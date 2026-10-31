@@ -191,3 +191,39 @@ test('Kontinuität: Lade-Fehler zeigt Retry statt «noch keine Analyse»', async
   await card.locator('.card-empty button', { hasText: await tr(page, 'kontinuitaet.error.retry') }).click();
   await expect(card.locator('.entity-list .entity-row')).toHaveCount(3);
 });
+
+test('Kontinuität: «Nicht mehr gemeldet» — Tab, Badge, Datum, Sammel-Nachprüfen', async ({ page }) => {
+  const guard = attachConsoleGuard(page);
+  await bootApp(page);
+  const bookId = await selectSeededBook(page);
+  const [ch1, ch2] = await seedChapters(page);
+  const check = mockCheck(ch1, ch2);
+  check.issues.push({
+    id: 5, typ: 'anachronismus', schwere: 'mittel', stelle_a: ch1.name, chapter_ids: [ch1.id],
+    beschreibung: 'TV Total lief erst ab Dezember 1999.', resolved: false, dismissed: false,
+    missing_since: '2026-10-15T06:31:49.177Z',
+  });
+  await page.route(`**/jobs/kontinuitaet/${bookId}`, json(check));
+  const card = await openCard(page);
+  await expect(card.locator('.entity-list .entity-row').first()).toBeVisible({ timeout: 20000 });
+
+  // Zählt als offen (aktiv: 3 + 1) und trägt die Markierung.
+  await expect(card.locator('.entity-list .entity-row')).toHaveCount(4);
+  await expect(card.locator('.kontinuitaet-missing-badge:visible')).toHaveCount(1);
+
+  const tab = card.locator('.tabs-btn', { hasText: await tr(page, 'kontinuitaet.status.missing') });
+  await expect(tab.locator('.tabs-btn-count')).toHaveText('1');
+  await tab.click();
+  await expect(tab).toHaveAttribute('aria-pressed', 'true');
+  const rows = card.locator('.entity-list .entity-row');
+  await expect(rows).toHaveCount(1);
+  await expect(card.locator('.kontinuitaet-missing-hint .card-hint')).toHaveText(await tr(page, 'kontinuitaet.missing.hint'));
+  await expect(card.locator('.kontinuitaet-missing-hint button'))
+    .toHaveText(await tr(page, 'kontinuitaet.missing.recheckAll', { n: 1 }));
+
+  await rows.first().click();
+  const since = card.locator('.kontinuitaet-missing .entity-meta-value');
+  await expect(since).toBeVisible();
+  await expect(since).toContainText('2026');
+  guard.assertClean('Kontinuität nicht mehr gemeldet');
+});

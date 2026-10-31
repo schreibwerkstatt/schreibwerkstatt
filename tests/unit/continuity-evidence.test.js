@@ -164,3 +164,25 @@ test('locateFact: Fakten der im Befund genannten Kapitel gehen vor', () => {
   // genanntes Kapitel ohne Treffer → Fallback aufs übrige Buch
   assert.equal(locateFact(text, facts, { kapitel: ['Kapitel 5'] })?.seite, 'Früh');
 });
+
+// ── Kurzer Name als letzter Anker (Songtitel, Album) ──────────────────────────
+const { locateShortName } = require('../../lib/continuity-evidence');
+const MUSIK = buildPageIndex([
+  { id: 1, title: 'Abschied', chapter: 'Die Krise', text: 'Sascha legte «Kid A» von Radiohead ein und drehte auf.' },
+  { id: 2, title: 'Besuch', chapter: 'Die Krise', text: 'Kid Andrea stand vor der Tür.' },
+  { id: 3, title: 'Später', chapter: 'Anderes', text: 'Wieder lief Kid A im Hintergrund.' },
+  { id: 4, title: 'Vernissage', chapter: 'Die WG', text: 'Im Hintergrund lief Geogaddi.' },
+  { id: 5, title: 'Nachher', chapter: 'Die WG', text: 'Danach noch einmal Geogaddi, lauter.' },
+]);
+
+test('kurzer Titel: als ganzes Wort, nur in den genannten Kapiteln', () => {
+  assert.equal(locateStelle('Die Krise: «Kid A» von Radiohead', '', MUSIK, { kapitel: ['Die Krise'] })?.id, 1);
+  assert.equal(locateShortName('«Kid A»', MUSIK, ['Anderes'])?.id, 3);
+});
+
+test('kurzer Titel: mehrdeutig, ohne Kapitel oder zu kurz → kein Anker', () => {
+  assert.equal(locateShortName('Die WG: «Geogaddi»', MUSIK, ['Die WG']), null);
+  assert.equal(locateShortName('«Kid A»', MUSIK, []), null);
+  assert.equal(locateShortName('«Kid»', MUSIK, ['Die Krise']), null);
+  assert.equal(locateShortName('«Die Krise»', MUSIK, ['Die Krise']), null);
+});

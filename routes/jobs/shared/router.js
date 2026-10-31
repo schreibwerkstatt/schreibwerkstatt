@@ -128,7 +128,14 @@ sharedRouter.get('/active', (req, res) => {
   const jobId = findActiveJobId(type, entityId, userEmail);
   if (!jobId) return res.json({ jobId: null });
   const job = jobs.get(jobId);
-  res.json({ jobId: job.id, status: job.status, progress: job.progress, statusText: job.statusText, statusParams: job.statusParams });
+  // Live-Felder mitliefern, damit ein Wiederaufnehmen nach dem Neuladen sofort den
+  // echten Stand zeigt statt bis zum ersten Poll Nullen und den Vorgabe-Umfang.
+  res.json({
+    jobId: job.id, status: job.status, progress: job.progress,
+    statusText: job.statusText, statusParams: job.statusParams,
+    tokensIn: job.tokensIn ?? null, tokensOut: job.tokensOut ?? null, tokensPerSec: job.tokensPerSec ?? null,
+    passMode: job.passMode ?? null, komplettScope: job.komplettScope ?? null,
+  });
 });
 
 sharedRouter.delete('/:id', (req, res) => {

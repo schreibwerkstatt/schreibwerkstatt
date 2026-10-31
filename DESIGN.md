@@ -2085,7 +2085,7 @@ Nur in Sidebar-Tree verwendet. Bei neuer hierarchischer Liste: erst prüfen, ob 
 - Marker-Farbe NICHT pro Subtyp als CSS-Selektor duplizieren, sondern `--gz-marker-color` inline via `:style` (`bandMarkerStyle`) auf `var(--card-accent-event-<subtyp>)` setzen (SSoT-Tokens, gleiche Codierung wie die Listen-Badges); `extern` → `--color-err-border`.
 - `x` ist der Mittelpunkt eines Punkt-Markers (`translateX(-50%)`); Spannen (`--range`) starten bei `x` mit inline gesetzter `width` (kein Zentrieren).
 - Datums-Bau via `setFullYear` (nicht `new Date(year,…)`) — sonst landen Jahre < 100 auf 1900+year.
-- Klick auf Marker → `onBandMarkerClick(id)` → `scrollToEventIndex` + `selectedEventIndex`; Liste→Band über `selectTimelineEvent(i)` (hebt Marker hervor + scrollt ihn ins Bild).
+- Klick auf Marker → `onBandMarkerClick(id)` → `scrollToEventIndex` + Auswahl; Liste→Band über `selectTimelineEvent(i)` (hebt Marker hervor + scrollt ihn ins Bild). Die Auswahl ist ein stabiler Schlüssel (`_selKey`: DB-ID, im Figuren-Fallback der Vergleichsschlüssel), nie der Listen-Index — der Index (`selectedEventIndex()`) wird daraus je gefilterter Liste gerechnet, sonst leuchtet nach einem Filterwechsel der Marker eines anderen Ereignisses.
 
 **Beispiele:** [public/partials/ereignisse.html](public/partials/ereignisse.html), [public/js/cards/ereignisse-card.js](public/js/cards/ereignisse-card.js)
 

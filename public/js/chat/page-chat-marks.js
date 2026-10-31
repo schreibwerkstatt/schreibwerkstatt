@@ -3,7 +3,7 @@
 // Hinzeigen auf eine Stelle (Hover/Klick auf einen Vorschlag). In `chatCard`
 // gespreadet (über chat.js); `this` ist die Karte.
 
-import { countInHtml } from '../utils.js';
+import { countInHtml, parseRichReplacement } from '../utils.js';
 import { foldQuotes, normalizeMatchText } from '../utils/text-match.js';
 import { stripLektoratMarks } from '../editor/shared/html-clean.js';
 import { collectTextNodes, createHighlightPair } from '../editor/shared/text-find.js';
@@ -88,11 +88,20 @@ function _count(html, needle) {
   return n;
 }
 
+// Was nach dem Übernehmen im Abschnitt steht: ohne `*`/`**`, Absätze getrennt.
+// `text` sucht/zählt (eine Absatzteilung steht nie als ein Stück da → 0 Treffer),
+// `display` zeigt die Teilung als ¶ im Wort-Diff, `first` ist der erste Absatz
+// (Hinzeigen auf eine übernommene Teilung).
+function _ersatzForms(ersatz) {
+  const { paras } = parseRichReplacement(ersatz);
+  return { text: paras.join('\n\n'), display: paras.join(' ¶ '), first: paras[0] || '' };
+}
+
 // Steckt das Original im Ersatz („Haus" → „das Haus"), sagt ein wieder
 // auffindbares Original nichts über ein Zurücknehmen — es kann Rest einer
 // späteren Bearbeitung sein. Dann bleibt „übernommen" stehen.
 function _ersatzContainsOriginal(v) {
-  return normalizeMatchText(v.ersatz).includes(normalizeMatchText(v.original));
+  return normalizeMatchText(_ersatzForms(v.ersatz).text).includes(normalizeMatchText(v.original));
 }
 
 export const pageChatMarksMethods = {
@@ -106,6 +115,7 @@ export const pageChatMarksMethods = {
   //   _stale    — offen, die Originalstelle stand da, steht aber nicht mehr in der Seite
   //   _ambiguous — offen, die Stelle kommt mehrfach vor (Übernehmen bricht ab)
   //   _undoable — übernommen, und der Ersatztext steht noch genau einmal da
+  //   _rich     — Ersatz trägt *kursiv*/**fett** oder eine Absatzteilung
   //   _diff     — Wort-Diff original → ersatz (null = zu gross, zwei Blöcke)
   //
   // Übernommen, aber der Ersatz ist weg und das Original steht wieder genau
@@ -118,7 +128,7 @@ export const pageChatMarksMethods = {
       if (!Array.isArray(m.vorschlaege)) continue;
       m.vorschlaege.forEach((v, vIdx) => {
         if (html && v.applied && !v._applying && !_ersatzContainsOriginal(v)
-            && _count(html, v.ersatz) === 0 && _count(html, v.original) === 1) {
+            && _count(html, _ersatzForms(v.ersatz).text) === 0 && _count(html, v.original) === 1) {
           delete v.applied;
           delete v.applied_at;
           if (m.id) this._patchChatVorschlag?.(m.id, vIdx, 'applied', { applied: false });
@@ -130,8 +140,11 @@ export const pageChatMarksMethods = {
         v._notFound = n === 0 && v.match === 'not_found';
         v._stale = n === 0 && !v._notFound;
         v._ambiguous = n > 1;
-        v._undoable = !!html && v._applied && _count(html, v.ersatz) === 1;
-        if (v._diff === undefined) v._diff = diffParts(v.original, v.ersatz);
+        // Auszeichnung/Absatzteilung: Rückgängig nur über Strg+Z bzw. Revisionen
+        // (page-chat-apply.js#isRichErsatz).
+        if (v._rich === undefined) { const r = parseRichReplacement(v.ersatz); v._rich = r.hasMarkup || r.split; }
+        v._undoable = !!html && v._applied && !v._rich && _count(html, _ersatzForms(v.ersatz).text) === 1;
+        if (v._diff === undefined) v._diff = diffParts(v.original, _ersatzForms(v.ersatz).display);
       });
     }
     this._publishChatMarks();
@@ -157,7 +170,7 @@ export const pageChatMarksMethods = {
     const container = root?.editMode
       ? (root.focusActive ? null : root._getEditEl?.())
       : document.querySelector(VIEW_SEL);
-    const needle = v?._applied ? v.ersatz : v?.original;
+    const needle = v?._applied ? _ersatzForms(v.ersatz).first : v?.original;
     const match = locateInContainer(container, needle);
     if (!match) { locateHighlight.clear(); return; }
     locateHighlight.paint([match], 0);

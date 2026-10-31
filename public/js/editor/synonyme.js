@@ -1,8 +1,10 @@
 import { fetchJson } from '../utils.js';
-import { WORD_RE, attachReflow, positionPopupNearRect, rangeForWordAtClientPoint } from './utils.js';
+import { tFetchError } from '../i18n.js';
+import { attachReflow, positionPopupNearRect } from './utils.js';
 import { startPoll } from '../cards/job-helpers.js';
 import { EVT } from '../events.js';
 import { applySpellcheckReplacement } from './shared/apply-replacement.js';
+import { normalizeSynonymWord, wordBoundsAt, synonymContext, matchSynonymCase } from './shared/synonym-text.js';
 
 // Synonym-Ermittler für den contenteditable-Editor.
 // Cmd/Ctrl+Shift+S auf markiertem Wort (oder Cursor in Wort) → Custom-Menü →
@@ -38,40 +40,32 @@ export const synonymMethods = {
     const editEl = this._getEditEl?.();
     if (!editEl) return;
     const sel = window.getSelection();
+    if (!sel || sel.rangeCount === 0) return;
+    const r = sel.getRangeAt(0);
+    if (!editEl.contains(r.commonAncestorContainer)) return;
+    // Griff gehört ab hier dem Editor — auch wenn kein Wort passt, sonst
+    // öffnet Firefox auf Cmd/Ctrl+Shift+S seinen Bildschirmfoto-Dialog.
+    e.preventDefault();
     let range = null;
     let wort = '';
-    if (sel && sel.rangeCount > 0 && !sel.isCollapsed) {
-      const text = sel.toString().trim();
-      if (!text || !WORD_RE.test(text)) return;
-      const r = sel.getRangeAt(0);
-      if (!editEl.contains(r.commonAncestorContainer)) return;
+    if (!sel.isCollapsed) {
+      wort = normalizeSynonymWord(sel.toString());
+      if (!wort) return;
       range = r.cloneRange();
-      wort  = text;
-    } else if (sel && sel.rangeCount > 0) {
+    } else {
       // Caret in Wort: Range expandieren über die Wortgrenzen.
-      const r = sel.getRangeAt(0);
-      if (!editEl.contains(r.commonAncestorContainer)) return;
       const node = r.startContainer;
       if (node.nodeType !== Node.TEXT_NODE) return;
-      const text = node.textContent || '';
-      let s = r.startOffset;
-      let eIdx = r.startOffset;
-      const isWord = (ch) => /[\p{L}\p{M}\d'’-]/u.test(ch);
-      while (s > 0 && isWord(text[s - 1])) s--;
-      while (eIdx < text.length && isWord(text[eIdx])) eIdx++;
-      const candidate = text.slice(s, eIdx);
-      if (!candidate || !WORD_RE.test(candidate)) return;
+      const hit = wordBoundsAt(node.textContent || '', r.startOffset);
+      if (!hit) return;
       const expanded = document.createRange();
-      expanded.setStart(node, s);
-      expanded.setEnd(node, eIdx);
+      expanded.setStart(node, hit.start);
+      expanded.setEnd(node, hit.end);
       range = expanded;
-      wort  = candidate;
+      wort  = hit.word;
       sel.removeAllRanges();
       sel.addRange(expanded.cloneRange());
-    } else {
-      return;
     }
-    e.preventDefault();
     window.dispatchEvent(new CustomEvent(EVT.EDITOR_SYNONYM_OPEN, {
       detail: { range, word: wort },
     }));
@@ -86,12 +80,12 @@ export const synonymMethods = {
     if (!editEl) return;
     const sel = window.getSelection();
     if (!sel || sel.rangeCount === 0 || sel.isCollapsed) return;
-    const text = sel.toString().trim();
-    if (!text || !WORD_RE.test(text)) return;
+    const wort = normalizeSynonymWord(sel.toString());
+    if (!wort) return;
     const r = sel.getRangeAt(0);
     if (!editEl.contains(r.commonAncestorContainer)) return;
     window.dispatchEvent(new CustomEvent(EVT.EDITOR_SYNONYM_OPEN, {
-      detail: { range: r.cloneRange(), word: text },
+      detail: { range: r.cloneRange(), word: wort },
     }));
   },
 
@@ -113,6 +107,7 @@ export const synonymMethods = {
 export const synonymCardMethods = {
   _openSynonymMenu({ range, word, clientX, clientY }) {
     if (!range || !word) return;
+    this._cancelSynonymRequest();
     this._synonymRange = range;
     this._synonymWord  = word;
     this.showSynonymPicker = false;
@@ -175,71 +170,53 @@ export const synonymCardMethods = {
   closeSynonymMenu() {
     this.showSynonymMenu = false;
     this._syncOpenFlag();
-    // User schliesst das Kontextmenü, bevor er Synonyme requested → Picker
-    // läuft nicht. Falls aber ein Polling-Timer aus früherer Session noch
-    // aktiv ist (race), hier ebenfalls räumen — sonst pollt er bis Timeout/
-    // Job-NotFound zombie weiter.
-    if (this._synonymPollTimer) { clearInterval(this._synonymPollTimer); this._synonymPollTimer = null; }
     if (!this.showSynonymPicker) this._detachSynonymScroll();
   },
 
   closeSynonymPicker() {
     this.showSynonymPicker = false;
     this._syncOpenFlag();
-    const wasLoading = this.synonymKiLoading;
-    const jobId = this._synonymJobId;
+    this._cancelSynonymRequest();
     this.synonymThesList = [];
     this.synonymThesError = '';
     this.synonymThesDisabled = false;
     this.synonymKiList = [];
     this.synonymKiError = '';
     this.synonymKiLoading = false;
-    if (this._synonymPollTimer) { clearInterval(this._synonymPollTimer); this._synonymPollTimer = null; }
-    this._synonymJobId = null;
-    if (wasLoading && jobId) {
-      fetch('/jobs/' + jobId, { method: 'DELETE' }).catch(() => {});
-    }
+    this.synonymThesLoading = false;
     if (!this.showSynonymMenu) this._detachSynonymScroll();
   },
 
-  // Extrahiert den Satz um das gewählte Wort. Nimmt den Textinhalt des
-  // umschliessenden Block-Elements (P/LI/DIV/…) und schneidet den Satz um den Wort-Offset.
-  _extractSentence(range, wort) {
-    let node = range.startContainer;
-    if (node.nodeType === Node.TEXT_NODE) node = node.parentElement;
-    const block = node?.closest?.('p, li, blockquote, h1, h2, h3, h4, h5, h6, div') || node;
-    const full = (block?.textContent || '').replace(/\s+/g, ' ').trim();
-    if (!full) return wort;
+  // Bricht die laufende Anfrage ab: Thesaurus-Fetch, Job-POST, Polling und den
+  // KI-Job selbst. Jede Antwort, die danach noch eintrifft, trägt eine veraltete
+  // Anfrage-Nummer und wird verworfen (`_isCurrentSynonymReq`).
+  _cancelSynonymRequest() {
+    this._synonymReqSeq = (this._synonymReqSeq || 0) + 1;
+    this._synonymFetchAbort?.abort();
+    this._synonymFetchAbort = null;
+    if (this._synonymPollTimer) { clearInterval(this._synonymPollTimer); this._synonymPollTimer = null; }
+    const jobId = this._synonymJobId;
+    this._synonymJobId = null;
+    if (jobId) fetch('/jobs/' + jobId, { method: 'DELETE' }).catch(() => {});
+  },
 
-    // Offset des Wortes: über pre-range vom Block-Anfang bis zur Selection-Start-Position
-    let offset = -1;
-    try {
-      const pre = document.createRange();
-      pre.selectNodeContents(block);
-      pre.setEnd(range.startContainer, range.startOffset);
-      offset = pre.toString().replace(/\s+/g, ' ').length;
-    } catch { /* Fallback via indexOf */ }
-    if (offset < 0 || offset > full.length) offset = full.indexOf(wort);
-    if (offset < 0) return full.length <= 400 ? full : wort;
-
-    // Satzgrenzen: letztes Satzzeichen vor dem Wort, nächstes danach.
-    const before = full.slice(0, offset);
-    const after  = full.slice(offset);
-    const startMatch = before.match(/[.!?…][\s"»)]*(?=[^.!?…]*$)/);
-    const start = startMatch ? startMatch.index + startMatch[0].length : 0;
-    const endMatch = after.match(/[.!?…]/);
-    const end = endMatch ? offset + endMatch.index + 1 : full.length;
-    const sentence = full.slice(start, end).trim();
-    return sentence || full;
+  _isCurrentSynonymReq(seq) {
+    return seq === this._synonymReqSeq && this.showSynonymPicker;
   },
 
   async requestSynonyms() {
     if (!this._synonymRange || !this._synonymWord) return;
     const app = window.__app;
     const wort = this._synonymWord;
-    const satz = this._extractSentence(this._synonymRange, wort);
+    const { satz, sentenceStart } = synonymContext(this._synonymRange, wort, app?._getEditEl?.());
+    this._synonymSentenceStart = sentenceStart;
     const bookId = app?.currentPage?.book_id || null;
     const pageId = app?.currentPage?.page_id || null;
+    this._cancelSynonymRequest();
+    const seq = this._synonymReqSeq;
+    const abort = new AbortController();
+    this._synonymFetchAbort = abort;
+    const { signal } = abort;
     this.showSynonymMenu = false;
     this.synonymThesLoading = true;
     this.synonymThesError = '';
@@ -255,37 +232,46 @@ export const synonymCardMethods = {
 
     // OpenThesaurus: paralleler Sync-Call, keine Job-Queue
     const thesUrl = `/openthesaurus/synonyms?word=${encodeURIComponent(wort)}` + (bookId ? `&book_id=${bookId}` : '');
-    fetchJson(thesUrl)
+    fetchJson(thesUrl, { signal })
       .then(d => {
+        if (!this._isCurrentSynonymReq(seq)) return;
         this.synonymThesDisabled = !!d.disabled;
         this.synonymThesList = Array.isArray(d.synonyme) ? d.synonyme : [];
-        if (!this.synonymThesDisabled && this.synonymThesList.length === 0) {
-          this.synonymThesError = app?.t('synonym.noMatches') || '';
-        }
       })
-      .catch(e => { this.synonymThesError = e.message || (app?.t('synonym.error') || ''); })
+      .catch(e => {
+        if (e?.name === 'AbortError' || !this._isCurrentSynonymReq(seq)) return;
+        this.synonymThesError = tFetchError(e);
+      })
       .finally(() => {
+        if (!this._isCurrentSynonymReq(seq)) return;
         this.synonymThesLoading = false;
         this.$nextTick(() => this._positionSynonymUI());
       });
 
-    // KI via Job-Queue (bestehend)
+    // KI via Job-Queue
     try {
-      const { jobId, error } = await fetchJson('/jobs/synonym', {
+      const { jobId } = await fetchJson('/jobs/synonym', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ wort, satz, book_id: bookId, page_id: pageId }),
+        signal,
       });
-      if (!jobId) throw new Error(error || app?.t('synonym.jobFailed'));
+      if (!jobId) throw new Error('no_job');
+      // Picker inzwischen zu oder neue Anfrage: Job gleich wieder einsammeln.
+      if (!this._isCurrentSynonymReq(seq)) {
+        fetch('/jobs/' + jobId, { method: 'DELETE' }).catch(() => {});
+        return;
+      }
       this._synonymJobId = jobId;
-      this._startSynonymPoll(jobId);
+      this._startSynonymPoll(jobId, seq);
     } catch (e) {
+      if (e?.name === 'AbortError' || !this._isCurrentSynonymReq(seq)) return;
       this.synonymKiLoading = false;
-      this.synonymKiError = e.message;
+      this.synonymKiError = e?.body ? tFetchError(e) : (app?.t('synonym.jobFailed') || '');
     }
   },
 
-  _startSynonymPoll(jobId) {
+  _startSynonymPoll(jobId, seq) {
     const app = window.__app;
     startPoll(this, {
       timerProp: '_synonymPollTimer',
@@ -293,22 +279,22 @@ export const synonymCardMethods = {
       lsKey: null,
       onProgress: () => { /* keine Progress-Anzeige, kurzer Call */ },
       onNotFound: () => {
+        if (!this._isCurrentSynonymReq(seq)) return;
         this.synonymKiLoading = false;
         this.synonymKiError = app?.t('synonym.jobUnavailable') || '';
         this._synonymJobId = null;
       },
       onError: (job) => {
+        if (!this._isCurrentSynonymReq(seq)) return;
         this.synonymKiLoading = false;
         this.synonymKiError = job.error ? app.t(job.error, job.errorParams) : app.t('synonym.kiFailed');
         this._synonymJobId = null;
       },
       onDone: (job) => {
+        if (!this._isCurrentSynonymReq(seq)) return;
         this.synonymKiLoading = false;
         this._synonymJobId = null;
         this.synonymKiList = Array.isArray(job.result?.synonyme) ? job.result.synonyme : [];
-        if (this.synonymKiList.length === 0) {
-          this.synonymKiError = app?.t('synonym.noneFound') || '';
-        }
         this.$nextTick(() => this._positionSynonymUI());
       },
     });
@@ -320,12 +306,13 @@ export const synonymCardMethods = {
     if (!range || !entry?.wort) { this.closeSynonymPicker(); return; }
     const editEl = app?._getEditEl?.();
     if (!editEl || !editEl.contains(range.startContainer)) { this.closeSynonymPicker(); return; }
+    const text = matchSynonymCase(this._synonymWord, entry.wort, this._synonymSentenceStart);
     try {
       // Range-Mutation + Caret-Restore + bubbelndes `input` über die geteilte
       // SSoT — derselbe Weg, den Spellcheck-Apply und der Mac-Synonym-Controller
       // nehmen. Caret landet am Ende des eingefügten Wortes (nicht hinter dem
       // Block; Begründung im Header von shared/apply-replacement.js).
-      if (!applySpellcheckReplacement(range, entry.wort)) { this.closeSynonymPicker(); return; }
+      if (!applySpellcheckReplacement(range, text)) { this.closeSynonymPicker(); return; }
       app?._markEditDirty?.();
     } catch (e) {
       console.error('[applySynonym]', e);

@@ -109,3 +109,11 @@ test('buchtyp: Schulweg-Ausschlussliste nennt nur bekannte Buchtypen', async () 
   const unbekannt = SCHULWEG_OHNE_BUCHTYPEN.filter((k) => !de.has(k) || !en.has(k));
   assert.deepEqual(unbekannt, [], `SCHULWEG_OHNE_BUCHTYPEN kennt: ${unbekannt.join(', ')}`);
 });
+
+test('buchtyp: Palette-Sprung «Bucheinstellungen: Schule» fehlt genau bei SCHULWEG_OHNE_BUCHTYPEN', async () => {
+  const { SCHULWEG_OHNE_BUCHTYPEN } = await import(join(ROOT, 'public', 'js', 'book', 'school-path.js'));
+  const { ACTIONS } = await import(join(ROOT, 'public', 'js', 'cards', 'feature-registry.js'));
+  const eintrag = ACTIONS.find((a) => a.key === 'action.bookSettings.school');
+  assert.ok(eintrag, 'action.bookSettings.school fehlt in der Feature-Registry');
+  assert.deepEqual([...eintrag.hiddenForBuchtyp].sort(), [...SCHULWEG_OHNE_BUCHTYPEN].sort());
+});

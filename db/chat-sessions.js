@@ -151,8 +151,22 @@ function setOpeningPageText(id, text) {
   _stmtSetOpening.run(text, id);
 }
 
+// «Erneut fragen» im Abschnitts-Chat: die unbeantwortete Frage, die wiederholt
+// wird, fällt weg, bevor die neue gespeichert wird — sonst stünde sie zweimal im
+// Gespräch, und das Modell bekäme sie zweimal. Nur, wenn sie wirklich offen ist:
+// letzte Nachricht der Session, Rolle user. Liefert true, wenn gelöscht.
+const _stmtDeleteOpenQuestion = db.prepare(`
+  DELETE FROM chat_messages
+   WHERE id = ? AND session_id = ? AND role = 'user'
+     AND id = (SELECT MAX(id) FROM chat_messages WHERE session_id = ?)
+`);
+function deleteUnansweredQuestion(sessionId, messageId) {
+  return _stmtDeleteOpenQuestion.run(messageId, sessionId, sessionId).changes > 0;
+}
+
 module.exports = {
   ORPHAN_GRACE_MS,
+  deleteUnansweredQuestion,
   deleteEmptyPageSessions,
   deleteEmptyBookSessions,
   insertPageSession,

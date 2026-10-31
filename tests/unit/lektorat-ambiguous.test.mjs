@@ -11,7 +11,7 @@ const { useTmpDb } = require('./_helpers/tmp-db');
 useTmpDb('lektorat-ambiguous');
 process.env.SESSION_SECRET = process.env.SESSION_SECRET || 'test-secret';
 require('../../db/migrations');
-const { markAmbiguous } = require('../../routes/jobs/lektorat-page.js');
+const { markAmbiguous, dropUnlocatable } = require('../../routes/jobs/lektorat-page.js');
 
 const TEXT = 'Er sagte, dass er kommt. Sie wusste, dass er lügt. «Ja», sagte er.';
 
@@ -32,4 +32,17 @@ test('gezählt in der Normalform der Fundstellen-Suche (Anführungszeichen gefal
 test('veraltetes Flag aus dem Cache fällt weg', () => {
   const out = markAmbiguous([{ typ: 'stil', original: 'Sie wusste', korrektur: 'x', mehrdeutig: true }], TEXT, countInText);
   assert.equal('mehrdeutig' in out[0], false);
+});
+
+// Falsch zitierte Befunde fallen schon am Server weg (dropUnlocatable): sonst zählten
+// Verlauf und Heatmap mehr Befunde, als die Liste zeigt.
+test('nicht auffindbares original fällt weg, Befund ohne original bleibt', () => {
+  const { fehler, dropped } = dropUnlocatable([
+    { typ: 'grammatik', original: 'dass er kommt', korrektur: 'das er kommt' },
+    { typ: 'grammatik', original: 'dass sie geht', korrektur: 'das sie geht' },
+    { typ: 'stil', original: '"Ja", sagte er', korrektur: 'x' },
+    { typ: 'stil', korrektur: 'ohne Stelle' },
+  ], TEXT, countInText);
+  assert.equal(dropped, 1);
+  assert.deepEqual(fehler.map(f => f.original), ['dass er kommt', '"Ja", sagte er', undefined]);
 });

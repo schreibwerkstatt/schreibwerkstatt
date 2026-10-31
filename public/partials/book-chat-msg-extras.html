@@ -11,6 +11,9 @@
             :data-tip="$app.t('chat.retryWholeBookTip')" x-text="$app.t('chat.retryWholeBook')"></button>
   </div>
 </template>
+<!-- Buch ohne Komplettanalyse: nur unter der jüngsten Antwort, nicht unter jeder -->
+<div x-show="msg.role === 'assistant' && msg.context_info?.komplett_missing && msgIdx === bookChatMessages.length - 1"
+     class="chat-msg-hint" x-text="$app.t('chat.komplettMissing')"></div>
 <template x-if="msg.role === 'assistant' && msg.context_info && msg.context_info.mode === 'agent'">
   <div class="book-chat-extras">
     <!-- Fussnoten: validierte Zitate aus final_answer -->

@@ -1,4 +1,5 @@
 import { EVT } from '../events.js';
+import { takeCardRequest } from './card-request.js';
 import { ownedFilterKeys, resetFilterScopes, restoreFilterScopes, watchFilterScopes } from '../filter-persist.js';
 // Shared lifecycle helper for Buch-scoped Karten.
 //
@@ -22,6 +23,18 @@ import { ownedFilterKeys, resetFilterScopes, restoreFilterScopes, watchFilterSco
 //
 // Optional cfg fields:
 //   onShow(root)             — overrides default show-watch (which calls cfg.load)
+//   onHide(root)             — runs when showFlag turns false
+//   tabRequest               — { key, apply(value) }: Reiter-Wunsch aus
+//                              card-request.js (Schluessel `CARD_REQUEST.*_TAB`).
+//                              Der Helper holt ihn an allen drei Stellen ab:
+//                              beim Mount (Karte erst durch den Sprung
+//                              gemountet), synchron beim Einblenden VOR
+//                              onShow/load (im selben Alpine-Flush wie `x-show`,
+//                              sonst blitzt der gemerkte Reiter auf — das
+//                              CARD_REQUEST-Event kommt erst nach dem Oeffnen)
+//                              und auf das Event bei schon offener Karte.
+//                              Karten rufen takeCardRequest fuer *_TAB nie
+//                              selbst (gegated: card-tab-request-single-place).
 //   onBookChanged(e, ctx, r) — override; skips the default reset+load
 //                              (timerKeys are still cleared first)
 //   onViewReset(e, ctx, r)   — override; skips the default reset
@@ -83,9 +96,17 @@ export function setupCardLifecycle(ctx, cfg) {
     Object.assign(ctx, state);
   };
 
-  if (cfg.showFlag && (cfg.load || cfg.onShow)) {
+  const applyTabRequest = () => {
+    if (!cfg.tabRequest) return;
+    const value = takeCardRequest(cfg.tabRequest.key);
+    if (value != null && value !== '') cfg.tabRequest.apply(value);
+  };
+
+  if (cfg.showFlag && (cfg.load || cfg.onShow || cfg.onHide || cfg.tabRequest)) {
     ctx.$watch(() => root()[cfg.showFlag], async (visible) => {
-      if (!visible) return;
+      if (!visible) { if (cfg.onHide) await cfg.onHide(root()); return; }
+      applyTabRequest();
+      if (!cfg.load && !cfg.onShow) return;
       if (cfg.showNeedsBookId !== false && !Alpine.store('nav').selectedBookId) return;
       if (cfg.onShow) await cfg.onShow(root());
       else await cfg.load(root());
@@ -142,6 +163,13 @@ export function setupCardLifecycle(ctx, cfg) {
 
   for (const { type, handler } of (cfg.extraListeners || [])) {
     window.addEventListener(type, handler, { signal });
+  }
+
+  if (cfg.tabRequest) {
+    window.addEventListener(EVT.CARD_REQUEST, (e) => {
+      if (e.detail?.key === cfg.tabRequest.key) applyTabRequest();
+    }, { signal });
+    applyTabRequest();
   }
 
   return {

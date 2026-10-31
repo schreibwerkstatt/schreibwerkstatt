@@ -39,11 +39,13 @@ const { COST_LABEL, costTier } = require('./cost-labels');
 // zuerst der beste Kandidat JEDES Incomings, bevor ein Zweitkandidat drankommt — sonst
 // belegen wenige Incomings mit vielen ähnlichen Kandidaten den ganzen Deckel. Mehrere
 // kleine Calls statt eines grossen: ein Paar kostet wenig, ein gescheiterter Call
-// verliert nur seinen Teil.
+// verliert nur seinen Teil. Der Gesamtdeckel (240 Paare) reicht, um bei ~250 Szenen
+// den Erstkandidaten jedes Incomings vorzulegen; was er abschneidet, bleibt getrennt und
+// kehrt beim nächsten Lauf als stale-Dublette wieder. Ein Call kostet Cent-Beträge.
 const JUDGE_PAIR_CAP = 24;
-const JUDGE_MAX_CALLS = 4;
+const JUDGE_MAX_CALLS = 10;
 const JUDGE_RANKS = 2;
-const JUDGE_CONCURRENCY = 2;
+const JUDGE_CONCURRENCY = 3;
 
 /** Ordnet die unsicheren Paare für den Judge: ohne Dubletten, je Incoming höchstens
  *  JUDGE_RANKS Kandidaten, Rang vor Stärke (alle Erstkandidaten zuerst), innerhalb eines

@@ -3,9 +3,10 @@
 // State: profiles[], aktives Profil, aktiver Tab, Font-Liste, Job-Status.
 // `showPdfExportCard` bleibt im Root (Hash-Router + Exklusivität).
 //
-// Lifecycle:
-//   - $watch($app.showPdfExportCard): on-visible → loadProfiles + loadFonts.
-//   - book:changed: aktive Auswahl resetten + Profile neu laden.
+// Lifecycle (setupCardLifecycle):
+//   - Einblenden → loadFonts + loadProfiles + Fassungen; Ausblenden mit
+//     ungespeichertem Profil → Rückfrage.
+//   - book:changed: laufenden Export + Fassungsauswahl resetten.
 //   - view:reset: alles leeren.
 //
 // Render-Job läuft über die Standard-Job-Queue (/jobs/pdf-export). Sobald done,
@@ -20,6 +21,7 @@ import * as presets from './pdf-export-presets.js';
 import * as templates from './pdf-export-templates.js';
 import { pdfExportUiSlice } from './pdf-export-ui.js';
 import { CARD_REQUEST } from './card-request.js';
+import { setupCardLifecycle } from './card-lifecycle.js';
 import { openBookSettingsTab } from '../book/book-settings/open-tab.js';
 
 export function registerPdfExportCard() {
@@ -114,76 +116,66 @@ export function registerPdfExportCard() {
     spineImageUploading: false,
     spineImageError: '',
 
-    _onBookChanged: null,
-    _onViewReset: null,
-    _onBeforeUnload: null,
-    _onCardRequest: null,
+    _lifecycle: null,
 
     init() {
       this._initUiMode();
-      this.$watch(() => window.__app.showPdfExportCard, async (visible) => {
-        if (!visible) { await this._onHiddenWhileDirty(); return; }
-        await this.loadFonts();
-        // Profile sind user-scoped → einmal geladen reicht; selectedBookId-
-        // Wechsel triggert KEINE Neuladung.
-        if (!this.profiles.length) await this.loadProfiles();
-        // Fassungen sind buch-scoped → bei jedem Öffnen frisch ziehen.
-        await this._loadExportSnapshots();
-      });
       this._initScopeWatches();
       this._bindPreset(EVT.EXPORT_PRESET, '__exportPreset');
 
-      // book:changed räumt nur den laufenden Export-State (Buchwechsel = neuer
-      // Render-Kontext). Profile-Liste bleibt erhalten.
-      this._onBookChanged = () => {
-        this._resetExportRun();
-        this.exportSnapshotId = '';
-        if (window.__app?.showPdfExportCard) this._loadExportSnapshots();
-        else { this.exportSnapshots = []; }
-      };
-      window.addEventListener(EVT.BOOK_CHANGED, this._onBookChanged);
-
-      // view:reset (Logout / User-Settings-Danger-Reset) räumt ALLES inkl.
-      // Profile-Liste — könnte anderer User sein nach Re-Login.
-      this._onViewReset = async () => {
-        this._resetExportRun();
-        this.exportSnapshots = [];
-        this.exportSnapshotId = '';
-        await this._unmountFormThen(() => {
-          this.profiles = [];
-          this.activeProfile = null;
-          this.activeProfileId = null;
-          this.savedAt = null;
-          this._savedSnapshot = '';
-          this.exportWarnings = [];
-        });
-      };
-      window.addEventListener(EVT.VIEW_RESET, this._onViewReset);
-
-      // Reload/Tab-Close mit ungespeichertem Profil: nativer Prompt (appConfirm
-      // geht in beforeunload nicht — Browser blockiert Modals dort).
-      this._onBeforeUnload = (e) => {
-        if (!this.isDirty()) return;
-        e.preventDefault();
-        e.returnValue = '';
-      };
-      window.addEventListener('beforeunload', this._onBeforeUnload);
-
-      this._onCardRequest = (e) => {
-        if (e.detail?.key === CARD_REQUEST.PDF_EXPORT_TAB) this._applyPendingTab();
-      };
-      window.addEventListener(EVT.CARD_REQUEST, this._onCardRequest);
-      this._applyPendingTab();
+      this._lifecycle = setupCardLifecycle(this, {
+        showFlag: 'showPdfExportCard',
+        showNeedsBookId: false,
+        onShow: async () => {
+          await this.loadFonts();
+          // Profile sind user-scoped → einmal geladen reicht; selectedBookId-
+          // Wechsel triggert KEINE Neuladung.
+          if (!this.profiles.length) await this.loadProfiles();
+          // Fassungen sind buch-scoped → bei jedem Öffnen frisch ziehen.
+          await this._loadExportSnapshots();
+        },
+        onHide: () => this._onHiddenWhileDirty(),
+        // book:changed räumt nur den laufenden Export-State (Buchwechsel = neuer
+        // Render-Kontext). Profile-Liste bleibt erhalten.
+        onBookChanged: () => {
+          this._resetExportRun();
+          this.exportSnapshotId = '';
+          if (window.__app?.showPdfExportCard) this._loadExportSnapshots();
+          else { this.exportSnapshots = []; }
+        },
+        // view:reset (Logout / User-Settings-Danger-Reset) räumt ALLES inkl.
+        // Profile-Liste — könnte anderer User sein nach Re-Login.
+        onViewReset: async () => {
+          this._resetExportRun();
+          this.exportSnapshots = [];
+          this.exportSnapshotId = '';
+          await this._unmountFormThen(() => {
+            this.profiles = [];
+            this.activeProfile = null;
+            this.activeProfileId = null;
+            this.savedAt = null;
+            this._savedSnapshot = '';
+            this.exportWarnings = [];
+          });
+        },
+        // Reload/Tab-Close mit ungespeichertem Profil: nativer Prompt (appConfirm
+        // geht in beforeunload nicht — Browser blockiert Modals dort).
+        extraListeners: [{ type: 'beforeunload', handler: (e) => {
+          if (!this.isDirty()) return;
+          e.preventDefault();
+          e.returnValue = '';
+        } }],
+        // Sprung auf einen Reiter (Command-Palette). Ein Experten-Reiter schaltet
+        // nur für diese Sitzung in den Experten-Modus; die gemerkte Wahl bleibt.
+        tabRequest: { key: CARD_REQUEST.PDF_EXPORT_TAB, apply: (tab) => this._applyTab(tab) },
+      });
     },
 
     destroy() {
       this._stopPoll();
       if (this._savedAtTimer)     { clearTimeout(this._savedAtTimer);     this._savedAtTimer = null; }
       if (this._exportStatusTimer) { clearTimeout(this._exportStatusTimer); this._exportStatusTimer = null; }
-      if (this._onBookChanged)  window.removeEventListener(EVT.BOOK_CHANGED, this._onBookChanged);
-      if (this._onViewReset)    window.removeEventListener(EVT.VIEW_RESET,   this._onViewReset);
-      if (this._onCardRequest)  window.removeEventListener(EVT.CARD_REQUEST, this._onCardRequest);
-      if (this._onBeforeUnload) window.removeEventListener('beforeunload',   this._onBeforeUnload);
+      this._lifecycle?.destroy();
       this._unbindPreset();
     },
 

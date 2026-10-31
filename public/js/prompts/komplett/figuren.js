@@ -3,7 +3,14 @@
 import { _isLocal } from '../state.js';
 import { FIGUREN_BASIS_SCHEMA, figurenBasisRules } from './schema-strings.js';
 
-export function buildFiguresBasisConsolidationPrompt(bookName, chapterFiguren, buchKontext = '') {
+// opts.teil: die Liste ist nur ein Teil der Figuren (geteilte Konsolidierung,
+// routes/jobs/komplett/phases/figuren-konsol.js). Ohne den Hinweis legt das Modell für
+// Beziehungsziele aus anderen Teilen eigene, dünne Einträge an — die kommen danach als
+// Dubletten zurück und kosten Output-Tokens.
+export function buildFiguresBasisConsolidationPrompt(bookName, chapterFiguren, buchKontext = '', opts = {}) {
+  const teilHinweis = opts.teil
+    ? '\n\nDies ist ein TEIL der Figurenliste; die übrigen Figuren werden separat konsolidiert. Gib NUR Figuren aus, die oben als eigener Eintrag («- Name …») stehen. Figuren, die nur als Beziehungsziel genannt sind, bekommen KEINEN eigenen Eintrag — die Beziehung selbst bleibt mit ihrem Namen erhalten.'
+    : '';
   const synthInput = chapterFiguren.map(cf => {
     const nameById = Object.fromEntries((cf.figuren || []).map(f => [f.id, f.name]));
     const arcStr = (a) => {
@@ -31,7 +38,7 @@ export function buildFiguresBasisConsolidationPrompt(bookName, chapterFiguren, b
         }).join(', ') : '');
     }).join('\n');
   }).join('\n\n');
-  return `Konsolidiere die folgenden Figurenanalysen aller Kapitel des Buchs «${bookName}» zu einer einheitlichen Gesamtliste. Dedupliziere Figuren, führe Informationen zusammen und vergib stabile IDs.
+  return `Konsolidiere die folgenden Figurenanalysen aller Kapitel des Buchs «${bookName}» zu einer einheitlichen Gesamtliste. Dedupliziere Figuren, führe Informationen zusammen und vergib stabile IDs.${teilHinweis}
 
 Wähle pro Feld die textnächste, reichhaltigste Variante; ergänzende Angaben aus verschiedenen Kapiteln zusammenführen statt verkürzen. Die Tiefe-Felder (motivation, konflikt, aeusseres, stimme, hintergrund, arc) NICHT einkürzen.
 

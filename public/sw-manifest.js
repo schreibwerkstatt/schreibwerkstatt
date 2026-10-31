@@ -5,7 +5,7 @@
 // __SHELL_BUILD: content hash over all listed assets → drives SHELL_CACHE.
 // __SHELL_MANIFEST: the coherent set precached atomically at SW install.
 // __VENDOR_SET: current vendor/ + fonts/ files — VENDOR_CACHE prune list.
-self.__SHELL_BUILD = "a06d9ca8dbc80d6c";
+self.__SHELL_BUILD = "c00c740b7c77bc7a";
 self.__SHELL_MANIFEST = [
   "/css/admin/admin-backup.css",
   "/css/admin/admin-home.css",
@@ -472,6 +472,7 @@ self.__SHELL_MANIFEST = [
   "/js/cards/ereignisse-card.js",
   "/js/cards/ereignisse/band.js",
   "/js/cards/ereignisse/date.js",
+  "/js/cards/ereignisse/edit.js",
   "/js/cards/ereignisse/model.js",
   "/js/cards/ereignisse/subtyp.js",
   "/js/cards/erzaehlprofil-card.js",
@@ -626,6 +627,7 @@ self.__SHELL_MANIFEST = [
   "/js/editor/focus/viewport.js",
   "/js/editor/lektorat-analysis.js",
   "/js/editor/lektorat-evidence.js",
+  "/js/editor/lektorat-undo.js",
   "/js/editor/lektorat.js",
   "/js/editor/live-edit.js",
   "/js/editor/notebook/card.js",
@@ -701,6 +703,7 @@ self.__SHELL_MANIFEST = [
   "/js/editor/shared/save-pipeline.js",
   "/js/editor/shared/shortcuts.js",
   "/js/editor/shared/soft-break.js",
+  "/js/editor/shared/synonym-text.js",
   "/js/editor/shared/text-find.js",
   "/js/editor/shared/timers.js",
   "/js/editor/shared/todo-html.js",
@@ -913,6 +916,7 @@ self.__SHELL_MANIFEST = [
   "/js/utils/format.js",
   "/js/utils/html-container.js",
   "/js/utils/html-find.js",
+  "/js/utils/html-replace-rich.js",
   "/js/utils/html.js",
   "/js/utils/iso-day.js",
   "/js/utils/keys.js",
@@ -1050,6 +1054,7 @@ self.__SHELL_MANIFEST = [
   "/partials/editor-toolbar.html",
   "/partials/epub-export-headings.html",
   "/partials/epub-export.html",
+  "/partials/ereignisse-edit.html",
   "/partials/ereignisse.html",
   "/partials/erzaehlprofil-befund.html",
   "/partials/erzaehlprofil.html",

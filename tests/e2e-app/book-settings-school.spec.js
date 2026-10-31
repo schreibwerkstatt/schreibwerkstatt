@@ -1,7 +1,7 @@
-// Bucheinstellungen › Kontext › Schulsystem gegen die ECHTE App
-// (docs/figur-lebenslauf.md «Schullaufbahn»): Vorlage per Combobox waehlen,
-// Stufen-Jahre erscheinen, Speichern schreibt ueber /booksettings/:id/schulsystem
-// und die Antwort kommt normalisiert zurueck. Danach wieder auf «keins».
+// Bucheinstellungen › Reiter «Schule» gegen die ECHTE App
+// (docs/figur-lebenslauf.md «Schullaufbahn»): Schalter ein (HarmoS als Start),
+// Vorlage per Combobox wechseln, Stufen-Jahre erscheinen, Speichern schreibt ueber
+// /booksettings/:id/schulsystem und die Antwort kommt normalisiert zurueck.
 const { test, expect } = require('../e2e/_helpers/fixtures');
 const { bootApp, selectSeededBook } = require('./_helpers/app');
 
@@ -11,10 +11,14 @@ test('schulsystem: Vorlage waehlen, Jahre editieren, speichern', async ({ page }
   await page.evaluate(() => window.__app.toggleBookSettingsCard());
   const card = page.locator('.card--settings');
   await expect(card).toBeVisible();
-  await card.locator('.tabs-btn', { hasText: 'Kontext' }).click();
+  await card.locator('.tabs-btn', { hasText: 'Schule' }).click();
 
   const section = card.locator('.book-settings-section', { hasText: 'Schulsystem' });
   await expect(section).toBeVisible();
+  // Aus: nur der Schalter, keine Felder.
+  await expect(section.locator('.combobox-trigger')).toHaveCount(0);
+  await section.locator('#bs-schule-aktiv').check();
+  await expect(section.locator('.card-form-label', { hasText: 'Kindergarten' })).toBeVisible();
   // Die Combobox schliesst bei jedem Scroll; erst die Karten-Scroll-Animation und
   // das Hineinscrollen der Sektion abwarten, dann oeffnen.
   const trigger = section.locator('.combobox-trigger').first();

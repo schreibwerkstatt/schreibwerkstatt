@@ -50,3 +50,26 @@ test('Verworfene zählen nicht als offen und erscheinen nur unter «Verworfen»'
   assert.equal(c.kontinuitaetDiscardReasonText(RESULT.discarded[0]), 'Verify sagt nein.');
   filters.status = '';
 });
+
+test('«Nicht mehr gemeldet»: nur offene mit missing_since, zugleich offen', async () => {
+  const { kontinuitaetRecheckMethods } = await import('../../public/js/book/kontinuitaet-recheck.js');
+  const result = {
+    issues: [
+      { id: 1, schwere: 'mittel', resolved: false, dismissed: false },
+      { id: 2, schwere: 'mittel', resolved: false, dismissed: false, missing_since: '2026-10-15T06:31:49.177Z' },
+      { id: 3, schwere: 'mittel', resolved: true, dismissed: false, missing_since: '2026-10-15T06:31:49.177Z' },
+      { id: 4, schwere: 'mittel', resolved: false, dismissed: true, missing_since: '2026-10-15T06:31:49.177Z' },
+    ],
+    discarded: [],
+  };
+  const c = { ...card(result), ...kontinuitaetRecheckMethods };
+  assert.ok(KONTINUITAET_STATUS_FILTERS.includes('missing'));
+  filters.status = 'missing';
+  c._memos = {};
+  assert.deepEqual(c.kontinuitaetIssuesSorted().map(i => i.id), [2]);
+  assert.deepEqual(c.kontinuitaetMissingIssues().map(i => i.id), [2]);
+  filters.status = 'open';
+  c._memos = {};
+  assert.deepEqual(c.kontinuitaetIssuesSorted().map(i => i.id).sort(), [1, 2]);
+  filters.status = '';
+});

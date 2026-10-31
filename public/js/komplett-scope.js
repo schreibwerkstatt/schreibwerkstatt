@@ -20,6 +20,18 @@ export const KOMPLETT_CORE_STEPS = ['seiten', 'extraktion', 'figuren', 'weltfakt
 
 export const KOMPLETT_STEP_KEYS = KOMPLETT_STEPS.map(s => s.key);
 
+// Phasen der Fortschrittsanzeige; `end` = Progress-Wert, den der Job am Phasenende meldet.
+export const KOMPLETT_PHASES = [
+  { key: 'loadPages',          end: 12 },
+  { key: 'extract',            end: 30 },
+  { key: 'figurenConsolidate', end: 43 },
+  { key: 'orteConsolidate',    end: 55, scope: ['orte'] },
+  { key: 'songsConsolidate',   end: 56, scope: ['songs'] },
+  { key: 'chapterRelations',   end: 58, scope: ['beziehungen'], onlyMulti: true },
+  { key: 'szenenEvents',       end: 78, scope: ['szenen', 'ereignisse'] },
+  { key: 'timeline',           end: 97, scope: ['ereignisse'] },
+];
+
 /** Rohen Umfang auf die bekannten Schluessel normalisieren. Fehlendes ist AN. */
 export function normalizeKomplettScope(raw) {
   const src = (raw && typeof raw === 'object') ? raw : {};

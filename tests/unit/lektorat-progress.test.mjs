@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { createRequire } from 'node:module';
 
 const require = createRequire(import.meta.url);
-const { lektoratProgress } = require('../../lib/lektorat-progress.js');
+const { lektoratProgress, markPreviouslyRejected } = require('../../lib/lektorat-progress.js');
 
 const F = (typ, original, korrektur = '') => ({ typ, original, korrektur, erklaerung: '' });
 const prevRow = (fehler, applied = null) => ({
@@ -72,4 +72,28 @@ test('Normalform der Fundstellen-Suche: andere Anführungszeichen sind nicht „
   const p = lektoratProgress(prev, [], text, normalizeMatchText);
   assert.equal(p.fixed, 0);
   assert.equal(p.notReported, 1);
+});
+
+// Im Vorlauf stehen gelassene Befunde (übernommen wurde etwas anderes) werden markiert.
+test('markPreviouslyRejected: nicht übernommen + Stelle unverändert → abgelehnt', () => {
+  const text = 'Er ging schnell nach Hause. Sie lachte laut.';
+  const prev = prevRow(
+    [F('stil', 'ging schnell', 'eilte'), F('stil', 'lachte laut', 'lachte'), F('grammatik', 'Sie lachten', 'Sie lachte')],
+    [F('grammatik', 'Sie lachten', 'Sie lachte')],
+  );
+  const out = markPreviouslyRejected(prev, [
+    F('stil', 'ging schnell', 'rannte'),
+    F('wiederholung', 'lachte laut', 'x'),
+    F('stil', 'nach Hause', 'heim'),
+  ], text);
+  assert.equal(out[0].abgelehnt, true);
+  assert.equal('abgelehnt' in out[1], false, 'anderer Typ zählt nicht');
+  assert.equal('abgelehnt' in out[2], false, 'neu gemeldet');
+});
+
+test('markPreviouslyRejected: ohne Übernahme im Vorlauf ist nichts entschieden', () => {
+  const prev = prevRow([F('stil', 'ging schnell', 'eilte')]);
+  const out = markPreviouslyRejected(prev, [F('stil', 'ging schnell', 'eilte')], 'Er ging schnell.');
+  assert.equal('abgelehnt' in out[0], false);
+  assert.deepEqual(markPreviouslyRejected(null, [], 'x'), []);
 });

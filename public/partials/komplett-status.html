@@ -1,5 +1,8 @@
 <!-- Komplettanalyse: Primärbutton mit eingebettetem Fortschrittsring + Status-/Aktionsmenü (⋯) -->
-<div class="komplett-status-wrap" @click.outside="showKomplettStatus = false" @mouseenter="if ($store.jobs.alleAktualisierenLoading) showKomplettStatus = true">
+<div class="komplett-status-wrap"
+     @click.outside="showKomplettStatus = false; komplettStatusByHover = false"
+     @mouseenter="if ($store.jobs.alleAktualisierenLoading && !showKomplettStatus) { showKomplettStatus = true; komplettStatusByHover = true }"
+     @mouseleave.debounce.400ms="if (komplettStatusByHover && !$el.matches(':hover')) { showKomplettStatus = false; komplettStatusByHover = false }">
   <button type="button"
           class="update-all-btn"
           :class="{ 'update-all-btn--running': $store.jobs.alleAktualisierenLoading }"
@@ -18,11 +21,11 @@
   <button type="button"
           class="icon-btn icon-btn--ghost"
           :class="{ 'is-active': showKomplettStatus }"
-          @click="showKomplettStatus = !showKomplettStatus"
+          @click="showKomplettStatus = komplettStatusByHover || !showKomplettStatus; komplettStatusByHover = false"
           :disabled="!$store.nav.selectedBookId"
           :data-tip="t('header.statusMenu')"
           :aria-label="t('header.statusMenu')"
-          aria-haspopup="menu"
+          aria-haspopup="dialog"
           :aria-expanded="showKomplettStatus">
     <svg class="icon" aria-hidden="true"><use href="/icons.svg#more-horizontal"/></svg>
   </button>
@@ -30,21 +33,25 @@
         x-show="!$store.jobs.alleAktualisierenLoading && $store.jobs.alleAktualisierenLastRun"
         x-cloak
         x-text="t('common.asOf', { date: $store.jobs.alleAktualisierenLastRun })"></span>
-  <div class="komplett-status-panel" x-show="showKomplettStatus" x-cloak role="menu">
+  <div class="komplett-status-panel" x-show="showKomplettStatus" x-cloak role="dialog" :aria-label="t('komplett.title')">
     <div class="komplett-status-title" x-text="t('komplett.title')"></div>
     <div class="komplett-status-laststamp" x-show="$store.jobs.alleAktualisierenLastRun" x-cloak
          x-text="t('common.asOf', { date: $store.jobs.alleAktualisierenLastRun })"></div>
-    <template x-if="$store.jobs.alleAktualisierenLoading || $store.jobs.alleAktualisierenLastRun">
+    <!-- Ohne Lauf in dieser Sitzung (Fortschritt 0, kein Status) nichts zeigen: ein leerer
+         Balken mit «Fertig» daneben wäre eine Falschaussage; der Stand steht oben. -->
+    <template x-if="$store.jobs.alleAktualisierenLoading || $store.jobs.alleAktualisierenProgress > 0 || $store.jobs.alleAktualisierenStatus">
       <div class="komplett-status-progress">
         <div class="progress-bar-wrap komplett-progress-bar-wrap">
           <div class="progress-bar" :style="{ '--progress': $store.jobs.alleAktualisierenProgress + '%' }"></div>
         </div>
         <div class="komplett-progress-label">
-          <span x-text="$store.jobs.alleAktualisierenStatus || t('komplett.done')"></span>
+          <span class="komplett-status-text"
+                x-text="$store.jobs.alleAktualisierenStatus || t('komplett.done')"
+                :data-tip="$store.jobs.alleAktualisierenStatus || t('komplett.done')"></span>
           <span x-show="$store.jobs.alleAktualisierenTokIn > 0 || $store.jobs.alleAktualisierenTokOut > 0" class="komplett-tokens">
-            <svg class="icon" aria-hidden="true"><use href="/icons.svg#arrow-up"/></svg><span x-text="_fmtTok($store.jobs.alleAktualisierenTokIn)"></span>
-            <svg class="icon" aria-hidden="true"><use href="/icons.svg#arrow-down"/></svg><span x-text="_fmtTok($store.jobs.alleAktualisierenTokOut)"></span>
-            <span x-show="$store.jobs.alleAktualisierenTps" x-text="' · ' + Math.round($store.jobs.alleAktualisierenTps) + ' tok/s'"></span>
+            <svg class="icon" aria-hidden="true"><use href="/icons.svg#arrow-up"/></svg><span class="komplett-tok-num" x-text="_fmtTok($store.jobs.alleAktualisierenTokIn)"></span>
+            <svg class="icon" aria-hidden="true"><use href="/icons.svg#arrow-down"/></svg><span class="komplett-tok-num" x-text="_fmtTok($store.jobs.alleAktualisierenTokOut)"></span>
+            <span class="komplett-tok-tps" x-show="$store.jobs.alleAktualisierenTps" x-text="' · ' + Math.round($store.jobs.alleAktualisierenTps) + ' tok/s'"></span>
           </span>
         </div>
         <ul class="komplett-phase-list" x-show="_komplettPhasen().length">
@@ -73,9 +80,9 @@
     </div>
     <!-- Kosten pro Call-Klasse: bewusst NEBEN dem Coverage-Score. Eine Tier-/Effort-
          Umstellung ist nur dann ein Gewinn, wenn die Summe sinkt UND der Recall hält —
-         beides muss im selben Blick lesbar sein. -->
+         beides muss im selben Blick lesbar sein. Nur für Admins: Autor:innen sehen keine Kosten. -->
     <div class="komplett-cost" x-cloak
-         x-show="!$store.jobs.alleAktualisierenLoading && $store.jobs.alleAktualisierenCost">
+         x-show="$store.session.currentUser?.isAdmin && !$store.jobs.alleAktualisierenLoading && $store.jobs.alleAktualisierenCost">
       <div class="komplett-cost-total">
         <span x-text="t('komplett.costTotal', { usd: ($store.jobs.alleAktualisierenCost?.totalUsd ?? 0).toFixed(2) })"></span>
       </div>
@@ -92,7 +99,6 @@
     <div class="komplett-status-actions">
       <button type="button"
               class="komplett-status-action-btn"
-              role="menuitem"
               @click="showKomplettStatus = false; clearChapterCache()"
               :disabled="$store.jobs.alleAktualisierenLoading || !$store.nav.selectedBookId"
               :data-tip="t('header.clearCacheTitle')">

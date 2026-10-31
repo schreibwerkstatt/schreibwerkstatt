@@ -63,8 +63,8 @@ const UNSURE = [
 
 test('bestaetigte Paare werden zu Hints, abgelehnte nicht', async () => {
   const ctx = makeCtx({ answer: { paare: [
-    { nr: 1, _reasoning: 'dieselbe Schule', gleich: true },
-    { nr: 2, _reasoning: 'zwei verschiedene Wirtschaften', gleich: false },
+    { nr: 1, begruendung: 'dieselbe Schule', gleich: true },
+    { nr: 2, begruendung: 'zwei verschiedene Wirtschaften', gleich: false },
   ] } });
   const hints = await judgeEntityPairs(ctx, 'ort', { incoming: ORTE_IN, existing: ORTE_EX, unsure: UNSURE });
   assert.equal(hints.size, 1);

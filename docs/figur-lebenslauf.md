@@ -82,10 +82,13 @@ Stufenübertritte zuverlässig falsch genug, dass die Antwort nicht mehr belegt 
 
 **Zwei Ebenen:**
 
-- **Buch:** `book_settings.schulsystem_json` (Bucheinstellungen › Kontext ›
-  Schulsystem, `PUT /booksettings/:book_id/schulsystem`, ab `editor`). Gewählt wird
-  eine Vorlage — «CH Solothurn (1990er)», «CH allgemein (HarmoS)» oder keins —,
-  editierbar sind Einschulungsalter, Stichtag,
+- **Buch:** `book_settings.schulsystem_json` (Bucheinstellungen › Reiter «Schule»,
+  `PUT /booksettings/:book_id/schulsystem`, ab `editor`). Ein Schalter oben im Reiter
+  entscheidet, ob das Buch überhaupt eine Schullaufbahn rechnet: aus = `null`
+  (Standard; nur wenige Bücher brauchen das), an = Vorlage «CH allgemein (HarmoS)»
+  als Ausgangspunkt. Eigene Schulwege der Figuren bleiben beim Ausschalten
+  gespeichert. Gewählt wird dann eine Vorlage — «CH Solothurn (1990er)» oder
+  «CH allgemein (HarmoS)» —, editierbar sind Einschulungsalter, Stichtag,
   Schuljahresbeginn, die Jahre je Stufe und der Standardweg. Stufen und benannte
   Wege kommen aus der Vorlage (`SCHUL_VORLAGEN`); gespeichert werden nur die
   editierbaren Werte, normalisiert. Unbekannte Vorlage → `400`. Wechselt der Autor
@@ -97,7 +100,7 @@ Stufenübertritte zuverlässig falsch genug, dass die Antwort nicht mehr belegt 
   Klassenstufe «im Handlungsjahr».
   Buchtypen ohne Figuren-Biografien (`SCHULWEG_OHNE_BUCHTYPEN` in
   school-path.js: Sachbuch, Wissenschaft, Essay, Lyrik, Blog, Journalismus) haben
-  keine Schullaufbahn: dort fehlen Einstellungs-Abschnitt, Steckbrief-Block und
+  keine Schullaufbahn: dort fehlen der Reiter «Schule» (samt Palette-Sprung), Steckbrief-Block und
   KI-Vorschlag, und die Schulweg-Routen, der Job und `get_figure_age` lesen über
   `lib/buchtyp.js#activeBookSchulsystem` kein System. Ein gespeichertes bleibt
   liegen und greift wieder, sobald der Buchtyp wechselt.

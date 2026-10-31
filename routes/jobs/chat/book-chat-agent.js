@@ -250,6 +250,9 @@ const runBookChatJobAgent = makeAgenticChatJob({
         // Welcher Werkzeugsatz lief — landet in context_info (Kosten-Diagnose:
         // ein Slim-Lauf beantwortet manche Frage nicht, das muss sichtbar sein).
         toolSet, toolsOffered: tools.length,
+        // Ohne Figuren-Werkzeuge fehlt die Komplettanalyse des Buchs (Figuren,
+        // Szenen, Zeitleiste, Orte): die Karte rät dann, sie laufen zu lassen.
+        komplettMissing: unavailable.includes('list_figures'),
         // generate_image-Tool sammelt hier {image_id, prompt, mime}; nach dem Loop
         // in context_info.images persistiert (Frontend-Anzeige im Verlauf).
         images: [],
@@ -287,6 +290,7 @@ const runBookChatJobAgent = makeAgenticChatJob({
     ...(ctx.recherche ? { recherche_hinweis: true, recherche_frage: ctx.recherche.frage } : {}),
     ...(ctx.ideenProposals?.length ? { proposals: ctx.ideenProposals } : {}),
     ...(ctx.toolSet ? { tool_set: ctx.toolSet, tools_offered: ctx.toolsOffered } : {}),
+    ...(ctx.komplettMissing ? { komplett_missing: true } : {}),
     ...(ctx.preContext ? { pre_context: ctx.preContext } : {}),
     fullPossible: !!ctx.fullPossible,
     // Im Chat generierte Bilder — Frontend rendert sie unter der Antwort.

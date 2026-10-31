@@ -17,7 +17,8 @@ import { subtypIcon, bandMarkerColor, eventSpanYears, POINT_SUBTYPES } from './e
 import {
   buildTimelineItems, timelineBounds, layoutBandItems, bandAxisTicks, buildBandModel,
 } from './ereignisse/band.js';
-import { normalizeEvent, normalizeEvents, compareEvents, sortEvents } from './ereignisse/model.js';
+import { normalizeEvent, normalizeEvents, compareEvents, sortEvents, eventGroupKey } from './ereignisse/model.js';
+import { ereignisEditMethods } from './ereignisse/edit.js';
 import { memoMethods } from './card-memo.js';
 import { activeFilterId, hasId, sameId } from '../chapter-filter.js';
 
@@ -32,11 +33,21 @@ export { normalizeEvent, normalizeEvents, compareEvents, sortEvents };
 // Arrays, weil beide Produzenten durch `normalizeEvent` laufen.
 // `kapitelId`/`seiteId` sind die bereits wirksamen Werte (activeFilterId gegen die
 // Optionen); Kapitel und Abschnitte per ID (chapter-filter.js).
+// Die Suche liest alles, was die Zeile zeigt: Text, Bedeutung, Datums-Label,
+// Figuren-, Kapitel- und Abschnittsnamen — «1987» oder ein Figurenname finden so
+// auch Ereignisse, in deren Text sie nicht stehen.
+export function eventSearchText(ev) {
+  return [
+    ev.ereignis, ev.bedeutung, ev.datum_label || ev.datum,
+    ...(ev.figuren || []).map(f => f?.name), ...(ev.kapitel || []), ...(ev.seiten || []),
+  ].filter(Boolean).join('\n').toLowerCase();
+}
+
 export function applyEreignisseFilters(events, { suche = '', figurId = '', subtyp = '', kapitelId = '', seiteId = '' } = {}) {
   let result = events || [];
   if (suche) {
     const q = suche.toLowerCase();
-    result = result.filter(ev => (ev.ereignis || '').toLowerCase().includes(q));
+    result = result.filter(ev => eventSearchText(ev).includes(q));
   }
   if (figurId) result = result.filter(ev => (ev.figuren || []).some(f => f.id === figurId));
   if (subtyp) result = result.filter(ev => (ev.subtyp || 'sonstiges') === subtyp);
@@ -67,9 +78,18 @@ export function registerEreignisseCard() {
     // Gerenderte Track-Breite (px, auf 16er gerundet gegen Resize-Thrashing).
     // Speist die Chip-Kollisionsauflösung in bandModel(); 0 = noch nicht gemessen.
     _bandWidth: 0,
-    // Listen-Index des aktuell hervorgehobenen Events (Klick auf Marker oder
-    // Listen-Datum). Markiert den passenden Band-Marker und scrollt ihn ins Bild.
-    selectedEventIndex: null,
+    // Ausgewähltes Ereignis als stabiler Schlüssel (`_eventSelKey`), NICHT als
+    // Listen-Index: nach einem Filterwechsel stünde an derselben Position ein
+    // anderes Ereignis, und dessen Marker leuchtete. Die Achse rechnet den Index
+    // daraus (selectedEventIndex()). Ereignisse mit ID spiegeln die Auswahl
+    // zusätzlich in den Store (Deep-Link, Hervorhebung der Listenzeile).
+    _selKey: null,
+    // Ereignis bearbeiten (ereignisse/edit.js).
+    eventEditId: null,
+    eventEditDraft: {},
+    eventEditBusy: false,
+    eventEditError: '',
+    eventEditMessage: '',
 
     init() {
       this._lifecycle = setupCardLifecycle(this, {
@@ -83,7 +103,12 @@ export function registerEreignisseCard() {
           zeitstrahlConsolidating: false,
           zeitstrahlProgress: 0,
           zeitstrahlStatus: '',
-          selectedEventIndex: null,
+          _selKey: null,
+          eventEditId: null,
+          eventEditDraft: {},
+          eventEditBusy: false,
+          eventEditError: '',
+          eventEditMessage: '',
         },
         load: async (root) => {
           this._memos = {};
@@ -128,6 +153,18 @@ export function registerEreignisseCard() {
 
     // Memo-Helper (cards/card-memo.js); Reset über this._memos = {} (load-Pfad).
     ...memoMethods,
+    ...ereignisEditMethods,
+
+    // Figuren, die in mindestens einem Ereignis vorkommen (Filter-Optionen).
+    ereignisseFigurOptionen() {
+      const events = Alpine.store('catalog').globalZeitstrahl;
+      const figuren = Alpine.store('catalog').figuren;
+      return this._memo('figOpt', [events, figuren], () => {
+        const ids = new Set();
+        for (const ev of (events || [])) for (const f of ev.figuren) if (f.id != null) ids.add(f.id);
+        return (figuren || []).filter(f => ids.has(f.id)).map(f => ({ value: f.id, label: f.kurzname || f.name }));
+      });
+    },
 
     // UI-Helper. Lesen $root-Filter + -Daten.
     ereignisseKapitelOptionen() {
@@ -185,15 +222,44 @@ export function registerEreignisseCard() {
         () => applyEreignisseFilters(events, { suche, figurId, kapitelId, seiteId, subtyp }));
     },
 
-    // Ausgewaehltes Ereignis (Store-ID) → Listen-Index fuer die Achsen-Markierung.
-    // Kein Scroll hier: den macht `openEreignisById` ueber das `data-event-id` der
-    // Zeile (gleicher Weg wie bei Figur/Ort/Szene), und zwar wartend, bis die
-    // Zeile im DOM steht.
+    // Auswahl-Schlüssel eines Ereignisses: die DB-ID, im Figuren-Fallback (ohne
+    // ID) der Vergleichsschlüssel aus Datum + Text.
+    _eventSelKey(ev) {
+      return ev?.id != null ? 'i' + ev.id : 'k' + eventGroupKey(ev);
+    },
+
+    isEventSelected(ev) {
+      return this._selKey != null && this._eventSelKey(ev) === this._selKey;
+    },
+
+    // Listen-Index des ausgewählten Ereignisses in der gefilterten Liste (Brücke
+    // zum Band-Marker), oder null, wenn es gerade herausgefiltert ist.
+    selectedEventIndex() {
+      const list = this.filteredEreignisse();
+      const key = this._selKey;
+      return this._memo('selIdx', [list, key], () => {
+        if (key == null) return null;
+        const idx = list.findIndex(ev => this._eventSelKey(ev) === key);
+        return idx >= 0 ? idx : null;
+      });
+    },
+
+    // Ein Ereignis auswählen (Marker- oder Datums-Klick). Mit ID auch im Store,
+    // damit Listenzeile, Deep-Link und Achse dasselbe Ereignis zeigen.
+    _selectEventAt(index) {
+      const ev = this.filteredEreignisse()[index];
+      if (!ev) return;
+      this._selKey = this._eventSelKey(ev);
+      if (ev.id != null) Alpine.store('catalogUi').selectedEreignisId = ev.id;
+    },
+
+    // Store-Auswahl (Hash-Router/Palette) → lokaler Schlüssel. Kein Scroll hier:
+    // den macht `openEreignisById` ueber das `data-event-id` der Zeile (gleicher
+    // Weg wie bei Figur/Ort/Szene), und zwar wartend, bis die Zeile im DOM steht.
     _syncSelectedEreignis() {
       const id = Alpine.store('catalogUi').selectedEreignisId;
-      if (id == null) { this.selectedEventIndex = null; return; }
-      const idx = this.filteredEreignisse().findIndex(ev => ev.id === id);
-      this.selectedEventIndex = idx >= 0 ? idx : null;
+      if (id != null) this._selKey = 'i' + id;
+      else if (this._selKey?.startsWith('i')) this._selKey = null;
     },
 
     // Scrollt das Event am Listen-Index ins Sichtfeld (Klick auf Timeline-Item).
@@ -229,19 +295,22 @@ export function registerEreignisseCard() {
     // Liste → Band: hebt den Marker zum Listen-Index hervor und scrollt ihn
     // horizontal ins Bild. No-op für undatierte Events (kein Marker auf der Achse).
     selectTimelineEvent(index) {
-      this.selectedEventIndex = index;
+      this._selectEventAt(index);
       this.$nextTick(() => {
         const marker = this.$root?.querySelector(`.gz-band-marker[data-ev-index="${index}"]`);
         marker?.scrollIntoView({ behavior: 'smooth', inline: 'center', block: 'nearest' });
       });
     },
 
-    // Achse/Zeile → Manuskript: öffnet die erste verknüpfte Seite, sonst das
-    // erste Kapitel. Liefert true, wenn ein Sprungziel existiert.
+    // Achse/Zeile → Manuskript: öffnet den ersten verknüpften Abschnitt, sonst
+    // das erste Kapitel — beides per ID (chapter-filter.js); nur ein Anker ohne ID
+    // (Figuren-Fallback) löst über den Namen auf. Liefert true bei Sprungziel.
     openEventText(ev) {
       if (!ev) return false;
-      const pageId = ev.page_ids?.[0];
+      const pageId = ev.page_ids?.find(id => id != null);
       if (pageId != null) { window.__app.gotoPageById(pageId); return true; }
+      const chapterId = ev.chapter_ids?.find(id => id != null);
+      if (chapterId != null) { window.__app.gotoChapterById(chapterId); return true; }
       const kap = ev.kapitel?.[0];
       if (kap) { window.__app.gotoStelle(kap, null); return true; }
       return false;
@@ -249,7 +318,7 @@ export function registerEreignisseCard() {
 
     // True, wenn openEventText ein Ziel hätte (steuert .internal-link-Affordance).
     eventHasTarget(ev) {
-      return ev?.page_ids?.[0] != null || !!ev?.kapitel?.[0];
+      return ev?.page_ids?.some(id => id != null) || !!ev?.kapitel?.length;
     },
 
     // --- Jahres-Band ---------------------------------------------------------
@@ -286,7 +355,7 @@ export function registerEreignisseCard() {
 
     // Klick auf einen Band-Marker → zum Listeneintrag scrollen + hervorheben.
     onBandMarkerClick(index) {
-      this.selectedEventIndex = index;
+      this._selectEventAt(index);
       this.scrollToEventIndex(index);
     },
   }));

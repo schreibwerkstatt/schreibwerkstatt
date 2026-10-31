@@ -23,8 +23,7 @@ import { presenceMethods } from '../book/figuren-presence.js';
 import { figurenAlterMethods } from '../book/figuren-alter.js';
 import { figurenLebenslaufMethods } from '../book/figuren-lebenslauf.js';
 import { setupCardLifecycle } from './card-lifecycle.js';
-import { takeCardRequest, CARD_REQUEST } from './card-request.js';
-import { EVT } from '../events.js';
+import { CARD_REQUEST } from './card-request.js';
 import { attachFullscreenSync } from '../fullscreen.js';
 import { observeThemeChange } from '../graph-kit.js';
 // Datums-Anzeige der Lebensereignisse: dieselbe reine Funktion wie in der
@@ -247,12 +246,9 @@ export function registerFigurenCard() {
           ctx.figurenGraphKapitelId = null;
           ctx.figurenGraphFullscreen = false;
         },
-        // Sprung auf einen Reiter (Job-Queue: figur-alter → «Alter»).
-        extraListeners: [{ type: EVT.CARD_REQUEST, handler: (e) => {
-          if (e.detail?.key === CARD_REQUEST.FIGUREN_TAB) this._applyFigurenTabRequest();
-        } }],
+        // Sprung auf einen Reiter (Figur in der Liste, Job-Queue: figur-alter → «Alter»).
+        tabRequest: { key: CARD_REQUEST.FIGUREN_TAB, apply: (mode) => this.setFigurenGraphModus(mode) },
       });
-      this._applyFigurenTabRequest();
 
       // Reiter „Alter" ist der einzige, der Daten nachlaedt (der Alters-Index
       // gehoert nicht in den heissen Katalog-Fetch). Darum hier und nicht in
@@ -315,11 +311,6 @@ export function registerFigurenCard() {
           }
         },
       });
-    },
-
-    _applyFigurenTabRequest() {
-      const mode = takeCardRequest(CARD_REQUEST.FIGUREN_TAB);
-      if (mode) this.setFigurenGraphModus(mode);
     },
 
     destroy() {

@@ -211,3 +211,21 @@ test('Kontinuitaet: Befunde des Attribut-Detektors (_source attr) sind von der Z
   assert.equal(out.length, 1, 'erfundenes Buchzitat faellt, Attribut-Befund bleibt');
   assert.equal(out[0].beschreibung, 'Geburtsjahr widerspricht sich.');
 });
+
+test('Szene: szenenCount zaehlt die gespeicherte Liste nach dem Within-Run-Dedup', () => {
+  db.prepare('DELETE FROM figure_scenes WHERE book_id = ?').run(BOOK);
+  db.prepare('DELETE FROM chapters WHERE book_id = ?').run(BOOK);
+  const { lastInsertRowid: chapId } = db.prepare(
+    `INSERT INTO chapters (book_id, chapter_name, updated_at) VALUES (?, ?, '2026-01-01T00:00:00.000Z')`
+  ).run(BOOK, 'Kapitel Eins');
+  const idMaps = { chNameToId: { 'Kapitel Eins': chapId }, pageNameToIdByChapter: {} };
+  const scene = (sort_order) => ({
+    kapitel: 'Kapitel Eins', seite: null, titel: 'Der Sturm', wertung: 'gut', kommentar: null,
+    fig_ids: [], ort_ids: [], sort_order,
+  });
+  // Zwei Extraktions-Paesse lieferten dieselbe Szene — gespeichert wird eine.
+  const { szenenCount } = saveSzenenAndEvents(BOOK, EMAIL, [scene(0), scene(1)], [], {}, idMaps, log, null);
+  const rows = db.prepare('SELECT COUNT(*) AS c FROM figure_scenes WHERE book_id = ? AND stale = 0').get(BOOK).c;
+  assert.equal(rows, 1);
+  assert.equal(szenenCount, rows, 'Kennzahl muss der gespeicherten Zahl entsprechen');
+});

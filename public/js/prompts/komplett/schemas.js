@@ -292,13 +292,13 @@ export const SCHEMA_KONTINUITAET_FAKTEN = _obj({
 
 // Verify-Stufe: pro gemeldetem Multi-Pass-Problem die Bestätigung mit Originaltext.
 // `grund` vor `bestaetigt`: ein Modell generiert in Feldreihenfolge — stünde das Urteil
-// vorn, wäre der Grund nur dessen Rechtfertigung (Reasoning-First wie _reasoning).
+// vorn, wäre der Grund nur dessen Rechtfertigung (Begründung zuerst wie `begruendung`).
 export const SCHEMA_KONTINUITAET_VERIFY = _obj({
   grund: _str,
   bestaetigt: { type: 'boolean' },
 });
 
-// _reasoning MUSS das erste Property bleiben: PROBLEME_RULES (schema-strings.js)
+// begruendung MUSS das erste Property bleiben: PROBLEME_RULES (schema-strings.js)
 // erzwingt Reasoning-First als zentrale False-Positive-Abwehr. _obj() macht alle
 // Properties required + additionalProperties:false – ohne dieses Feld verbietet die
 // Grammar lokaler Provider (ollama/llama) genau das vom Prompt geforderte Reasoning.
@@ -307,7 +307,7 @@ export const SCHEMA_KONTINUITAET_VERIFY = _obj({
 // legt Einträge mit entwarnung===true als verworfen ab (einziges Entwarnungs-Signal,
 // kein Text-Fallback über die Prosa).
 export const SCHEMA_KONTINUITAET_PROBLEME = _obj({
-  _reasoning: _str,
+  begruendung: _str,
   probleme: {
     type: 'array',
     items: _obj({
@@ -358,7 +358,7 @@ export const SCHEMA_FIGUREN_ALIAS_CLUSTER = _obj({
 // entscheidet das Modell, ob ein echter Kontinuitätswiderspruch vorliegt. Reasoning-First
 // als False-Positive-Abwehr (analog SCHEMA_KONTINUITAET_PROBLEME).
 export const SCHEMA_ATTR_CONTRADICTION = _obj({
-  _reasoning: _str,
+  begruendung: _str,
   widerspruch: { type: 'boolean' },
   schwere: { type: 'string', enum: ['kritisch', 'mittel', 'niedrig'] },
   beschreibung: _str,
@@ -372,7 +372,7 @@ export const SCHEMA_ATTR_CONTRADICTION = _obj({
 export const SCHEMA_ENTITY_MATCH = _obj({
   paare: {
     type: 'array',
-    items: _obj({ nr: _num, _reasoning: _str, gleich: { type: 'boolean' } }),
+    items: _obj({ nr: _num, begruendung: _str, gleich: { type: 'boolean' } }),
   },
 });
 
@@ -382,7 +382,7 @@ export const SCHEMA_ENTITY_MATCH = _obj({
 // dreistufig: nur «falsch» erzeugt einen Befund; «unklar» (keine belastbare Quelle) und
 // «korrekt» werden verworfen. `quelle` = belegende URL (nur bei «falsch» Pflicht).
 export const SCHEMA_FAKT_REALITY = _obj({
-  _reasoning: _str,
+  begruendung: _str,
   urteil: { type: 'string', enum: ['korrekt', 'falsch', 'unklar'] },
   schwere: { type: 'string', enum: ['kritisch', 'mittel', 'niedrig'] },
   beschreibung: _str,

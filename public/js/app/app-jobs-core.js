@@ -512,15 +512,16 @@ export const appJobsCoreMethods = {
     // Prüfen ob ein komplett-analyse Job vom Server noch läuft (z.B. Tab geschlossen)
     if (!this.$store.jobs.alleAktualisierenLoading) {
       try {
-        const { jobId, status, progress, statusText, statusParams } = await fetchJson(
-          `/jobs/active?type=komplett-analyse&book_id=${bookId}`
-        );
+        const active = await fetchJson(`/jobs/active?type=komplett-analyse&book_id=${bookId}`);
+        const { jobId, status, progress, statusText, statusParams } = active;
         if (jobId && (status === 'running' || status === 'queued')) {
           this.$store.jobs.alleAktualisierenLoading = true;
           this.$store.jobs.alleAktualisierenProgress = progress || 0;
-          this.$store.jobs.alleAktualisierenTokIn = 0;
-          this.$store.jobs.alleAktualisierenTokOut = 0;
-          this.$store.jobs.alleAktualisierenTps = null;
+          this.$store.jobs.alleAktualisierenTokIn = active.tokensIn || 0;
+          this.$store.jobs.alleAktualisierenTokOut = active.tokensOut || 0;
+          this.$store.jobs.alleAktualisierenTps = active.tokensPerSec ?? null;
+          this.$store.jobs.alleAktualisierenPassMode = active.passMode ?? null;
+          this.$store.jobs.alleAktualisierenScope = active.komplettScope ?? null;
           this.$store.jobs.alleAktualisierenStatus = statusText ? this.t(statusText, statusParams) : this.t('komplett.running');
           this.showKomplettStatus = true;
           this._startKomplettPoll(jobId, bookId);

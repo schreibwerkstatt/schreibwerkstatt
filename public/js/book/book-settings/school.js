@@ -1,5 +1,5 @@
 // Teil von bookSettingsMethods (siehe Facade book-settings.js).
-// Schulsystem des Buchs (Kontext-Tab, docs/figur-lebenslauf.md «Schullaufbahn»):
+// Schulsystem des Buchs (Reiter «Schule», docs/figur-lebenslauf.md «Schullaufbahn»):
 // Vorlage, Einschulungsalter, Stichtag, Schuljahresbeginn, Jahre je Stufe,
 // Standardweg. Grundlage der Klassenstufen in Figuren-Karte und Buch-Chat.
 //
@@ -15,6 +15,8 @@ import {
   vorlageLabelKey, stufeLabelKey, wegLabelKey,
 } from '../school-path.js';
 
+const SCHUL_VORLAGE_DEFAULT = 'ch_harmos';
+
 export const schoolMethods = {
   /** Aus dem Settings-Response übernehmen (GET /booksettings/:id trägt `schulsystem`). */
   _applySchoolSettings(data) {
@@ -28,6 +30,17 @@ export const schoolMethods = {
   /** Abschnitt nur bei Buchtypen mit Schullaufbahn — folgt der Auswahl im Formular. */
   schulAbschnittSichtbar() {
     return schulwegFuerBuchtyp(this.bookSettingsBuchtyp);
+  },
+
+  /** Schalter oben im Reiter: aus = kein Schulsystem, an = Vorlage HarmoS als
+   *  Ausgangspunkt (die allgemeine; Solothurn ist eine bewusste Wahl). Eigene
+   *  Schulwege der Figuren bleiben beim Ausschalten gespeichert und greifen wieder,
+   *  sobald dieselbe Vorlage aktiv ist. */
+  onSchulAktivChange(on) {
+    if (!on) { this.bookSchulsystem = null; this.schulVorlage = ''; return; }
+    if (this.bookSchulsystem) return;
+    this.schulVorlage = SCHUL_VORLAGE_DEFAULT;
+    this.bookSchulsystem = schulsystemAusVorlage(SCHUL_VORLAGE_DEFAULT);
   },
 
   schulVorlageOptionen() {

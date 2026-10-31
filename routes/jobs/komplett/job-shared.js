@@ -358,46 +358,49 @@ function buildAnachronismusData(bookIdInt, email) {
 // Attribut-Widerspruchs-Detektor (F4): ./attribute-check.js (hier re-exportiert).
 const { buildAttributeContradictions, runAttributeContradictionCheck } = require('./attribute-check');
 
-// ── Remap-Rescue: unauflösbare Figuren-Klarnamen dem Katalog zuordnen ─────────
-// remapSzenen/remapAssignments verwerfen Figuren-Klarnamen aus Szenen/Events, die sich weder
-// exakt noch per lowercase/Token-Fallback einem konsolidierten Figur-Eintrag zuordnen lassen
-// (Spitznamen, Teilnamen, Epitheta, Schreibvarianten). Bevor sie gedroppt werden, mappt ein
-// billiger Auflösungs-Call (Kandidaten + Katalognamen → Zuordnung oder «») sie – gefundene
-// Treffer werden als lowercase-Aliase in figNameToIdLower eingespeist, sodass der anschliessende
-// Remap sie auflöst statt Szenen-Figuren-Links / Event-Assignments zu verlieren. Nur
-// Cloud-Klasse (der Call urteilt über Namensvarianten und braucht ein faehiges Modell,
-// keine Anthropic-API-Faehigkeit — SSoT lib/ai/config.js#providerClass),
-// nur wenn es überhaupt unauflösbare Namen gibt. Non-fatal (AbortError propagiert). Mutiert
-// figNameToIdLower in place; gibt die Anzahl neu aufgelöster Namen zurück.
-async function resolveRemapNames(ctx, { chapterSzenen, chapterAssignments, figuren, figNameToId, figNameToIdLower }) {
+// ── Remap-Rescue: unauflösbare Figuren-/Ort-Klarnamen dem Katalog zuordnen ────
+// remapSzenen/remapAssignments verwerfen Klarnamen aus Szenen/Events, die sich weder exakt
+// noch per lowercase einem konsolidierten Eintrag zuordnen lassen. Bei Figuren sind das
+// Spitznamen, Teilnamen, Epitheta, Schreibvarianten; bei Orten benennt die Orte-
+// Konsolidierung um («Rumpel-Restaurant» → «Rumpel», «Schützi» → «Schützenmatte (Schützi)»),
+// und die deterministische Alias-Brücke (phases/orte.js#ortAliasesFromSources) erkennt nur
+// SAME-Paare aus den Kapitel-Orten, nicht die Namen der Szenen. Bevor sie gedroppt werden,
+// mappt ein billiger Auflösungs-Call (Kandidaten + Katalognamen → Zuordnung oder «») sie –
+// gefundene Treffer werden als lowercase-Aliase in die Lower-Map eingespeist, sodass der
+// anschliessende Remap sie auflöst. Nur Cloud-Klasse (der Call urteilt über Namensvarianten
+// und braucht ein faehiges Modell, keine Anthropic-API-Faehigkeit — SSoT
+// lib/ai/config.js#providerClass), nur wenn es überhaupt unauflösbare Namen gibt. Non-fatal
+// (AbortError propagiert). Mutiert die Lower-Map in place; gibt die Anzahl neu aufgelöster
+// Namen zurück.
+const _RESCUE_KIND = {
+  figur: { sysKey: 'SYSTEM_FIGUREN_BLOCKS', logLabel: 'Namen' },
+  ort:   { sysKey: 'SYSTEM_ORTE_BLOCKS',    logLabel: 'Ort-Namen' },
+};
+
+async function _rescueNames(ctx, kind, rawNames, catalog, nameToId, nameToIdLower) {
   const { call, prompts, sys, jobId, tok, bookName, log, effectiveProvider } = ctx;
   if (providerClass(effectiveProvider) !== 'cloud') return 0;
   if (appSettings.get('ai.komplett.remap_rescue') === false) return 0;
 
-  const isResolved = (name) => !name || !!(figNameToId[name] || figNameToIdLower[name.toLowerCase()]);
+  const isResolved = (name) => !name || !!(nameToId[name] || nameToIdLower[name.toLowerCase()]);
   const unknown = new Map(); // lowerKey → Anzeige-Name
-  const add = (raw) => {
+  for (const raw of rawNames) {
     const name = _refToString(raw);
-    if (!name || isResolved(name)) return;
+    if (!name || isResolved(name)) continue;
     const k = name.toLowerCase();
     if (!unknown.has(k)) unknown.set(k, name);
-  };
-  for (const { szenen } of (chapterSzenen || []))
-    for (const s of (szenen || []))
-      for (const n of (s?.figuren_namen || [])) add(n);
-  for (const { assignments } of (chapterAssignments || []))
-    for (const a of (assignments || [])) add(a?.figur_name);
-
+  }
   const unknownList = [...unknown.values()];
-  const catalogNames = (figuren || []).map(f => f.name).filter(Boolean);
+  const catalogNames = (catalog || []).map(e => e.name).filter(Boolean);
   if (!unknownList.length || !catalogNames.length) return 0;
 
+  const { sysKey, logLabel } = _RESCUE_KIND[kind];
   updateJob(jobId, { statusText: 'job.phase.resolveNames' });
   let res;
   try {
     res = await call(jobId, tok,
-      prompts.buildNameResolutionPrompt(bookName, unknownList, catalogNames),
-      sys.SYSTEM_FIGUREN_BLOCKS, null, null, 800, 0.2, null, prompts.SCHEMA_NAME_RESOLUTION,
+      prompts.buildNameResolutionPrompt(bookName, unknownList, catalogNames, kind),
+      sys[sysKey], null, null, 800, 0.2, null, prompts.SCHEMA_NAME_RESOLUTION,
       costTier(COST_LABEL.match));
     // Pflichtfeld: ohne `zuordnungen`-Array hat das Modell nicht wie verlangt geantwortet
     // — als Fehler melden (gleicher non-fataler Ausgang unten), nicht still als
@@ -405,22 +408,40 @@ async function resolveRemapNames(ctx, { chapterSzenen, chapterAssignments, figur
     if (!Array.isArray(res?.zuordnungen)) throw i18nError('job.error.nameResolutionMissing');
   } catch (e) {
     if (e.name === 'AbortError') throw e;
-    log.warn(`Remap-Rescue Namensauflösung fehlgeschlagen (ignoriert): ${i18nErrText(e)}`);
+    log.warn(`Remap-Rescue ${logLabel} fehlgeschlagen (ignoriert): ${i18nErrText(e)}`);
     return 0;
   }
-  const catalogByLower = new Map((figuren || []).map(f => [String(f.name || '').toLowerCase(), f.id]));
+  const catalogByLower = new Map((catalog || []).map(e => [String(e.name || '').toLowerCase(), e.id]));
   let added = 0;
   for (const z of res.zuordnungen) {
     const name = _refToString(z?.name);
     const treffer = _refToString(z?.treffer);
     if (!name || !treffer) continue;
-    const id = figNameToId[treffer] || figNameToIdLower[treffer.toLowerCase()] || catalogByLower.get(treffer.toLowerCase());
+    const id = nameToId[treffer] || nameToIdLower[treffer.toLowerCase()] || catalogByLower.get(treffer.toLowerCase());
     if (!id) continue;
     const lk = name.toLowerCase();
-    if (!figNameToIdLower[lk]) { figNameToIdLower[lk] = id; added++; }
+    if (!nameToIdLower[lk]) { nameToIdLower[lk] = id; added++; }
   }
-  if (added) log.info(`Remap-Rescue: ${added}/${unknownList.length} unauflösbare Namen dem Katalog zugeordnet.`);
+  if (added) log.info(`Remap-Rescue: ${added}/${unknownList.length} unauflösbare ${logLabel} dem Katalog zugeordnet.`);
   return added;
+}
+
+/** Figuren-Klarnamen aus Szenen + Events; mutiert figNameToIdLower. */
+async function resolveRemapNames(ctx, { chapterSzenen, chapterAssignments, figuren, figNameToId, figNameToIdLower }) {
+  const names = [];
+  for (const { szenen } of (chapterSzenen || []))
+    for (const s of (szenen || [])) names.push(...(s?.figuren_namen || []));
+  for (const { assignments } of (chapterAssignments || []))
+    for (const a of (assignments || [])) names.push(a?.figur_name);
+  return _rescueNames(ctx, 'figur', names, figuren, figNameToId, figNameToIdLower);
+}
+
+/** Ort-Klarnamen aus Szenen; mutiert ortNameToIdLower. */
+async function resolveRemapOrtNames(ctx, { chapterSzenen, orte, ortNameToId, ortNameToIdLower }) {
+  const names = [];
+  for (const { szenen } of (chapterSzenen || []))
+    for (const s of (szenen || [])) names.push(...(s?.orte_namen || []));
+  return _rescueNames(ctx, 'ort', names, orte, ortNameToId, ortNameToIdLower);
 }
 
 // ── Per-Job-Overrides für die Komplettanalyse-Familie ─────────────────────────
@@ -496,4 +517,5 @@ module.exports = {
   buildAnachronismusData, _komplettAiOverrides,
   buildAttributeContradictions, runAttributeContradictionCheck,
   resolveRemapNames,
+  resolveRemapOrtNames,
 };

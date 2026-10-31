@@ -133,3 +133,27 @@ test('runKonsolBatched: scheitert jeder Teil, wirft es (Aufrufer fällt zurück)
   const ctx = makeCtx(() => { throw new Error('boom'); });
   await assert.rejects(runKonsolBatched(ctx, chapters(120), OPTS));
 });
+
+test('mergeKonsolParts: Figur eines anderen Teils (nur Beziehungsziel) wird verworfen, neuer kanonischer Name bleibt', () => {
+  const inputA = [{ kapitel: 'A', figuren: [
+    fig('fig_1', 'Hans Meier', { beziehungen: [{ name: 'Anna Weber', typ: 'freund' }] }),
+    fig('fig_2', 'Hansi'),
+  ] }];
+  const inputB = [{ kapitel: 'B', figuren: [fig('fig_1', 'Anna Weber', { beschreibung: 'voller Steckbrief' })] }];
+  const parts = [
+    // Teil A erfindet einen dünnen Eintrag für das Beziehungsziel Anna Weber und
+    // fasst Hans/Hansi unter einem neuen kanonischen Namen zusammen.
+    { input: inputA, figuren: [
+      { id: 'fig_1', name: 'Johann «Hansi» Meier', beziehungen: [{ name: 'Anna Weber', typ: 'freund' }] },
+      { id: 'fig_2', name: 'Anna Weber', beschreibung: 'dünn', beziehungen: [] },
+    ] },
+    { input: inputB, figuren: [{ id: 'fig_1', name: 'Anna Weber', beschreibung: 'voller Steckbrief', beziehungen: [] }] },
+  ];
+  const out = mergeKonsolParts(parts, null);
+  const annas = out.filter(f => f.name === 'Anna Weber');
+  assert.equal(annas.length, 1, 'Anna nur einmal');
+  assert.equal(annas[0].beschreibung, 'voller Steckbrief', 'der Eintrag ihres eigenen Teils gewinnt');
+  assert.ok(out.some(f => f.name === 'Johann «Hansi» Meier'), 'neuer kanonischer Name bleibt');
+  const hans = out.find(f => f.name === 'Johann «Hansi» Meier');
+  assert.deepEqual(hans.beziehungen.map(b => b.figur_id), [annas[0].id], 'Kante zeigt auf die echte Anna');
+});

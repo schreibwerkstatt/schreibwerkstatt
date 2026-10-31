@@ -16,14 +16,6 @@ export const bookChatMethods = {
     return Array.isArray(c) ? c : [];
   },
 
-  // Kosten dieser Antwort (nur Claude; aus dem Job berechnet, context_info.cost_usd).
-  _bookChatCost(msg) {
-    const usd = msg?.context_info?.cost_usd;
-    if (!(usd > 0)) return '';
-    const v = usd < 0.01 ? usd.toFixed(4) : usd.toFixed(2);
-    return window.__app.t('chat.answerCost', { usd: v });
-  },
-
   // Hinweis, wenn die Antwort aus einem Deckel-Abbruch synthetisiert wurde.
   _bookChatStopNote(msg) {
     const r = msg?.context_info?.stop_reason;

@@ -43,6 +43,10 @@ export function registerJobsStore() {
     alleAktualisierenTokOut: 0,
     alleAktualisierenTps: null,
     alleAktualisierenPassMode: null,
+    // Umfang des laufenden/letzten Laufs (job.komplettScope) — die Phasenliste blendet
+    // daran abgewählte Phasen aus. Nicht der Dialog-Zustand: der ist nach einem
+    // Neuladen auf den Vorgabe-Umfang zurückgesetzt.
+    alleAktualisierenScope: null,
     alleAktualisierenWarnings: [],
     alleAktualisierenCoverage: null,
     // Kosten-Aufschluesselung des letzten Laufs (job.result.costByPhase): zeigt neben

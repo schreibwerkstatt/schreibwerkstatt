@@ -80,14 +80,6 @@ export const researchChatMethods = {
     return (msg?.context_info?.web_queries || []).filter(q => typeof q === 'string' && q.trim());
   },
 
-  // Kosten dieser Antwort (Tokens + Web-Suchen) aus context_info.cost_usd.
-  researchCostLabel(msg) {
-    const usd = Number(msg?.context_info?.cost_usd);
-    if (!Number.isFinite(usd) || usd <= 0) return '';
-    const v = usd < 0.1 ? usd.toFixed(3) : usd.toFixed(2);
-    return window.__app.t('recherche.chat.cost', { usd: v });
-  },
-
   ...researchProposalMethods,
 
   ...makeChatMethods({

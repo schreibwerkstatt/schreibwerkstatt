@@ -35,11 +35,6 @@
           <div x-show="msg.role === 'user'" class="chat-msg-text" x-text="msg.content"></div>
           <div x-show="msg.role === 'assistant'" class="chat-msg-text" x-html="_renderChatMarkdown(msg.content)"></div>
 
-          <template x-if="msg.role === 'assistant' && ideenChatCostLabel(msg)">
-            <div class="chat-context-info">
-              <span class="chat-context-badge" x-text="ideenChatCostLabel(msg)"></span>
-            </div>
-          </template>
           <!-- @include chat-tool-log -->
 
           <!-- Vorschläge an die Ideen: jeder einzeln übernehmen/verwerfen -->

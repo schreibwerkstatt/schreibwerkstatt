@@ -35,6 +35,7 @@ function jobView(job, { withResult = true } = {}) {
     tokensPerSec: job.tokensPerSec,
     error: job.error, errorParams: job.errorParams,
     passMode: job.passMode ?? null,
+    komplettScope: job.komplettScope ?? null,
     // Agentische Chats: Werkzeug-Verlauf des laufenden Turns (agentic-chat/loop.js),
     // gedeckelt; nur solange der Job läuft, danach steht er in context_info.
     ...(job.liveTools && job.status === 'running' ? { liveTools: job.liveTools, liveRounds: job.liveRounds || [] } : {}),

@@ -48,8 +48,10 @@ async function serverHtml(page, id) {
 }
 
 // Netz-Mocks für genau EINEN Chat-Turn. Liefert das PATCH-Protokoll.
-// `contextInfo` ersetzt das context_info der Antwort (Ideen-Vorschläge).
-async function mockChatTurn(page, pageId, contextInfo = { titel_varianten: ['Hofgeflüster', 'Stille im Hof'] }) {
+// `contextInfo` ersetzt das context_info der Antwort (Ideen-Vorschläge),
+// `vorschlaege` die Änderungsvorschläge.
+const DEFAULT_VORSCHLAEGE = [{ original: 'bellt laut', ersatz: 'bellt leise', begruendung: 'ruhiger' }];
+async function mockChatTurn(page, pageId, contextInfo = { titel_varianten: ['Hofgeflüster', 'Stille im Hof'] }, vorschlaege = DEFAULT_VORSCHLAEGE) {
   const patches = [];
   let answered = false;
   await page.route('**/jobs/chat', async (route) => {
@@ -70,7 +72,7 @@ async function mockChatTurn(page, pageId, contextInfo = { titel_varianten: ['Hof
           { id: 900001, role: 'user', content: 'Mach es leiser', vorschlaege: [], context_info: null },
           {
             id: 900002, role: 'assistant', content: 'Hier ein Vorschlag.',
-            vorschlaege: [{ original: 'bellt laut', ersatz: 'bellt leise', begruendung: 'ruhiger' }],
+            vorschlaege,
             context_info: typeof contextInfo === 'function' ? contextInfo() : contextInfo,
           },
         ],
@@ -132,6 +134,36 @@ test('Seiten-Chat (Leseansicht): Übernehmen speichert, Marke verschwindet, Rüc
     await expect(titel.locator('.chat-titel-text')).toHaveText('Hofgeflüster');
     await titel.locator('.chat-vorschlag-btn').first().click();
     await page.waitForFunction(() => window.__app.currentPage?.name === 'Hofgeflüster');
+  } finally {
+    await deletePage(page, pageId);
+  }
+});
+
+// Ersatz mit *kursiv* und Leerzeile: echtes <em> und zwei Absätze statt Sternchen
+// und verklebter Sätze (utils/html-replace-rich.js); Rückgängig über die Karte gesperrt.
+test('Seiten-Chat: Übernehmen mit Hervorhebung und Absatzteilung', async ({ page }) => {
+  await bootApp(page);
+  await selectSeededBook(page);
+  const pageId = await createPage(page);
+  try {
+    await page.waitForFunction(() => window.__app.showEditorCard && (window.__app.originalHtml || '').includes('bellt laut'));
+    await mockChatTurn(page, pageId, null, [{
+      original: 'Der Hund bellt laut im Hof. Die Katze',
+      ersatz: 'Der Hund bellt *leise* im Hof.\n\nDie Katze',
+      begruendung: 'Absatz', typ: 'stil',
+    }]);
+    await openChatAndSend(page);
+    const card = page.locator('#chat-card .chat-vorschlag');
+    await expect(card.locator('.badge')).toHaveText(/Stil|Style/);
+
+    await card.locator('.chat-vorschlag-actions button:visible').first().click();
+    await expect.poll(() => serverHtml(page, pageId)).toContain('<em>leise</em>');
+    const html = await serverHtml(page, pageId);
+    expect(html).not.toContain('*');
+    expect((html.match(/<p\b/g) || []).length).toBe(2);
+    expect(html).toMatch(/im Hof\.<\/p><p[^>]*>Die Katze/);
+    await expect(card).toHaveClass(/chat-vorschlag--applied/);
+    await expect(card.locator('.chat-vorschlag-actions button:visible').first()).toBeDisabled();
   } finally {
     await deletePage(page, pageId);
   }

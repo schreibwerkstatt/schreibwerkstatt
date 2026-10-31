@@ -38,6 +38,7 @@ const NOT_A_MESSAGE = new Map([
 const OWN_COMPONENT = new Map([
   ['combobox-empty', 'Innenleben der Pflicht-Komponente combobox (JS-gerendert)'],
   ['lt-popover__empty', 'Spellcheck-Popover im OTA-Editor-Bundle — die nativen Schalen laden card-blocks.css nicht'],
+  ['synonym-picker-empty', 'Synonym-Picker im OTA-Editor-Bundle (SPA + Mac-Controller) — die nativen Schalen laden card-blocks.css nicht'],
 ]);
 // Share-Reader: eigene SSR-Seite mit eigenem Theme (`--share-*`), ohne card-blocks.css.
 const SKIP_CSS_DIRS = ['public/css/share/'];

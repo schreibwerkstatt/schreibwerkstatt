@@ -1,6 +1,6 @@
 # ERD — schreibwerkstatt
 
-Stand: Schema-Version 346, 188 Tabellen (ohne `sqlite_*`/`schema_version`/FTS5-Shadow-Tables; inkl. FTS5-Virtual `search_index`/`search_trigram`/`chat_messages_fts` + `search_meta`).
+Stand: Schema-Version 348, 188 Tabellen (ohne `sqlite_*`/`schema_version`/FTS5-Shadow-Tables; inkl. FTS5-Virtual `search_index`/`search_trigram`/`chat_messages_fts` + `search_meta`).
 
 Quelle: Squashed-Schema-Snapshot in [db/squashed-schema.js](../db/squashed-schema.js) (regeneriert via `node tools/dump-schema.js`) + [db/migrations.js](../db/migrations.js). Drift gegen die Legacy-Migration-Kette ist durch [tests/unit/squash-drift.test.mjs](../tests/unit/squash-drift.test.mjs) gegated. Mermaid-Diagramme — in VSCode mit „Markdown Preview Mermaid Support" (oder GitHub) direkt sichtbar.
 
@@ -1226,6 +1226,7 @@ erDiagram
     TEXT    recheck_reason  "Begründung des Modells"
     TEXT    recheck_beleg   "Beleg-Zitat des Modells"
     TEXT    recheck_at      "Zeitpunkt des Urteils (ISO+Z)"
+    TEXT    missing_since   "offener Befund des Vorlaufs, den dieser Lauf nicht mehr meldete (mitgeführt); erster Lauf ohne Meldung (ISO+Z); NULL = selbst gemeldet"
   }
   continuity_issue_figures {
     INTEGER id         PK
@@ -1303,6 +1304,7 @@ erDiagram
     TEXT    subtyp          "geburt|tod|reise|… Whitelist"
     TEXT    bedeutung
     INTEGER manually_edited "Schutz vor Re-Run-Overwrite"
+    TEXT    ki_key          "Vergleichsschluessel des KI-Stands"
     INTEGER sort_order
     TEXT    updated_at
   }

@@ -345,7 +345,9 @@ export { buildErzaehlweiseLine } from './prompts/chat-pre-context.js';
 
 export {
   buildSynonymPrompt,
+  prepareSynonymSatz,
   SCHEMA_SYNONYM,
+  SYNONYM_PROMPT_REV,
 } from './prompts/synonym.js';
 
 export {

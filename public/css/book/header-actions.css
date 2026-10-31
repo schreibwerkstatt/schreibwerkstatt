@@ -90,7 +90,7 @@
   height: var(--ring-size);
   border-radius: 50%;
   background:
-    conic-gradient(var(--color-primary) calc(var(--progress) * 1%), var(--color-border) 0);
+    conic-gradient(var(--color-primary) var(--progress), var(--color-border) 0);
   position: relative;
   flex-shrink: 0;
 }

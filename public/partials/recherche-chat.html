@@ -27,13 +27,12 @@
           <div x-show="msg.role === 'user'" class="chat-msg-text" x-text="msg.content"></div>
           <div x-show="msg.role === 'assistant'" class="chat-msg-text" x-html="_renderResearchAnswer(msg)"></div>
 
-          <!-- Web-Suchen + Kosten; die einzelnen Aufrufe stehen im Werkzeug-Verlauf -->
-          <template x-if="msg.role === 'assistant' && msg.context_info">
+          <!-- Web-Suchen; die einzelnen Aufrufe stehen im Werkzeug-Verlauf -->
+          <template x-if="msg.role === 'assistant' && msg.context_info?.web_searches > 0">
             <div class="chat-context-info">
               <template x-if="msg.context_info.web_searches > 0">
                 <span class="chat-context-tool" x-text="$app.t('recherche.chat.webSearches', { n: msg.context_info.web_searches })"></span>
               </template>
-              <span class="chat-context-tool" x-show="researchCostLabel(msg)" x-text="researchCostLabel(msg)"></span>
             </div>
           </template>
           <!-- @include chat-tool-log -->

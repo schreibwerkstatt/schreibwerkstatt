@@ -114,7 +114,8 @@ test('Entwarnung, erfundenes Zitat und Verify-Urteil landen mit Grund unter «ve
   assert.equal(out.length, 1);
   assert.equal(stats.discarded, 3);
   const check = latest();
-  assert.deepEqual(check.issues.map(i => i.beschreibung), ['Marek stirbt und lebt.']);
+  // Befunde des Vortests wandern als «nicht mehr gemeldet» mit; gezählt wird nur dieser Lauf.
+  assert.deepEqual(check.issues.filter(i => !i.missing_since).map(i => i.beschreibung), ['Marek stirbt und lebt.']);
   assert.deepEqual(check.discarded.map(d => [d.beschreibung, d.discard_reason, d.discard_detail]), [
     ['Verify sagt nein.', 'verify', 'Rückblende in der Rückkehr.'],
     ['Entwarnt.', 'entwarnung', null],

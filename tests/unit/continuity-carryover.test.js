@@ -31,10 +31,36 @@ test('anderer Widerspruch im selben Kapitel → nicht übernommen', () => {
   assert.deepEqual(carryOverStatus([neu], [PRIOR]), [null]);
 });
 
-test('anderer Typ oder andere Figur → nicht derselbe', () => {
+test('andere Figur → nicht derselbe', () => {
+  assert.equal(sameIssue(issueSignature({ ...PRIOR, figuren: ['Lena'] }), issueSignature(PRIOR)), false);
+});
+
+test('Typwechsel bei fast gleichen Stellen → derselbe; bei nur mässigem Überlapp nicht', () => {
   const base = issueSignature(PRIOR);
-  assert.equal(sameIssue(issueSignature({ ...PRIOR, typ: 'zeitlinie' }), base), false);
-  assert.equal(sameIssue(issueSignature({ ...PRIOR, figuren: ['Lena'] }), base), false);
+  // Dasselbe falsche Alter, einmal «figur», einmal «zeitlinie» geführt.
+  assert.equal(sameIssue(issueSignature({ ...PRIOR, typ: 'zeitlinie' }), base), true);
+  const umformuliert = {
+    stelle_a: 'Kapitel 3: «Marek lag reglos unter den Trümmern des Hauses»',
+    stelle_b: 'Kapitel 5: «Marek öffnete lachend die Tür»',
+  };
+  assert.equal(sameIssue(issueSignature({ ...PRIOR, ...umformuliert }), base), true);
+  assert.equal(sameIssue(issueSignature({ ...PRIOR, ...umformuliert, typ: 'zeitlinie' }), base), false);
+});
+
+test('bei Gleichstand erbt der Kandidat desselben Typs', () => {
+  const gleicherTyp = { ...PRIOR, check_id: 1, dismissed: false, dismissed_at: null };
+  const andererTyp = { ...PRIOR, check_id: 1, typ: 'zeitlinie' };
+  // gleicherTyp ist offen → der neue Befund bleibt offen, obwohl andererTyp verworfen ist
+  assert.deepEqual(carryOverStatus([{ ...PRIOR }], [andererTyp, gleicherTyp]), [null]);
+});
+
+test('gemeinsamer Seitenanker macht verschiedene Kapitel-IDs vereinbar', () => {
+  // Alter Lauf ordnete das Kapitel über einen Namen zu, den auch ein Abschnitt trägt.
+  const alt = { ...PRIOR, chapter_ids: [4], page_a_id: 24, page_b_id: 55 };
+  const neu = { ...PRIOR, chapter_ids: [11], page_a_id: 24, page_b_id: 55 };
+  assert.equal(carryOverStatus([neu], [alt])[0]?.dismissed, true);
+  const ohneAnker = { ...PRIOR, chapter_ids: [11] };
+  assert.equal(carryOverStatus([ohneAnker], [{ ...alt, page_a_id: null, page_b_id: null }])[0], null);
 });
 
 test('jeder frühere Befund wird höchstens einmal vergeben', () => {
@@ -68,7 +94,10 @@ test('jüngste Zeile zählt: aufgehobenes „kein Fehler" kommt nicht über die 
 });
 
 test('ein älterer verworfener Befund, den der jüngste Lauf nicht fand, vererbt weiter', () => {
-  const other = { ...PRIOR, check_id: 2, typ: 'zeitlinie', dismissed: false };
+  const other = {
+    ...PRIOR, check_id: 2, typ: 'zeitlinie', dismissed: false,
+    stelle_a: 'Kapitel 3: «Es war der Sommer 1985»', stelle_b: 'Kapitel 5: «Im Winter 1983 kehrte er zurück»',
+  };
   const old = { ...PRIOR, check_id: 1 };
   const [st] = carryOverStatus([{ ...PRIOR }], [other, old]);
   assert.equal(st?.dismissed, true);

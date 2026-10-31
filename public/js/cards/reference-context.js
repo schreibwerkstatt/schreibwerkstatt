@@ -204,7 +204,8 @@ export const referenceContextMethods = {
   _evtInChapter(ev, chapterId, chapterName) {
     // Anker sind Listen — die Kanonform stellt cards/ereignisse/model.js an den
     // beiden Schreibstellen des Stores her (book/ereignisse.js).
-    const ids = ev?.chapter_ids || [];
+    // Ein Paar ohne ID steht als `null` an seinem Platz (Name ↔ ID-Paare).
+    const ids = (ev?.chapter_ids || []).filter(x => x != null);
     if (ids.length) return hasId(ids, chapterId);
     if (!chapterName) return false;
     const cl = String(chapterName).toLowerCase();

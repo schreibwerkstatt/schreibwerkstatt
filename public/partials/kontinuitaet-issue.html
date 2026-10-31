@@ -34,6 +34,9 @@
     <span x-show="issue.changed && !issue.resolved && !issue.dismissed && !issue.discarded" class="kontinuitaet-changed-badge"
           :data-tip="$app.t('kontinuitaet.changedTip')"
           x-text="$app.t('kontinuitaet.changedBadge')"></span>
+    <span x-show="issue.missing_since && !issue.resolved && !issue.dismissed && !issue.discarded" class="kontinuitaet-missing-badge"
+          :data-tip="$app.t('kontinuitaet.missing.tip')"
+          x-text="$app.t('kontinuitaet.missing.badge')"></span>
     <span x-show="issue.resolved || issue.dismissed || issue.discarded" class="kontinuitaet-resolved-badge"
           x-text="$app.t(issue.discarded ? 'kontinuitaet.discarded' : (issue.dismissed ? 'kontinuitaet.dismissed' : 'kontinuitaet.resolved'))"></span>
     <span class="history-chevron" :class="{ open: selectedKontinuitaetIssueKey === kontinuitaetIssueKey(issue, i) }" aria-hidden="true"></span>
@@ -52,6 +55,10 @@
       <template x-if="!kontinuitaetSafeUrl(issue.quelle)">
         <span class="entity-meta-value" x-text="issue.quelle"></span>
       </template>
+    </div>
+    <div x-show="issue.missing_since && !issue.resolved && !issue.dismissed" class="entity-meta-row kontinuitaet-missing">
+      <span class="entity-meta-label" x-text="$app.t('kontinuitaet.status.missing')"></span>
+      <span class="entity-meta-value" x-text="kontinuitaetMissingSinceText(issue)"></span>
     </div>
     <div x-show="issue.discarded" class="entity-meta-row kontinuitaet-discard">
       <span class="entity-meta-label" x-text="$app.t('kontinuitaet.discard.reasonLabel')"></span>

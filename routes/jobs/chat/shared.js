@@ -17,27 +17,40 @@ const {
   jobs, runningJobs, createJob, enqueueJob, jobKey, findActiveJobId,
 } = require('../shared');
 
-// Nur die drei Modell-Felder überleben: `applied`/`applied_at`/`status` setzt
+// Nur die Modell-Felder (`original`, `ersatz`, `begruendung`, `typ`) überleben: `applied`/`applied_at`/`status` setzt
 // ausschliesslich der User über die PATCH-Routen (routes/chat.js) — ein Modell,
 // das sie mitliefert, darf keinen Vorschlag als erledigt ausgeben. Auch `match`
 // (Fundstellen-Prüfung) setzt erst der Job (page-chat-verify.js), nie das Modell.
 // `original`/`ersatz` getrimmt gespeichert: die Fundstelle schliesst nie Rand-
 // Leerraum ein, ein Ersatz mit eigenem Rand verklebte sonst Nachbarwörter bzw.
-// verdoppelte den Leerraum.
+// verdoppelte den Leerraum. Eine Leerzeile im `ersatz` ist gewollt (Absatz-
+// teilung, public/js/utils/html-replace-rich.js) — Zeilenenden vereinheitlicht,
+// mehr als eine Leerzeile auf eine gekürzt. `typ` nur aus dem Enum, sonst weg.
+const VORSCHLAG_TYPEN = new Set(['korrektur', 'stil']);
 function _sanitizeVorschlaege(arr) {
   if (!Array.isArray(arr)) return [];
   const out = [];
   for (const v of arr) {
     const orig = typeof v?.original === 'string' ? v.original.trim() : '';
-    const ers  = typeof v?.ersatz   === 'string' ? v.ersatz.trim()   : '';
+    const ers  = typeof v?.ersatz   === 'string' ? v.ersatz.replace(/\r\n?/g, '\n').replace(/\n[ \t]*\n(?:[ \t]*\n)+/g, '\n\n').trim() : '';
     if (!orig || !ers || orig === ers) continue;
     out.push({
       original: orig,
       ersatz: ers,
       ...(typeof v.begruendung === 'string' && v.begruendung.trim() ? { begruendung: v.begruendung } : {}),
+      ...(VORSCHLAG_TYPEN.has(v.typ) ? { typ: v.typ } : {}),
     });
   }
   return out;
+}
+
+// Höchstens VORSCHLAEGE_MAX Vorschläge je Antwort (Prompt: die wichtigsten
+// zuerst). Mehr überfordert: von 26 Vorschlägen auf eine Frage bleibt der
+// Grossteil unberührt. Der Rest wird nicht gespeichert, nur gezählt — die Karte
+// zeigt «n weitere auf Nachfrage».
+const VORSCHLAEGE_MAX = 8;
+function capVorschlaege(list) {
+  return { vorschlaege: list.slice(0, VORSCHLAEGE_MAX), dropped: Math.max(0, list.length - VORSCHLAEGE_MAX) };
 }
 
 // Titelvarianten (Seiten-Chat, optional): reine Strings, getrimmt, ein
@@ -307,6 +320,6 @@ function weltfaktenBlockChars(aiCfg) {
 }
 
 module.exports = {
-  _sanitizeVorschlaege, _sanitizeTitelVarianten, _parseChatResponse, classicRefusalAnswer, _handleChatPost, figurenBlockChars, weltfaktenBlockChars,
+  _sanitizeVorschlaege, capVorschlaege, VORSCHLAEGE_MAX, _sanitizeTitelVarianten, _parseChatResponse, classicRefusalAnswer, _handleChatPost, figurenBlockChars, weltfaktenBlockChars,
   bookPageCache, BOOK_PAGE_CACHE_TTL_MS, BOOK_PAGE_CACHE_MAX, invalidateBookPageCache,
 };

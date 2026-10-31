@@ -1,6 +1,7 @@
 // Teil von notebookEditMethods (siehe Facade edit.js).
 import { editorHost, handleEditorCopy, handleEditorCut, handleEditorPaste, mountEditorHtml, stripLektoratMarks } from './_shared.js';
-import { countInHtml, replaceInHtml, skipReason } from '../../../utils.js';
+import { countInHtml, replaceInHtmlRich, richSkipReason } from '../../../utils.js';
+import { normalizeQuotesInHtml } from '../../shared/quote-normalize/walk.js';
 
 export const inputMethods = {
 
@@ -12,11 +13,14 @@ export const inputMethods = {
   //
   // Dieselben Guards wie der Server-Pfad (chat.js), gegen die Save-Normalform
   // (`stripLektoratMarks`): 0 Treffer → 'notFound', >1 → 'ambiguous', No-Op von
-  // `replaceInHtml` → `skipReason`. Mount über `mountEditorHtml` (dieselbe
+  // `replaceInHtmlRich` → `richSkipReason` (Ersatz darf *kursiv*/**fett** und eine
+  // Absatzteilung tragen). `quoteStyle` (optional, Stil des Buchs): danach die
+  // Anführungszeichen ziehen wie der Server-Pfad (`_loadApplyAndSave`) — sonst
+  // blieben gerade `"` der KI im Text. Mount über `mountEditorHtml` (dieselbe
   // Pipeline wie Undo-Restore und Merge-Spiegel). Notebook-only: im Fokusmodus
   // löst `_getEditEl` auf den Fokus-Container auf — dort wird nichts angefasst.
   // Liefert { ok: true } oder { ok: false, reason }.
-  _applyTextReplacement(original, replacement) {
+  _applyTextReplacement(original, replacement, { quoteStyle = null } = {}) {
     const app = editorHost();
     if (!app?.editMode) return { ok: false, reason: 'notEditing' };
     if (app.focusActive) return { ok: false, reason: 'focus' };
@@ -26,8 +30,9 @@ export const inputMethods = {
     const n = countInHtml(html, original);
     if (n === 0) return { ok: false, reason: 'notFound' };
     if (n > 1) return { ok: false, reason: 'ambiguous' };
-    const next = replaceInHtml(html, original, replacement);
-    if (next === html) return { ok: false, reason: skipReason(html, original, replacement) };
+    let next = replaceInHtmlRich(html, original, replacement);
+    if (next === html) return { ok: false, reason: richSkipReason(html, original, replacement) };
+    if (quoteStyle) next = normalizeQuotesInHtml(next, quoteStyle);
     // Vorher-Stand als eigenen Undo-Schritt einfrieren (offene Tipp-Serie
     // inklusive), sonst fasste der Debounce Tippen + Übernahme zusammen.
     this._historyPushNow?.();

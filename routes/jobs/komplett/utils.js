@@ -330,6 +330,18 @@ function buildFigNameLookup(figuren, chapterFiguren, chapterAssignments, chapter
  *  nicht-leere Kapitel als Stichprobe und baut je Kapitel den Prüftext (auf
  *  `maxCharsPerChapter` gedeckelt — die Stichprobe misst Recall, nicht Vollextraktion).
  *  Deterministisch (kein Zufall) → reproduzierbar. Pure, testbar. */
+/** Coverage-Self-Audit (F2): Stichprobengrösse. `minSetting` (ai.komplett.coverage_audit_chapters)
+ *  ist die Untergrenze, 0 = aus; darüber wächst die Stichprobe mit einem Drittel der Kapitel,
+ *  gedeckelt auf COVERAGE_MAX_CHAPTERS. Ein festes N mass bei 5 Kapiteln mehr als die Hälfte,
+ *  bei 180 Kapiteln unter 2 %. Der Deckel hält die Messung (sie schreibt nichts in den
+ *  Katalog) bei grossen Büchern bezahlbar. Rein. */
+const COVERAGE_MAX_CHAPTERS = 20;
+function coverageSampleSize(minSetting, chapterCount) {
+  const min = Math.max(0, Math.min(COVERAGE_MAX_CHAPTERS, parseInt(minSetting, 10) || 0));
+  if (min <= 0) return 0;
+  return Math.min(COVERAGE_MAX_CHAPTERS, Math.max(min, Math.ceil((chapterCount || 0) / 3)));
+}
+
 function sampleChapters(groups, groupOrder, n, maxCharsPerChapter = 40000) {
   if (!groups || !groupOrder || n <= 0) return [];
   const nonEmpty = groupOrder.filter(k => {
@@ -402,5 +414,5 @@ module.exports = {
   _stelleQuote, STELLE_QUOTE_MIN_CHARS, STELLE_QUOTE_MIN_WORDS,
   makePhaseTimer,
   runNonCritical, buildFigNameLookup,
-  sampleChapters, computeCoverageScore, buildConsolidationSig,
+  sampleChapters, coverageSampleSize, computeCoverageScore, buildConsolidationSig,
 };

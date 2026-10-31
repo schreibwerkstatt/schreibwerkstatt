@@ -43,6 +43,9 @@ const baseMethods = makeChatMethods({
     page_name: ctx.$app.currentPage.name,
   }),
   sendUrl: '/jobs/chat',
+  // «Erneut fragen»: die unbeantwortete Frage wird serverseitig ersetzt statt
+  // verdoppelt (routes/jobs/chat.js, Preflight des Abschnitts-Chats).
+  sendExtra: (ctx) => (ctx._chatRetryOf ? { retry_of: ctx._chatRetryOf } : {}),
   // Vor dem Senden: Editor-Stand auf den Server bringen, damit der Job den Text
   // sieht, den der User vor Augen hat (Autosave läuft nur alle 30s), und den
   // View-State auf den Server-Stand ziehen, gegen den die Vorschläge entstehen.
@@ -117,6 +120,31 @@ export const chatMethods = {
       if (active?.jobId) await window.__app.cancelJob(active.jobId);
     } catch (e) {
       console.error('[cancelChatRun]', e);
+    }
+  },
+  // Letzte Frage des Gesprächs ohne Antwort (Lauf gescheitert oder abgebrochen)
+  // — dann bietet die Karte «Erneut fragen» an. null, solange etwas läuft.
+  chatOpenQuestion() {
+    const last = this.chatMessages[this.chatMessages.length - 1];
+    if (this.chatLoading || !last || last.role !== 'user' || !last.id || last.sendError) return null;
+    return this.isChatSessionRunning(this.chatSessionId) ? null : last;
+  },
+  // Schickt die offene Frage noch einmal ab; ein angefangener Entwurf im
+  // Eingabefeld bleibt stehen. Verbraucht `sendChatMessage` die Frage nicht
+  // (früher Abbruch), kommt sie in die Liste zurück.
+  async retryChatQuestion() {
+    const q = this.chatOpenQuestion();
+    if (!q) return;
+    const draft = this.chatInput;
+    this._chatRetryOf = q.id;
+    this.chatMessages.splice(this.chatMessages.length - 1, 1);
+    this.chatInput = q.content;
+    try {
+      await this.sendChatMessage();
+    } finally {
+      this._chatRetryOf = null;
+      if (this.chatInput === q.content) this.chatMessages.push(q);
+      this.chatInput = draft;
     }
   },
   // Schnellauftrag (chat-quick-actions.html): vorformulierte Frage sofort senden.

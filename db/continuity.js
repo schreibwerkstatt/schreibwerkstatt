@@ -26,7 +26,7 @@ const { db } = require('./connection');
 require('./migrations');
 const { NOW_ISO_SQL } = require('./now');
 const { toRefString: _toRefString } = require('./write-helpers');
-const { carryOverStatus } = require('../lib/continuity-carryover');
+const { carryOverStatus, unmatchedPrior } = require('../lib/continuity-carryover');
 const { pageChapters } = require('./content-names');
 
 const _insContinuityCheck = db.prepare(
@@ -45,6 +45,26 @@ const _insContinuityIssueFig = db.prepare(
 );
 const _insContinuityIssueCh = db.prepare(
   `INSERT INTO continuity_issue_chapters (issue_id, chapter_id, sort_order) VALUES (?, ?, ?)`
+);
+// Mitgeführter Befund („nicht mehr gemeldet"): Kopie der offenen Zeile des Vorlaufs samt
+// Nachprüf-Urteil; `missing_since` bleibt vom ersten Lauf ohne Meldung stehen.
+const _copyMissingIssue = db.prepare(
+  `INSERT INTO continuity_issues
+   (check_id, book_id, user_email, schwere, typ, beschreibung, stelle_a, stelle_b, empfehlung, quelle,
+    page_a_id, page_b_id, resolved, dismissed, recheck_verdict, recheck_reason, recheck_beleg, recheck_at,
+    missing_since, sort_order, updated_at)
+   SELECT ?, book_id, user_email, schwere, typ, beschreibung, stelle_a, stelle_b, empfehlung, quelle,
+          page_a_id, page_b_id, 0, 0, recheck_verdict, recheck_reason, recheck_beleg, recheck_at,
+          COALESCE(missing_since, ${NOW_ISO_SQL}), ?, ${NOW_ISO_SQL}
+     FROM continuity_issues WHERE id = ?`
+);
+const _copyMissingIssueFigs = db.prepare(
+  `INSERT INTO continuity_issue_figures (issue_id, figure_id, figur_name, sort_order)
+   SELECT ?, figure_id, figur_name, sort_order FROM continuity_issue_figures WHERE issue_id = ?`
+);
+const _copyMissingIssueChs = db.prepare(
+  `INSERT INTO continuity_issue_chapters (issue_id, chapter_id, sort_order)
+   SELECT ?, chapter_id, sort_order FROM continuity_issue_chapters WHERE issue_id = ?`
 );
 
 // Figuren-/Kapitelnamen eines KI-Befunds auflösen (dedupliziert, Reihenfolge bleibt).
@@ -166,10 +186,11 @@ const PRIOR_CHECKS_LIMIT = 20;
  *  offene — eine jüngere offene Zeile schlägt eine ältere verworfene), neueste
  *  zuerst — Kandidaten für carryOverStatus. Ohne Pipeline-Verwürfe (`discard_reason`):
  *  sie sind keine Autoren-Entscheidung und dürfen weder „kein Fehler" vererben noch
- *  eine ältere Entscheidung verdecken. Kapitel als aufgelöste IDs, Figuren als Namen. */
+ *  eine ältere Entscheidung verdecken. Kapitel als aufgelöste IDs, Figuren als Namen,
+ *  Seitenanker als IDs. */
 function _priorIssues(bookIdInt, email) {
   const rows = db.prepare(`
-    SELECT ci.id, ci.check_id, ci.typ, ci.stelle_a, ci.stelle_b, ci.dismissed, ci.dismissed_at
+    SELECT ci.id, ci.check_id, ci.typ, ci.stelle_a, ci.stelle_b, ci.page_a_id, ci.page_b_id, ci.dismissed, ci.dismissed_at
       FROM continuity_issues ci
       JOIN (SELECT id, checked_at FROM continuity_checks
              WHERE book_id = ? AND user_email IS ?
@@ -194,6 +215,31 @@ function _priorIssues(bookIdInt, email) {
   return rows.map(r => byId.get(r.id));
 }
 
+/** Offene Befunde des jüngsten Checks (Kandidaten zum Mitführen): weder erledigt noch
+ *  „kein Fehler" noch Pipeline-Verwurf; ohne Faktenfehler — die hängt der Faktencheck
+ *  bei jedem Lauf selbst wieder an. Form wie _priorIssues. */
+function _openIssuesOfCheck(checkId) {
+  if (checkId == null) return [];
+  const rows = db.prepare(`
+    SELECT ci.id, ci.typ, ci.stelle_a, ci.stelle_b, ci.page_a_id, ci.page_b_id
+      FROM continuity_issues ci
+     WHERE ci.check_id = ? AND ci.resolved = 0 AND ci.dismissed = 0
+       AND ci.discard_reason IS NULL AND COALESCE(ci.typ, '') <> 'faktenfehler'
+     ORDER BY ci.sort_order, ci.id
+  `).all(checkId);
+  if (!rows.length) return [];
+  const byId = new Map(rows.map(r => [r.id, { ...r, figuren: [], chapter_ids: [] }]));
+  for (const f of db.prepare(`SELECT cif.issue_id, cif.figur_name FROM continuity_issue_figures cif
+                               JOIN continuity_issues ci ON ci.id = cif.issue_id WHERE ci.check_id = ?`).all(checkId)) {
+    if (f.figur_name && byId.has(f.issue_id)) byId.get(f.issue_id).figuren.push(f.figur_name);
+  }
+  for (const c of db.prepare(`SELECT cic.issue_id, cic.chapter_id FROM continuity_issue_chapters cic
+                               JOIN continuity_issues ci ON ci.id = cic.issue_id WHERE ci.check_id = ?`).all(checkId)) {
+    if (c.chapter_id != null && byId.has(c.issue_id)) byId.get(c.issue_id).chapter_ids.push(c.chapter_id);
+  }
+  return rows.map(r => byId.get(r.id));
+}
+
 // Issues auflösen, Triage übernehmen, speichern. Läuft innerhalb der Aufrufer-Transaktion.
 // Kapitel der verankerten Abschnitte aller Befunde in einem Lookup.
 function _anchorChapters(issuesArr) {
@@ -206,37 +252,51 @@ function _persistIssues(cid, bookIdInt, email, issuesArr, sortStart, figNameToId
   const figIdToRowId = _figIdToRowIdMap(bookIdInt, email);
   const anchors = _anchorChapters(issuesArr);
   const refsList = issuesArr.map(it => _resolveRefs(it || {}, figNameToId, figIdToRowId, chNameToId, anchors));
-  const statuses = carryOverStatus(
-    issuesArr.map((it, i) => ({ ...(it || {}), ...refsList[i] })),
-    _priorIssues(bookIdInt, email),
-  );
-  return issuesArr.map((it, i) =>
+  const resolvedIssues = issuesArr.map((it, i) => ({ ...(it || {}), ...refsList[i] }));
+  const statuses = carryOverStatus(resolvedIssues, _priorIssues(bookIdInt, email));
+  const persisted = issuesArr.map((it, i) =>
     _persistOneContinuityIssue(cid, bookIdInt, email, it || {}, refsList[i], statuses[i], sortStart + i));
+  return { persisted, resolvedIssues };
 }
 
 /** Speichert einen Kontinuitäts-Check mit allen Issues als eigene Zeilen.
+ *  Offene Befunde des vorigen Checks, die dieser Lauf nicht wiedererkennt
+ *  (lib/continuity-carryover.js#unmatchedPrior), wandern mit `missing_since` in den neuen
+ *  Check („nicht mehr gemeldet") — ein Lauf, der einen Befund zufällig nicht findet,
+ *  lässt ihn sonst ungeprüft verschwinden. Sie bleiben, bis der Autor sie triagiert.
  *  issues: [{schwere, typ, beschreibung, stelle_a, stelle_b, empfehlung, quelle?,
  *            page_a_id?, page_b_id?, figuren:[Namen], kapitel:[Namen]}]
  *  figNameToId / chNameToId: Auflösungs-Maps (Name → fig_id / chapter_id).
  *  discarded: von der Pipeline verworfene Befunde in derselben Form plus
  *    `discard: { reason: 'entwarnung'|'zitat'|'verify', detail? }` — hinter den offenen
  *    einsortiert, ohne Triage-Übernahme.
- *  Gibt { checkId, normalizedIssues, discardedIssues } zurück (Frontend-Form mit
- *  fig_ids/chapter_ids und übernommenem Triage-Status). */
+ *  Gibt { checkId, normalizedIssues, discardedIssues, missingCount } zurück (Frontend-Form
+ *  mit fig_ids/chapter_ids und übernommenem Triage-Status; die mitgeführten nur gezählt). */
 function saveContinuityCheck(bookId, userEmail, summary, model, issues, figNameToId, chNameToId, discarded = []) {
   const bookIdInt = parseInt(bookId);
   const email = userEmail || null;
   let normalizedIssues = [];
   let discardedIssues = [];
+  let missingCount = 0;
   let checkId = null;
   db.transaction(() => {
+    const prevCheckId = db.prepare(
+      'SELECT id FROM continuity_checks WHERE book_id = ? AND user_email IS ? ORDER BY checked_at DESC, id DESC LIMIT 1'
+    ).get(bookIdInt, email)?.id ?? null;
     const { lastInsertRowid: cid } = _insContinuityCheck.run(
       bookIdInt, email, summary || '', model || null,
     );
     checkId = cid;
     const issuesArr = Array.isArray(issues) ? issues : [];
-    normalizedIssues = _persistIssues(cid, bookIdInt, email, issuesArr, 0, figNameToId, chNameToId)
-      .map(({ id, ...rest }) => rest);
+    const { persisted, resolvedIssues } = _persistIssues(cid, bookIdInt, email, issuesArr, 0, figNameToId, chNameToId);
+    normalizedIssues = persisted.map(({ id, ...rest }) => rest);
+    const missing = unmatchedPrior(resolvedIssues, _openIssuesOfCheck(prevCheckId));
+    missing.forEach((old, i) => {
+      const { lastInsertRowid: newId } = _copyMissingIssue.run(cid, issuesArr.length + i, old.id);
+      _copyMissingIssueFigs.run(newId, old.id);
+      _copyMissingIssueChs.run(newId, old.id);
+    });
+    missingCount = missing.length;
     const discArr = (Array.isArray(discarded) ? discarded : []).filter(d => d && typeof d === 'object');
     if (discArr.length) {
       const figIdToRowId = _figIdToRowIdMap(bookIdInt, email);
@@ -244,11 +304,11 @@ function saveContinuityCheck(bookId, userEmail, summary, model, issues, figNameT
       discardedIssues = discArr.map((it, i) => _persistOneContinuityIssue(
         cid, bookIdInt, email, it,
         _resolveRefs(it, figNameToId, figIdToRowId, chNameToId, anchors),
-        null, issuesArr.length + i, it.discard || { reason: 'verify' },
+        null, issuesArr.length + missingCount + i, it.discard || { reason: 'verify' },
       )).map(({ id, ...rest }) => rest);
     }
   })();
-  return { checkId, normalizedIssues, discardedIssues };
+  return { checkId, normalizedIssues, discardedIssues, missingCount };
 }
 
 // Faktencheck-Befunde (typ='faktenfehler') an den NEUESTEN Kontinuitäts-Check anhängen,
@@ -279,7 +339,7 @@ function saveFaktencheckIssues(bookId, userEmail, model, issues, figNameToId, ch
     // Neue faktenfehler ans Ende einsortieren (sort_order nach den bestehenden Issues).
     const maxSort = db.prepare('SELECT COALESCE(MAX(sort_order), -1) AS m FROM continuity_issues WHERE check_id = ?').get(cid).m;
     normalizedIssues = _persistIssues(cid, bookIdInt, email, issuesArr, maxSort + 1, figNameToId, chNameToId)
-      .map(({ id, ...rest }) => rest);
+      .persisted.map(({ id, ...rest }) => rest);
     if (stale.length) {
       db.prepare(`DELETE FROM continuity_issues WHERE id IN (${stale.map(() => '?').join(',')})`).run(...stale);
     }
@@ -304,7 +364,7 @@ function getLatestContinuityCheck(bookId, userEmail) {
   const issueRows = db.prepare(`
     SELECT ci.id, ci.schwere, ci.typ, ci.beschreibung, ci.stelle_a, ci.stelle_b, ci.empfehlung, ci.quelle,
            ci.resolved, ci.dismissed, ci.page_a_id, ci.page_b_id, ci.discard_reason, ci.discard_detail,
-           ci.recheck_verdict, ci.recheck_reason, ci.recheck_beleg, ci.recheck_at,
+           ci.recheck_verdict, ci.recheck_reason, ci.recheck_beleg, ci.recheck_at, ci.missing_since,
            (COALESCE(pa.local_updated_at, pa.updated_at) > COALESCE(ci.recheck_at, ?)
              OR COALESCE(pb.local_updated_at, pb.updated_at) > COALESCE(ci.recheck_at, ?)) AS changed
     FROM continuity_issues ci
@@ -350,6 +410,7 @@ function getLatestContinuityCheck(bookId, userEmail) {
     quelle: r.quelle || null,
     page_a_id: r.page_a_id ?? null, page_b_id: r.page_b_id ?? null,
     changed: !!r.changed,
+    missing_since: r.missing_since || null,
     recheck: r.recheck_verdict
       ? { verdict: r.recheck_verdict, reason: r.recheck_reason || '', beleg: r.recheck_beleg || '', at: r.recheck_at }
       : null,

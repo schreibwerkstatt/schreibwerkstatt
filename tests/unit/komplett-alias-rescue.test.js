@@ -13,7 +13,7 @@ useTmpDb('komplett-alias-rescue');
 require('../../db/migrations');
 
 const { applyAliasClusters } = require('../../routes/jobs/komplett/figuren-merge');
-const { resolveRemapNames } = require('../../routes/jobs/komplett/job-shared');
+const { resolveRemapNames, resolveRemapOrtNames } = require('../../routes/jobs/komplett/job-shared');
 
 function captureLog() {
   const warns = [];
@@ -87,4 +87,36 @@ test('resolveRemapNames: gültige Zuordnung wird als Alias eingespeist', async (
   assert.equal(added, 1);
   assert.equal(warns.length, 0);
   assert.equal(input.figNameToIdLower.annchen, 'fig_1');
+});
+
+test('resolveRemapOrtNames: umbenannter Ort aus Szenen wird dem Katalog zugeordnet', async () => {
+  const seen = {};
+  const { log } = captureLog();
+  const ctx = {
+    jobId: 'test-job', tok: { in: 0, out: 0 }, bookName: 'B', log, effectiveProvider: 'claude',
+    prompts: {
+      buildNameResolutionPrompt: (_b, unknown, catalog, kind) => { Object.assign(seen, { unknown, catalog, kind }); return 'p'; },
+      SCHEMA_NAME_RESOLUTION: {},
+    },
+    sys: { SYSTEM_FIGUREN_BLOCKS: ['fig'], SYSTEM_ORTE_BLOCKS: ['ort'] },
+    call: async (_j, _t, _p, sysBlocks) => { seen.sys = sysBlocks; return { zuordnungen: [
+      { name: 'Rumpel-Restaurant', treffer: 'Rumpel' },
+      { name: 'Strassenstrich', treffer: '' },
+    ] }; },
+  };
+  const input = {
+    chapterSzenen: [{ kapitel: 'K1', szenen: [
+      { orte_namen: ['Rumpel-Restaurant', 'Strassenstrich', 'Frohheim'] },
+    ] }],
+    orte: [{ id: 'ort_1', name: 'Rumpel' }, { id: 'ort_2', name: 'Frohheim' }],
+    ortNameToId: { Rumpel: 'ort_1', Frohheim: 'ort_2' },
+    ortNameToIdLower: { rumpel: 'ort_1', frohheim: 'ort_2' },
+  };
+  const added = await resolveRemapOrtNames(ctx, input);
+  assert.equal(added, 1);
+  assert.equal(seen.kind, 'ort');
+  assert.deepEqual(seen.sys, ['ort'], 'Orte-System-Prompt');
+  assert.deepEqual(seen.unknown, ['Rumpel-Restaurant', 'Strassenstrich'], 'nur unauflösbare Namen');
+  assert.equal(input.ortNameToIdLower['rumpel-restaurant'], 'ort_1');
+  assert.equal(input.ortNameToIdLower.strassenstrich, undefined);
 });

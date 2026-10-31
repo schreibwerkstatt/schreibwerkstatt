@@ -1,4 +1,4 @@
-import { escHtml, fetchJson, SAFETY_HTML_RATIO, countInHtml, replaceInHtml, findInHtml, skipReason, stripFocusArtefacts } from '../utils.js';
+import { escHtml, fetchJson, SAFETY_HTML_RATIO, countInHtml, replaceInHtml, replaceInHtmlRich, richSkipReason, findInHtml, skipReason, stripFocusArtefacts, formatNumber } from '../utils.js';
 import { insideClassDiv } from '../utils/html-container.js';
 import { MSG_THREAD_CLASS } from '../messages/msg-html.js';
 import { sortByPosition, isHardFinding } from '../book/page-view.js';
@@ -26,6 +26,10 @@ function _inMsgThread(html, original) {
   return _threadMemo.get(original);
 }
 
+// Ab dieser Länge des geprüften Texts (Zeichen) rät das Ergebnis, den Abschnitt
+// zu teilen (routes/jobs/lektorat.js liefert `textChars`).
+const LONG_SECTION_CHARS = 20000;
+
 export const lektoratMethods = {
   // Befund steht in einem Nachrichtenverlauf: Chat-Schreibweise ist Figurenrede.
   // Solche Befunde sind nie vorausgewählt — „Korrekturen speichern" soll keine
@@ -36,9 +40,10 @@ export const lektoratMethods = {
 
   // Mehrdeutige Fundstelle (`mehrdeutig`, Server: lektorat-page.js#markAmbiguous):
   // «Übernehmen» ersetzt das erste Vorkommen — nicht vorauswählen, der Autor
-  // hakt bewusst an.
+  // hakt bewusst an. Ebenso ein Befund, den der Autor im Vorlauf stehen liess
+  // (`abgelehnt`, lib/lektorat-progress.js#markPreviouslyRejected).
   findingPreselected(f) {
-    return isHardFinding(f.typ) && !f.mehrdeutig && !this.findingInMsgThread(f) && this.findingSelectable(f);
+    return isHardFinding(f.typ) && !f.mehrdeutig && !f.abgelehnt && !this.findingInMsgThread(f) && this.findingSelectable(f);
   },
 
   // Auswählbar ist ein Befund, der etwas ändern würde und noch nicht übernommen
@@ -62,7 +67,12 @@ export const lektoratMethods = {
   // `checkAmbiguous` (nur Abschnitts-Chat): eine mehrfach vorkommende Stelle wird
   // als 'ambiguous' übersprungen statt das erste Vorkommen zu ersetzen. Das
   // Lektorat prüft das bewusst nicht (tests/unit/lektorat-apply-guard.test.mjs).
-  _applyCorrections(html, fehler, outSkipped, { checkAmbiguous = false } = {}) {
+  // `rich` (nur Abschnitts-Chat): Ersatz darf *kursiv*/**fett** und eine
+  // Absatzteilung tragen (utils/html-replace-rich.js); eine Lektorat-Korrektur
+  // ist immer Klartext.
+  _applyCorrections(html, fehler, outSkipped, { checkAmbiguous = false, rich = false } = {}) {
+    const replace = rich ? replaceInHtmlRich : replaceInHtml;
+    const reasonOf = rich ? richSkipReason : skipReason;
     let result = html;
     for (const f of fehler) {
       if (!f.original || !f.korrektur || f.original === f.korrektur) continue;
@@ -70,9 +80,9 @@ export const lektoratMethods = {
         if (outSkipped) outSkipped.push({ f, reason: 'ambiguous' });
         continue;
       }
-      const next = replaceInHtml(result, f.original, f.korrektur);
+      const next = replace(result, f.original, f.korrektur);
       if (next === result) {
-        if (outSkipped) outSkipped.push({ f, reason: skipReason(result, f.original, f.korrektur) });
+        if (outSkipped) outSkipped.push({ f, reason: reasonOf(result, f.original, f.korrektur) });
         continue;
       }
       result = next;
@@ -104,8 +114,8 @@ export const lektoratMethods = {
   // weder Ziel noch Name des PUT verschieben. `stale: true` im Ergebnis sagt
   // dem Aufrufer, dass inzwischen eine andere Seite offen ist — deren View-State
   // (originalHtml, updated_at) fasst er dann nicht an.
-  // `opts.checkAmbiguous` reicht an `_applyCorrections` durch (Abschnitts-Chat).
-  async _loadApplyAndSave(selectedErrors, onProgress, source = 'lektorat-apply', { checkAmbiguous = false } = {}) {
+  // `opts.checkAmbiguous`/`opts.rich` reichen an `_applyCorrections` durch (Abschnitts-Chat).
+  async _loadApplyAndSave(selectedErrors, onProgress, source = 'lektorat-apply', { checkAmbiguous = false, rich = false } = {}) {
     const pageId = this.currentPage.id;
     const pageName = this.currentPage.name;
     onProgress(10, this.t('lektorat.loadingPage'));
@@ -114,7 +124,7 @@ export const lektoratMethods = {
 
     const skipped = [];
     let finalHtml = selectedErrors.length > 0
-      ? this._applyCorrections(page.html, selectedErrors, skipped, { checkAmbiguous })
+      ? this._applyCorrections(page.html, selectedErrors, skipped, { checkAmbiguous, rich })
       : page.html;
 
     // KI-Korrekturen/Vorschläge liefern oft gerade `"`/`'` — auf Buch-Style
@@ -146,7 +156,9 @@ export const lektoratMethods = {
     // bearbeitet und gilt danach zu Recht als „seit Lektorat geaendert".
     if (source !== 'chat-apply') this.markPageChecked?.(pageId);
     this._syncPageStatsAfterSave?.({ id: pageId, updated_at: saved?.updated_at || null }, finalHtml);
-    return { finalHtml, skipped, pageId, stale };
+    // `preHtml` + `savedUpdatedAt`: Grundlage für «Korrekturen rückgängig»
+    // (lektorat-undo.js) — der frisch geladene Stand vor dem Übernehmen.
+    return { finalHtml, skipped, pageId, stale, preHtml: page.html, savedUpdatedAt: saved?.updated_at || null };
   },
 
 
@@ -355,6 +367,13 @@ export const lektoratMethods = {
             total: fehler.length,
           }))}</div>`;
         }
+        // Langer Abschnitt: ein Lauf prüft ihn als Ganzes, die Befunde streuen
+        // dort von Lauf zu Lauf stärker und dauern länger. Rat, ihn zu teilen.
+        if (r.textChars > LONG_SECTION_CHARS) {
+          out += `<div class="analysis-notice">${escHtml(this.t('lektorat.longSection', {
+            chars: formatNumber(r.textChars, this.$store.shell.uiLocale, 0),
+          }))}</div>`;
+        }
         out += renderLektoratAnalysisHtml((k, p) => this.t(k, p), {
           szenen: r.szenen, stilanalyse: r.stilanalyse, fazit: r.fazit,
         });
@@ -387,7 +406,7 @@ export const lektoratMethods = {
       .map(f => ({ f, reason: 'noCorrection' }));
 
     try {
-      const { finalHtml, skipped: applySkipped, pageId, stale } = await this._loadApplyAndSave(selected, (pct, text) => {
+      const { finalHtml, skipped: applySkipped, pageId, stale, preHtml, savedUpdatedAt } = await this._loadApplyAndSave(selected, (pct, text) => {
         this.saveApplying = pct;
         if (text) this.setStatus(text, true);
       });
@@ -452,6 +471,12 @@ export const lektoratMethods = {
         msg = skipParams ? this.t('lektorat.correctionsSavedWithSkips', skipParams) : this.t('lektorat.correctionsSaved');
       }
       this.setStatus(msg, false, skipped.length > 0 || historyFailed ? 8000 : 5000);
+      const historyBefore = historyEntry && historyEntry.id === checkId ? historyEntry : null;
+      this._rememberLektoratUndo?.({
+        pageId, pageName: this.currentPage?.name, preHtml, updatedAt: savedUpdatedAt, checkId,
+        prevApplied: historyBefore?.applied_errors_json || null,
+        prevSelected: historyBefore?.selected_errors_json || null,
+      });
       this.correctedHtml = null;
       this.hasErrors = false;
       this.lektoratFindings = [];

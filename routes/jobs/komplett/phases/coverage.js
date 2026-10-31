@@ -1,17 +1,17 @@
 'use strict';
 // Coverage-Self-Audit (F2, nur Cloud-Klasse): misst den Extraktions-Recall an einer
-// Kapitel-Stichprobe. Pro Sample bekommt das Modell den Kapiteltext + die bekannten
+// Kapitel-Stichprobe (Grösse: utils.js#coverageSampleSize). Pro Sample bekommt das Modell den Kapiteltext + die bekannten
 // Figuren-/Ort-Namen und meldet Wiedererkannte + Fehlende. Rein diagnostisch (kein
 // DB-Schreibzugriff), non-critical. Läuft auf dem Extraktions-Tier.
 const appSettings = require('../../../../lib/app-settings');
 const { updateJob, toSystemBlocks, retryOnTransientAi, settledAll } = require('../../shared');
-const { sampleChapters, computeCoverageScore } = require('../utils');
+const { sampleChapters, coverageSampleSize, computeCoverageScore } = require('../utils');
 const { komplettMaxTokens } = require('./tokens');
 
 // Gibt `{ score, erkannt, fehlend, missingFiguren, missingOrte, sampledChapters }` oder null.
 async function runCoverageAudit(ctx, figurenNames, orteNames) {
   const { jobId, bookName, call, tok, log, prompts, sys, groups, groupOrder, coverageTier } = ctx;
-  const n = Math.max(0, Math.min(20, parseInt(appSettings.get('ai.komplett.coverage_audit_chapters'), 10) || 0));
+  const n = coverageSampleSize(appSettings.get('ai.komplett.coverage_audit_chapters'), (groupOrder || []).length);
   if (n <= 0) return null;
   const samples = sampleChapters(groups, groupOrder, n);
   if (!samples.length) return null;

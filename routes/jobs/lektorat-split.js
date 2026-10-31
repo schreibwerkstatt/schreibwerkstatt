@@ -87,6 +87,18 @@ function _statusLine(jobId, total) {
 // werden gestaffelt, damit der Prompt-Cache greift. Split AUS oder lokaler Provider:
 // genau EIN kombinierter Call (Rechtschreibung + Stil + Szenen zusammen). Rückgabe
 // hat stets die Form { fehler, szenen, stilanalyse, fazit } — Cache/History/Frontend gleich.
+// Ausgabe-Deckel je Teil-Call (Tokens, inkl. Denken): ohne Wert gälte das Modell-
+// maximum (128K), und ein Ausreisser in Schleife kostete ein Vielfaches eines
+// normalen Laufs (beobachtet: 82K Output auf 63K Input). Ein normaler Pass liegt bei
+// ~5–15K; der Deckel lässt reichlich Luft und wächst mit der Textlänge. Wird er
+// erreicht, endet der Call als `truncated` (Fehler statt Teil-Befunde).
+const LEKTORAT_MAX_TOKENS_BASE = 32000;
+const LEKTORAT_MAX_TOKENS_CAP = 64000;
+function lektoratMaxTokens(textLen) {
+  const len = Number.isFinite(textLen) && textLen > 0 ? textLen : 0;
+  return Math.min(LEKTORAT_MAX_TOKENS_CAP, LEKTORAT_MAX_TOKENS_BASE + Math.ceil(len / 2));
+}
+
 async function lektoratAnalyze({ jobId, tok, text, local, prompts, system, promptOpts, fromPct, toPct, buchtyp = null }) {
   const {
     buildLektoratPrompt,
@@ -103,6 +115,7 @@ async function lektoratAnalyze({ jobId, tok, text, local, prompts, system, promp
   // Schema und Prompt-Enum müssen dasselbe Buchtyp-Profil sehen (Grammar vs. Text) —
   // sonst bietet die Grammar Typen an, die der Prompt verbietet.
   const kombiSchema = buildLektoratSchema({ buchtyp, textsorte });
+  const maxTokens = lektoratMaxTokens(text.length);
 
   const trackPasses = fromPct != null && toPct != null;
   const status = trackPasses ? _statusLine(jobId, split ? K + 1 : 1) : null;
@@ -110,7 +123,7 @@ async function lektoratAnalyze({ jobId, tok, text, local, prompts, system, promp
 
   if (!split) {
     const prompt = buildLektoratPrompt(text, promptOpts);
-    const result = await aiCall(jobId, tok, prompt, system, fromPct, toPct, 5000, 0.2, null, undefined, kombiSchema);
+    const result = await aiCall(jobId, tok, prompt, system, fromPct, toPct, 5000, 0.2, maxTokens, undefined, kombiSchema);
     if (!Array.isArray(result?.fehler)) throw i18nError('job.error.fehlerArrayMissing');
     return result;
   }
@@ -158,13 +171,13 @@ async function lektoratAnalyze({ jobId, tok, text, local, prompts, system, promp
     buchtyp, textsorte, hasFiguren: (promptOpts.figuren || []).length > 0,
   });
   const stilPrompt = buildStilLektoratPrompt(text, promptOpts);
-  const objCall = () => aiCall(jobId, tok, objektivPrompt, system, null, null, 4000, 0.2, null, undefined, objektivSchema).then(tick);
+  const objCall = () => aiCall(jobId, tok, objektivPrompt, system, null, null, 4000, 0.2, maxTokens, undefined, objektivSchema).then(tick);
 
   // Stil-Pass parallel starten – eigener User-Prompt, profitiert nicht vom
   // Objektiv-Cache (teilt nur den kleinen System-Block). Eigenes Schema: das
   // Enum lässt die objektiven Typen weg, die der Objektiv-Pass liefert.
   const stilSchema = buildLektoratSchema({ buchtyp, textsorte, stilOnly: true });
-  const stilPromise = aiCall(jobId, tok, stilPrompt, system, null, null, 5000, 0.2, null, undefined, stilSchema).then(tick);
+  const stilPromise = aiCall(jobId, tok, stilPrompt, system, null, null, 5000, 0.2, maxTokens, undefined, stilSchema).then(tick);
   // Scheitert ein Objektiv-Lauf, wirft das `await` unten, bevor `stilPromise`
   // abgeholt wird — dessen Rejection (gleiche Ursache: Key, Abbruch, Overload)
   // bliebe sonst unbehandelt. Das eigentliche `await stilPromise` sieht den
@@ -195,4 +208,4 @@ async function lektoratAnalyze({ jobId, tok, text, local, prompts, system, promp
   return { fehler, szenen: stilResult.szenen, stilanalyse: stilResult.stilanalyse, fazit: stilResult.fazit };
 }
 
-module.exports = { lektoratAnalyze, objektivRuns, consensusThreshold, splitEnabled, applyLektoratAiOverrides };
+module.exports = { lektoratAnalyze, lektoratMaxTokens, objektivRuns, consensusThreshold, splitEnabled, applyLektoratAiOverrides };

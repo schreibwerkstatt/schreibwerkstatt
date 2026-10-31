@@ -566,10 +566,13 @@ process.on('SIGTERM', () => shutdown('SIGTERM'));
 process.on('SIGINT',  () => shutdown('SIGINT'));
 
 process.on('unhandledRejection', (reason) => {
-  logger.error('unhandledRejection', { reason: reason instanceof Error ? { message: reason.message, stack: reason.stack } : reason });
+  // Das Log-Format (logger.js) gibt nur `message` und `stack` aus — Details in
+  // einem eigenen Feld fielen stumm weg. Darum Meldung in den Text, Stack daneben.
+  const msg = reason instanceof Error ? reason.message : String(reason);
+  logger.error(`unhandledRejection: ${msg}`, { stack: reason instanceof Error ? reason.stack : undefined });
 });
 process.on('uncaughtException', (err) => {
-  logger.error('uncaughtException', { message: err.message, stack: err.stack });
+  logger.error(`uncaughtException: ${err.message}`, { stack: err.stack });
   shutdown('uncaughtException', err);
 });
 

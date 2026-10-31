@@ -77,6 +77,7 @@
           <span x-show="$app.appliedOriginals.includes(f.original)" class="tag" x-text="$app.t('editor.findings.applied')"></span>
           <span x-show="$app.findingInMsgThread(f)" class="tag" x-text="$app.t('editor.findings.inMsgThread')" :data-tip="$app.t('editor.findings.inMsgThreadTip')"></span>
           <span x-show="f.mehrdeutig" class="tag" x-text="$app.t('editor.findings.ambiguous')" :data-tip="$app.t('editor.findings.ambiguousTip')"></span>
+          <span x-show="f.abgelehnt" class="tag" x-text="$app.t('editor.findings.rejected')" :data-tip="$app.t('editor.findings.rejectedTip')"></span>
           <span class="finding-content">
             <span class="finding-original" x-text="f.original"></span>
 

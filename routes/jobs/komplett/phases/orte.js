@@ -15,6 +15,7 @@ const { ankerHints, mergeHints } = require('../katalog-anker');
 const { locationHintKey } = require('../../../../lib/entity-match');
 const { countActiveLocations } = require('../../../../db/katalog-anker');
 const { loadOrteFromDb, countSongsInDb } = require('../scope');
+const { PHASE_END } = require('../../../../lib/komplett-scope');
 
 // Kollaps-Riegel wie bei den Figuren (phases/figuren.js): liefert die Konsolidierung bei
 // einem gewachsenen Bestand (fast) nichts, würde der Reconcile den ganzen Ortskatalog
@@ -128,7 +129,7 @@ async function runPhase3(ctx, chapterOrte, figurenKompakt, isSinglePass, figName
   // fiele ihre Ort-Verknüpfung in remapSzenen still weg.
   let aliasesByIdx = [];
   if (isSinglePass) {
-    updateJob(jobId, { progress: 43, statusText: 'job.phase.consolidatingOrte' });
+    updateJob(jobId, { progress: PHASE_END.figurenConsolidate, statusText: 'job.phase.consolidatingOrte' });
     const raw = chapterOrte[0]?.orte || [];
     // Within-Run-Dedup: der Single-Pass fährt KEINE KI-Konsolidierung (spart einen Call),
     // aber die Completeness-Gap-Pässe ziehen Schreibvarianten desselben Orts nach
@@ -158,9 +159,9 @@ async function runPhase3(ctx, chapterOrte, figurenKompakt, isSinglePass, figName
     const mergedN = raw.length - deduped.length;
     log.info(`Phase 3 übersprungen (Single-Pass, ${orte.length} Orte aus P1 übernommen`
       + `${mergedN > 0 ? `, ${mergedN} Varianten verschmolzen` : ''}) – spart einen KI-Call.`);
-    updateJob(jobId, { progress: 55 });
+    updateJob(jobId, { progress: PHASE_END.orteConsolidate });
   } else {
-    updateJob(jobId, { progress: 43, statusText: 'job.phase.consolidatingOrte' });
+    updateJob(jobId, { progress: PHASE_END.figurenConsolidate, statusText: 'job.phase.consolidatingOrte' });
     let orteResultRaw = prefetched;
     // Prompt erst hier bauen: im Parallel-Pfad (prefetchAttempted) ist der Call längst
     // gelaufen, und der Prompt trägt den ganzen Ortskatalog — ihn dort zu bauen wäre
@@ -205,7 +206,7 @@ async function runPhase3(ctx, chapterOrte, figurenKompakt, isSinglePass, figName
         ctx.warnings?.push({ key: 'job.warn.orteKonsolidierungDegraded' });
       }
       orte = buildFallbackOrte(chapterOrte, figNameToId, figNameToIdLower);
-      updateJob(jobId, { progress: 55 });
+      updateJob(jobId, { progress: PHASE_END.orteConsolidate });
     } else {
       // Beide KI-Pfade (parallel vorab geholt / seriell) gleich behandeln:
       // * id IMMER neu vergeben — eine doppelte ort_N der KI liefe in
@@ -216,7 +217,7 @@ async function runPhase3(ctx, chapterOrte, figurenKompakt, isSinglePass, figName
         id: 'ort_' + (i + 1),
         figuren: _remapFigNames(o.figuren_namen, figNameToId, figNameToIdLower),
       }));
-      updateJob(jobId, { progress: 55 });
+      updateJob(jobId, { progress: PHASE_END.orteConsolidate });
     }
     aliasesByIdx = ortAliasesFromSources(orte, chapterOrte);
   }
@@ -316,7 +317,7 @@ async function runPhase3Songs(ctx, chapterSongs, figurenKompakt, isSinglePass, f
 
   let songs;
   if (isSinglePass) {
-    updateJob(jobId, { progress: 56, statusText: 'job.phase.consolidatingSongs' });
+    updateJob(jobId, { progress: PHASE_END.songsConsolidate, statusText: 'job.phase.consolidatingSongs' });
     const raw = chapterSongs[0]?.songs || [];
     songs = dedupeSongsWithinRun(raw.map(s => ({
       ...s,
@@ -328,7 +329,7 @@ async function runPhase3Songs(ctx, chapterSongs, figurenKompakt, isSinglePass, f
     const hasInput = chapterSongs.some(cs => (cs.songs || []).length > 0);
     if (!hasInput) {
       songs = [];
-      updateJob(jobId, { progress: 56 });
+      updateJob(jobId, { progress: PHASE_END.songsConsolidate });
       log.info(`Phase 3 Songs übersprungen (keine Songs in Pass B – KI-Call gespart).`);
     } else {
       // Songs-Range 55→56 (klein, ~3K Out): lässt 56→58 frei für P3b.
@@ -361,7 +362,7 @@ async function runPhase3Songs(ctx, chapterSongs, figurenKompakt, isSinglePass, f
         }
         songs = buildFallbackSongs(chapterSongs, figNameToId, figNameToIdLower);
       }
-      updateJob(jobId, { progress: 56 });
+      updateJob(jobId, { progress: PHASE_END.songsConsolidate });
     }
   }
   const songBestand = countSongsInDb(bookIdInt, email);

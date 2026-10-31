@@ -6,7 +6,6 @@ import { bookSettingsMethods } from '../book/book-settings.js';
 import { CITATION_DEFAULTS, XREF_DEFAULTS } from '../book/book-settings/citation.js';
 import { setupCardLifecycle } from './card-lifecycle.js';
 import { EVT } from '../events.js';
-import { takePendingBookSettingsTab } from '../book/book-settings/open-tab.js';
 import { CARD_REQUEST } from './card-request.js';
 
 // Vollständiges Default-Meta (alle book_publication-Felder). Der /publication-PUT
@@ -76,7 +75,7 @@ export function registerBookSettingsCard() {
     bookResearchLoaded: false,
     researchSaving: false,
     researchError: '',
-    // Kontext-Tab, Abschnitt „Schulsystem": normalisierte Form oder null (keins).
+    // Reiter «Schule»: normalisierte Form oder null (ausgeschaltet).
     // Eigener Schreibpfad /booksettings/:id/schulsystem — siehe
     // book/book-settings/school.js.
     bookSchulsystem: null,
@@ -215,7 +214,6 @@ export function registerBookSettingsCard() {
     init() {
       this._lifecycle = setupCardLifecycle(this, {
         showFlag: 'showBookSettingsCard',
-        onShow: () => Promise.all([this.loadBookSettings(), this.loadBookJobStats(), this.loadBookAccess(), this.loadBookCategory(), this.loadBlogStatus(), this.loadHubspotStatus(), this.loadPublication(), this.loadExpose()]),
         load: () => Promise.all([this.loadBookSettings(), this.loadBookJobStats(), this.loadBookAccess(), this.loadBookCategory(), this.loadBlogStatus(), this.loadHubspotStatus(), this.loadPublication(), this.loadExpose()]),
         // Factory, nicht Objekt-Literal: der Reset enthält Objekte, die danach
         // per x-model in-place mutiert werden (blogForm, hubspotForm,
@@ -347,13 +345,9 @@ export function registerBookSettingsCard() {
           citationError: '',
         },
         // Verweis aus einer anderen Karte auf einen bestimmten Reiter
-        // (book/book-settings/open-tab.js). Ist die Karte erst durch den
-        // Verweis gemountet worden, liegt der Wunsch schon bereit (unten).
-        extraListeners: [{ type: EVT.CARD_REQUEST, handler: (e) => {
-          if (e.detail?.key === CARD_REQUEST.BOOK_SETTINGS_TAB) this._applyPendingTab();
-        } }],
+        // (book/book-settings/open-tab.js), Palette, Job-Queue-Sprung.
+        tabRequest: { key: CARD_REQUEST.BOOK_SETTINGS_TAB, apply: (tab) => { this.bookSettingsTab = tab; } },
       });
-      this._applyPendingTab();
 
       // Blog-Sync: bei Job-Ende Status nachladen, lokale Job-IDs nullen.
       // Filter lose: jeder blog-* Job-Done räumt beide Spinner-Flags und
@@ -439,11 +433,6 @@ export function registerBookSettingsCard() {
         this._onExposeJobFinished = null;
       }
       this._lifecycle?.destroy();
-    },
-
-    _applyPendingTab() {
-      const tab = takePendingBookSettingsTab();
-      if (tab) this.bookSettingsTab = tab;
     },
 
     ...bookSettingsMethods,

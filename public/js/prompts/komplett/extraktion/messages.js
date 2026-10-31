@@ -316,21 +316,41 @@ Für szenen[].kapitel exakt den betreffenden Kapitelnamen (aus dem ## Header) ve
 <text>Der Buchtext steht im System-Prompt oben.</text>`;
 }
 
-/** Remap-Rescue: ordnet unauflösbare Figuren-Klarnamen (aus Szenen/Events) dem konsolidierten
- *  Katalog zu, BEVOR sie im Remap verworfen werden. Rein deterministisches Mapping – kein
- *  Buchtext nötig; System-Prompt kann ein leichter Figuren-Kontext sein. Schema: SCHEMA_NAME_RESOLUTION. */
-export function buildNameResolutionPrompt(bookName, unknownNames, catalogNames) {
+// Je Entitätsart: Herkunft der Bezeichnungen, typische Varianten, Beispiele. `figur` ist
+// der ursprüngliche Wortlaut; `ort` kommt dazu, weil die Orte-Konsolidierung umbenennt
+// und die Szenen sonst ihre Ort-Verknüpfung verlieren.
+const _NAME_RESOLUTION_KIND = {
+  figur: {
+    was: 'Figuren-Bezeichnungen aus Szenen und Ereignissen',
+    varianten: 'Spitznamen, Teilnamen, Epitheta, Schreibvarianten, Titel',
+    dieselbe: 'dieselbe Figur', keiner: 'keine Katalog-Figur', tag: 'katalog_figuren',
+    beispiel: '«Gerold» → «Gerold Brunner», «der Kommissar» → die einzige Kommissar-Figur',
+  },
+  ort: {
+    was: 'Ortsbezeichnungen aus Szenen',
+    varianten: 'Kurzformen, Mundart- und Spitznamen, Schreibvarianten, Zusätze wie Stadt oder Gebäudeart',
+    dieselbe: 'derselbe Ort', keiner: 'kein Katalog-Ort', tag: 'katalog_orte',
+    beispiel: '«Rumpel-Restaurant» → «Rumpel», «Schützi» → «Schützenmatte (Schützi)». NICHT zuordnen: Ober- und Unterbegriff (Stadt vs. Quartier, Gebäude vs. Raum darin) oder gleicher Name in einer anderen Stadt',
+  },
+};
+
+/** Remap-Rescue: ordnet unauflösbare Figuren- bzw. Ort-Klarnamen (aus Szenen/Events) dem
+ *  konsolidierten Katalog zu, BEVOR sie im Remap verworfen werden. Rein deterministisches
+ *  Mapping – kein Buchtext nötig; System-Prompt kann ein leichter Figuren-/Orte-Kontext sein.
+ *  `kind`: 'figur' | 'ort'. Schema: SCHEMA_NAME_RESOLUTION. */
+export function buildNameResolutionPrompt(bookName, unknownNames, catalogNames, kind = 'figur') {
+  const k = _NAME_RESOLUTION_KIND[kind] || _NAME_RESOLUTION_KIND.figur;
   return `<aufgabe>
-Im Buch «${bookName}» wurden Figuren-Bezeichnungen aus Szenen und Ereignissen extrahiert, die sich nicht direkt einem Katalog-Eintrag zuordnen liessen (Spitznamen, Teilnamen, Epitheta, Schreibvarianten, Titel). Ordne jede unbekannte Bezeichnung GENAU EINEM Namen aus der Katalogliste zu, wenn es sich SICHER um dieselbe Figur handelt. Wenn keine Katalog-Figur eindeutig passt, gib für «treffer» einen leeren String «» zurück (lieber keine Zuordnung als eine falsche).
+Im Buch «${bookName}» wurden ${k.was} extrahiert, die sich nicht direkt einem Katalog-Eintrag zuordnen liessen (${k.varianten}). Ordne jede unbekannte Bezeichnung GENAU EINEM Namen aus der Katalogliste zu, wenn es sich SICHER um ${k.dieselbe} handelt. Wenn ${k.keiner} eindeutig passt, gib für «treffer» einen leeren String «» zurück (lieber keine Zuordnung als eine falsche).
 </aufgabe>
 
 <unbekannte_bezeichnungen>
 ${_knownList(unknownNames)}
 </unbekannte_bezeichnungen>
 
-<katalog_figuren>
+<${k.tag}>
 ${_knownList(catalogNames)}
-</katalog_figuren>
+</${k.tag}>
 
 Antworte mit diesem JSON-Schema:
 {
@@ -342,7 +362,7 @@ Antworte mit diesem JSON-Schema:
 Regeln:
 - Für JEDE unbekannte Bezeichnung genau einen Eintrag. «name» exakt wie in der Liste.
 - «treffer» ist entweder ein Name EXAKT aus der Katalogliste oder leer.
-- KONSERVATIV: nur zuordnen, wenn die Identität eindeutig ist (z.B. «Gerold» → «Gerold Brunner», «der Kommissar» → die einzige Kommissar-Figur). Im Zweifel «».`;
+- KONSERVATIV: nur zuordnen, wenn die Identität eindeutig ist (z.B. ${k.beispiel}). Im Zweifel «».`;
 }
 
 /** Claude-Single-Pass C: nur Fakten – eigener Call gegen den gecachten Buchtext-Block. */

@@ -51,6 +51,9 @@
       <div class="chat-skeleton-line chat-skeleton-line--wide"></div>
       <div class="chat-skeleton-line chat-skeleton-line--narrow"></div>
     </div>
+    <div x-show="chatOpenQuestion()" class="chat-retry-row">
+      <button type="button" class="chat-vorschlag-btn" @click="retryChatQuestion()" x-text="$app.t('chat.retryQuestion')"></button>
+    </div>
   </div>
 
   <!-- @include chat-quick-actions -->
@@ -160,7 +163,7 @@
             </div>
           </template>
           <!-- @include book-chat-msg-extras -->
-          <div x-show="msg.role === 'assistant' && _chatTokenInfo(msg)" class="chat-token-info" :title="_chatTokenTitle(msg)" x-text="_chatTokenInfo(msg) + (_bookChatCost(msg) ? ' · ' + _bookChatCost(msg) : '')"></div>
+          <div x-show="msg.role === 'assistant' && _chatTokenInfo(msg)" class="chat-token-info" :title="_chatTokenTitle(msg)" x-text="_chatTokenInfo(msg)"></div>
           <!-- @include chat-feedback -->
         </div>
         <!-- Ideen-Vorschläge (Abschnitts- und Buch-Chat) -->

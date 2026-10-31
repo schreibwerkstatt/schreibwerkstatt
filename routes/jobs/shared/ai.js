@@ -10,6 +10,7 @@ const appSettings = require('../../../lib/app-settings');
 const { stripDiagramBlocks, stripTagsKeepPunctuation, summarizeTableBlocks, markMsgThreads } = require('../../../lib/html-text');
 const { jobAbortControllers } = require('./state');
 const { updateJob, i18nError, fmtTok } = require('./jobs');
+const { createThinkPhase } = require('./think-phase');
 
 // Transient-Klassifikator: Claude-Streams droppen gelegentlich mid-flight als
 // 'terminated' (Undici-Socket-Reset) oder werden vom Hard-Timeout (`AI_TIMEOUT`)
@@ -242,12 +243,6 @@ function toSystemBlocks(blocksOrString, defaultTtl) {
 // Reduziert Event-Loop-Last bei parallelen KI-Streams; die Live-Anzeige ruckelt
 // in der Praxis bei 200 ms nicht sichtbar.
 const PROGRESS_THROTTLE_MS = 200;
-// Denkphase im Fortschrittsbalken (siehe aiCall): Anteil einer Call-Fraktion, den das
-// Denken höchstens füllt, Zeitkonstante der Annäherung (nach TAU ~63 % davon) und
-// Tick-Intervall des Timers. TAU grob an einem Opus-5.5-Lektorat-Pass (~1 Min Denken).
-const THINK_SHARE = 0.6;
-const THINK_TAU_MS = 40000;
-const THINK_TICK_MS = 1000;
 
 // Kosten-Aufschlüsselung pro Call-Klasse.
 //
@@ -355,23 +350,13 @@ async function aiCall(jobId, tok, prompt, system, fromPct, toPct, expectedChars 
   // Hook `tok.onThinking(callId, on)` — der Job entscheidet selbst, ob und wie er die
   // Phase anzeigt; ohne Hook bleibt die Statuszeile unberührt. Ungedrosselt: zwei
   // Übergänge pro Call.
-  // Während des Denkens streamt der Provider keinen Text, nur Pings — ein rein
-  // zeichenbasierter Balken stünde minutenlang still und spränge dann. Darum rückt
-  // die Call-Fraktion in der Denkphase zeitbasiert asymptotisch bis THINK_SHARE vor
-  // (Timer, weil keine Events kommen); der gestreamte Text füllt danach den Rest.
-  // Monoton in Zeit und Zeichen → der Balken läuft nie rückwärts.
-  let thinkingNow = false;
-  let thinkStartMs = null;
-  let thinkFloor = 0;
+  // Balken-Kurve der Denkphase: ./think-phase.js.
   let lastChars = 0;
-  let thinkTimer = null;
   const hasRange = !!tok.progressRange || (fromPct != null && toPct != null);
-  const thinkShare = () => (thinkStartMs == null ? thinkFloor
-    : Math.max(thinkFloor, THINK_SHARE * (1 - Math.exp(-(Date.now() - thinkStartMs) / THINK_TAU_MS))));
-  const callFraction = (chars) => {
-    const think = thinkShare();
-    return think + (1 - think) * Math.min(1, chars / dynExpectedChars);
-  };
+  const think = createThinkPhase({
+    onTick: hasRange ? () => updateJob(jobId, { progress: progressValue(lastChars) }) : null,
+  });
+  const callFraction = (chars) => think.fraction(chars / dynExpectedChars);
   const progressValue = (chars) => {
     if (tok.progressRange) {
       // Mehrere Teil-Calls (Lektorat-Split: K Objektiv-Läufe + 1 Stil-Lauf) teilen
@@ -390,24 +375,11 @@ async function aiCall(jobId, tok, prompt, system, fromPct, toPct, expectedChars 
     return null;
   };
   const setThinking = (on) => {
-    if (thinkingNow === on) return;
-    thinkingNow = on;
-    if (on) {
-      thinkStartMs = Date.now();
-      if (hasRange && !thinkTimer) {
-        thinkTimer = setInterval(() => updateJob(jobId, { progress: progressValue(lastChars) }), THINK_TICK_MS);
-        thinkTimer.unref?.();
-      }
-    } else {
-      thinkFloor = thinkShare();
-      thinkStartMs = null;
-      if (thinkTimer) { clearInterval(thinkTimer); thinkTimer = null; }
-    }
-    tok.onThinking?.(callId, on);
+    if (think.set(on)) tok.onThinking?.(callId, on);
   };
   const onProgress = ({ chars, tokIn, thinking }) => {
     if (thinking) setThinking(true);
-    else if (thinkingNow && chars > 0) setThinking(false);
+    else if (think.active && chars > 0) setThinking(false);
     lastChars = chars;
     if (!calibrated && tokIn > 0) {
       dynExpectedChars = Math.max(expectedChars, Math.round(tokIn * 4 * outputRatio));

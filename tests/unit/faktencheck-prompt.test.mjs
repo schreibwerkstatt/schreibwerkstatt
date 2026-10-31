@@ -35,7 +35,7 @@ test('SYSTEM_FAKTENCHECK: Rolle + JSON-Only, kein Buchtext-Platzhalter', async (
 test('SCHEMA_FAKT_REALITY: Reasoning-First + urteil-Enum + Pflichtfelder', async () => {
   const { SCHEMA_FAKT_REALITY } = await import(schemasUrl);
   const props = SCHEMA_FAKT_REALITY.properties;
-  assert.ok(props._reasoning, '_reasoning vorhanden (False-Positive-Abwehr)');
+  assert.ok(props.begruendung, 'begruendung vorhanden (False-Positive-Abwehr)');
   assert.deepEqual(props.urteil.enum, ['korrekt', 'falsch', 'unklar']);
   assert.ok(props.quelle && props.beschreibung && props.empfehlung && props.schwere);
   // _obj() macht additionalProperties:false — Grammar-safe für lokale Provider.

@@ -16,6 +16,7 @@ const { getLatestVersion: getLatestChangelogVersion } = require('../lib/changelo
 const { MAX_INPUT_BYTES: PDF_MAX_BYTES } = require('../lib/pdf-attachment');
 const { sessionEmail } = require('../lib/acl');
 const { clientContract } = require('../lib/client-contract');
+const { tServerParams } = require('../lib/i18n-server');
 
 const router = express.Router();
 
@@ -254,7 +255,9 @@ function extractThesSynonyms(data, queryWord) {
 }
 
 // Liefert Synonyme; fällt bei flektierten Formen ("ging") automatisch auf die Grundform zurück.
-async function fetchOpenThesaurus(word, budgetSignal) {
+// `uiLocale` übersetzt den Grundform-Hinweis serverseitig: der Mac-Client reicht
+// nur wort/hinweis durch, ein Client-seitiger Text aus `lemma` käme dort nicht an.
+async function fetchOpenThesaurus(word, budgetSignal, uiLocale) {
   const first = await fetchOpenThesaurusRaw(word, budgetSignal);
   if (!first) return { synonyme: [], lemma: null };
   const direct = extractThesSynonyms(first, word);
@@ -267,7 +270,7 @@ async function fetchOpenThesaurus(word, budgetSignal) {
     if (!second) continue;
     const hits = extractThesSynonyms(second, lemma);
     if (hits.length > 0) {
-      const hinweis = `Grundform: ${lemma}`;
+      const hinweis = tServerParams('synonym.baseForm', { lemma }, uiLocale);
       return {
         synonyme: hits.map(h => ({ wort: h.wort, hinweis: h.hinweis || hinweis })),
         lemma,
@@ -292,7 +295,8 @@ router.get('/openthesaurus/synonyms', async (req, res) => {
   const budgetTimer = setTimeout(() => budget.abort(), 10000);
   const t0 = Date.now();
   try {
-    const { synonyme, lemma } = await fetchOpenThesaurus(word, budget.signal);
+    const uiLocale = userEmail ? appUsers.getUser(userEmail)?.language : null;
+    const { synonyme, lemma } = await fetchOpenThesaurus(word, budget.signal, uiLocale);
     const ms = Date.now() - t0;
     log.info(`word=«${word}»${lemma ? ` lemma=«${lemma}»` : ''} hits=${synonyme.length} ${ms}ms`);
     res.json({ synonyme, disabled: false, lemma });

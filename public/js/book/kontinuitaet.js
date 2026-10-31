@@ -25,13 +25,15 @@ const START_ERROR_KEYS = {
 // „kein Fehler"), 'open' = nur offene, 'resolved' = nur erledigte, 'dismissed' = nur
 // als „kein Fehler" markierte, 'discarded' = von der Prüfung selbst verworfene
 // (Entwarnung, erfundenes Zitat, Verify) — sie liegen in `result.discarded`, nie in
-// `result.issues`, und zählen in keinem anderen Filter.
-export const KONTINUITAET_STATUS_FILTERS = ['', 'open', 'resolved', 'dismissed', 'discarded'];
+// `result.issues`, und zählen in keinem anderen Filter. 'missing' = offene Befunde
+// eines früheren Laufs, die der letzte nicht mehr gemeldet hat (`missing_since`).
+export const KONTINUITAET_STATUS_FILTERS = ['', 'open', 'resolved', 'dismissed', 'missing', 'discarded'];
 function _matchesStatus(issue, status) {
   if (status === 'discarded') return !!issue.discarded;
   if (issue.discarded) return false;
   if (status === 'dismissed') return !!issue.dismissed;
   if (issue.dismissed) return false;
+  if (status === 'missing') return !issue.resolved && !!issue.missing_since;
   if (status === 'open') return !issue.resolved;
   if (status === 'resolved') return !!issue.resolved;
   return true;

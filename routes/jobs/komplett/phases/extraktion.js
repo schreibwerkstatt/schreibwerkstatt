@@ -22,6 +22,7 @@ const { getContextConfigFor, providerClass } = require('../../../../lib/ai');
 const { komplettMaxTokens } = require('./tokens');
 const { extractMultiPass } = require('./extraktion/multi-pass');
 const { resolveSinglePassFakten } = require('./extraktion/fakten-pass');
+const { PHASE_END } = require('../../../../lib/komplett-scope');
 
 /** Teilt ein Array in Gruppen der Grösse `size` (≥1). */
 function _chunkArray(arr, size) {
@@ -487,7 +488,7 @@ async function extractSinglePass(ctx, { claudeExtractCap, callExtract }) {
     };
   }
 
-  updateJob(jobId, { progress: 12, statusText: 'job.phase.extracting' });
+  updateJob(jobId, { progress: PHASE_END.loadPages, statusText: 'job.phase.extracting' });
   const { passA, passB, failed } = providerClass(effectiveProvider) === 'cloud'
     ? await extractSinglePassSplit(ctx, { claudeExtractCap })
     : await extractSinglePassLocal(ctx, { callExtract });

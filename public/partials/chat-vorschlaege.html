@@ -9,6 +9,10 @@
 <template x-if="msg.role === 'assistant' && msg.vorschlaege && msg.vorschlaege.length > 0">
   <div class="chat-vorschlaege">
     <div x-show="$app.canEdit() && chatOpenVorschlagCount(msg) > 1" class="chat-vorschlaege-actions">
+      <button type="button" class="chat-vorschlag-btn chat-vorschlag-btn--ghost" x-show="chatShowCorrectionsOnly(msg)"
+        @click="applyAllChatVorschlaege(msgIdx, 'korrektur')"
+        :disabled="chatLoading || msg.vorschlaege.some(x => x._applying)"
+        x-text="$app.t('chat.applyCorrections', { n: chatOpenVorschlagCount(msg, 'korrektur') })"></button>
       <button type="button" class="chat-vorschlag-btn"
         @click="applyAllChatVorschlaege(msgIdx)"
         :disabled="chatLoading || msg.vorschlaege.some(x => x._applying)"
@@ -19,8 +23,13 @@
         :class="{ 'chat-vorschlag--applied': v._applied, 'chat-vorschlag--discarded': v._discarded, 'chat-vorschlag--stale': v._stale || v._notFound }"
         @mouseenter="locateChatVorschlag(v)" @mouseleave="unlocateChatVorschlag()">
         <div class="chat-vorschlag-header">
-          <span class="chat-vorschlag-label"
-            x-text="v._applied ? $app.t('chat.applied') : v._discarded ? $app.t('chat.discarded') : v._notFound ? $app.t('chat.notFoundSuggestion') : v._stale ? $app.t('chat.staleSuggestion') : v._ambiguous ? $app.t('chat.ambiguousSuggestion') : $app.t('chat.suggestion')"></span>
+          <span class="chat-vorschlag-heading">
+            <span class="chat-vorschlag-label"
+              x-text="v._applied ? $app.t('chat.applied') : v._discarded ? $app.t('chat.discarded') : v._notFound ? $app.t('chat.notFoundSuggestion') : v._stale ? $app.t('chat.staleSuggestion') : v._ambiguous ? $app.t('chat.ambiguousSuggestion') : $app.t('chat.suggestion')"></span>
+            <span x-show="v.typ === 'korrektur' || v.typ === 'stil'" class="badge"
+              :class="v.typ === 'korrektur' ? 'badge-err' : 'badge-neutral'"
+              x-text="$app.t(v.typ === 'korrektur' ? 'chat.typ.korrektur' : 'chat.typ.stil')"></span>
+          </span>
           <span class="chat-vorschlag-actions">
             <button type="button" class="chat-vorschlag-btn" x-show="$app.canEdit() && !v._applied && !v._discarded"
               @click="applyChatVorschlag(v, msgIdx, vIdx)" :disabled="!!v._applying || chatLoading">
@@ -29,7 +38,7 @@
             </button>
             <button type="button" class="chat-vorschlag-btn" x-show="$app.canEdit() && v._applied"
               @click="undoChatVorschlag(msgIdx, vIdx)" :disabled="!v._undoable || !!v._applying || chatLoading"
-              :data-tip="v._undoable ? null : $app.t('chat.undoChanged')" x-text="$app.t('chat.undo')"></button>
+              :data-tip="v._undoable ? null : $app.t(v._rich ? 'chat.undoRich' : 'chat.undoChanged')" x-text="$app.t('chat.undo')"></button>
             <button type="button" class="chat-vorschlag-btn chat-vorschlag-btn--ghost" x-show="!v._applied"
               @click="toggleDiscardChatVorschlag(msgIdx, vIdx)" :disabled="!!v._applying"
               x-text="v._discarded ? $app.t('chat.restore') : $app.t('chat.discard')"></button>
@@ -42,7 +51,7 @@
           <template x-if="!v._diff">
             <span>
               <span class="finding-original" x-text="v.original"></span>
-              <span class="finding-korrektur" x-text="v.ersatz"></span>
+              <span class="finding-korrektur" x-text="v.ersatz.replace(/\n\s*\n/g, ' ¶ ').replace(/\*/g, '')"></span>
             </span>
           </template>
         </div>
@@ -50,5 +59,7 @@
         <div x-show="v._error" class="chat-vorschlag-error" x-text="v._error"></div>
       </div>
     </template>
+    <div x-show="msg.context_info?.vorschlaege_gekappt > 0" class="chat-msg-hint"
+      x-text="$app.t('chat.moreSuggestions', { n: msg.context_info?.vorschlaege_gekappt })"></div>
   </div>
 </template>

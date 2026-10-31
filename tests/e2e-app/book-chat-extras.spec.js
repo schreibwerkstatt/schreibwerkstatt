@@ -11,7 +11,7 @@ const { bootApp, selectSeededBook } = require('./_helpers/app');
 
 const CARD = '#book-chat-card';
 
-test('buch-chat: Werkzeug-Verlauf, Belege, Recherche-Hinweis, Kosten', async ({ page }) => {
+test('buch-chat: Werkzeug-Verlauf, Belege, Recherche-Hinweis, keine Kosten', async ({ page }) => {
   await bootApp(page);
   const bookId = await selectSeededBook(page);
   const SID = 987654;
@@ -100,8 +100,8 @@ test('buch-chat: Werkzeug-Verlauf, Belege, Recherche-Hinweis, Kosten', async ({ 
   await expect(log.locator('.chat-tool-log-item--final')).toHaveText('Antwort mit 2 Zitaten, 1 davon nicht im Text bestätigt');
   if (process.env.SHOT) await log.screenshot({ path: process.env.SHOT });
 
-  // Kosten in der Token-Zeile.
-  await expect(card.locator('.chat-msg--assistant .chat-token-info')).toContainText('0.04');
+  // Token-Zeile ohne Kosten — die Chats zeigen keine Preise mehr.
+  await expect(card.locator('.chat-msg--assistant .chat-token-info')).toHaveText('↑12.0K ↓300');
 
   // Recherche-Übergabe: Event mit vorgeschlagener Frage + Buch-ID.
   await extras.locator('.book-chat-research-hint button').click();
@@ -139,8 +139,11 @@ test('buch-chat: Werkzeug-Verlauf wächst während des Laufs mit (liveTools am J
   await page.evaluate(() => window.__app.toggleBookChatCard());
   const card = page.locator(CARD);
   const live = card.locator('.chat-tool-log-live .chat-tool-log');
-  // Live offen, ohne Klick; drei gleiche Suchen einer Runde als Sammelzeile.
-  await expect(live.locator('.collapsible-toggle').first()).toHaveText('Werkzeuge bisher (4)');
+  // Live zugeklappt wie fertig; drei gleiche Suchen einer Runde als Sammelzeile.
+  const toggle = live.locator('.collapsible-toggle').first();
+  await expect(toggle).toHaveText('Werkzeuge bisher (4)');
+  await expect(live.locator('.chat-tool-log-note').nth(1)).toBeHidden();
+  await toggle.click();
   await expect(live.locator('.chat-tool-log-note').nth(1)).toHaveText('Jetzt die Fundstellen.');
   await expect(live.locator('.chat-tool-log-note').nth(0)).toBeHidden();
   const group = live.locator('.chat-tool-log-group');

@@ -26,11 +26,6 @@
           <div x-show="msg.role === 'user'" class="chat-msg-text" x-text="msg.content"></div>
           <div x-show="msg.role === 'assistant'" class="chat-msg-text" x-html="_renderChatMarkdown(msg.content)"></div>
 
-          <template x-if="msg.role === 'assistant' && plotChatCostLabel(msg)">
-            <div class="chat-context-info">
-              <span class="chat-context-badge" x-text="plotChatCostLabel(msg)"></span>
-            </div>
-          </template>
           <!-- @include chat-tool-log -->
 
           <!-- Vorschläge ans Board: jeder einzeln übernehmen/verwerfen -->

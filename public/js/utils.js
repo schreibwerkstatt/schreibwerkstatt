@@ -8,6 +8,7 @@
 //   net.js       — Fetch-Wrapper + Status-Reset
 //   html.js      — HTML-Bereinigung (Paste-Sanitizing, Style-/Leerblock-Cleanup)
 //   html-find.js — tolerantes Suchen/Ersetzen in HTML
+//   html-replace-rich.js — Chat-Ersatz mit *kursiv*/**fett** und Absatzteilung
 //   markdown.js  — Chat-Markdown → HTML + Mention/Channel-Dekoration
 //   textarea.js  — Textarea-Höhe nach Inhalt (field-sizing-Fallback), Inline-Edit-Mount
 //   keys.js      — Tastatur-Prädikate (Cmd/Ctrl+S)
@@ -22,6 +23,7 @@ export * from './utils/escape.js';
 export * from './utils/net.js';
 export * from './utils/html.js';
 export * from './utils/html-find.js';
+export * from './utils/html-replace-rich.js';
 export * from './utils/markdown.js';
 export * from './utils/textarea.js';
 export * from './utils/keys.js';

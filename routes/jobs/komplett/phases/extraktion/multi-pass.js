@@ -8,6 +8,7 @@ const { buildChapterSystemBlockText, bookSettingsSigPart, extractField } = requi
 const { _normalizeName } = require('../../figuren-merge');
 const appSettings = require('../../../../../lib/app-settings');
 const { getContextConfigFor, providerClass } = require('../../../../../lib/ai');
+const { PHASE_END } = require('../../../../../lib/komplett-scope');
 
 /**
  * Cloud-Multi-Pass: System-Blöcke eines Chunk-Calls. Läuft danach ein Gap-Pass
@@ -248,7 +249,7 @@ async function extractMultiPass(ctx, { chunks, chunkOrder, claudeExtractCap, cal
 
   // Lokale Modelle: Kapitel über PER_CHUNK_LIMIT in Seiten-Untergruppen splitten, jeder Chunk
   // mit eigenem KI-Call + Delta-Cache-Eintrag. Claude: singlePassLimit als Grenze → kein Split.
-  updateJob(jobId, { progress: 12, statusText: 'job.phase.extractingChunks', statusParams: { n: chunkOrder.length } });
+  updateJob(jobId, { progress: PHASE_END.loadPages, statusText: 'job.phase.extractingChunks', statusParams: { n: chunkOrder.length } });
   // Settings-Anteil identisch zum Single-Pass-Key (buildBookPagesSig): Buchtyp/
   // Kontext fliessen in den Extraktions-Prompt, also muss ihr Wechsel auch die
   // Per-Chunk-Caches invalidieren – sonst liefert der Multi-Pass-Cache stale
@@ -302,7 +303,7 @@ async function extractMultiPass(ctx, { chunks, chunkOrder, claudeExtractCap, cal
   let chunksDone = 0;
   const bumpChunkProgress = () => {
     chunksDone++;
-    updateJob(jobId, { progress: 12 + Math.round((chunksDone / chunkTexts.length) * 16) });
+    updateJob(jobId, { progress: PHASE_END.loadPages + Math.round((chunksDone / chunkTexts.length) * 16) });
   };
   const settled = await settledAll(
     chunkTexts.map(({ chunk, key, pagesSig, chText }, chunkIdx) => async () => {

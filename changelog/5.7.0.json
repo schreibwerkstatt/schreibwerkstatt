@@ -1,0 +1,61 @@
+{
+  "version": "5.7.0",
+  "date": "2026-10-31",
+  "entries": [
+    {
+      "kind": "neu",
+      "de": "Ereignisse-Karte: Du bearbeitest ein Ereignis direkt (Text, Datum, Art, Kategorie, Bedeutung). Deine Fassung bleibt stehen, auch wenn du die Komplettanalyse erneut laufen lässt.",
+      "en": "Events card: you can edit an event directly (text, date, type, category, significance). Your version stays, even when you run the full analysis again."
+    },
+    {
+      "kind": "neu",
+      "de": "Lektorat: Nach «Korrekturen speichern» nimmt der Knopf «Korrekturen rückgängig» die übernommenen Korrekturen wieder zurück, solange du den Abschnitt nicht weiter bearbeitet hast.",
+      "en": "Proofreading: after \"Save corrections\", the \"Undo corrections\" button takes the applied corrections back, as long as you haven't edited the section further."
+    },
+    {
+      "kind": "neu",
+      "de": "Kontinuitätsprüfung: Offene Befunde, die der letzte Lauf nicht mehr gemeldet hat, verschwinden nicht mehr still. Sie stehen als «nicht mehr gemeldet» da, bis du sie erledigst, und lassen sich gesammelt nachprüfen.",
+      "en": "Continuity check: open findings that the latest check no longer reported no longer vanish silently. They stay marked \"no longer reported\" until you resolve them, and you can recheck them all at once."
+    },
+    {
+      "kind": "verbessert",
+      "de": "Abschnitts-Chat: Vorschläge sind als Korrektur oder Stil markiert, und «Nur Korrekturen übernehmen» übernimmt nur die Korrekturen. Der Chat antwortet schneller und nennt höchstens acht Vorschläge pro Antwort.",
+      "en": "Section chat: suggestions are marked as correction or style, and \"Apply only corrections\" applies just the corrections. The chat answers faster and gives at most eight suggestions per reply."
+    },
+    {
+      "kind": "verbessert",
+      "de": "Abschnitts-Chat: Vorschläge, die einen Absatz teilen oder Hervorhebungen ändern, lassen sich jetzt übernehmen. Zurücknehmen geht mit Strg+Z im Editor.",
+      "en": "Section chat: suggestions that split a paragraph or change emphasis can now be applied. Undo them with Ctrl+Z in the editor."
+    },
+    {
+      "kind": "verbessert",
+      "de": "Lektorat: Einen Befund, den du beim letzten Lektorat derselben Stelle nicht übernommen hast, wählt die App nicht mehr vor und markiert ihn als «früher abgelehnt».",
+      "en": "Proofreading: a finding you didn't apply the last time this passage was proofread is no longer preselected and is marked \"previously rejected\"."
+    },
+    {
+      "kind": "verbessert",
+      "de": "Lektorat: Bei sehr langen Abschnitten rät die App, sie zu teilen. Kürzere Abschnitte werden genauer und gleichmässiger geprüft.",
+      "en": "Proofreading: for very long sections, the app suggests splitting them. Shorter sections are checked more precisely and consistently."
+    },
+    {
+      "kind": "verbessert",
+      "de": "Bucheinstellungen: Das Schulsystem hat einen eigenen Reiter «Schule» und ist standardmässig aus. Schalte es nur ein, wenn dein Buch die Schullaufbahn der Figuren braucht.",
+      "en": "Book settings: the school system has its own \"School\" tab and is off by default. Turn it on only if your book needs the characters' school careers."
+    },
+    {
+      "kind": "verbessert",
+      "de": "Synonyme: Die Vorschläge passen zur markierten Stelle, auch wenn das Wort im Satz mehrmals vorkommt. Bei gebeugten Wörtern siehst du die Grundform.",
+      "en": "Synonyms: suggestions fit the marked spot, even when the word appears several times in the sentence. For inflected words you see the base form."
+    },
+    {
+      "kind": "verbessert",
+      "de": "Buch-Chat: Fehlt die Komplettanalyse, sagt dir der Chat, dass er Fragen zu Figuren, Orten und Zeitleiste nur aus dem Text beantwortet.",
+      "en": "Book chat: if the full analysis is missing, the chat tells you that it answers questions about characters, places and timeline from the text alone."
+    },
+    {
+      "kind": "behoben",
+      "de": "Lektorat: Befunde zu Stellen, die gar nicht im Abschnitt stehen, erscheinen nicht mehr in der Liste.",
+      "en": "Proofreading: findings about passages that aren't in the section at all no longer show up in the list."
+    }
+  ]
+}

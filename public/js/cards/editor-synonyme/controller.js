@@ -27,15 +27,14 @@
 // KI-Job fertig, sodass lookupAi direkt { synonyme } liefert).
 //
 // Schlanke Closure: bewusst keine Imports aus editor/utils.js oder
-// job-helpers.js (die zoegen schwere Closures ins Bundle). Die benoetigten
-// Helfer (WORD_RE, Popup-Positionierung, Reflow, Satz-Extraktion, Job-Poll)
-// sind inline. Einzige Import-Kopplung: apply-replacement.js — bereits ein
-// Entry-Modul des Bundles.
+// job-helpers.js (die zoegen schwere Closures ins Bundle). Popup-Positionierung,
+// Reflow und Job-Poll sind inline. Import-Kopplung nur an zwei import-freie
+// shared/-Module: apply-replacement.js (Range-Mutation) und synonym-text.js
+// (Worterkennung, Satz-Kontext, Schreibung — geteilt mit dem SPA-Picker).
 
 import { applySpellcheckReplacement } from '../../editor/shared/apply-replacement.js';
+import { normalizeSynonymWord, wordBoundsAt, synonymContext, matchSynonymCase } from '../../editor/shared/synonym-text.js';
 
-// Ein "Einzelwort": Buchstaben/Ziffern, optional mit Bindestrich/Apostroph.
-const WORD_RE = /^[\p{L}\p{N}][\p{L}\p{N}\-']*$/u;
 const MOBILE_MAX = 768;
 const POLL_INTERVAL_MS = 2000;
 
@@ -114,6 +113,7 @@ export function createSynonymController({
   let pickerEl = null;
   let anchorRange = null;
   let word = '';
+  let sentenceStart = false;
   let reflowDetach = null;
   let dismissBound = false;
   let reqAbort = null;          // AbortController des laufenden Synonym-Requests
@@ -179,35 +179,6 @@ export function createSynonymController({
     if (!reflowDetach) return;
     reflowDetach();
     reflowDetach = null;
-  }
-
-  // ─── Satz-Extraktion fuer den KI-Kontext (inline) ─────────────────────────
-
-  function _extractSentence(range, wort) {
-    let node = range.startContainer;
-    if (node.nodeType === Node.TEXT_NODE) node = node.parentElement;
-    const block = node?.closest?.('p, li, blockquote, h1, h2, h3, h4, h5, h6, div') || node;
-    const full = (block?.textContent || '').replace(/\s+/g, ' ').trim();
-    if (!full) return wort;
-
-    let offset = -1;
-    try {
-      const pre = document.createRange();
-      pre.selectNodeContents(block);
-      pre.setEnd(range.startContainer, range.startOffset);
-      offset = pre.toString().replace(/\s+/g, ' ').length;
-    } catch { /* Fallback via indexOf */ }
-    if (offset < 0 || offset > full.length) offset = full.indexOf(wort);
-    if (offset < 0) return full.length <= 400 ? full : wort;
-
-    const before = full.slice(0, offset);
-    const after = full.slice(offset);
-    const startMatch = before.match(/[.!?…][\s"»)]*(?=[^.!?…]*$)/);
-    const start = startMatch ? startMatch.index + startMatch[0].length : 0;
-    const endMatch = after.match(/[.!?…]/);
-    const end = endMatch ? offset + endMatch.index + 1 : full.length;
-    const sentence = full.slice(start, end).trim();
-    return sentence || full;
   }
 
   // ─── Dismiss (Outside-Click + Escape) ─────────────────────────────────────
@@ -296,7 +267,7 @@ export function createSynonymController({
     }
     const list = Array.isArray(state.list) ? state.list : [];
     if (list.length === 0) {
-      contentEl.className = 'synonym-picker-error';
+      contentEl.className = 'synonym-picker-empty';
       contentEl.textContent = state.emptyLabel;
       return;
     }
@@ -379,7 +350,9 @@ export function createSynonymController({
     if (!anchorRange || !word) return;
     const range = anchorRange;
     const wort = word;
-    const satz = _extractSentence(range, wort);
+    const ctx = synonymContext(range, wort, root);
+    const satz = ctx.satz;
+    sentenceStart = ctx.sentenceStart;
     const bookId = getBookId();
     const pageId = getPageId();
 
@@ -437,8 +410,9 @@ export function createSynonymController({
       });
   }
 
-  function _apply(text) {
+  function _apply(suggestion) {
     const range = anchorRange;
+    const text = matchSynonymCase(word, suggestion, sentenceStart);
     _closeAll();
     if (!range || !text) return;
     if (root && range.startContainer && !root.contains(range.startContainer)) return;
@@ -455,40 +429,31 @@ export function createSynonymController({
     if (window.innerWidth <= MOBILE_MAX) return;
 
     const sel = window.getSelection();
+    if (!sel || sel.rangeCount === 0) return;
+    const r = sel.getRangeAt(0);
+    if (!root.contains(r.commonAncestorContainer)) return;
+    // Griff gehoert ab hier dem Editor, auch wenn kein Wort passt.
+    e.preventDefault();
     let range = null;
     let wort = '';
-    if (sel && sel.rangeCount > 0 && !sel.isCollapsed) {
-      const text = sel.toString().trim();
-      if (!text || !WORD_RE.test(text)) return;
-      const r = sel.getRangeAt(0);
-      if (!root.contains(r.commonAncestorContainer)) return;
+    if (!sel.isCollapsed) {
+      wort = normalizeSynonymWord(sel.toString());
+      if (!wort) return;
       range = r.cloneRange();
-      wort = text;
-    } else if (sel && sel.rangeCount > 0) {
+    } else {
       // Caret in Wort: Range ueber die Wortgrenzen expandieren.
-      const r = sel.getRangeAt(0);
-      if (!root.contains(r.commonAncestorContainer)) return;
       const node = r.startContainer;
       if (node.nodeType !== Node.TEXT_NODE) return;
-      const text = node.textContent || '';
-      let s = r.startOffset;
-      let eIdx = r.startOffset;
-      const isWord = (ch) => /[\p{L}\p{M}\d'’-]/u.test(ch);
-      while (s > 0 && isWord(text[s - 1])) s--;
-      while (eIdx < text.length && isWord(text[eIdx])) eIdx++;
-      const candidate = text.slice(s, eIdx);
-      if (!candidate || !WORD_RE.test(candidate)) return;
+      const hit = wordBoundsAt(node.textContent || '', r.startOffset);
+      if (!hit) return;
       const expanded = document.createRange();
-      expanded.setStart(node, s);
-      expanded.setEnd(node, eIdx);
+      expanded.setStart(node, hit.start);
+      expanded.setEnd(node, hit.end);
       range = expanded;
-      wort = candidate;
+      wort = hit.word;
       sel.removeAllRanges();
       sel.addRange(expanded.cloneRange());
-    } else {
-      return;
     }
-    e.preventDefault();
     _openMenu(range, wort);
   }
 

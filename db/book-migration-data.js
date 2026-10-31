@@ -409,15 +409,15 @@ function restoreAnalysis(bookId, data, ctx) {
   // 7) zeitstrahl_events
   const insZe = db.prepare(`INSERT INTO zeitstrahl_events
     (book_id,user_email,datum,datum_label,datum_year,datum_month,datum_day,datum_ende_year,datum_ende_month,datum_ende_day,
-     story_tag,ereignis,typ,subtyp,bedeutung,storyline_id,manually_edited,sort_order,updated_at,datum_unsicher)
-    VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`);
+     story_tag,ereignis,typ,subtyp,bedeutung,storyline_id,manually_edited,sort_order,updated_at,datum_unsicher,ki_key)
+    VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`);
   for (const r of arr('zeitstrahlEvents')) {
     const d = normalizeDatumFields(r);
     const res = insZe.run(bookId, email, r.datum, r.datum_label ?? null, d.datum_year, d.datum_month,
       d.datum_day, d.datum_ende_year, d.datum_ende_month, d.datum_ende_day,
       d.story_tag, r.ereignis, r.typ ?? 'persoenlich', r.subtyp ?? 'sonstiges', r.bedeutung ?? null,
       r.storyline_id == null ? null : (slMap.get(r.storyline_id) ?? null), r.manually_edited ?? 0, r.sort_order ?? 0,
-      r.updated_at ?? null, r.datum_unsicher ?? 0);
+      r.updated_at ?? null, r.datum_unsicher ?? 0, r.ki_key ?? null);
     evMap.set(r.id, res.lastInsertRowid);
   }
   const insZec = db.prepare('INSERT INTO zeitstrahl_event_chapters (event_id,chapter_id,sort_order) VALUES (?,?,?)');
@@ -446,8 +446,8 @@ function restoreAnalysis(bookId, data, ctx) {
   }
   const insCi = db.prepare(`INSERT INTO continuity_issues
     (check_id,book_id,user_email,schwere,typ,beschreibung,stelle_a,stelle_b,empfehlung,quelle,sort_order,updated_at,
-     resolved,resolved_at,dismissed,dismissed_at,page_a_id,page_b_id,discard_reason,discard_detail)
-    VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`);
+     resolved,resolved_at,dismissed,dismissed_at,page_a_id,page_b_id,discard_reason,discard_detail,missing_since)
+    VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`);
   // Pipeline-Verwurf (discard_reason) mitnehmen: ohne ihn käme ein verworfener Befund als
   // „kein Fehler" des Autors an und vererbte sich auf spätere Läufe. Unbekannter Grund → kein Verwurf.
   const _DISCARD = new Set(['entwarnung', 'zitat', 'verify']);
@@ -458,7 +458,8 @@ function restoreAnalysis(bookId, data, ctx) {
     const res = insCi.run(cid, bookId, email, r.schwere ?? null, r.typ ?? null, r.beschreibung ?? null,
       r.stelle_a ?? null, r.stelle_b ?? null, r.empfehlung ?? null, _httpUrlOrNull(r.quelle), r.sort_order ?? 0, r.updated_at ?? null,
       r.resolved ?? 0, r.resolved_at ?? null, discard ? 1 : (r.dismissed ?? 0), r.dismissed_at ?? null,
-      pageOf(r.page_a_id), pageOf(r.page_b_id), discard, discard ? (r.discard_detail ?? null) : null);
+      pageOf(r.page_a_id), pageOf(r.page_b_id), discard, discard ? (r.discard_detail ?? null) : null,
+      r.missing_since ?? null);
     issueMap.set(r.id, res.lastInsertRowid);
   }
   const insCif = db.prepare('INSERT INTO continuity_issue_figures (issue_id,figure_id,figur_name,sort_order) VALUES (?,?,?,?)');

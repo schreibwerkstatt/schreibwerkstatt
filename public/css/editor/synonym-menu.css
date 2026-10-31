@@ -84,6 +84,13 @@
   font-size: var(--font-size-base);
   color: var(--color-err-text);
 }
+/* Leerzustand: eigene Klasse statt .muted-msg, weil das OTA-Editor-Bundle
+   card-blocks.css nicht lädt (Ausnahme im empty-state-Gate). */
+.synonym-picker-empty {
+  padding: var(--space-md);
+  font-size: var(--font-size-base);
+  color: var(--color-muted);
+}
 .synonym-picker-list {
   overflow-y: auto;
   padding: var(--space-xs);

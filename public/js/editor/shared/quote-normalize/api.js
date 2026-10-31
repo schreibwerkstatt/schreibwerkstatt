@@ -11,6 +11,20 @@ async function _loadStyle(bookId) {
   return resolveQuoteStyle(data.language, data.region);
 }
 
+// Stil des Buchs für einen späteren synchronen `normalizeQuotesInHtml`-Aufruf
+// (Abschnitts-Chat im Notebook-Edit-Modus, chat/page-chat-apply.js). null bei
+// Fehler — der Ersatz bleibt dann unnormalisiert, wie bei `runQuoteNormalizeHtml`.
+// Bewusst nicht über die Facade quote-normalize.js exportiert (Bundle-Fläche).
+export async function loadQuoteStyle(bookId) {
+  if (!bookId) return null;
+  try {
+    return await _loadStyle(bookId);
+  } catch (e) {
+    console.error('[quote-normalize] booksettings fetch failed', e);
+    return null;
+  }
+}
+
 export async function runQuoteNormalize({ bookId, rootEl, range = null }) {
   if (!bookId || !rootEl) return { ok: false, count: 0 };
   let style;

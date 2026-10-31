@@ -17,6 +17,7 @@ const { providerClass, getContextConfigFor } = require('../../../../lib/ai');
 const { COST_LABEL, costTier } = require('../cost-labels');
 const { ankerHints, mergeHints } = require('../katalog-anker');
 const { figureHintKey } = require('../../../../lib/entity-match');
+const { PHASE_END } = require('../../../../lib/komplett-scope');
 
 // Riegel gegen einen kollabierten Figuren-Katalog. Der Reconcile mustert jede nicht
 // wiedergefundene Bestandsfigur aus (`onMissing: 'stale'`) — liefert die
@@ -50,13 +51,13 @@ async function runPhase2(ctx, chapterFiguren, chapterAssignments, chapterSzenen)
   let aliasMap = null;
 
   if (isSinglePass) {
-    updateJob(jobId, { progress: 30, statusText: 'job.phase.consolidatingFiguren' });
+    updateJob(jobId, { progress: PHASE_END.extract, statusText: 'job.phase.consolidatingFiguren' });
     const raw = chapterFiguren[0].figuren || [];
     figuren = raw.map((f, i) => ({ ...f, id: f.id || ('fig_' + (i + 1)) }));
     log.info(`Phase 2 übersprungen (Single-Pass, ${figuren.length} Figuren aus P1 übernommen) – spart einen KI-Call.`);
-    updateJob(jobId, { progress: providerClass(effectiveProvider) === 'cloud' ? 40 : 43 });
+    updateJob(jobId, { progress: providerClass(effectiveProvider) === 'cloud' ? 40 : PHASE_END.figurenConsolidate });
   } else {
-    updateJob(jobId, { progress: 30, statusText: 'job.phase.consolidatingFiguren' });
+    updateJob(jobId, { progress: PHASE_END.extract, statusText: 'job.phase.consolidatingFiguren' });
     // Beziehungs-Ziele mit dem Namen anreichern, BEVOR irgendetwas gemergt wird: `figur_id`
     // ist chunk-lokal, und jeder Weg, der die Figuren danach neu durchnummeriert (Fallback
     // unten), verlöre sonst die Zuordnung an eine fremde Figur. Nutzt zugleich dem Prompt,
@@ -299,7 +300,7 @@ async function runPhase2(ctx, chapterFiguren, chapterAssignments, chapterSzenen)
         if (e.name === 'AbortError') throw e;
         log.warn(`Soziogramm-Konsolidierung fehlgeschlagen, nutze preliminary-Werte: ${e.message}`);
         ctx.warnings?.push({ key: 'job.warn.soziogrammDegraded' });
-        updateJob(jobId, { progress: 43 });
+        updateJob(jobId, { progress: PHASE_END.figurenConsolidate });
       }
     }
 

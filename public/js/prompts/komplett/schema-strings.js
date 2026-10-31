@@ -191,7 +191,7 @@ export const KONTINUITAET_TYPEN = [
 ];
 
 export const PROBLEME_SCHEMA = `{
-  "_reasoning": "Kurzer Prüf-Audit (max 6 Zeilen Stichpunkte), KEINE ausführliche Herleitung. Wenn du intern bereits Schritt für Schritt nachgedacht hast, wiederhole das hier NICHT in voller Länge – fasse nur das Ergebnis zusammen: 1) als harmlos verworfene Kandidaten mit Kurz-Grund (z.B. ‹durch Rückblende erklärbar›, ‹im selben Kapitel auflösbar›); 2) bestätigte Befunde, die ins probleme-Array kommen.",
+  "begruendung": "Kurzes Prüfprotokoll (max 6 Zeilen Stichpunkte), KEINE ausführliche Herleitung – nur das Ergebnis: 1) als harmlos verworfene Kandidaten mit Kurz-Grund (z.B. ‹durch Rückblende erklärbar›, ‹im selben Kapitel auflösbar›); 2) bestätigte Befunde, die ins probleme-Array kommen.",
   "probleme": [
     {
       "schwere": "kritisch|mittel|niedrig",
@@ -216,7 +216,7 @@ export function buildProblemeRules({ anachronismus = false } = {}) {
     ? 'Gemeldet werden drei Arten von Befunden: Widersprüche zwischen zwei Textstellen (alle typ ausser «zeitluecke» und «anachronismus»), Anachronismen (typ «anachronismus», siehe Anachronismus-Prüfung unten) und unmarkierte Zeitlücken (typ «zeitluecke»).'
     : 'Gemeldet werden zwei Arten von Befunden: Widersprüche zwischen zwei Textstellen (alle typ ausser «zeitluecke») und unmarkierte Zeitlücken (typ «zeitluecke»).';
   const ausnahmen = anachronismus
-    ? '(1) typ «anachronismus»: stelle_a = Zitat bzw. exakte Bezeichnung der Erwähnung in «»; stelle_b = die maßgebliche Erzählzeit als Klartext-Jahresangabe OHNE «» (kein Buchzitat). (2) typ «zeitluecke»'
+    ? '(1) typ «anachronismus»: stelle_a = Kapitel + wörtliches Zitat (5-15 Wörter) des Satzes, in dem der Song, die Technik oder das Ereignis erwähnt wird, in «» — nicht nur der Titel; stelle_b = die maßgebliche Erzählzeit als Klartext-Jahresangabe OHNE «» (kein Buchzitat). (2) typ «zeitluecke»'
     : 'typ «zeitluecke»';
   return `Beispiel eines korrekten Eintrags:
 {
@@ -237,8 +237,8 @@ Regeln:
 - Belegstellen, Ausnahmen zuerst: ${ausnahmen}: stelle_a = Zitat der letzten Zeit-/Handlungsverankerung VOR der Lücke, stelle_b = Zitat der ersten Verankerung DANACH — beide in «», aber sie widersprechen sich nicht, sie rahmen die Lücke.
 - Für alle übrigen typ gilt die Zitat-Pflicht ohne Ausnahme: «stelle_a» UND «stelle_b» MÜSSEN je die konkrete widersprechende Aussage belegen (5-15 Wörter, in «»). Liegt dir der Buchtext vor, zitiere wörtlich aus dem Text; liegen dir nur extrahierte Fakten vor, zitiere die betreffende Fakt-Aussage. Kannst du für eine der beiden Stellen keinen solchen Beleg angeben, melde den Befund NICHT. Keine erfundenen Stellen.
 - Stellen-Format: Kapitel OHNE Anführungszeichen voranstellen, dann Doppelpunkt, dann das Zitat in «» (z.B. «Kapitel 3: «…»», «Die Flucht: «…»»). Kapitelnamen nie in «» setzen — nur das Zitat steht in Anführungszeichen.
-- Reasoning-First: «_reasoning» MUSS das erste Feld im JSON-Output sein. Denke dort schrittweise nach, BEVOR du «probleme» befüllst. Reihenfolge der Schritte: (1) Fakten, (2) paarweise Vergleiche, (3) verworfene Kandidaten mit Grund, (4) bestätigte Befunde. Knapp halten, Stichpunkte reichen.
-- «probleme» enthält NUR die im _reasoning unter (4) bestätigten Befunde – jeden verworfenen Kandidaten lässt du weg, NIE als Eintrag mit «Eintrag entfernen»-Empfehlung.
+- Begründung zuerst: «begruendung» MUSS das erste Feld im JSON-Output sein und steht VOR «probleme». Halte dort in dieser Reihenfolge fest: (1) Fakten, (2) paarweise Vergleiche, (3) verworfene Kandidaten mit Grund, (4) bestätigte Befunde. Knapp halten, Stichpunkte reichen.
+- «probleme» enthält NUR die in «begruendung» unter (4) bestätigten Befunde – jeden verworfenen Kandidaten lässt du weg, NIE als Eintrag mit «Eintrag entfernen»-Empfehlung.
 - WICHTIG: Kommst du bei der Analyse zum Schluss, dass KEIN echtes Problem vorliegt (z.B. «konsistent», «passt», «kein echter Widerspruch»), dann den Kandidaten NICHT melden. Das «probleme»-Array ist AUSSCHLIESSLICH für bestätigte Befunde da – nicht für Zwischenüberlegungen, geprüfte-aber-verworfene Kandidaten oder Entwarnungen.
 - entwarnung: PFLICHTFELD, Normalfall false. Es ist der EINZIGE Weg, einen Eintrag zurückzunehmen: Stellst du erst beim Ausformulieren fest, dass der Befund sich auflöst (Rückblende, plausibel vergangene Zeit, zwei verschiedene Figuren, bewusste Ellipse …), setze entwarnung=true — der Eintrag wird dann als verworfen abgelegt. Eine Entwarnung in Prosa («kein Widerspruch», «passt zusammen», «Eintrag entfernen» …) bei entwarnung=false wird NICHT erkannt und landet als echter Befund beim Autor.
 - Selbstcheck vor dem Antworten: Lies jede «beschreibung» UND jede «empfehlung» gegen. Entwarnt einer der beiden Texte den Befund selbst – etwa «kein Widerspruch», «kein echter/wirklicher Widerspruch», «die Angaben sind konsistent/stimmig», «passt zusammen», «wird nicht gemeldet», «Entwarnung», «unproblematisch», «das ist korrekt», «Kein Problem.», «Eintrag entfernen», «lässt sich erklären durch …» –, dann den Eintrag weglassen oder entwarnung=true setzen; nie mit entwarnung=false stehen lassen. «beschreibung» muss den Befund positiv benennen, «empfehlung» muss eine Lösung vorschlagen – niemals «Eintrag entfernen» oder ähnliche Selbst-Annullierungen.

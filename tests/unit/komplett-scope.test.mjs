@@ -82,3 +82,40 @@ test('Jeder Schritt hat Label (+ Hinweis) in beiden Locales', () => {
     }
   }
 });
+
+// Phasen-Grenzen: der Job meldet sie über PHASE_END, das Status-Panel hakt daran ab.
+// Eine Grenze als Zahl-Literal im Job wäre wieder eine zweite Wahrheit — verschiebt
+// sie jemand, hakt das Panel zu früh oder zu spät ab, ohne dass ein Test es merkt.
+test('Phasen: Server und Browser deckungsgleich, aufsteigend, Umfang bekannt, Label vorhanden', () => {
+  assert.deepEqual(browser.KOMPLETT_PHASES, server.KOMPLETT_PHASES);
+  let prev = 0;
+  for (const ph of server.KOMPLETT_PHASES) {
+    assert.ok(ph.end > prev && ph.end < 100, `${ph.key}: end ${ph.end} nicht aufsteigend in (0,100)`);
+    prev = ph.end;
+    for (const k of ph.scope || []) assert.ok(server.KOMPLETT_STEP_KEYS.includes(k), `${ph.key}: unbekannter Schritt ${k}`);
+  }
+  for (const loc of ['de', 'en']) {
+    const i18n = readJson(`public/js/i18n/${loc}.json`);
+    for (const ph of server.KOMPLETT_PHASES) assert.ok(i18n[`phase.${ph.key}`], `${loc}: phase.${ph.key} fehlt`);
+  }
+});
+
+test('Phasen: der Komplett-Job meldet Phasengrenzen nur über PHASE_END', () => {
+  const ends = new Set(server.KOMPLETT_PHASES.map(p => p.end));
+  const files = [
+    'routes/jobs/komplett/job-komplett.js',
+    'routes/jobs/komplett/phases/beziehungen-zeitstrahl.js',
+    'routes/jobs/komplett/phases/extraktion.js',
+    'routes/jobs/komplett/phases/extraktion/multi-pass.js',
+    'routes/jobs/komplett/phases/figuren.js',
+    'routes/jobs/komplett/phases/orte.js',
+  ];
+  for (const rel of files) {
+    const src = readFileSync(new URL(rel, root), 'utf8');
+    for (const m of src.matchAll(/progress:\s*([^,}\n]+)/g)) {
+      for (const n of m[1].match(/\b\d+\b/g) || []) {
+        assert.ok(!ends.has(Number(n)), `${rel}: Phasengrenze ${n} als Literal («progress: ${m[1].trim()}») — PHASE_END benutzen`);
+      }
+    }
+  }
+});

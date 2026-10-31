@@ -30,6 +30,7 @@
             <span class="spinner"></span> <span x-text="$app.t('editor.synonym.loading')"></span>
           </div>
           <div x-show="!synonymThesLoading && synonymThesError" class="synonym-picker-error" x-text="synonymThesError"></div>
+          <div x-show="!synonymThesLoading && !synonymThesError && synonymThesList.length === 0" class="synonym-picker-empty" x-text="$app.t('synonym.noMatches')"></div>
           <div x-show="!synonymThesLoading && !synonymThesError && synonymThesList.length > 0" class="synonym-picker-list">
             <template x-for="(s, i) in synonymThesList" :key="'t'+i">
               <button type="button" class="synonym-entry" @click="applySynonym(s)">
@@ -46,6 +47,7 @@
             <span class="spinner"></span> <span x-text="$app.t('editor.synonym.kiLoading')"></span>
           </div>
           <div x-show="!synonymKiLoading && synonymKiError" class="synonym-picker-error" x-text="synonymKiError"></div>
+          <div x-show="!synonymKiLoading && !synonymKiError && synonymKiList.length === 0" class="synonym-picker-empty" x-text="$app.t('synonym.noneFound')"></div>
           <div x-show="!synonymKiLoading && !synonymKiError && synonymKiList.length > 0" class="synonym-picker-list">
             <template x-for="(s, i) in synonymKiList" :key="'k'+i">
               <button type="button" class="synonym-entry" @click="applySynonym(s)">

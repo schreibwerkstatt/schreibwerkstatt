@@ -15,7 +15,9 @@ const contentStore = require('../../../lib/content-store');
 const { hasMsgThread } = require('../../../lib/html-text');
 const { generateSessionTitle } = require('../chat-title');
 const { recordChatLedgerForMessage } = require('../../../db/cost-ledger');
-const { _parseChatResponse, figurenBlockChars } = require('./shared');
+const { _parseChatResponse, capVorschlaege, figurenBlockChars } = require('./shared');
+const { applyChatEffort } = require('../agentic-chat');
+const { createThinkPhase } = require('../shared/think-phase');
 const { pageChatBudget, computePageChangeHunks, fitHistory } = require('./page-chat-context');
 const { annotateVorschlagMatches, titelCollisions } = require('./page-chat-verify');
 const { preContextPassages, retrievalQuery } = require('./book-chat-retrieval');
@@ -90,6 +92,10 @@ async function runChatJob(jobId, sessionId, userMsgId, message, userEmail) {
   } = await getPrompts(userEmail);
   const effectiveProvider = resolveProvider({ userEmail });
   const aiCfg = getContextConfigFor(effectiveProvider);
+  // Denk-Tiefe (nur Claude): ohne Setting gälte der Modell-Default, und ein
+  // Modellwechsel änderte still Dauer und Kosten jeder Antwort.
+  const effort = applyChatEffort(effectiveProvider, 'ai.claude.effort.pagechat');
+  if (effort) logger.info(`Effort: ${effort}.`);
   try {
     updateJob(jobId, { statusText: 'job.phase.preparing', progress: 5 });
 
@@ -149,7 +155,10 @@ async function runChatJob(jobId, sessionId, userMsgId, message, userEmail) {
       }
       return parts.filter(Boolean).join('\n\n');
     };
-    const fullHistory = buildChatMessageHistory(session.id, { annotate }).slice(0, -1);
+    // Eine Frage ohne Antwort (Lauf gescheitert, danach neu getippt) fällt weg:
+    // zwei User-Turns in Folge zeigten dem Modell dieselbe Frage doppelt.
+    const fullHistory = buildChatMessageHistory(session.id, { annotate }).slice(0, -1)
+      .filter((m, i, all) => !(m.role === 'user' && (all[i + 1]?.role ?? 'user') === 'user'));
 
     // opening_page_text: der Stand, den das Modell in der ersten Runde sah. Hat
     // der Autor seither editiert, geht nur ein kompakter Wort-Diff an die KI —
@@ -211,8 +220,19 @@ async function runChatJob(jobId, sessionId, userMsgId, message, userEmail) {
 
     updateJob(jobId, { statusText: 'job.phase.aiReply', progress: 10 });
 
-    const onProgress = ({ chars, tokIn }) => {
-      const updates = { progress: Math.min(97, 10 + Math.round(chars / 50)) };
+    // Fortschritt 10…97 %: Denkphase zeitbasiert (think-phase.js), danach der
+    // gestreamte Text gegen eine grobe Erwartung (eine Antwort mit Vorschlägen
+    // hat selten mehr als ~4000 Zeichen). Ohne das stand der Balken während des
+    // stummen Denkens (oft über eine Minute) bei 10 % still.
+    const EXPECTED_ANSWER_CHARS = 4000;
+    let lastChars = 0;
+    const progressAt = (chars) => Math.min(97, 10 + Math.round(87 * think.fraction(chars / EXPECTED_ANSWER_CHARS)));
+    const think = createThinkPhase({ onTick: () => updateJob(jobId, { progress: progressAt(lastChars) }) });
+    const onProgress = ({ chars, tokIn, thinking }) => {
+      if (thinking && think.set(true)) updateJob(jobId, { statusText: 'job.phase.aiThinking' });
+      else if (think.active && chars > 0 && think.set(false)) updateJob(jobId, { statusText: 'job.phase.aiReply' });
+      lastChars = chars;
+      const updates = { progress: progressAt(chars) };
       if (tokIn > 0)  updates.tokensIn  = tokIn;
       if (chars > 0)  updates.tokensOut = Math.floor(chars / aiCfg.charsPerToken);
       updateJob(jobId, updates);
@@ -222,7 +242,12 @@ async function runChatJob(jobId, sessionId, userMsgId, message, userEmail) {
     // (Block 1 buch-stabil, Block 2 seiten-stabil) — der Buch-Kontext steht in der
     // Frage —, also greift das Multi-Turn-Caching der Konversationshistorie immer.
     // 1h wie die System-Blöcke: zwischen zwei Fragen liegen oft mehr als fünf Minuten.
-    const aiRes = await callAIChat(aiMessages, systemPrompt, onProgress, null, signal, undefined, SCHEMA_CHAT, chatTemperature(), '1h');
+    let aiRes;
+    try {
+      aiRes = await callAIChat(aiMessages, systemPrompt, onProgress, null, signal, undefined, SCHEMA_CHAT, chatTemperature(), '1h');
+    } finally {
+      think.set(false);
+    }
     const { text, truncated, tokensIn, tokensOut, cacheReadIn = 0, cacheCreationIn = 0, cacheCreation1hIn = 0, provider, model, genDurationMs } = aiRes;
     // Job-State auf echte Provider-Werte setzen, damit Status-Anzeige und
     // gespeicherte Chat-Nachricht dieselben Tokens zeigen (statt eines
@@ -230,7 +255,10 @@ async function runChatJob(jobId, sessionId, userMsgId, message, userEmail) {
     updateJob(jobId, { tokensIn, tokensOut, cacheReadIn, cacheCreationIn, cacheCreation1hIn });
     if (truncated) throw i18nError('job.error.aiTruncated', { max: aiCfg.maxTokensOut, tokIn: tokensIn, tokOut: tokensOut, total: tokensIn + tokensOut });
 
-    const { antwort, vorschlaege, titel_varianten: titelVarianten, ideen: rawIdeen, fallback, lostVorschlaege } = _parseChatResponse(text, aiRes, logger);
+    const parsed = _parseChatResponse(text, aiRes, logger);
+    const { antwort, titel_varianten: titelVarianten, ideen: rawIdeen, fallback, lostVorschlaege } = parsed;
+    const { vorschlaege, dropped: vorschlaegeGekappt } = capVorschlaege(parsed.vorschlaege);
+    if (vorschlaegeGekappt) logger.info(`${vorschlaegeGekappt} Vorschläge über dem Deckel verworfen.`);
     // Ideen-Vorschläge: Anker = dieser Abschnitt (eine page_id des Modells darf
     // auf einen anderen Abschnitt desselben Buchs zeigen). Nichts wird angelegt —
     // der User erfasst jeden einzeln (POST /ideen).
@@ -256,6 +284,7 @@ async function runChatJob(jobId, sessionId, userMsgId, message, userEmail) {
       ...(titelDoppelt.length ? { titel_doppelt: titelDoppelt } : {}),
       ...(ideenProposals.length ? { proposals: ideenProposals } : {}),
       ...(dropped > 0 ? { history_trimmed: dropped } : {}),
+      ...(vorschlaegeGekappt > 0 ? { vorschlaege_gekappt: vorschlaegeGekappt } : {}),
       ...(bookCtxText ? { book_context: { count: bookCtx.hits.length, chars: bookCtx.chars } } : {}),
     };
 

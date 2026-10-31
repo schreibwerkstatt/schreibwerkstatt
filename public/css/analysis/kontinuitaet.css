@@ -92,6 +92,23 @@
   color: var(--color-warn-text);
   white-space: nowrap;
 }
+/* Offener Befund eines früheren Laufs, den der letzte nicht mehr gemeldet hat. */
+.kontinuitaet-missing-badge {
+  flex-shrink: 0;
+  padding: var(--pad-badge);
+  border-radius: var(--radius-sm);
+  font-size: var(--font-size-xs);
+  font-weight: var(--fw-semibold);
+  color: var(--color-muted);
+  border: 1px dashed var(--color-border);
+  white-space: nowrap;
+}
+.kontinuitaet-missing-hint {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--space-sm);
+}
 .kontinuitaet-recheck-verdict { font-weight: var(--fw-semibold); }
 .kontinuitaet-recheck-verdict--behoben { color: var(--color-ok-text); }
 .kontinuitaet-recheck-verdict--teilweise,

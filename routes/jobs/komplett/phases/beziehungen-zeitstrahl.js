@@ -8,6 +8,10 @@ const { komplettMaxTokens } = require('./tokens');
 const { providerClass, getContextConfigFor } = require('../../../../lib/ai');
 const appSettings = require('../../../../lib/app-settings');
 const { COST_LABEL, costTier } = require('../cost-labels');
+const { PHASE_END } = require('../../../../lib/komplett-scope');
+const { eventModel } = require('../../../../lib/esm-bridge');
+const { structuredDatum } = require('../../../../db/event-datum');
+const { groupFigureEvents, withRefIds, attachRefIds } = require('../zeitstrahl-refs');
 
 // Obergrenze für den Co-Occurrence-Auszug, wenn das Buch NICHT als gecachter Block
 // mitgeht: der Auszug steht ungecacht im User-Turn. Mit der Single-Pass-Grenze als
@@ -23,7 +27,7 @@ const P3B_EXCERPT_MAX_CHARS = 200000;
 async function runPhase3b(ctx, figuren) {
   const { jobId, log, sys, singlePassLimit, bookName, fullBookText, pageContents, effectiveProvider } = ctx;
 
-  updateJob(jobId, { progress: 56, statusText: 'job.phase.crossChapterRelations' });
+  updateJob(jobId, { progress: PHASE_END.songsConsolidate, statusText: 'job.phase.crossChapterRelations' });
 
   // Passt das ganze Buch ins Fenster (Cloud; Extraktion nur per extract_single_pass_cap
   // in Chunks gezwungen), geht es als derselbe 1h-Buchblock mit wie in den Prüf-Jobs — P3b
@@ -129,55 +133,22 @@ async function runZeitstrahl(ctx, opts = {}) {
   // damit P8 die Bar exklusiv kontrolliert.
   const silent = !!opts.silent;
 
-  if (!silent) updateJob(jobId, { progress: 78, statusText: 'job.phase.consolidatingTimeline' });
+  if (!silent) updateJob(jobId, { progress: PHASE_END.szenenEvents, statusText: 'job.phase.consolidatingTimeline' });
   const rawEvtRows = listFigureEventsForTimeline(bookIdInt, email);
   if (!rawEvtRows.length) return;
 
-  const evtGroupMap = new Map();
-  for (const row of rawEvtRows) {
-    const key = `${row.datum}||${(row.ereignis || '').trim().toLowerCase()}`;
-    if (!evtGroupMap.has(key)) {
-      evtGroupMap.set(key, {
-        datum: row.datum,
-        datum_label:      row.datum_label,
-        datum_year:       row.datum_year,
-        datum_month:      row.datum_month,
-        datum_day:        row.datum_day,
-        datum_ende_year:  row.datum_ende_year,
-        datum_ende_month: row.datum_ende_month,
-        datum_ende_day:   row.datum_ende_day,
-        story_tag:        row.story_tag,
-        datum_unsicher:   row.datum_unsicher ? true : false,
-        subtyp:           row.subtyp || 'sonstiges',
-        ereignis: row.ereignis, typ: row.evt_typ,
-        bedeutung: row.bedeutung || '',
-        kapitel: row.kapitel ? [row.kapitel] : [],
-        seiten:  row.seite   ? [row.seite]   : [],
-        figuren: [],
-      });
-    }
-    const ev = evtGroupMap.get(key);
-    // Sicheres Datum gewinnt: ist eine der zusammengeführten Figuren-Zeilen
-    // explizit belegt (datum_unsicher=0), gilt das Gruppen-Event als sicher.
-    if (!row.datum_unsicher) ev.datum_unsicher = false;
-    if (!ev.figuren.some(f => f.id === row.fig_id))
-      ev.figuren.push({ id: row.fig_id, name: row.fig_name, typ: row.fig_typ || 'andere' });
-    if (row.kapitel && !ev.kapitel.includes(row.kapitel)) ev.kapitel.push(row.kapitel);
-    if (row.seite   && !ev.seiten.includes(row.seite))   ev.seiten.push(row.seite);
-  }
+  // Vorgruppierung nach demselben Vergleichsschlüssel wie der Figuren-Fallback der
+  // Karte und der Abgleich gegen gepflegte Zeilen (eventGroupKey). Die Kapitel-/
+  // Abschnitts-IDs der Gruppen liegen in `groups.refs`, nicht in den Events — die
+  // gehen unverändert in den Konsolidierungs-Prompt.
+  const { eventGroupKey: groupKey, compareEvents } = await eventModel();
+  const groups = groupFigureEvents(rawEvtRows, groupKey);
+  const save = (events) => saveZeitstrahlEvents(bookIdInt, email, events,
+    idMaps.chNameToId, idMaps.pageNameToIdByChapter, { groupKey });
 
-  // Strukturierte Sortierung — Events ohne Jahr ans Ende.
-  const _sortKey = ev => [
-    ev.datum_year  ?? 9999,
-    ev.datum_month ?? 99,
-    ev.datum_day   ?? 99,
-    ev.story_tag   ?? 99999,
-  ];
-  const zeitstrahlEvents = [...evtGroupMap.values()].sort((a, b) => {
-    const ka = _sortKey(a), kb = _sortKey(b);
-    for (let i = 0; i < ka.length; i++) if (ka[i] !== kb[i]) return ka[i] - kb[i];
-    return 0;
-  });
+  // Strukturierte Sortierung — Events ohne Jahr ans Ende; dieselbe Ordnung wie
+  // die Karte (compareEvents spiegelt das ORDER BY der Zeitstrahl-Route).
+  const zeitstrahlEvents = [...groups.events].sort(compareEvents);
 
   // Bei wenigen pre-gegroupeten Events bringt die KI-Konsolidierung fast nichts
   // (Dedup-Chance klein, kanonische Formulierung marginal) – direkt speichern spart
@@ -194,7 +165,7 @@ async function runZeitstrahl(ctx, opts = {}) {
     : 0;
   const tooMany = localEventCap > 0 && zeitstrahlEvents.length > localEventCap;
   if (zeitstrahlEvents.length < 5 || tooMany) {
-    saveZeitstrahlEvents(bookIdInt, email, zeitstrahlEvents, idMaps.chNameToId, idMaps.pageNameToIdByChapter);
+    save(withRefIds(zeitstrahlEvents, groups.refs));
     if (tooMany) {
       log.info(`${zeitstrahlEvents.length} Zeitstrahl-Ereignisse direkt gespeichert `
         + `(über dem Deckel ai.komplett.timeline_consolidate_max=${localEventCap} für lokale Modelle) `
@@ -217,7 +188,7 @@ async function runZeitstrahl(ctx, opts = {}) {
     charsPerToken: getContextConfigFor(effectiveProvider).charsPerToken, cap: ztCap,
   });
   if (!ztFit.fits) {
-    saveZeitstrahlEvents(bookIdInt, email, zeitstrahlEvents, idMaps.chNameToId, idMaps.pageNameToIdByChapter);
+    save(withRefIds(zeitstrahlEvents, groups.refs));
     log.warn(`${zeitstrahlEvents.length} Zeitstrahl-Ereignisse direkt gespeichert – erwarteter Output `
       + `~${ztFit.estOut} Tokens über dem Cap ${ztFit.cap} (Truncation wäre sicher).`);
     ctx.warnings?.push({ key: 'job.warn.timelineConsolidationTooLarge', params: { count: zeitstrahlEvents.length } });
@@ -248,11 +219,13 @@ async function runZeitstrahl(ctx, opts = {}) {
     // der User nur „done" und kann holistisch-konsolidiert nicht von roh-durchgereicht
     // unterscheiden. Kein Datenverlust (Events bleiben gruppiert + persistiert).
     ctx.warnings?.push({ key: 'job.warn.zeitstrahlDegraded' });
-    saveZeitstrahlEvents(bookIdInt, email, zeitstrahlEvents, idMaps.chNameToId, idMaps.pageNameToIdByChapter);
+    save(withRefIds(zeitstrahlEvents, groups.refs));
     if (!silent) updateJob(jobId, { progress: 82 });
     return;
   }
-  saveZeitstrahlEvents(bookIdInt, email, ztResult.ereignisse, idMaps.chNameToId, idMaps.pageNameToIdByChapter);
+  // Die Antwort nennt Kapitel/Abschnitte nur beim Namen — IDs aus den Vorgruppen
+  // zurückführen, wo der Name eindeutig ist (zeitstrahl-refs.js#attachRefIds).
+  save(attachRefIds(ztResult.ereignisse, groups, groupKey, structuredDatum));
   log.info(`${ztResult.ereignisse.length} Zeitstrahl-Ereignisse gespeichert (aus ${zeitstrahlEvents.length} vorgruppierten).`);
   if (!silent) updateJob(jobId, { progress: 82 });
 }
@@ -264,7 +237,7 @@ async function runZeitstrahl(ctx, opts = {}) {
 async function runZeitstrahlPhase(ctx, { skip = false } = {}) {
   if (skip) {
     ctx.log.info('Zeitstrahl (P6) auf Wunsch übersprungen – bestehender Zeitstrahl bleibt.');
-    updateJob(ctx.jobId, { progress: 97 });
+    updateJob(ctx.jobId, { progress: PHASE_END.timeline });
     return;
   }
   try { await runZeitstrahl(ctx); }
@@ -273,7 +246,7 @@ async function runZeitstrahlPhase(ctx, { skip = false } = {}) {
     ctx.log.warn(`Zeitstrahl-Phase fehlgeschlagen (Katalog bleibt erhalten): ${i18nErrText(e)}`);
     ctx.warnings.push({ key: 'job.warn.timelineFailed' });
   }
-  updateJob(ctx.jobId, { progress: 97 });
+  updateJob(ctx.jobId, { progress: PHASE_END.timeline });
 }
 
 module.exports = { runPhase3b, runZeitstrahl, runZeitstrahlPhase };

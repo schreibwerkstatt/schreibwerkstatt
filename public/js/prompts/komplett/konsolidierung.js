@@ -154,7 +154,7 @@ ${list}
 Antworte mit diesem JSON-Schema:
 {
   "paare": [
-    { "nr": 1, "_reasoning": "kurze Begründung aus den gegebenen Angaben", "gleich": true }
+    { "nr": 1, "begruendung": "kurze Begründung aus den gegebenen Angaben", "gleich": true }
   ]
 }
 

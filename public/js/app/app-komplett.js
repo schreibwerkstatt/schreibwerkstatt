@@ -1,7 +1,7 @@
 import { fetchJson, clearStatusAfter, formatLastRun, localeTag } from '../utils.js';
 import { EVT } from '../events.js';
 import { tFetchError } from '../i18n.js';
-import { KOMPLETT_STEPS, KOMPLETT_CORE_STEPS, KOMPLETT_STEP_KEYS,
+import { KOMPLETT_STEPS, KOMPLETT_CORE_STEPS, KOMPLETT_STEP_KEYS, KOMPLETT_PHASES,
          normalizeKomplettScope, isFullKomplettScope } from '../komplett-scope.js';
 
 // Komplett-Analyse-Pipeline-UI: Start, Polling, Phasen-Indikator,
@@ -80,7 +80,8 @@ export const appKomplettMethods = {
     const run = this.komplettDelta?.lastRun;
     if (!run) return '';
     const when = formatLastRun(run.endedAt, (k, p) => this.t(k, p), this.$store.shell.uiLocale);
-    return run.usd != null && run.usd > 0
+    // Kosten nur für Admins; Autor:innen sehen keine Preise.
+    return this.$store.session.currentUser?.isAdmin && run.usd != null && run.usd > 0
       ? this.t('komplett.delta.lastRunCost', { when, usd: run.usd.toFixed(2) })
       : this.t('komplett.delta.lastRun', { when });
   },
@@ -137,6 +138,8 @@ export const appKomplettMethods = {
     this.showKomplettStatus = true;
     const bookId = this.$store.nav.selectedBookId;
     const bookName = this.selectedBookName;
+    const scope = Object.fromEntries(KOMPLETT_STEP_KEYS.map(k => [k, this.komplettScope[k] !== false]));
+    this.$store.jobs.alleAktualisierenScope = scope;
     try {
       this.$store.jobs.alleAktualisierenStatus = this.t('komplett.started');
       const { jobId } = await fetchJson('/jobs/komplett-analyse', {
@@ -146,7 +149,7 @@ export const appKomplettMethods = {
           book_id: parseInt(bookId), book_name: bookName,
           // Lauf-Umfang: der Server normalisiert nach, wir schicken nur die bekannten
           // Schlüssel. Er wird zugleich als Vorbelegung des nächsten Laufs gespeichert.
-          scope: Object.fromEntries(KOMPLETT_STEP_KEYS.map(k => [k, this.komplettScope[k] !== false])),
+          scope,
           force: !!this.komplettScopeForce,
         }),
       });
@@ -175,6 +178,7 @@ export const appKomplettMethods = {
         if (job.tokensOut != null) this.$store.jobs.alleAktualisierenTokOut = job.tokensOut;
         if (job.tokensPerSec != null) this.$store.jobs.alleAktualisierenTps = job.tokensPerSec;
         if (job.passMode) this.$store.jobs.alleAktualisierenPassMode = job.passMode;
+        if (job.komplettScope) this.$store.jobs.alleAktualisierenScope = job.komplettScope;
       },
       onNotFound: () => {
         this.$store.jobs.alleAktualisierenLoading = false;
@@ -237,43 +241,27 @@ export const appKomplettMethods = {
     }
   },
 
+  // Phasen und ihre Grenzen: KOMPLETT_PHASES (komplett-scope.js) — der Job meldet
+  // dieselben Werte über PHASE_END, hier wird nur abgelesen.
+  // Im Single-Pass faellt Phase 3b weg (Server setzt passMode='single'). Eine Phase,
+  // deren Schritte alle abgewaehlt sind, faellt WEG statt als erledigt abgehakt zu
+  // werden — die Bar rueckt ueber den Bereich hinweg vor, und ein Haken waere eine
+  // Falschaussage ueber eine Phase, die gar nicht lief. Massgeblich ist der Umfang
+  // des Laufs (Store), nicht der Dialog: der ist nach einem Neuladen zurueckgesetzt.
+  // «Aktiv» nur, solange ein Lauf laeuft — sonst stuende nach einem Neuladen
+  // (Fortschritt 0, nur der letzte Lauf bekannt) die erste Phase als laufend da.
   _komplettPhasen() {
-    const p = this.$store.jobs.alleAktualisierenProgress;
-    // Thresholds entsprechen den Server-Progress-Punkten nach den jeweiligen aiCalls:
-    //   orteConsolidate=55  = Ende Phase 3 (43→55)
-    //   songsConsolidate=56 = Ende Phase 3 Songs (55→56)
-    //   chapterRelations=58 = Ende Phase 3b (56→58, nur Multi-Pass)
-    //   szenenEvents=78     = Ende Szenen-Remap/Save (58→78)
-    //   timeline=97         = Ende Phase 6 (78→97); Kontinuität und Erzählprofil laufen
-    //                         danach als eigene Prüf-Jobs und stehen in der Footer-Queue
-    // Im Single-Pass wird Phase 3b übersprungen (Server setzt passMode='single'),
-    // damit sie auch im UI nicht als „erledigt" erscheint.
-    // `scope`: der Schritt, an dem die Phase haengt. Ist er abgewaehlt, faellt die
-    // Zeile WEG statt als erledigt abgehakt zu werden — die Bar rueckt ueber den
-    // Bereich hinweg vor, und ein Haken waere dann eine Falschaussage ueber eine
-    // Phase, die gar nicht lief.
-    const phases = [
-      { key: 'phase.loadPages',          threshold: 12  },
-      { key: 'phase.extract',            threshold: 30  },
-      { key: 'phase.figurenConsolidate', threshold: 43  },
-      { key: 'phase.orteConsolidate',    threshold: 55, scope: 'orte' },
-      { key: 'phase.songsConsolidate',   threshold: 56, scope: 'songs' },
-      { key: 'phase.chapterRelations',   threshold: 58, onlyMulti: true, scope: 'beziehungen' },
-      { key: 'phase.szenenEvents',       threshold: 78, scope: ['szenen', 'ereignisse'] },
-      { key: 'phase.timeline',           threshold: 97, scope: 'ereignisse' },
-    ];
-    const inScope = (ph) => {
-      if (!ph.scope) return true;
-      const keys = Array.isArray(ph.scope) ? ph.scope : [ph.scope];
-      return keys.some(k => this.komplettScope[k] !== false);
-    };
-    const visible = phases.filter(ph =>
-      !(ph.onlyMulti && this.$store.jobs.alleAktualisierenPassMode === 'single') && inScope(ph));
+    const jobs = this.$store.jobs;
+    const p = jobs.alleAktualisierenProgress;
+    const scope = jobs.alleAktualisierenScope || {};
+    const inScope = (ph) => !ph.scope || ph.scope.some(k => scope[k] !== false);
+    const visible = KOMPLETT_PHASES.filter(ph =>
+      !(ph.onlyMulti && jobs.alleAktualisierenPassMode === 'single') && inScope(ph));
     return visible.map((ph, i) => {
-      const done = p >= ph.threshold;
-      const prevThreshold = i === 0 ? 0 : visible[i - 1].threshold;
-      const active = !done && p >= prevThreshold;
-      return { label: this.t(ph.key), done, active };
+      const done = p >= ph.end;
+      const prevEnd = i === 0 ? 0 : visible[i - 1].end;
+      const active = jobs.alleAktualisierenLoading && !done && p >= prevEnd;
+      return { key: ph.key, label: this.t('phase.' + ph.key), done, active };
     });
   },
 };

@@ -4,7 +4,8 @@
 // Eigener State: showSynonymMenu, synonymMenuX/Y, showSynonymPicker,
 //   synonymThesList/Loading/Error/Disabled, synonymKiList/Loading/Error,
 //   _synonymRange, _synonymWord, _synonymPollTimer, _synonymReflowDetach,
-//   _synonymJobId.
+//   _synonymJobId, _synonymReqSeq/_synonymFetchAbort (veraltete Antworten
+//   verwerfen), _synonymSentenceStart (Schreibung beim Ersetzen).
 // Root behält: `_onEditContextMenu` (Trigger am contenteditable extrahiert
 //   Range+Word und dispatcht `editor:synonym:open {range, word, x, y}`),
 //   Trampoline `closeSynonymMenu/closeSynonymPicker` und `requestSynonyms`
@@ -32,6 +33,9 @@ export function registerEditorSynonymeCard() {
     _synonymPollTimer: null,
     _synonymReflowDetach: null,
     _synonymJobId: null,
+    _synonymReqSeq: 0,
+    _synonymFetchAbort: null,
+    _synonymSentenceStart: false,
     _synonymAbort: null,
 
     init() {
@@ -45,7 +49,7 @@ export function registerEditorSynonymeCard() {
     },
 
     destroy() {
-      if (this._synonymPollTimer) { clearInterval(this._synonymPollTimer); this._synonymPollTimer = null; }
+      this._cancelSynonymRequest();
       this._detachSynonymScroll();
       this._synonymAbort?.abort();
     },

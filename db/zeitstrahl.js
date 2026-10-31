@@ -19,13 +19,21 @@ const { toRefString: _toRefString } = require('./write-helpers');
 // db/event-datum.js, geteilt mit dem figure_events-Schreibpfad.
 const _structuredDatum = require('./event-datum').structuredDatum;
 
-// Ersetzt den gesamten Bestand für book/user.
-// ereignisse: Array aus KI-Antwort [{datum, ereignis, typ, bedeutung, kapitel[], seiten[], figuren[]}]
+// Ersetzt den gesamten KI-Bestand für book/user.
+// ereignisse: Array aus KI-Antwort [{datum, ereignis, typ, bedeutung, kapitel[], seiten[], figuren[]}];
+//   optional `chapter_ids[]`/`page_ids[]` — IDs, die der Aufrufer schon kennt (P6:
+//   aus figure_events). Sie gelten vor der Namensauflösung, weil ein Name, den
+//   zwei Kapitel tragen, in chNameToId fehlt.
 // chNameToId: optionaler Map Kapitelname → chapter_id für stabile ID-Referenzen.
 // pageNameToIdByChapter: optionaler Map chapter_id → (page_name → page_id) für
 // kapitel-scoped Auflösung der seiten-Einträge. Fehlt er, bleiben page_ids leer.
-function saveZeitstrahlEvents(bookId, userEmail, ereignisse, chNameToId = {}, pageNameToIdByChapter = null) {
+// opts.groupKey: cards/ereignisse/model.js#eventGroupKey (über die ESM-Brücke). Mit
+//   ihm überspringt der Save KI-Ereignisse, die der Autor schon bearbeitet hat —
+//   erkannt am gesicherten KI-Stand (`ki_key`) oder am heutigen Stand der
+//   gepflegten Zeile. Ohne ihn entfällt der Abgleich.
+function saveZeitstrahlEvents(bookId, userEmail, ereignisse, chNameToId = {}, pageNameToIdByChapter = null, opts = {}) {
   const email = _requireUserEmail(userEmail, 'saveZeitstrahlEvents');
+  const groupKey = typeof opts.groupKey === 'function' ? opts.groupKey : null;
   db.transaction(() => {
     // Nur AI-generierte Rows (manually_edited=0) ersetzen — user-kuratierte
     // Events bleiben über Re-Runs hinweg erhalten. CASCADE löscht ihre Child-
@@ -33,6 +41,16 @@ function saveZeitstrahlEvents(bookId, userEmail, ereignisse, chNameToId = {}, pa
     db.prepare(
       'DELETE FROM zeitstrahl_events WHERE book_id = ? AND user_email = ? AND manually_edited = 0'
     ).run(bookId, email);
+    const curatedKeys = new Set();
+    if (groupKey) {
+      const curated = db.prepare(
+        'SELECT * FROM zeitstrahl_events WHERE book_id = ? AND user_email = ? AND manually_edited = 1'
+      ).all(bookId, email);
+      for (const r of curated) {
+        if (r.ki_key) curatedKeys.add(r.ki_key);
+        curatedKeys.add(groupKey(r));
+      }
+    }
     const ins = db.prepare(`INSERT INTO zeitstrahl_events
       (book_id, user_email, datum, datum_label,
        datum_year, datum_month, datum_day,
@@ -50,9 +68,11 @@ function saveZeitstrahlEvents(bookId, userEmail, ereignisse, chNameToId = {}, pa
         if (n) figNameToRowId[n.toLowerCase()] = r.id;
       }
     }
+    const _ids = (v) => (Array.isArray(v) ? v : []).map(x => Number(x)).filter(x => Number.isInteger(x) && x > 0);
     for (let i = 0; i < ereignisse.length; i++) {
       const ev = ereignisse[i];
       const sd = _structuredDatum(ev);
+      if (groupKey && curatedKeys.has(groupKey({ ...ev, ...sd }))) continue;
       const { lastInsertRowid: eventId } = ins.run(
         bookId, email,
         ev.datum || sd.datum_label || '', sd.datum_label,
@@ -65,7 +85,7 @@ function saveZeitstrahlEvents(bookId, userEmail, ereignisse, chNameToId = {}, pa
 
       const rawKapitel = Array.isArray(ev.kapitel) ? ev.kapitel : (ev.kapitel ? [ev.kapitel] : []);
       const kapitelArr = rawKapitel.map(_toRefString).filter(Boolean);
-      const chapIds = kapitelArr.map(n => chNameToId?.[n] ?? null).filter(id => id != null);
+      const chapIds = [..._ids(ev.chapter_ids), ...kapitelArr.map(n => chNameToId?.[n] ?? null).filter(id => id != null)];
       const seenChap = new Set();
       let j = 0;
       for (const cid of chapIds) {
@@ -80,6 +100,11 @@ function saveZeitstrahlEvents(bookId, userEmail, ereignisse, chNameToId = {}, pa
       // Halluzinations-Check: seite === kapitel → skip.
       const seenPage = new Set();
       j = 0;
+      for (const pid of _ids(ev.page_ids)) {
+        if (seenPage.has(pid)) continue;
+        seenPage.add(pid);
+        insZep.run(eventId, pid, j++);
+      }
       if (pageNameToIdByChapter) {
         for (const seite of seitenArr) {
           if (!seite || kapitelArr.includes(seite) || isUngroupedChapterName(seite)) continue;
@@ -131,7 +156,8 @@ function saveZeitstrahlEvents(bookId, userEmail, ereignisse, chNameToId = {}, pa
 
 /** Lebensereignisse aller Figuren eines Buchs als Eingabe der Zeitstrahl-
  *  Konsolidierung (Komplettanalyse P6), chronologisch sortiert (Ereignisse ohne
- *  Jahr ans Ende) — mit Kapitel- und Seitennamen. Der Namens-JOIN auf
+ *  Jahr ans Ende) — mit Kapitel-/Seiten-IDs und ihren Namen (die IDs tragen den
+ *  Anker, die Namen braucht nur der Konsolidierungs-Prompt). Der Namens-JOIN auf
  *  `chapters`/`pages` liegt hier und nicht im Job-Handler (Content-Store-Regel,
  *  Muster db/sources/citations.js#listSourceCitations).
  *  Nur aktive Figuren (`stale = 0`): eine ausgemusterte Figur behält ihre
@@ -145,6 +171,7 @@ function listFigureEventsForTimeline(bookId, userEmail) {
            fe.datum_ende_year, fe.datum_ende_month, fe.datum_ende_day,
            fe.story_tag, fe.datum_unsicher, fe.subtyp,
            fe.ereignis, fe.typ AS evt_typ, fe.bedeutung,
+           fe.chapter_id, fe.page_id,
            c.chapter_name AS kapitel, p.page_name AS seite
     FROM figure_events fe
     JOIN figures f ON f.id = fe.figure_id

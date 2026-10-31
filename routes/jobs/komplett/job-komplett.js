@@ -41,9 +41,9 @@ const {
   buildPrelimFigurenKompakt, runPhase3OrteCall,
   runZeitstrahlPhase, runCoverageAudit, komplettMaxTokens,
 } = require('./phases');
-const { _komplettAiOverrides, resolveRemapNames, komplettTextOpts } = require('./job-shared');
+const { _komplettAiOverrides, resolveRemapNames, resolveRemapOrtNames, komplettTextOpts } = require('./job-shared');
 const { loadOrteFromDb, countSongsInDb, countSzenenInDb, activeStepJob } = require('./scope');
-const { normalizeKomplettScope, isFullKomplettScope, skippedKomplettSteps, KOMPLETT_STEPS } = require('../../../lib/komplett-scope');
+const { normalizeKomplettScope, isFullKomplettScope, skippedKomplettSteps, KOMPLETT_STEPS, PHASE_END } = require('../../../lib/komplett-scope');
 const { enqueuePruefJobs } = require('./pruef-jobs');
 const { COST_LABEL, relabel } = require('./cost-labels');
 const { persistWorldFacts } = require('./world-facts-save');
@@ -147,14 +147,16 @@ async function runKomplettAnalyseJob(jobId, bookId, bookName, userEmail, provide
     const cp = loadAndValidateCheckpoint(bookIdInt, email, log, jobId);
 
     // ── Seiten laden ──────────────────────────────────────────────────────────
-    updateJob(jobId, { statusText: 'job.phase.loadingPages', progress: 0 });
+    // Umfang am Job: das Status-Panel blendet daran abgewählte Phasen aus — auch
+    // nach einem Neuladen, wenn der Dialog-Zustand des Starts längst weg ist.
+    updateJob(jobId, { statusText: 'job.phase.loadingPages', progress: 0, komplettScope: scope });
     const { chMap, chNameToId, pages } = await loadOrderedBookContents(bookId)
       .catch(e => { throw contentHttpError(e); });
     if (!pages.length) { completeJob(jobId, { empty: true }); return; }
 
     const pageContents = await loadPageContents(pages, chMap, 30, (i, total) => {
       updateJob(jobId, {
-        progress: Math.round((i / total) * 12),
+        progress: Math.round((i / total) * PHASE_END.loadPages),
         statusText: 'job.phase.readingPages',
         statusParams: { from: i + 1, to: Math.min(i + BATCH_SIZE, total), total },
       });
@@ -206,8 +208,6 @@ async function runKomplettAnalyseJob(jobId, bookId, bookName, userEmail, provide
     // Enablement in die cacheVersion, sonst friert ein Toggle den alten HIT ein. Einmal
     // berechnen und via ctx durchreichen → cacheVersion und Verhalten lesen dieselben Werte.
     // Der Coverage-Audit ist reine Messung (schreibt nichts) und gehört NICHT hinein.
-    const coverageAuditChapters = Math.max(0, Math.min(20,
-      parseInt(appSettings.get('ai.komplett.coverage_audit_chapters'), 10) || 0));
     const sceneBackfillEnabled = isCloudModel
       && appSettings.get('ai.komplett.scene_backfill') !== false;
     const sceneBackfillMinChars = Math.max(500, parseInt(appSettings.get('ai.komplett.scene_backfill_min_chars'), 10) || 3000);
@@ -245,7 +245,7 @@ async function runKomplettAnalyseJob(jobId, bookId, bookName, userEmail, provide
       cacheVersion, chunkCacheVersion, bookPagesSig, prompts, sys,
       idMaps, pageContents, groups, groupOrder, totalChars, fullBookText, warnings, completenessPasses,
       extractTier, gapTier, coverageTier,
-      coverageAuditChapters, sceneBackfillEnabled, sceneBackfillMinChars, figureBatchSize,
+      sceneBackfillEnabled, sceneBackfillMinChars, figureBatchSize,
     };
     pt.mark('Laden');
 
@@ -338,7 +338,7 @@ async function runKomplettAnalyseJob(jobId, bookId, bookName, userEmail, provide
       } else {
         ({ orte, ortNameToId, ortNameToIdLower } = loadOrteFromDb(bookIdInt, email));
         log.info(`Orte auf Wunsch übersprungen – ${orte.length} Schauplätze aus dem Katalog übernommen.`);
-        updateJob(jobId, { progress: 55 });
+        updateJob(jobId, { progress: PHASE_END.orteConsolidate });
       }
     }
     pt.mark('P2+P3 Konsolidierung');
@@ -351,7 +351,7 @@ async function runKomplettAnalyseJob(jobId, bookId, bookName, userEmail, provide
     } else {
       songsCount = countSongsInDb(bookIdInt, email);
       log.info(`Songs auf Wunsch übersprungen – bestehende Musikbibliothek (${songsCount}) bleibt.`);
-      updateJob(jobId, { progress: 56 });
+      updateJob(jobId, { progress: PHASE_END.songsConsolidate });
     }
 
     // ── Phase 3b: Kapitelübergreifende Beziehungen (non-critical, nur Multi-Pass) ──
@@ -367,7 +367,7 @@ async function runKomplettAnalyseJob(jobId, bookId, bookName, userEmail, provide
     // parallel. P8 dominiert zeitlich (voller Buchtext bei Single-Pass, sonst
     // Fakten-Listen) und kontrolliert die Progress-Bar (82..97); P6 läuft
     // silent. Lokale Provider sequentiell (Mutex serialisiert ohnehin).
-    updateJob(jobId, { progress: 58, statusText: 'job.phase.processingScenes' });
+    updateJob(jobId, { progress: PHASE_END.chapterRelations, statusText: 'job.phase.processingScenes' });
     const locRows = db.prepare(
       'SELECT id, loc_id FROM locations WHERE book_id = ? AND user_email = ? ORDER BY sort_order'
     ).all(bookIdInt, email);
@@ -380,10 +380,16 @@ async function runKomplettAnalyseJob(jobId, bookId, bookName, userEmail, provide
     const writeEvents = scope.ereignisse;
     let szenenResult = { szenenCount: countSzenenInDb(bookIdInt, email), eventsCount: 0 };
     if (writeSzenen || writeEvents) {
-      // Remap-Rescue (#8, nur Claude): unauflösbare Figuren-Klarnamen aus Szenen/Events dem Katalog
-      // zuordnen (mutiert figNameToIdLower in place), BEVOR remapSzenen/remapAssignments sie droppen.
+      // Remap-Rescue (#8, nur Claude): unauflösbare Figuren- und Ort-Klarnamen aus Szenen/Events
+      // dem Katalog zuordnen (mutiert figNameToIdLower/ortNameToIdLower in place), BEVOR
+      // remapSzenen/remapAssignments sie droppen. Die beiden Calls sind unabhängig → parallel.
       // Non-fatal (AbortError propagiert); no-op wenn alle Namen bereits auflösbar sind.
-      await resolveRemapNames(ctx, { chapterSzenen, chapterAssignments, figuren, figNameToId, figNameToIdLower });
+      await Promise.all([
+        resolveRemapNames(ctx, { chapterSzenen, chapterAssignments, figuren, figNameToId, figNameToIdLower }),
+        writeSzenen
+          ? resolveRemapOrtNames(ctx, { chapterSzenen, orte, ortNameToId, ortNameToIdLower })
+          : 0,
+      ]);
       const szenen = writeSzenen
         ? remapSzenen(chapterSzenen, figNameToId, figNameToIdLower, ortNameToId, ortNameToIdLower, idMaps.chNameToId, log)
         : [];

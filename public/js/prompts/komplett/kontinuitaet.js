@@ -79,7 +79,7 @@ Dieses Buch hat eine reale, kalendarische Chronologie. Die datierte Handlung spi
 // Zitat-Pflicht; hier wird sie nur wiederholt, damit die Prüfung in sich lesbar bleibt.
 const _ANACHRONISMUS_RULE = `
 
-Anachronismus-Prüfung (typ «anachronismus»): Vergleiche die oben unter «Zeitliche Verortung» gelisteten Songs, Technologien und historischen Ereignisse mit ihrer realen Entstehungs- bzw. Veröffentlichungszeit (aus deinem Allgemeinwissen). Maßgeblich ist je Eintrag das markierte «(Szene ~JAHR)» – fehlt es, gilt die Gesamtspanne. Wird etwas erwähnt, das es zu dieser Erzählzeit real noch nicht gab (ein Song nach seinem Erscheinungsjahr, eine Technologie vor ihrer Erfindung, ein Ereignis vor seinem tatsächlichen Datum), ist das ein Anachronismus. Für typ «anachronismus» gilt abweichend: stelle_a = wörtliches Zitat bzw. exakte Bezeichnung der Erwähnung im Buch; stelle_b = die für diesen Eintrag maßgebliche Erzählzeit (das «(Szene ~JAHR)» bzw. die Gesamtspanne) – als Klartext-Jahresangabe OHNE «» (kein Buchzitat nötig). Beschreibung nennt das reale Datum (z.B. «Der Song … erschien erst 1991, die Handlung spielt 1985»). Nur melden, wenn du dir beim realen Datum sicher bist; im Zweifel weglassen.`;
+Anachronismus-Prüfung (typ «anachronismus»): Vergleiche die oben unter «Zeitliche Verortung» gelisteten Songs, Technologien und historischen Ereignisse mit ihrer realen Entstehungs- bzw. Veröffentlichungszeit (aus deinem Allgemeinwissen). Maßgeblich ist je Eintrag das markierte «(Szene ~JAHR)» – fehlt es, gilt die Gesamtspanne. Wird etwas erwähnt, das es zu dieser Erzählzeit real noch nicht gab (ein Song nach seinem Erscheinungsjahr, eine Technologie vor ihrer Erfindung, ein Ereignis vor seinem tatsächlichen Datum), ist das ein Anachronismus. Für typ «anachronismus» gilt abweichend: stelle_a = Kapitel + wörtliches Zitat (5-15 Wörter) des Satzes mit der Erwähnung, nicht nur der Titel; stelle_b = die für diesen Eintrag maßgebliche Erzählzeit (das «(Szene ~JAHR)» bzw. die Gesamtspanne) – als Klartext-Jahresangabe OHNE «» (kein Buchzitat nötig). Beschreibung nennt das reale Datum (z.B. «Der Song … erschien erst 1991, die Handlung spielt 1985»). Nur melden, wenn du dir beim realen Datum sicher bist; im Zweifel weglassen.`;
 
 // Zeitlücken-Prüfung (typ «zeitluecke») – IMMER angehängt (Belegstellen-Ausnahme wie beim
 // Anachronismus in PROBLEME_RULES) (anders als Anachronismus, der
@@ -254,7 +254,7 @@ Berücksichtige auflösende Erklärungen: legitime Entwicklung über die Zeit (A
 
 Antworte mit diesem JSON-Schema:
 {
-  "_reasoning": "kurze Abwägung: welcher Kontext den Widerspruch auflöst oder warum er echt ist",
+  "begruendung": "kurze Abwägung: welcher Kontext den Widerspruch auflöst oder warum er echt ist",
   "widerspruch": true,
   "schwere": "kritisch|mittel|niedrig",
   "beschreibung": "1 Satz: worin der Widerspruch besteht (nur wenn widerspruch=true, sonst leer)",
@@ -353,7 +353,7 @@ WICHTIG:
 
 Antworte mit diesem JSON-Schema:
 {
-  "_reasoning": "kurze Abwägung auf Basis der Recherche: was die Quellen sagen, ob fiktiv oder real gemeint",
+  "begruendung": "kurze Abwägung auf Basis der Recherche: was die Quellen sagen, ob fiktiv oder real gemeint",
   "urteil": "korrekt|falsch|unklar",
   "schwere": "kritisch|mittel|niedrig",
   "beschreibung": "1 Satz (nur bei urteil=falsch, sonst leer)",

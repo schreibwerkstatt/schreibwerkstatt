@@ -235,6 +235,8 @@ export const ACTIONS = [
   ...[
     ['book',        ['buch','titel','title','sprache','language','buchtyp']],
     ['context',     ['kontext','stil','style','ziele','goals','zitierstil']],
+    // Liste = SCHULWEG_OHNE_BUCHTYPEN (school-path.js), gegated in buchtyp-drift.test.mjs.
+    ['school',      ['schule','schulsystem','schulweg','schullaufbahn','klasse','handlungsjahr','school'], { hiddenForBuchtyp: ['sachbuch','wissenschaft','essay','lyrik','blog','journalismus'] }],
     ['sources',     ['quellen','literatur','bibliography','zitieren']],
     ['share',       ['teilen','share','link','freigabe','leser','reader']],
     ['publication', ['publikation','veröffentlichung','publish','klappentext','blurb','isbn','verlag','publisher','cover','vita','autorname']],
@@ -251,7 +253,7 @@ export const ACTIONS = [
   })),
   // Direktsprung auf einen Reiter des PDF-Exports. `apparat`/`cover` sind
   // Experten-Reiter; der Sprung schaltet dafür in den Experten-Modus
-  // (pdf-export-ui.js#_applyPendingTab).
+  // (pdf-export-ui.js#_applyTab).
   ...[
     ['layout',      ['format','papier','paper','satzspiegel','ränder','margins','trim','beschnitt']],
     ['font',        ['schrift','font','typografie','typography','schriftgrösse','zeilenabstand']],

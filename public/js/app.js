@@ -7,6 +7,7 @@ import { treeContextMenuMethods } from './book/tree-context-menu.js';
 import { actionMenuMethods } from './action-menu.js';
 import { diaryCalendarMethods } from './book/diary-calendar.js';
 import { lektoratMethods } from './editor/lektorat.js';
+import { lektoratUndoMethods } from './editor/lektorat-undo.js';
 // readNormalSnapshot/clearNormalSnapshot werden in editor-notebook-card.js via
 // notebook/card.js konsumiert (Restore-Lifecycle dort).
 import { kapitelReviewMethods } from './book/kapitel-review.js';
@@ -273,6 +274,7 @@ document.addEventListener('alpine:init', () => {
     ...treeContextMenuMethods,
     ...diaryCalendarMethods,
     ...lektoratMethods,
+    ...lektoratUndoMethods,
     ...kapitelReviewMethods,
     ...figurenMethods,
     ...ereignisseMethods,

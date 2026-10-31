@@ -24,7 +24,9 @@
   border: 0.5px solid var(--color-border);
   border-radius: var(--radius-lg);
   padding: var(--space-md) var(--space-lg);
-  min-width: 260px;
+  /* Feste Breite: Status-Text und Token-Zähler ändern sich im Sekundentakt —
+     eine inhaltsabhängige Breite liesse das Panel bei jedem Poll springen. */
+  width: 340px;
   z-index: var(--z-header);
   box-shadow: var(--shadow-md);
   animation: cardFadeIn var(--transition-base) both;
@@ -51,6 +53,14 @@
   color: var(--color-muted);
   margin-bottom: var(--space-10);
 }
+/* Eine Zeile: ein umbrechender Status änderte die Panel-Höhe bei jedem Poll.
+   Der volle Wortlaut steht im Tooltip. */
+.komplett-status-text {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
 .komplett-tokens {
   font-size: var(--font-size-xs);
   color: var(--color-subtle);
@@ -58,6 +68,18 @@
   display: inline-flex;
   align-items: center;
   gap: var(--space-2xs);
+  flex-shrink: 0;
+  font-variant-numeric: tabular-nums;
+}
+/* Platz für «123.4K» reserviert: fmtTok liefert 1–6 Zeichen, ohne Reserve
+   verschiebt jeder Stellenwechsel die Pfeile und den Status-Text daneben. */
+.komplett-tok-num {
+  display: inline-block;
+  min-width: 6ch;
+}
+.komplett-tok-tps {
+  display: inline-block;
+  min-width: 11ch;
 }
 .komplett-phase-list {
   list-style: none;
@@ -195,7 +217,7 @@
     right: 0;
     top: auto;
     border-radius: var(--radius-lg) var(--radius-lg) 0 0;
-    min-width: 0;
+    width: auto;
     max-height: 80vh;
     overflow-y: auto;
   }

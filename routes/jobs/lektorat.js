@@ -23,7 +23,7 @@ const { getBookSettings } = require('../../db/book-settings');
 const { listChaptersForBook, pageChapters } = require('../../db/content-names');
 const appSettings = require('../../lib/app-settings');
 const { objektivRuns, splitEnabled } = require('./lektorat-split');
-const { prepareLektoratRun, makeNeighbourLoader, loadLektoratPageList, checkOnePage, progressSincePrevious } = require('./lektorat-page');
+const { prepareLektoratRun, makeNeighbourLoader, loadLektoratPageList, checkOnePage, progressSincePrevious, markRejectedSincePrevious } = require('./lektorat-page');
 
 const lektoratRouter = express.Router();
 
@@ -62,9 +62,12 @@ async function runCheckJob(jobId, pageId, bookId, userEmail) {
     let progress = null;
     try { progress = await progressSincePrevious(pageId, userEmail, r); }
     catch (e) { logger.warn(`Fortschritts-Vergleich fehlgeschlagen (page=${pageId}): ${e.message}`); }
+    let fehler = r.fehler;
+    try { fehler = await markRejectedSincePrevious(pageId, userEmail, r); }
+    catch (e) { logger.warn(`Abgleich abgelehnter Befunde fehlgeschlagen (page=${pageId}): ${e.message}`); }
 
     completeJob(jobId, {
-      fehler: r.fehler,
+      fehler,
       szenen: r.szenen,
       stilanalyse: r.stilanalyse,
       fazit: r.fazit,
@@ -73,6 +76,9 @@ async function runCheckJob(jobId, pageId, bookId, userEmail) {
       pageName: pd.name,
       checkId: r.checkId,
       progress,
+      // Länge des geprüften Texts: ab LONG_SECTION_CHARS (editor/lektorat.js)
+      // rät die Karte, den Abschnitt zu teilen.
+      textChars: r.text.length,
       tokensIn: tok.in,
       tokensOut: tok.out,
     }, tps(tok), `«${pd.name}» page=${pageId}, chap=${pd.chapter_id || '-'}, ${r.fehler.length} Beanstandungen${r.historyDedup ? ' (dedup)' : ''}`);

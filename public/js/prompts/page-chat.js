@@ -11,7 +11,7 @@ export const SCHEMA_CHAT = _obj({
   antwort: _str,
   vorschlaege: {
     type: 'array',
-    items: _obj({ original: _str, ersatz: _str, begruendung: _str }),
+    items: _obj({ original: _str, ersatz: _str, begruendung: _str, typ: { type: 'string', enum: ['korrektur', 'stil'] } }),
   },
   titel_varianten: { type: 'array', items: _str },
   ideen: {

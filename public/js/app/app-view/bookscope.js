@@ -116,6 +116,7 @@ export const bookscopeMethods = {
     this.$store.jobs.alleAktualisierenCoverage = null;
     this.$store.jobs.alleAktualisierenCost = null;
     this.$store.jobs.alleAktualisierenPassMode = null;
+    this.$store.jobs.alleAktualisierenScope = null;
     this.$store.jobs.alleAktualisierenLastRun = null;
     this.showKomplettStatus = false;
     this.resetDailyProgress();

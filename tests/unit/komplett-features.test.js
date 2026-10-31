@@ -140,3 +140,13 @@ test('buildConsolidationSig: cacheVersion- oder Flag-Änderung → andere Sig', 
   assert.notEqual(base, buildConsolidationSig(chaptersA, 'v1', { model: 'm', attr: false }));
   assert.notEqual(base, buildConsolidationSig(chaptersA, 'v1', { model: 'x', attr: true }));
 });
+
+test('coverageSampleSize: Setting ist Untergrenze, ein Drittel der Kapitel, Deckel 20, 0 = aus', () => {
+  const { coverageSampleSize } = require('../../routes/jobs/komplett/utils');
+  assert.equal(coverageSampleSize(0, 100), 0, '0 = aus, auch bei vielen Kapiteln');
+  assert.equal(coverageSampleSize(3, 5), 3, 'kleines Buch: Mindestzahl');
+  assert.equal(coverageSampleSize(3, 30), 10, 'ein Drittel der Kapitel');
+  assert.equal(coverageSampleSize(3, 181), 20, 'Deckel');
+  assert.equal(coverageSampleSize(50, 5), 20, 'auch ein zu hohes Setting bleibt unter dem Deckel');
+  assert.equal(coverageSampleSize('3', 9), 3);
+});

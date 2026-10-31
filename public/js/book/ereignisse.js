@@ -6,7 +6,7 @@
 // (normalizeEvents) — jede Leseseite darf sich danach auf Arrays verlassen.
 
 import { fetchJson } from '../utils.js';
-import { normalizeEvents, sortEvents } from '../cards/ereignisse/model.js';
+import { normalizeEvents, sortEvents, eventGroupKey, addRefPair } from '../cards/ereignisse/model.js';
 
 export const ereignisseMethods = {
   _buildGlobalZeitstrahl() {
@@ -50,17 +50,13 @@ export const ereignisseMethods = {
       }
     }
 
-    // Events mit identischem datum+ereignis zusammenführen (O(n) via Map statt
-    // O(n²) Doppelschleife). Insertion-Order der Map bleibt für stabile Sortier-
-    // Tiebreaker erhalten. Gruppierungs-Schluessel ist das strukturierte Datum
-    // (mit Label-Rueckfall), weil Ereignisse mit gleichem Kalenderdatum, aber
-    // leerem Freitext-Label sonst alle in denselben Topf fielen.
+    // Events mit gleichem Datum + Text zusammenführen (O(n) via Map). Der
+    // Schlüssel ist derselbe wie in der Zeitstrahl-Phase P6 (eventGroupKey), damit
+    // ein Buch vor und nach der Konsolidierung dieselben Doppel zusammenlegt.
+    // Insertion-Order der Map bleibt für stabile Sortier-Tiebreaker erhalten.
     const byKey = new Map();
     for (const ev of allEvents) {
-      const stamp = ev.datum_year != null
-        ? `${ev.datum_year}-${ev.datum_month ?? ''}-${ev.datum_day ?? ''}`
-        : (ev.datum_label || ev.datum || '');
-      const key = `${stamp} ${ev.ereignis}`;
+      const key = eventGroupKey(ev);
       let group = byKey.get(key);
       if (!group) {
         group = { ...ev, kapitel: [], chapter_ids: [], seiten: [], page_ids: [], figuren: [] };
@@ -71,12 +67,11 @@ export const ereignisseMethods = {
         delete group.page_id;
         byKey.set(key, group);
       }
-      group.figuren.push(ev.figur);
-      if (ev.kapitel && !group.kapitel.includes(ev.kapitel)) group.kapitel.push(ev.kapitel);
-      if (ev.seite   && !group.seiten.includes(ev.seite))   group.seiten.push(ev.seite);
-      // Kapitel-/Abschnittsfilter arbeiten auf den IDs (chapter-filter.js).
-      if (ev.chapter_id != null && !group.chapter_ids.includes(ev.chapter_id)) group.chapter_ids.push(ev.chapter_id);
-      if (ev.page_id    != null && !group.page_ids.includes(ev.page_id))       group.page_ids.push(ev.page_id);
+      if (!group.figuren.some(f => f.id === ev.figur.id)) group.figuren.push(ev.figur);
+      // Name und ID als Paar (kapitel[i] ↔ chapter_ids[i]): Template und Filter
+      // lesen beide über denselben Index.
+      addRefPair(group.kapitel, group.chapter_ids, ev.kapitel, ev.chapter_id);
+      addRefPair(group.seiten, group.page_ids, ev.seite, ev.page_id);
     }
 
     this.$store.catalog.globalZeitstrahl = sortEvents(normalizeEvents([...byKey.values()]));
@@ -95,8 +90,12 @@ export const ereignisseMethods = {
         this.$store.catalog.globalZeitstrahl = sortEvents(normalizeEvents(ereignisse));
         // Kanonische Daten geladen → figuren-Fallback ab jetzt sperren.
         this.$store.catalog.zeitstrahlServerLoaded = true;
-      } else if (!this.$store.catalog.globalZeitstrahl.length) {
-        // Kein konsolidierter Zeitstrahl (unkonsolidiertes Buch) → Fallback erlaubt.
+      } else {
+        // Kein konsolidierter Zeitstrahl (unkonsolidiertes Buch) → Fallback aus
+        // den Figuren. Auch wenn vorher Server-Daten standen: die gibt es nicht
+        // mehr, und stehen gelassen zeigte die Karte einen Zeitstrahl, den der
+        // Server nicht mehr kennt.
+        this.$store.catalog.zeitstrahlServerLoaded = false;
         this._buildGlobalZeitstrahl();
       }
     } catch (e) {

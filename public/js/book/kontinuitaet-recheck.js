@@ -2,9 +2,10 @@
 // Ein Job prüft einzelne Befunde am aktuellen Text (routes/jobs/komplett/job-recheck.js);
 // «behoben» mit Beleg erledigt den Befund serverseitig, die Karte lädt danach neu.
 // `changed` am Issue (Server: Stelle nach Prüflauf/letzter Nachprüfung gespeichert)
-// macht die Kandidaten für «Geänderte nachprüfen» sichtbar.
+// macht die Kandidaten für «Geänderte nachprüfen» sichtbar; `missing_since` die
+// «nicht mehr gemeldeten» Befunde früherer Läufe (db/continuity.js#saveContinuityCheck).
 
-import { escHtml } from '../utils.js';
+import { escHtml, dateTimeFormat } from '../utils.js';
 import { startPoll, runningJobStatus } from '../cards/job-helpers.js';
 import { isSelectedBook } from '../cards/book-guard.js';
 
@@ -16,6 +17,24 @@ export const kontinuitaetRecheckMethods = {
   /** Offene Befunde, deren Stelle seit dem Prüflauf (bzw. der letzten Nachprüfung) geändert wurde. */
   kontinuitaetChangedIssues() {
     return (this.kontinuitaetResult?.issues || []).filter(i => _isOpen(i) && i.changed);
+  },
+
+  /** Offene Befunde früherer Läufe, die der letzte Lauf nicht mehr gemeldet hat. */
+  kontinuitaetMissingIssues() {
+    return (this.kontinuitaetResult?.issues || []).filter(i => _isOpen(i) && i.missing_since);
+  },
+
+  kontinuitaetRecheckMissing() {
+    return this._kontinuitaetStartRecheck(this.kontinuitaetMissingIssues().map(i => i.id));
+  },
+
+  kontinuitaetMissingSinceText(issue) {
+    const iso = issue?.missing_since;
+    if (!iso) return '';
+    const d = new Date(iso);
+    if (Number.isNaN(d.getTime())) return '';
+    const date = dateTimeFormat(Alpine.store('shell')?.uiLocale, { day: 'numeric', month: 'short', year: 'numeric' }).format(d);
+    return window.__app.t('kontinuitaet.missing.since', { date });
   },
 
   kontinuitaetIsRechecking(issue) {

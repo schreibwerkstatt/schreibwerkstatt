@@ -90,17 +90,37 @@ function planKonsolBatches(chapterFiguren, maxChars) {
 /** Führt die Ergebnisse der Teile zu einer Liste mit global eindeutigen ids zusammen.
  *  `parts[i] = { input, figuren }` — `figuren` aus der KI-Konsolidierung des Teils oder,
  *  wenn sie scheiterte, die Eingabe selbst. Mutiert die Eingaben nicht. */
+function _inputNames(input) {
+  const names = new Set();
+  for (const cf of input) for (const g of (cf.figuren || [])) {
+    for (const nm of [g.name, g.kurzname]) { const k = normName(nm); if (k) names.add(k); }
+  }
+  return names;
+}
+
 function mergeKonsolParts(parts, log) {
   const out = [];
   let n = 0;
-  for (const { input, figuren } of parts) {
+  let foreign = 0;
+  const inputByPart = parts.map(p => _inputNames(p.input));
+  for (const [pi, { input, figuren }] of parts.entries()) {
     const nameById = new Map();
     for (const f of (figuren || [])) if (f?.id != null && f.name) nameById.set(String(f.id), f.name);
-    const inPart = new Set();
-    for (const cf of input) for (const g of (cf.figuren || [])) {
-      for (const nm of [g.name, g.kurzname]) { const k = normName(nm); if (k) inPart.add(k); }
-    }
-    const partOut = (figuren || []).map(f => {
+    const inPart = inputByPart[pi];
+    // Eine Ausgabe-Figur, deren Name nicht in diesem Teil, wohl aber in einem anderen
+    // steht, hat das Modell aus einem Beziehungsziel erfunden — der andere Teil liefert
+    // sie mit vollem Steckbrief. Neue kanonische Namen (in keinem Teil) bleiben.
+    const ownedElsewhere = (f) => {
+      const keys = [f?.name, f?.kurzname].map(normName).filter(Boolean);
+      if (!keys.length || keys.some(k => inPart.has(k))) return false;
+      return inputByPart.some((s, j) => j !== pi && keys.some(k => s.has(k)));
+    };
+    const kept = (figuren || []).filter(f => {
+      if (!ownedElsewhere(f)) return true;
+      foreign++;
+      return false;
+    });
+    const partOut = kept.map(f => {
       const beziehungen = (f.beziehungen || []).map(bz => {
         if (!bz) return null;
         const name = bz.name || nameById.get(String(bz.figur_id ?? ''));
@@ -126,6 +146,7 @@ function mergeKonsolParts(parts, log) {
     }
     out.push(...partOut);
   }
+  if (foreign) log?.info(`Figuren-Teile: ${foreign} Figur(en) verworfen, die nur als Beziehungsziel aus einem anderen Teil stammten.`);
   rebindBeziehungenByName(out, log);
   return out;
 }
@@ -142,7 +163,7 @@ async function runKonsolBatched(ctx, preMerged, { cap, charsPerToken, fromPct, t
   updateJob(jobId, { statusText: 'job.phase.consolidatingFigurenParts', statusParams: { n: batches.length } });
 
   const konsol = (input, label) => retryOnTransientAi(() => call(jobId, tok,
-    prompts.buildFiguresBasisConsolidationPrompt(bookName, input, sys.BUCH_KONTEXT || ''),
+    prompts.buildFiguresBasisConsolidationPrompt(bookName, input, sys.BUCH_KONTEXT || '', { teil: true }),
     sys.SYSTEM_FIGUREN_BLOCKS, fromPct, toPct, undefined, 0.2, cap, prompts.SCHEMA_FIGUREN_KONSOL,
     costTier(COST_LABEL.figuren),
   ), { log, label }).then(res => {

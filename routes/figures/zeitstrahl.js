@@ -1,4 +1,5 @@
-// Konsolidierter Zeitstrahl eines Buchs: GET /figures/zeitstrahl/:book_id.
+// Konsolidierter Zeitstrahl eines Buchs: GET /figures/zeitstrahl/:book_id,
+// Pflege eines Ereignisses: PATCH /figures/zeitstrahl/:book_id/:event_id.
 //
 // Eigenes Modul, weil der Zeitstrahl kein Figuren-Thema ist — er liest
 // `zeitstrahl_events` (+ die drei Bruecken-Tabellen) und leitet daraus die
@@ -11,6 +12,10 @@ const { listZeitstrahlEvents, listZeitstrahlEventRefs } = require('../../db/zeit
 const { ensureTree } = require('../../db/book-order');
 const { sessionEmail } = require('../../lib/acl');
 const { parseDatum } = require('../../lib/datum-parse');
+const { validateEventPatch, patchZeitstrahlEvent } = require('../../db/zeitstrahl-patch');
+const { eventModel } = require('../../lib/esm-bridge');
+const { toIntId } = require('../../lib/validate');
+const express = require('express');
 
 // Lese-Reihenfolge: globaler Ordinalwert je Kapitel/Seite aus dem book_order-Tree
 // (Depth-First). Brücke, um zu einer Event-Referenz (chapter_id/page_id) die
@@ -105,16 +110,20 @@ function register(router) {
     const chByEvt = new Map();
     for (const r of chRows) {
       if (!chByEvt.has(r.event_id)) chByEvt.set(r.event_id, { kapitel: [], chapter_ids: [] });
+      // Name und ID immer als Paar (kapitel[i] ↔ chapter_ids[i]), nie je Liste
+      // gefiltert — sonst rutscht ein Verweis auf die ID des Nachbarn.
+      if (!r.chapter_name) continue;
       const b = chByEvt.get(r.event_id);
-      if (r.chapter_name) b.kapitel.push(r.chapter_name);
-      if (r.chapter_id != null) b.chapter_ids.push(r.chapter_id);
+      b.kapitel.push(r.chapter_name);
+      b.chapter_ids.push(r.chapter_id);
     }
     const pgByEvt = new Map();
     for (const r of pgRows) {
       if (!pgByEvt.has(r.event_id)) pgByEvt.set(r.event_id, { seiten: [], page_ids: [] });
+      if (!r.page_name) continue;
       const b = pgByEvt.get(r.event_id);
-      if (r.page_name) b.seiten.push(r.page_name);
-      if (r.page_id != null) b.page_ids.push(r.page_id);
+      b.seiten.push(r.page_name);
+      b.page_ids.push(r.page_id);
     }
     const fgByEvt = new Map();
     for (const r of fgRows) {
@@ -156,6 +165,20 @@ function register(router) {
     const { zeitlinie_real } = getBookSettings(bookId, userEmail);
     const chronology = zeitlinie_real ? _computeChronology(bookId, ereignisse) : null;
     res.json({ ereignisse, chronology });
+  });
+
+  // Einzelnes Ereignis pflegen (Ereignisse-Karte, «Bearbeiten»). Nur die
+  // übergebenen Felder; setzt manually_edited — die Komplettanalyse ersetzt die
+  // Zeile danach nicht mehr. Schreibkern + Validierung: db/zeitstrahl-patch.js.
+  router.patch('/zeitstrahl/:book_id/:event_id', express.json(), async (req, res) => {
+    const eventId = toIntId(req.params.event_id);
+    if (!eventId) return res.status(400).json({ error_code: 'INVALID_ID' });
+    const { fields, error } = validateEventPatch(req.body);
+    if (error) return res.status(400).json(error);
+    const { eventGroupKey } = await eventModel();
+    const r = patchZeitstrahlEvent(req.bookId, sessionEmail(req), eventId, fields, eventGroupKey);
+    if (!r) return res.status(404).json({ error_code: 'NOT_FOUND' });
+    res.json({ ok: true, changed: r.changed });
   });
 }
 

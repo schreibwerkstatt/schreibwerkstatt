@@ -12,6 +12,9 @@
   kapitel/seiten/page_ids/figuren sind IMMER Arrays. Keine Nachnormalisierung
   im Template.
 
+  Bearbeiten: Formular je Zeile aus ereignisse-edit.html (string-seitiger
+  Include im x-for), Methods in cards/ereignisse/edit.js.
+
   Zwei Index-Raeume, darum zwei Namen: `data-ev-index` = Position in der
   gefilterten Liste (Bruecke Liste ↔ Band-Marker), `data-event-id` = die
   DB-ID des Ereignisses (Sprungziel von openEreignisById/Deep-Link).
@@ -61,6 +64,7 @@
     <div class="progress-bar" :style="{ '--progress': zeitstrahlProgress + '%' }"></div>
   </div>
   <div x-show="zeitstrahlStatus && !ereignisseLoading" class="card-status" x-html="zeitstrahlStatus"></div>
+  <div x-show="eventEditMessage" class="card-status" x-text="eventEditMessage"></div>
 
   <!-- Leer-Hinweis mit CTA -->
   <div x-show="$store.catalog.globalZeitstrahl.length === 0 && !zeitstrahlConsolidating && !ereignisseLoading" class="card-empty">
@@ -82,7 +86,7 @@
     </span>
     <div x-data="catalogFilter('figur')"
          x-modelable="value" x-model="$store.catalogUi.ereignisseFilters.figurId"
-         x-effect="options = $store.catalog.figuren.filter(f => $store.catalog.globalZeitstrahl.some(ev => ev.figuren.some(fr => fr.id === f.id))).map(f => ({value: f.id, label: f.kurzname || f.name}))"
+         x-effect="options = ereignisseFigurOptionen()"
          >
     </div>
     <div x-data="catalogFilter('subtyp')"
@@ -121,7 +125,7 @@
         <template x-for="m in bandModel().markers" :key="m.kind + m.id">
           <button type="button"
                   class="gz-band-marker"
-                  :class="[ m.kind === 'more' ? 'gz-band-marker--more' : '', m.isRange ? 'gz-band-marker--range' : '', (selectedEventIndex === m.id && m.kind !== 'more') ? 'gz-band-marker--selected' : '' ]"
+                  :class="[ m.kind === 'more' ? 'gz-band-marker--more' : '', m.isRange ? 'gz-band-marker--range' : '', (selectedEventIndex() === m.id && m.kind !== 'more') ? 'gz-band-marker--selected' : '' ]"
                   :style="bandMarkerStyle(m)"
                   :data-ev-index="m.id"
                   :data-tip="m.kind === 'more' ? $app.t('events.timelineCluster', { count: m.count }) : m.content"
@@ -146,11 +150,12 @@
              !eventHasYear(ev) && ev.story_tag == null ? 'gz-item--unknown' : '',
              ev.manually_edited ? 'gz-item--manual' : '',
              (i === firstUndatedIndex() && i > 0) ? 'gz-item--section-start' : '',
-             (ev.id != null && $store.catalogUi.selectedEreignisId === ev.id) ? 'gz-item--selected' : '',
+             isEventSelected(ev) ? 'gz-item--selected' : '',
            ]"
            :style="eventSpanYears(ev) > 0 ? ('--span-years:' + eventSpanYears(ev)) : null">
         <div class="gz-marker" :class="ev.typ === 'extern' ? 'gz-marker--extern' : ''"></div>
-        <div class="gz-content">
+        <!-- @include ereignisse-edit -->
+        <div class="gz-content" x-show="eventEditId == null || eventEditId !== ev.id">
           <div class="gz-datum-row">
             <span class="gz-datum"
                   :class="{ 'gz-datum--unsicher': ev.datum_unsicher && eventHasYear(ev), 'internal-link': eventHasYear(ev) }"
@@ -167,8 +172,13 @@
               <span class="gz-extern-badge" x-text="$app.t('events.worldEvent')"></span>
             </template>
             <template x-if="ev.manually_edited">
-              <span class="gz-manual-badge" :title="$app.t('events.manuallyEdited')" x-text="$app.t('events.manuallyEdited')"></span>
+              <span class="gz-manual-badge" :title="$app.t('events.manuallyEditedHint')" x-text="$app.t('events.manuallyEdited')"></span>
             </template>
+            <button type="button" class="icon-btn icon-btn--ghost gz-edit-btn" x-show="ev.id != null"
+                    @click.stop="startEventEdit(ev)"
+                    :data-tip="$app.t('events.edit.open')" :aria-label="$app.t('events.edit.open')">
+              <svg class="icon" aria-hidden="true"><use href="/icons.svg#pencil"/></svg>
+            </button>
           </div>
           <div class="gz-ereignis"
                :class="{ 'internal-link': eventHasTarget(ev) }"

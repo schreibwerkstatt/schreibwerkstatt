@@ -3,12 +3,13 @@
   String-Include in die Nachrichten-Schleifen von book-chat-msg-extras.html
   (Buch-Chat), recherche-chat.html (Recherche-Chat), plot-chat.html (Plot-Chat)
   und ideen-chat.html (Ideen-Chat) sowie unter das Antwort-Skelett eines laufenden
-  Turns (`msg._live`, offen); Scope: `msg`. Einträge aus `_toolLog(msg)`
+  Turns (`msg._live`); Scope: `msg`. Immer zugeklappt, auch live —
+  der Verlauf ist technisch und auf Abruf da. Einträge aus `_toolLog(msg)`
   (chat-base.js → chat/tool-log.js): Vorab-Kontext, Rundenköpfe mit Notiz des
   Modells, Aufrufe (ab drei gleichen pro Runde gebündelt), Abschluss.
 -->
 <template x-if="msg.role === 'assistant' && _toolLog(msg)">
-  <div x-data="collapsible(!!msg._live)" class="chat-tool-log" :class="{ 'chat-tool-log--live': msg._live }">
+  <div x-data="collapsible()" class="chat-tool-log" :class="{ 'chat-tool-log--live': msg._live }">
     <button type="button" class="collapsible-toggle" x-bind="trigger">
       <span class="history-chevron" x-bind="chevron" aria-hidden="true"></span>
       <span x-text="msg._live ? $app.t('chat.toolsLive', { n: _toolLog(msg).rows.length }) : _toolLog(msg).heading"></span>

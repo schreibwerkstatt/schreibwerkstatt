@@ -363,6 +363,9 @@ const cardsState = () => ({
   showSearchCard: false,
   showShareLinksCard: false,
   showKomplettStatus: false,
+  // Panel per Hover aufgegangen (nicht per Klick): nur dann schliesst es beim Verlassen
+  // wieder — ein bewusst geöffnetes Panel bleibt stehen, bis daneben geklickt wird.
+  komplettStatusByHover: false,
   // Lauf-Umfang der Komplettanalyse (Modal vor dem Start): welche Schritte der Lauf
   // neu berechnet. Katalog + Normalisierung in ../komplett-scope.js; der zuletzt
   // gestartete Umfang liegt serverseitig und ist die Vorbelegung des nächsten Laufs.
@@ -427,6 +430,8 @@ const lektoratState = () => ({
   // Vergleich mit dem Vorlauf derselben Seite (lib/lektorat-progress.js), nur
   // direkt nach einem Abschnitts-Lektorat gesetzt, sonst null.
   lektoratProgress: null,
+  // «Korrekturen rückgängig» nach dem Speichern (editor/lektorat-undo.js), sonst null.
+  lektoratUndo: null,
   checkDone: false,
   checkLoading: false,
   checkProgress: 0,

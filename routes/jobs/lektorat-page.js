@@ -21,7 +21,7 @@ const { lastParagraph, firstParagraph, neighbourPages, isChapterChange } = requi
 const { finalizeFehler, effectiveStylisticCap, _runSig } = require('./lektorat-filter');
 const userDictionary = require('../../db/user-dictionary');
 const { MAX_PROMPT_WORDS, dictionaryWordsOnPage, dropDictionaryFindings } = require('./lektorat-dictionary');
-const { lektoratProgress } = require('../../lib/lektorat-progress');
+const { lektoratProgress, markPreviouslyRejected } = require('../../lib/lektorat-progress');
 const { hasMsgThread } = require('../../lib/html-text');
 const { textMatch } = require('../../lib/esm-bridge');
 const { checkDialogformat, mergeRegelBefunde, ohneRegelBefunde } = require('../../lib/dialogformat-rules');
@@ -76,7 +76,7 @@ async function prepareLektoratRun(bookId, userEmail, logger) {
   const { model, cacheSuffix } = applyLektoratAiOverrides(effectiveProvider, logger);
   const locale = bookId ? getBookLocale(bookId, userEmail) : 'de-CH';
   return {
-    bookId, userEmail, prompts, effectiveProvider, model, locale,
+    bookId, userEmail, prompts, effectiveProvider, model, locale, logger,
     langCode: (locale || 'de-CH').split('-')[0],
     cacheVersion: `${model}:${prompts.PROMPTS_VERSION || ''}${cacheSuffix}`,
     system: book.SYSTEM_LEKTORAT_BLOCKS,
@@ -149,6 +149,17 @@ function markAmbiguous(fehler, text, countInText) {
     const { mehrdeutig, ...rest } = f;
     return f.original && countInText(text, f.original) > 1 ? { ...rest, mehrdeutig: true } : rest;
   });
+}
+
+// Befunde, deren `original` im geprüften Text gar nicht vorkommt (die KI hat
+// falsch zitiert), fallen hier weg. Das Frontend fände sie ohnehin nicht
+// (`sortByPosition` verwirft sie still) — gezählt in `page_checks.error_count`,
+// Log und Heatmap ergäben sie sonst mehr Befunde, als in der Liste stehen.
+// Befunde ohne `original` bleiben unangetastet. Liefert { fehler, dropped }.
+function dropUnlocatable(fehler, text, countInText) {
+  if (!Array.isArray(fehler)) return { fehler, dropped: 0 };
+  const kept = fehler.filter(f => !f.original || countInText(text, f.original) > 0);
+  return { fehler: kept, dropped: fehler.length - kept.length };
 }
 
 // Erlaubte Fehlertypen. SSoT ist das Buchtyp-Profil in
@@ -274,11 +285,16 @@ async function checkOnePage(run, {
   // Nachbearbeitung für frische und gecachte Ergebnisse, plus Wörterbuch-Backstop
   // (greift auch für Wörter jenseits von MAX_PROMPT_WORDS, die der Prompt nicht sah).
   const { countInText } = await textMatch();
-  const finalize = (fehler) => markAmbiguous(
-    mergeRegelBefunde(
-      dropDictionaryFindings(finalizeFehler(ohneRegelBefunde(fehler), locale, validTypen, neighbour), woerterbuch),
-      regelBefunde, text),
-    text, countInText);
+  let unlocatable = 0;
+  const finalize = (fehler) => {
+    const located = dropUnlocatable(
+      mergeRegelBefunde(
+        dropDictionaryFindings(finalizeFehler(ohneRegelBefunde(fehler), locale, validTypen, neighbour), woerterbuch),
+        regelBefunde, text),
+      text, countInText);
+    unlocatable = located.dropped;
+    return markAmbiguous(located.fehler, text, countInText);
+  };
   const cached = ctxSig ? loadLektoratCache(bookId, userEmail, pageId, ctxSig, run.effectiveProvider) : null;
 
   let result;
@@ -313,6 +329,7 @@ async function checkOnePage(run, {
   }
 
   const fehler = result.fehler || [];
+  if (unlocatable) run.logger?.info(`${unlocatable} Befund(e) ohne Fundstelle im Text verworfen (Seite #${pageId}).`);
   const szenen = Array.isArray(result?.szenen) ? result.szenen : [];
   const errorsJson = JSON.stringify(fehler);
 
@@ -358,4 +375,14 @@ async function progressSincePrevious(pageId, userEmail, r) {
   return lektoratProgress(prev, r.fehler, r.text, normalizeMatchText);
 }
 
-module.exports = { prepareLektoratRun, makeNeighbourLoader, loadLektoratPageList, checkOnePage, progressSincePrevious, markAmbiguous };
+// Befunde dieses Laufs, die der Autor im Vorlauf bewusst stehen liess
+// (lib/lektorat-progress.js#markPreviouslyRejected) — gleiche Normalform.
+async function markRejectedSincePrevious(pageId, userEmail, r) {
+  const id = Number(r.checkId);
+  if (!id) return r.fehler;
+  const prev = _prevPageCheckStmt.get(parseInt(pageId, 10), userEmail || null, id, id);
+  const { normalizeMatchText } = await textMatch();
+  return markPreviouslyRejected(prev, r.fehler, r.text, normalizeMatchText);
+}
+
+module.exports = { prepareLektoratRun, makeNeighbourLoader, loadLektoratPageList, checkOnePage, progressSincePrevious, markRejectedSincePrevious, markAmbiguous, dropUnlocatable };

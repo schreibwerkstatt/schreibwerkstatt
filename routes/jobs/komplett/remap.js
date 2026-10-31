@@ -3,7 +3,8 @@ const {
   db, saveZeitstrahlEvents, updateFigurenEvents, saveContinuityCheck,
   saveFaktencheckIssues, faktenfehlerIssues,
 } = require('../../../db/schema');
-const { _modelName } = require('../shared');
+const { effectiveCallSig } = require('./signatures');
+const { COST_LABEL, costTier } = require('./cost-labels');
 const { _refToString, _stelleQuote } = require('./utils');
 const { NOW_ISO_SQL } = require('../../../db/now');
 const { matchScenes, dedupeScenesWithinRun } = require('../../../lib/entity-match');
@@ -182,6 +183,9 @@ function saveSzenenAndEvents(bookIdInt, email, szenen, assignments, locIdToDbId,
   // Abwählen schützen soll.
   const writeSzenen = opts.writeSzenen !== false;
   const writeEvents = opts.writeEvents !== false;
+  // Gespeichert wird die aufgeloeste, deduplizierte Liste — gezaehlt muss dieselbe werden,
+  // sonst meldet Log und Job-Result die Szenen vor dem Within-Run-Dedup.
+  let savedCount = 0;
   if (writeSzenen) db.transaction(() => {
     // Reconcile statt DELETE+INSERT, damit figure_scenes.id (und FK-Refs darauf:
     // research_item_links.scene_id, scene_locations) ueber Re-Analysen stabil bleibt.
@@ -194,6 +198,7 @@ function saveSzenenAndEvents(bookIdInt, email, szenen, assignments, locIdToDbId,
     // Aufloesen + Within-Run-Dedup: der Job hat (falls er geplant hat) auf genau
     // dieser Liste geplant — siehe resolveSzenenForSave.
     const { szenen: resolved, unsure: dedupUnsure } = opts.resolved || resolveSzenenForSave(szenen, idMaps);
+    savedCount = resolved.length;
     if (szenen.length !== resolved.length) {
       log.info(`Szenen-Within-Run-Dedup: ${szenen.length - resolved.length} Titel-Variante(n) derselben Szene verschmolzen.`);
     }
@@ -283,8 +288,8 @@ function saveSzenenAndEvents(bookIdInt, email, szenen, assignments, locIdToDbId,
   searchIndex.removeKindForBook('location', bookIdInt);
   const locRows = db.prepare('SELECT id FROM locations WHERE book_id = ?').all(bookIdInt);
   for (const l of locRows) searchIndex.upsertLocation(l.id);
-  log.info(`${writeSzenen ? szenen.length : 0} Szenen, ${eventsCount} Ereignisse gespeichert.`);
-  return { szenenCount: writeSzenen ? szenen.length : 0, eventsCount };
+  log.info(`${savedCount} Szenen, ${eventsCount} Ereignisse gespeichert.`);
+  return { szenenCount: savedCount, eventsCount };
 }
 
 // Server-Spiegel von KONTINUITAET_TYPEN (public/js/prompts/komplett/schema-strings.js,
@@ -349,6 +354,12 @@ function _isEntwarnung(p) {
  *    das Modell Fakten statt Buchsätzen; der Seitenname des Fakts liefert den Anker.
  *  opts.stats: optionales Objekt, in das `discarded` (Anzahl verworfener Befunde dieses
  *    Laufs) geschrieben wird — fürs Job-Result. */
+// Modell, das die Kontinuitäts-Calls dieses Jobs tatsächlich fahren (Komplett-Override aus
+// dem ALS-Job-Bag, Tier der Kontinuität) — nicht das globale Modell.
+function _checkModelName(provider) {
+  return effectiveCallSig(provider, costTier(COST_LABEL.kontinuitaet)).model;
+}
+
 function saveKontinuitaetResult(bookIdInt, email, kontResult, figNameToId, chNameToId, effectiveProvider, log, opts = {}) {
   const { pageContents = null, requireQuoteEvidence = false, chapterFacts = null, stats = null } = opts;
   if (typeof kontResult?.zusammenfassung === 'undefined') return null;
@@ -415,20 +426,20 @@ function saveKontinuitaetResult(bookIdInt, email, kontResult, figNameToId, chNam
   };
   const issues = filtered.map(toIssue);
   const discardedIssues = discarded.map(d => ({ ...toIssue(d.p), discard: { reason: d.reason, detail: d.detail } }));
-  const { normalizedIssues } = saveContinuityCheck(
+  const { normalizedIssues, missingCount } = saveContinuityCheck(
     bookIdInt, email, kontResult.zusammenfassung || '',
-    _modelName(effectiveProvider), issues, figNameToId, chNameToId, discardedIssues,
+    _checkModelName(effectiveProvider), issues, figNameToId, chNameToId, discardedIssues,
   );
   if (stats && typeof stats === 'object') stats.discarded = (stats.discarded || 0) + discardedIssues.length;
   const carried = normalizedIssues.filter(i => i.resolved || i.dismissed).length;
-  log.info(`Kontinuitätsprüfung gespeichert (${normalizedIssues.length} Probleme${carried ? `, Triage von ${carried} übernommen` : ''}${discardedIssues.length ? `, ${discardedIssues.length} verworfen` : ''}).`);
+  log.info(`Kontinuitätsprüfung gespeichert (${normalizedIssues.length} Probleme${carried ? `, Triage von ${carried} übernommen` : ''}${discardedIssues.length ? `, ${discardedIssues.length} verworfen` : ''}${missingCount ? `, ${missingCount} nicht mehr gemeldet mitgeführt` : ''}).`);
   // Faktencheck-Befunde aus dem Urteils-Cache in den neuen Check nachziehen — sonst
   // verdeckte jeder Kontinuitätslauf (Komplettanalyse wie Standalone) die belegten
   // Abweichungen bis zum nächsten Faktencheck. Kein KI-Call, keine Web-Suche.
   const faktenfehler = faktenfehlerIssues(bookIdInt, email);
   if (faktenfehler.length) {
     const { normalizedIssues: ff } = saveFaktencheckIssues(
-      bookIdInt, email, _modelName(effectiveProvider), faktenfehler, {}, chNameToId);
+      bookIdInt, email, _checkModelName(effectiveProvider), faktenfehler, {}, chNameToId);
     normalizedIssues.push(...ff);
     log.info(`${ff.length} Faktenfehler aus dem Faktencheck übernommen.`);
   }

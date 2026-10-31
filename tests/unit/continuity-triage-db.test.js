@@ -288,3 +288,50 @@ test('Kapitel eines Befunds: verankerte Abschnitte schlagen den KI-Kapitelnamen'
   assert.deepEqual(normalizedIssues[0].kapitel, ['Der Unauffällige']);
   assert.deepEqual(normalizedIssues[1].chapter_ids.sort(), [cVater, cUnauff].sort());
 });
+
+test('offener Befund, den der neue Lauf nicht meldet, wird mitgeführt — bis zur Triage', () => {
+  const bookId = newBook();
+  const c3 = addChapter(bookId, 'Kap 3', 1);
+  const c5 = addChapter(bookId, 'Kap 5', 2);
+  const chMap = { 'Kap 3': c3, 'Kap 5': c5 };
+  const figMap = { Marek: 'fig_1' };
+  addFigur(bookId, 'fig_1', 'Marek');
+  const tod = issue('Kap 3: «Marek lag reglos unter den Trümmern»', 'Kap 5: «Marek öffnete die Tür und lachte»');
+  const mantel = issue('Kap 3: «Er trug den blauen Mantel»', 'Kap 5: «Der Mantel war grün»', { typ: 'objekt' });
+  const tv = issue('Kap 3: «Sie schauten TV Total im August»', 'Kap 5: «1999»', { typ: 'anachronismus' });
+  const fakt = issue('Kap 3: «Bern liegt am Meer»', '', { typ: 'faktenfehler' });
+
+  continuity.saveContinuityCheck(bookId, USER, 's1', 'm', [tod, mantel, tv], figMap, chMap);
+  const l1 = continuity.getLatestContinuityCheck(bookId, USER);
+  continuity.setContinuityIssueResolved(l1.issues[1].id, true);   // Mantel: erledigt
+  db.prepare("UPDATE continuity_issues SET recheck_verdict = 'weiterhin', recheck_reason = 'r' WHERE id = ?").run(l1.issues[2].id);
+  continuity.saveFaktencheckIssues(bookId, USER, 'm', [fakt], figMap, chMap);
+
+  // Lauf 2 meldet nur den Tod wieder: TV wird mitgeführt, Mantel (erledigt) und Faktenfehler nicht.
+  const r2 = continuity.saveContinuityCheck(bookId, USER, 's2', 'm', [tod], figMap, chMap);
+  assert.equal(r2.missingCount, 1);
+  const l2 = continuity.getLatestContinuityCheck(bookId, USER);
+  assert.deepEqual(l2.issues.map(i => i.typ), ['figur', 'anachronismus']);
+  const carried = l2.issues[1];
+  assert.ok(carried.missing_since, 'missing_since gesetzt');
+  assert.equal(l2.issues[0].missing_since, null);
+  assert.deepEqual(carried.chapter_ids.sort(), [c3, c5].sort());
+  assert.deepEqual(carried.figuren, ['Marek']);
+  assert.equal(carried.recheck?.verdict, 'weiterhin', 'Nachprüf-Urteil wandert mit');
+
+  // Lauf 3 meldet wieder nichts dazu: mitgeführt mit unverändertem missing_since.
+  continuity.saveContinuityCheck(bookId, USER, 's3', 'm', [tod], figMap, chMap);
+  const l3 = continuity.getLatestContinuityCheck(bookId, USER);
+  assert.equal(l3.issues[1].missing_since, carried.missing_since);
+
+  // Lauf 4 findet ihn wieder: normaler Befund, kein Duplikat.
+  continuity.saveContinuityCheck(bookId, USER, 's4', 'm', [tod, tv], figMap, chMap);
+  const l4 = continuity.getLatestContinuityCheck(bookId, USER);
+  assert.equal(l4.issues.length, 2);
+  assert.equal(l4.issues[1].missing_since, null);
+
+  // Triagiert (erledigt) → der nächste Lauf ohne ihn führt ihn nicht mehr mit.
+  continuity.setContinuityIssueResolved(l4.issues[1].id, true);
+  const r5 = continuity.saveContinuityCheck(bookId, USER, 's5', 'm', [tod], figMap, chMap);
+  assert.equal(r5.missingCount, 0);
+});

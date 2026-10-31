@@ -287,7 +287,10 @@
   gap: var(--space-xs);
 }
 .chat-vorschlag-btn--ghost { border-color: var(--color-border); color: var(--color-muted); }
-.chat-vorschlaege-actions { display: flex; justify-content: flex-end; }
+.chat-vorschlaege-actions { display: flex; justify-content: flex-end; gap: var(--space-xs); }
+.chat-vorschlag-heading { display: inline-flex; align-items: center; gap: var(--space-xs); }
+/* «Erneut fragen» unter einer unbeantworteten Frage (Abschnitts-Chat) */
+.chat-retry-row { display: flex; justify-content: flex-end; margin-top: var(--space-xs); }
 /* Hinweise unter einer Antwort (Parse-Fallback, gekürzter Verlauf) und über dem
    Eingabefeld des Abschnitts-Chats (Flush vor dem Senden gescheitert). */
 .chat-msg-hint {

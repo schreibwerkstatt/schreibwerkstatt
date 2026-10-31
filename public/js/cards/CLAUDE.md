@@ -46,7 +46,7 @@ Root dispatched, Subs hören:
 - **`job:reconnect` `{ type, jobId, job, extra? }`** — aus `checkPendingJobs()`; Review/Kapitel-Review-Subs übernehmen Loading-State + starten Polling.
 - **`chat:reset` / `book-chat:reset`** — Root dispatcht beim Seitenwechsel / User-Settings-Danger-Reset; Chat-Subs leeren Session.
 - **`kapitel-review:select` `{ chapterId }`** — aus Sidebar/Hash-Router; Sub setzt ihre `kapitelReviewChapterId`.
-- **`card:request` `{ key }`** — Karte auf einem Reiter/einer Session öffnen, die sie selbst hält: [card-request.js](card-request.js)#`openCardWith`; die Karte holt den Wunsch per `takeCardRequest` in `init()`/`onShow` **und** im Listener ab. Neuer Wunsch → Schlüssel in `CARD_REQUEST`.
+- **`card:request` `{ key }`** — Karte auf einem Reiter/einer Session öffnen, die sie selbst hält: [card-request.js](card-request.js)#`openCardWith`. Neuer Wunsch → Schlüssel in `CARD_REQUEST`. **Reiter-/Modus-Wunsch** heisst `*_TAB` und wird ausschliesslich über `tabRequest: { key, apply }` in `setupCardLifecycle` abgeholt (Mount, synchron beim Einblenden, Event) — nie per eigenem `takeCardRequest`. **Why:** das Event kommt erst nach dem Öffnen; wer nur dort umschaltet, zeigt einen Frame lang den gemerkten Reiter. Übrige Wünsche (Session, Entwurf, Abschnitt) greifen erst nach dem Laden: die Karte holt sie in `onShow` **und** im Listener selbst ab. Gegated: [card-tab-request-single-place.test.mjs](../../../tests/unit/card-tab-request-single-place.test.mjs).
 
 ### Job-Polling (shared utilities)
 
