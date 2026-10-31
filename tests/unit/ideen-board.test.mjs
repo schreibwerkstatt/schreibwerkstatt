@@ -11,16 +11,16 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const ROOT = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', '..');
-const { buildLaneOrder, buildBoard, chapterFilterOptions, statusTotals, LANE_UNKNOWN } =
+const { buildLaneOrder, buildBoard, chapterFilterOptions, statusTotals, LANE_UNKNOWN, laneKeyResolver, laneKeySet } =
   await import(path.join(ROOT, 'public', 'js', 'book', 'ideen-board', 'model.js'));
-const { LANE_BOOK, ideeLaneKey } = await import(path.join(ROOT, 'public', 'js', 'book', 'ideen-shared.js'));
+const { LANE_BOOK, ideeLaneKey, soleChapterPages, ideenPlace } = await import(path.join(ROOT, 'public', 'js', 'book', 'ideen-shared.js'));
 
 // Baum wie ihn tree/build.js liefert: flach, depth-annotiert, Solo-Seiten als
 // Pseudo-Kapitel.
 const TREE = [
   { type: 'chapter', id: 'solo-90', solo: true, depth: 1, name: 'Vorwort', pages: [{ id: 90, name: 'Vorwort' }] },
   { type: 'chapter', id: 1, solo: false, depth: 1, name: 'Kapitel 1', pages: [{ id: 10, name: 'Seite A' }, { id: 11, name: 'Seite B' }] },
-  { type: 'chapter', id: 2, solo: false, depth: 2, name: 'Kapitel 2', pages: [{ id: 20, name: 'Seite C' }] },
+  { type: 'chapter', id: 2, solo: false, depth: 2, name: 'Kapitel 2', pages: [{ id: 20, name: 'Seite C' }, { id: 21, name: 'Seite D' }] },
 ];
 
 const idee = (id, over = {}) => ({
@@ -33,7 +33,7 @@ test('Bahnen: Reihenfolge kommt aus dem Baum, Kapitel vor seinen Seiten', () => 
     LANE_BOOK,          // Ideen ohne Anker stehen vor allen Stellen im Buch
     'page:90',          // Solo-Seite: nur die Seiten-Bahn, kein Pseudo-Kapitel
     'chapter:1', 'page:10', 'page:11',
-    'chapter:2', 'page:20',
+    'chapter:2', 'page:20', 'page:21',
   ]);
 });
 
@@ -400,7 +400,7 @@ test('cellOrderAfterDrop: Zug aus einer anderen Spalte fuegt an der Drop-Stelle 
 const NESTED = [
   { type: 'chapter', id: 5, solo: false, depth: 1, parent_id: null, name: 'Teil I', pages: [{ id: 50, name: 'Auftakt' }] },
   { type: 'chapter', id: 6, solo: false, depth: 2, parent_id: 5, name: 'Kapitel 1', pages: [{ id: 60, name: 'Szene A' }, { id: 61, name: 'Szene B' }] },
-  { type: 'chapter', id: 7, solo: false, depth: 3, parent_id: 6, name: 'Unterkapitel', pages: [{ id: 70, name: 'Szene C' }] },
+  { type: 'chapter', id: 7, solo: false, depth: 3, parent_id: 6, name: 'Unterkapitel', pages: [{ id: 70, name: 'Szene C' }, { id: 71, name: 'Szene D' }] },
 ];
 
 test('Hierarchie: ein Oberkapitel ohne eigene Ideen ordnet die Ideen seiner Unterkapitel', () => {
@@ -489,4 +489,95 @@ test('Liste: derselbe Filter wie das Raster, Bahn-Position fuer die Buch-Reihenf
   assert.ok(byId.get(3).laneIndex < byId.get(1).laneIndex, 'Buch-Bahn vor Kapitel 2');
   assert.equal(byId.get(4).lane, null);
   assert.equal(byId.get(4).laneIndex, Number.MAX_SAFE_INTEGER, 'unbekannte Bahn steht hinten');
+});
+
+// ── Einabschnitts-Kapitel ──────────────────────────────────────────────────
+// Ein Kapitel mit genau einem Abschnitt und ohne Unterkapitel ist EIN Ort: eine
+// Bahn (die des Abschnitts, mit dem Kapitelnamen), in der auch die Ideen am
+// Kapitel stehen. Keine Kapitelzeile mit einer einzigen Abschnittszeile darunter.
+
+const SOLE = [
+  { type: 'chapter', id: 1, solo: false, depth: 1, parent_id: null, name: 'Kapitel 1', pages: [{ id: 10, name: 'WG-Leben' }] },
+  { type: 'chapter', id: 2, solo: false, depth: 1, parent_id: null, name: 'Kapitel 2', pages: [{ id: 20, name: 'A' }, { id: 21, name: 'B' }] },
+  { type: 'chapter', id: 3, solo: false, depth: 1, parent_id: null, name: 'Teil II', pages: [{ id: 30, name: 'Vorspann' }] },
+  { type: 'chapter', id: 4, solo: false, depth: 2, parent_id: 3, name: 'Kapitel 3', pages: [{ id: 40, name: 'Szene' }] },
+];
+
+test('Einabschnitts-Kapitel: eine Bahn statt Kapitel + Abschnitt', () => {
+  const lanes = buildLaneOrder(SOLE);
+  assert.deepEqual(lanes.map(l => l.key), [
+    LANE_BOOK,
+    'page:10',                          // Kapitel 1: zusammengelegt
+    'chapter:2', 'page:20', 'page:21',  // zwei Abschnitte: normal
+    'chapter:3', 'page:30',             // hat ein Unterkapitel: normal
+    'page:40',                          // Unterkapitel mit einem Abschnitt: zusammengelegt
+  ]);
+  const l10 = lanes.find(l => l.key === 'page:10');
+  assert.equal(l10.label, 'Kapitel 1');
+  assert.equal(l10.merged, true);
+  assert.deepEqual(l10.aliases, ['chapter:1']);
+  assert.equal(l10.depth, 1);
+  assert.equal(lanes.find(l => l.key === 'page:40').depth, 2);
+});
+
+test('Einabschnitts-Kapitel: Ideen am Kapitel und am Abschnitt teilen die Bahn', () => {
+  const laneOrder = buildLaneOrder(SOLE);
+  const ideen = [
+    idee(1, { chapter_id: 1, lane_chapter_id: 1 }),
+    idee(2, { page_id: 10, lane_chapter_id: 1 }),
+    idee(3, { chapter_id: 4, lane_chapter_id: 4, status: 'erledigt' }),
+  ];
+  const { lanes } = buildBoard({ ideen, laneOrder });
+  assert.deepEqual(lanes.map(l => l.lane.key), ['page:10', 'chapter:3', 'page:40']);
+  assert.deepEqual(lanes[0].columns.offen.map(i => i.id).sort(), [1, 2]);
+  assert.deepEqual(lanes[2].columns.erledigt.map(i => i.id), [3]);
+  // Das Oberkapitel zaehlt die zusammengelegte Bahn als seine Abschnitts-Bahn …
+  assert.equal(lanes[1].childLanes, 1);
+  // … und faltet sie ein.
+  const folded = buildBoard({ ideen, laneOrder, collapsedChapters: ['chapter:3'] });
+  assert.deepEqual(folded.lanes.map(l => l.lane.key), ['page:10', 'chapter:3']);
+  assert.equal(folded.lanes[1].foldedCount, 1);
+  const list = buildIdeenList({ ideen, laneOrder });
+  assert.deepEqual(list.map(r => r.lane?.key), ['page:10', 'page:10', 'page:40']);
+});
+
+test('Einabschnitts-Kapitel: Kapitel-Filter und Optionen kennen das Kapitel', () => {
+  const laneOrder = buildLaneOrder(SOLE);
+  const ideen = [
+    idee(1, { chapter_id: 1, lane_chapter_id: 1 }),
+    idee(2, { page_id: 10, lane_chapter_id: 1 }),
+    idee(3, { page_id: 40, lane_chapter_id: 4 }),
+  ];
+  assert.deepEqual(chapterFilterOptions(ideen, laneOrder), [
+    { value: '1', label: 'Kapitel 1' },
+    { value: '3', label: 'Teil II' },
+    { value: '4', label: 'Kapitel 3' },
+  ]);
+  assert.equal(buildBoard({ ideen, laneOrder, filterChapterId: '1' }).visible, 2);
+  // Oberkapitel erfasst die zusammengelegte Bahn seines Unterkapitels.
+  assert.equal(buildBoard({ ideen, laneOrder, filterChapterId: '3' }).visible, 1);
+});
+
+test('Einabschnitts-Kapitel: Resolver und Key-Menge fuehren den Kapitel-Anker als Alias', () => {
+  const laneOrder = buildLaneOrder(SOLE);
+  const keyOf = laneKeyResolver(laneOrder);
+  assert.equal(keyOf(idee(1, { chapter_id: 1 })), 'page:10');
+  assert.equal(keyOf('chapter:1'), 'page:10');
+  assert.equal(keyOf('chapter:2'), 'chapter:2');
+  assert.equal(keyOf(idee(2)), LANE_BOOK);
+  const keys = laneKeySet(laneOrder);
+  assert.ok(keys.has('chapter:1') && keys.has('page:10') && keys.has('chapter:4'));
+});
+
+test('Einabschnitts-Kapitel: soleChapterPages und Ort der Ideen-Karte', () => {
+  const tree = [{ type: 'chapter', id: 'solo-90', solo: true, depth: 1, name: 'Vorwort', pages: [{ id: 90 }] }, ...SOLE];
+  assert.deepEqual([...soleChapterPages(tree)], [[1, 10], [4, 40]]);
+  // Abschnitt eines Einabschnitts-Kapitels ↔ Kapitel: derselbe Ort, von beiden Seiten.
+  assert.deepEqual(ideenPlace(tree, { kind: 'page', id: 10 }), { pageId: 10, chapterId: 1 });
+  assert.deepEqual(ideenPlace(tree, { kind: 'chapter', id: 1 }), { pageId: 10, chapterId: 1 });
+  // Sonst nur der eine Anker.
+  assert.deepEqual(ideenPlace(tree, { kind: 'page', id: 20 }), { pageId: 20, chapterId: null });
+  assert.deepEqual(ideenPlace(tree, { kind: 'chapter', id: 3 }), { pageId: null, chapterId: 3 });
+  assert.deepEqual(ideenPlace(tree, { kind: 'page', id: 90 }), { pageId: 90, chapterId: null });
+  assert.equal(ideenPlace(tree, { kind: 'page', id: null }), null);
 });

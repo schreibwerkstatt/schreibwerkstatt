@@ -174,6 +174,7 @@ export const FAKTEN_RULES = `Fakten-Regeln:
   · soziolekt = Sprachregister/Sprechweise einer Figur
   · ereignis = öffentliche/gesellschaftliche Geschehnisse, die KEINER einzelnen Figur gehören (Krieg, Naturkatastrophe, Wahl, Umbruch, historisches Ereignis). Nicht: Taten, Unfälle oder Feiern einzelner Figuren; nicht: Songs (die erfasst die Musik-Extraktion).
 - Nur prüfbare Aussagen aus dem Text – keine Interpretationen, Wertungen oder Spekulationen.
+- KEINE Widersprüche, Fehler oder Kontinuitätsbefunde als Fakt erfassen (auch nicht unter «sonstiges» oder mit «Kontinuität» als Subjekt) – das prüft die Kontinuitätsprüfung. Widerspricht sich der Text, erfasse jede der beiden Aussagen als eigenen Fakt.
 - Jede Aussage nur EINMAL erfassen, auch wenn der Text sie mehrfach erwähnt.
 - Kein Cap auf Anzahl Fakten – vollständige, präzise Erfassung ist das Ziel`;
 
@@ -182,6 +183,7 @@ export const FAKTEN_RULES = `Fakten-Regeln:
 export const FAKTEN_RULES_LOCAL = `Fakten-Regeln:
 - Nur STABILE Aussagen über die Welt des Buchs, keine Handlungsschritte oder Episoden einzelner Figuren.
 - kategorie genau einer der Werte: figur (dauerhafte Eigenschaft einer Figur) · ort · objekt · organisation · technik · regel (allgemein geltende Regel/Norm, keine Einzelabsprache) · kultur · historie · zeit (absolute/verankerte Daten, keine Szenenübergänge) · soziolekt · ereignis (öffentliches Geschehen, keiner Figur zugeordnet) · sonstiges (nur als letzte Wahl).
+- Keine Widersprüche oder Kontinuitätsbefunde als Fakt; widersprechen sich zwei Stellen, beide Aussagen einzeln erfassen.
 - Jede Aussage nur einmal.`;
 
 // ── Kontinuitäts-Probleme-Schema (verwendet in Check und SinglePass) ─────────

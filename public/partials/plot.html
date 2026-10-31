@@ -85,7 +85,7 @@
 
   <!-- Board links, Plot-Chat rechts daneben (ab 1280px; schmaler klappt der Chat
        per `order` über das Board). Reine Layout-Klammer. -->
-  <div class="aside-split aside-split--aside-first" :class="{ 'aside-split--on': plotChatOpen }">
+  <div class="aside-split aside-split--aside-first" x-aside-resize :class="{ 'aside-split--on': plotChatOpen }">
   <div class="plot-main">
 
   <!-- Skeleton -->

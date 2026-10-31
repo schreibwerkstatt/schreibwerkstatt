@@ -15,7 +15,7 @@
 // escaped hat.
 
 import { escHtml } from './utils/escape.js';
-import { sameStructureTitle } from './structure-title.js';
+import { sectionTitleRedundant, sectionCountsByChapter } from './structure-title.js';
 
 const DEFAULTS = {
   chapterTag: 'h2',
@@ -43,11 +43,13 @@ export function renderStreamHtml(entries, opts = {}) {
   const toc = [];
   let n = 0;
   // Kapitel, dessen erster Abschnitt als naechstes kommt (null, sobald einer
-  // gerendert ist). Traegt dieser erste Abschnitt denselben Namen, entfaellt
-  // seine Ueberschrift samt Verzeichnis-Eintrag — dieselbe Regel wie PDF/Word
-  // (structure-title.js). Bei Kapitel-Shares steht der Kapitelname im h1-Kopf
+  // gerendert ist). Ist dieser erste Abschnitt der einzige des Kapitels oder
+  // traegt er denselben Namen, entfaellt seine Ueberschrift samt Verzeichnis-
+  // Eintrag — dieselbe Regel wie PDF/Word (structure-title.js#
+  // sectionTitleRedundant). Bei Kapitel-Shares steht der Kapitelname im h1-Kopf
   // der Leseansicht und zaehlt genauso.
   let pendingChapter = null;
+  const counts = sectionCountsByChapter(entries);
   // Verzeichnis-Ebene = Tiefe + 1 (Kapitel: depth 0 = oberstes Kapitel; Seite:
   // depth = Zahl der umschliessenden Kapitel), beim ausgelassenen Wurzel-
   // Kapitel eines Kapitel-Shares eine Ebene höher.
@@ -69,7 +71,9 @@ export function renderStreamHtml(entries, opts = {}) {
     } else if (e.kind === 'page') {
       const dupOfChapter = !!pendingChapter && !e.article
         && (pendingChapter.chapterId ?? null) === (e.chapterId ?? null)
-        && sameStructureTitle(e.name, pendingChapter.name);
+        && sectionTitleRedundant({
+          index: 0, count: counts.get(e.chapterId ?? null) || 0, pageName: e.name, chapterName: pendingChapter.name,
+        });
       pendingChapter = null;
       if (dupOfChapter) {
         // Die Ueberschrift entfaellt, `headAfter` nicht: ein Nicht-Beitrag traegt

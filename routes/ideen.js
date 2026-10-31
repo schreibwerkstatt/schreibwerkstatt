@@ -9,6 +9,9 @@
 // Einfall ohne Ort im Text; der Autor ordnet sie spaeter selbst einer Seite oder
 // einem Kapitel zu. Danach darf sie frei umziehen — Seite ↔ Seite, Kapitel ↔
 // Kapitel und quer zwischen Seite und Kapitel; der alte Anker wird dabei geleert.
+// Ein Kapitel mit genau einem Abschnitt ist derselbe Ort wie dieser Abschnitt:
+// ein Kapitel-Anker wird dort beim Anlegen und Umziehen zum Abschnitt
+// (lib/idee-anchor.js).
 //
 // Stufen-Modell: `status` (offen → in_arbeit → erledigt, daneben verworfen) ist
 // die einzige Wahrheit ueber den Bearbeitungsstand; SSoT der Stufen ist
@@ -19,6 +22,7 @@ const express = require('express');
 const { toIntId } = require('../lib/validate');
 const { guardBook, sessionEmail } = require('../lib/acl');
 const { resolvePageBookId, resolveChapterBookId } = require('../lib/content-ownership');
+const { canonicalIdeeAnchor } = require('../lib/idee-anchor');
 const { IDEE_STATUSES, IDEE_OPEN_STATUSES, isIdeeStatus, isIdeaLinkKind } = require('../lib/ideen-status');
 const { getBookIdeenStages, setBookIdeenStages } = require('../db/book-settings');
 const { setContext } = require('../lib/log-context');
@@ -185,8 +189,8 @@ router.get('/', (req, res) => {
 router.post('/', jsonBody, async (req, res) => {
   const userEmail = sessionEmail(req);
   const bookId = toIntId(req.body?.book_id);
-  const pageId = toIntId(req.body?.page_id);
-  const chapterId = toIntId(req.body?.chapter_id);
+  let pageId = toIntId(req.body?.page_id);
+  let chapterId = toIntId(req.body?.chapter_id);
   const content = (req.body?.content || '').toString().trim();
   if (!bookId) return res.status(400).json({ error_code: 'BOOKID_REQ' });
   if (pageId && chapterId) return res.status(400).json({ error_code: 'INVALID_SCOPE' });
@@ -199,6 +203,10 @@ router.post('/', jsonBody, async (req, res) => {
   if (pageId || chapterId) {
     const ankerBook = pageId ? resolvePageBookId(pageId) : resolveChapterBookId(chapterId);
     if (ankerBook !== bookId) return res.status(400).json({ error_code: 'BOOK_MISMATCH' });
+  }
+  if (chapterId) {
+    const c = canonicalIdeeAnchor({ kind: 'chapter', id: chapterId });
+    if (c.kind === 'page') { pageId = c.id; chapterId = null; }
   }
 
   // Nachgespielt aus der Offline-Warteschlange (lib/idempotency.js): derselbe
@@ -245,8 +253,8 @@ router.patch('/:id', jsonBody, (req, res) => {
   const toBook = hasPageMove && hasChapterMove && req.body.page_id === null && req.body.chapter_id === null;
   if (hasPageMove && hasChapterMove && !toBook) return res.status(400).json({ error_code: 'INVALID_SCOPE' });
   if (hasPageMove || hasChapterMove) {
-    const isPage = hasPageMove && !toBook;
-    const newId = toBook ? null : toIntId(isPage ? req.body.page_id : req.body.chapter_id);
+    let isPage = hasPageMove && !toBook;
+    let newId = toBook ? null : toIntId(isPage ? req.body.page_id : req.body.chapter_id);
     if (!toBook && !newId) return res.status(400).json({ error_code: isPage ? 'INVALID_PAGE_ID' : 'INVALID_CHAPTER_ID' });
     // Eine abgeschlossene Idee (erledigt/verworfen) wandert nicht mehr: sie ist
     // die Spur einer Entscheidung an DIESER Stelle, und anderswo hingehaengt
@@ -261,6 +269,10 @@ router.patch('/:id', jsonBody, (req, res) => {
     if (!toBook) {
       const targetBook = isPage ? resolvePageBookId(newId) : resolveChapterBookId(newId);
       if (targetBook !== existing.book_id) return res.status(400).json({ error_code: 'BOOK_MISMATCH' });
+      if (!isPage) {
+        const c = canonicalIdeeAnchor({ kind: 'chapter', id: newId });
+        if (c.kind === 'page') { isPage = true; newId = c.id; }
+      }
     }
     movedFrom = existing.page_id !== null ? 'page=' + existing.page_id
       : existing.chapter_id !== null ? 'chapter=' + existing.chapter_id : 'book';

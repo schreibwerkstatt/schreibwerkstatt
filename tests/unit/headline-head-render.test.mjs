@@ -201,7 +201,10 @@ test('der Stream stellt den Kopf um die Seitenüberschrift und markiert den Beit
 test('ohne Kopf bleibt der Stream unverändert (kein Regress für Romane)', () => {
   const groups = [{
     chapterId: 3, chapter: { id: 3, name: 'Kapitel' },
-    pages: [{ p: page('Seite 1'), pd: { id: 7, name: 'Seite 1', html: '<p>Text.</p>' } }],
+    pages: [
+      { p: page('Seite 1'), pd: { id: 7, name: 'Seite 1', html: '<p>Text.</p>' } },
+      { p: page('Seite 2'), pd: { id: 8, name: 'Seite 2', html: '<p>Mehr.</p>' } },
+    ],
   }];
   const html = renderStreamHtml(fromGroups(groups)).html;
   assert.ok(!html.includes('--article'), 'Nicht-Beitrag als Beitrag markiert');

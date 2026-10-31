@@ -125,9 +125,9 @@
     <div class="progress-bar" :style="{ '--progress': (checkProgress || saveApplying || 0) + '%' }"></div>
   </div>
   <div class="card-status" x-show="checkStatus" x-html="checkStatus"></div>
-  <div id="status" x-html="statusHtml"></div>
-  <div x-show="canUndoLektorat()" class="lektorat-undo-row">
-    <button type="button" class="btn-compact" @click="undoLektoratCorrections()" x-text="t('lektorat.undoCorrections')"></button>
+  <div class="page-status-row">
+    <div id="status" x-html="statusHtml"></div>
+    <button type="button" class="btn-compact" x-show="canUndoLektorat()" @click="undoLektoratCorrections()" x-text="t('lektorat.undoCorrections')"></button>
   </div>
   <!-- Edit-Toolbar (Undo/Redo/Fullscreen/Meatball) → Partial editor-page-toolbar.html.
        Lebt im sticky Topbar, damit sie beim Scrollen permanent sichtbar bleibt. -->

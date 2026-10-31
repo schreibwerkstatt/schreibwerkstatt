@@ -3,6 +3,8 @@
 import { contentRepo } from '../repo/content.js';
 import { localIsoDate } from '../utils.js';
 import { MAX_CHAPTER_DEPTH } from './constants.js';
+import { sameStructureTitle } from '../structure-title.js';
+import { singleSectionOf } from './view.js';
 
 export const crudMethods = {
   onRenameChapter(id, ev) {
@@ -32,8 +34,14 @@ export const crudMethods = {
     return promise;
   },
 
+  // Kapitel aus genau einem gleichnamigen Abschnitt: der Abschnitt wird
+  // mitbenannt, wie in der Sidebar (tree-context-menu.js#renameChapterById) —
+  // sonst laufen die Namen auseinander, und Editorkopf und Sidebar zeigen
+  // Verschiedenes. Undo/Redo laufen ueber denselben Weg und nehmen ihn mit.
   async _doRenameChapter(id, newName, inputEl) {
     const root = window.__app;
+    const twin = this._singleSectionTwin(id);
+    const oldName = this._findChapter(id)?.node?.name;
     try {
       await contentRepo.updateChapter(id, { name: newName }, { bookId: Alpine.store('nav').selectedBookId });
       const ch = this._findChapter(id)?.node;
@@ -42,6 +50,9 @@ export const crudMethods = {
       // wie die Sidebar: Baum-Item, `chapterName` der Abschnitte, Indexe.
       root._mirrorChapterRename(id, newName);
       this._signalXrefsChanged();
+      if (twin && sameStructureTitle(twin.name, oldName) && !sameStructureTitle(twin.name, newName)) {
+        await this._doRenamePage(twin.id, newName, null, { syncTwin: false });
+      }
       return true;
     } catch (e) {
       root.setStatus(root.t('bookOrganizer.saveFailed', { detail: e.message }));
@@ -64,9 +75,15 @@ export const crudMethods = {
     }));
   },
 
-  async _doRenamePage(id, newName, inputEl) {
+  // Gegenstueck zu _doRenameChapter: der einzige gleichnamige Abschnitt
+  // benennt sein Kapitel mit.
+  async _doRenamePage(id, newName, inputEl, { syncTwin = true } = {}) {
     const root = window.__app;
     const nav = Alpine.store('nav');
+    const oldName = this._findPage(id)?.name;
+    const chapterId = this._findPage(id)?.chapter_id || 0;
+    const twinOf = syncTwin && chapterId && this._singleSectionTwin(chapterId)?.id === id
+      ? this._findChapter(chapterId)?.node : null;
     try {
       await contentRepo.updatePage(id, { name: newName });
       const page = this._findPage(id);
@@ -81,6 +98,9 @@ export const crudMethods = {
       this._rebuildOrderMaps();
       this._invalidateDiaryCache();
       this._signalXrefsChanged();
+      if (twinOf && sameStructureTitle(twinOf.name, oldName) && !sameStructureTitle(twinOf.name, newName)) {
+        await this._doRenameChapter(chapterId, newName, null);
+      }
       return true;
     } catch (e) {
       root.setStatus(root.t('bookOrganizer.saveFailed', { detail: e.message }));
@@ -98,7 +118,12 @@ export const crudMethods = {
       confirmLabel: root.t('bookOrganizer.create'),
     });
     if (!name) return;
+    // Buch aus lauter Ein-Abschnitt-Kapiteln: der erste Abschnitt entsteht
+    // gleichnamig mit, wie in der Sidebar (tree/load.js#createChapter). Vor dem
+    // Anlegen messen, solange der Workstate noch der alte ist.
+    const withFirstSection = window.__app._bookUsesSingleSectionChapters();
     let createdId = null;
+    let pageId = null;
     const ok = await this._runMutation(async () => {
       const created = await contentRepo.createChapter({
         book_id: parseInt(Alpine.store('nav').selectedBookId, 10),
@@ -112,7 +137,22 @@ export const crudMethods = {
       this.chapterOpen = { ...this.chapterOpen, [created.id]: true };
       await this._rerender();
     }, 'bookOrganizer.createFailed');
-    if (ok && createdId != null) this._recordCreateChapter(createdId, name);
+    if (ok && createdId != null && withFirstSection) {
+      // Scheitert nur dieser Teil, bleibt das leere Kapitel stehen — derselbe
+      // Zustand wie nach dem Anlegen in einem Mehr-Abschnitt-Buch.
+      await this._runMutation(async () => {
+        pageId = (await this._createPageRaw({ name, chapterId: createdId }))?.id ?? null;
+        // Eine Zeile wie jedes Ein-Abschnitt-Kapitel (view.js#isSingleSectionChapter).
+        this.chapterOpen = { ...this.chapterOpen, [createdId]: false };
+        await this._rerender();
+      }, 'bookOrganizer.createFailed');
+    }
+    if (ok && createdId != null) this._recordCreateChapter(createdId, name, pageId);
+  },
+
+  // Der einzige Abschnitt eines Kapitels ohne Unterkapitel, sonst null.
+  _singleSectionTwin(chapterId) {
+    return singleSectionOf(this._findChapter(chapterId)?.node);
   },
 
   async createPage(chapterId) {
@@ -224,6 +264,23 @@ export const crudMethods = {
     const root = window.__app;
     const ch = this._findChapter(id)?.node;
     if (!ch) return;
+    // Ein-Abschnitt-Kapitel: eine Zeile, also ein Loeschen fuer beides — wie
+    // das Sidebar-Kontextmenue (tree-context-menu.js#pagetreeCtxDeleteChapter).
+    // Der Abschnitt landet im Papierkorb, das Kapitel nicht; darum keine History.
+    const single = singleSectionOf(ch);
+    if (single) {
+      const ok = await root.appConfirm({
+        message: root.t('pagetreeCtx.confirmDeleteSingleChapter', { name: ch.name }),
+        confirmLabel: root.t('common.delete'),
+        cancelLabel: root.t('common.cancel'),
+        danger: true,
+      });
+      if (!ok) return;
+      if (!await this._deletePageRaw(single.id, { name: single.name, confirm: false })) return;
+      await this._deleteChapterRaw(id);
+      this._clearHistory();
+      return;
+    }
     if (ch.pages.length > 0) {
       root.setStatus(root.t('bookOrganizer.chapterNotEmpty', { name: ch.name, n: ch.pages.length }));
       return;

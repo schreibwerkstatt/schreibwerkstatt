@@ -2,7 +2,7 @@
 // Pruef-Praedikat fuer den Drag quer zur Bahn. Gespreadet in ideenBoardActions
 // (actions.js); `this` = die ideenBoardCard-Instanz.
 
-import { IDEE_OPEN_STATUSES, ideeStatus, ideeLaneKey, isOpenIdee, isBookIdee, LANE_BOOK } from '../ideen-shared.js';
+import { IDEE_OPEN_STATUSES, ideeStatus, isOpenIdee, isBookIdee, LANE_BOOK } from '../ideen-shared.js';
 
 export const ideenBoardMove = {
   // ── Zuordnen / Verschieben (Idee → Kapitel/Abschnitt/Buch) ───────────────
@@ -37,7 +37,7 @@ export const ideenBoardMove = {
   // fuer eine verankerte Idee zuerst das ganze Buch (Anker loesen).
   assignTargetOptions() {
     const idee = this.assigningIdee();
-    const cur = idee ? ideeLaneKey(idee) : '';
+    const cur = idee ? this._laneKeyOf(idee) : '';
     return cur === LANE_BOOK
       ? this.anchorLaneOptions()
       : this.newLaneOptions().filter(o => o.value !== cur);
@@ -52,8 +52,11 @@ export const ideenBoardMove = {
   // oder mit LANE_BOOK vom Anker loesen, optional zugleich die Stufe setzen
   // (Drop in eine andere Spalte) — ein PATCH, damit die Idee nie halb
   // umgezogen dasteht. Der Server leert den alten Anker.
+  // Ein Kapitel-Key eines Einabschnitts-Kapitels (Drop aufs Inhaltsverzeichnis)
+  // wird zum Key seiner Bahn, also seines Abschnitts — derselbe Ort, ein Anker.
   async _reanchorIdee(idee, laneKey, status = null) {
-    if (!this.canMove(idee) || !laneKey || laneKey === ideeLaneKey(idee)) return null;
+    laneKey = laneKey && this._laneKeyOf(laneKey);
+    if (!this.canMove(idee) || !laneKey || laneKey === this._laneKeyOf(idee)) return null;
     let body;
     if (laneKey === LANE_BOOK) {
       body = { page_id: null, chapter_id: null };

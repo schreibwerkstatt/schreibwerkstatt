@@ -16,9 +16,13 @@ const { test, expect } = require('@playwright/test');
 const { attachConsoleGuard } = require('../e2e/_helpers/console-guard.js');
 const { bootApp, selectSeededBook } = require('./_helpers/app.js');
 
-async function openOrganizer(page) {
+// Klappt alle Kapitel auf: Ein-Abschnitt-Kapitel starten zu (ihre Kopfzeile
+// traegt den Abschnitt), die Specs hier pruefen aber die Abschnittszeilen.
+async function openOrganizer(page, { expand = true } = {}) {
   await page.evaluate(() => window.__app.toggleBookOrganizerCard());
   await expect(page.locator('.card--organizer')).toBeVisible();
+  if (!expand) return;
+  await page.evaluate(() => window.Alpine.$data(document.querySelector('.card--organizer')).expandAll());
   await page.waitForFunction(() =>
     document.querySelectorAll('.card--organizer .organizer-page').length > 0);
 }
@@ -474,4 +478,35 @@ test('Bearbeitungsstand-Auswahl behält beim Öffnen Beschriftung und Breite', a
   expect((await combo.boundingBox()).width).toBe(before.width);
   await expect(combo.locator('.combobox-option--selected')).toHaveCount(0);
   guard.assertClean('redaktion combo stable');
+});
+
+// Kapitel aus genau einem Abschnitt: eine Zeile — zugeklappt, ohne
+// Abschnittszaehler, abweichender Abschnittsname grau daneben, Loeschen aktiv.
+test('Ein-Abschnitt-Kapitel erscheint als eine Zeile', async ({ page }) => {
+  const guard = attachConsoleGuard(page);
+  await bootApp(page);
+  const bookId = await selectSeededBook(page);
+  const same = await seedChapter(page, bookId, 'Einzeln', ['Einzeln']);
+  const other = await seedChapter(page, bookId, 'Kapitel 9: Lang', ['Kapitel 9']);
+  try {
+    await openOrganizer(page, { expand: false });
+    for (const { chapterId, pageIds } of [same, other]) {
+      const row = page.locator(`.card--organizer .organizer-chapter[data-chapter-id="${chapterId}"]`);
+      await expect(row.locator('.organizer-chapter-header')).toBeVisible();
+      await expect(row.locator(`.organizer-page[data-page-id="${pageIds[0]}"]`)).toHaveCount(0);
+      await expect(row.locator('.organizer-chapter-meta').first()).toBeHidden();
+      await expect(row.locator('.organizer-delete-btn--chapter')).toBeEnabled();
+    }
+    const sameRow = page.locator(`.card--organizer .organizer-chapter[data-chapter-id="${same.chapterId}"]`);
+    const otherRow = page.locator(`.card--organizer .organizer-chapter[data-chapter-id="${other.chapterId}"]`);
+    await expect(sameRow.locator('.organizer-section-name')).toBeHidden();
+    await expect(otherRow.locator('.organizer-section-name')).toHaveText('Kapitel 9');
+    // Aufklappen zeigt die Abschnittszeile.
+    await otherRow.locator('.organizer-chapter-toggle').click();
+    await expect(otherRow.locator(`.organizer-page[data-page-id="${other.pageIds[0]}"]`)).toBeVisible();
+  } finally {
+    await cleanupChapter(page, same.chapterId);
+    await cleanupChapter(page, other.chapterId);
+  }
+  guard.assertClean('single-section row');
 });

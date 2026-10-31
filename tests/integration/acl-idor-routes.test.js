@@ -303,6 +303,11 @@ test('GET /plot, /ideen: fremdes Buch → 403, ohne Login → 401 NOT_LOGGED_IN'
 
 test('POST /ideen ohne Anker → Buch-Idee; Zuordnen nur auf Stellen DIESES Buchs', async () => {
   sessionUser = ME;
+  // Zweiter Abschnitt: ein Einabschnitts-Kapitel ist EIN Ort, sein Kapitel-
+  // Anker würde zum Abschnitt (lib/idee-anchor.js) — hier geht es um den Umzug
+  // zwischen zwei verschiedenen Ankern.
+  db.prepare(`INSERT INTO pages (page_id, book_id, page_name, chapter_id, position, updated_at, body_html)
+              VALUES (?, ?, ?, ?, 1, ?, ?)`).run(MY_PAGE + 1, MY_BOOK, 'Zweite Seite', MY_CHAPTER, NOW, '<p>Mehr.</p>');
   const created = await api('POST', '/ideen', { book_id: MY_BOOK, content: 'Einfall ohne Ort' });
   assert.equal(created.status, 200);
   assert.equal(created.json.page_id, null);

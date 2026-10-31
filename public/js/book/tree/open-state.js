@@ -13,6 +13,13 @@ export const treeOpenStateMethods = {
     // chapterId zuerst am Root setzen, dann toggle awaiten — toggle lädt das
     // Partial via `_ensurePartial`; ohne await bleibt die Karte leer.
     if (item.pages.length === 0 && !item.hasChildren) {
+      // Buch aus lauter Ein-Abschnitt-Kapiteln: der erste Abschnitt entsteht
+      // gleichnamig und oeffnet sich — eine Namensabfrage liesse Kapitel- und
+      // Abschnittsname auseinanderlaufen (tree/structure.js#_createFirstSection).
+      if (this.canEdit() && this._bookUsesSingleSectionChapters()) {
+        await this._createFirstSection(item);
+        return;
+      }
       this.kapitelReviewChapterId = String(item.id);
       if (!this.showKapitelReviewCard) await this.toggleKapitelReviewCard();
       else this._closeOtherMainCards('kapitelReview');

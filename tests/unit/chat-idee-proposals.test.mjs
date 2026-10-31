@@ -2,6 +2,7 @@
 //  - nur Abschnitte des Session-Buchs; fremde/unbekannte fallen still heraus,
 //  - Abschnitts-Chat: ohne page_id der eigene Abschnitt, `ort: 'kapitel'` dessen Kapitel;
 //    Buch-Chat: page_id ODER chapter_id Pflicht,
+//  - Einabschnitts-Kapitel: ein Kapitel-Anker wird zum Abschnitt (ein Ort, ein Anker),
 //  - Format = idee_create des Ideen-Chats (geteilter Status-Router),
 //  - Deckel, Dubletten, leere Texte.
 // Dazu: der Parser reicht `ideen` durch, der Verlauf nennt den Status.
@@ -34,6 +35,16 @@ const P_FOREIGN = 8801021;
 insPage.run(P1, BOOK, CH1, 'Der Brief', NOW);
 insPage.run(P2, BOOK, null, 'Am Bahnhof', NOW);
 insPage.run(P_FOREIGN, OTHER_BOOK, CH_FOREIGN, 'Fremd', NOW);
+// CH1 hat zwei Abschnitte — dort bleibt ein Kapitel-Anker ein Kapitel-Anker.
+insPage.run(8801013, BOOK, CH1, 'Abfahrt', NOW);
+// CH_SOLE: genau ein Abschnitt, keine Unterkapitel. CH_PARENT: ein Abschnitt,
+// aber ein Unterkapitel — kein Einabschnitts-Kapitel.
+const CH_SOLE = db.prepare('INSERT INTO chapters (book_id, chapter_name) VALUES (?, ?)').run(BOOK, 'Heimkehr').lastInsertRowid;
+const CH_PARENT = db.prepare('INSERT INTO chapters (book_id, chapter_name) VALUES (?, ?)').run(BOOK, 'Teil II').lastInsertRowid;
+db.prepare('INSERT INTO chapters (book_id, chapter_name, parent_chapter_id) VALUES (?, ?, ?)').run(BOOK, 'Unterkapitel', CH_PARENT);
+const P_SOLE = 8801014;
+insPage.run(P_SOLE, BOOK, CH_SOLE, 'Kapitel 2', NOW);
+insPage.run(8801015, BOOK, CH_PARENT, 'Vorspann', NOW);
 
 test('Abschnitts-Chat: ohne page_id der eigene Abschnitt, mit page_id ein anderer des Buchs', () => {
   const out = normalizeChatIdeeProposals([
@@ -92,6 +103,28 @@ test('Buch-Chat: chapter_id als Anker, page_id hat Vorrang, fremdes Kapitel fäl
     { content: 'gleicher text, anderer ort', chapter_id: CH1 },
   ]);
   assert.equal(out[0].labels.anchor_kind, 'chapter');
+});
+
+test('Einabschnitts-Kapitel: Kapitel-Anker wird zum Abschnitt, sonst bleibt er', () => {
+  const out = normalizeChatIdeeProposals([
+    { inhalt: 'Kapitel direkt', chapter_id: CH_SOLE },
+    { inhalt: 'Über ort', ort: 'kapitel' },
+    { inhalt: 'Mit Unterkapitel', chapter_id: CH_PARENT },
+  ], { bookId: BOOK, defaultPageId: P_SOLE });
+  assert.deepEqual(out.map(p => p.fields), [
+    { content: 'Kapitel direkt', page_id: P_SOLE },
+    { content: 'Über ort', page_id: P_SOLE },
+    { content: 'Mit Unterkapitel', chapter_id: CH_PARENT },
+  ]);
+  assert.deepEqual(out[0].labels, { anchor: 'Kapitel 2', anchor_kind: 'page' });
+});
+
+test('Einabschnitts-Kapitel: dieselbe Idee über Kapitel und Abschnitt ist eine Dublette', () => {
+  const out = normalizeChatIdeeProposals([
+    { inhalt: 'Zeit prüfen', chapter_id: CH_SOLE },
+    { inhalt: 'Zeit prüfen', page_id: P_SOLE },
+  ], { bookId: BOOK });
+  assert.equal(out.length, 1);
 });
 
 test('Leere Texte, Nicht-Objekte, Dubletten, Deckel', () => {

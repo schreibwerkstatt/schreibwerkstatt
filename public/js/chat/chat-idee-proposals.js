@@ -75,7 +75,9 @@ export const chatIdeeProposalMethods = {
           ...(p.fields.page_id != null ? { page_id: p.fields.page_id } : { chapter_id: p.fields.chapter_id }),
         }),
       });
-      _bumpIdeenCount(p.fields);
+      // Der Server legt sie ggf. an einen anderen Anker (Einabschnitts-Kapitel →
+      // Abschnitt, lib/idee-anchor.js) — gezählt wird, wo sie wirklich hängt.
+      _bumpIdeenCount(row?.page_id != null || row?.chapter_id != null ? row : p.fields);
       // Erfasster Text ersetzt den Vorschlag in der Anzeige (lokal; der Server
       // hält nur den Status fest, die Idee selbst steht in `ideen`).
       p.fields = { ...p.fields, content };

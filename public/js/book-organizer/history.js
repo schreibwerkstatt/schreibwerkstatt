@@ -83,8 +83,10 @@ export const historyMethods = {
     this._pushUndo({ kind: 'rename-page', id, oldName, newName });
   },
 
-  _recordCreateChapter(id, name) {
-    this._pushUndo({ kind: 'create-chapter', id, name });
+  // `pageId`: der gleichnamige erste Abschnitt, der im Ein-Abschnitt-Buch
+  // mitentsteht (crud.js#createChapter) — ein Undo nimmt beides zurueck.
+  _recordCreateChapter(id, name, pageId = null) {
+    this._pushUndo({ kind: 'create-chapter', id, name, pageId });
   },
 
   _recordCreatePage(id, chapterId, name) {
@@ -173,7 +175,9 @@ export const historyMethods = {
     if (rec.kind === 'create-chapter') {
       const ch = this._findChapter(rec.id)?.node;
       if (!ch) return STALE;
-      const filled = (ch.pages?.length || 0) > 0 || (ch.subchapters?.length || 0) > 0;
+      const ownPages = (ch.pages || []).filter(p => p.id !== rec.pageId);
+      const written = rec.pageId != null && (window.__app?.tokEsts?.[rec.pageId]?.chars || 0) > 0;
+      const filled = ownPages.length > 0 || (ch.subchapters?.length || 0) > 0 || written;
       return filled ? { key: 'bookOrganizer.historyHasContent', params: { name: ch.name } } : null;
     }
     if (rec.kind === 'create-page') {
@@ -201,7 +205,10 @@ export const historyMethods = {
     if (rec.kind === 'reorder') return this._applyReorderSnapshot(rec.before);
     if (rec.kind === 'rename-chapter') return this._doRenameChapter(rec.id, rec.oldName, null);
     if (rec.kind === 'rename-page') return this._doRenamePage(rec.id, rec.oldName, null);
-    if (rec.kind === 'create-chapter') return this._deleteChapterRaw(rec.id);
+    if (rec.kind === 'create-chapter') {
+      if (rec.pageId != null && this._findPage(rec.pageId) && !await this._deletePageRaw(rec.pageId)) return false;
+      return this._deleteChapterRaw(rec.id);
+    }
     if (rec.kind === 'create-page') return this._deletePageRaw(rec.id);
     if (rec.kind === 'delete-page') return this._restoreDeletedPage(rec);
     return false;

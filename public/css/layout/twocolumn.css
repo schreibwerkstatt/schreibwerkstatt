@@ -60,7 +60,8 @@
    `--sidebar-w` auf `.layout`. Persistenz in localStorage('sidebar-width').
    Mobile (<960px) hat keinen Grid → Handle versteckt.
    Hauptspalte schrumpft mit (1fr); eine Leiste darin (layout/aside-split.css)
-   behaelt ihre `--aside-w`. */
+   behaelt ihre Breite. `body.col-resizing` (unten) setzt column-resize.js
+   fuer jeden Spaltengriff, auch den der Leiste. */
 .layout-sidebar {
   position: relative;
 }
@@ -149,11 +150,11 @@
 @media (max-width: 959.98px) {
   .sidebar-resize-handle { display: none; }
 }
-body.sidebar-resizing {
+body.col-resizing {
   cursor: col-resize !important;
   user-select: none;
 }
-body.sidebar-resizing iframe {
+body.col-resizing iframe {
   pointer-events: none;
 }
 

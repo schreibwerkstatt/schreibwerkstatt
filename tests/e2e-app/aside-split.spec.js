@@ -58,3 +58,52 @@ test('Leiste neben dem Editor: Breite, Viewport-Deckel, ein Platz für Chat und 
   await expect(page.locator('#reference-card')).toBeHidden();
   expect(await page.evaluate(() => window.__app.editorAsideOpen)).toBe(false);
 });
+
+// Griff an der Spaltengrenze (aside-resize.js): Ziehen nach links verbreitert
+// die Leiste, die Breite gilt für alle Leisten und überlebt einen Reload;
+// Doppelklick setzt auf `--aside-w` zurück.
+test('Leiste per Griff verbreitern, gespeichert, Doppelklick zurück', async ({ page }) => {
+  await page.setViewportSize({ width: 1600, height: 800 });
+  await bootApp(page);
+  await selectSeededBook(page);
+  await page.evaluate(async () => {
+    await window.__app.selectPage(window.Alpine.store('nav').pages[0]);
+    window.__app.toggleChatCard();
+  });
+  const chat = page.locator('#chat-card');
+  await expect(chat).toBeVisible();
+  const handle = page.locator('.main-aside-split.aside-split--on > .aside-split-handle');
+  await expect(handle).toBeVisible();
+  await expect(handle).not.toHaveAttribute('aria-label', 'aside.resizeHandle');
+  // Einblend-Animation der Karte abwarten, sonst verschiebt sich die Geometrie
+  // zwischen Messen und Ziehen.
+  await page.evaluate(() => Promise.all(document.getAnimations().map(a => a.finished.catch(() => {}))));
+
+  const before = await chat.evaluate(el => el.getBoundingClientRect().width);
+  const hb = await handle.boundingBox();
+  // Griff sitzt im Spaltenabstand, links von der Leiste.
+  const chLeft = await chat.evaluate(el => el.getBoundingClientRect().left);
+  expect(hb.x + hb.width).toBeLessThanOrEqual(chLeft + 1);
+
+  await page.mouse.move(hb.x + hb.width / 2, hb.y + 40);
+  await page.mouse.down();
+  await page.mouse.move(hb.x + hb.width / 2 - 150, hb.y + 40, { steps: 5 });
+  await page.mouse.up();
+  const after = await chat.evaluate(el => el.getBoundingClientRect().width);
+  expect(Math.round(after - before)).toBe(150);
+  expect(await page.evaluate(() => localStorage.getItem('aside-width'))).toBe(String(Math.round(after)));
+
+  // Über den 50vw-Deckel hinaus: die gespeicherte Breite folgt dem Bild.
+  const hb2 = await handle.boundingBox();
+  await page.mouse.move(hb2.x + 3, hb2.y + 40);
+  await page.mouse.down();
+  await page.mouse.move(0, hb2.y + 40, { steps: 5 });
+  await page.mouse.up();
+  const capped = await chat.evaluate(el => el.getBoundingClientRect().width);
+  expect(Math.round(capped)).toBe(800);
+  expect(await page.evaluate(() => localStorage.getItem('aside-width'))).toBe('800');
+
+  await handle.dblclick();
+  expect(Math.round(await chat.evaluate(el => el.getBoundingClientRect().width))).toBe(Math.round(before));
+  expect(await page.evaluate(() => localStorage.getItem('aside-width'))).toBeNull();
+});

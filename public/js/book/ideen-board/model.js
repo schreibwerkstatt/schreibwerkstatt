@@ -4,7 +4,7 @@
 // Ohne Alpine, ohne fetch, ohne `this` — damit die Gruppierung testbar ist
 // (tests/unit/ideen-board.test.mjs) und die Karte nur noch State haelt.
 
-import { IDEE_STATUSES, ideeStatus, ideeLaneKey, LANE_BOOK, compareIdeeManual } from '../ideen-shared.js';
+import { IDEE_STATUSES, ideeStatus, ideeLaneKey, LANE_BOOK, compareIdeeManual, soleChapterPages } from '../ideen-shared.js';
 import { compareText } from '../../i18n.js';
 
 export { compareIdeeManual };
@@ -30,13 +30,31 @@ export const LANE_UNKNOWN = 'unknown:0';
  * Ganz oben steht die Buch-Bahn: Ideen ohne Anker, die noch auf ihre Zuordnung
  * warten. Sie erscheint wie eine Seiten-Bahn nur, wenn sie belegt ist; den
  * Anker loest ohne sie der Picker («Ganzes Buch»).
+ *
+ * Einabschnitts-Kapitel (genau ein Abschnitt, keine Unterkapitel) ergeben EINE
+ * Bahn: Kapitel und Abschnitt sind derselbe Ort, eine Kapitelzeile mit einer
+ * einzigen Abschnittszeile darunter waere Hierarchie ohne Inhalt. Die Bahn ist
+ * die des Abschnitts (`page:<id>`, kanonischer Anker — Drop und Neuanlage
+ * schreiben `page_id`, wie die Chat-Vorschlaege), traegt den Kapitelnamen und
+ * fuehrt den Kapitel-Anker als Alias (`aliases`), damit Ideen am Kapitel in
+ * derselben Bahn stehen. `merged` markiert sie fuer Filter und Picker.
  */
 export function buildLaneOrder(tree) {
   const lanes = [{ key: LANE_BOOK, kind: 'book', id: 0, label: '', chapterId: null, chapterLabel: '', depth: 1 }];
+  const sole = soleChapterPages(tree);
   for (const node of (tree || [])) {
     if (node.solo) {
       const p = (node.pages || [])[0];
       if (p) lanes.push({ key: `page:${p.id}`, kind: 'page', id: p.id, label: p.name || '', chapterId: null, chapterLabel: '', depth: 1 });
+      continue;
+    }
+    if (sole.has(node.id)) {
+      const p = node.pages[0];
+      lanes.push({
+        key: `page:${p.id}`, kind: 'page', id: p.id, label: node.name || p.name || '',
+        chapterId: node.id, chapterLabel: node.name || '', depth: node.depth || 1,
+        parentId: node.parent_id ?? null, merged: true, aliases: [`chapter:${node.id}`],
+      });
       continue;
     }
     lanes.push({
@@ -53,6 +71,44 @@ export function buildLaneOrder(tree) {
   }
   return lanes;
 }
+
+/**
+ * Bahn-Key einer Idee: der Key ihres Ankers, ausser er ist Alias einer
+ * zusammengelegten Bahn (Einabschnitts-Kapitel) — dann deren Key. Liefert
+ * `(idee) => key`; ohne `laneOrder` gilt der rohe Anker.
+ */
+export function laneKeyResolver(laneOrder) {
+  const alias = new Map();
+  for (const l of (laneOrder || [])) for (const a of (l.aliases || [])) alias.set(a, l.key);
+  return (ideeOrKey) => {
+    const k = typeof ideeOrKey === 'string' ? ideeOrKey : ideeLaneKey(ideeOrKey);
+    return alias.get(k) || k;
+  };
+}
+
+/** Alle Anker-Keys, die eine Bahn im Baum haben — eigene Keys und Aliasse. */
+export function laneKeySet(laneOrder) {
+  const out = new Set();
+  for (const l of (laneOrder || [])) {
+    out.add(l.key);
+    for (const a of (l.aliases || [])) out.add(a);
+  }
+  return out;
+}
+
+// Kapitel-Id → Bahn, die dieses Kapitel vertritt: die Kapitel-Bahn oder die
+// zusammengelegte Bahn eines Einabschnitts-Kapitels (traegt dessen parentId).
+function chapterLaneMap(laneOrder) {
+  const out = new Map();
+  for (const l of (laneOrder || [])) {
+    if (l.kind === 'chapter') out.set(l.id, l);
+    else if (l.merged) out.set(l.chapterId, l);
+  }
+  return out;
+}
+
+// Kapitel-Id einer Bahn aus chapterLaneMap.
+const chapterIdOf = (l) => (l.kind === 'chapter' ? l.id : l.chapterId);
 
 /**
  * Reihenfolge der Karten INNERHALB einer Zelle — gewaehlt PRO SPALTE
@@ -168,10 +224,10 @@ function matchesQuery(idee, q) {
 export function makeIdeeFilter({ laneOrder, filterChapterId = '', showErledigt = true, showVerworfen = true, query = '' }) {
   const q = (query || '').trim().toLowerCase();
   const chapterFilter = filterChapterId === '' || filterChapterId == null ? null : Number(filterChapterId);
-  const chapterLanes = new Map((laneOrder || []).filter(l => l.kind === 'chapter').map(l => [l.id, l]));
+  const chapterLanes = chapterLaneMap(laneOrder);
   // Der Kapitel-Filter erfasst den TEILBAUM: „Kapitel 3" zeigt auch die Ideen
   // seiner Unterkapitel und deren Abschnitte.
-  const inFilter = (cid) => cid != null && chapterChain(cid, chapterLanes).some(l => l.id === chapterFilter);
+  const inFilter = (cid) => cid != null && chapterChain(cid, chapterLanes).some(l => chapterIdOf(l) === chapterFilter);
   return (idee) => {
     const status = ideeStatus(idee);
     // Kapitel-Filter misst die Bahn, nicht den Anker: eine Seiten-Idee gehoert
@@ -193,12 +249,13 @@ export function makeIdeeFilter({ laneOrder, filterChapterId = '', showErledigt =
  */
 export function buildIdeenList({ ideen, laneOrder, ...filter }) {
   const keep = makeIdeeFilter({ laneOrder, ...filter });
+  const laneKeyOf = laneKeyResolver(laneOrder);
   const idx = new Map((laneOrder || []).map((l, i) => [l.key, i]));
   const byKey = new Map((laneOrder || []).map(l => [l.key, l]));
   const rows = [];
   for (const idee of (ideen || [])) {
     if (!keep(idee)) continue;
-    const key = ideeLaneKey(idee);
+    const key = laneKeyOf(idee);
     rows.push({
       idee,
       lane: byKey.get(key) || null,
@@ -240,7 +297,8 @@ export function buildBoard({
 }) {
   const keep = makeIdeeFilter({ laneOrder, filterChapterId, showErledigt, showVerworfen, query });
   const laneByKey = new Map((laneOrder || []).map(l => [l.key, l]));
-  const chapterLanes = new Map((laneOrder || []).filter(l => l.kind === 'chapter').map(l => [l.id, l]));
+  const laneKeyOf = laneKeyResolver(laneOrder);
+  const chapterLanes = chapterLaneMap(laneOrder);
   const buckets = new Map();   // laneKey → { lane, columns }
   let total = 0;
   let hiddenByFilter = 0;
@@ -260,7 +318,7 @@ export function buildBoard({
     const status = ideeStatus(idee);
     const laneChapterId = idee.lane_chapter_id ?? idee.chapter_id ?? null;
 
-    const key = ideeLaneKey(idee);
+    const key = laneKeyOf(idee);
     const lane = laneByKey.get(key) || {
       key: LANE_UNKNOWN, kind: 'unknown', id: 0, label: '',
       chapterId: laneChapterId, chapterLabel: idee.lane_chapter_name || '', depth: 1,
@@ -285,7 +343,9 @@ export function buildBoard({
   }
 
   // Kapitel-Kette je Bahn, von aussen nach innen (Vorfahren zuerst).
-  const chainOf = (lane) => chapterChain(lane.kind === 'chapter' ? lane.parentId : lane.chapterId, chapterLanes).map(l => l.key).reverse();
+  // Die zusammengelegte Bahn steht fuer ihr Kapitel: ihre Kette beginnt wie die
+  // einer Kapitel-Bahn beim Elternkapitel.
+  const chainOf = (lane) => chapterChain(lane.kind === 'chapter' || lane.merged ? lane.parentId : lane.chapterId, chapterLanes).map(l => l.key).reverse();
 
   // Erster Durchgang: welche Kapitel tragen irgendwo darunter Ideen, und wie
   // viele belegte Abschnitts-Bahnen haengen in ihrem Teilbaum? Eine Kapitelzeile
@@ -375,21 +435,22 @@ function newRow(lane, bucket, collapsed) {
 export function chapterFilterOptions(ideen, laneOrder) {
   // Ein Oberkapitel ist waehlbar, sobald sein Teilbaum Ideen traegt — der
   // Filter erfasst den Teilbaum (buildBoard).
-  const chapterLanes = new Map((laneOrder || []).filter(l => l.kind === 'chapter').map(l => [l.id, l]));
+  const chapterLanes = chapterLaneMap(laneOrder);
   const withIdeen = new Set();
   for (const idee of (ideen || [])) {
     const cid = idee.lane_chapter_id ?? idee.chapter_id ?? null;
     if (cid == null) continue;
     withIdeen.add(cid);
-    for (const l of chapterChain(cid, chapterLanes)) withIdeen.add(l.id);
+    for (const l of chapterChain(cid, chapterLanes)) withIdeen.add(chapterIdOf(l));
   }
   const seen = new Set();
   const out = [];
   for (const lane of (laneOrder || [])) {
-    if (lane.kind !== 'chapter') continue;
-    if (!withIdeen.has(lane.id) || seen.has(lane.id)) continue;
-    seen.add(lane.id);
-    out.push({ value: String(lane.id), label: lane.label });
+    if (lane.kind !== 'chapter' && !lane.merged) continue;
+    const id = chapterIdOf(lane);
+    if (!withIdeen.has(id) || seen.has(id)) continue;
+    seen.add(id);
+    out.push({ value: String(id), label: lane.kind === 'chapter' ? lane.label : lane.chapterLabel });
   }
   return out;
 }

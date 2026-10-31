@@ -32,7 +32,7 @@
        1280px, Muster des Seiten-Chats neben dem Editor). Darunter klappt der
        Chat per `order` wieder ueber das Board. Die Board-Kinder behalten ihre
        Einrueckung — der Wrapper ist reine Layout-Klammer. -->
-  <div class="recherche-split aside-split aside-split--aside-first" :class="{ 'aside-split--on': researchChatOpen }">
+  <div class="recherche-split aside-split aside-split--aside-first" x-aside-resize :class="{ 'aside-split--on': researchChatOpen }">
   <div class="recherche-board">
 
   <!-- Ansicht-Umschalter (Liste / Status-Board). Zwei Blicke auf DENSELBEN

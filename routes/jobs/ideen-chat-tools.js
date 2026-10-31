@@ -35,6 +35,7 @@ const { htmlToText } = require('./shared');
 const { normalizeForQuoteMatch, quoteFoundIn } = require('../../lib/quote-verify');
 const { str: _str, posInt: _int } = require('../../lib/proposal-input');
 const { ideeProposalKey } = require('../../lib/chat-idee-proposals');
+const { canonicalIdeeAnchor } = require('../../lib/idee-anchor');
 const { err: _err, pushProposal: _push, oneLine } = require('./proposal-chat-shared');
 
 const MAX_PROPOSALS = 40;
@@ -69,6 +70,9 @@ function _resolveAnchor(input, state) {
   }
   if (chapterId) {
     if (!state.chapterNames.has(chapterId)) return _err(`Kapitel #${chapterId} gehört nicht zu diesem Buch. Nutze eine chapter#-id aus der Gliederung.`);
+    // Einabschnitts-Kapitel: derselbe Ort wie sein Abschnitt, die Idee hängt am Abschnitt.
+    const c = canonicalIdeeAnchor({ kind: 'chapter', id: chapterId });
+    if (c.kind === 'page' && state.pageById.has(c.id)) return { page_id: c.id };
     return { chapter_id: chapterId };
   }
   return {};

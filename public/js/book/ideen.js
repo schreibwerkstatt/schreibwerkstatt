@@ -1,5 +1,8 @@
 // Methoden für die Ideen-Karte (Sub-Komponente). Verwaltet User-Notizen und
 // Pendenzen pro Seite ODER pro Kapitel — Scope-Switch via app.ideenScope.
+// Ein Einabschnitts-Kapitel ist EIN Ort (ideen-shared.js#ideenPlace): die Karte
+// zeigt dort die Ideen des Abschnitts UND des Kapitels, egal ob sie neben dem
+// Editor oder neben der Kapitelbewertung offen ist, und legt neue am Abschnitt an.
 // Offene Ideen werden im Seiten-Chat als Kontext eingespielt (Backend-seitig
 // via getOpenIdeen: Page-Ideen + Chapter-Ideen des umliegenden Kapitels).
 //
@@ -10,7 +13,7 @@
 
 import { fetchJson, autosizeTextarea, mountAutosizeTextarea } from '../utils.js';
 import { createIdee, patchIdee, deleteIdee as removeIdee, overlayPendingIdeen } from '../repo/ideen-queue.js';
-import { IDEE_STATUSES, ideeStatus, isOpenIdee, normalizeIdeeStages, compareIdeeManual, IDEE_MAX_LEN } from './ideen-shared.js';
+import { IDEE_STATUSES, ideeStatus, isOpenIdee, normalizeIdeeStages, compareIdeeManual, IDEE_MAX_LEN, ideenPlace } from './ideen-shared.js';
 import { isTempId as isTempPageId, resolveTempId } from '../repo/structure-queue.js';
 import { loadToken } from '../cards/book-guard.js';
 
@@ -23,12 +26,25 @@ function _activeScope(app) {
   return app.currentPage?.id ? { kind: 'page', id: app.currentPage.id } : null;
 }
 
+// Ort der Karte: { pageId, chapterId } (ideenPlace) oder null.
+function _activePlace(app) {
+  return ideenPlace(Alpine.store('nav').tree, _activeScope(app));
+}
+
+// Hängt die Idee an diesem Ort?
+function _inPlace(idee, place) {
+  if (!idee || !place) return false;
+  if (place.pageId != null && idee.page_id != null && String(idee.page_id) === String(place.pageId)) return true;
+  return place.chapterId != null && idee.chapter_id != null && String(idee.chapter_id) === String(place.chapterId);
+}
+
 export const ideenMethods = {
   // ── Lifecycle ────────────────────────────────────────────────────────────
   async loadIdeen() {
     const app = window.__app;
     const scope = _activeScope(app);
-    if (!scope) { this.ideen = []; return; }
+    const place = _activePlace(app);
+    if (!scope || !place) { this.ideen = []; return; }
     // Abschnitts-/Kapitelwechsel während des Fetch: die Ideen des alten Scopes
     // dürfen nicht in der Karte des neuen landen (auch nicht als Plaketten-Zahl).
     const fresh = loadToken(this, '_ideenLoadSeq');
@@ -41,13 +57,15 @@ export const ideenMethods = {
       // Offline angelegter Abschnitt (negative, temporäre ID): auf dem Server
       // gibt es ihn noch nicht — nur die vorgemerkten Ideen zeigen. Ist er
       // inzwischen angelegt, gilt seine echte ID (repo/structure-queue.js).
-      let scopeId = scope.id;
-      if (scope.kind === 'page' && isTempPageId(scopeId)) scopeId = resolveTempId(scopeId);
-      const qs = scope.kind === 'chapter' ? `chapter_id=${scopeId}` : `page_id=${scopeId}`;
-      const rows = scopeId ? await fetchJson(`/ideen?${qs}`) : [];
+      let pageId = place.pageId;
+      if (pageId != null && isTempPageId(pageId)) pageId = resolveTempId(pageId);
+      const [pageRows, chapterRows] = await Promise.all([
+        pageId ? fetchJson(`/ideen?page_id=${pageId}`) : [],
+        place.chapterId ? fetchJson(`/ideen?chapter_id=${place.chapterId}`) : [],
+      ]);
+      const rows = [...(Array.isArray(pageRows) ? pageRows : []), ...(Array.isArray(chapterRows) ? chapterRows : [])];
       // Offline vorgemerkte Writes darüberlegen (repo/ideen-queue.js).
-      const key = scope.kind === 'chapter' ? 'chapter_id' : 'page_id';
-      const merged = await overlayPendingIdeen(Array.isArray(rows) ? rows : [], (r) => String(r[key]) === String(scope.id));
+      const merged = await overlayPendingIdeen(rows, (r) => _inPlace(r, place));
       if (!isCurrent()) return;
       this.ideen = this._sortIdeen(merged);
       this.errorMessage = '';
@@ -120,15 +138,17 @@ export const ideenMethods = {
     const content = (this.newContent || '').trim();
     if (!content) { this.errorMessage = app.t('ideen.error.contentRequired'); return; }
     if (content.length > IDEE_MAX_LEN) { this.errorMessage = app.t('ideen.error.contentTooLong'); return; }
-    const scope = _activeScope(app);
+    const place = _activePlace(app);
     const bookId = Alpine.store('nav').selectedBookId;
-    if (!scope || !bookId) return;
+    if (!place || !bookId) return;
 
     this.busy = true;
     try {
+      // Am Abschnitt, wo es einen gibt — beim Einabschnitts-Kapitel auch aus
+      // der Kapitelbewertung heraus (ein Ort, ein Anker).
       const body = { book_id: bookId, content };
-      if (scope.kind === 'page') body.page_id = scope.id;
-      else                       body.chapter_id = scope.id;
+      if (place.pageId != null) body.page_id = place.pageId;
+      else                      body.chapter_id = place.chapterId;
       const row = await createIdee(body);
       // Neueste offene Idee nach oben (Liste ist offen-zuerst, dann created_at DESC)
       this.ideen = [row, ...this.ideen];
@@ -247,13 +267,16 @@ export const ideenMethods = {
 
     this.busy = true;
     try {
-      await patchIdee(idee, kind === 'page' ? { page_id: targetId } : { chapter_id: targetId });
-      this.ideen = this.ideen.filter(i => i.id !== idee.id);
+      const row = await patchIdee(idee, kind === 'page' ? { page_id: targetId } : { chapter_id: targetId });
+      // Kapitel-Idee an den eigenen Abschnitt (Einabschnitts-Kapitel): bleibt in
+      // der Liste, die Plaketten rechnet _publishIdeenCount neu.
+      const stays = _inPlace(row || { [kind === 'page' ? 'page_id' : 'chapter_id']: targetId }, _activePlace(app));
+      this.ideen = stays && row ? this.ideen.map(i => (i.id === idee.id ? row : i)) : this.ideen.filter(i => i.id !== idee.id);
       this.cancelMoveIdee();
       this.errorMessage = '';
       this._publishIdeenCount();
       // Ziel-Counts bumpen (Backend lehnt Move bei abgeschlossener Idee ab → +1 sicher).
-      this._bumpTreeCountForTarget(kind, targetId);
+      if (!stays) this._bumpTreeCountForTarget(kind, targetId);
     } catch (e) {
       this.errorMessage = app.t('ideen.error.move');
     } finally {
@@ -282,34 +305,34 @@ export const ideenMethods = {
   },
 
   // ── Helpers ──────────────────────────────────────────────────────────────
+  // Knopf-Plakette = alle offenen Ideen der Karte (beim Einabschnitts-Kapitel
+  // Abschnitt + Kapitel); die Baum-Plaketten bleiben je Anker, wie der Server
+  // sie zählt.
   _publishIdeenCount() {
     const app = window.__app;
-    const scope = _activeScope(app);
-    if (!scope) return;
-    const count = (this.ideen || []).filter(isOpenIdee).length;
-    if (scope.kind === 'page') {
-      if (app.currentPage?.id === scope.id) app.currentPageIdeenOpenCount = count;
-    } else {
-      if (app.ideenChapterId === scope.id) app.currentChapterIdeenOpenCount = count;
+    const place = _activePlace(app);
+    if (!place) return;
+    const open = (this.ideen || []).filter(isOpenIdee);
+    if (place.pageId != null && app.currentPage?.id === place.pageId) app.currentPageIdeenOpenCount = open.length;
+    if (place.chapterId != null && app.ideenChapterId === place.chapterId) app.currentChapterIdeenOpenCount = open.length;
+    if (place.pageId != null) {
+      this._setTreeIdeenCount('page', place.pageId, open.filter(i => String(i.page_id) === String(place.pageId)).length);
     }
-    this._setTreeIdeenCount(scope, count);
+    if (place.chapterId != null) {
+      this._setTreeIdeenCount('chapter', place.chapterId, open.filter(i => String(i.chapter_id) === String(place.chapterId)).length);
+    }
   },
 
   // Patched ideenCounts/chapterIdeenCounts-Map im badges-Store für Sidebar-Indikator.
-  _setTreeIdeenCount(scope, count) {
+  // `count` null/0 entfernt den Eintrag.
+  _setTreeIdeenCount(kind, id, count) {
     const badges = Alpine.store('badges');
-    if (!badges || !scope?.id) return;
-    if (scope.kind === 'page') {
-      const next = { ...(badges.ideenCounts || {}) };
-      if (count > 0) next[scope.id] = count;
-      else           delete next[scope.id];
-      badges.ideenCounts = next;
-    } else {
-      const next = { ...(badges.chapterIdeenCounts || {}) };
-      if (count > 0) next[scope.id] = count;
-      else           delete next[scope.id];
-      badges.chapterIdeenCounts = next;
-    }
+    if (!badges || !id) return;
+    const mapKey = kind === 'page' ? 'ideenCounts' : 'chapterIdeenCounts';
+    const next = { ...(badges[mapKey] || {}) };
+    if (count > 0) next[id] = count;
+    else           delete next[id];
+    badges[mapKey] = next;
   },
 
   _bumpTreeCountForTarget(kind, targetId) {

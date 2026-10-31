@@ -84,6 +84,12 @@
               <span x-text="t('pagetreeCtx.rename')"></span>
             </button>
             <button type="button" role="menuitem" class="context-menu-item context-menu-item--icon"
+                    x-show="_pagetreeCtxTitlesDiffer()"
+                    @click="pagetreeCtxAlignTitles()">
+              <svg class="icon" aria-hidden="true"><use href="/icons.svg#copy"/></svg>
+              <span x-text="t('pagetreeCtx.alignTitles')"></span>
+            </button>
+            <button type="button" role="menuitem" class="context-menu-item context-menu-item--icon"
                     @click="pagetreeCtxNewChapter()">
               <svg class="icon" aria-hidden="true"><use href="/icons.svg#folder-plus"/></svg>
               <span x-text="t('pagetreeCtx.newChapter')"></span>
@@ -135,12 +141,13 @@
           </div>
         </template>
         <!-- Loeschen: Abschnitt; Kapitel nur leer (wie im Buchorganizer) oder als
-             Ein-Abschnitt-Zeile — dort mitsamt dem einen Abschnitt. -->
+             Ein-Abschnitt-Zeile — dort nur dieser eine Eintrag, mitsamt dem
+             Abschnitt: ein blosses Abschnitt-Loeschen liesse ein leeres Kapitel zurueck. -->
         <template x-if="canEdit() && (actionMenuTarget.kind === 'page' || actionMenuTarget.empty)">
           <div>
             <div class="context-menu-sep" role="separator"></div>
             <button type="button" role="menuitem" class="context-menu-item context-menu-item--icon context-menu-item--danger"
-                    x-show="actionMenuTarget.kind === 'page'"
+                    x-show="actionMenuTarget.kind === 'page' && !actionMenuTarget.single"
                     @click="pagetreeCtxDeletePage()">
               <svg class="icon" aria-hidden="true"><use href="/icons.svg#trash"/></svg>
               <span x-text="t('pagetreeCtx.delete')"></span>

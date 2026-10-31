@@ -3,6 +3,7 @@
 // Querabhängigkeiten zu Job-Queue oder Hash-Router haben.
 import { bindScrollFade } from '../scroll-fade.js';
 import { lsGet, lsSet, lsRemove } from '../safe-storage.js';
+import { bindColumnResize } from '../column-resize.js';
 
 export const appChromeMethods = {
   // ── Theme (Hell/Dunkel/Auto) ─────────────────────────────────────────────
@@ -75,89 +76,36 @@ export const appChromeMethods = {
 
     const handle = document.createElement('div');
     handle.className = 'sidebar-resize-handle';
-    handle.setAttribute('role', 'separator');
-    handle.setAttribute('aria-orientation', 'vertical');
     handle.setAttribute('aria-label', this.t('sidebar.resizeHandle'));
-    handle.setAttribute('aria-valuemin', String(MIN));
-    handle.setAttribute('aria-valuemax', String(MAX));
-    handle.tabIndex = 0;
 
     const rendered = () => Math.round(sidebar.getBoundingClientRect().width);
-    const syncAria = () => handle.setAttribute('aria-valuenow', String(rendered()));
     const set = (w) => layout.style.setProperty('--sidebar-w', Math.max(MIN, Math.min(MAX, Math.round(w))) + 'px');
+    sidebar.appendChild(handle);
     // Nur bei einer Bewegung des Users: der gespeicherte Wert beim Boot bleibt
     // stehen, auch wenn das Fenster gerade schmaler ist — beim Verbreitern
     // kehrt die gewählte Breite zurück.
-    const apply = (w) => {
-      set(w);
-      const actual = rendered();
-      // Unsichtbare Sidebar (Mobile, x-show) misst 0 — dann nichts zurückschreiben.
-      if (actual > 0) layout.style.setProperty('--sidebar-w', actual + 'px');
-      syncAria();
-    };
-    const persist = () => {
-      const cur = parseInt(layout.style.getPropertyValue('--sidebar-w'), 10);
-      if (Number.isFinite(cur)) lsSet('sidebar-width', String(cur));
-    };
-    const reset = () => {
-      layout.style.removeProperty('--sidebar-w');
-      lsRemove('sidebar-width');
-      syncAria();
-    };
-
-    sidebar.appendChild(handle);
     const saved = parseInt(lsGet('sidebar-width'), 10);
     if (Number.isFinite(saved)) set(saved);
-    syncAria();
 
-    let dragging = false;
-    let startX = 0;
-    let startW = 0;
-
-    const onMove = (e) => {
-      if (!dragging) return;
-      apply(startW + (e.clientX - startX));
-    };
-    const onUp = () => {
-      if (!dragging) return;
-      dragging = false;
-      handle.classList.remove('dragging');
-      document.body.classList.remove('sidebar-resizing');
-      window.removeEventListener('pointermove', onMove);
-      window.removeEventListener('pointerup', onUp);
-      persist();
-    };
-
-    handle.addEventListener('pointerdown', (e) => {
-      if (e.button !== 0) return;
-      e.preventDefault();
-      dragging = true;
-      startX = e.clientX;
-      startW = rendered();
-      handle.classList.add('dragging');
-      document.body.classList.add('sidebar-resizing');
-      window.addEventListener('pointermove', onMove);
-      window.addEventListener('pointerup', onUp);
+    bindColumnResize(handle, {
+      min: MIN,
+      max: MAX,
+      measure: rendered,
+      apply: (w) => {
+        set(w);
+        const actual = rendered();
+        // Unsichtbare Sidebar (Mobile, x-show) misst 0 — dann nichts zurückschreiben.
+        if (actual > 0) layout.style.setProperty('--sidebar-w', actual + 'px');
+      },
+      persist: () => {
+        const cur = parseInt(layout.style.getPropertyValue('--sidebar-w'), 10);
+        if (Number.isFinite(cur)) lsSet('sidebar-width', String(cur));
+      },
+      reset: () => {
+        layout.style.removeProperty('--sidebar-w');
+        lsRemove('sidebar-width');
+      },
     });
-
-    // Tastatur nach dem ARIA-Muster «Window Splitter»: Pfeile in Schritten
-    // (Umschalt = grob), Home/End an die Grenzen.
-    handle.addEventListener('keydown', (e) => {
-      let target;
-      if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') {
-        const step = e.shiftKey ? 32 : 8;
-        target = rendered() + (e.key === 'ArrowRight' ? step : -step);
-      } else if (e.key === 'Home') target = MIN;
-      else if (e.key === 'End') target = MAX;
-      else return;
-      e.preventDefault();
-      apply(target);
-      persist();
-    });
-
-    handle.addEventListener('dblclick', reset);
-    // Fensterbreite ändert den 40vw-Deckel und damit die gerenderte Breite.
-    window.addEventListener('resize', syncAria);
   },
 
   // Scrollbar im Sidebar-Tree initial unsichtbar, erscheint nur während des

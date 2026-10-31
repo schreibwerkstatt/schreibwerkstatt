@@ -70,6 +70,17 @@
   white-space: nowrap;
 }
 
+/* Ein-Abschnitt-Kapitel mit abweichendem Abschnittsnamen: grau neben dem
+   Kapitelnamen, wie die Sidebar (page-list.css .page-item-section-name). */
+.organizer-section-name {
+  color: var(--color-muted);
+  font-size: var(--font-size-xs);
+  max-width: 30%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .organizer-chapter-actions {
   display: flex;
   align-items: center;

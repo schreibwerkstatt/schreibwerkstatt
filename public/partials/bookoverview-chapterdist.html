@@ -1,5 +1,7 @@
 <!-- Kapitel-Verteilung: horizontale Bars pro Kapitel (Zeichen relativ).
-     Immer medium — Bar + 5 Meta-Zellen brauchen Breite, sonst Stack-Wrap. -->
+     Immer medium — Bar + 5 Meta-Zellen brauchen Breite, sonst Stack-Wrap.
+     Die Abschnitts-Zelle entfaellt, wenn jedes Kapitel genau einen hat
+     (Kurzgeschichten-Sammlung: 54× «1 Abschnitt» waere reines Rauschen). -->
 <template x-if="!overviewIsTagebuch() && overviewChapterDistribution().length > 0">
   <div class="overview-tile overview-tile--medium">
     <div class="overview-tile-head">
@@ -31,7 +33,7 @@
                   :data-tip="$app.t('bookstats.metric.normseiten')"
                   x-text="_fmtNormseiten(ch.chars) + ' ' + $app.t('bookstats.unit.ns')"></span>
             <span class="overview-chapter-words" x-text="_fmtNum(ch.words) + ' ' + $app.t('bookstats.unit.w')"></span>
-            <span class="overview-chapter-pages" x-text="_fmtNum(ch.pages) + ' ' + $app.t('overview.unit.sections')"></span>
+            <span class="overview-chapter-pages" x-show="!overviewChaptersAllSingle()" x-text="_fmtNum(ch.pages) + ' ' + $app.t('overview.unit.sections')"></span>
           </span>
         </div></li>
       </template>

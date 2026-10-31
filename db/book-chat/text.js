@@ -58,6 +58,25 @@ function getChapterRow(chapterId) {
   return _stmtChapter.get(chapterId);
 }
 
+// Ein Kapitel mit genau einem Abschnitt und ohne Unterkapitel ist EIN Ort —
+// Kapitel und Abschnitt bezeichnen dieselbe Stelle. Ideen-Vorschläge legen sich
+// dort einheitlich an den Abschnitt (lib/idee-anchor.js#canonicalIdeeAnchor,
+// docs/ideen-board.md „Einabschnitts-Kapitel"); das Board führt beide Anker in
+// einer Bahn (public/js/book/ideen-board/model.js#buildLaneOrder).
+const _stmtSoleChapterPage = db.prepare(`
+    SELECT p.page_id, p.page_name, p.book_id
+    FROM pages p
+    WHERE p.chapter_id = ?
+      AND (SELECT COUNT(*) FROM pages q WHERE q.chapter_id = p.chapter_id) = 1
+      AND NOT EXISTS (SELECT 1 FROM chapters c WHERE c.parent_chapter_id = p.chapter_id)
+  `);
+
+/** `{ page_id, page_name, book_id }` des einzigen Abschnitts eines Kapitels ohne
+ *  Unterkapitel, sonst undefined. */
+function getSoleChapterPage(chapterId) {
+  return _stmtSoleChapterPage.get(chapterId);
+}
+
 /** Seiten mit body_html für get_dialogue in Leserichtung, optional auf
  *  `chapterId` und/oder `pageId` begrenzt. */
 function listPagesForDialogue(bookId, { chapterId = null, pageId = null } = {}) {
@@ -105,6 +124,7 @@ module.exports = {
   listPagesForPassageSearch,
   getPageWithChapter,
   getChapterRow,
+  getSoleChapterPage,
   listPagesForDialogue,
   getLatestPageCheck,
   listLocationChaptersWithNames,

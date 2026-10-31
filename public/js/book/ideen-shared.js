@@ -71,6 +71,40 @@ export function ideeLaneKey(idee) {
   return LANE_BOOK;
 }
 
+/**
+ * Einabschnitts-Kapitel aus dem Navigationsbaum (`$store.nav.tree`): Kapitel
+ * mit genau einem Abschnitt und ohne Unterkapitel. Kapitel und Abschnitt sind
+ * dort EIN Ort, kanonischer Anker ist der Abschnitt (docs/ideen-board.md
+ * „Einabschnitts-Kapitel"; Server-Pendant lib/idee-anchor.js#canonicalIdeeAnchor).
+ * Liefert Map chapterId → pageId.
+ */
+export function soleChapterPages(tree) {
+  const hasChildren = new Set();
+  for (const node of (tree || [])) if (node.parent_id != null) hasChildren.add(node.parent_id);
+  const out = new Map();
+  for (const node of (tree || [])) {
+    if (node.solo || hasChildren.has(node.id) || (node.pages || []).length !== 1) continue;
+    out.set(node.id, node.pages[0].id);
+  }
+  return out;
+}
+
+/**
+ * Ort einer Ideen-Karte: { pageId, chapterId } — beide gesetzt, wenn Abschnitt
+ * und Kapitel derselbe Ort sind (Einabschnitts-Kapitel), sonst nur der eine.
+ * `scope` = { kind: 'page'|'chapter', id }.
+ */
+export function ideenPlace(tree, scope) {
+  if (!scope?.id) return null;
+  const sole = soleChapterPages(tree);
+  if (scope.kind === 'chapter') {
+    const pageId = sole.get(scope.id);
+    return { pageId: pageId ?? null, chapterId: scope.id };
+  }
+  for (const [chapterId, pageId] of sole) if (pageId === scope.id) return { pageId, chapterId };
+  return { pageId: scope.id, chapterId: null };
+}
+
 export function isBookIdee(idee) {
   return !!idee && idee.page_id == null && idee.chapter_id == null;
 }

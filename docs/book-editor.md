@@ -188,7 +188,7 @@ Eigener Verlauf pro Seite, das native Browser-Undo wird **nie** bedient: `onBloc
 - `scrollToBlock(pageId)` — smooth-scroll aus Outline-Klick; setzt `visiblePageId` sofort optimistisch.
 - `toggleChapterCollapse(chapterId)` — Map `collapsedChapters` togglet Sichtbarkeit der Pages unter einem Kapitel im Outline (Stream bleibt vollständig).
 - `buildOutlineNodes(blocks)` ([book-editor/outline.js](../public/js/cards/book-editor/outline.js)) — Kapitel aus genau einem Abschnitt ohne Unterkapitel (`node.single`) erscheinen als **eine** Zeile (Kapitelname, Seiten-Optik mit Status-Punkt, Klick springt zum Abschnitt), ohne Kapitelzeile, Zähler und Collapse.
-- Stream: heisst der erste Abschnitt eines Kapitels wie das Kapitel (`block.dupTitle`, `sameStructureTitle` aus [structure-title.js](../public/js/structure-title.js)), bleibt der Name in der Abschnitts-Caption leer — Status und Plaketten bleiben stehen.
+- Stream: ist ein Abschnitt der einzige seines Kapitels oder heisst der erste Abschnitt wie das Kapitel (`block.dupTitle`, `sectionTitleRedundant` aus [structure-title.js](../public/js/structure-title.js), Regel wie PDF/Word), bleibt der Name in der Abschnitts-Caption leer — Status und Plaketten bleiben stehen.
 
 ## Pflicht-Invarianten
 

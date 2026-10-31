@@ -3,7 +3,7 @@
 // ohne Netz, aus dem Content-Cache (offline gehaltenes Buch).
 
 import { fromPages } from '../../manuscript-stream.js';
-import { sameStructureTitle } from '../../structure-title.js';
+import { sectionTitleRedundant, sectionCountsByChapter } from '../../structure-title.js';
 import { stripFocusArtefacts, isNetworkError } from '../../utils.js';
 import { contentRepo } from '../../repo/content.js';
 
@@ -17,14 +17,19 @@ import { contentRepo } from '../../repo/content.js';
 export function buildBlocksFromPages(pages, chapters = null) {
   const byId = new Map();
   for (const p of (pages || [])) byId.set(p.pageId, p);
-  // `dupTitle`: erster Abschnitt, der wie sein Kapitel heisst — der Kopf zeigt
-  // dann keinen zweiten Namen (Regel wie Share-Reader/PDF, structure-title.js).
+  // `dupTitle`: einziger Abschnitt seines Kapitels oder erster, der wie das
+  // Kapitel heisst — der Kopf zeigt dann keinen zweiten Namen (Regel wie
+  // Share-Reader/PDF, structure-title.js#sectionTitleRedundant).
   let pendingChapter = null;
-  return fromPages(pages, { chapters }).map((e) => {
+  const entries = fromPages(pages, { chapters });
+  const counts = sectionCountsByChapter(entries);
+  return entries.map((e) => {
     if (e.kind === 'chapter') { pendingChapter = e; return { kind: 'chapter', chapterId: e.chapterId, name: e.name, depth: e.depth }; }
     const src = byId.get(e.id) || {};
     const html = stripFocusArtefacts(e.html || '');
-    const dupTitle = !!pendingChapter && pendingChapter.chapterId === e.chapterId && sameStructureTitle(e.name, pendingChapter.name);
+    const dupTitle = !!pendingChapter && pendingChapter.chapterId === e.chapterId && sectionTitleRedundant({
+      index: 0, count: counts.get(e.chapterId) || 0, pageName: e.name, chapterName: pendingChapter.name,
+    });
     pendingChapter = null;
     return {
       kind: 'page',

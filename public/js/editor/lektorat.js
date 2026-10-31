@@ -7,6 +7,7 @@ import { savePage } from './shared/page-api.js';
 import { renderLektoratAnalysisHtml } from './lektorat-analysis.js';
 import { runQuoteNormalizeHtml } from './shared/quote-normalize.js';
 import { lsSet } from '../safe-storage.js';
+import { UNDO_WINDOW_MS } from './lektorat-undo.js';
 
 // Lektorat-Workflow-Methoden (werden in die Alpine-Komponente gespreadet)
 // `this` bezieht sich auf die Alpine-Komponente.
@@ -472,7 +473,7 @@ export const lektoratMethods = {
       } else {
         msg = skipParams ? this.t('lektorat.correctionsSavedWithSkips', skipParams) : this.t('lektorat.correctionsSaved');
       }
-      this.setStatus(msg, false, skipped.length > 0 || historyFailed ? 8000 : 5000);
+      this.setStatus(msg, false, UNDO_WINDOW_MS);
       const historyBefore = historyEntry && historyEntry.id === checkId ? historyEntry : null;
       this._rememberLektoratUndo?.({
         pageId, pageName: this.currentPage?.name, preHtml, updatedAt: savedUpdatedAt, checkId,

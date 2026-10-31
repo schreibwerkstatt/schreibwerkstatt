@@ -246,12 +246,12 @@ test('nested: jede Seite traegt ihren Titel als Heading 4 (vierte Stufe unter de
   assert.equal(headingCount(xml, 'Heading4', 'Szene 2'), 1);
 });
 
-test('nested greift auch beim EINSEITIGEN Kapitel (kein pages.length>1-Vorbehalt)', async () => {
+test('nested: einziger Abschnitt eines Kapitels bekommt keine eigene Ueberschrift', async () => {
   const xml = await documentXml(validateConfig({ chapter: { pageStructure: 'nested' } }));
-  // Kapitel "Anhang" hat genau eine Seite ("A") — sie muss trotzdem als
-  // eigene Gliederungsstufe erscheinen.
+  // Kapitel "Anhang" hat genau eine Seite ("A") — der Kapiteltitel traegt sie
+  // (shared.js#sectionTitleRedundant, wie EPUB/HTML).
   assert.equal(headingCount(xml, 'Heading1', 'Anhang'), 1);
-  assert.equal(headingCount(xml, 'Heading4', 'A'), 1);
+  assert.equal(headingCount(xml, 'Heading4', 'A'), 0);
 });
 
 test('flatten: Seiten bekommen keine eigene Ueberschrift', async () => {
@@ -311,7 +311,10 @@ test('Autoren-Ueberschrift im Seitentext liegt UNTER dem Seitentitel (Heading 5/
     ...bundle,
     groups: [{
       chapterId: 40, chapter: { id: 40, name: 'Kapitel', parent_chapter_id: null },
-      pages: [{ p: { id: 5, name: 'Beitrag' }, pd: { html: '<h1>Gross</h1><p>x</p><h2>Klein</h2><p>y</p>' } }],
+      pages: [
+        { p: { id: 5, name: 'Beitrag' }, pd: { html: '<h1>Gross</h1><p>x</p><h2>Klein</h2><p>y</p>' } },
+        { p: { id: 6, name: 'Zweiter' }, pd: { html: '<p>z</p>' } },
+      ],
     }],
   };
   const xmlFor = async (pageStructure) => {

@@ -4,7 +4,7 @@ import { fetchJson } from '../../utils.js';
 import { SHELL_PROTOCOL } from '../../shell-protocol.js';
 import {
   AUTO_APPLY_TICK_MS, BOOT_STALE_WINDOW_MS, isBusy, shouldAutoApply, shouldHealSkew, isUpdateRequired, shouldForceUpdate, hasUnsavedWork,
-  shouldCheckProtocol,
+  shouldCheckProtocol, shouldCheckBuild, isBuildStale,
 } from './update-policy.js';
 import { createBusyLock, activateIfNobodyBusy } from './busy-lock.js';
 
@@ -21,6 +21,10 @@ import { createBusyLock, activateIfNobodyBusy } from './busy-lock.js';
 // Modul-Skripte sind deferred: DOMContentLoaded kann zum Aufrufzeitpunkt noch
 // nicht gefeuert sein, obwohl readyState schon 'interactive' steht. Nur
 // 'complete' heisst sicher, dass es vorbei ist.
+// Frisches `/config` am SWR-Cache vorbei — der eine Abruf hinter der
+// Protokoll- und der Build-Prüfung.
+const fetchFreshConfig = () => fetchJson('/config?__fresh=1');
+
 function whenDomReady(fn) {
   if (document.readyState === 'complete') { fn(); return; }
   document.addEventListener('DOMContentLoaded', fn, { once: true });
@@ -156,6 +160,38 @@ export function registerServiceWorker() {
       // Der Takt prüft beides: den Lock nachziehen und einen schiefen Tab
       // heilen, sobald das Editieren endet (siehe `healSkew` oben).
       setInterval(() => { busyLock.sync(); healSkew(); }, 1000);
+
+      // Unkontrollierter Tab: selbst gegen ein frisches `/config` prüfen
+      // (update-policy.js#shouldCheckBuild) und eine Abweichung wie einen
+      // schiefen Tab behandeln — `healSkew` im Takt oben lädt neu, sobald weder
+      // editiert wird noch das Netz fehlt. Der Reload landet beim aktiven SW;
+      // ist der noch der alte, übernimmt ab da die normale Update-Politik.
+      let buildInflight = false;
+      let buildCheckedAt = 0;
+      const checkUncontrolledBuild = () => {
+        if (!shouldCheckBuild({
+          controlled: !!navigator.serviceWorker.controller,
+          skewed,
+          inflight: buildInflight,
+          online: navigator.onLine,
+          sinceLastMs: Date.now() - buildCheckedAt,
+        })) return;
+        const loaded = window.__SHELL_BUILD;
+        if (!loaded) return;
+        buildInflight = true;
+        fetchFreshConfig().then((cfg) => {
+          buildCheckedAt = Date.now();
+          if (!isBuildStale(cfg?.shellBuild, loaded)) return;
+          skewed = true;
+          const app = window.__app;
+          if (app) app.$store.shell.updateAvailable = true;
+          healSkew();
+        }).catch(() => {}).finally(() => { buildInflight = false; });
+      };
+      setInterval(() => { if (!document.hidden) checkUncontrolledBuild(); }, 60_000);
+      document.addEventListener('visibilitychange', () => {
+        if (!document.hidden) checkUncontrolledBuild();
+      });
 
       // Den wartenden SW aktivieren — aber nur, wenn in KEINEM Tab editiert
       // wird: skip-waiting wechselt die Generation für alle Tabs der Origin.
@@ -293,7 +329,7 @@ export function registerServiceWorker() {
         })) return;
         protocolInflight = true;
         const epoch = protocolEpoch;
-        fetchJson('/config?__fresh=1').then((cfg) => {
+        fetchFreshConfig().then((cfg) => {
           if (!Number.isFinite(Number(cfg?.shellProtocol))) return;
           if (epoch === protocolEpoch) protocolPending = false;
           protocolCheckedAt = Date.now();

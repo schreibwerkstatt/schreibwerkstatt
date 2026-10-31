@@ -653,7 +653,7 @@
 <!-- Splits mit Leiste (layout/aside-split.css): Kapitelreview | Kapitel-Ideen
      und Editor | Chat/Ideen/Referenz. Ob die Leiste steht, sagen die Root-
      Getter kapitelAsideOpen / editorAsideOpen (app-root-getters.js). -->
-<div class="aside-split main-aside-split" :class="{ 'aside-split--on': kapitelAsideOpen }">
+<div class="aside-split main-aside-split" x-aside-resize :class="{ 'aside-split--on': kapitelAsideOpen }">
   <div id="partial-kapitelreview" class="display-contents"></div>
   <div id="kapitel-ideen-slot" class="display-contents"></div>
 </div>
@@ -679,7 +679,7 @@
 <div id="partial-wortschatz"></div>
 <div id="partial-struktur"></div>
 <div id="partial-titelwerkstatt"></div>
-<div class="aside-split main-aside-split" :class="{ 'aside-split--on': editorAsideOpen }">
+<div class="aside-split main-aside-split" x-aside-resize :class="{ 'aside-split--on': editorAsideOpen }">
   <div id="partial-editor-notebook" class="display-contents"></div>
   <div id="partial-chat" class="display-contents"></div>
   <div id="partial-ideen" class="display-contents"></div>

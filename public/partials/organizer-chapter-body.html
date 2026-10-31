@@ -1,5 +1,7 @@
 <!--
-  Kopfzeile + Seitenliste eines Organizer-Kapitels. Identisch auf allen drei
+  Kopfzeile + Seitenliste eines Organizer-Kapitels. Ein-Abschnitt-Kapitel
+  (isSingleSectionChapter) starten zugeklappt: die Kopfzeile steht fuer beide,
+  ohne Abschnittszaehler, ein abweichender Abschnittsname grau daneben. Identisch auf allen drei
   Kapitel-Tiefen → SSoT als string-seitiger Fragment-Include (Marker
   @include organizer-chapter-body, app-ui.js#_resolveIncludes), pro
   x-for-Iteration geklont.
@@ -29,7 +31,9 @@
          :disabled="organizerSaving"
          autocomplete="off" data-bwignore data-1p-ignore data-lpignore="true" data-form-type="other" data-spellcheck="spelling"
          :aria-label="$app.t('bookOrganizer.renameChapter')">
-  <span class="organizer-chapter-meta tag" x-text="$app.t('sidebar.pagesCountShort', { n: chapterPageTotal(ch) })"
+  <span class="organizer-section-name" x-show="singleSectionNameDiffers(ch)" x-text="ch.pages[0]?.name"
+        :data-tip="$app.t('bookOrganizer.sectionNameDiffers')"></span>
+  <span class="organizer-chapter-meta tag" x-show="!isSingleSectionChapter(ch)" x-text="$app.t('sidebar.pagesCountShort', { n: chapterPageTotal(ch) })"
         :data-tip="$app.tn('sidebar.pagesCount', chapterPageTotal(ch))"
         :aria-label="$app.tn('sidebar.pagesCount', chapterPageTotal(ch))"></span>
   <span class="organizer-chapter-meta tag" x-show="ch.subchapters?.length"
@@ -49,8 +53,9 @@
             :data-tip="$app.t('bookOrganizer.demote')"
             :aria-label="$app.t('bookOrganizer.demote')"><svg class="icon" aria-hidden="true"><use href="/icons.svg#arrow-right"/></svg></button>
     <button type="button" class="organizer-delete-btn organizer-delete-btn--chapter" @click="deleteChapter(ch.id)"
-            :disabled="organizerSaving || ch.pages.length > 0 || (ch.subchapters?.length || 0) > 0"
-            :data-tip="(ch.pages.length > 0 || (ch.subchapters?.length || 0) > 0) ? $app.t('bookOrganizer.deleteChapterNotEmptyHint') : $app.t('bookOrganizer.deleteChapter')"
+            :disabled="organizerSaving || (!isSingleSectionChapter(ch) && (ch.pages.length > 0 || (ch.subchapters?.length || 0) > 0))"
+            :data-tip="isSingleSectionChapter(ch) ? $app.t('bookOrganizer.deleteSingleChapter')
+              : ((ch.pages.length > 0 || (ch.subchapters?.length || 0) > 0) ? $app.t('bookOrganizer.deleteChapterNotEmptyHint') : $app.t('bookOrganizer.deleteChapter'))"
             :aria-label="$app.t('bookOrganizer.deleteChapter')"><svg class="icon" aria-hidden="true"><use href="/icons.svg#trash"/></svg></button>
   </div>
 </div>

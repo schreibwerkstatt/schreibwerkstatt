@@ -84,6 +84,13 @@ export const kapitelMethods = {
       () => this._computeChapterDistribution(tree, tokEsts));
   },
 
+  // Jedes Kapitel der Verteilung hat genau einen Abschnitt — die Abschnitts-
+  // Spalte sagt dann nichts. Zaehlt den Bucket (Kapitel samt Unterkapiteln).
+  overviewChaptersAllSingle() {
+    const dist = this.overviewChapterDistribution();
+    return dist.length > 0 && dist.every(ch => ch.pages === 1);
+  },
+
   _computeChapterDistribution(tree, tokEsts) {
     const { rootOf } = this._chapterRollup();
     const out = this._chapterBuckets(

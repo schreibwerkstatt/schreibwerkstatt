@@ -42,7 +42,8 @@
      Seitenbaum: Breite per Griff zwischen min und max, gedeckelt auf 40vw (der
      Griff in app-chrome.js liest min/max von hier). Leiste: die rechte Spalte
      eines `.aside-split` (layout/aside-split.css); `-wide` nur, wo die Antworten
-     Zeilenbreite brauchen (Recherche-Chat mit Web-Quellen). Klebe-Abstand: oben
+     Zeilenbreite brauchen (Recherche-Chat mit Web-Quellen); per Griff
+     (aside-resize.js) zwischen min und max, gedeckelt auf 50vw. Klebe-Abstand: oben
      wie unten derselbe Rand; unten zusaetzlich ueber der festen Job-Leiste,
      deren Hoehe sie selbst als `--job-queue-h` auf <html> schreibt. */
   --sidebar-w-default: 280px;
@@ -50,6 +51,8 @@
   --sidebar-w-max:     600px;
   --aside-w:           clamp(380px, 30vw, 560px);
   --aside-w-wide:      clamp(420px, 32vw, 620px);
+  --aside-w-min:       320px;
+  --aside-w-max:       960px;
   --aside-scroll-max:  min(52vh, 38rem);
   --sticky-top:        var(--space-xl);  /* 24px */
   --sticky-bottom:     max(var(--sticky-top), calc(var(--job-queue-h, 0px) + var(--space-sm)));

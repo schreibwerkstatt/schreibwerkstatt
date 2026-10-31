@@ -16,7 +16,7 @@ import { EVT } from '../events.js';
 import { attachFullscreenSync, toggleWrapFullscreen } from '../fullscreen.js';
 import { ideenBoardMethods } from '../book/ideen-board.js';
 import { pickerPopoverState } from '../picker-popover.js';
-import { buildLaneOrder } from '../book/ideen-board/model.js';
+import { buildLaneOrder, laneKeySet } from '../book/ideen-board/model.js';
 import { LANE_BOOK, IDEE_STATUSES, ideeLaneKey } from '../book/ideen-shared.js';
 import { ideenChatMethods, ideenChatState } from '../chat/ideen-chat.js';
 
@@ -146,10 +146,12 @@ export function registerIdeenBoardCard() {
       // Dann wird neu geladen statt nur umgeordnet.
       this.$watch(() => this.$store.nav.tree, (tree) => {
         if (!window.__app?.showIdeenBoardCard) return;
-        const before = new Set((this.laneOrder || []).map(l => l.key));
+        // Mit Aliassen: ein Kapitel-Anker in der Bahn eines Einabschnitts-Kapitels
+        // geht ebenso verloren, wenn das Kapitel geloescht wird.
+        const before = laneKeySet(this.laneOrder);
         this.laneOrder = buildLaneOrder(tree);
         this._memos = {};
-        const after = new Set(this.laneOrder.map(l => l.key));
+        const after = laneKeySet(this.laneOrder);
         const lost = (this.ideen || []).some(i => {
           const k = ideeLaneKey(i);
           return k !== LANE_BOOK && before.has(k) && !after.has(k);

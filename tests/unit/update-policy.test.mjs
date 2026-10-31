@@ -23,12 +23,15 @@
 //   7. Die Protokoll-Prüfung bleibt offen, bis ein frisches /config geantwortet
 //      hat — ein gescheiterter Abruf beim neuen SW darf ein Pflicht-Update
 //      nicht verschlucken; beim Aufwachen wird gedrosselt nachgefragt.
+//   8. Ein Tab ohne Controller prüft den Server-Build selbst — ihn erreicht
+//      kein Update-Weg des SW; ein fehlender Build-Wert ist keine Abweichung.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { createRequire } from 'node:module';
 import {
   AUTO_APPLY_IDLE_MS, isBusy, shouldAutoApply, shouldHealSkew, isUpdateRequired, shouldForceUpdate,
   hasUnsavedWork, registerBusySource, shouldCheckProtocol, PROTOCOL_WAKE_MIN_MS,
+  shouldCheckBuild, isBuildStale, BUILD_CHECK_MIN_MS,
 } from '../../public/js/app/boot/update-policy.js';
 import { readFileSync } from 'node:fs';
 import { SHELL_PROTOCOL } from '../../public/js/shell-protocol.js';
@@ -132,6 +135,26 @@ test('Protokoll-Marke öffnet bei updatefound und schiefem controllerchange, sch
   assert.equal((ctrl.match(/markProtocolPending\(\)/g) || []).length, 2, 'busy- und offline-Zweig');
   // Kein Einmal-Abruf mehr neben checkProtocol, und tryAutoApply prüft im Takt.
   assert.equal((src.match(/fetchJson\('\/config\?__fresh=1'\)/g) || []).length, 1);
+  const protocol = src.slice(src.indexOf('const checkProtocol'), src.indexOf("addEventListener('visibilitychange'", src.indexOf('const checkProtocol')));
+  assert.match(protocol, /fetchFreshConfig\(\)/);
   const tick = src.slice(src.indexOf('const tryAutoApply'), src.indexOf('setInterval(tryAutoApply'));
   assert.match(tick, /checkProtocol\(\)/);
+});
+
+test('isBuildStale: nur zwei vorhandene, verschiedene Builds', () => {
+  assert.equal(isBuildStale('b2', 'b1'), true);
+  assert.equal(isBuildStale('b1', 'b1'), false);
+  assert.equal(isBuildStale(undefined, 'b1'), false);
+  assert.equal(isBuildStale('b2', undefined), false);
+});
+
+test('shouldCheckBuild: nur ein unkontrollierter, noch nicht schiefer Tab, gedrosselt', () => {
+  const base = { controlled: false, skewed: false, inflight: false, online: true };
+  assert.equal(shouldCheckBuild(base), true);
+  assert.equal(shouldCheckBuild({ ...base, controlled: true }), false);
+  assert.equal(shouldCheckBuild({ ...base, skewed: true }), false);
+  assert.equal(shouldCheckBuild({ ...base, inflight: true }), false);
+  assert.equal(shouldCheckBuild({ ...base, online: false }), false);
+  assert.equal(shouldCheckBuild({ ...base, sinceLastMs: BUILD_CHECK_MIN_MS }), true);
+  assert.equal(shouldCheckBuild({ ...base, sinceLastMs: BUILD_CHECK_MIN_MS - 1 }), false);
 });

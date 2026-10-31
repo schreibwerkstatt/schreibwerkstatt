@@ -48,6 +48,13 @@ const insPage = db.prepare(`INSERT INTO pages (page_id, book_id, chapter_id, pag
 insPage.run(P1, BOOK, ch1, 'Der Brief', '<p>Anna öffnet den Brief. Darin steht: «Komm nach Hause, Vater ist krank.»</p>', NOW);
 insPage.run(P2, BOOK, ch2, 'Am Bahnhof', '<p>Der Zug fährt ein.</p>', NOW);
 insPage.run(P_FOREIGN, OTHER_BOOK, chForeign, 'Fremd', '<p>x</p>', NOW);
+// «Heimkehr» hat zwei Abschnitte (Kapitel-Anker bleibt Kapitel-Anker), «Epilog»
+// nur einen — dort ist ein Kapitel-Anker derselbe Ort wie sein Abschnitt.
+insPage.run(7702014, BOOK, ch2, 'Ankunft', '<p>Sie steigt aus.</p>', NOW);
+const chSole = db.prepare('INSERT INTO chapters (book_id, chapter_name) VALUES (?, ?)').run(BOOK, 'Epilog').lastInsertRowid;
+const P_SOLE = 7702015;
+insPage.run(P_SOLE, BOOK, chSole, 'Danach', '<p>Jahre später.</p>', NOW);
+const iSole = ideenDb.createIdee({ bookId: BOOK, pageId: P_SOLE, userEmail: USER, content: 'Zeitsprung markieren' });
 
 const iBook = ideenDb.createIdee({ bookId: BOOK, userEmail: USER, content: 'Die Schwester sollte am Bahnhof warten' });
 const iPage = ideenDb.createIdee({ bookId: BOOK, pageId: P1, userEmail: USER, content: 'Brief: Grund der Heimkehr nennen' });
@@ -68,7 +75,7 @@ const mkCtx = () => ({
 
 test('Kontext: nur eigene Ideen, gruppiert nach Ort, mit ids', () => {
   const state = loadIdeenState(BOOK, USER, tree);
-  assert.equal(state.ideen.length, 4);
+  assert.equal(state.ideen.length, 5);
   assert.ok(!state.ideeById.has(iForeign));
   const out = ideenOutline(state);
   assert.match(out, /^BUCH \(ohne Ort/);
@@ -79,6 +86,17 @@ test('Kontext: nur eigene Ideen, gruppiert nach Ort, mit ids', () => {
   const glied = gliederungOutline(state);
   assert.match(glied, new RegExp(`Abschnitt \\[page#${P2}\\] «Am Bahnhof»`));
   assert.match(targetsOutline(state), new RegExp(`\\[beat#${beat.id}\\] «Heimkehr»`));
+});
+
+test('propose_idee: Kapitel-Anker eines Einabschnitts-Kapitels wird zum Abschnitt', async () => {
+  const ctx = mkCtx();
+  const out = await executeIdeenChatTool('propose_idee', { content: 'Jahreszahl nennen', chapter_id: chSole }, ctx);
+  assert.equal(out.ok, true);
+  assert.deepEqual(ctx.proposals[0].fields, { content: 'Jahreszahl nennen', page_id: P_SOLE });
+  assert.equal(ctx.proposals[0].labels.anchor_kind, 'page');
+  // Umzug der Abschnitts-Idee «an ihr Kapitel» ist kein Ortswechsel.
+  const move = await executeIdeenChatTool('propose_idee', { idee_id: iSole, chapter_id: chSole }, ctx);
+  assert.ok(move.error);
 });
 
 test('propose_idee: neue Idee mit Ort wird gesammelt, nicht geschrieben', async () => {

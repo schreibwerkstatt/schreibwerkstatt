@@ -849,7 +849,7 @@ function structCfg(over = {}) {
 
 const oneShortPage = '<p>Kurzer Absatz.</p>';
 
-test('nested: einseitiges Kapitel bekommt trotzdem einen eigenen Seitentitel', async () => {
+test('nested: einziger Abschnitt eines Kapitels bekommt keinen eigenen Seitentitel', async () => {
   const groups = [{ chapter: { id: 7, name: 'Anhang' }, pages: [
     { p: { id: 70, name: 'Danksagung' }, pd: { html: oneShortPage } },
   ]}];
@@ -861,10 +861,21 @@ test('nested: einseitiges Kapitel bekommt trotzdem einen eigenen Seitentitel', a
     book: baseBook, groups, profile: { config: structCfg({ pageStructure: 'flatten' }) },
     coverBuf: null, token: null, scope: 'book',
   });
-  // Kein `pages.length > 1`-Vorbehalt mehr: der Seitentitel steht als
-  // Lesezeichen im Dokument, im flatten-Modus nicht.
-  assert.ok(occurrences(nested, 'Danksagung') > 0, 'Seitentitel fehlt als Outline-Eintrag');
+  // Der Kapiteltitel traegt die einzige Seite, auch bei abweichendem Namen
+  // (shared.js#sectionTitleRedundant, wie EPUB/HTML) — kein Lesezeichen,
+  // weder nested noch flatten. Mit einer zweiten Seite erscheint er wieder.
+  assert.equal(occurrences(nested, 'Danksagung'), 0);
   assert.equal(occurrences(flat, 'Danksagung'), 0);
+  const twoPages = await renderPdfBuffer({
+    book: baseBook,
+    groups: [{ chapter: { id: 7, name: 'Anhang' }, pages: [
+      { p: { id: 70, name: 'Danksagung' }, pd: { html: oneShortPage } },
+      { p: { id: 71, name: 'Register' }, pd: { html: oneShortPage } },
+    ]}],
+    profile: { config: structCfg({ pageStructure: 'nested' }) },
+    coverBuf: null, token: null, scope: 'book',
+  });
+  assert.ok(occurrences(twoPages, 'Danksagung') > 0, 'Seitentitel fehlt als Outline-Eintrag');
 });
 
 test('nested: Seitenname gleich Kapitelname → keine doppelte Ueberschrift', async () => {
@@ -951,6 +962,7 @@ test('Autoren-Ueberschrift im Seitentext laeuft auf h5/h6, nicht auf der Kapitel
   const html = '<h1>Ueberschrift</h1><p>Text.</p>'.repeat(20);
   const groups = [{ chapter: { id: 31, name: 'Kap' }, pages: [
     { p: { id: 310, name: 'Beitrag' }, pd: { html } },
+    { p: { id: 311, name: 'Zweiter' }, pd: { html: '<p>z</p>' } },
   ]}];
   const pagesFor = async (pageStructure, sizes) => {
     const cfg = structCfg({ pageStructure });

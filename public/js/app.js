@@ -17,6 +17,7 @@ import { writingTimeMethods } from './book/writing-time.js';
 import { sttTimeMethods } from './book/stt-time.js';
 import { lektoratTimeMethods } from './book/lektorat-time.js';
 import { szenenMethods } from './book/szenen.js';
+import { ideenPlace } from './book/ideen-shared.js';
 import { orteMethods } from './book/orte.js';
 import { songsMethods } from './book/songs.js';
 import { i18nMethods } from './i18n.js';
@@ -139,8 +140,13 @@ document.addEventListener('alpine:init', () => {
     // nicht Karten-Methoden sieht.
     ideenMovePickerOptions() {
       const tree = this.$store.nav.tree || [];
-      const curPageId = this.ideenScope === 'page' ? this.currentPage?.id : null;
-      const curChapterId = this.ideenScope === 'chapter' ? this.ideenChapterId : null;
+      // Der Ort der Karte — beim Einabschnitts-Kapitel Abschnitt UND Kapitel
+      // (ideenPlace); beide sind kein Ziel.
+      const place = ideenPlace(tree, this.ideenScope === 'chapter'
+        ? { kind: 'chapter', id: this.ideenChapterId }
+        : { kind: 'page', id: this.currentPage?.id });
+      const curPageId = place?.pageId ?? null;
+      const curChapterId = place?.chapterId ?? null;
       const pageOpt = (p, group) => ({ value: 'page:' + p.id, label: p.name, group });
       const byId = new Map(tree.filter(it => !it.solo).map(it => [it.id, it]));
       const pathOf = (ch) => {

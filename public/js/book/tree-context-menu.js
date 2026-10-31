@@ -192,6 +192,27 @@ export const treeContextMenuMethods = {
     else await this.renameChapterById(chapterId, name);
   },
 
+  // Ein-Abschnitt-Zeile, deren Abschnitt anders heisst als das Kapitel (die
+  // Sidebar zeigt den Abschnittsnamen dann grau daneben). Exporte und
+  // Bucheditor drucken nur den Kapitelnamen; der abweichende Name lebt nur im
+  // Editorkopf weiter und haengt das Mitbenennen ab.
+  _pagetreeCtxTitlesDiffer(target = this.actionMenuTarget) {
+    if (!target?.single) return false;
+    const page = this._findTreePage(target.id);
+    const ch = this._findTreeChapter(target.chapterId);
+    return !!page && !!ch && !this.sameStructureTitle(page.name, ch.name);
+  },
+
+  // Abschnitt bekommt den Kapitelnamen — ab dann benennen sich beide
+  // gegenseitig mit (renameChapterById / renamePageById).
+  async pagetreeCtxAlignTitles() {
+    const target = this.actionMenuTarget;
+    this.closeActionMenu();
+    if (!this.canEdit() || !this._pagetreeCtxTitlesDiffer(target)) return;
+    const ch = this._findTreeChapter(target.chapterId);
+    await this.renamePageById(Number(target.id), ch.name);
+  },
+
   // Kapitel umbenennen: Server, dann In-Place-Mirror auf nav.tree, die
   // `chapterName`-Aliase der Seiten und die namens-keyenden Sortier-Indexe.
   // Gegenstueck zu app-view/page.js#renamePageById. Hat das Kapitel genau einen

@@ -1,0 +1,46 @@
+{
+  "version": "5.7.3",
+  "date": "2026-10-31",
+  "entries": [
+    {
+      "kind": "neu",
+      "de": "Ideen-Board und Ideen-Karte: Ein Kapitel mit nur einem Abschnitt gilt als ein Ort. Ideen am Kapitel und am Abschnitt stehen in derselben Zeile.",
+      "en": "Ideas board and Ideas card: a chapter with only one section counts as one place. Ideas on the chapter and on the section appear in the same row."
+    },
+    {
+      "kind": "neu",
+      "de": "Die Leiste rechts neben dem Inhalt, etwa im Ideen-Board, in der Recherche oder im Plot, lässt sich per Griff breiter oder schmaler ziehen. Doppelklick setzt sie zurück.",
+      "en": "The panel to the right of the content, for example in the Ideas board, Research or Plot, can be dragged wider or narrower by its handle. Double-click resets it."
+    },
+    {
+      "kind": "neu",
+      "de": "Seitenleiste, Rechtsklick auf ein Kapitel mit einem Abschnitt: «Abschnittsnamen an Kapitel angleichen» gibt dem Abschnitt den Kapitelnamen.",
+      "en": "Sidebar, right-click on a chapter with one section: \"Match section title to chapter\" gives the section the chapter's name."
+    },
+    {
+      "kind": "verbessert",
+      "de": "Buchorganizer: Ein Kapitel mit nur einem Abschnitt steht als eine Zeile da. Umbenennen und Löschen gelten für beide zugleich.",
+      "en": "Book organizer: a chapter with only one section is shown as a single row. Renaming and deleting apply to both at once."
+    },
+    {
+      "kind": "verbessert",
+      "de": "PDF- und Word-Export, Bucheditor und Leseansicht: Ist ein Abschnitt der einzige seines Kapitels, steht nur noch der Kapitelname als Überschrift da.",
+      "en": "PDF and Word export, book editor and reading view: if a section is the only one in its chapter, only the chapter name is shown as the heading."
+    },
+    {
+      "kind": "verbessert",
+      "de": "Lektorat: Nach dem Übernehmen von Korrekturen bleibt «Rückgängig» 15 Sekunden neben der Bestätigung stehen.",
+      "en": "Copy-editing: after applying corrections, \"Undo\" stays next to the confirmation for 15 seconds."
+    },
+    {
+      "kind": "verbessert",
+      "de": "Buchübersicht, Kapitelverteilung: Hat jedes Kapitel genau einen Abschnitt, fällt die Spalte mit der Abschnittszahl weg.",
+      "en": "Book overview, chapter distribution: if every chapter has exactly one section, the section count column is hidden."
+    },
+    {
+      "kind": "behoben",
+      "de": "Ein Tab, der nach einem Update noch die alte Version zeigte, lädt jetzt von selbst neu, sobald du gerade nicht schreibst.",
+      "en": "A tab that still showed the old version after an update now reloads by itself as soon as you're not typing."
+    }
+  ]
+}

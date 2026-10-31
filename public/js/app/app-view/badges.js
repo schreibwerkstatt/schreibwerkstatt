@@ -1,6 +1,6 @@
 // Teil von appViewMethods (siehe Facade app-view.js).
 import { fetchJson } from './_shared.js';
-import { isOpenIdee } from '../../book/ideen-shared.js';
+import { isOpenIdee, ideenPlace } from '../../book/ideen-shared.js';
 
 export const badgesMethods = {
 
@@ -11,9 +11,13 @@ export const badgesMethods = {
       // Fehler (Netz/5xx) → null statt []: sonst zeigte die Plakette „0 offene
       // Ideen" und der Tree-Indikator verlöre seinen Punkt. Bei null bleibt der
       // bisherige Stand stehen.
-      const [ideen, sessions] = await Promise.all([
+      // Einabschnitts-Kapitel: die Ideen-Karte zeigt Abschnitt + Kapitel als
+      // einen Ort (ideenPlace) — die Knopf-Plakette zählt darum beide.
+      const soleChapterId = ideenPlace(this.$store.nav.tree, { kind: 'page', id: pageId })?.chapterId ?? null;
+      const [ideen, sessions, chapterIdeen] = await Promise.all([
         fetchJson(`/ideen?page_id=${pageId}`).catch(() => null),
         fetchJson(`/chat/sessions/${pageId}`).catch(() => null),
+        soleChapterId ? fetchJson(`/ideen?chapter_id=${soleChapterId}`).catch(() => null) : [],
       ]);
       if (this.currentPage?.id !== pageId) return;
       // Recherche-Count aus der buchweit geladenen Map (kein Extra-Request);
@@ -29,7 +33,8 @@ export const badgesMethods = {
         // „Offen" = offen ODER in_arbeit (SSoT ideen-shared.js). Eine verworfene
         // Idee ist keine offene Pendenz und setzt darum keine Plakette.
         const openCount = ideen.filter(isOpenIdee).length;
-        this.currentPageIdeenOpenCount = openCount;
+        const chapterOpen = Array.isArray(chapterIdeen) ? chapterIdeen.filter(isOpenIdee).length : 0;
+        this.currentPageIdeenOpenCount = openCount + chapterOpen;
         // Tree-Indikator mit frischer Wahrheit syncen (z.B. bei Cross-Tab-Edits).
         const next = { ...(badges.ideenCounts || {}) };
         if (openCount > 0) next[pageId] = openCount;

@@ -202,8 +202,14 @@
   color: var(--color-muted);
   min-height: 20px;
 }
-/* «Korrekturen rückgängig» direkt unter der Save-Bestätigung (editor/lektorat-undo.js) */
-.lektorat-undo-row { margin-bottom: var(--space-xs); }
+/* Notebook-Kopfleiste: «Korrekturen rückgängig» steht in der Zeile der
+   Save-Bestätigung und läuft mit ihr ab (editor/lektorat-undo.js). */
+.page-status-row {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--space-xs);
+}
 
 /* === Spinner === */
 .spinner {

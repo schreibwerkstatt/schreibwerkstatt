@@ -5,28 +5,37 @@
 // chapterOpen ist ein per-chapter-id Object-Map. Beim ersten Snapshot wird
 // COLLAPSE_THRESHOLD geprüft: > N Kapitel → alle zu, sonst alle auf. Inkremen-
 // telle Re-Snapshots (z.B. nach pages:loaded) übernehmen den User-Zustand und
-// ergänzen nur neue/entfernte IDs.
+// ergänzen nur neue/entfernte IDs. Kapitel aus genau einem Abschnitt starten
+// immer zu: ihre Kopfzeile traegt den Abschnitt (isSingleSectionChapter).
 
 import { MAX_CHAPTER_DEPTH, COLLAPSE_THRESHOLD } from './constants.js';
 import { memoMethods } from '../cards/card-memo.js';
 import { numberFormat } from '../utils.js';
+import { sameStructureTitle } from '../structure-title.js';
 
-function _walkAllIds(chapters, out = []) {
+function _walkAll(chapters, out = []) {
   for (const c of chapters) {
-    out.push(c.id);
-    _walkAllIds(c.subchapters || [], out);
+    out.push(c);
+    _walkAll(c.subchapters || [], out);
   }
   return out;
 }
 
+// Kapitel aus genau einem Abschnitt ohne Unterkapitel (Workstate-Knoten).
+export function singleSectionOf(ch) {
+  if (!ch || (ch.subchapters?.length || 0) > 0 || ch.pages?.length !== 1) return null;
+  return ch.pages[0];
+}
+
 export const viewMethods = {
   _recomputeInitialOpenState() {
-    const ids = _walkAllIds(this.workTree);
+    const nodes = _walkAll(this.workTree);
+    const ids = nodes.map(c => c.id);
     const knownKeys = Object.keys(this.chapterOpen);
     if (knownKeys.length === 0) {
       const wantOpen = ids.length <= COLLAPSE_THRESHOLD;
       const next = {};
-      for (const id of ids) next[id] = wantOpen;
+      for (const c of nodes) next[c.id] = wantOpen && !singleSectionOf(c);
       this.chapterOpen = next;
       return;
     }
@@ -57,7 +66,7 @@ export const viewMethods = {
 
   _setAllChaptersOpen(open) {
     const next = {};
-    for (const id of _walkAllIds(this.workTree)) next[id] = open;
+    for (const c of _walkAll(this.workTree)) next[c.id] = open;
     this.chapterOpen = next;
     this._reattachSortables();
   },
@@ -128,6 +137,19 @@ export const viewMethods = {
   // Abschnitte im ganzen Unterbaum — dieselbe Zaehlung wie das Kapitel-Tag der
   // Sidebar (tree/stats.js#_chapterPageCount). Bei aktiver Suche ist `ch` die
   // gefilterte Kopie: dann die Treffer im Unterbaum, wie dort.
+  // Wie die Sidebar (tree/stats.js#_isSingleSectionChapter): die Kopfzeile
+  // steht fuer Kapitel und Abschnitt, ohne Abschnittszaehler; ein abweichender
+  // Abschnittsname steht grau daneben. Aufklappen zeigt die Abschnittszeile
+  // (verschieben in ein anderes Kapitel, Abschnitts-Aktionen).
+  isSingleSectionChapter(ch) {
+    return !!singleSectionOf(ch);
+  },
+
+  singleSectionNameDiffers(ch) {
+    const page = singleSectionOf(ch);
+    return !!page && !sameStructureTitle(page.name, ch.name);
+  },
+
   chapterPageTotal(ch) {
     let n = ch?.pages?.length || 0;
     for (const sub of ch?.subchapters || []) n += this.chapterPageTotal(sub);

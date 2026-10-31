@@ -26,7 +26,7 @@
 
   <!-- Board links, Ideen-Chat rechts daneben (ab 1280px; schmaler steht der
        Chat per `order` über dem Board). Reine Layout-Klammer. -->
-  <div class="aside-split aside-split--aside-first" :class="{ 'aside-split--on': ideenChatOpen }">
+  <div class="aside-split aside-split--aside-first" x-aside-resize :class="{ 'aside-split--on': ideenChatOpen }">
   <div class="ideen-main">
 
   <!-- Feature-Tipp: offene Ideen an Abschnitten/Kapiteln → Erledigt-Check des Ideen-Chats -->

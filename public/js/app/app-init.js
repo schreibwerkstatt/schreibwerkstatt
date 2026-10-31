@@ -18,7 +18,7 @@ import { setStructureOwner, whenStructureQueueReady } from '../repo/structure-qu
 import { installFileLaunch } from './boot/file-launch.js';
 import { sweepStaleJobKeys } from '../storage-sweep.js';
 import { SHELL_PROTOCOL } from '../shell-protocol.js';
-import { isUpdateRequired } from './boot/update-policy.js';
+import { isUpdateRequired, isBuildStale } from './boot/update-policy.js';
 
 export const appInitMethods = {
   // AbortController `_abortCtrl` (initialisiert via app-state.js) hält alle
@@ -281,10 +281,10 @@ export const appInitMethods = {
       // ist SWR, und direkt nach dem Generationswechsel trägt die gecachte Kopie
       // noch den Build von vorher — ohne Bestätigung folgte jedem Update ein
       // zweiter Reload bzw. (innerhalb der 30-s-Sperre) erneut das Banner.
-      if (cfg.shellBuild && window.__SHELL_BUILD && cfg.shellBuild !== window.__SHELL_BUILD) {
+      if (isBuildStale(cfg.shellBuild, window.__SHELL_BUILD)) {
         const loaded = window.__SHELL_BUILD;
         fetchJson('/config?__fresh=1').then((fresh) => {
-          if (fresh?.shellBuild && fresh.shellBuild !== loaded) window.__requestCoherentReload?.();
+          if (isBuildStale(fresh?.shellBuild, loaded)) window.__requestCoherentReload?.();
           else if (fresh?.shellBuild) { try { sessionStorage.removeItem('sw-update-attempts'); } catch {} }
         }).catch(() => {});
       } else if (cfg.shellBuild && window.__SHELL_BUILD) {

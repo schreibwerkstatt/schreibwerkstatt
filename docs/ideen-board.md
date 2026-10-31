@@ -28,7 +28,8 @@ Abschnitts- und Buch-Chat können eine Idee an einem Abschnitt oder Kapitel **vo
 User sie dort erfasst — über dieselbe Route wie die Ideen-Karte
 ([chats.md](chats.md#ideen-vorschläge-abschnitts--und-buch-chat)).
 
-Zwei Oberflächen, dieselben Zeilen:
+Zwei Oberflächen, dieselben Zeilen (ein Kapitel mit genau einem Abschnitt ist für
+beide **ein** Ort, siehe „Einabschnitts-Kapitel" in § 2):
 
 | | Ideen-Karte | Ideen-Board |
 |---|---|---|
@@ -182,6 +183,37 @@ ohne Anker; sie ist nicht anspringbar und fällt aus jedem Kapitel-Filter. Das
 Anlegen-Feld hat sie vorgewählt, damit ein Einfall ohne Ortswahl festgehalten
 ist. Der Baum kann sich unter dem
 offenen Board ändern — darum zieht ein `$watch` die Bahnen nach.
+
+**Einabschnitts-Kapitel sind eine Bahn.** Ein Kapitel mit genau einem Abschnitt
+und ohne Unterkapitel ist **ein** Ort — Kapitel und Abschnitt bezeichnen dieselbe
+Stelle. Statt einer Kapitelzeile mit einer einzigen Abschnittszeile darunter steht
+dort eine Bahn auf Kapitelhöhe: der Key ist der des Abschnitts (`page:<id>`, der
+**kanonische Anker** — Drop, Zuordnen und Neuanlage schreiben `page_id`), die
+Beschriftung der Kapitelname, und der Kapitel-Anker hängt als Alias daran
+(`aliases`, `merged`), damit Ideen am Kapitel in derselben Bahn stehen. Jede
+Stelle, die eine Idee einer Bahn zuordnet (Raster, Liste, Zellreihenfolge,
+Picker, Verlust-Prüfung beim Baum-Wechsel), geht über `laneKeyResolver`/`laneKeySet`
+statt über den rohen Anker; ein Drop auf das Kapitel im Inhaltsverzeichnis landet
+so ebenfalls am Abschnitt. Im Zuordnen-Picker steht die Bahn unter «Kapitel», der
+Kapitel-Filter kennt das Kapitel weiter. Die Ideen-Vorschläge der Chats legen sich
+nach derselben Regel an den Abschnitt ([chats.md](chats.md#ideen-vorschläge-abschnitts--und-buch-chat)).
+**Why:** wer pro Kapitel nur einen Abschnitt schreibt, legt Pendenzen mal am
+Kapitel, mal am Abschnitt ab — zwei Zeilen für einen Ort zerstreuen sie.
+Die Regel steht im Frontend einmal: `soleChapterPages`/`ideenPlace` in
+[ideen-shared.js](../public/js/book/ideen-shared.js) (Board-Bahnen und
+Ideen-Karte), im Server [lib/idee-anchor.js](../lib/idee-anchor.js)#`canonicalIdeeAnchor` —
+den auch `POST /ideen` und der Umzug per `PATCH /ideen/:id` anwenden: ein
+Kapitel-Anker eines Einabschnitts-Kapitels wird dort zum Abschnitt, egal über
+welchen Weg (auch ein älterer, noch gespeicherter Chat-Vorschlag am Kapitel).
+
+**Auch die Ideen-Karte führt den Ort, nicht den Anker.** Neben dem Editor wie neben
+der Kapitelbewertung lädt sie bei einem Einabschnitts-Kapitel die Ideen von
+Abschnitt **und** Kapitel in eine Liste ([book/ideen.js](../public/js/book/ideen.js)),
+legt neue am Abschnitt an, und ihr Verschieben-Picker bietet keinen der beiden
+Anker als Ziel. Die Knopf-Plakette neben dem Editor zählt beide; die
+Baum-Plaketten bleiben je Anker, wie `GET /ideen/counts` sie zählt. **Why:** sonst
+sieht, wer am Abschnitt schreibt, den Szenenplan am Kapitel nicht — und legt ihn
+am Abschnitt ein zweites Mal an.
 
 **Nur belegte Bahnen erscheinen.** Ein Board mit einer leeren Zeile je Seite des
 Buches wäre unlesbar. Das gilt auch für die Buch-Bahn: leer steht sie nicht als

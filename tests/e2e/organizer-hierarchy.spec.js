@@ -59,6 +59,11 @@ test('Seitenlisten haengen an der richtigen Tiefe', async ({ page }) => {
   await expect(pagesOf(0)).toHaveCount(1);   // Solo-Liste
   await expect(pagesOf(1)).toHaveCount(1);
   await expect(pagesOf(11)).toHaveCount(1);
+  // 111 hat genau einen Abschnitt und keine Unterkapitel: die Kopfzeile traegt
+  // ihn, das Kapitel startet zu (view.js#isSingleSectionChapter). Aufklappen
+  // zeigt die Abschnittszeile.
+  await expect(pagesOf(111)).toHaveCount(0);
+  await page.locator('.organizer-chapter[data-chapter-id="111"] > .organizer-chapter-header .organizer-chapter-toggle').click();
   await expect(pagesOf(111)).toHaveCount(1);
 
   await expect(page.locator('ul.organizer-pages[data-chapter-id="111"] input.organizer-name'))

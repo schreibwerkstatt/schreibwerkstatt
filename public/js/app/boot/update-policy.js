@@ -25,6 +25,8 @@
 // Änderungen (`hasUnsavedWork`, alle Editoren), nicht mehr auf den Edit- oder
 // Fokusmodus selbst — und wird wiederholt geprüft, bis eine Antwort da ist
 // (`shouldCheckProtocol`).
+// Ein Tab ohne Controller fragt selbst nach dem Server-Build und gilt bei
+// Abweichung als schief (`shouldCheckBuild`, `isBuildStale`).
 
 export const AUTO_APPLY_IDLE_MS = 120_000;
 export const AUTO_APPLY_TICK_MS = 15_000;
@@ -110,4 +112,25 @@ export function shouldCheckProtocol({ pending, inflight, online, wake = false, s
 // ein weiterer Versuch in derselben Sitzung bräuchte eine neue Generation).
 export function shouldHealSkew({ skewed, reloaded, busy, online }) {
   return !!skewed && !reloaded && !busy && !!online;
+}
+
+// Läuft der Server einen anderen Build als die geladene Shell? Nur mit beiden
+// Werten — fehlt einer (alter Server, Shell ohne sw-manifest.js), ist das
+// keine Abweichung, sonst lüde jede solche Seite endlos neu.
+export function isBuildStale(serverBuild, loadedBuild) {
+  return !!serverBuild && !!loadedBuild && serverBuild !== loadedBuild;
+}
+
+// Build-Prüfung eines unkontrollierten Tabs (harter Reload, erster Besuch vor
+// dem Install). Ihn erreicht kein Update-Weg des SW: das Banner setzt einen
+// Controller voraus, ein `controllerchange` kommt nie, und der Build-Guard in
+// app-init.js prüft nur beim Boot. Nach einem Deploy liefe er sonst unbegrenzt
+// auf den alten Modulen, während jeder lazy Partial frisch vom neuen Server
+// kommt. Geprüft wird im Update-Takt und beim Aufwachen, gedrosselt; ist der
+// Tab schon als schief markiert, wartet er nur noch auf `shouldHealSkew`.
+export const BUILD_CHECK_MIN_MS = 30_000;
+
+export function shouldCheckBuild({ controlled, skewed, inflight, online, sinceLastMs = Infinity }) {
+  if (controlled || skewed || inflight || !online) return false;
+  return sinceLastMs >= BUILD_CHECK_MIN_MS;
 }

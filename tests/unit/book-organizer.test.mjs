@@ -372,7 +372,8 @@ test('_recomputeInitialOpenState: Threshold beim ersten, User-State danach', () 
   seedNav();
   const card = makeCard();
   card._snapshotFromNav();
-  assert.deepEqual(card.chapterOpen, { 1: true, 11: true, 2: true });
+  // Unter der Schwelle offen — ausser den Ein-Abschnitt-Kapiteln 11 und 2.
+  assert.deepEqual(card.chapterOpen, { 1: true, 11: false, 2: false });
 
   card.chapterOpen = { 1: false, 11: true, 2: true };
   card._snapshotFromNav();
@@ -729,4 +730,67 @@ test('_fmtDec1 formatiert eine Nachkommastelle in der UI-Locale', () => {
   const card = makeCard();
   assert.equal(card._fmtDec1(2), '2.0');
   assert.equal(card._fmtDec1(12.345), '12.3');
+});
+
+// Ein-Abschnitt-Kapitel: eine Zeile, zugeklappt, Namen laufen mit.
+test('isSingleSectionChapter: genau ein Abschnitt, keine Unterkapitel', () => {
+  const card = makeSeededCard();
+  const eins = card._findChapter(1).node;
+  assert.equal(card.isSingleSectionChapter(eins), false, 'zwei Abschnitte + Sub');
+  assert.equal(card.isSingleSectionChapter(card._findChapter(11).node), true);
+  assert.equal(card.isSingleSectionChapter(card._findChapter(2).node), true);
+});
+
+test('Ein-Abschnitt-Kapitel starten zugeklappt, Mehr-Abschnitt-Kapitel nach Schwelle', () => {
+  const card = makeSeededCard();
+  card.chapterOpen = {};
+  card._recomputeInitialOpenState();
+  assert.equal(card.chapterOpen[1], true);
+  assert.equal(card.chapterOpen[11], false);
+  assert.equal(card.chapterOpen[2], false);
+});
+
+test('Create-Chapter-Record mit Erst-Abschnitt: Undo erlaubt, solange der Abschnitt leer ist', async () => {
+  const card = makeSeededCard();
+  rootStub.tokEsts = { 920: { chars: 0 } };
+  assert.equal(card._staleReason({ kind: 'create-chapter', id: 2, pageId: 920 }, 'undo'), null);
+  rootStub.tokEsts = { 920: { chars: 40 } };
+  assert.equal(card._staleReason({ kind: 'create-chapter', id: 2, pageId: 920 }, 'undo')?.key,
+    'bookOrganizer.historyHasContent');
+  rootStub.tokEsts = {};
+
+  const order = [];
+  card._deletePageRaw = async (id) => { order.push('p' + id); return true; };
+  card._deleteChapterRaw = async (id) => { order.push('c' + id); return true; };
+  assert.equal(await card._applyInverse({ kind: 'create-chapter', id: 2, pageId: 920 }), true);
+  assert.deepEqual(order, ['p920', 'c2'], 'erst der Abschnitt, dann das leere Kapitel');
+});
+
+test('Umbenennen im Organizer nimmt den gleichnamigen einzigen Abschnitt mit (und zurueck)', async () => {
+  const card = makeSeededCard();
+  // Kapitel „Zwei" mit einzigem Abschnitt gleichen Namens.
+  card._findChapter(2).node.pages[0].name = 'Zwei';
+  const calls = [];
+  const orig = { updateChapter: contentRepo.updateChapter, updatePage: contentRepo.updatePage };
+  contentRepo.updateChapter = async (id, body) => { calls.push(['c', id, body.name]); };
+  contentRepo.updatePage = async (id, body) => { calls.push(['p', id, body.name]); };
+  rootStub._mirrorChapterRename = () => {};
+  rootStub.sameStructureTitle = (a, b) => String(a).trim().toLowerCase() === String(b).trim().toLowerCase();
+  card._signalXrefsChanged = () => {};
+  card._rebuildOrderMaps = () => {};
+  card._invalidateDiaryCache = () => {};
+  try {
+    assert.equal(await card._doRenameChapter(2, 'Drei', null), true);
+    assert.deepEqual(calls, [['c', 2, 'Drei'], ['p', 920, 'Drei']]);
+    calls.length = 0;
+    assert.equal(await card._doRenamePage(920, 'Vier', null), true);
+    assert.deepEqual(calls, [['p', 920, 'Vier'], ['c', 2, 'Vier']]);
+    // Abweichender Name: kein Mitbenennen.
+    calls.length = 0;
+    card._findChapter(2).node.name = 'Anders';
+    await card._doRenamePage(920, 'Fuenf', null);
+    assert.deepEqual(calls, [['p', 920, 'Fuenf']]);
+  } finally {
+    Object.assign(contentRepo, orig);
+  }
 });

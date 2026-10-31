@@ -8,12 +8,12 @@ import {
   patchSortableOnce, revertSortable, markDragIgnore, unmarkDragIgnore, BASE_SORTABLE_OPTS,
 } from '../../sortable-dnd.js';
 import {
-  IDEE_STATUSES, IDEE_OPTIONAL_STATUSES, ideeStatus, ideeLaneKey, isOpenIdee, LANE_BOOK,
+  IDEE_STATUSES, IDEE_OPTIONAL_STATUSES, ideeStatus, isOpenIdee, LANE_BOOK,
   normalizeIdeeStages, IDEE_MAX_LEN,
 } from '../ideen-shared.js';
 import {
   buildLaneOrder, buildBoard, chapterFilterOptions, statusTotals, boardColumns, IDEE_SORT_MANUAL,
-  columnSortOf, nextColumnSort, compareIdeeManual, cellOrderAfterDrop,
+  columnSortOf, nextColumnSort, compareIdeeManual, cellOrderAfterDrop, laneKeyResolver,
 } from './model.js';
 import { memoMethods } from '../../cards/card-memo.js';
 import { isSelectedBook, loadToken } from '../../cards/book-guard.js';
@@ -129,6 +129,11 @@ export const ideenBoardActions = {
   chapterOptions() {
     return this._memo('chapterOptions', [this.ideen, this.laneOrder],
       () => chapterFilterOptions(this.ideen, this.laneOrder));
+  },
+  // Bahn-Key einer Idee bzw. eines Anker-Keys — loest den Kapitel-Anker eines
+  // Einabschnitts-Kapitels auf dessen Bahn auf (model.js#buildLaneOrder).
+  _laneKeyOf(ideeOrKey) {
+    return this._memo('laneKeyOf', [this.laneOrder], () => laneKeyResolver(this.laneOrder))(ideeOrKey);
   },
   laneLabel(lane) {
     if (lane.kind === 'unknown') return window.__app.t('ideenBoard.laneUnknown');
@@ -316,13 +321,14 @@ export const ideenBoardActions = {
       const t = window.__app.t.bind(window.__app);
       const opt = (l) => ({
         value: l.key,
-        label: l.kind === 'chapter' ? l.label : `${l.chapterLabel ? l.chapterLabel + ' · ' : ''}${l.label}`,
-        group: t(l.kind === 'chapter' ? 'ideenBoard.groupChapters' : 'ideenBoard.groupPages'),
+        label: l.kind === 'chapter' || l.merged ? l.label : `${l.chapterLabel ? l.chapterLabel + ' · ' : ''}${l.label}`,
+        // Einabschnitts-Kapitel stehen als Kapitel — Kapitel und Abschnitt sind dort ein Ort.
+        group: t(l.kind === 'chapter' || l.merged ? 'ideenBoard.groupChapters' : 'ideenBoard.groupPages'),
       });
       const lanes = this.laneOrder || [];
       return [
-        ...lanes.filter(l => l.kind === 'chapter').map(opt),
-        ...lanes.filter(l => l.kind !== 'chapter').map(opt),
+        ...lanes.filter(l => l.kind === 'chapter' || l.merged).map(opt),
+        ...lanes.filter(l => l.kind !== 'chapter' && !l.merged).map(opt),
       ];
     });
   },
@@ -510,10 +516,10 @@ export const ideenBoardActions = {
   async _saveCellOrder(ideeId, domIds) {
     const idee = (this.ideen || []).find(i => i.id === ideeId);
     if (!idee) return;
-    const lane = ideeLaneKey(idee);
+    const lane = this._laneKeyOf(idee);
     const status = ideeStatus(idee);
     const cellIds = this.ideen
-      .filter(i => ideeLaneKey(i) === lane && ideeStatus(i) === status)
+      .filter(i => this._laneKeyOf(i) === lane && ideeStatus(i) === status)
       .sort(compareIdeeManual)
       .map(i => i.id);
     const ids = cellOrderAfterDrop(cellIds, domIds, ideeId);

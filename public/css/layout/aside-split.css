@@ -21,6 +21,10 @@
                           fuer breite Antworten)
      --aside-scroll-max   Deckel des inneren Verlaufs
 
+   Breite per Griff: `x-aside-resize` am Split-Element (aside-resize.js) haengt
+   `.aside-split-handle` an die Spaltengrenze; die gewaehlte Breite gilt fuer
+   alle Leisten (`--aside-w-user` auf <html>) und schlaegt `--aside-w`.
+
    Die Leiste deckelt sich selbst auf die Viewport-Hoehe und scrollt als
    Ganzes: Kopf, Verlauf und Eingabefeld bleiben auch auf niedrigen
    Bildschirmen erreichbar, waehrend sie klebt. Ein Deckel nur am inneren
@@ -37,10 +41,15 @@
 /* Hauptebene (index.html): Leisten sind ganze Karten mit eigenem Kopf. */
 .main-aside-split { --aside-scroll-max: 60vh; }
 
+/* Griff erst sichtbar, wenn die Leiste neben dem Hauptinhalt steht. */
+.aside-split-handle { display: none; }
+
 @media (min-width: 1280px) {
   .aside-split--on {
+    --aside-w-eff: clamp(var(--aside-w-min), var(--aside-w-user, var(--aside-w)), min(var(--aside-w-max), 50vw));
+    position: relative;
     display: grid;
-    grid-template-columns: minmax(0, 1fr) var(--aside-w);
+    grid-template-columns: minmax(0, 1fr) var(--aside-w-eff);
     column-gap: var(--layout-gap);
     align-items: start;
   }
@@ -54,6 +63,31 @@
   .aside-split--on .aside-split-scroll {
     max-height: var(--aside-scroll-max);
     overflow-y: auto;
+  }
+  /* Mitte des Spaltenabstands, ueber die ganze Hoehe des Splits — wie der
+     Griff des Seitenbaums (twocolumn.css). */
+  .aside-split--on > .aside-split-handle {
+    display: block;
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    right: calc(var(--aside-w-eff) + var(--layout-gap) / 2 - 3px);
+    width: 6px;
+    cursor: col-resize;
+    background: transparent;
+    border-radius: var(--radius-none);
+    transition: background var(--transition-slow);
+    z-index: var(--z-base);
+    touch-action: none;
+  }
+  .aside-split--on > .aside-split-handle:hover,
+  .aside-split--on > .aside-split-handle.dragging {
+    background: var(--color-accent-soft);
+  }
+  .aside-split--on > .aside-split-handle:focus-visible {
+    background: var(--color-accent-soft);
+    outline: var(--focus-ring);
+    outline-offset: var(--focus-ring-offset-inset);
   }
 }
 

@@ -5,19 +5,29 @@
 // frisch geladen hat — exakt, nicht die nächstältere Revision (die ist nach 24 h
 // ausgedünnt). Optimistisch gegen den Stempel des Korrektur-Saves: hat seither
 // jemand geschrieben (eigener Edit, Zweitgerät, Mitautor), antwortet der Server
-// mit 409 und nichts wird überschrieben. Der Knopf erscheint nur, solange die
-// Seite unverändert auf genau diesem Stand steht und nicht bearbeitet wird.
+// mit 409 und nichts wird überschrieben. Der Knopf steht in der Zeile der
+// Save-Bestätigung und läuft mit ihr nach UNDO_WINDOW_MS ab; davor nur, solange
+// die Seite unverändert auf genau diesem Stand steht und nicht bearbeitet wird.
 // Der Übernahme-Vermerk am Lauf (page_checks) geht auf den Stand davor zurück,
 // sonst zählte die Fehler-Heatmap die zurückgenommenen Korrekturen als erledigt.
 
 import { savePage, isPageConflict } from './shared/page-api.js';
 
+// Auch Anzeigedauer der Save-Bestätigung, wenn Rückgängig angeboten wird.
+export const UNDO_WINDOW_MS = 15000;
+
 export const lektoratUndoMethods = {
   // Von saveCorrections nach erfolgreichem Speichern gesetzt.
   _rememberLektoratUndo({ pageId, pageName, preHtml, updatedAt, checkId, prevApplied = null, prevSelected = null }) {
+    clearTimeout(this._lektoratUndoTimer);
     this.lektoratUndo = preHtml && updatedAt
       ? { pageId, pageName, preHtml, updatedAt, checkId, prevApplied, prevSelected }
       : null;
+    if (!this.lektoratUndo) return;
+    const u = this.lektoratUndo;
+    this._lektoratUndoTimer = setTimeout(() => {
+      if (this.lektoratUndo === u && this.saveApplying == null) this.lektoratUndo = null;
+    }, UNDO_WINDOW_MS);
   },
 
   canUndoLektorat() {

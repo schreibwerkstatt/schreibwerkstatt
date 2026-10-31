@@ -191,14 +191,17 @@ test('resolveConflictTakeRemote: aktiver Block wird deaktiviert, damit der DOM n
     'sonst lässt _maybeRehydrate den DOM stehen und der nächste Tastendruck speichert die lokale Fassung');
 });
 
-test('buildBlocksFromPages: erster Abschnitt gleichnamig mit Kapitel → dupTitle', () => {
+test('buildBlocksFromPages: erster gleichnamiger und einziger Abschnitt → dupTitle', () => {
   const blocks = buildBlocksFromPages([
     { pageId: 1, pageName: 'Kapitel 1', chapterId: 10, chapterName: 'Kapitel 1', html: '<p>a</p>' },
     { pageId: 2, pageName: 'Kapitel 1', chapterId: 10, chapterName: 'Kapitel 1', html: '<p>b</p>' },
     { pageId: 3, pageName: 'Szene', chapterId: 20, chapterName: 'Kapitel 2', html: '<p>c</p>' },
+    { pageId: 4, pageName: 'Szene 1', chapterId: 30, chapterName: 'Kapitel 3', html: '<p>d</p>' },
+    { pageId: 5, pageName: 'Szene 2', chapterId: 30, chapterName: 'Kapitel 3', html: '<p>e</p>' },
   ]);
   const pages = blocks.filter(b => b.kind === 'page');
-  assert.deepEqual(pages.map(b => b.dupTitle), [true, false, false]);
+  // Kapitel 2 hat nur «Szene» → Kapitelname traegt sie; Kapitel 3 hat zwei → beide behalten ihren Namen.
+  assert.deepEqual(pages.map(b => b.dupTitle), [true, false, true, false, false]);
 });
 
 test('buildOutlineNodes: Ein-Abschnitt-Kapitel ist single, Mehr-Abschnitt-Kapitel nicht', async () => {
