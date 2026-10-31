@@ -57,6 +57,11 @@ test('Fine-Tuning-Export: Profilwahl setzt Felder, YAML passt zum Profil', async
   expect(yaml).toMatch(/^ {2}lora_alpha: 64$/m);
 
   // Von Hand geändertes Sequenz-Budget landet in der YAML, nicht der Profilwert.
+  // numInput schreibt beim Fokus den Rohwert ins Feld; ohne Fokus-Fenster
+  // (CI, mehrere Worker) feuert das Event erst nach dem Select-All von fill()
+  // und der Text wird angehängt statt ersetzt.
+  await seq.focus();
+  await expect(seq).toHaveValue('8192');
   await seq.fill('2048');
   await seq.blur();
   yaml = await downloadYaml(page, card);
