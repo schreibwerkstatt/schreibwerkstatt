@@ -88,7 +88,7 @@ function buildLocationSamples(ctx) {
     if (l.stimmung) {
       pushQA('authorChat|ort-stimmung|' + l.loc_id,
         langIsEn ? `What's the mood of ${l.name}?` : `Welche Stimmung hat der Schauplatz «${l.name}»?`,
-        l.stimmung, { unit });
+        langIsEn ? `The mood of «${l.name}» is ${l.stimmung}.` : `Die Stimmung am Schauplatz «${l.name}» ist ${l.stimmung}.`, { unit });
     }
     if (l.erste_erwaehnung) {
       pushQA('authorChat|ort-first|' + l.loc_id,

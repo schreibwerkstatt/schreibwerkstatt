@@ -65,8 +65,10 @@ test('Zitat-Samples tragen den sourceKey ihres Kapitels; «Wer sagt das» nur f�
   const ctx = dialogCtx();
   buildDialogSamples(ctx);
   const rev = ctx.samples.filter(s => s.id.startsWith('dialogRev|'));
-  // Kurz/generisch («Ich weiss nicht.») und doppelt im Buch («nach Hause») fallen weg.
-  assert.equal(rev.length, 3);
+  // Kurz/generisch («Ich weiss nicht.») und doppelt im Buch («nach Hause») fallen weg;
+  // ohne Szene nennt die Antwort das Kapitel, und jede Antwort steht nur einmal.
+  assert.equal(rev.length, 2);
+  assert.equal(new Set(rev.map(s => s.messages[2].content)).size, rev.length);
   for (const s of rev) assert.doesNotMatch(s.messages[1].content, /weiss nicht|nach Hause/);
   for (const s of rev) {
     const quote = s.messages[1].content;

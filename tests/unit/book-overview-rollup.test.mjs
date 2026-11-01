@@ -349,3 +349,86 @@ test('overviewLatest.chapter_count zählt ausgeschlossene Kapitel mit', () => {
   const ctx = { _memos: {}, overviewStats: [], ...bookOverviewMethods };
   assert.equal(ctx.overviewLatest().chapter_count, 2);
 });
+
+// Gleichnamige Unterkapitel in zwei Teilen: «Einleitung» in Root A (id 2) und
+// Root B (id 6). Name→Kapitel wäre geraten — der Rollup kennt den Namen nicht.
+function treeWithDupNames() {
+  const tree = makeTree();
+  tree.find(c => c.id === 2).name = 'Einleitung';
+  tree.push({ type: 'chapter', id: 6, name: 'Einleitung', depth: 2, parent_id: 5, pages: [{ id: 210 }] });
+  return tree;
+}
+
+test('Rollup: doppelter Kapitelname löst nicht über den Namen auf', () => {
+  const ctx = makeCtx(treeWithDupNames());
+  const { rootOfName, rootOf } = ctx._chapterRollup();
+  assert.equal(rootOfName('Einleitung'), null);
+  assert.equal(rootOfName('Sub A2').id, 1, 'eindeutige Namen bleiben auflösbar');
+  assert.equal(rootOf(6).id, 5, 'per ID eindeutig');
+});
+
+test('Präsenz: Fundstelle mit ID im ausgeschlossenen Teil fällt nicht per Namen in einen anderen', () => {
+  const tree = treeWithDupNames();
+  tree.find(c => c.id === 5).excluded = true; // Root B samt Unterkapitel id 6
+  const ctx = makeCtx(tree);
+  ctx.overviewOrte = [{ id: 'o', name: 'Markt', kapitel: [
+    { chapter_id: 1, name: 'Root A', haeufigkeit: 2 },
+    // ID zeigt ins ausgeschlossene Kapitel, der mitgelieferte Name auf Root A.
+    { chapter_id: 6, name: 'Root A', haeufigkeit: 7 },
+  ] }];
+  const m = ctx.overviewOrtPresence();
+  assert.equal(m.rows[0].cells[0].value, 2);
+});
+
+test('Präsenz: Name-Fallback nur ohne ID', () => {
+  const ctx = makeCtx(makeTree());
+  ctx.overviewOrte = [{ id: 'o', name: 'Markt', kapitel: [
+    { chapter_id: null, name: 'Sub A1', haeufigkeit: 3 },
+    { chapter_id: 9999, name: 'Root B', haeufigkeit: 5 }, // gelöschte ID
+  ] }];
+  const m = ctx.overviewOrtPresence();
+  assert.deepEqual(m.rows.map(r => r.cells[0].value), [3, 0]);
+});
+
+test('Top-Listen: Fundstellen in ausgeschlossenen Kapiteln zählen nicht', () => {
+  const tree = makeTree();
+  tree.find(c => c.id === 3).excluded = true; // Sub A2 + Sub A2a
+  const ctx = makeCtx(tree);
+  ctx.overviewOrte = [
+    { id: 'a', name: 'Hafen', kapitel: [{ chapter_id: 4, name: 'Sub A2a', haeufigkeit: 9 }] },
+    { id: 'b', name: 'Markt', kapitel: [{ chapter_id: 1, name: 'Root A', haeufigkeit: 2 }] },
+  ];
+  assert.deepEqual(ctx.overviewTopOrte().map(o => [o.id, o.total]), [['b', 2]], 'Hafen nur im ausgeschlossenen Kapitel');
+  ctx.overviewSongs = [{ id: 's', titel: 'Lied', kapitel: [
+    { chapter_id: 3, name: 'Sub A2', haeufigkeit: 4 }, { chapter_id: 5, name: 'Root B', haeufigkeit: 1 },
+  ] }];
+  assert.equal(ctx.overviewTopSongs()[0].total, 1);
+  ctx.overviewFiguren = [{ id: 'f1', name: 'Anna' }, { id: 'f2', name: 'Ben' }];
+  ctx.overviewSzenen = [
+    { chapter_id: 4, fig_ids: ['f1'] }, { chapter_id: 4, fig_ids: ['f1'] },
+    { chapter_id: 1, fig_ids: ['f2'] },
+  ];
+  assert.deepEqual(ctx.overviewTopFiguren().map(f => [f.id, f.mentions]), [['f2', 1]], 'Anna nur in ausgeschlossenen Szenen');
+});
+
+test('Findings: Zeile mit unbekannter ID fällt nicht per Namen in ein Kapitel', () => {
+  const ctx = makeCtx(makeTree());
+  ctx.overviewHeat = {
+    chapters: [
+      { chapter_id: 1, chapter_name: 'Root A', pages_checked: 1, pages_total: 1, words: 100 },
+      { chapter_id: 9999, chapter_name: 'Root B', pages_checked: 1, pages_total: 1, words: 100 },
+    ],
+    matrix: { 1: { stil: { count: 2 } }, 9999: { stil: { count: 5 } } },
+  };
+  assert.deepEqual(ctx.overviewChapterFindings().map(r => [r.id, r.count]), [[1, 2]]);
+});
+
+test('overviewShowsOtherBook: nur beim Buchwechsel, nicht beim Refresh desselben Buchs', () => {
+  const ctx = makeCtx(makeTree());
+  Object.assign(ctx, { overviewLoading: true, overviewBookId: 2, overviewDataBookId: 1 });
+  assert.equal(ctx.overviewShowsOtherBook(), true);
+  ctx.overviewDataBookId = 2;
+  assert.equal(ctx.overviewShowsOtherBook(), false);
+  Object.assign(ctx, { overviewLoading: false, overviewDataBookId: 1 });
+  assert.equal(ctx.overviewShowsOtherBook(), false);
+});

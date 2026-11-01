@@ -7,7 +7,7 @@
 
 const { entryQuestion } = require('./persona');
 const { hasPersonaMaterial } = require('./figures');
-const { REFUSAL_TEXT, buildHaystack, unknownNames, WRONG_TYP } = require('./refusals');
+const { REFUSAL_TEXT, buildHaystack, unknownNames, WRONG_TYP, WRONG_NEEDS, generation } = require('./refusals');
 const { genderOf, roleNoun, rolePhrase } = require('../core-facts/words');
 
 const EQ = {
@@ -78,13 +78,16 @@ function buildReaderEvalPrompts(ctx, add, { PER_CAT = 3, rels = [] } = {}) {
       mustContain: [langIsEn ? 'not' : 'nicht'] });
   });
 
-  // Falsche Annahme: Rolle der Kernbeziehung vertauscht (Geschwister statt Eltern …).
+  // Falsche Annahme: Rolle der Kernbeziehung vertauscht, generationsplausibel
+  // wie im Train (refusals.js#WRONG_NEEDS).
+  const birthYear = (f) => (ctx.eventsByFigPk?.get(f.pk) || []).find(e => e.subtyp === 'geburt' && e.datum_year)?.datum_year || null;
   let n = 0;
   for (const r of rels) {
     if (n >= PER_CAT) break;
     const right = roleNoun(r.typ, genderOf(r.b), langIsEn);
     const wrong = WRONG_TYP[r.typ] && roleNoun(WRONG_TYP[r.typ], genderOf(r.b), langIsEn);
     if (!right || !wrong || right.noun === wrong.noun) continue;
+    if (WRONG_TYP[r.typ] in WRONG_NEEDS && generation(r.typ, birthYear(r.a), birthYear(r.b)) !== WRONG_NEEDS[WRONG_TYP[r.typ]]) continue;
     const vars = { y: r.b.name, wrong: rolePhrase(r.a.name, wrong, WRONG_TYP[r.typ], langIsEn), right: rolePhrase(r.a.name, right, r.typ, langIsEn) };
     add('falsePremise', fill(langIsEn ? 'Why exactly is {y} {wrong}?' : 'Warum genau ist {y} eigentlich {wrong}?', vars), {
       expected: fill(rt.fpRelA[0], vars), mustContain: [right.noun] });

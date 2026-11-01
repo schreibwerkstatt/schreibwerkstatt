@@ -140,15 +140,16 @@ export const presenceMethods = {
 
   // Gemeinsamer Kapitel-Kontext der drei Matrizen: Wurzel-Kapitel als Zeilen
   // plus ein Resolver, der eine Fundstelle (chapter_id, ersatzweise Name) auf
-  // ihr Wurzel-Kapitel abbildet. Der Name-Fallback deckt Server-Rows ab, die
-  // nur `chapter_name` ohne aufgelöste ID liefern (Backfill-Lücken).
+  // ihr Wurzel-Kapitel abbildet. Der Name-Fallback deckt nur Server-Rows ab,
+  // die gar keine ID liefern (Backfill-Lücken) — eine ID, die nicht aufgeht
+  // (ausgeschlossenes oder gelöschtes Kapitel), zählt nirgends.
   _presenceContext() {
     const { roots, rootOf, rootOfName } = this._chapterRollup();
     return {
       chapters: roots.map(c => ({ id: c.id, name: c.name })),
-      resolveRoot: (chapterId, chapterName) =>
-        (chapterId != null ? rootOf(chapterId) : null)
-        || (chapterName ? rootOfName(chapterName) : null),
+      resolveRoot: (chapterId, chapterName) => (chapterId != null
+        ? rootOf(chapterId)
+        : (chapterName ? rootOfName(chapterName) : null)),
     };
   },
 };

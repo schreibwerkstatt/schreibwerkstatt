@@ -42,6 +42,7 @@ Browser → NGINX (HTTPS) → Express (Port 3737)
   /jobs/source-detect → Quellen-Erkennung: findet im Buchtext LOSE erwaehnte Werke (ohne Quellen-Marker) und schlaegt sie zur Aufnahme vor
   /jobs/source-pdf-draft → Quelle aus PDF: DOI/ISBN → Register, sonst Titelseite lesen → Register-Suche; liefert nur einen Entwurf (Anlage + Anhang laufen ueber /sources)
   /lexicon/:book_id  → Wortschatz-Analyse lesen (abgeleitete Kennzahlen + Ranglisten, read-only)
+  /overview/:book_id → Buch-Übersicht gebündelt: alle Tile-Daten in einer Antwort, je Teil `data`/`forbidden`/`error` (Rechte je Teil wie die Einzel-Route, deren Builder er aufruft), `?skip=` für schon geladene Kataloge — read-only, kein KI-Call
   /jobs/lexicon-scan → Wortschatz-Scan: laengenrobuste Diversitaetsmasse + Lieblingswoerter + Wendungen (kein KI-Call)
   /jobs/manuscript-import → EIN Word-/ODT-Dokument nach Ueberschriften-Ebenen in Kapitel + Seiten zerlegen (Zuordnung h1..h6 kommt vom User); …/preview liefert dieselbe Gliederung synchron, ohne zu schreiben — kein KI-Call
   /jobs/book-map   → Buchlandkarte: PCA- oder Pol-Projektion (Abschnitte oder Passagen) + Ähnlichkeitsmatrix in Lesereihenfolge mit Bruchstellen/Echos + Kapitel-Kohaesion + Ausreisser (kein KI-Call; Embedding-Call nur für Freitext-Pole)

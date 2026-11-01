@@ -148,7 +148,24 @@ function deleteRueckblick(id, userEmail) {
   return _deleteRueckblick.run(parseInt(id), userEmail || '').changes;
 }
 
+// Jüngster Rückblick je Zeitraum (user-spezifisch — tagebuch_rueckblicke ist
+// persönlich). Grundlage der Rückblick-Heatmap der Buch-Übersicht.
+const _latestPerZeitraum = db.prepare(`
+  WITH ranked AS (
+    SELECT id, zeitraum, created_at,
+           ROW_NUMBER() OVER (PARTITION BY zeitraum ORDER BY created_at DESC, id DESC) AS rn
+    FROM tagebuch_rueckblicke
+    WHERE book_id = ? AND user_email = ?
+  )
+  SELECT id, zeitraum, created_at FROM ranked WHERE rn = 1
+`);
+
+function latestRueckblickPerZeitraum(bookId, userEmail) {
+  return _latestPerZeitraum.all(bookId, userEmail);
+}
+
 module.exports = {
+  latestRueckblickPerZeitraum,
   loadRueckblickCache,
   saveRueckblickCache,
   deleteRueckblickCache,

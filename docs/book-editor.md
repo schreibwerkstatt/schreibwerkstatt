@@ -190,6 +190,10 @@ Eigener Verlauf pro Seite, das native Browser-Undo wird **nie** bedient: `onBloc
 - `buildOutlineNodes(blocks)` ([book-editor/outline.js](../public/js/cards/book-editor/outline.js)) — Kapitel aus genau einem Abschnitt ohne Unterkapitel (`node.single`) erscheinen als **eine** Zeile (Kapitelname, Seiten-Optik mit Status-Punkt, Klick springt zum Abschnitt), ohne Kapitelzeile, Zähler und Collapse.
 - Stream: ist ein Abschnitt der einzige seines Kapitels oder heisst der erste Abschnitt wie das Kapitel (`block.dupTitle`, `sectionTitleRedundant` aus [structure-title.js](../public/js/structure-title.js), Regel wie PDF/Word), bleibt der Name in der Abschnitts-Caption leer — Status und Plaketten bleiben stehen.
 
+## Schreibzeit
+
+Die Karte meldet dem Root `bookEditorWriting` = Karte offen **und** ein Abschnitt aktiviert (`activePageId`). Der Schreibzeit-Zähler ([book/writing-time.js](../public/js/book/writing-time.js)) zählt damit wie im Notebook- und Focus-Editor, mit einem Unterschied: im Bucheditor gilt nur Taste/Klick/Eingabe als Aktivität, kein Scrollen — der ganze Manuskript-Stream ist offen, Durchscrollen ist Lesen. `destroy()` setzt das Flag zurück.
+
 ## Pflicht-Invarianten
 
 1. **Bucheditor ist **kein** Modus auf einer Seite.** `editMode`/`focusActive` werden **nie** vom Bucheditor gesetzt. Wer eine Cross-Editor-Funktion einbaut, prüft das per Feature-Flag explizit, statt am Modus-State zu hängen.

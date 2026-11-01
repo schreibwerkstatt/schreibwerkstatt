@@ -1,6 +1,9 @@
 'use strict';
 
-const { eventDetailParts, eventWhen } = require('./event-data');
+const { datOf } = require('../core-facts/words');
+const { whenAdverb } = require('../core-facts/events');
+
+const { eventDetailParts, eventWhen, leadSafe } = require('./event-data');
 
 // Enum-Werte der Analyse (figures.sozialschicht) als Prosa —
 // das Modell soll «gehobenes Bürgertum» lernen, nicht den Schlüssel
@@ -63,9 +66,10 @@ function buildFigureBaseSamples(ctx) {
         const aDesc = (A.beschreibung || '').split(/(?<=[.!?])\s/)[0] || '';
         const bDesc = (B.beschreibung || '').split(/(?<=[.!?])\s/)[0] || '';
         if (!aDesc || !bDesc) continue;
-        const answer = langIsEn
-          ? `${A.name}: ${aDesc} ${B.name}: ${bDesc}`
-          : `${A.name}: ${aDesc} ${B.name}: ${bDesc}`;
+        // Ganze Sätze statt «Stefan: … Renate: …»; nennt eine Beschreibung
+        // ihre Figur nicht, steht der Name davor.
+        const about = (F, d) => (d.includes(F.name) ? d : (langIsEn ? `About ${F.name}: ${d}` : `Zu ${F.name}: ${d}`));
+        const answer = `${about(A, aDesc)} ${about(B, bDesc)}`;
         pushQA('authorChat|figCmp|' + A.fig_id + '|' + B.fig_id,
           langIsEn ? `What distinguishes ${A.name} from ${B.name}?` : `Was unterscheidet ${A.name} von ${B.name}?`,
           answer);
@@ -115,7 +119,7 @@ function buildFigureMetaSamples(ctx) {
       if (!ereignis) continue;
       const kapitel = (e.chapter_id != null && chMap[e.chapter_id]) || '';
       const when = eventWhen(e, langIsEn).when;
-      const parts = [ereignis + '.', ...eventDetailParts(e, {
+      const parts = [leadSafe(ereignis) + '.', ...eventDetailParts(e, {
         langIsEn,
         chapterNames: kapitel ? [kapitel] : [],
         storyline: storylineNameById.get(e.storyline_id) || '',
@@ -135,7 +139,9 @@ function buildFigureMetaSamples(ctx) {
       if (when) {
         pushQA('authorChat|figEvtWhen|' + f.fig_id + '|' + j,
           langIsEn ? `When does ${f.name} experience «${ereignis}»?` : `Wann erlebt ${f.name} «${ereignis}»?`,
-          `${ereignis}: ${when}.`, { unit: 'fig:' + f.fig_id });
+          whenAdverb(when, langIsEn)
+            ? (langIsEn ? `${f.name} experiences «${ereignis}» ${whenAdverb(when, true)}.` : `${f.name} erlebt «${ereignis}» ${whenAdverb(when, false)}.`)
+            : (langIsEn ? `The time of «${ereignis}»: ${when}.` : `Zeitpunkt von «${ereignis}»: ${when}.`), { unit: 'fig:' + f.fig_id });
       }
       if (when && (e.subtyp === 'geburt' || e.subtyp === 'tod')) {
         pushQA('authorChat|figLife|' + e.subtyp + '|' + f.fig_id,
@@ -145,9 +151,8 @@ function buildFigureMetaSamples(ctx) {
           `${f.name}, ${e.subtyp === 'geburt' ? (langIsEn ? 'born' : 'geboren') : (langIsEn ? 'died' : 'gestorben')}: ${when}.`, { unit: 'fig:' + f.fig_id });
       }
     }
-    const allEvtsList = evts.slice(0, 8)
-      .map(e => `${e.datum ? e.datum + ': ' : ''}${e.ereignis}${e.bedeutung ? ' (' + e.bedeutung + ')' : ''}`)
-      .join(' · ');
+    const allEvtsList = (langIsEn ? `The key moments in ${f.name}'s story: ` : `Die Schlüsselmomente in der Geschichte von ${datOf(f.name)}: `)
+      + evts.slice(0, 8).map(e => `${e.ereignis}${e.datum ? ' (' + e.datum + ')' : ''}`).join('; ') + '.';
     pushQA('authorChat|figAllEvt|' + f.fig_id,
       langIsEn ? `What are the key moments in ${f.name}'s story?` : `Welche Schlüsselmomente erlebt ${f.name}?`,
       allEvtsList, { unit: 'fig:' + f.fig_id });

@@ -70,14 +70,14 @@ function _coalesce(map, key, fn) {
 // chars. Hero und Sidebar-Σ zeigen damit ein konstantes Verhältnis. Nur
 // Seiten-HTML zählt — Seiten- und Kapitelnamen fliessen nicht in den Umfang
 // ein. Frontend nutzt dieselbe Formel in public/js/book/tree.js:_syncPageStatsAfterSave.
+// Satzmetriken stehen nicht hier: sie kommen aus dem Stil-Index (computePageIndex
+// auf dem Prosatext), Wortformen aus dem Wortschatz-Scan (stampLexiconHistory).
 function computeStats(html) {
   const text = htmlToText(html || '');
-  const wordList = text.trim() === '' ? [] : text.trim().split(/\s+/);
-  const words = wordList.length;
+  const words = text.trim() === '' ? 0 : text.trim().split(/\s+/).length;
   const chars = text.length;
   const tok = Math.round(chars / CHARS_PER_TOKEN);
-  const sentences = text.trim() === '' ? 0 : text.split(/[.!?]+/).filter(s => s.trim().length > 0).length;
-  return { words, chars, tok, wordList, sentences };
+  return { words, chars, tok };
 }
 
 const upsertPageStats = db.prepare(`
@@ -182,8 +182,7 @@ async function syncBook(bookId, ctx) {
   // in Mig 78 entfernt — Anzeige laeuft jetzt ueber JOIN auf books(name).
   const now = new Date().toISOString();
   const statsItems = [];
-  const globalWordSet = new Set();
-  let totalWords = 0, totalChars = 0, totalTok = 0, totalSentences = 0;
+  let totalWords = 0, totalChars = 0, totalTok = 0;
 
   // Stand des letzten Syncs je Seite — wer seither nicht gespeichert wurde, steht
   // schon richtig im Volltext-Index (siehe Index-Nachzug unten).
@@ -209,7 +208,7 @@ async function syncBook(bookId, ctx) {
   const indexItems = [];
   const computePage = (p, pd) => {
     const text = htmlToText(pd.html || '');
-    const { words, chars, tok, wordList, sentences } = computeStats(pd.html || '');
+    const { words, chars, tok } = computeStats(pd.html || '');
     const preview = text.trim().slice(0, PREVIEW_CHARS);
     // Zwei Textformen mit Absicht: `text` ist der Umfang (Tabellenzellen sind
     // geschriebener Inhalt und zaehlen in page_stats + Volltextindex),
@@ -220,7 +219,7 @@ async function syncBook(bookId, ctx) {
     // Satzmetriken laufen ohne Verlauf (`proseText`, lib/html-text.js#stripMsgThreads).
     const { text: styleText, msgRanges } = htmlToPlainTextWithMsgRanges(stripTableBlocks(pd.html || ''));
     const proseText = htmlToText(stripMsgThreads(stripTableBlocks(pd.html || '')));
-    return { page_id: p.id, book_id: bookId, tok, words, chars, updated_at: p.updated_at || null, cached_at: now, wordList, sentences, preview, fullText: text, styleText, msgRanges, proseText };
+    return { page_id: p.id, book_id: bookId, tok, words, chars, updated_at: p.updated_at || null, cached_at: now, preview, fullText: text, styleText, msgRanges, proseText };
   };
   for (let i = 0; i < pages.length; i += PAGE_BATCH) {
     if (i > 0) await _yield();
@@ -233,14 +232,12 @@ async function syncBook(bookId, ctx) {
       let value;
       try { value = computePage(metaById.get(pd.id) || pd, pd); }
       catch (e) { logger.warn(`Sync Buch ${bookId}: Seite ${pd.id} übersprungen: ${e.message}`); continue; }
-      const { wordList, sentences, preview, fullText, styleText, msgRanges, proseText, ...statsItem } = value;
+      const { preview, fullText, styleText, msgRanges, proseText, ...statsItem } = value;
       statsItems.push(statsItem);
       previewItems.push({ page_id: value.page_id, preview_text: preview || null });
       totalWords += value.words;
       totalChars += value.chars;
       totalTok += value.tok;
-      totalSentences += sentences;
-      for (const w of wordList) globalWordSet.add(w.toLowerCase());
 
       // Stil-Index auf dem Prosatext, Figuren-Erwaehnungen auf dem Volltext:
       // eine in einer Tabellenzelle genannte Figur ist genannt.
@@ -248,8 +245,14 @@ async function syncBook(bookId, ctx) {
       indexItems.push({ page_id: value.page_id, index: indexResult, fullText });
     }
   }
-  const uniqueWords = globalWordSet.size;
-  const avgSentenceLen = totalSentences > 0 ? Math.round((totalWords / totalSentences) * 10) / 10 : null;
+  // Buch-Satzlänge = Σ Wörter in Sätzen / Σ Sätze aus dem Stil-Index — dieselbe
+  // Satzzerlegung wie Stil-Karte und Autorenprofil, ohne Tabellen und Verläufe.
+  let sentenceWords = 0, sentenceCount = 0;
+  for (const item of indexItems) {
+    sentenceWords += item.index.sentence_words || 0;
+    sentenceCount += item.index.sentences || 0;
+  }
+  const avgSentenceLen = sentenceCount > 0 ? Math.round((sentenceWords / sentenceCount) * 10) / 10 : null;
 
   // Buch-Level-Lesbarkeit: gewichteter Durchschnitt über alle Seiten (nach Wortzahl).
   // Eine aus gesamten Totals neu berechnete Kennzahl wäre mathematisch korrekter,
@@ -315,28 +318,51 @@ async function syncBook(bookId, ctx) {
   // des Umfangs (siehe computeStats).
   const bookWords = totalWords, bookChars = totalChars, bookTok = totalTok;
 
+  // Fehlt eine noch existierende Seite (Batch- oder Seitenfehler oben), wäre die
+  // Summe zu klein: der Tagesstand würde mit einem Teilbuch überschrieben, die
+  // Buchentwicklung zeigte einen Einbruch und am Folgetag denselben Zuwachs.
+  // Dann lieber den alten Tagesstand behalten — page_stats der geladenen
+  // Seiten sind trotzdem geschrieben.
+  const computedIds = new Set(statsItems.map(s => s.page_id));
+  const missing = pages.filter(p => livePageIds.has(p.id) && !computedIds.has(p.id)).length;
+  if (missing > 0) {
+    logger.warn(`Sync Buch ${bookId} (${bookName}): ${missing} Seite(n) nicht geladen — Tages-Snapshot nicht geschrieben.`);
+    return { page_count: pages.length, words: bookWords, chars: bookChars, tok: bookTok, chapter_count: chapterCount, snapshot: false, missing_pages: missing };
+  }
+
   // Lokales Datum statt UTC: book_stats_history.recorded_at muss zur lokalen
   // User-Wahrnehmung passen. Frontend-Streak/Heute-Ring iteriert ebenfalls
   // lokal — beide Seiten in derselben TZ (process.env.TZ, default Europe/Zurich).
   const today = localIsoDate();
+  // imported_*: kumulativer Import-Zuwachs (lib/import-baseline.js) — eine neue
+  // Tageszeile erbt ihn vom juengsten Vorgaenger, ein Re-Sync laesst ihn stehen.
   db.prepare(`
-    INSERT INTO book_stats_history (book_id, recorded_at, page_count, words, chars, tok, unique_words, chapter_count, avg_sentence_len, avg_lix, avg_flesch_de)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    INSERT INTO book_stats_history (book_id, recorded_at, page_count, words, chars, tok, chapter_count, avg_sentence_len, avg_lix, avg_flesch_de,
+                                    imported_chars, imported_words, imported_pages)
+    SELECT @book, @day, @pages, @words, @chars, @tok, @chapters, @sentLen, @lix, @flesch,
+           COALESCE(p.imported_chars, 0), COALESCE(p.imported_words, 0), COALESCE(p.imported_pages, 0)
+    FROM (SELECT 1) LEFT JOIN (
+      SELECT imported_chars, imported_words, imported_pages FROM book_stats_history
+      WHERE book_id = @book AND recorded_at < @day ORDER BY recorded_at DESC LIMIT 1
+    ) p
+    WHERE true
     ON CONFLICT(book_id, recorded_at) DO UPDATE SET
       page_count=excluded.page_count,
       words=excluded.words, chars=excluded.chars, tok=excluded.tok,
-      unique_words=excluded.unique_words, chapter_count=excluded.chapter_count,
+      chapter_count=excluded.chapter_count,
       avg_sentence_len=excluded.avg_sentence_len,
       avg_lix=excluded.avg_lix, avg_flesch_de=excluded.avg_flesch_de
-  `).run(bookId, today, pages.length, bookWords, bookChars, bookTok, uniqueWords, chapterCount, avgSentenceLen, avgLix, avgFleschDe);
-  // Wortschatz-Kennzahlen des letzten Scans in die Tageszeile übernehmen. Der
-  // Nacht-Scan läuft NACH dem Sync und überschreibt sie mit dem frischen Stand; an
-  // Tagen, an denen er das Buch als unverändert überspringt, bleibt so trotzdem
-  // ein Wert im Verlauf statt einer Lücke.
+  `).run({ book: bookId, day: today, pages: pages.length, words: bookWords, chars: bookChars, tok: bookTok,
+          chapters: chapterCount, sentLen: avgSentenceLen, lix: avgLix, flesch: avgFleschDe });
+  // Wortschatz-Kennzahlen des letzten Scans in die Tageszeile übernehmen — auch
+  // `unique_words` (Wortformen), damit Buchentwicklung und Wortschatz-Karte
+  // dieselbe Zahl zeigen. Der Nacht-Scan läuft NACH dem Sync und überschreibt
+  // sie mit dem frischen Stand; an Tagen, an denen er das Buch als unverändert
+  // überspringt, bleibt so trotzdem ein Wert im Verlauf statt einer Lücke.
   stampLexiconHistory(bookId, today, MATTR_WINDOW);
 
-  logger.info(`Sync Buch ${bookId} (${bookName}): ${pages.length} Seiten, ${chapterCount} Kapitel, ${bookWords} Wörter, ${uniqueWords} einzigartige, Ø ${avgSentenceLen} W/Satz, LIX ${avgLix}, Flesch ${avgFleschDe}`);
-  return { page_count: pages.length, words: bookWords, chars: bookChars, tok: bookTok, unique_words: uniqueWords, chapter_count: chapterCount, avg_sentence_len: avgSentenceLen, avg_lix: avgLix, avg_flesch_de: avgFleschDe };
+  logger.info(`Sync Buch ${bookId} (${bookName}): ${pages.length} Seiten, ${chapterCount} Kapitel, ${bookWords} Wörter, Ø ${avgSentenceLen} W/Satz, LIX ${avgLix}, Flesch ${avgFleschDe}`);
+  return { page_count: pages.length, words: bookWords, chars: bookChars, tok: bookTok, chapter_count: chapterCount, avg_sentence_len: avgSentenceLen, avg_lix: avgLix, avg_flesch_de: avgFleschDe, snapshot: true };
 }
 
 async function _syncAllBooksInner() {

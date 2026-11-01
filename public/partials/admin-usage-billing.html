@@ -4,7 +4,7 @@
   Anthropic abgerechneten Kosten (Cost-Report-API, lib/anthropic-billing.js)
   dem App-Ledger gegenueber. Tage sind UTC-Tage, wie die API sie schneidet.
 -->
-<div x-show="adminUsageTab === 'billing'" class="admin-usage-pane">
+<div x-show="adminUsageTab === 'billing'" class="admin-usage-pane" :aria-busy="adminUsageLoading">
   <template x-if="adminUsageBilling && !adminUsageBilling.configured">
     <p class="muted-msg" x-text="$app.t('admin.usage.billing.notConfigured')"></p>
   </template>

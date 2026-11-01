@@ -2,7 +2,7 @@
 import { RECENT_SHOW_LIMIT } from './load.js';
 
 export const recentMethods = {
-  // Der Endpunkt liefert mehr Einträge als angezeigt (RECENT_FETCH_LIMIT);
+  // Der Server liefert mehr Einträge als angezeigt (routes/overview.js#RECENT_LIMIT);
   // Abschnitte, die nicht mehr im Buch stehen, fallen hier heraus, erst danach
   // wird auf RECENT_SHOW_LIMIT gekürzt.
   overviewRecentPages() {

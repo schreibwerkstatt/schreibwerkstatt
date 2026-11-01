@@ -8,13 +8,13 @@
 // bookstats.js). Sie sind darum an dieses Modul gebunden und werden nur ueber
 // die hier exportierten Methoden angefasst.
 import { loadChart } from '../lazy-libs.js';
-import { localeTag, localIsoDate, dateTimeFormat } from '../utils.js';
+import { localeTag, localIsoDate, dateTimeFormat, charsToNormseiten } from '../utils.js';
 import { createChartHolder } from './chart-holder.js';
 import {
   barDataset, calendarAxisLabel, calendarTooltipLabel, categoryAxis, chartOptions, chartPalette,
   compactTick, crosshairPlugin, lineDataset, refLineDataset, seriesColor, valueAxis, withAlpha,
 } from './chart-style.js';
-import { bucketizeIso, bucketRange, aggregateByBucket } from './my-stats-compute.js';
+import { bucketizeIso, bucketRange, aggregateByBucket, carryForwardTotals } from './my-stats-compute.js';
 
 
 // Chart-Metriken: content aus book_stats_history (Summe pro Tag), writing aus
@@ -123,8 +123,10 @@ export const myStatsChartMethods = {
     const byBook = this.myStatsChartMode === 'byBook';
     const cumulative = this.myStatsCumulative && isTime;
 
-    // Leerzustand: ohne jede Snapshot-Historie (Buecher da, Nacht-Sync noch nicht
-    // gelaufen) ein eigener Hinweis, sonst „keine Daten im Zeitraum".
+    // Leerzustand: Verlauf nicht ladbar → Fehler; ohne jede Snapshot-Historie
+    // (Buecher da, Nacht-Sync noch nicht gelaufen) ein eigener Hinweis, sonst
+    // „keine Daten im Zeitraum".
+    if (this.myStatsHistoryError) { this.myStatsChartEmpty = 'loadError'; return; }
     if (!isTime && !this.myStatsHistory.length) { this.myStatsChartEmpty = 'noHistory'; return; }
 
     // Quelle vereinheitlichen auf { book_id, date, raw }.
@@ -137,27 +139,8 @@ export const myStatsChartMethods = {
     if (!hasValue) { this.myStatsChartEmpty = 'noData'; return; }
     this.myStatsChartEmpty = '';
 
-    // Nur bis zum letzten vollständigen Sync zeigen: book_stats_history bekommt
-    // pro Buch eine Tageszeile vom Nacht-Cron. Ein manueller Einzelbuch-Sync
-    // mitten am Tag (oder ein noch ausstehender Nachtlauf) erzeugt sonst einen
-    // Teil-Tages-Punkt mit weniger Büchern als der Vortag — als künstlicher
-    // Einbruch sichtbar. Darum jüngste Tage abschneiden, solange ihre Buch-Zahl
-    // unter der des Vortags liegt. Nur für Content-Historie.
-    if (!isTime) {
-      const allDates = [...new Set(rows.map(r => r.date))].sort();
-      const booksOn = new Map();
-      for (const r of rows) {
-        if (!booksOn.has(r.date)) booksOn.set(r.date, new Set());
-        booksOn.get(r.date).add(r.book_id);
-      }
-      let last = allDates.length - 1;
-      while (last > 0 && booksOn.get(allDates[last]).size < booksOn.get(allDates[last - 1]).size) last--;
-      const lastDate = allDates[last];
-      rows = rows.filter(r => r.date <= lastDate);
-    }
-
     const valOf = (raw) => {
-      if (metric === 'normseiten') return Math.round(((Number(raw.chars) || 0) / 1500) * 10) / 10;
+      if (metric === 'normseiten') return charsToNormseiten(raw.chars);
       if (isTime)                 return Math.round((Number(raw.seconds) || 0) / 60);
       return Number(raw[metric]) || 0;
     };
@@ -222,9 +205,20 @@ export const myStatsChartMethods = {
       });
     } else {
       // Gesamt: erst Summe pro Tag über alle Bücher, dann auf Buckets verdichten.
-      const totalByDate = new Map();
-      for (const r of rows) totalByDate.set(r.date, (totalByDate.get(r.date) || 0) + valOf(r.raw));
-      const points = [...totalByDate.entries()].map(([date, value]) => ({ date, value }));
+      // Zeit-Metriken sind Tages-Deltas (fehlender Tag = 0). Inhalts-Metriken sind
+      // Bestände: ein Buch ohne Zeile an einem Tag zählt mit seinem letzten Stand
+      // (carryForwardTotals) — über die GANZE Historie gerechnet, damit auch ein
+      // Stand von vor dem Fensterbeginn mitzählt, erst danach aufs Fenster.
+      let points;
+      if (isTime) {
+        const totalByDate = new Map();
+        for (const r of rows) totalByDate.set(r.date, (totalByDate.get(r.date) || 0) + valOf(r.raw));
+        points = [...totalByDate.entries()].map(([date, value]) => ({ date, value }));
+      } else {
+        const inWin = new Set(rows.map(r => r.date));
+        points = carryForwardTotals(this.myStatsHistory.map(r => ({ book_id: r.book_id, date: r.recorded_at, value: valOf(r) })))
+          .filter(p => inWin.has(p.date));
+      }
       const bmap = new Map(aggregateByBucket(points, gran, aggMode).map(x => [x.bucket, x.value]));
       let series = buckets.map(b => bmap.has(b) ? bmap.get(b) : 0);
       // Kumuliert nur fuer Zeit-Metriken sinnvoll (Bucket-Deltas aufsummiert →

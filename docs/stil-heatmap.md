@@ -37,7 +37,10 @@ füllt (`METRICS_VERSION`).
 ## Satzerkennung
 
 Eine Zerlegung (`sentenceRanges` in [lib/sentence-split.js](../lib/sentence-split.js)) für Satzlängen, Satzanfänge,
-LIX/Flesch und die Drilldown-Beispiele. Kein Satzende ist ein Punkt nach Abkürzung
+LIX/Flesch, die Drilldown-Beispiele und die Satzzahl `page_stats.sentences` (Autorenprofil,
+Analyse-Werkzeug der agentischen Chats). Die Buch-Satzlänge der Buchentwicklung
+(`book_stats_history.avg_sentence_len`) ist Σ Wörter in Sätzen / Σ Sätze derselben
+Zerlegung ([routes/sync.js](../routes/sync.js)#`syncBook`). Kein Satzende ist ein Punkt nach Abkürzung
 (`_ABBREVIATIONS`), Einzelbuchstabe oder Zahl („z. B.", „Dr.", „am 3. Mai") und ein
 Terminator, nach dem es kleingeschrieben weitergeht (Dialog-Einschub «Komm!», rief er.;
 Auslassung „…" mitten im Satz). Wörter sind Buchstabenfolgen aller Schriften (`\p{L}`).

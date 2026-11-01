@@ -13,6 +13,14 @@
   max-height: min(360px, 50vh);
   overflow-y: auto;
 }
+/* Klickbare Zeilen stecken in einem nackten <li> (role=button nie am <li>) —
+   das Hüll-<li> reicht die drei Spalten als Subgrid an die Zeile durch. */
+.overview-chapter-list > li:not(.overview-chapter-row) {
+  display: grid;
+  grid-template-columns: subgrid;
+  grid-column: 1 / -1;
+  min-width: 0;
+}
 .overview-chapter-row {
   display: grid;
   grid-template-columns: subgrid;

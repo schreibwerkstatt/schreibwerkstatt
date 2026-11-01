@@ -5,7 +5,7 @@
 // __SHELL_BUILD: content hash over all listed assets → drives SHELL_CACHE.
 // __SHELL_MANIFEST: the coherent set precached atomically at SW install.
 // __VENDOR_SET: current vendor/ + fonts/ files — VENDOR_CACHE prune list.
-self.__SHELL_BUILD = "7606fe7cba64e634";
+self.__SHELL_BUILD = "7bfe8805902200ab";
 self.__SHELL_MANIFEST = [
   "/css/admin/admin-backup.css",
   "/css/admin/admin-home.css",
@@ -44,6 +44,7 @@ self.__SHELL_MANIFEST = [
   "/css/book/export-shared.css",
   "/css/book/export.css",
   "/css/book/expose.css",
+  "/css/book/finetune-export.css",
   "/css/book/header-actions.css",
   "/css/book/motiv.css",
   "/css/book/pdf-export.css",
@@ -1105,6 +1106,7 @@ self.__SHELL_MANIFEST = [
   "/partials/figuren-presence.html",
   "/partials/figuren.html",
   "/partials/finetune-export-ai.html",
+  "/partials/finetune-export-files.html",
   "/partials/finetune-export-quality.html",
   "/partials/finetune-export-result.html",
   "/partials/finetune-export.html",

@@ -99,18 +99,24 @@
                 </td>
                 <template x-for="(typ, idx) in fehlerHeatmapTypen" :key="typ">
                   <!-- Klasse, Farbe und Klickbarkeit kommen fertig aus buildFehlerRows
-                       (public/js/book/fehler-heatmap.js). Klickbare Zellen tragen dort
-                       `internal-link` und sind damit ueber die globale Delegation
-                       (app/boot/internal-links.js) tastatur-erreichbar; eine Zelle ohne
-                       Befunde hat kein Detail-Panel und bietet weder Cursor noch Tab-Stopp. -->
+                       (public/js/book/fehler-heatmap.js). Klickbar ist nur eine Zelle mit
+                       Befunden — sie trägt dafür einen Button (.heatmap-cell-btn), nie
+                       role=button am <td>; ohne Befund kein Detail-Panel, kein Tab-Stopp. -->
                   <td class="heatmap-cell"
                       :class="[row.cells[typ].cls, {
                         'heatmap-cell--active': activeFehlerDetailKey === row.cells[typ].detailKey,
                         'heatmap-cluster-start': fehlerHeatmapIsClusterStart(idx) }]"
                       :style="row.cells[typ].vars"
-                      :data-tip="fehlerHeatmapCellTooltip(row.cells[typ])"
-                      @click="toggleFehlerHeatmapDetail(row.cells[typ])"
-                      x-text="row.cells[typ].text">
+                      :data-tip="fehlerHeatmapCellTooltip(row.cells[typ])">
+                    <template x-if="row.cells[typ].clickable">
+                      <button type="button" class="heatmap-cell-btn"
+                              @click="toggleFehlerHeatmapDetail(row.cells[typ])"
+                              :aria-expanded="activeFehlerDetailKey === row.cells[typ].detailKey ? 'true' : 'false'"
+                              x-text="row.cells[typ].text"></button>
+                    </template>
+                    <template x-if="!row.cells[typ].clickable">
+                      <span x-text="row.cells[typ].text"></span>
+                    </template>
                   </td>
                 </template>
               </tr>

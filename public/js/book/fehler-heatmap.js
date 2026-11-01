@@ -124,7 +124,7 @@ export function buildFehlerRows(data, typen, uiLocale) {
       const clickable = count > 0;
       cells[typ] = {
         text: count > 0 ? formatNumber(count, uiLocale, 0) : '–',
-        cls: `heatmap-cell--${kind}${clickable ? ' heatmap-cell--clickable internal-link' : ''}`,
+        cls: `heatmap-cell--${kind}${clickable ? ' heatmap-cell--clickable' : ''}`,
         vars,
         clickable,
         detailKey: `${key}:${typ}`,

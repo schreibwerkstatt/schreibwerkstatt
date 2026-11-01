@@ -12,7 +12,10 @@ const {
 const { buildExportFilename } = require('../../../lib/filenames');
 const { loadFinetuneData } = require('./data-loader');
 const { finalizeFinetuneSamples } = require('./finalize');
-const { bookFingerprint, finetuneFilePath, saveFinetuneResult, loadFinetuneMeta } = require('./lib/store');
+const {
+  FINETUNE_FILE_KINDS, bookFingerprint, saveFinetuneExport, listFinetuneExports, getFinetuneExport, readFinetuneFile, deleteFinetuneExport,
+} = require('../../../db/finetune-exports');
+const JSZip = require('jszip');
 const { buildEvalPrompts } = require('./lib/eval-prompts');
 const { qualityLogLine, coreFactCoverage } = require('./lib/export-stats');
 const { loadEventData } = require('./samples/author-chat/event-data');
@@ -247,9 +250,13 @@ async function runFinetuneExportJob(jobId, bookId, bookName, userEmail, opts) {
     const createdAt = new Date();
     // Gemeinsamer Namensstamm aller Downloads: <Buch>-<Profil>-<Zeitstempel>.
     stats.fileStem = `${fileSafeName(bookName || `book${bookId}`)}-${profile.id}-${formatExportTimestamp(createdAt)}`;
-    await saveFinetuneResult(bookId, userEmail, {
-      trainJsonl, valJsonl, allJsonl, evalJsonl, valFamilyJsonl,
-      meta: { bookName, createdAt: createdAt.toISOString(), fingerprint: bookFingerprint(pages), stats },
+    await saveFinetuneExport(bookId, userEmail, {
+      createdAt: createdAt.toISOString(), fingerprint: bookFingerprint(pages), stats,
+      files: {
+        train: trainJsonl, val: valJsonl, all: allJsonl, eval: evalJsonl,
+        'val-facts': valFamilyJsonl.facts, 'val-writing': valFamilyJsonl.writing, 'val-persona': valFamilyJsonl.persona,
+        'val-refusal': valFamilyJsonl.refusal, 'val-editor': valFamilyJsonl.editor,
+      },
     });
     const sampleBreakdown = `${counts.style}/${counts.scene}/${counts.verbatim}/${counts.dialog}/${counts.authorChat}/${counts.core}/${counts.aiAugment}/${counts.reader} (sty/scn/vrb/dlg/ac/core/aug/rdr)`;
     completeJob(jobId, { stats }, null,
@@ -279,7 +286,10 @@ function normalizeExportOptions(base, over = {}) {
     minMentions: Math.round(clamp(o.minMentions, 1, 1000, base.minMentions)),
     factParaphrases: Math.round(clamp(o.factParaphrases, 1, 10, base.factParaphrases)),
     maxVariantsPerFact: Math.round(clamp(o.maxVariantsPerFact, 1, 10, base.maxVariantsPerFact)),
+    corePerTier: Object.fromEntries(Object.entries(base.corePerTier)
+      .map(([k, v]) => [k, Math.round(clamp(o.corePerTier?.[k], 1, 10, v))])),
     familyTokenShares: shareMap(o.familyTokenShares, base.familyTokenShares),
+    refusalShareBasis: 'count',
     refusalShare: clamp(o.refusalShare, 0, 0.5, base.refusalShare),
     refusalMix: shareMap(o.refusalMix, base.refusalMix),
     verbatimMaxTokenShare: clamp(o.verbatimMaxTokenShare, 0, 1, base.verbatimMaxTokenShare),
@@ -349,72 +359,94 @@ finetuneExportRouter.post('/finetune-export', jsonBody, (req, res) => {
   res.json({ jobId });
 });
 
-// Zuletzt gespeichertes Set dieses Users fürs Buch, samt Hinweis, ob sich der
-// Buchstand seither geändert hat (`stale`). Neu generiert wird nur auf Klick.
-finetuneExportRouter.get('/finetune-export/latest', async (req, res) => {
+// Gespeicherte Sets dieses Users fürs Buch, neuestes zuerst, je mit Hinweis,
+// ob sich der Buchstand seither geändert hat (`stale`). Neu generiert wird nur
+// auf Klick.
+finetuneExportRouter.get('/finetune-export/list', async (req, res) => {
   const bookId = toIntId(req.query.book_id);
   if (!bookId) return res.status(400).json({ error_code: 'BOOK_ID_REQUIRED' });
   setContext({ book: bookId });
   if (!guardBook(req, res, bookId, 'viewer')) return;
-  const meta = loadFinetuneMeta(bookId, sessionEmail(req));
-  if (!meta) return res.json({ export: null });
+  const metas = listFinetuneExports(bookId, sessionEmail(req));
+  if (!metas.length) return res.json({ exports: [] });
   const { pages } = await loadOrderedBookContents(bookId).catch(e => { throw contentHttpError(e); });
-  res.json({ export: { createdAt: meta.createdAt, stats: meta.stats, stale: meta.fingerprint !== bookFingerprint(pages) } });
+  const fp = bookFingerprint(pages);
+  res.json({ exports: metas.map(m => ({ id: m.id, createdAt: m.createdAt, stats: m.stats, stale: m.fingerprint !== fp })) });
 });
-
-// Herunterladbare Dateien des gespeicherten Sets und woran man erkennt, dass
-// sie Inhalt haben. `all` (train + val) und `eval` (Testprompts) fehlen in
-// Sets, die vor ihrer Einführung erzeugt wurden.
-const KIND_PRESENT = {
-  train: (st) => st.train > 0,
-  val:   (st) => st.val > 0,
-  all:   (st) => st.allBytes > 0,
-  eval:  (st) => st.evalBytes > 0,
-  'val-facts':   (st) => st.valFactsBytes > 0,
-  'val-writing': (st) => st.valWritingBytes > 0,
-  'val-refusal': (st) => st.valRefusalBytes > 0,
-};
 
 // Dateiname: finetune-<art>-<Buch>-<Profil>-<Zeitstempel>. Sets ohne
-// `fileStem` (vor dem Profil im Namen erzeugt) behalten Buch + Zeitstempel.
-function downloadName(meta, bookId, kind, ext) {
-  if (meta.stats?.fileStem) return `finetune-${kind}-${meta.stats.fileStem}.${ext}`;
-  return buildExportFilename({
-    prefix: `finetune-${kind}`, slug: meta.bookName || `book${bookId}`, ext,
-    date: new Date(meta.createdAt || Date.now()),
-  });
+// `fileStem` (vor dem Profil im Namen erzeugt) tragen Buch-ID + Zeitstempel.
+function downloadName(ex, bookId, kind, ext) {
+  if (ex.stats?.fileStem) return `finetune-${kind}-${ex.stats.fileStem}.${ext}`;
+  return buildExportFilename({ prefix: `finetune-${kind}`, slug: `book${bookId}`, ext, date: new Date(ex.createdAt || Date.now()) });
 }
 
-// Statistik des gespeicherten Sets als Datei — dieselbe Struktur wie
-// `export.stats` von /finetune-export/latest.
-finetuneExportRouter.get('/finetune-export/stats.json', (req, res) => {
+const statsJson = (ex) => JSON.stringify({ createdAt: ex.createdAt, stats: ex.stats }, null, 2);
+
+// Vorspann der Download-Routen: Buch-ID, ACL (Buchzugriff kann seit dem Export
+// entzogen worden sein), Set per `?id=` — ohne `id` das neueste. Antwortet
+// selbst und liefert dann null.
+function savedExport(req, res) {
   const bookId = toIntId(req.query.book_id);
-  if (!bookId) return res.status(400).json({ error_code: 'BOOK_ID_REQUIRED' });
+  if (!bookId) { res.status(400).json({ error_code: 'BOOK_ID_REQUIRED' }); return null; }
   setContext({ book: bookId });
-  if (!guardBook(req, res, bookId, 'viewer')) return;
-  const meta = loadFinetuneMeta(bookId, sessionEmail(req));
-  if (!meta) return res.status(404).json({ error_code: 'JSONL_NOT_FOUND' });
+  if (!guardBook(req, res, bookId, 'viewer')) return null;
+  const id = req.query.id == null ? null : toIntId(req.query.id);
+  if (req.query.id != null && !id) { res.status(400).json({ error_code: 'INVALID_EXPORT_ID' }); return null; }
+  const ex = getFinetuneExport(bookId, sessionEmail(req), id);
+  if (!ex) { res.status(404).json({ error_code: 'JSONL_NOT_FOUND' }); return null; }
+  return { bookId, ex };
+}
+
+// Statistik eines gespeicherten Sets als Datei — dieselbe Struktur wie ein
+// Eintrag von /finetune-export/list.
+finetuneExportRouter.get('/finetune-export/stats.json', (req, res) => {
+  const s = savedExport(req, res);
+  if (!s) return;
   res.setHeader('Content-Type', 'application/json; charset=utf-8');
-  res.setHeader('Content-Disposition', `attachment; filename="${downloadName(meta, bookId, 'stats', 'json')}"`);
-  res.send(JSON.stringify({ bookName: meta.bookName, createdAt: meta.createdAt, stats: meta.stats }, null, 2));
+  res.setHeader('Content-Disposition', `attachment; filename="${downloadName(s.ex, s.bookId, 'stats', 'json')}"`);
+  res.send(statsJson(s.ex));
 });
 
-finetuneExportRouter.get('/finetune-export/:kind.jsonl', (req, res) => {
+// Alle Dateien eines Sets (jede gespeicherte JSONL + stats.json) als ZIP.
+finetuneExportRouter.get('/finetune-export/export.zip', async (req, res) => {
+  const s = savedExport(req, res);
+  if (!s) return;
+  const zip = new JSZip();
+  for (const kind of FINETUNE_FILE_KINDS) {
+    const buf = await readFinetuneFile(s.ex.id, kind);
+    if (buf) zip.file(downloadName(s.ex, s.bookId, kind, 'jsonl'), buf);
+  }
+  zip.file(downloadName(s.ex, s.bookId, 'stats', 'json'), statsJson(s.ex));
+  const out = await zip.generateAsync({ type: 'nodebuffer', compression: 'DEFLATE' });
+  res.setHeader('Content-Type', 'application/zip');
+  res.setHeader('Content-Disposition', `attachment; filename="${downloadName(s.ex, s.bookId, 'all-files', 'zip')}"`);
+  res.setHeader('Content-Length', out.length);
+  res.end(out);
+});
+
+finetuneExportRouter.get('/finetune-export/:kind.jsonl', async (req, res) => {
+  const kind = req.params.kind;
+  if (!FINETUNE_FILE_KINDS.includes(kind)) return res.status(400).json({ error_code: 'INVALID_KIND' });
+  const s = savedExport(req, res);
+  if (!s) return;
+  const buf = await readFinetuneFile(s.ex.id, kind);
+  if (!buf) return res.status(404).json({ error_code: 'JSONL_EMPTY' });
+  res.setHeader('Content-Type', 'application/jsonl; charset=utf-8');
+  res.setHeader('Content-Disposition', `attachment; filename="${downloadName(s.ex, s.bookId, kind, 'jsonl')}"`);
+  res.setHeader('Content-Length', buf.length);
+  res.end(buf);
+});
+
+finetuneExportRouter.delete('/finetune-export/:id', (req, res) => {
   const bookId = toIntId(req.query.book_id);
   if (!bookId) return res.status(400).json({ error_code: 'BOOK_ID_REQUIRED' });
   setContext({ book: bookId });
-  // Buchzugriff kann seit dem Export entzogen worden sein.
   if (!guardBook(req, res, bookId, 'viewer')) return;
-  const kind = req.params.kind;
-  if (!Object.hasOwn(KIND_PRESENT, kind)) return res.status(400).json({ error_code: 'INVALID_KIND' });
-  const userEmail = sessionEmail(req);
-  const meta = loadFinetuneMeta(bookId, userEmail);
-  if (!meta) return res.status(404).json({ error_code: 'JSONL_NOT_FOUND' });
-  if (!KIND_PRESENT[kind](meta.stats || {})) return res.status(404).json({ error_code: 'JSONL_EMPTY' });
-  const filename = downloadName(meta, bookId, kind, 'jsonl');
-  res.setHeader('Content-Type', 'application/jsonl; charset=utf-8');
-  res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
-  res.sendFile(finetuneFilePath(bookId, userEmail, kind));
+  const id = toIntId(req.params.id);
+  if (!id) return res.status(400).json({ error_code: 'INVALID_EXPORT_ID' });
+  if (!deleteFinetuneExport(bookId, sessionEmail(req), id)) return res.status(404).json({ error_code: 'JSONL_NOT_FOUND' });
+  res.json({ ok: true });
 });
 
 module.exports = { finetuneExportRouter, runFinetuneExportJob };

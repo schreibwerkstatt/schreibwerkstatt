@@ -45,6 +45,24 @@ const usableLabel = (s) => {
 // { when, start, end, storyDay } — `when` ist die lesbare Gesamtangabe.
 // Vorrang: Original-Notation (`datum`), dann ein brauchbares Label, dann die
 // strukturierten Felder.
+// Ein Titel, der mit «Wort:» beginnt («Millenniumsnacht: Stefans erster
+// Joint …»), stünde am Antwortanfang wie ein Etikett — dann in «…». Gilt
+// für den Titel allein, nicht für einen ganzen Antwortsatz.
+const LABEL_LEAD = /^[\p{L}\p{N}_]+\s*:/u;
+function leadSafe(title) {
+  const t = String(title || '');
+  return LABEL_LEAD.test(t) ? `«${t}»` : t;
+}
+
+// Ereignis als Listenglied: «Geburt von Ernst (1958) — Bedeutung». Ereignis
+// vorn, nie ein Datum als Etikett («1958: …»). `eventList` reiht sie zu
+// einem Satz («…; ….»).
+function eventListItem(e, { meaning = true } = {}) {
+  const bed = meaning && e.bedeutung ? ' — ' + String(e.bedeutung).trim().replace(/[.\s]+$/, '') : '';
+  return `${leadSafe(e.ereignis)}${e.datum ? ' (' + e.datum + ')' : ''}${bed}`;
+}
+const eventList = (items, opts) => items.map(e => eventListItem(e, opts)).join('; ') + '.';
+
 function eventWhen(ev, langIsEn) {
   const start = cleanDatum(ev.datum) || usableLabel(ev.datum_label)
     || fmtDate(ev.datum_year, ev.datum_month, ev.datum_day, langIsEn);
@@ -241,7 +259,7 @@ function loadEventData(ctx) {
     const haystack = [ereignis, ev.bedeutung || '', e.excerpt ? e.excerpt.text : ''].join('\n');
     e.locs = locRows.filter(l => l.name && l.name.length >= 3 && nameRegex(l.name).test(haystack));
 
-    const parts = [ereignis + '.'];
+    const parts = [leadSafe(ereignis) + '.'];
     parts.push(...eventDetailParts(ev, { langIsEn, storyline }));
     if (figs.length) parts.push(langIsEn
       ? `Characters involved: ${figs.map(f => f.name).join(', ')}.`
@@ -265,4 +283,4 @@ function loadEventData(ctx) {
   return { events, eventsBySceneId, storylineNameById };
 }
 
-module.exports = { loadEventData, eventDetailParts, eventWhen, eventExcerpt, subtypLabel, eventKindPhrase };
+module.exports = { leadSafe, eventListItem, eventList, loadEventData, eventDetailParts, eventWhen, eventExcerpt, subtypLabel, eventKindPhrase };

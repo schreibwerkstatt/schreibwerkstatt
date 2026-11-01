@@ -3,7 +3,7 @@
 // lesen und loeschen, dazu der komplette History-Reset eines Buchs.
 
 const {
-  db, listChapterReviewHistory, deleteChapterReview,
+  listChapterReviewHistory, deleteChapterReview,
   listRueckblicke, getRueckblick, searchRueckblickIds, deleteRueckblick,
   listBookReviewHistory, deleteBookReview,
 } = require('../../db/schema');
@@ -12,9 +12,16 @@ const { toIntId } = require('../../lib/validate');
 const { guardBook, sessionEmail } = require('../../lib/acl');
 const { buildRueckblickCoverage } = require('../jobs/rueckblick-dates');
 const { listPageNamesForBook } = require('../../db/content-names');
+const { latestRueckblickPerZeitraum } = require('../../db/rueckblick');
 const { resolveProvider } = require('../../lib/ai');
 const { _modelName } = require('../jobs/shared/model');
 const logger = require('../../logger');
+
+// Rückblick-Heatmap-Coverage eines Buchs für einen User. Geteilt mit der
+// gebündelten Übersicht (routes/overview.js).
+function rueckblickCoverage(bookId, userEmail) {
+  return buildRueckblickCoverage(listPageNamesForBook(bookId), latestRueckblickPerZeitraum(bookId, userEmail));
+}
 
 function register(router) {
   // Buchbewertung löschen
@@ -92,20 +99,7 @@ function register(router) {
   // Liest nur Metadaten (page_name/page_id) zur Datums-Aggregation — kein Buch-
   // Inhalt (folgt der Praxis von /fehler-heatmap, /style-stats). Kein KI-Call.
   router.get('/rueckblick-coverage/:book_id', (req, res) => {
-    const user_email = sessionEmail(req);
-    const bookId = req.bookId;
-    const pages = listPageNamesForBook(bookId);
-    // Jüngster Rückblick je Zeitraum (user-spezifisch — tagebuch_rueckblicke ist persönlich).
-    const rbRows = db.prepare(`
-      WITH ranked AS (
-        SELECT id, zeitraum, created_at,
-               ROW_NUMBER() OVER (PARTITION BY zeitraum ORDER BY created_at DESC, id DESC) AS rn
-        FROM tagebuch_rueckblicke
-        WHERE book_id = ? AND user_email = ?
-      )
-      SELECT id, zeitraum, created_at FROM ranked WHERE rn = 1
-    `).all(bookId, user_email);
-    res.json(buildRueckblickCoverage(pages, rbRows));
+    res.json(rueckblickCoverage(req.bookId, sessionEmail(req)));
   });
 
   // Kapitel-Reviews: gruppiert als { [chapter_id]: [entries] }, je Kapitel die
@@ -123,4 +117,4 @@ function register(router) {
   });
 }
 
-module.exports = { register };
+module.exports = { register, rueckblickCoverage };

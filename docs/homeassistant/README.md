@@ -51,7 +51,7 @@ Inhalt von [dashboard.yaml](dashboard.yaml) als neues Dashboard anlegen: Setting
 | `sensor.schreibwerkstatt_books` / `_pages` / `_chapters` | `sw_books/pages/chapters` | Count |
 | `sensor.schreibwerkstatt_books_written` | `sw_books_written` (Bücher mit Text) | Count |
 | `sensor.schreibwerkstatt_chars` / `_words` | `sw_chars/words` | Total |
-| `sensor.schreibwerkstatt_normseiten` | Template (chars / 1800) | Total |
+| `sensor.schreibwerkstatt_normseiten` | Template (chars / 1500) | Total |
 | `sensor.schreibwerkstatt_writing_seconds_today` / `_minutes` | `sw_writing_seconds_today` | Duration |
 | `sensor.schreibwerkstatt_lektorat_seconds_today` / `_minutes` | `sw_lektorat_seconds_today` | Duration |
 | `sensor.schreibwerkstatt_stt_seconds_today` / `_minutes` | `sw_stt_seconds_today` | Duration |

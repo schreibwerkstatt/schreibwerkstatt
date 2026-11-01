@@ -48,12 +48,8 @@ function _isStale(stats, bookId) {
     || stats.language !== lexiconDb.bookLanguage(bookId);
 }
 
-router.get('/:book_id', (req, res) => {
-  const bookId = req.bookId;
-  const isOwner = req.bookRole === 'owner';
-
-  const stats = lexiconDb.getBookLexicon(bookId);
-  const thresholds = {
+function _thresholds() {
+  return {
     version: LEXICON_VERSION,
     mattrWindow: MATTR_WINDOW,
     mtldMinTokens: MTLD_MIN_TOKENS,
@@ -65,18 +61,32 @@ router.get('/:book_id', (req, res) => {
     deltaMinChapters: DELTA_MIN_CHAPTERS,
     idiolectMinTokens: IDIOLECT_MIN_TOKENS,
   };
-  // `?summary=1`: nur Kennzahlen + Vergleich — für die Kachel der Buch-Übersicht,
-  // die bei jedem Buchwechsel lädt und die Ranglisten (Hunderte Zeilen) nie zeigt.
-  const summary = req.query.summary === '1';
-  if (stats && summary) {
-    return res.json({
-      stats,
-      peers: isOwner ? lexiconDb.loadPeerStats(bookId, LEXICON_VERSION, stats.language) : null,
-      isOwner,
-      stale: _isStale(stats, bookId),
-      thresholds,
-    });
-  }
+}
+
+// Nur Kennzahlen + Vergleich — für die Kachel der Buch-Übersicht, die bei jedem
+// Buchwechsel lädt und die Ranglisten (Hunderte Zeilen) nie zeigt. Ohne Scan
+// `stats: null`. Antwort von `?summary=1` und Teil der gebündelten Übersicht
+// (routes/overview.js).
+function buildLexiconSummary(bookId, isOwner) {
+  const stats = lexiconDb.getBookLexicon(bookId);
+  const thresholds = _thresholds();
+  if (!stats) return { stats: null, peers: null, isOwner, stale: false, thresholds };
+  return {
+    stats,
+    peers: isOwner ? lexiconDb.loadPeerStats(bookId, LEXICON_VERSION, stats.language) : null,
+    isOwner,
+    stale: _isStale(stats, bookId),
+    thresholds,
+  };
+}
+
+router.get('/:book_id', (req, res) => {
+  const bookId = req.bookId;
+  const isOwner = req.bookRole === 'owner';
+  if (req.query.summary === '1') return res.json(buildLexiconSummary(bookId, isOwner));
+
+  const stats = lexiconDb.getBookLexicon(bookId);
+  const thresholds = _thresholds();
   if (!stats) {
     return res.json({
       stats: null, terms: [], hapax: [], ngrams: [], chapters: [], idiolect: [],
@@ -103,3 +113,4 @@ router.get('/:book_id', (req, res) => {
 });
 
 module.exports = router;
+module.exports.buildLexiconSummary = buildLexiconSummary;

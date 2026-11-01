@@ -1,7 +1,7 @@
 <!-- Admin-Usage: Tab «Verhalten» (docs/usage-events.md). Methoden in
      public/js/admin/admin-usage-behavior.js, Daten aus GET /admin/usage/behavior.
      Keine Inhalte, keine Buchtitel. -->
-<div x-show="adminUsageTab === 'behavior'" class="admin-usage-pane">
+<div x-show="adminUsageTab === 'behavior'" class="admin-usage-pane" :aria-busy="adminUsageLoading">
   <div x-show="adminUsageBehavior">
     <p class="muted-msg muted-msg--sm" x-text="$app.t('admin.usage.behavior.intro')"></p>
 

@@ -17,16 +17,62 @@ const { estimateTokens } = require('./tokens');
 //   4. refusal nach ANZAHL (`refusalShare` der Beispiele, verteilt nach
 //      `refusalMix`): Ablehnungen sind kurz, 5 % der Tokens wären ein Viertel
 //      aller Beispiele.
-// Kernfakten (`sample.core`) werden nie gekürzt. Gekürzt wird jeder
-// Aufgabentyp anteilig (das letzte Zehntel jedes Typs vor dem vorletzten), damit
-// kleine Typen (Welt-Fakten, Songs, «Wer sagt das?») nicht ganz wegfallen;
-// innerhalb eines Typs fallen Sammellisten ohne Einheit vor Einzelfragen.
+// Gekürzt wird jeder Aufgabentyp anteilig (das letzte Zehntel jedes Typs vor
+// dem vorletzten), damit kleine Typen (Welt-Fakten, Songs, «Wer sagt das?»)
+// nicht ganz wegfallen; innerhalb eines Typs fallen Sammellisten ohne Einheit
+// vor Einzelfragen.
+//
+// Fakten werden nach WICHTIGKEIT gekürzt (`factRank`): zuerst Fakten zu
+// Randfiguren, dann Orte/Welt/Szenen, dann übrige Fakten, dann
+// Zusatzvarianten des Kernwissens der Rand-, zuletzt der Nebenfiguren. Nie
+// gekürzt (`isProtected`): das ganze Kernwissen der Hauptfiguren, der
+// Kapitelinhalt und die erste Variante jeder Kernkarte (und Fragerichtung) —
+// so bleibt jede Kernkarte im Set (`coreFactCoverage`), und lieber fallen
+// Randfiguren-Fakten ganz weg, als dass eine Hauptfigur auf eine Variante
+// schrumpft. Die Bedeutung (`tier`: main/side/minor) trägt das Sample selbst
+// (core-facts) oder ergibt sich aus den Figuren-IDs in seiner ID (`tierByFig`).
 
 const answerTokens = (s, langIsEn) => s.messages
   .filter(m => m.role === 'assistant')
   .reduce((a, m) => a + estimateTokens(m.content, langIsEn), 0);
 
 function sumTokens(list) { return list.reduce((a, e) => a + e.answerTokens, 0); }
+
+const TIER_RANK = { main: 0, side: 1, minor: 2 };
+const LOW_PRIORITY_FACTS = new Set(['factPlace', 'factWorld', 'factScene']);
+
+// Variante einer Kernkarte: letzte Stelle der ID (`core|<karte>[|dir]|<n>`).
+const variantOf = (s) => (s.type === 'core' ? Number(String(s.id).split('|').pop()) || 0 : 0);
+
+// Bedeutung eines Samples: eigenes `tier`, sonst die wichtigste Figur, deren
+// ID im Sample steckt (`authorChat|figTraits|fig_12`). null ohne Figur.
+function tierOf(s, tierByFig) {
+  if (s.tier) return s.tier;
+  if (!tierByFig) return null;
+  let best = null;
+  for (const id of String(s.id).match(/\bfig_\d+\b/g) || []) {
+    const t = tierByFig.get(id);
+    if (t && (best === null || TIER_RANK[t] < TIER_RANK[best])) best = t;
+  }
+  return best;
+}
+
+function isProtected(s) {
+  if (!s.core) return false;
+  return s.task === 'chapterCore' || s.tier === 'main' || variantOf(s) === 0;
+}
+
+// Kürz-Rang eines Fakten-Samples, kleiner fällt zuerst: Randfiguren →
+// Orte/Welt/Szenen → übrige → Zusatzvarianten Kernwissen Rand-/Nebenfiguren
+// → Fakten der Hauptfiguren (Ereignis-Facetten, Buchwissen).
+function factRank(s, tierByFig) {
+  const tier = tierOf(s, tierByFig);
+  if (s.core) return tier === 'main' ? 5 : tier === 'side' ? 4 : 3;
+  if (tier === 'minor') return 0;
+  if (LOW_PRIORITY_FACTS.has(s.task)) return 1;
+  if (tier === 'main') return 5;
+  return 2;
+}
 
 // Entfernt aus `list` (Drop-Reihenfolge `dropOrder`) so lange, bis die Summe
 // ≤ budget ist. Geschützte Einträge bleiben. → Set der entfernten Einträge.
@@ -35,7 +81,7 @@ function trimTo(list, budget, dropOrder) {
   let sum = sumTokens(list);
   for (const e of [...list].sort(dropOrder)) {
     if (sum <= budget) break;
-    if (e.s.core) continue;
+    if (isProtected(e.s)) continue;
     out.add(e);
     sum -= e.answerTokens;
   }
@@ -78,9 +124,13 @@ function mixByTokens(entries, opts) {
       const order = proportionalDropOrder(list, h, 'mixW', (e) => e.s.task === 'verbatim');
       for (const e of trimTo(list, F * sw / sf, order)) { drop.add(e); dropped.writing++; }
     } else if (F > W * sf / sw) {
-      // Kernfakten zählen mit, werden aber nie gekürzt (trimTo überspringt sie).
+      // Geschütztes Kernwissen zählt mit, wird aber nie gekürzt (trimTo
+      // überspringt es); sonst nach Wichtigkeit, innerhalb eines Rangs anteilig
+      // je Typ, Kernkarten von der höchsten Variante abwärts.
       const list = byFam('facts');
-      const order = proportionalDropOrder(list, h, 'mixF');
+      const rank = new Map(list.map(e => [e, factRank(e.s, opts.tierByFig)]));
+      const prop = proportionalDropOrder(list, h, 'mixF');
+      const order = (a, b) => rank.get(a) - rank.get(b) || variantOf(b.s) - variantOf(a.s) || prop(a, b);
       for (const e of trimTo(list, W * sf / sw, order)) { drop.add(e); dropped.facts++; }
     }
   }
@@ -140,4 +190,4 @@ function mixByTokens(entries, opts) {
   return { kept: entries.filter(e => !drop.has(e)), dropped, refusalCount };
 }
 
-module.exports = { mixByTokens, answerTokens };
+module.exports = { mixByTokens, answerTokens, tierOf, isProtected, factRank };

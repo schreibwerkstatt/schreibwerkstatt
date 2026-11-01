@@ -8,6 +8,7 @@ const { db } = require('../../db/schema');
 const { listBookIdsForUser } = require('../../db/book-access');
 const bookCategories = require('../../db/book-categories');
 const { localIsoDate, localIsoDaysAgo } = require('../../lib/local-date');
+const { NORMSEITE_CHARS } = require('../../lib/normseite');
 const logger = require('../../logger');
 const { sessionEmail } = require('../../lib/acl');
 const contentStore = require('../../lib/content-store');
@@ -32,8 +33,8 @@ function register(router) {
   /**
    * Aggregierte Schreib-Statistik ueber ALLE eigenen Buecher (role='owner').
    * Inhalts-Kennzahlen (chars/words/tok/pages) live aus `page_stats` — gleiche
-   * Quelle wie admin-books, frischer als der Tages-Snapshot. Kapitel-Anzahl aus
-   * dem letzten `book_stats_history`-Snapshot pro Buch (taeglich synchronisiert).
+   * Quelle wie admin-books, frischer als der Tages-Snapshot. Kapitel-Anzahl live
+   * ueber den Content-Store, Wortformen aus dem letzten `book_stats_history`-Snapshot.
    * Schreibzeit aus `writing_time` (per-User). `page_stats`/`book_stats_history`/
    * `writing_time` sind Cache-/Aggregat-Tabellen (kein Content-Store-Verstoss).
    */
@@ -52,12 +53,11 @@ function register(router) {
                COUNT(*)                AS pages
         FROM page_stats WHERE book_id IN (${ph})
       `).get(...owned);
-      // Letzter Snapshot pro Buch (MAX(recorded_at)) — daraus chapter_count +
-      // unique_words summieren (Wortschatz; ueber Buecher summiert = Naeherung,
-      // gleiche Konvention wie chars).
+      // Letzter Snapshot pro Buch (MAX(recorded_at)) — daraus unique_words
+      // summieren (Wortformen; ueber Buecher summiert = Naeherung, gleiche
+      // Konvention wie chars). Die Kapitelzahl zaehlt live (unten).
       const snap = db.prepare(`
-        SELECT COALESCE(SUM(bsh.chapter_count), 0) AS chapters,
-               COALESCE(SUM(bsh.unique_words), 0)  AS unique_words
+        SELECT COALESCE(SUM(bsh.unique_words), 0)  AS unique_words
         FROM book_stats_history bsh
         JOIN (
           SELECT book_id, MAX(recorded_at) AS mx
@@ -109,32 +109,29 @@ function register(router) {
       // `checked_at` ist ein ISO-Zeitstempel; der Stichtag ist ein Tagesdatum.
       // `< Folgetag` schliesst den ganzen Stichtag ein (`<= 'YYYY-MM-DD'` liesse
       // jeden Zeitstempel dieses Tages fallen, weil er laenger ist als das Datum).
+      // Je Seite genau EINE Zeile (juengster Lauf, bei gleichem Zeitstempel die
+      // hoehere id) — ein Join auf MAX(checked_at) zaehlte Gleichstaende doppelt.
       const lektoratAgg = (beforeIso) => {
         const cond = beforeIso ? 'AND checked_at < ?' : '';
-        const innerArgs = beforeIso ? [...owned, beforeIso] : [...owned];
-        const outerArgs = beforeIso ? [...owned, beforeIso] : [...owned];
+        const args = beforeIso ? [...owned, beforeIso] : [...owned];
         return db.prepare(`
           SELECT COUNT(*) AS pages,
                  COALESCE(SUM(lc.error_count), 0) AS findings,
                  COALESCE(SUM(ps.chars), 0)       AS chars
           FROM (
-            SELECT pc.page_id, pc.error_count
-            FROM page_checks pc
-            JOIN (
-              SELECT page_id, MAX(checked_at) AS mx
-              FROM page_checks WHERE book_id IN (${ph}) ${cond}
-              GROUP BY page_id
-            ) m ON m.page_id = pc.page_id AND m.mx = pc.checked_at
-            WHERE pc.book_id IN (${ph}) ${cond}
+            SELECT page_id, error_count,
+                   ROW_NUMBER() OVER (PARTITION BY page_id ORDER BY checked_at DESC, id DESC) AS rn
+            FROM page_checks WHERE book_id IN (${ph}) ${cond}
           ) lc
           LEFT JOIN page_stats ps ON ps.page_id = lc.page_id
-        `).get(...innerArgs, ...outerArgs);
+          WHERE lc.rn = 1
+        `).get(...args);
       };
       const ltNow = lektoratAgg(null);
       let lektorat = null;
       if (ltNow && ltNow.pages > 0) {
         const avgPerPage = ltNow.findings / ltNow.pages;
-        const perNormpage = ltNow.chars > 0 ? ltNow.findings / (ltNow.chars / 1500) : null;
+        const perNormpage = ltNow.chars > 0 ? ltNow.findings / (ltNow.chars / NORMSEITE_CHARS) : null;
         const ltPast = lektoratAgg(localIsoDaysAgo(29)); // Stand bis inkl. heute − 30
         let trend = 0;
         if (ltPast && ltPast.pages > 0) {
@@ -155,13 +152,22 @@ function register(router) {
       const goalMap = new Map(goalRows.map(r => [r.book_id, r]));
       // Kategorie je Buch (book_categories-Pool, optional via books.category_id).
       const catMap = bookCategories.getForBooks(owned);
-      // Anlagedatum je Buch (Content-Store): das Frontend erkennt daran, ob ein
-      // Buch vor einem Zeitraum schon existierte, auch wenn die Snapshot-Historie
-      // nicht so weit zurueckreicht (Zeitraum-Umfang „ohne Basis", docs/my-stats.md).
-      const ownedSet = new Set(owned);
-      const createdMap = new Map((await contentStore.listBooks())
-        .filter(b => ownedSet.has(b.id))
-        .map(b => [b.id, b.created_at ? String(b.created_at).slice(0, 10) : null]));
+      // Anlagedatum je Buch (Content-Store) als App-Datum: das Frontend erkennt
+      // daran, ob ein Buch vor einem Zeitraum schon existierte, auch wenn die
+      // Snapshot-Historie nicht so weit zurueckreicht (docs/my-stats.md). Der
+      // Zeitstempel ist UTC — sein Datums-Praefix laege nachts einen Tag daneben.
+      // Kapitelzahl live (wie Zeichen/Abschnitte), nicht aus dem Vortags-Snapshot.
+      const createdMap = new Map();
+      let chapters = 0;
+      await Promise.all(owned.map(async (bid) => {
+        const [book, chs] = await Promise.all([
+          contentStore.loadBook(bid).catch(() => null),
+          contentStore.listChapters(bid).catch(() => []),
+        ]);
+        const ts = book?.created_at ? new Date(book.created_at) : null;
+        createdMap.set(bid, ts && !isNaN(ts) ? localIsoDate(ts) : null);
+        chapters += chs.length;
+      }));
       const booksDetail = owned.map((bid) => {
         const c = perBookMap.get(bid) || {};
         const g = goalMap.get(bid) || {};
@@ -181,7 +187,7 @@ function register(router) {
       });
       res.json({
         books:            owned.length,
-        chapters:         snap?.chapters || 0,
+        chapters,
         pages:            content?.pages || 0,
         chars:            content?.chars || 0,
         words:            content?.words || 0,
@@ -219,7 +225,7 @@ function register(router) {
       const ph = owned.map(() => '?').join(',');
       const history = db.prepare(`
         SELECT book_id, recorded_at, chars, words, tok, page_count, chapter_count, unique_words,
-               avg_sentence_len, avg_lix, avg_flesch_de
+               avg_sentence_len, avg_lix, avg_flesch_de, imported_chars, imported_words, imported_pages
         FROM book_stats_history WHERE book_id IN (${ph})
         ORDER BY recorded_at ASC
       `).all(...owned);

@@ -61,3 +61,14 @@ test('weggeklickt (Key je Buch) und Deckel', () => {
   const rest = computeNextSteps(all, k => k !== 'overview.emptyChapter.7');
   assert.deepEqual(rest.map(s => s.kind), ['ideenCheck', 'figuren', 'bookChat']);
 });
+
+test('leeres Kapitel: Unterkapitel eines ausgeschlossenen Oberkapitels zählt nicht', () => {
+  const tree = [
+    { type: 'chapter', id: 1, name: 'Teil', excluded: true, hasChildren: true, pages: [] },
+    { type: 'chapter', id: 2, name: 'Innen', parent_id: 1, pages: [] },
+    { type: 'chapter', id: 3, name: 'Draussen', pages: [] },
+  ];
+  const isExcluded = (id) => id === 1 || id === 2;
+  const out = computeNextSteps({ ...base, tree, isExcluded }, open);
+  assert.deepEqual(out[0].params, { id: 3, name: 'Draussen' });
+});

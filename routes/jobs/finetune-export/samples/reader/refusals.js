@@ -17,35 +17,65 @@ const { hashSplit, nameRegex } = require('../../lib/names');
 const { collectRelationFacts } = require('../core-facts/relations');
 const { genderOf, roleNoun, inverseTyp, rolePhrase, cleanBeruf, isStatus } = require('../core-facts/words');
 
+// Namensvorrat der erfundenen Figuren: je ≥ 40 Vor- und Nachnamen, damit kein
+// Nachname im Set gehäuft auftaucht. Kombiniert wird über zwei gemischte
+// Listen (fester Seed): Runde r paart Vorname i mit Nachname (i + r) — jeder
+// Name kommt so gleich oft vor.
 const FIRST = {
   de: ['Konrad', 'Helene', 'Jakob', 'Margrit', 'Severin', 'Ottilie', 'Benedikt', 'Leonore', 'Kaspar', 'Rosalie',
        'Florian', 'Adelheid', 'Lukas', 'Theres', 'Valentin', 'Mechthild', 'Urban', 'Klothilde', 'Ruedi', 'Verena',
-       'Balthasar', 'Gertrud', 'Ignaz', 'Hedwig', 'Leopold', 'Brigitta', 'Silvan', 'Eugenie', 'Gottfried', 'Irmgard'],
+       'Balthasar', 'Gertrud', 'Ignaz', 'Hedwig', 'Leopold', 'Brigitta', 'Silvan', 'Eugenie', 'Gottfried', 'Irmgard',
+       'Anselm', 'Philomena', 'Cyrill', 'Walburga', 'Fridolin', 'Notburga', 'Remo', 'Agathe', 'Damian', 'Isidora',
+       'Eusebius', 'Cäcilia', 'Pankraz', 'Henriette', 'Vinzenz', 'Kunigunde', 'Gebhard', 'Mathilde', 'Lorenz', 'Seraina'],
   en: ['Harold', 'Delia', 'Ambrose', 'Prudence', 'Silas', 'Rosalind', 'Jasper', 'Winifred', 'Barnaby', 'Cordelia',
-       'Tobias', 'Philippa', 'Rupert', 'Imogen', 'Cedric', 'Beatrix', 'Horace', 'Lavinia', 'Percival', 'Millicent'],
+       'Tobias', 'Philippa', 'Rupert', 'Imogen', 'Cedric', 'Beatrix', 'Horace', 'Lavinia', 'Percival', 'Millicent',
+       'Algernon', 'Henrietta', 'Bartholomew', 'Clementine', 'Ezekiel', 'Ottoline', 'Fitzroy', 'Marigold', 'Godfrey', 'Euphemia',
+       'Lancelot', 'Araminta', 'Thaddeus', 'Wilhelmina', 'Mortimer', 'Perpetua', 'Leopold', 'Dorcas', 'Crispin', 'Theodora'],
 };
 const LAST = {
   de: ['Albisser', 'Brunnmeier', 'Wettstein', 'Oberholzer', 'Kaltenbach', 'Rauschert', 'Imhof', 'Fässler', 'Zumsteg', 'Tschopp',
        'Hollenstein', 'Eberle', 'Gasser', 'Wyrsch', 'Niederöst', 'Bachofner', 'Strebel', 'Ruckstuhl', 'Hürlimann', 'Lanzrein',
-       'Schwendener', 'Dürrenberger', 'Wasmer', 'Kilchherr', 'Zgraggen', 'Brändle', 'Obrist', 'Marfurt', 'Gisler', 'Hänggi'],
+       'Schwendener', 'Dürrenberger', 'Wasmer', 'Kilchherr', 'Zgraggen', 'Brändle', 'Obrist', 'Marfurt', 'Gisler', 'Hänggi',
+       'Aeschbacher', 'Bürgisser', 'Christen', 'Dettwiler', 'Egloff', 'Fankhauser', 'Gübeli', 'Hunkeler', 'Jäggi', 'Kägi',
+       'Lüscher', 'Mettler', 'Nussbaumer', 'Pfister', 'Rüegsegger', 'Stalder', 'Tobler', 'Vögeli', 'Wüthrich', 'Zbinden'],
   en: ['Whitcombe', 'Fairbanks', 'Kettering', 'Ashdown', 'Thornbury', 'Pemberly', 'Lockridge', 'Calloway', 'Hollingsworth', 'Mapplethorpe',
-       'Blackwood', 'Fenwick', 'Hargreaves', 'Wetherby', 'Grimsditch', 'Ollerenshaw', 'Pettigrew', 'Thistlewood', 'Crabtree', 'Duckworth'],
+       'Blackwood', 'Fenwick', 'Hargreaves', 'Wetherby', 'Grimsditch', 'Ollerenshaw', 'Pettigrew', 'Thistlewood', 'Crabtree', 'Duckworth',
+       'Applegarth', 'Bramwell', 'Cheesewright', 'Dunstable', 'Eversleigh', 'Fotheringham', 'Gatehouse', 'Huxtable', 'Ingleby', 'Jessop',
+       'Kenwright', 'Langstaff', 'Merriweather', 'Nethercott', 'Oddington', 'Pockley', 'Quarrington', 'Rowbotham', 'Shufflebottom', 'Tattersall'],
 };
 const PLACE_A = {
-  de: ['Eschen', 'Kalt', 'Nord', 'Marien', 'Falken', 'Linden', 'Roten', 'Birken', 'Hasel', 'Weiden', 'Ulmen', 'Erlen'],
-  en: ['Ash', 'Grey', 'Elver', 'Marrow', 'Brack', 'Hens', 'Thorn', 'Willow', 'Raven', 'Holly'],
+  de: ['Eschen', 'Kalt', 'Nord', 'Marien', 'Falken', 'Linden', 'Roten', 'Birken', 'Hasel', 'Weiden', 'Ulmen', 'Erlen',
+       'Tannen', 'Moos', 'Stein', 'Wolfs', 'Fuchs', 'Rosen', 'Hagen', 'Brunnen'],
+  en: ['Ash', 'Grey', 'Elver', 'Marrow', 'Brack', 'Hens', 'Thorn', 'Willow', 'Raven', 'Holly', 'Fern', 'Oak', 'Stoat', 'Bramble'],
 };
 const PLACE_B = {
-  de: ['ried', 'brunn', 'hafen', 'au', 'stieg', 'moos', 'wil', 'egg', 'tal', 'hofen'],
-  en: ['combe', 'water', 'ton', 'dene', 'ley', 'ford', 'mere', 'wick', 'holt', 'stead'],
+  de: ['ried', 'brunn', 'hafen', 'au', 'stieg', 'moos', 'wil', 'egg', 'tal', 'hofen', 'acker', 'bühl', 'matt', 'wangen'],
+  en: ['combe', 'water', 'ton', 'dene', 'ley', 'ford', 'mere', 'wick', 'holt', 'stead', 'bury', 'cliffe'],
 };
 const FAKE_EVENTS = {
   de: ['der Brand in der Sägerei', 'das Zugunglück am Bahnübergang', 'der Überfall auf die Kantonalbank', 'die Lawine im Hochtal',
        'die Entführung des Gemeindepräsidenten', 'der Schiffbruch auf dem Stausee', 'der Diebstahl der Monstranz',
-       'die Explosion in der Feuerwerksfabrik', 'das Jahrhunderthochwasser', 'der Einsturz der Holzbrücke'],
+       'die Explosion in der Feuerwerksfabrik', 'das Jahrhunderthochwasser', 'der Einsturz der Holzbrücke',
+       'das Erdbeben während der Fasnacht', 'der Streik in der Uhrenfabrik', 'die Sprengung des Staudamms',
+       'der Absturz der Seilbahn', 'die Vergiftung am Dorffest', 'der Grossbrand im Kloster', 'die Flucht aus dem Bezirksgefängnis',
+       'der Bergsturz über dem Dorf', 'die Schlägerei am Schützenfest', 'der Konkurs der Dorfkäserei'],
   en: ['the fire at the sawmill', 'the train crash at the level crossing', 'the robbery at the county bank', 'the avalanche in the high valley',
-       "the mayor's kidnapping", 'the shipwreck on the reservoir', 'the theft of the monstrance', 'the explosion at the fireworks factory'],
+       "the mayor's kidnapping", 'the shipwreck on the reservoir', 'the theft of the monstrance', 'the explosion at the fireworks factory',
+       'the earthquake during the carnival', 'the strike at the watch factory', 'the cable car crash', 'the poisoning at the village fair',
+       'the prison break', 'the landslide above the village'],
 };
+
+// Paare ohne gehäufte Namen: Runde r paart firsts[i] mit lasts[(i + r) % n].
+function spreadPairs(firsts, lasts, ordered) {
+  const fs = ordered(firsts, 'fn|');
+  const ls = ordered(lasts, 'ln|');
+  const out = [];
+  const rounds = Math.min(fs.length, ls.length);
+  for (let r = 0; r < rounds; r++) {
+    for (let i = 0; i < fs.length; i++) out.push(`${fs[i]} ${ls[(i + r) % ls.length]}`);
+  }
+  return out;
+}
 
 const T = {
   de: {
@@ -58,8 +88,10 @@ const T = {
     placeQ: ['Was passiert in {x}?', 'Beschreibe {x}.', 'Wer lebt in {x}?', 'Was ist {x} für ein Ort?'],
     placeA: ['Einen Ort namens {x} gibt es in meiner Geschichte nicht.', '{x} kommt in «{book}» nicht vor – meine Geschichte spielt anderswo.',
              'In {x} spielt keine Szene von «{book}»; diesen Ort kenne ich nicht.'],
-    eventQ: ['Was geschah bei {x}?', 'Wann passiert {x}?', 'Wer war bei {x} dabei?'],
-    eventA: ['Davon erzähle ich nicht: {x} kommt in meiner Geschichte nicht vor.', '{X} gibt es in «{book}» nicht.'],
+    // Ereignisse stehen mit Artikel im Nominativ («das Jahrhunderthochwasser»):
+    // nur Vorlagen, in denen sie Subjekt sind — «bei das …» wäre falsch.
+    eventQ: ['Wann war {x}?', 'Wer war dabei, als {x} geschah?', 'Was hat {x} ausgelöst?'],
+    eventA: ['Davon erzähle ich nicht: {x} kommt in meiner Geschichte nicht vor.', '{X} kommt in «{book}» nicht vor.'],
     offA: ['{Thing} kann ich dir nicht geben – ich bin «{book}» und kenne nur meine eigene Geschichte. Frag mich lieber nach {hook}.',
            'Für {thing} bin ich nicht die richtige Adresse: Ich weiss nur, was zwischen meinen Buchdeckeln geschieht. Wie wäre es mit einer Frage zu {hook}?',
            'Um {thing} kümmere ich mich nicht, das liegt ausserhalb meiner Seiten. Über {hook} erzähle ich dir aber gern.'],
@@ -148,12 +180,32 @@ function buildHaystack(ctx) {
     + '\n' + locRows.map(l => l.name).join(' ').toLowerCase();
 }
 
-// Falsche Rolle für eine Beziehung: plausibel, aber unvereinbar.
+// Falsche Rolle für eine Beziehung: plausibel, aber unvereinbar. Plausibel
+// heisst: dieselbe Generation, wenn die falsche Rolle Geschwister oder Partner
+// ist, die ältere, wenn sie Elternteil oder Mentor ist, die jüngere bei Kind
+// oder Schützling (`WRONG_NEEDS`). Die Generation folgt aus dem echten Typ
+// (Eltern +1, Kind −1, Geschwister/Partner 0) oder aus den Geburtsjahren;
+// ist sie unbekannt, entfällt eine generationsgebundene Falschannahme. Keine
+// Prämisse «Renate ist die Mutter ihres Vorgesetzten».
 const WRONG_TYP = {
-  elternteil: 'geschwister', kind: 'geschwister', geschwister: 'elternteil', ehepartner: 'geschwister',
-  ex_partner: 'geschwister', freund: 'feind', feind: 'freund', kollege: 'vorgesetzter', vorgesetzter: 'kind',
-  untergebener: 'elternteil', mentor: 'kind', schuetzling: 'elternteil', rivale: 'ehepartner', liebesbeziehung: 'geschwister',
+  elternteil: 'mentor', kind: 'schuetzling', geschwister: 'kollege', ehepartner: 'geschwister',
+  ex_partner: 'geschwister', freund: 'feind', feind: 'freund', kollege: 'vorgesetzter', vorgesetzter: 'kollege',
+  untergebener: 'kollege', mentor: 'elternteil', schuetzling: 'kind', rivale: 'freund', liebesbeziehung: 'geschwister',
 };
+// Generation von Y gegenüber X, die die falsche Rolle voraussetzt.
+const WRONG_NEEDS = { geschwister: 0, ehepartner: 0, ex_partner: 0, elternteil: 1, mentor: 1, kind: -1, schuetzling: -1 };
+const GEN_OF_TYP = { elternteil: 1, kind: -1, geschwister: 0, ehepartner: 0, ex_partner: 0, liebesbeziehung: 0 };
+
+// Generation von Y gegenüber X: +1 älter (≥ 15 Jahre), −1 jünger, 0 gleich
+// (≤ 10 Jahre), null unbekannt.
+function generation(typY, yearX, yearY) {
+  if (typY in GEN_OF_TYP) return GEN_OF_TYP[typY];
+  if (!yearX || !yearY) return null;
+  const d = yearX - yearY;
+  if (d >= 15) return 1;
+  if (d <= -15) return -1;
+  return Math.abs(d) <= 10 ? 0 : null;
+}
 
 function buildRefusalSamples(ctx, push) {
   const { langIsEn, displayName: book, figRows, opts, eligibleFigIds } = ctx;
@@ -163,7 +215,12 @@ function buildRefusalSamples(ctx, push) {
   const hay = buildHaystack(ctx);
   const pick = (arr, key) => arr[Math.floor(hashSplit(key, seed) * arr.length)];
   const ordered = (arr, tag) => [...arr].sort((a, b) => hashSplit(tag + a, seed) - hashSplit(tag + b, seed));
-  const realFigs = figRows.filter(f => f.name && (!eligibleFigIds || eligibleFigIds.has(f.fig_id)));
+  // Nur benannte Figuren (core-facts/naming.js): keine Falschannahme über
+  // «Herr Koch (Primarlehrer)» oder «Renates Vorgesetzter bei der SoBa».
+  const realFigs = figRows
+    .filter(f => f.name && (!eligibleFigIds || eligibleFigIds.has(f.fig_id)) && ctx.figNameInfo?.get(f.fig_id)?.proper !== false)
+    .map(f => ({ ...f, name: ctx.figNameInfo?.get(f.fig_id)?.name || f.name }));
+  const birthYearOf = (f) => (ctx.eventsByFigPk?.get(f.pk) || []).find(e => e.subtyp === 'geburt' && e.datum_year)?.datum_year || null;
   // Zurück zum Buch über die meistgenannten Figuren — ein Ortsname («Frag
   // mich lieber nach Speisesaal») passt grammatisch selten.
   const mentions = ctx.figMentions || new Map();
@@ -176,9 +233,7 @@ function buildRefusalSamples(ctx, push) {
   // ── Unbekannte Figuren ──────────────────────────────────────────────
   const firsts = unknownNames(FIRST[lang], hay);
   const lasts = unknownNames(LAST[lang], hay);
-  const combos = [];
-  for (const fn of firsts) for (const ln of lasts) combos.push(`${fn} ${ln}`);
-  for (const x of ordered(combos, 'uf|').slice(0, 220)) {
+  for (const x of spreadPairs(firsts, lasts, ordered).slice(0, 220)) {
     const useRel = realFigs.length && hashSplit('ufRel|' + x, seed) < 0.15;
     if (useRel) {
       const real = pick(realFigs, 'ufReal|' + x).name;
@@ -200,7 +255,7 @@ function buildRefusalSamples(ctx, push) {
   // ── Unbekannte Orte und Ereignisse ──────────────────────────────────
   const places = [];
   for (const a of PLACE_A[lang]) for (const b of PLACE_B[lang]) places.push(a + b);
-  for (const x of ordered(unknownNames(places, hay), 'up|').slice(0, 40)) {
+  for (const x of ordered(unknownNames(places, hay), 'up|').slice(0, 60)) {
     one('unknownPlace', x, fill(pick(t.placeQ, 'upQ|' + x), { x }), fill(pick(t.placeA, 'upA|' + x), { x, book }));
   }
   const eventOk = (e) => !e.split(/\s+/).some(w => w.length >= 5 && /^\p{Lu}/u.test(w) && hay.includes(w.toLowerCase()));
@@ -225,6 +280,7 @@ function buildRefusalSamples(ctx, push) {
     // Rolle von b gegenüber a: r.typ. Frage über b aus Sicht von a.
     for (const [X, Y, typY] of [[r.a, r.b, r.typ], [r.b, r.a, inverseTyp(r.typ)]]) {
       const wrongTyp = WRONG_TYP[typY];
+      if (wrongTyp in WRONG_NEEDS && generation(typY, birthYearOf(X), birthYearOf(Y)) !== WRONG_NEEDS[wrongTyp]) continue;
       const right = roleNoun(typY, genderOf(Y), langIsEn);
       const wrong = wrongTyp && roleNoun(wrongTyp, genderOf(Y), langIsEn);
       if (!right || !wrong || right.noun === wrong.noun) continue;
@@ -243,13 +299,13 @@ function buildRefusalSamples(ctx, push) {
     one('falsePremise', key, fill(pick(t.fpJobQ, 'fpJQ|' + key), vars), fill(pick(t.fpJobA, 'fpJA|' + key), vars));
   }
   for (const f of realFigs) {
-    const ev = (ctx.eventsByFigPk?.get(f.pk) || []).find(e => e.subtyp === 'geburt' && e.datum_year);
-    if (!ev) continue;
+    const year = birthYearOf(f);
+    if (!year) continue;
     const shift = 3 + Math.floor(hashSplit('fpY|' + f.fig_id, seed) * 12);
-    const vars = { n: f.name, right: String(ev.datum_year), wrong: String(ev.datum_year + (hashSplit('fpYs|' + f.fig_id, seed) < 0.5 ? -shift : shift)) };
+    const vars = { n: f.name, right: String(year), wrong: String(year + (hashSplit('fpYs|' + f.fig_id, seed) < 0.5 ? -shift : shift)) };
     const key = `year|${f.fig_id}`;
     one('falsePremise', key, fill(pick(t.fpYearQ, 'fpYQ|' + key), vars), fill(pick(t.fpYearA, 'fpYA|' + key), vars));
   }
 }
 
-module.exports = { buildRefusalSamples, unknownNames, buildHaystack, OFF_TOPIC, REFUSAL_TEXT: T, FIRST, LAST, WRONG_TYP };
+module.exports = { buildRefusalSamples, unknownNames, buildHaystack, spreadPairs, generation, OFF_TOPIC, REFUSAL_TEXT: T, FIRST, LAST, PLACE_A, PLACE_B, FAKE_EVENTS, WRONG_TYP, WRONG_NEEDS };

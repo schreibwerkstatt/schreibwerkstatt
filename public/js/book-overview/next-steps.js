@@ -16,7 +16,9 @@ const OHNE_FIGUREN = new Set(['journalismus', 'sachbuch', 'wissenschaft', 'essay
 /**
  * Pure Auswahl (testbar ohne Alpine). Reihenfolge = Priorität.
  * @param {{ bookId, tree, ideen, figurenCount, figurenForbidden, chars, buchtyp,
- *           pageCount, bookChatSessions, isFinished }} d
+ *           pageCount, bookChatSessions, isFinished, isExcluded? }} d
+ *   `isExcluded(chapterId)` kaskadiert den Export-Ausschluss über die Vorfahren
+ *   (_chapterRollup); ohne ihn zählt nur das Flag am Kapitel selbst.
  * @param {(key: string) => boolean} isOpen  Tipp-Key noch nicht weggeklickt
  * @returns {Array<{ kind, key, params }>}
  */
@@ -27,10 +29,12 @@ export function computeNextSteps(d, isOpen) {
     if (isOpen(key)) out.push({ kind, key, params });
   };
 
-  // Erstes angelegtes, noch leeres Kapitel (ohne Unterkapitel, nicht vom
-  // Export ausgeschlossen): dort steht die Schreibfront.
+  // Erstes angelegtes, noch leeres Kapitel (ohne Unterkapitel, weder selbst
+  // noch über ein Oberkapitel vom Export ausgeschlossen): dort steht die Schreibfront.
   if (!d.isFinished) {
-    const empty = (d.tree || []).find(c => c.type === 'chapter' && !c.solo && !c.excluded
+    const excluded = d.isExcluded || (() => false);
+    const empty = (d.tree || []).find(c => c.type === 'chapter' && !c.solo
+      && !c.excluded && !excluded(c.id)
       && !c.hasChildren && !(c.pages || []).length);
     if (empty) push('emptyChapter', { id: empty.id, name: empty.name || '' });
   }
@@ -50,6 +54,10 @@ export const nextStepsMethods = {
   overviewNextSteps() {
     const hints = Alpine.store('hints');
     if (!hints?.loaded) return [];
+    // Beim Buchwechsel stehen noch die Daten des vorigen Buchs, die Hint-Keys
+    // trügen aber schon die neue Buch-ID — ein Klick blendete dann im falschen
+    // Buch einen Schritt dauerhaft aus.
+    if (this.overviewShowsOtherBook()) return [];
     const tree = Alpine.store('nav').tree || [];
     const d = {
       bookId: this.overviewBookId,
@@ -62,6 +70,7 @@ export const nextStepsMethods = {
       pageCount: (Alpine.store('nav').pages || []).length,
       bookChatSessions: this.overviewBookChatSessions,
       isFinished: this.overviewIsFinished,
+      isExcluded: this._chapterRollup().isExcluded,
     };
     // Kein Memo: `hints.dismissed` und `nav.tree` wechseln ihre Identität bei
     // jeder Änderung, die Auswahl selbst ist ein einziger Durchlauf.

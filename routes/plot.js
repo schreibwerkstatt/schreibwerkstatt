@@ -52,10 +52,9 @@ const MAX_THREAD_NAME = 120;
 const _ORDER_ERR = new Set(['ORDER_INVALID', 'ACT_MISMATCH', 'ACT_THREAD_MISMATCH', 'ACT_SCOPE_MIXED']);
 
 // ── Board laden ──────────────────────────────────────────────────────────────
-router.get('/', (req, res) => {
-  const ctx = _requireBook(req, res);
-  if (!ctx) return;
-  const { userEmail, bookId } = ctx;
+// Board-Payload eines Buchs (GET /plot). Geteilt mit der gebündelten
+// Übersicht (routes/overview.js), die dieselbe Antwort braucht.
+function buildPlotBoard(bookId, userEmail) {
   // Ist-Index der Beat-Verankerung an jeden Beat hängen (count + Top-Fundstellen)
   // → Drift-Badge + Fundstellen-Popover im Frontend (Soll `status` vs. Ist). Kein
   // Extra-Call. navigableOnly: nur anspringbare Fundstellen (Szene ohne Seite fällt
@@ -78,7 +77,7 @@ router.get('/', (req, res) => {
     geburtsjahre[figId] = f.geburtsjahr;
     if (f.geburtsjahr_quelle === 'text') geburtsjahrAusText.push(figId);
   }
-  res.json({
+  return {
     geburtsjahre,
     geburtsjahrAusText,
     // `alter` = Altersspanne aus dem Aktnamen (lib/plot-act-age.js) — zusammen
@@ -92,7 +91,13 @@ router.get('/', (req, res) => {
       stale: plotDb.beatAnchorStale(bookId, userEmail, staleStatuses),
       ranAt: plotDb.beatAnchorLastRun(bookId, userEmail),
     },
-  });
+  };
+}
+
+router.get('/', (req, res) => {
+  const ctx = _requireBook(req, res);
+  if (!ctx) return;
+  res.json(buildPlotBoard(ctx.bookId, ctx.userEmail));
 });
 
 // ── Zeit-Messung ────────────────────────────────────────────────────────────
@@ -589,3 +594,4 @@ router.delete('/brainstorm-runs/:id', (req, res) => {
 });
 
 module.exports = router;
+module.exports.buildPlotBoard = buildPlotBoard;

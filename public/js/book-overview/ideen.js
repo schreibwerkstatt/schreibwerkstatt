@@ -2,7 +2,7 @@
 // die Stufen, Buch-Ideen ohne Ort und Ideen mit planerischer Verknüpfung.
 // Datenquelle: /ideen/board?book_id → { statuses, stages, ideen } (user-privat:
 // nur die eigenen Ideen). Rein abgeleitet, kein KI-Job. Reader ohne Editor-Recht
-// bekommen 403 → overviewIdeen=null → Tile via x-if aus (siehe load.js).
+// bekommen den Teil als `forbidden` → overviewIdeen=null → Tile via x-if aus (siehe load.js).
 import { ideeStatus } from '../book/ideen-shared.js';
 
 export const IDEEN_TILE_STATUSES = ['offen', 'in_arbeit', 'erledigt', 'verworfen'];

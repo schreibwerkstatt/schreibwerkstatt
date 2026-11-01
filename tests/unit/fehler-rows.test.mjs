@@ -88,12 +88,16 @@ test('Teilabdeckung blasst ab, die Zellklasse bleibt tinted', () => {
   assert.equal(rows[1].cells.stil.vars['--heatmap-opacity'], '1');
 });
 
-test('klickbare Zellen tragen internal-link und den Detail-Schluessel der Antwort', () => {
+// Klickziel ist der Button im Template (.heatmap-cell-btn) — die Zell-Klasse
+// trägt nie internal-link, sonst bekäme das <td> role=button.
+test('klickbare Zellen: clickable + Detail-Schluessel, nie internal-link an der Zelle', () => {
   const [row] = buildFehlerRows(data([chapter(null, { chapter_name: null })], { __uncat__: { stil: { count: 2, per1k: 1, pages: 1 } } }), TYPEN, 'de');
   assert.equal(row.key, '__uncat__');
   assert.equal(row.cells.stil.detailKey, '__uncat__:stil');
-  assert.ok(row.cells.stil.cls.includes('internal-link'));
-  assert.ok(!row.cells.grammatik.cls.includes('internal-link'));
+  assert.equal(row.cells.stil.clickable, true);
+  assert.equal(row.cells.grammatik.clickable, false);
+  assert.ok(row.cells.stil.cls.includes('heatmap-cell--clickable'));
+  assert.ok(!row.cells.stil.cls.includes('internal-link'));
 });
 
 test('Summenzeile: Dichte gegen alle geprueften Woerter des Buchs', () => {

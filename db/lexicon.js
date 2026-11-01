@@ -293,7 +293,8 @@ const _stmtStampHistory = db.prepare(`
     mattr       = (SELECT CASE WHEN mattr_window >= @window THEN mattr END FROM book_lexicon WHERE book_id = @book_id),
     mtld        = (SELECT mtld        FROM book_lexicon WHERE book_id = @book_id),
     lex_density = (SELECT lex_density FROM book_lexicon WHERE book_id = @book_id),
-    hapax_ratio = (SELECT hapax_ratio FROM book_lexicon WHERE book_id = @book_id)
+    hapax_ratio = (SELECT hapax_ratio FROM book_lexicon WHERE book_id = @book_id),
+    unique_words = (SELECT types      FROM book_lexicon WHERE book_id = @book_id)
    WHERE book_id = @book_id AND recorded_at = @date
 `);
 function stampLexiconHistory(bookId, date, mattrWindow) {

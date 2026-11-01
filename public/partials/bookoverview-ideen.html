@@ -2,7 +2,7 @@
      Buch-Ideen ohne Ort + Ideen mit planerischer Verknüpfung. Datenquelle:
      /ideen/board?book_id (nur die eigenen Ideen), Aggregat overviewIdeenStats().
      Klick → Ideen-Board. Reader ohne Editor-Recht sehen das Tile nicht
-     (overviewIdeen=null via 403, siehe load.js). -->
+     (overviewIdeen=null via `forbidden`, siehe load.js). -->
 <template x-if="overviewHasIdeen()">
   <div class="overview-tile internal-link"
        @click="$app.toggleIdeenBoardCard()"

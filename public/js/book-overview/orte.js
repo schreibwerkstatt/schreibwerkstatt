@@ -12,12 +12,15 @@ import { rankPreferRecurring } from './ranking.js';
 export const orteMethods = {
   overviewOrteCount() { return (this.overviewOrte || []).length; },
 
+  // Fundstellen in ausgeschlossenen Kapiteln zählen nicht (wie in der Matrix).
   overviewTopOrte() {
     const orte = this.overviewOrte || [];
-    return this._memo('topOrte', [orte], () => {
+    const rollup = this._chapterRollup();
+    return this._memo('topOrte', [orte, rollup], () => {
       const rows = orte.map(o => {
         const kap = Array.isArray(o.kapitel) ? o.kapitel : [];
-        const total = kap.reduce((s, k) => s + (Number(k.haeufigkeit) || 0), 0);
+        const total = kap.reduce((s, k) => (rollup.isExcludedRef(k?.chapter_id, k?.name)
+          ? s : s + (Number(k.haeufigkeit) || 0)), 0);
         return { id: o.id, name: o.name, typ: o.typ || 'andere', total };
       });
       return rankPreferRecurring(rows, { valueOf: o => o.total });

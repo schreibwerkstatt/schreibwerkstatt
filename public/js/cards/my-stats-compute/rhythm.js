@@ -46,6 +46,20 @@ export function computeStreakStats(valueByIso, isoToday, hit = (v) => v > 0) {
 // gleichnamige Funktion mit anderer Signatur und anderer Datenquelle (Zeichen
 // statt Sekunden), und beide liegen gleichzeitig im Modulgraph.
 export function computeWritingTimeStreak(writingRows, todayLocal = new Date(), statsRows = writingRows) {
+  const grid = computeWritingTimeGrid(writingRows, todayLocal);
+  const stats = computeStreakStats(secondsByDate(statsRows), localIsoDate(new Date(todayLocal)));
+  return {
+    ...grid,
+    currentStreak: stats.currentStreak,
+    longestStreak: stats.longestStreak,
+    totalActiveDays: stats.activeDays,
+  };
+}
+
+// Nur das Raster (immer die letzten 52 Wochen, unabhaengig vom Zeitfenster) —
+// eigene Funktion, damit die Karte es getrennt von den Fenster-Serien memoisiert
+// und ein Zeitraumwechsel das Raster nicht neu baut.
+export function computeWritingTimeGrid(writingRows, todayLocal = new Date()) {
   const secByDate = secondsByDate(writingRows);
   const grid = buildStreakGrid({
     valueForIso: (iso) => secByDate.get(iso) || 0,
@@ -55,17 +69,12 @@ export function computeWritingTimeStreak(writingRows, todayLocal = new Date(), s
       ? { seconds: null, minutes: null }
       : { seconds: cell.value, minutes: Math.round(cell.value / 60), active: cell.value > 0 },
   });
-  const statsSec = statsRows === writingRows ? secByDate : secondsByDate(statsRows);
-  const stats = computeStreakStats(statsSec, localIsoDate(new Date(todayLocal)));
   return {
     weeks: grid.weeks,
     weeksCount: grid.weeksCount,
     gridActiveDays: grid.totalActiveDays,
     gridCurrentStreak: grid.currentStreak,
     gridLongestStreak: grid.longestStreak,
-    currentStreak: stats.currentStreak,
-    longestStreak: stats.longestStreak,
-    totalActiveDays: stats.activeDays,
   };
 }
 

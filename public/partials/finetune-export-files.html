@@ -1,0 +1,107 @@
+<!-- Fine-Tuning-Export: Statistik und Downloads EINES gespeicherten Sets.
+     Fragment (@include) im Verlauf von finetune-export-result.html; erwartet
+     `ex` ({ id, createdAt, stats, stale }) aus dem umschliessenden x-for. -->
+  <div class="form-stats">
+    <span class="tok-badge tok-neutral" x-text="$app.t('finetune.stats.total', { n: ex.stats.total })"></span>
+    <span class="tok-badge tok-neutral" x-text="$app.t('finetune.stats.train', { n: ex.stats.train })"></span>
+    <span class="tok-badge tok-neutral" x-show="ex.stats.val > 0" x-text="$app.t('finetune.stats.val', { n: ex.stats.val })"></span>
+    <span class="tok-badge tok-neutral" x-show="ex.stats.styleCount > 0" x-text="$app.t('finetune.stats.style', { n: ex.stats.styleCount })"></span>
+    <span class="tok-badge tok-neutral" x-show="ex.stats.sceneCount > 0" x-text="$app.t('finetune.stats.scene', { n: ex.stats.sceneCount })"></span>
+    <span class="tok-badge tok-neutral" x-show="ex.stats.verbatimCount > 0" x-text="$app.t('finetune.stats.verbatim', { n: ex.stats.verbatimCount })"></span>
+    <span class="tok-badge tok-neutral" x-show="ex.stats.dialogCount > 0" x-text="$app.t('finetune.stats.dialog', { n: ex.stats.dialogCount })"></span>
+    <span class="tok-badge tok-neutral" x-show="ex.stats.authorChatCount > 0" x-text="$app.t('finetune.stats.authorChat', { n: ex.stats.authorChatCount })"></span>
+    <span class="tok-badge tok-neutral" x-show="ex.stats.coreCount > 0" x-text="$app.t('finetune.stats.core', { n: ex.stats.coreCount })"></span>
+    <span class="tok-badge tok-neutral" x-show="ex.stats.aiAugmentCount > 0" x-text="$app.t('finetune.stats.aiAugment', { n: ex.stats.aiAugmentCount })"></span>
+    <span class="tok-badge tok-neutral" x-show="ex.stats.readerCount > 0" x-text="$app.t('finetune.stats.reader', { n: ex.stats.readerCount })"></span>
+    <span class="tok-badge tok-neutral" x-show="ex.stats.tokensP95 > 0" x-text="$app.t('finetune.stats.tokensP95', { n: ex.stats.tokensP95 })"></span>
+    <span class="tok-badge tok-neutral" x-show="ex.stats.tokensMax > 0" x-text="$app.t('finetune.stats.tokensMax', { n: ex.stats.tokensMax })"></span>
+    <span class="tok-badge tok-neutral" x-show="ex.stats.recommendedSeqLen > 0" x-text="$app.t('finetune.stats.recommendedSeqLen', { n: ex.stats.recommendedSeqLen })"></span>
+    <span class="tok-badge tok-med" x-show="ex.stats.dropped > 0" x-text="$app.t('finetune.stats.dropped', { n: ex.stats.dropped })"></span>
+    <span class="tok-badge tok-med" x-show="ex.stats.capped > 0" x-text="$app.t('finetune.stats.capped', { n: ex.stats.capped })"></span>
+    <span class="tok-badge tok-neutral" x-show="ex.stats.deduped > 0" x-text="$app.t('finetune.stats.deduped', { n: ex.stats.deduped })"></span>
+    <span class="tok-badge tok-med" x-show="ex.stats.balanced > 0" x-text="$app.t('finetune.stats.balanced', { n: ex.stats.balanced })"></span>
+    <span class="tok-badge tok-neutral" x-show="ex.stats.voiceRewritten > 0" x-text="$app.t('finetune.stats.voiceRewritten', { n: ex.stats.voiceRewritten })"></span>
+  </div>
+
+  <div class="form-section">
+    <div class="card-section-title" x-text="$app.t('finetune.files.title')"></div>
+    <button type="button" class="primary finetune-download-zip" @click="finetuneDownloadZip(ex.id)">
+      <svg class="icon" aria-hidden="true"><use href="/icons.svg#download"/></svg>
+      <span x-text="$app.t('finetune.download.zip')"></span>
+    </button>
+
+    <div class="finetune-download-group">
+      <div class="card-section-title" x-text="$app.t('finetune.files.training')"></div>
+      <div class="finetune-downloads">
+        <button type="button" @click="finetuneDownload('train', ex.id)" :disabled="(ex.stats.train ?? 0) === 0">
+          <svg class="icon" aria-hidden="true"><use href="/icons.svg#download"/></svg>
+          <span class="finetune-download-name">train.jsonl</span>
+          <span class="form-size-hint" x-show="ex.stats.trainBytes > 0" x-text="finetuneFormatBytes(ex.stats.trainBytes)"></span>
+        </button>
+        <button type="button" @click="finetuneDownload('val', ex.id)" :disabled="(ex.stats.val ?? 0) === 0">
+          <svg class="icon" aria-hidden="true"><use href="/icons.svg#download"/></svg>
+          <span class="finetune-download-name">val.jsonl</span>
+          <span class="form-size-hint" x-show="ex.stats.valBytes > 0" x-text="finetuneFormatBytes(ex.stats.valBytes)"></span>
+        </button>
+        <button type="button" @click="finetuneDownload('all', ex.id)" x-show="ex.stats.allBytes > 0">
+          <svg class="icon" aria-hidden="true"><use href="/icons.svg#download"/></svg>
+          <span class="finetune-download-name">all.jsonl</span>
+          <span class="form-size-hint" x-text="finetuneFormatBytes(ex.stats.allBytes)"></span>
+        </button>
+      </div>
+      <p class="card-form-hint" x-show="ex.stats.allBytes > 0" x-text="$app.t('finetune.hint.all')"></p>
+    </div>
+
+    <div class="finetune-download-group"
+         x-show="ex.stats.evalBytes > 0 || ex.stats.valFactsBytes > 0 || ex.stats.valWritingBytes > 0 || ex.stats.valPersonaBytes > 0 || ex.stats.valRefusalBytes > 0 || ex.stats.valEditorBytes > 0">
+      <div class="card-section-title" x-text="$app.t('finetune.files.evaluation')"></div>
+      <div class="finetune-downloads">
+        <button type="button" @click="finetuneDownload('eval', ex.id)" x-show="ex.stats.evalBytes > 0">
+          <svg class="icon" aria-hidden="true"><use href="/icons.svg#download"/></svg>
+          <span class="finetune-download-name" x-text="$app.t('finetune.files.eval')"></span>
+          <span class="form-size-hint" x-text="finetuneFormatBytes(ex.stats.evalBytes)"></span>
+        </button>
+        <button type="button" @click="finetuneDownload('val-facts', ex.id)" x-show="ex.stats.valFactsBytes > 0">
+          <svg class="icon" aria-hidden="true"><use href="/icons.svg#download"/></svg>
+          <span class="finetune-download-name">val-facts.jsonl</span>
+          <span class="form-size-hint" x-text="finetuneFormatBytes(ex.stats.valFactsBytes)"></span>
+        </button>
+        <button type="button" @click="finetuneDownload('val-writing', ex.id)" x-show="ex.stats.valWritingBytes > 0">
+          <svg class="icon" aria-hidden="true"><use href="/icons.svg#download"/></svg>
+          <span class="finetune-download-name">val-writing.jsonl</span>
+          <span class="form-size-hint" x-text="finetuneFormatBytes(ex.stats.valWritingBytes)"></span>
+        </button>
+        <button type="button" @click="finetuneDownload('val-persona', ex.id)" x-show="ex.stats.valPersonaBytes > 0">
+          <svg class="icon" aria-hidden="true"><use href="/icons.svg#download"/></svg>
+          <span class="finetune-download-name">val-persona.jsonl</span>
+          <span class="form-size-hint" x-text="finetuneFormatBytes(ex.stats.valPersonaBytes)"></span>
+        </button>
+        <button type="button" @click="finetuneDownload('val-refusal', ex.id)" x-show="ex.stats.valRefusalBytes > 0">
+          <svg class="icon" aria-hidden="true"><use href="/icons.svg#download"/></svg>
+          <span class="finetune-download-name">val-refusal.jsonl</span>
+          <span class="form-size-hint" x-text="finetuneFormatBytes(ex.stats.valRefusalBytes)"></span>
+        </button>
+        <button type="button" @click="finetuneDownload('val-editor', ex.id)" x-show="ex.stats.valEditorBytes > 0">
+          <svg class="icon" aria-hidden="true"><use href="/icons.svg#download"/></svg>
+          <span class="finetune-download-name">val-editor.jsonl</span>
+          <span class="form-size-hint" x-text="finetuneFormatBytes(ex.stats.valEditorBytes)"></span>
+        </button>
+      </div>
+    </div>
+
+    <div class="finetune-download-group">
+      <div class="card-section-title" x-text="$app.t('finetune.files.more')"></div>
+      <div class="finetune-downloads">
+        <button type="button" @click="finetuneDownloadModelfile(ex.stats)" x-show="ex.stats.systemPrompt">
+          <svg class="icon" aria-hidden="true"><use href="/icons.svg#download"/></svg>
+          <span class="finetune-download-name" x-text="$app.t('finetune.files.modelfile')"></span>
+        </button>
+        <button type="button" @click="finetuneDownloadStats(ex.id)">
+          <svg class="icon" aria-hidden="true"><use href="/icons.svg#download"/></svg>
+          <span class="finetune-download-name">stats.json</span>
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <p class="card-form-warn" x-show="ex.stale" role="status" x-text="$app.t('finetune.hint.stale')"></p>

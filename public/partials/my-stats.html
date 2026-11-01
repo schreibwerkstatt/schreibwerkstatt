@@ -233,7 +233,7 @@
           <!-- Leerzustand über dem (leeren) Canvas — das Canvas bleibt im Layout,
                damit ein späteres Rendern nicht in ein 0×0-Element zeichnet. -->
           <p class="muted-msg mystats-chart-empty" x-show="myStatsChartEmpty" x-cloak
-             x-text="myStatsChartEmpty === 'noHistory' ? $app.t('mystats.chart.noHistory') : $app.t('mystats.chart.noData')"></p>
+             x-text="$app.t('mystats.chart.' + myStatsChartEmpty)"></p>
         </div>
       </div>
     </template>

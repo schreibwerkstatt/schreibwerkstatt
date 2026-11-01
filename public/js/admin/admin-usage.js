@@ -57,7 +57,7 @@ export const adminUsageMethods = {
       this.adminUsageFrom = this._adminUsageMonthStart();
       this.adminUsageTo = '';
     }
-    await this.adminUsageLoadTab();
+    await this.adminUsageLoadTab(true);
   },
 
   _adminUsageMonthStart() {
@@ -103,9 +103,18 @@ export const adminUsageMethods = {
     this.adminUsageSelectTab('jobs');
   },
 
-  async adminUsageLoadTab() {
-    this.adminUsageError = '';
+  // Ohne `force` laedt ein Tab nur, wenn sich seit seinem letzten Load etwas
+  // an Zeitraum/Filtern geaendert hat — ein Tab-Wechsel zeigt sonst den
+  // vorhandenen Stand, statt ihn neu zu holen und auszutauschen. Charts sind
+  // beim Verlassen zerstoert und werden aus dem Stand neu gezeichnet.
+  async adminUsageLoadTab(force = false) {
     const tab = this.adminUsageTab;
+    if (!force && this._adminUsageKeys[tab] === this._adminUsageStateKey()) {
+      if (tab === 'summary' && this.adminUsageSummary) this.$nextTick(() => this._adminUsageRenderCharts(this.adminUsageSummary));
+      if (tab === 'behavior' && this.adminUsageBehavior) this.$nextTick(() => this._adminUsageRenderBehaviorCharts(this.adminUsageBehavior));
+      return;
+    }
+    this.adminUsageError = '';
     if (tab === 'users')    return this.adminUsageLoadUsers();
     if (tab === 'summary')  return this.adminUsageLoadSummary();
     if (tab === 'jobs')     return this.adminUsageLoadJobs();
@@ -124,6 +133,12 @@ export const adminUsageMethods = {
     return qs.toString();
   },
 
+  // Alles, was das Ergebnis eines Tab-Loads bestimmt.
+  _adminUsageStateKey() {
+    return JSON.stringify([this._adminUsageQuery(), this.adminUsageFilterUsers, this.adminUsageJobsOffset,
+      this.adminUsageChatOffset, this.adminUsageChatFeedback]);
+  },
+
   async _adminUsageFetch(path) {
     const qs = this._adminUsageQuery();
     const url = path + (qs ? (path.includes('?') ? '&' : '?') + qs : '');
@@ -139,13 +154,19 @@ export const adminUsageMethods = {
   async _adminUsageRun(tab, fetchFn, applyFn) {
     const seq = (this._adminUsageSeq[tab] || 0) + 1;
     this._adminUsageSeq[tab] = seq;
+    // Schon beim Start gesetzt: ein zweiter Aufruf fuer denselben Stand (Hash-
+    // Router oeffnet die Karte und setzt den Tab) laeuft nicht doppelt.
+    this._adminUsageKeys[tab] = this._adminUsageStateKey();
     this._adminUsagePending++;
     this.adminUsageLoading = true;
     try {
       const data = await fetchFn();
       if (seq === this._adminUsageSeq[tab]) applyFn(data);
     } catch (e) {
-      if (seq === this._adminUsageSeq[tab]) this.adminUsageError = tFetchErrorRaw(e);
+      if (seq === this._adminUsageSeq[tab]) {
+        this.adminUsageError = tFetchErrorRaw(e);
+        delete this._adminUsageKeys[tab];
+      }
     } finally {
       this._adminUsagePending--;
       this.adminUsageLoading = this._adminUsagePending > 0;

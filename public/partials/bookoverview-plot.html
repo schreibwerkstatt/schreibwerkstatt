@@ -2,7 +2,7 @@
      Verteilung (geplant/im_buch/verworfen) + Drift-Warnung (als „im Buch"
      markiert, aber im Text nicht auffindbar). Datenquelle: /plot?book_id,
      Aggregat overviewPlotStats(). Klick → Plot-Werkstatt. Reader ohne
-     Editor-Recht sehen das Tile nicht (overviewPlot=null via 403, siehe load.js). -->
+     Editor-Recht sehen das Tile nicht (overviewPlot=null via `forbidden`, siehe load.js). -->
 <template x-if="overviewHasPlot()">
   <div class="overview-tile internal-link"
        @click="$app.togglePlotCard()"

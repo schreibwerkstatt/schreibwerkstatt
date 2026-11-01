@@ -22,7 +22,7 @@
               x-text="$app.charBadge(kapitelReviewChapterStats().chars)"></span>
             <span class="tok-badge tok-neutral"
               :data-tip="$app.t('bookstats.metric.normseiten')"
-              x-text="(Math.round((kapitelReviewChapterStats().chars || 0) / 1500 * 10) / 10).toLocaleString($store.shell.uiLocale === 'en' ? 'en-US' : 'de-CH', { minimumFractionDigits: 1, maximumFractionDigits: 1 }) + ' ' + $app.t('bookstats.unit.ns')"></span>
+              x-text="$app.normseitenBadge(kapitelReviewChapterStats().chars)"></span>
             <span class="tok-badge tok-neutral"
               x-text="kapitelReviewChapterStats().words >= 1000 ? '~' + Math.round(kapitelReviewChapterStats().words/1000) + 'k W' : kapitelReviewChapterStats().words + ' W'"></span>
             <span class="tok-badge"

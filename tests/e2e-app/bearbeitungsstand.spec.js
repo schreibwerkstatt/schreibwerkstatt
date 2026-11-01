@@ -91,6 +91,10 @@ test('Stand per Rechtsklick setzen: Abschnitt, Kapitel, Übersicht', async ({ pa
   const tile = page.locator('.overview-edit-status');
   await expect(tile).toBeVisible();
   await expect(tile.locator('.overview-stacked-seg--status3')).toHaveCount(1);
+  // Zwei Klickziele in der Kachel → sie selbst ist kein role=button (dessen
+  // Kinder wären für Screenreader unsichtbar); Tastatur über den Titel-Button.
+  await expect(tile).not.toHaveAttribute('role', /./);
+  await expect(tile.locator('button.overview-edit-status-open')).toBeVisible();
   if (SHOT) await tile.screenshot({ path: `${SHOT}/overview-tile.png` });
 
   // Notebook-Kopf: Stand des offenen Abschnitts anzeigen und setzen.

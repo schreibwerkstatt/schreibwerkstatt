@@ -76,7 +76,6 @@
   padding: 0;
   border-radius: var(--radius-none);
   background: var(--color-border);
-  cursor: pointer;
   text-align: center;
   vertical-align: middle;
   /* --cell-pct 0..100: globaler Anteil (Wert / Max aller Cells im Matrix).
@@ -86,7 +85,14 @@
 .overview-presence-cell--empty {
   background: transparent;
   border: 0.5px dashed var(--color-border);
-  cursor: default;
+}
+/* Klickziel (heatmap-cell-btn) über die ganze Zelle — Füllung liegt darunter. */
+.overview-presence-btn {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 .overview-presence-fill {
   position: absolute;
@@ -102,7 +108,7 @@
   opacity: calc(0.25 + 0.75 * (var(--cell-pct, 0) / 100));
   transition: background 0.2s, opacity 0.18s;
 }
-.overview-presence-cell:hover:not(.overview-presence-cell--empty) .overview-presence-fill {
+.overview-presence-cell:has(.overview-presence-btn:hover) .overview-presence-fill {
   filter: brightness(1.15) saturate(1.2);
 }
 .overview-presence-cell--empty .overview-presence-fill { display: none; }

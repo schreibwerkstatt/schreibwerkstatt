@@ -1,0 +1,52 @@
+@layer components {
+/* ── Fine-Tuning-Export (Karte `.card--finetune`) ─────────────────────────
+   Häufigste Antworten eines Sets: nummerierte Liste, Ziffern innerhalb der
+   Box, Zählbadge in eigener Spalte, umbrechender Text hängt am Text ein —
+   nicht unter dem Badge. Der Reset in base.css nimmt `ol` das Padding.
+   Der Block folgt direkt auf die Aufgabentypen-Tabelle und braucht
+   Abschnittsabstand nach oben. */
+.finetune-top-answers-block { margin-top: var(--card-gap-section); }
+.finetune-top-answers {
+  list-style: decimal;
+  padding-inline-start: var(--space-xl);
+  margin: var(--space-sm) 0 0;
+}
+.finetune-top-answers li {
+  padding-inline-start: var(--space-xs);
+  margin-bottom: var(--space-xs);
+}
+.finetune-top-answer {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  align-items: baseline;
+  gap: var(--space-sm);
+}
+.finetune-top-answer-text { overflow-wrap: anywhere; }
+
+/* Downloads eines Sets: ZIP als Hauptaktion, darunter die Einzeldateien
+   nach Zweck gruppiert in einem gleichmässigen Raster — ausgeblendete
+   Dateien lassen keine Lücken, Grösse steht rechtsbündig im Knopf. */
+.finetune-download-zip { margin-bottom: var(--space-lg); }
+.finetune-download-group + .finetune-download-group { margin-top: var(--space-lg); }
+.finetune-downloads {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(13rem, 1fr));
+  gap: var(--space-sm);
+}
+.finetune-downloads > button {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  min-width: 0;
+  text-align: start;
+}
+.finetune-download-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.finetune-downloads .form-size-hint { margin-left: 0; }
+.finetune-download-group .card-form-hint { margin-top: var(--space-sm); }
+}

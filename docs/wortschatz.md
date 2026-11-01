@@ -7,14 +7,16 @@ liest den Text und schreibt nie hinein. **Kein `callAI`**: alles ist Arithmetik
 
 ## Warum das nicht `unique_words` ist
 
-`book_stats_history.unique_words` ([routes/sync.js](../routes/sync.js)) ist die
-Grösse eines `Set` aller Wortformen — ein reiner Type-Count. Er wächst monoton mit
+`book_stats_history.unique_words` ist `book_lexicon.types` des Scans, in die
+Tageszeile gestempelt (`stampLexiconHistory`) — ein reiner Type-Count. Er wächst monoton mit
 der Textlänge und ist darum weder zwischen Büchern noch über die Zeit vergleichbar:
 er misst überwiegend Buchlänge. Dasselbe gilt für die klassische Type-Token-Rate.
 Die Masse hier sind alle gegen genau diesen Effekt gebaut.
 
-`unique_words` bleibt bestehen (Historie, Charts) und heisst im UI „Wortformen
-kumuliert", nicht „Wortschatz".
+`unique_words` bleibt bestehen (Historie, Charts) und heisst im UI „Wortformen",
+nicht „Wortschatz"; in „Meine Statistik" je Buch addiert („Wortformen kumuliert").
+Es gibt **keine zweite Zählung** im Sync: Buchentwicklung und Wortschatz-Karte zeigen
+dieselbe Zahl.
 
 ## Die zentrale Invariante: buchweiter Pass, kein Seiten-Aggregat
 
@@ -287,7 +289,7 @@ wie `motif-scan`/`beat-anchor`).
 Autor sieht nichts passieren.
 
 **Tagesverlauf:** `book_stats_history` trägt `mattr`/`mtld`/`lex_density`/
-`hapax_ratio`. Der Sync stempelt seine Tageszeile mit dem Stand des letzten Scans
+`hapax_ratio` und `unique_words` (= `types`). Der Sync stempelt seine Tageszeile mit dem Stand des letzten Scans
 (`stampLexiconHistory`), der Scan überschreibt sie danach mit dem frischen Stand.
 MATTR nur mit vollem Fenster — der Sprung von TTR zu MATTR sähe im Verlauf sonst wie
 eine Stiländerung aus. Die Buchstatistik bietet die vier Werte als Kurven an.

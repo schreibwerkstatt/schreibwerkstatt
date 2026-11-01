@@ -21,6 +21,9 @@
            :style="{ '--progress': overviewGoalProjection().progressPct + '%' }"></div>
     </div>
 
+    <!-- Status-Zeile: genau eine Lage. Abgelaufene Deadline schlägt «kein
+         Fortschritt» und «zu wenig Verlauf» — beides stünde sonst als zweite
+         Warnung darunter. -->
     <div class="overview-goal-projection">
       <span class="overview-goal-status overview-goal-status--reached" x-show="overviewGoalProjection().reached" x-cloak>
         <svg class="icon" aria-hidden="true"><use href="/icons.svg#check"></use></svg>
@@ -30,10 +33,10 @@
             x-show="overviewGoalProjection().deadlinePassed" x-cloak
             x-text="$app.t('overview.goal.deadlinePassed', { date: overviewGoalDateLabel(overviewGoalProjection().deadlineIso) })"></span>
       <span class="overview-goal-status overview-goal-status--stalled"
-            x-show="!overviewGoalProjection().reached && overviewGoalProjection().stalled" x-cloak
+            x-show="!overviewGoalProjection().reached && !overviewGoalProjection().deadlinePassed && overviewGoalProjection().stalled" x-cloak
             x-text="$app.tn('overview.goal.stalled', overviewGoalProjection().stalledDays)"></span>
       <span class="overview-goal-status"
-            x-show="overviewGoalProjection().insufficientHistory" x-cloak
+            x-show="overviewGoalProjection().insufficientHistory && !overviewGoalProjection().deadlinePassed" x-cloak
             x-text="$app.t('overview.goal.tooLittleHistory')"></span>
       <span class="overview-goal-status"
             x-show="!overviewGoalProjection().reached && overviewGoalProjection().projectedFinishIso" x-cloak

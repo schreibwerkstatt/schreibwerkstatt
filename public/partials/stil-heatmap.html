@@ -58,12 +58,21 @@
                 </th>
                 <td class="heatmap-numcol" x-text="c.wordsLabel"></td>
                 <template x-for="m in stilMetricDefs" :key="m.key">
+                  <!-- Klickziel ist ein Button IN der Zelle (.heatmap-cell-btn), nie
+                       role=button am <td> — DESIGN.md «Klickbare Nicht-Buttons». -->
                   <td class="heatmap-cell"
                       :class="[c.cells[m.key].cls, { 'heatmap-cell--active': activeStilDetailKey === c.cells[m.key].detailKey }]"
                       :style="c.cells[m.key].vars"
-                      :data-tip="c.cells[m.key].lowData ? $app.t('heatmap.lowData', { n: stilMinWords }) : ''"
-                      @click="c.cells[m.key].clickable && toggleStilDetail(c.key, m.key)"
-                      x-text="c.cells[m.key].text">
+                      :data-tip="c.cells[m.key].lowData ? $app.t('heatmap.lowData', { n: stilMinWords }) : ''">
+                    <template x-if="c.cells[m.key].clickable">
+                      <button type="button" class="heatmap-cell-btn"
+                              @click="toggleStilDetail(c.key, m.key)"
+                              :aria-expanded="activeStilDetailKey === c.cells[m.key].detailKey ? 'true' : 'false'"
+                              x-text="c.cells[m.key].text"></button>
+                    </template>
+                    <template x-if="!c.cells[m.key].clickable">
+                      <span x-text="c.cells[m.key].text"></span>
+                    </template>
                   </td>
                 </template>
               </tr>

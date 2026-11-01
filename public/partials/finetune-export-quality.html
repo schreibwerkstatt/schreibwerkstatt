@@ -1,36 +1,36 @@
-<!-- Fine-Tuning-Export: Qualität des gespeicherten Sets (stats.quality aus
+<!-- Fine-Tuning-Export: Qualität eines gespeicherten Sets (stats.quality aus
      finalize.js) — Anteil Schreibaufgaben, eigene Antworten, Überlappung
-     Val ↔ Train, Aufgabentypen und häufigste Antworten. Wird in
-     `#partial-finetune-export-quality` von finetune-export-result.html
-     geladen und erbt den x-data-Scope der Karte. -->
-<template x-if="finetuneStats && finetuneStats.quality && !finetuneLoading">
+     Val ↔ Train, Aufgabentypen und häufigste Antworten. Fragment (@include)
+     im Verlauf von finetune-export-result.html; erwartet `ex` aus dem
+     umschliessenden x-for. -->
+<template x-if="ex.stats.quality">
   <div class="form-section">
     <div class="card-section-title" x-text="$app.t('finetune.quality.title')"></div>
     <div class="form-stats">
-      <span class="tok-badge tok-neutral" x-text="$app.t('finetune.quality.writingShare', { pct: finetunePct(finetuneStats.quality.writingShare) })"></span>
-      <span class="tok-badge tok-neutral" x-text="$app.t('finetune.quality.uniqueShare', { pct: finetunePct(finetuneStats.quality.uniqueAnswerShare) })"></span>
-      <span class="tok-badge tok-neutral" x-show="finetuneStats.quality.answerTokens > 0" x-text="$app.t('finetune.quality.tokenShares', finetuneTokenShares())"></span>
-      <span class="tok-badge tok-neutral" x-show="finetuneStats.quality.answerTokens > 0" x-text="$app.t('finetune.quality.verbatimShare', { pct: finetunePct(finetuneStats.quality.verbatimTokenShare) })"></span>
-      <span class="tok-badge tok-neutral" x-show="finetuneStats.coreFactCoverage != null" x-text="$app.t('finetune.quality.coverage', { pct: finetunePct(finetuneStats.coreFactCoverage) })"></span>
-      <span class="tok-badge tok-neutral" x-show="finetuneStats.paragraphTargetMax > 0" x-text="$app.t('finetune.quality.paragraphMax', { n: finetuneStats.paragraphTargetMax })"></span>
-      <span class="tok-badge tok-neutral" x-show="finetuneStats.quality.refusalShare > 0" x-text="$app.t('finetune.quality.refusals', { pct: finetunePct(finetuneStats.quality.refusalShare) })"></span>
-      <span class="tok-badge tok-neutral" x-show="finetuneStats.quality.factCount > 0" x-text="$app.t('finetune.quality.paraphrases', { facts: finetuneStats.quality.factCount, n: finetuneStats.quality.factParaphraseCount })"></span>
-      <span class="tok-badge" :class="finetuneOverlapTotal() ? 'tok-high' : 'tok-neutral'"
-            x-text="$app.t('finetune.quality.overlap', finetuneStats.quality.overlap)"></span>
-      <span class="tok-badge tok-neutral" x-show="finetuneStats.answerCapped > 0" x-text="$app.tn('finetune.stats.answerCapped', finetuneStats.answerCapped)"></span>
-      <span class="tok-badge tok-med" x-show="finetuneStats.critiqueDropped > 0" x-text="$app.tn('finetune.stats.critiqueDropped', finetuneStats.critiqueDropped)"></span>
-      <span class="tok-badge tok-neutral" x-show="finetuneStats.paragraphCapped > 0" x-text="$app.tn('finetune.stats.paragraphCapped', finetuneStats.paragraphCapped)"></span>
-      <span class="tok-badge tok-neutral" x-show="finetuneStats.lengthClipped > 0" x-text="$app.tn('finetune.stats.lengthClipped', finetuneStats.lengthClipped)"></span>
-      <span class="tok-badge tok-neutral" x-show="finetuneStats.relationConflicts > 0" x-text="$app.tn('finetune.stats.relationConflicts', finetuneStats.relationConflicts)"></span>
-      <span class="tok-badge tok-med" x-show="finetuneStats.cardDropped > 0" x-text="$app.tn('finetune.stats.cardDropped', finetuneStats.cardDropped)"></span>
-      <span class="tok-badge tok-neutral" x-show="finetuneStats.splitMixed > 0" x-text="$app.tn('finetune.stats.splitMixed', finetuneStats.splitMixed)"></span>
-      <span class="tok-badge tok-neutral" x-show="finetuneStats.valPurged > 0" x-text="$app.tn('finetune.stats.valPurged', finetuneStats.valPurged)"></span>
+      <span class="tok-badge tok-neutral" x-text="$app.t('finetune.quality.writingShare', { pct: finetunePct(ex.stats.quality.writingShare) })"></span>
+      <span class="tok-badge tok-neutral" x-text="$app.t('finetune.quality.uniqueShare', { pct: finetunePct(ex.stats.quality.uniqueAnswerShare) })"></span>
+      <span class="tok-badge tok-neutral" x-show="ex.stats.quality.answerTokens > 0" x-text="$app.t('finetune.quality.tokenShares', finetuneTokenShares(ex.stats))"></span>
+      <span class="tok-badge tok-neutral" x-show="ex.stats.quality.answerTokens > 0" x-text="$app.t('finetune.quality.verbatimShare', { pct: finetunePct(ex.stats.quality.verbatimTokenShare) })"></span>
+      <span class="tok-badge tok-neutral" x-show="ex.stats.coreFactCoverage != null" x-text="$app.t('finetune.quality.coverage', { pct: finetunePct(ex.stats.coreFactCoverage) })"></span>
+      <span class="tok-badge tok-neutral" x-show="ex.stats.paragraphTargetMax > 0" x-text="$app.t('finetune.quality.paragraphMax', { n: ex.stats.paragraphTargetMax })"></span>
+      <span class="tok-badge tok-neutral" x-show="ex.stats.quality.refusalShare > 0" x-text="$app.t('finetune.quality.refusals', { pct: finetunePct(ex.stats.quality.refusalShare) })"></span>
+      <span class="tok-badge tok-neutral" x-show="ex.stats.quality.factCount > 0" x-text="$app.t('finetune.quality.paraphrases', { facts: ex.stats.quality.factCount, n: ex.stats.quality.factParaphraseCount })"></span>
+      <span class="tok-badge" :class="finetuneOverlapTotal(ex.stats) ? 'tok-high' : 'tok-neutral'"
+            x-text="$app.t('finetune.quality.overlap', ex.stats.quality.overlap)"></span>
+      <span class="tok-badge tok-neutral" x-show="ex.stats.answerCapped > 0" x-text="$app.tn('finetune.stats.answerCapped', ex.stats.answerCapped)"></span>
+      <span class="tok-badge tok-med" x-show="ex.stats.critiqueDropped > 0" x-text="$app.tn('finetune.stats.critiqueDropped', ex.stats.critiqueDropped)"></span>
+      <span class="tok-badge tok-neutral" x-show="ex.stats.paragraphCapped > 0" x-text="$app.tn('finetune.stats.paragraphCapped', ex.stats.paragraphCapped)"></span>
+      <span class="tok-badge tok-neutral" x-show="ex.stats.lengthClipped > 0" x-text="$app.tn('finetune.stats.lengthClipped', ex.stats.lengthClipped)"></span>
+      <span class="tok-badge tok-neutral" x-show="ex.stats.relationConflicts > 0" x-text="$app.tn('finetune.stats.relationConflicts', ex.stats.relationConflicts)"></span>
+      <span class="tok-badge tok-med" x-show="ex.stats.cardDropped > 0" x-text="$app.tn('finetune.stats.cardDropped', ex.stats.cardDropped)"></span>
+      <span class="tok-badge tok-neutral" x-show="ex.stats.splitMixed > 0" x-text="$app.tn('finetune.stats.splitMixed', ex.stats.splitMixed)"></span>
+      <span class="tok-badge tok-neutral" x-show="ex.stats.valPurged > 0" x-text="$app.tn('finetune.stats.valPurged', ex.stats.valPurged)"></span>
     </div>
 
     <div class="table-scroll">
       <table class="data-table"
              x-data="sortableTable({
-               rows: () => finetuneQualityRows(),
+               rows: () => finetuneQualityRows(ex.stats),
                defaultKey: 'count',
                defaultDir: 'desc',
                persistKey: 'finetune.qualityTasks',
@@ -65,12 +65,17 @@
       </table>
     </div>
 
-    <template x-if="finetuneStats.quality.topAnswers.length">
-      <div>
+    <template x-if="ex.stats.quality.topAnswers?.length">
+      <div class="finetune-top-answers-block">
         <div class="card-section-title" x-text="$app.t('finetune.quality.topAnswers')"></div>
-        <ol>
-          <template x-for="(a, i) in finetuneStats.quality.topAnswers" :key="i">
-            <li><span class="tok-badge tok-neutral" x-text="a.count + '×'"></span> <span x-text="a.text"></span></li>
+        <ol class="finetune-top-answers">
+          <template x-for="(a, i) in ex.stats.quality.topAnswers" :key="i">
+            <li>
+              <div class="finetune-top-answer">
+                <span class="tok-badge tok-neutral" x-text="a.count + '×'"></span>
+                <span class="finetune-top-answer-text" x-text="a.text"></span>
+              </div>
+            </li>
           </template>
         </ol>
       </div>

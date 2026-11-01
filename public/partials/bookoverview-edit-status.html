@@ -2,14 +2,20 @@
      die Stufen der Buch-Kette, fertige Kapitel, seither bearbeitete. Compute:
      book-overview/edit-status.js#overviewEditStatus. Ohne gesetzte Stufe zeigt
      die Kachel, wie man eine setzt — sonst wüsste niemand, dass es den Stand gibt.
-     Klick öffnet den Buchorganizer (Stufen-Spalte je Abschnitt). -->
+     Klick öffnet den Buchorganizer (Stufen-Spalte je Abschnitt).
+     Die Kachel ist KEIN role=button: sie enthält ein zweites Klickziel (offene
+     Pendenzen → Ideen-Board), und die Kinder eines Buttons sind für Screenreader
+     unsichtbar. Klick auf die Fläche ist die Maus-Abkürzung; Tastatur und
+     Screenreader nehmen den Titel-Button. -->
 <template x-if="overviewEditStatus().total > 0 && $store.badges.editStatusChain.length > 0">
-  <div class="overview-tile internal-link overview-edit-status"
+  <div class="overview-tile overview-tile--area-click overview-edit-status"
        @click="$app.toggleBookOrganizerCard()"
-       :data-tip="$app.t('overview.openOrganizer')"
-       :aria-label="$app.t('overview.editStatus') + ': ' + $app.t('overview.editStatusDone', { n: overviewEditStatus().doneN, total: overviewEditStatus().total, status: overviewEditStatus().doneLabel })">
+       :data-tip="$app.t('overview.openOrganizer')">
     <div class="overview-tile-head">
-      <div class="overview-tile-label" x-text="$app.t('overview.editStatus')"></div>
+      <button type="button" class="overview-tile-label overview-edit-status-open text-link"
+              @click.stop="$app.toggleBookOrganizerCard()"
+              :aria-label="$app.t('overview.editStatus') + ' – ' + $app.t('overview.openOrganizer')"
+              x-text="$app.t('overview.editStatus')"></button>
     </div>
     <template x-if="overviewEditStatus().set === 0">
       <div class="muted-msg muted-msg--sm" x-text="$app.t('overview.editStatusEmpty')"></div>
@@ -33,10 +39,10 @@
         <div class="overview-edit-status-meta">
           <span x-show="overviewEditStatus().chapters > 0"
                 x-text="$app.t('overview.editStatusChapters', { status: overviewEditStatus().doneLabel, n: overviewEditStatus().chaptersDone, total: overviewEditStatus().chapters })"></span>
-          <span class="overview-edit-status-stale internal-link text-link" x-show="overviewEditStatus().finalOpen > 0"
-                @click.stop="$app.toggleIdeenBoardCard()"
-                :data-tip="$app.t('overview.editStatusFinalOpenTip')"
-                x-text="$app.t('overview.editStatusFinalOpen', { n: overviewEditStatus().finalOpen, status: overviewEditStatus().doneLabel })"></span>
+          <button type="button" class="overview-edit-status-stale overview-edit-status-ideen text-link" x-show="overviewEditStatus().finalOpen > 0"
+                  @click.stop="$app.toggleIdeenBoardCard()"
+                  :data-tip="$app.t('overview.editStatusFinalOpenTip')"
+                  x-text="$app.t('overview.editStatusFinalOpen', { n: overviewEditStatus().finalOpen, status: overviewEditStatus().doneLabel })"></button>
           <span class="overview-edit-status-stale" x-show="overviewEditStatus().stale > 0"
                 :data-tip="$app.t('overview.editStatusStaleTip')"
                 x-text="$app.t('overview.editStatusStale', { n: overviewEditStatus().stale })"></span>

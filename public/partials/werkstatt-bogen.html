@@ -70,22 +70,29 @@
                     <span class="heatmap-rowhead-main" x-text="arcKernLabel(k)"></span>
                   </th>
                   <td class="heatmap-numcol" x-text="arcRowTotal(k)"></td>
-                  <!-- `heatmap-cell--clickable` + `internal-link` haengen am
+                  <!-- `heatmap-cell--clickable` + Button (.heatmap-cell-btn) haengen am
                        Praedikat arcCellClickable: eine leere Zelle hat nichts
                        aufzuloesen und darf weder Klick-Cursor noch Tab-Stopp
-                       anbieten. -->
+                       anbieten. Nie role=button am <td> (Tabellen-Navigation). -->
                   <template x-for="ch in arcChapters()" :key="ch.id">
                     <td class="heatmap-cell"
                         :class="[
                           arcCellClass(arcCount(k, ch.id)),
                           { 'heatmap-cell--clickable': arcCellClickable(k, ch.id),
-                            'internal-link': arcCellClickable(k, ch.id),
                             'heatmap-cell--active': activeArcDetailKey === arcDetailKey(k, ch.id) }
                         ]"
                         :style="arcCellVars(arcCount(k, ch.id))"
-                        :data-tip="ch.name + ' · ' + $app.t('werkstatt.arc.hits', { n: arcCount(k, ch.id) })"
-                        @click="toggleArcDetail(k, ch.id)"
-                        x-text="arcCount(k, ch.id) || ''"></td>
+                        :data-tip="ch.name + ' · ' + $app.t('werkstatt.arc.hits', { n: arcCount(k, ch.id) })">
+                      <template x-if="arcCellClickable(k, ch.id)">
+                        <button type="button" class="heatmap-cell-btn"
+                                @click="toggleArcDetail(k, ch.id)"
+                                :aria-expanded="activeArcDetailKey === arcDetailKey(k, ch.id) ? 'true' : 'false'"
+                                x-text="arcCount(k, ch.id)"></button>
+                      </template>
+                      <template x-if="!arcCellClickable(k, ch.id)">
+                        <span x-text="arcCount(k, ch.id) || ''"></span>
+                      </template>
+                    </td>
                   </template>
                 </tr>
               </template>

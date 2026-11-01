@@ -79,12 +79,18 @@ function _motifFloor() {
 
 // ── Graph-Payload (Themen + Motive mit Soll-Links & Ist-Count + Beziehungen) ──
 
+// Graph mit Ist-Count unter dem Score-Floor. Geteilt mit der gebündelten
+// Übersicht (routes/overview.js); die braucht den Embed-Index-Status nicht.
+function buildMotifGraph(bookId, userEmail) {
+  return motifsDb.getGraph(bookId, userEmail, _motifFloor());
+}
+
 router.get('/', (req, res) => {
   const userEmail = sessionEmail(req);
   const bookId = toIntId(req.query.book_id);
   if (!bookId) return res.status(400).json({ error_code: 'INVALID_ID' });
   if (!guardBook(req, res, bookId, 'viewer')) return;
-  const graph = motifsDb.getGraph(bookId, userEmail, _motifFloor());
+  const graph = buildMotifGraph(bookId, userEmail);
   graph.embedIndex = _embedIndexInfo(bookId, userEmail);
   res.json(graph);
 });
@@ -432,3 +438,4 @@ router.delete('/:id', (req, res) => {
 });
 
 module.exports = router;
+module.exports.buildMotifGraph = buildMotifGraph;

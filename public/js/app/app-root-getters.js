@@ -7,7 +7,7 @@
 // und als statische Werte kopieren — darum descriptor-basiertes
 // `Object.defineProperties`.
 
-import { aggregateLiveBookStats } from '../utils.js';
+import { aggregateLiveBookStats, charsToNormseiten } from '../utils.js';
 
 // Sichtbarkeit einer Leistenkarte als Sicht auf `asideSlot` (app-state.js).
 // Lesend wie ein gewoehnliches Flag (Templates, `setupCardLifecycle({ showFlag })`,
@@ -90,7 +90,7 @@ export const rootGetterDescriptors = {
       const { chars, words, tok } = aggregateLiveBookStats(ts);
       const value = {
         chars, words, tok,
-        normseiten: Math.round((chars / 1500) * 10) / 10,
+        normseiten: charsToNormseiten(chars),
         any: size > 0,
       };
       this._tokTotalsCache = { tokRef: ts, size, value };

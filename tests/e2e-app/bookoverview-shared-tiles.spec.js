@@ -97,15 +97,21 @@ test('Präsenz-Matrizen + Kapitel-Balken rendern aus den geteilten Fragmenten', 
   expect(chapterIds.length, 'Seed-Buch braucht ≥ 2 Top-Level-Kapitel').toBeGreaterThanOrEqual(2);
 
   const mock = mockPayloads(chapterIds);
-  const json = (body) => (route) => route.fulfill({
-    status: 200, contentType: 'application/json', body: JSON.stringify(body),
+  // Die Übersicht holt ihre Tile-Daten gebündelt (GET /overview/:id): die echte
+  // Antwort durchreichen und nur die Teile der fünf Tiles ersetzen.
+  await page.route(`**/overview/${bookId}*`, async (route) => {
+    const real = await (await route.fetch()).json();
+    const parts = {
+      ...real.parts,
+      figuren: { data: mock.figuren },
+      szenen: { data: mock.szenen },
+      orte: { data: mock.orte },
+      motifs: { data: mock.motifs },
+      heat: { data: mock.heat },
+      lektorat: { data: mock.lektoratTime },
+    };
+    await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ parts }) });
   });
-  await page.route(`**/figures/${bookId}`, json(mock.figuren));
-  await page.route(`**/figures/scenes/${bookId}`, json(mock.szenen));
-  await page.route(`**/locations/${bookId}`, json(mock.orte));
-  await page.route('**/motifs?book_id=*', json(mock.motifs));
-  await page.route('**/history/fehler-heatmap/**', json(mock.heat));
-  await page.route(`**/history/lektorat-time/${bookId}`, json(mock.lektoratTime));
 
   // Übersicht neu laden, damit die gemockten Endpoints greifen. Bewusst über
   // den Re-Klick-Pfad der offenen Karte (`onReclick: 'refresh'` →
@@ -131,7 +137,11 @@ test('Präsenz-Matrizen + Kapitel-Balken rendern aus den geteilten Fragmenten', 
     await expect(tile.locator('.overview-presence-row-head').first()).toBeVisible();
     const filled = tile.locator('.overview-presence-cell:not(.overview-presence-cell--empty)');
     expect(await filled.count(), `${labelKey}: belegte Zellen`).toBeGreaterThan(0);
-    await expect(filled.first()).toHaveClass(/internal-link/);
+    // Klickziel ist ein Button IN der Zelle, das <td> bleibt Tabellenzelle
+    // (role=button nähme Screenreadern Zeile/Spalte).
+    await expect(filled.first().locator('button.heatmap-cell-btn')).toHaveCount(1);
+    await expect(filled.first()).not.toHaveAttribute('role', /./);
+    await expect(tile.locator('.overview-presence-row-head').first()).not.toHaveAttribute('role', /./);
   }
 
   // Zell-Tooltip kommt aus overviewPresenceTip(kind, …) — belegt, dass der
@@ -157,4 +167,28 @@ test('Präsenz-Matrizen + Kapitel-Balken rendern aus den geteilten Fragmenten', 
   }
 
   guard.assertClean('Buch-Übersicht mit geteilten Tile-Fragmenten');
+});
+
+// Die klickbare Verteilungs-Zeile steckt in einem nackten <li> (role=button nie
+// am <li>). Reicht das <li> die Spalten nicht als Subgrid weiter, fallen die
+// Zeilen einzeln in die drei Listenspalten: Median-Striche stehen versetzt,
+// Name/Balken/Meta nicht mehr untereinander.
+test('Kapitel-Länge vs. Median: Zeilen über die volle Breite, Median-Strich fluchtet', async ({ page }) => {
+  await bootWithBook(page);
+  await page.waitForFunction(() => window.__app.showBookOverviewCard === true, null, { timeout: 20000 });
+  const label = await page.evaluate(() => window.__app.t('overview.chapterDist'));
+  const tile = page.locator('.card--bookoverview .overview-tile', { hasText: label });
+  await expect(tile).toBeVisible();
+
+  const geo = await tile.locator('.overview-chapter-list').evaluate((list) => {
+    const lr = list.getBoundingClientRect();
+    return [...list.querySelectorAll('.overview-chapter-row')].map((row) => {
+      const r = row.getBoundingClientRect();
+      const t = row.querySelector('.overview-chapter-median-tick').getBoundingClientRect();
+      return { width: r.width, listWidth: lr.width, tickX: t.left + t.width / 2 };
+    });
+  });
+  expect(geo.length, 'Seed-Buch braucht ≥ 2 Kapitel').toBeGreaterThanOrEqual(2);
+  for (const g of geo) expect(g.width).toBeGreaterThan(g.listWidth * 0.9);
+  for (const g of geo) expect(Math.abs(g.tickX - geo[0].tickX)).toBeLessThan(1);
 });

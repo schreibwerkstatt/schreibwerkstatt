@@ -44,11 +44,13 @@ function buildQuestionPools(langIsEn) {
     : ['Was passiert in «{titel}»?', 'Worum geht es in «{titel}»?',
        'Fasse die Szene «{titel}» zusammen.', 'Erzähl mir von der Szene «{titel}».',
        'Was spielt sich in «{titel}» ab?'];
+  // «Was weisst du über …?» nur für Figuren, Orte und Organisationen — ein
+  // Ereignis ist kein Gegenstand, über den man «etwas weiss».
   // Bedeutung/Wann/Wer/Wo fragt das Kernwissen (core-facts/events.js) mit
   // eigener Antwort; hier nur die Gesamtfrage mit der ganzen Ereigniskarte.
   const eventQuestions = langIsEn
-    ? ['What happens around {ereignis}?', 'Tell me about {ereignis}.', 'What do you know about {ereignis}?']
-    : ['Was weisst du über {ereignis}?', 'Erzähl mir von {ereignis}.', 'Was geschah bei {ereignis}?'];
+    ? ['What happens at «{ereignis}»?', 'Tell me about «{ereignis}».', 'What happened at «{ereignis}»?']
+    : ['Was passiert bei «{ereignis}»?', 'Erzähl mir von «{ereignis}».', 'Was geschah bei «{ereignis}»?'];
   const chapterQuestions = langIsEn
     ? ['What happens in «{kapitel}»?', 'Summarize «{kapitel}» for me.',
        'Walk me through «{kapitel}».', 'What is «{kapitel}» about?']

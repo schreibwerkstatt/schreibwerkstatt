@@ -1,23 +1,18 @@
 // Buch-Übersicht: Default-Landing beim Öffnen eines Buchs.
-// Aggregiert ohne neuen KI-Job aus existierenden Endpoints:
-//   /history/book-stats/:book_id       → Snapshot-Verlauf (Sparkline + Last-Snapshot)
-//   /history/coverage/:book_id         → Lektorat-Abdeckung
-//   /history/fehler-heatmap/:book_id   → Top-Fehlertypen (mode=open)
-//   /history/review/:book_id           → letzte + vorletzte Bewertung (Trend)
-//   /history/lektorat-time/:book_id    → Lektoratszeit pro Kapitel
-//   /history/rueckblick-coverage/:id   → Rückblick-Heatmap (nur buchtyp 'tagebuch')
+// Aggregiert ohne neuen KI-Job aus zwei Quellen:
+//   /overview/:book_id                 → ALLE Tile-Daten in einer Antwort (routes/overview.js:
+//                                        Lektorat-Abdeckung + offene Fehler, Bewertungen,
+//                                        Lektoratszeit, Recent, Figuren/Szenen/Schauplätze,
+//                                        Songs, Plot, Motive, Wortschatz, Ideen, Buch-Chat,
+//                                        Rückblick-Coverage nur für Tagebücher). Jeder Teil
+//                                        trägt `data`, `forbidden` oder `error` —
+//                                        Zuordnung zu Banner/still: load.js#OVERVIEW_PARTS.
+//     (Figuren/Schauplätze/Szenen: liegt der Katalog des offenen Buchs schon im
+//     catalog-Store, lässt `?skip=` sie aus; der Refresh fragt immer neu)
+//   app-view/bookscope.js#loadDailyProgress → Snapshot-Verlauf + Buch-Einstellungen
+//                                        (geteilt mit dem Header-Donut)
 //   /history/stats-stale/:book_id      → Server-Urteil Stats-Staleness (Auto-Sync)
-//   /history/page-stats/:book_id       → tokEsts-Refresh nach Auto-Sync
-//   /usage/page/recent                 → zuletzt geöffnete Abschnitte (mit Puffer, siehe load.js)
-//   /figures/:book_id, /figures/scenes/:book_id → Figuren/Szenen + Präsenz-Matrix
-//   /locations/:book_id                → Schauplätze + Präsenz-Matrix
-//     (Figuren/Schauplätze: liegt der Katalog des offenen Buchs schon im
-//     catalog-Store, wird er wiederverwendet; der Refresh fragt immer neu)
-//   /songs/:book_id                    → Soundtrack-Tile
-//   /booksettings/:book_id             → Buchtyp, is_finished, Schreibziel/Deadline
-//   /plot?book_id, /motifs?book_id     → optionale Planungswerkzeuge (Tile aus, wenn leer)
-//   /lexicon/:book_id                  → Wortschatz-Tile (MTLD/MATTR + Peer-Median)
-//   /chat/sessions/book/:book_id       → «Nächste Schritte» (Buch-Chat schon genutzt?)
+//   /history/book-stats, /history/coverage, /history/page-stats → Refresh nach Auto-Sync
 //   $store.badges.editStatus           → Bearbeitungsstand (lädt der Seitenbaum, kein eigener Fetch)
 //
 // Reaktivität / Memoization:
@@ -30,9 +25,9 @@
 // Visualisierungen sind reines Inline-SVG (kein Chart.js): Overview soll
 // instant beim Buchwechsel sichtbar sein, ohne Lazy-Lib-Load.
 //
-// Fehler vs. Recht: ein 403 (Betrachter ohne editor-Recht auf Figuren, Szenen,
-// Schauplätze, Songs) ist kein Ladefehler — das Tile bleibt aus, der
-// Fehler-Banner nicht (`overviewForbidden` statt `overviewLoadErrors`).
+// Fehler vs. Recht: ein Teil mit `forbidden` (Betrachter ohne editor-Recht auf
+// Figuren, Szenen, Schauplätze, Songs) ist kein Ladefehler — das Tile bleibt aus,
+// der Fehler-Banner nicht (`overviewForbidden` statt `overviewLoadErrors`).
 //
 // Facade: spreadet alle Sub-Module in `bookOverviewMethods`. Sub-Methoden
 // nutzen `this._memo` aus `load.js` (gemeinsamer Memo-Speicher pro Card).

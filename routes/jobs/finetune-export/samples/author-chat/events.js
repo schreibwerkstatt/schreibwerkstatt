@@ -1,5 +1,7 @@
 'use strict';
 
+const { leadSafe, eventList } = require('./event-data');
+
 // Block 6-11: Zeitstrahl-Events. Die Ereignisse kommen angereichert aus
 // ./event-data.js (Szenen, Schauplätze mit Bezug, Strang, Zeitspanne).
 //
@@ -40,9 +42,7 @@ function buildEventSamples(ctx) {
   }
 
   // ── Sammellisten: Ereignisse pro Ort / Figur / Kapitel ───────────────
-  const renderEvtList = (items, max = 8) => items.slice(0, max)
-    .map(e => `${e.datum ? e.datum + ': ' : ''}${e.ereignis}${e.bedeutung ? ' (' + e.bedeutung + ')' : ''}`)
-    .join(' · ');
+  const renderEvtList = (items, max = 8) => eventList(items.slice(0, max));
   const groupBy = (keyFn) => {
     const m = new Map();
     for (const e of events) {
@@ -79,7 +79,7 @@ function buildEventSamples(ctx) {
   if (externEvents.length) {
     pushQA('authorChat|evtsExternAll',
       langIsEn ? `Which historical or global events appear in the book?` : `Welche historischen oder globalen Ereignisse spielen im Buch eine Rolle?`,
-      externEvents.slice(0, 15).map(e => `${e.datum ? e.datum + ': ' : ''}${e.ereignis}`).join(' · '));
+      eventList(externEvents.slice(0, 15), { meaning: false }));
     for (const [fkey, g] of groupBy(e => (isExtern(e) ? e.figs.map(fg => [figKey(fg), fg.name]) : []))) {
       pushQA('authorChat|evtsExtByFig|' + fkey,
         langIsEn ? `Which historical events touch ${g.label}'s life?` : `Welche historischen Ereignisse berühren ${g.label}s Leben?`,
@@ -99,7 +99,13 @@ function buildEventSamples(ctx) {
   // ── Abfolge: was davor, was danach ───────────────────────────────────
   // sort_order spiegelt die erzählte Reihenfolge. Die Antwort nennt das
   // Nachbar-Ereignis, nicht dessen ganze Karte.
-  const brief = (x) => x.ereignis + (x.bedeutung ? ' — ' + x.bedeutung : '');
+  const brief = (x) => leadSafe(x.ereignis) + (x.bedeutung ? ' — ' + x.bedeutung : '');
+  // «Zuerst …, dann …, schliesslich ….» — ganze Sätze statt «1992: … → …».
+  const chainSentence = (xs, en) => {
+    const f = (x) => `«${x.ereignis}»${x.datum ? ` (${x.datum})` : ''}`;
+    return en ? `First ${f(xs[0])}, then ${f(xs[1])}, finally ${f(xs[2])}.`
+      : `Zuerst ${f(xs[0])}, dann ${f(xs[1])}, schliesslich ${f(xs[2])}.`;
+  };
   for (let k = 0; k < events.length; k++) {
     const e = events[k];
     const unit = 'evt:' + e.i;
@@ -116,7 +122,7 @@ function buildEventSamples(ctx) {
     if (k + 2 < events.length) {
       pushQA('authorChat|evtChain|' + e.i,
         langIsEn ? `Trace the chain of events starting from «${e.ereignis}».` : `Zeichne die Ereigniskette ab «${e.ereignis}» nach.`,
-        [e, events[k + 1], events[k + 2]].map(x => `${x.datum ? x.datum + ': ' : ''}${x.ereignis}`).join(' → '),
+        chainSentence([e, events[k + 1], events[k + 2]], langIsEn),
         { unit });
     }
   }

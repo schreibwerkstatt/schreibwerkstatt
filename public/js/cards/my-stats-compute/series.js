@@ -150,3 +150,42 @@ export function resolveWindow({ rangeDays = 0, from = '', to = '', todayIso }) {
   if (rangeDays > 0) return { active: true, from: isoAddDays(todayIso, -(rangeDays - 1)), to: todayIso };
   return { active: false, from: null, to: null };
 }
+
+// Summe je Snapshot-Tag ueber ALLE Buecher, die bis dahin einen Stand haben —
+// ein Buch ohne Zeile an diesem Tag zaehlt mit seinem letzten bekannten Stand
+// (ausgefallener Nacht-Sync, Teil-Sync von heute, unterschiedliche Monatsend-
+// Tage in der ausgeduennten Historie). Ohne das summierte jeder Tag nur die
+// Buecher mit Zeile, und die Linie braeche um den Bestand des fehlenden ein.
+// Rows: { book_id, date, value }; liefert [{ date, value }] chronologisch.
+export function carryForwardTotals(rows) {
+  const byDate = new Map(); // date → [{ book_id, value }]
+  for (const r of (rows || [])) {
+    if (!r.date) continue;
+    if (!byDate.has(r.date)) byDate.set(r.date, []);
+    byDate.get(r.date).push(r);
+  }
+  const last = new Map(); // book_id → value
+  let total = 0;
+  const out = [];
+  for (const date of [...byDate.keys()].sort()) {
+    for (const r of byDate.get(date)) {
+      const v = Number(r.value) || 0;
+      total += v - (last.get(r.book_id) || 0);
+      last.set(r.book_id, v);
+    }
+    out.push({ date, value: total });
+  }
+  return out;
+}
+
+// Spannen-Grenzen (Tage) der Zeitachsen-Vorwahl: bis ~ein Quartal je Tag, bis
+// zwei Jahre je Woche, darueber je Monat — die Historie aelter als ein Jahr ist
+// ohnehin nur monatlich und stuende auf einer Tagesachse wie einzelne Tage da.
+export const AUTO_GRAN_DAY_MAX = 90;
+export const AUTO_GRAN_WEEK_MAX = 730;
+export function autoGranularity(spanDays) {
+  const d = Number(spanDays) || 0;
+  if (d <= AUTO_GRAN_DAY_MAX) return 'day';
+  if (d <= AUTO_GRAN_WEEK_MAX) return 'week';
+  return 'month';
+}

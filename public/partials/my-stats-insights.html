@@ -107,7 +107,7 @@
       <div class="overview-consistency-item" x-show="myStatsHasVocab()" :data-tip="$app.t('mystats.uniqueWordsTip')">
         <span class="overview-consistency-value">
           <span x-text="_myStatsFmt(myStatsVocabTrend().total)"></span>
-          <svg class="icon mystats-trend" aria-hidden="true"><use :href="'/icons.svg#' + myStatsTrendIcon(myStatsVocabTrend().trend)"></use></svg>
+          <svg class="icon mystats-trend" aria-hidden="true" :data-tip="myStatsTrendTip(myStatsVocabTrend().refIso)"><use :href="'/icons.svg#' + myStatsTrendIcon(myStatsVocabTrend().trend)"></use></svg>
         </span>
         <span class="overview-consistency-label" x-text="$app.t('mystats.vocabTrend')"></span>
       </div>

@@ -15,7 +15,7 @@
       <span class="mystats-scope-tag" x-text="myStatsScope('window')"></span>
     </div>
     <div class="overview-consistency-grid">
-      <div class="overview-consistency-item">
+      <div class="overview-consistency-item" x-show="myStatsShowCurrentStreak">
         <span class="overview-consistency-value" x-text="$app.tn('mystats.days', myStatsStreak().currentStreak)"></span>
         <span class="overview-consistency-label" x-text="$app.t('mystats.streakCurrent')"></span>
       </div>

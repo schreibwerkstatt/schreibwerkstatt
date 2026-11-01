@@ -18,6 +18,8 @@ export function registerAdminUsageCard() {
     // Buchhaltung fuer `_adminUsageRun`: letzte Load-Sequenz je Tab + Zahl
     // laufender Loads.
     _adminUsageSeq: {},
+    // Stand (Zeitraum + Filter), fuer den jeder Tab zuletzt geladen hat.
+    _adminUsageKeys: {},
     _adminUsagePending: 0,
     adminUsageError: '',
     adminUsageFrom: '',

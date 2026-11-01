@@ -157,7 +157,7 @@ test('KI-Phasen: Paare ohne auffindbaren Beleg fallen weg, Ich-Form mit Einstieg
   assert.ok(aiPrompts.some(p => p.includes('Anerkennung vom Vater')), 'Werkstatt-Notizen im Material');
 });
 
-test('Gespräche: drei Runden je Thema, kein Mix von Buchtext aus zwei Kapiteln', () => {
+test('Gespräche: nur Figuren-Gespräche, keine Quiz-Ketten aus Faktenfragen', () => {
   const ctx = makeCtx({ readerFigures: [{ key: 'fig:anna', name: 'Anna' }] });
   ctx.personaPairs = new Map([['fig:anna', { name: 'Anna', pairs: [['Wer bist du?', 'A1'], ['Was willst du?', 'A2'], ['Wen liebst du?', 'A3']] }]]);
   const push = makeReaderPush(ctx);
@@ -167,16 +167,8 @@ test('Gespräche: drei Runden je Thema, kein Mix von Buchtext aus zwei Kapiteln'
   push({ id: 'y2', turns: [['Was macht Ben?', 'backt']], convKey: 'fig:ben' });
   push({ id: 'y3', turns: [['Wo wohnt Ben?', 'am Markt']], convKey: 'fig:ben' });
   runConversations(ctx, push);
-  assert.ok(!ctx.samples.some(s => s.id.startsWith('reader|conv|fig:ben')), 'keine Gespräche über Nebenfiguren');
-  const convs = ctx.samples.filter(s => s.id.startsWith('reader|conv|'));
-  assert.ok(convs.length >= 1);
-  for (const c of convs) {
-    assert.equal(c.messages.length, 7);
-    const answers = c.messages.filter(m => m.role === 'assistant').map(m => m.content);
-    assert.ok(!(answers.includes('Antwort 3') && answers.includes('Antwort 4')), 'zwei Kapitel gemischt');
-    if (answers.includes('Antwort 3')) assert.equal(c.sourceKey, 'ch:1');
-    if (answers.includes('Antwort 4')) assert.equal(c.sourceKey, 'ch:2');
-  }
+  // Aneinandergereihte Faktenfragen sind kein Gespräch (docs/finetuning.md#leser-modell).
+  assert.ok(!ctx.samples.some(s => s.id.startsWith('reader|conv|')), 'keine Quiz-Ketten');
   const pconv = ctx.samples.find(s => s.id === 'reader|personaConv|fig:anna|0');
   assert.match(pconv.messages[1].content, /Anna/);
   assert.match(pconv.messages.at(-2).content, /wieder mit dem Buch/, 'Rückweg zum Buch');

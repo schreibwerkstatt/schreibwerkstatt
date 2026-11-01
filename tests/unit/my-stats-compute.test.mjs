@@ -757,7 +757,98 @@ test('computeVolumeDelta: Basis = juengster Snapshot vor dem Fenster, auch aus d
   ];
   const v = C.computeVolumeDelta(rows, '2025-10-05', '2026-10-01');
   assert.equal(v.chars, 3000, '4000 − 1000 (letzter Stand <= from−1)');
-  assert.equal(v.approximated, false);
+  assert.equal(v.approximated, true, 'Basis liegt 35 Tage vor from−1 (Monats-Historie) → Naeherung');
+  // Tagesgenaue Basis (Luecke innerhalb der Toleranz) bleibt exakt.
+  const near = C.computeVolumeDelta([...rows, { book_id: 1, recorded_at: '2025-10-02', chars: 1200 }], '2025-10-05', '2026-10-01');
+  assert.equal(near.chars, 2800);
+  assert.equal(near.approximated, false);
+});
+
+test('computeVolumeDelta: veralteter Endstand (Fenster endet in der Monats-Historie) → approximiert', () => {
+  const rows = [
+    { book_id: 1, recorded_at: '2024-01-31', chars: 1000 },
+    { book_id: 1, recorded_at: '2024-02-29', chars: 2000 },
+    { book_id: 1, recorded_at: '2024-03-31', chars: 3000 },
+  ];
+  const v = C.computeVolumeDelta(rows, '2024-02-01', '2024-03-15');
+  assert.equal(v.chars, 1000, 'Endstand 2024-02-29 − Basis 2024-01-31');
+  assert.equal(v.approximated, true);
+});
+
+test('computeVolumeDelta: Import-Zuwachs zaehlt nicht (Snapshot und Live-Stand)', () => {
+  const today = localIsoDate();
+  const rows = [
+    { book_id: 1, recorded_at: C.isoAddDays(today, -40), chars: 1000, words: 100, page_count: 2 },
+    // Import vor 5 Tagen: +50'000 Zeichen, Zaehler kumulativ ab da.
+    { book_id: 1, recorded_at: C.isoAddDays(today, -6), chars: 51500, words: 5150, page_count: 12,
+      imported_chars: 50000, imported_words: 5000, imported_pages: 10 },
+    { book_id: 1, recorded_at: C.isoAddDays(today, -1), chars: 52000, words: 5200, page_count: 12,
+      imported_chars: 50000, imported_words: 5000, imported_pages: 10 },
+  ];
+  const detail = [{ book_id: 1, chars: 52300, words: 5230, pages: 13, created_at: '2020-01-01' }];
+  const v = C.computeVolumeDelta(rows, C.isoAddDays(today, -29), today, { booksDetail: detail, todayIso: today });
+  assert.equal(v.chars, 1300, 'Live 52300 − Import 50000 − Basis 1000');
+  assert.equal(v.words, 130);
+  assert.equal(v.pages, 1);
+  const past = C.computeVolumeDelta(rows, C.isoAddDays(today, -29), C.isoAddDays(today, -1), { booksDetail: detail, todayIso: today });
+  assert.equal(past.chars, 1000);
+  assert.deepEqual(C.importedTotals(rows), { chars: 50000, words: 5000, pages: 10 });
+});
+
+test('computeVolumeDelta: importiertes neues Buch zaehlt im Zeitraum 0', () => {
+  const today = localIsoDate();
+  // seedImportBaseline: gestrige Zeile = Stand nach dem Import, Zaehler gleich.
+  const rows = [
+    { book_id: 3, recorded_at: C.isoAddDays(today, -1), chars: 80000, imported_chars: 80000 },
+    { book_id: 3, recorded_at: today, chars: 80000, imported_chars: 80000 },
+  ];
+  const detail = [{ book_id: 3, chars: 80400, created_at: today }];
+  const v = C.computeVolumeDelta(rows, C.isoAddDays(today, -29), today, { booksDetail: detail, todayIso: today });
+  assert.equal(v.chars, 400, 'nur das danach Geschriebene');
+});
+
+test('computeBookGoals: Tempo ohne Import-Zuwachs', () => {
+  const today = localIsoDate();
+  const rows = [
+    { book_id: 1, recorded_at: C.isoAddDays(today, -30), chars: 10000 },
+    { book_id: 1, recorded_at: C.isoAddDays(today, -1), chars: 73000, imported_chars: 60000 },
+  ];
+  const [g] = computeBookGoals([{ book_id: 1, chars: 73000, goal_target_chars: 200000 }], rows);
+  assert.equal(g.paceDays, 29);
+  assert.equal(g.recentDailyChars, Math.round(3000 / 29));
+});
+
+test('carryForwardTotals: fehlende Zeile eines Buchs zaehlt mit dem letzten Stand', () => {
+  const pts = C.carryForwardTotals([
+    { book_id: 1, date: '2026-01-01', value: 100 },
+    { book_id: 2, date: '2026-01-01', value: 50 },
+    { book_id: 1, date: '2026-01-02', value: 120 }, // Buch 2: Sync fehlgeschlagen
+    { book_id: 1, date: '2026-01-03', value: 130 },
+    { book_id: 2, date: '2026-01-03', value: 70 },
+    { book_id: 3, date: '2026-01-03', value: 5 },   // neues Buch
+  ]);
+  assert.deepEqual(pts, [
+    { date: '2026-01-01', value: 150 },
+    { date: '2026-01-02', value: 170 },
+    { date: '2026-01-03', value: 205 },
+  ]);
+});
+
+test('autoGranularity: Tag bis 90, Woche bis 730, darueber Monat', () => {
+  assert.equal(C.autoGranularity(30), 'day');
+  assert.equal(C.autoGranularity(90), 'day');
+  assert.equal(C.autoGranularity(91), 'week');
+  assert.equal(C.autoGranularity(730), 'week');
+  assert.equal(C.autoGranularity(731), 'month');
+});
+
+test('computeWritingTimeGrid: Raster ohne Fenster-Serien, gleich wie computeWritingTimeStreak', () => {
+  const rows = [{ book_id: 1, date: localIsoDate(), seconds: 600 }];
+  const g = C.computeWritingTimeGrid(rows);
+  const s = computeWritingTimeStreak(rows);
+  assert.equal(g.weeks.length, 52);
+  assert.deepEqual(g.weeks, s.weeks);
+  assert.equal(g.currentStreak, undefined);
 });
 
 test('computeVolumeDelta: neues Buch ohne Anlagedatum vor dem Fenster → voller Zuwachs, nicht approximiert', () => {

@@ -1,0 +1,56 @@
+{
+  "version": "5.8.3",
+  "date": "2026-11-01",
+  "entries": [
+    {
+      "kind": "neu",
+      "de": "Fine-Tuning-Export: die letzten fünf Exporte bleiben unter «Gespeicherte Exporte» erhalten. Alle Dateien eines Exports lädst du jetzt mit einem Klick als ZIP herunter.",
+      "en": "Fine-tuning export: your last five exports stay available under “Saved exports”. You can now download all files of an export as a ZIP with one click."
+    },
+    {
+      "kind": "neu",
+      "de": "Im Bucheditor zählt jetzt deine Schreibzeit mit, sobald du in einem Abschnitt tippst. Blosses Durchscrollen gilt als Lesen und zählt nicht.",
+      "en": "The book editor now counts your writing time as soon as you type in a section. Just scrolling through counts as reading and isn’t tracked."
+    },
+    {
+      "kind": "verbessert",
+      "de": "Buchentwicklung: die Werte sind nach Umfang, Aufwand und Qualität gruppiert, und neu gibt es «Zeichen pro Schreibstunde». Längere Zeiträume zeigt das Diagramm als Wochen- oder Monatswerte, mit deinem Tagesziel als Linie.",
+      "en": "Book progress: values are grouped into size, effort and quality, and “characters per writing hour” is new. Longer periods show as weekly or monthly values, with your daily goal as a line."
+    },
+    {
+      "kind": "verbessert",
+      "de": "Meine Statistik: importierte Texte zählen nicht mehr als geschrieben. Zuwachs und Tempo zeigen damit nur, was du selbst dazugeschrieben hast.",
+      "en": "My statistics: imported texts no longer count as written. Growth and pace now show only what you wrote yourself."
+    },
+    {
+      "kind": "verbessert",
+      "de": "Eine Normseite zählt überall 1500 Zeichen, auch im Exposé. Vorher rechneten einzelne Stellen mit 1800 Zeichen und zeigten weniger Seiten an.",
+      "en": "A standard page now counts as 1,500 characters everywhere, including the exposé. Some places used 1,800 before and showed fewer pages."
+    },
+    {
+      "kind": "verbessert",
+      "de": "Die Buchübersicht lädt spürbar schneller. Die Kachel «Bearbeitungsstand» und die Kapitelzeilen lassen sich jetzt auch per Tastatur und Screenreader bedienen.",
+      "en": "The book overview loads noticeably faster. The “Editing status” tile and the chapter rows now also work with keyboard and screen reader."
+    },
+    {
+      "kind": "verbessert",
+      "de": "Fine-Tuning-Export: die Antworten zu Figuren, Beziehungen und Ereignissen klingen natürlicher, Hauptfiguren bekommen mehr Varianten. Lektoratsnotizen im Manuskript landen nicht mehr im Trainingsset.",
+      "en": "Fine-tuning export: answers about characters, relationships and events read more naturally, and main characters get more variants. Editing notes in the manuscript no longer end up in the training set."
+    },
+    {
+      "kind": "behoben",
+      "de": "Buchentwicklung: Satzlänge und Wortformen zeigten zu hohe bzw. abweichende Werte. Der Verlauf beginnt dafür neu und stimmt jetzt mit der Stil- und der Wortschatz-Karte überein.",
+      "en": "Book progress: sentence length and word forms showed values that were too high or didn’t match. Their history starts fresh and now matches the style and vocabulary cards."
+    },
+    {
+      "kind": "behoben",
+      "de": "Konnte beim Aktualisieren ein Abschnitt nicht geladen werden, sank der Tagesstand des Buchs. Jetzt bleibt der alte Stand stehen, und die Buchentwicklung sagt dir, was gefehlt hat.",
+      "en": "If a section failed to load during a refresh, the book’s daily count dropped. Now the previous count stays, and Book progress tells you what was missing."
+    },
+    {
+      "kind": "behoben",
+      "de": "Buchübersicht: bei abgelaufener Deadline standen mehrere Warnungen zum Ziel untereinander. Jetzt erscheint nur noch die passende.",
+      "en": "Book overview: when the deadline had passed, several goal warnings were stacked. Now only the relevant one appears."
+    }
+  ]
+}

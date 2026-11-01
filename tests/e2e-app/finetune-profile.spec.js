@@ -96,17 +96,17 @@ test('Fine-Tuning-Export: Leser-Optionen sind vorbelegt, keine Autor-Optionen', 
   guard.assertClean('Fine-Tuning-Leser');
 });
 
-test('Fine-Tuning-Export: Qualität des Sets zeigt Aufgabentypen, Überlappung und häufigste Antworten', async ({ page }) => {
+test('Fine-Tuning-Export: Verlauf klappt ein Set auf — Qualität, häufigste Antworten, Downloads', async ({ page }) => {
   const guard = attachConsoleGuard(page);
   await bootApp(page);
   await selectSeededBook(page);
   await page.evaluate(() => window.__app.toggleFinetuneExportCard());
   const card = page.locator('.card--finetune');
   await expect(card).toBeVisible();
-  await expect(card.locator('#partial-finetune-export-quality')).toBeAttached();
+  await expect(card.locator('#partial-finetune-export-result .muted-msg')).toBeVisible();
   await page.evaluate(() => {
     const c = window.Alpine.$data(document.querySelector('.card--finetune'));
-    c.finetuneStats = {
+    const stats = {
       total: 10, train: 9, val: 1, answerCapped: 5, critiqueDropped: 3, cardDropped: 0, splitMixed: 2, valPurged: 1,
       coreFactCoverage: 0.95, paragraphTargetMax: 2,
       quality: {
@@ -122,8 +122,20 @@ test('Fine-Tuning-Export: Qualität des Sets zeigt Aufgabentypen, Überlappung u
         topAnswers: [{ count: 2, text: 'Anna ist die Wirtin im Dorf.' }],
       },
     };
+    c.finetuneExports = [
+      { id: 2, createdAt: '2026-10-02T10:00:00Z', stale: false, stats },
+      { id: 1, createdAt: '2026-10-01T10:00:00Z', stale: true, stats: { total: 4, train: 4 } },
+    ];
   });
-  const rows = card.locator('#partial-finetune-export-quality tbody tr');
+  const items = card.locator('.history-item');
+  await expect(items).toHaveCount(2);
+  await expect(items.nth(1)).toContainText(await tr(page, 'finetune.history.stale'));
+  await expect(card.locator('.history-detail')).toHaveCount(0);
+  await items.first().click();
+  const detail = card.locator('.history-detail');
+  await expect(detail).toHaveCount(1);
+  await expect(detail.getByRole('button', { name: await tr(page, 'finetune.download.zip') })).toBeVisible();
+  const rows = detail.locator('tbody tr');
   await expect(rows).toHaveCount(3);
   await expect(rows.first()).toContainText(await tr(page, 'finetune.task.continue'));
   await expect(card).toContainText(await tr(page, 'finetune.quality.writingShare', { pct: '60.0 %' }));
@@ -132,7 +144,13 @@ test('Fine-Tuning-Export: Qualität des Sets zeigt Aufgabentypen, Überlappung u
   await expect(card).toContainText(await page.evaluate(() => window.__app.tn('finetune.stats.critiqueDropped', 3)));
   await expect(card).toContainText(await tr(page, 'finetune.quality.tokenShares', { writing: '55.0 %', facts: '30.0 %', persona: '10.0 %', refusal: '5.0 %' }));
   await expect(card).toContainText(await tr(page, 'finetune.quality.coverage', { pct: '95.0 %' }));
-  await expect(card).toContainText('Anna ist die Wirtin im Dorf.');
+  const answer = detail.locator('.finetune-top-answers li').first();
+  await expect(answer).toContainText('Anna ist die Wirtin im Dorf.');
+  // Ziffern und Badge liegen innerhalb der Detail-Box, nicht links davor.
+  const [box, li] = await Promise.all([detail.boundingBox(), answer.boundingBox()]);
+  expect(li.x).toBeGreaterThan(box.x + 32);
+  await items.first().click();
+  await expect(detail).toHaveCount(0);
 
   guard.assertClean('Fine-Tuning-Qualität');
 });

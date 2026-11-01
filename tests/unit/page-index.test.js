@@ -260,3 +260,12 @@ test('Satzmetriken: Nachrichten kleben nicht an den Erzählsätzen', () => {
   assert.equal(idx.sentences, 2);
   assert.equal(idx.dialog_chars, 'bist du schon da'.length + 'gleich 5 min'.length, 'Dialog weiter mit Nachrichten');
 });
+
+test('page_stats.sentences stammt aus derselben Satzzerlegung wie die Satzlänge', () => {
+  const { computePageIndex } = require('../../lib/page-index');
+  const text = 'Dr. Meier kam um 14.30 Uhr, d. h. z. B. pünktlich. Er sagte: «Na?» Dann ging er.';
+  const idx = computePageIndex(text);
+  assert.equal(idx.sentences, 3, 'Abkürzungen und Uhrzeit beenden keinen Satz');
+  assert.equal(Math.round((idx.sentence_words / idx.sentences) * 10) / 10, idx.avg_sentence_len);
+  assert.equal(JSON.parse(idx.sentence_lens).length, idx.sentences);
+});

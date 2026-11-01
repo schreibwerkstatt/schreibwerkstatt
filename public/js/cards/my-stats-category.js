@@ -8,6 +8,8 @@
 // pro Gruppe Summen (chars/words/pages) + Buchzahl, absteigend nach Zeichen;
 // der Uncategorized-Bucket steht stets zuletzt. pct = Anteil am Spitzenreiter
 // (fuer den Balken). Leere Buecher (chars = 0) zaehlen nicht in die Gruppen.
+import { CHARS_PER_NORMSEITE } from '../utils/format.js';
+
 export function computeVolumeByCategory(booksDetail) {
   const groups = new Map(); // catId|'__none__' → { categoryId, name, color, chars, words, pages, bookCount }
   for (const b of (booksDetail || [])) {
@@ -32,5 +34,5 @@ export function computeVolumeByCategory(booksDetail) {
     return b.chars - a.chars;
   });
   const max = rows.length ? Math.max(1, ...rows.map(r => r.chars)) : 1;
-  return rows.map(r => ({ ...r, normpages: Math.round(r.chars / 1500), pct: Math.round((r.chars / max) * 100) }));
+  return rows.map(r => ({ ...r, normpages: Math.round(r.chars / CHARS_PER_NORMSEITE), pct: Math.round((r.chars / max) * 100) }));
 }

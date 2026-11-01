@@ -4,7 +4,7 @@
 // Seiten-Alter und Abdeckung.
 
 const { db } = require('../../db/schema');
-const { getOwnedCheck, listPageChecks } = require('../../db/page-checks');
+const { getOwnedCheck, listPageChecks, lektoratCoverage } = require('../../db/page-checks');
 const { toIntId } = require('../../lib/validate');
 const { guardBook, sessionEmail } = require('../../lib/acl');
 const { resolvePageBookId } = require('../../lib/content-ownership');
@@ -139,13 +139,7 @@ function register(router) {
 
   // Lektorat-Abdeckung: wie viele Seiten eines Buchs wurden schon geprüft. Cross-User.
   router.get('/coverage/:book_id', (req, res) => {
-    const bookId = req.bookId;
-    const { total } = db.prepare('SELECT COUNT(*) as total FROM page_stats WHERE book_id = ?').get(bookId);
-    const { checked } = db.prepare(
-      'SELECT COUNT(DISTINCT page_id) as checked FROM page_checks WHERE book_id = ?'
-    ).get(bookId);
-    const pct = total > 0 ? Math.round((checked / total) * 100) : 0;
-    res.json({ checked_pages: checked, total_pages: total, pct });
+    res.json(lektoratCoverage(req.bookId));
   });
 }
 

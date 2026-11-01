@@ -20,7 +20,8 @@ function makeCoreHelpers(ctx) {
   const order = (n, tag) => [...Array(n).keys()]
     .sort((a, b) => hashSplit(tag + '|' + a, seed) - hashSplit(tag + '|' + b, seed));
 
-  // `card`: { id, kind, subject, fields, unit, core }.
+  // `card`: { id, kind, subject, fields, unit, core, tier }. `tier`: Bedeutung
+  // der Figur (main/side/minor), steuert das Kürzen in lib/token-mix.js.
   // `questions` / `answers`: Listen; `count` überschreibt die Variantenzahl.
   // `dir` (optional): Fragerichtung derselben Karte (Beziehung A→B / B→A),
   // steht am Sample und in seiner ID.
@@ -29,7 +30,9 @@ function makeCoreHelpers(ctx) {
     const qs = [...new Set(questions.map(q => String(q || '').trim()).filter(q => q.length >= 4))];
     const as = [...new Set(answers.map(a => String(a || '').trim()).filter(a => a.length >= 12))];
     if (!qs.length || !as.length) return 0;
-    const n = Math.min(count || k, qs.length * as.length);
+    // Jede Frage höchstens einmal je Karte und Richtung: dieselbe Frage mit
+    // zwei Antworten wäre ein doppelter Prompt (finalize.js#promptDedup).
+    const n = Math.min(count || k, qs.length);
     const tag = card.id + (dir ? '|' + dir : '');
     const qo = order(qs.length, tag + '|q');
     const ao = order(as.length, tag + '|a');
@@ -37,7 +40,7 @@ function makeCoreHelpers(ctx) {
     let emitted = 0;
     for (let i = 0; emitted < n && i < n * 3; i++) {
       const q = qs[qo[i % qs.length]];
-      const a = as[ao[(i + Math.floor(i / qs.length)) % as.length]];
+      const a = as[ao[i % as.length]];
       const key = q + '\u0000' + a;
       if (seen.has(key)) continue;
       seen.add(key);
@@ -49,6 +52,7 @@ function makeCoreHelpers(ctx) {
         ...(dir ? { dir } : {}),
         unit: card.unit || card.id,
         ...(card.core ? { core: true } : {}),
+        ...(card.tier ? { tier: card.tier } : {}),
         messages: [
           { role: 'system', content: unifiedSys },
           { role: 'user', content: q },

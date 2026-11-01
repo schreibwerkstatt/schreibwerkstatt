@@ -18,6 +18,7 @@ Zwei Wege:
 | [`requirements.txt`](requirements.txt) | Gepinnte Versionen (CLI-Pfad) |
 | [`Modelfile.example`](Modelfile.example) | Ollama-Modelfile (Muster; die Karte liefert es mit dem System-Prompt deines Buchs) |
 | [`compare_models.py`](compare_models.py) | Testprompts (`eval.jsonl`) an zwei Ollama-Modelle schicken, Antworten vergleichen |
+| [`token_factor.py`](token_factor.py) | Token-Schätzung des Exports gegen den echten Tekken-Tokenizer messen, schreibt `tokenEstimateError` in die Statistik-Datei |
 
 ## Setup
 

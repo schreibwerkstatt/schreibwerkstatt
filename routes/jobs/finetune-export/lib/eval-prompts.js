@@ -82,7 +82,7 @@ function buildEvalPrompts(ctx, { valUnits = new Set(), trainPrompts = null } = {
     const typY = flip ? inverseTyp(r.typ) : r.typ;
     const role = roleNoun(typY, genderOf(Y), langIsEn);
     if (!role) return;
-    const expected = relationAnswers({ X, Y, typY, desc: '', descFromX: false }, langIsEn)[1] || '';
+    const expected = relationAnswers({ X, Y, typY, desc: '' }, langIsEn)[1] || '';
     add('relation', fill(Q[lang].relation[i % 3], { x: X.name, y: Y.name }), {
       expected, mustContain: [role.noun], holdout: valUnits.has('rel:' + r.key) });
   });

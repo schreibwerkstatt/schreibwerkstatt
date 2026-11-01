@@ -1,4 +1,4 @@
-import { fetchText, tzOpts, formatRelativeShort, charBadgeLabel, localeTag } from '../utils.js';
+import { fetchText, tzOpts, formatRelativeShort, charBadgeLabel, localeTag, charsToNormseiten, formatNumber } from '../utils.js';
 import { avatarHue } from '../avatar.js';
 import { isRetryableSaveError } from '../editor/notebook/save-errors.js';
 import { idOptions, sameId } from '../chapter-filter.js';
@@ -43,6 +43,11 @@ export const appUiMethods = {
   // bewertung) — die Einheit kommt aus der i18n, nicht aus einem Literal.
   charBadge(chars) {
     return charBadgeLabel(chars, this.t('bookstats.unit.z'));
+  },
+
+  // Normseiten-Plakette („12,4 NS"). Teiler aus utils/format.js#CHARS_PER_NORMSEITE.
+  normseitenBadge(chars) {
+    return formatNumber(charsToNormseiten(chars), this.$store.shell.uiLocale, 1) + ' ' + this.t('bookstats.unit.ns');
   },
 
   // ── Sort helpers (use persistent order maps from loadPages) ─────────────

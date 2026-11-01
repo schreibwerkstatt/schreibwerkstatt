@@ -10,7 +10,8 @@
 //
 // Pure Funktion (Alpine-/DOM-frei) → direkt unit-testbar, siehe
 // tests/unit/streak-grid.test.mjs.
-import { localIsoDate, localIsoDaysAgo } from './utils.js';
+import { localIsoDate } from './utils.js';
+import { isoAddDays } from './utils/iso-day.js';
 import { quartileLevelFor } from './book/ymheatmap.js';
 
 export const STREAK_WEEKS = 52;
@@ -52,14 +53,15 @@ export function buildStreakGrid({
   const [ty, tm, td] = isoToday.split('-').map(Number);
   const dowMon = (new Date(Date.UTC(ty, tm - 1, td)).getUTCDay() + 6) % 7; // Mo=0 ... So=6
   const startOffset = (weeks - 1) * 7 + dowMon;
-  const today = new Date(todayLocal);
 
   // Tageswerte EINMAL ziehen — Raster und Serien-Zaehlung lesen dieselbe Reihe
   // statt jede fuer sich zu rechnen (das war die dritte Kopie der Regel).
   const series = []; // chronologisch, aeltester zuerst
   const valueByIso = new Map();
   for (let off = startOffset; off >= 0; off--) {
-    const iso = localIsoDaysAgo(off, today);
+    // Heute einmal bestimmt, danach reine Kalenderarithmetik: ein
+    // localIsoDaysAgo je Tag riefe ~730-mal toLocaleDateString mit Zeitzone.
+    const iso = isoAddDays(isoToday, -off);
     const value = valueForIso(iso);
     valueByIso.set(iso, value);
     series.push({ iso, value });
@@ -80,7 +82,7 @@ export function buildStreakGrid({
       grid[col][row] = makeCell({ iso: null, value: null, level: 0, future: true });
       continue;
     }
-    const iso = localIsoDaysAgo(offsetDays, today);
+    const iso = isoAddDays(isoToday, -offsetDays);
     const value = valueByIso.has(iso) ? valueByIso.get(iso) : null;
     grid[col][row] = makeCell({ iso, value, level: levelFor(value), future: false });
   }

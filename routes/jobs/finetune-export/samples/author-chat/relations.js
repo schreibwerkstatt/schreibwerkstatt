@@ -1,8 +1,17 @@
 'use strict';
 
+const { figureTypePhrase, genderOf } = require('../core-facts/words');
+const { relationAnswers } = require('../core-facts/relations');
+const { declineName, capFirst, contract } = require('../core-facts/naming');
+const { joinList } = require('../core-facts/events');
+const { SCHICHT_PROSA } = require('./figures');
+
 // Block 12-16: Cast-Aggregate + Familien + Macht + Tags
 function buildRelationSamples(ctx) {
-  const { langIsEn, figRows, figById, figRelRows, pushQA } = ctx;
+  const { langIsEn, figRows, figById, figRelRows, pushQA, displayName } = ctx;
+  // Eigenname, nach dem man fragt (core-facts/naming.js) — Rollenfiguren
+  // und mehrdeutige Namen tragen keine Beziehungs- und Attributfragen.
+  const proper = (id) => ctx.figNameInfo?.get(id)?.proper !== false;
 
   // Einzelbeziehungen («Wie steht A zu B?», beide Richtungen) stehen als
   // Kernwissen in ../core-facts/relations.js; hier bleiben die Sammellisten.
@@ -62,9 +71,15 @@ function buildRelationSamples(ctx) {
 
       // Pro Figur dieser Typ-Klasse: Rollen-Q&A
       for (const f of group.items) {
+        const phrase = figureTypePhrase(f.typ, genderOf(f), langIsEn);
+        if (!phrase || !proper(f.fig_id)) continue;
+        const name = ctx.figNameInfo?.get(f.fig_id)?.name || f.name;
+        const head = /^\p{Lu}/u.test(name)
+          ? (langIsEn ? `${name} is ${phrase} in «${displayName}».` : `${name} ist ${phrase} in «${displayName}».`)
+          : (langIsEn ? `In «${displayName}», ${name} is ${phrase}.` : `In «${displayName}» ist ${name} ${phrase}.`);
         pushQA('authorChat|cast-figType|' + f.fig_id,
-          langIsEn ? `What role does ${f.name} play in the book?` : `Welche Rolle spielt ${f.name} im Roman?`,
-          langIsEn ? `${f.name} is a ${labelLow}.` : `${f.name} ist eine ${group.label}.`);
+          langIsEn ? `What role does ${name} play in the book?` : `Welche Rolle spielt ${declineName(name, 'nom') || name} im Roman?`,
+          head);
       }
     }
   }
@@ -122,20 +137,16 @@ function buildRelationSamples(ctx) {
       for (const [root, members] of familyRoots) {
         const memberSet = new Set(members);
         const memberNames = members.map(id => figById.get(id)?.name).filter(Boolean);
-        const lines = [];
-        for (const r of familyRels) {
-          if (!memberSet.has(r.from_fig_id) || !memberSet.has(r.to_fig_id)) continue;
-          const a = figById.get(r.from_fig_id)?.name;
-          const b = figById.get(r.to_fig_id)?.name;
-          if (!a || !b) continue;
-          const t = (r.typ || '').trim();
-          const d = (r.beschreibung || '').trim();
-          lines.push(`${a} ↔ ${b}: ${t}${d ? ' (' + d + ')' : ''}`);
-        }
+        // Je Beziehung ein ganzer Satz aus dem Kernwissen («Gisela ist
+        // Stefans Mutter.»), nie die Rohform «Gisela ↔ Stefan: kind».
+        const lines = (ctx.relationFacts || [])
+          .filter(r => memberSet.has(r.a.fig_id) && memberSet.has(r.b.fig_id))
+          .map(r => relationAnswers({ X: r.a, Y: r.b, typY: r.typ, desc: '' }, langIsEn)[0])
+          .filter(Boolean);
         const rootName = figById.get(root)?.name || memberNames[0] || root;
         const answer = (langIsEn
-          ? `Members: ${memberNames.join(', ')}. ${lines.slice(0, 12).join('; ')}.`
-          : `Mitglieder: ${memberNames.join(', ')}. ${lines.slice(0, 12).join('; ')}.`).trim();
+          ? `The family around ${rootName}: ${joinList(memberNames, true)}. ${lines.slice(0, 8).join(' ')}`
+          : `Zur Familie um ${rootName} gehören ${joinList(memberNames, false)}. ${lines.slice(0, 8).join(' ')}`).trim();
         pushQA('authorChat|family|' + root,
           langIsEn ? `Describe the family around ${rootName}.` : `Beschreibe die Familie um ${rootName}.`,
           answer);
@@ -203,9 +214,11 @@ function buildRelationSamples(ctx) {
       if (!s) continue;
       if (!bySchicht.has(s)) bySchicht.set(s, []);
       bySchicht.get(s).push(f);
+      const prosa = SCHICHT_PROSA[s.toLowerCase()];
+      if (!prosa || !proper(f.fig_id)) continue;
       pushQA('authorChat|schicht-fig|' + f.fig_id,
         langIsEn ? `Which social class does ${f.name} belong to?` : `In welcher gesellschaftlichen Schicht steht ${f.name}?`,
-        langIsEn ? `${f.name} belongs to: ${s}.` : `${f.name} gehört zur ${s}.`);
+        langIsEn ? `${f.name} belongs to ${prosa.en}.` : contract(`${f.name} gehört zu ${prosa.de}.`));
     }
     // Per Schicht: Zugehörige Figuren
     for (const [schicht, members] of bySchicht) {
@@ -253,7 +266,10 @@ function buildRelationSamples(ctx) {
       const t = (r.typ || '').trim();
       const d = (r.beschreibung || '').trim();
       if (!t && !d) continue;
-      const answer = d ? (t ? `${t}: ${d}` : d) : t;
+      // Nur mit Beschreibung, und nur zwischen benannten Figuren: das rohe
+      // Typwort («vorgesetzter: …») ist kein Satz.
+      if (!d || !proper(r.from_fig_id) || !proper(r.to_fig_id)) continue;
+      const answer = capFirst(d);
       pushQA('authorChat|power-rel|' + r.from_fig_id + '|' + r.to_fig_id,
         langIsEn ? `What is the power relationship between ${a} and ${b}?` : `In welchem Machtverhältnis stehen ${a} und ${b}?`,
         answer);

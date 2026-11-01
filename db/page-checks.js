@@ -32,4 +32,17 @@ function listPageChecks(pageId, email, limit = 20) {
   return _stmtChecksForPage.all(pageId, email, limit);
 }
 
-module.exports = { getOwnedCheck, listPageChecks };
+const _stmtCoverageTotal = db.prepare('SELECT COUNT(*) AS total FROM page_stats WHERE book_id = ?');
+const _stmtCoverageChecked = db.prepare(
+  'SELECT COUNT(DISTINCT page_id) AS checked FROM page_checks WHERE book_id = ?'
+);
+
+/** Lektorat-Abdeckung eines Buchs, Cross-User: geprüfte / gesamte Abschnitte. */
+function lektoratCoverage(bookId) {
+  const { total } = _stmtCoverageTotal.get(bookId);
+  const { checked } = _stmtCoverageChecked.get(bookId);
+  const pct = total > 0 ? Math.round((checked / total) * 100) : 0;
+  return { checked_pages: checked, total_pages: total, pct };
+}
+
+module.exports = { getOwnedCheck, listPageChecks, lektoratCoverage };

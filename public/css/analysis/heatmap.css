@@ -25,14 +25,23 @@
   align-items: flex-start;
 }
 
+/* Kennzahlen in Gruppen (Umfang · Qualität · Aufwand): Caps-Beschriftung in
+   einer eigenen Spalte, Badges daneben umbrechend. Die Gruppe selbst ist
+   transparent fürs Raster, damit alle Beschriftungen bündig stehen. */
 .book-stats-current {
-  display: flex;
-  align-items: center;
-  gap: var(--space-6);
-  flex-wrap: wrap;
+  display: grid;
+  grid-template-columns: max-content minmax(0, 1fr);
+  align-items: baseline;
+  gap: var(--space-6) var(--space-10);
   margin-top: var(--space-sm);
   padding-top: var(--space-sm);
   border-top: 0.5px solid var(--color-border);
+}
+.book-stats-group { display: contents; }
+.book-stats-group-badges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-6);
 }
 
 /* === Heatmap (shared: Stil + Fehler) === */
@@ -151,6 +160,28 @@
 }
 .heatmap-cell--clickable {
   cursor: pointer;
+}
+/* Klickziel einer Matrix-Zelle: ein echter Button IN der Zelle, nie role=button
+   am <td>/<th> — das nähme Screenreadern die Tabellen-Navigation (Zeile/Spalte).
+   Füllt die Zelle, erbt Schrift, Farbe und Ausrichtung; die Tönung bleibt an der
+   Zelle. Konsumenten: Fehler-/Stil-Heatmap, Motiv-Band, Werkstatt-Bogen,
+   Präsenz-Matrizen der Buch-Übersicht (DESIGN.md «Klickbare Nicht-Buttons»). */
+.heatmap-cell-btn {
+  appearance: none;
+  display: block;
+  width: 100%;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: none;
+  font: inherit;
+  color: inherit;
+  text-align: inherit;
+  cursor: pointer;
+}
+.heatmap-cell-btn:focus-visible {
+  outline: var(--focus-ring);
+  outline-offset: var(--focus-ring-offset-inset);
 }
 .heatmap-cell--active {
   outline: 1px solid var(--color-primary);

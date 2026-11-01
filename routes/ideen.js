@@ -77,17 +77,21 @@ router.get('/counts', (req, res) => {
 // zwei Ansichten des Recherche-Boards). Ein serverseitiger Filter machte aus der
 // ausgeblendeten `verworfen`-Spalte eine nicht geladene — und die Zahl neben dem
 // Filter, die sagt wie viel gerade versteckt ist, waere nicht mehr zu bilden.
+function buildIdeenBoard(bookId, userEmail) {
+  return {
+    statuses: IDEE_STATUSES,
+    stages: getBookIdeenStages(bookId),
+    ideen: ideenDb.listBoardIdeen(bookId, userEmail),
+  };
+}
+
 router.get('/board', (req, res) => {
   const userEmail = sessionEmail(req);
   const bookId = toIntId(req.query.book_id);
   if (!bookId)    return res.status(400).json({ error_code: 'INVALID_ID' });
   setContext({ book: bookId });
   if (!guardBook(req, res, bookId, 'editor')) return;
-  res.json({
-    statuses: IDEE_STATUSES,
-    stages: getBookIdeenStages(bookId),
-    ideen: ideenDb.listBoardIdeen(bookId, userEmail),
-  });
+  res.json(buildIdeenBoard(bookId, userEmail));
 });
 
 // Aktive Stufen des Buches (book_settings.ideen_stages) — fuer die Ideen-Karte,
@@ -326,3 +330,4 @@ router.delete('/:id', (req, res) => {
 });
 
 module.exports = router;
+module.exports.buildIdeenBoard = buildIdeenBoard;

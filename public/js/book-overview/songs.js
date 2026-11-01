@@ -9,10 +9,13 @@ export const songsMethods = {
 
   overviewTopSongs() {
     const songs = this.overviewSongs || [];
-    return this._memo('topSongs', [songs], () => {
+    const rollup = this._chapterRollup();
+    return this._memo('topSongs', [songs, rollup], () => {
       const rows = songs.map(s => {
         const kap = Array.isArray(s.kapitel) ? s.kapitel : [];
-        const total = kap.reduce((sum, k) => sum + (Number(k.haeufigkeit) || 0), 0);
+        // Nennungen in ausgeschlossenen Kapiteln zählen nicht (wie Orte/Figuren).
+        const total = kap.reduce((sum, k) => (rollup.isExcludedRef(k?.chapter_id, k?.name)
+          ? sum : sum + (Number(k.haeufigkeit) || 0)), 0);
         return {
           id: s.id,
           titel: s.titel || '',

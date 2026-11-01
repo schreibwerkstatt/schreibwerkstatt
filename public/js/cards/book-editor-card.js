@@ -166,6 +166,12 @@ export function registerBookEditorCard() {
         if (!shown) this._saveDirtyNow();
       });
 
+      // Schreibzeit (book/writing-time.js) zählt im Bucheditor nur, solange ein
+      // Abschnitt aktiviert ist — Lesen und Scrollen im Stream ist kein Schreiben.
+      this.$watch(() => !!window.__app?.showBookEditorCard && this.activePageId != null, (writing) => {
+        if (window.__app) window.__app.bookEditorWriting = writing;
+      });
+
       // Cmd/Ctrl+F-Routing via editor-find-card: dispatcht hierher, wenn die
       // Karte sichtbar ist.
       window.addEventListener(EVT.BOOK_EDITOR_OPEN_FIND, () => {
@@ -194,6 +200,7 @@ export function registerBookEditorCard() {
     },
 
     destroy() {
+      if (window.__app) window.__app.bookEditorWriting = false;
       this._autosave?.clearAll();
       this._savedFlash?.clearAll();
       if (this._findRecomputeTimer) { clearTimeout(this._findRecomputeTimer); this._findRecomputeTimer = null; }

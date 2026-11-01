@@ -50,7 +50,7 @@ Katalog: [lib/metrics/defs.js](../lib/metrics/defs.js) — eine Beschreibung je 
 - `sw_books`, `sw_pages`, `sw_chapters` — Gauge, `COUNT(*)`.
 - `sw_books_written` — Gauge, Bücher mit `SUM(page_stats.chars) > 0`; Basis für „Zeichen pro Buch" in der Integration, damit leere und Test-Bücher den Schnitt nicht drücken.
 - `sw_chars`, `sw_words` — Gauge, `SUM(page_stats.chars|words)`.
-- `sw_normseiten` — Gauge, `round(sw_chars / 1800)` (Normseite = 1800 Zeichen).
+- `sw_normseiten` — Gauge, `round(sw_chars / 1500)` (Normseite = 1500 Zeichen, [lib/normseite.js](../lib/normseite.js)).
 
 ### Writing-Activity (heute, app.timezone)
 

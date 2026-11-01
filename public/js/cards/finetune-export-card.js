@@ -2,8 +2,8 @@
 //
 // Trainiert immer das Leser-Modell (docs/finetuning.md#leser-modell).
 //
-// State: Trainingsprofil, Typ-Toggles, Längenfenster, Val-Split, Loading/Progress/Status, Stats,
-// Zeitpunkt + Veraltet-Flag des gespeicherten Sets.
+// State: Trainingsprofil, Typ-Toggles, Längenfenster, Val-Split, Loading/Progress/Status,
+// Verlauf der gespeicherten Sets (je Stats, Zeitpunkt, Veraltet-Flag) + aufgeklapptes Set.
 // `showFinetuneExportCard` bleibt im Root (Hash-Router + Exklusivität).
 //
 // Export-Vorgaben kommen aus dem gewählten Trainingsprofil
@@ -61,9 +61,8 @@ export function registerFinetuneExportCard() {
     finetuneLoading:  false,
     finetuneProgress: 0,
     finetuneStatus:   '',
-    finetuneStats:    null,
-    finetuneSavedAt:  null,
-    finetuneStale:    false,
+    finetuneExports:  [],
+    finetuneOpenId:   null,
 
     _finetunePollTimer: null,
     _lifecycle: null,
@@ -91,9 +90,8 @@ export function registerFinetuneExportCard() {
           finetuneLoading: false,
           finetuneProgress: 0,
           finetuneStatus: '',
-          finetuneStats: null,
-          finetuneSavedAt: null,
-          finetuneStale: false,
+          finetuneExports: [],
+          finetuneOpenId: null,
         },
         extraListeners: [{ type: 'job:reconnect', handler: onJobReconnect }],
       });
@@ -124,11 +122,8 @@ export function registerFinetuneExportCard() {
         alreadyRunning: 'common.analysisAlreadyRunning',
       },
       progressResetDelay: 400,
-      onOpen() { return this.finetuneLoadSaved(); },
+      onOpen() { return this.finetuneLoadExports(); },
       buildPayload() {
-        this.finetuneStats = null;
-        this.finetuneSavedAt = null;
-        this.finetuneStale = false;
         return {
           book_id: parseInt(Alpine.store('nav').selectedBookId),
           book_name: window.__app.selectedBookName,
@@ -171,17 +166,16 @@ export function registerFinetuneExportCard() {
       async onDone(job) {
         if (job.result?.empty) {
           this.finetuneStatus = window.__app.t('finetune.empty');
-          this.finetuneStats = null;
           return;
         }
-        this.finetuneStats = job.result?.stats || null;
-        this.finetuneSavedAt = new Date().toISOString();
-        this.finetuneStale = false;
+        const st = job.result?.stats;
         this.finetuneStatus = window.__app.t('finetune.done', {
-          n: this.finetuneStats?.total ?? 0,
-          train: this.finetuneStats?.train ?? 0,
-          val: this.finetuneStats?.val ?? 0,
+          n: st?.total ?? 0,
+          train: st?.train ?? 0,
+          val: st?.val ?? 0,
         });
+        await this.finetuneLoadExports();
+        this.finetuneOpenId = this.finetuneExports[0]?.id ?? null;
       },
     }),
   }));

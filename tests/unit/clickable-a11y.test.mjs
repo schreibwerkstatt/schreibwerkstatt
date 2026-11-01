@@ -11,6 +11,11 @@
 // listitem-Rolle, der Screenreader verliert Liste und Position. Das Klickziel
 // gehoert an ein inneres Element.
 //
+// Vierte Regel (unten): `.internal-link` nie direkt am <td>/<th> — role=button
+// ersetzt die Zellen-Rolle, der Screenreader verliert die Tabellen-Navigation
+// (Zeile/Spalte). Klickbare Zelle: <button class="heatmap-cell-btn"> in der
+// Zelle; klickbarer Kopf: `.internal-link` am <span> im <th>.
+//
 // Dritte Regel: `.internal-link` traegt kein Aussehen. Das Link-Aussehen ist
 // `.text-link`; Zeilen und Kacheln zeigen Hover ueber ihren eigenen Hintergrund.
 // Darum setzt keine `.internal-link`-Hover-Regel Unterstreichung oder Deckkraft,
@@ -41,12 +46,10 @@ const ALLOW = [
     'Backdrop der Command-Palette (Klick daneben schliesst); Tastatur schliesst per Esc'],
   ['public/partials/sidebar.html', 'class="history-chevron"',
     'Chevron im Kapitelkopf; Tastatur ueber den Kopf selbst (Enter/Leertaste) und die Baum-Tastatur (book/tree/keyboard.js)'],
+  ['public/partials/bookoverview-edit-status.html', 'class="overview-tile overview-tile--area-click',
+    'Kachel mit zwei Klickzielen (Buchorganizer + Ideen-Board) darf kein role=button sein — dessen Kinder waeren fuer Screenreader unsichtbar; Flaeche ist Maus-Abkuerzung, Tastatur ueber den Titel-<button> und den Pendenzen-<button>'],
   ['public/partials/snapshots-reader.html', 'class="snapshot-reader__backdrop"',
     'Backdrop des Fassungs-Readers; Tastatur schliesst per Esc bzw. Schliessen-Knopf'],
-  ['public/partials/fehler-heatmap.html', 'class="heatmap-cell"',
-    '`internal-link` kommt mit `row.cells[typ].cls` aus buildFehlerRows (book/fehler-heatmap.js), nur fuer Zellen mit Befunden'],
-  ['public/partials/stil-heatmap.html', 'class="heatmap-cell"',
-    '`internal-link` kommt mit `c.cells[m.key].cls` aus book/stil-heatmap.js, nur fuer klickbare Zellen'],
 ];
 
 const TAG_RE = /<(div|span|li|td|tr|p|h[1-6]|img|section|article)\b((?:[^>"']|"[^"]*"|'[^']*')*)>/g;
@@ -92,6 +95,19 @@ export function findListItemLinks(files, read) {
     const src = read(file);
     for (const m of src.matchAll(re)) {
       if (!/internal-link/.test(m[1])) continue;
+      out.push(`${file}:${src.slice(0, m.index).split('\n').length}`);
+    }
+  }
+  return out;
+}
+
+export function findCellLinks(files, read) {
+  const out = [];
+  const re = /<(td|th)\b((?:[^>"']|"[^"]*"|'[^']*')*)>/g;
+  for (const file of files) {
+    const src = read(file);
+    for (const m of src.matchAll(re)) {
+      if (!/internal-link/.test(m[2])) continue;
       out.push(`${file}:${src.slice(0, m.index).split('\n').length}`);
     }
   }
@@ -151,6 +167,17 @@ test('.internal-link nie am <li> (Listen-Semantik bleibt)', () => {
   assert.deepEqual(hits, [], `.internal-link an ein inneres Element des <li> setzen:\n${hits.join('\n')}`);
 });
 
+test('.internal-link nie am <td>/<th> (Tabellen-Semantik bleibt)', () => {
+  const hits = findCellLinks(FILES, read);
+  assert.deepEqual(hits, [], `Zelle: <button class="heatmap-cell-btn"> hinein; Kopf: .internal-link an ein <span> im <th>:\n${hits.join('\n')}`);
+});
+
+test('Heatmap-Builder haengen .internal-link nicht an Zellen-Klassen', () => {
+  const hits = ['public/js/book/fehler-heatmap.js', 'public/js/book/stil-heatmap.js']
+    .filter(f => /internal-link/.test(read(f)));
+  assert.deepEqual(hits, [], `cls landet am <td> — Klickziel ist der Button im Template:\n${hits.join('\n')}`);
+});
+
 test('.internal-link nie am <button> (Link-Aussehen ist .text-link)', () => {
   const hits = findButtonLinks(FILES, read);
   assert.deepEqual(hits, [], `<button> ist schon bedienbar — .internal-link entfernen, fuer Link-Aussehen .text-link:\n${hits.join('\n')}`);
@@ -174,6 +201,7 @@ test('Selbsttest: Detektor schlaegt an und laesst Erlaubtes durch', () => {
   const { offenders } = findOffenders(Object.keys(fake), r, []);
   assert.deepEqual(offenders, ['a.html:1 <div>']);
   assert.deepEqual(findListItemLinks(Object.keys(fake), r), ['f.html:1']);
+  assert.deepEqual(findCellLinks(Object.keys(fake), r), ['e.html:1']);
   const btn = { 'g.html': '<button class="text-link">x</button>\n<button class="internal-link">y</button>' };
   assert.deepEqual(findButtonLinks(['g.html'], (f) => btn[f]), ['g.html:2']);
   const css = { 'h.css': '.row.internal-link:hover { background: red; }\n.internal-link:hover { opacity: 0.65; }' };

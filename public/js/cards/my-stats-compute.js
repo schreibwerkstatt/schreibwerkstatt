@@ -5,9 +5,11 @@
 
 export { isoAddDays, isoDaysBetween, isoWeekdayMon, bucketizeIso, bucketRange, aggregateByBucket,
          filterByWindow, secondsByDate, latestSnapshotPerBook, earliestSnapshotPerBook,
-         snapshotPerBookOnOrBefore, firstSnapshotPerBookInWindow, resolveWindow } from './my-stats-compute/series.js';
-export { computeVolumeDelta, computeWeeklyDelta, HISTORY_DAILY_DAYS } from './my-stats-compute/volume.js';
-export { computeStreakStats, computeWritingTimeStreak, computeWeekdayPattern, computeDerived,
+         snapshotPerBookOnOrBefore, firstSnapshotPerBookInWindow, resolveWindow, carryForwardTotals,
+         autoGranularity } from './my-stats-compute/series.js';
+export { computeVolumeDelta, computeWeeklyDelta, importedTotals, valuesOfSnap, HISTORY_DAILY_DAYS,
+         SNAPSHOT_GAP_TOLERANCE_DAYS } from './my-stats-compute/volume.js';
+export { computeStreakStats, computeWritingTimeStreak, computeWritingTimeGrid, computeWeekdayPattern, computeDerived,
          computeMilestones, computePerBookTime, computeHourPattern, computeGoalAttainment,
          computeEffortSplit } from './my-stats-compute/rhythm.js';
 export { computeReadability, commonBookIds, TREND_REF_DAYS } from './my-stats-compute/readability.js';

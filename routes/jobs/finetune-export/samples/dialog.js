@@ -11,6 +11,7 @@ const DIALOG_LINE_MIN = 25;
 // Buch, einem Namen zugeordnet, den genau eine Figur trägt.
 const WHO_SAYS_MIN_CHARS = 30;
 const WHO_SAYS_MIN_WORDS = 6;
+const WHO_SAYS_NO_SCENE_CAP = 3;
 const normQuote = (q) => q.toLowerCase().replace(/[^\p{L}\p{N}]+/gu, ' ').trim();
 
 // Dialog-Sammlung läuft immer, wenn Figuren bekannt sind — `dialogsByFigure`
@@ -42,7 +43,7 @@ function buildDialogSamples(ctx) {
       const spkKey = speaker.toLowerCase();
       if (!dialogsByFigure.has(spkKey)) dialogsByFigure.set(spkKey, []);
       dialogsByFigure.get(spkKey).push({
-        quote: d.quote, chapter: p.chapter, chapterId: p.chapter_id ?? 0, page: p.title,
+        quote: d.quote, chapter: p.chapter, chapterId: p.chapter_id ?? 0, page: p.title, pageId: p.id,
       });
       if (!opts.types.dialog || d.quote.length < DIALOG_LINE_MIN || looksLikeNarration(d.quote)) continue;
       // Vorlauf: die Sätze vor dem Zitat, an einer Satzgrenze begonnen.
@@ -74,8 +75,23 @@ function buildDialogSamples(ctx) {
   // in Buchreihenfolge zu nehmen, hiesse, nur die frühen Kapitel abzufragen.
   // `sourceKey` = Kapitel des Zitats: das Zitat ist Buchtext und gehört in
   // denselben Split wie die übrigen Ableitungen seines Kapitels.
+  // Die Antwort nennt die Situation — die Szene des Abschnitts, in der die
+  // Figur auftritt —, damit sie eindeutig ist und unter `maxPerAnswer` fällt
+  // («Das sagt Fabio in der Szene «…» (Kapitel «…»).»). Ohne eindeutige
+  // Szene bleibt nur das Kapitel; davon höchstens WHO_SAYS_NO_SCENE_CAP je
+  // Figur, sonst wiederholt sich «Fabio (Kapitel X)» dutzendfach.
   if (opts.types.dialog) {
     const REV_CAP_PER_FIG = 30 * (opts.biasBoost || 1);
+    const scenesOnPage = new Map();
+    for (const sc of ctx.sceneRows || []) {
+      if (!sc.page_id || !sc.titel) continue;
+      if (!scenesOnPage.has(sc.page_id)) scenesOnPage.set(sc.page_id, []);
+      scenesOnPage.get(sc.page_id).push(sc);
+    }
+    const sceneOf = (pageId, figId) => {
+      const hits = (scenesOnPage.get(pageId) || []).filter(sc => (ctx.figsByScene?.get(sc.id) || []).includes(figId));
+      return hits.length === 1 ? hits[0].titel : null;
+    };
     const minWords = Math.max(1, Number(opts.whoSaysMinWords) || WHO_SAYS_MIN_WORDS);
     // Name → Figuren, die ihn tragen (Name oder Kurzname). Ein geteilter
     // Kurzname («Buddenbrook») ordnet ein Zitat keiner Figur eindeutig zu.
@@ -109,8 +125,16 @@ function buildDialogSamples(ctx) {
         .sort((a, b) => a[0] - b[0])
         .slice(0, REV_CAP_PER_FIG)
         .map(([, e]) => e);
+      let noScene = 0;
+      const usedAnswers = new Set();
       picked.forEach((e, i) => {
-        const ctxTag = e.chapter ? ` (in «${e.chapter}»)` : '';
+        const scene = sceneOf(e.pageId, f.fig_id);
+        const answer = whoSaysAnswer(f.name, scene, e.chapter, langIsEn);
+        // Jede Antwort einmal: zwei Zitate derselben Szene lehrten dieselbe
+        // Antwort auf verschiedene Fragen.
+        if (usedAnswers.has(answer)) return;
+        if (!scene && ++noScene > WHO_SAYS_NO_SCENE_CAP) return;
+        usedAnswers.add(answer);
         samples.push({
           id: 'dialogRev|' + f.fig_id + '|' + i,
           type: 'dialog',
@@ -120,7 +144,7 @@ function buildDialogSamples(ctx) {
             { role: 'user',   content: (langIsEn
               ? `Who says this: \u201C${e.quote}\u201D?`
               : `Wer sagt das: «${e.quote}»?`) },
-            { role: 'assistant', content: f.name + ctxTag + '.' },
+            { role: 'assistant', content: answer },
           ],
         });
         counts.dialog++;
@@ -129,4 +153,11 @@ function buildDialogSamples(ctx) {
   }
 }
 
-module.exports = { buildDialogSamples };
+function whoSaysAnswer(name, scene, chapter, langIsEn) {
+  const ch = chapter ? (langIsEn ? ` (chapter «${chapter}»)` : ` (Kapitel «${chapter}»)`) : '';
+  if (scene) return langIsEn ? `${name} says that in the scene «${scene}»${ch}.` : `Das sagt ${name} in der Szene «${scene}»${ch}.`;
+  if (chapter) return langIsEn ? `${name} says that in the chapter «${chapter}».` : `Das sagt ${name} im Kapitel «${chapter}».`;
+  return langIsEn ? `${name} says that.` : `Das sagt ${name}.`;
+}
+
+module.exports = { buildDialogSamples, whoSaysAnswer };

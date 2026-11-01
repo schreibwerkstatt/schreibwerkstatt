@@ -31,23 +31,29 @@
                         x-text="(themeById(m.theme_id) || {}).name || ''"></span>
                 </th>
                 <td class="heatmap-numcol" x-text="bandRowTotal(m.id)"></td>
-                <!-- `heatmap-cell--clickable` + `internal-link` haengen am
+                <!-- `heatmap-cell--clickable` + Button (.heatmap-cell-btn) haengen am
                      Praedikat: eine leere Zelle hat nichts aufzuloesen und darf
-                     weder Klick-Cursor noch Tab-Stopp anbieten. `internal-link`
-                     macht die klickbaren Zellen ueber die globale Delegation
-                     (app/boot/internal-links.js) tastatur-erreichbar. -->
+                     weder Klick-Cursor noch Tab-Stopp anbieten. Nie role=button
+                     am <td> — das nähme Screenreadern die Tabellen-Navigation. -->
                 <template x-for="ch in bandChapters()" :key="ch.id">
                   <td class="heatmap-cell"
                       :class="[
                         bandCellClass(bandCount(m.id, ch.id)),
                         { 'heatmap-cell--clickable': bandCellClickable(m.id, ch.id),
-                          'internal-link': bandCellClickable(m.id, ch.id),
                           'heatmap-cell--active': activeBandDetailKey === bandDetailKey(m.id, ch.id) }
                       ]"
                       :style="bandCellVars(bandCount(m.id, ch.id))"
-                      :data-tip="ch.name + ' · ' + $app.t('motiv.band.hits', { n: bandCount(m.id, ch.id) })"
-                      @click="toggleBandDetail(m.id, ch.id)"
-                      x-text="bandCount(m.id, ch.id) || ''"></td>
+                      :data-tip="ch.name + ' · ' + $app.t('motiv.band.hits', { n: bandCount(m.id, ch.id) })">
+                    <template x-if="bandCellClickable(m.id, ch.id)">
+                      <button type="button" class="heatmap-cell-btn"
+                              @click="toggleBandDetail(m.id, ch.id)"
+                              :aria-expanded="activeBandDetailKey === bandDetailKey(m.id, ch.id) ? 'true' : 'false'"
+                              x-text="bandCount(m.id, ch.id)"></button>
+                    </template>
+                    <template x-if="!bandCellClickable(m.id, ch.id)">
+                      <span x-text="bandCount(m.id, ch.id) || ''"></span>
+                    </template>
+                  </td>
                 </template>
               </tr>
             </template>

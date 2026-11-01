@@ -31,6 +31,23 @@
 
 .admin-usage-pane {
   margin-top: var(--space-lg);
+  transition: opacity var(--transition-slow);
+}
+
+/* Laden: der bisherige Stand bleibt stehen und wird erst nach einer kurzen
+   Verzoegerung gedimmt — schnelle Loads tauschen nur die Zahlen, ohne dass
+   ein Hinweis den Inhalt verschiebt oder die Flaeche aufblitzt. */
+.admin-usage-pane[aria-busy="true"] {
+  opacity: 0.55;
+  transition-delay: 0.3s;
+}
+
+.admin-usage-refresh--busy .icon {
+  animation: spin 0.8s linear infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .admin-usage-refresh--busy .icon { animation: none; }
 }
 
 .admin-usage-filter {

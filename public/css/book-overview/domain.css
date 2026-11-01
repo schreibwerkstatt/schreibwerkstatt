@@ -116,6 +116,15 @@
   color: var(--color-muted);
 }
 .overview-edit-status-stale { color: var(--color-warn-text); }
+/* Titel- und Pendenzen-Button der Kachel: Text, kein Knopf-Rahmen. */
+.overview-edit-status-open,
+.overview-edit-status-ideen {
+  padding: 0;
+  border: 0;
+  background: none;
+  text-align: left;
+}
+.overview-edit-status-ideen { font-size: inherit; }
 
 /* ── Plot-Board-Snapshot: Status-Verteilung + Meta + Drift-Warnung ─────────── */
 /* Status-Segmente der geteilten `.overview-stacked-bar`: geplant (Akzent),

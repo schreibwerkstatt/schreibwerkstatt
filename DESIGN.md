@@ -3002,12 +3002,13 @@ Pflicht-Patterns. Verstreute aria-Verwendungen werden hier zentralisiert; neue K
 
 | Element | Hover | Klassen |
 |---|---|---|
-| Klickbarer Text im Fluss (Kapitel-/Figurenname, „in den Einstellungen ändern", Quellen-Titel, Zeilenkopf einer Matrix) | Unterstreichung, keine Farb- oder Deckkraft-Änderung | `internal-link text-link` (span/th) bzw. nur `text-link` (button) |
+| Klickbarer Text im Fluss (Kapitel-/Figurenname, „in den Einstellungen ändern", Quellen-Titel, Zeilen-/Spaltenkopf einer Matrix) | Unterstreichung, keine Farb- oder Deckkraft-Änderung | `internal-link text-link` (span — im Matrixkopf am `<span>` **im** `<th>`) bzw. nur `text-link` (button) |
 | Zeile, Kachel, Akkordeon, Block | eigene Tönung über `--color-hover` bzw. Rahmen/Shadow | `internal-link` + Feature-Klasse mit `:hover` |
-| Badge, Tag, Heatmap-Zelle | eigene Tönung/Outline der Feature-Klasse | `internal-link` + Feature-Klasse |
+| Badge, Tag | eigene Tönung/Outline der Feature-Klasse | `internal-link` + Feature-Klasse |
+| Heatmap-/Matrix-Zelle | Outline/Tönung an der Zelle (`.heatmap-cell:hover`) | `<button type="button" class="heatmap-cell-btn">` **in** der Zelle, nur wenn sie klickbar ist; `:aria-expanded`, wenn sie ein Detail aufklappt ([analysis/heatmap.css](public/css/analysis/heatmap.css)) |
 | App-Titel, Überschrift | keins, der Cursor genügt | `internal-link` |
 
-Ein `<button>` trägt nie `.internal-link` — er ist schon bedienbar; Link-Aussehen bekommt er über `.text-link`. Deckkraft ist kein Hover-Signal: sie senkt den Kontrast und liest sich als deaktiviert. Gegated: [clickable-a11y.test.mjs](tests/unit/clickable-a11y.test.mjs).
+Ein `<button>` trägt nie `.internal-link` — er ist schon bedienbar; Link-Aussehen bekommt er über `.text-link`. Ein `<td>`/`<th>` trägt es ebenfalls nie: `role="button"` ersetzt die Zellen-Rolle, und der Screenreader verliert die Tabellen-Navigation (Zeile, Spalte, Kopf). Deckkraft ist kein Hover-Signal: sie senkt den Kontrast und liest sich als deaktiviert. Gegated: [clickable-a11y.test.mjs](tests/unit/clickable-a11y.test.mjs).
 
 ### Toggle-Sections (Accordion)
 
@@ -3301,6 +3302,7 @@ Drei Editoren leben in eigenen Subfoldern (`book/`, `focus/`, `notebook/`); edit
 | [book/book-create-modal.css](public/css/book/book-create-modal.css) | Buch-Anlage-Modal. |
 | [book/book-settings.css](public/css/book/book-settings.css) | Bucheinstellungen-Karte (`.card--book-settings`): Tab-Abstand + Panel-Einrückung, `.book-settings-section`-Abschnitte, Job-Stats-Tabellen, Sharing-Liste (`.book-share-*`), Sync-Status-Panel (`.sync-status-*`, `--hubspot`), Publikation (Bildvorschau, `.pub-repeater`, `.pub-matter-*`), Kontext-/Stilprofil-/Preset-Zeilen, Merge-Gattungen, Reihe (`.series-*`). Ganze Datei in `@layer components`. |
 | [book/expose.css](public/css/book/expose.css) | Exposé-Reiter der Buch-Einstellungen: Eckdaten als Definitionsliste `.expose-facts` (live aus Formular/Publikation), Figuren-/Gliederungsliste `.expose-list` (Verweis + Text), Laufhistorie `.expose-history`, Hinweise `.expose-warnings`. |
+| [book/finetune-export.css](public/css/book/finetune-export.css) | Fine-Tuning-Export-Karte: nummerierte Liste der häufigsten Antworten `.finetune-top-answers` (Ziffern in der Box, Zählbadge als eigene Spalte `.finetune-top-answer`, umbrechender Text hängt am Text ein). |
 | [book/header-actions.css](public/css/book/header-actions.css) | `.header-actions`-Cluster, Update-All-Panel. |
 | [book/buchorganizer.css](public/css/book/buchorganizer.css) | Buch-Organisations-Karte. |
 | [book/titelwerkstatt.css](public/css/book/titelwerkstatt.css) | Titel-Werkstatt (Dachzeile/Titel/Lead/Teaser als Metadata des Beitrags, publizistische Buchtypen): Übersichtszeile `.tw-row` als Grid-Button in einer `colspan`-Zelle (Sortierung über `sortableTable` bleibt, der Detail-Block bekommt die volle Breite), Feld-Block `.tw-field` mit Zeichenzähler, Kanal-Lineal `.tw-ruler-track` + `.tw-channel--fits/--over` (Print/Web/Suche/Social) und Varianten-Liste `.tw-variant` mit Herkunfts-Marke `--user`/`--ki`. Akzent via `var(--card-accent)` (`.card--titelwerkstatt`). |

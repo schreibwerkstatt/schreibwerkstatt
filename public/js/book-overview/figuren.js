@@ -12,14 +12,17 @@ import { rankPreferRecurring } from './ranking.js';
 export const figurenMethods = {
   overviewFigurenCount() { return (this.overviewFiguren || []).length; },
 
-  // Top-6 Figuren nach Szenen-Präsenz.
+  // Top-6 Figuren nach Szenen-Präsenz. Szenen in ausgeschlossenen Kapiteln
+  // zählen nicht (wie in der Matrix).
   overviewTopFiguren() {
     const figs = this.overviewFiguren || [];
     const sz = this.overviewSzenen || [];
-    return this._memo('topFiguren', [figs, sz], () => {
+    const rollup = this._chapterRollup();
+    return this._memo('topFiguren', [figs, sz, rollup], () => {
       const totals = new Map();
       for (const s of sz) {
         if (!Array.isArray(s.fig_ids)) continue;
+        if (rollup.isExcludedRef(s.chapter_id, s.kapitel)) continue;
         for (const fid of s.fig_ids) totals.set(fid, (totals.get(fid) || 0) + 1);
       }
       const rows = figs.map(f => ({

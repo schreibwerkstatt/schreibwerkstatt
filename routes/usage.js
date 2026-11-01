@@ -152,22 +152,27 @@ router.post('/page/track', jsonBody, (req, res) => {
   }
 });
 
+// Zuletzt geöffnete Abschnitte eines Users im Buch, jüngste zuerst. `limit`
+// (Default 5, Deckel 20). Geteilt mit der gebündelten Übersicht (routes/overview.js).
+function listRecentPages(userEmail, bookId, limit) {
+  const n = Math.max(1, Math.min(20, parseInt(limit, 10) || 5));
+  return db.prepare(`
+    SELECT page_id, last_used, use_count
+    FROM user_page_usage
+    WHERE user_email = ? AND book_id = ?
+    ORDER BY last_used DESC
+    LIMIT ?
+  `).all(userEmail, bookId, n);
+}
+
 // Letzte N Seiten des aktuellen Buchs für Command-Palette-Sektion „Zuletzt".
 router.get('/page/recent', (req, res) => {
   const bookId = parseInt(req.query.book_id, 10);
   if (!bookId) return res.status(400).json({ error_code: 'INVALID_BOOK_ID' });
   if (!guardBook(req, res, bookId, 'viewer')) return;
   const userEmail = sessionEmail(req);
-  const limit = Math.max(1, Math.min(20, parseInt(req.query.limit, 10) || 5));
   try {
-    const rows = db.prepare(`
-      SELECT page_id, last_used, use_count
-      FROM user_page_usage
-      WHERE user_email = ? AND book_id = ?
-      ORDER BY last_used DESC
-      LIMIT ?
-    `).all(userEmail, bookId, limit);
-    res.json(rows);
+    res.json(listRecentPages(userEmail, bookId, req.query.limit));
   } catch (e) {
     logger.error('[usage/page/recent] DB-Fehler: ' + e.message);
     res.status(500).json({ error_code: 'DB_ERROR' });
@@ -175,3 +180,4 @@ router.get('/page/recent', (req, res) => {
 });
 
 module.exports = router;
+module.exports.listRecentPages = listRecentPages;

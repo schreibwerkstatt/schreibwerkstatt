@@ -25,6 +25,14 @@
   display: contents;
 }
 
+/* Buchwechsel: bis der neue Load steht, zeigt das Grid noch die Daten des
+   vorigen Buchs (kein Leeren → kein Flackern). Gedimmt und `inert` (im Markup),
+   damit sie nicht als Stand des neuen Buchs gelesen oder angeklickt werden. */
+.overview-grid--stale {
+  opacity: var(--opacity-disabled);
+  transition: opacity var(--transition-slow);
+}
+
 .overview-tile {
   display: flex;
   flex-direction: column;
@@ -41,9 +49,11 @@
   container-type: inline-size;
 }
 
-/* Klickbar ist ein Tile als div mit `.internal-link` oder als <button>. */
-.overview-tile:is(.internal-link, button) { cursor: pointer; }
-.overview-tile:is(.internal-link, button):hover {
+/* Klickbar ist ein Tile als div mit `.internal-link` oder als <button>.
+   `--area-click`: Tile mit mehreren Klickzielen (kein role=button) — die Fläche
+   ist Maus-Abkürzung, die Tastatur nimmt die Buttons darin. */
+.overview-tile:is(.internal-link, button, .overview-tile--area-click) { cursor: pointer; }
+.overview-tile:is(.internal-link, button, .overview-tile--area-click):hover {
   border-color: var(--color-border-focus);
   background: var(--color-hover);
   box-shadow: var(--shadow-sm);

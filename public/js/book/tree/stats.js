@@ -1,4 +1,4 @@
-import { CHARS_PER_TOKEN, charBadgeLabel, localDayDiff, localeTag, relativeDay, tzOpts } from '../../utils.js';
+import { CHARS_PER_TOKEN, charBadgeLabel, charsToNormseiten, localDayDiff, localeTag, relativeDay, tzOpts } from '../../utils.js';
 import { htmlToPlainText } from '../../html-text.js';
 import { EVT } from '../../events.js';
 import { sameStructureTitle } from '../../structure-title.js';
@@ -245,7 +245,7 @@ export const treeStatsMethods = {
       item.stats = count
         ? {
             words, chars, tok, count,
-            normseiten: Math.round((chars / 1500) * 10) / 10,
+            normseiten: charsToNormseiten(chars),
             badge: charBadgeLabel(chars, this.t('bookstats.unit.z')),
           }
         : null;

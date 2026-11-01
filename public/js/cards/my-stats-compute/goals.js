@@ -1,9 +1,10 @@
 // Pro-Buch-Ziele + Fertigstellungs-Prognose. Facade: cards/my-stats-compute.js.
 // Regeln: docs/my-stats.md „Bücher & Ziele / Prognose".
 
-import { localIsoDate, localIsoDaysAgo, resolveDailyGoal } from '../../utils.js';
+import { localIsoDate, localIsoDaysAgo, resolveDailyGoal, CHARS_PER_NORMSEITE } from '../../utils.js';
 import { isoAddDays, isoDaysBetween, latestSnapshotPerBook, earliestSnapshotPerBook,
          snapshotPerBookOnOrBefore } from './series.js';
+import { valuesOfSnap } from './volume.js';
 
 // Fenster (Tage) fuer die Tempo-Schaetzung der Fertigstellungs-Prognose: juengster
 // Snapshot je Buch minus Snapshot ~30 Tage zuvor → Zeichen-Zuwachs pro Kalendertag.
@@ -29,7 +30,7 @@ export function computeBookGoals(booksDetail, historyRows = [], todayLocal = new
   // Basis-Snapshot je Buch = letzter Snapshot strikt vor heute.
   const baseSnap = snapshotPerBookOnOrBefore(historyRows, localIsoDaysAgo(1, new Date(todayLocal)));
 
-  // Tempo-Basis: juengster Snapshot gegen den letzten on-or-before (heute −
+  // Tempo-Basis (ohne Importe): juengster Snapshot gegen den letzten on-or-before (heute −
   // FORECAST_PACE_DAYS). Ein juengeres Buch hat keinen so alten Snapshot —
   // dann zaehlt sein aeltester (kuerzeres Fenster, `paceDays` sagt wie lang).
   const paceLatest = latestSnapshotPerBook(historyRows);
@@ -65,7 +66,8 @@ export function computeBookGoals(booksDetail, historyRows = [], todayLocal = new
     let recentDailyChars = 0, paceDays = null;
     if (latestSnap && pastSnap && latestSnap.recorded_at > pastSnap.recorded_at) {
       paceDays = Math.max(1, isoDaysBetween(pastSnap.recorded_at, latestSnap.recorded_at));
-      recentDailyChars = Math.max(0, ((Number(latestSnap.chars) || 0) - (Number(pastSnap.chars) || 0)) / paceDays);
+      // Ohne Import-Zuwachs (valuesOfSnap): ein Import ist kein Schreibtempo.
+      recentDailyChars = Math.max(0, (valuesOfSnap(latestSnap).chars - valuesOfSnap(pastSnap).chars) / paceDays);
     }
     const remainingChars = hasGoal ? Math.max(0, goal - chars) : 0;
     let forecastDate = null, forecastStalled = false, forecastDays = null, onTrack = null;
@@ -95,9 +97,9 @@ export function computeBookGoals(booksDetail, historyRows = [], todayLocal = new
       chars,
       words: Number(b.words) || 0,
       pages: Number(b.pages) || 0,
-      normpages: Math.round(chars / 1500),
+      normpages: Math.round(chars / CHARS_PER_NORMSEITE),
       goal: hasGoal ? goal : null,
-      goalNormpages: hasGoal ? Math.round(goal / 1500) : null,
+      goalNormpages: hasGoal ? Math.round(goal / CHARS_PER_NORMSEITE) : null,
       hasGoal,
       reached,
       remainingChars: hasGoal ? remainingChars : null,

@@ -6,8 +6,8 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import {
-  CLASSIFIED_METRICS, computeAvgSummary, metricKind, rollingSeries,
-  rollingWindowForRange, trendSeries,
+  CLASSIFIED_METRICS, bucketFor, bucketSeries, bucketStart, computeAvgSummary, fillCalendar,
+  metricKind, rollingSeries, rollingWindowForRange, tempoRows, trendSeries,
 } from '../../public/js/book/bookstats-avg.js';
 
 const near = (actual, expected, msg) =>
@@ -124,4 +124,69 @@ test('Fensterbreite folgt dem gewaehlten Zeitraum', () => {
   assert.equal(rollingWindowForRange(90), 7);
   assert.equal(rollingWindowForRange(365), 30);
   assert.equal(rollingWindowForRange(0), 30);
+});
+
+test('Kalender: Tagesmengen bekommen Null-Tage, Bestaende bleiben leer', () => {
+  const flow = fillCalendar(['2026-09-01', '2026-09-04'], [5, 7], 'flow');
+  assert.deepEqual(flow.dates, ['2026-09-01', '2026-09-02', '2026-09-03', '2026-09-04']);
+  assert.deepEqual(flow.values, [5, 0, 0, 7]);
+  const stock = fillCalendar(['2026-09-01', '2026-09-03'], [100, 120], 'stock');
+  assert.deepEqual(stock.values, [100, null, 120]);
+});
+
+test('Tagesmenge: aufgefuellte Null-Tage sind keine aktiven Tage', () => {
+  const cal = fillCalendar(['2026-09-01', '2026-09-08'], [10, 30], 'flow');
+  const s = computeAvgSummary({ kind: 'flow', dates: cal.dates, values: cal.values });
+  assert.equal(s.spanDays, 8);
+  assert.equal(s.activeDays, 2);
+  near(s.perDay, 5, 'perDay ueber den Kalender');
+  near(s.mean, 20, 'Ø je aktivem Tag');
+});
+
+test('Verdichtung folgt Zeitraum und Spanne', () => {
+  assert.equal(bucketFor(90, 90), 'day');
+  assert.equal(bucketFor(365, 60), 'day', 'junges Buch bleibt tageweise');
+  assert.equal(bucketFor(365, 365), 'week');
+  assert.equal(bucketFor(0, 100), 'day');
+  assert.equal(bucketFor(0, 300), 'week');
+  assert.equal(bucketFor(0, 700), 'month');
+});
+
+test('Wochen beginnen montags, Monate am Ersten', () => {
+  assert.equal(bucketStart('2026-11-01', 'week'), '2026-10-26'); // Sonntag → Montag davor
+  assert.equal(bucketStart('2026-10-26', 'week'), '2026-10-26');
+  assert.equal(bucketStart('2026-10-17', 'month'), '2026-10-01');
+});
+
+test('Eimer: Summe, letzter Stand, Mittel — mit Randtagen', () => {
+  const dates = ['2026-10-30', '2026-10-31', '2026-11-01', '2026-11-02'];
+  const flow = bucketSeries(dates, [1, 2, 3, 4], 'flow', 'week');
+  assert.deepEqual(flow.map(b => [b.start, b.days, b.value]), [['2026-10-26', 3, 6], ['2026-11-02', 1, 4]]);
+  const stock = bucketSeries(dates, [10, null, 30, 40], 'stock', 'month');
+  assert.deepEqual(stock.map(b => [b.start, b.end, b.value]), [['2026-10-01', '2026-10-31', 10], ['2026-11-01', '2026-11-02', 40]]);
+  const rate = bucketSeries(dates, [2, 4, null, null], 'rate', 'month');
+  assert.deepEqual(rate.map(b => b.value), [3, null]);
+});
+
+test('Schreibtempo: Σ Zeichen / Σ Stunden, ohne Import und ohne Kurz-Tage', () => {
+  const stats = [
+    { recorded_at: '2026-10-01', chars: 1000, imported_chars: 0 },
+    { recorded_at: '2026-10-02', chars: 3000, imported_chars: 0 },     // +2000 in 1 h
+    { recorded_at: '2026-10-03', chars: 13000, imported_chars: 9000 }, // +1000 geschrieben in 0,5 h
+    { recorded_at: '2026-10-04', chars: 16000, imported_chars: 9000 }, // 2 min: zählt nicht
+  ];
+  const writing = [
+    { date: '2026-10-02', seconds: 3600 }, { date: '2026-10-03', seconds: 1800 }, { date: '2026-10-04', seconds: 120 },
+  ];
+  const rows = tempoRows(stats, writing);
+  assert.deepEqual(rows.map(r => r.cph), [2000, 2000, null]);
+  const s = computeAvgSummary({
+    kind: 'rate', dates: rows.map(r => r.recorded_at), values: rows.map(r => r.cph), weights: rows.map(r => r.hours),
+  });
+  near(s.perDay, 2000, 'gewogener Ø');
+});
+
+test('gewogener Ø: lange Tage zaehlen mehr als kurze', () => {
+  const s = computeAvgSummary({ kind: 'rate', dates: ['2026-10-01', '2026-10-02'], values: [1000, 4000], weights: [3, 1] });
+  near(s.perDay, 1750, 'Σ(v·w)/Σw');
 });

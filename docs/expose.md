@@ -19,7 +19,7 @@ Das Exposé speichert **nur, was neu entsteht**. Alles andere wird live gelesen 
 | Titel | `books.name` |
 | Untertitel, Autor, Co-Autoren, Vita | `book_publication` |
 | Genre, Erzählperspektive, Erzählzeit, fertig? | `book_settings` |
-| Umfang (Normseiten) | `page_stats` (Summe `chars` / 1800, [lib/normseite.js](../lib/normseite.js)) |
+| Umfang (Normseiten) | `page_stats` (Summe `chars` / 1500, [lib/normseite.js](../lib/normseite.js)) |
 | Zielgruppe, Vergleichstitel | `book_publication.zielgruppe` / `.vergleichstitel` (Reiter Publikation) |
 | **Klappentext** | `book_publication.description` — der einzige Ort ([publikation-export.md](publikation-export.md)) |
 | Figurennamen in der Liste | Figurenkatalog über `fig_id` (`x-entity-ref`) — eine umbenannte Figur heisst auch im Exposé richtig |

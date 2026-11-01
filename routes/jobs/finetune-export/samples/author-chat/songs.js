@@ -92,12 +92,12 @@ function buildSongSamples(ctx) {
     if (s.genre) {
       pushQA('authorChat|songGenre|' + s.id,
         langIsEn ? `What genre is «${titel}»?` : `Welches Genre hat «${titel}»?`,
-        s.genre);
+        langIsEn ? `«${titel}» belongs to the genre ${s.genre}.` : `«${titel}» gehört zum Genre ${s.genre}.`);
     }
     if (s.stimmung) {
       pushQA('authorChat|songMood|' + s.id,
         langIsEn ? `What mood does «${titel}» carry?` : `Welche Stimmung trägt «${titel}»?`,
-        s.stimmung);
+        langIsEn ? `The mood of «${titel}» is ${s.stimmung}.` : `Die Stimmung von «${titel}» ist ${s.stimmung}.`);
     }
     if (figuren.length) {
       pushQA('authorChat|songFigs|' + s.id,

@@ -134,13 +134,14 @@ export const kapitelMethods = {
   },
 
   _computeChapterFindings(heat) {
-    const { rootOf, rootOfName } = this._chapterRollup();
+    const { rootOf } = this._chapterRollup();
     const out = this._chapterBuckets(
       () => ({ count: 0, words: 0, pages_total: 0, pages_checked: 0 }),
       (buckets) => {
         for (const ch of heat.chapters) {
+          // Die Matrix ist per chapter_id geschlüsselt — ohne ID keine Zählung.
           if (ch.chapter_id == null) continue;
-          const root = rootOf(ch.chapter_id) || rootOfName(ch.chapter_name);
+          const root = rootOf(ch.chapter_id);
           if (!root) continue;
           const b = buckets.get(Number(root.id));
           if (!b) continue;
@@ -183,8 +184,8 @@ export const kapitelMethods = {
         for (const row of (lt?.per_chapter || [])) {
           const sec = Number(row.seconds) || 0;
           if (sec <= 0) continue;
-          const root = (row.chapter_id != null ? rootOf(row.chapter_id) : null)
-                     || rootOfName(row.chapter_name);
+          // Name nur ohne ID (siehe _chapterRollup), sonst zählt die ID allein.
+          const root = row.chapter_id != null ? rootOf(row.chapter_id) : rootOfName(row.chapter_name);
           if (!root) continue;
           const b = buckets.get(Number(root.id));
           if (!b) continue;

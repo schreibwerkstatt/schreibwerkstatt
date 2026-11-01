@@ -4,6 +4,9 @@
 // Beziehungstypen (public/js/book/beziehung-typen.js) und Figurentypen.
 // Trainingstext, keine UI-Strings.
 
+const { declineName } = require('./naming');
+const datOf = (name, langIsEn) => (langIsEn ? name : declineName(name, 'dat') || name);
+
 // figures.geschlecht ist Freitext der Analyse («männlich (Plural)»,
 // «männlich/weiblich (Familie)») — eindeutig ist nur ein reines
 // männlich/weiblich am Anfang ohne Zweitwert.
@@ -25,7 +28,8 @@ function genitive(name, langIsEn) {
   const words = n.split(/\s+/);
   if (words.length > 3 || words.some(w => !/^\p{Lu}/u.test(w))) return null;
   if (langIsEn) return /s$/i.test(n) ? n + "'" : n + "'s";
-  return /(s|ß|x|z|ce)$/i.test(n) ? n + "'" : n + 's';
+  const base = words[0] === 'Herr' && words.length > 1 ? 'Herrn ' + words.slice(1).join(' ') : n;
+  return /(s|ß|x|z|ce)$/i.test(base) ? base + "'" : base + 's';
 }
 
 // Rollenwort je Beziehungstyp und Geschlecht der Person, die die Rolle hat.
@@ -135,7 +139,7 @@ function roleStatement(holder, other, role, langIsEn, typ) {
   const gen = genitive(other, langIsEn);
   const art = roleArticle(typ, role.g, langIsEn);
   if (langIsEn) return gen ? `${holder} is ${gen} ${role.noun}` : `${holder} is ${art} ${role.noun} of ${other}`;
-  return gen ? `${holder} ist ${gen} ${role.noun}` : `${holder} ist ${art} ${role.noun} von ${other}`;
+  return gen ? `${holder} ist ${gen} ${role.noun}` : `${holder} ist ${art} ${role.noun} von ${datOf(other)}`;
 }
 
 // Rolle als Nominalphrase: «Stefans Mutter» / «eine Kollegin von Vater von Thomas».
@@ -143,7 +147,7 @@ function rolePhrase(other, role, typ, langIsEn) {
   const gen = genitive(other, langIsEn);
   const art = roleArticle(typ, role.g, langIsEn);
   if (langIsEn) return gen ? `${gen} ${role.noun}` : `${art} ${role.noun} of ${other}`;
-  return gen ? `${gen} ${role.noun}` : `${art} ${role.noun} von ${other}`;
+  return gen ? `${gen} ${role.noun}` : `${art} ${role.noun} von ${datOf(other)}`;
 }
 
 // `figures.beruf` ist Freitext der Analyse und trägt oft keinen Beruf
@@ -194,6 +198,17 @@ function figureTypePhrase(typ, gender, langIsEn) {
   return fn ? fn(gender) : '';
 }
 
+// Bedeutungsstufe einer Figur aus `figures.typ` (Figuren-Analyse bzw.
+// Figurenwerkstatt, nicht aus der Erwähnungszahl): main / side / minor.
+// Sie steuert die Zahl der Porträt-Varianten (`corePerTier`) und die
+// Reihenfolge beim Kürzen (lib/token-mix.js).
+function figureTier(typ) {
+  const t = String(typ || '').trim().toLowerCase();
+  if (t === 'hauptfigur') return 'main';
+  if (t === 'nebenfigur' || t === 'mentor' || t === 'antagonist') return 'side';
+  return 'minor';
+}
+
 // Personalpronomen (Nominativ) für zweite Sätze; null → Name wiederholen.
 function pronoun(gender, langIsEn) {
   if (langIsEn) return gender === 'm' ? 'He' : gender === 'f' ? 'She' : null;
@@ -206,7 +221,7 @@ const firstSentences = (text, n) => {
 };
 
 module.exports = {
-  genderOf, genitive, roleNoun, inverseTyp, roleStatement, possessive,
+  figureTier, datOf, genderOf, genitive, roleNoun, inverseTyp, roleStatement, possessive,
   figureTypePhrase, pronoun, firstSentences, roleArticle, descFitsType, rolePhrase, cleanBeruf, isAdverbialWhen, isStatus,
   FAMILY_TYPES, DISTANT_KIN, ART_DEF, ART_INDEF, ROLE_DE, UNIQUE_ROLES, PLACEHOLDER_NAME,
 };

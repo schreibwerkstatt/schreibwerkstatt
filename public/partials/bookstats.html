@@ -10,7 +10,7 @@
       <span class="card-eyebrow" x-text="$app.selectedBookName"></span>
       <span class="card-title" x-text="$app.t('bookstats.title')"></span>
       <div class="card-subline" x-show="bookStatsData.length > 0 && !bookStatsLoading">
-        <span class="card-timestamp" x-text="$app.t('bookstats.lastSnapshot', { date: (bookStatsData[bookStatsData.length - 1]?.recorded_at?.split('-').reverse().join('.') || '') })"></span>
+        <span class="card-timestamp" x-text="bookStatsLastSnapshotLabel()"></span>
       </div>
     </div>
     <div class="card-header-aside">
@@ -50,6 +50,7 @@
            {value:'hapax_ratio',         label: $app.t('bookstats.metric.hapaxRatio')},
            {value:'writing_minutes',     label: $app.t('bookstats.metric.writingMinutes')},
            {value:'writing_cumulative',  label: $app.t('bookstats.metric.writingCumulative')},
+           {value:'chars_per_hour',      label: $app.t('bookstats.metric.charsPerHour')},
            {value:'lektorat_minutes',    label: $app.t('bookstats.metric.lektoratMinutes')},
            {value:'lektorat_cumulative', label: $app.t('bookstats.metric.lektoratCumulative')},
            {value:'stt_minutes',         label: $app.t('bookstats.metric.sttMinutes')},
@@ -88,40 +89,18 @@
     <canvas id="book-stats-chart" role="img" :aria-label="$app.t('bookstats.chartFallback')"><span x-text="$app.t('bookstats.chartFallback')"></span></canvas>
   </div>
 
-  <!-- Aktuelle Stats (letzter Snapshot) -->
-  <div x-show="bookStatsData.length > 0" class="book-stats-current">
-    <span class="tok-badge tok-neutral"
-      x-text="(bookStatsData[bookStatsData.length - 1]?.chars ?? 0).toLocaleString($store.shell.uiLocale === 'en' ? 'en-US' : 'de-CH') + ' ' + $app.t('bookstats.unit.z')"></span>
-    <span class="tok-badge tok-neutral"
-      :data-tip="$app.t('bookstats.metric.normseiten')"
-      x-text="(Math.round(((bookStatsData[bookStatsData.length - 1]?.chars ?? 0) / 1500) * 10) / 10).toLocaleString($store.shell.uiLocale === 'en' ? 'en-US' : 'de-CH', { minimumFractionDigits: 1, maximumFractionDigits: 1 }) + ' ' + $app.t('bookstats.unit.ns')"></span>
-    <span class="tok-badge tok-neutral"
-      x-text="(bookStatsData[bookStatsData.length - 1]?.words ?? 0).toLocaleString($store.shell.uiLocale === 'en' ? 'en-US' : 'de-CH') + ' ' + $app.t('bookstats.unit.w')"></span>
-    <span class="tok-badge tok-neutral"
-      x-text="bookStatsData[bookStatsData.length - 1]?.page_count + ' ' + $app.t('bookstats.unit.s')"></span>
-    <span class="tok-badge tok-neutral"
-      x-text="(bookStatsData[bookStatsData.length - 1]?.tok ?? 0).toLocaleString($store.shell.uiLocale === 'en' ? 'en-US' : 'de-CH') + ' ' + $app.t('bookstats.unit.t')"></span>
-    <span class="tok-badge tok-neutral" x-show="bookStatsDelta !== null"
-      x-text="(bookStatsDelta >= 0 ? '+' : '') + (bookStatsDelta ?? 0).toLocaleString($store.shell.uiLocale === 'en' ? 'en-US' : 'de-CH') + ' ' + $app.t('bookstats.unit.delta')"></span>
-    <span class="tok-badge tok-neutral" x-show="bookStatsStatusBadge()" x-text="bookStatsStatusBadge()"></span>
-    <span class="tok-badge tok-neutral" x-show="bookStatsCoverage !== null"
-      x-text="$app.t('bookstats.coverage', { pct: (bookStatsCoverage?.pct ?? 0), checked: (bookStatsCoverage?.checked_pages ?? 0), total: (bookStatsCoverage?.total_pages ?? 0) })"></span>
-    <span class="tok-badge tok-neutral" x-show="bookStatsData[bookStatsData.length - 1]?.avg_sentence_len != null"
-      x-text="$app.t('bookstats.avgSentenceBadge', { n: (bookStatsData[bookStatsData.length - 1]?.avg_sentence_len ?? 0).toLocaleString($store.shell.uiLocale === 'en' ? 'en-US' : 'de-CH', { minimumFractionDigits: 1, maximumFractionDigits: 1 }) })"></span>
-    <span class="tok-badge tok-neutral" x-show="bookStatsData[bookStatsData.length - 1]?.chapter_count > 0"
-      x-text="$app.t('bookstats.pagesPerChapterBadge', { n: ((bookStatsData[bookStatsData.length - 1]?.page_count / bookStatsData[bookStatsData.length - 1]?.chapter_count) || 0).toLocaleString($store.shell.uiLocale === 'en' ? 'en-US' : 'de-CH', { minimumFractionDigits: 1, maximumFractionDigits: 1 }) })"></span>
-    <span class="tok-badge tok-neutral" x-show="(writingTimeData?.total_seconds ?? 0) > 0"
-      x-text="$app.t('bookstats.writingTotal', { h: ((writingTimeData?.total_seconds ?? 0) / 3600).toLocaleString($store.shell.uiLocale === 'en' ? 'en-US' : 'de-CH', { minimumFractionDigits: 1, maximumFractionDigits: 1 }) })"></span>
-    <span class="tok-badge tok-neutral" x-show="(writingTimeData?.active_days ?? 0) > 0"
-      x-text="$app.t('bookstats.writingAvg', { m: Math.round((writingTimeData?.total_seconds ?? 0) / 60 / (writingTimeData?.active_days || 1)).toLocaleString($store.shell.uiLocale === 'en' ? 'en-US' : 'de-CH') })"></span>
-    <span class="tok-badge tok-neutral" x-show="(lektoratTimeData?.total_seconds ?? 0) > 0"
-      x-text="$app.t('bookstats.lektoratTotal', { h: ((lektoratTimeData?.total_seconds ?? 0) / 3600).toLocaleString($store.shell.uiLocale === 'en' ? 'en-US' : 'de-CH', { minimumFractionDigits: 1, maximumFractionDigits: 1 }) })"></span>
-    <span class="tok-badge tok-neutral" x-show="(lektoratTimeData?.active_days ?? 0) > 0"
-      x-text="$app.t('bookstats.lektoratAvg', { m: Math.round((lektoratTimeData?.total_seconds ?? 0) / 60 / (lektoratTimeData?.active_days || 1)).toLocaleString($store.shell.uiLocale === 'en' ? 'en-US' : 'de-CH') })"></span>
-    <span class="tok-badge tok-neutral" x-show="(sttTimeData?.total_seconds ?? 0) > 0"
-      x-text="$app.t('bookstats.sttTotal', { h: ((sttTimeData?.total_seconds ?? 0) / 3600).toLocaleString($store.shell.uiLocale === 'en' ? 'en-US' : 'de-CH', { minimumFractionDigits: 1, maximumFractionDigits: 1 }) })"></span>
-    <span class="tok-badge tok-neutral" x-show="(sttTimeData?.total_chars ?? 0) > 0"
-      x-text="$app.t('bookstats.sttChars', { n: (sttTimeData?.total_chars ?? 0).toLocaleString($store.shell.uiLocale === 'en' ? 'en-US' : 'de-CH') })"></span>
+  <!-- Kennzahlen in drei Gruppen: Umfang · Qualität · Aufwand -->
+  <div x-show="bookStatsBadgeGroups().length" class="book-stats-current">
+    <template x-for="g in bookStatsBadgeGroups()" :key="g.key">
+      <div class="book-stats-group">
+        <span class="card-section-title card-section-title--inline" x-text="g.title"></span>
+        <div class="book-stats-group-badges">
+          <template x-for="(b, i) in g.badges" :key="i">
+            <span class="tok-badge tok-neutral" :data-tip="b.tip || null" x-text="b.text"></span>
+          </template>
+        </div>
+      </div>
+    </template>
   </div>
 
   <!-- Leer-Zustand -->

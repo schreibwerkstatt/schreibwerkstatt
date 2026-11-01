@@ -1,6 +1,6 @@
 # ERD — schreibwerkstatt
 
-Stand: Schema-Version 349, 189 Tabellen (ohne `sqlite_*`/`schema_version`/FTS5-Shadow-Tables; inkl. FTS5-Virtual `search_index`/`search_trigram`/`chat_messages_fts` + `search_meta`).
+Stand: Schema-Version 353, 191 Tabellen (ohne `sqlite_*`/`schema_version`/FTS5-Shadow-Tables; inkl. FTS5-Virtual `search_index`/`search_trigram`/`chat_messages_fts` + `search_meta`).
 
 Quelle: Squashed-Schema-Snapshot in [db/squashed-schema.js](../db/squashed-schema.js) (regeneriert via `node tools/dump-schema.js`) + [db/migrations.js](../db/migrations.js). Drift gegen die Legacy-Migration-Kette ist durch [tests/unit/squash-drift.test.mjs](../tests/unit/squash-drift.test.mjs) gegated. Mermaid-Diagramme — in VSCode mit „Markdown Preview Mermaid Support" (oder GitHub) direkt sichtbar.
 
@@ -67,6 +67,8 @@ erDiagram
   books ||--o| book_series_members   : "Band in Reihe"
   books ||--o{ user_page_usage       : has
   books ||--o{ usage_events          : "context of"
+  books ||--o{ finetune_exports      : "trained from"
+  finetune_exports ||--o{ finetune_export_files : contains
   books ||--o{ book_access           : has
   books ||--o{ book_shelf            : "shelved by"
   books ||--o{ komplett_scope        : "run scope"
@@ -208,6 +210,7 @@ erDiagram
 
   app_users ||--o{ book_access       : grants
   app_users ||--o{ usage_events      : "acts in"
+  app_users ||--o{ finetune_exports  : exports
   app_users ||--o{ book_shelf        : "pins/archives"
   app_users ||--o{ komplett_scope    : "chooses run scope"
   app_users ||--|| author_profile    : "own style profile"
@@ -1712,6 +1715,9 @@ erDiagram
     REAL    mtld             "nullable — Wortschatz-Scan"
     REAL    lex_density      "nullable — Wortschatz-Scan"
     REAL    hapax_ratio      "nullable — Wortschatz-Scan"
+    INTEGER imported_chars   "kumulativer Import-Zuwachs"
+    INTEGER imported_words   "kumulativer Import-Zuwachs"
+    INTEGER imported_pages   "kumulativer Import-Zuwachs"
   }
 
   job_runs {
@@ -2119,6 +2125,20 @@ erDiagram
     TEXT    meta_json
     TEXT    app_version
     TEXT    created_at
+  }
+  finetune_exports {
+    INTEGER id          PK
+    INTEGER book_id     FK
+    TEXT    user_email  FK
+    TEXT    fingerprint "Buchstand beim Export — veraltet, wenn abweichend"
+    TEXT    stats_json
+    TEXT    created_at
+  }
+  finetune_export_files {
+    INTEGER export_id PK,FK
+    TEXT    kind      PK "train|val|all|eval|val-facts|val-writing|val-persona|val-refusal|val-editor"
+    BLOB    data_gz   "JSONL gzip-komprimiert"
+    INTEGER bytes     "entpackte Grösse"
   }
   merge_telemetry {
     TEXT    name       PK

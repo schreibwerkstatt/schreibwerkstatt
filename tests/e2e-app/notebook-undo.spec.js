@@ -23,17 +23,31 @@ async function openPageInEdit(page, pageIdx) {
   await page.waitForSelector(EDIT_SEL, { timeout: 15000 });
 }
 
-// Caret ans Ende des Editors.
+// Caret ans Ende des ersten Absatzes. Geklickt wird der Absatz, nicht die
+// Editor-Mitte: andere Specs derselben Shard-DB hängen Diagramm/Bild an diesen
+// Abschnitt, und ein Klick darauf nähme den Fokus ins Diagramm-Quelltextfeld.
 async function caretToEnd(page) {
-  await page.locator(EDIT_SEL).click();
+  await page.locator(`${EDIT_SEL} > p`).first().click();
   await page.evaluate((sel) => {
-    const el = document.querySelector(sel);
+    const el = document.querySelector(`${sel} > p`);
     const r = document.createRange();
     r.selectNodeContents(el);
     r.collapse(false);
     const s = getSelection();
     s.removeAllRanges();
     s.addRange(r);
+  }, EDIT_SEL);
+}
+
+// Caret-Position als Textoffset ab Editor-Anfang.
+function caretOffset(page) {
+  return page.evaluate((sel) => {
+    const el = document.querySelector(sel);
+    const s = getSelection();
+    const r = document.createRange();
+    r.selectNodeContents(el);
+    r.setEnd(s.anchorNode, s.anchorOffset);
+    return r.toString().length;
   }, EDIT_SEL);
 }
 
@@ -62,19 +76,11 @@ test('Undo-/Redo-Buttons werden nach dem Tippen aktiv und wirken per Klick', asy
 test('Strg+Z nach dem Tippen setzt den Caret an die Einfügestelle, nicht an den Anfang', async ({ page }) => {
   await openPageInEdit(page, 1);
   await caretToEnd(page);
-  const endOffset = await page.evaluate((sel) => document.querySelector(sel).textContent.length, EDIT_SEL);
+  const endOffset = await caretOffset(page);
   await page.keyboard.type(' CARETPROBE');
   await page.keyboard.press('Control+z');
   await expect(page.locator(EDIT_SEL)).not.toContainText('CARETPROBE');
-  const caret = await page.evaluate((sel) => {
-    const el = document.querySelector(sel);
-    const s = getSelection();
-    const r = document.createRange();
-    r.selectNodeContents(el);
-    r.setEnd(s.anchorNode, s.anchorOffset);
-    return r.toString().length;
-  }, EDIT_SEL);
-  expect(caret).toBe(endOffset);
+  expect(await caretOffset(page)).toBe(endOffset);
   // Nicht awaiten: nach Änderungen wartet cancelEdit auf den Verwerfen-Dialog.
   await page.evaluate(() => { window.__app.cancelEdit(); });
 });

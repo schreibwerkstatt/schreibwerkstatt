@@ -1,50 +1,85 @@
 // Fine-Tuning-Export: Methods werden in Alpine.data('finetuneExportCard')
 // gespreadet. Root-Zugriffe via window.__app.
 
-import { fetchJson, tzOpts, downloadHref, downloadBlob } from '../utils.js';
+import { fetchJson, downloadHref, downloadBlob } from '../utils.js';
 import { FINETUNE_PROFILES, finetuneProfileById, buildStudioYaml, studioSteps } from './finetune-profiles.js';
 import { buildModelfile } from './finetune-modelfile.js';
 
 export const finetuneExportMethods = {
-  // Zuletzt gespeichertes Set des Buchs (überlebt Neustarts, liegt serverseitig
-  // auf der Platte). `stale` = Buch seither geändert → Warnung, kein Auto-Rerun.
-  async finetuneLoadSaved() {
+  // Gespeicherte Sets des Buchs, neuestes zuerst (überleben Neustarts, liegen
+  // in der DB, die letzten fünf bleiben). `stale` = Buch
+  // seither geändert → Warnung, kein Auto-Rerun.
+  async finetuneLoadExports() {
     const bookId = Alpine.store('nav').selectedBookId;
     if (!bookId) return;
     try {
-      const { export: saved } = await fetchJson(`/jobs/finetune-export/latest?book_id=${encodeURIComponent(bookId)}`);
+      const { exports } = await fetchJson(`/jobs/finetune-export/list?book_id=${encodeURIComponent(bookId)}`);
       if (Alpine.store('nav').selectedBookId !== bookId || this.finetuneLoading) return;
-      this.finetuneStats = saved?.stats || null;
-      this.finetuneSavedAt = saved?.createdAt || null;
-      this.finetuneStale = !!saved?.stale;
+      this.finetuneExports = exports || [];
+      if (!this.finetuneExports.some(ex => ex.id === this.finetuneOpenId)) this.finetuneOpenId = null;
     } catch (e) {
-      console.error('[finetune] gespeicherter Export:', e);
+      console.error('[finetune] gespeicherte Exporte:', e);
     }
   },
 
-  finetuneSavedLabel() {
-    if (!this.finetuneSavedAt) return '';
-    const date = new Date(this.finetuneSavedAt).toLocaleString(undefined, tzOpts({ dateStyle: 'medium', timeStyle: 'short' }));
-    return window.__app.t('finetune.hint.saved', { date });
+  // Neuestes Set: liefert der Studio-Config die Train-Grösse.
+  finetuneLatestStats() {
+    return this.finetuneExports[0]?.stats || null;
   },
 
-  finetuneDownload(kind) {
-    const bookId = Alpine.store('nav').selectedBookId;
-    if (!bookId || !this.finetuneStats) return;
-    if (!['train', 'val', 'all', 'eval', 'val-facts', 'val-writing', 'val-refusal'].includes(kind)) return;
-    downloadHref(`/jobs/finetune-export/${kind}.jsonl?book_id=${encodeURIComponent(bookId)}`);
+  finetuneToggleExport(id) {
+    this.finetuneOpenId = this.finetuneOpenId === id ? null : id;
   },
 
-  finetuneDownloadStats() {
+  finetuneProfileLabel(st) {
+    const p = st?.profileId && FINETUNE_PROFILES.find(x => x.id === st.profileId);
+    return p ? window.__app.t('finetune.profile.option', { model: p.name, vram: p.vramGb }) : '';
+  },
+
+  async finetuneDeleteExport(id) {
+    const app = window.__app;
     const bookId = Alpine.store('nav').selectedBookId;
-    if (!bookId || !this.finetuneStats) return;
-    downloadHref(`/jobs/finetune-export/stats.json?book_id=${encodeURIComponent(bookId)}`);
+    if (!bookId || !await app.appConfirm({
+      message: app.t('finetune.history.confirmDelete'),
+      confirmLabel: app.t('common.delete'),
+      danger: true,
+    })) return;
+    try {
+      await fetchJson(`/jobs/finetune-export/${encodeURIComponent(id)}?book_id=${encodeURIComponent(bookId)}`, { method: 'DELETE' });
+      this.finetuneExports = this.finetuneExports.filter(ex => ex.id !== id);
+      if (this.finetuneOpenId === id) this.finetuneOpenId = null;
+    } catch (e) {
+      console.error('[finetune] Export löschen:', e);
+      app.setStatus(app.t('common.deleteFailed'), false, 5000);
+    }
+  },
+
+  _finetuneUrl(file, id) {
+    const bookId = Alpine.store('nav').selectedBookId;
+    return `/jobs/finetune-export/${file}?book_id=${encodeURIComponent(bookId)}&id=${encodeURIComponent(id)}`;
+  },
+
+  finetuneDownload(kind, id) {
+    if (!Alpine.store('nav').selectedBookId || !id) return;
+    if (!['train', 'val', 'all', 'eval', 'val-facts', 'val-writing', 'val-persona', 'val-refusal', 'val-editor'].includes(kind)) return;
+    downloadHref(this._finetuneUrl(`${kind}.jsonl`, id));
+  },
+
+  finetuneDownloadStats(id) {
+    if (!Alpine.store('nav').selectedBookId || !id) return;
+    downloadHref(this._finetuneUrl('stats.json', id));
+  },
+
+  // Alle Dateien des Sets als ZIP (jede JSONL mit Inhalt + stats.json).
+  finetuneDownloadZip(id) {
+    if (!Alpine.store('nav').selectedBookId || !id) return;
+    downloadHref(this._finetuneUrl('export.zip', id));
   },
 
   // Dateiname wie die Server-Downloads: finetune-<art>-<Buch>-<Profil>-<Zeit>
   // (stats.fileStem). Ohne Export: <art>.<ext>.
   _finetuneFileName(kind, ext) {
-    const stem = this.finetuneStats?.fileStem;
+    const stem = this.finetuneLatestStats()?.fileStem;
     return stem ? `finetune-${kind}-${stem}.${ext}` : `${kind}.${ext}`;
   },
 
@@ -75,7 +110,7 @@ export const finetuneExportMethods = {
   finetuneDownloadStudioConfig() {
     const t = window.__app.t.bind(window.__app);
     const p = finetuneProfileById(this.finetuneProfileId);
-    const trainCount = Number(this.finetuneStats?.train) || 0;
+    const trainCount = Number(this.finetuneLatestStats()?.train) || 0;
     const steps = studioSteps(p, trainCount);
     const yaml = buildStudioYaml(p, {
       maxSeqTokens: Number(this.finetuneMaxSeqTokens) || 0,
@@ -95,11 +130,10 @@ export const finetuneExportMethods = {
 
   // System-Prompt aus dem gespeicherten Export (wörtlich wie im Training).
   // Sets von vor dieser Funktion tragen ihn nicht → Knopf ausgeblendet.
-  finetuneDownloadModelfile() {
-    const st = this.finetuneStats;
+  finetuneDownloadModelfile(st) {
     if (!st?.systemPrompt) return;
     const t = window.__app.t.bind(window.__app);
-    const p = finetuneProfileById(this.finetuneProfileId);
+    const p = finetuneProfileById(st.profileId || this.finetuneProfileId);
     const text = buildModelfile({
       systemPrompt: st.systemPrompt,
       header: [
@@ -124,22 +158,22 @@ export const finetuneExportMethods = {
     return (Number(x || 0) * 100).toFixed(1) + ' %';
   },
 
-  finetuneOverlapTotal() {
-    const o = this.finetuneStats?.quality?.overlap || {};
+  finetuneOverlapTotal(st) {
+    const o = st?.quality?.overlap || {};
     return (o.prompt || 0) + (o.answer || 0) + (o.shingle || 0);
   },
 
-  finetuneTokenShares() {
-    const q = this.finetuneStats?.quality || {};
+  finetuneTokenShares(st) {
+    const q = st?.quality || {};
     return {
       writing: this.finetunePct(q.writingTokenShare), facts: this.finetunePct(q.factTokenShare),
       persona: this.finetunePct(q.personaTokenShare), refusal: this.finetunePct(q.refusalTokenShare),
     };
   },
 
-  finetuneQualityRows() {
+  finetuneQualityRows(st) {
     const t = window.__app.t.bind(window.__app);
-    return (this.finetuneStats?.quality?.tasks || []).map(r => ({
+    return (st?.quality?.tasks || []).map(r => ({
       ...r,
       label: t('finetune.task.' + r.task),
       familyLabel: t('finetune.family.' + r.family),

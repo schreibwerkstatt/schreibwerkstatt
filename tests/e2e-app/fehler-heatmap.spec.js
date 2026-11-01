@@ -82,10 +82,17 @@ test('Fehler-Heatmap rendert Dichte-Farbe, Mindestmenge, Summenzeile und Naeheru
   const zero = rows.nth(0).locator('td.heatmap-cell').nth(grammatikIdx);
   await expect(zero).toHaveText('–');
   await expect(zero).not.toHaveClass(/heatmap-cell--clickable/);
+  await expect(zero.locator('button'), 'ohne Befund kein Tab-Stopp').toHaveCount(0);
+
+  // Klickziel ist ein Button IN der Zelle — das <td> selbst bleibt Tabellenzelle.
+  await expect(stilCell(0)).not.toHaveAttribute('role', /./);
+  const stilBtn = stilCell(0).locator('button.heatmap-cell-btn');
+  await expect(stilBtn).toHaveAttribute('aria-expanded', 'false');
 
   // Klick oeffnet das Detail-Panel der Zelle.
   await stilCell(0).click();
   await expect(card.locator('.heatmap-detail')).toBeVisible();
+  await expect(stilBtn).toHaveAttribute('aria-expanded', 'true');
 
   // Summenzeile im tfoot: Anzahl des ganzen Buchs.
   const total = card.locator('.heatmap-table tfoot tr.heatmap-total-row td.heatmap-cell').nth(stilIdx);

@@ -10,7 +10,8 @@ const { buildQualityStats } = require('./lib/export-stats');
 const { makeCritiqueRegex } = require('./lib/critique');
 const { capAnswerLengths } = require('./lib/answer-length');
 const { applyParagraphBudget, paragraphTargetMax } = require('./lib/paragraph-budget');
-const { mixByTokens } = require('./lib/token-mix');
+const { mixByTokens, isProtected } = require('./lib/token-mix');
+const { swissSpelling, hasEditorNote, lintAnswer, isTrivial, promptKey, ESZETT } = require('./lib/answer-lint');
 
 const sha1 = (s) => crypto.createHash('sha1').update(s).digest('hex');
 
@@ -34,9 +35,10 @@ function balanceCap(typeCounts, share) {
 
 const answersOf = (s) => s.messages.filter(m => m.role === 'assistant').map(m => normText(m.content));
 const answersRaw = (s) => s.messages.filter(m => m.role === 'assistant').map(m => m.content);
-// «Wer sagt das?» antwortet mit dem Namen der Figur — gleiche Antworten sind
-// dort richtig, keine Dubletten; das Antwort-Budget gilt für sie nicht.
-const BUDGET_EXEMPT = new Set(['whoSays']);
+
+// Familien mit eigener Val-Datei — zusammen jede Familie (lib/tasks.js), damit
+// `val` genau die Summe der Familien-Dateien ist.
+const VAL_FAMILIES = ['facts', 'writing', 'persona', 'refusal', 'editor'];
 
 // Token-Stats berechnen, optional nach `maxSeqTokens` filtern, exakte Dubletten
 // entfernen, Faktenkarten als Schreibziel und Lektorats-Sprache als Inhalt
@@ -48,10 +50,10 @@ const BUDGET_EXEMPT = new Set(['whoSays']);
 //
 // Gibt `{ stats, trainJsonl, valJsonl, allJsonl, valFamilyJsonl, valUnits,
 // trainPrompts }` zurück; `stats` geht in completeJob, die JSONL in den
-// Platten-Store (lib/store.js). `allJsonl` ist train + val gemeinsam gemischt —
+// DB (db/finetune-exports.js). `allJsonl` ist train + val gemeinsam gemischt —
 // für den zweiten Trainingslauf, der die Holdout-Kapitel mitlernt
 // (docs/finetuning.md §3); leer ohne val. `valFamilyJsonl` sind die Val-
-// Teilmengen je Familie (facts / writing / refusal). `valUnits` und
+// Teilmengen je Familie (facts / writing / persona / refusal / editor). `valUnits` und
 // `trainPrompts` braucht das Eval-Set (Holdout-Markierung, keine Frage
 // wörtlich aus dem Train).
 function finalizeFinetuneSamples(ctx) {
@@ -136,6 +138,48 @@ function finalizeFinetuneSamples(ctx) {
     kept = out;
   }
 
+  // ── Schreibung, Notizen, Lint, Trivial-Antworten (lib/answer-lint.js) ──
+  // Schweizer Schreibung gilt, wenn der Buchtext selbst kein «ß» kennt.
+  const swiss = !langIsEn && !(ctx.pageContents || []).some(p => ESZETT.test(p.text || ''));
+  let noteDropped = 0, lintDropped = 0, trivialDropped = 0;
+  const lintReasons = {};
+  kept = kept.filter(e => {
+    if (swiss && e.family !== 'writing') {
+      for (const m of e.s.messages) if (m.role === 'assistant') m.content = swissSpelling(m.content);
+    }
+    if (e.s.messages.some(m => m.role !== 'system' && hasEditorNote(m.content))) { noteDropped++; return false; }
+    if (e.family === 'writing') return true;
+    const reason = answersRaw(e.s).map(a => lintAnswer(a, swiss)).find(Boolean);
+    if (reason) {
+      lintDropped++;
+      lintReasons[reason] = (lintReasons[reason] || 0) + 1;
+      return false;
+    }
+    const [, user, answer] = e.s.messages;
+    if (e.s.messages.length === 3 && isTrivial(user.content, answer.content)) { trivialDropped++; return false; }
+    return true;
+  });
+
+  // ── Prompt-Dedup ──────────────────────────────────────────────────────
+  // Dieselbe Frage (alle Nutzer-Turns) nur einmal: zwei Antworten auf
+  // dieselbe Frage lehren Beliebigkeit, und eine Frage in Train und Val wäre
+  // ein Leck. Geschütztes Kernwissen gewinnt, sonst der Hash.
+  let promptDeduped = 0;
+  {
+    const rank = (e) => (isProtected(e.s) ? 0 : e.s.core ? 1 : 2);
+    const order = [...kept].sort((a, b) => rank(a) - rank(b)
+      || hashSplit('pd|' + a.s.id, valSeed) - hashSplit('pd|' + b.s.id, valSeed));
+    const seen = new Set();
+    const keep = new Set();
+    for (const e of order) {
+      const k = promptKey(e.s);
+      if (seen.has(k)) { promptDeduped++; continue; }
+      seen.add(k);
+      keep.add(e);
+    }
+    kept = kept.filter(e => keep.has(e));
+  }
+
   // ── Keine Faktenkarte als Schreibziel ─────────────────────────────────
   // Schutznetz hinter den Samplern: eine Erzähl-/Schreibaufgabe, deren Antwort
   // wie eine Karte aussieht («Zeitpunkt: … Art: …»), fliegt raus.
@@ -181,7 +225,7 @@ function finalizeFinetuneSamples(ctx) {
     const used = new Map();
     const tasksPerAnswer = new Map();
     const keep = new Set();
-    const fits = (e, distinctTask) => BUDGET_EXEMPT.has(e.s.task) || answersOf(e.s).every(a => (used.get(a) || 0) < maxPerAnswer
+    const fits = (e, distinctTask) => answersOf(e.s).every(a => (used.get(a) || 0) < maxPerAnswer
       && (!distinctTask || !tasksPerAnswer.get(a)?.has(e.s.task)));
     const take = (e) => {
       keep.add(e);
@@ -210,6 +254,7 @@ function finalizeFinetuneSamples(ctx) {
     refusalShare: opts.refusalShare,
     refusalMix: opts.refusalMix,
     verbatimMaxTokenShare: opts.verbatimMaxTokenShare,
+    tierByFig: ctx.tierByFig,
   });
   kept = mix.kept;
 
@@ -317,10 +362,14 @@ function finalizeFinetuneSamples(ctx) {
   const valJsonl   = toJsonl(valOut);
   const allJsonl   = toJsonl(allOut);
   // Val je Familie: `val-facts` misst Faktenwissen (empfohlene Eval-Datei in
-  // Studio), `val-writing` Prosa, `val-refusal` das Ablehnen. Persona und
-  // Lektorat stehen nur in der gemischten Datei.
-  const VAL_FAMILIES = ['facts', 'writing', 'refusal'];
+  // Studio), `val-writing` Prosa, `val-persona` das Leser-Gespräch,
+  // `val-refusal` das Ablehnen, `val-editor` Lektorats-Feedback (nur mit
+  // `editorFeedback`). Zusammen ergeben sie genau `val` — sonst Abbruch.
   const valByFamily = Object.fromEntries(VAL_FAMILIES.map(f => [f, valOut.filter(s => familyOf(s.task) === f)]));
+  const famSum = VAL_FAMILIES.reduce((a, f) => a + valByFamily[f].length, 0);
+  if (famSum !== valOut.length) {
+    throw Object.assign(new Error('finetune.error.valFamilies'), { i18nParams: { val: valOut.length, families: famSum } });
+  }
   const valFamilyJsonl = Object.fromEntries(VAL_FAMILIES.map(f => [f, toJsonl(valByFamily[f])]));
   const overlapByVal = { val: valOverlapCounts(trainOut, valOut) };
   for (const f of VAL_FAMILIES) overlapByVal['val-' + f] = valOverlapCounts(trainOut, valByFamily[f]);
@@ -332,6 +381,11 @@ function finalizeFinetuneSamples(ctx) {
     balanced: balancedCount,
     cardDropped,
     critiqueDropped,
+    noteDropped,
+    lintDropped,
+    lintReasons,
+    trivialDropped,
+    promptDeduped,
     lengthClipped: lengthCap.clipped,
     lengthDropped: lengthCap.dropped,
     answerCapped,
@@ -344,10 +398,14 @@ function finalizeFinetuneSamples(ctx) {
     quality: buildQualityStats(trainOut, valOut, { langIsEn, overlapByVal }),
     valFacts: valByFamily.facts.length,
     valWriting: valByFamily.writing.length,
+    valPersona: valByFamily.persona.length,
     valRefusal: valByFamily.refusal.length,
+    valEditor: valByFamily.editor.length,
     valFactsBytes: Buffer.byteLength(valFamilyJsonl.facts, 'utf8'),
     valWritingBytes: Buffer.byteLength(valFamilyJsonl.writing, 'utf8'),
+    valPersonaBytes: Buffer.byteLength(valFamilyJsonl.persona, 'utf8'),
     valRefusalBytes: Buffer.byteLength(valFamilyJsonl.refusal, 'utf8'),
+    valEditorBytes: Buffer.byteLength(valFamilyJsonl.editor, 'utf8'),
     train: trainOut.length,
     val: valOut.length,
     styleCount: exported.style,

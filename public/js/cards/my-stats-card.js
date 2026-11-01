@@ -4,12 +4,12 @@
 // `toggleMyStatsCard` leben im Root (generiert aus EXCLUSIVE_CARDS). Daten:
 // `GET /me/profile-stats` (Tiles) + `GET /me/profile-stats-history` (Chart).
 
-import { localeTag, localIsoDate, dateTimeFormat } from '../utils.js';
+import { localeTag, localIsoDate, dateTimeFormat, CHARS_PER_NORMSEITE } from '../utils.js';
 import { setupCardLifecycle } from './card-lifecycle.js';
-import { computeWritingTimeStreak, computeWeekdayPattern, computeDerived, computeMilestones,
-         computeReadability, computeWeeklyDelta, computePerBookTime, computeEffortSplit,
+import { computeWritingTimeGrid, computeStreakStats, secondsByDate, computeWeekdayPattern, computeDerived,
+         computeMilestones, computeReadability, computeWeeklyDelta, computePerBookTime, computeEffortSplit,
          computeVolumeDelta, computeHourPattern, computeGoalAttainment, computeBookGoals,
-         filterByWindow, resolveWindow } from './my-stats-compute.js';
+         filterByWindow, resolveWindow, importedTotals, autoGranularity, isoDaysBetween } from './my-stats-compute.js';
 import { computeVolumeByCategory } from './my-stats-category.js';
 import { myStatsTrendMethods } from './my-stats-trends-methods.js';
 import { myStatsChartMethods } from './my-stats-chart-methods.js';
@@ -46,12 +46,15 @@ export function registerMyStatsCard() {
     myStatsTo: '',
     myStatsChartMode: 'total', // 'total' | 'byBook'
     myStatsChartGran: 'day',   // 'day' | 'week' | 'month' — Zeitachsen-Granularitaet
-    myStatsCumulative: false,  // nur fuer Metrik 'writing' (kumulierte Schreibzeit)
+    myStatsCumulative: false,  // nur fuer Zeit-Metriken (kumulierte Schreib-/Lektoratszeit)
     myStatsLoading: false,
     myStatsError: '',
     // Leerzustand des Entwicklungs-Charts: '' | 'noData' (nichts im Zeitraum) |
     // 'noHistory' (noch kein Nacht-Snapshot). Gesetzt von renderMyStatsChart().
     myStatsChartEmpty: '',
+    // /me/profile-stats-history fehlgeschlagen: der Chart zeigt einen Fehler
+    // statt des Leerzustands „füllt sich nachts".
+    myStatsHistoryError: false,
     _memos: {},
     _lifecycle: null,
 
@@ -85,7 +88,9 @@ export function registerMyStatsCard() {
         ]);
         if (!statsR.ok) throw new Error('HTTP ' + statsR.status);
         this.myStatsData = await statsR.json();
-        const hist = histR.ok ? await histR.json() : { history: [], writing: [], lektorat: [] };
+        this.myStatsHistoryError = !histR.ok;
+        if (!histR.ok) console.error('[myStats load] Verlauf: HTTP ' + histR.status);
+        const hist = histR.ok ? await histR.json() : {};
         this.myStatsHistory = Array.isArray(hist.history) ? hist.history : [];
         this.myStatsWriting = Array.isArray(hist.writing) ? hist.writing : [];
         this.myStatsLektorat = Array.isArray(hist.lektorat) ? hist.lektorat : [];
@@ -101,6 +106,7 @@ export function registerMyStatsCard() {
       } finally {
         this.myStatsLoading = false;
       }
+      this._applyAutoGran();
       // rAF in $nextTick: Canvas erst nach Layout-Pass vermessen (sonst 0×0).
       this.$nextTick(() => requestAnimationFrame(() => this.renderMyStatsChart()));
     },
@@ -157,7 +163,22 @@ export function registerMyStatsCard() {
         [this.myStatsFrom, this.myStatsTo] = [this.myStatsTo, this.myStatsFrom];
       }
       // Memos haengen an from/to → aktualisieren sich selbst; nur Chart neu zeichnen.
+      this._applyAutoGran();
       this.$nextTick(() => requestAnimationFrame(() => this.renderMyStatsChart()));
+    },
+
+    // Zeitachsen-Granularitaet des Charts nach der Spanne des Zeitraums vorwaehlen
+    // (autoGranularity). Ohne Von: ab dem aeltesten Datenpunkt. Die Buttons
+    // ueberschreiben die Wahl bis zum naechsten Zeitraumwechsel.
+    _applyAutoGran() {
+      const w = this.myStatsWindow();
+      const to = w.to || localIsoDate();
+      let from = w.from;
+      if (!from) {
+        for (const r of this.myStatsHistory) if (!from || r.recorded_at < from) from = r.recorded_at;
+        for (const r of this.myStatsWriting) if (!from || r.date < from) from = r.date;
+      }
+      this.myStatsChartGran = from ? autoGranularity(isoDaysBetween(from, to) + 1) : 'day';
     },
 
     // Im Zeitraum produzierter Netto-Umfang (Zeichen/Woerter/Abschnitte). Ohne
@@ -176,11 +197,26 @@ export function registerMyStatsCard() {
     },
 
     // ── Schreibrhythmus (aus der gefilterten writing-Zeitreihe) ────────────
-    // Raster = letzte 52 Wochen (ungefiltert), Serien-Kennzahlen = Zeitfenster.
+    // Raster = letzte 52 Wochen (ungefiltert, eigenes Memo — ein Zeitraumwechsel
+    // baut es nicht neu), Serien-Kennzahlen = Zeitfenster.
     myStatsStreak() {
+      const grid = this._memo('streakGrid', [this.myStatsWriting], () =>
+        computeWritingTimeGrid(this.myStatsWriting, new Date()));
       const win = this._winWriting();
-      return this._memo('streak', [this.myStatsWriting, win], () =>
-        computeWritingTimeStreak(this.myStatsWriting, new Date(), win));
+      const stats = this._memo('streakStats', [win], () =>
+        computeStreakStats(secondsByDate(win), localIsoDate()));
+      return this._memo('streak', [grid, stats], () => ({
+        ...grid,
+        currentStreak: stats.currentStreak,
+        longestStreak: stats.longestStreak,
+        totalActiveDays: stats.activeDays,
+      }));
+    },
+    // „Aktuelle Serie" zaehlt ab heute rueckwaerts — in einem Zeitraum, der vor
+    // heute endet, waere sie immer 0. Dort ausgeblendet.
+    get myStatsShowCurrentStreak() {
+      const w = this.myStatsWindow();
+      return !w.to || w.to >= localIsoDate();
     },
     myStatsWeekdays() {
       const win = this._winWriting();
@@ -189,12 +225,27 @@ export function registerMyStatsCard() {
     myStatsDerived() {
       const win = this._winWriting();
       // Tempo = Zeichen pro Schreibstunde IM Zeitraum: Volumen-Delta / gefilterte Sekunden.
+      // Ohne Zeitraum: Bestand minus Import-Zuwachs (ein Import ist kein Tempo).
       const data = this.myStatsWindowActive
         ? { chars: this.myStatsVolume().chars, writing_seconds: this._sumSeconds(win) }
-        : this.myStatsData;
+        : this._myStatsNetData();
       return this._memo('derived', [data?.chars, data?.writing_seconds, win], () =>
         computeDerived(data, win));
     },
+    _myStatsNetData() {
+      const d = this.myStatsData;
+      return this._memo('netData', [d, this.myStatsHistory], () => {
+        if (!d) return d;
+        return { ...d, chars: Math.max(0, (Number(d.chars) || 0) - importedTotals(this.myStatsHistory).chars) };
+      });
+    },
+
+    // Signatur der Buchnamen (Root-Buchliste) — Memo-Dep fuer Ergebnisse mit
+    // aufgeloesten Namen, damit ein Umbenennen bei offener Karte durchschlaegt.
+    _myStatsNamesSig() {
+      return (Alpine.store('nav').books || []).map(b => b.id + ':' + b.name).join('|');
+    },
+
     // Meilensteine sind Lifetime-Achievements → immer ueber ALLE Daten, nie gefiltert.
     // `books` zaehlt dort nur Buecher mit Inhalt (books_detail).
     myStatsMilestones() {
@@ -275,7 +326,7 @@ export function registerMyStatsCard() {
     },
     myStatsPerBookTime() {
       const win = this._winWriting();
-      return this._memo('perBook', [win], () =>
+      return this._memo('perBook', [win, this._myStatsNamesSig()], () =>
         computePerBookTime(win).map(r => ({ ...r, name: this._bookName(r.book_id) })));
     },
 
@@ -320,7 +371,7 @@ export function registerMyStatsCard() {
     // Lifetime-Bestand (kein Zeitraum-Filter): zeigt den aktuellen Stand pro
     // Buch gegen das gesetzte Gesamtziel, daher aus dem Live-books_detail.
     myStatsBookGoals() {
-      return this._memo('bookGoals', [this.myStatsData?.books_detail, this.myStatsHistory], () =>
+      return this._memo('bookGoals', [this.myStatsData?.books_detail, this.myStatsHistory, this._myStatsNamesSig()], () =>
         computeBookGoals(this.myStatsData?.books_detail, this.myStatsHistory)
           .map(r => ({ ...r, name: this._bookName(r.book_id) })));
     },
@@ -331,7 +382,7 @@ export function registerMyStatsCard() {
     // Zeitraum-Filter, analog Pro-Buch-Zielen). Sammel-Bucket „Ohne Kategorie"
     // bekommt das Default-Label, Gruppen ohne eigene Farbe eine Palettenfarbe.
     myStatsByCategory() {
-      return this._memo('byCategory', [this.myStatsData?.books_detail], () =>
+      return this._memo('byCategory', [this.myStatsData?.books_detail, Alpine.store('shell').uiLocale], () =>
         computeVolumeByCategory(this.myStatsData?.books_detail).map((r, i) => ({
           ...r,
           name: r.categoryId == null ? window.__app.t('mystats.category.none') : r.name,
@@ -403,9 +454,9 @@ export function registerMyStatsCard() {
       return Number(n || 0).toLocaleString(loc);
     },
 
-    // Normseite = 1500 Zeichen (primaere Umfangs-Kennzahl) — zeitraum-bewusst.
+    // Normseite (utils/format.js#CHARS_PER_NORMSEITE) — zeitraum-bewusst.
     myStatsNormpages() {
-      return this._myStatsFmt(Math.round((this.myStatsVolume().chars || 0) / 1500));
+      return this._myStatsFmt(Math.round((this.myStatsVolume().chars || 0) / CHARS_PER_NORMSEITE));
     },
 
     // Schreibzeit kompakt: „12 h 30 min" bzw. „45 min" — im Zeitraum bzw. gesamt.

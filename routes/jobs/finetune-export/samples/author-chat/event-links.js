@@ -1,13 +1,13 @@
 'use strict';
 
 const { nameRegex } = require('../../lib/names');
+const { eventList } = require('./event-data');
 
 // Block 11b: Ereignisse ↔ Buchtext, Szenen, Handlungsstrang, Art und Zeit.
 // Ergänzt ./events.js um die Verknüpfungen aus ./event-data.js.
 function buildEventLinkSamples(ctx) {
   const { langIsEn, events, eventsBySceneId, sceneRows, pushQA } = ctx;
 
-  const evtLine = (e) => `${e.datum ? e.datum + ': ' : ''}${e.ereignis}${e.bedeutung ? ' (' + e.bedeutung + ')' : ''}`;
   const sceneLabel = (s) => '«' + s.titel + '»' + (s.seite ? (langIsEn ? ` (section ${s.seite})` : ` (Abschnitt ${s.seite})`) : '');
 
   for (const e of events) {
@@ -85,7 +85,7 @@ function buildEventLinkSamples(ctx) {
   for (const s of sceneRows) {
     const items = eventsBySceneId.get(s.id) || [];
     if (!items.length || !s.titel) continue;
-    const list = items.map(evtLine).join(' · ');
+    const list = eventList(items);
     pushQA('authorChat|sceneEvts|' + s.id,
       langIsEn ? `Which events belong to the scene «${s.titel}»?` : `Welche Ereignisse gehören zur Szene «${s.titel}»?`,
       list);
@@ -99,7 +99,7 @@ function buildEventLinkSamples(ctx) {
     bySubtyp.get(e.subtyp).items.push(e);
   }
   for (const [key, group] of bySubtyp) {
-    const list = group.items.map(evtLine).join(' · ');
+    const list = eventList(group.items);
     pushQA('authorChat|evtsBySubtyp|' + key,
       langIsEn ? `Which events of the kind «${group.label}» happen in the book?` : `Welche Ereignisse der Art «${group.label}» gibt es im Buch?`,
       list);

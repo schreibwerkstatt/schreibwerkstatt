@@ -12,7 +12,7 @@ const express = require('express');
 const { db } = require('../../db/schema');
 const { mergeScenes } = require('../../db/entity-merge');
 const { toIntId } = require('../../lib/validate');
-const { listScenesWithRefs, deleteStaleScenes } = require('../../db/scene-catalog');
+const { listScenesForBook, deleteStaleScenes } = require('../../db/scene-catalog');
 const { sessionEmail } = require('../../lib/acl');
 const searchIndex = require('../../lib/search');
 const { enqueueEmbedIndexJob } = require('../jobs/embed-index');
@@ -23,34 +23,7 @@ const jsonBody = express.json();
 function register(router) {
   // Szenen eines Buchs laden (vor /:book_id definiert um Konflikte zu vermeiden)
   router.get('/scenes/:book_id', (req, res) => {
-    const bookId = req.bookId;
-    const userEmail = sessionEmail(req);
-
-    const { rows, sfRows, slRows } = listScenesWithRefs(bookId, userEmail);
-    const sfMap = {};
-    for (const sf of sfRows) (sfMap[sf.scene_id] ??= []).push(sf.fig_id);
-
-    const slMap = {};
-    for (const sl of slRows) (slMap[sl.scene_id] ??= []).push(sl.loc_id);
-
-    const szenen = rows.map(s => ({
-      id:         s.id,
-      stale:      !!s.stale,
-      kapitel:    s.kapitel,
-      seite:      s.seite,
-      titel:      s.titel,
-      wertung:    s.wertung,
-      kommentar:  s.kommentar,
-      chapter_id: s.chapter_id,
-      page_id:    s.page_id,
-      fig_ids:    sfMap[s.id] || [],
-      ort_ids:    slMap[s.id] || [],
-    }));
-
-    // Jüngster Stand über alle Szenen (wie der Figuren-Katalog), nicht der der
-    // ersten nach sort_order.
-    const updated_at = rows.reduce((max, r) => (r.updated_at && (!max || r.updated_at > max) ? r.updated_at : max), null);
-    res.json({ szenen, updated_at });
+    res.json(listScenesForBook(req.bookId, sessionEmail(req)));
   });
 
   // Zwei Szenen zusammenführen (Pendant zum Figuren-Merge). `source_id`/`target_id`

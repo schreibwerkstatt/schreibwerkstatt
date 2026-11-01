@@ -15,7 +15,8 @@ const TOP_ANSWER_CHARS = 140;
 // Qualitäts-Statistik des exportierten Sets: Anzahl, Antwort-Tokens, eigene
 // Antworten und mittlere Antwortlänge je Aufgabentyp, Familienanteile nach
 // Anzahl UND nach Antwort-Tokens, Ablehnungen je Untertyp, Paraphrasen, die
-// häufigsten Antworten und die Überlappung Val ↔ Train je Val-Datei. Sie
+// häufigsten Antworten, Varianten je Kernkarte nach Bedeutung der Figur
+// (`paraphrasesPerFact`, min/median/p90) und die Überlappung Val ↔ Train je Val-Datei. Sie
 // steht in `meta.stats.quality` (Karte + gespeichertes Set) und im Job-Log.
 function buildQualityStats(trainArr, valArr, { langIsEn = false, overlapByVal = null } = {}) {
   const all = [...trainArr, ...valArr];
@@ -24,6 +25,7 @@ function buildQualityStats(trainArr, valArr, { langIsEn = false, overlapByVal = 
   const family = Object.fromEntries(FAMILIES.map(f => [f, 0]));
   const familyTok = Object.fromEntries(FAMILIES.map(f => [f, 0]));
   const perFact = new Map();
+  const factTier = new Map();
   let totalTok = 0;
   for (const s of all) {
     const task = s.task || 'other';
@@ -36,7 +38,10 @@ function buildQualityStats(trainArr, valArr, { langIsEn = false, overlapByVal = 
     t.tokens += tok;
     familyTok[fam] += tok;
     totalTok += tok;
-    if (s.factId) perFact.set(s.factId, (perFact.get(s.factId) || 0) + 1);
+    if (s.factId) {
+      perFact.set(s.factId, (perFact.get(s.factId) || 0) + 1);
+      if (s.tier) factTier.set(s.factId, s.tier);
+    }
     const last = s.messages[s.messages.length - 1].content;
     t.chars += last.length;
     const key = normText(last);
@@ -70,6 +75,18 @@ function buildQualityStats(trainArr, valArr, { langIsEn = false, overlapByVal = 
   for (const t of tasks) if (REFUSAL_TASKS.has(t.task)) { refusalCount[t.task] = t.count; refusalCount.total += t.count; }
   let factParaphraseCount = 0;
   for (const n of perFact.values()) factParaphraseCount += n - 1;
+  // Varianten je Kernkarte, getrennt nach Bedeutung der Figur.
+  const perTier = { main: [], side: [], minor: [] };
+  for (const [id, n] of perFact) {
+    const tier = factTier.get(id);
+    if (tier in perTier) perTier[tier].push(n);
+  }
+  const dist = (arr) => {
+    const a = [...arr].sort((x, y) => x - y);
+    const at = (p) => (a.length ? a[Math.min(a.length - 1, Math.floor(p * (a.length - 1) + 0.5))] : null);
+    return { facts: a.length, min: a.length ? a[0] : null, median: at(0.5), p90: at(0.9) };
+  };
+  const paraphrasesPerFact = Object.fromEntries(Object.entries(perTier).map(([k, v]) => [k, dist(v)]));
   return {
     tasks,
     tokenMethod: TOKEN_METHOD,
@@ -87,6 +104,7 @@ function buildQualityStats(trainArr, valArr, { langIsEn = false, overlapByVal = 
     refusalCount,
     factCount: perFact.size,
     factParaphraseCount,
+    paraphrasesPerFact,
     uniqueAnswers: answerCount.size,
     uniqueAnswerShare: total ? answerCount.size / total : 0,
     repeated3Share: total ? repeated3 / total : 0,

@@ -476,6 +476,8 @@ app.use('/xrefs', xrefsRouter);
 app.use('/plot', plotRouter);
 app.use('/motifs', motifsRouter);
 app.use('/lexicon', require('./routes/lexicon'));
+// Gebündelte Buch-Übersicht: alle Tile-Daten in einer Antwort (routes/overview.js).
+app.use('/overview', require('./routes/overview'));
 app.use('/textsorte', require('./routes/textsorte'));
 app.use('/redaktion', require('./routes/redaktion'));
 app.use('/headline', require('./routes/headline'));

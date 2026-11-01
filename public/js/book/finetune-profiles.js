@@ -74,8 +74,16 @@ export const EXPORT_DEFAULTS = {
   minMentions: 5,
   factParaphrases: 4,
   maxVariantsPerFact: 5,
-  // Mischung nach Antwort-Tokens (lib/token-mix.js); refusal nach Anzahl.
+  // Varianten des Kurzporträts («Wer ist X?») nach Bedeutung der Figur
+  // (`figures.typ`: hauptfigur → main; nebenfigur/mentor/antagonist → side;
+  // sonst minor).
+  corePerTier: { main: 5, side: 3, minor: 1 },
+  // Mischung nach Antwort-Tokens (lib/token-mix.js). `refusal` steht hier nur
+  // der Vollständigkeit halber: Ablehnungen werden nach ANZAHL gemischt
+  // (`refusalShareBasis`), Ziel `refusalShare` der Beispiele — ihre Antworten
+  // sind so kurz, dass ein Token-Anteil ein Viertel aller Beispiele wäre.
   familyTokenShares: { writing: 0.55, facts: 0.30, persona: 0.10, refusal: 0.05 },
+  refusalShareBasis: 'count',
   refusalShare: 0.03,
   refusalMix: { unknownEntity: 0.5, offTopic: 0.25, falsePremise: 0.25 },
   verbatimMaxTokenShare: 0.01,

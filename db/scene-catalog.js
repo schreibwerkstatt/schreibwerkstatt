@@ -49,4 +49,30 @@ function deleteStaleScenes(bookId, userEmail) {
   return ids;
 }
 
-module.exports = { listScenesWithRefs, deleteStaleScenes };
+/** Szenen eines Buchs als Antwort von GET /figures/scenes/:book_id: Zeile +
+ *  Figuren-/Orts-IDs, dazu der jüngste Stand über alle Szenen (wie der
+ *  Figuren-Katalog), nicht der der ersten nach sort_order. */
+function listScenesForBook(bookId, userEmail) {
+  const { rows, sfRows, slRows } = listScenesWithRefs(bookId, userEmail);
+  const sfMap = {};
+  for (const sf of sfRows) (sfMap[sf.scene_id] ??= []).push(sf.fig_id);
+  const slMap = {};
+  for (const sl of slRows) (slMap[sl.scene_id] ??= []).push(sl.loc_id);
+  const szenen = rows.map(s => ({
+    id:         s.id,
+    stale:      !!s.stale,
+    kapitel:    s.kapitel,
+    seite:      s.seite,
+    titel:      s.titel,
+    wertung:    s.wertung,
+    kommentar:  s.kommentar,
+    chapter_id: s.chapter_id,
+    page_id:    s.page_id,
+    fig_ids:    sfMap[s.id] || [],
+    ort_ids:    slMap[s.id] || [],
+  }));
+  const updated_at = rows.reduce((max, r) => (r.updated_at && (!max || r.updated_at > max) ? r.updated_at : max), null);
+  return { szenen, updated_at };
+}
+
+module.exports = { listScenesForBook, deleteStaleScenes };

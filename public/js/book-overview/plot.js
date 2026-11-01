@@ -1,7 +1,7 @@
 // Plot-Board-Tile: Snapshot des Beat-Boards (Akte/Stränge/Beats + Status-
 // Verteilung + Drift-Warnung). Datenquelle: /plot?book_id → { acts, threads,
 // beats }, jeder Beat mit status/verworfen/occ_count. Rein abgeleitet, kein
-// KI-Job. Reader ohne Editor-Recht bekommen 403 auf /plot → overviewPlot=null
+// KI-Job. Reader ohne Editor-Recht bekommen den Teil als `forbidden` → overviewPlot=null
 // → Tile via x-if aus (siehe load.js).
 import { classifyBeatAnchor, beatAnchorKnown } from '../book/plot/constants.js';
 

@@ -14,17 +14,38 @@ export const HISTORY_DAILY_DAYS = 365;
 // Aufbewahrungsgrenze liegt (Daten vor Einfuehrung der Ausduennung) und das
 // Buch selbst mit diesem aeltesten Stand beginnt.
 const TRUNCATION_SLACK_DAYS = 7;
+// Ein Rand-Snapshot (Basis bzw. Endstand) darf so viele Tage vor seinem
+// Stichtag liegen, ohne dass der Wert als Naeherung gilt: ein, zwei verpasste
+// Nacht-Syncs ja, die Monats-Historie aelter als ein Jahr nicht.
+export const SNAPSHOT_GAP_TOLERANCE_DAYS = 3;
 
-const valuesOfSnap = (s) => ({
-  chars: Number(s?.chars) || 0,
-  words: Number(s?.words) || 0,
-  pages: Number(s?.page_count) || 0,
+const num = (v) => Number(v) || 0;
+// Umfang eines Snapshots ohne den kumulativen Import-Zuwachs (`imported_*`,
+// lib/import-baseline.js): jede Differenz zweier solcher Werte ist geschrieben,
+// nicht importiert.
+export const valuesOfSnap = (s) => ({
+  chars: num(s?.chars) - num(s?.imported_chars),
+  words: num(s?.words) - num(s?.imported_words),
+  pages: num(s?.page_count) - num(s?.imported_pages),
 });
-const valuesOfLive = (b) => ({
-  chars: Number(b?.chars) || 0,
-  words: Number(b?.words) || 0,
-  pages: Number(b?.pages) || 0,
+// Live-Stand ohne Import: der Zaehler steht im juengsten Snapshot des Buchs
+// (ein Import synct und schreibt die heutige Zeile sofort).
+const valuesOfLive = (b, latestSnap) => ({
+  chars: num(b?.chars) - num(latestSnap?.imported_chars),
+  words: num(b?.words) - num(latestSnap?.imported_words),
+  pages: num(b?.pages) - num(latestSnap?.imported_pages),
 });
+
+/** Summe des kumulativen Import-Zuwachses ueber den juengsten Snapshot je Buch. */
+export function importedTotals(historyRows) {
+  const out = { chars: 0, words: 0, pages: 0 };
+  for (const s of latestSnapshotPerBook(historyRows).values()) {
+    out.chars += num(s.imported_chars);
+    out.words += num(s.imported_words);
+    out.pages += num(s.imported_pages);
+  }
+  return out;
+}
 
 /**
  * Im Zeitfenster [from, to] produzierter Netto-Umfang (Zeichen/Woerter/
@@ -40,6 +61,10 @@ const valuesOfLive = (b) => ({
  *    booksDetail) bzw. ohne Anlagedatum die Heuristik „Buch beginnt mit der
  *    Historie selbst". Dann ist der erste Snapshot im Fenster die Basis und das
  *    Ergebnis traegt `approximated` (Zuwachs vor diesem Snapshot fehlt).
+ *  - Liegt ein Rand-Snapshot mehr als SNAPSHOT_GAP_TOLERANCE_DAYS vor seinem
+ *    Stichtag (Monats-Historie aelter als ein Jahr, ausgefallene Syncs), traegt
+ *    das Ergebnis ebenfalls `approximated`.
+ *  - Importe zaehlen nicht: alle Staende ohne den Import-Zaehler (valuesOfSnap).
  *
  * Netto: Loeschungen machen den Wert negativ; Importe und Beitraege von
  * Co-Autor:innen zaehlen mit (es ist die Bestandsdifferenz, keine Tipp-Messung).
@@ -57,6 +82,7 @@ export function computeVolumeDelta(historyRows, fromIso, toIso, opts = {}) {
   const usesLive = !!live && (!toIso || toIso >= todayIso);
 
   const endSnaps = toIso ? snapshotPerBookOnOrBefore(historyRows, toIso) : latestSnapshotPerBook(historyRows);
+  const latestSnaps = usesLive ? latestSnapshotPerBook(historyRows) : null;
   const liveById = new Map((live || []).map(b => [b.book_id, b]));
   const ids = new Set(endSnaps.keys());
   if (usesLive) for (const id of liveById.keys()) ids.add(id);
@@ -78,23 +104,30 @@ export function computeVolumeDelta(historyRows, fromIso, toIso, opts = {}) {
     return isoDaysBetween(globalEarliest, first) <= TRUNCATION_SLACK_DAYS;
   };
 
+  const baseDay = fromIso ? isoAddDays(fromIso, -1) : null;
+  const stale = (snap, dayIso) => !!snap && isoDaysBetween(snap.recorded_at, dayIso) > SNAPSHOT_GAP_TOLERANCE_DAYS;
+
   let chars = 0, words = 0, pages = 0;
-  const approxBooks = [];
+  const approx = new Set();
   for (const id of ids) {
-    const end = usesLive && liveById.has(id) ? valuesOfLive(liveById.get(id)) : valuesOfSnap(endSnaps.get(id));
+    const fromLive = usesLive && liveById.has(id);
+    const end = fromLive ? valuesOfLive(liveById.get(id), latestSnaps.get(id)) : valuesOfSnap(endSnaps.get(id));
+    if (!fromLive && toIso && stale(endSnaps.get(id), toIso)) approx.add(id);
     let b = { chars: 0, words: 0, pages: 0 };
     if (base.has(id)) {
       b = valuesOfSnap(base.get(id));
+      if (stale(base.get(id), baseDay)) approx.add(id);
     } else if (fromIso && existedBefore(id)) {
       // Ohne Snapshot im Fenster (nur Live-Stand) bleibt nichts als „kein
       // messbarer Zuwachs" — besser als den ganzen Bestand als Zuwachs zu zeigen.
       b = firstInWin.has(id) ? valuesOfSnap(firstInWin.get(id)) : end;
-      approxBooks.push(id);
+      approx.add(id);
     }
     chars += end.chars - b.chars;
     words += end.words - b.words;
     pages += end.pages - b.pages;
   }
+  const approxBooks = [...approx];
   return { chars, words, pages, approximated: approxBooks.length > 0, approxBooks, usesLive };
 }
 

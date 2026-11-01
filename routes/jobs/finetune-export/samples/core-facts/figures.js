@@ -4,9 +4,10 @@ const { nameRegex } = require('../../lib/names');
 const { eventWhen } = require('../author-chat/event-data');
 const { SCHICHT_PROSA } = require('../author-chat/figures');
 const {
-  genderOf, genitive, roleNoun, possessive, figureTypePhrase, pronoun, firstSentences,
+  genderOf, genitive, roleNoun, possessive, figureTypePhrase, pronoun, firstSentences, inverseTyp, datOf,
   roleArticle, cleanBeruf, isStatus, FAMILY_TYPES, PLACEHOLDER_NAME,
 } = require('./words');
+const { declineName, fillCase, stripQualifier } = require('./naming');
 
 // Wie oft eine Figur im Buchtext vorkommt (Name oder Kurzname als ganzes
 // Wort). Kernwissen bekommen nur Figuren ab `minMentions` — eine Figur, die
@@ -23,12 +24,15 @@ function countMentions(figRows, pageContents) {
   return out;
 }
 
+// Fragen mit Kasus-Platzhaltern (naming.js#fillCase): `{n}` Nominativ,
+// `{n:akk}`, `{n:dat}` — «Was weisst du über Herrn Koch?», «Erzähl mir kurz
+// vom Fahrer des Mercedes.».
 const Q = {
   de: {
-    core: ['Wer ist {n}?', 'Erzähl mir kurz von {n}.', 'Was weisst du über {n}?', 'Was für eine Figur ist {n}?', 'Stell mir {n} kurz vor.'],
+    core: ['Wer ist {n}?', 'Erzähl mir kurz von {n:dat}.', 'Was weisst du über {n:akk}?', 'Was für eine Figur ist {n}?', 'Stell mir {n:akk} kurz vor.'],
     beruf: ['Was macht {n} beruflich?', 'Welchen Beruf hat {n}?', 'Als was arbeitet {n}?'],
     birth: ['Wann wurde {n} geboren?', 'In welchem Jahr kam {n} zur Welt?', 'Wann ist {n} geboren?'],
-    family: ['Wer gehört zu {n}s Familie?', 'Mit wem ist {n} verwandt?', 'Wie sieht die Familie von {n} aus?'],
+    family: ['Wer gehört zur Familie von {n:dat}?', 'Mit wem ist {n} verwandt?', 'Wie sieht die Familie von {n:dat} aus?'],
     schicht: ['Aus welcher Schicht stammt {n}?', 'Aus welchem Milieu kommt {n}?', 'In welchen Verhältnissen lebt {n}?'],
   },
   en: {
@@ -39,33 +43,36 @@ const Q = {
     schicht: ['Which social class does {n} come from?', 'What milieu does {n} come from?', 'What background does {n} have?'],
   },
 };
-const fill = (tpl, n) => tpl.replace(/\{n\}/g, n);
-// «{n}s Familie» geht nur mit einfachem Genitiv; sonst «die Familie von {n}».
-const familyQ = (tpl, f, langIsEn) => {
-  if (langIsEn || !tpl.includes('{n}s ')) return fill(tpl, f.name);
-  const gen = genitive(f.name, false);
-  return gen ? tpl.replace('{n}s ', gen + ' ') : null;
-};
 
 // Familien-Sätze einer Figur aus den Beziehungsfakten (relations.js):
 // [{ other, noun, g, typ }] — `noun` ist die Rolle der ANDEREN Figur.
-function familyOf(f, relationFacts, langIsEn) {
+// `types`: welche Beziehungstypen zählen (Standard: Familie).
+function familyOf(f, relationFacts, langIsEn, types = FAMILY_TYPES) {
   const out = [];
   for (const r of relationFacts) {
-    if (!FAMILY_TYPES.has(r.typ)) continue;
+    if (!types.has(r.typ) && !types.has(inverseTyp(r.typ))) continue;
     let other, typ;
     if (r.a.fig_id === f.fig_id) { other = r.b; typ = r.typ; }
-    else if (r.b.fig_id === f.fig_id) {
-      other = r.a;
-      typ = ({ elternteil: 'kind', kind: 'elternteil' })[r.typ] || r.typ;
-    } else continue;
+    else if (r.b.fig_id === f.fig_id) { other = r.a; typ = inverseTyp(r.typ); }
+    else continue;
+    if (!types.has(typ)) continue;
     const role = roleNoun(typ, genderOf(other), langIsEn);
     if (role) out.push({ other, typ, ...role });
   }
   return out;
 }
 
-// «Seine Mutter ist Gisela.» / «Die Mutter von Stefan ist Gisela.»
+// Engste Beziehungen fürs Porträt: Partner, Eltern, Kinder, Geschwister,
+// Freunde — in dieser Reihenfolge.
+const CLOSE_ORDER = ['ehepartner', 'liebesbeziehung', 'elternteil', 'kind', 'geschwister', 'freund'];
+const CLOSE_TYPES = new Set(CLOSE_ORDER);
+function closestRelations(f, relationFacts, langIsEn, n = 2) {
+  return familyOf(f, relationFacts, langIsEn, CLOSE_TYPES)
+    .sort((a, b) => CLOSE_ORDER.indexOf(a.typ) - CLOSE_ORDER.indexOf(b.typ))
+    .slice(0, n);
+}
+
+// «Seine Mutter ist Gisela.» / «Gisela ist Stefans Mutter.»
 function familySentence(f, rel, langIsEn, form) {
   const g = genderOf(f);
   const poss = possessive(g, rel.g, langIsEn);
@@ -76,7 +83,26 @@ function familySentence(f, rel, langIsEn, form) {
     return gen ? `${rel.other.name} is ${gen} ${rel.noun}.` : `${rel.other.name} is ${roleArticle(rel.typ, rel.g, true)} ${rel.noun} of ${f.name}.`;
   }
   if (form === 0 && poss) return `${cap(poss)} ${rel.noun} ist ${rel.other.name}.`;
-  return gen ? `${rel.other.name} ist ${gen} ${rel.noun}.` : `${rel.other.name} ist ${roleArticle(rel.typ, rel.g, false)} ${rel.noun} von ${f.name}.`;
+  return gen ? `${rel.other.name} ist ${gen} ${rel.noun}.` : `${rel.other.name} ist ${roleArticle(rel.typ, rel.g, false)} ${rel.noun} von ${datOf(f.name)}.`;
+}
+
+// Zwei Beziehungen in einem Satz: «Seine Mutter ist Gisela, sein Bruder Adrian.»
+function relationsSentence(f, rels, langIsEn, form) {
+  if (rels.length < 2) return rels.length ? familySentence(f, rels[0], langIsEn, form) : '';
+  const g = genderOf(f);
+  const [p1, p2] = rels.map(r => possessive(g, r.g, langIsEn));
+  if (form === 0 && p1 && p2) {
+    const cap = (s) => s.charAt(0).toUpperCase() + s.slice(1);
+    return langIsEn
+      ? `${cap(p1)} ${rels[0].noun} is ${rels[0].other.name}, ${p2} ${rels[1].noun} ${rels[1].other.name}.`
+      : `${cap(p1)} ${rels[0].noun} ist ${rels[0].other.name}, ${p2} ${rels[1].noun} ${rels[1].other.name}.`;
+  }
+  // Ein Satz: «Renate ist Stefans Ehefrau, Gisela seine Mutter.»
+  const gen = genitive(f.name, langIsEn);
+  const own = (r, p) => (p || gen ? `${p || gen} ${r.noun}` : null);
+  const [o1, o2] = [own(rels[0], gen), own(rels[1], p2)];
+  if (o1 && o2) return langIsEn ? `${rels[0].other.name} is ${o1}, ${rels[1].other.name} ${o2}.` : `${rels[0].other.name} ist ${o1}, ${rels[1].other.name} ${o2}.`;
+  return familySentence(f, rels[0], langIsEn, 1);
 }
 
 function birthYear(f, eventsByFigPk) {
@@ -84,19 +110,50 @@ function birthYear(f, eventsByFigPk) {
   return ev ? ev.datum_year : null;
 }
 
-function keyEvent(f, eventsByFigPk, langIsEn) {
-  const evs = eventsByFigPk.get(f.pk) || [];
-  const ev = evs.find(e => e.bedeutung && e.ereignis && e.subtyp !== 'geburt') || evs.find(e => e.ereignis && e.subtyp !== 'geburt');
-  if (!ev) return null;
-  const when = eventWhen(ev, langIsEn).when;
-  return { text: String(ev.ereignis).trim().replace(/[.\s]+$/, ''), when };
+// Wichtigster persönlicher Wendepunkt: nur `typ = persoenlich`, nie
+// Weltgeschehen (`extern`, Untertyp `extern_*`) und nie die Geburt. Das
+// Datenmodell kennt kein Gewicht; Rang nach Untertyp (Wendepunkt vor Verlust,
+// Trennung … vor Sonstigem), dann Ereignisse mit Bedeutung, dann das erste
+// im Zeitstrahl.
+const TURN_RANK = { wendepunkt: 0, verlust: 1, tod: 1, trennung: 1, hochzeit: 1, liebe: 2, konflikt: 2, sieg: 2, krankheit: 2, entdeckung: 2, umzug: 3, reise: 3 };
+function turningPoint(f, names, eventsByFigPk, langIsEn) {
+  const evs = (eventsByFigPk.get(f.pk) || []).filter(e => e.ereignis
+    && String(e.typ || 'persoenlich') !== 'extern' && !/^extern/.test(String(e.subtyp || '')) && e.subtyp !== 'geburt');
+  if (!evs.length) return null;
+  const rank = (e) => (TURN_RANK[e.subtyp] ?? 4) * 2 + (e.bedeutung ? 0 : 1);
+  const ev = evs.map((e, i) => [e, i]).sort((a, b) => rank(a[0]) - rank(b[0]) || a[1] - b[1])[0][0];
+  const when = stripQualifier(eventWhen(ev, langIsEn).when || '');
+  const text = String(ev.ereignis).trim().replace(/[.\s]+$/, '');
+  const bed = String(ev.bedeutung || '').trim();
+  return {
+    text, when,
+    // Satzbeginn mit dem Namen («Mario wechselt an die Frohheim-Schule …»):
+    // der Titel ist selbst ein Satz.
+    isSentence: names.some(n => text.startsWith(n + ' ')),
+    // Bedeutung nur, wenn sie ein ganzer Satz über die Figur ist.
+    meaning: /^(Er|Sie|Ihr|Ihm|Ihn|Sein|Seine|He|She|His|Her)\b/.test(bed) && /[.!?]$/.test(bed) ? bed : '',
+  };
 }
+
+function turningSentences(tp, subject, langIsEn) {
+  const at = tp.when ? ` (${tp.when})` : '';
+  if (tp.isSentence) return [`${tp.text}${at}.`];
+  return langIsEn
+    ? [`A turning point for ${subject} is «${tp.text}»${at}.`, `«${tp.text}»${at} changes things for ${subject}.`]
+    : [`Zum Wendepunkt für ${subject} wird «${tp.text}»${at}.`, `Einschneidend für ${subject} ist «${tp.text}»${at}.`];
+}
+
+const corePerTierOf = (opts, tier) => {
+  const map = { main: 5, side: 3, minor: 1, ...(opts.corePerTier || {}) };
+  return Math.max(1, Math.round(Number(map[tier]) || 1));
+};
 
 function buildFigureCore(ctx, emitCard, relationFacts) {
   const {
-    langIsEn, displayName, figRows, eligibleFigIds,
+    langIsEn, displayName, figRows, eligibleFigIds, opts,
     eventsByFigPk, appearancesByFigPk, figsByLocPk, locRows,
   } = ctx;
+  const nameInfoOf = (f) => ctx.figNameInfo?.get(f.fig_id) || { name: f.name, role: false, proper: true, aliases: [f.name] };
   const lang = langIsEn ? 'en' : 'de';
   const locsByFig = new Map();
   for (const l of locRows) {
@@ -106,74 +163,100 @@ function buildFigureCore(ctx, emitCard, relationFacts) {
     }
   }
 
-  for (const f of figRows) {
-    if (!eligibleFigIds.has(f.fig_id) || PLACEHOLDER_NAME.test(f.name)) continue;
+  for (const f0 of figRows) {
+    if (!eligibleFigIds.has(f0.fig_id) || PLACEHOLDER_NAME.test(f0.name)) continue;
+    const info = nameInfoOf(f0);
+    const f = { ...f0, name: info.name };
     const g = genderOf(f);
-    const pron = pronoun(g, langIsEn);
+    const tier = ctx.tierByFig?.get(f.fig_id) || 'minor';
     const unit = 'fig:' + f.fig_id;
+    const decl = { gender: g, role: info.role, langIsEn };
+    const nom = declineName(f.name, 'nom', decl) || f.name;
+    const dat = declineName(f.name, 'dat', decl) || f.name;
+    const cap = (s) => s.charAt(0).toUpperCase() + s.slice(1);
+    // Nutzernamen in Kleinschrift («madame_phantasma») nie am Satzanfang.
+    const lowerStart = !/^\p{Lu}/u.test(nom) && !info.role;
+    const Nom = info.role ? cap(nom) : nom;
+    const pron = pronoun(g, langIsEn);
+    const later = pron || Nom;
     const typePhrase = figureTypePhrase(f.typ, g, langIsEn);
-    const desc = firstSentences(f.beschreibung, 2);
-    const fam = familyOf(f, relationFacts, langIsEn).slice(0, 2);
+    const desc = firstSentences(f.beschreibung, 1);
     const beruf = cleanBeruf(f.beruf);
     const ch = (appearancesByFigPk.get(f.pk) || []).find(Boolean);
     const loc = (locsByFig.get(f.fig_id) || [])[0];
-    const kev = keyEvent(f, eventsByFigPk, langIsEn);
-    const subj = (form) => (form && pron ? pron : f.name);
+    const tp = turningPoint(f, [f.name, ...info.aliases], eventsByFigPk, langIsEn);
+    const rels = info.proper ? closestRelations(f, relationFacts, langIsEn) : [];
 
-    // Satzbausteine, je zwei Formulierungen.
+    // Bausteine in fester Priorität: Rolle im Buch → engste Beziehungen →
+    // Beruf/Ort → persönlicher Wendepunkt. Je Baustein zwei Formulierungen.
     const identity = [];
     if (typePhrase) {
-      identity.push(langIsEn ? `${f.name} is ${typePhrase} in «${displayName}».` : `${f.name} ist ${typePhrase} in «${displayName}».`);
-      identity.push(langIsEn ? `In «${displayName}», ${f.name} is ${typePhrase}.` : `In «${displayName}» ist ${f.name} ${typePhrase}.`);
+      identity.push(langIsEn
+        ? `${Nom} is ${typePhrase} in «${displayName}»${ch ? ` and appears above all in the chapter «${ch}»` : ''}.`
+        : `${Nom} ist ${typePhrase} in «${displayName}»${ch ? ` und tritt vor allem im Kapitel «${ch}» auf` : ''}.`);
+      identity.push(langIsEn
+        ? `In «${displayName}», ${nom} is ${typePhrase}${ch ? `; you meet ${f.name} most often in the chapter «${ch}»` : ''}.`
+        : `In «${displayName}» ist ${nom} ${typePhrase}${ch ? `; am häufigsten begegnet man ${dat} im Kapitel «${ch}»` : ''}.`);
+      if (lowerStart) identity.shift();
+    } else if (ch) {
+      identity.push(langIsEn ? `In «${displayName}», ${nom} appears above all in the chapter «${ch}».`
+        : `In «${displayName}» tritt ${nom} vor allem im Kapitel «${ch}» auf.`);
     }
-    if (desc) identity.push(desc);
-    const extras = [];
-    for (const r of fam) extras.push([familySentence(f, r, langIsEn, 0), familySentence(f, r, langIsEn, 1)]);
-    if (beruf) extras.push(isStatus(beruf)
-      ? [langIsEn ? `${subj(1)} is ${beruf}.` : `${subj(1)} ist ${beruf}.`]
-      : langIsEn
-        ? [`${subj(1)} works as ${beruf}.`, `By profession, ${f.name} is ${beruf}.`]
-        : [`${subj(1)} arbeitet als ${beruf}.`, `Von Beruf ist ${f.name} ${beruf}.`]);
-    if (ch) extras.push(langIsEn
-      ? [`${subj(1)} appears above all in the chapter «${ch}».`, `You meet ${f.name} most often in the chapter «${ch}».`]
-      : [`${subj(1)} tritt vor allem im Kapitel «${ch}» auf.`, `Am häufigsten begegnet man ${f.name} im Kapitel «${ch}».`]);
-    if (loc) extras.push(langIsEn
-      ? [`${f.name} is closely tied to the setting «${loc}».`, `The setting «${loc}» belongs to ${f.name}'s story.`]
-      : [`Mit ${f.name} verbunden ist vor allem der Schauplatz «${loc}».`, `Der Schauplatz «${loc}» gehört zur Geschichte von ${f.name}.`]);
-    if (kev) extras.push(langIsEn
-      ? [`An important event for ${f.name}: ${kev.text}${kev.when ? ` (${kev.when})` : ''}.`, `${kev.text}${kev.when ? ` (${kev.when})` : ''} marks ${f.name}'s story.`]
-      : [`Ein wichtiges Ereignis für ${f.name}: ${kev.text}${kev.when ? ` (${kev.when})` : ''}.`, `${f.name} erlebt: ${kev.text}${kev.when ? ` (${kev.when})` : ''}.`]);
-    // Ohne Typ, Beschreibung und Bausteine keine Kernantwort — die
-    // Einzelattribute unten gibt es trotzdem.
-    if (identity.length || extras.length) {
+    const relBlock = rels.length ? [relationsSentence(f, rels, langIsEn, 0), relationsSentence(f, rels, langIsEn, 1)] : null;
+    const jobBlock = beruf
+      ? (isStatus(beruf)
+        ? [langIsEn ? `${later} is ${beruf}.` : `${later} ist ${beruf}.`]
+        : langIsEn
+          ? [`${later} works as ${beruf}${loc ? ` and is closely tied to «${loc}»` : ''}.`, `By profession, ${pron ? pron.toLowerCase() : f.name} is ${beruf}.`]
+          : [`${later} arbeitet als ${beruf}${loc ? ` und ist eng mit «${loc}» verbunden` : ''}.`, `Von Beruf ist ${pron ? pron.toLowerCase() : Nom} ${beruf}.`])
+      : loc
+        ? (langIsEn
+          ? [`${later} is closely tied to the setting «${loc}».`, `The setting «${loc}» belongs to ${f.name}'s story.`]
+          : [`Mit ${dat} verbunden ist vor allem der Schauplatz «${loc}».`, `Der Schauplatz «${loc}» gehört zur Geschichte von ${dat}.`])
+        : null;
+    const tpBlock = tp ? turningSentences(tp, langIsEn ? f.name : dat, langIsEn) : null;
+    const descBlock = desc && !desc.startsWith(f.name + ':') ? desc : null;
 
-      // Antwortvarianten: 2–4 Sätze, Reihenfolge und Formulierung rotieren.
+    if (identity.length || relBlock || jobBlock || tpBlock || descBlock) {
+      // Antwortvarianten: 2–4 Sätze in fester Reihenfolge (Rolle → Beziehungen
+      // → Beruf/Ort → Wendepunkt). Die Varianten kombinieren die Formulierungen
+      // der Bausteine; jede zweite Hälfte setzt die Beschreibung an die Stelle
+      // von Beruf/Ort. Verschiedene Antworten, damit `maxPerAnswer` keine
+      // Variante streicht.
       const answers = [];
-      const nAns = 5;
-      for (let v = 0; v < nAns; v++) {
-        const parts = [];
-        if (identity.length) parts.push(identity[v % identity.length]);
-        const take = Math.min(extras.length, 1 + (v % 3));
-        for (let j = 0; j < take; j++) {
-          const e = extras[(v + j) % extras.length];
-          parts.push(e[(v + j) % e.length]);
-        }
+      const at = (b, i) => (b ? b[i % b.length] : null);
+      for (let v = 0; v < 8; v++) {
+        const useDesc = descBlock && v >= 4;
+        const parts = [
+          identity.length ? identity[v % identity.length] : null,
+          useDesc ? descBlock : null,
+          at(relBlock, v >> 1),
+          useDesc ? null : at(jobBlock, v + 1),
+          at(tpBlock, (v >> 1) + v),
+        ].filter(Boolean);
         if (!parts.length) continue;
-        if (!parts[0].includes(f.name)) parts.unshift(identity[0] || `${f.name}.`);
-        answers.push(parts.join(' '));
+        if (!identity.length && !parts[0].includes(f.name)) parts.unshift(`${Nom} gehört zu den Figuren von «${displayName}».`);
+        // Die Bedeutung des Wendepunkts als eigener Satz, solange Platz ist.
+        if (tpBlock && tp.meaning && parts.length < 4 && tpBlock.includes(parts[parts.length - 1])) parts.push(tp.meaning);
+        answers.push(parts.slice(0, 4).join(' '));
       }
-      const names = [f.name, ...(f.kurzname && f.kurzname !== f.name && f.kurzname.trim().length >= 2 ? [f.kurzname] : [])];
-      const questions = Q[lang].core.flatMap(t => names.map(n => fill(t, n)));
-      emitCard({ id: 'fig:' + f.fig_id + ':core', kind: 'figure', unit, core: true, subject: f.name,
+      const names = info.role ? [f.name] : info.aliases;
+      const questions = Q[lang].core.flatMap(t => names.map(n => fillCase(t, n, decl))).filter(Boolean);
+      emitCard({ id: 'fig:' + f.fig_id + ':core', kind: 'figure', unit, core: true, tier, subject: f.name,
         fields: { typ: f.typ || null, beruf: beruf || null, beschreibung: desc || null } },
-      { task: 'figureCore', questions, answers });
+      { task: 'figureCore', questions, answers, count: corePerTierOf(opts, tier) });
     }
+
+    // Rollenfiguren tragen keine Einzelattribute: «Bademeister der Badi Olten
+    // kommt aus der Arbeiterschicht» ist weder Satz noch Leserfrage.
+    if (!info.proper) continue;
+    const q = (key) => Q[lang][key].map(t => fillCase(t, f.name, decl)).filter(Boolean);
 
     // ── Einzelattribute ───────────────────────────────────────────────
     if (beruf) {
-      emitCard({ id: 'fig:' + f.fig_id + ':beruf', kind: 'figureAttr', unit, core: true, subject: f.name, fields: { beruf } }, {
+      emitCard({ id: 'fig:' + f.fig_id + ':beruf', kind: 'figureAttr', unit, core: true, tier, subject: f.name, fields: { beruf } }, {
         task: 'figureAttr',
-        questions: Q[lang].beruf.map(t => fill(t, f.name)),
+        questions: q('beruf'),
         answers: isStatus(beruf)
           ? (langIsEn ? [`${f.name} is ${beruf}.`, `${f.name} is currently ${beruf}.`] : [`${f.name} ist ${beruf}.`, `Zurzeit ist ${f.name} ${beruf}.`])
           : langIsEn
@@ -183,33 +266,33 @@ function buildFigureCore(ctx, emitCard, relationFacts) {
     }
     const year = birthYear(f, eventsByFigPk);
     if (year) {
-      emitCard({ id: 'fig:' + f.fig_id + ':geburt', kind: 'figureAttr', unit, core: true, subject: f.name, fields: { geburtsjahr: year } }, {
+      emitCard({ id: 'fig:' + f.fig_id + ':geburt', kind: 'figureAttr', unit, core: true, tier, subject: f.name, fields: { geburtsjahr: year } }, {
         task: 'figureAttr',
-        questions: Q[lang].birth.map(t => fill(t, f.name)),
+        questions: q('birth'),
         answers: langIsEn
           ? [`${f.name} was born in ${year}.`, `${f.name} came into the world in ${year}.`, `${f.name}'s year of birth is ${year}.`]
-          : [`${f.name} wurde ${year} geboren.`, `${f.name} kam ${year} zur Welt.`, `Das Geburtsjahr von ${f.name} ist ${year}.`],
+          : [`${f.name} wurde ${year} geboren.`, `${f.name} kam ${year} zur Welt.`, `Das Geburtsjahr von ${datOf(f.name)} ist ${year}.`],
       });
     }
     const allFam = familyOf(f, relationFacts, langIsEn);
     if (allFam.length) {
       const list = allFam.map(r => `${r.other.name} (${r.noun})`).join(', ');
       const sentences = allFam.map((r, i) => familySentence(f, r, langIsEn, i % 2)).join(' ');
-      emitCard({ id: 'fig:' + f.fig_id + ':familie', kind: 'figureAttr', unit, core: true, subject: f.name,
+      emitCard({ id: 'fig:' + f.fig_id + ':familie', kind: 'figureAttr', unit, core: true, tier, subject: f.name,
         fields: { familie: allFam.map(r => ({ name: r.other.name, rolle: r.noun })) } }, {
         task: 'figureAttr',
-        questions: Q[lang].family.map(t => familyQ(t, f, langIsEn)).filter(Boolean),
+        questions: q('family'),
         answers: langIsEn
           ? [`To ${f.name}'s family belong: ${list}.`, sentences]
-          : [`Zur Familie von ${f.name} gehören: ${list}.`, sentences],
+          : [`Zur Familie von ${datOf(f.name)} gehören: ${list}.`, sentences],
       });
     }
     const schicht = SCHICHT_PROSA[String(f.sozialschicht || '').trim().toLowerCase()];
     if (schicht) {
       const s = schicht[lang];
-      emitCard({ id: 'fig:' + f.fig_id + ':schicht', kind: 'figureAttr', unit, core: true, subject: f.name, fields: { sozialschicht: f.sozialschicht } }, {
+      emitCard({ id: 'fig:' + f.fig_id + ':schicht', kind: 'figureAttr', unit, core: true, tier, subject: f.name, fields: { sozialschicht: f.sozialschicht } }, {
         task: 'figureAttr',
-        questions: Q[lang].schicht.map(t => fill(t, f.name)),
+        questions: q('schicht'),
         answers: langIsEn
           ? [`${f.name} comes from ${s}.`, `${f.name} belongs to ${s}.`]
           : [`${f.name} stammt aus ${s}.`, `${f.name} kommt aus ${s}.`],

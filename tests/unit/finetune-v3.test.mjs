@@ -228,7 +228,7 @@ test('whoSays: nur lange, einmalige Zitate einer eindeutig benannten Figur', () 
   const who = ctx.samples.filter(s => s.id.startsWith('dialogRev|')).map(s => [s.messages[1].content, s.messages[2].content]);
   assert.equal(who.length, 1, JSON.stringify(who));
   assert.match(who[0][0], /alten Bahnhof/);
-  assert.match(who[0][1], /^Anna/);
+  assert.match(who[0][1], /^Das sagt Anna im Kapitel «K1»\.$/);
 });
 
 // ── 7. Studio-YAML ───────────────────────────────────────────────────────

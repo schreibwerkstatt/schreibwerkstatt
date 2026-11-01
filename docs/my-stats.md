@@ -8,8 +8,8 @@ Rechnung: pure Funktionen in [cards/my-stats-compute.js](../public/js/cards/my-s
 
 | Quelle | Inhalt | Frische |
 |---|---|---|
-| `GET /me/profile-stats` ([routes/usersettings/profile-stats.js](../routes/usersettings/profile-stats.js)) | Live-Bestand aus `page_stats` (Summe + `books_detail` je Buch inkl. `created_at` und Ziel-Feldern), Schreib-/Lektoratszeit gesamt, heutige Schreibsekunden, Stunden-Histogramm (`writing_hour`), Lektorat-Befund (`page_checks`) | live |
-| `GET /me/profile-stats-history` | `history` = `book_stats_history`-Snapshots je (Buch, Tag); `writing`/`lektorat`/`sessions` = Tagesreihen aus `writing_time`/`lektorat_time`/`writing_session` | Snapshots: nächtlicher Sync ([lib/cron.js](../lib/cron.js) → `syncAllBooks`); Zeitreihen: live (Heartbeat) |
+| `GET /me/profile-stats` ([routes/usersettings/profile-stats.js](../routes/usersettings/profile-stats.js)) | Live-Bestand aus `page_stats` (Summe + `books_detail` je Buch inkl. `created_at` als App-Datum und Ziel-Feldern), Kapitelzahl live über den Content-Store, Schreib-/Lektoratszeit gesamt, heutige Schreibsekunden, Stunden-Histogramm (`writing_hour`), Lektorat-Befund (`page_checks`) | live |
+| `GET /me/profile-stats-history` | `history` = `book_stats_history`-Snapshots je (Buch, Tag) inkl. Import-Zähler `imported_*`; `writing`/`lektorat`/`sessions` = Tagesreihen aus `writing_time`/`lektorat_time`/`writing_session` | Snapshots: nächtlicher Sync ([lib/cron.js](../lib/cron.js) → `syncAllBooks`); Zeitreihen: live (Heartbeat) |
 
 Buchnamen kommen aus der Root-Buchliste (`Alpine.store('nav').books`), nicht aus den Routen.
 
@@ -30,27 +30,33 @@ Jede Kachel trägt ein Geltungs-Tag (`myStatsScope`):
 | **aktuell** | Bücher/Kapitel/Wortformen im Hero, Lesbarkeit, Lektorat, Umfang nach Kategorie, Bücher & Ziele |
 | **gesamt** | Meilensteine, Tageszeit-Muster, Tagesziel |
 
+## Importe
+
+`book_stats_history.imported_chars`/`imported_words`/`imported_pages` sind **kumulativ** je Buch: der bis zu diesem Snapshot aufsummierte Zuwachs aus Importen (Ordner, Manuskript, `.swbook`, WordPress, HubSpot). [lib/import-baseline.js](../lib/import-baseline.js)#`seedImportBaseline` bucht ihn (Stand nach dem Sync minus `page_stats` davor) auf die heutige Zeile und kopiert sie samt Zähler als Vortags-Baseline; der Sync ([routes/sync.js](../routes/sync.js)) erbt den Zähler in jede neue Tageszeile vom jüngsten Vorgänger. Rechnungen über Umfang ziehen ihn ab ([volume.js](../public/js/cards/my-stats-compute/volume.js)#`valuesOfSnap`; Live-Stand minus Zähler des jüngsten Snapshots): Umfang im Zeitraum, Vorperioden-Vergleich, Wochen-Delta, Schreibtempo (Z/h, auch ohne Zeitraum) und das Prognose-Tempo. **Bestandswerte** (Hero ohne Zeitraum, Entwicklungs-Chart, Bücher & Ziele, Meilensteine) zeigen den Bestand inklusive Importe. Importe vor Einführung des Zählers sind nicht erfasst (Zähler 0).
+
 ## Umfang im Zeitraum
 
 Netto-Bestandsdifferenz je Buch, summiert ([volume.js](../public/js/cards/my-stats-compute/volume.js)#`computeVolumeDelta`):
 
 - **Endstand:** reicht das Fenster bis heute, der Live-Stand aus `books_detail` (der heutige Nacht-Snapshot existiert noch nicht); sonst der jüngste Snapshot ≤ Fensterende.
 - **Basis:** jüngster Snapshot ≤ Fensterbeginn − 1. Fehlt er, ist das Buch im Fenster neu (voller Zuwachs zählt) — oder seine Historie reicht nicht zurück: Anlagedatum vor dem Fenster (`created_at`; ohne Anlagedatum: das Buch beginnt mit der ältesten Historie überhaupt, und die liegt an der 365-Tage-Grenze). Dann ist der erste Snapshot im Fenster die Basis, und die Karte zeigt den Hinweis „Näherungswert".
-- **Netto:** Importe, Löschungen und Beiträge von Co-Autor:innen zählen mit; ein negativer Wert trägt das Tag „netto".
+- **Randlücken:** liegt der Basis- oder End-Snapshot mehr als `SNAPSHOT_GAP_TOLERANCE_DAYS` (3) vor seinem Stichtag — Monats-Historie älter als ein Jahr, ausgefallene Syncs —, gilt der Wert ebenfalls als „Näherungswert". Lücken **innerhalb** des Fensters ändern die Differenz nicht.
+- **Netto:** Löschungen und Beiträge von Co-Autor:innen zählen mit, Importe nicht (siehe „Importe"); ein negativer Wert trägt das Tag „netto".
 
 Dieselbe Regel gilt für den Vorperioden-Vergleich und das Wochen-Delta („diese Woche"); das Schreibtempo (Z/h) teilt den Umfang durch die Schreibzeit desselben Fensters.
 
 ## Schreibrhythmus
 
-- **Aktive Tage, aktuelle und längste Serie** zählen Tage mit Schreibsekunden > 0 im Fenster ([rhythm.js](../public/js/cards/my-stats-compute/rhythm.js)#`computeStreakStats`). Eine Serie reisst an jedem Kalendertag ohne Treffer; ein heute noch leerer Tag bricht die aktuelle Serie nicht. Der Meilenstein „Schreibtage" nutzt dieselbe Tageszählung über alle Daten.
+- **Aktive Tage, aktuelle und längste Serie** zählen Tage mit Schreibsekunden > 0 im Fenster ([rhythm.js](../public/js/cards/my-stats-compute/rhythm.js)#`computeStreakStats`). Eine Serie reisst an jedem Kalendertag ohne Treffer; ein heute noch leerer Tag bricht die aktuelle Serie nicht. Die aktuelle Serie zählt ab heute und ist darum ausgeblendet, wenn der Zeitraum vor heute endet. Der Meilenstein „Schreibtage" nutzt dieselbe Tageszählung über alle Daten.
 - **Tagesziel** (Minuten/Tag, Profil): erreicht, wenn Sekunden ≥ Ziel·60 — in der Ziel-Serie wie in der Heatmap-Färbung (Modus „Ziel"). Heute zählt der Live-Wert `today_writing_seconds`.
 - **Meilenstein „Bücher"** zählt nur Bücher mit Inhalt.
 
 ## Entwicklungs-Chart
 
-- **Inhalts-Metriken** (Zeichen, Normseiten, Wörter, Wortformen, Abschnitte, Kapitel): Linie über die Snapshot-Tage, Y-Achse ab 0; je Bucket der jüngste Stand. Jüngste Tage mit weniger Büchern als der Vortag (Teil-Sync) werden abgeschnitten.
+- **Inhalts-Metriken** (Zeichen, Normseiten, Wörter, Wortformen, Abschnitte, Kapitel): Linie über die Snapshot-Tage, Y-Achse ab 0; je Bucket der jüngste Stand. Gesamt-Linie: ein Buch ohne Zeile an einem Tag (ausgefallener Sync, Teil-Sync von heute, abweichender Monatsend-Tag) zählt mit seinem letzten bekannten Stand ([series.js](../public/js/cards/my-stats-compute/series.js)#`carryForwardTotals`, über die ganze Historie gerechnet, dann aufs Fenster).
+- **Granularität:** bei jedem Laden und Zeitraumwechsel vorgewählt nach der Spanne (`autoGranularity`: bis 90 Tage Tag, bis 730 Woche, darüber Monat; ohne Von ab dem ältesten Datenpunkt). Die Buttons überschreiben die Wahl bis zum nächsten Zeitraumwechsel. Grund: die Kategorie-Achse gibt jedem Punkt dieselbe Breite, und die Historie älter als ein Jahr ist nur monatlich.
 - **Zeit-Metriken** (Schreib-/Lektoratszeit): Balken auf lückenloser Kalenderachse (Tage ohne Wert = 0), Einheit je Granularität (min/Tag, min/Woche, min/Monat); kumuliert als Linie. Pro Buch: gestapelte Balken. Mit Tagesziel zeigt Schreibzeit/Tag eine Ziellinie.
-- **Leerzustand:** ohne Snapshot-Historie „füllt sich nachts", sonst „Keine Daten im Zeitraum".
+- **Leerzustand:** Verlauf nicht ladbar → Fehlerhinweis; ohne Snapshot-Historie „füllt sich nachts", sonst „Keine Daten im Zeitraum".
 
 ## Lesbarkeit & Wortformen
 
@@ -62,13 +68,13 @@ Wert = zeichengewichteter Schnitt (Lesbarkeit) bzw. Summe (Wortformen) über den
 
 - **Heute** = Live-Stand minus letzter Snapshot vor heute (≥ 0; ohne Vortags-Snapshot 0).
 - **Tagesziel des Buchs** (`daily_goal_chars`): aufgelöst über `resolveDailyGoal` ([utils/format.js](../public/js/utils/format.js)) wie Header-Donut und Buch-Übersicht — NULL (nie gesetzt) = eine Normseite, 0 = bewusst kein Tagesziel.
-- **Tempo** (`recentDailyChars`) = Zeichen-Zuwachs pro Kalendertag zwischen jüngstem Snapshot und dem Snapshot von vor 30 Tagen; ein jüngeres Buch nimmt seinen ältesten Snapshot (kürzeres Fenster, `paceDays`). Angezeigt als „⌀ n Z/Tag, letzte d Tage".
+- **Tempo** (`recentDailyChars`) = Zeichen-Zuwachs ohne Importe pro Kalendertag zwischen jüngstem Snapshot und dem Snapshot von vor 30 Tagen; ein jüngeres Buch nimmt seinen ältesten Snapshot (kürzeres Fenster, `paceDays`). Angezeigt als „⌀ n Z/Tag, letzte d Tage".
 - **Prognose** = heute + Restumfang / Tempo (bis ~14 Jahre, sonst „kein Tempo"). Mit Frist zusätzlich „im Plan"/„hinter der Frist" als Text und das nötige Tempo bis zur Frist.
 - **Gesamt-Prognose** ([my-stats-trends.js](../public/js/cards/my-stats-trends.js)#`computeOverallForecast`): Summe der Restumfänge / Summe der Tempi aller Bücher mit offenem Ziel.
 
 ## Lektorat-Befund
 
-Server-seitig: jüngster `page_checks`-Lauf je Abschnitt; Trend gegen den Stand bis einschliesslich heute − 30 Tage (Schwelle ±0,2 Fundstellen/Abschnitt).
+Server-seitig: jüngster `page_checks`-Lauf je Abschnitt (bei gleichem `checked_at` die höhere `id`); Trend gegen den Stand bis einschliesslich heute − 30 Tage (Schwelle ±0,2 Fundstellen/Abschnitt).
 
 ## KI-Jobs
 

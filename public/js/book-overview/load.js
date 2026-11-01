@@ -1,5 +1,5 @@
 // Load-Pipeline + Memo-Helper.
-// `loadBookOverview` holt alle voneinander unabhängigen Tile-Endpoints parallel
+// `loadBookOverview` holt alle Tile-Daten in einer gebündelten Antwort (/overview)
 // und schreibt das Resultat in den State. `_checkBookStatsStaleness` läuft
 // anschliessend silent im Hintergrund; `resetBookOverview` setzt State + Memos
 // beim Buchwechsel auf den Initialstand zurück.
@@ -10,10 +10,10 @@ import { assignCatalogList } from '../cards/catalog-store.js';
 
 const fetchJsonRetry = (url, opts) => fetchJsonRetryBase(url, opts, 'bookOverview');
 
-// Recent-Kachel: mehr anfragen als anzeigen. Der Endpunkt kennt auch Abschnitte,
-// die inzwischen gelöscht oder in ein anderes Buch verschoben sind; die fallen
-// beim Abgleich mit nav.pages heraus, und die Liste bliebe sonst kürzer.
-export const RECENT_FETCH_LIMIT = 8;
+// Recent-Kachel: angezeigt werden höchstens so viele. Der Server liefert mehr
+// (routes/overview.js#RECENT_LIMIT) — er kennt auch Abschnitte, die inzwischen
+// gelöscht oder in ein anderes Buch verschoben sind; die fallen beim Abgleich
+// mit nav.pages heraus, und die Liste bliebe sonst kürzer.
 export const RECENT_SHOW_LIMIT = 5;
 
 // Bereits geladener Katalog (Alpine.store('catalog')) für das aktuelle Buch, oder
@@ -28,11 +28,38 @@ function _catalogList(name) {
   } catch { return null; }
 }
 
-// 403 = dem Betrachter fehlt das Recht auf diesen Endpunkt (Figuren, Szenen,
-// Schauplätze, Songs verlangen editor). Das ist ein erwarteter Zustand, kein
-// Ladefehler — das Tile bleibt aus, der Fehler-Banner nicht.
-export function isForbidden(e) {
-  return e?.status === 403;
+
+// Teile der gebündelten Antwort (routes/overview.js), Wert = `guarded`: ein
+// Ausfall zieht den Fehler-Banner, ein fehlendes Recht wird als `forbidden`
+// vermerkt. Die übrigen sind optionale Planungswerkzeuge bzw. Zusatzsignale —
+// ihr Fehlen ist normal (nie geplant, kein Scan, Betrachter ohne Editor-Recht),
+// darum still: das Tile bleibt via x-if einfach aus.
+export const OVERVIEW_PARTS = {
+  coverage: true, heat: true, review: true, recent: true,
+  figuren: true, szenen: true, orte: true, songs: true,
+  lektorat: true, rueckblick: true,
+  plot: false, motifs: false, lexicon: false, ideen: false, bookChat: false,
+};
+
+/** Pure: gebündelte Antwort `{ parts }` in Tile-Daten + Fehler-/Rechte-Listen.
+ *  `bundle === null` (Request ganz ausgefallen) → ein Eintrag `overview` im
+ *  Banner. Ein fehlender Teil (per `skip` ausgelassen, ohne Tile für dieses
+ *  Buch) ist weder Fehler noch Recht. */
+export function readOverviewBundle(bundle) {
+  const data = {};
+  const failed = [];
+  const forbidden = [];
+  if (!bundle || typeof bundle !== 'object' || !bundle.parts) {
+    return { data, failed: ['overview'], forbidden };
+  }
+  for (const [key, guarded] of Object.entries(OVERVIEW_PARTS)) {
+    const part = bundle.parts[key];
+    if (!part) continue;
+    if (part.forbidden) { if (guarded) forbidden.push(key); continue; }
+    if (part.error) { if (guarded) failed.push(key); continue; }
+    data[key] = part.data;
+  }
+  return { data, failed, forbidden };
 }
 
 // Initialer Tile-State der Karte. SSoT für BEIDE Seiten: die Card-Registrierung
@@ -43,6 +70,9 @@ export function initialOverviewState() {
   return {
     overviewLoading: false,
     overviewBookId: null,
+    // Buch, zu dem die angezeigten Tile-Daten gehören. Weicht beim Buchwechsel
+    // von `overviewBookId` ab, bis der neue Load zugewiesen hat.
+    overviewDataBookId: null,
     overviewStats: [],
     overviewCoverage: null,
     overviewHeat: null,
@@ -61,12 +91,12 @@ export function initialOverviewState() {
     overviewBuchtyp: null,
     overviewRueckblickCoverage: null,
     overviewPlot: null,
-    overviewIdeen: null,      // eigene Ideen des Buchs (Ideen-Tile); null = nicht ladbar (403)
+    overviewIdeen: null,      // eigene Ideen des Buchs (Ideen-Tile); null = nicht ladbar (forbidden)
     overviewBookChatSessions: null, // Zahl eigener Buch-Chat-Gespräche («Nächste Schritte»); null = unbekannt
     overviewMotifs: null,
     overviewLexiconData: null,
     overviewLoadErrors: [],
-    // Endpunkte, die mit 403 antworteten (fehlendes Recht, kein Fehler).
+    // Teile, die als `forbidden` kamen (fehlendes Recht, kein Fehler).
     overviewForbidden: [],
   };
 }
@@ -104,63 +134,45 @@ export const loadMethods = {
     this.overviewBookId = bookId;
     // Fehlerstand des vorigen Loads verwerfen: der Banner gilt dem laufenden.
     this.overviewLoadErrors = [];
-    // Fehlgeschlagene Endpoints sammeln (nach dem einen Retry aus fetchJsonRetry),
-    // statt sie still zu schlucken — die Overview zeigt danach einen dezenten
-    // Hinweis + Retry, damit ein ausgefallenes Tile nicht als „keine Daten"
-    // missverstanden wird.
+    // Ausgefallene Teile sammeln (nach dem einen Retry aus fetchJsonRetry), statt
+    // sie still zu schlucken — die Overview zeigt danach einen dezenten Hinweis +
+    // Retry, damit ein ausgefallenes Tile nicht als „keine Daten" missverstanden wird.
     const failed = [];
     const forbidden = [];
-    const guard = (key, fallback) => (e) => {
-      if (isForbidden(e)) { forbidden.push(key); return fallback; }
-      failed.push(key);
-      console.warn(`[bookOverview] ${key} fehlgeschlagen`, e);
-      return fallback;
-    };
     // Figuren, Schauplätze, Szenen: liegt der Katalog fürs offene Buch schon vor
     // (loadPages lädt die Figuren, Orte-/Szenen-Karte und Palette den Rest), dieselbe
-    // Antwort wiederverwenden statt erneut zu holen. Der ausdrückliche
+    // Antwort wiederverwenden statt erneut zu holen (`skip`). Der ausdrückliche
     // Refresh (`fresh`) fragt immer den Server.
     const cachedFiguren = opts.fresh ? null : _catalogList('figuren');
     const cachedOrte = opts.fresh ? null : _catalogList('orte');
     const cachedSzenen = opts.fresh ? null : _catalogList('szenen');
+    const skip = [cachedFiguren && 'figuren', cachedOrte && 'orte', cachedSzenen && 'szenen'].filter(Boolean);
     try {
-      // Plot-Board + Motiv-Konstellation sind optionale Planungswerkzeuge (pro
-      // Buch + User, editor-skopiert für Plot). Ihr Fehlen ist normal (nie geplant)
-      // bzw. erwartbar (Reader ohne Editor-Recht → 403 auf /plot) — darum stiller
-      // Catch statt `guard`, damit ein 403/leerer Payload NICHT den Fehler-Banner
-      // auslöst. Das Tile bleibt bei fehlenden Daten via x-if einfach aus.
-      // Wortschatz (/lexicon) ebenfalls still: ein fehlender Scan ist dort kein
-      // Fehler (Antwort mit `stats: null`), und ein Ausfall soll das Tile nur
-      // ausblenden statt den Banner fuer die ganze Uebersicht zu ziehen.
-      const [shared, coverage, heat, reviews, recent, figuren, szenen, orte, songs, lektoratTime, plot, motifs, lexicon, ideenBoard, bookChatSessions] = await Promise.all([
+      // Alle Tile-Daten in EINER Antwort (routes/overview.js); Snapshot-Verlauf +
+      // Buch-Einstellungen parallel aus dem geteilten Loader.
+      const [shared, bundle] = await Promise.all([
         this._loadSharedBookStats(bookId, opts),
-        fetchJsonRetry(`/history/coverage/${bookId}`).catch(guard('coverage', null)),
-        fetchJsonRetry(`/history/fehler-heatmap/${bookId}?mode=open`).catch(guard('heat', null)),
-        fetchJsonRetry(`/history/review/${bookId}`).catch(guard('review', [])),
-        fetchJsonRetry(`/usage/page/recent?book_id=${bookId}&limit=${RECENT_FETCH_LIMIT}`).catch(guard('recent', [])),
-        cachedFiguren ? { figuren: cachedFiguren } : fetchJsonRetry(`/figures/${bookId}`).catch(guard('figuren', null)),
-        cachedSzenen ? { szenen: cachedSzenen } : fetchJsonRetry(`/figures/scenes/${bookId}`).catch(guard('szenen', null)),
-        cachedOrte ? { orte: cachedOrte, fromCatalog: true } : fetchJsonRetry(`/locations/${bookId}`).catch(guard('orte', null)),
-        fetchJsonRetry(`/songs/${bookId}`).catch(guard('songs', null)),
-        fetchJsonRetry(`/history/lektorat-time/${bookId}`).catch(guard('lektorat', null)),
-        fetchJsonRetry(`/plot?book_id=${bookId}`).catch(() => null),
-        fetchJsonRetry(`/motifs?book_id=${bookId}`).catch(() => null),
-        fetchJsonRetry(`/lexicon/${bookId}?summary=1`).catch(() => null),
-        // Ideen: optional wie Plot (Editor+, user-privat) — stiller Catch.
-        fetchJsonRetry(`/ideen/board?book_id=${bookId}`).catch(() => null),
-        // Buch-Chat-Gespräche: nur ob es welche gibt («Nächste Schritte») — stiller Catch.
-        fetchJsonRetry(`/chat/sessions/book/${bookId}`).catch(() => null),
+        fetchJsonRetry(`/overview/${bookId}${skip.length ? `?skip=${skip.join(',')}` : ''}`).catch((e) => {
+          console.warn('[bookOverview] overview fehlgeschlagen', e);
+          return null;
+        }),
       ]);
       if (this.overviewBookId !== bookId) return;
+      const read = readOverviewBundle(bundle);
+      failed.push(...(shared?.failed || []), ...read.failed);
+      forbidden.push(...read.forbidden);
+      const d = read.data;
+      const figuren = cachedFiguren ? { figuren: cachedFiguren } : d.figuren;
+      const szenen = cachedSzenen ? { szenen: cachedSzenen } : d.szenen;
+      const orte = cachedOrte ? { orte: cachedOrte, fromCatalog: true } : d.orte;
       const settings = shared?.settings || null;
-      failed.push(...(shared?.failed || []));
       this.overviewStats = Array.isArray(shared?.stats) ? shared.stats : [];
-      this.overviewCoverage = coverage || null;
-      this.overviewHeat = heat || null;
-      const reviewArr = Array.isArray(reviews) ? reviews : [];
+      this.overviewCoverage = d.coverage || null;
+      this.overviewHeat = d.heat || null;
+      const reviewArr = Array.isArray(d.review) ? d.review : [];
       this.overviewLastReview = reviewArr[0] || null;
       this.overviewPrevReview = reviewArr[1] || null;
-      this.overviewRecent = Array.isArray(recent) ? recent : [];
+      this.overviewRecent = Array.isArray(d.recent) ? d.recent : [];
       this.overviewFiguren = Array.isArray(figuren?.figuren) ? figuren.figuren : [];
       // Nur Szenen, die im Text stehen — stale-Einträge zählen in keiner Kachel
       // (gleiche Regel wie die Szenen-Karte, book/szenen-stats.js).
@@ -174,27 +186,22 @@ export const loadMethods = {
         assignCatalogList('orte', bookId, orte.orte);
         Alpine.store('catalogUi').orteUpdatedAt = orte.updated_at || null;
       }
-      this.overviewSongs = Array.isArray(songs?.songs) ? songs.songs : [];
-      this.overviewLektoratTime = lektoratTime || null;
+      this.overviewSongs = Array.isArray(d.songs?.songs) ? d.songs.songs : [];
+      this.overviewLektoratTime = d.lektorat || null;
       this.overviewIsFinished = !!settings?.is_finished;
       this.overviewDailyGoalChars = settings?.daily_goal_chars != null ? Number(settings.daily_goal_chars) : null;
       this.overviewGoalTargetChars = settings?.goal_target_chars != null ? Number(settings.goal_target_chars) : null;
       this.overviewGoalDeadline = settings?.goal_deadline || null;
       this.overviewBuchtyp = settings?.buchtyp || null;
-      this.overviewPlot = plot && Array.isArray(plot.beats) ? plot : null;
-      this.overviewIdeen = ideenBoard && Array.isArray(ideenBoard.ideen) ? ideenBoard.ideen : null;
-      this.overviewBookChatSessions = Array.isArray(bookChatSessions) ? bookChatSessions.length : null;
-      this.overviewMotifs = motifs && Array.isArray(motifs.motifs) ? motifs : null;
-      this.overviewLexiconData = lexicon && typeof lexicon === 'object' && !Array.isArray(lexicon) ? lexicon : null;
+      this.overviewPlot = d.plot && Array.isArray(d.plot.beats) ? d.plot : null;
+      this.overviewIdeen = d.ideen && Array.isArray(d.ideen.ideen) ? d.ideen.ideen : null;
+      this.overviewBookChatSessions = Number.isFinite(d.bookChat?.count) ? d.bookChat.count : null;
+      this.overviewMotifs = d.motifs && Array.isArray(d.motifs.motifs) ? d.motifs : null;
+      this.overviewLexiconData = d.lexicon && typeof d.lexicon === 'object' && !Array.isArray(d.lexicon) ? d.lexicon : null;
+      // Rückblick-Heatmap-Coverage liefert der Server nur für Tagebücher.
+      this.overviewRueckblickCoverage = d.rueckblick || null;
+      this.overviewDataBookId = bookId;
       this._memos = {};
-      // Rückblick-Heatmap-Coverage nur für Tagebücher laden — der Buchtyp steht
-      // erst nach `settings` fest, daher sequenziell (non-Tagebuch fetcht nie).
-      this.overviewRueckblickCoverage = null;
-      if (this.overviewIsTagebuch()) {
-        const cov = await fetchJsonRetry(`/history/rueckblick-coverage/${bookId}`).catch(guard('rueckblick', null));
-        if (this.overviewBookId !== bookId) return;
-        this.overviewRueckblickCoverage = cov || null;
-      }
       this.overviewLoadErrors = failed;
       this.overviewForbidden = forbidden;
     } catch (e) {
@@ -353,7 +360,7 @@ export const loadMethods = {
   // ein Handlungsaufruf ohne erreichbares Ziel wäre eine Sackgasse.
   overviewNeedsAnalysis() {
     if (this.overviewIsTagebuch()) return false;
-    // Ohne Leserecht auf die Analyse-Ergebnisse (Betrachter: 403) sind die
+    // Ohne Leserecht auf die Analyse-Ergebnisse (Betrachter: `forbidden`) sind die
     // Zählkacheln nicht leer, sondern unsichtbar — kein Handlungsaufruf.
     if ((this.overviewForbidden || []).length) return false;
     if (komplettHiddenFor(this.overviewBuchtyp)) return false;
@@ -361,6 +368,12 @@ export const loadMethods = {
     return this.overviewFigurenCount() === 0
       && this.overviewSzenenCount() === 0
       && this.overviewOrteCount() === 0;
+  },
+
+  // True, solange das Grid noch die Daten eines anderen Buchs zeigt
+  // (Buchwechsel, Load läuft). Refresh desselben Buchs zählt nicht.
+  overviewShowsOtherBook() {
+    return this.overviewLoading && this.overviewDataBookId !== this.overviewBookId;
   },
 
   resetBookOverview() {
@@ -372,8 +385,9 @@ export const loadMethods = {
   // Wurzel-Kapitel (Top-Level, depth=1). Tree ist flach + depth-annotiert
   // (siehe tree.js#loadPages). Solo-Wrapper (Spezialseiten ohne Kapitel)
   // ausgeklammert — verzerren sonst Median/Skalierung. Name-Map als
-  // Fallback für Server-Rows, die nur `chapter_name` ohne `chapter_id`
-  // liefern (Backfill-Lücken).
+  // Fallback NUR für Server-Rows, die gar keine `chapter_id` liefern
+  // (Backfill-Lücken), und nur für eindeutige Namen. Eine vorhandene ID, die
+  // nicht aufgeht (ausgeschlossen, gelöscht), fällt nie auf den Namen zurück.
   //
   // Von Export und Analyse ausgeschlossene Kapitel (`excluded`, kaskadiert auf
   // alle Unterkapitel wie lib/load-contents.js#_excludedChapterIds) zählen in
@@ -393,7 +407,15 @@ export const loadMethods = {
     return this._memo('rollup', [tree, exSig], () => {
       const chs = tree.filter(i => i.type === 'chapter' && !i.solo);
       const byId = new Map(chs.map(c => [Number(c.id), c]));
-      const byName = new Map(chs.map(c => [c.name, c]));
+      // Nur eindeutige Namen: «Einleitung» in Teil I und Teil II sind zwei Orte,
+      // ein Name→Kapitel-Treffer müsste raten (docs/chapter-hierarchy.md).
+      const byName = new Map();
+      const dupNames = new Set();
+      for (const c of chs) {
+        if (byName.has(c.name)) dupNames.add(c.name);
+        else byName.set(c.name, c);
+      }
+      for (const n of dupNames) byName.delete(n);
       const rootCache = new Map();
       const exCache = new Map();
       const anyRootOf = (id) => {
@@ -429,11 +451,18 @@ export const loadMethods = {
         const ch = byName.get(name);
         return ch ? rootOf(ch.id) : null;
       };
+      // Fundstelle in einem ausgeschlossenen Kapitel? Für Zählungen ohne
+      // Kapitel-Zeilen (Top-Listen): dieselbe ID-vor-Name-Regel wie rootOf/rootOfName.
+      const isExcludedRef = (id, name) => {
+        if (id != null) return isExcluded(id);
+        const ch = name ? byName.get(name) : null;
+        return ch ? isExcluded(ch.id) : false;
+      };
       // Root = ohne parent_id. Stabiler als depth===1 (legacy/tree-Fixtures
       // ohne depth-Annotation funktionieren weiter; Tree-Walker setzt depth=1
       // genau dann, wenn parent_id === null).
       const roots = chs.filter(c => c.parent_id == null && !c.excluded);
-      return { roots, rootOf, rootOfName, anyRootOf, isExcluded, byId, byName };
+      return { roots, rootOf, rootOfName, anyRootOf, isExcluded, isExcludedRef, byId, byName };
     });
   },
 };

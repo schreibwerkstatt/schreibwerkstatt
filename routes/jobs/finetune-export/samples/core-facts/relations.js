@@ -1,5 +1,6 @@
 'use strict';
 
+const { declineName } = require('./naming');
 const {
   genderOf, genitive, roleNoun, inverseTyp, roleStatement, possessive, firstSentences,
   roleArticle, descFitsType, UNIQUE_ROLES, PLACEHOLDER_NAME,
@@ -29,12 +30,15 @@ const WEAK = new Set(['bekannt', 'andere']);
 // → { facts: [{ key, a, b, typ, desc, descFrom, core }], conflicts }
 //   `typ` ist die Rolle von b gegenüber a; `typ = 'andere'` = nur Beschreibung.
 function collectRelationFacts(ctx) {
-  const { figRelRows, figById, relTypes, eligibleFigIds } = ctx;
+  const { figRelRows, figById, relTypes, eligibleFigIds, figNameInfo } = ctx;
+  const proper = (f) => !figNameInfo || figNameInfo.get(f.fig_id)?.proper !== false;
+  const shown = (f) => (figNameInfo?.get(f.fig_id) ? { ...f, name: figNameInfo.get(f.fig_id).name } : f);
   const byPair = new Map();
   for (const r of figRelRows) {
     const A = figById.get(r.from_fig_id), B = figById.get(r.to_fig_id);
     if (!A || !B || A.fig_id === B.fig_id) continue;
     if (PLACEHOLDER_NAME.test(A.name) || PLACEHOLDER_NAME.test(B.name)) continue;
+    if (!proper(A) || !proper(B)) continue;
     const typ = relTypes ? relTypes.normalizeRelationTyp(r.typ).typ : String(r.typ || '').trim().toLowerCase();
     let st = relTypes ? relTypes.canonicalRelation(A.fig_id, B.fig_id, typ) : { from: A.fig_id, to: B.fig_id, typ };
     if (!DIRECTED.has(st.typ) && st.from > st.to) st = { from: st.to, to: st.from, typ: st.typ };
@@ -56,8 +60,8 @@ function collectRelationFacts(ctx) {
     const st = stmts[0];
     const desc = g.descs.find(d => d.from === st.from) || g.descs[0] || null;
     if (st.typ !== 'andere' && g.descs.some(d => !descFitsType(d.text, st.typ))) { conflicts++; continue; }
-    if (st.typ === 'andere' && !desc) continue;
-    const a = figById.get(st.from), b = figById.get(st.to);
+    if ((st.typ === 'andere' || st.typ === 'bekannt') && !desc) continue;
+    const a = shown(figById.get(st.from)), b = shown(figById.get(st.to));
     facts.push({
       key, a, b, typ: st.typ,
       desc: desc ? firstSentences(desc.text, 1) : '',
@@ -68,21 +72,29 @@ function collectRelationFacts(ctx) {
   return { facts, conflicts };
 }
 
+// `{x:dat}` usw.: Kasus für naming.js#declineName («zu Herrn Koch»).
 const QUESTIONS = {
-  de: ['Wie steht {x} zu {y}?', 'Was ist {y} für {x}?', 'In welcher Beziehung steht {x} zu {y}?',
-       'Wer ist {y} für {x}?', 'Wie ist {x} mit {y} verbunden?'],
+  de: ['Wie steht {x} zu {y:dat}?', 'Was ist {y} für {x:akk}?', 'In welcher Beziehung steht {x} zu {y:dat}?',
+       'Wer ist {y} für {x:akk}?', 'Wie ist {x} mit {y:dat} verbunden?'],
   en: ['How does {x} relate to {y}?', 'What is {y} to {x}?', 'What is the relationship between {x} and {y}?',
        'Who is {y} to {x}?', 'How is {x} connected to {y}?'],
 };
 
 const cap = (s) => s.charAt(0).toUpperCase() + s.slice(1);
 
+function fillRelationQuestion(q, x, y, langIsEn) {
+  const form = (name, k) => (langIsEn ? name : declineName(name, k || 'nom') || name);
+  return q.replace(/\{([xy])(?::(nom|akk|dat))?\}/g, (_, who, k) => form(who === 'x' ? x : y, k));
+}
+
 // Antworten auf «Wie steht X zu Y?»: Y hat gegenüber X die Rolle `typY`.
-function relationAnswers({ X, Y, typY, desc, descFromX }, langIsEn) {
+function relationAnswers({ X, Y, typY, desc }, langIsEn) {
   const gX = genderOf(X), gY = genderOf(Y);
   const RY = roleNoun(typY, gY, langIsEn);
   const RX = roleNoun(inverseTyp(typY), gX, langIsEn);
-  const tail = desc && descFromX ? ' ' + desc : '';
+  // Die Beschreibung ist der zweite Satz, in beiden Fragerichtungen — sie
+  // nennt meist beide Figuren oder ihre Rollen und trägt so oder so.
+  const tail = desc ? ' ' + desc : '';
   if (!RY || !RX) {
     if (!desc) return [];
     return langIsEn
@@ -102,13 +114,24 @@ function relationAnswers({ X, Y, typY, desc, descFromX }, langIsEn) {
   // «Stefans Mutter ist Gisela» nur bei Rollen, die man einmal hat.
   const inverted = UNIQUE_ROLES.has(typY);
   if (langIsEn) {
-    if (inverted) out.push(cap(genX ? `${genX} ${RY.noun} is ${Y.name}.` : `the ${RY.noun} of ${X.name} is ${Y.name}.`));
+    if (inverted) out.push(cap(genX ? `${genX} ${RY.noun} is ${Y.name}.` : `the ${RY.noun} of ${X.name} is ${Y.name}.`) + tail);
     out.push(`In my story, ${yRole}.` + tail);
   } else {
-    if (inverted) out.push(cap(genX ? `${genX} ${RY.noun} ist ${Y.name}.` : `${art} ${RY.noun} von ${X.name} ist ${Y.name}.`));
-    out.push(`Für ${X.name} ist ${Y.name} ${art} ${RY.noun}.` + tail);
+    if (inverted) out.push(cap(genX ? `${genX} ${RY.noun} ist ${Y.name}.` : `${art} ${RY.noun} von ${declineName(X.name, 'dat') || X.name} ist ${Y.name}.`) + tail);
+    out.push(`In meiner Geschichte ${yRole.replace(/^(.+?) ist /, 'ist $1 ')}.` + tail);
   }
   return out;
+}
+
+// Bedeutung einer Karte mit mehreren Figuren: die der wichtigsten.
+const TIER_RANK = { main: 0, side: 1, minor: 2 };
+function bestTier(ctx, figs) {
+  let best = 'minor';
+  for (const f of figs) {
+    const t = ctx.tierByFig?.get(f.fig_id) || 'minor';
+    if (TIER_RANK[t] < TIER_RANK[best]) best = t;
+  }
+  return best;
 }
 
 function buildRelationCore(ctx, emitCard, variantCount) {
@@ -118,10 +141,10 @@ function buildRelationCore(ctx, emitCard, variantCount) {
   // Pro Richtung mindestens zwei Varianten: die Fakten sollen aus beiden
   // Blickrichtungen abrufbar sein.
   const perDir = Math.max(2, Math.ceil(variantCount / 2));
-  const fill = (q, x, y) => q.replace('{x}', x).replace('{y}', y);
+  const fill = (q, x, y) => fillRelationQuestion(q, x, y, langIsEn);
   for (const f of facts) {
     const card = {
-      id: 'rel:' + f.key, kind: 'relation', unit: 'rel:' + f.key, core: f.core,
+      id: 'rel:' + f.key, kind: 'relation', unit: 'rel:' + f.key, core: f.core, tier: bestTier(ctx, [f.a, f.b]),
       subject: [f.a.name, f.b.name],
       fields: { from: f.a.name, to: f.b.name, typ: f.typ, beschreibung: f.desc },
     };
@@ -129,15 +152,15 @@ function buildRelationCore(ctx, emitCard, variantCount) {
     emitCard(card, {
       task: 'relationCore', dir: 'ab', count: perDir,
       questions: QUESTIONS[lang].map(q => fill(q, f.a.name, f.b.name)),
-      answers: relationAnswers({ X: f.a, Y: f.b, typY: f.typ, desc: f.desc, descFromX: f.descFrom === f.a.fig_id }, langIsEn),
+      answers: relationAnswers({ X: f.a, Y: f.b, typY: f.typ, desc: f.desc }, langIsEn),
     });
     emitCard(card, {
       task: 'relationCore', dir: 'ba', count: perDir,
       questions: QUESTIONS[lang].map(q => fill(q, f.b.name, f.a.name)),
-      answers: relationAnswers({ X: f.b, Y: f.a, typY: f.typ === 'andere' ? 'andere' : inverseTyp(f.typ), desc: f.desc, descFromX: f.descFrom === f.b.fig_id }, langIsEn),
+      answers: relationAnswers({ X: f.b, Y: f.a, typY: f.typ === 'andere' ? 'andere' : inverseTyp(f.typ), desc: f.desc }, langIsEn),
     });
   }
   return { facts, conflicts };
 }
 
-module.exports = { buildRelationCore, collectRelationFacts, relationAnswers, QUESTIONS };
+module.exports = { bestTier, buildRelationCore, collectRelationFacts, relationAnswers, fillRelationQuestion, QUESTIONS };

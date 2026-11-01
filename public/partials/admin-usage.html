@@ -10,7 +10,7 @@
   <div class="card-header">
     <span class="card-title" x-text="$app.t('admin.usage.title')"></span>
     <div class="card-actions">
-      <button type="button" class="icon-btn icon-btn--ghost" @click="adminUsageLoadTab()" :disabled="adminUsageLoading" :data-tip="$app.t('common.refresh')" :aria-label="$app.t('common.refresh')"><svg class="icon" aria-hidden="true"><use href="/icons.svg#rotate-cw"/></svg></button>
+      <button type="button" class="icon-btn icon-btn--ghost" @click="adminUsageLoadTab(true)" :disabled="adminUsageLoading" :class="adminUsageLoading ? 'admin-usage-refresh--busy' : ''" :data-tip="$app.t('common.refresh')" :aria-label="$app.t('common.refresh')"><svg class="icon" aria-hidden="true"><use href="/icons.svg#rotate-cw"/></svg></button>
     </div>
   </div>
 
@@ -30,21 +30,20 @@
   <div class="admin-usage-range">
     <label>
       <span x-text="$app.t('admin.usage.from')"></span>
-      <input type="date" x-model="adminUsageFrom">
+      <input type="date" x-model.debounce.400ms="adminUsageFrom">
     </label>
     <label>
       <span x-text="$app.t('admin.usage.to')"></span>
-      <input type="date" x-model="adminUsageTo">
+      <input type="date" x-model.debounce.400ms="adminUsageTo">
     </label>
     <div x-data="toggleSwitch({ label: () => $app.t('admin.usage.includeAdmins') })"
          x-modelable="value" x-model="adminUsageIncludeAdmins" @toggle-change="adminUsageIncludeAdmins = $event.detail; adminUsageLoadTab()"></div>
   </div>
 
-  <div x-show="adminUsageLoading" class="muted-msg" x-text="$app.t('common.loading')"></div>
   <div x-show="adminUsageError" class="error-msg" x-text="adminUsageError"></div>
 
   <!-- ── Users-Tab ─────────────────────────────────────────────────────── -->
-  <div x-show="adminUsageTab === 'users'" class="admin-usage-pane">
+  <div x-show="adminUsageTab === 'users'" class="admin-usage-pane" :aria-busy="adminUsageLoading">
     <div class="table-scroll" x-show="adminUsageUsersList.length">
     <table class="data-table"
            x-data="sortableTable({
@@ -107,7 +106,7 @@
   </div>
 
   <!-- ── Jobs-Tab ──────────────────────────────────────────────────────── -->
-  <div x-show="adminUsageTab === 'jobs'" class="admin-usage-pane">
+  <div x-show="adminUsageTab === 'jobs'" class="admin-usage-pane" :aria-busy="adminUsageLoading">
     <div class="admin-usage-filter">
       <label>
         <span x-text="$app.t('admin.usage.filter.user')"></span>
@@ -172,13 +171,13 @@
     <div x-show="!adminUsageJobsList.length && !adminUsageLoading" class="muted-msg" x-text="$app.t('admin.usage.empty')"></div>
   </div>
   <!-- ── Chat-Tab ──────────────────────────────────────────────────────── -->
-  <div x-show="adminUsageTab === 'chat'" class="admin-usage-pane">
+  <div x-show="adminUsageTab === 'chat'" class="admin-usage-pane" :aria-busy="adminUsageLoading">
     <div id="partial-admin-usage-chat-quality"></div>
     <div id="partial-admin-usage-chat-list"></div>
   </div>
 
   <!-- ── Summary-Tab ───────────────────────────────────────────────────── -->
-  <div x-show="adminUsageTab === 'summary'" class="admin-usage-pane">
+  <div x-show="adminUsageTab === 'summary'" class="admin-usage-pane" :aria-busy="adminUsageLoading">
     <div class="admin-usage-totals" x-show="adminUsageSummary">
       <div class="admin-usage-kpi">
         <div class="admin-usage-kpi-label" x-text="$app.t('admin.usage.summary.total')"></div>
@@ -225,7 +224,7 @@
   </div>
 
   <!-- ── Features-Tab ──────────────────────────────────────────────────── -->
-  <div x-show="adminUsageTab === 'features'" class="admin-usage-pane">
+  <div x-show="adminUsageTab === 'features'" class="admin-usage-pane" :aria-busy="adminUsageLoading">
     <h3 x-text="$app.t('admin.usage.feature.totals')"></h3>
     <div class="table-scroll" x-show="adminUsageFeatureTotals.length">
     <table class="data-table"
@@ -286,7 +285,7 @@
   </div>
 
   <!-- ── Zeit-Tab ──────────────────────────────────────────────────────── -->
-  <div x-show="adminUsageTab === 'time'" class="admin-usage-pane">
+  <div x-show="adminUsageTab === 'time'" class="admin-usage-pane" :aria-busy="adminUsageLoading">
     <div class="table-scroll" x-show="adminUsageTimeItems.length">
     <table class="data-table"
            x-data="sortableTable({

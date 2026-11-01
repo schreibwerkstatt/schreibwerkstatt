@@ -140,8 +140,12 @@ export const statsMethods = {
       const latestSnapshot = a[a.length - 1];
       const latestChars = live ? live.chars : (Number(latestSnapshot.chars) || 0);
       const cutoff = isoAddDays(this._todayIso(), -7);
+      // Ab dem LETZTEN Snapshot suchen: liegt er selbst vor dem Stichtag
+      // (Snapshot-Lücke, Cron ausgefallen), ist er die Basis — der vorletzte
+      // zöge Zuwachs von vor dem Fenster in die Summe. Der heutige Snapshot
+      // liegt nie vor dem Stichtag und fällt so von selbst heraus.
       let earlier = null;
-      for (let i = a.length - 2; i >= 0; i--) {
+      for (let i = a.length - 1; i >= 0; i--) {
         if (a[i].recorded_at <= cutoff) { earlier = a[i]; break; }
       }
       if (!earlier) earlier = a[0];

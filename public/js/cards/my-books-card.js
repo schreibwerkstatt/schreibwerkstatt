@@ -17,7 +17,7 @@
 // `/me/books` — zusammengefuehrt in my-books-compute.js.
 
 import { setupCardLifecycle } from './card-lifecycle.js';
-import { localeTag, tzOpts, formatIsoDay } from '../utils.js';
+import { localeTag, tzOpts, formatIsoDay, CHARS_PER_NORMSEITE } from '../utils.js';
 import {
   SHELF_TABS, mergeShelfRows, filterShelfRows, pinnedFirst, shelfTotals, mayToggleFinished,
 } from './my-books-compute.js';
@@ -191,7 +191,7 @@ export function registerMyBooksCard() {
     },
 
     myBooksNormpages(chars) {
-      return this._myBooksFmt(Math.round((chars || 0) / 1500));
+      return this._myBooksFmt(Math.round((chars || 0) / CHARS_PER_NORMSEITE));
     },
 
     myBooksDuration(seconds) {

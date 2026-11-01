@@ -28,23 +28,29 @@
     <tbody>
       <template x-for="row in overviewPresence(kind).rows" :key="row.id">
         <tr>
-          <th class="overview-presence-row-head internal-link text-link"
-              @click="_openKapitelReview(row.id)"
-              :data-tip="$app.t('overview.chapterReviewOpen', { name: row.name })"
-              x-text="row.name"></th>
+          <!-- Klickziel im Kopf, nie am <th>/<td> selbst: role=button nähme
+               Screenreadern die Tabellen-Navigation (DESIGN.md «Klickbare Nicht-Buttons»). -->
+          <th class="overview-presence-row-head" scope="row">
+            <span class="internal-link text-link"
+                  @click="_openKapitelReview(row.id)"
+                  :data-tip="$app.t('overview.chapterReviewOpen', { name: row.name })"
+                  x-text="row.name"></span>
+          </th>
           <template x-for="cell in row.cells" :key="cell.id">
             <td class="overview-presence-cell"
-                :class="{
-                  'overview-presence-cell--empty': cell.value === 0,
-                  'internal-link': cell.value > 0
-                }"
+                :class="{ 'overview-presence-cell--empty': cell.value === 0 }"
                 :style="{ '--cell-pct': cell.pct }"
                 :data-tip="cell.value > 0
                   ? overviewPresenceTip(kind, cell, row)
-                  : cell.name + ' · ' + row.name + ': ' + cell.value"
-                @click="cell.value > 0 && overviewOpenPresence(kind, cell, row)">
+                  : cell.name + ' · ' + row.name + ': ' + cell.value">
               <span class="overview-presence-fill"></span>
-              <span class="overview-presence-num" x-show="cell.value > 0" x-text="cell.value"></span>
+              <template x-if="cell.value > 0">
+                <button type="button" class="heatmap-cell-btn overview-presence-btn"
+                        @click="overviewOpenPresence(kind, cell, row)"
+                        :aria-label="overviewPresenceTip(kind, cell, row)">
+                  <span class="overview-presence-num" x-text="cell.value"></span>
+                </button>
+              </template>
             </td>
           </template>
         </tr>

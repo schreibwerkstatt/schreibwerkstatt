@@ -369,3 +369,13 @@ test('Heute geloescht: Heute-Balken negativ und 7-Tage-Summe == Summe der Balken
   // Donut bleibt bei Ziel-Semantik: nichts geschafft, nicht negativ.
   assert.equal(ctx.overviewTodayRing(1500).chars, 0);
 });
+
+test('overview7DayCharDelta: Snapshot-Lücke → letzter Snapshot vor dem Stichtag ist die Basis', () => {
+  // Verlauf endet vor 10 Tagen (Cron ausgefallen), Live-Stand fehlt. Der Zuwachs
+  // zwischen den beiden alten Snapshots liegt ausserhalb des 7-Tage-Fensters.
+  const ctx = makeCtx([
+    { recorded_at: isoDaysAgo(12), chars: 1000 },
+    { recorded_at: isoDaysAgo(10), chars: 1500 },
+  ]);
+  assert.equal(ctx.overview7DayCharDelta(), 0);
+});
