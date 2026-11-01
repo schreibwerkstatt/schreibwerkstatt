@@ -16,32 +16,39 @@
 // der nächste Lauf. Angenommen (`applied_errors_json`) wird nur, was über
 // «Übernehmen» in den Text kam, und erst, wenn ein Save es auf den Server
 // gebracht hat (`_flushLektoratLiveApplied` aus `_applySaveSuccess`, aus dem
-// Save nach einem Abschnittswechsel und aus der Outbox); «Abbrechen» verwirft
-// die noch nicht gespeicherten Übernahmen samt Markierung.
+// Save nach einem Abschnittswechsel und aus der Outbox). Eine Übernahme
+// speichert sofort (input.js#_applyLektoratInEditor) — «Abbrechen» verwirft
+// darum nur, was dieser Save noch nicht erreicht hat; zurückgenommen wird eine
+// Übernahme mit Strg+Z. Das öffnet auch eine schon gebuchte wieder; ausgebucht
+// wird sie nach derselben Regel erst mit dem Save, der den zurückgenommenen
+// Stand trägt. Ob Strg+Z eine Übernahme zurückgenommen hat, entscheidet ihr
+// Positions-Anker (lektorat/anchors.js), nicht eine Suche im ganzen Text;
+// steht dort per Redo wieder die Korrektur, ist sie wieder übernommen.
 //
 // Ein Befund kennt seine Stelle nur über den Text (`original`); Markieren und
-// Übernehmen treffen das erste Vorkommen. Kommt die Stelle beim Schreiben
-// mehrfach vor, wird der Befund `mehrdeutig` (dasselbe Flag, das der Server
-// beim Lauf setzt): abgewählt, alle Vorkommen gestrichelt markiert, «Übernehmen»
-// verweigert, solange er mehrfach dasteht. Das Flag bleibt — auch wenn danach
-// nur noch ein Vorkommen steht, kann es das falsche sein — und wird am Lauf
-// gespeichert (PATCH /history/check/:id/ambiguous).
+// Übernehmen treffen das erste Vorkommen. Steht die Stelle beim Schreiben
+// gerade mehrfach da, trägt der Befund `mehrfach` (transient, nur Anzeige,
+// gelesen über lektorat.js#findingAmbiguousNow):
+// alle Vorkommen gestrichelt, Tag „mehrdeutig", «Übernehmen» überspringt ihn.
+// Steht sie wieder einmal da, fällt das Flag — Tipp-Zwischenstände werden weder
+// abgewählt noch am Lauf gespeichert. Das Server-Flag `mehrdeutig` aus dem Lauf
+// (markAmbiguous) bleibt davon unberührt.
 
 import { findInHtml } from '../utils.js';
 import { findingKind } from '../book/page-view.js';
-import { buildLocateIndex, locateInIndex, locateAllInIndex, offsetInIndex, pointAfterOffset } from './shared/text-locate.js';
+import { buildLocateIndex, locateInIndex, locateAllInIndex, locateAtOffset, offsetInIndex, pointAfterOffset } from './shared/text-locate.js';
+import { anchorState, correctionDelta, shiftAnchors, shiftAnchorsByEdits } from './lektorat/anchors.js';
 import { normalizeMatchText } from '../utils/text-match.js';
 import { rangeOf } from './shared/text-find.js';
 import { stripLektoratMarks } from './shared/html-clean.js';
 import { isNoChange } from './shared/save-pipeline.js';
 import { loadQuoteStyle } from './shared/quote-normalize/api.js';
+import { patchBookedLists, mergeByOriginal, withoutOriginals, bookingEntry } from './lektorat-booking.js';
 
 const LIVE_RELOCATE_MS = 500;
 // Ein Save, der beim Start eines Laufs schon unterwegs ist, wird abgewartet
 // (höchstens so lange), statt den Lauf auf altem Text zu starten.
 const SAVE_WAIT_MS = 5000;
-// Neu mehrdeutige Befunde gesammelt am Lauf speichern.
-const AMBIGUOUS_FLUSH_MS = 1000;
 
 const KINDS = ['hard', 'soft', 'editorial'];
 
@@ -54,15 +61,23 @@ let _observer = null;
 let _observedEl = null;
 let _selAbort = null;
 let _applyBusy = false;
-// Im Editor übernommen, noch nicht gespeichert: [{ pageId, checkId, f }].
+// Im Editor übernommen, noch nicht gespeichert: [{ pageId, checkId, f, at }]
+// (`at`: Positions-Anker der Korrektur im Index-Text, -1 = unbekannt).
 // Trägt auch Übernahmen ohne Lauf-ID — Strg+Z muss sie wieder öffnen können;
 // gebucht wird nur, was eine ID hat.
 let _pending = [];
-// Je Lauf schon gebuchte Listen (PATCH ersetzt die ganze Liste, nicht additiv).
-const _recorded = new Map();
-// Neu mehrdeutig gewordene Befunde, noch nicht am Lauf gespeichert: checkId → Set(original).
-const _ambQueue = new Map();
-let _ambTimer = null;
+// Übernommen und gespeichert (gebucht, sofern mit Lauf-ID): Strg+Z öffnet auch
+// diese wieder — Übernahmen speichern sofort, ohne diese Liste ginge Undo ins Leere.
+let _booked = [];
+// Per Strg+Z wieder geöffnet, aber noch gebucht: ausgebucht wird erst, wenn ein
+// Save den zurückgenommenen Stand trägt (Spiegel zu `_pending`).
+let _unbook = [];
+// Per Strg+Z wieder geöffnet, nie gebucht (aus `_pending`): behält den Anker,
+// damit Redo die Übernahme zurückholt (Spiegel zu `_unbook`).
+let _undone = [];
+// Index-Text, auf den die Anker zuletzt nachgeführt wurden (null = noch keiner
+// für den beobachteten Editor — Anker gelten dann erst nach dem Abgleich).
+let _anchorText = null;
 
 function _highlights() {
   if (typeof CSS === 'undefined' || !CSS.highlights || typeof Highlight === 'undefined') return null;
@@ -89,45 +104,64 @@ function _stopLive() {
   _observedEl = null;
   _selAbort?.abort();
   _selAbort = null;
+  _anchorText = null;
   _clearHighlights();
 }
 
-// Persistierte Form eines Befunds: ohne die transienten Laufzeit-Flags.
-function _entryOf(f) {
-  const { umgeschrieben, erledigt, ...rest } = f;
-  return rest;
+// Übernahmen des offenen Abschnitts — nur deren Anker leben im beobachteten Text.
+function _anchoredOn(pageId) {
+  return [..._pending, ..._booked, ..._unbook, ..._undone].filter(p => String(p.pageId) === String(pageId));
 }
 
-// Gebuchte Listen eines Laufs: vom geladenen Verlaufseintrag, sonst vom Server.
-async function _bookedLists(checkId, entry) {
-  if (entry && entry.errors_json !== undefined) {
-    return { applied: entry.applied_errors_json || [], selected: entry.selected_errors_json || [] };
-  }
-  const r = await fetch('/history/check/' + checkId + '/details');
-  if (!r.ok) throw new Error(`HTTP ${r.status}`);
-  const d = await r.json();
-  return { applied: d.applied_errors_json || [], selected: d.selected_errors_json || [] };
+// Per Strg+Z geöffnete Übernahme von `f`, an deren Anker wieder die Korrektur
+// steht (Redo) — nur mit Anker: eine kurze Korrektur steht oft auch anderswo.
+function _redoneEntry(index, f) {
+  return [..._unbook, ..._undone].find(p => p.f === f && anchorState(index.text, p) === 'applied') || null;
 }
 
-function _mergeByOriginal(existing, items) {
-  const seen = new Set((existing || []).map(e => e.original));
-  return [...(existing || []), ...items.filter(e => !seen.has(e.original))];
+// Anker auf den aktuellen Index-Text nachführen (Tippen seit dem letzten Stand).
+function _trackAnchors(text, pageId) {
+  shiftAnchors(_anchorText, text, _anchoredOn(pageId));
+  _anchorText = text;
 }
 
-// Caret in einer markierten Stelle → Befund in der Liste hervorheben.
+// Hat Strg+Z die Übernahme zurückgenommen? Mit Anker: steht dort wieder das
+// Original. Ohne (Anker nicht bestimmbar): Korrektur nirgends, Original da.
+function _isUndone(index, p) {
+  const state = anchorState(index.text, p);
+  if (state) return state === 'undone';
+  return !locateInIndex(index, p.f.korrektur) && !!locateInIndex(index, p.f.original);
+}
+
+// Stelle einer Übernahme im Text: am Anker, sonst die erste Fundstelle der Korrektur.
+function _appliedMatch(index, p) {
+  if (anchorState(index.text, p) === 'applied') return locateAtOffset(index, p.at, normalizeMatchText(p.f.korrektur).length);
+  return locateInIndex(index, p.f.korrektur);
+}
+
+// Befund-Index, dessen Stelle den Caret enthält, sonst -1.
+function _caretFindingIdx() {
+  const sel = document.getSelection();
+  if (!sel?.rangeCount) return -1;
+  const { startContainer: node, startOffset: offset } = sel.getRangeAt(0);
+  if (!_observedEl?.contains(node)) return -1;
+  return _ranges.findIndex(r => {
+    try { return !!r && r.comparePoint(node, offset) === 0; } catch { return false; }
+  });
+}
+
+// Caret in einer markierten Stelle → Befund in der Liste hervorheben; verlässt
+// der Caret die Stelle, erlischt die Hervorhebung.
 function _onSelectionChange() {
   const app = window.__app;
   if (!app?._lektoratLiveOn?.()) return;
   const sel = document.getSelection();
-  if (!sel?.rangeCount) return;
-  const { startContainer: node, startOffset: offset } = sel.getRangeAt(0);
-  if (!_observedEl?.contains(node)) return;
-  const idx = _ranges.findIndex(r => {
-    try { return !!r && r.comparePoint(node, offset) === 0; } catch { return false; }
-  });
-  if (idx === -1 || idx === app.lektoratLiveActiveIdx) return;
+  if (!sel?.rangeCount || !_observedEl?.contains(sel.getRangeAt(0).startContainer)) return;
+  const idx = _caretFindingIdx();
+  if (idx === app.lektoratLiveActiveIdx) return;
   app.lektoratLiveActiveIdx = idx;
   app._paintLektoratLiveActive();
+  if (idx === -1) return;
   document.querySelector(`.lektorat-split-findings [data-finding-idx="${idx}"]`)
     ?.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
 }
@@ -145,6 +179,8 @@ export const lektoratLiveMethods = {
       () => `${!!this.editMode}|${!!this.checkDone}|${!!this.focusActive}|${this.lastCheckId}|${this.lektoratFindings?.length || 0}`,
       () => this.$nextTick(() => this._syncLektoratLive()),
     );
+    // Die Vorschau der Leseansicht ruht im Edit-Modus (lektorat.js#_recomputeCorrectedHtml).
+    this.$watch('editMode', (on) => { if (!on && this.checkDone) this._recomputeCorrectedHtml(); });
   },
 
   _syncLektoratLive() {
@@ -155,6 +191,7 @@ export const lektoratLiveMethods = {
     }
     const el = this._getEditEl?.();
     if (!el) return;
+    this._rebindLektoratLiveSession();
     if (_observedEl !== el) {
       _stopLive();
       _observedEl = el;
@@ -166,14 +203,48 @@ export const lektoratLiveMethods = {
     this._relocateLektoratLive();
   },
 
+  // Befundliste neu gesetzt (Lauf aus dem Verlauf geladen, ab- und wieder
+  // angewählt): die Übernahmen dieser Session an die neuen Befund-Objekte
+  // binden und „übernommen" nach ihnen richten — der Verlauf kennt nur den
+  // gebuchten Stand, eine noch ungespeicherte Übernahme sähe sonst offen aus
+  // und liesse sich ein zweites Mal anwenden („sagte er,,"). Gebuchte
+  // Übernahmen anderer Abschnitte haben nichts mehr zu tun und fallen weg.
+  _rebindLektoratLiveSession() {
+    const pageId = this.currentPage?.id;
+    const checkId = this.lastCheckId;
+    const findings = this.lektoratFindings;
+    const current = (p) => String(p.pageId) === String(pageId) && p.checkId === checkId;
+    _booked = _booked.filter(p => String(p.pageId) === String(pageId));
+    _undone = _undone.filter(p => String(p.pageId) === String(pageId));
+    const rebind = (p) => {
+      if (!current(p) || findings.includes(p.f)) return;
+      const f = findings.find(x => x.original === p.f.original);
+      if (f) p.f = f;
+    };
+    _pending.forEach(rebind);
+    _booked.forEach(rebind);
+    _unbook.forEach(rebind);
+    _undone.forEach(rebind);
+    const want = new Set([..._pending, ..._booked].filter(current).map(p => p.f.original));
+    const undone = new Set(_unbook.filter(current).map(p => p.f.original));
+    const next = this.appliedOriginals.filter(o => !undone.has(o));
+    for (const o of want) if (!next.includes(o)) next.push(o);
+    if (next.length !== this.appliedOriginals.length || next.some((o, i) => o !== this.appliedOriginals[i])) {
+      this.appliedOriginals = next;
+      findings.forEach((f, i) => { if (want.has(f.original) && this.selectedFindings[i]) this.selectedFindings[i] = false; });
+    }
+  },
+
   _scheduleLektoratLive() {
     clearTimeout(_timer);
     _timer = setTimeout(() => this._relocateLektoratLive(), LIVE_RELOCATE_MS);
   },
 
   // Alle Fundstellen im Live-Text neu suchen und markieren; `umgeschrieben`
-  // nachführen. Eine im Editor übernommene, noch ungespeicherte Korrektur, die
-  // Strg+Z zurückgenommen hat (Korrektur weg, Original wieder da), ist wieder offen.
+  // nachführen. Eine im Editor übernommene Korrektur, die Strg+Z zurückgenommen
+  // hat (Korrektur weg, Original wieder da), ist wieder offen — ungespeichert
+  // wartet sie in `_undone`, schon gebucht in `_unbook` auf den Save. Steht an
+  // ihrem Anker wieder die Korrektur (Redo), ist sie wieder übernommen.
   _relocateLektoratLive() {
     clearTimeout(_timer);
     _timer = null;
@@ -181,71 +252,53 @@ export const lektoratLiveMethods = {
     if (!this._lektoratLiveOn() || !_observedEl) return;
     const hl = _highlights();
     const index = buildLocateIndex(_observedEl);
+    _trackAnchors(index.text, this.currentPage?.id);
     const findings = this.lektoratFindings;
+    let redonePending = false;
     for (let i = 0; i < findings.length; i++) {
       const f = findings[i];
       if (this.appliedOriginals.includes(f.original)) {
         const p = _pending.findIndex(x => x.f === f);
-        const undone = p !== -1 && !locateInIndex(index, f.korrektur) && locateInIndex(index, f.original);
-        if (!undone) continue;
-        _pending.splice(p, 1);
+        const b = p === -1 ? _booked.findIndex(x => x.f === f) : -1;
+        const entry = p !== -1 ? _pending[p] : _booked[b];
+        if (!entry || !_isUndone(index, entry)) {
+          // Übernommen: nicht markiert, aber per Klick/Caret auffindbar.
+          const m = entry ? _appliedMatch(index, entry) : locateInIndex(index, f.korrektur);
+          try { if (m) _ranges[i] = rangeOf(m); } catch { /* DOM hat sich bewegt — nächster Lauf */ }
+          continue;
+        }
+        if (p !== -1) _undone.push(..._pending.splice(p, 1));
+        else _unbook.push(..._booked.splice(b, 1));
         this.appliedOriginals = this.appliedOriginals.filter(o => o !== f.original);
+      } else {
+        const redo = _redoneEntry(index, f);
+        if (redo) {
+          if (_undone.includes(redo)) { _undone = _undone.filter(x => x !== redo); _pending.push(redo); redonePending = true; }
+          else { _unbook = _unbook.filter(x => x !== redo); _booked.push(redo); }
+          this.appliedOriginals = [...this.appliedOriginals, f.original];
+          if (this.selectedFindings[i]) this.selectedFindings[i] = false;
+          if (f.umgeschrieben) f.umgeschrieben = false;
+          if (f.erledigt) f.erledigt = false;
+          try { const m = _appliedMatch(index, redo); if (m) _ranges[i] = rangeOf(m); } catch { /* DOM hat sich bewegt — nächster Lauf */ }
+          continue;
+        }
       }
       const all = locateAllInIndex(index, f.original);
-      if (!!f.umgeschrieben !== !all.length) f.umgeschrieben = !all.length;
-      if (!all.length) {
-        if (this.selectedFindings[i]) this.selectedFindings[i] = false;
-        continue;
-      }
-      // Stelle steht wieder da (z.B. Strg+Z): nicht mehr „durch andere Korrektur erledigt".
-      if (f.erledigt) f.erledigt = false;
-      if (all.length > 1 && !f.mehrdeutig) {
-        f.mehrdeutig = true;
-        if (this.selectedFindings[i]) this.selectedFindings[i] = false;
-        this._queueLektoratAmbiguous(f.original);
-      }
+      this._setFindingPresence(i, all.length > 0);
+      if (!all.length) continue;
+      const multi = all.length > 1;
+      if (!!f.mehrfach !== multi) f.mehrfach = multi;
       try {
         _ranges[i] = rangeOf(all[0]);
-        if (f.mehrdeutig) for (const m of all) hl?.ambiguous.add(rangeOf(m));
+        if (multi || f.mehrdeutig) for (const m of all) hl?.ambiguous.add(rangeOf(m));
         else hl?.[findingKind(f.typ)].add(_ranges[i]);
       } catch { /* DOM hat sich bewegt — nächster Lauf */ }
     }
     this._paintLektoratLiveActive();
-  },
-
-  // Neu mehrdeutig gewordenen Befund zum Speichern am Lauf vormerken (ohne Lauf-ID
-  // gilt das Flag nur für die Session).
-  _queueLektoratAmbiguous(original) {
-    const checkId = this.lastCheckId;
-    if (!checkId || !original) return;
-    if (!_ambQueue.has(checkId)) _ambQueue.set(checkId, new Set());
-    _ambQueue.get(checkId).add(original);
-    clearTimeout(_ambTimer);
-    _ambTimer = setTimeout(() => this._flushLektoratAmbiguous(), AMBIGUOUS_FLUSH_MS);
-  },
-
-  async _flushLektoratAmbiguous() {
-    _ambTimer = null;
-    const batches = [..._ambQueue.entries()];
-    _ambQueue.clear();
-    for (const [checkId, set] of batches) {
-      const originals = [...set];
-      try {
-        const r = await fetch('/history/check/' + checkId + '/ambiguous', {
-          method: 'PATCH',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ originals }),
-        });
-        if (!r.ok) throw new Error(`HTTP ${r.status}`);
-        // Geladener Verlaufseintrag: dasselbe Flag, sonst käme es beim erneuten Öffnen nicht mit.
-        const entry = this.pageHistory?.find(e => e.id === checkId);
-        if (Array.isArray(entry?.errors_json)) {
-          for (const e of entry.errors_json) if (set.has(e.original)) e.mehrdeutig = true;
-        }
-      } catch (e) {
-        console.error('[lektorat-live ambiguous]', e);
-      }
-    }
+    // Redo einer ungebuchten Übernahme, deren Korrektur ein Save schon auf den
+    // Server gebracht hat: der Text gleicht dem gespeicherten, ein weiterer Save
+    // käme nicht — gegen den gespeicherten Stand buchen.
+    if (redonePending) this._flushLektoratLiveApplied(this.originalHtml || '');
   },
 
   _paintLektoratLiveActive() {
@@ -257,11 +310,27 @@ export const lektoratLiveMethods = {
   },
 
   // Hover auf einen Befund (lektorat-findings-card.js#handleFindingPointer):
-  // Stelle im Editor hervorheben und in Sicht bringen.
+  // Stelle im Editor nur hervorheben — Scrollen beim Überfahren der Liste liesse
+  // den Text springen, an dem geschrieben wird.
   lektoratLiveFocus(i) {
     if (!this._lektoratLiveOn()) return;
     this.lektoratLiveActiveIdx = i;
     this._paintLektoratLiveActive();
+  },
+
+  // Mauszeiger verlässt den Befund: Hervorhebung zurück auf den Befund unter
+  // dem Caret (oder keinen) — sonst bliebe der zuletzt überfahrene stehen.
+  lektoratLiveBlur(i) {
+    if (!this._lektoratLiveOn() || this.lektoratLiveActiveIdx !== i) return;
+    this.lektoratLiveActiveIdx = _caretFindingIdx();
+    this._paintLektoratLiveActive();
+  },
+
+  // Klick auf den Befundtext: hervorheben und die Stelle in Sicht bringen —
+  // bei einem übernommenen die eingesetzte Korrektur.
+  lektoratLiveReveal(i) {
+    if (!this._lektoratLiveOn()) return;
+    this.lektoratLiveFocus(i);
     const r = _ranges[i];
     if (!r) return;
     const node = r.startContainer.nodeType === 1 ? r.startContainer : r.startContainer.parentElement;
@@ -284,16 +353,35 @@ export const lektoratLiveMethods = {
       // Vorher offen und auffindbar: verschwindet so eine Stelle durch DIESE
       // Übernahme, ist sie „durch andere Korrektur erledigt", nicht umgeschrieben.
       const openBefore = this.lektoratFindings.filter((f, i) => _ranges[i] && !this.appliedOriginals.includes(f.original));
-      // Einzel-Übernahme: Caret danach hinter die Korrektur (Offset vor dem Mount).
-      const caretAt = list.length === 1 ? offsetInIndex(buildLocateIndex(_observedEl), list[0].original) : -1;
+      // Stellen vor dem Mount: Anker der neuen Übernahmen und Caret danach.
+      const before = buildLocateIndex(_observedEl);
+      _trackAnchors(before.text, pageId);
+      const origAt = new Map(list.map(f => [f, offsetInIndex(before, f.original)]));
       const { applied, skipped, reason } = this._applyLektoratInEditor(list, { quoteStyle });
       if (reason) return;
+      // Ersetzt wurden die Stellen in Textreihenfolge: jede verschiebt die
+      // dahinter um ihre Längenänderung — bestehende Anker wie neue.
+      const edits = applied.filter(f => origAt.get(f) >= 0)
+        .map(f => ({ f, at: origAt.get(f), len: normalizeMatchText(f.original).length, delta: correctionDelta(f) }))
+        .sort((a, b) => a.at - b.at);
+      shiftAnchorsByEdits(edits, _anchoredOn(pageId));
+      const after = buildLocateIndex(_observedEl);
+      _anchorText = after.text;
+      let shift = 0;
+      const newAt = new Map();
+      for (const ed of edits) { newAt.set(ed.f, ed.at + shift); shift += ed.delta; }
       for (const f of applied) {
         if (!this.appliedOriginals.includes(f.original)) this.appliedOriginals.push(f.original);
         const i = this.lektoratFindings.indexOf(f);
         if (i >= 0) this.selectedFindings[i] = false;
-        _pending.push({ pageId, checkId, f });
+        _unbook = _unbook.filter(x => x.f !== f);
+        _undone = _undone.filter(x => x.f !== f);
+        const entry = { pageId, checkId, f, at: newAt.has(f) ? newAt.get(f) : -1 };
+        // Steht dort nicht die Korrektur (Ersatz anders normalisiert): ohne Anker.
+        if (anchorState(after.text, entry) !== 'applied') entry.at = -1;
+        _pending.push(entry);
       }
+      const caretAt = applied.length === 1 && newAt.has(applied[0]) ? newAt.get(applied[0]) : -1;
       const params = { n: applied.length, details: skipped.length ? this._skipSummary(skipped) : '' };
       this.setStatus(this.tn(skipped.length ? 'lektorat.liveAppliedWithSkips' : 'lektorat.liveApplied', applied.length, params), false, 6000);
       this._relocateLektoratLive();
@@ -320,14 +408,6 @@ export const lektoratLiveMethods = {
     document.getSelection()?.setBaseAndExtent(p.node, p.offset, p.node, p.offset);
   },
 
-  applyLektoratLiveSelected() {
-    return this.applyLektoratLive(this.selectedFindings.flatMap((v, i) => (v ? [i] : [])));
-  },
-
-  lektoratLiveSelectedCount() {
-    return this.selectedFindings.filter(Boolean).length;
-  },
-
   // Nach jedem erfolgreichen Save eines Abschnitts: Übernahmen, deren Korrektur
   // jetzt gespeichert ist, am Lauf als angenommen buchen. Was der Save noch nicht
   // enthält (Save lief schon vor der Übernahme), wartet auf den nächsten.
@@ -336,40 +416,52 @@ export const lektoratLiveMethods = {
   // app-outbox.js (Entwurf eines verlassenen Abschnitts nachgereicht) — darum
   // `pageId` explizit statt der gerade offenen Seite.
   async _flushLektoratLiveApplied(savedHtml, pageId = this.currentPage?.id) {
-    if (!_pending.length || pageId == null) return;
-    const byCheck = new Map();
+    if ((!_pending.length && !_unbook.length) || pageId == null) return;
+    const onPage = (p) => String(p.pageId) === String(pageId);
+    const book = new Map();
     _pending = _pending.filter(p => {
-      if (String(p.pageId) !== String(pageId) || !findInHtml(savedHtml, p.f.korrektur)) return true;
-      if (!p.checkId) return false;
-      if (!byCheck.has(p.checkId)) byCheck.set(p.checkId, []);
-      byCheck.get(p.checkId).push(p.f);
+      if (!onPage(p) || !findInHtml(savedHtml, p.f.korrektur)) return true;
+      if (!p.checkId) { _booked.push(p); return false; }
+      if (!book.has(p.checkId)) book.set(p.checkId, []);
+      book.get(p.checkId).push(p);
       return false;
     });
-    for (const [checkId, fs] of byCheck) {
-      // Verlaufsliste gehört zur offenen Seite — nur dort lokal nachführen.
-      const entry = String(this.currentPage?.id) === String(pageId) ? (this.pageHistory?.find(e => e.id === checkId) || null) : null;
-      const items = fs.map(_entryOf);
+    const unbook = new Map();
+    _unbook = _unbook.filter(p => {
+      if (!onPage(p) || findInHtml(savedHtml, p.f.korrektur) || !findInHtml(savedHtml, p.f.original)) return true;
+      if (!p.checkId) return false;
+      if (!unbook.has(p.checkId)) unbook.set(p.checkId, []);
+      unbook.get(p.checkId).push(p);
+      return false;
+    });
+    // Verlaufsliste gehört zur offenen Seite — nur dort lokal nachführen.
+    const entryOf = (checkId) => String(this.currentPage?.id) === String(pageId) ? (this.pageHistory?.find(e => e.id === checkId) || null) : null;
+    for (const [checkId, ps] of book) {
+      const items = ps.map(p => bookingEntry(p.f));
+      // Schon während der Buchung als gebucht führen: Strg+Z und eine neu
+      // gesetzte Befundliste (_rebindLektoratLiveSession) sehen sie sonst nicht.
+      _booked.push(...ps);
       try {
-        // PATCH ersetzt die Listen: Ausgangsstand ist, was schon gebucht ist —
-        // aus dieser Session, dem geladenen Eintrag oder frisch vom Server.
-        const prev = _recorded.get(checkId) || await _bookedLists(checkId, entry);
-        const next = { applied: _mergeByOriginal(prev.applied, items), selected: _mergeByOriginal(prev.selected, items) };
-        const r = await fetch('/history/check/' + checkId + '/saved', {
-          method: 'PATCH',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ applied_errors_json: next.applied, selected_errors_json: next.selected }),
-        });
-        if (!r.ok) throw new Error(`HTTP ${r.status}`);
-        _recorded.set(checkId, next);
-        if (entry) {
-          entry.saved = true;
-          entry.applied_errors_json = next.applied;
-          entry.selected_errors_json = next.selected;
-        }
+        await patchBookedLists(checkId, prev => ({ applied: mergeByOriginal(prev.applied, items), selected: mergeByOriginal(prev.selected, items) }), { entry: entryOf(checkId) });
         this.refreshPageAges?.();
       } catch (e) {
         console.error('[lektorat-live history]', e);
-        for (const f of fs) _pending.push({ pageId, checkId, f });
+        // Noch nicht gebucht: zurück nach `_pending` (ein inzwischen per Strg+Z
+        // Zurückgenommenes hat in `_unbook` nichts mehr auszubuchen).
+        _booked = _booked.filter(p => !ps.includes(p));
+        _unbook = _unbook.filter(p => !ps.includes(p));
+        _pending.push(...ps.filter(p => this.appliedOriginals.includes(p.f.original)));
+        this.setStatus(this.t('lektorat.historySaveFailed'), false, 8000);
+      }
+    }
+    for (const [checkId, ps] of unbook) {
+      const originals = new Set(ps.map(p => p.f.original));
+      try {
+        await patchBookedLists(checkId, prev => ({ applied: withoutOriginals(prev.applied, originals), selected: withoutOriginals(prev.selected, originals) }), { entry: entryOf(checkId) });
+        this.refreshPageAges?.();
+      } catch (e) {
+        console.error('[lektorat-live history]', e);
+        _unbook.push(...ps);
         this.setStatus(this.t('lektorat.historySaveFailed'), false, 8000);
       }
     }
@@ -381,7 +473,15 @@ export const lektoratLiveMethods = {
     const pageId = this.currentPage?.id;
     const dropped = new Set(_pending.filter(p => p.pageId === pageId).map(p => p.f.original));
     _pending = _pending.filter(p => p.pageId !== pageId);
+    // Nie gespeichert: der gespeicherte Stand kennt sie nicht, Redo ist mit dem Text weg.
+    _undone = _undone.filter(p => p.pageId !== pageId);
     if (dropped.size) this.appliedOriginals = this.appliedOriginals.filter(o => !dropped.has(o));
+    // Ungespeichertes Strg+Z einer gebuchten Übernahme: der gespeicherte Stand
+    // trägt die Korrektur — wieder „übernommen".
+    const restored = _unbook.filter(p => p.pageId === pageId);
+    _unbook = _unbook.filter(p => p.pageId !== pageId);
+    _booked.push(...restored);
+    for (const p of restored) if (!this.appliedOriginals.includes(p.f.original)) this.appliedOriginals.push(p.f.original);
   },
 
   // Lauf aus der Edit-Session: erst speichern — der Job liest den gespeicherten

@@ -46,9 +46,10 @@
             <button type="button" class="icon-btn icon-btn--ghost" @click="closeFindings()" x-show="checkDone" :data-tip="t('editor.btn.exitCheckTitle')" :aria-label="t('editor.btn.exitCheck')">
               <svg class="icon" aria-hidden="true"><use href="/icons.svg#x"/></svg>
             </button>
-            <button type="button" class="icon-btn icon-btn--ghost icon-btn--success" @click="saveCorrections()" :disabled="saveApplying != null" x-show="canEdit() && ((correctedHtml && selectedFindings.some(v => v)) || saveApplying != null)" :data-tip="saveApplying != null ? t('editor.btn.saveCorrectionsProgress') : t('editor.btn.saveCorrections')" :aria-label="t('editor.btn.saveCorrections')">
+            <!-- Angehakte übernehmen: derselbe Knopf wie im Befundkopf (editor-findings.html). -->
+            <button type="button" class="icon-btn icon-btn--ghost" @click="applySelectedFindings()" x-show="canEdit() && checkDone && (applicableSelectedCount() > 0 || saveApplying != null)" :disabled="saveApplying != null" :data-tip="saveApplying != null ? t('editor.btn.saveCorrectionsProgress') : t('editor.findings.applySelected', { n: applicableSelectedCount() })" :aria-label="t('editor.findings.applySelected', { n: applicableSelectedCount() })">
               <span x-show="saveApplying != null" class="spinner"></span>
-              <svg x-show="saveApplying == null" class="icon" aria-hidden="true"><use href="/icons.svg#check"/></svg>
+              <svg x-show="saveApplying == null" class="icon" aria-hidden="true"><use href="/icons.svg#check-check"/></svg>
             </button>
           </span>
           <span class="action-sep" aria-hidden="true" x-show="canReview() && canEdit()"></span>
@@ -135,6 +136,10 @@
             <!-- Eigenes Symbol: das ✕ daneben bricht die Bearbeitung ab. -->
             <button type="button" class="icon-btn icon-btn--ghost" @click="closeFindings()" x-show="checkDone" :data-tip="t('editor.btn.exitCheckTitle')" :aria-label="t('editor.btn.exitCheck')">
               <svg class="icon" aria-hidden="true"><use href="/icons.svg#minimize-2"/></svg>
+            </button>
+            <!-- Angehakte übernehmen: derselbe Knopf wie im Befundkopf (editor-findings.html). -->
+            <button type="button" class="icon-btn icon-btn--ghost" @click="applySelectedFindings()" x-show="canEdit() && checkDone && applicableSelectedCount() > 0" :data-tip="t('editor.findings.applySelected', { n: applicableSelectedCount() })" :aria-label="t('editor.findings.applySelected', { n: applicableSelectedCount() })">
+              <svg class="icon" aria-hidden="true"><use href="/icons.svg#check-check"/></svg>
             </button>
           </span>
           <span class="action-sep" aria-hidden="true"></span>

@@ -2,10 +2,10 @@
 // anhaken lassen und wie mehrdeutige Fundstellen erscheinen.
 //
 // - `mehrdeutig` (Server: lektorat-page.js#markAmbiguous) trägt das Tag
-//   „mehrdeutig" und ist nicht vorausgewählt — «Übernehmen» ersetzt das erste
-//   Vorkommen, das nicht das gemeinte sein muss.
+//   „mehrdeutig" und ist nicht vorausgewählt — «Übernehmen» überspringt die
+//   Stelle, solange sie mehrfach dasteht.
 // - Übernommene Befunde und Befunde ohne wirksamen Vorschlag haben eine
-//   gesperrte Checkbox; «Alle» lässt sie aus (editor/lektorat.js#findingSelectable).
+//   gesperrte Checkbox; «Alle anhaken» lässt sie aus (editor/lektorat.js#findingSelectable).
 // Die Bindungen hängen am Alpine-Template (public/partials/editor-findings.html):
 // ein Tippfehler im Ausdruck verschluckt Alpine still.
 
@@ -47,6 +47,7 @@ test('Befundliste: mehrdeutig gekennzeichnet, Übernommenes und Vorschlagsloses 
   await expect(box(2)).toBeDisabled();
   await expect(box(3)).toBeEnabled();
 
-  await page.locator('.finding-toggle-group button').first().click();
+  const selectAll = await page.evaluate(() => window.__app.t('editor.findings.selectAll'));
+  await page.locator('.finding-toggle-group').getByRole('button', { name: selectAll }).click();
   expect(await page.evaluate(() => window.__app.selectedFindings)).toEqual([true, false, false, true]);
 });

@@ -49,6 +49,8 @@ export function registerLektoratFindingsCard() {
 
     _findingKind(typ) { return findingKind(typ); },
     _findingBadgeClass(typ) { return findingBadgeClass(typ); },
+    // Erledigt (übernommen oder umgeschrieben): tritt zurück, ohne Zusatz-Tags.
+    _findingDone(f) { return !!(f.umgeschrieben || window.__app?.appliedOriginals.includes(f.original)); },
     // Typ-Delta im Fortschritts-Block: echtes Minuszeichen, Plus explizit.
     _progressDelta(d) { return d < 0 ? '−' + Math.abs(d) : '+' + d; },
 
@@ -95,7 +97,8 @@ export function registerLektoratFindingsCard() {
 
     // Hover auf Finding → Preview-Panel zur entsprechenden Markierung scrollen
     // (nur im Split-Modus, sonst zeigt page-view einen Tooltip). Im Edit-Modus
-    // die Stelle im Live-Editor hervorheben (editor/lektorat-live.js).
+    // die Stelle im Live-Editor nur hervorheben, nicht scrollen — dorthin führt
+    // der Klick auf den Befundtext (editor/lektorat-live.js#lektoratLiveReveal).
     handleFindingPointer(idx) {
       const app = window.__app;
       if (app?.editMode) { app.lektoratLiveFocus(idx); return; }
@@ -105,6 +108,12 @@ export function registerLektoratFindingsCard() {
         mark.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
         flashEl(mark);
       }
+    },
+
+    // Im Edit-Modus erlischt die Hervorhebung, wenn der Zeiger den Befund verlässt.
+    handleFindingPointerLeave(idx) {
+      const app = window.__app;
+      if (app?.editMode) app.lektoratLiveBlur(idx);
     },
   }));
 }

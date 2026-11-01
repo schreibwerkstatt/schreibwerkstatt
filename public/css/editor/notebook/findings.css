@@ -19,18 +19,35 @@
 .finding.editorial { border-color: var(--color-mark-border); }
 .finding.ok    { border-color: var(--color-ok-border); }
 .finding.finding--deselected { opacity: 0.55; }
-.finding.finding--applied {
+/* Erledigt (übernommen oder selbst umgeschrieben, editor/lektorat-live.js):
+   tritt hinter die offenen Befunde zurück — neutrale Kante, keine Tönung,
+   farbloses Badge, knapper. Die Farbe gehört allein den offenen. */
+.finding.finding--applied,
+.finding.finding--rewritten {
   opacity: var(--opacity-muted);
+  border-color: var(--color-border);
+  padding-block: var(--space-2xs);
+  font-size: var(--font-size-sm);
+}
+.finding.finding--applied > .badge,
+.finding.finding--rewritten > .badge { filter: grayscale(1); }
+.finding.finding--applied .finding-original,
+.finding.finding--applied .finding-korrektur,
+.finding.finding--rewritten .finding-original,
+.finding.finding--rewritten .finding-korrektur {
+  background: none;
+  box-shadow: none;
+  padding-inline: 0;
+}
+.finding.finding--applied .finding-original {
   text-decoration: line-through;
   text-decoration-color: var(--color-muted);
 }
-.finding.finding--applied .finding-checkbox { cursor: not-allowed; }
-/* Im Edit-Modus selbst umgeschrieben (editor/lektorat-live.js): nicht mehr
-   übernehmbar, aber nicht als angenommen durchgestrichen. */
-.finding.finding--rewritten { opacity: var(--opacity-muted); }
+.finding.finding--applied .finding-checkbox,
 .finding.finding--rewritten .finding-checkbox { cursor: not-allowed; }
 /* «Angehakte übernehmen» im Kopf (nur Edit-Modus): rechts, vor den Häkchen-Knöpfen. */
-.finding-apply-selected { margin-left: auto; margin-right: var(--space-xs); }
+/* Im Edit-Modus zeigt ein Klick auf das Original die Stelle im Editor. */
+.finding-original[role="button"] { cursor: pointer; }
 /* Im Edit-Modus hervorgehoben: Hover in der Liste oder Caret in der Stelle. */
 .finding.finding--active { background: var(--color-mark-bg); }
 .finding-checkbox { flex-shrink: 0; margin-top: var(--space-2xs); cursor: pointer; }

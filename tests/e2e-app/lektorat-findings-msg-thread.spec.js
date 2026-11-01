@@ -2,7 +2,7 @@
 // Notebook-Leseansicht, gegen die ECHTE App.
 //
 // Chat-Schreibweise ist Figurenrede. Ein harter Befund darin (z.B. Rechtschreibung)
-// darf nicht vorausgewählt sein — sonst bügelt „Korrekturen speichern" SMS-Sprache
+// darf nicht vorausgewählt sein — sonst bügelt «Angehakte übernehmen» SMS-Sprache
 // glatt, die der Autor nie einzeln angehakt hat — und trägt die Kennzeichnung
 // „im Nachrichtenverlauf". Derselbe Typ ausserhalb des Verlaufs bleibt vorausgewählt.
 // Die Kennzeichnung hängt am Alpine-Template (public/partials/editor-findings.html):

@@ -78,7 +78,10 @@
   gap: var(--space-6);
   min-width: 0;
 }
-.page-name .page-status-dot { margin-top: var(--space-5); }
+/* Punkt und Bearbeitungsstand-Meter auf die Mitte der ersten Textzeile:
+   halbe Differenz aus Zeilenhöhe (1lh) und Box-Höhe — skaliert mit der
+   Schriftgrösse der Zeile (Ein-Abschnitt-Kapitel ist grösser als 13px). */
+.page-name .page-status-dot { margin-top: calc((1lh - var(--page-status-dot-size)) / 2); }
 .page-name > span:not(.page-status-dot) {
   min-width: 0;
   overflow-wrap: anywhere;
@@ -102,9 +105,10 @@
 }
 
 .page-status-dot {
+  --page-status-dot-size: 9px;
   flex-shrink: 0;
-  width: 9px;
-  height: 9px;
+  width: var(--page-status-dot-size);
+  height: var(--page-status-dot-size);
   border-radius: var(--radius-none);
   background: var(--color-subtle);
   border: 1px solid transparent;
@@ -129,12 +133,13 @@
 .edit-status--2 { --edit-status-n: 3; }
 .edit-status--3 { --edit-status-n: 4; --edit-status-color: var(--color-ok-border); }
 .edit-status--stale { --edit-status-color: var(--color-pending); }
+.edit-status-meter { --edit-status-meter-h: 7px; }
 .edit-status-meter:is(.edit-status--0, .edit-status--1, .edit-status--2, .edit-status--3)::after {
   content: "";
   display: inline-block;
   flex-shrink: 0;
   width: 15px;
-  height: 7px;
+  height: var(--edit-status-meter-h);
   margin-left: var(--space-xs);
   vertical-align: middle;
   background: linear-gradient(90deg,
@@ -143,11 +148,12 @@
   -webkit-mask: repeating-linear-gradient(90deg, #000 0 3px, transparent 3px 4px);
   mask: repeating-linear-gradient(90deg, #000 0 3px, transparent 3px 4px);
 }
-/* Abschnittszeile: Flex-Item neben dem Lektorats-Punkt, oben buendig wie er. */
+/* Abschnittszeile: Flex-Item neben dem Lektorats-Punkt, mittig auf der ersten
+   Textzeile wie er. */
 .page-name > .edit-status-meter {
   display: flex;
   flex-shrink: 0;
-  margin-top: var(--space-5);
+  margin-top: calc((1lh - var(--edit-status-meter-h)) / 2);
 }
 
 /* Sanfter Indikator: Anzahl offener Ideen pro Seite. Sitzt rechts neben den

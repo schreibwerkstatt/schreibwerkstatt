@@ -68,6 +68,9 @@ export const inputMethods = {
     mountEditorHtml(el, next);
     el.scrollTop = scrollTop;
     this._markEditDirty();
+    // Übernahme sofort speichern, nicht erst nach der Autosave-Tipp-Pause.
+    // Läuft schon ein Save, bleibt der eben geplante Autosave-Timer als Netz.
+    if (!app.editSaving) this.quickSave('lektorat');
     const skippedSet = new Set(skipped.map(s => s.f));
     return { applied: fehler.filter(f => !skippedSet.has(f)), skipped };
   },

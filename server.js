@@ -379,6 +379,22 @@ const staticServe = express.static(path.join(__dirname, 'public'), {
     }
   },
 });
+// Prod-Bündel der Shell (scripts/build-bundle.js), nur wenn ein gültiges da ist
+// — sonst liefert staticServe die Einzeldateien wie bisher. Die Bündel-Dateien
+// sind wie /js/ und /css/ ohne Session abrufbar (gleicher Code, nur gepackt).
+// Vor dem Asset-Gate: dessen /sw-manifest.js (public/) würde sonst das Manifest
+// des Bündels verdecken.
+const bundleLib = require('./lib/bundle');
+const appBundle = bundleLib.loadBundle({
+  root: __dirname,
+  dir: process.env.BUNDLE_DIR || path.join(__dirname, 'dist'),
+  logger,
+});
+if (appBundle) {
+  app.use(bundleLib.bundleSwManifest(appBundle));
+  app.use(bundleLib.BUNDLE_URL_PREFIX, bundleLib.bundleAssets(appBundle));
+}
+
 app.use(require('./lib/public-asset-path').makePublicAssetGate({
   exact: PUBLIC_ASSETS,
   prefixes: PUBLIC_ASSET_PREFIXES,
@@ -528,6 +544,7 @@ app.use((req, _res, next) => {
   next();
 });
 
+if (appBundle) app.use(bundleLib.bundleShell(appBundle));
 app.use(staticServe);
 
 // Finaler JSON-Fehler-Handler: fängt synchrone Throws UND (dank

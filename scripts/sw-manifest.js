@@ -29,6 +29,7 @@
 const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
+const { BUNDLE_URL_PREFIX } = require('../lib/bundle');
 
 const ROOT = path.resolve(__dirname, '..');
 const PUBLIC = path.join(ROOT, 'public');
@@ -115,7 +116,7 @@ function collectVendorUrls() {
 // asset shifts the build id and therefore the SHELL_CACHE generation.
 // index.html is navigate-served (not precached) but folded in too, so an
 // index-only change (e.g. a new <link>) still bumps the generation.
-function buildHash(files) {
+function buildHash(files, indexPath = path.join(PUBLIC, 'index.html')) {
   const h = crypto.createHash('sha256');
   for (const f of files) {
     h.update(f.url);
@@ -125,14 +126,32 @@ function buildHash(files) {
   }
   try {
     h.update('::index.html::');
-    h.update(fs.readFileSync(path.join(PUBLIC, 'index.html')));
+    h.update(fs.readFileSync(indexPath));
   } catch { /* fehlt → ignorieren */ }
   return h.digest('hex').slice(0, 16);
 }
 
-function renderManifest() {
-  const files = collectFiles();
-  const build = buildHash(files);
+// Prod-Bündel (scripts/build-bundle.js): die ins Bündel eingebauten Module und
+// Stylesheets fallen aus dem Satz, die Bündel-Dateien kommen hinein (ohne
+// Sourcemaps — die lädt nur DevTools). Alles andere bleibt: klassische Scripts
+// aus index.html, Partials, i18n, Icon-Sprite. Geschrieben wird diese Fassung
+// nur ins Bündel selbst (dist/sw-manifest.js, ausgeliefert von lib/bundle.js),
+// nie nach public/ — das eingecheckte Manifest bleibt die Einzeldatei-Fassung.
+function bundleFiles(bundle) {
+  const built = new Set(bundle.build.inputs
+    .filter((i) => i.startsWith('public/') && i !== 'public/index.html')
+    .map((i) => i.slice('public/'.length)));
+  const kept = collectFiles().filter((f) => !built.has(f.rel));
+  const prefix = BUNDLE_URL_PREFIX;
+  const own = bundle.build.files
+    .filter((u) => u.startsWith(prefix) && !u.endsWith('.map'))
+    .map((u) => ({ rel: null, url: u, full: path.join(bundle.dir, u.slice(prefix.length)) }));
+  return [...kept, ...own].sort((a, b) => (a.url < b.url ? -1 : a.url > b.url ? 1 : 0));
+}
+
+function renderManifest({ bundle = null } = {}) {
+  const files = bundle ? bundleFiles(bundle) : collectFiles();
+  const build = buildHash(files, bundle ? bundle.indexPath : undefined);
   const urls = files.map((f) => f.url);
   const list = urls.map((u) => `  ${JSON.stringify(u)},`).join('\n');
   const vendorUrls = collectVendorUrls();

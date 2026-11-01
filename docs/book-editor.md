@@ -23,7 +23,7 @@ Trigger: Karten-Toggle aus Palette/Quick-Pills (`showBookEditorCard`, Feature-Ke
 | Find/Replace | eigene Find-Bar (CSS Custom Highlight, Range-Replace) | — | — |
 | Undo/Redo | eigener Verlauf **pro Seite** (`book-editor/history.js`) + Buttons im Kopf | eigener Verlauf pro Edit-Session | derselbe Verlauf wie Notebook |
 | Toolbar / Bubble | nein | ja ([editorToolbarCard](../public/js/cards/editor-toolbar-card.js)) | nein (im Fokus deaktiviert) |
-| Lektorat-Marks | nein (`stripLektoratMarks` entfernt sie defensiv) | ja (Findings im View, Apply via `saveCorrections`) | nein (im Fokus deaktiviert) |
+| Lektorat-Marks | nein (`stripLektoratMarks` entfernt sie defensiv) | ja (Findings im View, Apply via `applyFindings`) | nein (im Fokus deaktiviert) |
 
 **Keine Modus-Invariante** zwischen Bucheditor und den anderen — er kann nicht parallel zu Notebook/Focus offen sein (Exklusivität via `_closeOtherMainCards`, Eintrag in `EXCLUSIVE_CARDS` der feature-registry).
 

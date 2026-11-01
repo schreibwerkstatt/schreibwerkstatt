@@ -9,6 +9,8 @@ import { runQuoteNormalizeHtml } from './shared/quote-normalize.js';
 import { lsSet } from '../safe-storage.js';
 import { UNDO_WINDOW_MS } from './lektorat-undo.js';
 import { trackUsageEvent } from '../features-usage.js';
+import { patchBookedLists, mergeByOriginal, bookingEntry } from './lektorat-booking.js';
+import { lektoratBatchMethods } from './lektorat/batch.js';
 
 // Lektorat-Workflow-Methoden (werden in die Alpine-Komponente gespreadet)
 // `this` bezieht sich auf die Alpine-Komponente.
@@ -28,21 +30,30 @@ function _inMsgThread(html, original) {
   return _threadMemo.get(original);
 }
 
+// Stelle steht mehrfach in der angezeigten Fassung, gemerkt wie oben.
+let _ambigMemoHtml = null;
+const _ambigMemo = new Map();
+function _ambiguousIn(html, original) {
+  if (!html || !original) return false;
+  if (html !== _ambigMemoHtml) { _ambigMemoHtml = html; _ambigMemo.clear(); }
+  if (!_ambigMemo.has(original)) _ambigMemo.set(original, countInHtml(html, original) > 1);
+  return _ambigMemo.get(original);
+}
+
 // Ab dieser Länge des geprüften Texts (Zeichen) rät das Ergebnis, den Abschnitt
 // zu teilen (routes/jobs/lektorat.js liefert `textChars`).
 const LONG_SECTION_CHARS = 20000;
 
 export const lektoratMethods = {
   // Befund steht in einem Nachrichtenverlauf: Chat-Schreibweise ist Figurenrede.
-  // Solche Befunde sind nie vorausgewählt — „Korrekturen speichern" soll keine
+  // Solche Befunde sind nie vorausgewählt — «Angehakte übernehmen» soll keine
   // SMS-Sprache glattbügeln, die der Autor nicht einzeln angehakt hat.
   findingInMsgThread(f) {
     return _inMsgThread(this.originalHtml, f?.original);
   },
 
   // Mehrdeutige Fundstelle (`mehrdeutig`, Server: lektorat-page.js#markAmbiguous):
-  // «Übernehmen» ersetzt das erste Vorkommen — nicht vorauswählen, der Autor
-  // hakt bewusst an. Ebenso ein Befund, den der Autor im Vorlauf stehen liess
+  // «Übernehmen» überspringt sie (findingAmbiguousNow) — nicht vorauswählen. Ebenso ein Befund, den der Autor im Vorlauf stehen liess
   // (`abgelehnt`, lib/lektorat-progress.js#markPreviouslyRejected).
   findingPreselected(f) {
     return isHardFinding(f.typ) && !f.mehrdeutig && !f.abgelehnt && !this.findingInMsgThread(f) && this.findingSelectable(f);
@@ -53,6 +64,50 @@ export const lektoratMethods = {
   // zweites Anwenden schriebe „sagte er,,". Umgeschriebene stehen nicht mehr da.
   findingSelectable(f) {
     return !!f?.korrektur && f.korrektur !== f.original && !f.umgeschrieben && !this.appliedOriginals.includes(f.original);
+  },
+
+  // Steht die Stelle gerade mehrfach im Text? Edit-Modus: Live-Text (`mehrfach`,
+  // lektorat-live.js#_relocateLektoratLive), Leseansicht: die angezeigte Fassung.
+  // «Übernehmen» überspringt solche Befunde in beiden Modi (Skip-Grund `ambiguous`).
+  findingAmbiguousNow(f) {
+    if (this.editMode) return !!f?.mehrfach;
+    return _ambiguousIn(this.originalHtml, f?.original);
+  },
+
+  // Angehakt und jetzt übernehmbar: eine mehrfach dastehende Stelle bleibt
+  // angehakt, zählt aber nicht mit — «Übernehmen» überspränge sie ohnehin.
+  _applicableSelectedIndices() {
+    return this.selectedFindings.flatMap((v, i) => (v && !this.findingAmbiguousNow(this.lektoratFindings[i]) ? [i] : []));
+  },
+
+  applicableSelectedCount() {
+    return this._applicableSelectedIndices().length;
+  },
+
+  applySelectedFindings() {
+    return this.applyFindings(this._applicableSelectedIndices());
+  },
+
+  // «Übernehmen» — ein Einstieg für beide Modi: im Edit-Modus in den Live-Editor
+  // (lektorat-live.js#applyLektoratLive, Server-Write liesse das contenteditable
+  // auf altem Stand), in der Leseansicht per Server-Write (saveCorrections).
+  // Die Befundliste bleibt in beiden stehen; Übernommenes trägt „übernommen".
+  applyFindings(indices) {
+    return this.editMode ? this.applyLektoratLive(indices) : this.saveCorrections(indices);
+  },
+
+  // Steht die Stelle des Befunds `i` (noch) im Text? Eine Regel für beide Wege,
+  // die das nachführen: gegen das gespeicherte HTML nach einem Save
+  // (notebook/edit/lifecycle.js#_filterFindingsAfterSave) und gegen den
+  // Live-Text im Edit-Modus (lektorat-live.js#_relocateLektoratLive).
+  // Weg: `umgeschrieben` (grau, nicht auswählbar) und abgewählt. Wieder da
+  // (Strg+Z, Abbrechen): nicht mehr „durch andere Korrektur erledigt".
+  _setFindingPresence(i, present) {
+    const f = this.lektoratFindings[i];
+    if (!f) return;
+    if (!!f.umgeschrieben === present) f.umgeschrieben = !present;
+    if (present && f.erledigt) f.erledigt = false;
+    if (!present && this.selectedFindings[i]) this.selectedFindings[i] = false;
   },
 
   // `outSkipped` (optional): sammelt Korrekturen, die replaceInHtml unangetastet
@@ -66,9 +121,9 @@ export const lektoratMethods = {
   // Finding, dessen `original` erst durch eine vorherige Korrektur verschwindet,
   // ist `notFound` und nicht `boundary`.
   // Aufrufer ohne Interesse an den Skips lassen den Parameter weg.
-  // `checkAmbiguous` (nur Abschnitts-Chat): eine mehrfach vorkommende Stelle wird
-  // als 'ambiguous' übersprungen statt das erste Vorkommen zu ersetzen. Das
-  // Lektorat prüft das bewusst nicht (tests/unit/lektorat-apply-guard.test.mjs).
+  // `checkAmbiguous` (Abschnitts-Chat, Lektorat-«Übernehmen» in beiden Modi):
+  // eine mehrfach vorkommende Stelle wird als 'ambiguous' übersprungen. Die
+  // Vorschau der Leseansicht prüft es ebenso, damit sie zeigt, was übernommen würde.
   // `rich` (nur Abschnitts-Chat): Ersatz darf *kursiv*/**fett** und eine
   // Absatzteilung tragen (utils/html-replace-rich.js); eine Lektorat-Korrektur
   // ist immer Klartext.
@@ -166,11 +221,12 @@ export const lektoratMethods = {
   },
 
 
+  // Im Edit-Modus unsichtbar: nachgeholt beim Verlassen (lektorat-live.js#_setupLektoratLive).
   _recomputeCorrectedHtml() {
-    if (!this.originalHtml) return;
+    if (!this.originalHtml || this.editMode) return;
     const selected = this.lektoratFindings.filter((_, i) => this.selectedFindings[i]);
     this.correctedHtml = selected.length > 0
-      ? this._applyCorrections(this.originalHtml, selected)
+      ? this._applyCorrections(this.originalHtml, selected, null, { checkAmbiguous: true })
       : this.originalHtml;
     this.updatePageView();
   },
@@ -210,6 +266,8 @@ export const lektoratMethods = {
       this.setStatus(this.t('lektorat.blockedUnsavedEdits'), false, 6000);
       return;
     }
+    // Edit-Modus: ob leer, steht erst nach dem Save fest (Leseansicht sperrt den Knopf).
+    if (this.currentPageEmpty) return this.setStatus(this.t('editor.btn.pageEmpty'), false, 4000);
     const pageIdAtStart = this.currentPage.id;
     this.logAuditEvent?.('lektoratOpened', { book: this.$store.nav.selectedBookId, page: pageIdAtStart });
     this.checkLoading = true;
@@ -389,18 +447,18 @@ export const lektoratMethods = {
     });
   },
 
-  async saveCorrections() {
+  // Leseansicht-Zweig von `applyFindings`: frisch laden, übernehmen, speichern,
+  // am Lauf buchen. `indices` ohne Angabe: alle angehakten übernehmbaren.
+  async saveCorrections(indices = this._applicableSelectedIndices()) {
     if (!this.currentPage || this.saveApplying != null) return;
-    const selected = this.lektoratFindings.filter((_, i) => this.selectedFindings[i]);
+    const selected = indices.map(i => this.lektoratFindings[i])
+      .filter(f => f && !this.appliedOriginals.includes(f.original) && !f.umgeschrieben);
     if (selected.length === 0) return;
     const shown = this.lektoratFindings.length;
     // Ziel des History-PATCH beim Start pinnen: die Korrekturen gehören zu DIESEM
     // Lauf, auch wenn während der Awaits ein anderer Eintrag oder eine andere
     // Seite geöffnet wird.
     const checkId = this.lastCheckId;
-    const historyEntry = this.activeHistoryEntryId
-      ? this.pageHistory.find(e => e.id === this.activeHistoryEntryId) || null
-      : null;
     // Ohne anwendbaren Vorschlag (Feld geleert, gleich dem Original) ändert ein
     // Befund nichts — er ist übersprungen, nicht übernommen. `_applyCorrections`
     // lässt ihn still aus, weil der Abschnitts-Chat denselben Kern nutzt.
@@ -412,8 +470,10 @@ export const lektoratMethods = {
       const { savedHtml, skipped: applySkipped, pageId, stale, preHtml, savedUpdatedAt } = await this._loadApplyAndSave(selected, (pct, text) => {
         this.saveApplying = pct;
         if (text) this.setStatus(text, true);
-      });
+      }, 'lektorat-apply', { checkAmbiguous: true });
       const skipped = [...noCorrection, ...applySkipped];
+      const skippedSet = new Set(skipped.map(s => s.f));
+      const appliedNow = selected.filter(f => !skippedSet.has(f));
       // Nutzungs-Event (docs/usage-events.md): nur Zahlen, keine Befundtexte.
       trackUsageEvent('lektorat.applied', { shown, selected: selected.length, applied: selected.length - skipped.length, skipped: skipped.length });
 
@@ -421,31 +481,23 @@ export const lektoratMethods = {
       // verbuchen, auch nach einem Seitenwechsel. Sonst bliebe er offen und die
       // Fehler-Heatmap zählte die eingearbeiteten Korrekturen weiter.
       let historyFailed = false;
+      let bookedApplied = [], bookedSelected = [];
       if (checkId) {
         try {
           this.saveApplying = 95;
           // Angenommen ist nur, was tatsächlich im Text gelandet ist. Ein
           // übersprungener Befund (Text nicht gefunden, Schutzmechanismus, kein
           // Vorschlag) bleibt offen — sonst zählte ihn die Fehler-Heatmap als erledigt.
-          const skippedSet = new Set(skipped.map(s => s.f));
-          let applied = selected.filter(f => !skippedSet.has(f));
-          let selectedAll = selected;
-          // Bei History-Einträgen: mit bereits angewendeten Korrekturen mergen
-          if (historyEntry && historyEntry.id === checkId) {
-            const merge = (existing, items) => {
-              const set = new Set((existing || []).map(e => e.original));
-              return [...(existing || []), ...items.filter(e => !set.has(e.original))];
-            };
-            applied = merge(historyEntry.applied_errors_json, applied);
-            selectedAll = merge(historyEntry.selected_errors_json, selected);
-          }
-          const body = { applied_errors_json: applied, selected_errors_json: selectedAll };
-          const r = await fetch('/history/check/' + checkId + '/saved', {
-            method: 'PATCH',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(body),
-          });
-          if (!r.ok) throw new Error(`HTTP ${r.status}`);
+          const applied = appliedNow.map(bookingEntry);
+          const { prev } = await patchBookedLists(checkId, p => ({
+            applied: mergeByOriginal(p.applied, applied),
+            selected: mergeByOriginal(p.selected, selected.map(bookingEntry)),
+          }));
+          // Für «Korrekturen rückgängig»: nur austragen, was DIESER Save neu gebucht hat.
+          const had = (list) => new Set(list.map(e => e.original));
+          const hadApplied = had(prev.applied), hadSelected = had(prev.selected);
+          bookedApplied = applied.map(f => f.original).filter(o => !hadApplied.has(o));
+          bookedSelected = selected.map(f => f.original).filter(o => !hadSelected.has(o));
           this.refreshPageAges();
           if (!stale && this.currentPage?.id === pageId) await this.loadPageHistory(pageId);
         } catch (e) {
@@ -457,7 +509,8 @@ export const lektoratMethods = {
 
       // Seite während des Speicherns gewechselt: gespeichert ist die richtige
       // Seite, aber Findings-/History-/View-State gehören jetzt der neuen.
-      if (stale || this.currentPage?.id !== pageId) {
+      if (stale || this.currentPage?.id !== pageId || this.lastCheckId !== checkId) {
+        if (!stale && this.currentPage?.id === pageId) { this.originalHtml = savedHtml; this.updatePageView(); }
         this.setStatus(this.t(historyFailed ? 'lektorat.historySaveFailed' : 'lektorat.correctionsSaved'), false, historyFailed ? 8000 : 5000);
         return;
       }
@@ -476,26 +529,26 @@ export const lektoratMethods = {
         msg = skipParams ? this.t('lektorat.correctionsSavedWithSkips', skipParams) : this.t('lektorat.correctionsSaved');
       }
       this.setStatus(msg, false, UNDO_WINDOW_MS);
-      const historyBefore = historyEntry && historyEntry.id === checkId ? historyEntry : null;
       this._rememberLektoratUndo?.({
         pageId, pageName: this.currentPage?.name, preHtml, updatedAt: savedUpdatedAt, checkId,
-        prevApplied: historyBefore?.applied_errors_json || null,
-        prevSelected: historyBefore?.selected_errors_json || null,
+        bookedApplied, bookedSelected, appliedOriginals: appliedNow.map(f => f.original),
       });
-      this.correctedHtml = null;
-      this.hasErrors = false;
-      this.lektoratFindings = [];
-      this.selectedFindings = [];
-      this.appliedOriginals = [];
-      this.appliedHistoricCorrections = [];
-      this.lektoratProgress = null;
-      this.checkDone = false;
-      this.activeHistoryEntryId = null;
-      // Seitenansicht aus der gespeicherten Server-Fassung (data-bid) über den
-      // normalen Render-Pfad neu aufbauen (Erwähnungs-Hervorhebung inklusive).
+      // Befundliste bleibt stehen (wie im Edit-Modus): Übernommenes trägt
+      // „übernommen", Offenes lässt sich weiter übernehmen. Ansicht aus der
+      // gespeicherten Server-Fassung (data-bid) über den normalen Render-Pfad.
+      const openBefore = new Set(this.lektoratFindings.filter(f => !f.umgeschrieben && !this.appliedOriginals.includes(f.original)));
+      this.appliedOriginals = [...new Set([...this.appliedOriginals, ...appliedNow.map(f => f.original)])];
       this.originalHtml = savedHtml;
-      this.analysisOut = '';
-      this.updatePageView();
+      this.lektoratFindings.forEach((f, i) => {
+        if (this.appliedOriginals.includes(f.original)) {
+          if (this.selectedFindings[i]) this.selectedFindings[i] = false;
+          return;
+        }
+        this._setFindingPresence(i, !!(f.original && findInHtml(savedHtml, f.original)));
+        // Vorher offen, jetzt weg: durch eine der eben übernommenen Korrekturen erledigt.
+        if (f.umgeschrieben && openBefore.has(f)) f.erledigt = true;
+      });
+      this._recomputeCorrectedHtml();
     } catch (e) {
       console.error('[saveCorrections]', e);
       this.saveApplying = null;
@@ -503,95 +556,5 @@ export const lektoratMethods = {
     }
   },
 
-  // Serien-Lektorat: ganzes Buch oder — mit `chapterId` — ein Kapitel samt
-  // Unterkapiteln. Gleicher Job (`batch-check`), gleiche Statuszeile.
-  async batchCheck(chapterId = null) {
-    if (!this.$store.nav.pages.length) return;
-    const chapter = chapterId != null ? this._findTreeChapter(chapterId) : null;
-    if (chapterId != null && !chapter) return;
-    // Ganzer Unterbaum aus dem echten Baum — wie der Server (routes/jobs/lektorat.js),
-    // unabhaengig von einer laufenden Sidebar-Suche.
-    const ids = chapter ? this._chapterSubtreePageIds(chapter) : this.$store.nav.pages.map(p => p.id);
-    const all = ids.length;
-    if (!all) return;
-    // Final markierte, seither unveraenderte Abschnitte prueft der Server nicht
-    // (skip_final, docs/bearbeitungsstand.md) — die Rueckfrage nennt beide Zahlen.
-    const skipped = this.doneUnchangedCount(ids);
-    const n = all - skipped;
-    if (n === 0) { this.batchStatus = escHtml(this.t('lektorat.batchAllFinal', { n: skipped })); return; }
-    let message = chapter
-      ? this.t('lektorat.batchConfirmChapter', { n, name: chapter.name })
-      : this.t('lektorat.batchConfirm', { n });
-    if (skipped > 0) message += '\n\n' + this.t('lektorat.batchSkipFinal', { n: skipped });
-    if (!await this.appConfirm({ message })) return;
-    this.batchLoading = true;
-    this.batchProgress = 0;
-    this.batchStatus = this._runningJobStatus(this.t('common.starting'), 0, 0);
-    try {
-      const { jobId } = await fetchJson('/jobs/batch-check', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          book_id: parseInt(this.$store.nav.selectedBookId),
-          book_name: this.selectedBookName || null,
-          ...(chapter ? { chapter_id: parseInt(chapter.id, 10) } : {}),
-          skip_final: true,
-        }),
-      });
-      lsSet('lektorat_batchcheck_job_' + this.$store.nav.selectedBookId, jobId);
-      this.startBatchPoll(jobId);
-    } catch (e) {
-      console.error('[batchCheck]', e);
-      this.batchStatus = `<span class="error-msg">${this.t('common.errorColon')}${escHtml(e.message)}</span>`;
-      this.batchLoading = false;
-    }
-  },
-
-  startBatchPoll(jobId) {
-    const bookId = this.$store.nav.selectedBookId;
-    this._startPoll({
-      timerProp: '_batchPollTimer',
-      jobId,
-      lsKey: 'lektorat_batchcheck_job_' + bookId,
-      progressProp: 'batchProgress',
-      onProgress: (job) => {
-        this.batchStatus = this._runningJobStatus(job.statusText, job.tokensIn, job.tokensOut, job.maxTokensOut, job.progress, job.tokensPerSec, job.statusParams);
-      },
-      onNotFound: () => {
-        this.batchLoading = false;
-        this.batchStatus = escHtml(this.t('job.interrupted'));
-      },
-      onError: (job) => {
-        this.batchLoading = false;
-        setTimeout(() => { this.batchProgress = 0; }, 400);
-        this.batchStatus = `<span class="error-msg">${this.t('common.errorColon')}${escHtml(this.t(job.error, job.errorParams))}</span>`;
-      },
-      onDone: async (job) => {
-        this.batchLoading = false;
-        setTimeout(() => { this.batchProgress = 0; }, 400);
-        if (job.result?.empty) {
-          this.batchStatus = escHtml(job.result.skippedFinal > 0
-            ? this.t('lektorat.batchAllFinal', { n: job.result.skippedFinal })
-            : this.t(job.result.chapterId != null ? 'lektorat.batchNoPagesChapter' : 'lektorat.batchNoPages'));
-          return;
-        }
-        const r = job.result;
-        // Leere und gescheiterte Seiten getrennt nennen — „X/Y geprüft" allein
-        // lässt offen, ob der Rest leer war oder ein Fehler ihn übersprungen hat.
-        // x-html-Sink: Seitennamen escapen.
-        let status = escHtml(this.t('lektorat.batchDone', { done: r.done, total: r.pageCount, errors: r.totalErrors }));
-        if (r.skippedEmpty > 0) status += ' ' + escHtml(this.t('lektorat.batchSkippedEmpty', { n: r.skippedEmpty }));
-        if (r.skippedFinal > 0) status += ' ' + escHtml(this.t('lektorat.batchSkippedFinal', { n: r.skippedFinal }));
-        const failed = Array.isArray(r.failed) ? r.failed : [];
-        if (failed.length > 0) {
-          const MAX_NAMES = 5;
-          const names = failed.slice(0, MAX_NAMES).map(p => `«${p.name}»`).join(', ') + (failed.length > MAX_NAMES ? ', …' : '');
-          status += ` <span class="error-msg">${escHtml(this.t('lektorat.batchFailed', { n: failed.length, names }))}</span>`;
-        }
-        this.batchStatus = status;
-        this.refreshPageAges();
-        if (this.currentPage) await this.loadPageHistory(this.currentPage.id);
-      },
-    });
-  },
+  ...lektoratBatchMethods,
 };

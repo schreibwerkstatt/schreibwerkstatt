@@ -8,20 +8,27 @@
 // mit 409 und nichts wird überschrieben. Der Knopf steht in der Zeile der
 // Save-Bestätigung und läuft mit ihr nach UNDO_WINDOW_MS ab; davor nur, solange
 // die Seite unverändert auf genau diesem Stand steht und nicht bearbeitet wird.
-// Der Übernahme-Vermerk am Lauf (page_checks) geht auf den Stand davor zurück,
-// sonst zählte die Fehler-Heatmap die zurückgenommenen Korrekturen als erledigt.
+// Am Lauf (page_checks) werden die Befunde ausgetragen, die dieser Save neu
+// gebucht hat — sonst zählte die Fehler-Heatmap die zurückgenommenen
+// Korrekturen als erledigt. Was davor schon gebucht war (frühere Übernahme,
+// Edit-Modus), bleibt stehen; gelesen wird dafür der frische Serverstand
+// (lektorat-booking.js).
 
 import { savePage, isPageConflict } from './shared/page-api.js';
+import { patchBookedLists, withoutOriginals } from './lektorat-booking.js';
 
 // Auch Anzeigedauer der Save-Bestätigung, wenn Rückgängig angeboten wird.
 export const UNDO_WINDOW_MS = 15000;
 
 export const lektoratUndoMethods = {
   // Von saveCorrections nach erfolgreichem Speichern gesetzt.
-  _rememberLektoratUndo({ pageId, pageName, preHtml, updatedAt, checkId, prevApplied = null, prevSelected = null }) {
+  // `bookedApplied`/`bookedSelected`: Originale, die dieser Save neu gebucht hat.
+  // `appliedOriginals`: was dieser Save in den Text gebracht hat — die stehen
+  // gebliebene Befundliste öffnet sie beim Rückgängig wieder.
+  _rememberLektoratUndo({ pageId, pageName, preHtml, updatedAt, checkId, bookedApplied = [], bookedSelected = [], appliedOriginals = [] }) {
     clearTimeout(this._lektoratUndoTimer);
     this.lektoratUndo = preHtml && updatedAt
-      ? { pageId, pageName, preHtml, updatedAt, checkId, prevApplied, prevSelected }
+      ? { pageId, pageName, preHtml, updatedAt, checkId, bookedApplied, bookedSelected, appliedOriginals }
       : null;
     if (!this.lektoratUndo) return;
     const u = this.lektoratUndo;
@@ -48,20 +55,25 @@ export const lektoratUndoMethods = {
         expectedUpdatedAt: u.updatedAt,
       });
       this.lektoratUndo = null;
-      if (u.checkId) {
+      if (u.checkId && (u.bookedApplied.length || u.bookedSelected.length)) {
         try {
-          const r = await fetch('/history/check/' + u.checkId + '/saved', {
-            method: 'PATCH',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ saved: false, applied_errors_json: u.prevApplied || [], selected_errors_json: u.prevSelected || [] }),
+          const applied = new Set(u.bookedApplied), selected = new Set(u.bookedSelected);
+          await patchBookedLists(u.checkId, prev => {
+            const next = withoutOriginals(prev.applied, applied);
+            return { applied: next, selected: withoutOriginals(prev.selected, selected), saved: next.length > 0 };
           });
-          if (!r.ok) throw new Error(`HTTP ${r.status}`);
         } catch (e) {
           console.error('[lektorat undo history]', e);
         }
       }
       this._syncPageStatsAfterSave?.({ id: u.pageId, updated_at: saved?.updated_at || null }, u.preHtml);
       if (this.currentPage?.id === u.pageId) {
+        // Vor dem Refetch: dessen Abgleich (_filterFindingsAfterSave) öffnet die
+        // Befunde, deren Stelle wieder dasteht, und nimmt „erledigt" zurück.
+        if (this.lastCheckId === u.checkId && u.appliedOriginals.length) {
+          const reopened = new Set(u.appliedOriginals);
+          this.appliedOriginals = this.appliedOriginals.filter(o => !reopened.has(o));
+        }
         await this._refetchCurrentPage?.();
         this.refreshPageAges?.();
         await this.loadPageHistory?.(u.pageId);

@@ -236,6 +236,25 @@ jobs:
           done
           exit $status
 
+      # Prod liefert die Shell als Bündel aus (scripts/build-bundle.js), alle
+      # Specs oben laufen gegen die Einzeldateien. Dieser Schritt baut das Bündel
+      # und faehrt Smoke + Service-Worker-Specs dagegen; bundle.spec.js prueft
+      # dabei, dass es wirklich geladen wurde (ein veraltetes ignoriert der
+      # Server still), dass der SW das Bündel precacht und offline daraus
+      # bootet, und dass das OTA-Editor-ZIP der nativen Clients unveraendert aus
+      # den Einzeldateien kommt. Shard 4 → eigener Port + eigene Wegwerf-DB.
+      - name: Bündel-Smoke (Shell als Prod-Bündel)
+        env:
+          SMOKE_ENGINES: chromium
+          SMOKE_SHARD: 4
+          BUNDLE_DIR: tests/.tmp/bundle
+        run: |
+          node scripts/build-bundle.js --out "$BUNDLE_DIR"
+          npx playwright test --config=playwright.app.config.js --project=chromium \
+            tests/e2e-app/bundle.spec.js tests/e2e-app/smoke.spec.js \
+            tests/e2e-app/sw-drafts-sync.spec.js tests/e2e-app/sw-offline-book.spec.js \
+            tests/e2e-app/sw-offline-editors.spec.js --reporter=list
+
   deploy:
     name: Deploy auf Prod-LXC
     needs: [tests]

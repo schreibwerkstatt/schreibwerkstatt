@@ -5,6 +5,7 @@ import { fetchJson } from '../utils.js';
 import { sortByPosition, isHardFinding } from './page-view.js';
 import { contentRepo } from '../repo/content.js';
 import { renderLektoratAnalysisHtml } from '../editor/lektorat-analysis.js';
+import { patchCheckSaved } from '../editor/lektorat-booking.js';
 
 export const historyMethods = {
   async loadPageHistory(pageId) {
@@ -18,20 +19,13 @@ export const historyMethods = {
     }
   },
 
-  // Während «Korrekturen speichern» läuft, gehört der Lauf dem Speichervorgang:
+  // Während ein Übernehmen in der Leseansicht läuft, gehört der Lauf dem Speichervorgang:
   // kein Umschalten, Löschen oder Laden eines anderen Eintrags dazwischen.
   async toggleHistoryEntrySaved(entry) {
     if (this.saveApplying != null) return;
     const newSaved = !entry.saved;
     try {
-      const r = await fetch('/history/check/' + entry.id + '/saved', {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ saved: newSaved }),
-      });
-      if (!r.ok) throw new Error(`HTTP ${r.status}`);
-      entry.saved = newSaved;
-      entry.saved_at = newSaved ? new Date().toISOString() : null;
+      await patchCheckSaved(entry.id, newSaved, { entry });
       this.refreshPageAges();
     } catch (e) {
       console.error('[toggleHistoryEntrySaved]', e);

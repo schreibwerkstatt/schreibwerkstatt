@@ -186,6 +186,9 @@
       "quickSave": [
         "mac"
       ],
+      "replaceContent": [
+        "mac"
+      ],
       "save": [
         "android",
         "mac"

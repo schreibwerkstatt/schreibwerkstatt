@@ -61,31 +61,41 @@
     <div>
       <div class="section-heading finding-header">
         <span x-text="$app.t('editor.findings.count', { n: $app.lektoratFindings.length })"></span>
-        <!-- Edit-Modus: Angehakte direkt im Editor übernehmen (editor/lektorat-live.js) -->
-        <button type="button" class="btn-compact finding-apply-selected" x-show="$app.editMode" :disabled="$app.lektoratLiveSelectedCount() === 0"
-                @click="$app.applyLektoratLiveSelected()"
-                x-text="$app.t('editor.findings.applySelected', { n: $app.lektoratLiveSelectedCount() })"></button>
         <div class="finding-toggle-group">
-          <button type="button" class="icon-btn icon-btn--ghost" :disabled="$app.saveApplying != null" @click="$app.selectAllFindings(true)" :data-tip="$app.t('editor.findings.selectAll')" :aria-label="$app.t('editor.findings.selectAll')"><svg class="icon" aria-hidden="true"><use href="/icons.svg#check"/></svg></button>
-          <button type="button" class="icon-btn icon-btn--ghost" :disabled="$app.saveApplying != null" @click="$app.selectAllFindings(false)" :data-tip="$app.t('editor.findings.selectNone')" :aria-label="$app.t('editor.findings.selectNone')"><svg class="icon" aria-hidden="true"><use href="/icons.svg#x"/></svg></button>
+          <!-- Angehakte übernehmen, beide Modi (editor/lektorat.js#applyFindings);
+               derselbe Knopf steht in der Abschnittsleiste (editor-page-actions.html). -->
+          <button type="button" class="icon-btn icon-btn--ghost" :disabled="$app.saveApplying != null || $app.applicableSelectedCount() === 0"
+                  @click="$app.applySelectedFindings()"
+                  :data-tip="$app.t('editor.findings.applySelected', { n: $app.applicableSelectedCount() })"
+                  :aria-label="$app.t('editor.findings.applySelected', { n: $app.applicableSelectedCount() })"><svg class="icon" aria-hidden="true"><use href="/icons.svg#check-check"/></svg></button>
+          <button type="button" class="icon-btn icon-btn--ghost" :disabled="$app.saveApplying != null" @click="$app.selectAllFindings(true)" :data-tip="$app.t('editor.findings.selectAll')" :aria-label="$app.t('editor.findings.selectAll')"><svg class="icon" aria-hidden="true"><use href="/icons.svg#square-check"/></svg></button>
+          <button type="button" class="icon-btn icon-btn--ghost" :disabled="$app.saveApplying != null" @click="$app.selectAllFindings(false)" :data-tip="$app.t('editor.findings.selectNone')" :aria-label="$app.t('editor.findings.selectNone')"><svg class="icon" aria-hidden="true"><use href="/icons.svg#square"/></svg></button>
         </div>
       </div>
       <template x-for="(f, i) in $app.lektoratFindings" :key="i">
         <label class="finding"
                :class="{ 'error': _findingKind(f.typ) === 'hard', 'style': _findingKind(f.typ) === 'soft', 'editorial': _findingKind(f.typ) === 'editorial', 'finding--deselected': !$app.selectedFindings[i], 'finding--applied': $app.appliedOriginals.includes(f.original), 'finding--rewritten': f.umgeschrieben && !$app.appliedOriginals.includes(f.original), 'finding--active': $app.editMode && $app.lektoratLiveActiveIdx === i }"
                :data-finding-idx="i"
-               @pointerenter="handleFindingPointer(i)">
+               @pointerenter="handleFindingPointer(i)"
+               @pointerleave="handleFindingPointerLeave(i)">
           <input type="checkbox" class="finding-checkbox" :checked="$app.selectedFindings[i]" :disabled="!$app.selectedFindings[i] && !$app.findingSelectable(f)" @change="$app.toggleFinding(i)">
           <span class="badge" :class="_findingBadgeClass(f.typ)" x-text="$app.t('finding.' + f.typ)"
                 :data-tip="_findingKind(f.typ) === 'editorial' ? $app.t('editor.findings.editorialTip') : null"></span>
           <span x-show="$app.appliedOriginals.includes(f.original)" class="tag" x-text="$app.t('editor.findings.applied')"></span>
           <span x-show="f.umgeschrieben && !f.erledigt && !$app.appliedOriginals.includes(f.original)" class="tag" x-text="$app.t('editor.findings.rewritten')" :data-tip="$app.t('editor.findings.rewrittenTip')"></span>
           <span x-show="f.erledigt && !$app.appliedOriginals.includes(f.original)" class="tag" x-text="$app.t('editor.findings.resolvedByOther')" :data-tip="$app.t('editor.findings.resolvedByOtherTip')"></span>
-          <span x-show="$app.findingInMsgThread(f)" class="tag" x-text="$app.t('editor.findings.inMsgThread')" :data-tip="$app.t('editor.findings.inMsgThreadTip')"></span>
-          <span x-show="f.mehrdeutig" class="tag" x-text="$app.t('editor.findings.ambiguous')" :data-tip="$app.t($app.editMode ? 'editor.findings.ambiguousEditTip' : 'editor.findings.ambiguousTip')"></span>
-          <span x-show="f.abgelehnt" class="tag" x-text="$app.t('editor.findings.rejected')" :data-tip="$app.t('editor.findings.rejectedTip')"></span>
+          <span x-show="!_findingDone(f) && $app.findingInMsgThread(f)" class="tag" x-text="$app.t('editor.findings.inMsgThread')" :data-tip="$app.t('editor.findings.inMsgThreadTip')"></span>
+          <span x-show="!_findingDone(f) && (f.mehrdeutig || $app.findingAmbiguousNow(f))" class="tag" x-text="$app.t('editor.findings.ambiguous')" :data-tip="$app.t($app.editMode ? 'editor.findings.ambiguousEditTip' : 'editor.findings.ambiguousTip')"></span>
+          <span x-show="!_findingDone(f) && f.abgelehnt" class="tag" x-text="$app.t('editor.findings.rejected')" :data-tip="$app.t('editor.findings.rejectedTip')"></span>
           <span class="finding-content">
-            <span class="finding-original" x-text="f.original"></span>
+            <!-- Edit-Modus: Klick zeigt die Stelle im Editor (statt das Häkchen umzuschalten);
+                 Hover hebt sie nur hervor (editor/lektorat-live.js#lektoratLiveReveal). -->
+            <span class="finding-original" x-text="f.original"
+                  :role="$app.editMode ? 'button' : null" :tabindex="$app.editMode ? 0 : null"
+                  :data-tip="$app.editMode ? $app.t('editor.findings.revealTip') : null"
+                  @click="if ($app.editMode) { $event.preventDefault(); $app.lektoratLiveReveal(i) }"
+                  @keydown.enter="if ($app.editMode) { $event.preventDefault(); $app.lektoratLiveReveal(i) }"
+                  @keydown.space="if ($app.editMode) { $event.preventDefault(); $app.lektoratLiveReveal(i) }"></span>
 
             <!-- Korrektur (KI- oder eigener Vorschlag) – inline editierbar -->
             <template x-if="editingIdx !== i">
@@ -95,8 +105,9 @@
                 </template>
                 <span class="finding-korrektur-actions" @click.stop @pointerdown.stop
                       x-show="!$app.appliedOriginals.includes(f.original) && !f.umgeschrieben">
-                  <button type="button" class="finding-edit-btn" x-show="$app.editMode && $app.findingSelectable(f)"
-                          @click.stop="$app.applyLektoratLive([i])" x-text="$app.t('editor.findings.applyOne')"></button>
+                  <button type="button" class="finding-edit-btn" x-show="$app.findingSelectable(f) && !$app.findingAmbiguousNow(f)"
+                          :disabled="$app.saveApplying != null"
+                          @click.stop="$app.applyFindings([i])" x-text="$app.t('editor.findings.applyOne')"></button>
                   <button type="button" class="finding-edit-btn" @click.stop="startEditKorrektur(i)"
                           x-text="f.korrektur ? $app.t('editor.findings.editKorrektur') : $app.t('editor.findings.addKorrektur')"></button>
                   <span x-show="f.userEdited" class="tag" x-text="$app.t('editor.findings.yourSuggestion')"></span>

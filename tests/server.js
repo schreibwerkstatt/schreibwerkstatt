@@ -189,7 +189,13 @@ async function handleMockRoute(req, res, urlPath) {
     return true;
   }
 
-  // History-Endpoint: Lektorat patched nach saveCorrections die applied/selected-Listen.
+  // History-Endpoints: Lektorat patched nach saveCorrections die applied/selected-Listen;
+  // davor liest es den gebuchten Stand (editor/lektorat-booking.js).
+  if (urlPath.match(/^\/history\/check\/\d+\/details$/) && req.method === 'GET') {
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ errors_json: [], applied_errors_json: null, selected_errors_json: null, szenen_json: null }));
+    return true;
+  }
   if (urlPath.match(/^\/history\/check\/\d+\/saved$/) && req.method === 'PATCH') {
     const body = await readBody(req);
     try { lastHistoryPatch = JSON.parse(body); } catch (_) { lastHistoryPatch = null; }

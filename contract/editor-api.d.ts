@@ -124,7 +124,22 @@ export function buildResolvedHtml(merged: MergedEntry[], decisions?: Record<stri
 // ── Hilfen der Schale ─────────────────────────────────────────────────────────
 // Rechtschreibung, Synonyme, Anführungszeichen. Die Options-Namen, die die
 // Clients übergeben, stehen in contract/editor-surface.json unter `options`.
-export function createSpellcheckController(opts: Record<string, unknown>): unknown;
+export function createSpellcheckController(opts: Record<string, unknown>): SpellcheckController;
+
+/** Rückgabe von `createSpellcheckController`. */
+export interface SpellcheckController {
+  /** An `root` binden, sofort prüfen; danach prüft jedes `input` (entprellt). */
+  attach(): void;
+  /** Lösen, Markierungen und Popover entfernen. */
+  detach(): void;
+  /**
+   * Neu prüfen anstossen (entprellt, auch bei unverändertem Text). Für
+   * Inhaltswechsel, die kein `input` feuern — z.B. nach `handle.replaceContent`.
+   * Vor `attach` / nach `detach` wirkungslos.
+   */
+  refresh(): void;
+  isAttached(): boolean;
+}
 export function createSynonymController(opts: Record<string, unknown>): unknown;
 export function applySpellcheckReplacement(...args: unknown[]): unknown;
 export function normalizeQuotes(...args: unknown[]): unknown;

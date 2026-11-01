@@ -51,6 +51,13 @@
    components/manuscript-content.css (dieselben Blöcke zeigen Bucheditor und
    Share-Reader). Hier stehen nur die Notebook-Abweichungen. */
 .page-content-view p { margin: 0.6em 0; text-wrap: pretty; }
+/* Leerabsätze vor dem ersten Inhalt (`<p><br></p>`, z.B. aus Import oder
+   Enter am Seitenanfang) blähen im Lesemodus den oberen Abstand gegenüber dem
+   unteren auf — hinten räumt cleanPageHtml sie weg, vorne nicht. Im
+   Edit-Modus bleiben sie sichtbar, damit man sie löschen kann. */
+.page-content-view:not(.page-content-view--editing) > p:is(:empty, :has(> br:only-child)):not(:not(p:is(:empty, :has(> br:only-child))) ~ *) {
+  display: none;
+}
 
 /* Marginalia: Absätze mit Lektorats-Markierungen bekommen rechts einen
    feinen severity-getönten Akzentstreifen (wie roter Rotstift am Manuskript-

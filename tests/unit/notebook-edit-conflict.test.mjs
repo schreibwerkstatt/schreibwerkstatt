@@ -29,6 +29,7 @@ globalThis.matchMedia = window.matchMedia;
 
 const { contentRepo } = await import('../../public/js/repo/content.js');
 const { notebookEditMethods } = await import('../../public/js/editor/notebook/edit.js');
+const { lektoratMethods } = await import('../../public/js/editor/lektorat.js');
 // Die submitConflictResolution-Tests stubben `_attemptBlockMerge` am geteilten
 // Objekt; die Live-Stand-Tests unten brauchen den echten.
 const realAttemptBlockMerge = notebookEditMethods._attemptBlockMerge;
@@ -118,6 +119,7 @@ function setApp(extra) {
     correctedHtml: '<x>',
     hasErrors: true,
     _recomputeCorrectedHtml() { this._rcCalled = true; },
+    _setFindingPresence: lektoratMethods._setFindingPresence,
     ...extra,
   };
   window.__app = app;

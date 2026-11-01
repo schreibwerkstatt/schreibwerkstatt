@@ -1,0 +1,26 @@
+{
+  "version": "5.8.1",
+  "date": "2026-11-01",
+  "entries": [
+    {
+      "kind": "verbessert",
+      "de": "Abschnitts-Lektorat: Lese- und Bearbeiten-Ansicht übernehmen Befunde jetzt gleich, einzeln oder alle angehakten auf einen Klick. Im Bearbeiten-Modus wird eine Übernahme sofort gespeichert, und Strg+Z nimmt sie zurück.",
+      "en": "Section review: the reading and edit views now apply findings the same way, one by one or all checked ones with a single click. In edit mode an applied correction is saved right away, and Ctrl+Z undoes it."
+    },
+    {
+      "kind": "verbessert",
+      "de": "Die App startet schneller und zuverlässiger, weil sie beim Laden viel weniger Dateien einzeln abruft.",
+      "en": "The app starts faster and more reliably because it fetches far fewer individual files while loading."
+    },
+    {
+      "kind": "verbessert",
+      "de": "Fine-Tuning-Export: Das Leser-Modell lernt die Grundfakten zu Figuren, Beziehungen und Ereignissen gezielt und lehnt Fragen ab, die das Buch nicht beantwortet. Lektorats-Kritik landet nicht mehr in den Antworten.",
+      "en": "Fine-tuning export: the reader model learns the core facts about characters, relationships and events, and declines questions the book doesn't answer. Editorial criticism no longer ends up in its answers."
+    },
+    {
+      "kind": "behoben",
+      "de": "Abschnitts-Lektorat, Bearbeiten-Modus: Die Hervorhebung einer Fundstelle erlischt, sobald du die Stelle oder den Befund in der Liste verlässt. Erledigte Befunde treten farblich zurück.",
+      "en": "Section review, edit mode: the highlight on a passage goes away once you leave the passage or the finding in the list. Resolved findings now fade into the background."
+    }
+  ]
+}

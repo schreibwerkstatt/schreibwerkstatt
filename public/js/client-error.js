@@ -39,6 +39,54 @@
 
   window.__reportClientError = report;
 
+  // Netz-Diagnose fuer einen Ladefehler: der Server-/Proxy-Log zeigt nur, was
+  // ankam — ob der Browser den Request ueberhaupt abgeschickt hat, sieht man
+  // nur hier. Fehlt die Resource-Timing-Zeile, hat der Browser ihn nie
+  // abgeschlossen (verworfen, bevor er ins Netz ging, oder abgebrochen);
+  // `status=0` mit Bytes = Antwort kam, Verarbeitung scheiterte. Dazu der
+  // Seitenkontext, der Abbrueche erklaert (SW, Sichtbarkeit, Navigationsart).
+  function entryLine(r) {
+    return 'status=' + (r.responseStatus == null ? '?' : r.responseStatus)
+      + ' proto=' + (r.nextHopProtocol || '-')
+      + ' transfer=' + r.transferSize
+      + ' body=' + r.encodedBodySize
+      + ' start=' + Math.round(r.startTime) + 'ms'
+      + ' dur=' + Math.round(r.duration) + 'ms'
+      + (r.deliveryType ? ' delivery=' + r.deliveryType : '');
+  }
+
+  function resourceDiag(url) {
+    var lines = [];
+    try {
+      var entries = url ? performance.getEntriesByName(url) : [];
+      lines.push(entries.length
+        ? 'timing: ' + entryLine(entries[entries.length - 1])
+        : 'timing: keine Zeile (Request nie abgeschlossen)');
+    } catch (_) { lines.push('timing: n/a'); }
+    try {
+      var nav = performance.getEntriesByType('navigation')[0];
+      var conn = navigator.connection;
+      lines.push('page: t=' + Math.round(performance.now()) + 'ms'
+        + ' nav=' + (nav ? nav.type : '?')
+        + ' ready=' + document.readyState
+        + ' visible=' + document.visibilityState
+        + ' online=' + (navigator.onLine !== false)
+        + ' sw=' + (navigator.serviceWorker
+          ? (navigator.serviceWorker.controller ? 'controlled' : 'uncontrolled') : 'n/a')
+        + (conn && conn.effectiveType ? ' net=' + conn.effectiveType : ''));
+    } catch (_) {}
+    try {
+      var all = performance.getEntriesByType('resource');
+      var failed = all.filter(function (r) {
+        return r.responseStatus === 0 || r.responseStatus >= 400;
+      });
+      lines.push('resources: ' + all.length + ' geladen, ' + failed.length + ' ohne Erfolg');
+      failed.slice(0, 15).forEach(function (r) { lines.push('  ' + r.name + ' ' + entryLine(r)); });
+    } catch (_) {}
+    return lines.join('\n');
+  }
+  window.__resourceDiag = resourceDiag;
+
   // Capture-Phase ist Pflicht fuer den Resource-Zweig unten: Ladefehler von
   // Script/Link/Img bubblen NICHT, sie sind nur im Capture am window sichtbar.
   window.addEventListener('error', function (e) {
@@ -56,7 +104,7 @@
       report({
         kind: 'resource',
         message: tag + ' nicht ladbar: ' + (url || '(unbekannt)'),
-        stack: null,
+        stack: resourceDiag(url),
         source: url || null,
         line: null,
         col: null,

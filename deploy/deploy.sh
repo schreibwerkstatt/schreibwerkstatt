@@ -99,6 +99,10 @@ RSYNC_EXCLUDES=(
   # Gespeicherte Fine-Tuning-Sets (routes/jobs/finetune-export/lib/store.js) —
   # liegen neben der DB und müssen Deploys überleben wie sie.
   --exclude='finetune-exports'
+  # Prod-Bündel der Shell: entsteht weiter unten aus dem deployten Stand. Bis
+  # dahin liest der noch laufende Server seine Bündel-Dateien von der Platte —
+  # `--delete` darf sie ihm nicht unter den Füssen wegziehen.
+  --exclude='/dist'
 )
 
 # Demo-Instanz: der Golden-Snapshot und die beiden Marker liegen IM
@@ -210,6 +214,19 @@ fi
 # Asset-Stand regenerieren. Idempotent: rsync lieferte exakt die CI-getesteten
 # Files, der Hash ist also identisch zum committeten Manifest.
 node scripts/sw-manifest.js
+# Prod-Bündel der Shell (scripts/build-bundle.js, docs/architektur.md "Prod-
+# Bündel der Shell"): aus dem eben deployten Stand bauen, damit der Quell-Hash
+# zum Neustart passt. Der Server nimmt es nur, wenn er passt — sonst liefert er
+# die Einzeldateien, die Seite bleibt also auch bei einem Fehler hier benutzbar.
+# public/js bleibt vollständig liegen: der Server importiert daraus, und das
+# OTA-Editor-ZIP der nativen Clients (lib/editor-bundle.js) packt die
+# Einzeldateien.
+if node scripts/build-bundle.js; then
+  chown -R "$OWNER:$OWNER" dist
+else
+  echo "⚠ Bündel-Build gescheitert – der Server liefert die Einzeldateien aus."
+  rm -rf dist
+fi
 # sw-manifest.js laeuft als root und schreibt public/sw-manifest.js neu, also
 # NACH dem find-Pass oben. Ohne diese Zeile ist genau eine Datei im Baum
 # root-owned, bis der naechste Deploy sie einsammelt — die Invariante "nach dem

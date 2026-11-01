@@ -186,7 +186,7 @@ test.describe('Lektorat-Flow', () => {
     // Übernehmen schreibt den frischen Text mit der Korrektur zurück; der im
     // Mac-Client geschriebene Satz darf nicht überschrieben werden.
     await page.evaluate(() => window.harness.saveCorrections());
-    await waitUntil(page, 'h => h.saveApplying === null && h.checkDone === false', 5000);
+    await waitUntil(page, 'h => h.saveApplying === null && h.appliedOriginals.length > 0', 5000);
 
     const mock = await page.request.get('http://localhost:8765/__mock/state').then(r => r.json());
     expect(mock.lastBsPut.html).toContain('lief zum Fluss');
@@ -194,14 +194,14 @@ test.describe('Lektorat-Flow', () => {
     expect(mock.lastBsPut.html).not.toContain('scheinet');
   });
 
-  test('saveCorrections: sendet korrigiertes HTML an den Server und räumt State ab', async ({ page }) => {
+  test('saveCorrections: sendet korrigiertes HTML an den Server, Befundliste bleibt mit „übernommen" stehen', async ({ page }) => {
     await loadHarness(page, 'ok');
     await page.evaluate(() => window.harness.runCheck());
     await waitUntil(page, 'h => h.checkDone === true');
 
     const usage = page.waitForRequest(r => new URL(r.url()).pathname === '/usage/event');
     await page.evaluate(() => window.harness.saveCorrections());
-    await waitUntil(page, 'h => h.saveApplying === null && h.checkDone === false', 5000);
+    await waitUntil(page, 'h => h.saveApplying === null && h.appliedOriginals.length > 0', 5000);
     // Nutzungs-Event: nur Zahlen, keine Befundtexte (docs/usage-events.md).
     const ev = JSON.parse((await usage).postData());
     expect(ev.event).toBe('lektorat.applied');
@@ -219,13 +219,15 @@ test.describe('Lektorat-Flow', () => {
 
     const snap = await state(page, `h => ({
       findings: h.lektoratFindings.length,
-      corrected: h.correctedHtml,
+      applied: [...h.appliedOriginals],
+      selected: h.selectedFindings.filter(Boolean).length,
+      checkDone: h.checkDone,
       originalHtml: h.originalHtml,
-      analysisOut: h.analysisOut,
     })`);
-    expect(snap.findings).toBe(0);
-    expect(snap.corrected).toBeNull();
+    expect(snap.checkDone).toBe(true);
+    expect(snap.findings).toBeGreaterThanOrEqual(2);
+    expect(snap.applied).toHaveLength(2);
+    expect(snap.selected).toBe(0);
     expect(snap.originalHtml).toContain('Wald');
-    expect(snap.analysisOut).toBe('');
   });
 });

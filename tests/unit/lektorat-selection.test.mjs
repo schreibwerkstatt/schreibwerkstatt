@@ -87,10 +87,13 @@ test('skipReason: wirkungsloser Vorschlag ist „unchanged", nicht „boundary"'
   assert.equal(skipReason(HTML, '«Ja», sagte er'), 'boundary', 'ohne Ersatz unverändert');
 });
 
-function stubFetch() {
+// `details`: gebuchter Serverstand je Lauf-ID (GET /history/check/:id/details).
+function stubFetch(details = {}) {
   const calls = [];
   globalThis.fetch = async (url, opts = {}) => {
     calls.push({ url, method: opts.method || 'GET', body: opts.body ? JSON.parse(opts.body) : null });
+    const m = /^\/history\/check\/(\d+)\/details$/.exec(url);
+    if (m) return { ok: true, status: 200, json: async () => details[m[1]] || {} };
     return { ok: true, status: 200, json: async () => [] };
   };
   return calls;
@@ -114,14 +117,15 @@ test('Speichern: Befund ohne Vorschlag gilt als übersprungen, nicht als überno
 });
 
 test('Speichern: PATCH geht an den gepinnten Lauf, auch nach Seitenwechsel', async () => {
-  const calls = stubFetch();
+  const calls = stubFetch({ 42: { applied_errors_json: [F('stil', 'alt', 'neu')], selected_errors_json: null } });
   const ok = F('grammatik', 'und ging', 'und lief');
   const app = makeApp({
     lektoratFindings: [ok],
     selectedFindings: [true],
     lastCheckId: 42,
     activeHistoryEntryId: 42,
-    pageHistory: [{ id: 42, applied_errors_json: [F('stil', 'alt', 'neu')], selected_errors_json: null }],
+    // Veralteter Session-Stand: massgeblich ist der Serverstand aus /details.
+    pageHistory: [{ id: 42, applied_errors_json: [], selected_errors_json: null }],
   });
   app._loadApplyAndSave = async () => {
     // Während des Speicherns: anderer Abschnitt, anderer History-Eintrag offen.
@@ -134,7 +138,7 @@ test('Speichern: PATCH geht an den gepinnten Lauf, auch nach Seitenwechsel', asy
   const patch = calls.find(c => c.method === 'PATCH');
   assert.ok(patch, 'trotz Seitenwechsel verbucht');
   assert.equal(patch.url, '/history/check/42/saved');
-  assert.deepEqual(patch.body.applied_errors_json.map(f => f.original), ['alt', 'und ging'], 'mit dem Eintrag gemergt');
+  assert.deepEqual(patch.body.applied_errors_json.map(f => f.original), ['alt', 'und ging'], 'mit dem frischen Serverstand gemergt');
   assert.equal(app.lastCheckId, 99, 'State der neuen Seite unangetastet');
 });
 

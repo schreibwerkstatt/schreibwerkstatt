@@ -30,3 +30,6 @@ assets/icc/*.icc
 # Smoke-Test Wegwerf-DB
 tests/.tmp/
 finetune-exports/
+
+# Prod-Bündel der Shell (scripts/build-bundle.js, gebaut beim Deploy)
+/dist/

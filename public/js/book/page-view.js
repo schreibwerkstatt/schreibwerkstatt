@@ -281,7 +281,10 @@ export const pageViewMethods = {
       this.renderedPageHtml = '';
       return;
     }
-    const allErrors = this.lektoratFindings || [];
+    // Übernommene nicht markieren: ihr Original steht oft weiter im Text
+    // („sagte er" → „sagte er,"). Index bleibt erhalten (data-error-idx).
+    const applied = this.appliedOriginals || [];
+    const allErrors = (this.lektoratFindings || []).map(f => (applied.includes(f.original) ? { ...f, original: '' } : f));
     const allSelected = this.selectedFindings || [];
     // Offene Seiten-Chat-Vorschläge (nur die letzte Assistant-Nachricht) kommen
     // über den Store — die Nachrichten selbst leben in der Sub-Karte `chatCard`,

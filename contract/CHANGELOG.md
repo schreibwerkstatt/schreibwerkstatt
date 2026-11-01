@@ -18,6 +18,12 @@ Neustart, nur additiv:
 
 **Clients müssen:** nichts — wer 503 wie einen Netzfehler behandelt (Outbox, erneuter Versuch), liegt richtig.
 
+Bundle, nur additiv:
+
+- **`createSpellcheckController` → `SpellcheckController`** ist jetzt typisiert ([editor-api.d.ts](editor-api.d.ts)): `attach`, `detach`, `refresh`, `isAttached`. Das Bundle ist unverändert, die Methoden gab es schon; neu ist die Zusage.
+
+**Clients dürfen:** nach `handle.replaceContent(html)` `refresh()` aufrufen, damit die Rechtschreibprüfung den eingespielten Stand prüft (der Tausch feuert kein `input`).
+
 ## api 4 · editorApi 1
 
 Gliederung, nur additiv:

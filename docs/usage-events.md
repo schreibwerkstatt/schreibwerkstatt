@@ -36,7 +36,7 @@ Erstanbieter-Messung des Nutzungsverhaltens: welche Funktionen genutzt werden, o
 | `synonym.applied` | client | `source` thesaurus/ai | Synonym aus dem Picker eingesetzt (SPA-Weg `editor/synonyme.js`; der Bundle-Controller der nativen Clients meldet nichts) |
 | `job.queued` / `job.finished` | server | `type`, `status`, `durationSec` (ab Start) | `createJob`, `completeJob`, `failJob`, Abbruch in der Queue |
 | `chat.proposal` | client | `chat` page/book/research/plot/ideen, `action` applied/discarded/reopened/undone, `kind`, `count` | die fünf Chats; der Recherche-Chat kennt kein Verwerfen |
-| `lektorat.applied` | client | `shown`, `selected`, `applied`, `skipped` | Abschnitts-Lektorat «Korrekturen übernehmen» (`saveCorrections`) |
+| `lektorat.applied` | client | `shown`, `selected`, `applied`, `skipped` | Abschnitts-Lektorat «Übernehmen» in der Leseansicht (`saveCorrections`) |
 
 **Datenschutzerklärung:** die Nutzungsdaten stehen unter «Erhobene Daten» (`privacy.sec2ItemE`) mit der Default-Frist von 13 Monaten. Wer die Frist oder die Art der Events ändert, zieht den Text dort nach.
 

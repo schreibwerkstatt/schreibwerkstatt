@@ -177,14 +177,16 @@ export const lifecycleMethods = {
   // Differenzen), identisch zu `sortByPosition` — reines indexOf auf rohem HTML
   // würde ein noch gültiges Finding verwerfen, sobald sich Markup (z.B.
   // data-bid) um den Textausschnitt herum ändert.
+  // Im Notebook-Edit-Modus mit offener Befundliste entscheidet allein der
+  // Live-Text (editor/lektorat-live.js): wer während des Saves weitertippt, hat
+  // im Editor schon einen neueren Stand als das gespeicherte HTML.
   _filterFindingsAfterSave(newHtml) {
     const app = editorHost();
     if (!app?.lektoratFindings || app.lektoratFindings.length === 0) return;
+    if (app._lektoratLiveOn?.()) return;
     app.lektoratFindings.forEach((f, i) => {
-      const gone = !app.appliedOriginals.includes(f.original) && !(f.original && findInHtml(newHtml, f.original));
-      if (!!f.umgeschrieben !== gone) f.umgeschrieben = gone;
-      if (!gone && f.erledigt) f.erledigt = false;
-      if (gone && app.selectedFindings[i]) app.selectedFindings[i] = false;
+      const present = app.appliedOriginals.includes(f.original) || !!(f.original && findInHtml(newHtml, f.original));
+      app._setFindingPresence(i, present);
     });
     app._recomputeCorrectedHtml?.();
   },
@@ -476,7 +478,7 @@ export const lifecycleMethods = {
 
 
   // Stilles Speichern (Ctrl+S / Auto-Save): bleibt im Editor. `reason` nennt
-  // den Auslöser nur fürs PAGE_CONFLICT-Log (autosave, retry; sonst 'quick').
+  // den Auslöser nur fürs PAGE_CONFLICT-Log (autosave, retry, lektorat; sonst 'quick').
   async quickSave(reason = 'quick') {
     const app = editorHost();
     if (!app || !app.editMode || !app.currentPage || app.editSaving) return;

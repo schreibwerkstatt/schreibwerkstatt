@@ -75,7 +75,10 @@
       window.__reportClientError({
         kind: 'boot',
         message: message + ' [' + bootEnv() + ']',
-        stack: null,
+        // Ein Modul-Ladefehler meldet sich immer als "app.js" (der Graph
+        // scheitert als Ganzes) — welches Modul es war und ob der Request das
+        // Netz je erreicht hat, steht nur in der Resource-Timing-Liste.
+        stack: typeof window.__resourceDiag === 'function' ? window.__resourceDiag(source) : null,
         source: source || null,
         line: null,
         col: null,
