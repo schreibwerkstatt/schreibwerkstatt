@@ -14,7 +14,12 @@ const { loadFinetuneData } = require('./data-loader');
 const { finalizeFinetuneSamples } = require('./finalize');
 const { bookFingerprint, finetuneFilePath, saveFinetuneResult, loadFinetuneMeta } = require('./lib/store');
 const { buildEvalPrompts } = require('./lib/eval-prompts');
-const { qualityLogLine } = require('./lib/export-stats');
+const { qualityLogLine, coreFactCoverage } = require('./lib/export-stats');
+const { loadEventData } = require('./samples/author-chat/event-data');
+const { buildCoreFactSamples } = require('./samples/core-facts');
+const { buildAiParaphraseSamples } = require('./samples/core-facts/ai-paraphrase');
+const { relationTypes, finetuneProfiles } = require('../../../lib/esm-bridge');
+const { fileSafeName, formatExportTimestamp } = require('../../../lib/filenames');
 
 const { buildStyleSamples } = require('./samples/style');
 const { buildSceneSamples } = require('./samples/scene');
@@ -102,7 +107,13 @@ async function runFinetuneExportJob(jobId, bookId, bookName, userEmail, opts) {
     // `maxFactShare`: Faktenfragen höchstens dieser Anteil, der Rest sind
     // Schreibaufgaben mit Buchtext als Ziel (0 = aus). Siehe finalize.js.
     const maxPerAnswer = Math.max(0, Math.min(50, Math.floor(Number(opts.maxPerAnswer ?? 2))));
-    const maxFactShare = Math.max(0, Math.min(0.95, Number(opts.maxFactShare ?? 0.4) || 0));
+    // Export-Vorgaben v3 (Kernwissen, Mischung nach Tokens, Längen, Absatz-
+    // Budget, Ablehnen): Quelle ist das Trainingsprofil
+    // (public/js/book/finetune-profiles.js#exportOptions); die Karte schickt sie
+    // mit, fehlende Werte füllt der Server aus derselben Quelle.
+    const profiles = await finetuneProfiles();
+    const profile = profiles.finetuneProfileById(opts.profileId);
+    const exportOpts = normalizeExportOptions(profiles.exportOptions(profile), opts.export);
 
     // Einheitliche Identität über alle Sample-Typen: Modell soll *eine* Stimme
     // lernen — die des Buchs im Gespräch mit Lesern (docs/finetuning.md#leser-modell)
@@ -114,12 +125,12 @@ async function runFinetuneExportJob(jobId, bookId, bookName, userEmail, opts) {
     const samples = [];
     // Analyse-Antworten, die `voiceRewrite` im Buchton neu fasst (author-chat/index.js#pushQA).
     const voiceTargets = new Map();
-    const counts = { style: 0, scene: 0, verbatim: 0, dialog: 0, authorChat: 0, aiAugment: 0, reader: 0 };
+    const counts = { style: 0, scene: 0, verbatim: 0, dialog: 0, authorChat: 0, aiAugment: 0, reader: 0, core: 0 };
 
     // Normalised opts mit übernommenen Defaults — wird in alle Sub-Module gereicht.
-    const optsNorm = { ...opts, minChars, maxChars, valSplit, valSeed: seed, maxSeqTokens, emitText,
+    const optsNorm = { ...opts, ...exportOpts, minChars, maxChars, valSplit, valSeed: seed, maxSeqTokens, emitText,
                        fulltext, maxFullChars, truncateLong, biasBoost, maxTypeShare,
-                       maxPerAnswer, maxFactShare };
+                       maxPerAnswer, profileId: profile.id };
 
     const ctx = {
       jobId, logger,
@@ -131,8 +142,14 @@ async function runFinetuneExportJob(jobId, bookId, bookName, userEmail, opts) {
       // Namen aus dem Buchbaum, auch für Abschnitte unter der Mindestlänge
       // (Verweise auf Kapitel/Abschnitte ohne JOIN auf die Inhaltstabellen).
       chMap, pageNameById: new Map(pages.map(p => [p.id, p.name])),
+      // Beziehungstypen (normalisieren, kanonische Richtung) — Kernwissen und
+      // Falsche-Annahme-Fragen brauchen dieselbe Lesart wie der Figurengraph.
+      relTypes: await relationTypes(),
       ...data,
     };
+    // Zeitstrahl einmal angereichert: Szenen-Sampler (Inhalt statt Lektorat),
+    // Kernwissen (Ereignis-Facetten, Kapitelinhalt) und Buchwissen teilen ihn.
+    Object.assign(ctx, loadEventData(ctx));
 
     logger.info(`Seiten geladen: ${pageContents.length} Seiten, ${data.figNamesSorted.length} Figuren bekannt.`);
     if (data.droppedSlugNames.length) {
@@ -169,6 +186,14 @@ async function runFinetuneExportJob(jobId, bookId, bookName, userEmail, opts) {
     }
 
     if (opts.types.authorChat) {
+      updateJob(jobId, { progress: 89, statusText: 'finetune.phase.coreFacts' });
+      buildCoreFactSamples(ctx);
+      logger.info(`Kernwissen fertig: ${counts.core} Samples, ${ctx.factCards.length} Faktenkarten, `
+        + `${ctx.eligibleFigIds.size} Figuren ab ${optsNorm.minMentions} Erwähnungen, ${ctx.relationConflicts} widersprüchliche Beziehungen ausgelassen.`);
+      if (optsNorm.aiParaphrase) {
+        updateJob(jobId, { progress: 90, statusText: 'finetune.phase.aiParaphrase' });
+        await buildAiParaphraseSamples(ctx);
+      }
       updateJob(jobId, { progress: 90, statusText: 'finetune.phase.authorChat' });
       buildAuthorChatSamples(ctx);
       logger.info(`Sampler «authorChat» fertig: ${counts.authorChat} Samples.`);
@@ -195,10 +220,13 @@ async function runFinetuneExportJob(jobId, bookId, bookName, userEmail, opts) {
 
     updateJob(jobId, { progress: 95, statusText: 'finetune.phase.building' });
 
-    const { stats, trainJsonl, valJsonl, allJsonl } = finalizeFinetuneSamples(ctx);
+    const fin = finalizeFinetuneSamples(ctx);
+    const { stats, trainJsonl, valJsonl, allJsonl, valFamilyJsonl } = fin;
     logger.info(qualityLogLine(stats.quality));
-    logger.info(`Verworfen: Karte=${stats.cardDropped} Antwort-Budget=${stats.answerCapped} Fakten-Deckel=${stats.factCapped} Split gemischt=${stats.splitMixed} Val-Überlappung=${stats.valPurged}`);
-    const evalPrompts = buildEvalPrompts(ctx);
+    logger.info(`Verworfen: Karte=${stats.cardDropped} Kritik=${stats.critiqueDropped} Länge=${stats.lengthDropped} `
+      + `Antwort-Budget=${stats.answerCapped} Absatz-Budget=${stats.paragraphCapped} Mischung=${JSON.stringify(stats.mixDropped)} `
+      + `Split gemischt=${stats.splitMixed} Val-Überlappung=${stats.valPurged}`);
+    const evalPrompts = buildEvalPrompts(ctx, { valUnits: fin.valUnits, trainPrompts: fin.trainPrompts });
     const evalJsonl = evalPrompts.map(e => JSON.stringify(e)).join('\n') + (evalPrompts.length ? '\n' : '');
     // Der System-Prompt reist mit: das Modelfile der Karte muss ihn wörtlich
     // tragen, sonst verliert das Modell die trainierte Persona.
@@ -206,11 +234,24 @@ async function runFinetuneExportJob(jobId, bookId, bookName, userEmail, opts) {
     stats.voiceRewritten = counts.voiceRewritten || 0;
     stats.evalCount = evalPrompts.length;
     stats.evalBytes = Buffer.byteLength(evalJsonl, 'utf8');
+    stats.critiqueDropped = stats.critiqueDropped || 0;
+    stats.factParaphraseCount = stats.quality.factParaphraseCount;
+    stats.refusalCount = stats.quality.refusalCount;
+    stats.verbatimTokenShare = stats.quality.verbatimTokenShare;
+    stats.aiAugmentCount = (stats.aiAugmentCount || 0) + fin.trainOut.concat(fin.valOut).filter(s => s.aiParaphrase).length;
+    stats.coreFactCoverage = coreFactCoverage(fin.trainOut, ctx.eligibleFigIds, ctx.relationFacts);
+    stats.relationConflicts = ctx.relationConflicts || 0;
+    stats.factCards = (ctx.factCards || []).length;
+    stats.profileId = profile.id;
+    stats.exportOptions = exportOpts;
+    const createdAt = new Date();
+    // Gemeinsamer Namensstamm aller Downloads: <Buch>-<Profil>-<Zeitstempel>.
+    stats.fileStem = `${fileSafeName(bookName || `book${bookId}`)}-${profile.id}-${formatExportTimestamp(createdAt)}`;
     await saveFinetuneResult(bookId, userEmail, {
-      trainJsonl, valJsonl, allJsonl, evalJsonl,
-      meta: { bookName, createdAt: new Date().toISOString(), fingerprint: bookFingerprint(pages), stats },
+      trainJsonl, valJsonl, allJsonl, evalJsonl, valFamilyJsonl,
+      meta: { bookName, createdAt: createdAt.toISOString(), fingerprint: bookFingerprint(pages), stats },
     });
-    const sampleBreakdown = `${counts.style}/${counts.scene}/${counts.verbatim}/${counts.dialog}/${counts.authorChat}/${counts.aiAugment}/${counts.reader} (sty/scn/vrb/dlg/ac/aug/rdr)`;
+    const sampleBreakdown = `${counts.style}/${counts.scene}/${counts.verbatim}/${counts.dialog}/${counts.authorChat}/${counts.core}/${counts.aiAugment}/${counts.reader} (sty/scn/vrb/dlg/ac/core/aug/rdr)`;
     completeJob(jobId, { stats }, null,
       `${stats.total} Samples [${sampleBreakdown}], ${stats.train} train + ${stats.val} val, dropped=${stats.dropped}, p95=${stats.tokensP95} tok, max=${stats.tokensMax} tok, recSeq=${stats.recommendedSeqLen}`);
   } catch (e) {
@@ -219,13 +260,45 @@ async function runFinetuneExportJob(jobId, bookId, bookName, userEmail, opts) {
   }
 }
 
+const clamp = (v, lo, hi, dflt) => (Number.isFinite(Number(v)) ? Math.max(lo, Math.min(hi, Number(v))) : dflt);
+const shareMap = (over, base) => Object.fromEntries(Object.entries(base)
+  .map(([k, v]) => [k, clamp(over?.[k], 0, 1, v)]));
+
+// Export-Vorgaben aus dem Body auf die Profil-Vorgaben legen, Werte begrenzen.
+// Unbekannte Schlüssel fallen weg.
+function normalizeExportOptions(base, over = {}) {
+  const o = over && typeof over === 'object' ? over : {};
+  const caps = { ...base.maxAnswerChars };
+  if (o.maxAnswerChars && typeof o.maxAnswerChars === 'object') {
+    for (const [k, v] of Object.entries(o.maxAnswerChars)) {
+      const n = clamp(v, 0, 100000, null);
+      if (n !== null && /^[a-zA-Z]+$/.test(k)) caps[k] = n;
+    }
+  }
+  return {
+    minMentions: Math.round(clamp(o.minMentions, 1, 1000, base.minMentions)),
+    factParaphrases: Math.round(clamp(o.factParaphrases, 1, 10, base.factParaphrases)),
+    maxVariantsPerFact: Math.round(clamp(o.maxVariantsPerFact, 1, 10, base.maxVariantsPerFact)),
+    familyTokenShares: shareMap(o.familyTokenShares, base.familyTokenShares),
+    refusalShare: clamp(o.refusalShare, 0, 0.5, base.refusalShare),
+    refusalMix: shareMap(o.refusalMix, base.refusalMix),
+    verbatimMaxTokenShare: clamp(o.verbatimMaxTokenShare, 0, 1, base.verbatimMaxTokenShare),
+    maxAnswerChars: caps,
+    maxTargetsPerParagraph: Math.round(clamp(o.maxTargetsPerParagraph, 0, 50, base.maxTargetsPerParagraph)),
+    whoSaysMinWords: Math.round(clamp(o.whoSaysMinWords, 1, 50, base.whoSaysMinWords)),
+    editorFeedback: typeof o.editorFeedback === 'boolean' ? o.editorFeedback : !!base.editorFeedback,
+    aiParaphrase: typeof o.aiParaphrase === 'boolean' ? o.aiParaphrase : !!base.aiParaphrase,
+    critiquePatterns: Array.isArray(o.critiquePatterns) ? o.critiquePatterns.filter(p => typeof p === 'string' && p.length < 500).slice(0, 100) : undefined,
+  };
+}
+
 // Zahl aus dem Body, sonst der Standard — 0 ist ein gültiger Wert («aus»).
 const numOr = (v, dflt) => (v === undefined || v === null || v === '' || !Number.isFinite(Number(v)) ? dflt : Number(v));
 
 finetuneExportRouter.post('/finetune-export', jsonBody, (req, res) => {
   const { book_id, book_name, types, min_chars, max_chars, val_split, val_seed,
           max_seq_tokens, emit_text, fulltext, max_full_chars, truncate_long, bias_boost,
-          max_type_share, max_per_answer, max_fact_share, ai } = req.body || {};
+          max_type_share, max_per_answer, ai, profile, export: exportBody } = req.body || {};
   if (!book_id) return res.status(400).json({ error_code: 'BOOK_ID_REQUIRED' });
   setContext({ book: toIntId(book_id) });
   if (!guardBook(req, res, book_id, 'editor')) return;
@@ -262,7 +335,8 @@ finetuneExportRouter.post('/finetune-export', jsonBody, (req, res) => {
     biasBoost: Number(bias_boost) || 1,
     maxTypeShare: Number(max_type_share) || 0,
     maxPerAnswer: numOr(max_per_answer, 2),
-    maxFactShare: numOr(max_fact_share, 0.4),
+    profileId: typeof profile === 'string' ? profile : null,
+    export: exportBody && typeof exportBody === 'object' ? exportBody : {},
     ai: aiOpts,
   };
   const userEmail = sessionEmail(req);
@@ -296,7 +370,34 @@ const KIND_PRESENT = {
   val:   (st) => st.val > 0,
   all:   (st) => st.allBytes > 0,
   eval:  (st) => st.evalBytes > 0,
+  'val-facts':   (st) => st.valFactsBytes > 0,
+  'val-writing': (st) => st.valWritingBytes > 0,
+  'val-refusal': (st) => st.valRefusalBytes > 0,
 };
+
+// Dateiname: finetune-<art>-<Buch>-<Profil>-<Zeitstempel>. Sets ohne
+// `fileStem` (vor dem Profil im Namen erzeugt) behalten Buch + Zeitstempel.
+function downloadName(meta, bookId, kind, ext) {
+  if (meta.stats?.fileStem) return `finetune-${kind}-${meta.stats.fileStem}.${ext}`;
+  return buildExportFilename({
+    prefix: `finetune-${kind}`, slug: meta.bookName || `book${bookId}`, ext,
+    date: new Date(meta.createdAt || Date.now()),
+  });
+}
+
+// Statistik des gespeicherten Sets als Datei — dieselbe Struktur wie
+// `export.stats` von /finetune-export/latest.
+finetuneExportRouter.get('/finetune-export/stats.json', (req, res) => {
+  const bookId = toIntId(req.query.book_id);
+  if (!bookId) return res.status(400).json({ error_code: 'BOOK_ID_REQUIRED' });
+  setContext({ book: bookId });
+  if (!guardBook(req, res, bookId, 'viewer')) return;
+  const meta = loadFinetuneMeta(bookId, sessionEmail(req));
+  if (!meta) return res.status(404).json({ error_code: 'JSONL_NOT_FOUND' });
+  res.setHeader('Content-Type', 'application/json; charset=utf-8');
+  res.setHeader('Content-Disposition', `attachment; filename="${downloadName(meta, bookId, 'stats', 'json')}"`);
+  res.send(JSON.stringify({ bookName: meta.bookName, createdAt: meta.createdAt, stats: meta.stats }, null, 2));
+});
 
 finetuneExportRouter.get('/finetune-export/:kind.jsonl', (req, res) => {
   const bookId = toIntId(req.query.book_id);
@@ -310,12 +411,7 @@ finetuneExportRouter.get('/finetune-export/:kind.jsonl', (req, res) => {
   const meta = loadFinetuneMeta(bookId, userEmail);
   if (!meta) return res.status(404).json({ error_code: 'JSONL_NOT_FOUND' });
   if (!KIND_PRESENT[kind](meta.stats || {})) return res.status(404).json({ error_code: 'JSONL_EMPTY' });
-  const filename = buildExportFilename({
-    prefix: `finetune-${kind}`,
-    slug: meta.bookName || `book${bookId}`,
-    ext: 'jsonl',
-    date: new Date(meta.createdAt || Date.now()),
-  });
+  const filename = downloadName(meta, bookId, kind, 'jsonl');
   res.setHeader('Content-Type', 'application/jsonl; charset=utf-8');
   res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
   res.sendFile(finetuneFilePath(bookId, userEmail, kind));

@@ -38,13 +38,6 @@ function buildEventLinkSamples(ctx) {
       pushQA('authorChat|evtScene|' + i,
         langIsEn ? `In which scene does «${ereignis}» happen?` : `In welcher Szene passiert «${ereignis}»?`,
         e.scenes.map(sceneLabel).join(', '), { unit });
-      for (const s of e.scenes) {
-        const komm = (s.kommentar || '').trim();
-        if (!komm) continue;
-        pushQA('authorChat|evtSceneDetail|' + i + '|' + s.id,
-          langIsEn ? `What happens in the scene «${s.titel}» during «${ereignis}»?` : `Was passiert in der Szene «${s.titel}» bei «${ereignis}»?`,
-          komm, { unit });
-      }
     }
 
     // ── Handlungsstrang ───────────────────────────────────────────────

@@ -14,24 +14,41 @@ Vom JSONL-Export der Fine-Tuning-Karte zu einem lokal laufenden Modell, das Stil
 
 UI → Buch → Kachel **Fine-Tuning-Export**:
 
-- `Profil` = Basismodell × GPU-Speicher (Default Ministral 3 8B, 20 GB) — setzt `Max. Token pro Sample` und `Max. Zeichen`; daneben **studio-config.yaml herunterladen** ([§4](#4-hyperparameter-nach-ziel)).
-- Alle Typen aktiv: `Stil`, `Szene`, `Wörtlich`, `Dialog`, `Buchwissen`. Die Leser-Samples laufen immer mit.
+- `Profil` = Basismodell × GPU-Speicher (Default Ministral 3 8B, 20 GB) — setzt `Max. Token pro Sample` und `Max. Zeichen` und trägt die **Export-Vorgaben** ([Export-Vorgaben](#export-vorgaben)); daneben **studio-config.yaml herunterladen** ([§4](#4-hyperparameter-nach-ziel)).
+- Typen aktiv: `Stil`, `Szene`, `Dialog`, `Buchwissen`. `Wörtlich` ist standardmässig aus (lange wörtliche Ziele belohnen Auswendiglernen; eingeschaltet höchstens 1 % der Antwort-Tokens), `Lektorats-Feedback` ebenfalls. Die Leser-Samples laufen immer mit.
 - `Min. Zeichen = 200`, `Max. Zeichen` aus dem Profil.
 - `Validation-Split = 0.05` (> 20 000 Samples), sonst `0.1`.
 - `Max. Token pro Sample` aus dem Profil.
 - `Vorgerendertes text-Feld` optional.
-- `Max. Wiederholungen je Antwort = 2`, `Max. Anteil Faktenfragen = 0.4` ([Qualität des Sets](#qualität-des-sets)).
+- `Max. Wiederholungen je Antwort = 2` ([Qualität des Sets](#qualität-des-sets)).
 - `Typ-Balance` (Max. Anteil pro Aufgabentyp) steht auf `0`. Sie deckelt zusätzlich jeden Aufgabentyp der Tabelle «Qualität des Sets» gegen den **exportierten** Datensatz ([finalize.js](../routes/jobs/finetune-export/finalize.js)#`balanceCap`); mit weniger als `1/Anteil` Typen ist sie nicht erfüllbar und wird übersprungen.
 
 **Geschnitten wird nur an Satz- oder Absatzgrenzen** ([lib/text.js](../routes/jobs/finetune-export/lib/text.js) `clipAtSentence`/`tailFromSentence`/`chunkAtSentence`). Eine Antwort, die mitten im Wort endet, brächte dem Modell bei, mitten im Wort aufzuhören. Abschnitte und Absätze über `Max. Zeichen` laufen deshalb in Satzgrenzen-Teilen durch („Schreibe Teil 2 von 3 dieses Abschnitts"), statt nach 4000 Zeichen abzubrechen — so fehlt auch der Rest langer Abschnitte nicht.
+
+### Export-Vorgaben
+
+Quelle: `EXPORT_DEFAULTS` in [finetune-profiles.js](../public/js/book/finetune-profiles.js), pro Profil über `export` überschreibbar. Die Karte schickt sie mit; der Server füllt Fehlendes aus derselben Datei ([lib/esm-bridge.js](../lib/esm-bridge.js)#`finetuneProfiles`) und begrenzt die Werte ([index.js](../routes/jobs/finetune-export/index.js)#`normalizeExportOptions`). Die verwendeten Werte stehen in `stats.exportOptions`.
+
+| Vorgabe | Standard | Wirkung |
+|---|---|---|
+| `minMentions` | 5 | Figuren ab so vielen Erwähnungen im Text bekommen [Kernwissen](#kernwissen) |
+| `factParaphrases` / `maxVariantsPerFact` | 4 / 5 | Varianten pro Faktenkarte |
+| `familyTokenShares` | writing 0.55, facts 0.30, persona 0.10, refusal 0.05 | [Mischung nach Antwort-Tokens](#mischung-nach-antwort-tokens) |
+| `refusalShare` / `refusalMix` | 0.03 / unknownEntity 0.5, offTopic 0.25, falsePremise 0.25 | [Ablehnen](#ablehnen-lernen), nach Anzahl |
+| `verbatimMaxTokenShare` | 0.01 | Deckel für `Wörtlich` |
+| `maxAnswerChars` | sceneWrite/povPassage/passage 2000, continue 1500 | Antwortlänge pro Typ, an Satzgrenzen gekürzt |
+| `maxTargetsPerParagraph` | 2 | höchstens so viele Samples mit demselben Absatz als Ziel |
+| `whoSaysMinWords` | 6 | «Wer sagt das?» nur für Zitate ab so vielen Wörtern |
+| `editorFeedback` | aus | Lektorats-Feedback als eigener Typ |
+| `aiParaphrase` | aus | Kernfakten-Varianten zusätzlich per KI |
 
 **Lange Samples passen sich `Max. Token pro Sample` an.** Voll-Kapitel-, Wörtlich- und Mehrseiten-Samples werden in Slices von höchstens 60 % des Sequenz-Budgets geschnitten (4096 Tokens → rund 8000 Zeichen DE); der Rest bleibt dem Prompt. Ein fester, grösserer Slice würde genau die Samples aus dem Export filtern, die den Buchtext am vollständigsten tragen. `Lange Samples kappen` kürzt diese Slices nie — ein gekapptes „Teil 2 von 5" brächte dem Modell bei, mitten im Text aufzuhören —, sie fallen dann weg.
 
 **Figurennamen werden als ganzes Wort gesucht, Unicode-fähig** ([lib/names.js](../routes/jobs/finetune-export/lib/names.js) `nameRegex`). JavaScripts `\b` kennt nur ASCII-Buchstaben; ein Name, der mit Umlaut oder Akzent beginnt oder endet (Ömer, René, Zoë), fände sonst nie einen Treffer, und seine Passagen, Ortsbezüge und Sprecher-Zuordnungen fielen still weg.
 
-**Antworten im Buchton (KI-Augment, optional).** „Wer ist X?" und „Was ist Ort Y?" beantwortet das Buchwissen mit dem Beschreibungstext der Analyse. Ohne Umschreibung lernt das Modell für solche Fragen den Ton der Analyse, nicht den des Autors. Die Option **Figuren- und Ortsantworten im Buchton** fasst diese Antworten neu ([samples/ai-augment.js](../routes/jobs/finetune-export/samples/ai-augment.js)#`rewriteAnswersInBookVoice`). Als Stilvorlage dienen bis zu drei Originalabsätze, in denen die Figur bzw. der Ort vorkommt. Die Fakten bleiben gleich. Ersetzt wird die Antwort in den bestehenden Samples; es kommen keine neuen hinzu. Ein KI-Call pro Figur und Ort, gecacht wie die übrigen Augment-Calls. Leere oder ausufernde Antworten (mehr als dreimal so lang) behalten die Analyse-Antwort.
+**Antworten im Buchton (KI-Augment, optional).** „Was ist Ort Y?", die Innenleben-Fragen und die Ich-Vorstellung einer Figur beantwortet das Buchwissen mit dem Text der Analyse. Ohne Umschreibung lernt das Modell für solche Fragen den Ton der Analyse, nicht den des Autors. Die Option **Figuren- und Ortsantworten im Buchton** fasst diese Antworten neu ([samples/ai-augment.js](../routes/jobs/finetune-export/samples/ai-augment.js)#`rewriteAnswersInBookVoice`). Als Stilvorlage dienen bis zu drei Originalabsätze, in denen die Figur bzw. der Ort vorkommt. Die Fakten bleiben gleich. Ersetzt wird die Antwort in den bestehenden Samples; es kommen keine neuen hinzu. Ein KI-Call pro Figur und Ort, gecacht wie die übrigen Augment-Calls. Leere oder ausufernde Antworten (mehr als dreimal so lang) behalten die Analyse-Antwort.
 
-**Dialog-Zitate** erkennt [lib/text.js](../routes/jobs/finetune-export/lib/text.js)#`extractDialogs` in allen fünf Schreibweisen: „…“, “…”, »…«, «…» und ASCII-`"…"`. Sie füttern den Dialog-Typ, „Wer sagt das?" und das Sprach-Portrait pro Figur im Buchwissen; ohne erkannte Zitate fallen alle drei still weg. Die Dialogzeile als Schreibaufgabe bekommt die Sätze davor als Vorlauf und braucht mindestens 25 Zeichen. „Wer sagt das?" nimmt nur Zitate ab 30 Zeichen und 5 Wörtern, die genau einmal im Buch stehen und eindeutig einer Figur zugeordnet sind ([samples/dialog.js](../routes/jobs/finetune-export/samples/dialog.js)): «Ich weiss nicht.» ist ohne Kontext keiner Figur zuzuordnen.
+**Dialog-Zitate** erkennt [lib/text.js](../routes/jobs/finetune-export/lib/text.js)#`extractDialogs` in allen fünf Schreibweisen: „…“, “…”, »…«, «…» und ASCII-`"…"`. Sie füttern den Dialog-Typ, „Wer sagt das?" und das Sprach-Portrait pro Figur im Buchwissen; ohne erkannte Zitate fallen alle drei still weg. Die Dialogzeile als Schreibaufgabe bekommt die Sätze davor als Vorlauf und braucht mindestens 25 Zeichen. „Wer sagt das?" nimmt nur Zitate ab 30 Zeichen und `whoSaysMinWords` Wörtern (Standard 6), die genau einmal im Buch stehen und einem Namen zugeordnet sind, den genau eine Figur trägt ([samples/dialog.js](../routes/jobs/finetune-export/samples/dialog.js)): «Ich weiss nicht.» ist ohne Kontext keiner Figur zuzuordnen, und ein geteilter Kurzname («Meier») keiner bestimmten. Die Antwort ist der Name der Figur — gleiche Antworten sind dort richtig, das Antwort-Budget gilt für «Wer sagt das?» nicht.
 
 **Satzgrenzen:** ein- und zweistellige Zahlen mit Punkt sind Ordnungszahlen («die 1. Klasse», «am 11. September»), kein Satzende; Jahreszahlen bleiben Satzenden ([lib/text.js](../routes/jobs/finetune-export/lib/text.js)#`isAbbreviationBefore`).
 
@@ -40,6 +57,7 @@ UI → Buch → Kachel **Fine-Tuning-Export**:
 **Welt-Fakten (Buchwissen Block 29) sind KI-extrahiert, nicht kuratiert.** `world_facts` ist ein abgeleiteter Index der Komplettanalyse mit Full-Replace — es gibt keinen Edit-Pfad. Der Sampler ([samples/author-chat/world-facts.js](../routes/jobs/finetune-export/samples/author-chat/world-facts.js)) giesst EINEN Fakt in rund ein halbes Dutzend Samples (mehrere Frage-Paraphrasen + Sammelantwort pro Subjekt + pro Kategorie + globale Welt-Übersicht). Deshalb filtert er die Fakten heraus, die der **Weltfakten-Faktencheck** als real falsch belegt hat (SSoT [db/world-facts.js](../db/world-facts.js)#`refutedFactKeys`: Urteils-Cache `world_fact_verdicts`, abzüglich der vom Autor als „kein Fehler“ verworfenen; siehe [docs/komplett.md](komplett.md)): bei Trainingsdaten ist die Vervielfachung eines Fehlers teurer als das fehlende Sample. Lief der Faktencheck nie, wird nichts gefiltert. Der Abgleich läuft über den normalisierten Aussage-Schlüssel (`subjekt: fakt`, [lib/world-fact-key.js](../lib/world-fact-key.js)) — eine `fact_id` hinge an einem Index, den der nächste Lauf komplett ersetzt.
 
 **Ereignisse (Buchwissen Block 6–11b)** werden einmal angereichert geladen ([samples/author-chat/event-data.js](../routes/jobs/finetune-export/samples/author-chat/event-data.js)) und von Szenen-, Ereignis- und Figuren-Block geteilt. Die Vollantwort eines Ereignisses trägt alles, was der Zeitstrahl kennt: Zeitpunkt oder Spanne, Tag der Handlung, Art und Untertyp, Handlungsstrang, beteiligte Figuren, Schauplätze, Szenen, Kapitel und Bedeutung. Abschnittsnamen fehlen bewusst: sie sind Gliederung der Werkstatt, nicht des Buchs, das Leser kennen. Die Listen werden nicht gekürzt.
+- **Szeneninhalt kommt aus den Ereignissen.** `figure_scenes.kommentar` ist die Begründung der Wertung samt Verbesserungshinweis der Komplettanalyse, keine Inhaltsangabe; es fliesst in keine Antwort, keinen Prompt und keine Fundstellen-Suche. «Was passiert in Szene X?» antwortet mit den verknüpften Ereignissen, ohne Ereignis gibt es keine Inhaltsfrage. Dasselbe gilt für `chapter_reviews.zusammenfassung` (Gesamteindruck der Kapitelbewertung): nie als «Inhalt:» im Prompt.
 - **Szene ↔ Ereignis** nur über denselben Abschnitt. Ein gemeinsames Kapitel verbände in Büchern mit wenigen grossen Kapiteln fast alles mit allem.
 - **Schauplätze** eines Ereignisses sind nur Orte, deren Name im Ereignistext, in der Bedeutung oder in der Buchstelle steht. Die Szenen-Orte des Abschnitts zählen nicht: sie sind die Ortsliste des ganzen Abschnitts und hingen sonst an jedem Ereignis darin. Ein eigenes Ortsfeld hat das Ereignis nicht. In Fragen steht ein Ort als «am Schauplatz «X»» — ob «in Basel» oder «im Kantonsspital», weiss der Export nicht.
 - **Buchstelle** ([event-links.js](../routes/jobs/finetune-export/samples/author-chat/event-links.js)): «Wie ist X im Buch erzählt?» antwortet mit dem Fenster im verknüpften Abschnitt, in dem beteiligte Figuren und Stichwörter am dichtesten stehen, wörtlich. «Erzähle X aus der Sicht von Y» gibt es nur mit dieser Passage als Ziel und nur für Figuren, die darin vorkommen; ebenso «Erzähle die Szene X aus der Sicht von Y» mit der Szenenpassage ([scenes.js](../routes/jobs/finetune-export/samples/author-chat/scenes.js)#`sceneExcerpt`). Ohne Passage fällt die Aufgabe weg — eine Faktenkarte als Antwort brächte dem Modell bei, eine Erzählbitte mit Stichpunkten zu beantworten.
@@ -52,17 +70,56 @@ UI → Buch → Kachel **Fine-Tuning-Export**:
 [finalize.js](../routes/jobs/finetune-export/finalize.js) räumt nach den Samplern auf, in dieser Reihenfolge:
 
 1. **Keine Faktenkarte als Schreibziel.** Eine Schreibaufgabe, deren Antwort mindestens zwei Karten-Etiketten trägt («Zeitpunkt:», «Art:», «Beteiligte Figuren:» …), fliegt raus ([lib/tasks.js](../routes/jobs/finetune-export/lib/tasks.js)#`looksLikeCard`). Das ist das Schutznetz hinter den Samplern, die solche Paare gar nicht erst bauen.
-2. **Antwort-Budget** (`Max. Wiederholungen je Antwort`, Standard 2): jede Assistant-Antwort steht höchstens so oft im Set, auch als Turn eines Gesprächs. Umformulierungen derselben Frage bringen kein neues Wissen, sie gewichten nur die Antwort hoch. Bevorzugt bleiben Schreibaufgaben, dann Fragen zu einer Entität, dann verschiedene Aufgabentypen. Die Sampler ziehen pro Entität höchstens zwei Frageformulierungen (`PARAPHRASES`).
-3. **Fakten-Deckel** (`Max. Anteil Faktenfragen`, Standard 0.4): der Grossteil sind Schreibaufgaben mit echtem Buchtext als Ziel. Das Fakten-Budget verteilt sich gleichmässig auf die Faktentypen (`waterfillCap`): kleine Typen bleiben ganz, die grossen werden auf denselben Deckel gekappt. Innerhalb eines Typs bleiben Fragen zu einer Entität vor Sammellisten.
-4. **Train/Val nach Einheiten** ([lib/split.js](../routes/jobs/finetune-export/lib/split.js)): Buchtext trennt nach **Abschnitt**, Fakten nach **Entität** (`unit`: Ereignis, Figur, Ort, Szene) mit allen Fragen dazu. Welche Abschnitte ein Sample berührt, erkennt der Split am Text (8-Wort-Folgen aus Prompt und Antwort, kurze Zitate per Teilstring), nicht am Sampler — so gilt die Regel auch für Kontext im Prompt. Ein Sample über Abschnitte aus beiden Splits fällt weg. Sammellisten über mehrere Entitäten bleiben im Train. Val-Einheiten sind ein fester Anteil (`Validation-Split`), per Hash gereiht. Val-Samples, die trotzdem Text mit Train teilen (Refrain im Buch, gleiche Kurzantwort), werden entfernt, nie Train-Samples. Danach prüft der Export: Val-Prompt wörtlich im Train, Val-Antwort wörtlich im Train, gemeinsame 12-Wort-Folge. Bleibt etwas, bricht er mit `finetune.error.splitLeak` ab — ein geschönter Eval-Loss ist schlimmer als kein Export.
+2. **Keine Lektorats-Sprache als Inhalt** ([lib/critique.js](../routes/jobs/finetune-export/lib/critique.js), Zähler `critiqueDropped`): jede Antwort, die kein Buchtext ist, wird gegen die Kritik-Muster geprüft («würde … stärker», «reines Telling», «die Szene etabliert …», «Füllstoff», «thesenhaft», «Spannung erhöhen» …). Schreibaufgaben zielen auf echten Text, der «wirkt wie» legitim enthalten darf, und bleiben ungeprüft; `editorFeedback` ist ausdrücklich Kritik. Die Muster sind eng gefasst — sie urteilen über einen *Text*, nicht über eine Figur («Er wirkt wie ein Fremder» bleibt) — und über `critiquePatterns` ersetzbar.
+3. **Antwortlänge pro Typ** (`maxAnswerChars`): länger wird an einer Satz- oder Absatzgrenze gekürzt (`lengthClipped`), «Teil N von M»-Stücke werden nicht gekappt, sondern verworfen. Die Sampler schneiden ihre Teile deshalb gleich in Deckelgrösse.
+4. **Antwort-Budget** (`Max. Wiederholungen je Antwort`, Standard 2): jede Assistant-Antwort steht höchstens so oft im Set, auch als Turn eines Gesprächs. Gilt für identische Antworttexte; Paraphrasen sind keine Dubletten. Bevorzugt bleiben Schreibaufgaben, dann Fragen zu einer Entität, dann verschiedene Aufgabentypen.
+5. **Absatz-Budget** (`maxTargetsPerParagraph`, [lib/paragraph-budget.js](../routes/jobs/finetune-export/lib/paragraph-budget.js)): ein Sample zielt auf einen Absatz, wenn eine seiner Antworten eine 12-Wort-Folge mit ihm teilt. Höchstens 2 Samples pro Absatz bleiben — Faktenantworten mit Buchzitat zuerst, dann die Schreibaufgaben reihum (das k-te Sample jedes Typs vor dem k+1-ten), Wörtlich zuletzt. Abschnitte ohne Leerzeilen zählen in Stücken von rund 800 Zeichen, sonst trüge ein ganzer Abschnitt nur zwei Samples. `paragraphTargetMax` misst das Ergebnis im Train.
+6. **Mischung nach Antwort-Tokens** — siehe [unten](#mischung-nach-antwort-tokens).
+7. **Train/Val nach Einheiten** ([lib/split.js](../routes/jobs/finetune-export/lib/split.js)): Buchtext trennt nach **Abschnitt**, Fakten nach **Einheit** (`unit`: Ereignis, Figur, Ort, Szene, Faktenkarte) mit allen Fragen und Varianten dazu. **Kernwissen (`core`) bleibt immer im Train** — Val hält nur die übrigen Fakten zurück. Welche Abschnitte ein Sample berührt, erkennt der Split am Text (8-Wort-Folgen aus Prompt und Antwort, kurze Zitate per Teilstring), nicht am Sampler — so gilt die Regel auch für Kontext im Prompt. Ein Sample über Abschnitte aus beiden Splits fällt weg. Sammellisten über mehrere Entitäten bleiben im Train. Val-Einheiten sind ein fester Anteil (`Validation-Split`), per Hash gereiht. Val-Samples, die trotzdem Text mit Train teilen (Refrain im Buch, gleiche Kurzantwort), werden entfernt, nie Train-Samples. Danach prüft der Export: Val-Prompt wörtlich im Train, Val-Antwort wörtlich im Train, gemeinsame 12-Wort-Folge. Bleibt etwas, bricht er mit `finetune.error.splitLeak` ab — ein geschönter Eval-Loss ist schlimmer als kein Export.
+
+**Val je Familie:** neben `val.jsonl` gibt es `val-facts.jsonl` (Faktenwissen — die empfohlene Eval-Datei in Studio), `val-writing.jsonl` und `val-refusal.jsonl`. Sie sind Teilmengen von `val.jsonl`; die Überlappung steht je Datei in `quality.overlapByVal`.
+
+### Kernwissen
+
+[samples/core-facts/](../routes/jobs/finetune-export/samples/core-facts/) baut Grundfakten als eigene Aufgaben — ein 8B-LoRA lernt einen Fakt erst nach mehreren *verschieden formulierten* Begegnungen; beiläufig in Prosa genügt nicht.
+
+- **Faktenkarten** ([variants.js](../routes/jobs/finetune-export/samples/core-facts/variants.js)): ein Fakt = eine Karte mit stabiler ID (`fig:<id>:core`, `fig:<id>:beruf`, `rel:<a>|<b>`, `evt:<i>:when`, `chap:<Kapitel>`) und Feldern. So lassen sich die Karten später einzeln als Dokumente exportieren (Retrieval). Jede Karte erscheint in `factParaphrases` Varianten: Frage-Vorlagen × Antwort-Vorlagen, deterministisch per Seed, verschiedene Fragen **und** verschiedene Antworten. Alle Varianten tragen `factId` und dieselbe Einheit.
+- **`figureCore`** («Wer ist X?», «Erzähl mir kurz von X.» …) für Figuren ab `minMentions` Erwähnungen: 2–4 Sätze aus Figurentyp, Beschreibung, Familie, Beruf, Kapitel, Schauplatz und einem wichtigen Ereignis. **`figureAttr`**: Beruf, Geburtsjahr, Familie, Schicht einzeln. `figures.beruf` ist Freitext der Analyse; als Beruf gilt nur ein kurzer Eintrag ohne Klammer, «von» oder Verwandtschaft («Familienmitglied (Onkel)» zählt nicht). Platzhalter-Figuren («… (unnamed)») bekommen kein Kernwissen.
+- **`relationCore`** ([relations.js](../routes/jobs/finetune-export/samples/core-facts/relations.js)) **in beiden Richtungen**, Rolle ausgeschrieben und nach Geschlecht gebeugt: «Wie steht Stefan zu Gisela?» → «Gisela ist Stefans Mutter; …», «Wie steht Gisela zu Stefan?» → «Stefan ist Giselas Sohn; …». `figure_relations.typ` ist die Rolle von «zu» gegenüber «von»; `normalizeRelationTyp` + `canonicalRelation` ([beziehung-typen.js](../public/js/book/beziehung-typen.js)) legen Altbestand und beide Perspektiven derselben Aussage zusammen. **Widersprüchliche Paare fallen weg** (`relationConflicts`): zwei verschiedene spezifische Typen, oder eine Beschreibung mit einer anderen Verwandtschaft als der Typ («Enkelin» bei `kind`, «Schwägerin» bei `freund`). Vermutungen der Analyse («wahrscheinlich sein Sohn») zählen nicht als Beschreibung. «die Mutter von X» nur für Rollen, die man einmal hat (Eltern, Ehe), sonst «eine Kollegin von X».
+- **`eventCore`** ([events.js](../routes/jobs/finetune-export/samples/core-facts/events.js)): wann, wer, wo (nur zugeordnete Orte), warum wichtig. «Was folgt daraus» gibt es nicht — das Datenmodell kennt keine Kausalbeziehung zwischen Ereignissen. **`chapterCore`**: «Was passiert im Kapitel X?» aus den Ereignissen des Kapitels; ohne Ereignis keine Aufgabe.
+- **Kernfakten bleiben im Train** (`core: true` für Figuren ab `minMentions`, ihre Beziehungen und die Kapitelkarten) und werden von der Token-Mischung nie gekürzt. `coreFactCoverage` misst den Anteil dieser Figuren, deren `figureCore` und alle Kernbeziehungen in beiden Richtungen im Train stehen.
+- **KI-Varianten** (`aiParaphrase`, Standard aus, [ai-paraphrase.js](../routes/jobs/finetune-export/samples/core-facts/ai-paraphrase.js)): die erste Antwort jeder Karte und Richtung wird per KI umformuliert. Eine Variante zählt nur, wenn jeder Name, jede Jahreszahl und jedes Beziehungswort der Vorlage darin steht; sonst fällt sie weg. Gezählt in `aiAugmentCount`, gecacht wie die übrigen Augment-Calls.
+
+Die alten Einzelfragen «Wer ist X?» mit der Analyse-Beschreibung als Antwort und «Wie steht A zu B?» nur in Speicherrichtung gibt es nicht mehr; Sammellisten (Familien, Rollen, Cast) bleiben im Buchwissen.
+
+### Ablehnen lernen
+
+[samples/reader/refusals.js](../routes/jobs/finetune-export/samples/reader/refusals.js), Familie `refusal`:
+
+- **`unknownEntity`**: erfundene Figuren, Orte und Ereignisse → «… kommt in meiner Geschichte nicht vor», in mehreren Formulierungen. Ein erfundener Name, von dem auch nur ein Wort im Buch steht, wird nicht verwendet, sonst lernte das Modell, eine echte Figur zu leugnen. Namen, die einer echten Figur ähneln (echter Vorname + erfundener Nachname), antworten mit dem Hinweis auf die echte Figur («Meinst du vielleicht Stefan Meier?»).
+- **`offTopic`**: buchfremde Bitten (Rezepte, Code, Wetter, Allgemeinwissen) → freundlich ablehnen und über eine der meistgenannten Figuren zum Buch zurückführen.
+- **`falsePremise`**: Frage mit falscher Annahme (vertauschte Beziehungsrolle, falscher Beruf, falsches Geburtsjahr) → die Antwort korrigiert sie («Das stimmt so nicht: Gisela ist nicht Stefans Schwester, sondern Stefans Mutter.»).
+
+Der Sampler erzeugt einen Vorrat; ins Set kommt davon `refusalShare` der Beispiele (Standard 3 %), verteilt nach `refusalMix`. Jedes Ablehnungs-Sample hat eine eigene Einheit, Train und Val bekommen verschiedene Namen und Fragen.
+
+### Mischung nach Antwort-Tokens
+
+Eine Schreibaufgabe trägt rund zehnmal so viele Antwort-Tokens wie eine Faktenfrage; nach Anzahl gezählt stellte die Prosa 60 % der Beispiele, aber über 90 % des Loss. [lib/token-mix.js](../routes/jobs/finetune-export/lib/token-mix.js) steuert deshalb nach Antwort-Tokens (`familyTokenShares`). Weil nur weggelassen, nie ergänzt werden kann:
+
+1. writing und facts im Verhältnis ihrer Zielanteile — die grössere Seite wird gekürzt (Wörtlich zuerst, Sammellisten ohne Einheit zuerst);
+2. persona höchstens ihr Anteil an writing + facts; zu wenig Persona bleibt zu wenig;
+3. verbatim höchstens `verbatimMaxTokenShare` aller Antwort-Tokens;
+4. refusal **nach Anzahl** (`refusalShare`): Ablehnungen sind kurz, 5 % der Tokens wären ein Viertel aller Beispiele.
+
+Kernfakten werden nie gekürzt. Tokens schätzt der Export mit `estimateTokens` (Zeichen / 3.3 bzw. / 4.0, [lib/tokens.js](../routes/jobs/finetune-export/lib/tokens.js)), die Methode steht in `quality.tokenMethod`.
 
 Den Text der Holdout-Abschnitte sieht ein Training auf `train.jsonl` nie. Deshalb gibt es zusätzlich **`all.jsonl`** (train + val gemeinsam gemischt) für einen zweiten Lauf, siehe [§3](#3-training).
 
-**Statistik** (`stats.quality`, Karte «Qualität des Sets» und Job-Log): Anzahl, Anteil, eigene Antworten und mittlere Antwortlänge je Aufgabentyp, Anteil Schreibaufgaben, Anteil eigener Antworten, die zehn häufigsten Antworten, die Überlappung Val ↔ Train und was jeder Schritt oben verworfen hat.
+**Statistik** (`stats`, Karte «Qualität des Sets», Job-Log und Download `finetune-stats-….json`): je Aufgabentyp Anzahl, Anteil, Antwort-Tokens und Token-Anteil, eigene Antworten und mittlere Antwortlänge; Familienanteile nach Anzahl und nach Tokens (`writingTokenShare`, `factTokenShare`, `personaTokenShare`, `refusalTokenShare`, `verbatimTokenShare`); `refusalCount` je Untertyp; `factCount` und `factParaphraseCount`; `coreFactCoverage`; `paragraphTargetMax`; `critiqueDropped`, `relationConflicts`, `aiAugmentCount`; die zehn häufigsten Antworten; die Überlappung Val ↔ Train gesamt und je Val-Datei; was jeder Schritt oben verworfen hat; die verwendeten `exportOptions`.
 
 **Loss-Masking:** Trainiere über das `messages`-Feld + `train_on_responses_only` (so im CLI-Script verdrahtet; das Script rendert `messages` selbst über das Chat-Template und entfernt dabei das führende `<s>`, weil der Tokenizer es beim Tokenisieren ein zweites Mal setzt) — dann fliesst der Loss nur auf die Assistant-Tokens, User-Instruktionen/System-Prompts werden maskiert. Das `text`-Feld (`emit_text=true`) ist nur ein Fallback für Loader, die `dataset_text_field` erwarten; es kann den Prompt nicht maskieren, das Modell lernt dann auch die Instruktions-Phrasen mit.
 
-**Downloads der Karte:** `train.jsonl`, `val.jsonl`, `all.jsonl`, dazu **Testprompts** (`eval.jsonl`, [lib/eval-prompts.js](../routes/jobs/finetune-export/lib/eval-prompts.js)) und das **Ollama-Modelfile**. Die Testprompts sind die Fragen aus [§5](#5-qualitäts-check), gefüllt mit echten Figuren-, Kapitel- und Abschnittsnamen und im Wortlaut der Trainings-Instruktionen; Fortsetzungs-Prompts kommen bevorzugt aus Holdout-Kapiteln (`holdout: true`). Das Modelfile trägt den System-Prompt des Exports wörtlich (`stats.systemPrompt`, Generator [finetune-modelfile.js](../public/js/book/finetune-modelfile.js)). Sets, die vor diesen Downloads erzeugt wurden, zeigen die Knöpfe erst nach dem nächsten Generieren.
+**Downloads der Karte:** `train`, `val`, `all`, `val-facts`, `val-writing`, `val-refusal`, **Testprompts** (`eval`, [lib/eval-prompts.js](../routes/jobs/finetune-export/lib/eval-prompts.js)), die **Statistik** (`stats.json`), die **Studio-Konfiguration** und das **Ollama-Modelfile**. Dateinamen: `finetune-<art>-<Buch>-<Profil>-<Zeitstempel>.<ext>` (`stats.fileStem`); das Modelfile heisst `Modelfile`, weil Ollama den Namen erwartet. Die Testprompts sind rund 30–40 Fragen, mindestens drei pro Kategorie (`figure`, `relation`, `chapter`, `continuation`, `newChapter`, `psyche`, `persona`, `why`, `unknown`, `offTopic`, `falsePremise`), gefüllt mit echten Figuren- und Kapitelnamen. Jede trägt eine Referenzantwort (`expected`) und Prüfwörter (`mustContain`, z. B. `["Mutter"]` bei Stefan–Gisela). Die Frage steht in genau dieser Formulierung nicht im Train — eigene Vorlagen, und was trotzdem wörtlich im Train steht, fällt raus —, der Fakt dahinter schon, ausser bei `holdout: true` (Text oder Einheit liegt in Val). Fortsetzungs-Prompts kommen bevorzugt aus Holdout-Abschnitten. Das Modelfile trägt den System-Prompt des Exports wörtlich (`stats.systemPrompt`, Generator [finetune-modelfile.js](../public/js/book/finetune-modelfile.js)). Sets, die vor diesen Downloads erzeugt wurden, zeigen die Knöpfe erst nach dem nächsten Generieren.
 
 Stats nach Generierung: p95/max Token, empfohlene `seq_len`, verworfene Samples, entfernte Dubletten, per Typ-Cap entfernte Samples, dazu die [Qualität des Sets](#qualität-des-sets). Exakte Dubletten-Entfernung und ein deterministisches Shuffle pro Split laufen immer.
 
@@ -90,8 +147,8 @@ python3 -c "import json; [json.loads(l) for l in open('train.jsonl')]; print('OK
 Der Export trainiert das Buch im Gespräch, etwa für eine Webseite, auf der Leser Fragen stellen, Hintergründe erfahren und das Innenleben der Figuren ergründen. Code: [samples/reader/](../routes/jobs/finetune-export/samples/reader/).
 
 - **Eigener System-Prompt** ([reader/system.js](../routes/jobs/finetune-export/samples/reader/system.js)): «Du bist das Buch «…». Leserinnen und Leser sprechen mit dir …». Er reist als `stats.systemPrompt` ins Modelfile und muss beim Betrieb wörtlich gesetzt sein. Die Ich-Form einer Figur hat keinen zweiten System-Prompt: Der Leser bittet im Gespräch darum («Ich möchte mit Anna sprechen»). So trägt ein einziges Modelfile beides.
-- **Kein Werkstattwissen:** Lektorats-Korrekturen und -Bewertungen, Antworten aus dem Buch-Chat, Fundort eines Satzes («In welchem Abschnitt steht …»), Abschnittsnamen und der Kapitelaufbau kommen nicht in die Daten. Vor Lesern erklärte das Modell sonst die Schwächen des Buchs oder die Gliederung der Werkstatt.
-- **Wörtlicher Text bleibt voll drin.** Stil, Szene, Wörtlich und Dialog laufen ungekürzt. Das Buch lässt sich damit aus dem Modell herausfragen, und das ist gewollt.
+- **Kein Werkstattwissen:** Lektorats-Korrekturen und -Bewertungen (auch die Szenen-Wertung der Komplettanalyse und die Kapitelbewertung), Antworten aus dem Buch-Chat, Fundort eines Satzes («In welchem Abschnitt steht …»), Abschnittsnamen und der Kapitelaufbau kommen nicht in die Daten. Vor Lesern erklärte das Modell sonst die Schwächen des Buchs oder die Gliederung der Werkstatt. Lektorats-Feedback gibt es nur als eigenen, ausdrücklich benannten Typ (`editorFeedback`, Standard aus).
+- **Buchtext als Ziel, aber nicht auswendig.** Stil, Szene und Dialog tragen echten Buchtext als Ziel, gedeckelt auf `maxAnswerChars` pro Typ und höchstens zwei Ziele pro Absatz. `Wörtlich` ist standardmässig aus: lange wörtliche Ziele dominieren den Loss und belohnen Auswendiglernen statt Schreiben.
 - **Innenleben** kommt aus zwei Quellen:
   - **Komplettanalyse** (Buchwissen Block 32, [author-chat/depth.js](../routes/jobs/finetune-export/samples/author-chat/depth.js)): Pro Figur werden Rolle, Motivation, Konflikt, Entwicklung (`arc` als Prosa, sonst `entwicklung`), Hintergrund, Äusseres und Sprechweise zu Fragen wie «Was treibt Stefan an?» oder «Wie verändert sich Stefan?». Mit Motivation und Konflikt zusammen kommt «Was geht in Stefan vor?» dazu. Jedes Schlüsselzitat wird wörtlich zu einer eigenen Antwort. Die Analyse-Prosa fasst **Antworten im Buchton** in die Erzählstimme um.
   - **[Figuren-Werkstatt](figur-werkstatt.md)** ([reader/psyche.js](../routes/jobs/finetune-export/samples/reader/psyche.js)): Pro Kern (Want, Need, Wound, Lie, Konflikt, Bogen) entstehen Fragen mit den Notizen des Autors als Antwort, dazu eine Übersicht ab zwei Kernen. Die Textstellen, die das Verankern gefunden hat (`draft_figure_occurrences`), werden zu eigenen Beleg-Samples («Wo zeigt sich im Buch …?»), wörtlich und mit ihrem Abschnitt gesplittet.
@@ -99,9 +156,9 @@ Der Export trainiert das Buch im Gespräch, etwa für eine Webseite, auf der Les
 - **Ich-Form** ([reader/persona.js](../routes/jobs/finetune-export/samples/reader/persona.js)): Ohne KI wird jede Dialogzeile einer tragenden Figur zur Antwort auf «Sag mir etwas, wie nur du es sagen würdest». Mit der KI-Option **Figuren in der Ich-Form** kommen Leserfragen mit der Antwort der Figur dazu. Material dafür sind die Beschreibung, die Tiefe-Felder und Schlüsselzitate der Analyse, alle Werkstatt-Notizen und die Dialogzeilen der Figur. Eine Figur braucht ein Innenleben (Motivation oder Konflikt der Analyse oder Werkstatt-Notizen) oder mindestens drei Dialogzeilen. Dialogzeilen, die mit einem Satzzeichen beginnen oder einen Redebegleitsatz tragen («, sagte sie»), sind verkehrt gepaarte Anführungszeichen und fallen weg.
 - **Deutungen** (KI-Option): Pro Szene mit Figuren entstehen Warum-Fragen mit einer Antwort, die die Beweggründe deutet. Als Hintergrund bekommt die KI Motivation und Konflikt der Figuren aus Analyse und Werkstatt. Ohne Szenen-Analyse läuft das pro Abschnitt, in dem eine tragende Figur vorkommt. Die Antworten zitieren Buchtext und werden darum mit ihrem Abschnitt gesplittet.
 - **Belegpflicht** für beide KI-Phasen ([reader/ai.js](../routes/jobs/finetune-export/samples/reader/ai.js)): Jedes Paar braucht ein wörtliches Stück aus dem gelieferten Material, mindestens 12 Zeichen lang. [lib/quote-verify.js](../lib/quote-verify.js) prüft es dort nach; ohne Treffer fällt das Paar still weg. Eine erfundene Motivation im Ton des Buchs klänge für Leser wie Kanon. Darum gibt es keine Review-Liste, sondern diese Prüfung.
-- **Grenzen** ([reader/boundaries.js](../routes/jobs/finetune-export/samples/reader/boundaries.js)): Fragen nach erfundenen Figuren und Orten beantwortet das Modell mit «gibt es in «…» nicht». Ein erfundener Name, von dem auch nur ein Wort im Buch steht, wird nicht verwendet, sonst lernte das Modell, eine echte Figur zu leugnen. Dazu kommen «Was passiert nach dem Ende?», Off-Topic-Fragen, die es freundlich zum Buch zurücklenkt, «Bist du eine KI?» (ehrlich: ein auf das Buch trainiertes Sprachmodell) und Versuche, es aus der Rolle zu bringen. Spoiler sind erlaubt: Das Modell erzählt alles.
+- **Grenzen** ([reader/boundaries.js](../routes/jobs/finetune-export/samples/reader/boundaries.js)): «Was passiert nach dem Ende?», «Bist du eine KI?» (ehrlich: ein auf das Buch trainiertes Sprachmodell) und Versuche, es aus der Rolle zu bringen. Unbekannte Namen, Off-Topic und falsche Annahmen: [Ablehnen lernen](#ablehnen-lernen). Spoiler sind erlaubt: Das Modell erzählt alles.
 - **Gespräche über mehrere Runden** ([reader/conversations.js](../routes/jobs/finetune-export/samples/reader/conversations.js)): Sie werden aus den fertigen Einzel-Samples zusammengesetzt, zusätzlich zu ihnen. Pro tragender Figur sind es bis zu zwei Gespräche à drei Runden. Ich-Form-Gespräche beginnen mit der Bitte um die Figur, das erste endet mit der Rückkehr zum Buch. Turns mit Buchtext aus verschiedenen Kapiteln kommen nicht ins selbe Gespräch; berührt eines trotzdem Abschnitte aus Train und Val, fällt es beim Split weg.
-- **Testprompts** (`eval.jsonl`) bekommen die Kategorien `psyche`, `persona`, `why`, `unknown` und `offTopic`.
+- **Testprompts** (`eval.jsonl`) bekommen die Kategorien `psyche`, `persona`, `why`, `unknown`, `offTopic` und `falsePremise`.
 
 Die Samples tragen den Typ `reader`: eine eigene Zeile in den Stats und eine eigene Grösse für die Typ-Balance.
 
@@ -109,7 +166,9 @@ Die Samples tragen den Typ `reader`: eine eigene Zeile in den Stats und eine eig
 
 Konfiguration: [docs/unsloth-config/](unsloth-config/) – Script, gepinnte Requirements, Studio-YAML, Ollama-Modelfile. Setup-/Run-Anleitung dort.
 
-**Zwei Läufe.** Lauf 1 trainiert auf `train.jsonl` und misst an `val.jsonl`. Eval-Loss und Early-Stopping zeigen, nach wie vielen Epochen das Modell am besten generalisiert. Lauf 2 trainiert mit genau dieser Epochenzahl auf `all.jsonl`, ohne Evaluation. Erst dann kennt das fertige Modell auch die Holdout-Kapitel. Wer nur einen Lauf will, nimmt `all.jsonl` direkt mit 2 Epochen und verzichtet auf die Messung.
+**Feste Länge statt Early Stopping.** Der Eval-Loss eines Buch-LoRA steigt früh — im Test ab einem Drittel der ersten Epoche —, während der Train-Loss gegen null fällt und das Faktenwissen noch wächst. Early Stopping behielte genau den Stand, der die Fakten am schlechtesten kennt. Die Studio-Konfiguration trainiert deshalb eine feste Länge (`num_epochs: 1`, oder `max_steps` ≈ 1.5 Epochen mit `trainBy: 'steps'` im Profil), sichert alle ~10 % einen Stand (`save_steps`) und evaluiert an `val-facts.jsonl` (`eval_steps` ist ein Anteil der Gesamtschritte). Welcher Stand der beste ist, entscheidet der Vergleich mit `eval.jsonl` ([§5](#5-qualitäts-check)), nicht der Eval-Loss.
+
+**Zwei Läufe.** Lauf 1 trainiert auf `train.jsonl` und misst an `val-facts.jsonl`. Lauf 2 trainiert mit der Länge des besten Stands auf `all.jsonl`, ohne Evaluation. Erst dann kennt das fertige Modell auch die Holdout-Kapitel. Wer nur einen Lauf will, nimmt `all.jsonl` direkt mit einer Epoche.
 
 Kurzform CLI:
 
@@ -140,7 +199,7 @@ ollama run buch-leser "Worum geht es in dir?"
 | Ziel | `r` | `lr` | Epochen | Inferenz-Temp |
 |---|---|---|---|---|
 | Stilimitation (leicht) | 16 | 2e-4 | 1–2 | 0.7–0.8 |
-| **Welt internalisieren (Default)** | **32** | **2e-4** | **2** | **0.7–0.85** |
+| **Welt internalisieren (Default)** | **32** | **1e-4** | **1** | **0.7** |
 | Faktenwiedergabe | 64 | 1e-4 | 3 | 0.4–0.6 |
 | Figuren-Persona | 32 | 2e-4 | 2 | 0.85–1.0 |
 
@@ -157,7 +216,7 @@ Default: Ministral 3 8B auf 20 GB. Effektive Batch ist überall 16; `lora_alpha`
 
 ## 5. Qualitäts-Check
 
-Automatisch: **Testprompts herunterladen** (`eval.jsonl`) und an Basismodell und trainiertes Modell schicken:
+Automatisch: **Testprompts herunterladen** (`eval.jsonl`) und an Basismodell und trainiertes Modell (oder zwei gesicherte Stände) schicken; das Script druckt Referenz und Antworten und zählt am Ende pro Kategorie, wie viele Antworten alle Prüfwörter (`mustContain`) enthalten:
 
 ```bash
 python docs/unsloth-config/compare_models.py eval.jsonl ministral-3:8b buch-leser
@@ -180,16 +239,19 @@ Tests:
 4. Stil-Fortsetzung aus Kapitel-Anfang.
 5. Neues Kapitel mit zwei Figuren generieren.
 6. Ich-Form: „Ich möchte mit {Hauptfigur} sprechen." und eine Frage an sie.
-7. Grenze: „Wer ist {erfundener Name}?" → „gibt es nicht".
+7. Grenze: „Wer ist {erfundener Name}?" → „kommt nicht vor".
+8. Falsche Annahme: „Warum ist {Mutter} {Kinds} Schwester?" → korrigiert die Rolle.
 
 ## 6. Troubleshooting
 
 | Symptom | Fix |
 |---|---|
 | OOM | `seq_len=2048`, `batch=1`, `accum=16` |
-| Eval-Loss steigt früh | LR halbieren (2e-4 → 1e-4) |
-| Repetitive Inferenz | `repetition_penalty=1.05–1.15` |
-| Figuren halluziniert | mehr `authorChat`-Samples, +1 Epoche |
+| Eval-Loss steigt früh | erwartet bei einem Buch-LoRA; Stände per `eval.jsonl` vergleichen statt Early Stopping ([§3](#3-training)) |
+| Repetitive Inferenz | `repeat_penalty 1.1` (Modelfile der Karte), sonst 1.15 |
+| Figuren halluziniert | `factParaphrases` ↑, `minMentions` ↓; Faktenkarten später per Retrieval in den Prompt |
+| Erfindet Antworten zu Unbekanntem | `refusalShare` ↑ (z. B. 0.04) |
+| Antwortet auf Inhaltsfragen mit Lektorat | `critiqueDropped` in der Statistik prüfen, Muster in `critiquePatterns` ergänzen |
 | Klingt wie Standard-Mistral | `r` ↑ (32 → 48), +1 Epoche |
 | Kopiert Buch wörtlich | Epochen ↓, `lora_dropout=0.05` |
 | Antwortet auf Englisch | Modelfile aus der Karte verwenden (System-Prompt wörtlich) |

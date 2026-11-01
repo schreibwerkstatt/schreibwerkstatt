@@ -22,7 +22,12 @@
 # VRAM) mit den JSONL-Exports der Fine-Tuning-Export-Karte.
 #
 # Vor dem Import in Studio noch in der GUI einstellen:
-#   1. Dataset-Spalte: train.jsonl (Upload/Local), val.jsonl als Eval-File.
+#   1. Dataset-Spalte: train.jsonl (Upload/Local), als Eval-File
+#      val-facts.jsonl (misst Faktenwissen statt Prosa-Auswendiglernen).
+#
+# Die Karte schreibt beim Download die Gesamtschritte des Exports als
+# Kommentar dazu und setzt save_steps auf ~10 % davon; diese Muster-Datei
+# kennt keinen Export und trägt die Basiswerte.
 #   2. Advanced:       unsloth/Ministral-3-8B-Instruct-2512-unsloth-bnb-4bit,
 #                      Method = QLoRA.
 #
@@ -38,10 +43,11 @@
 
 training:
   # ─── Step-vs-Epoch-Strategie ─────────────────────────────────────────
-  # max_steps=0 → Epochen-gesteuert. num_epochs=2 ist Default für
-  # Welt-Internalisierung. In Studio: „Use Epochs"-Toggle aktivieren.
+  # Feste Länge: max_steps=0 → Epochen-gesteuert, 1 Epoche. Profile mit
+  # trainBy 'steps' setzen max_steps ≈ 1.5 Epochen aus der Train-Grösse.
+  # In Studio: „Use Epochs"-Toggle aktivieren.
   max_steps: 0
-  num_epochs: 2
+  num_epochs: 1
 
   # ─── Batching (20-GB-VRAM-Profil für 8B) ─────────────────────────────
   # effektive Batch = 2 × 8 = 16. VRAM-Peak ~12–15 GB. Bei OOM:
@@ -55,11 +61,12 @@ training:
   max_seq_length: 4096
 
   # ─── Optimizer & LR-Schedule ─────────────────────────────────────────
-  # adamw_8bit halbiert Optimizer-State-VRAM. Cosine statt linear:
-  # stabiler bei 2 Epochen. warmup_ratio rechnet Studio nur bei
+  # adamw_8bit halbiert Optimizer-State-VRAM. 1e-4 statt 2e-4: bei 2e-4
+  # fiel der Train-Loss eines Buchs bis 0.03 (auswendig gelernt), während
+  # der Eval-Loss ab ⅓ Epoche stieg. Cosine statt linear. warmup_ratio rechnet Studio nur bei
   # max_steps > 0 um — bei Epochen-Steuerung zählt warmup_steps (absolut).
   # 20 Steps ≈ 1–3 % eines typischen Buch-Runs.
-  learning_rate: 2.0e-4
+  learning_rate: 0.0001
   lr_scheduler_type: cosine
   warmup_steps: 20
   weight_decay: 0.01
@@ -73,14 +80,15 @@ training:
   packing: false
 
   # ─── Eval, Early-Stopping, Checkpointing ─────────────────────────────
-  # Studio steuert Eval/Save über die Step-Intervalle. Early-Stopping
-  # zählt Evaluationen ohne neuen eval_loss-Bestwert; nach `patience`
-  # davon in Folge stoppt der Run, und am Ende werden die Gewichte der
-  # besten Evaluation zurückgeschrieben (wirkt wie load_best_model_at_end).
-  # Braucht val.jsonl als Eval-File, sonst ohne Wirkung.
-  eval_steps: 200
-  early_stopping_patience: 3
-  save_steps: 400
+  # eval_steps liest Studio als ANTEIL der Gesamtschritte (0–1): 0.1 =
+  # zehn Evaluationen pro Lauf. Kein Early Stopping (0): der Eval-Loss
+  # eines Buch-LoRA steigt früh, während das Faktenwissen noch wächst —
+  # Early Stopping behielte den Stand, der die Fakten am schlechtesten
+  # kennt. Stattdessen alle ~10 % einen Stand sichern (save_steps) und die
+  # Stände mit eval.jsonl vergleichen (compare_models.py).
+  eval_steps: 0.1
+  early_stopping_patience: 0
+  save_steps: 100
 
   # ─── Loss-Masking (wichtigster Qualitäts-Hebel) ──────────────────────
   # Studio-Schlüssel: train_on_completions (entspricht Unsloths
@@ -112,9 +120,9 @@ lora:
   lora_alpha: 32
 
   # ─── Dropout ─────────────────────────────────────────────────────────
-  # 0 ist am schnellsten dank Unsloths Fused-LoRA-Patch. Bei Over-Training
-  # auf 0.05 hochsetzen.
-  lora_dropout: 0
+  # 0.05 gegen Auswendiglernen; 0 wäre dank Unsloths Fused-LoRA-Patch
+  # etwas schneller.
+  lora_dropout: 0.05
 
   # ─── Target-Module ───────────────────────────────────────────────────
   # Alle Attention- + MLP-Projections. Partielle Sets (nur q/v) trainieren

@@ -475,9 +475,11 @@ export {
   buildFinetuneReversePromptsPrompt,
   buildFinetuneFactQAPrompt,
   buildFinetuneVoiceRewritePrompt,
+  buildFinetuneParaphrasePrompt,
   SCHEMA_FT_REVERSE_PROMPTS,
   SCHEMA_FT_FACT_QA,
   SCHEMA_FT_VOICE_REWRITE,
+  SCHEMA_FT_PARAPHRASE,
 } from './prompts/finetune.js';
 
 export {

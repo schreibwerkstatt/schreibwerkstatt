@@ -1,30 +1,11 @@
 'use strict';
 
-// Block 12-16: figRelations + Cast-Aggregate + Familien + Macht + Tags
+// Block 12-16: Cast-Aggregate + Familien + Macht + Tags
 function buildRelationSamples(ctx) {
   const { langIsEn, figRows, figById, figRelRows, pushQA } = ctx;
 
-  // ── Figuren-Beziehungen ──────────────────────────────────────────────
-  // Pro Beziehung Q&A „Wie steht A zu B?" + Rückrichtung. Paare werden
-  // einmalig (A→B UND B→A) eingefügt, damit das Modell beide Fragerichtungen
-  // kennt.
-  for (const rel of figRelRows) {
-    const a = figById.get(rel.from_fig_id)?.name;
-    const b = figById.get(rel.to_fig_id)?.name;
-    if (!a || !b) continue;
-    const typ = (rel.typ || '').trim();
-    const besch = (rel.beschreibung || '').trim();
-    if (!typ && !besch) continue;
-    const answer = besch
-      ? (typ ? `${typ.charAt(0).toUpperCase() + typ.slice(1)}: ${besch}` : besch)
-      : typ;
-    pushQA('authorChat|rel|' + rel.from_fig_id + '|' + rel.to_fig_id,
-      langIsEn ? `How does ${a} relate to ${b}?` : `Wie steht ${a} zu ${b}?`,
-      answer);
-    pushQA('authorChat|rel2|' + rel.from_fig_id + '|' + rel.to_fig_id,
-      langIsEn ? `What is the relationship between ${a} and ${b}?` : `Welche Beziehung haben ${a} und ${b}?`,
-      answer);
-  }
+  // Einzelbeziehungen («Wie steht A zu B?», beide Richtungen) stehen als
+  // Kernwissen in ../core-facts/relations.js; hier bleiben die Sammellisten.
 
   // ── Cast-Aggregate (Figurentyp-Übersicht) ────────────────────────────
   // Gruppiert Figuren nach figures.typ (Hauptfigur, Nebenfigur, Statist, …).

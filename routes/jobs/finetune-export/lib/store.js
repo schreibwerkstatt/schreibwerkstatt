@@ -35,7 +35,9 @@ function finetuneFilePath(bookId, userEmail, kind) {
 
 // Schreibt erst in .tmp-Dateien und benennt dann um: ein Absturz mitten im
 // Schreiben lässt das vorige Set heil. Meta zuletzt — sie macht das Set gültig.
-async function saveFinetuneResult(bookId, userEmail, { trainJsonl, valJsonl, allJsonl, evalJsonl, meta }) {
+// `valFamilyJsonl`: Val je Familie ({ facts, writing, refusal }) → Dateien
+// `val-facts`, `val-writing`, `val-refusal`.
+async function saveFinetuneResult(bookId, userEmail, { trainJsonl, valJsonl, allJsonl, evalJsonl, valFamilyJsonl = {}, meta }) {
   await fs.promises.mkdir(DIR, { recursive: true });
   const base = _base(bookId, userEmail);
   const files = [
@@ -43,6 +45,7 @@ async function saveFinetuneResult(bookId, userEmail, { trainJsonl, valJsonl, all
     [`${base}.val.jsonl`, valJsonl || ''],
     [`${base}.all.jsonl`, allJsonl || ''],
     [`${base}.eval.jsonl`, evalJsonl || ''],
+    ...['facts', 'writing', 'refusal'].map(f => [`${base}.val-${f}.jsonl`, valFamilyJsonl[f] || '']),
     [`${base}.meta.json`, JSON.stringify(meta)],
   ];
   for (const [file, content] of files) {

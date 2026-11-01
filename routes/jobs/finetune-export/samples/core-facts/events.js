@@ -1,0 +1,127 @@
+'use strict';
+
+// Ereignisse und Kapitel als Faktenkarten mit Varianten. Jede Karte ist eine
+// Facette (wann, wer, wo, warum) mit eigener Antwort; alle Facetten eines
+// Ereignisses teilen die Einheit `evt:<i>` mit den übrigen Ereignis-Samples
+// (author-chat/events.js), damit der Split sie nicht trennt.
+//
+// «Was folgt daraus» gibt es nicht: das Datenmodell kennt keine Kausal- oder
+// Folgebeziehung zwischen Ereignissen, nur die erzählte Reihenfolge
+// (author-chat/events.js «davor/danach»).
+//
+// Kapitel: «Was passiert im Kapitel X?» wird aus den Ereignissen des Kapitels
+// beantwortet — nie aus einer Bewertung (chapter_reviews). Ohne Ereignis keine
+// Aufgabe. Kapitelkarten sind Kernwissen (`core`).
+
+const { isAdverbialWhen } = require('./words');
+
+const cap = (s) => s.charAt(0).toUpperCase() + s.slice(1);
+
+function joinList(items, langIsEn) {
+  if (items.length <= 1) return items.join('');
+  return items.slice(0, -1).join(', ') + (langIsEn ? ' and ' : ' und ') + items[items.length - 1];
+}
+
+const EQ = {
+  de: {
+    when: ['Wann passiert «{e}»?', 'Wann findet «{e}» statt?', 'Zu welcher Zeit geschieht «{e}»?'],
+    who: ['Wer ist bei «{e}» dabei?', 'Wer ist an «{e}» beteiligt?', 'Welche Figuren erleben «{e}»?'],
+    where: ['Wo spielt «{e}»?', 'An welchem Schauplatz geschieht «{e}»?', 'Wo findet «{e}» statt?'],
+    why: ['Warum ist «{e}» wichtig?', 'Welche Bedeutung hat «{e}»?', 'Was bedeutet «{e}» für die Geschichte?'],
+    chapter: ['Was passiert im Kapitel «{k}»?', 'Worum geht es im Kapitel «{k}»?', 'Was geschieht im Kapitel «{k}»?', 'Fasse das Kapitel «{k}» zusammen.'],
+  },
+  en: {
+    when: ['When does «{e}» happen?', 'When does «{e}» take place?', 'At what time does «{e}» happen?'],
+    who: ['Who is part of «{e}»?', 'Who is involved in «{e}»?', 'Which characters experience «{e}»?'],
+    where: ['Where does «{e}» take place?', 'At which setting does «{e}» happen?', 'Where is «{e}» set?'],
+    why: ['Why does «{e}» matter?', 'What is the significance of «{e}»?', 'What does «{e}» mean for the story?'],
+    chapter: ['What happens in the chapter «{k}»?', 'What is the chapter «{k}» about?', 'What goes on in the chapter «{k}»?', 'Summarize the chapter «{k}».'],
+  },
+};
+
+function buildEventCore(ctx, emitCard) {
+  const { langIsEn, events = [] } = ctx;
+  const lang = langIsEn ? 'en' : 'de';
+  const q = (key, e) => EQ[lang][key].map(t => t.replace('{e}', e));
+  for (const e of events) {
+    const E = e.ereignis;
+    const unit = 'evt:' + e.i;
+    const card = (facet, fields) => ({ id: `evt:${e.i}:${facet}`, kind: 'event', unit, subject: E, fields });
+    if (e.datum) {
+      emitCard(card('when', { wann: e.datum }), {
+        task: 'eventCore', questions: q('when', E),
+        answers: isAdverbialWhen(e.datum)
+          ? (langIsEn
+            ? [`«${E}» happens ${e.datum}.`, `The time of «${E}»: ${e.datum}.`, `${cap(E)} takes place ${e.datum}.`]
+            : [`«${E}» passiert ${e.datum}.`, `Zeitpunkt von «${E}»: ${e.datum}.`, `${cap(E)} geschieht ${e.datum}.`])
+          : (langIsEn
+            ? [`The time of «${E}»: ${e.datum}.`, `When: ${e.datum} — that is when «${E}» happens.`]
+            : [`Zeitpunkt von «${E}»: ${e.datum}.`, `Wann: ${e.datum} — dann passiert «${E}».`]),
+      });
+    }
+    if (e.figs.length) {
+      const names = e.figs.map(f => f.name);
+      const list = joinList(names, langIsEn);
+      emitCard(card('who', { figuren: names }), {
+        task: 'eventCore', questions: q('who', E),
+        answers: langIsEn
+          ? [`Part of «${E}»: ${list}.`, `${list} ${names.length > 1 ? 'are' : 'is'} involved in «${E}».`, `«${E}» involves ${list}.`]
+          : [`Bei «${E}» sind dabei: ${list}.`, `An «${E}» ${names.length > 1 ? 'sind' : 'ist'} ${list} beteiligt.`, `${list} ${names.length > 1 ? 'erleben' : 'erlebt'} «${E}».`],
+      });
+    }
+    if (e.locs.length) {
+      const names = e.locs.map(l => '«' + l.name + '»');
+      const list = joinList(names, langIsEn);
+      emitCard(card('where', { schauplaetze: e.locs.map(l => l.name) }), {
+        task: 'eventCore', questions: q('where', E),
+        answers: langIsEn
+          ? [`«${E}» is set at ${list}.`, `Setting of «${E}»: ${list}.`]
+          : [`«${E}» spielt am Schauplatz ${list}.`, `Schauplatz von «${E}»: ${list}.`],
+      });
+    }
+    const bed = String(e.bedeutung || '').trim();
+    if (bed) {
+      emitCard(card('why', { bedeutung: bed }), {
+        task: 'eventCore', questions: q('why', E),
+        answers: langIsEn
+          ? [bed, `«${E}» matters because of this: ${bed}`]
+          : [bed, `«${E}» ist für die Geschichte wichtig: ${bed}`],
+      });
+    }
+  }
+}
+
+function buildChapterCore(ctx, emitCard) {
+  const { langIsEn, events = [], chapterKeys = [], chapterNameByKey } = ctx;
+  const lang = langIsEn ? 'en' : 'de';
+  // Kapitel in Lesereihenfolge; Ereignisse in Zeitstrahl-Reihenfolge.
+  const order = new Map(chapterKeys.map((k, i) => [chapterNameByKey.get(k), i]));
+  const byCh = new Map();
+  for (const e of events) {
+    for (const k of e.kapitel) {
+      if (!byCh.has(k)) byCh.set(k, []);
+      byCh.get(k).push(e);
+    }
+  }
+  for (const [name, evs] of [...byCh].sort((a, b) => (order.get(a[0]) ?? 1e9) - (order.get(b[0]) ?? 1e9))) {
+    // Fünf Ereignisse über das ganze Kapitel verteilt, nicht die ersten fünf —
+    // sonst bestünde der Inhalt eines langen Kapitels nur aus seinem Anfang.
+    const top = evs.length <= 5 ? evs : [0, 1, 2, 3, 4].map(k => evs[Math.round(k * (evs.length - 1) / 4)]);
+    const plain = top.map(e => e.ereignis);
+    const dated = top.map(e => (e.datum ? `${e.datum}: ${e.ereignis}` : e.ereignis));
+    const steps = top.map((e, i) => (i === 0 ? (langIsEn ? 'First' : 'Zuerst')
+      : i === top.length - 1 ? (langIsEn ? 'Finally' : 'Schliesslich') : (langIsEn ? 'Then' : 'Dann')) + ': ' + e.ereignis + '.');
+    // Kapitelinhalt ist Kernwissen: bleibt im Train und wird von der
+    // Token-Mischung nicht gekürzt (wenige Karten, Leser fragen genau danach).
+    emitCard({ id: 'chap:' + name, kind: 'chapter', unit: 'chap:' + name, core: true, subject: name,
+      fields: { ereignisse: plain } }, {
+      task: 'chapterCore',
+      questions: EQ[lang].chapter.map(t => t.replace('{k}', name)),
+      answers: langIsEn
+        ? [`In the chapter «${name}»: ${plain.join('; ')}.`, dated.join(' · '), `«${name}» tells this. ${steps.join(' ')}`]
+        : [`Im Kapitel «${name}» geht es um: ${plain.join('; ')}.`, dated.join(' · '), `Das Kapitel «${name}» erzählt Folgendes. ${steps.join(' ')}`],
+    });
+  }
+}
+
+module.exports = { buildEventCore, buildChapterCore, joinList, EVENT_QUESTIONS: EQ };

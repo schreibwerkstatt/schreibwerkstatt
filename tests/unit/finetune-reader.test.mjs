@@ -25,7 +25,7 @@ shared.getPrompts = async () => prompts;
 
 const { createDraftFigure } = require('../../db/draft-figures');
 const { collectNotes } = require('../../routes/jobs/finetune-export/samples/reader/figures.js');
-const { unknownNames } = require('../../routes/jobs/finetune-export/samples/reader/boundaries.js');
+const { unknownNames } = require('../../routes/jobs/finetune-export/samples/reader/refusals.js');
 const { buildReaderConversations: runConversations } = require('../../routes/jobs/finetune-export/samples/reader/conversations.js');
 const { makeReaderPush } = require('../../routes/jobs/finetune-export/samples/reader/push.js');
 const {
@@ -119,11 +119,16 @@ test('Leser-Samples: Innenleben aus der Werkstatt, Stimm-Anker, Grenzen', () => 
   assert.ok(!voice.some(s => s.messages[2].content.includes('sagte sie')), 'Erzählfetzen ist keine Rede');
   assert.match(voice[0].messages[1].content, /Anna/);
 
-  for (const kind of ['unknownFig', 'unknownPlace', 'afterEnd', 'offTopic', 'meta', 'jailbreak']) {
+  for (const kind of ['afterEnd', 'meta', 'jailbreak']) {
     assert.ok(ids.some(id => id.startsWith(`reader|${kind}|`)), kind);
   }
-  const off = ctx.samples.find(s => s.id.startsWith('reader|offTopic|'));
+  // Ablehnen (samples/reader/refusals.js): eigene Einheit je Sample.
+  for (const kind of ['unknownFig', 'unknownPlace', 'offTopic']) {
+    assert.ok(ids.some(id => id.startsWith(`refusal|${kind}|`)), kind);
+  }
+  const off = ctx.samples.find(s => s.id.startsWith('refusal|offTopic|'));
   assert.match(off.messages[2].content, /Finetune-Leser/);
+  assert.match(off.unit, /^ref:offTopic:/);
   // Ben ist Nebenfigur ohne Werkstatt → keine Ich-Form, keine Psyche.
   assert.ok(!ids.some(id => id.includes('fig:ben')));
 });

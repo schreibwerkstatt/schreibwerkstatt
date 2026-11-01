@@ -16,6 +16,8 @@ function buildEventSamples(ctx) {
   const atLoc = (name) => (langIsEn ? `at ${name}` : `am Schauplatz «${name}»`);
 
   // ── Pro Ereignis ─────────────────────────────────────────────────────
+  // Wann / Wer / Wo / Warum stehen als Kernwissen mit Varianten in
+  // ../core-facts/events.js (gleiche Einheit `evt:<i>`).
   for (const e of events) {
     const { i, ereignis } = e;
     const unit = 'evt:' + i;
@@ -23,41 +25,16 @@ function buildEventSamples(ctx) {
       const q = eventQuestions[idx].replace('{ereignis}', ereignis);
       pushQA('authorChat|evt|' + i + '|' + idx, q, e.fullAnswer, { unit });
     }
-    if (e.figs.length) {
-      pushQA('authorChat|evt-fig|' + i,
-        langIsEn ? `Who is involved in «${ereignis}»?` : `Wer ist bei «${ereignis}» dabei?`,
-        langIsEn ? `Involved in «${ereignis}»: ${e.figs.map(f => f.name).join(', ')}.`
-          : `Bei «${ereignis}» sind dabei: ${e.figs.map(f => f.name).join(', ')}.`,
-        { unit });
-    }
     if (e.kapitel.length) {
       pushQA('authorChat|evt-ch|' + i,
         langIsEn ? `In which chapter does «${ereignis}» happen?` : `In welchem Kapitel passiert «${ereignis}»?`,
         langIsEn ? `«${ereignis}» happens in chapter ${e.kapitel.join(', ')}.` : `«${ereignis}» passiert im Kapitel ${e.kapitel.join(', ')}.`,
         { unit });
     }
-    if (e.datum) {
-      pushQA('authorChat|evt-when|' + i,
-        langIsEn ? `When does «${ereignis}» happen?` : `Wann passiert «${ereignis}»?`,
-        langIsEn ? `«${ereignis}» happens ${e.datum}.` : `«${ereignis}»: ${e.datum}.`,
-        { unit });
-    }
-    if (e.bedeutung) {
-      pushQA('authorChat|evt-sig|' + i,
-        langIsEn ? `What's the significance of «${ereignis}»?` : `Welche Bedeutung hat «${ereignis}»?`,
-        e.bedeutung, { unit });
-    }
     if (e.kindPhrase) {
       pushQA('authorChat|evt-typ|' + i,
         langIsEn ? `What kind of event is «${ereignis}»?` : `Was für ein Ereignis ist «${ereignis}»?`,
         langIsEn ? `«${ereignis}» is ${e.kindPhrase}.` : `«${ereignis}» ist ${e.kindPhrase}.`,
-        { unit });
-    }
-    if (e.locs.length) {
-      const names = e.locs.map(l => l.name).join(', ');
-      pushQA('authorChat|evt-loc|' + i,
-        langIsEn ? `Where does «${ereignis}» take place?` : `Wo spielt «${ereignis}»?`,
-        langIsEn ? `«${ereignis}» is set at: ${names}.` : `Schauplatz von «${ereignis}»: ${names}.`,
         { unit });
     }
   }

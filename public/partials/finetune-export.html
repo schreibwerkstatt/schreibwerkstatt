@@ -72,6 +72,13 @@
           </span>
         </label>
         <label class="form-check">
+          <input type="checkbox" id="ft-type-editor-feedback" name="ft-type-editor-feedback" x-model="finetuneEditorFeedback">
+          <span>
+            <span class="form-check-title" x-text="$app.t('finetune.type.editorFeedback')"></span>
+            <span class="form-check-desc" x-text="$app.t('finetune.type.editorFeedback.desc')"></span>
+          </span>
+        </label>
+        <label class="form-check">
           <input type="checkbox" id="ft-type-dialog" name="ft-type-dialog" x-model="finetuneTypeDialog">
           <span>
             <span class="form-check-title" x-text="$app.t('finetune.type.dialog')"></span>
@@ -122,10 +129,6 @@
           <label class="form-inline-field">
             <span x-text="$app.t('finetune.quality.maxPerAnswer')"></span>
             <input type="text" id="ft-max-per-answer" name="ft-max-per-answer" x-data="numInput({ step: 1, min: 0, max: 50, integer: true })" x-modelable="value" x-model="finetuneMaxPerAnswer" class="form-num">
-          </label>
-          <label class="form-inline-field">
-            <span x-text="$app.t('finetune.quality.maxFactShare')"></span>
-            <input type="text" id="ft-max-fact-share" name="ft-max-fact-share" x-data="numInput({ step: 0.05, min: 0, max: 0.95 })" x-modelable="value" x-model="finetuneMaxFactShare" class="form-num">
           </label>
         </div>
         <p class="form-check-desc" x-text="$app.t('finetune.quality.desc')"></p>

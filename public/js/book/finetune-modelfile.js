@@ -20,12 +20,15 @@ export const MODELFILE_TEMPLATE = [
   '{{- end }}',
 ].join('\n');
 
-// Prosa im Buchstil: 0.7–0.85 (docs/finetuning.md §4). 32k Kontext reicht für
-// Gespräche und spart KV-Cache gegenüber den nativen 256k.
+// 0.7: unteres Ende des Prosa-Fensters (docs/finetuning.md §4) — Faktenfragen
+// erfinden bei höherer Temperatur mehr. repeat_penalty 1.1 gegen die
+// Satz-Schleifen («Renate ist … Renate ist …»), die ein Buch-LoRA bei
+// kurzen Faktenantworten zeigt. 32k Kontext reicht für Gespräche und spart
+// KV-Cache gegenüber den nativen 256k.
 export const MODELFILE_PARAMS = [
-  ['temperature', '0.8'],
+  ['temperature', '0.7'],
   ['top_p', '0.95'],
-  ['repeat_penalty', '1.05'],
+  ['repeat_penalty', '1.1'],
   ['num_ctx', '32768'],
 ];
 

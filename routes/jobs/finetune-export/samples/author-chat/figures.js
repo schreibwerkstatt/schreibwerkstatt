@@ -1,9 +1,8 @@
 'use strict';
 
-const { hashSplit } = require('../../lib/names');
 const { eventDetailParts, eventWhen } = require('./event-data');
 
-// Enum-Werte der Analyse (figures.sozialschicht / figures.geschlecht) als Prosa —
+// Enum-Werte der Analyse (figures.sozialschicht) als Prosa —
 // das Modell soll «gehobenes Bürgertum» lernen, nicht den Schlüssel
 // «gehobenes_buergertum» (und in englischen Büchern nicht das deutsche Wort).
 // Kein UI-String: das ist Trainingstext wie die übrigen Antwort-Vorlagen dieses
@@ -17,74 +16,14 @@ const SCHICHT_PROSA = {
   prekariat:            { de: 'dem Prekariat', en: 'the precariat' },
   unterwelt:            { de: 'der Unterwelt', en: 'the criminal underworld' },
 };
-const GESCHLECHT_PROSA = {
-  'männlich': { de: 'männlich', en: 'male' },
-  maennlich:  { de: 'männlich', en: 'male' },
-  weiblich:   { de: 'weiblich', en: 'female' },
-  divers:     { de: 'divers', en: 'non-binary' },
-};
 
 // Block 1+2: Figuren-Composite + Trait-Q&A
 function buildFigureBaseSamples(ctx) {
-  const { langIsEn, opts, figRows, figQuestions, pushQA, pickVariants, PARAPHRASES } = ctx;
-  const seed = opts.valSeed;
+  const { langIsEn, figRows, pushQA, pickVariants, PARAPHRASES } = ctx;
 
-  // ── Figuren-Q&A ────────────────────────────────────────────────────────
-  // Composite answer: beschreibung als Rückgrat + ein angehängter Satz zu
-  // Beruf/Geschlecht/Tags (so die Antwort wie Prosa klingt und nicht wie CSV).
-  for (const f of figRows) {
-    const desc = (f.beschreibung || '').trim();
-    if (!desc) continue;
-    const extras = [];
-    if (f.beruf) extras.push(langIsEn ? `Occupation: ${f.beruf}.` : `Beruf: ${f.beruf}.`);
-    if (f.tags_csv) {
-      const tags = f.tags_csv.split(',').map(t => t.trim()).filter(Boolean).slice(0, 4).join(', ');
-      if (tags) extras.push(langIsEn ? `Traits: ${tags}.` : `Eigenschaften: ${tags}.`);
-    }
-    const answer = [desc, ...extras].join(' ');
-    const voice = { key: 'fig:' + f.fig_id, kind: 'figure', name: f.name };
-    // Alle Paraphrasen pro Figur → gleiche Fakten mehrmals sehen → bessere
-    // Memorisierung der Buchwelt (Ziel: Figur als «Realität» akzeptieren).
-    const idxs = pickVariants('fig|' + f.fig_id, figQuestions, PARAPHRASES);
-    for (const idx of idxs) {
-      const q = figQuestions[idx].replace('{name}', f.name);
-      pushQA('authorChat|fig|' + f.fig_id + '|' + idx, q, answer, { unit: 'fig:' + f.fig_id, voice });
-    }
-    // Zusatz-Frage mit Kurzname als Zielnamen (wenn vorhanden), damit das
-    // Modell beide Namen-Varianten kennt.
-    if (f.kurzname && f.kurzname !== f.name && f.kurzname.trim().length >= 2) {
-      const altIdx = Math.floor(hashSplit('figAlt|' + f.fig_id, seed) * figQuestions.length);
-      const q = figQuestions[altIdx].replace('{name}', f.kurzname);
-      pushQA('authorChat|figAlt|' + f.fig_id, q, answer, { unit: 'fig:' + f.fig_id, voice });
-    }
-  }
-
-  // ── Einzel-Felder als gezielte Q&A ───────────────────────────────────
-  // Composite-Antwort enthält Felder als Anhang, aber gezielte Fragen ziehen
-  // dann nicht direkt — eigene Samples pro Feld zwingen Modell, jedes Attribut
-  // separat zu memorisieren.
-  for (const f of figRows) {
-    if (f.beruf) {
-      pushQA('authorChat|figBeruf|' + f.fig_id,
-        langIsEn ? `What does ${f.name} do for a living?` : `Was macht ${f.name} beruflich?`,
-        langIsEn ? `${f.name} works as: ${f.beruf}.` : `${f.name} arbeitet als ${f.beruf}.`, { unit: 'fig:' + f.fig_id });
-      pushQA('authorChat|figBeruf2|' + f.fig_id,
-        langIsEn ? `What is ${f.name}'s profession?` : `Welchen Beruf hat ${f.name}?`,
-        f.beruf, { unit: 'fig:' + f.fig_id });
-    }
-    const geschl = GESCHLECHT_PROSA[String(f.geschlecht || '').trim().toLowerCase()];
-    if (geschl) {
-      pushQA('authorChat|figGeschl|' + f.fig_id,
-        langIsEn ? `What is ${f.name}'s gender?` : `Welches Geschlecht hat ${f.name}?`,
-        langIsEn ? `${f.name} is ${geschl.en}.` : `${f.name} ist ${geschl.de}.`, { unit: 'fig:' + f.fig_id });
-    }
-    const schicht = SCHICHT_PROSA[String(f.sozialschicht || '').trim().toLowerCase()];
-    if (schicht) {
-      pushQA('authorChat|figSchicht|' + f.fig_id,
-        langIsEn ? `Which social class does ${f.name} come from?` : `Aus welcher gesellschaftlichen Schicht stammt ${f.name}?`,
-        langIsEn ? `${f.name} comes from ${schicht.en}.` : `${f.name} stammt aus ${schicht.de}.`, { unit: 'fig:' + f.fig_id });
-    }
-  }
+  // «Wer ist X?», Beruf, Schicht und Familie stehen als Kernwissen mit
+  // Varianten in ../core-facts/figures.js; hier bleiben Vergleich, Rolle,
+  // Eigenschaften und Lebensereignisse.
 
   // ── Roleplay-/Selbstvorstellung-Frame ─────────────────────────────────
   // „Stelle dich als X vor" → Ich-Form Beschreibung. Trainiert Personae-
@@ -269,4 +208,4 @@ function buildFigureMetaSamples(ctx) {
   }
 }
 
-module.exports = { buildFigureBaseSamples, buildFigureMetaSamples };
+module.exports = { buildFigureBaseSamples, buildFigureMetaSamples, SCHICHT_PROSA };

@@ -44,11 +44,11 @@ function buildQuestionPools(langIsEn) {
     : ['Was passiert in «{titel}»?', 'Worum geht es in «{titel}»?',
        'Fasse die Szene «{titel}» zusammen.', 'Erzähl mir von der Szene «{titel}».',
        'Was spielt sich in «{titel}» ab?'];
+  // Bedeutung/Wann/Wer/Wo fragt das Kernwissen (core-facts/events.js) mit
+  // eigener Antwort; hier nur die Gesamtfrage mit der ganzen Ereigniskarte.
   const eventQuestions = langIsEn
-    ? ['What happens around {ereignis}?', 'What is the significance of {ereignis}?',
-       'Tell me about {ereignis}.', 'How does {ereignis} matter?']
-    : ['Was weisst du über {ereignis}?', 'Welche Bedeutung hat {ereignis}?',
-       'Erzähl mir von {ereignis}.', 'Warum ist {ereignis} wichtig?'];
+    ? ['What happens around {ereignis}?', 'Tell me about {ereignis}.', 'What do you know about {ereignis}?']
+    : ['Was weisst du über {ereignis}?', 'Erzähl mir von {ereignis}.', 'Was geschah bei {ereignis}?'];
   const chapterQuestions = langIsEn
     ? ['What happens in «{kapitel}»?', 'Summarize «{kapitel}» for me.',
        'Walk me through «{kapitel}».', 'What is «{kapitel}» about?']
@@ -119,8 +119,10 @@ function buildAuthorChatSamples(ctx) {
   const helpers = buildAuthorChatHelpers(ctx);
   // ctx wird um helpers + pools erweitert; alle sub-modules greifen darauf zu.
   const baseCtx = { ...ctx, ...pools, ...helpers, PARAPHRASES };
-  // Zeitstrahl einmal angereichert laden: Szenen-, Ereignis- und Figuren-Block teilen ihn.
-  const subCtx = { ...baseCtx, ...loadEventData(baseCtx) };
+  // Zeitstrahl einmal angereichert laden (index.js legt ihn vorab in ctx, weil
+  // auch Szenen-Sampler und Kernwissen ihn brauchen): Szenen-, Ereignis- und
+  // Figuren-Block teilen ihn.
+  const subCtx = { ...baseCtx, ...(ctx.events ? {} : loadEventData(baseCtx)) };
 
   buildFigureBaseSamples(subCtx);          // Block 1+2: figuren composite + traits
   buildLocationSamples(subCtx);            // Block 3+4: orte einzeln + aggregate

@@ -131,3 +131,35 @@ export function buildFinetuneVoiceRewritePrompt({ entityType, name, text, styleS
 }
 
 export const SCHEMA_FT_VOICE_REWRITE = _obj({ antwort: _str });
+
+// Kernwissen-Varianten (samples/core-facts/ai-paraphrase.js): eine Antwort
+// N-mal anders formulieren, Fakten unverändert. Der Export prüft danach
+// Namen, Jahreszahlen und Beziehungswörter gegen die Vorlage und verwirft
+// jede Variante, der etwas davon fehlt.
+export function buildFinetuneParaphrasePrompt({ question, answer, count = 3, langIsEn = false, bookName = '' }) {
+  const lines = langIsEn
+    ? [
+        `Rephrase the following answer from the book «${bookName || 'the book'}» ${count} times, each time differently worded.`,
+        '',
+        'Rules:',
+        '- Keep every fact exactly: all names, years, numbers and relationship words (mother, son, …) appear unchanged in every variant.',
+        '- Add nothing, leave nothing out.',
+        '- Prose, 1–4 sentences, no lists, no labels.',
+        '- The variants must differ from the original and from each other in wording or sentence structure.',
+      ]
+    : [
+        `Formuliere die folgende Antwort aus dem Buch «${bookName || 'dem Buch'}» ${count}-mal neu, jedes Mal anders.`,
+        '',
+        'Regeln:',
+        '- Jede Tatsache bleibt genau erhalten: alle Namen, Jahreszahlen, Zahlen und Beziehungswörter (Mutter, Sohn, …) stehen unverändert in jeder Variante.',
+        '- Nichts hinzufügen, nichts weglassen.',
+        '- Fliesstext, 1–4 Sätze, keine Liste, keine Etiketten.',
+        '- Die Varianten unterscheiden sich vom Original und voneinander in Wortwahl oder Satzbau.',
+      ];
+  lines.push('', 'Schema:\n{ "varianten": ["...", "..."] }', '');
+  lines.push(langIsEn ? 'Question:' : 'Frage:', question, '');
+  lines.push(langIsEn ? 'Answer:' : 'Antwort:', answer);
+  return lines.join('\n');
+}
+
+export const SCHEMA_FT_PARAPHRASE = _obj({ varianten: { type: 'array', items: _str } });

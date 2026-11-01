@@ -4,9 +4,13 @@
 // Statistik («Anzahl je Aufgabentyp»), den Fakten-Deckel in finalize.js und den
 // Karten-Schutz. Ein Sampler kann `task` auch selbst setzen.
 //
-// Familie `writing`: das Ziel ist echter Buchtext (Fortsetzen, Szene schreiben,
-// Dialogzeile, Erzählen aus Figurensicht, Wörtlich, Buchstelle). Alles andere
-// ist `facts` und wird auf `maxFactShare` gedeckelt.
+// Familien (Mischung nach Antwort-Tokens, lib/token-mix.js):
+//   `writing`: das Ziel ist echter Buchtext (Fortsetzen, Szene schreiben,
+//              Dialogzeile, Erzählen aus Figurensicht, Wörtlich, Buchstelle);
+//   `persona`: Leser-Gespräch, Ich-Form, Innenleben (samples/reader/);
+//   `refusal`: Ablehnen — unbekannte Namen, Off-Topic, falsche Annahme;
+//   `editor`:  Lektorats-Feedback, nur mit `editorFeedback` (Standard aus);
+//   alles andere ist `facts`.
 const TASK_RULES = [
   [/^(style|styleCtx|styleCont|chapWin|pageCont|chapCont|chapBridge)\|/, 'continue'],
   [/^(chapTrans|scnTrans)\|/, 'transition'],
@@ -27,6 +31,9 @@ const TASK_RULES = [
   [/^authorChat\|(fact|wfact)/, 'factWorld'],
   [/^authorChat\|song/, 'factSong'],
   [/^authorChat\|sl/, 'factStoryline'],
+  [/^refusal\|unknown/, 'unknownEntity'],
+  [/^refusal\|offTopic/, 'offTopic'],
+  [/^refusal\|falsePremise/, 'falsePremise'],
   [/^reader\|(conv|personaConv)\|/, 'readerConversation'],
   [/^reader\|(persona|personaVoice)\|/, 'readerPersona'],
   [/^reader\|/, 'reader'],
@@ -44,7 +51,19 @@ function taskOf(sample) {
   return 'other';
 }
 
-const familyOf = (task) => (WRITING_TASKS.has(task) ? 'writing' : 'facts');
+const PERSONA_TASKS = new Set(['reader', 'readerPersona', 'readerConversation']);
+const REFUSAL_TASKS = new Set(['unknownEntity', 'offTopic', 'falsePremise']);
+
+// Kernwissen (samples/core-facts/): eigene Typen, Familie `facts`.
+const CORE_TASKS = new Set(['figureCore', 'figureAttr', 'relationCore', 'eventCore', 'chapterCore']);
+
+function familyOf(task) {
+  if (WRITING_TASKS.has(task)) return 'writing';
+  if (PERSONA_TASKS.has(task)) return 'persona';
+  if (REFUSAL_TASKS.has(task)) return 'refusal';
+  if (task === 'editorFeedback') return 'editor';
+  return 'facts';
+}
 
 // Faktenkarte statt Prosa: mindestens zwei Feld-Etiketten der Ereignis-,
 // Szenen- oder Ortskarten. Eine Schreibaufgabe mit so einer Antwort brächte dem
@@ -56,4 +75,4 @@ function looksLikeCard(text) {
   return found.size >= 2;
 }
 
-module.exports = { taskOf, familyOf, looksLikeCard, WRITING_TASKS };
+module.exports = { taskOf, familyOf, looksLikeCard, WRITING_TASKS, REFUSAL_TASKS, CORE_TASKS };

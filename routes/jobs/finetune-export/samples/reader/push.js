@@ -4,13 +4,14 @@
 // Zeile in Statistik und Typ-Balance) und trägt optional:
 //   - `sourceKey`: Kapitel-Schlüssel, wenn die Antwort Buchtext wiedergibt
 //     (Train/Val-Split pro Kapitel, siehe finalize.js);
+//   - `unit`: Einheit im Train/Val-Split (lib/split.js), z.B. `ref:offTopic:3`;
 //   - `convKey`: Gesprächsthema (`fig:<fig_id>` …), aus dem conversations.js
 //     mehrzügige Gespräche zusammensetzt;
 //   - `voice`: Anmeldung für die Umschreibung im Buchton (KI-Augment
 //     `voiceRewrite`, gleicher Mechanismus wie author-chat/index.js#pushQA).
 function makeReaderPush(ctx) {
   const { samples, counts, unifiedSys, voiceTargets } = ctx;
-  return function pushReader({ id, turns, sourceKey, convKey, voice }) {
+  return function pushReader({ id, turns, sourceKey, convKey, voice, unit }) {
     const msgs = [{ role: 'system', content: unifiedSys }];
     for (const [q, a] of turns) {
       const qq = String(q || '').trim();
@@ -21,6 +22,7 @@ function makeReaderPush(ctx) {
     const sample = { id, type: 'reader', messages: msgs };
     if (sourceKey) sample.sourceKey = sourceKey;
     if (convKey) sample.convKey = convKey;
+    if (unit) sample.unit = unit;
     if (voice && voiceTargets && turns.length === 1) {
       sample.voiceKey = voice.key;
       voiceTargets.set(voice.key, { kind: voice.kind, name: voice.name, text: String(turns[0][1]).trim() });

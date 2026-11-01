@@ -118,6 +118,16 @@ function clipAtSentence(text, maxLen) {
   return (ws >= maxLen * 0.5 ? text.slice(0, ws) : text.slice(0, maxLen)).trim();
 }
 
+// Wie `clipAtSentence`, aber ausschliesslich an einer Satz- oder Absatzgrenze.
+// Liegt keine in der hinteren 70 % des Fensters, gibt es '' — der Aufrufer
+// verwirft das Sample lieber, als mitten im Satz zu enden.
+function clipAtSentenceStrict(text, maxLen) {
+  if (!text || text.length <= maxLen) return text || '';
+  let pick = -1;
+  for (const b of cutIndices(text)) { if (b <= maxLen) pick = b; else break; }
+  return pick >= maxLen * 0.3 ? text.slice(0, pick).trim() : '';
+}
+
 // Gegenstück für Text-Enden: höchstens `maxLen` Zeichen vom Ende, beginnend an
 // der ersten Satz-/Absatzgrenze im Fenster (sonst an einer Wortgrenze).
 function tailFromSentence(text, maxLen) {
@@ -202,6 +212,7 @@ module.exports = {
   splitAtSentence,
   splitHalfAtSentence,
   clipAtSentence,
+  clipAtSentenceStrict,
   tailFromSentence,
   chunkAtSentence,
   extractDialogs,

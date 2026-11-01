@@ -9,8 +9,11 @@ const { hashSplit } = require('./names');
 //     Teilstring). So gilt die Regel auch für Sampler, die keinen Quellschlüssel
 //     setzen, und für Kontext im Prompt. Berührt ein Sample Abschnitte aus
 //     beiden Splits, fällt es weg.
-//   - Fakten: Einheit ist die Entität (`sample.unit`, z.B. `evt:12`), mit
-//     allen Fragen dazu. Ohne Einheit (Sammellisten, Kreuzfragen) nur Train.
+//   - Fakten: Einheit ist die Entität bzw. Faktenkarte (`sample.unit`, z.B.
+//     `evt:12`, `rel:fig_3|fig_7`), mit allen Fragen und Varianten dazu. Ohne
+//     Einheit (Sammellisten, Kreuzfragen) nur Train.
+//   - Kernwissen (`sample.core`: Grundfakten der Figuren) bleibt immer im
+//     Train — Val hält nur übrige Fakten zurück.
 // Val-Einheiten werden per Hash gereiht und als fester Anteil gezogen, nicht
 // pro Einheit gewürfelt: bei 66 Abschnitten schwankte ein Münzwurf zu stark.
 
@@ -81,14 +84,15 @@ function pagesOfSample(index, sample) {
   return out;
 }
 
-// → { train, val, mixed } (Arrays der übergebenen Einträge `{ s, … }`).
+// → { train, val, mixed, valUnits } (Arrays der übergebenen Einträge `{ s, … }`).
 function splitByUnits(entries, { pageContents, opts }) {
   const train = [], val = [], mixed = [];
-  if (!(opts.valSplit > 0)) return { train: entries.slice(), val, mixed };
+  if (!(opts.valSplit > 0)) return { train: entries.slice(), val, mixed, valUnits: new Set() };
   const index = buildPageIndex(pageContents || []);
   const valPages = valPageKeys(pageContents || [], opts);
-  const valEntities = pickValUnits(entries.map(e => e.s.unit).filter(Boolean), opts.valSplit, opts.valSeed);
+  const valEntities = pickValUnits(entries.filter(e => !e.s.core).map(e => e.s.unit).filter(Boolean), opts.valSplit, opts.valSeed);
   for (const e of entries) {
+    if (e.s.core) { train.push(e); continue; }
     const pages = pagesOfSample(index, e.s);
     if (pages.size) {
       let inVal = 0;
@@ -102,7 +106,7 @@ function splitByUnits(entries, { pageContents, opts }) {
       train.push(e);
     }
   }
-  return { train, val, mixed };
+  return { train, val, mixed, valUnits: valEntities };
 }
 
 const assistantTexts = (s) => s.messages.filter(m => m.role === 'assistant').map(m => normText(m.content));

@@ -10,6 +10,8 @@
 // (book/finetune-profiles.js: Basismodell × GPU-Speicher, Default
 // Ministral-3-8B auf 20 GB):
 //   maxChars, maxSeqTokens → Sequenz-Budget des Profils
+//   exportOptions    → Kernwissen, Mischung nach Tokens, Längen, Absatz-Budget,
+//                      Ablehnen (geht als `export` an den Server)
 //   emitText=false   → Studio rendert das Chat-Template selbst auf Basis des
 //                      gewählten Basemodells; ein vorgerenderter text-Feld-
 //                      String würde kollidieren. Nur einschalten, wenn du
@@ -17,7 +19,7 @@
 //                      erwartet.
 
 import { finetuneExportMethods } from '../book/finetune-export.js';
-import { DEFAULT_FINETUNE_PROFILE_ID, finetuneProfileById } from '../book/finetune-profiles.js';
+import { DEFAULT_FINETUNE_PROFILE_ID, finetuneProfileById, exportOptions } from '../book/finetune-profiles.js';
 import { createCardJobFeature } from './job-feature-card.js';
 import { setupCardLifecycle } from './card-lifecycle.js';
 import { runningJobStatus } from './job-helpers.js';
@@ -25,11 +27,12 @@ import { runningJobStatus } from './job-helpers.js';
 export function registerFinetuneExportCard() {
   if (typeof window === 'undefined' || !window.Alpine) return;
   const defaultProfile = finetuneProfileById(DEFAULT_FINETUNE_PROFILE_ID);
+  const defaultExport = exportOptions(defaultProfile);
   window.Alpine.data('finetuneExportCard', () => ({
     finetuneProfileId:      DEFAULT_FINETUNE_PROFILE_ID,
     finetuneTypeStyle:      true,
     finetuneTypeScene:      true,
-    finetuneTypeVerbatim:   true,
+    finetuneTypeVerbatim:   defaultExport.types.verbatim !== false,
     finetuneTypeDialog:     true,
     finetuneTypeAuthorChat: true,
     finetuneMinChars:     200,
@@ -37,7 +40,7 @@ export function registerFinetuneExportCard() {
     finetuneBiasBoost:    1,
     finetuneMaxTypeShare: 0,   // 0 = kein Typ-Cap; sonst Anteil 0.1–0.95 pro Typ
     finetuneMaxPerAnswer: 2,   // jede Antwort höchstens so oft (0 = aus)
-    finetuneMaxFactShare: 0.4, // Faktenfragen höchstens dieser Anteil (0 = aus)
+    finetuneEditorFeedback: !!defaultExport.editorFeedback,
     finetuneValSplit:     0.1,
     finetuneValSeed:      0,
     finetuneMaxSeqTokens: defaultProfile.seq,
@@ -49,6 +52,7 @@ export function registerFinetuneExportCard() {
     finetuneAiVoiceRewrite:          true,
     finetuneAiReversePromptsPerPage: 4,
     finetuneAiFactQAPerEntity:       4,
+    finetuneAiParaphrase:            !!defaultExport.aiParaphrase,
     finetuneAiPersona:               true,
     finetuneAiDeutung:               true,
     finetuneAiPersonaPerFigure:      8,
@@ -128,6 +132,12 @@ export function registerFinetuneExportCard() {
         return {
           book_id: parseInt(Alpine.store('nav').selectedBookId),
           book_name: window.__app.selectedBookName,
+          profile: this.finetuneProfileId,
+          export: {
+            ...exportOptions(finetuneProfileById(this.finetuneProfileId)),
+            editorFeedback: !!this.finetuneEditorFeedback,
+            aiParaphrase: !!this.finetuneAiParaphrase,
+          },
           types: {
             style:      !!this.finetuneTypeStyle,
             scene:      !!this.finetuneTypeScene,
@@ -140,7 +150,6 @@ export function registerFinetuneExportCard() {
           bias_boost:     Number(this.finetuneBiasBoost) || 1,
           max_type_share: Number(this.finetuneMaxTypeShare) || 0,
           max_per_answer: Number(this.finetuneMaxPerAnswer) || 0,
-          max_fact_share: Number(this.finetuneMaxFactShare) || 0,
           val_split:      Number(this.finetuneValSplit) || 0,
           val_seed:       Number(this.finetuneValSeed)  || 0,
           max_seq_tokens: Number(this.finetuneMaxSeqTokens) || 0,

@@ -1,6 +1,6 @@
 // Unit: Finetune-Export — Qualität des Sets (docs/finetuning.md#qualität-des-sets).
 //
-// Antwort-Budget, Fakten-Deckel, keine Faktenkarte als Erzählziel, Train/Val-
+// Antwort-Budget, Mischung nach Antwort-Tokens, keine Faktenkarte als Erzählziel, Train/Val-
 // Split nach Einheiten ohne Überlappung, Satzgrenzen bei Ordnungszahlen,
 // Anzeigenamen statt Kennungen, keine Kreuzprodukte im Ereignis-Sampler.
 import test from 'node:test';
@@ -8,7 +8,7 @@ import assert from 'node:assert/strict';
 import { createRequire } from 'node:module';
 
 const require = createRequire(import.meta.url);
-const { finalizeFinetuneSamples, waterfillCap } = require('../../routes/jobs/finetune-export/finalize.js');
+const { finalizeFinetuneSamples } = require('../../routes/jobs/finetune-export/finalize.js');
 const { looksLikeCard, taskOf } = require('../../routes/jobs/finetune-export/lib/tasks.js');
 const { splitByUnits, valOverlap } = require('../../routes/jobs/finetune-export/lib/split.js');
 const { splitSentences } = require('../../routes/jobs/finetune-export/lib/text.js');
@@ -36,7 +36,7 @@ const sample = (id, user, answer, extra = {}) => ({
 });
 const finalize = (samples, opts = {}, pageContents = []) => finalizeFinetuneSamples({
   samples, langIsEn: false, pageContents,
-  opts: { valSplit: 0, valSeed: 0, maxSeqTokens: 0, emitText: false, truncateLong: false, maxFactShare: 0, ...opts },
+  opts: { valSplit: 0, valSeed: 0, maxSeqTokens: 0, emitText: false, truncateLong: false, ...opts },
 });
 const rows = (jsonl) => jsonl.trim().split('\n').filter(Boolean).map(l => JSON.parse(l).messages);
 
@@ -67,19 +67,21 @@ test('Antwort-Budget zählt jeden Assistant-Turn eines Gesprächs', () => {
   assert.equal(all.filter(a => a === 'Anna ist die Wirtin im Dorf.').length, 2);
 });
 
-test('Fakten-Deckel: Schreibaufgaben stellen mindestens 1 − maxFactShare, Budget gleichmässig je Faktentyp', () => {
+test('Mischung nach Antwort-Tokens: writing ↔ facts im Zielverhältnis, Kernfakten bleiben', () => {
   const samples = [];
-  for (let i = 0; i < 60; i++) samples.push(sample(`style|${i}`, `Setze fort ${i}`, `Fortsetzung Nummer ${i} des Absatzes im Buch.`, { type: 'style' }));
-  for (let i = 0; i < 300; i++) samples.push(sample(`authorChat|evt|${i}|0`, `Ereignis ${i}?`, `Antwort zum Ereignis Nummer ${i}.`, { unit: 'evt:' + i }));
-  for (let i = 0; i < 5; i++) samples.push(sample(`authorChat|song|${i}`, `Lied ${i}?`, `Antwort zum Lied Nummer ${i} im Buch.`));
-  const r = finalize(samples, { maxFactShare: 0.4 });
+  const long = (i) => `Fortsetzung Nummer ${i} des Absatzes im Buch. `.repeat(8);
+  for (let i = 0; i < 60; i++) samples.push(sample(`style|${i}`, `Setze fort ${i}`, long(i), { type: 'style' }));
+  for (let i = 0; i < 40; i++) samples.push(sample(`authorChat|evt|${i}|0`, `Ereignis ${i}?`, `Antwort zum Ereignis Nummer ${i}.`, { unit: 'evt:' + i }));
+  for (let i = 0; i < 5; i++) samples.push(sample(`core|fig:${i}:core|0`, `Wer ist F${i}?`, `F${i} ist eine Hauptfigur der Geschichte.`, { type: 'core', task: 'figureCore', core: true, unit: 'fig:' + i }));
+  const r = finalize(samples, { familyTokenShares: { writing: 0.55, facts: 0.30, persona: 0.10, refusal: 0.05 } });
   const q = r.stats.quality;
-  assert.ok(q.writingShare >= 0.6 - 1e-9, String(q.writingShare));
-  const task = (t) => q.tasks.find(x => x.task === t)?.count || 0;
-  assert.equal(task('factSong'), 5, 'kleiner Faktentyp bleibt ganz');
-  assert.equal(task('factEvent'), 40 - 5, 'grosser Faktentyp trägt den Rest');
-  assert.equal(waterfillCap([5, 300], 40), 35);
-  assert.equal(waterfillCap([5, 10], 40), Infinity);
+  // Prosa überwiegt die Fakten nach Tokens weit → Schreibaufgaben werden gekürzt.
+  assert.ok(r.stats.mixDropped.writing > 0);
+  const ratio = q.writingTokenShare / q.factTokenShare;
+  assert.ok(ratio <= 0.55 / 0.30 + 0.05, String(ratio));
+  assert.ok(ratio >= 0.55 / 0.30 - 0.5, String(ratio));
+  assert.equal(q.tasks.find(t => t.task === 'figureCore')?.count, 5, 'Kernfakten werden nie gekürzt');
+  assert.ok(q.tasks.every(t => typeof t.answerTokens === 'number' && t.tokenShare >= 0));
 });
 
 test('Keine Faktenkarte als Erzählziel', () => {

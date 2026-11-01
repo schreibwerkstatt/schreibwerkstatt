@@ -42,6 +42,11 @@ test('Fine-Tuning-Export: Profilwahl setzt Felder, YAML passt zum Profil', async
   expect(yaml).toMatch(/^ {2}lora_r: 32$/m);
   expect(yaml).toMatch(/^ {2}packing: false$/m);
   expect(yaml).toMatch(/^ {2}finetune_vision_layers: false$/m);
+  // Feste Länge, kein Early Stopping, eval_steps als Anteil; ohne Export der
+  // Hinweis, dass die Gesamtschritte noch fehlen.
+  expect(yaml).toMatch(/^ {2}eval_steps: 0\.1$/m);
+  expect(yaml).toMatch(/^ {2}early_stopping_patience: 0$/m);
+  expect(yaml).toContain('# ' + await tr(page, 'finetune.profile.yaml.noExport'));
 
   // Profil wechseln über die Combobox.
   const label24 = await tr(page, 'finetune.profile.option', { model: 'Ministral 3 8B', vram: 24 });
@@ -102,9 +107,12 @@ test('Fine-Tuning-Export: Qualität des Sets zeigt Aufgabentypen, Überlappung u
   await page.evaluate(() => {
     const c = window.Alpine.$data(document.querySelector('.card--finetune'));
     c.finetuneStats = {
-      total: 10, train: 9, val: 1, answerCapped: 5, factCapped: 1, cardDropped: 0, splitMixed: 2, valPurged: 1,
+      total: 10, train: 9, val: 1, answerCapped: 5, critiqueDropped: 3, cardDropped: 0, splitMixed: 2, valPurged: 1,
+      coreFactCoverage: 0.95, paragraphTargetMax: 2,
       quality: {
         writingShare: 0.6, factShare: 0.4, uniqueAnswerShare: 0.9, repeated3Share: 0,
+        answerTokens: 1000, writingTokenShare: 0.55, factTokenShare: 0.3, personaTokenShare: 0.1, refusalTokenShare: 0.05,
+        verbatimTokenShare: 0, refusalShare: 0.03, factCount: 4, factParaphraseCount: 8,
         overlap: { prompt: 0, answer: 0, shingle: 0 },
         tasks: [
           { task: 'continue', family: 'writing', count: 6, share: 0.6, uniqueAnswers: 6, avgAnswerChars: 900 },
@@ -121,6 +129,9 @@ test('Fine-Tuning-Export: Qualität des Sets zeigt Aufgabentypen, Überlappung u
   await expect(card).toContainText(await tr(page, 'finetune.quality.writingShare', { pct: '60.0 %' }));
   await expect(card).toContainText(await page.evaluate(() => window.__app.tn('finetune.stats.answerCapped', 5)));
   await expect(card).toContainText(await page.evaluate(() => window.__app.tn('finetune.stats.valPurged', 1)));
+  await expect(card).toContainText(await page.evaluate(() => window.__app.tn('finetune.stats.critiqueDropped', 3)));
+  await expect(card).toContainText(await tr(page, 'finetune.quality.tokenShares', { writing: '55.0 %', facts: '30.0 %', persona: '10.0 %', refusal: '5.0 %' }));
+  await expect(card).toContainText(await tr(page, 'finetune.quality.coverage', { pct: '95.0 %' }));
   await expect(card).toContainText('Anna ist die Wirtin im Dorf.');
 
   guard.assertClean('Fine-Tuning-Qualität');

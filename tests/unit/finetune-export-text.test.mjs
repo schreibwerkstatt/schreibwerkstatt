@@ -122,32 +122,51 @@ test('finalize: all.jsonl = train + val, leer ohne val', () => {
   assert.equal(run(0).allJsonl, '');
 });
 
-test('Testprompts: Holdout-Markierung folgt dem Split von finalize', () => {
+test('Testprompts: Holdout-Markierung folgt dem Split, jede Frage mit Referenz und Prüfwörtern', () => {
   const chapterKeys = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10];
-  const pageContents = Array.from({ length: 20 }, (_, i) => ({ id: i + 1, chapter_id: (i % 10) + 1, text: pageText(i + 100, 40) }));
+  const pageContents = Array.from({ length: 20 }, (_, i) => ({ id: i + 1, chapter_id: (i % 10) + 1, text: pageText(i + 100, 200) }));
+  const anna = { fig_id: 'a', name: 'Anna', geschlecht: 'weiblich' };
+  const ben = { fig_id: 'b', name: 'Ben', geschlecht: 'männlich' };
   const ctx = {
-    langIsEn: false, unifiedSys: 'SYS', opts: { valSplit: 0.3, valSeed: 0 },
-    figRows: [{ fig_id: 'a', name: 'Anna' }, { fig_id: 'b', name: 'Ben' }],
-    figById: new Map([['a', { name: 'Anna' }], ['b', { name: 'Ben' }]]),
-    figRelRows: [{ from_fig_id: 'a', to_fig_id: 'b' }],
+    langIsEn: false, unifiedSys: 'SYS', opts: { valSplit: 0.3, valSeed: 0 }, displayName: 'Buch',
+    figRows: [anna, ben], locRows: [],
+    figById: new Map([['a', anna], ['b', ben]]),
     chapterKeys,
     chapterNameByKey: new Map(chapterKeys.map(k => [k, 'Kapitel ' + k])),
     chapterFullTextByKey: new Map(chapterKeys.map(k => [k, sentences(20, k * 100)])),
     pageContents,
     sceneRows: [], figsByScene: new Map(),
+    eligibleFigIds: new Set(['a', 'b']),
+    figMentions: new Map([['a', 9], ['b', 7]]),
+    factCards: [
+      { id: 'fig:a:core', kind: 'figure', subject: 'Anna', statement: 'Anna ist eine der Hauptfiguren. Bens Mutter ist Anna.', fields: { beruf: 'Lehrerin' } },
+      { id: 'fig:b:core', kind: 'figure', subject: 'Ben', statement: 'Ben ist eine Nebenfigur. Seine Mutter ist Anna.', fields: {} },
+      { id: 'chap:Kapitel 1', kind: 'chapter', subject: 'Kapitel 1', statement: 'Im Kapitel «Kapitel 1» geht es um: Anna zieht um.', fields: { ereignisse: ['Anna zieht um'] } },
+    ],
+    relationFacts: [{ key: 'a|b', a: ben, b: anna, typ: 'elternteil', desc: '', descFrom: null, core: true }],
   };
   const rows = buildEvalPrompts(ctx);
   const cats = new Set(rows.map(r => r.category));
-  for (const c of ['figure', 'relation', 'chapter', 'continuation', 'newChapter', 'offTopic']) assert.ok(cats.has(c), c);
+  for (const c of ['figure', 'relation', 'chapter', 'continuation', 'newChapter', 'offTopic', 'unknown', 'falsePremise']) assert.ok(cats.has(c), c);
   assert.ok(!cats.has('reverseLookup'), 'keine Abschnitt-Suche');
-  for (const r of rows) assert.equal(r.messages[0].content, 'SYS');
+  for (const r of rows) {
+    assert.equal(r.messages[0].content, 'SYS');
+    assert.ok(typeof r.expected === 'string' && r.expected.length > 0, `${r.category}: expected`);
+    assert.ok(Array.isArray(r.mustContain) && r.mustContain.length > 0, `${r.category}: mustContain`);
+  }
+  assert.deepEqual(rows.find(r => r.category === 'relation').mustContain, ['Mutter']);
+  assert.deepEqual(rows.find(r => r.category === 'falsePremise').mustContain, ['Mutter']);
   const valPages = valPageKeys(pageContents, ctx.opts);
   const cont = rows.filter(r => r.category === 'continuation');
-  assert.ok(cont.length > 0 && cont.every(r => r.holdout), 'Fortsetzungen aus dem Holdout');
+  assert.ok(cont.length > 0);
   for (const r of cont) {
     const p = pageContents.find(pc => r.messages[1].content.includes(pc.text.split('.')[0]));
-    assert.ok(valPages.has('p:' + p.id));
+    assert.equal(r.holdout, valPages.has('p:' + p.id));
   }
+  assert.ok(cont.some(r => r.holdout), 'Fortsetzungen bevorzugt aus dem Holdout');
+  // Eine Frage, die wörtlich im Train steht, fällt weg.
+  const trainPrompts = new Set([rows[0].messages[1].content]);
+  assert.ok(!buildEvalPrompts(ctx, { trainPrompts }).some(r => r.messages[1].content === rows[0].messages[1].content));
 });
 
 test('Modelfile: Muster in der Doku == Generator, Template ohne literales <s>', () => {

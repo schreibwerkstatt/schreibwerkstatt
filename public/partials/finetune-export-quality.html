@@ -9,10 +9,19 @@
     <div class="form-stats">
       <span class="tok-badge tok-neutral" x-text="$app.t('finetune.quality.writingShare', { pct: finetunePct(finetuneStats.quality.writingShare) })"></span>
       <span class="tok-badge tok-neutral" x-text="$app.t('finetune.quality.uniqueShare', { pct: finetunePct(finetuneStats.quality.uniqueAnswerShare) })"></span>
+      <span class="tok-badge tok-neutral" x-show="finetuneStats.quality.answerTokens > 0" x-text="$app.t('finetune.quality.tokenShares', finetuneTokenShares())"></span>
+      <span class="tok-badge tok-neutral" x-show="finetuneStats.quality.answerTokens > 0" x-text="$app.t('finetune.quality.verbatimShare', { pct: finetunePct(finetuneStats.quality.verbatimTokenShare) })"></span>
+      <span class="tok-badge tok-neutral" x-show="finetuneStats.coreFactCoverage != null" x-text="$app.t('finetune.quality.coverage', { pct: finetunePct(finetuneStats.coreFactCoverage) })"></span>
+      <span class="tok-badge tok-neutral" x-show="finetuneStats.paragraphTargetMax > 0" x-text="$app.t('finetune.quality.paragraphMax', { n: finetuneStats.paragraphTargetMax })"></span>
+      <span class="tok-badge tok-neutral" x-show="finetuneStats.quality.refusalShare > 0" x-text="$app.t('finetune.quality.refusals', { pct: finetunePct(finetuneStats.quality.refusalShare) })"></span>
+      <span class="tok-badge tok-neutral" x-show="finetuneStats.quality.factCount > 0" x-text="$app.t('finetune.quality.paraphrases', { facts: finetuneStats.quality.factCount, n: finetuneStats.quality.factParaphraseCount })"></span>
       <span class="tok-badge" :class="finetuneOverlapTotal() ? 'tok-high' : 'tok-neutral'"
             x-text="$app.t('finetune.quality.overlap', finetuneStats.quality.overlap)"></span>
       <span class="tok-badge tok-neutral" x-show="finetuneStats.answerCapped > 0" x-text="$app.tn('finetune.stats.answerCapped', finetuneStats.answerCapped)"></span>
-      <span class="tok-badge tok-neutral" x-show="finetuneStats.factCapped > 0" x-text="$app.tn('finetune.stats.factCapped', finetuneStats.factCapped)"></span>
+      <span class="tok-badge tok-med" x-show="finetuneStats.critiqueDropped > 0" x-text="$app.tn('finetune.stats.critiqueDropped', finetuneStats.critiqueDropped)"></span>
+      <span class="tok-badge tok-neutral" x-show="finetuneStats.paragraphCapped > 0" x-text="$app.tn('finetune.stats.paragraphCapped', finetuneStats.paragraphCapped)"></span>
+      <span class="tok-badge tok-neutral" x-show="finetuneStats.lengthClipped > 0" x-text="$app.tn('finetune.stats.lengthClipped', finetuneStats.lengthClipped)"></span>
+      <span class="tok-badge tok-neutral" x-show="finetuneStats.relationConflicts > 0" x-text="$app.tn('finetune.stats.relationConflicts', finetuneStats.relationConflicts)"></span>
       <span class="tok-badge tok-med" x-show="finetuneStats.cardDropped > 0" x-text="$app.tn('finetune.stats.cardDropped', finetuneStats.cardDropped)"></span>
       <span class="tok-badge tok-neutral" x-show="finetuneStats.splitMixed > 0" x-text="$app.tn('finetune.stats.splitMixed', finetuneStats.splitMixed)"></span>
       <span class="tok-badge tok-neutral" x-show="finetuneStats.valPurged > 0" x-text="$app.tn('finetune.stats.valPurged', finetuneStats.valPurged)"></span>
@@ -25,7 +34,7 @@
                defaultKey: 'count',
                defaultDir: 'desc',
                persistKey: 'finetune.qualityTasks',
-               types: { count: 'number', share: 'number', uniqueAnswers: 'number', avgAnswerChars: 'number' },
+               types: { count: 'number', share: 'number', answerTokens: 'number', tokenShare: 'number', uniqueAnswers: 'number', avgAnswerChars: 'number' },
              })">
         <thead>
           <tr>
@@ -33,6 +42,8 @@
             <th x-bind="sortTh('familyLabel')" x-text="$app.t('finetune.quality.colFamily')"></th>
             <th x-bind="sortTh('count')" x-text="$app.t('finetune.quality.colCount')"></th>
             <th x-bind="sortTh('share')" x-text="$app.t('finetune.quality.colShare')"></th>
+            <th x-bind="sortTh('answerTokens')" x-text="$app.t('finetune.quality.colTokens')"></th>
+            <th x-bind="sortTh('tokenShare')" x-text="$app.t('finetune.quality.colTokenShare')"></th>
             <th x-bind="sortTh('uniqueAnswers')" x-text="$app.t('finetune.quality.colUnique')"></th>
             <th x-bind="sortTh('avgAnswerChars')" x-text="$app.t('finetune.quality.colAvg')"></th>
           </tr>
@@ -44,6 +55,8 @@
               <td x-text="row.familyLabel"></td>
               <td x-text="row.count"></td>
               <td x-text="finetunePct(row.share)"></td>
+              <td x-text="row.answerTokens ?? ''"></td>
+              <td x-text="row.tokenShare != null ? finetunePct(row.tokenShare) : ''"></td>
               <td x-text="row.uniqueAnswers"></td>
               <td x-text="row.avgAnswerChars"></td>
             </tr>

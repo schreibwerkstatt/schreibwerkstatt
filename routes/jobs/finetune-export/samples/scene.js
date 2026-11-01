@@ -1,6 +1,5 @@
 'use strict';
 
-const { db } = require('../../../../db/schema');
 const { splitAtSentence, clipAtSentence, tailFromSentence, chunkAtSentence } = require('../lib/text');
 const { extractName } = require('../lib/names');
 const { sceneExcerpt } = require('./author-chat/scenes');
@@ -15,8 +14,16 @@ function buildSceneSamples(ctx) {
     chapterKeys, chapterFullTextByKey, chapterNameByKey,
     pagesByChapter,
     figRows, locRows, appearancesByFigPk, chaptersByLocPk,
+    eventsBySceneId = new Map(),
   } = ctx;
-  const { minChars, maxChars, maxFullChars, fulltext } = opts;
+  const { minChars, maxFullChars, fulltext } = opts;
+  // Ziele schon im Sampler auf den Antwort-Deckel des Typs schneiden
+  // (`maxAnswerChars.sceneWrite`, finalize.js kürzt sonst bzw. verwirft
+  // «Teil N von M»-Stücke): lieber mehr kurze Teile als abgeschnittene.
+  const writeCap = Number(opts.maxAnswerChars?.sceneWrite) || Infinity;
+  const maxChars = Math.min(opts.maxChars, writeCap);
+  const fullChars = Math.min(maxFullChars, writeCap);
+  const eventLine = (scenes) => [...new Set(scenes.flatMap(sc => (eventsBySceneId.get(sc.id) || []).map(e => e.ereignis)))].join('; ');
 
   // Seite → Kapitel-Schlüssel (für Train/Val-Split auf Quell-Ebene, siehe
   // finalize.js — alle Ableitungen eines Kapitels landen im selben Split).
@@ -43,8 +50,9 @@ function buildSceneSamples(ctx) {
     const locIds = [...new Set(scenes.flatMap(s => locsByScene.get(s.id) || []))];
     const locNames = locIds.map(id => extractName(id, locById)).filter(Boolean);
     if (locNames.length) meta.push((langIsEn ? 'Location: ' : 'Schauplatz: ') + locNames.join(', '));
-    const comments = [...new Set(scenes.map(s => s.kommentar).filter(Boolean))].join(' ');
-    if (comments) meta.push((langIsEn ? 'Notes: ' : 'Notiz: ') + comments);
+    // Inhalt aus den verknüpften Ereignissen; `kommentar` ist Lektorat.
+    const evts = eventLine(scenes);
+    if (evts) meta.push((langIsEn ? 'What happens: ' : 'Was geschieht: ') + evts);
     if (meta.length === 0) continue;
     const instr = (langIsEn
       ? 'Write a scene with the following parameters:\n'
@@ -72,7 +80,7 @@ function buildSceneSamples(ctx) {
     const pageText = pageTextById.get(pageId) || '';
     for (const s of scenes) {
       if (!s.titel) continue;
-      const ex = sceneExcerpt(s, { figsByScene, figById, pageContents, maxChars });
+      const ex = sceneExcerpt(s, { figsByScene, figById, pageContents, maxChars, eventsBySceneId });
       if (!ex) continue;
       const at = pageText.indexOf(ex.text);
       const lead = at > 0 ? tailFromSentence(pageText.slice(0, at).trim(), 400) : '';
@@ -80,7 +88,8 @@ function buildSceneSamples(ctx) {
       const kapitel = s.kapitel || pageChapterById.get(pageId);
       if (kapitel) meta.push((langIsEn ? 'Chapter: ' : 'Kapitel: ') + kapitel);
       if (ex.figs.length) meta.push((langIsEn ? 'Characters: ' : 'Figuren: ') + ex.figs.map(f => f.name).join(', '));
-      if (s.kommentar) meta.push((langIsEn ? 'What happens: ' : 'Worum es geht: ') + s.kommentar.trim());
+      const evts = eventLine([s]);
+      if (evts) meta.push((langIsEn ? 'What happens: ' : 'Was geschieht: ') + evts);
       const instr = (langIsEn
         ? `Write the scene «${s.titel}» in the author's style.\n`
         : `Schreibe die Szene «${s.titel}» im Stil des Autors.\n`)
@@ -229,31 +238,11 @@ function buildSceneSamples(ctx) {
 
   // ── Kapitel-Anfänge mit vollem Metadaten-Kontext (#4) ────────────────
   // Pro Kapitel: Prompt kombiniert Kapitelname + Figuren (aus
-  // figure_appearances), Orte (aus location_chapters), Kurz-Zusammenfassung
-  // (aus chapter_reviews) + Vorgänger-Ausklang → Completion = erste
-  // 3000 Zeichen des Kapitels. Lehrt, wie Kapitel in genau diesem Buch
-  // begonnen werden, mit welcher Besetzung und Stimmung.
-  const chapterReviewMap = new Map();
-  try {
-    const crRows = db.prepare(`
-      SELECT c.chapter_name AS chapter_name, cr1.review_json
-      FROM chapter_reviews cr1
-      JOIN chapters c ON c.chapter_id = cr1.chapter_id
-      WHERE cr1.book_id = ? AND cr1.user_email = ?
-        AND cr1.reviewed_at = (
-          SELECT MAX(cr2.reviewed_at) FROM chapter_reviews cr2
-          WHERE cr2.book_id = cr1.book_id AND cr2.chapter_id = cr1.chapter_id AND cr2.user_email = cr1.user_email
-        )
-    `).all(bookIdInt, userEmail);
-    for (const r of crRows) {
-      if (!r.chapter_name || !r.review_json) continue;
-      try {
-        const cr = JSON.parse(r.review_json);
-        if (cr?.zusammenfassung) chapterReviewMap.set(r.chapter_name, cr.zusammenfassung);
-      } catch { /* ignore */ }
-    }
-  } catch { /* chapter_reviews optional */ }
-
+  // figure_appearances), Orte (aus location_chapters) + Vorgänger-Ausklang →
+  // Completion = Kapitelanfang. Lehrt, wie Kapitel in genau diesem Buch
+  // begonnen werden, mit welcher Besetzung und Stimmung. Keine
+  // Kapitelbewertung (chapter_reviews) im Prompt: ihre «Zusammenfassung» ist
+  // ein Gesamteindruck des Lektorats, keine Inhaltsangabe.
   // figures per chapter via figure_appearances.chapter_name
   const figsByChName = new Map();
   for (const f of figRows) {
@@ -285,8 +274,6 @@ function buildSceneSamples(ctx) {
     if (chFigs.length) metaLines.push(langIsEn ? `Cast: ${chFigs.join(', ')}` : `Figuren: ${chFigs.join(', ')}`);
     const chLocs = (locsByChName.get(name) || []).slice(0, 6);
     if (chLocs.length) metaLines.push(langIsEn ? `Settings: ${chLocs.join(', ')}` : `Schauplätze: ${chLocs.join(', ')}`);
-    const summary = chapterReviewMap.get(name);
-    if (summary) metaLines.push(langIsEn ? `Summary: ${summary}` : `Inhalt: ${summary}`);
     // Vorgänger-Ausklang: letzte 400 Zeichen des vorherigen Kapitels
     if (ci > 0) {
       const prevText = chapterFullTextByKey.get(chapterKeys[ci - 1]) || '';
@@ -334,14 +321,12 @@ function buildSceneSamples(ctx) {
       if (chFigs.length) metaLines.push(langIsEn ? `Cast: ${chFigs.join(', ')}` : `Figuren: ${chFigs.join(', ')}`);
       const chLocs = (locsByChName.get(name) || []).slice(0, 8);
       if (chLocs.length) metaLines.push(langIsEn ? `Settings: ${chLocs.join(', ')}` : `Schauplätze: ${chLocs.join(', ')}`);
-      const summary = chapterReviewMap.get(name);
-      if (summary) metaLines.push(langIsEn ? `Summary: ${summary}` : `Inhalt: ${summary}`);
 
       // (a) Voll-Kapitel chunked. Jeder Slice eigenständiges Sample. Bei
       // total>1 enthält Prompt Part-Label + Vorgänger-Tail (300 chars) als
       // Continuity-Anker, damit Modell die Kette als zusammenhängenden
       // Kapitelfluss lernt statt isolierte Schnipsel.
-      const slices = chunkAtSentence(text, maxFullChars);
+      const slices = chunkAtSentence(text, fullChars);
       const total = slices.length;
       for (let si = 0; si < total; si++) {
         const slice = slices[si];

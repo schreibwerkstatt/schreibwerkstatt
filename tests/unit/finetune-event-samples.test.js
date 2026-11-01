@@ -59,7 +59,7 @@ test('Ereignis-Verknüpfungen: Buchstelle mit sourceKey, Szene, Strang, Tag, Tod
   assert.match(pov[0].q, /Erzähle «Einquartierung» aus der Sicht von Prahl/);
   assert.ok(pov[0].a.startsWith('Prahl fiel im Getümmel.'));
   assert.ok(!/Zeitpunkt:/.test(pov[0].a));
-  assert.equal(kind('evtSceneDetail')[0].a, 'Die Familie isst schweigend zu Mittag.', 'Kurzfassung ohne angehängte Karte');
+  assert.equal(kind('evtSceneDetail').length, 0, 'Szenen-Kommentar (Lektorat) ist kein Inhalt');
   assert.match(kind('evtScene')[0].a, /Mittagessen/);
   assert.match(kind('sceneEvts')[0].a, /Einquartierung/);
   assert.match(kind('evtSl')[0].a, /Franzosenzeit/);

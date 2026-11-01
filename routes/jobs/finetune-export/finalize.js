@@ -7,6 +7,10 @@ const { splitAtSentence } = require('./lib/text');
 const { taskOf, familyOf, looksLikeCard } = require('./lib/tasks');
 const { splitByUnits, valOverlap, normText } = require('./lib/split');
 const { buildQualityStats } = require('./lib/export-stats');
+const { makeCritiqueRegex } = require('./lib/critique');
+const { capAnswerLengths } = require('./lib/answer-length');
+const { applyParagraphBudget, paragraphTargetMax } = require('./lib/paragraph-budget');
+const { mixByTokens } = require('./lib/token-mix');
 
 const sha1 = (s) => crypto.createHash('sha1').update(s).digest('hex');
 
@@ -28,40 +32,34 @@ function balanceCap(typeCounts, share) {
   }
 }
 
-// Grösster Pro-Typ-Deckel c mit Σ min(nₜ, c) ≤ budget: das Fakten-Budget wird
-// gleichmässig auf die Faktentypen verteilt — kleine Typen bleiben ganz, die
-// grossen werden auf denselben Deckel gekappt. Das ist die Obergrenze pro
-// Aufgabentyp, die verhindert, dass eine Fragenart die Fakten stellt.
-function waterfillCap(typeCounts, budget) {
-  const sorted = [...typeCounts].sort((a, b) => a - b);
-  let rest = budget;
-  for (let i = 0; i < sorted.length; i++) {
-    const left = sorted.length - i;
-    if (sorted[i] * left > rest) return Math.floor(rest / left);
-    rest -= sorted[i];
-  }
-  return Infinity;
-}
-
 const answersOf = (s) => s.messages.filter(m => m.role === 'assistant').map(m => normText(m.content));
+const answersRaw = (s) => s.messages.filter(m => m.role === 'assistant').map(m => m.content);
+// «Wer sagt das?» antwortet mit dem Namen der Figur — gleiche Antworten sind
+// dort richtig, keine Dubletten; das Antwort-Budget gilt für sie nicht.
+const BUDGET_EXEMPT = new Set(['whoSays']);
 
 // Token-Stats berechnen, optional nach `maxSeqTokens` filtern, exakte Dubletten
-// entfernen, Faktenkarten als Schreibziel verwerfen, jede Antwort auf
-// `maxPerAnswer` Vorkommen und die Fakten auf `maxFactShare` deckeln, optional
-// pro Aufgabentyp balancieren, train/val nach Einheiten aufteilen (lib/split.js),
+// entfernen, Faktenkarten als Schreibziel und Lektorats-Sprache als Inhalt
+// verwerfen, Antwortlängen pro Typ deckeln, jede Antwort auf `maxPerAnswer`
+// Vorkommen deckeln, pro Absatz höchstens `maxTargetsPerParagraph` Ziele,
+// die Familien nach Antwort-Tokens mischen (lib/token-mix.js), optional pro
+// Aufgabentyp balancieren, train/val nach Einheiten aufteilen (lib/split.js),
 // Überlappung prüfen, deterministisch shuffeln und JSONL serialisieren.
 //
-// Gibt `{ stats, trainJsonl, valJsonl, allJsonl }` zurück; `stats` geht in
-// completeJob, die JSONL in den Platten-Store (lib/store.js). `allJsonl` ist
-// train + val gemeinsam gemischt — für den zweiten Trainingslauf, der die
-// Holdout-Kapitel mitlernt (docs/finetuning.md §3); leer ohne val.
+// Gibt `{ stats, trainJsonl, valJsonl, allJsonl, valFamilyJsonl, valUnits,
+// trainPrompts }` zurück; `stats` geht in completeJob, die JSONL in den
+// Platten-Store (lib/store.js). `allJsonl` ist train + val gemeinsam gemischt —
+// für den zweiten Trainingslauf, der die Holdout-Kapitel mitlernt
+// (docs/finetuning.md §3); leer ohne val. `valFamilyJsonl` sind die Val-
+// Teilmengen je Familie (facts / writing / refusal). `valUnits` und
+// `trainPrompts` braucht das Eval-Set (Holdout-Markierung, keine Frage
+// wörtlich aus dem Train).
 function finalizeFinetuneSamples(ctx) {
   const { samples, opts, langIsEn } = ctx;
   const { valSplit, valSeed, maxSeqTokens, emitText, truncateLong } = opts;
   const maxTypeShare = Math.max(0, Math.min(0.95, Number(opts.maxTypeShare) || 0));
   // 0 = aus. Ohne Angabe gelten die Standardwerte der Karte.
   const maxPerAnswer = Math.max(0, Math.min(50, Math.floor(opts.maxPerAnswer ?? 2)));
-  const maxFactShare = Math.max(0, Math.min(0.95, Number(opts.maxFactShare ?? 0.4) || 0));
 
   // ── Token-Budget pro Sample (für Stats + Filter) ──────────────────────
   // Pro Sample: Summe aller Nachrichten + fester Template-Overhead. Mistral-
@@ -70,6 +68,7 @@ function finalizeFinetuneSamples(ctx) {
   // [/INST]=1, </s>=1 → real ~6 Tokens. 20 ist 3× konservativ und deckt
   // Newlines/Whitespace-Variationen mit ab.
   const TEMPLATE_OVERHEAD = 20;
+  const retoken = (sample) => sample.messages.reduce((a, m) => a + estimateTokens(m.content, langIsEn), 0) + TEMPLATE_OVERHEAD;
   const withTokens = samples.map(s => {
     const sum = s.messages.reduce((a, m) => a + estimateTokens(m.content, langIsEn), 0);
     s.task = taskOf(s);
@@ -148,6 +147,27 @@ function finalizeFinetuneSamples(ctx) {
     return false;
   });
 
+  // ── Keine Lektorats-Sprache als Inhalt ───────────────────────────────
+  // Schutznetz hinter den Samplern, die Bewertungsfelder gar nicht erst als
+  // Inhalt nehmen (lib/critique.js). Geprüft wird jede Antwort, die kein
+  // Buchtext ist: Schreibaufgaben zielen auf echten Text, der «wirkt wie»
+  // legitim enthalten darf; Lektorats-Feedback (`editorFeedback`, opt-in)
+  // ist ausdrücklich Kritik.
+  let critiqueDropped = 0;
+  {
+    const re = makeCritiqueRegex(opts.critiquePatterns);
+    kept = kept.filter(e => {
+      if (e.family === 'writing' || e.family === 'editor') return true;
+      if (!answersRaw(e.s).some(a => re.test(a))) return true;
+      critiqueDropped++;
+      return false;
+    });
+  }
+
+  // ── Antwortlänge pro Typ (`maxAnswerChars`) ───────────────────────────
+  const lengthCap = capAnswerLengths(kept, opts.maxAnswerChars, retoken);
+  kept = lengthCap.kept;
+
   // ── Antwort-Budget (`maxPerAnswer`) ──────────────────────────────────
   // Jede Antwort höchstens N-mal, damit Umformulierungen derselben Frage und
   // Kreuzprodukte (Figur × Ort × Ereignis) nicht dieselbe Antwort vervielfachen.
@@ -161,7 +181,7 @@ function finalizeFinetuneSamples(ctx) {
     const used = new Map();
     const tasksPerAnswer = new Map();
     const keep = new Set();
-    const fits = (e, distinctTask) => answersOf(e.s).every(a => (used.get(a) || 0) < maxPerAnswer
+    const fits = (e, distinctTask) => BUDGET_EXEMPT.has(e.s.task) || answersOf(e.s).every(a => (used.get(a) || 0) < maxPerAnswer
       && (!distinctTask || !tasksPerAnswer.get(a)?.has(e.s.task)));
     const take = (e) => {
       keep.add(e);
@@ -177,34 +197,21 @@ function finalizeFinetuneSamples(ctx) {
     kept = kept.filter(e => keep.has(e));
   }
 
-  // ── Fakten-Deckel (`maxFactShare`) ───────────────────────────────────
-  // Die Schreibaufgaben sind der Grossteil; Fakten höchstens `maxFactShare`
-  // des Sets. Das Budget wird gleichmässig auf die Faktentypen verteilt
-  // (`waterfillCap`); innerhalb eines Typs bleiben Fragen zu einer Entität vor
-  // Sammellisten.
-  let factCapped = 0;
-  if (maxFactShare > 0) {
-    const writingN = kept.filter(e => e.family === 'writing').length;
-    const facts = kept.filter(e => e.family === 'facts');
-    const budget = Math.floor(writingN * maxFactShare / (1 - maxFactShare));
-    if (facts.length > budget) {
-      const byTask = new Map();
-      for (const e of facts) {
-        if (!byTask.has(e.s.task)) byTask.set(e.s.task, []);
-        byTask.get(e.s.task).push(e);
-      }
-      const cap = waterfillCap([...byTask.values()].map(a => a.length), budget);
-      const drop = new Set();
-      for (const arr of byTask.values()) {
-        if (arr.length <= cap) continue;
-        arr.sort((a, b) => (a.s.unit ? 0 : 1) - (b.s.unit ? 0 : 1)
-          || hashSplit('fact|' + a.s.id, valSeed) - hashSplit('fact|' + b.s.id, valSeed));
-        for (const e of arr.slice(cap)) drop.add(e);
-      }
-      factCapped = drop.size;
-      kept = kept.filter(e => !drop.has(e));
-    }
-  }
+  // ── Absatz-Budget (`maxTargetsPerParagraph`) ─────────────────────────
+  const paraBudget = applyParagraphBudget(kept, {
+    pageContents: ctx.pageContents, maxTargets: Number(opts.maxTargetsPerParagraph) || 0, seed: valSeed,
+  });
+  kept = paraBudget.kept;
+
+  // ── Mischung nach Antwort-Tokens (lib/token-mix.js) ───────────────────
+  const mix = mixByTokens(kept, {
+    langIsEn, seed: valSeed,
+    familyTokenShares: opts.familyTokenShares,
+    refusalShare: opts.refusalShare,
+    refusalMix: opts.refusalMix,
+    verbatimMaxTokenShare: opts.verbatimMaxTokenShare,
+  });
+  kept = mix.kept;
 
   // ── Typ-Balance-Cap (optional, `maxTypeShare`) ────────────────────────
   // Deckelt jeden Aufgabentyp auf diesen Anteil am Gesamt. Der Cap gilt
@@ -238,6 +245,7 @@ function finalizeFinetuneSamples(ctx) {
   // Abschnitte für Buchtext, Entitäten für Fakten (lib/split.js). Ein Sample,
   // das Abschnitte aus beiden Splits berührt, fällt weg.
   const parts = splitByUnits(kept, { pageContents: ctx.pageContents, opts });
+  const valUnits = parts.valUnits;
   const splitMixed = parts.mixed.length;
   let trainArr = parts.train.map(e => e.s);
   let valArr = parts.val.map(e => e.s);
@@ -254,7 +262,8 @@ function finalizeFinetuneSamples(ctx) {
       valArr = valArr.filter((_, i) => !bad.has(i));
     }
   }
-  // Abbruch-Check: nach der Bereinigung darf keine Überlappung bleiben. Schlägt
+  // Abbruch-Check: nach der Bereinigung darf keine Überlappung bleiben (die
+  // Val-Dateien je Familie sind Teilmengen von val — was hier gilt, gilt dort). Schlägt
   // er an, ist der Split fehlerhaft — ein geschönter Eval-Loss ist schlimmer
   // als kein Export.
   {
@@ -287,7 +296,7 @@ function finalizeFinetuneSamples(ctx) {
 
   // Per-Typ-Zählung aus dem FINALEN Set (nach Filter/Dedup/Deckel/Split) — das
   // spiegelt, was tatsächlich exportiert wird, nicht die Build-Rohzahlen.
-  const exported = { style: 0, scene: 0, verbatim: 0, dialog: 0, authorChat: 0, aiAugment: 0, reader: 0 };
+  const exported = { style: 0, scene: 0, verbatim: 0, dialog: 0, authorChat: 0, aiAugment: 0, reader: 0, core: 0 };
   for (const s of [...trainOut, ...valOut]) if (s.type in exported) exported[s.type]++;
 
   // JSONL-Line: immer `messages`-Feld. Mit `emitText=true` zusätzlich ein
@@ -307,6 +316,14 @@ function finalizeFinetuneSamples(ctx) {
   const trainJsonl = toJsonl(trainOut);
   const valJsonl   = toJsonl(valOut);
   const allJsonl   = toJsonl(allOut);
+  // Val je Familie: `val-facts` misst Faktenwissen (empfohlene Eval-Datei in
+  // Studio), `val-writing` Prosa, `val-refusal` das Ablehnen. Persona und
+  // Lektorat stehen nur in der gemischten Datei.
+  const VAL_FAMILIES = ['facts', 'writing', 'refusal'];
+  const valByFamily = Object.fromEntries(VAL_FAMILIES.map(f => [f, valOut.filter(s => familyOf(s.task) === f)]));
+  const valFamilyJsonl = Object.fromEntries(VAL_FAMILIES.map(f => [f, toJsonl(valByFamily[f])]));
+  const overlapByVal = { val: valOverlapCounts(trainOut, valOut) };
+  for (const f of VAL_FAMILIES) overlapByVal['val-' + f] = valOverlapCounts(trainOut, valByFamily[f]);
   const stats = {
     total: trainOut.length + valOut.length,
     dropped: droppedCount,
@@ -314,13 +331,23 @@ function finalizeFinetuneSamples(ctx) {
     deduped: dedupedCount,
     balanced: balancedCount,
     cardDropped,
+    critiqueDropped,
+    lengthClipped: lengthCap.clipped,
+    lengthDropped: lengthCap.dropped,
     answerCapped,
-    factCapped,
+    paragraphCapped: paraBudget.dropped,
+    paragraphTargetMax: paragraphTargetMax(trainOut, ctx.pageContents),
+    mixDropped: mix.dropped,
     splitMixed,
     valPurged,
     maxPerAnswer: maxPerAnswer || null,
-    maxFactShare: maxFactShare || null,
-    quality: buildQualityStats(trainOut, valOut),
+    quality: buildQualityStats(trainOut, valOut, { langIsEn, overlapByVal }),
+    valFacts: valByFamily.facts.length,
+    valWriting: valByFamily.writing.length,
+    valRefusal: valByFamily.refusal.length,
+    valFactsBytes: Buffer.byteLength(valFamilyJsonl.facts, 'utf8'),
+    valWritingBytes: Buffer.byteLength(valFamilyJsonl.writing, 'utf8'),
+    valRefusalBytes: Buffer.byteLength(valFamilyJsonl.refusal, 'utf8'),
     train: trainOut.length,
     val: valOut.length,
     styleCount: exported.style,
@@ -330,6 +357,7 @@ function finalizeFinetuneSamples(ctx) {
     authorChatCount: exported.authorChat,
     aiAugmentCount: exported.aiAugment,
     readerCount: exported.reader,
+    coreCount: exported.core,
     trainBytes: Buffer.byteLength(trainJsonl, 'utf8'),
     valBytes:   Buffer.byteLength(valJsonl,   'utf8'),
     allBytes:   Buffer.byteLength(allJsonl,   'utf8'),
@@ -340,7 +368,13 @@ function finalizeFinetuneSamples(ctx) {
     emitText,
   };
 
-  return { stats, trainJsonl, valJsonl, allJsonl };
+  const trainPrompts = new Set(trainOut.flatMap(s => s.messages.filter(m => m.role === 'user').map(m => m.content.trim())));
+  return { stats, trainJsonl, valJsonl, allJsonl, valFamilyJsonl, valUnits, trainPrompts, trainOut, valOut };
 }
 
-module.exports = { finalizeFinetuneSamples, balanceCap, waterfillCap };
+function valOverlapCounts(trainArr, valArr) {
+  const ov = valOverlap(trainArr, valArr);
+  return { prompt: ov.prompt.size, answer: ov.answer.size, shingle: ov.shingle.size };
+}
+
+module.exports = { finalizeFinetuneSamples, balanceCap };

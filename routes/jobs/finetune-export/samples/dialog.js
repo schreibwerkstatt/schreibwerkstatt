@@ -6,10 +6,11 @@ const { findSpeaker, hashSplit } = require('../lib/names');
 // Dialogzeile als Schreibaufgabe nur ab dieser Länge: «Ja.» oder «Ich weiss
 // nicht.» ist aus dem Vorlauf nicht zu erschliessen.
 const DIALOG_LINE_MIN = 25;
-// «Wer sagt das?» nur für Zitate, die eine Figur erkennbar machen: lang genug,
-// genau einmal im Buch, eindeutig zugeordnet.
+// «Wer sagt das?» nur für Zitate, die eine Figur erkennbar machen: lang genug
+// (Zeichen und Wörter, `whoSaysMinWords` aus dem Profil), genau einmal im
+// Buch, einem Namen zugeordnet, den genau eine Figur trägt.
 const WHO_SAYS_MIN_CHARS = 30;
-const WHO_SAYS_MIN_WORDS = 5;
+const WHO_SAYS_MIN_WORDS = 6;
 const normQuote = (q) => q.toLowerCase().replace(/[^\p{L}\p{N}]+/gu, ' ').trim();
 
 // Dialog-Sammlung läuft immer, wenn Figuren bekannt sind — `dialogsByFigure`
@@ -75,9 +76,21 @@ function buildDialogSamples(ctx) {
   // denselben Split wie die übrigen Ableitungen seines Kapitels.
   if (opts.types.dialog) {
     const REV_CAP_PER_FIG = 30 * (opts.biasBoost || 1);
+    const minWords = Math.max(1, Number(opts.whoSaysMinWords) || WHO_SAYS_MIN_WORDS);
+    // Name → Figuren, die ihn tragen (Name oder Kurzname). Ein geteilter
+    // Kurzname («Buddenbrook») ordnet ein Zitat keiner Figur eindeutig zu.
+    const owners = new Map();
+    for (const g of figRows) {
+      for (const n of [g.name, g.kurzname].filter(Boolean)) {
+        const k = n.toLowerCase();
+        if (!owners.has(k)) owners.set(k, new Set());
+        owners.get(k).add(g.fig_id);
+      }
+    }
+    const unique = (n) => n && (owners.get(n.toLowerCase())?.size || 0) <= 1;
     for (const f of figRows) {
-      const entries = dialogsByFigure.get(f.name.toLowerCase()) || [];
-      const altEntries = (f.kurzname && f.kurzname !== f.name)
+      const entries = unique(f.name) ? (dialogsByFigure.get(f.name.toLowerCase()) || []) : [];
+      const altEntries = (f.kurzname && f.kurzname !== f.name && unique(f.kurzname))
         ? (dialogsByFigure.get(f.kurzname.toLowerCase()) || [])
         : [];
       const seenQ = new Set();
@@ -86,7 +99,7 @@ function buildDialogSamples(ctx) {
         if (seenQ.has(e.quote)) continue;
         seenQ.add(e.quote);
         if (e.quote.length < WHO_SAYS_MIN_CHARS || e.quote.length > 600) continue;
-        if (e.quote.split(/\s+/).length < WHO_SAYS_MIN_WORDS) continue;
+        if (e.quote.split(/\s+/).length < minWords) continue;
         if ((quoteFreq.get(normQuote(e.quote)) || 0) > 1) continue;
         if (looksLikeNarration(e.quote)) continue;
         pool.push(e);

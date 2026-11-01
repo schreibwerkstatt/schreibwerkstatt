@@ -18,6 +18,7 @@
       <span class="tok-badge tok-neutral" x-show="finetuneStats.verbatimCount > 0" x-text="$app.t('finetune.stats.verbatim', { n: finetuneStats.verbatimCount })"></span>
       <span class="tok-badge tok-neutral" x-show="finetuneStats.dialogCount > 0" x-text="$app.t('finetune.stats.dialog', { n: finetuneStats.dialogCount })"></span>
       <span class="tok-badge tok-neutral" x-show="finetuneStats.authorChatCount > 0" x-text="$app.t('finetune.stats.authorChat', { n: finetuneStats.authorChatCount })"></span>
+      <span class="tok-badge tok-neutral" x-show="finetuneStats.coreCount > 0" x-text="$app.t('finetune.stats.core', { n: finetuneStats.coreCount })"></span>
       <span class="tok-badge tok-neutral" x-show="finetuneStats.aiAugmentCount > 0" x-text="$app.t('finetune.stats.aiAugment', { n: finetuneStats.aiAugmentCount })"></span>
       <span class="tok-badge tok-neutral" x-show="finetuneStats.readerCount > 0" x-text="$app.t('finetune.stats.reader', { n: finetuneStats.readerCount })"></span>
       <span class="tok-badge tok-neutral" x-show="finetuneStats.tokensP95 > 0" x-text="$app.t('finetune.stats.tokensP95', { n: finetuneStats.tokensP95 })"></span>
@@ -57,6 +58,24 @@
       <button type="button" @click="finetuneDownload('eval')" x-show="finetuneStats.evalBytes > 0">
         <svg class="icon" aria-hidden="true"><use href="/icons.svg#download"/></svg>
         <span x-text="$app.t('finetune.download.eval')"></span>
+      </button>
+    </div>
+    <div class="row">
+      <button type="button" @click="finetuneDownload('val-facts')" x-show="finetuneStats.valFactsBytes > 0">
+        <svg class="icon" aria-hidden="true"><use href="/icons.svg#download"/></svg>
+        <span x-text="$app.t('finetune.download.valFacts')"></span>
+      </button>
+      <button type="button" @click="finetuneDownload('val-writing')" x-show="finetuneStats.valWritingBytes > 0">
+        <svg class="icon" aria-hidden="true"><use href="/icons.svg#download"/></svg>
+        <span x-text="$app.t('finetune.download.valWriting')"></span>
+      </button>
+      <button type="button" @click="finetuneDownload('val-refusal')" x-show="finetuneStats.valRefusalBytes > 0">
+        <svg class="icon" aria-hidden="true"><use href="/icons.svg#download"/></svg>
+        <span x-text="$app.t('finetune.download.valRefusal')"></span>
+      </button>
+      <button type="button" @click="finetuneDownloadStats()">
+        <svg class="icon" aria-hidden="true"><use href="/icons.svg#download"/></svg>
+        <span x-text="$app.t('finetune.download.stats')"></span>
       </button>
     </div>
     <p class="card-form-hint" x-show="finetuneStats.allBytes > 0" x-text="$app.t('finetune.hint.all')"></p>
