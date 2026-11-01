@@ -55,17 +55,19 @@ function dialogCtx() {
     figNamesSorted: ['Anna'],
     dialogsByFigure: new Map(),
     pageContents: [
-      page(1, 11, 'Eins', '»Ich gehe jetzt nach Hause«, sagte Anna. »Morgen komme ich wieder«, sagte Anna.'),
-      page(2, 12, 'Zwei', '»Das Wetter ist heute schlecht«, sagte Anna. »Wir bleiben lieber drinnen«, sagte Anna.'),
+      page(1, 11, 'Eins', '»Ich gehe jetzt nach Hause zu meiner Mutter«, sagte Anna. »Morgen komme ich mit dem ersten Zug wieder«, sagte Anna. »Ich weiss nicht.« Anna zuckte mit den Schultern.'),
+      page(2, 12, 'Zwei', '»Das Wetter ist heute schlecht in dieser Stadt«, sagte Anna. »Wir bleiben lieber drinnen am warmen Ofen«, sagte Anna. »Ich gehe jetzt nach Hause zu meiner Mutter«, sagte Anna.'),
     ],
   };
 }
 
-test('Zitat-Samples tragen den sourceKey ihres Kapitels', () => {
+test('Zitat-Samples tragen den sourceKey ihres Kapitels; «Wer sagt das» nur für eindeutige Zitate', () => {
   const ctx = dialogCtx();
   buildDialogSamples(ctx);
   const rev = ctx.samples.filter(s => s.id.startsWith('dialogRev|'));
-  assert.equal(rev.length, 4);
+  // Kurz/generisch («Ich weiss nicht.») und doppelt im Buch («nach Hause») fallen weg.
+  assert.equal(rev.length, 3);
+  for (const s of rev) assert.doesNotMatch(s.messages[1].content, /weiss nicht|nach Hause/);
   for (const s of rev) {
     const quote = s.messages[1].content;
     const expected = /Hause|Morgen/.test(quote) ? 'ch:11' : 'ch:12';
@@ -76,7 +78,7 @@ test('Zitat-Samples tragen den sourceKey ihres Kapitels', () => {
   buildFigureMetaSamples({
     langIsEn: false, figRows: ctx.figRows, eventsByFigPk: new Map(), appearancesByFigPk: new Map(),
     dialogsByFigure: ctx.dialogsByFigure,
-    pushQA: (id, q, a, sourceKey) => voice.push({ id, q, a, sourceKey }),
+    pushQA: (id, q, a, o) => voice.push({ id, q, a, sourceKey: o && typeof o === 'object' ? o.sourceKey : o }),
   });
   const figVoice = voice.filter(s => s.id.startsWith('authorChat|figVoice|'));
   assert.deepEqual(figVoice.map(s => s.sourceKey).sort(), ['ch:11', 'ch:12']);

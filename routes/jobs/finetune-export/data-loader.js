@@ -1,6 +1,26 @@
 'use strict';
 
 const { db } = require('../../../db/schema');
+const { isSlugName, slugDisplayName } = require('./lib/names');
+
+// Slug-förmige Namen (`cat_lady_40`) bekommen die Schreibweise aus dem Buch —
+// wörtlich, wenn das Buch sie so schreibt (Chat-Nicknames), sonst als
+// Wortfolge. Kennt das Buch den Namen nicht, fällt die Entität weg: eine
+// Figur, die nur unter einer Kennung bekannt ist, lernt das Modell besser gar
+// nicht. `dropped` sammelt die Kennungen fürs Log.
+function cleanNames(rows, bookText, dropped) {
+  const out = [];
+  for (const r of rows) {
+    if (isSlugName(r.name)) {
+      const shown = slugDisplayName(r.name, bookText);
+      if (!shown) { dropped.push(r.name); continue; }
+      r.name = shown;
+    }
+    if (r.kurzname && isSlugName(r.kurzname)) r.kurzname = null;
+    out.push(r);
+  }
+  return out;
+}
 
 // Lädt alle DB-Tabellen für den Finetune-Export und baut die Maps
 // (Lookups, Reverse-Indizes), die alle Sample-Module verwenden.
@@ -13,7 +33,9 @@ const { db } = require('../../../db/schema');
 // Returnt ein flaches Objekt mit allen Datenstrukturen, das später in den
 // ctx-Object gemerged wird.
 function loadFinetuneData({ bookIdInt, userEmail, pageContents, langIsEn }) {
-  const figRows = db.prepare(`
+  const bookText = pageContents.map(p => p.text || '').join('\n\n');
+  const droppedSlugNames = [];
+  const figRows = cleanNames(db.prepare(`
     SELECT f.fig_id, f.id AS pk, f.name, f.kurzname, f.typ, f.beschreibung, f.beruf, f.geschlecht, f.sozialschicht,
            f.praesenz, f.rolle, f.motivation, f.konflikt, f.entwicklung, f.arc, f.aeusseres, f.stimme,
            f.hintergrund, f.schluesselzitate,
@@ -23,7 +45,7 @@ function loadFinetuneData({ bookIdInt, userEmail, pageContents, langIsEn }) {
     WHERE f.book_id = ? AND f.user_email = ? AND f.stale = 0
     GROUP BY f.id
     ORDER BY f.sort_order
-  `).all(bookIdInt, userEmail);
+  `).all(bookIdInt, userEmail), bookText, droppedSlugNames);
   // stale = 0: vom letzten Analyse-Lauf nicht wiedergefundene Figuren (Katalog-Badge
   // „nicht mehr im Text") sind oft die alte Dublette einer umbenannten Figur — im
   // Training gäbe das zwei widersprüchliche Antworten auf „Wer ist X?".
@@ -32,12 +54,12 @@ function loadFinetuneData({ bookIdInt, userEmail, pageContents, langIsEn }) {
     figRows.flatMap(f => [f.name, f.kurzname].filter(n => n && String(n).trim().length >= 2))
   )].sort((a, b) => b.length - a.length);
 
-  const locRows = db.prepare(`
+  const locRows = cleanNames(db.prepare(`
     SELECT id AS pk, loc_id, name, typ, beschreibung, erste_erwaehnung, stimmung
     FROM locations
     WHERE book_id = ? AND (user_email = ? OR (? IS NULL AND user_email IS NULL))
     ORDER BY sort_order
-  `).all(bookIdInt, userEmail, userEmail);
+  `).all(bookIdInt, userEmail, userEmail), bookText, droppedSlugNames);
   const locById = new Map(locRows.map(l => [l.loc_id, l]));
 
   // ── Relationen zwischen Figuren/Orten/Kapiteln/Szenen ─────────────────
@@ -202,6 +224,7 @@ function loadFinetuneData({ bookIdInt, userEmail, pageContents, langIsEn }) {
   const pageChapterById = new Map(pageContents.map(p => [p.id, p.chapter || '']));
 
   return {
+    droppedSlugNames,
     figRows, figById, figNamesSorted,
     locRows, locById, locPkByLocId,
     chaptersByLocPk, figsByLocPk, scenesByLocPk, sceneLocRows,

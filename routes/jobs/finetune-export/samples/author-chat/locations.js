@@ -3,14 +3,16 @@
 const { extractName, nameRegex } = require('../../lib/names');
 const { splitParagraphs } = require('../../lib/text');
 
-// Block 3+4: Orte-Q&A einzeln + Doppel-/Tripel-Verknüpfungen + Reisen
+// Block 3+4: Orte-Q&A einzeln + Verknüpfungen + Reisen. Orte stehen in den
+// Fragen als «Schauplatz «X»» — ob «in Basel», «im Kantonsspital» oder «an der
+// Aare», weiss der Export nicht. Fragen zu einem Ort tragen `unit: loc:<id>`.
 function buildLocationSamples(ctx) {
   const {
     langIsEn,
     locRows, sceneRows, figById, figRows,
     chaptersByLocPk, figsByLocPk, scenesByLocPk,
     figsByScene, locsByScene, locById,
-    ortQuestions, pushQA, pickVariants,
+    ortQuestions, pushQA, pickVariants, PARAPHRASES,
   } = ctx;
 
   // ── Orte-Q&A (angereichert) ───────────────────────────────────────────
@@ -53,13 +55,15 @@ function buildLocationSamples(ctx) {
     }
     const fullAnswer = parts.join(' ');
     if (!fullAnswer) continue;
+    const unit = 'loc:' + l.loc_id;
+    const atLoc = langIsEn ? `at ${l.name}` : `am Schauplatz «${l.name}»`;
 
     // Haupt-Q&A: 3 Paraphrasen mit voller Antwort
-    const idxs = pickVariants('ort|' + l.loc_id, ortQuestions, ortQuestions.length);
+    const idxs = pickVariants('ort|' + l.loc_id, ortQuestions, PARAPHRASES);
     for (const idx of idxs) {
       const q = ortQuestions[idx].replace('{name}', l.name);
-      pushQA('authorChat|ort|' + l.loc_id + '|' + idx, q, fullAnswer, undefined,
-        { key: 'ort:' + l.loc_id, kind: 'location', name: l.name });
+      pushQA('authorChat|ort|' + l.loc_id + '|' + idx, q, fullAnswer,
+        { unit, voice: { key: 'ort:' + l.loc_id, kind: 'location', name: l.name } });
     }
 
     // Spezifische Q&A für jede Facette, damit das Modell gezielt abrufbar lernt.
@@ -67,31 +71,31 @@ function buildLocationSamples(ctx) {
       const answer = kapitel.slice(0, 15).join(', ');
       pushQA('authorChat|ort-ch|' + l.loc_id,
         langIsEn ? `In which chapters does ${l.name} appear?` : `In welchen Kapiteln kommt ${l.name} vor?`,
-        langIsEn ? `${l.name} appears in: ${answer}.` : `${l.name} kommt vor in: ${answer}.`);
+        langIsEn ? `${l.name} appears in: ${answer}.` : `${l.name} kommt vor in: ${answer}.`, { unit });
     }
     if (figsHere.length) {
       const answer = figsHere.slice(0, 15).join(', ');
       pushQA('authorChat|ort-fig|' + l.loc_id,
-        langIsEn ? `Which characters are at ${l.name}?` : `Welche Figuren sind an ${l.name}?`,
-        langIsEn ? `At ${l.name}: ${answer}.` : `An ${l.name}: ${answer}.`);
+        langIsEn ? `Which characters are ${atLoc}?` : `Welche Figuren sind ${atLoc}?`,
+        langIsEn ? `At ${l.name}: ${answer}.` : `Am Schauplatz «${l.name}»: ${answer}.`, { unit });
     }
     if (szenenHere.length) {
       const answer = szenenHere.slice(0, 10).map(t => `«${t}»`).join(', ');
       pushQA('authorChat|ort-sz|' + l.loc_id,
-        langIsEn ? `What scenes take place at ${l.name}?` : `Welche Szenen spielen an ${l.name}?`,
-        langIsEn ? `Scenes at ${l.name}: ${answer}.` : `Szenen an ${l.name}: ${answer}.`);
+        langIsEn ? `What scenes take place ${atLoc}?` : `Welche Szenen spielen ${atLoc}?`,
+        langIsEn ? `Scenes at ${l.name}: ${answer}.` : `Szenen am Schauplatz «${l.name}»: ${answer}.`, { unit });
     }
     if (l.stimmung) {
       pushQA('authorChat|ort-stimmung|' + l.loc_id,
-        langIsEn ? `What's the mood of ${l.name}?` : `Welche Stimmung hat ${l.name}?`,
-        l.stimmung);
+        langIsEn ? `What's the mood of ${l.name}?` : `Welche Stimmung hat der Schauplatz «${l.name}»?`,
+        l.stimmung, { unit });
     }
     if (l.erste_erwaehnung) {
       pushQA('authorChat|ort-first|' + l.loc_id,
         langIsEn ? `When is ${l.name} first mentioned?` : `Wann wird ${l.name} zum ersten Mal erwähnt?`,
         langIsEn
           ? `${l.name} is first introduced in the section «${l.erste_erwaehnung}».`
-          : `${l.name} wird zum ersten Mal im Abschnitt «${l.erste_erwaehnung}» erwähnt.`);
+          : `${l.name} wird zum ersten Mal im Abschnitt «${l.erste_erwaehnung}» erwähnt.`, { unit });
     }
   }
 
@@ -123,14 +127,6 @@ function buildLocationSamples(ctx) {
     pushQA('authorChat|locsByFig|' + f.fig_id,
       langIsEn ? `Which locations does ${f.name} visit?` : `An welchen Orten ist ${f.name} unterwegs?`,
       list);
-    pushQA('authorChat|locsByFig2|' + f.fig_id,
-      langIsEn ? `Where do we meet ${f.name} in the book?` : `Wo trifft man ${f.name} im Buch?`,
-      list);
-    if (locs.length >= 2) {
-      pushQA('authorChat|locsByFigMap|' + f.fig_id,
-        langIsEn ? `Map ${f.name} across the locations.` : `Verorte ${f.name} in den Schauplätzen.`,
-        list);
-    }
   }
   for (const [key, group] of locsByChapter) {
     if (group.items.length < 1) continue;
@@ -138,29 +134,6 @@ function buildLocationSamples(ctx) {
     pushQA('authorChat|locsByCh|' + key.replace(/\s+/g, '_').slice(0, 80),
       langIsEn ? `Which locations appear in «${group.name}»?` : `Welche Schauplätze kommen in «${group.name}» vor?`,
       list);
-  }
-  const sceneTitleByIdLoc = new Map(sceneRows.map(s => [s.id, s.titel]));
-  for (const l of locRows) {
-    const sceneIds = scenesByLocPk.get(l.pk) || [];
-    const figIds = figsByLocPk.get(l.pk) || [];
-    if (!sceneIds.length || !figIds.length) continue;
-    for (let si = 0; si < Math.min(sceneIds.length, 4); si++) {
-      const sid = sceneIds[si];
-      const sTitle = sceneTitleByIdLoc.get(sid);
-      if (!sTitle) continue;
-      for (let fi = 0; fi < Math.min(figIds.length, 3); fi++) {
-        const fid = figIds[fi];
-        const fname = extractName(fid, figById);
-        if (!fname) continue;
-        pushQA('authorChat|locFigSz|' + l.loc_id + '|' + fid + '|' + sid,
-          langIsEn
-            ? `What does ${fname} do at ${l.name} in scene «${sTitle}»?`
-            : `Was macht ${fname} an ${l.name} in der Szene «${sTitle}»?`,
-          langIsEn
-            ? `${fname} is at ${l.name} in scene «${sTitle}».`
-            : `${fname} ist in der Szene «${sTitle}» an ${l.name}.`);
-      }
-    }
   }
   const locsByTyp = new Map();
   const locsByStimmung = new Map();
@@ -195,9 +168,6 @@ function buildLocationSamples(ctx) {
     pushQA('authorChat|locsAll',
       langIsEn ? `List all the locations in the book.` : `Liste alle Schauplätze im Buch auf.`,
       allLocs);
-    pushQA('authorChat|locsAll2',
-      langIsEn ? `What are the settings of this book?` : `An welchen Schauplätzen spielt das Buch?`,
-      allLocs);
   }
 
   // ── Reise-Sequenzen pro Figur ────────────────────────────────────────
@@ -228,21 +198,6 @@ function buildLocationSamples(ctx) {
     pushQA('authorChat|figJourney|' + fid,
       langIsEn ? `Trace ${fname}'s journey through the book.` : `Zeichne ${fname}s Reise durchs Buch nach.`,
       stations);
-    pushQA('authorChat|figStations|' + fid,
-      langIsEn ? `Which stations does ${fname} pass through?` : `Welche Stationen durchläuft ${fname}?`,
-      stations);
-    // Paarweise Übergänge A→B
-    for (let i = 1; i < Math.min(seq.length, 8); i++) {
-      const A = seq[i - 1].loc;
-      const B = seq[i].loc;
-      pushQA('authorChat|figTransit|' + fid + '|' + A.pk + '|' + B.pk,
-        langIsEn
-          ? `How does ${fname} get from ${A.name} to ${B.name}?`
-          : `Wie kommt ${fname} von ${A.name} nach ${B.name}?`,
-        langIsEn
-          ? `From ${A.name} to ${B.name}.`
-          : `Von ${A.name} nach ${B.name}.`);
-    }
   }
 }
 
@@ -269,7 +224,7 @@ function buildLocationPassageSamples(ctx) {
       pushQA('authorChat|ortPass|' + l.loc_id + '|' + j,
         langIsEn
           ? `Show me a passage set at ${l.name}.`
-          : `Zeig mir eine Passage an ${l.name}.`,
+          : `Zeig mir eine Passage, die am Schauplatz «${l.name}» spielt.`,
         found[j].para);
     }
   }

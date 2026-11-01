@@ -116,6 +116,23 @@
     </div>
 
     <div class="card-form-row">
+      <label for="ft-max-per-answer" class="card-form-label" x-text="$app.t('finetune.quality')"></label>
+      <div class="form-stack">
+        <div class="form-inline">
+          <label class="form-inline-field">
+            <span x-text="$app.t('finetune.quality.maxPerAnswer')"></span>
+            <input type="text" id="ft-max-per-answer" name="ft-max-per-answer" x-data="numInput({ step: 1, min: 0, max: 50, integer: true })" x-modelable="value" x-model="finetuneMaxPerAnswer" class="form-num">
+          </label>
+          <label class="form-inline-field">
+            <span x-text="$app.t('finetune.quality.maxFactShare')"></span>
+            <input type="text" id="ft-max-fact-share" name="ft-max-fact-share" x-data="numInput({ step: 0.05, min: 0, max: 0.95 })" x-modelable="value" x-model="finetuneMaxFactShare" class="form-num">
+          </label>
+        </div>
+        <p class="form-check-desc" x-text="$app.t('finetune.quality.desc')"></p>
+      </div>
+    </div>
+
+    <div class="card-form-row">
       <label for="ft-max-type-share" class="card-form-label" x-text="$app.t('finetune.balance')"></label>
       <div class="form-stack">
         <div class="form-inline">

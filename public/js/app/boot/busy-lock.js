@@ -66,3 +66,18 @@ export async function activateIfNobodyBusy(activate, { locks = defaultLocks() } 
     return false;
   }
 }
+
+// Editiert ein ANDERER Tab? Für den Klick auf das Update-Banner: der eigene Tab
+// darf editieren (der User nimmt den Verlust mit dem Klick in Kauf), ein fremder
+// nicht. `activateIfNobodyBusy` taugt dafür nicht — hält der eigene Tab den
+// geteilten Lock, bekäme er den exklusiven nie. Gezählt wird darum: mehr
+// gehaltene BUSY_LOCKs als der eigene. Ohne `query` (alte Browser) gilt: nein.
+export async function otherTabBusy(ownHeld, { locks = defaultLocks() } = {}) {
+  if (!locks?.query) return false;
+  try {
+    const { held = [] } = await locks.query();
+    return held.filter((l) => l.name === BUSY_LOCK).length > (ownHeld ? 1 : 0);
+  } catch {
+    return false;
+  }
+}

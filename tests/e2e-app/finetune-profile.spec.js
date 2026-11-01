@@ -90,3 +90,38 @@ test('Fine-Tuning-Export: Leser-Optionen sind vorbelegt, keine Autor-Optionen', 
 
   guard.assertClean('Fine-Tuning-Leser');
 });
+
+test('Fine-Tuning-Export: Qualität des Sets zeigt Aufgabentypen, Überlappung und häufigste Antworten', async ({ page }) => {
+  const guard = attachConsoleGuard(page);
+  await bootApp(page);
+  await selectSeededBook(page);
+  await page.evaluate(() => window.__app.toggleFinetuneExportCard());
+  const card = page.locator('.card--finetune');
+  await expect(card).toBeVisible();
+  await expect(card.locator('#partial-finetune-export-quality')).toBeAttached();
+  await page.evaluate(() => {
+    const c = window.Alpine.$data(document.querySelector('.card--finetune'));
+    c.finetuneStats = {
+      total: 10, train: 9, val: 1, answerCapped: 5, factCapped: 1, cardDropped: 0, splitMixed: 2, valPurged: 1,
+      quality: {
+        writingShare: 0.6, factShare: 0.4, uniqueAnswerShare: 0.9, repeated3Share: 0,
+        overlap: { prompt: 0, answer: 0, shingle: 0 },
+        tasks: [
+          { task: 'continue', family: 'writing', count: 6, share: 0.6, uniqueAnswers: 6, avgAnswerChars: 900 },
+          { task: 'factEvent', family: 'facts', count: 3, share: 0.3, uniqueAnswers: 2, avgAnswerChars: 120 },
+          { task: 'whoSays', family: 'facts', count: 1, share: 0.1, uniqueAnswers: 1, avgAnswerChars: 20 },
+        ],
+        topAnswers: [{ count: 2, text: 'Anna ist die Wirtin im Dorf.' }],
+      },
+    };
+  });
+  const rows = card.locator('#partial-finetune-export-quality tbody tr');
+  await expect(rows).toHaveCount(3);
+  await expect(rows.first()).toContainText(await tr(page, 'finetune.task.continue'));
+  await expect(card).toContainText(await tr(page, 'finetune.quality.writingShare', { pct: '60.0 %' }));
+  await expect(card).toContainText(await page.evaluate(() => window.__app.tn('finetune.stats.answerCapped', 5)));
+  await expect(card).toContainText(await page.evaluate(() => window.__app.tn('finetune.stats.valPurged', 1)));
+  await expect(card).toContainText('Anna ist die Wirtin im Dorf.');
+
+  guard.assertClean('Fine-Tuning-Qualität');
+});

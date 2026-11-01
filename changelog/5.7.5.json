@@ -1,0 +1,36 @@
+{
+  "version": "5.7.5",
+  "date": "2026-11-01",
+  "entries": [
+    {
+      "kind": "neu",
+      "de": "Fine-Tuning-Export: Die Karte «Qualität des Sets» zeigt nach dem Generieren, welche Aufgabentypen wie oft vorkommen und welche Antworten sich am häufigsten wiederholen.",
+      "en": "Fine-tuning export: after generating, the \"Set quality\" card shows how often each task type occurs and which answers repeat most."
+    },
+    {
+      "kind": "neu",
+      "de": "Fine-Tuning-Export: Unter «Wiederholung und Gewichtung» legst du fest, wie oft dieselbe Antwort vorkommen darf und wie gross der Anteil an Faktenfragen höchstens ist.",
+      "en": "Fine-tuning export: under \"Repetition and weighting\" you set how often the same answer may appear and the maximum share of fact questions."
+    },
+    {
+      "kind": "verbessert",
+      "de": "Fine-Tuning-Export: Train und Val teilen keine Buchstellen mehr, damit der Val-Wert ehrlich bleibt. Namen erscheinen so, wie sie im Buch stehen, und «Wer sagt das?» fragt nur noch eindeutige Zitate ab.",
+      "en": "Fine-tuning export: train and val no longer share passages of the book, so the val score stays honest. Names appear as written in the book, and \"Who says this?\" only asks about unambiguous quotes."
+    },
+    {
+      "kind": "verbessert",
+      "de": "Offline verfügbare Bücher nehmen jetzt auch ihre Bilder mit, sodass Abschnitte ohne Verbindung vollständig angezeigt werden.",
+      "en": "Books saved for offline use now include their images, so sections display completely without a connection."
+    },
+    {
+      "kind": "behoben",
+      "de": "Der Knopf zum Aktualisieren im Hinweis auf eine neue Version blieb gesperrt, solange du im selben Tab bearbeitet hast. Jetzt sperrt nur ein anderer Tab, und der Hinweis sagt es dir.",
+      "en": "The update button in the new-version notice stayed locked while you were editing in the same tab. Now only another tab blocks it, and the notice tells you so."
+    },
+    {
+      "kind": "behoben",
+      "de": "Direkt nach einer neuen Version konnte die App unvollständig laden und wiederholt zum Neuladen auffordern. Das passiert nicht mehr.",
+      "en": "Right after a new version, the app could load incompletely and keep asking you to reload. That no longer happens."
+    }
+  ]
+}

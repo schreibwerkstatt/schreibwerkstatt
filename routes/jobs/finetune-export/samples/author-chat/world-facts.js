@@ -16,7 +16,7 @@ const { db, refutedFactKeys, worldFactKey } = require('../../../../../db/schema'
 // eingeübt — bei Trainingsdaten ist die Vervielfachung des Fehlers teurer als das
 // fehlende Sample.
 function buildWorldFactSamples(ctx) {
-  const { langIsEn, bookIdInt, userEmail, pushQA, pickVariants } = ctx;
+  const { langIsEn, bookIdInt, userEmail, pushQA, pickVariants, PARAPHRASES } = ctx;
 
   const factRows = db.prepare(`
     SELECT id, kategorie, subjekt, fakt, seite_label
@@ -73,7 +73,7 @@ function buildWorldFactSamples(ctx) {
 
     // Einzel-Fakt-Q&A mit mehreren Paraphrasen (nur wenn Subjekt vorhanden)
     if (subjekt) {
-      const idxs = pickVariants('wfact|' + r.id, subjQuestions, subjQuestions.length);
+      const idxs = pickVariants('wfact|' + r.id, subjQuestions, PARAPHRASES);
       for (const idx of idxs) {
         const q = subjQuestions[idx].replace('{subjekt}', subjekt);
         pushQA('authorChat|wfact|' + r.id + '|' + idx, q, answer);

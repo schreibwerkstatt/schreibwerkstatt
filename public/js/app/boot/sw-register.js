@@ -6,7 +6,8 @@ import {
   AUTO_APPLY_TICK_MS, BOOT_STALE_WINDOW_MS, isBusy, shouldAutoApply, shouldHealSkew, isUpdateRequired, shouldForceUpdate, hasUnsavedWork,
   shouldCheckProtocol, shouldCheckBuild, isBuildStale,
 } from './update-policy.js';
-import { createBusyLock, activateIfNobodyBusy } from './busy-lock.js';
+import { createBusyLock, activateIfNobodyBusy, otherTabBusy } from './busy-lock.js';
+import { tRaw } from '../../i18n.js';
 
 // Registrierung an DOMContentLoaded, NICHT an `load`. Das `load`-Event feuert
 // erst, wenn jedes Subresource durch ist — auf einer noch unkontrollierten
@@ -89,9 +90,10 @@ export function registerServiceWorker() {
       // Seite kohärent (alte Partials + alte Module). Auto-Reload hier nur,
       // wenn niemand editiert — sonst Banner stehen lassen, damit der User
       // erst speichern kann.
-      // hadController-Snapshot: beim First-Install (Tab ohne Controller
-      // geladen) feuert clients.claim() ein controllerchange — ohne Snapshot
-      // würde die Seite direkt nach dem ersten Laden nochmal reloaden.
+      // hadController-Snapshot, defensiv: ein Tab ohne Controller beim Laden
+      // (Erst-Install, Ctrl-F5) hat seine Module vom Netz und nichts zu heilen.
+      // sw.js ruft kein clients.claim(); käme trotzdem ein controllerchange,
+      // soll es diesen Tab nicht direkt nach dem Laden neu laden.
       const hadController = !!navigator.serviceWorker.controller;
       let reloaded = false;
       // Skew-Marke: der neue SW kontrolliert dieses Dokument, die geladenen
@@ -259,10 +261,23 @@ export function registerServiceWorker() {
       // nächsten register() derselben Script-URL ohne Install zurück. Der SW
       // erkennt die fehlende Generation selbst (sw.js#GENERATION_COMPLETE_PATH),
       // bedient die Seite dann vom Netz und füllt nach.
+      //
+      // Editiert ein ANDERER Tab, wird nicht aktiviert: skip-waiting wechselte
+      // die Generation auch unter ihm (busy-lock.js). Der eigene Tab zählt
+      // nicht — wer hier klickt, nimmt seinen Verlust in Kauf (Banner-Text).
+      // Vom Banner (`interactive`) gibt es dazu einen Hinweis; das Pflicht-
+      // Update wartet still, sein Banner steht ohnehin. Den Wechsel holt die
+      // Update-Politik nach, sobald der andere Tab frei ist.
       let applying = false;
-      const applyUpdate = async () => {
+      const applyUpdate = async ({ interactive = false } = {}) => {
         if (applying) return;
         applying = true;
+        busyLock.sync();
+        if (await otherTabBusy(busyLock.held)) {
+          applying = false;
+          if (interactive) window.__app?.appAlert?.({ message: tRaw('session.updateBlockedByOtherTab') });
+          return;
+        }
         const w = window.__pendingWorker || reg.waiting;
         if (w) {
           try { w.postMessage({ type: 'skip-waiting' }); } catch {}

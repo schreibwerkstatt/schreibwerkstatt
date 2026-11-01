@@ -2,7 +2,7 @@
 
 const { db } = require('../../../../../db/schema');
 const { tServer } = require('../../../../../lib/i18n-server');
-const { nameRegex } = require('../../lib/names');
+const { nameRegex, isIdLike } = require('../../lib/names');
 const { splitParagraphs, splitSentences, clipAtSentence } = require('../../lib/text');
 
 // Zeitstrahl-Ereignisse für den Autor-Chat einmal laden und anreichern, damit
@@ -14,8 +14,11 @@ const { splitParagraphs, splitSentences, clipAtSentence } = require('../../lib/t
 //
 // Szene ↔ Ereignis: nur über denselben Abschnitt. Ein gemeinsames Kapitel
 // verbände in Büchern mit wenigen grossen Kapiteln fast alles mit allem.
-// Schauplätze eines Ereignisses: die Orte seiner Szenen plus Ortsnamen, die im
-// Ereignistext selbst stehen.
+// Schauplätze eines Ereignisses: nur Orte, deren Name im Ereignistext, in der
+// Bedeutung oder in der zugeordneten Buchstelle steht. Die Szenen-Orte des
+// Abschnitts zählen nicht — sie sind die Ortsliste des ganzen Abschnitts und
+// hängen sonst an jedem Ereignis darin. Ein eigenes Ortsfeld hat das Ereignis
+// nicht.
 
 const fmtDate = (y, m, d, langIsEn) => {
   if (!y) return '';
@@ -69,14 +72,27 @@ function subtypLabel(subtyp, langIsEn) {
   return label === key ? '' : label;
 }
 
+// Art des Ereignisses als Nominalphrase statt Enum-Wert («persoenlich»):
+// «ein persönliches Ereignis (Geburt)». '' bei unbekanntem Typ.
+function eventKindPhrase(typ, subtyp, langIsEn) {
+  const t = String(typ || '').toLowerCase();
+  const base = t === 'extern' ? (langIsEn ? 'a world event' : 'ein Ereignis des Weltgeschehens')
+    : t === 'persoenlich' ? (langIsEn ? 'a personal event' : 'ein persönliches Ereignis')
+    : '';
+  if (!base) return '';
+  const sub = subtypLabel(subtyp, langIsEn);
+  return sub ? `${base} (${langIsEn ? sub.toLowerCase() : sub})` : base;
+}
+const capFirst = (s) => s.charAt(0).toUpperCase() + s.slice(1);
+
 // Gemeinsame Detail-Teile für Zeitstrahl- und Figuren-Ereignisse.
 function eventDetailParts(ev, { langIsEn, chapterNames = [], storyline = '' }) {
   const parts = [];
   const w = eventWhen(ev, langIsEn);
   if (w.when) parts.push(langIsEn ? `When: ${w.when}.` : `Zeitpunkt: ${w.when}.`);
   if (w.storyDay) parts.push(langIsEn ? `Day ${w.storyDay} of the story.` : `Tag ${w.storyDay} der Handlung.`);
-  const art = [ev.typ, subtypLabel(ev.subtyp, langIsEn)].filter(Boolean).join(', ');
-  if (art) parts.push(langIsEn ? `Type: ${art}.` : `Art: ${art}.`);
+  const kind = eventKindPhrase(ev.typ, ev.subtyp, langIsEn);
+  if (kind) parts.push(capFirst(kind) + '.');
   if (storyline) parts.push(langIsEn ? `Storyline: ${storyline}.` : `Handlungsstrang: ${storyline}.`);
   if (chapterNames.length) parts.push(langIsEn ? `In chapter(s): ${chapterNames.join(', ')}.` : `In Kapitel: ${chapterNames.join(', ')}.`);
   return parts;
@@ -133,8 +149,8 @@ function eventExcerpt(e, { pageById, maxChars }) {
 function loadEventData(ctx) {
   const {
     langIsEn, opts, bookIdInt, userEmail,
-    figRows, locRows, locById,
-    sceneRows, locsByScene,
+    figRows, locRows,
+    sceneRows,
     pageContents, chMap, pageNameById,
   } = ctx;
   const maxChars = opts.maxChars;
@@ -200,7 +216,7 @@ function loadEventData(ctx) {
       const f = (r.figure_id != null && figByPk.get(r.figure_id))
         || figRows.find(x => r.figur_name && (x.name === r.figur_name || x.kurzname === r.figur_name));
       const name = f ? f.name : (r.figur_name || '').trim();
-      if (!name) continue;
+      if (!name || isIdLike(name)) continue;
       const key = f ? f.fig_id : name.toLowerCase();
       if (seenFig.has(key)) continue;
       seenFig.add(key);
@@ -209,46 +225,36 @@ function loadEventData(ctx) {
     }
 
     const scenes = pageIds.flatMap(pid => scenesByPage.get(pid) || []);
-    const locMap = new Map();
-    for (const s of scenes) {
-      for (const lid of (locsByScene.get(s.id) || [])) {
-        const l = locById.get(lid);
-        if (l) locMap.set(l.pk, l);
-      }
-    }
-    const haystack = ereignis + ' ' + (ev.bedeutung || '');
-    for (const l of locRows) {
-      if (!l.name || l.name.length < 3) continue;
-      if (nameRegex(l.name).test(haystack)) locMap.set(l.pk, l);
-    }
-    const locs = [...locMap.values()];
     const storyline = storylineNameById.get(ev.storyline_id) || '';
+    const w = eventWhen(ev, langIsEn);
+    const e = {
+      i, ereignis,
+      datum: w.when, start: w.start, end: w.end, storyDay: w.storyDay,
+      typ: ev.typ, subtyp: ev.subtyp, subtypLabel: subtypLabel(ev.subtyp, langIsEn),
+      kindPhrase: eventKindPhrase(ev.typ, ev.subtyp, langIsEn),
+      bedeutung: ev.bedeutung, storyline,
+      kapitel, pageIds,
+      figs, scenes,
+    };
+    e.excerpt = eventExcerpt(e, { pageById, maxChars });
+
+    const haystack = [ereignis, ev.bedeutung || '', e.excerpt ? e.excerpt.text : ''].join('\n');
+    e.locs = locRows.filter(l => l.name && l.name.length >= 3 && nameRegex(l.name).test(haystack));
 
     const parts = [ereignis + '.'];
     parts.push(...eventDetailParts(ev, { langIsEn, storyline }));
     if (figs.length) parts.push(langIsEn
       ? `Characters involved: ${figs.map(f => f.name).join(', ')}.`
       : `Beteiligte Figuren: ${figs.map(f => f.name).join(', ')}.`);
-    if (locs.length) parts.push(langIsEn
-      ? `Locations: ${locs.map(l => l.name).join(', ')}.`
-      : `Schauplätze: ${locs.map(l => l.name).join(', ')}.`);
+    if (e.locs.length) parts.push(langIsEn
+      ? `Locations: ${e.locs.map(l => l.name).join(', ')}.`
+      : `Schauplätze: ${e.locs.map(l => l.name).join(', ')}.`);
     if (scenes.length) parts.push(langIsEn
       ? `Scenes: ${scenes.map(s => '«' + s.titel + '»').join(', ')}.`
       : `Szenen: ${scenes.map(s => '«' + s.titel + '»').join(', ')}.`);
     if (kapitel.length) parts.push(langIsEn ? `In chapter(s): ${kapitel.join(', ')}.` : `In Kapitel: ${kapitel.join(', ')}.`);
     if (ev.bedeutung) parts.push((langIsEn ? 'Why it matters: ' : 'Bedeutung: ') + ev.bedeutung);
-
-    const w = eventWhen(ev, langIsEn);
-    const e = {
-      i, ereignis,
-      datum: w.when, start: w.start, end: w.end, storyDay: w.storyDay,
-      typ: ev.typ, subtyp: ev.subtyp, subtypLabel: subtypLabel(ev.subtyp, langIsEn),
-      bedeutung: ev.bedeutung, storyline,
-      kapitel, pageIds,
-      figs, locs, scenes,
-      fullAnswer: parts.join(' '),
-    };
-    e.excerpt = eventExcerpt(e, { pageById, maxChars });
+    e.fullAnswer = parts.join(' ');
     events.push(e);
     for (const s of scenes) {
       if (!eventsBySceneId.has(s.id)) eventsBySceneId.set(s.id, []);
@@ -259,4 +265,4 @@ function loadEventData(ctx) {
   return { events, eventsBySceneId, storylineNameById };
 }
 
-module.exports = { loadEventData, eventDetailParts, eventWhen, eventExcerpt, subtypLabel };
+module.exports = { loadEventData, eventDetailParts, eventWhen, eventExcerpt, subtypLabel, eventKindPhrase };

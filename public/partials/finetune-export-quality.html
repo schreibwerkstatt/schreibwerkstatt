@@ -1,0 +1,66 @@
+<!-- Fine-Tuning-Export: Qualität des gespeicherten Sets (stats.quality aus
+     finalize.js) — Anteil Schreibaufgaben, eigene Antworten, Überlappung
+     Val ↔ Train, Aufgabentypen und häufigste Antworten. Wird in
+     `#partial-finetune-export-quality` von finetune-export-result.html
+     geladen und erbt den x-data-Scope der Karte. -->
+<template x-if="finetuneStats && finetuneStats.quality && !finetuneLoading">
+  <div class="form-section">
+    <div class="card-section-title" x-text="$app.t('finetune.quality.title')"></div>
+    <div class="form-stats">
+      <span class="tok-badge tok-neutral" x-text="$app.t('finetune.quality.writingShare', { pct: finetunePct(finetuneStats.quality.writingShare) })"></span>
+      <span class="tok-badge tok-neutral" x-text="$app.t('finetune.quality.uniqueShare', { pct: finetunePct(finetuneStats.quality.uniqueAnswerShare) })"></span>
+      <span class="tok-badge" :class="finetuneOverlapTotal() ? 'tok-high' : 'tok-neutral'"
+            x-text="$app.t('finetune.quality.overlap', finetuneStats.quality.overlap)"></span>
+      <span class="tok-badge tok-neutral" x-show="finetuneStats.answerCapped > 0" x-text="$app.tn('finetune.stats.answerCapped', finetuneStats.answerCapped)"></span>
+      <span class="tok-badge tok-neutral" x-show="finetuneStats.factCapped > 0" x-text="$app.tn('finetune.stats.factCapped', finetuneStats.factCapped)"></span>
+      <span class="tok-badge tok-med" x-show="finetuneStats.cardDropped > 0" x-text="$app.tn('finetune.stats.cardDropped', finetuneStats.cardDropped)"></span>
+      <span class="tok-badge tok-neutral" x-show="finetuneStats.splitMixed > 0" x-text="$app.tn('finetune.stats.splitMixed', finetuneStats.splitMixed)"></span>
+      <span class="tok-badge tok-neutral" x-show="finetuneStats.valPurged > 0" x-text="$app.tn('finetune.stats.valPurged', finetuneStats.valPurged)"></span>
+    </div>
+
+    <div class="table-scroll">
+      <table class="data-table"
+             x-data="sortableTable({
+               rows: () => finetuneQualityRows(),
+               defaultKey: 'count',
+               defaultDir: 'desc',
+               persistKey: 'finetune.qualityTasks',
+               types: { count: 'number', share: 'number', uniqueAnswers: 'number', avgAnswerChars: 'number' },
+             })">
+        <thead>
+          <tr>
+            <th x-bind="sortTh('label')" x-text="$app.t('finetune.quality.colTask')"></th>
+            <th x-bind="sortTh('familyLabel')" x-text="$app.t('finetune.quality.colFamily')"></th>
+            <th x-bind="sortTh('count')" x-text="$app.t('finetune.quality.colCount')"></th>
+            <th x-bind="sortTh('share')" x-text="$app.t('finetune.quality.colShare')"></th>
+            <th x-bind="sortTh('uniqueAnswers')" x-text="$app.t('finetune.quality.colUnique')"></th>
+            <th x-bind="sortTh('avgAnswerChars')" x-text="$app.t('finetune.quality.colAvg')"></th>
+          </tr>
+        </thead>
+        <tbody>
+          <template x-for="row in sorted" :key="row.task">
+            <tr>
+              <td x-text="row.label"></td>
+              <td x-text="row.familyLabel"></td>
+              <td x-text="row.count"></td>
+              <td x-text="finetunePct(row.share)"></td>
+              <td x-text="row.uniqueAnswers"></td>
+              <td x-text="row.avgAnswerChars"></td>
+            </tr>
+          </template>
+        </tbody>
+      </table>
+    </div>
+
+    <template x-if="finetuneStats.quality.topAnswers.length">
+      <div>
+        <div class="card-section-title" x-text="$app.t('finetune.quality.topAnswers')"></div>
+        <ol>
+          <template x-for="(a, i) in finetuneStats.quality.topAnswers" :key="i">
+            <li><span class="tok-badge tok-neutral" x-text="a.count + '×'"></span> <span x-text="a.text"></span></li>
+          </template>
+        </ol>
+      </div>
+    </template>
+  </div>
+</template>

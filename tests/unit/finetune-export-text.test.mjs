@@ -21,7 +21,7 @@ const { nameRegex, findSpeaker } = require('../../routes/jobs/finetune-export/li
 const { buildSceneSamples } = require('../../routes/jobs/finetune-export/samples/scene.js');
 const { finalizeFinetuneSamples } = require('../../routes/jobs/finetune-export/finalize.js');
 const { buildEvalPrompts } = require('../../routes/jobs/finetune-export/lib/eval-prompts.js');
-const { hashSplit } = require('../../routes/jobs/finetune-export/lib/names.js');
+const { valPageKeys } = require('../../routes/jobs/finetune-export/lib/split.js');
 
 const sentences = (n, from = 0) => Array.from({ length: n }, (_, i) => `Satz Nummer ${from + i + 1} erzählt etwas vom langen Tag am See.`).join(' ');
 const endsClean = (s) => /[.!?…»«“"]$/.test(s);
@@ -83,24 +83,48 @@ test('Szenen-Sampler: langer Abschnitt in Teilen, keine Antwort endet mitten im 
   assert.ok(answers.some(a => a.includes('Satz Nummer 200 ')), 'auch das Ende des Abschnitts ist trainiert');
 });
 
+// Abschnittstext ohne gemeinsame 8-Wort-Folgen zwischen Abschnitten: der Split
+// erkennt Abschnitte am Text (lib/split.js), gleichförmige Testsätze sähen für
+// ihn wie ein einziger Abschnitt aus.
+const VOCAB = ('Haus Wald Licht Regen Brief Tür Stimme Feld Hund Kirche Zug Brücke Fenster Abend '
+  + 'Mutter Lehrer Garten Strasse Uhr Spiegel Messer Dorf Schnee Wind Hafen Stein Tisch Lampe '
+  + 'Fluss Wolke Schule Markt Turm Mantel Karte Schritt Glocke Vogel Acker Keller').split(' ');
+const pageText = (seed, n = 60) => {
+  let x = seed * 7919 + 17;
+  const w = [];
+  for (let i = 0; i < n; i++) {
+    x = (x * 1103515245 + 12345) % 2147483648;
+    w.push(VOCAB[(x >>> 16) % VOCAB.length].toLowerCase());
+    if (i % 10 === 9) w[w.length - 1] += '.';
+  }
+  return w.join(' ').replace(/(^|\. )(\p{Ll})/gu, (m, a, b) => a + b.toUpperCase());
+};
+
 test('finalize: all.jsonl = train + val, leer ohne val', () => {
-  const samples = Array.from({ length: 60 }, (_, i) => ({
-    id: 's' + i, type: 'style', sourceKey: 'ch:' + (i % 30),
-    messages: [{ role: 'system', content: 'S' }, { role: 'user', content: 'u' + i }, { role: 'assistant', content: 'a' + i }],
-  }));
+  const pageContents = Array.from({ length: 30 }, (_, i) => ({ id: i + 1, chapter_id: 1, text: pageText(i + 1) }));
+  const samples = pageContents.map(p => {
+    const [a, b] = [p.text.slice(0, p.text.length / 2), p.text.slice(p.text.length / 2)];
+    return {
+      id: 'style|' + p.id, type: 'style', sourceKey: 'ch:1',
+      messages: [{ role: 'system', content: 'S' }, { role: 'user', content: 'Setze fort:\n\n' + a }, { role: 'assistant', content: b }],
+    };
+  });
   const run = (valSplit) => finalizeFinetuneSamples({
-    samples, langIsEn: false, opts: { valSplit, valSeed: 0, maxSeqTokens: 0, emitText: false, truncateLong: false },
+    samples: samples.map(s => ({ ...s, messages: s.messages.map(m => ({ ...m })) })), langIsEn: false, pageContents,
+    opts: { valSplit, valSeed: 0, maxSeqTokens: 0, emitText: false, truncateLong: false },
   });
   const r = run(0.3);
   const lines = (s) => s.trim().split('\n').filter(Boolean);
   assert.ok(r.stats.val > 0);
   assert.equal(lines(r.allJsonl).length, r.stats.train + r.stats.val);
   assert.deepEqual(new Set(lines(r.allJsonl)), new Set([...lines(r.trainJsonl), ...lines(r.valJsonl)]));
+  assert.deepEqual(r.stats.quality.overlap, { prompt: 0, answer: 0, shingle: 0 });
   assert.equal(run(0).allJsonl, '');
 });
 
 test('Testprompts: Holdout-Markierung folgt dem Split von finalize', () => {
   const chapterKeys = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10];
+  const pageContents = Array.from({ length: 20 }, (_, i) => ({ id: i + 1, chapter_id: (i % 10) + 1, text: pageText(i + 100, 40) }));
   const ctx = {
     langIsEn: false, unifiedSys: 'SYS', opts: { valSplit: 0.3, valSeed: 0 },
     figRows: [{ fig_id: 'a', name: 'Anna' }, { fig_id: 'b', name: 'Ben' }],
@@ -109,7 +133,7 @@ test('Testprompts: Holdout-Markierung folgt dem Split von finalize', () => {
     chapterKeys,
     chapterNameByKey: new Map(chapterKeys.map(k => [k, 'Kapitel ' + k])),
     chapterFullTextByKey: new Map(chapterKeys.map(k => [k, sentences(20, k * 100)])),
-    pageContents: chapterKeys.map(k => ({ id: k, chapter_id: k, text: sentences(5) })),
+    pageContents,
     sceneRows: [], figsByScene: new Map(),
   };
   const rows = buildEvalPrompts(ctx);
@@ -117,10 +141,12 @@ test('Testprompts: Holdout-Markierung folgt dem Split von finalize', () => {
   for (const c of ['figure', 'relation', 'chapter', 'continuation', 'newChapter', 'offTopic']) assert.ok(cats.has(c), c);
   assert.ok(!cats.has('reverseLookup'), 'keine Abschnitt-Suche');
   for (const r of rows) assert.equal(r.messages[0].content, 'SYS');
-  const val = (k) => hashSplit('ch:' + k, 0) < 0.3;
-  for (const r of rows.filter(r => r.category === 'continuation')) {
-    const k = chapterKeys.find(k => r.messages[1].content.includes(ctx.chapterFullTextByKey.get(k).split('.')[0] + '.'));
-    assert.equal(r.holdout, val(k));
+  const valPages = valPageKeys(pageContents, ctx.opts);
+  const cont = rows.filter(r => r.category === 'continuation');
+  assert.ok(cont.length > 0 && cont.every(r => r.holdout), 'Fortsetzungen aus dem Holdout');
+  for (const r of cont) {
+    const p = pageContents.find(pc => r.messages[1].content.includes(pc.text.split('.')[0]));
+    assert.ok(valPages.has('p:' + p.id));
   }
 });
 

@@ -14,6 +14,7 @@ const { loadFinetuneData } = require('./data-loader');
 const { finalizeFinetuneSamples } = require('./finalize');
 const { bookFingerprint, finetuneFilePath, saveFinetuneResult, loadFinetuneMeta } = require('./lib/store');
 const { buildEvalPrompts } = require('./lib/eval-prompts');
+const { qualityLogLine } = require('./lib/export-stats');
 
 const { buildStyleSamples } = require('./samples/style');
 const { buildSceneSamples } = require('./samples/scene');
@@ -97,6 +98,11 @@ async function runFinetuneExportJob(jobId, bookId, bookName, userEmail, opts) {
     // (0 = aus). Hält die volumenstarken Text-Sampler davon ab, das
     // Welt-/Figurenwissen zu erschlagen. Geclamped in finalize auf 0..0.95.
     const maxTypeShare = Math.max(0, Math.min(0.95, Number(opts.maxTypeShare) || 0));
+    // `maxPerAnswer`: jede Assistant-Antwort höchstens so oft (0 = aus).
+    // `maxFactShare`: Faktenfragen höchstens dieser Anteil, der Rest sind
+    // Schreibaufgaben mit Buchtext als Ziel (0 = aus). Siehe finalize.js.
+    const maxPerAnswer = Math.max(0, Math.min(50, Math.floor(Number(opts.maxPerAnswer ?? 2))));
+    const maxFactShare = Math.max(0, Math.min(0.95, Number(opts.maxFactShare ?? 0.4) || 0));
 
     // Einheitliche Identität über alle Sample-Typen: Modell soll *eine* Stimme
     // lernen — die des Buchs im Gespräch mit Lesern (docs/finetuning.md#leser-modell)
@@ -112,7 +118,8 @@ async function runFinetuneExportJob(jobId, bookId, bookName, userEmail, opts) {
 
     // Normalised opts mit übernommenen Defaults — wird in alle Sub-Module gereicht.
     const optsNorm = { ...opts, minChars, maxChars, valSplit, valSeed: seed, maxSeqTokens, emitText,
-                       fulltext, maxFullChars, truncateLong, biasBoost, maxTypeShare };
+                       fulltext, maxFullChars, truncateLong, biasBoost, maxTypeShare,
+                       maxPerAnswer, maxFactShare };
 
     const ctx = {
       jobId, logger,
@@ -128,6 +135,9 @@ async function runFinetuneExportJob(jobId, bookId, bookName, userEmail, opts) {
     };
 
     logger.info(`Seiten geladen: ${pageContents.length} Seiten, ${data.figNamesSorted.length} Figuren bekannt.`);
+    if (data.droppedSlugNames.length) {
+      logger.info(`Ohne Anzeigenamen übersprungen: ${data.droppedSlugNames.join(', ')}`);
+    }
 
     if (opts.types.style) {
       updateJob(jobId, { progress: 55, statusText: 'finetune.phase.style' });
@@ -186,6 +196,8 @@ async function runFinetuneExportJob(jobId, bookId, bookName, userEmail, opts) {
     updateJob(jobId, { progress: 95, statusText: 'finetune.phase.building' });
 
     const { stats, trainJsonl, valJsonl, allJsonl } = finalizeFinetuneSamples(ctx);
+    logger.info(qualityLogLine(stats.quality));
+    logger.info(`Verworfen: Karte=${stats.cardDropped} Antwort-Budget=${stats.answerCapped} Fakten-Deckel=${stats.factCapped} Split gemischt=${stats.splitMixed} Val-Überlappung=${stats.valPurged}`);
     const evalPrompts = buildEvalPrompts(ctx);
     const evalJsonl = evalPrompts.map(e => JSON.stringify(e)).join('\n') + (evalPrompts.length ? '\n' : '');
     // Der System-Prompt reist mit: das Modelfile der Karte muss ihn wörtlich
@@ -207,10 +219,13 @@ async function runFinetuneExportJob(jobId, bookId, bookName, userEmail, opts) {
   }
 }
 
+// Zahl aus dem Body, sonst der Standard — 0 ist ein gültiger Wert («aus»).
+const numOr = (v, dflt) => (v === undefined || v === null || v === '' || !Number.isFinite(Number(v)) ? dflt : Number(v));
+
 finetuneExportRouter.post('/finetune-export', jsonBody, (req, res) => {
   const { book_id, book_name, types, min_chars, max_chars, val_split, val_seed,
           max_seq_tokens, emit_text, fulltext, max_full_chars, truncate_long, bias_boost,
-          max_type_share, ai } = req.body || {};
+          max_type_share, max_per_answer, max_fact_share, ai } = req.body || {};
   if (!book_id) return res.status(400).json({ error_code: 'BOOK_ID_REQUIRED' });
   setContext({ book: toIntId(book_id) });
   if (!guardBook(req, res, book_id, 'editor')) return;
@@ -246,6 +261,8 @@ finetuneExportRouter.post('/finetune-export', jsonBody, (req, res) => {
     truncateLong: !!truncate_long,
     biasBoost: Number(bias_boost) || 1,
     maxTypeShare: Number(max_type_share) || 0,
+    maxPerAnswer: numOr(max_per_answer, 2),
+    maxFactShare: numOr(max_fact_share, 0.4),
     ai: aiOpts,
   };
   const userEmail = sessionEmail(req);
@@ -304,4 +321,4 @@ finetuneExportRouter.get('/finetune-export/:kind.jsonl', (req, res) => {
   res.sendFile(finetuneFilePath(bookId, userEmail, kind));
 });
 
-module.exports = { finetuneExportRouter };
+module.exports = { finetuneExportRouter, runFinetuneExportJob };

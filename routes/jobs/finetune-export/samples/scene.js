@@ -3,6 +3,7 @@
 const { db } = require('../../../../db/schema');
 const { splitAtSentence, clipAtSentence, tailFromSentence, chunkAtSentence } = require('../lib/text');
 const { extractName } = require('../lib/names');
+const { sceneExcerpt } = require('./author-chat/scenes');
 
 function buildSceneSamples(ctx) {
   const {
@@ -59,6 +60,44 @@ function buildSceneSamples(ctx) {
       ],
     });
     counts.scene++;
+  }
+
+  // ── Szene schreiben aus Kapitel- und Figurenkontext ──────────────────
+  // Trägt ein Abschnitt mehrere Szenen, bekommt jede ihre eigene Aufgabe:
+  // Kapitel, Figuren und Kurzfassung der Szene plus der Vorlauf davor → die
+  // Originalpassage der Szene. Bei einer Szene pro Abschnitt deckt das
+  // Abschnitts-Sample oben dasselbe ab.
+  for (const [pageId, scenes] of scenesByPageId) {
+    if (scenes.length < 2) continue;
+    const pageText = pageTextById.get(pageId) || '';
+    for (const s of scenes) {
+      if (!s.titel) continue;
+      const ex = sceneExcerpt(s, { figsByScene, figById, pageContents, maxChars });
+      if (!ex) continue;
+      const at = pageText.indexOf(ex.text);
+      const lead = at > 0 ? tailFromSentence(pageText.slice(0, at).trim(), 400) : '';
+      const meta = [];
+      const kapitel = s.kapitel || pageChapterById.get(pageId);
+      if (kapitel) meta.push((langIsEn ? 'Chapter: ' : 'Kapitel: ') + kapitel);
+      if (ex.figs.length) meta.push((langIsEn ? 'Characters: ' : 'Figuren: ') + ex.figs.map(f => f.name).join(', '));
+      if (s.kommentar) meta.push((langIsEn ? 'What happens: ' : 'Worum es geht: ') + s.kommentar.trim());
+      const instr = (langIsEn
+        ? `Write the scene «${s.titel}» in the author's style.\n`
+        : `Schreibe die Szene «${s.titel}» im Stil des Autors.\n`)
+        + meta.join('\n')
+        + (lead ? '\n\n' + (langIsEn ? 'What comes before:\n' : 'Davor:\n') + lead : '');
+      samples.push({
+        id: 'sceneWrite|' + s.id,
+        type: 'scene',
+        sourceKey: 'ch:' + (pageChById.get(pageId) ?? 0),
+        messages: [
+          { role: 'system', content: unifiedSys },
+          { role: 'user', content: instr },
+          { role: 'assistant', content: ex.text },
+        ],
+      });
+      counts.scene++;
+    }
   }
 
   // ── Alle Seiten als Meta→Text (unabhängig vom Scene-Mapping) ─────────

@@ -1,15 +1,29 @@
 'use strict';
 
-const { extractName } = require('../../lib/names');
-const { clipAtSentence } = require('../../lib/text');
+const { extractName, nameRegex } = require('../../lib/names');
+const { eventExcerpt } = require('./event-data');
+
+// Buchstelle einer Szene: das Fenster im Abschnitt, in dem ihre Figuren und
+// die Stichwörter aus Titel und Kurzfassung am dichtesten stehen (dieselbe
+// Suche wie für Ereignisse). Passt der Abschnitt ganz in `maxChars`, ist er
+// selbst die Stelle. null ohne Abschnitt oder Treffer.
+function sceneExcerpt(s, { figsByScene, figById, pageContents, maxChars }) {
+  if (!s.page_id) return null;
+  const figs = (figsByScene.get(s.id) || []).map(id => figById.get(id)).filter(Boolean)
+    .map(f => ({ name: f.name, names: [f.name, f.kurzname].filter(n => n && String(n).trim().length >= 2) }));
+  const pageById = new Map(pageContents.filter(p => p.id === s.page_id).map(p => [p.id, p]));
+  const found = eventExcerpt({ ereignis: [s.titel, s.kommentar].filter(Boolean).join(' '), figs, pageIds: [s.page_id] },
+    { pageById, maxChars });
+  return found ? { ...found, figs } : null;
+}
 
 // Block 5: Szenen-Q&A + POV-Prosa + Reverse-Lookup + Stimmungs-getrieben
 function buildSceneQASamples(ctx) {
   const {
     langIsEn, opts,
     sceneRows, figsByScene, locsByScene, figById, locById,
-    pageTextById, eventsBySceneId,
-    sceneQuestions, pushQA, pickVariants,
+    pageContents, eventsBySceneId,
+    sceneQuestions, pushQA, pickVariants, PARAPHRASES,
   } = ctx;
   const maxChars = opts.maxChars;
 
@@ -27,29 +41,30 @@ function buildSceneQASamples(ctx) {
     const evts = (eventsBySceneId.get(s.id) || []).map(e => e.ereignis);
     if (evts.length) parts.push(langIsEn ? `Events: ${evts.join('; ')}.` : `Ereignisse: ${evts.join('; ')}.`);
     const answer = parts.join(' ');
-    const idxs = pickVariants('scene|' + s.id, sceneQuestions, sceneQuestions.length);
+    const idxs = pickVariants('scene|' + s.id, sceneQuestions, PARAPHRASES);
     for (const idx of idxs) {
       const q = sceneQuestions[idx].replace('{titel}', s.titel);
-      pushQA('authorChat|scene|' + s.id + '|' + idx, q, answer);
+      pushQA('authorChat|scene|' + s.id + '|' + idx, q, answer, { unit: 'scene:' + s.id });
     }
   }
 
-  // ── POV-Generierung mit Szenentext ────────────────────────────────────
-  // Pro Szene mit Page-Mapping: „Erzähle Szene X aus Sicht von Figur Y" →
-  // Page-Volltext der Szene. Schichtet POV-Framing auf vorhandenen Text,
-  // damit das Modell Perspektivwechsel als Operation lernt.
+  // ── Erzählen aus Figurensicht ─────────────────────────────────────────
+  // Ziel ist die Originalpassage der Szene, nie eine Zusammenfassung. Nur
+  // Figuren der Szene, die in der Passage vorkommen, die zwei meistgenannten.
+  // Ohne Passage keine Aufgabe.
   for (const s of sceneRows) {
-    if (!s.titel || !s.page_id) continue;
-    const text = pageTextById.get(s.page_id);
-    if (!text || text.length < 200) continue;
-    const completion = clipAtSentence(text, maxChars);
-    const figIds = figsByScene.get(s.id) || [];
-    for (const fid of figIds.slice(0, 3)) {
-      const fname = extractName(fid, figById);
-      if (!fname) continue;
-      pushQA('authorChat|scenePov|' + s.id + '|' + fid,
-        langIsEn ? `Tell scene «${s.titel}» from ${fname}'s point of view.` : `Erzähle Szene «${s.titel}» aus ${fname}s Sicht.`,
-        completion);
+    if (!s.titel) continue;
+    const ex = sceneExcerpt(s, { figsByScene, figById, pageContents, maxChars });
+    if (!ex) continue;
+    const ranked = ex.figs
+      .map(f => ({ f, n: f.names.reduce((a, nm) => a + (ex.text.match(new RegExp(nameRegex(nm).source, 'giu')) || []).length, 0) }))
+      .filter(x => x.n > 0)
+      .sort((a, b) => b.n - a.n)
+      .slice(0, 2);
+    for (const { f } of ranked) {
+      pushQA('authorChat|scenePov|' + s.id + '|' + f.name,
+        langIsEn ? `Tell the scene «${s.titel}» from ${f.name}'s point of view.` : `Erzähle die Szene «${s.titel}» aus der Sicht von ${f.name}.`,
+        ex.text, { sourceKey: 'ch:' + (ex.page.chapter_id ?? 0), unit: 'scene:' + s.id });
     }
   }
 
@@ -82,7 +97,7 @@ function buildSceneQASamples(ctx) {
         pushQA('authorChat|sceneRevFigLoc|' + s.id + '|' + figIds[fi] + '|' + locIds[li],
           langIsEn
             ? `Which scene shows ${fname} at ${lname}?`
-            : `Welche Szene zeigt ${fname} an ${lname}?`,
+            : `Welche Szene zeigt ${fname} am Schauplatz «${lname}»?`,
           `«${s.titel}»${s.kapitel ? ' (' + s.kapitel + ')' : ''}`);
       }
     }
@@ -106,4 +121,4 @@ function buildSceneQASamples(ctx) {
   }
 }
 
-module.exports = { buildSceneQASamples };
+module.exports = { buildSceneQASamples, sceneExcerpt };

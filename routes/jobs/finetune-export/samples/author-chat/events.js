@@ -1,396 +1,197 @@
 'use strict';
 
-// Block 6-11: Zeitstrahl-Events + Tripel + Pair-Frames. Die Ereignisse kommen
-// angereichert aus ./event-data.js (Szenen, Schauplätze, Strang, Zeitspanne).
+// Block 6-11: Zeitstrahl-Events. Die Ereignisse kommen angereichert aus
+// ./event-data.js (Szenen, Schauplätze mit Bezug, Strang, Zeitspanne).
+//
+// Jede Frage hat eine eigene Antwort: keine Kreuzprodukte Figur × Ort ×
+// Ereignis, die alle mit derselben Ereigniskarte antworten, und keine
+// Facettenfrage, deren Antwort wieder die ganze Karte ist. Fragen zu einem
+// Ereignis tragen `unit: evt:<i>` und wandern im Train/Val-Split gemeinsam;
+// Sammellisten über mehrere Ereignisse bleiben ohne Einheit (nur Train).
+//
+// Orte stehen in den Fragen als «Schauplatz «X»» statt mit einer Präposition:
+// ob «in Basel», «im Kantonsspital» oder «an der Aare», weiss der Export nicht.
 function buildEventSamples(ctx) {
-  const { langIsEn, events, locRows, eventQuestions, pushQA, pickVariants } = ctx;
-  const enrichedEvents = events;
+  const { langIsEn, events, locRows, eventQuestions, pushQA, pickVariants, PARAPHRASES } = ctx;
+  const atLoc = (name) => (langIsEn ? `at ${name}` : `am Schauplatz «${name}»`);
 
-  // ── Zeitstrahl-Q&A ───────────────────────────────────────────────────
-  // Pro Ereignis die Vollantwort in mehreren Paraphrasen plus gezielte
-  // Sub-Fragen je Facette.
+  // ── Pro Ereignis ─────────────────────────────────────────────────────
   for (const e of events) {
     const { i, ereignis } = e;
-    for (const idx of pickVariants('evt|' + i, eventQuestions, eventQuestions.length)) {
+    const unit = 'evt:' + i;
+    for (const idx of pickVariants('evt|' + i, eventQuestions, PARAPHRASES)) {
       const q = eventQuestions[idx].replace('{ereignis}', ereignis);
-      pushQA('authorChat|evt|' + i + '|' + idx, q, e.fullAnswer);
+      pushQA('authorChat|evt|' + i + '|' + idx, q, e.fullAnswer, { unit });
     }
     if (e.figs.length) {
       pushQA('authorChat|evt-fig|' + i,
         langIsEn ? `Who is involved in «${ereignis}»?` : `Wer ist bei «${ereignis}» dabei?`,
-        e.figs.map(f => f.name).join(', '));
+        langIsEn ? `Involved in «${ereignis}»: ${e.figs.map(f => f.name).join(', ')}.`
+          : `Bei «${ereignis}» sind dabei: ${e.figs.map(f => f.name).join(', ')}.`,
+        { unit });
     }
     if (e.kapitel.length) {
       pushQA('authorChat|evt-ch|' + i,
         langIsEn ? `In which chapter does «${ereignis}» happen?` : `In welchem Kapitel passiert «${ereignis}»?`,
-        langIsEn ? `«${ereignis}» happens in chapter ${e.kapitel.join(', ')}.` : `«${ereignis}» passiert im Kapitel ${e.kapitel.join(', ')}.`);
+        langIsEn ? `«${ereignis}» happens in chapter ${e.kapitel.join(', ')}.` : `«${ereignis}» passiert im Kapitel ${e.kapitel.join(', ')}.`,
+        { unit });
     }
     if (e.datum) {
       pushQA('authorChat|evt-when|' + i,
         langIsEn ? `When does «${ereignis}» happen?` : `Wann passiert «${ereignis}»?`,
-        langIsEn ? `«${ereignis}» happens ${e.datum}.` : `«${ereignis}»: ${e.datum}.`);
+        langIsEn ? `«${ereignis}» happens ${e.datum}.` : `«${ereignis}»: ${e.datum}.`,
+        { unit });
     }
     if (e.bedeutung) {
       pushQA('authorChat|evt-sig|' + i,
         langIsEn ? `What's the significance of «${ereignis}»?` : `Welche Bedeutung hat «${ereignis}»?`,
-        e.bedeutung);
+        e.bedeutung, { unit });
     }
-    const art = [e.typ, e.subtypLabel].filter(Boolean).join(', ');
-    if (art) {
+    if (e.kindPhrase) {
       pushQA('authorChat|evt-typ|' + i,
-        langIsEn ? `What type of event is «${ereignis}»?` : `Was für eine Art Ereignis ist «${ereignis}»?`,
-        langIsEn ? `«${ereignis}» is an event of the type ${art}.` : `«${ereignis}» ist ein Ereignis der Art ${art}.`);
+        langIsEn ? `What kind of event is «${ereignis}»?` : `Was für ein Ereignis ist «${ereignis}»?`,
+        langIsEn ? `«${ereignis}» is ${e.kindPhrase}.` : `«${ereignis}» ist ${e.kindPhrase}.`,
+        { unit });
     }
-  }
-
-  // Pro-Event Q&A mit Orts-Bezug
-  for (const e of enrichedEvents) {
-    // Wo passiert das Ereignis?
     if (e.locs.length) {
-      const locList = e.locs.map(l => l.name).join(', ');
-      pushQA('authorChat|evt-loc|' + e.i,
-        langIsEn ? `Where does «${e.ereignis}» take place?` : `Wo findet «${e.ereignis}» statt?`,
-        locList);
-      pushQA('authorChat|evt-loc2|' + e.i,
-        langIsEn ? `At which locations does «${e.ereignis}» happen?` : `An welchen Schauplätzen spielt sich «${e.ereignis}» ab?`,
-        locList);
-      // Pro Einzel-Ort eine fokussierte Frage mit voller Antwort
-      for (let li = 0; li < Math.min(e.locs.length, 4); li++) {
-        const l = e.locs[li];
-        pushQA('authorChat|evt-locDetail|' + e.i + '|' + l.pk,
-          langIsEn ? `What happens at ${l.name} during «${e.ereignis}»?` : `Was passiert an ${l.name} bei «${e.ereignis}»?`,
-          e.fullAnswer);
-      }
-    }
-    // Pro Einzel-Figur fokussierte Frage mit voller Antwort
-    for (let fi = 0; fi < Math.min(e.figs.length, 6); fi++) {
-      const fg = e.figs[fi];
-      const fkey = fg.fig_id || fg.name.toLowerCase();
-      pushQA('authorChat|evt-figDetail|' + e.i + '|' + fkey,
-        langIsEn ? `What does ${fg.name} experience during «${e.ereignis}»?` : `Was erlebt ${fg.name} bei «${e.ereignis}»?`,
-        e.fullAnswer);
-      pushQA('authorChat|evt-figRole|' + e.i + '|' + fkey,
-        langIsEn ? `What is ${fg.name}'s role in «${e.ereignis}»?` : `Welche Rolle spielt ${fg.name} bei «${e.ereignis}»?`,
-        e.fullAnswer);
-    }
-    // Tripel: Figur × Ort × Event
-    if (e.figs.length && e.locs.length) {
-      for (let fi = 0; fi < Math.min(e.figs.length, 4); fi++) {
-        const fg = e.figs[fi];
-        const fkey = fg.fig_id || fg.name.toLowerCase();
-        for (let li = 0; li < Math.min(e.locs.length, 3); li++) {
-          const l = e.locs[li];
-          pushQA('authorChat|evt-figLoc|' + e.i + '|' + fkey + '|' + l.pk,
-            langIsEn
-              ? `What does ${fg.name} do at ${l.name} during «${e.ereignis}»?`
-              : `Was macht ${fg.name} an ${l.name} während «${e.ereignis}»?`,
-            e.fullAnswer);
-          pushQA('authorChat|evt-figLoc2|' + e.i + '|' + fkey + '|' + l.pk,
-            langIsEn
-              ? `Why is ${fg.name} at ${l.name} in «${e.ereignis}»?`
-              : `Warum ist ${fg.name} an ${l.name} bei «${e.ereignis}»?`,
-            e.bedeutung || e.fullAnswer);
-        }
-      }
+      const names = e.locs.map(l => l.name).join(', ');
+      pushQA('authorChat|evt-loc|' + i,
+        langIsEn ? `Where does «${ereignis}» take place?` : `Wo spielt «${ereignis}»?`,
+        langIsEn ? `«${ereignis}» is set at: ${names}.` : `Schauplatz von «${ereignis}»: ${names}.`,
+        { unit });
     }
   }
 
-  // ── Inverse Aggregate: Events pro Ort / pro Figur / pro Figur×Ort ───
-  const evtsByLocPk = new Map();
-  const evtsByFigKey = new Map(); // fig_id || lowercased-name → [events]
-  const evtsByFigLoc = new Map(); // fig_id+'|'+locPk → [events]
-  for (const e of enrichedEvents) {
-    for (const l of e.locs) {
-      if (!evtsByLocPk.has(l.pk)) evtsByLocPk.set(l.pk, []);
-      evtsByLocPk.get(l.pk).push(e);
-    }
-    for (const fg of e.figs) {
-      const fkey = fg.fig_id || fg.name.toLowerCase();
-      if (!evtsByFigKey.has(fkey)) evtsByFigKey.set(fkey, { name: fg.name, fig_id: fg.fig_id, items: [] });
-      evtsByFigKey.get(fkey).items.push(e);
-      for (const l of e.locs) {
-        const k = fkey + '|' + l.pk;
-        if (!evtsByFigLoc.has(k)) evtsByFigLoc.set(k, { fig: fg, loc: l, items: [] });
-        evtsByFigLoc.get(k).items.push(e);
-      }
-    }
-  }
+  // ── Sammellisten: Ereignisse pro Ort / Figur / Kapitel ───────────────
   const renderEvtList = (items, max = 8) => items.slice(0, max)
     .map(e => `${e.datum ? e.datum + ': ' : ''}${e.ereignis}${e.bedeutung ? ' (' + e.bedeutung + ')' : ''}`)
     .join(' · ');
-  // Pro Ort: alle dort spielenden Events
-  for (const [locPk, items] of evtsByLocPk) {
-    if (!items.length) continue;
+  const groupBy = (keyFn) => {
+    const m = new Map();
+    for (const e of events) {
+      for (const [key, label] of keyFn(e)) {
+        if (!m.has(key)) m.set(key, { label, items: [] });
+        m.get(key).items.push(e);
+      }
+    }
+    return m;
+  };
+  const figKey = (fg) => fg.fig_id || fg.name.toLowerCase();
+
+  for (const [locPk, g] of groupBy(e => e.locs.map(l => [l.pk, l.name]))) {
     const loc = locRows.find(l => l.pk === locPk);
     if (!loc) continue;
-    const list = renderEvtList(items, 10);
     pushQA('authorChat|evtsByLoc|' + loc.loc_id,
-      langIsEn ? `Which events take place at ${loc.name}?` : `Welche Ereignisse spielen an ${loc.name}?`,
-      list);
-    pushQA('authorChat|evtsByLoc2|' + loc.loc_id,
-      langIsEn ? `What happens at ${loc.name} over the course of the book?` : `Was geschieht an ${loc.name} im Verlauf des Buches?`,
-      list);
-    // Erst-Ereignis
-    if (items[0]) {
-      pushQA('authorChat|evtsByLocFirst|' + loc.loc_id,
-        langIsEn ? `What's the first event at ${loc.name}?` : `Welches Ereignis spielt zuerst an ${loc.name}?`,
-        items[0].fullAnswer);
-    }
+      langIsEn ? `Which events take place ${atLoc(loc.name)}?` : `Welche Ereignisse spielen ${atLoc(loc.name)}?`,
+      renderEvtList(g.items, 10));
   }
-  // Pro Figur: alle Zeitstrahl-Events, an denen sie beteiligt ist
-  for (const [fkey, group] of evtsByFigKey) {
-    if (!group.items.length) continue;
-    const list = renderEvtList(group.items, 10);
+  for (const [fkey, g] of groupBy(e => e.figs.map(fg => [figKey(fg), fg.name]))) {
     pushQA('authorChat|evtsByFig|' + fkey,
-      langIsEn ? `Which events involve ${group.name}?` : `An welchen Ereignissen ist ${group.name} beteiligt?`,
-      list);
-    pushQA('authorChat|evtsByFig2|' + fkey,
-      langIsEn ? `What does ${group.name} experience throughout the book?` : `Was erlebt ${group.name} im Verlauf des Buches?`,
-      list);
-    if (group.items.length >= 2) {
-      pushQA('authorChat|evtsByFigArc|' + fkey,
-        langIsEn ? `Trace ${group.name}'s arc through the events.` : `Zeichne ${group.name}s Bogen anhand der Ereignisse nach.`,
-        list);
-    }
+      langIsEn ? `Which events involve ${g.label}?` : `An welchen Ereignissen ist ${g.label} beteiligt?`,
+      renderEvtList(g.items, 10));
   }
-  // Schnittmenge Figur × Ort
-  for (const [, group] of evtsByFigLoc) {
-    if (group.items.length < 1) continue;
-    const list = renderEvtList(group.items, 6);
-    const fname = group.fig.name;
-    const lname = group.loc.name;
-    pushQA('authorChat|evtsByFigLoc|' + (group.fig.fig_id || fname.toLowerCase()) + '|' + group.loc.pk,
-      langIsEn ? `Which events involve ${fname} at ${lname}?` : `Welche Ereignisse erlebt ${fname} an ${lname}?`,
-      list);
-  }
-  // Pro Kapitel: alle Events (kapitelübergreifender Zugriff)
-  const evtsByChapter = new Map();
-  for (const e of enrichedEvents) {
-    for (const ch of e.kapitel) {
-      const key = ch.toLowerCase();
-      if (!evtsByChapter.has(key)) evtsByChapter.set(key, { name: ch, items: [] });
-      evtsByChapter.get(key).items.push(e);
-    }
-  }
-  for (const [key, group] of evtsByChapter) {
-    if (!group.items.length) continue;
-    const list = renderEvtList(group.items, 10);
+  for (const [key, g] of groupBy(e => e.kapitel.map(ch => [ch.toLowerCase(), ch]))) {
     pushQA('authorChat|evtsByCh|' + key.replace(/\s+/g, '_').slice(0, 80),
-      langIsEn ? `Which events take place in «${group.name}»?` : `Welche Ereignisse passieren in «${group.name}»?`,
-      list);
+      langIsEn ? `Which events take place in «${g.label}»?` : `Welche Ereignisse passieren in «${g.label}»?`,
+      renderEvtList(g.items, 10));
   }
 
-  // ── Globale (externe) Ereignisse — gezielt boosten ───────────────────
-  // typ='extern' = gesellschaftlich/historisch (Kriege, Krisen, Sport,
-  // Naturkatastrophen). Eigene Aggregate + zusätzliche Q&A pro externes
-  // Event, damit das Modell den historischen Hintergrund prominent lernt.
-  const externEvents = enrichedEvents.filter(e => (e.typ || '').toLowerCase() === 'extern');
-  const persoenlichEvents = enrichedEvents.filter(e => (e.typ || '').toLowerCase() === 'persoenlich' || !e.typ);
+  // ── Weltgeschehen und persönliche Wendepunkte ────────────────────────
+  const isExtern = (e) => (e.typ || '').toLowerCase() === 'extern';
+  const externEvents = events.filter(isExtern);
   if (externEvents.length) {
-    const list = externEvents.slice(0, 15)
-      .map(e => `${e.datum ? e.datum + ': ' : ''}${e.ereignis}`)
-      .join(' · ');
     pushQA('authorChat|evtsExternAll',
       langIsEn ? `Which historical or global events appear in the book?` : `Welche historischen oder globalen Ereignisse spielen im Buch eine Rolle?`,
-      list);
-    pushQA('authorChat|evtsExternAll2',
-      langIsEn ? `What's the historical backdrop of the book?` : `Welcher historische Hintergrund prägt das Buch?`,
-      list);
-    pushQA('authorChat|evtsExternAll3',
-      langIsEn ? `List the external events that shape the story.` : `Liste die externen Ereignisse, die die Geschichte prägen.`,
-      list);
-    // Pro externes Event extra Frames + Figur-Auswirkung
-    for (const e of externEvents) {
-      pushQA('authorChat|evtExtCtx|' + e.i,
-        langIsEn ? `What is the historical context of «${e.ereignis}»?` : `Welcher historische Kontext steckt hinter «${e.ereignis}»?`,
-        e.fullAnswer);
-      pushQA('authorChat|evtExtSoc|' + e.i,
-        langIsEn ? `How does «${e.ereignis}» shape the world of the book?` : `Wie prägt «${e.ereignis}» die Welt des Buches?`,
-        e.bedeutung || e.fullAnswer);
-      for (const fg of e.figs.slice(0, 6)) {
-        const fkey = fg.fig_id || fg.name.toLowerCase();
-        pushQA('authorChat|evtExtFig|' + e.i + '|' + fkey,
-          langIsEn ? `How does «${e.ereignis}» affect ${fg.name}?` : `Wie betrifft «${e.ereignis}» ${fg.name}?`,
-          e.fullAnswer);
-        pushQA('authorChat|evtExtFigLife|' + e.i + '|' + fkey,
-          langIsEn ? `What does ${fg.name} live through during «${e.ereignis}»?` : `Was erlebt ${fg.name} während «${e.ereignis}»?`,
-          e.fullAnswer);
-      }
-    }
-    // Pro Figur Trennung extern/persönlich für Sortier-Recall
-    const externByFig = new Map();
-    for (const e of externEvents) {
-      for (const fg of e.figs) {
-        const fkey = fg.fig_id || fg.name.toLowerCase();
-        if (!externByFig.has(fkey)) externByFig.set(fkey, { name: fg.name, items: [] });
-        externByFig.get(fkey).items.push(e);
-      }
-    }
-    for (const [fkey, group] of externByFig) {
-      const list2 = renderEvtList(group.items, 8);
+      externEvents.slice(0, 15).map(e => `${e.datum ? e.datum + ': ' : ''}${e.ereignis}`).join(' · '));
+    for (const [fkey, g] of groupBy(e => (isExtern(e) ? e.figs.map(fg => [figKey(fg), fg.name]) : []))) {
       pushQA('authorChat|evtsExtByFig|' + fkey,
-        langIsEn ? `Which historical events touch ${group.name}'s life?` : `Welche historischen Ereignisse berühren ${group.name}s Leben?`,
-        list2);
+        langIsEn ? `Which historical events touch ${g.label}'s life?` : `Welche historischen Ereignisse berühren ${g.label}s Leben?`,
+        renderEvtList(g.items, 8));
     }
   }
-  // ── Kausalketten via sort_order-Nachbarn ─────────────────────────────
-  // sort_order in zeitstrahl_events spiegelt narrativ-chronologische Folge.
-  // Pro Event: was führt dahin (Vorgänger), was folgt (Nachfolger). Lehrt
-  // narrative Logik statt isolierter Fakten.
-  for (let i = 0; i < enrichedEvents.length; i++) {
-    const e = enrichedEvents[i];
-    if (i > 0) {
-      const prev = enrichedEvents[i - 1];
-      pushQA('authorChat|evtCausePrev|' + e.i,
-        langIsEn ? `What leads up to «${e.ereignis}»?` : `Was führt zu «${e.ereignis}»?`,
-        prev.fullAnswer);
+  // Nur, wenn die Figur auch Weltgeschehen erlebt — sonst wäre die Liste
+  // dieselbe wie «An welchen Ereignissen ist X beteiligt?».
+  const externFigs = new Set(externEvents.flatMap(e => e.figs.map(figKey)));
+  for (const [fkey, g] of groupBy(e => (!isExtern(e) ? e.figs.map(fg => [figKey(fg), fg.name]) : []))) {
+    if (!externFigs.has(fkey)) continue;
+    pushQA('authorChat|evtsPersByFig|' + fkey,
+      langIsEn ? `What are ${g.label}'s personal turning points?` : `Was sind ${g.label}s persönliche Wendepunkte?`,
+      renderEvtList(g.items, 8));
+  }
+
+  // ── Abfolge: was davor, was danach ───────────────────────────────────
+  // sort_order spiegelt die erzählte Reihenfolge. Die Antwort nennt das
+  // Nachbar-Ereignis, nicht dessen ganze Karte.
+  const brief = (x) => x.ereignis + (x.bedeutung ? ' — ' + x.bedeutung : '');
+  for (let k = 0; k < events.length; k++) {
+    const e = events[k];
+    const unit = 'evt:' + e.i;
+    if (k > 0) {
       pushQA('authorChat|evtCausePrev2|' + e.i,
         langIsEn ? `What happens just before «${e.ereignis}»?` : `Was geschieht unmittelbar vor «${e.ereignis}»?`,
-        prev.ereignis + (prev.bedeutung ? ' — ' + prev.bedeutung : ''));
+        brief(events[k - 1]), { unit });
     }
-    if (i + 1 < enrichedEvents.length) {
-      const next = enrichedEvents[i + 1];
-      pushQA('authorChat|evtCauseNext|' + e.i,
-        langIsEn ? `What follows from «${e.ereignis}»?` : `Was folgt aus «${e.ereignis}»?`,
-        next.fullAnswer);
+    if (k + 1 < events.length) {
       pushQA('authorChat|evtCauseNext2|' + e.i,
         langIsEn ? `What happens right after «${e.ereignis}»?` : `Was geschieht direkt nach «${e.ereignis}»?`,
-        next.ereignis + (next.bedeutung ? ' — ' + next.bedeutung : ''));
+        brief(events[k + 1]), { unit });
     }
-    // 2-Schritt-Kette
-    if (i + 2 < enrichedEvents.length) {
-      const a = enrichedEvents[i + 1];
-      const b = enrichedEvents[i + 2];
+    if (k + 2 < events.length) {
       pushQA('authorChat|evtChain|' + e.i,
         langIsEn ? `Trace the chain of events starting from «${e.ereignis}».` : `Zeichne die Ereigniskette ab «${e.ereignis}» nach.`,
-        [e, a, b].map(x => `${x.datum ? x.datum + ': ' : ''}${x.ereignis}`).join(' → '));
+        [e, events[k + 1], events[k + 2]].map(x => `${x.datum ? x.datum + ': ' : ''}${x.ereignis}`).join(' → '),
+        { unit });
     }
   }
-
-  // ── Chronologie-Aggregate ────────────────────────────────────────────
-  if (enrichedEvents.length >= 2) {
-    const chrono = enrichedEvents.slice(0, 30)
-      .map((e, idx) => `${idx + 1}. ${e.datum ? e.datum + ': ' : ''}${e.ereignis}`)
-      .join('\n');
+  if (events.length >= 2) {
     pushQA('authorChat|evtChrono',
       langIsEn ? `List the events of the book in chronological order.` : `Liste die Ereignisse des Buches in chronologischer Reihenfolge.`,
-      chrono);
-    pushQA('authorChat|evtChrono2',
-      langIsEn ? `What's the timeline of the book?` : `Wie sieht der Zeitstrahl des Buches aus?`,
-      chrono);
+      events.slice(0, 30).map((e, idx) => `${idx + 1}. ${e.datum ? e.datum + ': ' : ''}${e.ereignis}`).join('\n'));
   }
 
-  if (persoenlichEvents.length) {
-    const personByFig = new Map();
-    for (const e of persoenlichEvents) {
-      for (const fg of e.figs) {
-        const fkey = fg.fig_id || fg.name.toLowerCase();
-        if (!personByFig.has(fkey)) personByFig.set(fkey, { name: fg.name, items: [] });
-        personByFig.get(fkey).items.push(e);
-      }
-    }
-    for (const [fkey, group] of personByFig) {
-      if (group.items.length < 1) continue;
-      const list2 = renderEvtList(group.items, 8);
-      pushQA('authorChat|evtsPersByFig|' + fkey,
-        langIsEn ? `What are ${group.name}'s personal turning points?` : `Was sind ${group.name}s persönliche Wendepunkte?`,
-        list2);
-    }
-  }
-
-  // ── Figuren-Paar-Events (Wann/Wo/Was zwischen A und B) ───────────────
-  // Pro Event mit ≥2 Figuren werden alle ungeordneten Figuren-Paare
-  // permutiert (A→B). Dadurch bekommt das Modell pro (A,B,Event) drei
-  // bis vier zeitlich-örtliche Q&A-Frames. Bei semantisch erkennbaren
-  // ereignis-Texten (Kuss/Hochzeit/Streit/…) entsteht zusätzlich eine
-  // natürliche Verbalisierung.
+  // ── Figurenpaar: wann und wo ──────────────────────────────────────────
+  // Nur für die ersten beiden Beteiligten und nur mit Datum oder einem Ort mit
+  // Bezug. Mehr Paare wiederholten dieselbe Wann/Wo-Antwort. Bei erkennbaren
+  // Ereignissen (Kuss/Hochzeit/Streit/…) zusätzlich die natürliche Frage.
   const verbalize = (ereignis) => {
     const t = (ereignis || '').toLowerCase();
     if (langIsEn) {
-      if (/\bkiss/.test(t))                     return { de: null, en: 'kiss for the first time' };
-      if (/\b(meet|first met|first encounter)/.test(t)) return { de: null, en: 'first meet' };
-      if (/\b(wedding|marri|got married)/.test(t)) return { de: null, en: 'get married' };
-      if (/\b(fight|argu|quarrel)/.test(t))      return { de: null, en: 'have a fight' };
-      if (/\b(break.?up|separat|split)/.test(t)) return { de: null, en: 'break up' };
-      if (/\b(reuni|reunion)/.test(t))           return { de: null, en: 'reunite' };
+      if (/\bkiss/.test(t)) return 'kiss for the first time';
+      if (/\b(meet|first met|first encounter)/.test(t)) return 'first meet';
+      if (/\b(wedding|marri|got married)/.test(t)) return 'get married';
+      if (/\b(fight|argu|quarrel)/.test(t)) return 'have a fight';
+      if (/\b(break.?up|separat|split)/.test(t)) return 'break up';
+      if (/\b(reuni|reunion)/.test(t)) return 'reunite';
       return null;
     }
-    if (/\b(kuss|geküsst|küssen)/.test(t))          return { de: 'sich das erste Mal geküsst', en: null };
-    if (/\b(kennengelernt|kennenlern)/.test(t))     return { de: 'sich kennengelernt', en: null };
-    if (/\b(hochzeit|geheiratet|heirat)/.test(t))   return { de: 'geheiratet', en: null };
-    if (/\b(streit|gestritten)/.test(t))            return { de: 'Streit gehabt', en: null };
-    if (/\b(trennung|getrennt|trennen)/.test(t))    return { de: 'sich getrennt', en: null };
-    if (/\b(versöhn|wiedersehen|wiedergesehen)/.test(t)) return { de: 'sich wiedergesehen', en: null };
-    if (/\b(geboren|geburt)/.test(t))               return { de: 'sich geboren', en: null };
+    if (/\b(kuss|geküsst|küssen)/.test(t)) return 'sich das erste Mal geküsst';
+    if (/\b(kennengelernt|kennenlern)/.test(t)) return 'sich kennengelernt';
+    if (/\b(hochzeit|geheiratet|heirat)/.test(t)) return 'geheiratet';
+    if (/\b(streit|gestritten)/.test(t)) return 'Streit gehabt';
+    if (/\b(trennung|getrennt|trennen)/.test(t)) return 'sich getrennt';
+    if (/\b(versöhn|wiedersehen|wiedergesehen)/.test(t)) return 'sich wiedergesehen';
     return null;
   };
-  const fmtWhenWhere = (datum, ortName, bedeutung) => {
-    const parts = [];
-    if (datum)                  parts.push(langIsEn ? `When: ${datum}.` : `Zeitpunkt: ${datum}.`);
-    if (ortName)                parts.push(langIsEn ? `Where: ${ortName}.` : `Ort: ${ortName}.`);
-    if (bedeutung)              parts.push(bedeutung);
-    return parts.join(' ');
-  };
-  for (const e of enrichedEvents) {
+  for (const e of events) {
     if (e.figs.length < 2) continue;
-    const primaryLoc = e.locs[0]?.name || '';
-    const dat = e.datum || '';
-    const bed = e.bedeutung || '';
+    const loc = e.locs[0]?.name || '';
+    if (!e.datum && !loc) continue;
+    const [A, B] = e.figs;
+    const unit = 'evt:' + e.i;
+    const parts = [];
+    if (e.datum) parts.push(langIsEn ? `When: ${e.datum}.` : `Wann: ${e.datum}.`);
+    if (loc) parts.push(langIsEn ? `Where: ${loc}.` : `Wo: ${loc}.`);
+    const answer = `${e.ereignis}. ${parts.join(' ')}`;
+    const pairKey = e.i + '|' + (A.fig_id || A.name) + '|' + (B.fig_id || B.name);
+    pushQA('authorChat|evtPairWhen|' + pairKey,
+      langIsEn ? `When and where do ${A.name} and ${B.name} meet in «${e.ereignis}»?`
+        : `Wann und wo treffen ${A.name} und ${B.name} bei «${e.ereignis}» aufeinander?`,
+      answer, { unit });
     const verb = verbalize(e.ereignis);
-    // Geordnete Paare A→B (beide Richtungen, damit Modell Reihenfolge-invariant lernt)
-    for (let ai = 0; ai < e.figs.length; ai++) {
-      for (let bi = 0; bi < e.figs.length; bi++) {
-        if (ai === bi) continue;
-        if (ai >= 4 || bi >= 4) continue; // cap
-        const A = e.figs[ai];
-        const B = e.figs[bi];
-        const akey = A.fig_id || A.name.toLowerCase();
-        const bkey = B.fig_id || B.name.toLowerCase();
-        const pairKey = e.i + '|' + akey + '|' + bkey;
-        const whenWhere = fmtWhenWhere(dat, primaryLoc, bed);
-        // Generische Wann-Frage
-        if (dat || primaryLoc) {
-          pushQA('authorChat|evtPairWhen|' + pairKey,
-            langIsEn
-              ? `When does «${e.ereignis}» happen between ${A.name} and ${B.name}?`
-              : `Wann passiert «${e.ereignis}» zwischen ${A.name} und ${B.name}?`,
-            whenWhere || e.fullAnswer);
-        }
-        // Generische Wo-Frage
-        if (primaryLoc) {
-          pushQA('authorChat|evtPairWhere|' + pairKey,
-            langIsEn
-              ? `Where does «${e.ereignis}» happen between ${A.name} and ${B.name}?`
-              : `Wo passiert «${e.ereignis}» zwischen ${A.name} und ${B.name}?`,
-            fmtWhenWhere(dat, primaryLoc, bed) || primaryLoc);
-        }
-        // Was-Frage mit voller Antwort
-        pushQA('authorChat|evtPairWhat|' + pairKey,
-          langIsEn
-            ? `What happens between ${A.name} and ${B.name} during «${e.ereignis}»?`
-            : `Was passiert zwischen ${A.name} und ${B.name} bei «${e.ereignis}»?`,
-          e.fullAnswer);
-        // Verbalisierte Variante (Kuss/Hochzeit/etc.)
-        if (verb) {
-          const phrase = langIsEn ? verb.en : verb.de;
-          if (phrase) {
-            if (dat || primaryLoc) {
-              pushQA('authorChat|evtPairVerbWhen|' + pairKey,
-                langIsEn
-                  ? `When do ${A.name} and ${B.name} ${phrase}?`
-                  : `Wann haben ${A.name} und ${B.name} ${phrase}?`,
-                whenWhere || e.fullAnswer);
-            }
-            if (primaryLoc) {
-              pushQA('authorChat|evtPairVerbWhere|' + pairKey,
-                langIsEn
-                  ? `Where do ${A.name} and ${B.name} ${phrase}?`
-                  : `Wo haben ${A.name} und ${B.name} ${phrase}?`,
-                fmtWhenWhere(dat, primaryLoc, bed) || primaryLoc);
-            }
-          }
-        }
-      }
+    if (verb) {
+      pushQA('authorChat|evtPairVerbWhen|' + pairKey,
+        langIsEn ? `When and where do ${A.name} and ${B.name} ${verb}?` : `Wann und wo haben ${A.name} und ${B.name} ${verb}?`,
+        answer, { unit });
     }
   }
 }

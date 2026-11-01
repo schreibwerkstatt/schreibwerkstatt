@@ -7,7 +7,7 @@ const { db } = require('../../../../../db/schema');
 // (Interpret, Genre, Stimmung, Kontext, Beschreibung, Kapitel, Figuren)
 // plus facettierte Q&A + Reverse-Lookup Figur → Songs + globaler Soundtrack.
 function buildSongSamples(ctx) {
-  const { langIsEn, bookIdInt, userEmail, pushQA, pickVariants } = ctx;
+  const { langIsEn, bookIdInt, userEmail, pushQA, pickVariants, PARAPHRASES } = ctx;
 
   const songRows = db.prepare(`
     SELECT id, titel, interpret, genre, kontext_typ, beschreibung, stimmung, erste_erwaehnung
@@ -77,7 +77,7 @@ function buildSongSamples(ctx) {
     const fullAnswer = parts.join(' ');
 
     // Haupt-Q&A mit allen Paraphrasen
-    const idxs = pickVariants('song|' + s.id, songQuestions, songQuestions.length);
+    const idxs = pickVariants('song|' + s.id, songQuestions, PARAPHRASES);
     for (const idx of idxs) {
       const q = songQuestions[idx].replace('{titel}', titel);
       pushQA('authorChat|song|' + s.id + '|' + idx, q, fullAnswer);

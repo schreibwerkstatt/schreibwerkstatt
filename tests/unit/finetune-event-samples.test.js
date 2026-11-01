@@ -32,7 +32,7 @@ test('eventExcerpt: Fenster um die beteiligte Figur, auch ohne Absatzumbrüche',
 
 function collect() {
   const out = [];
-  const scene = { id: 11, titel: 'Mittagessen', seite: 'Viertes Kapitel', kommentar: 'Die Familie isst.' };
+  const scene = { id: 11, titel: 'Mittagessen', seite: 'Viertes Kapitel', kommentar: 'Die Familie isst schweigend zu Mittag.' };
   const e = {
     i: 0, ereignis: 'Einquartierung', datum: 'November 1806', end: '', storyDay: 32,
     subtyp: 'tod', subtypLabel: 'Tod', storyline: 'Franzosenzeit', bedeutung: '',
@@ -43,7 +43,7 @@ function collect() {
   };
   buildEventLinkSamples({
     langIsEn: false, events: [e], eventsBySceneId: new Map([[11, [e]]]),
-    sceneRows: [scene], pushQA: (id, q, a, src) => out.push({ id, q, a, src }),
+    sceneRows: [scene], pushQA: (id, q, a, o) => out.push({ id, q, a, src: o?.sourceKey, unit: o?.unit }),
   });
   return out;
 }
@@ -52,7 +52,14 @@ test('Ereignis-Verknüpfungen: Buchstelle mit sourceKey, Szene, Strang, Tag, Tod
   const out = collect();
   const kind = (k) => out.filter(s => s.id.split('|')[1] === k);
   assert.equal(kind('evtText')[0].src, 'ch:3');
-  assert.equal(kind('evtTextFig').length, 1);
+  assert.equal(kind('evtText')[0].unit, 'evt:0');
+  // Erzählen aus Figurensicht: Ziel ist die Buchstelle, nie die Karte.
+  const pov = kind('evtTextFig');
+  assert.equal(pov.length, 1);
+  assert.match(pov[0].q, /Erzähle «Einquartierung» aus der Sicht von Prahl/);
+  assert.ok(pov[0].a.startsWith('Prahl fiel im Getümmel.'));
+  assert.ok(!/Zeitpunkt:/.test(pov[0].a));
+  assert.equal(kind('evtSceneDetail')[0].a, 'Die Familie isst schweigend zu Mittag.', 'Kurzfassung ohne angehängte Karte');
   assert.match(kind('evtScene')[0].a, /Mittagessen/);
   assert.match(kind('sceneEvts')[0].a, /Einquartierung/);
   assert.match(kind('evtSl')[0].a, /Franzosenzeit/);

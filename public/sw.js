@@ -1,48 +1,15 @@
 // Service Worker: hält die SPA-Shell und Buch-Inhalte offline verfügbar (Zug-Szenario).
-// Strategie:
-//  - Navigate (/, /index.html): Cache-Only innerhalb der Generation, Netz nur
-//    ohne verifizierten Shell-Eintrag. Verifiziert heisst: die Antwort trägt den
-//    Marker `X-App-Shell` (server.js) — `GET /` liefert anonym die Landing-Seite
-//    unter derselben URL, ebenfalls mit 200, und die darf nie als Shell gelten.
-//    Der Shell-HTML gehört zum kohärenz-kritischen Satz (s.u.)
-//    und wird beim Install mitgecacht. Bewusst KEIN Stale-While-Revalidate —
-//    eine Revalidierung schriebe nach einem Deploy das HTML der neuen Generation
-//    in den Cache des noch aktiven alten SW und erzeugte damit „neues Markup
-//    gegen alte JS-Module".
-//    Deploy-Update fliesst über `skip-waiting` + controllerchange-Reload.
-//  - Kohärenz-kritische Shell-Assets (App-JS + Partials + App-CSS + i18n +
-//    Icon-Sprite): Liste + Content-Hash kommen aus dem generierten
-//    /sw-manifest.js (importScripts). Der Install-Handler precacht diesen Satz
-//    ATOMAR (precacheWithRetry, all-or-nothing). Damit hat jede SW-Generation ihren vollständigen,
-//    kohärenten Asset-Satz ab Installationszeitpunkt — ein lazy-gefetchtes
-//    Partial oder dynamisch importiertes Modul zieht NIE eine neuere Fassung
-//    vom Netz in eine laufende alte Generation (Skew → ReferenceError auf
-//    neuen Card-Feldern). Auslieferung: Cache-Only. Ein Miss (iOS evictiert
-//    Einzeleinträge) holt bewusst KEINE evtl. neuere Einzeldatei nach, sondern
-//    meldet den Clients 'shell-incoherent' → sauberer Reload in eine
-//    kohärente Generation; die Netzkopie wird nur als Notnagel ungecacht
-//    durchgereicht. Fehlt dagegen die ganze Generation (GENERATION_COMPLETE_PATH),
-//    geht die Seite komplett ans Netz und der SW füllt nach (repairGeneration).
-//  - Nicht-kritische Shell-Assets (vendor/*, fonts/*): self-contained,
-//    versionsstabil → eigener VENDOR_CACHE (NICHT an SHELL_BUILD gekoppelt),
-//    Cache-First mit Netz-Fallback. Da der Cache-Name generationsunabhängig ist,
-//    überleben diese ~2.8 MB jeden Deploy, statt bei jedem Generationswechsel
-//    neu vom Netz gezogen zu werden (kein Skew auf App-Feldern möglich).
-//  - SHELL_CACHE-Name leitet sich aus dem Content-Hash (__SHELL_BUILD) ab:
-//    jede Asset-Änderung erzeugt automatisch eine neue Generation — kein
-//    manueller Versions-Bump mehr. Regeneriert via `npm run sw:manifest`
-//    (läuft auf prestart), Drift gegated durch sw-manifest-drift.test.mjs.
-//  - Content-GETs (/content/*): Stale-While-Revalidate im CONTENT_CACHE → Navigation + Seiteninhalt offline.
-//    Zwei Ausnahmen, begründet an CONTENT_LIVE_REGEX/CONTENT_VOLATILE_REGEX: Poll-Endpunkte
-//    (/changes, /presence) werden nie gecacht, wachsende Logs (Revisionsliste) und die Suche
-//    laufen Netz-zuerst mit Cache als Offline-Rückfall.
-//    MIT NACHZUG: weicht die Revalidierung vom ausgelieferten Cache-Stand ab,
-//    meldet der SW das als 'content-updated' an seine Tabs (notifyContentUpdated).
-//    Ohne diese Meldung ist SWR aus Sicht der UI reines „stale" — die Netzantwort
-//    fuellt nur den Cache, nicht die schon gerenderte Sidebar, und der Baum wird
-//    erst beim ZWEITEN Reload aktuell.
-//  - Schreibende Requests (PUT/POST/DELETE): nie behandelt (method-Check am Anfang)
-//  - Auth/KI/Job-Queue/SSE: Network-Only, nie cachen
+// Strategie je Request-Klasse (Begründung jeweils am Handler, Überblick docs/caching.md):
+//  - Navigate (/, /index.html) und kohärenz-kritische Shell-Assets (App-JS,
+//    Partials, App-CSS, i18n, Icon-Sprite): Cache-Only aus der Generation, die
+//    der Install ATOMAR precacht hat (handleNavigate, handleShellAsset). Der
+//    Cache-Name folgt dem Content-Hash __SHELL_BUILD aus /sw-manifest.js — jede
+//    Asset-Änderung ist eine neue Generation, Wechsel nur per `skip-waiting`.
+//  - vendor/*, fonts/*: versionsstabil, generationsunabhängiger VENDOR_CACHE.
+//  - /content/*: Stale-While-Revalidate mit Nachzug-Meldung an die Tabs;
+//    Poll-Endpunkte nie, Logs/Suche Netz-zuerst (CONTENT_LIVE/VOLATILE_REGEX).
+//    Abschnitts-Bilder eigener Cache (sw-offline.js#respondImage).
+//  - Werkstatt-Daten Netz-zuerst (sw-domain.js), Schreiben/Auth/KI/SSE nie.
 
 // Build-Konstanten (self.__SHELL_BUILD/__SHELL_MANIFEST), „Buch offline halten"
 // (sw-offline.js), Entwürfe per Background Sync (sw-drafts.js), Werkstatt-Daten
@@ -63,7 +30,7 @@ const CONFIG_CACHE = 'schreibwerkstatt-config-v2';
 // Versionsstabile Assets (vendor/*, fonts/*) leben generationsunabhängig hier,
 // damit sie nicht bei jedem Deploy mit dem SHELL_CACHE weggeworfen werden.
 const VENDOR_CACHE = 'schreibwerkstatt-vendor-v1';
-const ACTIVE_CACHES = new Set([SHELL_CACHE, CONTENT_CACHE, CONFIG_CACHE, VENDOR_CACHE, OFFLINE?.CACHE, DOMAIN?.CACHE]);
+const ACTIVE_CACHES = new Set([SHELL_CACHE, CONTENT_CACHE, CONFIG_CACHE, VENDOR_CACHE, OFFLINE?.CACHE, OFFLINE?.IMAGE_CACHE, DOMAIN?.CACHE]);
 const SHELL_PATH = '/index.html';
 const CONFIG_PATH = '/config';
 
@@ -135,27 +102,21 @@ async function isCachedShell(res) {
   catch { return false; }
 }
 
-// Precache mit begrenzter Parallelität und Retry PRO ASSET, all-or-nothing:
-// erst wenn ALLE Antworten da und ok sind, wird geschrieben (kein halb
-// gefüllter Cache). Bleibt ein Asset nach PRECACHE_ATTEMPTS beim Fehler,
-// bricht der Rest ab und der Install scheitert sauber; der alte SW bedient
-// seinen eigenen, kohärenten Satz unverändert weiter.
+// Precache mit begrenzter Parallelität und Retry PRO ASSET (samt Body: ein Abbruch
+// darin scheiterte sonst erst ohne Retry in cache.put), all-or-nothing: erst wenn
+// ALLE Antworten da und ok sind, wird geschrieben (kein halb gefüllter Cache).
+// Bleibt ein Asset nach PRECACHE_ATTEMPTS beim Fehler, bricht der Rest ab und
+// der Install scheitert sauber; der alte SW bedient seinen eigenen, kohärenten
+// Satz unverändert weiter.
 //
-// **Why begrenzt:** der Satz umfasst ~900 Assets. Alle auf einmal gestartet
-// (ein `Promise.all` über den ganzen Satz) liefen beim Erst-Install parallel zu
-// den ~700 Modul-Requests der noch unkontrollierten Seite, und ein einziger
-// transienter Fehler verwarf den ganzen Versuch — drei Versuche, dann still kein
-// SW. Die Seite blieb dauerhaft ohne Controller (jede Navigation revalidiert den
-// ganzen Satz vom Netz, offline geht nichts), nachweisbar nur in der Telemetrie.
-// Retry pro Asset heisst: ein Aussetzer kostet einen Request, nicht 900.
+// **Why begrenzt + Retry pro Asset:** ~900 Assets auf einmal liefen beim
+// Erst-Install neben den ~700 Modul-Requests der unkontrollierten Seite, und
+// ein transienter Fehler verwarf den ganzen Versuch — die Seite blieb still
+// ohne Controller. So kostet ein Aussetzer einen Request, nicht 900.
 //
-// Bewusst NICHT `cache.addAll`: das folgt einem Redirect und legt die Antwort
-// unter der ANGEFRAGTEN URL ab. Partials laufen ohne Session in den Auth-Guard
-// (302 → /login), und Chromium lehnt umgeleitete Antworten hier nicht ab — die
-// Login-Seite landete so unter jedem Partial-Pfad. Weil Shell-Assets cache-only
-// ausgeliefert werden, bliebe die Generation dauerhaft kaputt. `redirect:'error'`
-// lässt den Fetch stattdessen scheitern: fällt die Session während des Installs
-// aus, schlägt er fehl, statt Müll zu committen.
+// Bewusst NICHT `cache.addAll`: es folgt Redirects und legte ohne Session die
+// Login-Seite unter jedem Partial-Pfad ab (Auth-Guard 302), cache-only für
+// immer. `redirect:'error'` lässt den Fetch stattdessen scheitern.
 const PRECACHE_CONCURRENCY = 16;
 const PRECACHE_ATTEMPTS = 3;
 
@@ -164,7 +125,7 @@ async function fetchForPrecache(p, signal) {
   for (let i = 0; i < PRECACHE_ATTEMPTS; i++) {
     try {
       const res = await fetch(new Request(p, { cache: 'reload', redirect: 'error', signal }));
-      if (res && res.ok) return res;
+      if (res && res.ok) return new Response(await res.blob(), { status: res.status, statusText: res.statusText, headers: res.headers });
       lastErr = new Error(`HTTP ${res && res.status}`);
     } catch (err) {
       lastErr = err;
@@ -177,7 +138,9 @@ async function fetchForPrecache(p, signal) {
   throw err;
 }
 
-async function precacheWithRetry(cache, paths) {
+// `verify` läuft, wenn alles geholt ist und bevor geschrieben wird — wirft es,
+// bleibt der Cache so leer wie bei einem Fetch-Fehler.
+async function precacheWithRetry(cache, paths, verify) {
   // Beim ersten endgültigen Fehlschlag die übrigen Requests abbrechen: bei
   // fehlender Session (jeder Pfad scheitert) liefe der Install sonst Minuten.
   const ctrl = new AbortController();
@@ -200,7 +163,37 @@ async function precacheWithRetry(cache, paths) {
     firstErr.precacheTotal = paths.length;
     throw firstErr;
   }
+  if (verify) await verify();
   await Promise.all(paths.map((p, i) => cache.put(p, fetched[i])));
+}
+
+// Lebenszeit des SW über die Antwort hinaus verlängern, damit Cache-Writes und
+// Meldungen nach `return` nicht mit dem beendeten Worker verloren gehen.
+// Best-effort: ein Event ohne waitUntil (Tests, Aufruf ausserhalb) läuft so weiter.
+function extendLife(event, p) {
+  try { event?.waitUntil?.(p); } catch {}
+  return p;
+}
+
+// Build, den der Server gerade ausliefert — null, wenn er sich nicht feststellen
+// lässt (offline, unlesbar). Ein gleicher Build heisst: die Netz-Bytes jedes
+// Manifest-Assets sind per Content-Hash die dieser Generation.
+async function fetchServerBuild() {
+  try {
+    const res = await fetch(new Request(SW_MANIFEST_PATH, { cache: 'reload', redirect: 'error' }));
+    const m = res && res.ok ? (await res.text()).match(/self\.__SHELL_BUILD\s*=\s*"([^"]+)"/) : null;
+    return m ? m[1] : null;
+  } catch { return null; }
+}
+
+// Dieselbe Frage für Einzel-Löcher, 30 s gemerkt: ein Boot mit mehreren
+// fehlenden Assets fragt einmal, nicht je Asset.
+let _sameBuild = null;
+function sameBuildOnServer() {
+  if (_sameBuild) return _sameBuild;
+  const p = _sameBuild = fetchServerBuild().then((b) => b === SHELL_BUILD);
+  setTimeout(() => { if (_sameBuild === p) _sameBuild = null; }, 30_000);
+  return p;
 }
 
 // Ein gescheiterter Install hinterlässt nichts Sichtbares: ohne aktiven SW bleibt
@@ -261,7 +254,19 @@ async function fillGeneration() {
   // Laufzeit nie ein lazy-gefetchtes Partial / dynamisch importiertes Modul eine
   // fremde Generation vom Netz. `cache: 'reload'` umgeht den HTTP-Cache, damit
   // der Precache wirklich diese Generation holt.
-  await precacheWithRetry(cache, SHELL_MANIFEST);
+  //
+  // Vor dem Schreiben den Build des Servers prüfen: deploy/deploy.sh tauscht die
+  // Dateien per rsync, Minuten bevor der Prozess neu startet, und der laufende
+  // Server liefert sie sofort vom Disk. Fällt ein Install in dieses Fenster,
+  // stammt der Satz teils aus dem alten, teils aus dem neuen Stand — und trüge
+  // trotzdem die Marke. Nur ein NACHGEWIESENER Wechsel bricht ab; ein
+  // unlesbares Manifest ist kein Beweis.
+  await precacheWithRetry(cache, SHELL_MANIFEST, async () => {
+    const build = await fetchServerBuild();
+    if (build && build !== SHELL_BUILD) {
+      throw new Error(`Install abgebrochen: Server liefert inzwischen Build ${build}.`);
+    }
+  });
   // Einstiegspunkt (SPA-Shell) zuletzt — nicht im Manifest, weil er unter zwei
   // Schlüsseln adressiert wird ('/' bei Navigation, SHELL_PATH beim Lookup).
   // Unter BEIDEN ablegen, damit der Lookup in handleNavigate deterministisch
@@ -284,10 +289,7 @@ function repairGeneration() {
   if (_repairing) return _repairing;
   _repairing = (async () => {
     try {
-      const res = await fetch(new Request(SW_MANIFEST_PATH, { cache: 'reload', redirect: 'error' }));
-      const src = res && res.ok ? await res.text() : '';
-      const m = src.match(/self\.__SHELL_BUILD\s*=\s*"([^"]+)"/);
-      if (!m || m[1] !== SHELL_BUILD) {
+      if ((await fetchServerBuild()) !== SHELL_BUILD) {
         await self.registration?.update?.();
         return;
       }
@@ -302,8 +304,7 @@ function repairGeneration() {
 }
 
 function startRepair(event) {
-  const p = repairGeneration();
-  try { event?.waitUntil?.(p); } catch {}
+  extendLife(event, repairGeneration());
 }
 
 self.addEventListener('install', (event) => {
@@ -350,25 +351,14 @@ self.addEventListener('activate', (event) => {
 });
 
 // Navigate (HTML-Shell): Cache-Only innerhalb der Generation, Netz nur, wenn die
-// Generation nicht vollständig vorliegt (keine Marke, oder keine echte Shell). Der Shell-HTML gehört zum kohärenz-kritischen Satz wie
-// jedes Modul und Partial — er wird beim Install dieser Generation gecacht und
-// danach unverändert ausgeliefert.
+// Generation nicht vollständig vorliegt (keine Marke, oder keine echte Shell).
+// Das HTML ist Teil des kohärenten Satzes; seine Bytes gehen in __SHELL_BUILD ein.
 //
-// KEIN Stale-While-Revalidate: eine Revalidierung würde das HTML vom Netz in den
-// SHELL_CACHE schreiben. Nach einem Deploy ist das aber das HTML der NEUEN
-// Generation, während der noch aktive ALTE SW (kein skipWaiting) jedes Modul,
-// Partial und CSS weiter cache-only aus SEINER Generation bedient. Die nächste
-// Navigation liefert dann neues Markup gegen alte JS-Module — genau der Skew,
-// den der atomare Cache-Only-Satz verhindern soll (Alpine-Expressions greifen
-// auf Stores/Karten zu, die das geladene app.js nicht registriert). Ein Login ist
-// dafür der typische Auslöser, weil er mehrere echte Navigationen hintereinander
-// macht: die erste schreibt das fremde HTML in den Cache, die zweite serviert es.
-// Deploy-Updates laufen ausschliesslich über `skip-waiting` + controllerchange-
-// Reload in die neu precachte, kohärente Generation.
-//
-// Innerhalb einer Generation ist das HTML ohnehin unveränderlich: seine Bytes
-// gehen in __SHELL_BUILD ein (scripts/sw-manifest.js), jede Änderung erzeugt also
-// eine neue Generation samt neuem Precache.
+// KEIN Stale-While-Revalidate: nach einem Deploy schriebe die Revalidierung das
+// HTML der NEUEN Generation in den Cache des noch aktiven ALTEN SW, und die
+// nächste Navigation lieferte neues Markup gegen alte JS-Module (typisch beim
+// Login: mehrere Navigationen hintereinander). Updates laufen ausschliesslich
+// über `skip-waiting` + controllerchange-Reload.
 async function handleNavigate(req, event) {
   const cache = await caches.open(SHELL_CACHE);
   const cached = await cache.match(SHELL_PATH) || await cache.match('/');
@@ -415,11 +405,12 @@ function notifyIncoherent(pathname) {
 
 // Kohärenz-kritische Shell-Assets (App-JS/Partials/CSS/i18n/Icons): Cache-Only.
 // Der Satz wurde beim Install atomar precacht → ein Hit ist garantiert kohärent.
-// Ein Miss bedeutet Einzel-Eviction (v.a. iOS). Dann NICHT die evtl. neuere
-// Einzeldatei vom Netz nachladen (das wäre exakt der Skew, den wir verhindern),
-// sondern die Clients zum sauberen Reload anstossen. Die Netzkopie wird nur als
-// Notnagel ungecacht durchgereicht, damit der laufende Fetch nicht hängt; der
-// Reload stellt sofort wieder Kohärenz her. Offline → 503.
+// Ein Miss bei vollständiger Generation ist ein Einzel-Loch. Liefert der Server
+// noch diesen Build, sind seine Bytes die dieser Generation: still nachfüllen —
+// ein Reload landete beim selben SW im selben Loch. Ist der Server weiter, wäre
+// die Einzeldatei genau der Skew, den cache-only verhindert: dann nur als
+// Notnagel ungecacht durchreichen und die Clients zum Reload anstossen (ein
+// wartender Nachfolger bringt die Kohärenz). Offline → 503.
 //
 // Nicht-kritische Shell-Assets (vendor/*, fonts/*): self-contained und
 // versionsstabil, kein Skew auf App-Feldern möglich → klassisch Cache-First mit
@@ -434,7 +425,7 @@ async function handleShellAsset(req, url, event) {
     if (vhit) return vhit;
     try {
       const net = await fetch(req);
-      if (net && net.ok) vcache.put(req, net.clone());
+      if (net && net.ok) extendLife(event, vcache.put(req, net.clone()).catch(() => {}));
       return net;
     } catch {
       return new Response('Offline', { status: 503 });
@@ -480,6 +471,16 @@ async function handleShellAsset(req, url, event) {
       startRepair(event);
       try { return await fetch(req); } catch { return new Response('Offline', { status: 503 }); }
     }
+    if (await sameBuildOnServer()) {
+      try {
+        // Query-los und ohne Redirect, wie der Precache ablegt.
+        const net = await fetch(new Request(url.pathname, { cache: 'no-cache', redirect: 'error' }));
+        if (net.ok) {
+          extendLife(event, cache.put(url.pathname, net.clone()).catch(() => {}));
+          return net;
+        }
+      } catch {}
+    }
     notifyIncoherent(url.pathname);
     try {
       return await fetch(req); // Notnagel, bewusst NICHT in diese Generation cachen
@@ -490,7 +491,7 @@ async function handleShellAsset(req, url, event) {
 
   try {
     const net = await fetch(req);
-    if (net && net.ok) cache.put(req, net.clone());
+    if (net && net.ok) extendLife(event, cache.put(req, net.clone()).catch(() => {}));
     return net;
   } catch {
     return new Response('Offline', { status: 503 });
@@ -523,17 +524,11 @@ function _forbidsStale(res) {
 }
 
 // Hat die Revalidierung etwas anderes geliefert als den ausgelieferten Stand?
-//
-// Zwei Wege, und der erste ist der Regelfall: traegt die gecachte Antwort einen
-// ETag, entscheidet der Header-Vergleich ohne einen einzigen Byte-Read. Genau
-// dafuer setzen die beiden Lese-Endpunkte des Baums ihren ETag
-// (routes/content/books.js) — bei unveraendertem Buch beantwortet ihn schon der
-// HTTP-Cache des Browsers mit 304, ganz ohne Body.
-//
-// Ohne ETag bleibt der Textvergleich gegen den vorab gezogenen Klon. Fehlt der
-// (Klon nicht lesbar, Netzantwort ohne ETag obwohl der Cache-Eintrag einen hat):
-// als Drift werten. Ein Nachzug zu viel kostet einen leisen Re-Render, ein
-// verpasster kostet die Aussage, um derentwillen das Ganze existiert.
+// Regelfall: die gecachte Antwort traegt einen ETag, der Header-Vergleich
+// entscheidet ohne Byte-Read (bei unveraendertem Buch antwortet schon der
+// HTTP-Cache mit 304). Sonst Textvergleich gegen den vorab gezogenen Klon; fehlt
+// der, als Drift werten — ein Nachzug zu viel kostet einen leisen Re-Render,
+// ein verpasster die Aussage, um derentwillen das Ganze existiert.
 async function _samePayload(cachedEtag, cachedClone, net) {
   if (cachedEtag) return net.headers.get('ETag') === cachedEtag;
   if (!cachedClone) return false;
@@ -541,27 +536,16 @@ async function _samePayload(cachedEtag, cachedClone, net) {
   catch { return false; }
 }
 
-// Fuer WELCHE Pfade lohnt der Vergleich ueberhaupt? Buchliste, Seitenbaum
-// (Sidebar) und der Abschnitt selbst: ohne Meldung bliebe er auf dem Stand des
-// letzten Besuchs stehen, und der Editor startete auf dieser Basis. Alle drei
-// tragen einen ETag (routes/content/shared.js#REVALIDATE_CACHE_CONTROL) — der
-// Vergleich ist ein Header-Vergleich, kein Klon samt Textvergleich. Revisionen,
-// Praesenz und Changes schliesst der Anker `$` aus.
-//
-// Diese Liste sagt nur „vergleichen ja/nein". Was ein Pfad BEDEUTET, entscheidet
-// weiterhin allein der Client (boot/content-updated.js) — der SW kennt keine Karten.
+// Fuer WELCHE Pfade lohnt der Vergleich? Buchliste, Seitenbaum und der Abschnitt
+// selbst (sonst startete der Editor auf dem Stand des letzten Besuchs); alle drei
+// tragen einen ETag (routes/content/shared.js#REVALIDATE_CACHE_CONTROL). Was ein
+// Pfad BEDEUTET, entscheidet allein der Client (boot/content-updated.js).
 const CONTENT_NOTIFY_REGEX = /^\/content\/(?:books|books\/\d+\/tree|pages\/\d+)$/;
 
 // Meldet den Tabs, dass die Hintergrund-Revalidierung dieses Pfads einen ANDEREN
-// Inhalt ergeben hat als der Cache-Hit, den sie gerade rendern.
-//
-// WARUM DAS NOETIG IST: Stale-While-Revalidate gibt den Cache-Stand an die UI
-// und die Netzantwort nur in den Cache. Die schon gerenderte Sidebar erfaehrt
-// davon nie — deshalb zeigt der erste Reload den Stand des letzten Besuchs und
-// erst der zweite den aktuellen. Der Netz-Request laeuft ohnehin; hier wird nur
-// sein Ergebnis nicht mehr weggeworfen. Der Client entscheidet, was ein Pfad
-// fuer ihn bedeutet (public/js/app/boot/content-updated.js) — der SW kennt
-// keine Karten.
+// Inhalt ergeben hat als der Cache-Hit, den sie gerade rendern. Ohne Meldung
+// fuellt SWR nur den Cache, nicht die schon gerenderte Sidebar — erst der
+// ZWEITE Reload zeigte den aktuellen Stand.
 function notifyContentUpdated(pathname) {
   return postToClients({ type: 'content-updated', path: pathname });
 }
@@ -589,7 +573,11 @@ function _cacheable(res) {
 //  - `content`: die Content-Regeln (LRU-Deckel, `_forbidsStale`, Nachzug-
 //    Meldung an die Tabs). /config hat keinen Deckel (ein Eintrag), keinen
 //    Konsumenten für eine Nachzug-Meldung und keinen no-cache-Vertrag.
-async function _handleSwr(req, cacheName, { cacheKey = null, content = true } = {}) {
+// Das Ablegen der Netzantwort läuft nach der Auslieferung unter `event`s
+// waitUntil (extendLife): ohne das kann der Browser den SW nach `return cached`
+// beenden, und mit dem Cache-Write fiele gerade die Nachzug-Meldung weg. Beim
+// Miss wartet der Aufrufer so auch nicht auf Write + Deckel-Pass.
+async function _handleSwr(req, cacheName, { cacheKey = null, content = true, event = null } = {}) {
   // Bypass-Marker: konsistenzkritische Reads (z.B. Konflikt-Check vor
   // Draft-Push) müssen frische Server-Daten sehen, nicht den SWR-Cache.
   // Sonst matcht ein stale `page.html` mit dem `draft.originalHtml` und
@@ -606,7 +594,6 @@ async function _handleSwr(req, cacheName, { cacheKey = null, content = true } = 
       // bekommt unveraendert die Netzantwort — an der Konsistenzzusage des
       // Markers aendert sich nichts.
       if (_cacheable(net)) {
-        const cw = await caches.open(cacheName);
         // Unter dem Pfad OHNE `__fresh` ablegen, sonst entsteht ein zweiter
         // Eintrag, den kein normaler Read je trifft (und der den 200er-Deckel
         // mit Dubletten fuellt). Eigene URL-Instanz: `url` wird weiter unten
@@ -617,8 +604,13 @@ async function _handleSwr(req, cacheName, { cacheKey = null, content = true } = 
           u.searchParams.delete('__fresh');
           key = new Request(u.toString());
         }
-        await cw.put(key, net.clone());
-        if (content) { await _evictContentCache(cw); await OFFLINE?.refresh(key, net.clone()); }
+        const forCache = net.clone();
+        const forOffline = content ? net.clone() : null;
+        extendLife(event, (async () => {
+          const cw = await caches.open(cacheName);
+          await cw.put(key, forCache);
+          if (content) { await _evictContentCache(cw); await OFFLINE?.refresh(key, forOffline); }
+        })().catch(() => {}));
       }
       return net;
     } catch {
@@ -645,21 +637,26 @@ async function _handleSwr(req, cacheName, { cacheKey = null, content = true } = 
   const worthDiffing = content && !!cached && CONTENT_NOTIFY_REGEX.test(url.pathname);
   const cachedEtag = worthDiffing ? cached.headers.get('ETag') : null;
   const cachedClone = (worthDiffing && !cachedEtag) ? cached.clone() : null;
-  const netPromise = fetch(req).then(async (res) => {
+  // Klone ziehen, bevor `res` an den Aufrufer geht; abgelegt wird danach.
+  let stored = Promise.resolve();
+  const netPromise = fetch(req).then((res) => {
     if (_cacheable(res)) {
-      // Der Vergleich muss VOR dem cache.put laufen, sonst ist der alte Stand weg.
-      const drifted = worthDiffing && !(await _samePayload(cachedEtag, cachedClone, res));
-      await cache.put(cacheKey || req, res.clone());
-      if (content) { await _evictContentCache(cache); await OFFLINE?.refresh(req, res.clone()); }
-      if (drifted) notifyContentUpdated(url.pathname);
+      const forCache = res.clone();
+      const forOffline = content ? res.clone() : null;
+      const forDiff = (worthDiffing && !cachedEtag) ? res.clone() : res;
+      stored = (async () => {
+        // Der Vergleich muss VOR dem cache.put laufen, sonst ist der alte Stand weg.
+        const drifted = worthDiffing && !(await _samePayload(cachedEtag, cachedClone, forDiff));
+        await cache.put(cacheKey || req, forCache);
+        if (content) { await _evictContentCache(cache); await OFFLINE?.refresh(req, forOffline); }
+        if (drifted) await notifyContentUpdated(url.pathname);
+      })().catch(() => {});
     }
     return res;
   }).catch(() => null);
+  extendLife(event, netPromise.then(() => stored));
 
-  if (cached) {
-    netPromise.catch(() => {});
-    return cached;
-  }
+  if (cached) return cached;
   const net = await netPromise;
   if (net) return net;
   return offlineJson();
@@ -678,15 +675,10 @@ async function _handleSwr(req, cacheName, { cacheKey = null, content = true } = 
 // ein gecachter Heartbeat ist eine Falschaussage.
 //
 // VOLATIL (Netz zuerst, Cache nur als Offline-Rueckfall): die Revisionsliste
-// einer Seite und die Suche. Die Revisionsliste ist ein wachsendes Log — ein
-// Stale-Hit zeigt den Stand des letzten Besuchs, und weil der Hintergrund-
-// Revalidate nur den Cache fuellt und nicht die Karte, bleibt die Liste bis zum
-// naechsten Reload kurz: bei einer frisch angelegten Seite also leer, waehrend
-// der Server schon Fassungen haelt. Ein Write bustet den Eintrag zwar, aber nur
-// aus DIESEM Browser — jede Revision von einem zweiten Geraet, vom Mac-/Android-
-// Client oder aus einem Server-Apply-Pfad kommt ohne Bust an. Die Liste der
-// Schreiber eines Logs vollstaendig zu halten ist die verlorene Wette; die Regel
-// ist darum "ein Log wird nicht stale ausgeliefert".
+// einer Seite und die Suche. Ein Stale-Hit der Revisionsliste zeigte den Stand
+// des letzten Besuchs (frische Seite: leer), und ein Write bustet nur aus DIESEM
+// Browser — Revisionen von anderen Geraeten, nativen Clients oder Server-Apply
+// kommen ohne Bust an. Regel darum: "ein Log wird nicht stale ausgeliefert".
 // Der Voll-Body EINER Revision (`/revisions/:rev_id`) bleibt bewusst SWR: er ist
 // unveraenderlich, dort IST der Cache-Hit die richtige Antwort.
 const CONTENT_LIVE_REGEX = /^\/content\/(?:books|pages)\/\d+\/(?:changes|presence)$/;
@@ -712,16 +704,16 @@ async function _handleNetworkFirst(req, cacheName) {
   }
 }
 
-function handleContent(req) {
+function handleContent(req, event) {
   const url = new URL(req.url);
   if (CONTENT_VOLATILE_REGEX.test(url.pathname)) return _handleNetworkFirst(req, CONTENT_CACHE);
-  return _handleSwr(req, CONTENT_CACHE);
+  return _handleSwr(req, CONTENT_CACHE, { event });
 }
 
 // /config liefert Session-User + Provider-Config. SWR, damit wiederkehrende
 // Offline-User den App-Shell-Bootstrap komplett durchlaufen können. 401/Fehler
 // werden nicht gecacht (via res.ok-Check), damit Login-Redirects nicht festfrieren.
-async function handleConfig(req) {
+async function handleConfig(req, event) {
   // Bypass-Marker wie bei /content/* — hier ist er nicht optional, sondern die
   // Voraussetzung eines vorhandenen Mechanismus: der Wake-Refresh
   // (app-view/bookscope.js#_refreshAfterWake) holt `/config` ausschliesslich, um
@@ -732,7 +724,7 @@ async function handleConfig(req) {
   // ACHTUNG: der Cache-Schlüssel CONFIG_PATH ignoriert die Query, ein blosses
   // `?__fresh=1` am Aufrufer wuerde also weiterhin den Cache-Eintrag treffen.
   // Der Bypass MUSS im SW stehen — _handleSwr prüft ihn vor dem Cache-Lookup.
-  return _handleSwr(req, CONFIG_CACHE, { cacheKey: CONFIG_PATH, content: false });
+  return _handleSwr(req, CONFIG_CACHE, { cacheKey: CONFIG_PATH, content: false, event });
 }
 
 // Sitzungs-gebundene Caches wegwerfen. ZWEI Anlaesse, gleiche Wirkung:
@@ -817,17 +809,23 @@ self.addEventListener('fetch', (event) => {
     return;
   }
   if (url.pathname === CONFIG_PATH) {
-    event.respondWith(handleConfig(req));
+    event.respondWith(handleConfig(req, event));
     return;
   }
   if (DOMAIN?.handles(url)) {
     event.respondWith(DOMAIN.respond(req, event));
     return;
   }
+  // Abschnitts-Bilder vor /content/*: eigener Cache, sonst verdrängten sie
+  // Baum und Abschnitte aus dem gedeckelten CONTENT_CACHE.
+  if (OFFLINE?.handlesImage(url)) {
+    event.respondWith(OFFLINE.respondImage(req, event));
+    return;
+  }
   if (url.pathname.startsWith('/content/')) {
     // Poll-Endpunkte gehen unbehandelt ans Netz (siehe isLiveContent).
     if (isLiveContent(url)) return;
-    event.respondWith(handleContent(req));
+    event.respondWith(handleContent(req, event));
     return;
   }
   if (isShellRequest(url)) {

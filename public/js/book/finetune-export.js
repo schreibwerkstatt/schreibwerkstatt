@@ -97,4 +97,23 @@ export const finetuneExportMethods = {
     if (n >= 1024) return (n / 1024).toFixed(1) + ' KB';
     return n + ' B';
   },
+
+  // Qualitäts-Statistik des Sets (stats.quality, routes/jobs/finetune-export/lib/export-stats.js).
+  finetunePct(x) {
+    return (Number(x || 0) * 100).toFixed(1) + ' %';
+  },
+
+  finetuneOverlapTotal() {
+    const o = this.finetuneStats?.quality?.overlap || {};
+    return (o.prompt || 0) + (o.answer || 0) + (o.shingle || 0);
+  },
+
+  finetuneQualityRows() {
+    const t = window.__app.t.bind(window.__app);
+    return (this.finetuneStats?.quality?.tasks || []).map(r => ({
+      ...r,
+      label: t('finetune.task.' + r.task),
+      familyLabel: t('finetune.family.' + r.family),
+    }));
+  },
 };

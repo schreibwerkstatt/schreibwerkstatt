@@ -235,3 +235,169 @@ test('Entfernen räumt die Abschnitte des Buchs', async () => {
   await waited;
   assert.deepEqual(caches.paths(OFF), ['/__offline-books']);
 });
+
+// --- Mehrere Bücher, Entfernen während des Syncs ------------------------------
+
+function twoBookServer() {
+  const routes = { '/content/books': [{ id: 5 }, { id: 6 }] };
+  for (const [book, ids] of [[5, [10, 11, 12]], [6, [20, 21, 22]]]) {
+    const pages = ids.map((id) => ({ id, updated_at: 'a' }));
+    routes[`/content/books/${book}`] = { id: book };
+    routes[`/content/books/${book}/tree`] = tree(pages);
+    for (const p of pages) routes[`/content/pages/${p.id}`] = { id: p.id, html: '<p>x</p>' };
+  }
+  return { routes, offline: false };
+}
+
+async function statusOf(ctx) {
+  let books;
+  ctx.__listeners.message({
+    data: { type: 'offline-book-status' },
+    waitUntil: async (p) => { await p; },
+    source: { postMessage: (m) => { books = m.books; } },
+  });
+  await new Promise((r) => setImmediate(r));
+  return books;
+}
+
+test('Paralleler Sync zweier Bücher: keiner überschreibt den Meta-Eintrag des anderen', async () => {
+  // Der Client stösst beim Start alle angehefteten Bücher auf einmal an.
+  const caches = makeCaches();
+  const ctx = load({ caches, server: twoBookServer() });
+
+  await Promise.all([ctx.__swOffline._syncBook(5), ctx.__swOffline._syncBook(6)]);
+
+  const books = await statusOf(ctx);
+  assert.deepEqual(Object.keys(books).sort(), ['5', '6']);
+  assert.equal(books['5'].total, 3);
+  assert.equal(books['6'].total, 3);
+});
+
+test('Entfernen während eines laufenden Syncs: das Buch kommt nicht zurück', async () => {
+  const caches = makeCaches();
+  const ctx = load({ caches, server: twoBookServer() });
+
+  const sync = ctx.__swOffline._syncBook(5);
+  await ctx.__swOffline._removeBook(5);
+  await sync;
+
+  assert.deepEqual(Object.keys(await statusOf(ctx)), []);
+  assert.ok(!caches.paths(OFF).some((p) => /^\/content\/(?:pages\/1\d|books\/5)/.test(p)),
+    'keine Abschnitte des entfernten Buchs bleiben liegen');
+});
+
+// --- Bilder --------------------------------------------------------------------
+
+const IMG = 'schreibwerkstatt-images-v1';
+
+function imageServer() {
+  const server = twoBookServer();
+  server.routes['/content/pages/10'] = { id: 10, html: '<img src="/content/page-image/7"><img src="/content/page-image/8">' };
+  server.routes['/content/pages/20'] = { id: 20, html: '<img src="/content/page-image/7">' };
+  server.routes['/content/page-image/7'] = 'BILD7';
+  server.routes['/content/page-image/8'] = 'BILD8';
+  return server;
+}
+
+test('Sync legt die Bilder eines Abschnitts im Offline-Cache ab', async () => {
+  const caches = makeCaches();
+  const ctx = load({ caches, server: imageServer() });
+
+  await ctx.__swOffline._syncBook(5);
+
+  const paths = caches.paths(OFF);
+  assert.ok(paths.includes('/content/page-image/7') && paths.includes('/content/page-image/8'));
+});
+
+test('Ein Bild mit HTTP-Fehler lässt den Abschnitt nicht scheitern', async () => {
+  const caches = makeCaches();
+  const server = imageServer();
+  server.routes['/content/page-image/8'] = 404;
+  const ctx = load({ caches, server });
+
+  const entry = await ctx.__swOffline._syncBook(5);
+
+  assert.equal(entry.failed, 0);
+  assert.ok(caches.paths(OFF).includes('/content/page-image/7'));
+});
+
+test('Abschnitt ohne gemerkte Bild-Liste (Altbestand) wird einmal neu geladen', async () => {
+  const caches = makeCaches();
+  const server = imageServer();
+  const ctx = load({ caches, server });
+  await ctx.__swOffline._syncBook(5);
+  // Meta wie vor den Bildern: ohne pageImages.
+  const off = await caches.open(OFF);
+  const meta = await (await off.match(ORIGIN + '/__offline-books')).json();
+  delete meta.books['5'].pageImages;
+  await off.put(ORIGIN + '/__offline-books', new FakeResponse(JSON.stringify(meta)));
+
+  ctx.__fetched.length = 0;
+  await ctx.__swOffline._syncBook(5);
+  assert.ok(ctx.__fetched.includes('/content/pages/10'));
+
+  ctx.__fetched.length = 0;
+  await ctx.__swOffline._syncBook(5);
+  assert.deepEqual(ctx.__fetched.filter((p) => p.startsWith('/content/pages/')), [],
+    'danach wieder inkrementell');
+});
+
+test('Entfernen räumt Bilder nur, wenn kein anderes angeheftetes Buch sie nutzt', async () => {
+  const caches = makeCaches();
+  const ctx = load({ caches, server: imageServer() });
+  await ctx.__swOffline._syncBook(5);
+  await ctx.__swOffline._syncBook(6);
+
+  await ctx.__swOffline._removeBook(5);
+  let paths = caches.paths(OFF);
+  assert.ok(paths.includes('/content/page-image/7'), 'Buch 6 nutzt Bild 7 noch');
+  assert.ok(!paths.includes('/content/page-image/8'), 'Bild 8 gehörte nur Buch 5');
+
+  await ctx.__swOffline._removeBook(6);
+  paths = caches.paths(OFF);
+  assert.ok(!paths.includes('/content/page-image/7'));
+});
+
+test('Bild-Requests laufen am CONTENT_CACHE vorbei in den eigenen, gedeckelten Cache', async () => {
+  const caches = makeCaches();
+  const server = imageServer();
+  const ctx = load({ caches, server });
+  const respond = async (p) => {
+    let res;
+    const pending = [];
+    ctx.__listeners.fetch({
+      request: new FakeRequest(p),
+      respondWith: (r) => { res = r; },
+      waitUntil: (w) => pending.push(w),
+    });
+    const out = await res;
+    await Promise.all(pending);
+    return out;
+  };
+
+  assert.equal((await respond('/content/page-image/7')).body, 'BILD7');
+  assert.ok(!caches.byName.has('schreibwerkstatt-content-v1')
+    || !caches.paths('schreibwerkstatt-content-v1').length, 'nicht im CONTENT_CACHE');
+  assert.deepEqual(caches.paths(IMG), ['/content/page-image/7']);
+
+  ctx.__fetched.length = 0;
+  assert.equal((await respond('/content/page-image/7')).body, 'BILD7');
+  assert.deepEqual(ctx.__fetched, [], 'zweiter Abruf aus dem Cache — Bild-Bytes einer ID ändern sich nie');
+
+  server.routes['/content/page-image/9'] = 401;
+  await respond('/content/page-image/9');
+  assert.ok(!caches.paths(IMG).includes('/content/page-image/9'), '401 wird nicht abgelegt');
+});
+
+test('Sitzungswechsel wirft auch den Bild-Cache weg', async () => {
+  const caches = makeCaches();
+  const ctx = load({ caches, server: imageServer() });
+  await ctx.__swOffline.respondImage(new FakeRequest('/content/page-image/7'), null);
+  await new Promise((r) => setImmediate(r));
+  assert.ok(caches.byName.has(IMG));
+
+  let waited;
+  ctx.__listeners.message({ data: { type: 'session-changed' }, waitUntil: (p) => { waited = p; }, source: { postMessage() {} } });
+  await waited;
+  assert.ok(!caches.byName.has(IMG));
+});

@@ -422,10 +422,15 @@ test('Revisionsliste und Revisions-Body eines Abschnitts werden nicht gemeldet',
 test('__fresh liefert die Netzantwort UND zieht den Cache-Eintrag nach', async () => {
   const cache = makeCache({ [TREE]: new FakeResponse('ALT') });
   const ctx = loadSw({ cache, fetchImpl: async () => new FakeResponse('NEU') });
+  // Abgelegt wird nach der Auslieferung, unter waitUntil (sw.js#extendLife).
+  const pending = [];
+  const event = { waitUntil: (p) => pending.push(p) };
 
-  const res = await ctx.handleContent(new FakeRequest(TREE + '?__fresh=1'));
+  const res = await ctx.handleContent(new FakeRequest(TREE + '?__fresh=1'), event);
 
   assert.equal(res.body, 'NEU', 'Der Aufrufer bekommt unveraendert den Serverstand.');
+  assert.equal(pending.length, 1, 'der Cache-Write haengt an waitUntil, sonst stirbt er mit dem SW');
+  await Promise.all(pending);
   assert.deepEqual(cache.writes, [TREE],
     'Abgelegt unter dem Pfad OHNE Marker — sonst trifft ihn kein normaler Read.');
   assert.equal(cache.store.get('https://example.test' + TREE).body, 'NEU');
@@ -452,4 +457,21 @@ test('__fresh cacht keine Fehlerantwort', async () => {
   assert.deepEqual(cache.writes, []);
   assert.equal(cache.store.get('https://example.test' + TREE).body, 'ALT',
     'Der bestehende Offline-Stand bleibt, statt durch eine 401 ersetzt zu werden.');
+});
+
+test('SWR-Hit: die Revalidierung haengt an waitUntil und meldet den Nachzug', async () => {
+  // Ohne waitUntil darf der Browser den SW nach `return cached` beenden — dann
+  // gingen Cache-Write und 'content-updated' verloren.
+  const posted = [];
+  const cache = makeCache({ [TREE]: new FakeResponse('ALT') });
+  const ctx = loadSw({ cache, posted, fetchImpl: async () => new FakeResponse('NEU') });
+  const pending = [];
+
+  const res = await ctx.handleContent(new FakeRequest(TREE), { waitUntil: (p) => pending.push(p) });
+
+  assert.equal(res.body, 'ALT', 'der Cache-Stand geht sofort raus');
+  assert.equal(pending.length, 1);
+  await Promise.all(pending);
+  assert.equal(cache.store.get('https://example.test' + TREE).body, 'NEU');
+  assert.deepEqual(posted.map((m) => m.type), ['content-updated']);
 });

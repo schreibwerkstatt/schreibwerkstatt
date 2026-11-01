@@ -21,7 +21,13 @@ const ABBREVIATIONS = new Set([
 ]);
 
 // True, wenn der Punkt an `dotIdx` zu einer Abkürzung gehört (kein Satzende).
+// Ein- und zweistellige Zahlen mit Punkt sind Ordnungszahlen («die 1. Klasse»,
+// «am 11. September»); Jahreszahlen und längere Zahlen bleiben Satzenden.
 function isAbbreviationBefore(text, dotIdx) {
+  let d = dotIdx - 1;
+  while (d >= 0 && /[0-9]/.test(text[d])) d--;
+  const digits = dotIdx - 1 - d;
+  if (digits > 0) return digits <= 2 && (d < 0 || !/[\p{L}\p{N}]/u.test(text[d]));
   let i = dotIdx - 1;
   let word = '';
   while (i >= 0 && /[A-Za-zÄÖÜäöüß]/.test(text[i])) { word = text[i] + word; i--; }
@@ -183,7 +189,14 @@ function extractDialogs(text) {
   return results;
 }
 
+// Ein Zitat, das mit Satzzeichen beginnt oder Redebegleitsätze trägt, ist ein
+// verkehrt gepaartes Anführungszeichen (Erzähltext zwischen zwei Reden), keine
+// Rede der Figur. Als Ich-Antwort, Dialogzeile oder «Wer sagt das?» brächte es
+// dem Modell Erzählfetzen bei.
+const looksLikeNarration = (q) => /^[\s,;:.…–—-]/.test(q) || /,\s*(sagte|fragte|rief|antwortete|said|asked|cried)\b/i.test(q);
+
 module.exports = {
+  looksLikeNarration,
   splitParagraphs,
   splitSentences,
   splitAtSentence,

@@ -13,7 +13,7 @@
 //   4. Ohne Web Locks entscheidet der eigene Tab allein (kein Hänger).
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { createBusyLock, activateIfNobodyBusy, BUSY_LOCK } from '../../public/js/app/boot/busy-lock.js';
+import { createBusyLock, activateIfNobodyBusy, otherTabBusy, BUSY_LOCK } from '../../public/js/app/boot/busy-lock.js';
 import { isBusy, registerBusySource } from '../../public/js/app/boot/update-policy.js';
 
 // Minimaler LockManager: shared/exclusive + ifAvailable, origin-weit geteilt
@@ -23,6 +23,7 @@ function fakeLocks() {
   let exclusive = false;
   return {
     get sharedCount() { return shared; },
+    async query() { return { held: Array.from({ length: shared }, () => ({ name: BUSY_LOCK, mode: 'shared' })) }; },
     async request(name, opts, cb) {
       assert.equal(name, BUSY_LOCK);
       if (opts.mode === 'exclusive') {
@@ -99,4 +100,38 @@ test('Bucheditor meldet ungespeicherte Blöcke an die Update-Politik', async () 
   const fs = await import('node:fs');
   const src = fs.readFileSync(new URL('../../public/js/cards/book-editor-card.js', import.meta.url), 'utf8');
   assert.match(src, /registerBusySource\(\(\) => this\.dirtyCount > 0 \|\| this\.savingCount > 0\)/);
+});
+
+// Klick auf das Update-Banner: der eigene editierende Tab darf aktualisieren
+// (der Banner-Text nennt den Verlust), ein FREMDER editierender Tab sperrt.
+test('otherTabBusy zählt nur fremde Halter des Locks', async () => {
+  const locks = fakeLocks();
+  let aEditing = true;
+  let bEditing = false;
+  const tabA = createBusyLock({ isBusy: () => aEditing, locks });
+  const tabB = createBusyLock({ isBusy: () => bEditing, locks });
+  tabA.sync();
+  await tick();
+
+  assert.equal(await otherTabBusy(tabA.held, { locks }), false, 'nur der eigene Tab editiert');
+
+  bEditing = true;
+  tabB.sync();
+  await tick();
+  assert.equal(await otherTabBusy(tabA.held, { locks }), true, 'Tab B editiert');
+
+  aEditing = false;
+  tabA.sync();
+  await tick();
+  assert.equal(await otherTabBusy(tabA.held, { locks }), true, 'auch wenn A selbst frei ist');
+
+  bEditing = false;
+  tabB.sync();
+  await tick();
+  assert.equal(await otherTabBusy(tabA.held, { locks }), false);
+});
+
+test('otherTabBusy ohne locks.query: nein (alte Browser)', async () => {
+  assert.equal(await otherTabBusy(false, { locks: { request() {} } }), false);
+  assert.equal(await otherTabBusy(false, { locks: null }), false);
 });

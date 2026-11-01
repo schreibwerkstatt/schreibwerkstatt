@@ -15,8 +15,13 @@ const { buildSongSamples } = require('./songs');
 const { buildStorylineSamples } = require('./storylines');
 const { buildFigureDepthSamples } = require('./depth');
 
-// Mehr Fragevarianten = Modell lernt dieselbe Buchfakten über viele
-// Formulierungen hinweg assoziieren → schnellere Memorisierung der Welt.
+// Umformulierungen derselben Frage pro Entität. Jede trägt dieselbe Antwort;
+// mehr als zwei vervielfachen nur die Antwort (finalize.js deckelt sie auf
+// `maxPerAnswer`), statt neues Wissen zu bringen.
+const PARAPHRASES = 2;
+
+// Fragevarianten, aus denen `pickVariants` pro Entität `PARAPHRASES` zieht —
+// verschiedene Entitäten bekommen verschiedene Formulierungen.
 function buildQuestionPools(langIsEn) {
   const figQuestions = langIsEn
     ? ['Who is {name}?', 'Tell me about {name}.', 'How would you describe {name}?',
@@ -71,13 +76,19 @@ function buildAuthorChatHelpers(ctx) {
     return out;
   };
 
-  // `sourceKey` optional: nur dort setzen, wo die Antwort wörtlichen Buchtext
-  // reproduziert (z.B. Figur-Passagen), damit der Train/Val-Split auf
-  // Quell-Ebene greift. Fakten-/Q&A-Antworten lassen ihn weg → Split per id.
-  // `voice` ({ key, kind, name }) meldet eine Analyse-Antwort für die
-  // Umschreibung im Buchton an (KI-Augment `voiceRewrite`); alle Samples mit
-  // demselben key bekommen dort dieselbe neue Antwort.
-  const pushQA = (id, q, a, sourceKey, voice) => {
+  // Viertes Argument: Kapitel-Schlüssel (`sourceKey`, wenn die Antwort
+  // Buchtext wiedergibt) oder ein Objekt `{ sourceKey, voice, unit }`.
+  // `unit` (`evt:12`, `fig:<fig_id>`, `loc:<loc_id>`, `scene:<id>`) ist die
+  // Entität, mit der das Sample im Train/Val-Split wandert (lib/split.js);
+  // ohne `unit` bleibt eine Fakten-Antwort im Train. `voice` ({ key, kind,
+  // name }) meldet eine Analyse-Antwort für die Umschreibung im Buchton an
+  // (KI-Augment `voiceRewrite`); alle Samples mit demselben key bekommen dort
+  // dieselbe neue Antwort.
+  const pushQA = (id, q, a, sourceKeyOrOpts, voiceArg) => {
+    const o = sourceKeyOrOpts && typeof sourceKeyOrOpts === 'object'
+      ? sourceKeyOrOpts
+      : { sourceKey: sourceKeyOrOpts, voice: voiceArg };
+    const { sourceKey, voice, unit } = o;
     const qq = (q || '').trim();
     const aa = (a || '').trim();
     if (qq.length < 4 || aa.length < 20) return;
@@ -91,6 +102,7 @@ function buildAuthorChatHelpers(ctx) {
       ],
     };
     if (sourceKey) sample.sourceKey = sourceKey;
+    if (unit) sample.unit = unit;
     if (voice && voiceTargets) {
       sample.voiceKey = voice.key;
       voiceTargets.set(voice.key, { kind: voice.kind, name: voice.name, text: aa });
@@ -106,7 +118,7 @@ function buildAuthorChatSamples(ctx) {
   const pools = buildQuestionPools(ctx.langIsEn);
   const helpers = buildAuthorChatHelpers(ctx);
   // ctx wird um helpers + pools erweitert; alle sub-modules greifen darauf zu.
-  const baseCtx = { ...ctx, ...pools, ...helpers };
+  const baseCtx = { ...ctx, ...pools, ...helpers, PARAPHRASES };
   // Zeitstrahl einmal angereichert laden: Szenen-, Ereignis- und Figuren-Block teilen ihn.
   const subCtx = { ...baseCtx, ...loadEventData(baseCtx) };
 
@@ -126,4 +138,4 @@ function buildAuthorChatSamples(ctx) {
   buildFigureDepthSamples(subCtx);         // Block 32: Tiefe-Felder (Motivation, Konflikt, Bogen …)
 }
 
-module.exports = { buildAuthorChatSamples, buildQuestionPools };
+module.exports = { buildAuthorChatSamples, buildQuestionPools, PARAPHRASES };

@@ -7,7 +7,7 @@
 // Ein Buch mit mehr Abschnitten kann dort nie vollständig liegen, und im Zug
 // fehlt genau der Abschnitt, den man seit Wochen nicht angefasst hat. Ein
 // angeheftetes Buch liegt darum KOMPLETT in einem eigenen Cache ohne Deckel:
-// Buchliste, Buch, Baum und jeder Abschnitt.
+// Buchliste, Buch, Baum, jeder Abschnitt und jedes Bild darin.
 //
 // WIE ES ZUSAMMENSPIELT (Andockstellen in sw.js):
 //   - Lesen: _handleSwr schaut nach einem CONTENT_CACHE-Miss hier nach
@@ -17,23 +17,39 @@
 //     ohnehin bekommt, ersetzt die Kopie hier (`refresh`). Ein Write bustet den
 //     CONTENT_CACHE; hier wird dagegen nachgeladen (`invalidate`) — gelöscht
 //     wäre der Abschnitt bis zum nächsten Sync offline weg.
-//   - Sitzung: fällt mit CONTENT_CACHE/CONFIG_CACHE (`drop`), sonst läge ein
-//     fremdes Buch auf dem Gerät. Die ABSICHT („dieses Buch offline") hält der
-//     Client pro Konto (app/offline-books.js) und stösst den Sync danach neu an.
+//   - Bilder (`/content/page-image/:id`): `respondImage` bedient alle, auch die
+//     nicht angehefteter Bücher, aus einem eigenen gedeckelten IMAGE_CACHE —
+//     im CONTENT_CACHE verdrängten ein paar bebilderte Abschnitte sonst Baum und
+//     Text. Cache-first, weil die Bytes einer Bild-ID sich nie ändern (ein
+//     neues Bild ist eine neue ID; db/page-images.js verschiebt nur die Seite).
+//   - Sitzung: fällt mit CONTENT_CACHE/CONFIG_CACHE (`drop`, beide Caches), sonst
+//     läge ein fremdes Buch auf dem Gerät. Die ABSICHT („dieses Buch offline")
+//     hält der Client pro Konto (app/offline-books.js) und stösst den Sync danach
+//     neu an.
 //   - Nachrichten (`handleMessage`): 'offline-book-sync' {bookId},
 //     'offline-book-remove' {bookId}, 'offline-book-status'. Fortschritt geht
 //     als 'offline-book-progress' / 'offline-book-synced' an alle Tabs.
 //
 // INKREMENTELL: Die Metadaten merken sich pro Abschnitt den `updated_at` aus dem
-// Baum. Ein erneuter Sync lädt nur, was sich geändert hat oder fehlt, und räumt
-// Abschnitte, die nicht mehr im Baum stehen.
+// Baum und die Bild-IDs darin. Ein erneuter Sync lädt nur, was sich geändert hat
+// oder fehlt, und räumt Abschnitte und Bilder, die nicht mehr im Baum stehen.
+//
+// METADATEN SERIELL: Der Client stösst beim Start den Sync aller angehefteten
+// Bücher auf einmal an. Jeder Meta-Write ist darum ein Lesen-Ändern-Schreiben
+// hinter `updateMeta` — parallel überschrieb sonst ein Buch den gerade
+// geschriebenen Eintrag eines anderen mit dessen altem Stand.
 (function () {
   const CACHE = 'schreibwerkstatt-offline-v1';
+  const IMAGE_CACHE = 'schreibwerkstatt-images-v1';
+  const IMAGE_MAX = 150;
   const META_PATH = '/__offline-books';
   const CONCURRENCY = 4;
   const CHECKPOINT_EVERY = 25;
+  const IMAGE_PATH_RE = /^\/content\/page-image\/\d+$/;
+  const IMAGE_REF_RE = /\/content\/page-image\/(\d+)/g;
   const origin = self.location.origin;
   const keyOf = (path) => origin + path;
+  const imageKey = (imgId) => keyOf(`/content/page-image/${imgId}`);
 
   async function readMeta(cache) {
     try {
@@ -47,6 +63,20 @@
     return cache.put(keyOf(META_PATH), new Response(JSON.stringify(meta), {
       headers: { 'Content-Type': 'application/json' },
     }));
+  }
+
+  // `fn(meta, cache)` ändert `meta` an Ort und Stelle; liefert es `false`, wird
+  // nicht geschrieben.
+  let metaChain = Promise.resolve();
+  function updateMeta(fn) {
+    const run = metaChain.then(async () => {
+      const cache = await caches.open(CACHE);
+      const meta = await readMeta(cache);
+      if ((await fn(meta, cache)) === false) return;
+      await writeMeta(cache, meta);
+    });
+    metaChain = run.catch(() => {});
+    return run;
   }
 
   async function post(msg) {
@@ -69,6 +99,20 @@
     return out.filter((p) => p && p.id != null);
   }
 
+  // Bild-IDs, auf die ein Abschnitt verweist (figure-html.js: `<img src="/content/page-image/42">`).
+  // Gelesen wird der rohe JSON-Text: JSON.stringify maskiert `/` nicht.
+  function imageIdsOf(text) {
+    return [...new Set([...String(text).matchAll(IMAGE_REF_RE)].map((m) => m[1]))];
+  }
+
+  function imagesOfEntry(entry) {
+    return new Set(Object.values(entry?.pageImages || {}).flat());
+  }
+
+  function imageUsedBy(meta, imgId) {
+    return Object.values(meta.books).some((e) => imagesOfEntry(e).has(imgId));
+  }
+
   // Netz-Fetch eines Content-Pfads; nur eine echte 200 zählt (kein Login-
   // Redirect, keine 401). `redirect: 'error'` wie im Precache von sw.js.
   async function fetchOk(path) {
@@ -81,7 +125,23 @@
     return res;
   }
 
+  // Ein Abschnitt samt seiner Bilder. Ein Bild mit HTTP-Fehler (gelöscht, aber
+  // noch verlinkt) bleibt aus, ohne den Abschnitt scheitern zu lassen — er
+  // würde sonst bei jedem Sync erneut geladen. Netzfehler werfen.
+  async function storePage(cache, pid) {
+    const res = await fetchOk(`/content/pages/${pid}`);
+    const imgs = imageIdsOf(await res.clone().text());
+    await cache.put(keyOf(`/content/pages/${pid}`), res);
+    for (const img of imgs) {
+      if (await cache.match(imageKey(img))) continue;
+      try { await cache.put(imageKey(img), await fetchOk(`/content/page-image/${img}`)); }
+      catch (e) { if (!e?.status) throw e; }
+    }
+    return imgs;
+  }
+
   const running = new Map(); // bookId → Promise (single-flight pro Buch)
+  const aborted = new Set(); // bookIds, deren Sync ein removeBook beendet
 
   function syncBook(bookId) {
     const id = String(bookId);
@@ -99,13 +159,20 @@
         const pages = pagesOfTree(tree);
         const want = new Map(pages.map((p) => [String(p.id), p.updated_at || null]));
         const todo = [];
+        const pagesMeta = {};
+        const pageImages = {};
         for (const [pid, stamp] of want) {
           const have = prev.pages?.[pid];
-          if (have !== undefined && have === stamp && await cache.match(keyOf(`/content/pages/${pid}`))) continue;
+          const imgs = prev.pageImages?.[pid];
+          // Ohne gemerkte Bild-Liste (Stand vor den Bildern) einmal neu laden.
+          if (have !== undefined && have === stamp && Array.isArray(imgs)
+            && await cache.match(keyOf(`/content/pages/${pid}`))) {
+            pagesMeta[pid] = stamp;
+            pageImages[pid] = imgs;
+            continue;
+          }
           todo.push(pid);
         }
-        const pagesMeta = {};
-        for (const [pid, stamp] of want) if (!todo.includes(pid)) pagesMeta[pid] = stamp;
 
         let done = want.size - todo.length;
         let failed = 0;
@@ -113,19 +180,25 @@
         let sinceCheckpoint = 0;
         await post({ type: 'offline-book-progress', bookId: Number(id), done, total: want.size });
         const worker = async () => {
-          while (next < todo.length) {
+          while (next < todo.length && !aborted.has(id)) {
             const pid = todo[next++];
             try {
-              await cache.put(keyOf(`/content/pages/${pid}`), await fetchOk(`/content/pages/${pid}`));
+              pageImages[pid] = await storePage(cache, pid);
               pagesMeta[pid] = want.get(pid);
               // Zwischenstand sichern: der Browser beendet einen SW auch mit
               // waitUntil nach einigen Minuten. Ein abgebrochener Sync fängt
               // dann beim Gesicherten an, nicht wieder bei null.
               if (++sinceCheckpoint >= CHECKPOINT_EVERY) {
                 sinceCheckpoint = 0;
-                const meta = await readMeta(cache);
-                meta.books[id] = { ...(meta.books[id] || {}), pages: { ...prev.pages, ...pagesMeta } };
-                await writeMeta(cache, meta);
+                await updateMeta((meta) => {
+                  if (aborted.has(id)) return false;
+                  const cur = meta.books[id] || {};
+                  meta.books[id] = {
+                    ...cur,
+                    pages: { ...prev.pages, ...pagesMeta },
+                    pageImages: { ...prev.pageImages, ...pageImages },
+                  };
+                });
               }
             } catch (e) {
               if (!e?.status) throw e; // Netz weg → ganzer Sync später
@@ -136,18 +209,24 @@
           }
         };
         await Promise.all(Array.from({ length: Math.min(CONCURRENCY, todo.length) }, worker));
+        if (aborted.has(id)) return null;
 
         // Abschnitte, die nicht mehr im Baum stehen (gelöscht/verschoben).
         for (const pid of Object.keys(prev.pages || {})) {
           if (!want.has(pid)) await cache.delete(keyOf(`/content/pages/${pid}`));
         }
-        const entry = { pages: pagesMeta, at: new Date().toISOString(), total: want.size, failed };
-        const meta = await readMeta(cache);
-        meta.books[id] = entry;
-        await writeMeta(cache, meta);
+        const entry = { pages: pagesMeta, pageImages, at: new Date().toISOString(), total: want.size, failed };
+        await updateMeta(async (meta, c) => {
+          meta.books[id] = entry;
+          // Bilder, auf die kein angeheftetes Buch mehr verweist.
+          for (const img of imagesOfEntry(prev)) {
+            if (!imageUsedBy(meta, img)) await c.delete(imageKey(img));
+          }
+        });
         await post({ type: 'offline-book-synced', bookId: Number(id), at: entry.at, total: entry.total, failed });
         return entry;
       } catch (e) {
+        if (aborted.has(id)) return null;
         // 403/404: Buch weg oder Zugriff entzogen — der Client hebt die
         // Anheftung auf. Sonst (Netz) bleibt der alte Stand stehen.
         await post({ type: 'offline-book-failed', bookId: Number(id), status: e?.status || 0 });
@@ -160,19 +239,32 @@
     return p;
   }
 
+  // Ein laufender Sync desselben Buchs wird erst beendet — er schriebe den
+  // Eintrag sonst nach dem Entfernen wieder hinein.
   async function removeBook(bookId) {
     const id = String(bookId);
-    const cache = await caches.open(CACHE);
-    const meta = await readMeta(cache);
-    const entry = meta.books[id];
-    delete meta.books[id];
-    for (const pid of Object.keys(entry?.pages || {})) {
-      await cache.delete(keyOf(`/content/pages/${pid}`));
+    const run = running.get(id);
+    if (run) {
+      aborted.add(id);
+      await run.catch(() => {});
     }
-    await cache.delete(keyOf(`/content/books/${id}/tree`));
-    await cache.delete(keyOf(`/content/books/${id}`));
-    if (!Object.keys(meta.books).length) await cache.delete(keyOf('/content/books'));
-    await writeMeta(cache, meta);
+    try {
+      await updateMeta(async (meta, cache) => {
+        const entry = meta.books[id];
+        delete meta.books[id];
+        for (const pid of Object.keys(entry?.pages || {})) {
+          await cache.delete(keyOf(`/content/pages/${pid}`));
+        }
+        for (const img of imagesOfEntry(entry)) {
+          if (!imageUsedBy(meta, img)) await cache.delete(imageKey(img));
+        }
+        await cache.delete(keyOf(`/content/books/${id}/tree`));
+        await cache.delete(keyOf(`/content/books/${id}`));
+        if (!Object.keys(meta.books).length) await cache.delete(keyOf('/content/books'));
+      });
+    } finally {
+      aborted.delete(id);
+    }
   }
 
   async function status() {
@@ -216,6 +308,38 @@
     }
   }
 
+  // Bild-Requests ohne Query (`?download=1` ist ein Datei-Download, kein Bild).
+  function handlesImage(url) {
+    return IMAGE_PATH_RE.test(url.pathname) && !url.search;
+  }
+
+  async function evictImages(icache) {
+    const keys = await icache.keys();
+    for (let i = 0; i < keys.length - IMAGE_MAX; i++) await icache.delete(keys[i]);
+  }
+
+  // Angeheftet → nie verdrängt; sonst der gedeckelte IMAGE_CACHE; sonst Netz.
+  // 401/Fehler werden nicht abgelegt (sonst fröre ein Login-Problem fest).
+  async function respondImage(req, event) {
+    const key = keyOf(new URL(req.url).pathname);
+    const pinned = await (await caches.open(CACHE)).match(key);
+    if (pinned) return pinned;
+    const icache = await caches.open(IMAGE_CACHE);
+    const hit = await icache.match(key);
+    if (hit) return hit;
+    try {
+      const net = await fetch(req);
+      if (net && net.ok && !net.redirected) {
+        const copy = net.clone();
+        const put = (async () => { await icache.put(key, copy); await evictImages(icache); })().catch(() => {});
+        try { event?.waitUntil?.(put); } catch {}
+      }
+      return net;
+    } catch {
+      return new Response('', { status: 503 });
+    }
+  }
+
   function handleMessage(event) {
     const d = event.data || {};
     if (d.type === 'offline-book-sync' && d.bookId != null) {
@@ -238,9 +362,9 @@
   }
 
   self.__swOffline = {
-    CACHE, match, refresh, invalidate, handleMessage,
-    drop: () => caches.delete(CACHE),
+    CACHE, IMAGE_CACHE, match, refresh, invalidate, handleMessage, handlesImage, respondImage,
+    drop: () => Promise.all([caches.delete(CACHE), caches.delete(IMAGE_CACHE)]),
     // Für Tests.
-    _syncBook: syncBook, _pagesOfTree: pagesOfTree,
+    _syncBook: syncBook, _removeBook: removeBook, _pagesOfTree: pagesOfTree, _imageIdsOf: imageIdsOf,
   };
 })();

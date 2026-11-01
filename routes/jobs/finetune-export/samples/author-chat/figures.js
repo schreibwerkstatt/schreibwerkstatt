@@ -26,7 +26,7 @@ const GESCHLECHT_PROSA = {
 
 // Block 1+2: Figuren-Composite + Trait-Q&A
 function buildFigureBaseSamples(ctx) {
-  const { langIsEn, opts, figRows, figQuestions, pushQA, pickVariants } = ctx;
+  const { langIsEn, opts, figRows, figQuestions, pushQA, pickVariants, PARAPHRASES } = ctx;
   const seed = opts.valSeed;
 
   // ── Figuren-Q&A ────────────────────────────────────────────────────────
@@ -45,17 +45,17 @@ function buildFigureBaseSamples(ctx) {
     const voice = { key: 'fig:' + f.fig_id, kind: 'figure', name: f.name };
     // Alle Paraphrasen pro Figur → gleiche Fakten mehrmals sehen → bessere
     // Memorisierung der Buchwelt (Ziel: Figur als «Realität» akzeptieren).
-    const idxs = pickVariants('fig|' + f.fig_id, figQuestions, figQuestions.length);
+    const idxs = pickVariants('fig|' + f.fig_id, figQuestions, PARAPHRASES);
     for (const idx of idxs) {
       const q = figQuestions[idx].replace('{name}', f.name);
-      pushQA('authorChat|fig|' + f.fig_id + '|' + idx, q, answer, undefined, voice);
+      pushQA('authorChat|fig|' + f.fig_id + '|' + idx, q, answer, { unit: 'fig:' + f.fig_id, voice });
     }
     // Zusatz-Frage mit Kurzname als Zielnamen (wenn vorhanden), damit das
     // Modell beide Namen-Varianten kennt.
     if (f.kurzname && f.kurzname !== f.name && f.kurzname.trim().length >= 2) {
       const altIdx = Math.floor(hashSplit('figAlt|' + f.fig_id, seed) * figQuestions.length);
       const q = figQuestions[altIdx].replace('{name}', f.kurzname);
-      pushQA('authorChat|figAlt|' + f.fig_id, q, answer, undefined, voice);
+      pushQA('authorChat|figAlt|' + f.fig_id, q, answer, { unit: 'fig:' + f.fig_id, voice });
     }
   }
 
@@ -67,22 +67,22 @@ function buildFigureBaseSamples(ctx) {
     if (f.beruf) {
       pushQA('authorChat|figBeruf|' + f.fig_id,
         langIsEn ? `What does ${f.name} do for a living?` : `Was macht ${f.name} beruflich?`,
-        langIsEn ? `${f.name} works as: ${f.beruf}.` : `${f.name} arbeitet als ${f.beruf}.`);
+        langIsEn ? `${f.name} works as: ${f.beruf}.` : `${f.name} arbeitet als ${f.beruf}.`, { unit: 'fig:' + f.fig_id });
       pushQA('authorChat|figBeruf2|' + f.fig_id,
         langIsEn ? `What is ${f.name}'s profession?` : `Welchen Beruf hat ${f.name}?`,
-        f.beruf);
+        f.beruf, { unit: 'fig:' + f.fig_id });
     }
     const geschl = GESCHLECHT_PROSA[String(f.geschlecht || '').trim().toLowerCase()];
     if (geschl) {
       pushQA('authorChat|figGeschl|' + f.fig_id,
         langIsEn ? `What is ${f.name}'s gender?` : `Welches Geschlecht hat ${f.name}?`,
-        langIsEn ? `${f.name} is ${geschl.en}.` : `${f.name} ist ${geschl.de}.`);
+        langIsEn ? `${f.name} is ${geschl.en}.` : `${f.name} ist ${geschl.de}.`, { unit: 'fig:' + f.fig_id });
     }
     const schicht = SCHICHT_PROSA[String(f.sozialschicht || '').trim().toLowerCase()];
     if (schicht) {
       pushQA('authorChat|figSchicht|' + f.fig_id,
         langIsEn ? `Which social class does ${f.name} come from?` : `Aus welcher gesellschaftlichen Schicht stammt ${f.name}?`,
-        langIsEn ? `${f.name} comes from ${schicht.en}.` : `${f.name} stammt aus ${schicht.de}.`);
+        langIsEn ? `${f.name} comes from ${schicht.en}.` : `${f.name} stammt aus ${schicht.de}.`, { unit: 'fig:' + f.fig_id });
     }
   }
 
@@ -98,10 +98,7 @@ function buildFigureBaseSamples(ctx) {
       : `Ich bin ${f.name}.${f.beruf ? ' ' + f.beruf + '.' : ''} ${desc}`;
     pushQA('authorChat|figRole|' + f.fig_id,
       langIsEn ? `Introduce yourself as ${f.name}.` : `Stelle dich als ${f.name} vor.`,
-      intro);
-    pushQA('authorChat|figRole2|' + f.fig_id,
-      langIsEn ? `Speak as ${f.name} for a moment.` : `Sprich einen Moment lang als ${f.name}.`,
-      intro);
+      intro, { unit: 'fig:' + f.fig_id });
   }
 
   // ── Figur-vs-Figur-Vergleich (gleicher typ) ──────────────────────────
@@ -150,12 +147,12 @@ function buildFigureBaseSamples(ctx) {
          `Describe ${f.name}'s personality.`, `What is ${f.name} like as a person?`]
       : [`Welche Eigenschaften hat ${f.name}?`, `Wie würdest du ${f.name} charakterisieren?`,
          `Beschreibe den Charakter von ${f.name}.`, `Was zeichnet ${f.name} charakterlich aus?`];
-    const idxs = pickVariants('figTraits|' + f.fig_id, traitQs, traitQs.length);
+    const idxs = pickVariants('figTraits|' + f.fig_id, traitQs, PARAPHRASES);
     const answer = langIsEn
       ? `${f.name} is: ${tagList}.`
       : `${f.name} ist: ${tagList}.`;
     for (const idx of idxs) {
-      pushQA('authorChat|figTraits|' + f.fig_id + '|' + idx, traitQs[idx], answer);
+      pushQA('authorChat|figTraits|' + f.fig_id + '|' + idx, traitQs[idx], answer, { unit: 'fig:' + f.fig_id });
     }
   }
 }
@@ -190,26 +187,23 @@ function buildFigureMetaSamples(ctx) {
         langIsEn
           ? `What happens to ${f.name} ${when ? `around ${when}` : `during the story`}?`
           : `Was passiert mit ${f.name}${when ? ` (${when})` : ' im Verlauf der Geschichte'}?`,
-        answer);
-      pushQA('authorChat|figEvtWhat|' + f.fig_id + '|' + j,
-        langIsEn ? `Tell me about «${ereignis}» in ${f.name}'s life.` : `Erzähl mir von «${ereignis}» in ${f.name}s Leben.`,
-        answer);
+        answer, { unit: 'fig:' + f.fig_id });
       if (kapitel) {
         pushQA('authorChat|figEvtCh|' + f.fig_id + '|' + j,
           langIsEn ? `In which chapter does ${f.name} experience «${ereignis}»?` : `In welchem Kapitel erlebt ${f.name} «${ereignis}»?`,
-          langIsEn ? `${f.name} experiences «${ereignis}» in chapter «${kapitel}».` : `${f.name} erlebt «${ereignis}» im Kapitel «${kapitel}».`);
+          langIsEn ? `${f.name} experiences «${ereignis}» in chapter «${kapitel}».` : `${f.name} erlebt «${ereignis}» im Kapitel «${kapitel}».`, { unit: 'fig:' + f.fig_id });
       }
       if (when) {
         pushQA('authorChat|figEvtWhen|' + f.fig_id + '|' + j,
           langIsEn ? `When does ${f.name} experience «${ereignis}»?` : `Wann erlebt ${f.name} «${ereignis}»?`,
-          `${ereignis}: ${when}.`);
+          `${ereignis}: ${when}.`, { unit: 'fig:' + f.fig_id });
       }
       if (when && (e.subtyp === 'geburt' || e.subtyp === 'tod')) {
         pushQA('authorChat|figLife|' + e.subtyp + '|' + f.fig_id,
           e.subtyp === 'geburt'
             ? (langIsEn ? `When was ${f.name} born?` : `Wann wurde ${f.name} geboren?`)
             : (langIsEn ? `When did ${f.name} die?` : `Wann ist ${f.name} gestorben?`),
-          `${f.name}, ${e.subtyp === 'geburt' ? (langIsEn ? 'born' : 'geboren') : (langIsEn ? 'died' : 'gestorben')}: ${when}.`);
+          `${f.name}, ${e.subtyp === 'geburt' ? (langIsEn ? 'born' : 'geboren') : (langIsEn ? 'died' : 'gestorben')}: ${when}.`, { unit: 'fig:' + f.fig_id });
       }
     }
     const allEvtsList = evts.slice(0, 8)
@@ -217,7 +211,7 @@ function buildFigureMetaSamples(ctx) {
       .join(' · ');
     pushQA('authorChat|figAllEvt|' + f.fig_id,
       langIsEn ? `What are the key moments in ${f.name}'s story?` : `Welche Schlüsselmomente erlebt ${f.name}?`,
-      allEvtsList);
+      allEvtsList, { unit: 'fig:' + f.fig_id });
   }
 
   // ── Figuren-Auftritte (Kapitel-Liste) ────────────────────────────────
@@ -227,7 +221,7 @@ function buildFigureMetaSamples(ctx) {
     const answer = chs.join(', ');
     pushQA('authorChat|figApp|' + f.fig_id,
       langIsEn ? `In which chapters does ${f.name} appear?` : `In welchen Kapiteln taucht ${f.name} auf?`,
-      langIsEn ? `${f.name} appears in: ${answer}.` : `${f.name} kommt vor in: ${answer}.`);
+      langIsEn ? `${f.name} appears in: ${answer}.` : `${f.name} kommt vor in: ${answer}.`, { unit: 'fig:' + f.fig_id });
   }
 
   // ── Figuren-Dialogstil: wie spricht X? ───────────────────────────────

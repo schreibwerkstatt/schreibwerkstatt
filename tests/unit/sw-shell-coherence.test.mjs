@@ -47,15 +47,22 @@ class FakeResponse {
     this.body = body;
     this.status = init.status ?? 200;
     this.type = init.type ?? 'basic';
-    this._h = new Map(
-      Object.entries(init.headers ?? {}).map(([k, v]) => [k.toLowerCase(), v]),
-    );
+    // `bodyError`: der Body bricht beim Lesen ab (Header kamen schon an).
+    this.bodyError = init.bodyError ?? null;
+    // Der Precache baut die Response aus `res.headers` neu — dann kommt ein
+    // Headers-artiges Objekt statt eines Plain-Objekts herein.
+    const h = init.headers?.entries ? Object.fromEntries(init.headers.entries()) : (init.headers ?? {});
+    this._h = new Map(Object.entries(h).map(([k, v]) => [k.toLowerCase(), v]));
     // Echte Responses tragen ein Headers-Objekt; sw.js liest darueber den
     // Shell-Marker. Ein blankes `{}` wuerde den Aufruf werfen lassen.
-    this.headers = { get: (k) => this._h.get(String(k).toLowerCase()) ?? null };
+    this.headers = {
+      get: (k) => this._h.get(String(k).toLowerCase()) ?? null,
+      entries: () => this._h.entries(),
+    };
   }
   get ok() { return this.status >= 200 && this.status < 300; }
-  async text() { return this.body; }
+  async text() { if (this.bodyError) throw this.bodyError; return this.body; }
+  async blob() { if (this.bodyError) throw this.bodyError; return this.body; }
   clone() {
     return new FakeResponse(this.body, {
       status: this.status, type: this.type, headers: Object.fromEntries(this._h),
@@ -361,6 +368,26 @@ test('Precache: ein transienter Fehler kostet EINEN Retry, nicht den ganzen Satz
   assert.equal(seen.filter(p => p === '/js/app.js').length, 2);
 });
 
+test('Precache: ein abbrechender Body faellt in den Retry pro Asset, nicht erst in cache.put', async () => {
+  const cache = makeCache({});
+  const seen = [];
+  let brokeOnce = false;
+  const ctx = loadSw({
+    cache,
+    fetchImpl: shellOr(async (req) => {
+      seen.push(req.pathname);
+      if (req.pathname === '/js/app.js' && !brokeOnce) {
+        brokeOnce = true;
+        return new FakeResponse('', { bodyError: new TypeError('network error') });
+      }
+      return new FakeResponse('asset ' + req.pathname);
+    }),
+  });
+  await runInstall(ctx);
+  assert.equal(seen.filter(p => p === '/js/app.js').length, 2);
+  assert.equal(await cache.store.get('/js/app.js').text(), 'asset /js/app.js');
+});
+
 test('Precache: hoechstens PRECACHE_CONCURRENCY Requests gleichzeitig', async () => {
   const manifest = Array.from({ length: 100 }, (_, i) => `/js/m${i}.js`);
   let inFlight = 0;
@@ -469,15 +496,61 @@ test('Verlorene Generation, Server schon weiter: nichts Fremdes ablegen, Update 
   assert.equal(env.updates.length, 1, 'der neue SW kommt ueber den regulaeren Update-Weg');
 });
 
-test('Einzel-Eviction in vollstaendiger Generation meldet weiterhin shell-incoherent', async () => {
+test('Einzel-Loch bei gleichem Server-Build: still nachfuellen, KEIN shell-incoherent', async () => {
+  // Ein Reload landete beim selben SW im selben Loch — die Meldung triebe nur
+  // Reload, 30-s-Sperre und Banner, ohne je zu heilen. Bei gleichem Build sind
+  // die Netz-Bytes per Content-Hash die dieser Generation.
   const cache = makeCache({ ...COMPLETE, '/partials/x.html': new FakeResponse('P') });
   const env = assetEnv({ cache });
+
+  const res = await env.asset('/js/app.js');
+  await Promise.all(env.pending);
+
+  assert.equal(res.body, 'NETZ /js/app.js');
+  assert.deepEqual(env.posted.filter(m => m.type === 'shell-incoherent'), []);
+  assert.deepEqual(cache.writes, ['/js/app.js'], 'unter dem query-losen Pfad, wie der Precache');
+});
+
+test('Einzel-Loch bei NEUEM Server-Build: Notnagel ungecacht + shell-incoherent', async () => {
+  const cache = makeCache({ ...COMPLETE, '/partials/x.html': new FakeResponse('P') });
+  const env = assetEnv({ cache, serverBuild: 'neuerbuild' });
 
   await env.asset('/js/app.js');
   await new Promise(r => setImmediate(r));
 
   assert.equal(env.posted.filter(m => m.type === 'shell-incoherent').length, 1);
   assert.deepEqual(cache.writes, [], 'der Notnagel wird nicht in die Generation geschrieben');
+});
+
+test('Install bricht ab, wenn der Server waehrend des Precache den Build wechselt', async () => {
+  // deploy.sh tauscht die Dateien per rsync, bevor der Prozess neu startet —
+  // ein Install in diesem Fenster saehe alte und neue Bytes gemischt.
+  const cache = makeCache({});
+  const ctx = loadSw({
+    cache,
+    fetchImpl: async (req) => {
+      if (req.pathname === '/sw-manifest.js') return new FakeResponse('self.__SHELL_BUILD = "neuerbuild";');
+      if (req.pathname === '/') return new FakeResponse(SHELL_HTML, { headers: SHELL_HEADERS });
+      return new FakeResponse('asset');
+    },
+  });
+  await assert.rejects(runInstall(ctx), /Build neuerbuild/);
+  assert.deepEqual(cache.writes, [], 'nichts geschrieben, keine Marke');
+});
+
+test('Install laeuft durch, wenn der Server-Build sich nicht feststellen laesst', async () => {
+  // Ein unlesbares Manifest ist kein Beweis fuer einen Wechsel.
+  const cache = makeCache({});
+  const ctx = loadSw({
+    cache,
+    fetchImpl: async (req) => {
+      if (req.pathname === '/sw-manifest.js') throw new TypeError('Failed to fetch');
+      if (req.pathname === '/') return new FakeResponse(SHELL_HTML, { headers: SHELL_HEADERS });
+      return new FakeResponse('asset');
+    },
+  });
+  await runInstall(ctx);
+  assert.ok(cache.store.has('/__sw-generation-complete'));
 });
 
 test('/sw-manifest.js nennt den Build DIESES SW, nicht den des Servers', async () => {

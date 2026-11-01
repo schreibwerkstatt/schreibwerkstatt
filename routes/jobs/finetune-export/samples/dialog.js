@@ -1,18 +1,36 @@
 'use strict';
 
-const { extractDialogs } = require('../lib/text');
+const { extractDialogs, tailFromSentence, looksLikeNarration } = require('../lib/text');
 const { findSpeaker, hashSplit } = require('../lib/names');
+
+// Dialogzeile als Schreibaufgabe nur ab dieser Länge: «Ja.» oder «Ich weiss
+// nicht.» ist aus dem Vorlauf nicht zu erschliessen.
+const DIALOG_LINE_MIN = 25;
+// «Wer sagt das?» nur für Zitate, die eine Figur erkennbar machen: lang genug,
+// genau einmal im Buch, eindeutig zugeordnet.
+const WHO_SAYS_MIN_CHARS = 30;
+const WHO_SAYS_MIN_WORDS = 5;
+const normQuote = (q) => q.toLowerCase().replace(/[^\p{L}\p{N}]+/gu, ' ').trim();
 
 // Dialog-Sammlung läuft immer, wenn Figuren bekannt sind — `dialogsByFigure`
 // füttert auch den authorChat-Block (Zitatsammlung pro Figur). Der eigentliche
 // dialog-Typ ist davon unabhängig per Checkbox steuerbar.
 function buildDialogSamples(ctx) {
   const {
-    samples, counts, opts, langIsEn, unifiedSys, bookName,
+    samples, counts, opts, langIsEn, unifiedSys,
     pageContents, figRows, figNamesSorted, dialogsByFigure,
   } = ctx;
 
   if (!figNamesSorted.length) return;
+
+  // Wie oft jedes Zitat im Buch steht — auch die ohne zugeordneten Sprecher.
+  const quoteFreq = new Map();
+  for (const p of pageContents) {
+    for (const d of extractDialogs(p.text)) {
+      const k = normQuote(d.quote);
+      quoteFreq.set(k, (quoteFreq.get(k) || 0) + 1);
+    }
+  }
 
   for (const p of pageContents) {
     const dlgs = extractDialogs(p.text);
@@ -25,12 +43,13 @@ function buildDialogSamples(ctx) {
       dialogsByFigure.get(spkKey).push({
         quote: d.quote, chapter: p.chapter, chapterId: p.chapter_id ?? 0, page: p.title,
       });
-      if (!opts.types.dialog) continue;
-      const ctxBefore = p.text.slice(Math.max(0, d.start - 160), d.start).replace(/\s+/g, ' ').trim();
-      const ctxStr = (ctxBefore.slice(-140) || p.chapter || bookName).trim();
+      if (!opts.types.dialog || d.quote.length < DIALOG_LINE_MIN || looksLikeNarration(d.quote)) continue;
+      // Vorlauf: die Sätze vor dem Zitat, an einer Satzgrenze begonnen.
+      const lead = tailFromSentence(p.text.slice(0, d.start).trim(), 500);
+      if (lead.length < 80) continue;
       const userPart = langIsEn
-        ? `Write a dialogue line for ${speaker}. Context: ${ctxStr}`
-        : `Schreibe eine Dialogzeile für ${speaker}. Kontext: ${ctxStr}`;
+        ? `Write ${speaker}'s next line of dialogue. What happened before:\n\n${lead}`
+        : `Schreibe die nächste Dialogzeile von ${speaker}. Der Vorlauf:\n\n${lead}`;
       samples.push({
         id: 'dialog|' + p.id + '|' + d.start,
         type: 'dialog',
@@ -66,7 +85,10 @@ function buildDialogSamples(ctx) {
       for (const e of [...entries, ...altEntries]) {
         if (seenQ.has(e.quote)) continue;
         seenQ.add(e.quote);
-        if (e.quote.length < 12 || e.quote.length > 600) continue;
+        if (e.quote.length < WHO_SAYS_MIN_CHARS || e.quote.length > 600) continue;
+        if (e.quote.split(/\s+/).length < WHO_SAYS_MIN_WORDS) continue;
+        if ((quoteFreq.get(normQuote(e.quote)) || 0) > 1) continue;
+        if (looksLikeNarration(e.quote)) continue;
         pool.push(e);
       }
       const picked = pool

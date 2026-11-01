@@ -53,7 +53,7 @@ export const appChromeMethods = {
   // wegwerfen, neu laden), damit der User nicht im Banner-Loop hängenbleibt.
   // Fallback (SW nicht unterstützt / nicht registriert): harter Reload.
   applyUpdate() {
-    if (window.__applyUpdate) { window.__applyUpdate(); return; }
+    if (window.__applyUpdate) { window.__applyUpdate({ interactive: true }); return; }
     setTimeout(() => location.reload(), 2000);
   },
   // ── Sidebar-Resize ──────────────────────────────────────────────────────

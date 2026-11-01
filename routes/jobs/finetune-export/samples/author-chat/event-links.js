@@ -12,41 +12,38 @@ function buildEventLinkSamples(ctx) {
 
   for (const e of events) {
     const { i, ereignis } = e;
+    const unit = 'evt:' + i;
 
     // ── Buchstelle: wie das Ereignis erzählt ist ──────────────────────
-    // Antwort ist wörtlicher Buchtext → sourceKey auf Kapitel-Ebene, damit
-    // dieselbe Stelle nicht in Train und Val landet.
+    // Antwort ist wörtlicher Buchtext. Erzählen aus Figurensicht gibt es nur
+    // mit dieser Passage als Ziel und nur für Figuren, die darin vorkommen —
+    // ohne zugeordnete Passage fällt die Aufgabe weg, eine Faktenkarte ist
+    // nie die Antwort auf eine Erzählbitte.
     if (e.excerpt) {
       const { text, page } = e.excerpt;
       const src = 'ch:' + (page.chapter_id ?? 0);
       pushQA('authorChat|evtText|' + i,
         langIsEn ? `How is «${ereignis}» told in the book?` : `Wie ist «${ereignis}» im Buch erzählt?`,
-        text, src);
-      pushQA('authorChat|evtText2|' + i,
-        langIsEn ? `Show me the passage where «${ereignis}» happens.` : `Zeig mir die Stelle, an der «${ereignis}» passiert.`,
-        text, src);
+        text, { sourceKey: src, unit });
       for (const fg of e.figs) {
         if (!fg.names.some(n => nameRegex(n).test(text))) continue;
         pushQA('authorChat|evtTextFig|' + i + '|' + fg.key,
-          langIsEn ? `Show me how ${fg.name} experiences «${ereignis}».` : `Zeig mir, wie ${fg.name} «${ereignis}» erlebt.`,
-          text, src);
+          langIsEn ? `Tell «${ereignis}» from ${fg.name}'s point of view.` : `Erzähle «${ereignis}» aus der Sicht von ${fg.name}.`,
+          text, { sourceKey: src, unit });
       }
     }
 
     // ── Szenen ────────────────────────────────────────────────────────
     if (e.scenes.length) {
-      const list = e.scenes.map(sceneLabel).join(', ');
       pushQA('authorChat|evtScene|' + i,
         langIsEn ? `In which scene does «${ereignis}» happen?` : `In welcher Szene passiert «${ereignis}»?`,
-        list);
-      pushQA('authorChat|evtScene2|' + i,
-        langIsEn ? `Which scenes belong to «${ereignis}»?` : `Welche Szenen gehören zu «${ereignis}»?`,
-        list);
+        e.scenes.map(sceneLabel).join(', '), { unit });
       for (const s of e.scenes) {
         const komm = (s.kommentar || '').trim();
+        if (!komm) continue;
         pushQA('authorChat|evtSceneDetail|' + i + '|' + s.id,
           langIsEn ? `What happens in the scene «${s.titel}» during «${ereignis}»?` : `Was passiert in der Szene «${s.titel}» bei «${ereignis}»?`,
-          (komm ? komm + ' ' : '') + e.fullAnswer);
+          komm, { unit });
       }
     }
 
@@ -54,22 +51,22 @@ function buildEventLinkSamples(ctx) {
     if (e.storyline) {
       pushQA('authorChat|evtSl|' + i,
         langIsEn ? `Which storyline does «${ereignis}» belong to?` : `Zu welchem Handlungsstrang gehört «${ereignis}»?`,
-        langIsEn ? `«${ereignis}» belongs to the storyline «${e.storyline}».` : `«${ereignis}» gehört zum Handlungsstrang «${e.storyline}».`);
+        langIsEn ? `«${ereignis}» belongs to the storyline «${e.storyline}».` : `«${ereignis}» gehört zum Handlungsstrang «${e.storyline}».`, { unit });
     }
 
     // ── Zeit: Spanne und Tag der Handlung ─────────────────────────────
     if (e.end) {
       pushQA('authorChat|evtSpan|' + i,
         langIsEn ? `How long does «${ereignis}» last?` : `Wie lange dauert «${ereignis}»?`,
-        langIsEn ? `«${ereignis}» lasts ${e.datum}.` : `«${ereignis}» dauert ${e.datum}.`);
+        langIsEn ? `«${ereignis}» lasts ${e.datum}.` : `«${ereignis}» dauert ${e.datum}.`, { unit });
       pushQA('authorChat|evtEnd|' + i,
         langIsEn ? `When does «${ereignis}» end?` : `Wann endet «${ereignis}»?`,
-        langIsEn ? `«${ereignis}» ends in ${e.end}.` : `Ende von «${ereignis}»: ${e.end}.`);
+        langIsEn ? `«${ereignis}» ends in ${e.end}.` : `Ende von «${ereignis}»: ${e.end}.`, { unit });
     }
     if (e.storyDay) {
       pushQA('authorChat|evtDay|' + i,
         langIsEn ? `On which day of the story does «${ereignis}» happen?` : `An welchem Tag der Handlung passiert «${ereignis}»?`,
-        langIsEn ? `«${ereignis}» happens on day ${e.storyDay} of the story.` : `«${ereignis}» passiert am Tag ${e.storyDay} der Handlung.`);
+        langIsEn ? `«${ereignis}» happens on day ${e.storyDay} of the story.` : `«${ereignis}» passiert am Tag ${e.storyDay} der Handlung.`, { unit });
     }
 
     // ── Geburt / Tod einer Figur ──────────────────────────────────────
@@ -86,7 +83,7 @@ function buildEventLinkSamples(ctx) {
           ? (langIsEn ? 'is born' : 'wird geboren')
           : (langIsEn ? 'dies' : 'stirbt');
         pushQA('authorChat|evtLife|' + e.subtyp + '|' + i + '|' + fg.key, q,
-          `${fg.name} ${verb}: ${e.datum}.` + (e.kapitel.length ? (langIsEn ? ` Chapter: ${e.kapitel.join(', ')}.` : ` Kapitel: ${e.kapitel.join(', ')}.`) : ''));
+          `${fg.name} ${verb}: ${e.datum}.` + (e.kapitel.length ? (langIsEn ? ` Chapter: ${e.kapitel.join(', ')}.` : ` Kapitel: ${e.kapitel.join(', ')}.`) : ''), { unit });
       }
     }
   }
@@ -98,9 +95,6 @@ function buildEventLinkSamples(ctx) {
     const list = items.map(evtLine).join(' · ');
     pushQA('authorChat|sceneEvts|' + s.id,
       langIsEn ? `Which events belong to the scene «${s.titel}»?` : `Welche Ereignisse gehören zur Szene «${s.titel}»?`,
-      list);
-    pushQA('authorChat|sceneEvts2|' + s.id,
-      langIsEn ? `What happens on the timeline during the scene «${s.titel}»?` : `Was geschieht auf dem Zeitstrahl in der Szene «${s.titel}»?`,
       list);
   }
 

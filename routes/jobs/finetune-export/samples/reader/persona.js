@@ -8,6 +8,7 @@
 // Vorlagen sind Trainingstext, keine UI-Strings.
 
 const { hashSplit } = require('../../lib/names');
+const { looksLikeNarration } = require('../../lib/text');
 const { hasPersonaMaterial } = require('./figures');
 
 const ENTRY = {
@@ -30,13 +31,8 @@ function entryQuestion(lang, name, q, key, seed) {
   return fill(pool[Math.floor(hashSplit('entry|' + key, seed) * pool.length)], { name, q });
 }
 
-// Ein Zitat, das mit Satzzeichen beginnt oder Redebegleitsätze trägt, ist ein
-// verkehrt gepaartes Anführungszeichen (Erzähltext zwischen zwei Reden), keine
-// Rede der Figur. Als Ich-Antwort brächte es dem Modell Erzählfetzen bei.
-const looksLikeNarration = (q) => /^[\s,;:.…–—-]/.test(q) || /,\s*(sagte|fragte|rief|antwortete|said|asked|cried)\b/i.test(q);
-
 // Jede Dialogzeile einmal als Antwort, in Gruppen zu höchstens drei Zeilen
-// desselben Kapitels — die Antwort ist wörtlicher Buchtext, Split pro Kapitel.
+// desselben Kapitels — die Antwort ist wörtlicher Buchtext (Split nach Abschnitt, lib/split.js).
 function buildPersonaAnchorSamples(ctx, readerFigures, push) {
   const lang = ctx.langIsEn ? 'en' : 'de';
   const seed = ctx.opts.valSeed;
@@ -62,4 +58,4 @@ function buildPersonaAnchorSamples(ctx, readerFigures, push) {
   }
 }
 
-module.exports = { buildPersonaAnchorSamples, entryQuestion, looksLikeNarration, EXIT, fill };
+module.exports = { buildPersonaAnchorSamples, entryQuestion, EXIT, fill };

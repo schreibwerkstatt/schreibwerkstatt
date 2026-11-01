@@ -1,6 +1,7 @@
 'use strict';
 
 const { splitParagraphs, splitSentences, splitAtSentence, clipAtSentence, tailFromSentence, chunkAtSentence } = require('../lib/text');
+const { hashSplit } = require('../lib/names');
 
 // Fortsetzungs-Instruktion der Stil-Samples; die Testprompts (lib/eval-prompts.js)
 // stellen ihre Fortsetzungsfrage wortgleich.
@@ -91,31 +92,37 @@ function buildStyleSamples(ctx) {
       counts.style++;
     }
 
-    // ── Satz-Level-Fortsetzung (#1) ───────────────────────────────────
-    // Feinstes Kontinuitäts-Signal: pro Satz Kontext (1–2 vorherige Sätze)
-    // → nächster Satz. Limit pro Seite, damit einzelne lange Seiten nicht
-    // den Trainings-Pool dominieren. Nur Sätze 40–300 Zeichen (Rauschen raus).
-    const SENT_CAP_PER_PAGE = 40 * (opts.biasBoost || 1);
-    const sentPrefix = langIsEn ? 'Next sentence after:\n\n' : 'Nächster Satz nach:\n\n';
-    const pageSentences = paragraphs.flatMap(splitSentences);
-    let sentEmit = 0;
-    for (let i = 1; i < pageSentences.length && sentEmit < SENT_CAP_PER_PAGE; i++) {
-      const cur = pageSentences[i];
-      if (cur.length < 40 || cur.length > 300) continue;
-      const prev = pageSentences.slice(Math.max(0, i - 2), i).join(' ');
-      if (prev.length < 30) continue;
+    // ── Fortsetzen in 2–6 Sätzen ──────────────────────────────────────
+    // Kontext: die bis zu vier Sätze davor → Ziel: die nächsten 2–6 Sätze
+    // (Anzahl per Hash), höchstens bis zum Absatzende. Ein einzelner Satz als
+    // Ziel brächte dem Modell bei, nach einem Satz aufzuhören.
+    const CONT_CAP_PER_PAGE = 20 * (opts.biasBoost || 1);
+    const contPrefix = langIsEn
+      ? "How does it go on? Write the next sentences in the author's style:\n\n"
+      : 'Wie geht es weiter? Schreibe die nächsten Sätze im Stil des Autors:\n\n';
+    const units = paragraphs.flatMap((para, pi) => splitSentences(para).map(t => ({ t, pi })));
+    const join = (arr) => arr.map((u, j) => (j ? (arr[j - 1].pi !== u.pi ? '\n\n' : ' ') : '') + u.t).join('');
+    let contEmit = 0;
+    for (let i = 3; i < units.length - 1 && contEmit < CONT_CAP_PER_PAGE; i += 5) {
+      const want = 2 + Math.floor(hashSplit('cont|' + p.id + '|' + i, opts.valSeed) * 5);
+      let end = i + 1;
+      while (end < units.length && end - i < want && units[end].pi === units[end - 1].pi) end++;
+      if (end - i < 2) continue;
+      const target = join(units.slice(i, end));
+      const context = join(units.slice(Math.max(0, i - 4), i));
+      if (context.length < 120 || target.length < 120 || target.length > maxChars) continue;
       samples.push({
-        id: 'styleSent|' + p.id + '|' + i,
+        id: 'styleCont|' + p.id + '|' + i,
         type: 'style',
         sourceKey: pageCh,
         messages: [
           { role: 'system', content: unifiedSys },
-          { role: 'user',   content: sentPrefix + prev },
-          { role: 'assistant', content: cur },
+          { role: 'user',   content: contPrefix + context },
+          { role: 'assistant', content: target },
         ],
       });
       counts.style++;
-      sentEmit++;
+      contEmit++;
     }
   }
 

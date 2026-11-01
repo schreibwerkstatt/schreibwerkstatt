@@ -1,6 +1,6 @@
 'use strict';
 
-const { hashSplit } = require('./names');
+const { valPageKeys } = require('./split');
 const { clipAtSentence, splitParagraphs } = require('./text');
 const { stylePrefix } = require('../samples/style');
 const { buildQuestionPools } = require('../samples/author-chat');
@@ -10,17 +10,19 @@ const { buildReaderEvalPrompts } = require('../samples/reader/eval');
 // dieselben Fragen ans Basismodell und ans trainierte Modell. Gefüllt mit
 // echten Figuren- und Kapitelnamen und im Wortlaut der Trainings-
 // Instruktionen, damit ein Treffer messbar ist. Holdout-Prompts stammen aus
-// Kapiteln, die der Split nach `val` gelegt hat (gleicher Hash wie
-// finalize.js) — sie prüfen Stil an Text, den das Modell nie gesehen hat.
+// Abschnitten, die der Split nach `val` gelegt hat (dieselbe Auswahl wie
+// finalize.js, lib/split.js#valPageKeys) — sie prüfen Stil an Text, den das
+// Modell nie gesehen hat.
 //
 // Zeile: { category, holdout, messages: [system, user] }.
 function buildEvalPrompts(ctx) {
   const {
     langIsEn, unifiedSys, opts,
     figRows, figById, figRelRows, chapterKeys, chapterNameByKey, chapterFullTextByKey,
+    pageContents = [],
   } = ctx;
   const { figQuestions, chapterQuestions } = buildQuestionPools(langIsEn);
-  const isVal = (k) => opts.valSplit > 0 && hashSplit('ch:' + k, opts.valSeed) < opts.valSplit;
+  const valPages = valPageKeys(pageContents, opts);
   const out = [];
   const add = (category, user, holdout = false) => out.push({
     category, holdout,
@@ -37,18 +39,18 @@ function buildEvalPrompts(ctx) {
   }
 
   const withText = chapterKeys.filter(k => (chapterFullTextByKey.get(k) || '').length >= 400);
-  const trainCh = withText.filter(k => !isVal(k));
-  const valCh = withText.filter(isVal);
-  for (const k of trainCh.slice(0, 2)) {
+  for (const k of withText.slice(0, 2)) {
     add('chapter', chapterQuestions[0].replace('{kapitel}', chapterNameByKey.get(k)));
   }
 
-  // Fortsetzung: Anfang eines Kapitels, bevorzugt aus dem Holdout.
-  const contKeys = valCh.length ? valCh.slice(0, 2) : trainCh.slice(-1);
-  for (const k of contKeys) {
-    const firstPara = splitParagraphs(chapterFullTextByKey.get(k))[0] || '';
-    const opening = clipAtSentence(firstPara, 800);
-    if (opening.length >= 120) add('continuation', stylePrefix(langIsEn) + opening, isVal(k));
+  // Fortsetzung: Anfang eines Abschnitts, bevorzugt aus dem Holdout.
+  const isVal = (p) => valPages.has('p:' + p.id);
+  const withPara = pageContents.filter(p => clipAtSentence(splitParagraphs(p.text || '')[0] || '', 800).length >= 120);
+  const valP = withPara.filter(isVal);
+  const contPages = valP.length ? valP.slice(0, 2) : withPara.slice(-1);
+  for (const p of contPages) {
+    const opening = clipAtSentence(splitParagraphs(p.text)[0], 800);
+    add('continuation', stylePrefix(langIsEn) + opening, isVal(p));
   }
 
   if (figs.length >= 2) {
@@ -58,10 +60,6 @@ function buildEvalPrompts(ctx) {
       : `Schreibe den Anfang eines neuen Kapitels, in dem ${a.name} und ${b.name} aufeinandertreffen.`);
   }
 
-  // Nach dem Bestand fragen, den das Modell nur über Q&A kennt.
-  for (const k of valCh.slice(0, 1)) {
-    add('chapter', chapterQuestions[0].replace('{kapitel}', chapterNameByKey.get(k)), true);
-  }
   buildReaderEvalPrompts(ctx, add);
   return out;
 }
