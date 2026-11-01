@@ -159,7 +159,7 @@ function cleanBeruf(beruf) {
 
 // Kein Erwerbsberuf, sondern ein Stand («Schüler», «Rentnerin»): «X ist
 // Schüler», nicht «X arbeitet als Schüler».
-const isStatus = (beruf) => /^(schüler|schülerin|student|studentin|lehrling|lernende[rn]?|rentner|rentnerin|pensionär|pensionärin|hausfrau|hausmann|arbeitslos|pupil|student|retired|unemployed|housewife)\b/i.test(String(beruf || '').trim());
+const isStatus = (beruf) => /^(schüler|schülerin|student|studentin|maturand|maturandin|gymnasiast|gymnasiastin|lehrling|lehrtochter|lernende[rn]?|auszubildende[rn]?|azubi|rentner|rentnerin|pensionär|pensionärin|hausfrau|hausmann|arbeitslos|pupil|student|retired|unemployed|housewife)\b/i.test(String(beruf || '').trim());
 
 // Zeitangabe, die als Adverbial in «passiert …» passt: Zahl oder Präposition
 // vorne («1968», «im März 1968», «von 1990 bis 1995»). Sonst («Beginn des
