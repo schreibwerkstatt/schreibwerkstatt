@@ -5,6 +5,7 @@ const { setContext } = require('../../lib/log-context');
 const { _validDeviceId } = require('../content/shared');
 const { attachJobChannel } = require('../jobs/shared/stream');
 const { attachBookChannel } = require('./book-channel');
+const { trackStream } = require('../../lib/shutdown');
 
 // GET /events/stream[?book_id=<id>&device_id=<uuid>] — ein SSE-Stream pro Tab.
 //
@@ -33,6 +34,7 @@ function handleEventStream(req, res) {
   res.setHeader('Connection', 'keep-alive');
   res.setHeader('X-Accel-Buffering', 'no'); // NGINX: kein Buffering
   res.flushHeaders();
+  trackStream(res);
 
   let closed = false;
   const write = (event, data) => {

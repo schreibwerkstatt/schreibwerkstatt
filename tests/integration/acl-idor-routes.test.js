@@ -6,6 +6,7 @@
 //   - POST /jobs/check         — dasselbe für den Seiten-Lektorat-Job
 //   - POST /jobs/chat          — Alt-Session, deren Seite nicht im Session-Buch liegt
 //   - POST /usage/page/track   — fremde Seite unter eigenem Buch
+//   - POST /usage/event        — fremdes Buch, Server-Event vom Client
 //   - POST /content/pages      — eigenes book_id + fremdes chapter_id
 //   - GET  /plot, /ideen/counts — ein Nicht-ACL-Fehler beim Rollen-Lookup darf
 //     nicht als „erlaubt" durchgehen (guardBook statt `return !sendACLError`)
@@ -90,7 +91,7 @@ test.after(() => {
 test.beforeEach(() => {
   sessionUser = ME;
   const { grantAccess } = require('../../db/book-access');
-  for (const t of ['share_comments', 'share_links', 'chat_messages', 'chat_sessions', 'user_page_usage', 'book_access']) {
+  for (const t of ['share_comments', 'share_links', 'chat_messages', 'chat_sessions', 'user_page_usage', 'usage_events', 'book_access']) {
     db.prepare(`DELETE FROM ${t}`).run();
   }
   ctx.dbSeed._wipeDb?.();
@@ -241,6 +242,22 @@ test('POST /usage/page/track: fremde Seite → 403, eigene Seite unter ihrem Buc
   assert.equal(ok.status, 200);
   const row = db.prepare('SELECT book_id FROM user_page_usage WHERE page_id = ?').get(MY_PAGE);
   assert.equal(row.book_id, MY_BOOK);
+});
+
+test('POST /usage/event: Client-Event mit eigenem Buch, Meta zugeschnitten', async () => {
+  const r = await api('POST', '/usage/event', { event: 'editor.close', book_id: MY_BOOK, meta: { editor: 'focus', durationSec: 90, text: 'Geheim' } });
+  assert.equal(r.status, 204);
+  const row = db.prepare('SELECT user_email, book_id, event, meta_json FROM usage_events').get();
+  assert.deepEqual({ ...row, meta: JSON.parse(row.meta_json), meta_json: undefined },
+    { user_email: ME, book_id: MY_BOOK, event: 'editor.close', meta: { editor: 'focus', durationSec: 90 }, meta_json: undefined });
+});
+
+test('POST /usage/event: fremdes Buch → 403, Server-Event → 400, nichts geschrieben', async () => {
+  assert.equal((await api('POST', '/usage/event', { event: 'editor.open', book_id: FOREIGN_BOOK, meta: { editor: 'book' } })).status, 403);
+  const forged = await api('POST', '/usage/event', { event: 'auth.login', meta: { method: 'local' } });
+  assert.equal(forged.status, 400);
+  assert.equal(forged.json.error_code, 'INVALID_EVENT');
+  assert.equal(db.prepare('SELECT COUNT(*) AS n FROM usage_events').get().n, 0);
 });
 
 // ── Content ─────────────────────────────────────────────────────────────────

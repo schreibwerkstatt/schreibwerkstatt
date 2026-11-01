@@ -2,6 +2,22 @@
 
 Neueste oben. Je Abschnitt: was sich geändert hat, und was ein Client tun **muss** (Bruch, Frist) bzw. tun **darf** (neues Feld, neuer Weg). Regeln: [README.md](README.md).
 
+## api 5 · editorApi 1
+
+Diktat, nur additiv:
+
+- **`POST /stt/transcribe` → `uncertain`:** Konfidenz des Whisper-Modells für das Segment. `true` heisst: das Modell ist unsicher, ob überhaupt Sprache vorlag (typisch für Geisterphrasen wie «Vielen Dank.» aus einem stillen Segment); `false` heisst: sicher erkannte Sprache. Das Feld fehlt, wenn das STT-Backend keine Konfidenz liefert. Segmente, die das Modell klar als Stille einstuft, kommen jetzt als `text: ""`.
+- **`bookId` wird geprüft:** ohne Zugriff auf das Buch antwortet der Endpunkt `403 NO_BOOK_ACCESS` (bisher bediente er jede `bookId`).
+- **200 ohne lesbares Transkript des Backends** ist jetzt `502 STT_UPSTREAM` statt `200 { text: "" }`.
+
+**Clients dürfen:** einen eigenen Floskel-Filter nur noch anwenden, wenn `uncertain` nicht `false` ist, damit eine klar gesprochene Dialogzeile wie «Tschüss.» erhalten bleibt. Feature-Check `clientContract.api >= 5`.
+
+Neustart, nur additiv:
+
+- **`503 SHUTTING_DOWN`** auf jeder Route, mit `Retry-After: 5` und `Connection: close`: der Server wird gerade gestoppt (Deploy) und hat den Request nicht bearbeitet, es wurde nichts geschrieben. Kommt nur auf einer schon offenen Keep-Alive-Verbindung; neue Verbindungen lehnt der Server in dieser Phase ab. SSE-Streams (`/events/stream`) beendet der Server dabei aktiv.
+
+**Clients müssen:** nichts — wer 503 wie einen Netzfehler behandelt (Outbox, erneuter Versuch), liegt richtig.
+
 ## api 4 · editorApi 1
 
 Gliederung, nur additiv:

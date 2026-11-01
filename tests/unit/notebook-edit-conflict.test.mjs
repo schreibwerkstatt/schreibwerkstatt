@@ -3,8 +3,9 @@
 //   - `_checkPageConflict` — Read-Modify-Write-Konflikterkennung. Kritisch ist
 //     der `fresh: true`-Read (SW-SWR-Cache würde sonst Cross-User-Edits
 //     verschlucken) und dass kein Modal bei fehlendem/gleichem Stand auslöst.
-//   - `_filterFindingsAfterSave` — nach jedem Save fliegen Findings raus, deren
-//     `original`-Text nicht mehr im HTML steht; Selektion der Überlebenden bleibt.
+//   - `_filterFindingsAfterSave` — nach jedem Save tragen Findings, deren
+//     `original`-Text nicht mehr im HTML steht, `umgeschrieben` (bleiben in der
+//     Liste, abgewählt); Übernommenes bleibt übernommen, Prüfmodus bleibt offen.
 //
 // Setup: linkedom liefert window/document; `contentRepo.loadPage` wird am
 // Singleton gemockt (gleiche Modulinstanz wie edit.js). Test-HTML sind statische
@@ -130,33 +131,35 @@ test('_filterFindingsAfterSave: ohne Findings → no-op', () => {
   assert.notEqual(app._rcCalled, true);
 });
 
-test('_filterFindingsAfterSave: behält Finding mit vorhandenem original + Selektion', () => {
-  const f1 = { original: 'bleibt', pos: 0 };
-  const f2 = { original: 'verschwunden', pos: 1 };
+test('_filterFindingsAfterSave: fehlendes original → umgeschrieben + abgewählt, Übernommenes bleibt', () => {
+  const f1 = { original: 'bleibt' };
+  const f2 = { original: 'verschwunden' };
+  const f3 = { original: 'übernommen' };
   const app = setApp({
-    lektoratFindings: [f1, f2],
-    selectedFindings: [true, true],
-    appliedOriginals: ['bleibt', 'verschwunden'],
+    lektoratFindings: [f1, f2, f3],
+    selectedFindings: [true, true, false],
+    appliedOriginals: ['übernommen'],
   });
   notebookEditMethods._filterFindingsAfterSave('<p>bleibt drin</p>');
-  assert.equal(app.lektoratFindings.length, 1);
-  assert.equal(app.lektoratFindings[0], f1);
-  assert.deepEqual(app.selectedFindings, [true]);
-  assert.deepEqual(app.appliedOriginals, ['bleibt']);
+  assert.equal(app.lektoratFindings.length, 3);
+  assert.ok(!f1.umgeschrieben);
+  assert.equal(f2.umgeschrieben, true);
+  assert.ok(!f3.umgeschrieben, 'übernommen ist nicht umgeschrieben, auch wenn das Original fehlt');
+  assert.deepEqual(app.selectedFindings, [true, false, false]);
+  assert.deepEqual(app.appliedOriginals, ['übernommen']);
   assert.equal(app._rcCalled, true);
 });
 
-test('_filterFindingsAfterSave: alle weg → Prüfmodus-Reset', () => {
+test('_filterFindingsAfterSave: alle umgeschrieben → Prüfmodus bleibt offen', () => {
   const app = setApp({
     lektoratFindings: [{ original: 'weg' }],
     selectedFindings: [true],
-    appliedOriginals: ['weg'],
   });
   notebookEditMethods._filterFindingsAfterSave('<p>nichts</p>');
-  assert.equal(app.lektoratFindings.length, 0);
-  assert.equal(app.checkDone, false);
-  assert.equal(app.correctedHtml, null);
-  assert.equal(app.hasErrors, false);
+  assert.equal(app.lektoratFindings.length, 1);
+  assert.equal(app.lektoratFindings[0].umgeschrieben, true);
+  assert.deepEqual(app.selectedFindings, [false]);
+  assert.equal(app.checkDone, true);
 });
 
 // --- submitConflictResolution: erneuter 409 → Re-Merge statt Sackgasse -------

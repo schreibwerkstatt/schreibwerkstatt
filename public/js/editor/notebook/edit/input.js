@@ -43,6 +43,35 @@ export const inputMethods = {
     return { ok: true };
   },
 
+  // Lektorat-Befunde im LIVE-Editor übernehmen (Befundliste im Edit-Modus,
+  // editor/lektorat-live.js). Gleicher Ersetzungs-Kern wie «Korrekturen
+  // speichern» (`_applyCorrections`: Klartext, sequenziell), aber wie
+  // `_applyTextReplacement` im DOM statt per Server-Write — sonst überschriebe
+  // der nächste Autosave die Übernahme. Eine Stelle, die im Live-Text mehrfach
+  // steht, wird übersprungen ('ambiguous', wie im Abschnitts-Chat): beim
+  // Schreiben entsteht so leicht ein zweites Vorkommen vor der gemeinten Stelle.
+  // Alle Befunde zusammen sind EIN Undo-Schritt. Notebook-only. Liefert
+  // { applied, skipped } oder { applied: [], skipped: [], reason }.
+  _applyLektoratInEditor(fehler, { quoteStyle = null } = {}) {
+    const app = editorHost();
+    if (!app?.editMode) return { applied: [], skipped: [], reason: 'notEditing' };
+    if (app.focusActive) return { applied: [], skipped: [], reason: 'focus' };
+    const el = this._getEditEl();
+    if (!el) return { applied: [], skipped: [], reason: 'notEditing' };
+    const html = stripLektoratMarks(el.innerHTML);
+    const skipped = [];
+    let next = app._applyCorrections(html, fehler, skipped, { checkAmbiguous: true });
+    if (next === html) return { applied: [], skipped };
+    if (quoteStyle) next = normalizeQuotesInHtml(next, quoteStyle);
+    this._historyPushNow?.();
+    const scrollTop = el.scrollTop;
+    mountEditorHtml(el, next);
+    el.scrollTop = scrollTop;
+    this._markEditDirty();
+    const skippedSet = new Set(skipped.map(s => s.f));
+    return { applied: fehler.filter(f => !skippedSet.has(f)), skipped };
+  },
+
   // Einfügen/Ausschneiden sind eigene Undo-Schritte: Vorher-Stand einfrieren
   // (offene Tipp-Serie inklusive), Nachher-Stand sofort — sonst fasst der
   // Debounce Tippen + Einfügen zu einem Schritt zusammen.

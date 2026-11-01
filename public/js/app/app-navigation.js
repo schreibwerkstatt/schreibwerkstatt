@@ -1,6 +1,7 @@
 import { EVT } from '../events.js';
 import { highlightOccurrenceOnPage } from '../book/passage-highlight.js';
 import { openCardWith, CARD_REQUEST } from '../cards/card-request.js';
+import { firstPageInChapter } from '../book/tree/first-page.js';
 
 // Figuren/Orte/Szenen-IDs sind INTEGER-PKs; aus Volltext-Treffern (FTS5
 // liefert entity_id als String) und aus Deep-Link-Hashes kommen sie als
@@ -303,10 +304,11 @@ export const appNavigationMethods = {
     }
   },
 
+  // Erster Abschnitt im Teilbaum: ein Kapitel, das nur Unterkapitel trägt,
+  // springt in deren ersten Abschnitt statt ins Leere.
   gotoChapterById(chapterId) {
     if (!chapterId) return;
-    const chapter = (this.$store.nav.tree || []).find(t => t.type === 'chapter' && String(t.id) === String(chapterId));
-    const first = chapter?.pages?.[0];
+    const first = firstPageInChapter(this.$store.nav.tree, chapterId);
     if (first) this.selectPage(first);
   },
 

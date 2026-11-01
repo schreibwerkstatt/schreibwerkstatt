@@ -84,7 +84,7 @@ async function runBookImportJob(jobId, { userEmail, zipLimits = SWBOOK_ZIP_LIMIT
 
     // Buch + Owner-Grant als Einheit; scheitert der Grant, bricht der Job ab.
     updateJob(jobId, { progress: 20, statusText: 'job.book-import.creatingBook' });
-    const created = await createOwnedBook({ name: bookName, description }, userEmail, ctx);
+    const created = await createOwnedBook({ name: bookName, description }, userEmail, ctx, { via: 'book-import' });
     const bookId = created.id;
     createdBookId = bookId;
     setContext({ book: bookId });

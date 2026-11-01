@@ -1,5 +1,6 @@
 // Lektoratszeit-Tracking: summiert die Sekunden, während der Prüfmodus
-// (`checkDone`) auf einer Seite aktiv ist und der Tab sichtbar ist.
+// (`checkDone`) auf einer Seite aktiv ist, nicht bearbeitet wird und der Tab
+// sichtbar ist.
 // Timer-Lifecycle, Clamp, Tab-Lease und Senden kommen aus
 // [heartbeat-tracker.js](heartbeat-tracker.js).
 //
@@ -26,13 +27,17 @@ export const lektoratTimeMethods = {
       flush: '_flushLektoratTime',
     },
     spec: {
+      // Im Edit-Modus bucht die Schreibzeit (writing-time.js) — Befunde neben
+      // dem Editor (editor/lektorat-live.js) zählen nicht doppelt.
       isActive: (ctx) => ctx.checkDone
+        && !ctx.editMode
         && ctx.$store.nav.selectedBookId
         && ctx.currentPage?.id
         && document.visibilityState === 'visible',
 
       watch: [
         { get: 'checkDone' },
+        { get: 'editMode' },
         { get: (ctx) => ctx.$store.nav.selectedBookId, restart: true },
         { get: (ctx) => ctx.currentPage?.id, restart: true },
       ],

@@ -128,7 +128,7 @@ async function runManuscriptImportJob(jobId, { userEmail, mode, bookName, bookId
     let effBookId = bookId;
     if (mode === 'new-book') {
       updateJob(jobId, { progress: 25, statusText: 'job.manuscript-import.creatingBook' });
-      const created = await createOwnedBook({ name: bookName }, userEmail, { session: { user: { email: userEmail } } });
+      const created = await createOwnedBook({ name: bookName }, userEmail, { session: { user: { email: userEmail } } }, { via: 'manuscript-import' });
       effBookId = created.id;
       createdBookId = created.id;
       audit('info', 'importLog.bookCreated', { name: bookName });

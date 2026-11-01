@@ -390,3 +390,93 @@ test('Vortext links vom Einfuegepunkt geht als X-Stt-Prompt mit', async ({ page 
   expect(prompts[0]).toBe('Start.');
   expect(prompts[1]).toBe('Start. Hallo Welt');
 });
+
+test('Abschnittswechsel ohne Stopp: spaetes Transkript landet nicht im neuen Abschnitt', async ({ page }) => {
+  // Unabhaengig von jedem Stop-Pfad: ein Transkript gehoert zu dem Abschnitt,
+  // in dem es gesprochen wurde.
+  await page.route('**/stt/transcribe*', async (route) => {
+    await new Promise((r) => setTimeout(r, 600));
+    try {
+      await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ text: 'Hallo Welt' }) });
+    } catch { /* Request abgebrochen */ }
+  });
+  await ready(page, HARNESS + '?enabled=true');
+  await page.evaluate(() => { window.__sttApp.currentPage = { id: 1 }; });
+  await placeCaret(page);
+  const before = await page.evaluate(() => document.getElementById('editor').textContent);
+
+  const reqSent = page.waitForRequest('**/stt/transcribe*');
+  await page.locator('#stt-mic').click();
+  await page.waitForFunction(() => window.__sttApp.$store.stt.recording === true);
+  await page.evaluate(() => { window.__voice = true; });
+  await page.waitForTimeout(250);
+  await page.evaluate(() => { window.__voice = false; });
+  await reqSent;
+  await page.evaluate(() => { window.__sttApp.currentPage = { id: 2 }; });
+
+  await page.waitForTimeout(900);
+  expect(await page.evaluate(() => document.getElementById('editor').textContent)).toBe(before);
+});
+
+test('Lange Pause mit Caret mitten im Absatz: Absatz wird am Caret geteilt', async ({ page }) => {
+  await ready(page, HARNESS + '?enabled=true');
+  // Caret bewusst hinter „Erster Satz." setzen.
+  await page.evaluate(() => {
+    const el = document.getElementById('editor');
+    el.innerHTML = '<p>Erster Satz. Zweiter Satz.</p>';
+    el.focus();
+    const r = document.createRange();
+    r.setStart(el.firstChild.firstChild, 'Erster Satz.'.length);
+    r.collapse(true);
+    const sel = document.getSelection();
+    sel.removeAllRanges();
+    sel.addRange(r);
+    window.__sttApp.$store.stt.caretUserSet = true;
+  });
+  await page.locator('#stt-mic').click();
+  await page.waitForFunction(() => window.__sttApp.$store.stt.recording === true);
+  // Segment 1 (inline am Caret), lange Pause, Segment 2 (neuer Absatz).
+  await page.evaluate(() => { window.__voice = true; });
+  await page.waitForTimeout(350);
+  await page.evaluate(() => { window.__voice = false; });
+  await page.waitForTimeout(550);
+  await page.evaluate(() => { window.__voice = true; });
+  await page.waitForTimeout(350);
+  await page.evaluate(() => { window.__voice = false; });
+
+  await page.waitForFunction(() => document.querySelectorAll('#editor p').length === 2);
+  const ps = await page.evaluate(() => [...document.querySelectorAll('#editor p')].map((p) => p.textContent));
+  expect(ps).toEqual(['Erster Satz. Hallo Welt.', 'Hallo Welt Zweiter Satz.']);
+});
+
+test('Hoechstdauer schneidet mitten im Satz: Whispers Schlusspunkt faellt weg', async ({ page }) => {
+  await page.route('**/stt/transcribe*', async (route) => {
+    await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ text: 'Eins.' }) });
+  });
+  await ready(page, HARNESS + '?enabled=true');
+  await page.evaluate(() => { window.__sttApp.$store.stt.vad.maxSegmentS = 0.5; });
+  await placeCaret(page);
+  await page.locator('#stt-mic').click();
+  await page.waitForFunction(() => window.__sttApp.$store.stt.recording === true);
+  // Dauer-Sprechen ueber die Hoechstdauer (max-Cut), dann Pause (silence-Cut).
+  await page.evaluate(() => { window.__voice = true; });
+  await page.waitForTimeout(950);
+  await page.evaluate(() => { window.__voice = false; });
+
+  await page.waitForFunction(() => /Eins Eins\.$/.test(document.getElementById('editor').textContent.trim()));
+});
+
+test('Mic-Klick waehrend der Mikrofon-Abfrage bricht ab und gibt das Mikrofon frei', async ({ page }) => {
+  await ready(page, HARNESS + '?enabled=true');
+  await page.evaluate(() => {
+    const orig = navigator.mediaDevices.getUserMedia;
+    navigator.mediaDevices.getUserMedia = (c) => new Promise((r) => setTimeout(() => r(orig(c)), 400));
+  });
+  await page.locator('#stt-mic').click();
+  await page.waitForFunction(() => window.__sttApp.$store.stt.pending === true);
+  await page.locator('#stt-mic').click(); // abbrechen
+  expect(await page.evaluate(() => window.__sttApp.$store.stt.pending)).toBe(false);
+
+  await page.waitForFunction(() => window.__micStopped > 0);
+  expect(await page.evaluate(() => window.__sttApp.$store.stt.recording)).toBe(false);
+});

@@ -1,4 +1,5 @@
 import { EVT } from '../../events.js';
+import { trackUsageEvent } from '../../features-usage.js';
 import {
   computeTtsSentences, coalesceTtsRanges, splitLongRange, chunkTtsRanges,
   collectTtsSegments, hasTtsText, ttsSegmentAt,
@@ -247,6 +248,7 @@ export const ttsProofMethods = {
     if (idx < 0) idx = this._ttsSavedIndex(segs);
     this._ttsLog(`start locale=${this._ttsLocaleCode()} book=${this.$store.nav.selectedBookId || '-'} page=${this.currentPage?.id || '-'}`);
     p.start(segs, Math.max(0, idx));
+    trackUsageEvent('tts.start');
   },
 
   // Nicht-leere Markierung in der Leseansicht → Start ab dem Satz, in dem sie

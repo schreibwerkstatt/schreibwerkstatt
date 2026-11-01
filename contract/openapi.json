@@ -2,9 +2,9 @@
   "openapi": "3.1.0",
   "info": {
     "title": "Schreibwerkstatt — Client-Vertrag (macOS, Android)",
-    "version": "api 4 · editorApi 1",
+    "version": "api 5 · editorApi 1",
     "description": "Die REST-Fläche, die die nativen Clients nutzen. Regeln, Versionen und Ablauf: contract/README.md. Antworten dürfen Felder tragen, die hier nicht stehen — ein Client ignoriert sie.",
-    "x-api": 4,
+    "x-api": 5,
     "x-editor-api": 1
   },
   "components": {
@@ -1526,6 +1526,10 @@
         "properties": {
           "text": {
             "type": "string"
+          },
+          "uncertain": {
+            "type": "boolean",
+            "description": "Whisper-Konfidenz (seit api 5): true = das Modell ist unsicher, ob Sprache vorlag; false = sicher. Fehlt, wenn das STT-Backend keine Konfidenz liefert."
           }
         },
         "required": [

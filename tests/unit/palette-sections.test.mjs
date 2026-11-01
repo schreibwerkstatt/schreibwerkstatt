@@ -9,7 +9,7 @@ import {
   visiblePaletteActions, matchFeatureFuzzy, RECENT_TARGET_COUNT,
 } from '../../public/js/cards/palette-sections.js';
 import { hasWordPrefix } from '../../public/js/cards/palette-fuzzy.js';
-import { firstPageInChapter } from '../../public/js/cards/palette-providers.js';
+import { firstPageInChapter } from '../../public/js/book/tree/first-page.js';
 import {
   DEFAULT_RECENT_KEYS, KOMPLETT_HIDDEN_BUCHTYPEN, REQUIRED_CONFIG_FLAGS, FEATURES, isFeatureAvailable, unavailabilityReasonKey,
 } from '../../public/js/cards/feature-registry.js';

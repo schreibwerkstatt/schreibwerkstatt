@@ -1,12 +1,16 @@
 'use strict';
 // Feature-Usage-Tracking pro User. Quick-Pills + Command-Palette lesen daraus
 // die zuletzt genutzten Features (Recency-Sort). Allowlist verhindert Pollution
-// durch beliebige Keys.
+// durch beliebige Keys. Jede Karten-Oeffnung landet zusaetzlich mit Quelle
+// (Palette/Kachel/Sidebar/Shortcut) als `card.open` in usage_events — dort liegt
+// die Zeitachse; die Zaehler hier tragen nur die Recency-Liste.
 
 const express = require('express');
 const { db } = require('../db/schema');
 const { guardBook, sessionEmail } = require('../lib/acl');
 const { pageBookGuard } = require('../lib/page-guard');
+const { setContext } = require('../lib/log-context');
+const { isEvent, recordUsageEvent, SOURCES } = require('../lib/usage-events');
 const logger = require('../logger');
 
 const router = express.Router();
@@ -56,11 +60,6 @@ const ALLOWED_KEYS = new Set([
   'onboarding',
 ]);
 
-// Quellen für Source-Tag im Tracking-Log. Persistiert wird nur der Key —
-// der Source-Tag landet im Winston-Log (für spätere Auswertung „Palette vs.
-// Tile vs. Sidebar"), ohne Schema-Change.
-const KNOWN_SOURCES = new Set(['palette', 'tile', 'sidebar', 'shortcut']);
-
 router.post('/track', jsonBody, (req, res) => {
   const userEmail = sessionEmail(req);
   if (!userEmail) return res.status(401).json({ error_code: 'NOT_LOGGED_IN' });
@@ -69,7 +68,7 @@ router.post('/track', jsonBody, (req, res) => {
     return res.status(400).json({ error_code: 'INVALID_KEY' });
   }
   const rawSource = (req.body?.source || '').toString();
-  const source = KNOWN_SOURCES.has(rawSource) ? rawSource : null;
+  const source = SOURCES.has(rawSource) ? rawSource : null;
   const bookId = parseInt(req.body?.book_id, 10);
   if (bookId && !guardBook(req, res, bookId, 'viewer')) return;
   const now = Date.now();
@@ -81,12 +80,31 @@ router.post('/track', jsonBody, (req, res) => {
         last_used = excluded.last_used,
         use_count = use_count + 1
     `).run(userEmail, key, now);
-    if (source) logger.info(`[usage/track] ${key} via ${source}`);
+    recordUsageEvent({ userEmail, event: 'card.open', bookId: bookId || null, source, meta: { feature: key } });
     res.json({ ok: true });
   } catch (e) {
     logger.error('[usage/track] DB-Fehler: ' + e.message);
     res.status(500).json({ error_code: 'DB_ERROR' });
   }
+});
+
+// Nutzungs-Event des Clients (docs/usage-events.md). Nur Events mit
+// origin 'client' — Logins, Jobs und Karten-Oeffnungen schreibt der Server
+// selbst. Meta wird im Katalog auf kategoriale Felder zugeschnitten.
+// Best-Effort-Vertrag: 204 auch bei verworfenem Meta, 400 nur fuer
+// unbekannte Events (Aufrufer-Bug, im Drift-Test gegated).
+router.post('/event', jsonBody, (req, res) => {
+  const userEmail = sessionEmail(req);
+  if (!userEmail) return res.status(401).json({ error_code: 'NOT_LOGGED_IN' });
+  const event = String(req.body?.event || '');
+  if (!isEvent(event, 'client')) return res.status(400).json({ error_code: 'INVALID_EVENT' });
+  const bookId = parseInt(req.body?.book_id, 10) || null;
+  if (bookId) {
+    if (!guardBook(req, res, bookId, 'viewer')) return;
+    setContext({ book: bookId });
+  }
+  recordUsageEvent({ userEmail, event, bookId, meta: req.body?.meta });
+  res.status(204).end();
 });
 
 router.get('/recent', (req, res) => {

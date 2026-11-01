@@ -1,5 +1,5 @@
 // Teil von notebookEditMethods (siehe Facade edit.js).
-import { clearDraft, clearNormalSnapshot, editorHost, findInHtml, getActiveEditorContainer, htmlToText, installEditCounter, isNoChange, isPageConflict, mountEditorHtml, readConflictBody, readDraft, readEditorPrefs, savePage, sortByPosition, stripLektoratMarks, writeDraft, writeNormalSnapshot } from './_shared.js';
+import { clearDraft, clearNormalSnapshot, editorHost, findInHtml, getActiveEditorContainer, htmlToText, installEditCounter, isNoChange, isPageConflict, mountEditorHtml, readConflictBody, readDraft, readEditorPrefs, savePage, stripLektoratMarks, writeDraft, writeNormalSnapshot } from './_shared.js';
 import { isLiveEditedElsewhere, startLiveEdit, stopLiveEdit } from '../../live-edit.js';
 import { noteEditStartDuringOutage, noteSaveRecovered } from '../save-outage.js';
 import { claimSaveOwner, ownsSave } from '../save-owner.js';
@@ -81,6 +81,7 @@ export const lifecycleMethods = {
     this._ensureLiveBlockIds(serverHtml);
     app.currentPageEmpty = !htmlToText(serverHtml).trim();
     this._filterFindingsAfterSave(serverHtml);
+    app._flushLektoratLiveApplied?.(serverHtml);
     app._syncPageStatsAfterSave?.(app.currentPage, serverHtml);
     // Sidebar-Lektorat-Status flippt auf 'warn' (updated_at > checkedAt) — Server-Map nachladen.
     app.refreshPageAges?.();
@@ -168,10 +169,10 @@ export const lifecycleMethods = {
   },
 
 
-  // Nach jedem erfolgreichen Save: Findings, deren `original`-Text nicht mehr
-  // im neuen HTML vorkommt, gelten als behoben und fliegen raus. Gilt sowohl
-  // für saveEdit (expliziter Save) als auch quickSave (Ctrl+S/Autosave) –
-  // damit das Prüf-Panel auch nach Fokus-Editor-Edits aktuell bleibt.
+  // Nach jedem erfolgreichen Save (und nach Refetch/Abbrechen): Findings, deren
+  // `original`-Text nicht mehr im neuen HTML vorkommt, tragen `umgeschrieben`
+  // (grau, nicht mehr auswählbar) und bleiben in der Liste — angenommen ist nur,
+  // was übernommen wurde. Gilt für saveEdit, quickSave/Autosave und Fokus-Saves.
   // Überlebens-Check via `findInHtml` (tolerant gegen Tag-/Entity-/Whitespace-
   // Differenzen), identisch zu `sortByPosition` — reines indexOf auf rohem HTML
   // würde ein noch gültiges Finding verwerfen, sobald sich Markup (z.B.
@@ -179,25 +180,13 @@ export const lifecycleMethods = {
   _filterFindingsAfterSave(newHtml) {
     const app = editorHost();
     if (!app?.lektoratFindings || app.lektoratFindings.length === 0) return;
-    const survivors = [];
-    const prevSelected = new Map();
-    for (let i = 0; i < app.lektoratFindings.length; i++) {
-      const f = app.lektoratFindings[i];
-      if (f.original && findInHtml(newHtml, f.original)) {
-        survivors.push(f);
-        prevSelected.set(f, !!app.selectedFindings[i]);
-      }
-    }
-    app.lektoratFindings = sortByPosition(newHtml, survivors);
-    app.selectedFindings = app.lektoratFindings.map(f => prevSelected.get(f) ?? false);
-    app.appliedOriginals = app.appliedOriginals.filter(o => findInHtml(newHtml, o));
-    if (app.lektoratFindings.length === 0) {
-      app.checkDone = false;
-      app.correctedHtml = null;
-      app.hasErrors = false;
-    } else {
-      app._recomputeCorrectedHtml?.();
-    }
+    app.lektoratFindings.forEach((f, i) => {
+      const gone = !app.appliedOriginals.includes(f.original) && !(f.original && findInHtml(newHtml, f.original));
+      if (!!f.umgeschrieben !== gone) f.umgeschrieben = gone;
+      if (!gone && f.erledigt) f.erledigt = false;
+      if (gone && app.selectedFindings[i]) app.selectedFindings[i] = false;
+    });
+    app._recomputeCorrectedHtml?.();
   },
 
 
@@ -210,9 +199,9 @@ export const lifecycleMethods = {
     // laufende Arbeit anfassen.
     if (app.editMode) return;
     if (app.checkLoading || app.saveApplying != null) return;
-    // Prüfmodus blockt Edit (Invariante: editMode + checkDone forbidden).
-    // Findings-Apply-Pfad bleibt via saveCorrections, ohne contenteditable.
-    if (app.checkDone) return;
+    // Prüfmodus darf offen bleiben: die Befunde stehen dann neben dem Editor und
+    // sind im Live-Text als Highlights markiert (editor/lektorat-live.js) — nie
+    // als Markup im contenteditable.
     // viewer/lektor duerfen Page-HTML nicht direkt mutieren.
     // Defense-in-depth zum verstecken Button-Hide in editor.html.
     if (!app.canEdit?.()) return;
@@ -349,7 +338,11 @@ export const lifecycleMethods = {
       });
       if (!ok) return;
     }
+    // Im Editor übernommene, ungespeicherte Lektorat-Korrekturen sind mit dem
+    // Text verworfen; Befunde gegen den gespeicherten Stand neu bewerten.
+    app._discardLektoratLivePending?.();
     this._teardownEditSession();
+    if (app.checkDone) this._filterFindingsAfterSave(app.originalHtml || '');
     app.updatePageView?.();
     if (app.focusActive) app.exitFocusMode?.();
   },

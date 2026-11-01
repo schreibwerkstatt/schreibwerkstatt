@@ -9,6 +9,7 @@
 
 const express = require('express');
 const adminUsage = require('../db/admin-usage');
+const usageEvents = require('../db/usage-events');
 const billing = require('../lib/anthropic-billing');
 const appUsers = require('../db/app-users');
 const { requireAdmin } = require('../lib/admin-mw');
@@ -51,6 +52,15 @@ router.get('/users', (req, res) => {
   const rows = adminUsage.listUsersWithUsage({ ...range, includeAdmins: _includeAdmins(req) });
   _auditView(req, 'users', { from: range.from, to: range.to });
   res.json({ users: rows, from: range.from || null, to: range.to || null });
+});
+
+// GET /admin/usage/behavior?from=&to=  — Tab «Verhalten» (docs/usage-events.md).
+// Zeitraum wie die Kosten-Tabs; Kohorten laufen ueber die ganze Historie.
+router.get('/behavior', (req, res) => {
+  const range = adminUsage.resolveRange(_range(req));
+  const report = usageEvents.behaviorReport({ ...range, includeAdmins: _includeAdmins(req) });
+  _auditView(req, 'behavior', { from: range.fromIso, to: range.toIso });
+  res.json({ ...report, from: range.fromIso, to: range.toIso });
 });
 
 // Normalisiert `?user=` (string | string[]) zu einem deduplizierten,

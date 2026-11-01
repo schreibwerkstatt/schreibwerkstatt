@@ -53,9 +53,8 @@
       <button type="button" class="dock-btn stt-dock-btn"
               :aria-pressed="$store.stt.recording"
               :class="{ 'is-recording': $store.stt.recording, 'is-pending': $store.stt.pending }"
-              :disabled="$store.stt.pending"
-              :data-tip="$store.stt.recording ? t('stt.stop') : t('stt.dictate')"
-              :aria-label="$store.stt.recording ? t('stt.stop') : t('stt.dictate')"
+              :data-tip="($store.stt.recording || $store.stt.pending) ? t('stt.stop') : t('stt.dictate')"
+              :aria-label="($store.stt.recording || $store.stt.pending) ? t('stt.stop') : t('stt.dictate')"
               @click="toggleSttDictation()">
         <svg class="icon" aria-hidden="true"><use href="/icons.svg#mic"/></svg>
       </button>

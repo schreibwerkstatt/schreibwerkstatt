@@ -3,7 +3,9 @@
 // Upstream via globalem fetch-Stub und prueft: disabled->404, kein/falsches
 // Audio->400/415, enabled->Forward+{text}, Upstream-Fehler->502 (transient) bzw. 424 (dauerhaft), Timeout->408,
 // Buch-Locale gewinnt als Sprache, Secret bleibt server-seitig, Vortext als
-// Prompt + Echo-Filter, ß->ss fuer Schweizer Buecher.
+// Prompt + Echo-Filter, ß->ss fuer Schweizer Buecher, Buch-ACL, Whisper-
+// Konfidenz aus verbose_json (Stille verwerfen, `uncertain`, Echo nur bei
+// Unsicherheit) samt Rueckfall auf json, kaputter 200-Body -> 502.
 
 const test = require('node:test');
 const assert = require('node:assert/strict');
@@ -135,6 +137,7 @@ test('Buch-Locale gewinnt als Sprache (de-CH -> de)', async () => {
     .run(910001, 'stt-locale-book');
   db.prepare(`INSERT INTO book_settings (book_id, language, region, updated_at) VALUES (?, ?, ?, ${now})`)
     .run(910001, 'de', 'CH');
+  require('../../db/book-access').grantAccess(910001, 'tester@test.dev', 'viewer');
   let sawLang = null;
   fetchHandler = async (_url, opts) => {
     const form = opts.body;
@@ -144,18 +147,21 @@ test('Buch-Locale gewinnt als Sprache (de-CH -> de)', async () => {
   const r = await postAudio(Buffer.from('d'), { query: '?bookId=910001' });
   assert.equal(r.status, 200);
   assert.equal(sawLang, 'de');
+  db.prepare('DELETE FROM book_access WHERE book_id = ?').run(910001);
   db.prepare('DELETE FROM book_settings WHERE book_id = ?').run(910001);
   db.prepare('DELETE FROM books WHERE book_id = ?').run(910001);
 });
 
-function withBook(bookId, region, fn) {
+function withBook(bookId, region, fn, { access = true } = {}) {
   const { db } = require('../../db/connection');
   const now = "strftime('%Y-%m-%dT%H:%M:%fZ','now')";
   db.prepare(`INSERT INTO books (book_id, name, created_at, updated_at) VALUES (?, ?, ${now}, ${now})`)
     .run(bookId, `stt-book-${bookId}`);
   db.prepare(`INSERT INTO book_settings (book_id, language, region, updated_at) VALUES (?, ?, ?, ${now})`)
     .run(bookId, 'de', region);
+  if (access) require('../../db/book-access').grantAccess(bookId, 'tester@test.dev', 'viewer');
   return Promise.resolve(fn()).finally(() => {
+    db.prepare('DELETE FROM book_access WHERE book_id = ?').run(bookId);
     db.prepare('DELETE FROM book_settings WHERE book_id = ?').run(bookId);
     db.prepare('DELETE FROM books WHERE book_id = ?').run(bookId);
   });
@@ -303,4 +309,82 @@ test('upstream abort -> 408 stt_timeout', async () => {
   const r = await postAudio(Buffer.from('d'));
   assert.equal(r.status, 408);
   assert.equal((await r.json()).error, 'stt_timeout');
+});
+
+test('fremdes Buch -> 403, kein Upstream-Call', async () => {
+  setStt({ enabled: true, host: 'http://whisper.lan:8000' });
+  let called = false;
+  fetchHandler = async () => { called = true; return new Response('{}', { status: 200 }); };
+  await withBook(910010, 'DE', async () => {
+    const r = await postAudio(Buffer.from('d'), { query: '?bookId=910010' });
+    assert.equal(r.status, 403);
+    assert.equal((await r.json()).error_code, 'NO_BOOK_ACCESS');
+  }, { access: false });
+  assert.equal(called, false);
+});
+
+test('kaputter 200-Body des Upstreams -> 502 (Client wiederholt), nicht stille Leere', async () => {
+  setStt({ enabled: true, host: 'http://whisper.lan:8000' });
+  fetchHandler = async () => new Response('NICHT JSON', { status: 200 });
+  const r = await postAudio(Buffer.from('d'));
+  assert.equal(r.status, 502);
+  assert.equal((await r.json()).error_code, 'STT_UPSTREAM');
+});
+
+// verbose_json-Antwort mit einem Segment der gegebenen Konfidenz.
+function whisperVerbose(text, { ns, lp }, seen = {}) {
+  return async (_url, opts) => {
+    seen.format = opts.body.get('response_format');
+    return new Response(JSON.stringify({
+      text, segments: [{ start: 0, end: 2, text, no_speech_prob: ns, avg_logprob: lp }],
+    }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+  };
+}
+
+test('verbose_json: sichere Sprache -> uncertain:false, unsichere -> uncertain:true', async () => {
+  setStt({ enabled: true, host: 'http://verbose.lan:8000' });
+  const seen = {};
+  fetchHandler = whisperVerbose('Tschüss.', { ns: 0.05, lp: -0.2 }, seen);
+  let r = await postAudio(Buffer.from('d'));
+  assert.equal(seen.format, 'verbose_json');
+  assert.deepEqual(await r.json(), { text: 'Tschüss.', uncertain: false });
+
+  fetchHandler = whisperVerbose('Vielen Dank.', { ns: 0.5, lp: -0.6 });
+  r = await postAudio(Buffer.from('d'));
+  assert.deepEqual(await r.json(), { text: 'Vielen Dank.', uncertain: true });
+});
+
+test('verbose_json: klar keine Sprache -> leeres Transkript', async () => {
+  setStt({ enabled: true, host: 'http://verbose.lan:8000' });
+  fetchHandler = whisperVerbose('Untertitel im Auftrag des ZDF.', { ns: 0.9, lp: -1.4 });
+  const r = await postAudio(Buffer.from('d'));
+  assert.equal((await r.json()).text, '');
+});
+
+test('Echo-Filter nur bei Unsicherheit: sicher wiederholter Satz bleibt', async () => {
+  setStt({ enabled: true, host: 'http://verbose.lan:8000' });
+  const prompt = encodeURIComponent('Ich weiss es nicht. Ich weiss es wirklich nicht.');
+  fetchHandler = whisperVerbose('Ich weiss es wirklich nicht.', { ns: 0.02, lp: -0.15 });
+  let r = await postAudio(Buffer.from('d'), { headers: { 'X-Stt-Prompt': prompt } });
+  assert.equal((await r.json()).text, 'Ich weiss es wirklich nicht.');
+
+  fetchHandler = whisperVerbose('Ich weiss es wirklich nicht.', { ns: 0.45, lp: -0.9 });
+  r = await postAudio(Buffer.from('d'), { headers: { 'X-Stt-Prompt': prompt } });
+  assert.equal((await r.json()).text, '');
+});
+
+test('Backend ohne verbose_json: einmal mit json wiederholen und Host merken', async () => {
+  setStt({ enabled: true, host: 'http://plain.lan:8000' });
+  const formats = [];
+  fetchHandler = async (_url, opts) => {
+    const f = opts.body.get('response_format');
+    formats.push(f);
+    if (f === 'verbose_json') return new Response('{"error":"unsupported response_format"}', { status: 400 });
+    return new Response(JSON.stringify({ text: 'Hallo.' }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+  };
+  let r = await postAudio(Buffer.from('d'));
+  assert.deepEqual(await r.json(), { text: 'Hallo.' });
+  r = await postAudio(Buffer.from('d'));
+  assert.deepEqual(await r.json(), { text: 'Hallo.' });
+  assert.deepEqual(formats, ['verbose_json', 'json', 'json']);
 });

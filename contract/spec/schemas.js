@@ -201,5 +201,8 @@ module.exports = {
   SynonymJobRequest: obj({ wort: str(), satz: str(), book_id: nul(int()), page_id: nul(str()) }, ['wort']),
   CheckJobRequest: obj({ page_id: int(), book_id: nul(int()), page_name: nul(str()) }, ['page_id']),
   SynonymList: obj({ synonyme: arr(ref('Synonym')), disabled: bool(), lemma: nul(str()) }),
-  Transcript: obj({ text: str() }, ['text']),
+  Transcript: obj({
+    text: str(),
+    uncertain: bool('Whisper-Konfidenz (seit api 5): true = das Modell ist unsicher, ob Sprache vorlag; false = sicher. Fehlt, wenn das STT-Backend keine Konfidenz liefert.'),
+  }, ['text']),
 };

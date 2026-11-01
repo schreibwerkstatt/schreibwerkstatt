@@ -27,6 +27,15 @@
 // verworfen. Region CH/LI: ß -> ss (Whisper kennt nur "de" und schreibt
 // bundesdeutsch).
 //
+// Konfidenz: der Proxy fordert `verbose_json` an und mittelt `no_speech_prob`
+// und `avg_logprob` der Whisper-Segmente (dauergewichtet). Klar keine Sprache
+// -> `{ text: '' }`; unsicher -> `uncertain: true` (Client wendet dann seinen
+// Floskel-Filter an), sicher -> `uncertain: false` (Floskel-Filter und
+// Echo-Filter greifen nicht, „Tschüss." als Dialogzeile bleibt). Liefert das
+// Backend keine Segmente, fehlt `uncertain` und alles bleibt wie ohne
+// Konfidenz. Lehnt es `verbose_json` ab (4xx), wiederholt der Proxy einmal mit
+// `json` und merkt sich das pro Host bis zum Neustart.
+//
 // Upstream-Fehler: transient (5xx, 408/425/429) -> 502 STT_UPSTREAM, der
 // Client wiederholt. Dauerhaft (uebrige 4xx: unbekanntes Modell, Key ohne
 // Recht, kaputte Anfrage) -> 424 STT_UPSTREAM_REJECTED, der Client wiederholt
@@ -36,9 +45,8 @@ const express = require('express');
 const logger = require('../logger');
 const appSettings = require('../lib/app-settings');
 const { toIntId } = require('../lib/validate');
-const { setContext } = require('../lib/log-context');
 const { getBookLocale } = require('../db/schema');
-const { sessionEmail } = require('../lib/acl');
+const { guardBook, sessionEmail } = require('../lib/acl');
 
 const router = express.Router();
 
@@ -69,13 +77,49 @@ function foldForEcho(s) {
 
 // Whisper wiederholt bei stillen/unklaren Segmenten gern den Prompt (oder
 // dessen letzten Satz). Ein Transkript, das vollstaendig im Prompt steht, ist
-// darum keine Sprache. Erst ab ECHO_MIN_CHARS — ein kurzes „und dann" darf
-// natuerlich mehrfach vorkommen.
+// darum keine Sprache — es sei denn, das Modell war sich sicher (absichtlich
+// wiederholter Satz, Refrain; Pruefung beim Aufrufer). Erst ab ECHO_MIN_CHARS —
+// ein kurzes „und dann" darf natuerlich mehrfach vorkommen.
 function isPromptEcho(text, prompt) {
   if (!prompt) return false;
   const t = foldForEcho(text);
   return t.length >= ECHO_MIN_CHARS && foldForEcho(prompt).includes(t);
 }
+
+// Schwellen der Konfidenz-Auswertung. Startwerte: der Info-Log traegt die
+// gemessenen Mittel (`ns=` / `lp=`), damit sie am echten Backend kalibriert
+// werden koennen. NO_SPEECH entspricht Whispers eigener Stille-Regel.
+const NO_SPEECH_PROB_MIN = 0.6;
+const NO_SPEECH_LOGPROB_MAX = -1.0;
+const UNCERTAIN_NO_SPEECH_MIN = 0.4;
+const UNCERTAIN_LOGPROB_MAX = -0.8;
+
+// Dauergewichtetes Mittel von no_speech_prob und avg_logprob ueber die
+// Segmente einer verbose_json-Antwort; null ohne verwertbare Segmente.
+function assessConfidence(json) {
+  const segs = Array.isArray(json?.segments) ? json.segments : [];
+  let weight = 0, noSpeech = 0, logprob = 0;
+  for (const seg of segs) {
+    const ns = Number(seg?.no_speech_prob);
+    const lp = Number(seg?.avg_logprob);
+    if (!Number.isFinite(ns) || !Number.isFinite(lp)) continue;
+    const dur = Number(seg.end) - Number(seg.start);
+    const w = Number.isFinite(dur) && dur > 0 ? dur : 1;
+    weight += w; noSpeech += ns * w; logprob += lp * w;
+  }
+  if (!weight) return null;
+  const ns = noSpeech / weight;
+  const lp = logprob / weight;
+  return {
+    noSpeech: ns,
+    logprob: lp,
+    silent: ns >= NO_SPEECH_PROB_MIN && lp <= NO_SPEECH_LOGPROB_MAX,
+    uncertain: ns >= UNCERTAIN_NO_SPEECH_MIN || lp <= UNCERTAIN_LOGPROB_MAX,
+  };
+}
+
+// Hosts, die `verbose_json` abgelehnt haben (bis zum Neustart).
+const verboseUnsupported = new Set();
 
 function swissSpelling(text) {
   return text.replace(/ß/g, 'ss').replace(/ẞ/g, 'SS');
@@ -137,7 +181,7 @@ router.post('/transcribe', rawAudioBody, async (req, res) => {
 
   const bookId = toIntId(req.query.bookId);
   const pageId = toIntId(req.query.pageId);
-  if (bookId) setContext({ book: bookId });
+  if (bookId && !guardBook(req, res, bookId, 'viewer')) return;
   const userEmail = sessionEmail(req);
   const mime = baseMime(req.headers['content-type']);
   const log = logger.child({ job: 'stt', user: userEmail || '-', book: bookId || '-' });
@@ -178,25 +222,30 @@ router.post('/transcribe', rawAudioBody, async (req, res) => {
   const ctrl = new AbortController();
   const timer = setTimeout(() => ctrl.abort(), upstreamTimeoutMs());
   const t0 = Date.now();
-  try {
+  // Sampling-Temperatur (App-Setting, Default 0 = deterministisch, weniger
+  // Halluzinationen bei stillen/unklaren Segmenten).
+  const temperature = Number(appSettings.get('stt.temperature'));
+  const headers = apiKey ? { Authorization: `Bearer ${apiKey}` } : undefined;
+  const send = (responseFormat) => {
     const form = new FormData();
     form.append('file', new Blob([req.body], { type: mime }), `segment.${ext}`);
     if (model) form.append('model', model);
     if (language) form.append('language', language);
     if (prompt) form.append('prompt', prompt);
-    form.append('response_format', 'json');
-    // Sampling-Temperatur (App-Setting, Default 0 = deterministisch, weniger
-    // Halluzinationen bei stillen/unklaren Segmenten).
-    const temperature = Number(appSettings.get('stt.temperature'));
+    form.append('response_format', responseFormat);
     form.append('temperature', String(Number.isFinite(temperature) ? temperature : 0));
-
-    const headers = apiKey ? { Authorization: `Bearer ${apiKey}` } : undefined;
-    const upstream = await fetch(`${host}/v1/audio/transcriptions`, {
-      method: 'POST',
-      headers,
-      body: form,
-      signal: ctrl.signal,
-    });
+    return fetch(`${host}/v1/audio/transcriptions`, { method: 'POST', headers, body: form, signal: ctrl.signal });
+  };
+  try {
+    let verbose = !verboseUnsupported.has(host);
+    let upstream = await send(verbose ? 'verbose_json' : 'json');
+    if (verbose && upstream.status >= 400 && upstream.status < 500 && !UPSTREAM_TRANSIENT.has(upstream.status)) {
+      const detail = await upstreamErrorText(upstream);
+      log.warn(`upstream ${upstream.status} auf verbose_json, weiter mit json ${ctx}${detail ? ` body=${detail}` : ''}`);
+      verbose = false;
+      upstream = await send('json');
+      if (upstream.ok) verboseUnsupported.add(host);
+    }
     if (!upstream.ok) {
       const status = upstream.status;
       const detail = await upstreamErrorText(upstream);
@@ -207,15 +256,24 @@ router.post('/transcribe', rawAudioBody, async (req, res) => {
         : res.status(502).json({ error_code: 'STT_UPSTREAM', error: 'stt_upstream', upstream_status: status });
     }
     const json = await upstream.json().catch(() => null);
-    let text = typeof json?.text === 'string' ? json.text : '';
-    const echo = isPromptEcho(text, prompt);
-    if (echo) text = '';
+    if (typeof json?.text !== 'string') {
+      // 200 ohne lesbares Transkript ist ein Upstream-Fehler, keine Stille.
+      log.warn(`upstream bad-body ${ctx} model=${model || '-'} latency=${Date.now() - t0}ms`);
+      return res.status(502).json({ error_code: 'STT_UPSTREAM', error: 'stt_upstream', upstream_status: upstream.status });
+    }
+    let text = json.text;
+    const conf = verbose ? assessConfidence(json) : null;
+    const silent = !!conf?.silent && text.trim().length > 0;
+    const echo = !silent && conf?.uncertain !== false && isPromptEcho(text, prompt);
+    if (silent || echo) text = '';
     else if (swiss) text = swissSpelling(text);
-    // Leeres Resultat (Stille/VAD-Fehltrigger/Whisper-Guard) und Prompt-Echo als
-    // eigene Marker — sonst nicht von einem echten Treffer unterscheidbar.
-    const kind = echo ? 'echo' : (text.length ? 'ok' : 'empty');
-    log.info(`${kind} ${ctx} lang=${language || '-'}${swiss ? '-ch' : ''} prompt=${prompt.length} chars=${text.length} ${Date.now() - t0}ms`);
-    return res.json({ text });
+    // Leeres Resultat (Stille/VAD-Fehltrigger/Whisper-Guard), Prompt-Echo und
+    // Stille laut Konfidenz als eigene Marker — sonst nicht von einem echten
+    // Treffer unterscheidbar.
+    const kind = silent ? 'nospeech' : echo ? 'echo' : (text.length ? 'ok' : 'empty');
+    const confLog = conf ? ` ns=${conf.noSpeech.toFixed(2)} lp=${conf.logprob.toFixed(2)}${conf.uncertain ? ' uncertain' : ''}` : '';
+    log.info(`${kind} ${ctx} lang=${language || '-'}${swiss ? '-ch' : ''} prompt=${prompt.length} chars=${text.length}${confLog} ${Date.now() - t0}ms`);
+    return res.json(conf ? { text, uncertain: conf.uncertain } : { text });
   } catch (err) {
     const isAbort = err && (err.name === 'AbortError' || err.code === 'ABORT_ERR');
     log.warn(`fetch ${isAbort ? 'TIMEOUT' : err.message} ${ctx} latency=${Date.now() - t0}ms`);

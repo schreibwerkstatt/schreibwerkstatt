@@ -1,14 +1,14 @@
 // Uebertragung eines Segments an /stt/transcribe — inklusive Retry-Politik.
 //
 // Die Fetches laufen parallel (Durchsatz), die EINFUEGUNG wird ueber
-// `rt.insertChain` in Sende-Reihenfolge serialisiert: sonst landete ein spaeter
+// `_sttInsertChain` in Sende-Reihenfolge serialisiert: sonst landete ein spaeter
 // gesprochenes, aber schneller transkribiertes Segment vor einem frueheren im
 // Text.
 
 // Segment-Retry: transiente Upstream-Fehler mehrfach mit exponentiellem Backoff
 // wiederholen, bevor der Fehler-Toast kommt — ein GPU-Cold-Start (Modell-Reload
 // nach Idle) oder kurzzeitige Backend-Last kostet so keinen Satz. Die Retries
-// laufen INNERHALB der insertChain (siehe _sttSendSegment) → Sprechreihenfolge
+// laufen INNERHALB der Einfuege-Kette (siehe _sttSendSegment) → Sprechreihenfolge
 // bleibt erhalten, spaetere Segmente warten nur mit dem Einfuegen.
 const STT_MAX_RETRY = 3;
 const STT_RETRY_DELAY_MS = 800; // Basis; Backoff = base * 2^attempt, gedeckelt
@@ -21,35 +21,35 @@ const STT_PROMPT_CHARS = 300;
 export const sttTransportMethods = {
   // Transkribiert ein Segment und fuegt es ein. Der Fetch startet sofort (mehrere
   // Segmente transkribieren parallel), die EINFUEGUNG wird aber ueber
-  // `rt.insertChain` in Sende-Reihenfolge serialisiert — so landet ein frueher
+  // `_sttInsertChain` in Sende-Reihenfolge serialisiert — so landet ein frueher
   // gesprochenes Segment auch dann vor einem spaeteren im Text, wenn dessen
   // Transkript (z. B. nach einem Retry) erst spaeter zurueckkommt. `rt` kommt
   // vom Aufrufer (onstop), weil das letzte Segment eines beendenden Stopps
   // gesendet wird, wenn `_sttRt` schon geraeumt ist. `rt.dead` (harter Stopp:
-  // Seitenwechsel, Edit-Modus verlassen) verwirft spaete Inserts.
-  _sttSendSegment(rt, blob, mime, boundaryKind) {
+  // Seitenwechsel, Edit-Modus verlassen) verwirft spaete Inserts. Zweite,
+  // von jedem Stop-Pfad unabhaengige Sperre: ein Transkript landet nur in dem
+  // Abschnitt, in dem es gesprochen wurde, und nur im Edit-Modus.
+  // `midCut`: das Segment endet an der Hoechstdauer mitten im Satz.
+  _sttSendSegment(rt, blob, mime, boundaryKind, { midCut = false } = {}) {
     if (!rt || rt.dead) return;
+    const pageId = this.currentPage?.id ?? null;
     this._sttBusyOn(); // Indikator „transkribiert" (mit Mindest-Standzeit)
     const prompt = this._sttPromptContext();
-    const fetchP = this._sttFetchTranscript(blob, mime, 0, rt.abort.signal, prompt)
-      .finally(() => this._sttBusyOff());
-    rt.insertChain = rt.insertChain
+    const fetchP = this._sttFetchTranscript(blob, mime, 0, rt.abort.signal, prompt);
+    this._sttInsertChain = this._sttInsertChain
       .then(async () => {
-        const text = await fetchP;
-        if (text == null) return; // Fehler/Abbruch bereits behandelt (Toast/Stop)
+        const res = await fetchP;
+        if (res == null) return; // Fehler/Abbruch bereits behandelt (Toast/Stop)
         if (rt.dead) return; // Session hart beendet -> nicht mehr einfuegen
-        this._sttInsertText(text, boundaryKind);
+        if ((this.currentPage?.id ?? null) !== pageId || !this.editMode) return;
+        this._sttInsertText(res.text, boundaryKind, { midCut, uncertain: res.uncertain });
       })
-      .catch(() => { /* ein fehlgeschlagener Insert darf die Kette nicht brechen */ });
+      .catch(() => { /* ein fehlgeschlagener Insert darf die Kette nicht brechen */ })
+      // Status bis das Transkript im Text steht. Ein harter Stopp hat den
+      // Zaehler schon genullt — dann nicht den einer neuen Session senken.
+      .finally(() => { if (!rt.dead) this._sttBusyOff(); });
   },
 
-  // Transkribiert ein Segment; gibt den Text zurueck oder null (Fehler bereits
-  // behandelt). Transiente Fehler (Netzwerk-Throw, 408/5xx) werden bis zu
-  // STT_MAX_RETRY-mal wiederholt, bevor der Fehler-Toast kommt — ein kurzer
-  // Upstream-Haenger kostet so keinen Satz. 404 (Feature aus) und 4xx
-  // (z. B. 413/415, 424 = Upstream lehnt dauerhaft ab) werden NICHT wiederholt. `signal` (Session-AbortController)
-  // beendet Request UND Retry-Wait sofort und still beim Stop — ein
-  // abgebrochenes Segment liefert `null` ohne Fehler-Toast.
   // Text links vom Einfuegepunkt als Whisper-Kontext: das Modell setzt dann
   // Schreibweise und Zeichensetzung des bestehenden Textes fort. Gelesen beim
   // SENDEN — ein vorheriges Segment, dessen Transkript noch aussteht, fehlt
@@ -60,6 +60,15 @@ export const sttTransportMethods = {
     return range ? this._sttTextBefore(range, STT_PROMPT_CHARS).trim() : '';
   },
 
+  // Transkribiert ein Segment; gibt `{ text, uncertain }` zurueck oder null
+  // (Fehler bereits behandelt). `uncertain` ist die Whisper-Konfidenz des
+  // Proxys (true/false) oder null, wenn das Backend keine liefert. Transiente
+  // Fehler (Netzwerk-Throw, 408/5xx) werden bis zu STT_MAX_RETRY-mal
+  // wiederholt, bevor der Fehler-Toast kommt — ein kurzer Upstream-Haenger
+  // kostet so keinen Satz. 404 (Feature aus) und 4xx (z. B. 413/415, 424 =
+  // Upstream lehnt dauerhaft ab) werden NICHT wiederholt. `signal`
+  // (Session-AbortController) beendet Request UND Retry-Wait sofort und still
+  // beim Stop — ein abgebrochenes Segment liefert `null` ohne Fehler-Toast.
   async _sttFetchTranscript(blob, mime, attempt, signal, prompt = '') {
     if (signal?.aborted) return null; // Session beendet -> still verwerfen
     const params = new URLSearchParams();
@@ -102,7 +111,8 @@ export const sttTransportMethods = {
     // 200 mit kaputtem Body (Server-/Proxy-Fehler): nicht stumm verwerfen.
     // Bei Abort waehrend des Body-Reads aber still bleiben (Stop).
     try {
-      return (await res.json())?.text || '';
+      const j = await res.json();
+      return { text: j?.text || '', uncertain: typeof j?.uncertain === 'boolean' ? j.uncertain : null };
     } catch (e) {
       if (signal?.aborted || e?.name === 'AbortError') return null;
       this._sttToastFailed();

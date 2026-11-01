@@ -113,6 +113,8 @@ const app = express();
 // Hinter einem Reverse-Proxy (NGINX, NPM, Traefik …) echte Client-IP
 // und req.secure korrekt auswerten lassen.
 app.set('trust proxy', 1);
+// Während des Graceful Shutdowns: 503 SHUTTING_DOWN statt neuer Arbeit.
+app.use(require('./lib/shutdown').gate);
 app.use(helmet({
   contentSecurityPolicy: false,
   crossOriginEmbedderPolicy: false,
@@ -538,32 +540,8 @@ const server = app.listen(PORT, '0.0.0.0', () => {
 });
 
 // ── Graceful Shutdown ────────────────────────────────────────────────────────
-// systemd schickt SIGTERM, Ctrl+C schickt SIGINT. Ohne Handler werden
-// offene SSE-Streams und Jobs abrupt gekappt. 30 s Drain-Zeit für laufende Requests,
-// danach `server.close()` + SQLite-Close. Kein Force-Kill von Jobs – die kommen
-// beim nächsten Start via cleanupStuckJobRuns() wieder hoch.
-let shuttingDown = false;
-function shutdown(signal) {
-  if (shuttingDown) return;
-  shuttingDown = true;
-  logger.info(`${signal} empfangen – Graceful Shutdown (max 30 s Drain)…`);
-  const force = setTimeout(() => {
-    logger.warn('Drain-Timeout erreicht – erzwinge Exit.');
-    try { db.close(); } catch {}
-    process.exit(1);
-  }, 30000);
-  force.unref();
-  server.close(err => {
-    clearTimeout(force);
-    if (err) logger.error('server.close Fehler: ' + err.message);
-    try { db.pragma('optimize'); } catch {}
-    try { db.close(); } catch {}
-    logger.info('Graceful Shutdown abgeschlossen.');
-    process.exit(err ? 1 : 0);
-  });
-}
-process.on('SIGTERM', () => shutdown('SIGTERM'));
-process.on('SIGINT',  () => shutdown('SIGINT'));
+// SIGTERM/SIGINT, Ablauf und Exit-Codes: lib/shutdown.js.
+require('./lib/shutdown').install({ server, db });
 
 process.on('unhandledRejection', (reason) => {
   // Das Log-Format (logger.js) gibt nur `message` und `stack` aus — Details in
@@ -573,7 +551,7 @@ process.on('unhandledRejection', (reason) => {
 });
 process.on('uncaughtException', (err) => {
   logger.error(`uncaughtException: ${err.message}`, { stack: err.stack });
-  shutdown('uncaughtException', err);
+  require('./lib/shutdown').requestShutdown('uncaughtException', { exitCode: 1 });
 });
 
 // Tägliche Cron-Jobs (node-cron) — lib/cron.js.

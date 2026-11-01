@@ -11,6 +11,7 @@ const express = require('express');
 const { Issuer, generators } = require('openid-client');
 const logger = require('../../../logger');
 const appUsers = require('../../../db/app-users');
+const { recordUsageEvent } = require('../../../lib/usage-events');
 const appSettings = require('../../../lib/app-settings');
 const { publicUrl } = require('../../../lib/public-url');
 const { clientIp, establishSession } = require('../credential-login');
@@ -140,6 +141,7 @@ router.get('/auth/callback', async (req, res) => {
           invitedBy: acceptedInvite.invited_by,
         });
         appUsers.acceptInvite(acceptedInvite.id);
+        recordUsageEvent({ userEmail: email, event: 'account.created', meta: { method: 'oidc', via: 'invite' } });
         // Das KI-Profil erbt createUser vom Einladenden (db/app-users.js). Die
         // Herkunft gehoert in die Audit-Spur, sonst steht im Admin-Drawer ein
         // Profil ohne jede Zuweisung.
@@ -161,6 +163,7 @@ router.get('/auth/callback', async (req, res) => {
           globalRole: 'user',
           status: 'active',
         });
+        recordUsageEvent({ userEmail: email, event: 'account.created', meta: { method: 'oidc', via: 'open-signup' } });
       } else {
         appUsers.recordAuditEvent(email, 'login-denied', { ip, userAgent, meta: { method: 'oidc', reason: 'not-invited' } });
         logger.warn('Login verweigert (kein Invite, ALLOW_OPEN_SIGNUP=false).', { user: email });
@@ -177,6 +180,7 @@ router.get('/auth/callback', async (req, res) => {
     delete req.session.returnTo;
     appUsers.touchLogin(email, claims.name || null);
     appUsers.recordAuditEvent(email, 'login', { ip, userAgent, meta: { method: 'oidc' } });
+    recordUsageEvent({ userEmail: email, event: 'auth.login', meta: { method: 'oidc' } });
     establishSession(req, res, {
       email,
       name: claims.name || user.display_name || email,

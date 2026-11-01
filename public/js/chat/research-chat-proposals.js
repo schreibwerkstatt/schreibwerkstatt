@@ -16,6 +16,7 @@
 // x-for-Item zu mutieren: Mutationen am Proxy nach einem await schlagen nicht
 // zuverlässig ins Template durch.
 import { sendJson } from '../utils.js';
+import { trackChatProposal } from '../features-usage.js';
 
 const PROPOSAL_KINDS = ['note', 'link', 'quote', 'fact'];
 const _key = (msg, pi) => `${msg?.id ?? 'x'}:${pi}`;
@@ -138,6 +139,9 @@ export const researchProposalMethods = {
       });
       const savedId = res?.item?.id || null;
       this._patchProposal(msg, pi, { saved_item_id: savedId });
+      // Nur eine frische Speicherung zaehlt; die 409-Pfade unten sind keine.
+      // Verwerfen gibt es im Recherche-Chat nicht — offen ist, was liegen bleibt.
+      if (savedId) trackChatProposal('research', 'applied', p.kind);
       if (this._proposalEdits[k]) { const n = { ...this._proposalEdits }; delete n[k]; this._proposalEdits = n; }
       // _proposalRemovedUrls bleibt stehen: der gespeicherte Vorschlag zeigt die
       // weggelassenen Links weiter durchgestrichen (bis zum Reload).

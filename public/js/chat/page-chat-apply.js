@@ -26,6 +26,7 @@
 import { escHtml, countInHtml, replaceInHtmlRich, richSkipReason, parseRichReplacement, clearStatusAfter, stripFocusArtefacts } from '../utils.js';
 import { contentRepo } from '../repo/content.js';
 import { loadQuoteStyle } from '../editor/shared/quote-normalize/api.js';
+import { trackChatProposal } from '../features-usage.js';
 
 const REASON_KEYS = {
   notFound: 'chat.originalNotFound',
@@ -217,6 +218,7 @@ export const pageChatApplyMethods = {
           if (!ok) item.v._error = root.t('chat.statusNotSaved');
         });
       }
+      this._trackChatProposals('applied', res.done.map(item => item.v));
       if (res.stale || this._chatGen !== gen) return;
       if (items.length > 1) {
         if (res.done.length) this._chatStatusFlash('chat.applyAllResult', { applied: res.done.length, skipped: res.failed.length });
@@ -235,6 +237,13 @@ export const pageChatApplyMethods = {
       for (const { v } of items) v._applying = false;
       if (this._chatGen === gen) this._refreshVorschlagStates();
     }
+  },
+
+  // Nutzungs-Event je Vorschlagstyp (korrektur/stil), Anzahl gebuendelt.
+  _trackChatProposals(action, vs) {
+    const byTyp = new Map();
+    for (const v of vs) byTyp.set(v.typ, (byTyp.get(v.typ) || 0) + 1);
+    for (const [typ, n] of byTyp) trackChatProposal('page', action, typ, n);
   },
 
   applyChatVorschlag(_vorschlag, msgIdx, vIdx) {
@@ -288,6 +297,7 @@ export const pageChatApplyMethods = {
       }
       v._applied = false;
       delete v.applied;
+      this._trackChatProposals('undone', [v]);
       this._patchChatVorschlag(msgId, vIdx, 'applied', { applied: false }).then((ok) => {
         if (!ok) v._error = root.t('chat.statusNotSaved');
       });
@@ -319,7 +329,9 @@ export const pageChatApplyMethods = {
       setDiscarded(!discard);
       v._error = window.__app.t('chat.statusNotSaved');
       this._refreshVorschlagStates();
+      return;
     }
+    this._trackChatProposals(discard ? 'discarded' : 'reopened', [v]);
   },
 
   // ── Titelvarianten ───────────────────────────────────────────────────────

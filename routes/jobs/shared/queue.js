@@ -24,6 +24,10 @@ function _interactiveSlots() {
 }
 let activeShared = 0;
 let activeReserved = 0;
+// Graceful Shutdown (lib/shutdown.js): ab hier startet kein Eintrag mehr. Wer
+// noch wartet, stirbt mit dem Prozess; seine job_runs räumt der Boot auf.
+let stopped = false;
+function stopQueue() { stopped = true; }
 
 // Auto-Cleanup: 2 h nachdem der Job terminal (done|error|cancelled) wurde,
 // wird der Memory-Eintrag entfernt. Vorher nicht – solange der Job läuft, soll
@@ -38,6 +42,7 @@ function _pickSlot(entry, maxShared, reserved) {
 }
 
 function drainQueue() {
+  if (stopped) return;
   const maxShared = _maxConcurrent();
   const reserved = _interactiveSlots();
   let i = 0;
@@ -111,5 +116,5 @@ function _slotUsage() {
 
 module.exports = {
   CLEANUP_DELAY_MS,
-  drainQueue, enqueueJob, _scheduleJobCleanup, _slotUsage,
+  drainQueue, enqueueJob, stopQueue, _scheduleJobCleanup, _slotUsage,
 };

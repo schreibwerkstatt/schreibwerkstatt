@@ -44,6 +44,9 @@ export const saveGuardMethods = {
   // gespeicherte Fassung als Basis vor (sonst liefe er beim nächsten Öffnen
   // gegen den eigenen Save in einen Merge).
   _releaseDraftAfterSave(pageId, html, saved) {
+    // Im Editor übernommene Lektorat-Korrekturen dieses Abschnitts am Lauf buchen
+    // (editor/lektorat-live.js) — der Save kam erst nach dem Wechsel an.
+    editorHost()?._flushLektoratLiveApplied?.(typeof saved?.html === 'string' ? saved.html : html, pageId);
     const draft = readDraft(pageId);
     if (!draft?.html || isNoChange(draft.html, html)) { clearDraft(pageId); return; }
     const base = typeof saved?.html === 'string' ? saved.html : html;

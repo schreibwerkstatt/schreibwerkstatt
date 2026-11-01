@@ -181,7 +181,7 @@ export const hashApplyMethods = {
           // Tab VOR dem Oeffnen setzen: `adminUsageEnter` laedt beim Oeffnen den
           // aktuellen Tab — sonst holte es zuerst den alten Tab umsonst.
           const tab = parts[2];
-          const valid = ['users', 'jobs', 'chat', 'summary', 'features', 'time', 'billing'];
+          const valid = ['users', 'jobs', 'chat', 'summary', 'features', 'time', 'behavior', 'billing'];
           if (tab && valid.includes(tab)) this.adminUsageTab = tab;
           else if (!tab) this.adminUsageTab = 'users';
           if (!this.showAdminUsageCard) await this.toggleAdminUsageCard();

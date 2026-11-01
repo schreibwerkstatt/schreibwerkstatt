@@ -16,7 +16,7 @@
 
   <!-- Tab-Bar -->
   <div class="tabs" role="tablist">
-    <template x-for="tab in ['users','jobs','chat','summary','features','time','billing']" :key="tab">
+    <template x-for="tab in ['users','jobs','chat','summary','features','time','behavior','billing']" :key="tab">
       <button type="button" role="tab"
               class="tabs-btn"
               :class="adminUsageTab === tab ? 'tabs-btn--active' : ''"
@@ -358,5 +358,6 @@
       </div>
     </div>
   </div>
+  <div id="partial-admin-usage-behavior"></div>
   <div id="partial-admin-usage-billing"></div>
 </div>

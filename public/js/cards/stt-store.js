@@ -15,8 +15,9 @@
 //             der Buch-Locale auf — kein Frontend-State dafür.
 //   vad     — browserseitige VAD-Segmentierung (aus /config).
 //   recording — aktive Aufnahme.
-//   pending — kurzlebiger Re-Entry-Guard während getUserMedia/Stop läuft.
-//   transcribing — Anzahl laufender Transkriptions-Requests.
+//   pending — getUserMedia läuft; ein Mic-Klick in dieser Phase bricht ab.
+//   transcribing — Anzahl gesendeter Segmente, deren Transkript noch nicht
+//             eingefügt (oder verworfen) ist.
 //   busy    — davon abgeleiteter Anzeige-Flag mit Mindest-Standzeit (verhindert
 //             Sub-Sekunden-Flackern des „Transkribiert"-Status bei kurzen
 //             Segmenten; gesetzt via _sttBusyOn/_sttBusyOff in stt-dictation.js).

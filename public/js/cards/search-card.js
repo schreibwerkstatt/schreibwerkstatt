@@ -11,6 +11,7 @@ import { startPoll } from './job-helpers.js';
 import { tRaw, tErrorRaw } from '../i18n.js';
 import { searchOfflineBook } from '../shared/offline-search.js';
 import { isBrowserOffline, isOfflineRejection } from '../app/boot/net-required.js';
+import { activateSearchHit } from './search-hit.js';
 
 const DEBOUNCE_MS = 220;
 const DEFAULT_KINDS = ['page', 'chapter'];
@@ -23,17 +24,6 @@ const SEMANTIC_KINDS = ['page', 'scene', 'figure', 'location', 'fact', 'research
 const SEMANTIC_ERROR_KEYS = {
   EMBED_UNAVAILABLE: 'search.semantic.unavailable',
   LIKE_ENTITY_NOT_FOUND: 'search.semantic.entityNotFound',
-};
-
-// Treffer-Art → Hash-Segment des Buch-Deep-Links (app-hash-router.js, Schema
-// `#book/:bookId/<path>/:id`). `navId`: Figuren/Orte/Szenen adressiert der
-// Router über ihre TEXT-ID (siehe activateHit), nicht über den INTEGER-PK.
-const CROSS_BOOK_SEGMENT = {
-  page:     { path: 'page' },
-  chapter:  { path: 'kapitel' },
-  figure:   { path: 'figur', navId: true },
-  location: { path: 'ort', navId: true },
-  scene:    { path: 'szene', navId: true },
 };
 
 export function registerSearchCard() {
@@ -433,93 +423,13 @@ export function registerSearchCard() {
       return tRaw('search.kind.' + kind);
     },
 
-    // Treffer-Aktivierung: Hash-Router fuer page/chapter, Karten-Trigger fuer
-    // figure/location/scene/idea. book → Buch wechseln + Overview.
+    // Treffer-Aktivierung: geteilt mit der Command-Palette (search-hit.js).
     async activateHit(hit) {
-      const root = window.__app;
-      if (!root || !hit) return;
       try {
-        // Treffer aus einem anderen Buch (Scope «alle Bücher»): die Root-
-        // Methoden suchen nur im gewählten Buch und liefen ins Leere — der
-        // Deep-Link-Hash wechselt das Buch, lädt es und öffnet dann das Ziel
-        // (gleicher Weg wie fact/research unten).
-        const seg = CROSS_BOOK_SEGMENT[hit.kind];
-        const hitBook = Number(hit.book_id);
-        if (seg && Number.isFinite(hitBook) && hitBook > 0
-            && String(hitBook) !== String(Alpine.store('nav').selectedBookId ?? '')) {
-          const id = seg.navId ? (hit.nav_id ?? hit.entity_id) : hit.entity_id;
-          location.hash = `#book/${hitBook}/${seg.path}/${encodeURIComponent(id)}`;
-          return;
-        }
-        switch (hit.kind) {
-          case 'page':
-            return root.gotoPageById?.(hit.entity_id, { snippet: hit.snippet });
-          case 'chapter': {
-            const tree = Alpine.store('nav').tree || [];
-            const ch = tree.find(t => t.type === 'chapter' && String(t.id) === String(hit.entity_id));
-            if (ch && typeof root.openKapitelReviewForChapter === 'function') {
-              return root.openKapitelReviewForChapter(hit.entity_id);
-            }
-            if (ch?.pages?.[0]) return root.selectPage(ch.pages[0]);
-            return;
-          }
-          case 'book': {
-            // FTS5 liefert book_id als String, selectedBookId ist numerisch →
-            // sonst greift der strikte Vergleich nie und reassignt bei jedem
-            // Treffer einen String.
-            const bid = Number(hit.book_id);
-            if (Number.isFinite(bid) && Alpine.store('nav').selectedBookId !== bid) {
-              Alpine.store('nav').selectedBookId = bid;
-            }
-            root.toggleBookOverviewCard?.();
-            return;
-          }
-          // `nav_id`, nicht `entity_id`: Figuren/Schauplaetze werden ueber ihre
-          // TEXT-ID adressiert (fig_id/loc_id), Index + Embedding-Chunks fuehren
-          // den INTEGER-PK. Mit dem PK oeffnet die Karte zwar (und die URL sieht
-          // richtig aus), die Zeile klappt aber nie auf.
-          case 'figure':
-            return root.openFigurById?.(hit.nav_id ?? hit.entity_id);
-          case 'location':
-            return root.openOrtById?.(hit.nav_id ?? hit.entity_id);
-          case 'scene':
-            return root.openSzeneById?.(hit.nav_id ?? hit.entity_id);
-          case 'fact': {
-            // Welt-Fakten haben keine Einzel-Ansicht: der Treffer oeffnet die
-            // Welt-Fakten-Karte des Buches (Hash-Router #book/:id/fakten).
-            const bid = Number(hit.book_id) || Alpine.store('nav').selectedBookId;
-            if (!bid) return;
-            location.hash = `#book/${bid}/fakten`;
-            return;
-          }
-          case 'research': {
-            // Deep-Link-Hash als SSoT (analog reference-card#openRechercheItem):
-            // der Hash-Router oeffnet die Karte, setzt Exklusivitaet und
-            // fokussiert das Item.
-            const bid = Number(hit.book_id) || Alpine.store('nav').selectedBookId;
-            if (!bid) return;
-            location.hash = `#book/${bid}/recherche/${hit.entity_id}`;
-            return;
-          }
-          case 'idea':
-            // Ideen sind seitengebunden; oeffne die Seite.
-            if (hit.book_id) {
-              const idea = await this._loadIdeaPage(hit.entity_id);
-              if (idea?.page_id) return root.gotoPageById?.(idea.page_id);
-            }
-            return;
-        }
+        await activateSearchHit(window.__app, hit);
       } catch (e) {
         console.error('[search activate]', e);
       }
-    },
-
-    async _loadIdeaPage(ideaId) {
-      try {
-        const r = await fetch('/ideen/' + encodeURIComponent(ideaId), { credentials: 'same-origin' });
-        if (!r.ok) return null;
-        return await r.json();
-      } catch { return null; }
     },
   }));
 }

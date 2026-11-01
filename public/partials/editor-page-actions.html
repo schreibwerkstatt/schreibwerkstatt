@@ -51,8 +51,8 @@
               <svg x-show="saveApplying == null" class="icon" aria-hidden="true"><use href="/icons.svg#check"/></svg>
             </button>
           </span>
-          <span class="action-sep" aria-hidden="true" x-show="canReview() && canEdit() && !checkDone"></span>
-          <span class="action-group" x-show="canEdit() && !checkDone">
+          <span class="action-sep" aria-hidden="true" x-show="canReview() && canEdit()"></span>
+          <span class="action-group" x-show="canEdit()">
             <button type="button" class="icon-btn icon-btn--ghost" @click="startEdit()" :disabled="checkLoading || saveApplying != null || originalHtml === null" :data-tip="withHotkey(t('editor.btn.editTitle'), 'edit')" :aria-label="t('editor.btn.edit')">
               <svg class="icon" aria-hidden="true"><use href="/icons.svg#pencil"/></svg>
             </button>
@@ -123,6 +123,18 @@
             </button>
             <button type="button" class="icon-btn icon-btn--ghost" @click="cancelEdit()" :disabled="editSaving" :data-tip="t('common.cancel')" :aria-label="t('common.cancel')">
               <svg class="icon" aria-hidden="true"><use href="/icons.svg#x"/></svg>
+            </button>
+          </span>
+          <!-- Lektorat aus der Edit-Session: speichert zuerst, Befunde erscheinen
+               neben dem Editor (editor/lektorat-live.js). Nicht im Fokusmodus. -->
+          <span class="action-sep" aria-hidden="true" x-show="canReview() && !focusActive"></span>
+          <span class="action-group" x-show="canReview() && !focusActive">
+            <button type="button" class="icon-btn icon-btn--ghost" @click="runCheck()" :disabled="checkLoading || editSaving" :data-tip="withHotkey(t('editor.btn.checkTitle'), 'runCheck')" :aria-label="t('editor.btn.check')">
+              <svg class="icon" aria-hidden="true"><use href="/icons.svg#spell-check"/></svg>
+            </button>
+            <!-- Eigenes Symbol: das ✕ daneben bricht die Bearbeitung ab. -->
+            <button type="button" class="icon-btn icon-btn--ghost" @click="closeFindings()" x-show="checkDone" :data-tip="t('editor.btn.exitCheckTitle')" :aria-label="t('editor.btn.exitCheck')">
+              <svg class="icon" aria-hidden="true"><use href="/icons.svg#minimize-2"/></svg>
             </button>
           </span>
           <span class="action-sep" aria-hidden="true"></span>

@@ -17,6 +17,7 @@ const { readLinesReverse, listRotatedFiles } = require('../lib/log-reverse-read'
 const { sessionEmail } = require('../lib/acl');
 
 const { LOG_FILE } = require('../lib/log-file');
+const { trackStream } = require('../lib/shutdown');
 const MAX_FILES = 4;
 
 const router = express.Router();
@@ -172,6 +173,7 @@ router.get('/stream', async (req, res) => {
   res.setHeader('Connection', 'keep-alive');
   res.setHeader('X-Accel-Buffering', 'no'); // NGINX: kein Buffering
   res.flushHeaders();
+  trackStream(res);
 
   let offset = 0;
   try {

@@ -13,6 +13,10 @@
 //   4. Ein Write lädt angeheftete Pfade nach, statt sie zu löschen.
 //   5. Ein Sitzungswechsel wirft die Offline-Kopie mit weg.
 //   6. 403/404 beim Baum meldet 'offline-book-failed' mit Status.
+//   7. Ein frischer Baum mit neuen Stempeln stösst den Sync von selbst an
+//      (gedrosselt; gescheiterte Abschnitte mit gleichem Stempel zählen nicht).
+//   8. Die Werkstatt-Listen eines angehefteten Buchs liegen mit in der Kopie,
+//      sw-domain.js liefert sie offline, Entfernen räumt sie.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
@@ -23,6 +27,7 @@ import { fileURLToPath } from 'node:url';
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 const SW_SRC = fs.readFileSync(path.join(ROOT, 'public/sw.js'), 'utf8');
 const OFFLINE_SRC = fs.readFileSync(path.join(ROOT, 'public/sw-offline.js'), 'utf8');
+const DOMAIN_SRC = fs.readFileSync(path.join(ROOT, 'public/sw-domain.js'), 'utf8');
 const ORIGIN = 'https://example.test';
 
 class FakeResponse {
@@ -97,6 +102,7 @@ function load({ caches, server, posted = [] }) {
   const ctx = vm.createContext(sandbox);
   sandbox.importScripts = (...urls) => {
     if (urls.includes('/sw-offline.js')) vm.runInContext(OFFLINE_SRC, ctx);
+    if (urls.includes('/sw-domain.js')) vm.runInContext(DOMAIN_SRC, ctx);
   };
   vm.runInContext(SW_SRC, ctx);
   ctx.__listeners = listeners;
@@ -400,4 +406,115 @@ test('Sitzungswechsel wirft auch den Bild-Cache weg', async () => {
   ctx.__listeners.message({ data: { type: 'session-changed' }, waitUntil: (p) => { waited = p; }, source: { postMessage() {} } });
   await waited;
   assert.ok(!caches.byName.has(IMG));
+});
+
+// --- Nachzug bei frischem Baum -------------------------------------------------
+
+const treeRes = (pages) => new FakeResponse(JSON.stringify(tree(pages)));
+const pageFetches = (ctx) => ctx.__fetched.filter((p) => p.startsWith('/content/pages/')).sort();
+
+test('Ein frischer Baum mit neuen Stempeln stösst den Sync an, ein unveränderter nicht', async () => {
+  const caches = makeCaches();
+  const pages = [{ id: 10, updated_at: 'a' }, { id: 11, updated_at: 'a' }, { id: 12, updated_at: 'a' }];
+  const server = serverFor(pages);
+  const ctx = load({ caches, server });
+  await ctx.__swOffline._syncBook(5);
+
+  ctx.__fetched.length = 0;
+  await ctx.__swOffline.refresh(new FakeRequest('/content/books/5/tree?__fresh=1'), treeRes(pages));
+  assert.deepEqual(ctx.__fetched, [], 'unveränderter Baum: kein Sync');
+
+  // Ein anderes Gerät hat Abschnitt 11 geändert.
+  const next = [{ id: 10, updated_at: 'a' }, { id: 11, updated_at: 'b' }, { id: 12, updated_at: 'a' }];
+  Object.assign(server, serverFor(next));
+  await ctx.__swOffline.refresh(new FakeRequest('/content/books/5/tree'), treeRes(next));
+  assert.deepEqual(pageFetches(ctx), ['/content/pages/11']);
+  const copy = await (await caches.open(OFF)).match(ORIGIN + '/content/pages/11');
+  assert.match(copy.body, /<p>b<\/p>/);
+});
+
+test('Auto-Sync ist je Buch gedrosselt', async () => {
+  const caches = makeCaches();
+  const server = serverFor([{ id: 10, updated_at: 'a' }, { id: 11, updated_at: 'a' }]);
+  const ctx = load({ caches, server });
+  await ctx.__swOffline._syncBook(5);
+
+  const b = [{ id: 10, updated_at: 'b' }, { id: 11, updated_at: 'a' }];
+  Object.assign(server, serverFor(b));
+  await ctx.__swOffline.refresh(new FakeRequest('/content/books/5/tree'), treeRes(b));
+  const c = [{ id: 10, updated_at: 'c' }, { id: 11, updated_at: 'a' }];
+  Object.assign(server, serverFor(c));
+  ctx.__fetched.length = 0;
+  await ctx.__swOffline.refresh(new FakeRequest('/content/books/5/tree'), treeRes(c));
+  assert.deepEqual(pageFetches(ctx), [], 'innerhalb der Sperrfrist kein zweiter Sync');
+
+  ctx.__swOffline._resetAutoSync();
+  await ctx.__swOffline.refresh(new FakeRequest('/content/books/5/tree'), treeRes(c));
+  assert.deepEqual(pageFetches(ctx), ['/content/pages/10']);
+});
+
+test('Gescheiterter Abschnitt mit unverändertem Stempel löst keinen Auto-Sync aus', async () => {
+  const caches = makeCaches();
+  const pages = [{ id: 10, updated_at: 'a' }, { id: 11, updated_at: 'a' }];
+  const server = serverFor(pages);
+  server.routes['/content/pages/11'] = 404;
+  const ctx = load({ caches, server });
+  const entry = await ctx.__swOffline._syncBook(5);
+  assert.equal(entry.failed, 1);
+
+  ctx.__fetched.length = 0;
+  await ctx.__swOffline.refresh(new FakeRequest('/content/books/5/tree'), treeRes(pages));
+  assert.deepEqual(ctx.__fetched, []);
+});
+
+test('Ein nicht angehefteter Baum stösst nichts an', async () => {
+  const caches = makeCaches();
+  const ctx = load({ caches, server: serverFor([{ id: 10, updated_at: 'a' }, { id: 11, updated_at: 'a' }]) });
+  await ctx.__swOffline.refresh(new FakeRequest('/content/books/5/tree'), treeRes([{ id: 10, updated_at: 'b' }, { id: 11, updated_at: 'a' }]));
+  assert.deepEqual(ctx.__fetched, []);
+  assert.ok(!caches.paths(OFF).includes('/content/books/5/tree'));
+});
+
+// --- Werkstatt-Listen ----------------------------------------------------------
+
+test('Werkstatt-Listen liegen in der Kopie, sw-domain liefert sie offline, Entfernen räumt sie', async () => {
+  const caches = makeCaches();
+  const server = serverFor([{ id: 10, updated_at: 'a' }, { id: 11, updated_at: 'a' }]);
+  server.routes['/figures/5'] = { figuren: [{ id: 'f1' }] };
+  server.routes['/ideen/board'] = { ideen: [{ id: 3 }] };
+  server.routes['/booksettings/5'] = 403; // ohne Zugriff: bleibt aus, Sync geht trotzdem durch
+  const ctx = load({ caches, server });
+  const entry = await ctx.__swOffline._syncBook(5);
+  assert.equal(entry.failed, 0);
+  assert.ok(caches.paths(OFF).includes('/figures/5'));
+  assert.ok(!caches.paths(OFF).includes('/booksettings/5'));
+  const key = [...caches.byName.get(OFF).store.keys()].find((u) => u.includes('/ideen/board'));
+  assert.equal(key, ORIGIN + '/ideen/board?book_id=5', 'abgelegt unter der exakten Karten-URL');
+
+  server.offline = true;
+  const res = await ctx.__swDomain.respond(new FakeRequest('/ideen/board?book_id=5'), null);
+  assert.equal(res.status, 200);
+  assert.match(res.body, /"id":3/);
+
+  ctx.__fetched.length = 0;
+  server.offline = false;
+  await ctx.__swOffline._syncBook(5);
+  assert.ok(!ctx.__fetched.includes('/figures/5'), 'Listen werden höchstens alle zehn Minuten nachgeladen');
+
+  await ctx.__swOffline._removeBook(5);
+  assert.deepEqual(caches.paths(OFF), ['/__offline-books']);
+});
+
+test('refreshDomain ersetzt nur Kopien angehefteter Bücher', async () => {
+  const caches = makeCaches();
+  const server = serverFor([{ id: 10, updated_at: 'a' }, { id: 11, updated_at: 'a' }]);
+  server.routes['/figures/5'] = { figuren: [] };
+  const ctx = load({ caches, server });
+  await ctx.__swOffline._syncBook(5);
+
+  await ctx.__swOffline.refreshDomain(new FakeRequest('/figures/5'), new FakeResponse('{"figuren":[{"id":"neu"}]}'));
+  await ctx.__swOffline.refreshDomain(new FakeRequest('/figures/6'), new FakeResponse('{"figuren":[]}'));
+  const copy = await ctx.__swOffline.matchDomain(new FakeRequest('/figures/5'));
+  assert.match(copy.body, /neu/);
+  assert.ok(!caches.paths(OFF).includes('/figures/6'));
 });

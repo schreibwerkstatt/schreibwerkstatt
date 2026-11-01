@@ -194,6 +194,7 @@ function _renderPrivacy(req, res) {
     sec2Title:     t('privacy.sec2Title'),  sec2Intro: t('privacy.sec2Intro'),
     sec2ItemA:     t('privacy.sec2ItemA'),  sec2ItemB: t('privacy.sec2ItemB'),
     sec2ItemC:     t('privacy.sec2ItemC'),  sec2ItemD: t('privacy.sec2ItemD'),
+    sec2ItemE:     t('privacy.sec2ItemE'),
     sec3Title:     t('privacy.sec3Title'),  sec3Body:  t('privacy.sec3Body'),
     sec4Title:     t('privacy.sec4Title'),  sec4Body:  t('privacy.sec4Body'),
     secAiTitle:    t('privacy.secAiTitle'), secAiBody: t('privacy.secAiBody'),

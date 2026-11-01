@@ -14,6 +14,7 @@
 import { fetchJson } from '../utils.js';
 import { tFetchError } from '../i18n.js';
 import { persistProposalStatus, applyProposalOnce } from './proposal-status.js';
+import { trackChatProposal } from '../features-usage.js';
 
 const JSON_HEADERS = { 'Content-Type': 'application/json' };
 
@@ -33,6 +34,12 @@ function _bumpIdeenCount({ page_id: pageId, chapter_id: chapterId }) {
   if (!app) return;
   if (isPage && app.currentPage?.id === id) app.currentPageIdeenOpenCount = (app.currentPageIdeenOpenCount || 0) + 1;
   if (!isPage && app.ideenChapterId === id) app.currentChapterIdeenOpenCount = (app.currentChapterIdeenOpenCount || 0) + 1;
+}
+
+// Beide Wirte (Abschnitts- und Buch-Chat) spreaden dieselben Methoden; welcher
+// Chat es ist, sagt die Nachrichtenliste, in der die Nachricht steht.
+function _chatKind(host, msg) {
+  return host.bookChatMessages?.includes(msg) ? 'book' : 'page';
 }
 
 export const chatIdeeProposalMethods = {
@@ -87,6 +94,8 @@ export const chatIdeeProposalMethods = {
     if (!r.ok) {
       console.error('[captureChatIdee]', r.error);
       p._error = tFetchError(r.error);
+    } else {
+      trackChatProposal(_chatKind(this, msg), 'applied', p.type);
     }
     p._busy = false;
   },
@@ -97,7 +106,9 @@ export const chatIdeeProposalMethods = {
     p._busy = true;
     p._error = '';
     try {
-      await persistProposalStatus('/ideen/chat-proposal', msg, idx, p.status === 'discarded' ? 'reopen' : 'discarded');
+      const action = p.status === 'discarded' ? 'reopen' : 'discarded';
+      await persistProposalStatus('/ideen/chat-proposal', msg, idx, action);
+      trackChatProposal(_chatKind(this, msg), action === 'reopen' ? 'reopened' : 'discarded', p.type);
       p._editing = false;
     } catch (e) {
       console.error('[toggleDiscardChatIdee]', e);

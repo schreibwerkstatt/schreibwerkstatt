@@ -85,9 +85,10 @@ router.post('/restart', (req, res) => {
   }
   logger.warn(`[admin-backup] Neustart angefordert durch ${sessionEmail(req)} — beende Prozess zum Anwenden des Restores.`);
   res.json({ ok: true });
-  // Kurze Verzoegerung, damit die Antwort raus ist. Exit != 0 triggert den
-  // systemd-Neustart (Restart=on-failure der deployten Unit).
-  setTimeout(() => process.exit(1), 400);
+  // Kurze Verzoegerung, damit die Antwort raus ist. Gewollter Exit → 0 nach
+  // sauberem DB-Close; Restart=always der Unit startet neu und swappt die
+  // Pending-DB beim Boot ein.
+  setTimeout(() => require('../lib/shutdown').requestShutdown('Admin-Restore'), 400);
 });
 
 module.exports = router;

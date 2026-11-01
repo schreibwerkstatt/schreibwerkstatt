@@ -5,6 +5,7 @@ import { startPoll } from '../cards/job-helpers.js';
 import { EVT } from '../events.js';
 import { applySpellcheckReplacement } from './shared/apply-replacement.js';
 import { normalizeSynonymWord, wordBoundsAt, synonymContext, matchSynonymCase } from './shared/synonym-text.js';
+import { trackUsageEvent } from '../features-usage.js';
 
 // Synonym-Ermittler für den contenteditable-Editor.
 // Cmd/Ctrl+Shift+S auf markiertem Wort (oder Cursor in Wort) → Custom-Menü →
@@ -314,6 +315,7 @@ export const synonymCardMethods = {
       // Block; Begründung im Header von shared/apply-replacement.js).
       if (!applySpellcheckReplacement(range, text)) { this.closeSynonymPicker(); return; }
       app?._markEditDirty?.();
+      trackUsageEvent('synonym.applied', { source: this.synonymKiList?.includes(entry) ? 'ai' : 'thesaurus' });
     } catch (e) {
       console.error('[applySynonym]', e);
     }

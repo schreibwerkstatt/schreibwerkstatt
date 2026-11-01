@@ -451,6 +451,8 @@ export const appOutboxMethods = {
         expectedUpdatedAt: draft.originalUpdatedAt, reason: 'outbox',
         writer: 'outbox', extraOwnSaveIds: draft.ownSaveIds || [],
       });
+      // Im Notebook übernommene Lektorat-Korrekturen am Lauf buchen (editor/lektorat-live.js).
+      this._flushLektoratLiveApplied?.(draft.html, pageId);
       // Nur den gesendeten Stand räumen: ein Tab kann während des PUT
       // weitergeschrieben haben (editor/draft-storage.js#clearDraftIfSame).
       clearDraftIfSame(pageId, draft.savedAt);
@@ -502,10 +504,12 @@ export const appOutboxMethods = {
     catch { return 'conflict'; }
     if (m.conflicts.length) return 'conflict'; // echte Kollision → beim Öffnen lösen
     try {
+      const mergedHtml = mergedToHtml(m.merged);
       await savePage(pageId, {
-        html: mergedToHtml(m.merged), pageName: name, source: draft.writer === 'book' ? 'book' : 'main',
+        html: mergedHtml, pageName: name, source: draft.writer === 'book' ? 'book' : 'main',
         expectedUpdatedAt: remote.updated_at, reason: 'outbox-merge', writer: 'outbox',
       });
+      this._flushLektoratLiveApplied?.(mergedHtml, pageId);
       clearDraftIfSame(pageId, draft.savedAt);
       return 'ok';
     } catch (e) {

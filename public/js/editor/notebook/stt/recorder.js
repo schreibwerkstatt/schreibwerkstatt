@@ -11,6 +11,7 @@
 
 import { caretRangeIn, anchorCaretToEnd } from '../../utils.js';
 import { EVT } from '../../../events.js';
+import { trackUsageEvent } from '../../../features-usage.js';
 
 // Rausch-Kalibrierung: Fenster, in dem vor dem ersten Sprechen der
 // Geraeuschboden gesammelt wird (blockiert die Spracherkennung nicht).
@@ -25,6 +26,12 @@ const STT_TICK_MS = 100;
 // antwortet auf solche Fetzen mit Geisterphrasen. Zwei Ticks reichen fuer ein
 // kurzes „Ja.".
 const STT_MIN_VOICED_MS = 200;
+// Stille vor dem ersten Sprechen: nach dieser Zeit wird das stille Segment
+// verworfen und neu begonnen (`trim`-Schnitt). Lange Stille vor der Sprache
+// verleitet Whisper zu Geisterphrasen und blaeht den Upload auf. Bewusst
+// grosszuegig: faellt ein Sprechbeginn genau in die Stop/Start-Luecke, fehlt
+// sein Anfang — je seltener getrimmt wird, desto seltener passiert das.
+const STT_TRIM_SILENCE_MS = 6000;
 // Spaetestens nach dieser Zeit gibt ein beendender Stopp das Mikrofon frei,
 // auch wenn der Recorder sein letztes `onstop` schuldig bleibt.
 const STT_RELEASE_FALLBACK_MS = 1500;
@@ -52,6 +59,15 @@ export const sttRecorderMethods = {
     // Per Mic-Klick beendete Session, deren letzte Transkripte noch eintreffen
     // (siehe `_sttStop({ finish: true })`). Ein harter Stopp verwirft auch sie.
     this._sttDraining = null;
+    // Einfuege-Reihenfolge ueber ALLE Sessions: die Fetches laufen parallel
+    // (Durchsatz), die DOM-Einfuegung jedes Segments wird aber ueber diese
+    // Promise-Kette in Sende-Reihenfolge serialisiert — sonst koennte ein
+    // spaeter gesendetes, aber schneller transkribiertes Segment (oder eines
+    // nach Retry) vor einem frueheren im Text landen. Sessionuebergreifend,
+    // damit der letzte Satz einer per Mic-Klick beendeten Session auch dann
+    // vor dem ersten der naechsten landet, wenn deren `onstop` erst nach dem
+    // Neustart kommt.
+    this._sttInsertChain = Promise.resolve();
     // Aufnahme beenden + den bewussten-Caret-Anker zuruecksetzen (neuer Kontext
     // = kein gueltiger Anker mehr; STT haengt wieder ans Editorende an, bis der
     // User erneut bewusst klickt).
@@ -69,7 +85,10 @@ export const sttRecorderMethods = {
   // ── Toggle / Start / Stop ────────────────────────────────────────────────
 
   async toggleSttDictation() {
-    if (this.$store.stt.pending) return; // Re-Entry-Guard waehrend getUserMedia/Stop
+    // Klick waehrend der Mikrofon-Abfrage = abbrechen. `_sttStop` entwertet den
+    // laufenden Start; `_sttStart` gibt das Mikrofon frei, sobald getUserMedia
+    // zurueckkommt.
+    if (this.$store.stt.pending) { this._sttStop(); return; }
     // Mic-Klick = der User ist fertig: was er bis hierher gesagt hat, kommt
     // noch in den Text (anders als bei Seiten-/Kontextwechsel).
     if (this.$store.stt.recording) { this._sttStop({ finish: true }); return; }
@@ -147,6 +166,7 @@ export const sttRecorderMethods = {
       chunks: [],
       vadTimer: null,
       segmentStart: 0,
+      voiceStart: null, // erstes Sprechen im laufenden Segment (Hoechstdauer)
       lastVoiceTs: 0,
       hasVoice: false,
       voicedMs: 0, // Sprechdauer im laufenden Segment (gegen STT_MIN_VOICED_MS)
@@ -155,6 +175,9 @@ export const sttRecorderMethods = {
       startedAt: 0,
       mime: rec.mimeType || mime || 'audio/webm',
       stopping: false,
+      // Zwischen rec.stop() eines VAD-Schnitts und dessen `onstop`: der
+      // Recorder ist schon inaktiv, sein Segment aber noch nicht gesendet.
+      onstopPending: false,
       // Hart beendet (Kontextwechsel, 401/404): kein Transkript dieser Session
       // wird mehr eingefuegt. Ein beendender Stopp setzt das Flag NICHT.
       dead: false,
@@ -162,15 +185,6 @@ export const sttRecorderMethods = {
       // AbortController dieser Session: bricht beim harten Stopp alle laufenden
       // Transkriptions-Requests (inkl. Retry-Waits) ab.
       abort: new AbortController(),
-      // Einfuege-Reihenfolge: die Fetches laufen parallel (Durchsatz), die DOM-
-      // Einfuegung jedes Segments wird aber ueber diese Promise-Kette in
-      // Sende-Reihenfolge serialisiert — sonst koennte ein spaeter gesendetes,
-      // aber schneller transkribiertes Segment (oder eines nach Retry) vor einem
-      // frueheren im Text landen.
-      // Laeuft noch eine per Mic-Klick beendete Session aus, haengt diese hinter
-      // deren Kette — ihr letzter Satz kommt vor dem ersten neuen.
-      insertChain: (this._sttDraining && !this._sttDraining.dead)
-        ? this._sttDraining.insertChain : Promise.resolve(),
       // Cut-Grund des zuletzt geschnittenen Segments; bestimmt, ob das naechste
       // Segment einen neuen Satz beginnt (silence = Sprechpause = Satzgrenze).
       lastCutReason: null,
@@ -195,27 +209,34 @@ export const sttRecorderMethods = {
 
     rec.ondataavailable = (e) => { if (e.data && e.data.size > 0) rt.chunks.push(e.data); };
     rec.onstop = () => {
+      rt.onstopPending = false;
       const blob = rt.chunks.length ? new Blob(rt.chunks, { type: rt.mime }) : null;
       rt.chunks = [];
       // Grenz-Art VOR diesem Segment (ggf. waehrend der Aufnahme auf 'paragraph'
       // hochgestuft) bestimmt, wie das Transkript angefuegt wird.
       const boundaryKind = rt.boundaryKindForNext;
+      const cutReason = rt.lastCutReason;
+      rt.lastCutReason = null;
       if (blob && blob.size > 0 && rt.hasVoice && rt.voicedMs >= STT_MIN_VOICED_MS && !rt.dead) {
-        this._sttSendSegment(rt, blob, rt.mime, boundaryKind);
+        // max-Cut = mitten im Satz geschnitten: Whispers Schlusspunkt faellt weg.
+        this._sttSendSegment(rt, blob, rt.mime, boundaryKind, { midCut: cutReason === 'max' });
       }
       // Beendender Stopp: das letzte Segment ist raus -> jetzt Mikrofon frei.
       if (rt.stopping) {
         this._sttRelease(rt);
-        rt.insertChain.then(() => { if (this._sttDraining === rt) this._sttDraining = null; });
+        this._sttClearDrainingAfterInserts(rt);
         return;
       }
       // Grenze fuer das naechste Segment: silence-Cut => mind. neuer Satz;
-      // max-Cut (Dauer-Sprechen) => keine Grenze (mitten im Satz).
-      rt.boundaryKindForNext = (rt.lastCutReason === 'silence') ? 'sentence' : 'none';
-      rt.lastCutReason = null;
+      // max-Cut (Dauer-Sprechen) => keine Grenze (mitten im Satz). Ein trim-Cut
+      // hat nur Stille verworfen und laesst die Grenze stehen.
+      if (cutReason !== 'trim') {
+        rt.boundaryKindForNext = (cutReason === 'silence') ? 'sentence' : 'none';
+      }
       // Naechstes Segment, falls noch aktiv.
       if (!rt.stopping && this.$store.stt.recording) {
         rt.hasVoice = false;
+        rt.voiceStart = null;
         rt.voicedMs = 0;
         rt.segmentStart = this._sttNow();
         rt.lastVoiceTs = rt.segmentStart;
@@ -230,6 +251,7 @@ export const sttRecorderMethods = {
     try { rec.start(); } catch { /* noop */ }
     this.$store.stt.recording = true;
     this.$store.stt.pending = false;
+    trackUsageEvent('dictation.start');
     // Einfüge-Anker bestimmen: hat der User bewusst per Klick einen Caret im
     // Edit-Feld gesetzt (sttCaretUserSet) und steht dieser noch im Editor, wird
     // dort eingefügt (nur sichtbar scrollen). Sonst — z. B. blosser Mic-Klick
@@ -302,12 +324,17 @@ export const sttRecorderMethods = {
       threshold: rt.threshold,
       now,
       segmentStart: rt.segmentStart,
+      voiceStart: rt.voiceStart,
       lastVoiceTs: rt.lastVoiceTs,
       hasVoice: rt.hasVoice,
       silenceMs: this.$store.stt.vad.silenceMs,
       maxSegmentS: this.$store.stt.vad.maxSegmentS,
+      trimSilenceMs: STT_TRIM_SILENCE_MS,
     });
-    if (decision.voiced) { rt.hasVoice = true; rt.lastVoiceTs = now; rt.voicedMs += STT_TICK_MS; }
+    if (decision.voiced) {
+      if (!rt.hasVoice) rt.voiceStart = now;
+      rt.hasVoice = true; rt.lastVoiceTs = now; rt.voicedMs += STT_TICK_MS;
+    }
 
     // Absatz-Erkennung: erstes Sprechen nach einem silence-Cut -> Gesamtpause
     // messen (silenceMs vor dem Cut + Luecke bis jetzt). Ist sie deutlich
@@ -323,10 +350,12 @@ export const sttRecorderMethods = {
 
     if (decision.cut && rt.rec.state === 'recording') {
       rt.lastCutReason = decision.reason;
-      // Pausenanfang fuer die Absatz-Messung des naechsten Segments merken.
-      rt.silenceCutAt = decision.reason === 'silence' ? now : null;
+      // Pausenanfang fuer die Absatz-Messung des naechsten Segments merken. Ein
+      // trim-Cut liegt mitten in derselben Pause und laesst die Messung stehen.
+      if (decision.reason !== 'trim') rt.silenceCutAt = decision.reason === 'silence' ? now : null;
       // stop() triggert onstop -> Segment senden + naechstes Segment starten.
-      try { rt.rec.stop(); } catch { /* noop */ }
+      rt.onstopPending = true;
+      try { rt.rec.stop(); } catch { rt.onstopPending = false; }
     }
   },
 
@@ -346,8 +375,9 @@ export const sttRecorderMethods = {
     return false;
   },
 
-  // „Transkribiert"-Status mit Mindest-Standzeit: An sofort beim Start eines
-  // Segment-Uploads, Aus erst, wenn KEIN Request mehr laeuft — und dann
+  // „Transkribiert"-Status mit Mindest-Standzeit: An sofort beim Senden eines
+  // Segments, Aus erst, wenn KEIN Segment mehr aussteht (Transkript eingefuegt
+  // oder verworfen) — und dann
   // verzoegert (600 ms), damit kurze Segmente den Status nicht aufblitzen
   // lassen.
   _sttBusyOn() {
@@ -382,15 +412,22 @@ export const sttRecorderMethods = {
     if (finish && rt) {
       rt.stopping = true;
       this._sttDraining = rt;
-      // stop() feuert onstop -> letztes Segment senden -> _sttRelease. Ohne
-      // laufende Aufnahme gibt es kein onstop mehr: sofort freigeben.
+      // stop() feuert onstop -> letztes Segment senden -> _sttRelease. Steht
+      // das onstop eines VAD-Schnitts noch aus, sendet es das letzte Segment
+      // und raeumt ebenso auf. Nur ohne beides sofort freigeben — sonst gaebe
+      // `_sttDraining` die Session frei, bevor ihr letztes Segment in der Kette
+      // steht, und ein harter Stopp erreichte es nicht mehr.
       let stopped = false;
       try { if (rt.rec.state === 'recording') { rt.rec.stop(); stopped = true; } } catch { /* noop */ }
-      if (stopped) {
-        setTimeout(() => this._sttRelease(rt), STT_RELEASE_FALLBACK_MS);
+      if (stopped || rt.onstopPending) {
+        setTimeout(() => {
+          if (rt.released) return; // onstop hat schon aufgeraeumt
+          this._sttRelease(rt);
+          this._sttClearDrainingAfterInserts(rt);
+        }, STT_RELEASE_FALLBACK_MS);
       } else {
         this._sttRelease(rt);
-        rt.insertChain.then(() => { if (this._sttDraining === rt) this._sttDraining = null; });
+        this._sttClearDrainingAfterInserts(rt);
       }
       return;
     }
@@ -411,6 +448,13 @@ export const sttRecorderMethods = {
       try { if (r.rec.state === 'recording') r.rec.stop(); } catch { /* noop */ }
       this._sttRelease(r);
     }
+  },
+
+  // Eine beendend gestoppte Session gilt als ausgelaufen, sobald alles, was
+  // bis jetzt in der Einfuege-Kette steht, eingefuegt ist. Erst dann aufrufen,
+  // wenn ihr letztes Segment gesendet ist.
+  _sttClearDrainingAfterInserts(rt) {
+    this._sttInsertChain.then(() => { if (this._sttDraining === rt) this._sttDraining = null; });
   },
 
   // Mikrofon, Audio-Graph und Stream einer Session freigeben. Idempotent: der

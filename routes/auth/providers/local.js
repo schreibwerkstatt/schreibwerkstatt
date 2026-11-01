@@ -24,6 +24,7 @@
 const express = require('express');
 const logger = require('../../../logger');
 const appUsers = require('../../../db/app-users');
+const { recordUsageEvent } = require('../../../lib/usage-events');
 const creds = require('../../../db/user-credentials');
 const appSettings = require('../../../lib/app-settings');
 const password = require('../../../lib/password');
@@ -260,6 +261,7 @@ router.post('/auth/password', express.json({ limit: '8kb' }), asyncRoute('POST /
         status: 'active',
         invitedBy: ticket.invite.invited_by,
       });
+      recordUsageEvent({ userEmail: email, event: 'account.created', meta: { method: 'local', via: 'invite' } });
       if (user?.ai_profile_id) {
         appUsers.recordAuditEvent(email, 'ai-provider-changed', {
           ip, userAgent,
@@ -288,6 +290,7 @@ router.post('/auth/password', express.json({ limit: '8kb' }), asyncRoute('POST /
   });
   appUsers.touchLogin(email);
   appUsers.recordAuditEvent(email, 'login', { ip, userAgent, meta: { method: 'local' } });
+  recordUsageEvent({ userEmail: email, event: 'auth.login', meta: { method: 'local' } });
   rateLimit.recordSuccess(ip);
   establishSession(req, res, { email, name: user.display_name || email, role: user.global_role });
   logger.info('Passwort gesetzt + Login (lokal).', { user: email });

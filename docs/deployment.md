@@ -76,6 +76,10 @@ Die **macOS-App** braucht das Token nicht: sie kommt aus dem [Mac App Store](htt
 git pull && npm ci --omit=dev && systemctl restart schreibwerkstatt
 ```
 
+### Stopp & Neustart
+
+`systemctl stop|restart` schickt SIGTERM; [lib/shutdown.js](lib/shutdown.js) nimmt ab dann nichts Neues mehr an (`503 SHUTTING_DOWN`, Queue gestoppt), beendet SSE-Streams aktiv, lässt laufende Jobs bis 15 s fertig werden (danach Abbruch), schliesst nach spätestens 25 s alle Verbindungen und die DB mit WAL-Checkpoint. Ein gewollter Stopp endet **immer mit Exit 0** (auch wenn eine Frist griff — dann steht ein `WARN` mit der Liste offener Verbindungen, Streams, Jobs und Timer im Log), Exit ≠ 0 nur bei echtem Fehler (DB nicht schliessbar, `uncaughtException`). Darum kein `SuccessExitStatus=1` in der Unit. `TimeoutStopSec=45` liegt über dem 30-s-Hard-Timeout, damit systemd nicht vorher SIGKILL schickt. Die Logzeile `SIGTERM empfangen – Graceful Shutdown (max 30 s Drain)…` bleibt im Wortlaut — das Monitoring zählt sie.
+
 ### Logs
 
 Winston schreibt `schreibwerkstatt.log` (current) und rotiert bei 5 MB nach `schreibwerkstatt1.log` … `schreibwerkstatt5.log` — die Ziffer steht **vor** der Endung. Ablageort: `LOG_DIR` (ENV, Default App-Verzeichnis; [lib/log-file.js](lib/log-file.js), von Logger und Admin-Log-Ansicht geteilt). Der CD-Deploy ([deploy/deploy.sh](deploy/deploy.sh)) synchronisiert mit `rsync --delete` und schliesst deshalb `schreibwerkstatt*.log*` aus; empfohlen ist trotzdem ein Verzeichnis ausserhalb des Installationsziels, damit die Historie nicht an einem Exclude-Muster hängt:

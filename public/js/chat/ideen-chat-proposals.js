@@ -17,6 +17,7 @@ import { fetchJson } from '../utils.js';
 import { tFetchError } from '../i18n.js';
 import { diffParts } from '../diff/diff-parts.js';
 import { persistProposalStatus, applyProposalOnce } from './proposal-status.js';
+import { trackChatProposal } from '../features-usage.js';
 import { IDEE_OPEN_STATUSES } from '../book/ideen-shared.js';
 
 const JSON_HEADERS = { 'Content-Type': 'application/json' };
@@ -160,7 +161,7 @@ export const ideenProposalMethods = {
         await this._ensureBoardSortables();
         return id;
       });
-      if (r.ok) return;
+      if (r.ok) { trackChatProposal('ideen', 'applied', p.type); return; }
       if (r.phase === 'write') p._error = r.error?.body ? tFetchError(r.error) : app.t('ideenBoard.chat.applyError');
       // Das Board ist geändert, nur der Status fehlt — der nächste Klick holt nur
       // den Status nach.
@@ -198,6 +199,7 @@ export const ideenProposalMethods = {
     p._error = '';
     try {
       await persistProposalStatus('/ideen/chat-proposal', msg, pi, discard ? 'discarded' : 'reopen');
+      trackChatProposal('ideen', discard ? 'discarded' : 'reopened', p.type);
     } catch (e) {
       p._error = tFetchError(e);
     }

@@ -164,7 +164,7 @@ Content-Type: application/json
 | Konto-Selbstlöschung | ✅ `DELETE /me/account` | — (Web-Profil) | — (`/me/*` nicht allowlistet) |
 | Push-Notifications | — | — (kein FCM/APNS im Server) | — |
 | Save-Kennung (`save_id`/`own_save_ids`, verlorene Antwort) | ✅ (`564d0e2`) | ✅ (`65408bb`) | — (kein Manuskript-Write) |
-| Block-Merge bei fremdem `409` | ✅ (`merge3`) | ✅ Server-Merge (`base_html`) | — |
+| Block-Merge bei fremdem `409` | ✅ (`merge3`; ohne WebView-Merge Server-Merge per `base_html`) | ✅ Server-Merge (`base_html`) | — |
 | Vertrags-Fixtures in den Decoding-Tests (`contract/`) | ✅ | ✅ | — |
 
 Was beide nativen Clients gemeinsam tragen — Auth, Sync, Presence, Release-Discovery, Editor-Bundle — ist symmetrisch abgedeckt.
@@ -211,6 +211,7 @@ Jede Fehlerantwort ist JSON mit dem Feld `error_code` (Ausnahmen unten). **Diese
 | `NOT_LOGGED_IN` | 401 | `swd_`-Token fehlt, ist unbekannt, widerrufen oder abgelaufen; oder der User ist `suspended`/`deleted` | alle |
 | `DEVICE_SCOPE_FORBIDDEN` | 403 | Methode+Pfad stehen in keiner Allowlist des Tokens. Greift **vor** der Route — es wird nichts geladen und nichts geschrieben | alle |
 | `DEMO_TOKEN_FIXED` | 403 | Versuch, ein ENV-festgenageltes Demo-Token zu widerrufen/löschen | `POST /me/device-tokens/:id/revoke`, `DELETE /me/device-tokens/:id`. **Mit einem `capture`-Token nicht erreichbar** (`/me/*` ist nicht allowlistet → vorher `DEVICE_SCOPE_FORBIDDEN`); nur über die Browser-Session des Demo-Users |
+| `SHUTTING_DOWN` | 503 | Server wird gerade gestoppt/neu gestartet (Deploy); kommt nur auf einer schon offenen Verbindung, neue Verbindungen werden abgelehnt. Trägt `Retry-After: 5` — wie einen Netzfehler behandeln und erneut versuchen. Es wurde nichts geschrieben | alle |
 
 **Buch-ACL** ([lib/acl.js](../lib/acl.js)) — greift auf jeder Route mit `book_id`, gleich ob Session oder Token:
 

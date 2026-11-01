@@ -9,7 +9,11 @@ const { toIntId } = require('../../lib/validate');
 const { guardBook, sessionEmail } = require('../../lib/acl');
 const { resolvePageBookId } = require('../../lib/content-ownership');
 const logger = require('../../logger');
+const { setContext } = require('../../lib/log-context');
 const { jsonBody } = require('./shared');
+
+// Obergrenze je Aufruf: ein Lauf hat höchstens einige hundert Befunde.
+const MAX_AMBIGUOUS = 500;
 
 function register(router) {
   // Lauf als gespeichert markieren (oder zurücksetzen).
@@ -57,6 +61,43 @@ function register(router) {
     }
 
     res.json({ ok: true });
+  });
+
+  // Befunde eines Laufs als mehrdeutig markieren (Lektorat im Notebook-Edit-Modus,
+  // public/js/editor/lektorat-live.js): ihre Stelle kam während einer Edit-Session
+  // mehrfach vor. Das Flag gilt danach auch beim Laden aus dem Verlauf (nicht
+  // vorausgewählt, Tag „mehrdeutig") — sonst sähe ein Befund, dessen gemeinte
+  // Stelle umgeschrieben wurde, an der verbliebenen fremden Stelle eindeutig aus.
+  // Nur setzen, nie löschen; Abgleich per `original`.
+  router.patch('/check/:id/ambiguous', jsonBody, (req, res) => {
+    const id = toIntId(req.params.id);
+    if (!id) return res.status(400).json({ error_code: 'INVALID_ID' });
+    const originals = req.body?.originals;
+    if (!Array.isArray(originals) || originals.length === 0 || originals.length > MAX_AMBIGUOUS
+        || originals.some(o => typeof o !== 'string')) {
+      return res.status(400).json({ error_code: 'INVALID_FINDINGS' });
+    }
+    const user_email = sessionEmail(req);
+    const row = getOwnedCheck(id, user_email);
+    if (!row) return res.status(404).json({ error_code: 'NOT_FOUND' });
+    if (!row.book_id) return res.status(400).json({ error_code: 'CHECK_HAS_NO_BOOK' });
+    if (!guardBook(req, res, row.book_id, 'lektor')) return;
+    setContext({ book: row.book_id });
+
+    const cur = db.prepare('SELECT errors_json FROM page_checks WHERE id = ? AND user_email = ?').get(id, user_email);
+    let errors;
+    try { errors = JSON.parse(cur?.errors_json || '[]'); } catch { errors = null; }
+    if (!Array.isArray(errors)) return res.status(409).json({ error_code: 'CHECK_UNREADABLE' });
+    const wanted = new Set(originals);
+    let marked = 0;
+    for (const f of errors) {
+      if (f && wanted.has(f.original) && !f.mehrdeutig) { f.mehrdeutig = true; marked++; }
+    }
+    if (marked) {
+      db.prepare('UPDATE page_checks SET errors_json = ? WHERE id = ? AND user_email = ?')
+        .run(JSON.stringify(errors), id, user_email);
+    }
+    res.json({ ok: true, marked });
   });
 
   // Letzte 20 Läufe für eine Seite (Listenansicht – ohne grosse JSON-Felder).

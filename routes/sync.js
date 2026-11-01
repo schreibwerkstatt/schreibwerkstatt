@@ -185,11 +185,11 @@ async function syncBook(bookId, ctx) {
   const globalWordSet = new Set();
   let totalWords = 0, totalChars = 0, totalTok = 0, totalSentences = 0;
 
-  // Bestehende content_sigs laden, um Seiten ohne inhaltliche Änderung zu überspringen
-  // (Index-Berechnung ist teuer bei vielen Seiten, nur neu laufen lassen wenn nötig).
-  const existingIndex = Object.fromEntries(
-    db.prepare('SELECT page_id, content_sig, metrics_version FROM page_stats WHERE book_id = ?')
-      .all(bookId).map(r => [r.page_id, r])
+  // Stand des letzten Syncs je Seite — wer seither nicht gespeichert wurde, steht
+  // schon richtig im Volltext-Index (siehe Index-Nachzug unten).
+  const statsStampById = new Map(
+    db.prepare('SELECT page_id, updated_at FROM page_stats WHERE book_id = ?')
+      .all(bookId).map(r => [r.page_id, r.updated_at])
   );
 
   // Eigennamen aus Figuren + Schauplätzen + Szenen-Titeln dieses Buchs
@@ -290,11 +290,23 @@ async function syncBook(bookId, ctx) {
     catch (e) { logger.warn(`Figuren-Mentions für Seite ${item.page_id} fehlgeschlagen: ${e.message}`); }
   }
 
-  // Volltext-Index nach dem Sync aktualisieren (Buch-Meta, Kapitel, Seiten).
+  // Volltext-Index nachziehen (Buch-Meta, Kapitel, seit dem letzten Sync
+  // geänderte Seiten). Den laufenden Stand hält der Schreib-Chokepoint der
+  // Content-Store-Facade; hier nur ein Nachzug für Seiten, die der vorige Sync
+  // nicht kannte. Alle Seiten neu zu schreiben, je Seite eine Transaktion, hielt
+  // bei einem Buch mit 2500 Seiten den Prozess 13 s am Stück an — jeder Save
+  // anderer Tabs und User wartete so lange. Eine Transaktion statt einer pro Zeile.
+  const stampNowById = new Map(statsItems.map(s => [s.page_id, s.updated_at]));
+  const staleIndexItems = liveIndexItems.filter(it => {
+    const prev = statsStampById.get(it.page_id);
+    return prev == null || prev !== stampNowById.get(it.page_id);
+  });
   try {
-    searchIndex.upsertBookMeta(bookId);
-    for (const ch of chapters) searchIndex.upsertChapter(ch.id);
-    for (const item of liveIndexItems) searchIndex.upsertPage(item.page_id);
+    db.transaction(() => {
+      searchIndex.upsertBookMeta(bookId);
+      for (const ch of chapters) searchIndex.upsertChapter(ch.id);
+      for (const item of staleIndexItems) searchIndex.upsertPage(item.page_id);
+    })();
   } catch (e) {
     logger.warn(`Search-Index Sync Buch ${bookId} fehlgeschlagen: ${e.message}`);
   }

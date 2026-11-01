@@ -7,13 +7,15 @@ Type=simple
 User=github-runner
 WorkingDirectory=/opt/schreibwerkstatt
 ExecStart=/usr/bin/node server.js
-# always: der Admin-Backup-Restore beendet den Prozess bewusst, damit die
-# Pending-DB beim Boot eingeswappt wird. `always` startet nach jedem Exit neu
-# (ausser explizitem `systemctl stop`). Der Restore-Pfad nutzt zusaetzlich einen
-# Exit-Code != 0, sodass er auch mit `on-failure` funktioniert, falls diese Unit
-# nicht neu ausgerollt wurde.
+# always: der Admin-Backup-Restore beendet den Prozess bewusst (Exit 0), damit
+# die Pending-DB beim Boot eingeswappt wird. `always` startet nach jedem Exit neu
+# (ausser explizitem `systemctl stop`). Gewollte Stopps enden mit 0, Exit != 0
+# heisst echter Fehler — darum kein SuccessExitStatus=1.
 Restart=always
 RestartSec=5
+# Groesser als die 30 s Drain von lib/shutdown.js — sonst kommt SIGKILL, bevor
+# der Prozess die DB sauber geschlossen hat.
+TimeoutStopSec=45
 Environment=PORT=3737
 StandardOutput=journal
 StandardError=journal

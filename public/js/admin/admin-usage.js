@@ -112,6 +112,7 @@ export const adminUsageMethods = {
     if (tab === 'chat')     return this.adminUsageLoadChat();
     if (tab === 'features') return this.adminUsageLoadFeatures();
     if (tab === 'time')     return this.adminUsageLoadTime();
+    if (tab === 'behavior') return this.adminUsageLoadBehavior();
     if (tab === 'billing')  return this.adminUsageLoadBilling();
   },
 

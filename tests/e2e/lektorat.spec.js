@@ -199,8 +199,14 @@ test.describe('Lektorat-Flow', () => {
     await page.evaluate(() => window.harness.runCheck());
     await waitUntil(page, 'h => h.checkDone === true');
 
+    const usage = page.waitForRequest(r => new URL(r.url()).pathname === '/usage/event');
     await page.evaluate(() => window.harness.saveCorrections());
     await waitUntil(page, 'h => h.saveApplying === null && h.checkDone === false', 5000);
+    // Nutzungs-Event: nur Zahlen, keine Befundtexte (docs/usage-events.md).
+    const ev = JSON.parse((await usage).postData());
+    expect(ev.event).toBe('lektorat.applied');
+    expect(ev.meta).toMatchObject({ selected: 2, applied: 2, skipped: 0 });
+    expect(ev.meta.shown).toBeGreaterThanOrEqual(2);
 
     const mock = await page.request.get('http://localhost:8765/__mock/state').then(r => r.json());
     expect(mock.lastBsPut).not.toBeNull();

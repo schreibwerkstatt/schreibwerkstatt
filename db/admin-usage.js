@@ -460,4 +460,5 @@ module.exports = {
   userJobBreakdown,
   listFeatureUsage, featureUsageTotals,
   listTimeUsage, dailyTimeSeries,
+  resolveRange: _resolveRange,
 };

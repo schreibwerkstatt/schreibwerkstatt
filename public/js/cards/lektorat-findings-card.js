@@ -94,9 +94,11 @@ export function registerLektoratFindingsCard() {
     },
 
     // Hover auf Finding → Preview-Panel zur entsprechenden Markierung scrollen
-    // (nur im Split-Modus, sonst zeigt page-view einen Tooltip).
+    // (nur im Split-Modus, sonst zeigt page-view einen Tooltip). Im Edit-Modus
+    // die Stelle im Live-Editor hervorheben (editor/lektorat-live.js).
     handleFindingPointer(idx) {
       const app = window.__app;
+      if (app?.editMode) { app.lektoratLiveFocus(idx); return; }
       if (!splitMQ?.matches || !app?.checkDone) return;
       const mark = document.querySelector(`.lektorat-split-preview .lektorat-mark[data-error-idx="${idx}"]`);
       if (mark) {

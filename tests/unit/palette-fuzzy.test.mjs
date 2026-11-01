@@ -43,3 +43,15 @@ test('fuzzyMatch: Diakritika werden ignoriert (Schauplätze)', () => {
   assert.ok(r);
   assert.deepEqual(r.indices, [0, 1, 2, 3, 4]);
 });
+
+test('fuzzyMatch: Indizes zeigen auf den Original-String, auch wenn normalize die Länge ändert', async () => {
+  const { highlight } = await import('../../public/js/cards/palette-fuzzy.js');
+  // Zerlegter Umlaut (NFD, z. B. aus macOS-Dateinamen): "A" + U+0308.
+  const nfd = 'Ärger';
+  const r = fuzzyMatch('rg', nfd);
+  assert.deepEqual(r.indices, [2, 3]);
+  // Treffer auf dem Grundbuchstaben nimmt den Akzent mit ins <mark>.
+  assert.equal(highlight(nfd, fuzzyMatch('ar', nfd).indices), '<mark class="palette-mark">Är</mark>ger');
+  // 'İ'.toLowerCase() ergibt zwei Zeichen.
+  assert.deepEqual(fuzzyMatch('ok', 'İstanbul ok').indices, [9, 10]);
+});

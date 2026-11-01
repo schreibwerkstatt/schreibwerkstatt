@@ -15,13 +15,31 @@ function normalize(s) {
   return s.normalize('NFD').replace(COMBINING, '').toLowerCase();
 }
 
+// Wie normalize, plus Rückabbildung jeder Position auf ihren Index im
+// Original. normalize kann die Länge ändern (zerlegte Umlaute aus NFD-Quellen
+// schrumpfen, 'İ' wird zu zwei Zeichen) — die Highlight-Indices müssen aber
+// auf den angezeigten String zeigen.
+function normalizeMapped(s) {
+  let text = '';
+  const map = [];
+  for (let i = 0; i < s.length;) {
+    const cp = s.codePointAt(i);
+    const ch = String.fromCodePoint(cp);
+    const norm = normalize(ch);
+    for (let k = 0; k < norm.length; k++) map.push(i);
+    text += norm;
+    i += ch.length;
+  }
+  return { text, map };
+}
+
 const WORD_BOUNDARY = /[\s\-_/.,:;()[\]{}]/;
 
 export function fuzzyMatch(query, target) {
   if (!query) return { score: 0, indices: [] };
   if (!target) return null;
   const q = normalize(query);
-  const t = normalize(target);
+  const { text: t, map } = normalizeMapped(target);
   if (!q.length) return { score: 0, indices: [] };
 
   // Greedy-Scan ab Startposition `start`. Greedy ist nach dem ersten Match ok —
@@ -58,7 +76,8 @@ export function fuzzyMatch(query, target) {
     if (!r) break; // ab hier keine vollständige Sequenz mehr möglich
     if (!best || r.score < best.score) best = r;
   }
-  return best;
+  if (!best) return null;
+  return { score: best.score, indices: [...new Set(best.indices.map(i => map[i]))] };
 }
 
 // Steht die Query zusammenhängend an einem Wortanfang des Targets? Gate für
@@ -76,6 +95,11 @@ export function hasWordPrefix(query, target) {
   return false;
 }
 
+// Zeichen, die zum vorigen gehören: kombinierende Akzente (zerlegte Umlaute)
+// und die zweite Hälfte eines Surrogat-Paars. Ein <mark> dazwischen risse sie
+// auseinander.
+const TAIL = /[\p{M}\uDC00-\uDFFF]/u;
+
 export function highlight(target, indices) {
   if (!indices || !indices.length) return escHtml(target);
   let out = '';
@@ -85,7 +109,7 @@ export function highlight(target, indices) {
     if (!idxSet.has(i)) continue;
     if (i > last) out += escHtml(target.slice(last, i));
     let j = i;
-    while (j < target.length && idxSet.has(j)) j++;
+    while (j < target.length && (idxSet.has(j) || (j > i && TAIL.test(target[j])))) j++;
     out += '<mark class="palette-mark">' + escHtml(target.slice(i, j)) + '</mark>';
     last = j;
     i = j - 1;

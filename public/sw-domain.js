@@ -70,10 +70,12 @@
     for (let i = 0; i < rest.length - MAX_ENTRIES; i++) await cache.delete(rest[i]);
   }
 
-  // Abgelegte Antwort, markiert als Rückfall.
+  // Abgelegte Antwort, markiert als Rückfall. Nach einem Miss die Kopie eines
+  // offline gehaltenen Buchs (sw-offline.js, nie verdrängt, auch für Karten,
+  // die auf diesem Gerät nie geöffnet wurden).
   async function cached(req) {
     const cache = await caches.open(CACHE);
-    const hit = await cache.match(req);
+    const hit = (await cache.match(req)) || (await self.__swOffline?.matchDomain(req));
     if (!hit) return null;
     try {
       const headers = new Headers(hit.headers);
@@ -83,9 +85,11 @@
   }
 
   async function store(req, res) {
+    const forOffline = self.__swOffline ? res.clone() : null;
     const cache = await caches.open(CACHE);
     await cache.put(req, res);
     await evict(cache);
+    if (forOffline) await self.__swOffline.refreshDomain(req, forOffline);
   }
 
   // `event`: der Ablage-Write läuft per waitUntil neben der Auslieferung — die

@@ -96,7 +96,7 @@ Client: [public/js/event-stream.js](../public/js/event-stream.js), eine EventSou
 
 ## Reconnect & Persistence-Lücke
 
-Server-Restart verliert In-Memory-Jobs. Mitigation:
+Server-Restart verliert In-Memory-Jobs; die Queue kennt kein Wieder-Einreihen. Beim Stopp ([lib/shutdown.js](../lib/shutdown.js)) startet die Queue nichts mehr (`stopQueue`), laufende Jobs bekommen 15 s zum Fertigwerden und werden danach wie ein User-Abbruch über ihren AbortController beendet (`cancelled`, `job_runs` abgeschlossen); Wartende und Abgebrochene startet niemand neu, die übrigen `job_runs` räumt `cleanupStuckJobRuns` beim Boot auf. Mitigation:
 - `localStorage` per Card hält `lsKey: jobId` während der Job läuft. Bei `onNotFound` (404/403) → cleanup.
 - `checkPendingJobs()` (Root, [public/js/app/app-jobs-core.js](../public/js/app/app-jobs-core.js)) liest `/jobs/queue` beim Login und dispatched `job:reconnect` `{ type, jobId, job, extra? }` → Karten übernehmen Loading-State + starten Polling.
 

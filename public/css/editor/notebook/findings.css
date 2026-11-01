@@ -25,6 +25,14 @@
   text-decoration-color: var(--color-muted);
 }
 .finding.finding--applied .finding-checkbox { cursor: not-allowed; }
+/* Im Edit-Modus selbst umgeschrieben (editor/lektorat-live.js): nicht mehr
+   übernehmbar, aber nicht als angenommen durchgestrichen. */
+.finding.finding--rewritten { opacity: var(--opacity-muted); }
+.finding.finding--rewritten .finding-checkbox { cursor: not-allowed; }
+/* «Angehakte übernehmen» im Kopf (nur Edit-Modus): rechts, vor den Häkchen-Knöpfen. */
+.finding-apply-selected { margin-left: auto; margin-right: var(--space-xs); }
+/* Im Edit-Modus hervorgehoben: Hover in der Liste oder Caret in der Stelle. */
+.finding.finding--active { background: var(--color-mark-bg); }
 .finding-checkbox { flex-shrink: 0; margin-top: var(--space-2xs); cursor: pointer; }
 .finding > .badge { flex-shrink: 0; }
 .finding-content { flex: 1; min-width: 0; overflow-x: auto; }

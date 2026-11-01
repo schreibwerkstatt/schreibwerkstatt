@@ -14,6 +14,7 @@
 const crypto = require('crypto');
 const logger = require('../../logger');
 const appUsers = require('../../db/app-users');
+const { recordUsageEvent } = require('../../lib/usage-events');
 const rateLimit = require('../../lib/admin-login-ratelimit');
 const altcha = require('../../lib/altcha');
 const { setSessionFingerprintCookie } = require('../../lib/session-fingerprint');
@@ -130,6 +131,7 @@ function credentialLogin(cfg) {
 
     appUsers.touchLogin(givenEmail);
     appUsers.recordAuditEvent(givenEmail, 'login', { ip, userAgent, meta: { method } });
+    recordUsageEvent({ userEmail: givenEmail, event: 'auth.login', meta: { method } });
     establishSession(req, res, { email: givenEmail, name: result.name, role: result.role });
     logger.info(`${logLabel}.`, { user: givenEmail });
 

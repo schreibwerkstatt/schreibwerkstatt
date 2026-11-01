@@ -12,6 +12,9 @@ WorkingDirectory=/opt/schreibwerkstatt-demo
 ExecStart=/usr/bin/node server.js
 Restart=always
 RestartSec=5
+# Groesser als die 30 s Drain von lib/shutdown.js — sonst kommt SIGKILL, bevor
+# der Prozess die DB sauber geschlossen hat.
+TimeoutStopSec=45
 Environment=PORT=3738
 # Kein Backup-Timer auf der Demo-Instanz: der Golden-Snapshot
 # (deploy/demo-reset.sh capture) ist hier die Sicherung, und die Nutzdaten sind

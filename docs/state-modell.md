@@ -39,7 +39,7 @@ Slice-Anzahl und Slice-Namen-Set sind gegen [app-state.js](../public/js/app/app-
 | `cardsState` | **Alle `showXxxCard`-Flags** inkl. Admin-Karten (showAdminUsers/Settings/Usage/Categories/BooksCard), showSongsCard, showKontinuitaetCard, showSearchCard, showKomplettStatus, showAvatarMenu, adminUsageTab — exklusiv via `_closeOtherMainCards(keep)` (siehe Exklusivität über `await`-Grenzen) |
 | `statusState` | status, statusSpinner, `_statusTimer` |
 | `confirmDialogState` | Native-`<dialog>`-Modal-Ersatz für `window.confirm`/prompt (verhindert macOS-Vollbild-Bug) inkl. Input-Mode + Resolver |
-| `lektoratState` | analysisOut, correctedHtml, hasErrors, lektoratFindings, selectedFindings, appliedOriginals, appliedHistoricCorrections, lektoratProgress, checkDone/Loading/Progress/Status, saveApplying, batchLoading/Progress/Status, lastCheckId, pageHistory, activeHistoryEntryId, Token-Estimates (`tokEsts`, `_tokenEstGen`), pageLastChecked, ideenScope/ideenChapterId/currentChapterIdeenOpenCount, showTokLegend/tokTooltipData/showPageStatusTip, `_statsObserver*` |
+| `lektoratState` | analysisOut, correctedHtml, hasErrors, lektoratFindings, selectedFindings, appliedOriginals, appliedHistoricCorrections, lektoratProgress, lektoratLiveActiveIdx, checkDone/Loading/Progress/Status, saveApplying, batchLoading/Progress/Status, lastCheckId, pageHistory, activeHistoryEntryId, Token-Estimates (`tokEsts`, `_tokenEstGen`), pageLastChecked, ideenScope/ideenChapterId/currentChapterIdeenOpenCount, showTokLegend/tokTooltipData/showPageStatusTip, `_statsObserver*` |
 | `bookReviewState` | bookReviewHistory (von tree.js geschrieben, von user-settings beim Reset gelesen → Root) |
 | `kapitelReviewState` | kapitelReviewChapterId (Hash-Router-SSoT) |
 | ~~`tagebuchRueckblickNavState` / `figurWerkstattState` / `plotNavState`~~ | **migriert → `$store.nav`** (Permalink-Spiegel `pendingRueckblickZeitraum/rueckblickEntryId/werkstattDraftId/werkstattDrafts/plotBeatId`, Hash-Router-SSoT); kein Root-Slice mehr |
@@ -230,7 +230,7 @@ Vier orthogonale Modi am **Notebook-Editor** (nicht am Bucheditor) — kein Sing
 - Editmodus: `editDirty`, `editSaving`, `saveOffline`, `lastAutosaveAt`, `lastDraftSavedAt`, `_autosaveIdleTimer`, `_autosaveMaxTimer`, `_draftTimer`, `_onlineHandler`, `_onlineVisHandler` (`notebookState`) + `originalHtml` (`pageState`, da Mode-agnostisch).
 - Fokusmodus: `focusCountWords/Chars/*Delta` (`focusState`) + `focusGranularity` (`shellState`) + Sub-Maschine `_focusState` (`idle`/`entering`/`active`/`exiting`) + `_focusGen` (Re-Entry-Guard) in [editorFocusCard](../public/js/cards/editor-focus-card.js).
 
-**Erlaubte Kombinationen** (8 Bool-Tripel, 4 erlaubt):
+**Erlaubte Kombinationen** (8 Bool-Tripel, 6 erlaubt):
 
 | Edit | Focus | Check | Erlaubt? | Bemerkung |
 |------|-------|-------|----------|-----------|
@@ -238,14 +238,15 @@ Vier orthogonale Modi am **Notebook-Editor** (nicht am Bucheditor) — kein Sing
 | 0 | 0 | 1 | ✓ | View + Findings (Split-View) |
 | 1 | 0 | 0 | ✓ | Edit |
 | 1 | 1 | 0 | ✓ | Edit + Fokus |
-| 1 | * | 1 | ✗ | **Invariante: Edit + Prüfmodus forbidden** — `startEdit` bricht bei `checkDone` ab; Edit/Fokus-Buttons sind im Prüfmodus ausgeblendet. |
+| 1 | 0 | 1 | ✓ | Edit + Befunde (Split-View, Fundstellen als Highlights im Live-Editor — [lektorat.md](lektorat.md#befunde-im-edit-modus)) |
+| 1 | 1 | 1 | ✓ | Edit + Fokus bei offenem Prüfmodus: Befunde und Markierung ruhen, bis der Fokus endet |
 | 0 | 1 | * | ✗ | **Invariante: `focusActive → editMode`** |
 
 **Invarianten (Pflicht — bei Änderungen prüfen):**
 
 1. `focusActive === true` ⇒ `editMode === true`. Enforced in [editor/focus/card.js](../public/js/editor/focus/card.js) (`enterFocusMode` bricht bei `!app.editMode` ab) und [editor/notebook/edit/lifecycle.js](../public/js/editor/notebook/edit/lifecycle.js) (`cancelEdit` ruft `exitFocusMode` zuerst).
-2. `runCheck` darf nicht im Editmodus starten. Template-Guard: Prüfen-Button steht in `<template x-if="!editMode">` ([editor-notebook.html](../public/partials/editor-notebook.html)).
-3. `editMode === true` ⇒ `checkDone === false`. Enforced in `startEdit` ([editor/notebook/edit/lifecycle.js](../public/js/editor/notebook/edit/lifecycle.js), Guard `if (this.checkDone) return`) und im Template über `x-show="canEdit() && !checkDone"` auf Edit/Fokus-Buttons ([editor-notebook.html](../public/partials/editor-notebook.html)). Findings im Editor sind damit ausgeschlossen — Korrekturen laufen via `saveCorrections` aus dem Prüfmodus, nicht via contenteditable.
+2. `runCheck` startet im Editmodus erst nach einem Save (`_saveBeforeLiveCheck` in [editor/lektorat-live.js](../public/js/editor/lektorat-live.js)); bleibt die Session ungespeichert, blockt der Guard in `runCheck`. Im Fokusmodus kein Lauf (Knopf ausgeblendet, Ctrl+Enter-Guard in [index.html](../public/index.html)).
+3. `editMode && checkDone`: Findings stehen **nie** als Markup im contenteditable — die Fundstellen sind CSS-Custom-Highlights ([editor/lektorat-live.js](../public/js/editor/lektorat-live.js)), Übernehmen läuft über `_applyLektoratInEditor` im Live-DOM (Undo-Schritt, Autosave), nicht über `saveCorrections`. Die Read-View-Marken (`correctedHtml`/`renderedPageHtml`) betreffen nur die Leseansicht.
 4. **Chat-Modus** (`asideSlot === 'chat'`, gelesen als showChatCard) snapshotet `checkDone` in `_checkDoneBeforeChat` und setzt `checkDone=false` ([cards/chat-card.js](../public/js/cards/chat-card.js) `onShow` — nur Abschnitts-Chat, die geteilte `chat-base.js` fasst `checkDone` nicht an); verlässt die Leiste den Chat — Schliessen oder Ablösung durch Ideen/Referenz —, stellt `_setAside` den Stand wieder her ([app-view/cards.js](../public/js/app/app-view/cards.js)). Ohne diesen Snapshot würde der Chat Findings doppelt rendern.
 5. **Reset-Reihenfolge in `resetPage()`** ([app-view/page.js](../public/js/app/app-view/page.js)): `exitFocusMode` → `_stopAutosave` → Chat-Reset → Card-Flags → Editor-State (`editMode/editDirty/editSaving`) → Lektorat-State (`checkDone/findings/...`). Diese Reihenfolge ist Pflicht — Fokus zuerst, weil `exitFocusMode` `editMode/editDirty` liest.
 6. `saveEdit` im Fokus bleibt im Fokus+Edit ([editor/notebook/edit/lifecycle.js](../public/js/editor/notebook/edit/lifecycle.js)) — User möchte weiter schreiben. Erst sauberer Exit räumt Edit-Mode auf, dann flusht `exitFocusMode` per `quickSave` ([editor/focus/card.js](../public/js/editor/focus/card.js)).

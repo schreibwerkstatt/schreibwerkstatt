@@ -105,6 +105,15 @@
   background: var(--color-warn-bg);
 }
 
+/* Tab «Verhalten»: Funktion ohne Oeffnung im Zeitraum. */
+.admin-usage-row--muted {
+  color: var(--color-muted);
+}
+
+.admin-usage-tool-table {
+  margin-top: var(--space-sm);
+}
+
 .admin-usage-budget-input {
   width: 6rem;
   padding: var(--space-2xs) var(--space-xs);

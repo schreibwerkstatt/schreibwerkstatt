@@ -15,6 +15,7 @@ import { fetchJson } from '../utils.js';
 import { tFetchError } from '../i18n.js';
 import { diffParts } from '../diff/diff-parts.js';
 import { persistProposalStatus, applyProposalOnce } from './proposal-status.js';
+import { trackChatProposal } from '../features-usage.js';
 
 const JSON_HEADERS = { 'Content-Type': 'application/json' };
 const CREATE_KIND = { beat_create: 'beat', act_create: 'act', thread_create: 'thread' };
@@ -229,7 +230,7 @@ export const plotProposalMethods = {
     });
     this.busy = false;
     p._applying = false;
-    if (r.ok) return;
+    if (r.ok) { trackChatProposal('plot', 'applied', p.type); return; }
     if (r.phase === 'write') p._error = r.error?.body ? tFetchError(r.error) : app.t('plot.chat.applyError');
     // Das Board ist geändert, nur der Status fehlt — sichtbar machen statt
     // verschlucken; der nächste Klick holt nur den Status nach.
@@ -242,6 +243,7 @@ export const plotProposalMethods = {
     p._error = '';
     try {
       await persistProposalStatus('/plot/chat-proposal', msg, pi, discard ? 'discarded' : 'reopen');
+      trackChatProposal('plot', discard ? 'discarded' : 'reopened', p.type);
     } catch (e) {
       p._error = tFetchError(e);
     }

@@ -99,7 +99,7 @@ Verschachtelte Kontextdateien laden mit dem Verzeichnis, in dem gearbeitet wird.
 
 Lies das Doc, **bevor** du im jeweiligen Bereich etwas änderst — nicht danach.
 
-**Querschnitt:** [auth.md](docs/auth.md) Anmeldeverfahren (Registry, lokale Passwörter) · [architektur.md](docs/architektur.md) Routen-Inventar + Modul-Cluster + bewusster Eigenbau · [erd.md](docs/erd.md) Schema-ERD, Pflicht vor neuen Tabellen · [jobs.md](docs/jobs.md) Queue-Lifecycle · [ai-providers.md](docs/ai-providers.md) `callAI`-Vertrag, Budgets, Caching · [i18n.md](docs/i18n.md) Key-Konvention, `__i18n:`-Marker · [testing.md](docs/testing.md) welche Suite wann · [caching.md](docs/caching.md) Service-Worker: Shell- + Content-Cache · [state-modell.md](docs/state-modell.md) Alpine-State-Architektur (verbindlich)
+**Querschnitt:** [auth.md](docs/auth.md) Anmeldeverfahren (Registry, lokale Passwörter) · [architektur.md](docs/architektur.md) Routen-Inventar + Modul-Cluster + bewusster Eigenbau · [erd.md](docs/erd.md) Schema-ERD, Pflicht vor neuen Tabellen · [jobs.md](docs/jobs.md) Queue-Lifecycle · [ai-providers.md](docs/ai-providers.md) `callAI`-Vertrag, Budgets, Caching · [i18n.md](docs/i18n.md) Key-Konvention, `__i18n:`-Marker · [testing.md](docs/testing.md) welche Suite wann · [caching.md](docs/caching.md) Service-Worker: Shell- + Content-Cache · [usage-events.md](docs/usage-events.md) Nutzungs-Events: Katalog als Allowlist, kein Freitext, Admin-Tab «Verhalten» · [state-modell.md](docs/state-modell.md) Alpine-State-Architektur (verbindlich)
 
 **Editoren:** [notebook-editor.md](docs/notebook-editor.md) · [focus-editor.md](docs/focus-editor.md) + [Klickliste](docs/focus-editor-acceptance.md) · [book-editor.md](docs/book-editor.md)
 

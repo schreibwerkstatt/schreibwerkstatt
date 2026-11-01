@@ -350,7 +350,7 @@ async function runFolderImportJob(jobId, { userEmail, mode, bookName, bookId, gr
     let effBookId = bookId;
     if (mode === 'new-book') {
       updateJob(jobId, { progress: 28, statusText: 'job.folder-import.creatingBook' });
-      const created = await createOwnedBook({ name: bookName }, userEmail, { session: { user: { email: userEmail } } });
+      const created = await createOwnedBook({ name: bookName }, userEmail, { session: { user: { email: userEmail } } }, { via: 'folder-import' });
       effBookId = created.id;
       createdBookId = created.id;
       audit('info', 'importLog.bookCreated', { name: bookName });

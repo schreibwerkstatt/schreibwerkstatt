@@ -1,0 +1,117 @@
+<!-- Admin-Usage: Tab «Verhalten» (docs/usage-events.md). Methoden in
+     public/js/admin/admin-usage-behavior.js, Daten aus GET /admin/usage/behavior.
+     Keine Inhalte, keine Buchtitel. -->
+<div x-show="adminUsageTab === 'behavior'" class="admin-usage-pane">
+  <div x-show="adminUsageBehavior">
+    <p class="muted-msg muted-msg--sm" x-text="$app.t('admin.usage.behavior.intro')"></p>
+
+    <div class="admin-usage-totals">
+      <div class="admin-usage-kpi">
+        <div class="admin-usage-kpi-label" x-text="$app.t('admin.usage.behavior.kpi.activeUsers')"></div>
+        <div class="admin-usage-kpi-value" x-text="adminUsageInt(adminUsageBehavior?.activity?.activeUsers)"></div>
+      </div>
+      <div class="admin-usage-kpi">
+        <div class="admin-usage-kpi-label" x-text="$app.t('admin.usage.behavior.kpi.sessions')"></div>
+        <div class="admin-usage-kpi-value" x-text="adminUsageInt(adminUsageBehavior?.sessions)"></div>
+      </div>
+      <div class="admin-usage-kpi">
+        <div class="admin-usage-kpi-label" x-text="$app.t('admin.usage.behavior.kpi.logins')"></div>
+        <div class="admin-usage-kpi-value" x-text="adminUsageInt(adminUsageBehavior?.logins)"></div>
+      </div>
+      <div class="admin-usage-kpi">
+        <div class="admin-usage-kpi-label" x-text="$app.t('admin.usage.behavior.kpi.booksCreated')"></div>
+        <div class="admin-usage-kpi-value" x-text="adminUsageInt(adminUsageBehavior?.booksCreated)"></div>
+      </div>
+      <div class="admin-usage-kpi">
+        <div class="admin-usage-kpi-label" x-text="$app.t('admin.usage.behavior.kpi.unused')"></div>
+        <div class="admin-usage-kpi-value" x-text="adminUsageInt(adminUsageBehaviorUnusedCount())"></div>
+      </div>
+    </div>
+
+    <div class="admin-usage-charts">
+      <figure>
+        <figcaption x-text="$app.t('admin.usage.behavior.weekly')"></figcaption>
+        <div class="admin-usage-chart-canvas"><canvas x-ref="chartBehaviorWeekly"></canvas></div>
+      </figure>
+      <figure>
+        <figcaption x-text="$app.t('admin.usage.behavior.hours')"></figcaption>
+        <div class="admin-usage-chart-canvas"><canvas x-ref="chartBehaviorHours"></canvas></div>
+      </figure>
+    </div>
+
+    <!-- KI-Ergebnisse: Vorschläge der Chats -->
+    <h3 class="admin-usage-h3--spaced" x-text="$app.t('admin.usage.behavior.proposals')"></h3>
+    <div class="table-scroll" x-show="adminUsageBehaviorProposals().length">
+      <table class="data-table"
+             x-data="sortableTable({ rows: () => adminUsageBehaviorProposals(), defaultKey: 'applied', defaultDir: 'desc', persistKey: 'admin.usage.behavior.proposals',
+               types: { applied: 'number', discarded: 'number', undone: 'number', acceptRate: 'number', users: 'number' } })">
+        <thead>
+          <tr>
+            <th x-bind="sortTh('chatLabel')" x-text="$app.t('admin.usage.behavior.col.chat')"></th>
+            <th x-bind="sortTh('kind')" x-text="$app.t('admin.usage.behavior.col.kind')"></th>
+            <th x-bind="sortTh('applied')" x-text="$app.t('admin.usage.behavior.col.applied')"></th>
+            <th x-bind="sortTh('discarded')" x-text="$app.t('admin.usage.behavior.col.discarded')"></th>
+            <th x-bind="sortTh('undone')" x-text="$app.t('admin.usage.behavior.col.undone')"></th>
+            <th x-bind="sortTh('acceptRate')" x-text="$app.t('admin.usage.behavior.col.acceptRate')"></th>
+            <th x-bind="sortTh('users')" x-text="$app.t('admin.usage.behavior.col.users')"></th>
+          </tr>
+        </thead>
+        <tbody>
+          <template x-for="p in sorted" :key="p.chat + ':' + p.kind">
+            <tr>
+              <td x-text="p.chatLabel"></td>
+              <td x-text="p.kind || '—'"></td>
+              <td class="admin-usage-cell-num" x-text="adminUsageInt(p.applied)"></td>
+              <td class="admin-usage-cell-num" x-text="adminUsageInt(p.discarded)"></td>
+              <td class="admin-usage-cell-num" x-text="adminUsageInt(p.undone)"></td>
+              <td class="admin-usage-cell-num" x-text="adminUsagePct(p.acceptRate)"></td>
+              <td class="admin-usage-cell-num" x-text="adminUsageInt(p.users)"></td>
+            </tr>
+          </template>
+        </tbody>
+      </table>
+    </div>
+    <div x-show="!adminUsageBehaviorProposals().length" class="muted-msg muted-msg--sm" x-text="$app.t('admin.usage.empty')"></div>
+
+    <p class="muted-msg muted-msg--sm" x-show="adminUsageBehavior?.lektorat?.runs"
+       x-text="$app.t('admin.usage.behavior.lektorat', { runs: adminUsageInt(adminUsageBehavior?.lektorat?.runs), shown: adminUsageInt(adminUsageBehavior?.lektorat?.shown), selected: adminUsageInt(adminUsageBehavior?.lektorat?.selected), applied: adminUsageInt(adminUsageBehavior?.lektorat?.applied), rate: adminUsagePct(adminUsageBehaviorLektoratRate()) })"></p>
+
+    <!-- KI-Jobs: eingereiht, fertig, gescheitert -->
+    <h3 class="admin-usage-h3--spaced" x-text="$app.t('admin.usage.behavior.jobs')"></h3>
+    <div class="table-scroll" x-show="adminUsageBehaviorJobs().length">
+      <table class="data-table"
+             x-data="sortableTable({ rows: () => adminUsageBehaviorJobs(), defaultKey: 'queued', defaultDir: 'desc', persistKey: 'admin.usage.behavior.jobs',
+               types: { queued: 'number', done: 'number', error: 'number', cancelled: 'number', successRate: 'number', medianSec: 'number', users: 'number' } })">
+        <thead>
+          <tr>
+            <th x-bind="sortTh('label')" x-text="$app.t('admin.usage.job.type')"></th>
+            <th x-bind="sortTh('queued')" x-text="$app.t('admin.usage.behavior.col.queued')"></th>
+            <th x-bind="sortTh('done')" x-text="$app.t('admin.usage.behavior.col.done')"></th>
+            <th x-bind="sortTh('error')" x-text="$app.t('admin.usage.behavior.col.error')"></th>
+            <th x-bind="sortTh('cancelled')" x-text="$app.t('admin.usage.behavior.col.cancelled')"></th>
+            <th x-bind="sortTh('successRate')" x-text="$app.t('admin.usage.behavior.col.successRate')"></th>
+            <th x-bind="sortTh('medianSec')" x-text="$app.t('admin.usage.behavior.col.median')"></th>
+            <th x-bind="sortTh('users')" x-text="$app.t('admin.usage.behavior.col.users')"></th>
+          </tr>
+        </thead>
+        <tbody>
+          <template x-for="j in sorted" :key="j.type">
+            <tr>
+              <td x-text="j.label"></td>
+              <td class="admin-usage-cell-num" x-text="adminUsageInt(j.queued)"></td>
+              <td class="admin-usage-cell-num" x-text="adminUsageInt(j.done)"></td>
+              <td class="admin-usage-cell-num" x-text="adminUsageInt(j.error)"></td>
+              <td class="admin-usage-cell-num" x-text="adminUsageInt(j.cancelled)"></td>
+              <td class="admin-usage-cell-num" x-text="adminUsagePct(j.successRate)"></td>
+              <td class="admin-usage-cell-num" x-text="j.medianSec == null ? '—' : adminUsageHhmm(j.medianSec)"></td>
+              <td class="admin-usage-cell-num" x-text="adminUsageInt(j.users)"></td>
+            </tr>
+          </template>
+        </tbody>
+      </table>
+    </div>
+    <div x-show="!adminUsageBehaviorJobs().length" class="muted-msg muted-msg--sm" x-text="$app.t('admin.usage.empty')"></div>
+
+    <div id="partial-admin-usage-behavior-more"></div>
+  </div>
+</div>

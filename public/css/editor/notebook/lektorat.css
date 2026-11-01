@@ -85,6 +85,40 @@
 }
 .lektorat-mark--selected:hover { background: var(--color-mark-del-bg-hover); }
 
+/* Befunde im Notebook-Edit-Modus (editor/lektorat-live.js): CSS-Custom-Highlights
+   statt <mark> — nie im gespeicherten HTML. Durchgezogene Linie, damit sie sich
+   von den LanguageTool-Wellen (spellcheck.css) unterscheidet; Farbe = Befund-Klasse
+   wie in der Liste. `active` = Hover in der Liste bzw. Caret in der Stelle. */
+::highlight(lektorat-live-hard) {
+  background-color: color-mix(in srgb, var(--color-err-border) 14%, transparent);
+  text-decoration: underline solid var(--color-err-border);
+  text-decoration-thickness: 2px;
+  text-underline-offset: 3px;
+}
+::highlight(lektorat-live-soft) {
+  background-color: color-mix(in srgb, var(--color-style-border) 14%, transparent);
+  text-decoration: underline solid var(--color-style-border);
+  text-decoration-thickness: 2px;
+  text-underline-offset: 3px;
+}
+::highlight(lektorat-live-editorial) {
+  background-color: color-mix(in srgb, var(--color-mark-border) 14%, transparent);
+  text-decoration: underline solid var(--color-mark-border);
+  text-decoration-thickness: 2px;
+  text-underline-offset: 3px;
+}
+/* Mehrdeutig (Stelle kommt mehrfach vor): alle Vorkommen gestrichelt, wertfrei —
+   welches gemeint ist, weiss nur die Autorin. */
+::highlight(lektorat-live-ambiguous) {
+  background-color: color-mix(in srgb, var(--color-mark-border) 10%, transparent);
+  text-decoration: underline dashed var(--color-mark-border);
+  text-decoration-thickness: 2px;
+  text-underline-offset: 3px;
+}
+::highlight(lektorat-live-active) {
+  background-color: var(--color-mark-bg-hover);
+}
+
 /* Hover-Sync: Flash-Animation beim Hover-Scrollen im Split-Modus */
 @keyframes hoverSyncFlash {
   0%   { outline: 2px solid var(--color-primary); outline-offset: 1px; }

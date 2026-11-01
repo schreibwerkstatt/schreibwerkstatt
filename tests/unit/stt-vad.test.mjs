@@ -257,3 +257,93 @@ test('_computeEatPrevSpace: kein Whitespace davor -> false', () => {
 test('_computeEatPrevSpace: Text beginnt mit Wort -> false', () => {
   assert.equal(m._computeEatPrevSpace(' ', 'dann'), false);
 });
+
+// --- Hoechstdauer ab erstem Sprechen + trim-Schnitt -------------------------
+
+test('_computeVadCut: lange Denkpause vor dem Sprechen loest keinen max-Cut aus', () => {
+  // 35 s Stille im Segment, dann 200 ms Sprache: die Hoechstdauer zaehlt ab
+  // dem ersten Sprechen, nicht ab Segmentbeginn — kein Schnitt mitten im Wort.
+  const d = m._computeVadCut({
+    rms: 0.1, ...VAD, now: 35200, segmentStart: 0, voiceStart: 35000, lastVoiceTs: 35100, hasVoice: true,
+  });
+  assert.equal(d.cut, false);
+});
+
+test('_computeVadCut: Hoechstdauer ab erstem Sprechen -> Cut (max)', () => {
+  const d = m._computeVadCut({
+    rms: 0.1, ...VAD, now: 40000, segmentStart: 0, voiceStart: 10000, lastVoiceTs: 39900, hasVoice: true,
+  });
+  assert.equal(d.reason, 'max');
+});
+
+test('_computeVadCut: Stille vor dem Sprechen ab trimSilenceMs -> Cut (trim)', () => {
+  const base = { rms: 0.001, ...VAD, segmentStart: 0, lastVoiceTs: 0, hasVoice: false, trimSilenceMs: 6000 };
+  assert.equal(m._computeVadCut({ ...base, now: 5900 }).cut, false);
+  const d = m._computeVadCut({ ...base, now: 6000 });
+  assert.equal(d.cut, true);
+  assert.equal(d.reason, 'trim');
+  // Sprache im selben Tick: kein trim (der Sprechbeginn gehoert ins Segment).
+  assert.equal(m._computeVadCut({ ...base, rms: 0.1, now: 6000 }).cut, false);
+});
+
+// --- _computeMidCutText -----------------------------------------------------
+
+test('_computeMidCutText: Whispers Schlusspunkt nach max-Cut faellt weg', () => {
+  assert.equal(m._computeMidCutText('und dann ging er nach.'), 'und dann ging er nach');
+  assert.equal(m._computeMidCutText('und dann…'), 'und dann…');
+  assert.equal(m._computeMidCutText('und dann...'), 'und dann...');
+  assert.equal(m._computeMidCutText('Wirklich?'), 'Wirklich?');
+  assert.equal(m._computeMidCutText('»Komm her.«'), '»Komm her.«');
+});
+
+// --- Anfuehrung / Strich am Segmentanfang -----------------------------------
+
+test('_computeSpacedInsert: oeffnende Anfuehrung bekommt ein Leerzeichen', () => {
+  assert.equal(m._computeSpacedInsert('Er sagte:', '"Komm her," rief sie.'), ' "Komm her," rief sie.');
+  assert.equal(m._computeSpacedInsert('Er sagte:', '»Komm her«'), ' »Komm her«');
+  assert.equal(m._computeSpacedInsert('Er sagte:', '„Komm her“'), ' „Komm her“');
+});
+
+test('_computeSpacedInsert: schliessende Anfuehrung haengt direkt an', () => {
+  assert.equal(m._computeSpacedInsert('Komm her', '" rief sie.'), '" rief sie.');
+  assert.equal(m._computeSpacedInsert('Komm her', '«, rief sie.'), '«, rief sie.');
+  assert.equal(m._computeSpacedInsert('Komm her', '"'), '"');
+});
+
+test('_computeSpacedInsert: Gedankenstrich am Segmentanfang bekommt ein Leerzeichen', () => {
+  assert.equal(m._computeSpacedInsert('und dann', '- also gut'), ' - also gut');
+});
+
+// --- Auslassungspunkte ------------------------------------------------------
+
+test('_normalizeTranscript: Leerzeichen vor Auslassungspunkten bleibt', () => {
+  assert.equal(m._normalizeTranscript('Und dann … nichts'), 'Und dann … nichts');
+  assert.equal(m._normalizeTranscript('Und dann…'), 'Und dann…');
+});
+
+// --- Halluzinations-Filter: Prosa und Konfidenz -----------------------------
+
+test('_isLikelyHallucination: Sender, Funk, Untertitel, Copyright in Prosa bleiben', () => {
+  assert.equal(m._isLikelyHallucination('Sie arbeitete zwanzig Jahre beim SRF.'), false);
+  assert.equal(m._isLikelyHallucination('Der Funk fiel im Winter 1943 aus.'), false);
+  assert.equal(m._isLikelyHallucination('Die Untertitel liefen bis 2003 mit.'), false);
+  assert.equal(m._isLikelyHallucination('Untertitel waren damals selten.'), false);
+  assert.equal(m._isLikelyHallucination('Copyright war ihr egal.'), false);
+});
+
+test('_isLikelyHallucination: Boilerplate als ganzes Segment', () => {
+  assert.equal(m._isLikelyHallucination('ZDF, 2021'), true);
+  assert.equal(m._isLikelyHallucination('SRF'), true);
+  assert.equal(m._isLikelyHallucination('Copyright 2019 WDR'), true);
+  assert.equal(m._isLikelyHallucination('© 2020'), true);
+  assert.equal(m._isLikelyHallucination('Untertitel im Auftrag des ZDF für funk, 2017'), true);
+  assert.equal(m._isLikelyHallucination('Untertitelung des NDR, 2020'), true);
+});
+
+test('_isLikelyHallucination: Modell sicher -> nie verworfen, unsicher -> Liste greift', () => {
+  assert.equal(m._isLikelyHallucination('Tschüss.', false), false);
+  assert.equal(m._isLikelyHallucination('Vielen Dank.', false), false);
+  assert.equal(m._isLikelyHallucination('Tschüss.', true), true);
+  assert.equal(m._isLikelyHallucination('Tschüss.', null), true);
+  assert.equal(m._isLikelyHallucination('Sie lachte.', true), false);
+});

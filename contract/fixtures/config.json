@@ -7,7 +7,7 @@
   "status": 200,
   "response": {
     "clientContract": {
-      "api": 4,
+      "api": 5,
       "editorApi": 1
     },
     "languagetool": {

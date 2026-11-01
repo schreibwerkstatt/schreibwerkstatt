@@ -188,6 +188,7 @@ export function buildPaletteSections(args) {
   if (q.length >= 2) {
     const limit = Math.max(3, Math.ceil(q.length * FUZZY_SCORE_BUDGET_PER_CHAR));
     for (const provider of providers || []) {
+      if (provider.mixMinLength && q.length < provider.mixMinLength) continue;
       const items = provider.search(root, q, t).filter(it => it.score < limit);
       if (items.length) sections.push({ key: provider.key, labelKey: provider.sectionKey, items });
     }

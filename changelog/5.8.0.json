@@ -1,0 +1,31 @@
+{
+  "version": "5.8.0",
+  "date": "2026-11-01",
+  "entries": [
+    {
+      "kind": "neu",
+      "de": "Abschnitts-Lektorat: Wechselst du nach dem Prüfen zu «Bearbeiten», bleibt die Befundliste rechts stehen. Die Stellen sind im Text markiert, und du übernimmst Korrekturen einzeln oder alle angehakten direkt beim Schreiben.",
+      "en": "Section review: if you switch to \"Edit\" after a review, the list of findings stays on the right. The passages are highlighted in the text, and you apply corrections one by one or all checked ones while you write."
+    },
+    {
+      "kind": "verbessert",
+      "de": "Diktat: Stille und Hintergrundgeräusche erzeugen seltener erfundenen Text. Was du diktierst, landet immer in dem Abschnitt, in dem du gesprochen hast, auch wenn du die Aufnahme stoppst und gleich neu startest.",
+      "en": "Dictation: silence and background noise produce made-up text less often. What you dictate always lands in the section where you spoke, even if you stop and restart the recording right away."
+    },
+    {
+      "kind": "verbessert",
+      "de": "Befehlspalette: Volltext-Treffer aus anderen Büchern öffnen direkt das richtige Buch, und ein Kapitel mit nur Unterkapiteln springt in deren ersten Abschnitt.",
+      "en": "Command palette: full-text hits from other books open the right book directly, and a chapter with only subchapters jumps to their first section."
+    },
+    {
+      "kind": "verbessert",
+      "de": "Offline verfügbare Bücher halten sich selbst aktuell und nehmen auch Figuren, Orte und die übrigen Werkstatt-Listen mit.",
+      "en": "Books saved for offline use keep themselves up to date and also include characters, places and the other workshop lists."
+    },
+    {
+      "kind": "verbessert",
+      "de": "Datenschutzerklärung: Sie nennt neu die erfassten Nutzungsdaten, etwa welche Funktionen du öffnest und ob du KI-Vorschläge übernimmst, nie Textinhalte. Sie werden nach 13 Monaten gelöscht.",
+      "en": "Privacy policy: it now lists the usage data that is recorded, such as which features you open and whether you accept AI suggestions, never any text. It is deleted after 13 months."
+    }
+  ]
+}

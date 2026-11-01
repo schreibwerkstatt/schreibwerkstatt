@@ -4,9 +4,10 @@
 // gespreadet (über chat.js); `this` ist die Karte.
 
 import { countInHtml, parseRichReplacement } from '../utils.js';
-import { foldQuotes, normalizeMatchText } from '../utils/text-match.js';
+import { normalizeMatchText } from '../utils/text-match.js';
 import { stripLektoratMarks } from '../editor/shared/html-clean.js';
-import { collectTextNodes, createHighlightPair } from '../editor/shared/text-find.js';
+import { createHighlightPair } from '../editor/shared/text-find.js';
+import { locateInContainer } from '../editor/shared/text-locate.js';
 import { diffParts } from '../diff/diff-parts.js';
 
 // CSS-Custom-Highlight (kein DOM-Eingriff — landet nie im gespeicherten HTML).
@@ -43,36 +44,6 @@ export function computeChatMarks(messages) {
     out.push({ msgIdx: last, vIdx, original: v.original, ersatz: v.ersatz });
   });
   return out;
-}
-
-/** Erste Fundstelle von `needle` unter `container` als Match-Tupel
- *  ({ startNode, startOffset, endNode, endOffset }) oder null — mit derselben
- *  Toleranz wie `countInHtml` (Whitespace kollabiert, Anführungszeichen
- *  gefaltet), damit Hervorhebung und Apply-Guard dieselbe Stelle meinen: nach
- *  dem Übernehmen stehen die Anführungszeichen im Buch-Stil, der Vorschlag hat
- *  sie gerade. Text-Nodes werden ohne Trenner verkettet (Inline-Tags tragen
- *  ihren Leerraum selbst); Block-Grenzen überspannt ein Vorschlag nie. */
-export function locateInContainer(container, needle) {
-  const n = normalizeMatchText(needle);
-  if (!container || !n) return null;
-  const nodes = collectTextNodes(container);
-  const chars = [];
-  const pos = [];
-  let pendingSpace = false;
-  for (const node of nodes) {
-    const v = node.nodeValue || '';
-    for (let i = 0; i < v.length; i++) {
-      if (/\s/.test(v[i])) { if (chars.length) pendingSpace = true; continue; }
-      if (pendingSpace) { chars.push(' '); pos.push({ node, i }); pendingSpace = false; }
-      chars.push(v[i]);
-      pos.push({ node, i });
-    }
-  }
-  const idx = foldQuotes(chars.join('')).indexOf(n);
-  if (idx === -1) return null;
-  const a = pos[idx];
-  const b = pos[idx + n.length - 1];
-  return { startNode: a.node, startOffset: a.i, endNode: b.node, endOffset: b.i + 1 };
 }
 
 // Zählungen je Needle, gültig für genau ein HTML. `_refreshVorschlagStates`

@@ -423,8 +423,7 @@ const confirmDialogState = () => ({
 // Seiten-Lektorat (Finding-Liste, Apply-Flow, Token-Estimates). `correctedHtml`
 // ist die Lektorat-überlagerte HTML-Fassung (Overlay über `renderedPageHtml`,
 // nur wenn `checkDone`); `hasErrors` flaggt, ob das Overlay harte Korrekturen
-// enthält. Notebook/Focus berühren beides nicht (Invariante: editMode ⇒
-// !checkDone).
+// enthält. Im Notebook-Edit-Modus markiert editor/lektorat-live.js (Highlights).
 const lektoratState = () => ({
   analysisOut: '',
   correctedHtml: null,
@@ -436,6 +435,7 @@ const lektoratState = () => ({
   // Vergleich mit dem Vorlauf derselben Seite (lib/lektorat-progress.js), nur
   // direkt nach einem Abschnitts-Lektorat gesetzt, sonst null.
   lektoratProgress: null,
+  lektoratLiveActiveIdx: -1, // Edit-Modus: hervorgehobener Befund (lektorat-live.js)
   // «Korrekturen rückgängig» nach dem Speichern (editor/lektorat-undo.js), sonst null.
   lektoratUndo: null,
   checkDone: false,

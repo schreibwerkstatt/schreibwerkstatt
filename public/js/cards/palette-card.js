@@ -14,14 +14,16 @@
 
 import { EXCLUSIVE_CARDS, REQUIRED_CONFIG_FLAGS, configFlags } from './feature-registry.js';
 import { highlight } from './palette-fuzzy.js';
-import { PROVIDERS, parseQuery } from './palette-providers.js';
+import { PROVIDERS, PALETTE_LEGEND, parseQuery } from './palette-providers.js';
 import { buildPaletteSections } from './palette-sections.js';
 import { memoMethods } from './card-memo.js';
 import { markNextUsageSource } from '../features-usage.js';
 import { EVT } from '../events.js';
 import { mountInTopLayer } from '../fullscreen.js';
+import { isImeComposing } from '../utils/keys.js';
 
 const NO_SECTIONS = Object.freeze([]);
+const FULLTEXT = PROVIDERS.find(p => p.key === 'fulltext');
 
 export function registerPaletteCard() {
   if (typeof window === 'undefined' || !window.Alpine) return;
@@ -82,10 +84,7 @@ export function registerPaletteCard() {
           try { p.prepare?.(root); } catch (e) { console.error('[palette prepare]', e); }
         }
       }
-      this.$nextTick(() => {
-        const input = document.querySelector('.palette-input');
-        if (input) input.focus();
-      });
+      this.$nextTick(() => this.$refs.paletteInput?.focus());
     },
 
     // Overlay in den aktuell obersten Layer haengen (Fullscreen-Element, sonst
@@ -118,9 +117,15 @@ export function registerPaletteCard() {
     },
 
     onPaletteKeydown(event) {
+      // Während einer IME-Komposition gehören Enter/Pfeile/Esc der Zeichenwahl.
+      if (isImeComposing(event)) return;
       const k = event.key;
       if (k === 'Escape') {
+        // Nicht weiterreichen: window-Esc-Handler darunter (Vollbild des
+        // Notebook-Editors, Figuren-Graph, Snapshot-Reader …) schlössen sonst
+        // mit — die Palette zu verwerfen darf den Kontext nicht kosten.
         event.preventDefault();
+        event.stopPropagation();
         this.closePalette();
         return;
       }
@@ -153,7 +158,7 @@ export function registerPaletteCard() {
 
     _scrollActiveIntoView() {
       this.$nextTick(() => {
-        const el = document.querySelector('.palette-item--active');
+        const el = this.$refs.paletteList?.querySelector('.palette-item--active');
         if (el) el.scrollIntoView({ block: 'nearest' });
       });
     },
@@ -188,6 +193,7 @@ export function registerPaletteCard() {
         this.paletteQuery,
         ctx.selectedBookId, ctx.bookRole, ctx.buchtyp, ctx.cloudModelEffective,
         ...REQUIRED_CONFIG_FLAGS.map(k => ctx.config[k]),
+        ctx.hasBooks,
         nav.pages, (nav.pages || []).length,
         nav.tree, (nav.tree || []).length, root._chapterLabelMap,
         nav.werkstattDrafts,
@@ -253,18 +259,17 @@ export function registerPaletteCard() {
       });
     },
 
-    // Statische Legende der Prefix-Modi (für Empty-State).
+    // Legende der Prefix-Modi (für Empty-State), abgeleitet aus PROVIDERS.
     paletteLegendItems() {
-      return [
-        { prefix: '>', labelKey: 'palette.legend.commands' },
-        { prefix: '#', labelKey: 'palette.legend.pages' },
-        { prefix: '!', labelKey: 'palette.legend.chapters' },
-        { prefix: '@', labelKey: 'palette.legend.figuren' },
-        { prefix: '$', labelKey: 'palette.legend.orte' },
-        { prefix: '%', labelKey: 'palette.legend.szenen' },
-        { prefix: '&', labelKey: 'palette.legend.ereignisse' },
-        { prefix: '?', labelKey: 'palette.legend.fulltext' },
-      ];
+      return PALETTE_LEGEND;
+    },
+
+    // Leerzustand der Liste: null (Treffer da bzw. leere Query), 'searching'
+    // (Volltext-Anfrage läuft noch) oder 'empty'. Liest paletteSections()
+    // zuerst — deren Aufbau stösst die Volltext-Anfrage erst an.
+    paletteEmptyState() {
+      if (!this.paletteQuery || this.paletteSections().length) return null;
+      return FULLTEXT?.isPending() ? 'searching' : 'empty';
     },
 
     // Hover markiert nur bei ECHTER Zeigerbewegung. mouseenter feuert auch,

@@ -63,8 +63,12 @@ export const notebookTrampoline = {
   // Eigener Undo-Schritt für Block-Umbauten aus der Toolbar (msg-convert.js).
   _historyPushNow() { card()?._historyPushNow(); },
   // Seiten-Chat: Ersetzung im Live-Editor statt Server-Write (edit/input.js).
-  _applyTextReplacement(original, replacement) {
-    return card()?._applyTextReplacement(original, replacement) ?? { ok: false, reason: 'notEditing' };
+  _applyTextReplacement(original, replacement, opts) {
+    return card()?._applyTextReplacement(original, replacement, opts) ?? { ok: false, reason: 'notEditing' };
+  },
+  // Lektorat-Befunde im Edit-Modus: Übernahme im Live-Editor (edit/input.js).
+  _applyLektoratInEditor(fehler, opts) {
+    return card()?._applyLektoratInEditor(fehler, opts) ?? { applied: [], skipped: [], reason: 'notEditing' };
   },
   _flushDraftSaveNow() { card()?._flushDraftSaveNow(); },
   // Remote-Stand der offenen Seite in den laufenden Edit holen (Collab-Treffer, Aufwachen).

@@ -8,6 +8,7 @@ import { renderLektoratAnalysisHtml } from './lektorat-analysis.js';
 import { runQuoteNormalizeHtml } from './shared/quote-normalize.js';
 import { lsSet } from '../safe-storage.js';
 import { UNDO_WINDOW_MS } from './lektorat-undo.js';
+import { trackUsageEvent } from '../features-usage.js';
 
 // Lektorat-Workflow-Methoden (werden in die Alpine-Komponente gespreadet)
 // `this` bezieht sich auf die Alpine-Komponente.
@@ -49,9 +50,9 @@ export const lektoratMethods = {
 
   // Auswählbar ist ein Befund, der etwas ändern würde und noch nicht übernommen
   // ist. Übernommene stehen oft weiter im Text („sagte er" → „sagte er,"): ein
-  // zweites Anwenden schriebe „sagte er,,".
+  // zweites Anwenden schriebe „sagte er,,". Umgeschriebene stehen nicht mehr da.
   findingSelectable(f) {
-    return !!f?.korrektur && f.korrektur !== f.original && !this.appliedOriginals.includes(f.original);
+    return !!f?.korrektur && f.korrektur !== f.original && !f.umgeschrieben && !this.appliedOriginals.includes(f.original);
   },
 
   // `outSkipped` (optional): sammelt Korrekturen, die replaceInHtml unangetastet
@@ -98,7 +99,7 @@ export const lektoratMethods = {
   _skipSummary(skipped) {
     const counts = {};
     for (const s of skipped) counts[s.reason] = (counts[s.reason] || 0) + 1;
-    return ['notFound', 'noCorrection', 'unchanged', 'spansLink', 'spansMarker', 'boundary']
+    return ['notFound', 'ambiguous', 'noCorrection', 'unchanged', 'spansLink', 'spansMarker', 'boundary']
       .filter(k => counts[k] > 0)
       .map(k => this.t('lektorat.skip.' + k, { count: counts[k] }))
       .join(', ');
@@ -202,13 +203,9 @@ export const lektoratMethods = {
   },
 
   async runCheck() {
-    if (!this.currentPage) return;
-    // Guard: Lektorat darf nicht auf nicht-persistierten Edits laufen.
-    // Server-Job liest die gespeicherte Seite; sind Edits nur lokal (offline-
-    // Draft oder editDirty), sieht der Job die alte Fassung. Findings haben
-    // dann Positionen aus altem Text, und der spätere Save-Pfad würde nach
-    // einem zwischenzeitlichen Online-Retry ein Race auslösen, das Edits
-    // überschreiben kann. Lieber blocken bis der Save durch ist.
+    if (!this.currentPage || this.checkLoading) return;
+    if (await this._saveBeforeLiveCheck?.() === false) return; // Edit-Modus: erst speichern
+    // Job liest die gespeicherte Seite: lokale Edits (Draft, editDirty) erst speichern.
     if (this.saveOffline || this.editDirty) {
       this.setStatus(this.t('lektorat.blockedUnsavedEdits'), false, 6000);
       return;
@@ -306,7 +303,9 @@ export const lektoratMethods = {
         let base = r.originalHtml;
         let verified = false;
         let staleRefiltered = false;
-        if (pageId != null) {
+        const live = this._lektoratLiveBase?.(r.originalHtml); // Edit-Modus: Live-Text, originalHtml bleibt Save-Basis
+        if (live) { ({ html: base, changed: staleRefiltered } = live); verified = true; }
+        else if (pageId != null) {
           try {
             const pd = await contentRepo.loadPage(pageId, { fresh: true });
             if (this.currentPage?.id !== pageId) return;
@@ -342,7 +341,7 @@ export const lektoratMethods = {
           this.analysisOut = `<span class="error-msg">${escHtml(this.t('lektorat.staleResultDropped'))}</span>`;
           return;
         }
-        this.originalHtml = base;
+        if (!live) this.originalHtml = base;
         this.lektoratFindings = findings;
         // Default selected: nur „harte" Typen (page-view.js#findingKind) ausserhalb
         // eines Nachrichtenverlaufs. Weiche und redaktionelle default unselected.
@@ -394,6 +393,7 @@ export const lektoratMethods = {
     if (!this.currentPage || this.saveApplying != null) return;
     const selected = this.lektoratFindings.filter((_, i) => this.selectedFindings[i]);
     if (selected.length === 0) return;
+    const shown = this.lektoratFindings.length;
     // Ziel des History-PATCH beim Start pinnen: die Korrekturen gehören zu DIESEM
     // Lauf, auch wenn während der Awaits ein anderer Eintrag oder eine andere
     // Seite geöffnet wird.
@@ -414,6 +414,8 @@ export const lektoratMethods = {
         if (text) this.setStatus(text, true);
       });
       const skipped = [...noCorrection, ...applySkipped];
+      // Nutzungs-Event (docs/usage-events.md): nur Zahlen, keine Befundtexte.
+      trackUsageEvent('lektorat.applied', { shown, selected: selected.length, applied: selected.length - skipped.length, skipped: skipped.length });
 
       // Der Text ist gespeichert — den Lauf darum immer als übernommen
       // verbuchen, auch nach einem Seitenwechsel. Sonst bliebe er offen und die

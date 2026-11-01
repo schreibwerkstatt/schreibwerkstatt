@@ -421,6 +421,7 @@ export const appInitMethods = {
       if (this.$store.nav.selectedBookId) this._startCollabPoll(this.$store.nav.selectedBookId);
       this._setupWritingTime();
       this._setupLektoratTime();
+      this._setupLektoratLive();
       this._setupSttTime();
       // _setupNotebookRestore lebt jetzt in editor-notebook-card.js#init.
     } catch (e) {

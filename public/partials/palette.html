@@ -19,15 +19,16 @@
          class="palette-overlay"
          x-trap.inert.noautofocus.noreturn="paletteOpen"
          @click="onOverlayClick($event)"
-         @keydown.escape.window="if (paletteOpen) closePalette()">
+         @keydown.escape.stop="closePalette()">
       <div class="palette-panel" role="dialog" aria-modal="true" :aria-label="$app.t('palette.placeholder')">
         <input type="text"
+               x-ref="paletteInput"
                class="palette-input"
                role="combobox"
                aria-autocomplete="list"
                aria-controls="palette-listbox"
                :aria-activedescendant="activeItemDomId() || null"
-               aria-expanded="true"
+               :aria-expanded="paletteSections().length > 0"
                x-model="paletteQuery"
                @input="onPaletteInput()"
                @keydown="onPaletteKeydown($event)"
@@ -46,7 +47,7 @@
             </span>
           </template>
         </div>
-        <div class="palette-list" id="palette-listbox" role="listbox">
+        <div class="palette-list" id="palette-listbox" role="listbox" x-ref="paletteList">
           <template x-for="section in paletteSections()" :key="section.key">
             <div class="palette-section" role="group" :aria-labelledby="paletteSectionLabelId(section.key)">
               <div class="palette-section-label" :id="paletteSectionLabelId(section.key)" x-text="$app.t(section.labelKey)"></div>
@@ -76,8 +77,8 @@
             </div>
           </template>
           <div class="muted-msg muted-msg--sm muted-msg--block"
-               x-show="paletteSections().length === 0 && paletteQuery"
-               x-text="$app.t('palette.empty')"></div>
+               x-show="paletteEmptyState()"
+               x-text="$app.t(paletteEmptyState() === 'searching' ? 'palette.searching' : 'palette.empty')"></div>
         </div>
         <!-- Prefix-Legende: nur sichtbar wenn Suchfeld leer. -->
         <div class="palette-legend" x-show="!paletteQuery" x-cloak>

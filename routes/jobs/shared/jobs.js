@@ -10,6 +10,7 @@ const { emitJobChange, emitQueueShift } = require('./events');
 const { _modelName } = require('./model');
 const jobLogBuffer = require('../../../lib/job-log-buffer');
 const embed = require('../../../lib/embed');
+const { recordUsageEvent } = require('../../../lib/usage-events');
 
 // Job-Ctx (type/user/book) wird via ALS in `drainQueue` gesetzt – jeder
 // `logger.*`-Call innerhalb der Job-Funktion erbt ihn automatisch.
@@ -33,6 +34,17 @@ function fmtDuration(seconds) {
   const m = Math.floor(s / 60);
   const rem = s % 60;
   return rem > 0 ? `${m}m ${rem}s` : `${m}m`;
+}
+
+// Nutzungs-Event zum Job-Ende (docs/usage-events.md), an allen drei Endpunkten
+// (fertig, Fehler/Abbruch im Lauf, Abbruch in der Queue). Laufzeit ab Start, nicht
+// ab Einreihen — Wartezeit in der Queue ist keine Eigenschaft des Features.
+function _recordJobFinished(job) {
+  const ms = job.startedAt ? Date.now() - new Date(job.startedAt).getTime() : NaN;
+  recordUsageEvent({
+    userEmail: job.userEmail, event: 'job.finished', bookId: job.bookId,
+    meta: { type: job.type, status: job.status, durationSec: Number.isFinite(ms) && ms >= 0 ? Math.round(ms / 1000) : undefined },
+  });
 }
 
 function _jobDurationFmt(startedAt) {
@@ -186,6 +198,7 @@ function createJob(type, bookId, userEmail, label, labelParams = null, dedupId =
   try { insertJobRun({ id, type, bookId: String(bookId), userEmail, label, provider, model }); } catch (e) {
     logger.error(`insertJobRun: ${e.message}`, { job: type, user: userEmail, book: bookId });
   }
+  recordUsageEvent({ userEmail, event: 'job.queued', bookId, meta: { type } });
   runningJobs.set(key, id);
   return id;
 }
@@ -256,6 +269,7 @@ function completeJob(id, result, tokensPerSec = null, detail = null) {
   _scheduleJobCleanup(id);
   jobLogBuffer.clear(id);
   emitJobChange(job, true);
+  _recordJobFinished(job);
   if (job.userEmail) {
     const notify = require('../../../lib/notify');
     notify.maybeNotifyBudgetOverrun(job.userEmail)
@@ -292,6 +306,7 @@ function failJob(id, err) {
   _scheduleJobCleanup(id);
   jobLogBuffer.clear(id);
   emitJobChange(job, true);
+  _recordJobFinished(job);
   if (!isCancelled) {
     const notify = require('../../../lib/notify');
     const httpStatus = (err && typeof err.status === 'number') ? err.status : null;
@@ -338,6 +353,7 @@ function cancelJob(id, userEmail) {
     _scheduleJobCleanup(id);
     jobLogBuffer.clear(id);
     emitJobChange(job, true);
+  _recordJobFinished(job);
     emitQueueShift();
     logger.info('Aus Warteschlange entfernt und abgebrochen.', _jobLogCtx(job));
     return true;

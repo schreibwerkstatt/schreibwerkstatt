@@ -3,6 +3,7 @@
 // (`showAdminUsageCard`) im Root.
 
 import { adminUsageMethods } from '../admin/admin-usage.js';
+import { adminUsageBehaviorMethods } from '../admin/admin-usage-behavior.js';
 import { setupCardLifecycle } from './card-lifecycle.js';
 
 export function registerAdminUsageCard() {
@@ -61,6 +62,9 @@ export function registerAdminUsageCard() {
     adminUsageFeatureItems: [],
     adminUsageFeatureTotals: [],
 
+    // Verhalten-Tab (GET /admin/usage/behavior, docs/usage-events.md)
+    adminUsageBehavior: null,
+
     // Zeit-Tab
     adminUsageTimeItems: [],
     adminUsageTimeSeries: [],
@@ -81,10 +85,10 @@ export function registerAdminUsageCard() {
       // `adminUsageTab` erst NACH dem Oeffnen der Karte (Deep-Link
       // #admin/usage/billing, Back/Forward) — `adminUsageEnter` hat da schon den
       // alten Tab geladen, der neue bliebe sonst leer.
-      // Summary-Charts beim Verlassen des Tabs zerstoeren (Klick UND Hash-Router),
+      // Charts (Summary, Verhalten) beim Verlassen des Tabs zerstoeren (Klick UND Hash-Router),
       // damit Chart.js' ResizeObserver nicht auf dem versteckten Canvas crasht.
       this.$watch(() => this.adminUsageTab, (tab, prev) => {
-        if (prev === 'summary' && tab !== 'summary') this._adminUsageDestroyCharts();
+        if ((prev === 'summary' || prev === 'behavior') && tab !== prev) this._adminUsageDestroyCharts();
         if (window.__app.showAdminUsageCard) this.adminUsageLoadTab();
       });
       this.$watch(() => this.adminUsageFrom, () => { if (window.__app.showAdminUsageCard) this.adminUsageLoadTab(); });
@@ -116,5 +120,6 @@ export function registerAdminUsageCard() {
     },
 
     ...adminUsageMethods,
+    ...adminUsageBehaviorMethods,
   }));
 }

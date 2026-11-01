@@ -40,7 +40,7 @@ test('Deep-Link #admin/usage/billing laedt den Abrechnungs-Tab', async ({ page }
 // Load des richtigen nicht verpuffen.
 for (const [tab, path] of [
   ['jobs', '/admin/usage/jobs'], ['chat', '/admin/usage/chat'], ['summary', '/admin/usage/summary'],
-  ['features', '/admin/usage/features'], ['time', '/admin/usage/time'],
+  ['features', '/admin/usage/features'], ['time', '/admin/usage/time'], ['behavior', '/admin/usage/behavior'],
 ]) {
   test(`Deep-Link #admin/usage/${tab} laedt den Tab`, async ({ page }) => {
     await bootApp(page);
@@ -66,6 +66,39 @@ test('Schneller Tab-Wechsel: neuer Tab laedt, waehrend der vorige noch laeuft', 
   await jobsReq;
   releaseUsers();
   await expect(page.locator('.card--admin-usage [x-show="adminUsageLoading"]')).toBeHidden();
+});
+
+test('Verhalten mit Daten: Vorschlaege, Jobs, nie geoeffnete Funktionen, Kohorten', async ({ page }) => {
+  // Zwei nachgeladene Partials (admin-usage-behavior + -more) im Karten-Scope;
+  // ihre Ausdruecke laufen nur im vollen Baum. Report direkt in den Scope.
+  await bootApp(page);
+  await page.evaluate(async () => {
+    window.__app.adminUsageTab = 'behavior';
+    await window.__app.toggleAdminUsageCard();
+  });
+  const pane = page.locator('[x-show="adminUsageTab === \'behavior\'"]');
+  await expect(pane).toBeVisible();
+  await page.evaluate(() => {
+    const c = window.Alpine.$data(document.querySelector('[x-data="adminUsageCard"]'));
+    c.adminUsageBehavior = {
+      activity: { activeUsers: 2, weekly: [{ week: '2026-10-26', activeUsers: 2, activeSeconds: 3600, activeDays: 3 }] },
+      sessions: 5, logins: 2, booksCreated: 1,
+      features: [{ feature: 'plot', opens: 4, users: 1, lastAt: '2026-10-30T10:00:00.000Z', sources: { palette: 3, tile: 1 } }],
+      jobs: [{ type: 'check', queued: 3, done: 2, error: 1, cancelled: 0, users: 1, medianSec: 40 }],
+      proposals: [{ chat: 'plot', kind: 'beat_update', applied: 3, discarded: 1, reopened: 0, undone: 0, users: 1 }],
+      lektorat: { runs: 1, users: 1, shown: 10, selected: 6, applied: 5, skipped: 1 },
+      editors: [{ editor: 'focus', opens: 2, users: 1, sessions: 2, medianSec: 900, totalSec: 1800 }],
+      hours: Array.from({ length: 24 }, (_, h) => (h === 9 ? 2 : 0)),
+      tools: [{ event: 'dictation.start', count: 4, users: 1 }],
+      cohorts: [{ email: 'neu@test.dev', displayName: 'Neu', startDate: '2026-10-01', activeDays7: 3, activeDays30: 9, activeDaysTotal: 12, activeWeeks: 4, lastActive: '2026-10-30' }],
+    };
+  });
+  await expect(pane.locator('tr', { hasText: 'beat_update' })).toContainText('75 %');
+  await expect(pane.locator('tr', { hasText: /Plot-Werkstatt|Plot/ }).first()).toBeVisible();
+  // Funktionen ohne Oeffnung stehen mit 0 in der Tabelle (gedimmt).
+  await expect(pane.locator('tr.admin-usage-row--muted').first()).toBeVisible();
+  await expect(pane.locator('tr', { hasText: 'neu@test.dev' })).toBeVisible();
+  await expect(pane.locator('canvas').first()).toBeVisible();
 });
 
 test('Abrechnung mit Daten: KPIs, Modell- und Tagestabelle, Abweichung markiert', async ({ page }) => {

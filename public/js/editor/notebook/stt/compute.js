@@ -32,14 +32,17 @@ const STT_HALLUCINATION_EXACT = new Set([
   'thank you',
   'thanks for watching',
 ]);
+// Sender-Kuerzel, die Whisper aus Untertitel-Trainingsdaten mitbringt.
+const STT_BROADCASTERS = '(zdf|ard|wdr|swr|ndr|orf|srf|mdr|br|funk)';
 const STT_HALLUCINATION_PATTERNS = [
-  /untertitel(ung)?\s+(des|der|im auftrag|von|aufgrund|erstellt)/i,
-  /amara\.org/i,
-  /\b(zdf|ard|wdr|swr|ndr|orf|srf)\b/i,
-  /\bfunk\b[^.]*\b\d{4}\b/i,
-  /^\s*copyright\b/i,
-  /^\s*©/,
-  /\buntertitel\b.*\b\d{4}\b/i,
+  /amara\.org/,
+  // „Untertitel im Auftrag des ZDF, 2021", „Untertitelung des NDR": nur mit
+  // Sender oder Jahr — „Die Untertitel liefen bis 2003 mit." beginnt anders.
+  new RegExp(`^untertitel(ung)?\\b.*(\\b${STT_BROADCASTERS}\\b|\\b\\d{4}\\b)`),
+  new RegExp(`\\bim auftrag (des|der|von)\\b.*\\b${STT_BROADCASTERS}\\b`),
+  // Das ganze Segment ist nur ein Senderkuerzel (ggf. mit Jahr).
+  new RegExp(`^${STT_BROADCASTERS}(,? \\d{4})?$`),
+  /^(©|copyright\b.*\b\d{4}\b)/,
 ];
 
 export const sttComputeMethods = {
@@ -56,15 +59,24 @@ export const sttComputeMethods = {
   },
 
   // Segment-Schnitt-Entscheidung. Schneidet, wenn nach erkannter Sprache eine
-  // Stille von >= silenceMs anhaelt, oder wenn das Segment maxSegmentS
-  // ueberschreitet (Schutz gegen Dauer-Sprechen ohne Pause).
-  _computeVadCut({ rms, threshold, now, segmentStart, lastVoiceTs, hasVoice, silenceMs, maxSegmentS }) {
+  // Stille von >= silenceMs anhaelt, oder wenn die Sprechdauer maxSegmentS
+  // ueberschreitet (Schutz gegen Dauer-Sprechen ohne Pause). Die Hoechstdauer
+  // zaehlt ab dem ersten Sprechen (`voiceStart`), nicht ab Segmentbeginn —
+  // sonst schnitte eine lange Denkpause den folgenden Satz nach wenigen
+  // Silben mitten im Wort. Liegt vor dem Sprechen schon `trimSilenceMs` Stille
+  // im Segment, kommt ein `trim`-Schnitt: das stille Segment wird verworfen
+  // und neu begonnen — lange Stille vor dem Sprechen ist der haeufigste
+  // Ausloeser fuer Whisper-Geisterphrasen.
+  _computeVadCut({ rms, threshold, now, segmentStart, voiceStart, lastVoiceTs, hasVoice, silenceMs, maxSegmentS, trimSilenceMs }) {
     const voiced = rms >= threshold;
-    if (hasVoice && (now - segmentStart) >= maxSegmentS * 1000) {
+    if (hasVoice && (now - (voiceStart ?? segmentStart)) >= maxSegmentS * 1000) {
       return { cut: true, reason: 'max', voiced };
     }
     if (hasVoice && !voiced && (now - lastVoiceTs) >= silenceMs) {
       return { cut: true, reason: 'silence', voiced };
+    }
+    if (!hasVoice && !voiced && trimSilenceMs > 0 && (now - segmentStart) >= trimSilenceMs) {
+      return { cut: true, reason: 'trim', voiced };
     }
     return { cut: false, voiced };
   },
@@ -81,11 +93,12 @@ export const sttComputeMethods = {
   // Normalisiert ein Transkript-Segment fuer die Einfuegung: trimmt, kollabiert
   // interne Whitespace-Folgen (Whisper liefert gelegentlich Doppel-Leerzeichen
   // oder Zeilenumbrueche) und tilgt ein Leerzeichen DIREKT vor Satzzeichen
-  // („Wort , dann" -> „Wort, dann").
+  // („Wort , dann" -> „Wort, dann"). Nicht vor „…": steht es fuer ausgelassene
+  // Woerter, gehoert ein Leerzeichen davor („Und dann … nichts").
   _normalizeTranscript(text) {
     return String(text || '')
       .replace(/\s+/g, ' ')
-      .replace(/\s+([,.;:!?…])/g, '$1')
+      .replace(/\s+([,.;:!?])/g, '$1')
       .trim();
   },
 
@@ -128,17 +141,38 @@ export const sttComputeMethods = {
     if (!prevChar || this._endsSentence(prev)) t = this._capitalizeSentenceStart(t);
     if (!prevChar) return t;
     if (/\s/.test(prevChar)) return t; // schon Whitespace davor
-    const startsPunct = /^[\s,.;:!?…)»"'’-]/.test(t);
-    return startsPunct ? t : ' ' + t;
+    return this._startsGlued(t) ? t : ' ' + t;
+  },
+
+  // True, wenn ein Segment ohne Leerzeichen an den Vortext anschliesst:
+  // schliessende Satzzeichen/Klammern. Ein Anfuehrungszeichen am Segmentanfang
+  // oeffnet dagegen meist eine Rede (Er sagte: "Komm …") und bekommt ein
+  // Leerzeichen — es schliesst nur, wenn direkt Leerzeichen, Satzzeichen oder
+  // das Ende folgt. Ein Strich am Anfang ist ein Gedankenstrich. Pure/testbar.
+  _startsGlued(text) {
+    const t = String(text || '');
+    return /^[,.;:!?…)\]]/.test(t) || /^["'’”“»«](?=$|[\s,.;:!?…)\]])/u.test(t);
+  },
+
+  // Endet ein Segment nur, weil die Hoechstdauer es mitten im Satz geschnitten
+  // hat, setzt Whisper trotzdem einen Schlusspunkt (es sieht jedes Segment als
+  // eigene Aeusserung). Diesen einen Punkt entfernen; Auslassungspunkte, „?",
+  // „!" und ein Punkt vor schliessender Anfuehrung bleiben. Pure/testbar.
+  _computeMidCutText(text) {
+    return String(text || '').replace(/(?<!\.)\.$/, '');
   },
 
   // Whisper „halluziniert" bei stillen/unverstaendlichen Segmenten bekannte
   // Boilerplate-Phrasen (Video-Untertitel-Floskeln, Dank-/Abschiedsformeln).
   // True, wenn das GANZE Segment einer solchen Phrase entspricht — dann wird es
-  // verworfen statt eingefuegt. Bewusst Whole-Segment-Match bzw. eindeutige
-  // Marker (ZDF/ARD/Amara/funk/Copyright), damit legitimer Prosatext, der eine
-  // dieser Floskeln enthaelt, nicht faelschlich getilgt wird. Pure/testbar.
-  _isLikelyHallucination(text) {
+  // verworfen statt eingefuegt. Die Muster pruefen das ganze Segment bzw.
+  // eindeutige Boilerplate (Sender nur zusammen mit „Untertitel"/„im Auftrag",
+  // Copyright nur mit Jahreszahl), damit Prosa wie „Sie arbeitete beim SRF."
+  // durchkommt. `uncertain` kommt vom Proxy (Whisper-Konfidenz): `false` = das
+  // Modell hat sicher Sprache gehoert, dann ist auch ein „Tschüss." als
+  // Dialogzeile echt; `null` = Backend liefert keine Konfidenz. Pure/testbar.
+  _isLikelyHallucination(text, uncertain = null) {
+    if (uncertain === false) return false;
     const norm = String(text || '')
       .replace(/\s+/g, ' ')
       .replace(/[.!?…»«„“”"'’\s]+$/u, '')
@@ -146,7 +180,7 @@ export const sttComputeMethods = {
       .toLowerCase();
     if (!norm) return false;
     if (STT_HALLUCINATION_EXACT.has(norm)) return true;
-    return STT_HALLUCINATION_PATTERNS.some((re) => re.test(text));
+    return STT_HALLUCINATION_PATTERNS.some((re) => re.test(norm));
   },
 
   // Effektiver VAD-Threshold aus gemessenem Geraeuschboden: leicht ueber dem

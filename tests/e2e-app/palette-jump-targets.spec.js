@@ -45,3 +45,22 @@ test('Palette springt auf Reiter und Abschnitte', async ({ page }) => {
   await runPalette(page, 'Was ist neu');
   await expect(page.locator('.tabs-btn[aria-selected="true"]', { hasText: 'Neuigkeiten' })).toBeVisible();
 });
+
+// Esc verwirft die Palette, ohne bis zu window-Esc-Handlern durchzureichen —
+// die schlössen sonst mit (Vollbild des Notebook-Editors, Figuren-Graph,
+// Snapshot-Reader …), und die Palette zu verwerfen kostete den Kontext.
+test('Esc schliesst die Palette, ohne window-Esc-Handler auszuloesen', async ({ page }) => {
+  await bootApp(page);
+  await selectSeededBook(page);
+  await page.evaluate(() => {
+    window.__escSeen = 0;
+    window.addEventListener('keydown', (e) => { if (e.key === 'Escape') window.__escSeen++; });
+    window.dispatchEvent(new CustomEvent('palette:open'));
+  });
+  const input = page.locator('.palette-input');
+  await expect(input).toBeVisible();
+  await input.fill('einst');
+  await input.press('Escape');
+  await expect(input).toBeHidden();
+  expect(await page.evaluate(() => window.__escSeen)).toBe(0);
+});

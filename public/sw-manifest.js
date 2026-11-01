@@ -5,7 +5,7 @@
 // __SHELL_BUILD: content hash over all listed assets → drives SHELL_CACHE.
 // __SHELL_MANIFEST: the coherent set precached atomically at SW install.
 // __VENDOR_SET: current vendor/ + fonts/ files — VENDOR_CACHE prune list.
-self.__SHELL_BUILD = "6fae5b4fec834b35";
+self.__SHELL_BUILD = "3dc7841636ded765";
 self.__SHELL_MANIFEST = [
   "/css/admin/admin-backup.css",
   "/css/admin/admin-home.css",
@@ -195,6 +195,7 @@ self.__SHELL_MANIFEST = [
   "/js/admin/admin-devices.js",
   "/js/admin/admin-logs.js",
   "/js/admin/admin-settings.js",
+  "/js/admin/admin-usage-behavior.js",
   "/js/admin/admin-usage.js",
   "/js/admin/admin-users.js",
   "/js/admin/ai-parse-fails.js",
@@ -401,6 +402,7 @@ self.__SHELL_MANIFEST = [
   "/js/book/tree/build.js",
   "/js/book/tree/catchup.js",
   "/js/book/tree/edit-status.js",
+  "/js/book/tree/first-page.js",
   "/js/book/tree/keyboard.js",
   "/js/book/tree/load.js",
   "/js/book/tree/open-state.js",
@@ -552,6 +554,7 @@ self.__SHELL_MANIFEST = [
   "/js/cards/reference-interview.js",
   "/js/cards/reference-plan.js",
   "/js/cards/search-card.js",
+  "/js/cards/search-hit.js",
   "/js/cards/session-store.js",
   "/js/cards/share-links-card.js",
   "/js/cards/share-target-options.js",
@@ -639,6 +642,7 @@ self.__SHELL_MANIFEST = [
   "/js/editor/focus/viewport.js",
   "/js/editor/lektorat-analysis.js",
   "/js/editor/lektorat-evidence.js",
+  "/js/editor/lektorat-live.js",
   "/js/editor/lektorat-undo.js",
   "/js/editor/lektorat.js",
   "/js/editor/live-edit.js",
@@ -718,6 +722,7 @@ self.__SHELL_MANIFEST = [
   "/js/editor/shared/soft-break.js",
   "/js/editor/shared/synonym-text.js",
   "/js/editor/shared/text-find.js",
+  "/js/editor/shared/text-locate.js",
   "/js/editor/shared/timers.js",
   "/js/editor/shared/todo-html.js",
   "/js/editor/shortcuts.js",
@@ -977,6 +982,8 @@ self.__SHELL_MANIFEST = [
   "/partials/admin-settings-tts.html",
   "/partials/admin-settings-websearch.html",
   "/partials/admin-settings.html",
+  "/partials/admin-usage-behavior-more.html",
+  "/partials/admin-usage-behavior.html",
   "/partials/admin-usage-billing.html",
   "/partials/admin-usage-breakdown.html",
   "/partials/admin-usage-chat-list.html",

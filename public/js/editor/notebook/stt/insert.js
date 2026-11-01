@@ -51,10 +51,15 @@ export const sttInsertMethods = {
     return caretRangeIn(editEl) || rangeAtEnd(editEl);
   },
 
-  _sttInsertText(text, boundaryKind) {
-    const clean = this._normalizeTranscript(text);
+  // `midCut`: Segment endet an der Hoechstdauer mitten im Satz (Whispers
+  // Schlusspunkt faellt weg). `uncertain`: Whisper-Konfidenz vom Proxy, steuert
+  // den Halluzinations-Filter (siehe `_isLikelyHallucination`).
+  _sttInsertText(text, boundaryKind, { midCut = false, uncertain = null } = {}) {
+    let clean = this._normalizeTranscript(text);
     if (!clean) return; // leerer/Whitespace-Transkript -> nichts einfuegen
-    if (this._isLikelyHallucination(clean)) return; // Whisper-Geisterphrase -> verwerfen
+    if (this._isLikelyHallucination(clean, uncertain)) return; // Whisper-Geisterphrase -> verwerfen
+    if (midCut) clean = this._computeMidCutText(clean);
+    if (!clean) return;
     this._trackSttChars?.(clean.length); // Diktat-Tracking: diktierte Zeichen buchen
     if (boundaryKind === 'paragraph') { this._sttInsertParagraph(clean); return; }
     const range = this._sttResolveRange();
@@ -85,11 +90,13 @@ export const sttInsertMethods = {
   },
 
   // Fuegt das Transkript als NEUEN Absatz (`<p>`) ein — getriggert, wenn die
-  // Sprechpause deutlich laenger war (Absatz-Erkennung im VAD). Der neue Absatz
-  // wird hinter den Block gesetzt, in dem der Caret steht (sonst ans Editorende);
-  // der vorausgehende Block bekommt ein Satzendezeichen, falls es fehlt. Erster
-  // Buchstabe gross (neuer Absatz = neuer Satz). data-bid vergibt der Write-
-  // Chokepoint beim Speichern (idempotent) — hier kein manuelles Setzen noetig.
+  // Sprechpause deutlich laenger war (Absatz-Erkennung im VAD). Steht der Caret
+  // mitten in einem Prosa-Absatz, wird dieser dort geteilt: das Diktat beginnt
+  // den zweiten Teil, der Rest des Absatzes folgt dahinter. Sonst kommt der neue
+  // Absatz hinter den Block des Carets (bzw. ans Editorende). Der vorausgehende
+  // Teil bekommt ein Satzendezeichen, falls es fehlt. Erster Buchstabe gross
+  // (neuer Absatz = neuer Satz). data-bid vergibt der Write-Chokepoint beim
+  // Speichern (idempotent) — hier kein manuelles Setzen noetig.
   _sttInsertParagraph(clean) {
     const editEl = this._getEditEl?.();
     if (!editEl) return;
@@ -102,28 +109,64 @@ export const sttInsertMethods = {
     while (block && block !== editEl && block.parentNode !== editEl) block = block.parentNode;
     if (block === editEl) block = editEl.lastElementChild; // Caret direkt am Root
 
+    const head = document.createTextNode(this._capitalizeSentenceStart(clean));
     const p = document.createElement('p');
-    p.textContent = this._capitalizeSentenceStart(clean);
+    p.appendChild(head);
     if (block && block.parentNode === editEl) {
-      this._sttEnsureTerminalPunct(block);
-      block.after(p);
+      const rest = this._sttSplitBlockAt(block, range);
+      if (rest) p.append(' ', rest);
+      if (block.tagName === 'P' && this._sttBlockIsEmpty(block)) {
+        // Caret stand am Absatzanfang bzw. im leeren Absatz: nichts zu teilen,
+        // das Diktat beginnt den Absatz. Inhalt in den bestehenden Block, damit
+        // er seine data-bid behaelt.
+        block.replaceChildren(...p.childNodes);
+      } else {
+        this._sttEnsureTerminalPunct(block);
+        block.after(p);
+      }
     } else {
       editEl.appendChild(p);
     }
 
-    // Vorwaerts-Anker auf den Textknoten IM neuen Absatz, damit das naechste
-    // Segment innerhalb dieses `<p>` weiterschreibt (nicht dahinter am Root).
-    this._sttLastNode = p.firstChild || p;
+    // Vorwaerts-Anker auf den Textknoten des Diktats, damit das naechste
+    // Segment direkt dahinter weiterschreibt (vor einem abgeteilten Rest, nicht
+    // dahinter am Root).
+    this._sttLastNode = head;
     this._sttUserRange = null;
     const r2 = document.createRange();
-    r2.selectNodeContents(p);
-    r2.collapse(false);
+    r2.setStartAfter(head);
+    r2.collapse(true);
     sel?.removeAllRanges();
     sel?.addRange(r2);
     this._markEditDirty?.();
     let rect = null;
-    try { rect = p.getBoundingClientRect(); } catch { /* noop */ }
+    try { const rr = document.createRange(); rr.selectNode(head); rect = rr.getBoundingClientRect(); } catch { /* noop */ }
     this._scrollEditCaretIntoView?.(rect);
+  },
+
+  // Schneidet den Inhalt eines Prosa-Absatzes ab `range` bis zum Absatzende
+  // heraus und liefert ihn als Fragment (fuehrender Whitespace getilgt), oder
+  // null, wenn dort nichts steht (Caret am Absatzende) bzw. der Block kein
+  // `<p>` ist oder den Caret nicht enthaelt.
+  _sttSplitBlockAt(block, range) {
+    if (block.nodeType !== 1 || block.tagName !== 'P' || !block.contains(range.startContainer)) return null;
+    const tail = document.createRange();
+    tail.setStart(range.startContainer, range.startOffset);
+    tail.setEnd(block, block.childNodes.length);
+    if (!tail.toString().trim() && !tail.cloneContents().querySelector?.('img,[contenteditable="false"]')) return null;
+    const frag = tail.extractContents();
+    const walker = document.createTreeWalker(frag, NodeFilter.SHOW_TEXT);
+    for (let n = walker.nextNode(); n; n = walker.nextNode()) {
+      n.textContent = n.textContent.replace(/^\s+/, '');
+      if (n.textContent) break;
+    }
+    return frag;
+  },
+
+  // True, wenn ein Block nach dem Teilen keinen Text und keinen atomaren
+  // Inhalt (Bild, Chip) mehr traegt.
+  _sttBlockIsEmpty(block) {
+    return !block.textContent.trim() && !block.querySelector('img,[contenteditable="false"]');
   },
 
   // Haengt ein '.' an den letzten Textknoten eines Blocks an, wenn dieser nicht
