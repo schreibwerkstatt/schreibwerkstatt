@@ -125,3 +125,19 @@ test('SW-Manifest des Bündels: eingebaute Einzeldateien raus, Bündel rein', ()
   fs.writeFileSync(bundle.indexPath, '<html>b</html>');
   assert.notEqual(renderManifest({ bundle }).build, m.build, 'Build-Hash folgt der Bündel-index.html');
 });
+
+// /config meldet den Build, den der Server als /sw-manifest.js ausliefert — im
+// Bündel-Modus also den des Bündels, nicht den aus public/. Sonst hält jede
+// Shell sich für veraltet und das Update-Banner kommt bei jedem Boot.
+test('Bündel-Modus: getShellBuild folgt dem Bündel-Manifest', () => {
+  const version = require('../../lib/version');
+  const before = version.getShellBuild();
+  const { dir } = fixture();
+  try {
+    version.useShellManifest(path.join(dir, SW_MANIFEST_FILE));
+    assert.equal(version.getShellBuild(), 'b');
+  } finally {
+    version.useShellManifest(path.join(__dirname, '../../public/sw-manifest.js'));
+  }
+  assert.equal(version.getShellBuild(), before);
+});

@@ -1,0 +1,11 @@
+{
+  "version": "5.8.2",
+  "date": "2026-11-01",
+  "entries": [
+    {
+      "kind": "behoben",
+      "de": "Nach dem letzten Update erschien bei jedem Laden der Hinweis auf eine neue Version, und die App lud sich immer wieder neu. Auch die Hilfe liess sich dadurch nicht öffnen.",
+      "en": "After the last update, every load showed the notice about a new version and the app kept reloading. This also kept the help from opening."
+    }
+  ]
+}

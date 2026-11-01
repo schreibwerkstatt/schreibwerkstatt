@@ -391,6 +391,7 @@ const appBundle = bundleLib.loadBundle({
   logger,
 });
 if (appBundle) {
+  require('./lib/version').useShellManifest(path.join(appBundle.dir, bundleLib.SW_MANIFEST_FILE));
   app.use(bundleLib.bundleSwManifest(appBundle));
   app.use(bundleLib.BUNDLE_URL_PREFIX, bundleLib.bundleAssets(appBundle));
 }
