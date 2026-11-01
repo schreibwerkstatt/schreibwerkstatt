@@ -173,52 +173,66 @@ jobs:
             npx playwright install --with-deps chromium webkit
           fi
 
-      - name: E2E-Tests ausführen (Fixture-Harness)
-        run: npx playwright test --reporter=list
-
-      # Echte App (playwright.app.config.js, tests/e2e-app/ inkl. smoke.spec.js):
+      # Zwei Playwright-Suiten in EINEM Schritt, gleichzeitig — Schritte eines
+      # Jobs laufen sonst strikt nacheinander:
+      #
+      # E2E (playwright.config.js, tests/e2e/): Fixture-Harness gegen
+      # tests/server.js auf Port 8765, outputDir test-results/e2e.
+      #
+      # App-Specs (playwright.app.config.js, tests/e2e-app/ inkl. smoke.spec.js):
       # bootet `node server.js` mit LOCAL_DEV_MODE + Dev-Seed auf Wegwerf-DBs unter
       # tests/.tmp/. Nur diese Schicht faengt Alpine-Expression-Fehler ueber dem
       # kompletten Template-Baum und die Geometrie-Invarianten, die am vollen
-      # Shell-CSS haengen — das Fixture-Harness oben sieht beides nicht.
+      # Shell-CSS haengen — das Fixture-Harness sieht beides nicht.
       # Nur Chromium: das firefox-Projekt der Config bleibt lokal (`npm run
       # test:smoke`); SMOKE_ENGINES=chromium laesst auch dessen Server weg.
       #
-      # Zwei Shards gleichzeitig, je mit eigenem Server + eigener Wegwerf-DB
-      # (SMOKE_SHARD → Ports/DB/outputDir, siehe playwright.app.config.js). Pro
-      # Shard bleibt `workers: 1`, die Specs einer Datei-Gruppe teilen weiter
-      # genau einen Seed-Stand. Mehr als zwei nicht: ein Shard belegt ~1,3 GB,
-      # der LXC teilt seine 6 GB mit der Prod-App. Ausgabe pro Shard gepuffert
-      # und danach am Stueck ausgegeben, damit die Reports nicht ineinanderlaufen.
+      # Drei App-Shards, je mit eigenem Server + eigener Wegwerf-DB
+      # (SMOKE_SHARD → Ports 8768/8770/8772, DB, outputDir test-results/app-sN,
+      # siehe playwright.app.config.js) — kein Port, keine DB, kein outputDir
+      # ueberschneidet sich mit dem E2E-Lauf. Pro Shard bleibt `workers: 1`, die
+      # Specs einer Datei-Gruppe teilen weiter genau einen Seed-Stand. Speicher:
+      # ein Shard belegt ~1,3 GB, der LXC hat 8 GB und teilt sie mit der
+      # Prod-App (im Leerlauf ~7 GB frei) — drei Shards plus E2E passen, ein
+      # vierter nicht mehr sicher. Ausgabe pro Lauf gepuffert und danach am
+      # Stueck ausgegeben, damit die Reports nicht ineinanderlaufen.
       #
       # PWTEST_SHARD_WEIGHTS: Playwright schneidet die Shards nach Testanzahl in
       # Dateireihenfolge, die hinteren Specs (sw-*, Service-Worker) sind aber
-      # pro Test langsamer — gleich viele Tests ergaben 8,7 vs. 10,9 min. Die
-      # Gewichte geben Shard 1 entsprechend mehr Tests. Die Variable ist nicht
-      # dokumentiert (Playwright 1.61, runner#filterForShard); faellt sie bei
-      # einem Upgrade weg, gilt wieder die gleichmaessige Teilung — langsamer,
-      # nicht falsch. Nachjustieren anhand der Zusammenfassungszeile unten.
-      - name: App-Specs ausführen (Chromium, 2 Shards)
+      # pro Test langsamer. Die Gewichte sind aus den Testdauern pro Datei eines
+      # CI-Laufs simuliert (gleich verteilt: 5,9/5,2/6,0 min, gewichtet:
+      # 5,9/5,4/5,7) — feiner geht es nicht, weil eine Datei nie geteilt wird.
+      # Die Variable ist nicht dokumentiert (Playwright 1.61,
+      # runner#filterForShard); faellt sie bei einem Upgrade weg, gilt wieder
+      # die gleichmaessige Teilung — kaum langsamer, nicht falsch.
+      # Nachjustieren anhand der Zusammenfassungszeilen unten.
+      - name: E2E + App-Specs ausführen (parallel, App in 3 Shards)
         env:
           SMOKE_ENGINES: chromium
-          PWTEST_SHARD_WEIGHTS: '56:44'
+          PWTEST_SHARD_WEIGHTS: '29:39:32'
         run: |
-          n=2
+          n=3
+          npx playwright test --reporter=list > e2e.log 2>&1 &
+          e2e_pid=$!
           for i in $(seq 1 $n); do
             SMOKE_SHARD=$i npx playwright test --config=playwright.app.config.js \
               --project=chromium --shard=$i/$n --reporter=list > "shard-$i.log" 2>&1 &
             pids[$i]=$!
           done
           status=0
+          if ! wait "$e2e_pid"; then status=1; echo "::error::E2E-Tests rot"; fi
           for i in $(seq 1 $n); do
             if ! wait "${pids[$i]}"; then status=1; echo "::error::App-Specs Shard $i/$n rot"; fi
           done
+          echo "::group::E2E (Fixture-Harness)"; cat e2e.log; echo "::endgroup::"
           for i in $(seq 1 $n); do
-            echo "::group::Shard $i/$n"; cat "shard-$i.log"; echo "::endgroup::"
+            echo "::group::App-Specs Shard $i/$n"; cat "shard-$i.log"; echo "::endgroup::"
           done
           # Zusammenfassung ausserhalb der Gruppen, damit sie ohne Aufklappen sichtbar ist.
+          summary() { grep -E '^\s+[0-9]+ (passed|failed|flaky|skipped)' "$1" | tr -s ' ' | tr '\n' ' '; }
+          echo "E2E: $(summary e2e.log)"
           for i in $(seq 1 $n); do
-            echo "Shard $i/$n: $(grep -E '^\s+[0-9]+ (passed|failed|flaky|skipped)' "shard-$i.log" | tr -s ' ' | tr '\n' ' ')"
+            echo "App-Specs Shard $i/$n: $(summary "shard-$i.log")"
           done
           exit $status
 

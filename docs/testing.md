@@ -7,7 +7,7 @@ Vier Suiten, sequenziell via `npm test`. Erstmaliges Setup: `npx playwright inst
 | Unit | `node --test` | [tests/unit/](../tests/unit/) | `npm run test:unit` | Parallelisiert (concurrency 4), kein Browser; DB-Tests je File auf eigener Wegwerf-SQLite |
 | Integration | `node --test` | [tests/integration/](../tests/integration/) | `npm run test:integration` | Parallelisiert (concurrency 4), Mock-AI, Content-Store gegen Test-SQLite |
 | E2E | Playwright | [tests/e2e/](../tests/e2e/) | `npm run test:e2e` | Chromium gegen `tests/server.js` mit Fixture-Harness |
-| Smoke | Playwright | [tests/e2e-app/](../tests/e2e-app/) | `npm run test:smoke` | Chromium gegen die **echte** App (`node server.js`, `LOCAL_DEV_MODE`); lokal zusätzlich Firefox nur für `smoke`, `focus-editor-app` und `notebook-*`. Lokal startet [scripts/smoke-parallel.js](../scripts/smoke-parallel.js) drei Playwright-Prozesse gleichzeitig (Chromium in zwei Shards + Firefox), je mit eigenem Server/DB via `SMOKE_SHARD`; mit Spec-Argumenten läuft Chromium ungeteilt (CI: nur Chromium, zwei Shards) |
+| Smoke | Playwright | [tests/e2e-app/](../tests/e2e-app/) | `npm run test:smoke` | Chromium gegen die **echte** App (`node server.js`, `LOCAL_DEV_MODE`); lokal zusätzlich Firefox nur für `smoke`, `focus-editor-app` und `notebook-*`. Lokal startet [scripts/smoke-parallel.js](../scripts/smoke-parallel.js) drei Playwright-Prozesse gleichzeitig (Chromium in zwei Shards + Firefox), je mit eigenem Server/DB via `SMOKE_SHARD`; mit Spec-Argumenten läuft Chromium ungeteilt (CI: nur Chromium, drei Shards, gleichzeitig mit der E2E-Suite) |
 
 ## Wann welche Suite?
 

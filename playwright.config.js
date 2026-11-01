@@ -16,6 +16,11 @@ delete process.env.GIO_MODULE_DIR;
 module.exports = {
   testDir: './tests/e2e',
   testMatch: '**/*.spec.js',
+  // Eigener Unterordner statt des Defaults `test-results/`: Playwright leert
+  // seinen outputDir beim Start, und in CI laufen die App-Shards
+  // (test-results/app-sN) gleichzeitig — der Default wuerde deren Traces
+  // mitten im Lauf wegputzen.
+  outputDir: './test-results/e2e',
   fullyParallel: false,
   // CI läuft auf lokalem Runner über Ceph-RBD-Storage; IO-Stalls bremsen
   // Chromium → reine Setup/Navigations-Timeouts. Sequenziell (worker=1)
