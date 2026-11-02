@@ -37,15 +37,23 @@ const _bzBeleg = _obj({ kapitel: _str, seite: _str });
 // Beziehungstyp als enum: mit Grammar setzt das Modell genau einen Listenwert statt
 // des abgeschriebenen «a|b»-Beispiels oder eines eigenen Typs.
 const _bzTyp = { type: 'string', enum: RELATION_TYPES };
-const _bzItem = (arr) => _obj(_isLocal
-  ? { figur_id: _str, typ: _bzTyp, beschreibung: _str, belege: arr(_bzBeleg, 'belege') }
-  : { figur_id: _str, typ: _bzTyp, machtverhaltnis: _num, beschreibung: _str, belege: arr(_bzBeleg, 'belege') }
-);
+// `withName` (nur Konsolidierung): der Zielname neben der id. In der geteilten
+// Konsolidierung steht das Ziel oft in einem ANDEREN Teil — ohne Namensfeld muss das
+// Modell eine id erfinden, die dann eine Figur des eigenen Teils trifft
+// (routes/jobs/komplett/phases/figuren-konsol.js#mergeKonsolParts bindet über den Namen).
+const _bzItem = (arr, withName = false) => _obj({
+  figur_id: _str,
+  ...(withName ? { name: _str } : {}),
+  typ: _bzTyp,
+  ...(_isLocal ? {} : { machtverhaltnis: _num }),
+  beschreibung: _str,
+  belege: arr(_bzBeleg, 'belege'),
+});
 
 // Tiefe-Felder (aeusseres/stimme/hintergrund/arc) nur für Claude: lokale Grammar
 // (_obj → alle Properties required) würde kleine Modelle zwingen, sie zu füllen →
 // Halluzination/Bloat. Analog zum machtverhaltnis-Gating in _bzItem.
-const _figurSchemaProps = (arr = _arr) => ({
+const _figurSchemaProps = (arr = _arr, { bzName = false } = {}) => ({
   id: _str,
   katalog_id: _str,
   name: _str,
@@ -73,7 +81,7 @@ const _figurSchemaProps = (arr = _arr) => ({
   schluesselzitate: arr(_str, 'zitate'),
   eigenschaften: arr(_str, 'eigenschaften'),
   kapitel: arr(_obj({ name: _str, haeufigkeit: _num }), 'kapitel'),
-  beziehungen: arr(_bzItem(arr), 'beziehungen'),
+  beziehungen: arr(_bzItem(arr, bzName), 'beziehungen'),
 });
 
 // _figurSchema und alle abgeleiteten Schemas werden in _rebuildKomplettSchemas() bei jedem
@@ -257,7 +265,7 @@ export function _rebuildKomplettSchemas() {
   SCHEMA_KOMPLETT_ORTE_PASS = _buildOrtePassSchema();
   SCHEMA_KOMPLETT_FAKTEN_PASS = _buildFaktenPassSchema();
   SCHEMA_KOMPLETT_EVENTS = _buildEventsPassSchema();
-  SCHEMA_FIGUREN_KONSOL = _obj({ figuren: { type: 'array', items: _obj(_figurSchemaProps(_plainArr)) } });
+  SCHEMA_FIGUREN_KONSOL = _obj({ figuren: { type: 'array', items: _obj(_figurSchemaProps(_plainArr, { bzName: true })) } });
   SCHEMA_BEZIEHUNGEN = _buildBeziehungenSchema();
 }
 

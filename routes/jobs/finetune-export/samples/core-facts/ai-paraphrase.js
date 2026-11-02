@@ -13,7 +13,7 @@
 const { loadFinetuneAiCache, saveFinetuneAiCache } = require('../../../../../db/schema');
 const { aiCall, _modelName, getPrompts } = require('../../../shared');
 const appSettings = require('../../../../../lib/app-settings');
-const { AUGMENT_CONCURRENCY, sha1, pmap } = require('../../lib/augment-util');
+const { augmentConcurrency, augmentMaxTokens, sha1, pmap } = require('../../lib/augment-util');
 const { escapeRe } = require('../../lib/names');
 
 // Namen, die eine Frage trägt (aus der Figurenliste), auch im Genitiv («Stefans»).
@@ -51,7 +51,7 @@ async function buildAiParaphraseSamples(ctx) {
   const want = Math.max(1, Number(opts.factParaphrases) || 3);
   const prompts0 = new Set(samples.flatMap(s => s.messages.filter(m => m.role === 'user').map(m => m.content.trim())));
   let added = 0, rejected = 0;
-  await pmap([...groups], AUGMENT_CONCURRENCY, async ([key, arr]) => {
+  await pmap([...groups], augmentConcurrency(ctx.aiModel), async ([key, arr]) => {
     const base = arr[0];
     const question = base.messages[1].content;
     const answer = base.messages[2].content;
@@ -61,7 +61,7 @@ async function buildAiParaphraseSamples(ctx) {
       try {
         result = await aiCall(jobId, tok,
           prompts.buildFinetuneParaphrasePrompt({ question, answer, count: want, langIsEn, bookName }),
-          system, null, null, Math.max(300, question.length * want * 2), 1.0, 1500, undefined, prompts.SCHEMA_FT_PARAPHRASE);
+          system, null, null, Math.max(300, question.length * want * 2), 1.0, augmentMaxTokens(question.length * want * 2), undefined, prompts.SCHEMA_FT_PARAPHRASE);
       } catch (err) {
         if (err.name === 'AbortError') throw err;
         logger.warn(`paraphrase: ${key} fehlgeschlagen: ${err.message}`);
@@ -118,7 +118,7 @@ async function buildAiWhyQuestions(ctx) {
   const cards = new Map((ctx.factCards || []).map(c => [c.id, c]));
   const prompts0 = new Set(samples.flatMap(s => s.messages.filter(m => m.role === 'user').map(m => m.content.trim())));
   let added = 0, rejected = 0;
-  await pmap([...groups], AUGMENT_CONCURRENCY, async ([factId, arr]) => {
+  await pmap([...groups], augmentConcurrency(ctx.aiModel), async ([factId, arr]) => {
     const card = cards.get(factId);
     const base = arr[0];
     const event = String(card?.subject || '');
@@ -134,7 +134,7 @@ async function buildAiWhyQuestions(ctx) {
       try {
         result = await aiCall(jobId, tok,
           prompts.buildFinetuneWhyQuestionsPrompt({ event, figure, own, answer, count: WHY_AI_COUNT, langIsEn, bookName }),
-          system, null, null, 600, 1.0, 1500, undefined, prompts.SCHEMA_FT_PARAPHRASE);
+          system, null, null, 600, 1.0, augmentMaxTokens(600 * 2), undefined, prompts.SCHEMA_FT_PARAPHRASE);
       } catch (err) {
         if (err.name === 'AbortError') throw err;
         logger.warn(`why-questions: ${factId} fehlgeschlagen: ${err.message}`);

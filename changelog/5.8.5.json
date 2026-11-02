@@ -1,0 +1,26 @@
+{
+  "version": "5.8.5",
+  "date": "2026-11-02",
+  "entries": [
+    {
+      "kind": "verbessert",
+      "de": "Fine-Tuning-Export: ein Widerspruch in den Figurenbeziehungen sperrt nur noch die Beziehung, die ihn verursacht. Die übrigen Fakten der Familie bleiben im Export, und die Karte zeigt, welche das sind.",
+      "en": "Fine-tuning export: a contradiction in character relationships now only blocks the relationship that causes it. The family's other facts stay in the export, and the card shows which ones."
+    },
+    {
+      "kind": "verbessert",
+      "de": "Fine-Tuning-Export: die Prüfung der Figurenbeziehungen erkennt auch Beschreibungen mit falschem Geschlecht oder einer falschen Figur, etwa «der Vater» bei einer Frau.",
+      "en": "Fine-tuning export: the relationship check now also catches descriptions with the wrong gender or the wrong character, such as «the father» for a woman."
+    },
+    {
+      "kind": "verbessert",
+      "de": "Fine-Tuning-Export: Warum-Fragen zu Ereignissen klingen jetzt so, wie Leser fragen. Mit Haiku läuft der Export schneller, und lange Texte wie der Entwicklungsbogen einer Hauptfigur brechen nicht mehr ab.",
+      "en": "Fine-tuning export: why-questions about events now sound the way readers ask them. With Haiku the export runs faster, and long texts such as a main character's arc no longer get cut off."
+    },
+    {
+      "kind": "behoben",
+      "de": "Komplettanalyse: bei grossen Büchern landeten Beziehungen manchmal bei der falschen Figur, etwa der Vater beim Bruder, oder dieselbe Beschreibung stand bei zwei Figuren mit ähnlichem Namen.",
+      "en": "Full analysis: in large books, relationships sometimes ended up on the wrong character, such as the father on the brother, or the same description appeared on two characters with similar names."
+    }
+  ]
+}

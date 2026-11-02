@@ -15,7 +15,7 @@ const appSettings = require('../../../../../lib/app-settings');
 const { aiCall, _modelName, getPrompts } = require('../../../shared');
 const { nameRegex } = require('../../lib/names');
 const { clipAtSentence } = require('../../lib/text');
-const { AUGMENT_CONCURRENCY, sha1, trimInstr, pmap } = require('../../lib/augment-util');
+const { augmentConcurrency, sha1, trimInstr, pmap } = require('../../lib/augment-util');
 const { personaMaterial, hasPersonaMaterial, NOTE_LABELS } = require('./figures');
 const { entryQuestion } = require('./persona');
 const { PSYCHE_KERNE } = require('../../../../../lib/draft-mindmap-extract');
@@ -56,7 +56,7 @@ async function buildPersonaAiSamples(ctx, readerFigures, push) {
   const n = Math.max(2, Math.min(16, ctx.opts.ai.personaPerFigure || PERSONA_PER_FIGURE_DEFAULT));
   const figures = readerFigures.filter(hasPersonaMaterial);
   let kept = 0, dropped = 0;
-  await pmap(figures, AUGMENT_CONCURRENCY, async (rf) => {
+  await pmap(figures, augmentConcurrency(ctx.aiModel), async (rf) => {
     const material = personaMaterial(rf, langIsEn);
     const sig = sha1(material + '|n=' + n + '|lang=' + lang);
     const result = await cachedCall(ctx, 'reader-persona', rf.key, sig,
@@ -130,7 +130,7 @@ async function buildDeutungAiSamples(ctx, readerFigures, push) {
   const n = Math.max(1, Math.min(6, ctx.opts.ai.deutungPerScene || DEUTUNG_PER_SCENE_DEFAULT));
   const units = deutungUnits(ctx, readerFigures);
   let kept = 0, dropped = 0;
-  await pmap(units, AUGMENT_CONCURRENCY, async (u) => {
+  await pmap(units, augmentConcurrency(ctx.aiModel), async (u) => {
     const passage = clipAtSentence(u.text, DEUTUNG_PASSAGE_CHARS);
     const figures = u.figs.flatMap(r => psycheNotes(r, lang)).join('\n');
     const sig = sha1({ passage, figures, n, lang, sceneTitle: u.sceneTitle, chapter: u.chapter });

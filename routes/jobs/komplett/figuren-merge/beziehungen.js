@@ -3,7 +3,7 @@
 // binden, Beschreibungen prüfen, flache A2-Beziehungen falten. Facade:
 // ../figuren-merge.js.
 
-const { normName: _normalizeName, nameTokens: _nameTokens } = require('../../../../lib/name-normalize');
+const { normName: _normalizeName, nameTokens: _nameTokens, nameQualifier, stripNameQualifier: stripQualifier } = require('../../../../lib/name-normalize');
 
 /** Reichert `beziehungen[].figur_id` mit dem Zielnamen an (mutiert in place, liefert
  *  die Anzahl gesetzter Namen). MUSS auf den ROHEN Phase-1-Chunks laufen, vor jedem
@@ -135,6 +135,69 @@ function validateBeziehungenDescriptions(figuren) {
   return { moved, suspicious };
 }
 
+/** Beschreibung als Vergleichsschlüssel für kopierte Kanten; unter 20 Zeichen zu
+ *  unspezifisch («Freund»), dann ''. */
+function relationDescKey(s) {
+  const k = String(s || '').toLowerCase().replace(/\s+/g, ' ').replace(/[\s.!?…]+$/, '').trim();
+  return k.length >= 20 ? k : '';
+}
+
+/** Passt ein Name aus dem Eingabetext zu einer konsolidierten Figur, die die
+ *  Konsolidierung mit Zusatz versehen hat? («Sebastian» ↔ «Sebastian (Mitlehrling)»,
+ *  Kurzname «Sebastian»). */
+function nameFitsFigure(name, f) {
+  const k = _normalizeName(name);
+  return !!k && (k === _normalizeName(f?.name) || k === _normalizeName(f?.kurzname) || k === _normalizeName(stripQualifier(f?.name)));
+}
+
+/** Kopierte Kanten: zwei Beziehungen derselben Figur mit gleichem Typ und wörtlich
+ *  gleicher Beschreibung auf zwei verschiedene Ziele — eine ist die Kopie. Entsteht,
+ *  wenn die Konsolidierung Namensvettern trennt («Herr Koch» → «Herr Koch
+ *  (Primarlehrer)» / «(Frohheim)»), eine Kante aber noch den Rohnamen trägt.
+ *  Bleiben darf das Ziel, dessen Namenszusatz die Beschreibung nennt («Der
+ *  Primarlehrer fördert …»), sonst bei gleichem Grundnamen das einzige Ziel mit
+ *  Zusatz. Lässt sich das nicht entscheiden, bleiben beide (die Beziehungsprüfung des
+ *  Finetune-Exports meldet sie als `duplicateDescription`). Mutiert in place, liefert
+ *  die Zahl entfernter Kanten. Erwartet finale ids. */
+function dropCopiedRelations(figuren) {
+  const byId = new Map((figuren || []).map(f => [f.id, f]));
+  let dropped = 0;
+  const winnerOf = (list) => {
+    const targets = list.map(bz => byId.get(bz.figur_id));
+    const desc = String(list[0].beschreibung);
+    const named = list.filter((bz, i) => {
+      const q = nameQualifier(targets[i].name);
+      return q && _nameTokens(q).some(t => t.length >= 4 && _wordRe(t).test(desc));
+    });
+    if (named.length === 1) return named[0];
+    const bases = new Set(targets.map(t => _normalizeName(stripQualifier(t.name))));
+    const qualified = list.filter((bz, i) => nameQualifier(targets[i].name));
+    return bases.size === 1 && qualified.length === 1 ? qualified[0] : null;
+  };
+  for (const f of (figuren || [])) {
+    const groups = new Map();
+    for (const bz of (f.beziehungen || [])) {
+      const k = relationDescKey(bz?.beschreibung);
+      if (!k || !byId.has(bz.figur_id)) continue;
+      const g = `${bz.typ || ''}|${k}`;
+      if (!groups.has(g)) groups.set(g, []);
+      groups.get(g).push(bz);
+    }
+    const drop = new Set();
+    for (const list of groups.values()) {
+      if (new Set(list.map(bz => bz.figur_id)).size < 2) continue;
+      const winner = winnerOf(list);
+      if (!winner) continue;
+      for (const bz of list) if (bz.figur_id !== winner.figur_id) drop.add(bz);
+    }
+    if (drop.size) {
+      f.beziehungen = f.beziehungen.filter(bz => !drop.has(bz));
+      dropped += drop.size;
+    }
+  }
+  return dropped;
+}
+
 /** Faltet flache Beziehungen aus dem Claude-A2-Pass ({von,zu,typ,machtverhaltnis,
  *  beschreibung,belege}) zurück in figuren[].beziehungen ({figur_id,...} aus Sicht der
  *  «von»-Figur), sodass der Downstream (Soziogramm-Preliminary, saveFigurenToDb) dieselbe
@@ -172,4 +235,5 @@ function mergeBeziehungenIntoFiguren(figuren, flatBz) {
 module.exports = {
   annotateBeziehungenNames, rebindBeziehungenByName,
   validateBeziehungenDescriptions, mergeBeziehungenIntoFiguren,
+  relationDescKey, nameFitsFigure, dropCopiedRelations,
 };

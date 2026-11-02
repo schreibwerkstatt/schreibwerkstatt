@@ -3,7 +3,7 @@
 // Phase-1-Chunks und zweistufiger Merge der konsolidierten Liste. Facade:
 // ../figuren-merge.js.
 
-const { normName: _normalizeName, nameTokens: _nameTokens } = require('../../../../lib/name-normalize');
+const { normName: _normalizeName, nameTokens: _nameTokens, nameQualifier, stripNameQualifier } = require('../../../../lib/name-normalize');
 const { figureEvidence, figureDistinctive, FIGURE_CONTRADICTION } = require('../../../../lib/entity-match');
 
 // Katalog-Anker (`katalog_id`): die Extraktion meldet, welche Bestandsfigur sie meint.
@@ -11,6 +11,13 @@ const { figureEvidence, figureDistinctive, FIGURE_CONTRADICTION } = require('../
 // sind; gleicher Anker ist dieselbe Figur, egal wie verschieden die Namen sind.
 function _anchor(f) { const k = f?.katalog_id; return k == null || k === '' ? null : String(k); }
 function _anchorConflict(a, b) { const x = _anchor(a), y = _anchor(b); return !!(x && y && x !== y); }
+// Gleicher Anker trägt den Merge nur ohne harten Widerspruch (Geschlecht, Geburtsjahr,
+// Anrede — `figureEvidence` ≤ FIGURE_CONTRADICTION). Bewusst nicht der Beruf: dieselbe
+// Figur heisst in einem Kapitel «Kräuterkundige», im nächsten «Kennerin asiatischer
+// Medizin», und eine Hauptfigur wechselt ihn im Lauf des Buchs.
+function _anchorRefused(canon, f, opts) {
+  return _indicatorScore(canon, f, opts) <= FIGURE_CONTRADICTION;
+}
 
 /** Mergt duplizierte Figuren anhand des normalisierten Namens (case-insensitive).
  *  Fängt Fälle ab, in denen kleine Modelle (Ollama/llama) die Dedup-Regel in
@@ -25,6 +32,9 @@ function _anchorConflict(a, b) { const x = _anchor(a), y = _anchor(b); return !!
  *             (Beruf, Geburtsjahr, gemeinsames Kapitel, gleiches Geschlecht, geteilte Beziehung).
  *             Strenger Schutz: verschiedene Vornamen mit gleichem Nachnamen («Paul Schmidt»
  *             vs. «Marta Schmidt») werden NICHT zusammengeführt.
+ *    Stufe 3: Rest-Eintrag «X» neben ≥ 2 Namensvettern «X (…)» geht in die passendste
+ *             Variante auf (`_mergeQualifierResidue`); zählt in `stage2Saved` mit.
+ *  Vorab Stufe 0: gleicher Katalog-Anker, ausser bei hartem Widerspruch (`_anchorRefused`).
  *  Namens-Normalisierung (_normalizeName/_nameTokens) kommt aus lib/name-normalize. */
 
 /** Fasst zwei Figuren zu einer kanonischen Figur zusammen. `canon` wird mutiert.
@@ -210,6 +220,46 @@ function _mergeByPartialName(figuren, idRemap) {
   return merged;
 }
 
+/** Stufe 3: Rest-Eintrag ohne Zusatz. Trennt die Konsolidierung Namensvettern
+ *  («Herr Koch (Primarlehrer)», «Herr Koch (Frohheim)»), bleibt der Ausgangseintrag
+ *  «Herr Koch» oft als dritte Figur stehen, meist mit dem Katalog-Anker. Er geht in die
+ *  Variante auf, mit der er die meisten Inhaltswörter (Beschreibung, Beruf, Rolle) und
+ *  Kapitel teilt — nur bei ≥ 2 Varianten mit Zusatz, ohne harten Widerspruch oder
+ *  fremden Anker und mit eindeutigem Spitzenreiter; sonst bleibt er stehen. Kein Alias:
+ *  der Rohname bleibt mehrdeutig und soll nicht auf eine Variante auflösen. */
+function _residueWords(f) {
+  const text = [f.beschreibung, f.beruf, f.rolle].filter(Boolean).join(' ').toLowerCase();
+  const words = new Set(text.split(/[^\p{L}\p{N}]+/u).filter(w => w.length >= 5));
+  for (const k of (f.kapitel || [])) if (k?.name) words.add('kap:' + k.name);
+  return words;
+}
+function _mergeQualifierResidue(figuren, idRemap) {
+  const variantsByBase = new Map();
+  for (const f of figuren) {
+    if (!nameQualifier(f.name)) continue;
+    const base = _normalizeName(stripNameQualifier(f.name));
+    if (!variantsByBase.has(base)) variantsByBase.set(base, []);
+    variantsByBase.get(base).push(f);
+  }
+  const absorbed = new Set();
+  for (const f of figuren) {
+    if (nameQualifier(f.name)) continue;
+    const variants = variantsByBase.get(_normalizeName(f.name)) || [];
+    if (variants.length < 2) continue;
+    const own = _residueWords(f);
+    const scored = variants
+      .filter(v => _indicatorScore(v, f) > FIGURE_CONTRADICTION)
+      .map(v => ({ v, n: [..._residueWords(v)].filter(w => own.has(w)).length }))
+      .sort((a, b) => b.n - a.n);
+    if (!scored.length || scored[0].n === 0 || (scored[1] && scored[1].n === scored[0].n)) continue;
+    const target = scored[0].v;
+    idRemap[f.id] = target.id;
+    _mergeFigurInto(target, f);
+    absorbed.add(f);
+  }
+  return absorbed.size ? figuren.filter(f => !absorbed.has(f)) : figuren;
+}
+
 /** Kandidat mit gleichem Namensschlüssel für `f`: keiner, der widerspricht. Bleibt genau
  *  einer übrig, ist er es. Bleiben mehrere (untereinander unverträgliche, sonst wären
  *  sie verschmolzen), entscheidet nur ein eindeutiger Indizien-Spitzenreiter mit ≥ 2. */
@@ -253,8 +303,12 @@ function preMergeChapterFiguren(chapterFiguren) {
       // er eigenständig (Ambiguität ⇒ kein Merge), es sei denn, die Indizien zeichnen
       // genau einen Kandidaten mit ≥ 2 Punkten aus.
       // Gleicher Katalog-Anker: dieselbe Figur, auch unter anderem Namen.
-      const anchor = _anchor(f);
+      let anchor = _anchor(f);
       let canon = anchor ? (canonicalList.find(e => _anchor(e.figur) === anchor)?.figur || null) : null;
+      // Gleicher Anker, aber harter Widerspruch (Geschlecht, Geburtsjahr, Anrede): die
+      // Extraktion hat den Bestandseintrag zwei Personen gegeben. Der Anker bleibt beim
+      // ersten, dieser Eintrag läuft ohne ihn weiter (`_anchorRefused`).
+      if (canon && _anchorRefused(canon, f, { relationsByName: true })) { canon = null; anchor = null; }
       let partial = !!canon && _normalizeName(canon.name) !== key;
       if (!canon) canon = _pickUnambiguous(canonical.get(key) || [], f, { relationsByName: true });
 
@@ -314,6 +368,7 @@ function preMergeChapterFiguren(chapterFiguren) {
         // Kopie: der Pre-Merge reichert den Kanon an (Felder, Beziehungen, Name) —
         // die rohen Phase-1-Daten bleiben für Mode-Vote und Namens-Lookup unverändert.
         const copy = { ...f };
+        if (!anchor && _anchor(f)) copy.katalog_id = null;
         merged[ci].figuren.push(copy);
         addCanon(key, copy);
         canonicalList.push({ normKey: key, figur: copy });
@@ -334,6 +389,7 @@ function mergeDuplicateFiguren(figurenIn) {
     if (!a) { figuren.push(f); continue; }
     const canon = byAnchor.get(a);
     if (!canon) { const c = { ...f }; byAnchor.set(a, c); figuren.push(c); continue; }
+    if (_anchorRefused(canon, f)) { figuren.push({ ...f, katalog_id: null }); continue; }
     idRemap[f.id] = canon.id;
     _mergeFigurInto(canon, f);
     _addAlias(canon, f.name);
@@ -376,7 +432,7 @@ function mergeDuplicateFiguren(figurenIn) {
   }
   const stage1Saved = stage0Saved + figuren.length - stage1.length;
 
-  const stage2 = _mergeByPartialName(stage1, idRemap);
+  const stage2 = _mergeQualifierResidue(_mergeByPartialName(stage1, idRemap), idRemap);
   const stage2Saved = stage1.length - stage2.length;
 
   // Ketten auflösen: Stufe 1 bildet fig_7 → fig_3 ab, Stufe 2 danach fig_3 → fig_1.

@@ -9,7 +9,7 @@ const { buildFigNameLookup, consolidationFitsCap, skippedChapterIds } = require(
 const {
   preMergeChapterFiguren, applySozialschichtModeVote, mergeDuplicateFiguren,
   validateBeziehungenDescriptions, backfillFiguren, dropPseudoFiguren, ensureUniqueFigIds, applyAliasClusters,
-  annotateBeziehungenNames, rebindBeziehungenByName,
+  annotateBeziehungenNames, rebindBeziehungenByName, dropCopiedRelations,
 } = require('../figuren-merge');
 const { komplettMaxTokens } = require('./tokens');
 const { runKonsolBatched, KONSOL_SINGLE_RESERVE } = require('./figuren-konsol');
@@ -178,12 +178,17 @@ async function runPhase2(ctx, chapterFiguren, chapterAssignments, chapterSzenen)
     figuren = figResult.figuren.map((f, i) => ({ ...f, id: f.id || ('fig_' + (i + 1)) }));
   }
   const { figuren: mergedFiguren, mergedCount, stage1Saved, stage2Saved, idRemap } = mergeDuplicateFiguren(figuren);
-  if (mergedCount > 0) log.info(`${mergedCount} Figuren-Duplikate zusammengeführt (exakt: ${stage1Saved}, Teilname+Indizien: ${stage2Saved}).`);
+  if (mergedCount > 0) log.info(`${mergedCount} Figuren-Duplikate zusammengeführt (exakt: ${stage1Saved}, Teilname+Indizien bzw. Namensvetter-Rest: ${stage2Saved}).`);
   figuren = mergedFiguren;
   // Beziehungs-Beschreibungs-Rescue ist pure + billig und hilft jedem Provider:
   // auch Claude attribuiert gelegentlich eine Beschreibung der falschen Figur zu.
   const { moved, suspicious } = validateBeziehungenDescriptions(figuren);
   if (moved > 0 || suspicious > 0) log.info(`Beziehungs-Beschreibungen geprüft – ${moved} an die genannte Figur verschoben, ${suspicious} fraglich (unverändert gelassen).`);
+  // Kopien an Namensvettern (gleiche Beschreibung, gleicher Typ, zwei Ziele): die
+  // Konsolidierung trennt «Herr Koch» in zwei Figuren mit Zusatz, eine Kante trägt noch
+  // den Rohnamen. Nach dem Merge, weil erst dann die ids final sind.
+  const copiedDropped = dropCopiedRelations(figuren);
+  if (copiedDropped > 0) log.info(`${copiedDropped} kopierte Beziehung(en) an Namensvettern entfernt.`);
   // Typ auf genau einen Listenwert: Modelle schreiben das «a|b»-Schema-Beispiel ab oder
   // erfinden Typen («tante»), die der Graph weder färbt noch übersetzt.
   const { normalizeRelationTypes } = await relationTypes();

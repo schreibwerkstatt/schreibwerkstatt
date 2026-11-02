@@ -157,3 +157,95 @@ test('mergeKonsolParts: Figur eines anderen Teils (nur Beziehungsziel) wird verw
   const hans = out.find(f => f.name === 'Johann «Hansi» Meier');
   assert.deepEqual(hans.beziehungen.map(b => b.figur_id), [annas[0].id], 'Kante zeigt auf die echte Anna');
 });
+
+test('mergeKonsolParts: erfundene id für ein Ziel aus einem anderen Teil wird über die Beschreibung korrigiert', () => {
+  // Prod-Fall «Der Amoklauf»: Peter (Vater) liegt in einem anderen Teil als Stefan. Das
+  // Modell erfindet für Peter eine id, die im eigenen Teil Adrian (Bruder) trägt.
+  const VATER = 'Ein distanzierter, lesender Vater, der ihm bei der Stellensuche hilft.';
+  const inputA = [{ kapitel: 'A', figuren: [
+    fig('fig_1', 'Stefan', { beziehungen: [
+      { figur_id: 'fig_4', name: 'Peter', typ: 'elternteil', beschreibung: VATER },
+      { figur_id: 'fig_5', name: 'Adrian', typ: 'geschwister', beschreibung: 'Der jüngere Bruder, mit dem er unzertrennlich ist.' },
+    ] }),
+    fig('fig_5', 'Adrian'),
+  ] }];
+  const inputB = [{ kapitel: 'A', figuren: [fig('fig_4', 'Peter')] }];
+  const parts = [
+    { input: inputA, figuren: [
+      { id: 'fig_1', name: 'Stefan', beziehungen: [
+        { figur_id: 'fig_2', typ: 'elternteil', beschreibung: VATER },
+        { figur_id: 'fig_2', typ: 'geschwister', beschreibung: 'Der jüngere Bruder, mit dem er unzertrennlich ist.' },
+      ] },
+      { id: 'fig_2', name: 'Adrian', beziehungen: [] },
+    ] },
+    { input: inputB, figuren: [{ id: 'fig_1', name: 'Peter', beziehungen: [] }] },
+  ];
+  const out = mergeKonsolParts(parts, null);
+  const id = (n) => out.find(f => f.name === n).id;
+  const stefan = out.find(f => f.name === 'Stefan');
+  const byTyp = Object.fromEntries(stefan.beziehungen.map(b => [b.typ, b.figur_id]));
+  assert.equal(byTyp.elternteil, id('Peter'), 'Vater zeigt auf Peter, nicht auf Adrian');
+  assert.equal(byTyp.geschwister, id('Adrian'));
+  assert.equal(stefan.beziehungen.filter(b => b.beschreibung === VATER).length, 1, 'Beschreibung nicht doppelt');
+});
+
+test('mergeKonsolParts: Ziel im eigenen Teil bleibt, auch bei gleicher Beschreibung wie in der Eingabe', () => {
+  // Das Modell sah beide Figuren und hat «Hansi» in «Hans Meier» aufgehen lassen.
+  const D = 'Der beste Freund aus der Schulzeit, mit dem er alles teilt.';
+  const input = [{ kapitel: 'A', figuren: [
+    fig('fig_1', 'Lea', { beziehungen: [{ figur_id: 'fig_2', name: 'Hansi', typ: 'freund', beschreibung: D }] }),
+    fig('fig_2', 'Hansi'), fig('fig_3', 'Hans Meier'),
+  ] }];
+  const out = mergeKonsolParts([{ input, figuren: [
+    { id: 'fig_1', name: 'Lea', beziehungen: [{ figur_id: 'fig_2', name: 'Hans Meier', typ: 'freund', beschreibung: D }] },
+    { id: 'fig_2', name: 'Hans Meier', beziehungen: [] },
+  ] }], null);
+  const lea = out.find(f => f.name === 'Lea');
+  assert.deepEqual(lea.beziehungen.map(b => b.figur_id), [out.find(f => f.name === 'Hans Meier').id]);
+});
+
+test('mergeKonsolParts: Rohname auf umbenannten Namensvetter, Rohnamen-Kante aus der Eingabe nicht doppelt', () => {
+  // Das Modell trennt die Sebastians und nennt einen «Sebastian (Mitlehrling)»; die
+  // Kante trägt (wie die Eingabe) den Rohnamen. Ohne Auflösung bände «Sebastian» an
+  // den Vetter, und die Eingabe-Kante käme als Kopie dazu.
+  const D = 'Mitlehrling, der ihm vermittelt, dass man stets eine Rolle spiele.';
+  const inputA = [{ kapitel: 'A', figuren: [
+    fig('fig_1', 'Fabio', { beziehungen: [{ figur_id: 'fig_9', name: 'Sebastian', typ: 'kollege', beschreibung: D }] }),
+    fig('fig_9', 'Sebastian'),
+  ] }];
+  // Der Vetter steht als eigener Eintrag in Teil B (anderer Sebastian, Vollname «Sebastian»).
+  const inputB = [{ kapitel: 'B', figuren: [fig('fig_1', 'Sebastian')] }];
+  const out = mergeKonsolParts([
+    { input: inputA, figuren: [
+      { id: 'fig_1', name: 'Fabio', beziehungen: [{ figur_id: 'fig_2', name: 'Sebastian', typ: 'kollege', beschreibung: D }] },
+      { id: 'fig_2', name: 'Sebastian (Mitlehrling)', kurzname: 'Sebastian', beziehungen: [] },
+    ] },
+    { input: inputB, figuren: [{ id: 'fig_1', name: 'Sebastian', beziehungen: [] }] },
+  ], null);
+  const fabio = out.find(f => f.name === 'Fabio');
+  const mitlehrling = out.find(f => f.name === 'Sebastian (Mitlehrling)');
+  assert.deepEqual(fabio.beziehungen.map(b => b.figur_id), [mitlehrling.id]);
+});
+
+test('mergeKonsolParts: Eingabe-Kante mit Rohnamen kommt nicht dazu, wenn die KI-Kante dieselbe Beschreibung trägt', () => {
+  // Robert und die Kochs in verschiedenen Teilen; Teil B trennt «Herr Koch» in zwei
+  // Figuren mit Zusatz, die KI-Kante in Teil A nennt den neuen Namen.
+  const PRIM = 'Der Primarlehrer fördert Robert mit Zusatzaufgaben und empfiehlt ihn fürs Gymnasium.';
+  const inputA = [{ kapitel: 'A', figuren: [
+    fig('fig_1', 'Robert', { beziehungen: [{ name: 'Herr Koch', typ: 'mentor', beschreibung: PRIM }] }),
+  ] }];
+  const inputB = [{ kapitel: 'B', figuren: [fig('fig_1', 'Herr Koch')] }];
+  const out = mergeKonsolParts([
+    { input: inputA, figuren: [
+      { id: 'fig_1', name: 'Robert', beziehungen: [{ figur_id: '', name: 'Herr Koch (Primarlehrer)', typ: 'mentor', beschreibung: PRIM }] },
+    ] },
+    { input: inputB, figuren: [
+      // Frohheim zuerst: ein Rohname «Herr Koch» bände an den ersten Kurznamen-Treffer.
+      { id: 'fig_1', name: 'Herr Koch (Frohheim)', kurzname: 'Herr Koch', beziehungen: [] },
+      { id: 'fig_2', name: 'Herr Koch (Primarlehrer)', kurzname: 'Herr Koch', beziehungen: [] },
+    ] },
+  ], null);
+  const robert = out.find(f => f.name === 'Robert');
+  assert.equal(robert.beziehungen.length, 1);
+  assert.equal(robert.beziehungen[0].figur_id, out.find(f => f.name === 'Herr Koch (Primarlehrer)').id);
+});

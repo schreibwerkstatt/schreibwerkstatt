@@ -9,8 +9,11 @@ import { FIGUREN_BASIS_SCHEMA, figurenBasisRules, RELATION_TYPES_PROMPT } from '
 // Dubletten zurück und kosten Output-Tokens.
 export function buildFiguresBasisConsolidationPrompt(bookName, chapterFiguren, buchKontext = '', opts = {}) {
   const teilHinweis = opts.teil
-    ? '\n\nDies ist ein TEIL der Figurenliste; die übrigen Figuren werden separat konsolidiert. Gib NUR Figuren aus, die oben als eigener Eintrag («- Name …») stehen. Figuren, die nur als Beziehungsziel genannt sind, bekommen KEINEN eigenen Eintrag — die Beziehung selbst bleibt mit ihrem Namen erhalten.'
+    ? '\n\nDies ist ein TEIL der Figurenliste; die übrigen Figuren werden separat konsolidiert. Gib NUR Figuren aus, die oben als eigener Eintrag («- Name …») stehen. Figuren, die nur als Beziehungsziel genannt sind, bekommen KEINEN eigenen Eintrag — die Beziehung selbst bleibt mit ihrem Namen erhalten (beziehungen.name = dieser Name, beziehungen.figur_id leer).'
     : '';
+  // Das Schema der Konsolidierung trägt `beziehungen.name` (schemas.js#_bzItem): im Teil
+  // gibt es für Ziele aus anderen Teilen keine id, und eine erfundene träfe eine fremde Figur.
+  const nameRegel = '\n- beziehungen.name: Name der Zielfigur — Pflicht bei jeder Beziehung. Hat die Zielfigur in deiner Ausgabe einen eigenen Eintrag, genau der Name dieses Eintrags (auch wenn du ihn geändert oder zur Unterscheidung von Namensvettern ergänzt hast), dazu ihre figur_id; sonst der Name genau so geschrieben wie oben und figur_id leer';
   const synthInput = chapterFiguren.map(cf => {
     const nameById = Object.fromEntries((cf.figuren || []).map(f => [f.id, f.name]));
     const arcStr = (a) => {
@@ -49,7 +52,7 @@ ${synthInput}
 Antworte mit diesem JSON-Schema:
 ${FIGUREN_BASIS_SCHEMA}
 
-${figurenBasisRules(buchKontext)}`;
+${figurenBasisRules(buchKontext)}${nameRegel}`;
 }
 
 // ── Alias-Cluster (F3, Claude Multi-Pass, VOR der Konsolidierung) ─────────────

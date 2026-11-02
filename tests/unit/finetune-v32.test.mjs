@@ -77,8 +77,58 @@ test('Beziehungsprüfung: Fall Adrian/Peter/Gisela/Stefan', () => {
   // Gisela ist Stefans einzige Mutter, ihr Geburtsereignis «Geburt von Stefan» ist nicht ihres.
   assert.ok(!r.pairs.has('fig_1|fig_7'));
   assert.ok(!r.conflicts.some(c => c.rule === 'generationGap' && c.figures.includes('Gisela')));
-  for (const k of ['fig_1|fig_33', 'fig_1|fig_32', 'fig_33|fig_7', 'fig_32|fig_7']) assert.ok(r.pairs.has(k), k);
+  // Feiner sperren: der Text widerspricht nur Adrians Kanten (Bruder, «… Peter sich
+  // fügt»), Peters Vater- und Ehe-Kante bleiben im Set und stehen in `kept`.
+  for (const k of ['fig_1|fig_33', 'fig_33|fig_7']) assert.ok(r.pairs.has(k), k);
+  for (const k of ['fig_1|fig_32', 'fig_32|fig_7']) assert.ok(!r.pairs.has(k), k);
+  assert.deepEqual(two.kept, [['Stefan', 'Peter'], ['Peter', 'Gisela']]);
+  assert.ok(r.conflicts.some(c => c.rule === 'foreignName' && c.sources.includes('relation:5170')), 'Ehe-Kante zu Adrian nennt Peter');
   assert.ok(r.mainCount > 0);
+});
+
+test('Beziehungsprüfung: ohne unabhängigen Beleg bleiben beide Alternativen gesperrt', () => {
+  // Ohne Ereignis und ohne Ehe-Kanten weiss niemand, welcher der beiden Väter falsch ist.
+  const rels = RELS.filter(r => [5079, 5090].includes(r.rel_id));
+  const r = checkRelations(relCtx(FIGS, rels, new Map()));
+  for (const k of ['fig_1|fig_33', 'fig_1|fig_32']) assert.ok(r.pairs.has(k), k);
+  assert.ok(r.conflicts.every(c => !c.kept));
+});
+
+test('Beziehungsprüfung: Geschlecht des Rollenworts gegen die Zielfigur', () => {
+  const F = (id, name, g) => ({ fig_id: id, pk: Number(id.slice(2)), name, geschlecht: g });
+  const reto = F('f_1', 'Reto', 'männlich'), mutter = F('f_2', 'Stefanies Mutter', 'weiblich'), manfred = F('f_3', 'Manfred', 'männlich');
+  const R = (from, to, typ, beschreibung) => ({ from_fig_id: from, to_fig_id: to, typ, beschreibung });
+  const rules = (rels) => rulesOf(checkRelations(relCtx([reto, mutter, manfred], rels, new Map())));
+  // Prod-Fall: «Der Vater …» auf der Elternteil-Kante zu einer Frau.
+  assert.ok(rules([R('f_1', 'f_2', 'elternteil', 'Der Vater baut ihm mit Manfred die Mini-Pipe.')]).has('genderMismatch'));
+  assert.ok(!rules([R('f_1', 'f_2', 'elternteil', 'Die Mutter schlägt ihn, als er Koch werden will.')]).has('genderMismatch'));
+  // Das Wort direkt bei einer dritten Figur meint deren Verwandten.
+  assert.ok(!rules([R('f_1', 'f_2', 'elternteil', 'Sie streitet mit Manfreds Vater um das Haus.')]).has('genderMismatch'));
+  // Ein Wort, das eine andere Rolle als die Kante nennt, zählt nicht.
+  assert.ok(!rules([R('f_1', 'f_2', 'elternteil', 'Sie zieht den Sohn allein gross.')]).has('genderMismatch'));
+});
+
+test('Beziehungsprüfung: Ereigniswort belastet nur Figuren mit passendem Geschlecht', () => {
+  // «zwischen den Brüdern» meint nicht Renate, die im selben Ereignis steht.
+  const events = new Map([[1, [{ id: 2196, ereignis: 'Stefan beichtet Adrian die Beziehung zu Renate',
+    bedeutung: 'Seine Lüge bricht das Vertrauen zwischen den Brüdern.' }]]]);
+  const rels = RELS.filter(r => [5077, 5079].includes(r.rel_id));
+  const r = checkRelations(relCtx(FIGS, rels, events));
+  const tc = r.conflicts.find(c => c.rule === 'textContradiction' && c.sources.includes('event:2196'));
+  assert.ok(tc, 'Widerspruch zu Adrian gemeldet');
+  assert.ok(!r.pairs.has('fig_1|fig_2'), 'Ehe Stefan–Renate bleibt');
+  assert.ok(r.pairs.has('fig_1|fig_33'));
+});
+
+test('Beziehungsprüfung: fremder Name nur als ganzer Name, nicht als Namensteil einer Rollenfigur', () => {
+  const F = (id, name, g) => ({ fig_id: id, pk: Number(id.slice(2)), name, geschlecht: g });
+  const figs = [F('f_1', 'Dennis', 'männlich'), F('f_2', 'Herr Ruprecht', 'männlich'), F('f_3', 'Deutschlehrerin am Bifang', 'weiblich')];
+  const R = (from, to, typ, beschreibung) => ({ from_fig_id: from, to_fig_id: to, typ, beschreibung });
+  const r = checkRelations(relCtx(figs, [
+    R('f_1', 'f_2', 'mentor', 'Klassenlehrer im Bifang, dessen Satz zur Selbstorganisation Dennis prägt.'),
+    R('f_1', 'f_3', 'mentor', 'Sie fördert sein Schreiben.'),
+  ], new Map()));
+  assert.ok(!rulesOf(r).has('foreignName'));
 });
 
 test('Beziehungsprüfung: übrige Regeln einzeln', () => {
@@ -113,14 +163,15 @@ test('Konflikt-Paare fehlen in Kernwissen, Porträt, Falschannahme und Familienl
   };
   buildCoreFactSamples(ctx);
   assert.ok(ctx.conflictDropped >= 3);
-  assert.ok(!ctx.relationFacts.some(f => ['fig_32', 'fig_33'].includes(f.a.fig_id) || ['fig_32', 'fig_33'].includes(f.b.fig_id)));
+  assert.ok(!ctx.relationFacts.some(f => f.a.fig_id === 'fig_33' || f.b.fig_id === 'fig_33'));
   const text = ctx.samples.map(s => s.messages.map(m => m.content).join(' ')).join('\n');
-  assert.doesNotMatch(text, /Adrian ist Stefans Vater|Peter ist Stefans Vater|Stefans Vater/);
+  assert.doesNotMatch(text, /Adrian ist Stefans Vater|Adrian ist Giselas/);
   assert.match(text, /Gisela ist Stefans Mutter/, 'unbestrittene Beziehung bleibt');
+  assert.match(text, /Peter ist Stefans Vater/, 'die belegte Alternative bleibt (feiner sperren)');
   const push = makeReaderPush(ctx);
   buildRefusalSamples({ ...ctx, figMentions: new Map() }, push);
   const fp = ctx.samples.filter(s => s.id.startsWith('refusal|falsePremise|rel'));
-  assert.ok(fp.length && fp.every(s => !/Adrian|Peter/.test(s.messages[2].content)));
+  assert.ok(fp.length && fp.every(s => !/Adrian/.test(s.messages[2].content)));
 });
 
 test('Geburt/Tod: nur die eigene zählt', () => {

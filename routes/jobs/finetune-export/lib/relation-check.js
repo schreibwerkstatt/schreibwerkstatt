@@ -28,7 +28,19 @@
 //                        Graphen nicht passt («Schwager», wo die Daten
 //                        «Schwiegervater» ergeben; «vom grossen Bruder», wo
 //                        die Daten «Sohn» sagen). Heuristisch über die
-//                        Verwandtschaftswörter.
+//                        Verwandtschaftswörter;
+//   genderMismatch     — die Beschreibung nennt die Rolle des Ziels mit einem
+//                        Geschlecht, das nicht zur Zielfigur passt («Der Vater
+//                        …» auf der Elternteil-Kante zu einer Frau);
+//   foreignName        — die Beschreibung nennt statt des Ziels eine andere
+//                        Figur, zu der die Ausgangsfigur dieselbe Beziehung
+//                        hat («… Peter sich fügt» auf der Ehe-Kante zu Adrian,
+//                        während eine Ehe-Kante zu Peter besteht).
+//
+// Feiner sperren: `maxParents` und `duplicateDescription` nennen Alternativen
+// («einer der beiden Väter ist falsch»). Belegt eine unabhängige Regel genau
+// einen Teil davon, fällt nur dieser Teil aus; die übrigen Paare stehen in
+// `kept` und bleiben im Set. Gemeldet wird der Konflikt trotzdem.
 
 const { ownBirthYear } = require('../samples/core-facts/words');
 
@@ -57,6 +69,19 @@ const KIN_TOKENS = [
 ];
 const kinOf = (tok) => (KIN_TOKENS.find(([re]) => re.test(tok)) || [])[1] || null;
 
+// Geschlecht eines Verwandtschaftsworts (Token aus KIN_TOKENS), sonst null
+// («Eltern», «Enkel»). Weiblich zuerst: «schwägerin» beginnt wie «schwäger».
+const FEMALE_KIN = /^(mutter|mütter|mama|mother|tochter|töchter|daughter|schwester|sister|ehefrau|gattin|wife|schwiegermutter|schwiegertochter|mother-in-law|daughter-in-law|sister-in-law|schwägerin|grossmutter|großmutter|oma|grandmother|granddaughter|enkelin|tante|aunt|nichte|niece)/;
+const MALE_KIN = /^(vater|väter|papa|father|sohn|söhn|son|bruder|brüder|brother|ehemann|gatte|husband|schwiegervater|schwiegersohn|father-in-law|son-in-law|brother-in-law|schwager|schwäger|grossvater|großvater|opa|grandfather|grandson|onkel|uncle|neffe|nephew)/;
+const kinGender = (tok) => (FEMALE_KIN.test(tok) ? 'f' : MALE_KIN.test(tok) ? 'm' : null);
+
+// Regeln, deren Treffer ein bestimmtes Paar belasten, und Regeln, die nur
+// Alternativen nennen (siehe «Feiner sperren» oben).
+const PAIR_EVIDENCE = new Set(['parentIsKin', 'spouseAsymmetric', 'pairConflict', 'familyAndFriend',
+  'siblingsNoParent', 'generationGap', 'textContradiction', 'genderMismatch', 'foreignName']);
+const ALTERNATIVES = new Set(['maxParents', 'duplicateDescription']);
+const INVERSE_ROLE = { elternteil: 'kind', kind: 'elternteil' };
+
 // Wörter vor einem Verwandtschaftswort, die auf eine ANDERE Person zeigen
 // («vom grossen Bruder», «mit seiner Mutter») — anders als «wird Mutter»,
 // das die Figur selbst meint.
@@ -66,6 +91,7 @@ const OTHER_MARK = new Set(['vom', 'von', 'zum', 'zur', 'dem', 'den', 'der', 'de
 const tokenize = (s) => String(s || '').toLowerCase().split(/[^\p{L}\p{N}'-]+/u).filter(Boolean);
 const splitSentences = (s) => String(s || '').split(/(?<=[.!?;])\s+/).map(x => x.trim()).filter(Boolean);
 const pairKey = (a, b) => [a, b].sort().join('|');
+const wordRe = (name) => new RegExp(`(?<![\\p{L}\\p{N}])${name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}(?![\\p{L}\\p{N}])`, 'iu');
 
 const birthYearOf = (f, eventsByFigPk) => ownBirthYear(f, eventsByFigPk, { sure: false });
 
@@ -281,19 +307,44 @@ function checkRelations(ctx) {
   // `x`: Figur, deren Text es ist; `others`: genannte Figuren; `labels`:
   // gefundene Rollen. Widerspruch, wenn der Graph für jede genannte Figur
   // eine Verwandtschaft kennt, aber keine davon zum Wort passt.
+  // `kinLabels`: Rolle → Geschlechter der Wörter (null = ohne Geschlecht, «Eltern»).
+  // Belastet werden nur genannte Figuren, deren Geschlecht zum Wort passt: «zwischen
+  // den Brüdern» meint nicht die Ehefrau, die im selben Ereignis steht.
   const checkText = (x, others, kinLabels, source, snippet) => {
     if (!kinLabels.size || !others.length || others.length > 3) return;
     const known = others.map(y => ({ y, L: new Set([...G.labels(x, y), ...G.labels(y, x)]) })).filter(o => o.L.size);
     if (!known.length) return;
-    for (const lab of kinLabels) {
+    for (const [lab, genders] of kinLabels) {
       if (known.some(o => o.L.has(lab))) continue;
-      const pairs = known.map(o => [x, o.y]);
-      const relSources = known.flatMap(o => (byPair.get(pairKey(x, o.y)) || []).map(relSrc));
-      report('textContradiction', [x, ...known.map(o => o.y)], [source, ...relSources], snippet, pairs);
+      const fits = known.filter(o => {
+        const g = genderOf(figById.get(o.y));
+        return g === 'n' || genders.has(null) || genders.has(g);
+      });
+      if (!fits.length) continue;
+      const pairs = fits.map(o => [x, o.y]);
+      const relSources = fits.flatMap(o => (byPair.get(pairKey(x, o.y)) || []).map(relSrc));
+      report('textContradiction', [x, ...fits.map(o => o.y)], [source, ...relSources], snippet, pairs);
     }
+  };
+  const addKin = (labs, tok) => {
+    const lab = kinOf(tok);
+    if (!labs.has(lab)) labs.set(lab, new Set());
+    labs.get(lab).add(kinGender(tok));
   };
   const mentioned = (toks, exclude) => [...new Set(toks.map(t => forms.get(t)).filter(id => id && !exclude.includes(id)))];
   const kinAt = (toks, i) => kinOf(toks[i]);
+  // Strenger als `mentioned`: nur ganzer Name (ohne Klammerzusatz) oder Kurzname,
+  // den keine zweite Figur trägt — ein Namensteil wie «Bifang» aus «Deutschlehrerin
+  // am Bifang» ist meist ein Ort.
+  const fullNames = new Map();
+  for (const f of figRows) {
+    for (const n of new Set([f.name, f.kurzname].map(x => String(x || '').replace(/\([^)]*\)/g, ' ').trim()))) {
+      if (n.length < 3) continue;
+      const k = n.toLowerCase();
+      fullNames.set(k, fullNames.has(k) && fullNames.get(k).id !== f.fig_id ? { id: null } : { id: f.fig_id, re: wordRe(n) });
+    }
+  }
+  const namedIn = (text) => [...new Set([...fullNames.values()].filter(e => e.id && e.re.test(text)).map(e => e.id))];
 
   // Beziehungsbeschreibung: das Paar steht fest; nur ohne weitere genannte Figur.
   for (const s of stmts) {
@@ -310,6 +361,44 @@ function checkRelations(ctx) {
     }
   }
 
+  // Rolle, die `s` der Figur gegenüber `owner` gibt (die andere Seite des Paars).
+  const roleToward = (s, owner) => (s.from === owner ? s.typ : (INVERSE_ROLE[s.typ] || s.typ));
+  for (const s of stmts) {
+    if (!s.desc || HEDGE.test(s.desc)) continue;
+    const toks = tokenize(s.desc);
+
+    // Geschlecht des Rollenworts gegen das Ziel. Ein Wort direkt bei einer dritten
+    // Figur («Manfreds Vater») meint deren Verwandten und zählt nicht.
+    const target = genderOf(figById.get(s.to));
+    if (target !== 'n') {
+      const genders = new Set();
+      toks.forEach((t, i) => {
+        const g = kinGender(t);
+        if (!g || kinOf(t) !== s.typ) return;
+        for (let j = Math.max(0, i - 2); j <= Math.min(toks.length - 1, i + 2); j++) {
+          const id = forms.get(toks[j]);
+          if (id && id !== s.from && id !== s.to) return;
+        }
+        genders.add(g);
+      });
+      if (genders.size === 1 && !genders.has(target)) {
+        report('genderMismatch', [s.from, s.to], [relSrc(s)], s.desc, [[s.from, s.to]]);
+      }
+    }
+
+    // Fremder Name: die Beschreibung nennt das Ziel nicht, wohl aber genau eine
+    // andere Figur, zu der die Ausgangsfigur dieselbe Beziehung hat.
+    const named = namedIn(s.desc);
+    if (named.includes(s.to) || mentioned(toks, []).includes(s.to)) continue;
+    const others = named.filter(id => id !== s.to && id !== s.from);
+    if (others.length !== 1) continue;
+    const role = roleToward(s, s.from);
+    const twin = (byPair.get(pairKey(s.from, others[0])) || []).filter(x => roleToward(x, s.from) === role);
+    if (twin.length) {
+      report('foreignName', [s.from, s.to, others[0]], [relSrc(s), ...twin.map(relSrc)], s.desc, [[s.from, s.to]]);
+    }
+  }
+
   for (const f of figRows) {
     // Ereignisse der Figur: Verwandtschaftswort mit Verweis auf eine andere
     // Person («vom grossen Bruder»), genannte Figuren aus Titel und Bedeutung.
@@ -317,10 +406,9 @@ function checkRelations(ctx) {
       const text = `${e.ereignis || ''} ${e.bedeutung || ''}`;
       if (HEDGE.test(text)) continue;
       const toks = tokenize(text);
-      const labs = new Set();
+      const labs = new Map();
       toks.forEach((t, i) => {
-        const lab = kinAt(toks, i);
-        if (lab && [toks[i - 1], toks[i - 2]].some(w => OTHER_MARK.has(w))) labs.add(lab);
+        if (kinAt(toks, i) && [toks[i - 1], toks[i - 2]].some(w => OTHER_MARK.has(w))) addKin(labs, t);
       });
       checkText(f.fig_id, mentioned(toks, [f.fig_id]), labs,
         e.id != null ? `event:${e.id}` : `event:${f.fig_id}:${e.ereignis}`, text.trim());
@@ -331,19 +419,28 @@ function checkRelations(ctx) {
       for (const sent of splitSentences(f[field])) {
         if (HEDGE.test(sent)) continue;
         const toks = tokenize(sent);
-        const labs = new Set();
+        const labs = new Map();
         const near = new Set();
         toks.forEach((t, i) => {
-          const lab = kinOf(t);
-          if (!lab) return;
+          if (!kinOf(t)) return;
           for (let j = Math.max(0, i - 3); j <= Math.min(toks.length - 1, i + 2); j++) {
             const id = forms.get(toks[j]);
-            if (id && id !== f.fig_id) { near.add(id); labs.add(lab); }
+            if (id && id !== f.fig_id) { near.add(id); addKin(labs, t); }
           }
         });
         checkText(f.fig_id, [...near], labs, `bio:${f.fig_id}.${field}`, sent);
       }
     }
+  }
+
+  // ── Feiner sperren ───────────────────────────────────────────────────
+  const evidence = new Set(conflicts.filter(c => PAIR_EVIDENCE.has(c.rule)).flatMap(c => c.pairs));
+  for (const c of conflicts) {
+    if (!ALTERNATIVES.has(c.rule)) continue;
+    const suspect = c.pairs.filter(p => evidence.has(p));
+    if (!suspect.length || suspect.length === c.pairs.length) continue;
+    c.kept = c.pairs.filter(p => !evidence.has(p)).map(p => p.split('|').map(nameOf));
+    c.pairs = suspect;
   }
 
   const pairs = new Set(conflicts.flatMap(c => c.pairs));

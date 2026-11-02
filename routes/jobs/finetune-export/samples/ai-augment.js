@@ -24,7 +24,7 @@ const { aiCall, _modelName, getPrompts } = require('../../shared');
 const { extractName, nameRegex } = require('../lib/names');
 const { clipAtSentence, splitParagraphs } = require('../lib/text');
 const appSettings = require('../../../../lib/app-settings');
-const { AUGMENT_CONCURRENCY, sha1, trimInstr, pmap } = require('../lib/augment-util');
+const { augmentConcurrency, augmentMaxTokens, sha1, trimInstr, pmap } = require('../lib/augment-util');
 
 const REVERSE_PROMPTS_PER_PAGE_DEFAULT = 4;
 const FACT_QA_PER_ENTITY_DEFAULT = 4;
@@ -64,7 +64,7 @@ async function buildReversePromptSamples(ctx) {
   if (!eligible.length) return;
 
   let processed = 0;
-  await pmap(eligible, AUGMENT_CONCURRENCY, async (p) => {
+  await pmap(eligible, augmentConcurrency(ctx.aiModel), async (p) => {
     const passage = clipAtSentence(p.text, maxChars);
     const sig = sha1(passage + '|n=' + n + '|lang=' + (langIsEn ? 'en' : 'de'));
     const scopeKey = `page:${p.id}`;
@@ -80,7 +80,7 @@ async function buildReversePromptSamples(ctx) {
         pageTitle: p.title || '',
       });
       try {
-        result = await aiCall(jobId, tok, prompt, augmentSystem, null, null, 800, 0.25, 1500, undefined, prompts.SCHEMA_FT_REVERSE_PROMPTS);
+        result = await aiCall(jobId, tok, prompt, augmentSystem, null, null, 800, 0.25, augmentMaxTokens(800), undefined, prompts.SCHEMA_FT_REVERSE_PROMPTS);
       } catch (err) {
         if (err.name === 'AbortError') throw err;
         logger.warn(`reverse-prompts: page=${p.id} fehlgeschlagen: ${err.message}`);
@@ -181,7 +181,7 @@ async function buildFactQASamples(ctx) {
   if (!entities.length) return;
 
   let processed = 0;
-  await pmap(entities, AUGMENT_CONCURRENCY, async (ent) => {
+  await pmap(entities, augmentConcurrency(ctx.aiModel), async (ent) => {
     const sig = sha1(JSON.stringify(ent.json) + '|n=' + n + '|lang=' + (langIsEn ? 'en' : 'de'));
 
     let result = loadFinetuneAiCache(bookIdInt, userEmail, ent.scope, ent.scopeKey, sig, versionTag);
@@ -194,7 +194,7 @@ async function buildFactQASamples(ctx) {
         bookName,
       });
       try {
-        result = await aiCall(jobId, tok, prompt, augmentSystem, null, null, 1200, 0.3, 2000, undefined, prompts.SCHEMA_FT_FACT_QA);
+        result = await aiCall(jobId, tok, prompt, augmentSystem, null, null, 1200, 0.3, augmentMaxTokens(1200), undefined, prompts.SCHEMA_FT_FACT_QA);
       } catch (err) {
         if (err.name === 'AbortError') throw err;
         logger.warn(`fact-qa: ${ent.scopeKey} fehlgeschlagen: ${err.message}`);
@@ -252,7 +252,7 @@ async function rewriteAnswersInBookVoice(ctx) {
   const paragraphs = pageContents.flatMap(p => splitParagraphs(p.text || ''));
   const rewritten = new Map();
 
-  await pmap([...voiceTargets], AUGMENT_CONCURRENCY, async ([key, t]) => {
+  await pmap([...voiceTargets], augmentConcurrency(ctx.aiModel), async ([key, t]) => {
     const styleSamples = voiceStyleSamples(t.name, paragraphs);
     const sig = sha1(JSON.stringify({ text: t.text, styleSamples }) + '|lang=' + (langIsEn ? 'en' : 'de'));
     let result = loadFinetuneAiCache(bookIdInt, userEmail, 'voice-rewrite', key, sig, versionTag);
@@ -264,7 +264,7 @@ async function rewriteAnswersInBookVoice(ctx) {
         name: t.name, text: t.text, styleSamples, langIsEn, bookName,
       });
       try {
-        result = await aiCall(jobId, tok, prompt, augmentSystem, null, null, Math.max(400, t.text.length), 0.3, 1500, undefined, prompts.SCHEMA_FT_VOICE_REWRITE);
+        result = await aiCall(jobId, tok, prompt, augmentSystem, null, null, Math.max(400, t.text.length), 0.3, augmentMaxTokens(t.text.length * 1.5), undefined, prompts.SCHEMA_FT_VOICE_REWRITE);
       } catch (err) {
         if (err.name === 'AbortError') throw err;
         logger.warn(`voice-rewrite: ${key} fehlgeschlagen: ${err.message}`);

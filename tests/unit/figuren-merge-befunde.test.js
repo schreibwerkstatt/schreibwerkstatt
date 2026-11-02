@@ -6,12 +6,14 @@
 //   * Ein Kurzname, der zu mehreren Vollnamen passt, verschmilzt mit keinem davon.
 //   * Der Kanon trägt den vollsten Namen; idRemap-Ketten werden bis zum Ende aufgelöst.
 //   * Die Beschreibungs-Prüfung erfindet keine Kanten und leert keine Beschreibungen.
+//   * Kopierte Kanten an Namensvettern fallen weg, wenn sich das echte Ziel belegen lässt.
 
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const {
   annotateBeziehungenNames, rebindBeziehungenByName,
   preMergeChapterFiguren, mergeDuplicateFiguren, validateBeziehungenDescriptions,
+  dropCopiedRelations,
 } = require('../../routes/jobs/komplett/figuren-merge');
 
 const NOLOG = { info() {}, warn() {} };
@@ -208,4 +210,94 @@ test('buildFigNameLookup: Kurzname/Alias überschreibt keinen Vollnamen einer an
   assert.equal(figNameToId.Anna, 'fig_1');
   assert.equal(figNameToId['Anna Weber'], 'fig_2');
   assert.equal(figNameToIdLower.annchen, 'fig_2');
+});
+
+// Prod-Fall «Der Amoklauf»: die Konsolidierung trennt Namensvettern mit Zusatz, eine
+// Kante mit Rohnamen landet beim Rest-Eintrag bzw. beim Vetter — dieselbe Beschreibung
+// steht dann auf zwei Zielen.
+test('dropCopiedRelations: Zusatz in der Beschreibung entscheidet, gleichnamiges Ziel ohne Zusatz fällt', () => {
+  const PRIM = 'Der Primarlehrer fördert Robert mit Zusatzaufgaben und empfiehlt ihn fürs Gymnasium.';
+  const LEHR = 'Mitlehrling, der ihm vermittelt, dass man stets eine Rolle spiele.';
+  const f = [
+    { id: 'fig_1', name: 'Robert', beziehungen: [
+      { figur_id: 'fig_2', typ: 'mentor', beschreibung: PRIM },
+      { figur_id: 'fig_3', typ: 'mentor', beschreibung: PRIM },
+    ] },
+    { id: 'fig_2', name: 'Herr Koch (Primarlehrer)', kurzname: 'Herr Koch' },
+    { id: 'fig_3', name: 'Herr Koch', kurzname: 'Koch' },
+    { id: 'fig_4', name: 'Fabio', beziehungen: [
+      { figur_id: 'fig_5', typ: 'kollege', beschreibung: LEHR },
+      { figur_id: 'fig_6', typ: 'kollege', beschreibung: LEHR },
+    ] },
+    { id: 'fig_5', name: 'Sebastian (Mitlehrling)', kurzname: 'Sebastian' },
+    { id: 'fig_6', name: 'Sebastian', kurzname: 'Sebastian' },
+  ];
+  assert.equal(dropCopiedRelations(f), 2);
+  assert.deepEqual(f[0].beziehungen.map(b => b.figur_id), ['fig_2']);
+  assert.deepEqual(f[3].beziehungen.map(b => b.figur_id), ['fig_5']);
+});
+
+test('dropCopiedRelations: ohne Beleg bleiben beide, verschiedene Typen und kurze Beschreibungen ohnehin', () => {
+  const VATER = 'Ein distanzierter, lesender Vater, der ihm bei der Stellensuche hilft.';
+  const f = [
+    { id: 'fig_1', name: 'Stefan', beziehungen: [
+      { figur_id: 'fig_2', typ: 'elternteil', beschreibung: VATER },
+      { figur_id: 'fig_3', typ: 'elternteil', beschreibung: VATER },
+      { figur_id: 'fig_2', typ: 'freund', beschreibung: 'Freund' },
+      { figur_id: 'fig_3', typ: 'freund', beschreibung: 'Freund' },
+    ] },
+    { id: 'fig_2', name: 'Peter' }, { id: 'fig_3', name: 'Adrian' },
+  ];
+  assert.equal(dropCopiedRelations(f), 0);
+  assert.equal(f[0].beziehungen.length, 4);
+});
+
+// Prod-Fall «Der Amoklauf»: die Extraktion gab zwei Personen denselben Katalog-Anker.
+test('preMerge/mergeDuplicate: gleicher Anker verschmilzt nicht bei hartem Widerspruch, wohl aber bei anderem Beruf', () => {
+  const chunks = [
+    { kapitel: 'A', figuren: [{ id: 'fig_1', name: 'Kim', katalog_id: 'K7', geschlecht: 'weiblich', beruf: 'Kräuterkundige' }] },
+    { kapitel: 'B', figuren: [
+      { id: 'fig_1', name: 'Kim', katalog_id: 'K7', geschlecht: 'männlich' },
+      { id: 'fig_2', name: 'Josephine', katalog_id: 'K9', beruf: 'Kräuterkundige' },
+    ] },
+    { kapitel: 'C', figuren: [{ id: 'fig_1', name: 'Josephine', katalog_id: 'K9', beruf: 'Kennerin asiatischer Philosophie und Medizin' }] },
+  ];
+  const { chapterFiguren } = preMergeChapterFiguren(chunks);
+  const all = chapterFiguren.flatMap(c => c.figuren);
+  const kims = all.filter(f => f.name === 'Kim');
+  assert.equal(kims.length, 2, 'Geschlecht widerspricht → zwei Figuren');
+  assert.deepEqual(kims.map(f => f.katalog_id ?? null), ['K7', null], 'Anker bleibt beim ersten');
+  assert.equal(all.filter(f => f.name === 'Josephine').length, 1, 'anderer Beruf allein trennt nicht');
+
+  // Stufe 0 der Nach-Konsolidierung: gleiche Regel.
+  const { figuren } = mergeDuplicateFiguren([
+    { id: 'fig_1', name: 'Kim', katalog_id: 'K7', geschlecht: 'weiblich' },
+    { id: 'fig_2', name: 'Kim Meier', katalog_id: 'K7', geschlecht: 'männlich' },
+  ]);
+  assert.equal(figuren.length, 2);
+});
+
+test('mergeDuplicate: Rest-Eintrag ohne Zusatz geht in den passenden Namensvetter auf', () => {
+  const { figuren, idRemap } = mergeDuplicateFiguren([
+    { id: 'fig_1', name: 'Robert', beziehungen: [{ figur_id: 'fig_4', typ: 'mentor' }] },
+    { id: 'fig_2', name: 'Herr Koch (Primarlehrer)', kurzname: 'Herr Koch', geschlecht: 'männlich',
+      beschreibung: 'Der Primarlehrer fördert Robert mit Zusatzaufgaben und empfiehlt ihn fürs Gymnasium.', kapitel: [{ name: 'Der Künstler' }] },
+    { id: 'fig_3', name: 'Herr Koch (Frohheim)', kurzname: 'Herr Koch', geschlecht: 'männlich',
+      beschreibung: 'Als Schulleiter des Frohheims ordnet er beim Brand die Evakuierung an.', kapitel: [{ name: 'Der Nihilist' }] },
+    { id: 'fig_4', name: 'Herr Koch', kurzname: 'Koch', katalog_id: 'K2894', geschlecht: 'männlich',
+      beschreibung: 'Herr Koch ist Robert wohlgesonnen und versorgt ihn mit Zusatzaufgaben; er empfiehlt ihn fürs Gymnasium.', kapitel: [{ name: 'Der Künstler' }] },
+  ]);
+  assert.deepEqual(figuren.map(f => f.name), ['Robert', 'Herr Koch (Primarlehrer)', 'Herr Koch (Frohheim)']);
+  assert.equal(idRemap.fig_4, 'fig_2');
+  assert.equal(figuren[1].katalog_id, 'K2894', 'Anker wandert mit');
+  assert.deepEqual(figuren[0].beziehungen.map(b => b.figur_id), ['fig_2'], 'Kante folgt der Variante');
+});
+
+test('mergeDuplicate: Rest-Eintrag bleibt ohne eindeutigen Spitzenreiter', () => {
+  const { figuren } = mergeDuplicateFiguren([
+    { id: 'fig_1', name: 'Herr Koch (Primarlehrer)', beschreibung: 'Lehrer.' },
+    { id: 'fig_2', name: 'Herr Koch (Frohheim)', beschreibung: 'Schulleiter.' },
+    { id: 'fig_3', name: 'Herr Koch', beschreibung: 'Ein Nachbar mit Garten.' },
+  ]);
+  assert.equal(figuren.length, 3);
 });

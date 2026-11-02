@@ -7,6 +7,24 @@
 const crypto = require('crypto');
 
 const AUGMENT_CONCURRENCY = 4;
+// Haiku hat Rate-Limits und Preis für mehr parallele Calls; die schweren Modelle
+// bleiben beim kleinen Pool. `model` ist das effektiv laufende (`ctx.aiModel`).
+const AUGMENT_CONCURRENCY_HAIKU = 12;
+
+function augmentConcurrency(model) {
+  return /claude-haiku/.test(String(model || '')) ? AUGMENT_CONCURRENCY_HAIKU : AUGMENT_CONCURRENCY;
+}
+
+// Output-Deckel eines Augment-Calls aus der erwarteten Antwortlänge. Haiku 5+ denkt
+// adaptiv, und das Denken zählt gegen dasselbe `max_tokens` wie das JSON — ein fester
+// Deckel von 1500 truncierte lange Texte (Entwicklungsbogen einer Hauptfigur, Orte).
+// Bezahlt wird nur, was erzeugt wird; der Deckel fängt nur Ausreisser ab.
+const AUGMENT_THINK_RESERVE = 3000;
+const AUGMENT_MAX_TOKENS_CAP = 16000;
+
+function augmentMaxTokens(expectedChars) {
+  return Math.min(AUGMENT_MAX_TOKENS_CAP, AUGMENT_THINK_RESERVE + Math.ceil(Math.max(0, expectedChars || 0) / 2.5));
+}
 
 function sha1(s) {
   return crypto.createHash('sha1').update(typeof s === 'string' ? s : JSON.stringify(s)).digest('hex');
@@ -30,4 +48,4 @@ async function pmap(items, limit, fn) {
   return out;
 }
 
-module.exports = { AUGMENT_CONCURRENCY, sha1, trimInstr, pmap };
+module.exports = { AUGMENT_CONCURRENCY, AUGMENT_CONCURRENCY_HAIKU, augmentConcurrency, augmentMaxTokens, sha1, trimInstr, pmap };

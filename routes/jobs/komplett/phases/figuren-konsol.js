@@ -15,7 +15,7 @@
 // das Modell nicht sehen konnte, werden aus der Eingabe übernommen.
 const { normName, nameTokens } = require('../../../../lib/name-normalize');
 const { updateJob, retryOnTransientAi, settledAll, i18nError, i18nErrText } = require('../../shared');
-const { rebindBeziehungenByName } = require('../figuren-merge');
+const { rebindBeziehungenByName, relationDescKey, nameFitsFigure } = require('../figuren-merge');
 const { COST_LABEL, costTier } = require('../cost-labels');
 
 /** Anteil des Output-Caps, den das JSON einer Konsolidierung höchstens belegen darf.
@@ -98,15 +98,60 @@ function _inputNames(input) {
   return names;
 }
 
+/** Beschreibung → Zielnamen der Eingabe-Kanten eines Teils. Ziel ohne `name` (Kante
+ *  innerhalb desselben Kapitels) über die Kapitel-ids aufgelöst. */
+function _inputTargetsByDesc(input) {
+  const out = new Map();
+  for (const cf of input) {
+    const nameById = new Map((cf.figuren || []).map(g => [String(g.id), g.name]));
+    for (const g of (cf.figuren || [])) for (const bz of (g.beziehungen || [])) {
+      const k = relationDescKey(bz?.beschreibung);
+      const name = bz?.name || nameById.get(String(bz?.figur_id ?? ''));
+      if (!k || !name) continue;
+      if (!out.has(k)) out.set(k, new Map());
+      out.get(k).set(normName(name), name);
+    }
+  }
+  return out;
+}
+
 function mergeKonsolParts(parts, log) {
   const out = [];
   let n = 0;
   let foreign = 0;
+  let retargeted = 0;
+  let carriedDup = 0;
   const inputByPart = parts.map(p => _inputNames(p.input));
   for (const [pi, { input, figuren }] of parts.entries()) {
-    const nameById = new Map();
-    for (const f of (figuren || [])) if (f?.id != null && f.name) nameById.set(String(f.id), f.name);
+    const figById = new Map();
+    for (const f of (figuren || [])) if (f?.id != null && f.name) figById.set(String(f.id), f);
+    // Zielname einer KI-Kante. Trägt sie den Rohnamen («Sebastian»), das Modell hat die
+    // Figur hinter der id aber umbenannt, um Namensvettern zu trennen («Sebastian
+    // (Mitlehrling)»), gilt der Ausgabe-Name — sonst bände der Rohname an den Vetter.
+    const targetName = (bz) => {
+      const byId = figById.get(String(bz.figur_id ?? ''));
+      if (!bz.name) return byId?.name || null;
+      return byId && byId.name !== bz.name && nameFitsFigure(bz.name, byId) ? byId.name : bz.name;
+    };
     const inPart = inputByPart[pi];
+    // Steht die Beschreibung einer KI-Kante wörtlich auf einer Eingabe-Kante zu genau
+    // EINER Figur aus einem ANDEREN Teil, gilt deren Ziel: dieses Ziel hat im Teil keine
+    // id, und eine erfundene trifft eine Figur des eigenen Teils (der Vater landet beim
+    // Bruder). Ohne Korrektur übernähme der Schritt unten zusätzlich die echte Kante aus
+    // der Eingabe — dieselbe Beschreibung stünde auf zwei Figuren. Ziele im eigenen Teil
+    // bleiben: die hat das Modell gesehen und womöglich bewusst zusammengeführt.
+    const targetsByDesc = _inputTargetsByDesc(input);
+    const fixTarget = (name, desc) => {
+      const targets = targetsByDesc.get(relationDescKey(desc));
+      if (!targets || targets.size !== 1 || targets.has(normName(name))) return name;
+      const [key, target] = [...targets.entries()][0];
+      if (inPart.has(key)) return name;
+      // «Herr Koch (Primarlehrer)» für den Eingabenamen «Herr Koch» ist dasselbe Ziel, nur
+      // von Namensvettern unterschieden — der Rohname wäre wieder mehrdeutig.
+      if (nameFitsFigure(target, { name })) return name;
+      retargeted++;
+      return target;
+    };
     // Eine Ausgabe-Figur, deren Name nicht in diesem Teil, wohl aber in einem anderen
     // steht, hat das Modell aus einem Beziehungsziel erfunden — der andere Teil liefert
     // sie mit vollem Steckbrief. Neue kanonische Namen (in keinem Teil) bleiben.
@@ -123,8 +168,8 @@ function mergeKonsolParts(parts, log) {
     const partOut = kept.map(f => {
       const beziehungen = (f.beziehungen || []).map(bz => {
         if (!bz) return null;
-        const name = bz.name || nameById.get(String(bz.figur_id ?? ''));
-        return name ? { ...bz, name } : null;
+        const name = targetName(bz);
+        return name ? { ...bz, name: fixTarget(name, bz.beschreibung) } : null;
       }).filter(Boolean);
       return { ...f, id: 'fig_' + (++n), beziehungen };
     });
@@ -141,12 +186,19 @@ function mergeKonsolParts(parts, log) {
         const k = normName(bz?.name);
         if (!k || inPart.has(k)) continue;
         if (owner.beziehungen.some(b => normName(b.name) === k)) continue;
+        // Dieselbe Beschreibung steht schon auf einer Kante des Besitzers: das Modell
+        // hat das Ziel umbenannt («Herr Koch» → «Herr Koch (Primarlehrer)»), die
+        // Rohnamen-Kante wäre eine Kopie an den Namensvetter.
+        const dk = relationDescKey(bz.beschreibung);
+        if (dk && owner.beziehungen.some(b => relationDescKey(b.beschreibung) === dk)) { carriedDup++; continue; }
         owner.beziehungen.push({ ...bz });
       }
     }
     out.push(...partOut);
   }
   if (foreign) log?.info(`Figuren-Teile: ${foreign} Figur(en) verworfen, die nur als Beziehungsziel aus einem anderen Teil stammten.`);
+  if (retargeted) log?.info(`Figuren-Teile: ${retargeted} Beziehungs-Ziel(e) über die Eingabe-Beschreibung korrigiert.`);
+  if (carriedDup) log?.info(`Figuren-Teile: ${carriedDup} Eingabe-Kante(n) nicht übernommen, die Beschreibung steht schon auf einer KI-Kante.`);
   rebindBeziehungenByName(out, log);
   return out;
 }
