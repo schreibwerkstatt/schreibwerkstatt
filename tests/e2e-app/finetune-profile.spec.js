@@ -34,12 +34,13 @@ test('Fine-Tuning-Export: Profilwahl setzt Felder, YAML passt zum Profil', async
   const maxChars = card.locator('#ft-max-chars');
   await expect(seq).toHaveValue(/^4[’',.]?096$/);
 
-  // Default-Profil: Ministral 3 8B, 20 GB.
+  // Default-Profil: Ministral 3 8B, 16 GB.
   let yaml = await downloadYaml(page, card);
   expect(yaml).toContain('# ' + await tr(page, 'finetune.profile.yaml.model', { model: 'unsloth/Ministral-3-8B-Instruct-2512-unsloth-bnb-4bit' }));
-  expect(yaml).toMatch(/^ {2}batch_size: 2$/m);
+  expect(yaml).toMatch(/^ {2}batch_size: 1$/m);
+  expect(yaml).toMatch(/^ {2}gradient_accumulation_steps: 16$/m);
   expect(yaml).toMatch(/^ {2}max_seq_length: 4096$/m);
-  expect(yaml).toMatch(/^ {2}lora_r: 32$/m);
+  expect(yaml).toMatch(/^ {2}lora_r: 64$/m);
   expect(yaml).toMatch(/^ {2}packing: false$/m);
   expect(yaml).toMatch(/^ {2}finetune_vision_layers: false$/m);
   // Feste Länge, kein Early Stopping, eval_steps als Anteil; ohne Export der

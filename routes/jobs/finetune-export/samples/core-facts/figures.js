@@ -5,7 +5,7 @@ const { eventWhen } = require('../author-chat/event-data');
 const { SCHICHT_PROSA } = require('../author-chat/figures');
 const {
   genderOf, genitive, roleNoun, possessive, figureTypePhrase, pronoun, firstSentences, inverseTyp, datOf,
-  roleArticle, cleanBeruf, isStatus, FAMILY_TYPES, PLACEHOLDER_NAME,
+  roleArticle, berufHead, jobInSentence, isStatus, ownBirthYear, FAMILY_TYPES, PLACEHOLDER_NAME,
 } = require('./words');
 const { declineName, fillCase, stripQualifier } = require('./naming');
 
@@ -27,16 +27,26 @@ function countMentions(figRows, pageContents) {
 // Fragen mit Kasus-Platzhaltern (naming.js#fillCase): `{n}` Nominativ,
 // `{n:akk}`, `{n:dat}` — «Was weisst du über Herrn Koch?», «Erzähl mir kurz
 // vom Fahrer des Mercedes.».
+//
+// `core` sind die Porträt-Fragen, direkte wie umgangssprachliche. Dieselben
+// Vorlagen fragen in reader/refusals.js nach erfundenen Namen
+// (Kontrastpaare): das Modell soll am Namen entscheiden, nicht an der Frageform.
 const Q = {
   de: {
-    core: ['Wer ist {n}?', 'Erzähl mir kurz von {n:dat}.', 'Was weisst du über {n:akk}?', 'Was für eine Figur ist {n}?', 'Stell mir {n:akk} kurz vor.'],
+    core: ['Wer ist {n}?', 'Erzähl mir kurz von {n:dat}.', 'Was weisst du über {n:akk}?', 'Was für eine Figur ist {n}?', 'Stell mir {n:akk} kurz vor.',
+      'Kannst du mir sagen, wer {n} ist?', 'Beschreib mir {n:akk} in ein paar Sätzen.', 'Was ist {n} für ein Mensch?',
+      'Wer ist eigentlich {n}?', 'Erzähl mir etwas über {n:akk}.', '{n} – wer ist das?', 'Welche Rolle spielt {n} in deiner Geschichte?',
+      'Stell mir {n:akk} vor.'],
     beruf: ['Was macht {n} beruflich?', 'Welchen Beruf hat {n}?', 'Als was arbeitet {n}?'],
     birth: ['Wann wurde {n} geboren?', 'In welchem Jahr kam {n} zur Welt?', 'Wann ist {n} geboren?'],
     family: ['Wer gehört zur Familie von {n:dat}?', 'Mit wem ist {n} verwandt?', 'Wie sieht die Familie von {n:dat} aus?'],
     schicht: ['Aus welcher Schicht stammt {n}?', 'Aus welchem Milieu kommt {n}?', 'In welchen Verhältnissen lebt {n}?'],
   },
   en: {
-    core: ['Who is {n}?', 'Tell me briefly about {n}.', 'What do you know about {n}?', 'What kind of character is {n}?', 'Introduce {n} to me.'],
+    core: ['Who is {n}?', 'Tell me briefly about {n}.', 'What do you know about {n}?', 'What kind of character is {n}?', 'Introduce {n} to me.',
+      'Can you tell me who {n} is?', 'Describe {n} to me in a few sentences.', 'What sort of person is {n}?',
+      'Who is {n}, actually?', 'Tell me something about {n}.', '{n} – who is that?', 'What role does {n} play in your story?',
+      'Present {n} to me.'],
     beruf: ['What does {n} do for a living?', "What is {n}'s job?", 'What does {n} work as?'],
     birth: ['When was {n} born?', 'In which year was {n} born?', "What is {n}'s year of birth?"],
     family: ["Who belongs to {n}'s family?", 'Who is {n} related to?', "What is {n}'s family like?"],
@@ -105,10 +115,7 @@ function relationsSentence(f, rels, langIsEn, form) {
   return familySentence(f, rels[0], langIsEn, 1);
 }
 
-function birthYear(f, eventsByFigPk) {
-  const ev = (eventsByFigPk.get(f.pk) || []).find(e => e.subtyp === 'geburt' && e.datum_year);
-  return ev ? ev.datum_year : null;
-}
+const birthYear = (f, eventsByFigPk) => ownBirthYear(f, eventsByFigPk);
 
 // Wichtigster persönlicher Wendepunkt: nur `typ = persoenlich`, nie
 // Weltgeschehen (`extern`, Untertyp `extern_*`) und nie die Geburt. Das
@@ -122,7 +129,9 @@ function turningPoint(f, names, eventsByFigPk, langIsEn) {
   if (!evs.length) return null;
   const rank = (e) => (TURN_RANK[e.subtyp] ?? 4) * 2 + (e.bedeutung ? 0 : 1);
   const ev = evs.map((e, i) => [e, i]).sort((a, b) => rank(a[0]) - rank(b[0]) || a[1] - b[1])[0][0];
-  const when = stripQualifier(eventWhen(ev, langIsEn).when || '');
+  // Datum nur, wenn es sicher ist: ein aus dem Kontext erschlossenes Jahr
+  // gehört nicht als Fakt ins Porträt.
+  const when = ev.datum_unsicher ? '' : stripQualifier(eventWhen(ev, langIsEn).when || '');
   const text = String(ev.ereignis).trim().replace(/[.\s]+$/, '');
   const bed = String(ev.bedeutung || '').trim();
   return {
@@ -143,8 +152,19 @@ function turningSentences(tp, subject, langIsEn) {
     : [`Zum Wendepunkt für ${subject} wird «${tp.text}»${at}.`, `Einschneidend für ${subject} ist «${tp.text}»${at}.`];
 }
 
+// Werdegang aus dem freien Berufsfeld: «Stefan ist Polymechaniker – zuerst im
+// Stahlwerk Gerlafingen, ab 1988 Facharbeiter …». Nur, wenn das Feld mit dem
+// Beruf beginnt und mehr trägt als ihn.
+function careerSentences(f, head, langIsEn) {
+  const raw = String(f.beruf || '').trim().replace(/[.\s]+$/, '');
+  if (!head || raw.length <= head.length + 3 || raw.length > 220 || !raw.toLowerCase().startsWith(head.toLowerCase())) return [];
+  const rest = raw.slice(head.length).replace(/^[\s,;]+/, '').replace(/^\(([^)]*)\)\s*[;,]?\s*/, '$1; ');
+  if (rest.length < 6) return [];
+  return [langIsEn ? `${f.name} is ${head} – ${rest}.` : `${f.name} ist ${head} – ${rest}.`];
+}
+
 const corePerTierOf = (opts, tier) => {
-  const map = { main: 5, side: 3, minor: 1, ...(opts.corePerTier || {}) };
+  const map = { main: 8, side: 4, minor: 1, ...(opts.corePerTier || {}) };
   return Math.max(1, Math.round(Number(map[tier]) || 1));
 };
 
@@ -181,7 +201,7 @@ function buildFigureCore(ctx, emitCard, relationFacts) {
     const later = pron || Nom;
     const typePhrase = figureTypePhrase(f.typ, g, langIsEn);
     const desc = firstSentences(f.beschreibung, 1);
-    const beruf = cleanBeruf(f.beruf);
+    const beruf = jobInSentence(berufHead(f.beruf));
     const ch = (appearancesByFigPk.get(f.pk) || []).find(Boolean);
     const loc = (locsByFig.get(f.fig_id) || [])[0];
     const tp = turningPoint(f, [f.name, ...info.aliases], eventsByFigPk, langIsEn);
@@ -257,11 +277,12 @@ function buildFigureCore(ctx, emitCard, relationFacts) {
       emitCard({ id: 'fig:' + f.fig_id + ':beruf', kind: 'figureAttr', unit, core: true, tier, subject: f.name, fields: { beruf } }, {
         task: 'figureAttr',
         questions: q('beruf'),
-        answers: isStatus(beruf)
+        answers: [...(isStatus(beruf)
           ? (langIsEn ? [`${f.name} is ${beruf}.`, `${f.name} is currently ${beruf}.`] : [`${f.name} ist ${beruf}.`, `Zurzeit ist ${f.name} ${beruf}.`])
           : langIsEn
-            ? [`${f.name} works as ${beruf}.`, `By profession, ${f.name} is ${beruf}.`, `${f.name}'s job: ${beruf}.`]
-            : [`${f.name} arbeitet als ${beruf}.`, `Von Beruf ist ${f.name} ${beruf}.`, `${f.name} verdient das Geld als ${beruf}.`],
+            ? [`${f.name} works as ${beruf}.`, `By profession, ${f.name} is ${beruf}.`, `${f.name} earns a living as ${beruf}.`]
+            : [`${f.name} arbeitet als ${beruf}.`, `Von Beruf ist ${f.name} ${beruf}.`, `${f.name} verdient das Geld als ${beruf}.`]),
+          ...careerSentences(f, beruf, langIsEn)],
       });
     }
     const year = birthYear(f, eventsByFigPk);
@@ -276,15 +297,14 @@ function buildFigureCore(ctx, emitCard, relationFacts) {
     }
     const allFam = familyOf(f, relationFacts, langIsEn);
     if (allFam.length) {
-      const list = allFam.map(r => `${r.other.name} (${r.noun})`).join(', ');
+      // Ganze Sätze («Rudolfs Ehefrau ist Johanna.»), nie «gehören: A (Ehefrau)».
       const sentences = allFam.map((r, i) => familySentence(f, r, langIsEn, i % 2)).join(' ');
+      const sentences2 = allFam.map((r, i) => familySentence(f, r, langIsEn, (i + 1) % 2)).join(' ');
       emitCard({ id: 'fig:' + f.fig_id + ':familie', kind: 'figureAttr', unit, core: true, tier, subject: f.name,
         fields: { familie: allFam.map(r => ({ name: r.other.name, rolle: r.noun })) } }, {
         task: 'figureAttr',
         questions: q('family'),
-        answers: langIsEn
-          ? [`To ${f.name}'s family belong: ${list}.`, sentences]
-          : [`Zur Familie von ${datOf(f.name)} gehören: ${list}.`, sentences],
+        answers: [sentences, sentences2],
       });
     }
     const schicht = SCHICHT_PROSA[String(f.sozialschicht || '').trim().toLowerCase()];
@@ -301,4 +321,4 @@ function buildFigureCore(ctx, emitCard, relationFacts) {
   }
 }
 
-module.exports = { buildFigureCore, countMentions, familyOf };
+module.exports = { buildFigureCore, countMentions, familyOf, familySentence, turningPoint, turningSentences, birthYear, careerSentences, PORTRAIT_QUESTIONS: Q };

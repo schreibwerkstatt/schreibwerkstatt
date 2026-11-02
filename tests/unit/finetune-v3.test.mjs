@@ -233,8 +233,10 @@ test('whoSays: nur lange, einmalige Zitate einer eindeutig benannten Figur', () 
 
 // ── 7. Studio-YAML ───────────────────────────────────────────────────────
 test('Studio-YAML: eval_steps als Anteil, feste Länge ohne Early Stopping, Gesamtschritte', () => {
-  const p = finetuneProfileById('ministral3-8b-16gb');
+  const p = finetuneProfileById('ministral3-8b-20gb');
   const yaml = buildStudioYaml(p, { maxSeqTokens: 4096, trainCount: 9637 });
+  // 16-GB-Profil: feste Sicherungsabstände.
+  assert.match(buildStudioYaml(finetuneProfileById('ministral3-8b-16gb'), { trainCount: 9637 }), /^ {2}save_steps: 100$/m);
   const val = (k) => Number(new RegExp(`^  ${k}: (.+)$`, 'm').exec(yaml)[1]);
   assert.ok(val('eval_steps') > 0 && val('eval_steps') < 1, 'Anteil 0–1');
   assert.equal(val('early_stopping_patience'), 0);

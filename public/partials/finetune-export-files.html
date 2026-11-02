@@ -61,6 +61,10 @@
           <span class="finetune-download-name" x-text="$app.t('finetune.files.eval')"></span>
           <span class="form-size-hint" x-text="finetuneFormatBytes(ex.stats.evalBytes)"></span>
         </button>
+        <button type="button" @click="finetuneDownloadJudge(ex.id)" x-show="ex.stats.evalBytes > 0">
+          <svg class="icon" aria-hidden="true"><use href="/icons.svg#download"/></svg>
+          <span class="finetune-download-name" x-text="$app.t('finetune.files.evalJudge')"></span>
+        </button>
         <button type="button" @click="finetuneDownload('val-facts', ex.id)" x-show="ex.stats.valFactsBytes > 0">
           <svg class="icon" aria-hidden="true"><use href="/icons.svg#download"/></svg>
           <span class="finetune-download-name">val-facts.jsonl</span>

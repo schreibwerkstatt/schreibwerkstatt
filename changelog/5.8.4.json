@@ -1,0 +1,26 @@
+{
+  "version": "5.8.4",
+  "date": "2026-11-02",
+  "entries": [
+    {
+      "kind": "neu",
+      "de": "Fine-Tuning-Export: vor dem Export prüft die Karte die Figurenbeziehungen auf Widersprüche, etwa zwei Väter oder ein Elternteil, der kaum älter ist. Betrifft ein Konflikt eine Hauptfigur, startet der Export erst nach deiner Bestätigung.",
+      "en": "Fine-tuning export: before exporting, the card checks character relationships for contradictions, such as two fathers or a parent who is barely older. If a conflict involves a main character, the export only starts once you confirm."
+    },
+    {
+      "kind": "neu",
+      "de": "Fine-Tuning-Export: das trainierte Modell lernt neu auch Warum-Fragen zu Ereignissen, Fragen vom Jahr zum Ereignis und gezielt die Kernfakten der Hauptfiguren. Es lehnt auch Fragen ab, die nur zum Teil ins Buch passen.",
+      "en": "Fine-tuning export: the trained model now also learns why-questions about events, questions from a year to its event, and the key facts about main characters. It also declines questions that only partly fit the book."
+    },
+    {
+      "kind": "verbessert",
+      "de": "Fine-Tuning-Export: die studio-config.yaml empfiehlt die Länge passend zu deinem Export und sagt, wie viele Beispiele darüber liegen. Das Standardprofil ist jetzt auf Grafikkarten mit 16 GB ausgelegt.",
+      "en": "Fine-tuning export: studio-config.yaml now recommends a length that fits your export and says how many examples exceed it. The default profile now targets graphics cards with 16 GB."
+    },
+    {
+      "kind": "verbessert",
+      "de": "Admin → Einstellungen → Provider: für den Fine-Tuning-Export lässt sich ein eigenes Claude-Modell wählen. Standard ist Haiku, damit Exporte günstig bleiben.",
+      "en": "Admin → Settings → Provider: you can pick a separate Claude model for the fine-tuning export. The default is Haiku, so exports stay inexpensive."
+    }
+  ]
+}

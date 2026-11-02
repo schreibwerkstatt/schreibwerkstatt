@@ -132,34 +132,67 @@ export function buildFinetuneVoiceRewritePrompt({ entityType, name, text, styleS
 
 export const SCHEMA_FT_VOICE_REWRITE = _obj({ antwort: _str });
 
-// Kernwissen-Varianten (samples/core-facts/ai-paraphrase.js): eine Antwort
-// N-mal anders formulieren, Fakten unverändert. Der Export prüft danach
-// Namen, Jahreszahlen und Beziehungswörter gegen die Vorlage und verwirft
-// jede Variante, der etwas davon fehlt.
+// Kernwissen-Varianten (samples/core-facts/ai-paraphrase.js): eine FRAGE
+// N-mal anders formulieren, so wie Leser sie stellen. Die Antwort bleibt die
+// Vorlage — eine umformulierte Antwort könnte einen neuen, falschen Fakt
+// enthalten. Der Export prüft danach, dass jede Frage alle Namen der Vorlage
+// trägt und keine anderen, und schickt sie durch Dedup und Overlap-Prüfung.
 export function buildFinetuneParaphrasePrompt({ question, answer, count = 3, langIsEn = false, bookName = '' }) {
   const lines = langIsEn
     ? [
-        `Rephrase the following answer from the book «${bookName || 'the book'}» ${count} times, each time differently worded.`,
+        `Rephrase the following reader question about the book «${bookName || 'the book'}» ${count} times, each time differently worded.`,
         '',
         'Rules:',
-        '- Keep every fact exactly: all names, years, numbers and relationship words (mother, son, …) appear unchanged in every variant.',
-        '- Add nothing, leave nothing out.',
-        '- Prose, 1–4 sentences, no lists, no labels.',
-        '- The variants must differ from the original and from each other in wording or sentence structure.',
+        '- Every variant asks for exactly the same thing; the answer below must fit every variant.',
+        '- Keep all names exactly as written; add no other names, years or facts.',
+        '- Mix direct, indirect and colloquial wording, as different readers would ask.',
+        '- One question per variant, no lists, no labels.',
       ]
     : [
-        `Formuliere die folgende Antwort aus dem Buch «${bookName || 'dem Buch'}» ${count}-mal neu, jedes Mal anders.`,
+        `Formuliere die folgende Leserfrage zum Buch «${bookName || 'dem Buch'}» ${count}-mal neu, jedes Mal anders.`,
         '',
         'Regeln:',
-        '- Jede Tatsache bleibt genau erhalten: alle Namen, Jahreszahlen, Zahlen und Beziehungswörter (Mutter, Sohn, …) stehen unverändert in jeder Variante.',
-        '- Nichts hinzufügen, nichts weglassen.',
-        '- Fliesstext, 1–4 Sätze, keine Liste, keine Etiketten.',
-        '- Die Varianten unterscheiden sich vom Original und voneinander in Wortwahl oder Satzbau.',
+        '- Jede Variante fragt genau dasselbe; die Antwort unten muss zu jeder Variante passen.',
+        '- Alle Namen bleiben genau so geschrieben; keine weiteren Namen, Jahreszahlen oder Fakten hinzufügen.',
+        '- Direkte, indirekte und umgangssprachliche Formulierungen mischen, wie verschiedene Leser fragen würden.',
+        '- Eine Frage pro Variante, keine Liste, keine Etiketten.',
       ];
   lines.push('', 'Schema:\n{ "varianten": ["...", "..."] }', '');
   lines.push(langIsEn ? 'Question:' : 'Frage:', question, '');
-  lines.push(langIsEn ? 'Answer:' : 'Antwort:', answer);
+  lines.push(langIsEn ? 'Answer (stays unchanged):' : 'Antwort (bleibt unverändert):', answer);
   return lines.join('\n');
 }
 
 export const SCHEMA_FT_PARAPHRASE = _obj({ varianten: { type: 'array', items: _str } });
+
+// Warum-Leserfragen zu einer Warum-Karte (samples/core-facts/ai-paraphrase.js
+// #buildAiWhyQuestions): so gefragt, wie Leser fragen — Perfekt, Präsens,
+// umgangssprachlich, ohne den Ereignistitel in Anführungszeichen. Die Antwort
+// bleibt die geprüfte aus den Daten; Schema wie die Fragevarianten.
+export function buildFinetuneWhyQuestionsPrompt({ event, figure, own = true, answer, count = 6, langIsEn = false, bookName = '' }) {
+  const lines = langIsEn
+    ? [
+        `A reader of the book «${bookName || 'the book'}» wants to understand an event. Write ${count} different questions a reader would ask about it, ${own ? `about why ${figure} acts this way` : `about how ${figure} experiences it and what goes on inside ${figure}`}.`,
+        '',
+        'Rules:',
+        '- Ask the way readers talk: past and present tense mixed, direct and colloquial, e.g. "Why did … ?", "What made … ?".',
+        '- Describe the event in your own words; never quote its title in «» or quotation marks.',
+        '- Use every name from the event exactly as written; add no other names, years or facts.',
+        '- The answer below must fit every question.',
+        '- One question per variant, no lists, no labels.',
+      ]
+    : [
+        `Eine Leserin des Buchs «${bookName || 'dem Buch'}» will ein Ereignis verstehen. Formuliere ${count} verschiedene Fragen, wie Leser sie stellen würden, ${own ? `danach, warum ${figure} so handelt` : `danach, wie ${figure} es erlebt und was in ${figure} vorgeht`}.`,
+        '',
+        'Regeln:',
+        '- Frag so, wie Leser reden: Perfekt und Präsens gemischt, direkt und umgangssprachlich, z. B. «Warum hat … ?», «Was hat … dazu gebracht, …?».',
+        '- Beschreib das Ereignis mit eigenen Worten; nie den Titel in «» oder Anführungszeichen zitieren.',
+        '- Jeden Namen aus dem Ereignis genau so verwenden; keine weiteren Namen, Jahreszahlen oder Fakten hinzufügen.',
+        '- Die Antwort unten muss zu jeder Frage passen.',
+        '- Eine Frage pro Variante, keine Liste, keine Etiketten.',
+      ];
+  lines.push('', 'Schema:\n{ "varianten": ["...", "..."] }', '');
+  lines.push(langIsEn ? 'Event:' : 'Ereignis:', event, '');
+  lines.push(langIsEn ? 'Answer (stays unchanged):' : 'Antwort (bleibt unverändert):', answer);
+  return lines.join('\n');
+}

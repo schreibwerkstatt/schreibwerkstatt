@@ -14,6 +14,10 @@ const { hashSplit } = require('./names');
 //     Einheit (Sammellisten, Kreuzfragen) nur Train.
 //   - Kernwissen (`sample.core`: Grundfakten der Figuren) bleibt immer im
 //     Train — Val hält nur übrige Fakten zurück.
+//   - Ablehnungen (Familie `refusal`) werden je Untertyp gezogen, mit
+//     Mindestzahl (`valRefusalMin`, Profil): `val-refusal` misst jede Art von
+//     Ablehnung, nicht nur die häufigste. Höchstens die Hälfte eines
+//     Untertyps geht in Val.
 // Val-Einheiten werden per Hash gereiht und als fester Anteil gezogen, nicht
 // pro Einheit gewürfelt: bei 66 Abschnitten schwankte ein Münzwurf zu stark.
 
@@ -84,13 +88,38 @@ function pagesOfSample(index, sample) {
   return out;
 }
 
+// Val-Einheiten der Ablehnungen, je Untertyp (`e.s.task`) geschichtet.
+function pickRefusalVal(entries, opts) {
+  const byTask = new Map();
+  for (const e of entries) {
+    if (!byTask.has(e.s.task)) byTask.set(e.s.task, new Map());
+    const units = byTask.get(e.s.task);
+    units.set(e.s.unit, (units.get(e.s.unit) || 0) + 1);
+  }
+  const out = new Set();
+  for (const [task, units] of byTask) {
+    const total = [...units.values()].reduce((a, n) => a + n, 0);
+    const target = Math.max(Number(opts.valRefusalMin?.[task]) || 0, Math.round(total * opts.valSplit));
+    const ordered = [...units].sort((a, b) => hashSplit('val|' + a[0], opts.valSeed) - hashSplit('val|' + b[0], opts.valSeed));
+    let n = 0;
+    for (const [unit, c] of ordered) {
+      if (n >= target || n + c > total / 2) break;
+      out.add(unit);
+      n += c;
+    }
+  }
+  return out;
+}
+
 // → { train, val, mixed, valUnits } (Arrays der übergebenen Einträge `{ s, … }`).
 function splitByUnits(entries, { pageContents, opts }) {
   const train = [], val = [], mixed = [];
   if (!(opts.valSplit > 0)) return { train: entries.slice(), val, mixed, valUnits: new Set() };
   const index = buildPageIndex(pageContents || []);
   const valPages = valPageKeys(pageContents || [], opts);
-  const valEntities = pickValUnits(entries.filter(e => !e.s.core).map(e => e.s.unit).filter(Boolean), opts.valSplit, opts.valSeed);
+  const isRefusal = (e) => e.family === 'refusal' && e.s.unit;
+  const valEntities = pickValUnits(entries.filter(e => !e.s.core && !isRefusal(e)).map(e => e.s.unit).filter(Boolean), opts.valSplit, opts.valSeed);
+  for (const u of pickRefusalVal(entries.filter(e => !e.s.core && isRefusal(e)), opts)) valEntities.add(u);
   for (const e of entries) {
     if (e.s.core) { train.push(e); continue; }
     const pages = pagesOfSample(index, e.s);
@@ -150,4 +179,4 @@ function valOverlap(trainSamples, valSamples) {
   return { prompt, answer, shingle };
 }
 
-module.exports = { splitByUnits, valOverlap, valPageKeys, pickValUnits, normText, pagesOfSample, buildPageIndex };
+module.exports = { splitByUnits, valOverlap, valPageKeys, pickValUnits, pickRefusalVal, normText, pagesOfSample, buildPageIndex };

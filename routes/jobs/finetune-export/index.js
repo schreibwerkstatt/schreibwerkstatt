@@ -2,6 +2,7 @@
 
 const express = require('express');
 const { getBookSettings } = require('../../../db/schema');
+const { getMeta: getPublicationMeta } = require('../../../db/book-publication');
 const {
   makeJobLogger, updateJob, completeJob, failJob, contentHttpError,
   loadOrderedBookContents, loadPageContents,
@@ -17,11 +18,16 @@ const {
 } = require('../../../db/finetune-exports');
 const JSZip = require('jszip');
 const { buildEvalPrompts } = require('./lib/eval-prompts');
-const { qualityLogLine, coreFactCoverage } = require('./lib/export-stats');
+const { qualityLogLine, coreFactCoverage, coreFactVariants } = require('./lib/export-stats');
 const { loadEventData } = require('./samples/author-chat/event-data');
-const { buildCoreFactSamples } = require('./samples/core-facts');
-const { buildAiParaphraseSamples } = require('./samples/core-facts/ai-paraphrase');
-const { relationTypes, finetuneProfiles } = require('../../../lib/esm-bridge');
+const { buildCoreFactSamples, prepareFigureInfo } = require('./samples/core-facts');
+const { checkRelations } = require('./lib/relation-check');
+const { buildAiParaphraseSamples, buildAiWhyQuestions } = require('./samples/core-facts/ai-paraphrase');
+const { relationTypes, finetuneProfiles, finetuneStudioFiles } = require('../../../lib/esm-bridge');
+const { tServerParams } = require('../../../lib/i18n-server');
+const { buildEvalJudgeMd } = require('./lib/eval/judge-md');
+const { applyFinetuneAiOverrides } = require('./lib/ai-overrides');
+const { resolveProvider } = require('../../../lib/ai');
 const { fileSafeName, formatExportTimestamp } = require('../../../lib/filenames');
 
 const { buildStyleSamples } = require('./samples/style');
@@ -88,7 +94,10 @@ async function runFinetuneExportJob(jobId, bookId, bookName, userEmail, opts) {
     // fester Wert über dem Budget hiesse, dass der Seq-Filter genau die Samples
     // verwirft, die den Buchtext am vollständigsten tragen. Ohne `maxSeqTokens`
     // 60000 chars ≈ 18000 Tekken-V7-Tokens DE.
-    const charsPerToken = langIsEn ? 4.0 : 3.3;
+    const profiles = await finetuneProfiles();
+    const profile = profiles.finetuneProfileById(opts.profileId);
+    // Zeichen pro Token des Profil-Tokenizers (Tekken, Qwen …).
+    const charsPerToken = profile.charsPerToken?.[langIsEn ? 'en' : 'de'] || (langIsEn ? 4.0 : 3.3);
     const derivedFullChars = maxSeqTokens > 0
       ? Math.floor((maxSeqTokens - 20) * charsPerToken * 0.6)
       : 60000;
@@ -114,8 +123,6 @@ async function runFinetuneExportJob(jobId, bookId, bookName, userEmail, opts) {
     // Budget, Ablehnen): Quelle ist das Trainingsprofil
     // (public/js/book/finetune-profiles.js#exportOptions); die Karte schickt sie
     // mit, fehlende Werte füllt der Server aus derselben Quelle.
-    const profiles = await finetuneProfiles();
-    const profile = profiles.finetuneProfileById(opts.profileId);
     const exportOpts = normalizeExportOptions(profiles.exportOptions(profile), opts.export);
 
     // Einheitliche Identität über alle Sample-Typen: Modell soll *eine* Stimme
@@ -133,7 +140,7 @@ async function runFinetuneExportJob(jobId, bookId, bookName, userEmail, opts) {
     // Normalised opts mit übernommenen Defaults — wird in alle Sub-Module gereicht.
     const optsNorm = { ...opts, ...exportOpts, minChars, maxChars, valSplit, valSeed: seed, maxSeqTokens, emitText,
                        fulltext, maxFullChars, truncateLong, biasBoost, maxTypeShare,
-                       maxPerAnswer, profileId: profile.id };
+                       maxPerAnswer, profileId: profile.id, charsPerToken, chatTemplate: profile.chatTemplate || 'mistral' };
 
     const ctx = {
       jobId, logger,
@@ -148,11 +155,34 @@ async function runFinetuneExportJob(jobId, bookId, bookName, userEmail, opts) {
       // Beziehungstypen (normalisieren, kanonische Richtung) — Kernwissen und
       // Falsche-Annahme-Fragen brauchen dieselbe Lesart wie der Figurengraph.
       relTypes: await relationTypes(),
+      // Autor, Erscheinungsjahr, Verlag — Antworten auf Meta-Fragen
+      // (samples/reader/refusals.js#buildMetaSamples), Quelle `book_publication`.
+      publication: getPublicationMeta(bookIdInt),
+      // Modell der KI-Teile (`ai.claude.model.finetune`, Standard Haiku) — geht
+      // in jeden versionTag der Augment-Caches.
+      aiModel: applyFinetuneAiOverrides(resolveProvider({ userEmail }), logger),
       ...data,
     };
     // Zeitstrahl einmal angereichert: Szenen-Sampler (Inhalt statt Lektorat),
     // Kernwissen (Ereignis-Facetten, Kapitelinhalt) und Buchwissen teilen ihn.
     Object.assign(ctx, loadEventData(ctx));
+
+    // Beziehungsprüfung vor allen Samplern (lib/relation-check.js): betroffene
+    // Paare fallen aus allen Fakten-Aufgaben. Konflikte bei Hauptfiguren
+    // halten den Export an, bis der Autor sie bestätigt
+    // (`allowRelationConflicts`) — korrigiert wird nichts.
+    prepareFigureInfo(ctx);
+    const relCheck = checkRelations(ctx);
+    ctx.relationExcluded = relCheck.pairs;
+    if (relCheck.conflicts.length) {
+      logger.info(`Beziehungsprüfung: ${relCheck.conflicts.length} Konflikte (${relCheck.mainCount} mit Hauptfiguren), `
+        + `${relCheck.pairs.size} Paare ausgelassen.`);
+    }
+    if (relCheck.mainCount && !opts.allowRelationConflicts) {
+      completeJob(jobId, { blocked: 'relationConflicts', relationConflicts: publicConflicts(relCheck.conflicts) }, null,
+        `angehalten: ${relCheck.mainCount} Beziehungskonflikte bei Hauptfiguren`);
+      return;
+    }
 
     logger.info(`Seiten geladen: ${pageContents.length} Seiten, ${data.figNamesSorted.length} Figuren bekannt.`);
     if (data.droppedSlugNames.length) {
@@ -192,10 +222,14 @@ async function runFinetuneExportJob(jobId, bookId, bookName, userEmail, opts) {
       updateJob(jobId, { progress: 89, statusText: 'finetune.phase.coreFacts' });
       buildCoreFactSamples(ctx);
       logger.info(`Kernwissen fertig: ${counts.core} Samples, ${ctx.factCards.length} Faktenkarten, `
-        + `${ctx.eligibleFigIds.size} Figuren ab ${optsNorm.minMentions} Erwähnungen, ${ctx.relationConflicts} widersprüchliche Beziehungen ausgelassen.`);
+        + `${ctx.eligibleFigIds.size} Figuren ab ${optsNorm.minMentions} Erwähnungen, ${ctx.conflictDropped || 0} Beziehungen wegen Konflikt ausgelassen.`);
       if (optsNorm.aiParaphrase) {
         updateJob(jobId, { progress: 90, statusText: 'finetune.phase.aiParaphrase' });
         await buildAiParaphraseSamples(ctx);
+      }
+      if (optsNorm.aiWhyQuestions) {
+        updateJob(jobId, { progress: 90, statusText: 'finetune.phase.aiWhyQuestions' });
+        await buildAiWhyQuestions(ctx);
       }
       updateJob(jobId, { progress: 90, statusText: 'finetune.phase.authorChat' });
       buildAuthorChatSamples(ctx);
@@ -234,6 +268,9 @@ async function runFinetuneExportJob(jobId, bookId, bookName, userEmail, opts) {
     // Der System-Prompt reist mit: das Modelfile der Karte muss ihn wörtlich
     // tragen, sonst verliert das Modell die trainierte Persona.
     stats.systemPrompt = unifiedSys;
+    stats.bookName = bookName || '';
+    stats.lang = langIsEn ? 'en' : 'de';
+    stats.evalDropped = ctx.evalDropped || null;
     stats.voiceRewritten = counts.voiceRewritten || 0;
     stats.evalCount = evalPrompts.length;
     stats.evalBytes = Buffer.byteLength(evalJsonl, 'utf8');
@@ -243,7 +280,13 @@ async function runFinetuneExportJob(jobId, bookId, bookName, userEmail, opts) {
     stats.verbatimTokenShare = stats.quality.verbatimTokenShare;
     stats.aiAugmentCount = (stats.aiAugmentCount || 0) + fin.trainOut.concat(fin.valOut).filter(s => s.aiParaphrase).length;
     stats.coreFactCoverage = coreFactCoverage(fin.trainOut, ctx.eligibleFigIds, ctx.relationFacts);
-    stats.relationConflicts = ctx.relationConflicts || 0;
+    stats.coreFactVariants = coreFactVariants(fin.trainOut, ctx.coreFactsByFig, (id) => ctx.figNameInfo?.get(id)?.name || id);
+    stats.chapterMismatches = (ctx.chapterMismatches || []).slice(0, 50);
+    stats.relationConflicts = publicConflicts(relCheck.conflicts);
+    stats.relationConflictsMain = relCheck.mainCount;
+    stats.relationConflictsAllowed = !!(relCheck.mainCount && opts.allowRelationConflicts);
+    stats.conflictDropped = ctx.conflictDropped || 0;
+    stats.relationResidual = ctx.relationResidual || 0;
     stats.factCards = (ctx.factCards || []).length;
     stats.profileId = profile.id;
     stats.exportOptions = exportOpts;
@@ -267,6 +310,9 @@ async function runFinetuneExportJob(jobId, bookId, bookName, userEmail, opts) {
   }
 }
 
+// Konfliktliste für Statistik und Karte: ohne die internen Paar-Schlüssel.
+const publicConflicts = (list) => list.map(({ pairs, ...c }) => c);
+
 const clamp = (v, lo, hi, dflt) => (Number.isFinite(Number(v)) ? Math.max(lo, Math.min(hi, Number(v))) : dflt);
 const shareMap = (over, base) => Object.fromEntries(Object.entries(base)
   .map(([k, v]) => [k, clamp(over?.[k], 0, 1, v)]));
@@ -287,7 +333,10 @@ function normalizeExportOptions(base, over = {}) {
     factParaphrases: Math.round(clamp(o.factParaphrases, 1, 10, base.factParaphrases)),
     maxVariantsPerFact: Math.round(clamp(o.maxVariantsPerFact, 1, 10, base.maxVariantsPerFact)),
     corePerTier: Object.fromEntries(Object.entries(base.corePerTier)
-      .map(([k, v]) => [k, Math.round(clamp(o.corePerTier?.[k], 1, 10, v))])),
+      .map(([k, v]) => [k, Math.round(clamp(o.corePerTier?.[k], 1, 13, v))])),
+    coreFactRepeat: Math.round(clamp(o.coreFactRepeat, 1, 4, base.coreFactRepeat)),
+    valRefusalMin: Object.fromEntries(Object.entries(base.valRefusalMin || {})
+      .map(([k, v]) => [k, Math.round(clamp(o.valRefusalMin?.[k], 0, 100, v))])),
     familyTokenShares: shareMap(o.familyTokenShares, base.familyTokenShares),
     refusalShareBasis: 'count',
     refusalShare: clamp(o.refusalShare, 0, 0.5, base.refusalShare),
@@ -295,9 +344,11 @@ function normalizeExportOptions(base, over = {}) {
     verbatimMaxTokenShare: clamp(o.verbatimMaxTokenShare, 0, 1, base.verbatimMaxTokenShare),
     maxAnswerChars: caps,
     maxTargetsPerParagraph: Math.round(clamp(o.maxTargetsPerParagraph, 0, 50, base.maxTargetsPerParagraph)),
+    maxPerFactAnswer: Math.round(clamp(o.maxPerFactAnswer, 0, 50, base.maxPerFactAnswer ?? 0)),
     whoSaysMinWords: Math.round(clamp(o.whoSaysMinWords, 1, 50, base.whoSaysMinWords)),
     editorFeedback: typeof o.editorFeedback === 'boolean' ? o.editorFeedback : !!base.editorFeedback,
     aiParaphrase: typeof o.aiParaphrase === 'boolean' ? o.aiParaphrase : !!base.aiParaphrase,
+    aiWhyQuestions: typeof o.aiWhyQuestions === 'boolean' ? o.aiWhyQuestions : !!base.aiWhyQuestions,
     critiquePatterns: Array.isArray(o.critiquePatterns) ? o.critiquePatterns.filter(p => typeof p === 'string' && p.length < 500).slice(0, 100) : undefined,
   };
 }
@@ -308,7 +359,7 @@ const numOr = (v, dflt) => (v === undefined || v === null || v === '' || !Number
 finetuneExportRouter.post('/finetune-export', jsonBody, (req, res) => {
   const { book_id, book_name, types, min_chars, max_chars, val_split, val_seed,
           max_seq_tokens, emit_text, fulltext, max_full_chars, truncate_long, bias_boost,
-          max_type_share, max_per_answer, ai, profile, export: exportBody } = req.body || {};
+          max_type_share, max_per_answer, ai, profile, export: exportBody, allow_relation_conflicts } = req.body || {};
   if (!book_id) return res.status(400).json({ error_code: 'BOOK_ID_REQUIRED' });
   setContext({ book: toIntId(book_id) });
   if (!guardBook(req, res, book_id, 'editor')) return;
@@ -347,6 +398,7 @@ finetuneExportRouter.post('/finetune-export', jsonBody, (req, res) => {
     maxPerAnswer: numOr(max_per_answer, 2),
     profileId: typeof profile === 'string' ? profile : null,
     export: exportBody && typeof exportBody === 'object' ? exportBody : {},
+    allowRelationConflicts: allow_relation_conflicts === true,
     ai: aiOpts,
   };
   const userEmail = sessionEmail(req);
@@ -357,6 +409,23 @@ finetuneExportRouter.post('/finetune-export', jsonBody, (req, res) => {
   const jobId = createJob('finetune-export', book_id, userEmail, label, labelParams);
   enqueueJob(jobId, () => runFinetuneExportJob(jobId, book_id, book_name || '', userEmail, opts));
   res.json({ jobId });
+});
+
+// Beziehungsprüfung ohne Export (lib/relation-check.js): die Karte zeigt die
+// Konflikte vor dem Start, mit Verweis auf die Figuren. Keine KI, nur Daten.
+finetuneExportRouter.get('/finetune-export/relation-check', async (req, res) => {
+  const bookId = toIntId(req.query.book_id);
+  if (!bookId) return res.status(400).json({ error_code: 'BOOK_ID_REQUIRED' });
+  setContext({ book: bookId });
+  if (!guardBook(req, res, bookId, 'editor')) return;
+  const userEmail = sessionEmail(req);
+  const { chMap, pages } = await loadOrderedBookContents(bookId).catch(e => { throw contentHttpError(e); });
+  const pageContents = await loadPageContents(pages, chMap, 30, null);
+  const langIsEn = (getBookSettings(bookId, userEmail).language || 'de') === 'en';
+  const ctx = { ...loadFinetuneData({ bookIdInt: bookId, userEmail, pageContents, langIsEn }), pageContents, relTypes: await relationTypes() };
+  prepareFigureInfo(ctx);
+  const { conflicts, mainCount } = checkRelations(ctx);
+  res.json({ conflicts: publicConflicts(conflicts), mainCount });
 });
 
 // Gespeicherte Sets dieses Users fürs Buch, neuestes zuerst, je mit Hinweis,
@@ -418,11 +487,41 @@ finetuneExportRouter.get('/finetune-export/export.zip', async (req, res) => {
     if (buf) zip.file(downloadName(s.ex, s.bookId, kind, 'jsonl'), buf);
   }
   zip.file(downloadName(s.ex, s.bookId, 'stats', 'json'), statsJson(s.ex));
+  // Beilagen fürs Training, aus dem Set erzeugt (public/js/book/finetune-studio-files.js):
+  // Studio-Config mit der empfohlenen Sequenzlänge, Modelfile mit dem
+  // System-Prompt des Trainings, Bewertungsanleitung zum Eval-Set.
+  const st = s.ex.stats || {};
+  const locale = st.lang || 'de';
+  const t = (key, params) => tServerParams(key, params, locale);
+  const files = await finetuneStudioFiles();
+  zip.file(downloadName(s.ex, s.bookId, 'studio-config', 'yaml'), files.studioYamlFor({ profileId: st.profileId, stats: st, t }));
+  const modelfile = files.modelfileFor({ stats: st, bookName: st.bookName || '', t });
+  if (modelfile) zip.file(downloadName(s.ex, s.bookId, 'Modelfile', 'txt'), modelfile);
+  const judge = await evalJudgeMd(s.ex);
+  if (judge) zip.file(downloadName(s.ex, s.bookId, 'eval-judge', 'md'), judge);
   const out = await zip.generateAsync({ type: 'nodebuffer', compression: 'DEFLATE' });
   res.setHeader('Content-Type', 'application/zip');
   res.setHeader('Content-Disposition', `attachment; filename="${downloadName(s.ex, s.bookId, 'all-files', 'zip')}"`);
   res.setHeader('Content-Length', out.length);
   res.end(out);
+});
+
+// Bewertungsanleitung zum Eval-Set (lib/eval/judge-md.js), aus eval.jsonl erzeugt.
+async function evalJudgeMd(ex) {
+  const buf = await readFinetuneFile(ex.id, 'eval');
+  if (!buf) return null;
+  const items = buf.toString('utf8').split('\n').filter(Boolean).map(l => JSON.parse(l));
+  return buildEvalJudgeMd(items, { bookName: ex.stats?.bookName || '', langIsEn: ex.stats?.lang === 'en' });
+}
+
+finetuneExportRouter.get('/finetune-export/eval-judge.md', async (req, res) => {
+  const s = savedExport(req, res);
+  if (!s) return;
+  const md = await evalJudgeMd(s.ex);
+  if (!md) return res.status(404).json({ error_code: 'JSONL_EMPTY' });
+  res.setHeader('Content-Type', 'text/markdown; charset=utf-8');
+  res.setHeader('Content-Disposition', `attachment; filename="${downloadName(s.ex, s.bookId, 'eval-judge', 'md')}"`);
+  res.send(md);
 });
 
 finetuneExportRouter.get('/finetune-export/:kind.jsonl', async (req, res) => {

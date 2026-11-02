@@ -476,6 +476,7 @@ export {
   buildFinetuneFactQAPrompt,
   buildFinetuneVoiceRewritePrompt,
   buildFinetuneParaphrasePrompt,
+  buildFinetuneWhyQuestionsPrompt,
   SCHEMA_FT_REVERSE_PROMPTS,
   SCHEMA_FT_FACT_QA,
   SCHEMA_FT_VOICE_REWRITE,

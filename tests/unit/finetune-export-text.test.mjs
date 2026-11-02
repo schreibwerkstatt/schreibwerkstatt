@@ -21,6 +21,8 @@ const { nameRegex, findSpeaker } = require('../../routes/jobs/finetune-export/li
 const { buildSceneSamples } = require('../../routes/jobs/finetune-export/samples/scene.js');
 const { finalizeFinetuneSamples } = require('../../routes/jobs/finetune-export/finalize.js');
 const { buildEvalPrompts } = require('../../routes/jobs/finetune-export/lib/eval-prompts.js');
+const { validateEvalItem } = require('../../routes/jobs/finetune-export/lib/eval/criteria.js');
+const { buildEvalJudgeMd } = require('../../routes/jobs/finetune-export/lib/eval/judge-md.js');
 const { valPageKeys } = require('../../routes/jobs/finetune-export/lib/split.js');
 
 const sentences = (n, from = 0) => Array.from({ length: n }, (_, i) => `Satz Nummer ${from + i + 1} erzählt etwas vom langen Tag am See.`).join(' ');
@@ -122,10 +124,10 @@ test('finalize: all.jsonl = train + val, leer ohne val', () => {
   assert.equal(run(0).allJsonl, '');
 });
 
-test('Testprompts: Holdout-Markierung folgt dem Split, jede Frage mit Referenz und Prüfwörtern', () => {
+test('Testprompts: Holdout-Markierung folgt dem Split, jede Frage mit auswertbarem Kriterium', () => {
   const chapterKeys = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10];
   const pageContents = Array.from({ length: 20 }, (_, i) => ({ id: i + 1, chapter_id: (i % 10) + 1, text: pageText(i + 100, 200) }));
-  const anna = { fig_id: 'a', name: 'Anna', geschlecht: 'weiblich' };
+  const anna = { fig_id: 'a', name: 'Anna', geschlecht: 'weiblich', typ: 'hauptfigur' };
   const ben = { fig_id: 'b', name: 'Ben', geschlecht: 'männlich' };
   const ctx = {
     langIsEn: false, unifiedSys: 'SYS', opts: { valSplit: 0.3, valSeed: 0 }, displayName: 'Buch',
@@ -147,26 +149,43 @@ test('Testprompts: Holdout-Markierung folgt dem Split, jede Frage mit Referenz u
   };
   const rows = buildEvalPrompts(ctx);
   const cats = new Set(rows.map(r => r.category));
-  for (const c of ['figure', 'relation', 'chapter', 'continuation', 'newChapter', 'offTopic', 'unknown', 'falsePremise']) assert.ok(cats.has(c), c);
+  for (const c of ['figure', 'relation', 'chapter', 'continuation', 'newChapter', 'offTopic', 'unknown', 'falsePremise', 'meta', 'mixed']) assert.ok(cats.has(c), c);
   assert.ok(!cats.has('reverseLookup'), 'keine Abschnitt-Suche');
   for (const r of rows) {
     assert.equal(r.messages[0].content, 'SYS');
-    assert.ok(typeof r.expected === 'string' && r.expected.length > 0, `${r.category}: expected`);
-    assert.ok(Array.isArray(r.mustContain) && r.mustContain.length > 0, `${r.category}: mustContain`);
+    assert.equal(validateEvalItem(r), null, `${r.category}: Kriterium`);
+    for (const k of ['mustContain', 'mustContainAny', 'mustNotContain', 'factIds']) assert.ok(Array.isArray(r[k]), `${r.category}: ${k}`);
   }
-  assert.deepEqual(rows.find(r => r.category === 'relation').mustContain, ['Mutter']);
-  assert.deepEqual(rows.find(r => r.category === 'falsePremise').mustContain, ['Mutter']);
+  // Beziehung: Rollenwort mit Synonymen und Gegenrolle; Falschannahme: richtige Rolle.
+  const rel = rows.find(r => r.category === 'relation');
+  assert.ok(rel.mustContainAny[0].includes('Mutter') && rel.mustContainAny[0].includes('Sohn'), JSON.stringify(rel.mustContainAny));
+  assert.ok(rows.find(r => r.category === 'falsePremise').mustContainAny[0].includes('Mutter'));
+  // Ablehnung: Marker statt «nicht», Porträt-Marker verboten.
+  const unk = rows.find(r => r.category === 'unknown');
+  assert.ok(unk.mustContainAny[0].length > 3 && unk.mustNotContain.includes('Randfigur'));
+  // Hälfte der Fragen in neuen Formen.
+  for (const c of ['figure', 'unknown']) {
+    const list = rows.filter(r => r.category === c);
+    assert.ok(list.some(r => r.holdout === 'phrasing') && list.some(r => r.holdout === false), c);
+  }
   const valPages = valPageKeys(pageContents, ctx.opts);
   const cont = rows.filter(r => r.category === 'continuation');
   assert.ok(cont.length > 0);
   for (const r of cont) {
     const p = pageContents.find(pc => r.messages[1].content.includes(pc.text.split('.')[0]));
-    assert.equal(r.holdout, valPages.has('p:' + p.id));
+    if (valPages.has('p:' + p.id)) assert.equal(r.holdout, 'text');
+    assert.match(r.judge, /Stil wie im Buch/);
   }
-  assert.ok(cont.some(r => r.holdout), 'Fortsetzungen bevorzugt aus dem Holdout');
+  assert.ok(cont.some(r => r.holdout === 'text'), 'Fortsetzungen bevorzugt aus dem Holdout');
   // Eine Frage, die wörtlich im Train steht, fällt weg.
   const trainPrompts = new Set([rows[0].messages[1].content]);
   assert.ok(!buildEvalPrompts(ctx, { trainPrompts }).some(r => r.messages[1].content === rows[0].messages[1].content));
+  // Referenz mit einem gemeldeten Beziehungskonflikt fällt weg.
+  const blocked = buildEvalPrompts({ ...ctx, relationExcluded: new Set(['a|b']) });
+  assert.ok(!blocked.some(r => /Mutter/.test(r.expected) && /Ben/.test(r.expected) && /Anna/.test(r.expected)));
+  // Bewertungsanleitung: jede Frage mit Punktefeld.
+  const md = buildEvalJudgeMd(rows, { bookName: 'Buch' });
+  assert.equal((md.match(/Punkte: __ \/ 2/g) || []).length, rows.length);
 });
 
 test('Modelfile: Muster in der Doku == Generator, Template ohne literales <s>', () => {

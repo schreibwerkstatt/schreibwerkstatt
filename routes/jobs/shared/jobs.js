@@ -176,6 +176,7 @@ function createJob(type, bookId, userEmail, label, labelParams = null, dedupId =
     if (type === 'komplett-analyse' || type === 'kontinuitaet') overrideKey = `ai.${provider}.model.komplett`;
     else if (type === 'book-chat' && provider === 'claude') overrideKey = 'ai.claude.model.bookchat';
     else if ((type === 'check' || type === 'batch-check') && provider === 'claude') overrideKey = 'ai.claude.model.lektorat';
+    else if (type === 'finetune-export' && provider === 'claude') overrideKey = 'ai.claude.model.finetune';
     if (overrideKey) {
       const overrideModel = String(appSettings.get(overrideKey) || '').trim();
       if (overrideModel) model = overrideModel;

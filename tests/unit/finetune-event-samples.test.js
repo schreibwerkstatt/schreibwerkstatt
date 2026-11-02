@@ -15,7 +15,9 @@ test('eventWhen: «unbekannt» und Zitat-Labels sind keine Zeitangabe', () => {
   const span = eventWhen({ datum_year: 1840, datum_month: 3, datum_ende_year: 1842 }, false);
   assert.equal(span.when, 'von März 1840 bis 1842');
   assert.equal(span.end, '1842');
-  assert.match(eventWhen({ datum: '1806', datum_unsicher: 1 }, false).when, /erschlossen/);
+  // Erschlossenes Jahr: ohne Zusatz im Text, als `unsure` markiert.
+  assert.equal(eventWhen({ datum: '1806', datum_unsicher: 1 }, false).when, '1806');
+  assert.equal(eventWhen({ datum: '1806', datum_unsicher: 1 }, false).unsure, true);
 });
 
 test('eventExcerpt: Fenster um die beteiligte Figur, auch ohne Absatzumbrüche', () => {

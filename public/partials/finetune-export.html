@@ -16,7 +16,7 @@
     </div>
     <div class="card-actions">
       <button type="button" class="icon-btn icon-btn--ghost"
-              @click="runFinetuneExport()"
+              @click="finetuneStart()"
               :disabled="finetuneLoading || !$store.nav.selectedBookId"
               :data-tip="finetuneLoading ? $app.t('finetune.generating') : $app.t('finetune.generate')"
               :aria-label="$app.t('finetune.generate')">
@@ -27,6 +27,7 @@
   </div>
 
   <p class="form-lead" x-text="$app.t('finetune.lead')"></p>
+  <div id="partial-finetune-export-checks"></div>
 
   <div class="card-form-grid">
 

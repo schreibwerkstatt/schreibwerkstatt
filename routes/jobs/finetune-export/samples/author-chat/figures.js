@@ -1,7 +1,7 @@
 'use strict';
 
-const { datOf } = require('../core-facts/words');
-const { whenAdverb } = require('../core-facts/events');
+const { datOf, isOwnLifeEvent } = require('../core-facts/words');
+const { whenAdverb, joinList } = require('../core-facts/events');
 
 const { eventDetailParts, eventWhen, leadSafe } = require('./event-data');
 
@@ -78,26 +78,50 @@ function buildFigureBaseSamples(ctx) {
   }
 
   // ── Figuren-Charaktereigenschaften (Tags) ────────────────────────────
-  // Pro Figur ein dediziertes Trait-Sample, damit "Wie ist X charakterlich?"
-  // direkt auf figure_tags zielt (nicht nur als Anhang in der Composite-Antwort).
+  // Ein Satz mit den drei tragenden Eigenschaften, nie die ganze Tag-Liste
+  // («Renate ist: abwesend, abweisend, …»): diese Form übernähme das Modell
+  // genau für «Was ist Renate für ein Mensch?».
   for (const f of figRows) {
-    if (!f.tags_csv) continue;
-    const tags = f.tags_csv.split(',').map(t => t.trim()).filter(Boolean);
-    if (!tags.length) continue;
-    const tagList = tags.join(', ');
+    const answers = traitAnswers(f, langIsEn);
+    if (!answers.length) continue;
     const traitQs = langIsEn
       ? [`What traits does ${f.name} have?`, `How would you characterize ${f.name}?`,
          `Describe ${f.name}'s personality.`, `What is ${f.name} like as a person?`]
       : [`Welche Eigenschaften hat ${f.name}?`, `Wie würdest du ${f.name} charakterisieren?`,
          `Beschreibe den Charakter von ${f.name}.`, `Was zeichnet ${f.name} charakterlich aus?`];
     const idxs = pickVariants('figTraits|' + f.fig_id, traitQs, PARAPHRASES);
-    const answer = langIsEn
-      ? `${f.name} is: ${tagList}.`
-      : `${f.name} ist: ${tagList}.`;
-    for (const idx of idxs) {
-      pushQA('authorChat|figTraits|' + f.fig_id + '|' + idx, traitQs[idx], answer, { unit: 'fig:' + f.fig_id });
-    }
+    idxs.forEach((idx, k) => {
+      pushQA('authorChat|figTraits|' + f.fig_id + '|' + idx, traitQs[idx], answers[k % answers.length], { unit: 'fig:' + f.fig_id });
+    });
   }
+}
+
+// Höchstens drei Eigenschaften, die für die Figur tragend sind: zuerst die,
+// die Beschreibung, Motivation, Konflikt oder Entwicklung aufgreifen, dann in
+// der Reihenfolge der Analyse. Doppelte fallen weg; im Deutschen nur
+// Adjektive (klein geschrieben) — «Renate ist Pflichtbewusstsein» wäre kein
+// Satz. Wo ein Satz der Analyse eine davon trägt, folgt er als Beleg.
+const TRAITS_MAX = 3;
+function traitAnswers(f, langIsEn) {
+  const seen = new Set();
+  const tags = String(f.tags_csv || '').split(',').map(t => t.trim()).filter(t => {
+    const k = t.toLowerCase();
+    if (!t || seen.has(k)) return false;
+    seen.add(k);
+    return langIsEn || /^\p{Ll}/u.test(t);
+  });
+  if (!tags.length) return [];
+  const sources = [f.beschreibung, f.motivation, f.konflikt, f.arc].filter(Boolean).join(' ').toLowerCase();
+  const stem = (t) => t.toLowerCase().slice(0, Math.max(4, t.length - 2));
+  const picked = tags.map((t, i) => [t, sources.includes(stem(t)) ? 0 : 1, i])
+    .sort((a, b) => a[1] - b[1] || a[2] - b[2]).slice(0, TRAITS_MAX).map(([t]) => t);
+  const list = joinList(picked, langIsEn);
+  const sentences = [f.konflikt, f.beschreibung].filter(Boolean).join(' ').split(/(?<=[.!?])\s+/);
+  const proof = sentences.find(x => x.length <= 220 && picked.some(t => x.toLowerCase().includes(stem(t)))) || '';
+  const tail = proof ? ' ' + proof.trim() : '';
+  return langIsEn
+    ? [`${f.name} is ${list}.${tail}`, `Above all, ${f.name} is ${list}.`]
+    : [`${f.name} ist ${list}.${tail}`, `Charakterlich ist ${f.name} vor allem ${list}.`];
 }
 
 // Block 17+18+19: Lebensereignisse + Auftritte + Dialogstil
@@ -143,7 +167,9 @@ function buildFigureMetaSamples(ctx) {
             ? (langIsEn ? `${f.name} experiences «${ereignis}» ${whenAdverb(when, true)}.` : `${f.name} erlebt «${ereignis}» ${whenAdverb(when, false)}.`)
             : (langIsEn ? `The time of «${ereignis}»: ${when}.` : `Zeitpunkt von «${ereignis}»: ${when}.`), { unit: 'fig:' + f.fig_id });
       }
-      if (when && (e.subtyp === 'geburt' || e.subtyp === 'tod')) {
+      // Nur die eigene Geburt/der eigene Tod — an den Eltern hängt auch
+      // «Geburt von Stefan» (words.js#isOwnLifeEvent).
+      if (when && (e.subtyp === 'geburt' || e.subtyp === 'tod') && isOwnLifeEvent(f, e)) {
         pushQA('authorChat|figLife|' + e.subtyp + '|' + f.fig_id,
           e.subtyp === 'geburt'
             ? (langIsEn ? `When was ${f.name} born?` : `Wann wurde ${f.name} geboren?`)

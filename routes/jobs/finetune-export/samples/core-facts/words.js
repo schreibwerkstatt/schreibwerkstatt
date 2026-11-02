@@ -5,6 +5,7 @@
 // Trainingstext, keine UI-Strings.
 
 const { declineName } = require('./naming');
+const { nameRegex, escapeRe } = require('../../lib/names');
 const datOf = (name, langIsEn) => (langIsEn ? name : declineName(name, 'dat') || name);
 
 // figures.geschlecht ist Freitext der Analyse («männlich (Plural)»,
@@ -161,9 +162,30 @@ function cleanBeruf(beruf) {
   return b;
 }
 
+// Kopf eines längeren Berufsfelds: «Polymechaniker, zuerst im Stahlwerk
+// Gerlafingen, ab 1988 Facharbeiter …» → «Polymechaniker», «Kauffrau
+// (Banklehre …); Hausfrau» → «Kauffrau». Der Rest ist Werdegang, kein Beruf.
+// '' wie `cleanBeruf`, wenn auch der Kopf keiner ist.
+function berufHead(beruf) {
+  const head = String(beruf || '').split(/[;,(]|\s[–—-]\s/)[0].trim();
+  return head.split(/\s+/).length <= 4 ? cleanBeruf(head) : '';
+}
+
+// Berufsfeld als einzelner Begriff (Falsche-Annahme-Fragen): keine
+// Aufzählung, höchstens drei Wörter.
+const isSingleJob = (job) => !!job && !/[,;/]|\s(und|oder|and|or)\s/.test(job) && job.split(/\s+/).length <= 3;
+
+// Beruf mitten im Satz: ein vorangestelltes Adjektiv klein («als reformierter
+// Pfarrer», «ist gelernte Schneiderin»).
+function jobInSentence(job) {
+  const w = String(job || '').split(/\s+/);
+  if (w.length >= 2 && /^\p{Lu}\p{Ll}+(er|e|es|en)$/u.test(w[0]) && /^\p{Lu}/u.test(w[1])) w[0] = w[0].toLowerCase();
+  return w.join(' ');
+}
+
 // Kein Erwerbsberuf, sondern ein Stand («Schüler», «Rentnerin»): «X ist
 // Schüler», nicht «X arbeitet als Schüler».
-const isStatus = (beruf) => /^(schüler|schülerin|student|studentin|maturand|maturandin|gymnasiast|gymnasiastin|lehrling|lehrtochter|lernende[rn]?|auszubildende[rn]?|azubi|rentner|rentnerin|pensionär|pensionärin|hausfrau|hausmann|arbeitslos|pupil|student|retired|unemployed|housewife)\b/i.test(String(beruf || '').trim());
+const isStatus = (beruf) => /^(\p{L}*schüler|\p{L}*schülerin|student|studentin|maturand|maturandin|gymnasiast|gymnasiastin|lehrling|lehrtochter|lernende[rn]?|auszubildende[rn]?|azubi|rentner|rentnerin|pensionär|pensionärin|hausfrau|hausmann|arbeitslos|pupil|student|retired|unemployed|housewife)\b/iu.test(String(beruf || '').trim());
 
 // Zeitangabe, die als Adverbial in «passiert …» passt: Zahl oder Präposition
 // vorne («1968», «im März 1968», «von 1990 bis 1995»). Sonst («Beginn des
@@ -178,6 +200,28 @@ function descFitsType(desc, typ) {
   if (DISTANT_KIN.test(d)) return false;
   const allowed = new Set([typ, inverseTyp(typ)]);
   return KIN_WORDS.every(([re, t]) => !re.test(d) || allowed.has(t));
+}
+
+// Geburt/Tod im Ereignisverlauf EINER Figur kann die eines anderen sein: an
+// den Eltern hängt «Geburt von Stefan», an der Tochter «Tod von Sandras
+// Vater». Eigen ist das Ereignis, wenn der Titel die Figur nennt
+// («Geburt von Stefan», «Stefans Geburt») oder weder eine andere Person
+// («von Peter») noch ein Verwandtschaftswort.
+function isOwnLifeEvent(f, e) {
+  const t = String(e?.ereignis || '');
+  const names = [f?.name, f?.kurzname, String(f?.name || '').split(/\s+/)[0]].filter(n => n && String(n).trim().length >= 2);
+  if (names.some(n => nameRegex(n).test(t))) return true;
+  if (names.some(n => new RegExp(escapeRe(n) + "'?s\\s+(Geburt|Tod|birth|death)", 'iu').test(t))) return true;
+  if (KIN_WORDS.some(([re]) => re.test(t)) || DISTANT_KIN.test(t)) return false;
+  return !/\b(von|vom|of)\s+\p{Lu}/u.test(t);
+}
+
+// Eigenes Geburtsjahr einer Figur (`isOwnLifeEvent`); `sure` (Standard) nur,
+// wenn das Jahr nicht aus dem Kontext erschlossen ist.
+function ownBirthYear(f, eventsByFigPk, { sure = true } = {}) {
+  const ev = (eventsByFigPk?.get(f?.pk) || [])
+    .find(e => e.subtyp === 'geburt' && e.datum_year && (!sure || !e.datum_unsicher) && isOwnLifeEvent(f, e));
+  return ev ? ev.datum_year : null;
 }
 
 // Figurentyp als Prädikat: «eine der Hauptfiguren».
@@ -223,5 +267,6 @@ const firstSentences = (text, n) => {
 module.exports = {
   figureTier, datOf, genderOf, genitive, roleNoun, inverseTyp, roleStatement, possessive,
   figureTypePhrase, pronoun, firstSentences, roleArticle, descFitsType, rolePhrase, cleanBeruf, isAdverbialWhen, isStatus,
+  berufHead, isSingleJob, jobInSentence, isOwnLifeEvent, ownBirthYear,
   FAMILY_TYPES, DISTANT_KIN, ART_DEF, ART_INDEF, ROLE_DE, UNIQUE_ROLES, PLACEHOLDER_NAME,
 };

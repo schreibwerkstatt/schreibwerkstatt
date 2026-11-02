@@ -1,7 +1,7 @@
 'use strict';
 
 const crypto = require('crypto');
-const { estimateTokens, renderMistralChat, percentile, recommendSeqLen } = require('./lib/tokens');
+const { estimateTokens, defaultCharsPerToken, renderMistralChat, renderChatML, percentile, recommendSeqLen } = require('./lib/tokens');
 const { hashSplit } = require('./lib/names');
 const { splitAtSentence } = require('./lib/text');
 const { taskOf, familyOf, looksLikeCard } = require('./lib/tasks');
@@ -70,9 +70,11 @@ function finalizeFinetuneSamples(ctx) {
   // [/INST]=1, </s>=1 → real ~6 Tokens. 20 ist 3× konservativ und deckt
   // Newlines/Whitespace-Variationen mit ab.
   const TEMPLATE_OVERHEAD = 20;
-  const retoken = (sample) => sample.messages.reduce((a, m) => a + estimateTokens(m.content, langIsEn), 0) + TEMPLATE_OVERHEAD;
+  // Zeichen pro Token des Profil-Tokenizers (Tekken, Qwen …), lib/tokens.js.
+  const rate = Number(opts.charsPerToken) || null;
+  const retoken = (sample) => sample.messages.reduce((a, m) => a + estimateTokens(m.content, langIsEn, rate), 0) + TEMPLATE_OVERHEAD;
   const withTokens = samples.map(s => {
-    const sum = s.messages.reduce((a, m) => a + estimateTokens(m.content, langIsEn), 0);
+    const sum = s.messages.reduce((a, m) => a + estimateTokens(m.content, langIsEn, rate), 0);
     s.task = taskOf(s);
     return { s, tokens: sum + TEMPLATE_OVERHEAD, family: familyOf(s.task) };
   });
@@ -88,7 +90,7 @@ function finalizeFinetuneSamples(ctx) {
   if (maxSeqTokens > 0) {
     if (truncateLong) {
       kept = [];
-      const perToken = langIsEn ? 4.0 : 3.3;
+      const perToken = rate || defaultCharsPerToken(langIsEn);
       for (const e of withTokens) {
         if (e.tokens <= maxSeqTokens) { kept.push(e); continue; }
         const assistantMsg = e.s.messages[e.s.messages.length - 1];
@@ -97,7 +99,7 @@ function finalizeFinetuneSamples(ctx) {
           continue;
         }
         const otherTokens = e.s.messages.slice(0, -1)
-          .reduce((a, m) => a + estimateTokens(m.content, langIsEn), 0);
+          .reduce((a, m) => a + estimateTokens(m.content, langIsEn, rate), 0);
         const assistantBudget = maxSeqTokens - otherTokens - TEMPLATE_OVERHEAD;
         if (assistantBudget < 30) { droppedCount++; continue; }
         const charBudget = Math.floor(assistantBudget * perToken);
@@ -107,7 +109,7 @@ function finalizeFinetuneSamples(ctx) {
         const [head] = splitAtSentence(orig, ratio);
         if (head.length < 60) { droppedCount++; continue; }
         assistantMsg.content = head;
-        const newSum = e.s.messages.reduce((a, m) => a + estimateTokens(m.content, langIsEn), 0);
+        const newSum = e.s.messages.reduce((a, m) => a + estimateTokens(m.content, langIsEn, rate), 0);
         e.tokens = newSum + TEMPLATE_OVERHEAD;
         cappedCount++;
         kept.push(e);
@@ -217,15 +219,23 @@ function finalizeFinetuneSamples(ctx) {
   // Kreuzprodukte (Figur × Ort × Ereignis) nicht dieselbe Antwort vervielfachen.
   // Bevorzugt: Schreibaufgaben, Fragen zu einer Entität, dann verschiedene
   // Aufgabentypen (erster Durchgang je Antwort nur einmal pro Typ).
+  // Kernfakten der Hauptfiguren (`coreFact`) sind ausgenommen: dort trägt
+  // jede Antwort denselben Fakt mit anderer Frage, und core-set.js deckelt
+  // ihre Wiederholung selbst. Die übrige Faktenfamilie hat ein eigenes, höheres
+  // Budget (`maxPerFactAnswer`): Wiederholung mit anderer Frage ist dort der
+  // Zweck — ein 8B-LoRA ohne Nachschlagen lernt einen Fakt nur so.
   let answerCapped = 0;
+  const maxPerFactAnswer = Math.max(maxPerAnswer, Math.min(50, Math.floor(Number(opts.maxPerFactAnswer) || 0)));
+  const limitOf = (e) => (e.family === 'facts' ? maxPerFactAnswer : maxPerAnswer);
   if (maxPerAnswer > 0) {
+    const exempt = kept.filter(e => e.s.coreFact);
     const rank = (e) => (e.family === 'writing' ? 0 : 2) + (e.s.unit ? 0 : 1);
-    const order = [...kept].sort((a, b) => rank(a) - rank(b)
+    const order = [...kept].filter(e => !e.s.coreFact).sort((a, b) => rank(a) - rank(b)
       || hashSplit('ans|' + a.s.id, valSeed) - hashSplit('ans|' + b.s.id, valSeed));
     const used = new Map();
     const tasksPerAnswer = new Map();
     const keep = new Set();
-    const fits = (e, distinctTask) => answersOf(e.s).every(a => (used.get(a) || 0) < maxPerAnswer
+    const fits = (e, distinctTask) => answersOf(e.s).every(a => (used.get(a) || 0) < limitOf(e)
       && (!distinctTask || !tasksPerAnswer.get(a)?.has(e.s.task)));
     const take = (e) => {
       keep.add(e);
@@ -237,6 +247,7 @@ function finalizeFinetuneSamples(ctx) {
     };
     for (const e of order) if (fits(e, true)) take(e);
     for (const e of order) if (!keep.has(e) && fits(e, false)) take(e);
+    for (const e of exempt) keep.add(e);
     answerCapped = kept.length - keep.size;
     kept = kept.filter(e => keep.has(e));
   }
@@ -249,12 +260,13 @@ function finalizeFinetuneSamples(ctx) {
 
   // ── Mischung nach Antwort-Tokens (lib/token-mix.js) ───────────────────
   const mix = mixByTokens(kept, {
-    langIsEn, seed: valSeed,
+    langIsEn, seed: valSeed, charsPerToken: rate,
     familyTokenShares: opts.familyTokenShares,
     refusalShare: opts.refusalShare,
     refusalMix: opts.refusalMix,
     verbatimMaxTokenShare: opts.verbatimMaxTokenShare,
     tierByFig: ctx.tierByFig,
+    unitTier: eventUnitTiers(ctx),
   });
   kept = mix.kept;
 
@@ -328,6 +340,9 @@ function finalizeFinetuneSamples(ctx) {
   const tokensP95 = percentile(tokenCounts, 0.95);
   const tokensMax = tokenCounts.length ? tokenCounts[tokenCounts.length - 1] : 0;
   const recommendedSeqLen = recommendSeqLen(tokensP95);
+  // Beispiele über der empfohlenen Länge schneidet der Trainer ab
+  // (`max_seq_length` der Studio-Config = `recommendedSeqLen`).
+  const overRecommendedSeq = tokenCounts.filter(n => n > recommendedSeqLen).length;
 
   // Deterministisches Shuffle pro Split, damit Tools ohne eigenes Shuffle
   // (oder Streaming-Loader) keine Sampler-Block-Reihenfolge sehen. Seed-stabil.
@@ -351,7 +366,7 @@ function finalizeFinetuneSamples(ctx) {
   // Tools (TRL ChatML-Loader) wollen das.
   const serialize = (sample) => {
     const obj = { messages: sample.messages };
-    if (emitText) obj.text = renderMistralChat(sample.messages);
+    if (emitText) obj.text = opts.chatTemplate === 'chatml' ? renderChatML(sample.messages) : renderMistralChat(sample.messages);
     return JSON.stringify(obj);
   };
   const toJsonl = (arr) => arr.length
@@ -395,7 +410,8 @@ function finalizeFinetuneSamples(ctx) {
     splitMixed,
     valPurged,
     maxPerAnswer: maxPerAnswer || null,
-    quality: buildQualityStats(trainOut, valOut, { langIsEn, overlapByVal }),
+    maxPerFactAnswer: maxPerFactAnswer || null,
+    quality: buildQualityStats(trainOut, valOut, { langIsEn, overlapByVal, charsPerToken: rate }),
     valFacts: valByFamily.facts.length,
     valWriting: valByFamily.writing.length,
     valPersona: valByFamily.persona.length,
@@ -421,6 +437,7 @@ function finalizeFinetuneSamples(ctx) {
     allBytes:   Buffer.byteLength(allJsonl,   'utf8'),
     tokensP50, tokensP95, tokensMax,
     recommendedSeqLen,
+    overRecommendedSeq,
     maxSeqTokens: maxSeqTokens || null,
     maxTypeShare: maxTypeShare || null,
     emitText,
@@ -428,6 +445,22 @@ function finalizeFinetuneSamples(ctx) {
 
   const trainPrompts = new Set(trainOut.flatMap(s => s.messages.filter(m => m.role === 'user').map(m => m.content.trim())));
   return { stats, trainJsonl, valJsonl, allJsonl, valFamilyJsonl, valUnits, trainPrompts, trainOut, valOut };
+}
+
+// Bedeutung je Ereignis-Einheit (`evt:<i>`): die wichtigste beteiligte Figur.
+// Ereignisfragen ohne Hauptfigur kürzt die Mischung zuerst (lib/token-mix.js).
+function eventUnitTiers(ctx) {
+  const rank = { main: 0, side: 1, minor: 2 };
+  const out = new Map();
+  for (const e of ctx.events || []) {
+    let best = 'minor';
+    for (const f of e.figs || []) {
+      const t = f.fig_id && ctx.tierByFig?.get(f.fig_id);
+      if (t && rank[t] < rank[best]) best = t;
+    }
+    out.set('evt:' + e.i, best);
+  }
+  return out;
 }
 
 function valOverlapCounts(trainArr, valArr) {

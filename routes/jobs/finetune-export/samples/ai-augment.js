@@ -40,7 +40,7 @@ async function buildAiAugmentSamples(ctx) {
     ...ctx,
     prompts,
     augmentSystem: prompts.buildFinetuneAugmentSystem(ctx.langIsEn),
-    versionTag: `${_modelName(provider)}:${prompts.PROMPTS_VERSION || ''}`,
+    versionTag: `${ctx.aiModel || _modelName(provider)}:${prompts.PROMPTS_VERSION || ''}`,
     tok: { in: 0, out: 0, ms: 0 },
   };
 

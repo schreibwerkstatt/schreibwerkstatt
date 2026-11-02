@@ -198,10 +198,11 @@ test('Beziehungssatz: «Stefan ist Peters Sohn.», nie «Für X ist Y ein …»,
 });
 
 // ── 6. «Wer sagt das?» mit Situation ─────────────────────────────────────
-test('whoSays: Antwort nennt Szene und Kapitel, jede Antwort einmal', () => {
+test('whoSays: Antwort nennt Szene und Kapitel, jede Antwort höchstens zweimal', () => {
   const text = [
     'Anna sagte: «Ich werde morgen früh ganz allein zum alten Bahnhof gehen.»',
     'Anna sagte: «Wir müssen das Haus noch vor dem ersten Schnee verkaufen.»',
+    'Anna sagte: «Am Sonntag fahren wir alle zusammen an den grossen See.»',
   ].join('\n\n');
   const ctx = {
     samples: [], counts: { dialog: 0 }, langIsEn: false, unifiedSys: 'S',
@@ -212,13 +213,13 @@ test('whoSays: Antwort nennt Szene und Kapitel, jede Antwort einmal', () => {
   };
   buildDialogSamples(ctx);
   const who = ctx.samples.filter(s => s.id.startsWith('dialogRev|')).map(s => s.messages[2].content);
-  assert.deepEqual(who, ['Das sagt Anna in der Szene «Abschied am Bahnhof» (Kapitel «Der Vater»).'], 'zweites Zitat derselben Szene entfällt');
-  // Ohne Szene: Kapitel, höchstens drei je Figur.
+  assert.deepEqual(who, Array(2).fill('Das sagt Anna in der Szene «Abschied am Bahnhof» (Kapitel «Der Vater»).'), 'drittes Zitat derselben Szene entfällt');
+  // Ohne Szene: Kapitel, dieselbe Antwort höchstens zweimal.
   const many = Array.from({ length: 6 }, (_, i) => `Anna sagte: «Das ist der Satz Nummer ${i} in diesem langen Kapitel hier.»`).join('\n\n');
   const ctx2 = { ...ctx, samples: [], dialogsByFigure: new Map(), sceneRows: [], pageContents: [{ ...ctx.pageContents[0], text: many }] };
   buildDialogSamples(ctx2);
   const who2 = ctx2.samples.filter(s => s.id.startsWith('dialogRev|'));
-  assert.equal(who2.length, 1, 'gleiche Kapitel-Antwort nur einmal');
+  assert.equal(who2.length, 2, 'gleiche Kapitel-Antwort höchstens zweimal');
 });
 
 // ── 7. Val-Familien vollständig ──────────────────────────────────────────

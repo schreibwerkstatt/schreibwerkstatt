@@ -5,7 +5,7 @@
 // __SHELL_BUILD: content hash over all listed assets → drives SHELL_CACHE.
 // __SHELL_MANIFEST: the coherent set precached atomically at SW install.
 // __VENDOR_SET: current vendor/ + fonts/ files — VENDOR_CACHE prune list.
-self.__SHELL_BUILD = "7bfe8805902200ab";
+self.__SHELL_BUILD = "d938089c79896573";
 self.__SHELL_MANIFEST = [
   "/css/admin/admin-backup.css",
   "/css/admin/admin-home.css",
@@ -317,6 +317,7 @@ self.__SHELL_MANIFEST = [
   "/js/book/finetune-export.js",
   "/js/book/finetune-modelfile.js",
   "/js/book/finetune-profiles.js",
+  "/js/book/finetune-studio-files.js",
   "/js/book/heartbeat-tracker.js",
   "/js/book/heartbeat.js",
   "/js/book/history.js",
@@ -1106,6 +1107,7 @@ self.__SHELL_MANIFEST = [
   "/partials/figuren-presence.html",
   "/partials/figuren.html",
   "/partials/finetune-export-ai.html",
+  "/partials/finetune-export-checks.html",
   "/partials/finetune-export-files.html",
   "/partials/finetune-export-quality.html",
   "/partials/finetune-export-result.html",

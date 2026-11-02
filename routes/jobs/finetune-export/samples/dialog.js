@@ -11,7 +11,11 @@ const DIALOG_LINE_MIN = 25;
 // Buch, einem Namen zugeordnet, den genau eine Figur trägt.
 const WHO_SAYS_MIN_CHARS = 30;
 const WHO_SAYS_MIN_WORDS = 6;
-const WHO_SAYS_NO_SCENE_CAP = 3;
+const WHO_SAYS_NO_SCENE_CAP = 8;
+// Dieselbe Antwort («Das sagt X in der Szene Y») höchstens so oft je Figur —
+// zwei Zitate derselben Szene sind zwei Erkennungsaufgaben, mehr lehrte nur
+// die Antwort.
+const WHO_SAYS_PER_ANSWER = 2;
 const normQuote = (q) => q.toLowerCase().replace(/[^\p{L}\p{N}]+/gu, ' ').trim();
 
 // Dialog-Sammlung läuft immer, wenn Figuren bekannt sind — `dialogsByFigure`
@@ -126,15 +130,13 @@ function buildDialogSamples(ctx) {
         .slice(0, REV_CAP_PER_FIG)
         .map(([, e]) => e);
       let noScene = 0;
-      const usedAnswers = new Set();
+      const usedAnswers = new Map();
       picked.forEach((e, i) => {
         const scene = sceneOf(e.pageId, f.fig_id);
         const answer = whoSaysAnswer(f.name, scene, e.chapter, langIsEn);
-        // Jede Antwort einmal: zwei Zitate derselben Szene lehrten dieselbe
-        // Antwort auf verschiedene Fragen.
-        if (usedAnswers.has(answer)) return;
+        if ((usedAnswers.get(answer) || 0) >= WHO_SAYS_PER_ANSWER) return;
         if (!scene && ++noScene > WHO_SAYS_NO_SCENE_CAP) return;
-        usedAnswers.add(answer);
+        usedAnswers.set(answer, (usedAnswers.get(answer) || 0) + 1);
         samples.push({
           id: 'dialogRev|' + f.fig_id + '|' + i,
           type: 'dialog',

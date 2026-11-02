@@ -1,0 +1,31 @@
+<!-- Fine-Tuning-Export: Beziehungsprüfung vor dem Export
+     (routes/jobs/finetune-export/lib/relation-check.js, GET /jobs/finetune-export/relation-check).
+     Jeder Konflikt mit Regel, Figuren (Verweis in den Katalog), Quellen und
+     Ausschnitt. Konflikte bei Hauptfiguren halten den Export an, bis der
+     Autor sie bestätigt; korrigiert wird nichts. Wird in
+     `#partial-finetune-export-checks` der Karte finetune-export.html geladen
+     und erbt deren x-data-Scope. -->
+<template x-if="finetuneRelCheck.conflicts.length">
+  <div class="form-section">
+    <div class="card-section-title" x-text="$app.t('finetune.relcheck.title')"></div>
+    <p :class="finetuneRelCheck.mainCount ? 'card-form-warn' : 'card-form-hint'" role="status"
+       x-text="finetuneRelCheck.mainCount
+         ? $app.tn('finetune.relcheck.blocking', finetuneRelCheck.mainCount)
+         : $app.tn('finetune.relcheck.warning', finetuneRelCheck.conflicts.length)"></p>
+    <ul class="finetune-conflicts">
+      <template x-for="(c, i) in finetuneRelCheck.conflicts" :key="i">
+        <li class="finetune-conflict">
+          <div class="finetune-conflict-head">
+            <span class="tok-badge" :class="c.main ? 'tok-high' : 'tok-med'" x-text="$app.t('finetune.relcheck.rule.' + c.rule)"></span>
+            <template x-for="id in c.figIds" :key="id">
+              <button type="button" class="entity-ref" x-entity-ref="{ type: 'figur', id }"></button>
+            </template>
+          </div>
+          <p class="finetune-conflict-snippet" x-show="c.snippet" x-text="c.snippet"></p>
+          <p class="card-form-hint" x-text="$app.t('finetune.relcheck.sources', { list: c.sources.join(', ') })"></p>
+        </li>
+      </template>
+    </ul>
+    <p class="card-form-hint" x-text="$app.t('finetune.relcheck.dropped')"></p>
+  </div>
+</template>

@@ -1,6 +1,7 @@
 'use strict';
 // Finetune-Export-Verlauf über HTTP: Liste (neuestes zuerst, `stale` je Set),
-// Download einer Datei per `?id=`, alle Dateien als ZIP, Löschen eines Sets.
+// Download einer Datei per `?id=`, alle Dateien als ZIP (samt Studio-Config
+// und Modelfile), Löschen eines Sets.
 
 const test = require('node:test');
 const assert = require('node:assert/strict');
@@ -35,7 +36,7 @@ test.before(async () => {
   bookAccess.grantAccess(BOOK, OWNER, 'owner', OWNER);
   const stats = (n) => ({ total: n, train: n, val: 0, allBytes: 0, evalBytes: 0, fileStem: `buch-p-${n}` });
   await saveFinetuneExport(BOOK, OWNER, { createdAt: '2026-10-01T10:00:00.000Z', fingerprint: 'alt', stats: stats(1), files: { train: '{"alt":1}\n' } });
-  await saveFinetuneExport(BOOK, OWNER, { createdAt: '2026-10-02T10:00:00.000Z', fingerprint: 'alt', stats: stats(2), files: { train: '{"neu":1}\n', val: '' } });
+  await saveFinetuneExport(BOOK, OWNER, { createdAt: '2026-10-02T10:00:00.000Z', fingerprint: 'alt', stats: { ...stats(2), systemPrompt: 'Du bist das Buch.' }, files: { train: '{"neu":1}\n', val: '' } });
   const app = express();
   app.use((req, _res, next) => { req.session = { user: { email: OWNER } }; next(); });
   app.use('/jobs', require('../../routes/jobs/finetune-export').finetuneExportRouter);
@@ -69,8 +70,14 @@ test('Liste, Einzel-Download, ZIP, Löschen', async () => {
   assert.equal(r.status, 200);
   assert.match(r.headers.get('content-disposition'), /finetune-all-files-buch-p-2\.zip/);
   const zip = await JSZip.loadAsync(Buffer.from(await r.arrayBuffer()));
-  assert.deepEqual(Object.keys(zip.files).sort(), ['finetune-stats-buch-p-2.json', 'finetune-train-buch-p-2.jsonl']);
+  assert.deepEqual(Object.keys(zip.files).sort(), [
+    'finetune-Modelfile-buch-p-2.txt', 'finetune-stats-buch-p-2.json',
+    'finetune-studio-config-buch-p-2.yaml', 'finetune-train-buch-p-2.jsonl',
+  ]);
   assert.equal(await zip.file('finetune-train-buch-p-2.jsonl').async('string'), '{"neu":1}\n');
+  // Beilagen fürs Training: Studio-Config und Modelfile mit dem System-Prompt des Sets.
+  assert.match(await zip.file('finetune-studio-config-buch-p-2.yaml').async('string'), /Unsloth-Studio-Konfiguration/);
+  assert.match(await zip.file('finetune-Modelfile-buch-p-2.txt').async('string'), /Du bist das Buch\./);
 
   r = await get(`/jobs/finetune-export/${neu.id}?book_id=${BOOK}`, { method: 'DELETE' });
   assert.equal(r.status, 200);

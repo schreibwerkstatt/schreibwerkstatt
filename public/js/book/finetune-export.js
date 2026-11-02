@@ -2,8 +2,8 @@
 // gespreadet. Root-Zugriffe via window.__app.
 
 import { fetchJson, downloadHref, downloadBlob } from '../utils.js';
-import { FINETUNE_PROFILES, finetuneProfileById, buildStudioYaml, studioSteps } from './finetune-profiles.js';
-import { buildModelfile } from './finetune-modelfile.js';
+import { FINETUNE_PROFILES, finetuneProfileById } from './finetune-profiles.js';
+import { studioYamlFor, modelfileFor } from './finetune-studio-files.js';
 
 export const finetuneExportMethods = {
   // Gespeicherte Sets des Buchs, neuestes zuerst (überleben Neustarts, liegen
@@ -20,6 +20,36 @@ export const finetuneExportMethods = {
     } catch (e) {
       console.error('[finetune] gespeicherte Exporte:', e);
     }
+  },
+
+  // Beziehungsprüfung ohne Export (routes/jobs/finetune-export/lib/relation-check.js).
+  async finetuneLoadRelCheck() {
+    const bookId = Alpine.store('nav').selectedBookId;
+    if (!bookId) return;
+    try {
+      const r = await fetchJson(`/jobs/finetune-export/relation-check?book_id=${encodeURIComponent(bookId)}`);
+      if (Alpine.store('nav').selectedBookId !== bookId) return;
+      this.finetuneRelCheck = { conflicts: r.conflicts || [], mainCount: r.mainCount || 0 };
+    } catch (e) {
+      console.error('[finetune] Beziehungsprüfung:', e);
+    }
+  },
+
+  // Start des Exports: Konflikte bei Hauptfiguren halten ihn an — der Autor
+  // bestätigt ausdrücklich, dass die betroffenen Beziehungen bis zur Klärung
+  // wegfallen (`allow_relation_conflicts`).
+  async finetuneStart() {
+    const app = window.__app;
+    this._finetuneAllowConflicts = false;
+    if (this.finetuneRelCheck.mainCount > 0) {
+      const ok = await app.appConfirm({
+        message: app.tn('finetune.relcheck.confirm', this.finetuneRelCheck.mainCount),
+        confirmLabel: app.t('finetune.relcheck.confirmLabel'),
+      });
+      if (!ok) return;
+      this._finetuneAllowConflicts = true;
+    }
+    return this.runFinetuneExport();
   },
 
   // Neuestes Set: liefert der Studio-Config die Train-Grösse.
@@ -65,12 +95,24 @@ export const finetuneExportMethods = {
     downloadHref(this._finetuneUrl(`${kind}.jsonl`, id));
   },
 
+  finetuneDownloadJudge(id) {
+    if (!Alpine.store('nav').selectedBookId || !id) return;
+    downloadHref(this._finetuneUrl('eval-judge.md', id));
+  },
+
+  // Konfliktliste: neue Sets tragen die Liste, ältere nur die Zahl.
+  finetuneConflictCount(st) {
+    const c = st?.relationConflicts;
+    return Array.isArray(c) ? c.length : Number(c) || 0;
+  },
+
   finetuneDownloadStats(id) {
     if (!Alpine.store('nav').selectedBookId || !id) return;
     downloadHref(this._finetuneUrl('stats.json', id));
   },
 
-  // Alle Dateien des Sets als ZIP (jede JSONL mit Inhalt + stats.json).
+  // Alle Dateien des Sets als ZIP: jede JSONL mit Inhalt, stats.json,
+  // Studio-Config, Modelfile und Bewertungsanleitung (sofern vorhanden).
   finetuneDownloadZip(id) {
     if (!Alpine.store('nav').selectedBookId || !id) return;
     downloadHref(this._finetuneUrl('export.zip', id));
@@ -102,28 +144,18 @@ export const finetuneExportMethods = {
     this.finetuneEmitText = false;
   },
 
-  // max_seq_length folgt dem Export-Feld, nicht dem Profil: Training und
-  // Export-Filter müssen dasselbe Budget sehen, auch wenn der User es
-  // nach der Profilwahl von Hand ändert.
-  // Mit gespeichertem Export kennt die YAML die Train-Grösse: Gesamtschritte
-  // als Kommentar, save_steps ≈ 10 % davon (finetune-profiles.js#studioSteps).
+  // Ohne Export folgt max_seq_length dem Export-Feld; mit Export der
+  // empfohlenen Länge des neuesten Sets (P95 + Puffer), Train-Grösse für
+  // save_steps — dieselben Dateien wie im ZIP (finetune-studio-files.js).
   finetuneDownloadStudioConfig() {
     const t = window.__app.t.bind(window.__app);
-    const p = finetuneProfileById(this.finetuneProfileId);
-    const trainCount = Number(this.finetuneLatestStats()?.train) || 0;
-    const steps = studioSteps(p, trainCount);
-    const yaml = buildStudioYaml(p, {
+    const st = this.finetuneLatestStats();
+    const sameProfile = st && (st.profileId || this.finetuneProfileId) === this.finetuneProfileId;
+    const yaml = studioYamlFor({
+      profileId: this.finetuneProfileId,
+      stats: sameProfile ? st : null,
       maxSeqTokens: Number(this.finetuneMaxSeqTokens) || 0,
-      trainCount,
-      header: [
-        t('finetune.profile.yaml.title', { profile: t('finetune.profile.option', { model: p.name, vram: p.vramGb }) }),
-        t('finetune.profile.yaml.model', { model: p.model }),
-        t('finetune.profile.yaml.order'),
-        t('finetune.profile.yaml.eval'),
-        steps
-          ? t('finetune.profile.yaml.steps', { train: trainCount, batch: p.batch, accum: p.accum, epochs: steps.epochs, total: steps.total, save: steps.save })
-          : t('finetune.profile.yaml.noExport'),
-      ],
+      t,
     });
     downloadBlob(new Blob([yaml], { type: 'application/yaml;charset=utf-8' }), this._finetuneFileName('studio-config', 'yaml'));
   },
@@ -131,18 +163,8 @@ export const finetuneExportMethods = {
   // System-Prompt aus dem gespeicherten Export (wörtlich wie im Training).
   // Sets von vor dieser Funktion tragen ihn nicht → Knopf ausgeblendet.
   finetuneDownloadModelfile(st) {
-    if (!st?.systemPrompt) return;
-    const t = window.__app.t.bind(window.__app);
-    const p = finetuneProfileById(st.profileId || this.finetuneProfileId);
-    const text = buildModelfile({
-      systemPrompt: st.systemPrompt,
-      header: [
-        t('finetune.modelfile.title', { book: window.__app.selectedBookName || '', model: p.name }),
-        t('finetune.modelfile.from'),
-        t('finetune.modelfile.system'),
-        t('finetune.modelfile.build'),
-      ],
-    });
+    const text = modelfileFor({ stats: st, bookName: window.__app.selectedBookName || '', t: window.__app.t.bind(window.__app) });
+    if (!text) return;
     downloadBlob(new Blob([text], { type: 'text/plain;charset=utf-8' }), 'Modelfile');
   },
 

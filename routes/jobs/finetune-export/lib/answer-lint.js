@@ -9,7 +9,10 @@
 //     und fällt in jeder Familie weg;
 //   - `lintAnswer`: eine Antwort ausserhalb der Schreibaufgaben beginnt mit
 //     Grossbuchstabe, Ziffer oder Anführungszeichen und nie mit einem
-//     Etikett («vorgesetzter: …», «Mitglieder: …»);
+//     Etikett («vorgesetzter: …», «Mitglieder: …»); sie ist keine
+//     Doppelpunkt-Liste («Renate ist: …», «Zur Familie gehören: …» —
+//     `colonList`) und wiederholt keinen Teilsatz von vier Wörtern mehr als
+//     zweimal (`repetition`, Nährboden für Endlosschleifen);
 //   - `isTrivial`: die Antwort sagt nichts, was nicht schon in der Frage
 //     steht («Wer ist an «Renate tritt … bei» beteiligt?» → «Renate …»);
 //   - `promptKey`: Schlüssel für das Prompt-Dedup (alle Nutzer-Turns).
@@ -31,12 +34,31 @@ const hasEditorNote = (text) => EDITOR_NOTE.some(re => re.test(String(text || ''
 
 const LABEL_START = /^[\p{L}\p{N}_]+\s*:/u;
 const GOOD_START = /^[\p{Lu}\p{N}«„"“'‹(]/u;
+// «<Name> ist: …», «Zur Familie von X gehören: …», «X is: …» — eine Aufzählung
+// statt eines Satzes.
+const COLON_LIST = /^[^.!?:]{0,80}?(?<![\p{L}])(ist|sind|gehören|gehört|is|are|include|includes|belong to)\s*:/u;
+const REPEAT_N = 4;
+const REPEAT_MAX = 2;
+// Ein Teilsatz aus REPEAT_N Wörtern, der öfter als REPEAT_MAX-mal vorkommt.
+function hasRepetition(text) {
+  const w = String(text || '').toLowerCase().split(/[^\p{L}\p{N}]+/u).filter(Boolean);
+  const seen = new Map();
+  for (let i = 0; i + REPEAT_N <= w.length; i++) {
+    const k = w.slice(i, i + REPEAT_N).join(' ');
+    const n = (seen.get(k) || 0) + 1;
+    if (n > REPEAT_MAX) return true;
+    seen.set(k, n);
+  }
+  return false;
+}
 // `swiss`: Buch in Schweizer Schreibung — ein «ß» ist dann ein Fehler.
 function lintAnswer(text, swiss = false) {
   const t = String(text || '').trim();
   if (!t) return 'empty';
   if (LABEL_START.test(t)) return 'label';
   if (!GOOD_START.test(t)) return 'lowercase';
+  if (COLON_LIST.test(t)) return 'colonList';
+  if (hasRepetition(t)) return 'repetition';
   if (swiss && ESZETT.test(t)) return 'eszett';
   return null;
 }
@@ -56,4 +78,4 @@ function isTrivial(question, answer) {
 
 const promptKey = (s) => s.messages.filter(m => m.role === 'user').map(m => m.content.trim()).join('\u0000');
 
-module.exports = { swissSpelling, hasEditorNote, lintAnswer, isTrivial, promptKey, ESZETT };
+module.exports = { swissSpelling, hasEditorNote, lintAnswer, hasRepetition, isTrivial, promptKey, ESZETT };

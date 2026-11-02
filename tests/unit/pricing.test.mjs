@@ -83,6 +83,9 @@ test('fallbackFamily: 5er-Serie inkl. Suffix-/Punktversionen', () => {
   assert.equal(fallbackFamily('claude-sonnet-5[1m]'),    'claude-sonnet-5');
   assert.equal(fallbackFamily('claude-fable-5'),         'claude-fable-5');
   assert.equal(fallbackFamily('claude-mythos-5'),        'claude-mythos-5');
+  // Haiku 5.5 kostet ein Zehntel von Haiku 4.5 — darf nicht auf 4.5 oder 0 fallen.
+  assert.equal(fallbackFamily('claude-haiku-5-5'),       'claude-haiku-5-5');
+  assert.equal(fallbackFamily('claude-haiku-5-5[1m]'),   'claude-haiku-5-5');
   // Die 4.x-Familien bleiben unberuehrt (5er-Regex darf nicht zu breit greifen).
   assert.equal(fallbackFamily('claude-opus-4-8[1m]'),    'claude-opus-4-8');
   assert.equal(fallbackFamily('claude-sonnet-4-6'),      'claude-sonnet-4-6');
@@ -93,16 +96,18 @@ test('fallbackFamily: 5er-Serie inkl. Suffix-/Punktversionen', () => {
 // App-Anzeige passt. Darum muss JEDES Modell, das ueber ein App-Setting waehlbar
 // ist, hier einen Tarif haben.
 test('PRICING: jedes per Setting waehlbare Claude-Modell hat einen Tarif', () => {
-  // app-settings.js wird als TEXT gelesen, nicht importiert: das Modul oeffnet beim
+  // Die Key-Registry wird als TEXT gelesen, nicht importiert: app-settings oeffnet beim
   // Laden die SQLite-Verbindung, und dieser Test soll seiteneffektfrei bleiben.
-  const src = readFileSync(new URL('../../lib/app-settings.js', import.meta.url), 'utf8');
-  const declared = [...src.matchAll(/'ai\.claude\.model[^']*':\s*'([^']*)'/g)]
-    .map(m => m[1].trim()).filter(Boolean);
+  const src = readFileSync(new URL('../../lib/app-settings/keys/ai.js', import.meta.url), 'utf8');
+  const keys = [...src.matchAll(/'ai\.claude\.model[^']*':\s*\{\s*default:\s*'([^']*)'/g)];
+  assert.ok(keys.length >= 2, 'Registry-Muster fuer ai.claude.model* nicht gefunden — Test liest die falsche Datei');
+  const declared = keys.map(m => m[1].trim()).filter(Boolean);
   // Die aktuell empfohlenen Modelle aus docs/komplett.md + docs/ai-providers.md.
   // Neues Modell in einer Empfehlung ⇒ hier UND in lib/pricing.js ergaenzen.
   const candidates = new Set([...declared,
     'claude-opus-5-5', 'claude-opus-5', 'claude-opus-4-8', 'claude-opus-4-7', 'claude-opus-4-6',
-    'claude-sonnet-5', 'claude-sonnet-4-6', 'claude-haiku-4-5', 'claude-fable-5', 'claude-fable-5-1',
+    'claude-sonnet-5-5', 'claude-sonnet-5', 'claude-sonnet-4-6', 'claude-haiku-5-5', 'claude-haiku-4-5',
+    'claude-fable-5', 'claude-fable-5-1',
   ]);
   for (const model of candidates) {
     const usd = costUsd({ provider: 'claude', model, tokensIn: 1_000_000 });

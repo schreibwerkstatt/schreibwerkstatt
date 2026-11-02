@@ -33,12 +33,8 @@ function buildEventSamples(ctx) {
         langIsEn ? `«${ereignis}» happens in chapter ${e.kapitel.join(', ')}.` : `«${ereignis}» passiert im Kapitel ${e.kapitel.join(', ')}.`,
         { unit });
     }
-    if (e.kindPhrase) {
-      pushQA('authorChat|evt-typ|' + i,
-        langIsEn ? `What kind of event is «${ereignis}»?` : `Was für ein Ereignis ist «${ereignis}»?`,
-        langIsEn ? `«${ereignis}» is ${e.kindPhrase}.` : `«${ereignis}» ist ${e.kindPhrase}.`,
-        { unit });
-    }
+    // «Was für ein Ereignis ist …?» fragt kein Leser; die Bedeutung für die
+    // beteiligte Figur fragt core-facts/events.js («Warum ist … für X wichtig?»).
   }
 
   // ── Sammellisten: Ereignisse pro Ort / Figur / Kapitel ───────────────

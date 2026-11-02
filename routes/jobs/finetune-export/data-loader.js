@@ -119,7 +119,7 @@ function loadFinetuneData({ bookIdInt, userEmail, pageContents, langIsEn }) {
 
   // Figuren-Lebensereignisse
   const figEvtRows = db.prepare(`
-    SELECT fe.figure_id, fe.datum, fe.datum_label, fe.datum_year, fe.datum_month, fe.datum_day,
+    SELECT fe.id, fe.figure_id, fe.datum, fe.datum_label, fe.datum_year, fe.datum_month, fe.datum_day,
            fe.datum_ende_year, fe.datum_ende_month, fe.datum_ende_day, fe.story_tag, fe.datum_unsicher,
            fe.ereignis, fe.bedeutung, fe.typ, fe.subtyp, fe.storyline_id, fe.chapter_id, fe.page_id
     FROM figure_events fe
@@ -135,7 +135,7 @@ function loadFinetuneData({ bookIdInt, userEmail, pageContents, langIsEn }) {
 
   // Figur-Beziehungen (beide Richtungen abrufen, Paare per Smaller-First dedupen)
   const figRelRows = db.prepare(`
-    SELECT ff.fig_id AS from_fig_id, ft.fig_id AS to_fig_id,
+    SELECT r.id AS rel_id, ff.fig_id AS from_fig_id, ft.fig_id AS to_fig_id,
            r.typ, r.beschreibung
     FROM figure_relations r
     JOIN figures ff ON ff.id = r.from_fig_id

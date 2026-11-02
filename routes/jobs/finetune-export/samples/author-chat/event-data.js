@@ -74,9 +74,12 @@ function eventWhen(ev, langIsEn) {
   if (end && startForRange && !String(start).includes(end)) {
     when = langIsEn ? `from ${startForRange} to ${end}` : `von ${startForRange} bis ${end}`;
   }
-  if (when && ev.datum_unsicher) when += langIsEn ? ' (year inferred from context)' : ' (Jahr aus dem Kontext erschlossen)';
+  // Ein aus dem Kontext erschlossenes Jahr (`datum_unsicher`) steht ohne
+  // Zusatz im Text; wer nur sichere Daten nennen darf (Porträt, Kernfakten,
+  // Kapitelinhalt), prüft `unsure`.
   return {
     when,
+    unsure: !!ev.datum_unsicher,
     start: startForRange,
     end,
     storyDay: Number.isInteger(ev.story_tag) && ev.story_tag >= 1 ? ev.story_tag : null,
@@ -247,7 +250,8 @@ function loadEventData(ctx) {
     const w = eventWhen(ev, langIsEn);
     const e = {
       i, ereignis,
-      datum: w.when, start: w.start, end: w.end, storyDay: w.storyDay,
+      datum: w.when, start: w.start, end: w.end, storyDay: w.storyDay, unsure: w.unsure,
+      year: ev.datum_year || null, month: ev.datum_month || null, day: ev.datum_day || null,
       typ: ev.typ, subtyp: ev.subtyp, subtypLabel: subtypLabel(ev.subtyp, langIsEn),
       kindPhrase: eventKindPhrase(ev.typ, ev.subtyp, langIsEn),
       bedeutung: ev.bedeutung, storyline,

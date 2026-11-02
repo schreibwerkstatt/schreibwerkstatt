@@ -5,9 +5,13 @@ Schickt jede Zeile aus eval.jsonl («Testprompts herunterladen») an zwei
 Ollama-Modelle — typisch das Basismodell und das trainierte, oder zwei
 gesicherte Stände desselben Laufs — und druckt die Antworten untereinander.
 Die Prompts tragen den System-Prompt aus dem Training; `holdout` markiert
-Kapitel, die das Modell in Lauf 1 nie gesehen hat. Jede Zeile trägt eine
-Referenz (`expected`) und Prüfwörter (`mustContain`); am Ende steht pro
-Modell und Kategorie, wie viele Antworten alle Prüfwörter enthalten.
+Frageformen (`phrasing`), Fakten (`unit`) oder Buchtext (`text`), die das
+Modell in Lauf 1 nie gesehen hat. Jede Zeile trägt eine Referenz (`expected`)
+und Kriterien: `mustContain` (jeder Begriff), `mustContainAny` (aus jeder
+Synonymgruppe einer), `mustNotContain` (keiner), dazu `judge` als Anweisung
+für einen menschlichen oder LLM-Richter (Skala 0–2, siehe eval-judge.md im
+ZIP). Am Ende steht pro Modell und Kategorie, wie viele Antworten alle
+Wort-Kriterien erfüllen; Zeilen nur mit `judge` zählen dort nicht.
 
 Einsatz:
     python compare_models.py eval.jsonl ministral-3:8b buch-leser
@@ -36,9 +40,17 @@ def chat(model, messages, temperature):
         return json.loads(res.read())["message"]["content"].strip()
 
 
-def hits(answer, must):
+def hits(answer, row):
+    """None ohne Wort-Kriterium, sonst True/False."""
     low = answer.lower()
-    return all(m.lower() in low for m in must)
+    must = row.get("mustContain") or []
+    groups = row.get("mustContainAny") or []
+    banned = row.get("mustNotContain") or []
+    if not (must or groups or banned):
+        return None
+    return (all(m.lower() in low for m in must)
+            and all(any(t.lower() in low for t in g) for g in groups)
+            and not any(b.lower() in low for b in banned))
 
 
 def main():
@@ -51,21 +63,22 @@ def main():
     for i, row in enumerate(rows, 1):
         # Fakten nüchtern, Prosa frei (Temperatur-Tabelle in docs/finetuning.md §4).
         temp = 0.8 if row["category"] in ("continuation", "newChapter") else 0.4
-        tag = " · holdout" if row.get("holdout") else ""
-        must = row.get("mustContain") or []
+        tag = f" · holdout {row['holdout']}" if row.get("holdout") else ""
         print(f"\n{'=' * 78}\n[{i}/{len(rows)}] {row['category']}{tag}\n{row['messages'][-1]['content']}")
         if row.get("expected"):
-            print(f"\n--- Referenz (muss enthalten: {', '.join(must) or '–'}) ---\n{row['expected']}")
+            print(f"\n--- Referenz ---\n{row['expected']}")
+        if row.get("judge"):
+            print(f"\n--- Bewertung ---\n{row['judge']}")
         for model in (model_a, model_b):
             answer = chat(model, row["messages"], temp)
-            ok = hits(answer, must) if must else None
+            ok = hits(answer, row)
             mark = "" if ok is None else (" ✓" if ok else " ✗")
             print(f"\n--- {model}{mark} ---\n{answer}")
             if ok is not None:
                 s = score.setdefault((model, row["category"]), [0, 0])
                 s[0] += int(ok)
                 s[1] += 1
-    print(f"\n{'=' * 78}\nPrüfwörter getroffen (mustContain):")
+    print(f"\n{'=' * 78}\nWort-Kriterien erfüllt (mustContain/mustContainAny/mustNotContain):")
     for model in (model_a, model_b):
         cats = sorted(c for (m, c) in score if m == model)
         parts = [f"{c} {score[(model, c)][0]}/{score[(model, c)][1]}" for c in cats]

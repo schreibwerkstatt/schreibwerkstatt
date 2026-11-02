@@ -16,8 +16,10 @@ const {
 // Ein Paar mit unvereinbaren Aussagen — zwei verschiedene spezifische Typen,
 // oder eine Beschreibung, die eine andere Verwandtschaft nennt als der Typ
 // («Enkelin Antonie» bei `kind`, «seine Schwägerin» bei `freund`) — bekommt
-// keinen Kernfakt (`relationConflicts`): ein falscher Fakt in mehreren
-// Varianten ist teurer als ein fehlender. Platzhalter-Figuren («(unnamed)»)
+// keinen Kernfakt (`relationResidual`): ein falscher Fakt in mehreren
+// Varianten ist teurer als ein fehlender. Die Prüfung über das ganze
+// Beziehungsnetz (zwei Väter, kopierte Beschreibung, Verwandtschaftswörter in
+// Ereignissen) macht lib/relation-check.js vorab. Platzhalter-Figuren («(unnamed)»)
 // fallen ganz weg.
 
 // Vermutungen der Analyse («wahrscheinlich sein Sohn», «nicht direkt») sind
@@ -27,10 +29,13 @@ const HEDGE = /\b(wahrscheinlich|vermutlich|möglicherweise|vielleicht|unklar|ni
 const DIRECTED = new Set(['elternteil', 'kind', 'mentor', 'schuetzling', 'vorgesetzter', 'untergebener', 'patronage']);
 const WEAK = new Set(['bekannt', 'andere']);
 
-// → { facts: [{ key, a, b, typ, desc, descFrom, core }], conflicts }
+// → { facts: [{ key, a, b, typ, desc, descFrom, core }], conflicts, conflictDropped }
 //   `typ` ist die Rolle von b gegenüber a; `typ = 'andere'` = nur Beschreibung.
+//   Paare aus der Beziehungsprüfung (`ctx.relationExcluded`, lib/relation-check.js)
+//   fallen bis zur Klärung weg (`conflictDropped`).
 function collectRelationFacts(ctx) {
   const { figRelRows, figById, relTypes, eligibleFigIds, figNameInfo } = ctx;
+  const excluded = ctx.relationExcluded || new Set();
   const proper = (f) => !figNameInfo || figNameInfo.get(f.fig_id)?.proper !== false;
   const shown = (f) => (figNameInfo?.get(f.fig_id) ? { ...f, name: figNameInfo.get(f.fig_id).name } : f);
   const byPair = new Map();
@@ -50,8 +55,9 @@ function collectRelationFacts(ctx) {
     if (d && !HEDGE.test(d)) g.descs.push({ text: d, from: A.fig_id });
   }
   const facts = [];
-  let conflicts = 0;
+  let conflicts = 0, conflictDropped = 0;
   for (const [key, g] of byPair) {
+    if (excluded.has(key)) { conflictDropped++; continue; }
     let stmts = [...g.stmts.values()];
     const strong = stmts.filter(s => !WEAK.has(s.typ));
     if (strong.length) stmts = strong;
@@ -69,7 +75,7 @@ function collectRelationFacts(ctx) {
       core: !!(eligibleFigIds?.has(a.fig_id) || eligibleFigIds?.has(b.fig_id)),
     });
   }
-  return { facts, conflicts };
+  return { facts, conflicts, conflictDropped };
 }
 
 // `{x:dat}` usw.: Kasus für naming.js#declineName («zu Herrn Koch»).
@@ -109,7 +115,9 @@ function relationAnswers({ X, Y, typY, desc }, langIsEn) {
   const genX = genitive(X.name, langIsEn);
   const out = [];
   out.push(yRole + '.' + tail);
-  out.push(yRole + '; ' + xRole + '.');
+  // «Dennis ist Melindas Bekannter; Melinda ist seine Bekannte.» sagt ohne
+  // die Beschreibung nichts — schwache Rollen nur mit Kontextsatz.
+  if (!WEAK.has(typY)) out.push(yRole + '; ' + xRole + '.');
   const art = roleArticle(typY, RY.g, langIsEn);
   // «Stefans Mutter ist Gisela» nur bei Rollen, die man einmal hat.
   const inverted = UNIQUE_ROLES.has(typY);
@@ -137,7 +145,7 @@ function bestTier(ctx, figs) {
 function buildRelationCore(ctx, emitCard, variantCount) {
   const { langIsEn } = ctx;
   const lang = langIsEn ? 'en' : 'de';
-  const { facts, conflicts } = collectRelationFacts(ctx);
+  const { facts, conflicts, conflictDropped } = collectRelationFacts(ctx);
   // Pro Richtung mindestens zwei Varianten: die Fakten sollen aus beiden
   // Blickrichtungen abrufbar sein.
   const perDir = Math.max(2, Math.ceil(variantCount / 2));
@@ -160,7 +168,7 @@ function buildRelationCore(ctx, emitCard, variantCount) {
       answers: relationAnswers({ X: f.b, Y: f.a, typY: f.typ === 'andere' ? 'andere' : inverseTyp(f.typ), desc: f.desc }, langIsEn),
     });
   }
-  return { facts, conflicts };
+  return { facts, conflicts, conflictDropped };
 }
 
 module.exports = { bestTier, buildRelationCore, collectRelationFacts, relationAnswers, fillRelationQuestion, QUESTIONS };

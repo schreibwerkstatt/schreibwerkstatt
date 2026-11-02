@@ -8,7 +8,7 @@
 //
 // Export-Vorgaben kommen aus dem gewählten Trainingsprofil
 // (book/finetune-profiles.js: Basismodell × GPU-Speicher, Default
-// Ministral-3-8B auf 20 GB):
+// Ministral-3-8B auf 16 GB):
 //   maxChars, maxSeqTokens → Sequenz-Budget des Profils
 //   exportOptions    → Kernwissen, Mischung nach Tokens, Längen, Absatz-Budget,
 //                      Ablehnen (geht als `export` an den Server)
@@ -53,6 +53,7 @@ export function registerFinetuneExportCard() {
     finetuneAiReversePromptsPerPage: 4,
     finetuneAiFactQAPerEntity:       4,
     finetuneAiParaphrase:            !!defaultExport.aiParaphrase,
+    finetuneAiWhyQuestions:          !!defaultExport.aiWhyQuestions,
     finetuneAiPersona:               true,
     finetuneAiDeutung:               true,
     finetuneAiPersonaPerFigure:      8,
@@ -63,6 +64,10 @@ export function registerFinetuneExportCard() {
     finetuneStatus:   '',
     finetuneExports:  [],
     finetuneOpenId:   null,
+    // Beziehungsprüfung (GET /jobs/finetune-export/relation-check): Konflikte
+    // vor dem Export; bei Hauptfiguren startet der Export nur nach Bestätigung.
+    finetuneRelCheck: { conflicts: [], mainCount: 0 },
+    _finetuneAllowConflicts: false,
 
     _finetunePollTimer: null,
     _lifecycle: null,
@@ -92,6 +97,8 @@ export function registerFinetuneExportCard() {
           finetuneStatus: '',
           finetuneExports: [],
           finetuneOpenId: null,
+          finetuneRelCheck: { conflicts: [], mainCount: 0 },
+          _finetuneAllowConflicts: false,
         },
         extraListeners: [{ type: 'job:reconnect', handler: onJobReconnect }],
       });
@@ -122,16 +129,18 @@ export function registerFinetuneExportCard() {
         alreadyRunning: 'common.analysisAlreadyRunning',
       },
       progressResetDelay: 400,
-      onOpen() { return this.finetuneLoadExports(); },
+      onOpen() { return Promise.all([this.finetuneLoadExports(), this.finetuneLoadRelCheck()]); },
       buildPayload() {
         return {
           book_id: parseInt(Alpine.store('nav').selectedBookId),
           book_name: window.__app.selectedBookName,
           profile: this.finetuneProfileId,
+          allow_relation_conflicts: !!this._finetuneAllowConflicts,
           export: {
             ...exportOptions(finetuneProfileById(this.finetuneProfileId)),
             editorFeedback: !!this.finetuneEditorFeedback,
             aiParaphrase: !!this.finetuneAiParaphrase,
+            aiWhyQuestions: !!this.finetuneAiWhyQuestions,
           },
           types: {
             style:      !!this.finetuneTypeStyle,
@@ -166,6 +175,12 @@ export function registerFinetuneExportCard() {
       async onDone(job) {
         if (job.result?.empty) {
           this.finetuneStatus = window.__app.t('finetune.empty');
+          return;
+        }
+        if (job.result?.blocked === 'relationConflicts') {
+          const conflicts = job.result.relationConflicts || [];
+          this.finetuneRelCheck = { conflicts, mainCount: conflicts.filter(c => c.main).length };
+          this.finetuneStatus = window.__app.t('finetune.relcheck.stopped');
           return;
         }
         const st = job.result?.stats;

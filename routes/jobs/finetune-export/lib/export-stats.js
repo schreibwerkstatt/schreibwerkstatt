@@ -7,7 +7,9 @@ const { estimateTokens } = require('./tokens');
 const FAMILIES = ['writing', 'facts', 'persona', 'refusal', 'editor'];
 // Wie `answerTokens` gezählt wird — steht in der Statistik, damit die Anteile
 // lesbar bleiben (kein echter Tokenizer im Export).
-const TOKEN_METHOD = 'Schätzung Zeichen/3.3 (de) bzw. /4.0 (en), Tekken-Heuristik (lib/tokens.js)';
+const tokenMethod = (rate) => (rate
+  ? `Schätzung Zeichen/${rate} (Tokenizer des Profils, lib/tokens.js)`
+  : 'Schätzung Zeichen/3.3 (de) bzw. /4.0 (en), Tekken-Heuristik (lib/tokens.js)');
 
 const TOP_ANSWERS = 10;
 const TOP_ANSWER_CHARS = 140;
@@ -18,7 +20,7 @@ const TOP_ANSWER_CHARS = 140;
 // häufigsten Antworten, Varianten je Kernkarte nach Bedeutung der Figur
 // (`paraphrasesPerFact`, min/median/p90) und die Überlappung Val ↔ Train je Val-Datei. Sie
 // steht in `meta.stats.quality` (Karte + gespeichertes Set) und im Job-Log.
-function buildQualityStats(trainArr, valArr, { langIsEn = false, overlapByVal = null } = {}) {
+function buildQualityStats(trainArr, valArr, { langIsEn = false, overlapByVal = null, charsPerToken = null } = {}) {
   const all = [...trainArr, ...valArr];
   const byTask = new Map();
   const answerCount = new Map();
@@ -34,7 +36,7 @@ function buildQualityStats(trainArr, valArr, { langIsEn = false, overlapByVal = 
     t.count++;
     const fam = familyOf(task);
     family[fam]++;
-    const tok = s.messages.filter(m => m.role === 'assistant').reduce((a, m) => a + estimateTokens(m.content, langIsEn), 0);
+    const tok = s.messages.filter(m => m.role === 'assistant').reduce((a, m) => a + estimateTokens(m.content, langIsEn, charsPerToken), 0);
     t.tokens += tok;
     familyTok[fam] += tok;
     totalTok += tok;
@@ -87,9 +89,13 @@ function buildQualityStats(trainArr, valArr, { langIsEn = false, overlapByVal = 
     return { facts: a.length, min: a.length ? a[0] : null, median: at(0.5), p90: at(0.9) };
   };
   const paraphrasesPerFact = Object.fromEntries(Object.entries(perTier).map(([k, v]) => [k, dist(v)]));
+  // Kontrastpaare: Ablehnungen unbekannter Namen in Porträt-Form je echte
+  // Porträt-Frage (Ziel ≥ 0.3).
+  const portraitRefusals = all.filter(s => s.task === 'unknownEntity' && s.form === 'portrait').length;
+  const portraitReal = byTask.get('figureCore')?.count || 0;
   return {
     tasks,
-    tokenMethod: TOKEN_METHOD,
+    tokenMethod: tokenMethod(charsPerToken),
     answerTokens: totalTok,
     writingShare: total ? family.writing / total : 0,
     factShare: total ? family.facts / total : 0,
@@ -105,6 +111,8 @@ function buildQualityStats(trainArr, valArr, { langIsEn = false, overlapByVal = 
     factCount: perFact.size,
     factParaphraseCount,
     paraphrasesPerFact,
+    portraitRefusals,
+    refusalPortraitRatio: portraitReal ? portraitRefusals / portraitReal : null,
     uniqueAnswers: answerCount.size,
     uniqueAnswerShare: total ? answerCount.size / total : 0,
     repeated3Share: total ? repeated3 / total : 0,
@@ -137,6 +145,32 @@ function coreFactCoverage(trainArr, eligibleFigIds, relationFacts) {
   return ok / eligibleFigIds.size;
 }
 
+// Varianten je Kernfakt der Hauptfiguren (samples/core-facts/core-set.js):
+// wie viele Train-Samples jeden Fakt tragen (`factIds`, sonst `factId`) —
+// Porträt, Falschannahme und Gespräch zählen mit. Pro Figur Zahl der Fakten,
+// min/median; dazu min/median über alle. Abnahme: min ≥ 6, median ≥ 8.
+function coreFactVariants(trainArr, coreFactsByFig, nameOf = (id) => id) {
+  if (!coreFactsByFig?.size) return null;
+  const count = new Map();
+  for (const s of trainArr) {
+    for (const id of new Set(s.factIds || (s.factId ? [s.factId] : []))) count.set(id, (count.get(id) || 0) + 1);
+  }
+  const med = (a) => (a.length ? a[Math.floor((a.length - 1) / 2)] : null);
+  const figures = {};
+  const all = [];
+  for (const [figId, facts] of coreFactsByFig) {
+    const n = facts.map(f => count.get(f.id) || 0).sort((a, b) => a - b);
+    if (!n.length) continue;
+    all.push(...n);
+    figures[nameOf(figId)] = {
+      facts: n.length, min: n[0], median: med(n),
+      weakest: facts.map(f => ({ fact: f.label, n: count.get(f.id) || 0 })).sort((a, b) => a.n - b.n).slice(0, 3),
+    };
+  }
+  all.sort((a, b) => a - b);
+  return { figures, min: all.length ? all[0] : null, median: med(all) };
+}
+
 // Einzeilige Zusammenfassung fürs Job-Log.
 function qualityLogLine(q) {
   const pct = (x) => (x * 100).toFixed(1) + '%';
@@ -148,4 +182,4 @@ function qualityLogLine(q) {
     + `${q.overlap.prompt}/${q.overlap.answer}/${q.overlap.shingle} · ${tasks}`;
 }
 
-module.exports = { buildQualityStats, qualityLogLine, coreFactCoverage };
+module.exports = { buildQualityStats, qualityLogLine, coreFactCoverage, coreFactVariants };

@@ -176,10 +176,14 @@ test('Gespräche: nur Figuren-Gespräche, keine Quiz-Ketten aus Faktenfragen', (
 
 test('Testprompts Leser: Innenleben, Ich-Form, Warum, Unbekanntes, Off-Topic — keine Abschnitt-Suche', () => {
   const ctx = makeCtx();
+  // Warum-Frage braucht das Motiv der Szene: ein Ereignis mit Bedeutung.
+  ctx.eventsBySceneId = new Map([[5, [{ ereignis: 'Anna wartet am Fenster', bedeutung: 'Sie hofft auf die Rückkehr des Vaters.', figs: [{ fig_id: 'anna' }] }]]]);
   buildReaderSamples(ctx);
   const cats = new Set(buildEvalPrompts(ctx).map(r => r.category));
   for (const c of ['psyche', 'persona', 'why', 'unknown', 'offTopic']) assert.ok(cats.has(c), c);
   assert.ok(!cats.has('reverseLookup'));
+  const why = buildEvalPrompts(ctx).find(r => r.category === 'why');
+  assert.match(why.judge, /Rückkehr des Vaters/, 'Motiv der Szene, nicht das allgemeine Profil');
 });
 
 test('Prompts: Belegpflicht und Anzahl im gebauten Prompt', () => {

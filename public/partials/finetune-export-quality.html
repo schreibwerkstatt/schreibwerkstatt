@@ -21,7 +21,12 @@
       <span class="tok-badge tok-med" x-show="ex.stats.critiqueDropped > 0" x-text="$app.tn('finetune.stats.critiqueDropped', ex.stats.critiqueDropped)"></span>
       <span class="tok-badge tok-neutral" x-show="ex.stats.paragraphCapped > 0" x-text="$app.tn('finetune.stats.paragraphCapped', ex.stats.paragraphCapped)"></span>
       <span class="tok-badge tok-neutral" x-show="ex.stats.lengthClipped > 0" x-text="$app.tn('finetune.stats.lengthClipped', ex.stats.lengthClipped)"></span>
-      <span class="tok-badge tok-neutral" x-show="ex.stats.relationConflicts > 0" x-text="$app.tn('finetune.stats.relationConflicts', ex.stats.relationConflicts)"></span>
+      <span class="tok-badge" :class="ex.stats.relationConflictsMain > 0 ? 'tok-high' : 'tok-neutral'" x-show="finetuneConflictCount(ex.stats) > 0" x-text="$app.tn('finetune.stats.relationConflicts', finetuneConflictCount(ex.stats))"></span>
+      <span class="tok-badge tok-neutral" x-show="ex.stats.conflictDropped > 0" x-text="$app.tn('finetune.stats.conflictDropped', ex.stats.conflictDropped)"></span>
+      <span class="tok-badge" :class="ex.stats.coreFactVariants?.min < 6 ? 'tok-med' : 'tok-neutral'" x-show="ex.stats.coreFactVariants?.min != null" x-text="$app.t('finetune.quality.coreFactVariants', ex.stats.coreFactVariants)"></span>
+      <span class="tok-badge" :class="ex.stats.quality.refusalPortraitRatio < 0.3 ? 'tok-med' : 'tok-neutral'" x-show="ex.stats.quality.refusalPortraitRatio != null" x-text="$app.t('finetune.quality.portraitContrast', { n: (ex.stats.quality.refusalPortraitRatio ?? 0).toFixed(2) })"></span>
+      <span class="tok-badge tok-med" x-show="ex.stats.chapterMismatches?.length > 0" x-text="$app.tn('finetune.stats.chapterMismatches', ex.stats.chapterMismatches?.length || 0)"></span>
+      <span class="tok-badge tok-neutral" x-show="ex.stats.overRecommendedSeq > 0" x-text="$app.tn('finetune.stats.overRecommendedSeq', ex.stats.overRecommendedSeq)"></span>
       <span class="tok-badge tok-med" x-show="ex.stats.cardDropped > 0" x-text="$app.tn('finetune.stats.cardDropped', ex.stats.cardDropped)"></span>
       <span class="tok-badge tok-neutral" x-show="ex.stats.splitMixed > 0" x-text="$app.tn('finetune.stats.splitMixed', ex.stats.splitMixed)"></span>
       <span class="tok-badge tok-neutral" x-show="ex.stats.valPurged > 0" x-text="$app.tn('finetune.stats.valPurged', ex.stats.valPurged)"></span>

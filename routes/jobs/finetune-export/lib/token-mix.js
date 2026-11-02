@@ -22,19 +22,23 @@ const { estimateTokens } = require('./tokens');
 // nicht ganz wegfallen; innerhalb eines Typs fallen Sammellisten ohne Einheit
 // vor Einzelfragen.
 //
-// Fakten werden nach WICHTIGKEIT gekürzt (`factRank`): zuerst Fakten zu
-// Randfiguren, dann Orte/Welt/Szenen, dann übrige Fakten, dann
+// Fakten werden nach WICHTIGKEIT gekürzt (`factRank`): zuerst Ereignis-
+// Facetten und Ereignisfragen ohne Hauptfigur (`eventCore`, `factEvent`),
+// «Wer sagt das?» erst spät (kurze Antworten, Stimmen erkennen),
+// dann Fakten zu Randfiguren, dann Orte/Welt/Szenen, dann übrige Fakten, dann
 // Zusatzvarianten des Kernwissens der Rand-, zuletzt der Nebenfiguren. Nie
-// gekürzt (`isProtected`): das ganze Kernwissen der Hauptfiguren, der
-// Kapitelinhalt und die erste Variante jeder Kernkarte (und Fragerichtung) —
-// so bleibt jede Kernkarte im Set (`coreFactCoverage`), und lieber fallen
-// Randfiguren-Fakten ganz weg, als dass eine Hauptfigur auf eine Variante
-// schrumpft. Die Bedeutung (`tier`: main/side/minor) trägt das Sample selbst
-// (core-facts) oder ergibt sich aus den Figuren-IDs in seiner ID (`tierByFig`).
+// gekürzt (`isProtected`): das ganze Kernwissen der Hauptfiguren samt ihren
+// Kernfakten (`coreFact`), der Kapitelinhalt und die erste Variante jeder
+// Kernkarte (und Fragerichtung) — so bleibt jede Kernkarte im Set
+// (`coreFactCoverage`), und lieber fallen Randfiguren-Fakten ganz weg, als dass
+// eine Hauptfigur auf eine Variante schrumpft. Die Bedeutung (`tier`:
+// main/side/minor) trägt das Sample selbst (core-facts), ergibt sich aus seiner
+// Einheit (`unitTier`: Ereignis → wichtigste Figur) oder aus den Figuren-IDs
+// in seiner ID (`tierByFig`).
 
-const answerTokens = (s, langIsEn) => s.messages
+const answerTokens = (s, langIsEn, rate) => s.messages
   .filter(m => m.role === 'assistant')
-  .reduce((a, m) => a + estimateTokens(m.content, langIsEn), 0);
+  .reduce((a, m) => a + estimateTokens(m.content, langIsEn, rate), 0);
 
 function sumTokens(list) { return list.reduce((a, e) => a + e.answerTokens, 0); }
 
@@ -44,10 +48,13 @@ const LOW_PRIORITY_FACTS = new Set(['factPlace', 'factWorld', 'factScene']);
 // Variante einer Kernkarte: letzte Stelle der ID (`core|<karte>[|dir]|<n>`).
 const variantOf = (s) => (s.type === 'core' ? Number(String(s.id).split('|').pop()) || 0 : 0);
 
-// Bedeutung eines Samples: eigenes `tier`, sonst die wichtigste Figur, deren
-// ID im Sample steckt (`authorChat|figTraits|fig_12`). null ohne Figur.
-function tierOf(s, tierByFig) {
+// Bedeutung eines Samples: eigenes `tier`, sonst die seiner Einheit
+// (`unitTier`, z.B. Ereignis `evt:12` → wichtigste beteiligte Figur), sonst
+// die wichtigste Figur, deren ID im Sample steckt
+// (`authorChat|figTraits|fig_12`). null ohne Figur.
+function tierOf(s, tierByFig, unitTier) {
   if (s.tier) return s.tier;
+  if (unitTier && s.unit && unitTier.has(s.unit)) return unitTier.get(s.unit);
   if (!tierByFig) return null;
   let best = null;
   for (const id of String(s.id).match(/\bfig_\d+\b/g) || []) {
@@ -59,14 +66,21 @@ function tierOf(s, tierByFig) {
 
 function isProtected(s) {
   if (!s.core) return false;
-  return s.task === 'chapterCore' || s.tier === 'main' || variantOf(s) === 0;
+  return s.coreFact || s.task === 'chapterCore' || s.tier === 'main' || variantOf(s) === 0;
 }
 
-// Kürz-Rang eines Fakten-Samples, kleiner fällt zuerst: Randfiguren →
-// Orte/Welt/Szenen → übrige → Zusatzvarianten Kernwissen Rand-/Nebenfiguren
-// → Fakten der Hauptfiguren (Ereignis-Facetten, Buchwissen).
-function factRank(s, tierByFig) {
-  const tier = tierOf(s, tierByFig);
+const EVENT_TASKS = new Set(['eventCore', 'factEvent']);
+
+// Kürz-Rang eines Fakten-Samples, kleiner fällt zuerst: Ereignis-Facetten und
+// Ereignisfragen ohne Hauptfigur → Randfiguren → Orte/Welt/Szenen → übrige →
+// Zusatzvarianten Kernwissen Rand-/Nebenfiguren → Fakten der Hauptfiguren.
+// Die Kernfakten der Hauptfiguren (`coreFact`) sind geschützt (`isProtected`).
+function factRank(s, tierByFig, unitTier) {
+  const tier = tierOf(s, tierByFig, unitTier);
+  if (EVENT_TASKS.has(s.task) && tier !== 'main') return -1;
+  // «Wer sagt das?» kostet kaum Tokens und übt das Wiedererkennen der Stimmen:
+  // gekürzt erst mit den Zusatzvarianten der Nebenfiguren.
+  if (s.task === 'whoSays') return 4;
   if (s.core) return tier === 'main' ? 5 : tier === 'side' ? 4 : 3;
   if (tier === 'minor') return 0;
   if (LOW_PRIORITY_FACTS.has(s.task)) return 1;
@@ -109,7 +123,7 @@ function mixByTokens(entries, opts) {
   const { langIsEn, seed = 0 } = opts;
   const shares = opts.familyTokenShares || {};
   const sw = Number(shares.writing) || 0, sf = Number(shares.facts) || 0, sp = Number(shares.persona) || 0;
-  for (const e of entries) e.answerTokens = answerTokens(e.s, langIsEn);
+  for (const e of entries) e.answerTokens = answerTokens(e.s, langIsEn, opts.charsPerToken);
   const h = (e, tag) => hashSplit(tag + '|' + e.s.id, seed);
   const byFam = (f) => entries.filter(e => e.family === f);
   const drop = new Set();
@@ -128,7 +142,7 @@ function mixByTokens(entries, opts) {
       // überspringt es); sonst nach Wichtigkeit, innerhalb eines Rangs anteilig
       // je Typ, Kernkarten von der höchsten Variante abwärts.
       const list = byFam('facts');
-      const rank = new Map(list.map(e => [e, factRank(e.s, opts.tierByFig)]));
+      const rank = new Map(list.map(e => [e, factRank(e.s, opts.tierByFig, opts.unitTier)]));
       const prop = proportionalDropOrder(list, h, 'mixF');
       const order = (a, b) => rank.get(a) - rank.get(b) || variantOf(b.s) - variantOf(a.s) || prop(a, b);
       for (const e of trimTo(list, W * sf / sw, order)) { drop.add(e); dropped.facts++; }

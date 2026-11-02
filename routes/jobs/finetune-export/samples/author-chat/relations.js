@@ -8,7 +8,11 @@ const { SCHICHT_PROSA } = require('./figures');
 
 // Block 12-16: Cast-Aggregate + Familien + Macht + Tags
 function buildRelationSamples(ctx) {
-  const { langIsEn, figRows, figById, figRelRows, pushQA, displayName } = ctx;
+  const { langIsEn, figRows, figById, pushQA, displayName } = ctx;
+  // Paare aus der Beziehungsprüfung (lib/relation-check.js) fehlen auch in
+  // den Sammellisten — sonst lernte das Modell den Widerspruch hier.
+  const excluded = ctx.relationExcluded || new Set();
+  const figRelRows = (ctx.figRelRows || []).filter(r => !excluded.has([r.from_fig_id, r.to_fig_id].sort().join('|')));
   // Eigenname, nach dem man fragt (core-facts/naming.js) — Rollenfiguren
   // und mehrdeutige Namen tragen keine Beziehungs- und Attributfragen.
   const proper = (id) => ctx.figNameInfo?.get(id)?.proper !== false;
@@ -127,12 +131,6 @@ function buildRelationSamples(ctx) {
         return familyRels.some(r => memberSet.has(r.from_fig_id) && memberSet.has(r.to_fig_id));
       });
 
-      // Familien-relevante Figuren-Map (für Per-Figur-Antworten)
-      const familyByFig = new Map();
-      for (const [root, members] of familyRoots) {
-        for (const m of members) familyByFig.set(m, root);
-      }
-
       // Pro Familie: Mitgliederliste + Beziehungs-Aufzählung
       for (const [root, members] of familyRoots) {
         const memberSet = new Set(members);
@@ -167,27 +165,8 @@ function buildRelationSamples(ctx) {
           overview);
       }
 
-      // Per Figur: persönliche Familien-Antwort
-      for (const f of figRows) {
-        const root = familyByFig.get(f.fig_id);
-        if (!root) continue;
-        const personal = [];
-        for (const r of familyRels) {
-          const isFrom = r.from_fig_id === f.fig_id;
-          const isTo   = r.to_fig_id   === f.fig_id;
-          if (!isFrom && !isTo) continue;
-          const otherId = isFrom ? r.to_fig_id : r.from_fig_id;
-          const otherName = figById.get(otherId)?.name;
-          if (!otherName) continue;
-          const t = (r.typ || '').trim();
-          const d = (r.beschreibung || '').trim();
-          personal.push(`${otherName} (${t}${d ? ' — ' + d : ''})`);
-        }
-        if (!personal.length) continue;
-        pushQA('authorChat|family-fig|' + f.fig_id,
-          langIsEn ? `Who are ${f.name}'s family members?` : `Wer gehört zur Familie von ${f.name}?`,
-          personal.slice(0, 10).join(', '));
-      }
+      // «Wer gehört zur Familie von X?» beantwortet das Kernwissen
+      // (core-facts/figures.js) in ganzen Sätzen.
     }
   }
 

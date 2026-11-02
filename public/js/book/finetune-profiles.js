@@ -70,22 +70,39 @@ export const EXPORT_DEFAULTS = {
   // Kernwissen (samples/core-facts/): Figuren ab so vielen Erwähnungen im
   // Text bekommen figureCore/figureAttr/relationCore; jeder Kernfakt in
   // `factParaphrases` Varianten (Frage UND Antwort verschieden), höchstens
-  // `maxVariantsPerFact`.
-  minMentions: 5,
-  factParaphrases: 4,
-  maxVariantsPerFact: 5,
+  // `maxVariantsPerFact`. Jeder Export ist für das Leser-Modell ohne
+  // Nachschlagen: alles Wissen muss in die Gewichte, und ein 8B-LoRA lernt einen
+  // Fakt erst nach vielen verschieden formulierten Begegnungen.
+  minMentions: 3,
+  factParaphrases: 8,
+  maxVariantsPerFact: 10,
   // Varianten des Kurzporträts («Wer ist X?») nach Bedeutung der Figur
   // (`figures.typ`: hauptfigur → main; nebenfigur/mentor/antagonist → side;
   // sonst minor).
-  corePerTier: { main: 5, side: 3, minor: 1 },
+  corePerTier: { main: 12, side: 6, minor: 3 },
+  // Kernfakten der Hauptfiguren (samples/core-facts/core-set.js): jeder Fakt
+  // in 8 × `coreFactRepeat` Frage-Antwort-Paaren, soweit es so viele
+  // verschiedene Fragen gibt. Faktentiefe kommt über Wiederholung mit
+  // verschiedenen Fragen, nicht über Epochen.
+  coreFactRepeat: 3,
   // Mischung nach Antwort-Tokens (lib/token-mix.js). `refusal` steht hier nur
   // der Vollständigkeit halber: Ablehnungen werden nach ANZAHL gemischt
   // (`refusalShareBasis`), Ziel `refusalShare` der Beispiele — ihre Antworten
   // sind so kurz, dass ein Token-Anteil ein Viertel aller Beispiele wäre.
-  familyTokenShares: { writing: 0.55, facts: 0.30, persona: 0.10, refusal: 0.05 },
+  // Fakten vor Schreiben: das Schreiben ist durch Buchlänge und Absatz-Budget
+  // gedeckelt; ein Verhältnis zugunsten des Schreibens schnitte das Buchwissen
+  // auf dessen Grösse zurück.
+  familyTokenShares: { writing: 0.25, facts: 0.60, persona: 0.15, refusal: 0.05 },
+  // Antwort-Budget der Faktenfamilie (finalize.js): dieselbe Faktenantwort darf
+  // so oft stehen, je mit anderer Frage — Wiederholung ist hier der Zweck. Für
+  // die übrigen Familien gilt `maxPerAnswer` der Karte.
+  maxPerFactAnswer: 6,
   refusalShareBasis: 'count',
-  refusalShare: 0.03,
-  refusalMix: { unknownEntity: 0.5, offTopic: 0.25, falsePremise: 0.25 },
+  refusalShare: 0.055,
+  refusalMix: { unknownEntity: 0.45, offTopic: 0.2, falsePremise: 0.2, mixedRefusal: 0.08, metaQuestion: 0.07 },
+  // Val-Ablehnungen je Untertyp mindestens so viele (lib/split.js), damit
+  // `val-refusal` jede Art von Ablehnung misst.
+  valRefusalMin: { unknownEntity: 8, offTopic: 8, falsePremise: 8, metaQuestion: 4, mixedRefusal: 4 },
   verbatimMaxTokenShare: 0.01,
   // Längste Antwort pro Aufgabentyp, gekürzt an Satzgrenzen.
   maxAnswerChars: { sceneWrite: 2000, povPassage: 2000, passage: 2000, continue: 1500 },
@@ -97,6 +114,10 @@ export const EXPORT_DEFAULTS = {
   editorFeedback: false,
   // Varianten der Kernfakten zusätzlich per KI umformulieren (geprüft gegen die Quelle).
   aiParaphrase: false,
+  // Warum-Leserfragen per KI (samples/core-facts/ai-paraphrase.js
+  // #buildAiWhyQuestions): ein günstiger Call je Warum-Karte, Antworten bleiben
+  // die geprüften aus den Daten.
+  aiWhyQuestions: true,
   // Typen, die standardmässig aus sind.
   types: { verbatim: false },
 };
@@ -115,19 +136,30 @@ export function exportOptions(profile) {
   return mergeDeep(EXPORT_DEFAULTS, profile?.export);
 }
 
-const MINISTRAL_8B = { name: 'Ministral 3 8B', model: 'unsloth/Ministral-3-8B-Instruct-2512-unsloth-bnb-4bit' };
-const MISTRAL_SMALL_24B = { name: 'Mistral Small 3.2 24B', model: 'unsloth/Mistral-Small-3.2-24B-Instruct-2506-unsloth-bnb-4bit' };
+// Tokenizer je Basismodell: Zeichen pro Token für die Längenschätzung des
+// Exports (routes/jobs/finetune-export/lib/tokens.js) und das Chat-Template
+// (vorgerendertes `text`-Feld, Modelfile). Tekken (Mistral) ≈ 3.3 Zeichen/Token
+// DE, Qwen ≈ 3.0 — ein dichterer Tokenizer heisst mehr Tokens pro Beispiel.
+const TEKKEN = { charsPerToken: { de: 3.3, en: 4.0 }, chatTemplate: 'mistral' };
+const QWEN = { charsPerToken: { de: 3.0, en: 3.8 }, chatTemplate: 'chatml' };
+const MINISTRAL_8B = { name: 'Ministral 3 8B', model: 'unsloth/Ministral-3-8B-Instruct-2512-unsloth-bnb-4bit', ...TEKKEN };
+const MISTRAL_SMALL_24B = { name: 'Mistral Small 3.2 24B', model: 'unsloth/Mistral-Small-3.2-24B-Instruct-2506-unsloth-bnb-4bit', ...TEKKEN };
+const QWEN3_14B = { name: 'Qwen3 14B', model: 'unsloth/Qwen3-14B-unsloth-bnb-4bit', ...QWEN };
 
 // `maxChars` hält p95 der Samples deutlich unter dem Sequenz-Budget
 // (4000 Zeichen ≈ 1500 Tokens bei seq 4096).
 export const FINETUNE_PROFILES = [
-  { id: 'ministral3-8b-16gb', ...MINISTRAL_8B, ...TRAIN_LENGTH, vramGb: 16, batch: 1, accum: 16, seq: 4096, r: 32, maxChars: 4000 },
+  // `saveSteps`: fester Abstand der gesicherten Stände statt ~10 % des Laufs.
+  { id: 'ministral3-8b-16gb', ...MINISTRAL_8B, ...TRAIN_LENGTH, vramGb: 16, batch: 1, accum: 16, seq: 4096, r: 64, maxChars: 4000, saveSteps: 100 },
   { id: 'ministral3-8b-20gb', ...MINISTRAL_8B, ...TRAIN_LENGTH, vramGb: 20, batch: 2, accum: 8, seq: 4096, r: 32, maxChars: 4000 },
   { id: 'ministral3-8b-24gb', ...MINISTRAL_8B, ...TRAIN_LENGTH, vramGb: 24, batch: 2, accum: 8, seq: 8192, r: 64, maxChars: 8000 },
   { id: 'mistral-small32-24b-20gb', ...MISTRAL_SMALL_24B, ...TRAIN_LENGTH, vramGb: 20, batch: 1, accum: 16, seq: 4096, r: 32, maxChars: 4000 },
+  // Vergleichsprofil: gleicher System-Prompt, kürzere Sequenz (P95 der
+  // Beispiele liegt weit darunter), kleineres LoRA.
+  { id: 'qwen3-14b-16gb', ...QWEN3_14B, ...TRAIN_LENGTH, vramGb: 16, batch: 1, accum: 16, seq: 2048, r: 16, maxChars: 2000 },
 ];
 
-export const DEFAULT_FINETUNE_PROFILE_ID = 'ministral3-8b-20gb';
+export const DEFAULT_FINETUNE_PROFILE_ID = 'ministral3-8b-16gb';
 
 export function finetuneProfileById(id) {
   return FINETUNE_PROFILES.find(p => p.id === id)
@@ -160,7 +192,7 @@ export function studioConfig(profile, { maxSeqTokens, trainCount } = {}) {
     training: {
       ...TRAINING_BASE,
       ...length,
-      ...(steps ? { save_steps: steps.save } : {}),
+      ...(profile.saveSteps ? { save_steps: profile.saveSteps } : steps ? { save_steps: steps.save } : {}),
       max_seq_length: maxSeqTokens > 0 ? maxSeqTokens : profile.seq,
       batch_size: profile.batch,
       gradient_accumulation_steps: profile.accum,

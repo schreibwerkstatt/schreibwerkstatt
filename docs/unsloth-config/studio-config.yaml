@@ -2,7 +2,7 @@
 # Unsloth-Studio Training-Config (Studio-natives Format)
 #
 # Kommentierte Fassung des Default-Profils der Fine-Tuning-Export-Karte
-# (Ministral 3 8B, 20 GB). Andere Profile lädt die Karte direkt herunter;
+# (Ministral 3 8B, 16 GB). Andere Profile lädt die Karte direkt herunter;
 # Werte-Quelle public/js/book/finetune-profiles.js, Gleichstand gegated
 # durch tests/unit/finetune-profiles.test.mjs.
 #
@@ -18,8 +18,8 @@
 # Defaults (für Chat-Modelle u. a. packing=true) und überschreibt einen
 # vorher importierten Stand. Dataset wird weiterhin in der GUI gewählt.
 #
-# Ziel: Ministral-3-8B-Instruct-2512 QLoRA auf 1× RTX 4000 Ada (20 GB
-# VRAM) mit den JSONL-Exports der Fine-Tuning-Export-Karte.
+# Ziel: Ministral-3-8B-Instruct-2512 QLoRA auf einer GPU mit 16 GB
+# VRAM mit den JSONL-Exports der Fine-Tuning-Export-Karte.
 #
 # Vor dem Import in Studio noch in der GUI einstellen:
 #   1. Dataset-Spalte: train.jsonl (Upload/Local), als Eval-File
@@ -49,11 +49,11 @@ training:
   max_steps: 0
   num_epochs: 1
 
-  # ─── Batching (20-GB-VRAM-Profil für 8B) ─────────────────────────────
-  # effektive Batch = 2 × 8 = 16. VRAM-Peak ~12–15 GB. Bei OOM:
-  # batch_size 1, gradient_accumulation_steps 16.
-  batch_size: 2
-  gradient_accumulation_steps: 8
+  # ─── Batching (16-GB-VRAM-Profil für 8B) ─────────────────────────────
+  # effektive Batch = 1 × 16 = 16. Mit 20 GB geht batch_size 2 ×
+  # gradient_accumulation_steps 8 (gleiche effektive Batch, schneller).
+  batch_size: 1
+  gradient_accumulation_steps: 16
 
   # ─── Sequenzlänge ────────────────────────────────────────────────────
   # 4096 matcht Export-Filter (max_seq_tokens=4096). p95 unserer Samples
@@ -112,12 +112,12 @@ training:
 
 lora:
   # ─── Rang & Alpha ────────────────────────────────────────────────────
-  # r=32 ist Sweet-Spot für "Welt internalisieren". Studio-Default 16 ist
-  # zu klein — verliert Kapazität für Figuren/Orte. alpha = r (Unsloth-
-  # Empfehlung). Bei 8B ist auf 20 GB auch r=64 möglich (Faktenwiedergabe,
-  # siehe finetuning.md §4).
-  lora_r: 32
-  lora_alpha: 32
+  # r=64: das Leser-Modell antwortet ohne Nachschlagen, der Adapter muss
+  # Figuren, Beziehungen, Ereignisse und Jahre halten (Faktenwiedergabe,
+  # siehe finetuning.md §4). r=32 reicht für Stil, Studio-Default 16 ist zu
+  # klein. alpha = r (Unsloth-Empfehlung). Bei 8B QLoRA passt r=64 auf 16 GB.
+  lora_r: 64
+  lora_alpha: 64
 
   # ─── Dropout ─────────────────────────────────────────────────────────
   # 0.05 gegen Auswendiglernen; 0 wäre dank Unsloths Fused-LoRA-Patch
@@ -146,7 +146,7 @@ lora:
   finetune_attention_modules: true
   finetune_mlp_modules: true
 
-  # RSLoRA/LoftQ/DoRA bringen bei r=32 nur marginalen Effekt — aus lassen.
+  # RSLoRA/LoftQ/DoRA bringen bei r=64 nur marginalen Effekt — aus lassen.
   use_rslora: false
   use_loftq: false
   use_dora: false

@@ -5,11 +5,13 @@
 // konservativ (eher aufrunden), damit `maxSeqTokens`-Filter nicht in
 // Truncation läuft. Tekken-V7 ist byte-level-BPE — bei reinem DE-Fliesstext
 // liegt die echte Rate näher an 3.5-3.8 char/tok, daher ist 3.3 ~10 % Puffer.
-function estimateTokens(text, langIsEn) {
+// `perToken` (optional): Zeichen pro Token des Profil-Tokenizers
+// (finetune-profiles.js#charsPerToken, z.B. Qwen), sonst die Tekken-Werte.
+function estimateTokens(text, langIsEn, perToken = null) {
   if (!text) return 0;
-  const perToken = langIsEn ? 4.0 : 3.3;
-  return Math.ceil(text.length / perToken);
+  return Math.ceil(text.length / (perToken || defaultCharsPerToken(langIsEn)));
 }
+const defaultCharsPerToken = (langIsEn) => (langIsEn ? 4.0 : 3.3);
 
 // Mistral-Tekken-Chat-Template (Ministral-3- und Mistral-Small-3.2-Format).
 // Layout pro Mistral-Common-Spec:
@@ -36,6 +38,11 @@ function renderMistralChat(messages) {
   return out;
 }
 
+// ChatML (Qwen): <|im_start|>role\n…<|im_end|>\n je Nachricht.
+function renderChatML(messages) {
+  return messages.map(m => `<|im_start|>${m.role}\n${m.content}<|im_end|>\n`).join('');
+}
+
 // Perzentile aus sortiertem Numeric-Array (Nearest-Rank).
 function percentile(sortedNums, p) {
   if (!sortedNums.length) return 0;
@@ -56,7 +63,9 @@ function recommendSeqLen(p95) {
 
 module.exports = {
   estimateTokens,
+  defaultCharsPerToken,
   renderMistralChat,
+  renderChatML,
   percentile,
   recommendSeqLen,
 };

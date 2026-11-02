@@ -8,7 +8,8 @@
 //   `writing`: das Ziel ist echter Buchtext (Fortsetzen, Szene schreiben,
 //              Dialogzeile, Erzählen aus Figurensicht, Wörtlich, Buchstelle);
 //   `persona`: Leser-Gespräch, Ich-Form, Innenleben (samples/reader/);
-//   `refusal`: Ablehnen — unbekannte Namen, Off-Topic, falsche Annahme;
+//   `refusal`: Ablehnen — unbekannte Namen, Teil-Ablehnung, Off-Topic,
+//              Meta-Fragen zum Werk, falsche Annahme;
 //   `editor`:  Lektorats-Feedback, nur mit `editorFeedback` (Standard aus);
 //   alles andere ist `facts`.
 const TASK_RULES = [
@@ -34,6 +35,8 @@ const TASK_RULES = [
   [/^refusal\|unknown/, 'unknownEntity'],
   [/^refusal\|offTopic/, 'offTopic'],
   [/^refusal\|falsePremise/, 'falsePremise'],
+  [/^refusal\|mixed/, 'mixedRefusal'],
+  [/^refusal\|meta/, 'metaQuestion'],
   [/^reader\|(conv|personaConv)\|/, 'readerConversation'],
   [/^reader\|(persona|personaVoice)\|/, 'readerPersona'],
   [/^reader\|/, 'reader'],
@@ -52,10 +55,10 @@ function taskOf(sample) {
 }
 
 const PERSONA_TASKS = new Set(['reader', 'readerPersona', 'readerConversation']);
-const REFUSAL_TASKS = new Set(['unknownEntity', 'offTopic', 'falsePremise']);
+const REFUSAL_TASKS = new Set(['unknownEntity', 'offTopic', 'falsePremise', 'mixedRefusal', 'metaQuestion']);
 
 // Kernwissen (samples/core-facts/): eigene Typen, Familie `facts`.
-const CORE_TASKS = new Set(['figureCore', 'figureAttr', 'relationCore', 'eventCore', 'chapterCore']);
+const CORE_TASKS = new Set(['figureCore', 'figureAttr', 'relationCore', 'eventCore', 'eventWhy', 'eventTimeline', 'chapterCore', 'coreFact']);
 
 function familyOf(task) {
   if (WRITING_TASKS.has(task)) return 'writing';
