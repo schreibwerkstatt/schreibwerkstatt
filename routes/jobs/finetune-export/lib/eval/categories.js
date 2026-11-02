@@ -17,7 +17,9 @@ const { CHAPTER_QUESTIONS } = require('../../samples/core-facts/events');
 const { fillCase } = require('../../samples/core-facts/naming');
 const { genderOf, roleNoun, inverseTyp, rolePhrase, figureTypePhrase, ownBirthYear } = require('../../samples/core-facts/words');
 const { wrongPremises, REFUSAL_TEXT } = require('../../samples/reader/refusals');
-const { EVAL_FAKES, META } = require('../../samples/reader/refusal-text');
+const { EVAL_FAKES } = require('../../samples/reader/refusal-text');
+const { META_TEXT } = require('../../samples/reader/meta-text');
+const { metaValues } = require('../../samples/reader/meta');
 const { stylePrefix } = require('../../samples/style');
 
 // Frageformen, die das Train nicht kennt.
@@ -27,11 +29,12 @@ const EQ = {
       'Was sollte man über {n:akk} unbedingt wissen?'],
     relation: ['Was verbindet {x} mit {y:dat}?', 'Welche Rolle spielt {y} im Leben von {x:dat}?', 'Sag mir, in welchem Verhältnis {x} und {y} zueinander stehen.'],
     chapter: ['Ich bin gerade beim Kapitel «{k}» – was passiert da alles?', 'Was erlebt man im Kapitel «{k}»?', 'Was sind die wichtigsten Ereignisse im Kapitel «{k}»?'],
-    falsePremise: ['Warum genau ist {y} eigentlich {wrong}?', 'Erzähl mir, wie {y} {wrong} wurde.', 'Was hält {y} davon, {wrong} zu sein?'],
+    falsePremise: ['Warum genau ist {y} eigentlich {wrong}?', 'Wie fühlt es sich für {y} an, {wrong} zu sein?', 'Was hält {y} davon, {wrong} zu sein?'],
     mixed: ['Was haben {real} und {x} miteinander zu tun?', 'Erzähl mir etwas über {x} und {real}.', 'Wer ist wichtiger für die Geschichte, {real} oder {x}?'],
     meta: {
-      author: 'Wer ist eigentlich der Verfasser von «{book}»?', year: 'Aus welchem Jahr stammst du?', origin: 'Wie ist die Idee zu dir entstanden?',
-      publisher: 'Wer hat «{book}» herausgebracht?', sequel: 'Gibt es noch einen zweiten Band von dir?', count: 'Wie viele Kapitel umfasst du?',
+      author: 'Wer ist eigentlich der Verfasser von «{book}»?', year: 'Verrätst du mir dein Entstehungsjahr?', count: 'Wie viele Kapitel zählt «{book}» insgesamt?',
+      chapterList: 'Welches Kapitel kommt bei dir zuerst?', publisher: 'Bei welchem Verlag ist «{book}» zu haben?', genre: 'Welcher Gattung würdest du dich zuordnen?',
+      'no-works': 'Welche anderen Romane hat dein Autor noch geschrieben?', 'no-origin': 'Was war der Anlass, «{book}» zu schreiben?',
     },
     newChapter: ['Schreibe den Anfang eines neuen Kapitels, in dem {a} und {b} aufeinandertreffen.', 'Erfinde eine neue Szene, in der {a} und {b} miteinander reden.'],
     continuation: 'Schreib diese Stelle weiter, so wie das Buch sie erzählen würde:\n\n',
@@ -44,8 +47,9 @@ const EQ = {
     falsePremise: ['Why exactly is {y} {wrong}?', 'Tell me how {y} became {wrong}.', 'What does {y} think about being {wrong}?'],
     mixed: ['What do {real} and {x} have to do with each other?', 'Tell me something about {x} and {real}.', 'Who matters more to the story, {real} or {x}?'],
     meta: {
-      author: 'Who actually wrote «{book}»?', year: 'What year are you from?', origin: 'How did the idea for you come about?',
-      publisher: 'Who brought out «{book}»?', sequel: 'Is there a second volume of you?', count: 'How many chapters do you comprise?',
+      author: 'Who actually wrote «{book}»?', year: 'Will you tell me the year you were written?', count: 'How many chapters does «{book}» have in total?',
+      chapterList: 'Which chapter comes first in you?', publisher: 'Which publisher is «{book}» available from?', genre: 'Which genre would you place yourself in?',
+      'no-works': 'What other novels has your author written?', 'no-origin': 'What prompted the writing of «{book}»?',
     },
     newChapter: ['Write the beginning of a new chapter in which {a} and {b} meet.', 'Invent a new scene in which {a} and {b} talk to each other.'],
     continuation: 'Keep writing this passage the way the book would tell it:\n\n',
@@ -91,12 +95,13 @@ function buildFactCategories(ctx, env) {
       const job = facts.find(x => x.id.endsWith(':beruf'));
       if (groups.length < 2 && job) { groups.push([job.label]); used.push(job.id); }
       if (!groups.length && card.fields?.beruf) groups.push([String(card.fields.beruf).split(/[\s,]+/)[0]]);
+      // Ein Porträt nennt nicht jeden Kernfakt: mindestens zwei der Gruppen.
       return {
-        expected: card.statement, mustContainAny: groups, mustNotContain: [`${name} ist:`, `${name} is:`],
+        expected: card.statement, mustContainAny: groups, minAny: Math.min(2, groups.length), mustNotContain: [`${name} ist:`, `${name} is:`],
         factIds: ['fig:' + f.fig_id + ':core', ...used],
         judge: langIsEn
-          ? `Portrait of ${name} in full sentences. Correct: role in the book and ${groups.map(g => g[0]).join(', ') || 'the facts of the reference'}. 0 if it invents facts (job, place, relatives) or only lists adjectives.`
-          : `Porträt von ${name} in ganzen Sätzen. Richtig: Rolle im Buch und ${groups.map(g => g[0]).join(', ') || 'die Fakten der Referenz'}. 0, wenn Fakten erfunden sind (Beruf, Ort, Verwandte) oder nur Eigenschaften aufgezählt werden.`,
+          ? `Portrait of ${name} in full sentences. Correct: role in the book and at least two of ${groups.map(g => g[0]).join(', ') || 'the facts of the reference'}. 0 if it invents facts (job, place, relatives) or only lists adjectives.`
+          : `Porträt von ${name} in ganzen Sätzen. Richtig: Rolle im Buch und mindestens zwei von ${groups.map(g => g[0]).join(', ') || 'den Fakten der Referenz'}. 0, wenn Fakten erfunden sind (Beruf, Ort, Verwandte) oder nur Eigenschaften aufgezählt werden.`,
       };
     },
   });
@@ -175,25 +180,27 @@ function buildFactCategories(ctx, env) {
   });
 
   // ── meta ──────────────────────────────────────────────────────────────
-  const pub = ctx.publication || {};
-  const chapters = (ctx.chapterKeys || []).filter(k => k !== 0).length;
-  const metaTopics = Object.keys(eq.meta);
+  // Felder aus den Projektdaten (Jahr, Kapitel, Autor …) und die ehrlichen
+  // Ablehnungen (weitere Werke, Entstehung) — samples/reader/meta.js.
+  const mv = metaValues(ctx);
+  const MT = META_TEXT[lang];
   const refusal = REFUSAL_MARKERS[lang];
-  quota('meta', metaTopics, {
-    seen: (topic) => (META[lang][topic]?.q || []).map(q => fill(q, { book })),
-    unseen: (topic) => [fill(eq.meta[topic], { book })],
+  quota('meta', Object.keys(eq.meta), {
+    seen: (topic) => (topic.startsWith('no-') ? MT.refuse[topic.slice(3)] : MT.fields[topic]?.q || [])
+      .filter(q => mv.author || !q.includes('{authorRef}')).map(q => fill(q, mv.vars)),
+    unseen: (topic) => [fill(eq.meta[topic], mv.vars)],
     build: (topic) => {
-      const author = String(pub.author_name || '').trim();
-      const year = String(pub.year || '').trim();
-      const publisher = String(pub.publisher || '').trim();
-      const known = { author, year: /^\d{4}$/.test(year) ? year : '', publisher, count: chapters ? String(chapters) : '' }[topic];
-      return known
-        ? { expected: known, mustContain: [known], judge: langIsEn ? `States «${known}» from the project data; nothing else invented.` : `Nennt «${known}» aus den Projektdaten; erfindet nichts dazu.` }
-        : {
-          expected: fill((META[lang][topic]?.unknown || [''])[0], { book }), mustContainAny: [refusal],
-          judge: langIsEn ? 'Declines honestly: the information is not in the book. 0 for any invented name, year or story of origin.'
-            : 'Lehnt ehrlich ab: die Angabe steht nicht im Buch. 0 für jeden erfundenen Namen, jedes Jahr, jede Entstehungsgeschichte.',
-        };
+      const known = { author: mv.author, year: mv.year, count: mv.vars.chapters, chapterList: mv.vars.first, publisher: mv.vars.publisher, genre: mv.genre }[topic];
+      if (known) {
+        return { expected: known, mustContain: [known],
+          judge: langIsEn ? `States «${known}» from the project data; nothing else invented.` : `Nennt «${known}» aus den Projektdaten; erfindet nichts dazu.` };
+      }
+      return {
+        expected: fill(MT.refuseA[0], mv.vars), mustContainAny: [refusal],
+        mustNotContain: mv.chapters.map(c => `«${c}»`).filter(c => !c.includes(mv.book)),
+        judge: langIsEn ? 'Declines honestly: the information is not in the book. 0 for any book title, publisher, year or story of origin; chapter names are not other books.'
+          : 'Lehnt ehrlich ab: die Angabe steht nicht im Buch. 0 für jeden Buchtitel, Verlag, jedes Jahr oder jede Entstehungsgeschichte; Kapitelnamen sind keine anderen Bücher.',
+      };
     },
   });
 
@@ -205,7 +212,10 @@ function buildFactCategories(ctx, env) {
     seen: (s) => REFUSAL_TEXT[lang].mixedQ.map(q => fill(q, s)),
     unseen: (s) => eq.mixed.map(q => fill(q, s)),
     build: (s) => ({
+      // Der erfundene Name wird nie wie eine Figur behandelt: kein Vergleich,
+      // keine Eigenschaft.
       expected: '', mustContain: [s.real], mustContainAny: [refusal],
+      mustNotContain: langIsEn ? [`${s.x} is`, `than ${s.x}`] : [`${s.x} ist`, `als ${s.x}`, `${s.x} spielt`],
       judge: langIsEn
         ? `Places ${s.real} briefly and correctly, and says that ${s.x} does not appear. 1 if only one half is right; 0 if ${s.x} is described as a character.`
         : `Ordnet ${s.real} kurz und richtig ein und sagt, dass ${s.x} nicht vorkommt. 1, wenn nur eine Hälfte stimmt; 0, wenn ${s.x} als Figur beschrieben wird.`,
@@ -229,7 +239,7 @@ function buildFactCategories(ctx, env) {
       const names = figRows.filter(f => nameRegex(f.name).test(expected)).map(f => f.name).slice(0, 2);
       return {
         expected, holdout: isVal(p) ? 'text' : undefined,
-        mustContainAny: names.length ? [names] : [], mustNotContain: swiss ? ['ß'] : [],
+        mustContainAny: names.length ? [names] : [], style: proseStyle(opening, swiss),
         judge: styleJudge(opening, langIsEn, swiss, names),
       };
     },
@@ -242,9 +252,20 @@ function buildFactCategories(ctx, env) {
     unseen: ([a, b]) => eq.newChapter.map(t => fill(t, { a: a.name, b: b.name })),
     build: ([a, b]) => ({
       expected: '', mustContain: [a.name.split(/\s+/)[0], b.name.split(/\s+/)[0]],
+      style: proseStyle(String(ctx.bookSettings?.erzaehlzeit || '') === 'praesens' ? '' : 'war hatte', swiss),
       judge: styleJudge('', langIsEn, swiss, [a.name, b.name]),
     }),
   });
+}
+
+// Automatische Stilprüfung der Prosa (lib/eval/score.js): kein «ß» in
+// Schweizer Schreibung, Zeitform wie der Anfang, keine Wiederholungsschleife,
+// kein Metatext («Kapitel 11»).
+function proseStyle(opening, swiss) {
+  const w = String(opening || '').toLowerCase().split(/[^\p{L}]+/u);
+  const past = w.filter(x => /^(war|waren|hatte|hatten|wurde|ging|sagte|was|were|had)$/.test(x)).length;
+  const present = w.filter(x => /^(ist|sind|hat|haben|wird|geht|sagt|is|are|has)$/.test(x)).length;
+  return { ...(swiss ? { noEszett: true } : {}), ...(past + present ? { tense: past >= present ? 'past' : 'present' } : {}), noRepeat: true, noMeta: true };
 }
 
 // Stil-Anweisung für den Richter: Perspektive und Zeitform aus dem Anfang
@@ -265,4 +286,4 @@ function styleJudge(opening, langIsEn, swiss, names) {
   return parts.join('; ');
 }
 
-module.exports = { buildFactCategories, EVAL_QUESTIONS: EQ, styleJudge };
+module.exports = { buildFactCategories, EVAL_QUESTIONS: EQ, styleJudge, proseStyle };

@@ -1,5 +1,6 @@
 // Unit: KI-Warum-Fragen (docs/finetuning.md#warum-familie): je Warum-Karte
-// Leserfragen per KI, Antworten bleiben die geprüften der Karte; Fragen ohne
+// Leserfragen per KI, Antworten sind geprüfte Fassungen der Karte, die noch
+// keine Vorlagen-Frage trägt; Fragen ohne
 // alle Namen, mit fremdem Namen oder mit zitiertem Titel fallen weg; der
 // zweite Lauf trifft den Cache.
 import test from 'node:test';
@@ -68,8 +69,12 @@ test('KI-Warum-Fragen: Leserfragen übernommen, Antworten aus der Karte, Prüfun
     'Warum hat Stefan Renate vergewaltigt?',
     'Was hat Stefan dazu gebracht, Renate am Chilbi-Abend Gewalt anzutun?',
   ]);
+  const pool = new Set(ctx.whyAnswers.get('evt:3:motive'));
   for (const s of neu) {
-    assert.ok(cardAnswers.has(s.messages[2].content), 'Antwort ist eine geprüfte Antwort der Karte');
+    // Eine Fassung der Karte, die noch keine Vorlagen-Frage trägt: je Frage
+    // eine eigene Antwort (why.js).
+    assert.ok(pool.has(s.messages[2].content), 'Antwort ist eine geprüfte Fassung der Karte');
+    assert.ok(!cardAnswers.has(s.messages[2].content), 'nicht dieselbe Antwort wie eine Vorlagen-Frage');
     assert.equal(s.task, 'eventWhy');
     assert.equal(s.factId, 'evt:3:motive');
     assert.ok(s.aiParaphrase);

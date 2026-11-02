@@ -3,6 +3,17 @@
 const { extractName, nameRegex } = require('../../lib/names');
 const { splitParagraphs } = require('../../lib/text');
 
+// Nur erwähnt statt Schauplatz: ein Ort im Ausland (`land` ≠ Schauplatz-Land
+// des Buchs, auch ohne Land) mit weniger als zwei Szenen — Nachricht,
+// Erinnerung, Gespräch («Columbine Highschool», «Ägypten»). Er bekommt seine
+// eigenen Fragen («Was ist X?»), aber keine Schauplatz-Fragen (Figuren und
+// Szenen am Ort, Reise, Kapitel-Schauplätze). Gleiche Regel wie
+// event-data.js#isSetting, dort je Ereignis.
+function mentionOnly(ctx, l) {
+  const home = String(ctx.homeLand || '').toLowerCase();
+  return !!home && l.land !== home && (ctx.scenesByLocPk?.get(l.pk) || []).length < 2;
+}
+
 // Block 3+4: Orte-Q&A einzeln + Verknüpfungen + Reisen. Orte stehen in den
 // Fragen als «Schauplatz «X»» — ob «in Basel», «im Kantonsspital» oder «an der
 // Aare», weiss der Export nicht. Fragen zu einem Ort tragen `unit: loc:<id>`.
@@ -22,9 +33,10 @@ function buildLocationSamples(ctx) {
   // soll jeden Ort aus vielen Blickwinkeln gelernt haben.
   const sceneTitleById = new Map(sceneRows.map(s => [s.id, s.titel]));
   for (const l of locRows) {
-    const kapitel    = chaptersByLocPk.get(l.pk) || [];
-    const figsHere   = (figsByLocPk.get(l.pk) || []).map(id => extractName(id, figById)).filter(Boolean);
-    const szenenHere = (scenesByLocPk.get(l.pk) || []).map(id => sceneTitleById.get(id)).filter(Boolean);
+    const mentioned  = mentionOnly(ctx, l);
+    const kapitel    = mentioned ? [] : chaptersByLocPk.get(l.pk) || [];
+    const figsHere   = mentioned ? [] : (figsByLocPk.get(l.pk) || []).map(id => extractName(id, figById)).filter(Boolean);
+    const szenenHere = mentioned ? [] : (scenesByLocPk.get(l.pk) || []).map(id => sceneTitleById.get(id)).filter(Boolean);
     const desc       = (l.beschreibung || '').trim();
 
     // Komplette Antwort mit allen verfügbaren Facetten. Wird als Haupt-Antwort
@@ -105,7 +117,7 @@ function buildLocationSamples(ctx) {
   const locsByFigId = new Map();
   for (const [locPk, figIds] of figsByLocPk) {
     const loc = locRows.find(l => l.pk === locPk);
-    if (!loc) continue;
+    if (!loc || mentionOnly(ctx, loc)) continue;
     for (const fid of figIds) {
       if (!locsByFigId.has(fid)) locsByFigId.set(fid, []);
       locsByFigId.get(fid).push(loc);
@@ -113,6 +125,7 @@ function buildLocationSamples(ctx) {
   }
   const locsByChapter = new Map();
   for (const l of locRows) {
+    if (mentionOnly(ctx, l)) continue;
     for (const ch of (chaptersByLocPk.get(l.pk) || [])) {
       const k = (ch || '').toLowerCase();
       if (!k) continue;
@@ -181,7 +194,7 @@ function buildLocationSamples(ctx) {
     for (const fid of figIds) {
       for (const lid of locIds) {
         const loc = locRows.find(l => l.loc_id === lid);
-        if (!loc) continue;
+        if (!loc || mentionOnly(ctx, loc)) continue;
         if (!figLocSeq.has(fid)) figLocSeq.set(fid, []);
         const seq = figLocSeq.get(fid);
         if (seq.length === 0 || seq[seq.length - 1].loc.pk !== loc.pk) {
@@ -220,14 +233,15 @@ function buildLocationPassageSamples(ctx) {
         found.push({ para, page: p });
       }
     }
+    const mentioned = mentionOnly(ctx, l);
     for (let j = 0; j < found.length; j++) {
       pushQA('authorChat|ortPass|' + l.loc_id + '|' + j,
         langIsEn
-          ? `Show me a passage set at ${l.name}.`
-          : `Zeig mir eine Passage, die am Schauplatz «${l.name}» spielt.`,
+          ? (mentioned ? `Show me a passage that mentions ${l.name}.` : `Show me a passage set at ${l.name}.`)
+          : (mentioned ? `Zeig mir eine Passage, in der «${l.name}» vorkommt.` : `Zeig mir eine Passage, die am Schauplatz «${l.name}» spielt.`),
         found[j].para);
     }
   }
 }
 
-module.exports = { buildLocationSamples, buildLocationPassageSamples };
+module.exports = { buildLocationSamples, buildLocationPassageSamples, mentionOnly };

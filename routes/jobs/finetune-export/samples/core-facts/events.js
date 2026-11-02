@@ -15,7 +15,7 @@
 
 const { isAdverbialWhen } = require('./words');
 const { bestTier } = require('./relations');
-const { nameRegex } = require('../../lib/names');
+const { nameRegex, hashSplit } = require('../../lib/names');
 const { leadSafe } = require('../author-chat/event-data');
 const { fillCase, declineName } = require('./naming');
 
@@ -121,6 +121,92 @@ function buildEventCore(ctx, emitCard) {
         answers: langIsEn
           ? [bed, `«${E}» matters because of this: ${bed}`]
           : [bed, `«${E}» ist für die Geschichte wichtig: ${bed}`],
+      });
+    }
+  }
+}
+
+// ── Dabei oder nicht ─────────────────────────────────────────────────────
+// Ja/Nein-Fragen zur Beteiligung («Ist Gisela bei «…» dabei?»). Ohne das Nein
+// lernt das Modell, jede Ja/Nein-Frage mit «Ja» zu beantworten — die Ja-
+// Antworten des Kernwissens (core-set.js) stünden allein. Ein Nein nur, wenn
+// es sicher ist: die Figur ist benannt, mit einer beteiligten Figur verbunden
+// (plausible Frage) und wird weder im Titel, in der Bedeutung noch in einem
+// der verknüpften Abschnitte genannt. Ohne verknüpften Abschnitt kein Nein.
+const PQ = {
+  de: {
+    q: ['Ist {n} bei «{e}» dabei?', 'War {n} bei «{e}» dabei?', 'Ist {n} an «{e}» beteiligt?', 'Erlebt {n} «{e}» mit?'],
+    no: ['Nein, {n} ist bei «{e}» nicht dabei. Beteiligt {verb} {list}.', 'Nein. An «{e}» {verb} {list} beteiligt, {n} nicht.'],
+    yes: ['Ja, {n} ist bei «{e}» dabei.', 'Ja, {n} ist an «{e}» beteiligt, zusammen mit {others}.'],
+    verb: ['ist', 'sind'],
+  },
+  en: {
+    q: ['Is {n} part of «{e}»?', 'Was {n} there for «{e}»?', 'Is {n} involved in «{e}»?', 'Does {n} experience «{e}»?'],
+    no: ['No, {n} is not part of «{e}». Involved {verb} {list}.', 'No. {List} {verb} involved in «{e}», {n} is not.'],
+    yes: ['Yes, {n} is part of «{e}».', 'Yes, {n} is involved in «{e}», together with {others}.'],
+    verb: ['is', 'are'],
+  },
+};
+const PRESENCE_NO_MAX = 2;
+
+function buildEventPresence(ctx, emitCard) {
+  const { langIsEn, events = [], relationFacts = [], pageContents = [], figRows = [] } = ctx;
+  const P = PQ[langIsEn ? 'en' : 'de'];
+  const seed = ctx.opts?.valSeed;
+  const textById = new Map(pageContents.map(p => [p.id, p.text || '']));
+  const figById = new Map(figRows.map(f => [f.fig_id, f]));
+  const usable = (id) => {
+    const info = ctx.figNameInfo?.get(id);
+    return info && info.proper !== false && !info.ambiguous && (!ctx.eligibleFigIds || ctx.eligibleFigIds.has(id))
+      && ['main', 'side'].includes(ctx.tierByFig?.get(id));
+  };
+  const nameOf = (id) => ctx.figNameInfo?.get(id)?.name || figById.get(id)?.name;
+  const forms = (id) => {
+    const f = figById.get(id) || {};
+    const all = [nameOf(id), f.name, f.kurzname].filter(Boolean).map(n => String(n).replace(/\s*\([^)]*\)/g, '').trim());
+    return [...new Set([...all, ...all.map(n => n.split(/\s+/)[0])])].filter(n => n.length >= 3);
+  };
+  const related = new Map();
+  for (const r of relationFacts) {
+    for (const [x, y] of [[r.a, r.b], [r.b, r.a]]) {
+      if (!related.has(x.fig_id)) related.set(x.fig_id, new Set());
+      related.get(x.fig_id).add(y.fig_id);
+    }
+  }
+  const fill = (tpl, v) => tpl.replace(/\{(\w+)\}/g, (_, k) => v[k] ?? '');
+  for (const e of events) {
+    const E = e.ereignis;
+    const inEvent = e.figs.filter(f => f.fig_id);
+    if (!inEvent.length || inEvent.length !== e.figs.length) continue;
+    const ids = new Set(inEvent.map(f => f.fig_id));
+    const tier = bestTier(ctx, inEvent);
+    const card = (fig, dabei) => ({ id: `evt:${e.i}:with:${fig}`, kind: 'event', unit: 'evt:' + e.i, tier, subject: E, fields: { figur: nameOf(fig), dabei } });
+    const list = joinList(inEvent.map(f => f.name), langIsEn);
+    const verb = P.verb[inEvent.length > 1 ? 1 : 0];
+    // Ja: nur Beteiligte, die der Titel nicht nennt — sonst stünde die Antwort in der Frage.
+    for (const f of inEvent) {
+      if (!usable(f.fig_id) || forms(f.fig_id).some(n => nameRegex(n).test(E))) continue;
+      const n = nameOf(f.fig_id);
+      const others = joinList(inEvent.filter(x => x !== f).map(x => x.name), langIsEn);
+      emitCard(card(f.fig_id, true), {
+        task: 'eventCore', count: 2,
+        questions: P.q.map(t => fill(t, { n, e: E })),
+        answers: P.yes.filter(t => others || !t.includes('{others}')).map(t => fill(t, { n, e: E, others })),
+      });
+    }
+    // Nein: verbundene, aber unbeteiligte Figuren, nirgends im Ereignis genannt.
+    if (!e.pageIds?.length) continue;
+    const hay = [E, e.bedeutung || '', e.excerpt?.text || '', ...e.pageIds.map(id => textById.get(id) || '')].join('\n');
+    const cands = [...new Set(inEvent.flatMap(f => [...(related.get(f.fig_id) || [])]))]
+      .filter(id => !ids.has(id) && usable(id) && !forms(id).some(n => nameRegex(n).test(hay)))
+      .sort((a, b) => (ctx.tierByFig.get(a) === 'main' ? 0 : 1) - (ctx.tierByFig.get(b) === 'main' ? 0 : 1)
+        || hashSplit(`pres|${e.i}|${a}`, seed) - hashSplit(`pres|${e.i}|${b}`, seed));
+    for (const id of cands.slice(0, PRESENCE_NO_MAX)) {
+      const n = nameOf(id);
+      emitCard(card(id, false), {
+        task: 'eventCore', count: 2,
+        questions: P.q.map(t => fill(t, { n, e: E })),
+        answers: P.no.map(t => fill(t, { n, e: E, list, List: cap(list), verb })),
       });
     }
   }
@@ -320,4 +406,4 @@ function buildChapterCore(ctx, emitCard) {
   }
 }
 
-module.exports = { buildEventCore, buildChapterCore, chapterOfEvent, chronicle, joinList, whenAdverb, EVENT_QUESTIONS: EQ, CHAPTER_QUESTIONS: CQ };
+module.exports = { buildEventCore, buildEventPresence, buildChapterCore, chapterOfEvent, chronicle, joinList, whenAdverb, EVENT_QUESTIONS: EQ, CHAPTER_QUESTIONS: CQ };

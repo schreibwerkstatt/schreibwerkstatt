@@ -1,77 +1,60 @@
 'use strict';
 
 // Warum-Familie (docs/finetuning.md#warum-familie): «Warum vergewaltigt Stefan
-// Renate am Chilbi-Abend?», «Was steckt hinter «…»?». Die Antwort setzt sich
-// aus Daten zusammen, die schon in der Analyse stehen — nichts wird erfunden:
-//   1. die Bedeutung des Ereignisses (`bedeutung`), ein führendes «Er»/«Sie»
-//      durch den Namen der handelnden Figur ersetzt;
-//   2. die ein, zwei Sätze aus Motivation und Konflikt der handelnden Figur,
-//      die am meisten mit dem Ereignis zu tun haben (Stichwörter aus Titel und
-//      Bedeutung, Namen der übrigen Beteiligten);
-//   3. die Vorgeschichte: die letzten zwei persönlichen Ereignisse derselben
-//      Figur davor im Zeitstrahl — ohne Weltgeschehen und ohne Geburt/Tod
-//      (der Sonnentempler-Selbstmord ist keine Vorgeschichte einer Tat).
+// Renate am Chilbi-Abend?», «Was steckt hinter «…»?». Die Antwort erklärt
+// DIESES Ereignis aus Daten der Analyse (Bausteine: why-parts.js):
+//   1. die Bedeutung des Ereignisses, in mehreren Rahmungen, ein führendes
+//      «Er»/«Sie» durch den Namen ersetzt;
+//   2. die Lage der Figur zu diesem Zeitpunkt (Alter, Schauplatz, Ehe);
+//   3. die Vorgeschichte: frühere persönliche Ereignisse derselben Figur, die
+//      mit diesem zu tun haben — nie ein späteres, nie Weltgeschehen;
+//   4. höchstens ein Teilsatz aus Motivation/Konflikt, nur wenn er
+//      nachweislich zum Ereignis passt, umgestellt statt wörtlich.
+// Je Frage eine eigene Antwortfassung: dieselbe Antwort auf viele Fragen hätte
+// das Modell als Profilblock gelernt, den es auf jede Warum-Frage legt.
+//
 // Handelnd ist die Figur, deren Name den Ereignistitel eröffnet; steht ein
 // Handlungsverb dahinter, wird daraus die Verbfrage («Warum vergewaltigt
 // Stefan Renate …?»). Jede weitere beteiligte Figur bekommt eine eigene Karte
-// aus ihrer Sicht («Wie erlebt Renate «…»?»), aber nur, wenn ein Satz ihrer
-// Motivation oder ihres Konflikts nachweislich zum Ereignis passt — ihr
-// allgemeiner Antrieb ist keine Antwort auf ein bestimmtes Ereignis. Die
-// Ereignisfragen («Wie kam es zu «…»?») trägt die Karte der handelnden Figur,
-// sonst die der Figur, die der Titel nennt («Stefans Rekrutenschule»), sonst
-// die der einzigen beteiligten Figur — nie die einer Nebenperson.
-// Keine Warum-Karte ohne Bedeutung, für Weltgeschehen, Geburt und Tod — «Warum
-// wird Erika geboren?» ist keine Leserfrage, und «Warum ist «E» wichtig?»
-// beantwortet schon die Bedeutungskarte (events.js).
-// Analyse-Etiketten («(Want)», «Need:») fallen aus den Motivsätzen; ein Satz
-// ohne Subjekt («Will eine Heirat eingehen.») bekommt den Namen davor.
+// aus ihrer Sicht («Wie erlebt Renate «…»?»), wenn die Bedeutung sie nicht
+// als «Er»/«Sie» der handelnden Figur meint oder ein Teilsatz ihres Profils
+// zum Ereignis passt. Die Ereignisfragen («Wie kam es zu «…»?») trägt die
+// Karte der handelnden Figur, sonst die der Figur, die der Titel nennt, sonst
+// die der einzigen Beteiligten. Keine Warum-Karte ohne Bedeutung, für
+// Weltgeschehen, Geburt und Tod.
 //
-// Eine Karte je Ereignis (`evt:<i>:motive`), viele Fragen, mehrere
-// Antwortfassungen (Reihenfolge der Bausteine). Einheit `evt:<i>` wie alle
-// Ereignis-Samples. Kernwissen (`core`), wenn die handelnde Figur eine
-// Hauptfigur ist.
+// Eine Karte je Ereignis und Figur (`evt:<i>:motive[:<fig>]`), Einheit
+// `evt:<i>`. Kernwissen (`core`, immer im Train), wenn die Figur eine
+// Hauptfigur ist; geschützt ist nur die erste Fassung (lib/token-mix.js).
+// Die übrigen Fassungen liegen in `ctx.whyAnswers` — die KI-Leserfragen
+// (ai-paraphrase.js#buildAiWhyQuestions) nehmen von dort, was die Vorlagen
+// nicht belegt haben.
 
 const { nameRegex } = require('../../lib/names');
-const { splitSentences } = require('../../lib/text');
 const { bestTier } = require('./relations');
 const { declineName, isRoleName } = require('./naming');
 const { genitive } = require('./words');
 const { joinList } = require('./events');
-
-const STOP = new Set(['und', 'oder', 'aber', 'nicht', 'einer', 'einem', 'einen', 'eines', 'seine', 'seiner',
-  'seinen', 'ihrer', 'ihren', 'their', 'there', 'which', 'about', 'after', 'before', 'durch', 'gegen', 'zwischen']);
-const stemsOf = (text) => [...new Set(
-  String(text || '').toLowerCase().split(/[^\p{L}\p{N}]+/u)
-    .filter(w => w.length >= 5 && !STOP.has(w)).map(w => w.slice(0, 6))
-)];
+const {
+  isPersonal, bedeutungFor, meaningFrames, situation, precedingEvents, precedingSentences,
+  profileClause, profileFrames, composeAnswers,
+} = require('./why-parts');
 
 // Zustand statt Handlung: dafür gibt es kein Warum aus der Motivation.
 const STATE_VERBS = new Set(['ist', 'wird', 'war', 'wurde', 'hat', 'hatte', 'bleibt', 'liegt', 'gilt', 'heisst', 'heißt',
   'is', 'was', 'has', 'had', 'becomes', 'remains', 'gets']);
-const NO_WHY_SUBTYPES = new Set(['geburt', 'tod']);
-const isPersonal = (e) => String(e.typ || '').toLowerCase() !== 'extern'
-  && !String(e.subtyp || '').toLowerCase().startsWith('extern')
-  && !NO_WHY_SUBTYPES.has(String(e.subtyp || '').toLowerCase());
-// Analyse-Sprache über den Text, nicht über die Figur — keine Antwort.
-const META_LEAD = /^(Zeigt|Verdeutlicht|Illustriert|Unterstreicht|Etabliert|Charakterisiert|Shows|Illustrates|Underlines|Establishes)\b/;
-const LABEL_TAG = /\s*\((Want|Need|Wound|Lie|Ghost|Ziel|Bedürfnis|Wunde|Lüge)\)/gi;
-const LABEL_LEAD = /^(Want|Need|Wound|Lie|Ghost|Ziel|Bedürfnis|Wunde|Lüge)\s*:\s*/i;
-const VERB_LEAD = /^(Will|Möchte|Wünscht|Sucht|Strebt|Hofft|Fürchtet|Kämpft|Ringt|Versucht|Braucht|Liebt|Hasst|Fühlt|Lebt|Muss|Kann|Hat|Ist|Steht|Wants|Needs|Seeks|Hopes|Fears|Struggles|Tries|Feels|Lives|Has|Is)\s/;
 
-function cleanMotive(s, name) {
-  let t = String(s || '').replace(LABEL_TAG, '').replace(LABEL_LEAD, '').trim();
-  if (VERB_LEAD.test(t)) t = name + ' ' + t.charAt(0).toLowerCase() + t.slice(1);
-  return t;
-}
+// Fragen je Karte aus den Vorlagen; die übrigen Fassungen bleiben den KI-Fragen.
+const TEMPLATE_QUESTIONS = 5;
+const AI_RESERVE = 3;
 
 const Q = {
   de: {
-    verb: ['Warum {v} {X} {rest}?', 'Wieso {v} {X} {rest}?', 'Weshalb {v} {X} {rest}?'],
+    verb: ['Warum {v} {X} {rest}?', 'Wieso {v} {X} {rest}?'],
     actor: [
       'Was treibt {X:akk} bei «{e}» an?',
       'Was sind {Xg} Beweggründe bei «{e}»?',
       'Wie ist {Xg} Handeln bei «{e}» zu verstehen?',
-      'Was geht in {X:dat} vor, als es zu «{e}» kommt?',
     ],
     other: [
       'Wie erlebt {X} «{e}»?',
@@ -80,14 +63,10 @@ const Q = {
       'Wie geht es {X:dat} mit «{e}»?',
     ],
     event: [
-      'Warum kommt es zu «{e}»?',
       'Wie kommt es zu «{e}»?',
       'Was steckt hinter «{e}»?',
       'Was führt zu «{e}»?',
-      'Wie konnte es zu «{e}» kommen?',
     ],
-    before: (list, n) => `Vorausgegangen ${n > 1 ? 'sind' : 'ist'} ${list}.`,
-    beforeAlt: (x, list) => `Davor erlebt ${x} ${list}.`,
   },
   en: {
     verb: [],
@@ -95,7 +74,6 @@ const Q = {
       'What drives {X} in «{e}»?',
       "What are {Xg} motives in «{e}»?",
       "How should we understand {Xg} actions in «{e}»?",
-      'What is going on inside {X} when «{e}» happens?',
     ],
     other: [
       'How does {X} experience «{e}»?',
@@ -103,14 +81,10 @@ const Q = {
       'What is going on inside {X} when «{e}» happens?',
     ],
     event: [
-      'Why does «{e}» happen?',
       'How does it come to «{e}»?',
       'What lies behind «{e}»?',
       'What leads to «{e}»?',
-      'How could «{e}» happen?',
     ],
-    before: (list) => `It is preceded by ${list}.`,
-    beforeAlt: (x, list) => `Before that, ${x} goes through ${list}.`,
   },
 };
 
@@ -140,54 +114,27 @@ function actorOf(e, figNameInfo) {
   return null;
 }
 
-// «Er entdeckt …» → «Stefan entdeckt …», sonst unverändert.
-function bedeutungFor(bed, name, langIsEn) {
-  const t = String(bed || '').trim().replace(/\s+/g, ' ');
-  if (!t) return '';
-  const re = langIsEn ? /^(He|She)\s/ : /^(Er|Sie)\s/;
-  if (META_LEAD.test(t)) return '';
-  const out = re.test(t) ? t.replace(re, name + ' ') : t;
-  return /[.!?]$/.test(out) ? out : out + '.';
-}
-
-// Die Sätze aus Motivation und Konflikt, die dem Ereignis am nächsten sind.
-// `strict`: nur passende Sätze, kein Auffüllen — für Figuren, die das Ereignis
-// nicht selbst auslösen.
-function motiveSentences(fig, e, max = 2, { strict = false } = {}) {
-  const pool = [fig.motivation, fig.konflikt]
-    .flatMap(t => splitSentences(String(t || '').trim()))
-    .map(s => s.trim())
-    .filter(s => s.length >= 25 && /[.!?]$/.test(s)
-      && (s.match(/«/g) || []).length === (s.match(/»/g) || []).length);
-  if (!pool.length) return [];
-  const stems = stemsOf(e.ereignis + ' ' + (e.bedeutung || ''));
-  const others = e.figs.filter(f => f.fig_id !== fig.fig_id).flatMap(f => f.names || [f.name]);
-  const scored = pool.map((s, idx) => {
-    const low = s.toLowerCase();
-    const score = stems.filter(st => low.includes(st)).length
-      + 2 * others.filter(n => nameRegex(n).test(s)).length;
-    return { s, idx, score };
-  });
-  const pick = scored.filter(x => x.score > 0).sort((a, b) => b.score - a.score || a.idx - b.idx).slice(0, max);
-  // Der erste Satz der Motivation trägt das Wesentliche; er füllt auf, wenn
-  // weniger als `max` Sätze zum Ereignis passen.
-  if (strict && !pick.length) return [];
-  if (pick.length < max && !pick.some(x => x.idx === 0)) pick.push(scored[0]);
-  return pick.sort((a, b) => a.idx - b.idx).map(x => x.s);
+// Antwortfassungen einer Karte (Figur `fig` mit Anzeigename `X`). `bed`: die
+// Bedeutung, '' wenn sie aus Sicht dieser Figur nicht passt.
+function whyAnswers(ctx, fig, e, X, bed) {
+  const { langIsEn } = ctx;
+  const prev = precedingEvents(ctx, fig, e);
+  return {
+    prev,
+    answers: composeAnswers({
+      meaning: meaningFrames(bed, X, e.ereignis, langIsEn),
+      sit: situation(ctx, fig, e, X),
+      prev: precedingSentences(prev, X, langIsEn, joinList),
+      prof: profileFrames(profileClause(fig, e, X, langIsEn), X, langIsEn),
+    }),
+  };
 }
 
 function buildEventWhy(ctx, emitCard) {
   const { langIsEn, events = [], figRows = [] } = ctx;
   const L = Q[langIsEn ? 'en' : 'de'];
   const figById = new Map(figRows.map(f => [f.fig_id, f]));
-  const byFig = new Map();
-  for (const e of events) {
-    for (const f of e.figs) {
-      if (!f.fig_id) continue;
-      if (!byFig.has(f.fig_id)) byFig.set(f.fig_id, []);
-      byFig.get(f.fig_id).push(e);
-    }
-  }
+  ctx.whyAnswers = ctx.whyAnswers || new Map();
   let built = 0;
   const plain = (name) => String(name).replace(/\s*\([^)]*\)\s*/g, ' ').trim();
   for (const e of events) {
@@ -202,26 +149,14 @@ function buildEventWhy(ctx, emitCard) {
       const fig = figById.get(f.fig_id);
       const primary = !!act && f.fig_id === act.fig.fig_id;
       const X = primary ? act.form : plain(f.name);
-      const motives = motiveSentences(fig, e, 2, { strict: !primary })
-        .map(m => bedeutungFor(cleanMotive(m, X), X, langIsEn)).filter(Boolean);
-      if (!motives.length) continue;
       // Ein führendes «Er»/«Sie» der Bedeutung meint die handelnde Figur; aus
       // Sicht einer anderen Figur bleibt die Bedeutung dann weg.
       const rawBed = String(e.bedeutung || '').trim();
-      const bed = primary || !/^(Er|Sie|He|She)\s/.test(rawBed) ? bedeutungFor(rawBed, X, langIsEn) : '';
-      if (primary && !bed) continue;
-      const prev = (byFig.get(fig.fig_id) || []).filter(p => p.i < e.i && isPersonal(p)).slice(-2).map(p => '«' + p.ereignis + '»');
-      const prevList = prev.length ? joinList(prev, langIsEn) : '';
-      const before = prevList ? L.before(prevList, prev.length) : '';
-      const beforeAlt = prevList ? L.beforeAlt(X, prevList) : '';
-      const M = motives.join(' ');
-
-      const answers = [
-        [bed, M, before],
-        [M, bed, beforeAlt],
-        [bed, beforeAlt, M],
-        [M, before, bed],
-      ].map(parts => parts.filter(Boolean).join(' ')).filter(a => a.length >= 40);
+      const leadsWithPronoun = /^(Er|Sie|He|She)\s/.test(rawBed);
+      const bed = primary || !leadsWithPronoun ? bedeutungFor(rawBed, X, langIsEn) : '';
+      if (!bed && (primary || !profileClause(fig, e, X, langIsEn))) continue;
+      const { prev, answers } = whyAnswers(ctx, fig, e, X, bed);
+      if (!answers.length) continue;
 
       const Xg = genitive(X, langIsEn);
       const fill = (t) => {
@@ -235,19 +170,27 @@ function buildEventWhy(ctx, emitCard) {
         ...(primary ? L.actor : L.other),
         ...(titleFig && f.fig_id === titleFig.fig_id ? L.event : []),
       ].map(fill).filter(Boolean);
-
+      // Je Frage eine eigene Fassung: nie mehr Fragen als Fassungen. Mit
+      // KI-Leserfragen (`aiWhyQuestions`) bleibt ein Teil der Fassungen für sie
+      // frei — sie fragen so, wie Leser fragen.
+      const reserve = ctx.opts?.aiWhyQuestions === false ? 0 : Math.min(AI_RESERVE, Math.floor(answers.length / 2));
+      const n = Math.min(TEMPLATE_QUESTIONS, questions.length, Math.max(1, answers.length - reserve));
+      const id = primary ? `evt:${e.i}:motive` : `evt:${e.i}:motive:${f.fig_id}`;
       const tier = bestTier(ctx, [f]);
-      const n = emitCard({
-        id: primary ? `evt:${e.i}:motive` : `evt:${e.i}:motive:${f.fig_id}`, kind: 'event', unit: 'evt:' + e.i, tier,
+      const emitted = emitCard({
+        id, kind: 'event', unit: 'evt:' + e.i, tier,
         ...(tier === 'main' ? { core: true } : {}),
         subject: e.ereignis,
-        fields: { figur: fig.name, bedeutung: e.bedeutung || '', motive: motives, vorgeschichte: prev },
-      }, { task: 'eventWhy', questions, answers, count: questions.length });
-      if (n) built++;
+        fields: { figur: fig.name, bedeutung: e.bedeutung || '', vorgeschichte: prev.map(p => p.ereignis) },
+      }, { task: 'eventWhy', questions, answers, count: n, distinct: true });
+      if (emitted) {
+        built++;
+        ctx.whyAnswers.set(id, answers);
+      }
     }
   }
   ctx.eventWhyCount = built;
   return built;
 }
 
-module.exports = { buildEventWhy, actorOf, motiveSentences, bedeutungFor, cleanMotive };
+module.exports = { buildEventWhy, actorOf, whyAnswers };

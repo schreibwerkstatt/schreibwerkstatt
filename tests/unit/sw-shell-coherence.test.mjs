@@ -388,6 +388,27 @@ test('Precache: ein abbrechender Body faellt in den Retry pro Asset, nicht erst 
   assert.equal(await cache.store.get('/js/app.js').text(), 'asset /js/app.js');
 });
 
+test('Install liest den Shell-Body, bevor der Precache startet', async () => {
+  // Geschrieben wird die Shell erst nach dem ganzen Precache; ein bis dahin
+  // ungelesener Stream reisst ab und `cache.put` scheitert mit „network error".
+  const cache = makeCache({});
+  const order = [];
+  const shell = new FakeResponse(SHELL_HTML, { headers: SHELL_HEADERS });
+  const blob = shell.blob.bind(shell);
+  shell.blob = async () => { order.push('shell-body'); return blob(); };
+  const ctx = loadSw({
+    cache,
+    fetchImpl: async (req) => {
+      if (req.pathname === '/') return shell;
+      order.push(req.pathname);
+      return new FakeResponse('asset');
+    },
+  });
+  await runInstall(ctx);
+  assert.equal(order[0], 'shell-body');
+  assert.equal(cache.store.get('/index.html').body, SHELL_HTML);
+});
+
 test('Precache: hoechstens PRECACHE_CONCURRENCY Requests gleichzeitig', async () => {
   const manifest = Array.from({ length: 100 }, (_, i) => `/js/m${i}.js`);
   let inFlight = 0;

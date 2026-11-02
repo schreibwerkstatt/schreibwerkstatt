@@ -298,10 +298,13 @@ test('Ablehnen: Kontrastpaare in Porträt-Form, ähnliche Namen, Teil-Ablehnung,
   const fakes = new Set(EVAL_FAKES.de.map(n => n.toLowerCase()));
   assert.ok(!unknown.some(s => [...fakes].some(f => s.messages[1].content.toLowerCase().includes(f))), 'Eval-Namen nie im Train');
   const mixed = ctx.samples.filter(s => s.id.startsWith('refusal|mixed'));
-  assert.ok(mixed.length && mixed.every(s => /(Stefan|Renate Studer) (ist|kenne)/.test(s.messages[2].content) && /nicht/.test(s.messages[2].content)));
+  assert.ok(mixed.length && mixed.every(s => /nicht/.test(s.messages[2].content)));
+  // Vorstellung, Vergleich, Beziehung, Szene: die echte Figur kurz eingeordnet;
+  // beim Ereignis steht das Ereignis vorn.
+  assert.ok(mixed.filter(s => s.form !== 'mixed-event').every(s => /(Stefan|Renate Studer) (ist|kenne)/.test(s.messages[2].content)));
   const meta = ctx.samples.filter(s => s.id.startsWith('refusal|meta'));
   assert.ok(meta.some(s => /David Berger/.test(s.messages[2].content)), 'Autor aus den Projektdaten');
-  assert.ok(meta.some(s => /Wann ich erschienen bin, steht nicht in meinen Seiten|Ein Erscheinungsjahr nennen meine Seiten nicht/.test(s.messages[2].content)), 'ohne Jahr: ablehnen');
+  assert.ok(meta.some(s => /Wann ich entstanden bin, steht nicht in meinen Seiten|Ein Jahr nennen meine Seiten nicht/.test(s.messages[2].content)), 'ohne Jahr: ablehnen');
   assert.ok(meta.some(s => /3 Kapitel/.test(s.messages[2].content)));
   const noAuthor = refusalCtx().samples.filter(s => s.id.startsWith('refusal|meta|author'));
   assert.ok(noAuthor.every(s => /nicht in meinen Seiten|nennen meine Seiten nicht/.test(s.messages[2].content)), 'nie raten');
@@ -311,8 +314,9 @@ test('Ablehnen: Kontrastpaare in Porträt-Form, ähnliche Namen, Teil-Ablehnung,
 
 test('Falschannahme: volle Form, bis zu drei je Kernbeziehung, Beruf klein im Satz', () => {
   const ctx = refusalCtx();
+  // Bis zu drei Falschannahmen je Kernbeziehung, dazu das Rollenspiel in der Ich-Form.
   const rel = ctx.samples.filter(s => s.id.startsWith('refusal|falsePremise|rel'));
-  assert.ok(rel.length >= 2 && rel.length <= 3, String(rel.length));
+  assert.ok(rel.length >= 2 && rel.length <= 4, String(rel.length));
   for (const s of rel) {
     assert.match(s.messages[2].content, /sondern (Stefans|Renate Studers|der|die|eine?|ein) \S+\.$|, nicht /, s.messages[2].content);
     assert.deepEqual(s.factIds, ['rel:fig_1|fig_2']);

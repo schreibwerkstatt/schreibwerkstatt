@@ -21,6 +21,12 @@ const TEXT = {
       '- *muss enthalten* — jeder Begriff kommt vor.',
       '- *muss eins aus jeder Gruppe enthalten* — aus jeder Synonymgruppe mindestens ein Begriff.',
       '- *darf nicht enthalten* — kommt einer vor, ist die Antwort höchstens 1 (bei Ablehnungen 0).',
+      '- «…» in einem Begriff ist eine Lücke: «gibt es … nicht» trifft «gibt es in «X» nicht».',
+      '- *mindestens k Gruppen* — statt aus jeder Gruppe genügen k Gruppen.',
+      '- *höchstens wörtlich aus dem Profil* — Anteil der 8-Wort-Folgen der Antwort, die wörtlich im Figurenprofil stehen; darüber höchstens 1.',
+      '- *Stil* — kein «ß», Zeitform, keine Wiederholungsschleife (Teilsatz ≥ 3×), kein Metatext («Kapitel 11»); verletzt: höchstens 1.',
+      '',
+      'Automatisch: `node scripts/eval-judge.js eval.jsonl antworten.jsonl` wendet diese Regeln an und lässt ein Modell die Anweisung bewerten; es vergibt nie mehr, als die Regeln erlauben.',
       '- *Referenz* ist eine mögliche richtige Antwort, kein Wortlaut, der getroffen werden muss.',
       '',
       '*holdout*: `phrasing` = Frageform kommt im Training nicht vor (misst Verallgemeinerung), `unit` = der Fakt lag im Val-Teil, `text` = der Buchtext lag im Val-Teil, `–` = Frageform aus dem Training (die Frage selbst nie wörtlich).',
@@ -31,6 +37,8 @@ const TEXT = {
     cat: 'Kategorie', count: 'Fragen', phrasing: 'davon neue Frageform',
     q: 'Frage', ref: 'Referenz', must: 'muss enthalten', any: 'muss eins aus jeder Gruppe enthalten', not: 'darf nicht enthalten',
     judge: 'Bewertung', facts: 'Fakten', score: 'Punkte: __ / 2',
+    minAny: (k) => `mindestens ${k} Gruppen`, overlap: (m) => `höchstens ${Math.round(m * 100)} % wörtlich aus dem Profil`,
+    style: 'Stil', styleParts: { noEszett: 'kein «ß»', past: 'Präteritum', present: 'Präsens', noRepeat: 'keine Wiederholungsschleife', noMeta: 'kein Metatext' },
   },
   en: {
     title: (book) => `# Eval scoring «${book}»`,
@@ -46,6 +54,12 @@ const TEXT = {
       '- *must contain* — every term appears.',
       '- *must contain one from each group* — at least one term from every synonym group.',
       '- *must not contain* — if one appears, the answer gets at most 1 (0 for refusals).',
+      '- «…» in a term is a gap: «does … exist» matches «does not exist».',
+      '- *at least k groups* — k groups are enough instead of every group.',
+      '- *at most verbatim from the profile* — share of the answer\'s 8-word sequences found verbatim in the character profile; above it, at most 1.',
+      '- *style* — no «ß», tense, no repetition loop (phrase ≥ 3×), no meta text («Chapter 11»); violated: at most 1.',
+      '',
+      'Automatic: `node scripts/eval-judge.js eval.jsonl answers.jsonl` applies these rules and lets a model score the note; it never awards more than the rules allow.',
       '- *Reference* is one possible correct answer, not wording that must be matched.',
       '',
       '*holdout*: `phrasing` = question form not seen in training (measures generalisation), `unit` = the fact was in the val split, `text` = the book text was in the val split, `–` = question form from training (the question itself never verbatim).',
@@ -56,6 +70,8 @@ const TEXT = {
     cat: 'Category', count: 'Questions', phrasing: 'of which new phrasing',
     q: 'Question', ref: 'Reference', must: 'must contain', any: 'must contain one from each group', not: 'must not contain',
     judge: 'Judging', facts: 'Facts', score: 'Points: __ / 2',
+    minAny: (k) => `at least ${k} groups`, overlap: (m) => `at most ${Math.round(m * 100)} % verbatim from the profile`,
+    style: 'Style', styleParts: { noEszett: 'no «ß»', past: 'past tense', present: 'present tense', noRepeat: 'no repetition loop', noMeta: 'no meta text' },
   },
 };
 
@@ -79,8 +95,13 @@ function buildEvalJudgeMd(items, { bookName = '', langIsEn = false } = {}) {
       lines.push('', `### ${n}. ${cat} · holdout: ${it.holdout || '–'}`, '', `**${t.q}:**`, '', quote(it.messages[1].content), '');
       if (it.expected) lines.push(`**${t.ref}:**`, '', quote(it.expected.length > 700 ? it.expected.slice(0, 700) + ' …' : it.expected), '');
       if (it.mustContain?.length) lines.push(`- ${t.must}: ${it.mustContain.map(code).join(', ')}`);
-      if (it.mustContainAny?.length) lines.push(`- ${t.any}: ${it.mustContainAny.map(g => '[' + g.map(code).join(' | ') + ']').join(' ')}`);
+      if (it.mustContainAny?.length) lines.push(`- ${t.any}${Number.isInteger(it.minAny) ? ` (${t.minAny(it.minAny)})` : ''}: ${it.mustContainAny.map(g => '[' + g.map(code).join(' | ') + ']').join(' ')}`);
       if (it.mustNotContain?.length) lines.push(`- ${t.not}: ${it.mustNotContain.map(code).join(', ')}`);
+      if (it.maxOverlapWithProfile) lines.push(`- ${t.overlap(it.maxOverlapWithProfile.max ?? 0.6)}`);
+      if (it.style) {
+        const parts = Object.entries(it.style).filter(([, v]) => v).map(([k, v]) => (k === 'tense' ? t.styleParts[v] : t.styleParts[k])).filter(Boolean);
+        if (parts.length) lines.push(`- ${t.style}: ${parts.join(', ')}`);
+      }
       if (it.factIds?.length) lines.push(`- ${t.facts}: ${it.factIds.map(code).join(', ')}`);
       if (it.judge) lines.push(`- ${t.judge}: ${it.judge}`);
       lines.push('', t.score);

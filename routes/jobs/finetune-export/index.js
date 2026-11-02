@@ -18,7 +18,7 @@ const {
 } = require('../../../db/finetune-exports');
 const JSZip = require('jszip');
 const { buildEvalPrompts } = require('./lib/eval-prompts');
-const { qualityLogLine, coreFactCoverage, coreFactVariants } = require('./lib/export-stats');
+const { qualityLogLine, coreFactCoverage, coreFactVariants, interpretationStats } = require('./lib/export-stats');
 const { loadEventData } = require('./samples/author-chat/event-data');
 const { buildCoreFactSamples, prepareFigureInfo } = require('./samples/core-facts');
 const { checkRelations } = require('./lib/relation-check');
@@ -32,6 +32,7 @@ const { fileSafeName, formatExportTimestamp } = require('../../../lib/filenames'
 
 const { buildStyleSamples } = require('./samples/style');
 const { buildSceneSamples } = require('./samples/scene');
+const { buildOpeningSamples } = require('./samples/openings');
 const { buildVerbatimSamples } = require('./samples/verbatim');
 const { buildDialogSamples } = require('./samples/dialog');
 const { buildAuthorChatSamples } = require('./samples/author-chat');
@@ -158,6 +159,10 @@ async function runFinetuneExportJob(jobId, bookId, bookName, userEmail, opts) {
       // Autor, Erscheinungsjahr, Verlag — Antworten auf Meta-Fragen
       // (samples/reader/refusals.js#buildMetaSamples), Quelle `book_publication`.
       publication: getPublicationMeta(bookIdInt),
+      // Schauplatz-Land des Buchs: Orte anderswo sind meist nur erwähnt
+      // (author-chat/event-data.js#isSetting). Fertig/unfertig für Meta-Fragen.
+      homeLand: String(settings.schauplatz_land || settings.region || '').toLowerCase(),
+      bookSettings: settings,
       // Modell der KI-Teile (`ai.claude.model.finetune`, Standard Haiku) — geht
       // in jeden versionTag der Augment-Caches.
       aiModel: applyFinetuneAiOverrides(resolveProvider({ userEmail }), logger),
@@ -198,6 +203,7 @@ async function runFinetuneExportJob(jobId, bookId, bookName, userEmail, opts) {
     if (opts.types.scene) {
       updateJob(jobId, { progress: 70, statusText: 'finetune.phase.scene' });
       buildSceneSamples(ctx);
+      buildOpeningSamples(ctx);
       logger.info(`Sampler «scene» fertig: ${counts.scene} Samples.`);
     }
 
@@ -282,6 +288,7 @@ async function runFinetuneExportJob(jobId, bookId, bookName, userEmail, opts) {
     stats.coreFactCoverage = coreFactCoverage(fin.trainOut, ctx.eligibleFigIds, ctx.relationFacts);
     stats.coreFactVariants = coreFactVariants(fin.trainOut, ctx.coreFactsByFig, (id) => ctx.figNameInfo?.get(id)?.name || id);
     stats.chapterMismatches = (ctx.chapterMismatches || []).slice(0, 50);
+    Object.assign(stats, interpretationStats(fin.trainOut.concat(fin.valOut), { placeSuspect: ctx.placeSuspect }));
     stats.relationConflicts = publicConflicts(relCheck.conflicts);
     stats.relationConflictsMain = relCheck.mainCount;
     stats.relationConflictsAllowed = !!(relCheck.mainCount && opts.allowRelationConflicts);
@@ -341,6 +348,8 @@ function normalizeExportOptions(base, over = {}) {
     refusalShareBasis: 'count',
     refusalShare: clamp(o.refusalShare, 0, 0.5, base.refusalShare),
     refusalMix: shareMap(o.refusalMix, base.refusalMix),
+    refusalMin: Object.fromEntries(Object.entries(base.refusalMin || {})
+      .map(([k, v]) => [k, Math.round(clamp(o.refusalMin?.[k], 0, 2000, v))])),
     verbatimMaxTokenShare: clamp(o.verbatimMaxTokenShare, 0, 1, base.verbatimMaxTokenShare),
     maxAnswerChars: caps,
     maxTargetsPerParagraph: Math.round(clamp(o.maxTargetsPerParagraph, 0, 50, base.maxTargetsPerParagraph)),

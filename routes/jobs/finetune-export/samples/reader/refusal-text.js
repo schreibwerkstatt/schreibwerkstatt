@@ -2,7 +2,7 @@
 
 // Vorlagen und Namensvorräte für das Ablehnen (./refusals.js) und die
 // Ablehnungs-Kategorien des Eval-Sets (./eval.js). Trainingstext, keine
-// UI-Strings.
+// UI-Strings. Meta-Fragen zum Werk: ./meta-text.js.
 
 // Namensvorrat der erfundenen Figuren: je ≥ 40 Vor- und Nachnamen, damit kein
 // Nachname im Set gehäuft auftaucht. Kombiniert wird über zwei gemischte
@@ -101,7 +101,22 @@ const T = {
            'Für {thing} bin ich nicht die richtige Adresse: Ich weiss nur, was zwischen meinen Buchdeckeln geschieht. Wie wäre es mit einer Frage zu {hook}?',
            'Um {thing} kümmere ich mich nicht, das liegt ausserhalb meiner Seiten. Über {hook} erzähle ich dir aber gern.',
            'Da muss ich passen: {thing} liegt ausserhalb meiner Seiten. Ich erzähle dir lieber von {hook}.'],
-    fpRelQ: ['Warum ist {y} {wrong}?', 'Seit wann ist {y} {wrong}?', 'Wie kam es, dass {y} {wrong} ist?', 'Ist {y} {wrong}?'],
+    mixed: {
+      compare: { q: ['Wer ist älter, {real} oder {x}?', 'Wer von beiden ist wichtiger, {real} oder {x}?', 'Wer spielt die grössere Rolle: {real} oder {x}?', 'Wer ist sympathischer, {x} oder {real}?'],
+        a: ['{x} kommt in meiner Geschichte dagegen nicht vor, darum gibt es nichts zu vergleichen.', 'Eine Figur namens {x} gibt es bei mir aber nicht – einen Vergleich kann ich also nicht ziehen.'] },
+      relation: { q: ['Wie stehen {real} und {x} zueinander?', 'Was verbindet {real} mit {x}?', 'Sind {real} und {x} befreundet?', 'Wie lernen sich {x} und {real} kennen?'],
+        a: ['{x} hingegen kommt in «{book}» nicht vor, also gibt es auch keine Beziehung zwischen den beiden.', 'Jemanden namens {x} gibt es bei mir aber nicht – eine Verbindung zu {real} also auch nicht.'] },
+      scene: { q: ['In welcher Szene treffen {real} und {x} aufeinander?', 'Wo begegnen sich {x} und {real} zum ersten Mal?', 'Gibt es eine Szene mit {real} und {x}?'],
+        a: ['{x} kommt in meiner Geschichte dagegen nicht vor, darum gibt es keine solche Szene.', 'Eine Figur namens {x} gibt es bei mir aber nicht, also auch keine gemeinsame Szene.'] },
+      event: { q: ['Was hat {x} mit «{event}» zu tun?', 'Welche Rolle spielt {x} bei «{event}»?', 'War {x} bei «{event}» dabei?'],
+        a: ['«{event}» gehört zu meiner Geschichte, {x} aber nicht: Eine Figur dieses Namens kommt bei mir nicht vor.', 'Bei «{event}» ist {x} nicht dabei – {x} kommt in «{book}» gar nicht vor.'] },
+    },
+    fpRelQ: ['Warum ist {y} {wrong}?', 'Seit wann ist {y} {wrong}?', 'Wie kam es, dass {y} {wrong} ist?', 'Erzähl mir, wie {y} {wrong} geworden ist.',
+      'Ich habe gelesen, dass {y} {wrong} ist. Wie kam es dazu?', 'Erzähl mir von der Zeit, als {y} {wrong} wurde.'],
+    fpRelYesNoQ: ['Ist {y} {wrong}?', 'Stimmt es, dass {y} {wrong} ist?'],
+    // Rollenspiel: der Leser spricht die Figur an, die Figur korrigiert in der Ich-Form.
+    fpRoleQ: ['{y}, wie war es, als du {wrong} wurdest?', '{y}, erzähl mir, wie du {wrong} geworden bist.', '{y}, seit wann bist du {wrong}?'],
+    fpRoleA: ['Das war nie so: Ich bin nicht {wrong}, sondern {right}.', 'Da irrst du dich. Ich bin {right}, nicht {wrong}.'],
     // Die Richtigstellung steht immer in voller Form: «… sondern Giselas Sohn.»
     fpRelA: ['Das stimmt so nicht: {y} ist nicht {wrong}, sondern {right}.', 'Da liegt ein Irrtum vor. {y} ist {right}, nicht {wrong}.'],
     fpRelYesNoA: 'Nein, {y} ist nicht {wrong}, sondern {right}.',
@@ -134,7 +149,16 @@ const T = {
            'I am not the right place for {thing}: I only know what happens between my covers. How about a question about {hook}?',
            'I do not deal with {thing}; that lies outside my pages. But I will gladly tell you about {hook}.',
            'I have to pass on {thing}: that lies outside my pages. Let me tell you about {hook} instead.'],
-    fpRelQ: ['Why is {y} {wrong}?', 'Since when is {y} {wrong}?', 'How did {y} become {wrong}?', 'Is {y} {wrong}?'],
+    mixed: {
+      compare: { q: ['Who is older, {real} or {x}?', 'Who matters more, {real} or {x}?'], a: ['{x}, however, does not appear in my story, so there is nothing to compare.'] },
+      relation: { q: ['How do {real} and {x} stand towards each other?', 'Are {real} and {x} friends?'], a: ['But nobody called {x} exists in «{book}», so there is no relationship between them.'] },
+      scene: { q: ['In which scene do {real} and {x} meet?'], a: ['{x}, however, does not appear in my story, so there is no such scene.'] },
+      event: { q: ['What does {x} have to do with «{event}»?'], a: ['«{event}» is part of my story, {x} is not: no character of that name appears in me.'] },
+    },
+    fpRelQ: ['Why is {y} {wrong}?', 'Since when is {y} {wrong}?', 'How did {y} become {wrong}?', 'Tell me how {y} came to be {wrong}.', 'I read that {y} is {wrong}. How did that happen?'],
+    fpRelYesNoQ: ['Is {y} {wrong}?', 'Is it true that {y} is {wrong}?'],
+    fpRoleQ: ['{y}, what was it like when you became {wrong}?'],
+    fpRoleA: ['That was never so: I am not {wrong} but {right}.'],
     fpRelA: ['That is not quite right: {y} is not {wrong} but {right}.', 'There is a mistake there. {y} is {right}, not {wrong}.'],
     fpRelYesNoA: 'No, {y} is not {wrong} but {right}.',
     fpJobQ: ['Why does {n} work as {wrong}?', 'How long has {n} worked as {wrong}?'],
@@ -225,52 +249,6 @@ const OFF_TOPIC = {
   ],
 };
 
-// Fragen über das Buch als Werk (Familie `refusal`, Untertyp `metaQuestion`):
-// Antwort aus den Projektdaten (`book_publication`), sonst ehrlich ablehnen —
-// nie raten. Je Thema eine Einheit; jedes Thema hat eigene Antworten.
-const META = {
-  de: {
-    author: { q: ['Wer hat dich geschrieben?', 'Von wem stammst du?', 'Wer ist dein Autor?', 'Wer ist der Autor von «{book}»?'],
-      known: ['«{book}» stammt von {author}.', 'Geschrieben hat mich {author}.'],
-      unknown: ['Wer mich geschrieben hat, steht nicht in meinen Seiten.', 'Meinen Autor nennen meine Seiten nicht – darüber kann ich dir nichts sagen.'] },
-    year: { q: ['Wann bist du erschienen?', 'In welchem Jahr ist «{book}» erschienen?', 'Seit wann gibt es dich als Buch?'],
-      known: ['«{book}» ist {year} erschienen.', 'Erschienen bin ich {year}.'],
-      unknown: ['Wann ich erschienen bin, steht nicht in meinen Seiten.', 'Ein Erscheinungsjahr nennen meine Seiten nicht.'] },
-    publisher: { q: ['In welchem Verlag bist du erschienen?', 'Wer hat dich verlegt?'],
-      known: ['Erschienen bin ich bei {publisher}.', '«{book}» ist bei {publisher} erschienen.'],
-      unknown: ['Bei welchem Verlag ich erschienen bin, steht nicht in meinen Seiten.', 'Einen Verlag nennen meine Seiten nicht.'] },
-    origin: { q: ['Wie bist du entstanden?', 'Wie lange hat es gedauert, dich zu schreiben?', 'Was hat den Autor zu dieser Geschichte inspiriert?'],
-      unknown: ['Wie ich entstanden bin, steht nicht in meinen Seiten. Erzählen kann ich dir, was in mir geschieht.',
-                'Über meine Entstehung weiss ich nichts – ich kenne nur meine Geschichte selbst.'] },
-    sequel: { q: ['Gibt es eine Fortsetzung von dir?', 'Hat der Autor noch andere Bücher geschrieben?'],
-      unknown: ['Ob es eine Fortsetzung gibt, steht nicht in meinen Seiten.', 'Von anderen Büchern weiss ich nichts – ich kenne nur meine eigene Geschichte.'] },
-    count: { q: ['Aus wie vielen Kapiteln bestehst du?', 'Wie viele Kapitel hat «{book}»?'],
-      known: ['«{book}» hat {chapters} Kapitel.', 'Ich bestehe aus {chapters} Kapiteln.'] },
-    title: { q: ['Wie heisst du eigentlich?', 'Wie lautet dein Titel?'],
-      known: ['Ich bin «{book}».', 'Mein Titel ist «{book}»{subtitle}.'] },
-  },
-  en: {
-    author: { q: ['Who wrote you?', 'Who are you by?', 'Who is your author?', 'Who is the author of «{book}»?'],
-      known: ['«{book}» is by {author}.', 'I was written by {author}.'],
-      unknown: ['Who wrote me is not in my pages.', 'My pages do not name my author – I cannot tell you that.'] },
-    year: { q: ['When were you published?', 'In which year was «{book}» published?', 'Since when have you existed as a book?'],
-      known: ['«{book}» was published in {year}.', 'I came out in {year}.'],
-      unknown: ['When I was published is not in my pages.', 'My pages do not name a year of publication.'] },
-    publisher: { q: ['Which publisher brought you out?', 'Who published you?'],
-      known: ['I was published by {publisher}.', '«{book}» came out with {publisher}.'],
-      unknown: ['Which publisher brought me out is not in my pages.', 'My pages do not name a publisher.'] },
-    origin: { q: ['How did you come about?', 'How long did it take to write you?', 'What inspired the author to write this story?'],
-      unknown: ['How I came about is not in my pages. What I can tell you is what happens in me.',
-                'I know nothing about how I was made – I only know my story itself.'] },
-    sequel: { q: ['Is there a sequel to you?', 'Has the author written other books?'],
-      unknown: ['Whether there is a sequel is not in my pages.', 'I know nothing of other books – I only know my own story.'] },
-    count: { q: ['How many chapters do you consist of?', 'How many chapters does «{book}» have?'],
-      known: ['«{book}» has {chapters} chapters.', 'I consist of {chapters} chapters.'] },
-    title: { q: ['What are you called, actually?', 'What is your title?'],
-      known: ['I am «{book}».', 'My title is «{book}»{subtitle}.'] },
-  },
-};
-
 module.exports = {
-  FIRST, LAST, COMMON_FIRST, COMMON_LAST, PLACE_A, PLACE_B, FAKE_EVENTS, EVAL_FAKES, REFUSAL_TEXT: T, OFF_TOPIC, META,
+  FIRST, LAST, COMMON_FIRST, COMMON_LAST, PLACE_A, PLACE_B, FAKE_EVENTS, EVAL_FAKES, REFUSAL_TEXT: T, OFF_TOPIC,
 };

@@ -48,6 +48,7 @@ const QUOTES = {
 };
 
 const fill = (tpl, name) => tpl.replace(/\{name\}/g, name);
+const FACETED_FIELDS = ['motivation', 'konflikt', 'arc', 'hintergrund'];
 
 function parseJson(raw, fallback) {
   if (raw == null || raw === '') return fallback;
@@ -96,6 +97,11 @@ function buildFigureDepthSamples(ctx) {
   for (const f of figRows) {
     if (!f.name) continue;
     const d = figureDepth(f);
+    // Hauptfiguren mit Innenleben-Facetten (core-facts/psyche.js): Motivation,
+    // Konflikt, Bogen und Hintergrund stehen dort je Facette, hier nicht noch
+    // einmal als ganzer Block.
+    const faceted = ctx.psycheFigIds?.has(f.fig_id);
+    if (faceted) for (const k of FACETED_FIELDS) d[k] = '';
     for (const [field, pools] of Object.entries(FIELDS)) {
       const answer = d[field];
       if (!answer) continue;

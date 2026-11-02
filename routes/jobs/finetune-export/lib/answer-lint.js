@@ -15,7 +15,18 @@
 //     zweimal (`repetition`, Nährboden für Endlosschleifen);
 //   - `isTrivial`: die Antwort sagt nichts, was nicht schon in der Frage
 //     steht («Wer ist an «Renate tritt … bei» beteiligt?» → «Renate …»);
+//   - `selfRepeat`: ein Teilsatz aus vier Wörtern mindestens dreimal oder
+//     mindestens vier Sätze hintereinander mit demselben ersten Wort
+//     («Er wollte … Er wollte … Er wollte …»). In synthetischen Antworten ein
+//     Fehler (Lint `repetition` bzw. `anaphora`); im Buchtext ein Stilmittel des
+//     Autors, dort nur gezählt (`selfRepeatBook`);
+//   - `personaThirdPerson`: eine Ich-Antwort der Figur fällt in die 3. Person
+//     («Ich bin Robert. Robert ist …») oder spricht den Leser als Bekannten an
+//     («Du bist mein bester Freund»);
 //   - `promptKey`: Schlüssel für das Prompt-Dedup (alle Nutzer-Turns).
+
+const { splitSentences } = require('./text');
+const { escapeRe } = require('./names');
 
 const ESZETT = /ß/;
 
@@ -51,6 +62,37 @@ function hasRepetition(text) {
   }
   return false;
 }
+const ANAPHORA_RUN = 4;
+// Mindestens ANAPHORA_RUN Sätze hintereinander mit demselben ersten Wort.
+function hasAnaphora(text) {
+  const firsts = splitSentences(String(text || '')).map(s => (s.trim().match(/^[«„"]?([\p{L}\p{N}]+)/u) || [])[1] || '').map(w => w.toLowerCase());
+  let run = 1;
+  for (let i = 1; i < firsts.length; i++) {
+    run = firsts[i] && firsts[i] === firsts[i - 1] ? run + 1 : 1;
+    if (run >= ANAPHORA_RUN) return true;
+  }
+  return false;
+}
+const selfRepeat = (text) => hasRepetition(text) || hasAnaphora(text);
+
+// Ich-Antwort einer Figur: kein Satz mit ihrem Namen als Subjekt in der 3.
+// Person («Robert ist …», «Robert hat …»), keine Anrede des Lesers als
+// Freund oder Vertrauter. Ihr Name als Anrede-Antwort («Ich bin Robert.») ist
+// erlaubt. → Grund oder null.
+const FAMILIAR = /\b(du bist mein\w*\s+(beste\w*|liebste\w*|einzige\w*)?\s*(Freund|Freundin|Vertraute\w*|Schatz)|mein\s+(lieber|bester)\s+Freund|meine\s+(liebe|beste)\s+Freundin)\b/i;
+function personaThirdPerson(text, name) {
+  const t = String(text || '');
+  if (FAMILIAR.test(t)) return 'personaFamiliar';
+  const first = String(name || '').trim().split(/\s+/)[0];
+  if (first.length < 2) return null;
+  const re = new RegExp(`^[«„"]?${escapeRe(first)}(\\s+\\p{L}+)?\\s+(\\p{Ll}+)`, 'u');
+  for (const s of splitSentences(t)) {
+    const m = s.trim().match(re);
+    if (m && !/^(und|oder|ist mein|bin)$/.test(m[2])) return 'personaThirdPerson';
+  }
+  return null;
+}
+
 // `swiss`: Buch in Schweizer Schreibung — ein «ß» ist dann ein Fehler.
 function lintAnswer(text, swiss = false) {
   const t = String(text || '').trim();
@@ -59,6 +101,7 @@ function lintAnswer(text, swiss = false) {
   if (!GOOD_START.test(t)) return 'lowercase';
   if (COLON_LIST.test(t)) return 'colonList';
   if (hasRepetition(t)) return 'repetition';
+  if (hasAnaphora(t)) return 'anaphora';
   if (swiss && ESZETT.test(t)) return 'eszett';
   return null;
 }
@@ -78,4 +121,6 @@ function isTrivial(question, answer) {
 
 const promptKey = (s) => s.messages.filter(m => m.role === 'user').map(m => m.content.trim()).join('\u0000');
 
-module.exports = { swissSpelling, hasEditorNote, lintAnswer, hasRepetition, isTrivial, promptKey, ESZETT };
+module.exports = {
+  swissSpelling, hasEditorNote, lintAnswer, hasRepetition, hasAnaphora, selfRepeat, personaThirdPerson, isTrivial, promptKey, ESZETT,
+};

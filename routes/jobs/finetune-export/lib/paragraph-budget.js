@@ -57,7 +57,11 @@ function targetsOf(index, sample) {
 // Buchzitat zuerst (wenige, tragen Wissen), dann die Schreibaufgaben reihum —
 // das k-te Sample jedes Typs vor dem (k+1)-ten, damit kein volumenstarker Typ
 // (Fortsetzen) alle Absätze belegt. Verbatim zuletzt.
-const WRITING_PRIORITY = ['sceneWrite', 'continue', 'passage', 'povPassage', 'dialogLine', 'transition', 'cloze', 'reversePrompt', 'verbatim'];
+// Anfänge und Szenen aus Figurensicht vor allen anderen Schreibaufgaben (nicht
+// nur reihum): sie üben genau die Bitten, die Leser stellen («Schreibe den
+// Anfang …»), und sind wenige.
+const FIRST_TASKS = new Set(['chapterOpening', 'sceneBrief']);
+const WRITING_PRIORITY = ['chapterOpening', 'sceneBrief', 'sceneWrite', 'continue', 'passage', 'povPassage', 'dialogLine', 'transition', 'cloze', 'reversePrompt', 'verbatim'];
 
 function applyParagraphBudget(entries, { pageContents, maxTargets, seed = 0 }) {
   if (!(maxTargets > 0)) return { kept: entries, dropped: 0 };
@@ -79,8 +83,10 @@ function applyParagraphBudget(entries, { pageContents, maxTargets, seed = 0 }) {
     const i = WRITING_PRIORITY.indexOf(task);
     return i < 0 ? WRITING_PRIORITY.length : i;
   };
+  const first = (task) => (FIRST_TASKS.has(task) ? 0 : 1);
   const ordered = withT.filter(x => x.t.size).sort((a, b) =>
     (prio(a.e.s.task) < 0 ? -1 : 0) - (prio(b.e.s.task) < 0 ? -1 : 0)
+    || first(a.e.s.task) - first(b.e.s.task)
     || (a.e.s.task === 'verbatim') - (b.e.s.task === 'verbatim')
     || rankInTask.get(a) - rankInTask.get(b)
     || prio(a.e.s.task) - prio(b.e.s.task));

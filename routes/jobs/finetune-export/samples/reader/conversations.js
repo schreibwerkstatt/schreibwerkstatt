@@ -51,7 +51,7 @@ function buildPersonaConversations(ctx, push) {
       const turns = chosen.map(([q, a], i) => [i === 0 ? entryQuestion(lang, name, q, `${key}|conv${c}`, seed) : q, a]);
       const back = c === 0 && bookAnswer.get(key);
       if (back) turns.push([fill(EXIT[lang].q, { name, q: back.messages[1].content }), back.messages[2].content]);
-      push({ id: `reader|personaConv|${key}|${c}`, turns });
+      push({ id: `reader|personaConv|${key}|${c}`, turns, persona: name });
     }
   }
 }

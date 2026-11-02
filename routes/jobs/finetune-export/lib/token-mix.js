@@ -15,8 +15,8 @@ const { estimateTokens } = require('./tokens');
 //      wenig Persona bleibt zu wenig, sie zieht die anderen nicht mit;
 //   3. verbatim höchstens `verbatimMaxTokenShare` aller Antwort-Tokens;
 //   4. refusal nach ANZAHL (`refusalShare` der Beispiele, verteilt nach
-//      `refusalMix`): Ablehnungen sind kurz, 5 % der Tokens wären ein Viertel
-//      aller Beispiele.
+//      `refusalMix`, je Untertyp mindestens `refusalMin`): Ablehnungen sind
+//      kurz, 5 % der Tokens wären ein Viertel aller Beispiele.
 // Gekürzt wird jeder Aufgabentyp anteilig (das letzte Zehntel jedes Typs vor
 // dem vorletzten), damit kleine Typen (Welt-Fakten, Songs, «Wer sagt das?»)
 // nicht ganz wegfallen; innerhalb eines Typs fallen Sammellisten ohne Einheit
@@ -46,7 +46,17 @@ const TIER_RANK = { main: 0, side: 1, minor: 2 };
 const LOW_PRIORITY_FACTS = new Set(['factPlace', 'factWorld', 'factScene']);
 
 // Variante einer Kernkarte: letzte Stelle der ID (`core|<karte>[|dir]|<n>`).
-const variantOf = (s) => (s.type === 'core' ? Number(String(s.id).split('|').pop()) || 0 : 0);
+// KI-Varianten (`…|ai0`, `…|why0`) zählen hinter allen Vorlagen-Varianten.
+const variantOf = (s) => {
+  if (s.type !== 'core') return 0;
+  const v = Number(String(s.id).split('|').pop());
+  return Number.isFinite(v) ? v : 99;
+};
+
+// Deutungen (Warum, Szene, Innenleben): jede Fassung ist eine eigene Antwort,
+// geschützt ist nur die erste — sonst stellten sie, als Kernwissen der
+// Hauptfiguren, den grössten Teil der Faktenfamilie und liessen sich nie kürzen.
+const FIRST_ONLY_TASKS = new Set(['eventWhy', 'sceneWhy', 'psyche']);
 
 // Bedeutung eines Samples: eigenes `tier`, sonst die seiner Einheit
 // (`unitTier`, z.B. Ereignis `evt:12` → wichtigste beteiligte Figur), sonst
@@ -66,10 +76,12 @@ function tierOf(s, tierByFig, unitTier) {
 
 function isProtected(s) {
   if (!s.core) return false;
+  if (FIRST_ONLY_TASKS.has(s.task)) return variantOf(s) === 0;
   return s.coreFact || s.task === 'chapterCore' || s.tier === 'main' || variantOf(s) === 0;
 }
 
 const EVENT_TASKS = new Set(['eventCore', 'factEvent']);
+const BULK_EVENT_TASKS = new Set(['eventCore', 'eventTimeline']);
 
 // Kürz-Rang eines Fakten-Samples, kleiner fällt zuerst: Ereignis-Facetten und
 // Ereignisfragen ohne Hauptfigur → Randfiguren → Orte/Welt/Szenen → übrige →
@@ -77,6 +89,11 @@ const EVENT_TASKS = new Set(['eventCore', 'factEvent']);
 // Die Kernfakten der Hauptfiguren (`coreFact`) sind geschützt (`isProtected`).
 function factRank(s, tierByFig, unitTier) {
   const tier = tierOf(s, tierByFig, unitTier);
+  // Ereignis-Facetten und Zeitstrahl rückwärts tragen die meisten Beispiele mit
+  // den wenigsten eigenen Antworten: ihre Zusatzvarianten fallen zuerst, auch
+  // bei Hauptfiguren; die erste Variante jeder Karte erst mit den
+  // Zusatzvarianten des Kernwissens der Randfiguren.
+  if (BULK_EVENT_TASKS.has(s.task)) return variantOf(s) > 0 ? -2 : 3;
   if (EVENT_TASKS.has(s.task) && tier !== 'main') return -1;
   // «Wer sagt das?» kostet kaum Tokens und übt das Wiedererkennen der Stimmen:
   // gekürzt erst mit den Zusatzvarianten der Nebenfiguren.
@@ -182,7 +199,9 @@ function mixByTokens(entries, opts) {
     const weights = [...bySub.keys()].map(k => [k, Number(mix[k]) || 0]);
     const wSum = weights.reduce((a, [, w]) => a + w, 0) || 1;
     // Quote pro Untertyp; was ein Untertyp nicht füllen kann, geht reihum an die anderen.
-    const quota = new Map(weights.map(([k, w]) => [k, Math.round(target * w / wSum)]));
+    // `refusalMin`: Untergrenze je Untertyp, soweit der Vorrat reicht.
+    const floor = opts.refusalMin || {};
+    const quota = new Map(weights.map(([k, w]) => [k, Math.max(Math.round(target * w / wSum), Math.round(Number(floor[k]) || 0))]));
     let spare = 0;
     for (const [k, arr] of bySub) {
       const q = quota.get(k);

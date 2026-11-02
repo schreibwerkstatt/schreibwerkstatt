@@ -33,6 +33,7 @@ export function studioYamlFor({ profileId, stats = null, maxSeqTokens = 0, t }) 
       rec: seq, p95: stats.tokensP95 ?? '?', max: stats.tokensMax ?? '?', over: stats.overRecommendedSeq ?? 0,
     }));
   }
+  header.push(t('finetune.profile.yaml.resume'));
   return buildStudioYaml(p, { maxSeqTokens: seq, trainCount, header });
 }
 
@@ -48,6 +49,7 @@ export function modelfileFor({ stats, bookName = '', t }) {
       t('finetune.modelfile.from'),
       t('finetune.modelfile.system'),
       t('finetune.modelfile.build'),
+      t('finetune.modelfile.repeat'),
     ],
   });
 }

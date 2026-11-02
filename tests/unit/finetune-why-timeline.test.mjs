@@ -1,6 +1,7 @@
 // Unit: Finetune-Export Warum-Familie und Zeitstrahl rückwärts
-// (docs/finetuning.md#warum-familie, #zeitstrahl-rückwärts): Warum-Fragen aus
-// Bedeutung + Motivation/Konflikt + Vorgeschichte, nichts erfunden; Jahr →
+// (docs/finetuning.md#warum-familie, #zeitstrahl-rückwärts): Warum-Fragen zu
+// DIESEM Ereignis (Bedeutung, Lage, frühere Vorgeschichte, höchstens ein
+// passender Profil-Teilsatz), nichts erfunden; Jahr →
 // Ereignisse, Figur + Jahr, gemeinsame Ereignisse, Reihenfolge — nur sichere
 // Jahre, keine doppelten Karten.
 import test from 'node:test';
@@ -9,7 +10,8 @@ import { createRequire } from 'node:module';
 
 const require = createRequire(import.meta.url);
 const { makeCoreHelpers } = require('../../routes/jobs/finetune-export/samples/core-facts/variants.js');
-const { buildEventWhy, actorOf, motiveSentences } = require('../../routes/jobs/finetune-export/samples/core-facts/why.js');
+const { buildEventWhy, actorOf } = require('../../routes/jobs/finetune-export/samples/core-facts/why.js');
+const { profileClause, isBefore } = require('../../routes/jobs/finetune-export/samples/core-facts/why-parts.js');
 const { buildTimelineReverse } = require('../../routes/jobs/finetune-export/samples/core-facts/timeline.js');
 
 const F = (fig_id, name) => ({ fig_id, name, names: [name] });
@@ -34,25 +36,26 @@ const makeCtx = () => ({
 });
 const qa = (s) => [s.messages[1].content, s.messages[2].content];
 
-test('Warum: Verbfrage aus dem Titel, Antwort aus Bedeutung + Motivation + Vorgeschichte', () => {
+test('Warum: Verbfrage aus dem Titel, Antwort zu DIESEM Ereignis, nur frühere Vorgeschichte, je Frage eine Fassung', () => {
   const ctx = makeCtx();
   const { emitCard } = makeCoreHelpers(ctx);
   buildEventWhy(ctx, emitCard);
   const why = ctx.samples.filter(s => s.factId === 'evt:3:motive');
-  assert.ok(why.length >= 8, 'viele Frageformen je Ereignis');
+  assert.ok(why.length >= 3, 'mehrere Frageformen je Ereignis');
   assert.ok(why.every(s => s.task === 'eventWhy' && s.unit === 'evt:3' && s.core && s.tier === 'main'));
   const qs = why.map(s => qa(s)[0]);
-  assert.ok(qs.includes('Warum vergewaltigt Stefan Renate am Chilbi-Abend?'), qs.join(' / '));
-  assert.ok(qs.some(q => q.startsWith('Was sind Stefans Beweggründe')));
+  assert.ok(qs.some(q => /^(Warum|Wieso) vergewaltigt Stefan Renate am Chilbi-Abend\?$/.test(q)), qs.join(' / '));
   assert.equal(new Set(qs).size, qs.length, 'jede Frage einmal');
+  assert.equal(new Set(why.map(s => qa(s)[1])).size, why.length, 'je Frage eine eigene Antwort');
   for (const s of why) {
     const a = qa(s)[1];
-    assert.match(a, /Stefan überschreitet die Grenze/, 'führendes «Er» der Bedeutung wird zum Namen');
-    assert.match(a, /Kontrolle über seine Frau/, 'Motivation steht drin');
-    assert.match(a, /«Hochzeit von Stefan und Renate»/, 'Vorgeschichte aus dem Zeitstrahl');
-    assert.doesNotMatch(a, /«Renate tritt der Damenriege bei»/, 'nur Ereignisse derselben Figur');
+    assert.match(a, /Stefan überschreitet die Grenze zur offenen Gewalt/, 'Bedeutung des Ereignisses, «Er» → Name');
+    assert.doesNotMatch(a, /Stefan schlägt Renate/, 'kein späteres Ereignis als Vorgeschichte');
+    assert.doesNotMatch(a, /Renate tritt der Damenriege bei/, 'nur Ereignisse mit Bezug (gemeinsame Figur, Strang, Abschnitt)');
+    assert.doesNotMatch(a, /Äusserlich will er/, 'kein Profilsatz wörtlich');
+    assert.ok((a.match(/Doppelleben/g) || []).length <= 1, 'höchstens ein Teilsatz aus dem Profil');
   }
-  assert.ok(new Set(why.map(s => qa(s)[1])).size >= 3, 'mehrere Antwortfassungen');
+  assert.ok(why.some(s => /«Hochzeit von Stefan und Renate» \(1990\)/.test(qa(s)[1])), 'frühere Vorgeschichte mit Jahr');
 });
 
 test('Warum: ohne handelnde Figur, ohne Motivation oder bei Rollenfigur keine Karte', () => {
@@ -66,9 +69,15 @@ test('Warum: ohne handelnde Figur, ohne Motivation oder bei Rollenfigur keine Ka
   assert.equal(actorOf(events[2], new Map()).verb, 'vergewaltigt');
 });
 
-test('Warum: Motivsätze nach Nähe zum Ereignis, erster Motivationssatz füllt auf', () => {
-  const m = motiveSentences(figRows[0], { ereignis: 'Stefan trinkt und wird gewalttätig', bedeutung: 'Alkohol und Gewalt', figs: [] });
-  assert.deepEqual(m, ['Äusserlich will er Kontrolle über seine Frau.', 'Er lebt ein Doppelleben aus Alkohol und Gewalt.']);
+test('Warum: Profil-Teilsatz nur mit Bezug zum Ereignis, umgestellt; Vorgeschichte nur mit sicherer Reihenfolge', () => {
+  const f = figRows[0];
+  assert.equal(profileClause(f, { ereignis: 'Stefan trinkt und wird gewalttätig', bedeutung: 'Alkohol und Gewalt', figs: [] }, 'Stefan', false),
+    'Stefan lebt ein Doppelleben aus Alkohol und Gewalt');
+  assert.equal(profileClause(f, { ereignis: 'Stefan geht wandern', bedeutung: 'Ein ruhiger Tag', figs: [] }, 'Stefan', false), '',
+    'kein Lückenfüller aus dem ersten Motivationssatz');
+  assert.ok(isBefore({ year: 1990, i: 9 }, { year: 1994, i: 1 }));
+  assert.ok(!isBefore({ year: 1999, i: 1 }, { year: 1999, month: 8, i: 5 }), 'gleiches Jahr ohne Monat: nicht entscheidbar');
+  assert.ok(isBefore({ year: 1999, month: 3, i: 9 }, { year: 1999, month: 8, i: 5 }), 'gleiches Jahr: Monat entscheidet, nicht die Reihenfolge im Zeitstrahl');
 });
 
 test('Zeitstrahl: Jahr, Figur + Jahr, Paare, Reihenfolge — nur sichere Jahre, keine Dubletten', () => {
@@ -145,7 +154,7 @@ test('Warum: weitere Figuren aus eigener Sicht, nur mit passendem Motivsatz', ()
   assert.ok(!qs.some(q => q.startsWith('Warum') || q.startsWith('Wie kommt es')), 'Ereignisfragen nur bei der handelnden Figur');
   for (const s of renate) {
     const a = s.messages[2].content;
-    assert.match(a, /sexueller Gewalt/);
+    assert.match(a, /Renate leidet unter Stefans Kontrolle und sexueller Gewalt/, 'Teilsatz mit der Figur vorn');
     assert.doesNotMatch(a, /Turnen/, 'nur der passende Satz');
     assert.doesNotMatch(a, /Renate überschreitet/, 'Bedeutung mit «Er» gehört der handelnden Figur');
   }

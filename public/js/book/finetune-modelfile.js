@@ -31,14 +31,17 @@ export const MODELFILE_TEMPLATE = [
 
 // 0.5: Mitte des Fensters für Faktenwiedergabe (docs/finetuning.md §4) — das
 // Leser-Modell antwortet ohne Nachschlagen, und Faktenfragen erfinden bei
-// höherer Temperatur mehr. repeat_penalty 1.1 gegen die
-// Satz-Schleifen («Renate ist … Renate ist …»), die ein Buch-LoRA bei
-// kurzen Faktenantworten zeigt. 32k Kontext reicht für Gespräche und spart
+// höherer Temperatur mehr. repeat_penalty 1.15 über die letzten 256 Tokens
+// gegen die Schleifen, die ein Buch-LoRA zeigt («Die erste Begegnung …» fünfmal,
+// «Er wollte … Er wollte …»); 1.1 über das Ollama-Standardfenster von 64 Tokens
+// liess sie bei Kapitelanfängen durch. Studio-Inferenz und Ollama setzen das
+// sonst nicht — darum steht es hier. 32k Kontext reicht für Gespräche und spart
 // KV-Cache gegenüber den nativen 256k.
 export const MODELFILE_PARAMS = [
   ['temperature', '0.5'],
   ['top_p', '0.95'],
-  ['repeat_penalty', '1.1'],
+  ['repeat_penalty', '1.15'],
+  ['repeat_last_n', '256'],
   ['num_ctx', '32768'],
 ];
 

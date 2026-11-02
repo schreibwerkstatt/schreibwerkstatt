@@ -55,7 +55,7 @@ function loadFinetuneData({ bookIdInt, userEmail, pageContents, langIsEn }) {
   )].sort((a, b) => b.length - a.length);
 
   const locRows = cleanNames(db.prepare(`
-    SELECT id AS pk, loc_id, name, typ, beschreibung, erste_erwaehnung, stimmung
+    SELECT id AS pk, loc_id, name, typ, beschreibung, erste_erwaehnung, stimmung, LOWER(COALESCE(land, geo_land, '')) AS land
     FROM locations
     WHERE book_id = ? AND (user_email = ? OR (? IS NULL AND user_email IS NULL))
     ORDER BY sort_order

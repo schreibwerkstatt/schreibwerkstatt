@@ -3,9 +3,11 @@
 const { makeCoreHelpers } = require('./variants');
 const { buildRelationCore } = require('./relations');
 const { buildFigureCore, countMentions } = require('./figures');
-const { buildEventCore, buildChapterCore } = require('./events');
+const { buildEventCore, buildEventPresence, buildChapterCore } = require('./events');
 const { buildCoreFactSet } = require('./core-set');
 const { buildEventWhy } = require('./why');
+const { buildSceneWhy } = require('./scene-why');
+const { buildPsycheFacets } = require('./psyche');
 const { buildTimelineReverse } = require('./timeline');
 const { nameInfo } = require('./naming');
 const { figureTier } = require('./words');
@@ -47,7 +49,10 @@ function buildCoreFactSamples(ctx) {
   ctx.conflictDropped = rel.conflictDropped;
   buildFigureCore(ctx, emitCard, rel.facts);
   buildEventCore(ctx, emitCard);
+  buildEventPresence(ctx, emitCard);
   buildEventWhy(ctx, emitCard);
+  buildSceneWhy(ctx, emitCard);
+  buildPsycheFacets(ctx, emitCard);
   buildTimelineReverse(ctx, emitCard);
   buildChapterCore(ctx, emitCard);
   buildCoreFactSet(ctx);

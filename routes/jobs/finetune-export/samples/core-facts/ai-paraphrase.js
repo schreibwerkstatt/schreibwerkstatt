@@ -143,9 +143,13 @@ async function buildAiWhyQuestions(ctx) {
       if (!result || !Array.isArray(result.varianten)) return;
       saveFinetuneAiCache(bookIdInt, userEmail, 'why-questions', factId, sig, versionTag, result);
     }
-    const answers = [...new Set(arr.map(s => s.messages[2].content))];
+    // Nur Fassungen, die keine Vorlagen-Frage schon trägt (why.js#whyAnswers):
+    // je Frage eine eigene Antwort, sonst würde die Fassung zum Block.
+    const taken = new Set(arr.map(s => s.messages[2].content));
+    const answers = (ctx.whyAnswers?.get(factId) || []).filter(a => !taken.has(a));
     let n = 0;
     for (const v of result.varianten) {
+      if (n >= answers.length) break;
       const q = String(v || '').trim();
       if (/[«»"“”]/.test(q) || prompts0.has(q) || !keepsQuestion(q, probe, names)) { rejected++; continue; }
       prompts0.add(q);
@@ -153,7 +157,7 @@ async function buildAiWhyQuestions(ctx) {
         ...base,
         id: `core|${factId}|why${n}`,
         aiParaphrase: true,
-        messages: [base.messages[0], { role: 'user', content: q }, { role: 'assistant', content: answers[n % answers.length] }],
+        messages: [base.messages[0], { role: 'user', content: q }, { role: 'assistant', content: answers[n] }],
       });
       n++;
       added++;

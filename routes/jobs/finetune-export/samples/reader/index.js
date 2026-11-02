@@ -14,8 +14,10 @@ const { loadReaderFigures } = require('./figures');
 const { makeReaderPush } = require('./push');
 const { buildPsycheSamples } = require('./psyche');
 const { buildPersonaAnchorSamples } = require('./persona');
+const { buildPersonaFactSamples } = require('./persona-facts');
 const { buildBoundarySamples } = require('./boundaries');
 const { buildRefusalSamples } = require('./refusals');
+const { buildNotInBookSamples, buildChallengeConversations } = require('./grounding');
 const { buildReaderAiSamples: runReaderAi } = require('./ai');
 const { buildReaderConversations: runConversations } = require('./conversations');
 const { buildReaderSystem } = require('./system');
@@ -26,8 +28,10 @@ function buildReaderSamples(ctx) {
   const push = makeReaderPush(ctx);
   buildPsycheSamples(ctx, ctx.readerFigures, push);
   buildPersonaAnchorSamples(ctx, ctx.readerFigures, push);
+  buildPersonaFactSamples(ctx, push);
   buildBoundarySamples(ctx, ctx.readerFigures, push);
   buildRefusalSamples(ctx, push);
+  buildNotInBookSamples(ctx, push);
 }
 
 async function buildReaderAiSamples(ctx) {
@@ -36,6 +40,7 @@ async function buildReaderAiSamples(ctx) {
 
 function buildReaderConversations(ctx) {
   runConversations(ctx, makeReaderPush(ctx));
+  buildChallengeConversations(ctx, makeReaderPush(ctx));
 }
 
 module.exports = { buildReaderSamples, buildReaderAiSamples, buildReaderConversations, buildReaderSystem };

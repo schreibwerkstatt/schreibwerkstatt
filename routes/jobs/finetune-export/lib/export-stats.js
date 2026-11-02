@@ -171,6 +171,31 @@ function coreFactVariants(trainArr, coreFactsByFig, nameOf = (id) => id) {
   return { figures, min: all.length ? all[0] : null, median: med(all) };
 }
 
+// Kennzahlen der Deutungen und der Ich-Form (docs/finetuning.md#qualität-des-sets):
+// Anteil verschiedener Antworten bei `eventWhy` (Ziel ≥ 0.8), Zahl der
+// `sceneWhy`-Beispiele, Ich-Form-Fragen je Hauptfigur (Ziel ≥ 30) und die
+// Orte, die als nur erwähnt nicht als Schauplatz gelten (`placeSuspect`, je Ort
+// mit Zahl der Ereignisse und Land — eine Aufgabe für den Autor).
+function interpretationStats(samples, { placeSuspect = [] } = {}) {
+  const task = (t) => samples.filter(s => s.task === t);
+  const why = task('eventWhy');
+  const personaByFig = {};
+  for (const s of samples) if (s.persona && s.task === 'readerPersona') personaByFig[s.persona] = (personaByFig[s.persona] || 0) + 1;
+  const places = new Map();
+  for (const p of placeSuspect) {
+    const k = p.place;
+    if (!places.has(k)) places.set(k, { place: k, land: p.land, events: 0, example: p.event });
+    places.get(k).events++;
+  }
+  return {
+    eventWhyUnique: why.length ? new Set(why.map(s => s.messages[s.messages.length - 1].content)).size / why.length : null,
+    sceneWhyCount: task('sceneWhy').length,
+    psycheCount: task('psyche').length,
+    personaPerFigure: personaByFig,
+    placeSuspect: [...places.values()].sort((a, b) => b.events - a.events),
+  };
+}
+
 // Einzeilige Zusammenfassung fürs Job-Log.
 function qualityLogLine(q) {
   const pct = (x) => (x * 100).toFixed(1) + '%';
@@ -182,4 +207,4 @@ function qualityLogLine(q) {
     + `${q.overlap.prompt}/${q.overlap.answer}/${q.overlap.shingle} · ${tasks}`;
 }
 
-module.exports = { buildQualityStats, qualityLogLine, coreFactCoverage, coreFactVariants };
+module.exports = { buildQualityStats, qualityLogLine, coreFactCoverage, coreFactVariants, interpretationStats };

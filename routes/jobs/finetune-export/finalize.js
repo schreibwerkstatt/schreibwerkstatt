@@ -11,7 +11,9 @@ const { makeCritiqueRegex } = require('./lib/critique');
 const { capAnswerLengths } = require('./lib/answer-length');
 const { applyParagraphBudget, paragraphTargetMax } = require('./lib/paragraph-budget');
 const { mixByTokens, isProtected } = require('./lib/token-mix');
-const { swissSpelling, hasEditorNote, lintAnswer, isTrivial, promptKey, ESZETT } = require('./lib/answer-lint');
+const { swissSpelling, hasEditorNote, lintAnswer, isTrivial, promptKey, ESZETT, personaThirdPerson, selfRepeat } = require('./lib/answer-lint');
+const { applyBlockReuse, maxBlockReuse } = require('./lib/block-reuse');
+const { tierIndex, tierMismatchOf, precedingAfterTarget } = require('./lib/consistency-check');
 
 const sha1 = (s) => crypto.createHash('sha1').update(s).digest('hex');
 
@@ -39,6 +41,7 @@ const answersRaw = (s) => s.messages.filter(m => m.role === 'assistant').map(m =
 // Familien mit eigener Val-Datei — zusammen jede Familie (lib/tasks.js), damit
 // `val` genau die Summe der Familien-Dateien ist.
 const VAL_FAMILIES = ['facts', 'writing', 'persona', 'refusal', 'editor'];
+const OPENING_TASKS = new Set(['chapterOpening', 'sceneBrief']);
 
 // Token-Stats berechnen, optional nach `maxSeqTokens` filtern, exakte Dubletten
 // entfernen, Faktenkarten als Schreibziel und Lektorats-Sprache als Inhalt
@@ -146,12 +149,17 @@ function finalizeFinetuneSamples(ctx) {
   let noteDropped = 0, lintDropped = 0, trivialDropped = 0;
   const lintReasons = {};
   kept = kept.filter(e => {
-    if (swiss && e.family !== 'writing') {
-      for (const m of e.s.messages) if (m.role === 'assistant') m.content = swissSpelling(m.content);
+    // Fragen auch: KI-Fragevarianten schreiben «groß», «weiß» — ein Buch ohne
+    // «ß» soll dem Modell keines zeigen, auch nicht im Prompt. Buchtext-Ziele
+    // bleiben, wie sie sind.
+    if (swiss) {
+      for (const m of e.s.messages) {
+        if (m.role === 'user' || (m.role === 'assistant' && e.family !== 'writing')) m.content = swissSpelling(m.content);
+      }
     }
     if (e.s.messages.some(m => m.role !== 'system' && hasEditorNote(m.content))) { noteDropped++; return false; }
     if (e.family === 'writing') return true;
-    const reason = answersRaw(e.s).map(a => lintAnswer(a, swiss)).find(Boolean);
+    const reason = answersRaw(e.s).map(a => lintAnswer(a, swiss)).find(Boolean) || personaLint(e.s);
     if (reason) {
       lintDropped++;
       lintReasons[reason] = (lintReasons[reason] || 0) + 1;
@@ -161,6 +169,23 @@ function finalizeFinetuneSamples(ctx) {
     if (e.s.messages.length === 3 && isTrivial(user.content, answer.content)) { trivialDropped++; return false; }
     return true;
   });
+
+  // ── Stufen der Figuren einheitlich (lib/consistency-check.js) ─────────
+  let tierMismatch = 0;
+  const tierMismatches = [];
+  {
+    const index = tierIndex(ctx.figRows || [], langIsEn, (f) => ctx.figNameInfo?.get(f.fig_id)?.name || f.name);
+    if (index.length) {
+      kept = kept.filter(e => {
+        if (e.family === 'writing') return true;
+        const hit = tierMismatchOf(e.s, index);
+        if (!hit) return true;
+        tierMismatch++;
+        if (tierMismatches.length < 20) tierMismatches.push({ ...hit, id: e.s.id });
+        return false;
+      });
+    }
+  }
 
   // ── Prompt-Dedup ──────────────────────────────────────────────────────
   // Dieselbe Frage (alle Nutzer-Turns) nur einmal: zwei Antworten auf
@@ -229,7 +254,9 @@ function finalizeFinetuneSamples(ctx) {
   const limitOf = (e) => (e.family === 'facts' ? maxPerFactAnswer : maxPerAnswer);
   if (maxPerAnswer > 0) {
     const exempt = kept.filter(e => e.s.coreFact);
-    const rank = (e) => (e.family === 'writing' ? 0 : 2) + (e.s.unit ? 0 : 1);
+    // Anfänge und Szenen aus Figurensicht vor den übrigen Schreibaufgaben: sie
+    // teilen ihr Ziel oft mit «Szene schreiben» und «Erzähle aus Sicht von …».
+    const rank = (e) => (e.family === 'writing' ? (OPENING_TASKS.has(e.s.task) ? -1 : 0) : 2) + (e.s.unit ? 0 : 1);
     const order = [...kept].filter(e => !e.s.coreFact).sort((a, b) => rank(a) - rank(b)
       || hashSplit('ans|' + a.s.id, valSeed) - hashSplit('ans|' + b.s.id, valSeed));
     const used = new Map();
@@ -252,6 +279,11 @@ function finalizeFinetuneSamples(ctx) {
     kept = kept.filter(e => keep.has(e));
   }
 
+  // ── Wörtliche Blöcke (`blockReuse`, lib/block-reuse.js) ───────────────
+  const blocks = applyBlockReuse(kept, { isProtected, seed: valSeed });
+  kept = blocks.kept;
+  for (const e of kept) if (e.s.messages.some(m => m.role === 'assistant')) e.tokens = retoken(e.s);
+
   // ── Absatz-Budget (`maxTargetsPerParagraph`) ─────────────────────────
   const paraBudget = applyParagraphBudget(kept, {
     pageContents: ctx.pageContents, maxTargets: Number(opts.maxTargetsPerParagraph) || 0, seed: valSeed,
@@ -264,6 +296,7 @@ function finalizeFinetuneSamples(ctx) {
     familyTokenShares: opts.familyTokenShares,
     refusalShare: opts.refusalShare,
     refusalMix: opts.refusalMix,
+    refusalMin: opts.refusalMin,
     verbatimMaxTokenShare: opts.verbatimMaxTokenShare,
     tierByFig: ctx.tierByFig,
     unitTier: eventUnitTiers(ctx),
@@ -412,6 +445,13 @@ function finalizeFinetuneSamples(ctx) {
     maxPerAnswer: maxPerAnswer || null,
     maxPerFactAnswer: maxPerFactAnswer || null,
     quality: buildQualityStats(trainOut, valOut, { langIsEn, overlapByVal, charsPerToken: rate }),
+    blockReuseTrimmed: blocks.trimmed,
+    blockReuseDropped: blocks.dropped,
+    maxBlockReuse: maxBlockReuse([...trainOut, ...valOut], (s) => familyOf(s.task) === 'writing'),
+    tierMismatch,
+    tierMismatches,
+    precedingAfterTarget: precedingAfterTarget([...trainOut, ...valOut], ctx.events).length,
+    ...writingChecks([...trainOut, ...valOut], swiss),
     valFacts: valByFamily.facts.length,
     valWriting: valByFamily.writing.length,
     valPersona: valByFamily.persona.length,
@@ -445,6 +485,40 @@ function finalizeFinetuneSamples(ctx) {
 
   const trainPrompts = new Set(trainOut.flatMap(s => s.messages.filter(m => m.role === 'user').map(m => m.content.trim())));
   return { stats, trainJsonl, valJsonl, allJsonl, valFamilyJsonl, valUnits, trainPrompts, trainOut, valOut };
+}
+
+// Ich-Antworten einer Figur (`persona`): kein Satz in der 3. Person, keine
+// Anrede des Lesers als Bekannten. Nach der Rückkehr zum Buch («… wieder mit
+// dem Buch sprechen») spricht das Buch, nicht mehr die Figur.
+function personaLint(s) {
+  if (!s.persona) return null;
+  for (let i = 1; i < s.messages.length; i++) {
+    const m = s.messages[i];
+    if (m.role === 'user' && /wieder mit dem Buch|talk to the book again/i.test(m.content)) return null;
+    if (m.role === 'assistant') {
+      const r = personaThirdPerson(m.content, s.persona);
+      if (r) return r;
+    }
+  }
+  return null;
+}
+
+// Prosa-Kennzahlen: Buchtext-Antworten mit Wiederholungsmuster (Stilmittel des
+// Autors, nur gezählt), «ß» in Prosa-Antworten und in Prompts — ein Buch in
+// Schweizer Schreibung ohne «ß» im Ziel, aber mit «ß» im Vorlauf, gäbe dem
+// Modell ein gemischtes Signal.
+function writingChecks(samples, swiss) {
+  let selfRepeatBook = 0, ssAnswers = 0, ssPrompts = 0;
+  for (const s of samples) {
+    const writing = familyOf(s.task) === 'writing';
+    for (const m of s.messages) {
+      if (m.role === 'user' && ESZETT.test(m.content)) ssPrompts++;
+      if (m.role !== 'assistant' || !writing) continue;
+      if (selfRepeat(m.content)) selfRepeatBook++;
+      if (ESZETT.test(m.content)) ssAnswers++;
+    }
+  }
+  return { selfRepeatBook, ssCount: { writingAnswers: ssAnswers, prompts: ssPrompts, swiss } };
 }
 
 // Bedeutung je Ereignis-Einheit (`evt:<i>`): die wichtigste beteiligte Figur.

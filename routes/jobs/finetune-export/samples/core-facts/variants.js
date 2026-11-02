@@ -24,15 +24,17 @@ function makeCoreHelpers(ctx) {
   // der Figur (main/side/minor), steuert das Kürzen in lib/token-mix.js.
   // `questions` / `answers`: Listen; `count` überschreibt die Variantenzahl.
   // `dir` (optional): Fragerichtung derselben Karte (Beziehung A→B / B→A),
-  // steht am Sample und in seiner ID.
+  // steht am Sample und in seiner ID. `distinct`: jede Frage bekommt eine
+  // eigene Antwort (höchstens so viele Varianten wie Antworten) — für Karten,
+  // deren Antworten sonst als wörtlicher Block über viele Fragen gelernt würden.
   const carded = new Set();
-  function emitCard(card, { task, questions, answers, count, dir }) {
+  function emitCard(card, { task, questions, answers, count, dir, distinct = false }) {
     const qs = [...new Set(questions.map(q => String(q || '').trim()).filter(q => q.length >= 4))];
     const as = [...new Set(answers.map(a => String(a || '').trim()).filter(a => a.length >= 12))];
     if (!qs.length || !as.length) return 0;
     // Jede Frage höchstens einmal je Karte und Richtung: dieselbe Frage mit
     // zwei Antworten wäre ein doppelter Prompt (finalize.js#promptDedup).
-    const n = Math.min(count || k, qs.length);
+    const n = Math.min(count || k, qs.length, distinct ? as.length : Infinity);
     const tag = card.id + (dir ? '|' + dir : '');
     const qo = order(qs.length, tag + '|q');
     const ao = order(as.length, tag + '|a');

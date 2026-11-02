@@ -2,6 +2,7 @@
 
 const { extractName, nameRegex } = require('../../lib/names');
 const { eventExcerpt } = require('./event-data');
+const { mentionOnly } = require('./locations');
 
 // Buchstelle einer Szene: das Fenster im Abschnitt, in dem ihre Figuren und
 // die Stichwörter aus Titel und verknüpften Ereignissen am dichtesten stehen
@@ -29,6 +30,10 @@ function buildSceneQASamples(ctx) {
     sceneQuestions, pushQA, pickVariants, PARAPHRASES,
   } = ctx;
   const maxChars = opts.maxChars;
+  // Schauplätze der Szene ohne Orte, die nur erwähnt werden (locations.js#mentionOnly).
+  const locByLocId = new Map((ctx.locRows || []).map(l => [l.loc_id, l]));
+  const settingIds = (sceneId) => (locsByScene.get(sceneId) || [])
+    .filter(id => !locByLocId.get(id) || !mentionOnly(ctx, locByLocId.get(id)));
 
   // «Was passiert in Szene X?» — Inhalt kommt aus den verknüpften Ereignissen,
   // nie aus `kommentar` (Bewertung + Verbesserungshinweis des Lektorats).
@@ -40,7 +45,7 @@ function buildSceneQASamples(ctx) {
     const figIds = figsByScene.get(s.id) || [];
     const figNames = figIds.map(id => extractName(id, figById)).filter(Boolean);
     if (figNames.length) parts.push(langIsEn ? `With ${figNames.join(', ')}.` : `Dabei sind ${figNames.join(', ')}.`);
-    const locIds = locsByScene.get(s.id) || [];
+    const locIds = settingIds(s.id);
     const locNames = locIds.map(id => extractName(id, locById)).filter(Boolean);
     if (locNames.length) parts.push(langIsEn ? `Setting: ${locNames.join(', ')}.` : `Schauplatz: ${locNames.join(', ')}.`);
     if (s.kapitel) parts.push(langIsEn ? `Chapter: ${s.kapitel}.` : `Kapitel: ${s.kapitel}.`);
@@ -100,7 +105,7 @@ function buildSceneQASamples(ctx) {
   for (const s of sceneRows) {
     if (!s.titel) continue;
     const figIds = figsByScene.get(s.id) || [];
-    const locIds = locsByScene.get(s.id) || [];
+    const locIds = settingIds(s.id);
     // Figurenpaar
     for (let ai = 0; ai < Math.min(figIds.length, 4); ai++) {
       for (let bi = ai + 1; bi < Math.min(figIds.length, 4); bi++) {

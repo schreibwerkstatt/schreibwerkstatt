@@ -30,8 +30,9 @@ const {
   genderOf, roleNoun, inverseTyp, rolePhrase, berufHead, jobInSentence, isStatus, isSingleJob, figureTypePhrase, ownBirthYear,
 } = require('../core-facts/words');
 const {
-  FIRST, LAST, COMMON_FIRST, COMMON_LAST, PLACE_A, PLACE_B, FAKE_EVENTS, EVAL_FAKES, REFUSAL_TEXT: T, OFF_TOPIC, META,
+  FIRST, LAST, COMMON_FIRST, COMMON_LAST, PLACE_A, PLACE_B, FAKE_EVENTS, EVAL_FAKES, REFUSAL_TEXT: T, OFF_TOPIC,
 } = require('./refusal-text');
+const { buildMetaSamples } = require('./meta');
 
 // Paare ohne gehäufte Namen: Runde r paart firsts[i] mit lasts[(i + r) % n].
 function spreadPairs(firsts, lasts, ordered) {
@@ -115,6 +116,7 @@ const FORM_PORTRAIT = 0.65;
 const PORTRAIT_RATIO = 0.6;
 const FORM_RELATION = 0.85;
 const UNKNOWN_POOL = 700;
+const MIX_POOL = 300;
 const FP_MAIN_MAX = 3;
 
 function buildRefusalSamples(ctx, push) {
@@ -210,18 +212,34 @@ function buildRefusalSamples(ctx, push) {
 
   // ── Teil-Ablehnung: echte und erfundene Figur ───────────────────────
   // Die echte Figur nur kurz einordnen (höchstens elf Wörter): ein längerer
-  // Satz wiederholte das Porträt aus dem Train wörtlich.
-  const mixPool = names.slice(UNKNOWN_POOL, UNKNOWN_POOL + 60);
+  // Satz wiederholte das Porträt aus dem Train wörtlich. Die Stufe kommt aus
+  // `figures.typ` (dieselbe Kurzform wie im Porträt, lib/consistency-check.js).
+  // Formen: Vorstellung, Vergleich («Wer ist älter, X oder Y?»), Beziehung,
+  // gemeinsame Szene, Ereignis der echten Figur. Beim Vergleich übernimmt die
+  // Antwort den erfundenen Namen nie als Figur — sie vergleicht nicht.
+  const mixPool = names.slice(UNKNOWN_POOL, UNKNOWN_POOL + MIX_POOL);
   const mixReal = realFigs.filter(f => figureTypePhrase(f.typ, genderOf(f), langIsEn));
+  const eventsOf = (f) => (ctx.events || []).filter(e => e.figs.some(x => x.fig_id === f.fig_id) && e.ereignis.length <= 90);
+  const FORMS = ['intro', 'compare', 'relation', 'scene', 'event'];
   mixPool.forEach((x, i) => {
     if (!mixReal.length) return;
     const f = pick(mixReal, 'mxR|' + x);
     const type = figureTypePhrase(f.typ, genderOf(f), langIsEn);
-    const tpl = t.mixedQ[i % t.mixedQ.length];
+    const form = FORMS[i % FORMS.length];
     const realPart = fill(pick(t.mixedReal, 'mxRA|' + x), { real: f.name, type });
-    const fakeFirst = tpl.indexOf('{x}') < tpl.indexOf('{real}');
-    const fakePart = fill(pick(fakeFirst ? t.mixedFakeFirst : t.mixedFake, 'mxFA|' + x), { x, book });
-    one('mixed', x, fill(tpl, { real: f.name, x }), fakeFirst ? `${fakePart} ${realPart}` : `${realPart} ${fakePart}`);
+    if (form === 'intro') {
+      const tpl = t.mixedQ[Math.floor(i / FORMS.length) % t.mixedQ.length];
+      const fakeFirst = tpl.indexOf('{x}') < tpl.indexOf('{real}');
+      const fakePart = fill(pick(fakeFirst ? t.mixedFakeFirst : t.mixedFake, 'mxFA|' + x), { x, book });
+      one('mixed', x, fill(tpl, { real: f.name, x }), fakeFirst ? `${fakePart} ${realPart}` : `${realPart} ${fakePart}`);
+      return;
+    }
+    const evs = form === 'event' ? eventsOf(f) : [];
+    if (form === 'event' && !evs.length) return;
+    const vars = { real: f.name, x, book, event: evs.length ? pick(evs, 'mxE|' + x).ereignis : '' };
+    const q = fill(pick(t.mixed[form].q, 'mxQ|' + x), vars);
+    const tail = fill(pick(t.mixed[form].a, 'mxT|' + x), vars);
+    one('mixed', x, q, form === 'event' ? tail : `${realPart} ${tail}`, { form: 'mixed-' + form });
   });
 
   // ── Off-Topic: zwei Antworten pro Frage, gleiche Einheit ────────────
@@ -251,13 +269,23 @@ function buildRefusalSamples(ctx, push) {
     const items = [];
     for (let k = 0; k < 3; k++) for (const d of dirs) if (d[k]) items.push(d[k]);
     const chosen = main ? items.slice(0, FP_MAIN_MAX) : dirs.map(d => d[0]).filter(Boolean);
+    // Formen: Frage, Erzählbitte («Erzähl mir, wie …»), Ich-Form des Lesers
+    // («Ich habe gelesen, dass …»), Ja/Nein («Stimmt es, dass …?») — und für
+    // Hauptfiguren das Rollenspiel: die Figur selbst korrigiert in der Ich-Form.
+    const qPool = [...t.fpRelQ, ...t.fpRelYesNoQ];
     chosen.forEach((w, k) => {
       const key = `rel|${r.key}|${k}`;
-      const q = pick(t.fpRelQ, 'fpQ|' + key);
-      const yesNo = q === t.fpRelQ[t.fpRelQ.length - 1];
+      const q = pick(qPool, 'fpQ|' + key);
+      const yesNo = t.fpRelYesNoQ.includes(q);
       const a = yesNo ? fill(t.fpRelYesNoA, w.vars) : fill(pick(t.fpRelA, 'fpA|' + key), w.vars);
       one('falsePremise', key, fill(q, w.vars), capFirst(a), { unit: `ref:fp:${r.key}`, factIds: ['rel:' + r.key] });
     });
+    if (main && chosen[0] && !langIsEn) {
+      const w = chosen[0];
+      const key = `rel|${r.key}|rp`;
+      one('falsePremise', key, fill(pick(t.fpRoleQ, 'fpRQ|' + key), w.vars), fill(pick(t.fpRoleA, 'fpRA|' + key), w.vars),
+        { unit: `ref:fp:${r.key}`, factIds: ['rel:' + r.key], persona: w.vars.y });
+    }
   }
   // Nur echte Berufe als einzelner Begriff: «Warum arbeitet X als Schüler?»
   // wäre schief, eine Aufzählung («Bezirksschüler, Hockeyspieler, …») ebenso.
@@ -279,33 +307,6 @@ function buildRefusalSamples(ctx, push) {
     const key = `year|${f.fig_id}`;
     one('falsePremise', key, fill(pick(t.fpYearQ, 'fpYQ|' + key), vars), fill(pick(t.fpYearA, 'fpYA|' + key), vars),
       { factIds: ['fig:' + f.fig_id + ':geburt'] });
-  }
-}
-
-// Meta-Fragen: je Thema eine Einheit, Antwort aus `ctx.publication`
-// (db/book-publication.js#getMeta) und der Kapitelzahl — fehlt der Wert,
-// lehnt das Buch ehrlich ab, statt zu raten.
-function buildMetaSamples(ctx, push) {
-  const { langIsEn, displayName: book } = ctx;
-  const m = META[langIsEn ? 'en' : 'de'];
-  const pub = ctx.publication || {};
-  const chapters = (ctx.chapterKeys || []).filter(k => k !== 0).length;
-  const values = {
-    book,
-    author: String(pub.author_name || '').trim(),
-    year: String(pub.year || '').trim(),
-    publisher: String(pub.publisher || '').trim(),
-    chapters: chapters >= 1 ? String(chapters) : '',
-    subtitle: pub.subtitle ? ` – ${String(pub.subtitle).trim()}` : '',
-  };
-  const known = { author: !!values.author, year: /^\d{4}$/.test(values.year), publisher: !!values.publisher, count: !!values.chapters, title: true };
-  for (const [topic, def] of Object.entries(m)) {
-    const answers = known[topic] ? def.known : def.unknown;
-    if (!answers) continue;
-    def.q.forEach((q, i) => push({
-      id: `refusal|meta|${topic}|${i}`, unit: `ref:meta:${topic}`,
-      turns: [[fill(q, values), fill(answers[i % answers.length], values)]],
-    }));
   }
 }
 

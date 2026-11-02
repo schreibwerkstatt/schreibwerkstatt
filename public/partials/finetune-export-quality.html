@@ -30,6 +30,12 @@
       <span class="tok-badge tok-med" x-show="ex.stats.cardDropped > 0" x-text="$app.tn('finetune.stats.cardDropped', ex.stats.cardDropped)"></span>
       <span class="tok-badge tok-neutral" x-show="ex.stats.splitMixed > 0" x-text="$app.tn('finetune.stats.splitMixed', ex.stats.splitMixed)"></span>
       <span class="tok-badge tok-neutral" x-show="ex.stats.valPurged > 0" x-text="$app.tn('finetune.stats.valPurged', ex.stats.valPurged)"></span>
+      <span class="tok-badge" :class="ex.stats.maxBlockReuse?.max > 5 ? 'tok-med' : 'tok-neutral'" x-show="ex.stats.maxBlockReuse?.max > 0" :data-tip="ex.stats.maxBlockReuse?.text" x-text="$app.t('finetune.quality.blockReuse', { n: ex.stats.maxBlockReuse?.max })"></span>
+      <span class="tok-badge" :class="ex.stats.eventWhyUnique < 0.8 ? 'tok-med' : 'tok-neutral'" x-show="ex.stats.eventWhyUnique != null" x-text="$app.t('finetune.quality.whyUnique', { pct: finetunePct(ex.stats.eventWhyUnique) })"></span>
+      <span class="tok-badge tok-neutral" x-show="ex.stats.blockReuseTrimmed > 0" x-text="$app.tn('finetune.stats.blockReuseTrimmed', ex.stats.blockReuseTrimmed)"></span>
+      <span class="tok-badge tok-high" x-show="ex.stats.precedingAfterTarget > 0" x-text="$app.tn('finetune.stats.precedingAfterTarget', ex.stats.precedingAfterTarget)"></span>
+      <span class="tok-badge tok-med" x-show="ex.stats.tierMismatch > 0" x-text="$app.tn('finetune.stats.tierMismatch', ex.stats.tierMismatch)"></span>
+      <span class="tok-badge tok-med" x-show="ex.stats.placeSuspect?.length > 0" x-text="$app.tn('finetune.stats.placeSuspect', ex.stats.placeSuspect?.length || 0)"></span>
     </div>
 
     <div class="table-scroll">

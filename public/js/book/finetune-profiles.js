@@ -89,25 +89,31 @@ export const EXPORT_DEFAULTS = {
   // der Vollständigkeit halber: Ablehnungen werden nach ANZAHL gemischt
   // (`refusalShareBasis`), Ziel `refusalShare` der Beispiele — ihre Antworten
   // sind so kurz, dass ein Token-Anteil ein Viertel aller Beispiele wäre.
-  // Fakten vor Schreiben: das Schreiben ist durch Buchlänge und Absatz-Budget
-  // gedeckelt; ein Verhältnis zugunsten des Schreibens schnitte das Buchwissen
-  // auf dessen Grösse zurück.
-  familyTokenShares: { writing: 0.25, facts: 0.60, persona: 0.15, refusal: 0.05 },
+  // Prosa vor Fakten: bei 0.27 Prosa-Anteil fiel das Modell bei «Schreibe den
+  // Anfang eines Kapitels …» in Schleifen und Profilblöcke. Gekürzt wird auf der
+  // Faktenseite zuerst bei den Ereignis-Facetten und dem Zeitstrahl rückwärts
+  // (lib/token-mix.js#factRank), nie beim Kernwissen der Hauptfiguren.
+  familyTokenShares: { writing: 0.45, facts: 0.42, persona: 0.08, refusal: 0.05 },
   // Antwort-Budget der Faktenfamilie (finalize.js): dieselbe Faktenantwort darf
   // so oft stehen, je mit anderer Frage — Wiederholung ist hier der Zweck. Für
   // die übrigen Familien gilt `maxPerAnswer` der Karte.
   maxPerFactAnswer: 6,
   refusalShareBasis: 'count',
-  refusalShare: 0.055,
-  refusalMix: { unknownEntity: 0.45, offTopic: 0.2, falsePremise: 0.2, mixedRefusal: 0.08, metaQuestion: 0.07 },
+  refusalShare: 0.065,
+  // `notInBook`: echte Figur, aber das Buch erzählt es nicht (reader/grounding.js).
+  refusalMix: { unknownEntity: 0.4, offTopic: 0.17, falsePremise: 0.2, notInBook: 0.1, mixedRefusal: 0.07, metaQuestion: 0.06 },
+  // Mindestzahl je Ablehnungs-Untertyp im Set, soweit der Vorrat reicht: Meta-
+  // Fragen (Jahr, Autor, Werke) und Teil-Ablehnungen sind wenige, aber jede
+  // Form muss oft genug vorkommen (lib/token-mix.js, Schritt 4).
+  refusalMin: { metaQuestion: 180, mixedRefusal: 230 },
   // Val-Ablehnungen je Untertyp mindestens so viele (lib/split.js), damit
   // `val-refusal` jede Art von Ablehnung misst.
-  valRefusalMin: { unknownEntity: 8, offTopic: 8, falsePremise: 8, metaQuestion: 4, mixedRefusal: 4 },
+  valRefusalMin: { unknownEntity: 8, offTopic: 8, falsePremise: 8, metaQuestion: 4, mixedRefusal: 4, notInBook: 6 },
   verbatimMaxTokenShare: 0.01,
   // Längste Antwort pro Aufgabentyp, gekürzt an Satzgrenzen.
-  maxAnswerChars: { sceneWrite: 2000, povPassage: 2000, passage: 2000, continue: 1500 },
+  maxAnswerChars: { sceneWrite: 2000, povPassage: 2000, passage: 2000, continue: 1500, chapterOpening: 1500, sceneBrief: 2000 },
   // Höchstens so viele Samples mit demselben Absatz als Ziel.
-  maxTargetsPerParagraph: 2,
+  maxTargetsPerParagraph: 3,
   // «Wer sagt das?» nur für Zitate ab so vielen Wörtern.
   whoSaysMinWords: 6,
   // Lektorats-Feedback als eigener Aufgabentyp (Werkstattwissen, Standard aus).

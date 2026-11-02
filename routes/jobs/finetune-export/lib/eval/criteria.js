@@ -2,9 +2,12 @@
 
 // Prüfkriterien des Eval-Sets (docs/finetuning.md#5-qualitäts-check):
 //   mustContain     — jeder Begriff muss vorkommen (Teilstring, ohne Gross-/Kleinschreibung);
-//   mustContainAny  — Synonymgruppen: aus JEDER Gruppe mindestens ein Begriff;
+//   mustContainAny  — Synonymgruppen: aus JEDER Gruppe mindestens ein Begriff
+//                     (mit `minAny: k` aus mindestens k Gruppen);
 //   mustNotContain  — keiner dieser Begriffe darf vorkommen;
+//   maxOverlapWithProfile, style — siehe lib/eval/score.js;
 //   judge           — Bewertungsanweisung für einen menschlichen oder LLM-Richter.
+// Begriffe mit «…» sind Muster mit Lücke. Ausgewertet in lib/eval/score.js.
 // Ein Kriterium wie «ich» oder «nicht» allein misst nichts (trifft jede
 // Antwort) — `validateEvalItem` verlangt mindestens ein aussagekräftiges.
 
@@ -29,13 +32,21 @@ const ROLE_SYNONYMS = {
 };
 const synonymsOf = (noun, langIsEn) => ROLE_SYNONYMS[langIsEn ? 'en' : 'de'][noun] || [noun];
 
-// Ablehnung erkennbar: eine dieser Wendungen (Vorlagen in samples/reader/refusal-text.js).
+// Ablehnung erkennbar: eine dieser Wendungen, «…» = Lücke (lib/eval/score.js
+// #hasTerm). Zentrale Liste für Eval-Set, Regelbewertung und Richter; sie
+// deckt jede Ablehnungs-Vorlage des Trains (samples/reader/refusal-text.js,
+// meta-text.js, grounding-text.js) — gegated durch
+// tests/unit/finetune-eval-score.test.mjs. Ein Marker, der eine richtige
+// Ablehnung verfehlt («gibt es in «X» nicht» gegen «gibt es nicht»), bewertet
+// eine gute Antwort als falsch.
 const REFUSAL_MARKERS = {
-  de: ['kommt in meiner Geschichte nicht vor', 'kommt nicht vor', 'gibt es nicht', 'nicht in meinen Seiten',
-    'ausserhalb meiner Seiten', 'nicht die richtige Adresse', 'kenne ich nicht', 'vergeblich', 'muss ich passen', 'kann ich dir nicht',
-    'nennen meine Seiten nicht', 'weiss ich nichts'],
+  de: ['kommt … nicht vor', 'gibt es … nicht', 'erzähle ich nirgends', 'suchst du … vergeblich', 'ausserhalb meiner Seiten',
+    'nicht die richtige Adresse', 'steht nicht in meinen Seiten', 'nicht in meinen Seiten', 'nichts in meinen Seiten', 'kenne ich nicht', 'meine Seiten nicht',
+    'weiss ich nichts', 'weiss ich nicht', 'muss ich passen', 'kann ich dir nicht', 'erzählen meine Seiten nichts', 'erzählt meine geschichte nichts',
+    'davon erzähle ich nicht', 'nichts zu erzählen', 'nichts zu vergleichen', 'kümmere ich mich nicht', 'kenne ich … nicht', 'gibt es bei mir … nicht'],
   en: ['does not appear', 'is not part of my story', 'does not exist', 'not in my pages', 'outside my pages', 'not the right place',
-    'do not know', "don't know", 'have to pass', 'cannot give you', 'do not name', 'know nothing'],
+    'do not know', "don't know", 'have to pass', 'cannot give you', 'do not name', 'know nothing', 'nobody … exists', 'there is no … in',
+    'say nothing about', 'never tell of', 'nothing to tell', 'nothing to compare', 'do not deal with'],
 };
 // Porträt-Marker: so beginnt eine erfundene Figur.
 const PORTRAIT_MARKERS = {
@@ -56,12 +67,12 @@ const meaningful = (term) => String(term || '').trim().length >= 3 && !TRIVIAL.h
 // Prüft eine Eval-Zeile: Frage vorhanden, mindestens ein aussagekräftiges
 // Kriterium. Kategorien, die nur ein Richter sinnvoll bewertet (Innenleben,
 // Deutung, Stil), brauchen den `judge`-Text. → null oder Grund.
-const JUDGE_ONLY = new Set(['psyche', 'why', 'continuation', 'newChapter', 'persona']);
+const JUDGE_ONLY = new Set(['psyche', 'why', 'sceneWhy', 'continuation', 'newChapter', 'persona']);
 function validateEvalItem(item) {
   if (!item?.messages?.[1]?.content) return 'noPrompt';
   const terms = [
     ...(item.mustContain || []), ...(item.mustContainAny || []).flat(), ...(item.mustNotContain || []),
-  ].filter(meaningful);
+  ].map(t => String(t).replace(/…/g, ' ')).filter(meaningful);
   if (terms.length) return null;
   if (JUDGE_ONLY.has(item.category) && String(item.judge || '').length >= 20) return null;
   return 'noCriterion';

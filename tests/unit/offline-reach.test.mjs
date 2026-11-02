@@ -119,6 +119,41 @@ test('Anheftung aufheben: zuletzt geöffnetes Buch bleibt über die Automatik li
   assert.ok(!posted.some((m) => m.type === 'offline-book-remove'));
 });
 
+test('Nutzungs-Events: Anheften und Ausgang des Erst-Syncs, nur einmal', async () => {
+  store.clear();
+  const sent = [];
+  const prevFetch = globalThis.fetch;
+  globalThis.fetch = async (url, init) => { sent.push({ url, ...JSON.parse(init.body) }); return {}; };
+  try {
+    const { root } = fakeRoot();
+    await root.toggleBookOffline(7);
+    root._onOfflineBookMessage({ type: 'offline-book-synced', bookId: 7, at: 'x', total: 66, failed: 2 });
+    root._onOfflineBookMessage({ type: 'offline-book-synced', bookId: 7, at: 'y', total: 66, failed: 0 });
+    await root.toggleBookOffline(7);
+    assert.deepEqual(sent.map((e) => [e.event, e.book_id]),
+      [['offline.pin', 7], ['offline.pin.result', 7], ['offline.pin', 7]], 'Nach-Sync meldet nichts');
+    assert.equal(sent[0].meta.action, 'pin');
+    assert.equal(sent[2].meta.action, 'unpin');
+    assert.deepEqual({ ...sent[1].meta, durationSec: 0 },
+      { result: 'partial', total: 66, failed: 2, durationSec: 0, persisted: 'yes' });
+  } finally { globalThis.fetch = prevFetch; }
+});
+
+test('Nutzungs-Events: abgebrochener Erst-Sync meldet failed mit Status', async () => {
+  store.clear();
+  const sent = [];
+  const prevFetch = globalThis.fetch;
+  globalThis.fetch = async (url, init) => { sent.push(JSON.parse(init.body)); return {}; };
+  try {
+    const { root } = fakeRoot();
+    await root.toggleBookOffline(3);
+    root._onOfflineBookMessage({ type: 'offline-book-failed', bookId: 3, status: 0 });
+    assert.equal(sent[1].event, 'offline.pin.result');
+    assert.equal(sent[1].meta.result, 'failed');
+    assert.equal(sent[1].meta.status, 0);
+  } finally { globalThis.fetch = prevFetch; }
+});
+
 test('netRequiredRule: Job-Start, Diktat, Vorlesen, LT, Suche — sonst nichts', () => {
   globalThis.location = { href: 'https://example.test/', origin: 'https://example.test' };
   const r = (url, method) => net.netRequiredRule(url, method ? { method } : undefined);

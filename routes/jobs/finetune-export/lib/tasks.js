@@ -6,7 +6,8 @@
 //
 // Familien (Mischung nach Antwort-Tokens, lib/token-mix.js):
 //   `writing`: das Ziel ist echter Buchtext (Fortsetzen, Szene schreiben,
-//              Dialogzeile, Erzählen aus Figurensicht, Wörtlich, Buchstelle);
+//              Abschnittsanfang, Szene aus Figurensicht, Dialogzeile,
+//              Erzählen aus Figurensicht, Wörtlich, Buchstelle);
 //   `persona`: Leser-Gespräch, Ich-Form, Innenleben (samples/reader/);
 //   `refusal`: Ablehnen — unbekannte Namen, Teil-Ablehnung, Off-Topic,
 //              Meta-Fragen zum Werk, falsche Annahme;
@@ -15,7 +16,9 @@
 const TASK_RULES = [
   [/^(style|styleCtx|styleCont|chapWin|pageCont|chapCont|chapBridge)\|/, 'continue'],
   [/^(chapTrans|scnTrans)\|/, 'transition'],
-  [/^(scene|sceneWrite|page|pageMulti|chapOpen|chapFull|chapFullChunk)\|/, 'sceneWrite'],
+  [/^(chapOpen|chapterOpening)\|/, 'chapterOpening'],
+  [/^sceneBrief\|/, 'sceneBrief'],
+  [/^(scene|sceneWrite|page|pageMulti|chapFull|chapFullChunk)\|/, 'sceneWrite'],
   [/^pageCloze\|/, 'cloze'],
   [/^verb(Page|Chap)\|/, 'verbatim'],
   [/^dialog\|/, 'dialogLine'],
@@ -37,14 +40,16 @@ const TASK_RULES = [
   [/^refusal\|falsePremise/, 'falsePremise'],
   [/^refusal\|mixed/, 'mixedRefusal'],
   [/^refusal\|meta/, 'metaQuestion'],
+  [/^refusal\|notInBook/, 'notInBook'],
+  [/^reader\|challenge\|/, 'factChallenge'],
   [/^reader\|(conv|personaConv)\|/, 'readerConversation'],
-  [/^reader\|(persona|personaVoice)\|/, 'readerPersona'],
+  [/^reader\|(persona|personaVoice|personaFact)\|/, 'readerPersona'],
   [/^reader\|/, 'reader'],
 ];
 
 const WRITING_TASKS = new Set([
   'continue', 'transition', 'sceneWrite', 'cloze', 'verbatim',
-  'dialogLine', 'povPassage', 'passage', 'reversePrompt',
+  'dialogLine', 'povPassage', 'passage', 'reversePrompt', 'chapterOpening', 'sceneBrief',
 ]);
 
 function taskOf(sample) {
@@ -55,10 +60,10 @@ function taskOf(sample) {
 }
 
 const PERSONA_TASKS = new Set(['reader', 'readerPersona', 'readerConversation']);
-const REFUSAL_TASKS = new Set(['unknownEntity', 'offTopic', 'falsePremise', 'mixedRefusal', 'metaQuestion']);
+const REFUSAL_TASKS = new Set(['unknownEntity', 'offTopic', 'falsePremise', 'mixedRefusal', 'metaQuestion', 'notInBook']);
 
 // Kernwissen (samples/core-facts/): eigene Typen, Familie `facts`.
-const CORE_TASKS = new Set(['figureCore', 'figureAttr', 'relationCore', 'eventCore', 'eventWhy', 'eventTimeline', 'chapterCore', 'coreFact']);
+const CORE_TASKS = new Set(['figureCore', 'figureAttr', 'relationCore', 'eventCore', 'eventWhy', 'sceneWhy', 'psyche', 'eventTimeline', 'chapterCore', 'coreFact']);
 
 function familyOf(task) {
   if (WRITING_TASKS.has(task)) return 'writing';

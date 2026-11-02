@@ -2,7 +2,7 @@
 
 const { db } = require('../../../../../db/schema');
 const { tServer } = require('../../../../../lib/i18n-server');
-const { nameRegex, isIdLike } = require('../../lib/names');
+const { nameRegex, isIdLike, escapeRe } = require('../../lib/names');
 const { splitParagraphs, splitSentences, clipAtSentence } = require('../../lib/text');
 
 // Zeitstrahl-Ereignisse für den Autor-Chat einmal laden und anreichern, damit
@@ -15,7 +15,8 @@ const { splitParagraphs, splitSentences, clipAtSentence } = require('../../lib/t
 // Szene ↔ Ereignis: nur über denselben Abschnitt. Ein gemeinsames Kapitel
 // verbände in Büchern mit wenigen grossen Kapiteln fast alles mit allem.
 // Schauplätze eines Ereignisses: nur Orte, deren Name im Ereignistext, in der
-// Bedeutung oder in der zugeordneten Buchstelle steht. Die Szenen-Orte des
+// Bedeutung oder im Erzähltext der zugeordneten Buchstelle steht (nicht in
+// Anführungszeichen, `withoutQuotes`). Die Szenen-Orte des
 // Abschnitts zählen nicht — sie sind die Ortsliste des ganzen Abschnitts und
 // hängen sonst an jedem Ereignis darin. Ein eigenes Ortsfeld hat das Ereignis
 // nicht.
@@ -167,6 +168,17 @@ function eventExcerpt(e, { pageById, maxChars }) {
   return text.length >= 200 ? { text, page: best.page } : null;
 }
 
+// Buchstelle ohne Text in Anführungszeichen: wörtliche Rede, Song- und
+// Werktitel nennen Orte, an denen die Szene nicht spielt («Big In Japan» bei
+// einer Bücherverbrennung im Kantiwald). Echte Schauplätze stehen im
+// Erzähltext. Verschachtelte Zeichen (‹…› in «…») fallen mit dem äusseren Paar.
+const QUOTED = /«[^«»]*»|„[^„“]*“|“[^“”]*”|"[^"\n]*"/g;
+function withoutQuotes(text) {
+  let t = String(text || '');
+  for (let prev = null; prev !== t;) { prev = t; t = t.replace(QUOTED, ' '); }
+  return t;
+}
+
 function loadEventData(ctx) {
   const {
     langIsEn, opts, bookIdInt, userEmail,
@@ -220,6 +232,26 @@ function loadEventData(ctx) {
     scenesByPage.get(s.page_id).push(s);
   }
 
+  // Schauplatz oder nur erwähnt? Das Datenmodell kennt keine Rolle des Orts im
+  // Ereignis; ein Ort im Ausland (`locations.land` ≠ `book_settings.schauplatz_land`,
+  // auch ohne Land), der in weniger als zwei Szenen einer beteiligten Figur
+  // vorkommt, steht im Text als Nachricht, Erinnerung oder Gesprächsthema
+  // («Columbine Highschool» bei einer Trennung in Olten). Er bleibt als
+  // `mentionedLocs` am Ereignis und erscheint nie als Schauplatz; die Liste
+  // (`placeSuspect`) geht in die Statistik.
+  const home = String(ctx.homeLand || '').toLowerCase();
+  const scenesOfFig = new Map();
+  for (const s of sceneRows) for (const fid of (ctx.figsByScene?.get(s.id) || [])) {
+    if (!scenesOfFig.has(fid)) scenesOfFig.set(fid, new Set());
+    scenesOfFig.get(fid).add(s.id);
+  }
+  const isSetting = (l, figs) => {
+    if (!home || l.land === home) return true;
+    const locScenes = ctx.scenesByLocPk?.get(l.pk) || [];
+    const ids = new Set(figs.flatMap(f => [...(scenesOfFig.get(f.fig_id) || [])]));
+    return locScenes.filter(id => ids.has(id)).length >= 2;
+  };
+  const placeSuspect = [];
   const events = [];
   const eventsBySceneId = new Map();
   for (let i = 0; i < rows.length; i++) {
@@ -260,8 +292,14 @@ function loadEventData(ctx) {
     };
     e.excerpt = eventExcerpt(e, { pageById, maxChars });
 
-    const haystack = [ereignis, ev.bedeutung || '', e.excerpt ? e.excerpt.text : ''].join('\n');
-    e.locs = locRows.filter(l => l.name && l.name.length >= 3 && nameRegex(l.name).test(haystack));
+    // Titel und Bedeutung auch im Genitiv («Männertoilette des Frohheims»).
+    const own = [ereignis, ev.bedeutung || ''].join('\n');
+    const told = e.excerpt ? withoutQuotes(e.excerpt.text) : '';
+    const named = locRows.filter(l => l.name && l.name.length >= 3
+      && (new RegExp(`(?<![\\p{L}])${escapeRe(l.name)}s?(?![\\p{L}])`, 'u').test(own) || nameRegex(l.name).test(told)));
+    e.locs = named.filter(l => isSetting(l, figs));
+    e.mentionedLocs = named.filter(l => !e.locs.includes(l));
+    for (const l of e.mentionedLocs) placeSuspect.push({ place: l.name, land: l.land || null, event: ereignis });
 
     const parts = [leadSafe(ereignis) + '.'];
     parts.push(...eventDetailParts(ev, { langIsEn, storyline }));
@@ -284,7 +322,7 @@ function loadEventData(ctx) {
     }
   }
 
-  return { events, eventsBySceneId, storylineNameById };
+  return { events, eventsBySceneId, storylineNameById, placeSuspect };
 }
 
-module.exports = { leadSafe, eventListItem, eventList, loadEventData, eventDetailParts, eventWhen, eventExcerpt, subtypLabel, eventKindPhrase };
+module.exports = { withoutQuotes, leadSafe, eventListItem, eventList, loadEventData, eventDetailParts, eventWhen, eventExcerpt, subtypLabel, eventKindPhrase };

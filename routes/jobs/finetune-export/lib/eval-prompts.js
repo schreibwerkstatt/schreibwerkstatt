@@ -25,6 +25,11 @@ const { buildHaystack } = require('../samples/reader/refusals');
 // (`validateEvalItem`). Was durchfällt, steht in `ctx.evalDropped`.
 
 const PER_CAT = 6;
+// Mehr Fragen, wo eine Kategorie mehrere Formen prüft: Meta (Jahr, Kapitel,
+// Werke, Entstehung …), Teil-Ablehnung mit Vergleich, Innenleben mit
+// Kontrastfragen, Ich-Form für mehr Figuren, Warum für mehr Figuren,
+// Falschannahmen auch in der Erzählform.
+const PER_CAT_BY = { meta: 8, mixed: 8, psyche: 8, persona: 8, why: 8, falsePremise: 8 };
 
 function buildEvalPrompts(ctx, { valUnits = new Set(), trainPrompts = null } = {}) {
   const { unifiedSys } = ctx;
@@ -47,6 +52,9 @@ function buildEvalPrompts(ctx, { valUnits = new Set(), trainPrompts = null } = {
       mustContain: (o.mustContain || []).filter(Boolean),
       mustContainAny: (o.mustContainAny || []).map(g => [...new Set(g.filter(Boolean))]).filter(g => g.length),
       mustNotContain: (o.mustNotContain || []).filter(Boolean),
+      ...(Number.isInteger(o.minAny) ? { minAny: o.minAny } : {}),
+      ...(o.maxOverlapWithProfile?.text ? { maxOverlapWithProfile: o.maxOverlapWithProfile } : {}),
+      ...(o.style && Object.keys(o.style).length ? { style: o.style } : {}),
       judge: o.judge || '',
       factIds: o.factIds || [],
       messages: [{ role: 'system', content: unifiedSys }, { role: 'user', content: q }],
@@ -60,9 +68,10 @@ function buildEvalPrompts(ctx, { valUnits = new Set(), trainPrompts = null } = {
 
   // Je Kategorie: die Hälfte aus `seen` (Frageformen des Trains), die Hälfte
   // aus `unseen`; Subjekte reihum, je Subjekt die erste freie Formulierung.
-  const quota = (category, subjects, { seen, unseen, build }) => {
+  const quota = (category, subjects, { seen, unseen, build, count }) => {
     if (!subjects.length) return;
-    const half = Math.ceil(PER_CAT / 2);
+    const total = count || PER_CAT_BY[category] || PER_CAT;
+    const half = Math.ceil(total / 2);
     let n = 0;
     const run = (phase, max, gen) => {
       let got = 0;
@@ -81,7 +90,7 @@ function buildEvalPrompts(ctx, { valUnits = new Set(), trainPrompts = null } = {
       return got;
     };
     const seenGot = run('seen', half, seen);
-    run('unseen', PER_CAT - seenGot, unseen);
+    run('unseen', total - seenGot, unseen);
   };
 
   const env = { quota, valUnits, trainHas, inBook };
@@ -91,4 +100,4 @@ function buildEvalPrompts(ctx, { valUnits = new Set(), trainPrompts = null } = {
   return out;
 }
 
-module.exports = { buildEvalPrompts, EVAL_QUESTIONS, PER_CAT };
+module.exports = { buildEvalPrompts, EVAL_QUESTIONS, PER_CAT, PER_CAT_BY };

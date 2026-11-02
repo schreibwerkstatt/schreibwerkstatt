@@ -119,13 +119,14 @@ async function isCachedShell(res) {
 // immer. `redirect:'error'` lässt den Fetch stattdessen scheitern.
 const PRECACHE_CONCURRENCY = 16;
 const PRECACHE_ATTEMPTS = 3;
+const buffered = async (res) => new Response(await res.blob(), { status: res.status, statusText: res.statusText, headers: res.headers });
 
 async function fetchForPrecache(p, signal) {
   let lastErr;
   for (let i = 0; i < PRECACHE_ATTEMPTS; i++) {
     try {
       const res = await fetch(new Request(p, { cache: 'reload', redirect: 'error', signal }));
-      if (res && res.ok) return new Response(await res.blob(), { status: res.status, statusText: res.statusText, headers: res.headers });
+      if (res && res.ok) return await buffered(res);
       lastErr = new Error(`HTTP ${res && res.status}`);
     } catch (err) {
       lastErr = err;
@@ -243,12 +244,10 @@ async function fillGeneration() {
   // überhaupt installierbar ist. Ohne gültige Session antwortet `/` mit der
   // Landing-Seite (200, kein Marker) und jedes auth-pflichtige Partial mit
   // einem Redirect auf /login; der Precache liefe dann in Müll. Ein Request
-  // klärt das, statt erst ~700 öffentliche Assets zu laden und beim ersten
-  // Partial aufzulaufen (die stehen alphabetisch hinter /css und /js).
-  const shellRes = await fetch(new Request('/', { cache: 'reload' }));
-  if (!isShellResponse(shellRes)) {
-    throw new Error('Install abgebrochen: `/` liefert keine SPA-Shell (Session abgelaufen?).');
-  }
+  // klärt das, statt erst den ganzen Satz zu laden. Body sofort lesen (`buffered`):
+  // ungelesen bis zum `cache.put` nach dem Precache riss der Stream ab.
+  const shellRes = await buffered(await fetch(new Request('/', { cache: 'reload' })));
+  if (!isShellResponse(shellRes)) throw new Error('Install abgebrochen: `/` liefert keine SPA-Shell (Session abgelaufen?).');
   // Den VOLLSTÄNDIGEN kohärenz-kritischen Asset-Satz dieser Generation ATOMAR
   // vorcachen: App-JS + Partials + App-CSS + i18n + Icon-Sprite. So zieht zur
   // Laufzeit nie ein lazy-gefetchtes Partial / dynamisch importiertes Modul eine

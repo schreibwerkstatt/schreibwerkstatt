@@ -27,6 +27,7 @@
 import { lsGetJSON, lsSetJSON } from '../safe-storage.js';
 import { tzOpts, localeTag } from '../utils.js';
 import { EVT } from '../events.js';
+import { trackUsageEvent } from '../features-usage.js';
 
 // Wartezeit nach dem Boot, bevor der Hintergrund-Sync startet: der Boot
 // selbst (Baum, Plaketten, offene Seite) hat Vorrang vor dem Vorladen.
@@ -223,9 +224,11 @@ export const appOfflineBooksMethods = {
       const { [id]: _, ...rest } = s.offlineProgress;
       s.offlineProgress = rest;
       s.offlineBooks = { ...s.offlineBooks, [id]: { at: msg.at, total: msg.total, failed: msg.failed || 0 } };
+      this._reportOfflinePinResult(id, { result: msg.failed ? 'partial' : 'done', total: msg.total, failed: msg.failed || 0 });
     } else if (msg.type === 'offline-book-failed' && id) {
       const { [id]: _, ...rest } = s.offlineProgress;
       s.offlineProgress = rest;
+      this._reportOfflinePinResult(id, { result: 'failed', status: msg.status || 0 });
       // Buch weg oder Zugriff entzogen: Anheftung aufheben. Bei einem
       // Netzfehler (status 0) bleibt sie — der nächste Sync versucht es erneut.
       if (msg.status === 403 || msg.status === 404) {
@@ -237,6 +240,20 @@ export const appOfflineBooksMethods = {
         }
       }
     }
+  },
+
+  // Ausgang des Erst-Syncs nach einem Anheften als Nutzungs-Event
+  // (`offline.pin.result`). Nur der Tab, der angeheftet hat, kennt den Start —
+  // die SW-Nachricht geht an alle Tabs, gemeldet wird trotzdem einmal.
+  _reportOfflinePinResult(id, meta) {
+    const startedAt = this._offlinePinStarted?.[id];
+    if (startedAt == null) return;
+    delete this._offlinePinStarted[id];
+    trackUsageEvent('offline.pin.result', {
+      ...meta,
+      durationSec: Math.round((Date.now() - startedAt) / 1000),
+      persisted: this.$store.session.storagePersisted ? 'yes' : 'no',
+    }, Number(id));
   },
 
   isBookOffline(bookId) {
@@ -252,11 +269,17 @@ export const appOfflineBooksMethods = {
 
   async toggleBookOffline(bookId) {
     if (bookId == null) return;
-    if (this.isBookOffline(bookId)) { this._unpinOfflineBook(bookId); return; }
+    if (this.isBookOffline(bookId)) {
+      this._unpinOfflineBook(bookId);
+      trackUsageEvent('offline.pin', { action: 'unpin' }, Number(bookId));
+      return;
+    }
     const email = this.$store.session.currentUser?.email;
     const next = [...this.$store.session.offlinePinned, String(bookId)];
     if (!writePinned(email, next)) return;
     this.$store.session.offlinePinned = next;
+    trackUsageEvent('offline.pin', { action: 'pin' }, Number(bookId));
+    this._offlinePinStarted = { ...this._offlinePinStarted, [String(bookId)]: Date.now() };
     this.$store.session.offlineProgress = {
       ...this.$store.session.offlineProgress, [String(bookId)]: { done: 0, total: 0 },
     };

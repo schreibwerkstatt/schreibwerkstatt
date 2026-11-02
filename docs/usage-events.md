@@ -37,6 +37,8 @@ Erstanbieter-Messung des Nutzungsverhaltens: welche Funktionen genutzt werden, o
 | `job.queued` / `job.finished` | server | `type`, `status`, `durationSec` (ab Start) | `createJob`, `completeJob`, `failJob`, Abbruch in der Queue |
 | `chat.proposal` | client | `chat` page/book/research/plot/ideen, `action` applied/discarded/reopened/undone, `kind`, `count` | die fünf Chats; der Recherche-Chat kennt kein Verwerfen |
 | `lektorat.applied` | client | `shown`, `selected`, `applied`, `skipped` | Abschnitts-Lektorat «Übernehmen» in der Leseansicht (`saveCorrections`) |
+| `offline.pin` | client | `action` pin/unpin | Klick auf «Buch offline halten» in der Sidebar ([app-offline-books.js](../public/js/app/app-offline-books.js)) |
+| `offline.pin.result` | client | `result` done/partial/failed, `total`, `failed`, `status` (HTTP, 0 = Netz), `durationSec`, `persisted` yes/no | Ausgang des Erst-Syncs nach dem Anheften, gemeldet vom anheftenden Tab; Automatik und Nach-Syncs melden nichts. Schliesst der Tab vor dem Ende, fehlt das Ergebnis |
 
 **Datenschutzerklärung:** die Nutzungsdaten stehen unter «Erhobene Daten» (`privacy.sec2ItemE`) mit der Default-Frist von 13 Monaten. Wer die Frist oder die Art der Events ändert, zieht den Text dort nach.
 

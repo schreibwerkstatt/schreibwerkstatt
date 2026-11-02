@@ -1,0 +1,26 @@
+{
+  "version": "5.8.6",
+  "date": "2026-11-02",
+  "entries": [
+    {
+      "kind": "verbessert",
+      "de": "Fine-Tuning-Export: das Set enthält neue Aufgaben. Dazu gehören Warum-Fragen zu einzelnen Szenen, das Innenleben einer Figur, Abschnittsanfänge und Szenen aus der Sicht einer Figur.",
+      "en": "Fine-tuning export: the set contains new tasks. They include why-questions about single scenes, a character's inner life, section openings and scenes from a character's point of view."
+    },
+    {
+      "kind": "verbessert",
+      "de": "Fine-Tuning-Export: Antworten, die immer wieder denselben Satz enthalten, werden gekürzt. Die Qualitätsübersicht zeigt neu, wie oft sich ein Satz wiederholt und wie verschieden die Warum-Antworten sind.",
+      "en": "Fine-tuning export: answers that keep repeating the same sentence are now shortened. The quality overview now shows how often a sentence repeats and how varied the why-answers are."
+    },
+    {
+      "kind": "verbessert",
+      "de": "Fine-Tuning-Export: das Modell lernt öfter abzulehnen, wenn etwas nicht im Buch steht. Das mitgelieferte Modelfile verhindert, dass es sich in Wiederholungen verfängt.",
+      "en": "Fine-tuning export: the model learns more often to decline when something is not in the book. The included Modelfile keeps it from getting stuck in repetitions."
+    },
+    {
+      "kind": "behoben",
+      "de": "Offline-Modus: die App liess sich manchmal nicht für die Offline-Nutzung einrichten und versuchte es beim nächsten Laden erneut.",
+      "en": "Offline mode: the app sometimes could not be set up for offline use and tried again on the next load."
+    }
+  ]
+}

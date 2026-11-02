@@ -75,6 +75,7 @@ async function buildPersonaAiSamples(ctx, readerFigures, push) {
     pairs.forEach(([q, a], i) => {
       if (push({
         id: `reader|persona|${rf.key}|${i}`,
+        persona: rf.name,
         turns: [[entryQuestion(lang, rf.name, q, `${rf.key}|${i}`, seed), a]],
       })) kept++;
     });

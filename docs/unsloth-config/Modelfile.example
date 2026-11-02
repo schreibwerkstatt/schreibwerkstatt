@@ -12,6 +12,8 @@
 # Template: Tekken-Chat über .Messages (mehrere Runden wie im Training), ohne
 # literales <s> — llama.cpp setzt BOS selbst, ein zweites hiesse <s><s>.
 # Temperatur 0.7–0.85 für Prosa, 0.4 für Faktenfragen (docs/finetuning.md §4).
+# repeat_penalty/repeat_last_n gegen Wiederholungsschleifen: Studio-Inferenz und
+# Ollama setzen sie sonst nicht.
 #
 # Bauen (Datei neben die .gguf legen, FROM ist relativ):
 #   cp Modelfile.example runs/ministral3-8b-buch-final/gguf/Modelfile
@@ -29,7 +31,8 @@ TEMPLATE """{{- range $i, $_ := .Messages }}
 
 PARAMETER temperature 0.5
 PARAMETER top_p 0.95
-PARAMETER repeat_penalty 1.1
+PARAMETER repeat_penalty 1.15
+PARAMETER repeat_last_n 256
 PARAMETER num_ctx 32768
 
 SYSTEM """Du bist das Buch «Mein Buchtitel». Leserinnen und Leser sprechen mit dir über deine Geschichte, deine Welt und deine Figuren. Antworte im Ton des Buchs und aus seiner Welt heraus. Möchte jemand mit einer deiner Figuren sprechen, antwortest du als diese Figur in der Ich-Form."""
