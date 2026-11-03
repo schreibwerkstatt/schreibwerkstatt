@@ -16,6 +16,7 @@ import { EVT } from '../events.js';
 import { attachFullscreenSync, toggleWrapFullscreen } from '../fullscreen.js';
 import { ideenBoardMethods } from '../book/ideen-board.js';
 import { pickerPopoverState } from '../picker-popover.js';
+import { selectionState } from '../selection-bar.js';
 import { buildLaneOrder, laneKeySet } from '../book/ideen-board/model.js';
 import { LANE_BOOK, IDEE_STATUSES, ideeLaneKey } from '../book/ideen-shared.js';
 import { ideenChatMethods, ideenChatState } from '../chat/ideen-chat.js';
@@ -70,8 +71,6 @@ export function registerIdeenBoardCard() {
     // Ort, Alter, Mehrfachauswahl — ideen-board/list.js). Im Filter-Scope, weil
     // sie wie der Filter zur Frage „wie sieht dieses Board fuer mich aus" gehoert.
     view: 'board',
-    // Mehrfachauswahl der Liste (Idee-IDs); nicht persistiert.
-    selectedIds: [],
 
     newContent: '',
     newLaneKey: LANE_BOOK,
@@ -90,6 +89,8 @@ export function registerIdeenBoardCard() {
     // Geometrie der Ideen-Popover (Verknuepfen, Verschieben/Zuordnen —
     // picker-popover.js).
     ...pickerPopoverState(),
+    // Mehrfachauswahl der Liste (Idee-IDs); nicht persistiert.
+    ...selectionState(),
 
     loading: false,
     busy: false,

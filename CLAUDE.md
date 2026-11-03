@@ -63,6 +63,7 @@ Diese Regeln setzt ein Hook ([.claude/settings.json](.claude/settings.json), [sc
 | Buchthema an genau einem Ort (`OWNERS`-Liste) — nie zusätzlich in `books`, einem Export-Profil oder einer zweiten Tabelle | [book-meta-single-place.test.js](tests/unit/book-meta-single-place.test.js) | oben, „Immer gültig" |
 | SortableJS-Griff nur als `.drag-grip` (Icon, Beschriftung, Optik an einem Ort) | [drag-grip-single-place.test.mjs](tests/unit/drag-grip-single-place.test.mjs) | [public/CLAUDE.md](public/CLAUDE.md) |
 | Auswahl an einem Element nur als `.picker-popover` (Rahmen, Mechanik, Optik an einem Ort) | [picker-popover-single-place.test.mjs](tests/unit/picker-popover-single-place.test.mjs) | [public/CLAUDE.md](public/CLAUDE.md) |
+| Sammelaktionen nur über `.selection-bar` + `selectionMethods` (Optik, Mechanik an einem Ort) | [selection-bar-single-place.test.mjs](tests/unit/selection-bar-single-place.test.mjs) | [public/CLAUDE.md](public/CLAUDE.md) |
 | Aktionsmenü nur über `menu()` oder `actionMenu`; Rechtsklick immer mit Long-Press | [action-menu-single-place.test.mjs](tests/unit/action-menu-single-place.test.mjs) | [public/CLAUDE.md](public/CLAUDE.md) |
 | Rückfrage nur über `appConfirm`/`appAlert`/`appPrompt`, nie natives `confirm()` | [app-confirm-single-place.test.mjs](tests/unit/app-confirm-single-place.test.mjs) | [public/CLAUDE.md](public/CLAUDE.md) |
 | Enter an Textfeldern nur über `$enter` (IME-Guard) | [enter-ime-guard.test.mjs](tests/unit/enter-ime-guard.test.mjs) | [public/CLAUDE.md](public/CLAUDE.md) |

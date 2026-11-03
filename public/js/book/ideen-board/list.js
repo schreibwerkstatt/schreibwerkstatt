@@ -84,33 +84,12 @@ export const ideenBoardList = {
     return Number.isFinite(d) ? relativeDay(Math.max(d, 0), Alpine.store('shell').uiLocale) : '';
   },
 
-  // ── Mehrfachauswahl ──────────────────────────────────────────────────────
-  // Immer eine NEUE Liste schreiben (Alpine-Reaktivitaet ueber Identitaet,
-  // wie collapsedLanes).
-  isSelected(id) { return (this.selectedIds || []).includes(id); },
-  toggleSelect(id) {
-    const cur = this.selectedIds || [];
-    this.selectedIds = cur.includes(id) ? cur.filter(x => x !== id) : [...cur, id];
-  },
-  clearSelection() { this.selectedIds = []; },
+  // ── Mehrfachauswahl (Mechanik: selection-bar.js) ─────────────────────────
   // „Alle" meint die SICHTBAREN Zeilen: was der Filter ausblendet, faellt nicht
   // unbemerkt unter eine Sammelaktion.
-  allVisibleSelected() {
-    const rows = this.listRows();
-    return rows.length > 0 && rows.every(r => this.isSelected(r.id));
-  },
-  toggleSelectAllVisible() {
-    this.selectedIds = this.allVisibleSelected() ? [] : this.listRows().map(r => r.id);
-  },
-  // Auswahl auf den aktuellen Bestand kuerzen (nach Neuladen/Filterwechsel
-  // zeigte sie sonst auf Ideen, die es nicht mehr gibt oder die man nicht sieht).
-  _pruneSelection() {
-    const visible = new Set(this.listRows().map(r => r.id));
-    const next = (this.selectedIds || []).filter(id => visible.has(id));
-    if (next.length !== (this.selectedIds || []).length) this.selectedIds = next;
-  },
+  selectionVisibleIds() { return this.listRows().map(r => r.id); },
   selectedIdeen() {
-    const sel = new Set(this.selectedIds || []);
+    const sel = new Set(this.selectedVisibleIds());
     return (this.ideen || []).filter(i => sel.has(i.id));
   },
 

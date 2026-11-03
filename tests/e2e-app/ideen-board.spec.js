@@ -709,8 +709,8 @@ test('ideen-board: Liste zeigt Ort und Alter, Sammelaktion setzt die Stufe', asy
   await expect(rows.first().locator('.ideen-list-age').first()).toHaveText(/notiert/);
 
   for (const r of await rows.all()) await r.locator('input[type=checkbox]').check();
-  await expect(card.locator('.ideen-list-bulk-count')).toHaveText('2 ausgewählt');
-  await card.locator('.ideen-list-bulk').getByRole('button', { name: 'Erledigt', exact: true }).click();
+  await expect(card.locator('.selection-bar__count')).toHaveText('2 ausgewählt');
+  await card.locator('.selection-bar').getByRole('button', { name: 'Erledigt', exact: true }).click();
 
   await expect.poll(() => page.evaluate(async ({ id, ids }) => {
     const data = await fetch(`/ideen/board?book_id=${id}`).then(r => r.json());
@@ -718,7 +718,7 @@ test('ideen-board: Liste zeigt Ort und Alter, Sammelaktion setzt die Stufe', asy
   }, { id: bookId, ids })).toEqual(['erledigt', 'erledigt']);
   // Erledigt ist per Default ausgeblendet — die Zeilen gehen, die Auswahl mit.
   await expect(rows).toHaveCount(0);
-  await expect(card.locator('.ideen-list-bulk')).toBeHidden();
+  await expect(card.locator('.selection-bar')).toBeHidden();
 
   await card.getByRole('button', { name: 'Raster', exact: true }).click();
   await expect(table).toBeHidden();

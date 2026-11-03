@@ -194,7 +194,7 @@ export const rechercheItemMethods = {
     if (this.busy) return;
     if (ev.target.closest('a, button, input, label, .research-tag, .entity-ref, .combobox-wrap')) return;
     // Im Auswahl-Modus markiert ein Klick, statt den Dialog zu oeffnen.
-    if (this.bulkMode) { this.toggleBulkSelect(item); return; }
+    if (this.bulkMode) { this.toggleSelect(item.id); return; }
     // Textselektion nicht abwürgen: hat der User Text markiert (Drag löst am
     // Ende ebenfalls ein click aus), nicht den Dialog aufziehen.
     const sel = window.getSelection();

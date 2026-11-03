@@ -2,7 +2,7 @@
 // Element, die KI-Verknuepfungsvorschlaege (Job /jobs/research-link) und die
 // Erreichbarkeits-Pruefung der URLs (Job /jobs/research-link-check).
 
-import { fetchJson } from '../../utils.js';
+import { fetchJson, linkText } from '../../utils.js';
 import { startPoll } from '../../cards/job-helpers.js';
 
 export const rechercheLinkMethods = {
@@ -168,6 +168,9 @@ export const rechercheLinkMethods = {
       this.errorMessage = app.t('recherche.linkCheck.error');
     }
   },
+  // Link-Text eines Fundstück-/Vorschlags-Links: Label oder Kurzform der URL
+  // (utils/url-display.js); die volle URL steht im Tooltip und im href.
+  urlText(u) { return linkText(u?.label, u?.url); },
   urlDead(u) { return !!u?.checked_at && u.check_ok === false; },
   // Ok, aber mit Zugangssperre (401/403/429) — kein toter Link, aber auch kein Beweis.
   urlBlocked(u) { return !!u?.checked_at && u.check_ok === true && [401, 403, 429].includes(u.check_code); },

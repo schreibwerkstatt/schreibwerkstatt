@@ -217,8 +217,10 @@
    (card-form/form-elements.css) hat hoehere Spezifitaet (0,1,1) als eine nackte
    Klasse (0,1,0) und wuerde sonst font-size/padding/width ueberschreiben — das
    Suchfeld kaeme dann in Default-Groesse (14px/8px) und waere hoeher als die
-   Compact-Combobox. */
-.filter-bar .filter-search-input {
+   Compact-Combobox. Die Auswahl-Leiste (components/selection-bar.css) traegt
+   dieselben Compact-Controls und teilt die Regel. */
+.filter-bar .filter-search-input,
+.selection-bar .filter-search-input {
   font-size: var(--font-size-mini);
   line-height: 1.4;
   padding: var(--space-xs) var(--space-sm);
@@ -229,7 +231,8 @@
   width: 120px;
   box-sizing: border-box;
 }
-.filter-bar .filter-search-input:focus { outline: none; border-color: var(--color-border-focus); }
+.filter-bar .filter-search-input:focus,
+.selection-bar .filter-search-input:focus { outline: none; border-color: var(--color-border-focus); }
 /* Wrapper fuer Suchfeld + Clear-X (reusable .search-clear--icon aus search.css). */
 .filter-search-wrap { position: relative; display: inline-flex; align-items: center; }
 .filter-search-wrap .filter-search-input { padding-right: 26px; /* Breite des Clear-X, keine Rasterstufe */ }

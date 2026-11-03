@@ -1,0 +1,62 @@
+/* Auswahl-Leiste: Sammelaktionen fuer die markierten Zeilen einer Liste oder
+   Tabelle. Eine Zeile in der Optik der Filterleiste (Compact-Controls, gleiche
+   Mittellinie), links der Zaehler, rechts das Schliessen. Klebt beim Rollen
+   oben, damit die Aktionen beim Markieren weit unten erreichbar bleiben.
+   Mechanik in public/js/selection-bar.js, Regeln in DESIGN.md „Auswahl-Leiste".
+
+   Markup:
+     <div class="selection-bar" role="toolbar" :aria-label="…">
+       <label class="selection-bar__all">   (optional: Haken „alle sichtbaren" + Zaehler)
+       oder <span class="selection-bar__count">
+       <div class="selection-bar__actions">  (btn-compact, Compact-Combobox,
+                                              .filter-search-input)
+       <button class="icon-btn icon-btn--ghost selection-bar__close">
+     </div> */
+@layer components {
+  .selection-bar {
+    display: flex;
+    align-items: center;
+    gap: var(--space-xs) var(--space-sm);
+    margin-bottom: var(--card-gap-section);
+    padding: var(--space-xs) var(--space-xs) var(--space-xs) var(--space-sm);
+    border-radius: var(--radius-md);
+    background: var(--color-accent-soft);
+    position: sticky;
+    top: 0;
+    z-index: 2;
+  }
+  .selection-bar__all,
+  .selection-bar__count {
+    flex: 0 0 auto;
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-xs);
+    font-size: var(--font-size-mini);
+    line-height: 1.4;
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+  }
+  .selection-bar__all { cursor: pointer; }
+  .selection-bar__actions {
+    flex: 1 1 auto;
+    min-width: 0;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--space-xs);
+  }
+  /* Ohne Auswahl bleiben die Aktionen stehen (kein Springen beim ersten Haken),
+     sind aber erkennbar aus. Buttons tragen dazu `:disabled`; Comboboxen haben
+     keinen Disabled-Zustand und werden hier gesperrt. */
+  .selection-bar__actions.is-disabled .combobox-wrap {
+    opacity: var(--opacity-disabled);
+    pointer-events: none;
+  }
+  .selection-bar__close { flex: 0 0 auto; align-self: flex-start; }
+
+  @media (max-width: 600px) {
+    .selection-bar { flex-wrap: wrap; }
+    .selection-bar__actions { order: 3; flex-basis: 100%; }
+    .selection-bar__close { margin-left: auto; }
+  }
+}

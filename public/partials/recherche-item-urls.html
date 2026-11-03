@@ -9,9 +9,9 @@
 <div class="research-item-urls" x-show="item.urls && item.urls.length">
   <template x-for="u in item.urls" :key="u.url_id">
     <div class="research-item-url-row">
-      <a class="research-item-url" :href="u.url" target="_blank" rel="noopener noreferrer">
+      <a class="research-item-url" :href="u.url" target="_blank" rel="noopener noreferrer" :data-tip="u.url">
         <svg class="icon" aria-hidden="true"><use href="/icons.svg#external-link"/></svg>
-        <span x-text="u.label || u.url"></span>
+        <span class="url-short" x-text="urlText(u)"></span>
       </a>
       <!-- Ergebnis der Link-Pruefung (links.js#checkLinks): tot → Hinweis + Weg zur
            Archivkopie; gesperrt (401/403/429) → nur ein leiser Hinweis. -->

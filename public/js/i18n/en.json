@@ -6155,10 +6155,7 @@
   "ideenBoard.age": "noted {rel}",
   "ideenBoard.staleTip": "Open for more than {n} days",
   "ideenBoard.bulk.label": "Bulk actions",
-  "ideenBoard.bulk.selected": "{n} selected",
   "ideenBoard.bulk.select": "Select idea",
-  "ideenBoard.bulk.selectAll": "Select all visible",
-  "ideenBoard.bulk.clear": "Clear selection",
   "ideenBoard.bulk.confirmDelete": "Delete {n} ideas permanently? Discarding keeps them as a decision.",
   "ideenBoard.bulk.failed": "{n} ideas could not be saved — they stay selected.",
   "ideenBoard.showErledigt": "Show done",
@@ -6379,7 +6376,6 @@
   "recherche.bulk.start": "Select",
   "recherche.bulk.done": "Done selecting",
   "recherche.bulk.label": "Actions for the selection",
-  "recherche.bulk.count": "{n} selected",
   "recherche.bulk.select": "Select “{title}”",
   "recherche.bulk.status": "Set status …",
   "recherche.bulk.tagPlaceholder": "Tag",
@@ -9125,5 +9121,9 @@
   "figuren.relcheck.summaryMain": "Relationship check: {n} contradictions in the character network, {main} of them involving main characters",
   "figuren.relcheck.summaryMainOne": "Relationship check: {n} contradiction in the character network, involving a main character",
   "figuren.relcheck.hint": "Nothing is corrected automatically: check the relationship on the character and edit or delete it. Relationships you changed by hand are kept by the next full analysis.",
-  "figuren.relcheck.edgeTip": "The relationship check reports this relationship as a contradiction."
+  "figuren.relcheck.edgeTip": "The relationship check reports this relationship as a contradiction.",
+  "selection.count": "{n} selected",
+  "selection.countOne": "{n} selected",
+  "selection.selectAll": "Select all visible",
+  "selection.clear": "Clear selection"
 }

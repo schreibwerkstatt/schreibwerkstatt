@@ -58,7 +58,7 @@ test('recherche: Status in der Mehrfachauswahl wirkt mit der ersten Wahl', async
   await card.locator('.card-toolbar button', { hasText: 'Auswählen' }).click();
   await row.locator('.research-item-select').check();
 
-  const bar = page.locator('.recherche-bulkbar');
+  const bar = page.locator('#recherche-card .selection-bar');
   await bar.locator('[x-data^="combobox"]').first().locator('button').first().click();
   await page.locator('.combobox-option', { hasText: 'Eingearbeitet' }).first().click();
 

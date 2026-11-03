@@ -89,7 +89,7 @@
                            Weglassen vor dem Speichern (edits.urls). -->
                       <template x-for="(u, ui) in (prop.urls || [])" :key="ui">
                         <span class="research-chat-proposal-url-row" :class="{ 'research-chat-proposal-url-row--removed': isProposalUrlRemoved(msg, pi, u) }">
-                          <a class="research-chat-proposal-url" :href="u.url" target="_blank" rel="noopener noreferrer" x-text="u.label || u.url"></a>
+                          <a class="research-chat-proposal-url url-short" :href="u.url" target="_blank" rel="noopener noreferrer" :data-tip="u.url" x-text="urlText(u)"></a>
                           <span class="research-chat-proposal-url-host" x-show="proposalUrlHost(u)" x-text="proposalUrlHost(u)"></span>
                           <span class="research-chat-proposal-url-unverified" x-show="isProposalUrlUnverified(u)"
                                 :data-tip="$app.t('recherche.chat.proposalUrlUnverifiedTip')"

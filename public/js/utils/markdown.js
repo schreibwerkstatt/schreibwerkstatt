@@ -2,6 +2,7 @@
 // über markdown-it mit `html: false`: Roh-HTML im Text wird escaped statt
 // durchgereicht, Links nur mit http(s)/mailto (XSS-Invariante, siehe CLAUDE.md).
 import { escHtml } from './escape.js';
+import { shortUrl } from './url-display.js';
 import { loadMarkdownIt } from '../lazy-libs.js';
 
 /**
@@ -79,6 +80,21 @@ const _CHAT_CLASS = {
   link_open: 'chat-link',
 };
 
+// Nackte URL im Text (linkify): Link-Text auf die Kurzform (utils/url-display.js),
+// volle URL als Tooltip — eine 120-Zeichen-URL sprengt sonst jede Chat-Blase.
+// Benannte Markdown-Links `[Text](url)` bleiben unangetastet.
+function _shortenBareLinks(children) {
+  for (let i = 0; i < children.length; i++) {
+    const tok = children[i];
+    if (tok.type !== 'link_open' || (tok.markup !== 'linkify' && tok.markup !== 'autolink')) continue;
+    const href = tok.attrGet('href') || '';
+    if (!/^https?:/i.test(href)) continue;
+    const text = children[i + 1];
+    if (text?.type === 'text') text.content = shortUrl(href);
+    tok.attrSet('data-tip', href);
+  }
+}
+
 function _decorateTokens(tokens) {
   for (const tok of tokens) {
     const cls = _CHAT_CLASS[tok.type];
@@ -93,7 +109,10 @@ function _decorateTokens(tokens) {
       tok.attrSet('target', '_blank');
       tok.attrSet('rel', 'noopener noreferrer');
     }
-    if (tok.children) _decorateTokens(tok.children);
+    if (tok.children) {
+      _shortenBareLinks(tok.children);
+      _decorateTokens(tok.children);
+    }
   }
 }
 

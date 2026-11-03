@@ -27,28 +27,28 @@ test('recherche: Auswählen markiert, Tag ergänzen und Archivieren wirken auf g
 
   // Ohne Auswahl-Modus keine Checkboxen und keine Leiste.
   await expect(row(made.a).locator('.research-item-select')).toBeHidden();
-  await expect(page.locator('.recherche-bulkbar')).toBeHidden();
+  await expect(page.locator('#recherche-card .selection-bar')).toBeHidden();
 
   await page.locator('#recherche-card .card-toolbar button', { hasText: 'Auswählen' }).click();
-  await expect(page.locator('.recherche-bulkbar')).toBeVisible();
+  await expect(page.locator('#recherche-card .selection-bar')).toBeVisible();
   await row(made.a).locator('.research-item-select').check();
   // Klick auf den Eintrag selbst markiert im Auswahl-Modus, statt den Dialog zu oeffnen.
   await row(made.b).locator('.research-item-text, .research-item-head').first().click({ position: { x: 200, y: 5 } });
   await expect(page.locator('.research-dialog[open]')).toHaveCount(0);
-  await expect(page.locator('.recherche-bulkbar__all')).toContainText('2');
+  await expect(page.locator('#recherche-card .selection-bar__all')).toContainText('2');
 
-  await page.locator('.recherche-bulkbar__tag').fill('bulktag');
-  await page.locator('.recherche-bulkbar button', { hasText: 'Tag ergänzen' }).click();
+  await page.locator('#recherche-card .selection-bar .filter-search-input').fill('bulktag');
+  await page.locator('#recherche-card .selection-bar button', { hasText: 'Tag ergänzen' }).click();
   await expect.poll(async () => page.evaluate(async (ids) => {
     const rows = await fetch(`/research?book_id=${ids.book}&tag=bulktag`).then(r => r.json());
     return rows.map(r => r.id).sort((x, y) => x - y);
   }, { book: bookId })).toEqual([made.a, made.b].sort((x, y) => x - y));
 
   // Nach der Aktion ist die Auswahl leer — erneut markieren und archivieren.
-  await expect(page.locator('.recherche-bulkbar__all')).toContainText('0');
+  await expect(page.locator('#recherche-card .selection-bar__all')).toContainText('0');
   await row(made.a).locator('.research-item-select').check();
   await row(made.b).locator('.research-item-select').check();
-  await page.locator('.recherche-bulkbar button', { hasText: 'Archivieren' }).click();
+  await page.locator('#recherche-card .selection-bar button', { hasText: 'Archivieren' }).click();
   await expect(row(made.a)).toHaveCount(0);
   await expect(row(made.b)).toHaveCount(0);
   await expect(row(made.c)).toBeVisible();

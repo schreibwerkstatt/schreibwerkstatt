@@ -32,6 +32,7 @@ Token-Referenz (Farben, Radien, Spacing, Schriftgrössen): [public/css/tokens.cs
 - [Icon-Button-Count-Badge](#icon-button-count-badge-icon-btn-badge) — Counter oben rechts auf Icon-Button
 - [Badges & Tags](#badges--tags) — eckig, Severity, Hue-Palette
 - [Entitäts-Referenz](#entitäts-referenz) — `x-entity-ref`: ein Verweis auf Kapitel/Seite/Figur/Ort/… sieht überall gleich aus
+- [URL als Link-Text](#url-als-link-text-url-short) — `linkText`/`shortUrl` + `.url-short`: Host + letztes Pfadstück, einzeilig mit Ellipse
 - [Combobox](#combobox-auswahlfeld) — ersetzt `<select>`
 - [Setting-Field](#setting-field-settingfield) — ein Admin-Settings-Feld deklarativ
 - [Tabs / Modus-Toggle](#tabs--modus-toggle) — `.tabs` + `.tabs-btn`
@@ -581,6 +582,30 @@ mit `myCardOptions() { return this.cardData.map(...); }` am Karten-Scope.
 
 ---
 
+## URL als Link-Text (`.url-short`)
+
+**Use:** Jeder Link, dessen sichtbarer Text eine URL ist (kein Label vorhanden): Recherche-Fundstücke, Speicher-Vorschläge und Quellenliste im Recherche-Chat, Werkzeug-Verlauf der agentischen Chats, nackte URLs in Chat-Antworten (Markdown-Linkify).
+
+**Markup:**
+```html
+<a :href="u.url" target="_blank" rel="noopener noreferrer" :data-tip="u.url">
+  <span class="url-short" x-text="urlText(u)"></span>
+</a>
+```
+
+**Klassen** [components/url-short.css](public/css/components/url-short.css):
+- `.url-short` — einzeilig, `max-width: 100%`, Ellipse; am Element, das den Text trägt.
+
+**Regeln:**
+- **Zwei Kürzungen, zwei Orte.** Inhaltlich kürzt [utils/url-display.js](public/js/utils/url-display.js): `shortUrl(url)` → `host/…/letztes-stück` (ohne Schema, `www.`, Query, Fragment; überlanges Endstück mittig gekürzt), `linkText(label, url)` → Label oder Kurzform, `urlHost(url)`. Geometrisch kürzt `.url-short` auf die verfügbare Breite (schmale Leiste, Mobile). Kein Viewport-Sonderfall im JS.
+- **Volle URL bleibt erreichbar:** immer im `href`, und als `data-tip` am Link.
+- **Kein `word-break: break-all`** an URLs — es reisst den Link an beliebiger Stelle in einen mehrzeiligen Block. In einer Flex-Zeile neben Aktionen braucht der Link `min-width: 0` (bringt `.url-short` mit), damit er statt der Aktionen schrumpft.
+- Benannte Markdown-Links `[Text](url)` bleiben, wie das Modell sie schrieb.
+
+**Beispiele:** [recherche-item-urls.html](public/partials/recherche-item-urls.html), [recherche-chat.html](public/partials/recherche-chat.html), [chat/tool-log.js](public/js/chat/tool-log.js), [utils/markdown.js](public/js/utils/markdown.js)#`_shortenBareLinks`
+
+---
+
 ## Buttons
 
 **Hierarchie:**
@@ -617,6 +642,7 @@ Betrifft jeden Knopf mit eigenem `transform`. Wer den Druck-Effekt gar nicht wil
 - [Toolbar-Action-Group](#toolbar-action-group-segmentierter-icon-cluster-neben-form-feldern) — segmentierte Icon-Reihe.
 - [Context-Menu](#context-menu-aktionsmenü) — `⋯`-Menü am Knopf (`menu()`) oder teleportiert mit Rechtsklick + Long-Press (`actionMenu`), Einträge mit `.context-menu-item--icon`.
 - [Picker-Popover](#picker-popover-picker-popover) — am Knopf verankerte Auswahl an einem Element (verknüpfen, verschieben, zuordnen), Kopf nennt das Element.
+- [Auswahl-Leiste](#auswahl-leiste-selection-bar) — Sammelaktionen für mehrere markierte Zeilen einer Liste/Tabelle (`.selection-bar`, `selection-bar.js`).
 - [Sofort-Tooltip](#sofort-tooltip-data-tip--default-variante) — `data-tip` (Pflicht bei Icon-only) + `aria-label`.
 
 **Regeln (verbindlich):**
@@ -2222,7 +2248,7 @@ menuOpenIdee() { return this.ideen.find(i => i.id === this.actionMenuTarget) || 
 ### Regeln
 - Neues **Aktions**-Menü erfindet kein eigenes Popover-CSS, keine eigene Item-/Sep-Klasse und keine eigene Öffnen/Schliessen-Mechanik. Fehlt ein Icon im Sprite, erst [public/icons.svg](public/icons.svg) ergänzen (Lucide).
 - **Kein Rechtsklick ohne Long-Press** — Touch-Geräte haben keinen Rechtsklick. Ausnahme: der Rechtsklick im Notebook-/Focus-Editor (`_onEditContextMenu`), der Rechtschreib-/Synonym-Vorschläge zum markierten Text zeigt, kein Element-Menü.
-- **Wann nicht:** selten genutzte Aktionen ohne räumlichen Kontext → Command-Palette; Bulk-Operationen → Auswahl + Toolbar; **Wählen statt Auslösen** → [Picker-Popover](#picker-popover-picker-popover).
+- **Wann nicht:** selten genutzte Aktionen ohne räumlichen Kontext → Command-Palette; Bulk-Operationen → [Auswahl-Leiste](#auswahl-leiste-selection-bar); **Wählen statt Auslösen** → [Picker-Popover](#picker-popover-picker-popover).
 - **Content-Popover-Ausnahme:** ein Popover, das reichen Inhalt statt Aktionen listet (mehrzeilige Zeilen mit Titel + Metadaten/Snippet), darf die `.context-menu`-Hülle mit eigener Zeilenklasse und eigener Positionierung nutzen. Einziger Konsument: Plot-Fundstellen-Popover ([plot-anchor-popover.html](public/partials/plot-anchor-popover.html), `openBeatOccPopover` in [plot/ai.js](public/js/book/plot/ai.js)).
 - Gegated: [action-menu-single-place.test.mjs](tests/unit/action-menu-single-place.test.mjs) — jedes `.context-menu` bindet `menu()` oder `actionMenuPanel()`, jeder ⋯-Knopf hängt an einem der beiden, jedes `@contextmenu` hat `x-long-press`, keine eigene Outside-Click-Mechanik daneben. Verhalten in der echten App: [tests/e2e-app/action-menu.spec.js](tests/e2e-app/action-menu.spec.js).
 
@@ -2281,6 +2307,44 @@ cancelXyz()       { this.xyzId = null; this._releasePickerPopover(); }
 **CSS:** [components/picker-popover.css](public/css/components/picker-popover.css). Gegated: [picker-popover-single-place.test.mjs](tests/unit/picker-popover-single-place.test.mjs) — Markup-Rahmen, Ref-Paarung `_openPickerPopover` ↔ `x-ref`, Mechanik nur aus `picker-popover.js`, Optik nur aus `picker-popover.css`.
 
 **Konsumenten:** Recherche — Verknüpfen eines Fundstücks ([recherche-link-picker.html](public/partials/recherche-link-picker.html), aus Liste, Board-Karte und Detail-Dialog). Ideen — Verknüpfen ([ideen-link-picker.html](public/partials/ideen-link-picker.html), Ideen-Karte + Ideen-Board), Verschieben ([ideen.html](public/partials/ideen.html)), Zuordnen ([ideen-board-add.html](public/partials/ideen-board-add.html)); die drei teilen sich `pickerPopoverPos`. Buchorganizer — Abschnitt in anderes Buch ([organizer-book-move.html](public/partials/organizer-book-move.html), Warnung als `__hint` statt Rückfrage-Dialog). Figur-Werkstatt — mit Katalogfigur verknüpfen ([werkstatt-link-picker.html](public/partials/werkstatt-link-picker.html), lädt nach dem Öffnen und misst über `_refinePickerPopover` neu).
+
+---
+
+## Auswahl-Leiste (`.selection-bar`)
+
+**Use:** Mehrere Zeilen einer Liste oder Tabelle markieren und **eine** Aktion auf alle anwenden (Status setzen, taggen, verknüpfen, archivieren, löschen).
+
+**Abgrenzung:** Aktion an **einem** Element → [Context-Menu](#context-menu-aktionsmenü) bzw. [Picker-Popover](#picker-popover-picker-popover). Auswahl als Eingabe einer Ansicht (Figuren vergleichen) → [Auswahl-Chip-Reihe](#auswahl-chip-reihe-mehrfachauswahl-vor-einer-vergleichsansicht). Vorschläge annehmen/ablehnen (Lektorat-Befunde, Zeit-Vorschläge) ist keine Sammelmutation über Buch-Objekte und bleibt bei seinem Review-Muster.
+
+**Markup** — eigene Zeile direkt **über** der Liste, nie in der `.card-toolbar`:
+```html
+<div class="selection-bar" x-show="…" x-cloak role="toolbar" :aria-label="$app.t('…')">
+  <!-- Liste: Haken „alle sichtbaren" + Zähler. Tabelle: nur Zähler (Haken im <thead>). -->
+  <label class="selection-bar__all">
+    <input type="checkbox" :checked="allVisibleSelected()" @change="toggleSelectAllVisible()" :aria-label="$app.t('selection.selectAll')">
+    <span x-text="$app.tn('selection.count', selectionCount())"></span>
+  </label>
+  <div class="selection-bar__actions" :class="{ 'is-disabled': !selectionCount() }">
+    <!-- btn-compact, Compact-Combobox, input.filter-search-input -->
+  </div>
+  <button type="button" class="icon-btn icon-btn--ghost selection-bar__close" @click="…"
+          :data-tip="…" :aria-label="…"><svg class="icon" aria-hidden="true"><use href="/icons.svg#x"/></svg></button>
+</div>
+```
+
+**JS** [public/js/selection-bar.js](public/js/selection-bar.js) — `selectionState()` in den State, `selectionMethods` in die Methoden; die Karte liefert nur `selectionVisibleIds()` (Ids der Zeilen, die der Filter gerade zeigt). Zeile: `:checked="isSelected(id)" @change="toggleSelect(id)"`. Die Aktion liest `selectedVisibleIds()`.
+
+**Regeln:**
+- **Gezählt und geschrieben wird nur, was sichtbar ist** (`selectedVisibleIds`) — ein Filterwechsel darf keine unsichtbare Auswahl mitschleppen, die dann mitgelöscht würde.
+- **Einstieg je Karte, Leiste überall gleich.** Öffnet ein Klick auf die Zeile sonst etwas (Dialog), schaltet ein Knopf «Auswählen» in der Toolbar einen Modus ein und die Leiste steht, solange er an ist (× beendet ihn). Hat die Zeile keine Klick-Aktion (Tabelle), stehen die Haken immer und die Leiste erscheint ab der ersten Markierung (× hebt die Auswahl auf).
+- **Der Einstiegs-Knopf ändert seine Beschriftung nicht** — nur `is-active`/`aria-pressed`. Ein längeres «Auswahl beenden» verschiebt die eingebettete Filterleiste daneben und lässt sie umbrechen; beendet wird über das × der Leiste.
+- **Aktionen bleiben stehen**, auch ohne Markierung (`:disabled` bzw. `is-disabled`) — sonst springt die Leiste beim ersten Haken.
+- **Nur Compact-Controls** in `__actions`; ein Textfeld ist `input.filter-search-input` (teilt die Compact-Regel der Filterleiste) — ein nacktes `<input>` käme in Formular-Grösse.
+- Zähltext über `tn('selection.count', n)`; „Alle sichtbaren auswählen"/„Auswahl aufheben" aus `selection.*`, nicht je Karte.
+
+**CSS:** [components/selection-bar.css](public/css/components/selection-bar.css), Compact-Textfeld in [card-form/card-blocks.css](public/css/components/card-form/card-blocks.css) (`.selection-bar .filter-search-input`). Klebt beim Rollen oben (`position: sticky`); unter 600px rutschen die Aktionen in eine eigene Zeile. Gegated: [selection-bar-single-place.test.mjs](tests/unit/selection-bar-single-place.test.mjs).
+
+**Konsumenten:** Recherche-Liste (Modus, [recherche-bulk-bar.html](public/partials/recherche-bulk-bar.html), Aktionen [recherche/bulk.js](public/js/book/recherche/bulk.js)), Ideen-Board-Liste (Haken immer, [ideen-board-list.html](public/partials/ideen-board-list.html), Aktionen [ideen-board/list.js](public/js/book/ideen-board/list.js)).
 
 ---
 
@@ -3181,6 +3245,7 @@ Struktur: 8 thematische Subfolder unter [public/css/](public/css/) + Root-Solit�
 | [components/user-chip.css](public/css/components/user-chip.css) | User-Avatar-Chip. |
 | [components/feature-tiles.css](public/css/components/feature-tiles.css) | Palette (Hero/Overlay/Panel/Item), Quick-Pills. |
 | [components/tooltip.css](public/css/components/tooltip.css) | `.tip-layer` / `.tip-bubble` / `.tip-arrow` für `[data-tip]`. |
+| [components/url-short.css](public/css/components/url-short.css) | `.url-short` — URL als Link-Text einzeilig mit Ellipse; Text-Kürzung aus `utils/url-display.js`. Siehe „URL als Link-Text". |
 | [components/entity-ref.css](public/css/components/entity-ref.css) | `.entity-ref` (+ `--<typ>`, `--static`, `--unresolved`, `--inherited`), `.entity-refs`, `.entity-ref-group`/`-remove`, `.entity-ref-more` — die eine Darstellung jedes Verweises auf ein Buch-Objekt; Inhalt + Klick setzt die Direktive `x-entity-ref`. Siehe „Entitäts-Referenz". |
 | [components/graph-tooltip.css](public/css/components/graph-tooltip.css) | `.graph-tooltip` (+ `.visible`, `strong`/`em`/`p`-Zeilen) — Hover-Detailkarte über einem vis-network-Canvas. Geteilt von Figuren-Graph (`#figur-tooltip`) und Motiv-Konstellation (`#motiv-tooltip`); positioniert wird in [public/js/graph-kit/tooltip.js](public/js/graph-kit/tooltip.js). Nicht `[data-tip]` — die Karte hängt an einem Canvas-Knoten, nicht an einem DOM-Element. Siehe „Graph-Tooltip (vis-network)". |
 | [components/sortable-table.css](public/css/components/sortable-table.css) | `.sortable-th` + `--asc`/`--desc`-Modifier für die `sortableTable`-Alpine-Komponente. |
@@ -3200,6 +3265,7 @@ Struktur: 8 thematische Subfolder unter [public/css/](public/css/) + Root-Solit�
 | [components/color-picker.css](public/css/components/color-picker.css) | `.color-picker` / `__swatch` / `__popover` / `__opt` (+ `--on`, `--none`) — Farbwähler-Popover für Ordnungsfarben. Geteilt zwischen Motiv-Werkstatt (Themen) und Plot-Werkstatt (Akte, Handlungsstränge). Die Farbe liefert der Konsument per `--col-accent`; das Modul kennt keine Palette, nur die Form. |
 | [components/relation-conflicts.css](public/css/components/relation-conflicts.css) | `.relcheck-list` / `.relcheck-item` / `.relcheck-head` / `.relcheck-snippet` — Konfliktliste der Beziehungsprüfung (Fragment [relation-conflicts-list.html](public/partials/relation-conflicts-list.html)). Konsumenten: Fine-Tuning-Export (Prüfung vor dem Export) und Figuren-Karte (Hinweis über der Liste). |
 | [components/picker-popover.css](public/css/components/picker-popover.css) | `.picker-popover` / `__head` / `__title` / `__subject` / `__actions` — am Trigger verankertes Auswahl-Popover an einem Element (Kopf nennt das Element, darunter Felder, unten Aktionen). Mechanik in [picker-popover.js](public/js/picker-popover.js), Breite über `--picker-popover-w`. Siehe „Picker-Popover". |
+| [components/selection-bar.css](public/css/components/selection-bar.css) | `.selection-bar` / `__all` / `__count` / `__actions` / `__close` — Sammelaktionen für markierte Zeilen einer Liste/Tabelle, klebt oben. Mechanik in [selection-bar.js](public/js/selection-bar.js). Siehe „Auswahl-Leiste". |
 | [components/editor-dialog.css](public/css/components/editor-dialog.css) | `.editor-dialog` / `__inner` / `__head` / `__title` / `__actions` / `__spacer` — Schale der modalen Notebook-Editor-Dialoge (natives `<dialog>`, Focus-Trap + ESC vom Browser). Geteilt von Diagramm- und Tabellen-Dialog; Breite pro Dialog über `--dlg-width`/`--dlg-max-width`. Der Rumpf (das eigentliche Werkzeug) bleibt beim Konsumenten. |
 | [components/snapshots.css](public/css/components/snapshots.css) | Fassungen-Karte (`snapshotsCard`): Capture-Leiste + Drift-Hinweis (`.snapshots-drift` „lohnt sich eine neue Fassung?", operational-status-Achse, `--worth`-Modifier amber-getönt + `.snapshots-drift__head`/`__tags`) + Fassungs-Liste + Buch-Level-Diff zweier Fassungen. Tabelle reuse `.entity-grid-table`; Diff-Zellen reuse `revision-diff-*` aus `page/page-revision-viewer.css` — hier nur snapshot-spezifische Zell-Tweaks. |
 

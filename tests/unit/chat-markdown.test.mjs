@@ -27,6 +27,9 @@ const CASES = [
   ['nummerierte Liste behält Startwert', '3. drei\n4. vier', /<ol start="3"/],
   ['Link mit Klammern in der URL', '[Bern](https://de.wikipedia.org/wiki/Bern_(Stadt))', /href="https:\/\/de\.wikipedia\.org\/wiki\/Bern_\(Stadt\)"/],
   ['nackte URL wird verlinkt', 'siehe https://example.com/a', /<a href="https:\/\/example\.com\/a"[^>]*class="chat-link"/],
+  ['nackte URL zeigt die Kurzform, volle URL im Tooltip', 'siehe https://www.example.com/x/y/artikel?id=7',
+    /data-tip="https:\/\/www\.example\.com\/x\/y\/artikel\?id=7"[^>]*>example\.com\/…\/artikel<\/a>/],
+  ['benannter Link behält seinen Text', '[Quelle](https://example.com/x/y/z)', />Quelle<\/a>/],
   ['Tabelle im Scroll-Wrapper', '| A |\n|---|\n| 1 |', /<div class="table-scroll"><table class="chat-table">/],
   ['Absatz bekommt Chat-Klasse', 'eins\n\nzwei', /<p class="chat-p">zwei<\/p>/],
 ];

@@ -85,7 +85,7 @@
     color: var(--color-muted);
   }
   .chat-tool-log-url {
-    word-break: break-all;
+    overflow-wrap: anywhere;
   }
   .chat-tool-log-result {
     color: var(--color-ok-text);
@@ -120,7 +120,7 @@
   }
 
   /* Mobile: Verlauf in lesbarer Grösse und Farbe, Klapp-Knöpfe als
-     Fingerziel, lange URLs umbrechen an Wortgrenzen statt mitten im Wort. */
+     Fingerziel. */
   @media (max-width: 768px) {
     .chat-tool-log { font-size: var(--font-size-sm); color: var(--color-muted); }
     .chat-tool-log-round-title,
@@ -132,7 +132,6 @@
     }
     .chat-tool-log-group-toggle.collapsible-toggle { font-size: inherit; }
     .chat-tool-log-row { padding: var(--space-xs) 0; }
-    .chat-tool-log-url { word-break: normal; overflow-wrap: anywhere; }
     .chat-tool-log-children { margin-left: var(--space-sm); }
   }
 }

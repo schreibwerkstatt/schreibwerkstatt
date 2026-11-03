@@ -1,34 +1,34 @@
-<!-- Aktionsleiste der Mehrfachauswahl (book/recherche/bulk.js). Nur in der
+<!-- Auswahl-Leiste der Recherche-Liste (DESIGN.md „Auswahl-Leiste",
+     Mechanik selection-bar.js, Aktionen book/recherche/bulk.js). Nur in der
      Listen-Ansicht und nur im Auswahl-Modus. Jede Aktion wirkt auf alle
      markierten, sichtbaren Fundstuecke (POST /research/bulk). -->
-<div class="recherche-bulkbar" x-show="bulkMode && viewMode === 'list'" x-cloak role="toolbar" :aria-label="$app.t('recherche.bulk.label')">
-  <label class="recherche-bulkbar__all">
-    <input type="checkbox" :checked="bulkAllSelected()" @change="bulkToggleAll()">
-    <span x-text="$app.t('recherche.bulk.count', { n: bulkCount() })"></span>
+<div class="selection-bar" x-show="bulkMode && viewMode === 'list'" x-cloak role="toolbar" :aria-label="$app.t('recherche.bulk.label')">
+  <label class="selection-bar__all">
+    <input type="checkbox" :checked="allVisibleSelected()" @change="toggleSelectAllVisible()"
+           :aria-label="$app.t('selection.selectAll')">
+    <span x-text="$app.tn('selection.count', selectionCount())"></span>
   </label>
-  <div class="recherche-bulkbar__actions" :class="{ 'is-disabled': !bulkCount() }">
+  <div class="selection-bar__actions" :class="{ 'is-disabled': !selectionCount() }">
     <div x-data="combobox($app.t('recherche.bulk.status'))"
          x-modelable="value" x-model="bulkStatus"
          x-effect="options = bulkStatusOptions()"
          @combobox-change="bulkSetStatus($event.detail)"></div>
-    <span class="recherche-bulkbar__group">
-      <input type="text" class="recherche-bulkbar__tag" x-model="bulkTag"
-             @keydown.enter="$enter($event, () => bulkAddTag())"
-             :placeholder="$app.t('recherche.bulk.tagPlaceholder')" :aria-label="$app.t('recherche.bulk.tagPlaceholder')">
-      <button type="button" class="btn-compact" @click="bulkAddTag()" :disabled="busy || !bulkCount() || !bulkTag.trim()" x-text="$app.t('recherche.bulk.addTag')"></button>
-    </span>
-    <span class="recherche-bulkbar__group">
-      <div x-data="combobox($app.t('recherche.bulk.linkKind'))"
-           x-modelable="value" x-model="bulkLinkKind"
-           x-effect="options = linkPickerKinds()"
-           @combobox-change="bulkLinkTargetId = ''"></div>
-      <div x-show="bulkLinkKind" x-cloak
-           x-data="entityPicker({ entity: 'target', placeholder: $app.t('recherche.bulk.linkTarget'), items: () => linkTargets, kind: () => bulkLinkKind })"
-           x-modelable="value" x-model="bulkLinkTargetId"></div>
-      <button type="button" class="btn-compact" @click="bulkLink()" :disabled="busy || !bulkCount() || !bulkLinkTargetId" x-text="$app.t('recherche.bulk.link')"></button>
-    </span>
-    <button type="button" class="btn-compact" @click="bulkApply('archive')" :disabled="busy || !bulkCount()" x-text="$app.t('recherche.bulk.archive')"></button>
-    <button type="button" class="btn-compact" x-show="showArchived" @click="bulkApply('unarchive')" :disabled="busy || !bulkCount()" x-text="$app.t('recherche.bulk.unarchive')"></button>
-    <button type="button" class="btn-compact danger" @click="bulkApply('delete')" :disabled="busy || !bulkCount()" x-text="$app.t('recherche.bulk.delete')"></button>
+    <input type="text" class="filter-search-input" x-model="bulkTag"
+           @keydown.enter="$enter($event, () => bulkAddTag())"
+           :placeholder="$app.t('recherche.bulk.tagPlaceholder')" :aria-label="$app.t('recherche.bulk.tagPlaceholder')">
+    <button type="button" class="btn-compact" @click="bulkAddTag()" :disabled="busy || !selectionCount() || !bulkTag.trim()" x-text="$app.t('recherche.bulk.addTag')"></button>
+    <div x-data="combobox($app.t('recherche.bulk.linkKind'))"
+         x-modelable="value" x-model="bulkLinkKind"
+         x-effect="options = linkPickerKinds()"
+         @combobox-change="bulkLinkTargetId = ''"></div>
+    <div x-show="bulkLinkKind" x-cloak
+         x-data="entityPicker({ entity: 'target', placeholder: $app.t('recherche.bulk.linkTarget'), items: () => linkTargets, kind: () => bulkLinkKind })"
+         x-modelable="value" x-model="bulkLinkTargetId"></div>
+    <button type="button" class="btn-compact" x-show="bulkLinkKind" x-cloak @click="bulkLink()" :disabled="busy || !selectionCount() || !bulkLinkTargetId" x-text="$app.t('recherche.bulk.link')"></button>
+    <button type="button" class="btn-compact" @click="bulkApply('archive')" :disabled="busy || !selectionCount()" x-text="$app.t('recherche.bulk.archive')"></button>
+    <button type="button" class="btn-compact" x-show="showArchived" @click="bulkApply('unarchive')" :disabled="busy || !selectionCount()" x-text="$app.t('recherche.bulk.unarchive')"></button>
+    <button type="button" class="btn-compact danger" @click="bulkApply('delete')" :disabled="busy || !selectionCount()" x-text="$app.t('recherche.bulk.delete')"></button>
   </div>
+  <button type="button" class="icon-btn icon-btn--ghost selection-bar__close" @click="toggleBulkMode()"
+          :data-tip="$app.t('recherche.bulk.done')" :aria-label="$app.t('recherche.bulk.done')"><svg class="icon" aria-hidden="true"><use href="/icons.svg#x"/></svg></button>
 </div>

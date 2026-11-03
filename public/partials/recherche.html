@@ -60,7 +60,7 @@
     </button>
     <button type="button" class="btn-compact" x-show="viewMode === 'list' && items.length > 0"
             :class="{ 'is-active': bulkMode }" :aria-pressed="bulkMode ? 'true' : 'false'"
-            @click="toggleBulkMode()" x-text="$app.t(bulkMode ? 'recherche.bulk.done' : 'recherche.bulk.start')"></button>
+            @click="toggleBulkMode()" x-text="$app.t('recherche.bulk.start')"></button>
     <button type="button" class="btn-compact" x-show="items.length > 0" @click="checkLinks()" :disabled="linkCheckRunning"
             :data-tip="$app.t('recherche.linkCheck.tip')" x-text="$app.t('recherche.linkCheck.btn')"></button>
     <button type="button" class="btn-compact" x-show="items.length > 0" @click="runCrosscheck()" :disabled="crosscheckRunning"

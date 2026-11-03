@@ -10,7 +10,7 @@
         <div class="sync-status-panel">
           <div class="sync-status-row">
             <span class="sync-status-label" x-text="$app.t('blog.status.url')"></span>
-            <span class="sync-status-value" x-text="blogConnection?.baseUrl"></span>
+            <span class="sync-status-value url-short" :data-tip="blogConnection?.baseUrl" x-text="blogConnection?.baseUrl"></span>
           </div>
           <div class="sync-status-row">
             <span class="sync-status-label" x-text="$app.t('blog.status.user')"></span>

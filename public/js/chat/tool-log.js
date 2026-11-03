@@ -16,6 +16,7 @@
 // als Zitat, IDs als Verweis ohne Namen.
 
 import { pluralKey } from '../i18n.js';
+import { shortUrl } from '../utils/url-display.js';
 
 // Arten der Server-Sicht, die `x-entity-ref` kennt (englische Kinds über KIND_ALIASES).
 const ENTITY_KINDS = new Set(['page', 'chapter', 'figure', 'location', 'beat', 'thread', 'motif', 'research', 'draft', 'idee']);
@@ -62,7 +63,7 @@ function _part(item, t) {
   if (item.t === 'q') return { kind: 'quote', text: t('chat.toolQuote', { v: item.v }) };
   if (item.t === 'url') {
     const ok = /^https?:\/\//i.test(item.v || '');
-    return { kind: 'url', text: String(item.v || '').replace(/^https?:\/\/(www\.)?/i, ''), href: ok ? item.v : null };
+    return { kind: 'url', text: ok ? shortUrl(item.v) : String(item.v || ''), href: ok ? item.v : null };
   }
   if (item.t === 'more') return { kind: 'muted', text: t('chat.toolMore', { n: item.v }) };
   if (item.t === 'f') {

@@ -4,16 +4,21 @@
      Ort in Buch-Reihenfolge, Stufe, Alter. Sammelaktionen wirken nur auf die
      ausgewaehlten SICHTBAREN Zeilen. -->
 <div class="ideen-list-wrap" x-show="!loading && isListView() && listRows().length > 0" x-cloak>
-  <div class="ideen-list-bulk" x-show="selectedIds.length > 0" x-cloak role="group" :aria-label="$app.t('ideenBoard.bulk.label')">
-    <span class="ideen-list-bulk-count" x-text="$app.t('ideenBoard.bulk.selected', { n: selectedIds.length })"></span>
-    <template x-for="st in statuses()" :key="st">
-      <button type="button" class="idee-board-step" :class="'idee-board-step--' + st"
-              x-show="isStageActive(st)" @click="bulkSetStatus(st)" :disabled="busy"
-              :data-tip="$app.t('ideenBoard.moveTo', { status: statusLabel(st) })"
-              x-text="statusLabel(st)"></button>
-    </template>
-    <button type="button" class="btn-compact danger" @click="bulkDelete()" :disabled="busy" x-text="$app.t('common.delete')"></button>
-    <button type="button" class="btn-compact" @click="clearSelection()" :disabled="busy" x-text="$app.t('ideenBoard.bulk.clear')"></button>
+  <!-- Auswahl-Leiste (DESIGN.md „Auswahl-Leiste", selection-bar.js): die Haken
+       stehen in der Tabelle immer, die Leiste erscheint ab der ersten Markierung. -->
+  <div class="selection-bar" x-show="selectionCount()" x-cloak role="toolbar" :aria-label="$app.t('ideenBoard.bulk.label')">
+    <span class="selection-bar__count" x-text="$app.tn('selection.count', selectionCount())"></span>
+    <div class="selection-bar__actions">
+      <template x-for="st in statuses()" :key="st">
+        <button type="button" class="idee-board-step" :class="'idee-board-step--' + st"
+                x-show="isStageActive(st)" @click="bulkSetStatus(st)" :disabled="busy"
+                :data-tip="$app.t('ideenBoard.moveTo', { status: statusLabel(st) })"
+                x-text="statusLabel(st)"></button>
+      </template>
+      <button type="button" class="btn-compact danger" @click="bulkDelete()" :disabled="busy" x-text="$app.t('common.delete')"></button>
+    </div>
+    <button type="button" class="icon-btn icon-btn--ghost selection-bar__close" @click="clearSelection()" :disabled="busy"
+            :data-tip="$app.t('selection.clear')" :aria-label="$app.t('selection.clear')"><svg class="icon" aria-hidden="true"><use href="/icons.svg#x"/></svg></button>
   </div>
 
   <table class="data-table ideen-list"
@@ -27,7 +32,7 @@
       <tr>
         <th class="ideen-list-check">
           <input type="checkbox" :checked="allVisibleSelected()" @change="toggleSelectAllVisible()"
-                 :aria-label="$app.t('ideenBoard.bulk.selectAll')">
+                 :aria-label="$app.t('selection.selectAll')">
         </th>
         <th x-bind="sortTh('laneIndex')" x-text="$app.t('ideenBoard.list.place')"></th>
         <th x-bind="sortTh('text')" x-text="$app.t('ideenBoard.list.text')"></th>

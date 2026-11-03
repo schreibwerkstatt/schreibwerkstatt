@@ -15,7 +15,7 @@
 // Lokale Updates ersetzen die Nachricht im Array (neues Objekt), statt das
 // x-for-Item zu mutieren: Mutationen am Proxy nach einem await schlagen nicht
 // zuverlässig ins Template durch.
-import { sendJson } from '../utils.js';
+import { sendJson, urlHost } from '../utils.js';
 import { trackChatProposal } from '../features-usage.js';
 
 const PROPOSAL_KINDS = ['note', 'link', 'quote', 'fact'];
@@ -49,8 +49,7 @@ export const researchProposalMethods = {
   // Echter Host neben einem Modell-Label — ein Label «Wikipedia» kann so keine
   // fremde Domain verdecken. Ohne Label zeigt der Link ohnehin die URL.
   proposalUrlHost(u) {
-    if (!u?.label) return '';
-    try { return new URL(u.url).hostname.replace(/^www\./, ''); } catch { return ''; }
+    return u?.label ? urlHost(u.url) : '';
   },
   isProposalUrlRemoved(msg, pi, u) {
     return (this._proposalRemovedUrls[_key(msg, pi)] || []).includes(u?.url);

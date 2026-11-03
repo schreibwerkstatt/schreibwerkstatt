@@ -483,15 +483,6 @@ body.ideen-tree-drop-active .page-tree .tree-drop-target {
 
 /* ── Listenansicht ───────────────────────────────────────────────────────── */
 .ideen-list-wrap { overflow-x: auto; }
-.ideen-list-bulk {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: var(--space-xs) var(--space-sm);
-  padding: var(--space-sm) 0;
-}
-.ideen-list-bulk-count { font-size: var(--font-size-xs); color: var(--color-muted); }
-.ideen-list-bulk .idee-board-step { flex: 0 0 auto; }
 .ideen-list .ideen-list-check { width: 2rem; }
 .ideen-list .ideen-list-place { white-space: nowrap; }
 .ideen-list .ideen-list-text { min-width: 16rem; overflow-wrap: anywhere; }

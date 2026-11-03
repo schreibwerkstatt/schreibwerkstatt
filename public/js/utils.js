@@ -22,6 +22,7 @@ export * from './utils/date.js';
 export * from './utils/iso-day.js';
 export * from './utils/escape.js';
 export * from './utils/net.js';
+export * from './utils/url-display.js';
 export * from './utils/html.js';
 export * from './utils/html-find.js';
 export * from './utils/html-replace-rich.js';

@@ -364,7 +364,8 @@ App-Zeitzone, `localDayDiff`); ab `IDEE_STALE_DAYS` (60) ist die Angabe warm
 hervorgehoben. Nur an offenen Pendenzen — an einer erledigten ist das Alter
 Geschichte, kein Versäumnis.
 
-**Mehrfachauswahl nur in der Liste.** Haken je Zeile, „alle sichtbaren" im Kopf;
+**Mehrfachauswahl nur in der Liste.** Haken je Zeile, „alle sichtbaren" im Kopf,
+darüber ab der ersten Markierung die Auswahl-Leiste (DESIGN.md „Auswahl-Leiste");
 Sammelaktionen setzen die Stufe (nur aktive) oder löschen. Jede Idee läuft
 einzeln über denselben Schreibpfad wie Knopf und Drag (`_patchIdee` /
 `repo/ideen-queue.js`), damit Offline-Warteschlange und Stufen-Prüfung je Idee

@@ -8,6 +8,8 @@
 // renderResearchAnswer (Live-Export an der Alpine-Methode erhalten, Templates
 // binden `this._renderResearchAnswer(msg)`).
 
+import { shortUrl } from '../utils/url-display.js';
+
 // Private-Use-Sentinels für Inline-Zitatmarker: überleben escHtml + die
 // Markdown-Transforms unverändert und werden NACH dem Render durch das
 // Superscript-HTML ersetzt. Kollusionsfrei in echtem Chat-/Markdown-Text.
@@ -107,7 +109,7 @@ export function citedSources(text, sources) {
     const src = resolveSource(sources, n);
     if (src && src.url && !seen.has(src.url)) {
       seen.add(src.url);
-      out.push({ n, url: src.url, title: src.title || src.url });
+      out.push({ n, url: src.url, title: src.title || shortUrl(src.url) });
     }
   }
   return out;
@@ -123,7 +125,7 @@ export function displaySources(text, sources, answerSources) {
   if (Array.isArray(answerSources) && answerSources.length) {
     return answerSources
       .filter(s => s && s.url)
-      .map((s, i) => ({ n: i + 1, url: s.url, title: s.title || s.url }));
+      .map((s, i) => ({ n: i + 1, url: s.url, title: s.title || shortUrl(s.url) }));
   }
   return citedSources(text, Array.isArray(sources) ? sources : []);
 }

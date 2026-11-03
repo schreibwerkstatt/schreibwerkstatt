@@ -6155,10 +6155,7 @@
   "ideenBoard.age": "notiert {rel}",
   "ideenBoard.staleTip": "Seit über {n} Tagen offen",
   "ideenBoard.bulk.label": "Sammelaktionen",
-  "ideenBoard.bulk.selected": "{n} ausgewählt",
   "ideenBoard.bulk.select": "Idee auswählen",
-  "ideenBoard.bulk.selectAll": "Alle sichtbaren auswählen",
-  "ideenBoard.bulk.clear": "Auswahl aufheben",
   "ideenBoard.bulk.confirmDelete": "{n} Ideen endgültig löschen? Verwerfen behält sie als Entscheidung.",
   "ideenBoard.bulk.failed": "{n} Ideen konnten nicht gespeichert werden — sie bleiben ausgewählt.",
   "ideenBoard.showErledigt": "Erledigte anzeigen",
@@ -6379,7 +6376,6 @@
   "recherche.bulk.start": "Auswählen",
   "recherche.bulk.done": "Auswahl beenden",
   "recherche.bulk.label": "Aktionen für die Auswahl",
-  "recherche.bulk.count": "{n} ausgewählt",
   "recherche.bulk.select": "«{title}» auswählen",
   "recherche.bulk.status": "Status setzen …",
   "recherche.bulk.tagPlaceholder": "Tag",
@@ -9125,5 +9121,9 @@
   "figuren.relcheck.summaryMain": "Beziehungsprüfung: {n} Widersprüche im Figurennetz, {main} davon bei Hauptfiguren",
   "figuren.relcheck.summaryMainOne": "Beziehungsprüfung: {n} Widerspruch im Figurennetz, bei einer Hauptfigur",
   "figuren.relcheck.hint": "Korrigiert wird nichts: Beziehung bei der Figur prüfen und bearbeiten oder löschen. Von Hand geänderte Beziehungen bleiben bei der nächsten Komplettanalyse stehen.",
-  "figuren.relcheck.edgeTip": "Die Beziehungsprüfung meldet diese Beziehung als Widerspruch."
+  "figuren.relcheck.edgeTip": "Die Beziehungsprüfung meldet diese Beziehung als Widerspruch.",
+  "selection.count": "{n} ausgewählt",
+  "selection.countOne": "{n} ausgewählt",
+  "selection.selectAll": "Alle sichtbaren auswählen",
+  "selection.clear": "Auswahl aufheben"
 }

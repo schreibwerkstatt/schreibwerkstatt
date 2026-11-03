@@ -33,29 +33,28 @@
   justify-content: space-between;
   gap: var(--space-sm);
 }
+/* Ein Vorschlag liest sich von oben nach unten: Typ-Badge, Titel, Text, Links,
+   Tags — darunter die Aktionen als eigene Zeile. Nebeneinander (Text | Aktionen)
+   bliebe dem Text in der Leiste kaum eine halbe Spalte. */
 .research-chat-proposal {
   display: flex;
-  align-items: flex-start;
-  gap: var(--space-md);
-  padding: var(--space-2xs) 0;
+  flex-direction: column;
+  gap: var(--space-2xs);
+  padding: var(--space-xs) 0;
 }
+.research-chat-proposal + .research-chat-proposal { border-top: 1px dashed var(--color-border); }
 .research-chat-proposal-main {
   display: flex;
+  flex-direction: column;
   align-items: flex-start;
-  gap: var(--space-sm);
-  flex: 1;
+  gap: var(--space-2xs);
   min-width: 0;
 }
-/* Aktionen als eigene rechte Spalte: oben ausgerichtet, schrumpft nicht — der
-   Vorschlagstext bricht davor um (saubere zweispaltige Optik). */
 .research-chat-proposal-actions {
   display: flex;
   flex-wrap: wrap;
-  justify-content: flex-end;
   align-items: center;
   gap: var(--space-2xs);
-  flex-shrink: 0;
-  margin-left: auto;
 }
 .research-chat-proposal-exists-actions {
   display: flex;
@@ -67,7 +66,7 @@
   display: flex;
   flex-direction: column;
   gap: var(--space-2xs);
-  flex: 1;
+  align-self: stretch;
   min-width: 0;
 }
 .research-chat-proposal-tags,
@@ -80,7 +79,7 @@
   display: flex;
   flex-direction: column;
   gap: var(--space-2xs);
-  flex: 1;
+  align-self: stretch;
   min-width: 0;
 }
 .research-chat-proposal-title { font-weight: var(--fw-semibold); }
@@ -92,27 +91,39 @@
   -webkit-line-clamp: 2;
   -webkit-box-orient: vertical;
 }
-.research-chat-proposal-url {
-  font-size: var(--font-size-sm);
-  color: var(--card-accent);
-  word-break: break-all;
-  min-width: 0;
-}
-/* Ein Link je Zeile: Label, echter Host, ggf. «nicht geprüft», Weglassen-Knopf. */
+/* Ein Link je Zeile: Label, echter Host, ggf. «nicht geprüft», Weglassen-Knopf.
+   Der Link kürzt sich per `.url-short` auf den Platz, der neben Host und Knopf
+   bleibt — die Zeile bricht nicht mitten in der URL um. */
 .research-chat-proposal-url-row {
   display: flex;
-  flex-wrap: wrap;
   align-items: center;
   gap: var(--space-2xs);
+  min-width: 0;
 }
+.research-chat-proposal-url {
+  flex: 0 1 auto;
+  min-width: 3em;
+  font-size: var(--font-size-sm);
+  color: var(--card-accent);
+}
+/* Der Host sichert das Label ab (ein Label «Wikipedia» darf keine fremde Domain
+   verdecken) — er schrumpft erst, wenn das Label schon auf wenige Zeichen steht. */
 .research-chat-proposal-url-host {
+  flex: 0 0 auto;
+  max-width: 50%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
   font-size: var(--font-size-sm);
   color: var(--color-muted);
 }
+.research-chat-proposal-url-row > .icon-btn { flex-shrink: 0; }
 .research-chat-proposal-url-unverified {
   font-size: var(--font-size-sm);
   color: var(--color-warn-text);
   font-style: italic;
+  white-space: nowrap;
+  flex-shrink: 0;
 }
 .research-chat-proposal-url-row--removed .research-chat-proposal-url,
 .research-chat-proposal-url-row--removed .research-chat-proposal-url-host {
@@ -201,9 +212,4 @@
 .research-chat-source-num { color: var(--color-muted); flex-shrink: 0; }
 .research-chat-source-title { word-break: break-word; }
 
-/* ── Mobile ─────────────────────────────────────────────────────────────── */
-@media (max-width: 640px) {
-  .research-chat-proposal { flex-wrap: wrap; }
-  .research-chat-proposal-actions { margin-left: 0; justify-content: flex-start; }
-}
 }

@@ -5,7 +5,7 @@
 // __SHELL_BUILD: content hash over all listed assets → drives SHELL_CACHE.
 // __SHELL_MANIFEST: the coherent set precached atomically at SW install.
 // __VENDOR_SET: current vendor/ + fonts/ files — VENDOR_CACHE prune list.
-self.__SHELL_BUILD = "0659ed2d75828b25";
+self.__SHELL_BUILD = "f6ae4773441ff7d6";
 self.__SHELL_MANIFEST = [
   "/css/admin/admin-backup.css",
   "/css/admin/admin-home.css",
@@ -104,6 +104,7 @@ self.__SHELL_MANIFEST = [
   "/css/components/picker-popover.css",
   "/css/components/relation-conflicts.css",
   "/css/components/seg-toggle.css",
+  "/css/components/selection-bar.css",
   "/css/components/share-links.css",
   "/css/components/snapshot-reader.css",
   "/css/components/snapshots.css",
@@ -112,6 +113,7 @@ self.__SHELL_MANIFEST = [
   "/css/components/tabs.css",
   "/css/components/toggle-switch.css",
   "/css/components/tooltip.css",
+  "/css/components/url-short.css",
   "/css/components/user-chip.css",
   "/css/components/year-month-heatmap.css",
   "/css/editor/book/book-editor-head.css",
@@ -870,6 +872,7 @@ self.__SHELL_MANIFEST = [
   "/js/repo/structure-queue.js",
   "/js/safe-storage.js",
   "/js/scroll-fade.js",
+  "/js/selection-bar.js",
   "/js/setting-field.js",
   "/js/share-anchor.js",
   "/js/share-reader.js",
@@ -956,6 +959,7 @@ self.__SHELL_MANIFEST = [
   "/js/utils/net.js",
   "/js/utils/text-match.js",
   "/js/utils/textarea.js",
+  "/js/utils/url-display.js",
   "/js/utils/uuid.js",
   "/js/xrefs/caption-preview.js",
   "/js/xrefs/target-cache.js",

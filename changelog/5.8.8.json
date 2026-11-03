@@ -1,0 +1,16 @@
+{
+  "version": "5.8.8",
+  "date": "2026-11-03",
+  "entries": [
+    {
+      "kind": "verbessert",
+      "de": "Recherche und Ideen-Board: markierst du in der Liste mehrere Einträge, erscheint darüber dieselbe Auswahl-Leiste mit Anzahl und Aktionen. Mit dem × daneben hebst du die Auswahl auf.",
+      "en": "Research and ideas board: when you mark several entries in the list, the same selection bar with the count and actions appears above it. The × next to it clears the selection."
+    },
+    {
+      "kind": "verbessert",
+      "de": "Lange Links in den Chats und bei Recherche-Funden werden gekürzt angezeigt, etwa als Website und letzter Teil der Adresse. Die volle Adresse siehst du, wenn du mit der Maus darüber fährst.",
+      "en": "Long links in the chats and on research findings are shown shortened, such as the website and the last part of the address. You see the full address when you hover over it."
+    }
+  ]
+}
