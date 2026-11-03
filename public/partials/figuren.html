@@ -104,6 +104,7 @@
   <!-- Figurenliste (Reiter «Liste») -->
   <div x-show="$store.catalog.figuren.length > 0 && figurenGraphModus === 'liste'" class="figur-list-section">
     <p class="card-form-saved" x-show="figurPflegeMessage" x-cloak x-text="figurPflegeMessage"></p>
+    <!-- @include figuren-relcheck -->
 
     <!-- Filter: Suche (Name, Kurzname, Beschreibung, Rolle, Beruf, Eigenschaften,
          Typ) · Typ · Kapitel · Abschnitt · Sortierung -->

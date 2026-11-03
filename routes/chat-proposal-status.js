@@ -1,8 +1,8 @@
 'use strict';
 // Status eines Chat-Vorschlags persistieren (context_info.proposals[i] der
 // Assistant-Nachricht) — geteilt von Plot-Chat (PATCH /plot/chat-proposal) und
-// den Ideen-Vorschlägen (PATCH /ideen/chat-proposal: Ideen-Chat sowie Abschnitts-
-// und Buch-Chat, lib/chat-idee-proposals.js). Das Übernehmen selbst läuft im
+// den Ideen-Vorschlägen (PATCH /ideen/chat-proposal: Ideen-Chat sowie Abschnitts-,
+// Buch- und Recherche-Chat, lib/chat-idee-proposals.js). Das Übernehmen selbst läuft im
 // Frontend über die normalen Routen des jeweiligen Boards (gleiche Validierung
 // wie jede Bearbeitung); hier wird nur festgehalten, DASS und WOMIT übernommen
 // bzw. dass verworfen wurde — sonst stünde der Vorschlag nach einem Reload
@@ -21,7 +21,7 @@
 //               erlaubt und überschreibt applied_id.
 //   discarded → status='discarded' (409, wenn schon übernommen)
 // Konsumenten: Plot-Chat (PATCH /plot/chat-proposal), Ideen-Chat und die
-// Ideen-Vorschläge aus Abschnitts- und Buch-Chat (PATCH /ideen/chat-proposal).
+// Ideen-Vorschläge aus Abschnitts-, Buch- und Recherche-Chat (PATCH /ideen/chat-proposal).
 //   reopen    → hebt „verworfen" auf
 // Besitz über die Session (pro User) und deren `kind` — ein Plot-Vorschlag
 // lässt sich nicht über die Ideen-Route setzen und umgekehrt.
@@ -40,8 +40,10 @@ const ACTIONS = new Set(['applied', 'discarded', 'reopen']);
  * `appliedExists(proposal, { bookId, userEmail })` → false, wenn das von einem
  * übernommenen Vorschlag Angelegte nicht mehr existiert (dann darf er erneut
  * übernommen werden); true/undefined = existiert bzw. nichts angelegt.
+ * `accepts(proposal, session)` → false, wenn dieser Vorschlag nicht über diese
+ * Route läuft (Recherche-Chat: nur `idee_create`, die Fundstücke haben ihre eigene).
  */
-function makeChatProposalStatusRouter({ kinds, appliedExists = null }) {
+function makeChatProposalStatusRouter({ kinds, appliedExists = null, accepts = null }) {
   const allowed = new Set(kinds);
   const router = express.Router();
   const jsonBody = express.json();
@@ -72,7 +74,7 @@ function makeChatProposalStatusRouter({ kinds, appliedExists = null }) {
       let ci;
       try { ci = JSON.parse(row?.context_info || '{}') || {}; } catch { ci = {}; }
       const p = Array.isArray(ci.proposals) ? ci.proposals[index] : null;
-      if (!p) { status = 404; body = { error_code: 'PROPOSAL_NOT_FOUND' }; return; }
+      if (!p || (accepts && !accepts(p, session))) { status = 404; body = { error_code: 'PROPOSAL_NOT_FOUND' }; return; }
       const next = { ...p };
       if (action === 'applied') {
         if (p.applied_at) {

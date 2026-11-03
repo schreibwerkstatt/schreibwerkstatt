@@ -26,7 +26,7 @@ neu, sobald der Baum einen Anker verliert, an dem eine geladene Idee hing.
 Abschnitts- und Buch-Chat können eine Idee an einem Abschnitt oder Kapitel **vorschlagen**
 (bemerkter Widerspruch, Fehler, offener Punkt); angelegt wird sie erst, wenn der
 User sie dort erfasst — über dieselbe Route wie die Ideen-Karte
-([chats.md](chats.md#ideen-vorschläge-abschnitts--und-buch-chat)).
+([chats.md](chats.md#ideen-vorschläge-abschnitts--buch--und-recherche-chat)).
 
 Zwei Oberflächen, dieselben Zeilen (ein Kapitel mit genau einem Abschnitt ist für
 beide **ein** Ort, siehe „Einabschnitts-Kapitel" in § 2):
@@ -196,7 +196,7 @@ Picker, Verlust-Prüfung beim Baum-Wechsel), geht über `laneKeyResolver`/`laneK
 statt über den rohen Anker; ein Drop auf das Kapitel im Inhaltsverzeichnis landet
 so ebenfalls am Abschnitt. Im Zuordnen-Picker steht die Bahn unter «Kapitel», der
 Kapitel-Filter kennt das Kapitel weiter. Die Ideen-Vorschläge der Chats legen sich
-nach derselben Regel an den Abschnitt ([chats.md](chats.md#ideen-vorschläge-abschnitts--und-buch-chat)).
+nach derselben Regel an den Abschnitt ([chats.md](chats.md#ideen-vorschläge-abschnitts--buch--und-recherche-chat)).
 **Why:** wer pro Kapitel nur einen Abschnitt schreibt, legt Pendenzen mal am
 Kapitel, mal am Abschnitt ab — zwei Zeilen für einen Ort zerstreuen sie.
 Die Regel steht im Frontend einmal: `soleChapterPages`/`ideenPlace` in

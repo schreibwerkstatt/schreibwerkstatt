@@ -369,10 +369,10 @@ textarea.recherche-input { resize: vertical; min-height: 2.75rem; }
   text-decoration: underline;
 }
 
-/* ── Vollbild: ganze Karte nimmt den Viewport; die Liste bleibt einspaltig,
+/* ── Vollbild: Karte (samt Chat-Leiste) nimmt den Viewport; die Liste bleibt einspaltig,
      aber zentriert mit lesbarer Maximalbreite (distraktionsfreier Lesemodus,
      keine über den ganzen Monitor gezogenen Karten). */
-.card--recherche:fullscreen .recherche-list {
+.recherche-split:fullscreen .recherche-list {
   max-width: 56rem;
   margin-inline: auto;
 }

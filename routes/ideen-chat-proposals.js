@@ -30,7 +30,13 @@ function ideenAppliedExists(p, { bookId, userEmail }) {
 }
 
 const router = express.Router();
-router.use('/', makeChatProposalStatusRouter({ kinds: ['ideen', 'page', 'book'], appliedExists: ideenAppliedExists }));
+// Recherche-Sessions tragen in `proposals` auch Fundstücke (POST /research/chat-proposal) —
+// über diese Route nur ihre Ideen.
+router.use('/', makeChatProposalStatusRouter({
+  kinds: ['ideen', 'page', 'book', 'research'],
+  appliedExists: ideenAppliedExists,
+  accepts: (p, session) => session.kind !== 'research' || p?.type === 'idee_create',
+}));
 
 router.post('/chat-proposal/beleg-check', express.json(), async (req, res) => {
   const userEmail = sessionEmail(req);

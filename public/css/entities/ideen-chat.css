@@ -48,4 +48,13 @@
   font-size: var(--font-size-xs);
   margin-top: var(--space-xs);
 }
+
+/* Mobile: Meta-/Feldzeilen lesbar statt 11px; Feld-Label über den Wert,
+   damit der Wert die volle Breite bekommt. */
+@media (max-width: 768px) {
+  .ideen-chat-proposal-meta,
+  .ideen-chat-proposal-field,
+  .ideen-chat-proposal-note { font-size: var(--font-size-sm); }
+  .ideen-chat-proposal-row, .ideen-chat-beleg { grid-template-columns: minmax(0, 1fr); gap: 0; }
+}
 }

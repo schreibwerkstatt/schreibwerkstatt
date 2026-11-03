@@ -243,7 +243,7 @@ export function registerRechercheCard() {
       this._consumeResearchChatAsk();
 
       // Native Fullscreen-API: Status spiegeln (Toggle-Button + Esc-Exit).
-      // $root = die Karten-Wurzel (.card--recherche), unabhängig vom Klick-Kontext.
+      // $root = die Scope-Wurzel (.recherche-split: Karte + Chat-Leiste), unabhängig vom Klick-Kontext.
       attachFullscreenSync({
         resolveWrap: () => this.$root,
         signal: this._lifecycle.signal,

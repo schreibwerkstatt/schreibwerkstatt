@@ -154,10 +154,9 @@ export const strukturMethods = {
 
   /** Textsorte einer einzelnen Seite setzen (leer = Buch-Default gilt wieder).
    *
-   *  No-Op-Vergleich gegen `strukturPageMap`, NICHT gegen `row.ownTextsorte`:
-   *  die Combobox schreibt ihren Wert über `x-model` in die Zeile, bevor
-   *  `@combobox-change` feuert — ein Vergleich mit der Zeile vergliche den
-   *  neuen Wert mit sich selbst und spränge immer heraus, ohne zu speichern. */
+   *  `value` kommt aus `$event.detail`: x-modelable synct `row.ownTextsorte`
+   *  erst im Effect-Flush nach dem Event. No-Op-Vergleich darum gegen
+   *  `strukturPageMap`, nie gegen die Zeile. */
   async setPageTextsorte(row, value) {
     const v = value || null;
     const gespeichert = this.strukturPageMap[String(row.id)] || '';

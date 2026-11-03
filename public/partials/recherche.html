@@ -1,8 +1,16 @@
 <!-- Recherche-/Wissensboard — buchweit geteiltes Archiv für Notizen, Links,
      Zitate, Faktensplitter und Bilder. Optional mit Buch-Entitäten verknüpfbar
      (Kapitel/Seite/Figur/Ort/Szene/Beat) + Tags. Rein kuratierend, nie
-     generativ im Buchtext. Hauptkarte (exklusiv). -->
-<div class="card card--recherche fullscreen-shell" id="recherche-card" x-data="rechercheCard" x-show="$app.showRechercheCard" x-cloak>
+     generativ im Buchtext. Hauptkarte (exklusiv).
+     Split mit Leiste wie Editor | Abschnitts-Chat (layout/aside-split.css):
+     links die Recherche-Karte, rechts der Recherche-Chat als eigene Karte
+     (recherche-chat.html). Beide teilen den Scope `rechercheCard` — darum
+     traegt der Split x-data, Sichtbarkeit und das Vollbild (Board + Chat
+     zusammen). Schmal steht der Chat ueber dem Board (`--aside-first`). -->
+<div class="aside-split main-aside-split aside-split--aside-first recherche-split fullscreen-shell"
+     x-data="rechercheCard" x-show="$app.showRechercheCard" x-cloak
+     x-aside-resize :class="{ 'aside-split--on': researchChatOpen }">
+<div class="card card--recherche" id="recherche-card">
   <div class="card-header card-header--subline">
     <div class="card-header-titlebar">
       <span class="card-title" x-text="$app.t('recherche.title')"></span>
@@ -28,12 +36,6 @@
   <div x-show="linkCheckStatus" x-cloak class="card-status" x-text="linkCheckStatus"></div>
   <div x-show="crosscheckStatus" x-cloak class="card-status" x-text="crosscheckStatus"></div>
 
-  <!-- Zweispaltiges Raster: Board links, Recherche-Chat rechts daneben (ab
-       1280px, Muster des Seiten-Chats neben dem Editor). Darunter klappt der
-       Chat per `order` wieder ueber das Board. Die Board-Kinder behalten ihre
-       Einrueckung — der Wrapper ist reine Layout-Klammer. -->
-  <div class="recherche-split aside-split aside-split--aside-first" x-aside-resize :class="{ 'aside-split--on': researchChatOpen }">
-  <div class="recherche-board">
 
   <!-- Ansicht-Umschalter (Liste / Status-Board). Zwei Blicke auf DENSELBEN
        Bestand: die Liste zeigt, was gesammelt ist, das Board, wo es auf dem Weg
@@ -67,20 +69,20 @@
       <div x-data="combobox($app.t('recherche.filter.allKinds'), $app.t('recherche.filter.allKinds'))"
            x-modelable="value" x-model="filterKind"
            x-effect="options = kindOptions()"
-           @combobox-change="applyFilters()"></div>
+           @combobox-change="filterKind = $event.detail; applyFilters()"></div>
       <div x-data="combobox($app.t('recherche.filter.allTags'), $app.t('recherche.filter.allTags'))"
            x-modelable="value" x-model="filterTag"
            x-effect="options = tagFilterOptions()"
-           @combobox-change="applyFilters()"></div>
+           @combobox-change="filterTag = $event.detail; applyFilters()"></div>
       <!-- Filter nach verknüpfter Entität: Kategorie + konkreter Eintrag -->
       <div x-data="combobox($app.t('recherche.filter.allLinked'), $app.t('recherche.filter.allLinked'))"
            x-modelable="value" x-model="filterLinkedKind"
            x-effect="options = linkKinds()"
-           @combobox-change="onLinkedFilterKindChange()"></div>
+           @combobox-change="onLinkedFilterKindChange($event.detail)"></div>
       <div x-show="filterLinkedKind" x-cloak
            x-data="entityPicker({ entity: 'target', placeholder: $app.t('recherche.filter.allLinkedTargets'), emptyLabel: $app.t('recherche.filter.allLinkedTargets'), items: () => linkTargets, kind: () => filterLinkedKind })"
            x-modelable="value" x-model="filterLinkedTargetId"
-           @combobox-change="applyLinkedFilter()"></div>
+           @combobox-change="applyLinkedFilter($event.detail)"></div>
       <span class="filter-search-wrap">
         <input type="text" class="filter-search-input filter-search-input--wide"
                x-model.debounce.400ms="filterText"
@@ -92,7 +94,7 @@
       <div x-data="combobox($app.t('recherche.sort.label'))"
            x-modelable="value" x-model="sortBy"
            x-effect="options = sortOptions()"
-           @combobox-change="applySort()"></div>
+           @combobox-change="sortBy = $event.detail; applySort()"></div>
       <label class="filter-toggle">
         <input type="checkbox" x-model="showArchived" @change="applyFilters()">
         <span x-text="$app.t('recherche.filter.showArchived')"></span>
@@ -143,18 +145,16 @@
     <!-- @include recherche-status-board -->
   </template>
 
-  </div><!-- /.recherche-board -->
-
-  <!-- @include recherche-chat -->
-  </div><!-- /.recherche-split -->
-
   <!-- Die zwei Dialoge der Karte (natives <dialog>, Top-Layer — also auch ueber
-       der Vollbild-Karte): Detailansicht eines Fundstuecks und Anlegen. Beide
-       stehen ausserhalb von .recherche-split: geschlossen sind sie display:none
-       und damit kein Layout-Kind, offen liegen sie im Top-Layer. Sie teilen die
-       Shell (.research-dialog*) UND die Formularfelder (recherche-form-fields). -->
+       dem Vollbild): Detailansicht eines Fundstuecks und Anlegen. Geschlossen
+       sind sie display:none und damit kein Layout-Kind, offen liegen sie im
+       Top-Layer. Sie teilen die Shell (.research-dialog*) UND die
+       Formularfelder (recherche-form-fields). -->
   <!-- @include recherche-detail -->
   <!-- @include recherche-create -->
   <!-- @include recherche-link-picker -->
   <!-- @include recherche-item-menu -->
-</div>
+</div><!-- /.card--recherche -->
+
+<!-- @include recherche-chat -->
+</div><!-- /.recherche-split -->

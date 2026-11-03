@@ -1,0 +1,23 @@
+<!-- Figurenliste: Beziehungsprüfung (book/figuren-relcheck.js,
+     GET /figures/:book_id/relation-check). Fragment, eingebunden via
+     `<!-- @include figuren-relcheck -->` in figuren.html über der Figurenliste;
+     Scope `figurenCard`. Klappbarer Hinweis mit der geteilten Konfliktliste
+     (relation-conflicts-list.html). Nur Hinweis, korrigiert wird nichts. -->
+<template x-if="figurenRelCheck.conflicts.length">
+  <div class="figuren-relcheck" x-data="collapsible(false)">
+    <button type="button" class="collapsible-toggle" x-bind="trigger">
+      <span class="history-chevron" x-bind="chevron" aria-hidden="true"></span>
+      <span x-text="figurenRelCheck.mainCount
+        ? $app.tn('figuren.relcheck.summaryMain', figurenRelCheck.conflicts.length, { main: figurenRelCheck.mainCount })
+        : $app.tn('figuren.relcheck.summary', figurenRelCheck.conflicts.length)"></span>
+    </button>
+    <div x-bind="panel" x-cloak>
+      <div class="figuren-relcheck-body">
+        <p class="card-hint" x-text="$app.t('figuren.relcheck.hint')"></p>
+        <div x-data="{ get relConflicts() { return figurenRelCheck.conflicts } }">
+          <!-- @include relation-conflicts-list -->
+        </div>
+      </div>
+    </div>
+  </div>
+</template>

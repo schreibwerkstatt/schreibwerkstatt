@@ -103,7 +103,7 @@ export const RESEARCH_CHAT_FORCE_FINAL_INSTRUCTION_SEARXNG = `${RESEARCH_CHAT_FO
  * (jedes Speichern ändert ihn) — darum NICHT im System-Prompt, sondern vor der
  * Frage in deren User-Nachricht (Job: `userPreamble`), damit Werkzeuge + System +
  * Verlauf ein stabiler Cache-Präfix bleiben. Ohne Zahl und leere Liste → ''.
- * @param {Array<{title,kind,saved_item_id?,exists_item_id?}>} list
+ * @param {Array<{title,kind,saved_item_id?,exists_item_id?,idee_state?}>} list  kind 'idee' = Ideen-Vorschlag
  * @param {{ toolNames?: string[], itemCount?: number|null }} [opts]
  */
 export function buildResearchProposalMemoryBlock(list = [], { toolNames, itemCount = null } = {}) {
@@ -112,7 +112,9 @@ export function buildResearchProposalMemoryBlock(list = [], { toolNames, itemCou
     : '';
   if (!Array.isArray(list) || !list.length) return countLine;
   const readable = toolMentions(toolNames).list(['list_research_items', 'read_research_item'], '/');
+  const IDEE_STATE = { applied: 'als Idee erfasst', discarded: 'verworfen', open: 'noch offen' };
   const lines = list.map(p => {
+    if (p.kind === 'idee') return `- Idee «${p.title}» — ${IDEE_STATE[p.idee_state] || IDEE_STATE.open}`;
     const state = p.saved_item_id
       ? `gespeichert als Eintrag id=${p.saved_item_id}`
       : (p.exists_item_id ? `nicht gespeichert (lag schon im Archiv als id=${p.exists_item_id})` : 'nicht gespeichert');
@@ -136,6 +138,7 @@ export function buildResearchWritingContextBlock(ctx, { toolNames } = {}) {
   const where = ctx.kind === 'chapter' ? `Kapitel «${ctx.name}»` : `Abschnitt «${ctx.name}»`;
   const lines = [
     `SCHREIBKONTEXT DIESER FRAGE: Der Autor recherchiert für ${where}. Richte Suche und Vorschläge auf das aus, was diese Stelle braucht (Zeit, Ort, Sachverhalte, Figuren darin). Gespeicherte Vorschläge werden mit dieser Stelle verknüpft.`,
+    `Ideen in \`final_answer.ideen\` hängen an ${ctx.kind === 'chapter' ? 'diesem Kapitel' : 'diesem Abschnitt (mit `ort: "kapitel"` an dessen Kapitel)'}.`,
   ];
   if (ctx.excerpt && !m.has('read_web_page')) {
     lines.push('', 'Textauszug (nur zur Orientierung — NICHT umschreiben, NICHT fortsetzen, keine Stil-Hinweise, nie in Suchbegriffe übernehmen):', `«${ctx.excerpt}»`);
@@ -210,7 +213,7 @@ export function buildResearchChatAgentSystemPrompt(bookName, itemCount, maxToolI
     ...m.route('Fachliteratur und Bücher aus bibliografischen Registern (Crossref, OpenLibrary) mit DOI/ISBN — bevorzugt, wenn zitierfähige Literatur gefragt ist; schlägst du einen Treffer vor, nimm die doi.org-URL in `urls` und Autoren/Jahr in `source`. Die gelieferten URLs darfst du in `final_answer.quellen` nennen', ['lookup_literature']),
     ...m.route('Szenen, Plot-Beats und Handlungsstränge des Buchs (sowie die oben gelisteten Figuren und Schauplätze in voller Tiefe), um gezielt FÜR die Geschichte zu recherchieren', ['list_book_entities']),
     '- `propose_research_item` — schlage ein konkretes Fundstück als neuen Recherche-Eintrag vor (Notiz/Link/Zitat/Fakt). Es wird NICHT automatisch gespeichert — der User bestätigt jeden Vorschlag selbst. Nutze dies grosszügig, wenn du Brauchbares findest: knackiger Titel, präziser Inhalt, bei Web-Quellen die URL als Quelle.',
-    '- `final_answer` — Pflicht-Endpunkt: jede Antwort an den User MUSS hierüber laufen.',
+    '- `final_answer` — Pflicht-Endpunkt: jede Antwort an den User MUSS hierüber laufen. Mit `ideen` bietest du dort Pendenzen für das Manuskript an.',
     '',
     'Arbeitsweise:',
     '- Nennt die Userfrage eine Figur oder einen Schauplatz, ziehe deren oben gelisteten Kontext heran und arbeite ihn in deine Web-Suche ein.',
@@ -224,6 +227,7 @@ export function buildResearchChatAgentSystemPrompt(bookName, itemCount, maxToolI
     `- Maximal ${maxToolIter} Werkzeug-Iterationen pro Antwort (eine Iteration = eine Runde, nicht ein Call). Geh effizient damit um.`,
     ...(maxWebSearches ? [`- Insgesamt höchstens ${maxWebSearches} Web-Suchen pro Antwort (über alle Runden; jede Suche ${searxng ? 'kostet Zeit' : 'kostet'}). Formuliere gezielte Suchbegriffe statt vieler ähnlicher.`] : []),
     '- WICHTIG — rückwärtsgewandt: Du schreibst NIEMALS Manuskripttext, formulierst keine Romanszenen und machst keine Stil-Vorschläge für den Fließtext. Du sammelst und ordnest Wissen. Wenn der User um Textgenerierung für das Buch bittet, biete stattdessen Recherche/Strukturierung an.',
+    '- IDEEN (Pendenzen am Manuskript): Steht vor der Frage ein SCHREIBKONTEXT und zeigt dein Fund, dass an dieser Stelle etwas zu prüfen oder zu ändern ist (ein Datum, das nicht stimmen kann, ein Detail, das der Quelle widerspricht, eine offene Sachfrage), biete es in `final_answer.ideen` an — der Autor erfasst jede einzeln als Idee. Du kennst den Manuskripttext nicht (höchstens den Auszug): formuliere als Prüfauftrag mit dem Fund, nicht als Behauptung über den Text. Ohne SCHREIBKONTEXT keine Ideen — sie hätten keinen Ort. Ein Fundstück für das Archiv bleibt `propose_research_item`.',
     '- Wenn du Material vorschlägst, das es im Archiv schon gibt, weise darauf hin statt zu duplizieren. `propose_research_item` meldet einen Treffer im Archiv als `already_in_archive` — schlage dann nur vor, wenn dein Vorschlag wirklich Neues ergänzt.',
     ...(!m.has('web_search') ? [] : searxng ? [
       '- Belege Aussagen aus Web-Treffern im Antworttext mit der Trefferzahl in eckigen Klammern, z.B. «… 2016 eröffnet [3].» Die Zahl ist das `nr` des Treffers aus `web_search` — erfinde keine Nummern und nummeriere nicht neu. Schreib keine eigene nummerierte Quellenliste in die Antwort: die App zeigt die Quellen aus `quellen` darunter.',
@@ -248,7 +252,7 @@ export const RESEARCH_CHAT_TOOLS = [
   { type: 'web_search_20250305', name: 'web_search', max_uses: 6 },
   {
     name: 'propose_research_item',
-    description: 'Schlägt dem User EINEN neuen Recherche-Eintrag zum Speichern vor. Wird NICHT automatisch gespeichert — der User bestätigt jeden Vorschlag mit einem Klick. Für konkrete Fundstücke (eine oder mehrere Web-Quellen, ein Fakt, ein Zitat); alle belegenden Web-Quellen als urls anhängen. Mehrere Vorschläge = mehrere Aufrufe.',
+    description: 'Schlägt dem User EINEN neuen Recherche-Eintrag zum Speichern vor (er bestätigt jeden). Für konkrete Fundstücke (eine oder mehrere Web-Quellen, ein Fakt, ein Zitat); alle belegenden Web-Quellen als urls anhängen. Mehrere Vorschläge = mehrere Aufrufe.',
     input_schema: {
       type: 'object',
       properties: {
@@ -277,7 +281,7 @@ export const RESEARCH_CHAT_TOOLS = [
   },
   {
     name: 'final_answer',
-    description: 'Liefert die finale Antwort an den User. ALLERLETZTER Aufruf einer Runde — Pflicht-Endpunkt. Freitext ohne final_answer wird nicht akzeptiert. Markdown erlaubt. Bei Web-Recherche die genutzten Quellen/URLs in der Antwort nennen. Wenn du Einträge via propose_research_item vorgeschlagen hast, weise kurz darauf hin, dass sie unten zum Speichern bereitstehen — aber wiederhole sie nicht im Volltext. Sprache: die der Userfrage.',
+    description: 'Liefert die finale Antwort an den User. ALLERLETZTER Aufruf einer Runde — Pflicht-Endpunkt. Freitext ohne final_answer wird nicht akzeptiert. Markdown erlaubt. Bei Web-Recherche die genutzten Quellen/URLs in der Antwort nennen. Vorschläge aus propose_research_item nur kurz erwähnen (stehen unten bereit), nicht wiederholen. Sprache: die der Userfrage.',
     input_schema: {
       type: 'object',
       properties: {
@@ -294,6 +298,20 @@ export const RESEARCH_CHAT_TOOLS = [
             required: ['url'],
           },
         },
+        // Regel und Beispiele stehen im System-Prompt (IDEEN) — hier nur die Form;
+        // Ratsche SET_BUDGET in tests/unit/chat-tools-contract.test.mjs.
+        ideen: {
+          type: 'array',
+          description: 'Nur mit SCHREIBKONTEXT: höchstens 3 Pendenzen an dieser Stelle (siehe IDEEN).',
+          items: {
+            type: 'object',
+            required: ['inhalt'],
+            properties: {
+              inhalt: { type: 'string', description: 'Eigenständiger Prüfauftrag samt Fund.' },
+              ort: { type: 'string', enum: ['abschnitt', 'kapitel'], description: '`kapitel`: das ganze Kapitel.' },
+            },
+          },
+        },
       },
       required: ['antwort'],
     },
@@ -308,7 +326,7 @@ export const RESEARCH_CHAT_TOOLS = [
 export const RESEARCH_WEB_FUNCTION_TOOLS = [
   {
     name: 'web_search',
-    description: 'Durchsucht das offene Web über eine Metasuchmaschine. Liefert je Treffer `nr` (fortlaufend über den ganzen Durchgang — damit belegst du im Antworttext: [nr]), Titel, URL, ein kurzes Snippet und ggf. ein Datum. Snippets sind oft abgeschnitten: für Details `read_web_page`. Eine Suche = ein Suchbegriff; mehrere Suchen parallel in einer Runde sind erlaubt.',
+    description: 'Durchsucht das offene Web über eine Metasuchmaschine. Liefert je Treffer `nr` (fortlaufend über den ganzen Durchgang — damit belegst du im Antworttext: [nr]), Titel, URL, ein kurzes Snippet und ggf. ein Datum. Eine Suche = ein Suchbegriff; mehrere Suchen parallel in einer Runde sind erlaubt.',
     input_schema: {
       type: 'object',
       properties: {
@@ -319,7 +337,7 @@ export const RESEARCH_WEB_FUNCTION_TOOLS = [
   },
   {
     name: 'read_web_page',
-    description: 'Liest den Text EINER Web-Seite oder eines PDFs (Titel, Fliesstext; lange Texte gekappt, `doc_truncated` sagt es). Nur URLs aus web_search dieses Durchgangs, aus dem Recherche-Archiv oder aus der Nachricht des Users. Nutze es, bevor du dich auf Details stützt, die im Snippet nicht vollständig stehen. Bei PDFs: `seiten` nennt die Seitenzahl, der Text trägt Marken «[Seite N]»; mit `suche` findest du die Seiten zu einem Begriff, mit `seite` liest du ab einer Seite weiter.',
+    description: 'Liest den Text EINER Web-Seite oder eines PDFs (Titel, Fliesstext; lange Texte gekappt, `doc_truncated` sagt es). Nur URLs aus web_search dieses Durchgangs, aus dem Recherche-Archiv oder aus der Nachricht des Users. Bei PDFs: `seiten` nennt die Seitenzahl, der Text trägt Marken «[Seite N]»; mit `suche` findest du die Seiten zu einem Begriff, mit `seite` liest du ab einer Seite weiter.',
     see: {
       lookup_literature: 'Lesbar sind auch die Treffer-URLs aus `lookup_literature`.',
     },
@@ -342,7 +360,7 @@ export const RESEARCH_WEB_FUNCTION_TOOLS = [
 const _FINAL_ANSWER_BASE = RESEARCH_CHAT_TOOLS.find(t => t.name === 'final_answer');
 const FINAL_ANSWER_SEARXNG = {
   ..._FINAL_ANSWER_BASE,
-  description: 'Liefert die finale Antwort an den User. ALLERLETZTER Aufruf einer Runde — Pflicht-Endpunkt. Freitext ohne final_answer wird nicht akzeptiert. Markdown erlaubt. ' + _NR_CITE_RULE + ' Wenn du Einträge via propose_research_item vorgeschlagen hast, weise kurz darauf hin, dass sie unten zum Speichern bereitstehen — aber wiederhole sie nicht im Volltext. Sprache: die der Userfrage.',
+  description: 'Liefert die finale Antwort an den User. ALLERLETZTER Aufruf einer Runde — Pflicht-Endpunkt. Freitext ohne final_answer wird nicht akzeptiert. Markdown erlaubt. ' + _NR_CITE_RULE + ' Vorschläge aus propose_research_item nur kurz erwähnen (stehen unten bereit), nicht wiederholen. Sprache: die der Userfrage.',
   input_schema: {
     ..._FINAL_ANSWER_BASE.input_schema,
     properties: {

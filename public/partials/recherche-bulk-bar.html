@@ -10,7 +10,7 @@
     <div x-data="combobox($app.t('recherche.bulk.status'))"
          x-modelable="value" x-model="bulkStatus"
          x-effect="options = bulkStatusOptions()"
-         @combobox-change="bulkSetStatus()"></div>
+         @combobox-change="bulkSetStatus($event.detail)"></div>
     <span class="recherche-bulkbar__group">
       <input type="text" class="recherche-bulkbar__tag" x-model="bulkTag"
              @keydown.enter="$enter($event, () => bulkAddTag())"

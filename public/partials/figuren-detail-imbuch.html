@@ -40,6 +40,10 @@
           <button type="button" class="entity-ref" x-entity-ref="{ type: 'figur', id: bz.figur_id }"></button>
           <span x-show="bz.machtverhaltnis && bz.machtverhaltnis !== 0" class="figur-bz-macht" :class="bz.machtverhaltnis > 0 ? 'figur-bz-macht--positiv' : 'figur-bz-macht--negativ'" x-text="bz.machtverhaltnis > 0 ? '↑'.repeat(Math.abs(bz.machtverhaltnis)) : '↓'.repeat(Math.abs(bz.machtverhaltnis))"></span>
           <span x-show="bz.beschreibung" class="card-hint card-hint--sm" x-text="'– ' + bz.beschreibung"></span>
+          <!-- Beziehungsprüfung (book/figuren-relcheck.js): Regeln, unter denen diese Kante gemeldet ist. -->
+          <template x-for="rule in figurBzConflictRules(f, bz)" :key="rule">
+            <span class="tok-badge tok-high" :data-tip="$app.t('figuren.relcheck.edgeTip')" x-text="$app.t('relcheck.rule.' + rule)"></span>
+          </template>
           <template x-if="bz.belege?.length">
             <!-- Beleg: Seite (per ID oder Kapitel+Seitenname), sonst Kapitel. -->
             <span class="entity-refs figur-bz-belege">

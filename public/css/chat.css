@@ -2,8 +2,8 @@
 /* === Diff-Ansicht === */
 /* === Chat === */
 
-/* Chat-Panel innerhalb einer Karte (Plot-, Ideen-, Recherche-Chat neben ihrem
-   Board): eine Huelle fuer alle drei. Die Feature-Klasse daneben (`.plot-chat`
+/* Chat-Panel innerhalb einer Karte (Plot- und Ideen-Chat neben ihrem
+   Board): eine Huelle fuer beide. Die Feature-Klasse daneben (`.plot-chat`
    usw.) traegt nur Abweichungen. Neben dem Board sitzt das Panel als Leiste
    eines `.aside-split` (layout/aside-split.css) und braucht dort keinen
    Abstand nach unten. */
@@ -322,7 +322,7 @@
   font-size: var(--font-size-xs);
   color: var(--color-warn-text);
 }
-/* Ideen-Vorschläge (Abschnitts- und Buch-Chat, chat-idee-vorschlaege.html) */
+/* Ideen-Vorschläge (Abschnitts-, Buch- und Recherche-Chat, chat-idee-vorschlaege.html) */
 .chat-msg .chat-idee-vorschlaege { margin-top: var(--space-6); }
 .chat-idee-anchor {
   display: flex;
@@ -557,5 +557,37 @@
   flex-wrap: wrap;
   align-items: center;
   gap: var(--space-6);
+}
+
+/* Mobile: Zusätze unter einer Antwort (Kontext-Angabe, Fussnoten, Bild-Legende,
+   Token-Info, Hinweise) lesbar statt Micro-Schrift in Subtle-Grau; die
+   Antwort-Blase nimmt die volle Breite, Links und Klapp-Knöpfe treffbar.
+   Gilt für alle fünf Chats (Werkzeug-Verlauf: components/chat-tool-log.css). */
+@media (max-width: 768px) {
+  .chat-msg--assistant .chat-msg-bubble,
+  .chat-msg .chat-vorschlaege,
+  .chat-msg .chat-titel-varianten { max-width: 100%; }
+  .chat-context-info,
+  .book-chat-extras,
+  .chat-token-info,
+  .chat-image-cap,
+  .chat-msg-hint,
+  .chat-vorschlag-begruendung,
+  .chat-vorschlag-error,
+  .chat-idee-anchor,
+  .chat-titel-doppelt,
+  .chat-session-preview { font-size: var(--font-size-sm); }
+  .chat-context-info,
+  .book-chat-extras,
+  .chat-token-info,
+  .chat-image-cap { color: var(--color-muted); }
+  .chat-context-label,
+  .book-chat-citations-title { opacity: 1; }
+  .chat-context-badge,
+  .chat-context-toggle,
+  .chat-session-meta { font-size: var(--font-size-xs); }
+  .chat-context-toggle { padding: var(--space-2xs) var(--space-sm); }
+  .chat-link,
+  .chat-image-dl { padding: var(--space-2xs) 0; overflow-wrap: anywhere; }
 }
 }

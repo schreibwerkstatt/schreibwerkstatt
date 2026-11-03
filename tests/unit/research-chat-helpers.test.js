@@ -3,7 +3,7 @@
 //  - toolsForRound: Web-Such-Gesamtdeckel (max_uses schrumpft, Werkzeug fällt weg)
 //  - validateAnswerSources: final_answer.quellen nur gegen echte Web-Treffer
 //  - proposalsOnlyFallback: leere Antwort + Vorschläge ≠ „Iterationen erschöpft"
-//  - sessionProposalMemory: frühere Vorschläge samt Gespeichert-Status
+//  - sessionProposalMemory: frühere Vorschläge samt Gespeichert-Status (auch Ideen)
 //  - researchChatGate: Kill-Switch / Suchweg / Claude-API-Key (vor dem Speichern der Frage)
 //  - findDuplicateItem: URL-/Titel-Abgleich mit dem Archiv
 
@@ -182,11 +182,17 @@ test('sessionProposalMemory: Vorschläge aller Antworten samt saved_item_id', ()
   );
   ins.run(sid, JSON.stringify({ proposals: [{ kind: 'fact', title: 'Erster', saved_item_id: 5 }] }), '2026-01-01T00:00:01.000Z');
   ins.run(sid, JSON.stringify({ tool_calls: [] }), '2026-01-01T00:00:02.000Z');
-  ins.run(sid, JSON.stringify({ proposals: [{ kind: 'link', urls: [{ url: 'https://e.org' }], exists_item_id: 9 }] }), '2026-01-01T00:00:03.000Z');
+  ins.run(sid, JSON.stringify({ proposals: [
+    { kind: 'link', urls: [{ url: 'https://e.org' }], exists_item_id: 9 },
+    { type: 'idee_create', fields: { content: 'Datum  prüfen', page_id: 1 }, applied_at: NOW },
+    { type: 'idee_create', fields: { content: 'Ort prüfen', page_id: 1 }, status: 'discarded' },
+  ] }), '2026-01-01T00:00:03.000Z');
   const mem = sessionProposalMemory(sid);
   assert.deepEqual(mem, [
     { title: 'Erster', kind: 'fact', saved_item_id: 5, exists_item_id: null },
     { title: 'https://e.org', kind: 'link', saved_item_id: null, exists_item_id: 9 },
+    { title: 'Datum prüfen', kind: 'idee', idee_state: 'applied' },
+    { title: 'Ort prüfen', kind: 'idee', idee_state: 'discarded' },
   ]);
 });
 

@@ -24,6 +24,7 @@ const BOOK = 9512;
 const NOW = '2026-01-01T00:00:00.000Z';
 
 let ctx; let db; let server; let baseUrl; let appSettings;
+let mkSessionOf;
 let ideenSessionId; let plotSessionId; let msgId; let plotMsgId; let pageMsgId; let bookMsgId;
 
 test.before(async () => {
@@ -39,6 +40,9 @@ test.before(async () => {
   access.grantAccess(BOOK, OWNER, 'editor', OWNER);
   access.grantAccess(BOOK, LEKTOR, 'lektor', OWNER);
   access.grantAccess(BOOK, OTHER, 'editor', OWNER);
+  mkSessionOf = (kind) => db.prepare(
+    'INSERT INTO chat_sessions (book_id, kind, user_email, created_at, last_message_at) VALUES (?, ?, ?, ?, ?)'
+  ).run(BOOK, kind, OWNER, NOW, NOW).lastInsertRowid;
   const mkSession = (kind) => db.prepare(
     'INSERT INTO chat_sessions (book_id, kind, user_email, created_at, last_message_at) VALUES (?, ?, ?, ?, ?)'
   ).run(BOOK, kind, OWNER, NOW, NOW).lastInsertRowid;
@@ -67,6 +71,7 @@ test.before(async () => {
   app.use('/jobs', require('../../routes/jobs/chat').chatRouter);
   app.use('/chat', require('../../routes/chat'));
   app.use('/ideen', require('../../routes/ideen'));
+  app.use('/research', require('../../routes/research'));
   await new Promise((resolve) => {
     server = app.listen(0, () => { baseUrl = `http://127.0.0.1:${server.address().port}`; resolve(); });
   });
@@ -137,6 +142,22 @@ test('PATCH /ideen/chat-proposal: Ideen-Vorschläge aus Abschnitts- und Buch-Cha
     assert.equal(proposalsOf(id)[0].applied_id, 7);
     assert.equal((await call('PATCH', '/ideen/chat-proposal', { message_id: id, index: 0, action: 'applied' }, LEKTOR)).status, 404);
   }
+});
+
+test('PATCH /ideen/chat-proposal: Recherche-Chat nur für idee_create, Fundstück-Route nicht für Ideen', async () => {
+  // Fundstücke vorn, Ideen dahinter (routes/jobs/research-chat.js#buildContextInfo).
+  const m = mkMsgWith(mkSessionOf('research'), [
+    { kind: 'fact', title: 'Fundstück', body: 'b', urls: [] },
+    { type: 'idee_create', fields: { content: 'Datum prüfen', page_id: 951201 } },
+  ]);
+  assert.equal((await call('PATCH', '/ideen/chat-proposal', { message_id: m, index: 0, action: 'discarded' })).status, 404);
+  assert.equal(proposalsOf(m)[0].status, undefined, 'Fundstück unberührt');
+  const r = await call('PATCH', '/ideen/chat-proposal', { message_id: m, index: 1, action: 'applied', applied_id: 5 });
+  assert.equal(r.status, 200);
+  assert.equal(proposalsOf(m)[1].applied_id, 5);
+  const save = await call('POST', '/research/chat-proposal', { message_id: m, index: 1 });
+  assert.equal(save.status, 404);
+  assert.equal(save.json.error_code, 'PROPOSAL_NOT_FOUND');
 });
 
 test('PATCH /ideen/chat-proposal: fremde Session, Plot-Nachricht, Unsinn → 404/400', async () => {

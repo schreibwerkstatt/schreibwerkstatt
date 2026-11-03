@@ -128,7 +128,7 @@ export const rechercheBoardMethods = {
     if (this._suggestTimer) { clearInterval(this._suggestTimer); this._suggestTimer = null; }
   },
 
-  // Ganze Recherche-Karte ins Native-Vollbild — mehr Platz fürs Karten-Board.
+  // Recherche-Karte samt Chat-Leiste ins Native-Vollbild — mehr Platz fürs Karten-Board.
   // Status-Sync via fullscreenchange-Listener in recherche-card.js (rechercheFullscreen).
   async toggleRechercheFullscreen() {
     try {
@@ -189,12 +189,15 @@ export const rechercheBoardMethods = {
 
   // Filter „nach Verknüpfung": Kategorie + konkreter Eintrag → filterLinked.
   // Die Ziel-Optionen baut die generische entityPicker-Komponente (entity
-  // 'target') aus `linkTargets[filterLinkedKind]`.
-  onLinkedFilterKindChange() {
-    this.filterLinkedTargetId = '';
-    return this.applyLinkedFilter();
+  // 'target') aus `linkTargets[filterLinkedKind]`. Den neuen Wert reicht das
+  // Template aus `$event.detail` durch: x-modelable synct erst im Effect-Flush,
+  // im combobox-change-Handler stünde sonst noch der alte Wert.
+  onLinkedFilterKindChange(kind) {
+    this.filterLinkedKind = kind ?? '';
+    return this.applyLinkedFilter('');
   },
-  applyLinkedFilter() {
+  applyLinkedFilter(targetId) {
+    this.filterLinkedTargetId = targetId ?? '';
     this.filterLinked = (this.filterLinkedKind && this.filterLinkedTargetId)
       ? `${this.filterLinkedKind}:${this.filterLinkedTargetId}` : '';
     return this.loadRecherche();

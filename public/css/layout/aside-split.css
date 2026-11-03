@@ -1,8 +1,8 @@
 @layer components {
 /* === Split mit Leiste: Hauptinhalt links, klebende Leiste rechts ===
    Ein Muster fuer jede Stelle, an der neben einem Hauptinhalt eine schmalere
-   Spalte mitlaeuft: Editor | Chat/Ideen/Referenz, Kapitelreview | Ideen und
-   Board | Chat in Plot-Werkstatt, Ideen-Board und Recherche.
+   Spalte mitlaeuft: Editor | Chat/Ideen/Referenz, Kapitelreview | Ideen,
+   Recherche | Recherche-Chat und Board | Chat in Plot-Werkstatt und Ideen-Board.
 
    Markup:
      <div class="aside-split" :class="{ 'aside-split--on': offen }">

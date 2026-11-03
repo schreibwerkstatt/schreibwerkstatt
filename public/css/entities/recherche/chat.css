@@ -1,19 +1,17 @@
 @layer components {
-/* Recherche-Chat der Recherche-Karte (Claude-only, mit Web-Suche): Spalten-
-   Layout neben dem Board + das Panel selbst. Board/Liste: board.css. */
+/* Recherche-Chat (mit Web-Suche): eigene Karte als Leiste neben der
+   Recherche-Karte (recherche.html, recherche-chat.html). Board/Liste: board.css. */
 
-/* ── Board + Chat nebeneinander ───────────────────────────────────────────
-   Geometrie aus layout/aside-split.css (`.aside-split--aside-first`). Breite
-   Stufe der Leiste: Web-Such-Antworten und Fundstueck-Vorschlaege brauchen mehr
-   Zeilenbreite als eine Abschnitts-Antwort. Panel-Huelle: `.chat-panel` (chat.css). */
-.recherche-split {
-  --aside-w: var(--aside-w-wide);
-  --aside-scroll-max: min(46vh, 34rem);
-}
+/* ── Recherche-Karte | Chat-Karte ─────────────────────────────────────────
+   Geometrie aus layout/aside-split.css (`.main-aside-split`, `--aside-first`),
+   Karten-Huelle wie der Abschnitts-Chat (`.card--chat`). Breite Stufe der
+   Leiste: Web-Such-Antworten und Fundstueck-Vorschlaege brauchen mehr
+   Zeilenbreite als eine Abschnitts-Antwort. */
+.recherche-split { --aside-w: var(--aside-w-wide); }
 
-/* Mitwachsende, aber gedeckelte Chat-Höhe — das Board bleibt darunter sichtbar. */
-.research-chat-messages { max-height: 22rem; }
-.card--recherche:fullscreen .research-chat-messages { max-height: 48vh; }
+/* Vollbild: der Split nimmt den Viewport (fullscreen-shell.css) und scrollt
+   selbst — die Leiste klebt an seiner Oberkante statt unter der App-Kopfzeile. */
+.recherche-split:fullscreen { --sticky-top: 0px; --sticky-bottom: 0px; }
 
 /* Speicher-Vorschläge unter einer Assistant-Antwort */
 .research-chat-proposals {

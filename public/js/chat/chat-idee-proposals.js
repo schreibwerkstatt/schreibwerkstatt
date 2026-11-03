@@ -1,8 +1,8 @@
-// Ideen-Vorschläge im Abschnitts- und Buch-Chat (context_info.proposals einer
-// Assistant-Nachricht, Typ `idee_create`, Format: lib/chat-idee-proposals.js).
-// Gespreadet in chatMethods (chat.js) und bookChatMethods (book-chat.js) —
-// `this` ist die jeweilige Chat-Karte; das Fragment chat-idee-vorschlaege.html
-// ruft nur die Methoden hier.
+// Ideen-Vorschläge im Abschnitts-, Buch- und Recherche-Chat (context_info.proposals
+// einer Assistant-Nachricht, Typ `idee_create`, Format: lib/chat-idee-proposals.js).
+// Gespreadet in chatMethods (chat.js), bookChatMethods (book-chat.js) und
+// researchChatMethods (research-chat.js) — `this` ist die jeweilige Chat-Karte;
+// das Fragment chat-idee-vorschlaege.html ruft nur die Methoden hier.
 //
 // Erfassen läuft über DIESELBE Route wie die Ideen-Karte (POST /ideen: Buch-ACL,
 // Anker im Buch), danach hält PATCH /ideen/chat-proposal fest, DASS erfasst bzw.
@@ -36,9 +36,10 @@ function _bumpIdeenCount({ page_id: pageId, chapter_id: chapterId }) {
   if (!isPage && app.ideenChapterId === id) app.currentChapterIdeenOpenCount = (app.currentChapterIdeenOpenCount || 0) + 1;
 }
 
-// Beide Wirte (Abschnitts- und Buch-Chat) spreaden dieselben Methoden; welcher
-// Chat es ist, sagt die Nachrichtenliste, in der die Nachricht steht.
+// Alle Wirte spreaden dieselben Methoden; welcher Chat es ist, sagt die
+// Nachrichtenliste, in der die Nachricht steht.
 function _chatKind(host, msg) {
+  if (host.researchChatMessages?.includes(msg)) return 'research';
   return host.bookChatMessages?.includes(msg) ? 'book' : 'page';
 }
 

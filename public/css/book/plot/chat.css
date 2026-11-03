@@ -45,4 +45,13 @@
   font-size: var(--font-size-xs);
   margin-top: var(--space-xs);
 }
+
+/* Mobile: Meta-/Feldzeilen lesbar statt 11px; Feld-Label über den Wert,
+   damit der Wert die volle Breite bekommt. */
+@media (max-width: 768px) {
+  .plot-chat-proposal-meta,
+  .plot-chat-proposal-field,
+  .plot-chat-proposal-note { font-size: var(--font-size-sm); }
+  .plot-chat-proposal-row { grid-template-columns: minmax(0, 1fr); gap: 0; }
+}
 }

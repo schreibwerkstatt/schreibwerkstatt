@@ -1,0 +1,22 @@
+<!-- Beziehungsprüfung: Liste der Konflikte
+     (routes/jobs/finetune-export/lib/relation-check.js). Fragment, eingebunden
+     via `<!-- @include relation-conflicts-list -->` in finetune-export-checks.html
+     und figuren-relcheck.html. Erwartet im Scope `relConflicts` (Array der
+     Konflikte). Je Konflikt Regel, Figuren (Verweis in den Katalog), Ausschnitt,
+     Quellen und die Paare, die im Fine-Tuning-Set bleiben (`kept`). -->
+<ul class="relcheck-list">
+  <template x-for="(c, i) in relConflicts" :key="i">
+    <li class="relcheck-item">
+      <div class="relcheck-head">
+        <span class="tok-badge" :class="c.main ? 'tok-high' : 'tok-med'" x-text="$app.t('relcheck.rule.' + c.rule)"></span>
+        <template x-for="id in c.figIds" :key="id">
+          <button type="button" class="entity-ref" x-entity-ref="{ type: 'figur', id }"></button>
+        </template>
+      </div>
+      <p class="relcheck-snippet" x-show="c.snippet" x-text="c.snippet"></p>
+      <p class="card-form-hint" x-text="$app.t('relcheck.sources', { list: c.sources.join(', ') })"></p>
+      <p class="card-form-hint" x-show="c.kept?.length"
+         x-text="$app.t('finetune.relcheck.kept', { list: (c.kept || []).map(p => p.join(' – ')).join(', ') })"></p>
+    </li>
+  </template>
+</ul>

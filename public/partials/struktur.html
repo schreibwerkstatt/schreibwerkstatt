@@ -31,7 +31,7 @@
       <div :aria-labelledby="$id('fld')" x-data="combobox($app.t('struktur.bookDefault'), $app.t('struktur.noTextsorte'))"
            x-modelable="value" x-model="strukturBookTextsorte"
            x-effect="options = strukturTextsorteOptions()"
-           @combobox-change="setBookTextsorte(strukturBookTextsorte)"></div>
+           @combobox-change="setBookTextsorte($event.detail)"></div>
       <p class="card-form-field-note" x-text="$app.t('struktur.bookDefault.hint')"></p>
     </div>
   </div>
@@ -119,7 +119,7 @@
             <div x-data="combobox($app.t('struktur.col.textsorte'), $app.t('struktur.inherit'))"
                  x-modelable="value" x-model="row.ownTextsorte"
                  x-effect="options = strukturTextsorteOptions()"
-                 @combobox-change="setPageTextsorte(row, row.ownTextsorte)"></div>
+                 @combobox-change="setPageTextsorte(row, $event.detail)"></div>
             <span class="muted-msg muted-msg--sm" x-show="!row.ownTextsorte && row.textsorteLabel"
                   x-text="row.textsorteLabel"></span>
           </td>

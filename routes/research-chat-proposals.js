@@ -86,7 +86,8 @@ router.post('/chat-proposal', jsonBody, (req, res) => {
   try { ci = JSON.parse(msg.context_info || '{}') || {}; } catch { ci = {}; }
   const proposals = Array.isArray(ci.proposals) ? ci.proposals : [];
   const p = proposals[index];
-  if (!p) return res.status(404).json({ error_code: 'PROPOSAL_NOT_FOUND' });
+  // Ideen-Vorschläge derselben Nachricht laufen über PATCH /ideen/chat-proposal.
+  if (!p || p.type === 'idee_create') return res.status(404).json({ error_code: 'PROPOSAL_NOT_FOUND' });
   if (p.saved_item_id && db.prepare('SELECT 1 FROM research_items WHERE id = ? AND book_id = ?').get(p.saved_item_id, bookId)) {
     return res.status(409).json({ error_code: 'ALREADY_SAVED', item_id: p.saved_item_id, params: { item_id: p.saved_item_id } });
   }

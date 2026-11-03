@@ -75,7 +75,8 @@ export const rechercheBulkMethods = {
       this.busy = false;
     }
   },
-  bulkSetStatus() { if (this.bulkStatus) this.bulkApply('status', { status: this.bulkStatus }); },
+  // Wert aus $event.detail: x-modelable synct `bulkStatus` erst nach dem Event.
+  bulkSetStatus(status) { if (status) this.bulkApply('status', { status }); },
   bulkAddTag() {
     const tag = (this.bulkTag || '').trim();
     if (tag) this.bulkApply('add_tag', { tag });

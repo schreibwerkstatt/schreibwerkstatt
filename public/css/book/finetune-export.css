@@ -50,10 +50,4 @@
 .finetune-downloads .form-size-hint { margin-left: 0; }
 .finetune-download-group .card-form-hint { margin-top: var(--space-sm); }
 
-/* Beziehungsprüfung vor dem Export: je Konflikt Regel-Badge und Figuren in
-   einer umbrechenden Zeile, darunter Ausschnitt und Quellen. */
-.finetune-conflicts { list-style: none; padding: 0; margin: var(--space-sm) 0 0; }
-.finetune-conflict + .finetune-conflict { margin-top: var(--space-md); }
-.finetune-conflict-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: var(--space-xs) var(--space-sm); }
-.finetune-conflict-snippet { margin: var(--space-xs) 0 0; overflow-wrap: anywhere; }
 }

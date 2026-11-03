@@ -23,7 +23,7 @@
        x-data="combobox($app.t('share.comments.filter.reviewerAll'), $app.t('share.comments.filter.reviewerAll'))"
        x-modelable="value" x-model="commentFilterReviewer"
        x-effect="options = _railReviewerNames().map(n => ({ value: n, label: n }))"
-       @combobox-change="_railSetFilter({})"></div>
+       @combobox-change="_railSetFilter({ reviewer: $event.detail ?? '' })"></div>
 </div>
 
 <div class="comment-rail__filter-empty muted-msg muted-msg--sm" x-show="!commentThreads.length && !commentGeneralThreads.length"

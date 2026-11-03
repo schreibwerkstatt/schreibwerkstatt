@@ -205,6 +205,10 @@
 }
 
 .figur-bz-list { margin-bottom: var(--space-sm); }
+/* Beziehungsprüfung über der Figurenliste (figuren-relcheck.html): klappbarer
+   Hinweis, Abstand ans Kind des Panels (collapsible-Regel). */
+.figuren-relcheck { margin-bottom: var(--card-gap-section); }
+.figuren-relcheck-body { padding-top: var(--space-sm); }
 
 /* === Figuren-Präsenz (Heatmap-Tab + Pro-Figur-Streifen) === */
 .figur-presence { margin-top: var(--space-10); }

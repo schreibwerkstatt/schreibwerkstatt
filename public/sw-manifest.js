@@ -5,7 +5,7 @@
 // __SHELL_BUILD: content hash over all listed assets → drives SHELL_CACHE.
 // __SHELL_MANIFEST: the coherent set precached atomically at SW install.
 // __VENDOR_SET: current vendor/ + fonts/ files — VENDOR_CACHE prune list.
-self.__SHELL_BUILD = "5401a551403e1922";
+self.__SHELL_BUILD = "0659ed2d75828b25";
 self.__SHELL_MANIFEST = [
   "/css/admin/admin-backup.css",
   "/css/admin/admin-home.css",
@@ -102,6 +102,7 @@ self.__SHELL_MANIFEST = [
   "/css/components/offline-rescue.css",
   "/css/components/onboarding.css",
   "/css/components/picker-popover.css",
+  "/css/components/relation-conflicts.css",
   "/css/components/seg-toggle.css",
   "/css/components/share-links.css",
   "/css/components/snapshot-reader.css",
@@ -312,6 +313,7 @@ self.__SHELL_MANIFEST = [
   "/js/book/figuren-lebenslauf.js",
   "/js/book/figuren-pflege.js",
   "/js/book/figuren-presence.js",
+  "/js/book/figuren-relcheck.js",
   "/js/book/figuren-schulweg.js",
   "/js/book/figuren.js",
   "/js/book/finetune-export.js",
@@ -1105,6 +1107,7 @@ self.__SHELL_MANIFEST = [
   "/partials/figuren-lebenslauf.html",
   "/partials/figuren-presence-strip.html",
   "/partials/figuren-presence.html",
+  "/partials/figuren-relcheck.html",
   "/partials/figuren.html",
   "/partials/finetune-export-ai.html",
   "/partials/finetune-export-checks.html",
@@ -1211,6 +1214,7 @@ self.__SHELL_MANIFEST = [
   "/partials/reference-oton.html",
   "/partials/reference-plan.html",
   "/partials/reference.html",
+  "/partials/relation-conflicts-list.html",
   "/partials/search.html",
   "/partials/share-links.html",
   "/partials/shortcuts-more.html",

@@ -37,6 +37,7 @@ import { memoMethods } from './card-memo.js';
 import { activeFilterId, sameId } from '../chapter-filter.js';
 import { plotBacklinkMethods } from '../book/plot-backlinks.js';
 import { figurPflegeMethods } from '../book/figuren-pflege.js';
+import { figurenRelCheckState, figurenRelCheckMethods } from '../book/figuren-relcheck.js';
 import { figurenSchulwegMethods } from '../book/figuren-schulweg.js';
 import { listWindowState, listWindowMethods } from '../list-window.js';
 
@@ -183,6 +184,8 @@ export function registerFigurenCard() {
     _memos: {},
     // Liste rendert schrittweise (list-window.js), wie Orte und Ereignisse.
     ...listWindowState(),
+    // Beziehungsprüfung (book/figuren-relcheck.js): Hinweisliste + Markierung im Detail.
+    ...figurenRelCheckState(),
     _lifecycle: null,
 
     init() {
@@ -204,6 +207,7 @@ export function registerFigurenCard() {
           this.loadPlotBacklinks('figure');
           this.loadFigurenSchulwege();
           await root.loadFiguren(Alpine.store('nav').selectedBookId);
+          this.loadFigurenRelCheck();
           await this.$nextTick();
           this.renderFigurGraph();
         },
@@ -222,6 +226,7 @@ export function registerFigurenCard() {
           ctx._resetFigurenAlter();
           ctx._resetFigurPflege();
           ctx._resetFigurSchulweg();
+          ctx._resetFigurenRelCheck();
           if (!root.showFiguresCard) return;
           const bookId = Alpine.store('nav').selectedBookId;
           if (!bookId) return;
@@ -247,6 +252,7 @@ export function registerFigurenCard() {
           ctx._resetFigurenAlter();
           ctx._resetFigurPflege();
           ctx._resetFigurSchulweg();
+          ctx._resetFigurenRelCheck();
           ctx.figurenGraphModus = 'liste';
           ctx.figurenGraphKapitelId = null;
           ctx.figurenGraphFullscreen = false;
@@ -299,8 +305,12 @@ export function registerFigurenCard() {
       // book:changed steht figuren kurz auf [] — rendern wuerde dort nur den
       // Leer-Platzhalter aufblitzen lassen. Faellt die letzte Figur weg, blendet
       // das Partial den ganzen Graph-Block ohnehin aus (figuren.length > 0).
+      // Dieselbe Änderung kann Beziehungen betreffen (Katalog-PUT, Analyse-Lauf,
+      // Merge) — die Beziehungsprüfung rechnet ohne KI und lädt darum mit.
       this.$watch(() => Alpine.store('catalog').figuren, (figuren) => {
-        if (window.__app.showFiguresCard && figuren?.length) this.renderFigurGraph();
+        if (!window.__app.showFiguresCard) return;
+        this.loadFigurenRelCheck();
+        if (figuren?.length) this.renderFigurGraph();
       });
 
       // Kapitel umsortiert/umbenannt (tree/build.js setzt beide Maps neu) → Achse
@@ -434,6 +444,7 @@ export function registerFigurenCard() {
     ...figurenLebenslaufMethods,
     ...plotBacklinkMethods,
     ...figurPflegeMethods,
+    ...figurenRelCheckMethods,
     ...figurenSchulwegMethods,
     ...listWindowMethods,
   }));

@@ -1,0 +1,9 @@
+@layer components {
+/* Beziehungsprüfung (Partial relation-conflicts-list.html): Fine-Tuning-Export
+   und Figuren-Karte zeigen dieselbe Liste. Je Konflikt Regel-Badge und Figuren
+   in einer umbrechenden Zeile, darunter Ausschnitt und Quellen. */
+.relcheck-list { list-style: none; padding: 0; margin: var(--space-sm) 0 0; }
+.relcheck-item + .relcheck-item { margin-top: var(--space-md); }
+.relcheck-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: var(--space-xs) var(--space-sm); }
+.relcheck-snippet { margin: var(--space-xs) 0 0; overflow-wrap: anywhere; }
+}

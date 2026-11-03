@@ -6,6 +6,7 @@
 //   sessionProposalMemory  — frühere Vorschläge der Session (für den System-Prompt)
 //   proposalsOnlyFallback  — Antworttext, wenn nur Vorschläge, aber kein Text kamen
 //   markProposalUrls       — Vorschlags-URLs gegen das in diesem Lauf Abgerufene markieren
+//   researchIdeeProposals  — `final_answer.ideen` an den Schreibkontext der Frage hängen
 
 const { db } = require('../../db/schema');
 const { normalizeUrl } = require('../../lib/url-normalize');
@@ -14,6 +15,7 @@ const { resolvePageBookId, resolveChapterBookId } = require('../../lib/content-o
 const contentStore = require('../../lib/content-store');
 const { itemIdsAtPlace, bookItemUrls } = require('../../db/research-items');
 const { htmlToTextForPrompt } = require('./shared');
+const { normalizeChatIdeeProposals } = require('../../lib/chat-idee-proposals');
 
 /**
  * Werkzeugliste unter dem Web-Such-Gesamtdeckel: `max_uses` des serverseitigen
@@ -107,6 +109,16 @@ function sessionProposalMemory(sessionId, limit = 30) {
     let ci;
     try { ci = JSON.parse(r.context_info); } catch { continue; }
     for (const p of Array.isArray(ci?.proposals) ? ci.proposals : []) {
+      if (p?.type === 'idee_create') {
+        const content = String(p.fields?.content || '').replace(/\s+/g, ' ').trim();
+        if (!content) continue;
+        out.push({
+          title: content.slice(0, 120),
+          kind: 'idee',
+          idee_state: p.applied_at ? 'applied' : (p.status === 'discarded' ? 'discarded' : 'open'),
+        });
+        continue;
+      }
       const title = p.title || p.urls?.[0]?.url || String(p.body || '').replace(/\s+/g, ' ').slice(0, 60);
       if (!title) continue;
       out.push({
@@ -193,6 +205,30 @@ async function loadResearchContext(rc, bookId) {
 }
 
 /**
+ * Ideen-Vorschläge aus `final_answer.ideen`. Der Recherche-Chat liest das
+ * Manuskript nicht und kennt keine Abschnitts-IDs — Anker ist allein der
+ * Schreibkontext der Frage (Kontext-Chip): beim Abschnitt dieser selbst bzw. mit
+ * `ort: 'kapitel'` dessen Kapitel, beim Kapitel das Kapitel. Vom Modell genannte
+ * IDs fallen weg (geraten). Ohne Schreibkontext keine Ideen. Format und Prüfung
+ * wie in Abschnitts- und Buch-Chat (lib/chat-idee-proposals.js).
+ *
+ * @param {unknown} raw  final_answer.ideen
+ * @param {{kind:'page'|'chapter', id:number}|null} rc  Schreibkontext (readMessageContext)
+ * @param {number} bookId
+ */
+function researchIdeeProposals(raw, rc, bookId) {
+  if (!Array.isArray(raw) || !rc?.id || (rc.kind !== 'page' && rc.kind !== 'chapter')) return [];
+  const items = raw.map(i => {
+    if (!i || typeof i !== 'object') return null;
+    const base = { inhalt: i.inhalt, begruendung: i.begruendung };
+    return rc.kind === 'chapter'
+      ? { ...base, chapter_id: rc.id }
+      : { ...base, ort: i.ort === 'kapitel' ? 'kapitel' : 'abschnitt' };
+  });
+  return normalizeChatIdeeProposals(items, { bookId, defaultPageId: rc.kind === 'page' ? rc.id : null });
+}
+
+/**
  * Jede Vorschlags-URL bekommt `verified: true|false` — ob sie in DIESEM Lauf
  * tatsächlich abgerufen bzw. geliefert wurde: Web-Treffer (Server-Tool wie
  * SearXNG), gelesene Seiten samt Redirect-Ziel, Literatur-Treffer, Links aus der
@@ -218,7 +254,7 @@ function markProposalUrls(proposals, { webResults = [], pages = [], literatureHi
 }
 
 module.exports = {
-  markProposalUrls,
+  markProposalUrls, researchIdeeProposals,
   toolsForRound, validateAnswerSources, sessionProposalMemory, proposalsOnlyFallback,
   researchMessageContext, readMessageContext, loadResearchContext,
 };

@@ -1,0 +1,36 @@
+{
+  "version": "5.8.7",
+  "date": "2026-11-03",
+  "entries": [
+    {
+      "kind": "neu",
+      "de": "Figuren: über der Figurenliste steht neu, wo sich Beziehungen widersprechen, etwa zwei Väter oder Geschwister ohne gemeinsame Eltern. Bei der Figur ist die betroffene Beziehung markiert, damit du sie dort prüfen kannst.",
+      "en": "Characters: above the character list you now see where relationships contradict each other, such as two fathers or siblings without a shared parent. The affected relationship is marked on the character so you can check it there."
+    },
+    {
+      "kind": "neu",
+      "de": "Recherche-Chat: ist der Abschnitt oder das Kapitel als Kontext eingeschaltet, schlägt der Chat Ideen vor, wenn ein Fund dort etwas zu prüfen gibt. Du übernimmst jede Idee mit einem Klick ins Ideen-Board.",
+      "en": "Research chat: with the section or chapter switched on as context, the chat suggests ideas when a finding gives you something to check there. You add each idea to the ideas board with one click."
+    },
+    {
+      "kind": "verbessert",
+      "de": "Recherche: der Chat steht als eigene Spalte neben dem Board, wie der Chat neben dem Editor. Im Vollbild bleiben Board und Chat zusammen.",
+      "en": "Research: the chat sits in its own column next to the board, like the chat next to the editor. In full screen, board and chat stay together."
+    },
+    {
+      "kind": "verbessert",
+      "de": "Komplettanalyse: findet sie Widersprüche im Figurennetz, weist sie am Ende darauf hin. Die Liste dazu steht in der Figuren-Karte.",
+      "en": "Full analysis: if it finds contradictions in the character network, it points them out at the end. The list is in the Characters card."
+    },
+    {
+      "kind": "verbessert",
+      "de": "Chats auf dem Handy: Hinweise, Quellen und Werkzeug-Verlauf unter einer Antwort sind grösser und besser lesbar. Links und Aufklapp-Knöpfe triffst du leichter.",
+      "en": "Chats on the phone: notes, sources and the tool history below an answer are larger and easier to read. Links and expand buttons are easier to tap."
+    },
+    {
+      "kind": "behoben",
+      "de": "Auswahllisten in Recherche, Struktur und Kommentar-Filter: eine Auswahl wirkte erst beim nächsten Wechsel, zuvor galt noch der alte Wert.",
+      "en": "Drop-downs in research, structure and the comment filter: a choice only took effect on the next change, until then the old value still applied."
+    }
+  ]
+}

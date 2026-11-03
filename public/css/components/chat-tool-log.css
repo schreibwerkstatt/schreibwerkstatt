@@ -118,4 +118,21 @@
     color: inherit;
     text-align: left;
   }
+
+  /* Mobile: Verlauf in lesbarer Grösse und Farbe, Klapp-Knöpfe als
+     Fingerziel, lange URLs umbrechen an Wortgrenzen statt mitten im Wort. */
+  @media (max-width: 768px) {
+    .chat-tool-log { font-size: var(--font-size-sm); color: var(--color-muted); }
+    .chat-tool-log-round-title,
+    .chat-tool-log-round-tokens { font-size: var(--font-size-xs); }
+    .chat-tool-log-note { color: var(--color-muted); }
+    .chat-tool-log .collapsible-toggle {
+      min-height: 36px;
+      font-size: var(--font-size-xs);
+    }
+    .chat-tool-log-group-toggle.collapsible-toggle { font-size: inherit; }
+    .chat-tool-log-row { padding: var(--space-xs) 0; }
+    .chat-tool-log-url { word-break: normal; overflow-wrap: anywhere; }
+    .chat-tool-log-children { margin-left: var(--space-sm); }
+  }
 }

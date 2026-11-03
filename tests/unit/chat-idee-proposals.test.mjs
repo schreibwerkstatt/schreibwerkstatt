@@ -1,7 +1,7 @@
-// Ideen-Vorschläge aus Abschnitts- und Buch-Chat (lib/chat-idee-proposals.js):
+// Ideen-Vorschläge aus Abschnitts-, Buch- und Recherche-Chat (lib/chat-idee-proposals.js):
 //  - nur Abschnitte des Session-Buchs; fremde/unbekannte fallen still heraus,
 //  - Abschnitts-Chat: ohne page_id der eigene Abschnitt, `ort: 'kapitel'` dessen Kapitel;
-//    Buch-Chat: page_id ODER chapter_id Pflicht,
+//    Buch-Chat: page_id ODER chapter_id Pflicht; Recherche-Chat: nur der Schreibkontext,
 //  - Einabschnitts-Kapitel: ein Kapitel-Anker wird zum Abschnitt (ein Ort, ein Anker),
 //  - Format = idee_create des Ideen-Chats (geteilter Status-Router),
 //  - Deckel, Dubletten, leere Texte.
@@ -20,6 +20,7 @@ const schema = require('../../db/schema');
 const { db } = require('../../db/connection');
 const { normalizeChatIdeeProposals, MAX_CHAT_IDEE_PROPOSALS } = require('../../lib/chat-idee-proposals');
 const { _parseChatResponse } = require('../../routes/jobs/chat/shared');
+const { researchIdeeProposals } = require('../../routes/jobs/research-chat-helpers');
 
 const BOOK = 880101;
 const OTHER_BOOK = 880102;
@@ -103,6 +104,36 @@ test('Buch-Chat: chapter_id als Anker, page_id hat Vorrang, fremdes Kapitel fäl
     { content: 'gleicher text, anderer ort', chapter_id: CH1 },
   ]);
   assert.equal(out[0].labels.anchor_kind, 'chapter');
+});
+
+test('Recherche-Chat: Anker nur aus dem Schreibkontext, Modell-IDs fallen weg', () => {
+  const raw = [
+    { inhalt: 'Datum prüfen', page_id: P2, chapter_id: CH_FOREIGN },
+    { inhalt: 'Kapitelweit', ort: 'kapitel' },
+  ];
+  // Abschnitt als Kontext: dieser Abschnitt, mit ort=kapitel dessen Kapitel — die
+  // genannte page_id (P2) ist geraten und zählt nicht.
+  assert.deepEqual(researchIdeeProposals(raw, { kind: 'page', id: P1 }, BOOK).map(p => p.fields), [
+    { content: 'Datum prüfen', page_id: P1 },
+    { content: 'Kapitelweit', chapter_id: CH1 },
+  ]);
+  // Kapitel als Kontext: alles am Kapitel, `ort` egal.
+  assert.deepEqual(researchIdeeProposals(raw, { kind: 'chapter', id: CH1 }, BOOK).map(p => p.fields), [
+    { content: 'Datum prüfen', chapter_id: CH1 },
+    { content: 'Kapitelweit', chapter_id: CH1 },
+  ]);
+  // Einabschnitts-Kapitel: Kapitel-Kontext wie ort=kapitel am einzigen Abschnitt
+  // landen beide am Abschnitt (lib/idee-anchor.js) — und sind derselbe Ort.
+  assert.deepEqual(researchIdeeProposals([{ inhalt: 'Kapitelkontext' }], { kind: 'chapter', id: CH_SOLE }, BOOK).map(p => p.fields), [
+    { content: 'Kapitelkontext', page_id: P_SOLE },
+  ]);
+  assert.deepEqual(researchIdeeProposals([{ inhalt: 'Kapitelweit', ort: 'kapitel' }], { kind: 'page', id: P_SOLE }, BOOK).map(p => p.fields), [
+    { content: 'Kapitelweit', page_id: P_SOLE },
+  ]);
+  // Ohne Kontext, mit fremdem Kontext oder ohne Liste: keine Ideen.
+  assert.deepEqual(researchIdeeProposals(raw, null, BOOK), []);
+  assert.deepEqual(researchIdeeProposals(raw, { kind: 'page', id: P_FOREIGN }, BOOK), []);
+  assert.deepEqual(researchIdeeProposals(undefined, { kind: 'page', id: P1 }, BOOK), []);
 });
 
 test('Einabschnitts-Kapitel: Kapitel-Anker wird zum Abschnitt, sonst bleibt er', () => {

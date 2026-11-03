@@ -1,10 +1,11 @@
 import { makeChatMethods } from './chat-base.js';
-import { escHtml, renderChatMarkdown } from '../utils.js';
+import { escHtml, renderChatMarkdown, fetchJson } from '../utils.js';
 import {
   renderResearchAnswer as _renderResearchAnswerText,
   displaySources as _displaySources,
 } from './research-chat-render.js';
 import { researchProposalMethods } from './research-chat-proposals.js';
+import { chatIdeeProposalMethods } from './chat-idee-proposals.js';
 import { takePendingResearchAsk } from './research-chat-ask.js';
 
 // Für rechercheCard: Zusatz-State der Vorschläge + die Frage-Brücke (Buch-Chat →
@@ -14,7 +15,8 @@ export { installResearchChatAskBridge, RESEARCH_CHAT_ASK_PENDING } from './resea
 
 // Recherche-Chat-Methoden (gespreadet in die rechercheCard). Agentischer Chat
 // NEBEN dem Wissensboard: recherchiert im Netz + im vorhandenen Material und
-// schlägt Fundstücke als neue Recherche-Items vor (User bestätigt). Jeder Provider
+// schlägt Fundstücke als neue Recherche-Items vor (User bestätigt), mit
+// Schreibkontext auch Ideen an dieser Stelle (chat-idee-proposals.js). Jeder Provider
 // mit Tool-Calling: Claude sucht über Anthropic oder SearXNG, die übrigen über
 // SearXNG (Gate: lib/research-chat-gate.js, Suchweg: lib/websearch#webSearchMode).
 
@@ -80,7 +82,23 @@ export const researchChatMethods = {
     return (msg?.context_info?.web_queries || []).filter(q => typeof q === 'string' && q.trim());
   },
 
+  // Laufende Antwort abbrechen (gleiche Mechanik wie Abschnitts- und Buch-Chat):
+  // /jobs/active liefert die Job-ID der laufenden Session (Entity = Session-ID),
+  // abgebrochen wird über die Root-Mechanik (DELETE /jobs/:id); das Poll-Ende
+  // (Status 'cancelled') räumt den Lauf-State ab.
+  async cancelResearchChatRun() {
+    const sid = this.researchChatRunningSessionId;
+    if (!sid) return;
+    try {
+      const active = await fetchJson(`/jobs/active?type=research-chat&book_id=${sid}`);
+      if (active?.jobId) await window.__app.cancelJob(active.jobId);
+    } catch (e) {
+      console.error('[cancelResearchChatRun]', e);
+    }
+  },
+
   ...researchProposalMethods,
+  ...chatIdeeProposalMethods,
 
   ...makeChatMethods({
     label: 'ResearchChat',

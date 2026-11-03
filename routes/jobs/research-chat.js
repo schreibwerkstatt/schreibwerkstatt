@@ -5,6 +5,8 @@
 // automatisch gespeichert — sie kommen in context_info.proposals zurück (jede URL
 // mit `verified`: in diesem Lauf abgerufen ja/nein), der User bestätigt sie im
 // Frontend (POST /research/chat-proposal, routes/research-chat-proposals.js).
+// Dazu Ideen-Vorschläge (final_answer.ideen, nur mit Schreibkontext) im Format von
+// Abschnitts- und Buch-Chat (lib/chat-idee-proposals.js, PATCH /ideen/chat-proposal).
 //
 // Prompt-Cache: der System-Prompt ist über die Turns stabil. Was je Frage wechselt
 // (Archiv-Stand, frühere Vorschläge, Schreibkontext), steht als `userPreamble` vor
@@ -25,7 +27,7 @@ const { getPrompts, i18nError } = require('./shared');
 const { researchChatGate } = require('../../lib/research-chat-gate');
 const {
   toolsForRound, validateAnswerSources, sessionProposalMemory, proposalsOnlyFallback,
-  readMessageContext, loadResearchContext, markProposalUrls,
+  readMessageContext, loadResearchContext, markProposalUrls, researchIdeeProposals,
 } = require('./research-chat-helpers');
 const { executeResearchTool } = require('./research-chat-tools');
 const { entityList } = require('./chat-tools/tools-research');
@@ -126,8 +128,9 @@ const runResearchChatJob = makeAgenticChatJob({
     // (_handleChatPost → context_info.research_context). Ein Lesefehler kostet
     // nur den Block, nicht die Antwort.
     let writingContext = '';
+    const researchContext = readMessageContext(userMsgId);
     try {
-      const wc = await loadResearchContext(readMessageContext(userMsgId), session.book_id);
+      const wc = await loadResearchContext(researchContext, session.book_id);
       writingContext = buildResearchWritingContextBlock(wc, { toolNames });
     } catch (e) {
       logger.warn(`Schreibkontext nicht geladen: ${e.message}`);
@@ -170,6 +173,9 @@ const runResearchChatJob = makeAgenticChatJob({
         bookId: session.book_id, sessionId: session.id, userEmail,
         jobSignal, logger, offeredTools,
         proposals: [], // propose_research_item sammelt hier; nach dem Loop in context_info
+        // final_answer.ideen, am Schreibkontext verankert (researchIdeeProposals).
+        researchContext,
+        ideenProposals: [],
         answerSourcesRaw: null, // final_answer.quellen (ungeprüft) → buildContextInfo validiert
         literatureHits: [],     // lookup_literature-Treffer (url/title) — zulässige Belege neben den Web-Treffern
         maxWebSearches,
@@ -190,9 +196,10 @@ const runResearchChatJob = makeAgenticChatJob({
   // Recherche kennt keine Zitat-Validierung — antwort schlicht extrahieren.
   consumeFinalAnswer: ({ finalUse, ctx, toolLog, iterNum, logger }) => {
     const raw = typeof finalUse.input?.antwort === 'string' ? finalUse.input.antwort : '';
+    if (ctx) ctx.ideenProposals = researchIdeeProposals(finalUse.input?.ideen, ctx.researchContext, ctx.bookId);
     // Leere Antwort trotz Vorschlägen ist kein Abbruch: eigener Hinweis statt
     // „Iterationen erschöpft".
-    const antwort = proposalsOnlyFallback(raw, ctx?.proposals?.length || 0);
+    const antwort = proposalsOnlyFallback(raw, (ctx?.proposals?.length || 0) + (ctx?.ideenProposals?.length || 0));
     if (ctx && Array.isArray(finalUse.input?.quellen)) ctx.answerSourcesRaw = finalUse.input.quellen;
     toolLog.push({ name: 'final_answer', input: { antwort_chars: antwort.length }, ok: true, durationMs: 0, resultBytes: antwort.length, truncated: false, iter: iterNum });
     logger.info(`tool=final_answer antwort_chars=${antwort.length} iter=${iterNum} (terminal)`);
@@ -234,21 +241,27 @@ const runResearchChatJob = makeAgenticChatJob({
     })(),
     // Speicher-Vorschläge — Frontend rendert sie als „Als … speichern"-Buttons.
     // Jede URL trägt `verified`: in diesem Lauf abgerufen/geliefert ja/nein.
-    ...(ctx.proposals.length ? {
-      proposals: markProposalUrls(ctx.proposals, {
-        webResults,
-        pages: ctx.web?.pages || [],
-        literatureHits: ctx.literatureHits,
-        userMessageUrls: ctx.userMessageUrls,
-        bookId: ctx.bookId,
-      }),
+    // Ideen-Vorschläge (`type: 'idee_create'`) stehen HINTER den Fundstücken: die
+    // Recherche-Vorschläge behalten so ihren Index (POST /research/chat-proposal,
+    // research-chat-proposals.js), die Ideen laufen über PATCH /ideen/chat-proposal.
+    ...(ctx.proposals.length || ctx.ideenProposals.length ? {
+      proposals: [
+        ...markProposalUrls(ctx.proposals, {
+          webResults,
+          pages: ctx.web?.pages || [],
+          literatureHits: ctx.literatureHits,
+          userMessageUrls: ctx.userMessageUrls,
+          bookId: ctx.bookId,
+        }),
+        ...ctx.ideenProposals,
+      ],
     } : {}),
   }),
 
-  buildCompletePayload: ({ base, ctx }) => ({ ...base, proposals: ctx.proposals.length }),
+  buildCompletePayload: ({ base, ctx }) => ({ ...base, proposals: ctx.proposals.length + ctx.ideenProposals.length }),
 
   buildSummary: ({ sessionId, toolLog, webSearches, ctx }) =>
-    `Recherche-Chat session=${sessionId}, ${toolLog.length} Tool-Calls, ${webSearches} Web-Suchen, ${ctx.proposals.length} Vorschläge`,
+    `Recherche-Chat session=${sessionId}, ${toolLog.length} Tool-Calls, ${webSearches} Web-Suchen, ${ctx.proposals.length} Vorschläge, ${ctx.ideenProposals.length} Ideen`,
 });
 
 module.exports = { runResearchChatJob };

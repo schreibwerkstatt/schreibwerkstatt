@@ -9,6 +9,7 @@ const { aclParamGuard, sessionEmail } = require('../lib/acl');
 const { bookParamHandler } = require('../lib/log-context');
 const searchIndex = require('../lib/search');
 const { enqueueEmbedIndexJob } = require('./jobs/embed-index');
+const { runBookRelationCheck } = require('./jobs/finetune-export/lib/relation-check-book');
 const logger = require('../logger');
 
 const router = express.Router();
@@ -44,6 +45,13 @@ router.get('/chapter/:book_id/:chapter_id', (req, res) => {
 // abgeleiteten Tabelle, nicht in den Handler.
 router.get('/:book_id', (req, res) => {
   res.json(listFigurenWithDetails(req.bookId, sessionEmail(req)));
+});
+
+// Beziehungsprüfung des Katalogs (docs/finetuning.md#beziehungsprüfung): dieselbe
+// Prüfung, die den Fine-Tuning-Export anhält — hier nur als Hinweis. Keine KI,
+// nur Daten; nach jeder Korrektur sofort aktuell.
+router.get('/:book_id/relation-check', async (req, res) => {
+  res.json(await runBookRelationCheck(req.bookId, sessionEmail(req)));
 });
 
 // Body des Katalog-PUT prüfen: ohne diese Prüfung enden ein fehlender Name

@@ -175,12 +175,12 @@
                   <div x-show="$store.catalog.figuren.length"
                        x-data="entityPicker({ entity: 'figur', placeholder: $app.t('plot.thread.bindFigurePlaceholder'), emptyLabel: $app.t('plot.thread.noFigure') })"
                        x-modelable="value" x-model="threadDraft.figure_id"
-                       @combobox-change="threadDraft.figure_id && (threadDraft.draft_figure_id = '')"></div>
+                       @combobox-change="$event.detail && (threadDraft.draft_figure_id = '')"></div>
                   <label class="plot-edit-label" x-show="draftFiguren.length" x-text="$app.t('plot.thread.bindDraftFigure')"></label>
                   <div x-show="draftFiguren.length"
                        x-data="entityPicker({ entity: 'werkstatt', placeholder: $app.t('plot.thread.bindFigurePlaceholder'), emptyLabel: $app.t('plot.thread.noFigure'), items: () => draftFiguren })"
                        x-modelable="value" x-model="threadDraft.draft_figure_id"
-                       @combobox-change="threadDraft.draft_figure_id && (threadDraft.figure_id = '')"></div>
+                       @combobox-change="$event.detail && (threadDraft.figure_id = '')"></div>
                   <label class="plot-edit-label" x-text="$app.t('plot.thread.bindChapter')"></label>
                   <div x-data="entityPicker({ entity: 'chapter', placeholder: $app.t('plot.beat.chapterPlaceholder'), emptyLabel: $app.t('plot.beat.noChapter') })"
                        x-modelable="value" x-model="threadDraft.chapter_id"></div>

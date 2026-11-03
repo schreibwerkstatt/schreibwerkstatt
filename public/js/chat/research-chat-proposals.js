@@ -22,8 +22,10 @@ const PROPOSAL_KINDS = ['note', 'link', 'quote', 'fact'];
 const _key = (msg, pi) => `${msg?.id ?? 'x'}:${pi}`;
 
 export const researchProposalMethods = {
+  // Ohne die Ideen-Vorschläge (`idee_create`, chat-idee-proposals.js): die stehen
+  // laut Job HINTER den Fundstücken, der Index `pi` bleibt so der Index in proposals.
   researchProposals(msg) {
-    return (msg?.context_info?.proposals) || [];
+    return ((msg?.context_info?.proposals) || []).filter(p => p?.type !== 'idee_create');
   },
   isProposalSaved(msg, pi) { return !!this.researchProposals(msg)[pi]?.saved_item_id; },
   isProposalSaving(msg, pi) { return !!this._proposalSaving[_key(msg, pi)]; },
