@@ -29,6 +29,7 @@ Gilt zusaetzlich zur Root-[CLAUDE.md](../../../CLAUDE.md).
   - `book-outline.js` — Gliederungs-Block des klassischen Buch-Chats (Kapitel/Unterkapitel/Abschnitte in Lesereihenfolge)
   - `synonym.js` — Synonym-Suche
   - `finetune.js` — Finetune-Export-Augmentation
+- **Maschinelle Verlaufs-Anhänge liegen in [lib/chat-history-note.js](../../../lib/chat-history-note.js), nicht hier** — die Notizen, die der Server an früheren Antworten anhängt (Belege des Buch-Chats, Vorschläge/Ideen des Abschnitts-Chats), mit Format **und** Echo-Entfernung. Sie sind kein Prompt-Bau, sondern die Beweisspur des Chats; Format und Echo-Strip müssen zusammenstehen, sonst wiederholt das Modell den Anhang in der Antwort (der Anhang hängt am Assistant-Turn und liest sich wie eigener Text).
 - **Reihenfolge in `configurePrompts`:** `_setIsLocal(provider)` → `_rebuildLektoratSchema()` → `_rebuildKomplettSchemas()` → `configureLocales(cfg)`. Schemas vor `configureLocales`, weil `_buildLocalePrompts` → `buildSystemKomplett*` den `_isLocal`-Flag liest.
 
 **Ladereihenfolge:**

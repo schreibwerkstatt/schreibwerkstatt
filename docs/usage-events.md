@@ -34,6 +34,10 @@ Erstanbieter-Messung des Nutzungsverhaltens: welche Funktionen genutzt werden, o
 | `editor.open` / `editor.close` | client | `editor` notebook/focus/book, `durationSec` | Watch auf die innerste offene Fläche: Bucheditor › Fokus › Notebook-Edit-Modus; `pagehide` schliesst ab |
 | `dictation.start` / `tts.start` | client | — | Start der Aufnahme bzw. Wiedergabe (nicht je Audio-Segment) |
 | `synonym.applied` | client | `source` thesaurus/ai | Synonym aus dem Picker eingesetzt (SPA-Weg `editor/synonyme.js`; der Bundle-Controller der nativen Clients meldet nichts) |
+| `xref.applied` | client | `kind` Zieltyp (chapter/figure/table/page) | Querverweis im Notebook-Editor eingesetzt (`editor/notebook/toolbar/xref.js`) |
+| `content.created` | server | `kind` source/idea/beat/page/chapter/figure | Quelle, Idee, Beat, Abschnitt, Kapitel, Figur-Entwurf angelegt — vom Server beim Anlegen geschrieben, also auch für die nativen Clients gemessen |
+| `share.link.created` | server | `kind` page/chapter/book | Share-Link erstellt (`POST /share/api/links`) |
+| `comment.action` | server | `action` reply/resolve/delete | Owner antwortet auf einen Leser-Kommentar, löst ihn auf oder löscht ihn. **Kommentare der Leser:innen sind anonym** (kein Konto) und stehen deshalb nicht hier — ihre Verweildauer liegt in den Share-Link-Tabellen |
 | `job.queued` / `job.finished` | server | `type`, `status`, `durationSec` (ab Start) | `createJob`, `completeJob`, `failJob`, Abbruch in der Queue |
 | `chat.proposal` | client | `chat` page/book/research/plot/ideen, `action` applied/discarded/reopened/undone, `kind`, `count` | die fünf Chats; der Recherche-Chat kennt kein Verwerfen |
 | `lektorat.applied` | client | `shown`, `selected`, `applied`, `skipped` | Abschnitts-Lektorat «Übernehmen» in der Leseansicht (`saveCorrections`) |
@@ -47,6 +51,11 @@ Erstanbieter-Messung des Nutzungsverhaltens: welche Funktionen genutzt werden, o
 Zeitraum, Admin-Schalter und Audit-Eintrag (`usage-viewed`) wie die übrigen Tabs. Neben den Events liest sie `user_activity` (aktive Sekunden je Person und Tag): aktive Personen je Woche und die **Kohorten** (aktive Tage in Woche 1 / Monat 1 nach der ersten Anmeldung, aktive Wochen, zuletzt aktiv) haben damit Historie vor dem ersten Event. Kohorten laufen über die ganze Historie, nicht über den Zeitraum.
 
 Die **Funktionstabelle** listet jede Karte der Feature-Registry, auch ohne Öffnung — die Nullzeilen beantworten «was nutzt niemand?». Die **Annahmequote** eines Chat-Vorschlags ist übernommen / (übernommen + verworfen); offen gelassene Vorschläge sieht der Client nicht, die Quote misst nur Entscheidungen.
+
+Zwei Auswertungen kommen aus **keinem** Event, sondern aus vorhandenen Daten:
+
+- **Chat-Runden**: eine Runde ist ein Chat-Job (`chat`, `book-chat`, `research-chat`, `plot-chat`, `ideen-chat`). Die Zahl der Runden gegen die Zahl der Vorschläge zeigt, wie viele Fragen nur eine Antwort brachten.
+- **Lesen**: `user_page_usage` (verschiedene Abschnitte und Öffnungen je Person). Diese Tabelle kennt **keine Zeitachse** — die Werte sind kumuliert über die ganze Historie, nicht auf den Zeitraum bezogen.
 
 ## Neues Event
 

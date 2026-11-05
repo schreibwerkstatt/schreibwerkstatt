@@ -21,6 +21,7 @@ const appSettings = require('../lib/app-settings');
 const { buildMindmapFromFigure, mapArchetype } = require('../lib/draft-mindmap-builder');
 const { defaultMindmap } = require('../lib/draft-mindmap-default');
 const { toIntId } = require('../lib/validate');
+const { recordUsageEvent } = require('../lib/usage-events');
 const { aclParamGuard, sessionEmail } = require('../lib/acl');
 const { getUser } = require('../db/app-users');
 const { tServerParams } = require('../lib/i18n-server');
@@ -156,6 +157,7 @@ router.post('/:book_id', jsonBody, (req, res) => {
 
   const created = createDraftFigure(bookId, userEmail, { name, archetype, mindmap, notes });
   logger.info(`[werkstatt] create id=${created.id} book=${bookId} name="${name}"`);
+  recordUsageEvent({ userEmail, event: 'content.created', bookId, meta: { kind: 'figure' } });
   res.json(created);
 });
 

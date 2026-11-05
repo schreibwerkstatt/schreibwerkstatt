@@ -462,8 +462,33 @@ test('buildAgenticHistory: Rollen alternieren ab user, Marker neutralisiert, Bel
   const joined = h.map(m => m.content).join('\n');
   assert.doesNotMatch(joined, /__i18n:/);
   assert.match(joined, /Keine inhaltliche Antwort/);
-  assert.match(joined, /Belege dieser Antwort: \(1\) Abschnitt «Kap 1» \(page_id 7\): «Stefan war achtundzwanzig\.»/);
+  assert.match(joined, /Belege der vorigen Antwort \(Verlauf — nicht in der Antwort wiedergeben\): \(1\) Abschnitt «Kap 1» \(page_id 7\): «Stefan war achtundzwanzig\.»/);
   assert.doesNotMatch(joined, /erfunden/);
+});
+
+test('buildAgenticHistory: ein Beleg-Echo in der gespeicherten Antwort wird entfernt, der Verlaufs-Hinweis bleibt', () => {
+  const { buildAgenticHistory } = require('../../routes/jobs/agentic-chat');
+  const sid = newSession();
+  db.prepare(`DELETE FROM chat_messages WHERE session_id = ?`).run(sid);
+  const ins = db.prepare(`INSERT INTO chat_messages (session_id, role, content, context_info, created_at) VALUES (?, ?, ?, ?, ?)`);
+  let t = 0;
+  const at = () => new Date(Date.UTC(2026, 0, 1, 0, 0, ++t)).toISOString();
+  ins.run(sid, 'user', 'Frage', null, at());
+  const ci = JSON.stringify({ citations: [{ n: 1, page_id: 7, page_name: 'Kap 1', quote: 'Stefan war achtundzwanzig.', valid: true }] });
+  // Antwort mit Echo (so hat das Modell den alten Verlaufs-Hinweis nachgeschrieben).
+  ins.run(sid, 'assistant', 'Antwort.\n\n[Belege dieser Antwort: (1) Abschnitt «Kap 1» (page_id 7): «Stefan war achtundzwanzig.»]', ci, at());
+  ins.run(sid, 'user', 'aktuell', null, at());
+  const h = buildAgenticHistory(sid, 8);
+  const assistant = h.find(m => m.role === 'assistant');
+  assert.equal(assistant.content, 'Antwort.\n\n[Belege der vorigen Antwort (Verlauf — nicht in der Antwort wiedergeben): (1) Abschnitt «Kap 1» (page_id 7): «Stefan war achtundzwanzig.»]',
+    'nur das Echo ist entfernt, der Verlaufs-Hinweis bleibt');
+});
+
+test('Beleg-Echo in der Antwort wird vor dem Speichern entfernt (Belege stehen in der Liste unter der Antwort)', async () => {
+  const echo = '[Belege dieser Antwort: (1) Abschnitt «Kap 1» (page_id 7): «Stefan war achtundzwanzig.»]';
+  mockCalls([res({ stopReason: 'tool_use', toolUses: [tu('final_answer', { antwort: `Antwort im Ton Ihres Textes.\n\n${echo}` })] })]);
+  const out = await runJob(makeJob(), newSession());
+  assert.equal(out.content, 'Antwort im Ton Ihres Textes.');
 });
 
 test('_handleChatPost: laufender Job derselben Session → 409, Nachricht wird nicht gespeichert', () => {

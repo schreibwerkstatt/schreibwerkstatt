@@ -92,9 +92,9 @@ export const bookChatMethods = {
   // Frage an den Recherche-Chat übergeben. Schnittstelle: Window-Event
   // EVT.RESEARCH_CHAT_ASK, detail { question, bookId } (docs/chats.md „Übergabe
   // Buch-Chat → Recherche-Chat"). Der Empfänger (public/js/chat/research-chat-ask.js)
-  // öffnet die Recherche-Karte samt Chat-Panel und belegt die Eingabe vor — gesendet
-  // wird erst durch den User (Web-Suchen kosten). Darum hier kein eigenes Öffnen der
-  // Karte: zwei Öffner liefen gegeneinander.
+  // öffnet die Recherche-Karte samt Chat-Panel, legt die Frage in eine neue Session
+  // und belegt deren Eingabe vor — gesendet wird erst durch den User (Web-Suchen
+  // kosten). Darum hier kein eigenes Öffnen der Karte: zwei Öffner liefen gegeneinander.
   askInResearchChat(msgIdx) {
     const bookId = parseInt(Alpine.store('nav').selectedBookId, 10);
     const question = this._bookChatResearchQuestion(msgIdx);

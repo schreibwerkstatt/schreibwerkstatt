@@ -7,6 +7,7 @@ import { escHtml, fmtTok, renderChatMarkdown, loadChatMarkdown, chatMarkdownRead
 import { startPoll, runningJobStatus } from '../cards/job-helpers.js';
 import { tFetchError } from '../i18n.js';
 import { toolLogEntries, toolLogHeading } from './tool-log.js';
+import { makeDraftMethod } from './chat-draft.js';
 import { uuid } from '../utils/uuid.js';
 
 const _toolLogCache = new WeakMap();
@@ -299,6 +300,10 @@ export function makeChatMethods(cfg) {
   m[`startNew${L}Session`] = function () { return startNewSession.call(this); };
   m[`load${L}Sessions`]    = function () { return loadSessions.call(this); };
   m[`load${L}Session`]     = function (id, opts) { return loadSession.call(this, id, opts); };
+
+  // Vorbereitete Nachricht in einer NEUEN Session — das Muster ALLER Übergaben
+  // zwischen Oberflächen (chat-draft.js; docs/chats.md).
+  m[`prepare${L}Draft`] = makeDraftMethod({ props: p, loadSessions, startNewSession });
 
   m[`delete${L}Session`] = async function (id) {
     const root = window.__app;

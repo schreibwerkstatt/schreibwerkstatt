@@ -831,6 +831,7 @@ Neue Aktionen erweitern diese Tabelle und das Sprite (siehe [Icon-System](#icon-
 **Regeln:**
 - **Nur Opacity, nie `visibility`/`display`.** Verborgene Knöpfe bleiben per Tab erreichbar, `:focus-within` blendet sie dann ein, und sie halten ihren Platz — das Einblenden verschiebt kein Layout.
 - **Nur auf Hover-Geräten** (`@media (hover: hover)`). Touch zeigt die Aktionen immer — sonst wären sie unsichtbar und trotzdem antippbar. Liegen sie schwebend über dem Inhalt, braucht das Feature unter `@media (hover: none)` einen Platz im Fluss (Beispiel: `.idee-board-card-actions` wird dort `position: static`).
+- **Schwebende Aktionen dürfen nichts Interaktives verdecken.** Liegt die Gruppe absolut über dem Item, darf sie keine Badges, Chips oder Knöpfe des Items überdecken — der Klick aufs Ziel ginge sonst an das Action-Icon (in der Plot-Beat-Karte lag das Löschen-Icon auf dem Textstellen-Chip). Solche Gruppen stehen im Fluss der Zeile und belegen ihren Platz selbst. Deckt eine Karte mehrere Ziele ab (Beat-Karte: Titel + Badges), gehören die Aktionen in eine eigene Fläche — bei der Plot-Beat-Karte in den Beat-Edit.
 - **Eigener Auswahl-Zustand = Delta beim Konsumenten**, nicht im Kern: `.comment-rail__thread--selected .hover-reveal { opacity: 1; }` (in `@media (hover: hover)`). Ebenso eine Zeile im Bearbeiten-Modus (`.sources-row--active`).
 - **Offenes Menü hält die Gruppe sichtbar** — der Kern blendet `.hover-reveal:has([aria-expanded="true"])` ein. Ein Menü-Trigger in der Gruppe trägt darum `aria-haspopup="menu"` + `:aria-expanded` (Muster [recherche-item-menu.html](public/partials/recherche-item-menu.html)); sonst verschwindet das Dropdown, sobald der Zeiger die Zeile verlässt.
 - **Kein eigenes `opacity` auf dem Ziel.** Eine Feature-Regel mit `opacity` auf demselben Element überschreibt den Kern (gleiche Spezifität, spätere Datei) — das Ziel bleibt dann dauerhaft sichtbar oder gedimmt. Gedimmt-bis-Hover am Knopf selbst ist keine zweite Variante dieses Musters.
@@ -841,7 +842,7 @@ Neue Aktionen erweitern diese Tabelle und das Sprite (siehe [Icon-System](#icon-
 - **Nicht für Werkzeug-Zeilen**, in denen jede Zeile bearbeitet wird (Buchorganizer, Admin-Tabellen, Formular-Wiederholfelder), und nicht für Entfernen-Kreuze an Chips (`entity-ref-remove`, `export-chip-remove`) — dort ist die Entfernbarkeit selbst die Aussage.
 
 **Konsumenten:**
-- Boards: Ideen-Board (Kartenaktionen + Stufen-Knöpfe, [ideen-board.html](public/partials/ideen-board.html)), Plot-Beat-Karte (Verwerfen/Löschen, [plot-beat-cell.html](public/partials/plot-beat-cell.html)), Recherche-Status-Board ([recherche-status-board.html](public/partials/recherche-status-board.html)).
+- Boards: Ideen-Board (Kartenaktionen + Stufen-Knöpfe, [ideen-board.html](public/partials/ideen-board.html)), Recherche-Status-Board ([recherche-status-board.html](public/partials/recherche-status-board.html)).
 - Listen: Recherche-Liste ([recherche-item.html](public/partials/recherche-item.html)), Quellen-Tabelle ([sources.html](public/partials/sources.html)), Motiv-Themen ([motiv-panel.html](public/partials/motiv-panel.html)), Titel-Varianten ([titelwerkstatt.html](public/partials/titelwerkstatt.html)).
 - Verläufe (`.history-item` + `.history-item-delete`): Prüf-Verlauf der Seite, Tagebuch-Rückblick, Motiv-Brainstorm/-Befunde, Plot-KI-Läufe, Figur-Werkstatt-Läufe.
 - Sitzungslisten (`.chat-session-item` + `.chat-session-delete`) aller fünf Chats: Abschnitts-, Buch-, Plot-, Recherche- und Ideen-Chat.
@@ -2554,6 +2555,8 @@ Spezifisch für Editor — bei neuer Inline-Toolbar erst prüfen, ob die Edit-Kl
 
 Nur einmal verwendet (Editor). Doku hier zur Auffindbarkeit für künftige Such-Features.
 
+**Anker:** `.edit-find` ist `position: fixed` (teleportiert nach `<body>`), die Position wird in [public/js/editor/find.js](public/js/editor/find.js) aus der Box der Editor-Karte berechnet und per ResizeObserver nachgeführt — die Leiste wandert mit, wenn neben dem Editor eine Leiste aufgeht (Abschnitts-Chat, Ideen) oder geschlossen wird.
+
 ### Lookup-Popover (Figur-Lookup)
 
 **Use:** Hover-/Click-Popover mit Detail-Info (z.B. Figuren-Lookup im Editor bei Ctrl+Click).
@@ -3588,8 +3591,9 @@ Eine Karten-Liste, die bei grossen Büchern ~1000 Zeilen erreicht (Figuren, Szen
             <span class="drag-grip plot-beat-grip">…grip-vertical-Icon…</span>  <!-- einzige Drag-Greiffläche (handle), nur Ansichtsmodus -->
             <span class="plot-beat-title">…</span>                    <!-- Klick = Edit-Modus -->
             <span class="plot-beat-intensity">…Pips 1–5…</span>
+            <span class="plot-beat-anchor">…Fundstellen-Zahl…</span>   <!-- Textstellen-Chip, Klick = Fundstellen-Popover -->
           </div>
-          <div class="plot-beat-actions hover-reveal">…Verwerfen · Löschen…</div>  <!-- schwebt oben rechts -->
+          <!-- Verwerfen/Löschen stehen im Beat-Edit (plot-beat-edit.html), nicht in der Karte. -->
           <!-- Status erscheint NICHT als Badge — nur die linke Border-Farbe signalisiert ihn. -->
         </div>
       </div>

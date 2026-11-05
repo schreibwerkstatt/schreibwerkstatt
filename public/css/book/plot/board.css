@@ -143,26 +143,6 @@
   }
   .plot-beat:hover { transform: translateY(-1px); box-shadow: var(--shadow-sm); }
 
-  /* Schnellaktionen der Beat-Karte (`.hover-reveal`, components/hover-reveal.css):
-     schweben oben rechts über Intensität/Verankerung, statt der Kopfzeile dauerhaft
-     Breite zu nehmen — der Titel bräche in einer schmalen Akt-Spalte sonst früher
-     um. Der eigene Hintergrund hält sie über dem Inhalt lesbar. Touch zeigt sie
-     immer; dort stehen sie als eigene Zeile im Fluss. */
-  .plot-beat-view { position: relative; }
-  .plot-beat-actions {
-    position: absolute;
-    top: calc(-1 * var(--space-3));
-    right: calc(-1 * var(--space-3));
-    display: flex;
-    gap: var(--space-3);
-    background: var(--color-card-bg);
-    border-radius: var(--radius-none);
-    box-shadow: var(--shadow-sm);
-  }
-  @media (hover: none) {
-    .plot-beat-actions { position: static; justify-content: flex-end; box-shadow: none; }
-  }
-
   /* Drag-Griff: Optik + Position aus components/drag-grip.css. Abweichung nur
      die Zeilenhöhe — der Titel daneben steht in --font-size-sm. */
   .plot-beat-grip { font-size: var(--font-size-sm); }
@@ -210,6 +190,11 @@
     transition: none;
   }
 
+  /* Kopfzeile der Beat-Karte: Griff + Titel + Status-Badges (Textstellen-Chip,
+     Konflikt-Warnung, Drift, Zeitbefund). Die Schnellaktionen (Verwerfen/
+     Löschen) stehen NICHT hier, sondern im Beat-Edit (plot-beat-edit.html):
+     als Hover-Overlay lagen sie über genau diesen Badges und verdeckten deren
+     Klick — in der Kopfzeile konkurrierten sie wiederum mit dem Beat-Titel. */
   .plot-beat-head {
     display: flex;
     align-items: flex-start;

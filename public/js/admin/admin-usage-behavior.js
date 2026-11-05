@@ -105,6 +105,41 @@ export const adminUsageBehaviorMethods = {
     return this.adminUsageBehavior?.cohorts || [];
   },
 
+  // Chat-Runden (ein Job je Runde) gegen die Vorschlaege, die daraus entstanden
+  // sind. Die Differenz sind Runden, in denen nur geantwortet wurde.
+  adminUsageBehaviorChatTurns() {
+    const b = this.adminUsageBehavior;
+    const t = window.__app.t.bind(window.__app);
+    return _derive(b, 'chatTurns', () => (b.chatTurns || []).map(c => ({
+      ...c,
+      chatLabel: t(`admin.usage.behavior.chat.${c.chat}`),
+      withoutProposal: Math.max(0, c.turns - c.proposals),
+    })));
+  },
+
+  // Im Buch angelegt: Quelle, Idee, Beat, Abschnitt, Kapitel, Figur-Entwurf.
+  adminUsageBehaviorCreation() {
+    const b = this.adminUsageBehavior;
+    const t = window.__app.t.bind(window.__app);
+    return _derive(b, 'creation', () => (b.creation || []).map(c => ({
+      ...c, label: t(`admin.usage.behavior.created.${c.kind}`),
+    })));
+  },
+
+  // Geteilt: Share-Links und die Aktionen an den Kommentaren der Leser:innen.
+  adminUsageBehaviorSharing() {
+    const b = this.adminUsageBehavior;
+    const t = window.__app.t.bind(window.__app);
+    return _derive(b, 'sharing', () => (b.sharing || []).map(s => ({
+      ...s, label: t(`admin.usage.behavior.sharing.${s.key}`),
+    })));
+  },
+
+  // Leseaktivitaet je Person (kumuliert, nicht periodisch).
+  adminUsageBehaviorReading() {
+    return this.adminUsageBehavior?.reading?.perUser || [];
+  },
+
   async _adminUsageRenderBehaviorCharts(data) {
     // Gleiche Schutzregeln wie _adminUsageRenderCharts: nur auf sichtbarem
     // Canvas, ohne Animation, Tab vor und nach dem Lazy-Load pruefen.

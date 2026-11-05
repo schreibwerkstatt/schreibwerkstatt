@@ -330,7 +330,7 @@ export {
   SCHEMA_CHAT_TITLE,
 } from './prompts/chat.js';
 
-export { SCHEMA_CHAT, formatHistoryVorschlaege, formatHistoryIdeen, historyTrimNote, formatPageChange, buildPageChatBookContext, normalizeTitle } from './prompts/page-chat.js';
+export { SCHEMA_CHAT, historyTrimNote, formatPageChange, buildPageChatBookContext, normalizeTitle } from './prompts/page-chat.js';
 
 // Buch-Chat-only: Gliederungs-Block (klassisch) + Aussenwelt-Regel.
 export { buildGliederungBlock } from './prompts/book-outline.js';

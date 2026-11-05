@@ -8,6 +8,7 @@ const contentStore = require('../../lib/content-store');
 const shareLinks = require('../../db/share-links');
 const { guardBook, resolveBookRole, sessionEmail } = require('../../lib/acl');
 const { setContext } = require('../../lib/log-context');
+const { recordUsageEvent } = require('../../lib/usage-events');
 const notify = require('../../lib/notify');
 const logger = require('../../logger');
 const H = require('../../lib/share-helpers');
@@ -39,14 +40,16 @@ function ownLink(req, res, minRole) {
 
 // Kommentar → Link → Buch-Guard fuer die Owner-Aktionen per Kommentar-ID.
 // Fremde/unbekannte IDs → 404 (die SQL-Seite filtert zusaetzlich auf owner_email).
+// Liefert die Buch-ID (für die Nutzungs-Events) oder null.
 function guardComment(req, res, id) {
   const c = shareLinks.getCommentById(id);
   const link = c ? shareLinks.getShareLinkByToken(c.share_token) : null;
   if (!link || link.owner_email !== sessionEmail(req)) {
     res.status(404).json({ error_code: 'NOT_FOUND' });
-    return false;
+    return null;
   }
-  return guardBook(req, res, link.book_id, shareLinks.SHARE_CREATE_MIN_ROLE);
+  if (!guardBook(req, res, link.book_id, shareLinks.SHARE_CREATE_MIN_ROLE)) return null;
+  return link.book_id;
 }
 
 // Zeile fuer die Owner-Karte: `mine` (selbst angelegt → Bearbeiten/Kommentare/
@@ -230,6 +233,7 @@ function register(router) {
       await backfillScopeBlockIds(created);
 
       logger.info(`[share/api/links POST] kind=${kind} book=${bookId} token=${created.token.slice(0, 8)}`);
+      recordUsageEvent({ userEmail: ownerEmail, event: 'share.link.created', bookId, meta: { kind } });
       res.json(created);
     } catch (e) {
       logger.error('[share/api/links POST] ' + e.message);
@@ -377,6 +381,7 @@ function register(router) {
       // hat (fire-and-forget, gedrosselt, opt-out). Kein Leak: Mail nur an den
       // Root-Verfasser dieses Threads.
       notify.maybeNotifyReaderReply(link, reply, shareLinks.getCommentById(parentId)).catch(() => {});
+      recordUsageEvent({ userEmail: ownerEmail, event: 'comment.action', bookId: link.book_id, meta: { action: 'reply' } });
       res.json(reply);
     } catch (e) {
       logger.error('[share/api/reply POST] ' + e.message);
@@ -389,11 +394,13 @@ function register(router) {
     const ownerEmail = sessionEmail(req);
     const id = parseInt(req.params.id, 10);
     if (!id) return res.status(400).json({ error_code: 'INVALID_ID' });
-    if (!guardComment(req, res, id)) return;
+    const bookId = guardComment(req, res, id);
+    if (!bookId) return;
     const resolved = req.body?.resolved !== false;
     try {
       const ok = shareLinks.setCommentResolved(id, ownerEmail, resolved);
       if (!ok) return res.status(404).json({ error_code: 'NOT_FOUND' });
+      recordUsageEvent({ userEmail: ownerEmail, event: 'comment.action', bookId, meta: { action: 'resolve' } });
       res.json({ ok: true, resolved });
     } catch (e) {
       logger.error('[share/api/comments resolve PATCH] ' + e.message);
@@ -405,10 +412,12 @@ function register(router) {
     const ownerEmail = sessionEmail(req);
     const id = parseInt(req.params.id, 10);
     if (!id) return res.status(400).json({ error_code: 'INVALID_ID' });
-    if (!guardComment(req, res, id)) return;
+    const bookId = guardComment(req, res, id);
+    if (!bookId) return;
     try {
       const ok = shareLinks.deleteComment(id, ownerEmail);
       if (!ok) return res.status(404).json({ error_code: 'NOT_FOUND' });
+      recordUsageEvent({ userEmail: ownerEmail, event: 'comment.action', bookId, meta: { action: 'delete' } });
       res.json({ ok: true });
     } catch (e) {
       logger.error('[share/api/comments DELETE] ' + e.message);

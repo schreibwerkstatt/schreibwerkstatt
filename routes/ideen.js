@@ -23,6 +23,7 @@ const { toIntId } = require('../lib/validate');
 const { guardBook, sessionEmail } = require('../lib/acl');
 const { resolvePageBookId, resolveChapterBookId } = require('../lib/content-ownership');
 const { canonicalIdeeAnchor } = require('../lib/idee-anchor');
+const { recordUsageEvent } = require('../lib/usage-events');
 const { IDEE_STATUSES, IDEE_OPEN_STATUSES, isIdeeStatus, isIdeaLinkKind } = require('../lib/ideen-status');
 const { getBookIdeenStages, setBookIdeenStages } = require('../db/book-settings');
 const { setContext } = require('../lib/log-context');
@@ -221,6 +222,7 @@ router.post('/', jsonBody, async (req, res) => {
   searchIndex.upsertIdea(id);
   logger.info(`[ideen] create id=${id} ${pageId ? 'page=' + pageId : chapterId ? 'chapter=' + chapterId : 'book=' + bookId}`);
   rememberIdempotent(req, 'POST /ideen', userEmail, row);
+  recordUsageEvent({ userEmail, event: 'content.created', bookId, meta: { kind: 'idea' } });
   res.json(row);
 });
 

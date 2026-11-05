@@ -12,16 +12,26 @@ const bookAccess = require('../../db/book-access');
 const { toIntId } = require('../../lib/validate');
 const { resolveChapterBookId } = require('../../lib/content-ownership');
 const { guardBook, sessionEmail } = require('../../lib/acl');
-const { jsonBody, NAME_MAX, REVALIDATE_CACHE_CONTROL, _validDeviceId, _logToken, _logStamp, _deviceTokenLabel, _guardPage, _fail, _sendSanitizeFailed } = require('./shared');
+const { jsonBody, NAME_MAX, REVALIDATE_CACHE_CONTROL, _validDeviceId, _logToken, _logStamp, _isNotableSave, _saveSuffix, _deviceTokenLabel, _guardPage, _fail, _sendSanitizeFailed } = require('./shared');
 const { htmlToPlainText } = require('../../lib/html-text');
 const { stripActiveContent } = require('../../lib/html-clean');
 const { mergeAgainstServer } = require('../../lib/page-merge');
 const { replayIdempotent, rememberIdempotent } = require('../../lib/idempotency');
+const { recordUsageEvent } = require('../../lib/usage-events');
 const logger = require('../../logger');
 
 // Deckel für `own_save_ids`: so viele unbestätigte Saves hat ein Schreiber
 // nach einem Funkloch höchstens offen (Autosave alle paar Sekunden).
 const OWN_SAVE_IDS_MAX = 16;
+
+// `no_change` ist ein internes Signal des Content-Stores (der eingeschickte
+// Body war identisch mit dem gespeicherten) — kein Vertragsfeld. Vor der
+// Antwort entfernen, damit es kein Client sieht.
+function _publicPayload(saved) {
+  if (!saved || typeof saved !== 'object' || !('no_change' in saved)) return saved;
+  const { no_change, ...rest } = saved;
+  return rest;
+}
 
 // Stale-Write mit mitgeschickter Basis (`base_html`, native Clients): gegen den
 // aktuellen Stand block-mergen und kollisionsfrei schreiben (lib/page-merge.js).
@@ -122,10 +132,17 @@ function register(router) {
       // `SW` (controlled/uncontrolled): ein Tab ohne SW-Kontrolle liest und
       // schreibt am Content-Cache vorbei — Spur, wenn ein anderer Tab danach
       // eine veraltete Ansicht zeigt.
+      // Level: `info` nur fuer die Besonderheiten (Wiederholung, eigener
+      // Vorgaenger-Save, Retry/Outbox, No-op-Save), sonst `debug` — Routine-
+      // Saves duennen das Prod-Log sonst mit einer Zeile pro Autosave aus.
       if (typeof req.body?.html === 'string') {
-        logger.info(`PAGE_SAVE Seite ${pageId}: Geraet ${req.body?.device_id || '-'} Tab ${_logToken(req.body?.client_tab)} SW ${_logToken(req.body?.client_sw)} Weg ${_logToken(req.body?.save_reason)} erwartete ${_logStamp(req.body?.expected_updated_at)}, neu ${saved?.updated_at || '-'}${saved?.save_match ? ` (${saved.save_match === 'own' ? 'eigener Vorgaenger-Save' : 'Wiederholung'})` : ''}.`);
+        const line = `PAGE_SAVE Seite ${pageId}: Geraet ${req.body?.device_id || '-'} Tab ${_logToken(req.body?.client_tab)} SW ${_logToken(req.body?.client_sw)} Weg ${_logToken(req.body?.save_reason)} erwartete ${_logStamp(req.body?.expected_updated_at)}, neu ${saved?.updated_at || '-'}${_saveSuffix(saved)}.`;
+        if (_isNotableSave(saved, req.body)) logger.info(line);
+        else logger.debug(line);
       }
-      res.json(saved);
+      // `no_change` ist ein internes Signal (unveraenderter Stand), kein
+      // Vertragsfeld — nicht ausliefern.
+      res.json(_publicPayload(saved));
     }
     catch (e) {
       if (e.code === 'EMPTY_BODY') return res.status(400).json({ error_code: 'EMPTY_BODY' });
@@ -137,7 +154,7 @@ function register(router) {
             const merge = await _mergeStaleWrite(pageId, req);
             if (merge.saved) {
               logger.info(`PAGE_MERGE Seite ${pageId}: Geraet ${req.body?.device_id || '-'} erwartete ${_logStamp(req.body?.expected_updated_at)}, kollisionsfrei gemergt, neu ${merge.saved.updated_at || '-'}.`);
-              return res.json(merge.saved);
+              return res.json(_publicPayload(merge.saved));
             }
             mergeConflicts = merge.conflicts;
           } catch (e2) {
@@ -292,7 +309,7 @@ function register(router) {
         { html: rev.body_html, source: 'restore', summary: `restored from #${revId}` },
         req,
       );
-      res.json({ ok: true, page: saved, restored_from: revId });
+      res.json({ ok: true, page: _publicPayload(saved), restored_from: revId });
     } catch (e) {
       if (e.code === 'EMPTY_BODY') return res.status(400).json({ error_code: 'EMPTY_BODY' });
       if (_sendSanitizeFailed(res, e)) return;
@@ -351,6 +368,7 @@ function register(router) {
         html: req.body?.html,
       }, req);
       rememberIdempotent(req, 'POST /content/pages', email, created);
+      recordUsageEvent({ userEmail: email, event: 'content.created', bookId: effBookId, meta: { kind: 'page' } });
       res.json(created);
     } catch (e) {
       if (_sendSanitizeFailed(res, e)) return;

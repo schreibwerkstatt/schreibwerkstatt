@@ -11,7 +11,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { createRequire } from 'node:module';
 import { useTmpDb } from './_helpers/tmp-db.js';
-import { formatHistoryIdeen } from '../../public/js/prompts/page-chat.js';
+import { formatIdeenNote } from '../../lib/chat-history-note.js';
 
 const require = createRequire(import.meta.url);
 useTmpDb('chat-idee-proposals');
@@ -176,7 +176,7 @@ test('Parser reicht `ideen` roh durch, Fallback liefert leeres Array', () => {
 });
 
 test('Verlauf nennt den Status früherer Ideen-Vorschläge', () => {
-  const txt = formatHistoryIdeen([
+  const txt = formatIdeenNote([
     { type: 'idee_create', fields: { content: 'Erfasst' }, applied_at: NOW },
     { type: 'idee_create', fields: { content: 'Weg' }, status: 'discarded' },
     { type: 'idee_create', fields: { content: 'Offen' } },
@@ -185,5 +185,5 @@ test('Verlauf nennt den Status früherer Ideen-Vorschläge', () => {
   assert.match(txt, /1\. \[als Idee erfasst\] Erfasst/);
   assert.match(txt, /2\. \[verworfen\] Weg/);
   assert.match(txt, /3\. \[offen\] Offen/);
-  assert.equal(formatHistoryIdeen(undefined), '');
+  assert.equal(formatIdeenNote(undefined), '');
 });

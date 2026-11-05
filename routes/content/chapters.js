@@ -3,10 +3,11 @@
 
 const contentStore = require('../../lib/content-store');
 const { toIntId } = require('../../lib/validate');
-const { guardBook } = require('../../lib/acl');
+const { guardBook, sessionEmail } = require('../../lib/acl');
 const { resolveChapterBookId } = require('../../lib/content-ownership');
 const bookOrder = require('../../db/book-order');
 const { jsonBody, _guardChapter, _fail } = require('./shared');
+const { recordUsageEvent } = require('../../lib/usage-events');
 
 function register(router) {
   // GET /content/chapters/:chapter_id — Kapitel-Detail.
@@ -49,6 +50,7 @@ function register(router) {
         parent_chapter_id: parentChapterId,
         after_chapter_id: afterChapterId,
       }, req);
+      recordUsageEvent({ userEmail: sessionEmail(req), event: 'content.created', bookId, meta: { kind: 'chapter' } });
       res.json(created);
     } catch (e) { _fail(res, e, 'POST /content/chapters'); }
   });

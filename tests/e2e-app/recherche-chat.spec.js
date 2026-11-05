@@ -127,3 +127,58 @@ test('recherche-chat: Ideen-Vorschlag neben Fundstück, getrennt gerendert und e
     }
   }
 });
+
+// Übergabe aus einer anderen Oberfläche (Buch-Chat → Recherche-Chat): die Frage
+// landet in einer NEUEN Session, nicht im laufenden Gespräch — und wird nicht
+// gesendet (Muster prepare<L>Draft, chat-base.js).
+test('recherche-chat: Übergabe legt die Frage in eine neue Session (nicht ins laufende Gespräch)', async ({ page }) => {
+  await bootApp(page);
+  const bookId = await selectSeededBook(page);
+  await page.evaluate((id) => { location.hash = `#book/${id}/recherche`; }, bookId);
+  await expect(page.locator('#recherche-card')).toBeVisible();
+  await page.evaluate(() => { window.Alpine.store('config').researchChatEnabled = true; });
+
+  // Laufendes Gespräch vortäuschen: eine Session mit Nachrichten.
+  await page.route(`**/chat/sessions/research/${bookId}`, (route) => route.fulfill({
+    status: 200, contentType: 'application/json',
+    body: JSON.stringify([{ id: 111, title: 'Alt', preview: 'Alte Frage', last_message_at: new Date().toISOString() }]),
+  }));
+  await page.route('**/chat/session/111', (route) => route.fulfill({
+    status: 200, contentType: 'application/json',
+    body: JSON.stringify({ id: 111, kind: 'research', messages: [{ id: 1, role: 'user', content: 'Alte Frage' }] }),
+  }));
+  // Neue Session abfangen: die ID ist fest, damit der Test sie prüfen kann.
+  const created = [];
+  await page.route('**/chat/session/research', async (route) => {
+    if (route.request().method() !== 'POST') return route.fallback();
+    created.push(route.request().postDataJSON());
+    await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ id: 4242 }) });
+  });
+  const jobs = [];
+  await page.route('**/jobs/research-chat', async (route) => {
+    jobs.push(route.request().postDataJSON());
+    await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ jobId: 1 }) });
+  });
+
+  // Panel aufklappen: das laufende Gespräch steht.
+  await page.locator('#recherche-card .card-header-aside button[aria-pressed]').first().click();
+  await page.waitForFunction(() => window.Alpine.$data(document.querySelector('#recherche-card')).researchChatSessionId === 111);
+
+  // Übergabe: Window-Event wie aus dem Buch-Chat.
+  await page.evaluate((id) => {
+    window.dispatchEvent(new CustomEvent('research-chat:ask', {
+      detail: { bookId: Number(id), question: 'Wann fiel die Berliner Mauer?' },
+    }));
+  }, bookId);
+
+  const textarea = page.locator('#research-chat-messages ~ .chat-input-row textarea.research-chat-input');
+  await expect(textarea).toHaveValue('Wann fiel die Berliner Mauer?');
+  await expect(textarea).toBeFocused();
+  await page.waitForFunction(() => window.Alpine.$data(document.querySelector('#recherche-card')).researchChatSessionId === 4242);
+
+  expect(created.length, 'eine neue Session wurde angelegt').toBeGreaterThan(0);
+  expect(jobs.length, 'die Frage wird NICHT gesendet').toBe(0);
+  // Das alte Gespräch steht nicht mehr im Weg.
+  expect(await page.evaluate(() => window.Alpine.$data(document.querySelector('#recherche-card')).researchChatMessages.length)).toBe(0);
+});
+

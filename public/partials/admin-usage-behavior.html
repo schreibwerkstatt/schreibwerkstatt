@@ -73,6 +73,36 @@
     </div>
     <div x-show="!adminUsageBehaviorProposals().length" class="muted-msg muted-msg--sm" x-text="$app.t('admin.usage.empty')"></div>
 
+    <!-- Chat-Runden: eine Runde = eine Frage an den Chat (ein Job). -->
+    <h3 class="admin-usage-h3--spaced" x-text="$app.t('admin.usage.behavior.chatTurns')"></h3>
+    <div class="table-scroll" x-show="adminUsageBehaviorChatTurns().length">
+      <table class="data-table"
+             x-data="sortableTable({ rows: () => adminUsageBehaviorChatTurns(), defaultKey: 'turns', defaultDir: 'desc', persistKey: 'admin.usage.behavior.chatTurns',
+               types: { turns: 'number', proposals: 'number', withoutProposal: 'number', users: 'number' } })">
+        <thead>
+          <tr>
+            <th x-bind="sortTh('chatLabel')" x-text="$app.t('admin.usage.behavior.col.chat')"></th>
+            <th x-bind="sortTh('turns')" x-text="$app.t('admin.usage.behavior.col.rounds')"></th>
+            <th x-bind="sortTh('proposals')" x-text="$app.t('admin.usage.behavior.col.withProposal')"></th>
+            <th x-bind="sortTh('withoutProposal')" x-text="$app.t('admin.usage.behavior.col.withoutProposal')"></th>
+            <th x-bind="sortTh('users')" x-text="$app.t('admin.usage.behavior.col.users')"></th>
+          </tr>
+        </thead>
+        <tbody>
+          <template x-for="c in sorted" :key="c.chat">
+            <tr>
+              <td x-text="c.chatLabel"></td>
+              <td class="admin-usage-cell-num" x-text="adminUsageInt(c.turns)"></td>
+              <td class="admin-usage-cell-num" x-text="adminUsageInt(c.proposals)"></td>
+              <td class="admin-usage-cell-num" x-text="adminUsageInt(c.withoutProposal)"></td>
+              <td class="admin-usage-cell-num" x-text="adminUsageInt(c.users)"></td>
+            </tr>
+          </template>
+        </tbody>
+      </table>
+    </div>
+    <div x-show="!adminUsageBehaviorChatTurns().length" class="muted-msg muted-msg--sm" x-text="$app.t('admin.usage.empty')"></div>
+
     <p class="muted-msg muted-msg--sm" x-show="adminUsageBehavior?.lektorat?.runs"
        x-text="$app.t('admin.usage.behavior.lektorat', { runs: adminUsageInt(adminUsageBehavior?.lektorat?.runs), shown: adminUsageInt(adminUsageBehavior?.lektorat?.shown), selected: adminUsageInt(adminUsageBehavior?.lektorat?.selected), applied: adminUsageInt(adminUsageBehavior?.lektorat?.applied), rate: adminUsagePct(adminUsageBehaviorLektoratRate()) })"></p>
 

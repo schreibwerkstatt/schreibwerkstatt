@@ -36,6 +36,7 @@ const { normalizeUrl } = require('../lib/url-normalize');
 const { lookupDoi, lookupIsbn, normalizeDoi, normalizeIsbn } = require('../lib/source-lookup');
 const { localIsoDate } = require('../lib/local-date');
 const { canRead, isOwner } = require('./sources-acl');
+const { recordUsageEvent } = require('../lib/usage-events');
 const sourcesDocRouter = require('./sources-doc');
 const sourcesEvidenceRouter = require('./sources-evidence');
 const logger = require('../logger');
@@ -467,6 +468,7 @@ router.post('/', jsonBody, (req, res) => {
     const created = createSource(email, body);
     if (bookId) linkSource(bookId, created.id, email);
     logger.info(`[quellen] create id=${created.id} book=${bookId || '-'} typ=${created.csl_type}`);
+    recordUsageEvent({ userEmail: email, event: 'content.created', bookId: bookId || null, meta: { kind: 'source' } });
     res.json(bookId ? getSource(created.id, bookId) : created);
   } catch (e) {
     // UNIQUE(owner_email, citekey) — der Zitierschluessel muss in der Bibliothek

@@ -95,8 +95,9 @@ const {
 const { recordChatLedgerForMessage, recordChatLedgerEntry } = require('../../../db/cost-ledger');
 const { generateSessionTitle } = require('../chat-title');
 const {
-  buildAgenticHistory, REFUSAL_MARKER, _ensureNonEmptyFinal, _proseFinal,
+  buildAgenticHistory, REFUSAL_MARKER, EMPTY_ANSWER_MARKER, _ensureNonEmptyFinal, _proseFinal,
 } = require('./history');
+const { stripHistoryNote } = require('../../../lib/chat-history-note');
 const {
   _defaultModelFor, _estimateTokens, _fitMessagesToBudget, _synthesisError, applyChatEffort, isServerTool,
   _synthesisRequestMessages,
@@ -487,7 +488,15 @@ function makeAgenticChatJob(config) {
 
       logger.info(`Abschluss: stop=${stopReason || '-'}, Runden=${state.rounds} (Provider-Stops ${providerStops.join(',') || '-'}), Werkzeug-Aufrufe=${toolLog.length}, übersprungen=${counters.skipped}, nicht angeboten=${counters.notOffered}, fehlgeschlagen=${counters.failed}.`);
       finalText = _ensureNonEmptyFinal(finalText);
-      const antwort = config.parseFinal(finalText, logger);
+      const rawAnswer = config.parseFinal(finalText, logger);
+      // Die Belege zeigt das System als Liste unter der Antwort an. Steht in der
+      // Antwort selbst ein Beleg-Absatz, ist das ein Echo des Verlaufs-Hinweises
+      // (das Modell hat den Hinweis als eigenen Text gelesen und mitgeschrieben) —
+      // er gehört nicht in die Antwort und wird hier entfernt
+      // (lib/chat-history-note.js). Bleibt danach nichts übrig, ist die Antwort
+      // leer: der Marker, nicht ein leerer Ballon.
+      let antwort = stripHistoryNote(rawAnswer);
+      if (rawAnswer && !antwort) antwort = EMPTY_ANSWER_MARKER;
 
       const assistantNow = new Date().toISOString();
       const tpsVal = (state.genMs > 0 && state.totalTokOut > 0) ? state.totalTokOut / (state.genMs / 1000) : null;

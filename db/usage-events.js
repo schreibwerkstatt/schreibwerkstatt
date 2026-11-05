@@ -168,6 +168,73 @@ function _tools(evts) {
   return [...acc.values()].map(t => ({ ...t, users: t.users.size }));
 }
 
+// Erzeugtes im Buch: Quelle, Idee, Beat, Abschnitt, Kapitel, Figur-Entwurf.
+function _creation(evts) {
+  const acc = new Map();
+  for (const e of evts) {
+    const kind = e.meta.kind;
+    if (!kind) continue;
+    const c = _bump(acc, kind, () => ({ kind, count: 0, users: new Set(), lastAt: null }));
+    c.count += 1;
+    c.users.add(e.user_email);
+    if (!c.lastAt || e.created_at > c.lastAt) c.lastAt = e.created_at;
+  }
+  return [...acc.values()].map(c => ({ ...c, users: c.users.size }));
+}
+
+// Geteilt: Share-Link erstellt, an Leser-Kommentare geantwortet/geloest/geloescht.
+function _sharing(evts) {
+  const acc = new Map();
+  for (const e of evts) {
+    const key = e.event === 'share.link.created' ? `link.${e.meta.kind}` : e.meta.action;
+    if (!key) continue;
+    const s = _bump(acc, key, () => ({ key, count: 0, users: new Set() }));
+    s.count += 1;
+    s.users.add(e.user_email);
+  }
+  return [...acc.values()].map(s => ({ ...s, users: s.users.size }));
+}
+
+// Job-Typ → Chat-Art. Eine Chat-Runde ist ein Job; die Vorschlaege dazu kommen
+// als `chat.proposal`. So ist sichtbar, wie viele Runden ohne Vorschlag blieben.
+const CHAT_JOB_TYPES = { chat: 'page', 'book-chat': 'book', 'research-chat': 'research', 'plot-chat': 'plot', 'ideen-chat': 'ideen' };
+
+function _chatTurns(evts) {
+  const acc = new Map();
+  // Alle fuenf Chats als Zeile — auch die ohne Runde: die Nullzeile beantwortet
+  // «welcher Chat wird nie benutzt?» (Muster der Funktionstabelle).
+  for (const chat of Object.values(CHAT_JOB_TYPES)) acc.set(chat, { chat, turns: 0, users: new Set() });
+  for (const e of evts) {
+    const chat = CHAT_JOB_TYPES[e.meta.type];
+    if (!chat) continue;
+    const c = acc.get(chat);
+    c.turns += 1;
+    c.users.add(e.user_email);
+  }
+  return [...acc.values()].map(c => ({ ...c, users: c.users.size }));
+}
+
+// Leseaktivitaet je Person: verschiedene Abschnitte und Oeffnungen. Quelle ist
+// `user_page_usage` (je Person und Abschnitt aggregiert) — nicht der Event-Strom,
+// deshalb kennt sie keine Zeitachse: die Werte sind kumuliert, nicht periodisch.
+function _reading(excluded) {
+  const rows = db.prepare(`
+    SELECT u.email AS user_email, u.display_name, COUNT(DISTINCT p.page_id) AS pages, SUM(p.use_count) AS opens, MAX(p.last_used) AS last_at
+      FROM user_page_usage p JOIN app_users u ON u.email = p.user_email
+     GROUP BY u.email
+  `).all().filter(r => !excluded.has(r.user_email));
+  let pages = 0, opens = 0;
+  const perUser = rows.map(r => {
+    pages += r.pages || 0;
+    opens += r.opens || 0;
+    return {
+      email: r.user_email, displayName: r.display_name,
+      pages: r.pages || 0, opens: r.opens || 0, lastAt: r.last_at || null,
+    };
+  });
+  return { total: { pages, opens }, perUser };
+}
+
 // Kohorten ueber die ganze Historie (nicht den Zeitraum): Start = erste Anmeldung
 // bzw. Anlage, Aktivitaet aus user_activity. «Tage aktiv in Woche 1» ist die
 // Retention-Frage «bleibt jemand nach dem Einstieg?».
@@ -202,18 +269,29 @@ function behaviorReport({ fromIso, toIso, includeAdmins = false }) {
   const keep = rows => rows.filter(r => !excluded.has(r.user_email));
   const sessions = keep(_events(['session.start'], fromIso, toIso));
   const { editors, hours } = _editors(keep(_events(['editor.open', 'editor.close'], fromIso, toIso)));
+  const jobEvents = keep(_events(['job.queued', 'job.finished'], fromIso, toIso));
+  const proposals = _proposals(keep(_events(['chat.proposal'], fromIso, toIso)));
   return {
     activity: _activity(fromIso.slice(0, 10), toIso.slice(0, 10), excluded),
     sessions: sessions.length,
     logins: keep(_events(['auth.login'], fromIso, toIso)).length,
     booksCreated: keep(_events(['book.created'], fromIso, toIso)).length,
     features: _features(keep(_events(['card.open'], fromIso, toIso))),
-    jobs: _jobs(keep(_events(['job.queued', 'job.finished'], fromIso, toIso))),
-    proposals: _proposals(keep(_events(['chat.proposal'], fromIso, toIso))),
+    jobs: _jobs(jobEvents),
+    proposals,
+    // Chat-Runden gegen die uebernommenen Vorschlaege: eine Runde ohne Vorschlag
+    // ist eine Frage, die nur eine Antwort brachte.
+    chatTurns: _chatTurns(keep(_events(['job.queued'], fromIso, toIso))).map(t => ({
+      ...t,
+      proposals: proposals.filter(p => p.chat === t.chat).reduce((s, p) => s + p.applied + p.discarded, 0),
+    })),
+    creation: _creation(keep(_events(['content.created'], fromIso, toIso))),
+    sharing: _sharing(keep(_events(['share.link.created', 'comment.action'], fromIso, toIso))),
     lektorat: _lektorat(keep(_events(['lektorat.applied'], fromIso, toIso))),
     editors,
     hours,
-    tools: _tools(keep(_events(['dictation.start', 'tts.start', 'synonym.applied'], fromIso, toIso))),
+    tools: _tools(keep(_events(['dictation.start', 'tts.start', 'synonym.applied', 'xref.applied'], fromIso, toIso))),
+    reading: _reading(excluded),
     cohorts: _cohorts(excluded),
   };
 }

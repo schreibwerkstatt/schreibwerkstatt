@@ -10,6 +10,7 @@ const chatQuality = require('../db/chat-quality');
 const { htmlToText, findActiveJobId, cancelJob } = require('./jobs/shared');
 const { setContext } = require('../lib/log-context');
 const { searchChatHistory } = require('../lib/chat-search');
+const { stripHistoryNote } = require('../lib/chat-history-note');
 const { enqueueChatEmbedIndexJob } = require('./jobs/chat-embed-index');
 
 const router = express.Router();
@@ -187,6 +188,12 @@ router.get('/session/:id', (req, res) => {
     ...session,
     messages: messages.map(m => ({
       ...m,
+      // Belege stehen in context_info.citations und werden als Liste unter der
+      // Antwort angezeigt. Eine ältere Antwort kann einen Beleg-Absatz im Text
+      // tragen (Echo des Verlaufs-Hinweises) — der gehört nicht in die Antwort
+      // und wird beim Lesen entfernt (lib/chat-history-note.js). Nur Assistant-
+      // Antworten: eine User-Nachricht bleibt unangetastet.
+      content: m.role === 'assistant' ? stripHistoryNote(m.content) : m.content,
       vorschlaege:  m.vorschlaege  ? JSON.parse(m.vorschlaege)  : [],
       context_info: m.context_info ? normalizeContextInfo(JSON.parse(m.context_info)) : null,
     })),

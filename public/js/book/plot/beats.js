@@ -334,6 +334,10 @@ export const beatsMethods = {
       this._recordBeatFields(beat.id, { verworfen: was }, { verworfen: was ? 0 : 1 });
       // Verwerfen ändert, ob der Beat in den Page-Count zählt → Indikator syncen.
       app.refreshPlotBeatCounts?.();
+      // Ein verworfener Beat verlässt das Board (pro Akt eingeklappt) — mit ihm
+      // verschwindet die Karte samt Edit-Panel. Der Edit-Zustand muss mitgehen,
+      // sonst bleibt eine offene Verfassung ohne Karte zurück.
+      if (updated?.verworfen && this.editingBeatId === beat.id) this.cancelEditBeat();
     } catch (e) { this.errorMessage = app.t('plot.error.save'); }
     finally { this.busy = false; }
   },
@@ -352,6 +356,8 @@ export const beatsMethods = {
       // referenzieren (Platzierung, Felder), wären danach Nieten → Historie leeren.
       this._clearHistory();
       this._pruneBeatsLocal([beat.id]);
+      // Die Karte ist weg — ein offener Edit-Zustand darauf darf nicht zurückbleiben.
+      if (this.editingBeatId === beat.id) this.cancelEditBeat();
       this.errorMessage = '';
     } catch (e) {
       this.errorMessage = app.t('plot.error.delete');

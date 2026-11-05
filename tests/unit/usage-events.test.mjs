@@ -69,6 +69,12 @@ test('behaviorReport: Vorschlaege, Jobs, Editoren, Funktionen, Admins aussen vor
   rec('w@ex.com', 'editor.close', { editor: 'focus', durationSec: 600 });
   rec('w@ex.com', 'card.open', { feature: 'plot' }, 'palette');
   rec('boss@ex.com', 'card.open', { feature: 'plot' }, 'tile');
+  rec('w@ex.com', 'content.created', { kind: 'idea' });
+  rec('w@ex.com', 'content.created', { kind: 'idea' });
+  rec('w@ex.com', 'content.created', { kind: 'source' });
+  rec('w@ex.com', 'share.link.created', { kind: 'book' });
+  rec('w@ex.com', 'comment.action', { action: 'reply' });
+  rec('w@ex.com', 'job.queued', { type: 'book-chat' });
 
   const r = behaviorReport(RANGE);
   const p = r.proposals.find(x => x.chat === 'page' && x.kind === 'korrektur');
@@ -84,6 +90,21 @@ test('behaviorReport: Vorschlaege, Jobs, Editoren, Funktionen, Admins aussen vor
   assert.deepEqual(plot.sources, { palette: 1 });
   assert.equal(behaviorReport({ ...RANGE, includeAdmins: true }).features.find(f => f.feature === 'plot').opens, 2);
   assert.ok(!r.cohorts.some(c => c.email === 'boss@ex.com'));
+
+  // Angelegt: je Art eine Zeile mit Anzahl und Personen.
+  const idea = r.creation.find(c => c.kind === 'idea');
+  assert.deepEqual([idea.count, idea.users], [2, 1]);
+  assert.equal(r.creation.find(c => c.kind === 'source').count, 1);
+  // Geteilt: Share-Link je Umfang, Kommentar-Aktion je Art.
+  assert.equal(r.sharing.find(s => s.key === 'link.book').count, 1);
+  assert.equal(r.sharing.find(s => s.key === 'reply').count, 1);
+  // Chat-Runden: der Job zaehlt als Runde, die Vorschlaege als Gegenseite.
+  const turn = r.chatTurns.find(c => c.chat === 'book');
+  assert.deepEqual([turn.turns, turn.proposals], [1, 0]);
+  assert.equal(r.chatTurns.find(c => c.chat === 'page').turns, 0);
+  // Lesen: kumuliert aus user_page_usage, unabhaengig vom Zeitraum.
+  assert.equal(r.reading.perUser.length, 0, 'ohne Seiten-Oeffnungen keine Leser');
+  assert.deepEqual(r.reading.total, { pages: 0, opens: 0 });
 });
 
 test('Konto-Loeschung nimmt die Events mit', () => {

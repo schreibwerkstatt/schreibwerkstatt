@@ -163,7 +163,7 @@ test('pageChatBudget: Seite ≤ 45 %, Gesamt ≤ 90 % des Input-Budgets', () => 
 // ── Verlauf mit Vorschlags-Status ────────────────────────────────────────────
 
 test('buildChatMessageHistory: annotate hängt Vorschläge samt Status an; ohne annotate unverändert', async () => {
-  const { formatHistoryVorschlaege } = await import('../../public/js/prompts.js');
+  const { formatProposalNote } = require('../../lib/chat-history-note');
   const sid = newSession();
   addMsg(sid, 'user', 'Frage');
   addMsg(sid, 'assistant', 'Antwort', [
@@ -174,7 +174,7 @@ test('buildChatMessageHistory: annotate hängt Vorschläge samt Status an; ohne 
   const plain = buildChatMessageHistory(sid);
   assert.equal(plain[1].content, 'Antwort');
   const annotated = buildChatMessageHistory(sid, {
-    annotate: (r) => (r.role === 'assistant' && r.vorschlaege ? formatHistoryVorschlaege(JSON.parse(r.vorschlaege)) : ''),
+    annotate: (r) => (r.role === 'assistant' && r.vorschlaege ? formatProposalNote(JSON.parse(r.vorschlaege)) : ''),
   });
   assert.match(annotated[1].content, /\[übernommen\] «bellt laut» → «bellt leise»/);
   assert.match(annotated[1].content, /\[verworfen\]/);
@@ -306,9 +306,32 @@ test('runChatJob: original gegen den Abschnittstext geprüft → match not_found
   assert.equal(vs[2].match, 'not_found');
 });
 
-test('formatHistoryVorschlaege: nicht gefundener offener Vorschlag wird markiert', async () => {
-  const { formatHistoryVorschlaege } = await import('../../public/js/prompts.js');
-  const out = formatHistoryVorschlaege([{ original: 'a', ersatz: 'b', match: 'not_found' }, { original: 'c', ersatz: 'd' }]);
+test('runChatJob: ein Echo des Verlaufs-Anhangs in der Antwort wird entfernt (Vorschläge stehen in der Liste darunter)', async () => {
+  const sid = newSession();
+  const echo = '[Deine Änderungsvorschläge in dieser Antwort, Status beim Autor:\n1. [offen] «Der Hund bellt laut.» → «Der Hund bellt leise.»\n]';
+  nextReply = () => JSON.stringify({ antwort: `Der Hund bellt laut.\n\n${echo}`, vorschlaege: [], titel_varianten: [] });
+  const job = await runJob(sid, 'Wie klingt der Hund?');
+  assert.equal(job.status, 'done', job.error);
+  const row = db.prepare(`SELECT content FROM chat_messages WHERE session_id = ? AND role = 'assistant' ORDER BY id DESC LIMIT 1`).get(sid);
+  assert.equal(row.content, 'Der Hund bellt laut.');
+});
+
+test('runChatJob: eine gespeicherte Antwort mit Echo kommt ohne Echo im Verlauf an (Anhang frisch angehängt)', async () => {
+  const sid = newSession();
+  const echo = '[Deine Änderungsvorschläge in dieser Antwort, Status beim Autor:\n1. [offen] «Der Hund bellt laut.» → «Der Hund bellt leise.»\n]';
+  addMsg(sid, 'user', 'Frage');
+  addMsg(sid, 'assistant', `Alte Antwort\n\n${echo}`, [{ original: 'Der Hund bellt laut.', ersatz: 'Der Hund bellt leise.' }]);
+  nextReply = () => JSON.stringify({ antwort: 'ok', vorschlaege: [], titel_varianten: [] });
+  await runJob(sid, 'Und?');
+  const hist = aiCalls.at(-1).messages.find(m => m.role === 'assistant');
+  assert.match(hist.content, /^Alte Antwort/, 'das Echo steht nicht mehr im Verlauf');
+  assert.equal((hist.content.match(/Deine Änderungsvorschläge in dieser Antwort/g) || []).length, 1,
+    'nur der frisch angehängte Verlaufs-Anhang steht im Verlauf');
+});
+
+test('formatProposalNote: nicht gefundener offener Vorschlag wird markiert', () => {
+  const { formatProposalNote } = require('../../lib/chat-history-note');
+  const out = formatProposalNote([{ original: 'a', ersatz: 'b', match: 'not_found' }, { original: 'c', ersatz: 'd' }]);
   assert.match(out, /\[offen, Stelle nicht im Text gefunden\] «a»/);
   assert.match(out, /\[offen\] «c»/);
 });

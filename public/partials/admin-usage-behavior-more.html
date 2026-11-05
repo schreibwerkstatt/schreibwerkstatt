@@ -84,6 +84,88 @@
 </div>
 <div x-show="!adminUsageBehaviorEditors().length && !adminUsageBehaviorTools().length" class="muted-msg muted-msg--sm" x-text="$app.t('admin.usage.empty')"></div>
 
+<!-- Anlegen und Teilen: im Buch Entstandenes, geteilte Links, Kommentar-Aktionen -->
+<h3 class="admin-usage-h3--spaced" x-text="$app.t('admin.usage.behavior.creation')"></h3>
+<div class="table-scroll" x-show="adminUsageBehaviorCreation().length">
+  <table class="data-table"
+         x-data="sortableTable({ rows: () => adminUsageBehaviorCreation(), defaultKey: 'count', defaultDir: 'desc', persistKey: 'admin.usage.behavior.creation',
+           types: { count: 'number', users: 'number', lastAt: 'date' } })">
+    <thead>
+      <tr>
+        <th x-bind="sortTh('label')" x-text="$app.t('admin.usage.behavior.col.kind')"></th>
+        <th x-bind="sortTh('count')" x-text="$app.t('admin.usage.behavior.col.count')"></th>
+        <th x-bind="sortTh('users')" x-text="$app.t('admin.usage.behavior.col.users')"></th>
+        <th x-bind="sortTh('lastAt')" x-text="$app.t('admin.usage.feature.lastUsed')"></th>
+      </tr>
+    </thead>
+    <tbody>
+      <template x-for="c in sorted" :key="c.kind">
+        <tr>
+          <td x-text="c.label"></td>
+          <td class="admin-usage-cell-num" x-text="adminUsageInt(c.count)"></td>
+          <td class="admin-usage-cell-num" x-text="adminUsageInt(c.users)"></td>
+          <td x-text="adminUsageDate(c.lastAt)"></td>
+        </tr>
+      </template>
+    </tbody>
+  </table>
+</div>
+<div class="table-scroll" x-show="adminUsageBehaviorSharing().length">
+  <table class="data-table"
+         x-data="sortableTable({ rows: () => adminUsageBehaviorSharing(), defaultKey: 'count', defaultDir: 'desc', persistKey: 'admin.usage.behavior.sharing',
+           types: { count: 'number', users: 'number' } })">
+    <thead>
+      <tr>
+        <th x-bind="sortTh('label')" x-text="$app.t('admin.usage.behavior.col.action')"></th>
+        <th x-bind="sortTh('count')" x-text="$app.t('admin.usage.behavior.col.count')"></th>
+        <th x-bind="sortTh('users')" x-text="$app.t('admin.usage.behavior.col.users')"></th>
+      </tr>
+    </thead>
+    <tbody>
+      <template x-for="s in sorted" :key="s.key">
+        <tr>
+          <td x-text="s.label"></td>
+          <td class="admin-usage-cell-num" x-text="adminUsageInt(s.count)"></td>
+          <td class="admin-usage-cell-num" x-text="adminUsageInt(s.users)"></td>
+        </tr>
+      </template>
+    </tbody>
+  </table>
+</div>
+<div x-show="!adminUsageBehaviorCreation().length && !adminUsageBehaviorSharing().length" class="muted-msg muted-msg--sm" x-text="$app.t('admin.usage.empty')"></div>
+
+<!-- Lesen: verschiedene Abschnitte und Öffnungen je Person -->
+<h3 class="admin-usage-h3--spaced" x-text="$app.t('admin.usage.behavior.reading')"></h3>
+<p class="muted-msg muted-msg--sm" x-text="$app.t('admin.usage.behavior.readingNote')"></p>
+<div class="table-scroll" x-show="adminUsageBehaviorReading().length">
+  <table class="data-table"
+         x-data="sortableTable({ rows: () => adminUsageBehaviorReading(), defaultKey: 'opens', defaultDir: 'desc', persistKey: 'admin.usage.behavior.reading',
+           types: { pages: 'number', opens: 'number', lastAt: 'date' } })">
+    <thead>
+      <tr>
+        <th x-bind="sortTh('email')" x-text="$app.t('admin.users.email')"></th>
+        <th x-bind="sortTh('pages')" x-text="$app.t('admin.usage.behavior.col.sections')"></th>
+        <th x-bind="sortTh('opens')" x-text="$app.t('admin.usage.behavior.col.pageOpens')"></th>
+        <th x-bind="sortTh('lastAt')" x-text="$app.t('admin.usage.feature.lastUsed')"></th>
+      </tr>
+    </thead>
+    <tbody>
+      <template x-for="r in sorted" :key="r.email">
+        <tr>
+          <td class="admin-usage-cell-email">
+            <div x-text="r.displayName || r.email"></div>
+            <div class="muted-msg muted-msg--sm" x-text="r.email"></div>
+          </td>
+          <td class="admin-usage-cell-num" x-text="adminUsageInt(r.pages)"></td>
+          <td class="admin-usage-cell-num" x-text="adminUsageInt(r.opens)"></td>
+          <td x-text="adminUsageDate(r.lastAt)"></td>
+        </tr>
+      </template>
+    </tbody>
+  </table>
+</div>
+<div x-show="!adminUsageBehaviorReading().length" class="muted-msg muted-msg--sm" x-text="$app.t('admin.usage.empty')"></div>
+
 <!-- Kohorten: ganze Historie, nicht der Zeitraum -->
 <h3 class="admin-usage-h3--spaced" x-text="$app.t('admin.usage.behavior.cohorts')"></h3>
 <p class="muted-msg muted-msg--sm" x-text="$app.t('admin.usage.behavior.cohortsNote')"></p>

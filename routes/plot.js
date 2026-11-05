@@ -11,6 +11,7 @@ const { getDraftFigure } = require('../db/schema');
 const plotDb = require('../db/plot');
 const { toIntId } = require('../lib/validate');
 const { guardBook, sessionEmail } = require('../lib/acl');
+const { recordUsageEvent } = require('../lib/usage-events');
 const appSettings = require('../lib/app-settings');
 const { computeTimeFindings } = require('../lib/plot-time-consistency');
 const { bookYearSpan } = require('../lib/figure-years');
@@ -413,6 +414,7 @@ router.post('/beats', jsonBody, (req, res) => {
 
   const beat = plotDb.createBeat(bookId, actId, userEmail, { titel, beschreibung, status, verworfen, chapterId, intensitaet, zeit, threadId, figureIds, draftFigureIds, motifIds, locationIds });
   logger.info(`[plot] beat create id=${beat.id} act=${actId} book=${bookId}`);
+  recordUsageEvent({ userEmail, event: 'content.created', bookId, meta: { kind: 'beat' } });
   res.json(_withAnchor(beat));
 });
 

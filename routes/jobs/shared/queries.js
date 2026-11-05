@@ -241,16 +241,21 @@ function getFiguren(bookId, userEmail, chapterId = null) {
  * hängt so die validierten Belege früherer Antworten an, siehe
  * routes/jobs/agentic-chat.js#buildAgenticHistory). Ohne `annotate` ist die
  * Historie reiner Gesprächstext.
+ *
+ * `sanitize(row)` (optional) bearbeitet den gespeicherten Text, BEVOR der Zusatz
+ * angehängt wird — der Buch-Chat entfernt so ein Beleg-Echo aus einer Antwort
+ * (lib/chat-history-note.js), ohne den Verlaufs-Hinweis selbst anzufassen.
  */
-function buildChatMessageHistory(sessionId, { annotate = null } = {}) {
+function buildChatMessageHistory(sessionId, { annotate = null, sanitize = null } = {}) {
   const rows = db.prepare(`
     SELECT role, content, vorschlaege, context_info FROM chat_messages
     WHERE session_id = ? ORDER BY created_at ASC, id ASC
   `).all(sessionId);
   const out = [];
   for (const r of rows) {
+    const base = sanitize ? sanitize(r) : r.content;
     const extra = annotate ? annotate(r) : '';
-    const content = extra ? `${r.content}\n\n${extra}` : r.content;
+    const content = extra ? `${base}\n\n${extra}` : base;
     const last = out[out.length - 1];
     if (last && last.role === r.role) {
       last.content += '\n\n' + content;

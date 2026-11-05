@@ -23,6 +23,7 @@ export function registerEditorFindCard() {
     findY: 0,
     _findRecomputeTimer: null,
     _findReflowDetach: null,
+    _findCardRO: null,
     _findAbort: null,
 
     init() {
@@ -57,7 +58,7 @@ export function registerEditorFindCard() {
 
     destroy() {
       if (this._findRecomputeTimer) { clearTimeout(this._findRecomputeTimer); this._findRecomputeTimer = null; }
-      if (this._findReflowDetach) { this._findReflowDetach(); this._findReflowDetach = null; }
+      this._uninstallFindReflow?.();
       this._findAbort?.abort();
     },
 

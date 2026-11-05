@@ -330,6 +330,7 @@ export function buildChatSystemPrompt(pageName, pageText, figuren, review, syste
     '}',
     '',
     'VORSCHLÄGE-REGELN:',
+    '- Vorschläge und Ideen stehen in den Feldern vorschlaege/ideen. Wiederhole sie nicht im Antworttext: kein Vorschlags- oder Ideen-Block, keine Statusliste in antwort — die App zeigt deine Vorschläge unter der Antwort an.',
     '- Wenn du stilistische, inhaltliche oder sprachliche Schwächen erkennst oder der Autor nach Verbesserungen fragt: liefere mindestens einen konkreten Vorschlag mit original und ersatz.',
     '- original muss zeichengenau mit dem Abschnittstext übereinstimmen und darin genau einmal vorkommen (sonst etwas mehr Kontext mitnehmen).',
     '- original liegt innerhalb EINES Absatzes (Absätze sind im Abschnittsinhalt durch Leerzeilen getrennt): über eine Absatzgrenze hinweg lässt sich nichts ersetzen — betrifft eine Änderung mehrere Absätze, liefere je Absatz einen eigenen Vorschlag.',
@@ -467,6 +468,7 @@ export function buildBookChatAgentSystemPrompt(bookName, figuren, review, system
 
   parts.push(
     'Liefere deine finale Antwort IMMER über das Werkzeug `final_answer` (Pflicht-Endpunkt). Kein Freitext-Output ohne Tool-Call — auch wenn keine Recherche-Tools nötig sind, muss die Antwort via final_answer kommen. Sprache der Antwort: passe dich der Sprache der Userfrage an, nicht der Sprache dieses Prompts.',
+    'ZITATE UND BELEGE: Das System zeigt die geprüften Belege unter deiner Antwort an. Gib sie deshalb nicht in die Antwort aus — kein «Belege»- oder «Quellen»-Abschnitt am Fuss, keine Zitatliste, keine Beleg-Nummern im Fliesstext. Wörtliche Zitate gehören in das Feld `zitate` von `final_answer`.',
   );
 
   // Werkzeug-Disziplin für lokale/kleinere Modelle. Nicht Stil, sondern die drei

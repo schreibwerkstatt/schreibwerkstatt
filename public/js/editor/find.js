@@ -75,19 +75,40 @@ export const editorFindCardMethods = {
     const rect = card.getBoundingClientRect();
     const width = 420;
     const right = rect.right - 12;
-    this.findX = Math.max(12, Math.min(window.innerWidth - width - 12, right - width));
-    this.findY = Math.max(12, rect.top + 12);
+    const x = Math.max(12, Math.min(window.innerWidth - width - 12, right - width));
+    const y = Math.max(12, rect.top + 12);
+    // Nur schreiben, wenn sich etwas geaendert hat — der ResizeObserver der
+    // Karte feuert auch beim Tippen (Hoehe) und wuerde sonst bei jedem
+    // Tastendruck den Alpine-State anstossen.
+    if (x === this.findX && y === this.findY) return;
+    this.findX = x;
+    this.findY = y;
   },
 
   _installFindReflow() {
     if (this._findReflowDetach) return;
     this._findReflowDetach = attachReflow(() => this._positionFindWidget());
+    // Die Karte waechst und schrumpft, wenn eine Leiste daneben aufgeht
+    // (Abschnitts-Chat, Ideen, Referenz) oder geschlossen wird. Scroll- und
+    // Resize-Listener decken das nicht ab – ohne Beobachter bliebe die Leiste
+    // an der alten Position kleben: ueber der geoeffneten Leiste und nach dem
+    // Schliessen zu weit links.
+    const card = document.getElementById('editor-card');
+    if (card && typeof ResizeObserver !== 'undefined') {
+      this._findCardRO = new ResizeObserver(() => this._positionFindWidget());
+      this._findCardRO.observe(card);
+    }
   },
 
   _uninstallFindReflow() {
-    if (!this._findReflowDetach) return;
-    this._findReflowDetach();
-    this._findReflowDetach = null;
+    if (this._findReflowDetach) {
+      this._findReflowDetach();
+      this._findReflowDetach = null;
+    }
+    if (this._findCardRO) {
+      this._findCardRO.disconnect();
+      this._findCardRO = null;
+    }
   },
 
   onFindInput() {

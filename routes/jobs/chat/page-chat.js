@@ -16,7 +16,7 @@ const { hasMsgThread } = require('../../../lib/html-text');
 const { generateSessionTitle } = require('../chat-title');
 const { recordChatLedgerForMessage } = require('../../../db/cost-ledger');
 const { _parseChatResponse, capVorschlaege, figurenBlockChars } = require('./shared');
-const { applyChatEffort } = require('../agentic-chat');
+const { applyChatEffort, EMPTY_ANSWER_MARKER } = require('../agentic-chat');
 const { createThinkPhase } = require('../shared/think-phase');
 const { pageChatBudget, computePageChangeHunks, fitHistory } = require('./page-chat-context');
 const { annotateVorschlagMatches, titelCollisions } = require('./page-chat-verify');
@@ -27,6 +27,7 @@ const { normalizeChatIdeeProposals } = require('../../../lib/chat-idee-proposals
 const { getPageStatus, statusChain } = require('../../../db/redaktion');
 const { getBookSettings } = require('../../../db/book-settings');
 const { isJournalisticBook } = require('../../../lib/buchtyp');
+const { formatProposalNote, formatIdeenNote, stripHistoryNote } = require('../../../lib/chat-history-note');
 
 // Zeichendeckel des Buch-Kontext-Blocks: der kleinere Wert aus dem Erst-Kontext-
 // Deckel des Buch-Chats und 10 % des Seiten-Chat-Budgets — der Block ist Beiwerk,
@@ -87,7 +88,7 @@ async function _loadBookTitles(bookId, logger) {
 async function runChatJob(jobId, sessionId, userMsgId, message, userEmail) {
   const logger = makeJobLogger(jobId);
   const {
-    buildChatSystemPrompt, SCHEMA_CHAT, formatHistoryVorschlaege, formatHistoryIdeen, historyTrimNote, formatPageChange,
+    buildChatSystemPrompt, SCHEMA_CHAT, historyTrimNote, formatPageChange,
     buildPageChatBookContext, normalizeTitle,
   } = await getPrompts(userEmail);
   const effectiveProvider = resolveProvider({ userEmail });
@@ -148,16 +149,22 @@ async function runChatJob(jobId, sessionId, userMsgId, message, userEmail) {
       if (r.role !== 'assistant') return '';
       const parts = [];
       if (r.vorschlaege) {
-        try { parts.push(formatHistoryVorschlaege(JSON.parse(r.vorschlaege))); } catch { /* kaputtes JSON: ohne Anhang */ }
+        try { parts.push(formatProposalNote(JSON.parse(r.vorschlaege))); } catch { /* kaputtes JSON: ohne Anhang */ }
       }
       if (r.context_info) {
-        try { parts.push(formatHistoryIdeen(JSON.parse(r.context_info).proposals)); } catch { /* dito */ }
+        try { parts.push(formatIdeenNote(JSON.parse(r.context_info).proposals)); } catch { /* dito */ }
       }
       return parts.filter(Boolean).join('\n\n');
     };
     // Eine Frage ohne Antwort (Lauf gescheitert, danach neu getippt) fällt weg:
     // zwei User-Turns in Folge zeigten dem Modell dieselbe Frage doppelt.
-    const fullHistory = buildChatMessageHistory(session.id, { annotate }).slice(0, -1)
+    // sanitize: ein Echo des Verlaufs-Anhangs in einer gespeicherten Antwort wird
+    // entfernt, BEVOR der Anhang angehängt wird — sonst wiederholt das Modell das
+    // Muster (lib/chat-history-note.js).
+    const fullHistory = buildChatMessageHistory(session.id, {
+      annotate,
+      sanitize: (r) => (r.role === 'assistant' ? stripHistoryNote(r.content) : r.content),
+    }).slice(0, -1)
       .filter((m, i, all) => !(m.role === 'user' && (all[i + 1]?.role ?? 'user') === 'user'));
 
     // opening_page_text: der Stand, den das Modell in der ersten Runde sah. Hat
@@ -256,7 +263,12 @@ async function runChatJob(jobId, sessionId, userMsgId, message, userEmail) {
     if (truncated) throw i18nError('job.error.aiTruncated', { max: aiCfg.maxTokensOut, tokIn: tokensIn, tokOut: tokensOut, total: tokensIn + tokensOut });
 
     const parsed = _parseChatResponse(text, aiRes, logger);
-    const { antwort, titel_varianten: titelVarianten, ideen: rawIdeen, fallback, lostVorschlaege } = parsed;
+    const { titel_varianten: titelVarianten, ideen: rawIdeen, fallback, lostVorschlaege } = parsed;
+    // Echo des Verlaufs-Anhangs entfernen: die Vorschläge und Ideen stehen in der
+    // Liste unter der Antwort, nicht in ihr (lib/chat-history-note.js). Bleibt
+    // danach nichts übrig, ist die Antwort leer: der Marker, kein leerer Ballon.
+    const stripped = stripHistoryNote(parsed.antwort);
+    const antwort = (parsed.antwort && !stripped) ? EMPTY_ANSWER_MARKER : stripped;
     const { vorschlaege, dropped: vorschlaegeGekappt } = capVorschlaege(parsed.vorschlaege);
     if (vorschlaegeGekappt) logger.info(`${vorschlaegeGekappt} Vorschläge über dem Deckel verworfen.`);
     // Ideen-Vorschläge: Anker = dieser Abschnitt (eine page_id des Modells darf

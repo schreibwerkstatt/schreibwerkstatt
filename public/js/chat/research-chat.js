@@ -34,16 +34,15 @@ export const researchChatMethods = {
   },
 
   // Vorbelegte Frage aus einer anderen Oberfläche (Event `research-chat:ask`,
-  // research-chat-ask.js) übernehmen: Panel auf, Eingabe vorbelegen, NICHT senden.
+  // research-chat-ask.js) übernehmen: Panel auf, NEUE Session, Eingabefeld
+  // vorbelegen, NICHT senden (Web-Suchen kosten). Das Muster der Übergaben
+  // heisst prepare<L>Draft (chat-draft.js): die Frage beginnt ein eigenes
+  // Gespräch statt im laufenden zu landen.
   async _consumeResearchChatAsk() {
     const ask = takePendingResearchAsk();
     if (!ask) return;
     if (!this.researchChatOpen) await this.toggleResearchChat();
-    this.researchChatInput = ask.question;
-    this.$nextTick(() => {
-      const ta = this.$root?.querySelector('.research-chat-input');
-      if (ta) { ta.focus(); ta.setSelectionRange?.(ta.value.length, ta.value.length); }
-    });
+    await this.prepareResearchChatDraft(ask.question);
   },
 
   // Web-Such-Trefferdokumente (1-basiert, Auftrittsreihenfolge) aus dem Backend.

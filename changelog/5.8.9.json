@@ -1,0 +1,36 @@
+{
+  "version": "5.8.9",
+  "date": "2026-11-05",
+  "entries": [
+    {
+      "kind": "neu",
+      "de": "Admin, Reiter Verhalten: neu stehen Auswertungen zu den Chat-Runden, zum Anlegen und Teilen im Buch und zur Leseaktivität je Person.",
+      "en": "Admin, Behavior tab: new breakdowns for chat turns, for creating and sharing in a book and for reading activity per person."
+    },
+    {
+      "kind": "verbessert",
+      "de": "Lektorat, Übersicht und Buch-Chat: eine übernommene Frage startet jetzt ein eigenes Gespräch, statt im laufenden Gespräch zu landen.",
+      "en": "Copy-editing, overview and book chat: a question handed over now starts its own conversation instead of landing in the running one."
+    },
+    {
+      "kind": "behoben",
+      "de": "Abschnitts-Chat und Buch-Chat: die Antwort wiederholt nicht mehr die Vorschläge und Belege, die ohnehin unter ihr stehen.",
+      "en": "Section chat and book chat: answers no longer repeat the suggestions and sources that already appear below them."
+    },
+    {
+      "kind": "behoben",
+      "de": "Plot-Board: Verwerfen und Löschen stehen jetzt im Beat-Edit. In der Karte lagen sie über der Fundstellen-Anzeige und verdeckten deren Klick.",
+      "en": "Plot board: discard and delete now sit in the beat edit. On the card, they lay over the passage-count badge and blocked clicks on it."
+    },
+    {
+      "kind": "behoben",
+      "de": "Suchen & Ersetzen im Editor: die Leiste wandert mit, wenn neben dem Editor eine Leiste aufgeht oder geschlossen wird.",
+      "en": "Find & Replace in the editor: the bar moves along when a panel next to the editor opens or closes."
+    },
+    {
+      "kind": "behoben",
+      "de": "Abschnitt: ein Speichern ohne Änderung gilt nicht mehr als Bearbeitung — der Abschnitt springt nicht mehr in «Zuletzt bearbeitet».",
+      "en": "Section: saving without a change no longer counts as an edit — the section no longer bumps «Last edited»."
+    }
+  ]
+}

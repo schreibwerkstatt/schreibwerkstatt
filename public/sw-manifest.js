@@ -5,7 +5,7 @@
 // __SHELL_BUILD: content hash over all listed assets → drives SHELL_CACHE.
 // __SHELL_MANIFEST: the coherent set precached atomically at SW install.
 // __VENDOR_SET: current vendor/ + fonts/ files — VENDOR_CACHE prune list.
-self.__SHELL_BUILD = "f6ae4773441ff7d6";
+self.__SHELL_BUILD = "1edb8c073963b576";
 self.__SHELL_MANIFEST = [
   "/css/admin/admin-backup.css",
   "/css/admin/admin-home.css",
@@ -589,6 +589,7 @@ self.__SHELL_MANIFEST = [
   "/js/chapter-filter.js",
   "/js/chat/book-chat.js",
   "/js/chat/chat-base.js",
+  "/js/chat/chat-draft.js",
   "/js/chat/chat-history-search.js",
   "/js/chat/chat-idee-proposals.js",
   "/js/chat/chat.js",

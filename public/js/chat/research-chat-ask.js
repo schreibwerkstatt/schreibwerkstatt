@@ -6,7 +6,8 @@
 //   }));
 //
 // Wirkung: Recherche-Karte öffnen (Registry-Toggle `toggleRechercheCard`), Chat-
-// Panel aufklappen, Eingabefeld mit `question` vorbelegen. Es wird NICHT
+// Panel aufklappen, eine **neue Session** anlegen und deren Eingabefeld mit
+// `question` vorbelegen (Muster `prepare<L>Draft`, chat-draft.js). Es wird NICHT
 // automatisch gesendet — der User prüft/ergänzt die Frage und schickt sie selbst
 // ab (Web-Suchen kosten). Ein `bookId` eines anderen als des offenen Buchs wird
 // ignoriert; ohne nutzbaren Recherche-Chat (`researchChat.enabled` false, Gate) ebenso.

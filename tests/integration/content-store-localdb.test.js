@@ -427,3 +427,54 @@ test('localdb: Wiederholung desselben Saves (gleiche save_id) schreibt nicht ern
   assert.equal(again.save_match, 'replay');
   assert.equal(again.updated_at, a.updated_at);
 });
+
+// No-op-Save: der Client schickt exakt den Stand, der schon gespeichert ist
+// (typisch: Editor ohne Aenderung, Autosave, Outbox-Wiederholung). Dann gibt
+// es nichts zu schreiben — kein Zeitstempel-Sprung, keine Revision, kein
+// Reindex, kein Change-Event.
+test('localdb: identischer Body → No-op-Save (kein Schreibvorgang, keine Revision)', async () => {
+  const bookId = _seedBook();
+  const created = await ctx.contentStore.createPage({ book_id: bookId, name: 'No-op', html: '<p>Inhalt</p>' });
+  const pageId = created.id;
+  const revCount = () => ctx.connection.db
+    .prepare('SELECT COUNT(*) AS c FROM page_revisions WHERE page_id = ?').get(pageId).c;
+
+  const a = await ctx.contentStore.savePage(pageId, { html: '<p>A</p>' });
+  await _sleep();
+  const revsBefore = revCount();
+
+  // Exakt der gespeicherte Stand (inkl. der vergebenen Block-IDs) → No-op.
+  const again = await ctx.contentStore.savePage(pageId, { html: a.html });
+  assert.equal(again.no_change, true, 'No-op-Save ist als solcher erkennbar');
+  assert.equal(again.updated_at, a.updated_at, 'Zeitstempel springt nicht');
+  assert.equal(noBid(again.html), noBid(a.html));
+  assert.equal(revCount(), revsBefore, 'keine neue Revision');
+  assert.equal((await ctx.contentStore.loadPage(pageId)).updated_at, a.updated_at);
+});
+
+test('localdb: No-op-Save setzt die Save-Kennung (Wiederholung bleibt erkennbar)', async () => {
+  const bookId = _seedBook();
+  const created = await ctx.contentStore.createPage({ book_id: bookId, name: 'No-op-Id', html: '<p>Inhalt</p>' });
+  const pageId = created.id;
+  const a = await ctx.contentStore.savePage(pageId, { html: '<p>A</p>' });
+  await _sleep();
+
+  const noop = await ctx.contentStore.savePage(pageId, { html: a.html, save_id: SID(7) });
+  assert.equal(noop.no_change, true);
+  assert.equal(noop.last_save_id, SID(7), 'Save-Kennung wird auch ohne Schreibvorgang gesetzt');
+  await _sleep();
+  const replay = await ctx.contentStore.savePage(pageId, { html: a.html, save_id: SID(7) });
+  assert.equal(replay.save_match, 'replay');
+});
+
+test('localdb: geänderter Body schreibt normal (No-op-Erkennung greift nicht)', async () => {
+  const bookId = _seedBook();
+  const created = await ctx.contentStore.createPage({ book_id: bookId, name: 'Aenderung', html: '<p>Inhalt</p>' });
+  const pageId = created.id;
+  const before = await ctx.contentStore.loadPage(pageId);
+  await _sleep();
+  const a = await ctx.contentStore.savePage(pageId, { html: '<p>A</p>' });
+  assert.notEqual(a.no_change, true);
+  assert.notEqual(a.updated_at, before.updated_at);
+  assert.equal(noBid(a.html), '<p>A</p>');
+});

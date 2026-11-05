@@ -25,6 +25,7 @@ import { formatXref } from '../../../xrefs/xref-format.js';
 // Legenden-Nummern der Leseansichten (xrefs/caption-preview.js) — ein Cache,
 // ein Stand.
 import { loadXrefTargets, previewNumbers, invalidateXrefTargetCache } from '../../../xrefs/target-cache.js';
+import { trackUsageEvent } from '../../../features-usage.js';
 
 export { invalidateXrefTargetCache };
 
@@ -177,6 +178,7 @@ export const xrefMethods = {
     markXrefsAtomic(editEl);
 
     window.__app?._markEditDirty?.();
+    trackUsageEvent('xref.applied', { kind: hit.kind });
     this._closeXref();
   },
 

@@ -82,39 +82,6 @@ function _clip(s, n = CLIP) {
   return t.length > n ? t.slice(0, n - 1) + '…' : t;
 }
 
-/**
- * Frühere Vorschläge einer Assistant-Nachricht für den Verlauf ans Modell.
- * Ohne diesen Anhang sieht das Modell nur seinen Antworttext: es schlägt
- * übernommene Stellen erneut vor (die es so nicht mehr gibt) und weiss nicht,
- * was der Autor verworfen hat.
- */
-export function formatHistoryVorschlaege(vorschlaege) {
-  if (!Array.isArray(vorschlaege) || vorschlaege.length === 0) return '';
-  const lines = vorschlaege.map((v, i) => {
-    const status = v?.applied ? 'übernommen'
-      : v?.status === 'discarded' ? 'verworfen'
-      : v?.match === 'not_found' ? 'offen, Stelle nicht im Text gefunden'
-      : 'offen';
-    return `${i + 1}. [${status}] «${_clip(v?.original)}» → «${_clip(v?.ersatz)}»`;
-  });
-  return ['[Deine Änderungsvorschläge in dieser Antwort, Status beim Autor:', ...lines, ']'].join('\n');
-}
-
-/**
- * Frühere Ideen-Vorschläge einer Assistant-Nachricht (context_info.proposals)
- * für den Verlauf — sonst schlägt das Modell verworfene erneut vor. Erfasste
- * stehen zusätzlich als OFFENE IDEEN im Prompt, solange sie offen sind.
- */
-export function formatHistoryIdeen(proposals) {
-  const list = Array.isArray(proposals) ? proposals.filter(p => p?.type === 'idee_create') : [];
-  if (list.length === 0) return '';
-  const lines = list.map((p, i) => {
-    const status = p.applied_at ? 'als Idee erfasst' : p.status === 'discarded' ? 'verworfen' : 'offen';
-    return `${i + 1}. [${status}] ${_clip(p.fields?.content)}`;
-  });
-  return ['[Deine Ideen-Vorschläge in dieser Antwort, Status beim Autor:', ...lines, ']'].join('\n');
-}
-
 /** Hinweis vor dem gekürzten Verlauf. */
 export function historyTrimNote(dropped) {
   return `[Hinweis: ${dropped} ältere Nachrichten dieses Gesprächs wurden aus Platzgründen weggelassen.]`;

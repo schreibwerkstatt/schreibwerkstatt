@@ -4,6 +4,7 @@
 // Prosa-Abschluss.
 
 const { buildChatMessageHistory } = require('../shared');
+const { formatCitationNote, stripHistoryNote } = require('../../../lib/chat-history-note');
 
 // Modell-Drift: schreibt Prosa-Antwort und hängt am Ende ```json\n{}\n``` als
 // Compliance-Theater an. extractBalancedJson greift dann das leere {} → antwort
@@ -26,25 +27,25 @@ function _neutralizeMarkers(content) {
   return typeof content === 'string' ? content.replace(I18N_MARKER_RE, FALLBACK_PLACEHOLDER) : content;
 }
 
+// Beleg-Echo aus einer gespeicherten Antwort entfernen (lib/chat-history-note.js).
+// Läuft VOR dem Anhängen des Verlaufs-Hinweises: das Modell hat den Hinweis als
+// eigenen Text gelesen und in der nächsten Antwort mitgeschrieben — im Verlauf würde
+// es das Muster wiederholen. Der Hinweis selbst ist kein Echo und bleibt stehen.
+function _stripEcho(row) {
+  if (row.role !== 'assistant') return row.content;
+  return stripHistoryNote(row.content);
+}
+
 // Belege früherer Antworten (context_info.citations, nur gültige) kompakt an den
 // Assistant-Turn im Verlauf hängen: ohne sie kennt das Modell bei einer Folgefrage
 // («und was sagt sie danach?») nur die eigene Prosa, nicht mehr die Stellen, auf die
 // sie sich stützte — und sucht sie neu. Gedeckelt, der Verlauf soll nicht wachsen.
-const HISTORY_CITATIONS_MAX = 6;
-const HISTORY_CITATION_QUOTE_MAX = 160;
+// Format und Zweck: lib/chat-history-note.js.
 function _citationNote(row) {
   if (row.role !== 'assistant' || !row.context_info) return '';
   let ci;
   try { ci = JSON.parse(row.context_info); } catch { return ''; }
-  const cites = Array.isArray(ci?.citations) ? ci.citations.filter(c => c && c.valid && c.quote) : [];
-  if (!cites.length) return '';
-  const lines = cites.slice(0, HISTORY_CITATIONS_MAX).map((c) => {
-    const q = String(c.quote);
-    const quote = q.length > HISTORY_CITATION_QUOTE_MAX ? q.slice(0, HISTORY_CITATION_QUOTE_MAX) + '…' : q;
-    const where = c.page_id ? `Abschnitt «${c.page_name || '?'}» (page_id ${c.page_id})` : 'Abschnitt unbekannt';
-    return `(${c.n}) ${where}: «${quote}»`;
-  });
-  return `[Belege dieser Antwort: ${lines.join(' ')}]`;
+  return formatCitationNote(ci?.citations);
 }
 
 // Rolling-Window: erste user+assistant-Runde als Kontext-Anker + die letzten
@@ -54,7 +55,7 @@ function _citationNote(row) {
 // Folge — Anthropic verschmilzt sie stumm, strikte Chat-Vorlagen lokaler Modelle
 // werfen). Führende Antworten des Tails fallen darum weg.
 function buildAgenticHistory(sessionId, tailMessages = 10) {
-  const all = buildChatMessageHistory(sessionId, { annotate: _citationNote })
+  const all = buildChatMessageHistory(sessionId, { annotate: _citationNote, sanitize: _stripEcho })
     .map(m => (m.role === 'assistant' ? { ...m, content: _neutralizeMarkers(m.content) } : m));
   while (all.length && all[0].role !== 'user') all.shift();
   if (all.length <= tailMessages + 2) return all;

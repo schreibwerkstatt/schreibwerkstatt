@@ -131,7 +131,7 @@ window.dispatchEvent(new CustomEvent(EVT.RESEARCH_CHAT_ASK, {   // 'research-cha
 }));
 ```
 
-Wirkung: Recherche-Karte öffnen (Registry-Toggle `toggleRechercheCard`, nur wenn zu — `onReclick: 'refresh'` würde sonst neu laden), Chat-Karte aufklappen, Eingabefeld vorbelegen und fokussieren. **Nicht** automatisch senden — Web-Suchen kosten, der User prüft die Frage. Ignoriert wird: leere Frage, `bookId` ≠ offenes Buch, `researchChat.enabled` false. Weil die Karte lazy ist, hält das Modul die Frage als „pending"; die Karte holt sie in `init()` bzw. über das interne Event `EVT.RESEARCH_CHAT_ASK_PENDING` ab. Der Listener wird einmal in `registerRechercheCard` installiert.
+Wirkung: Recherche-Karte öffnen (Registry-Toggle `toggleRechercheCard`, nur wenn zu — `onReclick: 'refresh'` würde sonst neu laden), Chat-Karte aufklappen, eine **neue Session** anlegen und deren Eingabefeld vorbelegen und fokussieren (Muster `prepare<L>Draft`, [chat-draft.js](../public/js/chat/chat-draft.js) — ein bereits leeres Gespräch wird weiterbenutzt). **Nicht** automatisch senden — Web-Suchen kosten, der User prüft die Frage. Ignoriert wird: leere Frage, `bookId` ≠ offenes Buch, `researchChat.enabled` false. Weil die Karte lazy ist, hält das Modul die Frage als „pending"; die Karte holt sie in `init()` bzw. über das interne Event `EVT.RESEARCH_CHAT_ASK_PENDING` ab. Der Listener wird einmal in `registerRechercheCard` installiert.
 
 ## Pflicht-Invarianten
 

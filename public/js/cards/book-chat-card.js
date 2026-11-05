@@ -40,7 +40,7 @@ export function registerBookChatCard() {
         onShow: async () => {
           const draft = takeCardRequest(CARD_REQUEST.BOOK_CHAT_DRAFT);
           this._bookChatShown = true;
-          if (draft) return this._openBookChatDraft(draft);
+          if (draft) return this.prepareBookChatDraft(draft);
           await this._onVisibleBookChat();
           this.$nextTick(() => {
             const ta = this.$el?.querySelector('.chat-input');
@@ -54,25 +54,11 @@ export function registerBookChatCard() {
           { type: EVT.CARD_REQUEST, handler: (e) => {
             if (e.detail?.key !== CARD_REQUEST.BOOK_CHAT_DRAFT || !this._bookChatShown) return;
             const text = takeCardRequest(CARD_REQUEST.BOOK_CHAT_DRAFT);
-            if (text) this._openBookChatDraft(text);
+            if (text) this.prepareBookChatDraft(text);
           } },
         ],
       });
       this.$watch(() => window.__app?.showBookChatCard, (open) => { if (!open) this._bookChatShown = false; });
-    },
-
-    // Vorformulierte Frage (Übersicht → «Nächste Schritte»): neues Gespräch,
-    // Text ins Eingabefeld, Cursor ans Ende — gesendet wird von Hand.
-    async _openBookChatDraft(text) {
-      await this.loadBookChatSessions();
-      await this.startNewBookChatSession();
-      this.bookChatInput = text;
-      this.$nextTick(() => {
-        const ta = this.$el?.querySelector('.chat-input');
-        if (!ta) return;
-        ta.focus();
-        ta.setSelectionRange(ta.value.length, ta.value.length);
-      });
     },
 
     destroy() { this._lifecycle?.destroy(); },

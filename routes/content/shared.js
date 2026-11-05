@@ -45,6 +45,30 @@ function _logToken(s) { return typeof s === 'string' && /^[A-Za-z0-9_-]{1,32}$/.
 // wird '-', damit ein Client keine Zeilenumbrueche ins Log schreiben kann.
 function _logStamp(s) { return typeof s === 'string' && /^[0-9T:.Z+-]{10,32}$/.test(s) ? s : '-'; }
 
+// PAGE_SAVE-Logzeile: `info` nur, wenn der Save etwas Besonderes zeigt —
+// eine Wiederholung, ein eigener Vorgaenger-Save, ein Retry/Outbox-Weg oder ein
+// No-op-Save (unveraenderter Stand). Routine-Saves (Autosave, quick, save)
+// stehen auf `debug`: bei Autosave-Intervall und mehreren Geraeten/Tabs
+// erzeugen sie sonst auf dem Prod-Log eine Zeile pro Save und dominieren es
+// (auf Prod waren es ~1150 Zeilen in 10 Tagen, die Haelfte davon vom nativen
+// macOS-Client). PAGE_CONFLICT und PAGE_MERGE bleiben auf `info` — sie sind
+// die eigentliche Diagnose und nennen Geraet/Stand des Schreibers.
+const _NOTABLE_SAVE_REASONS = new Set(['retry', 'outbox', 'outbox-merge', 'resolve', 'own-echo', 'remerge']);
+function _isNotableSave(saved, body) {
+  if (saved?.save_match) return true;   // Wiederholung / eigener Vorgaenger-Save
+  if (saved?.no_change) return true;    // No-op-Save (Stand unveraendert)
+  const reason = typeof body?.save_reason === 'string' ? body.save_reason : '';
+  return _NOTABLE_SAVE_REASONS.has(reason);
+}
+
+// Klammerzusatz der PAGE_SAVE-Logzeile: was der Save war — Wiederholung,
+// eigener Vorgaenger-Save oder ein No-op-Save (Stand unveraendert).
+function _saveSuffix(saved) {
+  if (saved?.no_change) return ' (unveraendert)';
+  if (saved?.save_match) return saved.save_match === 'own' ? ' (eigener Vorgaenger-Save)' : ' (Wiederholung)';
+  return '';
+}
+
 
 // Beschreibt den anfragenden Client fuer Logs. Bei Device-Token-Auth (nativer
 // Mac-Client) loest es Geraetename + Plattform aus dem Token auf, sonst "session".
@@ -103,6 +127,7 @@ function _sendSanitizeFailed(res, e) {
 
 module.exports = {
   jsonBody, NAME_MAX, UUID_RE, REVALIDATE_CACHE_CONTROL, _validDeviceId, _logToken, _logStamp,
+  _isNotableSave, _saveSuffix,
   _clientLabel, _deviceTokenLabel,
   _guardPage, _guardChapter, _fail, _sendSanitizeFailed,
 };
