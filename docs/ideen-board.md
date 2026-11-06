@@ -226,6 +226,37 @@ an dem das Kapitel zuklappt. Ohne sie wäre
 genau das Kapitel nicht klappbar, dessen Pendenzen alle auf Seiten hängen, also
 fast jedes.
 
+**Ausnahme zwei: das im Board angelegte Kapitel.** «+ Kapitel» heftet seine
+Bahn an (`pinnedLaneKeys` der Karte → `pinnedLanes` in `buildBoard`): sie steht
+leer im Raster, bis die Karte zurücksetzt (Buchwechsel, Ansicht verlassen).
+Ohne die Ausnahme hätte der Klick keine sichtbare Folge — das Kapitel stünde
+erst mit seiner ersten Idee da.
+
+**Anlegen im Board** ([ideen-board/add.js](../public/js/book/ideen-board/add.js)).
+Das Board ist der Ort, an dem eine Gliederung entsteht:
+
+* **«+ Kapitel»** legt über den Weg der Sidebar an (`createChapter` in
+  [tree/load.js](../public/js/book/tree/load.js): Buchende, bei Büchern aus
+  Einabschnitts-Kapiteln samt erstem Abschnitt), aber mit
+  `openFirstSection: false` — der Abschnitt öffnet sich **nicht** zum Schreiben,
+  wer hier gliedert, gliedert weiter. Danach ist das Kapitel im Anlegen-Feld
+  vorgewählt und der Fokus im Textfeld. Kein eigener Anlege-Weg daneben.
+* **Eine Idee je Zeile.** Das Textfeld ist mehrzeilig (Enter legt an,
+  Umschalt+Enter bricht um). Mehrere Zeilen werden nach Rückfrage zu je einer
+  Idee (`splitIdeenLines` in [ideen-shared.js](../public/js/book/ideen-shared.js):
+  leere Zeilen und Aufzählungszeichen fallen weg, eine einzelne Zeile bleibt
+  unverändert). Angelegt wird der Reihe nach über `createIdee`, also mit
+  Offline-Queue je Idee; scheitert eine, bleiben die übrigen Zeilen im Feld.
+  Nur im Board — in der Ideen-Karte bleibt ein Zeilenumbruch Teil **einer** Notiz.
+
+**Hinweis in der Ideen-Karte.** Legt jemand in einer Sitzung an drei
+verschiedenen Orten eines Buchs Ideen an (`_noteBoardHintPlace` in
+[book/ideen.js](../public/js/book/ideen.js), über Seitenwechsel hinweg), zeigt
+die Karte einmal den Feature-Tipp `ideen.boardOverview` mit Sprung ins Board.
+Weggeklickt — oder übers Öffnen erledigt — bleibt er über den `hints`-Store
+auf jedem Gerät weg. **Why:** auf Prod wurde Kapitel für
+Kapitel in der Ideen-Karte gegliedert, eine Notiz nach der anderen, ohne das Board zu kennen.
+
 **Klappen ist Ansicht, nicht Filter.** Zwei unabhängige Achsen, beide als Liste
 von Bahn-Keys:
 

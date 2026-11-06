@@ -422,7 +422,9 @@ export const treeLoadMethods = {
 
   // `parentChapterId`: als letztes Unterkapitel dieses Kapitels anlegen
   // (Server haengt es ebenfalls ans Ende der Geschwister).
-  async createChapter({ afterChapterId, parentChapterId, withFirstSection } = {}) {
+  // `openFirstSection: false`: der mitangelegte erste Abschnitt kommt nur in den
+  // Baum, statt sich zum Schreiben zu oeffnen (Ideen-Board: man plant weiter).
+  async createChapter({ afterChapterId, parentChapterId, withFirstSection, openFirstSection = true } = {}) {
     const bookId = this.$store.nav.selectedBookId;
     const title = (this.newChapterTitle || '').trim();
     if (!bookId || !title || this.newChapterCreating) return null;
@@ -468,7 +470,7 @@ export const treeLoadMethods = {
       this._rebuildTreeOrderMaps();
       this._persistTreeOpenState();
       window.dispatchEvent(new CustomEvent(EVT.CHAPTER_ADDED, { detail: { chapterId: created.id } }));
-      if (withFirstPage) await this._createFirstSection(created); // tree/structure.js
+      if (withFirstPage) await this._createFirstSection(created, { open: openFirstSection }); // tree/structure.js
       return chapterItem;
     } catch (e) {
       console.error('[createChapter]', e);

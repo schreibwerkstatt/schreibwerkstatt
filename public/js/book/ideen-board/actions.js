@@ -2,14 +2,14 @@
 // `this` = die ideenBoardCard-Instanz.
 
 import { fetchJson } from '../../utils.js';
-import { createIdee, patchIdee, deleteIdee as removeIdee, overlayPendingIdeen } from '../../repo/ideen-queue.js';
+import { patchIdee, deleteIdee as removeIdee, overlayPendingIdeen } from '../../repo/ideen-queue.js';
 import { loadSortable } from '../../lazy-libs.js';
 import {
   patchSortableOnce, revertSortable, markDragIgnore, unmarkDragIgnore, BASE_SORTABLE_OPTS,
 } from '../../sortable-dnd.js';
 import {
   IDEE_STATUSES, IDEE_OPTIONAL_STATUSES, ideeStatus, isOpenIdee, LANE_BOOK,
-  normalizeIdeeStages, IDEE_MAX_LEN,
+  normalizeIdeeStages,
 } from '../ideen-shared.js';
 import {
   buildLaneOrder, buildBoard, chapterFilterOptions, statusTotals, boardColumns, IDEE_SORT_MANUAL,
@@ -80,7 +80,7 @@ export const ideenBoardActions = {
   board() {
     return this._memo('board',
       [this.ideen, this.laneOrder, this.filterChapterId, this.showErledigt, this.showVerworfen, this.query,
-        this.collapsedLanes, this.collapsedChapters, this.columnSort],
+        this.collapsedLanes, this.collapsedChapters, this.columnSort, this.pinnedLaneKeys],
       () => buildBoard({
         ideen: this.ideen,
         laneOrder: this.laneOrder,
@@ -91,6 +91,7 @@ export const ideenBoardActions = {
         collapsedLanes: this.collapsedLanes,
         collapsedChapters: this.collapsedChapters,
         columnSort: this.columnSort,
+        pinnedLanes: this.pinnedLaneKeys,
       }));
   },
   lanes() { return this.board().lanes; },
@@ -232,6 +233,7 @@ export const ideenBoardActions = {
     this.laneOrder = [];
     this.newContent = '';
     this.newLaneKey = LANE_BOOK;
+    this.pinnedLaneKeys = [];
     this.assigningId = null;
     this.assignLaneKey = '';
     this.editingId = null;
@@ -299,16 +301,6 @@ export const ideenBoardActions = {
     this._memos = {};
   },
 
-  // Neue Pendenz direkt am Board: die Bahn waehlt den Anker. Vorgewaehlt ist
-  // das ganze Buch — ein Einfall, der noch keinen Ort hat, wird so ohne Umweg
-  // festgehalten und spaeter per „Zuordnen" eingeordnet.
-  newLaneOptions() {
-    return this._memo('newLaneOptionsWithBook', [this.laneOrder], () => [
-      { value: LANE_BOOK, label: window.__app.t('ideenBoard.laneBook') },
-      ...this.anchorLaneOptions(),
-    ]);
-  },
-
   // Nur echte Anker (Kapitel, Seiten) — die Ziele beim Zuordnen einer Buch-Idee.
   anchorLaneOptions() {
     // Erst alle Kapitel-Bahnen, dann alle Seiten-Bahnen — INNERHALB jeder Gruppe
@@ -331,36 +323,6 @@ export const ideenBoardActions = {
         ...lanes.filter(l => l.kind !== 'chapter' && !l.merged).map(opt),
       ];
     });
-  },
-
-  async addIdee() {
-    const app = window.__app;
-    const content = (this.newContent || '').trim();
-    const bookId = Alpine.store('nav').selectedBookId;
-    if (!content) { this.errorMessage = app.t('ideen.error.contentRequired'); return; }
-    if (content.length > IDEE_MAX_LEN) { this.errorMessage = app.t('ideen.error.contentTooLong'); return; }
-    if (!this.newLaneKey) { this.errorMessage = app.t('ideenBoard.error.laneRequired'); return; }
-    if (!bookId) return;
-    const [kind, rawId] = String(this.newLaneKey).split(':');
-    const anchorId = parseInt(rawId, 10);
-    if (kind !== 'book' && !anchorId) return;
-
-    this.busy = true;
-    try {
-      const body = { book_id: bookId, content };
-      if (kind !== 'book') body[kind === 'chapter' ? 'chapter_id' : 'page_id'] = anchorId;
-      const row = await createIdee(body);
-      this.ideen = [row, ...this.ideen];
-      this.newContent = '';
-      this.errorMessage = '';
-      this._memos = {};
-      this._publishCounts();
-      await this._ensureBoardSortables();
-    } catch {
-      this.errorMessage = app.t('ideenBoard.error.save');
-    } finally {
-      this.busy = false;
-    }
   },
 
   async deleteIdee(idee) {

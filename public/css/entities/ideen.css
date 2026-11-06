@@ -28,6 +28,8 @@
   .ideen-input { font-size: var(--font-size-reading); }
 }
 .ideen-add-btn { flex-shrink: 0; align-self: stretch; }
+/* Optik aus .feature-tip (components/feature-tip.css); hier nur der Abstand. */
+.ideen-board-hint { margin-top: var(--space-sm); }
 .ideen-loading,
 .ideen-section { margin-top: var(--space-md); }
 .idee-item {

@@ -20,6 +20,15 @@
 
   <div x-show="errorMessage" class="card-status card-status--error" x-text="errorMessage"></div>
 
+  <!-- Feature-Tipp: Ideen an mehreren Orten → Gliederung im Ideen-Board (book/ideen.js#_noteBoardHintPlace) -->
+  <template x-if="boardHintDue && $store.hints.isOpen('ideen.boardOverview')">
+    <div class="feature-tip ideen-board-hint" role="note">
+      <span class="feature-tip__text" x-text="$app.t('hint.ideenBoard.text')"></span>
+      <button type="button" class="feature-tip__action" @click="openBoardFromHint()" x-text="$app.t('hint.ideenBoard.action')"></button>
+      <button type="button" class="icon-btn icon-btn--ghost feature-tip__close" @click="$store.hints.dismiss('ideen.boardOverview')" :data-tip="$app.t('hint.dismiss')" :aria-label="$app.t('hint.dismiss')"><svg class="icon" aria-hidden="true"><use href="/icons.svg#x"/></svg></button>
+    </div>
+  </template>
+
   <div class="ideen-input-row">
     <textarea
       class="ideen-input"

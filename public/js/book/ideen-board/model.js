@@ -290,11 +290,16 @@ export const IDEE_STALE_DAYS = 60;
  * Was dabei verschwindet, steht je Zeile und Stufe in `hidden` — dieselbe
  * Ueberlegung wie bei `hiddenByFilter`: eine eingeklappte Pendenz ist sonst von
  * einer verlorenen nicht zu unterscheiden.
+ *
+ * `pinnedLanes` — Bahn-Keys, die auch LEER erscheinen: das Kapitel, das gerade
+ * im Board angelegt wurde. Ohne die Ausnahme bliebe es bis zur ersten Idee
+ * unsichtbar, und der Klick auf «+ Kapitel» haette keine sichtbare Folge.
  */
 export function buildBoard({
   ideen, laneOrder, filterChapterId = '', showErledigt = true, showVerworfen = true, query = '',
-  collapsedLanes = [], collapsedChapters = [], columnSort = {},
+  collapsedLanes = [], collapsedChapters = [], columnSort = {}, pinnedLanes = [],
 }) {
+  const pinned = new Set(pinnedLanes || []);
   const keep = makeIdeeFilter({ laneOrder, filterChapterId, showErledigt, showVerworfen, query });
   const laneByKey = new Map((laneOrder || []).map(l => [l.key, l]));
   const laneKeyOf = laneKeyResolver(laneOrder);
@@ -358,11 +363,11 @@ export function buildBoard({
   const childLanes = new Map();
   for (const lane of (laneOrder || [])) {
     const bucket = buckets.get(lane.key);
-    if (!bucket) continue;
+    if (!bucket && !pinned.has(lane.key)) continue;
     const chain = chainOf(lane);
     for (const k of chain) occupied.add(k);
     if (lane.kind === 'chapter') occupied.add(lane.key);
-    if (lane.kind === 'page') for (const k of chain) childLanes.set(k, (childLanes.get(k) || 0) + 1);
+    if (lane.kind === 'page' && bucket) for (const k of chain) childLanes.set(k, (childLanes.get(k) || 0) + 1);
   }
 
   const rows = [];
@@ -377,7 +382,7 @@ export function buildBoard({
     const bucket = buckets.get(lane.key);
     // Nur belegte Bahnen erscheinen — ein Board mit einer leeren Zeile je
     // Abschnitt des Buches waere unlesbar.
-    if (lane.kind === 'chapter' ? !occupied.has(lane.key) : !bucket) continue;
+    if (lane.kind === 'chapter' ? !occupied.has(lane.key) : !bucket && !pinned.has(lane.key)) continue;
     const hostKey = chainOf(lane).find(k => foldedChapters.has(k));
     const host = hostKey ? rowByKey.get(hostKey) : null;
     if (host) {

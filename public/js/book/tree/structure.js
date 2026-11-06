@@ -81,12 +81,15 @@ export const treeStructureMethods = {
   // Ueberschrift — und oeffnet sich. Sonst kostete jedes Kapitel einen zweiten
   // Schritt mit zweiter Namensabfrage. Scheitert nur dieser Teil, bleibt das
   // leere Kapitel stehen; ein Klick darauf fuehrt wie immer zum Anlegen.
-  async _createFirstSection(chapter) {
+  // `open: false` haengt den Abschnitt nur in den Baum (Ideen-Board).
+  async _createFirstSection(chapter, { open = true } = {}) {
     if (!chapter?.id || !this.canEdit()) return;
     try {
       const page = await contentRepo.createPage({ chapter_id: chapter.id, name: chapter.name, html: '<p></p>' });
       const item = this._findTreeChapter(chapter.id);
-      if (page?.id && item) await this.openNewSectionForWriting(this._insertCreatedPageIntoTree(item, page));
+      if (!page?.id || !item) return;
+      const inserted = this._insertCreatedPageIntoTree(item, page);
+      if (open) await this.openNewSectionForWriting(inserted);
     } catch (e) {
       this.setStatus?.(this.t('bookOrganizer.saveFailed', { detail: e.message }));
     }

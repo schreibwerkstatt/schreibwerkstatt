@@ -6,17 +6,16 @@
 // Beide Routen sind `:book_id`-Routen — Login + Buch-ACL (viewer+) erledigt der
 // router.param-Guard der Facade, `req.bookId` ist gesetzt.
 
-const { sessionEmail } = require('../../lib/acl');
 const { loadHeatmapRows } = require('../../db/lektorat-heatmap');
 const { buildFehlerHeatmap } = require('../../lib/fehler-heatmap');
 const snapshots = require('../../db/book-snapshots');
 
 function register(router) {
   // Fehler-Heatmap: aggregiert Fehler-Typen x Kapitel aus dem jeweils juengsten
-  // page_check pro Seite. `mode` (open|applied|all) waehlt, was als Fehler zaehlt
+  // page_check pro Seite, buchweit (alle Personen mit Zugriff — wie der Trend). `mode` (open|applied|all) waehlt, was als Fehler zaehlt
   // — Bedeutung der Modi siehe lib/fehler-heatmap.js.
   router.get('/fehler-heatmap/:book_id', (req, res) => {
-    const rows = loadHeatmapRows(req.bookId, sessionEmail(req));
+    const rows = loadHeatmapRows(req.bookId);
     res.json(buildFehlerHeatmap({ ...rows, mode: req.query.mode }));
   });
 

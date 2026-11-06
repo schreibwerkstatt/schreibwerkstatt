@@ -22,7 +22,7 @@ function pageAgesQuery(bookId) {
   const rows = db.prepare(`
     WITH latest AS (
       SELECT page_id, checked_at, saved_at, error_count, user_email,
-             ROW_NUMBER() OVER (PARTITION BY page_id ORDER BY checked_at DESC) AS rn
+             ROW_NUMBER() OVER (PARTITION BY page_id ORDER BY checked_at DESC, id DESC) AS rn
       FROM page_checks
       WHERE book_id = ?
     )

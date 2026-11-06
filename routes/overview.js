@@ -51,7 +51,7 @@ const RECENT_LIMIT = 8;
 // `when` blendet einen Teil für ein Buch aus (fehlt dann in `parts`).
 const PARTS = [
   { key: 'coverage', minRole: 'viewer', load: ({ bookId }) => lektoratCoverage(bookId) },
-  { key: 'heat', minRole: 'viewer', load: ({ bookId, email }) => buildFehlerHeatmap({ ...loadHeatmapRows(bookId, email), mode: 'open' }) },
+  { key: 'heat', minRole: 'viewer', load: ({ bookId }) => buildFehlerHeatmap({ ...loadHeatmapRows(bookId), mode: 'open' }) },
   { key: 'review', minRole: 'viewer', load: ({ bookId, email }) => listBookReviewHistory(bookId, email) },
   { key: 'recent', minRole: 'viewer', load: ({ bookId, email }) => listRecentPages(email, bookId, RECENT_LIMIT) },
   { key: 'figuren', minRole: 'editor', load: ({ bookId, email }) => listFigurenWithDetails(bookId, email) },

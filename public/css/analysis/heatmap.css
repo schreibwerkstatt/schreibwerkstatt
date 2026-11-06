@@ -103,6 +103,11 @@
   text-align: left;
   font-weight: var(--fw-medium);
 }
+/* Fehler-Heatmap: Unterkapitel nach Gliederungstiefe eingerückt
+   (--heatmap-depth = Tiefe - 1, gesetzt in buildFehlerRows). */
+.heatmap-table tbody th.fehler-heatmap-rowhead {
+  padding-left: calc(var(--space-10) + var(--heatmap-depth, 0) * var(--space-md));
+}
 /* Erste Spalte bleibt beim horizontalen Scrollen sichtbar */
 .heatmap-table tbody th.heatmap-rowhead,
 .heatmap-table tfoot th.heatmap-rowhead {
@@ -316,6 +321,25 @@
   border-radius: var(--radius-none);
   width: fit-content;
   max-width: 100%;
+}
+/* Original als Sprung an die Textstelle (Fehler-Heatmap): Button ohne
+   Button-Optik, gleiche Fläche wie das statische Original. */
+.heatmap-detail-original--link {
+  border: 0;
+  font: inherit;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.heatmap-detail-original--link:hover {
+  text-decoration: underline;
+}
+/* Rohtyp eines Befunds in der Spalte «Sonstige» */
+.heatmap-detail-typ {
+  display: block;
+  font-size: var(--font-size-xs, 11px);
+  color: var(--color-muted);
+  margin-bottom: var(--space-3);
 }
 .heatmap-detail-korrektur {
   display: block;

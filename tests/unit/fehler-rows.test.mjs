@@ -9,7 +9,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
 import {
-  buildFehlerRows, buildFehlerTotals, fehlerTrendDenominator,
+  buildFehlerRows, buildFehlerTotals, fehlerTrendDenominator, withOtherBucket, FEHLER_OTHER,
 } from '../../public/js/book/fehler-heatmap.js';
 import { HEATMAP_MIN_WORDS } from '../../public/js/utils.js';
 
@@ -114,4 +114,50 @@ test('Trend-Nenner: gepruefte Woerter, aeltere Fassungen als Naeherung', () => {
   assert.deepEqual(fehlerTrendDenominator({ words: 9000, metrics: { words_checked: 3000 } }), { words: 3000, approx: false });
   assert.deepEqual(fehlerTrendDenominator({ words: 9000, metrics: { open: { total: 1 } } }), { words: 9000, approx: true });
   assert.deepEqual(fehlerTrendDenominator({ words: 9000, metrics: { words_checked: 0 } }), { words: 0, approx: false });
+});
+
+test('withOtherBucket: Typen ohne Spalte landen in «Sonstige» — Matrix, Summen, Details', () => {
+  const d = {
+    mode: 'open',
+    chapters: [chapter(1)],
+    matrix: { 1: { stil: { count: 2, per1k: 1, pages: 1 }, alt_a: { count: 1, per1k: 0.5, pages: 1 }, alt_b: { count: 3, per1k: 1.5, pages: 1 } } },
+    totals: { stil: 2, alt_a: 1, alt_b: 3 },
+    details: {
+      '1:alt_a': [{ page_id: 7, page_name: 'P7', count: 1, samples: [{ original: 'x', typ: 'alt_a' }] }],
+      '1:alt_b': [{ page_id: 7, page_name: 'P7', count: 3, samples: [{ original: 'y', typ: 'alt_b' }] }],
+      '1:stil': [{ page_id: 7, page_name: 'P7', count: 2, samples: [] }],
+    },
+  };
+  const out = withOtherBucket(d, new Set(['stil']));
+  assert.deepEqual(out.matrix[1][FEHLER_OTHER], { count: 4, per1k: 2, pages: 1 });
+  assert.equal(out.matrix[1].alt_a, undefined);
+  assert.deepEqual(out.totals, { stil: 2, [FEHLER_OTHER]: 4 });
+  const det = out.details[`1:${FEHLER_OTHER}`];
+  assert.equal(det.length, 1, 'eine Seite, zusammengefuehrt');
+  assert.equal(det[0].count, 4);
+  assert.deepEqual(det[0].samples.map(s => s.typ), ['alt_a', 'alt_b']);
+  assert.equal(out.details['1:alt_a'], undefined);
+  assert.equal(out.details['1:stil'].length, 1, 'bekannte Typen unberuehrt');
+
+  const clean = { ...d, matrix: { 1: { stil: d.matrix[1].stil } }, totals: { stil: 2 } };
+  assert.equal(withOtherBucket(clean, new Set(['stil'])), clean, 'ohne fremde Typen: dieselbe Referenz');
+});
+
+test('Einrueckung: Tiefe aus depthOf, Kapitel ohne ID bleiben auf Ebene 1', () => {
+  const rows = buildFehlerRows(data(
+    [chapter(1), chapter(2), chapter(null, { chapter_name: null })],
+    { 1: {}, 2: {}, __uncat__: {} },
+  ), TYPEN, 'de', (id) => (id === 2 ? 3 : 1));
+  assert.deepEqual(rows.map(r => r.depth), [1, 3, 1]);
+  assert.equal(rows[1].indentVars['--heatmap-depth'], '2');
+});
+
+test('Blaesse folgt dem Anteil gepruefter Woerter, nicht der Abschnitte', () => {
+  // 1 von 2 Abschnitten geprueft, aber 95 % des Umfangs.
+  const rows = buildFehlerRows(data(
+    [chapter(1, { pages_checked: 1, words: 2000, words_covered: 1900, words_checked: 1900 }), chapter(2)],
+    { 1: { stil: { count: 4, per1k: 2, pages: 1 } }, 2: { stil: { count: 1, per1k: 0.5, pages: 1 } } },
+  ), TYPEN, 'de');
+  assert.equal(rows[0].coveragePct, 50, 'Balken/Label bleiben bei Abschnitten');
+  assert.equal(rows[0].cells.stil.vars['--heatmap-opacity'], String(0.5 + 0.95 / 2));
 });

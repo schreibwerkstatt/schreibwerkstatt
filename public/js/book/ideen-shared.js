@@ -124,3 +124,21 @@ export function compareIdeeManual(a, b) {
   if (ca !== cb) return ca < cb ? 1 : -1;
   return (b.id || 0) - (a.id || 0);
 }
+
+// Aufzählungszeichen am Zeilenanfang einer eingefügten Liste: «- », «* », «• »,
+// «– », «1. », «1) ». Nur das Zeichen samt Leerraum fällt, der Text bleibt.
+const LIST_MARKER_RE = /^(?:[-*•–—]|\d{1,3}[.)])\s+/;
+
+/**
+ * Text des Anlegen-Felds im Ideen-Board → eine Idee je nicht-leerer Zeile.
+ * Eine eingefügte Stichwortliste (aus Notizen, Mail, Word) wird so zu einzelnen
+ * Pendenzen, statt als ein Block in einer Karte zu stehen. Aufzählungszeichen
+ * am Zeilenanfang fallen bei mehreren Zeilen weg — sie sind Form der Quelle,
+ * nicht Inhalt der Idee.
+ */
+export function splitIdeenLines(text) {
+  const lines = String(text || '').split(/\r?\n/).map(l => l.trim()).filter(Boolean);
+  // Eine einzelne Zeile ist keine Liste: «1. Akt neu ordnen» bleibt, wie es dasteht.
+  if (lines.length < 2) return lines;
+  return lines.map(l => l.replace(LIST_MARKER_RE, '').trim()).filter(Boolean);
+}

@@ -106,3 +106,24 @@ test('Fassungs-Kennzahl und Live-Heatmap zählen identisch (gemeinsamer Kern)', 
     assert.equal(total, m[mode].total, `Modus ${mode}`);
   }
 });
+
+test('juengster Check bei gleicher Zeit: groessere id — wie das Heatmap-SQL', () => {
+  const at = '2026-04-01T10:00:00.000Z';
+  const rows = [
+    { id: 9, page_id: 1, checked_at: at, errors_json: JSON.stringify([{ typ: 'stil', original: 'neu' }]), applied_errors_json: null },
+    { id: 4, page_id: 1, checked_at: at, errors_json: JSON.stringify([]), applied_errors_json: null },
+  ];
+  assert.equal(computeLektoratMetrics(rows).all.total, 1);
+  assert.equal(computeLektoratMetrics([...rows].reverse()).all.total, 1, 'unabhaengig von der Zeilenfolge');
+});
+
+test('words_checked nimmt die Wortzahl des Laufs, sonst den Umfang der Fassung', () => {
+  const rows = [
+    { id: 1, page_id: 1, checked_at: '2026-01-01T00:00:00.000Z', errors_json: '[]', applied_errors_json: null, words: 400 },
+    { id: 2, page_id: 2, checked_at: '2026-01-01T00:00:00.000Z', errors_json: '[]', applied_errors_json: null, words: null },
+    { id: 3, page_id: 3, checked_at: '2026-01-01T00:00:00.000Z', errors_json: '[]', applied_errors_json: null, words: 50 },
+  ];
+  // Seite 3 existiert in der Fassung nicht mehr → zaehlt nicht.
+  const m = computeLektoratMetrics(rows, { wordsByPage: new Map([[1, 1000], [2, 300]]) });
+  assert.equal(m.words_checked, 700);
+});

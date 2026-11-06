@@ -581,3 +581,52 @@ test('Einabschnitts-Kapitel: soleChapterPages und Ort der Ideen-Karte', () => {
   assert.deepEqual(ideenPlace(tree, { kind: 'page', id: 90 }), { pageId: 90, chapterId: null });
   assert.equal(ideenPlace(tree, { kind: 'page', id: null }), null);
 });
+
+// ── Im Board angelegtes Kapitel (`pinnedLanes`) ────────────────────────────
+
+test('Angeheftet: das gerade angelegte Kapitel erscheint auch ohne Ideen', () => {
+  const tree = [
+    { type: 'chapter', id: 1, solo: false, depth: 1, name: 'Kapitel 1', pages: [{ id: 10, name: 'Kapitel 1' }] },
+    { type: 'chapter', id: 2, solo: false, depth: 1, name: 'Neu', pages: [{ id: 20, name: 'Neu' }] },
+  ];
+  const laneOrder = buildLaneOrder(tree);
+  const ideen = [idee(1, { page_id: 10, lane_chapter_id: 1 })];
+  // Ohne Anheften bleibt die leere Bahn weg (Regel «nur belegte Bahnen») …
+  assert.deepEqual(buildBoard({ ideen, laneOrder }).lanes.map(r => r.lane.key), ['page:10']);
+  // … angeheftet steht sie in Baum-Reihenfolge da, leer, mit der Beschriftung des Kapitels.
+  const { lanes, total } = buildBoard({ ideen, laneOrder, pinnedLanes: ['page:20'] });
+  assert.deepEqual(lanes.map(r => r.lane.key), ['page:10', 'page:20']);
+  assert.equal(lanes[1].count, 0);
+  assert.equal(lanes[1].lane.label, 'Neu');
+  assert.equal(total, 1, 'eine leere Bahn zaehlt keine Idee');
+});
+
+test('Angeheftet: ein leeres Kapitel ohne Abschnitt erscheint als Kapitel-Bahn', () => {
+  const laneOrder = buildLaneOrder([{ type: 'chapter', id: 3, solo: false, depth: 1, name: 'Leer', pages: [] }]);
+  const { lanes } = buildBoard({ ideen: [], laneOrder, pinnedLanes: ['chapter:3'] });
+  assert.deepEqual(lanes.map(r => r.lane.key), ['chapter:3']);
+  assert.equal(lanes[0].childLanes, 0, 'die leere Bahn zaehlt nicht als belegter Abschnitt');
+});
+
+test('Angeheftet: ein Key, den der Baum nicht kennt, erzeugt keine Zeile', () => {
+  const { lanes } = buildBoard({ ideen: [], laneOrder: buildLaneOrder(TREE), pinnedLanes: ['page:999'] });
+  assert.deepEqual(lanes, []);
+});
+
+// ── Eingefuegte Liste → eine Idee je Zeile ─────────────────────────────────
+
+test('splitIdeenLines: eine Idee je nicht-leerer Zeile, Aufzaehlungszeichen fallen weg', async () => {
+  const { splitIdeenLines } = await import(path.join(ROOT, 'public', 'js', 'book', 'ideen-shared.js'));
+  assert.deepEqual(
+    splitIdeenLines('- Schwester taucht auf\r\n\n* Brief finden\n• Regen\n3. Bahnhof\n4) Nacht\n  –  Ende  '),
+    ['Schwester taucht auf', 'Brief finden', 'Regen', 'Bahnhof', 'Nacht', 'Ende'],
+  );
+});
+
+test('splitIdeenLines: eine einzelne Zeile bleibt, wie sie dasteht', async () => {
+  const { splitIdeenLines } = await import(path.join(ROOT, 'public', 'js', 'book', 'ideen-shared.js'));
+  assert.deepEqual(splitIdeenLines('  1. Akt neu ordnen  '), ['1. Akt neu ordnen']);
+  assert.deepEqual(splitIdeenLines('- Gedankenstrich bleibt'), ['- Gedankenstrich bleibt']);
+  assert.deepEqual(splitIdeenLines(' \n \n'), []);
+  assert.deepEqual(splitIdeenLines(null), []);
+});

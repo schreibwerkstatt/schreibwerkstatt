@@ -158,7 +158,7 @@ test('details: pro Kapitel+Typ absteigend nach Anzahl, max 3 Beispiele je Seite'
   const rows = r.details['10:stil'];
   assert.deepEqual(rows.map(x => x.count), [5, 1], 'absteigend');
   assert.equal(rows[0].samples.length, 3, 'Beispiele gedeckelt');
-  assert.deepEqual(rows[0].samples[0], { original: 'a', korrektur: 'a!', erklaerung: 'weil' });
+  assert.deepEqual(rows[0].samples[0], { original: 'a', korrektur: 'a!', erklaerung: 'weil', typ: 'stil' });
 });
 
 test('kaputtes JSON und Findings ohne Typ kippen die Antwort nicht', () => {
@@ -221,4 +221,34 @@ test('open: eine Annahme deckt genau einen gleichlautenden Befund', () => {
     appliedRows: [applied(1, [finding('fuellwort', 'halt')], { id: 3 })],
   });
   assert.equal(r.matrix[10].fuellwort.count, 1);
+});
+
+test('Nenner: Wortzahl des Laufs (page_checks.words), Abdeckung nach heutigem Umfang', () => {
+  const r = buildFehlerHeatmap({
+    pages: [page(1, 10, 1000), page(2, 10, 1000)],
+    checks: [check(1, [finding('stil', 'A')], { words: 500 }), check(2, [], { words: null })],
+    appliedRows: [],
+  });
+  const ch = r.chapters[0];
+  assert.equal(ch.words_checked, 1500, 'Lauf-Woerter (500) + Fallback auf heute (1000)');
+  assert.equal(ch.words_covered, 2000, 'heutiger Umfang der gepruefen Seiten');
+});
+
+test('per1k geht ungerundet raus — seltene Typen bleiben unterscheidbar', () => {
+  const r = buildFehlerHeatmap({
+    pages: [page(1, 10, 30000)],
+    checks: [check(1, [finding('stil', 'A')])],
+    appliedRows: [],
+  });
+  assert.ok(Math.abs(r.matrix[10].stil.per1k - 1 / 30) < 1e-9, 'nicht auf 0.0 gerundet');
+});
+
+test('Seite auf ein geloeschtes Kapitel faellt unter __uncat__ (Zeile kommt aus dem JOIN mit chapter_id null)', () => {
+  const r = buildFehlerHeatmap({
+    pages: [page(1, null, 100)],
+    checks: [check(1, [finding('stil', 'A')])],
+    appliedRows: [],
+  });
+  assert.equal(r.chapters[0].chapter_id, null);
+  assert.equal(r.matrix.__uncat__.stil.count, 1);
 });

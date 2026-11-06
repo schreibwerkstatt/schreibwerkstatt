@@ -518,15 +518,16 @@ function restoreLektorat(bookId, data, ctx) {
   const { pageOf, chapterOf, email } = ctx;
   const ins = db.prepare(`INSERT INTO page_checks
     (page_id,book_id,checked_at,error_count,errors_json,stilanalyse,fazit,model,saved,saved_at,applied_errors_json,
-     user_email,selected_errors_json,szenen_json,chapter_id)
-    VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`);
+     user_email,selected_errors_json,szenen_json,chapter_id,words)
+    VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`);
   let n = 0;
   for (const r of (Array.isArray(data.pageChecks) ? data.pageChecks : [])) {
     const pid = pageOf(r.page_id);
     if (!pid) continue;
     ins.run(pid, bookId, r.checked_at || _now(), r.error_count ?? 0, r.errors_json ?? null, r.stilanalyse ?? null,
       r.fazit ?? null, r.model ?? null, r.saved ?? 0, r.saved_at ?? null, r.applied_errors_json ?? null,
-      email, r.selected_errors_json ?? null, r.szenen_json ?? null, chapterOf(r.chapter_id));
+      email, r.selected_errors_json ?? null, r.szenen_json ?? null, chapterOf(r.chapter_id),
+      Number.isFinite(r.words) ? r.words : null);
     n += 1;
   }
   return { pageChecks: n };

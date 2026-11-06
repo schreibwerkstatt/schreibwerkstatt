@@ -74,6 +74,9 @@ export function registerIdeenBoardCard() {
 
     newContent: '',
     newLaneKey: LANE_BOOK,
+    // Im Board angelegte Kapitel: ihre Bahn steht auch leer im Raster
+    // (model.js#buildBoard `pinnedLanes`), bis die Karte zuruecksetzt.
+    pinnedLaneKeys: [],
     // Zuordnen einer Buch-Idee (ohne Anker) zu Kapitel/Seite.
     assigningId: null,
     assignLaneKey: '',

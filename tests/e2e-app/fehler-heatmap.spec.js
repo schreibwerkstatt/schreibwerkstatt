@@ -103,3 +103,53 @@ test('Fehler-Heatmap rendert Dichte-Farbe, Mindestmenge, Summenzeile und Naeheru
 
   guard.assertClean();
 });
+
+// Typen ohne eigene Spalte (umbenannt, entfernt, importiert) verschwinden nicht:
+// die Spalte «Sonstige» erscheint, das Detail-Panel nennt den Rohtyp, und ein
+// Klick auf das Original springt in den Abschnitt (Karte schliesst).
+test('Fehler-Heatmap: Spalte «Sonstige» und Sprung an die Textstelle', async ({ page }) => {
+  const guard = attachConsoleGuard(page);
+  await bootApp(page);
+  await selectSeededBook(page);
+
+  const target = await page.evaluate(() => {
+    const p = window.Alpine.store('nav').pages[0];
+    return { id: p.id, name: p.name };
+  });
+  const heat = {
+    mode: 'open',
+    chapters: [
+      { chapter_id: 901, chapter_name: 'Eins', pages_total: 1, pages_checked: 1, words: 2000, words_checked: 2000, words_covered: 2000 },
+    ],
+    matrix: { 901: { stil: { count: 1, per1k: 0.5, pages: 1 }, alter_typ: { count: 2, per1k: 1, pages: 1 } } },
+    details: {
+      '901:alter_typ': [{ page_id: target.id, page_name: target.name, count: 2,
+        samples: [{ original: 'zz-kein-treffer', korrektur: '', erklaerung: '', typ: 'alter_typ' }] }],
+    },
+    totals: { stil: 1, alter_typ: 2 },
+  };
+  await page.route('**/history/fehler-heatmap/**', json(heat));
+  await page.route('**/history/fehler-trend/**', json({ versions: [] }));
+
+  await page.evaluate(() => window.__app.toggleFehlerHeatmapCard());
+  const card = page.locator('.card--heatmap');
+  const row = card.locator('.heatmap-table tbody tr').first();
+  await expect(row).toBeVisible({ timeout: 20000 });
+
+  const otherIdx = await page.evaluate(() =>
+    window.Alpine.$data(document.querySelector('.card--heatmap')).fehlerHeatmapTypen.indexOf('sonstige'));
+  expect(otherIdx, 'Spalte «Sonstige» vorhanden').toBeGreaterThan(0);
+  const otherCell = row.locator('td.heatmap-cell').nth(otherIdx);
+  await expect(otherCell).toHaveText('2');
+  await expect(card.locator('.heatmap-table tfoot td.heatmap-cell').nth(otherIdx)).toHaveText('2');
+
+  await otherCell.locator('button.heatmap-cell-btn').click();
+  const detail = card.locator('.heatmap-detail');
+  await expect(detail.locator('.heatmap-detail-typ')).toHaveText('alter_typ');
+
+  await detail.locator('button.heatmap-detail-original--link').click();
+  await expect(card).toBeHidden();
+  await expect.poll(() => page.evaluate(() => window.__app.currentPage?.id)).toBe(target.id);
+
+  guard.assertClean();
+});

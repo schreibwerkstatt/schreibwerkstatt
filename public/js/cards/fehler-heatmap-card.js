@@ -27,6 +27,8 @@ export function registerFehlerHeatmapCard() {
     _memos: {},
     // Anfrage-Zähler für loadFehlerHeatmap: nur die jüngste Antwort schreibt.
     _fehlerHeatmapSeq: 0,
+    // Dasselbe für loadFehlerTrend.
+    _fehlerTrendSeq: 0,
     _lifecycle: null,
 
     init() {
@@ -54,6 +56,7 @@ export function registerFehlerHeatmapCard() {
           ctx.activeFehlerDetailKey = null;
           ctx.fehlerTrendData = [];
           ctx._memos = {};
+          ctx._applyFehlerColumns(null);
           _destroyFehlerTrendChart();
         },
       });

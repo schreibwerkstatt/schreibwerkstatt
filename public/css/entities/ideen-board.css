@@ -65,6 +65,12 @@
   padding: var(--size-compact-padding);
   border: var(--border-thin) solid var(--color-border);
   background: var(--color-bg);
+  /* Einzeilig wie die Leiste, waechst mit einer eingefuegten Liste
+     (eine Idee je Zeile, ideen-board/add.js) und scrollt ab dem Deckel. */
+  field-sizing: content;
+  max-height: 40vh;
+  overflow-y: auto;
+  resize: none;
 }
 
 /* ── Raster ─────────────────────────────────────────────────────────────── */

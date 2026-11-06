@@ -84,7 +84,7 @@
           <tbody>
             <template x-for="row in fehlerHeatmapRows()" :key="row.key">
               <tr>
-                <th class="heatmap-rowhead" scope="row">
+                <th class="heatmap-rowhead fehler-heatmap-rowhead" scope="row" :style="row.indentVars">
                   <span class="heatmap-rowhead-main"
                         :class="{ 'internal-link text-link': row.chapter.chapter_id != null }"
                         @click="row.chapter.chapter_id != null && fehlerHeatmapJumpToChapter(row.chapter)"
@@ -165,7 +165,17 @@
                 </div>
                 <template x-for="(s, i) in page.samples" :key="i">
                   <div class="heatmap-detail-sample">
-                    <span class="heatmap-detail-original" x-text="s.original"></span>
+                    <!-- Rohtyp nur in der Spalte «Sonstige»: dort bündeln sich Typen ohne eigene Spalte. -->
+                    <template x-if="fehlerHeatmapActiveDetail().typ === fehlerHeatmapOther && s.typ">
+                      <span class="heatmap-detail-typ" x-text="s.typ"></span>
+                    </template>
+                    <!-- Klick springt an genau diese Stelle im Abschnitt. -->
+                    <template x-if="s.original">
+                      <button type="button" class="heatmap-detail-original heatmap-detail-original--link"
+                              :data-tip="$app.t('fehlerHeatmap.detail.jumpToPassage')"
+                              @click="fehlerHeatmapJumpToPage(page.page_id, s.original)"
+                              x-text="s.original"></button>
+                    </template>
                     <template x-if="s.korrektur">
                       <span class="heatmap-detail-korrektur" x-text="s.korrektur"></span>
                     </template>

@@ -39,6 +39,11 @@ export function registerIdeenCard() {
     loading: false,
     busy: false,
     errorMessage: '',
+    // Hinweis aufs Ideen-Board (book/ideen.js#_noteBoardHintPlace): Orte mit neuen
+    // Ideen in dieser Sitzung, je Buch. Bewusst nicht in resetIdeen — der
+    // Seitenwechsel ist genau der Moment, in dem gezaehlt werden soll.
+    _boardHintPlaces: null,
+    boardHintDue: false,
     _lifecycle: null,
 
     init() {

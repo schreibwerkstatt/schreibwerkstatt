@@ -38,6 +38,11 @@ function _inPlace(idee, place) {
   return place.chapterId != null && idee.chapter_id != null && String(idee.chapter_id) === String(place.chapterId);
 }
 
+// Ab so vielen verschiedenen Orten (Abschnitt bzw. Kapitel) mit neuen Ideen in
+// einer Sitzung zeigt die Karte den Hinweis aufs Ideen-Board.
+const BOARD_HINT_PLACES = 3;
+export const BOARD_HINT_KEY = 'ideen.boardOverview';
+
 export const ideenMethods = {
   // ── Lifecycle ────────────────────────────────────────────────────────────
   async loadIdeen() {
@@ -155,11 +160,31 @@ export const ideenMethods = {
       this.newContent = '';
       this.errorMessage = '';
       this._publishIdeenCount();
+      this._noteBoardHintPlace(bookId, place);
     } catch (e) {
       this.errorMessage = app.t('ideen.error.save');
     } finally {
       this.busy = false;
     }
+  },
+
+  // Hinweis aufs Ideen-Board: wer in einer Sitzung an mehreren Orten Ideen
+  // anlegt, gliedert — und das geht im Board an einem Ort statt Abschnitt fuer
+  // Abschnitt. Gezaehlt wird je Buch, ueber Seitenwechsel hinweg (resetIdeen
+  // laesst die Zaehlung stehen); weggeklickt wird ueber den hints-Store.
+  _noteBoardHintPlace(bookId, place) {
+    const cur = this._boardHintPlaces;
+    const keys = cur?.bookId === bookId ? cur.keys : [];
+    const key = place.pageId != null ? `page:${place.pageId}` : `chapter:${place.chapterId}`;
+    const next = keys.includes(key) ? keys : [...keys, key];
+    this._boardHintPlaces = { bookId, keys: next };
+    if (next.length >= BOARD_HINT_PLACES) this.boardHintDue = true;
+  },
+
+  openBoardFromHint() {
+    Alpine.store('hints').dismiss(BOARD_HINT_KEY);
+    const app = window.__app;
+    if (!app.showIdeenBoardCard) app.toggleIdeenBoardCard?.();
   },
 
   startEditIdee(idee) {

@@ -1,19 +1,27 @@
 <!-- Anlegen + Zuordnen im Ideen-Board (Fragment, string-seitiger @include aus
      ideen-board.html; Scope = ideenBoardCard). -->
 <!-- Neue Pendenz: Bahn waehlen + Text. Vorgewaehlt ist das ganze Buch (Idee
-     ohne Anker), zugeordnet wird spaeter ueber „Zuordnen" auf der Karte. -->
+     ohne Anker), zugeordnet wird spaeter ueber „Zuordnen" auf der Karte.
+     Mehrzeilig: eine eingefuegte Liste wird nach Rueckfrage zu einer Idee je
+     Zeile (ideen-board/add.js). Enter legt an, Umschalt+Enter bricht um.
+     «+ Kapitel» legt ein Kapitel am Buchende an und waehlt es hier vor — die
+     Gliederung entsteht im Board, ohne Umweg ueber den Buchorganizer. -->
 <div class="card-section ideen-board-add">
   <div class="ideen-board-add-lane"
        x-data="entityPicker({ entity: 'custom', placeholder: $app.t('ideenBoard.addLane'), items: () => newLaneOptions() })"
        x-modelable="value" x-model="newLaneKey"></div>
-  <input type="text" class="ideen-input ideen-board-add-input" x-model="newContent"
-         :placeholder="$app.t('ideenBoard.addPlaceholder')"
-         :aria-label="$app.t('ideenBoard.addPlaceholder')"
-         :disabled="busy" data-spellcheck="spelling"
-         @keydown.enter="$enter($event, () => addIdee())">
+  <textarea class="ideen-input ideen-board-add-input" rows="1" x-model="newContent" x-ref="ideenBoardAddInput"
+            :placeholder="$app.t('ideenBoard.addPlaceholder')"
+            :aria-label="$app.t('ideenBoard.addPlaceholder')"
+            :disabled="busy" data-spellcheck="spelling"
+            @input="autosizeEditInput($el)"
+            @keydown.enter="$enter($event, () => addIdee(), { multiline: true })"></textarea>
   <button type="button" class="ideen-add-btn btn-compact" @click="addIdee()"
           :disabled="busy || !newLaneKey || !(newContent || '').trim()"
           x-text="$app.t('ideen.add')"></button>
+  <button type="button" class="btn-compact ideen-board-add-chapter" x-show="$app.canEdit()" @click="addChapterLane()"
+          :disabled="busy" :data-tip="$app.t('ideenBoard.addChapterTip')"
+          x-text="$app.t('ideenBoard.addChapter')"></button>
 </div>
 
 <!-- Zuordnen einer Buch-Idee bzw. Verschieben einer verankerten: am Knopf der

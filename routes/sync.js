@@ -10,7 +10,7 @@ const { computePageIndex, writePageIndex, writeFigureMentionsForPageAllUsers, lo
 const { invalidateBookPageCache } = require('./jobs/chat');
 const { localIsoDate } = require('../lib/local-date');
 const searchIndex = require('../lib/search');
-const { htmlToPlainText, htmlToPlainTextWithMsgRanges, stripMsgThreads, stripTableBlocks } = require('../lib/html-text');
+const { pageWordCount, htmlToPlainText, htmlToPlainTextWithMsgRanges, stripMsgThreads, stripTableBlocks } = require('../lib/html-text');
 const { stampLexiconHistory, bookLanguage } = require('../db/lexicon');
 const { MATTR_WINDOW } = require('../lib/lexicon/measures');
 const { listChaptersForBook, listPageNamesForBook } = require('../db/content-names');
@@ -74,7 +74,7 @@ function _coalesce(map, key, fn) {
 // auf dem Prosatext), Wortformen aus dem Wortschatz-Scan (stampLexiconHistory).
 function computeStats(html) {
   const text = htmlToText(html || '');
-  const words = text.trim() === '' ? 0 : text.trim().split(/\s+/).length;
+  const words = pageWordCount(html);
   const chars = text.length;
   const tok = Math.round(chars / CHARS_PER_TOKEN);
   return { words, chars, tok };

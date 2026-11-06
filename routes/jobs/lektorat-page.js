@@ -22,7 +22,7 @@ const { finalizeFehler, effectiveStylisticCap, _runSig } = require('./lektorat-f
 const userDictionary = require('../../db/user-dictionary');
 const { MAX_PROMPT_WORDS, dictionaryWordsOnPage, dropDictionaryFindings } = require('./lektorat-dictionary');
 const { lektoratProgress, markPreviouslyRejected } = require('../../lib/lektorat-progress');
-const { hasMsgThread } = require('../../lib/html-text');
+const { hasMsgThread, pageWordCount } = require('../../lib/html-text');
 const { textMatch } = require('../../lib/esm-bridge');
 const { checkDialogformat, mergeRegelBefunde, ohneRegelBefunde } = require('../../lib/dialogformat-rules');
 
@@ -54,8 +54,11 @@ const _prevPageCheckStmt = db.prepare(`
    LIMIT 1
 `);
 const _insertPageCheckStmt = db.prepare(`INSERT INTO page_checks
-  (page_id, book_id, chapter_id, checked_at, error_count, errors_json, szenen_json, stilanalyse, fazit, model, user_email)
-  VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`);
+  (page_id, book_id, chapter_id, checked_at, error_count, errors_json, szenen_json, stilanalyse, fazit, model, user_email, words)
+  VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`);
+// History-Dedup: der wiederverwendete Eintrag bekommt die Wortzahl des jetzt
+// geprüften Stands — gleiches Ergebnis heisst nicht gleicher Umfang.
+const _setPageCheckWordsStmt = db.prepare('UPDATE page_checks SET words = ? WHERE id = ?');
 
 // Lokale Provider (ollama/llama) bekommen einen deutlich abgespeckten Lektorat-Prompt:
 // kein Nachbarseiten-Kontext (Seiten-Roundtrips gespart), keine Figuren-Beziehungen,
@@ -347,12 +350,18 @@ async function checkOnePage(run, {
     && lastCheck.szenen_json === szenenJson
     && (lastCheck.stilanalyse || null) === (result.stilanalyse || null)
     && (lastCheck.fazit || null) === (result.fazit || null));
-  const checkId = historyDedup
-    ? lastCheck.id
-    : _insertPageCheckStmt.run(parseInt(pageId, 10), parseInt(bookId, 10) || null, pd.chapter_id || null,
+  // Wortzahl des geprüften Stands: Nenner der Fehlerdichte (lib/lektorat-metrics.js#checkedWords).
+  const words = pageWordCount(html);
+  let checkId;
+  if (historyDedup) {
+    checkId = lastCheck.id;
+    _setPageCheckWordsStmt.run(words, checkId);
+  } else {
+    checkId = _insertPageCheckStmt.run(parseInt(pageId, 10), parseInt(bookId, 10) || null, pd.chapter_id || null,
       new Date().toISOString(), fehler.length, errorsJson,
       szenenJson,
-      result.stilanalyse || null, result.fazit || null, run.model, userEmail || null).lastInsertRowid;
+      result.stilanalyse || null, result.fazit || null, run.model, userEmail || null, words).lastInsertRowid;
+  }
 
   return {
     pd, html, fehler, szenen,

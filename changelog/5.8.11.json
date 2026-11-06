@@ -1,0 +1,36 @@
+{
+  "version": "5.8.11",
+  "date": "2026-11-06",
+  "entries": [
+    {
+      "kind": "neu",
+      "de": "Ideen-Board: mit «+ Kapitel» legst du direkt im Board ein neues Kapitel an und hältst gleich Ideen dafür fest. So entsteht die Gliederung an einem Ort.",
+      "en": "Ideas board: «+ Chapter» adds a new chapter right on the board, ready for its first ideas. That way your outline grows in one place."
+    },
+    {
+      "kind": "neu",
+      "de": "Ideen-Board: füg eine Liste ins Anlegen-Feld ein, und jede Zeile wird nach einer Rückfrage zu einer eigenen Idee.",
+      "en": "Ideas board: paste a list into the add field, and after a quick confirmation each line becomes its own idea."
+    },
+    {
+      "kind": "verbessert",
+      "de": "Ideen-Karte: sammelst du Ideen für mehrere Kapitel, weist dich ein Tipp einmal auf das Ideen-Board hin, das die ganze Gliederung zeigt.",
+      "en": "Ideas card: when you collect ideas for several chapters, a tip points you once to the ideas board, which shows the whole outline."
+    },
+    {
+      "kind": "verbessert",
+      "de": "Fehler-Heatmap: im Detail-Panel springst du per Klick an die Stelle im Abschnitt. Unterkapitel sind eingerückt.",
+      "en": "Error heatmap: in the detail panel, one click takes you to the passage in the section. Subchapters are indented."
+    },
+    {
+      "kind": "verbessert",
+      "de": "Fehler-Heatmap: Befunde aller Personen am Buch zählen jetzt gemeinsam, und die Fehlerdichte bezieht sich auf den Text, der geprüft wurde.",
+      "en": "Error heatmap: findings from everyone working on the book now count together, and the error density refers to the text that was actually checked."
+    },
+    {
+      "kind": "behoben",
+      "de": "Fehler-Heatmap: Befunde ohne eigene Spalte fehlten in der Tabelle, obwohl der Trend sie mitzählte. Sie stehen jetzt unter «Sonstige».",
+      "en": "Error heatmap: findings without their own column were missing from the table even though the trend counted them. They now appear under «Other types»."
+    }
+  ]
+}

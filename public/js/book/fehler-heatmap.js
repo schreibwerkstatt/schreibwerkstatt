@@ -14,6 +14,7 @@
 import { escHtml, fetchJson, formatNumber, heatmapCellVars, HEATMAP_MIN_WORDS, localeTag, minMaxBy, tzOpts } from '../utils.js';
 import { loadChart } from '../lazy-libs.js';
 import { isSelectedBook } from '../cards/book-guard.js';
+import { highlightOccurrenceOnPage } from './passage-highlight.js';
 import { createChartHolder } from '../cards/chart-holder.js';
 import { chartPalette, crosshairPlugin, lineDataset, timeSeriesOptions, withAlpha } from '../cards/chart-style.js';
 import { memoMethods } from '../cards/card-memo.js';
@@ -50,15 +51,68 @@ const FEHLER_CLUSTERS = [
 ];
 const FEHLER_TYPEN = FEHLER_CLUSTERS.flatMap(c => c.typen);
 
+// Spalte «Sonstige»: bündelt Befund-Typen ohne eigene Spalte (umbenannt,
+// entfernt, aus einem Import). Erscheint nur, wenn es solche Befunde gibt —
+// sonst verschwänden sie still, während Trend und Summen sie mitzählen.
+export const FEHLER_OTHER = 'sonstige';
+const FEHLER_CLUSTERS_WITH_OTHER = [...FEHLER_CLUSTERS, { key: 'other', typen: [FEHLER_OTHER] }];
+const FEHLER_TYPEN_WITH_OTHER = [...FEHLER_TYPEN, FEHLER_OTHER];
+const KNOWN_TYPEN = new Set(FEHLER_TYPEN);
+
 // Spalten-Indizes der jeweils ersten Spalte eines Clusters (fuer Trennlinien).
 // Das erste Cluster startet bei 0 und faellt raus — links aussen keine Linie.
 // Modul-Konstante, kein Getter: das Template fragt sie einmal PRO ZELLE ab
 // (26 Typen x N Kapiteln), und ein Getter haette dabei jedes Mal zwei Arrays
 // gebaut. Set statt Array, weil der Zugriff ein Enthaltensein-Test ist.
-const FEHLER_CLUSTER_STARTS = new Set(FEHLER_CLUSTERS.reduce((acc, c) => {
+// Enthält auch den Start der «Sonstige»-Spalte; ohne sie gibt es den Index nicht.
+const FEHLER_CLUSTER_STARTS = new Set(FEHLER_CLUSTERS_WITH_OTHER.reduce((acc, c) => {
   acc.push(acc.at(-1) + c.typen.length);
   return acc;
 }, [0]).slice(0, -1).slice(1));
+
+/** Faltet Typen ohne eigene Spalte in den Bucket `FEHLER_OTHER` (Matrix, Summen,
+ *  Detail-Liste). Pure; liefert die Antwort unverändert zurück, wenn es keine
+ *  solchen Typen gibt. Dichten addieren sich (gleicher Nenner je Kapitel), die
+ *  Abschnittszahl kommt aus den Detail-Listen (eindeutige page_id). */
+export function withOtherBucket(data, known = KNOWN_TYPEN) {
+  if (!data?.matrix) return data;
+  const isOther = (typ) => typ !== FEHLER_OTHER && !known.has(typ);
+  if (!Object.keys(data.totals || {}).some(isOther)) return data;
+
+  const matrix = {};
+  const details = { ...(data.details || {}) };
+  for (const [key, row] of Object.entries(data.matrix)) {
+    const out = {};
+    let count = 0, per1k = 0;
+    const pages = new Map(); // page_id -> Detail-Eintrag (zusammengeführt)
+    for (const [typ, cell] of Object.entries(row)) {
+      if (!isOther(typ)) { out[typ] = cell; continue; }
+      count += cell.count || 0;
+      per1k += cell.per1k || 0;
+      for (const d of details[`${key}:${typ}`] || []) {
+        const prev = pages.get(d.page_id);
+        if (prev) {
+          prev.count += d.count;
+          prev.samples = [...prev.samples, ...(d.samples || [])];
+        } else {
+          pages.set(d.page_id, { ...d, samples: [...(d.samples || [])] });
+        }
+      }
+      delete details[`${key}:${typ}`];
+    }
+    if (count > 0) {
+      out[FEHLER_OTHER] = { count, per1k, pages: pages.size };
+      details[`${key}:${FEHLER_OTHER}`] = [...pages.values()].sort((a, b) => b.count - a.count);
+    }
+    matrix[key] = out;
+  }
+  const totals = {};
+  for (const [typ, n] of Object.entries(data.totals || {})) {
+    const k = isOther(typ) ? FEHLER_OTHER : typ;
+    totals[k] = (totals[k] || 0) + n;
+  }
+  return { ...data, matrix, totals, details };
+}
 
 const MODES = ['open', 'applied', 'all'];
 const UNCAT = '__uncat__';
@@ -72,6 +126,15 @@ function _coveragePct(ch) {
   return ch.pages_total ? Math.round((ch.pages_checked / ch.pages_total) * 100) : 0;
 }
 
+// Abdeckung nach Umfang (0..1): heutige Wörter der geprüften Abschnitte am
+// Kapitelumfang. Steuert die Blässe — ein ungeprüfter Kurz-Abschnitt neben
+// einem langen geprüften soll die Farbe nicht halbieren. Ohne `words_covered`
+// (ältere Antwort) oder ohne Umfang: Anteil der Abschnitte.
+function _coverageWords(ch) {
+  if (typeof ch.words_covered === 'number' && ch.words > 0) return Math.min(1, ch.words_covered / ch.words);
+  return ch.pages_total ? ch.pages_checked / ch.pages_total : 0;
+}
+
 /** Baut die render-fertigen Zeilen aus der Server-Antwort. Pure (kein `this`),
  *  damit ohne Alpine testbar.
  *
@@ -83,8 +146,11 @@ function _coveragePct(ch) {
  *     und kein Einfluss auf die Skala. Erreichen weniger als zwei Kapitel die
  *     Schwelle (kurzes Buch), gilt sie nicht — sonst hätte es gar keine Farbe.
  *   - Teilweise geprüft → Farbe blasser (`--heatmap-opacity`, wirkt nur auf den
- *     Hintergrund, nicht auf die Zahl). */
-export function buildFehlerRows(data, typen, uiLocale) {
+ *     Hintergrund, nicht auf die Zahl), nach Anteil der geprüften WÖRTER.
+ *
+ *  `depthOf(chapter_id)` liefert die Gliederungstiefe (1 = Kapitel, 2 =
+ *  Unterkapitel …) für die Einrückung; ohne Funktion bleibt alles auf 1. */
+export function buildFehlerRows(data, typen, uiLocale, depthOf = null) {
   const chapters = data?.chapters || [];
   if (!chapters.length) return [];
   const matrix = data.matrix || {};
@@ -104,7 +170,8 @@ export function buildFehlerRows(data, typen, uiLocale) {
     const coveragePct = _coveragePct(ch);
     const isChecked = ch.pages_checked > 0;
     const lowData = isChecked && !inScale.has(ch);
-    const opacity = coveragePct < 100 ? 0.5 + (coveragePct / 200) : 1;
+    const cov = _coverageWords(ch);
+    const opacity = cov < 1 ? 0.5 + (cov / 2) : 1;
     const cells = {};
     for (const typ of typen) {
       const cell = matrix[key]?.[typ];
@@ -138,9 +205,13 @@ export function buildFehlerRows(data, typen, uiLocale) {
         },
       };
     }
+    const depth = ch.chapter_id != null && depthOf ? Math.max(1, Number(depthOf(ch.chapter_id)) || 1) : 1;
     return {
       key,
       chapter: ch,
+      depth,
+      // Einrückung als CSS-Variable (keine Inline-Styles im Markup).
+      indentVars: { '--heatmap-depth': String(depth - 1) },
       coveragePct,
       wordsLabel: formatNumber(ch.words || 0, uiLocale, 0),
       cells,
@@ -176,8 +247,19 @@ export function fehlerTrendDenominator(v) {
 }
 
 export const fehlerHeatmapMethods = {
-  get fehlerHeatmapTypen() { return FEHLER_TYPEN; },
-  get fehlerHeatmapClusters() { return FEHLER_CLUSTERS; },
+  // Spalten + Cluster als STATE, kein Getter: die Methoden werden per Spread in
+  // Alpine.data kopiert, und der Spread wertet Getter einmal aus — ein
+  // datenabhängiger Getter fröre auf dem Stand ohne Daten ein. Mit Spalte
+  // «Sonstige» nur, wenn die geladene Antwort solche Befunde trägt
+  // (_applyFehlerColumns im Lade-Pfad). Konstante Arrays, keine Kopie pro Render.
+  fehlerHeatmapTypen: FEHLER_TYPEN,
+  fehlerHeatmapClusters: FEHLER_CLUSTERS,
+  get fehlerHeatmapOther() { return FEHLER_OTHER; },
+  _applyFehlerColumns(data) {
+    const other = (data?.totals?.[FEHLER_OTHER] || 0) > 0;
+    this.fehlerHeatmapTypen = other ? FEHLER_TYPEN_WITH_OTHER : FEHLER_TYPEN;
+    this.fehlerHeatmapClusters = other ? FEHLER_CLUSTERS_WITH_OTHER : FEHLER_CLUSTERS;
+  },
   get fehlerHeatmapMinWords() { return HEATMAP_MIN_WORDS; },
   // Beginnt an dieser Spalte ein neues Cluster? (→ Trennlinie)
   fehlerHeatmapIsClusterStart(idx) { return FEHLER_CLUSTER_STARTS.has(idx); },
@@ -199,7 +281,9 @@ export const fehlerHeatmapMethods = {
       const mode = MODES.includes(this.fehlerHeatmapMode) ? this.fehlerHeatmapMode : 'open';
       const data = await fetchJson(`/history/fehler-heatmap/${bookId}?mode=${mode}`);
       if (!current()) return;
-      this.fehlerHeatmapData = data;
+      const shaped = withOtherBucket(data);
+      this._applyFehlerColumns(shaped);
+      this.fehlerHeatmapData = shaped;
     } catch (e) {
       if (!current()) return;
       console.error('[loadFehlerHeatmap]', e);
@@ -223,12 +307,15 @@ export const fehlerHeatmapMethods = {
   async loadFehlerTrend() {
     const bookId = Alpine.store('nav').selectedBookId;
     if (!bookId) return;
+    // Wie loadFehlerHeatmap: nur die jüngste Anfrage schreibt (schneller Buchwechsel).
+    const seq = ++this._fehlerTrendSeq;
+    const current = () => seq === this._fehlerTrendSeq && isSelectedBook(bookId);
     try {
       const data = await fetchJson(`/history/fehler-trend/${bookId}`);
-      if (!isSelectedBook(bookId)) return;
+      if (!current()) return;
       this.fehlerTrendData = data?.versions || [];
     } catch (e) {
-      if (!isSelectedBook(bookId)) return;
+      if (!current()) return;
       console.error('[loadFehlerTrend]', e);
       this.fehlerTrendData = [];
     }
@@ -341,13 +428,17 @@ export const fehlerHeatmapMethods = {
   fehlerHeatmapRows() {
     const data = this.fehlerHeatmapData;
     const locale = Alpine.store('shell').uiLocale;
-    return this._memo('rows', [data, locale], () => buildFehlerRows(data, FEHLER_TYPEN, locale));
+    const tree = Alpine.store('nav').tree;
+    return this._memo('rows', [data, locale, tree], () => {
+      const depth = new Map((tree || []).filter(i => i.type === 'chapter' && !i.solo).map(i => [String(i.id), i.depth]));
+      return buildFehlerRows(data, this.fehlerHeatmapTypen, locale, (id) => depth.get(String(id)));
+    });
   },
 
   fehlerHeatmapTotals() {
     const data = this.fehlerHeatmapData;
     const locale = Alpine.store('shell').uiLocale;
-    return this._memo('totals', [data, locale], () => buildFehlerTotals(data, FEHLER_TYPEN, locale));
+    return this._memo('totals', [data, locale], () => buildFehlerTotals(data, this.fehlerHeatmapTypen, locale));
   },
 
   // Tooltip einer Zelle aus den vorbereiteten Parametern (Text = UI-String).
@@ -387,36 +478,32 @@ export const fehlerHeatmapMethods = {
     };
   },
 
-  async fehlerHeatmapJumpToPage(pageId) {
-    const page = (Alpine.store('nav').pages || []).find(p => p.id === pageId);
+  // Sprung in den Abschnitt; mit `snippet` (Original eines Befunds) an diese
+  // Stelle statt an den Anfang. Öffnet den jüngsten eigenen Lektorat-Eintrag,
+  // damit die Befunde markiert sind — aber nur, wenn die Auswahl wirklich auf
+  // diesem Abschnitt gelandet ist: ein überholtes selectPage liesse sonst den
+  // Verlauf des vorigen Abschnitts stehen.
+  async fehlerHeatmapJumpToPage(pageId, snippet = '') {
+    const root = window.__app;
+    const page = (Alpine.store('nav').pages || []).find(p => String(p.id) === String(pageId));
     if (!page) return;
-    window.__app.showFehlerHeatmapCard = false;
+    root.showFehlerHeatmapCard = false;
     this.activeFehlerDetailKey = null;
-    await window.__app.selectPage(page);
-    // Jüngsten Lektorat-Eintrag öffnen, damit die Findings direkt sichtbar sind.
-    // Wenn gerade ein Check-Job läuft, ist pageHistory evtl. leer – dann nichts tun.
-    const latest = (window.__app.pageHistory || [])[0];
-    if (latest && window.__app.activeHistoryEntryId !== latest.id) {
-      await window.__app.loadHistoryEntry(latest);
+    await root.selectPage(page);
+    if (String(root.currentPage?.id) !== String(page.id)) return;
+    const latest = (root.pageHistory || [])[0];
+    if (latest && root.activeHistoryEntryId !== latest.id) {
+      await root.loadHistoryEntry(latest);
     }
+    if (snippet) highlightOccurrenceOnPage(snippet, { pageId: page.id });
   },
 
+  // Gleiches Sprungziel wie jede Kapitel-Referenz (kapitel-review.js#openChapterById):
+  // Kapitelbewertung, sonst erster Abschnitt — auch in Unterkapiteln.
   async fehlerHeatmapJumpToChapter(ch) {
     if (!ch || ch.chapter_id == null) return;
-    const root = window.__app;
-    const chapterId = ch.chapter_id;
-    const opts = root.kapitelReviewChapterOptions ? root.kapitelReviewChapterOptions() : [];
     this.activeFehlerDetailKey = null;
-    if (opts.some(c => String(c.id) === String(chapterId))) {
-      root.showFehlerHeatmapCard = false;
-      await root.openKapitelReviewForChapter(chapterId);
-      return;
-    }
-    const chapterNode = (Alpine.store('nav').tree || []).find(i => i.type === 'chapter' && String(i.id) === String(chapterId));
-    const firstPage = chapterNode?.pages?.[0];
-    if (firstPage) {
-      root.showFehlerHeatmapCard = false;
-      await root.selectPage(firstPage);
-    }
+    window.__app.showFehlerHeatmapCard = false;
+    await window.__app.openChapterById(ch.chapter_id);
   },
 };

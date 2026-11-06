@@ -15,8 +15,11 @@ const { db } = require('./connection');
 // materialisiert von db/book-order.js) und der Sortierschluessel der Zeilen;
 // `chapter_id` waere blosse Anlage-Reihenfolge. Muster wie
 // db/sources/citations.js#listSourceCitations (ORDER BY c.position, p.position).
+// `c.chapter_id` statt `p.chapter_id`: zeigt ein Abschnitt auf ein Kapitel, das
+// es nicht (mehr) gibt, faellt er unter „nicht zugeordnet" statt eine Zeile ohne
+// Namen mit totem Sprungziel zu bilden.
 const _stmtPages = db.prepare(`
-  SELECT p.page_id, p.page_name, p.chapter_id, c.chapter_name, c.position,
+  SELECT p.page_id, p.page_name, c.chapter_id, c.chapter_name, c.position,
          COALESCE(ps.words, 0) AS words
   FROM pages p
   LEFT JOIN chapters c ON c.chapter_id = p.chapter_id AND c.book_id = p.book_id
@@ -27,38 +30,43 @@ const _stmtPages = db.prepare(`
 
 // errors_json aus dem juengsten Check pro Seite = aktueller Findings-Stand.
 // `id`/`checked_at` braucht lib/lektorat-findings.js, um zu entscheiden, welche
-// Annahmen diesen Stand betreffen.
+// Annahmen diesen Stand betreffen; `words` ist die Wortzahl des geprueften
+// Stands (NULL bei Laeufen vor Migration 354 → Fallback auf page_stats).
+// Buchweit, ohne user_email-Filter — wie die Fassungs-Kennzahl des Trends
+// (lib/lektorat-metrics.js); sonst zeigte die Karte zwei Zaehlbasen
+// nebeneinander, sobald mehr als eine Person am Buch lektoriert. Juengster =
+// groesstes checked_at, bei Gleichstand groesste id (lektorat-findings.js#compareChecks).
 const _stmtLatestChecks = db.prepare(`
   WITH latest AS (
-    SELECT id, page_id, checked_at, errors_json, applied_errors_json,
+    SELECT id, page_id, checked_at, errors_json, applied_errors_json, words,
            ROW_NUMBER() OVER (PARTITION BY page_id ORDER BY checked_at DESC, id DESC) AS rn
     FROM page_checks
-    WHERE book_id = ? AND user_email = ?
+    WHERE book_id = ?
   )
-  SELECT id, page_id, checked_at, errors_json, applied_errors_json FROM latest WHERE rn = 1
+  SELECT id, page_id, checked_at, errors_json, applied_errors_json, words FROM latest WHERE rn = 1
 `);
 
 // Alle Checks mit applied_errors_json — die Union daraus ist kumulativ;
 // `saved_at` entscheidet, ob eine Annahme aus einem aelteren Check den
 // juengsten Stand noch betrifft (lib/lektorat-findings.js).
-// ORDER BY ist Teil des Vertrags, nicht Kosmetik: die Union dedupliziert per
-// `original` und behaelt den ERSTEN Treffer. Traegt derselbe Satz in zwei
-// Laeufen unterschiedliche `typ`-Werte (Re-Lektorat klassifiziert um), waere
-// ohne Sortierung SQL-seitig unbestimmt, welcher gewinnt — mit ihr immer der
-// aeltere Lauf.
+// ORDER BY ist Teil des Vertrags, nicht Kosmetik: bei gleich vielen Vorkommen
+// eines `original` behaelt die Union den ERSTEN Lauf. Traegt derselbe Satz in
+// zwei Laeufen unterschiedliche `typ`-Werte (Re-Lektorat klassifiziert um),
+// waere ohne Sortierung SQL-seitig unbestimmt, welcher gewinnt — mit ihr immer
+// der aeltere Lauf. Gleiche Ordnung wie compareChecks (checked_at, dann id).
 const _stmtApplied = db.prepare(`
   SELECT id, page_id, checked_at, saved_at, applied_errors_json
   FROM page_checks
-  WHERE book_id = ? AND user_email = ? AND applied_errors_json IS NOT NULL
-  ORDER BY checked_at ASC, rowid ASC
+  WHERE book_id = ? AND applied_errors_json IS NOT NULL
+  ORDER BY checked_at ASC, id ASC
 `);
 
-/** Rohzeilen fuer buildFehlerHeatmap: { pages, checks, appliedRows }. */
-function loadHeatmapRows(bookId, userEmail) {
+/** Rohzeilen fuer buildFehlerHeatmap: { pages, checks, appliedRows } — buchweit. */
+function loadHeatmapRows(bookId) {
   return {
     pages: _stmtPages.all(bookId),
-    checks: _stmtLatestChecks.all(bookId, userEmail),
-    appliedRows: _stmtApplied.all(bookId, userEmail),
+    checks: _stmtLatestChecks.all(bookId),
+    appliedRows: _stmtApplied.all(bookId),
   };
 }
 
