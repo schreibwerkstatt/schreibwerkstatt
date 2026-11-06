@@ -37,10 +37,16 @@ function _bumpIdeenCount({ page_id: pageId, chapter_id: chapterId }) {
 }
 
 // Alle Wirte spreaden dieselben Methoden; welcher Chat es ist, sagt die
-// Nachrichtenliste, in der die Nachricht steht.
+// Nachrichtenliste, in der die Nachricht steht. Auch per ID: der Recherche-Chat
+// ersetzt eine Nachricht nach dem Speichern eines Fundstücks durch ein neues
+// Objekt (research-chat-proposals.js#_patchProposal), ein laufender Ideen-Klick
+// hält dann noch das alte. Die IDs sind über alle Chats eindeutig (chat_messages).
+function _inList(list, msg) {
+  return Array.isArray(list) && list.some(m => m === msg || (msg?.id != null && m?.id === msg.id));
+}
 function _chatKind(host, msg) {
-  if (host.researchChatMessages?.includes(msg)) return 'research';
-  return host.bookChatMessages?.includes(msg) ? 'book' : 'page';
+  if (_inList(host.researchChatMessages, msg)) return 'research';
+  return _inList(host.bookChatMessages, msg) ? 'book' : 'page';
 }
 
 export const chatIdeeProposalMethods = {

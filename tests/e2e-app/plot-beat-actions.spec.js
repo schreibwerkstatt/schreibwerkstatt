@@ -63,12 +63,18 @@ test('plot: Verwerfen und Löschen stehen im Beat-Edit', async ({ page }) => {
     await expect(edit.locator('.plot-beat-discard')).toBeVisible();
     await expect(edit.locator('.plot-beat-delete')).toBeVisible();
 
+    // Ungespeicherte Änderung im Edit: Verwerfen schliesst das Panel und muss
+    // sie vorher speichern, sonst ginge sie mit dem Panel verloren.
+    await edit.locator('.plot-beat-edit-titel').fill('Aktionen-Beat geändert');
+
     // Verwerfen persistiert das Flag (eigene Achse, kein Status).
     await edit.locator('.plot-beat-discard').click();
-    await expect.poll(async () => page.evaluate(async ({ beatId, bookId }) => {
+    const stored = () => page.evaluate(async ({ beatId, bookId }) => {
       const board = await fetch(`/plot?book_id=${bookId}`).then(r => r.json());
-      return (board.beats || []).find(b => b.id === beatId)?.verworfen || 0;
-    }, { beatId: ids.beatId, bookId })).toBe(1);
+      const b = (board.beats || []).find(x => x.id === beatId);
+      return { verworfen: b?.verworfen || 0, titel: b?.titel };
+    }, { beatId: ids.beatId, bookId });
+    await expect.poll(stored).toEqual({ verworfen: 1, titel: 'Aktionen-Beat geändert' });
     // Ein verworfener Beat verlässt das Board (pro Akt eingeklappt) — und der
     // offene Edit-Zustand geht mit (keine Verfassung ohne Karte).
     await expect(page.locator(`.card--plot .plot-beat[data-beat-id="${ids.beatId}"]:visible`)).toHaveCount(0);

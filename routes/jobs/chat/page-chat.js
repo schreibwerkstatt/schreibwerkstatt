@@ -320,6 +320,7 @@ async function runChatJob(jobId, sessionId, userMsgId, message, userEmail) {
       assistant_message_id: asstMsgResult.lastInsertRowid,
       updatedAt: pageUpdatedAt,
       tokensIn, tokensOut,
+      proposals: vorschlaege.length + ideenProposals.length,
       // Titel folgt asynchron (unten); das Frontend holt ihn mit der Historie nach.
       titlePending: !session.title,
     }, chatTps, `«${session.page_name || '-'}» session=${sessionId}, ${vorschlaege.length} Vorschläge, ${ideenProposals.length} Ideen`);

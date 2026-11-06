@@ -37,6 +37,7 @@ import { appChromeMethods } from './app/app-chrome.js';
 import { appKomplettMethods } from './app/app-komplett.js';
 import { appJobsCoreMethods } from './app/app-jobs-core.js';
 import { appCollabMethods } from './app/app-collab.js';
+import { appCollabLockMethods } from './app/app-collab-lock.js';
 import { appCollabStreamMethods } from './app/app-collab-stream.js';
 import { appOutboxMethods } from './app/app-outbox.js';
 import { appOfflineRescueMethods } from './app/app-offline-rescue.js';
@@ -313,6 +314,7 @@ document.addEventListener('alpine:init', () => {
     ...appKomplettMethods,
     ...appJobsCoreMethods,
     ...appCollabMethods,
+    ...appCollabLockMethods,
     ...appCollabStreamMethods,
     ...appOutboxMethods,
     ...appOfflineRescueMethods,

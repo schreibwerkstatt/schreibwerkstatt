@@ -62,9 +62,4 @@ export const figurenRelCheckMethods = {
     const idx = this._memo('relConflictIndex', [this.figurenRelCheck], () => computeRelConflictIndex(this.figurenRelCheck));
     return idx.get(`${f.id}|${bz.figur_id}|${bz.typ}`) || [];
   },
-
-  // Konflikte, an denen die Figur beteiligt ist (Detail-Hinweis).
-  figurRelConflicts(f) {
-    return this.figurenRelCheck.conflicts.filter(c => c.figIds.includes(f.id));
-  },
 };

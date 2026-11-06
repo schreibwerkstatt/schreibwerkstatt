@@ -48,7 +48,12 @@
   user-select: none;
   margin-bottom: var(--space-2xs);
 }
-.tree-chapter-header > .history-chevron { padding-top: var(--space-2xs); }
+/* Chevron, Kapitelname und Badges teilen sich eine optische Mitte: alle drei
+   stehen auf der Cap-Hoehe der ersten Textzeile. Das Chevron ruckt 1px
+   nach unten — ohne den Versatz steht sein Icon (16px) zu hoch neben dem
+   14px-Text; die Badges brauchen keinen, ihre Box ist hoeher als die
+   Zeilenhoehe des Namens und traegt den Rest. */
+.tree-chapter-header > .history-chevron { margin-top: var(--space-1); }
 .tree-chapter-header > span:not(.history-chevron):not(.tree-chapter-meta) {
   min-width: 0;
   overflow-wrap: anywhere;
@@ -59,7 +64,6 @@
   align-items: center;
   gap: var(--space-6);
   flex-shrink: 0;
-  margin-top: var(--space-2xs);
 }
 .tree-chapter-header:hover { background: var(--color-hover); }
 .tree-chapter-header--empty { opacity: var(--opacity-hint); font-weight: var(--fw-regular); font-style: italic; }

@@ -43,7 +43,10 @@ function _recordJobFinished(job) {
   const ms = job.startedAt ? Date.now() - new Date(job.startedAt).getTime() : NaN;
   recordUsageEvent({
     userEmail: job.userEmail, event: 'job.finished', bookId: job.bookId,
-    meta: { type: job.type, status: job.status, durationSec: Number.isFinite(ms) && ms >= 0 ? Math.round(ms / 1000) : undefined },
+    meta: {
+      type: job.type, status: job.status, durationSec: Number.isFinite(ms) && ms >= 0 ? Math.round(ms / 1000) : undefined,
+      proposals: Number.isInteger(job.result?.proposals) ? job.result.proposals : undefined,
+    },
   });
 }
 

@@ -105,15 +105,14 @@ export const adminUsageBehaviorMethods = {
     return this.adminUsageBehavior?.cohorts || [];
   },
 
-  // Chat-Runden (ein Job je Runde) gegen die Vorschlaege, die daraus entstanden
-  // sind. Die Differenz sind Runden, in denen nur geantwortet wurde.
+  // Chat-Runden (ein Job je Runde), davon fertige mit und ohne Vorschlag
+  // (Server zaehlt beides, db/usage-events.js#_chatTurns).
   adminUsageBehaviorChatTurns() {
     const b = this.adminUsageBehavior;
     const t = window.__app.t.bind(window.__app);
     return _derive(b, 'chatTurns', () => (b.chatTurns || []).map(c => ({
       ...c,
       chatLabel: t(`admin.usage.behavior.chat.${c.chat}`),
-      withoutProposal: Math.max(0, c.turns - c.proposals),
     })));
   },
 

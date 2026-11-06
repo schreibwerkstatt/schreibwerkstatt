@@ -467,6 +467,19 @@ test('localdb: No-op-Save setzt die Save-Kennung (Wiederholung bleibt erkennbar)
   assert.equal(replay.save_match, 'replay');
 });
 
+test('localdb: identischer Body + neuer Name schreibt den Namen (kein No-op)', async () => {
+  const bookId = _seedBook();
+  const created = await ctx.contentStore.createPage({ book_id: bookId, name: 'Alt', html: '<p>Inhalt</p>' });
+  const pageId = created.id;
+  const a = await ctx.contentStore.savePage(pageId, { html: '<p>A</p>' });
+  await _sleep();
+
+  // Blog-Pull/HubSpot/Bundle-Import schicken Body und Titel zusammen.
+  const renamed = await ctx.contentStore.savePage(pageId, { html: a.html, name: 'Neu' });
+  assert.notEqual(renamed.no_change, true);
+  assert.equal((await ctx.contentStore.loadPage(pageId)).name, 'Neu');
+});
+
 test('localdb: geänderter Body schreibt normal (No-op-Erkennung greift nicht)', async () => {
   const bookId = _seedBook();
   const created = await ctx.contentStore.createPage({ book_id: bookId, name: 'Aenderung', html: '<p>Inhalt</p>' });

@@ -1,0 +1,41 @@
+{
+  "version": "5.8.10",
+  "date": "2026-11-06",
+  "entries": [
+    {
+      "kind": "verbessert",
+      "de": "Revisionen eines Abschnitts: speichert ein anderes Gerät oder eine andere Person den offenen Abschnitt, erscheint die neue Revision sofort in der Liste.",
+      "en": "Section revisions: when another device or person saves the open section, the new revision shows up in the list right away."
+    },
+    {
+      "kind": "verbessert",
+      "de": "Komplettanalyse: der Hinweis auf widersprüchliche Beziehungen erscheint jetzt auch, wenn du die Analyse ohne Textänderung erneut startest.",
+      "en": "Full analysis: the notice about conflicting relationships now also appears when you rerun the analysis without changing the text."
+    },
+    {
+      "kind": "behoben",
+      "de": "Chats: in seltenen Fällen stand eine Antwort beim erneuten Öffnen des Gesprächs leer da. Sie bleibt jetzt vollständig erhalten.",
+      "en": "Chats: in rare cases an answer showed up empty when reopening the conversation. It now stays complete."
+    },
+    {
+      "kind": "behoben",
+      "de": "WordPress, HubSpot und Buch-Import: ein geänderter Titel kam nicht an, wenn der Text gleich geblieben war.",
+      "en": "WordPress, HubSpot and book import: a changed title did not come through when the text had stayed the same."
+    },
+    {
+      "kind": "behoben",
+      "de": "Plot-Werkstatt, Beat bearbeiten: wer nach einer Änderung «Verwerfen» klickte, verlor die Änderung. Sie wird jetzt vorher gespeichert.",
+      "en": "Plot workshop, editing a beat: clicking «Discard» after a change lost that change. It is now saved first."
+    },
+    {
+      "kind": "behoben",
+      "de": "Admin, Reiter Verhalten: «Chat-Runden mit Vorschlag» zählte einzelne Vorschläge statt Runden. Die Spalten zeigen jetzt Runden mit und ohne Vorschlag.",
+      "en": "Admin, Behavior tab: «chat turns with suggestion» counted single suggestions instead of turns. The columns now show turns with and without a suggestion."
+    },
+    {
+      "kind": "behoben",
+      "de": "Seitenleiste: Pfeil, Kapitelname und Plaketten der Kapitelzeile stehen wieder auf einer Höhe.",
+      "en": "Sidebar: arrow, chapter name and badges of a chapter row line up again."
+    }
+  ]
+}

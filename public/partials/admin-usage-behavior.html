@@ -78,12 +78,12 @@
     <div class="table-scroll" x-show="adminUsageBehaviorChatTurns().length">
       <table class="data-table"
              x-data="sortableTable({ rows: () => adminUsageBehaviorChatTurns(), defaultKey: 'turns', defaultDir: 'desc', persistKey: 'admin.usage.behavior.chatTurns',
-               types: { turns: 'number', proposals: 'number', withoutProposal: 'number', users: 'number' } })">
+               types: { turns: 'number', withProposal: 'number', withoutProposal: 'number', users: 'number' } })">
         <thead>
           <tr>
             <th x-bind="sortTh('chatLabel')" x-text="$app.t('admin.usage.behavior.col.chat')"></th>
             <th x-bind="sortTh('turns')" x-text="$app.t('admin.usage.behavior.col.rounds')"></th>
-            <th x-bind="sortTh('proposals')" x-text="$app.t('admin.usage.behavior.col.withProposal')"></th>
+            <th x-bind="sortTh('withProposal')" x-text="$app.t('admin.usage.behavior.col.withProposal')"></th>
             <th x-bind="sortTh('withoutProposal')" x-text="$app.t('admin.usage.behavior.col.withoutProposal')"></th>
             <th x-bind="sortTh('users')" x-text="$app.t('admin.usage.behavior.col.users')"></th>
           </tr>
@@ -93,7 +93,7 @@
             <tr>
               <td x-text="c.chatLabel"></td>
               <td class="admin-usage-cell-num" x-text="adminUsageInt(c.turns)"></td>
-              <td class="admin-usage-cell-num" x-text="adminUsageInt(c.proposals)"></td>
+              <td class="admin-usage-cell-num" x-text="adminUsageInt(c.withProposal)"></td>
               <td class="admin-usage-cell-num" x-text="adminUsageInt(c.withoutProposal)"></td>
               <td class="admin-usage-cell-num" x-text="adminUsageInt(c.users)"></td>
             </tr>

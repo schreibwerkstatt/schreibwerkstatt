@@ -323,6 +323,11 @@ export const beatsMethods = {
     const app = window.__app;
     if (!beat || this.busy || this._inHistoryFlight) return;
     const was = beat.verworfen ? 1 : 0;
+    // Verwerfen schliesst das Edit-Panel (siehe unten) — offene Änderungen am
+    // Entwurf zuerst speichern, sonst gingen sie mit dem Panel verloren.
+    if (!was && this.editingBeatId === beat.id) {
+      if (await this.commitEditBeat(beat) === false) return;
+    }
     this.busy = true;
     try {
       const updated = await fetchJson(`/plot/beats/${beat.id}`, {

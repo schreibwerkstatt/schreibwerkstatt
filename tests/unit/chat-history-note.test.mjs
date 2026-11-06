@@ -106,3 +106,16 @@ test('ohne Echo bleibt der Text unangetastet (kein Blatt von einem fremden Absch
   const antwort = 'Er trat der FDP bei.\n\n**Vorschlag:** «Er war 1996 der städtischen FDP beigetreten …»';
   assert.equal(stripHistoryNote(antwort), antwort);
 });
+
+test('ein «[Belege …» am Zeilenanfang löscht nicht die Antwort bis zur letzten «]»', () => {
+  const antwort = '[Belege] sind in diesem Kapitel wichtig.\nDer Rest der Antwort, Fussnote [1]';
+  assert.equal(stripHistoryNote(antwort), antwort);
+  const mitListe = '[Deine Änderungsvorschläge sind gut]: so weit.\n\nAber hier [2]';
+  assert.equal(stripHistoryNote(mitListe), mitListe);
+});
+
+test('mehrere Anhänge hintereinander werden zusammen entfernt', () => {
+  const v = formatProposalNote(VORSCHLAEGE);
+  const i = formatIdeenNote([{ type: 'idee_create', fields: { content: 'Idee' } }]);
+  assert.equal(stripHistoryNote(`Antwort.\n\n${v}\n\n${i}`), 'Antwort.');
+});

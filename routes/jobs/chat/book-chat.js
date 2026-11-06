@@ -451,6 +451,7 @@ async function runBookChatJob(jobId, sessionId, userMsgId, message, userEmail) {
       tokensIn, tokensOut,
       pagesUsed: selectedPages.length,
       pagesTotal: totalPages,
+      proposals: 0,
       ...(sessionTitle ? { sessionTitle } : {}),
     }, bookChatTps, `«${session.book_name || '-'}» session=${sessionId}, ${selectedPages.length}/${totalPages} Seiten`);
   } catch (e) {

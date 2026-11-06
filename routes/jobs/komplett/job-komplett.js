@@ -51,6 +51,19 @@ const { persistWorldFacts } = require('./world-facts-save');
 const { extractCacheBase, consolidationFlags } = require('./signatures');
 const { loadKatalogAnker } = require('./katalog-anker');
 
+// Beziehungsprüfung über den fertigen Katalog (finetune-export/lib/relation-check.js):
+// nur Hinweis, korrigiert wird nichts. Die Liste zeigt die Figuren-Karte.
+async function _pushRelationWarnings(bookIdInt, email, warnings, log) {
+  try {
+    const rc = await runBookRelationCheck(bookIdInt, email);
+    if (rc.conflicts.length) {
+      log.info(`Beziehungsprüfung: ${rc.conflicts.length} Konflikte (${rc.mainCount} mit Hauptfiguren): `
+        + rc.conflicts.map(c => `${c.rule}[${c.figures.join('/')}]`).join(', '));
+      warnings.push({ key: 'job.warn.relationConflicts', params: { n: rc.conflicts.length, main: rc.mainCount } });
+    }
+  } catch (e) { log.warn(`Beziehungsprüfung nach Komplettanalyse fehlgeschlagen: ${e.message}`); }
+}
+
 // ── Job: Komplettanalyse ─────────────────────────────────────────────────────
 // Pipeline (token-optimiert):
 //   P1 (Vollextraktion: Figuren+Orte+Fakten+Szenen+Events, parallel/Kapitel, SYSTEM_KOMPLETT_EXTRAKTION)
@@ -289,6 +302,9 @@ async function runKomplettAnalyseJob(jobId, bookId, bookName, userEmail, provide
       log.info('Konsolidierungs-Checkpoint HIT – Katalog unverändert, P2–P8 übersprungen.');
       deleteCheckpoint('komplett-analyse', bookIdInt, email);
       updateJob(jobId, { progress: 100, statusText: 'job.phase.consolidationCached' });
+      // Auch ohne neue Konsolidierung: Beziehungen können seit dem letzten Lauf
+      // von Hand geändert worden sein (Figuren-Karte).
+      await _pushRelationWarnings(bookIdInt, email, warnings, log);
       completeJob(jobId, {
         figCount:    consolMarker.figCount ?? figuresPresent,
         orteCount:   consolMarker.orteCount ?? 0,
@@ -486,16 +502,7 @@ async function runKomplettAnalyseJob(jobId, bookId, bookName, userEmail, provide
     // daneben zeigt, ob es Recall gekostet hat.
     const costByPhase = summarizeCostByPhase(tok);
     if (costByPhase) log.info(`Kosten: ${formatCostByPhase(costByPhase)} → $${costByPhase.totalUsd.toFixed(2)}`);
-    // Beziehungsprüfung über den fertigen Katalog (finetune-export/lib/relation-check.js):
-    // nur Hinweis, korrigiert wird nichts. Die Liste zeigt die Figuren-Karte.
-    try {
-      const rc = await runBookRelationCheck(bookIdInt, email);
-      if (rc.conflicts.length) {
-        log.info(`Beziehungsprüfung: ${rc.conflicts.length} Konflikte (${rc.mainCount} mit Hauptfiguren): `
-          + rc.conflicts.map(c => `${c.rule}[${c.figures.join('/')}]`).join(', '));
-        warnings.push({ key: 'job.warn.relationConflicts', params: { n: rc.conflicts.length, main: rc.mainCount } });
-      }
-    } catch (e) { log.warn(`Beziehungsprüfung nach Komplettanalyse fehlgeschlagen: ${e.message}`); }
+    await _pushRelationWarnings(bookIdInt, email, warnings, log);
     completeJob(jobId, {
       figCount:    figuren.length,
       orteCount:   orte.length,

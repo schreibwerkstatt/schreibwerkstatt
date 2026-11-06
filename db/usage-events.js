@@ -199,17 +199,27 @@ function _sharing(evts) {
 // als `chat.proposal`. So ist sichtbar, wie viele Runden ohne Vorschlag blieben.
 const CHAT_JOB_TYPES = { chat: 'page', 'book-chat': 'book', 'research-chat': 'research', 'plot-chat': 'plot', 'ideen-chat': 'ideen' };
 
+// Runden zaehlt `job.queued`; mit/ohne Vorschlag zaehlen fertige Runden
+// (`job.finished` done) nach ihrem `proposals`-Feld. Runden ohne das Feld
+// (abgebrochen, fehlgeschlagen) zaehlen in keine der beiden Spalten.
 function _chatTurns(evts) {
   const acc = new Map();
   // Alle fuenf Chats als Zeile — auch die ohne Runde: die Nullzeile beantwortet
   // «welcher Chat wird nie benutzt?» (Muster der Funktionstabelle).
-  for (const chat of Object.values(CHAT_JOB_TYPES)) acc.set(chat, { chat, turns: 0, users: new Set() });
+  for (const chat of Object.values(CHAT_JOB_TYPES)) {
+    acc.set(chat, { chat, turns: 0, withProposal: 0, withoutProposal: 0, users: new Set() });
+  }
   for (const e of evts) {
     const chat = CHAT_JOB_TYPES[e.meta.type];
     if (!chat) continue;
     const c = acc.get(chat);
-    c.turns += 1;
-    c.users.add(e.user_email);
+    if (e.event === 'job.queued') {
+      c.turns += 1;
+      c.users.add(e.user_email);
+    } else if (e.meta.status === 'done' && Number.isInteger(e.meta.proposals)) {
+      if (e.meta.proposals > 0) c.withProposal += 1;
+      else c.withoutProposal += 1;
+    }
   }
   return [...acc.values()].map(c => ({ ...c, users: c.users.size }));
 }
@@ -279,12 +289,9 @@ function behaviorReport({ fromIso, toIso, includeAdmins = false }) {
     features: _features(keep(_events(['card.open'], fromIso, toIso))),
     jobs: _jobs(jobEvents),
     proposals,
-    // Chat-Runden gegen die uebernommenen Vorschlaege: eine Runde ohne Vorschlag
-    // ist eine Frage, die nur eine Antwort brachte.
-    chatTurns: _chatTurns(keep(_events(['job.queued'], fromIso, toIso))).map(t => ({
-      ...t,
-      proposals: proposals.filter(p => p.chat === t.chat).reduce((s, p) => s + p.applied + p.discarded, 0),
-    })),
+    // Chat-Runden mit und ohne Vorschlag: eine Runde ohne Vorschlag ist eine
+    // Frage, die nur eine Antwort brachte.
+    chatTurns: _chatTurns(jobEvents),
     creation: _creation(keep(_events(['content.created'], fromIso, toIso))),
     sharing: _sharing(keep(_events(['share.link.created', 'comment.action'], fromIso, toIso))),
     lektorat: _lektorat(keep(_events(['lektorat.applied'], fromIso, toIso))),

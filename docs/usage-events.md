@@ -38,7 +38,7 @@ Erstanbieter-Messung des Nutzungsverhaltens: welche Funktionen genutzt werden, o
 | `content.created` | server | `kind` source/idea/beat/page/chapter/figure | Quelle, Idee, Beat, Abschnitt, Kapitel, Figur-Entwurf angelegt — vom Server beim Anlegen geschrieben, also auch für die nativen Clients gemessen |
 | `share.link.created` | server | `kind` page/chapter/book | Share-Link erstellt (`POST /share/api/links`) |
 | `comment.action` | server | `action` reply/resolve/delete | Owner antwortet auf einen Leser-Kommentar, löst ihn auf oder löscht ihn. **Kommentare der Leser:innen sind anonym** (kein Konto) und stehen deshalb nicht hier — ihre Verweildauer liegt in den Share-Link-Tabellen |
-| `job.queued` / `job.finished` | server | `type`, `status`, `durationSec` (ab Start) | `createJob`, `completeJob`, `failJob`, Abbruch in der Queue |
+| `job.queued` / `job.finished` | server | `type`, `status`, `durationSec` (ab Start), `proposals` (Vorschläge einer fertigen Chat-Runde) | `createJob`, `completeJob`, `failJob`, Abbruch in der Queue |
 | `chat.proposal` | client | `chat` page/book/research/plot/ideen, `action` applied/discarded/reopened/undone, `kind`, `count` | die fünf Chats; der Recherche-Chat kennt kein Verwerfen |
 | `lektorat.applied` | client | `shown`, `selected`, `applied`, `skipped` | Abschnitts-Lektorat «Übernehmen» in der Leseansicht (`saveCorrections`) |
 | `offline.pin` | client | `action` pin/unpin | Klick auf «Buch offline halten» in der Sidebar ([app-offline-books.js](../public/js/app/app-offline-books.js)) |

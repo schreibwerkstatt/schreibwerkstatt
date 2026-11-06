@@ -3,9 +3,10 @@
 // benannte Store-Oberfläche. Der Store-Name liefert den Namespace, darum tragen
 // die Keys kein `collab`-Präfix (Zugriff via `$store.collab.collabToast`).
 //
-// Kein Root-Proxy-Spiegel (wie tts): die Methoden in app-collab.js (in den Root
-// gespreadet) greifen direkt via `this.$store.collab.*` zu, die Templates via
-// `$store.collab.*`, app-init.js (beforeunload) via `this.$store.collab.*`. Die
+// Kein Root-Proxy-Spiegel (wie tts): die Methoden in app-collab.js und
+// app-collab-lock.js (in den Root gespreadet) greifen direkt via
+// `this.$store.collab.*` zu, die Templates via `$store.collab.*`, app-init.js
+// (beforeunload) via `this.$store.collab.*`. Die
 // Methoden selbst (`presenceFor`, `_acquireEditLock`, `_startPresenceHeartbeat`,
 // …) bleiben am Root — lifecycle.js/Templates rufen sie unverändert auf.
 //

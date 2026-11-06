@@ -537,7 +537,7 @@ const featuresUsageState = () => ({
 
 // Collaboration-/Presence-/Soft-Lock-State lebt in Alpine.store('collab')
 // (cards/collab-store.js) und wird direkt via $store.collab / this.$store.collab
-// gelesen (kein Root-Proxy). Owner: app/app-collab.js.
+// gelesen (kein Root-Proxy). Owner: app/app-collab.js + app/app-collab-lock.js.
 
 // Buch-Erstellungs-Modal (Trigger: Combobox-Footer "+ Neues Buch") ist eine eigene
 // Karte Alpine.data('bookCreateCard') auf dem <dialog> (cards/book-create-card.js) —

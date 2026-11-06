@@ -531,6 +531,8 @@ function makeAgenticChatJob(config) {
         assistant_message_id: asstMsgResult.lastInsertRowid,
         tokensIn: state.totalTokIn, tokensOut: state.totalTokOut,
         toolCalls: toolLog.length, iterations: iter + 1,
+        // Vorschlaege der Runde (Nutzungs-Event job.finished, «Runden mit Vorschlag»).
+        proposals: Array.isArray(contextInfo.proposals) ? contextInfo.proposals.length : 0,
         ...(sessionTitle ? { sessionTitle } : {}),
       };
       const payload = config.buildCompletePayload ? config.buildCompletePayload({ base, ctx }) : base;

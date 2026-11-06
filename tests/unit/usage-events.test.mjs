@@ -75,6 +75,13 @@ test('behaviorReport: Vorschlaege, Jobs, Editoren, Funktionen, Admins aussen vor
   rec('w@ex.com', 'share.link.created', { kind: 'book' });
   rec('w@ex.com', 'comment.action', { action: 'reply' });
   rec('w@ex.com', 'job.queued', { type: 'book-chat' });
+  rec('w@ex.com', 'job.finished', { type: 'book-chat', status: 'done', durationSec: 9, proposals: 0 });
+  rec('w@ex.com', 'job.queued', { type: 'chat' });
+  rec('w@ex.com', 'job.queued', { type: 'chat' });
+  rec('w@ex.com', 'job.queued', { type: 'chat' });
+  rec('w@ex.com', 'job.finished', { type: 'chat', status: 'done', durationSec: 9, proposals: 5 });
+  rec('w@ex.com', 'job.finished', { type: 'chat', status: 'done', durationSec: 9, proposals: 0 });
+  rec('w@ex.com', 'job.finished', { type: 'chat', status: 'error', durationSec: 9 });
 
   const r = behaviorReport(RANGE);
   const p = r.proposals.find(x => x.chat === 'page' && x.kind === 'korrektur');
@@ -98,10 +105,13 @@ test('behaviorReport: Vorschlaege, Jobs, Editoren, Funktionen, Admins aussen vor
   // Geteilt: Share-Link je Umfang, Kommentar-Aktion je Art.
   assert.equal(r.sharing.find(s => s.key === 'link.book').count, 1);
   assert.equal(r.sharing.find(s => s.key === 'reply').count, 1);
-  // Chat-Runden: der Job zaehlt als Runde, die Vorschlaege als Gegenseite.
+  // Chat-Runden: der Job zaehlt als Runde; mit/ohne Vorschlag zaehlen fertige
+  // Runden nach ihrer Vorschlagszahl, nicht die einzelnen Vorschlaege.
   const turn = r.chatTurns.find(c => c.chat === 'book');
-  assert.deepEqual([turn.turns, turn.proposals], [1, 0]);
-  assert.equal(r.chatTurns.find(c => c.chat === 'page').turns, 0);
+  assert.deepEqual([turn.turns, turn.withProposal, turn.withoutProposal], [1, 0, 1]);
+  const page = r.chatTurns.find(c => c.chat === 'page');
+  assert.deepEqual([page.turns, page.withProposal, page.withoutProposal], [3, 1, 1]);
+  assert.equal(r.chatTurns.find(c => c.chat === 'plot').turns, 0);
   // Lesen: kumuliert aus user_page_usage, unabhaengig vom Zeitraum.
   assert.equal(r.reading.perUser.length, 0, 'ohne Seiten-Oeffnungen keine Leser');
   assert.deepEqual(r.reading.total, { pages: 0, opens: 0 });
