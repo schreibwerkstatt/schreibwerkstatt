@@ -15,13 +15,13 @@ const { renderManifest } = require('../../scripts/sw-manifest');
 
 const silent = { info() {}, warn() {} };
 
-function fixture() {
+function fixture(dist = 'dist') {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'bundle-test-'));
   fs.mkdirSync(path.join(root, 'src'));
   fs.writeFileSync(path.join(root, 'src/a.js'), 'export const a = 1;\n');
   fs.writeFileSync(path.join(root, 'src/b.css'), 'body{}\n');
-  const dir = path.join(root, 'dist');
-  fs.mkdirSync(dir);
+  const dir = path.join(root, dist);
+  fs.mkdirSync(dir, { recursive: true });
   fs.writeFileSync(path.join(dir, 'index.html'), '<html>bündel</html>');
   fs.writeFileSync(path.join(dir, 'app-X.js'), 'console.log(1)');
   fs.writeFileSync(path.join(dir, SW_MANIFEST_FILE), 'self.__SHELL_BUILD = "b";');
@@ -90,6 +90,29 @@ test('Shell no-cache + X-App-Shell, gehashte Dateien immutable', async () => {
     const sw = await get('/sw-manifest.js');
     assert.equal(sw.res.headers['cache-control'], 'no-cache');
     assert.match(sw.body, /__SHELL_BUILD = "b"/);
+  } finally {
+    server.close();
+  }
+});
+
+// Die CI baut das Bündel nach tests/.tmp/bundle. send prüft `dotfiles` bei einem
+// absoluten sendFile-Pfad auf jedem Segment → 404 auf Shell und Manifest, und
+// Playwrights webServer wartet bis zum Timeout. Mit `root` gilt nur der Teil
+// unterhalb des Bündels.
+test('Bündel unter einem Punkt-Verzeichnis: Shell und SW-Manifest liefern 200', async () => {
+  const { root, dir } = fixture('.tmp/bundle');
+  const bundle = loadBundle({ root, dir, logger: silent });
+  const app = express();
+  app.use(bundleSwManifest(bundle));
+  app.use(bundleShell(bundle));
+  const server = app.listen(0);
+  const port = server.address().port;
+  const status = (p) => new Promise((resolve, reject) => {
+    http.get({ port, path: p }, (res) => { res.resume(); resolve(res.statusCode); }).on('error', reject);
+  });
+  try {
+    assert.equal(await status('/'), 200);
+    assert.equal(await status('/sw-manifest.js'), 200);
   } finally {
     server.close();
   }
