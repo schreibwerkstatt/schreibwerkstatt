@@ -228,3 +228,22 @@ test('mergeProposal: edits.urls nur als Teilmenge der eigenen URLs, nie neue', (
   assert.deepEqual(mergeProposal(p, { urls: ['https://evil.example/leak', 'https://a.example/x'] }).urls.map(u => u.url), ['https://a.example/x'], 'neue URL ignoriert');
   assert.deepEqual(mergeProposal(p, { urls: [] }).urls, [], 'alle weggelassen');
 });
+
+test('lookup_literature: Job-Signal geht an die Register, Abbruch wird weitergeworfen', async () => {
+  const orig = globalThis.fetch;
+  const ctrl = new AbortController();
+  const signals = [];
+  globalThis.fetch = async (_url, opts) => {
+    signals.push(opts?.signal);
+    ctrl.abort();
+    throw Object.assign(new Error('aborted'), { name: 'AbortError' });
+  };
+  try {
+    const ctx = { ...mkCtx(), jobSignal: ctrl.signal };
+    await assert.rejects(executeResearchTool('lookup_literature', { q: 'bronze' }, ctx), (e) => e.name === 'AbortError');
+    await assert.rejects(executeResearchTool('lookup_literature', { doi: '10.1000/xyz' }, ctx), (e) => e.name === 'AbortError');
+    assert.ok(signals.length >= 2 && signals.every(Boolean), 'jeder Register-Request trägt ein Signal');
+  } finally {
+    globalThis.fetch = orig;
+  }
+});

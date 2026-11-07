@@ -29,7 +29,7 @@ const { validateSourceBody, hasSourceIdentity } = require('../lib/source-validat
 const { normalizeUrl } = require('../lib/url-normalize');
 const { localIsoDate } = require('../lib/local-date');
 const {
-  RESEARCH_KINDS, TITLE_MAX, BODY_MAX, SOURCE_MAX, cleanStr,
+  RESEARCH_KINDS, TITLE_MAX, BODY_MAX, SOURCE_MAX, URL_MAX, cleanStr, textFieldError,
 } = require('../lib/research-validate');
 const logger = require('../logger');
 
@@ -98,8 +98,15 @@ router.post('/', jsonBody, (req, res) => {
     });
   }
 
+  // Gleiche Strenge wie POST /research (lib/research-validate): eine URL ueber
+  // URL_MAX wird abgewiesen, nicht abgeschnitten; Textfelder nur als String.
   const rawUrl = String(req.body?.url || '').trim();
-  if (rawUrl && !normalizeUrl(rawUrl)) return res.status(400).json({ error_code: 'INVALID_URL' });
+  if (rawUrl && (rawUrl.length > URL_MAX || !normalizeUrl(rawUrl))) {
+    return res.status(400).json({ error_code: 'INVALID_URL', params: { max: URL_MAX } });
+  }
+  const badText = textFieldError('title', req.body?.title) || textFieldError('body', req.body?.body)
+    || textFieldError('source', req.body?.source);
+  if (badText) return res.status(400).json(badText);
 
   const kind = RESEARCH_KINDS.has(req.body?.kind) ? req.body.kind : (rawUrl ? 'link' : 'note');
   const title = cleanStr(req.body?.title, TITLE_MAX);

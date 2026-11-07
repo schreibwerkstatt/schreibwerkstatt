@@ -567,6 +567,18 @@ export function makeChatMethods(cfg) {
     );
   };
 
+  // Lauf abbrechen: /jobs/active liefert die Job-ID der Session, DELETE /jobs/:id
+  // (Root `cancelJob`); das Poll-Ende ('cancelled') räumt ab. Knopf nur in
+  // Abschnitts-, Buch- und Recherche-Chat.
+  m[`cancel${L}Run`] = async function () {
+    const sid = this[p.runningSessionId];
+    if (!sid) return;
+    try {
+      const active = await fetchJson(`/jobs/active?type=${cfg.activeJobType}&book_id=${sid}`);
+      if (active?.jobId) await window.__app.cancelJob(active.jobId);
+    } catch (e) { console.error(`[cancel${L}Run]`, e); }
+  };
+
   m[`reset${L}`] = function () {
     this[GEN] = gen(this) + 1;
     supersedeLoads(this);

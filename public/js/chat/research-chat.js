@@ -1,5 +1,5 @@
 import { makeChatMethods } from './chat-base.js';
-import { escHtml, renderChatMarkdown, fetchJson } from '../utils.js';
+import { escHtml, renderChatMarkdown } from '../utils.js';
 import {
   renderResearchAnswer as _renderResearchAnswerText,
   displaySources as _displaySources,
@@ -81,20 +81,7 @@ export const researchChatMethods = {
     return (msg?.context_info?.web_queries || []).filter(q => typeof q === 'string' && q.trim());
   },
 
-  // Laufende Antwort abbrechen (gleiche Mechanik wie Abschnitts- und Buch-Chat):
-  // /jobs/active liefert die Job-ID der laufenden Session (Entity = Session-ID),
-  // abgebrochen wird über die Root-Mechanik (DELETE /jobs/:id); das Poll-Ende
-  // (Status 'cancelled') räumt den Lauf-State ab.
-  async cancelResearchChatRun() {
-    const sid = this.researchChatRunningSessionId;
-    if (!sid) return;
-    try {
-      const active = await fetchJson(`/jobs/active?type=research-chat&book_id=${sid}`);
-      if (active?.jobId) await window.__app.cancelJob(active.jobId);
-    } catch (e) {
-      console.error('[cancelResearchChatRun]', e);
-    }
-  },
+  // cancelResearchChatRun kommt aus makeChatMethods (chat-base.js).
 
   ...researchProposalMethods,
   ...chatIdeeProposalMethods,

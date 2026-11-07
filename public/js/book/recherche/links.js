@@ -4,6 +4,12 @@
 
 import { fetchJson, linkText } from '../../utils.js';
 import { startPoll } from '../../cards/job-helpers.js';
+import { isSelectedBook } from '../../cards/book-guard.js';
+
+// Fehlerarten der Link-Pruefung (lib/url-check.js → `check_error`), je mit Key
+// recherche.linkCheck.err.<CODE>. Unbekanntes faellt auf NETWORK zurueck, statt
+// den rohen Key zu zeigen.
+const LINK_CHECK_ERRORS = new Set(['SSRF_BLOCKED', 'TIMEOUT', 'REDIRECT', 'NETWORK', 'DNS', 'INVALID']);
 
 export const rechercheLinkMethods = {
   // ── Verknüpfungen ──────────────────────────────────────────────────────────
@@ -32,9 +38,10 @@ export const rechercheLinkMethods = {
   // Ziel-Optionen des Link-Pickers baut die generische entityPicker-Komponente
   // (entity 'target') aus `linkTargets[linkPickerKind]`.
 
+  // true = Verknüpfung steht; false = nichts passiert (Meldung in errorMessage).
   async addLink(itemId, targetKind, targetId) {
     const app = window.__app;
-    if (!targetKind || !targetId) return;
+    if (!targetKind || !targetId) return false;
     try {
       const row = await fetchJson(`/research/${itemId}/links`, {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
@@ -44,7 +51,11 @@ export const rechercheLinkMethods = {
       this.cancelLinkPicker();
       if (targetKind === 'page') this._refreshRechercheCounts('page');
       if (targetKind === 'chapter') this._refreshRechercheCounts('chapter');
-    } catch { this.errorMessage = app.t('recherche.error.link'); }
+      return true;
+    } catch {
+      this.errorMessage = app.t('recherche.error.link');
+      return false;
+    }
   },
 
   async confirmLinkPicker() {
@@ -80,45 +91,64 @@ export const rechercheLinkMethods = {
   },
 
   // ── KI-Verknüpfungsvorschläge ──────────────────────────────────────────────
+  // Parallel je Fundstück: jeder Lauf hat seinen eigenen Poller in
+  // `_suggestTimers[itemId]` (die Map ist der ctx von startPoll, der Schlüssel
+  // der timerProp) und seine eigene Knopfsperre in `suggestRunning[itemId]`.
+  // Ein zweiter Lauf am selben Fundstück wartet auf den ersten.
+  suggestBusy(itemId) { return !!this.suggestRunning[itemId]; },
+  _setSuggestRunning(itemId, on) {
+    const next = { ...this.suggestRunning };
+    if (on) next[itemId] = true; else delete next[itemId];
+    this.suggestRunning = next;
+  },
+  // Alle Vorschlags-Poller stoppen (Buchwechsel, View-Reset, destroy). Den
+  // Handle nullen statt die Map zu ersetzen: startPoll prüft `ctx[key] === timer`
+  // auf der Map, die es bekommen hat — ein genullter Eintrag lässt einen noch
+  // fliegenden Tick still aussteigen.
+  _stopSuggestPolls() {
+    const timers = this._suggestTimers || {};
+    for (const k of Object.keys(timers)) {
+      if (timers[k]) clearInterval(timers[k]);
+      timers[k] = null;
+    }
+    this._suggestTimers = {};
+  },
+
   async suggestLinks(item) {
     const app = window.__app;
     const bookId = Alpine.store('nav').selectedBookId;
-    if (!bookId) return;
-    this.suggestItemId = item.id;
-    this.suggestStatus = app.t('recherche.suggest.running');
-    this.suggestions = { ...this.suggestions, [item.id]: null };
-    this.closeActionMenu();
+    if (!bookId || !item || this.suggestBusy(item.id)) return;
+    const itemId = item.id;
+    this._setSuggestRunning(itemId, true);
+    this.suggestions = { ...this.suggestions, [itemId]: null };
+    const fail = () => {
+      this._setSuggestRunning(itemId, false);
+      this.errorMessage = app.t('recherche.suggest.error');
+    };
     try {
       const { jobId } = await fetchJson('/jobs/research-link', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ book_id: bookId, item_id: item.id }),
+        body: JSON.stringify({ book_id: bookId, item_id: itemId }),
       });
-      startPoll(this, {
-        timerProp: '_suggestTimer',
+      if (!isSelectedBook(bookId)) return;
+      startPoll(this._suggestTimers, {
+        timerProp: String(itemId),
         jobId,
-        onNotFound: () => { this.suggestItemId = null; this.suggestStatus = ''; },
-        onError: () => {
-          this.suggestItemId = null;
-          this.suggestStatus = '';
-          this.errorMessage = app.t('recherche.suggest.error');
-        },
+        onNotFound: () => this._setSuggestRunning(itemId, false),
+        onError: fail,
         onDone: (job) => {
-          this.suggestItemId = null;
-          this.suggestStatus = '';
+          this._setSuggestRunning(itemId, false);
           const list = job.result?.suggestions || [];
-          this.suggestions = { ...this.suggestions, [item.id]: list };
-          if (!list.length) this.suggestStatus = app.t('recherche.suggest.none');
+          this.suggestions = { ...this.suggestions, [itemId]: list };
         },
       });
-    } catch (e) {
-      this.suggestItemId = null;
-      this.suggestStatus = '';
-      this.errorMessage = app.t('recherche.suggest.error');
+    } catch {
+      if (isSelectedBook(bookId)) fail();
     }
   },
 
   async acceptSuggestion(item, sugg) {
-    await this.addLink(item.id, sugg.target_kind, sugg.target_id);
+    if (!await this.addLink(item.id, sugg.target_kind, sugg.target_id)) return;
     const list = (this.suggestions[item.id] || []).filter(
       s => !(s.target_kind === sugg.target_kind && s.target_id === sugg.target_id)
     );
@@ -158,7 +188,7 @@ export const rechercheLinkMethods = {
         onDone: async (job) => {
           this.linkCheckRunning = false;
           const r = job.result || {};
-          this.linkCheckStatus = app.t(r.dead ? 'recherche.linkCheck.doneDead' : 'recherche.linkCheck.done', { n: r.checked || 0, dead: r.dead || 0 });
+          this.linkCheckStatus = app.tn(r.dead ? 'recherche.linkCheck.doneDead' : 'recherche.linkCheck.done', r.checked || 0, { dead: r.dead || 0 });
           await this.loadRecherche();
         },
       });
@@ -177,7 +207,8 @@ export const rechercheLinkMethods = {
   urlCheckTip(u) {
     const app = window.__app;
     if (u?.check_code) return app.t('recherche.linkCheck.code', { code: u.check_code });
-    return app.t(`recherche.linkCheck.err.${u?.check_error || 'NETWORK'}`);
+    const code = LINK_CHECK_ERRORS.has(u?.check_error) ? u.check_error : 'NETWORK';
+    return app.t(`recherche.linkCheck.err.${code}`);
   },
   // Archivkopie bei der Wayback Machine: reiner Link, kein Server-Request.
   waybackUrl(u) { return `https://web.archive.org/web/*/${u.url}`; },

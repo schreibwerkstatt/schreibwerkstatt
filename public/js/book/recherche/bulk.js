@@ -39,12 +39,12 @@ export const rechercheBulkMethods = {
     const ids = this.selectedVisibleIds();
     if (!bookId || !ids.length || this.busy) return;
     if (action === 'delete' && !await app.appConfirm({
-      message: app.t('recherche.bulk.confirmDelete', { n: ids.length }),
+      message: app.tn('recherche.bulk.confirmDelete', ids.length),
       confirmLabel: app.t('common.delete'), danger: true,
     })) return;
     this.busy = true;
     try {
-      await fetchJson('/research/bulk', {
+      const r = await fetchJson('/research/bulk', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ book_id: bookId, ids, action, ...extra }),
       });
@@ -55,11 +55,14 @@ export const rechercheBulkMethods = {
       this.bulkTag = '';
       this.bulkLinkTargetId = '';
       await this.loadRecherche();
+      // add_tag: Fundstuecke am Tag-Deckel ueberspringt der Server und zaehlt sie
+      // in `skipped`. Nach dem Reload melden — loadRecherche leert errorMessage.
+      if (r?.skipped) this.errorMessage = app.tn('recherche.bulk.tagSkipped', r.skipped);
       // Seiten-/Kapitel-Indikatoren haengen an Verknuepfung + Archiv-Stand.
       this._refreshRechercheCounts('page');
       this._refreshRechercheCounts('chapter');
-    } catch {
-      this.errorMessage = app.t('recherche.bulk.error');
+    } catch (e) {
+      this.errorMessage = this._rechercheErrorText(e, 'recherche.bulk.error');
     } finally {
       this.busy = false;
     }

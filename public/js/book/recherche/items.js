@@ -2,6 +2,7 @@
 // und der Uebersichts-Cap des Beschreibungstexts.
 
 import { fetchJson } from '../../utils.js';
+import { isSelectedBook } from '../../cards/book-guard.js';
 import { emptyDraft as _emptyDraft } from './shared.js';
 
 export const rechercheItemMethods = {
@@ -51,6 +52,13 @@ export const rechercheItemMethods = {
     this.clearCreateFile();
     this.errorMessage = '';
   },
+  // Meldung, die das Schliessen des Anlegen-Dialogs ueberleben soll: nach dem
+  // close-Handler (registriert NACH dem @close des Templates) erneut setzen.
+  _keepErrorAfterCreateClose(msg) {
+    const dlg = this.$refs?.createDialog;
+    if (!msg || !dlg?.open) return;
+    dlg.addEventListener('close', () => { this.errorMessage = msg; }, { once: true });
+  },
 
   // Datei-Auswahl beim Anlegen: File NICHT in reaktivem State halten (ein Alpine-
   // Proxy bricht File.arrayBuffer mit „Illegal invocation"), nur den Anzeige-Namen.
@@ -93,6 +101,7 @@ export const rechercheItemMethods = {
       try {
         row = await post();
       } catch (e) {
+        if (!isSelectedBook(bookId)) return;
         // Link liegt schon an einem Fundstück dieses Buchs (409 DUPLICATE_URL):
         // nachfragen statt still eine Dublette anzulegen — zwei Zitate aus
         // derselben Seite sind aber legitim, darum übersteuerbar.
@@ -100,25 +109,42 @@ export const rechercheItemMethods = {
         const ok = await app.appConfirm({
           message: app.t('recherche.error.duplicateUrlConfirm', { title: e.body?.params?.title || '' }),
         });
-        if (!ok) {
-          this.closeCreate();
-          this._focusRechercheItemById(e.body.existing_id);
+        if (!ok || !isSelectedBook(bookId)) {
+          if (!ok) {
+            this.closeCreate();
+            this._focusRechercheItemById(e.body.existing_id);
+          }
           return;
         }
         row = await post({ allow_duplicate: true });
       }
+      // Buch inzwischen gewechselt: das Fundstueck liegt im alten Buch und gehoert
+      // nicht in die Liste des neuen (der Reset hat den Dialog schon geschlossen).
+      if (!isSelectedBook(bookId)) return;
       this.items = [row, ...this.items];
       // Datei nachladen (image/* → Bild, application/pdf → Dokument); uploadXxx
       // ersetzt das eben eingefügte Item per id und setzt kind serverseitig.
+      let uploaded = true;
       if (file) {
-        if ((file.type || '').startsWith('image/')) await this.uploadImage(row, file);
-        else if (file.type === 'application/pdf') await this.uploadDoc(row, file);
+        if ((file.type || '').startsWith('image/')) uploaded = await this.uploadImage(row, file);
+        else if (file.type === 'application/pdf') uploaded = await this.uploadDoc(row, file);
+      }
+      if (!isSelectedBook(bookId)) return;
+      this._loadTags();
+      if (!uploaded) {
+        // Das Fundstueck steht, nur der Anhang fehlt: nicht im Anlegen-Dialog
+        // bleiben (ein zweites Speichern legte eine Dublette an), sondern das neue
+        // Fundstueck oeffnen, wo der Anhang erneut gewaehlt werden kann. Die
+        // Meldung erst NACH dem close-Event des Anlegen-Dialogs setzen —
+        // _onCreateClosed leert errorMessage, und das Event feuert als eigener Task.
+        this._keepErrorAfterCreateClose(this.errorMessage);
+        this.openDetail(row);
+        return;
       }
       // Dialog zu (raeumt draft + Datei-Input im close-Handler).
       this.closeCreate();
-      this._loadTags();
     } catch (e) {
-      this.errorMessage = app.t('recherche.error.save');
+      if (isSelectedBook(bookId)) this.errorMessage = this._rechercheErrorText(e, 'recherche.error.save');
     } finally {
       this.busy = false;
     }
@@ -215,7 +241,7 @@ export const rechercheItemMethods = {
       this.errorMessage = '';
       this._loadTags();
     } catch (e) {
-      this.errorMessage = app.t('recherche.error.save');
+      this.errorMessage = this._rechercheErrorText(e, 'recherche.error.save');
     } finally {
       this.busy = false;
     }
@@ -245,15 +271,17 @@ export const rechercheItemMethods = {
   async togglePin(item) {
     try {
       this._replaceItem(await this._patchItem(item.id, { pinned: !item.pinned }));
-      this.items = this._sortItems(this.items);
+      await this.loadRecherche();
     } catch { this.errorMessage = window.__app.t('recherche.error.save'); }
-    this.closeActionMenu();
   },
 
   async toggleArchive(item) {
     try {
       await this._patchItem(item.id, { archived: !item.archived });
       // Bei aktivem „nur aktive"-Filter verschwindet das Item aus der Liste.
+  // Nach dem Anheften neu laden statt lokal umzusortieren: die Reihenfolge
+  // bestimmt der Server je `sortBy` (routes/research.js FIXED_SORTS + link:<kind>,
+  // jeweils `pinned DESC` vorneweg) — eine Kopie davon im Client driftete.
       // Dann muss auch der Detail-Dialog zu: sein Inhalt hängt an `items`, er
       // stünde sonst leer offen.
       if (!this.showArchived) {
@@ -264,7 +292,6 @@ export const rechercheItemMethods = {
       if ((item.links || []).some(l => l.target_kind === 'page')) this._refreshRechercheCounts('page');
       if ((item.links || []).some(l => l.target_kind === 'chapter')) this._refreshRechercheCounts('chapter');
     } catch { this.errorMessage = window.__app.t('recherche.error.save'); }
-    this.closeActionMenu();
   },
 
   async deleteItem(item) {
@@ -281,7 +308,6 @@ export const rechercheItemMethods = {
       if ((item.links || []).some(l => l.target_kind === 'page')) this._refreshRechercheCounts('page');
       if ((item.links || []).some(l => l.target_kind === 'chapter')) this._refreshRechercheCounts('chapter');
     } catch { this.errorMessage = app.t('recherche.error.delete'); }
-    this.closeActionMenu();
   },
 
 };

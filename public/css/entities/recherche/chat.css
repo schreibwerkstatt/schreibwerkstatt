@@ -118,10 +118,22 @@
   color: var(--color-muted);
 }
 .research-chat-proposal-url-row > .icon-btn { flex-shrink: 0; }
+/* Ungeprüfte URL (verified: false): die GANZE Zeile in Warn-Optik, nicht nur
+   ein kleines Wort am Rand — sie ist vorab abgewählt, und wer sie wieder
+   aufnimmt, soll sehen, dass er eine nie abgerufene Adresse speichert. */
+.research-chat-proposal-url-row--unverified {
+  background: var(--color-warn-bg);
+  border-radius: var(--radius-md);
+  padding-inline: var(--space-2xs);
+}
+.research-chat-proposal-url-row--unverified .research-chat-proposal-url { color: var(--color-warn-text); }
 .research-chat-proposal-url-unverified {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2xs);
   font-size: var(--font-size-sm);
   color: var(--color-warn-text);
-  font-style: italic;
+  font-weight: 600;
   white-space: nowrap;
   flex-shrink: 0;
 }

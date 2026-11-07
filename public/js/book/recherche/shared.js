@@ -20,6 +20,10 @@ export const STATUSES = ['offen', 'in_arbeit', 'eingearbeitet', 'verworfen'];
 // bleiben in der Detailansicht.
 export const PLACE_LINK_KINDS = ['chapter', 'page'];
 
+// Schluessel der Busy-Maps je Link-Zeile (`_scrapeBusy`, `_toSourceBusy`):
+// Fundstueck + URL-Zeile. Eine Aktion haengt an der einzelnen URL, nicht am Fund.
+export function urlRowKey(item, u) { return `${item.id}:${u.url_id}`; }
+
 export function emptyDraft() {
   return { kind: 'note', title: '', body: '', urls: [], source: '', tags: '', fileName: '' };
 }

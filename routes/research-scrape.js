@@ -58,6 +58,10 @@ function _cmp(s) {
   return String(s || '').toLowerCase().replace(/[^\p{L}\p{N}]+/gu, ' ').trim();
 }
 
+// Unter dieser Laenge (Vergleichsform) ist eine Beschreibung zu unspezifisch
+// fuer einen Enthaltensein-Test: „Startseite" steht irgendwo in fast jedem Text.
+const SHORT_DESC = 60;
+
 /** Beschreibung + Haupttext zu EINEM Feldwert. Die Beschreibung fuehrt, wenn sie
  *  etwas beitraegt, das der Haupttext nicht schon sagt — sonst faellt sie weg. */
 function composeBody(description, text) {
@@ -66,9 +70,14 @@ function composeBody(description, text) {
   if (!desc) return main;
   if (!main) return desc;
   const d = _cmp(desc);
-  // Kurze Beschreibungen sind zu unspezifisch fuer einen Enthaltensein-Test
-  // („Startseite") — sie gelten nur als Dublette, wenn der Text sie wirklich fuehrt.
-  if (d && (_cmp(main).includes(d) || _cmp(main).startsWith(d.slice(0, 60)))) return main;
+  const m = _cmp(main);
+  // Kurze Beschreibungen gelten nur als Dublette, wenn der Text mit ihnen
+  // beginnt. Lange gelten auch, wenn sie irgendwo im Text stehen oder der Text
+  // mit ihrem Anfang beginnt (og:description = gekuerzter erster Absatz).
+  const dup = d.length < SHORT_DESC
+    ? m.startsWith(d)
+    : m.includes(d) || m.startsWith(d.slice(0, SHORT_DESC));
+  if (d && dup) return main;
   return `${desc}\n\n${main}`;
 }
 
@@ -90,8 +99,8 @@ researchScrapeRouter.post('/:id/scrape', jsonBody, async (req, res) => {
   if (!scope) return;
   const { id, bookId } = scope;
 
-  const item = db.prepare('SELECT title, body, source FROM research_items WHERE id = ?').get(id);
-  if (!item) return res.status(404).json({ error_code: 'ITEM_NOT_FOUND' });
+  // Bestand hat scopedItem schon geprueft (404 ITEM_NOT_FOUND).
+  const item = db.prepare('SELECT title, body, source FROM research_items WHERE id = ?').get(id) || {};
 
   const wantUrlId = req.body?.url_id === undefined ? null : toIntId(req.body.url_id);
   if (req.body?.url_id !== undefined && !wantUrlId) {

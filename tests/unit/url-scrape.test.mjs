@@ -319,3 +319,44 @@ test('scrapeUrl: bytes im Ergebnis, maxBytes deckelt unter dem Typ-Deckel', asyn
     await assert.rejects(scrapeUrl('https://x.example.org/b.pdf', { allowPdf: true, maxBytes: 10 }), (e) => e.code === 'SCRAPE_TOO_LARGE');
   } finally { restore(); }
 });
+
+// ── Abbruch, Body-Freigabe, Bytes am Fehler ─────────────────────────────────
+
+test('fetchDocument: Nicht-OK-Antwort gibt ihren Body frei', async () => {
+  let cancelled = false;
+  const restore = stubFetch(async () => ({
+    ok: false, status: 500, headers: { get: () => null },
+    body: { cancel: async () => { cancelled = true; } },
+  }));
+  try {
+    await assert.rejects(fetchDocument('https://x.example.org/kaputt'), (e) => e.code === 'SCRAPE_HTTP_ERROR');
+    assert.equal(cancelled, true);
+  } finally { restore(); }
+});
+
+test('fetchDocument: Abbruch des Aufrufers wirft AbortError, kein SCRAPE_UNAVAILABLE', async () => {
+  const ctrl = new AbortController();
+  const restore = stubFetch(async (_u, opts) => {
+    ctrl.abort();
+    throw opts.signal.reason ?? Object.assign(new Error('aborted'), { name: 'AbortError' });
+  });
+  try {
+    await assert.rejects(fetchDocument('https://x.example.org/a', { signal: ctrl.signal }), (e) => e.name === 'AbortError');
+  } finally { restore(); }
+});
+
+test('scrapeUrl: Fehler nach geladenem Body tragen die Bytes (Byte-Budget)', async () => {
+  const { scrapeUrl } = require('../../lib/url-scrape.js');
+  const bin = Buffer.from('keinpdf-binaer-0123456789');
+  let restore = stubFetch(async () => binResponse(bin, 'application/octet-stream'));
+  try {
+    await assert.rejects(scrapeUrl('https://x.example.org/blob', { allowPdf: true }),
+      (e) => e.code === 'SCRAPE_NOT_HTML' && e.bytes === bin.length);
+  } finally { restore(); }
+  const big = Buffer.alloc(64, 0x41);
+  restore = stubFetch(async () => binResponse(big, 'text/html'));
+  try {
+    await assert.rejects(scrapeUrl('https://x.example.org/gross', { maxBytes: 10 }),
+      (e) => e.code === 'SCRAPE_TOO_LARGE' && e.bytes === 10);
+  } finally { restore(); }
+});

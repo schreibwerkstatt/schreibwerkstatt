@@ -19,7 +19,7 @@
           <svg class="icon" aria-hidden="true"><use href="/icons.svg#external-link"/></svg>
           <span x-text="$app.t('recherche.link.add')"></span>
         </button>
-        <button type="button" class="context-menu-item context-menu-item--icon" role="menuitem" @click="if (menuCtx === 'status') openDetail(item); suggestLinks(item)" :disabled="busy || suggestItemId === item.id">
+        <button type="button" class="context-menu-item context-menu-item--icon" role="menuitem" @click="if (menuCtx === 'status') openDetail(item); suggestLinks(item)" :disabled="busy || suggestBusy(item.id)">
           <svg class="icon" aria-hidden="true"><use href="/icons.svg#zap"/></svg>
           <span x-text="$app.t('recherche.suggest.btn')"></span>
         </button>

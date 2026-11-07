@@ -62,3 +62,32 @@ test('isBlockedHost versteht eckige Klammern und hex-mapped Form', () => {
 test('assertPublicUrl: oeffentliches IPv6-Literal geht durch', async () => {
   await assertPublicUrl('http://[2606:4700:4700::1111]/');
 });
+
+test('safeFetch: Body jedes 3xx-Zwischenhops wird freigegeben, der des Ziels nicht', async () => {
+  const { safeFetch } = require('../../lib/ssrf-guard.js');
+  const cancelled = [];
+  const mk = (url, status, headers = {}) => {
+    const body = new ReadableStream({ cancel() { cancelled.push(url); } });
+    return new Response(body, { status, headers });
+  };
+  const fetchImpl = async (url) => (url === 'https://a.example/'
+    ? mk(url, 302, { location: 'https://b.example/' })
+    : mk(url, 200));
+  const { response, url } = await safeFetch('https://a.example/', { fetchImpl, assertUrl: async () => {}, readBody: false });
+  assert.equal(url, 'https://b.example/');
+  assert.deepEqual(cancelled, ['https://a.example/']);
+  await response.body.cancel();
+});
+
+test('safeFetch: Body wird freigegeben, wenn accept wirft oder die angekuendigte Laenge den Deckel sprengt', async () => {
+  const { safeFetch } = require('../../lib/ssrf-guard.js');
+  const run = async (opts, headers = {}) => {
+    let cancelled = false;
+    const body = new ReadableStream({ cancel() { cancelled = true; } });
+    const fetchImpl = async () => new Response(body, { status: 200, headers });
+    await assert.rejects(safeFetch('https://a.example/', { fetchImpl, assertUrl: async () => {}, ...opts }));
+    return cancelled;
+  };
+  assert.equal(await run({ accept: async () => { throw new Error('falscher Typ'); } }), true, 'accept wirft');
+  assert.equal(await run({ maxBytes: 10 }, { 'content-length': '999' }), true, 'declared zu gross');
+});

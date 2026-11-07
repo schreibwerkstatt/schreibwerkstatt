@@ -43,9 +43,13 @@ export const rechercheCrosscheckMethods = {
         onDone: async (job) => {
           stop();
           const r = job.result || {};
-          this.crosscheckStatus = r.checked
-            ? app.t(r.findings ? 'recherche.crosscheck.doneFindings' : 'recherche.crosscheck.doneClean', { n: r.checked, findings: r.findings || 0, unchecked: r.unchecked || 0 })
-            : app.t('recherche.crosscheck.nothing');
+          const main = r.checked
+            ? app.tn(r.findings ? 'recherche.crosscheck.doneFindings' : 'recherche.crosscheck.doneClean', r.checked, { findings: r.findings || 0, unchecked: r.unchecked || 0 })
+            : (r.failed ? '' : app.t('recherche.crosscheck.nothing'));
+          // `failed` (in `unchecked` enthalten): wegen Fehler ungeprueft — eigener
+          // Hinweis, weil deren alte Befunde stehen bleiben und veraltet sein koennen.
+          const failed = r.failed ? app.tn('recherche.crosscheck.failed', r.failed) : '';
+          this.crosscheckStatus = [main, failed].filter(Boolean).join(' ');
           await this.loadRecherche();
         },
       });

@@ -26,10 +26,9 @@ const {
 const { findDuplicateItem } = require('../../db/research-items');
 const { normalizeUrl } = require('../../lib/url-normalize');
 const { WEB_TOOLS } = require('./research-web-tools');
+const { snipText: _snip } = require('./chat-tools/tools-research');
 
 const MAX_PROPOSALS = 12;
-
-const _snip = (s, n) => String(s || '').replace(/\s+/g, ' ').trim().slice(0, n);
 
 // ── propose_research_item ────────────────────────────────────────────────────
 // Persistiert NICHTS — sammelt nur in ctx.proposals; der User bestätigt im Frontend.

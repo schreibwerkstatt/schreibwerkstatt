@@ -8,9 +8,12 @@
 // eine 409-Antwort beim Speichern: dann „schon im Board" statt Speichern-Knopf.
 //
 // Jede URL trägt `verified` (vom Job: in diesem Lauf abgerufen/geliefert ja/nein).
-// Eine ungeprüfte URL zeigt einen Hinweis, ihr Vorschlag fällt aus «Alle
-// speichern» — einzeln speichern geht weiter. Einzelne Links lassen sich vor dem
-// Speichern weglassen (`edits.urls`, nur Teilmenge der eigenen URLs).
+// Eine ungeprüfte URL steht in Warn-Optik und ist VORAB ABGEWÄHLT: einzeln
+// gespeichert geht sie nur mit, wenn der User sie ausdrücklich wieder aufnimmt.
+// Ein Vorschlag mit ungeprüfter URL fällt aus «Alle speichern». Einzelne Links
+// lassen sich vor dem Speichern weglassen (`edits.urls`, nur Teilmenge der
+// eigenen URLs). `_proposalRemovedUrls[key]` hält die vom Default ABWEICHENDEN
+// URLs: eine geprüfte darin ist weggelassen, eine ungeprüfte darin aufgenommen.
 //
 // Lokale Updates ersetzen die Nachricht im Array (neues Objekt), statt das
 // x-for-Item zu mutieren: Mutationen am Proxy nach einem await schlagen nicht
@@ -39,7 +42,8 @@ export const researchProposalMethods = {
   researchSavableProposals(msg) {
     return this.researchProposals(msg)
       .map((p, pi) => ({ p, pi }))
-      .filter(({ p, pi }) => !p.saved_item_id && !p.exists_item_id && !this.proposalHasUnverified(msg, pi));
+      .filter(({ p }) => !p.saved_item_id && !p.exists_item_id
+        && !(p.urls || []).some(u => this.isProposalUrlUnverified(u)));
   },
 
   // ── Links eines Vorschlags ──────────────────────────────────────────────
@@ -52,7 +56,12 @@ export const researchProposalMethods = {
     return u?.label ? urlHost(u.url) : '';
   },
   isProposalUrlRemoved(msg, pi, u) {
-    return (this._proposalRemovedUrls[_key(msg, pi)] || []).includes(u?.url);
+    const toggled = (this._proposalRemovedUrls[_key(msg, pi)] || []).includes(u?.url);
+    return this.isProposalUrlUnverified(u) ? !toggled : toggled;
+  },
+  // Warn-Optik der ganzen Zeile: ungeprüft UND (wieder) aufgenommen.
+  isProposalUrlRisky(msg, pi, u) {
+    return this.isProposalUrlUnverified(u) && !this.isProposalUrlRemoved(msg, pi, u);
   },
   toggleProposalUrl(msg, pi, u) {
     const k = _key(msg, pi);
@@ -65,9 +74,6 @@ export const researchProposalMethods = {
   // Links, die beim Speichern mitgehen.
   _proposalKeptUrls(msg, pi) {
     return (this.researchProposals(msg)[pi]?.urls || []).filter(u => !this.isProposalUrlRemoved(msg, pi, u));
-  },
-  proposalHasUnverified(msg, pi) {
-    return this._proposalKeptUrls(msg, pi).some(u => this.isProposalUrlUnverified(u));
   },
 
   // ── Bearbeiten vor dem Speichern ────────────────────────────────────────
@@ -97,7 +103,8 @@ export const researchProposalMethods = {
   // Bearbeitungen + weggelassene Links; null, wenn der User nichts geändert hat.
   _proposalEditsPayload(msg, pi) {
     const d = this.proposalEdit(msg, pi);
-    const removed = (this._proposalRemovedUrls[_key(msg, pi)] || []).length > 0;
+    const all = this.researchProposals(msg)[pi]?.urls || [];
+    const removed = this._proposalKeptUrls(msg, pi).length !== all.length;
     if (!d && !removed) return null;
     return {
       ...(d ? {

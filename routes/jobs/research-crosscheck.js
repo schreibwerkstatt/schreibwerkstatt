@@ -9,11 +9,16 @@
 // Kandidat die Manuskriptstellen, an denen er etwas sagen koennte (verknuepfte
 // Seiten/Kapitel, sonst die semantisch naechsten Seiten) → KI-Urteil in kleinen
 // Buendeln → nur Befunde, deren `stelle` woertlich im gelieferten Text steht.
-// Persistenz: research_item_findings (db/research-findings.js), je Lauf ersetzt.
+// Persistenz: research_item_findings (db/research-findings.js), je Buendel
+// ersetzt — ein spaeterer Fehler verwirft fertige Buendel nicht.
 // Rueckwaertsgewandt: meldet, schlaegt keinen Text vor, aendert nichts am Buch.
+//
+// Ungeprueft bleiben (`unchecked`): Fundstuecke ohne Manuskriptstelle und solche,
+// die an einem Fehler scheitern (Embedding-Ausfall, Antwort auch als Einzel-
+// Buendel abgeschnitten). Alte Befunde fallen nur im ersten Fall weg — die Stelle
+// gibt es nicht mehr; nach einem Fehler bleiben sie stehen (`failed`).
 
 const express = require('express');
-const { db } = require('../../db/schema');
 const {
   makeJobLogger, updateJob, completeJob, failJob, i18nError,
   aiCall, getPrompts, tps, htmlToTextForPrompt, jobAbortControllers,
@@ -23,9 +28,10 @@ const { toIntId } = require('../../lib/validate');
 const { setContext } = require('../../lib/log-context');
 const { guardBook, sessionEmail } = require('../../lib/acl');
 const contentStore = require('../../lib/content-store');
-const { researchPageHits } = require('../../lib/research-retrieval');
-const { bestLivePassage } = require('../../lib/live-passage');
+const { DOC_QUERY_CHARS } = require('../../lib/research-retrieval');
+const { semanticLivePassages } = require('./research-passages');
 const { replaceFindings, placePageIds, FINDING_TYPES } = require('../../db/research-findings');
+const { crosscheckCandidates } = require('../../db/research-jobs');
 
 const router = express.Router();
 
@@ -38,27 +44,23 @@ const PAGE_TEXT_MAX = 6000;
 const STELLE_MAX = 400;
 // Ausschnitt um eine semantisch gefundene Stelle (live nachgeschlagen, s.u.).
 const HIT_PASSAGE_MAX = 2000;
+// Output-Deckel je Buendel: Huelle + je Fundstueck Platz fuer einige Befunde
+// (stelle ≤ 400 Zeichen + erklaerung). aiCall kappt ihn auf den Provider-Deckel;
+// Schema und Modell bleiben je Call gleich (kein Cache-Bruch).
+const OUT_BASE_TOKENS = 600;
+const OUT_PER_ITEM_TOKENS = 500;
+const batchMaxTokens = (n) => OUT_BASE_TOKENS + Math.max(1, n) * OUT_PER_ITEM_TOKENS;
 
 const _norm = (s) => String(s || '').replace(/[“”„«»"]/g, '"').replace(/[‘’‚]/g, "'").replace(/\s+/g, ' ').trim();
 
-function _candidates(bookId, itemId) {
-  const where = ["ri.book_id = ?", "ri.kind IN ('fact','quote')", 'ri.archived = 0', "ri.status <> 'verworfen'"];
-  const args = [bookId];
-  if (itemId) { where.push('ri.id = ?'); args.push(itemId); }
-  return db.prepare(
-    `SELECT ri.id, ri.kind, ri.title, ri.body, ri.source, ri.doc_text
-       FROM research_items ri WHERE ${where.join(' AND ')}
-      ORDER BY ri.pinned DESC, ri.updated_at DESC LIMIT ${CANDIDATE_CAP + 1}`
-  ).all(...args);
-}
+const _abort = () => Object.assign(new Error('aborted'), { name: 'AbortError' });
 
 // Manuskriptstellen eines Kandidaten: verknuepfte Seiten zuerst (der Autor hat
-// gesagt, wo es hingehoert), sonst die semantisch naechsten Seiten-Chunks.
-// Der Chunk ist nur Wegweiser: Prompt und `stelle`-Pruefung laufen gegen den
-// AKTUELLEN Seitentext (der Index kann hinter dem Seitenstand liegen). Findet
-// sich die Chunk-Stelle nicht mehr (umgeschrieben/geloescht), faellt die Seite
-// weg — ein unverwandter Absatz waere kein Beleg.
-async function _passages(bookId, item, signal) {
+// gesagt, wo es hingehoert), sonst die semantisch naechsten Seiten-Chunks
+// (./research-passages.js: live nachgeschlagen, verschwundene Stellen fallen weg).
+// `error`: die Embedding-Suche fiel aus — das Fundstueck ist dann ungeprueft,
+// nicht stellenlos. Ein Job-Abbruch wird weitergeworfen.
+async function _passages(bookId, item, signal, logger) {
   const linked = placePageIds(item.id).slice(0, PAGES_PER_ITEM);
   const out = [];
   for (const pageId of linked) {
@@ -67,20 +69,17 @@ async function _passages(bookId, item, signal) {
     const text = htmlToTextForPrompt(page.html || '').trim();
     if (text) out.push({ page_id: pageId, page_name: page.name || '', text: text.slice(0, PAGE_TEXT_MAX) });
   }
-  if (out.length) return out;
-  const hits = await researchPageHits(bookId, item, { topK: PAGES_PER_ITEM * 2, signal });
-  const seen = new Set();
-  for (const h of hits) {
-    if (seen.has(h.entity_id) || !h.text) continue;
-    seen.add(h.entity_id);
-    const page = await contentStore.loadPage(h.entity_id).catch(() => null);
-    if (!page || page.book_id !== bookId) continue;
-    const live = bestLivePassage(htmlToTextForPrompt(page.html || ''), h.text, { maxChars: HIT_PASSAGE_MAX });
-    if (!live || !live.text) continue;
-    out.push({ page_id: h.entity_id, page_name: page.name || '', text: live.text });
-    if (out.length >= PAGES_PER_ITEM) break;
+  if (out.length) return { passages: out, error: false };
+  try {
+    const passages = await semanticLivePassages(bookId, item, {
+      limit: PAGES_PER_ITEM, topK: PAGES_PER_ITEM * 2, maxChars: HIT_PASSAGE_MAX, signal,
+    });
+    return { passages, error: false };
+  } catch (e) {
+    if (e?.name === 'AbortError') throw e;
+    logger?.warn?.(`Recherche-Abgleich: Stellen fuer Fundstueck ${item.id} nicht verfuegbar (${e.message})`);
+    return { passages: [], error: true };
   }
-  return out;
 }
 
 /** Modell-Befunde gegen die gelieferten Daten pruefen: ids aus dem Buendel, Seite
@@ -112,45 +111,81 @@ async function runResearchCrosscheckJob(jobId, bookId, itemId, userEmail) {
   const signal = jobAbortControllers.get(jobId)?.signal;
   try {
     updateJob(jobId, { statusText: 'job.phase.researchCrosscheckPassages', progress: 5 });
-    const all = _candidates(bookId, itemId);
+    const all = crosscheckCandidates(bookId, itemId, { cap: CANDIDATE_CAP, docChars: DOC_QUERY_CHARS });
     const capped = all.length > CANDIDATE_CAP;
     const list = all.slice(0, CANDIDATE_CAP);
     const checkable = [];
-    let unchecked = 0;
+    const noPlace = [];
+    const failed = [];
     for (const item of list) {
-      if (signal?.aborted) throw Object.assign(new Error('aborted'), { name: 'AbortError' });
-      const passages = await _passages(bookId, item, signal);
-      if (passages.length) checkable.push({ ...item, passages }); else unchecked += 1;
+      if (signal?.aborted) throw _abort();
+      const { passages, error } = await _passages(bookId, item, signal, logger);
+      if (passages.length) checkable.push({ ...item, passages });
+      else if (error) failed.push(item.id);
+      else noPlace.push(item.id);
     }
+    // Ohne Stelle: alte Befunde zeigen auf eine Stelle, die es so nicht mehr gibt.
+    if (noPlace.length) replaceFindings(bookId, noPlace, []);
+    const result = (checked, findings) => ({
+      checked, findings, unchecked: noPlace.length + failed.length, failed: failed.length, capped,
+    });
     if (!checkable.length) {
-      completeJob(jobId, { checked: 0, findings: 0, unchecked, capped }, null, '0 pruefbar');
+      completeJob(jobId, result(0, 0), null, '0 pruefbar');
       return;
     }
 
     const { buildSystemResearchCrosscheck, buildResearchCrosscheckPrompt, SCHEMA_RESEARCH_CROSSCHECK } = await getPrompts(userEmail);
+    const system = buildSystemResearchCrosscheck();
     const tok = { in: 0, out: 0, ms: 0 };
-    const findings = [];
+    let findingCount = 0;
+    let checkedCount = 0;
+
+    // Ein Buendel pruefen und seine Befunde sofort ersetzen. Abgeschnittene
+    // Antwort → halbieren und beide Haelften einzeln; ein Einzel-Fundstueck,
+    // das auch so nicht passt, bleibt ungeprueft (seine alten Befunde bleiben).
+    const checkBatch = async (batch, from, to) => {
+      let raw;
+      try {
+        raw = await aiCall(jobId, tok,
+          buildResearchCrosscheckPrompt(batch), system,
+          from, to, 1500, 0.1, batchMaxTokens(batch.length), undefined, SCHEMA_RESEARCH_CROSSCHECK,
+        );
+      } catch (e) {
+        if (e?.message !== 'job.error.aiTruncated') throw e;
+        if (batch.length === 1) {
+          logger.warn(`Recherche-Abgleich: Antwort fuer Fundstueck ${batch[0].id} auch einzeln abgeschnitten — ungeprueft`);
+          failed.push(batch[0].id);
+          return;
+        }
+        const mid = Math.ceil(batch.length / 2);
+        logger.info(`Recherche-Abgleich: Antwort abgeschnitten, Buendel ${batch.length} → ${mid} + ${batch.length - mid}`);
+        const half = Math.round((from + to) / 2);
+        await checkBatch(batch.slice(0, mid), from, half);
+        await checkBatch(batch.slice(mid), half, to);
+        return;
+      }
+      if (!Array.isArray(raw?.befunde)) throw i18nError('job.error.researchCrosscheckInvalid');
+      const found = validateFindings(raw.befunde, batch);
+      replaceFindings(bookId, batch.map(c => c.id), found);
+      findingCount += found.length;
+      checkedCount += batch.length;
+    };
+
     const batches = [];
     for (let i = 0; i < checkable.length; i += BATCH) batches.push(checkable.slice(i, i + BATCH));
     for (let b = 0; b < batches.length; b++) {
+      if (signal?.aborted) throw _abort();
       const from = 10 + Math.round((b / batches.length) * 85);
       const to = 10 + Math.round(((b + 1) / batches.length) * 85);
       updateJob(jobId, { statusText: 'job.phase.researchCrosscheck', statusParams: { done: b * BATCH, total: checkable.length } });
-      const result = await aiCall(jobId, tok,
-        buildResearchCrosscheckPrompt(batches[b]),
-        buildSystemResearchCrosscheck(),
-        from, to, 1500, 0.1, 2000, undefined, SCHEMA_RESEARCH_CROSSCHECK,
-      );
-      if (!Array.isArray(result?.befunde)) throw i18nError('job.error.researchCrosscheckInvalid');
-      findings.push(...validateFindings(result.befunde, batches[b]));
+      await checkBatch(batches[b], from, to);
     }
 
-    replaceFindings(bookId, checkable.map(c => c.id), findings);
-    logger.info(`Recherche-Abgleich: ${checkable.length} geprueft, ${findings.length} Befunde, ${unchecked} ohne Manuskriptstelle`);
+    logger.info(`Recherche-Abgleich: ${checkedCount} geprueft, ${findingCount} Befunde, ${noPlace.length} ohne Manuskriptstelle, ${failed.length} wegen Fehler ungeprueft`);
     completeJob(jobId, {
-      checked: checkable.length, findings: findings.length, unchecked, capped,
+      ...result(checkedCount, findingCount),
       tokensIn: tok.in, tokensOut: tok.out,
-    }, tps(tok), `${findings.length} Befunde`);
+    }, tps(tok), `${findingCount} Befunde`);
   } catch (e) {
     if (e.name !== 'AbortError') logger.error(`Recherche-Abgleich Fehler: ${e.message}`, { stack: e.stack });
     failJob(jobId, e);
@@ -173,4 +208,4 @@ router.post('/research-crosscheck', jsonBody, (req, res) => {
   res.json({ jobId });
 });
 
-module.exports = { researchCrosscheckRouter: router, runResearchCrosscheckJob, validateFindings };
+module.exports = { researchCrosscheckRouter: router, runResearchCrosscheckJob, validateFindings, batchMaxTokens };

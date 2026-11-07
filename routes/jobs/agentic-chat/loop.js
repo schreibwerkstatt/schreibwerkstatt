@@ -16,7 +16,7 @@
 //   loadSession(sessionId, userEmail),     // Session-Row (inkl. book_name) oder null
 //   prepare(args) → { systemPrompt, tools, maxToolIter, tokenBudget, toolResultCap?, forceFinalInstruction, ctx,
 //                     stopBeforeRound?, inputTokenCap?, inputCapInstruction? }
-//     args enthält u.a. `message` (die aktuelle Userfrage) und `history` (bisheriger
+//     args enthält u.a. `provider` (der eben aufgelöste), `message` (die aktuelle Userfrage) und `history` (bisheriger
 //     Verlauf ohne die aktuelle Frage) — der Buch-Chat zieht daraus seinen
 //     semantischen Erst-Kontext, bevor der Loop startet.
 //     Die Werkzeugliste bleibt über alle Runden dieselbe: sie steht vorn im
@@ -130,7 +130,7 @@ function makeAgenticChatJob(config) {
 
       const jobSignal = jobAbortControllers.get(jobId)?.signal;
       const historyWithoutLast = buildAgenticHistory(session.id).slice(0, -1);
-      const prep = await config.prepare({ session, userEmail, aiCfg, logger, jobSignal, message, userMsgId, history: historyWithoutLast });
+      const prep = await config.prepare({ session, userEmail, provider, aiCfg, logger, jobSignal, message, userMsgId, history: historyWithoutLast });
       const { systemPrompt, tools, maxToolIter, tokenBudget, forceFinalInstruction, ctx } = prep;
       const toolResultCap = prep.toolResultCap ?? Infinity;
       const toolResultCaps = prep.toolResultCaps || {};

@@ -88,6 +88,11 @@ function restoreResearch(bookId, data, ctx) {
   });
   const COL = Object.assign(Object.create(null),
     { chapter: 'chapter_id', page: 'page_id', figure: 'figure_id', location: 'location_id', scene: 'scene_id' });
+  // Ein Insert je Ziel-Art, einmal vorbereitet (nicht je Link-Zeile).
+  const insLink = Object.create(null);
+  for (const [kind, col] of Object.entries(COL)) {
+    insLink[kind] = db.prepare(`INSERT INTO research_item_links (item_id,target_kind,${col},created_at) VALUES (?,?,?,?)`);
+  }
   let linksDropped = 0;
   let links = 0;
   for (const r of arr('links')) {
@@ -95,8 +100,7 @@ function restoreResearch(bookId, data, ctx) {
     const kind = typeof r.target_kind === 'string' && Object.hasOwn(COL, r.target_kind) ? r.target_kind : null;
     const tid = iid && kind ? targetOf[kind](r) : null;
     if (!tid) { if (iid) linksDropped += 1; continue; }
-    db.prepare(`INSERT INTO research_item_links (item_id,target_kind,${COL[kind]},created_at) VALUES (?,?,?,?)`)
-      .run(iid, kind, tid, r.created_at || _now());
+    insLink[kind].run(iid, kind, tid, r.created_at || _now());
     links += 1;
   }
 

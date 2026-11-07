@@ -85,8 +85,8 @@
            @combobox-change="applyLinkedFilter($event.detail)"></div>
       <span class="filter-search-wrap">
         <input type="text" class="filter-search-input filter-search-input--wide"
-               x-model.debounce.400ms="filterText"
-               @input.debounce.400ms="applyFilters()"
+               :value="filterText"
+               @input.debounce.400ms="filterText = $event.target.value; applyFilters()"
                :placeholder="$app.t('recherche.filter.search')"
                :aria-label="$app.t('recherche.filter.search')">
         <button type="button" class="search-clear--icon" x-show="filterText" @click="filterText=''; applyFilters()" :aria-label="$app.t('search.clear')" :data-tip="$app.t('search.clear')"><svg class="icon" aria-hidden="true"><use href="/icons.svg#x"/></svg></button>
@@ -119,7 +119,7 @@
   </div>
 
   <!-- Empty-State mit CTA: kein Eintrag → direkt anlegen. -->
-  <div x-show="!loading && items.length === 0" class="card-empty" x-cloak>
+  <div x-show="!loading && !errorMessage && items.length === 0" class="card-empty" x-cloak>
     <p class="card-empty-text" x-text="$app.t('recherche.empty')"></p>
     <p class="card-empty-hint" x-text="$app.t('recherche.emptyHint')"></p>
     <button type="button" class="primary card-empty-cta" @click="startCreate()" :disabled="busy">

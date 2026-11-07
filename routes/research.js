@@ -12,8 +12,8 @@
 const express = require('express');
 const { db } = require('../db/schema');
 const {
-  LINK_TARGETS, attachRelations, emitItem, replaceUrls, replaceTags, createItem,
-  listEntityLinkTargets, findDuplicateItem, addItemLink, STATUS_SELECT_SQL, setItemsStatus,
+  linkTarget, attachRelations, emitItem, replaceUrls, replaceTags, createItem,
+  listEntityLinkTargets, urlDuplicateConflict, addItemLink, STATUS_SELECT_SQL, setItemsStatus,
 } = require('../db/research-items');
 const { toIntId } = require('../lib/validate');
 const { guardBook, sessionEmail } = require('../lib/acl');
@@ -24,6 +24,7 @@ const searchIndex = require('../lib/search');
 const {
   RESEARCH_KINDS, LIST_FILTER_KINDS, RESEARCH_STATUS_SET,
   TITLE_MAX, BODY_MAX, SOURCE_MAX, TAG_MAX, cleanStr,
+  textFieldError, flagFieldError, urlsInputError,
   FTS_PREFILTER_LIMIT, CLIENT_LIST_LIMIT, clampListLimit, toClientItem,
 } = require('../lib/research-validate');
 const logger = require('../logger');
@@ -52,7 +53,7 @@ router.use('/', researchChatProposalsRouter);
 // Mehrfachauswahl (POST /bulk): eine Aktion auf viele Fundstuecke, eine Transaktion.
 router.use('/', researchBulkRouter);
 
-// Item-Modell (Anlegen, Kind-Tabellen, Ausgabeform, LINK_TARGETS) liegt in
+// Item-Modell (Anlegen, Kind-Tabellen, Ausgabeform, linkTarget) liegt in
 // db/research-items.js, weil routes/capture.js (Browser-Erweiterung) denselben
 // Schreibpfad braucht.
 
@@ -65,16 +66,16 @@ const FIXED_SORTS = {
 };
 
 // PATCH-Feld-Deskriptoren für PATCH /:id. Reihenfolge bestimmt die
-// Validierungsreihenfolge (kind zuerst → early return bei INVALID_KIND, wie
-// vorher). `validate` retourniert false für einen 400; `clean` konvertiert den
-// Eingabewert in den SQL-Wert.
+// Validierungsreihenfolge (kind zuerst). `check` liefert null oder den 400-Body;
+// `clean` konvertiert den Eingabewert in den SQL-Wert; `indexed` = das Feld steht
+// im Volltext-Index (lib/search.js#_upsertResearch) und verlangt ein Nachziehen.
 const PATCH_FIELDS = [
-  { name: 'kind',     validate: (v) => RESEARCH_KINDS.has(v), error: 'INVALID_KIND' },
-  { name: 'title',    clean: (v) => cleanStr(v, TITLE_MAX) },
-  { name: 'body',     clean: (v) => cleanStr(v, BODY_MAX) },
-  { name: 'source',   clean: (v) => cleanStr(v, SOURCE_MAX) },
-  { name: 'pinned',   clean: (v) => v ? 1 : 0 },
-  { name: 'archived', clean: (v) => v ? 1 : 0 },
+  { name: 'kind',     check: (v) => (RESEARCH_KINDS.has(v) ? null : { error_code: 'INVALID_KIND' }) },
+  { name: 'title',    check: (v) => textFieldError('title', v),  clean: (v) => cleanStr(v, TITLE_MAX),  indexed: true },
+  { name: 'body',     check: (v) => textFieldError('body', v),   clean: (v) => cleanStr(v, BODY_MAX),   indexed: true },
+  { name: 'source',   check: (v) => textFieldError('source', v), clean: (v) => cleanStr(v, SOURCE_MAX), indexed: true },
+  { name: 'pinned',   check: (v) => flagFieldError('pinned', v),   clean: (v) => v ? 1 : 0 },
+  { name: 'archived', check: (v) => flagFieldError('archived', v), clean: (v) => v ? 1 : 0 },
 ];
 
 // ── Liste + Filter ─────────────────────────────────────────────────────────
@@ -118,7 +119,7 @@ router.get('/', (req, res) => {
   const linked = String(req.query.linked || '').trim();
   if (linked) {
     const [lk, lidRaw] = linked.split(':');
-    const t = LINK_TARGETS[lk];
+    const t = linkTarget(lk);
     const lid = toIntId(lidRaw);
     if (t && lid) {
       where.push(`ri.id IN (SELECT item_id FROM research_item_links WHERE target_kind = ? AND ${t.col} = ?)`);
@@ -129,18 +130,22 @@ router.get('/', (req, res) => {
   // q → FTS5-Vorfilter auf research-Kind dieses Buchs. Gedeckelt auf
   // FTS_PREFILTER_LIMIT Treffer: eine sehr breite Suche in einem sehr grossen
   // Buch sieht die Funde jenseits davon nicht (dokumentiert in docs/clients.md,
-  // damit der Client die Grenze spiegeln kann).
+  // damit der Client die Grenze spiegeln kann). Scheitert die Suche, antwortet
+  // die Route 503 SEARCH_FAILED — die ungefilterte Liste sähe aus wie ein
+  // Suchergebnis, das alles trifft.
   const q = String(req.query.q || '').trim();
   if (q) {
+    let ids;
     try {
       const hits = searchIndex.query(q, { bookId, kinds: ['research'], limit: FTS_PREFILTER_LIMIT });
-      const ids = (hits?.hits || []).map(h => h.entity_id).filter(Boolean);
-      if (!ids.length) return res.json([]);
-      where.push(`ri.id IN (${ids.map(() => '?').join(',')})`);
-      vals.push(...ids);
+      ids = (hits?.hits || []).map(h => h.entity_id).filter(Boolean);
     } catch (e) {
       logger.warn('[research] FTS-Vorfilter fehlgeschlagen: ' + e.message);
+      return res.status(503).json({ error_code: 'SEARCH_FAILED' });
     }
+    if (!ids.length) return res.json([]);
+    where.push(`ri.id IN (${ids.map(() => '?').join(',')})`);
+    vals.push(...ids);
   }
 
   // sort=updated|created|title|kind oder sort=link:<dimension> (nach verknüpfter
@@ -152,10 +157,11 @@ router.get('/', (req, res) => {
   const selectVals = [];
   let orderBy = FIXED_SORTS.updated;
   const linkSort = /^link:(\w+)$/.exec(sortRaw);
-  if (FIXED_SORTS[sortRaw]) {
+  const sortTarget = linkSort ? linkTarget(linkSort[1]) : null;
+  if (Object.hasOwn(FIXED_SORTS, sortRaw)) {
     orderBy = FIXED_SORTS[sortRaw];
-  } else if (linkSort && LINK_TARGETS[linkSort[1]]) {
-    const t = LINK_TARGETS[linkSort[1]];
+  } else if (sortTarget) {
+    const t = sortTarget;
     selectExtra = `, (SELECT MIN(e.${t.orderCol}) FROM research_item_links l
                         JOIN ${t.table} e ON e.${t.pk} = l.${t.col}
                        WHERE l.item_id = ri.id AND l.target_kind = ?) AS link_rank`;
@@ -259,31 +265,32 @@ router.post('/', jsonBody, (req, res) => {
   if (!guardBook(req, res, bookId, 'editor')) return;
   const userEmail = sessionEmail(req);
 
-  const kind = RESEARCH_KINDS.has(req.body?.kind) ? req.body.kind : 'note';
-  const title = cleanStr(req.body?.title, TITLE_MAX);
-  const body = cleanStr(req.body?.body, BODY_MAX);
-  const source = cleanStr(req.body?.source, SOURCE_MAX);
-  const urls = Array.isArray(req.body?.urls) ? req.body.urls : [];
-  const hasUrl = urls.some(u => /^https?:\/\//i.test(String(typeof u === 'string' ? u : u?.url || '').trim()));
+  const b = req.body || {};
+  // Typfehler und unbrauchbare URLs werden abgewiesen, nicht still verworfen:
+  // ein Fundstück ohne die URL, um die es ging, ist schlimmer als ein 400.
+  const bad = textFieldError('title', b.title) || textFieldError('body', b.body)
+    || textFieldError('source', b.source) || urlsInputError(b.urls);
+  if (bad) return res.status(400).json(bad);
+
+  const kind = RESEARCH_KINDS.has(b.kind) ? b.kind : 'note';
+  const title = cleanStr(b.title, TITLE_MAX);
+  const body = cleanStr(b.body, BODY_MAX);
+  const source = cleanStr(b.source, SOURCE_MAX);
+  const urls = Array.isArray(b.urls) ? b.urls : [];
+  const hasUrl = urls.some(u => cleanStr(typeof u === 'string' ? u : u?.url, Infinity));
   if (!title && !body && !hasUrl) return res.status(400).json({ error_code: 'EMPTY' });
 
   // Dublette: eine der URLs liegt schon an einem (nicht archivierten) Fundstück
   // dieses Buchs → 409 mit der bestehenden Id. Bewusst übersteuerbar
   // (`allow_duplicate: true`): zwei verschiedene Zitate aus derselben Seite sind
   // zwei Fundstücke. Client-Vertrag: docs/clients.md („Recherche-Board").
-  if (hasUrl && req.body?.allow_duplicate !== true) {
-    const dup = findDuplicateItem(bookId, { urls });
-    if (dup && dup.match === 'url') {
-      return res.status(409).json({
-        error_code: 'DUPLICATE_URL',
-        existing_id: dup.id,
-        params: { existing_id: dup.id, title: dup.title || dup.url || '' },
-      });
-    }
+  if (hasUrl && b.allow_duplicate !== true) {
+    const conflict = urlDuplicateConflict(bookId, urls);
+    if (conflict) return res.status(409).json(conflict);
   }
 
   const id = createItem({
-    bookId, userEmail, kind, title, body, source, urls, tags: req.body?.tags,
+    bookId, userEmail, kind, title, body, source, urls, tags: b.tags,
   });
   logger.info(`[research] create id=${id} kind=${kind}`);
   res.json(emitItem(id));
@@ -298,33 +305,53 @@ router.patch('/:id', jsonBody, (req, res) => {
   const sets = [];
   const vals = [];
   const b = req.body || {};
-  // Status laeuft ueber den gemeinsamen Schreibweg (haelt fest, wer und wann) —
-  // geprueft VOR den uebrigen Feldern, damit ein ungueltiger Wert nichts schreibt.
+  // Alles wird geprüft, BEVOR etwas geschrieben wird — ein ungültiges Feld
+  // schreibt auch die gültigen daneben nicht.
   const hasStatus = typeof b.status !== 'undefined';
   if (hasStatus && !RESEARCH_STATUS_SET.has(b.status)) return res.status(400).json({ error_code: 'INVALID_STATUS' });
+  // `kind` unverändert mitgeschickt (der Bearbeiten-Dialog sendet ihn immer)
+  // ist kein Wechsel: so bleibt ein Bild-/Dokument-/Transkript-Fundstück
+  // bearbeitbar, obwohl diese Arten per PATCH nicht gesetzt werden dürfen.
+  const currentKind = typeof b.kind === 'undefined' ? null
+    : db.prepare('SELECT kind FROM research_items WHERE id = ?').get(id)?.kind;
+  let reindex = false;
   for (const f of PATCH_FIELDS) {
     if (typeof b[f.name] === 'undefined') continue;
-    if (f.validate && !f.validate(b[f.name])) {
-      return res.status(400).json({ error_code: f.error || 'INVALID_FIELD' });
-    }
+    if (f.name === 'kind' && b.kind === currentKind) continue;
+    const bad = f.check(b[f.name]);
+    if (bad) return res.status(400).json(bad);
     sets.push(`${f.name} = ?`);
     vals.push(f.clean ? f.clean(b[f.name]) : b[f.name]);
+    if (f.indexed) reindex = true;
   }
 
   const hasTags = typeof b.tags !== 'undefined';
   const hasUrls = typeof b.urls !== 'undefined';
-  if (!sets.length && !hasTags && !hasUrls && !hasStatus) return res.status(400).json({ error_code: 'NO_FIELDS' });
-  if (hasStatus) setItemsStatus([id], b.status, sessionEmail(req));
-
-  // urls sind Kerninhalt → updated_at auch dann bumpen, wenn nur sie sich ändern.
-  if (sets.length || hasUrls) {
-    sets.push(`updated_at = ${NOW_ISO_SQL}`);
-    vals.push(id);
-    db.prepare(`UPDATE research_items SET ${sets.join(', ')} WHERE id = ?`).run(...vals);
+  if (hasUrls) {
+    const bad = urlsInputError(b.urls);
+    if (bad) return res.status(400).json(bad);
+    reindex = true;
   }
-  if (hasUrls) replaceUrls(id, b.urls);
-  if (hasTags) replaceTags(id, b.tags);
-  searchIndex.upsertResearch(id);
+  if (!sets.length && !hasTags && !hasUrls && !hasStatus && typeof b.kind === 'undefined') {
+    return res.status(400).json({ error_code: 'NO_FIELDS' });
+  }
+
+  // Eine Transaktion wie createItem: Status, Felder, URLs und Tags landen
+  // zusammen oder gar nicht.
+  db.transaction(() => {
+    // Status über den gemeinsamen Schreibweg (hält fest, wer und wann).
+    if (hasStatus) setItemsStatus([id], b.status, sessionEmail(req));
+    // urls sind Kerninhalt → updated_at auch dann bumpen, wenn nur sie sich ändern.
+    if (sets.length || hasUrls) {
+      sets.push(`updated_at = ${NOW_ISO_SQL}`);
+      db.prepare(`UPDATE research_items SET ${sets.join(', ')} WHERE id = ?`).run(...vals, id);
+    }
+    if (hasUrls) replaceUrls(id, b.urls || []);
+    if (hasTags) replaceTags(id, b.tags);
+  })();
+  // Tags, Status, Art und Schalter stehen nicht im Volltext-Index — nur Text-
+  // felder und URLs ziehen ihn nach.
+  if (reindex) searchIndex.upsertResearch(id);
   res.json(emitItem(id));
 });
 
@@ -345,7 +372,7 @@ router.post('/:id/links', jsonBody, (req, res) => {
 
   const targetKind = String(req.body?.target_kind || '').trim();
   const targetId = toIntId(req.body?.target_id);
-  if (!LINK_TARGETS[targetKind] || !targetId) return res.status(400).json({ error_code: 'INVALID_TARGET' });
+  if (!linkTarget(targetKind) || !targetId) return res.status(400).json({ error_code: 'INVALID_TARGET' });
   // Ziel muss zum Buch gehören (Prüfung + idempotenter Insert in db/research-items.js).
   const err = addItemLink(id, bookId, targetKind, targetId);
   if (err) return res.status(400).json({ error_code: err });

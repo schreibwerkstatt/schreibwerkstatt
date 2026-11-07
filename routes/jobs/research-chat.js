@@ -72,14 +72,13 @@ const runResearchChatJob = makeAgenticChatJob({
 
   loadSession: (sessionId, userEmail) => getSessionWithBookName(parseInt(sessionId), userEmail, 'research'),
 
-  async prepare({ session, userEmail, aiCfg, logger, jobSignal, userMsgId, message }) {
+  async prepare({ session, userEmail, provider, aiCfg, logger, jobSignal, userMsgId, message }) {
     const prompts = await getPrompts(userEmail);
     const {
       buildResearchChatAgentSystemPrompt, buildResearchChatTools, buildResearchProposalMemoryBlock,
       getResearchPromptContext, RESEARCH_CHAT_FORCE_FINAL_INSTRUCTION, RESEARCH_CHAT_FORCE_FINAL_INSTRUCTION_SEARXNG, buildResearchWritingContextBlock,
     } = prompts;
     const itemCount = countActiveResearchItems(session.book_id);
-    const provider = resolveProvider({ userEmail });
     const maxToolIter = maxToolIterFor('jobs.research_chat.max_tool_iter', 6, provider, userEmail);
     const limits = agentLimits(maxToolIter, aiCfg);
     const maxWebSearches = _maxWebSearches();
@@ -246,13 +245,7 @@ const runResearchChatJob = makeAgenticChatJob({
     // research-chat-proposals.js), die Ideen laufen über PATCH /ideen/chat-proposal.
     ...(ctx.proposals.length || ctx.ideenProposals.length ? {
       proposals: [
-        ...markProposalUrls(ctx.proposals, {
-          webResults,
-          pages: ctx.web?.pages || [],
-          literatureHits: ctx.literatureHits,
-          userMessageUrls: ctx.userMessageUrls,
-          bookId: ctx.bookId,
-        }),
+        ...markProposalUrls(ctx.proposals, { ctx, webResults }),
         ...ctx.ideenProposals,
       ],
     } : {}),

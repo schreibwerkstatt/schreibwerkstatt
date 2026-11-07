@@ -2,6 +2,17 @@
 
 Neueste oben. Je Abschnitt: was sich geändert hat, und was ein Client tun **muss** (Bruch, Frist) bzw. tun **darf** (neues Feld, neuer Weg). Regeln: [README.md](README.md).
 
+## api 6 · editorApi 1
+
+Recherche-Board, strengere Eingangsprüfung:
+
+- **`POST /research` → `400 INVALID_URL`:** eine URL in `urls`, die nicht mit http:// oder https:// beginnt oder länger als 2000 Zeichen ist (`params.max`), lehnt der Server ab. Bisher fiel sie still weg bzw. wurde abgeschnitten, und das Fundstück entstand ohne sie. Gleiches gilt für `POST /capture` (`url`).
+- **`POST /research` → `400 INVALID_FIELD`:** `title`, `body` oder `source` mit einem anderen Typ als String oder `null` (`params.field` nennt das Feld). Bisher wurde das Feld still verworfen.
+- **`kind: "image"`** ist beim Anlegen kein gültiger Wert mehr (wird wie jeder unbekannte Wert zu `note`): ein Bild-Fundstück entsteht nur über den Bild-Upload.
+- **`GET /research?q=…` → `503 SEARCH_FAILED`:** scheitert die Volltextsuche, kommt ein Fehler statt der ungefilterten Liste.
+
+**Clients müssen:** nichts, solange sie http(s)-URLs bis 2000 Zeichen und Strings schicken (macOS, Android und die Browser-Erweiterung tun das). **Clients dürfen:** `INVALID_URL` als Eingabefehler anzeigen und `503 SEARCH_FAILED` wie einen vorübergehenden Fehler behandeln (erneut versuchen), statt eine leere Trefferliste zu zeigen.
+
 ## api 5 · editorApi 1
 
 Diktat, nur additiv:

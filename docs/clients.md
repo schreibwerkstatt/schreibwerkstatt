@@ -231,7 +231,8 @@ Jede Fehlerantwort ist JSON mit dem Feld `error_code` (Ausnahmen unten). **Diese
 | `NOT_LOGGED_IN` | 401 | keine Session/kein gültiges Token |
 | `BOOKID_REQ` | 400 | `book_id` fehlt oder ist keine positive Ganzzahl |
 | `INVALID_VALUE` | 400 | Feldwert nicht in der Whitelist. Trägt `params: { field, allowed }` — `field: 'mode'` (`research\|source\|both`), `field: 'csl_type'`, `field: 'authors'\|'editors'` (`allowed: 'array'`) |
-| `INVALID_URL` | 400 | `url` ist nicht normalisierbar bzw. kein `http(s)` |
+| `INVALID_URL` | 400 | `url` ist nicht normalisierbar, kein `http(s)` oder länger als 2000 Zeichen (dann mit `params: { max }`) — wird abgewiesen, nie gekürzt |
+| `INVALID_FIELD` | 400 | ein Textfeld (`title`, `body`, `source`, …) ist weder String noch `null`. Trägt `params: { field }` |
 | `EMPTY` | 400 | Fundstück ohne Titel **und** ohne Text **und** ohne URL (`mode` ≠ `source`) |
 | `SOURCE_IDENTITY_REQ` | 400 | Quellen-Entwurf ohne Titel und ohne Person (`mode` ∈ `source\|both`) |
 | `CITEKEY_TAKEN` | 409 | `UNIQUE(owner_email, citekey)` verletzt. Der Entwurf trägt bewusst keinen `citekey`, der Fall ist praktisch ein Wettlauf |
@@ -244,10 +245,15 @@ Jede Fehlerantwort ist JSON mit dem Feld `error_code` (Ausnahmen unten). **Diese
 | `BOOKID_REQ` | 400 | `book_id` fehlt/ungültig | `POST /research` |
 | `INVALID_ID` | 400 | `book_id` (Query) bzw. `:id` (Pfad) fehlt/ungültig | `GET /research`, `GET /research/tags`, alle `/:id/*` |
 | `EMPTY` | 400 | weder Titel noch Text noch `http(s)`-URL | `POST /research` |
+| `INVALID_URL` | 400 | eine der `urls` ist kein `http(s)`, nicht normalisierbar oder länger als 2000 Zeichen (`params: { max }`). Abgewiesen wird der ganze Request — keine URL fällt still weg, keine wird gekürzt | `POST /research` |
+| `INVALID_FIELD` | 400 | `title`/`body`/`source` ist weder String noch `null`. Trägt `params: { field }` | `POST /research` |
+| `SEARCH_FAILED` | 503 | die Volltextsuche (`q`) ist gescheitert. Es kommt **keine** ungefilterte Liste zurück — wie einen vorübergehenden Fehler behandeln und erneut versuchen | `GET /research?q=` |
 | `DUPLICATE_URL` | 409 | eine der `urls` liegt (normalisiert: `www.`, Trailing-Slash, Tracking-Parameter, http/https, siehe [lib/url-normalize.js](../lib/url-normalize.js)) schon an einem nicht archivierten Fundstück **desselben Buchs**. Antwort trägt `existing_id` (auch in `params.existing_id`, dazu `params.title`). **Übersteuerbar** mit `allow_duplicate: true` im Body — zwei verschiedene Zitate aus derselben Seite sind zwei Fundstücke. Ein Client, der wortgleiche Doppelklicks abfangen will, nimmt `POST /capture` (gibt das Bestehende zurück statt 409) | `POST /research` |
-| `INVALID_KIND` | 400 | `kind` nicht in `note, link, quote, fact, image` | `PATCH /research/:id` — **nicht allowlistet** (kein `PATCH` im Capture-Scope); hier nur genannt, weil `kind` sonst wie ein prüfender Wert aussieht: bei `POST` wird ein unbekannter `kind` **still** auf `note` gesetzt, nicht abgewiesen |
+| `INVALID_KIND` | 400 | `kind` nicht in `note, link, quote, fact` (`image`, `document`, `transcript` entstehen nur über den jeweiligen Upload; ein unverändert mitgeschicktes `kind` gilt nicht als Wechsel) | `PATCH /research/:id` — **nicht allowlistet** (kein `PATCH` im Capture-Scope); hier nur genannt, weil `kind` sonst wie ein prüfender Wert aussieht: bei `POST` wird ein unbekannter `kind` **still** auf `note` gesetzt, nicht abgewiesen |
 | `INVALID_STATUS` | 400 | `status` nicht in `offen, in_arbeit, eingearbeitet, verworfen` | `PATCH /research/:id` — wie `INVALID_KIND` **nicht allowlistet**; die Einarbeitungs-Achse des Status-Boards wird ausschliesslich per `PATCH` gesetzt, `POST /research` kennt das Feld nicht (jedes neue Fundstück startet auf `offen`) |
 | `ITEM_NOT_FOUND` | 404 | Fundstück-Id existiert nicht | `/research/:id/{image,doc}` |
+
+Bei den Upload-Wegen (`/research/:id/{image,doc,audio}`) laufen Id-Prüfung und Buch-ACL **vor** dem Body-Parser: ein Unberechtigter bekommt `403` (bzw. `404`), ohne dass der Server den Body liest — nie ein `413`.
 | `NO_IMAGE` | 400 | leerer Body oder kein `image/*`-Content-Type | `POST /research/:id/image` |
 | `IMAGE_INVALID` | 400 | `sharp` kann das Bild nicht lesen/normalisieren | `POST /research/:id/image` |
 | `NO_DOC` | 400 | leerer Body, kein `application/pdf`-Content-Type, oder 0 Bytes | `POST /research/:id/doc` |

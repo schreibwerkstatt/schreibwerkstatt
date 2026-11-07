@@ -58,7 +58,7 @@
           <a class="research-item-doc" :href="docUrl(item)" target="_blank" rel="noopener noreferrer">
             <svg class="icon" aria-hidden="true"><use href="/icons.svg#file-plus"/></svg>
             <span class="research-item-doc-name" x-text="item.doc_name || $app.t('recherche.doc.fallbackName')"></span>
-            <span class="research-item-doc-meta" x-show="item.doc_pages" x-text="$app.t('recherche.doc.pages', { n: item.doc_pages })"></span>
+            <span class="research-item-doc-meta" x-show="item.doc_pages" x-text="$app.tn('recherche.doc.pages', item.doc_pages)"></span>
           </a>
           <button type="button" class="icon-btn icon-btn--ghost" @click="removeDoc(item)" :disabled="busy"
                   :data-tip="$app.t('recherche.doc.remove')" :aria-label="$app.t('recherche.doc.remove')"><svg class="icon" aria-hidden="true"><use href="/icons.svg#trash"/></svg></button>
@@ -102,7 +102,7 @@
             <svg class="icon" aria-hidden="true"><use href="/icons.svg#external-link"/></svg>
             <span x-text="$app.t('recherche.link.add')"></span>
           </button>
-          <button type="button" class="btn-compact" @click="suggestLinks(item)" :disabled="busy || suggestItemId === item.id">
+          <button type="button" class="btn-compact" @click="suggestLinks(item)" :disabled="busy || suggestBusy(item.id)">
             <svg class="icon" aria-hidden="true"><use href="/icons.svg#zap"/></svg>
             <span x-text="$app.t('recherche.suggest.btn')"></span>
           </button>

@@ -5,9 +5,11 @@ import { checkPdfFile, uploadPdf } from '../../upload-pdf.js';
 
 export const rechercheMediaMethods = {
   // ── Bild-Upload ──────────────────────────────────────────────────────────
+  // uploadImage/uploadDoc liefern true/false: createItem haengt die Datei an ein
+  // eben angelegtes Fundstueck und muss wissen, ob das gelang.
   async uploadImage(item, file) {
     const app = window.__app;
-    if (!file) return;
+    if (!file) return false;
     this.busy = true;
     try {
       const buf = await file.arrayBuffer();
@@ -17,8 +19,11 @@ export const rechercheMediaMethods = {
         body: buf,
       });
       this._replaceItem(row);
-    } catch { this.errorMessage = app.t('recherche.error.image'); }
-    finally { this.busy = false; }
+      return true;
+    } catch {
+      this.errorMessage = app.t('recherche.error.image');
+      return false;
+    } finally { this.busy = false; }
   },
   onImagePick(item, ev) {
     const file = ev?.target?.files?.[0];
@@ -40,23 +45,24 @@ export const rechercheMediaMethods = {
       this._replaceItem(row);
     } catch { this.errorMessage = app.t('recherche.error.imageRemove'); }
     finally { this.busy = false; }
-    this.closeActionMenu();
   },
 
   // ── Dokument-Upload (PDF) ──────────────────────────────────────────────────
   // Mechanik (Typ-/Groessenpruefung, Body, Fehleruebersetzung) kommt aus
   // public/js/upload-pdf.js — dasselbe Modul bedient den Quellen-Anhang.
   async uploadDoc(item, file) {
-    if (!file) return;
+    if (!file) return false;
     const bad = checkPdfFile(file);
-    if (bad) { this.errorMessage = bad; return; }
+    if (bad) { this.errorMessage = bad; return false; }
     this.busy = true;
     try {
       this._replaceItem(await uploadPdf(`/research/${item.id}/doc`, file));
+      return true;
     } catch (e) {
       // Die Server-Meldung ist praeziser als „Upload fehlgeschlagen" (zu gross /
       // kein PDF / unlesbar) — sie hat den Vorrang.
       this.errorMessage = e?.message || window.__app.t('recherche.error.doc');
+      return false;
     } finally { this.busy = false; }
   },
   onDocPick(item, ev) {
@@ -75,6 +81,5 @@ export const rechercheMediaMethods = {
       const row = await fetchJson(`/research/${item.id}/doc`, { method: 'DELETE' });
       this._replaceItem(row);
     } catch { this.errorMessage = app.t('recherche.error.docRemove'); }
-    this.closeActionMenu();
   },
 };

@@ -71,11 +71,11 @@
                    inhaltlich naechsten Manuskriptseiten (Embeddings). Die
                    Vorschlaege erscheinen im Detail-Dialog. -->
               <button type="button" class="btn-compact research-status-suggest" @click.stop="openDetail(item); suggestLinks(item)"
-                      :disabled="busy || suggestItemId === item.id" x-text="$app.t('recherche.status.suggestPlace')"></button>
+                      :disabled="busy || suggestBusy(item.id)" x-text="$app.t('recherche.status.suggestPlace')"></button>
             </p>
 
             <span class="research-status-otherlinks" x-show="otherLinkCount(item) > 0"
-                  x-text="$app.t('recherche.status.otherLinks', { n: otherLinkCount(item) })"></span>
+                  x-text="$app.tn('recherche.status.otherLinks', otherLinkCount(item))"></span>
           </div>
         </template>
       </div>

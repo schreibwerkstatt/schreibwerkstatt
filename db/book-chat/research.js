@@ -4,6 +4,7 @@
 // semantischen Suche, kompakte Welt-Übersicht. Alle Abfragen auf das Buch begrenzt.
 
 const { db } = require('../connection');
+const { worldEntityStmt } = require('../research-items');
 
 const _in = (ids) => ids.map(() => '?').join(',');
 
@@ -105,13 +106,15 @@ function researchItemMeta(bookId, ids) {
 }
 
 // Figuren/Orte mit ihrer öffentlichen Kennung (fig_id/loc_id) als `id` — die
-// INTEGER-PK bleibt im Server.
+// INTEGER-PK bleibt im Server. Tabelle, Label und Ordnung kommen aus derselben
+// Quelle wie der Link-Picker des Boards (db/research-items.js#worldEntityStmt);
+// Figuren nur aktive, weil die Liste einem Modell vorgelegt wird.
 const _entityStmts = {
-  figur:  db.prepare('SELECT fig_id AS id, name AS label, typ, rolle, beschreibung FROM figures WHERE book_id = ? AND user_email = ? AND COALESCE(stale,0) = 0 ORDER BY sort_order, name'),
-  ort:    db.prepare('SELECT loc_id AS id, name AS label, typ, land, beschreibung FROM locations WHERE book_id = ? AND user_email = ? ORDER BY sort_order, name'),
-  szene:  db.prepare('SELECT id, titel AS label, kommentar FROM figure_scenes WHERE book_id = ? AND user_email = ? ORDER BY sort_order, titel'),
-  beat:   db.prepare('SELECT id, titel AS label, beschreibung FROM plot_beats WHERE book_id = ? AND user_email = ? ORDER BY sort_order, titel'),
-  strang: db.prepare('SELECT id, name AS label FROM plot_threads WHERE book_id = ? AND user_email = ? ORDER BY position, name'),
+  figur:  worldEntityStmt('figure', { publicId: true, extraCols: ['typ', 'rolle', 'beschreibung'], activeOnly: true }),
+  ort:    worldEntityStmt('location', { publicId: true, extraCols: ['typ', 'land', 'beschreibung'] }),
+  szene:  worldEntityStmt('scene', { extraCols: ['kommentar'] }),
+  beat:   worldEntityStmt('beat', { extraCols: ['beschreibung'] }),
+  strang: worldEntityStmt('thread'),
 };
 
 /** Rohzeilen einer Welt-Kategorie (figur | ort | szene | beat | strang); [] bei unbekannter Art. */

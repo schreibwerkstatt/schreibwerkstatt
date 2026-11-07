@@ -48,3 +48,20 @@ test('ohne Seam greift der echte Guard: interne Adresse wird nicht abgefragt', a
   const r = await checkUrl('http://127.0.0.1:1/', { fetchImpl: async () => { throw new Error('darf nicht laufen'); } });
   assert.equal(r.error, 'SSRF_BLOCKED');
 });
+
+test('DNS-Fehler → DNS, unlesbare URL → INVALID, nur die Sperre ist SSRF_BLOCKED', async () => {
+  const fail = (code) => async () => { const e = new Error(code); e.code = code; throw e; };
+  const fetchImpl = async () => { throw new Error('darf nicht laufen'); };
+  assert.equal((await checkUrl('https://nx.example/', { fetchImpl, assertUrl: fail('SSRF_DNS_FAILED') })).error, 'DNS');
+  assert.equal((await checkUrl('kaputt', { fetchImpl, assertUrl: fail('SSRF_INVALID_URL') })).error, 'INVALID');
+  assert.equal((await checkUrl('http://10.0.0.1/', { fetchImpl, assertUrl: fail('SSRF_BLOCKED_HOST') })).error, 'SSRF_BLOCKED');
+});
+
+test('jeder Fehlercode hat einen Anzeigetext (recherche.linkCheck.err.<CODE>) in beiden Locales', () => {
+  const de = require('../../public/js/i18n/de.json');
+  const en = require('../../public/js/i18n/en.json');
+  for (const code of ['SSRF_BLOCKED', 'DNS', 'INVALID', 'TIMEOUT', 'REDIRECT', 'NETWORK']) {
+    assert.ok(de[`recherche.linkCheck.err.${code}`], `de: ${code}`);
+    assert.ok(en[`recherche.linkCheck.err.${code}`], `en: ${code}`);
+  }
+});

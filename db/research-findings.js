@@ -6,7 +6,7 @@
 // Seitennamen kommen hier per JOIN dazu (Handler lesen `pages` nicht selbst).
 
 const { db } = require('./connection');
-const { globalPageOrderSql } = require('./book-order');
+const { globalPageOrderSql, chapterSubtreeFilter } = require('./book-order');
 const { NOW_ISO_SQL } = require('./now');
 
 const FINDING_TYPES = new Set(['widerspruch', 'zitat']);
@@ -49,27 +49,69 @@ function findingsByItem(itemIds) {
   return map;
 }
 
+// Eine Kapitel-Stelle meint ihren ganzen Teilbaum (docs/chapter-hierarchy.md):
+// ein Fundstueck am Teil «Erster Teil» gehoert auch zu den Abschnitten seiner
+// Unterkapitel — ein Kapitel, das nur Unterkapitel traegt, waere sonst leer.
+// Der EINE Ort dieser Regel fuer das Recherche-Board: itemIdsAtPlace (Chat-
+// Kontext, list_research) und placePageIds (Recherche-Abgleich) fragen beide hier.
+/** Kapitel-Teilbaum einer Stelle: `chapterIds` (Kapitel selbst + Unterkapitel)
+ *  und `pageIds` (ihre Abschnitte in Lesereihenfolge: eigene Abschnitte eines
+ *  Kapitels vor denen seiner Unterkapitel). */
+function chapterPlace(chapterId) {
+  const { sql, params } = chapterSubtreeFilter('chapter_id', chapterId);
+  const chapters = db.prepare(
+    `SELECT chapter_id, parent_chapter_id, position FROM chapters WHERE ${sql}`
+  ).all(...params);
+  if (!chapters.length) return { chapterIds: [], pageIds: [] };
+  const children = new Map();
+  for (const c of chapters) {
+    if (!children.has(c.parent_chapter_id)) children.set(c.parent_chapter_id, []);
+    children.get(c.parent_chapter_id).push(c);
+  }
+  for (const list of children.values()) list.sort((a, b) => (a.position - b.position) || (a.chapter_id - b.chapter_id));
+  const ordered = [];
+  const seen = new Set();
+  const walk = (id) => {
+    if (seen.has(id)) return;
+    seen.add(id);
+    ordered.push(id);
+    for (const c of children.get(id) || []) walk(c.chapter_id);
+  };
+  walk(chapterId);
+  const pages = db.prepare(
+    `SELECT page_id, chapter_id FROM pages WHERE ${sql} ORDER BY position, page_id`
+  ).all(...params);
+  const byChapter = new Map();
+  for (const p of pages) {
+    if (!byChapter.has(p.chapter_id)) byChapter.set(p.chapter_id, []);
+    byChapter.get(p.chapter_id).push(p.page_id);
+  }
+  return { chapterIds: ordered, pageIds: ordered.flatMap(id => byChapter.get(id) || []) };
+}
+
 /** Seiten, an denen ein Fundstueck verknuepft ist: direkt an der Seite oder ueber
- *  ein verknuepftes Kapitel (dessen Seiten in Buch-Reihenfolge). */
+ *  ein verknuepftes Kapitel (die Abschnitte seines Teilbaums in Lesereihenfolge,
+ *  je verknuepftem Kapitel hoechstens `maxPerChapter`). */
 function placePageIds(itemId, { maxPerChapter = 3 } = {}) {
   const direct = db.prepare(
     `SELECT page_id FROM research_item_links WHERE item_id = ? AND target_kind = 'page' AND page_id IS NOT NULL`
   ).all(itemId).map(r => r.page_id);
-  const viaChapter = db.prepare(
-    `SELECT p.page_id, p.chapter_id FROM research_item_links l
-       JOIN pages p ON p.chapter_id = l.chapter_id
-      WHERE l.item_id = ? AND l.target_kind = 'chapter'
-      ORDER BY p.chapter_id, p.position`
-  ).all(itemId);
-  const perChapter = new Map();
+  const linkedChapters = db.prepare(
+    `SELECT chapter_id FROM research_item_links
+      WHERE item_id = ? AND target_kind = 'chapter' AND chapter_id IS NOT NULL
+      ORDER BY id`
+  ).all(itemId).map(r => r.chapter_id);
   const out = [...direct];
-  for (const r of viaChapter) {
-    const n = perChapter.get(r.chapter_id) || 0;
-    if (n >= maxPerChapter || out.includes(r.page_id)) continue;
-    perChapter.set(r.chapter_id, n + 1);
-    out.push(r.page_id);
+  for (const chapterId of linkedChapters) {
+    let n = 0;
+    for (const pageId of chapterPlace(chapterId).pageIds) {
+      if (n >= maxPerChapter) break;
+      if (out.includes(pageId)) continue;
+      out.push(pageId);
+      n += 1;
+    }
   }
   return out;
 }
 
-module.exports = { FINDING_TYPES, replaceFindings, findingsByItem, placePageIds };
+module.exports = { FINDING_TYPES, replaceFindings, findingsByItem, placePageIds, chapterPlace };

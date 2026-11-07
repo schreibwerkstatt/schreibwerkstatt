@@ -30,7 +30,7 @@ const { toIntId } = require('../lib/validate');
 const { resolveByteRange } = require('../lib/http-util');
 const { safeAudioMime, FALLBACK_MIME } = require('../lib/media-mime');
 const { sessionEmail } = require('../lib/acl');
-const { scopedItem } = require('./research-acl');
+const { scopedItem, scopeFirst } = require('./research-acl');
 const searchIndex = require('../lib/search');
 const logger = require('../logger');
 
@@ -62,10 +62,8 @@ function _cleanName(raw) {
 
 // ── Aufnahme hochladen ───────────────────────────────────────────────────────
 
-interviewMediaRouter.post('/:id/audio', rawAudio, (req, res) => {
-  const s = scopedItem(req, res, 'editor');
-  if (!s) return;
-  const { id, bookId } = s;
+interviewMediaRouter.post('/:id/audio', scopeFirst(), rawAudio, (req, res) => {
+  const { id, bookId } = req.researchScope;
 
   if (!Buffer.isBuffer(req.body) || !req.body.length) {
     return res.status(400).json({ error_code: 'NO_AUDIO' });

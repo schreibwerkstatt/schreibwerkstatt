@@ -228,8 +228,7 @@ test('POST /: urls — nur http(s), dedupliziert, Reihenfolge erhalten', async (
     urls: [
       { url: 'https://a.example', label: 'A' },
       'http://b.example',
-      'javascript:alert(1)',     // verworfen (kein http)
-      'https://a.example',       // Dublette → verworfen
+      'https://a.example',       // Dublette → verworfen (nicht-http → 400, siehe research-hardening)
     ],
   });
   assert.equal(item.urls.length, 2);

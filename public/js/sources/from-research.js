@@ -12,18 +12,18 @@
 // persistierte Verknuepfung Fund-URL ↔ Quelle waere jede Anzeige geraten. Die
 // Karte merkt sich nur den laufenden Klick.
 import { sendJson } from '../utils.js';
+import { urlRowKey } from '../book/recherche/shared.js';
 
 export const rechercheToSourceMethods = {
-  // Schluessel des Busy-Flags: Fundstueck + Link. `_toSourceBusy` ist in
+  // Busy-Flag je Link-Zeile (Schluessel urlRowKey). `_toSourceBusy` ist in
   // recherche-card.js deklariert und wird per Reassign (kein In-Place-Mutate)
   // gesetzt, damit Alpine die Aenderung im verschachtelten x-for sicher sieht.
-  urlToSourceKey(item, u) { return `${item.id}:${u.url_id}`; },
-  urlToSourceBusy(item, u) { return !!this._toSourceBusy[this.urlToSourceKey(item, u)]; },
+  urlToSourceBusy(item, u) { return !!this._toSourceBusy[urlRowKey(item, u)]; },
 
   async urlToSource(item, u) {
     const app = window.__app;
     if (!item || !u?.url_id) return;
-    const key = this.urlToSourceKey(item, u);
+    const key = urlRowKey(item, u);
     if (this._toSourceBusy[key]) return;
     this._toSourceBusy = { ...this._toSourceBusy, [key]: true };
     try {

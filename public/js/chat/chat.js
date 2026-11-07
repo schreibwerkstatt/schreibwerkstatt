@@ -1,5 +1,4 @@
 import { makeChatMethods } from './chat-base.js';
-import { fetchJson } from '../utils.js';
 import { pageChatMarksMethods } from './page-chat-marks.js';
 import { pageChatApplyMethods } from './page-chat-apply.js';
 import { chatIdeeProposalMethods } from './chat-idee-proposals.js';
@@ -108,20 +107,7 @@ const baseMethods = makeChatMethods({
 
 export const chatMethods = {
   ...baseMethods,
-  // Laufende Antwort abbrechen (gleiche Mechanik wie der Buch-Chat): der Job
-  // ist über die Session-ID registriert (`_handleChatPost`, entityId), der
-  // Abbruch läuft über DELETE /jobs/:id (Root `cancelJob`). Der Poller sieht
-  // danach den Status 'cancelled' und räumt den Lauf ab.
-  async cancelChatRun() {
-    const sid = this.chatRunningSessionId;
-    if (!sid) return;
-    try {
-      const active = await fetchJson(`/jobs/active?type=chat&book_id=${sid}`);
-      if (active?.jobId) await window.__app.cancelJob(active.jobId);
-    } catch (e) {
-      console.error('[cancelChatRun]', e);
-    }
-  },
+  // cancelChatRun kommt aus makeChatMethods (chat-base.js).
   // Letzte Frage des Gesprächs ohne Antwort (Lauf gescheitert oder abgebrochen)
   // — dann bietet die Karte «Erneut fragen» an. null, solange etwas läuft.
   chatOpenQuestion() {

@@ -18,14 +18,20 @@ const { normalizeUrls, normalizeTags, RESEARCH_KINDS, normalizeTitleForMatch, TI
 const { normalizeUrl } = require('../lib/url-normalize');
 const { MAX_TEXT_CHARS } = require('../lib/pdf-extract');
 const searchIndex = require('../lib/search');
-const { findingsByItem } = require('./research-findings');
+const { findingsByItem, chapterPlace } = require('./research-findings');
+const { activeFigureSql } = require('./figures/active');
 
 // target_kind → { col, table, pk, nameCol, orderCol, refCol } für Validierung,
 // Display-JOIN und Sortierung „nach verknüpfter Entität". orderCol ist die Spalte,
 // nach der die Entität in ihrer eigenen Ansicht geordnet ist (Buch-Reihenfolge).
 // refCol: öffentliche Kennung, unter der das Frontend die Entität kennt
 // (Katalog figurenById/orteById, Deep-Link) — die Link-Spalte hält die INTEGER-PK.
-const LINK_TARGETS = {
+//
+// Prototypfrei: `target_kind` kommt aus Query/Body. Ein Schluessel wie
+// `constructor` oder `__proto__` fiele sonst in den Prototyp und landete als
+// `undefined`-Spalte im SQL (500 statt 400). Zugriff von aussen nur ueber
+// `linkTarget(kind)`.
+const LINK_TARGETS = Object.freeze(Object.assign(Object.create(null), {
   chapter:  { col: 'chapter_id',  table: 'chapters',      pk: 'chapter_id', nameCol: 'chapter_name', orderCol: 'position' },
   page:     { col: 'page_id',     table: 'pages',         pk: 'page_id',    nameCol: 'page_name',    orderCol: 'position' },
   figure:   { col: 'figure_id',   table: 'figures',       pk: 'id',         nameCol: 'name',         orderCol: 'sort_order', refCol: 'fig_id' },
@@ -33,7 +39,13 @@ const LINK_TARGETS = {
   scene:    { col: 'scene_id',    table: 'figure_scenes', pk: 'id',         nameCol: 'titel',        orderCol: 'sort_order' },
   beat:     { col: 'beat_id',     table: 'plot_beats',    pk: 'id',         nameCol: 'titel',        orderCol: 'sort_order' },
   thread:   { col: 'thread_id',   table: 'plot_threads',  pk: 'id',         nameCol: 'name',         orderCol: 'position' },
-};
+}));
+
+/** Deskriptor eines Verknuepfungs-Ziels oder null (unbekannt, kein String,
+ *  Prototyp-Schluessel). Der EINE Zugang zu LINK_TARGETS mit fremdem Schluessel. */
+function linkTarget(kind) {
+  return typeof kind === 'string' && Object.hasOwn(LINK_TARGETS, kind) ? LINK_TARGETS[kind] : null;
+}
 
 // Tags + URLs + Links für eine Menge Items nachladen und nach item_id gruppieren.
 function attachRelations(items) {
@@ -231,12 +243,25 @@ function findDuplicateItem(bookId, { urls = [], title = '' } = {}) {
   return null;
 }
 
+/** 409-Body «diese URL liegt schon im Board» oder null — die harte URL-Achse
+ *  von findDuplicateItem in der Antwortform, die POST /research und das Speichern
+ *  eines Chat-Vorschlags teilen (Client-Vertrag: docs/clients.md). */
+function urlDuplicateConflict(bookId, urls) {
+  const dup = findDuplicateItem(bookId, { urls });
+  if (!dup || dup.match !== 'url') return null;
+  return {
+    error_code: 'DUPLICATE_URL',
+    existing_id: dup.id,
+    params: { existing_id: dup.id, title: dup.title || dup.url || '' },
+  };
+}
+
 /** Verknuepfung Fundstueck → Buch-Entitaet anlegen (idempotent). Das Ziel muss
  *  zum Buch des Fundstuecks gehoeren. Geteilt von POST /research/:id/links und
  *  dem Speichern eines Chat-Vorschlags mit Seiten-/Kapitel-Kontext.
  *  @returns {null | 'INVALID_TARGET' | 'BOOK_MISMATCH'} null = ok */
 function addItemLink(itemId, bookId, targetKind, targetId) {
-  const t = LINK_TARGETS[targetKind];
+  const t = linkTarget(targetKind);
   const tid = parseInt(targetId, 10);
   if (!t || !Number.isInteger(tid) || tid <= 0) return 'INVALID_TARGET';
   const owner = db.prepare(`SELECT book_id FROM ${t.table} WHERE ${t.pk} = ?`).get(tid);
@@ -268,33 +293,45 @@ function itemTitle(id) {
   return r ? r.t : undefined;
 }
 
-// Verknuepfbare Welt-Entitaeten des Buchs fuer den Link-Picker. NUR die
-// user-skopierten Dimensionen: Kapitel und Seiten holt der Aufrufer ueber die
-// Content-Store-Facade, weil `chapters`/`pages` niemand ausser ihr liest.
-//
-// Wo eine „Wichtigkeit" existiert, wird primaer danach sortiert — Figuren nach
-// praesenz (zentral→randfigur), Beats nach intensitaet (5→1). Orte und Szenen
-// haben kein Wichtigkeits-Signal und folgen ihrer kuratierten sort_order.
+// Welt-Dimensionen des Buchs (user-skopiert: Figuren, Orte, Szenen, Beats,
+// Straenge) als Liste `{ id, label, ... }`. Die EINE Quelle fuer Tabelle,
+// Label-Spalte und Grundordnung (LINK_TARGETS): Link-Picker hier und die
+// Welt-Uebersicht der agentischen Chats (db/book-chat/research.js) bauen ihre
+// Abfrage darueber, statt dieselben fuenf SELECTs zweimal zu pflegen.
+//   publicId    `id` = oeffentliche Kennung (fig_id/loc_id) statt INTEGER-PK
+//   extraCols   weitere Spalten der Tabelle
+//   orderPrefix Wichtigkeits-Sortierung vor der kuratierten Grundordnung
+//   activeOnly  nur aktive Figuren (db/figures/active.js) — fuer KI-Kontext
+const WORLD_KINDS = ['figure', 'location', 'scene', 'beat', 'thread'];
+function worldEntityStmt(kind, { publicId = false, extraCols = [], orderPrefix = '', activeOnly = false } = {}) {
+  if (!WORLD_KINDS.includes(kind)) throw new Error(`worldEntityStmt: keine Welt-Dimension «${kind}»`);
+  const t = LINK_TARGETS[kind];
+  const idCol = publicId && t.refCol ? t.refCol : t.pk;
+  const where = ['book_id = ?', 'user_email = ?'];
+  if (activeOnly && kind === 'figure') where.push(activeFigureSql(t.table));
+  return db.prepare(
+    `SELECT ${[`${idCol} AS id`, `${t.nameCol} AS label`, ...extraCols].join(', ')}
+       FROM ${t.table} WHERE ${where.join(' AND ')}
+      ORDER BY ${orderPrefix}${t.orderCol}, ${t.nameCol}`
+  );
+}
+
+// Link-Picker: NUR die user-skopierten Dimensionen — Kapitel und Seiten holt
+// der Aufrufer ueber die Content-Store-Facade, weil `chapters`/`pages` niemand
+// ausser ihr liest. Wo eine „Wichtigkeit" existiert, wird primaer danach
+// sortiert — Figuren nach praesenz (zentral→randfigur), Beats nach intensitaet
+// (5→1). Orte, Szenen und Straenge folgen ihrer kuratierten Ordnung.
 const _entityTargetStmts = {
-  figure: db.prepare(
-    `SELECT id, name AS label FROM figures WHERE book_id = ? AND user_email = ?
-      ORDER BY CASE praesenz WHEN 'zentral' THEN 0 WHEN 'regelmaessig' THEN 1
-                             WHEN 'punktuell' THEN 2 WHEN 'randfigur' THEN 3
-                             ELSE 4 END, sort_order, name`
-  ),
-  location: db.prepare(
-    'SELECT id, name AS label FROM locations WHERE book_id = ? AND user_email = ? ORDER BY sort_order, name'
-  ),
-  scene: db.prepare(
-    'SELECT id, titel AS label FROM figure_scenes WHERE book_id = ? AND user_email = ? ORDER BY sort_order, titel'
-  ),
-  beat: db.prepare(
-    `SELECT id, titel AS label FROM plot_beats WHERE book_id = ? AND user_email = ?
-      ORDER BY CASE WHEN intensitaet IS NULL THEN 1 ELSE 0 END, intensitaet DESC, sort_order, titel`
-  ),
-  thread: db.prepare(
-    'SELECT id, name AS label FROM plot_threads WHERE book_id = ? AND user_email = ? ORDER BY position, name'
-  ),
+  figure: worldEntityStmt('figure', {
+    orderPrefix: `CASE praesenz WHEN 'zentral' THEN 0 WHEN 'regelmaessig' THEN 1
+                               WHEN 'punktuell' THEN 2 WHEN 'randfigur' THEN 3 ELSE 4 END, `,
+  }),
+  location: worldEntityStmt('location'),
+  scene: worldEntityStmt('scene'),
+  beat: worldEntityStmt('beat', {
+    orderPrefix: 'CASE WHEN intensitaet IS NULL THEN 1 ELSE 0 END, intensitaet DESC, ',
+  }),
+  thread: worldEntityStmt('thread'),
 };
 
 function listEntityLinkTargets(bookId, userEmail) {
@@ -355,9 +392,9 @@ function setUrlLabel(itemId, urlId, label) {
 }
 
 // Fundstueck-Ids eines Buchs an einer Stelle: `pageId` = an dieser Seite
-// verknuepft; `chapterId` = am Kapitel selbst ODER an einer seiner Seiten
-// (dieselbe Regel wie der Kapitel-Filter von list_ideen). Liegt hier, weil der
-// Seiten-JOIN Buchstruktur liest — Handler fragen das Modul, nicht `pages`.
+// verknuepft; `chapterId` = an einem Kapitel seines Teilbaums ODER an einem
+// Abschnitt darin (Regel: db/research-findings.js#chapterPlace). Liegt hier,
+// weil die Stelle Buchstruktur liest — Handler fragen das Modul, nicht `pages`.
 function itemIdsAtPlace(bookId, { pageId = null, chapterId = null } = {}) {
   if (pageId) {
     return db.prepare(
@@ -367,14 +404,16 @@ function itemIdsAtPlace(bookId, { pageId = null, chapterId = null } = {}) {
     ).all(bookId, pageId).map(r => r.id);
   }
   if (chapterId) {
+    const { chapterIds, pageIds } = chapterPlace(chapterId);
+    if (!chapterIds.length) return [];
+    const ph = (a) => a.map(() => '?').join(',');
+    const pageClause = pageIds.length ? ` OR (l.target_kind = 'page' AND l.page_id IN (${ph(pageIds)}))` : '';
     return db.prepare(
       `SELECT DISTINCT l.item_id AS id FROM research_item_links l
          JOIN research_items ri ON ri.id = l.item_id
-         LEFT JOIN pages p ON l.target_kind = 'page' AND p.page_id = l.page_id
         WHERE ri.book_id = ?
-          AND ((l.target_kind = 'chapter' AND l.chapter_id = ?)
-            OR (l.target_kind = 'page' AND p.chapter_id = ?))`
-    ).all(bookId, chapterId, chapterId).map(r => r.id);
+          AND ((l.target_kind = 'chapter' AND l.chapter_id IN (${ph(chapterIds)}))${pageClause})`
+    ).all(bookId, ...chapterIds, ...pageIds).map(r => r.id);
   }
   return [];
 }
@@ -392,6 +431,8 @@ function bookItemUrls(bookId) {
 
 module.exports = {
   LINK_TARGETS,
+  linkTarget,
+  worldEntityStmt,
   bookItemUrls,
   STATUS_SELECT_SQL,
   setItemsStatus,
@@ -402,6 +443,7 @@ module.exports = {
   replaceTags,
   createItem,
   findDuplicateItem,
+  urlDuplicateConflict,
   addItemLink,
   itemBookId,
   itemTitle,

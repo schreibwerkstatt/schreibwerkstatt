@@ -8,12 +8,13 @@
 //   markProposalUrls       — Vorschlags-URLs gegen das in diesem Lauf Abgerufene markieren
 //   researchIdeeProposals  — `final_answer.ideen` an den Schreibkontext der Frage hängen
 
-const { db } = require('../../db/schema');
 const { normalizeUrl } = require('../../lib/url-normalize');
 const { cleanStr, TITLE_MAX } = require('../../lib/research-validate');
 const { resolvePageBookId, resolveChapterBookId } = require('../../lib/content-ownership');
 const contentStore = require('../../lib/content-store');
-const { itemIdsAtPlace, bookItemUrls } = require('../../db/research-items');
+const { itemIdsAtPlace } = require('../../db/research-items');
+const { sessionProposalContextInfos, messageContextInfo, activeResearchItemsByIds } = require('../../db/research-jobs');
+const { syncUrlIndex } = require('./research-url-index');
 const { htmlToTextForPrompt } = require('./shared');
 const { normalizeChatIdeeProposals } = require('../../lib/chat-idee-proposals');
 
@@ -99,15 +100,10 @@ function validateAnswerSources(raw, webResults, { max = 20, extra = [] } = {}) {
  * vorschlagen und „speicher das zweite" verstehen.
  */
 function sessionProposalMemory(sessionId, limit = 30) {
-  const rows = db.prepare(
-    `SELECT context_info FROM chat_messages
-      WHERE session_id = ? AND role = 'assistant' AND context_info LIKE '%"proposals"%'
-      ORDER BY created_at ASC, id ASC`
-  ).all(sessionId);
   const out = [];
-  for (const r of rows) {
+  for (const raw of sessionProposalContextInfos(sessionId)) {
     let ci;
-    try { ci = JSON.parse(r.context_info); } catch { continue; }
+    try { ci = JSON.parse(raw); } catch { continue; }
     for (const p of Array.isArray(ci?.proposals) ? ci.proposals : []) {
       if (p?.type === 'idee_create') {
         const content = String(p.fields?.content || '').replace(/\s+/g, ' ').trim();
@@ -161,8 +157,7 @@ function researchMessageContext(raw, bookId) {
 
 function readMessageContext(userMsgId) {
   if (!userMsgId) return null;
-  const row = db.prepare('SELECT context_info FROM chat_messages WHERE id = ?').get(userMsgId);
-  try { return JSON.parse(row?.context_info || 'null')?.research_context || null; } catch { return null; }
+  try { return JSON.parse(messageContextInfo(userMsgId) || 'null')?.research_context || null; } catch { return null; }
 }
 
 // Auszug-Deckel: genug, damit das Modell weiss, wovon die Szene handelt und
@@ -187,8 +182,15 @@ async function loadResearchContext(rc, bookId) {
     const chapter = await contentStore.loadChapter(rc.id).catch(() => null);
     if (!chapter || chapter.book_id !== bookId) return null;
     name = chapter.name || '';
-    const metas = (await contentStore.listPages(bookId).catch(() => []))
-      .filter(p => p.chapter_id === rc.id)
+    // Kapitel = Teilbaum: die ersten Abschnitte in Lesereihenfolge, auch aus
+    // Unterkapiteln (ein Teil, der nur Unterkapitel trägt, hätte sonst keinen Text).
+    const [outline, all] = await Promise.all([
+      contentStore.bookOutline(bookId).catch(() => []),
+      contentStore.listPages(bookId).catch(() => []),
+    ]);
+    const byId = new Map(all.map(p => [p.id, p]));
+    const metas = contentStore.chapterPages(outline, rc.id)
+      .map(n => byId.get(n.id)).filter(Boolean)
       .slice(0, CONTEXT_CHAPTER_PAGES);
     const pages = await contentStore.loadPagesBatch(metas, null, { onError: () => null }).catch(() => []);
     html = pages.filter(Boolean).map(p => p.html || '').join('\n');
@@ -196,11 +198,7 @@ async function loadResearchContext(rc, bookId) {
   const text = htmlToTextForPrompt(html).trim();
   const excerpt = text.length > CONTEXT_EXCERPT_MAX ? text.slice(0, CONTEXT_EXCERPT_MAX) + ' …' : text;
   const ids = itemIdsAtPlace(bookId, rc.kind === 'page' ? { pageId: rc.id } : { chapterId: rc.id });
-  const items = ids.length
-    ? db.prepare(`SELECT id, kind, title, status FROM research_items
-                   WHERE id IN (${ids.map(() => '?').join(',')}) AND archived = 0
-                   ORDER BY updated_at DESC LIMIT ${CONTEXT_ITEMS_MAX}`).all(...ids)
-    : [];
+  const items = activeResearchItemsByIds(ids, CONTEXT_ITEMS_MAX);
   return { kind: rc.kind, name, excerpt, items };
 }
 
@@ -235,17 +233,16 @@ function researchIdeeProposals(raw, rc, bookId) {
  * User-Nachricht, URLs der Archiv-Einträge des Buchs. Vergleich normalisiert
  * (lib/url-normalize). Eine unbelegte URL bleibt stehen (der User entscheidet),
  * das Frontend markiert sie und lässt sie bei «Alle speichern» aus.
- * Mutiert und liefert `proposals`.
+ * Derselbe URL-Index wie die Herkunftsprüfung von read_web_page
+ * (./research-url-index.js). Mutiert und liefert `proposals`.
  *
  * @param {Array} proposals  ctx.proposals ({ urls: [{url,label}] })
- * @param {object} seen      { webResults, pages, literatureHits, userMessageUrls, bookId }
+ * @param {object} seen      { ctx, webResults } im Job (Index des Laufs), sonst
+ *                           { webResults, pages, literatureHits, userMessageUrls, bookId }
  */
-function markProposalUrls(proposals, { webResults = [], pages = [], literatureHits = [], userMessageUrls = [], bookId = null } = {}) {
+function markProposalUrls(proposals, { ctx = null, webResults = [], pages = [], literatureHits = [], userMessageUrls = [], bookId = null } = {}) {
   if (!Array.isArray(proposals) || !proposals.some(p => p?.urls?.length)) return proposals || [];
-  const known = new Set();
-  const add = (u) => { const n = normalizeUrl(typeof u === 'string' ? u : u?.url); if (n) known.add(n); };
-  [webResults, pages, literatureHits, userMessageUrls].forEach(list => (Array.isArray(list) ? list : []).forEach(add));
-  if (bookId) bookItemUrls(bookId).forEach(add);
+  const known = syncUrlIndex(ctx || { web: { pages }, literatureHits, userMessageUrls, bookId }, { webResults });
   for (const p of proposals) {
     if (!Array.isArray(p?.urls)) continue;
     p.urls = p.urls.map(u => ({ ...u, verified: known.has(normalizeUrl(u.url)) }));

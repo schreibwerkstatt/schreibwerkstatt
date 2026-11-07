@@ -21,14 +21,13 @@ const { toIntId } = require('../lib/validate');
 const { guardBook, sessionEmail } = require('../lib/acl');
 const { getOwnedSession } = require('../db/chat-sessions');
 const {
-  createItem, emitItem, findDuplicateItem, addItemLink,
+  createItem, emitItem, urlDuplicateConflict, addItemLink,
 } = require('../db/research-items');
 const {
   PROPOSAL_KINDS, TITLE_MAX, BODY_MAX, SOURCE_MAX, cleanStr, normalizeUrls, normalizeTags,
 } = require('../lib/research-validate');
 const { normalizeUrl } = require('../lib/url-normalize');
 const logger = require('../logger');
-const { setContext } = require('../lib/log-context');
 
 const router = express.Router();
 const jsonBody = express.json();
@@ -79,8 +78,8 @@ router.post('/chat-proposal', jsonBody, (req, res) => {
   const session = msg ? getOwnedSession(msg.session_id, userEmail) : null;
   if (!session || session.kind !== 'research') return res.status(404).json({ error_code: 'PROPOSAL_NOT_FOUND' });
   const bookId = session.book_id;
+  // guardBook setzt den Log-Kontext `book` selbst.
   if (!guardBook(req, res, bookId, 'editor')) return;
-  setContext({ book: bookId });
 
   let ci;
   try { ci = JSON.parse(msg.context_info || '{}') || {}; } catch { ci = {}; }
@@ -101,14 +100,8 @@ router.post('/chat-proposal', jsonBody, (req, res) => {
   if (link && (!linkKind || !linkId)) return res.status(400).json({ error_code: 'INVALID_TARGET' });
 
   if (fields.urls.length && req.body?.allow_duplicate !== true) {
-    const dup = findDuplicateItem(bookId, { urls: fields.urls });
-    if (dup && dup.match === 'url') {
-      return res.status(409).json({
-        error_code: 'DUPLICATE_URL',
-        existing_id: dup.id,
-        params: { existing_id: dup.id, title: dup.title || dup.url || '' },
-      });
-    }
+    const conflict = urlDuplicateConflict(bookId, fields.urls);
+    if (conflict) return res.status(409).json(conflict);
   }
 
   let itemId;

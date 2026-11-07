@@ -5,21 +5,16 @@
 // Vorschläge zurück, die der User in der Karte bestätigt (POST /research/:id/links).
 // Generiert keinen Buchtext und schlägt keine neuen Entitäten vor.
 const express = require('express');
-const { db } = require('../../db/schema');
-const { activeFigureSql } = require('../../db/figures');
 const {
   makeJobLogger, updateJob, completeJob, failJob, i18nError,
   aiCall, getPrompts, tps,
   createJob, enqueueJob, findActiveJobId, jsonBody, jobAbortControllers,
-  htmlToTextForPrompt,
 } = require('./shared');
 const { toIntId } = require('../../lib/validate');
 const { setContext } = require('../../lib/log-context');
 const { guardBook, sessionEmail } = require('../../lib/acl');
-const { researchPageHits } = require('../../lib/research-retrieval');
-const { pageTitle } = require('../../db/content-names');
-const contentStore = require('../../lib/content-store');
-const { bestLivePassage } = require('../../lib/live-passage');
+const { semanticLivePassages } = require('./research-passages');
+const { researchItemForLinking, researchItemLinkKeys, researchLinkCandidates } = require('../../db/research-jobs');
 
 const researchLinkRouter = express.Router();
 const MAX_CANDIDATES = 200;
@@ -35,63 +30,33 @@ const PAGE_SUGGEST_MAX = 3;
 const PAGE_SNIPPET_MAX = 160;
 
 async function _semanticPageSuggestions(item, bookId, signal) {
-  const hits = await researchPageHits(bookId, item, { topK: PAGE_SUGGEST_MAX * 3, signal });
-  const out = [];
-  const seen = new Set();
-  for (const h of hits) {
-    if (h.kind !== 'page' || seen.has(h.entity_id)) continue;
-    const meta = pageTitle(h.entity_id);
-    if (!meta || meta.book_id !== bookId) continue;
-    seen.add(h.entity_id);
-    const page = await contentStore.loadPage(h.entity_id).catch(() => null);
-    if (!page) continue;
-    const live = bestLivePassage(htmlToTextForPrompt(page.html || ''), h.text || '', { maxChars: PAGE_SNIPPET_MAX });
-    if (!live || !live.text) continue;
-    const snip = live.text.replace(/\s+/g, ' ').trim();
-    out.push({
+  const passages = await semanticLivePassages(bookId, item, {
+    limit: PAGE_SUGGEST_MAX, topK: PAGE_SUGGEST_MAX * 3, maxChars: PAGE_SNIPPET_MAX, signal,
+  });
+  return passages.map((p) => {
+    const snip = p.text.replace(/\s+/g, ' ').trim();
+    return {
       target_kind: 'page',
-      target_id: h.entity_id,
-      label: meta.title || '',
+      target_id: p.page_id,
+      label: p.page_name,
       grund: `„${snip}${snip.length >= PAGE_SNIPPET_MAX ? '…' : ''}"`,
       source: 'semantic',
-    });
-    if (out.length >= PAGE_SUGGEST_MAX) break;
-  }
-  return out;
+    };
+  });
 }
 
 // KI-«art» → research_item_links.target_kind.
 const ART_TO_KIND = { figur: 'figure', ort: 'location', szene: 'scene', beat: 'beat', strang: 'thread' };
 
-function _loadCandidates(bookId, userEmail) {
-  const q = (sql) => db.prepare(sql).all(bookId, userEmail).slice(0, MAX_CANDIDATES);
-  return {
-    // Nur aktive Figuren (db/figures/active.js): eine ausgemusterte Figur steht nicht
-    // mehr im Text und taugt nicht als Vorschlag für eine neue Verknüpfung.
-    figur:  q(`SELECT id, fig_id AS ref_id, name AS label, typ, beruf, rolle, beschreibung FROM figures f WHERE book_id = ? AND user_email = ? AND ${activeFigureSql('f')} ORDER BY sort_order, name`),
-    ort:    q('SELECT id, loc_id AS ref_id, name AS label, typ, land, beschreibung FROM locations WHERE book_id = ? AND user_email = ? ORDER BY sort_order, name'),
-    szene:  q('SELECT id, titel AS label, kommentar FROM figure_scenes WHERE book_id = ? AND user_email = ? ORDER BY sort_order, titel'),
-    beat:   q('SELECT id, titel AS label, status, beschreibung FROM plot_beats WHERE book_id = ? AND user_email = ? ORDER BY sort_order, titel'),
-    strang: q('SELECT id, name AS label FROM plot_threads WHERE book_id = ? AND user_email = ? ORDER BY position, name'),
-  };
-}
-
 async function runResearchLinkJob(jobId, itemId, bookId, userEmail, { signal } = {}) {
   const logger = makeJobLogger(jobId);
   try {
     updateJob(jobId, { statusText: 'job.phase.researchLinking', progress: 15 });
-    const item = db.prepare(
-      'SELECT id, title, body, source, doc_name, doc_text FROM research_items WHERE id = ? AND book_id = ?'
-    ).get(itemId, bookId);
+    const item = researchItemForLinking(itemId, bookId);
     if (!item) throw i18nError('job.error.researchItemMissing');
-    item.urls = db.prepare('SELECT url, label FROM research_item_urls WHERE item_id = ? ORDER BY position, id').all(itemId);
 
     // Bereits bestehende Verknüpfungen ausblenden (Welt-Entitäten wie Seiten).
-    const existing = new Set(
-      db.prepare('SELECT target_kind, chapter_id, page_id, figure_id, location_id, scene_id, beat_id, thread_id FROM research_item_links WHERE item_id = ?')
-        .all(itemId)
-        .map(r => `${r.target_kind}:${r.chapter_id ?? r.page_id ?? r.figure_id ?? r.location_id ?? r.scene_id ?? r.beat_id ?? r.thread_id}`)
-    );
+    const existing = researchItemLinkKeys(itemId);
 
     // Seiten zuerst (billig, ohne Modell). Ein Embedding-Ausfall kostet nur sie.
     let pageSuggestions = [];
@@ -103,7 +68,7 @@ async function runResearchLinkJob(jobId, itemId, bookId, userEmail, { signal } =
       logger.warn(`Recherche-Verknüpfung: Seiten-Vorschläge nicht verfügbar (${e.message})`);
     }
 
-    const cands = _loadCandidates(bookId, userEmail);
+    const cands = researchLinkCandidates(bookId, userEmail, MAX_CANDIDATES);
     const total = cands.figur.length + cands.ort.length + cands.szene.length
       + cands.beat.length + cands.strang.length;
     if (!total) {

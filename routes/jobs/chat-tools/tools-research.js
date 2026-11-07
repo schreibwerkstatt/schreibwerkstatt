@@ -23,7 +23,10 @@ const ITEM_LIST_MAX = 60;
 const SNIPPET_MAX = 220;
 const DOC_TEXT_MAX = 8000;
 
-const _snip = (s, n) => String(s || '').replace(/\s+/g, ' ').trim().slice(0, n);
+/** Einzeiliger Anriss: Leerraum zusammengezogen, auf `n` Zeichen gekappt.
+ *  Auch vom Recherche-Chat (../research-chat-tools.js) benutzt. */
+const snipText = (s, n) => String(s || '').replace(/\s+/g, ' ').trim().slice(0, n);
+const _snip = snipText;
 
 // Verknuepfungen eines Fundstuecks, kompakt fuers Modell: `stellen` = Kapitel/
 // Seiten (wo es im Buch steht bzw. eingearbeitet ist), `bezug` = Figuren, Orte,
@@ -254,9 +257,12 @@ function _rememberLiterature(ctx, views) {
 }
 
 async function tool_lookup_literature(input, ctx) {
+  const signal = ctx?.jobSignal;
   try {
     if (input.doi || input.isbn) {
-      const draft = input.doi ? await sourceLookup.lookupDoi(input.doi) : await sourceLookup.lookupIsbn(input.isbn);
+      const draft = input.doi
+        ? await sourceLookup.lookupDoi(input.doi, { signal })
+        : await sourceLookup.lookupIsbn(input.isbn, { signal });
       if (!draft) return { treffer: [], hinweis: 'Unter dieser Kennung kein Eintrag im Register.' };
       const view = _literatureView(draft, input.doi ? 'crossref' : 'openlibrary');
       _rememberLiterature(ctx, [view]);
@@ -265,7 +271,7 @@ async function tool_lookup_literature(input, ctx) {
     const q = String(input.q || '').trim();
     if (!q) return { error: 'q, doi oder isbn angeben.', errorKey: 'chat.toolError.missingParam', errorParams: { param: 'q/doi/isbn' } };
     const register = ['artikel', 'buch', 'beide'].includes(input.register) ? input.register : 'beide';
-    const { hits, failed } = await sourceLookup.searchLiterature(q, { register, rows: input.anzahl || LITERATURE_ROWS_DEFAULT });
+    const { hits, failed } = await sourceLookup.searchLiterature(q, { register, rows: input.anzahl || LITERATURE_ROWS_DEFAULT, signal });
     const views = hits.map(h => _literatureView(h.draft, h.register));
     _rememberLiterature(ctx, views);
     return {
@@ -274,6 +280,8 @@ async function tool_lookup_literature(input, ctx) {
       ...(failed.length ? { register_ausgefallen: failed, hinweis: 'Ein Register war nicht erreichbar — fehlende Treffer dort sind keine Fehlanzeige.' } : {}),
     };
   } catch (e) {
+    // Abbruch des Jobs ist kein Register-Ausfall (Muster web_search).
+    if (e?.name === 'AbortError' && signal?.aborted) throw e;
     ctx?.logger?.warn?.(`[research] Literatur-Suche fehlgeschlagen: ${e.message}`);
     return { error: `Literatur-Register nicht erreichbar.${toolHint(ctx, 'web_search', ' Nutze web_search.')}`, errorKey: 'chat.toolError.serviceUnavailable' };
   }
@@ -286,4 +294,5 @@ module.exports = {
   tool_lookup_literature,
   tool_list_book_entities,
   entityList,
+  snipText,
 };

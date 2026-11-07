@@ -5,6 +5,8 @@ import { fetchJson } from '../../utils.js';
 import { isSelectedBook, loadToken } from '../../cards/book-guard.js';
 import { toggleWrapFullscreen } from '../../fullscreen.js';
 import { KINDS, LINK_KINDS, emptyDraft as _emptyDraft } from './shared.js';
+import { rechercheBulkState } from './bulk.js';
+import { rechercheCrosscheckState } from './crosscheck.js';
 
 export const rechercheBoardMethods = {
   // ── Lifecycle ──────────────────────────────────────────────────────────────
@@ -36,6 +38,7 @@ export const rechercheBoardMethods = {
       const rows = await fetchJson(`/research?${qs.toString()}`);
       if (!isCurrent()) return;
       this.items = Array.isArray(rows) ? rows : [];
+      this._rechercheLoadedBookId = bookId;
       this.errorMessage = '';
       this._loadTags();
       this.ensureLinkTargets();
@@ -44,7 +47,8 @@ export const rechercheBoardMethods = {
       this.loadIdeaBacklinks('research');
     } catch (e) {
       if (!isCurrent()) return;
-      this.errorMessage = app.t('recherche.error.load');
+      // 503 SEARCH_FAILED (Volltextsuche gescheitert) sagt mehr als „Laden fehlgeschlagen".
+      this.errorMessage = this._rechercheErrorText(e, 'recherche.error.load');
       this.items = [];
     } finally {
       // Nur der jüngste Load räumt die Ladeanzeige; ein überholter liesse sie
@@ -76,7 +80,7 @@ export const rechercheBoardMethods = {
       this.linkTargets = targets;
       this._sortLinkTargetsByTree();
       this._linkTargetsBookId = bookId;
-    } catch { this.linkTargets = {}; }
+    } catch { if (isSelectedBook(bookId)) this.linkTargets = {}; }
   },
 
   // Seiten + Kapitel im Picker/Filter in Buchtree-Reihenfolge bringen (identisch
@@ -102,7 +106,14 @@ export const rechercheBoardMethods = {
   },
 
   resetRecherche() {
+    // Laufende Poller zuerst: ein Tick des alten Buchs schriebe sonst in die
+    // frisch geleerte Karte. startPoll erkennt den genullten Handle als „abgeräumt".
+    this._stopSuggestPolls();
+    for (const k of ['_linkCheckTimer', '_crosscheckTimer']) {
+      if (this[k]) { clearInterval(this[k]); this[k] = null; }
+    }
     this.items = [];
+    this._rechercheLoadedBookId = null;
     this._memos = {};
     this.tagPool = [];
     this.linkTargets = {};
@@ -122,10 +133,25 @@ export const rechercheBoardMethods = {
     this.closeActionMenu();
     this.cancelLinkPicker();
     this.suggestions = {};
+    this.suggestRunning = {};
     this.errorMessage = '';
     this.busy = false;
     this.refreshing = false;
-    if (this._suggestTimer) { clearInterval(this._suggestTimer); this._suggestTimer = null; }
+    this.detailEditing = false;
+    this.linkCheckRunning = false;
+    this.linkCheckStatus = '';
+    Object.assign(this, rechercheCrosscheckState(), rechercheBulkState());
+  },
+
+  // Ist die Liste für das gewählte Buch geladen und kein Refetch unterwegs?
+  // Erst dann heisst „Fundstück fehlt in `items`" wirklich „nicht in der Liste".
+  _rechercheListSettled() {
+    const bookId = Alpine.store('nav').selectedBookId;
+    return !!bookId && String(this._rechercheLoadedBookId) === String(bookId)
+      && !this.loading && !this.refreshing;
+  },
+  _rechercheFiltersActive() {
+    return !!(this.filterKind || this.filterTag || this.filterLinked || (this.filterText || '').trim());
   },
 
   // Recherche-Karte samt Chat-Leiste ins Native-Vollbild — mehr Platz fürs Karten-Board.
@@ -147,10 +173,12 @@ export const rechercheBoardMethods = {
   },
   // Das Fundstück des offenen Menüs als 0/1-Liste (x-for im Menü, Schlüssel =
   // actionMenuKey: ein anderes Fundstück rendert den Inhalt neu).
+  // `detailItems` liest selbst aus `items` — ein zweiter Suchlauf dort fände
+  // nichts, was der erste nicht schon fand.
   itemMenuItems() {
     const id = this.actionMenuTarget?.id;
     if (id == null) return [];
-    const it = (this.items || []).find(i => i.id === id) || (this.detailItems || []).find(i => i.id === id);
+    const it = (this.items || []).find(i => i.id === id);
     return it ? [it] : [];
   },
 
@@ -203,38 +231,36 @@ export const rechercheBoardMethods = {
     return this.loadRecherche();
   },
 
-  // Sprung vom Seiten-Indikator: alle Filter zurücksetzen und nur die mit dieser
-  // Seite verknüpften Schnipsel zeigen. Beim frischen Öffnen lädt der Lifecycle
-  // (rising edge) selbst; ist die Karte schon offen, hier nachladen.
-  filterToPage(pageId) {
-    const pid = parseInt(pageId, 10);
-    if (!pid) return;
+  // Sprung vom Seiten- bzw. Kapitel-Indikator (`kind` 'page' | 'chapter'): alle
+  // Filter zurücksetzen und nur die mit diesem Ziel verknüpften Schnipsel zeigen.
+  // Beim frischen Öffnen lädt der Lifecycle (rising edge) selbst; ist die Karte
+  // schon offen, hier nachladen.
+  filterToLinked(kind, rawId) {
+    const id = parseInt(rawId, 10);
+    if (!id) return;
     this.filterKind = '';
     this.filterTag = '';
     this.filterText = '';
     this.showArchived = false;
-    this.filterLinkedKind = 'page';
-    this.filterLinkedTargetId = String(pid);
-    this.filterLinked = `page:${pid}`;
-    if (window.__app?.showRechercheCard) this.loadRecherche();
-  },
-
-  // Sprung vom Kapitel-Indikator: alle Filter zurücksetzen und nur die mit diesem
-  // Kapitel verknüpften Schnipsel zeigen (analog filterToPage).
-  filterToChapter(chapterId) {
-    const cid = parseInt(chapterId, 10);
-    if (!cid) return;
-    this.filterKind = '';
-    this.filterTag = '';
-    this.filterText = '';
-    this.showArchived = false;
-    this.filterLinkedKind = 'chapter';
-    this.filterLinkedTargetId = String(cid);
-    this.filterLinked = `chapter:${cid}`;
+    this.filterLinkedKind = kind;
+    this.filterLinkedTargetId = String(id);
+    this.filterLinked = `${kind}:${id}`;
     if (window.__app?.showRechercheCard) this.loadRecherche();
   },
 
   // ── Helpers ──────────────────────────────────────────────────────────────
+  // Fehlertext eines fetchJson-Fehlers: der übersetzte `error_code` des Servers
+  // (`error.<CODE>`, z.B. INVALID_URL, INVALID_FIELD, SEARCH_FAILED) hat Vorrang,
+  // weil er sagt, was zu korrigieren ist; ohne Übersetzung der Karten-Fallback.
+  _rechercheErrorText(e, fallbackKey) {
+    const t = window.__app.t;
+    if (e?.code) {
+      const key = `error.${e.code}`;
+      const msg = t(key, e.body?.params || {});
+      if (msg !== key) return msg;
+    }
+    return t(fallbackKey);
+  },
   _replaceItem(row) { this.items = this.items.map(i => (i.id === row.id ? row : i)); },
   // Indikator-Maps (Seiten + Kapitel) nach Link-/Archiv-/Lösch-Änderungen frisch
   // ziehen. Buchweit geteilt → ein leichter Request hält alle Editoren sync.
@@ -252,17 +278,13 @@ export const rechercheBoardMethods = {
     if (!cfg) return;
     try {
       const map = await fetchJson(`${cfg.url}?book_id=${bookId}`);
+      // Buch inzwischen gewechselt → die Zählung gehört nicht in die Indikatoren des neuen.
+      if (!isSelectedBook(bookId)) return;
       Alpine.store('badges')[cfg.storeKey] = map || {};
       if (cfg.currentPage && app.currentPage?.id) {
         app.currentPageRechercheCount = (map || {})[app.currentPage.id] || 0;
       }
     } catch { /* Indikator-Refresh ist best-effort */ }
-  },
-  _sortItems(arr) {
-    return [...arr].sort((a, b) => {
-      if (!!b.pinned !== !!a.pinned) return (b.pinned ? 1 : 0) - (a.pinned ? 1 : 0);
-      return (b.updated_at || '').localeCompare(a.updated_at || '');
-    });
   },
   kindLabel(k) { return window.__app.t(`recherche.kind.${k}`); },
   linkKindLabel(k) { return window.__app.t(`recherche.linkKind.${k}`); },

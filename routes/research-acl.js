@@ -37,4 +37,16 @@ function scopedItem(req, res, minRole = 'editor') {
   return { id, bookId };
 }
 
-module.exports = { bookScope, scopedItem };
+/** `scopedItem` als Middleware fuer Upload-Wege: laeuft VOR dem Body-Parser,
+ *  damit der Server fuer einen Unberechtigten nicht erst bis zu 25 MB puffert,
+ *  bevor er 403 sagt. Das Ergebnis liegt danach in `req.researchScope`. */
+function scopeFirst(minRole = 'editor') {
+  return (req, res, next) => {
+    const scope = scopedItem(req, res, minRole);
+    if (!scope) return;
+    req.researchScope = scope;
+    next();
+  };
+}
+
+module.exports = { bookScope, scopedItem, scopeFirst };

@@ -1,5 +1,4 @@
 import { makeChatMethods } from './chat-base.js';
-import { fetchJson } from '../utils.js';
 import { EVT } from '../events.js';
 import { chatIdeeProposalMethods } from './chat-idee-proposals.js';
 
@@ -102,20 +101,7 @@ export const bookChatMethods = {
     window.dispatchEvent(new CustomEvent(EVT.RESEARCH_CHAT_ASK, { detail: { question, bookId } }));
   },
 
-  // Laufende Antwort abbrechen. Die Job-ID kennt nur der Poller; /jobs/active
-  // liefert sie für die laufende Session (Entity des Buch-Chat-Jobs = Session-ID),
-  // abgebrochen wird über die Root-Mechanik (DELETE /jobs/:id). Das Poll-Ende
-  // (Status 'cancelled') räumt den Lauf-State wie bei jedem Fehler.
-  async cancelBookChatRun() {
-    const sid = this.bookChatRunningSessionId;
-    if (!sid) return;
-    try {
-      const active = await fetchJson(`/jobs/active?type=book-chat&book_id=${sid}`);
-      if (active?.jobId) await window.__app.cancelJob(active.jobId);
-    } catch (e) {
-      console.error('[cancelBookChatRun]', e);
-    }
-  },
+  // cancelBookChatRun kommt aus makeChatMethods (chat-base.js).
 
   ...makeChatMethods({
     label: 'BookChat',

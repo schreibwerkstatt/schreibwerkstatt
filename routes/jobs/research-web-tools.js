@@ -27,7 +27,7 @@
 const searxng = require('../../lib/websearch/searxng');
 const { cachedScrape, isCached, searchPdf, pdfReadText, pdfPaging } = require('./research-pdf-paging');
 const { normalizeUrl } = require('../../lib/url-normalize');
-const { bookItemUrls } = require('../../db/research-items');
+const { lookupKnownUrl } = require('./research-url-index');
 const { resultCapFor, offeredList } = require('./chat-tools/shared');
 
 const MAX_PAGE_READS = 6;
@@ -39,10 +39,14 @@ const PAGE_TEXT_MAX = 12000;
 // Richtwert für den Seitendeckel des Jobs; der Handler misst die Hülle selbst.
 const PAGE_OVERHEAD = 600;
 // Hüllenfelder aus fremder Hand (PDF-Info-Titel, og:title, URL) gekappt, damit
-// die Hülle den Platz für den Text nicht auffrisst.
-const TITLE_MAX = 300;
+// die Hülle den Platz für den Text nicht auffrisst. Eigener Name: TITLE_MAX ist
+// im Recherche-Chat der Titeldeckel eines Fundstücks (lib/research-validate).
+const PAGE_HEAD_TITLE_MAX = 300;
 const URL_MAX = 1000;
-const URL_RE = /https?:\/\/[^\s<>"'()\]]+/gi;
+// Klammern gehören zur URL (Wikipedia: `Foo_(Begriff)`); was am Ende unbalanciert
+// schliesst, schneidet extractUrls ab (Markdown-Link, Klammer-Einschub im Satz).
+const URL_RE = /https?:\/\/[^\s<>"'\[\]{}«»“”]+/gi;
+const TRAILING_PUNCT = /[.,;:!?'’]+$/;
 
 // pages: gelesene Seiten samt Redirect-Ziel (zulässige Belege, lesbare URLs);
 // fetches: Abrufversuche — daran hängt der Lesedeckel MAX_PAGE_READS;
@@ -59,9 +63,20 @@ function _clip(s, max) {
   return t.length > max ? `${t.slice(0, max - 1)}…` : t;
 }
 
-/** http(s)-URLs aus einem Freitext (User-Nachricht), Satzzeichen am Ende abgeschnitten. */
+function _trimUrlEnd(u) {
+  let out = u;
+  for (;;) {
+    const before = out;
+    out = out.replace(TRAILING_PUNCT, '');
+    if (out.endsWith(')') && (out.match(/\)/g) || []).length > (out.match(/\(/g) || []).length) out = out.slice(0, -1);
+    if (out === before) return out;
+  }
+}
+
+/** http(s)-URLs aus einem Freitext (User-Nachricht). Klammern in der URL bleiben,
+ *  Satzzeichen und unbalancierte schliessende Klammern am Ende fallen weg. */
 function extractUrls(text) {
-  return (String(text || '').match(URL_RE) || []).map(u => u.replace(/[.,;:!?]+$/, ''));
+  return (String(text || '').match(URL_RE) || []).map(_trimUrlEnd).filter(u => /^https?:\/\/[^/]/i.test(u));
 }
 
 async function tool_web_search(input, ctx) {
@@ -128,18 +143,8 @@ async function tool_web_search(input, ctx) {
  * durch den Abgleich und mit dem Abruf hinaus.
  */
 function _knownUrl(url, ctx) {
-  const n = normalizeUrl(url);
-  if (!n) return null;
-  const web = webState(ctx);
-  const known = [
-    ...web.results.map(r => r.url),
-    ...web.pages.map(p => p.url),
-    ...(ctx.literatureHits || []).map(r => r.url),
-    ...(ctx.userMessageUrls || []),
-  ];
-  const hit = known.find(u => normalizeUrl(u) === n);
-  if (hit) return hit;
-  return bookItemUrls(ctx.bookId).find(u => normalizeUrl(u) === n) || null;
+  webState(ctx);
+  return lookupKnownUrl(url, ctx);
 }
 
 // Anfang von `text`, dessen JSON-Form höchstens `max` Zeichen lang ist. Gemessen
@@ -191,9 +196,13 @@ async function tool_read_web_page(input, ctx) {
 
   let page;
   try {
-    page = await cachedScrape(knownUrl, web, cached ? {} : { maxBytes: bytesLeft });
+    page = await cachedScrape(knownUrl, web, cached ? {} : { maxBytes: bytesLeft, signal: ctx.jobSignal });
     if (!cached) web.bytes += Number(page?.bytes) || 0;
   } catch (e) {
+    if (e?.name === 'AbortError' && ctx.jobSignal?.aborted) throw e;
+    // Auch ein gescheiterter Abruf hat geladen (zu gross, kein Text-Dokument,
+    // unlesbares PDF) — lib/url-scrape gibt die Bytes am Fehler mit.
+    if (!cached) web.bytes += Number(e?.bytes) || 0;
     ctx.logger?.info?.(`[research-chat] Seite nicht lesbar (${e.code || e.message}): ${knownUrl}`);
     return { url: _clip(knownUrl, URL_MAX), error: `Seite nicht lesbar (${e.code || 'Fehler'}). Stütze dich auf das Snippet oder eine andere Quelle.`, errorKey: 'chat.toolError.serviceUnavailable' };
   }
@@ -208,7 +217,7 @@ async function tool_read_web_page(input, ctx) {
   const head = {
     url: _clip(url, URL_MAX),
     ...(finalUrl !== url ? { final_url: _clip(finalUrl, URL_MAX) } : {}),
-    titel: _clip(page.title, TITLE_MAX),
+    titel: _clip(page.title, PAGE_HEAD_TITLE_MAX),
   };
 
   // PDF: Fundstellen statt Text (`suche`) bzw. Text ab einer Seite (`seite`) —

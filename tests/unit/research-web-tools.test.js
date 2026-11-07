@@ -411,3 +411,53 @@ test('read_web_page PDF: Text nach dem Zeichendeckel gekappt → seiten = echte 
   assert.equal(r.text_bis_seite, 2);
   assert.match(r.hinweis, /nach Seite 2 gekappt/);
 });
+
+test('extractUrls: Klammern in der URL bleiben, Markdown-Link und Klammer-Einschub korrekt', () => {
+  assert.deepEqual(
+    extractUrls('Siehe [Wiki](https://de.wikipedia.org/wiki/Foo_(Bar)). Oder (vgl. https://ex.com/a), dazu https://ex.com/b?x=(1)! Ende: https://ex.com/c.'),
+    ['https://de.wikipedia.org/wiki/Foo_(Bar)', 'https://ex.com/a', 'https://ex.com/b?x=(1)', 'https://ex.com/c'],
+  );
+  assert.deepEqual(extractUrls('[Text](https://ex.com/d)'), ['https://ex.com/d']);
+  assert.deepEqual(extractUrls('«https://ex.com/e»'), ['https://ex.com/e']);
+});
+
+test('read_web_page: gescheiterter Abruf rechnet die geladenen Bytes ins Budget', async () => {
+  const { MAX_FETCH_BYTES } = require('../../routes/jobs/research-web-tools');
+  urlScrape.scrapeUrl = async () => { const e = new Error('pdf'); e.code = 'SCRAPE_PDF_UNREADABLE'; e.bytes = MAX_FETCH_BYTES; throw e; };
+  stubSearch([[hit(1), hit(2)]]);
+  const ctx = mkCtx();
+  await executeResearchTool('web_search', { query: 'q' }, ctx);
+  const r = await executeResearchTool('read_web_page', { url: 'https://ex.com/1' }, ctx);
+  assert.equal(r.errorKey, 'chat.toolError.serviceUnavailable');
+  assert.equal(ctx.web.bytes, MAX_FETCH_BYTES);
+  const over = await executeResearchTool('read_web_page', { url: 'https://ex.com/2' }, ctx);
+  assert.equal(over.errorKey, 'chat.toolError.pageBytesCap');
+});
+
+test('read_web_page: Job-Signal geht an den Abruf, Abbruch wird nicht verschluckt', async () => {
+  const ctrl = new AbortController();
+  let seen = null;
+  urlScrape.scrapeUrl = async (_u, o) => {
+    seen = o.signal;
+    ctrl.abort();
+    throw Object.assign(new Error('aborted'), { name: 'AbortError' });
+  };
+  stubSearch([[hit(1)]]);
+  const ctx = mkCtx({ jobSignal: ctrl.signal });
+  await executeResearchTool('web_search', { query: 'q' }, ctx);
+  await assert.rejects(executeResearchTool('read_web_page', { url: 'https://ex.com/1' }, ctx), (e) => e.name === 'AbortError');
+  assert.equal(seen, ctrl.signal);
+});
+
+test('read_web_page: Archiv-URLs werden je Lauf einmal gelesen (URL-Index)', async () => {
+  const { syncUrlIndex } = require('../../routes/jobs/research-url-index');
+  const ctx = mkCtx();
+  createItem({ bookId: BOOK, userEmail: 'u@example.com', kind: 'link', title: 'Idx', urls: [{ url: 'https://idx.example.org/a', label: '' }] });
+  const m1 = syncUrlIndex(ctx);
+  assert.ok([...m1.values()].includes('https://idx.example.org/a'));
+  createItem({ bookId: BOOK, userEmail: 'u@example.com', kind: 'link', title: 'Idx2', urls: [{ url: 'https://idx.example.org/b', label: '' }] });
+  const m2 = syncUrlIndex(ctx);
+  assert.ok(![...m2.values()].includes('https://idx.example.org/b'), 'Archiv nur beim ersten Aufruf gelesen');
+  ctx.userMessageUrls.push('https://neu.example.org/x');
+  assert.ok([...syncUrlIndex(ctx).values()].includes('https://neu.example.org/x'), 'neue Lauf-URLs kommen dazu');
+});

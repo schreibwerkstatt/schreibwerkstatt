@@ -2,9 +2,9 @@
   "openapi": "3.1.0",
   "info": {
     "title": "Schreibwerkstatt — Client-Vertrag (macOS, Android)",
-    "version": "api 5 · editorApi 1",
+    "version": "api 6 · editorApi 1",
     "description": "Die REST-Fläche, die die nativen Clients nutzen. Regeln, Versionen und Ablauf: contract/README.md. Antworten dürfen Felder tragen, die hier nicht stehen — ein Client ignoriert sie.",
-    "x-api": 5,
+    "x-api": 6,
     "x-editor-api": 1
   },
   "components": {
@@ -2525,6 +2525,16 @@
                 }
               }
             }
+          },
+          "503": {
+            "description": "Nur mit `q`: die Volltextsuche ist gescheitert (keine ungefilterte Liste). error_code: SEARCH_FAILED",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
           }
         }
       },
@@ -2555,7 +2565,7 @@
             }
           },
           "400": {
-            "description": "error_code: BOOKID_REQ | EMPTY",
+            "description": "`INVALID_URL`: eine URL ist nicht http(s) oder länger als 2000 Zeichen (`params.max`). `INVALID_FIELD`: `title`/`body`/`source` ist weder String noch null (`params.field`). error_code: BOOKID_REQ | EMPTY | INVALID_URL | INVALID_FIELD",
             "content": {
               "application/json": {
                 "schema": {

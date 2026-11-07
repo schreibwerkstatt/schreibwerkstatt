@@ -15,11 +15,10 @@ const express = require('express');
 const { db } = require('../db/schema');
 const { toIntId } = require('../lib/validate');
 const { guardBook, sessionEmail } = require('../lib/acl');
-const { setContext } = require('../lib/log-context');
 const { NOW_ISO_SQL } = require('../db/now');
 const searchIndex = require('../lib/search');
-const { RESEARCH_STATUS_SET, normalizeTags } = require('../lib/research-validate');
-const { LINK_TARGETS, setItemsStatus, addItemLink } = require('../db/research-items');
+const { RESEARCH_STATUS_SET, MAX_TAGS, normalizeTags } = require('../lib/research-validate');
+const { linkTarget, setItemsStatus, addItemLink } = require('../db/research-items');
 const logger = require('../logger');
 
 const router = express.Router();
@@ -40,15 +39,15 @@ router.post('/bulk', jsonBody, (req, res) => {
   const b = req.body || {};
   const bookId = toIntId(b.book_id);
   if (!bookId) return res.status(400).json({ error_code: 'BOOKID_REQ' });
+  // guardBook setzt den Log-Kontext `book` selbst.
   if (!guardBook(req, res, bookId, 'editor')) return;
-  setContext({ book: bookId });
 
   const action = String(b.action || '');
   if (!ACTIONS.has(action)) return res.status(400).json({ error_code: 'INVALID_ACTION' });
   if (action === 'status' && !RESEARCH_STATUS_SET.has(b.status)) return res.status(400).json({ error_code: 'INVALID_STATUS' });
   const tag = action === 'add_tag' ? normalizeTags([b.tag])[0] : null;
   if (action === 'add_tag' && !tag) return res.status(400).json({ error_code: 'INVALID_TAG' });
-  if (action === 'link' && (!LINK_TARGETS[b.target_kind] || !toIntId(b.target_id))) {
+  if (action === 'link' && (!linkTarget(b.target_kind) || !toIntId(b.target_id))) {
     return res.status(400).json({ error_code: 'INVALID_TARGET' });
   }
 
@@ -57,12 +56,23 @@ router.post('/bulk', jsonBody, (req, res) => {
   const ph = ids.map(() => '?').join(',');
 
   let linkError = null;
+  // add_tag: ein Fundstueck traegt hoechstens MAX_TAGS Tags (wie replaceTags beim
+  // Einzel-Edit). Am Deckel wird es uebersprungen und in `skipped` gezaehlt;
+  // traegt es den Tag schon (gleich bis auf Gross-/Kleinschreibung), ist das kein
+  // Ueberspringen, sondern schon erledigt.
+  let skipped = 0;
   const run = db.transaction(() => {
     if (action === 'status') {
       setItemsStatus(ids, b.status, sessionEmail(req));
     } else if (action === 'add_tag') {
+      const tagsOf = db.prepare('SELECT tag FROM research_item_tags WHERE item_id = ?');
       const ins = db.prepare('INSERT OR IGNORE INTO research_item_tags (item_id, tag) VALUES (?, ?)');
-      for (const id of ids) ins.run(id, tag);
+      for (const id of ids) {
+        const have = tagsOf.all(id).map(r => r.tag.toLowerCase());
+        if (have.includes(tag.toLowerCase())) continue;
+        if (have.length >= MAX_TAGS) { skipped += 1; continue; }
+        ins.run(id, tag);
+      }
     } else if (action === 'archive' || action === 'unarchive') {
       db.prepare(`UPDATE research_items SET archived = ?, updated_at = ${NOW_ISO_SQL} WHERE id IN (${ph})`)
         .run(action === 'archive' ? 1 : 0, ...ids);
@@ -84,15 +94,17 @@ router.post('/bulk', jsonBody, (req, res) => {
     return res.status(400).json({ error_code: linkError });
   }
 
-  // Suchindex ausserhalb der Transaktion (wie die Einzel-Routen nach dem Schreiben).
-  for (const id of ids) {
-    try {
-      if (action === 'delete') searchIndex.remove('research', id);
-      else if (action === 'add_tag') searchIndex.upsertResearch(id);
-    } catch (e) { logger.warn(`[research] Suchindex nach Bulk ${action} id=${id}: ${e.message}`); }
+  // Suchindex ausserhalb der Transaktion (wie die Einzel-Routen nach dem
+  // Schreiben). Nur Loeschen beruehrt ihn: Tags, Status und Archiv-Schalter
+  // stehen nicht im Volltext (lib/search.js#_upsertResearch).
+  if (action === 'delete') {
+    for (const id of ids) {
+      try { searchIndex.remove('research', id); }
+      catch (e) { logger.warn(`[research] Suchindex nach Bulk delete id=${id}: ${e.message}`); }
+    }
   }
-  logger.info(`[research] bulk ${action} count=${ids.length}`);
-  res.json({ ok: true, count: ids.length });
+  logger.info(`[research] bulk ${action} count=${ids.length}${skipped ? ` skipped=${skipped}` : ''}`);
+  res.json({ ok: true, count: ids.length - skipped, ...(action === 'add_tag' ? { skipped } : {}) });
 });
 
 module.exports = { researchBulkRouter: router };

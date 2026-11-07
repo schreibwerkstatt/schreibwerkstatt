@@ -48,7 +48,7 @@
           <a x-show="item.has_doc" class="research-item-doc" :href="docUrl(item)" target="_blank" rel="noopener noreferrer">
             <svg class="icon" aria-hidden="true"><use href="/icons.svg#file-plus"/></svg>
             <span class="research-item-doc-name" x-text="item.doc_name || $app.t('recherche.doc.fallbackName')"></span>
-            <span class="research-item-doc-meta" x-show="item.doc_pages" x-text="$app.t('recherche.doc.pages', { n: item.doc_pages })"></span>
+            <span class="research-item-doc-meta" x-show="item.doc_pages" x-text="$app.tn('recherche.doc.pages', item.doc_pages)"></span>
           </a>
 
           <!-- Anriss mit festem Zeilen-Cap (CSS). Kein Inline-Ausklappen: der

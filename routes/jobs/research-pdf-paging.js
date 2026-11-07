@@ -23,12 +23,13 @@ const _cacheKey = (url) => normalizeUrl(url) || url;
 
 /** scrapeUrl mit Lauf-Cache (pro ctx.web, Schlüssel = normalisierte URL). Das
  *  Redirect-Ziel bekommt denselben Eintrag — wer es danach liest, holt nicht neu.
- *  `maxBytes` (Rest des Byte-Budgets) gilt nur für einen neuen Abruf. */
-function cachedScrape(url, web, { maxBytes = 0 } = {}) {
+ *  `maxBytes` (Rest des Byte-Budgets) gilt nur für einen neuen Abruf, `signal`
+ *  (Job-Abbruch) bricht ihn ab. */
+function cachedScrape(url, web, { maxBytes = 0, signal } = {}) {
   if (!web.scrapeCache) web.scrapeCache = new Map();
   const key = _cacheKey(url);
   if (!web.scrapeCache.has(key)) {
-    const p = urlScrape.scrapeUrl(url, { allowPdf: true, ...(maxBytes > 0 ? { maxBytes } : {}) });
+    const p = urlScrape.scrapeUrl(url, { allowPdf: true, ...(maxBytes > 0 ? { maxBytes } : {}), ...(signal ? { signal } : {}) });
     // Ein Fehler soll nicht im Cache kleben (vorübergehender Timeout).
     p.then((page) => {
       const fin = page?.finalUrl ? _cacheKey(page.finalUrl) : null;

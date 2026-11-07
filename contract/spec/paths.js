@@ -168,7 +168,12 @@ module.exports = {
       'x-clients': ANDROID,
       summary: 'Recherche-Board eines Buchs (reduzierte Form für Device-Token)',
       parameters: [query('book_id', int()), query('kind', str()), query('sort', str()), query('q', str()), query('limit', int())],
-      responses: { 200: json({ type: 'array', items: ref('ResearchClientItem') }), 400: error('INVALID_ID'), ...AUTH },
+      responses: {
+        200: json({ type: 'array', items: ref('ResearchClientItem') }),
+        400: error('INVALID_ID'),
+        503: error('SEARCH_FAILED', 'Nur mit `q`: die Volltextsuche ist gescheitert (keine ungefilterte Liste).'),
+        ...AUTH,
+      },
     },
     post: {
       'x-clients': ANDROID,
@@ -176,7 +181,7 @@ module.exports = {
       requestBody: body('ResearchCreateRequest'),
       responses: {
         200: json(ref('ResearchItem')),
-        400: error(['BOOKID_REQ', 'EMPTY']),
+        400: error(['BOOKID_REQ', 'EMPTY', 'INVALID_URL', 'INVALID_FIELD'], '`INVALID_URL`: eine URL ist nicht http(s) oder länger als 2000 Zeichen (`params.max`). `INVALID_FIELD`: `title`/`body`/`source` ist weder String noch null (`params.field`).'),
         409: error('DUPLICATE_URL', 'Trägt `existing_id`; übersteuerbar mit `allow_duplicate: true`.'),
         ...AUTH,
       },

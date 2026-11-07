@@ -5,18 +5,23 @@
 // Embedding-Index-Nachzug) und für Bugfix-Kontext eine eigenständige Einheit ist.
 //
 // Routen (am research-Haupt-Router gemountet, siehe routes/research.js):
-//   POST   /:id/image   sharp-normalisiertes Bild als BLOB, kind wird 'image'
+//   POST   /:id/image   sharp-normalisiertes Bild als BLOB
 //   GET    /:id/image   Bild als BLOB-Stream (viewer-Recht, private Cache)
-//   DELETE /:id/image   Bild entfernen, kind fällt auf 'note' zurück
-//   POST   /:id/doc     Original-PDF + extrahierter Text, kind wird 'document'
+//   DELETE /:id/image   Bild entfernen
+//   POST   /:id/doc     Original-PDF + extrahierter Text
 //   GET    /:id/doc     Dokument als BLOB-Stream (viewer, Original-Name inline)
-//   DELETE /:id/doc     Dokument entfernen, kind fällt auf 'note' zurück
+//   DELETE /:id/doc     Dokument entfernen
+//
+// Art (`kind`) beim Anhaengen/Entfernen: ein Anhang macht nur aus einer
+// inhaltlich unbestimmten Art ('note'/'link') ein 'image' bzw. 'document' —
+// ein Zitat, ein Fakt oder ein Transkript bleibt, was es ist. Faellt der Anhang
+// weg, der die Art traegt, rueckt der andere Anhang nach, sonst 'note'.
 
 const express = require('express');
 const { db } = require('../db/schema');
 const { emitItem } = require('../db/research-items');
 const { sessionEmail } = require('../lib/acl');
-const { scopedItem } = require('./research-acl');
+const { scopedItem, scopeFirst } = require('./research-acl');
 const { prepareCover } = require('../lib/cover-prepare');
 const { safeImageMime, FALLBACK_MIME } = require('../lib/media-mime');
 // PDF-Anhang: geteilter Stack mit routes/sources.js (Limit, Namen, Extraktion,
@@ -29,24 +34,22 @@ const searchIndex = require('../lib/search');
 const logger = require('../logger');
 
 const researchMediaRouter = express.Router();
-const jsonBody = express.json();
 const rawImage = express.raw({ type: ['image/*'], limit: '12mb' });
 
-// Vorspann (Id + Buch-ACL) liegt in routes/research-acl.js: er stand hier
-// viermal wortgleich, samt einer 401-Pruefung, die der Buch-Guard ohnehin macht.
-
 // ── Bild hochladen (sharp-normalisiert) ──────────────────────────────────────
-researchMediaRouter.post('/:id/image', rawImage, async (req, res) => {
-  const scope = scopedItem(req, res);
-  if (!scope) return;
-  const { id } = scope;
+researchMediaRouter.post('/:id/image', scopeFirst(), rawImage, async (req, res) => {
+  const { id } = req.researchScope;
   if (!Buffer.isBuffer(req.body) || !req.body.length) {
     return res.status(400).json({ error_code: 'NO_IMAGE' });
   }
   try {
     const { buffer, mime } = await prepareCover(req.body);
     db.prepare(
-      `UPDATE research_items SET image = ?, image_mime = ?, kind = 'image', updated_at = ${NOW_ISO_SQL} WHERE id = ?`
+      `UPDATE research_items
+          SET image = ?, image_mime = ?,
+              kind = CASE WHEN kind IN ('note','link') THEN 'image' ELSE kind END,
+              updated_at = ${NOW_ISO_SQL}
+        WHERE id = ?`
     ).run(buffer, mime, id);
     res.json(emitItem(id));
   } catch (e) {
@@ -74,9 +77,9 @@ researchMediaRouter.get('/:id/image', (req, res) => {
   res.send(row.image);
 });
 
-// Bild entfernen (Item bleibt; kind fällt auf 'note' zurück, falls es nur wegen
-// des Bildes 'image' war — Pendant zum Dokument-Löschen weiter unten). Kein
-// FTS-/Embedding-Nachzug: das Bild trägt keinen indizierten Text.
+// Bild entfernen (Item bleibt). War es nur wegen des Bildes 'image', wird es
+// 'document', falls ein Dokument anhaengt, sonst 'note'. Kein FTS-/Embedding-
+// Nachzug: das Bild trägt keinen indizierten Text.
 researchMediaRouter.delete('/:id/image', (req, res) => {
   const scope = scopedItem(req, res);
   if (!scope) return;
@@ -84,7 +87,9 @@ researchMediaRouter.delete('/:id/image', (req, res) => {
   db.prepare(
     `UPDATE research_items
         SET image = NULL, image_mime = NULL,
-            kind = CASE WHEN kind = 'image' THEN 'note' ELSE kind END,
+            kind = CASE WHEN kind = 'image'
+                        THEN (CASE WHEN doc IS NOT NULL THEN 'document' ELSE 'note' END)
+                        ELSE kind END,
             updated_at = ${NOW_ISO_SQL}
       WHERE id = ?`
   ).run(id);
@@ -95,10 +100,8 @@ researchMediaRouter.delete('/:id/image', (req, res) => {
 // Original-PDF als BLOB + extrahierter Plain-Text (FTS + Embedding-Index + KI-
 // Verknuepfung). Dateiname kommt als ?name= (URL-encoded). Rein lesend, nie
 // generativ.
-researchMediaRouter.post('/:id/doc', rawPdfBody(), async (req, res) => {
-  const scope = scopedItem(req, res);
-  if (!scope) return;
-  const { id, bookId } = scope;
+researchMediaRouter.post('/:id/doc', scopeFirst(), rawPdfBody(), async (req, res) => {
+  const { id, bookId } = req.researchScope;
 
   const up = await readDocUpload(req.body, req.query.name);
   if (!up.ok) {
@@ -109,7 +112,8 @@ researchMediaRouter.post('/:id/doc', rawPdfBody(), async (req, res) => {
   db.prepare(
     `UPDATE research_items
         SET doc = ?, doc_mime = ?, doc_name = ?, doc_text = ?, doc_pages = ?, doc_chars = ?,
-            kind = 'document', updated_at = ${NOW_ISO_SQL}
+            kind = CASE WHEN kind IN ('note','link') THEN 'document' ELSE kind END,
+            updated_at = ${NOW_ISO_SQL}
       WHERE id = ?`
   ).run(doc.buffer, doc.mime, doc.name, doc.text, doc.pages, doc.chars, id);
   searchIndex.upsertResearch(id);
@@ -135,8 +139,8 @@ researchMediaRouter.get('/:id/doc', (req, res) => {
   sendDoc(res, { buffer: blob, mime: row.doc_mime, name: row.doc_name });
 });
 
-// Dokument entfernen (Item bleibt; kind fällt auf 'note' zurück, falls es nur
-// wegen des Dokuments 'document' war).
+// Dokument entfernen (Item bleibt). War es nur wegen des Dokuments 'document',
+// wird es 'image', falls ein Bild anhaengt, sonst 'note'.
 researchMediaRouter.delete('/:id/doc', (req, res) => {
   const scope = scopedItem(req, res);
   if (!scope) return;
@@ -145,7 +149,9 @@ researchMediaRouter.delete('/:id/doc', (req, res) => {
     `UPDATE research_items
         SET doc = NULL, doc_mime = NULL, doc_name = NULL, doc_text = NULL, doc_pages = NULL,
             doc_chars = NULL,
-            kind = CASE WHEN kind = 'document' THEN 'note' ELSE kind END,
+            kind = CASE WHEN kind = 'document'
+                        THEN (CASE WHEN image IS NOT NULL THEN 'image' ELSE 'note' END)
+                        ELSE kind END,
             updated_at = ${NOW_ISO_SQL}
       WHERE id = ?`
   ).run(id);

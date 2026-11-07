@@ -10,6 +10,7 @@
 // `overwrite` — ein Knopf, der eigenen Text ohne Rueckfrage durch Fremdtext
 // ersetzt, ist kein Knopf, den man zweimal drueckt.
 import { fetchJson } from '../../utils.js';
+import { urlRowKey } from './shared.js';
 
 // error_code → i18n-Key. Die Faelle sind bewusst getrennt, weil sie zu
 // verschiedenen Handlungen fuehren: URL korrigieren, spaeter erneut versuchen,
@@ -25,18 +26,30 @@ const SCRAPE_ERRORS = {
 };
 
 export const rechercheScrapeMethods = {
-  // Schluessel des Busy-Flags: Fundstueck + Link (Muster urlToSourceKey).
-  urlScrapeKey(item, u) { return `${item.id}:${u.url_id}`; },
-  urlScrapeBusy(item, u) { return !!this._scrapeBusy[this.urlScrapeKey(item, u)]; },
+  urlScrapeBusy(item, u) { return !!this._scrapeBusy[urlRowKey(item, u)]; },
 
-  async scrapeUrl(item, u, { overwrite = false } = {}) {
-    const app = window.__app;
+  // Einstieg aus der Link-Zeile: Busy-Guard je Zeile, dann der eigentliche
+  // Request. Die Rueckfrage „Ueberschreiben?" laeuft INNERHALB des Busy-Fensters
+  // und ruft darum _scrapeRequest direkt — ueber scrapeUrl stuende sie vor dem
+  // eigenen Guard und schickte nichts.
+  async scrapeUrl(item, u) {
     if (!item || !u?.url_id) return;
-    const key = this.urlScrapeKey(item, u);
+    const key = urlRowKey(item, u);
     if (this._scrapeBusy[key]) return;
     // Reassign statt In-Place-Mutate, damit Alpine die Aenderung im
     // verschachtelten x-for sicher sieht (wie _toSourceBusy).
     this._scrapeBusy = { ...this._scrapeBusy, [key]: true };
+    try {
+      await this._scrapeRequest(item, u, false);
+    } finally {
+      const next = { ...this._scrapeBusy };
+      delete next[key];
+      this._scrapeBusy = next;
+    }
+  },
+
+  async _scrapeRequest(item, u, overwrite) {
+    const app = window.__app;
     try {
       const r = await fetchJson(`/research/${item.id}/scrape`, {
         method: 'POST',
@@ -59,7 +72,7 @@ export const rechercheScrapeMethods = {
           confirmLabel: app.t('recherche.scrape.overwrite'),
           danger: true,
         });
-        if (ok) await this.scrapeUrl(item, u, { overwrite: true });
+        if (ok) await this._scrapeRequest(item, u, true);
         return;
       }
       if (!filled.length) {
@@ -80,10 +93,6 @@ export const rechercheScrapeMethods = {
       // `code` ist der `error_code` der Antwort (utils/net.js#fetchJson).
       const msgKey = SCRAPE_ERRORS[e?.code];
       this.errorMessage = msgKey ? app.t(msgKey) : app.t('recherche.scrape.error');
-    } finally {
-      const next = { ...this._scrapeBusy };
-      delete next[key];
-      this._scrapeBusy = next;
     }
   },
 };

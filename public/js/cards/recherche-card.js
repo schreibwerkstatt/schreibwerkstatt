@@ -114,10 +114,13 @@ export function registerRechercheCard() {
     // Flag wird in einem verschachtelten x-for gelesen.
     _scrapeBusy: {},
 
+    // KI-Verknuepfungsvorschlaege laufen parallel je Fundstueck (links.js):
+    // Ergebnis in suggestions[itemId], Knopfsperre in suggestRunning[itemId]
+    // (Reassign), je ein Poll-Timer in _suggestTimers[itemId] — startPoll
+    // bekommt die Map als ctx, der Reset stoppt alle (board.js#resetRecherche).
     suggestions: {},
-    suggestItemId: null,
-    suggestStatus: '',
-    _suggestTimer: null,
+    suggestRunning: {},
+    _suggestTimers: {},
 
     // Link-Pruefung (links.js#checkLinks, Job research-link-check).
     linkCheckRunning: false,
@@ -127,6 +130,8 @@ export function registerRechercheCard() {
     // Deep-Link-Ziel (#book/X/recherche/<itemId>): gemerkt, bis die Liste geladen
     // ist. loadRecherche fokussiert es danach; _focusRechercheItemById in recherche.js.
     _pendingFocusItemId: null,
+    // Buch, für das `items` zuletzt erfolgreich geladen wurde (board.js#_rechercheListSettled).
+    _rechercheLoadedBookId: null,
 
     // Recherche-Chat-Panel (Claude-only, mit Web-Suche). Eigener Sub-State neben
     // dem Board; Methoden aus researchChatMethods (makeChatMethods-Factory).
@@ -162,6 +167,7 @@ export function registerRechercheCard() {
     // Wortlaut, Sprecher. Buch-skopiert, darum aus der Factory.
     ...rechercheInterviewState(),
     _ivPollTimer: null,
+    _ivLoadSeq: 0,  // Lade-Token des Transkript-Slots (interview.js#ivLoadTranscript)
 
     _lifecycle: null,
 
@@ -185,24 +191,19 @@ export function registerRechercheCard() {
       this._lifecycle = setupCardLifecycle(this, {
         name: 'recherche',
         showFlag: 'showRechercheCard',
-        timerKeys: ['_suggestTimer', '_researchChatPollTimer', '_ivPollTimer', '_linkCheckTimer', '_crosscheckTimer'],
-        resetState: { detailEditing: false, linkPickerItemId: null, busy: false, linkCheckRunning: false, linkCheckStatus: '', crosscheckRunning: false, crosscheckItemId: null, crosscheckStatus: '', ...rechercheBulkState() },
+        // Kein resetState: onBookChanged/onViewReset ersetzen den Default-Reset,
+        // der Karten-Reset liegt vollstaendig in resetRecherche (board.js).
+        timerKeys: ['_researchChatPollTimer', '_ivPollTimer', '_linkCheckTimer', '_crosscheckTimer'],
         filterScopes: RECHERCHE_FILTER_SCOPES,
         load: async () => { await this.loadRecherche(); await this._ensureStatusBoard(); },
         extraListeners: [
-          { type: 'recherche:filter-page', handler: (e) => this.filterToPage(e.detail?.pageId) },
-          { type: 'recherche:filter-chapter', handler: (e) => this.filterToChapter(e.detail?.chapterId) },
+          { type: 'recherche:filter-page', handler: (e) => this.filterToLinked('page', e.detail?.pageId) },
+          { type: 'recherche:filter-chapter', handler: (e) => this.filterToLinked('chapter', e.detail?.chapterId) },
           // Deep-Link-Permalink #book/X/recherche/<itemId>: Hash-Router dispatcht das
           // Event; _focusRechercheItemById öffnet das Item (bzw. merkt es bis zum Load vor).
           { type: EVT.RECHERCHE_FOCUS_ITEM, handler: (e) => this._focusRechercheItemById(e.detail?.itemId) },
           // Vorbelegte Recherche-Frage (research-chat-ask.js) bei schon lebender Karte.
           { type: RESEARCH_CHAT_ASK_PENDING, handler: () => this._consumeResearchChatAsk() },
-          // Transkriptionslauf nach Reload/Tab-Wechsel wieder aufnehmen.
-          { type: 'job:reconnect', handler: (e) => {
-            if (e.detail?.type !== 'interview-transcribe') return;
-            const itemId = parseInt(String(e.detail.job?.entityId || '').replace(/^i/, ''));
-            if (itemId) this.ivReconnect(e.detail.jobId, itemId);
-          } },
         ],
         onBookChanged: (e, ctx, root) => {
           Object.assign(this, rechercheInterviewState());
@@ -252,6 +253,7 @@ export function registerRechercheCard() {
     },
 
     destroy() {
+      this._stopSuggestPolls();
       this._destroyStatusSortables();
       this.closeActionMenu();
       this._lifecycle?.destroy();
@@ -262,13 +264,25 @@ export function registerRechercheCard() {
     // nicht in ein Formular führen) + die Zeile dahinter zentriert ins Bild und
     // kurz hervorheben, damit sie nach dem Schliessen unter dem Cursor liegt.
     // Noch nicht geladene Liste → ID merken, loadRecherche ruft uns danach erneut
-    // auf (analog _focusBeatById in der Plot-Werkstatt).
+    // auf (analog _focusBeatById in der Plot-Werkstatt). Ist die Liste geladen und
+    // das Fundstück fehlt, liegt es meist hinter dem Filter: Filter zurücksetzen
+    // (clearFilters lädt neu und ruft uns am Ende wieder), danach öffnen; fehlt es
+    // dann noch, das Archiv einblenden. Fehlt es auch dort, ist der Wunsch nicht
+    // auflösbar und wird verworfen.
     _focusRechercheItemById(rawId) {
       const id = parseInt(rawId, 10);
       this._pendingFocusItemId = null;
       if (!Number.isInteger(id)) return;
       const item = (this.items || []).find(i => i.id === id);
-      if (!item) { this._pendingFocusItemId = id; return; }
+      if (!item) {
+        if (!this._rechercheListSettled()) { this._pendingFocusItemId = id; return; }
+        if (this._rechercheFiltersActive()) { this._pendingFocusItemId = id; this.clearFilters(); return; }
+        // Letzte Stufe: archivierte Fundstücke blendet die Liste ohne Archiv aus.
+        // Danach ist der Wunsch entweder auflösbar oder wird verworfen (kein Loop:
+        // mit Archiv und ohne Filter greift keine der Stufen mehr).
+        if (!this.showArchived) { this._pendingFocusItemId = id; this.showArchived = true; this.loadRecherche(); }
+        return;
+      }
       this.openDetail(item);
       this.$nextTick(() => {
         // Beide Ansichten stehen im Markup; das Sprungziel ist die SICHTBARE.
