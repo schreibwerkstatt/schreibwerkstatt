@@ -58,7 +58,7 @@ Der `pct create`-Aufruf zum Anlegen des LXC steht als Kommentar im Kopf des Scri
 
 Was das Script tut:
 
-1. Node 22 (LTS) + `sqlite3`-CLI (letzteres ist hier **Pflicht**, nicht optional wie auf Prod — Snapshot und Reset laufen darüber), System-User, Dateien, `npm install --omit=dev`.
+1. Node 26 + `sqlite3`-CLI (letzteres ist hier **Pflicht**, nicht optional wie auf Prod — Snapshot und Reset laufen darüber), System-User, Dateien, `npm install --omit=dev`.
 2. **Generiert die `.env` aus [.env.demo.example](.env.demo.example)** — die Vorlage ist die SSoT des ENV-Layouts, der Installer ersetzt nur die `__PLATZHALTER__` durch frische Zufallswerte (`SESSION_SECRET`, Admin-Passwort, Demo-Passwort, beide Device-Tokens im `swd_`-Format). Bleibt ein Platzhalter stehen, bricht er ab statt eine Instanz mit 18-Zeichen-„Secret" zu starten. **Eine bestehende `.env` wird nie überschrieben** — sonst würden bei einer Neuinstallation die Zugangsdaten rotieren, die bereits bei Apple/Google eingetragen sind, und das Review scheitert an einem Login-Fehler.
 3. Installiert Service + **Reset-Timer** (04:30 lokal, nach dem Nacht-Cron der App) statt des Backup-Timers.
 4. Wartet, bis die App antwortet — erst dann existieren Demo-User, Device-Tokens und Beispielbuch (Boot-Bootstrap) —, setzt `app.public_url` und das **Monatsbudget des Demo-Users** (Default 5 USD, `mode: hard`), und schreibt den **Golden-Snapshot** fest.

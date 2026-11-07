@@ -13,17 +13,21 @@ echo ""
 echo "=== Schreibwerkstatt Installer ==="
 echo ""
 
-# Node.js prüfen — fehlt es oder ist es älter als package.json#engines (>=22),
-# wird Node 22 installiert. Native Module wie better-sqlite3 liefern für ältere
-# Majors keine Prebuilds mehr; ohne Build-Toolchain scheitert dann `npm install`.
-NODE_MAJOR=24
+# Node.js prüfen — fehlt es oder ist es älter als package.json#engines (NODE_MIN),
+# wird Node NODE_MAJOR installiert (dieselbe Version wie Prod und Demo). Ein
+# vorhandenes Node innerhalb von engines bleibt; Major-Wechsel einer bestehenden
+# Installation: docs/deployment.md#node-major-wechseln. Native Module wie
+# better-sqlite3 liefern für ältere Majors keine Prebuilds mehr; ohne
+# Build-Toolchain scheitert dann `npm install`.
+NODE_MIN=24
+NODE_MAJOR=26
 node_major() { node -p 'process.versions.node.split(".")[0]' 2>/dev/null || echo 0; }
-if ! command -v node &>/dev/null || [ "$(node_major)" -lt "$NODE_MAJOR" ]; then
+if ! command -v node &>/dev/null || [ "$(node_major)" -lt "$NODE_MIN" ]; then
   echo "Node.js fehlt oder ist zu alt. Installiere Node.js ${NODE_MAJOR} (LTS)..."
   curl -fsSL "https://deb.nodesource.com/setup_${NODE_MAJOR}.x" | bash -
   apt-get install -y nodejs
 fi
-if [ "$(node_major)" -lt "$NODE_MAJOR" ]; then
+if [ "$(node_major)" -lt "$NODE_MIN" ]; then
   echo "Node.js $(node -v) ist noch zu alt — altes nodejs/npm-Paket entfernen (apt-get remove nodejs npm) und erneut starten." >&2
   exit 1
 fi

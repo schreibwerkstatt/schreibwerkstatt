@@ -145,17 +145,20 @@ echo "→ Systempakete…"
 apt-get update -qq
 apt-get install -y -qq curl ca-certificates sqlite3 git >/dev/null
 
-# Auch ein vorhandenes, zu altes Node wird ersetzt (package.json#engines:
-# >=22): native Module wie better-sqlite3 liefern fuer aeltere Majors keine
-# Prebuilds mehr, und ohne make/g++ auf der LXC scheitert dann `npm install`.
-NODE_MAJOR=24
+# Auch ein vorhandenes, zu altes Node wird ersetzt (unter package.json#engines,
+# NODE_MIN); installiert wird NODE_MAJOR, dieselbe Version wie Prod. Native
+# Module wie better-sqlite3 liefern fuer aeltere Majors keine Prebuilds mehr,
+# und ohne make/g++ auf der LXC scheitert dann `npm install`. Major-Wechsel
+# einer bestehenden Installation: docs/deployment.md#node-major-wechseln.
+NODE_MIN=24
+NODE_MAJOR=26
 node_major() { node -p 'process.versions.node.split(".")[0]' 2>/dev/null || echo 0; }
-if ! command -v node &>/dev/null || [ "$(node_major)" -lt "$NODE_MAJOR" ]; then
+if ! command -v node &>/dev/null || [ "$(node_major)" -lt "$NODE_MIN" ]; then
   echo "→ Node.js ${NODE_MAJOR} (LTS) installieren…"
   curl -fsSL "https://deb.nodesource.com/setup_${NODE_MAJOR}.x" | bash - >/dev/null
   apt-get install -y -qq nodejs >/dev/null
 fi
-if [ "$(node_major)" -lt "$NODE_MAJOR" ]; then
+if [ "$(node_major)" -lt "$NODE_MIN" ]; then
   echo "  ! Node $(node -v) ist noch zu alt — altes nodejs/npm-Paket entfernen (apt-get remove nodejs npm) und neu starten." >&2
   exit 1
 fi

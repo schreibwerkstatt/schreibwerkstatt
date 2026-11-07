@@ -4,7 +4,7 @@ Ausführliche Anleitung für den Betrieb und das Selbst-Hosting von Schreibwerks
 
 ## Voraussetzungen
 
-- Node.js v24–26 (`engines: >=24 <27`; unpdf 2 verlangt Node 24, und `npm test` übergibt Globs an `node --test`). Empfohlen: `.nvmrc` (Node 24); Umstieg einer bestehenden Installation auf 26: [Node-Major wechseln](#node-major-wechseln).
+- Node.js v24–26 (`engines: >=24 <27`; unpdf 2 verlangt Node 24, und `npm test` übergibt Globs an `node --test`). Empfohlen und auf Prod + Demo: Node 26 (`.nvmrc`, `NODE_MAJOR` in den Install-Skripten); Umstieg einer bestehenden Installation: [Node-Major wechseln](#node-major-wechseln).
 - Öffentliche HTTPS-URL (Reverse-Proxy mit TLS) für Produktion.
 - Login-Pfad: **Admin-Bootstrap** (Email+Passwort via ENV) und/oder **Google OAuth2** (Callback `https://<domain>/auth/callback`). Mindestens einer muss konfiguriert sein.
 
@@ -78,18 +78,23 @@ git pull && npm ci --omit=dev && systemctl restart schreibwerkstatt
 
 ### Node-Major wechseln
 
-Gilt für jeden Major-Sprung innerhalb von `engines` (z. B. 24 → 26). Node kommt auf Prod aus der NodeSource-Quelle (`/etc/apt/sources.list.d/nodesource.sources`), und **dieselbe** System-Node fährt den Dienst und den self-hosted CI-Runner. Ein neuer Major hat eine neue Modul-ABI: die nativen Module (`better-sqlite3`, `sharp`) müssen neu gebaut werden, sonst bricht der Start mit `NODE_MODULE_VERSION`-Fehler ab. Die beiden Lockfile-Stempel überspringen den Install aber, solange `package-lock.json` gleich bleibt — darum werden sie von Hand verworfen.
+Gilt für jeden Major-Sprung innerhalb von `engines` (z. B. 24 → 26), auf Prod wie auf der Demo (dort `/opt/schreibwerkstatt-demo`, User `swdemo`, Dienst `schreibwerkstatt-demo`, kein CI-Stempel). Node kommt aus der NodeSource-Quelle (`/etc/apt/sources.list.d/nodesource.sources`), und **dieselbe** System-Node fährt den Dienst und den self-hosted CI-Runner. Der Runner nimmt seinen `PATH` aus `/opt/actions-runner/.path`, eingefroren bei seiner Installation: steht dort eine nvm-Node aus der root-Shell, laufen CI und das `npm install` in `deploy.sh` (als root) unter **ihr** — der Deploy baut die nativen Module dann für die falsche ABI, und der Dienst startet nicht mehr. `.path` darf darum nur Systempfade tragen, und `.env` kein `NVM_BIN` (Schritt 0). Ein neuer Major hat eine neue Modul-ABI: die nativen Module (`better-sqlite3`, `sharp`) müssen neu gebaut werden, sonst bricht der Start mit `NODE_MODULE_VERSION`-Fehler ab. Die beiden Lockfile-Stempel überspringen den Install aber, solange `package-lock.json` gleich bleibt — darum werden sie von Hand verworfen.
 
 Voraussetzung: ein Release, dessen `engines` den Ziel-Major erlaubt, ist deployt. Schritte als root im Container:
 
 ```bash
+# 0. Runner-Umgebung prüfen — muss die System-Node finden, keine nvm-Pfade
+PATH=$(cat /opt/actions-runner/.path) command -v node   # erwartet /usr/bin/node bzw. /bin/node
+grep NVM /opt/actions-runner/.env                        # erwartet: nichts
+# sonst: .path auf Systempfade setzen, NVM_BIN aus .env löschen, Runner-Service neu starten (nur ohne laufenden Job: pgrep -x Runner.Worker)
+
 # 1. Sicherung
 systemctl start schreibwerkstatt-backup.service
 
 # 2. Quelle umstellen und Node tauschen
 sed -i 's/node_24\.x/node_26.x/' /etc/apt/sources.list.d/nodesource.sources
 apt-get update && apt-get install -y nodejs
-node -v && npm -v
+/usr/bin/node -v   # absolut: eine nvm-Node in der root-Shell verdeckt sonst die System-Node
 
 # 3. Native Module der App neu bauen (als App-User, im Installationsziel)
 su -s /bin/bash github-runner -c 'cd /opt/schreibwerkstatt && npm rebuild better-sqlite3 sharp'

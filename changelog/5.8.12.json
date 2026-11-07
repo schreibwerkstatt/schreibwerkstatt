@@ -1,0 +1,21 @@
+{
+  "version": "5.8.12",
+  "date": "2026-11-07",
+  "entries": [
+    {
+      "kind": "verbessert",
+      "de": "Diagramme: Mindmaps stehen jetzt als übersichtlicher Baum mit mittig gesetzten Beschriftungen da, statt alle Zweige in eine Zeile zu legen.",
+      "en": "Diagrams: mind maps now appear as a clear tree with centred labels instead of laying all branches out in one row."
+    },
+    {
+      "kind": "verbessert",
+      "de": "Wartung: die App läuft auf aktualisierten Bausteinen mit allen aktuellen Sicherheitskorrekturen. An der Bedienung ändert sich nichts.",
+      "en": "Maintenance: the app now runs on updated components with all current security fixes. Nothing changes in how you use it."
+    },
+    {
+      "kind": "behoben",
+      "de": "Abschnitt bearbeiten: wer in einem Gedicht, Zitat oder einer Liste zwei Zeilen per Rücktaste zusammenzog, bekam in neueren Chrome-Versionen fest eingebrannte Schriftfarben, die im dunklen Modus falsch aussahen.",
+      "en": "Editing a section: joining two lines of a poem, quote or list with Backspace left fixed text colours in newer Chrome versions that looked wrong in dark mode."
+    }
+  ]
+}
