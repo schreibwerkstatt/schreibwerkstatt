@@ -80,7 +80,12 @@ test('steckbrief: Berufsstation anlegen, im Lebenslauf sehen, löschen', async (
   await card.locator('.tabs-btn', { hasText: 'Lebenslauf' }).click();
   const chip = card.locator('.figur-cv-chip', { hasText: NAME });
   await expect(chip).toBeVisible();
+  // Die Vorbelegung (figurenLebenslaufEnsureAuswahl) läuft erst nach dem Laden der
+  // Alters-Daten und wählt mindestens eine Kandidatin — ist diese Figur die einzige,
+  // genau sie. Erst danach den Zustand lesen, sonst wählt der Klick sie wieder ab.
+  await expect(card.locator('.figur-cv-chip[aria-pressed="true"]').first()).toBeVisible();
   if ((await chip.getAttribute('aria-pressed')) !== 'true') await chip.click();
+  await expect(chip).toHaveAttribute('aria-pressed', 'true');
   const table = card.locator('.figur-cv-table');
   const badges = table.locator('.figur-cv-station--berufe');
   await expect(badges).toHaveText(['Beruf: Beginn', 'Beruf: Ende']);
