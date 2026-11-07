@@ -20,6 +20,23 @@ function isWordChar(ch) {
   return !!ch && WORD_CHAR_RE.test(ch);
 }
 
+/** Steht `name` als ganzes Wort in `text`? Dieselbe Wortgrenzen-Regel wie die
+ *  Highlights (buildRanges), damit der Referenz-Slot eine Figur nur dort
+ *  „im Abschnitt" nennt, wo der Editor sie auch markiert — „Anna" nicht in
+ *  „Annahme". Case-insensitiv. */
+export function containsWholeWord(text, name) {
+  const lowName = String(name || '').trim().toLowerCase();
+  if (!text || !lowName) return false;
+  const lowText = String(text).toLowerCase();
+  let from = 0;
+  for (;;) {
+    const idx = lowText.indexOf(lowName, from);
+    if (idx < 0) return false;
+    if (!isWordChar(lowText[idx - 1]) && !isWordChar(lowText[idx + lowName.length])) return true;
+    from = idx + 1;
+  }
+}
+
 /** Liefert Range-Deskriptoren fuer Vorkommen der Entitaeten im Text.
  *  Eingabe: { text: string, entities: [{ id, name, kind }] } — `kind` in
  *  'figure' | 'location'. Ausgabe: Array von { start, end, kind, id, name }

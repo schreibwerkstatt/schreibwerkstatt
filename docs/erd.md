@@ -1,6 +1,6 @@
 # ERD — schreibwerkstatt
 
-Stand: Schema-Version 354, 191 Tabellen (ohne `sqlite_*`/`schema_version`/FTS5-Shadow-Tables; inkl. FTS5-Virtual `search_index`/`search_trigram`/`chat_messages_fts` + `search_meta`).
+Stand: Schema-Version 355, 191 Tabellen (ohne `sqlite_*`/`schema_version`/FTS5-Shadow-Tables; inkl. FTS5-Virtual `search_index`/`search_trigram`/`chat_messages_fts` + `search_meta`).
 
 Quelle: Squashed-Schema-Snapshot in [db/squashed-schema.js](../db/squashed-schema.js) (regeneriert via `node tools/dump-schema.js`) + [db/migrations.js](../db/migrations.js). Drift gegen die Legacy-Migration-Kette ist durch [tests/unit/squash-drift.test.mjs](../tests/unit/squash-drift.test.mjs) gegated. Mermaid-Diagramme — in VSCode mit „Markdown Preview Mermaid Support" (oder GitHub) direkt sichtbar.
 
@@ -2343,18 +2343,19 @@ erDiagram
     TEXT    updated_at
   }
   search_index {
-    TEXT kind      "UNINDEXED — page|chapter|figure|location|scene|song"
-    TEXT entity_id "UNINDEXED"
-    TEXT book_id   "UNINDEXED"
-    TEXT lang      "UNINDEXED"
-    TEXT title     "FTS5"
-    TEXT body      "FTS5 — unicode61 remove_diacritics 2"
+    TEXT kind       "UNINDEXED — book|chapter|page|figure|location|scene|idea|song|research"
+    TEXT entity_id  "UNINDEXED — rowid aus (kind, entity_id) abgeleitet"
+    TEXT book_id    "UNINDEXED"
+    TEXT user_email "UNINDEXED — gesetzt bei Daten pro User (figure|location|scene|idea|song)"
+    TEXT title      "FTS5"
+    TEXT body       "FTS5 — unicode61 remove_diacritics 2 tokenchars _"
   }
   search_trigram {
-    TEXT kind      "UNINDEXED"
-    TEXT entity_id "UNINDEXED"
-    TEXT book_id   "UNINDEXED"
-    TEXT title     "FTS5 — trigram tokenizer"
+    TEXT kind       "UNINDEXED"
+    TEXT entity_id  "UNINDEXED"
+    TEXT book_id    "UNINDEXED"
+    TEXT user_email "UNINDEXED"
+    TEXT title      "FTS5 — trigram remove_diacritics 1"
   }
   search_meta {
     TEXT key        PK

@@ -297,8 +297,8 @@ export const cardsMethods = {
     return this.openPageChatDraft(this.t(key, { titel: titel || '', text }));
   },
 
-  // Referenz-Slot: read-only Begleitpanel (Figuren/Orte/Szenen/Ereignisse/
-  // Recherche/Quellen/Verwandt), teilt die Leiste mit Seiten-Chat + Ideen.
+  // Referenz-Slot: read-only Begleitpanel (Plan/Figuren/Orte/Szenen/
+  // Ereignisse/Recherche/Quellen/Verwandt), teilt die Leiste mit Seiten-Chat + Ideen.
   // Kein currentPage-Zwang — der Buch-Scope funktioniert auch ohne offene Seite;
   // erreichbar ist der Toggle ohnehin nur aus der Editor-Toolbar.
   async toggleReferenceCard() {

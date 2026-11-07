@@ -38,7 +38,8 @@
 }
 .reference-row:last-child { border-bottom: none; }
 
-/* Klickbare Zeile (z.B. Recherche-Schnipsel → Recherche-Karte öffnen). */
+/* Klickbare Zeile (Plan-Beat, Recherche-Schnipsel, Quelle, verwandter
+   Abschnitt → Sprung ins Ziel). */
 .reference-row--clickable {
   cursor: pointer;
   border-radius: var(--radius-none);
@@ -65,6 +66,14 @@
   color: var(--color-muted);
 }
 
+/* Zeile mit Entitäts-Referenzen (Abschnitte, Kapitel) hinter einem Label. */
+.reference-row-refs {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--space-xs);
+}
+
 .reference-row-desc {
   margin-top: var(--space-3);
   font-size: var(--font-size-sm);
@@ -72,7 +81,7 @@
   line-height: 1.45;
 }
 
-/* Verwandt-Tab (Semantik): Basis-Umschalter + Such-Button + klickbare Treffer. */
+/* Verwandt-Tab (Semantik): Basis-Umschalter + Such-Button. */
 .verwandt-controls {
   display: flex;
   flex-wrap: wrap;
@@ -90,23 +99,6 @@
   justify-content: center;
   padding: var(--size-compact-padding);
 }
-
-.verwandt-loading {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: var(--space-xs);
-  padding: var(--space-lg) 0;
-  font-size: var(--font-size-sm);
-  color: var(--color-muted);
-}
-
-.verwandt-hit {
-  cursor: pointer;
-  border-radius: var(--radius-none);
-  transition: background var(--transition-fast);
-}
-.verwandt-hit:hover { background: var(--color-surface); }
 
 /* === O-Töne aus einem Interview-Transkript ===
    Aufgeklappt unter der Transkript-Zeile des Recherche-Tabs. Jeder Redebeitrag

@@ -6,10 +6,13 @@
 //   - book_id: viewer-Guard auf das Buch (Cross-Book-Suche unterbunden).
 //   - kind: Komma-Liste aus VALID_KINDS (book/chapter/page/figure/location/
 //           scene/idea); Default = page,chapter (Spec-Default).
-//   - Trigram-Fallback automatisch bei Single-Word-Zero-Hit.
+//   - Trigram-Fallback automatisch bei Single-Word-Zero-Hit (nur offset=0).
+//   - Daten pro User (Figuren, Schauplaetze, Szenen, Ideen, Songs) nur aus dem
+//     eigenen Bestand (lib/search.js#USER_KINDS).
 //
 // Response: { hits: [{ kind, entity_id, nav_id, book_id, title, snippet, rank }],
-//             fallback: boolean }
+//             fallback: boolean, more: boolean }
+//   - more: hinter dieser Seite liegen weitere Treffer (offset + limit).
 //   - entity_id: INTEGER-PK der Tabelle (Index-Anker).
 //   - nav_id:    ID, mit der die Oberflaeche den Treffer oeffnet — bei
 //                figure/location die TEXT-ID (fig_id/loc_id), sonst = entity_id.
@@ -56,6 +59,7 @@ router.get('/', (req, res) => {
 
   if (bookId) {
     if (!guardBook(req, res, bookId, 'viewer')) return;
+    setContext({ book: bookId });
   }
 
   const kinds = _parseKinds(req.query.kind);
@@ -70,7 +74,7 @@ router.get('/', (req, res) => {
 
   try {
     const result = searchIndex.query(q, {
-      allowedBookIds, kinds, bookId, limit, offset,
+      allowedBookIds, kinds, bookId, limit, offset, user: email,
     });
     res.json({
       // nav_id = ID, mit der die Oberflaeche den Treffer oeffnet (siehe
@@ -80,6 +84,7 @@ router.get('/', (req, res) => {
       // nicht bezahlen.
       hits: searchIndex.attachNavIds(result.hits || []),
       fallback: !!result.fallback,
+      more: !!result.more,
     });
   } catch (e) {
     logger.error(`[search] GET /search failed: ${e.message}`);

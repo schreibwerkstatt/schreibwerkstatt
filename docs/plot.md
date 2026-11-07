@@ -397,8 +397,8 @@ Drei Rahmungen sind Pflicht, wie beim Motiv-Block der Buchbewertung: der Plan is
 
 Der Referenz-Slot neben dem **Notebook-Editor** hat einen Reiter „Plan" ([reference-plan.js](../public/js/cards/reference-plan.js), Partial [reference-plan.html](../public/partials/reference-plan.html)): die aktiven Beats des offenen Kapitels in Board-Lesereihenfolge (`beatReadingOrder`), mit Status, Akt · Strang · Zeit, Beschreibung, beteiligten Figuren/Orten und Motiven. „Beteiligte Figuren" (`planCastNames`) = Katalog- + Werkstatt-Figuren + die geerbte Strang-Hauptfigur, danach die Orte. Buch-Scope zeigt alle aktiven Beats. Daten: derselbe `GET /plot/`-Payload wie das Board, kein eigener Endpunkt.
 
-- **Kapitel, nicht Seite.** Ein Beat hängt am Kapitel — eigenes `chapter_id`, sonst geerbt vom Strang. „hier im Text" (`refCtx: 'page'`) kommt ausschliesslich aus der Beat-Verankerung (`occ_top[].page_id`), steht also erst nach einem Anker-Lauf.
-- **Read-only.** Jede Zeile springt per Beat-Permalink (`#book/<id>/plot/<beatId>`) aufs Board; gepflegt wird dort. Der Reiter ist ohne aktiven Beat im Buch ausgeblendet.
+- **Kapitel, nicht Seite.** Ein Beat hängt am Kapitel — eigenes `chapter_id`, sonst geerbt vom Strang. Ob er in diesem Abschnitt steht (`refCtx: 'page'`, oben, unmarkiert) oder nur ins Kapitel gehört (`refCtx: 'chapter'`, Tag «im Kapitel» wie in den Geschwister-Reitern), kommt ausschliesslich aus der Beat-Verankerung (`occ_top[].page_id`), steht also erst nach einem Anker-Lauf.
+- **Read-only.** Jede Zeile springt per Beat-Permalink (`#book/<id>/plot/<beatId>`) aufs Board; gepflegt wird dort. Der Reiter ist ohne aktiven Beat im Buch ausgeblendet (bei einem Ladefehler sichtbar, mit Meldung); war er gewählt, fällt der Slot auf «Figuren» zurück.
 - **Nur Notebook-Editor** — Focus-Editor und Bucheditor haben keinen Referenz-Slot.
 - Gegated: [tests/unit/reference-plan.test.mjs](../tests/unit/reference-plan.test.mjs) (Reihenfolge, Kontext-Regel, Strang-Vererbung), [tests/e2e-app/reference-plan-tab.spec.js](../tests/e2e-app/reference-plan-tab.spec.js) (echte App, Kapitel-Filter + Permalink).
 

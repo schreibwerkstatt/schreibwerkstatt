@@ -12,9 +12,9 @@ require('../migrations');
 const { chapterSubtreeFilter } = require('../book-order');
 
 /** Seiten mit body_html für search_passages. Filter optional: `chapterId`,
- *  `pageId`, `pageIds` (FTS-Kandidaten); null = kein Filter. Ohne ORDER BY —
- *  der Aufrufer sortiert nach FTS-Rang. */
-function listPagesForPassageSearch(bookId, { chapterId = null, pageId = null, pageIds = null } = {}) {
+ *  `pageId`; null = kein Filter. Ohne ORDER BY — der Aufrufer stellt die
+ *  FTS-Kandidaten nach vorn. */
+function listPagesForPassageSearch(bookId, { chapterId = null, pageId = null } = {}) {
   const scopeFilters = ['book_id = ?'];
   const scopeParams  = [bookId];
   if (chapterId !== null) {
@@ -25,10 +25,6 @@ function listPagesForPassageSearch(bookId, { chapterId = null, pageId = null, pa
   if (pageId !== null) {
     scopeFilters.push('page_id = ?');
     scopeParams.push(pageId);
-  }
-  if (pageIds) {
-    scopeFilters.push(`page_id IN (${pageIds.map(() => '?').join(',')})`);
-    scopeParams.push(...pageIds);
   }
   return db.prepare(`
     SELECT page_id, page_name, chapter_id, body_html

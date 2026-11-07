@@ -37,8 +37,8 @@ function _buildSearchRegex(pattern, regex) {
   return new RegExp(pattern, 'gi');
 }
 
-// Maximale Anzahl Kandidaten-Seiten aus FTS5. bm25-sortiert; 200 reicht für
-// Buch-weite Suchen mit eindeutigen Begriffen.
+// Maximale Anzahl Kandidaten-Seiten aus FTS5, die im Literal-Pfad zuerst
+// gescannt werden (bm25-sortiert, ggf. reranked).
 const SEARCH_FTS_CANDIDATE_LIMIT = 200;
 
 // Pro Kandidatenseite an den Reranker gegebener Volltext-Ausschnitt. Deckelt die
@@ -56,7 +56,10 @@ async function tool_search_passages(input, ctx) {
   try { re = _buildSearchRegex(pattern, isRegex); }
   catch (e) { return { error: `Ungueltiges Regex-Muster: ${e.message}`, errorKey: 'chat.toolError.invalidParam', errorParams: { param: 'pattern' } }; }
 
-  // FTS5 verengt nur den Literal-Pfad; Regex muss alle Buchseiten scannen.
+  // FTS5 ordnet im Literal-Pfad nur die Scan-Reihenfolge (Kandidaten zuerst),
+  // es schliesst nichts aus: der Index matcht Wortanfaenge, das Muster ist ein
+  // Teilstring («Haus» in «Hinterhaus», «z.B.»). Ein Ausschluss liesse das Modell
+  // eine Stelle als fehlend melden, die im Text steht.
   let candidatePageIds = null;
   let ftsUsed = false;
   if (!isRegex) {
@@ -67,27 +70,20 @@ async function tool_search_passages(input, ctx) {
     });
     candidatePageIds = hits.map(h => h.entity_id);
     ftsUsed = true;
-    if (!candidatePageIds.length) {
-      return _truncateResult({
-        pattern,
-        regex: false,
-        fts: true,
-        results: [],
-        note: 'Keine FTS5-Treffer im Buch.',
-      });
-    }
   }
 
   const pages = listPagesForPassageSearch(ctx.bookId, {
     chapterId: Number.isInteger(input.chapter_id) ? input.chapter_id : null,
     pageId:    Number.isInteger(input.page_id)    ? input.page_id    : null,
-    pageIds:   candidatePageIds,
   });
 
   let orderedPages = pages;
-  if (candidatePageIds) {
+  if (candidatePageIds?.length) {
     const rank = new Map(candidatePageIds.map((id, i) => [id, i]));
-    orderedPages = pages.slice().sort((a, b) => (rank.get(a.page_id) ?? Infinity) - (rank.get(b.page_id) ?? Infinity));
+    const candidates = pages.filter(p => rank.has(p.page_id))
+      .sort((a, b) => rank.get(a.page_id) - rank.get(b.page_id));
+    const rest = pages.filter(p => !rank.has(p.page_id));
+    let ranked = candidates;
 
     // Reranking (falls aktiv): den bm25-Kandidatenpool per Cross-Encoder gegen
     // das Suchmuster nach Bedeutung umsortieren, bevor gescannt wird. Bei
@@ -97,10 +93,11 @@ async function tool_search_passages(input, ctx) {
     // verworfen. Non-fatal: Endpunkt aus/nicht erreichbar → bm25-Reihenfolge.
     const order = await semanticRetrieval.rerankOrder(
       pattern,
-      orderedPages.map(p => htmlToPlainText(p.body_html || '').slice(0, RERANK_DOC_MAXCHARS)),
+      ranked.map(p => htmlToPlainText(p.body_html || '').slice(0, RERANK_DOC_MAXCHARS)),
       { signal: ctx.jobSignal },
     );
-    if (order) orderedPages = order.map(i => orderedPages[i]);
+    if (order) ranked = order.map(i => ranked[i]);
+    orderedPages = ranked.concat(rest);
   }
 
   const results = [];

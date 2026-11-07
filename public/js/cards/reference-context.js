@@ -15,7 +15,7 @@
 // Karte deklariert — ein Slice spreadet Methoden, keine eigene State-Insel.
 // Schreibt nie in den Buchtext.
 
-import { selectScenesForView } from '../editor/notebook/entities.js';
+import { containsWholeWord, selectScenesForView } from '../editor/notebook/entities.js';
 import { memoMethods } from './card-memo.js';
 
 /** Herkunft einer Zeile im Kontext-Scope: 'page' = haengt an der offenen Seite,
@@ -39,6 +39,16 @@ const hasId = (ids, id) =>
  *  dann jede Kapitel-Figur fuer unbekannt und rendert sie doppelt. */
 const figKey = (f) => (f?.id == null ? '' : String(f.id));
 
+/** HTML-Entities im Klartext auflösen. `<textarea>` parst seinen Inhalt als
+ *  RCDATA: Entities werden dekodiert, nichts wird ausgeführt oder geladen. */
+let _decoder = null;
+function decodeEntities(s) {
+  if (!s || !s.includes('&') || typeof document === 'undefined') return s || '';
+  _decoder ||= document.createElement('textarea');
+  _decoder.innerHTML = s;
+  return _decoder.value;
+}
+
 export const referenceContextMethods = {
   // ── Memo (cards/card-memo.js) ──────────────────────────────────────────────
   ...memoMethods,
@@ -49,21 +59,26 @@ export const referenceContextMethods = {
   },
 
   // Plaintext der aktuellen Seite (Namens-Treffer für Figuren/Orte im Kontext).
+  // Tags werden zu Leerzeichen (sonst klebten Wörter an Blockgrenzen zusammen
+  // und die Wortgrenzen-Prüfung schlüge fehl), danach Entities dekodiert —
+  // `&amp;`/`&nbsp;` stünden sonst als Wortzeichen im Text.
   _pageText() {
     const app = window.__app;
     if (!app?.currentPage) return '';
     const key = this._pageKey();
     if (this._refPageTextKey === key) return this._refPageText;
     const html = app.originalHtml || '';
-    this._refPageText = html.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').toLowerCase();
+    this._refPageText = decodeEntities(html.replace(/<[^>]+>/g, ' '))
+      .replace(/\s+/g, ' ').toLowerCase();
     this._refPageTextKey = key;
     return this._refPageText;
   },
 
+  // Ganzes Wort, gleiche Regel wie die Editor-Highlights (containsWholeWord).
   _nameInPage(names) {
     const txt = this._pageText();
     if (!txt) return false;
-    return names.some(n => n && txt.includes(String(n).toLowerCase()));
+    return names.some(n => containsWholeWord(txt, n));
   },
 
   _currentChapterName() {
@@ -144,31 +159,24 @@ export const referenceContextMethods = {
     const app = window.__app;
     const pid = app?.currentPage?.id;
     const cid = app?.currentPage?.chapter_id;
-    const pages = Alpine.store('nav').pages || [];
-    return this._memo('szenen', [this.referenceScope, pid, cid, all, pages], () => {
+    return this._memo('szenen', [this.referenceScope, pid, cid, all], () => {
       if (!this._contextActive()) return all;
       const v = selectScenesForView(all, pid, cid);
       return [
         ...markCtx(v.onPage, 'page'),
         ...markCtx(v.inChapter, 'chapter'),
         ...markCtx(v.inChapterOtherPage, 'chapter',
-          (s) => ({ refPageName: this._pageName(s.page_id, pages) })),
+          (s) => ({ refPageIds: s.page_id != null ? [s.page_id] : [] })),
       ];
     });
   },
 
-  _pageName(pageId, pages) {
-    if (pageId == null) return '';
-    const p = (pages || []).find(x => Number(x.id) === Number(pageId));
-    return p?.name || '';
-  },
-
-  /** Untertitel einer Zeile im Kontext-Scope: an welcher ANDEREN Seite sie
-   *  haengt. Leer, wenn sie zu dieser Seite gehoert oder kapitelweit gilt —
-   *  dann waere die Angabe nur Rauschen. Geteilt von Szenen + Ereignissen. */
-  referenceRowWhere(row) {
-    if (!row?.refPageName) return '';
-    return window.__app.t('reference.ctx.onOtherPage', { page: row.refPageName });
+  /** An welchen ANDEREN Abschnitten eine Zeile im Kontext-Scope haengt (IDs,
+   *  gerendert als Abschnitts-Referenzen). Leer, wenn sie zu diesem Abschnitt
+   *  gehoert oder kapitelweit gilt — dann waere die Angabe nur Rauschen.
+   *  Geteilt von Szenen, Ereignissen und Quellen. */
+  referenceRowPageIds(row) {
+    return Array.isArray(row?.refPageIds) ? row.refPageIds : [];
   },
 
   // Ereignisse tragen ihre Anker als IDs (`page_ids`/`chapter_ids`, Bruecken
@@ -181,8 +189,7 @@ export const referenceContextMethods = {
     const pid = app?.currentPage?.id ?? null;
     const cid = app?.currentPage?.chapter_id ?? null;
     const chapName = this._currentChapterName();
-    const pages = Alpine.store('nav').pages || [];
-    return this._memo('ereignisse', [this.referenceScope, pid, cid, chapName, all, pages], () => {
+    return this._memo('ereignisse', [this.referenceScope, pid, cid, chapName, all], () => {
       if (!this._contextActive()) return all;
       const onPage = [];
       const inChapter = [];
@@ -193,7 +200,7 @@ export const referenceContextMethods = {
       return [
         ...markCtx(onPage, 'page'),
         ...markCtx(inChapter, 'chapter',
-          (ev) => ({ refPageName: this._evtOtherPageNames(ev, pid, pages) })),
+          (ev) => ({ refPageIds: this._evtOtherPageIds(ev, pid) })),
       ];
     });
   },
@@ -214,11 +221,18 @@ export const referenceContextMethods = {
 
   /** Seiten, an denen ein Kapitel-Ereignis sonst noch haengt (ohne die offene).
    *  Leer, wenn es gar keinen Seitenanker hat — dann ist es kapitelweit. */
-  _evtOtherPageNames(ev, pageId, pages) {
-    const ids = (ev?.page_ids || [])
-      .filter(x => x != null && Number(x) !== Number(pageId));
-    if (!ids.length) return '';
-    return ids.map(id => this._pageName(id, pages)).filter(Boolean).join(', ');
+  _evtOtherPageIds(ev, pageId) {
+    return (ev?.page_ids || []).filter(x => x != null && Number(x) !== Number(pageId));
+  },
+
+  /** Kapitel eines Ereignisses als Referenz-Specs: `kapitel[i]` gehoert zu
+   *  `chapter_ids[i]` (Kanonform aus cards/ereignisse/model.js); ohne ID
+   *  loest die Referenz ueber den Namen auf. */
+  referenceEventChapters(ev) {
+    const names = Array.isArray(ev?.kapitel) ? ev.kapitel : [];
+    const ids = Array.isArray(ev?.chapter_ids) ? ev.chapter_ids : [];
+    return names.map((name, i) => ({ type: 'kapitel', id: ids[i] ?? undefined, name }))
+      .filter(r => r.id != null || r.name);
   },
 
   // Dieselbe Zweiteilung wie die Geschwister-Reiter: die Verknuepfung zeigt

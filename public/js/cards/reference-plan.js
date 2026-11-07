@@ -13,7 +13,8 @@
 // Seiten-Zugehoerigkeit kommt deshalb nicht aus dem Plan, sondern aus der
 // Beat-Verankerung (`occ_top[].page_id`, mitgeliefert vom Board-GET): 'page' =
 // der Beat wurde auf der offenen Seite im Text gefunden, 'chapter' = er gehoert
-// ins Kapitel, steht aber (noch) nicht hier.
+// ins Kapitel, steht aber (noch) nicht hier. Markiert wird wie bei den
+// Geschwister-Reitern nur 'chapter' («im Kapitel»).
 //
 // Daten: GET /plot/?book_id — derselbe Payload wie das Board (Akte, Straenge,
 // Beats mit fig_ids/locations/motifs/occ_top). Pro Buch + User skopiert, wie
@@ -88,18 +89,21 @@ export function referencePlanState() {
   return {
     referencePlan: null,              // { acts, threads, beats } aus GET /plot/
     referencePlanLoading: false,
+    referencePlanError: '',
   };
 }
 
 export const referencePlanMethods = {
-  // Buchwechsel-Race: nach jedem await prüfen, ob das Buch noch dasselbe ist.
-  // Werkstatt-Figuren (für die Besetzungszeile) best-effort dazu, im Plan-Objekt
-  // abgelegt — so räumt der Reset von referencePlan sie mit ab.
+  // Buchwechsel-Race: nach jedem await prüfen, ob das Buch noch dasselbe ist
+  // (`_staleBook` der Karte). Werkstatt-Figuren (für die Besetzungszeile)
+  // best-effort dazu, im Plan-Objekt abgelegt — so räumt der Reset von
+  // referencePlan sie mit ab.
   async _loadReferencePlan() {
     const bookId = Alpine.store('nav').selectedBookId;
     if (!bookId) { this.referencePlan = null; return; }
-    const stale = () => Alpine.store('nav').selectedBookId !== bookId;
+    const stale = () => this._staleBook(bookId);
     this.referencePlanLoading = true;
+    this.referencePlanError = '';
     try {
       const r = await fetchJson(`/plot/?book_id=${encodeURIComponent(bookId)}`);
       if (stale()) return;
@@ -112,9 +116,14 @@ export const referencePlanMethods = {
       if (stale()) return;
       this.referencePlan = { ...r, draftFigures };
     } catch {
-      if (!stale()) this.referencePlan = null;
+      if (stale()) return;
+      this.referencePlan = null;
+      this.referencePlanError = window.__app.t('reference.plan.loadError');
     } finally {
-      if (!stale()) this.referencePlanLoading = false;
+      if (!stale()) {
+        this.referencePlanLoading = false;
+        this._ensureVisibleTab();
+      }
     }
   },
 
@@ -123,8 +132,9 @@ export const referencePlanMethods = {
   },
 
   // Tab-Sichtbarkeit: ohne aktiven Beat im Buch gibt es keinen Plan zu zeigen
-  // (analog Quellen-Tab ohne Quellen).
-  referenceHasPlan() { return this._planOrdered().length > 0; },
+  // (analog Quellen-Tab ohne Quellen). Ein Ladefehler zeigt den Reiter, damit
+  // die Meldung nicht mit ihm verschwindet.
+  referenceHasPlan() { return this._planOrdered().length > 0 || !!this.referencePlanError; },
 
   referencePlanBeats() {
     const app = window.__app;

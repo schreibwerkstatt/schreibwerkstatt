@@ -1,6 +1,6 @@
 // Alpine.data('referenceCard') — Referenz-Slot: read-only Begleitpanel neben dem
 // Notebook-Editor (Companion, Mutex mit Seiten-Chat + Ideen im 420px-Slot).
-// Tabs — Figuren · Orte · Szenen · Ereignisse · Recherche · Quellen · Verwandt —
+// Tabs — Plan · Figuren · Orte · Szenen · Ereignisse · Recherche · Quellen · Verwandt —
 // wahlweise auf den aktuellen Kontext (Seite/Kapitel) oder das ganze Buch. Nie
 // schreibend (rückwärtsgewandt — nie generativ in den Buchtext).
 //
@@ -12,7 +12,9 @@
 // KONTEXT-SCOPE — eine Regel fuer alle Reiter: eine Zeile gehoert zur offenen
 // Seite ODER zu deren Kapitel, und die Karte sagt, welches von beidem. Jede
 // Liste ist entsprechend zweigeteilt (Seite zuerst) und markiert ihre Zeilen mit
-// `refCtx`; `refPageName` nennt die fremde Seite, wo es eine gibt. Woran die
+// `refCtx` — sichtbar ist nur 'chapter' («im Kapitel»), Zeilen der offenen
+// Seite bleiben unmarkiert; `refPageIds` nennt die fremden Seiten, wo es welche
+// gibt (gerendert als Abschnitts-Referenzen). Woran die
 // Zugehoerigkeit haengt, ist pro Reiter verschieden — IMMER an IDs, nie an
 // Namen, ausser wo es keine ID gibt:
 //   Figuren    `$app.chapterFigures` (figure_appearances) ∪ Namens-Treffer —
@@ -24,18 +26,22 @@
 //              gebundenen Szenen desselben Kapitels
 //   Ereignisse `page_ids`/`chapter_ids` (zeitstrahl_event_pages/_chapters)
 //   Recherche  `links[].target_kind/target_id`
-//   Quellen    groupCitedSources (eigene, aeltere Auspraegung derselben Idee:
-//              `row.onPage` + Seitennamen statt refCtx)
+//   Plan       Beat am Kapitel; 'page' = Beat-Verankerung fand ihn hier
+//   Quellen    Fund-Index (groupCitedSources), `row.onPage` → refCtx
 //   Verwandt   kein Kontext-Begriff — Semantik ueber das ganze Buch
 // Der Namens-Treffer ist Ergaenzung, nie Ersatz: der Index kennt eine eben
 // geschriebene Erwaehnung noch nicht, und eine nur umschriebene Figur steht
 // nicht im Text.
 //
-// Recherche lazy via /research; Quellen lazy via /sources + /sources/citations
-// (Gruppierung pure in sources/cited-index.js). Löst das alte „Auf dieser Seite"-
-// Panel ab; die Inline-Highlights + Popover bleiben im editorEntitiesCard.
+// Beim Einblenden geladen: Plan (/plot/), Recherche (/research), Quellen
+// (/sources + /sources/citations, Gruppierung pure in sources/cited-index.js) —
+// alle vorab, weil Reiter-Zähler und die Sichtbarkeit von Plan/Quellen davon
+// abhängen. Jeder Lader verwirft seine Antwort, wenn das Buch inzwischen
+// gewechselt hat (`_staleBook`). Die Inline-Highlights + Popover bleiben im
+// editorEntitiesCard.
 
 import { fetchJson } from '../utils.js';
+import { CARET_BLOCK_SEL } from '../editor/shared/dom-block.js';
 import { EVT } from '../events.js';
 import { tErrorRaw, tRaw } from '../i18n.js';
 import { setupCardLifecycle } from './card-lifecycle.js';
@@ -46,6 +52,10 @@ import { referenceContextMethods } from './reference-context.js';
 import { referencePlanMethods, referencePlanState } from './reference-plan.js';
 
 const TABS = ['plan', 'figuren', 'orte', 'szenen', 'ereignisse', 'recherche', 'quellen', 'verwandt'];
+// Immer sichtbarer Reiter — Rückfall, wenn der gewählte ausgeblendet ist.
+const FALLBACK_TAB = 'figuren';
+// Abschnitte, die eine Quellen-Zeile ausgeschrieben nennt; der Rest wird gezählt.
+const QUELLE_PAGES_SHOWN = 2;
 
 // Fehlercode der semantischen Route → eigener i18n-Key des Verwandt-Reiters
 // (gleiche Sätze wie die Such-Karte); übrige Codes über `error.<CODE>`.
@@ -65,6 +75,7 @@ export function registerReferenceCard() {
     referenceScope: 'page',            // 'page' (aktueller Kontext) | 'book'
     referenceRecherche: [],
     referenceRechercheLoading: false,
+    referenceRechercheError: '',
     // Quellen-Tab: die Quellen des Buchs (Anzeigedaten) + der Fund-Index
     // (welche Quelle steht auf welcher Seite). Beides buchweit geladen, die
     // Scope-Umschaltung filtert clientseitig.
@@ -81,7 +92,6 @@ export function registerReferenceCard() {
     verwandtError: '',
     verwandtSearched: false,
     verwandtNotIndexed: false,
-    verwandtKey: null,                // _pageKey() zum Suchzeitpunkt (Staleness)
     _verwandtAbort: null,
     _verwandtSelText: '',             // zuletzt in .page-content-view erfasste Auswahl/Absatz
     _refPageText: '',
@@ -93,7 +103,14 @@ export function registerReferenceCard() {
       this._lifecycle = setupCardLifecycle(this, {
         showFlag: 'showReferenceCard',
         onShow: () => this._onVisibleReference(),
-        onBookChanged: () => this._resetReference(),
+        // Reset + bei offenem Slot neu laden. Der Event kommt aus
+        // _resetBookScopedState, BEVOR dort der Katalog geleert wird — erst
+        // danach (Microtask) laden, sonst hielte _onVisibleReference den alten
+        // Katalog für geladen.
+        onBookChanged: () => {
+          this._resetReference();
+          if (window.__app?.showReferenceCard) queueMicrotask(() => this._onVisibleReference());
+        },
         onViewReset: () => this._resetReference(),
         // Quelle angelegt/entfernt/geändert (Quellen-Karte oder Beleg-Picker im
         // Editor): das Tab zeigt sonst den Stand von vorhin.
@@ -115,16 +132,21 @@ export function registerReferenceCard() {
         this._maybeAutoVerwandt();
       });
       this.$watch(() => window.__app?.currentPage?.id, () => {
-        // Auswahl der alten Seite verwerfen; „ganze Seite" ggf. neu suchen.
+        // Treffer und Auswahl gehören zur alten Seite; „ganze Seite" neu suchen.
+        // Ein Save derselben Seite lässt die Treffer stehen — sie sollen beim
+        // Schreiben nicht verschwinden; neu sucht der Knopf.
+        this._resetVerwandt();
         this._verwandtSelText = '';
-        if (this.referenceTab === 'verwandt') this._maybeAutoVerwandt();
+        if (this.referenceTab === 'verwandt' && window.__app?.showReferenceCard) this._maybeAutoVerwandt();
       });
       // Der Fund-Index wird serverseitig bei jedem Seiten-Write neu gebaut. Eine
       // neue `updated_at` heisst also: gerade gespeichert, ein eben eingefügter
       // Quellennachweis ist jetzt im Index. Nur die Fundstellen nachladen (die
-      // Quellenliste selbst ändert ein Seiten-Save nicht) und nur mit offenem Tab.
+      // Quellenliste selbst ändert ein Seiten-Save nicht) und nur mit offenem
+      // Slot + Tab — beim Einblenden lädt _onVisibleReference ohnehin frisch.
       this.$watch(() => window.__app?.currentPage?.updated_at, () => {
-        if (this.referenceTab === 'quellen' && this.referenceSources.length) {
+        if (window.__app?.showReferenceCard && this.referenceTab === 'quellen'
+            && this.referenceSources.length) {
           this._loadReferenceCitations();
         }
       });
@@ -139,9 +161,12 @@ export function registerReferenceCard() {
 
     _resetReference() {
       this.referenceRecherche = [];
-      this.referencePlan = null;
+      this.referenceRechercheLoading = false;
+      this.referenceRechercheError = '';
+      Object.assign(this, referencePlanState(), referenceInterviewState());
       this.referenceSources = [];
       this.referenceCitations = [];
+      this.referenceSourcesLoading = false;
       this.referenceSourcesError = '';
       this._resetVerwandt();
       this._verwandtSelText = '';
@@ -157,7 +182,12 @@ export function registerReferenceCard() {
       this.verwandtError = '';
       this.verwandtSearched = false;
       this.verwandtNotIndexed = false;
-      this.verwandtKey = null;
+    },
+
+    /** Prädikat für Lader: hat das Buch seit `bookId` gewechselt? Nach jedem
+     *  await prüfen — eine Antwort des alten Buchs darf das neue nicht füllen. */
+    _staleBook(bookId) {
+      return Alpine.store('nav').selectedBookId !== bookId;
     },
 
     // Beim Sichtbarwerden: Katalog-Daten defensiv nachladen (der Slot lebt
@@ -172,6 +202,7 @@ export function registerReferenceCard() {
       if (!(cat.orte || []).length) app.loadOrte?.(bookId);
       if (!(cat.szenen || []).length) app.loadSzenen?.(bookId);
       if (!(cat.globalZeitstrahl || []).length) app._reloadZeitstrahl?.();
+      this._ensureVisibleTab();
       this._loadReferenceRecherche();
       this._loadReferenceSources();
       this._loadReferencePlan();
@@ -181,11 +212,20 @@ export function registerReferenceCard() {
       const bookId = Alpine.store('nav').selectedBookId;
       if (!bookId) { this.referenceRecherche = []; return; }
       this.referenceRechercheLoading = true;
+      this.referenceRechercheError = '';
       try {
-        const rows = await fetchJson(`/research?book_id=${bookId}`);
+        const rows = await fetchJson(`/research?book_id=${encodeURIComponent(bookId)}`);
+        if (this._staleBook(bookId)) return;
         this.referenceRecherche = Array.isArray(rows) ? rows : [];
-      } catch { this.referenceRecherche = []; }
-      finally { this.referenceRechercheLoading = false; }
+      } catch {
+        if (this._staleBook(bookId)) return;
+        // Fehler sagen statt «Keine Recherche-Einträge» — sonst sieht ein
+        // Netzausfall aus wie ein leeres Buch.
+        this.referenceRecherche = [];
+        this.referenceRechercheError = window.__app.t('reference.recherche.loadError');
+      } finally {
+        if (!this._staleBook(bookId)) this.referenceRechercheLoading = false;
+      }
     },
 
     // ── Quellen-Tab ─────────────────────────────────────────────────────────
@@ -207,15 +247,20 @@ export function registerReferenceCard() {
       this.referenceSourcesError = '';
       try {
         const list = await fetchJson(`/sources?book_id=${encodeURIComponent(bookId)}&archived=1`);
+        if (this._staleBook(bookId)) return;
         this.referenceSources = Array.isArray(list) ? list : [];
         if (this.referenceSources.length) await this._loadReferenceCitations();
         else this.referenceCitations = [];
       } catch {
+        if (this._staleBook(bookId)) return;
         this.referenceSources = [];
         this.referenceCitations = [];
         this.referenceSourcesError = window.__app.t('reference.quellen.loadError');
       } finally {
-        this.referenceSourcesLoading = false;
+        if (!this._staleBook(bookId)) {
+          this.referenceSourcesLoading = false;
+          this._ensureVisibleTab();
+        }
       }
     },
 
@@ -226,17 +271,23 @@ export function registerReferenceCard() {
       if (!bookId) { this.referenceCitations = []; return; }
       try {
         const rows = await fetchJson(`/sources/citations?book_id=${encodeURIComponent(bookId)}`);
+        if (this._staleBook(bookId)) return;
         this.referenceCitations = Array.isArray(rows) ? rows : [];
       } catch {
+        if (this._staleBook(bookId)) return;
         this.referenceCitations = [];
         this.referenceSourcesError = window.__app.t('reference.quellen.loadError');
       }
     },
 
     // Tab-Sichtbarkeit: ohne Quellen im Buch gibt es nichts zu zeigen (analog
-    // zum Verwandt-Tab, das an der Semantik-Konfiguration hängt).
-    referenceHasSources() { return this.referenceSources.length > 0; },
+    // zum Verwandt-Tab, das an der Semantik-Konfiguration hängt). Ein
+    // Ladefehler zeigt den Reiter trotzdem — sonst verschwände die Meldung.
+    referenceHasSources() { return this.referenceSources.length > 0 || !!this.referenceSourcesError; },
 
+    // Fund-Index → Zeilen mit derselben Kontext-Markierung wie die Geschwister-
+    // Reiter: refCtx ('page' = auf der offenen Seite belegt, sonst 'chapter')
+    // und refPageIds (die übrigen Fundstellen-Seiten in Leserichtung).
     referenceQuellen() {
       const app = window.__app;
       const pages = Alpine.store('nav').pages || [];
@@ -249,7 +300,11 @@ export function registerReferenceCard() {
           sources: this.referenceSources,
           citations: this.referenceCitations,
           pages, scope, pageId: pid, chapterId: cid,
-        }));
+        }).map(row => ({
+          ...row,
+          refCtx: scope === 'page' ? (row.onPage ? 'page' : 'chapter') : null,
+          refPageIds: row.pages.filter(p => !p.onPage).map(p => p.pageId),
+        })));
     },
 
     referenceQuelleTitle(row) {
@@ -270,17 +325,14 @@ export function registerReferenceCard() {
       return window.__app.t('sources.citedN', { n: row?.count || 0 });
     },
 
-    /** Wo im Ausschnitt belegt. Auf der offenen Seite belegte Quellen sagen das
-     *  ausdrücklich — alles andere sind Seitennamen (zwei ausgeschrieben, der
-     *  Rest gezählt; die vollständige Liste steht im Quellenverzeichnis). */
-    referenceQuelleWhere(row) {
-      const app = window.__app;
-      if (row?.onPage) return app.t('reference.quellen.onPage');
-      const names = (row?.pages || []).map(p => p.name || `#${p.pageId}`);
-      if (names.length <= 2) return names.join(', ');
-      return app.t('reference.quellen.morePages', {
-        pages: names.slice(0, 2).join(', '), n: names.length - 2,
-      });
+    /** Wo sonst im Ausschnitt belegt: die ersten Seiten als Referenz, der Rest
+     *  gezählt (die vollständige Liste steht im Quellenverzeichnis). */
+    referenceQuellePages(row) {
+      return (row?.refPageIds || []).slice(0, QUELLE_PAGES_SHOWN);
+    },
+    referenceQuelleMore(row) {
+      const n = (row?.refPageIds || []).length - QUELLE_PAGES_SHOWN;
+      return n > 0 ? window.__app.tn('reference.quellen.morePages', n) : '';
     },
 
     /** Sprung ins Quellenverzeichnis auf genau diesen Eintrag. Deep-Link-Hash als
@@ -296,6 +348,27 @@ export function registerReferenceCard() {
     // ── Tabs + Scope ────────────────────────────────────────────────────────
     referenceTabs() { return TABS; },
     setReferenceTab(tab) { if (TABS.includes(tab)) this.referenceTab = tab; },
+
+    /** Ist der Reiter gerade sichtbar? Plan und Quellen hängen an Daten, Verwandt
+     *  an der Semantik-Konfiguration. Eine Stelle für Template und Rückfall. */
+    referenceTabVisible(tab) {
+      switch (tab) {
+        case 'plan':     return this.referenceHasPlan();
+        case 'quellen':  return this.referenceHasSources();
+        case 'verwandt': return !!Alpine.store('config')?.semanticSearchEnabled;
+        default:         return TABS.includes(tab);
+      }
+    },
+
+    /** Gewählter Reiter ausgeblendet (Buch ohne Quellen/Plan, Semantik aus) →
+     *  auf den Rückfall-Reiter, sonst wäre kein Reiter markiert und darunter
+     *  stünde ein verwaistes Panel. Erst nach dem Laden aufgerufen: während des
+     *  Ladens sind Plan/Quellen noch unbekannt und sollen den gemerkten Reiter
+     *  nicht wegschieben. */
+    _ensureVisibleTab() {
+      if (this.referencePlanLoading || this.referenceSourcesLoading) return;
+      if (!this.referenceTabVisible(this.referenceTab)) this.referenceTab = FALLBACK_TAB;
+    },
     toggleReferenceScope() {
       this.referenceScope = this.referenceScope === 'page' ? 'book' : 'page';
     },
@@ -305,15 +378,9 @@ export function registerReferenceCard() {
     _contextActive() { return this.referenceScope === 'page' && this.referenceHasContext(); },
 
     // ── Verwandt-Tab (Semantik) ───────────────────────────────────────────────
-    // Ergebnisse sind seiten-spezifisch: bei Seitenwechsel gaten wir über den
-    // _pageKey() (keine Watcher — konsistent mit dem Memo-Pattern der Karte).
-    verwandtResults() {
-      if (this.verwandtKey && this.verwandtKey !== this._pageKey()) return [];
-      return this.verwandtHits;
-    },
-    verwandtStale() {
-      return this.verwandtSearched && !!this.verwandtKey && this.verwandtKey !== this._pageKey();
-    },
+    // Ergebnisse gehören zur Seite: der Seitenwechsel-Watcher in init() verwirft
+    // sie, ein Save derselben Seite lässt sie stehen.
+    verwandtResults() { return this.verwandtHits; },
     verwandtScoreLabel(hit) {
       return Math.round((hit?.score || 0) * 100) + '%';
     },
@@ -338,7 +405,7 @@ export function registerReferenceCard() {
       if (!startEl?.closest?.('.page-content-view')) return;
       const selText = sel.toString().replace(/\s+/g, ' ').trim();
       if (!sel.isCollapsed && selText) { this._verwandtSelText = selText; return; }
-      const block = startEl.closest('p,h1,h2,h3,h4,h5,h6,li,blockquote,pre,div.poem');
+      const block = startEl.closest(CARET_BLOCK_SEL);
       this._verwandtSelText = (block?.textContent || '').replace(/\s+/g, ' ').trim();
     },
 
@@ -348,8 +415,7 @@ export function registerReferenceCard() {
       if (this.verwandtBasis !== 'page') return;
       if (!Alpine.store('config')?.semanticSearchEnabled) return;
       if (!window.__app?.currentPage?.id) return;
-      if (this.verwandtLoading) return;
-      if (this.verwandtSearched && this.verwandtKey === this._pageKey()) return;
+      if (this.verwandtLoading || this.verwandtSearched) return;
       this.runVerwandt();
     },
 
@@ -368,7 +434,6 @@ export function registerReferenceCard() {
           this.verwandtHits = [];
           this.verwandtSearched = true;
           this.verwandtNotIndexed = false;
-          this.verwandtKey = this._pageKey();
           this.verwandtError = app.t('reference.verwandt.noSelection');
           return;
         }
@@ -388,7 +453,6 @@ export function registerReferenceCard() {
       this.verwandtError = '';
       this.verwandtNotIndexed = false;
       this.verwandtSearched = true;
-      const key = this._pageKey();
 
       try {
         const r = await fetch('/search/semantic?' + params.toString(), { credentials: 'same-origin', signal: ctrl.signal });
@@ -399,24 +463,23 @@ export function registerReferenceCard() {
           const own = VERWANDT_ERROR_KEYS[j.error_code];
           this.verwandtError = own ? app.t(own)
             : j.error_code ? tErrorRaw(j) : app.t('search.semantic.failed');
-          this.verwandtHits = []; this.verwandtKey = key;
+          this.verwandtHits = [];
           return;
         }
         const data = await r.json();
         if (data.notIndexed) {
           this.verwandtNotIndexed = true;
-          this.verwandtHits = []; this.verwandtKey = key;
+          this.verwandtHits = [];
           return;
         }
         // Freitext-Modus schliesst die Quellseite nicht serverseitig aus.
         this.verwandtHits = (Array.isArray(data.hits) ? data.hits : [])
           .filter(h => !(h.kind === 'page' && String(h.entity_id) === String(pageId)));
-        this.verwandtKey = key;
       } catch (e) {
         if (e.name === 'AbortError' || ctrl.signal.aborted) return;
         // fetch wirft nur bei Netzausfall (HTTP-Fehler landen oben).
         this.verwandtError = tRaw('common.networkError');
-        this.verwandtHits = []; this.verwandtKey = key;
+        this.verwandtHits = [];
       } finally {
         if (!ctrl.signal.aborted) this.verwandtLoading = false;
       }

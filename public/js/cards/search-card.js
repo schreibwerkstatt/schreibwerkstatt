@@ -14,6 +14,8 @@ import { isBrowserOffline, isOfflineRejection } from '../app/boot/net-required.j
 import { activateSearchHit } from './search-hit.js';
 
 const DEBOUNCE_MS = 220;
+// Volltext-Treffer pro Seite; weitere über «Mehr laden» (Server meldet `more`).
+const FTS_PAGE_SIZE = 50;
 const DEFAULT_KINDS = ['page', 'chapter'];
 const ALL_KINDS = ['page', 'chapter', 'book', 'figure', 'location', 'scene', 'idea', 'research'];
 // Semantische Suche kennt nur die indizierten Kinds (Embedding-Index).
@@ -32,6 +34,8 @@ export function registerSearchCard() {
     q: '',
     hits: [],
     fallback: false,
+    more: false, // Server: hinter der geladenen Liste liegen weitere Volltext-Treffer
+    loadingMore: false,
     loading: false,
     errorMessage: '',
     notIndexed: false, // Server: Embedding-Index fehlt/unvollständig → Hinweis statt „keine Treffer“
@@ -212,6 +216,8 @@ export function registerSearchCard() {
     },
 
     async runSearch() {
+      this.more = false;
+      this.loadingMore = false;
       if (this.mode === 'semantic') return this.likeEntity ? this.runSemantic({ like: this.likeEntity }) : this.runSemantic();
       const query = (this.q || '').trim();
       if (query.length < 2) {
@@ -230,13 +236,7 @@ export function registerSearchCard() {
       this.loading = true;
       this.errorMessage = '';
 
-      const params = new URLSearchParams({
-        q: query,
-        kind: this.activeKinds.join(','),
-        limit: '50',
-      });
-      const bookId = Alpine.store('nav').selectedBookId;
-      if (this.scopeMode === 'book' && bookId) params.set('book_id', String(bookId));
+      const params = this._ftsParams(query);
 
       if (isBrowserOffline()) return this._runOfflineSearch(query, seq);
       this.offlineInfo = null;
@@ -259,6 +259,7 @@ export function registerSearchCard() {
         const data = await r.json();
         this.hits = Array.isArray(data.hits) ? data.hits : [];
         this.fallback = !!data.fallback;
+        this.more = !!data.more;
       } catch (e) {
         if (e.name === 'AbortError') return;
         if (seq !== this._searchSeq) return;
@@ -268,6 +269,48 @@ export function registerSearchCard() {
         this.hits = [];
       } finally {
         if (seq === this._searchSeq) this.loading = false;
+      }
+    },
+
+    _ftsParams(query) {
+      const params = new URLSearchParams({
+        q: query,
+        kind: this.activeKinds.join(','),
+        limit: String(FTS_PAGE_SIZE),
+      });
+      const bookId = Alpine.store('nav').selectedBookId;
+      if (this.scopeMode === 'book' && bookId) params.set('book_id', String(bookId));
+      return params;
+    },
+
+    // Nächste Seite der Volltext-Treffer anhängen. Eine neue Suche dazwischen
+    // (anderer _searchSeq) verwirft die Antwort.
+    async loadMore() {
+      if (this.mode !== 'fts' || !this.more || this.loadingMore || this.loading) return;
+      const query = (this.q || '').trim();
+      const seq = this._searchSeq;
+      const params = this._ftsParams(query);
+      params.set('offset', String(this.hits.length));
+      this.loadingMore = true;
+      try {
+        const r = await fetch('/search?' + params.toString(), {
+          credentials: 'same-origin',
+          signal: this._abortCtrl?.signal,
+        });
+        if (seq !== this._searchSeq) return;
+        if (!r.ok) { this.errorMessage = tRaw('search.failed'); this.more = false; return; }
+        const data = await r.json();
+        if (seq !== this._searchSeq) return;
+        const seen = new Set(this.hits.map(h => h.kind + ':' + h.entity_id));
+        const next = (Array.isArray(data.hits) ? data.hits : []).filter(h => !seen.has(h.kind + ':' + h.entity_id));
+        this.hits = this.hits.concat(next);
+        this.more = !!data.more && next.length > 0;
+      } catch (e) {
+        if (e.name === 'AbortError' || seq !== this._searchSeq) return;
+        this.errorMessage = tRaw('search.failed');
+        this.more = false;
+      } finally {
+        if (seq === this._searchSeq) this.loadingMore = false;
       }
     },
 
@@ -306,6 +349,7 @@ export function registerSearchCard() {
     // Semantische Suche (Embedding-basiert, immer buch-skopiert). Zwei Modi:
     // Freitext (q) oder „ähnliche Stellen zu Entität" (opts.like = {kind,id,label}).
     async runSemantic({ like = null } = {}) {
+      this.more = false;
       const bookId = Alpine.store('nav').selectedBookId;
       if (!this.$store.config?.semanticSearchEnabled || !bookId) {
         this.hits = []; this.notIndexed = false; this.loading = false; return;

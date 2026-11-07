@@ -51,13 +51,13 @@ test('Szenen: auch die seitengebundenen Szenen desselben Kapitels', async ({ pag
   await expect(page.locator('[data-test="szene-13"]')).toHaveAttribute('data-ctx', 'chapter');
 });
 
-test('Szene einer anderen Seite nennt diese Seite beim Namen', async ({ page }) => {
+test('Szene einer anderen Seite verweist auf diese Seite', async ({ page }) => {
   await setup(page);
-  // t() ist im Harness die Identitaet mit Params — der Seitenname muss drin sein.
-  await expect(page.locator('[data-test="szene-13"]'))
-    .toHaveAttribute('data-where', /reference\.ctx\.onOtherPage.*Seite Acht/);
-  // Szenen dieser Seite tragen keine Fremdseiten-Angabe.
-  await expect(page.locator('[data-test="szene-11"]')).toHaveAttribute('data-where', '');
+  // Die Karte rendert die IDs als Abschnitts-Referenzen (x-entity-ref).
+  await expect(page.locator('[data-test="szene-13"]')).toHaveAttribute('data-pages', '8');
+  // Szenen dieser Seite und kapitelweite Szenen tragen keine Fremdseiten-Angabe.
+  await expect(page.locator('[data-test="szene-11"]')).toHaveAttribute('data-pages', '');
+  await expect(page.locator('[data-test="szene-12"]')).toHaveAttribute('data-pages', '');
 });
 
 test('Figuren: Kapitel-Index UND Namens-Treffer, nicht das eine statt des anderen', async ({ page }) => {
@@ -94,9 +94,9 @@ test('Ereignisse: Anker sind IDs — ein gleichnamiges Fremdkapitel zaehlt nicht
   await expect(page.locator('[data-test="ereignis-32"]')).toHaveAttribute('data-ctx', 'chapter');
   await expect(page.locator('[data-test="ereignis-33"]')).toHaveAttribute('data-ctx', 'chapter');
   // Nur das Ereignis mit fremdem Seitenanker nennt die Seite.
-  await expect(page.locator('[data-test="ereignis-33"]'))
-    .toHaveAttribute('data-where', /reference\.ctx\.onOtherPage.*Seite Acht/);
-  await expect(page.locator('[data-test="ereignis-32"]')).toHaveAttribute('data-where', '');
+  await expect(page.locator('[data-test="ereignis-33"]')).toHaveAttribute('data-pages', '8');
+  await expect(page.locator('[data-test="ereignis-32"]')).toHaveAttribute('data-pages', '');
+  await expect(page.locator('[data-test="ereignis-31"]')).toHaveAttribute('data-pages', '');
 });
 
 test('Recherche: Seiten-Verknuepfung vor Kapitel-Verknuepfung, Herkunft ausgewiesen', async ({ page }) => {

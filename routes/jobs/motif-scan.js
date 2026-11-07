@@ -97,7 +97,7 @@ async function _scanMotif(bookId, motif, useSemantic, signalFn, topK, userEmail 
     const q = _triggerQuery(term);
     if (!q) continue;
     let r;
-    try { r = searchIndex.query(q, { bookId, kinds: SCAN_KINDS, limit: topK }); }
+    try { r = searchIndex.query(q, { bookId, kinds: SCAN_KINDS, limit: topK, user: userEmail }); }
     catch (e) { logger.warn(`[motiv-scan] FTS "${term}" fehlgeschlagen: ${e.message}`); continue; }
     for (const h of (r.hits || [])) {
       if (!own(h)) continue;

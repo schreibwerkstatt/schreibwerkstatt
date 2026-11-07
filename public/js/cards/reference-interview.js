@@ -36,18 +36,23 @@ export const referenceInterviewMethods = {
     this.refIvSegments = [];
     this.refIvSpeakers = {};
     this.refIvError = '';
+    this.refIvQuery = '';
     this.refIvLoading = true;
+    // Inzwischen eine andere Zeile auf- oder diese zugeklappt (oder Reset beim
+    // Buchwechsel): die Antwort gehört nicht mehr in die offene Zeile.
+    const superseded = () => this.refIvOpenId !== itemId;
     try {
       const d = await fetchJson(`/research/${itemId}/transcript`);
+      if (superseded()) return;
       this.refIvSegments = d.segments || [];
       this.refIvSpeakers = d.speakers || {};
-      this.refIvStatus = d.transcript?.status || null;
     } catch (e) {
+      if (superseded()) return;
       this.refIvError = window.__app.t(
         e.status === 404 ? 'interview.noTranscript' : 'interview.error.generic',
       );
     } finally {
-      this.refIvLoading = false;
+      if (!superseded()) this.refIvLoading = false;
     }
   },
 
@@ -98,7 +103,6 @@ export const referenceInterviewState = () => ({
   refIvOpenId: null,
   refIvSegments: [],
   refIvSpeakers: {},
-  refIvStatus: null,
   refIvQuery: '',
   refIvLoading: false,
   refIvBusyId: null,

@@ -21,16 +21,20 @@
     <button type="button" class="btn-card-close" @click="$app.toggleReferenceCard()" :data-tip="$app.t('common.close')" :aria-label="$app.t('common.close')"><svg class="icon" aria-hidden="true"><use href="/icons.svg#x"/></svg></button>
   </div>
 
+  <!-- Der Eyebrow nennt den Abschnitt bzw. «Ganzes Buch»; der Hinweis sagt,
+       was der Kontext umfasst (Abschnitt + Kapitel), statt den Namen zu wiederholen. -->
   <div class="card-hint card-hint--sm card-section" x-text="referenceScope === 'page'
-        ? (referenceHasContext() ? $app.t('reference.scope.contextNote', { page: $app.currentPage?.name || '' }) : $app.t('reference.scope.noContext'))
+        ? (referenceHasContext()
+            ? (_currentChapterName() ? $app.t('reference.scope.contextNote', { chapter: _currentChapterName() }) : $app.t('reference.scope.contextNoteSolo'))
+            : $app.t('reference.scope.noContext'))
         : $app.t('reference.scope.bookNote')"></div>
 
   <!-- Tabs (DESIGN.md .tabs / Alpine.data('tabs')). Nur der Tablist im tabs-
        Scope; die Panels lesen referenceTab direkt aus der Karte. -->
-  <div class="card-section" x-data="tabs(['plan','figuren','orte','szenen','ereignisse','recherche','quellen','verwandt'])"
+  <div class="card-section" x-data="tabs(referenceTabs())"
        x-modelable="value" x-model="referenceTab">
     <div class="tabs tabs--scrollable" x-bind="tablist">
-      <button class="tabs-btn" x-bind="tabBtn('plan')" x-show="referenceHasPlan()">
+      <button class="tabs-btn" x-bind="tabBtn('plan')" x-show="referenceTabVisible('plan')">
         <span x-text="$app.t('reference.tab.plan')"></span>
         <span class="reference-tab-count" x-show="referenceCount('plan') > 0" x-text="referenceCount('plan')"></span>
       </button>
@@ -54,11 +58,11 @@
         <span x-text="$app.t('reference.tab.recherche')"></span>
         <span class="reference-tab-count" x-show="referenceCount('recherche') > 0" x-text="referenceCount('recherche')"></span>
       </button>
-      <button class="tabs-btn" x-bind="tabBtn('quellen')" x-show="referenceHasSources()">
+      <button class="tabs-btn" x-bind="tabBtn('quellen')" x-show="referenceTabVisible('quellen')">
         <span x-text="$app.t('reference.tab.quellen')"></span>
         <span class="reference-tab-count" x-show="referenceCount('quellen') > 0" x-text="referenceCount('quellen')"></span>
       </button>
-      <button class="tabs-btn" x-bind="tabBtn('verwandt')" x-show="$store.config.semanticSearchEnabled">
+      <button class="tabs-btn" x-bind="tabBtn('verwandt')" x-show="referenceTabVisible('verwandt')">
         <span x-text="$app.t('reference.tab.verwandt')"></span>
         <span class="reference-tab-count" x-show="referenceCount('verwandt') > 0" x-text="referenceCount('verwandt')"></span>
       </button>
@@ -117,7 +121,14 @@
             <span x-show="s.refCtx === 'chapter'" class="tag" :data-tip="$app.t('reference.ctx.chapterTip')" x-text="$app.t('reference.ctx.chapter')"></span>
           </div>
           <div class="reference-row-desc" x-show="s.zusammenfassung || s.beschreibung" x-text="s.zusammenfassung || s.beschreibung"></div>
-          <div class="reference-row-sub" x-show="referenceRowWhere(s)" x-text="referenceRowWhere(s)"></div>
+          <div class="reference-row-sub reference-row-refs" x-show="referenceRowPageIds(s).length">
+            <span x-text="$app.t('reference.ctx.onPages')"></span>
+            <span class="entity-refs">
+              <template x-for="pid in referenceRowPageIds(s)" :key="'pg-' + pid">
+                <button type="button" class="entity-ref" x-entity-ref="{ type: 'seite', id: pid }"></button>
+              </template>
+            </span>
+          </div>
         </div>
       </template>
     </div>
@@ -127,15 +138,30 @@
       <template x-if="referenceEreignisse().length === 0">
         <div class="muted-msg muted-msg--sm muted-msg--block" x-text="$app.t('reference.empty.ereignisse')"></div>
       </template>
-      <template x-for="(ev, ei) in referenceEreignisse()" :key="'re-' + ei">
+      <template x-for="(ev, ei) in referenceEreignisse()" :key="'re-' + (ev.id ?? ei)">
         <div class="reference-row">
           <div class="reference-row-head">
             <span class="reference-row-title" x-text="ev.ereignis"></span>
             <span x-show="referenceEventDate(ev)" class="tag" x-text="referenceEventDate(ev)"></span>
             <span x-show="ev.refCtx === 'chapter'" class="tag" :data-tip="$app.t('reference.ctx.chapterTip')" x-text="$app.t('reference.ctx.chapter')"></span>
           </div>
-          <div class="reference-row-sub" x-show="ev.kapitel" x-text="Array.isArray(ev.kapitel) ? ev.kapitel.join(', ') : ev.kapitel"></div>
-          <div class="reference-row-sub" x-show="referenceRowWhere(ev)" x-text="referenceRowWhere(ev)"></div>
+          <!-- Kapitel als Anzeige-Referenz (static): ein Sprung in die
+               Kapitelbewertung schlösse den Editor, neben dem der Slot steht. -->
+          <div class="reference-row-sub reference-row-refs" x-show="referenceEventChapters(ev).length">
+            <span class="entity-refs">
+              <template x-for="(k, ki) in referenceEventChapters(ev)" :key="'k-' + ki">
+                <span class="entity-ref" x-entity-ref="{ ...k, static: true }"></span>
+              </template>
+            </span>
+          </div>
+          <div class="reference-row-sub reference-row-refs" x-show="referenceRowPageIds(ev).length">
+            <span x-text="$app.t('reference.ctx.onPages')"></span>
+            <span class="entity-refs">
+              <template x-for="pid in referenceRowPageIds(ev)" :key="'pg-' + pid">
+                <button type="button" class="entity-ref" x-entity-ref="{ type: 'seite', id: pid }"></button>
+              </template>
+            </span>
+          </div>
         </div>
       </template>
     </div>
@@ -143,7 +169,9 @@
     <!-- Recherche -->
     <div x-show="referenceTab === 'recherche'" class="reference-panel">
       <div x-show="referenceRechercheLoading" class="card-status" x-text="$app.t('reference.loading')"></div>
-      <template x-if="!referenceRechercheLoading && referenceRechercheItems().length === 0">
+      <div class="search-status search-status--error" x-show="referenceRechercheError && !referenceRechercheLoading"
+           x-text="referenceRechercheError"></div>
+      <template x-if="!referenceRechercheLoading && !referenceRechercheError && referenceRechercheItems().length === 0">
         <div class="muted-msg muted-msg--sm muted-msg--block" x-text="$app.t('reference.empty.recherche')"></div>
       </template>
       <template x-for="item in referenceRechercheItems()" :key="'rr-' + item.id">
@@ -184,62 +212,22 @@
           <div class="reference-row-head">
             <span class="reference-row-title" x-text="referenceQuelleTitle(row)"></span>
             <span class="tag" x-text="referenceQuelleCount(row)"></span>
+            <span x-show="row.refCtx === 'chapter'" class="tag" :data-tip="$app.t('reference.ctx.chapterTip')" x-text="$app.t('reference.ctx.chapter')"></span>
           </div>
           <div class="reference-row-sub" x-show="referenceQuelleMeta(row)" x-text="referenceQuelleMeta(row)"></div>
-          <div class="reference-row-sub" x-show="referenceQuelleWhere(row)" x-text="referenceQuelleWhere(row)"></div>
+          <div class="reference-row-sub reference-row-refs" x-show="referenceQuellePages(row).length">
+            <span x-text="$app.t('reference.quellen.citedIn')"></span>
+            <span class="entity-refs">
+              <template x-for="pid in referenceQuellePages(row)" :key="'qp-' + pid">
+                <button type="button" class="entity-ref" x-entity-ref="{ type: 'seite', id: pid }"></button>
+              </template>
+            </span>
+            <span x-show="referenceQuelleMore(row)" x-text="referenceQuelleMore(row)"></span>
+          </div>
         </div>
       </template>
     </div>
 
-    <!-- Verwandte Stellen (Semantik) — auf Knopfdruck ähnliche bestehende Seiten
-         zur ganzen Seite oder zum markierten Absatz. Read-only, rückwärtsgewandt. -->
-    <div x-show="referenceTab === 'verwandt'" class="reference-panel">
-      <template x-if="!referenceHasContext()">
-        <div class="muted-msg muted-msg--sm muted-msg--block" x-text="$app.t('reference.verwandt.noPage')"></div>
-      </template>
-      <template x-if="referenceHasContext()">
-        <div class="display-contents">
-          <div class="verwandt-controls">
-            <div class="seg-toggle">
-              <button :aria-pressed="verwandtBasis === 'page'" type="button" :class="{ 'seg-toggle--active': verwandtBasis === 'page' }" @click="verwandtBasis = 'page'" x-text="$app.t('reference.verwandt.basisPage')"></button>
-              <button :aria-pressed="verwandtBasis === 'absatz'" type="button" :class="{ 'seg-toggle--active': verwandtBasis === 'absatz' }" @click="verwandtBasis = 'absatz'" x-text="$app.t('reference.verwandt.basisAbsatz')"></button>
-            </div>
-            <button type="button" class="icon-btn verwandt-search-btn" @click="runVerwandt()" :disabled="verwandtLoading"
-                    :data-tip="verwandtLoading ? $app.t('reference.verwandt.searching') : $app.t('reference.verwandt.search')"
-                    :aria-label="verwandtLoading ? $app.t('reference.verwandt.searching') : $app.t('reference.verwandt.search')">
-              <span x-show="verwandtLoading" class="spinner" aria-hidden="true"></span>
-              <svg x-show="!verwandtLoading" class="icon" aria-hidden="true"><use href="/icons.svg#search"/></svg>
-            </button>
-          </div>
-          <div class="card-hint card-hint--sm" x-show="verwandtBasis === 'absatz'" x-text="$app.t('reference.verwandt.absatzHint')"></div>
-
-          <div class="verwandt-loading" x-show="verwandtLoading" aria-live="polite">
-            <span class="spinner" aria-hidden="true"></span>
-            <span x-text="$app.t('reference.verwandt.searching')"></span>
-          </div>
-
-          <div class="search-status search-status--error" x-show="verwandtError && !verwandtLoading" x-text="verwandtError"></div>
-          <div class="muted-msg muted-msg--sm muted-msg--block" x-show="verwandtNotIndexed && !verwandtLoading" x-text="$app.t('reference.verwandt.notIndexed')"></div>
-          <div class="card-hint card-hint--sm" x-show="verwandtStale() && !verwandtLoading" x-text="$app.t('reference.verwandt.stale')"></div>
-
-          <template x-if="!verwandtSearched && !verwandtLoading">
-            <div class="muted-msg muted-msg--sm muted-msg--block" x-text="$app.t('reference.verwandt.prompt')"></div>
-          </template>
-          <template x-if="verwandtSearched && !verwandtLoading && !verwandtError && !verwandtNotIndexed && !verwandtStale() && verwandtResults().length === 0">
-            <div class="muted-msg muted-msg--sm muted-msg--block" x-text="$app.t('reference.verwandt.empty')"></div>
-          </template>
-
-          <template x-for="hit in verwandtResults()" :key="'vw-' + hit.entity_id">
-            <div class="reference-row verwandt-hit internal-link" @click="activateVerwandt(hit)">
-              <div class="reference-row-head">
-                <span class="reference-row-title" x-text="hit.title || $app.t('search.untitled')"></span>
-                <span class="tag" x-text="verwandtScoreLabel(hit)"></span>
-              </div>
-              <div class="reference-row-desc" x-show="hit.snippet" x-html="hit.snippet"></div>
-            </div>
-          </template>
-        </div>
-      </template>
-    </div>
+    <!-- @include reference-verwandt -->
   </div>
 </div>

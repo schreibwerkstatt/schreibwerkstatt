@@ -5,7 +5,7 @@
 // __SHELL_BUILD: content hash over all listed assets → drives SHELL_CACHE.
 // __SHELL_MANIFEST: the coherent set precached atomically at SW install.
 // __VENDOR_SET: current vendor/ + fonts/ files — VENDOR_CACHE prune list.
-self.__SHELL_BUILD = "e1b14039a492658e";
+self.__SHELL_BUILD = "9209cabfba1c3c91";
 self.__SHELL_MANIFEST = [
   "/css/admin/admin-backup.css",
   "/css/admin/admin-home.css",
@@ -1220,6 +1220,7 @@ self.__SHELL_MANIFEST = [
   "/partials/recherche.html",
   "/partials/reference-oton.html",
   "/partials/reference-plan.html",
+  "/partials/reference-verwandt.html",
   "/partials/reference.html",
   "/partials/relation-conflicts-list.html",
   "/partials/search.html",

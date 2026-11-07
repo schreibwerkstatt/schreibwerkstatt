@@ -26,7 +26,7 @@
     <div data-test="count-szenen" x-text="referenceCount('szenen')"></div>
     <template x-for="s in referenceSzenen()" :key="'rs-' + s.id">
       <div :data-test="'szene-' + s.id" :data-ctx="s.refCtx || ''"
-           :data-where="referenceRowWhere(s)" x-text="s.titel"></div>
+           :data-pages="referenceRowPageIds(s).join(',')" x-text="s.titel"></div>
     </template>
 
     <div data-test="count-figuren" x-text="referenceCount('figuren')"></div>
@@ -37,7 +37,7 @@
     <div data-test="count-ereignisse" x-text="referenceCount('ereignisse')"></div>
     <template x-for="ev in referenceEreignisse()" :key="'re-' + ev.id">
       <div :data-test="'ereignis-' + ev.id" :data-ctx="ev.refCtx || ''"
-           :data-where="referenceRowWhere(ev)" x-text="ev.ereignis"></div>
+           :data-pages="referenceRowPageIds(ev).join(',')" x-text="ev.ereignis"></div>
     </template>
 
     <div data-test="count-recherche" x-text="referenceCount('recherche')"></div>

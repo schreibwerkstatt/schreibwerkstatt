@@ -1,0 +1,26 @@
+{
+  "version": "5.8.13",
+  "date": "2026-11-07",
+  "entries": [
+    {
+      "kind": "verbessert",
+      "de": "Suche: ein Wort findet jetzt auch seine Verlängerungen («Anna» findet «Annas», «Hans» findet «Hans-Peter»). Mit \"Anführungszeichen\" suchst du wörtlich, mit -Wort schliesst du ein Wort aus.",
+      "en": "Search: a word now also finds its longer forms (\"Anna\" finds \"Annas\", \"Hans\" finds \"Hans-Peter\"). Put words in \"quotes\" to search literally, or write -word to exclude a word."
+    },
+    {
+      "kind": "verbessert",
+      "de": "Suche: bei vielen Ergebnissen holt der Knopf «Weitere Treffer laden» die nächsten, statt die Liste abzuschneiden.",
+      "en": "Search: with many results, the \"Load more results\" button fetches the next ones instead of cutting the list off."
+    },
+    {
+      "kind": "verbessert",
+      "de": "Referenz neben dem Editor: Szenen und Ereignisse nennen die Abschnitte, in denen sie vorkommen, als Links zum Anklicken. Der Hinweis oben sagt, welches Kapitel mitgezählt wird.",
+      "en": "Reference panel next to the editor: scenes and events list the sections they appear in as clickable links. The note at the top tells you which chapter is included."
+    },
+    {
+      "kind": "behoben",
+      "de": "Suche in einem gemeinsamen Buch: Mitautoren sahen in den Treffern auch die Figuren, Orte und privaten Ideen der anderen. Jetzt findest du nur deine eigenen.",
+      "en": "Search in a shared book: co-authors saw each other's characters, places and private ideas in the results. Now you only find your own."
+    }
+  ]
+}

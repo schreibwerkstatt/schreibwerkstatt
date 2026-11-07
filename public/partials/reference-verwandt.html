@@ -1,0 +1,53 @@
+<!--
+  Verwandt-Reiter im Referenz-Panel neben dem Notebook-Editor: ähnliche
+  bestehende Abschnitte zum offenen Abschnitt oder zum markierten Absatz
+  (semantische Suche). Fragment-Include (Marker @include reference-verwandt in
+  reference.html), Methoden in cards/reference-card.js. Read-only.
+-->
+<!-- Verwandte Stellen (Semantik) — auf Knopfdruck ähnliche bestehende Seiten
+     zur ganzen Seite oder zum markierten Absatz. Read-only, rückwärtsgewandt. -->
+<div x-show="referenceTab === 'verwandt'" class="reference-panel">
+  <template x-if="!referenceHasContext()">
+    <div class="muted-msg muted-msg--sm muted-msg--block" x-text="$app.t('reference.verwandt.noPage')"></div>
+  </template>
+  <template x-if="referenceHasContext()">
+    <div class="display-contents">
+      <div class="verwandt-controls">
+        <div class="seg-toggle">
+          <button :aria-pressed="verwandtBasis === 'page'" type="button" :class="{ 'seg-toggle--active': verwandtBasis === 'page' }" @click="verwandtBasis = 'page'" x-text="$app.t('reference.verwandt.basisPage')"></button>
+          <button :aria-pressed="verwandtBasis === 'absatz'" type="button" :class="{ 'seg-toggle--active': verwandtBasis === 'absatz' }" @click="verwandtBasis = 'absatz'" x-text="$app.t('reference.verwandt.basisAbsatz')"></button>
+        </div>
+        <button type="button" class="icon-btn verwandt-search-btn" @click="runVerwandt()" :disabled="verwandtLoading"
+                :data-tip="verwandtLoading ? $app.t('reference.verwandt.searching') : $app.t('reference.verwandt.search')"
+                :aria-label="verwandtLoading ? $app.t('reference.verwandt.searching') : $app.t('reference.verwandt.search')">
+          <span x-show="verwandtLoading" class="spinner" aria-hidden="true"></span>
+          <svg x-show="!verwandtLoading" class="icon" aria-hidden="true"><use href="/icons.svg#search"/></svg>
+        </button>
+      </div>
+      <div class="card-hint card-hint--sm" x-show="verwandtBasis === 'absatz'" x-text="$app.t('reference.verwandt.absatzHint')"></div>
+
+      <div class="card-status" x-show="verwandtLoading" aria-live="polite" x-text="$app.t('reference.verwandt.searching')"></div>
+
+      <div class="search-status search-status--error" x-show="verwandtError && !verwandtLoading" x-text="verwandtError"></div>
+      <div class="muted-msg muted-msg--sm muted-msg--block" x-show="verwandtNotIndexed && !verwandtLoading" x-text="$app.t('reference.verwandt.notIndexed')"></div>
+
+      <template x-if="!verwandtSearched && !verwandtLoading">
+        <div class="muted-msg muted-msg--sm muted-msg--block" x-text="$app.t('reference.verwandt.prompt')"></div>
+      </template>
+      <template x-if="verwandtSearched && !verwandtLoading && !verwandtError && !verwandtNotIndexed && verwandtResults().length === 0">
+        <div class="muted-msg muted-msg--sm muted-msg--block" x-text="$app.t('reference.verwandt.empty')"></div>
+      </template>
+
+      <template x-for="hit in verwandtResults()" :key="'vw-' + hit.entity_id">
+        <div class="reference-row reference-row--clickable internal-link" @click="activateVerwandt(hit)"
+             :data-tip="$app.t('reference.verwandt.openTip')">
+          <div class="reference-row-head">
+            <span class="reference-row-title" x-text="hit.title || $app.t('search.untitled')"></span>
+            <span class="tag" x-text="verwandtScoreLabel(hit)"></span>
+          </div>
+          <div class="reference-row-desc" x-show="hit.snippet" x-html="hit.snippet"></div>
+        </div>
+      </template>
+    </div>
+  </template>
+</div>

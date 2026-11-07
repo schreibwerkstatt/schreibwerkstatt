@@ -220,6 +220,12 @@
 .search-status--error { color: var(--color-schwach-text); }
 .search-status--meta { color: var(--color-muted); font-size: var(--font-size-mini); }
 
+.search-more {
+  display: flex;
+  justify-content: center;
+  padding-top: var(--space-sm);
+}
+
 .search-results {
   list-style: none;
   padding: 0;

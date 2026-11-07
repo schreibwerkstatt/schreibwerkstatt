@@ -10,8 +10,8 @@
 //
 // Geprüfte Invarianten:
 //   1. Das Tab erscheint nur, wenn das Buch überhaupt Quellen hat.
-//   2. Seiten-Scope zeigt die auf DIESER Seite belegte Quelle („Auf dieser Seite")
-//      und nicht die eines anderen Kapitels.
+//   2. Seiten-Scope zeigt die auf DIESER Seite belegte Quelle (unmarkiert, ohne
+//      «im Kapitel») und nicht die eines anderen Kapitels.
 //   3. Buch-Scope zeigt beide.
 //   4. Klick setzt `#book/:id/quellen/<sourceId>`, öffnet das Quellenverzeichnis
 //      und fokussiert die Zeile.
@@ -104,7 +104,9 @@ test('Referenz-Slot: Quellen-Tab zeigt Belege der Seite und verlinkt ins Quellen
   await openQuellenTab(page, idx.first);
   const rowA = rowByTitle(page, TITLE_A);
   await expect(rowA).toBeVisible();
-  await expect(rowA).toContainText('In diesem Abschnitt');
+  // Auf der offenen Seite belegt → unmarkiert (nur Kapitel-Zeilen tragen «im Kapitel»).
+  // (x-show: das Tag steht versteckt im DOM, darum Sichtbarkeit statt Anzahl.)
+  await expect(rowA.locator('.tag', { hasText: 'im Kapitel' })).toBeHidden();
   await expect(rowByTitle(page, TITLE_B)).toHaveCount(0);
 
   // Invariante 3: Buch-Scope zeigt beide (Scope-Umschalter im Karten-Header).

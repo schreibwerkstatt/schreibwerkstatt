@@ -58,8 +58,8 @@ function _toOcc(kind, entityId, score, snippet, source) {
 //
 // `userEmail` (gesetzt = Besitz-Filter): Szenen sind Analyse-Daten pro User, der
 // Embedding-/FTS-Index hängt nur am Buch — Szenen eines Mitautors fallen weg. Der
-// User-Scope greift schon in der Suche (vor dem topK-Schnitt); `own` bleibt als
-// zweite Schicht und für den FTS-Fallback.
+// User-Scope greift schon in der Suche (vor dem topK-Schnitt, semantisch wie
+// FTS); `own` bleibt als zweite Schicht.
 //
 // `opts.snippetFor` (hit → Auszug | null): Live-Auszug (lib/anchor-snippet.js),
 // null = Stelle steht so nicht mehr auf der Seite → Treffer verworfen. Default:
@@ -90,7 +90,7 @@ async function _anchorBeat(bookId, beat, useSemantic, signalFn, minScore = 0, op
     // Ohne Embedding-Backend: wörtliche FTS über den Beat-Titel (kürzer, präziser
     // als die ganze Beschreibung als Textblob).
     let r;
-    try { r = searchIndex.query(beat.titel || '', { bookId, kinds: SCAN_KINDS, limit: TOP_K }); }
+    try { r = searchIndex.query(beat.titel || '', { bookId, kinds: SCAN_KINDS, limit: TOP_K, ...(scoped ? { user: opts.userEmail ?? null } : {}) }); }
     catch (e) { logger.warn(`[beat-anchor] FTS "${beat.titel}" fehlgeschlagen: ${e.message}`); return []; }
     for (const h of (r.hits || [])) {
       if (!own(h)) continue;

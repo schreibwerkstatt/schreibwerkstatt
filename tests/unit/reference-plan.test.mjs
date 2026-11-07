@@ -1,5 +1,5 @@
 // Plan-Reiter im Referenz-Panel: Board-Reihenfolge + Kontext-Regel.
-// Ein Beat haengt am KAPITEL; „hier im Text" (refCtx 'page') kommt allein aus
+// Ein Beat haengt am KAPITEL; „in diesem Abschnitt" (refCtx 'page') kommt allein aus
 // der Beat-Verankerung (occ_top[].page_id), nie aus dem Plan selbst.
 import test from 'node:test';
 import assert from 'node:assert/strict';

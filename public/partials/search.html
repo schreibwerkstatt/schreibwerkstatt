@@ -86,7 +86,7 @@
   <div class="search-status" x-show="mode === 'semantic' && notIndexed && !loading && !errorMessage" x-text="$app.t('search.semantic.indexMissing')"></div>
   <div class="search-status" x-show="!loading && !errorMessage && !(mode === 'semantic' && notIndexed) && (q.length >= 2 || likeEntity) && hits.length === 0" x-text="$app.t('search.empty')"></div>
   <div class="search-status search-status--meta" x-show="!loading && hits.length"
-       x-text="$app.t('search.results.count', { n: hits.length })"></div>
+       x-text="more ? $app.t('search.results.countMore', { n: hits.length }) : $app.tn('search.results.count', hits.length)"></div>
 
   <ul class="search-results" x-show="hits.length">
     <template x-for="hit in hits" :key="hit.kind + ':' + hit.entity_id + ':' + (hit.chunk_ix ?? '')">
@@ -101,4 +101,8 @@
       </div></li>
     </template>
   </ul>
+  <div class="search-more" x-show="more && !loading">
+    <button type="button" class="btn-toggle-saved btn-toggle-saved--off" @click="loadMore()" :disabled="loadingMore"
+            x-text="loadingMore ? $app.t('search.loadingMore') : $app.t('search.loadMore')"></button>
+  </div>
 </div>

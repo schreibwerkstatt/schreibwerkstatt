@@ -175,3 +175,29 @@ test('buildRanges: Aliase via toEntitiesList → Vorname/Nachname matchen', () =
   assert.ok(out.every(r => r.id === 1));
   assert.deepEqual(out.map(r => r.name).sort(), ['Brunner', 'Lea']);
 });
+
+// containsWholeWord: Namensfund des Referenz-Slots — dieselbe Wortgrenzen-Regel
+// wie buildRanges, damit „im Abschnitt" und Editor-Highlight übereinstimmen.
+const { containsWholeWord } = await import('../../public/js/editor/notebook/entities.js');
+
+test('containsWholeWord: ganzes Wort, case-insensitiv', () => {
+  assert.equal(containsWholeWord('dann kam anna herein', 'Anna'), true);
+  assert.equal(containsWholeWord('Anna.', 'anna'), true);
+  assert.equal(containsWholeWord('«Anna»', 'Anna'), true);
+});
+
+test('containsWholeWord: kein Treffer im Wortinneren', () => {
+  assert.equal(containsWholeWord('die annahme war falsch', 'Anna'), false);
+  assert.equal(containsWholeWord('in der kapelle', 'Ella'), false);
+  assert.equal(containsWholeWord('anna-lena lachte', 'Anna'), false, 'Bindestrich zählt als Wortzeichen');
+});
+
+test('containsWholeWord: späteres Vorkommen nach Fehltreffer wird gefunden', () => {
+  assert.equal(containsWholeWord('annahme, dann anna', 'Anna'), true);
+});
+
+test('containsWholeWord: leere Eingaben', () => {
+  assert.equal(containsWholeWord('', 'Anna'), false);
+  assert.equal(containsWholeWord('anna', ''), false);
+  assert.equal(containsWholeWord('anna', null), false);
+});
