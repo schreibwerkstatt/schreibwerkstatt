@@ -452,9 +452,9 @@ export const keydownMethods = {
   // beim Merge über so eine Grenze die berechneten CSS-Werte als Inline-`style`
   // ein und lässt den Wrapper teils ganz verschwinden. Vier symmetrische Fälle,
   // je nachdem ob der Caret innerhalb des Wrappers oder im Nachbarabsatz sitzt.
-  // Merges INNERHALB eines Wrappers (Zeile 2 auf Zeile 1) bleiben beim Default —
-  // die sind im Notebook nachweislich sauber (im Focus-Editor nicht, dort
-  // übernimmt `_kbFocusMerge`).
+  // Merges INNERHALB eines Wrappers (Zeile 2 auf Zeile 1) macht das Notebook
+  // ebenfalls selbst: Chromium (ab 158) bäckt auch dort Inline-`style` ein. Im
+  // Focus-Editor übernimmt diesen Fall `_kbFocusMerge`.
   _kbBlockBoundary(e, app) {
     if (e.key !== 'Backspace' && e.key !== 'Delete') return false;
     const editEl = getEditEl();
@@ -477,11 +477,13 @@ export const keydownMethods = {
   // Caret INNERHALB des Wrappers. Am Anfang des ersten Kind-Blocks verlässt
   // Backspace den Wrapper (Inhalt wird zum Absatz davor) — dieselbe Regel wie
   // in der Checkbox-Liste. Am Ende des letzten Kind-Blocks zieht Delete den
-  // Folgeabsatz herein.
+  // Folgeabsatz herein. Dazwischen (nur Notebook) zwei Kind-Blöcke von Hand
+  // zusammenführen.
   _kbBoundaryInside(e, app, range, block, wrapper) {
     const inner = wrapperInnerBlocks(wrapper);
     const idx = inner.indexOf(block);
     if (idx === -1) return false;
+    if (!app.focusActive && this._kbMergeInsideWrapper(e, app, range, block, inner, idx)) return true;
     if (e.key === 'Backspace') {
       if (idx > 0 || !caretAtBlockStart(range, block)) return false;
       e.preventDefault();
@@ -496,6 +498,22 @@ export const keydownMethods = {
     if (!after || !MERGE_BLOCK_TAGS.has(after.tagName)) return false;
     e.preventDefault();
     this._mergeBlocksManually(block, after);
+    app._markEditDirty?.();
+    return true;
+  },
+
+  // Zeile auf Zeile innerhalb desselben Wrappers: Backspace am Anfang eines
+  // nicht-ersten bzw. Delete am Ende eines nicht-letzten Kind-Blocks.
+  _kbMergeInsideWrapper(e, app, range, block, inner, idx) {
+    if (e.key === 'Backspace') {
+      if (idx === 0 || !caretAtBlockStart(range, block)) return false;
+      e.preventDefault();
+      this._mergeBlocksManually(inner[idx - 1], block);
+    } else {
+      if (idx === inner.length - 1 || !caretAtBlockEnd(range, block)) return false;
+      e.preventDefault();
+      this._mergeBlocksManually(block, inner[idx + 1]);
+    }
     app._markEditDirty?.();
     return true;
   },

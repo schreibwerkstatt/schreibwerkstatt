@@ -20,7 +20,8 @@
 //   2. Kein `<figure>` verliert sein `<img>` (Void-Element = Struktur, wie die
 //      Checkbox in `ul.todo`).
 //   3. Backspace am Anfang des ersten Kind-Blocks verlässt den Wrapper.
-//   4. Merges INNERHALB eines Wrappers bleiben beim Default (die sind sauber).
+//   4. Merges INNERHALB eines Wrappers ergeben dasselbe Markup wie der Default,
+//      nur ohne Inline-`style` (Chromium bäckt ihn ab Version 158 auch dort ein).
 //   5. Über die Wrapper-Grenze verschwindet kein Block spurlos.
 
 const { test, expect } = require('../e2e/_helpers/fixtures');
@@ -110,7 +111,7 @@ const CASES = [
   { label: 'poem: BS in der ersten Zeile verlässt das Gedicht',
     html: POEM, target: '.poem p:first-child', pos: 'start', key: 'Backspace',
     expected: '<p>Vorher</p><p>Zeile eins</p><div class="poem"><p>Zeile zwei</p></div><p>Nachher</p>' },
-  { label: 'poem: BS in der zweiten Zeile merged INNERHALB (Default)',
+  { label: 'poem: BS in der zweiten Zeile merged INNERHALB',
     html: POEM, target: '.poem p:last-child', pos: 'start', key: 'Backspace',
     expected: '<p>Vorher</p><div class="poem"><p>Zeile einsZeile zwei</p></div><p>Nachher</p>' },
   { label: 'poem: Delete am Ende der letzten Zeile zieht den Folgeabsatz herein',
@@ -155,7 +156,7 @@ const CASES = [
   { label: 'ul: BS im ersten Listenpunkt verlässt die Liste (wie ul.todo)',
     html: UL, target: 'ul li:first-child', pos: 'start', key: 'Backspace',
     expected: '<p>Vorher</p><p>Eins</p><ul><li>Zwei</li></ul><p>Nachher</p>' },
-  { label: 'ul: BS im zweiten Listenpunkt merged INNERHALB (Default)',
+  { label: 'ul: BS im zweiten Listenpunkt merged INNERHALB',
     html: UL, target: 'ul li:last-child', pos: 'start', key: 'Backspace',
     expected: '<p>Vorher</p><ul><li>EinsZwei</li></ul><p>Nachher</p>' },
   { label: 'ul: Delete am Ende des letzten Punkts zieht den Folgeabsatz herein',
