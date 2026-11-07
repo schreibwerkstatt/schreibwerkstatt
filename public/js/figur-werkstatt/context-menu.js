@@ -1,5 +1,5 @@
 // Rechtsklick-/Long-Press-Menü auf Mindmap-Knoten: Brainstorm/Rename/AddChild/AddSibling/Delete.
-// Die Aktionen lesen das Ziel vor dem Schliessen (closeActionMenu leert es).
+// Die Aktionen lesen das Ziel synchron vorne (das Menue schliesst nach dem Eintrag und leert es).
 
 import { _newNodeId } from './mindmap.js';
 
@@ -18,14 +18,12 @@ export const contextMenuMethods = {
 
   ctxRename() {
     const id = this.actionMenuTarget;
-    this.closeActionMenu();
     if (!id || !this._jm) return;
     try { this._jm.begin_edit(id); } catch {}
   },
 
   ctxAddChild() {
     const id = this.actionMenuTarget;
-    this.closeActionMenu();
     if (!id) return;
     const newId = _newNodeId();
     const label = window.__app.t('werkstatt.tree.newNode');
@@ -38,7 +36,6 @@ export const contextMenuMethods = {
 
   ctxAddSibling() {
     const id = this.actionMenuTarget;
-    this.closeActionMenu();
     if (!id) return;
     const newId = _newNodeId();
     const label = window.__app.t('werkstatt.tree.newNode');
@@ -53,12 +50,10 @@ export const contextMenuMethods = {
   // (history.js#_requestDeleteNode).
   ctxDelete() {
     const id = this.actionMenuTarget;
-    this.closeActionMenu();
     this._requestDeleteNode(id);
   },
 
   ctxBrainstorm() {
-    this.closeActionMenu();
     if (this.brainstormLoading) return;
     this.runBrainstorm();
   },

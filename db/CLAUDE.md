@@ -51,6 +51,8 @@ Neue Migration = **neue Datei** `db/migrations/NNNN-kurzname.js` (N = nächste f
 
 **Pflicht nach jeder neuen Migration: `npm run squash:regen`** — regeneriert [db/squashed-schema.js](../db/squashed-schema.js) aus einem frischen Migration-Run. Wer das vergisst, lässt den Drift-Test in CI rot. Wird eine Migration geändert, deren Nummer schon `SQUASHED_VERSION` ist, nimmt der Regen den Fast-Path (Squash installiert, Datei gilt als gelaufen) und schreibt das alte Schema zurück — vorher `db/squashed-schema.js` auf den Stand vor der Migration zurücksetzen.
 
+**Pflicht bei einer Buch-Tabelle (FK-Kette zu `books`): `.swbook`-Weg im selben Commit** — Standard ist eine Zeile in `WERK_TABLES` ([db/book-migration-data/werk.js](../db/book-migration-data/werk.js)) plus Rundlauf-Fall, sonst begründete Ausnahme. Regeln und Kategorien: [docs/book-migration.md](../docs/book-migration.md#neue-buchdaten). Gegated: [tests/unit/book-data-portability.test.js](../tests/unit/book-data-portability.test.js).
+
 **Pflicht: [docs/erd.md](../docs/erd.md) im selben Commit aktualisieren.** Stand-Zeile (Schema-Version + Tabellen-Anzahl) bumpen; betroffene Block-Definitionen (neue Spalten, geänderte Typen) anpassen; bei neuen Tabellen einen Block + die FK-Kanten in Section 1 (Übersicht) und ggf. im passenden thematischen Sub-Diagramm ergänzen; bei neuen FK-Kanten auf bestehende Tabellen die Kante in Section 1 nachziehen. Drift gegated durch [tests/unit/erd-drift.test.mjs](../tests/unit/erd-drift.test.mjs): prüft Stand-Zeile (Schema-Version + Tabellen-Anzahl) und Set-Gleichheit der Mermaid-Block-Definitionen (`name {`) gegen `sqlite_master` (ohne `sqlite_*`/`schema_version`/FTS5-Shadow-Tables). Vergessene Tabelle → CI rot.
 
 ### Neuer Figurentyp
@@ -59,6 +61,6 @@ Die Rangliste der Figurentypen (`figures.typ`) ist **SSoT in [public/js/book/fig
 
 ### Neuer Beziehungstyp
 
-Keine Schemaänderung. `figure_relations.typ` ist Freitext. Neuen Typ in der `BZ`-Konstante (Frontend-Rendering) und im Claude-Prompt (`FIGUREN_BASIS_SCHEMA` in `public/js/prompts/komplett.js`) ergänzen.
+Keine Schemaänderung. `figure_relations.typ` ist Freitext. SSoT der Typen ist `RELATION_TYPES` in [public/js/book/beziehung-typen.js](../public/js/book/beziehung-typen.js); deren Kopfkommentar listet, was ein neuer Typ ausserdem braucht (Graph-Styling, Nähe-Standard, i18n). Gegated durch [tests/unit/beziehung-typen.test.mjs](../tests/unit/beziehung-typen.test.mjs).
 
 `figure_relations.from_fig_id`/`to_fig_id` sind INTEGER-FK auf `figures.id` (nicht TEXT-fig_id). Schreib-/Lesepfade übersetzen via Lookup-Map (TEXT-fig_id ↔ INTEGER-id, siehe [db/figures.js](../db/figures.js) `saveFigurenToDb`/`updateFigurenSoziogramm`/`listFigurenWithDetails` und JOINs in [routes/jobs/shared/queries.js](../routes/jobs/shared/queries.js)).

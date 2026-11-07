@@ -15,12 +15,12 @@ const { getPrompts, loadOrderedBookContents } = require('./shared');
 const { makeProposalChatJob } = require('./proposal-chat');
 const { executePlotChatTool, PROPOSE_TOOLS } = require('./plot-chat-tools');
 const {
-  loadBoardState, fitBoardOutline, figurenOutline, sessionPlotProposalMemory,
+  loadBoardState, fitBoardOutline, figurenOutline, katalogOutline, sessionPlotProposalMemory,
 } = require('./plot-chat-context');
 
 /**
  * Kontext beider Pfade: Board-Stand, Prompt-Bausteine (Board-Gliederung aufs
- * Budget gekürzt, Figurenliste, Gedächtnis früherer Vorschläge, Buch-Kontext) und die Felder,
+ * Budget gekürzt, Figurenliste, Schauplätze + Motive, Gedächtnis früherer Vorschläge, Buch-Kontext) und die Felder,
  * die die Vorschlags-Handler im ctx brauchen. Kapitel nur über die
  * Content-Store-Facade, inkl. ausgeschlossener (ein Beat darf darauf zeigen).
  */
@@ -39,6 +39,7 @@ async function plotChatContext(session, userEmail, { outlineBudgetChars = Infini
     }),
     board: fitBoardOutline(state, { ideenMarker, budgetChars: outlineBudgetChars }),
     figurenOutline: figurenOutline(state),
+    katalogOutline: katalogOutline(state),
     proposalMemory: buildPlotProposalMemoryBlock(sessionPlotProposalMemory(session.id, state)),
     toolCtx: {
       bookId: session.book_id, sessionId: session.id, userEmail,
@@ -68,9 +69,14 @@ const plotChat = makeProposalChatJob({
     // Akte (nur thread_id) für die Reihenfolge-Regel (prompts/plot/board.js#_reihenfolgeRegel).
     boardActs: base.state.acts.map(a => ({ thread_id: a.thread_id ?? null })),
     figurenOutline: base.figurenOutline,
+    katalogOutline: base.katalogOutline,
     proposalMemory: base.proposalMemory,
   }),
   stateSummary: (s) => `Board ${s.acts.length} Akte/${s.beats.length} Beats/${s.threads.length} Stränge`,
+  // Das Board steht im Vorspann; get_plot_board nur, wenn es dort gekürzt ist
+  // (Beschreibungen gestutzt oder Beats weggelassen) — der Board-Stand ändert sich
+  // im Lauf nicht, Vorschläge schreiben nichts.
+  withholdReadTools: (base) => (base.board.trimmed ? [] : ['get_plot_board']),
   executeTool: executePlotChatTool,
   proposeToolNames: PROPOSE_TOOLS,
   classicFallbackNote: 'nur Board/Figuren',

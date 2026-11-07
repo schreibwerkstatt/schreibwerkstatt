@@ -20,7 +20,7 @@ import { contentRepo } from '../repo/content.js';
 import { EVT } from '../events.js';
 import { memoMethods } from './card-memo.js';
 import { groupRevisions, groupByDay, filterGroups, revisionDeltas, summaryInfo } from '../page-revisions-groups.js';
-import { viewerState, viewerMethods } from './page-revisions/viewer.js';
+import { viewerState, viewerMethods, revisionErrorText } from './page-revisions/viewer.js';
 
 export function registerPageRevisionsCard() {
   if (typeof window === 'undefined' || !window.Alpine) return;
@@ -45,6 +45,9 @@ export function registerPageRevisionsCard() {
     listOpen: false,
     loading: false,
     restoringId: null,
+    // Rueckfrage zum Wiederherstellen offen: ein zweites Cmd+Enter oder ein
+    // zweiter Klick oeffnet keine zweite.
+    _restorePending: false,
     pinningId: null,
     filterSource: '',
     filterUser: '',
@@ -102,6 +105,7 @@ export function registerPageRevisionsCard() {
       this.expanded = {};
       this._pageId = null;
       this._memos = {};
+      this._resetBodyCache();
       this.closeViewer();
     },
 
@@ -124,6 +128,7 @@ export function registerPageRevisionsCard() {
         this.filterUser = '';
         this.expanded = {};
         this.closeViewer();
+        this._resetBodyCache();
       }
       this._pageId = pageId;
       const seq = ++this._loadSeq;
@@ -143,6 +148,13 @@ export function registerPageRevisionsCard() {
       } catch (e) {
         if (seq !== this._loadSeq) return;
         console.error('[pageRevisions:load]', e);
+        // Neuladen derselben Seite (Autosave, Restore, fremder Save) gescheitert:
+        // den bisherigen Stand stehen lassen — sonst verschwaende die ganze
+        // Leiste samt nachgeladener Tiefe wegen eines einzelnen Fehlers.
+        if (samePage && (this.revisions.length || this.pinnedRevs.length)) {
+          window.__app?.setStatus?.(window.__app.t('editor.revisions.reloadFailed'), true, 5000);
+          return;
+        }
         this.revisions = [];
         this.pinnedRevs = [];
         this.older = null;
@@ -297,38 +309,27 @@ export function registerPageRevisionsCard() {
       return m ? { dir: m[1] === '→' ? 'to' : 'from', pageId: Number(m[2]) } : null;
     },
 
-    // Ausgangsstand, «vor dem Teilen», «wiederhergestellt aus Version N».
+    // Ausgangsstand, «vor dem Teilen», «aus der Version vom …».
+    // Eine Revision heisst nach ihrem Datum, nicht nach einer Nummer: eine
+    // Positionsnummer verschoebe sich mit jedem neuen Save und jeder
+    // Ausduennung der Retention, «aus Version 37» zeigte morgen auf eine andere.
     summaryLabel(rev) {
       const info = summaryInfo(rev?.summary);
       if (!info) return '';
       const t = window.__app.t;
       if (info.kind === 'restore') {
         const src = this.revisions.find(r => r.id === info.revId) || this.pinnedRevs.find(r => r.id === info.revId);
-        const n = src ? this.revisionNumber(src) : null;
-        return n != null
-          ? t('editor.revisions.summary.restoreFrom', { n })
+        return src?.created_at
+          ? t('editor.revisions.summary.restoreFrom', { when: window.__app.formatDate(src.created_at) })
           : t('editor.revisions.summary.restoreFromOld');
       }
       return t(`editor.revisions.summary.${info.kind}`);
     },
 
-    // Nummer gegen `total`, nicht gegen die Fenstergroesse: die Liste ist DESC
-    // und beginnt immer bei der juengsten Revision, Index 0 ist also Nummer
-    // `total`. Gegen `revisions.length` gerechnet wuerde dieselbe Revision nach
-    // jedem `loadMore()` eine andere Nummer tragen. Angeheftete Revisionen
-    // ausserhalb des Fensters haben keine Nummer.
-    revisionNumber(rev) {
-      if (!rev?.id) return null;
-      const idx = this.revisions.findIndex(r => r.id === rev.id);
-      if (idx < 0) return null;
-      return Math.max(this.total, this.revisions.length) - idx;
-    },
-
+    // Viewer-Titel: Name der angehefteten Revision, sonst ihr Datum.
     revisionTitle(rev) {
-      const n = this.revisionNumber(rev);
-      return n != null
-        ? window.__app.t('editor.revisions.viewer.title', { n })
-        : window.__app.t('editor.revisions.viewer.titlePinned');
+      if (rev?.pinned && rev.label) return rev.label;
+      return rev?.created_at ? window.__app.formatDate(rev.created_at) : '';
     },
 
     formatChars(n) {
@@ -432,12 +433,19 @@ export function registerPageRevisionsCard() {
     },
 
     async restore(rev) {
-      if (!rev?.id || this.restoringId || !this.canRestore()) return;
+      if (!rev?.id || this.restoringId || this._restorePending || !this.canRestore()) return;
       const app = window.__app;
       const pageId = this._pageId;
       if (!pageId || app?.currentPage?.id !== pageId) return;
       const when = app.formatDate ? app.formatDate(rev.created_at) : rev.created_at;
-      if (!await app.appConfirm({ message: app.t('editor.revisions.restoreConfirm', { when }) })) return;
+      this._restorePending = true;
+      let ok;
+      try {
+        ok = await app.appConfirm({ message: app.t('editor.revisions.restoreConfirm', { when }) });
+      } finally {
+        this._restorePending = false;
+      }
+      if (!ok || this._pageId !== pageId) return;
       this.restoringId = rev.id;
       try {
         // Ueber contentRepo statt per rohem fetch: der Restore ist ein Body-Write
@@ -452,8 +460,7 @@ export function registerPageRevisionsCard() {
         this.closeViewer();
       } catch (e) {
         console.error('[pageRevisions:restore]', e);
-        const why = e?.code || e?.message || '';
-        app.setStatus?.(app.t('editor.revisions.restoreFailed') + ' ' + why, true, 6000);
+        app.setStatus?.(app.t('editor.revisions.restoreFailed') + ' ' + revisionErrorText(e, 'common.unknownError'), true, 6000);
       } finally {
         this.restoringId = null;
       }
@@ -470,7 +477,7 @@ export function registerPageRevisionsCard() {
         await contentRepo.pinRevision(this._pageId, rev.id, { pinned, label });
       } catch (e) {
         console.error('[pageRevisions:pin]', e);
-        app.setStatus?.(app.t('editor.revisions.pinFailed') + ' ' + (e?.code || e?.message || ''), true, 6000);
+        app.setStatus?.(app.t('editor.revisions.pinFailed') + ' ' + revisionErrorText(e, 'common.unknownError'), true, 6000);
       } finally {
         this.pinningId = null;
       }

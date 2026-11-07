@@ -6,6 +6,7 @@
 const EVENT_SUBTYP_WL = new Set([
   'geburt', 'tod', 'hochzeit', 'liebe', 'trennung', 'krankheit',
   'reise', 'umzug', 'konflikt', 'wendepunkt', 'entdeckung', 'verlust', 'sieg',
+  'ausbildung', 'abschluss', 'stellenantritt', 'berufswechsel', 'jobverlust', 'pensionierung',
   'extern_politisch', 'extern_wirtschaftlich', 'extern_natur', 'extern_kulturell', 'extern_krieg',
   'sonstiges',
 ]);

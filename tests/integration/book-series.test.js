@@ -172,6 +172,14 @@ test('Übernahme kopiert gepflegt, überspringt Vorhandenes, Analyse lässt die 
   ], USER, idMaps(b1), FIG_ANALYSE);
   const anna1 = db.prepare("SELECT id FROM figures WHERE book_id = ? AND name = 'Anna'").get(b1).id;
   db.prepare('INSERT INTO figure_aliases (figure_id, book_id, alias) VALUES (?, ?, ?)').run(anna1, b1, 'Anni');
+  // Berufsweg/Hobbys: aktive Zeilen reisen ohne Beleg mit, Vorschläge nicht.
+  const st = require('../../db/figure-stationen');
+  st.createStation('berufe', anna1, { taetigkeit: 'Köchin', art: 'beruf', von_jahr: 1990, zitat: 'Zitat Band 1' }, { status: 'aktiv', source: 'ki' });
+  st.createStation('berufe', anna1, { taetigkeit: 'Pilotin' }, { status: 'vorschlag', source: 'ki' });
+  st.createStation('hobbys', anna1, { hobby: 'Geige', bis_jahr: 1985 }, { status: 'aktiv', source: 'autor' });
+  // Schulweg: Autor-Felder reisen mit, Vorschlag und Klassenangaben (Belege aus Band 1) nicht.
+  db.prepare(`INSERT INTO figure_school_paths (figure_id, weg, einschulung_jahr, repetitionen_json, source, vorschlag_json, klassenangaben_json)
+    VALUES (?, 'bez_gym', 1991, '[{"stufe":"primar","klasse":2}]', 'autor', '{"weg":"bez"}', '[{"jahr":1995}]')`).run(anna1);
   dbSchema.saveOrteToDb(b1, [{ id: 'ort_1', name: 'Burg' }], USER, {}, {}, { matchBy: 'name', onMissing: 'stale' });
   dbSchema.saveFaktenToDb(b1, [{ kapitel: 'Kapitel 1', fakten: [{ subjekt: 'Burg', fakt: 'hat drei Türme' }] }], USER);
   // Im Zielband gibt es Bruno schon.
@@ -196,6 +204,12 @@ test('Übernahme kopiert gepflegt, überspringt Vorhandenes, Analyse lässt die 
   assert.equal(anna2.manually_edited, 1);
   assert.equal(anna2.ki_name, null);
   assert.deepEqual(db.prepare('SELECT alias FROM figure_aliases WHERE figure_id = ?').all(anna2.id).map(a => a.alias), ['Anni']);
+  const berufe2 = st.listStationenForFigure('berufe', anna2.id);
+  assert.deepEqual(berufe2.map(b => [b.taetigkeit, b.status, b.source, b.von_jahr, b.zitat]), [['Köchin', 'aktiv', 'ki', 1990, null]]);
+  assert.deepEqual(st.listStationenForFigure('hobbys', anna2.id).map(h => [h.hobby, h.bis_jahr]), [['Geige', 1985]]);
+  const sp2 = db.prepare('SELECT * FROM figure_school_paths WHERE figure_id = ?').get(anna2.id);
+  assert.deepEqual([sp2.weg, sp2.einschulung_jahr, sp2.repetitionen_json, sp2.source, sp2.vorschlag_json, sp2.klassenangaben_json],
+    ['bez_gym', 1991, '[{"stufe":"primar","klasse":2}]', 'autor', null, null]);
   const burg = db.prepare("SELECT manually_created, origin_location_id FROM locations WHERE book_id = ? AND name = 'Burg'").get(b2);
   assert.equal(burg.manually_created, 1);
   assert.ok(burg.origin_location_id);

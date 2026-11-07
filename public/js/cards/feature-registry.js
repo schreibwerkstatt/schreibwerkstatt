@@ -213,6 +213,17 @@ export const ACTIONS = [
   { key: 'action.shortcuts',      kind: 'action', group: 'app', labelKey: 'palette.action.shortcuts', descKey: 'palette.action.shortcuts.desc',
     aliases: ['help','hotkeys','tasten','keyboard','hilfe','shortcuts'],
     run: (root) => { root.toggleShortcutsOverlay(); } },
+  // Leiste neben dem Notebook-Editor (editor/aside-hotkeys.js, dieselben Wege
+  // wie ⌘/Strg+Shift+1/2). `requiresPageAside`: nur gelistet, solange ein
+  // Abschnitt im Notebook-Editor offen ist und die Leiste dort aufgehen darf.
+  { key: 'action.pageChat',       kind: 'action', group: 'app', labelKey: 'palette.action.pageChat',  descKey: 'palette.action.pageChat.desc',
+    requiresPageAside: 'chat',
+    aliases: ['chat','abschnittschat','abschnitts-chat','fragen','ki','ai','section chat'],
+    run: (root) => root.openPageAsideFromKeyboard('chat', { fromPalette: true }) },
+  { key: 'action.pageIdeen',      kind: 'action', group: 'app', labelKey: 'palette.action.pageIdeen', descKey: 'palette.action.pageIdeen.desc',
+    requiresPageAside: 'ideen',
+    aliases: ['ideen','idee','ideas','notiz','pendenz','todo','merken'],
+    run: (root) => root.openPageAsideFromKeyboard('ideen', { fromPalette: true }) },
   { key: 'action.myStats',        kind: 'action', group: 'app', labelKey: 'mystats.title',           descKey: 'mystats.desc',
     aliases: ['statistik','stats','gesamt','zeichen','wörter','woerter','words','total','schreibstatistik','overview','profil','jobs','laufzeit','tokens','kosten'],
     run: (root) => { root.toggleMyStatsCard(); } },

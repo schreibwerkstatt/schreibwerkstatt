@@ -393,7 +393,7 @@
       @keydown.ctrl.s.prevent.window="if (editMode) quickSave()"
       @keydown.meta.s.prevent.window="if (editMode) quickSave()"
       @keydown.capture.window="handleBossKey($event)"
-      @keydown.window="handleShortcutsHotkey($event); handleFocusHotkey($event); handleNavHotkey($event); handleFindingsHotkey($event); handleTreeKeydown($event); handleSynonymHotkey($event)"
+      @keydown.window="handleShortcutsHotkey($event); handleFocusHotkey($event); handleNavHotkey($event); handleAsideHotkey($event); handleFindingsHotkey($event); handleTreeKeydown($event); handleSynonymHotkey($event)"
       @app-update-available.window="$store.shell.updateAvailable = true">
 
 <!-- Blog-Sync-Card (WordPress): headless State-Anker, via $blog-Magic erreichbar. -->

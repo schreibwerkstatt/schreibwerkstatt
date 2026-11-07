@@ -19,6 +19,7 @@
 // Gespreadet in cards/figuren-card.js; Root-Zugriffe via window.__app.
 
 import { typRank, compareNames } from './figur-typen.js';
+import { stationenAlsEreignisse } from './figure-stationen.js';
 
 // Wie viele Spalten die Tabelle von sich aus oeffnet. Mehr als eine Handvoll
 // nebeneinander liest niemand mehr; der Rest wird zugeschaltet.
@@ -89,19 +90,29 @@ export function phaseFuerAlter(alter) {
   return PHASE_UNDATIERT;
 }
 
-/** Figuren, die als Spalte taugen: nicht stale, mit Geburtsjahr, mit Ereignissen.
+/** Datierte Stationen einer Figur (Berufsweg + Hobbys) als Lebenslauf-Einträge.
+ *  `stationen` = Map fig_id → { berufe, hobbys } (book/figuren-stationen.js). */
+function _stationEvts(stationen, figId) {
+  const e = stationen?.get?.(String(figId));
+  if (!e) return [];
+  return [...stationenAlsEreignisse('berufe', e.berufe), ...stationenAlsEreignisse('hobbys', e.hobbys)];
+}
+
+/** Figuren, die als Spalte taugen: nicht stale, mit Geburtsjahr, mit Ereignissen
+ *  (Lebensereignisse oder datierte Stationen von Berufsweg und Hobbys).
  *  OHNE GEBURTSJAHR KEINE SPALTE — ohne Bezugspunkt liesse sich kein einziges
  *  Ereignis einer Lebensphase zuordnen, die ganze Spalte fiele in die
  *  Sammelzeile und taeuschte eine Aussage vor, die sie nicht macht. Wie viele
  *  Figuren das betrifft, meldet `computeLebenslaufKandidaten` als `ohneJahr`. */
-export function computeLebenslaufKandidaten(figuren, ages, { suche = '', typ = '' } = {}) {
+export function computeLebenslaufKandidaten(figuren, ages, { suche = '', typ = '', stationen = null } = {}) {
   const q = (suche || '').toLowerCase();
   const liste = [];
   let ohneJahr = 0;
   for (const f of (figuren || [])) {
     if (f.stale) continue;
     const evts = f.lebensereignisse || [];
-    if (!evts.length) continue;
+    const nStationen = _stationEvts(stationen, f.id).length;
+    if (!evts.length && !nStationen) continue;
     const gj = figurGeburtsjahr(f, ages?.get?.(f.id));
     if (gj == null) { ohneJahr++; continue; }
     if (typ && f.typ !== typ) continue;
@@ -113,7 +124,7 @@ export function computeLebenslaufKandidaten(figuren, ages, { suche = '', typ = '
       kurzname: f.kurzname || null,
       typ: f.typ || 'andere',
       geburtsjahr: gj,
-      anzahl: evts.length,
+      anzahl: evts.length + nStationen,
     });
   }
   // Zweitachse ist hier die Zahl der Ereignisse (die praesentesten stehen als
@@ -132,10 +143,10 @@ export function computeLebenslaufKandidaten(figuren, ages, { suche = '', typ = '
  *  Tabelle nicht durchmischt.
  *  Liefert `{ spalten, zeilen }`; `zeilen` enthaelt nur Phasen, in denen
  *  ueberhaupt etwas passiert — leere Zwischenzeilen sind kein Befund, nur Luft. */
-export function computeLebenslauf(figuren, ages, ids) {
+export function computeLebenslauf(figuren, ages, ids, stationen = null) {
   const wanted = new Set((ids || []).map(String));
   const byId = new Map((figuren || []).map(f => [String(f.id), f]));
-  const { liste } = computeLebenslaufKandidaten(figuren, ages);
+  const { liste } = computeLebenslaufKandidaten(figuren, ages, { stationen });
   const spalten = liste.filter(k => wanted.has(String(k.id)));
   if (!spalten.length) return { spalten: [], zeilen: [] };
 
@@ -169,6 +180,16 @@ export function computeLebenslauf(figuren, ages, ids) {
         seite: e.seite || null,
       });
     }
+    // Beginn/Ende einer Station steht wie ein Ereignis in der Zeile ihres Alters;
+    // `station` + `phase` tragen das Badge statt eines Subtyps.
+    for (const st of _stationEvts(stationen, sp.id)) {
+      const alter = st.jahr - sp.geburtsjahr;
+      push(phaseFuerAlter(alter), si, {
+        jahr: st.jahr, monat: st.monat, alter, datum: '', ereignis: st.titel, bedeutung: '',
+        subtyp: 'sonstiges', station: st.station, phase: st.phase,
+        page_id: st.page_id, kapitel: null, seite: null,
+      });
+    }
   });
 
   const zeilen = [];
@@ -193,8 +214,9 @@ export const figurenLebenslaufMethods = {
     const data = this.figurenAlterData;
     const f = this.figurenLebenslaufFilters;
     const suche = f?.suche ?? '', typ = f?.typ ?? '';
-    return this._memo('llKandidaten', [figuren, data, suche, typ], () =>
-      computeLebenslaufKandidaten(figuren, this._figurenLebenslaufAges(), { suche, typ }));
+    const stationen = this.figurenLebenslaufStationen();
+    return this._memo('llKandidaten', [figuren, data, suche, typ, stationen], () =>
+      computeLebenslaufKandidaten(figuren, this._figurenLebenslaufAges(), { suche, typ, stationen }));
   },
 
   _figurenLebenslaufAges() {
@@ -208,7 +230,7 @@ export const figurenLebenslaufMethods = {
   figurenLebenslaufEnsureAuswahl() {
     if (this.figurenLebenslaufIds.length) return;
     const figuren = Alpine.store('catalog').figuren;
-    const { liste } = computeLebenslaufKandidaten(figuren, this._figurenLebenslaufAges());
+    const { liste } = computeLebenslaufKandidaten(figuren, this._figurenLebenslaufAges(), { stationen: this.figurenLebenslaufStationen() });
     this.figurenLebenslaufIds = liste.slice(0, LEBENSLAUF_DEFAULT_SPALTEN).map(k => k.id);
   },
 
@@ -244,8 +266,9 @@ export const figurenLebenslaufMethods = {
     // Dep ist der VERKETTETE Schluessel, nicht das Array: `figurenLebenslaufIds`
     // wird in place mutiert (push/splice), die Referenz bleibt also gleich. Eine
     // Laengen-Dep daneben faenge das Umschalten „eine ab, eine dazu" nicht.
-    return this._memo('llMatrix', [figuren, data, ids.join(',')], () =>
-      computeLebenslauf(figuren, this._figurenLebenslaufAges(), ids));
+    const stationen = this.figurenLebenslaufStationen();
+    return this._memo('llMatrix', [figuren, data, ids.join(','), stationen], () =>
+      computeLebenslauf(figuren, this._figurenLebenslaufAges(), ids, stationen));
   },
 
   // ── Anzeige-Helfer ────────────────────────────────────────────────────────

@@ -46,6 +46,10 @@
   --color-warn-bg: #FAEEDA;
   --color-warn-text: #854F0B;
   --color-pending: #f59e0b;
+  /* Suchtreffer (Find-Leiste Notebook- + Bucheditor): alle / aktueller. */
+  --color-find-match-bg: #F5D98A;
+  --color-find-current-bg: #D9822B;
+  --color-find-current-text: #1a1a1a;
   --color-err-bg: #FCEBEB;
   --color-err-text: #A32D2D;
   --color-err-border: #E24B4A;
@@ -302,6 +306,18 @@
   --card-accent-event-verlust: var(--card-accent-event-verlust-base);
   --card-accent-event-sieg-base: #ad8a2f;
   --card-accent-event-sieg: var(--card-accent-event-sieg-base);
+  --card-accent-event-ausbildung-base: #4f7fa8;
+  --card-accent-event-ausbildung: var(--card-accent-event-ausbildung-base);
+  --card-accent-event-abschluss-base: #3f8f8a;
+  --card-accent-event-abschluss: var(--card-accent-event-abschluss-base);
+  --card-accent-event-stellenantritt-base: #5b7a3a;
+  --card-accent-event-stellenantritt: var(--card-accent-event-stellenantritt-base);
+  --card-accent-event-berufswechsel-base: #7d6aa8;
+  --card-accent-event-berufswechsel: var(--card-accent-event-berufswechsel-base);
+  --card-accent-event-jobverlust-base: #9a5a5a;
+  --card-accent-event-jobverlust: var(--card-accent-event-jobverlust-base);
+  --card-accent-event-pensionierung-base: #8a7a5c;
+  --card-accent-event-pensionierung: var(--card-accent-event-pensionierung-base);
   --card-accent-event-extern_politisch-base: #4a6a8e;
   --card-accent-event-extern_politisch: var(--card-accent-event-extern_politisch-base);
   --card-accent-event-extern_wirtschaftlich-base: #9c7e3c;
@@ -394,6 +410,9 @@
   --color-warn-bg: rgba(184, 134, 11, 0.18);
   --color-warn-text: #e5b960;
   --color-pending: #fbbf24;
+  --color-find-match-bg: rgba(240, 190, 70, 0.42);
+  --color-find-current-bg: #f2a541;
+  --color-find-current-text: #1a1a1a;
   --color-err-bg: rgba(226, 75, 74, 0.18);
   --color-err-text: #ff9090;
   --color-err-border: #e85a58;
@@ -532,6 +551,12 @@
   --card-accent-event-entdeckung: oklch(from var(--card-accent-event-entdeckung-base) max(var(--accent-dark-floor), calc(l + var(--accent-dark-lift))) calc(c * var(--accent-dark-chroma)) h);
   --card-accent-event-verlust: oklch(from var(--card-accent-event-verlust-base) max(var(--accent-dark-floor), calc(l + var(--accent-dark-lift))) calc(c * var(--accent-dark-chroma)) h);
   --card-accent-event-sieg: oklch(from var(--card-accent-event-sieg-base) max(var(--accent-dark-floor), calc(l + var(--accent-dark-lift))) calc(c * var(--accent-dark-chroma)) h);
+  --card-accent-event-ausbildung: oklch(from var(--card-accent-event-ausbildung-base) max(var(--accent-dark-floor), calc(l + var(--accent-dark-lift))) calc(c * var(--accent-dark-chroma)) h);
+  --card-accent-event-abschluss: oklch(from var(--card-accent-event-abschluss-base) max(var(--accent-dark-floor), calc(l + var(--accent-dark-lift))) calc(c * var(--accent-dark-chroma)) h);
+  --card-accent-event-stellenantritt: oklch(from var(--card-accent-event-stellenantritt-base) max(var(--accent-dark-floor), calc(l + var(--accent-dark-lift))) calc(c * var(--accent-dark-chroma)) h);
+  --card-accent-event-berufswechsel: oklch(from var(--card-accent-event-berufswechsel-base) max(var(--accent-dark-floor), calc(l + var(--accent-dark-lift))) calc(c * var(--accent-dark-chroma)) h);
+  --card-accent-event-jobverlust: oklch(from var(--card-accent-event-jobverlust-base) max(var(--accent-dark-floor), calc(l + var(--accent-dark-lift))) calc(c * var(--accent-dark-chroma)) h);
+  --card-accent-event-pensionierung: oklch(from var(--card-accent-event-pensionierung-base) max(var(--accent-dark-floor), calc(l + var(--accent-dark-lift))) calc(c * var(--accent-dark-chroma)) h);
   --card-accent-event-extern_politisch: oklch(from var(--card-accent-event-extern_politisch-base) max(var(--accent-dark-floor), calc(l + var(--accent-dark-lift))) calc(c * var(--accent-dark-chroma)) h);
   --card-accent-event-extern_wirtschaftlich: oklch(from var(--card-accent-event-extern_wirtschaftlich-base) max(var(--accent-dark-floor), calc(l + var(--accent-dark-lift))) calc(c * var(--accent-dark-chroma)) h);
   --card-accent-event-extern_natur: oklch(from var(--card-accent-event-extern_natur-base) max(var(--accent-dark-floor), calc(l + var(--accent-dark-lift))) calc(c * var(--accent-dark-chroma)) h);

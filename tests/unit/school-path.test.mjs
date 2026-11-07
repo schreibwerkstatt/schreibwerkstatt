@@ -5,7 +5,7 @@ import assert from 'node:assert/strict';
 import {
   SCHUL_VORLAGEN, normalizeSchulsystem, resolveSchulsystem, schulsystemAusVorlage,
   einschulungsJahre, schoolStageAt, schoolStagesForYear, wegAblauf, normalizeRepetitionen,
-  wegKeys, schuljahrStart, repetitionsKlassen, wegGueltig, pruefeKlassenangabe,
+  wegKeys, schuljahrStart, repetitionsKlassen, wegGueltig, pruefeKlassenangabe, schulZeiten,
 } from '../../public/js/book/school-path.js';
 
 const SO = schulsystemAusVorlage('ch_so_1990');
@@ -196,4 +196,29 @@ test('resolveSchulsystem liefert Stufen mit klasseStart', () => {
   const r = resolveSchulsystem(SO);
   assert.equal(r.stufen.primar.klasseStart, 1);
   assert.equal(r.wege.length, SCHUL_VORLAGEN.ch_so_1990.wege.length);
+});
+
+test('schulZeiten: Zeitraeume je Stufe, deckungsgleich mit schoolStageAt; Repetition und Unsicherheit', () => {
+  const geburt = { y: 1986, m: 2, d: 1 }; // eingeschult Aug 1992
+  const z = schulZeiten({ geburt, system: SO, figur: { weg: 'bez' } });
+  assert.deepEqual(z.stufen, [{ stufe: 'primar', von: 1992, bis: 1998 }, { stufe: 'bez', von: 1998, bis: 2001 }]);
+  assert.equal(z.abschluss, 2001);
+  assert.equal(z.unsicher, undefined);
+  // Gleiche Grenzen wie die Tagesabfrage: letztes Primarjahr 1997/98, erstes Bez 1998/99.
+  const at = (jahr) => schoolStageAt({ geburt, system: SO, figur: { weg: 'bez' }, jahr, monat: 10 });
+  assert.equal(at(1997).stufe, 'primar');
+  assert.equal(at(1998).stufe, 'bez');
+  // Repetition verlaengert die Primarzeit.
+  const r = schulZeiten({ geburt, system: SO, figur: { weg: 'bez', repetitionen: [{ stufe: 'primar', klasse: 3 }] } });
+  assert.deepEqual(r.stufen[0], { stufe: 'primar', von: 1992, bis: 1999 });
+  // Nur Geburtsjahr: Einschulung offen → unsicher mit Alternative.
+  const u = schulZeiten({ geburt: { y: 1986 }, system: SO, figur: { weg: 'bez' } });
+  assert.equal(u.unsicher, true);
+  assert.notEqual(u.einschulung_alternative, u.einschulung);
+  // Override macht es sicher.
+  const o = schulZeiten({ geburt: { y: 1986 }, system: SO, figur: { weg: 'bez', einschulung_jahr: 1993 } });
+  assert.equal(o.einschulung, 1993);
+  assert.equal(o.unsicher, undefined);
+  assert.equal(schulZeiten({ geburt: null, system: SO }), null);
+  assert.equal(schulZeiten({ geburt, system: null }), null);
 });

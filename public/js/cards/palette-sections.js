@@ -42,7 +42,8 @@ export function visiblePaletteFeatures(ctx) {
 
 export function visiblePaletteActions(ctx, devMode) {
   const actions = actionsVisibleFor(ACTIONS, ctx.bookRole, ctx.buchtyp, ctx.cloudModelEffective)
-    .filter(a => configSatisfied(a, ctx.config));
+    .filter(a => configSatisfied(a, ctx.config))
+    .filter(a => !a.requiresPageAside || !!ctx.pageAside?.[a.requiresPageAside]);
   return devMode ? actions.filter(a => a.key !== 'action.logout') : actions;
 }
 

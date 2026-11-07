@@ -239,6 +239,11 @@ const STRIP_STYLE_TAGS = new Set([
   'BR', 'PRE', 'CODE', 'SMALL', 'MARK', 'U', 'S', 'SUB', 'SUP',
 ]);
 
+// Formatierungs-Tags, die leer (oder nur mit Leerraum) wegfallen — nur
+// attributlose: `<a>`, Marker-Spans und alles mit Klasse bleibt.
+const EMPTY_INLINE_TAGS = 'i,em,b,strong,u,s,mark,small,sub,sup';
+const EMPTY_INLINE_PROBE = /<(i|em|b|strong|u|s|mark|small|sub|sup)\b[^>]*>\s*<\//i;
+
 /**
  * Säubert HTML von Inline-Style-Müll, leeren Spans und Paste-Wrapper-Tags.
  *
@@ -252,7 +257,8 @@ const STRIP_STYLE_TAGS = new Set([
  */
 export function cleanContentArtefacts(html) {
   if (!html) return html;
-  if (!/\sstyle\s*=|<(span|meta|link|script|style|title)\b/i.test(html)) return html;
+  if (!/\sstyle\s*=|<(span|meta|link|script|style|title)\b/i.test(html)
+    && !EMPTY_INLINE_PROBE.test(html)) return html;
 
   const tmp = document.createElement('div');
   tmp.innerHTML = html;
@@ -273,6 +279,16 @@ export function cleanContentArtefacts(html) {
       parent.removeChild(span);
     }
   });
+
+  // Leere Formatierungs-Hüllen (`<i></i>`), die ein Schnitt am Formatrand
+  // zurücklässt — nach dem style-Strip, damit auch `<i style="…"></i>` fällt.
+  // Server-Pendant: lib/html-clean.js#stripEmptyInline (gleiche Regel).
+  for (const el of Array.from(tmp.querySelectorAll(EMPTY_INLINE_TAGS)).reverse()) {
+    if (el.attributes.length || el.firstElementChild) continue;
+    if ((el.textContent || '').trim()) continue;
+    while (el.firstChild) el.parentNode.insertBefore(el.firstChild, el);
+    el.remove();
+  }
 
   return tmp.innerHTML;
 }

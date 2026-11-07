@@ -21,6 +21,10 @@
 //   siblingsNoParent   — Geschwister ohne gemeinsames Elternteil, obwohl bei
 //                        beiden Eltern erfasst sind;
 //   generationGap      — Elternteil laut Geburtsjahr keine 14 Jahre älter;
+//   peerAgeGap         — Freundschaft unter Gleichaltrigen (Beschreibung nennt
+//                        Schule, Klasse, Clique, Kindheit …), die Geburtsjahre
+//                        liegen aber mehr als 5 Jahre auseinander — oft zwei
+//                        gleichnamige Figuren, die zu einer verschmolzen sind;
 //   duplicateDescription — dieselbe Beschreibung auf zwei Beziehungen
 //                        gleichen Typs mit einer gemeinsamen Figur (kopiert);
 //   textContradiction  — eine Beziehungsbeschreibung, ein Ereignis oder eine
@@ -35,7 +39,12 @@
 //   foreignName        — die Beschreibung nennt statt des Ziels eine andere
 //                        Figur, zu der die Ausgangsfigur dieselbe Beziehung
 //                        hat («… Peter sich fügt» auf der Ehe-Kante zu Adrian,
-//                        während eine Ehe-Kante zu Peter besteht).
+//                        während eine Ehe-Kante zu Peter besteht);
+//   foreignTarget      — die Beschreibung nennt statt des Ziels genau eine
+//                        andere Figur, zu der die Ausgangsfigur gar keine
+//                        Beziehung hat: das Ziel ist verrutscht («Er kennt
+//                        Sarahs Mutter …» auf der Kante zu Peter). Rollenfiguren
+//                        zählen auch über ihr Kopfwort («Der Nervenarzt …»).
 //
 // Feiner sperren: `maxParents` und `duplicateDescription` nennen Alternativen
 // («einer der beiden Väter ist falsch»). Belegt eine unabhängige Regel genau
@@ -51,6 +60,10 @@ const PARTNERISH = new Set(['geschwister', 'ehepartner', 'ex_partner', 'liebesbe
 const FRIENDISH = new Set(['freund', 'bekannt']);
 const WEAK = new Set(['bekannt', 'andere']);
 const MIN_PARENT_GAP = 14;
+// Gleichaltrige: Schulfreunde, Clique, Kindheitsfreunde. Nur mit einem solchen
+// Wort in der Beschreibung — eine Freundschaft allein sagt nichts übers Alter.
+const MAX_PEER_GAP = 5;
+const PEER_MARK = /(schul|klasse|mitschüler|kindergarten|kindheit|jugendfreund|spielkamerad|clique|jahrgang|gleichaltrig|altersgenoss|classmate|school|childhood|same age)/i;
 
 // Verwandtschaftswort (ein Token, kleingeschrieben) → Rolle der genannten
 // Person gegenüber der anderen.
@@ -78,7 +91,7 @@ const kinGender = (tok) => (FEMALE_KIN.test(tok) ? 'f' : MALE_KIN.test(tok) ? 'm
 // Regeln, deren Treffer ein bestimmtes Paar belasten, und Regeln, die nur
 // Alternativen nennen (siehe «Feiner sperren» oben).
 const PAIR_EVIDENCE = new Set(['parentIsKin', 'spouseAsymmetric', 'pairConflict', 'familyAndFriend',
-  'siblingsNoParent', 'generationGap', 'textContradiction', 'genderMismatch', 'foreignName']);
+  'siblingsNoParent', 'generationGap', 'peerAgeGap', 'textContradiction', 'genderMismatch', 'foreignName', 'foreignTarget']);
 const ALTERNATIVES = new Set(['maxParents', 'duplicateDescription']);
 const INVERSE_ROLE = { elternteil: 'kind', kind: 'elternteil' };
 
@@ -93,7 +106,16 @@ const splitSentences = (s) => String(s || '').split(/(?<=[.!?;])\s+/).map(x => x
 const pairKey = (a, b) => [a, b].sort().join('|');
 const wordRe = (name) => new RegExp(`(?<![\\p{L}\\p{N}])${name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}(?![\\p{L}\\p{N}])`, 'iu');
 
-const birthYearOf = (f, eventsByFigPk) => ownBirthYear(f, eventsByFigPk, { sure: false });
+// Geburtsjahr: eigenes Geburts-Ereignis, sonst das Jahr im Steckbrief-Feld
+// `geburtstag` («1964», «12. Mai 1964»). Ohne den Steckbrief blieben Figuren ohne
+// Geburts-Ereignis aus beiden Altersregeln heraus, obwohl die Alters-Tabelle mit
+// genau diesem Jahr rechnet.
+const birthYearOf = (f, eventsByFigPk) => {
+  const ev = ownBirthYear(f, eventsByFigPk, { sure: false });
+  if (ev) return ev;
+  const m = String(f?.geburtstag || '').match(/(?<!\d)(\d{4})(?!\d)/);
+  return m ? Number(m[1]) : null;
+};
 
 function genderOf(f) {
   const g = String(f?.geschlecht || '').trim().toLowerCase();
@@ -191,16 +213,46 @@ function checkRelations(ctx) {
   const forms = nameForms(figRows);
   const conflicts = [];
   const seen = new Set();
-  const report = (rule, figIds, sources, snippet, pairs) => {
+  // Quelle → lesbare Angabe für die Konfliktliste (Namen statt IDs):
+  // { kind: 'relation', from, to, typ } · { kind: 'event', fig, title } · { kind: 'bio', fig, field }.
+  const relByKey = new Map(stmts.map(s => [s.relId != null ? String(s.relId) : `${s.from}>${s.to}`, s]));
+  const eventById = new Map();
+  for (const f of figRows) {
+    for (const e of eventsByFigPk?.get(f.pk) || []) if (e.id != null) eventById.set(String(e.id), { e, fig: f.fig_id });
+  }
+  const refOf = (src) => {
+    const [kind, rest = ''] = [src.slice(0, src.indexOf(':')), src.slice(src.indexOf(':') + 1)];
+    if (kind === 'relation') {
+      const s = relByKey.get(rest);
+      return s ? { kind, from: nameOf(s.from), to: nameOf(s.to), typ: s.typ } : null;
+    }
+    if (kind === 'event') {
+      const hit = eventById.get(rest);
+      if (hit) return { kind, fig: nameOf(hit.fig), title: String(hit.e.ereignis || '').trim() };
+      const m = rest.match(/^([^:]+):(.*)$/);
+      return m ? { kind, fig: nameOf(m[1]), title: m[2].trim() } : null;
+    }
+    if (kind === 'bio') {
+      const dot = rest.lastIndexOf('.');
+      return dot > 0 ? { kind, fig: nameOf(rest.slice(0, dot)), field: rest.slice(dot + 1) } : null;
+    }
+    return null;
+  };
+  // `extra`: regelspezifische Zusätze, etwa `retarget` ({ relId, to }: vorgeschlagenes
+  // neues Ziel einer verrutschten Kante, fig_id) für den Umhängen-Knopf der Karte.
+  const report = (rule, figIds, sources, snippet, pairs, extra = {}) => {
     const ids = [...new Set(figIds)];
     const key = rule + '|' + [...ids].sort().join(',') + '|' + [...sources].sort().join(',');
     if (seen.has(key)) return;
     seen.add(key);
     conflicts.push({
       rule, figIds: ids, figures: ids.map(nameOf),
-      sources: [...new Set(sources)], snippet: String(snippet || '').slice(0, 240),
+      sources: [...new Set(sources)],
+      refs: [...new Set(sources)].map(refOf).filter(Boolean),
+      snippet: String(snippet || '').slice(0, 240),
       pairs: [...new Set(pairs.map(([a, b]) => pairKey(a, b)))],
       main: ids.some(id => tierOf(id) === 'main'),
+      ...extra,
     });
   };
   const relSrc = (s) => (s.relId != null ? `relation:${s.relId}` : `relation:${s.from}>${s.to}`);
@@ -250,6 +302,17 @@ function checkRelations(ctx) {
         report('generationGap', [child, p], (G.parentSrc.get(child + '|' + p) || []).map(relSrc),
           `${nameOf(p)} *${py}, ${nameOf(child)} *${cy}`, [[child, p]]);
       }
+    }
+  }
+
+  // ── Gleichaltrige Freunde ───────────────────────────────────────────
+  for (const s of stmts) {
+    if (s.typ !== 'freund' || !PEER_MARK.test(s.desc)) continue;
+    const ay = birthYearOf(figById.get(s.from) || {}, eventsByFigPk);
+    const by = birthYearOf(figById.get(s.to) || {}, eventsByFigPk);
+    if (ay && by && Math.abs(ay - by) > MAX_PEER_GAP) {
+      report('peerAgeGap', [s.from, s.to], [relSrc(s)],
+        `${nameOf(s.from)} *${ay}, ${nameOf(s.to)} *${by}: ${s.desc}`, [[s.from, s.to]]);
     }
   }
 
@@ -345,6 +408,38 @@ function checkRelations(ctx) {
     }
   }
   const namedIn = (text) => [...new Set([...fullNames.values()].filter(e => e.id && e.re.test(text)).map(e => e.id))];
+  // Kopfwort einer Rollenfigur («Nervenarzt an der Musterung in Brugg» → «Nervenarzt»):
+  // erstes Wort eines mehrteiligen Namens, ab sechs Zeichen und nur bei einer Figur,
+  // im Text mit bestimmtem Artikel («Der Nervenarzt …») — ohne Artikel ist es meist
+  // das Gattungswort («besuchen Prostituierte»). Kurze Anreden («Herr», «Alte») und
+  // geteilte Rollen («Deutschlehrerin am Bifang» / «… der Kantonsschule») zählen nicht.
+  const heads = new Map();
+  for (const f of figRows) {
+    const words = String(f.name || '').replace(/\([^)]*\)/g, ' ').trim().split(/\s+/);
+    if (words.length < 2 || words[0].length < 6 || !/^\p{Lu}/u.test(words[0])) continue;
+    const k = words[0].toLowerCase();
+    const esc = words[0].replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const re = new RegExp(`(?<![\\p{L}\\p{N}])(?:[Dd](?:er|ie|as|em|en|es))\\s+${esc}(?![\\p{L}\\p{N}])`, 'u');
+    heads.set(k, heads.has(k) && heads.get(k).id !== f.fig_id ? { id: null } : { id: f.fig_id, re });
+  }
+  const headsIn = (text) => [...new Set([...heads.values()].filter(e => e.id && e.re.test(text)).map(e => e.id))];
+  // Ganzer Name in seiner Schreibung (`possessive`: auch «Renates»): «nicht ernst
+  // nimmt» nennt Ernst nicht. Ein Kurzname, der nur das Kopfwort einer Rollenfigur
+  // ist («Prostituierte» zu «Prostituierte von der Haslistrasse»), zählt hier nicht —
+  // für ihn gilt headsIn mit Artikel.
+  const namedExactly = (id, text, { possessive = false } = {}) => {
+    const f = figById.get(id);
+    if (!f) return false;
+    const full = String(f.name || '').replace(/\([^)]*\)/g, ' ').trim();
+    const words = full.split(/\s+/);
+    return [...new Set([full, String(f.kurzname || '').trim()])].some(n => {
+      if (n.length < 3) return false;
+      if (words.length >= 2 && !n.includes(' ') && n === words[0] && n !== full) return false;
+      const esc = n.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      const suffix = possessive ? "(?:s|'s|')?" : '';
+      return new RegExp(`(?<![\\p{L}\\p{N}])${esc}${suffix}(?![\\p{L}\\p{N}])`, 'u').test(text);
+    });
+  };
 
   // Beziehungsbeschreibung: das Paar steht fest; nur ohne weitere genannte Figur.
   for (const s of stmts) {
@@ -387,15 +482,24 @@ function checkRelations(ctx) {
     }
 
     // Fremder Name: die Beschreibung nennt das Ziel nicht, wohl aber genau eine
-    // andere Figur, zu der die Ausgangsfigur dieselbe Beziehung hat.
+    // andere Figur — mit ganzem Namen, sonst über das Kopfwort einer Rollenfigur.
+    // Hat die Ausgangsfigur zu ihr dieselbe Beziehung, ist die Kante eine Kopie
+    // (foreignName); hat sie zu ihr gar keine, ist das Ziel verrutscht (foreignTarget).
     const named = namedIn(s.desc);
-    if (named.includes(s.to) || mentioned(toks, []).includes(s.to)) continue;
-    const others = named.filter(id => id !== s.to && id !== s.from);
+    const headed = headsIn(s.desc);
+    if (named.includes(s.to) || headed.includes(s.to) || mentioned(toks, []).includes(s.to)
+      || namedExactly(s.to, s.desc, { possessive: true })) continue;
+    let others = named.filter(id => id !== s.to && id !== s.from);
+    if (!others.length) others = headed.filter(id => id !== s.to && id !== s.from);
     if (others.length !== 1) continue;
     const role = roleToward(s, s.from);
-    const twin = (byPair.get(pairKey(s.from, others[0])) || []).filter(x => roleToward(x, s.from) === role);
+    const pairRels = byPair.get(pairKey(s.from, others[0])) || [];
+    const twin = pairRels.filter(x => roleToward(x, s.from) === role);
     if (twin.length) {
       report('foreignName', [s.from, s.to, others[0]], [relSrc(s), ...twin.map(relSrc)], s.desc, [[s.from, s.to]]);
+    } else if (!pairRels.length && (headed.includes(others[0]) || namedExactly(others[0], s.desc))) {
+      report('foreignTarget', [s.from, s.to, others[0]], [relSrc(s)], s.desc, [[s.from, s.to]],
+        s.relId != null ? { retarget: { relId: s.relId, to: others[0], toName: nameOf(others[0]) } } : {});
     }
   }
 

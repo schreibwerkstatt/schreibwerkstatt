@@ -253,10 +253,20 @@ export const aiMethods = {
   dismissConsistency() { this._clearConsistencyPanel(); },
 
   // ── Konsistenz-Triage: Befund ↔ Beat ──────────────────────────────────────
-  // Scrollt einen Beat ins Sichtfeld und hebt ihn kurz hervor. $root-skopiert
-  // (funktioniert auch im Vollbild). Kein Auto-Edit — der User entscheidet.
+  // Die sichtbare Karte eines Beats. Flaches Board und Swimlane-Grid liegen
+  // beide im DOM (eines via x-show versteckt) — der erste Treffer kann die
+  // unsichtbare Kopie sein, auf der scrollIntoView nichts tut. Nicht über
+  // this.$root: aus einem verschachtelten x-data (Verschiebe-Block, Klapp-Panel)
+  // zeigt $root auf diesen Block, nicht auf die Karte.
+  _visibleBeatEl(beatId) {
+    const cards = document.querySelectorAll(`.card--plot .plot-beat[data-beat-id="${beatId}"]`);
+    return [...cards].find(c => c.offsetParent !== null) || null;
+  },
+
+  // Scrollt einen Beat ins Sichtfeld und hebt ihn kurz hervor (funktioniert
+  // auch im Vollbild). Kein Auto-Edit — der User entscheidet.
   scrollToBeat(beatId) {
-    const el = this.$root?.querySelector(`[data-beat-id="${beatId}"]`);
+    const el = this._visibleBeatEl(beatId);
     if (!el) return;
     el.scrollIntoView({ behavior: 'smooth', block: 'center' });
     el.classList.remove('plot-beat--flash');
@@ -279,16 +289,24 @@ export const aiMethods = {
     if (beat) this._revealBeat(beat);
   },
 
-  // Ein Sprungziel, das Filter oder ein eingeklappter Akt verbirgt, hat keine
-  // Karte im DOM — der Klick liefe still ins Leere. Darum erst sichtbar machen:
-  // Filter ab (auch «im Buch ausblenden», der Befund gilt oft gerade einem
-  // eingearbeiteten Beat), Akt auf, dann scrollen.
+  // Ein Sprungziel, das Filter, ein eingeklappter Akt, das ausgeblendete Archiv
+  // oder die Verworfen-Faltung verbirgt, hat keine Karte im DOM — der Klick
+  // liefe still ins Leere. Darum erst sichtbar machen: Filter ab (auch «im Buch
+  // ausblenden», der Befund gilt oft gerade einem eingearbeiteten Beat), Akt auf,
+  // Archiv bzw. Verworfene des Akts einblenden, dann scrollen. Auch der Plot-Chat
+  // zeigt so jeden übernommenen Beat sofort (chat/plot-chat-proposals.js).
   _revealBeat(beat) {
+    if (!beat) return;
     if (this.plotFilterActive() && !this._beatMatchesFilter(beat)) {
       this.plotFilters = { kapitelId: '', figurId: '', draftFigurId: '', status: '', text: '' };
       this.plotHideImBuch = false;
     }
-    if (beat.act_id != null && this.isActCollapsed(beat.act_id)) this.toggleActCollapsed(beat.act_id);
+    if (beat.act_id != null) {
+      this._revealAct(beat.act_id);
+      if (beat.verworfen && !this.verworfenOpen[beat.act_id] && this.plotFilters.status !== 'verworfen') {
+        this.toggleVerworfen(beat.act_id);
+      }
+    }
     this.$nextTick(() => this.scrollToBeat(beat.id));
   },
 

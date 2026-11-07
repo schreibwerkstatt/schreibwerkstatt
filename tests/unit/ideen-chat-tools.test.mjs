@@ -319,3 +319,77 @@ test('Gedächtnis: übernommene, danach gelöschte neue Idee steht als «removed
   assert.deepEqual(sessionIdeenProposalMemory(sid, state).map(m => m.state), ['applied', 'removed']);
   assert.deepEqual(sessionIdeenProposalMemory(sid).map(m => m.state), ['applied', 'applied'], 'ohne Stand keine Aussage');
 });
+
+test('propose_idee mit merge_ids: Dubletten zusammenführen, gesammelt statt geschrieben', async () => {
+  const a = ideenDb.createIdee({ bookId: BOOK, pageId: P2, userEmail: USER, content: 'Bahnhof: Schwester wartet' });
+  const b = ideenDb.createIdee({ bookId: BOOK, userEmail: USER, content: 'Schwester am Gleis' });
+  const ctx = mkCtx();
+  const before = ideenCount();
+  const ok = await executeIdeenChatTool('propose_idee', {
+    idee_id: a, merge_ids: [b, a, b], content: 'Bahnhof: Schwester wartet am Gleis', begruendung: 'derselbe Gedanke',
+  }, ctx);
+  assert.equal(ok.ok, true, JSON.stringify(ok));
+  assert.equal(ideenCount(), before, 'nichts geschrieben');
+  const p = ctx.proposals[0];
+  assert.equal(p.type, 'idee_merge');
+  assert.equal(p.idee_id, a);
+  assert.deepEqual(p.merge_ids, [b], 'ohne Ziel, ohne Doppel');
+  assert.equal(p.fields.content, 'Bahnhof: Schwester wartet am Gleis');
+  assert.equal(p.before.content, 'Bahnhof: Schwester wartet');
+  assert.equal(p.labels.merged[0].id, b);
+
+  // Dieselbe Idee in einer zweiten Zusammenführung derselben Antwort → error.
+  const again = await executeIdeenChatTool('propose_idee', { idee_id: iBook, merge_ids: [b], begruendung: 'x' }, ctx);
+  assert.ok(again.error);
+  // Ohne idee_id, mit Stufe, unbekannte id, fremde id → error.
+  for (const input of [
+    { merge_ids: [b] },
+    { idee_id: a, merge_ids: [iBook], status: 'erledigt' },
+    { idee_id: a, merge_ids: [99999999] },
+    { idee_id: a, merge_ids: [iForeign] },
+  ]) {
+    const r = await executeIdeenChatTool('propose_idee', { ...input, begruendung: 'x' }, mkCtx());
+    assert.ok(r.error, JSON.stringify(input));
+  }
+  // Abgeschlossenes Ziel nimmt keine offene Quelle.
+  const closed = await executeIdeenChatTool('propose_idee', { idee_id: iDone, merge_ids: [iBook], begruendung: 'x' }, mkCtx());
+  assert.ok(closed.error);
+  ideenDb.deleteIdee(a, USER);
+  ideenDb.deleteIdee(b, USER);
+});
+
+test('Ideenliste: offene Ideen tragen ihr Alter, ab der Board-Schwelle «LANGE OFFEN»', async () => {
+  const { IDEE_STALE_DAYS } = require('../../routes/jobs/ideen-chat-context');
+  const model = await import('../../public/js/book/ideen-board/model.js');
+  assert.equal(IDEE_STALE_DAYS, model.IDEE_STALE_DAYS, 'Server-Schwelle = Board-Liste («liegengeblieben»)');
+  const state = loadIdeenState(BOOK, USER, tree);
+  const created = Date.parse(state.ideeById.get(iPage).created_at);
+  state.now = created + (IDEE_STALE_DAYS + 3) * 24 * 60 * 60 * 1000;
+  const text = ideenOutline(state);
+  const line = text.split('\n').find(l => l.includes(`[#${iPage}]`));
+  assert.match(line, new RegExp(`notiert vor ${IDEE_STALE_DAYS + 3} Tagen — LANGE OFFEN`));
+  const doneLine = text.split('\n').find(l => l.includes(`[#${iDone}]`));
+  assert.ok(!/notiert vor/.test(doneLine), 'abgeschlossene ohne Alter');
+  state.now = created + 2 * 24 * 60 * 60 * 1000;
+  assert.ok(!/LANGE OFFEN/.test(ideenOutline(state)));
+});
+
+test('Kontext: geprüfter Auto-Check-Fund steht an der offenen Idee', () => {
+  const ideenCheck = require('../../db/ideen-check');
+  ideenCheck.setHint(iPage, USER, { pageId: P1, beleg: 'Komm nach Hause, Vater ist krank.' });
+  const out = ideenOutline(loadIdeenState(BOOK, USER, tree));
+  assert.match(out, new RegExp(`\\[#${iPage}\\] \\(offen\\).*AUTO-CHECK eingelöst\\? «Komm nach Hause, Vater ist krank\\.» \\[page#${P1}\\]`));
+  ideenCheck.clearHint(iPage, USER);
+});
+
+test('propose_idee «erledigt»: Kurzfragmente mit Auslassungen tragen keinen Beleg', async () => {
+  const ctx = mkCtx();
+  const out = await executeIdeenChatTool('propose_idee', {
+    idee_id: iPage, status: 'erledigt', beleg: 'Anna … Brief … krank', beleg_page_id: P1,
+  }, ctx);
+  assert.ok(out.error);
+  const ok = await executeIdeenChatTool('propose_idee', {
+    idee_id: iPage, status: 'erledigt', beleg: 'Komm nach Hause, Vater ist krank.', beleg_page_id: P1,
+  }, mkCtx());
+  assert.equal(ok.ok, true, ok.error);
+});

@@ -135,3 +135,51 @@ test('rebindBeziehungenByName ist idempotent', () => {
   assert.equal(zweiter.rebound, 0);
   assert.equal(zweiter.dropped, 0);
 });
+
+// preferBeziehungNames — Einzel-Call der Konsolidierung: das Modell zählt die
+// Figuren-ids und die figur_id der Kanten getrennt; nach einer zusammengelegten Figur
+// verrutschen die Kanten um eins. Der mitgeschriebene Zielname entscheidet.
+const { preferBeziehungNames } = require('../../routes/jobs/komplett/figuren-merge');
+
+test('preferBeziehungNames: um eins verrutschte figur_id wird über den Namen korrigiert', () => {
+  const figuren = [
+    { id: 'fig_1', name: 'Reto', beziehungen: [{ figur_id: 'fig_3', name: 'Retos Vater', typ: 'elternteil' }] },
+    { id: 'fig_2', name: 'Retos Vater', beziehungen: [] },
+    { id: 'fig_3', name: 'Stefanies Mutter', beziehungen: [] },
+  ];
+  assert.equal(preferBeziehungNames(figuren, NOLOG), 1);
+  assert.equal(figuren[0].beziehungen[0].figur_id, 'fig_2');
+});
+
+test('preferBeziehungNames: passende id bleibt, auch bei Namensvetter mit Zusatz', () => {
+  const figuren = [
+    { id: 'fig_1', name: 'Robert', beziehungen: [{ figur_id: 'fig_3', name: 'Herr Koch', typ: 'mentor' }] },
+    { id: 'fig_2', name: 'Herr Koch (Frohheim)', kurzname: 'Herr Koch', beziehungen: [] },
+    { id: 'fig_3', name: 'Herr Koch (Primarlehrer)', kurzname: 'Herr Koch', beziehungen: [] },
+  ];
+  assert.equal(preferBeziehungNames(figuren, NOLOG), 0);
+  assert.equal(figuren[0].beziehungen[0].figur_id, 'fig_3');
+});
+
+test('preferBeziehungNames: mehrdeutiger oder unbekannter Name lässt die id stehen', () => {
+  const figuren = [
+    { id: 'fig_1', name: 'Anna', beziehungen: [
+      { figur_id: 'fig_4', name: 'Herr Koch', typ: 'bekannt' },
+      { figur_id: 'fig_4', name: 'Niemand', typ: 'bekannt' },
+    ] },
+    { id: 'fig_2', name: 'Herr Koch (A)', kurzname: 'Herr Koch', beziehungen: [] },
+    { id: 'fig_3', name: 'Herr Koch (B)', kurzname: 'Herr Koch', beziehungen: [] },
+    { id: 'fig_4', name: 'Bruno', beziehungen: [] },
+  ];
+  assert.equal(preferBeziehungNames(figuren, NOLOG), 0);
+  assert.deepEqual(figuren[0].beziehungen.map(b => b.figur_id), ['fig_4', 'fig_4']);
+});
+
+test('preferBeziehungNames: Name der eigenen Figur bindet keine Selbstkante', () => {
+  const figuren = [
+    { id: 'fig_1', name: 'Anna', beziehungen: [{ figur_id: 'fig_2', name: 'Anna', typ: 'freund' }] },
+    { id: 'fig_2', name: 'Bruno', beziehungen: [] },
+  ];
+  assert.equal(preferBeziehungNames(figuren, NOLOG), 0);
+  assert.equal(figuren[0].beziehungen[0].figur_id, 'fig_2');
+});

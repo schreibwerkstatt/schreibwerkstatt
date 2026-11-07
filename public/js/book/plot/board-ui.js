@@ -72,6 +72,18 @@ export const boardUiMethods = {
 
   isActCollapsed(actId) { return !!this.collapsedActs[actId]; },
 
+  // Akt-Spalte sichtbar machen: aufklappen, ein archivierter Akt holt das Archiv
+  // ein. Mit `scroll` danach in den Blick (Plot-Chat: neuer/geänderter Akt).
+  _revealAct(actId, { scroll = false } = {}) {
+    const act = this.acts.find(a => a.id === actId);
+    if (act?.archiviert && !this.plotShowArchived) this.plotShowArchived = true;
+    if (this.isActCollapsed(actId)) this.toggleActCollapsed(actId);
+    if (scroll) {
+      this.$nextTick(() => this.$root?.querySelector(`[data-act-id="${actId}"]`)
+        ?.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'nearest' }));
+    }
+  },
+
   toggleActCollapsed(actId) {
     const next = { ...this.collapsedActs };
     if (next[actId]) delete next[actId]; else next[actId] = true;

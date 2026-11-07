@@ -11,8 +11,19 @@
 // `pinned`/`label` kommen aus der Liste, nicht aus dem Detail: der Voll-Body ist
 // im Service Worker SWR-gecacht und waere nach einem Anheften auf einem zweiten
 // Geraet veraltet.
+//
+// Zwei Sequenzen: `_viewerSeq` verwirft Antworten einer anderen Revision
+// (Navigation, Schliessen), `_diffSeq` die eines ueberholten Vergleichs
+// (Vergleichsziel umgeschaltet, Revision gewechselt). Ohne die zweite gewinnt
+// bei schnellem Umschalten der zuletzt fertige Diff, nicht der zuletzt verlangte.
+//
+// Fehler: Inhalt (`viewerError`) und Vergleich (`viewerDiffError`) getrennt —
+// ein gescheiterter Diff laesst den geladenen Inhalt lesbar. Beide tragen einen
+// uebersetzten Satz, nie einen rohen Code.
 
 import { fetchJson } from '../../utils.js';
+import { tRaw } from '../../i18n.js';
+import { trackUsageEvent } from '../../features-usage.js';
 import { contentRepo } from '../../repo/content.js';
 import { loadDiff } from '../../lazy-libs.js';
 import { renderSideBySide } from '../../page-revision-diff.js';
@@ -32,9 +43,35 @@ export function viewerState() {
     viewerDiffHtml: '',
     viewerDiffUnchanged: false,
     viewerDiffLoading: false,
+    viewerDiffError: '',
     viewerLabelDraft: '',
     _viewerSeq: 0,
+    _diffSeq: 0,
+    // Voll-Bodies bereits geladener Revisionen (id → HTML) der aktuellen
+    // Seite. Revisionen sind unveraenderlich; beim Blaettern im Vergleich ist
+    // jede Revision einmal «diese» und einmal «Vorgaengerin» — ohne Cache
+    // zwei Abrufe je Schritt. Geleert beim Seitenwechsel (_resetBodyCache).
+    _bodyCache: new Map(),
+    // Nutzung der laufenden Viewer-Sitzung (Oeffnen bis Schliessen), gemeldet
+    // als ein `revision.view` beim Schliessen (docs/usage-events.md). null =
+    // Viewer zu. Nur Kategorien und eine Zahl, kein Inhalt.
+    _viewerUsage: null,
   };
+}
+
+// Deckel des Body-Caches: aeltester Eintrag faellt (Map haelt Einfuegeordnung).
+const BODY_CACHE_MAX = 40;
+
+// Uebersetzter Satz zu einem Ladefehler: bekannter `error_code` → `error.<code>`,
+// sonst der Fallback-Key. Nie die rohe Fehlermeldung (`HTTP 500: …`).
+export function revisionErrorText(e, fallbackKey) {
+  const code = e?.code || (e?.message === 'REVISION_NOT_FOUND' ? 'REVISION_NOT_FOUND' : null);
+  if (code) {
+    const key = 'error.' + code;
+    const msg = tRaw(key);
+    if (msg && msg !== key) return msg;
+  }
+  return tRaw(fallbackKey);
 }
 
 export const viewerMethods = {
@@ -57,10 +94,13 @@ export const viewerMethods = {
     this.viewerError = '';
     this.viewerDiffHtml = '';
     this.viewerDiffUnchanged = false;
+    this.viewerDiffError = '';
+    this._diffSeq++;
     this.viewerLabelDraft = rev.label || '';
     this.viewerLoading = true;
 
     if (firstOpen) {
+      this._viewerUsage = { diff: false, current: false, steps: 0 };
       this.$nextTick(() => {
         const dlg = this.$refs?.viewerDialog;
         if (dlg && typeof dlg.showModal === 'function' && !dlg.open) dlg.showModal();
@@ -68,22 +108,39 @@ export const viewerMethods = {
     }
 
     try {
-      const data = await fetchJson(`/content/pages/${pageId}/revisions/${rev.id}`);
+      const data = await this._fetchRevision(pageId, rev.id);
       if (seq !== this._viewerSeq) return;
-      const rev2 = data?.revision || null;
-      if (!rev2) throw new Error('REVISION_NOT_FOUND');
-      this.viewerBody = String(rev2.body_html || '');
-      this.viewerPrevMeta = data?.prev || null;
+      this.viewerBody = data.body;
+      this.viewerPrevMeta = data.prev;
     } catch (e) {
       if (seq !== this._viewerSeq) return;
       console.error('[pageRevisions:viewer:load]', e);
-      this.viewerError = e.message || 'load failed';
+      this.viewerError = revisionErrorText(e, 'editor.revisions.viewer.loadFailed');
     } finally {
       if (seq === this._viewerSeq) this.viewerLoading = false;
     }
 
     // Vergleichs-Tab beibehalten → Diff fuer die neu geladene Revision ziehen.
     if (seq === this._viewerSeq && this.viewerMode === 'diff' && !this.viewerError) await this._ensureDiff();
+  },
+
+  // Detail einer Revision: Body + Meta der Vorgaengerin laut Server. Der Cache
+  // haelt beides, damit ein Treffer auch `prev` liefert.
+  async _fetchRevision(pageId, revId) {
+    const hit = this._bodyCache.get(revId);
+    if (hit && hit.pageId === pageId) return hit;
+    const data = await fetchJson(`/content/pages/${pageId}/revisions/${revId}`);
+    if (!data?.revision) throw new Error('REVISION_NOT_FOUND');
+    const entry = { pageId, body: String(data.revision.body_html || ''), prev: data.prev || null };
+    if (this._pageId === pageId) {
+      this._bodyCache.set(revId, entry);
+      if (this._bodyCache.size > BODY_CACHE_MAX) this._bodyCache.delete(this._bodyCache.keys().next().value);
+    }
+    return entry;
+  },
+
+  _resetBodyCache() {
+    this._bodyCache = new Map();
   },
 
   // Navigation laeuft ueber die ganze geladene Liste (ungefiltert, ungruppiert):
@@ -102,6 +159,7 @@ export const viewerMethods = {
   async gotoRev(direction) {
     const target = this._siblingRev(direction);
     if (!target) return;
+    if (this._viewerUsage) this._viewerUsage.steps += 1;
     if (direction === 'prev' && !this.revisions.some(r => r.id === target.id) && this.hasMore) {
       await this.loadMore();
     }
@@ -116,6 +174,7 @@ export const viewerMethods = {
   hasViewerPrev() { return !!this._viewerPrev(); },
 
   closeViewer() {
+    this._reportViewerUsage();
     this._viewerSeq++;
     this.viewerOpen = false;
     this.viewerRev = null;
@@ -126,15 +185,52 @@ export const viewerMethods = {
     this.viewerError = '';
     this.viewerDiffHtml = '';
     this.viewerDiffUnchanged = false;
+    this.viewerDiffError = '';
+    this.viewerDiffLoading = false;
+    this._diffSeq++;
     this.viewerLabelDraft = '';
     const dlg = this.$refs?.viewerDialog;
     if (dlg && dlg.open) dlg.close();
   },
 
+  _reportViewerUsage() {
+    const u = this._viewerUsage;
+    this._viewerUsage = null;
+    if (!u) return;
+    trackUsageEvent('revision.view', {
+      diff: u.diff ? 'yes' : 'no',
+      current: u.current ? 'yes' : 'no',
+      steps: u.steps,
+    });
+  },
+
+  // Schliessen durch den User (Esc, ×, «Schliessen»): ein getippter, noch
+  // nicht gespeicherter Name wird vorher gespeichert — wie beim Klick daneben.
+  // `closeViewer` allein (Seitenwechsel, Restore) speichert nicht: dort gehoert
+  // `_pageId` evtl. schon zur naechsten Seite.
+  dismissViewer() {
+    if (this.viewerOpen) this.saveViewerLabel();
+    this.closeViewer();
+  },
+
+  // ←/→ blaettern durch die Revisionen — aber nicht mit Zusatztaste
+  // (Umschalt+Pfeil erweitert eine Textauswahl), nicht im Namensfeld und nicht
+  // auf der Tab-Leiste (dort wechseln die Pfeile den Tab, Alpine.data('tabs')).
+  onViewerArrow(event, direction) {
+    if (event.shiftKey || event.altKey || event.ctrlKey || event.metaKey) return;
+    const tgt = event.target;
+    if (tgt?.closest?.('input, textarea, [role="tab"]')) return;
+    event.preventDefault();
+    if (direction === 'prev' ? this.hasPrevRev() : this.hasNextRev()) this.gotoRev(direction);
+  },
+
   async setViewerMode(mode) {
     if (mode !== 'content' && mode !== 'diff') return;
     this.viewerMode = mode;
-    if (mode === 'diff' && !this.viewerDiffHtml && !this.viewerError) {
+    if (mode === 'diff' && this._viewerUsage) this._viewerUsage.diff = true;
+    // Waehrend der Body noch laedt kein Diff: er liefe gegen einen leeren
+    // Body. openViewer zieht ihn nach dem Laden selbst nach.
+    if (mode === 'diff' && !this.viewerLoading && !this.viewerDiffHtml && !this.viewerDiffUnchanged && !this.viewerError) {
       await this._ensureDiff();
     }
   },
@@ -143,9 +239,11 @@ export const viewerMethods = {
     if (compare !== 'prev' && compare !== 'current') return;
     if (this.viewerCompare === compare) return;
     this.viewerCompare = compare;
+    if (compare === 'current' && this._viewerUsage) this._viewerUsage.current = true;
     this.viewerDiffHtml = '';
     this.viewerDiffUnchanged = false;
-    if (this.viewerMode === 'diff' && !this.viewerError) await this._ensureDiff();
+    this.viewerDiffError = '';
+    if (this.viewerMode === 'diff' && !this.viewerLoading && !this.viewerError) await this._ensureDiff();
   },
 
   // Rechte Spalte ist immer die offene Version. Links die Vorgaengerin bzw. der
@@ -155,13 +253,16 @@ export const viewerMethods = {
     const app = window.__app;
     if (!this.viewerRev?.id) return;
     const seq = this._viewerSeq;
+    const dseq = ++this._diffSeq;
+    const current = () => seq === this._viewerSeq && dseq === this._diffSeq;
     this.viewerDiffLoading = true;
+    this.viewerDiffError = '';
     try {
       const diffLib = await loadDiff();
       const leftHtml = this.viewerCompare === 'current'
         ? await this._loadCurrentBody()
         : await this._loadPrevRevisionBody();
-      if (seq !== this._viewerSeq) return;
+      if (!current()) return;
       const t = (k, p) => app?.t?.(k, p);
       const out = renderSideBySide(leftHtml, this.viewerBody, diffLib, {
         skipLabel: (n) => t('editor.revisions.viewer.diffSkip', { n }) || `… ${n} …`,
@@ -173,22 +274,20 @@ export const viewerMethods = {
       this.viewerDiffUnchanged = out.unchanged;
     } catch (e) {
       console.error('[pageRevisions:viewer:diff]', e);
-      if (seq === this._viewerSeq) this.viewerError = e.message || 'diff failed';
+      if (current()) this.viewerDiffError = revisionErrorText(e, 'editor.revisions.viewer.diffFailed');
     } finally {
-      if (seq === this._viewerSeq) this.viewerDiffLoading = false;
+      if (current()) this.viewerDiffLoading = false;
     }
   },
 
+  // Leerer String nur, wenn es wirklich keine Vorgaengerin gibt (allererste
+  // Revision: alles erscheint als hinzugefuegt). Ein Ladefehler wirft — sonst
+  // zeigte der Vergleich still den ganzen Text als neu.
   async _loadPrevRevisionBody() {
     const prev = this._viewerPrev();
     if (!prev?.id || !this._pageId) return '';
-    try {
-      const data = await fetchJson(`/content/pages/${this._pageId}/revisions/${prev.id}`);
-      return String(data?.revision?.body_html || '');
-    } catch (e) {
-      console.error('[pageRevisions:viewer:prev]', e);
-      return '';
-    }
+    const data = await this._fetchRevision(this._pageId, prev.id);
+    return data.body;
   },
 
   // Gespeicherter Stand, nicht der Editor-Puffer: «Wiederherstellen» ersetzt den

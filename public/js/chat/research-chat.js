@@ -5,17 +5,20 @@ import {
   displaySources as _displaySources,
 } from './research-chat-render.js';
 import { researchProposalMethods } from './research-chat-proposals.js';
+import { researchChangeMethods } from './research-chat-changes.js';
 import { chatIdeeProposalMethods } from './chat-idee-proposals.js';
 import { takePendingResearchAsk } from './research-chat-ask.js';
 
 // Für rechercheCard: Zusatz-State der Vorschläge + die Frage-Brücke (Buch-Chat →
 // Recherche-Chat), damit die Karte nur dieses Modul importiert.
 export { researchProposalState } from './research-chat-proposals.js';
+export { researchChangeState } from './research-chat-changes.js';
 export { installResearchChatAskBridge, RESEARCH_CHAT_ASK_PENDING } from './research-chat-ask.js';
 
 // Recherche-Chat-Methoden (gespreadet in die rechercheCard). Agentischer Chat
 // NEBEN dem Wissensboard: recherchiert im Netz + im vorhandenen Material und
-// schlägt Fundstücke als neue Recherche-Items vor (User bestätigt), mit
+// schlägt Fundstücke als neue Recherche-Items und Änderungen an bestehenden vor
+// (User bestätigt jeden, research-chat-changes.js), mit
 // Schreibkontext auch Ideen an dieser Stelle (chat-idee-proposals.js). Jeder Provider
 // mit Tool-Calling: Claude sucht über Anthropic oder SearXNG, die übrigen über
 // SearXNG (Gate: lib/research-chat-gate.js, Suchweg: lib/websearch#webSearchMode).
@@ -84,6 +87,7 @@ export const researchChatMethods = {
   // cancelResearchChatRun kommt aus makeChatMethods (chat-base.js).
 
   ...researchProposalMethods,
+  ...researchChangeMethods,
   ...chatIdeeProposalMethods,
 
   ...makeChatMethods({

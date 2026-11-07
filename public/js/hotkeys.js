@@ -28,6 +28,7 @@ export const HOTKEYS = {
   hr:            { mod: true, shift: true, key: 'H' },
   link:          { mod: true, shift: true, key: 'K' },
   synonym:       { mod: true, shift: true, key: 'S' },
+  pageChat:      { mod: true, shift: true, key: '1' },
   undo:          { mod: true, key: 'Z' },
   redo:          { mod: true, shift: true, key: 'Z' },
   find:          { mod: true, key: 'F' },

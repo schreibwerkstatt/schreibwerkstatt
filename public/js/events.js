@@ -89,6 +89,7 @@ export const EVT = {
 
   // ── Semantische Suche ────────────────────────────────────────────────────
   SEARCH_SIMILAR: 'search:similar',             // detail: { kind, id, label }
+  SEARCH_QUERY: 'search:query',                 // detail: { q, kinds }
 
   // ── Editor: Focus-Modus (Trampoline aus dem Root) ────────────────────────
   EDITOR_FOCUS_ENTER: 'editor:focus:enter',     // detail: { granularity? }

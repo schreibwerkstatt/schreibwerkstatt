@@ -18,6 +18,7 @@ import { PROVIDERS, PALETTE_LEGEND, parseQuery } from './palette-providers.js';
 import { buildPaletteSections } from './palette-sections.js';
 import { memoMethods } from './card-memo.js';
 import { markNextUsageSource } from '../features-usage.js';
+import { isTextEntry } from '../utils/scroll-when-ready.js';
 import { EVT } from '../events.js';
 import { mountInTopLayer } from '../fullscreen.js';
 import { isImeComposing } from '../utils/keys.js';
@@ -94,7 +95,11 @@ export function registerPaletteCard() {
       mountInTopLayer(document.querySelector('.palette-overlay'));
     },
 
-    closePalette() {
+    // `{ jump: true }`: die Palette schliesst, weil eine Auswahl ausgeführt wird
+    // (Sprung zu Karte/Abschnitt/Zeile). Dann bekommt ein Textfeld den Fokus
+    // nicht zurück — auf dem Handy öffnete das die Tastatur wieder, mitten in
+    // den Scroll zum Ziel, und der Fokus gehört ohnehin nicht mehr dorthin.
+    closePalette({ jump = false } = {}) {
       this.paletteOpen = false;
       this.paletteQuery = '';
       this.paletteIdx = 0;
@@ -107,8 +112,15 @@ export function registerPaletteCard() {
       this._remountPaletteOverlay();
       const el = this._returnFocusEl;
       this._returnFocusEl = null;
+      // Eingabefeld der Palette sofort freigeben: solange es den Fokus hält,
+      // bleibt die Bildschirmtastatur offen, bis das x-show es versteckt.
+      const input = this.$refs.paletteInput;
+      if (input && document.activeElement === input) input.blur();
+      if (jump && isTextEntry(el)) return;
+      // preventScroll: das alte Fokus-Element (Palette-Knopf im Kopf, Editor)
+      // zöge sich sonst selbst ins Bild — gegen den Sprung, der gleich startet.
       if (el && typeof el.focus === 'function' && document.contains(el)) {
-        try { el.focus(); } catch {}
+        try { el.focus({ preventScroll: true }); } catch {}
       }
     },
 
@@ -173,6 +185,11 @@ export function registerPaletteCard() {
         buchtyp: (typeof root.currentBuchtyp === 'function' ? root.currentBuchtyp() : null) || null,
         cloudModelEffective: (Alpine.store('config')?.effectiveProviderClass || 'cloud') === 'cloud',
         config: configFlags(),
+        // Leiste neben dem Notebook-Editor (action.pageChat/pageIdeen).
+        pageAside: {
+          chat: !!root.canOpenPageAside?.('chat'),
+          ideen: !!root.canOpenPageAside?.('ideen'),
+        },
       };
     },
 
@@ -193,7 +210,7 @@ export function registerPaletteCard() {
         this.paletteQuery,
         ctx.selectedBookId, ctx.bookRole, ctx.buchtyp, ctx.cloudModelEffective,
         ...REQUIRED_CONFIG_FLAGS.map(k => ctx.config[k]),
-        ctx.hasBooks,
+        ctx.hasBooks, ctx.pageAside.chat, ctx.pageAside.ideen,
         nav.pages, (nav.pages || []).length,
         nav.tree, (nav.tree || []).length, root._chapterLabelMap,
         nav.werkstattDrafts,
@@ -322,7 +339,7 @@ export function registerPaletteCard() {
         const fn = root[item.feature.toggle];
         if (typeof fn !== 'function') return;
         const alreadyOpen = !!root[item.feature.flag];
-        this.closePalette();
+        this.closePalette({ jump: true });
         if (alreadyOpen) {
           const card = EXCLUSIVE_CARDS.find(c => c.flag === item.feature.flag);
           if (card) root._scrollToCardByKey?.(card.key);
@@ -339,7 +356,7 @@ export function registerPaletteCard() {
       // erst das `.catch` am Promise den Fehler, nicht das try.
       const run = item.kind === 'action' ? item.feature.run : item.run;
       if (typeof run !== 'function') return;
-      this.closePalette();
+      this.closePalette({ jump: true });
       const label = item.kind === 'action' ? '[palette action]' : '[palette provider]';
       try {
         Promise.resolve(run(root)).catch(e => console.error(label, e));

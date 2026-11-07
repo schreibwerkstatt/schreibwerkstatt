@@ -88,8 +88,19 @@ function saveDataOn() {
   try { return !!navigator.connection?.saveData; } catch { return false; }
 }
 
+// Registrierung mit aktivem Worker, sobald `serviceWorker.ready` aufgelöst hat.
+let swReg = null;
+
+// Empfänger für Nachrichten an den SW: der Controller dieses Tabs, sonst der
+// aktive Worker der Registrierung. **Why:** sw.js ruft bewusst kein
+// clients.claim() — nach dem Erst-Install und nach jedem harten Reload hat der
+// Tab keinen Controller, obwohl ein SW läuft. Nur am Controller gemessen fehlte
+// der Offline-Knopf dann bis zum nächsten normalen Reload. Ablage und Abgleich
+// gehören dem SW des ganzen Origins, nicht diesem Tab (Muster:
+// repo/content.js#_invalidateContentCache).
 function swController() {
-  return (typeof navigator !== 'undefined' && navigator.serviceWorker?.controller) || null;
+  if (typeof navigator === 'undefined' || !navigator.serviceWorker) return null;
+  return navigator.serviceWorker.controller || swReg?.active || null;
 }
 
 export const appOfflineBooksMethods = {
@@ -106,11 +117,23 @@ export const appOfflineBooksMethods = {
     if (typeof navigator === 'undefined' || !navigator.serviceWorker) return;
     navigator.serviceWorker.addEventListener('message', (e) => this._onOfflineBookMessage(e.data), { signal });
     window.addEventListener('online', () => this._syncOfflineBooks(), { signal });
-    // Kontrolliert erst nach dem Erst-Install — dann wird der Knopf sichtbar.
     navigator.serviceWorker.addEventListener('controllerchange', () => this._refreshOfflineCapable(), { signal });
     // Automatik: jedes geöffnete Buch wird das neue „zuletzt geöffnete".
     this.$watch(() => this.$store.nav.selectedBookId, (id) => this._noteBookOpenedForOffline(id));
     this._refreshOfflineCapable();
+    // Erst-Install bzw. unkontrollierter Tab: `ready` löst auf, sobald ein
+    // Worker aktiv ist (ohne Registrierung nie — dann bleibt der Knopf weg).
+    navigator.serviceWorker.ready?.then((reg) => {
+      if (signal?.aborted) return;
+      swReg = reg;
+      const wasCapable = this.$store.session.offlineCapable;
+      this._refreshOfflineCapable();
+      // Der Boot-Sync (_initOfflineBooksForUser) fand eventuell noch keinen
+      // Worker vor — jetzt nachholen.
+      if (!wasCapable && this._offlineUserReady && this._desiredOfflineBooks().length) {
+        setTimeout(() => this._syncOfflineBooks(), OFFLINE_SYNC_BOOT_DELAY_MS);
+      }
+    }, () => {});
   },
 
   _announceNetRequired(now = Date.now()) {

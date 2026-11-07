@@ -92,9 +92,12 @@
     return run;
   }
 
+  // Auch an unkontrollierte Tabs (Erst-Install, harter Reload — sw.js ruft
+  // kein clients.claim()): dort steht der Offline-Knopf ebenfalls, und ohne
+  // die Nachricht bliebe sein Fortschritt auf „Wird abgelegt …" stehen.
   async function post(msg) {
     try {
-      for (const c of await self.clients.matchAll({ includeUncontrolled: false })) c.postMessage(msg);
+      for (const c of await self.clients.matchAll({ type: 'window', includeUncontrolled: true })) c.postMessage(msg);
     } catch {}
   }
 

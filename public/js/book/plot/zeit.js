@@ -149,6 +149,21 @@ export const zeitMethods = {
       .map(b => window.__app.t('plot.zeitVorschlag.beleg', { datum: b.datum, ereignis: b.ereignis }));
   },
 
+  // Warum ein Vorschlag kein Häkchen hat (lib/plot-zeit-vorschlag.js#eindeutig).
+  zeitVorschlagKonkurrenzTip(v) {
+    const app = window.__app;
+    const list = (v && v.konkurrenz) || [];
+    if (!list.length) return '';
+    return app.t('plot.zeitVorschlag.konkurrenzTip', {
+      stellen: list.map(k => app.t('plot.zeitVorschlag.konkurrenzStelle', { abschnitt: k.page_name || '', zeit: k.zeit })).join('; '),
+    });
+  },
+
+  zeitVorschlagAktTip(v) {
+    if (!v || !v.akt) return '';
+    return window.__app.t('plot.zeitVorschlag.aktTip', { akt: v.akt.name, von: v.akt.from, bis: v.akt.to });
+  },
+
   zeitVorschlagFor(beatId) {
     return (this.zeitVorschlaege || []).find(v => v.beat_id === beatId) || null;
   },

@@ -4,7 +4,7 @@
 // Prosa-Abschluss.
 
 const { buildChatMessageHistory } = require('../shared');
-const { formatCitationNote, stripHistoryNote } = require('../../../lib/chat-history-note');
+const { formatCitationNote, formatSourceNote, stripHistoryNote } = require('../../../lib/chat-history-note');
 
 // Modell-Drift: schreibt Prosa-Antwort und hängt am Ende ```json\n{}\n``` als
 // Compliance-Theater an. extractBalancedJson greift dann das leere {} → antwort
@@ -33,7 +33,27 @@ function _neutralizeMarkers(content) {
 // es das Muster wiederholen. Der Hinweis selbst ist kein Echo und bleibt stehen.
 function _stripEcho(row) {
   if (row.role !== 'assistant') return row.content;
-  return stripHistoryNote(row.content);
+  const text = stripHistoryNote(row.content);
+  return _ciOf(row)?.mode === 'research' ? _stripResearchCites(text) : text;
+}
+
+function _ciOf(row) {
+  if (!row.context_info) return null;
+  try { return JSON.parse(row.context_info); } catch { return null; }
+}
+
+// Belegmarker einer Recherche-Antwort (`<cite index="N-…">TEXT</cite>` der
+// Anthropic-Suche, `[N]` des Suchwegs SearXNG) zeigen auf die Treffer IHRES Laufs.
+// Im Verlauf eines neuen Laufs zeigten dieselben Nummern auf andere Treffer —
+// das Modell kopierte sie und verlinkte falsch. Die Quellen selbst stehen in der
+// Quellen-Notiz (formatSourceNote). Gleiche Muster wie das Frontend
+// (public/js/chat/research-chat-render.js).
+const CITE_TAG_RE = /<cite\b[^>]*>([\s\S]*?)<\/cite>/gi;
+const BRACKET_CITE_RE = /[ \t]*\[(\d{1,3}(?:\s*,\s*\d{1,3})*)\](?!\()/g;
+function _stripResearchCites(text) {
+  if (typeof text !== 'string') return text;
+  if (/<cite\b/i.test(text)) return text.replace(CITE_TAG_RE, '$1').replace(/<\/?cite\b[^>]*>/gi, '');
+  return text.replace(BRACKET_CITE_RE, '');
 }
 
 // Belege früherer Antworten (context_info.citations, nur gültige) kompakt an den
@@ -41,15 +61,22 @@ function _stripEcho(row) {
 // («und was sagt sie danach?») nur die eigene Prosa, nicht mehr die Stellen, auf die
 // sie sich stützte — und sucht sie neu. Gedeckelt, der Verlauf soll nicht wachsen.
 // Format und Zweck: lib/chat-history-note.js.
+// Recherche-Antworten: statt Buch-Belegen die geprüften Quellen (answer_sources).
 function _citationNote(row) {
-  if (row.role !== 'assistant' || !row.context_info) return '';
-  let ci;
-  try { ci = JSON.parse(row.context_info); } catch { return ''; }
-  return formatCitationNote(ci?.citations);
+  if (row.role !== 'assistant') return '';
+  const ci = _ciOf(row);
+  if (!ci) return '';
+  if (ci.mode === 'research') return formatSourceNote(ci.answer_sources);
+  return formatCitationNote(ci.citations);
 }
 
-// Rolling-Window: erste user+assistant-Runde als Kontext-Anker + die letzten
-// tailMessages Nachrichten. Verhindert unbegrenztes Historien-Wachstum.
+// Rolling-Window: erste user+assistant-Runde als Kontext-Anker + höchstens
+// tailMessages der jüngsten Nachrichten. Verhindert unbegrenztes Historien-Wachstum.
+// Das Fenster rückt in Sprüngen vor, nicht mit jeder Frage: sein Anfang liegt auf
+// einem Raster von `step` Nachrichten, der Tail ist darum zwischen
+// tailMessages - step + 1 und tailMessages lang. Ein gleitendes Fenster änderte
+// den Verlauf direkt hinter dem Anker bei jedem Turn — der Cache-Präfix
+// (cacheHistory) würde dann jedes Mal ganz neu geschrieben statt gelesen.
 // Rollen strikt alternierend, Beginn mit user: ein Tail, der mit einer Antwort
 // beginnt, stünde sonst direkt hinter der Anker-Antwort (zwei Assistant-Turns in
 // Folge — Anthropic verschmilzt sie stumm, strikte Chat-Vorlagen lokaler Modelle
@@ -60,7 +87,12 @@ function buildAgenticHistory(sessionId, tailMessages = 10) {
   while (all.length && all[0].role !== 'user') all.shift();
   if (all.length <= tailMessages + 2) return all;
   const anchor = all[1]?.role === 'assistant' ? [all[0], all[1]] : [all[0]];
-  const tail = all.slice(-tailMessages);
+  const body = all.slice(anchor.length);
+  // Gerades Raster: ein Fensteranfang auf einer Frage bleibt auf einer Frage.
+  const step = 2 * Math.max(1, Math.ceil(tailMessages / 4));
+  const minKeep = Math.max(1, tailMessages - step + 1);
+  const start = Math.max(0, Math.floor((body.length - minKeep) / step) * step);
+  const tail = body.slice(start);
   while (tail.length && tail[0].role === 'assistant') tail.shift();
   return [...anchor, ...tail];
 }

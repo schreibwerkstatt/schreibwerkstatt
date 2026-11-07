@@ -144,11 +144,38 @@ test('get_figure_age: Schulstufe aus dem Buch-Schulsystem (im Code gerechnet)', 
   // Übertritt nach der 2. Bez: Herbst 1975 = 1. Obergym.
   const g = await call('get_figure_age', { figur_name: 'Anna', jahr: 1975 });
   assert.equal(g.zum_jahr.schulstufe.herbst.klasse, '1. Obergym');
+  // Schulzeit als Zeiträume: Primar ab Aug 1967 bis Sommer 1973, dann 2 Jahre Bez.
+  const zeit = r.schulweg.schulzeit;
+  assert.deepEqual(zeit.stufen.slice(0, 2), [
+    { stufe: 'Primarschule', von: 1967, bis: 1973 },
+    { stufe: 'Bezirksschule', von: 1973, bis: 1975 },
+  ]);
+  assert.equal(zeit.unsicher, undefined);
+  // Liste aller Figuren trägt dieselbe Schulzeit; Bert (nur Jahr) als unsicher.
+  const all = await call('get_figure_age', { jahr: 1975 });
+  assert.deepEqual(all.figuren.find(f => f.fig_id === 'fig_anna').schulzeit, zeit);
+  assert.equal(all.figuren.find(f => f.fig_id === 'fig_bert').schulzeit.unsicher, true);
   setBookSchulsystem(BOOK, null);
 });
 
-test('ageAt: Spanne ohne Monat, exakt mit Monat, vor der Geburt markiert', () => {
-  const { ageAt } = require('../../routes/jobs/chat-tools/tools-timeline');
+test('get_figure_age: ohne Figur, mit jahr+monat → alle Figuren zum Stichtag, nur eigene', async () => {
+  const r = await call('get_figure_age', { jahr: 2001, monat: 6 });
+  assert.deepEqual(r.stichtag, { jahr: 2001, monat: 6 });
+  const anna = r.figuren.find(f => f.fig_id === 'fig_anna');
+  assert.equal(anna.alter, 40);            // März 1961 → Juni 2001: Geburtstag vorbei
+  assert.equal(anna.exakt, true);
+  const bert = r.figuren.find(f => f.fig_id === 'fig_bert');
+  assert.deepEqual([bert.alter_von, bert.alter_bis], [30, 31]); // nur Geburtsjahr
+  assert.deepEqual(r.ohne_geburtsjahr, ['Cleo Cron']);
+  assert.ok(!JSON.stringify(r).includes('Fremdfigur'));
+  // Einzelfigur mit Monat: exakt statt Spanne.
+  const e = await call('get_figure_age', { figur_name: 'Anna', jahr: 2001, monat: 2 });
+  assert.equal(e.zum_jahr.alter, 39);
+  assert.match((await call('get_figure_age', {})).error, /erforderlich/);
+});
+
+test('ageAt: Spanne ohne Monat, exakt mit Monat, vor der Geburt markiert', async () => {
+  const { ageAt } = await require('../../lib/esm-bridge').ageAtModule();
   assert.deepEqual(ageAt({ y: 1960 }, { y: 1990 }), { alter_von: 29, alter_bis: 30, exakt: false });
   assert.deepEqual(ageAt({ y: 1960, m: 5 }, { y: 1990, m: 6 }), { alter: 30, exakt: true });
   assert.deepEqual(ageAt({ y: 1960, m: 5, d: 20 }, { y: 1990, m: 5, d: 19 }), { alter: 29, exakt: true });
@@ -240,4 +267,8 @@ test('getFiguren: Geburtsjahr nach derselben Vorrangregel wie get_figure_age, Wi
   assert.equal(byId.fig_fremd, undefined);
   // Werkzeug und Block sagen dasselbe.
   assert.deepEqual((await call('get_figure_age', { figur_id: 'fig_bert' })).geburtsjahr_widerspruch, byId.fig_bert.geburtsjahr_widerspruch);
+  // … und die Stichtag-Liste aller Figuren ebenso.
+  const all = await call('get_figure_age', { jahr: 2001 });
+  assert.deepEqual(all.figuren.find(f => f.fig_id === 'fig_bert').geburtsjahr_widerspruch, byId.fig_bert.geburtsjahr_widerspruch);
+  assert.equal(all.figuren.find(f => f.fig_id === 'fig_anna').geburtsjahr_widerspruch, undefined);
 });

@@ -382,6 +382,19 @@
   font-variant-numeric: tabular-nums;
 }
 .page-revisions-row--child .page-revisions-row__time { color: var(--color-muted); }
+/* Uhrzeit als Oeffnen-Knopf: Tastatur-/Screenreader-Ziel der Zeile, sieht
+   aus wie Text (die Zeile traegt Hover und Cursor). */
+.page-revisions-row__open {
+  background: none;
+  border: 0;
+  padding: 0;
+  font: inherit;
+  font-size: var(--font-size-sm);
+  text-align: left;
+  cursor: pointer;
+  border-radius: var(--radius-md);
+}
+.page-revisions-row__open:focus-visible { outline: var(--focus-ring); outline-offset: var(--focus-ring-offset); }
 /* Quelle + Geraet als eine ruhige Zeile «Editor · Chrome · macOS». */
 .page-revisions-row__source { font-size: var(--font-size-xs); font-weight: var(--fw-semibold); color: var(--color-muted); }
 /* Einzeilig auch in schmaler Spalte (Editor neben Chat): Uhrzeit, Zahlen und

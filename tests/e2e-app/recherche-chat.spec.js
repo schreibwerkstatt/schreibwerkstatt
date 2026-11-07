@@ -92,7 +92,8 @@ test('recherche-chat: Ideen-Vorschlag neben Fundstück, getrennt gerendert und e
   await page.route('**/ideen/chat-proposal', async (route) => {
     const body = route.request().postDataJSON();
     patches.push(body);
-    await route.fulfill({ json: { proposal: { applied_at: '2026-01-01T00:00:00.000Z', applied_id: body.applied_id } } });
+    // claim reserviert nur (vor dem Schreiben, proposal-status.js#applyProposalOnce).
+    await route.fulfill({ json: { proposal: body.action === 'claim' ? { claimed_at: '2026-01-01T00:00:00.000Z' } : { applied_at: '2026-01-01T00:00:00.000Z', applied_id: body.applied_id } } });
   });
   const pageId = await page.evaluate(() => window.Alpine.store('nav').pages[0].id);
   await page.evaluate((pid) => {
@@ -118,7 +119,8 @@ test('recherche-chat: Ideen-Vorschlag neben Fundstück, getrennt gerendert und e
     created = await page.evaluate(async (pid) => (await (await fetch('/ideen?page_id=' + pid)).json()), pageId);
     const mine = created.filter(i => i.content === 'Bahnfahrt 1845 prüfen — Strecke erst 1847 eröffnet');
     expect(mine).toHaveLength(1);
-    expect(patches[0]).toMatchObject({ message_id: 987657, index: 1, action: 'applied', applied_id: mine[0].id });
+    expect(patches.map(p => p.action)).toEqual(['claim', 'applied']);
+    expect(patches[1]).toMatchObject({ message_id: 987657, index: 1, action: 'applied', applied_id: mine[0].id });
   } finally {
     // Seed-Abschnitt: angelegte Idee wieder entfernen, andere Specs zählen den Seed.
     created = await page.evaluate(async (pid) => (await (await fetch('/ideen?page_id=' + pid)).json()), pageId);
@@ -182,3 +184,65 @@ test('recherche-chat: Übergabe legt die Frage in eine neue Session (nicht ins l
   expect(await page.evaluate(() => window.Alpine.$data(document.querySelector('#recherche-card')).researchChatMessages.length)).toBe(0);
 });
 
+
+// Änderungen an bestehenden Einträgen (recherche-chat-changes.html): eigene
+// Karten neben Fundstück und Idee, Übernehmen schickt den ECHTEN Index in
+// context_info.proposals, Verwerfen läuft über PATCH /research/chat-proposal.
+test('recherche-chat: Änderungsvorschläge getrennt gerendert, Übernehmen + Verwerfen', async ({ page }) => {
+  await bootApp(page);
+  const bookId = await selectSeededBook(page);
+  await page.evaluate((id) => { location.hash = `#book/${id}/recherche`; }, bookId);
+  await expect(page.locator('#recherche-card')).toBeVisible();
+  await page.evaluate(() => { window.Alpine.store('config').researchChatEnabled = true; });
+  await page.locator('#recherche-card .card-header-aside button[aria-pressed]').first().click();
+  await page.waitForFunction(() => window.Alpine.$data(document.querySelector('#recherche-card')).researchChatSessionId != null);
+
+  const applied = [];
+  const patched = [];
+  await page.route('**/research/chat-proposal/apply', async (route) => {
+    const body = route.request().postDataJSON();
+    applied.push(body);
+    await route.fulfill({ json: { item: { id: 4242 }, proposal: { type: 'research_update', item_id: 4242, fields: { status: 'eingearbeitet' }, labels: { item: 'Fahrplan 1847' }, applied_at: '2026-01-01T00:00:00.000Z', applied_id: 4242 } } });
+  });
+  await page.route('**/research/chat-proposal', async (route) => {
+    if (route.request().method() !== 'PATCH') return route.fallback();
+    const body = route.request().postDataJSON();
+    patched.push(body);
+    await route.fulfill({ json: { proposal: { type: 'research_archive', item_id: 4243, status: 'discarded' } } });
+  });
+  const pageId = await page.evaluate(() => window.Alpine.store('nav').pages[0].id);
+  await page.evaluate((pid) => {
+    window.Alpine.$data(document.querySelector('#recherche-card')).researchChatMessages = [{
+      id: 987658, role: 'assistant', content: 'Antwort.',
+      context_info: { proposals: [
+        { kind: 'fact', title: 'Neu', body: 'Neues Fundstück', urls: [] },
+        { type: 'research_update', item_id: 4242, fields: { status: 'eingearbeitet', append: 'Ab 1902 elektrisch.' },
+          before: { status: 'offen' }, beleg: { text: 'um 7 Uhr in Olten', page_id: pid },
+          labels: { item: 'Fahrplan 1847', beleg_page: 'Ankunft' } },
+        { type: 'research_archive', item_id: 4243, labels: { item: 'Alter Fund' } },
+        { type: 'research_merge', item_id: 4242, merge_item_id: 4244, fields: {}, before: {},
+          labels: { item: 'Fahrplan 1847', merge_item: 'Fahrplan Kopie' }, merge_preview: { body: 'Kopie-Text' } },
+        { type: 'idee_create', fields: { content: 'Uhrzeit prüfen', page_id: pid }, labels: { anchor: 'Ankunft', anchor_kind: 'page' } },
+      ] },
+    }];
+  }, pageId);
+
+  const card = page.locator('#research-chat-card');
+  await expect(card.locator('.research-chat-proposal')).toHaveCount(1);
+  await expect(card.locator('.chat-idee-vorschlaege .chat-vorschlag')).toHaveCount(1);
+  const changes = card.locator('.research-chat-changes > .chat-vorschlag');
+  await expect(changes).toHaveCount(3);
+  const update = changes.nth(0);
+  await expect(update.locator('.research-chat-change-beleg q')).toHaveText('um 7 Uhr in Olten');
+  await expect(update).toContainText('Ab 1902 elektrisch.');
+  await expect(changes.nth(2)).toContainText('Kopie-Text');
+
+  await update.getByRole('button', { name: /Übernehmen|Apply/ }).click();
+  await expect(update).toHaveClass(/chat-vorschlag--applied/);
+  expect(applied[0]).toMatchObject({ message_id: 987658, index: 1 });
+
+  const archive = changes.nth(1);
+  await archive.getByRole('button', { name: /Verwerfen|Discard/ }).click();
+  await expect(archive).toHaveClass(/chat-vorschlag--discarded/);
+  expect(patched[0]).toMatchObject({ message_id: 987658, index: 2, action: 'discarded' });
+});

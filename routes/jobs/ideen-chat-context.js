@@ -22,6 +22,10 @@ const { sessionProposalMemory, proposalState: sharedProposalState, oneLine: _one
 // abgeschlossene Ideen nur noch als Zahl je Gruppe (fitIdeenOutline).
 const PREVIEW_LEVELS = [{ open: 400, closed: 140 }, { open: 200, closed: 0 }, { open: 90, closed: 0 }];
 const MAX_TARGETS_PER_KIND = 80;
+// Ab so vielen Tagen gilt eine offene Idee als «lange offen» — der Schnellstart
+// «Was liegt lange offen?» arbeitet genau diese Markierung ab.
+const IDEE_STALE_DAYS = 60; // = public/js/book/ideen-board/model.js#IDEE_STALE_DAYS (Liste: «liegengeblieben»), Gleichstand gegated
+const DAY_MS = 24 * 60 * 60 * 1000;
 
 /**
  * Alles, was Outline und Vorschlags-Validierung brauchen. `tree` ist das Ergebnis
@@ -47,6 +51,7 @@ function loadIdeenState(bookId, userEmail, tree = {}) {
     // Bearbeitungsstand je Abschnitt (docs/bearbeitungsstand.md) — steht an den
     // Abschnitten der Outlines, damit «final + offene Pendenz» auffaellt.
     editStatus: listBookStatus(bookId),
+    now: Date.now(),
   };
 }
 
@@ -59,11 +64,37 @@ function _standSuffix(state, pageId) {
 
 const LINK_KIND_LABEL = { research: 'Recherche', beat: 'Beat', thread: 'Strang', motif: 'Motiv', draft: 'Werkstatt-Figur' };
 
-function _ideeLine(i, lvl = PREVIEW_LEVELS[0]) {
+// Ganze Tage seit einem ISO-Zeitpunkt, null ohne gültiges Datum.
+function _daysSince(iso, now) {
+  const t = Date.parse(iso || '');
+  return Number.isFinite(t) ? Math.max(0, Math.floor((now - t) / DAY_MS)) : null;
+}
+
+// «notiert vor 50 Tagen, in Arbeit seit 12 Tagen — LANGE OFFEN» bzw. leer.
+// Nur für offene Ideen: an einer abgeschlossenen sagt das Alter nichts.
+function _ageNote(i, now) {
+  if (!now || !isOpenIdeeStatus(i.status)) return '';
+  const age = _daysSince(i.created_at, now);
+  if (age == null) return '';
+  const bits = [`notiert vor ${age} Tagen`];
+  if (i.status === 'in_arbeit') {
+    const since = _daysSince(i.status_at, now);
+    if (since != null) bits.push(`in Arbeit seit ${since} Tagen`);
+  }
+  return bits.join(', ') + (age >= IDEE_STALE_DAYS ? ' — LANGE OFFEN' : '');
+}
+
+function _ideeLine(i, lvl = PREVIEW_LEVELS[0], now = null) {
   const open = isOpenIdeeStatus(i.status);
   const parts = [`[#${i.id}] (${i.status})`, `«${_oneLine(i.content, open ? lvl.open : (lvl.closed || 140))}»`];
+  const age = _ageNote(i, now);
+  if (age) parts.push(age);
   const links = (i.links || []).map(l => `${LINK_KIND_LABEL[l.target_kind] || l.target_kind} «${_oneLine(l.label, 60)}» [${l.target_kind}#${l.target_id}]`);
   if (links.length) parts.push(`verknüpft: ${links.join(', ')}`);
+  // Geprüfter Fund des Auto-Checks (wörtlich im Abschnitt gefunden, ideen-auto-check.js):
+  // der Chat braucht den Abschnitt dafür nicht neu zu lesen.
+  const h = open ? i.check_hint : null;
+  if (h?.beleg) parts.push(`AUTO-CHECK eingelöst? «${_oneLine(h.beleg, 200)}» [page#${h.page_id}]`);
   return `  - ${parts.join(' · ')}`;
 }
 
@@ -84,7 +115,7 @@ function ideenOutline(state, { level = 0 } = {}) {
   const emit = (list, indent) => {
     list.forEach(i => used.add(i.id));
     const shown = collapseClosed ? list.filter(i => isOpenIdeeStatus(i.status)) : list;
-    shown.forEach(i => out.push(indent + _ideeLine(i, lvl)));
+    shown.forEach(i => out.push(indent + _ideeLine(i, lvl, state.now)));
     const hidden = list.filter(i => !shown.includes(i));
     if (hidden.length) {
       const by = {};
@@ -178,7 +209,7 @@ function targetsOutline(state) {
   return out.join('\n');
 }
 
-const PROPOSAL_TYPE_LABEL = { idee_create: 'neue Idee', idee_update: 'Idee ändern', link_create: 'Verknüpfung' };
+const PROPOSAL_TYPE_LABEL = { idee_create: 'neue Idee', idee_update: 'Idee ändern', link_create: 'Verknüpfung', idee_merge: 'zusammenführen' };
 
 /** Anzeige-Titel eines gespeicherten Vorschlags (Gedächtnis-Block + Logs). */
 function proposalLabel(p) {
@@ -193,6 +224,7 @@ function proposalLabel(p) {
     return `#${p.idee_id} «${_oneLine(p.labels?.idee, 60)}» ${what.join(', ')}`.trim();
   }
   if (p.type === 'link_create') return `${p.idee_id ? `#${p.idee_id}` : 'neue Idee'} ↔ ${p.labels?.target || p.target_kind}`;
+  if (p.type === 'idee_merge') return `${(p.merge_ids || []).map(i => '#' + i).join(', ')} → #${p.idee_id} «${_oneLine(p.labels?.idee, 60)}»`;
   return '';
 }
 
@@ -217,5 +249,5 @@ function sessionIdeenProposalMemory(sessionId, state = null) {
 
 module.exports = {
   loadIdeenState, ideenOutline, fitIdeenOutline, gliederungOutline, targetsOutline,
-  sessionIdeenProposalMemory, proposalLabel, proposalState, PROPOSAL_TYPE_LABEL,
+  sessionIdeenProposalMemory, proposalLabel, proposalState, PROPOSAL_TYPE_LABEL, IDEE_STALE_DAYS,
 };

@@ -1,0 +1,85 @@
+<!-- Figur-Detail: Berufsweg und Hobbys (docs/figur-lebenslauf.md «Berufsweg und Hobbys»)
+     Fragment der Figurenübersicht — eingebunden via `<!-- @include figuren-detail-stationen -->`
+     in figuren-detail.html (string-seitiger Include, weil der Block INNERHALB des
+     `x-for` über die Figuren steht). Scope: `figurenCard` + Schleifenvariable `f`.
+     Methods: public/js/book/figuren-stationen.js. Zwei Listen, eine Vorlage:
+     `kind` = berufe | hobbys; die Berufsfelder (Art, Arbeitgeber) nur bei Berufen. -->
+<template x-for="kind in ['berufe', 'hobbys']" :key="kind">
+  <section class="figur-group figur-stationen">
+    <h4 class="figur-group-title" x-text="$app.t('figuren.stationen.title.' + kind)"></h4>
+
+    <p class="muted-msg muted-msg--sm"
+       x-show="!figurStationenAktiv(f, kind).length && !figurStationenVorschlaege(f, kind).length && !figurStationEditing(f, kind)"
+       x-text="$app.t('figuren.stationen.leer.' + kind)"></p>
+
+    <ul class="figur-station-list" x-show="figurStationenAktiv(f, kind).length">
+      <template x-for="s in figurStationenAktiv(f, kind)" :key="s.id">
+        <li class="figur-station">
+          <template x-if="!figurStationEditing(f, kind, s)">
+            <div class="figur-station-head">
+              <span class="figur-station-titel" x-text="figurStationTitel(kind, s)"></span>
+              <span class="figur-station-meta" x-show="figurStationMeta(kind, s)" x-text="figurStationMeta(kind, s)"></span>
+              <span class="figur-station-actions">
+                <template x-if="s.page_id">
+                  <button type="button" class="entity-ref" x-entity-ref="{ type: 'seite', id: s.page_id }"></button>
+                </template>
+                <button type="button" class="icon-btn icon-btn--ghost" :disabled="figurStationBusy"
+                        :aria-label="$app.t('figuren.stationen.edit')" :data-tip="$app.t('figuren.stationen.edit')"
+                        @click.stop="startFigurStationEdit(f, kind, s)">
+                  <svg class="icon" aria-hidden="true"><use href="/icons.svg#pencil"/></svg>
+                </button>
+                <button type="button" class="icon-btn icon-btn--ghost" :disabled="figurStationBusy"
+                        :aria-label="$app.t('common.delete')" :data-tip="$app.t('common.delete')"
+                        @click.stop="deleteFigurStation(f, kind, s)">
+                  <svg class="icon" aria-hidden="true"><use href="/icons.svg#trash"/></svg>
+                </button>
+              </span>
+            </div>
+          </template>
+          <template x-if="figurStationEditing(f, kind, s)">
+            <div><!-- @include figuren-detail-stationen-form --></div>
+          </template>
+        </li>
+      </template>
+    </ul>
+
+    <template x-if="figurStationEditing(f, kind)">
+      <div><!-- @include figuren-detail-stationen-form --></div>
+    </template>
+
+    <div class="figur-detail-actions" x-show="!figurStationEditing(f, kind)">
+      <button type="button" class="btn-compact" :disabled="figurStationBusy" @click.stop="startFigurStationNew(f, kind)">
+        <svg class="icon" aria-hidden="true"><use href="/icons.svg#plus"/></svg>
+        <span x-text="$app.t('figuren.stationen.add.' + kind)"></span>
+      </button>
+    </div>
+
+    <!-- Offene KI-Vorschläge: nur mit wörtlichem, geprüftem Beleg; übernimmt erst der Autor. -->
+    <template x-if="figurStationenVorschlaege(f, kind).length">
+      <div class="figur-schule-vorschlag">
+        <p class="card-form-section-divider" x-text="$app.t('figuren.stationen.vorschlagTitel')"></p>
+        <template x-for="s in figurStationenVorschlaege(f, kind)" :key="s.id">
+          <div class="figur-station figur-station--vorschlag">
+            <div class="figur-station-head">
+              <span class="figur-station-titel" x-text="figurStationTitel(kind, s)"></span>
+              <span class="figur-station-meta" x-show="figurStationMeta(kind, s)" x-text="figurStationMeta(kind, s)"></span>
+            </div>
+            <blockquote class="figur-schule-beleg">
+              <span x-text="'«' + s.zitat + '»'"></span>
+              <template x-if="s.page_id">
+                <button type="button" class="entity-ref" x-entity-ref="{ type: 'seite', id: s.page_id }"></button>
+              </template>
+            </blockquote>
+            <p class="card-hint card-hint--sm" x-show="s.begruendung" x-text="s.begruendung"></p>
+            <div class="figur-edit-actions">
+              <button type="button" class="primary" :disabled="figurStationBusy" @click="acceptFigurStation(f, kind, s)" x-text="$app.t('figuren.schule.uebernehmen')"></button>
+              <button type="button" :disabled="figurStationBusy" @click="rejectFigurStation(f, kind, s)" x-text="$app.t('figuren.schule.verwerfen')"></button>
+            </div>
+          </div>
+        </template>
+      </div>
+    </template>
+
+    <p class="card-form-error" x-show="figurStationError && figurStationEdit?.figId === f.id && figurStationEdit?.kind === kind" x-text="figurStationError"></p>
+  </section>
+</template>

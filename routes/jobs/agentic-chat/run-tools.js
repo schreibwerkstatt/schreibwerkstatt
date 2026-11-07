@@ -47,7 +47,16 @@ function failureKey(err) {
  * @param {Function} p.executeTool   config.executeTool(name, input, ctx)
  * @param {object}   p.ctx
  * @param {Set<string>} p.offered    Namen aller Werkzeuge, die der Lauf dem Modell anbietet
- * @param {object}   p.caps          { maxToolsPerRound, roundResultCap, toolResultCaps, capFor }
+ * @param {object}   p.caps          { maxToolsPerRound, roundResultCap, toolResultCaps, capFor,
+ *                                     collectTools?, parallelTools? }
+ *   collectTools:  Set — Werkzeuge, die nur sammeln (propose_*: kein I/O, winziges
+ *                  Ergebnis). Sie zählen nicht gegen maxToolsPerRound: der Deckel
+ *                  schützt das Fenster vor vielen Volltexten, Vorschläge deckelt der
+ *                  Chat selbst (MAX_PROPOSALS) — und die Prompts verlangen sie gebündelt.
+ *   parallelTools: Set — Werkzeuge mit Netz-I/O, deren Handler gleichzeitige Aufrufe
+ *                  vertragen (Recherche-Chat: web_search, read_web_page). Folgen
+ *                  mehrere davon direkt aufeinander, laufen sie gleichzeitig; Deckel,
+ *                  Ergebnis-Reihenfolge und Verlauf bleiben wie seriell.
  * @param {Array}    p.toolLog
  * @param {Function} p.toolView      (name, input, out, ok) → Sicht | null
  * @param {object}   p.logger
@@ -57,45 +66,84 @@ function failureKey(err) {
  */
 function makeToolRunner({ executeTool, ctx, offered, caps, toolLog, toolView, logger, jobSignal, publishLive, counters }) {
   const { maxToolsPerRound, roundResultCap, toolResultCaps, capFor } = caps;
+  const collectTools = caps.collectTools || new Set();
+  const parallelTools = caps.parallelTools || new Set();
+
+  const execute = async (tu) => {
+    const t0 = Date.now();
+    try {
+      const out = await executeTool(tu.name, tu.input, ctx);
+      return { out, ok: true, errMsg: null, thrown: null, durationMs: Date.now() - t0 };
+    } catch (e) {
+      if (e.name === 'AbortError') throw e;
+      return { out: { error: e.message }, ok: false, errMsg: e.message, thrown: e, durationMs: Date.now() - t0 };
+    }
+  };
+
   return async function runTools(toolUses, iterNum) {
     const toolResults = [];
     let roundChars = 0;
     let executed = 0;
-    for (const tu of toolUses) {
-      if (jobSignal?.aborted) throw new DOMException('Aborted', 'AbortError');
-      const t0 = Date.now();
-      let out, ok = true, errMsg = null, skipped = false, thrown = null;
-      const remaining = roundResultCap - roundChars;
+
+    // Warum ein Aufruf NICHT läuft (Fehler-Result fürs Modell) — oder null.
+    // `remaining`: Rest des Rundenbudgets nach allem, was davor lief oder reserviert ist.
+    const refuse = (tu, remaining) => {
       if (tu.parseError) {
-        skipped = true;
-        out = _skipped(`Werkzeug-Argumente waren kein gültiges JSON (${String(tu.parseError).slice(0, 120)}) – Aufruf NICHT ausgeführt. Wiederhole ihn mit gültigen Argumenten.`, 'chat.toolError.invalidArgs');
-      } else if (!offered.has(tu.name)) {
+        return _skipped(`Werkzeug-Argumente waren kein gültiges JSON (${String(tu.parseError).slice(0, 120)}) – Aufruf NICHT ausgeführt. Wiederhole ihn mit gültigen Argumenten.`, 'chat.toolError.invalidArgs');
+      }
+      if (!offered.has(tu.name)) {
         // Nur was dieser Lauf anbietet, läuft — für jeden Chat an derselben Stelle.
         // Ein erfundener oder fremder Name (Werkzeug eines anderen Chats, Slim-Satz
         // ohne dieses Werkzeug, fehlender Endpunkt) erreicht keinen Handler.
-        skipped = true;
         counters.notOffered++;
-        out = _skipped(`Werkzeug «${String(tu.name).slice(0, 80)}» wird in diesem Lauf nicht angeboten – Aufruf NICHT ausgeführt. Nutze nur die angebotenen Werkzeuge.`, 'chat.toolError.notOffered');
-      } else if (executed >= maxToolsPerRound) {
-        skipped = true;
-        out = _skipped(`Nicht ausgeführt: höchstens ${maxToolsPerRound} Werkzeug-Aufrufe pro Runde. Fordere ihn in der nächsten Runde erneut an, falls er noch nötig ist.`, 'chat.toolError.roundLimit', { max: maxToolsPerRound });
-      } else if (remaining < 500 || (Number(toolResultCaps[tu.name]) > 0 && remaining < capFor(tu.name))) {
+        return _skipped(`Werkzeug «${String(tu.name).slice(0, 80)}» wird in diesem Lauf nicht angeboten – Aufruf NICHT ausgeführt. Nutze nur die angebotenen Werkzeuge.`, 'chat.toolError.notOffered');
+      }
+      if (!collectTools.has(tu.name) && executed >= maxToolsPerRound) {
+        return _skipped(`Nicht ausgeführt: höchstens ${maxToolsPerRound} Werkzeug-Aufrufe pro Runde. Fordere ihn in der nächsten Runde erneut an, falls er noch nötig ist.`, 'chat.toolError.roundLimit', { max: maxToolsPerRound });
+      }
+      if (remaining < 500 || (Number(toolResultCaps[tu.name]) > 0 && remaining < capFor(tu.name))) {
         // Ein Werkzeug mit eigenem Deckel (Recherche-Chat: read_web_page) misst sein
         // Ergebnis auf genau diesen Deckel; passt der nicht mehr ins Rundenbudget,
         // läuft es in der nächsten Runde, statt hier hart geschnitten zu werden.
-        skipped = true;
-        out = _skipped('Nicht ausgeführt: das Ergebnis-Budget dieser Runde ist ausgeschöpft. Fordere den Aufruf in der nächsten Runde erneut an, falls er noch nötig ist.', 'chat.toolError.roundBudget');
-      } else {
-        executed++;
-        try {
-          out = await executeTool(tu.name, tu.input, ctx);
-        } catch (e) {
-          if (e.name === 'AbortError') throw e;
-          ok = false; errMsg = e.message; thrown = e; out = { error: e.message };
-        }
+        return _skipped('Nicht ausgeführt: das Ergebnis-Budget dieser Runde ist ausgeschöpft. Fordere den Aufruf in der nächsten Runde erneut an, falls er noch nötig ist.', 'chat.toolError.roundBudget');
       }
+      return null;
+    };
+
+    for (let i = 0; i < toolUses.length;) {
+      if (jobSignal?.aborted) throw new DOMException('Aborted', 'AbortError');
+      // Block gleichzeitig laufender Aufrufe: direkt aufeinanderfolgende Werkzeuge
+      // aus parallelTools. Zugelassen wird wie seriell, nur mit dem vollen Einzeldeckel
+      // als Platzhalter für die noch unbekannte Ergebnisgrösse — dieselbe Entscheidung
+      // also, wie wenn jeder Vorgänger seinen Deckel ausgeschöpft hätte.
+      let j = i + 1;
+      if (parallelTools.has(toolUses[i].name)) {
+        while (j < toolUses.length && parallelTools.has(toolUses[j].name)) j++;
+      }
+      const batch = toolUses.slice(i, j);
+      i = j;
+      let reserved = 0;
+      const plans = batch.map((tu) => {
+        const remaining = roundResultCap - roundChars - reserved;
+        const skip = refuse(tu, remaining);
+        if (skip) return { tu, skip };
+        if (!collectTools.has(tu.name)) executed++;
+        if (batch.length > 1) reserved += Math.min(capFor(tu.name), Math.max(0, remaining));
+        return { tu, run: true };
+      });
+      const runs = await Promise.all(plans.map(p => (p.run ? execute(p.tu) : null)));
+      for (let k = 0; k < plans.length; k++) {
+        const { tu, skip } = plans[k];
+        const run = runs[k];
+        record(tu, run || { out: skip, ok: true, errMsg: null, thrown: null, durationMs: 0 }, !run);
+      }
+    }
+    publishLive();
+    return toolResults;
+
+    function record(tu, { out, ok, errMsg, thrown, durationMs }, skipped) {
+      const remaining = roundResultCap - roundChars;
       if (skipped) counters.skipped++;
-      const durationMs = Date.now() - t0;
       // errorKey/errorParams sind fürs UI (Werkzeug-Liste), nicht fürs Modell.
       let errorKey = null, errorParams = null;
       if (out && typeof out === 'object' && !Array.isArray(out) && ('errorKey' in out || 'errorParams' in out)) {
@@ -132,8 +180,6 @@ function makeToolRunner({ executeTool, ctx, offered, caps, toolLog, toolView, lo
         ...(out && out.error ? { is_error: true } : {}),
       });
     }
-    publishLive();
-    return toolResults;
   };
 }
 

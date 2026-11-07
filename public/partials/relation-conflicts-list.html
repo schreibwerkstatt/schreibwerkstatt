@@ -14,7 +14,12 @@
         </template>
       </div>
       <p class="relcheck-snippet" x-show="c.snippet" x-text="c.snippet"></p>
-      <p class="card-form-hint" x-text="$app.t('relcheck.sources', { list: c.sources.join(', ') })"></p>
+      <p class="card-form-hint" x-show="c.refs?.length"
+         x-text="$app.t('relcheck.sources', { list: (c.refs || []).map(r => r.kind === 'relation'
+           ? $app.t('relcheck.ref.relation', { from: r.from, to: r.to, typ: $app.t('figuren.bz.' + r.typ) })
+           : r.kind === 'event'
+             ? $app.t('relcheck.ref.event', { fig: r.fig, title: r.title })
+             : $app.t('relcheck.ref.bio.' + r.field, { fig: r.fig })).join(' · ') })"></p>
       <p class="card-form-hint" x-show="c.kept?.length"
          x-text="$app.t('finetune.relcheck.kept', { list: (c.kept || []).map(p => p.join(' – ')).join(', ') })"></p>
     </li>

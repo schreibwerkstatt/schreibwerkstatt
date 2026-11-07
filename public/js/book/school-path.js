@@ -363,6 +363,42 @@ export function schoolStageAt({ geburt, system, figur = null, jahr, monat = null
   return { ...first, unsicher: true, alternative: alt };
 }
 
+/**
+ * Schulzeit einer Figur als Zeitraeume je Stufe: «Primar 1991–1997, Bez 1997–2000».
+ * `von`/`bis` sind Kalenderjahre der Schuljahresbeginne (Sommer `von` bis Sommer
+ * `bis`). Dieselbe Rechnung wie schoolStageAt (Einschulung, Weg, Repetitionen) —
+ * nur zusammengefasst statt an einem Tag abgefragt.
+ *
+ * @returns {object|null} { weg, einschulung, abschluss, stufen: [{ stufe, von, bis }],
+ *   unsicher?, einschulung_alternative? } — null ohne System, Weg oder Geburt (und
+ *   ohne Einschulungs-Override). `unsicher`: Geburtstag relativ zum Stichtag unbekannt,
+ *   jede Grenze kann ein Jahr spaeter (bzw. frueher) liegen.
+ */
+export function schulZeiten({ geburt, system, figur = null }) {
+  const s = system?.stufen ? system : resolveSchulsystem(system);
+  if (!s) return null;
+  const weg = figurWeg(s, figur);
+  if (!weg) return null;
+  const override = _int(figur?.einschulung_jahr);
+  const kandidaten = override != null ? [override] : einschulungsJahre(geburt, s);
+  if (!kandidaten.length) return null;
+  const ablauf = wegAblauf(s, weg, figur?.repetitionen || []);
+  if (!ablauf.length) return null;
+  const e = kandidaten[0];
+  const stufen = [];
+  ablauf.forEach((p, i) => {
+    const last = stufen[stufen.length - 1];
+    if (last && last.stufe === p.stufe) last.bis = e + i + 1;
+    else stufen.push({ stufe: p.stufe, von: e + i, bis: e + i + 1 });
+  });
+  const out = { weg, einschulung: e, abschluss: e + ablauf.length, stufen };
+  if (kandidaten.length > 1 && kandidaten[1] !== e) {
+    out.unsicher = true;
+    out.einschulung_alternative = kandidaten[1];
+  }
+  return out;
+}
+
 /** Kalenderjahr ohne Monat: Fruehjahr und Herbst liegen in verschiedenen
  *  Schuljahren. Liefert { herbst, fruehjahr? } — `fruehjahr` nur, wenn es sich
  *  vom Herbst unterscheidet. */

@@ -4,7 +4,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  PROVIDERS, PALETTE_LEGEND, parseQuery, ensureLoaded,
+  PROVIDERS, PALETTE_LEGEND, parseQuery, ensureLoaded, mixFulltextHits,
 } from '../../public/js/cards/palette-providers.js';
 import { buildPaletteSections } from '../../public/js/cards/palette-sections.js';
 import { activateSearchHit, crossBookHash } from '../../public/js/cards/search-hit.js';
@@ -84,6 +84,41 @@ test('Volltext: Mix-Modus erst ab mixMinLength, cancel leert den Cache', () => {
   } finally {
     ft.cancel();
     globalThis.fetch = realFetch;
+  }
+});
+
+test('Volltext: Textstellen behalten ihre Plätze, freie Plätze füllt die andere Gruppe', () => {
+  const mk = (kind, n) => Array.from({ length: n }, (_, i) => ({ kind, entity_id: i + 1 }));
+  const kinds = (r) => r.hits.map(h => h.kind).join(',');
+  // Viele Figuren verdrängen die Abschnitte nicht mehr.
+  let r = mixFulltextHits(mk('page', 8), mk('figure', 8));
+  assert.equal(kinds(r), 'page,page,page,page,page,figure,figure,figure');
+  assert.equal(r.more, true);
+  // Wenige Abschnitte → Figuren rücken nach, und umgekehrt.
+  r = mixFulltextHits(mk('page', 1), mk('figure', 8));
+  assert.equal(r.hits.length, 8);
+  assert.equal(r.hits.filter(h => h.kind === 'page').length, 1);
+  r = mixFulltextHits(mk('page', 8), mk('figure', 1));
+  assert.equal(r.hits.filter(h => h.kind === 'page').length, 7);
+  // Alles passt hinein → more nur, wenn der Server weitere meldet.
+  assert.equal(mixFulltextHits(mk('page', 3), mk('idea', 2)).more, false);
+  assert.equal(mixFulltextHits(mk('page', 3), [], { textMore: true }).more, true);
+});
+
+test('Volltext: «Alle Treffer» erscheint nur bei more und öffnet die Suche mit der Anfrage', () => {
+  const ft = provider('fulltext');
+  try {
+    ft._cache = { key: 'anna|1', items: [{ kind: 'page', entity_id: 5, title: 'X' }], more: false };
+    assert.deepEqual(ft.search({}, 'anna', t).map(i => i.key), ['fts:page:5']);
+    ft._cache.more = true;
+    const items = ft.search({}, 'anna', t);
+    assert.equal(items.at(-1).key, 'fts:all');
+    const calls = [];
+    items.at(-1).run({ openSearchWithQuery: (q, kinds) => calls.push([q, kinds]) });
+    assert.equal(calls[0][0], 'anna');
+    assert.ok(calls[0][1].includes('page') && calls[0][1].includes('figure'));
+  } finally {
+    ft.cancel();
   }
 });
 

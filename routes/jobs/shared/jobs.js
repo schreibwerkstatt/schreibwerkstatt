@@ -422,6 +422,7 @@ const JOB_TYPE_LABELS = {
   'research-chat':         'job.label.researchChat',
   'plot-chat':             'job.label.plotChat',
   'ideen-chat':            'job.label.ideenChat',
+  'ideen-auto-check':      'job.label.ideenAutoCheck',
   'research-link':         'job.label.researchLink',
   'research-link-check':   'job.label.researchLinkCheck',
   'research-crosscheck':   'job.label.researchCrosscheck',
@@ -438,6 +439,8 @@ const JOB_TYPE_LABELS = {
   'interview-transcribe':  'job.label.interviewTranscribe',
   'figur-alter':           'job.label.figurAlter',
   'schulweg-vorschlag':    'job.label.schulwegVorschlag',
+  'figuren-naehe':         'job.label.figurenNaehe',
+  'stationen-vorschlag':   'job.label.stationenVorschlag',
 };
 
 // Job-Typen, die vom Superjob (komplett-analyse) abgedeckt werden und nicht in der Statistik erscheinen sollen

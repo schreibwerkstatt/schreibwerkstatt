@@ -54,6 +54,7 @@ const { NOW_ISO_SQL } = require('./now');
 const { normName } = require('../lib/name-normalize');
 const { relationKey } = require('./figures/refs');
 const { addFigureAliases } = require('./figures/aliases');
+const { suppressRelation } = require('./figures/relation-edits');
 
 // Skalar-Felder, die aus der Quelle nachgefuellt werden — aber NUR, wenn sie beim
 // Ziel leer sind. Bestandswerte des Ziels werden nie ueberschrieben (Muster
@@ -229,6 +230,18 @@ function mergeFigures(bookId, userEmail, sourceId, targetId) {
       } else relSeen.add(key);
     }
 
+    // Löschmarken verworfener KI-Kanten (Migration 0358) wandern mit der Figur, sonst
+    // nähme sie die CASCADE beim Löschen der Quelle mit und die Komplettanalyse legte
+    // die verworfene Kante am Ziel wieder an. Kanonische Form (kleinere id vorn) neu
+    // bilden; Kollisionen am UNIQUE sind dieselbe Marke.
+    for (const m of db.prepare(
+      'SELECT from_fig_id, to_fig_id, typ FROM figure_relation_suppressions WHERE book_id = ? AND user_email IS ? AND (from_fig_id = ? OR to_fig_id = ?)'
+    ).all(bookId, em, sourceId, sourceId)) {
+      const from = m.from_fig_id === sourceId ? targetId : m.from_fig_id;
+      const to   = m.to_fig_id   === sourceId ? targetId : m.to_fig_id;
+      if (from !== to) suppressRelation(bookId, em, from, to, m.typ);
+    }
+
     // Composite-PK-Bruecken. Kein Buch-Scope-Subselect noetig: die Quell-Figur ist
     // oben als zu diesem Buch gehoerend verifiziert, und die Bruecken haengen an ihr.
     moved.scenes = db.prepare(
@@ -329,6 +342,10 @@ function mergeFigures(bookId, userEmail, sourceId, targetId) {
       db.prepare('DELETE FROM figure_school_paths WHERE figure_id = ?').run(targetId);
       moved.schoolPath = db.prepare('UPDATE figure_school_paths SET figure_id = ? WHERE figure_id = ?').run(targetId, sourceId).changes;
     }
+    // Berufsweg und Hobbys (Listen, keine Einzelzeile): alle Zeilen der Quelle
+    // kommen zum Ziel — eine Station ist kein Widerspruch zur anderen.
+    moved.jobs = db.prepare('UPDATE figure_jobs SET figure_id = ? WHERE figure_id = ?').run(targetId, sourceId).changes;
+    moved.hobbies = db.prepare('UPDATE figure_hobbies SET figure_id = ? WHERE figure_id = ?').run(targetId, sourceId).changes;
     if (!db.prepare('SELECT 1 FROM figure_idiolect WHERE figure_id = ?').get(targetId)) {
       moved.idiolect = db.prepare('UPDATE figure_idiolect SET figure_id = ? WHERE figure_id = ?').run(targetId, sourceId).changes;
     }

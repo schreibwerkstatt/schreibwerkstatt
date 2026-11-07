@@ -13,9 +13,11 @@
 //   `propose_research_item` — sammelt nur in ctx.proposals; der User bestätigt
 //     jeden Vorschlag im Frontend (POST /research/chat-proposal). Ob die URLs in
 //     diesem Lauf tatsächlich abgerufen wurden, markiert der Job danach
-//     (research-chat-helpers.js#markProposalUrls).
+//     (research-chat-helpers.js#markProposalUrls). Mit `item_id` schlägt es eine
+//     Änderung an einem BESTEHENDEN Eintrag vor (./research-chat-change.js,
+//     sammelt in ctx.changeProposals).
 //
-// ctx = { bookId, userEmail, jobSignal, logger, offeredTools, proposals: [] }
+// ctx = { bookId, userEmail, jobSignal, logger, offeredTools, proposals: [], changeProposals: [] }
 
 const { _truncateResult, resultCapFor } = require('./chat-tools/shared');
 const { executeTool: executeCatalogTool, TOOLS: CATALOG_TOOLS } = require('./chat-tools');
@@ -27,12 +29,22 @@ const { findDuplicateItem } = require('../../db/research-items');
 const { normalizeUrl } = require('../../lib/url-normalize');
 const { WEB_TOOLS } = require('./research-web-tools');
 const { snipText: _snip } = require('./chat-tools/tools-research');
+const { proposeResearchChange } = require('./research-chat-change');
 
 const MAX_PROPOSALS = 12;
 
 // ── propose_research_item ────────────────────────────────────────────────────
 // Persistiert NICHTS — sammelt nur in ctx.proposals; der User bestätigt im Frontend.
 function tool_propose_research_item(input, ctx) {
+  if (input.item_id != null && input.item_id !== '' && input.item_id !== 0) {
+    if (!ctx.changeProposals) ctx.changeProposals = [];
+    return proposeResearchChange(input, ctx, { maxProposals: MAX_PROPOSALS });
+  }
+  for (const k of ['append', 'status', 'archive', 'merge_item_id', 'beleg']) {
+    if (input[k] != null && input[k] !== '' && input[k] !== false) {
+      return { ok: false, error: `${k} gilt nur mit item_id (Änderung an einem bestehenden Eintrag).`, errorKey: 'chat.toolError.proposalRejected' };
+    }
+  }
   const kind = PROPOSAL_KINDS.has(input.kind) ? input.kind : 'note';
   const title = cleanStr(input.title, TITLE_MAX) || '';
   const body = cleanStr(input.body, BODY_MAX) || '';
@@ -51,7 +63,7 @@ function tool_propose_research_item(input, ctx) {
     return { ok: false, error: 'URLs müssen mit http:// oder https:// beginnen.', errorKey: 'chat.toolError.invalidParam', errorParams: { param: 'urls' } };
   }
 
-  if ((ctx.proposals?.length || 0) >= MAX_PROPOSALS) {
+  if ((ctx.proposals?.length || 0) + (ctx.changeProposals?.length || 0) >= MAX_PROPOSALS) {
     return { ok: false, error: `Maximal ${MAX_PROPOSALS} Vorschläge pro Antwort.`, errorKey: 'chat.toolError.proposalCap', errorParams: { max: MAX_PROPOSALS } };
   }
   // Wortgleicher Titel oder dieselbe URL (normalisiert: Tracking-Parameter, www.,

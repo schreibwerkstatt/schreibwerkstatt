@@ -10,10 +10,38 @@
 // Die Mehrfachauswahl lebt nur in der Liste: im Raster laege ein Haken neben
 // dem Drag-Griff und konkurrierte mit ihm um dieselbe Geste.
 
-import { localDayDiff, relativeDay } from '../../utils.js';
+import { localDayDiff, relativeDay, fetchJson } from '../../utils.js';
+import { tFetchError } from '../../i18n.js';
 import { deleteIdee as removeIdee } from '../../repo/ideen-queue.js';
 import { ideeStatus, isOpenIdee } from '../ideen-shared.js';
 import { buildIdeenList, IDEE_STALE_DAYS } from './model.js';
+
+/**
+ * Welche der markierten Ideen beim Zusammenführen bleibt: eine offene vor einer
+ * abgeschlossenen (eine offene Pendenz geht nie in einer erledigten auf — der
+ * Server lehnt das ab), dann die älteste. Pure.
+ */
+export function mergeTargetOf(ideen) {
+  return [...(ideen || [])].sort((a, b) => {
+    const ao = isOpenIdee(a) ? 0 : 1, bo = isOpenIdee(b) ? 0 : 1;
+    if (ao !== bo) return ao - bo;
+    // ISO-Zeitstempel: lexikografisch = zeitlich (kein Anzeige-Text, kein compareText).
+    const ac = String(a.created_at || ''), bc = String(b.created_at || '');
+    return ac < bc ? -1 : ac > bc ? 1 : a.id - b.id;
+  })[0] || null;
+}
+
+/** Vorschlag für den gemeinsamen Text: jede Fassung einmal, bleibende zuerst. Pure. */
+export function mergedContentOf(target, sources) {
+  const seen = new Set();
+  const out = [];
+  for (const i of [target, ...(sources || [])]) {
+    const t = String(i?.content || '').replace(/\s+/g, ' ').trim();
+    const k = t.toLowerCase();
+    if (t && !seen.has(k)) { seen.add(k); out.push(t); }
+  }
+  return out.join(' · ');
+}
 
 export const ideenBoardList = {
   isListView() { return this.view === 'list'; },
@@ -131,6 +159,43 @@ export const ideenBoardList = {
       this._publishCounts();
     }
     this._afterBulk(failed);
+  },
+
+  // Dubletten zusammenführen (POST /ideen/:id/merge, derselbe Weg wie der
+  // Vorschlag des Ideen-Chats): eine bleibt (mergeTargetOf), die anderen gehen
+  // in ihr auf — Verknüpfungen wandern mit, sie selbst fallen. Der Text wird
+  // vorher in der Rückfrage bestätigt bzw. gekürzt. Online-only: der Merge ist
+  // eine Transaktion über mehrere Ideen, die Offline-Warteschlange kennt nur
+  // Einzel-Schreibwege.
+  async bulkMerge() {
+    const app = window.__app;
+    const todo = this.selectedIdeen();
+    if (todo.length < 2 || this.busy) return;
+    const target = mergeTargetOf(todo);
+    const sources = todo.filter(i => i.id !== target.id);
+    const content = await app.appPrompt({
+      message: app.t('ideenBoard.bulk.mergePrompt'),
+      defaultValue: mergedContentOf(target, sources),
+      confirmLabel: app.t('ideenBoard.bulk.merge'),
+    });
+    if (content == null || !String(content).trim()) return;
+    this.busy = true;
+    try {
+      const r = await fetchJson(`/ideen/${target.id}/merge`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ source_ids: sources.map(i => i.id), content: String(content).trim() }),
+      });
+      const removed = new Set(r.removed_ids || []);
+      this.ideen = this.ideen.filter(i => !removed.has(i.id));
+      this._replaceIdee(r.idee);
+      this._publishCounts();
+      this.errorMessage = '';
+      this.clearSelection();
+    } catch (e) {
+      this.errorMessage = tFetchError(e);
+    } finally {
+      this.busy = false;
+    }
   },
 
   _afterBulk(failed) {

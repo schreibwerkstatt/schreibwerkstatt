@@ -117,6 +117,42 @@ test('behaviorReport: Vorschlaege, Jobs, Editoren, Funktionen, Admins aussen vor
   assert.deepEqual(r.reading.total, { pages: 0, opens: 0 });
 });
 
+test('behaviorReport: Revisionen — Viewer-Sitzungen, Wiederherstellen nach Alter, Anheften', () => {
+  appUsers.createUser({ email: 'rev@ex.com' });
+  appUsers.createUser({ email: 'rev2@ex.com' });
+  const rec = (userEmail, event, meta) => recordUsageEvent({ userEmail, event, meta });
+  const before = Object.fromEntries(behaviorReport(RANGE).revisions.map(r => [r.key, r.count]));
+  rec('rev@ex.com', 'revision.view', { diff: 'yes', current: 'yes', steps: 3 });
+  rec('rev@ex.com', 'revision.view', { diff: 'no', current: 'no', steps: 0 });
+  rec('rev2@ex.com', 'revision.view', { diff: 'yes', current: 'no', steps: 2 });
+  rec('rev@ex.com', 'revision.restore', { ageBucket: 'hour' });
+  rec('rev2@ex.com', 'revision.restore', { ageBucket: 'older' });
+  rec('rev@ex.com', 'revision.pin', { action: 'pin', named: 'no' });
+  rec('rev@ex.com', 'revision.pin', { action: 'rename', named: 'yes' });
+  rec('rev2@ex.com', 'revision.pin', { action: 'pin', named: 'yes' });
+  rec('rev2@ex.com', 'revision.pin', { action: 'unpin', named: 'no' });
+
+  const rows = behaviorReport(RANGE).revisions;
+  const d = (key) => {
+    const r = rows.find(x => x.key === key);
+    return [r.count - (before[key] || 0), r.users];
+  };
+  assert.deepEqual(d('view'), [3, 2]);
+  assert.deepEqual(d('view.diff'), [2, 2]);
+  assert.deepEqual(d('view.current'), [1, 1]);
+  assert.deepEqual(d('view.steps'), [5, 2], 'Schritte summiert, Personen nur mit Schritten');
+  assert.deepEqual(d('restore.hour'), [1, 1]);
+  assert.deepEqual(d('restore.older'), [1, 1]);
+  assert.deepEqual(d('restore.week'), [0, 0], 'Nullzeile bleibt stehen');
+  assert.deepEqual(d('pin'), [2, 2]);
+  assert.deepEqual(d('pin.named'), [1, 1]);
+  assert.deepEqual(d('rename'), [1, 1]);
+  assert.deepEqual(d('unpin'), [1, 1]);
+  // Freitext und fremde Werte fallen weg.
+  assert.equal(sanitizeMeta('revision.pin', { action: 'pin', named: 'yes', label: 'Geheimer Titel' }).label, undefined);
+  assert.equal(sanitizeMeta('revision.restore', { ageBucket: 'decade' }), null);
+});
+
 test('Konto-Loeschung nimmt die Events mit', () => {
   appUsers.createUser({ email: 'gone@ex.com' });
   recordUsageEvent({ userEmail: 'gone@ex.com', event: 'auth.login', meta: { method: 'local' } });

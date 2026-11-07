@@ -14,15 +14,15 @@ test('buildManifest setzt Format + Version + normalisierte includes', () => {
   assert.equal(m.format, FORMAT);
   assert.equal(m.version, VERSION);
   assert.equal(m.sourceBookId, 42);
-  assert.deepEqual(m.includes, { analysis: false, lektorat: false, chats: false, research: false });
+  assert.deepEqual(m.includes, { analysis: false, lektorat: false, chats: false, research: false, werk: false });
 
   const m2 = buildManifest({ sourceBookId: 1, includes: { analysis: true, chats: 1 } });
-  assert.deepEqual(m2.includes, { analysis: true, lektorat: false, chats: true, research: false });
+  assert.deepEqual(m2.includes, { analysis: true, lektorat: false, chats: true, research: false, werk: false });
 });
 
 test('normalizeIncludes ist tolerant gegen Müll', () => {
-  assert.deepEqual(normalizeIncludes(null), { analysis: false, lektorat: false, chats: false, research: false });
-  assert.deepEqual(normalizeIncludes({ analysis: 'yes', foo: 1 }), { analysis: true, lektorat: false, chats: false, research: false });
+  assert.deepEqual(normalizeIncludes(null), { analysis: false, lektorat: false, chats: false, research: false, werk: false });
+  assert.deepEqual(normalizeIncludes({ analysis: 'yes', foo: 1 }), { analysis: true, lektorat: false, chats: false, research: false, werk: false });
 });
 
 test('treeToNodes baut Hierarchie + Reihenfolge inkl. inline-HTML', () => {

@@ -2,6 +2,7 @@ import { EVT } from '../events.js';
 import { highlightOccurrenceOnPage } from '../book/passage-highlight.js';
 import { openCardWith, CARD_REQUEST } from '../cards/card-request.js';
 import { firstPageInChapter } from '../book/tree/first-page.js';
+import { scrollToWhenReady } from '../utils/scroll-when-ready.js';
 
 // Figuren/Orte/Szenen-IDs sind INTEGER-PKs; aus Volltext-Treffern (FTS5
 // liefert entity_id als String) und aus Deep-Link-Hashes kommen sie als
@@ -12,39 +13,6 @@ function _coerceId(id) {
   return (typeof id === 'string' && /^\d+$/.test(id)) ? Number(id) : id;
 }
 
-// Wartet, bis das Ziel-Element im DOM UND an seinem Platz ist, und scrollt es
-// zentriert ins Bild. Cold-Open: toggleXxxCard öffnet die Karte, deren
-// Lifecycle-Load aber async läuft und vom Toggle nicht awaited wird → bei
-// $nextTick fehlt die erst nach dem Fetch gerenderte Listenzeile noch.
-//
-// „Im DOM" allein reicht nicht: im ersten Frame nach dem Einfügen steht die
-// Zeile noch bei 0 und das Dokument ist kaum höher als das Fenster — ein Scroll
-// dorthin ist dann ein No-op, und wenn die Liste danach fertig aufbaut, liegt
-// das Ziel unbemerkt unterhalb des Bildes. Darum wird auf eine **stabile
-// dokument-absolute Position** gewartet (zwei Frames gleich). Absolut gemessen,
-// nicht relativ zum Fenster: der Wert ändert sich dann nur durch Layout, nicht
-// durch einen laufenden Scroll. Bleibt das Layout bis zum Ende des Budgets in
-// Bewegung, wird trotzdem gescrollt — lieber ungenau als gar nicht.
-// `target`: CSS-Selektor oder Funktion, die das Element liefert (oder null).
-export function scrollToWhenReady(target, tries = 60) {
-  let lastOffset = null;
-  const find = typeof target === 'function' ? target : () => document.querySelector(target);
-  const step = (left) => {
-    const el = find();
-    if (!el) {
-      if (left > 0) requestAnimationFrame(() => step(left - 1));
-      return;
-    }
-    const offset = Math.round(el.getBoundingClientRect().top + window.scrollY);
-    if (offset !== lastOffset && left > 0) {
-      lastOffset = offset;
-      requestAnimationFrame(() => step(left - 1));
-      return;
-    }
-    el.scrollIntoView({ behavior: 'smooth', block: 'center' });
-  };
-  step(tries);
-}
 
 // Interne Navigation zwischen Buch-Views. `_beginNavigation/_endNavigation`
 // klammern zusammengesetzte Karten-Öffnungen (z.B. openFigurById →
@@ -298,9 +266,15 @@ export const appNavigationMethods = {
     if (!pageId) return;
     const page = this.$store.nav.pages.find(p => String(p.id) === String(pageId));
     if (!page) return;
-    await this.selectPage(page);
+    // Mit Fundstelle scrollt nur die Markierung (zur Textstelle, die Karte
+    // kommt dabei mit ins Bild); findet sie die Stelle nicht, springt sie
+    // ersatzweise an den Anfang des Abschnitts.
+    await this.selectPage(page, { skipCardScroll: !!snippet });
     if (snippet && String(this.currentPage?.id) === String(page.id)) {
-      highlightOccurrenceOnPage(snippet, { pageId: page.id });
+      highlightOccurrenceOnPage(snippet, {
+        pageId: page.id,
+        onMiss: () => this._scrollToEditorCard(),
+      });
     }
   },
 

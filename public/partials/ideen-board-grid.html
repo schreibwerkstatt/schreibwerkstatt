@@ -10,13 +10,19 @@
        Darum umschliesst der Container nur das Raster, in dem kein Popover
        aufgeht. Gegated: tests/e2e-app/combobox-anchoring.spec.js -->
   <div class="ideen-board-wrap">
+    <!-- Eigener Scrollbereich (auf Fensterhoehe gedeckelt, CSS): nur so kleben
+         Spaltenkoepfe und Bahntitel — der horizontale Scroll macht das Raster
+         ohnehin zum Scroll-Container. Spalten ohne sichtbare Karte werden
+         schmal (`--ideen-col-tracks`, actions.js#columnTracks). -->
     <div class="ideen-board" :class="'ideen-board--cols-' + statuses().length"
+         :style="{ '--ideen-col-tracks': columnTracks() }"
          x-show="!loading && !isListView() && lanes().length > 0" x-cloak>
       <!-- Spaltenkoepfe: Stufe + Gesamtzahl ueber den ganzen Bestand (nicht ueber
            die gefilterte Sicht — sonst zeigte die Spalte „verworfen" beim
            Ausblenden eine 0 und damit das Gegenteil der Wahrheit). -->
       <div class="ideen-board-head">
-        <div class="ideen-board-head-lane" x-text="$app.t('ideenBoard.laneColumn')"></div>
+        <div class="ideen-board-head-lane" x-text="$app.t('ideenBoard.laneColumn')"
+             x-resize="$el.closest('.ideen-board').style.setProperty('--ideen-head-h', $el.offsetHeight + 'px')"></div>
         <template x-for="st in statuses()" :key="st">
           <div class="ideen-board-head-col hover-reveal-host"
                :class="'ideen-board-head-col--' + st + (isStageActive(st) ? '' : ' ideen-board-head-col--inactive')">
@@ -169,6 +175,7 @@
                        Kartenkante: neben dem Griff eingerueckt sassen sie als
                        Fortsetzung des Textes statt als eigene Zeile. -->
                   <!-- @include ideen-link-chips -->
+                  <!-- @include ideen-check-hint -->
 
                   <!-- Stufen-Knoepfe: derselbe Schreibpfad wie der Drag, aber mit
                        der Tastatur erreichbar. Sie stehen ueber die ganze Breite,

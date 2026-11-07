@@ -19,6 +19,8 @@
   padding: var(--space-md);
   overflow: auto;
   min-height: 0;
+  /* Deckend: sonst kein Compositor-Scroll bei Pixeldichte 1 (siehe entities/recherche/dialog.css). */
+  background: var(--color-surface);
 }
 .diagram-dialog-source {
   display: flex;

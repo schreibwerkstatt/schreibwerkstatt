@@ -26,7 +26,7 @@ const { countActiveResearchItems } = require('../../db/book-chat/research');
 const { getPrompts, i18nError } = require('./shared');
 const { researchChatGate } = require('../../lib/research-chat-gate');
 const {
-  toolsForRound, validateAnswerSources, sessionProposalMemory, proposalsOnlyFallback,
+  toolsForRound, validateAnswerSources, sessionProposalMemory, sessionPriorSources, proposalsOnlyFallback,
   readMessageContext, loadResearchContext, markProposalUrls, researchIdeeProposals,
 } = require('./research-chat-helpers');
 const { executeResearchTool } = require('./research-chat-tools');
@@ -40,6 +40,8 @@ const { resolveProvider } = require('../../lib/ai');
 const { webSearchMode } = require('../../lib/websearch');
 const { extractUrls, MAX_PAGE_READS, PAGE_TEXT_MAX, PAGE_OVERHEAD } = require('./research-web-tools');
 
+const WEB_TOOLS = ['web_search', 'read_web_page'];
+
 function _maxWebSearches() {
   return parseInt(appSettings.get('jobs.research_chat.max_web_searches'), 10) || 10;
 }
@@ -52,6 +54,11 @@ function _maxWebSearches() {
 function _pageResultCapChars(generalCap, aiCfg) {
   const share = Math.floor((aiCfg.inputBudgetChars * 0.4) / MAX_PAGE_READS);
   return Math.max(generalCap, Math.min(PAGE_TEXT_MAX + PAGE_OVERHEAD, share));
+}
+
+// Alle Vorschläge einer Antwort: neue Fundstücke, Änderungen, Ideen.
+function _proposalCount(ctx) {
+  return (ctx?.proposals?.length || 0) + (ctx?.changeProposals?.length || 0) + (ctx?.ideenProposals?.length || 0);
 }
 
 const runResearchChatJob = makeAgenticChatJob({
@@ -119,10 +126,15 @@ const runResearchChatJob = makeAgenticChatJob({
       chat: 'research', prompts, provider, userEmail,
       ctx: { bookId: session.book_id, sessionId: session.id, userEmail, logger },
       outputTools: searxng ? outputTools : toolsForRound(outputTools, 0, maxWebSearches),
+      // Manuskripttext nur, wo kein Seitenlesen angeboten ist — dieselbe Regel wie
+      // der Textauszug im Schreibkontext (buildResearchWritingContextBlock): wer
+      // fremde Seiten liest, kann angestiftet werden, Buchtext in eine URL zu
+      // packen. Auf dem Suchweg SearXNG gibt es darum kein «eingearbeitet».
+      withhold: searxng ? ['search_passages'] : [],
     });
     // Archiv-Stand + frühere Vorschläge dieser Session (gespeichert ja/nein) —
     // Folge-Turns sollen sie kennen, ohne dass sie in der Gesprächshistorie stehen.
-    const proposalMemory = buildResearchProposalMemoryBlock(sessionProposalMemory(session.id), { toolNames, itemCount });
+    const proposalMemory = buildResearchProposalMemoryBlock(sessionProposalMemory(session.id, 30, session.book_id), { toolNames, itemCount });
     // Schreibkontext DIESER Frage (Kontext-Chip): an der User-Nachricht abgelegt
     // (_handleChatPost → context_info.research_context). Ein Lesefehler kostet
     // nur den Block, nicht die Antwort.
@@ -155,9 +167,12 @@ const runResearchChatJob = makeAgenticChatJob({
       tools,
       ...(userPreamble ? { userPreamble } : {}),
       cacheHistory: true,
-      // Web-Such-Gesamtdeckel über alle Runden: erreicht → keine weitere Runde,
-      // Synthese aus den Treffern. webSearches zählt beide Wege (Loop + webStats).
-      stopBeforeRound: ({ webSearches }) => (webSearches >= maxWebSearches ? 'web_cap' : null),
+      // Web-Such-Gesamtdeckel über alle Runden (nur Suchweg Anthropic): erreicht →
+      // keine weitere Runde, Synthese aus den Treffern — die API sucht sonst im
+      // nächsten Turn weiter. Auf SearXNG hält der Handler den Deckel selbst
+      // (research-web-tools.js); weitere Runden lesen dort die gefundenen Seiten,
+      // statt mit den blossen Snippets zu antworten.
+      ...(searxng ? {} : { stopBeforeRound: ({ webSearches }) => (webSearches >= maxWebSearches ? 'web_cap' : null) }),
       // Suchen des SearXNG-Handlers (ctx.web) für Deckel, context_info, Zusammenfassung.
       webStats: (ctx) => (ctx.web ? { searches: ctx.web.searches, queries: ctx.web.queries, results: ctx.web.results } : null),
       maxToolIter,
@@ -167,11 +182,17 @@ const runResearchChatJob = makeAgenticChatJob({
       maxToolsPerRound: limits.maxToolsPerRound,
       roundResultCapChars: limits.roundResultCapChars,
       inputTokenCap: limits.inputTokenCap,
+      // Vorschläge sammeln nur (kein Runden-Deckel, auch in der Synthese erlaubt);
+      // Suchen und Seitenabrufe einer Runde laufen gleichzeitig und sind reine Lese-
+      // Werkzeuge (in der final_answer-Runde nicht mehr ausgeführt).
+      collectTools: ['propose_research_item'],
+      ...(searxng ? { parallelTools: WEB_TOOLS, readOnlyTools: new Set(WEB_TOOLS) } : {}),
       forceFinalInstruction: searxng ? RESEARCH_CHAT_FORCE_FINAL_INSTRUCTION_SEARXNG : RESEARCH_CHAT_FORCE_FINAL_INSTRUCTION,
       ctx: {
         bookId: session.book_id, sessionId: session.id, userEmail,
         jobSignal, logger, offeredTools,
         proposals: [], // propose_research_item sammelt hier; nach dem Loop in context_info
+        changeProposals: [], // propose_research_item mit item_id (research-chat-change.js)
         // final_answer.ideen, am Schreibkontext verankert (researchIdeeProposals).
         researchContext,
         ideenProposals: [],
@@ -181,6 +202,9 @@ const runResearchChatJob = makeAgenticChatJob({
         // Links der User-Nachricht: lesbare URLs (SearXNG) und belegte
         // Vorschlags-URLs (markProposalUrls, beide Suchwege).
         userMessageUrls: extractUrls(message),
+        // Geprüfte Quellen der jüngsten Antworten: lesbar und belegbar wie Treffer
+        // dieses Laufs (Folgefrage «lies die zweite Quelle genauer»).
+        priorSources: sessionPriorSources(session.id),
         // Nur vom SearXNG-Handler gelesen (research-web-tools.js):
         allowedDomains: researchProfile.domains,
         searchLanguage: bookSettings.language || '',
@@ -198,7 +222,7 @@ const runResearchChatJob = makeAgenticChatJob({
     if (ctx) ctx.ideenProposals = researchIdeeProposals(finalUse.input?.ideen, ctx.researchContext, ctx.bookId);
     // Leere Antwort trotz Vorschlägen ist kein Abbruch: eigener Hinweis statt
     // „Iterationen erschöpft".
-    const antwort = proposalsOnlyFallback(raw, (ctx?.proposals?.length || 0) + (ctx?.ideenProposals?.length || 0));
+    const antwort = proposalsOnlyFallback(raw, _proposalCount(ctx));
     if (ctx && Array.isArray(finalUse.input?.quellen)) ctx.answerSourcesRaw = finalUse.input.quellen;
     toolLog.push({ name: 'final_answer', input: { antwort_chars: antwort.length }, ok: true, durationMs: 0, resultBytes: antwort.length, truncated: false, iter: iterNum });
     logger.info(`tool=final_answer antwort_chars=${antwort.length} iter=${iterNum} (terminal)`);
@@ -213,10 +237,14 @@ const runResearchChatJob = makeAgenticChatJob({
     return antwort;
   },
 
-  buildContextInfo: ({ toolLog, iter, webSearches, webResults, webQueries, ctx, stopReason, costUsd }) => ({
+  buildContextInfo: ({ toolLog, rounds, webSearches, webResults, webQueries, ctx, stopReason, costUsd }) => ({
     mode: 'research',
+    // Stelle, für die DIESE Frage gestellt wurde (Kontext-Chip beim Senden) — damit
+    // verknüpft das Speichern eines Vorschlags, nicht mit dem Chip von jetzt.
+    // null = ohne Stelle gefragt.
+    research_context: ctx.researchContext || null,
     tool_calls: toolLog,
-    iterations: iter + 1,
+    iterations: rounds,
     web_searches: webSearches,
     web_search_cap: ctx.maxWebSearches,
     ...(stopReason ? { stop_reason: stopReason } : {}),
@@ -234,27 +262,30 @@ const runResearchChatJob = makeAgenticChatJob({
       // Zulässige Belege neben den Treffern: Literatur-Register und gelesene Seiten
       // (read_web_page, inkl. Redirect-Ziel).
       const answerSources = validateAnswerSources(ctx.answerSourcesRaw, webResults, {
-        extra: [...ctx.literatureHits, ...(ctx.web?.pages || [])],
+        extra: [...ctx.literatureHits, ...(ctx.web?.pages || []), ...(ctx.priorSources || [])],
       });
       return answerSources.length ? { answer_sources: answerSources } : {};
     })(),
     // Speicher-Vorschläge — Frontend rendert sie als „Als … speichern"-Buttons.
     // Jede URL trägt `verified`: in diesem Lauf abgerufen/geliefert ja/nein.
-    // Ideen-Vorschläge (`type: 'idee_create'`) stehen HINTER den Fundstücken: die
-    // Recherche-Vorschläge behalten so ihren Index (POST /research/chat-proposal,
-    // research-chat-proposals.js), die Ideen laufen über PATCH /ideen/chat-proposal.
-    ...(ctx.proposals.length || ctx.ideenProposals.length ? {
+    // Reihenfolge: neue Fundstücke, dann Änderungen an bestehenden Einträgen
+    // (`type: 'research_update'|'research_archive'|'research_merge'`, POST
+    // /research/chat-proposal/apply), dann Ideen (`type: 'idee_create'`, PATCH
+    // /ideen/chat-proposal). Die neuen Fundstücke behalten so ihren Index
+    // (POST /research/chat-proposal, research-chat-proposals.js).
+    ...(_proposalCount(ctx) ? {
       proposals: [
         ...markProposalUrls(ctx.proposals, { ctx, webResults }),
+        ...markProposalUrls(ctx.changeProposals, { ctx, webResults }),
         ...ctx.ideenProposals,
       ],
     } : {}),
   }),
 
-  buildCompletePayload: ({ base, ctx }) => ({ ...base, proposals: ctx.proposals.length + ctx.ideenProposals.length }),
+  buildCompletePayload: ({ base, ctx }) => ({ ...base, proposals: _proposalCount(ctx) }),
 
   buildSummary: ({ sessionId, toolLog, webSearches, ctx }) =>
-    `Recherche-Chat session=${sessionId}, ${toolLog.length} Tool-Calls, ${webSearches} Web-Suchen, ${ctx.proposals.length} Vorschläge, ${ctx.ideenProposals.length} Ideen`,
+    `Recherche-Chat session=${sessionId}, ${toolLog.length} Tool-Calls, ${webSearches} Web-Suchen, ${ctx.proposals.length} Vorschläge, ${ctx.changeProposals.length} Änderungen, ${ctx.ideenProposals.length} Ideen`,
 });
 
 module.exports = { runResearchChatJob };

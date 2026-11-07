@@ -28,6 +28,7 @@ const { IDEE_STATUSES, IDEE_OPEN_STATUSES, isIdeeStatus, isIdeaLinkKind } = requ
 const { getBookIdeenStages, setBookIdeenStages } = require('../db/book-settings');
 const { setContext } = require('../lib/log-context');
 const ideenDb = require('../db/ideen');
+const ideenCheck = require('../db/ideen-check');
 const searchIndex = require('../lib/search');
 const { replayIdempotent, rememberIdempotent } = require('../lib/idempotency');
 const logger = require('../logger');
@@ -83,6 +84,8 @@ function buildIdeenBoard(bookId, userEmail) {
     statuses: IDEE_STATUSES,
     stages: getBookIdeenStages(bookId),
     ideen: ideenDb.listBoardIdeen(bookId, userEmail),
+    // Persönlicher Schalter des Auto-Erledigt-Checks — steht im Stufen-Menü.
+    auto_check: ideenCheck.isAutoCheckEnabled(userEmail),
   };
 }
 
@@ -319,6 +322,43 @@ router.delete('/:id/links/:linkId', (req, res) => {
   const linkId = toIntId(req.params.linkId);
   if (!linkId) return res.status(400).json({ error_code: 'INVALID_ID' });
   ideenDb.removeIdeaLink(existing.id, linkId);
+  res.json(ideenDb.getIdee(existing.id));
+});
+
+// Dubletten zusammenfuehren: `source_ids` gehen in dieser Idee auf (Links
+// wandern mit, die Quellen fallen), `content` ersetzt optional ihren Text.
+// Ort und Stufe des Ziels bleiben. Board-Sammelaktion und Ideen-Chat
+// (propose_idee_merge) schreiben beide hierueber.
+const MAX_MERGE = 20;
+router.post('/:id/merge', jsonBody, (req, res) => {
+  const existing = _ownedIdee(req, res);
+  if (!existing) return;
+  const raw = Array.isArray(req.body?.source_ids) ? req.body.source_ids.map(toIntId) : null;
+  if (!raw || !raw.length || raw.some(id => !id)) return res.status(400).json({ error_code: 'MERGE_SOURCES_REQ' });
+  const sourceIds = [...new Set(raw)];
+  if (sourceIds.length > MAX_MERGE) return res.status(400).json({ error_code: 'MERGE_TOO_MANY' });
+  if (sourceIds.includes(existing.id)) return res.status(400).json({ error_code: 'MERGE_SELF' });
+  let content = null;
+  if (typeof req.body?.content === 'string') {
+    content = req.body.content.trim();
+    if (!content) return res.status(400).json({ error_code: 'CONTENT_REQ' });
+    if (content.length > MAX_LEN) return res.status(400).json({ error_code: 'CONTENT_TOO_LONG' });
+  }
+  const r = ideenDb.mergeIdeen(existing.id, sourceIds, existing.userEmail, content);
+  if (r.error_code) return res.status(r.error_code === 'IDEE_NOT_FOUND' ? 404 : 400).json(r);
+  for (const sid of sourceIds) searchIndex.remove('idea', sid);
+  searchIndex.upsertIdea(existing.id);
+  logger.info(`[ideen] merge id=${existing.id} quellen=${sourceIds.join(',')}`);
+  res.json({ idee: ideenDb.getIdee(existing.id), removed_ids: sourceIds });
+});
+
+// Hinweis des Auto-Erledigt-Checks verwerfen («nein, noch offen»). Abhaken
+// laeuft ueber PATCH /:id mit status — der Stufenwechsel raeumt den Hinweis
+// selbst ab (db/ideen.js#updateIdee).
+router.delete('/:id/check-hint', (req, res) => {
+  const existing = _ownedIdee(req, res);
+  if (!existing) return;
+  ideenCheck.clearHint(existing.id, existing.userEmail);
   res.json(ideenDb.getIdee(existing.id));
 });
 

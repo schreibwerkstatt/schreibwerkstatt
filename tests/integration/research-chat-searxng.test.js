@@ -142,7 +142,7 @@ test('openai-compat + SearXNG: Suche, Seite lesen, belegte Antwort, keine Suchko
   assert.equal(msg.provider, 'openai-compat');
 });
 
-test('Suchdeckel: Handler lehnt ab, Loop beendet die Recherche mit web_cap', async () => {
+test('Suchdeckel: Handler lehnt ab, die Recherche läuft weiter (Seiten lesen) statt mit web_cap abzubrechen', async () => {
   appSettings.set('ai.provider', 'openai-compat');
   appSettings.set('jobs.research_chat.max_web_searches', 2);
   let n = 0;
@@ -151,12 +151,13 @@ test('Suchdeckel: Handler lehnt ab, Loop beendet die Recherche mit web_cap', asy
     const { calls, ci } = await run('Frage', [
       // Drei Suchen in einer Runde: die dritte trifft den Deckel im Handler.
       toolTurn(tu('a', 'web_search', { query: 'eins' }), tu('b', 'web_search', { query: 'zwei' }), tu('c', 'web_search', { query: 'drei' })),
-      // Synthese-Turn (stopBeforeRound → web_cap).
+      // Kein erzwungener Abschluss: auf SearXNG hält der Handler den Deckel, die
+      // nächste Runde ist eine normale (hier gleich die Antwort).
       toolTurn(tu('d', 'final_answer', { antwort: 'Zusammenfassung' })),
     ]);
     assert.equal(n, 2, 'nur zwei echte Suchen');
     assert.equal(ci.web_searches, 2);
-    assert.equal(ci.stop_reason, 'web_cap');
+    assert.equal(ci.stop_reason, 'final_answer');
     const third = calls[1].messages.find(m => m.role === 'user' && Array.isArray(m.content) && m.content.some(r => r.tool_use_id === 'c'));
     assert.ok(third.content.find(r => r.tool_use_id === 'c').is_error);
   } finally {

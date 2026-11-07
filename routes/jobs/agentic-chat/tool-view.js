@@ -34,6 +34,7 @@ const MAX_LIST_REFS = 3;
 const ID_KEYS = {
   page_id: 'page', beleg_page_id: 'page', chapter_id: 'chapter', chapter_ids: 'chapter',
   figur_id: 'figure', loc_id: 'location', act_id: 'act', beat_id: 'beat', thread_id: 'thread',
+  from_beat_id: 'beat', to_beat_id: 'beat',
   idee_id: 'idee', motif_id: 'motif', draft_id: 'draft', item_id: 'research',
 };
 // Argument → Objekt-Art (schon ein Name, nichts aufzulösen).
@@ -57,7 +58,7 @@ const SEARCH_TOOLS = new Set([
 ]);
 const SECTION_TOOLS = new Set(['get_pages', 'get_chapter_text']);
 const PROPOSE_TOOLS = new Set([
-  'propose_beat', 'propose_beat_move', 'propose_act', 'propose_thread',
+  'propose_beat', 'propose_beat_move', 'propose_act', 'propose_thread', 'propose_beat_relation',
   'propose_idee', 'propose_idee_link', 'propose_research_item',
 ]);
 

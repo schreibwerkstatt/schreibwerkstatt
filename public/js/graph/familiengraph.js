@@ -1,10 +1,10 @@
 import { graphPlaceholder } from '../graph-kit.js';
 import { BZ } from './constants.js';
-import { familyEdges, familyLevels, familyComponents, packFamilies } from './family-layout.js';
+import { familyEdges, familyLevels, familyComponents, familyPositions, packFamilies } from './family-layout.js';
 
-// Familienbaum: Generationen aus den Daten (Eltern oben, Geschwister und
-// Ehepartner auf einer Ebene, siehe ./family-layout.js), vis ordnet nur die
-// Reihenfolge innerhalb der Ebene. Danach werden die einzelnen Familien als
+// Familienbaum: Generationen und x-Lage aus den Daten (Eltern oben, Geschwister und
+// Ehepartner auf einer Ebene, Paare nebeneinander über ihren Kindern, siehe
+// ./family-layout.js); vis zeichnet nur. Danach werden die einzelnen Familien als
 // Raster gepackt — nebeneinander in einer Reihe wären sie bei vielen kleinen
 // Familien nach `fit()` winzig und weit auseinander.
 export const familiengraphMethods = {
@@ -28,19 +28,9 @@ export const familiengraphMethods = {
     const ids = famFiguren.map(f => f.id);
     const levels = familyLevels(ids, famEdges);
 
-    // Pass 1: Hierarchie-Layout mit festen Ebenen, nur um die Reihenfolge je
-    // Ebene zu bekommen; danach verworfen.
-    const probe = new vis.Network(container, {
-      nodes: famFiguren.map(f => ({ ...this._baseNode(f), level: levels.get(f.id) })),
-      edges: famEdges.map(({ from, to }) => ({ from, to })),
-    }, {
-      physics: false,
-      layout: { hierarchical: { direction: 'UD', nodeSpacing: 160, levelSeparation: 120, treeSpacing: 160 } },
-    });
-    const raw = probe.getPositions();
-    probe.destroy();
-    const packed = packFamilies(raw, familyComponents(ids, famEdges), {
+    const packed = packFamilies(familyPositions(ids, famEdges, levels), familyComponents(ids, famEdges), {
       aspect: Math.max(0.8, (container.offsetWidth || 800) / (container.offsetHeight || 500)),
+      nodeW: 180,
     });
 
     const nodes = new vis.DataSet(famFiguren.map(f => ({ ...this._baseNode(f), ...packed[f.id] })));

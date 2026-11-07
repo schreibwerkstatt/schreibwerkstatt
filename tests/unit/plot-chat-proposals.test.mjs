@@ -5,7 +5,7 @@
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { proposalStatus, refAppliedId, beatUpdateRows } from '../../public/js/chat/plot-chat-proposals.js';
+import { proposalStatus, refAppliedId, beatUpdateRows, relationBeatId } from '../../public/js/chat/plot-chat-proposals.js';
 
 const board = {
   acts: [{ id: 1, thread_id: null }, { id: 2, thread_id: null }],
@@ -79,4 +79,47 @@ test('beatUpdateRows: Wort-Diff für Text, Vorher/Nachher für Felder, Flag für
   assert.deepEqual([rows[2].before, rows[2].after], ['—', 'Anna']);
   assert.equal(rows[3].flag, 'on');
   assert.deepEqual(beatUpdateRows({ type: 'beat_create' }), []);
+});
+
+test('Beziehung: offen; übernommen solange die Kante besteht; Beat weg → blockiert', () => {
+  const b = { ...board, beats: [...board.beats, { id: 11, act_id: 1, thread_id: null }], relations: [{ id: 50, from_beat_id: 10, to_beat_id: 11, typ: 'fuehrt-zu' }] };
+  const p = { type: 'relation_create', from_beat_id: 10, to_beat_id: 11, typ: 'fuehrt-zu' };
+  assert.equal(proposalStatus(p, [p], b).state, 'open');
+  assert.equal(proposalStatus({ ...p, applied_at: 'x', applied_id: 50 }, [], b).state, 'applied');
+  const undone = proposalStatus({ ...p, applied_at: 'x', applied_id: 51 }, [], b);
+  assert.equal(undone.state, 'open');
+  assert.equal(undone.removed, true);
+  assert.deepEqual(proposalStatus({ ...p, to_beat_id: 404 }, [], b).blocked, { key: 'plot.chat.block.beatGone' });
+});
+
+test('Beziehung zu neuem Beat: blockiert, bis der Beat übernommen ist', () => {
+  const beatP = { type: 'beat_create', act_id: 1, thread_id: null, fields: { titel: 'Payoff' } };
+  const relP = { type: 'relation_create', from_beat_id: 10, to_beat_ref: 1, typ: 'bereitet-vor' };
+  let st = proposalStatus(relP, [beatP, relP], board);
+  assert.equal(st.blocked.key, 'plot.chat.block.refBeat');
+  assert.equal(st.blocked.params.name, 'Payoff');
+  const applied = { ...beatP, applied_at: 'x', applied_id: 10 };
+  st = proposalStatus(relP, [applied, relP], board);
+  assert.equal(st.blocked, null);
+  assert.equal(relationBeatId(relP, 'to', [applied, relP], board), 10);
+});
+
+test('beatUpdateRows: Status als Schlüssel, Orte und Motive mit Vorher-Namen', () => {
+  const rows = beatUpdateRows({
+    type: 'beat_update', beat_id: 10,
+    fields: { status: 'im_buch', location_ids: ['loc_a'], motif_ids: [] },
+    before: { status: 'geplant', location_ids: [], motif_ids: [3] },
+    labels: { orte: ['Hafen'], orte_before: [], motive: [], motive_before: ['Spiegel'] },
+  });
+  assert.deepEqual(rows.map(r => [r.key, r.before, r.after]), [
+    ['status', 'geplant', 'im_buch'], ['orte', '—', 'Hafen'], ['motive', 'Spiegel', '—'],
+  ]);
+  assert.equal(rows[0].i18n, 'plot.status.');
+});
+
+test('stale: Orte des Beats seit dem Vorschlag geändert', () => {
+  const b = { ...board, beats: [{ ...board.beats[0], locations: [{ id: 'loc_b', name: 'Turm' }] }] };
+  const p = { type: 'beat_update', beat_id: 10, fields: { location_ids: ['loc_a'] }, before: { location_ids: [] } };
+  assert.equal(proposalStatus(p, [p], b).stale, true);
+  assert.equal(proposalStatus(p, [p], board).stale, false);
 });

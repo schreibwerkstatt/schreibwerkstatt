@@ -86,7 +86,7 @@ export const coreMethods = {
     const sig = figuren.map(f => {
       const kap = (f.kapitel || []).map(k => k.name + k.haeufigkeit).join(',');
       const bz  = (f.beziehungen || []).map(b =>
-        b.figur_id + b.typ + (b.machtverhaltnis ?? '') + '~' + (b.beschreibung || '')).join(',');
+        b.figur_id + b.typ + (b.machtverhaltnis ?? '') + '/' + (b.naehe ?? '') + '~' + (b.beschreibung || '')).join(',');
       return [f.id, f.typ || '', f.sozialschicht || '', f.name || '', f.kurzname || '',
         f.geburtstag || '', f.beschreibung || '', kap, bz].join('::');
     }).join('|');
@@ -96,7 +96,14 @@ export const coreMethods = {
     const axis = this.figurenKapitelOptionen().map(o => o.value + ':' + o.label).join(',');
     // Theme im Key: die Canvas-Farben hängen am aufgelösten Hell/Dunkel-Stand,
     // ohne diesen Anteil bliebe nach einem Theme-Wechsel das alte Bild stehen.
-    const hash = [sig, axis, this.figurenGraphModus, Alpine.store('shell').uiLocale,
+    // Soziogramm-Schalter: Inseln und Begegnungen ändern das Layout; die Begegnungen
+    // hängen am Szenen-Katalog (Besetzung je Szene).
+    const sozio = this.figurenGraphModus === 'soziogramm'
+      ? [this.soziogrammInseln ? 'i' : '', this.soziogrammBegegnungen
+        ? 'b' + (Alpine.store('catalog').szenen || []).map(s => s.id + ':' + (s.fig_ids || []).join(',')).join(';')
+        : ''].join('')
+      : '';
+    const hash = [sig, axis, this.figurenGraphModus, sozio, Alpine.store('shell').uiLocale,
       this._graphTheme.dark ? 'dark' : 'light'].join('|');
     if (this._figurenNetwork && this._figurenHash === hash) return;
     this._figurenHash = hash;

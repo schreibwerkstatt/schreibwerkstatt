@@ -537,7 +537,7 @@
      keine Scroll); ab ~280px greift der Min, danach Horizontal-Scroll wie sonst.
      max-width hält die Spalten lesbar, wenn nur wenige Akte da sind. Die
      „Neuer Akt"-Spalte wächst nicht mit. */
-  .card--plot:fullscreen .plot-column:not(.plot-column--add) {
+  .plot-split:fullscreen .plot-column:not(.plot-column--add) {
     flex: 1 1 280px;
     max-width: 420px;
   }

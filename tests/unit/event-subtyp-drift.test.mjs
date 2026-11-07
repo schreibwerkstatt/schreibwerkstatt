@@ -6,8 +6,9 @@
 //   3. Icon-Map        public/js/cards/ereignisse/subtyp.js — fehlt er, traegt
 //      das Badge stumm das Sammel-Icon
 //   4. Farb-Token      public/css/tokens/colors.css (--card-accent-event-<key>,
-//      Light UND Dark) + Mapping in css/entities/ereignisse-subtyp.css — fehlt
-//      er, faellt der Marker auf eine leere Custom-Prop zurueck
+//      Light UND Dark) + Mapping in css/entities/ereignisse-subtyp.css
+//      (.gz-item--subtyp-<key> UND .gz-subtyp-badge--<key>) — fehlt er, faellt
+//      der Marker bzw. das Badge auf eine leere Custom-Prop zurueck
 //   5. i18n            events.subtyp.<key> in BEIDEN Locales — fehlt er, steht
 //      der rohe Key im Badge und in der Filter-Combobox
 // Nur 1+2 waren gegated; 3–5 scheitern lautlos, weil ueberall ein Fallback greift.
@@ -55,6 +56,10 @@ test('Event-Subtyp: jeder Subtyp hat eine Farbe (Token hell + dunkel + Mapping)'
   assert.deepEqual(ohneDark, [], `Keine Dark-Ableitung in tokens/colors.css: ${ohneDark.join(', ')}`);
   const ohneKlasse = EVENT_SUBTYP_ENUM.filter(v => !mapping.includes(`.gz-item--subtyp-${v}`));
   assert.deepEqual(ohneKlasse, [], `Keine Variant-Klasse in ereignisse-subtyp.css: ${ohneKlasse.join(', ')}`);
+  // Das Badge setzt die Farbe selbst (Referenz-Slot, Lebenslauf, Palette stehen
+  // ausserhalb eines .gz-item) — fehlt die Variante, ist es dort farblos.
+  const ohneBadge = EVENT_SUBTYP_ENUM.filter(v => !mapping.includes(`.gz-subtyp-badge--${v}`));
+  assert.deepEqual(ohneBadge, [], `Keine Badge-Variante in ereignisse-subtyp.css: ${ohneBadge.join(', ')}`);
 });
 
 test('Event-Subtyp: jeder Subtyp hat ein Label in beiden Locales', () => {

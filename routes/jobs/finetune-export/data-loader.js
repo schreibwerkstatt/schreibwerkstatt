@@ -36,7 +36,7 @@ function loadFinetuneData({ bookIdInt, userEmail, pageContents, langIsEn }) {
   const bookText = pageContents.map(p => p.text || '').join('\n\n');
   const droppedSlugNames = [];
   const figRows = cleanNames(db.prepare(`
-    SELECT f.fig_id, f.id AS pk, f.name, f.kurzname, f.typ, f.beschreibung, f.beruf, f.geschlecht, f.sozialschicht,
+    SELECT f.fig_id, f.id AS pk, f.name, f.kurzname, f.typ, f.beschreibung, f.beruf, f.geschlecht, f.geburtstag, f.sozialschicht,
            f.praesenz, f.rolle, f.motivation, f.konflikt, f.entwicklung, f.arc, f.aeusseres, f.stimme,
            f.hintergrund, f.schluesselzitate,
            GROUP_CONCAT(DISTINCT ft.tag) AS tags_csv

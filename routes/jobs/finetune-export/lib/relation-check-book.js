@@ -16,7 +16,7 @@ function loadRelationCheckCtx(bookId, userEmail) {
   // stale = 0 wie im Export: eine nicht wiedergefundene Figur ist oft die alte
   // Dublette einer umbenannten und meldete sonst Scheinkonflikte.
   const figRows = db.prepare(`
-    SELECT fig_id, id AS pk, name, kurzname, typ, geschlecht, beschreibung, hintergrund
+    SELECT fig_id, id AS pk, name, kurzname, typ, geschlecht, geburtstag, beschreibung, hintergrund
     FROM figures
     WHERE book_id = ? AND user_email IS ? AND stale = 0
     ORDER BY sort_order

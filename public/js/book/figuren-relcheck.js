@@ -3,7 +3,10 @@
 // (routes/jobs/finetune-export/lib/relation-check.js), hier nur als Hinweis:
 // Liste über der Figurenliste und Markierung der betroffenen Beziehungen im
 // Figuren-Detail. GET /figures/:book_id/relation-check rechnet ohne KI, darum
-// lädt die Karte nach jedem Katalog-Reload neu. Korrigiert wird nichts.
+// lädt die Karte nach jedem Katalog-Reload neu. Die Prüfung korrigiert nichts;
+// an einer gemeldeten Kante entscheidet der Autor per Knopf: entfernen oder — wo
+// die Beschreibung eine andere Figur nennt — umhängen (DELETE/PATCH
+// /figures/:book_id/relations/:rel_id, db/figures/relation-edits.js).
 //
 // Kein `get x()` in diesem gespreadeten Modul (Spread-Getter-Falle).
 
@@ -14,6 +17,8 @@ export const figurenRelCheckState = () => ({
   // `relation:<id>` ({ id, from, to, typ }, fig_id).
   figurenRelCheck: { conflicts: [], mainCount: 0, edges: [] },
   _figurenRelCheckSeq: 0,
+  // Löschen/Umhängen einer gemeldeten Kante läuft (Knöpfe gesperrt).
+  figurBzBusy: false,
 });
 
 // Pure: Kante (von, zu, Typ) → Regeln der Konflikte, die sie als Quelle nennen.
@@ -62,4 +67,67 @@ export const figurenRelCheckMethods = {
     const idx = this._memo('relConflictIndex', [this.figurenRelCheck], () => computeRelConflictIndex(this.figurenRelCheck));
     return idx.get(`${f.id}|${bz.figur_id}|${bz.typ}`) || [];
   },
+
+  // Vorgeschlagenes neues Ziel einer verrutschten Kante ({ to, toName } | null).
+  figurBzRetarget(bz) {
+    const idx = this._memo('relRetargetIndex', [this.figurenRelCheck], () => computeRelRetargetIndex(this.figurenRelCheck));
+    return (bz?.rel_id != null && idx.get(bz.rel_id)) || null;
+  },
+
+  // Gemeldete Kante entfernen. Eine KI-Kante bekommt serverseitig eine Löschmarke —
+  // die nächste Komplettanalyse legt sie nicht wieder an.
+  async deleteFigurBz(f, bz) {
+    if (bz?.rel_id == null || this.figurBzBusy) return;
+    const app = window.__app;
+    const ok = await app.appConfirm({
+      message: app.t('figuren.relcheck.deleteConfirm', {
+        von: f.name, typ: app.t('figuren.bz.' + bz.typ), zu: _figName(bz.figur_id),
+      }),
+      danger: true,
+    });
+    if (!ok) return;
+    await this._figurBzRequest('DELETE', bz.rel_id);
+  },
+
+  // Gemeldete Kante auf das Ziel umhängen, das ihre Beschreibung nennt.
+  async retargetFigurBz(bz, sug) {
+    if (bz?.rel_id == null || !sug?.to || this.figurBzBusy) return;
+    await this._figurBzRequest('PATCH', bz.rel_id, { to: sug.to });
+  },
+
+  async _figurBzRequest(method, relId, body) {
+    const bookId = Alpine.store('nav').selectedBookId;
+    if (!bookId) return;
+    this.figurBzBusy = true;
+    try {
+      const r = await fetch(`/figures/${encodeURIComponent(bookId)}/relations/${encodeURIComponent(relId)}`, {
+        method,
+        headers: body ? { 'Content-Type': 'application/json' } : undefined,
+        body: body ? JSON.stringify(body) : undefined,
+      });
+      const data = await r.json().catch(() => null);
+      if (!r.ok) throw new Error(window.__app.tError(data));
+      if (String(Alpine.store('nav').selectedBookId) !== String(bookId)) return;
+      await window.__app.loadFiguren(bookId);
+      this.loadFigurenRelCheck();
+    } catch (e) {
+      console.error('[figuren] Beziehung ändern:', e);
+      window.__app.appAlert?.({ message: e.message || window.__app.t('figuren.relcheck.editError') });
+    } finally {
+      this.figurBzBusy = false;
+    }
+  },
 };
+
+function _figName(figId) {
+  return (Alpine.store('catalog').figuren || []).find(x => x.id === figId)?.name || figId;
+}
+
+// Pure: rel_id → vorgeschlagenes neues Ziel aus den foreignTarget-Konflikten.
+export function computeRelRetargetIndex(check) {
+  const out = new Map();
+  for (const c of check?.conflicts || []) {
+    if (c.retarget?.relId != null && c.retarget.to) out.set(c.retarget.relId, { to: c.retarget.to, toName: c.retarget.toName || c.retarget.to });
+  }
+  return out;
+}

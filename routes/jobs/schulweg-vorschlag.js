@@ -37,7 +37,8 @@ const { activeBookSchulsystem } = require('../../lib/buchtyp');
 const { listFiguresForSchoolPath, setSchoolPathJobErgebnis } = require('../../db/figure-school-paths');
 const { resolveBirthsForFigures } = require('../../lib/figure-birth');
 const { buildFigureNamePatterns } = require('../../lib/page-index');
-const { buildNameIndex, figuresInText, splitSentences, trimSatz, foldWord } = require('../../lib/figure-age');
+const { buildNameIndex, foldWord } = require('../../lib/figure-age');
+const stellenLib = require('./shared/figure-stellen');
 const { schoolPath } = require('../../lib/esm-bridge');
 const { schoolLabel } = require('../../lib/school-labels');
 
@@ -59,7 +60,6 @@ const ORDINAL_STAEMME = ['erst', 'zweit', 'dritt', 'viert', 'fünft', 'sechst', 
 
 const MAX_STELLEN_PRO_FIGUR = 8;
 const MAX_KLASSENANGABEN_PRO_FIGUR = 6;
-const SATZ_MAX = 320;
 const MIN_ZITAT_CHARS = 8;
 const BUNDLE_SHARE = 0.5;
 // Antwort-Deckel des KI-Calls und geschätzte Antwort je Figur: ein Weg-Vorschlag
@@ -74,84 +74,21 @@ const OUT_TOK_PRO_STELLE = 25;
 // Einschulungsalter entfernt (Rückstellung, früh eingeschult).
 const EINSCHULUNG_TOLERANZ = 2;
 
-const _norm = (s) => String(s ?? '').toLowerCase()
-  .replace(/[«»„“”‚‘’"'`´]/g, '"').replace(/[–—]/g, '-').replace(/\s+/g, ' ').trim();
-
-/** Satz um den Schulbegriff auf SATZ_MAX kappen (an Wortgrenzen). */
-function _clip(text) {
-  const t = trimSatz(text);
-  if (t.length <= SATZ_MAX) return t;
-  const m = SCHOOL_RE.exec(t);
-  const at = m ? m.index : 0;
-  let start = Math.max(0, at - Math.floor(SATZ_MAX / 2));
-  const sp = t.lastIndexOf(' ', start);
-  if (sp > 0 && start - sp < 20) start = sp + 1;
-  return t.slice(start, start + SATZ_MAX).replace(/\s\S*$/, '');
-}
-
-/** Gleichmässig über den Buchbogen verteilt auswählen (erste + letzte immer). */
-function _spread(list, max) {
-  if (list.length <= max) return list;
-  const out = [];
-  for (let i = 0; i < max; i++) out.push(list[Math.round((i * (list.length - 1)) / (max - 1))]);
-  return [...new Set(out)];
-}
-
-/** Stellen einer Figur auswählen: starke Schulbegriffe zuerst (verteilt), mit
- *  schwachen auffüllen (verteilt) — Reihenfolge danach wieder im Buchverlauf. */
-function pickStellen(list, max = MAX_STELLEN_PRO_FIGUR) {
-  const stark = list.filter(s => SCHOOL_STARK_RE.test(s.satz));
-  const schwach = list.filter(s => !SCHOOL_STARK_RE.test(s.satz));
-  const picked = _spread(stark, max);
-  if (picked.length < max) picked.push(..._spread(schwach, max - picked.length));
-  const order = new Map(list.map((s, i) => [s, i]));
-  return picked.sort((a, b) => order.get(a) - order.get(b));
-}
-
-/** Schicht 1: Kandidatensätze je Figur. Steht im Satz keine Figur, gilt der Satz
- *  davor — aber nur, wenn dort genau eine steht; bei zweien wüsste niemand, wem
- *  das «sie» gehört, und die Zitatprüfung könnte die Verwechslung nicht fangen. */
+/** Kandidatensätze je Figur mit Schulbegriff (geteilte Mechanik: shared/figure-stellen.js). */
 function collectStellen(pageTexts, nameIndex) {
-  const byFig = new Map();
-  for (const { text, page_id } of pageTexts) {
-    const sents = splitSentences(text);
-    for (let i = 0; i < sents.length; i++) {
-      const cur = sents[i].text;
-      if (!SCHOOL_RE.test(cur)) continue;
-      let ids = figuresInText(cur, nameIndex);
-      let satz = cur;
-      if (!ids.length && i > 0) {
-        const prev = figuresInText(sents[i - 1].text, nameIndex);
-        if (prev.length !== 1) continue;
-        ids = prev;
-        satz = `${sents[i - 1].text} ${cur}`;
-      }
-      for (const id of ids) {
-        if (!byFig.has(id)) byFig.set(id, []);
-        byFig.get(id).push({ satz: _clip(satz), page_id });
-      }
-    }
-  }
-  return byFig;
+  return stellenLib.collectStellen(pageTexts, nameIndex, SCHOOL_RE);
 }
 
-/** Die Stelle, aus der das Zitat stammt: zuerst die vom Modell genannte
- *  («2.3» = Figur 2, Stelle 3 im Bündel), sonst irgendeine Stelle der Figur. */
-function _findeStelle(zitat, stellen, stelleRef, figIndex) {
-  const nz = _norm(zitat);
-  const m = /^(\d+)\.(\d+)$/.exec(String(stelleRef || '').trim());
-  if (m && Number(m[1]) === figIndex + 1) {
-    const s = stellen[Number(m[2]) - 1];
-    if (s && _norm(s.satz).includes(nz)) return s;
-  }
-  return stellen.find(s => _norm(s.satz).includes(nz)) || null;
+/** Stellen einer Figur: starke Schulbegriffe zuerst, über das Buch verteilt. */
+function pickStellen(list, max = MAX_STELLEN_PRO_FIGUR) {
+  return stellenLib.pickStellen(list, max, SCHOOL_STARK_RE);
 }
 
 /** Zitat prüfen: lang genug, in einer Stelle der Figur, mit Schulbegriff. */
 function _belegtesZitat(v, ctx) {
   const zitat = typeof v?.zitat === 'string' ? v.zitat.trim() : '';
   if (zitat.length < MIN_ZITAT_CHARS) return null;
-  const treffer = _findeStelle(zitat, ctx.stellen, v.stelle, ctx.figIndex ?? -1);
+  const treffer = stellenLib.findeStelle(zitat, ctx.stellen, v.stelle, ctx.figIndex ?? -1);
   if (!treffer || !SCHOOL_RE.test(zitat)) return null;
   return { zitat, treffer };
 }

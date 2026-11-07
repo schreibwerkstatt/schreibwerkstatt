@@ -66,6 +66,7 @@ export function actionMenuState() {
     actionMenuTarget: null,     // woran das Menue haengt (frei, vom Konsumenten)
     actionMenuPos: { top: 0, left: 0 },
     _actionMenu: null,          // Laufzeit des offenen Menues (Anker, Listener)
+    _actionMenuClickedItem: null, // aktiver Eintrag des laufenden Klicks (Capture-Phase)
   };
 }
 
@@ -202,10 +203,19 @@ export const actionMenuMethods = {
       // Klick endet am Menue: ein Eintrag, der ein Inline-Formular oder einen
       // Picker mit `@click.outside` oeffnet, saehe denselben Klick sonst am
       // document ankommen und schloesse das Frischgeoeffnete sofort wieder.
+      // Ob der Eintrag aktiv war, zaehlt VOR seinem Handler (Capture-Phase):
+      // ein Handler, der sofort `busy` setzt, macht `:disabled` noch im selben
+      // Klick wahr — die Microtask-Pruefung zwischen den Listenern flusht
+      // Alpine —, und die Bubble-Phase liesse das Menue dann offen.
+      '@click.capture': (e) => {
+        const item = e.target.closest?.(ITEM_SEL);
+        this._actionMenuClickedItem = item && !item.disabled ? item : null;
+      },
       '@click': (e) => {
         e.stopPropagation();
-        const item = e.target.closest?.(ITEM_SEL);
-        if (item && !item.disabled) this.closeActionMenu();
+        const hit = this._actionMenuClickedItem;
+        this._actionMenuClickedItem = null;
+        if (hit) this.closeActionMenu();
       },
     };
   },

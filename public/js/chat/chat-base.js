@@ -568,8 +568,8 @@ export function makeChatMethods(cfg) {
   };
 
   // Lauf abbrechen: /jobs/active liefert die Job-ID der Session, DELETE /jobs/:id
-  // (Root `cancelJob`); das Poll-Ende ('cancelled') räumt ab. Knopf nur in
-  // Abschnitts-, Buch- und Recherche-Chat.
+  // (Root `cancelJob`); das Poll-Ende ('cancelled') räumt ab. Knopf im
+  // Kartenkopf aller fünf Chats.
   m[`cancel${L}Run`] = async function () {
     const sid = this[p.runningSessionId];
     if (!sid) return;

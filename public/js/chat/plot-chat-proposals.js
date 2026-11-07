@@ -16,14 +16,24 @@ import { tFetchError } from '../i18n.js';
 import { diffParts } from '../diff/diff-parts.js';
 import { persistProposalStatus, applyProposalOnce } from './proposal-status.js';
 import { trackChatProposal } from '../features-usage.js';
+import { sameBeatRelation } from '../book/plot/constants.js';
 
 const JSON_HEADERS = { 'Content-Type': 'application/json' };
-const CREATE_KIND = { beat_create: 'beat', act_create: 'act', thread_create: 'thread' };
+const CREATE_KIND = { beat_create: 'beat', act_create: 'act', thread_create: 'thread', relation_create: 'relation' };
+const BOARD_LIST = { beat: 'beats', act: 'acts', thread: 'threads', relation: 'relations' };
 
 function _exists(board, kind, id) {
   if (id == null) return false;
-  const list = kind === 'beat' ? board.beats : kind === 'act' ? board.acts : board.threads;
-  return (list || []).some(x => x.id === id);
+  return (board[BOARD_LIST[kind]] || []).some(x => x.id === id);
+}
+
+/** Beat-id einer Beziehungs-Seite (`from`/`to`): bestehender Beat oder der per
+ *  *_beat_ref übernommene neue Beat derselben Antwort. null = (noch) keiner. */
+export function relationBeatId(p, side, proposals, board) {
+  const ref = p?.[`${side}_beat_ref`];
+  if (ref) return refAppliedId(proposals, ref, 'beat', board);
+  const id = p?.[`${side}_beat_id`];
+  return _exists(board, 'beat', id) ? id : null;
 }
 
 // Ziel-Entität eines Änderungs-/Verschiebe-Vorschlags.
@@ -47,6 +57,8 @@ function _beatValue(beat, k) {
   if (k === 'figure_ids') return [...(beat.fig_ids || [])].sort();
   if (k === 'draft_figure_ids') return [...(beat.draft_fig_ids || [])].sort();
   if (k === 'verworfen') return beat.verworfen ? 1 : 0;
+  if (k === 'location_ids') return (beat.locations || []).map(l => l.id).sort();
+  if (k === 'motif_ids') return (beat.motifs || []).map(m => m.id).sort();
   return beat[k] ?? null;
 }
 function _norm(k, v) {
@@ -90,6 +102,20 @@ export function proposalStatus(p, proposals, board) {
     out.blocked = { key: 'plot.chat.block.actGone' };
     return out;
   }
+  if (p.type === 'relation_create') {
+    for (const side of ['from', 'to']) {
+      const ref = p[`${side}_beat_ref`];
+      if (ref && !relationBeatId(p, side, proposals, board)) {
+        out.blocked = { key: 'plot.chat.block.refBeat', params: { name: proposals[ref - 1]?.fields?.titel || '' } };
+        return out;
+      }
+      if (!ref && !relationBeatId(p, side, proposals, board)) {
+        out.blocked = { key: 'plot.chat.block.beatGone' };
+        return out;
+      }
+    }
+    return out;
+  }
   if (p.thread_ref && !refAppliedId(proposals, p.thread_ref, 'thread', board)) {
     out.blocked = { key: 'plot.chat.block.refThread', params: { name: proposals[p.thread_ref - 1]?.name || '' } };
     return out;
@@ -127,12 +153,15 @@ export function beatUpdateRows(p) {
   };
   text('titel');
   text('beschreibung');
+  if ('status' in f) rows.push({ key: 'status', before: b.status || 'geplant', after: f.status, i18n: 'plot.status.' });
   if ('intensitaet' in f) rows.push({ key: 'intensitaet', before: b.intensitaet ?? '—', after: f.intensitaet ?? '—' });
   if ('zeit' in f) rows.push({ key: 'zeit', before: b.zeit || '—', after: f.zeit || '—' });
   if ('chapter_id' in f) rows.push({ key: 'chapter', before: L.chapter_before || '—', after: L.chapter || '—' });
   if ('figure_ids' in f || 'draft_figure_ids' in f) {
     rows.push({ key: 'figuren', before: (L.figuren_before || []).join(', ') || '—', after: (L.figuren || []).join(', ') || '—' });
   }
+  if ('location_ids' in f) rows.push({ key: 'orte', before: (L.orte_before || []).join(', ') || '—', after: (L.orte || []).join(', ') || '—' });
+  if ('motif_ids' in f) rows.push({ key: 'motive', before: (L.motive_before || []).join(', ') || '—', after: (L.motive || []).join(', ') || '—' });
   if ('verworfen' in f) rows.push({ key: 'verworfen', flag: f.verworfen ? 'on' : 'off' });
   return rows;
 }
@@ -159,7 +188,7 @@ export const plotProposalMethods = {
   },
 
   _plotBoardRef() {
-    return { beats: this.beats || [], acts: this.acts || [], threads: this.threads || [] };
+    return { beats: this.beats || [], acts: this.acts || [], threads: this.threads || [], relations: this.relations || [] };
   },
 
   plotProposalStatus(msg, pi) {
@@ -167,7 +196,20 @@ export const plotProposalMethods = {
     return proposalStatus(list[pi], list, this._plotBoardRef());
   },
 
-  plotProposalRows(p) { return beatUpdateRows(p); },
+  // Status-Werte sind Schlüssel (geplant/im_buch) — fürs Template übersetzt.
+  plotProposalRows(p) {
+    const t = (k) => window.__app.t(k);
+    return beatUpdateRows(p).map(r => (r.i18n ? { ...r, before: t(r.i18n + r.before), after: t(r.i18n + r.after) } : r));
+  },
+
+  // Beziehungs-Vorschlag als Satz: «Titel A» bereitet vor «Titel B».
+  plotProposalRelationText(p) {
+    if (p?.type !== 'relation_create') return '';
+    const t = (k, params) => window.__app.t(k, params);
+    return t('plot.chat.relation', {
+      from: p.labels?.from || '?', to: p.labels?.to || '?', typ: t(`plot.relation.type.${p.typ}`),
+    });
+  },
 
   plotProposalTypeLabel(p) {
     return window.__app.t(`plot.chat.type.${p?.type || 'beat_create'}`);
@@ -199,15 +241,16 @@ export const plotProposalMethods = {
   },
 
   // Ziel-Beat eines übernommenen Vorschlags (für „Im Board zeigen").
-  plotProposalBeatId(p) {
+  plotProposalBeatId(p, msg = null) {
     if (p?.type === 'beat_create') return p.applied_id || null;
     if (p?.type === 'beat_update' || p?.type === 'beat_move') return p.beat_id;
+    if (p?.type === 'relation_create') return relationBeatId(p, 'from', this.plotProposals(msg), this._plotBoardRef());
     return null;
   },
 
-  showPlotProposalBeat(p) {
-    const id = this.plotProposalBeatId(p);
-    if (id) this.scrollToBeat(id);
+  showPlotProposalBeat(p, msg = null) {
+    const id = this.plotProposalBeatId(p, msg);
+    if (id) this._revealBeat(this.beats.find(b => b.id === id));
   },
 
   async applyPlotProposal(msg, pi) {
@@ -230,7 +273,8 @@ export const plotProposalMethods = {
     });
     this.busy = false;
     p._applying = false;
-    if (r.ok) { trackChatProposal('plot', 'applied', p.type); return; }
+    if (r.ok) { if (!r.already) trackChatProposal('plot', 'applied', p.type); return; }
+    if (r.phase === 'cancelled') return;
     if (r.phase === 'write') p._error = r.error?.body ? tFetchError(r.error) : app.t('plot.chat.applyError');
     // Das Board ist geändert, nur der Status fehlt — sichtbar machen statt
     // verschlucken; der nächste Klick holt nur den Status nach.
@@ -271,7 +315,7 @@ export const plotProposalMethods = {
       }
       window.__app.refreshPlotBeatCounts?.();
       this.loadTimeChecks();
-      this.$nextTick(() => this.scrollToBeat(beat.id));
+      this._revealBeat(beat);
       return beat.id;
     }
 
@@ -288,7 +332,7 @@ export const plotProposalMethods = {
       this._replaceBeat({ ...updated, occ_count: beat.occ_count, occ_top: beat.occ_top });
       this._recordBeatFields(p.beat_id, before, { ...p.fields });
       window.__app.refreshPlotBeatCounts?.();
-      this.$nextTick(() => this.scrollToBeat(p.beat_id));
+      this._revealBeat(this.beats.find(b => b.id === p.beat_id));
       return p.beat_id;
     }
 
@@ -309,7 +353,7 @@ export const plotProposalMethods = {
       const ok = await this._persistCells(same ? [{ actId, threadId }] : [fromCell, { actId, threadId }]);
       if (!ok) throw new Error('persist');
       this._recordBeatPlace(placeBefore);
-      this.$nextTick(() => this.scrollToBeat(beat.id));
+      this._revealBeat(beat);
       return beat.id;
     }
 
@@ -328,6 +372,7 @@ export const plotProposalMethods = {
       if (p.after_act_id || p.at_start) {
         try { await this._placePlotAct(act, p); } catch { await this.loadBoard(); }
       }
+      this._revealAct(act.id, { scroll: true });
       return act.id;
     }
 
@@ -339,6 +384,7 @@ export const plotProposalMethods = {
       this.acts = this.acts.map(a => (a.id === updated.id ? updated : a));
       this._memos = {};
       this._recordActFields(p.act_id, { name: act.name }, { name: p.name });
+      this._revealAct(p.act_id, { scroll: true });
       return p.act_id;
     }
 
@@ -354,6 +400,7 @@ export const plotProposalMethods = {
       this.threads = [...this.threads, thread];
       this._memos = {};
       this._recordCreate('thread', thread.id);
+      this._scrollToPlotLane(thread.id);
       return thread.id;
     }
 
@@ -369,9 +416,37 @@ export const plotProposalMethods = {
       this.threads = this.threads.map(x => (x.id === updated.id ? updated : x));
       this._memos = {};
       this._recordThreadFields(p.thread_id, before, { ...p.fields });
+      this._scrollToPlotLane(p.thread_id);
       return p.thread_id;
     }
+    if (p.type === 'relation_create') {
+      const fromId = relationBeatId(p, 'from', list, board);
+      const toId = relationBeatId(p, 'to', list, board);
+      // Inzwischen von Hand angelegt: nichts schreiben, nur als übernommen
+      // vermerken — und kein Undo-Record, sonst löschte Undo die Kante des Users.
+      const had = (this.relations || []).find(r => sameBeatRelation(
+        { from: r.from_beat_id, to: r.to_beat_id, typ: r.typ }, { from: fromId, to: toId, typ: p.typ }));
+      if (had) return had.id;
+      const rel = await fetchJson('/plot/beat-relations', {
+        method: 'POST', headers: JSON_HEADERS,
+        body: JSON.stringify({ book_id: bookId, from_beat_id: fromId, to_beat_id: toId, typ: p.typ }),
+      });
+      if (!(this.relations || []).some(r => r.id === rel.id)) {
+        this.relations = [...(this.relations || []), rel];
+        this._recordCreate('relation', rel.id);
+      }
+      this._memos = {};
+      this._revealBeat(this.beats.find(b => b.id === fromId));
+      return rel.id;
+    }
     throw new Error(`unknown proposal type ${p.type}`);
+  },
+
+  // Strang-Zeile im Grid in den Blick holen (ein neuer erster Strang schaltet
+  // das Board erst aufs Grid um — darum nach dem Render).
+  _scrollToPlotLane(threadId) {
+    this.$nextTick(() => this.$root?.querySelector(`[data-plot-cell][data-thread-id="${threadId}"]`)
+      ?.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'nearest' }));
   },
 
   // Neuen Akt hinter after_act_id bzw. an den Anfang seines Bereichs stellen.

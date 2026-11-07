@@ -68,6 +68,12 @@
                         :aria-disabled="!item.available">
                   <span class="palette-item-headrow">
                     <span class="palette-item-label" x-html="renderLabelHtml(item)"></span>
+                    <template x-if="item.subtyp">
+                      <span class="gz-subtyp-badge" :class="'gz-subtyp-badge--' + item.subtyp">
+                        <svg class="icon gz-subtyp-icon" aria-hidden="true"><use :href="'/icons.svg#' + item.subtypIcon"/></svg>
+                        <span x-text="$app.t('events.subtyp.' + item.subtyp)"></span>
+                      </span>
+                    </template>
                     <span class="palette-item-badge" x-show="item.dependsOnKomplett" x-text="$app.t('palette.komplettDep')"></span>
                   </span>
                   <span class="palette-item-desc" x-text="renderSubText(item)"></span>

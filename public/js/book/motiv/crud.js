@@ -193,7 +193,6 @@ export const crudMethods = {
   // einem Thema zugeordnet, danach im Panel selektiert + Namensfeld fokussiert zum
   // sofortigen Umbenennen.
   async createMotifAt(themeId) {
-    this.closeActionMenu();
     this.busy = true;
     try {
       const body = { book_id: this._bookId(), name: window.__app.t('motiv.motif.newName') };
@@ -208,7 +207,6 @@ export const crudMethods = {
   // Thema direkt anlegen (aus dem Graph-Kontextmenü) — mit Default-Namen; danach im
   // Panel-Editor selektiert + Namensfeld fokussiert zum sofortigen Umbenennen.
   async createThemeQuick() {
-    this.closeActionMenu();
     this.busy = true;
     try {
       const theme = await sendJson('/motifs/themes', 'POST', { book_id: this._bookId(), name: window.__app.t('motiv.theme.newName') });

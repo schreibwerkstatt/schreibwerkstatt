@@ -250,12 +250,12 @@
      Spalten, die Lanes nur auf N → Kopf-Spalten schmaler als ihre Zellen, der
      Versatz akkumuliert nach rechts. `.plot-swim-spacer` ist der unsichtbare
      Lane-Zwilling der Add-Spalte und stellt gleiche Spaltenzahl pro Zeile her. */
-  .card--plot:fullscreen .plot-swim {
+  .plot-split:fullscreen .plot-swim {
     width: max-content;
     min-width: 100%;
   }
-  .card--plot:fullscreen .plot-swim-acthead,
-  .card--plot:fullscreen .plot-swim-cell {
+  .plot-split:fullscreen .plot-swim-acthead,
+  .plot-split:fullscreen .plot-swim-cell {
     flex: 1 0 0;
     width: auto;
     min-width: var(--cell-w);
@@ -267,7 +267,7 @@
      dort dieselbe Flex-Regel wie acthead/cell — eigener Block, weil der Spacer im
      Normalmodus display:none ist (kein zweites Mal denselben Selektor splitten). */
   .plot-swim-spacer { display: none; }
-  .card--plot:fullscreen .plot-swim-spacer {
+  .plot-split:fullscreen .plot-swim-spacer {
     display: block;
     flex: 1 0 0;
     width: auto;

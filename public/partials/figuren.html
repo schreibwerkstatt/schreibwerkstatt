@@ -76,6 +76,22 @@
                @combobox-change="_figurenGraphSetKapitel($event.detail || null)"
 ></div>
         </div>
+        <!-- Soziogramm: Kapitel-Inseln, Begegnungen aus Szenen, Nähe-Einschätzung
+             (graph/soziogramm-controls.js, docs/graph.md «Soziogramm»). -->
+        <div x-show="figurenGraphModus === 'soziogramm'" class="figuren-graph-sozio">
+          <div x-data="toggleSwitch({ label: () => $app.t('graph.sozio.inseln') })"
+               x-modelable="value" x-model="soziogrammInseln"
+               @toggle-change="setSoziogrammInseln($event.detail)" :data-tip="$app.t('graph.sozio.inselnHint')"></div>
+          <div x-data="toggleSwitch({ label: () => $app.t('graph.sozio.begegnungen') })"
+               x-modelable="value" x-model="soziogrammBegegnungen"
+               @toggle-change="setSoziogrammBegegnungen($event.detail)" :data-tip="$app.t('graph.sozio.begegnungenHint')"></div>
+          <button type="button" class="btn-compact" x-show="soziogrammNaeheStand().total > 0"
+                  :disabled="soziogrammNaeheLoading" @click="runFigurenNaehe()"
+                  :data-tip="$app.t('graph.sozio.naeheHint')"
+                  x-text="soziogrammNaeheLoading ? $app.t('graph.sozio.naeheRunning')
+                    : soziogrammNaeheStand().offen ? $app.tn('graph.sozio.naeheRun', soziogrammNaeheStand().offen)
+                    : $app.t('graph.sozio.naeheRerun')"></button>
+        </div>
         <div class="figuren-graph-toolbar-zoom">
           <button type="button" class="icon-btn" :data-tip="$app.t('graph.zoomIn')" :aria-label="$app.t('graph.zoomIn')" @click="_figurenNetwork && _figurenNetwork.moveTo({ scale: _figurenNetwork.getScale() * 1.3, animation: { duration: 200, easingFunction: 'easeInOutQuad' } })"><svg class="icon" aria-hidden="true"><use href="/icons.svg#plus"/></svg></button>
           <button type="button" class="icon-btn" :data-tip="$app.t('graph.zoomOut')" :aria-label="$app.t('graph.zoomOut')" @click="_figurenNetwork && _figurenNetwork.moveTo({ scale: _figurenNetwork.getScale() * 0.77, animation: { duration: 200, easingFunction: 'easeInOutQuad' } })"><svg class="icon" aria-hidden="true"><use href="/icons.svg#minus"/></svg></button>
@@ -83,6 +99,7 @@
           <button type="button" class="icon-btn" :aria-pressed="figurenGraphFullscreen" :data-tip="figurenGraphFullscreen ? $app.t('graph.fullscreenClose') : $app.t('graph.fullscreen')" :aria-label="figurenGraphFullscreen ? $app.t('graph.fullscreenClose') : $app.t('graph.fullscreen')" @click="toggleFigurenGraphFullscreen()"><svg class="icon" aria-hidden="true"><use :href="figurenGraphFullscreen ? '/icons.svg#minimize-2' : '/icons.svg#maximize-2'"/></svg></button>
         </div>
       </div>
+      <p class="card-status" x-show="figurenGraphModus === 'soziogramm' && soziogrammNaeheStatus" x-cloak x-text="soziogrammNaeheStatus"></p>
       <div id="figuren-graph" class="figuren-graph-container" role="img" :aria-label="$app.t('graph.ariaLabel')"></div>
       <div id="figur-tooltip" class="graph-tooltip"></div>
     </div>
@@ -162,7 +179,7 @@
             <svg class="icon" aria-hidden="true"><use href="/icons.svg#trash"/></svg>
           </button>
           <span class="tag" x-text="$app.t('figuren.type.' + f.typ)"></span>
-          <span x-show="$app.figurJahrLabel(f)" class="tag" :data-tip="$app.t('figuren.jahrAlterTip')" x-text="$app.figurJahrLabel(f)"></span>
+          <span x-show="$app.figurJahrLabel(f)" class="tag" :data-tip="$app.figurJahrTip(f)" x-text="$app.figurJahrLabel(f)"></span>
           <span x-show="f.geburtstag" class="tag" :data-tip="$app.t('figuren.birthYearTip')" x-text="$app.t('figuren.birthYear', { jahr: f.geburtstag })"></span>
           <!-- Häufigstes Kapitel + Anzahl weiterer -->
           <template x-if="f.kapitel?.length">

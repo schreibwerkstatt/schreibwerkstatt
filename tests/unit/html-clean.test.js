@@ -404,3 +404,34 @@ test('cleanPageHtml: Popover-Markup eines alten Clients landet nicht im Content'
   assert.equal(out.indexOf('Meinten Sie'), -1);
   assert.equal(out, '<p>Erster Absatz</p><p>Zweiter Absatz</p>');
 });
+
+// Leere Formatierungs-Hüllen: Enter am Rand einer Kursivierung liess im
+// Nachrichtenverlauf `Marie<i></i>` in der Absenderzeile stehen.
+test('stripEmptyInline: leere Hülle hinter Text fällt', () => {
+  const { stripEmptyInline } = require('../../lib/html-clean');
+  assert.equal(
+    stripEmptyInline('<div class="msg-thread"><p class="msg-name">Marie<i></i></p><p class="msg-in"><i>Hi</i></p></div>'),
+    '<div class="msg-thread"><p class="msg-name">Marie</p><p class="msg-in"><i>Hi</i></p></div>',
+  );
+});
+
+test('stripEmptyInline: verschachtelte leere Kette fällt, Leerraum bleibt', () => {
+  const { stripEmptyInline } = require('../../lib/html-clean');
+  assert.equal(stripEmptyInline('<p>a<b><em></em></b>b</p>'), '<p>ab</p>');
+  assert.equal(stripEmptyInline('<p>a<i> </i>b</p>'), '<p>a b</p>');
+});
+
+test('stripEmptyInline: Hüllen mit Inhalt, Attribut oder Element-Kind bleiben', () => {
+  const { stripEmptyInline } = require('../../lib/html-clean');
+  for (const html of [
+    '<p><i>kursiv</i></p>',
+    '<p><i><br></i></p>',
+    '<p>x<span class="xref" data-xref="1"></span></p>',
+    '<p><a id="anker"></a>x</p>',
+    '<p><em class="k"></em>x</p>',
+  ]) assert.equal(stripEmptyInline(html), html);
+});
+
+test('cleanPageHtml: leere Hülle fällt auch über die Pipeline', () => {
+  assert.equal(cleanPageHtml('<p>read more<i></i>.</p>'), '<p>read more.</p>');
+});

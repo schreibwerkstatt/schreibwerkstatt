@@ -1,6 +1,6 @@
 # ERD — schreibwerkstatt
 
-Stand: Schema-Version 355, 191 Tabellen (ohne `sqlite_*`/`schema_version`/FTS5-Shadow-Tables; inkl. FTS5-Virtual `search_index`/`search_trigram`/`chat_messages_fts` + `search_meta`).
+Stand: Schema-Version 359, 196 Tabellen (ohne `sqlite_*`/`schema_version`/FTS5-Shadow-Tables; inkl. FTS5-Virtual `search_index`/`search_trigram`/`chat_messages_fts` + `search_meta`).
 
 Quelle: Squashed-Schema-Snapshot in [db/squashed-schema.js](../db/squashed-schema.js) (regeneriert via `node tools/dump-schema.js`) + [db/migrations.js](../db/migrations.js). Drift gegen die Legacy-Migration-Kette ist durch [tests/unit/squash-drift.test.mjs](../tests/unit/squash-drift.test.mjs) gegated. Mermaid-Diagramme — in VSCode mit „Markdown Preview Mermaid Support" (oder GitHub) direkt sichtbar.
 
@@ -27,6 +27,7 @@ erDiagram
   books ||--o{ world_facts_scan      : has
   books ||--o{ world_fact_verdicts   : has
   books ||--o{ figure_relations      : has
+  books ||--o{ figure_relation_suppressions : has
   books ||--o{ zeitstrahl_events     : has
   books ||--o{ continuity_checks     : has
   books ||--o{ continuity_issues     : has
@@ -44,6 +45,10 @@ erDiagram
   books ||--o{ chat_sessions         : has
   books ||--o{ ideen                 : has
   ideen ||--o{ idea_links            : links
+  ideen ||--o| idee_check_hints      : hint
+  pages ||--o{ idee_check_hints      : beleg
+  pages ||--o{ idee_check_baselines  : baseline
+  app_users ||--o{ idee_check_baselines : owns
   research_items ||--o{ idea_links   : "linked from"
   plot_beats ||--o{ idea_links       : "linked from"
   motifs ||--o{ idea_links           : "linked from"
@@ -264,9 +269,15 @@ erDiagram
   figures ||--o{ zeitstrahl_event_figures: ref
   figures ||--o{ figure_relations        : from
   figures ||--o{ figure_relations        : to
+  figures ||--o{ figure_relation_suppressions : from
+  figures ||--o{ figure_relation_suppressions : to
   figures ||--o{ draft_figures           : "imported as"
   figures ||--o| figure_ages             : "age index"
   figures ||--o| figure_school_paths     : "school path"
+  figures ||--o{ figure_jobs             : "career"
+  figures ||--o{ figure_hobbies          : "hobby"
+  pages   ||--o{ figure_jobs             : "evidence"
+  pages   ||--o{ figure_hobbies          : "evidence"
   figures ||--o{ figure_age_belege       : "age evidence"
   figures ||--o{ figure_aliases          : "alias"
 
@@ -515,6 +526,19 @@ erDiagram
     INTEGER thread_id   FK "ON DELETE CASCADE (Plot-Strang)"
     TEXT    created_at
     %% partielle UNIQUE-Indexe je Ziel-Art: dieselbe Kante nur einmal
+  }
+  idee_check_hints {
+    INTEGER idee_id     PK,FK "ON DELETE CASCADE — ein Hinweis je Idee"
+    INTEGER page_id     FK "ON DELETE CASCADE — Abschnitt des Belegs"
+    TEXT    beleg       "geprüftes Zitat, das die Pendenz einlöst (Auto-Erledigt-Check)"
+    TEXT    begruendung
+    TEXT    created_at
+  }
+  idee_check_baselines {
+    INTEGER page_id     PK,FK "ON DELETE CASCADE"
+    TEXT    user_email  PK,FK "ON DELETE CASCADE"
+    TEXT    text        "Klartext beim letzten Check — Mass für «grössere Änderung»"
+    TEXT    checked_at
   }
   book_settings {
     INTEGER book_id                  PK,FK
@@ -904,9 +928,19 @@ erDiagram
     TEXT    typ             "freie Bezeichnung"
     TEXT    beschreibung
     INTEGER machtverhaltnis
+    INTEGER naehe           "emotionale Naehe -2..2, NULL = nicht eingeschaetzt (Soziogramm: Typ-Standard)"
     TEXT    belege
     TEXT    user_email      "UNIQUE(book_id, from_fig_id, to_fig_id, typ, user_email)"
-    TEXT    origin          "ki|manual — Komplettanalyse baut nur 'ki' neu auf, 'manual' (Katalog-PUT) ueberlebt"
+    TEXT    origin          "ki|manual — Komplettanalyse baut nur 'ki' neu auf; 'manual' ueberlebt und sperrt sein Paar fuer KI-Kanten"
+  }
+  figure_relation_suppressions {
+    INTEGER id          PK
+    INTEGER book_id     FK
+    TEXT    user_email  FK
+    INTEGER from_fig_id FK "kanonisch: kleinere figures.id"
+    INTEGER to_fig_id   FK
+    TEXT    typ         "beim Tauschen auf das Inverse gedreht (wie relationKey)"
+    TEXT    created_at
   }
   figure_appearances {
     INTEGER figure_id   FK
@@ -937,6 +971,44 @@ erDiagram
     TEXT    source             "CHECK IN ('autor','ki') oder NULL — wer die Felder gesetzt hat"
     TEXT    vorschlag_json     "offener KI-Vorschlag mit Beleg (Job schulweg-vorschlag schreibt nur hier)"
     TEXT    klassenangaben_json "JSON [{jahr,monat,stufe,klasse,zitat,page_id}] — ausdrückliche Klassenangaben aus dem Text (Job), gegen die Rechnung geprüft beim Lesen"
+    TEXT    updated_at
+  }
+  figure_jobs {
+    INTEGER id          PK
+    INTEGER figure_id   FK "ON DELETE CASCADE"
+    TEXT    status      "CHECK IN ('aktiv','vorschlag') — Job schreibt nur 'vorschlag', ersetzt nur diese"
+    TEXT    source      "CHECK IN ('autor','ki')"
+    TEXT    art         "CHECK IN ('ausbildung','beruf')"
+    TEXT    taetigkeit  "NOT NULL"
+    TEXT    arbeitgeber
+    TEXT    ort
+    INTEGER von_jahr    "NULL = Beginn unbekannt"
+    INTEGER von_monat   "1-12 oder NULL"
+    INTEGER bis_jahr    "NULL = laeuft noch / Ende unbekannt"
+    INTEGER bis_monat   "1-12 oder NULL"
+    TEXT    notiz
+    TEXT    zitat       "Beleg (Vorschlag)"
+    INTEGER page_id     FK "ON DELETE SET NULL — Beleg-Sprungziel"
+    TEXT    begruendung
+    TEXT    created_at
+    TEXT    updated_at
+  }
+  figure_hobbies {
+    INTEGER id          PK
+    INTEGER figure_id   FK "ON DELETE CASCADE"
+    TEXT    status      "CHECK IN ('aktiv','vorschlag')"
+    TEXT    source      "CHECK IN ('autor','ki')"
+    TEXT    hobby       "NOT NULL"
+    TEXT    ort
+    INTEGER von_jahr
+    INTEGER von_monat
+    INTEGER bis_jahr
+    INTEGER bis_monat
+    TEXT    notiz
+    TEXT    zitat
+    INTEGER page_id     FK "ON DELETE SET NULL"
+    TEXT    begruendung
+    TEXT    created_at
     TEXT    updated_at
   }
   figure_age_belege {
@@ -1113,6 +1185,8 @@ erDiagram
   figures   ||--o{ figure_tags        : tagged
   figures   ||--o{ figure_relations   : from
   figures   ||--o{ figure_relations   : to
+  figures   ||--o{ figure_relation_suppressions : from
+  figures   ||--o{ figure_relation_suppressions : to
   figures   ||--o{ figure_appearances : appears
   figures   ||--o{ figure_events      : has
   figures   ||--o{ page_figure_mentions: mentioned
@@ -1181,6 +1255,8 @@ erDiagram
   figures ||--o{ figure_aliases : "alias (CASCADE)"
   figures ||--o| figure_ages : "age index (CASCADE)"
   figures ||--o| figure_school_paths : "school path (CASCADE)"
+  figures ||--o{ figure_jobs : "career (CASCADE)"
+  figures ||--o{ figure_hobbies : "hobby (CASCADE)"
   figures ||--o{ figure_age_belege : "age evidence (CASCADE)"
   books ||--o{ figure_age_scans : "scan head (CASCADE)"
   figures ||--o{ draft_figures : "imported as (SET NULL)"
@@ -1960,6 +2036,7 @@ erDiagram
     INTEGER ai_profile_id     FK "ai_profiles(id) ON DELETE SET NULL; NULL = folgt global ai.provider"
     TEXT    onboarding_state  "JSON { welcomeDismissed, completed }; NULL = frisch (Mig 241)"
     TEXT    changelog_seen_version "zuletzt gelesene Release-Notiz; NULL = nie (Mig 278)"
+    INTEGER ideen_auto_check "0|1, Auto-Erledigt-Check nach dem Speichern (Mig 359, Default 1)"
   }
   user_invites {
     INTEGER id              PK "AUTOINCREMENT"

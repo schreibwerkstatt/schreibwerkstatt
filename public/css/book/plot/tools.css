@@ -62,9 +62,9 @@
   .plot-swim-cell.plot-swim-cell--collapsed { flex-basis: 6rem; width: 6rem; }
   /* Vollbild verteilt die Spalten fluid (board.css/swimlane.css) — eingeklappte
      bleiben trotzdem schmal. */
-  .card--plot:fullscreen .plot-column.plot-column--collapsed { flex: 0 0 9rem; }
-  .card--plot:fullscreen .plot-swim-acthead.plot-swim-acthead--collapsed,
-  .card--plot:fullscreen .plot-swim-cell.plot-swim-cell--collapsed { flex: 0 0 6rem; min-width: 0; }
+  .plot-split:fullscreen .plot-column.plot-column--collapsed { flex: 0 0 9rem; }
+  .plot-split:fullscreen .plot-swim-acthead.plot-swim-acthead--collapsed,
+  .plot-split:fullscreen .plot-swim-cell.plot-swim-cell--collapsed { flex: 0 0 6rem; min-width: 0; }
   .plot-swim-acthead--collapsed .plot-column-actions { display: none; }
   .plot-swim-acthead--collapsed .plot-column-title {
     min-width: 0;

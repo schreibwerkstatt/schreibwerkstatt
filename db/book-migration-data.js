@@ -27,10 +27,14 @@ const { db } = require('./connection');
 // in den Datumsspalten tragen (siehe lib/datum-parse#normalizeDatumFields) —
 // beim Import bereinigen, sonst wandert der Defekt mit dem Buch mit.
 const { normalizeDatumFields } = require('../lib/datum-parse');
+const { normNaehe } = require('../lib/relation-naehe');
+const { suppressRelation } = require('./figures/relation-edits');
 const { normalizeIdeeStatus } = require('../lib/ideen-status');
 const { normFaktKategorie, markWorldFactsScanned } = require('./world-facts');
 const searchIndex = require('../lib/search');
 const { collectResearch, restoreResearch } = require('./book-migration-data/research');
+const { FIGURE_EXTRA_QUERIES, restoreFigureExtras } = require('./book-migration-data/figure-extras');
+const { collectWerk, restoreWerk } = require('./book-migration-data/werk');
 
 function _now() { return new Date().toISOString(); }
 
@@ -86,8 +90,9 @@ function collectAnalysis(bookId, scopeEmail = null) {
   return {
     figures:               q('SELECT * FROM figures WHERE book_id = ? AND user_email IS ?'),
     figureTags:            q('SELECT ft.* FROM figure_tags ft JOIN figures f ON f.id = ft.figure_id WHERE f.book_id = ? AND f.user_email IS ?'),
-    figureSchoolPaths:     q('SELECT fsp.* FROM figure_school_paths fsp JOIN figures f ON f.id = fsp.figure_id WHERE f.book_id = ? AND f.user_email IS ?'),
+    ...Object.fromEntries(Object.entries(FIGURE_EXTRA_QUERIES).map(([k, sql]) => [k, q(sql)])),
     figureRelations:       q('SELECT * FROM figure_relations WHERE book_id = ? AND user_email IS ?'),
+    figureRelationSuppressions: q('SELECT * FROM figure_relation_suppressions WHERE book_id = ? AND user_email IS ?'),
     figureAppearances:     q('SELECT fa.* FROM figure_appearances fa JOIN figures f ON f.id = fa.figure_id WHERE f.book_id = ? AND f.user_email IS ?'),
     figureEvents:          q('SELECT fe.* FROM figure_events fe JOIN figures f ON f.id = fe.figure_id WHERE f.book_id = ? AND f.user_email IS ?'),
     pageFigureMentions:    q('SELECT pfm.* FROM page_figure_mentions pfm JOIN figures f ON f.id = pfm.figure_id WHERE f.book_id = ? AND f.user_email IS ?'),
@@ -135,7 +140,7 @@ function collectChats(bookId) {
 // waehrend zwei Analyse-Kataloge desselben Buchs sich beim Restore vermischen.
 // Die uebersprungenen Scopes stehen in `out.analysisScope` — der Aufrufer soll
 // sagen koennen, dass er nicht alles mitnimmt.
-function collectExtras(bookId, { analysis = false, lektorat = false, chats = false, research = false } = {}, scopeEmail = null) {
+function collectExtras(bookId, { analysis = false, lektorat = false, chats = false, research = false, werk = false } = {}, scopeEmail = null) {
   const out = {};
   if (analysis) {
     const scope = _pickScope(_analysisScopes(bookId), scopeEmail);
@@ -149,6 +154,8 @@ function collectExtras(bookId, { analysis = false, lektorat = false, chats = fal
   if (lektorat) out.lektorat = collectLektorat(bookId);
   if (chats)    out.chats = collectChats(bookId);
   if (research) out.research = collectResearch(bookId);
+  // Werk-Block im selben User-Scope wie die Analyse (Plot-Board, Läufe …).
+  if (werk)     out.werk = collectWerk(bookId, out.analysisScope ? out.analysisScope.email : scopeEmail);
   return out;
 }
 
@@ -258,34 +265,23 @@ function restoreAnalysis(bookId, data, ctx) {
     if (fid) insTag.run(fid, r.tag);
   }
 
-  // Schulweg je Figur (Autor-Angabe oder übernommener KI-Vorschlag). Ein offener
-  // Vorschlag und die Klassenangaben reisen mit — sie tragen ihren Beleg selbst;
-  // dessen page_id wird wie jede andere umgeschlüsselt.
-  const remapBelege = (json) => {
-    if (!json) return null;
-    let v;
-    try { v = JSON.parse(json); } catch { return null; }
-    const fix = (o) => (o && typeof o === 'object' ? { ...o, page_id: o.page_id != null ? (pageOf(o.page_id) ?? null) : null } : o);
-    return JSON.stringify(Array.isArray(v) ? v.map(fix) : fix(v));
-  };
-  const insSchool = db.prepare(`INSERT OR IGNORE INTO figure_school_paths
-    (figure_id,weg,einschulung_jahr,repetitionen_json,source,vorschlag_json,klassenangaben_json,updated_at) VALUES (?,?,?,?,?,?,?,?)`);
-  for (const r of arr('figureSchoolPaths')) {
-    const fid = figMap.get(r.figure_id);
-    if (!fid) continue;
-    const source = r.source === 'autor' || r.source === 'ki' ? r.source : null;
-    const ej = Number.isInteger(r.einschulung_jahr) ? r.einschulung_jahr : null;
-    insSchool.run(fid, r.weg ?? null, ej, r.repetitionen_json ?? null, source,
-      remapBelege(r.vorschlag_json), remapBelege(r.klassenangaben_json), r.updated_at || _now());
-  }
+  // Schulweg, Berufsweg, Hobbys (db/book-migration-data/figure-extras.js).
+  restoreFigureExtras(arr, { figMap, pageOf });
 
   const insRel = db.prepare(`INSERT OR IGNORE INTO figure_relations
-    (book_id,from_fig_id,to_fig_id,typ,beschreibung,user_email,machtverhaltnis,belege,origin)
-    VALUES (?,?,?,?,?,?,?,?,?)`);
+    (book_id,from_fig_id,to_fig_id,typ,beschreibung,user_email,machtverhaltnis,naehe,belege,origin)
+    VALUES (?,?,?,?,?,?,?,?,?,?)`);
   for (const r of arr('figureRelations')) {
     const from = figMap.get(r.from_fig_id); const to = figMap.get(r.to_fig_id);
-    if (from && to) insRel.run(bookId, from, to, r.typ, r.beschreibung ?? null, email, r.machtverhaltnis ?? null, r.belege ?? null,
+    if (from && to) insRel.run(bookId, from, to, r.typ, r.beschreibung ?? null, email, r.machtverhaltnis ?? null, normNaehe(r.naehe), r.belege ?? null,
       r.origin === 'manual' ? 'manual' : 'ki');
+  }
+
+  // Löschmarken verworfener KI-Kanten (db/figures/relation-edits.js): reisen mit, sonst
+  // legte die erste Komplettanalyse im Zielbuch die verworfenen Kanten wieder an.
+  for (const r of arr('figureRelationSuppressions')) {
+    const from = figMap.get(r.from_fig_id); const to = figMap.get(r.to_fig_id);
+    if (from && to && from !== to && r.typ) suppressRelation(bookId, email, from, to, r.typ);
   }
 
   const insApp = db.prepare('INSERT OR IGNORE INTO figure_appearances (figure_id,chapter_id,haeufigkeit) VALUES (?,?,?)');
@@ -563,6 +559,7 @@ function restoreChats(bookId, data, ctx) {
       r.tps ?? null, r.created_at || _now(), r.client_msg_id ?? null, r.job_id ?? null, r.cache_creation_1h_in ?? 0);
     n += 1;
   }
+  ctx.sessionMap = sessionMap;
   return { sessions: sessionMap.size, messages: n };
 }
 
@@ -576,6 +573,7 @@ function restoreExtras(bookId, extras, maps, importerEmail) {
     email: importerEmail,
     pageOf: (src) => (src == null ? null : (pageIdMap.get(src) ?? null)),
     chapterOf: (src) => (src == null ? null : (chapterIdMap.get(src) ?? null)),
+    sourceMap: maps?.sourceIdMap instanceof Map ? maps.sourceIdMap : new Map(),
   };
   const result = {};
   const run = db.transaction(() => {
@@ -584,6 +582,8 @@ function restoreExtras(bookId, extras, maps, importerEmail) {
     if (extras.chats)    result.chats = restoreChats(bookId, extras.chats, ctx);
     // Nach der Analyse: die Recherche-Verknuepfungen brauchen deren id-Maps.
     if (extras.research) result.research = restoreResearch(bookId, extras.research, ctx);
+    // Zuletzt: der Werk-Block verweist auf alle übrigen Blöcke (Figuren, Chats, Recherche).
+    if (extras.werk)     result.werk = restoreWerk(bookId, extras.werk, ctx);
   });
   run();
   // Suchindex ausserhalb der Transaktion (FTS-Schreibfehler duerfen den Import

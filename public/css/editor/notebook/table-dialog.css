@@ -67,6 +67,8 @@
   max-height: 56vh;
   border: 0.5px solid var(--color-border);
   border-radius: var(--radius-none);
+  /* Deckend: sonst kein Compositor-Scroll bei Pixeldichte 1 (siehe entities/recherche/dialog.css). */
+  background: var(--color-surface);
 }
 .table-dialog-grid {
   border-collapse: separate;

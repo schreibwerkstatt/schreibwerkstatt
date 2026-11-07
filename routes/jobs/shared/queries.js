@@ -122,7 +122,7 @@ function getFiguren(bookId, userEmail, chapterId = null) {
 
   const relRows = db.prepare(`
     SELECT ff.fig_id AS from_fig_id, ft.fig_id AS to_fig_id,
-           r.typ, r.beschreibung, r.machtverhaltnis
+           r.typ, r.beschreibung, r.machtverhaltnis, r.naehe
     FROM figure_relations r
     JOIN figures ff ON ff.id = r.from_fig_id
     JOIN figures ft ON ft.id = r.to_fig_id
@@ -134,6 +134,7 @@ function getFiguren(bookId, userEmail, chapterId = null) {
       typ: r.typ,
       ...(r.beschreibung    ? { beschreibung: r.beschreibung }       : {}),
       ...(r.machtverhaltnis != null ? { machtverhaltnis: r.machtverhaltnis } : {}),
+      ...(r.naehe != null ? { naehe: r.naehe } : {}),
     };
     if (!relsByFigId[r.from_fig_id]) relsByFigId[r.from_fig_id] = [];
     relsByFigId[r.from_fig_id].push({ mit: r.to_fig_id, ...entry });

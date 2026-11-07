@@ -106,4 +106,18 @@ function locationParentMap(bookId) {
   return new Map(_stmtLocParents.all(bookId).map(r => [r.loc_id, r.parent_loc_id]));
 }
 
-module.exports = { listLocationsForBook, getLocationName, locationParentMap };
+// Schlanke Namensliste (loc_id, Name, Elternort) für Auswahl und Auflösung — etwa
+// die Schauplatz-Felder der Plot-Chat-Vorschläge —, ohne die Figuren-/Kapitel-Joins
+// von listLocationsForBook. Gleicher Scope wie dort (Buch + User).
+const _stmtLocNames = db.prepare(`
+  SELECT l.loc_id, l.name, p.name AS parent_name
+    FROM locations l
+    LEFT JOIN locations p ON p.id = l.parent_id
+   WHERE l.book_id = ? AND l.user_email IS ?
+   ORDER BY l.sort_order, l.id
+`);
+function listLocationNames(bookId, userEmail) {
+  return _stmtLocNames.all(bookId, userEmail || null);
+}
+
+module.exports = { listLocationsForBook, listLocationNames, getLocationName, locationParentMap };

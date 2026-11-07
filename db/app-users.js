@@ -25,7 +25,7 @@ const _stmtFindByEmail = db.prepare(`
          theme, default_buchtyp, default_language, default_region,
          focus_granularity, daily_goal_minutes,
          monthly_budget_usd, budget_mode, ai_profile_id,
-         onboarding_state, changelog_seen_version
+         onboarding_state, changelog_seen_version, ideen_auto_check
     FROM app_users
    WHERE email = ?
 `);

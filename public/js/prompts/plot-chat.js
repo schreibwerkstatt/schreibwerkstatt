@@ -1,6 +1,6 @@
 // Plot-Chat (Panel in der Plot-Werkstatt). Entwickelt das Beat-Board im
 // Gespräch und schlägt Änderungen am Board vor (propose_beat / propose_beat_move /
-// propose_act / propose_thread). Ein Vorschlag schreibt NICHTS — der User
+// propose_act / propose_thread / propose_beat_relation). Ein Vorschlag schreibt NICHTS — der User
 // übernimmt jeden einzeln. Nie generativ in den Buchtext: Beats sind
 // Struktur-Stichpunkte, keine Prosa.
 // Zwei Pfade, ein Prompt-Kern: agentisch (Provider mit Werkzeug-Protokoll, liest
@@ -14,51 +14,51 @@ import { buildPassageBlockLines } from './chat-pre-context.js';
 import { toolMentions } from './chat-tools/mentions.js';
 import { _reihenfolgeRegel } from './plot/board.js';
 import { buildProposalMemoryBlock } from './proposal-memory.js';
+import { BEAT_REL_TYPES, STATUSES } from '../book/plot/constants.js';
 
 export const PLOT_CHAT_FORCE_FINAL_INSTRUCTION =
   'Du hast die maximale Zahl an Werkzeug-Iterationen erreicht — keine weiteren Lese-Aufrufe mehr. '
   + 'Fasse JETZT aus dem Gesammelten die bestmögliche Antwort zusammen und liefere sie über `final_answer`. '
-  + 'Rufe kein anderes Werkzeug mehr auf als `final_answer` — weitere Aufrufe werden nicht ausgeführt. '
+  + 'Ausser `final_answer` laufen nur noch Vorschläge (`propose_*`) — gib sie zusammen mit `final_answer` in derselben Antwort ab; Lese-Aufrufe werden nicht mehr ausgeführt. '
   + 'Bereits abgegebene Vorschläge bleiben gültig; wiederhole sie nicht. Sprache der Antwort: die der Userfrage.';
 
-const _BEGRUENDUNG = { type: 'string', description: 'Ein bis zwei Sätze: warum diese Änderung den Plot stärkt (Bezug auf Figur, Bogen, Szene oder Text). Pflicht.' };
-const _FIGUREN = {
-  type: 'array',
-  items: { type: 'string' },
-  description: 'Beteiligte Figuren — Kennung (fig_id bzw. draft#id) oder eindeutiger Name aus der Figurenliste. Bei Änderung ersetzt sie die bisherige Liste.',
-};
-const _LEEREN = {
-  type: 'array',
-  items: { type: 'string', enum: ['beschreibung', 'zeit', 'kapitel', 'intensitaet', 'figuren'] },
-  description: 'Nur bei ÄNDERUNG: Felder leeren («kapitel» = vom Kapitel lösen).',
-};
+const _BEGRUENDUNG = { type: 'string', description: 'Ein bis zwei Sätze: warum das den Plot stärkt (Figur, Bogen, Szene, Text). Pflicht.' };
+// Listen-Felder: Kennung oder eindeutiger Name aus dem Vorspann; bei Änderung
+// ersetzt die Liste die bisherige.
+const _list = (what) => ({ type: 'array', items: { type: 'string' }, description: `${what}. Bei Änderung ersetzt die Liste die bisherige.` });
+const _NEU = 'Nur bei NEUEM Beat';
+const _REF = (what) => ({ type: 'integer', description: `Statt ${what}_id: \`ref\` eines neuen ${what === 'act' ? 'Akts' : what === 'thread' ? 'Strangs' : 'Beats'} DIESER Antwort.` });
 
 /**
  * Vorschlags-Werkzeuge + final_answer. Die Lese-Werkzeuge kommen aus
- * gemeinsamen Katalog (./chat-tools/, Spalte `plot` in access.js).
+ * gemeinsamen Katalog (./chat-tools/, Spalte `plot` in access.js). Dass nichts
+ * gespeichert wird, sagt der System-Prompt einmal — nicht jedes Werkzeug.
  */
 export const PLOT_CHAT_PROPOSE_TOOLS = [
   {
     name: 'propose_beat',
-    description: 'Schlägt EINEN Beat vor: ohne beat_id einen NEUEN Beat, mit beat_id eine ÄNDERUNG an einem bestehenden (nur die mitgegebenen Felder ändern sich). Wird NICHT gespeichert — der User übernimmt jeden Vorschlag einzeln. Titel = prägnanter Handlungspunkt (3–10 Wörter), Beschreibung = Stichpunkte, NIE ausformulierte Prosa. Neue Beats lassen sich nicht referenzieren; neue Akte/Stränge derselben Antwort schon (act_ref/thread_ref). Zum Verschieben eines bestehenden Beats: propose_beat_move.',
+    description: 'EIN Beat: ohne beat_id NEU, mit beat_id ÄNDERUNG (nur die mitgegebenen Felder). Titel = Handlungspunkt in 3–10 Wörtern, Beschreibung = Stichpunkte, nie Prosa. Verschieben: propose_beat_move.',
     input_schema: {
       type: 'object',
       properties: {
-        beat_id: { type: 'integer', description: 'Nur bei ÄNDERUNG: id des bestehenden Beats (aus dem Board).' },
-        act_id: { type: 'integer', description: 'Nur bei NEUEM Beat: Ziel-Akt (id aus dem Board).' },
-        act_ref: { type: 'integer', description: 'Nur bei NEUEM Beat statt act_id: `ref` eines in DIESER Antwort vorgeschlagenen neuen Akts.' },
-        thread_id: { type: 'integer', description: 'Nur bei NEUEM Beat, optional: Strang (id aus dem Board). Ohne = „ohne Strang".' },
-        thread_ref: { type: 'integer', description: 'Nur bei NEUEM Beat statt thread_id: `ref` eines in DIESER Antwort vorgeschlagenen neuen Strangs.' },
-        after_beat_id: { type: 'integer', description: 'Nur bei NEUEM Beat, optional: hinter diesem Beat derselben Zelle einreihen. Ohne = ans Ende.' },
-        at_start: { type: 'boolean', description: 'Nur bei NEUEM Beat, optional: an den Anfang der Zelle.' },
-        titel: { type: 'string', description: 'Titel (Pflicht bei neuem Beat, max. 200 Zeichen).' },
-        beschreibung: { type: 'string', description: 'Stichpunkte zum Inhalt (Konflikt, Wendung, Ziel). Keine Prosa.' },
-        intensitaet: { type: 'integer', description: 'Spannung 1–5 für den Spannungsbogen.' },
-        zeit: { type: 'string', description: 'Freitext-Zeitangabe innerhalb der Handlung, z.B. „Sommer 1987".' },
-        chapter_id: { type: 'integer', description: 'Zielkapitel (chapter_id aus Board oder Gliederung).' },
-        figuren: _FIGUREN,
-        verworfen: { type: 'boolean', description: 'Nur bei ÄNDERUNG: true = Beat ausmustern (bleibt erhalten, zählt nicht mehr), false = wieder aufnehmen.' },
-        leeren: _LEEREN,
+        beat_id: { type: 'integer', description: 'Nur bei ÄNDERUNG: id des Beats.' },
+        act_id: { type: 'integer', description: `${_NEU}: Ziel-Akt (id).` },
+        act_ref: _REF('act'),
+        thread_id: { type: 'integer', description: `${_NEU}, optional: Strang (id). Ohne = „ohne Strang".` },
+        thread_ref: _REF('thread'),
+        after_beat_id: { type: 'integer', description: `${_NEU}, optional: hinter diesem Beat derselben Zelle. Ohne = ans Ende.` },
+        at_start: { type: 'boolean', description: `${_NEU}, optional: an den Anfang der Zelle.` },
+        titel: { type: 'string', description: 'Pflicht bei neuem Beat.' },
+        beschreibung: { type: 'string', description: 'Stichpunkte: Konflikt, Wendung, Ziel.' },
+        status: { type: 'string', enum: STATUSES, description: 'im_buch nur, wenn du die Stelle im Text gesehen hast — nenne sie in der Begründung. Ohne = geplant.' },
+        intensitaet: { type: 'integer', description: 'Spannung 1–5.' },
+        zeit: { type: 'string', description: 'Erzählte Zeit, z.B. „Sommer 1987".' },
+        chapter_id: { type: 'integer', description: 'Zielkapitel (id aus Board oder Gliederung).' },
+        figuren: _list('Figuren: fig_id, draft#id oder Name'),
+        orte: _list('Schauplätze: loc_id oder Name'),
+        motive: _list('Motive: motiv_id oder Name'),
+        verworfen: { type: 'boolean', description: 'Nur bei ÄNDERUNG: true = ausmustern (bleibt erhalten), false = wieder aufnehmen.' },
+        leeren: { type: 'array', items: { type: 'string', enum: ['beschreibung', 'zeit', 'kapitel', 'intensitaet', 'figuren', 'orte', 'motive'] }, description: 'Nur bei ÄNDERUNG: diese Felder leeren.' },
         begruendung: _BEGRUENDUNG,
       },
       required: ['begruendung'],
@@ -66,17 +66,17 @@ export const PLOT_CHAT_PROPOSE_TOOLS = [
   },
   {
     name: 'propose_beat_move',
-    description: 'Schlägt vor, einen BESTEHENDEN Beat zu verschieben — in einen anderen Akt, einen anderen Strang oder an eine andere Stelle derselben Zelle. Wird NICHT gespeichert, der User übernimmt einzeln.',
+    description: 'Einen BESTEHENDEN Beat verschieben — anderer Akt, anderer Strang oder andere Stelle derselben Zelle.',
     input_schema: {
       type: 'object',
       properties: {
         beat_id: { type: 'integer', description: 'id des Beats.' },
-        act_id: { type: 'integer', description: 'Ziel-Akt (id). Ohne = bleibt im bisherigen Akt.' },
-        act_ref: { type: 'integer', description: 'Statt act_id: `ref` eines in DIESER Antwort vorgeschlagenen neuen Akts.' },
-        thread_id: { type: 'integer', description: 'Ziel-Strang (id). Ohne = bleibt im bisherigen Strang.' },
-        thread_ref: { type: 'integer', description: 'Statt thread_id: `ref` eines in DIESER Antwort vorgeschlagenen neuen Strangs.' },
-        ohne_strang: { type: 'boolean', description: 'true = aus dem Strang lösen („ohne Strang").' },
-        after_beat_id: { type: 'integer', description: 'Hinter diesem Beat der Zielzelle einreihen. Ohne (und ohne at_start) = ans Ende.' },
+        act_id: { type: 'integer', description: 'Ziel-Akt (id). Ohne = bisheriger Akt.' },
+        act_ref: _REF('act'),
+        thread_id: { type: 'integer', description: 'Ziel-Strang (id). Ohne = bisheriger Strang.' },
+        thread_ref: _REF('thread'),
+        ohne_strang: { type: 'boolean', description: 'true = aus dem Strang lösen.' },
+        after_beat_id: { type: 'integer', description: 'Hinter diesem Beat der Zielzelle. Ohne = ans Ende.' },
         at_start: { type: 'boolean', description: 'An den Anfang der Zielzelle.' },
         begruendung: _BEGRUENDUNG,
       },
@@ -85,15 +85,15 @@ export const PLOT_CHAT_PROPOSE_TOOLS = [
   },
   {
     name: 'propose_act',
-    description: 'Schlägt einen NEUEN Akt (Spalte) vor oder — mit act_id — eine Umbenennung. Wird NICHT gespeichert, der User übernimmt einzeln. Das Ergebnis trägt `ref` für act_ref. Ein Akt nur eines Strangs geht nur, wenn der Strang schon eigene Akte hat.',
+    description: 'NEUER Akt (Spalte) oder — mit act_id — Umbenennung. Ein Akt nur eines Strangs geht nur, wenn der Strang schon eigene Akte hat.',
     input_schema: {
       type: 'object',
       properties: {
-        act_id: { type: 'integer', description: 'Nur bei Umbenennung: id des bestehenden Akts.' },
-        name: { type: 'string', description: 'Name des Akts (max. 120 Zeichen). Pflicht.' },
-        thread_id: { type: 'integer', description: 'Nur bei neuem Akt, optional: Akt gehört nur diesem Strang (eigene Aktstruktur). Ohne = geteilter Akt für alle Stränge.' },
-        after_act_id: { type: 'integer', description: 'Nur bei neuem Akt, optional: hinter diesem Akt (desselben Bereichs) einreihen. Ohne = ans Ende.' },
-        at_start: { type: 'boolean', description: 'Nur bei neuem Akt, optional: als ersten Akt einreihen.' },
+        act_id: { type: 'integer', description: 'Nur bei Umbenennung: id des Akts.' },
+        name: { type: 'string', description: 'Name (max. 120 Zeichen). Pflicht.' },
+        thread_id: { type: 'integer', description: 'Nur bei neuem Akt, optional: Akt nur dieses Strangs. Ohne = geteilter Akt.' },
+        after_act_id: { type: 'integer', description: 'Nur bei neuem Akt, optional: hinter diesem Akt desselben Bereichs. Ohne = ans Ende.' },
+        at_start: { type: 'boolean', description: 'Nur bei neuem Akt, optional: als ersten Akt.' },
         begruendung: _BEGRUENDUNG,
       },
       required: ['name', 'begruendung'],
@@ -101,16 +101,32 @@ export const PLOT_CHAT_PROPOSE_TOOLS = [
   },
   {
     name: 'propose_thread',
-    description: 'Schlägt einen NEUEN Handlungsstrang (Swimlane, oft je Hauptfigur) vor oder — mit thread_id — eine Umbenennung/neue Hauptfigur. Wird NICHT gespeichert, der User übernimmt einzeln. Das Ergebnis trägt `ref` für thread_ref.',
+    description: 'NEUER Handlungsstrang (Swimlane, oft je Hauptfigur) oder — mit thread_id — Umbenennung bzw. neue Hauptfigur.',
     input_schema: {
       type: 'object',
       properties: {
-        thread_id: { type: 'integer', description: 'Nur bei Änderung: id des bestehenden Strangs.' },
-        name: { type: 'string', description: 'Name des Strangs (max. 120 Zeichen). Pflicht.' },
-        figur: { type: 'string', description: 'Optional: Hauptfigur — Kennung (fig_id bzw. draft#id) oder eindeutiger Name aus der Figurenliste.' },
+        thread_id: { type: 'integer', description: 'Nur bei Änderung: id des Strangs.' },
+        name: { type: 'string', description: 'Name (max. 120 Zeichen). Pflicht.' },
+        figur: { type: 'string', description: 'Optional: Hauptfigur — fig_id, draft#id oder Name.' },
         begruendung: _BEGRUENDUNG,
       },
       required: ['name', 'begruendung'],
+    },
+  },
+  {
+    name: 'propose_beat_relation',
+    description: 'EINE gerichtete Beziehung «from typ to». Setup/Payoff: bereitet-vor (Setup → Payoff), zahlt-ein (Payoff → Setup). Kausalität: fuehrt-zu, motiviert, blockiert, spiegelt. Bestehende Kanten stehen im Board als «→ typ [#id]». Entfernen geht nicht.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        from_beat_id: { type: 'integer', description: 'Ausgangs-Beat (id).' },
+        from_beat_ref: _REF('from_beat'),
+        to_beat_id: { type: 'integer', description: 'Ziel-Beat (id).' },
+        to_beat_ref: _REF('to_beat'),
+        typ: { type: 'string', enum: BEAT_REL_TYPES, description: 'Art der Beziehung.' },
+        begruendung: _BEGRUENDUNG,
+      },
+      required: ['typ', 'begruendung'],
     },
   },
   {
@@ -135,7 +151,7 @@ const _PROPOSE_FIELDS = (() => {
   for (const t of PLOT_CHAT_PROPOSE_TOOLS) {
     if (t.name === 'final_answer') continue;
     for (const [k, v] of Object.entries(t.input_schema.properties)) {
-      if (!out[k]) out[k] = { type: v.type, ...(v.items ? { items: v.items } : {}) };
+      if (!out[k]) out[k] = { type: v.type, ...(v.items ? { items: v.items } : {}), ...(v.enum ? { enum: v.enum } : {}) };
     }
   }
   return out;
@@ -192,7 +208,7 @@ export function buildPlotProposalMemoryBlock(list = []) {
  * @param {string} bookName
  * @param {object} ctx { mode ('agent'|'classic'), maxToolIter, toolNames,
  *                       bookContext, boardOutline, boardTrimmed, boardActs,
- *                       figurenOutline, proposalMemory, passages (classic immer;
+ *                       figurenOutline, katalogOutline, proposalMemory, passages (classic immer;
  *                       agent als Erst-Kontext, null = ohne Embedding-Endpunkt),
  *                       passageStatus (Index-/Suchstand, chat-pre-context.js) }
  */
@@ -210,14 +226,15 @@ export function buildPlotChatSystemPrompt(bookName, ctx = {}) {
     ...(erzaehlweise ? [erzaehlweise] : []),
     '',
     'Was du tust:',
-    '- Du denkst mit: Struktur, Wendepunkte, Spannungsbogen, Setup/Payoff, Kausalität, Figurenbögen (Want/Need/Wound/Lie aus der Figuren-Werkstatt), Strang-Verflechtung.',
+    '- Du denkst mit: Struktur, Wendepunkte, Spannungsbogen, Setup/Payoff, Kausalität, Figurenbögen (Want/Need/Wound/Lie aus der Figuren-Werkstatt), Strang-Verflechtung, Schauplätze und Motive.',
+    '- Setup/Payoff und Ursache/Wirkung hältst du als Beat-Beziehungen fest, nicht nur in Worten: schlägst du einen Payoff, eine Folge oder einen Gegenspieler-Beat vor, verknüpfe ihn mit dem Beat, auf den er sich bezieht. Ein Setup ohne Payoff im Board (keine ausgehende «bereitet-vor»-Kante, keine eingehende «zahlt-ein») ist ein offenes Versprechen — sprich es an.',
     '- Du gründest jeden Vorschlag in der Buchrealität: im Board, in den Figuren, im geschriebenen Text, in Szenen, Zeitstrahl und Weltregeln. Was geschrieben ist, gilt — ein Beat darf dem Text nicht widersprechen, ausser der User will es ändern.',
     '- Konkrete Änderungen am Board gibst du über die Vorschlags-Werkzeuge ab — nicht nur als Prosa. Bittet der User um Beats, Akte, Stränge oder Umbauten, MUSST du sie als Vorschläge abgeben.',
     '',
     ...(classic ? [
       'Vorschläge (nichts wird gespeichert — der User übernimmt jeden Vorschlag einzeln) gibst du im Feld `vorschlaege` deiner JSON-Antwort ab. Jeder Eintrag nennt sein `werkzeug` und dessen Felder:',
       ..._classicToolLines(),
-      'Jeder Vorschlag bekommt in Reihenfolge eine Nummer `ref` (1, 2, 3 …). Baust du etwas Neues auf (z.B. neue Aktstruktur mit Beats darin), stelle zuerst die Akte/Stränge in die Liste und verweise in den Beats per act_ref/thread_ref auf deren Nummer.',
+      'Jeder Vorschlag bekommt in Reihenfolge eine Nummer `ref` (1, 2, 3 …). Baust du etwas Neues auf (z.B. neue Aktstruktur mit Beats darin), stelle zuerst die Akte/Stränge in die Liste und verweise in den Beats per act_ref/thread_ref auf deren Nummer; Beziehungen zu neuen Beats stehen nach den Beats (from_beat_ref/to_beat_ref).',
       'ids nur aus dem Board im Vorspann der Frage — ein Vorschlag mit unbekannter id wird verworfen. Lass Felder weg, die du nicht setzen willst; ein leerer Wert heisst «nicht ändern». Ein Feld leeren (z.B. das Kapitel eines Beats entfernen) nur über `leeren`.',
     ] : [
       'Vorschlags-Werkzeuge (nichts wird gespeichert — der User übernimmt jeden Vorschlag einzeln):',
@@ -225,7 +242,8 @@ export function buildPlotChatSystemPrompt(bookName, ctx = {}) {
       '- `propose_beat_move` — bestehenden Beat in anderen Akt/Strang/Platz verschieben.',
       '- `propose_act` — neuer Akt oder Umbenennung.',
       '- `propose_thread` — neuer Strang (optional mit Hauptfigur) oder Änderung.',
-      'Ein Vorschlag pro Aufruf; mehrere Vorschläge = mehrere Aufrufe, gebündelt in einer Runde. Baust du etwas Neues auf (z.B. neue Aktstruktur mit Beats darin), schlage zuerst die Akte/Stränge vor und verweise in den Beats per act_ref/thread_ref auf deren `ref`.',
+      '- `propose_beat_relation` — Beziehung zwischen zwei Beats (Setup/Payoff, Kausalität).',
+      'Ein Vorschlag pro Aufruf; mehrere Vorschläge = mehrere Aufrufe, gebündelt in einer Runde. Baust du etwas Neues auf (z.B. neue Aktstruktur mit Beats darin), schlage zuerst die Akte/Stränge vor und verweise in den Beats per act_ref/thread_ref auf deren `ref`; Beziehungen zu neuen Beats kommen nach den Beats (from_beat_ref/to_beat_ref).',
       'Meldet ein Vorschlags-Werkzeug einen Fehler (unbekannte id, falscher Akt, mehrdeutige Figur), korrigiere den Aufruf — rate keine ids, sie stehen im Board im Vorspann der Frage.',
       'Ein leerer Wert heisst «nicht ändern». Ein Feld leeren (z.B. das Kapitel eines Beats entfernen) nur über `leeren`.',
     ]),
@@ -252,6 +270,7 @@ export function buildPlotChatSystemPrompt(bookName, ctx = {}) {
     ...m.route('Geplante Figuren mit psychologischem Kern (Want/Need/Wound/Lie, Bogen)', ['list_werkstatt_drafts']),
     ...m.route('Was schon geschrieben ist (Szenen, Ereignisse in Reihenfolge)', ['list_scenes', 'get_timeline']),
     ...m.route('Stellen im Text (nach Sinn bzw. Wortlaut)', ['search_similar', 'search_passages']),
+    ...m.route('Einzelne Abschnitte lesen (page_id aus einem Treffer, mehrere in EINEM Aufruf)', ['get_pages']),
     ...m.route('Ganze Kapitel lesen (teuer, nur wenn der Zusammenhang nötig ist)', ['get_chapter_text']),
     ...m.route('Weltregeln, gegen die ein Beat nicht verstossen darf', ['list_world_facts']),
     ...m.route('Themen & Motive', ['get_motifs']),
@@ -290,6 +309,8 @@ function _finish(stable, ctx, { classic }) {
   }
   const fig = String(ctx.figurenOutline || '').trim();
   if (fig) volatile.push('', '=== FIGUREN (Name · fig_id bzw. draft#id = Kennung für figuren/figur) ===', fig);
+  const kat = String(ctx.katalogOutline || '').trim();
+  if (kat) volatile.push('', kat);
   const mem = String(ctx.proposalMemory || '').trim();
   if (mem) volatile.push('', mem);
   // Textpassagen: klassisch immer (einzige Text-Grundierung), agentisch als

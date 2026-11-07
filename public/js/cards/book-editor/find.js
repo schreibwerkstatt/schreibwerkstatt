@@ -7,7 +7,7 @@
 // nur die Bucheditor-Eigenheit: N Block-Roots statt einem, Replace über
 // Range-Mutation (statt execCommand) und die Anbindung an die Save-Queue.
 
-import { collectMatches, collectTextNodes, createHighlightPair, rangeOf, matchStillValid } from '../../editor/shared/text-find.js';
+import { collectMatches, collectTextNodes, createHighlightPair, rangeOf, matchStillValid, firstMatchFrom } from '../../editor/shared/text-find.js';
 import { clearRenderedDiagrams, RENDERED_DIAGRAM_SEL } from '../../diagram/mermaid-view.js';
 import { clearCaptionNumbers, XREF_NUM_SEL } from '../../xrefs/caption-preview.js';
 
@@ -109,24 +109,57 @@ export const bookEditorFindMethods = {
     // Block (beim Öffnen gemerkt), sonst der aktive bzw. sichtbare Abschnitt.
     // Dahinter nichts mehr → von vorn (wie findNext am Ende).
     _nearestMatchIndex() {
+      const a = this._findAnchor?.range?.startContainer?.isConnected ? this._findAnchor : null;
+      return this._matchIndexFrom(a ? a.pageId : (this.activePageId ?? this.visiblePageId), a?.range || null);
+    },
+
+    // Erster Treffer ab Abschnitt `pageId` (und dort ab `range`, falls
+    // gegeben); nichts mehr dahinter → von vorn.
+    _matchIndexFrom(pageId, range) {
       const ms = this.findMatches;
       if (!ms.length) return -1;
+      if (pageId == null) return 0;
       const order = new Map();
       let i = 0;
       for (const b of this.blocks) if (b.kind === 'page') order.set(b.pageId, i++);
-      const a = this._findAnchor?.range?.startContainer?.isConnected ? this._findAnchor : null;
-      const pageId = a ? a.pageId : (this.activePageId ?? this.visiblePageId);
-      if (pageId == null) return 0;
       const at = order.get(pageId) ?? 0;
-      for (let k = 0; k < ms.length; k++) {
-        const o = order.get(ms[k].pageId) ?? 0;
-        if (o < at) continue;
-        if (o > at || !a) return k;
-        try {
-          if (rangeOf(ms[k]).compareBoundaryPoints(Range.START_TO_START, a.range) >= 0) return k;
-        } catch { return k; }
-      }
-      return 0;
+      let k = 0;
+      while (k < ms.length && (order.get(ms[k].pageId) ?? 0) < at) k++;
+      if (k === ms.length) return 0;
+      if (!range || ms[k].pageId !== pageId) return k;
+      let end = k;
+      while (end < ms.length && ms[end].pageId === pageId) end++;
+      const hit = firstMatchFrom(ms, range, k, end);
+      return hit >= 0 ? hit : (end < ms.length ? end : 0);
+    },
+
+    // Neuladen der Karte (erneutes Öffnen, `card:refresh`) verwirft die
+    // Treffer, weil sie auf alte Knoten zeigen. Gemerkt wird der aktuelle
+    // Treffer als Abschnitt + Ordnungszahl darin — das überlebt den Neuaufbau
+    // der Knoten. `_resumeFind` springt danach wieder dorthin statt an den
+    // Buchanfang.
+    _captureFindResume() {
+      const m = this.findMatches[this.findIndex];
+      if (!this.findOpen) { this._findResume = null; return; }
+      // Kein Treffer: ein überholtes `_load` hat die Liste schon geleert —
+      // dessen gemerkte Position bleibt stehen.
+      if (!m) return;
+      let nth = 0;
+      for (let k = 0; k < this.findIndex; k++) if (this.findMatches[k].pageId === m.pageId) nth++;
+      this._findResume = { pageId: m.pageId, nth };
+    },
+
+    _resumeFind() {
+      const r = this._findResume;
+      this._findResume = null;
+      this.recomputeFindMatches();
+      if (!r || this.findMatches.length === 0) return;
+      const inPage = [];
+      this.findMatches.forEach((m, k) => { if (m.pageId === r.pageId) inPage.push(k); });
+      const i = inPage.length
+        ? inPage[Math.min(r.nth, inPage.length - 1)]
+        : this._matchIndexFrom(r.pageId, null);
+      this._selectMatch(i);
     },
 
     _allBlockEls() {
@@ -199,13 +232,25 @@ export const bookEditorFindMethods = {
       // Eigener Undo-Schritt: im aktiven Block den Stand davor sichern, der
       // Stand danach kommt aus _commitReplaced.
       if (m.pageId === this.activePageId) this._historyPushNow(m.pageId);
-      const container = this._doReplaceAt(m);
-      if (container) this._commitReplaced(new Set([container]));
+      const at = this.findIndex;
+      const done = this._doReplaceAt(m);
+      // Weiter beim nächsten Treffer HINTER der Ersetzung — nicht am
+      // Buchanfang (recomputeFindMatches setzt den Index auf 0) und nicht im
+      // eben eingefügten Text, falls er den Suchbegriff selbst enthält.
+      let after = null;
+      if (done) {
+        after = document.createRange();
+        after.setStartAfter(done.node);
+        after.collapse(true);
+        this._commitReplaced(new Set([done.container]));
+      }
       this.$nextTick(() => {
         this.recomputeFindMatches();
-        if (this.findMatches.length > 0) {
-          this._selectMatch(Math.min(this.findIndex, this.findMatches.length - 1));
-        }
+        if (this.findMatches.length === 0) return;
+        const i = after?.startContainer?.isConnected
+          ? this._matchIndexFrom(m.pageId, after)
+          : Math.min(at, this.findMatches.length - 1);
+        this._selectMatch(i);
       });
     },
 
@@ -227,8 +272,8 @@ export const bookEditorFindMethods = {
       let count = 0;
       const touched = new Set();
       for (const m of matches) {
-        const container = this._doReplaceAt(m);
-        if (container) { touched.add(container); count++; }
+        const done = this._doReplaceAt(m);
+        if (done) { touched.add(done.container); count++; }
       }
       this._commitReplaced(touched);
       const app = window.__app;
@@ -236,7 +281,8 @@ export const bookEditorFindMethods = {
       this.$nextTick(() => this.recomputeFindMatches());
     },
 
-    // Nur die DOM-Ersetzung; liefert den Block-Container oder null. Was daraus
+    // Nur die DOM-Ersetzung; liefert `{ container, node }` (Block-Container +
+    // eingefügter Text-Node) oder null. Was daraus
     // folgt (block.html, dirty, Undo, Anzeige), erledigt _commitReplaced —
     // einmal je Abschnitt nach ALLEN Ersetzungen.
     _doReplaceAt(m) {
@@ -246,8 +292,9 @@ export const bookEditorFindMethods = {
       try {
         const range = rangeOf(m);
         range.deleteContents();
-        range.insertNode(document.createTextNode(this.findReplace));
-        return container;
+        const node = document.createTextNode(this.findReplace);
+        range.insertNode(node);
+        return { container, node };
       } catch {
         return null;
       }

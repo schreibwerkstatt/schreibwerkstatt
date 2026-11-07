@@ -28,6 +28,13 @@
    das Panel breiter als sein Trigger und x-anchor zentriert es darunter — es haengt
    dann sichtbar schief unter dem Pfeil. Gleiche Breite = buendige Kante. */
 .figur-alter .filter-bar .combobox-wrap { min-width: 180px; }
+/* Stichtag-Zeile unter dem Filter: Label, Jahr, Monat — das Jahr ist vierstellig,
+   die volle Feldbreite waere leere Flaeche. */
+.figur-alter-stichtag .card-form-label { margin: 0; }
+.figur-alter-stichtag .form-num { width: 6rem; }
+/* Schulzeit: eine Zeile je Stufe, damit «Primarschule 1991–1997» nicht mitten im
+   Zeitraum umbricht. */
+.figur-alter-schulzeit-zeile { display: block; white-space: nowrap; font-size: var(--font-size-sm); }
 
 /* ── Tabelle ──────────────────────────────────────────────────────────────── */
 

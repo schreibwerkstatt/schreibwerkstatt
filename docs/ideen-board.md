@@ -249,6 +249,22 @@ Das Board ist der Ort, an dem eine Gliederung entsteht:
   Offline-Queue je Idee; scheitert eine, bleiben die übrigen Zeilen im Feld.
   Nur im Board — in der Ideen-Karte bleibt ein Zeilenumbruch Teil **einer** Notiz.
 
+**Ideen in Serie in der Ideen-Karte.** Wer Abschnitt für Abschnitt Pendenzen
+notiert (auf Prod: 84 in einer Stunde, alle 10–20 s eine), tut das ohne Maus:
+
+* Das Anlegen-Feld ist beim Speichern `readonly`, **nie** `disabled` — ein
+  deaktiviertes Feld verliert den Fokus, und nach jedem Enter müsste man
+  zurückklicken. Dasselbe gilt fürs Anlegen-Feld im Board.
+* Die Ideen-Leiste bleibt beim **Abschnittswechsel** offen (`keepIdeen` in
+  `selectPage`, [app-view/page.js](../public/js/app/app-view/page.js)) und lädt
+  die Ideen des neuen Abschnitts; Chat und Referenz schliessen weiter, sie tragen
+  Zustand der verlassenen Seite. Wurde in der Karte schon angelegt, steht der
+  Cursor danach wieder im Feld (`_refocusAfterPlaceChange` in
+  [book/ideen.js](../public/js/book/ideen.js)) — ausser ein anderes Eingabefeld
+  (Editor) hat ihn.
+
+Gegated: [tests/e2e-app/ideen-serie.spec.js](../tests/e2e-app/ideen-serie.spec.js).
+
 **Hinweis in der Ideen-Karte.** Legt jemand in einer Sitzung an drei
 verschiedenen Orten eines Buchs Ideen an (`_noteBoardHintPlace` in
 [book/ideen.js](../public/js/book/ideen.js), über Seitenwechsel hinweg), zeigt
@@ -411,6 +427,20 @@ Fläche horizontal, statt die Zeilen-Achse aufzugeben — untereinander gestapel
 wäre genau die Aussage des Boards weg, und dann wäre die Ideen-Karte das bessere
 Werkzeug.
 
+**Viele Ideen** (100+ offen). Das Raster ist sein **eigener Scrollbereich**,
+auf `100dvh − --sticky-top − --sticky-bottom` gedeckelt: der horizontale Scroll
+macht es ohnehin zum Scroll-Container, und ohne Höhendeckel scrollte die Seite
+statt seiner — die `sticky`-Spaltenköpfe klebten an einem Kasten, der sich nie
+bewegt. So bleiben Spaltenköpfe und der **Bahntitel** (klebt darunter, Höhe der
+Kopfzeile per `x-resize` als `--ideen-head-h`) stehen, auch mitten in einer Bahn
+mit zwanzig Karten. **Spalten ohne sichtbare Karte** — leer oder ausgeblendet
+wie per Default «erledigt» — werden schmal (`columnTracks` in
+[actions.js](../public/js/book/ideen-board/actions.js) → `--ideen-col-tracks`,
+Grössen `--ideen-track`/`--ideen-track-slim` im CSS); sonst bekäme die einzige
+belegte Spalte ein Viertel der Breite, und jede Idee bräche auf vier, fünf
+Zeilen um. Die schmale Spalte bleibt Drop-Ziel und zeigt ihren Zähler.
+Gegated: [tests/e2e-app/ideen-board-viele.spec.js](../tests/e2e-app/ideen-board-viele.spec.js).
+
 **Vollbild:** Knopf im Kartenkopf schaltet die ganze Karte ins Native-Vollbild
 (`.fullscreen-shell`, [fullscreen.js](../public/js/fullscreen.js), wie Plot und
 Recherche). Das Raster braucht dafür keine eigene Regel — die Spaltenbreite hängt
@@ -513,7 +543,7 @@ seine Entscheidung. Darum lesen die planenden KI-Funktionen sie mit:
   ([review-context.js](../routes/jobs/review-context.js)). Steht in der
   `optionsSig` nur, wenn vorhanden; der Kapitel-Cache ist pro User.
 - **Buch-Chat** — `list_ideen` liefert pro Idee `verknuepft` (Ziele aus `idea_links`).
-- **Ideen-Chat** — Panel im Board selbst: prüft offene Pendenzen gegen den Text (Beleg-Pflicht für «erledigt»), sucht Buch-Ideen einen Ort, führt Dubletten zusammen. Schreibt nicht, jeder Vorschlag läuft beim Übernehmen über die Routen unten. Details: [ideen-chat.md](ideen-chat.md).
+- **Ideen-Chat** — eigene Karte neben dem Board (Split wie Recherche | Recherche-Chat): prüft offene Pendenzen gegen den Text (Beleg-Pflicht für «erledigt»), sucht Buch-Ideen einen Ort, führt Dubletten zusammen. Schreibt nicht, jeder Vorschlag läuft beim Übernehmen über die Routen unten. Details: [ideen-chat.md](ideen-chat.md).
 - **Buchübersicht** — Kachel „Ideen" ([book-overview/ideen.js](../public/js/book-overview/ideen.js)):
   offene Pendenzen, Verteilung auf die Stufen, Buch-Ideen ohne Ort, offene mit
   Verknüpfung. Quelle `GET /ideen/board`; Viewer (403) sehen sie nicht.
@@ -561,6 +591,58 @@ Gelesen wird offline über den Service Worker ([caching.md](caching.md), Werksta
 `overlayPendingIdeen` legt die vorgemerkten Writes über die gecachte Liste.
 Gegated durch [tests/unit/ideen-queue.test.mjs](../tests/unit/ideen-queue.test.mjs).
 
+## 3a · Zusammenführen
+
+Dubletten (zwei oder mehr Ideen, ein Gedanke) gehen in **einer** auf:
+`POST /ideen/:id/merge { source_ids, content? }` ([db/ideen.js](../db/ideen.js)#`mergeIdeen`,
+eine Transaktion). Die Verknüpfungen der Quellen wandern ans Ziel (eine Kante,
+die das Ziel schon hat, bleibt einmal), `content` ersetzt den Zieltext, danach
+werden die Quellen **gelöscht** — nicht verworfen: ihr Inhalt lebt im Ziel
+weiter, «verworfen» hiesse «bewusst fallengelassen». Ort und Stufe des Ziels
+bleiben; wer anderes will, ändert danach. Ein abgeschlossenes Ziel nimmt keine
+offene Quelle auf (`400 MERGE_TARGET_CLOSED`) — die Pendenz verschwände sonst in
+einer erledigten Idee.
+
+Zwei Einstiege, ein Schreibweg:
+
+* **Board-Liste:** Sammelaktion «Zusammenführen» ab zwei markierten Zeilen
+  ([ideen-board/list.js](../public/js/book/ideen-board/list.js)#`bulkMerge`). Ziel
+  ist eine offene Idee, sonst die älteste (`mergeTargetOf`); der gemeinsame Text
+  (jede Fassung einmal, `mergedContentOf`) wird in der Rückfrage bestätigt oder
+  gekürzt. Nur online — die Offline-Warteschlange kennt nur Einzel-Schreibwege.
+* **Ideen-Chat:** Vorschlag `idee_merge`, einzeln übernommen ([ideen-chat.md](ideen-chat.md)).
+
+## 3b · Erledigt-Check nach dem Speichern
+
+Nach einer grösseren Änderung an einem Abschnitt prüft ein KI-Job die offenen
+Pendenzen, die **direkt an diesem Abschnitt** hängen, gegen seinen neuen Text
+([routes/jobs/ideen-auto-check.js](../routes/jobs/ideen-auto-check.js), Prompt
+[prompts/ideen-auto-check.js](../public/js/prompts/ideen-auto-check.js)).
+
+* **Auslöser** ist `PUT /content/pages/:id` (auch der gemergte Konflikt-Write) —
+  der Speicherweg aller drei Editoren und der nativen Clients; kein Editor-Code
+  ist beteiligt. `noteIdeenPageSave` entprellt je (Abschnitt, User) um
+  `DEBOUNCE_MS` (3 min) und tut nichts, wenn der Schalter aus ist oder keine
+  offene Abschnitts-Idee existiert.
+* **«Grösser»** misst `changedWordCount` (Wort-Multimenge) gegen den Ausgangsstand
+  in `idee_check_baselines`: ab `MIN_CHANGED_WORDS` (40) läuft der Job über die
+  Queue. Ohne Ausgangsstand wird der aktuelle Text zum Ausgangsstand, ohne Lauf;
+  nach jedem erfolgreichen Lauf rückt er nach. Der Timer lebt im Prozess — ein
+  Neustart verwirft einen wartenden Check, der nächste Save stösst neu an.
+* **Ergebnis ist ein Hinweis, kein Schreiben.** Das Modell nennt eingelöste
+  Pendenzen mit wörtlichem Zitat; das Zitat wird gegen denselben Text geprüft,
+  den das Modell las (`pageQuoteHaystack`, wie im Ideen-Chat). Nur Verifiziertes
+  landet in `idee_check_hints` und erscheint als `check_hint` an der Idee — in der
+  Ideen-Karte und auf der Board-Karte ([ideen-check-hint.html](../public/partials/ideen-check-hint.html)):
+  «Erledigt» setzt die Stufe über den gewöhnlichen Weg, «Noch offen» verwirft
+  nur den Hinweis (`DELETE /ideen/:id/check-hint`). **Jeder Stufenwechsel räumt
+  den Hinweis ab** (`updateIdee`).
+* **Schalter:** persönlich, für alle Bücher (`app_users.ideen_auto_check`,
+  Default an), im Stufen-Menü des Boards; `GET /ideen/board` liefert ihn als
+  `auto_check`, geschaltet über `PATCH /me/settings`.
+* **Von Hand:** «Gegen Text prüfen» in der Ideen-Karte (Abschnitt) startet
+  denselben Job sofort, ohne Schwelle (`POST /jobs/ideen-auto-check`).
+
 ## 4 · Routen
 
 | Route | Zweck |
@@ -575,6 +657,8 @@ Gegated durch [tests/unit/ideen-queue.test.mjs](../tests/unit/ideen-queue.test.m
 | `PATCH /ideen/:id` | `content`, `status`, Move |
 | `PUT /ideen/order` | manuelle Reihenfolge einer Board-Zelle (`ids` → `sort_order` 1..n) |
 | `POST /ideen/:id/links` · `DELETE /ideen/:id/links/:linkId` | Kante setzen / lösen |
+| `POST /ideen/:id/merge` | Dubletten zusammenführen (§ 3a) |
+| `DELETE /ideen/:id/check-hint` | Hinweis des Auto-Erledigt-Checks verwerfen (§ 3b) |
 | `PATCH /ideen/chat-proposal` | Status eines Ideen-Chat-Vorschlags (übernommen / verworfen / wieder offen), [ideen-chat.md](ideen-chat.md) |
 | `DELETE /ideen/:id` | löschen |
 
@@ -582,7 +666,8 @@ Alle ab Rolle `editor` auf dem Buch, alle Ideen-Routen zusätzlich auf den
 eigenen `user_email`-Bestand beschränkt (`/stages` nicht — die Stufen gehören dem
 Buch). Fehlerformen: `INVALID_SCOPE`, `BOOK_MISMATCH`,
 `IDEE_CLOSED`, `INVALID_STATUS`, `IDEE_STATUS_INACTIVE`, `INVALID_LINK_KIND`,
-`LINK_TARGET_NOT_FOUND`, `ORDER_REQ`, `ORDER_MISMATCH`, `CONTENT_REQUIRED` / `CONTENT_TOO_LONG` (4000 Zeichen).
+`LINK_TARGET_NOT_FOUND`, `ORDER_REQ`, `ORDER_MISMATCH`, `CONTENT_REQUIRED` / `CONTENT_TOO_LONG` (4000 Zeichen),
+`MERGE_SOURCES_REQ`, `MERGE_SELF`, `MERGE_TOO_MANY`, `MERGE_TARGET_CLOSED`.
 
 ---
 
@@ -611,3 +696,8 @@ Buch). Fehlerformen: `INVALID_SCOPE`, `BOOK_MISMATCH`,
     Alt-Zeile ihren rohen Key.
 12. **`offen` und `erledigt` sind nie abschaltbar**, und eine abgeschaltete Stufe
     schreibt keine Idee um — ihre Spalte bleibt, solange sie belegt ist.
+13. **Der Auto-Erledigt-Check schreibt nie an der Idee** — er legt nur einen
+    Hinweis mit verifiziertem Zitat ab; abgehakt wird vom User über den
+    gewöhnlichen Stufen-Weg, und jeder Stufenwechsel räumt den Hinweis ab.
+14. **Zusammenführen löscht die Quellen, verwirft sie nicht** — ihr Inhalt lebt
+    im Ziel weiter; eine offene Pendenz geht nie in einer abgeschlossenen auf.

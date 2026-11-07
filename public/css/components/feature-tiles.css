@@ -91,6 +91,8 @@
   overflow-y: auto;
   padding: var(--space-6) 0;
   flex: 1;
+  /* Deckend: sonst kein Compositor-Scroll bei Pixeldichte 1 (siehe entities/recherche/dialog.css). */
+  background: var(--color-surface);
 }
 .palette-section { padding: var(--space-xs) 0; }
 .palette-section-label {

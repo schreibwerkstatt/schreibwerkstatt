@@ -225,6 +225,89 @@ Leerzeilen, CASCADE), [tests/unit/entity-merge.test.js](../tests/unit/entity-mer
 [tests/integration/schulweg-vorschlag.test.js](../tests/integration/schulweg-vorschlag.test.js)
 (Belegprüfung und Klassenangaben mit Mock-AI).
 
+## Berufsweg und Hobbys
+
+Beantwortet **„was tat Figur X im Jahr Y"**: Ausbildung, Stellen, Hobbys — mit
+Zeitraum, gepflegt im Steckbrief, gelesen von Alterstabelle, Lebenslauf und
+`get_figure_age`. Der Schulweg lässt sich rechnen, ein Berufsweg nicht: er kommt
+aus dem Text oder vom Autor, darum Daten statt Regelwerk.
+
+**Zwei Listen, eine Mechanik.** `figure_jobs` (Berufsweg: `art` =
+`ausbildung`|`beruf`, `taetigkeit`, `arbeitgeber`, `ort`) und `figure_hobbies`
+(`hobby`, `ort`), beide mit `von_jahr`/`von_monat`/`bis_jahr`/`bis_monat`,
+`notiz` und Beleg (`zitat`, `page_id`, `begruendung`). Ein Schreib-/Lesepfad für
+beide: [db/figure-stationen.js](../db/figure-stationen.js) (`kind` = `berufe` |
+`hobbys` wählt Tabelle und Pflichtfeld). Gespeichert an `figures.id` (CASCADE),
+nach aussen nach `fig_id` geschlüsselt — wie der Schulweg.
+
+**Zeitraum beidseitig offen.** `bis` leer heisst „läuft noch oder Ende
+unbekannt" — am Stichtag aktiv, sobald begonnen. Ohne Beginn ist der Start
+unbekannt: aktiv bis zum Ende, markiert `unsicher` («(?)» in der Tabelle,
+`beginn_unbekannt` im Chat). Ohne jede Jahresangabe ist die Station undatiert:
+im Steckbrief ja, am Stichtag und im Lebenslauf nie. Ohne Monat auf einer Seite
+zählt das ganze Jahr.
+
+**Die Rechnung hat genau einen Ort:**
+[public/js/book/figure-stationen.js](../public/js/book/figure-stationen.js)
+(Browser-ESM, auf dem Server über `lib/esm-bridge.js#figureStationen`):
+`stationAm`/`stationenAm` (am Stichtag), `normalizeStation` (Formular **und**
+Route — derselbe 400 wie die Fehlermeldung am Feld), `stationenAlsEreignisse`
+(Beginn/Ende als Lebenslauf-Einträge). Offene Vorschläge zählen nirgends mit.
+
+**Zwei Schreiber, getrennte Zeilen** (`status`):
+- Autor: `POST/PUT/DELETE /figures/:book_id/stationen/:kind/:fig_id[/:id]`
+  ([routes/figures-stationen.js](../routes/figures-stationen.js), ab `editor`;
+  Lesen `GET /figures/:book_id/stationen` ab `viewer`, nur eigene Figuren) legt
+  Zeilen mit `status = 'aktiv'`, `source = 'autor'` an. Den Beleg setzt die Route
+  nie.
+- Job `stationen-vorschlag` (`POST /jobs/stationen-vorschlag`, ab `editor`,
+  Knopf im Lebenslauf-Reiter; [routes/jobs/stationen-vorschlag.js](../routes/jobs/stationen-vorschlag.js),
+  Prompt [prompts/stationen.js](../public/js/prompts/stationen.js)) schreibt
+  **nur** Zeilen mit `status = 'vorschlag'` und ersetzt je gefragter Figur genau
+  diese (`replaceVorschlaege`) — jede Figur bekommt den Stand dieses Laufs.
+  **Übernehmen** (`…/:id/uebernehmen`) setzt `aktiv` + `source = 'ki'`, der Beleg
+  bleibt; **Verwerfen** löscht die Zeile.
+
+**Belegprüfung** — drei Schichten wie beim Schulweg, Stellen-Mechanik geteilt in
+[routes/jobs/shared/figure-stellen.js](../routes/jobs/shared/figure-stellen.js):
+1. deterministisch: Sätze mit Figur und Arbeits- (`BERUF_RE`) bzw.
+   Freizeitbegriff (`HOBBY_RE`), je Thema eigene Auswahl (starke Begriffe zuerst,
+   über das Buch verteilt) — sonst verdrängten Arbeitssätze die Hobbys.
+2. Modell: Einträge mit wörtlichem Zitat und Stellennummer; was „schon erfasst"
+   ist, steht im Prompt.
+3. deterministisch: Zitat in einer Stelle **dieser** Figur, ein Wort der
+   Tätigkeit bzw. des Hobbys im Zitat (Stammvergleich), sonst verworfen
+   (`verworfen.zitat/feld/figur`). Ein Jahr bleibt nur, wenn es im Zitat steht
+   und nicht vor der Geburt liegt, ein Monat nur, wenn er dort genannt ist; ein
+   gestrichenes Jahr macht den Eintrag undatiert, verwirft ihn nicht
+   (`verworfen.jahr`). Gleiche Tätigkeit + gleiches Beginnjahr wie eine aktive
+   Zeile → `schonVorhanden`, kein Vorschlag.
+
+**Lebenslauf:** Beginn und Ende jeder datierten aktiven Station stehen als
+Einträge in der Zeile ihres Alters, mit eigenem Badge statt Subtyp. Eine Figur
+mit Stationen, aber ohne Lebensereignisse taugt als Spalte.
+
+**Komplettanalyse:** sie schreibt keine Stationen. Berufliche Wendepunkte, die
+sie als Lebensereignis findet, tragen die Subtypen `ausbildung`, `abschluss`,
+`stellenantritt`, `berufswechsel`, `jobverlust`, `pensionierung` — datierte
+Ereignisse im Zeitstrahl, keine Zeiträume. Das Feld `figures.beruf` bleibt die
+Kurzangabe im Steckbrief.
+
+**Mitreisen:** Figuren-Merge hängt alle Zeilen der Quelle ans Ziel
+([db/entity-merge.js](../db/entity-merge.js)); `.swbook` trägt beide Tabellen im
+Analyse-Block samt offener Vorschläge ([db/book-migration-data/figure-extras.js](../db/book-migration-data/figure-extras.js),
+`page_id` umgeschlüsselt); Fassungen frieren sie über denselben Analyse-Block mit
+ein. «Aus Vorband übernehmen» ([db/series-carryover.js](../db/series-carryover.js))
+kopiert nur aktive Zeilen und ohne Beleg — Zitat und Abschnitt gehören zum Vorband,
+die Biografie zur Figur.
+
+Tests: [tests/unit/figure-stationen.test.mjs](../tests/unit/figure-stationen.test.mjs)
+(Stichtag, Normalisierung, Lebenslauf-Einträge),
+[tests/integration/stationen-routes.test.js](../tests/integration/stationen-routes.test.js)
+(ACL, Validierung, Übernehmen/Verwerfen, Zeile nur an der eigenen Figur, CASCADE),
+[tests/integration/stationen-vorschlag.test.js](../tests/integration/stationen-vorschlag.test.js)
+(Belegprüfung mit Mock-AI, aktive Zeilen unberührt; mutationsgeprüft).
+
 ## Verhältnis zum Alters-Reiter
 
 Geschwister, nicht Alternativen: die Alterstabelle ist **eine Zeile pro Figur**
@@ -240,7 +323,8 @@ Geburtsjahr-Auflösung teilen.
   [js/book/figuren-lebenslauf.js](../public/js/book/figuren-lebenslauf.js), Methods
   gespreadet in `figurenCard`).
 - Lesen: keine eigene Route — `GET /figures/:book_id` (Katalog) plus optional
-  `GET /figures/:book_id/alter` (Geburtsjahre aus dem Text).
+  `GET /figures/:book_id/alter` (Geburtsjahre aus dem Text) und
+  `GET /figures/:book_id/stationen` (Berufsweg und Hobbys).
 - Muster der Chip-Auswahl: DESIGN.md → „Auswahl-Chip-Reihe".
 - Tests: [tests/unit/figuren-lebenslauf.test.mjs](../tests/unit/figuren-lebenslauf.test.mjs)
   (reine Schicht, Bandgrenzen, Lückenlosigkeit),

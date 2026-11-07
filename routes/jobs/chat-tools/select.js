@@ -30,12 +30,15 @@ function chatToolSet(provider, userEmail) {
  * @param {string|null} p.userEmail
  * @param {object} p.ctx          Werkzeug-ctx (bookId, userEmail, sessionId?, logger) für die Verfügbarkeit
  * @param {Array<object>} [p.outputTools]  final_answer, propose_*, Web-Werkzeuge des Chats
+ * @param {Iterable<string>} [p.withhold]  Lese-Werkzeuge, die der Chat in diesem Lauf bewusst
+ *   nicht anbietet (Recherche-Chat: kein Manuskripttext neben dem Seitenlesen)
  * @returns {{ tools: object[], toolNames: string[], toolSet: 'full'|'slim', offeredTools: Set<string>, unavailable: string[] }}
  */
-function prepareChatTools({ chat, prompts, provider, userEmail, ctx, outputTools = [] }) {
+function prepareChatTools({ chat, prompts, provider, userEmail, ctx, outputTools = [], withhold = [] }) {
   const toolSet = chatToolSet(provider, userEmail);
   const slim = toolSet === 'slim';
   const unavailable = unavailableTools(prompts.chatToolNames(chat, { slim }), ctx);
+  for (const name of withhold) unavailable.add(name);
   const tools = prompts.buildChatToolset(chat, { slim, unavailable, outputTools });
   const toolNames = tools.map(t => t.name);
   return { tools, toolNames, toolSet, offeredTools: new Set(toolNames), unavailable: [...unavailable] };

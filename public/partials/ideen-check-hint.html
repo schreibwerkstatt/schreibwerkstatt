@@ -1,0 +1,21 @@
+<!-- Hinweis des Auto-Erledigt-Checks an einer offenen Idee: der Text scheint die
+     Pendenz einzulösen (geprüftes Zitat, Sprung in den Abschnitt). Abhaken setzt
+     die Stufe «erledigt» über den gewöhnlichen Stufen-Weg; «Noch offen» verwirft
+     nur den Hinweis. Fragment (string-seitiger @include) für Ideen-Karte und
+     Ideen-Board — beide nennen die Idee `idee` und spreaden book/ideen-check.js.
+     Server: routes/jobs/ideen-auto-check.js. -->
+<template x-if="idee.check_hint && editingId !== idee.id">
+  <div class="idee-check-hint" role="note">
+    <div class="idee-check-hint__label" x-text="$app.t('ideen.check.hintLabel')"></div>
+    <div class="idee-check-hint__beleg">
+      <q x-text="idee.check_hint.beleg"></q>
+      <button type="button" class="entity-ref" x-show="idee.check_hint.page_id"
+              x-entity-ref="{ type: 'seite', id: idee.check_hint.page_id, label: idee.check_hint.page_name }"></button>
+    </div>
+    <div class="idee-check-hint__reason" x-show="idee.check_hint.begruendung" x-text="idee.check_hint.begruendung"></div>
+    <div class="idee-check-hint__actions">
+      <button type="button" class="btn-compact" @click.stop="setIdeeStatus(idee, 'erledigt')" :disabled="busy" x-text="$app.t('ideen.check.accept')"></button>
+      <button type="button" class="btn-compact btn-compact--ghost" @click.stop="dismissCheckHint(idee)" :disabled="busy" x-text="$app.t('ideen.check.dismiss')"></button>
+    </div>
+  </div>
+</template>

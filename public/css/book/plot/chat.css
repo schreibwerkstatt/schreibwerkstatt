@@ -1,15 +1,20 @@
 @layer components {
-/* Plot-Chat der Plot-Werkstatt: Spalten-Layout neben dem Board + das Panel.
-   Vorschlagskarten nutzen die geteilten `.chat-vorschlag*`-Klassen (chat.css),
-   hier nur die Plot-spezifischen Innenteile. Ergänzt plot/board.css. */
+/* Plot-Chat: eigene Karte als Leiste neben der Plot-Karte (plot.html,
+   plot-chat.html) — Muster des Recherche-Chats. Vorschlagskarten nutzen die
+   geteilten `.chat-vorschlag*`-Klassen (chat.css), hier nur die
+   Plot-spezifischen Innenteile. Ergänzt plot/board.css. */
 
-/* ── Board + Chat nebeneinander ───────────────────────────────────────────
-   Geometrie aus layout/aside-split.css (`.aside-split--aside-first`); das Board
-   behält seinen eigenen horizontalen Scroll (minmax(0, 1fr) lässt die Spalte
-   schrumpfen). Panel-Hülle: `.chat-panel` (chat.css). */
-.plot-main { min-width: 0; }
-.plot-chat-messages { max-height: 24rem; }
-.card--plot:fullscreen .plot-chat-messages { max-height: 52vh; }
+/* ── Plot-Karte | Chat-Karte ──────────────────────────────────────────────
+   Geometrie aus layout/aside-split.css (`.main-aside-split`, `--aside-first`),
+   Karten-Hülle wie der Abschnitts-Chat (`.card--chat`). Breite Stufe der
+   Leiste: Beat-Vorschläge mit Feld-Diffs brauchen Zeilenbreite. Die Plot-Karte
+   behält ihren eigenen horizontalen Board-Scroll (min-width: 0). */
+.plot-split { --aside-w: var(--aside-w-wide); }
+.plot-split > .card--plot { min-width: 0; }
+
+/* Vollbild: der Split nimmt den Viewport (fullscreen-shell.css) und scrollt
+   selbst — die Leiste klebt an seiner Oberkante statt unter der App-Kopfzeile. */
+.plot-split:fullscreen { --sticky-top: 0px; --sticky-bottom: 0px; }
 
 /* Vorschläge: volle Bubble-Breite statt der 88% des Seiten-Chats — Beat-Diffs
    brauchen die Zeile. */

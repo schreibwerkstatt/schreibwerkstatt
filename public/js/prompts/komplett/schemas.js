@@ -9,7 +9,7 @@ import { RELATION_TYPES } from '../../book/beziehung-typen.js';
 // ═════════════════════════════════════════════════════════════════════════════
 // JSON-Schemas für Grammar-Constrained Decoding (lokale Provider)
 // ═════════════════════════════════════════════════════════════════════════════
-// Beziehungs-Items: für lokale Provider wird `machtverhaltnis` absichtlich aus dem
+// Beziehungs-Items: für lokale Provider werden `machtverhaltnis` und `naehe` absichtlich aus dem
 // JSON-Schema weggelassen – kleine Modelle setzen es fast immer 0 oder halluzinieren.
 // Lieber das Feld leer lassen als falsche Werte anzeigen. Für Claude bleibt es erhalten.
 
@@ -45,7 +45,7 @@ const _bzItem = (arr, withName = false) => _obj({
   figur_id: _str,
   ...(withName ? { name: _str } : {}),
   typ: _bzTyp,
-  ...(_isLocal ? {} : { machtverhaltnis: _num }),
+  ...(_isLocal ? {} : { machtverhaltnis: _num, naehe: _num }),
   beschreibung: _str,
   belege: arr(_bzBeleg, 'belege'),
 });
@@ -156,6 +156,7 @@ function _szenenField() {
 export const EVENT_SUBTYP_ENUM = [
   'geburt', 'tod', 'hochzeit', 'liebe', 'trennung', 'krankheit',
   'reise', 'umzug', 'konflikt', 'wendepunkt', 'entdeckung', 'verlust', 'sieg',
+  'ausbildung', 'abschluss', 'stellenantritt', 'berufswechsel', 'jobverlust', 'pensionierung',
   'extern_politisch', 'extern_wirtschaftlich', 'extern_natur', 'extern_kulturell', 'extern_krieg',
   'sonstiges',
 ];
@@ -250,7 +251,7 @@ function _buildBeziehungenSchema() {
   const belegeField = { belege: { type: 'array', items: _bzBeleg } };
   const props = _isLocal
     ? { von: _str, zu: _str, typ: _bzTyp, beschreibung: _str, ...belegeField }
-    : { von: _str, zu: _str, typ: _bzTyp, machtverhaltnis: _num, beschreibung: _str, ...belegeField };
+    : { von: _str, zu: _str, typ: _bzTyp, machtverhaltnis: _num, naehe: _num, beschreibung: _str, ...belegeField };
   return _obj({ beziehungen: { type: 'array', items: _obj(props) } });
 }
 

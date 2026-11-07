@@ -34,6 +34,9 @@ Erstanbieter-Messung des Nutzungsverhaltens: welche Funktionen genutzt werden, o
 | `editor.open` / `editor.close` | client | `editor` notebook/focus/book, `durationSec` | Watch auf die innerste offene Fläche: Bucheditor › Fokus › Notebook-Edit-Modus; `pagehide` schliesst ab |
 | `dictation.start` / `tts.start` | client | — | Start der Aufnahme bzw. Wiedergabe (nicht je Audio-Segment) |
 | `synonym.applied` | client | `source` thesaurus/ai | Synonym aus dem Picker eingesetzt (SPA-Weg `editor/synonyme.js`; der Bundle-Controller der nativen Clients meldet nichts) |
+| `revision.view` | client | `diff` yes/no (Vergleich benutzt), `current` yes/no (gegen aktuellen Stand), `steps` (‹/›-Schritte) | eine Viewer-Sitzung der Abschnitts-Revisionen, gemeldet beim Schliessen ([page-revisions/viewer.js](../public/js/cards/page-revisions/viewer.js)); schliesst der Tab bei offenem Viewer, fehlt sie |
+| `revision.restore` | server | `ageBucket` hour/day/week/older (Alter der Ziel-Revision) | Restore-Route, auch «Stand davor» und die nativen Clients |
+| `revision.pin` | server | `action` pin/unpin/rename, `named` yes/no | PATCH-Route; `rename` = Name einer schon angehefteten Revision geändert |
 | `xref.applied` | client | `kind` Zieltyp (chapter/figure/table/page) | Querverweis im Notebook-Editor eingesetzt (`editor/notebook/toolbar/xref.js`) |
 | `content.created` | server | `kind` source/idea/beat/page/chapter/figure | Quelle, Idee, Beat, Abschnitt, Kapitel, Figur-Entwurf angelegt — vom Server beim Anlegen geschrieben, also auch für die nativen Clients gemessen |
 | `share.link.created` | server | `kind` page/chapter/book | Share-Link erstellt (`POST /share/api/links`) |

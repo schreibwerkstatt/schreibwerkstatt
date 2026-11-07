@@ -5,9 +5,11 @@
 // landet ein Sprung in einen langen Abschnitt (ein ganzes Kapitel) an der
 // Stelle statt an seinem Anfang. Findet die Passage nicht (semantischer Chunk
 // quer über Blockgrenzen), wird auf das längste distinktive Wort
-// zurückgefallen; findet auch das nichts, passiert nichts (der Sprung auf den
-// Abschnitt bleibt bestehen). Einstieg für Konsumenten:
+// zurückgefallen; findet auch das nichts, ruft es `onMiss` (der Aufrufer
+// scrollt dann an den Abschnittsanfang). Einstieg für Konsumenten:
 // app-navigation.js#gotoPageById(pageId, { snippet }).
+
+import { scrollToWhenReady } from '../utils/scroll-when-ready.js';
 
 const HL_NAME = 'passage-hit';
 const MAX_PHRASE_WORDS = 12;
@@ -81,11 +83,13 @@ function _plainSnippet(snippet) {
 // der Zielabschnitt gerendert ist (bis ~60 Frames; mit `pageId` erst, wenn
 // genau dieser offen ist — sonst suchte der erste Frame noch im vorigen
 // Abschnitt), markiert dann + scrollt zentriert. Räumt die Markierung nach
-// einigen Sekunden wieder ab.
-export function highlightOccurrenceOnPage(snippet, { pageId = null } = {}) {
+// einigen Sekunden wieder ab. `onMiss`: keine Markierung möglich (Stelle nicht
+// gefunden, Highlight-API fehlt) — der Aufrufer hat dann noch nicht gescrollt.
+export function highlightOccurrenceOnPage(snippet, { pageId = null, onMiss = null } = {}) {
   _clear();
+  const miss = () => { try { onMiss?.(); } catch (e) { console.error('[passage-highlight onMiss]', e); } };
   const text = _plainSnippet(snippet);
-  if (!text || !window.CSS?.highlights || typeof window.Highlight === 'undefined') return;
+  if (!text || !window.CSS?.highlights || typeof window.Highlight === 'undefined') { miss(); return; }
   let tries = 0;
   const attempt = () => {
     const onTarget = pageId == null || String(window.__app?.currentPage?.id) === String(pageId);
@@ -95,13 +99,17 @@ export function highlightOccurrenceOnPage(snippet, { pageId = null } = {}) {
       if (r) {
         try {
           window.CSS.highlights.set(HL_NAME, new window.Highlight(r));
-          (r.startContainer.parentElement || root).scrollIntoView({ behavior: 'smooth', block: 'center' });
+          // Über den gemeinsamen Helfer: wartet eine zufahrende Tastatur ab
+          // und verwirft einen noch wartenden älteren Sprung.
+          const target = r.startContainer.parentElement || root;
+          scrollToWhenReady(() => target);
           setTimeout(_clear, 4500);
         } catch (_) { /* Range/Highlight abgelaufen — egal */ }
         return;
       }
     }
     if (tries++ < 60) requestAnimationFrame(attempt);
+    else miss();
   };
   requestAnimationFrame(attempt);
 }

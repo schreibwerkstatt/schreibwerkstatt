@@ -22,11 +22,34 @@ import { fuzzyMatch } from './palette-fuzzy.js';
 import { EVT } from '../events.js';
 import { pluralKey } from '../i18n.js';
 import { activateSearchHit } from './search-hit.js';
+import { subtypIcon } from './ereignisse/subtyp.js';
 
 const PER_PROVIDER_LIMIT = 8;
 // Wartezeit, bevor die Volltextsuche eine Anfrage stellt — ohne sie ginge jeder
 // Tastendruck als eigener FTS-Request an den Server.
 const FULLTEXT_DEBOUNCE_MS = 200;
+// Volltext getrennt nach Textstellen und übrigen Arten, je mit festen Plätzen.
+// Ein gemeinsames bm25-Ranking bevorzugt kurze Dokumente: Figuren-Steckbriefe
+// verdrängten sonst jeden Abschnitt aus den PER_PROVIDER_LIMIT Plätzen. Ein
+// unbesetzter Platz der einen Gruppe geht an die andere.
+export const FULLTEXT_TEXT_KINDS = ['page', 'chapter'];
+export const FULLTEXT_OTHER_KINDS = ['figure', 'location', 'scene', 'idea'];
+const FULLTEXT_TEXT_SLOTS = 5;
+
+// Mischt die zwei Volltext-Listen (je bm25-sortiert) in die Palette-Plätze:
+// Textstellen zuerst, bis FULLTEXT_TEXT_SLOTS, der Rest an die übrigen Arten,
+// freie Plätze füllt die jeweils andere Gruppe auf. `more`: der Server kennt
+// weitere Treffer oder ein geholter Treffer fand keinen Platz.
+export function mixFulltextHits(text, other, { textMore = false, otherMore = false } = {}) {
+  const total = PER_PROVIDER_LIMIT;
+  const otherSlots = Math.max(total - Math.min(text.length, FULLTEXT_TEXT_SLOTS), total - FULLTEXT_TEXT_SLOTS);
+  const otherTake = Math.min(other.length, otherSlots);
+  const textTake = Math.min(text.length, total - otherTake);
+  return {
+    hits: [...text.slice(0, textTake), ...other.slice(0, otherTake)],
+    more: textMore || otherMore || text.length > textTake || other.length > otherTake,
+  };
+}
 
 // Lazy-Nachladen einer leeren Datenquelle, einmal pro Buch. Zwei Guards:
 // `_inFlight` gegen Parallel-Starts, `_loadedList` gegen Wiederholung, wenn die
@@ -299,6 +322,9 @@ export const PROVIDERS = [
           providerKey: 'ereignisse',
           label: ev.ereignis || '',
           sub: [ev.datum_label || ev.datum || '', kapitel || ''].filter(Boolean).join(' · '),
+          // Subtyp-Badge wie in Ereignisse-Karte, Referenz-Slot und Lebenslauf.
+          subtyp: ev.subtyp && ev.subtyp !== 'sonstiges' ? ev.subtyp : null,
+          subtypIcon: ev.subtyp ? subtypIcon(ev.subtyp) : null,
           score: m.score,
           indices: m.indices,
           available: true,
@@ -322,7 +348,7 @@ export const PROVIDERS = [
     prefix: '?',
     sectionKey: 'palette.section.fulltext',
     mixMinLength: 3,
-    _cache: { key: '', items: [] },
+    _cache: { key: '', items: [], more: false },
     _wantKey: '',
     _timer: null,
     _abort: null,
@@ -336,14 +362,20 @@ export const PROVIDERS = [
         this._timer = null;
         const ctrl = new AbortController();
         this._abort = ctrl;
-        const url = new URLSearchParams({ q, kind: 'page,chapter,figure,location,scene,idea', limit: '12' });
-        if (bookId) url.set('book_id', String(bookId));
-        fetch('/search?' + url.toString(), { credentials: 'same-origin', signal: ctrl.signal })
-          .then(r => r.ok ? r.json() : { hits: [] })
-          .catch(e => (e?.name === 'AbortError' ? null : { hits: [] }))
-          .then(data => {
-            if (!data || this._wantKey !== key) return;
-            this._cache = { key, items: Array.isArray(data.hits) ? data.hits : [] };
+        const get = (kinds) => {
+          const url = new URLSearchParams({ q, kind: kinds.join(','), limit: String(PER_PROVIDER_LIMIT) });
+          if (bookId) url.set('book_id', String(bookId));
+          return fetch('/search?' + url.toString(), { credentials: 'same-origin', signal: ctrl.signal })
+            .then(r => r.ok ? r.json() : { hits: [] })
+            .then(d => ({ hits: Array.isArray(d?.hits) ? d.hits : [], more: !!d?.more }));
+        };
+        Promise.all([get(FULLTEXT_TEXT_KINDS), get(FULLTEXT_OTHER_KINDS)])
+          .catch(e => (e?.name === 'AbortError' ? null : [{ hits: [] }, { hits: [] }]))
+          .then(res => {
+            if (!res || this._wantKey !== key) return;
+            const [text, other] = res;
+            const mixed = mixFulltextHits(text.hits, other.hits, { textMore: text.more, otherMore: other.more });
+            this._cache = { key, items: mixed.hits, more: mixed.more };
             this._wantKey = '';
             window.dispatchEvent(new CustomEvent(EVT.PALETTE_RERENDER));
           })
@@ -360,7 +392,7 @@ export const PROVIDERS = [
     },
     cancel() {
       this._abortPending();
-      this._cache = { key: '', items: [] };
+      this._cache = { key: '', items: [], more: false };
     },
     search(root, q, t) {
       const query = (q || '').trim();
@@ -368,7 +400,7 @@ export const PROVIDERS = [
       const bookId = Alpine.store('nav').selectedBookId || '';
       this.request(query, bookId);
       if (this._cache.key !== query + '|' + bookId) return [];
-      return this._cache.items.slice(0, PER_PROVIDER_LIMIT).map(h => ({
+      const items = this._cache.items.slice(0, PER_PROVIDER_LIMIT).map(h => ({
         key: 'fts:' + h.kind + ':' + h.entity_id,
         providerKey: 'fulltext',
         label: h.title || (t('search.untitled') || ''),
@@ -379,6 +411,21 @@ export const PROVIDERS = [
         available: true,
         run: (r) => activateSearchHit(r, h),
       }));
+      // Mehr Treffer, als die Palette zeigt → letzte Zeile öffnet die Suchkarte
+      // mit derselben Anfrage (alle Arten, volle Trefferliste mit «Mehr laden»).
+      if (items.length && this._cache.more) {
+        items.push({
+          key: 'fts:all',
+          providerKey: 'fulltext',
+          labelKey: 'palette.fulltextAll',
+          sub: '',
+          score: 0,
+          indices: [],
+          available: true,
+          run: (r) => r.openSearchWithQuery(query, [...FULLTEXT_TEXT_KINDS, ...FULLTEXT_OTHER_KINDS]),
+        });
+      }
+      return items;
     },
   },
 ];

@@ -67,6 +67,14 @@ test('ideen-karte: Rechtsklick zeigt dasselbe Menue wie der ⋯-Knopf, Esc gibt 
   expect(Math.abs(mbox.x - (box.x + box.width / 2))).toBeLessThan(box.width / 2 + 2);
   await page.mouse.click(5, 5);
   await expect(menu).toHaveCount(0);
+
+  // Ein Eintrag, dessen Handler sofort `busy` setzt (Stufenwechsel), schliesst
+  // das Menue trotzdem: `:disabled` flippt noch im selben Klick.
+  await trigger.click();
+  await expect(menu).toHaveCount(1);
+  await menu.locator('.context-menu-item:visible').first().click();
+  await expect(menu).toHaveCount(0);
+  await expect(item.locator('.idee-status-badge')).not.toHaveClass(/idee-status-badge--offen/);
 });
 
 test('recherche: Long-Press oeffnet das Menue; nach dem Detail-Dialog geht es in der Liste wieder sichtbar auf', async ({ browser }) => {

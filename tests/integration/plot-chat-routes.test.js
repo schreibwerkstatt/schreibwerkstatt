@@ -152,3 +152,52 @@ test('PATCH /plot/chat-proposal: zweites «applied» → 409; nach Undo des Ange
   assert.equal((await call('PATCH', '/plot/chat-proposal', { message_id: m, index: 1, action: 'applied', applied_id: act.id })).status, 200);
   assert.equal((await call('PATCH', '/plot/chat-proposal', { message_id: m, index: 1, action: 'applied', applied_id: act.id })).status, 409);
 });
+
+test('PATCH /plot/chat-proposal: Beziehung — 409 solange die Kante besteht, nach Löschen erneut übernehmbar', async () => {
+  const plot = require('../../db/plot');
+  const act = plot.createAct(BOOK, OWNER, { name: 'Akt R' });
+  const a = plot.createBeat(BOOK, act.id, OWNER, { titel: 'Setup' });
+  const b = plot.createBeat(BOOK, act.id, OWNER, { titel: 'Payoff' });
+  const rel = plot.createBeatRelation(BOOK, OWNER, { fromBeatId: a.id, toBeatId: b.id, typ: 'bereitet-vor' });
+  const m = db.prepare(
+    "INSERT INTO chat_messages (session_id, role, content, context_info, created_at) VALUES (?, 'assistant', 'x', ?, ?)"
+  ).run(plotSessionId, JSON.stringify({ mode: 'plot', proposals: [
+    { type: 'relation_create', ref: 1, from_beat_id: a.id, to_beat_id: b.id, typ: 'bereitet-vor' },
+  ] }), NOW).lastInsertRowid;
+  assert.equal((await call('PATCH', '/plot/chat-proposal', { message_id: m, index: 0, action: 'applied', applied_id: rel.id })).status, 200);
+  assert.equal((await call('PATCH', '/plot/chat-proposal', { message_id: m, index: 0, action: 'applied', applied_id: rel.id })).status, 409);
+  plot.deleteBeatRelation(rel.id, OWNER);
+  assert.equal((await call('PATCH', '/plot/chat-proposal', { message_id: m, index: 0, action: 'applied', applied_id: 777 })).status, 200);
+});
+
+test('PATCH /plot/chat-proposal: claim reserviert vor dem Schreiben; zweiter claim → 409 CLAIMED, force reserviert neu', async () => {
+  const m = db.prepare(
+    "INSERT INTO chat_messages (session_id, role, content, context_info, created_at) VALUES (?, 'assistant', 'x', ?, ?)"
+  ).run(plotSessionId, JSON.stringify({ mode: 'plot', proposals: [
+    { type: 'act_create', ref: 1, name: 'Neu' },
+  ] }), NOW).lastInsertRowid;
+  const c1 = await call('PATCH', '/plot/chat-proposal', { message_id: m, index: 0, action: 'claim' });
+  assert.equal(c1.status, 200);
+  assert.ok(proposalsOf(m)[0].claimed_at);
+  // Zweiter Tab / verlorener Status: nicht still nochmals schreiben.
+  const c2 = await call('PATCH', '/plot/chat-proposal', { message_id: m, index: 0, action: 'claim' });
+  assert.equal(c2.status, 409);
+  assert.equal(c2.json.error_code, 'PROPOSAL_CLAIMED');
+  assert.equal((await call('PATCH', '/plot/chat-proposal', { message_id: m, index: 0, action: 'claim', force: true })).status, 200);
+  // Übernommen: Reservierung weg; ein weiterer claim meldet «schon übernommen».
+  const act = require('../../db/plot').createAct(BOOK, OWNER, { name: 'Neu' });
+  assert.equal((await call('PATCH', '/plot/chat-proposal', { message_id: m, index: 0, action: 'applied', applied_id: act.id })).status, 200);
+  assert.equal(proposalsOf(m)[0].claimed_at, undefined);
+  const c3 = await call('PATCH', '/plot/chat-proposal', { message_id: m, index: 0, action: 'claim' });
+  assert.equal(c3.status, 409);
+  assert.equal(c3.json.error_code, 'PROPOSAL_ALREADY_APPLIED');
+});
+
+test('PATCH /plot/chat-proposal: unclaim gibt eine Reservierung frei', async () => {
+  const m = db.prepare(
+    "INSERT INTO chat_messages (session_id, role, content, context_info, created_at) VALUES (?, 'assistant', 'x', ?, ?)"
+  ).run(plotSessionId, JSON.stringify({ mode: 'plot', proposals: [{ type: 'act_create', ref: 1, name: 'Neu' }] }), NOW).lastInsertRowid;
+  assert.equal((await call('PATCH', '/plot/chat-proposal', { message_id: m, index: 0, action: 'claim' })).status, 200);
+  assert.equal((await call('PATCH', '/plot/chat-proposal', { message_id: m, index: 0, action: 'unclaim' })).status, 200);
+  assert.equal((await call('PATCH', '/plot/chat-proposal', { message_id: m, index: 0, action: 'claim' })).status, 200);
+});

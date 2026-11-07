@@ -52,6 +52,7 @@
       showBookSettingsCard: true,
       appTimezone: 'Europe/Zurich',
       t: tStub,
+      tn: (key, n, params = {}) => tStub(n === 1 && dict[key + 'One'] ? key + 'One' : key, { n, ...params }),
       tError: (d) => (d && (d.error_code || d.error)) || 'error',
       formatLastRun: (iso) => iso || '',
       async loadBooks() {},

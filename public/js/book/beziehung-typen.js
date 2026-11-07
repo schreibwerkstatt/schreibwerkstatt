@@ -2,11 +2,14 @@
 // Komplettanalyse-Prompts und -Schemas, den Figurengraph (graph/constants.js) und
 // die Bereinigung der KI-Ausgabe vor dem Speichern (Server über lib/esm-bridge.js).
 // Ein neuer Typ braucht ausserdem Styling in graph/constants.js (`BZ`, `BZ_SOZIO_CAT`,
-// ggf. `DIRECTED_TYPES`) und `figuren.bz.<typ>` in beiden Locales.
+// ggf. `DIRECTED_TYPES`), einen Nähe-Standard (`NAEHE_DEFAULT_BY_TYP` unten), ein
+// Rollenwort für den Finetune-Export (`ROLE_DE`/`ROLE_EN` in
+// routes/jobs/finetune-export/samples/core-facts/words.js) und `figuren.bz.<typ>` in
+// beiden Locales.
 
 // Reihenfolge ist Prompt-Text: sie landet als «a|b|c»-Liste im Schema-Beispiel.
 export const RELATION_TYPES = [
-  'elternteil', 'geschwister', 'kind', 'freund', 'feind', 'kollege', 'bekannt',
+  'elternteil', 'geschwister', 'kind', 'verwandt', 'freund', 'feind', 'kollege', 'bekannt',
   'liebesbeziehung', 'ehepartner', 'ex_partner', 'rivale', 'mentor', 'schuetzling',
   'patronage', 'geschaeft', 'verbuendete', 'komplize', 'vorgesetzter', 'untergebener', 'andere',
 ];
@@ -18,6 +21,12 @@ const DIRECTED = new Set(['elternteil', 'kind', 'mentor', 'schuetzling', 'patron
 // aus der anderen Perspektive. Kanonisch ist die Form, deren «von» die übergeordnete
 // Seite ist (Elternteil, Mentor, Vorgesetzter) — ihr Typ beschreibt die Rolle von «zu».
 const CANONICAL_INVERSE = { elternteil: 'kind', mentor: 'schuetzling', vorgesetzter: 'untergebener' };
+
+/** Gegenläufige Typen in beide Richtungen (A elternteil B ≡ B kind A). SSoT; der
+ *  synchrone CJS-Spiegel in db/figures/refs.js (`RELATION_INVERSES`, für relationKey
+ *  im Write-Pfad) ist durch tests/unit/beziehung-typen.test.mjs daran gebunden. */
+export const RELATION_INVERSES = Object.fromEntries(Object.entries(CANONICAL_INVERSE)
+  .flatMap(([a, b]) => [[a, b], [b, a]]));
 
 /** Bringt eine gerichtete Beziehung in ihre kanonische Form, damit beide Perspektiven
  *  derselben Aussage zusammenfallen. `flipped`: von/zu wurden getauscht (Werte, die
@@ -31,9 +40,16 @@ export function canonicalRelation(from, to, typ) {
 
 // Varianten, die Modelle statt des Listenwerts schreiben. Nur eindeutige Fälle — die
 // Rolle von «zu» bleibt erhalten («vater» ⇒ «zu» ist Elternteil). Entferntere
-// Verwandtschaft (Tante, Onkel, Cousin, Grosseltern, Schwager) hat keinen eigenen Typ
-// und fällt auf «andere».
+// Verwandtschaft (Tante, Onkel, Cousin, Grosseltern, Schwager, Schwiegereltern) ist
+// «verwandt», ungerichtet; das genaue Wort bleibt in der Beschreibung.
 const SYNONYMS = {
+  verwandte: 'verwandt', verwandter: 'verwandt', verwandtschaft: 'verwandt',
+  tante: 'verwandt', onkel: 'verwandt', cousin: 'verwandt', cousine: 'verwandt',
+  neffe: 'verwandt', nichte: 'verwandt', enkel: 'verwandt', enkelin: 'verwandt',
+  grossvater: 'verwandt', grossmutter: 'verwandt', grosseltern: 'verwandt', opa: 'verwandt', oma: 'verwandt',
+  schwager: 'verwandt', schwaegerin: 'verwandt',
+  schwiegervater: 'verwandt', schwiegermutter: 'verwandt', schwiegereltern: 'verwandt',
+  schwiegersohn: 'verwandt', schwiegertochter: 'verwandt',
   vater: 'elternteil', mutter: 'elternteil', eltern: 'elternteil',
   sohn: 'kind', tochter: 'kind',
   bruder: 'geschwister', schwester: 'geschwister',
@@ -51,6 +67,7 @@ const SYNONYMS = {
 };
 
 const _VALID = new Set(RELATION_TYPES);
+const GENERIC_VERWANDT = new Set(['verwandt', 'verwandte', 'verwandter', 'verwandtschaft']);
 
 function _key(s) {
   return String(s || '').normalize('NFC').toLowerCase().trim()
@@ -79,7 +96,10 @@ export function normalizeRelationTyp(raw) {
   if (specific.length === 1) typ = specific[0];
   else if (specific.length > 1 && !specific.some(t => DIRECTED.has(t))) typ = specific[0];
   const known = parts.length > 0 && s.split(/[|/,;]+/).every(p => _one(p));
-  return { typ, original: s && !known ? s : null };
+  // «Tante» → verwandt ist bekannt, aber verlustbehaftet: das genaue Wort ist die
+  // eigentliche Auskunft und gehört in die Beschreibung.
+  const kinWord = typ === 'verwandt' && !GENERIC_VERWANDT.has(_key(s));
+  return { typ, original: s && (!known || kinWord) ? s : null };
 }
 
 /** Bereinigt `typ` einer Beziehungsliste in place (Form egal: `{figur_id,typ,…}` oder
@@ -96,4 +116,31 @@ export function normalizeRelationTypes(list) {
     changed++;
   }
   return changed;
+}
+
+// ── Emotionale Nähe (`figure_relations.naehe`, −2 … +2) ──────────────────────
+// Gespeichert ist, wie die Beziehung im Text GELEBT wird (Komplettanalyse, Job
+// `figuren-naehe`). Fehlt der Wert, gilt der Standard des Typs — eine Schätzung,
+// die bei einer «versteinerten Ehe» danebenliegt; darum zeigt die Oberfläche, ob
+// ein Wert eingeschätzt oder nur angenommen ist (`naeheOf().geschaetzt`).
+export const NAEHE_MIN = -2;
+export const NAEHE_MAX = 2;
+export const NAEHE_DEFAULT_BY_TYP = {
+  ehepartner: 1, liebesbeziehung: 2, elternteil: 1, kind: 1, geschwister: 1, verwandt: 1,
+  freund: 1, verbuendete: 1, mentor: 1, schuetzling: 1,
+  bekannt: 0, kollege: 0, geschaeft: 0, vorgesetzter: 0, untergebener: 0,
+  patronage: 0, komplize: 0, andere: 0,
+  ex_partner: -1, rivale: -1, feind: -2,
+};
+
+/** Nähe einer Beziehung: der gespeicherte Wert, sonst der Typ-Standard.
+ *  `{ wert, geschaetzt }` — `geschaetzt` = vom Text eingeschätzt, nicht angenommen. */
+export function naeheOf(bz) {
+  const raw = bz?.naehe;
+  if (raw != null && raw !== '' && Number.isFinite(Number(raw))) {
+    const n = Math.max(NAEHE_MIN, Math.min(NAEHE_MAX, Math.round(Number(raw))));
+    return { wert: n, geschaetzt: true };
+  }
+  const typ = normalizeRelationTyp(bz?.typ).typ;
+  return { wert: NAEHE_DEFAULT_BY_TYP[typ] ?? 0, geschaetzt: false };
 }

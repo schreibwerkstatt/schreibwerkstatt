@@ -128,6 +128,7 @@ function restoreResearch(bookId, data, ctx) {
   }
 
   ctx.researchIds = [...itemMap.values()];
+  ctx.researchItemMap = itemMap;
   return { items: itemMap.size, links, linksDropped };
 }
 

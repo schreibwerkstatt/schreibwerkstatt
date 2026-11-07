@@ -5,6 +5,7 @@
 const express = require('express');
 const contentStore = require('../../lib/content-store');
 const pageRevisions = require('../../db/page-revisions');
+const { noteIdeenPageSave } = require('../jobs/ideen-auto-check');
 const pagePresence = require('../../db/page-presence');
 const bookPresence = require('../../db/book-presence');
 const appUsersDevices = require('../../db/app-users-devices');
@@ -143,6 +144,9 @@ function register(router) {
       // `no_change` ist ein internes Signal (unveraenderter Stand), kein
       // Vertragsfeld — nicht ausliefern.
       res.json(_publicPayload(saved));
+      // Auto-Erledigt-Check der Ideen: entprellt, misst selbst, ob die Änderung
+      // gross genug ist (routes/jobs/ideen-auto-check.js). Wirft nie.
+      if (!saved?.no_change) noteIdeenPageSave(pageId, bookId, email);
     }
     catch (e) {
       if (e.code === 'EMPTY_BODY') return res.status(400).json({ error_code: 'EMPTY_BODY' });
@@ -154,7 +158,9 @@ function register(router) {
             const merge = await _mergeStaleWrite(pageId, req);
             if (merge.saved) {
               logger.info(`PAGE_MERGE Seite ${pageId}: Geraet ${req.body?.device_id || '-'} erwartete ${_logStamp(req.body?.expected_updated_at)}, kollisionsfrei gemergt, neu ${merge.saved.updated_at || '-'}.`);
-              return res.json(_publicPayload(merge.saved));
+              res.json(_publicPayload(merge.saved));
+              noteIdeenPageSave(pageId, bookId, email);
+              return;
             }
             mergeConflicts = merge.conflicts;
           } catch (e2) {
@@ -309,6 +315,7 @@ function register(router) {
         { html: rev.body_html, source: 'restore', summary: `restored from #${revId}` },
         req,
       );
+      recordUsageEvent({ event: 'revision.restore', userEmail: email, bookId, meta: { ageBucket: _revisionAgeBucket(rev.created_at) } });
       res.json({ ok: true, page: _publicPayload(saved), restored_from: revId });
     } catch (e) {
       if (e.code === 'EMPTY_BODY') return res.status(400).json({ error_code: 'EMPTY_BODY' });
@@ -316,6 +323,17 @@ function register(router) {
       _fail(res, e, 'POST /content/pages/:id/revisions/:rev/restore');
     }
   });
+
+  // Alter der wiederhergestellten Revision fuer das Nutzungs-Event: wie weit
+  // gehen Leute zurueck? Grenzen folgen grob der Retention (24 h ungeduennt).
+  function _revisionAgeBucket(createdAt) {
+    const age = Date.now() - Date.parse(createdAt || '');
+    if (!Number.isFinite(age)) return undefined;
+    if (age <= 3600e3) return 'hour';
+    if (age <= 86400e3) return 'day';
+    if (age <= 7 * 86400e3) return 'week';
+    return 'older';
+  }
 
   // PATCH /content/pages/:page_id/revisions/:rev_id — anheften/loesen + Name.
   // Body: { pinned: bool, label?: string }. Angeheftete Revisionen nimmt die
@@ -325,7 +343,8 @@ function register(router) {
     const pageId = toIntId(req.params.page_id);
     const revId = toIntId(req.params.rev_id);
     if (!pageId || !revId) return res.status(400).json({ error_code: 'INVALID_ID' });
-    if (_guardPage(req, res, pageId, 'editor') == null) return;
+    const bookId = _guardPage(req, res, pageId, 'editor');
+    if (bookId == null) return;
     if (typeof req.body?.pinned !== 'boolean') return res.status(400).json({ error_code: 'PINNED_REQUIRED' });
     const label = req.body.label;
     if (label != null && typeof label !== 'string') return res.status(400).json({ error_code: 'INVALID_LABEL' });
@@ -333,6 +352,8 @@ function register(router) {
     if (!rev || rev.page_id !== pageId) return res.status(404).json({ error_code: 'REVISION_NOT_FOUND' });
     try {
       const updated = pageRevisions.setPin(revId, { pinned: req.body.pinned, label });
+      const action = !req.body.pinned ? 'unpin' : (rev.pinned ? 'rename' : 'pin');
+      recordUsageEvent({ event: 'revision.pin', userEmail: sessionEmail(req), bookId, meta: { action, named: updated?.label ? 'yes' : 'no' } });
       const { body_html: _omit, ...meta } = updated;
       res.json({ revision: meta });
     } catch (e) {

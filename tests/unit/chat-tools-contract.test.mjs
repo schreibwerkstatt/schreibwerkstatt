@@ -39,9 +39,9 @@ const MAX_PARAMS = 8;
 const MAX_SCHEMA_DEPTH = 3;
 const SET_BUDGET = {   // [Werkzeuge inkl. Ausgabe, Zeichen JSON]
   'book/full': [37, 38000], 'book/slim': [21, 22000],
-  'plot/full': [27, 27000], 'plot/slim': [15, 16500],
-  'ideen/full': [25, 24500], 'ideen/slim': [10, 11500],
-  'research/full': [9, 8500], 'research/slim': [9, 8500],
+  'plot/full': [27, 26500], 'plot/slim': [15, 16000],
+  'ideen/full': [25, 24800], 'ideen/slim': [10, 11700],
+  'research/full': [12, 12600], 'research/slim': [9, 9900],
 };
 const NAME_RE = /^(list|get|search|read|quote|find|lookup|generate)_[a-z]+(_[a-z]+)*$/;
 

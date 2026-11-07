@@ -221,7 +221,8 @@ test('Seiten-Chat: Ideen-Vorschlag bearbeiten und als Idee am Abschnitt erfassen
     await expect(idee).toHaveClass(/chat-vorschlag--applied/);
     const ideen = await page.evaluate(async (pid) => (await (await fetch('/ideen?page_id=' + pid)).json()), pageId);
     expect(ideen.map(i => i.content)).toEqual(['Hund: laut oder stumm? Kapitel 2 prüfen']);
-    const applied = patches.find(p => /\/ideen\/chat-proposal$/.test(p.url));
+    // Vor dem Schreiben reserviert (claim), danach als übernommen bestätigt.
+    const applied = patches.find(p => /\/ideen\/chat-proposal$/.test(p.url) && p.body?.action !== 'claim');
     expect(applied?.body).toMatchObject({ message_id: 900002, index: 0, action: 'applied', applied_id: ideen[0].id });
     expect(await page.evaluate((pid) => window.Alpine.store('badges').ideenCounts[pid], pageId)).toBe(1);
   } finally {

@@ -1,7 +1,7 @@
 // Fundstueck-Ebene der Recherche-Karte: Anlegen, Bearbeiten, Pin/Archiv/Loeschen
 // und der Uebersichts-Cap des Beschreibungstexts.
 
-import { fetchJson } from '../../utils.js';
+import { fetchJson, escHtml } from '../../utils.js';
 import { isSelectedBook } from '../../cards/book-guard.js';
 import { emptyDraft as _emptyDraft } from './shared.js';
 
@@ -212,6 +212,18 @@ export const rechercheItemMethods = {
   addUrlRow(draft) { if (!Array.isArray(draft.urls)) draft.urls = []; draft.urls.push({ url: '', label: '' }); },
   removeUrlRow(draft, i) { (draft.urls || []).splice(i, 1); },
 
+  // Beschreibungstext als HTML für Board-Anriss und Detailansicht. Notizen und
+  // Fakten kommen oft als Markdown (Recherche-Chat-Vorschläge) und
+  // laufen durch den Chat-Renderer (escaped, html:false, lädt markdown-it nach).
+  // Ein Zitat ist Wortlaut: escaped, nur Zeilenumbrüche — ein `*` im Original
+  // darf dort nicht zur Hervorhebung werden.
+  itemBodyHtml(item) {
+    const body = item?.body || '';
+    if (!body) return '';
+    if (item.kind === 'quote') return escHtml(body).replace(/\n/g, '<br>');
+    return this._renderChatMarkdown(body);
+  },
+
   // Klick auf den Eintrag öffnet die Detailansicht — ausser auf interaktiven
   // Elementen (Aktions-Buttons, Links, Datei-Inputs, Tag-/Link-Chips) sowie
   // dem Verknüpfen-Picker (inkl. Combobox-Dropdown, dessen Optionen <li> sind
@@ -268,6 +280,9 @@ export const rechercheItemMethods = {
     };
   },
 
+  // Nach dem Anheften neu laden statt lokal umzusortieren: die Reihenfolge
+  // bestimmt der Server je `sortBy` (routes/research.js FIXED_SORTS + link:<kind>,
+  // jeweils `pinned DESC` vorneweg) — eine Kopie davon im Client driftete.
   async togglePin(item) {
     try {
       this._replaceItem(await this._patchItem(item.id, { pinned: !item.pinned }));
@@ -279,9 +294,6 @@ export const rechercheItemMethods = {
     try {
       await this._patchItem(item.id, { archived: !item.archived });
       // Bei aktivem „nur aktive"-Filter verschwindet das Item aus der Liste.
-  // Nach dem Anheften neu laden statt lokal umzusortieren: die Reihenfolge
-  // bestimmt der Server je `sortBy` (routes/research.js FIXED_SORTS + link:<kind>,
-  // jeweils `pinned DESC` vorneweg) — eine Kopie davon im Client driftete.
       // Dann muss auch der Detail-Dialog zu: sein Inhalt hängt an `items`, er
       // stünde sonst leer offen.
       if (!this.showArchived) {

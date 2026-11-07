@@ -4,13 +4,16 @@
 //   boardOutline        — kompakte Text-Gliederung des Boards mit [#id]-Markern
 //   fitBoardOutline     — dieselbe Gliederung, aufs Zeichenbudget gekürzt
 //   figurenOutline      — Katalog- + Werkstatt-Figuren, jede mit ihrer Kennung
+//   katalogOutline      — Schauplätze + Motive, je mit Kennung (Felder orte/motive)
 //   sessionPlotProposalMemory — frühere Vorschläge der Session + ihr Status
 //
 // Das Board steht im Vorspann der Frage, weil der Chat neben dem Board lebt und
 // jeder Vorschlag ids braucht — eine Pflicht-Runde get_plot_board pro Frage wäre
 // reine Verschwendung. Bei grossen Boards wird es gekürzt (fitBoardOutline).
 
-const { listActs, listThreads, listBeats } = require('../../db/plot');
+const { listActs, listThreads, listBeats, listBeatRelations } = require('../../db/plot');
+const { listMotifs } = require('../../db/motifs');
+const { listLocationNames } = require('../../db/locations-read');
 const { listDraftFigures } = require('../../db/draft-figures');
 const { listFigureNamesForUser } = require('../../db/book-chat/figures');
 const { ideaNotesByTarget } = require('../../lib/idea-context');
@@ -31,11 +34,26 @@ function loadBoardState(bookId, userEmail, chapterNames = new Map()) {
   const beats = listBeats(bookId, userEmail);
   const figures = listFigureNamesForUser(bookId, userEmail);
   const drafts = listDraftFigures(bookId, userEmail).map(d => ({ id: d.id, name: d.name }));
+  const relations = listBeatRelations(bookId, userEmail)
+    .map(r => ({ id: r.id, from_beat_id: r.from_beat_id, to_beat_id: r.to_beat_id, typ: r.typ }));
+  const locations = listLocationNames(bookId, userEmail);
+  const motifs = listMotifs(bookId, userEmail).map(m => ({ id: m.id, name: m.name }));
+  const relsByFrom = new Map();
+  const relsByTo = new Map();
+  for (const r of relations) {
+    if (!relsByFrom.has(r.from_beat_id)) relsByFrom.set(r.from_beat_id, []);
+    relsByFrom.get(r.from_beat_id).push(r);
+    if (!relsByTo.has(r.to_beat_id)) relsByTo.set(r.to_beat_id, []);
+    relsByTo.get(r.to_beat_id).push(r);
+  }
   return {
-    acts, threads, beats, figures, drafts, chapterNames,
+    acts, threads, beats, figures, drafts, chapterNames, relations, locations, motifs,
     actById: new Map(acts.map(a => [a.id, a])),
     threadById: new Map(threads.map(t => [t.id, t])),
     beatById: new Map(beats.map(b => [b.id, b])),
+    relationById: new Map(relations.map(r => [r.id, r])),
+    relsByFrom,
+    relsByTo,
     figNameById: new Map(figures.map(f => [f.fig_id, f.name || f.kurzname || f.fig_id])),
     draftNameById: new Map(drafts.map(d => [d.id, d.name])),
     // Pendenzen des Autors je Beat (offen / verworfen) — siehe lib/idea-context.js.
@@ -89,7 +107,21 @@ function _beatLine(b, state, ideenMarker, descMax) {
     ...(b.draft_fig_ids || []).map(id => state.draftNameById.get(id)).filter(Boolean),
   ];
   if (figs.length) parts.push(`Figuren: ${figs.join(', ')}`);
+  if ((b.locations || []).length) parts.push(`Orte: ${b.locations.map(l => l.name).join(', ')}`);
+  if ((b.motifs || []).length) parts.push(`Motive: ${b.motifs.map(m => m.name).join(', ')}`);
   const lines = [`  - ${parts.join(' · ')}`];
+  // Beat-Beziehungen (Setup/Payoff, Kausalität), ausgehend und eingehend — ohne
+  // sie schlägt der Chat Kanten doppelt vor und sieht hängende Setups nicht. Die
+  // eingehenden braucht das Urteil «offenes Setup»: «#12 zahlt-ein #5» steht nur
+  // unter #12, ist aber der Payoff von #5.
+  for (const r of state.relsByFrom?.get(b.id) || []) {
+    const to = state.beatById.get(r.to_beat_id);
+    lines.push(`      → ${r.typ} [#${r.to_beat_id}] «${to?.titel || '?'}»`);
+  }
+  for (const r of state.relsByTo?.get(b.id) || []) {
+    const from = state.beatById.get(r.from_beat_id);
+    lines.push(`      ← ${r.typ} von [#${r.from_beat_id}] «${from?.titel || '?'}»`);
+  }
   const desc = String(b.beschreibung || '').replace(/\s+/g, ' ').trim();
   if (desc && descMax > 0) lines.push(`      ${desc.length > descMax ? desc.slice(0, descMax) + '…' : desc}`);
   const ideen = ideenMarker ? ideenMarker(state.ideasByBeat?.get(b.id)) : '';
@@ -171,10 +203,29 @@ function figurenOutline(state) {
   return lines.join('\n');
 }
 
+// Schauplätze und Motive mit der Kennung, die die Felder orte/motive annehmen.
+// Gedeckelt: ein Orts-Katalog kann Hunderte Einträge haben; was fehlt, löst der
+// Handler trotzdem über den Namen auf.
+const KATALOG_MAX = 150;
+function katalogOutline(state) {
+  const out = [];
+  const cap = (list, fmt, head) => {
+    if (!list.length) return;
+    out.push(head, ...list.slice(0, KATALOG_MAX).map(fmt));
+    if (list.length > KATALOG_MAX) out.push(`(+ ${list.length - KATALOG_MAX} weitere — per Name angeben)`);
+  };
+  cap(state.locations || [], l => `- ${l.name}${l.parent_name ? ` (in ${l.parent_name})` : ''} · loc_id ${l.loc_id}`,
+    '=== SCHAUPLÄTZE (Name · loc_id = Kennung für orte) ===');
+  if (out.length && (state.motifs || []).length) out.push('');
+  cap(state.motifs || [], m => `- ${m.name} · motiv_id ${m.id}`, '=== MOTIVE (Name · motiv_id = Kennung für motive) ===');
+  return out.join('\n');
+}
+
 const PROPOSAL_TYPE_LABEL = {
   beat_create: 'neuer Beat', beat_update: 'Beat ändern', beat_move: 'Beat verschieben',
   act_create: 'neuer Akt', act_update: 'Akt umbenennen',
   thread_create: 'neuer Strang', thread_update: 'Strang ändern',
+  relation_create: 'Beat-Beziehung',
 };
 
 /** Anzeige-Titel eines gespeicherten Vorschlags (für Gedächtnis-Block + Logs). */
@@ -186,10 +237,11 @@ function proposalLabel(p) {
   if (p.type === 'act_create' || p.type === 'act_update') return p.name || '';
   if (p.type === 'thread_create') return p.name || '';
   if (p.type === 'thread_update') return p.fields?.name || p.labels?.thread || '';
+  if (p.type === 'relation_create') return `${p.labels?.from || '?'} ${p.typ} ${p.labels?.to || '?'}`;
   return '';
 }
 
-const CREATE_MAP = { beat_create: 'beatById', act_create: 'actById', thread_create: 'threadById' };
+const CREATE_MAP = { beat_create: 'beatById', act_create: 'actById', thread_create: 'threadById', relation_create: 'relationById' };
 
 /** Gibt es das von einem übernommenen create-Vorschlag Angelegte noch? undefined = kein create. */
 function plotCreatedExists(state) {
@@ -218,6 +270,6 @@ function sessionPlotProposalMemory(sessionId, state = null) {
 }
 
 module.exports = {
-  loadBoardState, boardOutline, fitBoardOutline, figurenOutline, readingBlocks, threadHasOwnActs,
+  loadBoardState, boardOutline, fitBoardOutline, figurenOutline, katalogOutline, readingBlocks, threadHasOwnActs,
   sessionPlotProposalMemory, proposalLabel, proposalState, PROPOSAL_TYPE_LABEL,
 };

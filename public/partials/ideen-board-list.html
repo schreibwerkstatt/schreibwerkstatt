@@ -15,6 +15,8 @@
                 :data-tip="$app.t('ideenBoard.moveTo', { status: statusLabel(st) })"
                 x-text="statusLabel(st)"></button>
       </template>
+      <button type="button" class="btn-compact" x-show="selectionCount() >= 2" @click="bulkMerge()" :disabled="busy"
+              :data-tip="$app.t('ideenBoard.bulk.mergeTip')" x-text="$app.t('ideenBoard.bulk.merge')"></button>
       <button type="button" class="btn-compact danger" @click="bulkDelete()" :disabled="busy" x-text="$app.t('common.delete')"></button>
     </div>
     <button type="button" class="icon-btn icon-btn--ghost selection-bar__close" @click="clearSelection()" :disabled="busy"
@@ -43,7 +45,7 @@
     </thead>
     <tbody>
       <template x-for="r in sorted" :key="r.id">
-        <tr :class="{ 'is-selected': isSelected(r.id) }">
+        <tr :class="{ 'is-selected': isSelected(r.id) }" :data-idee-row-id="r.id">
           <td class="ideen-list-check">
             <input type="checkbox" :checked="isSelected(r.id)" @change="toggleSelect(r.id)"
                    :aria-label="$app.t('ideenBoard.bulk.select')">

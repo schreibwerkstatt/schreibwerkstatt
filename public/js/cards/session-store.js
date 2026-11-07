@@ -21,8 +21,9 @@
 //                  synchronisiertem Entwurf (Reconnect-Outbox, app-outbox.js).
 //                  Speist den Offline-Banner. Die aktuell offene Edit-Seite ist
 //                  ausgenommen (sie ist „live", sonst flackert der Zähler).
-//   offlineCapable — ein Service Worker kontrolliert die Seite; nur dann gibt
-//                  es „Buch offline halten" (app/app-offline-books.js).
+//   offlineCapable — ein Service Worker ist aktiv (Controller dieses Tabs oder
+//                  aktiver Worker der Registrierung); nur dann gibt es
+//                  „Buch offline halten" (app/app-offline-books.js).
 //   offlinePinned  — IDs (Strings) der Bücher, die dieses Konto offline hält.
 //   offlineBooks   — Stand je Buch laut SW: { [id]: { at, total, failed } }.
 //   offlineProgress — laufender Sync je Buch: { [id]: { done, total } }.

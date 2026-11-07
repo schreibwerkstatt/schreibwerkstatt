@@ -411,6 +411,12 @@ export {
 } from './prompts/ideen-chat.js';
 
 export {
+  buildIdeenAutoCheckSystemPrompt,
+  buildIdeenAutoCheckPrompt,
+  SCHEMA_IDEEN_AUTO_CHECK,
+} from './prompts/ideen-auto-check.js';
+
+export {
   buildMotivSystemPrompt,
   buildMotivBrainstormPrompt,
   SCHEMA_MOTIV_BRAINSTORM,
@@ -431,6 +437,18 @@ export {
   buildSchulwegPrompt,
   buildSchulwegSchema,
 } from './prompts/schulweg.js';
+
+export {
+  buildNaeheSystemPrompt,
+  buildNaehePrompt,
+  buildNaeheSchema,
+} from './prompts/figuren-naehe.js';
+
+export {
+  buildStationenSystemPrompt,
+  buildStationenPrompt,
+  buildStationenSchema,
+} from './prompts/stationen.js';
 
 export {
   buildSourceDetectSystemPrompt,

@@ -99,9 +99,11 @@ export const chatIdeeProposalMethods = {
       return row?.id || null;
     });
     if (!r.ok) {
-      console.error('[captureChatIdee]', r.error);
-      p._error = tFetchError(r.error);
-    } else {
+      if (r.phase !== 'cancelled') {
+        console.error('[captureChatIdee]', r.error);
+        p._error = tFetchError(r.error);
+      }
+    } else if (!r.already) {
       trackChatProposal(_chatKind(this, msg), 'applied', p.type);
     }
     p._busy = false;

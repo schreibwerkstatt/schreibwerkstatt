@@ -92,8 +92,9 @@ test('plot: Durchsicht der Zeitvorschläge — Belege sichtbar, nur eindeutige v
     // Nur der eindeutige Vorschlag ist vorausgewählt; der breite trägt den Hinweis.
     await expect(rows.nth(0).locator('input[type=checkbox]')).toBeChecked();
     await expect(rows.nth(1).locator('input[type=checkbox]')).not.toBeChecked();
-    await expect(rows.nth(1).locator('.badge')).toBeVisible();
-    await expect(rows.nth(0).locator('.badge')).toBeHidden();
+    // Je Zeile drei mögliche Hinweise (breit, andere Szene, ausserhalb Akt): hier nur «breit».
+    await expect(rows.nth(1).locator('.badge').filter({ visible: true })).toHaveText(['breit']);
+    await expect(rows.nth(0).locator('.badge').filter({ visible: true })).toHaveCount(0);
 
     await review.locator('.plot-zeit-review-actions .btn-compact').first().click();
     const zeitOf = id => page.evaluate(id => Alpine.$data(document.querySelector('.card--plot')).beats.find(b => b.id === id)?.zeit ?? null, id);
@@ -146,6 +147,41 @@ test('plot: Alters-Chip der Strang-Figur an der Karte', async ({ page }) => {
     await expect(zelle).toHaveText(/2000–2007/);
   } finally {
     await page.unroute('**/plot?book_id=*');
+    await page.evaluate(async ({ actId, threadId }) => {
+      await fetch(`/plot/acts/${actId}`, { method: 'DELETE' });
+      await fetch(`/plot/threads/${threadId}`, { method: 'DELETE' });
+    }, ids);
+  }
+});
+
+// Klick auf einen Befund im Zeit-Messung-Panel springt zum Beat. Mit Strang steht
+// das Swimlane-Grid, das flache Board liegt per x-show versteckt mit derselben
+// data-beat-id im DOM — der Sprung muss die sichtbare Karte treffen, nicht die Kopie.
+test('plot: Zeit-Messung-Befund springt zur sichtbaren Karte im Swimlane-Grid', async ({ page }) => {
+  await page.goto('/');
+  await page.waitForFunction(() => window.__app && window.Alpine.store('nav').selectedBookId);
+  const bookId = await page.evaluate(() => window.Alpine.store('nav').selectedBookId);
+  const ids = await page.evaluate(async (bookId) => {
+    const post = (url, body) => fetch(url, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body),
+    }).then(r => r.json());
+    const act = await post('/plot/acts', { book_id: bookId, name: 'Sprung-Akt' });
+    const thread = await post('/plot/threads', { book_id: bookId, name: 'Sprung-Strang' });
+    const a = await post('/plot/beats', { book_id: bookId, act_id: act.id, thread_id: thread.id, titel: 'Sprung-A', zeit: 'März 2000' });
+    const b = await post('/plot/beats', { book_id: bookId, act_id: act.id, thread_id: thread.id, titel: 'Sprung-B', zeit: '1990' });
+    return { actId: act.id, threadId: thread.id, a: a.id, b: b.id };
+  }, bookId);
+
+  try {
+    await page.evaluate(() => window.__app.togglePlotCard());
+    const visible = page.locator(`.card--plot .plot-swimlane .plot-beat[data-beat-id="${ids.b}"]`);
+    await expect(visible).toBeVisible();
+
+    const finding = page.locator('.card--plot .plot-konflikt', { hasText: 'Sprung-B' }).first();
+    await expect(finding).toBeVisible();
+    await finding.click();
+    await expect(visible).toHaveClass(/plot-beat--flash/);
+  } finally {
     await page.evaluate(async ({ actId, threadId }) => {
       await fetch(`/plot/acts/${actId}`, { method: 'DELETE' });
       await fetch(`/plot/threads/${threadId}`, { method: 'DELETE' });

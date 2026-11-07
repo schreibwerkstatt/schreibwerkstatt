@@ -6,9 +6,17 @@
   mit ≥1 Strang das Akte×Stränge-Grid (plot-board-grid.html). Zwei KI-Jobs:
   Brainstorm (Beats vorschlagen) + Consistency (geplant vs. Buchrealität prüfen).
   Rahmen + verschachtelte Partials (File-Limit) via _loadPartials-Cascade.
+
+  Split mit Leiste wie Recherche | Recherche-Chat (layout/aside-split.css):
+  links die Plot-Karte, rechts der Plot-Chat als eigene Karte (plot-chat.html).
+  Beide teilen den Scope `plotCard` — darum traegt der Split x-data,
+  Sichtbarkeit und das Vollbild (Board + Chat zusammen). Schmal steht der Chat
+  ueber dem Board (`--aside-first`).
 -->
-<div class="card card--plot fullscreen-shell" x-data="plotCard" x-show="$app.showPlotCard" x-cloak
-     :class="{ 'plot--compact': plotDensity === 'compact' }">
+<div class="aside-split main-aside-split aside-split--aside-first plot-split fullscreen-shell" id="plot-split"
+     x-data="plotCard" x-show="$app.showPlotCard" x-cloak
+     x-aside-resize :class="{ 'aside-split--on': plotChatOpen }">
+<div class="card card--plot" :class="{ 'plot--compact': plotDensity === 'compact' }">
   <div class="card-header card-header--subline">
     <div class="card-header-titlebar">
       <span class="card-eyebrow" x-text="$app.selectedBookName"></span>
@@ -52,7 +60,7 @@
                 @click="togglePlotFullscreen()"
                 :aria-label="plotFullscreen ? $app.t('plot.fullscreenExit.tip') : $app.t('plot.fullscreen.tip')"
                 :data-tip="plotFullscreen ? $app.t('plot.fullscreenExit.tip') : $app.t('plot.fullscreen.tip')"><svg class="icon" aria-hidden="true"><use :href="plotFullscreen ? '/icons.svg#minimize-2' : '/icons.svg#maximize-2'"/></svg></button>
-        <!-- Plot-Chat-Panel (chat/plot-chat.js): Vorschläge ans Board, einzeln übernehmen -->
+        <!-- Plot-Chat-Karte (chat/plot-chat.js): Vorschläge ans Board, einzeln übernehmen -->
         <button type="button" class="icon-btn icon-btn--ghost" :class="{ 'is-active': plotChatOpen }"
                 :aria-pressed="plotChatOpen" @click="togglePlotChat()"
                 :aria-label="$app.t('plot.chat.toggle')" :data-tip="$app.t('plot.chat.toggle')"><svg class="icon" aria-hidden="true"><use href="/icons.svg#message-square"/></svg></button>
@@ -82,11 +90,6 @@
 
   <!-- Fehler -->
   <div x-show="errorMessage" class="card-status card-status--error" x-text="errorMessage"></div>
-
-  <!-- Board links, Plot-Chat rechts daneben (ab 1280px; schmaler klappt der Chat
-       per `order` über das Board). Reine Layout-Klammer. -->
-  <div class="aside-split aside-split--aside-first" x-aside-resize :class="{ 'aside-split--on': plotChatOpen }">
-  <div class="plot-main">
 
   <!-- Skeleton -->
   <div x-show="loading && !acts.length" class="card-status" x-text="$app.t('plot.loading')"></div>
@@ -193,9 +196,7 @@
   <!-- KI-Konsistenz (Fortschritt + Ergebnis) + Lauf-Historien (Konsistenz + Brainstorm).
        Ausgelagert (File-Limit), via _loadPartials in den plotCard-Scope injiziert. -->
   <div id="partial-plot-ki-runs"></div>
-  </div><!-- /.plot-main -->
+</div><!-- /.card--plot -->
 
-  <!-- Plot-Chat-Panel (ausgelagert; File-Limit) -->
-  <div id="partial-plot-chat" class="aside-split-aside"></div>
-  </div><!-- /.aside-split -->
-</div>
+<!-- @include plot-chat -->
+</div><!-- /.plot-split -->

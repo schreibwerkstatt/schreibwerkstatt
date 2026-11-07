@@ -159,6 +159,8 @@
 
 /* === Figuren: Beziehungs-Belege === */
 .figur-bz-belege { margin-left: var(--space-6); }
+/* Knöpfe an einer gemeldeten Beziehung (Beziehungsprüfung): entfernen / umhängen. */
+.figur-bz-actions { display: inline-flex; flex-wrap: wrap; gap: var(--space-xs); margin-left: var(--space-6); }
 
 /* === Figuren: Listen-Bereich === */
 /* Verhindert Scroll-Anchoring im Listen-Bereich: wenn figur-detail aufklappt,
@@ -281,7 +283,8 @@
   color: var(--color-muted);
 }
 
-/* Wendepunkt-Marker: kleiner Punkt mittig in der Zelle. */
+/* Wendepunkt-Marker: kleiner Punkt mittig in der Zelle, in der Subtyp-Farbe
+   «Wendepunkt» (dieselbe wie Badge und Zeitstrahl-Marker). */
 .figur-presence-cell--wp { position: relative; }
 .figur-presence-cell--wp::after {
   content: "";
@@ -291,7 +294,7 @@
   width: 6px;
   height: 6px;
   border-radius: 50%;
-  background: var(--color-primary);
+  background: var(--card-accent-event-wendepunkt);
   box-shadow: 0 0 0 1.5px var(--color-surface);
 }
 
@@ -444,6 +447,14 @@
 }
 .figur-bz-macht--positiv { color: var(--color-primary); }
 .figur-bz-macht--negativ { color: var(--color-err-border); }
+/* Emotionale Nähe (−2 … +2): warm = nah, kühl/rot = fern; neutral gedämpft. */
+.figur-bz-naehe {
+  font-size: var(--font-size-xs);
+  margin-left: var(--space-2xs);
+  color: var(--color-muted);
+}
+.figur-bz-naehe--nah  { color: var(--color-primary); }
+.figur-bz-naehe--fern { color: var(--color-err-border); }
 
 /* Die Kapitel-Referenzen selbst sind die geteilte Komponente
    (components/entity-ref.css); hier steht nur, was am Detail-Block der

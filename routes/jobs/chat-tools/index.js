@@ -158,4 +158,9 @@ async function executeTool(name, input, ctx) {
   return _truncateResult(result, resultCapFor(ctx));
 }
 
-module.exports = { executeTool, unavailableTools, TOOLS, AVAILABILITY, validateFinalAnswerCitations };
+// Reine Lese-Werkzeuge des Katalogs: ihr Ergebnis wirkt nur, wenn das Modell es
+// liest. In der Runde, die schon final_answer ruft, laufen sie darum nicht
+// (agentic-chat/loop.js). generate_image erzeugt ein Bild — kein Lese-Werkzeug.
+const READ_ONLY_TOOLS = new Set(Object.keys(TOOLS).filter(n => n !== 'generate_image'));
+
+module.exports = { executeTool, unavailableTools, TOOLS, AVAILABILITY, READ_ONLY_TOOLS, validateFinalAnswerCitations };

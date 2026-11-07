@@ -80,7 +80,25 @@ function activeResearchItemsByIds(ids, limit) {
   ).all(...ids);
 }
 
+/** context_info der jüngsten `limit` Antworten einer Session mit geprüften Quellen (neueste zuerst). */
+function sessionAnswerSourceInfos(sessionId, limit) {
+  return db.prepare(
+    `SELECT context_info FROM chat_messages
+      WHERE session_id = ? AND role = 'assistant' AND context_info LIKE '%"answer_sources"%'
+      ORDER BY created_at DESC, id DESC LIMIT ${limit | 0}`
+  ).all(sessionId).map(r => r.context_info);
+}
+
+/** Welche der ids gibt es im Buch noch (auch archiviert)? → Set */
+function existingResearchItemIds(ids, bookId) {
+  if (!ids.length) return new Set();
+  return new Set(db.prepare(
+    `SELECT id FROM research_items WHERE book_id = ? AND id IN (${ids.map(() => '?').join(',')})`
+  ).all(bookId, ...ids).map(r => r.id));
+}
+
 module.exports = {
   crosscheckCandidates, researchItemForLinking, researchItemLinkKeys, researchLinkCandidates,
   sessionProposalContextInfos, messageContextInfo, activeResearchItemsByIds,
+  sessionAnswerSourceInfos, existingResearchItemIds,
 };

@@ -3,6 +3,14 @@
 Beantwortet **„wie alt ist diese Figur im Buch"** — als Tabelle über alle Figuren,
 filterbar nach Figurentyp und Kapitel (Figuren mit Auftritt im Kapitel; die Alterswerte bleiben die des ganzen Buchs), mit Belegstelle im Manuskript.
 
+**Stichtag:** Jahr (+ optional Monat) über der Tabelle blendet die Spalte «Alter ‹Stichtag›» ein — für jede Figur mit bekannter Geburt, gerechnet in [book/age-at.js](../public/js/book/age-at.js) (dieselbe Rechnung wie `get_figure_age` im Buch-Chat). Die Geburt liefert `GET /figures/:book_id/alter` als `geburten` (fig_id → `{ y, m, d, quelle }`, Vorrang aus [lib/figure-birth.js](../lib/figure-birth.js)). Ohne Monat auf einer Seite bleibt das Alter eine Spanne. Hat das Buch ein Schulsystem, steht daneben die Klasse am Stichtag ([figur-lebenslauf.md](figur-lebenslauf.md#schullaufbahn)), ausserhalb der Schulzeit «noch nicht eingeschult» bzw. «Schule abgeschlossen (Jahr)». Filter «Nur am Stichtag geboren» blendet Figuren ohne Geburt und noch Ungeborene aus.
+
+**Tätigkeit am Stichtag:** mit Stichtag zusätzlich die Spalte «Tätigkeit» — Berufsstationen und Hobbys, die an diesem Tag liefen, gerechnet in [book/figure-stationen.js](../public/js/book/figure-stationen.js)#`stationenAm` (dieselbe Rechnung wie `get_figure_age`); «(?)», wenn nur das Ende bekannt ist ([figur-lebenslauf.md](figur-lebenslauf.md#berufsweg-und-hobbys)).
+
+**Schulzeit** (nur mit Schulsystem, unabhängig vom Stichtag): Zeiträume je Stufe, «Primarschule 1991–1997 · Bezirksschule 1997–2000», aus `schulZeiten` in [book/school-path.js](../public/js/book/school-path.js) — dieselbe Rechnung wie die Klasse am Stichtag und `get_figure_age` (`schulweg.schulzeit`). Ist der Geburtstag relativ zum Einschulungs-Stichtag unbekannt, steht «≈» davor und der Tooltip nennt beide Einschulungsjahre.
+
+**Geburtsjahr-Widerspruch:** nennen Steckbrief, Geburts-Ereignis und Alters-Index verschiedene Jahre, trägt die Geburtsjahr-Zelle «prüfen» mit allen Quellen im Tooltip (`geburten[fig].widerspruch`); gerechnet wird mit der ersten. Der Filter «Nur Widersprüche» schliesst diesen Fall ein.
+
 ## Warum neben der Komplettanalyse
 
 Die Komplettanalyse extrahiert `figures.geburtstag` und die datierten Ereignisse als

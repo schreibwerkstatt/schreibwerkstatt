@@ -3,26 +3,64 @@
 /* SSoT der Subtyp-Hues: `--card-accent-event-<subtyp>` in
    public/css/tokens/colors.css (Light + Dark). Hier nur das Mapping
    per Variant-Klasse auf die gemeinsame `--gz-subtyp-color`-Prop, die
-   sowohl der Marker (.gz-marker) als auch das Badge konsumiert. */
-.gz-item--subtyp-geburt           { --gz-subtyp-color: var(--card-accent-event-geburt); }
-.gz-item--subtyp-tod              { --gz-subtyp-color: var(--card-accent-event-tod); }
-.gz-item--subtyp-hochzeit         { --gz-subtyp-color: var(--card-accent-event-hochzeit); }
-.gz-item--subtyp-liebe            { --gz-subtyp-color: var(--card-accent-event-liebe); }
-.gz-item--subtyp-trennung         { --gz-subtyp-color: var(--card-accent-event-trennung); }
-.gz-item--subtyp-krankheit        { --gz-subtyp-color: var(--card-accent-event-krankheit); }
-.gz-item--subtyp-reise            { --gz-subtyp-color: var(--card-accent-event-reise); }
-.gz-item--subtyp-umzug            { --gz-subtyp-color: var(--card-accent-event-umzug); }
-.gz-item--subtyp-konflikt         { --gz-subtyp-color: var(--card-accent-event-konflikt); }
-.gz-item--subtyp-wendepunkt       { --gz-subtyp-color: var(--card-accent-event-wendepunkt); }
-.gz-item--subtyp-entdeckung       { --gz-subtyp-color: var(--card-accent-event-entdeckung); }
-.gz-item--subtyp-verlust          { --gz-subtyp-color: var(--card-accent-event-verlust); }
-.gz-item--subtyp-sieg             { --gz-subtyp-color: var(--card-accent-event-sieg); }
-.gz-item--subtyp-extern_politisch { --gz-subtyp-color: var(--card-accent-event-extern_politisch); }
-.gz-item--subtyp-extern_wirtschaftlich { --gz-subtyp-color: var(--card-accent-event-extern_wirtschaftlich); }
-.gz-item--subtyp-extern_natur     { --gz-subtyp-color: var(--card-accent-event-extern_natur); }
-.gz-item--subtyp-extern_kulturell { --gz-subtyp-color: var(--card-accent-event-extern_kulturell); }
-.gz-item--subtyp-extern_krieg     { --gz-subtyp-color: var(--card-accent-event-extern_krieg); }
-.gz-item--subtyp-sonstiges        { --gz-subtyp-color: var(--card-accent-event-sonstiges); }
+   sowohl der Marker (.gz-marker) als auch das Badge konsumiert. Die
+   Badge-Variante setzt die Farbe selbst, damit das Badge ausserhalb eines
+   `.gz-item` (Referenz-Slot, Lebenslauf) dieselbe Farbe trägt wie im
+   Zeitstrahl — ein Subtyp, eine Farbe, überall. */
+.gz-item--subtyp-geburt,
+.gz-subtyp-badge--geburt { --gz-subtyp-color: var(--card-accent-event-geburt); }
+.gz-item--subtyp-tod,
+.gz-subtyp-badge--tod { --gz-subtyp-color: var(--card-accent-event-tod); }
+.gz-item--subtyp-hochzeit,
+.gz-subtyp-badge--hochzeit { --gz-subtyp-color: var(--card-accent-event-hochzeit); }
+.gz-item--subtyp-liebe,
+.gz-subtyp-badge--liebe { --gz-subtyp-color: var(--card-accent-event-liebe); }
+.gz-item--subtyp-trennung,
+.gz-subtyp-badge--trennung { --gz-subtyp-color: var(--card-accent-event-trennung); }
+.gz-item--subtyp-krankheit,
+.gz-subtyp-badge--krankheit { --gz-subtyp-color: var(--card-accent-event-krankheit); }
+.gz-item--subtyp-reise,
+.gz-subtyp-badge--reise { --gz-subtyp-color: var(--card-accent-event-reise); }
+.gz-item--subtyp-umzug,
+.gz-subtyp-badge--umzug { --gz-subtyp-color: var(--card-accent-event-umzug); }
+.gz-item--subtyp-konflikt,
+.gz-subtyp-badge--konflikt { --gz-subtyp-color: var(--card-accent-event-konflikt); }
+.gz-item--subtyp-wendepunkt,
+.gz-subtyp-badge--wendepunkt { --gz-subtyp-color: var(--card-accent-event-wendepunkt); }
+.gz-item--subtyp-entdeckung,
+.gz-subtyp-badge--entdeckung { --gz-subtyp-color: var(--card-accent-event-entdeckung); }
+.gz-item--subtyp-verlust,
+.gz-subtyp-badge--verlust { --gz-subtyp-color: var(--card-accent-event-verlust); }
+.gz-item--subtyp-sieg,
+.gz-subtyp-badge--sieg { --gz-subtyp-color: var(--card-accent-event-sieg); }
+.gz-item--subtyp-ausbildung,
+.gz-subtyp-badge--ausbildung { --gz-subtyp-color: var(--card-accent-event-ausbildung); }
+.gz-item--subtyp-abschluss,
+.gz-subtyp-badge--abschluss { --gz-subtyp-color: var(--card-accent-event-abschluss); }
+.gz-item--subtyp-stellenantritt,
+.gz-subtyp-badge--stellenantritt { --gz-subtyp-color: var(--card-accent-event-stellenantritt); }
+.gz-item--subtyp-berufswechsel,
+.gz-subtyp-badge--berufswechsel { --gz-subtyp-color: var(--card-accent-event-berufswechsel); }
+.gz-item--subtyp-jobverlust,
+.gz-subtyp-badge--jobverlust { --gz-subtyp-color: var(--card-accent-event-jobverlust); }
+.gz-item--subtyp-pensionierung,
+.gz-subtyp-badge--pensionierung { --gz-subtyp-color: var(--card-accent-event-pensionierung); }
+.gz-item--subtyp-extern_politisch,
+.gz-subtyp-badge--extern_politisch { --gz-subtyp-color: var(--card-accent-event-extern_politisch); }
+.gz-item--subtyp-extern_wirtschaftlich,
+.gz-subtyp-badge--extern_wirtschaftlich { --gz-subtyp-color: var(--card-accent-event-extern_wirtschaftlich); }
+.gz-item--subtyp-extern_natur,
+.gz-subtyp-badge--extern_natur { --gz-subtyp-color: var(--card-accent-event-extern_natur); }
+.gz-item--subtyp-extern_kulturell,
+.gz-subtyp-badge--extern_kulturell { --gz-subtyp-color: var(--card-accent-event-extern_kulturell); }
+.gz-item--subtyp-extern_krieg,
+.gz-subtyp-badge--extern_krieg { --gz-subtyp-color: var(--card-accent-event-extern_krieg); }
+.gz-item--subtyp-sonstiges,
+.gz-subtyp-badge--sonstiges { --gz-subtyp-color: var(--card-accent-event-sonstiges); }
+/* Stationen von Berufsweg und Hobbys im Lebenslauf (figuren-lebenslauf.html):
+   kein Subtyp, aber dasselbe Badge — Berufe in der Farbe des Stellenantritts. */
+.figur-cv-station--berufe { --gz-subtyp-color: var(--card-accent-event-stellenantritt); }
+.figur-cv-station--hobbys { --gz-subtyp-color: var(--card-accent-event-entdeckung); }
 
 /* Marker übernimmt Subtyp-Farbe (bestehende externe-Marker-Variante bleibt
    für gz-marker--extern erhalten und schlägt die Subtyp-Farbe). */

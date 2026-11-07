@@ -1,0 +1,93 @@
+<!-- Formular einer Berufsstation bzw. eines Hobbys (Anlegen und Ändern).
+     Eingebunden zweimal in figuren-detail-stationen.html — an der Zeile (Ändern)
+     und unter der Liste (Anlegen). Scope: `figurenCard` + `f` + `kind`.
+     Prüfung wie der Server über book/figure-stationen.js#normalizeStation. -->
+<div class="figur-edit figur-station-form"
+     @keydown="$editKeys($event, { save: () => saveFigurStationEdit(f), cancel: () => cancelFigurStationEdit() })">
+  <div class="card-form-grid">
+    <template x-if="kind === 'berufe'">
+      <div x-id="['fld']" class="card-form-row">
+        <label :for="$id('fld')" class="card-form-label" x-text="$app.t('figuren.stationen.feld.taetigkeit')"></label>
+        <div class="card-form-field">
+          <input :id="$id('fld')" type="text" data-spellcheck="spelling" x-model="figurStationDraft.taetigkeit"
+                 :placeholder="$app.t('figuren.stationen.feld.taetigkeitPlaceholder')">
+        </div>
+      </div>
+    </template>
+    <template x-if="kind === 'hobbys'">
+      <div x-id="['fld']" class="card-form-row">
+        <label :for="$id('fld')" class="card-form-label" x-text="$app.t('figuren.stationen.feld.hobby')"></label>
+        <div class="card-form-field">
+          <input :id="$id('fld')" type="text" data-spellcheck="spelling" x-model="figurStationDraft.hobby"
+                 :placeholder="$app.t('figuren.stationen.feld.hobbyPlaceholder')">
+        </div>
+      </div>
+    </template>
+    <template x-if="kind === 'berufe'">
+      <div x-id="['fld']" class="card-form-row">
+        <label :id="$id('fld')" class="card-form-label" x-text="$app.t('figuren.stationen.feld.art')"></label>
+        <div class="card-form-field">
+          <div :aria-labelledby="$id('fld')" x-data="combobox({ placeholder: $app.t('figuren.stationen.feld.art'), compact: false })"
+               x-modelable="value" x-model="figurStationDraft.art"
+               x-effect="options = figurStationArtOptionen()"></div>
+        </div>
+      </div>
+    </template>
+    <template x-if="kind === 'berufe'">
+      <div x-id="['fld']" class="card-form-row">
+        <label :for="$id('fld')" class="card-form-label" x-text="$app.t('figuren.stationen.feld.arbeitgeber')"></label>
+        <div class="card-form-field">
+          <input :id="$id('fld')" type="text" data-spellcheck="spelling" x-model="figurStationDraft.arbeitgeber">
+        </div>
+      </div>
+    </template>
+    <div x-id="['fld']" class="card-form-row">
+      <label :for="$id('fld')" class="card-form-label" x-text="$app.t('figuren.stationen.feld.ort')"></label>
+      <div class="card-form-field">
+        <input :id="$id('fld')" type="text" data-spellcheck="spelling" x-model="figurStationDraft.ort">
+      </div>
+    </div>
+    <div x-id="['fld']" class="card-form-row">
+      <span :id="$id('fld')" class="card-form-label" x-text="$app.t('figuren.stationen.feld.von')"></span>
+      <div class="card-form-field figur-station-zeit" role="group" :aria-labelledby="$id('fld')">
+        <input type="text" class="form-num" :aria-label="$app.t('figuren.stationen.feld.jahr')"
+               :placeholder="$app.t('figuren.stationen.feld.jahr')"
+               x-data="numInput({ integer: true, min: 1000, max: 2999, grouping: false })"
+               x-modelable="value" x-model="figurStationDraft.von_jahr">
+        <input type="text" class="form-num" :aria-label="$app.t('figuren.stationen.feld.monat')"
+               :placeholder="$app.t('figuren.stationen.feld.monat')"
+               x-data="numInput({ integer: true, min: 1, max: 12, grouping: false })"
+               x-modelable="value" x-model="figurStationDraft.von_monat">
+      </div>
+    </div>
+    <div x-id="['fld']" class="card-form-row">
+      <span :id="$id('fld')" class="card-form-label" x-text="$app.t('figuren.stationen.feld.bis')"></span>
+      <div class="card-form-field">
+        <div class="figur-station-zeit" role="group" :aria-labelledby="$id('fld')">
+          <input type="text" class="form-num" :aria-label="$app.t('figuren.stationen.feld.jahr')"
+                 :placeholder="$app.t('figuren.stationen.feld.jahr')"
+                 x-data="numInput({ integer: true, min: 1000, max: 2999, grouping: false })"
+                 x-modelable="value" x-model="figurStationDraft.bis_jahr">
+          <input type="text" class="form-num" :aria-label="$app.t('figuren.stationen.feld.monat')"
+                 :placeholder="$app.t('figuren.stationen.feld.monat')"
+                 x-data="numInput({ integer: true, min: 1, max: 12, grouping: false })"
+                 x-modelable="value" x-model="figurStationDraft.bis_monat">
+        </div>
+        <p class="card-form-field-note" x-text="$app.t('figuren.stationen.feld.bisHint')"></p>
+      </div>
+    </div>
+    <div x-id="['fld']" class="card-form-row">
+      <label :for="$id('fld')" class="card-form-label" x-text="$app.t('figuren.stationen.feld.notiz')"></label>
+      <div class="card-form-field">
+        <textarea :id="$id('fld')" rows="2" data-spellcheck="spelling" x-model="figurStationDraft.notiz"></textarea>
+      </div>
+    </div>
+  </div>
+  <div class="figur-edit-actions">
+    <button type="button" class="primary" :disabled="figurStationBusy" @click="saveFigurStationEdit(f)">
+      <span x-show="figurStationBusy" class="spinner"></span>
+      <span x-text="$app.t('common.save')"></span>
+    </button>
+    <button type="button" :disabled="figurStationBusy" @click="cancelFigurStationEdit()" x-text="$app.t('common.cancel')"></button>
+  </div>
+</div>

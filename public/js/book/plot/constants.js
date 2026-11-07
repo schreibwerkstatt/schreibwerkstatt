@@ -24,6 +24,17 @@ export const _intensityBottomPct = (i) => 10 + ((i - 1) / 4) * 80;
 // (plot.relation.type.<typ>) — hier nur die stabilen Schlüssel + Reihenfolge.
 export const BEAT_REL_TYPES = ['bereitet-vor', 'zahlt-ein', 'fuehrt-zu', 'motiviert', 'blockiert', 'spiegelt'];
 
+// Setup/Payoff sind dieselbe Aussage aus zwei Richtungen: «A bereitet B vor» ist
+// «B zahlt auf A ein». Wer eine Kante auf Dubletten prüft (Plot-Chat-Vorschläge,
+// Übernahme), prüft auch die Gegenrichtung.
+const BEAT_REL_INVERSE = { 'bereitet-vor': 'zahlt-ein', 'zahlt-ein': 'bereitet-vor' };
+
+/** Sagen die Kanten a und b ({ from, to, typ }) dasselbe? */
+export function sameBeatRelation(a, b) {
+  if (a.typ === b.typ && a.from === b.from && a.to === b.to) return true;
+  return BEAT_REL_INVERSE[a.typ] === b.typ && a.from === b.to && a.to === b.from;
+}
+
 // Beat-Titel normalisieren für den Abgleich Befund ↔ Beat (gleiche Vertragsbasis
 // wie der Consistency-Job, der den Beat nur per Titel-String referenziert). EINE
 // Quelle für derived.js (Index/Match) und ai.js (Sprung) — divergierte sonst still.

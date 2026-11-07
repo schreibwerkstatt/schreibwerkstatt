@@ -19,14 +19,12 @@ const { timeKeyOf } = require('../lib/time-key');
 const { locationParentMap } = require('../db/locations-read');
 const { computeZeitVorschlaege } = require('../lib/plot-zeit-vorschlag');
 const { parseActAgeRange } = require('../lib/plot-act-age');
-const { listDatedEventsForPages } = require('../db/zeitstrahl');
-const { getBookSettings } = require('../db/book-settings');
 const { beatsInReadingOrder } = require('../lib/plot-reading-order');
 const logger = require('../logger');
 const {
   _loadOwned, _requireBook, _validChapterId, _parseIntensitaet, _parseFlag,
   _anchorOpts, _withAnchor, _resolveThreadFigure, _resolveThreadDraftFigure,
-  _figureTimeMap, _actAgeMap, _threadFigMap,
+  _figureTimeMap, _actAgeMap, _threadFigMap, _zeitVorschlagInput,
 } = require('./plot-helpers');
 
 const router = express.Router();
@@ -139,25 +137,12 @@ router.get('/time-check', (req, res) => {
 // Für Beats IM BUCH ohne Zeitangabe: die datierten Zeitstrahl-Ereignisse ihrer
 // besten Fundstelle (derselbe Lese-Filter wie das Drift-Badge). Pure Rechnung in
 // lib/plot-zeit-vorschlag.js, kein Job, kein callAI, kein Schreibzugriff — der
-// Autor übernimmt einzeln oder über die Durchsicht (PATCH /beats/:id).
+// Autor übernimmt einzeln oder über die Durchsicht (PATCH /beats/:id). Eingabe
+// (Fundstellen, Konkurrentinnen, Akt-Fenster): plot-helpers.js#_zeitVorschlagInput.
 router.get('/zeit-vorschlaege', (req, res) => {
   const ctx = _requireBook(req, res);
   if (!ctx) return;
-  const { userEmail, bookId } = ctx;
-  const beats = plotDb.listBeats(bookId, userEmail)
-    .filter(b => b.status === 'im_buch' && !b.verworfen && !(b.zeit || '').trim());
-  const occMap = plotDb.beatOccurrenceMap(bookId, userEmail, _anchorOpts());
-  const topPage = new Map();
-  for (const b of beats) {
-    const top = (occMap.get(b.id)?.top || []).find(o => o.page_id);
-    if (top) topPage.set(b.id, { page_id: top.page_id, page_name: top.page_name });
-  }
-  const pageIds = [...new Set([...topPage.values()].map(t => t.page_id))];
-  res.json({ vorschlaege: computeZeitVorschlaege({
-    beats, topPage,
-    eventsByPage: listDatedEventsForPages(bookId, userEmail, pageIds),
-    lang: getBookSettings(bookId, userEmail)?.language || 'de',
-  }) });
+  res.json({ vorschlaege: computeZeitVorschlaege(_zeitVorschlagInput(ctx.bookId, ctx.userEmail)) });
 });
 
 // Map page_id → Anzahl nicht-verworfener Beats im Kapitel der Seite. Speist den

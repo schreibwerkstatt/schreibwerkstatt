@@ -46,6 +46,8 @@
   display: flex;
   flex-direction: column;
   gap: var(--space-sm);
+  /* Deckend: sonst kein Compositor-Scroll bei Pixeldichte 1 (siehe entities/recherche/dialog.css). */
+  background: var(--color-card-bg);
 }
 .offline-rescue-item {
   border: 1px solid var(--color-border);

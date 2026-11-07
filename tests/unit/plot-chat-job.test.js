@@ -71,7 +71,8 @@ test('Vorschlag landet in context_info.proposals, Board unverändert', async () 
   assert.match(sysText, /=== FRAGE ===/);
   assert.match(sysText, new RegExp(`AKT \\[#${act.id}\\] «Akt Eins»`));
   assert.match(sysText, /«Erster Beat»/);
-  assert.ok(calls[0].tools.includes('get_plot_board'));
+  // Board steht ungekürzt im Vorspann → get_plot_board wäre doppelt bezahlt.
+  assert.ok(!calls[0].tools.includes('get_plot_board'), 'ungekürztes Board: kein get_plot_board');
   assert.ok(calls[0].tools.includes('propose_beat_move'));
   assert.ok(!calls[0].tools.includes('generate_image'), 'kein Bild-Werkzeug im Plot-Chat');
 

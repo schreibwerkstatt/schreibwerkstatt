@@ -317,7 +317,8 @@ export function registerPlotCard() {
       });
 
       // Native Fullscreen-API: Status spiegeln (Toggle-Button + Esc-Exit).
-      // $root = die Karten-Wurzel (.card--plot), unabhängig vom Klick-Kontext.
+      // $root = die Scope-Wurzel (Split .plot-split: Plot-Karte + Chat-Karte),
+      // unabhängig vom Klick-Kontext.
       attachFullscreenSync({
         resolveWrap: () => this.$root,
         signal: this._lifecycle.signal,

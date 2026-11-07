@@ -357,6 +357,14 @@ Invarianten der Leseansicht-Variante:
 - `/` in leerem Block → Slash-Menü öffnen.
 - Slash-Menü offen: `↑/↓` Navigation, `Enter` Apply, `Esc` Schliessen, druckbare Zeichen filtern die Liste (`slashQuery`), Backspace kürzt den Filter bzw. schliesst bei leerem Filter.
 
+### Leiste per Tastatur: Abschnitts-Chat + Ideen ([editor/aside-hotkeys.js](../public/js/editor/aside-hotkeys.js))
+Notebook-only, in Lese- **und** Bearbeiten-Ansicht; nicht im Focus-Editor (Leiste ausgeblendet), nicht im Bucheditor. Gebunden am `@keydown.window` der Shell (`handleAsideHotkey`), nicht im Edit-Dispatcher oben.
+- `Cmd/Ctrl+Shift+1` → Abschnitts-Chat, `Cmd/Ctrl+Shift+2` → Ideen zum Abschnitt. Ausgewertet wird `event.code` (`Digit1`/`Digit2`) — Shift+Ziffer ergibt je nach Layout `!` oder `+`.
+- Ein Druck: Leiste zu → öffnen; offen, Fokus im Text → ins Eingabefeld; Fokus schon im Eingabefeld → schliessen und zurück in den Text. Dieselben Bedingungen wie die Knöpfe (`canOpenPageAside`: Chat nur mit `canReview()` und nicht leerem Abschnitt).
+- **Markierung → Zitat:** steht beim Druck eine Auswahl im Abschnittstext, landet sie als Zitat (`aside.quote`, Whitespace zu einer Zeile) im Eingabefeld — hinter einem angefangenen Entwurf, ins laufende Gespräch, nie gesendet/gespeichert. Übergabe über `CARD_REQUEST.PAGE_CHAT_QUOTE` / `IDEEN_QUOTE`, weil die Karte beim Druck oft noch nicht gemountet ist.
+- **`Esc` im Eingabefeld** (`returnFromAside`) setzt Caret bzw. Markierung an die gemerkte Stelle zurück, die Leiste bleibt offen. Gemerkt wird beim Kürzel; sonst gilt die letzte Auswahl im Text (`selectionchange`), damit auch Maus- und Palettenweg zurückfinden.
+- Palette: `action.pageChat` / `action.pageIdeen` (`requiresPageAside`), schliessen nie.
+
 ## Steuerzeichen-Overlay (¶/↵)
 
 Toggle `pageEditorShowMarks` (Seiten-Toolbar, Pilcrow-Icon; persistiert in `notebook.editorPrefs`, Default **aus**) blendet Soft-Break-Pfeile (↵) und Absatzmarken (¶) ein. Nur der Notebook-Editor hat das Overlay — der Focus-Editor bleibt unberührt.

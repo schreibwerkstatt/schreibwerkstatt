@@ -1,7 +1,8 @@
 // Facade des Figuren-Datenzugriffs. Die Umsetzung liegt in ./figures/:
 // refs (fig_id↔id-Übersetzung, Namens-/Beleg-Auflösung), save (Match-Planung +
 // die drei Reconcile-Modi), patch (figur-granulare Katalog-Pflege), aliases
-// (dauerhafte Namens-Aliasse aus dem Merge), active (SSoT «aktive Figur» der
+// (dauerhafte Namens-Aliasse aus dem Merge), relation-edits (Löschen/Umhängen
+// einzelner Beziehungen samt Löschmarke), active (SSoT «aktive Figur» der
 // KI-Kontext-Loader), events (Lebensereignisse, Soziogramm, nachgetragene
 // Beziehungen) und queries (Lesepfade + der
 // abgeleitete Auftritts-Index). Externe Konsumenten importieren nur diese Datei.
@@ -12,6 +13,7 @@ const { activeFigureSql, countActiveFigures } = require('./figures/active');
 const { listFigureAliasesByFigure, addFigureAliases } = require('./figures/aliases');
 const { PATCHABLE_FIELDS, validateFigurePatch, patchFigure, deleteStaleFigures } = require('./figures/patch');
 const { updateFigurenEvents, updateFigurenSoziogramm, addFigurenBeziehungen } = require('./figures/events');
+const { deleteFigureRelation, retargetFigureRelation } = require('./figures/relation-edits');
 const {
   listFigurenWithDetails, getChapterFigures, rebuildFigureAppearances,
   getChapterFigureRelations, getFigureWithDetails,
@@ -34,6 +36,8 @@ module.exports = {
   updateFigurenEvents,
   updateFigurenSoziogramm,
   addFigurenBeziehungen,
+  deleteFigureRelation,
+  retargetFigureRelation,
   listFigurenWithDetails,
   getChapterFigures,
   getChapterFigureRelations,

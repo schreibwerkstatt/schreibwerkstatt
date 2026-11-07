@@ -13,10 +13,12 @@ export function registerExportCard() {
     exportChapterId: null,
     exportPageId: null,
     // Migrations-Export: optionale Extra-Bloecke ins .swbook-Bundle aufnehmen.
-    migrateAnalysis: false,
-    migrateLektorat: false,
-    migrateChats: false,
-    migrateResearch: false,
+    // Standard ist «alles»: ein Umzug soll nichts verlieren; abwählen ist die Ausnahme.
+    migrateAnalysis: true,
+    migrateLektorat: true,
+    migrateChats: true,
+    migrateResearch: true,
+    migrateWerk: true,
     _lifecycle: null,
 
     init() {
@@ -27,10 +29,11 @@ export function registerExportCard() {
           exportScope: 'book',
           exportChapterId: null,
           exportPageId: null,
-          migrateAnalysis: false,
-          migrateLektorat: false,
-          migrateChats: false,
-          migrateResearch: false,
+          migrateAnalysis: true,
+          migrateLektorat: true,
+          migrateChats: true,
+          migrateResearch: true,
+          migrateWerk: true,
         },
         extraListeners: [
           { type: 'export:preset', handler: (e) => this._applyExportPreset(e.detail) },

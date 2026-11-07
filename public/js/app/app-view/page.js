@@ -8,12 +8,16 @@ import { lsSet, lsRemove } from '../../safe-storage.js';
 const PREFETCH_WAIT_MS = 300;
 
 export const pageMethods = {
-  async selectPage(p) {
+  // `skipCardScroll`: der Aufrufer springt gleich danach selbst an eine
+  // Textstelle (gotoPageById mit `snippet`). Ein Karten-Scroll daneben liefe als
+  // zweite Smooth-Animation gegen den Sprung — gleiche Regel wie bei
+  // toggleXxxCard({ skipCardScroll }).
+  async selectPage(p, { skipCardScroll = false } = {}) {
     if (this.currentPage && this.currentPage.id === p.id) {
       // Re-Klick auf bereits offene Seite: SW-Cache umgehen und frischen
       // Server-Stand laden. Aktive Edits nicht überschreiben.
       if (this.editMode || this.editDirty) return;
-      this._scrollToEditorCard();
+      if (!skipCardScroll) this._scrollToEditorCard();
       await this._refetchCurrentPage();
       return;
     }
@@ -42,6 +46,12 @@ export const pageMethods = {
     const swap = !!(this.showEditorCard && this.currentPage && this.renderedPageHtml
       && !this.editMode && !this.focusActive);
     const deferClose = !swap && !this.editMode && !this.focusActive;
+    // Die Ideen-Leiste geht mit von Abschnitt zu Abschnitt (der Karten-Watch auf
+    // currentPage laedt die Ideen des neuen Abschnitts). Wer Abschnitt fuer
+    // Abschnitt Pendenzen notiert, oeffnete sie sonst bei jedem Wechsel neu.
+    // Chat und Referenz schliessen weiter: beide tragen Zustand der verlassenen
+    // Seite (Chat-Sitzung, Lektorat-Snapshot).
+    const keepIdeen = this.asideSlot === 'ideen' && this.ideenScope === 'page';
     const seq = this._selectPageSeq = (this._selectPageSeq || 0) + 1;
     if (!deferClose) {
       // Alle Buchkarten schliessen + Editor-State resetten – nur eine Ebene
@@ -80,13 +90,14 @@ export const pageMethods = {
     const flip = () => {
       this._closeOtherMainCards(null, { resetPage: deferClose });
       this.currentPage = p;
+      if (keepIdeen) this.asideSlot = 'ideen';
       this.showEditorCard = true;
       this.analysisOut = '';
       loaded = this._loadCurrentPageContent(p, { prefetch });
     };
     if (deferClose) await _withCardTransition(this, flip);
     else flip();
-    this.$nextTick(() => this._scrollToEditorCard());
+    if (!skipCardScroll) this.$nextTick(() => this._scrollToEditorCard());
 
     if (typeof this._trackPageUsage === 'function' && this.$store.nav.selectedBookId) {
       this._trackPageUsage(p.id, this.$store.nav.selectedBookId);

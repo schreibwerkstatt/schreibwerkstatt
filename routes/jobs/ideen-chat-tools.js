@@ -17,6 +17,9 @@
 //   idee_update { idee_id, fields: { content?, status?, page_id?|chapter_id? }, before, beleg? }
 //               — `anker_loesen` setzt page_id UND chapter_id auf null (zurück ans Buch)
 //   link_create { idee_id|idee_ref, target_kind, target_id }
+//   idee_merge  { idee_id (bleibt), merge_ids (gehen auf), fields: { content? }, before: { content } }
+//               — propose_idee mit merge_ids; Übernehmen: POST /ideen/:id/merge
+//                 (Links wandern mit, die Quellen fallen)
 // Gemeinsam: { type, ref, begruendung, labels }. `ref` ist 1-basiert über alle
 // Vorschläge DIESER Antwort; `idee_ref` zeigt auf ein idee_create derselben Antwort.
 // `beleg` = { text, page_id } — Textstelle, die eine Stufen-Änderung trägt
@@ -36,13 +39,14 @@ const { normalizeForQuoteMatch, quoteFoundIn } = require('../../lib/quote-verify
 const { str: _str, posInt: _int } = require('../../lib/proposal-input');
 const { ideeProposalKey } = require('../../lib/chat-idee-proposals');
 const { canonicalIdeeAnchor } = require('../../lib/idee-anchor');
-const { err: _err, pushProposal: _push, oneLine } = require('./proposal-chat-shared');
+const { err: _err, pushProposal: _push, oneLine, refProposal } = require('./proposal-chat-shared');
 
 const MAX_PROPOSALS = 40;
 const MAX_CONTENT = 4000; // = routes/ideen.js MAX_LEN
 const MAX_BELEG = 500;
 
 const PROPOSE_TOOLS = new Set(['propose_idee', 'propose_idee_link']);
+const MAX_MERGE = 10;
 
 // Ideen-Stand pro Antwort einmal laden; Vorschläge ändern ihn nicht.
 function _state(ctx) {
@@ -97,7 +101,7 @@ async function belegInPage(pageId, beleg, bookId = null) {
     throw e;
   }
   if (!page || (bookId != null && page.book_id != null && page.book_id !== bookId)) return false;
-  return quoteFoundIn(beleg, pageQuoteHaystack(page.html));
+  return quoteFoundIn(beleg, pageQuoteHaystack(page.html), { strict: true });
 }
 
 function _proposeCreate(input, ctx, state) {
@@ -192,8 +196,8 @@ async function _proposeUpdate(input, ctx, state, ideeId) {
   if (belegText) {
     if (!bp) return _err('Zum beleg gehört beleg_page_id — der Abschnitt, in dem das Zitat steht.');
     if (!state.pageById.has(bp)) return _err(`beleg_page_id #${bp} gehört nicht zu diesem Buch.`);
-    if (!quoteFoundIn(belegText, await _pageHaystack(ctx, bp))) {
-      return _err(`Das Zitat steht so nicht in Abschnitt #${bp}. Lies den Abschnitt und zitiere wörtlich — oder lass den Vorschlag weg.`);
+    if (!quoteFoundIn(belegText, await _pageHaystack(ctx, bp), { strict: true })) {
+      return _err(`Das Zitat steht so nicht in Abschnitt #${bp}. Lies den Abschnitt und zitiere wörtlich eine zusammenhängende Stelle (je Teilstück mind. drei Wörter, höchstens zwei Auslassungen «…») — oder lass den Vorschlag weg.`);
     }
     beleg = { text: belegText, page_id: bp };
     labels.beleg_page = state.pageById.get(bp)?.name || null;
@@ -208,6 +212,13 @@ async function _proposeUpdate(input, ctx, state, ideeId) {
 async function _proposeIdee(input, ctx) {
   const state = _state(ctx);
   const ideeId = _int(input.idee_id);
+  if (Array.isArray(input.merge_ids) && input.merge_ids.length) {
+    if (!ideeId) return _err('merge_ids nur zusammen mit idee_id — der Idee, die bleibt.');
+    if (input.status != null || input.page_id || input.chapter_id || input.anker_loesen === true || input.beleg) {
+      return _err('Beim Zusammenführen nur content angeben — Stufe und Ort der bleibenden Idee ändert ein eigener Vorschlag.');
+    }
+    return _proposeMerge(input, ctx);
+  }
   return ideeId ? _proposeUpdate(input, ctx, state, ideeId) : _proposeCreate(input, ctx, state);
 }
 
@@ -219,10 +230,11 @@ function _proposeLink(input, ctx) {
   const target = targetId ? (state.targets?.[kind] || []).find(t => t.id === targetId) : null;
   if (!target) return _err(`${kind}#${input.target_id} ist kein verknüpfbares Ziel in diesem Buch. Nutze eine id aus der Zielliste.`);
 
-  const ref = _int(input.idee_ref);
-  if (ref) {
-    const p = ctx.proposals[ref - 1];
-    if (!p || p.type !== 'idee_create') return _err(`idee_ref ${ref} ist keine in dieser Antwort vorgeschlagene neue Idee.`);
+  const n = _int(input.idee_ref);
+  if (n) {
+    const r = refProposal(ctx, n, 'idee_create', 'idee_ref');
+    if (r.error) return r;
+    const { ref, p } = r;
     return _push(ctx, {
       type: 'link_create', idee_ref: ref, target_kind: kind, target_id: targetId,
       labels: { idee: _preview(p.fields.content), target: target.label },
@@ -237,6 +249,42 @@ function _proposeLink(input, ctx) {
   return _push(ctx, {
     type: 'link_create', idee_id: ideeId, target_kind: kind, target_id: targetId,
     labels: { idee: _preview(idee.content), target: target.label },
+  }, input);
+}
+
+// Dubletten zusammenführen: idee_id bleibt, merge_ids gehen in ihr auf.
+function _proposeMerge(input, ctx) {
+  const state = _state(ctx);
+  const keepId = _int(input.idee_id);
+  const keep = keepId ? state.ideeById.get(keepId) : null;
+  if (!keep) return _err(`Idee #${input.idee_id} gibt es nicht. idee_id ist die Idee, die bleibt — eine [#id] aus der Ideenliste.`);
+  const raw = Array.isArray(input.merge_ids) ? input.merge_ids : [];
+  const ids = [...new Set(raw.map(_int).filter(Boolean))].filter(id => id !== keepId);
+  if (!ids.length) return _err('merge_ids braucht mindestens eine andere Idee, die in idee_id aufgeht.');
+  if (ids.length > MAX_MERGE) return _err(`Höchstens ${MAX_MERGE} Ideen pro Zusammenführung.`);
+  const missing = ids.filter(id => !state.ideeById.has(id));
+  if (missing.length) return _err(`Unbekannte Ideen: ${missing.map(i => '#' + i).join(', ')}. Nutze [#id] aus der Ideenliste.`);
+  const merged = ids.map(id => state.ideeById.get(id));
+  if (!isOpenIdeeStatus(keep.status) && merged.some(i => isOpenIdeeStatus(i.status))) {
+    return _err(`Idee #${keepId} ist ${keep.status} — eine offene Pendenz geht nicht in einer abgeschlossenen auf. Behalte die offene.`);
+  }
+  const taken = new Set();
+  for (const p of ctx.proposals) if (p.type === 'idee_merge') [p.idee_id, ...p.merge_ids].forEach(i => taken.add(i));
+  const clash = [keepId, ...ids].filter(i => taken.has(i));
+  if (clash.length) return _err(`${clash.map(i => '#' + i).join(', ')} steckt schon in einer Zusammenführung dieser Antwort — fasse alle Dubletten eines Gedankens in EINEM propose_idee-Aufruf zusammen.`);
+  const fields = {};
+  const c = _str(input.content, MAX_CONTENT);
+  if (c && c !== keep.content) fields.content = c;
+  return _push(ctx, {
+    type: 'idee_merge', idee_id: keepId, merge_ids: ids, fields,
+    // Text der aufgehenden Ideen: sie werden gelöscht — geändert seit dem
+    // Vorschlag, sperrt das Frontend die Übernahme (ideenProposalStatus).
+    before: { content: keep.content, sources: Object.fromEntries(merged.map(i => [i.id, i.content])) },
+    labels: {
+      idee: _preview(keep.content),
+      anchor: _anchorLabel(state, keep),
+      merged: merged.map(i => ({ id: i.id, text: _preview(i.content), anchor: _anchorLabel(state, i), status: i.status })),
+    },
   }, input);
 }
 

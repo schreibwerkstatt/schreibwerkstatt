@@ -2,7 +2,9 @@
      Buch (GET /plot/zeit-vorschlaege, Logik lib/plot-zeit-vorschlag.js).
      Ausgelagert aus plot.html (File-Limit), via Partial-Kaskade in den
      plotCard-Scope injiziert. Jeder Vorschlag mit Belegen und Abschnitt;
-     vorausgewählt nur die eindeutigen, breite tragen den Hinweis «breit».
+     vorausgewählt nur die eindeutigen; was das Häkchen kostet, sagt je ein
+     Hinweis: «breit», «andere Szene» (gleich starke, anders datierte
+     Fundstelle), «ausserhalb Akt».
      Die Auswahl läuft als EIN Undo-Schritt (zeit.js#applyZeitReviewSelection). -->
 <div class="plot-zeit-review" x-show="zeitReviewList().length > 0" x-cloak x-data="collapsible(false)">
   <button type="button" class="collapsible-toggle" x-bind="trigger">
@@ -18,8 +20,12 @@
             <label class="plot-zeit-review-check">
               <input type="checkbox" x-model="zeitVorschlagSel[v.beat_id]">
               <span class="plot-zeit-review-zeit" x-text="v.zeit"></span>
-              <span class="badge badge-neutral" x-show="!v.eindeutig" :data-tip="$app.t('plot.zeitVorschlag.breitTip')"
+              <span class="badge badge-neutral" x-show="v.spread > 1" :data-tip="$app.t('plot.zeitVorschlag.breitTip')"
                     x-text="$app.t('plot.zeitVorschlag.breit')"></span>
+              <span class="badge badge-neutral" x-show="v.konkurrenz?.length" :data-tip="zeitVorschlagKonkurrenzTip(v)"
+                    x-text="$app.t('plot.zeitVorschlag.konkurrenz')"></span>
+              <span class="badge badge-neutral" x-show="v.akt" :data-tip="zeitVorschlagAktTip(v)"
+                    x-text="$app.t('plot.zeitVorschlag.akt')"></span>
             </label>
             <div class="plot-zeit-review-main">
               <button type="button" class="entity-ref" x-entity-ref="{ type: 'beat', id: v.beat_id, label: zeitReviewBeatTitel(v) }"></button>

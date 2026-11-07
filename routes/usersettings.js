@@ -1,6 +1,7 @@
 'use strict';
 const express = require('express');
 const appUsers = require('../db/app-users');
+const { setAutoCheck: setIdeenAutoCheck } = require('../db/ideen-check');
 const deviceTokens = require('../db/device-tokens');
 const { TOKEN_KINDS, DEFAULT_KIND, scopesForKind } = require('../lib/device-scopes');
 const { db } = require('../db/schema');
@@ -76,6 +77,7 @@ function toResponse(u) {
     can_invite_users:  u.can_invite_users ? 1 : 0,
     display_name:      u.display_name || null,
     model_override:    u.model_override || null,
+    ideen_auto_check:  u.ideen_auto_check !== 0,
   };
 }
 
@@ -148,7 +150,15 @@ router.patch('/settings', jsonBody, (req, res) => {
     merged.daily_goal_minutes = n > 0 ? n : null;
   }
 
+  // Schalter des Auto-Erledigt-Checks der Ideen (db/ideen-check.js) — boolesch,
+  // eigene Spalte ausserhalb des Enum-Loops.
+  const iac = body.ideen_auto_check;
+  if (iac !== undefined && typeof iac !== 'boolean') {
+    return res.status(400).json({ error_code: 'INVALID_VALUE', params: { field: 'ideen_auto_check', allowed: 'true, false' } });
+  }
+
   appUsers.updateUserSettings(email, merged);
+  if (typeof iac === 'boolean') setIdeenAutoCheck(email, iac);
   res.json({ ok: true, ...toResponse(appUsers.getUser(email)) });
 });
 

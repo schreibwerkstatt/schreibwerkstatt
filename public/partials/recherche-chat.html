@@ -152,6 +152,8 @@
             </div>
           </template>
 
+          <!-- Änderungen an bestehenden Einträgen (POST /research/chat-proposal/apply) -->
+          <!-- @include recherche-chat-changes -->
           <!-- Ideen-Vorschläge an der Stelle des Schreibkontexts (PATCH /ideen/chat-proposal) -->
           <!-- @include chat-idee-vorschlaege -->
           <div x-show="msg.role === 'assistant' && _chatTokenInfo(msg)" class="chat-token-info" :title="_chatTokenTitle(msg)" x-text="_chatTokenInfo(msg)"></div>

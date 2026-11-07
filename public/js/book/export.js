@@ -40,6 +40,7 @@ export const exportMethods = {
       if (this.migrateLektorat) qs.set('lektorat', '1');
       if (this.migrateChats)    qs.set('chats', '1');
       if (this.migrateResearch) qs.set('research', '1');
+      if (this.migrateWerk)     qs.set('werk', '1');
       const suffix = qs.toString() ? `?${qs}` : '';
       const r = await fetch(`/book-migration/${encodeURIComponent(bid)}${suffix}`);
       if (!r.ok) {

@@ -56,8 +56,8 @@ test('Ideen-Chat: Ort, Stufe mit Beleg und neue Idee einzeln übernehmen', async
   // Panel öffnen; das Öffnen legt asynchron eine Session an und leert dabei den
   // Verlauf — erst danach die Nachricht einspielen.
   await page.locator(`${CARD} .card-header button[aria-pressed]`).first().click();
-  await expect(page.locator(`${CARD} .ideen-chat`)).toBeVisible();
-  await expect(page.locator(`${CARD} .card-empty-actions button`)).toHaveCount(3);
+  await expect(page.locator(`#ideen-chat-card`)).toBeVisible();
+  await expect(page.locator(`#ideen-chat-card .card-empty-actions button`)).toHaveCount(4);
   await page.waitForFunction(() => window.Alpine.$data(document.querySelector('.card--ideenboard')).ideenChatSessionId != null);
 
   await boardData(page, `
@@ -76,11 +76,11 @@ test('Ideen-Chat: Ort, Stufe mit Beleg und neue Idee einzeln übernehmen', async
       ] },
     }];`, made);
 
-  const cards = page.locator(`${CARD} .ideen-chat .chat-vorschlag`);
+  const cards = page.locator(`#ideen-chat-card .chat-vorschlag`);
   await expect(cards).toHaveCount(4);
 
   // Werkzeug-Verlauf: dasselbe Fragment wie im Buch-Chat (chat-tool-log).
-  const log = page.locator(`${CARD} .ideen-chat .chat-tool-log`);
+  const log = page.locator(`#ideen-chat-card .chat-tool-log`);
   await log.locator('.collapsible-toggle').click();
   await expect(log.locator('.chat-tool-log-row')).toHaveText(/Ideen gelesen\s*nur offene\s*4 Einträge/);
   const applyBtn = (i) => cards.nth(i).locator('.chat-vorschlag-btn').first();
@@ -102,9 +102,15 @@ test('Ideen-Chat: Ort, Stufe mit Beleg und neue Idee einzeln übernehmen', async
 
   // ── Verknüpfung mit idee_ref: blockiert, bis die neue Idee übernommen ist ─
   await expect(applyBtn(3)).toBeDisabled();
+  // Ein Suchfilter, der die neue Idee nicht trifft, darf sie nicht verstecken.
+  await boardData(page, 'd.query = "Pendenz";');
   await applyBtn(2).click();
   await expect(cards.nth(2).locator('.chat-vorschlag-label')).toHaveText('Übernommen');
   await expect(applyBtn(3)).toBeEnabled();
+
+  // Sofort sichtbar: die neue Idee steht ohne Reload als Karte auf dem Board.
+  await expect(page.locator(`${CARD} [data-idee-card-id]`, { hasText: 'Chat-Test: neue Idee' })).toBeVisible();
+  expect(await boardData(page, 'return d.query;')).toBe('');
 
   // Persistiert: nach Board-Reload steht alles so da.
   await boardData(page, 'return d.loadBoard();');
@@ -112,5 +118,30 @@ test('Ideen-Chat: Ort, Stufe mit Beleg und neue Idee einzeln übernehmen', async
   expect((await idee(made.pageIdee)).status).toBe('erledigt');
   expect(await boardData(page, 'return d.ideen.some(i => i.content === "Chat-Test: neue Idee" && i.chapter_id === a);', made.chapterId)).toBe(true);
 
+  expect(guard.unmatched().map((f) => `[${f.channel}] ${f.text}`)).toEqual([]);
+});
+
+test('Ideen-Chat: Abbrechen-Knopf im Kopf bricht den laufenden Job der Session ab', async ({ page }) => {
+  const guard = attachConsoleGuard(page);
+  await bootApp(page);
+  await selectSeededBook(page);
+  await page.evaluate(() => window.__app.toggleIdeenBoardCard());
+  await expect(page.locator(CARD)).toBeVisible();
+  await page.locator(`${CARD} .card-header button[aria-pressed]`).first().click();
+  await page.waitForFunction(() => window.Alpine.$data(document.querySelector('.card--ideenboard')).ideenChatSessionId != null);
+
+  const cancelBtn = page.locator('#ideen-chat-card .card-actions button', { has: page.locator('use[href$="#square"]') });
+  await expect(cancelBtn).toBeHidden();
+
+  const sid = await boardData(page, 'd.ideenChatLoading = true; d.ideenChatRunningSessionId = d.ideenChatSessionId; return d.ideenChatSessionId;');
+  await page.route(`**/jobs/active?type=ideen-chat&book_id=${sid}`, (r) => r.fulfill({ json: { jobId: 'job-ideen-x' } }));
+  const del = page.waitForRequest((r) => r.method() === 'DELETE' && r.url().endsWith('/jobs/job-ideen-x'));
+  await page.route('**/jobs/job-ideen-x', (r) => r.fulfill({ json: { ok: true } }));
+
+  await expect(cancelBtn).toBeVisible();
+  await cancelBtn.click();
+  await del;
+
+  await boardData(page, 'd.ideenChatLoading = false; d.ideenChatRunningSessionId = null;');
   expect(guard.unmatched().map((f) => `[${f.channel}] ${f.text}`)).toEqual([]);
 });

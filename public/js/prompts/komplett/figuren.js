@@ -111,7 +111,7 @@ ${bookText == null ? '(steht im System-Prompt oben)' : bookText}
 Antworte mit diesem JSON-Schema:
 {
   "beziehungen": [
-    { "von": "fig_1", "zu": "fig_2", "typ": "${RELATION_TYPES_PROMPT}", "machtverhaltnis": 0, "beschreibung": "1 Satz", "belege": [{ "kapitel": "Kapitelname (ohne ##-Präfix)", "seite": "Abschnittstitel (ohne ###-Präfix); leer wenn = Kapitel oder unklar" }] }
+    { "von": "fig_1", "zu": "fig_2", "typ": "${RELATION_TYPES_PROMPT}", "machtverhaltnis": 0, "naehe": 0, "beschreibung": "1 Satz", "belege": [{ "kapitel": "Kapitelname (ohne ##-Präfix)", "seite": "Abschnittstitel (ohne ###-Präfix); leer wenn = Kapitel oder unklar" }] }
   ]
 }
 
@@ -119,10 +119,11 @@ Regeln:
 - Nur Beziehungen zwischen Figuren aus VERSCHIEDENEN Kapiteln
 - Nur Beziehungen die im Buchtext eindeutig belegt sind – KONSERVATIV, lieber weglassen als spekulieren
 - von/zu: nur IDs aus der obigen Figurenliste
-- typ: GENAU EIN Wert aus der Liste im Schema – nie mehrere mit «|» verbinden, keine eigenen Typen. Verwandtschaft ohne eigenen Typ (Tante, Onkel, Cousin, Grosseltern, Schwager) → andere
+- typ: GENAU EIN Wert aus der Liste im Schema – nie mehrere mit «|» verbinden, keine eigenen Typen. Weitere Verwandtschaft (Tante, Onkel, Cousin, Grosseltern, Enkel, Schwager, Schwiegereltern) → verwandt, das genaue Verwandtschaftswort in die Beschreibung
 - Jede Beziehung nur einmal eintragen (nicht von→zu UND zu→von für denselben Typ)
 - Keine Beziehungen die bereits in «Bekannte Beziehungen» stehen
 - machtverhaltnis: ganzzahlig im Bereich -2 bis 2 (KEIN führendes Plus-Zeichen). Machtasymmetrie: 2=Gegenüber («zu») dominiert klar, 1=Gegenüber hat leichten Vorteil, 0=symmetrisch, -1=diese Figur («von») hat leichten Vorteil, -2=diese Figur dominiert klar; weglassen oder 0 wenn unklar
+- naehe: ganzzahlig im Bereich -2 bis 2 (KEIN führendes Plus-Zeichen). Emotionale Nähe, wie die Beziehung im Text GELEBT wird – nicht, was der Typ nahelegt: 2=innig (Zuneigung, Vertrauen, Geborgenheit), 1=zugewandt, 0=sachlich/neutral, -1=kühl/entfremdet/gleichgültig, -2=feindselig/verletzend/Abscheu. Eine Ehe, in der man sich ignoriert, ist -1; ein Vater, der sein Kind vernachlässigt, -1 oder -2; 0 wenn unklar
 - belege: HÖCHSTENS 1 Stelle (Kapitelname + Abschnittstitel) an der die Beziehung sichtbar wird. seite leer lassen wenn identisch mit dem Kapitelnamen oder unklar. Abschnittsnamen aus ### Überschriften, Kapitel aus ## Überschriften des übergebenen Textes.
 - Leeres Array wenn keine neuen kapitelübergreifenden Beziehungen eindeutig belegt sind`;
 }
@@ -142,8 +143,9 @@ export function buildFigurenBeziehungenExtraktionPrompt(bookName, figurenList, b
     : `Buchtext:\n${bookText}`;
   const machtRule = _isLocal
     ? ''
-    : `\n- machtverhaltnis: ganzzahlig im Bereich -2 bis 2 (KEIN führendes Plus-Zeichen). 2=«zu» dominiert klar, 1=«zu» leichter Vorteil, 0=symmetrisch, -1=«von» leichter Vorteil, -2=«von» dominiert klar; 0 wenn unklar`;
-  const machtField = _isLocal ? '' : ' "machtverhaltnis": 0,';
+    : `\n- machtverhaltnis: ganzzahlig im Bereich -2 bis 2 (KEIN führendes Plus-Zeichen). 2=«zu» dominiert klar, 1=«zu» leichter Vorteil, 0=symmetrisch, -1=«von» leichter Vorteil, -2=«von» dominiert klar; 0 wenn unklar
+- naehe: ganzzahlig im Bereich -2 bis 2 (KEIN führendes Plus-Zeichen). Emotionale Nähe, wie die Beziehung im Text GELEBT wird – nicht, was der Typ nahelegt: 2=innig (Zuneigung, Vertrauen, Geborgenheit), 1=zugewandt, 0=sachlich/neutral, -1=kühl/entfremdet/gleichgültig, -2=feindselig/verletzend/Abscheu. Eine Ehe, in der man sich ignoriert, ist -1; ein Vater, der sein Kind vernachlässigt, -1 oder -2; 0 wenn unklar`;
+  const machtField = _isLocal ? '' : ' "machtverhaltnis": 0, "naehe": 0,';
   // Batch-Scope (grosse Casts): die volle Figurenliste bleibt sichtbar (damit «zu» auflösbar
   // ist), aber es werden NUR Beziehungen ausgegeben, deren «von» eine der Scope-Figuren ist →
   // partitionierter, kleinerer Output pro Call. Paar-Dedup übernimmt der Server.
@@ -171,8 +173,8 @@ Antworte mit diesem JSON-Schema:
 
 Regeln:
 - von/zu: nur IDs aus der obigen Figurenliste
-- typ: GENAU EIN Wert aus der Liste im Schema – nie mehrere mit «|» verbinden, keine eigenen Typen. Verwandtschaft ohne eigenen Typ (Tante, Onkel, Cousin, Grosseltern, Schwager) → andere
-- typ beschreibt die ROLLE von «zu» (NICHT von «von»). Beispiel: Robert hat Mutter Sandra → { von: «<Roberts id>», zu: «<Sandras id>», typ: elternteil } (Sandra IST der Elternteil von Robert). patronage=Schutzherrschaft (zu = Patron), geschaeft=wirtschaftliche Beziehung, geschwister/ehepartner/ex_partner/verbuendete/komplize=ungerichtet, vorgesetzter=«zu» ist Vorgesetzte(r) von «von», untergebener=«zu» ist «von» unterstellt, liebesbeziehung nur für nicht-eheliche romantische Bindung, übrige selbsterklärend.
+- typ: GENAU EIN Wert aus der Liste im Schema – nie mehrere mit «|» verbinden, keine eigenen Typen. Weitere Verwandtschaft (Tante, Onkel, Cousin, Grosseltern, Enkel, Schwager, Schwiegereltern) → verwandt, das genaue Verwandtschaftswort in die Beschreibung
+- typ beschreibt die ROLLE von «zu» (NICHT von «von»). Beispiel: Robert hat Mutter Sandra → { von: «<Roberts id>», zu: «<Sandras id>», typ: elternteil } (Sandra IST der Elternteil von Robert). patronage=Schutzherrschaft (zu = Patron), geschaeft=wirtschaftliche Beziehung, geschwister/verwandt/ehepartner/ex_partner/verbuendete/komplize=ungerichtet, vorgesetzter=«zu» ist Vorgesetzte(r) von «von», untergebener=«zu» ist «von» unterstellt, liebesbeziehung nur für nicht-eheliche romantische Bindung, übrige selbsterklärend.
 - Pro Figurenpaar höchstens EINE Beziehung – nicht von→zu UND zu→von für dasselbe Paar. Keine widersprüchlichen Angaben.${machtRule}
 - belege: HÖCHSTENS 1 Stelle (Kapitelname + Abschnittstitel) an der die Beziehung klar wird. seite leer lassen wenn identisch mit dem Kapitelnamen oder unklar. Abschnittsnamen aus ### Überschriften, Kapitel aus ## Überschriften.
 - KONSERVATIV: Nur Beziehungen die im Text eindeutig belegt sind – lieber weglassen als spekulieren.${scopeRule}

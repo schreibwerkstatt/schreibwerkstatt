@@ -20,6 +20,12 @@
 //   act_update    { act_id, name, before }
 //   thread_create { name, figure_id?|draft_figure_id? }
 //   thread_update { thread_id, fields, before }
+//   relation_create { from_beat_id|from_beat_ref, to_beat_id|to_beat_ref, typ }
+//                 — gerichtete Beat-Kante (Setup/Payoff, Kausalität); *_ref
+//                 zeigt auf einen beat_create derselben Antwort
+// Beat-Felder (fields): titel, beschreibung, status, intensitaet, zeit,
+// chapter_id, figure_ids/draft_figure_ids, location_ids (loc_id), motif_ids,
+// verworfen — dieselben Namen wie POST/PATCH /plot/beats.
 // Gemeinsam: { type, ref, begruendung, labels }. `ref` ist 1-basiert über alle
 // Vorschläge DIESER Antwort (= Index + 1); act_ref/thread_ref zeigen darauf.
 // Persistierter Status (vom User gesetzt, PATCH /plot/chat-proposal):
@@ -28,7 +34,7 @@
 const { executeTool: executeCatalogTool } = require('./chat-tools');
 const { loadBoardState, threadHasOwnActs } = require('./plot-chat-context');
 const { str: _str, posInt: _int } = require('../../lib/proposal-input');
-const { err: _err, pushProposal: _push } = require('./proposal-chat-shared');
+const { err: _err, pushProposal: _push, refProposal } = require('./proposal-chat-shared');
 
 const MAX_PROPOSALS = 30;
 const MAX_TITEL = 200;
@@ -36,9 +42,16 @@ const MAX_BESCHREIBUNG = 4000;
 const MAX_ZEIT = 120;
 const MAX_NAME = 120;
 
-const PROPOSE_TOOLS = new Set(['propose_beat', 'propose_beat_move', 'propose_act', 'propose_thread']);
+const PROPOSE_TOOLS = new Set(['propose_beat', 'propose_beat_move', 'propose_act', 'propose_thread', 'propose_beat_relation']);
 // Felder, die ein Änderungs-Vorschlag ausdrücklich leeren darf (`leeren`).
-const CLEARABLE = new Set(['beschreibung', 'zeit', 'kapitel', 'intensitaet', 'figuren']);
+const CLEARABLE = new Set(['beschreibung', 'zeit', 'kapitel', 'intensitaet', 'figuren', 'orte', 'motive']);
+// `leeren`-Schlüssel → Feld in `fields` (Listen-Felder: leere Liste).
+const CLEAR_FIELD = { kapitel: 'chapter_id', figuren: 'figure_ids', orte: 'location_ids', motive: 'motif_ids' };
+// Status und kuratierte Beziehungs-Typen kommen aus der Plot-SSoT
+// (public/js/book/plot/constants.js, STATUSES / BEAT_REL_TYPES) — executePlotChatTool
+// legt sie am Board-Stand ab (state.plotConst). Die Plot-Route nimmt beim Typ Freitext; der
+// Chat bleibt bei der Auswahl, die auch der Beat-Edit anbietet.
+const { plotConstants } = require('../../lib/esm-bridge');
 
 // Board-Stand pro Antwort einmal laden; Vorschläge ändern ihn nicht.
 function _state(ctx) {
@@ -49,10 +62,11 @@ function _state(ctx) {
 // Akt aus act_id oder act_ref (Vorschlag dieser Antwort) auflösen.
 // → { act_id, act } | { act_ref, refThread, refThreadRef } | { error }
 function _resolveAct(input, ctx, state) {
-  const ref = _int(input.act_ref);
-  if (ref) {
-    const p = ctx.proposals[ref - 1];
-    if (!p || p.type !== 'act_create') return _err(`act_ref ${ref} ist kein in dieser Antwort vorgeschlagener neuer Akt.`);
+  const n = _int(input.act_ref);
+  if (n) {
+    const r = refProposal(ctx, n, 'act_create', 'act_ref');
+    if (r.error) return r;
+    const { ref, p } = r;
     return { act_ref: ref, refThread: p.thread_id ?? null, refThreadRef: p.thread_ref ?? null, label: p.name };
   }
   const id = _int(input.act_id);
@@ -64,11 +78,11 @@ function _resolveAct(input, ctx, state) {
 
 // Strang aus thread_id oder thread_ref auflösen. undefined = nicht angegeben.
 function _resolveThread(input, ctx, state) {
-  const ref = _int(input.thread_ref);
-  if (ref) {
-    const p = ctx.proposals[ref - 1];
-    if (!p || p.type !== 'thread_create') return _err(`thread_ref ${ref} ist kein in dieser Antwort vorgeschlagener neuer Strang.`);
-    return { thread_ref: ref, label: p.name };
+  const n = _int(input.thread_ref);
+  if (n) {
+    const r = refProposal(ctx, n, 'thread_create', 'thread_ref');
+    if (r.error) return r;
+    return { thread_ref: r.ref, label: r.p.name };
   }
   const id = _int(input.thread_id);
   if (!id) return undefined;
@@ -135,6 +149,37 @@ function _figurenError(r) {
   return null;
 }
 
+// Schauplätze (loc_id oder Name) bzw. Motive (motiv_id oder Name) auflösen.
+// Wie bei Figuren: ein Name, der auf mehrere passt, wird nicht geraten.
+function _resolveCatalog(list, items, { idOf, isId, what, kennung }) {
+  const ids = [];
+  const names = [];
+  const unknown = [];
+  const ambiguous = [];
+  const norm = (x) => String(x || '').trim().toLowerCase();
+  for (const raw of list) {
+    const q = String(raw ?? '').trim();
+    if (!q) continue;
+    let hit = isId(q) ? items.find(it => String(idOf(it)) === q) : null;
+    if (!hit) {
+      const byName = items.filter(it => norm(it.name) === norm(q));
+      if (byName.length > 1) { ambiguous.push(`«${q}» (${byName.map(it => `${kennung} ${idOf(it)}`).join(', ')})`); continue; }
+      hit = byName[0];
+    }
+    if (!hit) { unknown.push(q); continue; }
+    if (!ids.includes(idOf(hit))) { ids.push(idOf(hit)); names.push(hit.name); }
+  }
+  if (ambiguous.length) return _err(`Mehrdeutige ${what}: ${ambiguous.join('; ')}. Gib die Kennung (${kennung}) an.`);
+  if (unknown.length) return _err(`Unbekannte ${what}: ${unknown.join(', ')}. Nutze ${kennung} oder Namen aus der Liste im Vorspann.`);
+  return { ids, names };
+}
+const _resolveOrte = (list, state) => _resolveCatalog(list, state.locations || [], {
+  idOf: l => l.loc_id, isId: () => true, what: 'Schauplätze', kennung: 'loc_id',
+});
+const _resolveMotive = (list, state) => _resolveCatalog(list, state.motifs || [], {
+  idOf: m => m.id, isId: q => /^\d+$/.test(q), what: 'Motive', kennung: 'motiv_id',
+});
+
 function _validChapter(raw, state) {
   const id = _int(raw);
   if (!id) return { id: null };
@@ -165,6 +210,11 @@ function _beatFieldsFromInput(input, state, { isUpdate }) {
   if (t) fields.titel = t;
   const desc = _str(input.beschreibung, MAX_BESCHREIBUNG);
   if (desc) fields.beschreibung = desc;
+  if (input.status != null) {
+    const STATUSES = state.plotConst.STATUSES;
+    if (!STATUSES.includes(input.status)) return _err(`status kennt nur: ${STATUSES.join(', ')}.`);
+    fields.status = input.status;
+  }
   if (input.intensitaet != null) {
     const n = Number(input.intensitaet);
     if (!Number.isInteger(n) || n < 1 || n > 5) return _err('intensitaet muss 1–5 sein.');
@@ -188,16 +238,29 @@ function _beatFieldsFromInput(input, state, { isUpdate }) {
     fields.draft_figure_ids = r.draft_figure_ids;
     labels.figuren = r.names;
   }
+  if (Array.isArray(input.orte) && input.orte.length) {
+    const r = _resolveOrte(input.orte, state);
+    if (r.error) return r;
+    fields.location_ids = r.ids;
+    labels.orte = r.names;
+  }
+  if (Array.isArray(input.motive) && input.motive.length) {
+    const r = _resolveMotive(input.motive, state);
+    if (r.error) return r;
+    fields.motif_ids = r.ids;
+    labels.motive = r.names;
+  }
   if (isUpdate && typeof input.verworfen === 'boolean') fields.verworfen = input.verworfen ? 1 : 0;
 
   const clear = Array.isArray(input.leeren) ? [...new Set(input.leeren.map(x => String(x)))] : [];
   if (clear.length && !isUpdate) return _err('leeren gibt es nur bei Änderungen bestehender Beats.');
   for (const k of clear) {
     if (!CLEARABLE.has(k)) return _err(`leeren kennt nur: ${[...CLEARABLE].join(', ')}.`);
-    const field = k === 'kapitel' ? 'chapter_id' : k === 'figuren' ? 'figure_ids' : k;
+    const field = CLEAR_FIELD[k] || k;
     if (field in fields) return _err(`${k} kann nicht zugleich gesetzt und geleert werden.`);
     if (k === 'beschreibung') fields.beschreibung = '';
     else if (k === 'figuren') { fields.figure_ids = []; fields.draft_figure_ids = []; labels.figuren = []; }
+    else if (k === 'orte' || k === 'motive') { fields[field] = []; labels[k] = []; }
     else fields[field] = null;
   }
   return { fields, labels };
@@ -217,8 +280,12 @@ function _beatBefore(beat, fields, state) {
     if (k === 'figure_ids') before.figure_ids = [...(beat.fig_ids || [])];
     else if (k === 'draft_figure_ids') before.draft_figure_ids = [...(beat.draft_fig_ids || [])];
     else if (k === 'verworfen') before.verworfen = beat.verworfen ? 1 : 0;
+    else if (k === 'location_ids') before.location_ids = (beat.locations || []).map(l => l.id);
+    else if (k === 'motif_ids') before.motif_ids = (beat.motifs || []).map(m => m.id);
     else before[k] = beat[k] ?? null;
   }
+  if ('location_ids' in fields) labels.orte_before = (beat.locations || []).map(l => l.name);
+  if ('motif_ids' in fields) labels.motive_before = (beat.motifs || []).map(m => m.name);
   if ('figure_ids' in fields || 'draft_figure_ids' in fields) {
     labels.figuren_before = [
       ...(beat.fig_ids || []).map(id => state.figNameById.get(id) || id),
@@ -235,7 +302,13 @@ function _proposeBeat(input, ctx) {
   if (beatId) {
     const beat = state.beatById.get(beatId);
     if (!beat) return _err(`Beat #${beatId} gibt es nicht. Nutze eine Beat-id aus dem Board.`);
-    if (input.act_id != null || input.act_ref != null || input.thread_id != null || input.thread_ref != null) {
+    // Klassischer Pfad: das Schema ist die Vereinigung aller Werkzeugfelder, das
+    // Modell füllt act_id/thread_id gern mit der Zelle, in der der Beat schon liegt.
+    // Das ist keine Verschiebung — nur eine abweichende Zelle oder ein Bezug ist eine.
+    const moves = input.act_ref != null || input.thread_ref != null
+      || (input.act_id != null && _int(input.act_id) !== beat.act_id)
+      || (input.thread_id != null && _int(input.thread_id) !== (beat.thread_id ?? null));
+    if (moves) {
       return _err('Zum Verschieben eines bestehenden Beats propose_beat_move verwenden; propose_beat ändert nur Inhalt/Felder.');
     }
     const r = _beatFieldsFromInput(input, state, { isUpdate: true });
@@ -260,7 +333,9 @@ function _proposeBeat(input, ctx) {
   if (!_actFits(actRes, threadRes, ctx, state)) {
     return _err('Akt und Strang passen nicht: ein Strang mit eigener Aktstruktur liegt nur auf seinen eigenen Akten, alle anderen Beats auf geteilten Akten. Wähle einen passenden Akt bzw. thread_id.');
   }
-  if (typeof input.verworfen === 'boolean') return _err('verworfen gibt es nur bei Änderungen bestehender Beats.');
+  // `verworfen: false` ist bei einem neuen Beat der Normalfall (Constrained Decoding
+  // schickt den Boolean im klassischen Pfad mit) — nur `true` widerspricht.
+  if (input.verworfen === true) return _err('verworfen gibt es nur bei Änderungen bestehender Beats.');
   const r = _beatFieldsFromInput(input, state, { isUpdate: false });
   if (r.error) return r;
   if (!r.fields.titel) return _err('Neuer Beat braucht einen titel.');
@@ -410,11 +485,56 @@ function _proposeThread(input, ctx) {
   }, input);
 }
 
+// Beat aus <prefix>_beat_id oder <prefix>_beat_ref (neuer Beat dieser Antwort).
+function _resolveRelBeat(input, prefix, ctx, state) {
+  const n = _int(input[`${prefix}_beat_ref`]);
+  if (n) {
+    const r = refProposal(ctx, n, 'beat_create', `${prefix}_beat_ref`);
+    if (r.error) return r;
+    return { ref: r.ref, label: r.p.fields?.titel || '' };
+  }
+  const id = _int(input[`${prefix}_beat_id`]);
+  if (!id) return _err(`${prefix}_beat_id (oder ${prefix}_beat_ref) ist Pflicht.`);
+  const b = state.beatById.get(id);
+  if (!b) return _err(`Beat #${id} gibt es nicht. Nutze eine Beat-id aus dem Board.`);
+  return { id, label: b.titel, verworfen: !!b.verworfen };
+}
+
+// Gerichtete Beat-Kante (Setup/Payoff, Kausalität). Kein Löschen: eine falsche
+// Kante benennt der Chat in der Antwort, entfernt wird sie von Hand.
+function _proposeBeatRelation(input, ctx) {
+  const state = _state(ctx);
+  const typ = String(input.typ || '').trim();
+  const REL_TYPES = state.plotConst.BEAT_REL_TYPES;
+  if (!REL_TYPES.includes(typ)) return _err(`typ kennt nur: ${REL_TYPES.join(', ')}.`);
+  const from = _resolveRelBeat(input, 'from', ctx, state);
+  if (from.error) return from;
+  const to = _resolveRelBeat(input, 'to', ctx, state);
+  if (to.error) return to;
+  if ((from.id && from.id === to.id) || (from.ref && from.ref === to.ref)) return _err('Ein Beat kann nicht auf sich selbst zeigen.');
+  if (from.verworfen || to.verworfen) return _err('Verworfene Beats bekommen keine neuen Beziehungen — schlage zuerst vor, den Beat wieder aufzunehmen, oder wähle einen anderen.');
+  // Dublette auch in Gegenrichtung (bereitet-vor ↔ zahlt-ein, sameBeatRelation).
+  const same = state.plotConst.sameBeatRelation;
+  const edge = { from: from.id ? `#${from.id}` : `r${from.ref}`, to: to.id ? `#${to.id}` : `r${to.ref}`, typ };
+  const had = from.id && to.id && (state.relations || []).find(r => same(edge, { from: `#${r.from_beat_id}`, to: `#${r.to_beat_id}`, typ: r.typ }));
+  if (had) return _err(`Die Beziehung steht schon im Board: #${had.from_beat_id} ${had.typ} #${had.to_beat_id}.`);
+  const key = (p, side) => (p[`${side}_beat_id`] != null ? `#${p[`${side}_beat_id`]}` : `r${p[`${side}_beat_ref`]}`);
+  const dup = ctx.proposals.some(p => p.type === 'relation_create' && same(edge, { from: key(p, 'from'), to: key(p, 'to'), typ: p.typ }));
+  if (dup) return _err('Diese Beziehung hast du in dieser Antwort schon vorgeschlagen.');
+  return _push(ctx, {
+    type: 'relation_create', typ,
+    ...(from.ref ? { from_beat_ref: from.ref } : { from_beat_id: from.id }),
+    ...(to.ref ? { to_beat_ref: to.ref } : { to_beat_id: to.id }),
+    labels: { from: from.label, to: to.label },
+  }, input);
+}
+
 const PROPOSE_HANDLERS = {
   propose_beat: _proposeBeat,
   propose_beat_move: _proposeBeatMove,
   propose_act: _proposeAct,
   propose_thread: _proposeThread,
+  propose_beat_relation: _proposeBeatRelation,
 };
 
 async function executePlotChatTool(name, input, ctx) {
@@ -422,6 +542,8 @@ async function executePlotChatTool(name, input, ctx) {
     if (ctx.proposals.length >= MAX_PROPOSALS) {
       return _err(`Höchstens ${MAX_PROPOSALS} Vorschläge pro Antwort. Beende die Antwort mit final_answer.`);
     }
+    const state = _state(ctx);
+    if (!state.plotConst) state.plotConst = await plotConstants();
     return PROPOSE_HANDLERS[name](input || {}, ctx);
   }
   if (!ctx.offeredTools?.has(name)) throw new Error(`Unbekanntes Werkzeug: ${name}`);

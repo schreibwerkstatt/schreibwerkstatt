@@ -128,6 +128,37 @@ test('Find/Replace läuft über den ganzen Stream', async ({ page }) => {
   guard.assertClean('Bucheditor: Find/Replace');
 });
 
+test('Find: Ersetzen und Neuladen springen nicht an den Buchanfang', async ({ page }) => {
+  const guard = attachConsoleGuard(page);
+  await openBookEditor(page);
+  const data = () => page.evaluate(() => {
+    const d = window.Alpine.$data(document.querySelector('.card--bookeditor'));
+    return { n: d.findMatches.length, i: d.findIndex, pageId: d.findMatches[d.findIndex]?.pageId };
+  });
+
+  await page.evaluate(() => window.Alpine.$data(document.querySelector('.card--bookeditor')).openFind());
+  await card(page).locator('.book-editor-find-input').first().fill('der');
+  await expect.poll(async () => (await data()).n, { timeout: 5000 }).toBeGreaterThan(4);
+  await page.evaluate(() => window.Alpine.$data(document.querySelector('.card--bookeditor'))._selectMatch(2));
+  const before = await data();
+
+  // Ein Ersetzen: der Treffer fällt weg, der nächste rückt auf Index 2 nach.
+  await card(page).locator('.book-editor-find-input--replace').fill('DEEER');
+  await card(page).locator('.book-editor-find-btn--text').nth(0).click();
+  await expect.poll(async () => (await data()).n, { timeout: 5000 }).toBe(before.n - 1);
+  expect((await data()).i).toBe(2);
+
+  // Neuladen der Karte (erneutes Öffnen): gleicher Treffer, nicht Index 0.
+  const kept = await data();
+  await page.evaluate(() => {
+    const d = window.Alpine.$data(document.querySelector('.card--bookeditor'));
+    return d._load(window.Alpine.store('nav').selectedBookId);
+  });
+  await expect.poll(async () => (await data()).n, { timeout: 5000 }).toBe(kept.n);
+  expect(await data()).toEqual(kept);
+  guard.assertClean('Bucheditor: Find-Position');
+});
+
 test('Outline-Chevron klappt ein Kapitel ein', async ({ page }) => {
   const guard = attachConsoleGuard(page);
   await openBookEditor(page);

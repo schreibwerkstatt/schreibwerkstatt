@@ -46,7 +46,7 @@ async function buildBundleBuffer(bookId, includes = null, opts = {}) {
   const zip = new JSZip();
   zip.file('manifest.json', JSON.stringify(manifest));
   zip.file('book.json', JSON.stringify(bookJson));
-  if (norm.analysis || norm.lektorat || norm.chats || norm.research) {
+  if (Object.values(norm).some(Boolean)) {
     const { collectExtras } = require('../../db/book-migration-data');
     const extras = collectExtras(bookId, norm, opts.scopeEmail ?? null);
     // `analysisOverride` baut ein Alt-Bundle nach: vor der Scope-Regel sammelte
@@ -56,6 +56,7 @@ async function buildBundleBuffer(bookId, includes = null, opts = {}) {
     if (extras.lektorat) zip.file('lektorat.json', JSON.stringify(extras.lektorat));
     if (extras.chats)    zip.file('chats.json', JSON.stringify(extras.chats));
     if (extras.research) zip.file('research.json', JSON.stringify(extras.research));
+    if (extras.werk)     zip.file('werk.json', JSON.stringify(extras.werk));
   }
   return zip.generateAsync({ type: 'nodebuffer' });
 }
@@ -484,4 +485,123 @@ test('Schullaufbahn-Round-Trip: Schulsystem des Buchs und Schulweg je Figur reis
   assert.equal(row.einschulung_jahr, 1992);
   assert.equal(row.source, 'autor');
   assert.equal(row.repetitionen_json, '[{"stufe":"primar","klasse":3}]');
+});
+
+test('Berufsweg/Hobbys-Round-Trip: Stationen samt Vorschlag und Beleg reisen an die neue Figur', async () => {
+  ctxBoot.dbSeed.setBook({
+    books: [{ id: 961, name: 'StationQuelle' }],
+    chapters: [{ id: 9611, book_id: 961, name: 'Kap', position: 0 }],
+    pages: [{ id: 96101, book_id: 961, name: 'Seite1', chapter_id: 9611, position: 0 }],
+    pageBodies: { 96101: '<p>Text</p>' },
+  });
+  const { db } = require('../../db/connection');
+  const st = require('../../db/figure-stationen');
+  const fig = db.prepare('INSERT INTO figures (book_id,fig_id,name,updated_at,user_email) VALUES (?,?,?,?,?)')
+    .run(961, 'fig-sina', 'Sina', '2026-05-30T10:00:00.000Z', OWNER).lastInsertRowid;
+  st.createStation('berufe', fig, { taetigkeit: 'Schreinerin', art: 'ausbildung', arbeitgeber: 'Holz AG', von_jahr: 1996, von_monat: 8, bis_jahr: 1999 }, { status: 'aktiv', source: 'autor' });
+  st.createStation('hobbys', fig, { hobby: 'Unihockey', zitat: 'spielt Unihockey', page_id: 96101 }, { status: 'vorschlag', source: 'ki' });
+
+  const buffer = await buildBundleBuffer(961, { analysis: true });
+  const job = await runImport(buffer);
+  assert.equal(job.status, 'done', job.error || '');
+  const newFig = db.prepare('SELECT id FROM figures WHERE book_id = ? AND name = ?').get(job.result.bookId, 'Sina').id;
+  assert.notEqual(newFig, fig);
+  const b = st.listStationenForFigure('berufe', newFig);
+  assert.deepEqual(b.map(x => [x.taetigkeit, x.art, x.arbeitgeber, x.von_jahr, x.von_monat, x.bis_jahr, x.status, x.source]),
+    [['Schreinerin', 'ausbildung', 'Holz AG', 1996, 8, 1999, 'aktiv', 'autor']]);
+  const h = st.listStationenForFigure('hobbys', newFig);
+  assert.equal(h.length, 1);
+  assert.equal(h[0].status, 'vorschlag');
+  assert.equal(h[0].zitat, 'spielt Unihockey');
+  assert.ok(h[0].page_id && h[0].page_id !== 96101, 'Beleg auf den neuen Abschnitt umgeschlüsselt');
+});
+
+
+// Werk-Block (db/book-migration-data/werk.js): ein Querschnitt durch die
+// Umschlüssel-Arten — Buch (1:1-PK), Abschnitt, Kapitel, Figur aus dem
+// Analyse-Block, Kette innerhalb des Blocks (Strang → Akt → Beat → Beat-Figur),
+// Share-Link mit neuem Token samt Kommentar-Antwort, Chat-Bild mit
+// context_info, BLOB, Quelle mit `data-src` im Text, User-Scope.
+test('Werk-Round-Trip: Publikation, Plot, Share, KI-Ergebnis, Chat-Bild, Quelle reisen umgeschlüsselt mit', async () => {
+  const { db } = require('../../db/connection');
+  const OTHER = 'koautor@test.dev';
+  db.prepare('INSERT OR IGNORE INTO app_users (email) VALUES (?)').run(OTHER);
+  const src = db.prepare(`INSERT INTO sources (owner_email, csl_type, authors, editors, title, year, citekey, created_at, updated_at)
+    VALUES (?, 'book', '[]', '[]', 'Die Quelle', '1999', 'quelle99', ?, ?)`).run(OTHER, '2026-01-01T00:00:00Z', '2026-01-01T00:00:00Z').lastInsertRowid;
+  ctxBoot.dbSeed.setBook({
+    books: [{ id: 962, name: 'WerkQuelle' }],
+    chapters: [{ id: 9621, book_id: 962, name: 'Kap', position: 0 }],
+    pages: [{ id: 96201, book_id: 962, name: 'Seite1', chapter_id: 9621, position: 0 }],
+    pageBodies: { 96201: `<p>Wie belegt <span class="cite" data-src="${src}" data-loc="4">(Q, 1999)</span>.</p>` },
+  });
+  const iso = '2026-05-30T10:00:00.000Z';
+  const ins = (sql, ...a) => db.prepare(sql).run(...a).lastInsertRowid;
+  const fig = ins('INSERT INTO figures (book_id,fig_id,name,updated_at,user_email) VALUES (?,?,?,?,?)', 962, 'fig-ida', 'Ida', iso, OWNER);
+  ins('INSERT INTO source_citations (source_id, page_id, count, first_offset) VALUES (?,?,1,0)', src, 96201);
+  ins(`INSERT INTO book_publication (book_id, isbn, description, cover_image, cover_mime, epub_css_style, epub_justify, created_at, updated_at)
+       VALUES (?, '978-3-1', 'Klappentext', ?, 'image/png', 'classic', 1, ?, ?)`, 962, Buffer.from([1, 2, 3]), iso, iso);
+  const thread = ins('INSERT INTO plot_threads (book_id,user_email,name,figure_id,position) VALUES (?,?,?,?,0)', 962, OWNER, 'A-Strang', fig);
+  const act = ins('INSERT INTO plot_acts (book_id,user_email,name,position,thread_id,archiviert,created_at,updated_at) VALUES (?,?,?,0,?,0,?,?)', 962, OWNER, 'Akt 1', thread, iso, iso);
+  const beat = ins(`INSERT INTO plot_beats (book_id,act_id,thread_id,user_email,titel,status,verworfen,chapter_id,sort_order,created_at,updated_at)
+       VALUES (?,?,?,?,?,'geplant',0,?,0,?,?)`, 962, act, thread, OWNER, 'Begegnung', 9621, iso, iso);
+  ins('INSERT INTO plot_beat_figures (beat_id, figure_id) VALUES (?,?)', beat, fig);
+  // Fremdes Plot-Board im selben Buch: reist nicht mit (ein Board pro Bundle).
+  ins('INSERT INTO plot_acts (book_id,user_email,name,position,archiviert,created_at,updated_at) VALUES (?,?,?,0,0,?,?)', 962, OTHER, 'Fremder Akt', iso, iso);
+  ins("INSERT INTO page_editorial_status (page_id,book_id,status,updated_by,updated_at) VALUES (?,?,'ueberarbeitet',?,?)", 96201, 962, OWNER, iso);
+  ins("INSERT INTO chapter_reviews (book_id,chapter_id,reviewed_at,review_json,user_email) VALUES (?,?,?,'{\"note\":5}',?)", 962, 9621, iso, OWNER);
+  db.prepare("INSERT INTO share_links (token,kind,book_id,owner_email,view_count,created_at,show_toc) VALUES ('alt-token','book',?,?,7,?,1)").run(962, OWNER, iso);
+  const c1 = ins("INSERT INTO share_comments (share_token,reader_name,body,created_at,anchor_bid) VALUES ('alt-token','Lea','Schön',?, 'b1')", iso);
+  ins("INSERT INTO share_comments (share_token,body,created_at,parent_id,author_email) VALUES ('alt-token','Danke',?,?,?)", iso, c1, OWNER);
+  const sess = ins("INSERT INTO chat_sessions (book_id,kind,user_email,created_at,last_message_at) VALUES (?,'book',?,?,?)", 962, OWNER, iso, iso);
+  const img = ins("INSERT INTO chat_images (session_id,prompt,mime,size,image,created_at) VALUES (?,'Burg','image/png','1024x1024',?,?)", sess, Buffer.from([9, 9]), iso);
+  ins("INSERT INTO chat_messages (session_id,role,content,context_info,created_at) VALUES (?,'assistant','Bild',?,?)", sess, JSON.stringify({ images: [{ image_id: img, prompt: 'Burg' }] }), iso);
+  ins('INSERT INTO writing_time (user_email,book_id,date,seconds) VALUES (?,?,?,?)', OWNER, 962, '2026-05-29', 3600);
+
+  const buffer = await buildBundleBuffer(962, { analysis: true, chats: true, werk: true }, { scopeEmail: OWNER });
+  const job = await runImport(buffer);
+  assert.equal(job.status, 'done', job.error || '');
+  const nb = job.result.bookId;
+  const one = (sql, ...a) => db.prepare(sql).get(...a);
+  const newPage = one('SELECT page_id FROM pages WHERE book_id = ?', nb).page_id;
+  const newChap = one('SELECT chapter_id FROM chapters WHERE book_id = ?', nb).chapter_id;
+  const newFig = one("SELECT id FROM figures WHERE book_id = ? AND name = 'Ida'", nb).id;
+
+  const pub = one('SELECT * FROM book_publication WHERE book_id = ?', nb);
+  assert.equal(pub.isbn, '978-3-1');
+  assert.equal(pub.description, 'Klappentext');
+  assert.deepEqual([...pub.cover_image], [1, 2, 3], 'BLOB über base64');
+
+  const acts = db.prepare('SELECT * FROM plot_acts WHERE book_id = ?').all(nb);
+  assert.deepEqual(acts.map(a => [a.name, a.user_email]), [['Akt 1', OWNER]], 'nur das eigene Board');
+  const b = one('SELECT * FROM plot_beats WHERE book_id = ?', nb);
+  assert.equal(b.act_id, acts[0].id);
+  assert.equal(b.chapter_id, newChap);
+  assert.equal(one('SELECT figure_id FROM plot_threads WHERE id = ?', b.thread_id).figure_id, newFig);
+  assert.equal(one('SELECT figure_id FROM plot_beat_figures WHERE beat_id = ?', b.id).figure_id, newFig);
+
+  assert.equal(one('SELECT status FROM page_editorial_status WHERE page_id = ?', newPage).status, 'ueberarbeitet');
+  assert.equal(one('SELECT chapter_id FROM chapter_reviews WHERE book_id = ?', nb).chapter_id, newChap);
+
+  const link = one('SELECT * FROM share_links WHERE book_id = ?', nb);
+  assert.notEqual(link.token, 'alt-token', 'neues Token');
+  assert.equal(link.view_count, 0);
+  const comments = db.prepare('SELECT * FROM share_comments WHERE share_token = ? ORDER BY id').all(link.token);
+  assert.equal(comments.length, 2);
+  assert.equal(comments[1].parent_id, comments[0].id, 'Antwort hängt an der neuen Wurzel');
+
+  const newSess = one('SELECT id FROM chat_sessions WHERE book_id = ?', nb).id;
+  const newImg = one('SELECT id FROM chat_images WHERE session_id = ?', newSess).id;
+  const ci = JSON.parse(one('SELECT context_info FROM chat_messages WHERE session_id = ?', newSess).context_info);
+  assert.equal(ci.images[0].image_id, newImg);
+
+  assert.equal(one('SELECT seconds FROM writing_time WHERE book_id = ?', nb).seconds, 3600);
+
+  // Quelle: in der Bibliothek des Importierenden angelegt, Text zeigt auf sie.
+  const mine = one("SELECT id FROM sources WHERE owner_email = ? AND title = 'Die Quelle'", OWNER);
+  assert.ok(mine && mine.id !== src);
+  const html = (await contentStore.loadPage(newPage, reqCtx)).html;
+  assert.match(html, new RegExp(`data-src="${mine.id}"`));
+  // Zweiter Import: dieselbe Quelle wird wiederverwendet, nicht verdoppelt.
+  await runImport(buffer);
+  assert.equal(one("SELECT COUNT(*) AS n FROM sources WHERE owner_email = ? AND title = 'Die Quelle'", OWNER).n, 1);
 });

@@ -3,7 +3,7 @@ import { test, describe } from 'node:test';
 import assert from 'node:assert';
 
 import {
-  familyEdges, familyLevels, familyComponents, packFamilies,
+  familyEdges, familyLevels, familyComponents, familyPositions, packFamilies,
 } from '../../public/js/graph/family-layout.js';
 
 const e = (from, typ, to) => ({ from, to, typ });
@@ -62,6 +62,52 @@ describe('familyLevels', () => {
     const lv = familyLevels(['a', 'b', 'x', 'y'], edges);
     assert.strictEqual(lv.get('x'), 0);
     assert.strictEqual(Math.min(lv.get('a'), lv.get('b')), 0);
+  });
+  test('Zyklus über Umwege bläht die Ebenen nicht auf', () => {
+    const edges = familyEdges([
+      e('a', 'kind', 'b'), e('b', 'kind', 'c'), e('c', 'kind', 'd'), e('d', 'kind', 'a'),
+      e('x', 'kind', 'a'), e('x', 'kind', 'c'),
+    ]);
+    const lv = familyLevels(['a', 'b', 'c', 'd', 'x'], edges);
+    assert.ok(Math.max(...lv.values()) <= 4, JSON.stringify([...lv]));
+  });
+});
+
+describe('familyPositions', () => {
+  const layout = (rel) => {
+    const edges = familyEdges(rel);
+    const ids = [...new Set(edges.flatMap(x => [x.from, x.to]))];
+    return familyPositions(ids, edges, familyLevels(ids, edges), { nodeSep: 180 });
+  };
+
+  test('Paar nebeneinander, Kind mittig darunter', () => {
+    const p = layout([
+      e('k', 'elternteil', 'v'), e('m', 'kind', 'k'), e('v', 'ehepartner', 'm'),
+      e('oma', 'kind', 'v'),
+    ]);
+    assert.strictEqual(Math.abs(p.v.x - p.m.x), 180);
+    assert.strictEqual(p.v.y, p.m.y);
+    assert.ok(Math.abs(p.k.x - (p.v.x + p.m.x) / 2) < 1, JSON.stringify(p));
+  });
+
+  test('gemeinsame Eltern ohne erfasste Ehe stehen nebeneinander', () => {
+    const p = layout([
+      e('g', 'kind', 'a'), e('g', 'kind', 'b'), e('b', 'ehepartner', 'b2'),
+      e('a', 'kind', 'k1'), e('a', 'kind', 'k2'), e('z', 'kind', 'k1'), e('z', 'kind', 'k2'),
+    ]);
+    assert.strictEqual(Math.abs(p.a.x - p.z.x), 180, JSON.stringify(p));
+  });
+
+  test('keine Überlappung auf einer Ebene', () => {
+    const rel = [];
+    for (let i = 0; i < 6; i++) rel.push(e('p', 'kind', `c${i}`), e(`c${i}`, 'ehepartner', `s${i}`), e(`c${i}`, 'kind', `g${i}`));
+    const p = layout(rel);
+    const rows = new Map();
+    for (const { x, y } of Object.values(p)) { if (!rows.has(y)) rows.set(y, []); rows.get(y).push(x); }
+    for (const xs of rows.values()) {
+      xs.sort((a, b) => a - b);
+      for (let i = 1; i < xs.length; i++) assert.ok(xs[i] - xs[i - 1] >= 179.9, `${xs}`);
+    }
   });
 });
 

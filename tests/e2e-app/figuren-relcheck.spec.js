@@ -88,3 +88,42 @@ test('figuren-relcheck: zwei Väter → Hinweis, Liste, markierte Kante; nach Ko
   await page.evaluate((id) => window.__app.loadFiguren(id), bookId);
   await expect(relcheck.locator('.relcheck-item').filter({ has: page.locator('.entity-ref', { hasText: BRUDER }) })).toHaveCount(0);
 });
+
+test('figuren-relcheck: verrutschte Kante umhängen, gemeldete Kante entfernen (Knöpfe an der Kante)', async ({ page }) => {
+  await bootApp(page);
+  const bookId = await selectSeededBook(page);
+  const before = await page.evaluate(async (id) => (await (await fetch(`/figures/${id}`)).json())?.figuren || [], bookId);
+  restore = { bookId, before };
+  // Prod-Fall «Er kennt Sarahs Mutter …» auf der Kante zu Peter: der Text nennt den
+  // Bruder, zu dem das Kind keine Kante hat (foreignTarget) → Umhängen-Knopf.
+  const figs = seeded(false);
+  figs[0].beziehungen = [{ figur_id: ids.vater, typ: 'bekannt', beschreibung: `Er kennt ${BRUDER} aus dem Wahlbüro.` }];
+  await putFiguren(page, bookId, [...before, ...figs]);
+
+  await page.evaluate(() => window.__app.toggleFiguresCard());
+  const card = page.locator(CARD);
+  await expect(card).toBeVisible();
+  const list = card.locator('.figur-list-section');
+  await list.locator('.filter-search-input').fill(KIND);
+  await list.locator('.figur-item', { hasText: KIND }).click();
+
+  const edgeTo = (name) => card.locator('.figur-beziehung-item').filter({ has: page.locator('.entity-ref', { hasText: name }) });
+  const retarget = edgeTo(VATER).locator('.figur-bz-actions button', { hasText: BRUDER });
+  await expect(retarget).toBeVisible();
+  await retarget.click();
+  await expect(edgeTo(BRUDER)).toHaveCount(1);
+  await expect(edgeTo(VATER)).toHaveCount(0);
+  const after = await page.evaluate(async (id) => (await (await fetch(`/figures/${id}`)).json()).figuren, bookId);
+  expect(after.find(f => f.id === ids.kind).beziehungen.map(b => b.figur_id)).toEqual([ids.bruder]);
+
+  // Zwei Väter: «Entfernen» an der falschen Kante, mit Rückfrage.
+  await putFiguren(page, bookId, [...before, ...seeded(true)]);
+  await page.evaluate((id) => window.__app.loadFiguren(id), bookId);
+  await card.locator('.figuren-relcheck').waitFor();
+  const remove = edgeTo(BRUDER).locator('.figur-bz-actions button', { hasText: 'Entfernen' });
+  await expect(remove).toBeVisible();
+  await remove.click();
+  await page.locator('#app-confirm-dialog .confirm-dialog-btn--danger').click();
+  await expect(edgeTo(BRUDER)).toHaveCount(0);
+  await expect(edgeTo(VATER)).toHaveCount(1);
+});

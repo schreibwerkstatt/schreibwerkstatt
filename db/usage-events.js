@@ -195,6 +195,44 @@ function _sharing(evts) {
   return [...acc.values()].map(s => ({ ...s, users: s.users.size }));
 }
 
+// Abschnitts-Revisionen: je Kennzahl eine Zeile mit Anzahl und Personen. Alle
+// Zeilen stehen auch bei 0 — «niemand stellt je wieder her» ist eine Antwort.
+// `view.steps` zaehlt Blaetterschritte (Summe), Personen = wer geblaettert hat.
+const REVISION_KEYS = [
+  'view', 'view.diff', 'view.current', 'view.steps',
+  'restore.hour', 'restore.day', 'restore.week', 'restore.older',
+  'pin', 'pin.named', 'rename', 'unpin',
+];
+
+function _revisions(evts) {
+  const acc = new Map(REVISION_KEYS.map(key => [key, { key, count: 0, users: new Set() }]));
+  const hit = (key, user, n = 1) => {
+    const r = acc.get(key);
+    if (!r || n <= 0) return;
+    r.count += n;
+    r.users.add(user);
+  };
+  for (const e of evts) {
+    const m = e.meta;
+    if (e.event === 'revision.view') {
+      hit('view', e.user_email);
+      if (m.diff === 'yes') hit('view.diff', e.user_email);
+      if (m.current === 'yes') hit('view.current', e.user_email);
+      if (Number.isInteger(m.steps)) hit('view.steps', e.user_email, m.steps);
+    } else if (e.event === 'revision.restore') {
+      if (m.ageBucket) hit(`restore.${m.ageBucket}`, e.user_email);
+    } else if (e.event === 'revision.pin') {
+      if (m.action === 'pin') {
+        hit('pin', e.user_email);
+        if (m.named === 'yes') hit('pin.named', e.user_email);
+      } else if (m.action) {
+        hit(m.action, e.user_email);
+      }
+    }
+  }
+  return [...acc.values()].map(r => ({ ...r, users: r.users.size }));
+}
+
 // Job-Typ → Chat-Art. Eine Chat-Runde ist ein Job; die Vorschlaege dazu kommen
 // als `chat.proposal`. So ist sichtbar, wie viele Runden ohne Vorschlag blieben.
 const CHAT_JOB_TYPES = { chat: 'page', 'book-chat': 'book', 'research-chat': 'research', 'plot-chat': 'plot', 'ideen-chat': 'ideen' };
@@ -295,6 +333,7 @@ function behaviorReport({ fromIso, toIso, includeAdmins = false }) {
     creation: _creation(keep(_events(['content.created'], fromIso, toIso))),
     sharing: _sharing(keep(_events(['share.link.created', 'comment.action'], fromIso, toIso))),
     lektorat: _lektorat(keep(_events(['lektorat.applied'], fromIso, toIso))),
+    revisions: _revisions(keep(_events(['revision.view', 'revision.restore', 'revision.pin'], fromIso, toIso))),
     editors,
     hours,
     tools: _tools(keep(_events(['dictation.start', 'tts.start', 'synonym.applied', 'xref.applied'], fromIso, toIso))),

@@ -83,6 +83,46 @@ function rebindBeziehungenByName(figuren, log) {
   return { rebound, dropped };
 }
 
+/** Bindet die Ziele einer KI-Konsolidierung (Einzel-Call) über `bz.name`, wo Name und
+ *  `figur_id` auseinanderlaufen. Das Schema verlangt beide (schemas.js#_bzItem
+ *  `withName`); die Ausgabe-ids der Figuren und die `figur_id` der Beziehungen zählt das
+ *  Modell aber getrennt — legt es eine Figur zusammen, verrutschen die Kanten dahinter
+ *  um eins («Der Vater baut ihm …» landet bei der nächsten Figur der Liste). Der Name
+ *  ist der Wert, den das Modell bewusst geschrieben hat.
+ *
+ *  Konservativ: trägt die id eine Figur, zu der der Name passt (`nameFitsFigure`, auch
+ *  Namensvettern mit Zusatz), bleibt sie. Sonst gilt die Figur, auf die der Name
+ *  EINDEUTIG zeigt (Voll-, Kurz- oder Grundname ohne Zusatz); ein mehrdeutiger oder
+ *  unbekannter Name lässt die id stehen. Mutiert in place. */
+function preferBeziehungNames(figuren, log) {
+  const byId = new Map((figuren || []).map(f => [f?.id, f]));
+  const idsByKey = new Map();
+  const add = (key, id) => {
+    if (!key) return;
+    if (!idsByKey.has(key)) idsByKey.set(key, new Set());
+    idsByKey.get(key).add(id);
+  };
+  for (const f of (figuren || [])) {
+    if (!f?.id) continue;
+    for (const nm of new Set([f.name, f.kurzname, stripQualifier(f.name)])) add(_normalizeName(nm), f.id);
+  }
+  let rebound = 0;
+  for (const f of (figuren || [])) {
+    for (const bz of (f?.beziehungen || [])) {
+      if (!bz?.name) continue;
+      if (nameFitsFigure(bz.name, byId.get(bz.figur_id))) continue;
+      const ids = idsByKey.get(_normalizeName(bz.name));
+      if (!ids || ids.size !== 1) continue;
+      const [target] = ids;
+      if (target === f.id || target === bz.figur_id) continue;
+      bz.figur_id = target;
+      rebound++;
+    }
+  }
+  if (rebound && log) log.info(`Konsolidierung: ${rebound} Beziehungs-Ziel(e) über den Namen statt die figur_id gebunden.`);
+  return rebound;
+}
+
 /** Prüfung der Beziehungs-Beschreibungen gegen offensichtliche Fehlzuordnung.
  *  Modelle verrutschen gelegentlich eine Beschreibung zwischen den Beziehungen
  *  derselben Figur («Cara ist die Schwester» auf der Kante Anna→Bert).
@@ -225,6 +265,7 @@ function mergeBeziehungenIntoFiguren(figuren, flatBz) {
       figur_id: zu,
       typ: bz.typ || 'andere',
       ...(Number.isFinite(bz.machtverhaltnis) ? { machtverhaltnis: bz.machtverhaltnis } : {}),
+      ...(Number.isFinite(bz.naehe) ? { naehe: bz.naehe } : {}),
       ...(bz.beschreibung ? { beschreibung: bz.beschreibung } : {}),
       ...(Array.isArray(bz.belege) && bz.belege.length ? { belege: bz.belege } : {}),
     });
@@ -233,7 +274,7 @@ function mergeBeziehungenIntoFiguren(figuren, flatBz) {
 }
 
 module.exports = {
-  annotateBeziehungenNames, rebindBeziehungenByName,
+  annotateBeziehungenNames, rebindBeziehungenByName, preferBeziehungNames,
   validateBeziehungenDescriptions, mergeBeziehungenIntoFiguren,
   relationDescKey, nameFitsFigure, dropCopiedRelations,
 };

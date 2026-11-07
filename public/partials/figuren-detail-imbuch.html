@@ -39,10 +39,27 @@
           <span class="figur-bz-typ" :class="'figur-bz-' + bz.typ" x-text="$app.t('figuren.bz.' + bz.typ)"></span>
           <button type="button" class="entity-ref" x-entity-ref="{ type: 'figur', id: bz.figur_id }"></button>
           <span x-show="bz.machtverhaltnis && bz.machtverhaltnis !== 0" class="figur-bz-macht" :class="bz.machtverhaltnis > 0 ? 'figur-bz-macht--positiv' : 'figur-bz-macht--negativ'" x-text="bz.machtverhaltnis > 0 ? '↑'.repeat(Math.abs(bz.machtverhaltnis)) : '↓'.repeat(Math.abs(bz.machtverhaltnis))"></span>
+          <span x-show="bz.naehe != null" class="figur-bz-naehe" :class="bz.naehe > 0 ? 'figur-bz-naehe--nah' : bz.naehe < 0 ? 'figur-bz-naehe--fern' : ''"
+                :data-tip="$app.t('figuren.naehe.tip')" x-text="bz.naehe != null ? $app.t('figuren.naehe.' + bz.naehe) : ''"></span>
           <span x-show="bz.beschreibung" class="card-hint card-hint--sm" x-text="'– ' + bz.beschreibung"></span>
           <!-- Beziehungsprüfung (book/figuren-relcheck.js): Regeln, unter denen diese Kante gemeldet ist. -->
           <template x-for="rule in figurBzConflictRules(f, bz)" :key="rule">
             <span class="tok-badge tok-high" :data-tip="$app.t('figuren.relcheck.edgeTip')" x-text="$app.t('relcheck.rule.' + rule)"></span>
+          </template>
+          <!-- Gemeldete Kante: der Autor entscheidet (entfernen bzw. auf die genannte Figur umhängen). -->
+          <template x-if="bz.rel_id != null && figurBzConflictRules(f, bz).length">
+            <span class="figur-bz-actions">
+              <template x-if="figurBzRetarget(bz)">
+                <button type="button" class="btn-compact" :disabled="figurBzBusy"
+                        @click="retargetFigurBz(bz, figurBzRetarget(bz))"
+                        :data-tip="$app.t('figuren.relcheck.retargetTip')"
+                        x-text="$app.t('figuren.relcheck.retarget', { name: figurBzRetarget(bz).toName })"></button>
+              </template>
+              <button type="button" class="btn-compact" :disabled="figurBzBusy"
+                      @click="deleteFigurBz(f, bz)"
+                      :data-tip="$app.t('figuren.relcheck.deleteTip')"
+                      x-text="$app.t('figuren.relcheck.delete')"></button>
+            </span>
           </template>
           <template x-if="bz.belege?.length">
             <!-- Beleg: Seite (per ID oder Kapitel+Seitenname), sonst Kapitel. -->

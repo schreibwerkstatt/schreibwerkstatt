@@ -24,6 +24,8 @@ export const CARD_REQUEST = Object.freeze({
   FIGUREN_TAB:       'figurenTab',        // cards/figuren-card.js (figurenGraphModus)
   PAGE_CHAT_SESSION: 'pageChatSession',   // cards/chat-card.js (Session-ID)
   PAGE_CHAT_DRAFT:   'pageChatDraft',     // cards/chat-card.js (Frage fürs Eingabefeld, neues Gespräch)
+  PAGE_CHAT_QUOTE:   'pageChatQuote',     // cards/chat-card.js (Markierung als Zitat ins Eingabefeld, laufendes Gespräch)
+  IDEEN_QUOTE:       'ideenQuote',        // cards/ideen-card.js (Markierung als Zitat ins Ideen-Eingabefeld)
   BOOK_CHAT_DRAFT:   'bookChatDraft',     // cards/book-chat-card.js (Frage fürs Eingabefeld, neues Gespräch)
   PDF_EXPORT_TAB:    'pdfExportTab',      // cards/pdf-export-card.js (activeTab)
   USER_SETTINGS_SECTION: 'userSettingsSection', // cards/user-settings-card.js (data-settings-section)

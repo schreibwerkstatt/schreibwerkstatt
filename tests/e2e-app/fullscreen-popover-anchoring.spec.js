@@ -17,7 +17,7 @@ const CARDS = [
   {
     label: 'plot',
     toggle: 'togglePlotCard',
-    card: '.card--plot',
+    card: '#plot-split',                         // Vollbild-Element: Split (Karte + Plot-Chat)
     popovers: [
       '.plot-occ-popover',                      // Anchor-Fundstellen (plot-anchor-popover.html)
       '.context-menu[x-ref="actionMenu"]',      // Strang-Aktionen (plot-thread-menu.html)
@@ -72,8 +72,8 @@ test('Vollbild: Tooltip und Palette erreichen den Top-Layer', async ({ page }) =
   // und macht sie zum Containing-Block fuer position:fixed.
   await page.waitForTimeout(1000);
 
-  await page.evaluate(() => document.querySelector('.card--plot').requestFullscreen());
-  await page.waitForFunction(() => document.fullscreenElement?.classList.contains('card--plot'));
+  await page.evaluate(() => document.getElementById('plot-split').requestFullscreen());
+  await page.waitForFunction(() => document.fullscreenElement?.id === 'plot-split');
 
   // ── Tooltip: Pixel-Nachweis. `.tip-layer` hat `pointer-events: none`, ein
   // Hit-Test taugt also nicht — stattdessen denselben Bildausschnitt mit und ohne
@@ -84,7 +84,7 @@ test('Vollbild: Tooltip und Palette erreichen den Top-Layer', async ({ page }) =
   const tip = await page.evaluate(() => {
     const l = document.querySelector('.tip-layer');
     const r = l.getBoundingClientRect();
-    return { inCard: document.querySelector('.card--plot').contains(l),
+    return { inCard: document.getElementById('plot-split').contains(l),
              clip: { x: Math.round(r.x), y: Math.round(r.y), width: Math.round(r.width), height: Math.round(r.height) } };
   });
   expect(tip.inCard, 'Tooltip-Layer liegt im Vollbild-Teilbaum').toBe(true);
@@ -106,7 +106,7 @@ test('Vollbild: Tooltip und Palette erreichen den Top-Layer', async ({ page }) =
     const o = document.querySelector('.palette-overlay');
     const r = o.getBoundingClientRect();
     const hit = document.elementFromPoint(window.innerWidth / 2, r.top + r.height * 0.2);
-    return { inCard: document.querySelector('.card--plot').contains(o),
+    return { inCard: document.getElementById('plot-split').contains(o),
              hitInOverlay: !!(hit && o.contains(hit)),
              stillFullscreen: !!document.fullscreenElement };
   });
@@ -138,7 +138,7 @@ test('ideen-board: Vollbild-Knopf und Verknuepfungs-Picker im Top-Layer', async 
     await page.waitForTimeout(1000); // cardFadeIn (Transform = Containing-Block)
 
     await boardCard.getByRole('button', { name: 'Board im Vollbild anzeigen (Esc beendet)' }).click();
-    await page.waitForFunction(() => document.fullscreenElement?.id === 'ideen-board-card');
+    await page.waitForFunction(() => document.fullscreenElement?.id === 'ideen-board-split');
     await expect(boardCard.getByRole('button', { name: 'Vollbild beenden' })).toHaveAttribute('aria-pressed', 'true');
 
     const card = boardCard.locator(`[data-idee-card-id="${ideeId}"]`);
@@ -151,7 +151,7 @@ test('ideen-board: Vollbild-Knopf und Verknuepfungs-Picker im Top-Layer', async 
       const o = document.querySelector('.idee-link-popover');
       const r = o.getBoundingClientRect();
       const hit = document.elementFromPoint(r.left + r.width / 2, r.top + 10);
-      return { inCard: document.getElementById('ideen-board-card').contains(o), hitInPopover: !!(hit && o.contains(hit)) };
+      return { inCard: document.getElementById('ideen-board-split').contains(o), hitInPopover: !!(hit && o.contains(hit)) };
     });
     expect(res.inCard, 'Picker liegt im Vollbild-Teilbaum').toBe(true);
     expect(res.hitInPopover, 'Picker ist im Vollbild anklickbar').toBe(true);

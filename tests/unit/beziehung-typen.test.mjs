@@ -44,10 +44,17 @@ test('Synonyme und Schreibvarianten auf den Listenwert', () => {
 });
 
 test('unbekannter Typ ⇒ andere, Rohwert bleibt als original erhalten', () => {
-  assert.deepEqual(normalizeRelationTyp('tante'), { typ: 'andere', original: 'tante' });
-  assert.deepEqual(normalizeRelationTyp('großmutter'), { typ: 'andere', original: 'großmutter' });
+  assert.deepEqual(normalizeRelationTyp('patin'), { typ: 'andere', original: 'patin' });
   assert.deepEqual(normalizeRelationTyp(''), { typ: 'andere', original: null });
   assert.deepEqual(normalizeRelationTyp(undefined), { typ: 'andere', original: null });
+});
+
+test('weitere Verwandtschaft ⇒ verwandt, das genaue Wort bleibt als original', () => {
+  assert.deepEqual(normalizeRelationTyp('tante'), { typ: 'verwandt', original: 'tante' });
+  assert.deepEqual(normalizeRelationTyp('großmutter'), { typ: 'verwandt', original: 'großmutter' });
+  assert.deepEqual(normalizeRelationTyp('Schwägerin'), { typ: 'verwandt', original: 'Schwägerin' });
+  assert.deepEqual(normalizeRelationTyp('Verwandter'), { typ: 'verwandt', original: null });
+  assert.deepEqual(normalizeRelationTyp('verwandt'), { typ: 'verwandt', original: null });
 });
 
 test('normalizeRelationTypes: in place, Rohwert füllt nur eine leere Beschreibung', () => {
@@ -59,7 +66,7 @@ test('normalizeRelationTypes: in place, Rohwert füllt nur eine leere Beschreibu
     null,
   ];
   assert.equal(normalizeRelationTypes(list), 3);
-  assert.deepEqual(list[0], { figur_id: 'a', typ: 'andere', beschreibung: 'tante' });
+  assert.deepEqual(list[0], { figur_id: 'a', typ: 'verwandt', beschreibung: 'tante' });
   assert.equal(list[1].beschreibung, 'Ihr Onkel aus Bremen.');
   assert.equal(list[2].typ, 'bekannt');
   assert.equal(list[3].typ, 'freund');
@@ -84,4 +91,13 @@ test('Prompts nennen die Liste nur über RELATION_TYPES_PROMPT, nie als Literal'
   for (const f of ['public/js/prompts/komplett/schema-strings.js', 'public/js/prompts/komplett/figuren.js']) {
     assert.ok(!read(f).includes(literal), `${f}: Typenliste hartcodiert`);
   }
+});
+
+test('RELATION_INVERSES: CJS-Spiegel in db/figures/refs.js gleich der SSoT', async () => {
+  const { RELATION_INVERSES } = await import('../../public/js/book/beziehung-typen.js');
+  const src = read('db/figures/refs.js');
+  const m = src.match(/const RELATION_INVERSES = (\{[^}]*\});/);
+  assert.ok(m, 'RELATION_INVERSES in refs.js nicht gefunden');
+  const mirror = Function(`return (${m[1]});`)();
+  assert.deepEqual(mirror, RELATION_INVERSES);
 });

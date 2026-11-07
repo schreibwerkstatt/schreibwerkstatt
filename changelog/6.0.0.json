@@ -1,0 +1,106 @@
+{
+  "version": "6.0.0",
+  "date": "2026-11-07",
+  "entries": [
+    {
+      "kind": "neu",
+      "de": "Figuren-Karte, Steckbrief: neue Bereiche «Berufsweg» und «Hobbys» mit Zeitraum, Ort und Arbeitgeber. Mit «Berufsweg & Hobbys vorschlagen» sucht die KI passende Stellen im Text, übernehmen tust du jeden Vorschlag selbst.",
+      "en": "Characters card, profile: new \"Career\" and \"Hobbies\" sections with period, place and employer. \"Suggest career & hobbies\" has the AI find matching passages in the text, and you accept each suggestion yourself."
+    },
+    {
+      "kind": "neu",
+      "de": "Figuren-Karte, Reiter «Alter»: gib einen Stichtag ein und sieh das Alter jeder Figur an diesem Tag, dazu Klasse und Tätigkeit. Die Spalte «Schulzeit» zeigt, wann welche Schulstufe lief.",
+      "en": "Characters card, \"Age\" tab: enter a reference date to see each character's age on that day, along with school grade and occupation. The \"School years\" column shows when each school level ran."
+    },
+    {
+      "kind": "neu",
+      "de": "Soziogramm: nahe Figuren stehen jetzt eng beieinander, verfeindete weit auseinander. Mit «Nähe einschätzen» bewertet die KI jede Beziehung, gestrichelte Linien zeigen Figuren, die sich oft begegnen.",
+      "en": "Sociogram: close characters now stand near each other, enemies far apart. \"Estimate closeness\" has the AI rate each relationship, and dashed lines show characters who often meet."
+    },
+    {
+      "kind": "neu",
+      "de": "Abschnitts-Chat und Ideen per Tastatur: ⌘/Strg+Shift+1 öffnet den Chat, ⌘/Strg+Shift+2 die Ideen zum Abschnitt. Markierter Text kommt als Zitat mit, Esc bringt dich zurück an die Stelle im Text.",
+      "en": "Section chat and ideas by keyboard: ⌘/Ctrl+Shift+1 opens the chat, ⌘/Ctrl+Shift+2 the section's ideas. Selected text comes along as a quote, and Esc takes you back to your place in the text."
+    },
+    {
+      "kind": "neu",
+      "de": "Beziehungs-Check der Figuren: eine fragwürdige Beziehung kannst du direkt entfernen oder auf die Figur umhängen, die ihre Beschreibung nennt. Die nächste Buchanalyse legt eine entfernte Beziehung nicht wieder an.",
+      "en": "Characters relationship check: you can now remove a questionable relationship directly, or move it to the character its description names. The next book analysis won't add a removed relationship back."
+    },
+    {
+      "kind": "neu",
+      "de": "Recherche-Chat: er kann jetzt auch bestehende Fundstücke ändern, archivieren oder zwei davon zusammenführen. Jeder Vorschlag erscheint mit Vorher und Nachher, übernommen wird erst auf deinen Klick.",
+      "en": "Research chat: it can now also edit existing items, archive them or merge two of them. Each suggestion shows before and after, and nothing changes until you click."
+    },
+    {
+      "kind": "neu",
+      "de": "Ideen-Karte: «Gegen Text prüfen» schaut, welche offenen Pendenzen des Abschnitts im Text schon eingelöst sind. Du entscheidest je Hinweis, ob sie erledigt ist oder offen bleibt.",
+      "en": "Ideas card: \"Check against text\" looks at which of the section's open to-dos are already resolved in the text. For each hint you decide whether it's done or stays open."
+    },
+    {
+      "kind": "verbessert",
+      "de": "Export-Karte, Buch-Umzug (.swbook): standardmässig reist jetzt alles mit, auch Publikation, Plot-Board, Motive, Figuren-Werkstatt und Share-Links mit Leser-Kommentaren. Beim Umzug auf eine andere Instanz geht nichts mehr verloren.",
+      "en": "Export card, book transfer (.swbook): by default everything now comes along, including publication, plot board, motifs, character workshop and share links with reader comments. Nothing gets lost when moving to another instance."
+    },
+    {
+      "kind": "verbessert",
+      "de": "Ideen-Karte: du kannst Idee um Idee per Enter erfassen, ohne zurück ins Feld zu klicken, und die Leiste bleibt beim Abschnittswechsel offen. Im Ideen-Board bleiben bei vielen Ideen die Spaltenköpfe sichtbar.",
+      "en": "Ideas card: you can add idea after idea with Enter without clicking back into the field, and the panel stays open when you switch sections. On the ideas board, column headers stay visible even with many ideas."
+    },
+    {
+      "kind": "verbessert",
+      "de": "Revisionen eines Abschnitts heissen jetzt nach ihrem Datum statt nach einer Nummer. Im Viewer blätterst du mit ← und → Version für Version.",
+      "en": "A section's revisions are now named by their date instead of a number. In the viewer, ← and → step through them one version at a time."
+    },
+    {
+      "kind": "verbessert",
+      "de": "Befehlspalette: «Alle Treffer in der Suche öffnen» zeigt die volle Trefferliste. Abschnitts-Chat und Ideen lassen sich von hier aus öffnen.",
+      "en": "Command palette: \"Open all results in search\" shows the full result list. Section chat and ideas can be opened from here too."
+    },
+    {
+      "kind": "verbessert",
+      "de": "Recherche-Board: Beschreibungen von Fundstücken werden formatiert angezeigt, mit Listen, Hervorhebungen und anklickbaren Links.",
+      "en": "Research board: descriptions of items are now shown formatted, with lists, emphasis and clickable links."
+    },
+    {
+      "kind": "verbessert",
+      "de": "Zeitstrahl: neue Ereignistypen für Ausbildung, Abschluss, Stellenantritt, Berufswechsel, Jobverlust und Pensionierung, jeder mit eigener Farbe.",
+      "en": "Timeline: new event types for training, graduation, starting a job, career change, job loss and retirement, each with its own color."
+    },
+    {
+      "kind": "verbessert",
+      "de": "Plot-Chat und Ideen-Chat öffnen jetzt als eigene Karte neben dem Board, wie der Recherche-Chat. So siehst du das Board, während du mit dem Chat arbeitest.",
+      "en": "Plot chat and ideas chat now open as their own card next to the board, like the research chat. That way you see the board while you work with the chat."
+    },
+    {
+      "kind": "verbessert",
+      "de": "Plot-Chat: er schlägt jetzt auch Beziehungen zwischen Beats vor (etwa Setup und Payoff) und ordnet Beats Motive und Orte zu.",
+      "en": "Plot chat: it now also suggests relationships between beats (such as setup and payoff) and assigns motifs and places to beats."
+    },
+    {
+      "kind": "verbessert",
+      "de": "Ideen-Chat: doppelte Ideen führt er auf Wunsch zu einer zusammen. Eine übernommene Idee zeigt das Board sofort an, auch wenn ein Filter sie verdeckt hätte.",
+      "en": "Ideas chat: on request, it merges duplicate ideas into one. The board shows an accepted idea right away, even if a filter would have hidden it."
+    },
+    {
+      "kind": "verbessert",
+      "de": "Plot-Werkstatt, Zeitvorschläge: ein Hinweis zeigt jetzt, wenn ein Beat ebenso gut zu einer anders datierten Szene passt oder nicht in seinen Akt fällt.",
+      "en": "Plot workshop, time suggestions: a hint now shows when a beat fits an otherwise-dated scene just as well, or doesn't fall within its act."
+    },
+    {
+      "kind": "behoben",
+      "de": "Bucheditor, Suchen und Ersetzen: nach einem Einzel-Ersetzen sprang die Suche nicht zum nächsten Treffer, und nach dem Neuladen begann sie wieder am Buchanfang.",
+      "en": "Book editor, find and replace: after a single replace, search didn't move on to the next match, and after reloading it started again at the beginning of the book."
+    },
+    {
+      "kind": "behoben",
+      "de": "Recherche-Board: ein hochgeladenes Audio meldete fälschlich einen Fehler, und ein laufendes Transkript ging nach dem Neuladen verloren. Ein Klick auf ein ausgefiltertes oder archiviertes Fundstück öffnet es jetzt.",
+      "en": "Research board: an uploaded audio file wrongly reported an error, and a running transcript got lost after reloading. Clicking a filtered-out or archived item now opens it."
+    },
+    {
+      "kind": "behoben",
+      "de": "Recherche-Board: Links, die nicht erreichbar waren, standen fälschlich als «Interne Adresse» da. Fehler beim Hochladen oder Verknüpfen verschwinden nicht mehr unbemerkt.",
+      "en": "Research board: unreachable links were wrongly labeled \"Internal address\". Errors while uploading or linking no longer vanish unnoticed."
+    }
+  ]
+}

@@ -172,3 +172,41 @@ test('recherche: Anlegen im Modal — gleiche Felder wie im Bearbeiten-Modus', a
     for (const r of rows) await fetch(`/research/${r.id}`, { method: 'DELETE' });
   }, bookId);
 });
+
+// Beschreibungstexte kommen oft als Markdown (Recherche-Chat-Vorschläge): Board-
+// Anriss und Detailansicht rendern es über den Chat-Renderer — Roh-HTML bleibt
+// escaped. Ein Zitat ist Wortlaut und wird NICHT als Markdown gelesen.
+test('recherche: Markdown im Beschreibungstext wird gerendert, Zitat bleibt Wortlaut', async ({ page }) => {
+  await bootApp(page);
+  const bookId = await selectSeededBook(page);
+  const made = await page.evaluate(async (id) => {
+    const post = (payload) => fetch('/research', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ book_id: id, ...payload }),
+    }).then(r => r.json());
+    const md = await post({ kind: 'note', title: 'MD-Notiz',
+      body: '**Fall-Eckdaten**\n\n- Tatdatum: 2024\n- Ort: Binningen\n\n<img src=x onerror=alert(1)>' });
+    const quote = await post({ kind: 'quote', title: 'MD-Zitat', body: 'Er sagte: **nie** wieder.' });
+    return { md: md.id, quote: quote.id };
+  }, bookId);
+
+  await page.evaluate((id) => { location.hash = `#book/${id}/recherche`; }, bookId);
+  const teaser = page.locator(`[data-research-id="${made.md}"] .research-item-text`);
+  await expect(teaser.locator('strong')).toHaveText('Fall-Eckdaten');
+  await expect(teaser.locator('li')).toHaveCount(2);
+  await expect(teaser.locator('img')).toHaveCount(0);
+  await expect(teaser).toContainText('<img src=x');
+
+  const quoteTeaser = page.locator(`[data-research-id="${made.quote}"] .research-item-text`);
+  await expect(quoteTeaser).toHaveText('Er sagte: **nie** wieder.');
+
+  const dialog = page.locator('dialog.research-dialog:not(.research-dialog--create)');
+  await page.locator(`[data-research-id="${made.md}"] .research-item-title`).click();
+  await expect(dialog.locator('.research-dialog__text li')).toHaveCount(2);
+  await expect(dialog.locator('.research-dialog__text strong')).toHaveText('Fall-Eckdaten');
+  await page.keyboard.press('Escape');
+
+  await page.evaluate(async (ids) => {
+    for (const id of ids) await fetch(`/research/${id}`, { method: 'DELETE' });
+  }, [made.md, made.quote]);
+});

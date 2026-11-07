@@ -1,6 +1,6 @@
 const express = require('express');
 const { db, saveFigurenToDb, getChapterFigures, listFigurenWithDetails } = require('../db/schema');
-const { validateFigurePatch, patchFigure, deleteStaleFigures } = require('../db/figures');
+const { validateFigurePatch, patchFigure, deleteStaleFigures, deleteFigureRelation, retargetFigureRelation } = require('../db/figures');
 const { mergeFigures } = require('../db/entity-merge');
 const { loadOrderedBookContents, idMapsFromContents } = require('./jobs/shared/loader');
 const { recomputeBookFigureMentions } = require('../lib/page-index');
@@ -196,6 +196,30 @@ router.patch('/:book_id/:fig_id', jsonBody, (req, res) => {
       }
     });
   }
+});
+
+// Einzelne Beziehung löschen bzw. umhängen (Knöpfe an gemeldeten Kanten der
+// Figuren-Karte, book/figuren-relcheck.js). `:rel_id` = figure_relations.id, wie GET
+// sie je Beziehung als `rel_id` ausliefert. Eine KI-Kante bekommt dabei eine
+// Löschmarke, damit die nächste Komplettanalyse sie nicht wieder anlegt
+// (db/figures/relation-edits.js). Umhängen: Body `{ to }` = fig_id des neuen Ziels.
+// Muss VOR '/:book_id/:id' stehen — dort ist nur ein Segment nach der Buch-ID.
+router.delete('/:book_id/relations/:rel_id', (req, res) => {
+  const relId = toIntId(req.params.rel_id);
+  if (!relId) return res.status(400).json({ error_code: 'INVALID_ID' });
+  if (!deleteFigureRelation(req.bookId, sessionEmail(req), relId)) return res.status(404).json({ error_code: 'NOT_FOUND' });
+  res.json({ ok: true });
+});
+
+router.patch('/:book_id/relations/:rel_id', jsonBody, (req, res) => {
+  const relId = toIntId(req.params.rel_id);
+  if (!relId) return res.status(400).json({ error_code: 'INVALID_ID' });
+  const to = typeof req.body?.to === 'string' ? req.body.to.trim() : '';
+  if (!to) return res.status(400).json({ error_code: 'MISSING_TARGET' });
+  const r = retargetFigureRelation(req.bookId, sessionEmail(req), relId, to);
+  if (r.error === 'NOT_FOUND' || r.error === 'TARGET_NOT_FOUND') return res.status(404).json({ error_code: r.error });
+  if (r.error) return res.status(400).json({ error_code: r.error });
+  res.json({ ok: true });
 });
 
 // Bulk-Cleanup: alle STALE Figuren eines Buchs auf einmal löschen (Danger-Zone). Pendant

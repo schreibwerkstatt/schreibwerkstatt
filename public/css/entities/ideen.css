@@ -110,4 +110,31 @@
   box-shadow: 0 0 0 1px var(--color-accent);
 }
 
+/* Hinweis des Auto-Erledigt-Checks (partials/ideen-check-hint.html) — in der
+   Ideen-Karte und auf der Board-Karte: der Text scheint die Pendenz einzulösen. */
+.idee-check-hint {
+  margin-top: var(--space-xs);
+  padding: var(--space-xs) var(--space-sm);
+  background: var(--color-ok-bg);
+  border-radius: var(--radius-md);
+  font-size: var(--font-size-sm);
+  overflow-wrap: anywhere;
+}
+.idee-check-hint__label {
+  color: var(--color-ok-text);
+  font-size: var(--font-size-xs);
+  font-weight: 600;
+}
+.idee-check-hint__beleg q { font-style: italic; }
+.idee-check-hint__reason {
+  color: var(--color-muted);
+  font-size: var(--font-size-xs);
+}
+.idee-check-hint__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-xs);
+  margin-top: var(--space-xs);
+}
+
 }

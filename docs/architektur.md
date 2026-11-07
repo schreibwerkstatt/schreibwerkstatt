@@ -20,6 +20,7 @@ Browser → NGINX (HTTPS) → Express (Port 3737)
   /figures/*       → Figuren-CRUD (SQLite)
   /figures/:id/alter → Alterstabelle lesen (abgeleiteter Alters-Index, read-only, ab `viewer`)
   /figures/:id/relation-check → Beziehungsprüfung des Katalogs (ohne KI, read-only, ab `editor`)
+  /figures/:id/relations/:rel_id → einzelne Beziehung löschen (DELETE) bzw. umhängen (PATCH { to }); KI-Kanten bekommen eine Löschmarke
   /jobs/figur-alter → Alters-Analyse: Altersangaben der Figuren aus dem Buchtext (Muster + semantische Nachlese, dann KI-Lesung der Kandidatensaetze)
   /draft-figures/* → Figuren-Drafts (Brainstorming vor Übernahme)
   /locations/*     → Orte-CRUD (SQLite, inkl. lat/lng/land für Geo-Karte)

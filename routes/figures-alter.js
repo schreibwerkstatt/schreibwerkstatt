@@ -16,6 +16,8 @@ const contentStore = require('../lib/content-store');
 const { AGE_ANALYSIS_VERSION } = require('../lib/figure-age');
 const { aclParamGuard, sessionEmail } = require('../lib/acl');
 const { bookParamHandler } = require('../lib/log-context');
+const { resolveBirthsForFigures } = require('../lib/figure-birth');
+const { listFiguresForSchoolPath } = require('../db/figure-school-paths');
 
 const router = express.Router();
 
@@ -47,8 +49,16 @@ router.get('/:book_id/alter', (req, res) => {
   const bookId = req.bookId; // aclParamGuard hat Login + Buch-ID schon geprueft
   const userEmail = sessionEmail(req);
   const scan = getFigureAgeScan(bookId, userEmail);
+  // Massgebliche Geburt je Figur (Steckbrief › Geburts-Ereignis › Alters-Index,
+  // lib/figure-birth.js) für den Stichtag der Tabelle — dieselbe Geburt, mit der
+  // das Buch-Chat-Werkzeug `get_figure_age` rechnet. Auch ohne Lauf vorhanden.
+  const figs = listFiguresForSchoolPath(bookId, userEmail);
+  const births = resolveBirthsForFigures(bookId, userEmail, figs);
+  const geburten = {};
+  for (const f of figs) if (births.has(f.id)) geburten[f.fig_id] = births.get(f.id);
   res.json({
     figuren: listFigureAges(bookId, userEmail),
+    geburten,
     scan: scan ? {
       scanned_at: scan.scanned_at,
       figuren_total: scan.figuren_total,

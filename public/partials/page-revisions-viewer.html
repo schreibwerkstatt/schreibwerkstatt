@@ -4,17 +4,18 @@
 <dialog class="revision-viewer"
         x-ref="viewerDialog"
         @close="viewerOpen = false"
-        @keydown.escape="closeViewer()"
-        @keydown.left="$event.target.closest('input') || ($event.preventDefault(), hasPrevRev() && gotoRev('prev'))"
-        @keydown.right="$event.target.closest('input') || ($event.preventDefault(), hasNextRev() && gotoRev('next'))"
+        @keydown.escape="dismissViewer()"
+        @keydown.left="onViewerArrow($event, 'prev')"
+        @keydown.right="onViewerArrow($event, 'next')"
         @keydown.window.capture.enter="onViewerRestoreKey($event)">
   <template x-if="viewerOpen && viewerRev">
     <div class="revision-viewer__inner">
       <header class="revision-viewer__head">
         <div class="revision-viewer__meta">
           <h2 class="revision-viewer__title">
-            <span x-text="viewerRev.pinned && viewerRev.label ? viewerRev.label : revisionTitle(viewerRev)"></span>
-            <span class="revision-viewer__date" x-text="$app.formatDate(viewerRev.created_at)"></span>
+            <span x-text="revisionTitle(viewerRev)"></span>
+            <span class="revision-viewer__date" x-show="viewerRev.pinned && viewerRev.label"
+                  x-text="$app.formatDate(viewerRev.created_at)"></span>
           </h2>
           <span class="badge badge-ok" x-text="sourceLabel(viewerRev.source)"></span>
           <span class="tag" x-show="summaryLabel(viewerRev)" x-text="summaryLabel(viewerRev)"></span>
@@ -35,7 +36,7 @@
         </div>
         <button type="button"
                 class="revision-viewer__close"
-                @click="closeViewer()"
+                @click="dismissViewer()"
                 :data-tip="$app.t('editor.revisions.viewer.close')"
                 :aria-label="$app.t('editor.revisions.viewer.close')"><svg class="icon" aria-hidden="true"><use href="/icons.svg#x"/></svg></button>
       </header>
@@ -65,66 +66,71 @@
                @blur="saveViewerLabel()">
       </div>
 
-      <nav class="revision-viewer__tabs" role="tablist">
-        <button type="button"
-                role="tab"
-                class="revision-viewer__tab"
-                :class="{ 'is-active': viewerMode === 'content' }"
-                :aria-selected="viewerMode === 'content'"
-                @click="setViewerMode('content')"
-                x-text="$app.t('editor.revisions.viewer.tabContent')"></button>
-        <button type="button"
-                role="tab"
-                class="revision-viewer__tab"
-                :class="{ 'is-active': viewerMode === 'diff' }"
-                :aria-selected="viewerMode === 'diff'"
-                @click="setViewerMode('diff')"
-                x-text="$app.t('editor.revisions.viewer.tabDiff')"></button>
-      </nav>
+      <!-- Tab+Panel-Set ueber Alpine.data('tabs') (DESIGN.md «Tabs»): ARIA,
+           Roving-Tabindex und Pfeil-Tastatur kommen aus der Komponente. Der
+           aktive Tab ist `viewerMode`; `tab-change` zieht den Diff nach. Auf der
+           Tab-Leiste blaettern ←/→ nicht durch die Revisionen (onViewerArrow).
+           Wrapper ohne eigene Box (display: contents), die Spaltenaufteilung
+           des Dialogs bleibt. -->
+      <div class="revision-viewer__tabset"
+           x-data="tabs(['content', 'diff'])" x-modelable="value" x-model="viewerMode"
+           @tab-change="setViewerMode($event.detail)">
+        <div class="revision-viewer__tabs" x-bind="tablist">
+          <button class="revision-viewer__tab" x-bind="tabBtn('content')"
+                  x-text="$app.t('editor.revisions.viewer.tabContent')"></button>
+          <button class="revision-viewer__tab" x-bind="tabBtn('diff')"
+                  x-text="$app.t('editor.revisions.viewer.tabDiff')"></button>
+        </div>
 
-      <div class="revision-viewer__body">
-        <div x-show="viewerLoading" x-cloak class="revision-viewer__hint"
-             x-text="$app.t('editor.revisions.viewer.loading')"></div>
-        <div x-show="viewerError" x-cloak class="revision-viewer__hint revision-viewer__hint--error"
-             x-text="$app.t('editor.revisions.viewer.error') + ' ' + viewerError"></div>
+        <div class="revision-viewer__body">
+          <div x-show="viewerLoading" x-cloak class="revision-viewer__hint"
+               x-text="$app.t('editor.revisions.viewer.loading')"></div>
+          <div x-show="viewerError" x-cloak class="revision-viewer__hint revision-viewer__hint--error"
+               role="alert" x-text="viewerError"></div>
 
-        <!-- Inhalt-Tab: gerendertes Body-HTML der Revision. Der Server liefert
-             es ohne aktive Inhalte aus (stripActiveContent in der Detail-Route). -->
-        <div x-show="!viewerLoading && !viewerError && viewerMode === 'content'"
-             x-cloak
-             class="revision-viewer__content page-content-view"
-             x-html="viewerBody"></div>
-
-        <!-- Vergleichs-Tab: Block-/Wort-Diff gegen Vorgaengerin oder aktuellen Stand. -->
-        <div x-show="!viewerLoading && !viewerError && viewerMode === 'diff'" x-cloak
-             class="revision-viewer__diff">
-          <!-- Modus-Toggle (DESIGN.md „Tabs / Modus-Toggle"), kein Panel-Set. -->
-          <div class="revision-viewer__compare">
-            <span class="revision-viewer__compare-label" x-text="$app.t('editor.revisions.viewer.compareLabel')"></span>
-            <div class="tabs">
-              <button type="button" class="tabs-btn"
-                      :class="{ 'tabs-btn--active': viewerCompare === 'prev' }"
-                      :aria-pressed="viewerCompare === 'prev'"
-                      @click="setViewerCompare('prev')"
-                      x-text="$app.t('editor.revisions.viewer.compareWithPrev')"></button>
-              <button type="button" class="tabs-btn"
-                      :class="{ 'tabs-btn--active': viewerCompare === 'current' }"
-                      :aria-pressed="viewerCompare === 'current'"
-                      @click="setViewerCompare('current')"
-                      x-text="$app.t('editor.revisions.viewer.compareWithCurrent')"></button>
-            </div>
+          <!-- Inhalt-Tab: gerendertes Body-HTML der Revision. Der Server liefert
+               es ohne aktive Inhalte aus (stripActiveContent in der Detail-Route). -->
+          <div x-bind="panel('content')">
+            <div x-show="!viewerLoading && !viewerError" x-cloak
+                 class="revision-viewer__content page-content-view"
+                 x-html="viewerBody"></div>
           </div>
-          <div x-show="viewerDiffLoading" x-cloak class="revision-viewer__hint"
-               x-text="$app.t('editor.revisions.viewer.diffLoading')"></div>
-          <div x-show="!viewerDiffLoading && viewerDiffUnchanged" x-cloak
-               class="revision-viewer__hint"
-               x-text="$app.t(viewerCompare === 'current' ? 'editor.revisions.viewer.noChangesCurrent' : 'editor.revisions.viewer.noChanges')"></div>
-          <div x-show="!viewerDiffLoading && !viewerDiffUnchanged" x-cloak>
-            <div class="revision-diff-header" aria-hidden="true">
-              <span x-text="$app.t(viewerCompare === 'current' ? 'editor.revisions.viewer.colCurrent' : 'editor.revisions.viewer.colPrev')"></span>
-              <span x-text="$app.t('editor.revisions.viewer.colThis')"></span>
+
+          <!-- Vergleichs-Tab: Block-/Wort-Diff gegen Vorgaengerin oder aktuellen Stand. -->
+          <div x-bind="panel('diff')">
+            <div x-show="!viewerLoading && !viewerError" x-cloak class="revision-viewer__diff">
+            <!-- Modus-Toggle (DESIGN.md „Tabs / Modus-Toggle"), kein Panel-Set. -->
+            <div class="revision-viewer__compare">
+              <span class="revision-viewer__compare-label" x-text="$app.t('editor.revisions.viewer.compareLabel')"></span>
+              <div class="tabs">
+                <button type="button" class="tabs-btn"
+                        :class="{ 'tabs-btn--active': viewerCompare === 'prev' }"
+                        :aria-pressed="viewerCompare === 'prev'"
+                        @click="setViewerCompare('prev')"
+                        x-text="$app.t('editor.revisions.viewer.compareWithPrev')"></button>
+                <button type="button" class="tabs-btn"
+                        :class="{ 'tabs-btn--active': viewerCompare === 'current' }"
+                        :aria-pressed="viewerCompare === 'current'"
+                        @click="setViewerCompare('current')"
+                        x-text="$app.t('editor.revisions.viewer.compareWithCurrent')"></button>
+              </div>
             </div>
-            <div class="revision-diff-body" x-html="viewerDiffHtml"></div>
+            <div x-show="viewerDiffLoading" x-cloak class="revision-viewer__hint"
+                 x-text="$app.t('editor.revisions.viewer.diffLoading')"></div>
+            <div x-show="!viewerDiffLoading && viewerDiffError" x-cloak
+                 class="revision-viewer__hint revision-viewer__hint--error"
+                 role="alert" x-text="viewerDiffError"></div>
+            <div x-show="!viewerDiffLoading && !viewerDiffError && viewerDiffUnchanged" x-cloak
+                 class="revision-viewer__hint"
+                 x-text="$app.t(viewerCompare === 'current' ? 'editor.revisions.viewer.noChangesCurrent' : 'editor.revisions.viewer.noChanges')"></div>
+            <div x-show="!viewerDiffLoading && !viewerDiffError && !viewerDiffUnchanged && viewerDiffHtml" x-cloak>
+              <div class="revision-diff-header" aria-hidden="true">
+                <span x-text="$app.t(viewerCompare === 'current' ? 'editor.revisions.viewer.colCurrent' : 'editor.revisions.viewer.colPrev')"></span>
+                <span x-text="$app.t('editor.revisions.viewer.colThis')"></span>
+              </div>
+              <div class="revision-diff-body" x-html="viewerDiffHtml"></div>
+            </div>
+            </div>
           </div>
         </div>
       </div>
@@ -151,7 +157,7 @@
         <div class="revision-viewer__foot-actions">
           <button type="button"
                   class="revision-viewer__btn"
-                  @click="closeViewer()"
+                  @click="dismissViewer()"
                   x-text="$app.t('editor.revisions.viewer.close')"></button>
           <button type="button"
                   class="revision-viewer__btn"

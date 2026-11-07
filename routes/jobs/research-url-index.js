@@ -37,6 +37,8 @@ function syncUrlIndex(ctx, { webResults = null } = {}) {
     ['pages', ctx.web?.pages],
     ['literature', ctx.literatureHits],
     ['user', ctx.userMessageUrls],
+    // Geprüfte Quellen früherer Antworten dieser Session (research-chat-helpers.js#sessionPriorSources).
+    ['prior', ctx.priorSources],
   ];
   for (const [key, list] of lists) {
     if (!Array.isArray(list)) continue;

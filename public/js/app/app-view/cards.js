@@ -167,6 +167,15 @@ export const cardsMethods = {
     window.dispatchEvent(new CustomEvent(EVT.SEARCH_SIMILAR, { detail: { kind, id, label: label || '' } }));
   },
 
+  // Volltextsuche mit fertiger Anfrage öffnen (Palette: «Alle Treffer in der
+  // Suche»). Die Suchkarte übernimmt Anfrage + Arten und sucht im aktuellen Buch.
+  async openSearchWithQuery(q, kinds) {
+    if (!this.showSearchCard) await this.toggleSearchCard();
+    else await this._ensurePartial('search');
+    await this.$nextTick();
+    window.dispatchEvent(new CustomEvent(EVT.SEARCH_QUERY, { detail: { q, kinds } }));
+  },
+
   // Kapitel-Ideen: lebt parallel zur Kapitelreview-Karte (gleicher Slot wie
   // Page-Modus). Kein _closeOtherMainCards — Kapitelreview bleibt offen.
   async toggleChapterIdeenCard(chapterId) {

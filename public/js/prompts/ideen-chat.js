@@ -18,7 +18,7 @@ import { buildProposalMemoryBlock } from './proposal-memory.js';
 export const IDEEN_CHAT_FORCE_FINAL_INSTRUCTION =
   'Du hast die maximale Zahl an Werkzeug-Iterationen erreicht — keine weiteren Lese-Aufrufe mehr. '
   + 'Fasse JETZT aus dem Gesammelten die bestmögliche Antwort zusammen und liefere sie über `final_answer`. '
-  + 'Rufe kein anderes Werkzeug mehr auf als `final_answer` — weitere Aufrufe werden nicht ausgeführt. '
+  + 'Ausser `final_answer` laufen nur noch Vorschläge (`propose_*`) — gib sie zusammen mit `final_answer` in derselben Antwort ab; Lese-Aufrufe werden nicht mehr ausgeführt. '
   + 'Sage, welche Ideen du noch nicht prüfen konntest. Bereits abgegebene Vorschläge bleiben gültig; wiederhole sie nicht. '
   + 'Sprache der Antwort: die der Userfrage.';
 
@@ -31,7 +31,7 @@ const _BEGRUENDUNG = { type: 'string', description: 'Ein bis zwei Sätze: warum 
 export const IDEEN_CHAT_PROPOSE_TOOLS = [
   {
     name: 'propose_idee',
-    description: 'Schlägt EINE Idee vor: ohne idee_id eine NEUE Idee (startet als «offen»), mit idee_id eine ÄNDERUNG an einer bestehenden — Stufe (status), Ort (page_id bzw. chapter_id) und/oder Text (content); nur die mitgegebenen Felder ändern sich. Wird NICHT gespeichert — der User übernimmt jeden Vorschlag einzeln. Wer status «erledigt» vorschlägt, MUSS die einlösende Textstelle in `beleg` zitieren. Eine Idee ist ein Stichpunkt, NIE ausformulierte Prosa. Löschen gibt es nicht — statt dessen status «verworfen».',
+    description: 'Schlägt EINE Idee vor: ohne idee_id eine NEUE (startet «offen»), mit idee_id eine ÄNDERUNG — Stufe, Ort und/oder Text; nur Mitgegebenes ändert sich. Wird NICHT gespeichert, der User übernimmt einzeln. «erledigt» MUSS die einlösende Stelle in `beleg` zitieren. Stichpunkt, NIE Prosa. Kein Löschen — statt dessen «verworfen».',
     input_schema: {
       type: 'object',
       properties: {
@@ -41,6 +41,7 @@ export const IDEEN_CHAT_PROPOSE_TOOLS = [
         page_id: { type: 'integer', description: 'Ort: Abschnitt (page#-id aus der Gliederung). Bei Änderung: neuer Ort, auch von Kapitel zu Abschnitt.' },
         chapter_id: { type: 'integer', description: 'Ort: Kapitel (chapter#-id aus der Gliederung), nie zusammen mit page_id. Bei Änderung: neuer Ort, auch von Abschnitt zu Kapitel.' },
         anker_loesen: { type: 'boolean', description: 'Nur bei ÄNDERUNG: true = Ort entfernen (nur noch am Buch).' },
+        merge_ids: { type: 'array', items: { type: 'integer' }, description: 'Dubletten zusammenführen: ids, die in idee_id aufgehen (werden gelöscht, Links wandern mit). Nur mit content.' },
         beleg: { type: 'string', description: 'Nur bei Stufen-Änderung: wörtliches Zitat (max. 500 Zeichen) der Textstelle, die die Pendenz einlöst bzw. überholt. Pflicht bei «erledigt». Wird gegen den Abschnitt geprüft — ein Zitat, das dort nicht wörtlich steht, wird abgelehnt.' },
         beleg_page_id: { type: 'integer', description: 'Abschnitt (page_id), in dem das Zitat steht. Pflicht zu jedem beleg.' },
         begruendung: _BEGRUENDUNG,
@@ -155,9 +156,10 @@ export function buildIdeenChatSystemPrompt(bookName, ctx = {}) {
     'Eine Idee hängt an höchstens einem Ort: an einem Abschnitt, an einem Kapitel oder — ohne Ort — nur am Buch. Ihre Stufe ist «offen», «in_arbeit», «erledigt» oder «verworfen» (verworfen = bewusst fallengelassen, nicht gelöscht).',
     '',
     'Was du tust:',
-    '- ERLEDIGT-CHECK: Prüfe offene Pendenzen gegen den aktuellen Text. Löst der Text eine Pendenz ein, schlage «erledigt» vor und zitiere die Stelle wörtlich in `beleg` (mit beleg_page_id). Ist sie nur teilweise eingelöst, sage was fehlt — kein «erledigt». Hat der Text die Idee überholt (widerspricht ihr, macht sie gegenstandslos), schlage «verworfen» vor und belege auch das.',
+    '- ERLEDIGT-CHECK: Prüfe offene Pendenzen gegen den aktuellen Text. Löst der Text eine Pendenz ein, schlage «erledigt» vor und zitiere die Stelle wörtlich in `beleg` (mit beleg_page_id). Ist sie nur teilweise eingelöst, sage was fehlt — kein «erledigt». Hat der Text die Idee überholt (widerspricht ihr, macht sie gegenstandslos), schlage «verworfen» vor und belege auch das. Trägt eine Idee «AUTO-CHECK eingelöst?», ist das Zitat schon wörtlich im genannten Abschnitt gefunden: urteile darüber, ob es die Pendenz wirklich einlöst — dafür musst du den Abschnitt nicht erneut lesen; trägt es, nimm es als `beleg`.',
     '- ORTE FINDEN: Buch-Ideen ohne Ort bekommen einen Abschnitt oder ein Kapitel, an dem sie sich einlösen lassen. Suche die Stelle im Text, statt nach dem Titel zu raten.',
-    '- AUFRÄUMEN: Erkenne Dubletten (zwei Ideen, ein Gedanke) — schlage vor, eine mit zusammengeführtem Text zu behalten und die andere zu verwerfen. Schlage Verknüpfungen zu Beats, Strängen, Motiven, Werkstatt-Figuren oder Recherche-Fundstücken vor, wenn eine Idee erkennbar dazu gehört.',
+    '- AUFRÄUMEN: Erkenne Dubletten (zwei oder mehr Ideen, ein Gedanke) — schlage vor, sie zusammenzuführen: eine bleibt mit zusammengeführtem Text, die anderen gehen in ihr auf (nicht «verwerfen» — verworfen heisst bewusst fallengelassen). Schlage Verknüpfungen zu Beats, Strängen, Motiven, Werkstatt-Figuren oder Recherche-Fundstücken vor, wenn eine Idee erkennbar dazu gehört.',
+    '- LANGE OFFEN: Offene Ideen tragen ihr Alter («notiert vor … Tagen»), lange liegengebliebene den Vermerk «LANGE OFFEN». Bittet der User darum, gehe genau diese durch, älteste zuerst, und entscheide je Idee: im Text schon eingelöst (→ «erledigt» mit Beleg), vom Text überholt (→ «verworfen» mit Beleg), am falschen Ort (→ neuer Ort), Dublette (→ zusammenführen) — oder noch gültig: dann nenne in der Antwort den nächsten konkreten Schritt. Kein «verworfen» nur wegen des Alters.',
     '- NEUE IDEEN: Nur auf Wunsch oder wenn sich beim Lesen eine echte Lücke zeigt — als knappe Pendenz mit Ort.',
     '- BEARBEITUNGSSTAND: Abschnitte tragen in den Listen den Stand, den der Autor selbst gesetzt hat («— Stand: …», letzte Stufe = fertig). Eine offene Pendenz an einem Abschnitt auf der letzten Stufe ist ein Widerspruch — prüfe solche zuerst: entweder ist sie eingelöst (dann «erledigt» mit Beleg), oder der Abschnitt ist noch nicht fertig; sag das dem Autor ausdrücklich.',
     '',
@@ -176,6 +178,7 @@ export function buildIdeenChatSystemPrompt(bookName, ctx = {}) {
       'Vorschlags-Werkzeuge (nichts wird gespeichert — der User übernimmt jeden Vorschlag einzeln):',
       '- `propose_idee` — neue Idee, oder Änderung einer bestehenden (idee_id): Stufe, Ort, Text.',
       '- `propose_idee_link` — Idee mit Beat/Strang/Motiv/Werkstatt-Figur/Fundstück verknüpfen.',
+      '- `propose_idee` mit `merge_ids` — Dubletten zusammenführen (idee_id bleibt, die anderen gehen in ihr auf; alle Dubletten eines Gedankens in EINEM Aufruf).',
       'Ein Vorschlag pro Aufruf; mehrere Vorschläge = mehrere Aufrufe, gebündelt in einer Runde.',
       'Meldet ein Vorschlags-Werkzeug einen Fehler (unbekannte id, abgeschaltete Stufe, fehlender Beleg), korrigiere den Aufruf — rate keine ids, sie stehen im Vorspann der Frage.',
     ]),

@@ -453,9 +453,9 @@ test('buildAgenticHistory: Rollen alternieren ab user, Marker neutralisiert, Bel
     ins.run(sid, 'assistant', i === 4 ? '__i18n:chat.errors.maxIterReached__' : `A${i}`, ci, at());
   }
   ins.run(sid, 'user', 'aktuell', null, at());
-  // 15 Nachrichten, Tail von 8 beginnt mit einer Antwort (A2) → muss wegfallen.
+  // 15 Nachrichten: nach dem Anker 13; Raster 4, Tail 5–8 → Fenster ab F4.
   const h = buildAgenticHistory(sid, 8);
-  assert.deepEqual(h.slice(0, 3).map(m => m.content), ['Anker-Frage', 'Anker-Antwort', 'F3']);
+  assert.deepEqual(h.slice(0, 3).map(m => m.content), ['Anker-Frage', 'Anker-Antwort', 'F4']);
   assert.equal(h[0].role, 'user');
   for (let i = 1; i < h.length; i++) assert.notEqual(h[i].role, h[i - 1].role, `Rollen-Folge bei ${i}`);
   assert.equal(h.at(-1).content, 'aktuell');
@@ -464,6 +464,28 @@ test('buildAgenticHistory: Rollen alternieren ab user, Marker neutralisiert, Bel
   assert.match(joined, /Keine inhaltliche Antwort/);
   assert.match(joined, /Belege der vorigen Antwort \(Verlauf — nicht in der Antwort wiedergeben\): \(1\) Abschnitt «Kap 1» \(page_id 7\): «Stefan war achtundzwanzig\.»/);
   assert.doesNotMatch(joined, /erfunden/);
+});
+
+test('buildAgenticHistory: das Fenster rückt in Sprüngen vor — der Präfix bleibt über mehrere Turns gleich', () => {
+  const { buildAgenticHistory } = require('../../routes/jobs/agentic-chat');
+  const sid = newSession();
+  db.prepare(`DELETE FROM chat_messages WHERE session_id = ?`).run(sid);
+  const ins = db.prepare(`INSERT INTO chat_messages (session_id, role, content, context_info, created_at) VALUES (?, ?, ?, ?, ?)`);
+  let t = 0;
+  const at = () => new Date(Date.UTC(2026, 0, 1, 0, 0, ++t)).toISOString();
+  const firstAfterAnchor = [];
+  for (let i = 0; i < 14; i++) {
+    ins.run(sid, 'user', `F${i}`, null, at());
+    const h = buildAgenticHistory(sid, 10).slice(0, -1);
+    if (h.length > 2) firstAfterAnchor.push(h[2].content);
+    for (let k = 1; k < h.length; k++) assert.notEqual(h[k].role, h[k - 1].role);
+    assert.ok(h.length <= 12, `höchstens Anker + 10, war ${h.length}`);
+    ins.run(sid, 'assistant', `A${i}`, null, at());
+  }
+  // Ein gleitendes Fenster wechselte den Anfang mit jedem Turn; das Raster hält ihn
+  // jeweils drei Turns lang.
+  const changes = firstAfterAnchor.filter((v, i) => i > 0 && v !== firstAfterAnchor[i - 1]).length;
+  assert.ok(changes <= Math.ceil(firstAfterAnchor.length / 3), `${changes} Wechsel bei ${firstAfterAnchor.length} Turns`);
 });
 
 test('buildAgenticHistory: ein Beleg-Echo in der gespeicherten Antwort wird entfernt, der Verlaufs-Hinweis bleibt', () => {
@@ -758,4 +780,96 @@ test('_synthesisRequestMessages: leerer Turn fällt weg, Rollen bleiben im Wechs
   const same = _synthesisRequestMessages([{ role: 'user', content: 'a' }, { role: 'assistant', content: [{ type: 'thinking', thinking: 't' }, { type: 'text', text: 'b' }] }]);
   assert.equal(same.stripped, false);
   assert.equal(same.thinkingStripped, 0);
+});
+
+test('final_answer-Runde: reine Lese-Werkzeuge laufen nicht mehr, Seiteneffekte schon', async () => {
+  mockCalls([res({
+    stopReason: 'tool_use',
+    toolUses: [tu('list_chapters'), tu('side_effect', { v: 1 }), tu('final_answer', { antwort: 'fertig' })],
+  })]);
+  const job = makeJob({ prep: { tools: [...TOOLS, { name: 'list_chapters' }] } });
+  const out = await runJob(job, newSession());
+  assert.deepEqual(job.executed, ['side_effect']);
+  const skipped = job.ctx().toolLog.find(e => e.name === 'list_chapters');
+  assert.equal(skipped.skipped, true);
+  assert.equal(skipped.errorKey, 'chat.toolError.finalRound');
+  assert.equal(out.content, 'fertig');
+});
+
+test('collectTools zählen nicht gegen maxToolsPerRound, Lese-Werkzeuge schon', async () => {
+  mockCalls([
+    res({ stopReason: 'tool_use', toolUses: [
+      ...Array.from({ length: 5 }, (_, i) => tu('side_effect', { v: i })),
+      tu('lookup'), tu('lookup'), tu('lookup'),
+    ] }),
+    res({ stopReason: 'tool_use', toolUses: [tu('final_answer', { antwort: 'ok' })] }),
+  ]);
+  const job = makeJob({ prep: { maxToolsPerRound: 2, collectTools: ['side_effect'] } });
+  const out = await runJob(job, newSession());
+  assert.deepEqual(out.ci.effects, [0, 1, 2, 3, 4], 'alle Vorschläge gesammelt');
+  assert.equal(job.executed.filter(n => n === 'lookup').length, 2, 'Lese-Aufrufe gedeckelt');
+  const limited = job.ctx().toolLog.filter(e => e.errorKey === 'chat.toolError.roundLimit');
+  assert.equal(limited.length, 1);
+});
+
+test('Synthese: ein Vorschlag (collectTools) ohne final_answer läuft, die zweite Synthese antwortet', async () => {
+  const calls = mockCalls([
+    res({ stopReason: 'tool_use', toolUses: [tu('lookup')] }),
+    res({ stopReason: 'tool_use', toolUses: [tu('side_effect', { v: 7 }), tu('lookup')] }),
+    res({ stopReason: 'tool_use', toolUses: [tu('final_answer', { antwort: 'zusammen' })] }),
+  ]);
+  const job = makeJob({ prep: { maxToolIter: 1, collectTools: ['side_effect'] } });
+  const out = await runJob(job, newSession());
+  assert.deepEqual(out.ci.effects, [7]);
+  assert.equal(out.content, 'zusammen');
+  assert.equal(job.executed.filter(n => n === 'lookup').length, 1, 'Lese-Aufruf in der Synthese nicht ausgeführt');
+  // Die zweite Synthese sieht das echte Ergebnis des Vorschlags, nicht «nicht ausgeführt».
+  const lastUser = calls[2].messages.at(-1).content;
+  const results = lastUser.filter(b => b.type === 'tool_result');
+  assert.equal(results.length, 2);
+  assert.ok(!results[0].is_error, 'Vorschlag ausgeführt');
+  assert.equal(results[1].is_error, true, 'Lese-Aufruf nicht ausgeführt');
+  assert.equal(job.ctx().rounds, 3);
+});
+
+test('parallelTools: aufeinanderfolgende Aufrufe laufen gleichzeitig, Ergebnisse in Aufrufreihenfolge', async () => {
+  let inFlight = 0, maxInFlight = 0;
+  const calls = mockCalls([
+    res({ stopReason: 'tool_use', toolUses: [tu('lookup', { d: 20 }, 'a'), tu('lookup', { d: 0 }, 'b'), tu('side_effect', { v: 1 }, 'c')] }),
+    res({ stopReason: 'tool_use', toolUses: [tu('final_answer', { antwort: 'ok' })] }),
+  ]);
+  const job = makeJob({
+    prep: { parallelTools: ['lookup'] },
+    toolResult: async (name, input) => {
+      if (name !== 'lookup') return { ok: true };
+      inFlight++; maxInFlight = Math.max(maxInFlight, inFlight);
+      await new Promise(r => setTimeout(r, input.d));
+      inFlight--;
+      return { ok: true, d: input.d };
+    },
+  });
+  await runJob(job, newSession());
+  assert.equal(maxInFlight, 2);
+  const ids = calls[1].messages.at(-1).content.map(b => b.tool_use_id);
+  assert.deepEqual(ids, ['a', 'b', 'c']);
+});
+
+test('buildAgenticHistory: Recherche-Antwort ohne alte Belegmarker, mit Quellen-Notiz', () => {
+  const { buildAgenticHistory } = require('../../routes/jobs/agentic-chat');
+  const sid = newSession();
+  db.prepare(`DELETE FROM chat_messages WHERE session_id = ?`).run(sid);
+  const ins = db.prepare(`INSERT INTO chat_messages (session_id, role, content, context_info, created_at) VALUES (?, ?, ?, ?, ?)`);
+  ins.run(sid, 'user', 'Wann eröffnet?', null, '2026-01-01T00:00:01.000Z');
+  ins.run(sid, 'assistant', 'Eröffnet 2016 [3]. Umbau 2019 [1, 4] folgte, siehe [Chronik](https://ex.org/a).',
+    JSON.stringify({ mode: 'research', answer_sources: [{ url: 'https://ex.org/a', title: 'Chronik' }] }), '2026-01-01T00:00:02.000Z');
+  ins.run(sid, 'user', 'Und der Umbau?', null, '2026-01-01T00:00:03.000Z');
+  ins.run(sid, 'assistant', 'Der <cite index="2-1">Umbau 2019</cite> folgte.',
+    JSON.stringify({ mode: 'research' }), '2026-01-01T00:00:04.000Z');
+  ins.run(sid, 'user', 'Lies die Quelle genauer', null, '2026-01-01T00:00:05.000Z');
+  const [a, b] = buildAgenticHistory(sid).filter(m => m.role === 'assistant').map(m => m.content);
+  assert.match(a, /^Eröffnet 2016\. Umbau 2019 folgte, siehe \[Chronik\]\(https:\/\/ex\.org\/a\)\./, 'Markdown-Link bleibt');
+  assert.match(a, /\[Quellen der vorigen Antwort .*\(1\) Chronik — https:\/\/ex\.org\/a\]/);
+  assert.equal(b, 'Der Umbau 2019 folgte.');
+  const { stripHistoryNote } = require('../../lib/chat-history-note');
+  assert.equal(stripHistoryNote(`Antwort.\n\n[Quellen der vorigen Antwort (Verlauf — nicht in der Antwort wiedergeben; diese URLs sind lesbar): (1) X — https://x]`), 'Antwort.');
 });

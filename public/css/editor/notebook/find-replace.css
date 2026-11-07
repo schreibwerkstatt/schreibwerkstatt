@@ -3,12 +3,12 @@
 /* Highlights via CSS Custom Highlight API – rein visuell, kein DOM-Eingriff,
    landet nicht im gespeicherten HTML. */
 ::highlight(edit-find-match) {
-  background: var(--color-warn-bg);
+  background: var(--color-find-match-bg);
   color: inherit;
 }
 ::highlight(edit-find-current) {
-  background: var(--color-accent);
-  color: var(--color-on-accent);
+  background: var(--color-find-current-bg);
+  color: var(--color-find-current-text);
 }
 /* Angesprungene Fundstelle im Abschnittstext (Suche, Motive, Figurenbogen,
    Plot, Buchlandkarte — gesetzt von book/passage-highlight.js). */

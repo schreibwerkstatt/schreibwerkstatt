@@ -451,13 +451,14 @@
      components/manuscript-content.css — dieselben Blöcke rendert die
      Notebook-Leseansicht und der Share-Reader. */
 
-  /* Find-Highlights — gedämpft. */
+  /* Find-Highlights — dieselben Tokens wie der Notebook-Finder. */
   ::highlight(book-editor-find-match) {
-    background: color-mix(in srgb, var(--card-accent, currentColor) 22%, transparent);
+    background: var(--color-find-match-bg);
+    color: inherit;
   }
   ::highlight(book-editor-find-current) {
-    background: color-mix(in srgb, var(--card-accent, currentColor) 55%, transparent);
-    color: var(--color-text);
+    background: var(--color-find-current-bg);
+    color: var(--color-find-current-text);
   }
 
   /* Verankerte Leser-Kommentar-Stellen (Kommentar-Leiste). Dezenter Hintergrund +

@@ -50,5 +50,16 @@
       <span x-text="statusLabel('erledigt')"></span>
     </button>
     <p class="ideen-board-stages-hint" x-text="$app.t('ideenBoard.stages.hint')"></p>
+
+    <!-- Auto-Erledigt-Check nach dem Speichern: persönlich, für alle Bücher
+         (app_users.ideen_auto_check, book/ideen-check.js#toggleAutoCheck). -->
+    <div class="context-menu-sep" role="separator"></div>
+    <button type="button" class="context-menu-item context-menu-item--icon" role="menuitemcheckbox"
+            :class="{ 'context-menu-item--on': autoCheckOn }" :aria-checked="autoCheckOn"
+            :disabled="busy" @click.stop="toggleAutoCheck()">
+      <svg class="icon" aria-hidden="true"><use :href="autoCheckOn ? '/icons.svg#check' : '/icons.svg#square'"/></svg>
+      <span x-text="$app.t('ideenBoard.autoCheck.label')"></span>
+    </button>
+    <p class="ideen-board-stages-hint" x-text="$app.t('ideenBoard.autoCheck.hint')"></p>
   </div>
 </span>

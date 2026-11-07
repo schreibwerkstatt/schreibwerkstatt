@@ -102,11 +102,7 @@ export const beatMoveMethods = {
     // Der Beat-Edit wird in der Ziel-Zelle neu aufgebaut — den Fokus dorthin
     // nachziehen, damit die Tastatur-Bedienung nicht am <body> landet.
     this.$nextTick(() => {
-      // Flaches Board + Grid liegen beide im DOM (eines via x-show versteckt).
-      // Nicht über this.$root: aufgerufen aus dem verschachtelten x-data des
-      // Verschiebe-Blocks zeigt $root auf diesen Block, nicht auf die Karte.
-      const cards = [...document.querySelectorAll(`.card--plot .plot-beat[data-beat-id="${beat.id}"]`)];
-      const card = cards.find(c => c.offsetParent !== null);
+      const card = this._visibleBeatEl(beat.id);
       if (!card) return;
       const sel = focusKey ? `[data-beat-move="${focusKey}"]` : '.plot-beat-move-act .combobox-trigger';
       const target = card.querySelector(sel);

@@ -47,9 +47,26 @@
          x-effect="options = figurenKapitelOptionen()"></div>
     <div x-data="catalogFilter('alterStatus')"
          x-modelable="value" x-model="figurenAlterFilters.nur"
-         x-effect="options = ['mitAlter', 'ohneAlter', 'beleg', 'widerspruch'].map(k => ({ value: k, label: $app.t('figuren.alter.only.' + k) }))"></div>
+         x-effect="options = ['mitAlter', 'ohneAlter', 'beleg', 'widerspruch'].concat(figurenAlterStichtagAktiv() ? ['amStichtag'] : []).map(k => ({ value: k, label: $app.t('figuren.alter.only.' + k) }))"></div>
     <span class="filter-count"
           x-text="figurenAlterSummary().mitAlter + ' / ' + figurenAlterSummary().total"></span>
+  </div>
+
+  <!-- Stichtag: «wie alt ist wer im Juni 2001» — eine Spalte für alle Figuren,
+       gerechnet wie das Buch-Chat-Werkzeug get_figure_age (book/age-at.js). -->
+  <div class="filter-bar figur-alter-stichtag" x-id="['stichtag']">
+    <label class="card-form-label" :for="$id('stichtag')" x-text="$app.t('figuren.alter.stichtag.label')"></label>
+    <input type="text" class="form-num" :id="$id('stichtag')"
+           :placeholder="$app.t('figuren.alter.stichtag.jahrPlaceholder')"
+           x-data="numInput({ integer: true, min: 1000, max: 2999, grouping: false })"
+           x-modelable="value" x-model="figurenAlterStichtag.jahr">
+    <div x-data="combobox({ placeholder: $app.t('figuren.alter.stichtag.monat'), emptyLabel: $app.t('figuren.alter.stichtag.ganzesJahr'), label: $app.t('figuren.alter.stichtag.monat') })"
+         x-modelable="value" x-model="figurenAlterStichtag.monat"
+         x-effect="options = figurenAlterMonatOptionen()"></div>
+    <button type="button" class="search-clear--icon" x-show="figurenAlterStichtag.jahr != null"
+            @click="figurenAlterStichtag = { jahr: null, monat: '' }"
+            :aria-label="$app.t('figuren.alter.stichtag.clear')"
+            :data-tip="$app.t('figuren.alter.stichtag.clear')"><svg class="icon" aria-hidden="true"><use href="/icons.svg#x"/></svg></button>
   </div>
 
   <p class="card-hint card-hint--sm card-section" x-show="figurenAlterSummary().widerspruch > 0"
@@ -69,14 +86,26 @@
              defaultKey: 'name',
              defaultDir: 'asc',
              persistKey: 'figuren.alter',
-             types: { name: 'string', typ_rank: 'number', geburtsjahr: 'number', alter_von: 'number', alter_abgeleitet: 'number' },
+             types: { name: 'string', typ_rank: 'number', geburtsjahr: 'number', alter_von: 'number', alter_abgeleitet: 'number', stichtag_sort: 'number' },
            })">
       <thead>
         <tr>
           <th x-bind="sortTh('name')" x-text="$app.t('figuren.alter.col.figur')"></th>
           <th x-bind="sortTh('typ_rank')" x-text="$app.t('figuren.alter.col.typ')"></th>
           <th x-bind="sortTh('alter_von')" x-text="$app.t('figuren.alter.col.alter')"></th>
+          <template x-if="figurenAlterStichtagAktiv()">
+            <th x-bind="sortTh('stichtag_sort')" x-text="$app.t('figuren.alter.col.atDate', { datum: figurenAlterStichtagLabel() })"></th>
+          </template>
+          <template x-if="figurenAlterStichtagAktiv() && figurSchulSystem()">
+            <th x-text="$app.t('figuren.alter.col.schule')"></th>
+          </template>
+          <template x-if="figurenAlterStichtagAktiv()">
+            <th x-text="$app.t('figuren.alter.col.taetigkeit')"></th>
+          </template>
           <th x-bind="sortTh('geburtsjahr')" x-text="$app.t('figuren.alter.col.birthYear')"></th>
+          <template x-if="figurSchulSystem()">
+            <th x-text="$app.t('figuren.alter.col.schulzeit')"></th>
+          </template>
           <th x-bind="sortTh('alter_abgeleitet')"
               :data-tip="$app.t('figuren.alter.col.derivedTip')" x-text="$app.t('figuren.alter.col.derived')"></th>
           <th x-text="$app.t('figuren.alter.col.reference')"></th>
@@ -120,12 +149,37 @@
             </td>
             <td><span class="tag" x-text="$app.t('figuren.type.' + row.typ)"></span></td>
             <td class="figur-alter-num figur-alter-age" x-text="figurenAlterLabel(row)"></td>
+            <template x-if="figurenAlterStichtagAktiv()">
+              <td class="figur-alter-num figur-alter-age" x-text="figurenAlterStichtagWert(row)"></td>
+            </template>
+            <template x-if="figurenAlterStichtagAktiv() && figurSchulSystem()">
+              <td x-text="figurenAlterStichtagSchule(row) || '–'"></td>
+            </template>
+            <template x-if="figurenAlterStichtagAktiv()">
+              <td x-text="figurenAlterStichtagTaetigkeit(row) || '–'"></td>
+            </template>
             <td class="figur-alter-num">
               <span x-text="row.geburtsjahr != null ? row.geburtsjahr : '–'"></span>
               <span class="figur-alter-sub" x-show="row.geburtsjahr_quelle"
                     :data-tip="$app.t('figuren.alter.birthSourceTip')"
                     x-text="row.geburtsjahr_quelle ? $app.t('figuren.alter.birthSource.' + row.geburtsjahr_quelle) : ''"></span>
+              <template x-if="row.geburt?.widerspruch">
+                <span class="tag tag--stale" :data-tip="figurenAlterGeburtWiderspruchTip(row)"
+                      x-text="$app.t('figuren.alter.conflictBadge')"></span>
+              </template>
             </td>
+            <template x-if="figurSchulSystem()">
+              <td class="figur-alter-schulzeit">
+                <template x-if="figurenAlterSchulzeit(row)">
+                  <span :data-tip="figurenAlterSchulzeit(row).tip || null">
+                    <template x-for="st in figurenAlterSchulzeit(row).stufen" :key="st.label">
+                      <span class="figur-alter-schulzeit-zeile"><span x-text="st.label"></span> <span class="figur-alter-num" x-text="(figurenAlterSchulzeit(row).tip ? '≈ ' : '') + st.zeit"></span></span>
+                    </template>
+                  </span>
+                </template>
+                <span x-show="!figurenAlterSchulzeit(row)" x-text="'–'"></span>
+              </td>
+            </template>
             <td class="figur-alter-num" x-text="row.alter_abgeleitet != null ? row.alter_abgeleitet : '–'"></td>
             <td class="figur-alter-num" x-text="figurenAlterBezugLabel(row) || '–'"></td>
             <td>
@@ -149,7 +203,7 @@
             </td>
           </tr>
           <tr x-show="figurenAlterOpenId === row.id" class="figur-alter-belege-row">
-            <td colspan="8">
+            <td :colspan="figurenAlterSpalten()">
               <ul class="figur-alter-belege">
                 <template x-for="(b, bi) in row.belege" :key="bi">
                   <li class="figur-alter-beleg">

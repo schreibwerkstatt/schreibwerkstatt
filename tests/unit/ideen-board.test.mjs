@@ -11,7 +11,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const ROOT = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', '..');
-const { buildLaneOrder, buildBoard, chapterFilterOptions, statusTotals, LANE_UNKNOWN, laneKeyResolver, laneKeySet } =
+const { buildLaneOrder, buildBoard, chapterFilterOptions, statusTotals, LANE_UNKNOWN, laneKeyResolver, laneKeySet, ideeRevealPatch } =
   await import(path.join(ROOT, 'public', 'js', 'book', 'ideen-board', 'model.js'));
 const { LANE_BOOK, ideeLaneKey, soleChapterPages, ideenPlace } = await import(path.join(ROOT, 'public', 'js', 'book', 'ideen-shared.js'));
 
@@ -629,4 +629,33 @@ test('splitIdeenLines: eine einzelne Zeile bleibt, wie sie dasteht', async () =>
   assert.deepEqual(splitIdeenLines('- Gedankenstrich bleibt'), ['- Gedankenstrich bleibt']);
   assert.deepEqual(splitIdeenLines(' \n \n'), []);
   assert.deepEqual(splitIdeenLines(null), []);
+});
+
+// Eine aus dem Ideen-Chat übernommene Idee muss sofort sichtbar werden: der
+// Patch nimmt genau die Filter und Klappungen zurück, die sie verdecken.
+test('ideeRevealPatch: sichtbare Idee → kein Patch', () => {
+  const laneOrder = buildLaneOrder(TREE);
+  assert.deepEqual(ideeRevealPatch(idee(1, { page_id: 10, lane_chapter_id: 1 }), { laneOrder }), {});
+});
+
+test('ideeRevealPatch: Kapitel-Filter, Suche und Klappungen geben die Idee frei', () => {
+  const laneOrder = buildLaneOrder(TREE);
+  const i = idee(1, { page_id: 10, lane_chapter_id: 1, content: 'Bahnhof' });
+  const patch = ideeRevealPatch(i, {
+    laneOrder, filterChapterId: 2, query: 'zug', showErledigt: false,
+    collapsedLanes: ['page:10', 'chapter:1', 'page:20'], collapsedChapters: ['chapter:1', 'chapter:2'],
+  });
+  assert.deepEqual(patch, {
+    query: '', filterChapterId: '',
+    collapsedLanes: ['page:20'], collapsedChapters: ['chapter:2'],
+  });
+  const board = buildBoard({ ideen: [i], laneOrder, showErledigt: false, query: 'zug', filterChapterId: 2,
+    collapsedLanes: ['page:10', 'chapter:1', 'page:20'], collapsedChapters: ['chapter:1', 'chapter:2'], ...patch });
+  assert.equal(board.visible, 1);
+});
+
+test('ideeRevealPatch: passender Filter bleibt stehen, ausgeblendete Stufe geht auf', () => {
+  const laneOrder = buildLaneOrder(TREE);
+  const i = idee(1, { page_id: 20, lane_chapter_id: 2, status: 'verworfen' });
+  assert.deepEqual(ideeRevealPatch(i, { laneOrder, filterChapterId: 2, showVerworfen: false }), { showVerworfen: true });
 });

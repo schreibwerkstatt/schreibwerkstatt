@@ -120,3 +120,23 @@ test('ohne Option bleibt der Abgleich streng (Bewertung, Ideen-Chat)', () => {
   assert.ok(!quoteFoundIn('Trümmern und niemand kam', norm(raw)));
   assert.equal(norm(raw), 'er lag unter den trümmern, und niemand kam.');
 });
+
+test('strict: kurze Fragmente und viele Auslassungen belegen nichts', () => {
+  const hay = normalizeForQuoteMatch('Anna stand am Fenster. ' + 'Viel Text dazwischen. '.repeat(80) + 'Der Brief lag auf dem Tisch. ' + 'Noch mehr. '.repeat(80) + 'Sie verbrennt ihn nicht.');
+  assert.equal(quoteFoundIn('Anna … Brief … verbrennt', hay), true, 'ohne strict: Treffer');
+  assert.equal(quoteFoundIn('Anna … Brief … verbrennt', hay, { strict: true }), false);
+  assert.equal(quoteFoundIn('und', normalizeForQuoteMatch('Er kam und ging.'), { strict: true }), false);
+  assert.equal(quoteFoundIn('Der Brief lag auf dem Tisch.', hay, { strict: true }), true);
+});
+
+test('strict: Teile müssen an einer Stelle stehen — auch wenn der erste Teil früher schon vorkommt', () => {
+  const hay = normalizeForQuoteMatch('Der Brief lag dort. ' + 'x '.repeat(600) + 'Der Brief lag auf dem Tisch, und Anna nahm ihn nicht an sich.');
+  assert.equal(quoteFoundIn('Der Brief lag … Anna nahm ihn nicht', hay, { strict: true }), true);
+  const far = normalizeForQuoteMatch('Der Brief lag dort. ' + 'x '.repeat(600) + 'Anna nahm ihn nicht an sich.');
+  assert.equal(quoteFoundIn('Der Brief lag … Anna nahm ihn nicht', far, { strict: true }), false);
+});
+
+test('Leerraum vor Satzzeichen ist Extraktions-Artefakt: «nein .» = «nein.»', () => {
+  const hay = normalizeForQuoteMatch('Sie sagte nein. Dann ging sie (leise) hinaus.');
+  assert.equal(quoteFoundIn('Sie sagte nein . Dann ging sie ( leise ) hinaus', hay), true);
+});

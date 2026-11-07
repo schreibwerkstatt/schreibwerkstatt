@@ -89,14 +89,25 @@ export const figurenMethods = {
   // bleibt aus). jahr_im_roman/alter_im_roman kommen serverseitig aus den
   // datierten Figuren-Ereignissen. Geteilt von Figurenübersicht, Kontext-Leiste
   // und Figur-Lookup im Editor.
+  // Ohne Alter und ohne eigenes datiertes Ereignis (`anchor_ereignis`) ist
+  // `jahr_im_roman` bloss das Buchende (lib/figure-years.js) — über die Figur
+  // sagt die Zahl nichts und läse sich unter «Jahr / Alter» wie ein Alter. Dann
+  // leer; gleiche Regel wie figurenAlterBezugLabel in der Alters-Analyse.
   figurJahrLabel(fig) {
     if (!fig) return '';
     const jahr = fig.jahr_im_roman;
     const alter = fig.alter_im_roman;
-    if (jahr == null && alter == null) return '';
-    if (jahr != null && alter != null) return this.t('figuren.jahrAlter', { jahr, alter });
-    if (jahr != null) return String(jahr);
-    return '';
+    if (jahr == null) return '';
+    if (alter != null) return this.t('figuren.jahrAlter', { jahr, alter });
+    return fig.anchor_ereignis ? String(jahr) : '';
+  },
+
+  // Feld-Label/Tooltip passend zum Wert: «Jahr / Alter» nur, wenn ein Alter dasteht.
+  figurJahrFieldLabel(fig) {
+    return this.t(fig?.alter_im_roman != null ? 'figuren.field.jahrAlter' : 'figuren.field.jahr');
+  },
+  figurJahrTip(fig) {
+    return this.t(fig?.alter_im_roman != null ? 'figuren.jahrAlterTip' : 'figuren.jahrTip');
   },
 
   // Das datierte Ereignis, das den aktuellen Stand der Figur setzt (das "weil

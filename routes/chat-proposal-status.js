@@ -20,6 +20,13 @@
 //               `appliedExists` des Routers): dann ist erneutes Übernehmen
 //               erlaubt und überschreibt applied_id.
 //   discarded → status='discarded' (409, wenn schon übernommen)
+//   claim     → claimed_at setzen, BEVOR das Frontend ins Board schreibt. Schon
+//               übernommen → 409 PROPOSAL_ALREADY_APPLIED (wie oben). Schon
+//               reserviert, aber nie als übernommen bestätigt → 409
+//               PROPOSAL_CLAIMED: das Board wurde womöglich schon geschrieben
+//               (zweiter Tab, oder der Status-PATCH eines früheren Versuchs ging
+//               verloren); erst mit `force: true` wird neu reserviert.
+//   unclaim   → claimed_at weg (Schreiben gescheitert)
 // Konsumenten: Plot-Chat (PATCH /plot/chat-proposal), Ideen-Chat und die
 // Ideen-Vorschläge aus Abschnitts-, Buch- und Recherche-Chat (PATCH /ideen/chat-proposal).
 //   reopen    → hebt „verworfen" auf
@@ -33,7 +40,7 @@ const { guardBook, sessionEmail } = require('../lib/acl');
 const { getOwnedSession } = require('../db/chat-sessions');
 const { setContext } = require('../lib/log-context');
 
-const ACTIONS = new Set(['applied', 'discarded', 'reopen']);
+const ACTIONS = new Set(['applied', 'discarded', 'reopen', 'claim', 'unclaim']);
 
 /**
  * Router mit `PATCH /chat-proposal` für Sessions der Arten `kinds` (Buch-ACL editor).
@@ -85,9 +92,22 @@ function makeChatProposalStatusRouter({ kinds, appliedExists = null, accepts = n
         const appliedId = toIntId(req.body?.applied_id);
         if (appliedId) next.applied_id = appliedId;
         delete next.status;
+        delete next.claimed_at;
+      } else if (action === 'claim') {
+        if (p.applied_at) {
+          const gone = appliedExists && appliedExists(p, { bookId: session.book_id, userEmail }) === false;
+          if (!gone) { status = 409; body = { error_code: 'PROPOSAL_ALREADY_APPLIED', proposal: p }; return; }
+        }
+        if (p.claimed_at && !p.applied_at && req.body?.force !== true) {
+          status = 409; body = { error_code: 'PROPOSAL_CLAIMED', proposal: p }; return;
+        }
+        next.claimed_at = new Date().toISOString();
+      } else if (action === 'unclaim') {
+        delete next.claimed_at;
       } else if (action === 'discarded') {
         if (p.applied_at) { status = 409; body = { error_code: 'PROPOSAL_ALREADY_APPLIED', proposal: p }; return; }
         next.status = 'discarded';
+        delete next.claimed_at;
       } else {
         delete next.status;
       }

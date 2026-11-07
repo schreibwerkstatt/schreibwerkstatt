@@ -9,6 +9,9 @@
 // - Fakten: `manually_edited = 1` → überleben den Full-Replace (world-facts.js).
 // Nicht mitkopiert werden Bezüge auf Kapitel/Abschnitte des Vorbands (Vorkommen,
 // erste Erwähnung, Schlüsselzitate, Bogen, Präsenz) — deren IDs gehören zum alten Buch.
+// Schulweg, Berufsweg und Hobbys reisen mit (die Biografie gehört der Figur, nicht
+// dem Band), aber nur, was der Autor gesetzt oder übernommen hat, und ohne Beleg:
+// offener Schulweg-Vorschlag, Klassenangaben, Zitate und Abschnitte stammen aus dem Vorband.
 
 const { db } = require('./connection');
 require('./migrations');
@@ -90,6 +93,19 @@ function copyFromPrequel(sourceBookId, targetBookId, userEmail, sel = {}) {
     const insTag = db.prepare('INSERT OR IGNORE INTO figure_tags (figure_id, tag) VALUES (?, ?)');
     const selAlias = db.prepare('SELECT alias FROM figure_aliases WHERE figure_id = ?');
     const selTag = db.prepare('SELECT tag FROM figure_tags WHERE figure_id = ?');
+    const STATION_COPY = {
+      figure_jobs: ['taetigkeit', 'art', 'arbeitgeber', 'ort', 'von_jahr', 'von_monat', 'bis_jahr', 'bis_monat', 'notiz'],
+      figure_hobbies: ['hobby', 'ort', 'von_jahr', 'von_monat', 'bis_jahr', 'bis_monat', 'notiz'],
+    };
+    const stationStmts = Object.entries(STATION_COPY).map(([table, cols]) => ({
+      sel: db.prepare(`SELECT ${cols.join(', ')}, source FROM ${table} WHERE figure_id = ? AND status = 'aktiv' ORDER BY id`),
+      ins: db.prepare(`INSERT INTO ${table} (figure_id, status, source, ${cols.join(', ')}, created_at, updated_at)
+        VALUES (@figure_id, 'aktiv', @source, ${cols.map(c => '@' + c).join(', ')}, ${NOW_ISO_SQL}, ${NOW_ISO_SQL})`),
+    }));
+    const selSchool = db.prepare(`SELECT weg, einschulung_jahr, repetitionen_json, source FROM figure_school_paths
+      WHERE figure_id = ? AND source IS NOT NULL`);
+    const insSchool = db.prepare(`INSERT INTO figure_school_paths (figure_id, weg, einschulung_jahr, repetitionen_json, source, updated_at)
+      VALUES (?, ?, ?, ?, ?, ${NOW_ISO_SQL})`);
     const figMap = new Map();
     for (const r of srcFigs) {
       if (t.figOrigin.has(r.id) || t.figName.has(_norm(r.name))) continue;
@@ -99,6 +115,9 @@ function copyFromPrequel(sourceBookId, targetBookId, userEmail, sel = {}) {
       parkFig.run(id);
       for (const a of selAlias.all(r.id)) insAlias.run(id, targetBookId, a.alias);
       for (const g of selTag.all(r.id)) insTag.run(id, g.tag);
+      for (const st of stationStmts) for (const row of st.sel.all(r.id)) st.ins.run({ ...row, figure_id: id });
+      const sp = selSchool.get(r.id);
+      if (sp) insSchool.run(id, sp.weg, sp.einschulung_jahr, sp.repetitionen_json, sp.source);
       figMap.set(r.id, id);
       t.figName.add(_norm(r.name));
       out.figuren++;
@@ -110,16 +129,16 @@ function copyFromPrequel(sourceBookId, targetBookId, userEmail, sel = {}) {
     // (Zitate aus dem Vorband).
     if (figMap.size) {
       const rels = db.prepare(`
-        SELECT from_fig_id, to_fig_id, typ, beschreibung, machtverhaltnis FROM figure_relations
+        SELECT from_fig_id, to_fig_id, typ, beschreibung, machtverhaltnis, naehe FROM figure_relations
          WHERE book_id = ? AND user_email IS ?`).all(sourceBookId, email);
       const insRel = db.prepare(`
-        INSERT OR IGNORE INTO figure_relations (book_id, from_fig_id, to_fig_id, typ, beschreibung, machtverhaltnis, user_email, origin)
-        VALUES (?, ?, ?, ?, ?, ?, ?, 'manual')`);
+        INSERT OR IGNORE INTO figure_relations (book_id, from_fig_id, to_fig_id, typ, beschreibung, machtverhaltnis, naehe, user_email, origin)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'manual')`);
       for (const r of rels) {
         const a = figMap.get(r.from_fig_id);
         const b = figMap.get(r.to_fig_id);
         if (a == null || b == null) continue;
-        out.beziehungen += insRel.run(targetBookId, a, b, r.typ, r.beschreibung, r.machtverhaltnis, email).changes;
+        out.beziehungen += insRel.run(targetBookId, a, b, r.typ, r.beschreibung, r.machtverhaltnis, r.naehe, email).changes;
       }
     }
 

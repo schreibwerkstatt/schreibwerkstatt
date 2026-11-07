@@ -83,6 +83,8 @@
             <button type="button" class="entity-ref" x-entity-ref="{ type: 'page', id: editZeitVorschlag().page_id, label: editZeitVorschlag().page_name }"></button>
             <button type="button" class="btn-compact" @click="applyZeitVorschlagToDraft()"
                     x-text="$app.t('plot.zeitVorschlag.apply')"></button>
+            <p class="plot-zeit-vorschlag-warn" x-show="editZeitVorschlag().konkurrenz?.length" x-text="zeitVorschlagKonkurrenzTip(editZeitVorschlag())"></p>
+            <p class="plot-zeit-vorschlag-warn" x-show="editZeitVorschlag().akt" x-text="zeitVorschlagAktTip(editZeitVorschlag())"></p>
             <ul class="plot-zeit-belege">
               <template x-for="(b, i) in zeitVorschlagBelege(editZeitVorschlag())" :key="i">
                 <li x-text="b"></li>

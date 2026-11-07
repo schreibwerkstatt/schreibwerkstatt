@@ -4,7 +4,7 @@
 // auf die Sub-Komponente, Root-Zugriffe via window.__app.
 
 import { getEditEl, attachReflow } from './utils.js';
-import { collectMatches, createHighlightPair, rangeOf, matchStillValid } from './shared/text-find.js';
+import { collectMatches, createHighlightPair, rangeOf, matchStillValid, firstMatchFrom } from './shared/text-find.js';
 
 // Match-Suche + Offset-Rückmapping + Highlight-Registrierung liegen in
 // shared/text-find.js — geteilt mit dem Bucheditor (cards/book-editor/find.js).
@@ -212,14 +212,20 @@ export const editorFindCardMethods = {
       sel.removeAllRanges();
       sel.addRange(range);
       editEl.focus();
+      const at = this.findIndex;
       document.execCommand('insertText', false, this.findReplace);
+      // insertText setzt den Caret hinter den eingefügten Text: dort geht es
+      // weiter — nicht am Seitenanfang (recomputeFindMatches setzt den Index
+      // auf 0) und nicht im eingefügten Text, falls er den Suchbegriff enthält.
+      const after = sel.rangeCount ? sel.getRangeAt(0).cloneRange() : null;
+      after?.collapse(false);
       window.__app?._markEditDirty?.();
       this.$nextTick(() => {
         this.recomputeFindMatches();
-        if (this.findMatches.length > 0) {
-          const nextIdx = Math.min(this.findIndex, this.findMatches.length - 1);
-          this._selectFindMatch(nextIdx);
-        }
+        if (this.findMatches.length === 0) return;
+        let i = after?.startContainer?.isConnected ? firstMatchFrom(this.findMatches, after) : -1;
+        if (i < 0) i = after ? 0 : Math.min(at, this.findMatches.length - 1);
+        this._selectFindMatch(i);
       });
     } catch (e) { /* ignorieren */ }
   },

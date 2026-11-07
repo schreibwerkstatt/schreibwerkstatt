@@ -162,9 +162,11 @@ export function renderSideBySide(oldHtml, newHtml, diffLib, opts) {
   const parts = diffLib.diffArrays(oldBlocks.map(b => b.text), newBlocks.map(b => b.text));
   const entries = attachBlocks(parts, oldBlocks, newBlocks);
   if (!entries.length || !entries.some(e => e.kind !== 'eq')) {
-    // Fallback: parseBlocks deckt nur p/h1-h6/li/blockquote/pre ab. Aenderungen
-    // in <div>/<table>/<section>/etc. rutschen durch und liefern „unchanged",
-    // obwohl `chars` (htmlToPlainText) sehr wohl differiert. Plain-Text-
+    // Fallback: parseBlocks kennt nur Blattbloecke (p, h1-h6, li, blockquote,
+    // pre, Tabellenzellen, caption/figcaption, dt/dd) und Bilder
+    // (diff/html-blocks.js#BLOCK_TAGS). Text direkt in <div>/<section>/etc.
+    // rutscht durch und liefert „unchanged", obwohl `chars` (htmlToPlainText)
+    // sehr wohl differiert. Plain-Text-
     // Word-Diff als Sicherheitsnetz, damit Phantom-Revs trotzdem sichtbar
     // werden — single-cell, ein gepaarter Change.
     const oldText = htmlToPlainText(oldHtml);

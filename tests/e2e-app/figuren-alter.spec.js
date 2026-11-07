@@ -90,6 +90,7 @@ test('alterstabelle: Reiter rendert, Filter greifen, Belege klappen auf', async 
             { art: 'alter', wert: 19, bezugsjahr: 1919, zitat: 'die neunzehnjährige Anna', page_id: null, page_name: 'Seite Zwei', chapter_id: null, chapter_name: 'Kapitel Zwei', unsicher: true, begruendung: null },
           ],
         }],
+        geburten: { [seeded.aId]: { y: 1900, m: 3, d: null, quelle: 'steckbrief' } },
         scan: { scanned_at: '2026-01-02T03:04:05.000Z', figuren_total: 2, mit_alter: 1, belege_total: 2, embed_used: true, model: 'test' },
       }),
     });
@@ -152,7 +153,7 @@ test('alterstabelle: Reiter rendert, Filter greifen, Belege klappen auf', async 
   await expect(rowA.locator('.figur-alter-beleg').nth(1).locator('.entity-ref')).toHaveCount(0);
 
   // Filter „nur mit Alter" (dritte Combobox, nach Typ und Kapitel) blendet Bert aus.
-  const boxes = card.locator('.figur-alter .filter-bar .combobox-wrap');
+  const boxes = card.locator('.figur-alter .filter-bar:not(.figur-alter-stichtag) .combobox-wrap');
   await expect(boxes).toHaveCount(3);
 
   // Kapitel-Filter (zweite Combobox): Auftritte entstehen nur in der Analyse
@@ -190,4 +191,108 @@ test('alterstabelle: Reiter rendert, Filter greifen, Belege klappen auf', async 
   await card.locator('.figur-alter .filter-search-input').fill(B_NAME);
   await expect(table.locator('tbody', { hasText: A_NAME })).toHaveCount(0);
 
+  // Filter zuruecksetzen, dann Stichtag: Jahr allein → Spanne, mit Monat → exakt;
+  // die Spalte erscheint erst mit Jahr und traegt den Stichtag im Kopf.
+  await card.locator('.figur-alter .filter-search-input').fill('');
+  await boxes.nth(2).locator('.combobox-trigger').click();
+  await boxes.nth(2).locator('.combobox-option').first().click();
+  await expect(rowB).toBeVisible();
+  const stichtag = card.locator('.figur-alter-stichtag');
+  const ageCells = (row) => row.locator('tr.figur-alter-row .figur-alter-age');
+  await expect(ageCells(rowA)).toHaveCount(1);
+  await stichtag.locator('input.form-num').fill('1915');
+  await stichtag.locator('input.form-num').blur();
+  await expect(ageCells(rowA)).toHaveCount(2);
+  await expect(ageCells(rowA).nth(1)).toHaveText('14–15');
+  await expect(ageCells(rowB).nth(1)).toHaveText('–');
+  await stichtag.locator('.combobox-trigger').click();
+  await stichtag.locator('.combobox-option').nth(6).click(); // «Ganzes Jahr» + Jan…Jun
+  await expect(ageCells(rowA).nth(1)).toHaveText('15');
+  await expect(table.locator('thead th').nth(3)).toContainText('1915');
+  // Belegzeile spannt die zusaetzliche Spalte mit.
+  await expect(rowA.locator('.figur-alter-belege-row td')).toHaveAttribute('colspan', /^(9|10)$/);
+
+});
+
+// Schulsystem im Buch: Spalte «Schulzeit» (Zeitraeume je Stufe), Klasse am
+// Stichtag — auch ausserhalb der Schulzeit mit Wort statt «–» — und der
+// «prüfen»-Hinweis, wenn sich die Geburtsjahre der Quellen widersprechen.
+test('alterstabelle: Schulzeit, Klasse am Stichtag, Geburtsjahr-Widerspruch', async ({ page }) => {
+  await bootApp(page);
+  const bookId = await selectSeededBook(page);
+  const seeded = await seedFiguren(page, bookId);
+  restore = { bookId, before: seeded.before };
+
+  const geburten = {
+    [seeded.aId]: { y: 1985, m: 3, d: null, quelle: 'steckbrief' },
+    [seeded.bId]: { y: 1986, m: null, d: null, quelle: 'geburts_ereignis',
+      widerspruch: [{ quelle: 'geburts_ereignis', jahr: 1986 }, { quelle: 'alters_index', jahr: 1987 }] },
+  };
+  await page.route('**/figures/*/alter', (route) => route.fulfill({
+    status: 200, contentType: 'application/json',
+    body: JSON.stringify({ figuren: [], geburten, scan: null }),
+  }));
+  await page.route('**/figures/*/schulwege', (route) => route.fulfill({
+    status: 200, contentType: 'application/json',
+    body: JSON.stringify({
+      schulsystem: { vorlage: 'ch_so_1990' },
+      wege: { [seeded.aId]: { fig_id: seeded.aId, weg: 'bez', einschulung_jahr: null, repetitionen: [], source: 'autor', vorschlag: null, klassenangaben: [] } },
+      geburten, handlungsjahr: 2001,
+    }),
+  }));
+  // Berufsweg/Hobbys: eine laufende Lehre ab 2000, ein Hobby 1993–1996, ein
+  // offener Vorschlag (zählt nie am Stichtag).
+  await page.route('**/figures/*/stationen', (route) => route.fulfill({
+    status: 200, contentType: 'application/json',
+    body: JSON.stringify({
+      berufe: { [seeded.aId]: [
+        { id: 1, status: 'aktiv', source: 'autor', art: 'ausbildung', taetigkeit: 'Lehre als Köchin', von_jahr: 2000 },
+        { id: 2, status: 'vorschlag', source: 'ki', art: 'beruf', taetigkeit: 'Pilotin', von_jahr: 1990 },
+      ] },
+      hobbys: { [seeded.aId]: [{ id: 3, status: 'aktiv', source: 'autor', hobby: 'Geige', von_jahr: 1993, bis_jahr: 1996 }] },
+    }),
+  }));
+
+  await page.evaluate(() => window.__app.toggleFiguresCard());
+  const card = page.locator(CARD);
+  await card.locator('.tabs-btn', { hasText: 'Alter' }).click();
+  const table = card.locator('.figur-alter-table');
+  await expect(table).toBeVisible();
+  const rowA = table.locator('tbody', { hasText: A_NAME }).first();
+  const rowB = table.locator('tbody', { hasText: B_NAME }).first();
+
+  // Anna: Maerz 1985, Weg Bez → eingeschult 1991, sicher.
+  const zeitA = rowA.locator('.figur-alter-schulzeit-zeile');
+  await expect(zeitA).toHaveText(['Primarschule 1991–1997', 'Bezirksschule 1997–2000']);
+  // Bert: nur Jahr → Einschulung offen, Zeitraeume als «≈».
+  await expect(rowB.locator('.figur-alter-schulzeit-zeile').first()).toContainText('≈');
+  // Bert: Geburtsjahre widersprechen sich → «prüfen» mit beiden Quellen im Tooltip.
+  const badge = rowB.locator('.tag--stale:visible');
+  await expect(badge).toHaveText('prüfen');
+  await expect(badge).toHaveAttribute('data-tip', /Zeitstrahl 1986, Alters-Analyse 1987/);
+  await expect(rowA.locator('.tag--stale:visible')).toHaveCount(0);
+
+  // Stichtag Juni 1995 → 4. Primar; Juni 2001 → abgeschlossen (Wort, nicht «–»).
+  const stichtag = card.locator('.figur-alter-stichtag');
+  await stichtag.locator('input.form-num').fill('1995');
+  await stichtag.locator('input.form-num').blur();
+  await stichtag.locator('.combobox-trigger').click();
+  await stichtag.locator('.combobox-option').nth(6).click();
+  const head = await table.locator('thead th').allTextContents();
+  const klasseIdx = head.indexOf('Klasse');
+  expect(klasseIdx).toBeGreaterThan(0);
+  const klasseA = rowA.locator('tr.figur-alter-row > td').nth(klasseIdx);
+  await expect(klasseA).toHaveText('4. Primar');
+  // Tätigkeit am Stichtag (book/figure-stationen.js): 1995 nur das Hobby, der
+  // Vorschlag von 1990 nicht; 2001 nur die Lehre.
+  const taetIdx = head.indexOf('Tätigkeit');
+  expect(taetIdx).toBeGreaterThan(klasseIdx);
+  const taetA = rowA.locator('tr.figur-alter-row > td').nth(taetIdx);
+  await expect(taetA).toHaveText('Geige');
+  await stichtag.locator('input.form-num').fill('2001');
+  await stichtag.locator('input.form-num').blur();
+  await expect(klasseA).toHaveText('Schule abgeschlossen (2000)');
+  await expect(taetA).toHaveText('Lehre als Köchin');
+  // Belegzeile spannt alle Spalten: 8 + Schulzeit + Stichtag + Klasse + Tätigkeit.
+  expect(head.length).toBe(12);
 });

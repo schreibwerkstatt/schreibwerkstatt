@@ -235,8 +235,11 @@ test('GET /zeit-vorschlaege: aus dem Text der besten Fundstelle, nur Beats im Bu
   const r = await call('GET', `/plot/zeit-vorschlaege?book_id=${B}`);
   assert.equal(r.status, 200);
   assert.deepEqual(r.body.vorschlaege, [{
-    beat_id: ziel.id, zeit: '1999', page_id: 952401, page_name: 'Das nächste Drama', n: 1, spread: 0, eindeutig: true,
+    // 1999 liegt ausserhalb des Akt-Fensters (Stefan *1968, «Erwachsen (24-28)» → 1992–1997):
+    // nicht eindeutig, das Fenster steht in `akt`.
+    beat_id: ziel.id, zeit: '1999', page_id: 952401, page_name: 'Das nächste Drama', n: 1, spread: 0, eindeutig: false,
     belege: [{ datum: '1999', ereignis: 'Renate ist schwanger' }],
+    konkurrenz: [], akt: { name: 'Erwachsen (24-28)', from: 1992, to: 1997 },
   }]);
   const board = (await call('GET', `/plot/?book_id=${B}`)).body;
   assert.deepEqual(board.geburtsjahre, { fig_st: 1968 });

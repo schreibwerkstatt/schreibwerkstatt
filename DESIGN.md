@@ -1826,12 +1826,11 @@ Nur einmal verwendet — nicht neu erfinden für andere Kontexte (Karten haben e
 **Use:** Hauptinhalt links, schmalere klebende Spalte rechts, ab 1280 px. Fünf Konsumenten: Editor | Seiten-Chat/Ideen/Referenz und Kapitelbewertung | Kapitel-Ideen (Hauptebene, [index.html](public/index.html)), Board | Chat in Plot-Werkstatt, Ideen-Board und Recherche.
 
 ```html
-<div class="aside-split aside-split--aside-first" :class="{ 'aside-split--on': chatOpen }">
-  <div class="plot-main">…Board…</div>
-  <div class="aside-split-aside">
-    <div class="chat-panel plot-chat">
-      … <div class="chat-messages aside-split-scroll">…</div> …
-    </div>
+<div class="aside-split main-aside-split aside-split--aside-first plot-split fullscreen-shell"
+     x-data="plotCard" x-aside-resize :class="{ 'aside-split--on': plotChatOpen }">
+  <div class="card card--plot">…Board…</div>
+  <div class="card card--chat plot-chat-card aside-split-aside" x-show="plotChatOpen">
+    … <div class="chat-messages aside-split-scroll">…</div> …
   </div>
 </div>
 ```
@@ -1844,13 +1843,13 @@ CSS: [public/css/layout/aside-split.css](public/css/layout/aside-split.css).
 - `.aside-split-scroll` (optional) deckelt den inneren Verlauf auf `--aside-scroll-max`.
 - Leiste und Scroll-Bereich dürfen in einem `display: contents`-Partial-Host sitzen — die Selektoren sind Nachfahren-, nicht Kind-Selektoren. Splits werden nicht verschachtelt.
 
-**Stellschrauben** — am Split-Element, Default in [tokens/spacing.css](public/css/tokens/spacing.css): `--aside-w` (Standard `clamp(380px, 30vw, 560px)`; `--aside-w-wide` = `clamp(420px, 32vw, 620px)` nur für den Recherche-Chat, dessen Web-Antworten Zeilenbreite brauchen), `--aside-scroll-max` (Standard `min(52vh, 38rem)`; Hauptebene `60vh`, Recherche `min(46vh, 34rem)`).
+**Stellschrauben** — am Split-Element, Default in [tokens/spacing.css](public/css/tokens/spacing.css): `--aside-w` (Standard `clamp(380px, 30vw, 560px)`; `--aside-w-wide` = `clamp(420px, 32vw, 620px)` für die Board-Chats Recherche, Plot und Ideen, deren Antworten und Vorschläge Zeilenbreite brauchen), `--aside-scroll-max` (Standard `min(52vh, 38rem)`; Hauptebene `60vh`, Recherche `min(46vh, 34rem)`).
 
 **Klebe-Rahmen:** `--sticky-top` (24 px) und `--sticky-bottom` gelten für Leiste **und** Seitenbaum. `--sticky-bottom` liegt über der festen Job-Leiste: die schreibt ihre Höhe per `x-resize` als `--job-queue-h` auf `<html>` ([components/job-queue.css](public/css/components/job-queue.css)), geschlossen ist sie 0.
 
 **Leiste der Hauptebene = ein Zustand:** Seiten-Chat, Ideen und Referenz teilen sich die Leiste über das Root-Feld `asideSlot` (`'chat' | 'ideen' | 'reference' | null`). `showChatCard`/`showIdeenCard`/`showReferenceCard` sind davon abgeleitete Getter/Setter ([app-root-getters.js](public/js/app/app-root-getters.js)); geöffnet wird über `_setAside(slot)` ([app-view/cards.js](public/js/app/app-view/cards.js)), das auch die Lektorat-Befunde zurückgibt, wenn der Seiten-Chat abgelöst wird. Ob die Spalte steht, sagen `editorAsideOpen` / `kapitelAsideOpen`. Neue Leistenkarte: Wert in `asideSlot` + Flag in `asideFlagDescriptors` + `.aside-split-aside` an der Karte — **keine** Karten-ID in einer Layout-Datei.
 
-**Board-Chat-Hülle:** `.chat-panel` + `.chat-panel-title` / `-head-actions` ([chat.css](public/css/chat.css)); die Feature-Klasse (`.plot-chat`, `.ideen-chat`, `.research-chat`) trägt nur Abweichungen.
+**Board-Chats = eigene Karte:** Plot-, Ideen- und Recherche-Chat sind je eine `.card.card--chat` neben ihrer Board-Karte; der Split ist die Scope-Wurzel (`x-data`, Sichtbarkeit) und das Vollbild-Element (`fullscreen-shell`, Board + Chat zusammen). Die Feature-Klasse (`.plot-chat-card`, `.ideen-chat-card`, `.research-chat-card`) trägt nur Abweichungen.
 
 Gegated: [tests/unit/aside-split-single-place.test.mjs](tests/unit/aside-split-single-place.test.mjs) — klebende Spalte mit Viewport-Deckel nur hier oder im Seitenbaum, `.aside-split*`-Geometrie nur in aside-split.css, keine Karten-IDs in `layout/`. Ausnahme mit Begründung: das Inhaltsverzeichnis des Bucheditors (eigenes Dreispalten-Raster).
 
@@ -3379,7 +3378,7 @@ Drei Editoren leben in eigenen Subfoldern (`book/`, `focus/`, `notebook/`); edit
 | [book/plot/board.css](public/css/book/plot/board.css) | Plot-Werkstatt (Beat-Board / Kanban): Board-Layout, Spalten, Beat-Karten, Beat-Edit, Add-Beat/Akt, Vollbild + Mobile. |
 | [book/plot/widgets.css](public/css/book/plot/widgets.css) | Plot-Werkstatt-Widgets: KI-Brainstorm, Consistency-Panel, Coverage, Status-Verteilungsbalken, Akt-Farbpalette, Beat-Intensität, Spannungsbogen. Ergänzt plot/board.css. |
 | [book/plot/swimlane.css](public/css/book/plot/swimlane.css) | Plot-Werkstatt: Swimlane-Grid (Akte × Stränge) + Strang-Leiste. Ergänzt plot/board.css + plot/widgets.css. |
-| [book/plot/chat.css](public/css/book/plot/chat.css) | Plot-Werkstatt: Plot-Chat — Nachrichtenhöhe und Panel-Innenteile `.plot-chat*` (Spalten-Layout: `.aside-split`, Hülle: `.chat-panel`); die Vorschlagskarten nutzen die geteilten `.chat-vorschlag*`-Klassen aus chat.css, hier nur Innenteile (Meta-Zeile, Feld-Diff-Raster, Hinweis). Ergänzt plot/board.css. |
+| [book/plot/chat.css](public/css/book/plot/chat.css) | Plot-Werkstatt: Plot-Chat als eigene Karte neben der Plot-Karte — breite Leistenstufe (`--aside-w-wide` am `.plot-split`; Spalten-Layout: `.main-aside-split`, Hülle: `.card--chat`; Vollbild ohne Sticky-Versatz) plus Innenteile `.plot-chat*`; die Vorschlagskarten nutzen die geteilten `.chat-vorschlag*`-Klassen aus chat.css, hier nur Innenteile (Meta-Zeile, Feld-Diff-Raster, Hinweis). Ergänzt plot/board.css. |
 | [book/plot/relations.css](public/css/book/plot/relations.css) | Plot-Werkstatt: Beat-zu-Beat-Beziehungen (Kausalität + Setup/Payoff) — read-only Badges auf der Beat-Karte + Beziehungs-Editor (Typ-/Ziel-Combobox + Chips). Ergänzt plot/board.css. |
 | [book/plot/tools.css](public/css/book/plot/tools.css) | Plot-Werkstatt: Board-Werkzeuge — Beat verschieben ohne Drag (Akt/Strang-Combobox + oben/unten im Beat-Edit), Dichte „nur Titel“ (`.plot--compact`), einklappbare Akte (`.plot-column--collapsed` / `.plot-swim-*--collapsed`), Befund-Typ-Filter/-Aktion/„erledigt“ der Konsistenz-Liste. Lädt nach relations.css. |
 | [book/plot/zeit.css](public/css/book/plot/zeit.css) | Plot-Werkstatt: erzählte Zeit am Beat — Befund-Plakette der Zeit-Messung `.plot-beat-timecheck--{kritisch,mittel,niedrig}` (Variante von `.plot-beat-anchor`), gestrichelter Zeit-Tag für unverstandene Angaben (`.tag--zeit-unklar`), „verstanden als“-Hinweis und Zeitvorschlag im Beat-Edit Alters-Chip `.tag--alter`, (`.plot-zeit-hint`, `.plot-zeit-vorschlag`, Herleitung `.plot-zeit-vorschlag-beleg`), Durchsicht der Zeitvorschläge (`.plot-zeit-review*`). Lädt nach tools.css. |

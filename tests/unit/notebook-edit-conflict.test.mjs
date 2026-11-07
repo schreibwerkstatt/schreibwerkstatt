@@ -553,6 +553,10 @@ const SERVER_CLEAN_CASES = {
   newBlockNoBid: '<p data-bid="a">A</p><p>Neu getippt</p>',
   threadNoBid: '<div class="msg-thread"><p class="msg-in">Hi</p><p class="msg-out">Ho</p></div>',
   dupBid: '<p data-bid="a">Eins</p><p data-bid="a">Zwei</p>',
+  // Leere Formatierungs-Hülle: der Server entfernt sie, der Abdruck darf sie
+  // darum auch nicht zählen (Absenderzeile nach Enter am Kursiv-Rand).
+  msgNameEmptyItalic: '<div class="msg-thread" data-bid="t"><p class="msg-name" data-bid="m0">Marie<i></i></p><p class="msg-in" data-bid="m1"><i>Hi</i></p></div>',
+  emptyBoldChain: '<p data-bid="a">ab<b><em></em></b>c</p>',
 };
 test('sent-saves: anderer Text unter denselben Block-IDs ist kein eigener Stand', () => {
   recordSentSave(79, '<p data-bid="a">Anfang</p><p data-bid="b">Mitte</p>', SS_BASE);

@@ -82,10 +82,20 @@
   --ideen-lane-w: 11rem;
   --ideen-col-w: 13rem;
   --ideen-cols: 4;
+  --ideen-track: minmax(var(--ideen-col-w), 1fr);
+  /* Spalte ohne sichtbare Karte (actions.js#columnTracks): schmal, aber noch
+     breit genug fuer Titel, Zaehler und als Drop-Ziel. */
+  --ideen-track-slim: minmax(7rem, 0.4fr);
   display: grid;
-  grid-template-columns: var(--ideen-lane-w) repeat(var(--ideen-cols), minmax(var(--ideen-col-w), 1fr));
+  grid-template-columns: var(--ideen-lane-w) var(--ideen-col-tracks, repeat(var(--ideen-cols), var(--ideen-track)));
   gap: var(--space-xs);
-  overflow-x: auto;
+  /* Eigener Scrollbereich in beiden Achsen, auf die sichtbare Hoehe gedeckelt
+     (Rahmen wie die Editor-Leiste, DESIGN.md „Split mit Leiste"). Der
+     horizontale Scroll macht das Raster ohnehin zum Scroll-Container; ohne
+     Hoehendeckel scrollte die Seite statt seiner, und die `sticky`-Koepfe
+     klebten an einem Kasten, der sich nie bewegt. */
+  overflow: auto;
+  max-height: calc(100dvh - var(--sticky-top) - var(--sticky-bottom));
   padding-bottom: var(--space-sm);
 }
 
@@ -127,6 +137,9 @@
   display: flex;
   flex-wrap: wrap;
   align-items: center;
+  /* Bricht die Sortierung in einer schmalen Spalte um, wird die Kopfzeile
+     hoeher — die Titel aller Spalten bleiben trotzdem auf einer Linie oben. */
+  align-content: flex-start;
   gap: var(--space-xs);
 }
 /* Sortierung pro Spalte (.seg-toggle aus book/book-settings.css + Reset-Knopf),
@@ -210,6 +223,12 @@
   gap: var(--space-3);
   width: 100%;
   min-width: 0;
+  /* Bahntitel klebt unter den Spaltenkoepfen, solange seine Bahn im Bild ist:
+     bei zwanzig Karten in einer Bahn weiss man sonst nicht mehr, welcher
+     Abschnitt das ist. Hoehe der Kopfzeile misst ideen-board-grid.html
+     (x-resize → --ideen-head-h). */
+  position: sticky;
+  top: var(--ideen-head-h, 2rem);
 }
 /* `min-width: 0` haelt den umbrechenden Titel im Flex-Kind (sonst diktiert das
    laengste Wort die Bahnbreite und schiebt die Stufen-Spalten aus dem Raster). */
@@ -506,4 +525,15 @@ body.ideen-tree-drop-active .page-tree .tree-drop-target {
 
 /* Feature-Tipp über der Toolbar (Erledigt-Check): nur der Abstand zum Fluss. */
 .ideen-board-tip { margin-bottom: var(--card-gap-section); }
+
+/* Ins Bild geholte Idee (actions.js#revealIdee, z.B. aus dem Ideen-Chat
+   übernommen): kurzes Aufleuchten in der Kartenfarbe. */
+@keyframes ideeRevealFlash {
+  0%, 100% { box-shadow: none; }
+  20%, 65% { box-shadow: 0 0 0 2px var(--card-accent); }
+}
+.idee-reveal-flash { animation: ideeRevealFlash 1.6s ease; }
+@media (prefers-reduced-motion: reduce) {
+  .idee-reveal-flash { animation: none; }
+}
 }

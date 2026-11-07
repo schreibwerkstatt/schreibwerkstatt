@@ -9,25 +9,28 @@
      (SortableJS, Logik in public/js/book/ideen-board/actions.js); der
      tastaturerreichbare Weg sind die Stufen-Knoepfe auf der Karte. Innerhalb
      einer Spalte ordnet der Drag nur, solange sie in ihrer urspruenglichen
-     Position steht (`ideen.sort_order`); sortiert wird pro Spalte im Kopf. -->
-<div class="card card--ideenboard fullscreen-shell" id="ideen-board-card" x-data="ideenBoardCard"
-     x-show="$app.showIdeenBoardCard" x-cloak>
+     Position steht (`ideen.sort_order`); sortiert wird pro Spalte im Kopf.
+
+     Split mit Leiste wie Recherche | Recherche-Chat (layout/aside-split.css):
+     links die Board-Karte, rechts der Ideen-Chat als eigene Karte
+     (ideen-chat.html). Beide teilen den Scope `ideenBoardCard` — darum traegt
+     der Split x-data, Sichtbarkeit und das Vollbild (Board + Chat zusammen).
+     Schmal steht der Chat ueber dem Board (`--aside-first`). -->
+<div class="aside-split main-aside-split aside-split--aside-first ideen-split fullscreen-shell" id="ideen-board-split"
+     x-data="ideenBoardCard" x-show="$app.showIdeenBoardCard" x-cloak
+     x-aside-resize :class="{ 'aside-split--on': ideenChatOpen }">
+<div class="card card--ideenboard" id="ideen-board-card">
   <div class="card-header card-header--subline">
     <div class="card-header-titlebar">
       <span class="card-title" x-text="$app.t('ideenBoard.title')"></span>
       <div class="card-subline" x-text="$app.t('ideenBoard.subline')"></div>
     </div>
-    <!-- Ideen-Chat-Panel (chat/ideen-chat.js): Vorschläge an die Ideen, einzeln übernehmen -->
+    <!-- Ideen-Chat-Karte (chat/ideen-chat.js): Vorschläge an die Ideen, einzeln übernehmen -->
     <button type="button" class="icon-btn icon-btn--ghost" :class="{ 'is-active': ideenChatOpen }" :aria-pressed="ideenChatOpen" @click="toggleIdeenChat()" :aria-label="$app.t('ideenBoard.chat.toggle')" :data-tip="$app.t('ideenBoard.chat.toggle')"><svg class="icon" aria-hidden="true"><use href="/icons.svg#message-square"/></svg></button>
     <button type="button" class="icon-btn icon-btn--ghost" :class="{ 'is-active': ideenBoardFullscreen }" :aria-pressed="ideenBoardFullscreen" @click="toggleIdeenBoardFullscreen()" :aria-label="ideenBoardFullscreen ? $app.t('ideenBoard.fullscreenExit.tip') : $app.t('ideenBoard.fullscreen.tip')" :data-tip="ideenBoardFullscreen ? $app.t('ideenBoard.fullscreenExit.tip') : $app.t('ideenBoard.fullscreen.tip')"><svg class="icon" aria-hidden="true"><use :href="ideenBoardFullscreen ? '/icons.svg#minimize-2' : '/icons.svg#maximize-2'"/></svg></button>
   </div>
 
   <div x-show="errorMessage" class="card-status card-status--error" x-text="errorMessage"></div>
-
-  <!-- Board links, Ideen-Chat rechts daneben (ab 1280px; schmaler steht der
-       Chat per `order` über dem Board). Reine Layout-Klammer. -->
-  <div class="aside-split aside-split--aside-first" x-aside-resize :class="{ 'aside-split--on': ideenChatOpen }">
-  <div class="ideen-main">
 
   <!-- Feature-Tipp: offene Ideen an Abschnitten/Kapiteln → Erledigt-Check des Ideen-Chats -->
   <template x-if="$store.hints.isOpen('ideenBoard.erledigtCheck') && ideenCheckTipDue()">
@@ -52,9 +55,7 @@
   <!-- @include ideen-board-grid -->
 
   <!-- @include ideen-board-list -->
-  </div><!-- /.ideen-main -->
+</div><!-- /.card--ideenboard -->
 
-  <!-- Ideen-Chat-Panel (ausgelagert; File-Limit) -->
-  <div id="partial-ideen-chat" class="aside-split-aside"></div>
-  </div><!-- /.aside-split -->
-</div>
+<!-- @include ideen-chat -->
+</div><!-- /.ideen-split -->

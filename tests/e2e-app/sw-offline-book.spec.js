@@ -64,3 +64,32 @@ test('angeheftetes Buch ist nach Reload ohne Netz lesbar, auch ein nie geöffnet
   expect(await page.evaluate(() => window.__app.pageLoadError)).toBe(false);
   await context.setOffline(false);
 });
+
+// Erst-Install: der SW übernimmt die offene Seite bewusst nicht (kein
+// clients.claim), dasselbe gilt nach jedem harten Reload. Der Knopf hängt
+// darum am aktiven Worker der Registrierung, nicht am Controller — sonst fehlte
+// er genau dann, und der Sync-Fortschritt käme in diesem Tab nie an.
+test('Offline-Knopf erscheint und synct auch ohne Controller (Erst-Install)', async ({ page, browserName }) => {
+  test.skip(browserName !== 'chromium', 'SW-Offline nur in Chromium verlässlich steuerbar');
+  test.setTimeout(120000);
+
+  await bootApp(page);
+  const bookId = await selectSeededBook(page);
+  await page.evaluate(() => localStorage.setItem('sw', '1'));
+  await page.reload({ waitUntil: 'domcontentloaded' });
+  await waitBooted(page);
+  await page.evaluate(() => navigator.serviceWorker.ready);
+  expect(await page.evaluate(() => !!navigator.serviceWorker.controller)).toBe(false);
+  await page.waitForFunction(() => window.Alpine.store('session').offlineCapable === true, null, { timeout: 30000 });
+
+  await page.evaluate((id) => { location.hash = '#book/' + id; }, bookId);
+  const btn = page.locator('.card-actions button[aria-pressed]:has(use[href*="/icons.svg#cloud-"])');
+  await expect(btn).toBeVisible();
+  await expect(btn).toHaveAttribute('aria-pressed', 'false');
+  await btn.click();
+  await page.waitForFunction((id) => {
+    const s = window.Alpine.store('session');
+    const k = String(id);
+    return s.offlinePinned.includes(k) && !s.offlineProgress[k] && !!s.offlineBooks[k]?.at;
+  }, bookId, { timeout: 60000 });
+});

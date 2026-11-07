@@ -33,28 +33,61 @@ test('applyProposalOnce: Status-Fehler → zweiter Klick schreibt nicht doppelt'
   const msg = mkMsg();
   let writes = 0;
   const write = async () => { writes++; return 42; };
+  // 1 = claim, 2 = Status scheitert, 3 = Status nachgeholt (ohne neuen claim).
   const calls = mockFetch((url, opts, n) => (n === 1
-    ? { status: 500, body: { error_code: 'INTERNAL' } }
-    : { body: { proposal: { type: 'beat_create', applied_at: 'T', applied_id: 42 } } }));
+    ? { body: { proposal: { type: 'beat_create', claimed_at: 'C' } } }
+    : n === 2
+      ? { status: 500, body: { error_code: 'INTERNAL' } }
+      : { body: { proposal: { type: 'beat_create', applied_at: 'T', applied_id: 42 } } }));
   const first = await applyProposalOnce('/plot/chat-proposal', msg, 0, write);
   assert.deepEqual([first.ok, first.phase], [false, 'persist']);
   assert.equal(writes, 1);
+  assert.equal(calls[0].body.action, 'claim', 'vor dem Schreiben reserviert');
   assert.equal(msg.context_info.proposals[0]._written, true);
   const second = await applyProposalOnce('/plot/chat-proposal', msg, 0, write);
   assert.equal(second.ok, true);
   assert.equal(writes, 1, 'Board nur einmal geschrieben');
-  assert.equal(calls[1].body.applied_id, 42, 'Status mit der id des ersten Schreibens');
+  assert.equal(calls.length, 3, 'zweiter Klick holt nur den Status nach');
+  assert.equal(calls[2].body.applied_id, 42, 'Status mit der id des ersten Schreibens');
   const p = msg.context_info.proposals[0];
   assert.equal(p.applied_at, 'T');
   assert.equal(p._written, undefined);
 });
 
-test('applyProposalOnce: Schreibfehler → phase write, nichts gemerkt', async () => {
+test('applyProposalOnce: Schreibfehler → phase write, nichts gemerkt, Reservierung freigegeben', async () => {
   const msg = mkMsg();
-  mockFetch(() => ({ body: {} }));
+  const calls = mockFetch(() => ({ body: {} }));
   const r = await applyProposalOnce('/plot/chat-proposal', msg, 0, async () => { throw new Error('boom'); });
   assert.deepEqual([r.ok, r.phase], [false, 'write']);
   assert.equal(msg.context_info.proposals[0]._written, undefined);
+  await new Promise(res => setTimeout(res, 0));
+  assert.deepEqual(calls.map(c => c.body.action), ['claim', 'unclaim']);
+});
+
+test('applyProposalOnce: anderer Tab hat schon übernommen → kein zweites Schreiben', async () => {
+  const msg = mkMsg();
+  let writes = 0;
+  mockFetch(() => ({ status: 409, body: { error_code: 'PROPOSAL_ALREADY_APPLIED', proposal: { type: 'beat_create', applied_at: 'T', applied_id: 7 } } }));
+  const r = await applyProposalOnce('/plot/chat-proposal', msg, 0, async () => { writes++; return 1; });
+  assert.deepEqual([r.ok, r.already], [true, true]);
+  assert.equal(writes, 0);
+  assert.equal(msg.context_info.proposals[0].applied_id, 7);
+});
+
+test('applyProposalOnce: hängende Reservierung → nur nach Rückfrage schreiben', async () => {
+  const claimed = { status: 409, body: { error_code: 'PROPOSAL_CLAIMED', proposal: { type: 'beat_create', claimed_at: 'C' } } };
+  let writes = 0;
+  const write = async () => { writes++; return 1; };
+  // Abgelehnt: nichts geschrieben.
+  mockFetch(() => claimed);
+  const no = await applyProposalOnce('/plot/chat-proposal', mkMsg(), 0, write, { confirmReclaim: async () => false });
+  assert.deepEqual([no.ok, no.phase, writes], [false, 'cancelled', 0]);
+  // Bestätigt: neu reservieren (force), dann schreiben.
+  const calls = mockFetch((url, opts, n) => (n === 1 ? claimed : { body: { proposal: { type: 'beat_create' } } }));
+  const yes = await applyProposalOnce('/plot/chat-proposal', mkMsg(), 0, write, { confirmReclaim: async () => true });
+  assert.equal(yes.ok, true);
+  assert.equal(writes, 1);
+  assert.equal(calls[1].body.force, true);
 });
 
 test('409 PROPOSAL_ALREADY_APPLIED: gespeicherter Stand wird übernommen (applied und discarded)', async () => {

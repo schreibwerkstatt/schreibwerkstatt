@@ -81,3 +81,49 @@ test('breite Streuung ist nicht eindeutig', () => {
   assert.equal(v.spread, 19);
   assert.equal(v.eindeutig, false);
 });
+
+// Prod-Fall: „Streit mit Renate, dann Vergewaltigung" (Akt 20–24, Stefan *1968)
+// traf am stärksten das Drama von 1999 (0.681), fast gleich stark die Szene von
+// 1992 (0.592). Die Streuung im besten Abschnitt war 0 → fälschlich eindeutig.
+const PROD_EVENTS = new Map([
+  [10, [ev({ datum_year: 1999, datum_month: 8, ereignis: 'Renate entdeckt ihre zweite Schwangerschaft' })]],
+  [11, [ev({ datum_year: 1999, ereignis: 'Stefan vergewaltigt Renate erneut' })]],
+  [12, [ev({ datum_year: 1992, ereignis: 'Renate tritt der Damenriege bei' })]],
+  [13, [ev({ datum_year: 1975, ereignis: 'Weit weg' })]],
+]);
+const runRivals = ({ rivals = [], aktFenster = null, top = 0.681 } = {}) => computeZeitVorschlaege({
+  beats: [{ id: 1, status: 'im_buch', zeit: null, verworfen: 0 }],
+  topPage: new Map([[1, { page_id: 10, page_name: 'Das nächste Drama', score: top }]]),
+  rivals: new Map([[1, rivals]]),
+  aktFenster: aktFenster ? new Map([[1, aktFenster]]) : new Map(),
+  eventsByPage: PROD_EVENTS,
+})[0];
+
+test('gleich starke, anders datierte Fundstelle nimmt das Häkchen und wird genannt', () => {
+  const v = runRivals({ rivals: [
+    { page_id: 11, page_name: 'Die neue Sexualität', score: 0.611 },
+    { page_id: 12, page_name: 'Das Vereinsleben', score: 0.592 },
+  ] });
+  assert.equal(v.zeit, 'August 1999', 'der Vorschlag selbst bleibt');
+  assert.equal(v.spread, 0);
+  assert.equal(v.eindeutig, false);
+  assert.deepEqual(v.konkurrenz, [{ page_id: 12, page_name: 'Das Vereinsleben', zeit: '1992' }],
+    'gleich datierte Konkurrentin (1999) zählt nicht');
+});
+
+test('Konkurrenz: deutlich schwächere Fundstelle zählt nicht, wörtlicher Treffer immer', () => {
+  assert.equal(runRivals({ rivals: [{ page_id: 13, page_name: 'X', score: 0.5 }] }).eindeutig, true);
+  assert.equal(runRivals({ rivals: [{ page_id: 13, page_name: 'X', score: null }] }).eindeutig, false);
+  assert.equal(runRivals({ rivals: [{ page_id: 10, page_name: 'gleicher Abschnitt', score: 0.6 }] }).eindeutig, true,
+    'zweiter Treffer im selben Abschnitt ist keine Konkurrenz');
+});
+
+test('Vorschlag ausserhalb des Akt-Fensters ist nicht eindeutig, innerhalb schon', () => {
+  const aussen = runRivals({ aktFenster: { name: 'Erste Reife (20-24)', from: 1988, to: 1993 } });
+  assert.equal(aussen.zeit, 'August 1999', 'der Akt liefert die Zeit nie');
+  assert.equal(aussen.eindeutig, false);
+  assert.deepEqual(aussen.akt, { name: 'Erste Reife (20-24)', from: 1988, to: 1993 });
+  const innen = runRivals({ aktFenster: { name: 'Erste Krise (28-32)', from: 1996, to: 2001 } });
+  assert.equal(innen.eindeutig, true);
+  assert.equal(innen.akt, null);
+});

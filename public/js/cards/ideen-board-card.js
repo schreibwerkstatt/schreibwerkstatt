@@ -55,6 +55,9 @@ export function registerIdeenBoardCard() {
     // Filterleiste + Klappung (Besitz: IDEEN_BOARD_FILTER_SCOPES).
     filterChapterId: '',
     showErledigt: false,
+    // Auto-Erledigt-Check an/aus (persönlich, app_users.ideen_auto_check;
+    // geladen mit dem Board, geschaltet im Stufen-Menü — book/ideen-check.js).
+    autoCheckOn: true,
     showVerworfen: false,
     query: '',
     // Reihenfolge der Karten pro Spalte: Map Stufe → { by, dir }
@@ -106,7 +109,7 @@ export function registerIdeenBoardCard() {
     _boardLoadSeq: 0,  // Lade-Token (book-guard.js#loadToken)
     _lifecycle: null,
 
-    // Ideen-Chat: Panel neben dem Board (chat/ideen-chat.js). Vorschläge des Chats
+    // Ideen-Chat: eigene Karte neben dem Board, Scope-Wurzel = Split (chat/ideen-chat.js). Vorschläge des Chats
     // laufen beim Übernehmen über dieselben /ideen-Routen wie die Board-Bearbeitung.
     ...ideenChatState(),
 

@@ -17,6 +17,7 @@ import { chatMethods } from '../chat/chat.js';
 import { setupCardLifecycle } from './card-lifecycle.js';
 import { takeCardRequest, CARD_REQUEST } from './card-request.js';
 import { EVT } from '../events.js';
+import { applyQuoteToInput } from '../editor/aside-hotkeys.js';
 
 export function registerChatCard() {
   if (typeof window === 'undefined' || !window.Alpine) return;
@@ -69,6 +70,7 @@ export function registerChatCard() {
           this.$nextTick(() => {
             const ta = this.$el?.querySelector('.chat-input');
             if (ta) ta.focus();
+            this._takeChatQuote();
           });
         },
         // book:changed + view:reset reuse resetChat (kein einfaches resetState).
@@ -84,6 +86,8 @@ export function registerChatCard() {
             } else if (e.detail?.key === CARD_REQUEST.PAGE_CHAT_DRAFT) {
               const text = takeCardRequest(CARD_REQUEST.PAGE_CHAT_DRAFT);
               if (text) this.prepareChatDraft(text);
+            } else if (e.detail?.key === CARD_REQUEST.PAGE_CHAT_QUOTE && this._chatShown) {
+              this._takeChatQuote();
             }
           } },
         ],
@@ -116,6 +120,13 @@ export function registerChatCard() {
     // wechselt, um dort zu handeln.
     onChatPointerEnter() {
       if (window.__app?.editMode && this.chatMessages.length) this._refreshVorschlagStates();
+    },
+
+    // Markierung aus dem Text (⌘/Strg+Shift+1, editor/aside-hotkeys.js) als
+    // Zitat ins Eingabefeld des laufenden Gesprächs — gesendet wird nichts.
+    _takeChatQuote() {
+      const text = takeCardRequest(CARD_REQUEST.PAGE_CHAT_QUOTE);
+      if (text) applyQuoteToInput(this, 'chatInput', this.$el?.querySelector('.chat-input'), text);
     },
 
     ...chatMethods,

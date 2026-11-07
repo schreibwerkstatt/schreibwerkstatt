@@ -8,7 +8,7 @@ import { ideenBacklinkMethods } from '../book/ideen-backlinks.js';
 import { rechercheToSourceMethods } from '../sources/from-research.js';
 import { rechercheScrapeMethods } from '../book/recherche/scrape.js';
 import {
-  researchChatMethods, researchProposalState, installResearchChatAskBridge, RESEARCH_CHAT_ASK_PENDING,
+  researchChatMethods, researchProposalState, researchChangeState, installResearchChatAskBridge, RESEARCH_CHAT_ASK_PENDING,
 } from '../chat/research-chat.js';
 import { EVT } from '../events.js';
 import { emptyDraft as _emptyDraft } from '../book/recherche/shared.js';
@@ -157,6 +157,7 @@ export function registerRechercheCard() {
     _proposalSaving: {},
     // Bearbeitungs-Entwürfe + Kontext-Chip der Vorschläge (research-chat-proposals.js).
     ...researchProposalState(),
+    ...researchChangeState(),
 
     // Mehrfachauswahl der Liste (book/recherche/bulk.js).
     ...rechercheBulkState(),

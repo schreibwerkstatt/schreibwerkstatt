@@ -13,6 +13,8 @@ const { parseDatum } = require('../lib/datum-parse');
 const { parseActAgeRange } = require('../lib/plot-act-age');
 const { computeFigureYears } = require('../lib/figure-years');
 const { listAnalysedBirthYears } = require('../db/figure-ages');
+const { listDatedEventsForPages } = require('../db/zeitstrahl');
+const { getBookSettings } = require('../db/book-settings');
 
 // Entity per :id laden + Owner (user_email) + Buch-ACL prüfen. Gibt die Entity
 // zurück oder null (die passende Fehler-Response wurde dann bereits gesendet).
@@ -138,8 +140,41 @@ function _resolveThreadDraftFigure(bookId, userEmail, rawDraftId) {
   return rawDraftId ? (plotDb.resolveDraftFigureIds(bookId, userEmail, [rawDraftId])[0] || null) : null;
 }
 
+// Eingabe für lib/plot-zeit-vorschlag.js (GET /plot/zeit-vorschlaege): Beats im
+// Buch ohne Zeit, je Beat die beste anspringbare Fundstelle (derselbe Lese-
+// Filter wie das Drift-Badge) plus die übrigen als Konkurrentinnen, die
+// datierten Ereignisse ALLER dieser Abschnitte und das Jahresfenster des Akts
+// für die Strang-Figur (Altersspanne im Aktnamen + Geburtsjahr; bis obere
+// Grenze + 1 wie public/js/book/plot/zeit.js#aktFenster).
+function _zeitVorschlagInput(bookId, userEmail) {
+  const beats = plotDb.listBeats(bookId, userEmail)
+    .filter(b => b.status === 'im_buch' && !b.verworfen && !(b.zeit || '').trim());
+  const occMap = plotDb.beatOccurrenceMap(bookId, userEmail, _anchorOpts());
+  const actAges = _actAgeMap(plotDb.listActs(bookId, userEmail));
+  const threadFig = _threadFigMap(plotDb.listThreads(bookId, userEmail));
+  const births = actAges.size ? _figureTimeMap(bookId, userEmail, { stand: false }) : new Map();
+  const topPage = new Map(), rivals = new Map(), aktFenster = new Map();
+  const pageIds = new Set();
+  for (const b of beats) {
+    const occ = (occMap.get(b.id)?.top || []).filter(o => o.page_id);
+    if (!occ.length) continue;
+    const [top, ...rest] = occ.map(o => ({ page_id: o.page_id, page_name: o.page_name, score: o.score }));
+    topPage.set(b.id, top);
+    rivals.set(b.id, rest);
+    for (const o of occ) pageIds.add(o.page_id);
+    const age = actAges.get(b.act_id);
+    const geb = age && b.thread_id != null ? births.get(threadFig.get(b.thread_id))?.geburtsjahr : null;
+    if (Number.isInteger(geb)) aktFenster.set(b.id, { name: age.name, from: geb + age.von, to: geb + age.bis + 1 });
+  }
+  return {
+    beats, topPage, rivals, aktFenster,
+    eventsByPage: listDatedEventsForPages(bookId, userEmail, [...pageIds]),
+    lang: getBookSettings(bookId, userEmail)?.language || 'de',
+  };
+}
+
 module.exports = {
   _loadOwned, _requireBook, _validChapterId, _parseIntensitaet, _parseFlag,
   _anchorOpts, _withAnchor, _resolveThreadFigure, _resolveThreadDraftFigure,
-  _figureTimeMap, _actAgeMap, _threadFigMap,
+  _figureTimeMap, _actAgeMap, _threadFigMap, _zeitVorschlagInput,
 };

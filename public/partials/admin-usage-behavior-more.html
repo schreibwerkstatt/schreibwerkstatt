@@ -134,6 +134,34 @@
 </div>
 <div x-show="!adminUsageBehaviorCreation().length && !adminUsageBehaviorSharing().length" class="muted-msg muted-msg--sm" x-text="$app.t('admin.usage.empty')"></div>
 
+<!-- Abschnitts-Revisionen: Viewer, Vergleich, Wiederherstellen nach Alter, Anheften.
+     Feste Kennzahl-Reihenfolge (Trichter von oben nach unten), darum sortierbar
+     nur nach Wahl — Default ist die Server-Reihenfolge. -->
+<h3 class="admin-usage-h3--spaced" x-text="$app.t('admin.usage.behavior.revisions')"></h3>
+<p class="muted-msg muted-msg--sm" x-text="$app.t('admin.usage.behavior.revisionsHint')"></p>
+<div class="table-scroll">
+  <table class="data-table"
+         x-data="sortableTable({ rows: () => adminUsageBehaviorRevisions(), defaultKey: null, persistKey: 'admin.usage.behavior.revisions',
+           types: { count: 'number', users: 'number' } })">
+    <thead>
+      <tr>
+        <th x-bind="sortTh('label')" x-text="$app.t('admin.usage.behavior.col.action')"></th>
+        <th x-bind="sortTh('count')" x-text="$app.t('admin.usage.behavior.col.count')"></th>
+        <th x-bind="sortTh('users')" x-text="$app.t('admin.usage.behavior.col.users')"></th>
+      </tr>
+    </thead>
+    <tbody>
+      <template x-for="r in sorted" :key="r.key">
+        <tr>
+          <td x-text="r.label"></td>
+          <td class="admin-usage-cell-num" x-text="adminUsageInt(r.count)"></td>
+          <td class="admin-usage-cell-num" x-text="adminUsageInt(r.users)"></td>
+        </tr>
+      </template>
+    </tbody>
+  </table>
+</div>
+
 <!-- Lesen: verschiedene Abschnitte und Öffnungen je Person -->
 <h3 class="admin-usage-h3--spaced" x-text="$app.t('admin.usage.behavior.reading')"></h3>
 <p class="muted-msg muted-msg--sm" x-text="$app.t('admin.usage.behavior.readingNote')"></p>

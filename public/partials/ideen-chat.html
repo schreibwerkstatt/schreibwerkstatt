@@ -1,16 +1,23 @@
-<!-- Ideen-Chat-Panel des Ideen-Boards (jeder Provider; agentisch oder klassisch).
-     Prüft Pendenzen gegen den Text, sucht Buch-Ideen einen Ort, räumt Dubletten
-     auf; Änderungen kommen als Vorschläge, die der User EINZELN übernimmt oder
-     verwirft (Vorschlagskarten wie im Plot-Chat).
-     Scope + Methoden aus ideenBoardCard (chat/ideen-chat.js, chat/ideen-chat-proposals.js).
+<!-- Ideen-Chat — eigene Karte als Leiste neben der Ideen-Board-Karte
+     (Muster des Recherche-Chats, layout/aside-split.css; jeder Provider,
+     agentisch oder klassisch). Prüft Pendenzen gegen den Text, sucht
+     Buch-Ideen einen Ort, räumt Dubletten auf; Änderungen kommen als
+     Vorschläge, die der User EINZELN übernimmt oder verwirft (Vorschlagskarten
+     wie im Plot-Chat). Fragment (string-seitiger @include) im Split von
+     ideen-board.html; Scope + Methoden aus ideenBoardCard (chat/ideen-chat.js,
+     chat/ideen-chat-proposals.js), Sichtbarkeit aus `ideenChatOpen`.
      Deep-Doc: docs/ideen-chat.md -->
-<div x-show="ideenChatOpen" x-cloak class="chat-panel ideen-chat">
-  <div class="card-section-head">
-    <span class="chat-panel-title" x-text="$app.t('ideenBoard.chat.heading')"></span>
-    <div class="chat-panel-head-actions">
-      <button type="button" class="icon-btn icon-btn--ghost" @click="startNewIdeenChatSession()" :disabled="ideenChatLoading" :data-tip="$app.t('chat.newSessionTitle')" :aria-label="$app.t('chat.newSession')"><svg class="icon" aria-hidden="true"><use href="/icons.svg#plus"/></svg></button>
-      <button type="button" class="icon-btn icon-btn--ghost" @click="ideenChatOpen = false" :data-tip="$app.t('common.close')" :aria-label="$app.t('common.close')"><svg class="icon" aria-hidden="true"><use href="/icons.svg#x"/></svg></button>
+<div class="card card--chat ideen-chat-card aside-split-aside" id="ideen-chat-card" x-show="ideenChatOpen" x-cloak>
+  <div class="card-header">
+    <div class="card-header-titlebar">
+      <span class="card-eyebrow" x-text="$app.selectedBookName || '–'"></span>
+      <span class="card-title" x-text="$app.t('ideenBoard.chat.heading')"></span>
     </div>
+    <div class="card-actions">
+      <button type="button" class="icon-btn icon-btn--ghost" x-show="isIdeenChatSessionRunning(ideenChatSessionId)" @click="cancelIdeenChatRun()" :data-tip="$app.t('chat.cancelRunTip')" :aria-label="$app.t('chat.cancelRun')"><svg class="icon" aria-hidden="true"><use href="/icons.svg#square"/></svg></button>
+      <button type="button" class="icon-btn icon-btn--ghost" @click="startNewIdeenChatSession()" :disabled="ideenChatLoading" :data-tip="$app.t('chat.newSessionTitle')" :aria-label="$app.t('chat.newSession')"><svg class="icon" aria-hidden="true"><use href="/icons.svg#plus"/></svg></button>
+    </div>
+    <button type="button" class="btn-card-close" @click="ideenChatOpen = false" :data-tip="$app.t('common.close')" :aria-label="$app.t('common.close')"><svg class="icon" aria-hidden="true"><use href="/icons.svg#x"/></svg></button>
   </div>
 
   <div x-show="ideenChatProgress > 0 && isIdeenChatSessionRunning(ideenChatSessionId)" class="progress-bar-wrap">
@@ -26,6 +33,7 @@
         <button type="button" class="btn-compact" @click="askIdeenChat('ideenBoard.chat.starter.erledigt')" x-text="$app.t('ideenBoard.chat.starter.erledigtLabel')"></button>
         <button type="button" class="btn-compact" @click="askIdeenChat('ideenBoard.chat.starter.orte')" x-text="$app.t('ideenBoard.chat.starter.orteLabel')"></button>
         <button type="button" class="btn-compact" @click="askIdeenChat('ideenBoard.chat.starter.dubletten')" x-text="$app.t('ideenBoard.chat.starter.dublettenLabel')"></button>
+        <button type="button" class="btn-compact" @click="askIdeenChat('ideenBoard.chat.starter.alt')" x-text="$app.t('ideenBoard.chat.starter.altLabel')"></button>
       </div>
     </div>
 
@@ -96,6 +104,27 @@
                     </div>
                   </template>
 
+                  <!-- Dubletten zusammenführen: die bleibende Idee, die aufgehenden, ggf. Text-Diff -->
+                  <template x-if="p.type === 'idee_merge'">
+                    <div class="chat-vorschlag-diff">
+                      <div class="chat-vorschlag-title" x-text="p.labels?.idee"></div>
+                      <div class="ideen-chat-proposal-row">
+                        <span class="ideen-chat-proposal-field" x-text="$app.t('ideenBoard.chat.field.mergeIn')"></span>
+                        <ul class="ideen-chat-merge-list">
+                          <template x-for="m in (p.labels?.merged || [])" :key="m.id">
+                            <li><span x-text="m.text"></span> <span class="ideen-chat-merge-anchor" x-show="m.anchor" x-text="'· ' + m.anchor"></span></li>
+                          </template>
+                        </ul>
+                      </div>
+                      <template x-for="row in ideenProposalRows(p)" :key="row.key">
+                        <div class="ideen-chat-proposal-row">
+                          <span class="ideen-chat-proposal-field" x-text="$app.t('ideenBoard.chat.field.' + row.key)"></span>
+                          <span class="chat-word-diff"><template x-for="(part, di) in row.diff" :key="di"><span :class="part.c" x-text="part.v"></span></template></span>
+                        </div>
+                      </template>
+                    </div>
+                  </template>
+
                   <!-- Verknüpfung -->
                   <template x-if="p.type === 'link_create'">
                     <div class="chat-vorschlag-diff">
@@ -134,7 +163,7 @@
   </div>
 
   <div class="chat-input-row">
-    <textarea class="chat-input ideen-chat-input" x-model="ideenChatInput" rows="1"
+    <textarea class="chat-input ideen-chat-input" x-model="ideenChatInput" rows="2"
               :placeholder="$app.t('ideenBoard.chat.placeholder')" :aria-label="$app.t('ideenBoard.chat.placeholder')"
               :disabled="ideenChatLoading" data-spellcheck="spelling"
               @keydown.enter="$enter($event, () => sendIdeenChatMessage(), { multiline: true })"></textarea>

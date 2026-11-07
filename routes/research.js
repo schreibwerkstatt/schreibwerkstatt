@@ -32,6 +32,7 @@ const { researchMediaRouter } = require('./research-media');
 const { interviewMediaRouter } = require('./interview');
 const { researchScrapeRouter } = require('./research-scrape');
 const { researchChatProposalsRouter } = require('./research-chat-proposals');
+const { researchChatChangesRouter } = require('./research-chat-changes');
 const { researchBulkRouter } = require('./research-bulk');
 
 const router = express.Router();
@@ -50,6 +51,8 @@ router.use('/', researchScrapeRouter);
 // Speichern eines Recherche-Chat-Vorschlags (POST /chat-proposal): legt das
 // Fundstück an UND persistiert den Gespeichert-Status am Vorschlag.
 router.use('/', researchChatProposalsRouter);
+// Vor PATCH /:id: sonst nähme die Item-Route PATCH /chat-proposal als id.
+router.use('/', researchChatChangesRouter);
 // Mehrfachauswahl (POST /bulk): eine Aktion auf viele Fundstuecke, eine Transaktion.
 router.use('/', researchBulkRouter);
 

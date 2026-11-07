@@ -13,6 +13,7 @@ const {
 } = require('./shared');
 const { validateManifest, validateBookJson, planFromNodes, normalizeIncludes } = require('../../lib/book-bundle');
 const { restoreExtras } = require('../../db/book-migration-data');
+const { restoreSources } = require('../../db/book-migration-data/werk');
 const { materializeOps, applyBundleSettings } = require('../../lib/bundle-apply');
 const { setContext } = require('../../lib/log-context');
 const { createOwnedBook, discardImportedBook, bookNameError, BOOK_NAME_MAX } = require('../../lib/book-create');
@@ -98,8 +99,22 @@ async function runBookImportJob(jobId, { userEmail, zipLimits = SWBOOK_ZIP_LIMIT
     // Kapitel + Seiten anlegen (gemeinsamer Schreibpfad mit dem Fassungs-Restore):
     // Reihenfolge inkl. Interleaving, excluded-Flag, Kapitel-Querverweise auf die
     // neuen IDs. srcId -> neue ID fuellt die Remap-Maps fuer die Extra-Bloecke.
+    // Quellen des Werk-Blocks VOR den Abschnitten: `data-src` im Text zeigt dann
+    // beim Anlegen schon auf die Quellen in der Bibliothek des Importierenden.
+    const includesEarly = normalizeIncludes(manifest.includes);
+    let werkData = null;
+    let sourceIdMap = new Map();
+    if (includesEarly.werk) {
+      try {
+        werkData = await _readJsonEntry(zip, 'werk.json');
+        sourceIdMap = restoreSources(werkData?.sources, userEmail);
+      } catch (e) {
+        log.warn(`book-import: Quellen des Werk-Blocks nicht übernommen: ${e.message}`);
+      }
+    }
     const applied = await materializeOps(bookId, ops, ctx, {
       replace: true,
+      sourceIdMap,
       onProgress: (done, total) => {
         throwIfCancelled(jobId);
         if (done % 10 !== 0 && done !== total) return;
@@ -130,7 +145,7 @@ async function runBookImportJob(jobId, { userEmail, zipLimits = SWBOOK_ZIP_LIMIT
     // Non-fatal: scheitert das, bleibt das Buch mit Inhalt erhalten.
     const includes = normalizeIncludes(manifest.includes);
     let extrasResult = null;
-    if (includes.analysis || includes.lektorat || includes.chats || includes.research) {
+    if (Object.values(includes).some(Boolean)) {
       updateJob(jobId, { progress: 92, statusText: 'job.book-import.restoringExtras' });
       const extras = {};
       try {
@@ -138,7 +153,8 @@ async function runBookImportJob(jobId, { userEmail, zipLimits = SWBOOK_ZIP_LIMIT
         if (includes.lektorat) extras.lektorat = await _readJsonEntry(zip, 'lektorat.json');
         if (includes.chats)    extras.chats = await _readJsonEntry(zip, 'chats.json');
         if (includes.research) extras.research = await _readJsonEntry(zip, 'research.json');
-        extrasResult = restoreExtras(bookId, extras, { pageIdMap, chapterIdMap }, userEmail);
+        if (werkData)          extras.werk = werkData;
+        extrasResult = restoreExtras(bookId, extras, { pageIdMap, chapterIdMap, sourceIdMap }, userEmail);
         log.info(`book-import Extras wiederhergestellt: ${JSON.stringify(extrasResult)}`);
       } catch (e) {
         log.warn(`book-import: Extra-Wiederherstellung fehlgeschlagen: ${e.message}`);

@@ -95,7 +95,7 @@ export const SCHEMA_RESEARCH_LINK = _obj({
 export const RESEARCH_CHAT_FORCE_FINAL_INSTRUCTION =
   'Die Recherche für diese Antwort ist beendet (Iterationen oder Web-Suchen aufgebraucht) — keine weitere Suche mehr. '
   + 'Fasse JETZT aus dem bereits Gesammelten die bestmögliche Antwort zusammen und liefere sie über das Werkzeug `final_answer`. '
-  + 'Rufe kein anderes Werkzeug mehr auf, auch keine Web-Suche. '
+  + 'Ausser `final_answer` läuft nur noch `propose_research_item` — gib Vorschläge zusammen mit `final_answer` in derselben Antwort ab; keine Suche, kein Seitenlesen mehr. '
   + 'Wenn etwas offen blieb, weise kurz darauf hin. Sprache der Antwort: die der Userfrage.';
 
 // Suchweg SearXNG: die Schlussrunde ist genau die, in der ein Modell seine Belege
@@ -110,7 +110,8 @@ export const RESEARCH_CHAT_FORCE_FINAL_INSTRUCTION_SEARXNG = `${RESEARCH_CHAT_FO
  * (jedes Speichern ändert ihn) — darum NICHT im System-Prompt, sondern vor der
  * Frage in deren User-Nachricht (Job: `userPreamble`), damit Werkzeuge + System +
  * Verlauf ein stabiler Cache-Präfix bleiben. Ohne Zahl und leere Liste → ''.
- * @param {Array<{title,kind,saved_item_id?,exists_item_id?,idee_state?}>} list  kind 'idee' = Ideen-Vorschlag
+ * @param {Array<{title,kind,saved_item_id?,exists_item_id?,idee_state?,item_id?,what?,change_state?}>} list
+ *   kind 'idee' = Ideen-Vorschlag, kind 'change' = Änderung an einem bestehenden Eintrag
  * @param {{ toolNames?: string[], itemCount?: number|null }} [opts]
  */
 export function buildResearchProposalMemoryBlock(list = [], { toolNames, itemCount = null } = {}) {
@@ -120,15 +121,17 @@ export function buildResearchProposalMemoryBlock(list = [], { toolNames, itemCou
   if (!Array.isArray(list) || !list.length) return countLine;
   const readable = toolMentions(toolNames).list(['list_research_items', 'read_research_item'], '/');
   const IDEE_STATE = { applied: 'als Idee erfasst', discarded: 'verworfen', open: 'noch offen' };
+  const CHANGE_STATE = { applied: 'übernommen', discarded: 'verworfen', open: 'noch offen' };
   const lines = list.map(p => {
     if (p.kind === 'idee') return `- Idee «${p.title}» — ${IDEE_STATE[p.idee_state] || IDEE_STATE.open}`;
+    if (p.kind === 'change') return `- Änderung an Eintrag id=${p.item_id} «${p.title}»: ${p.what} — ${CHANGE_STATE[p.change_state] || CHANGE_STATE.open}`;
     const state = p.saved_item_id
       ? `gespeichert als Eintrag id=${p.saved_item_id}`
       : (p.exists_item_id ? `nicht gespeichert (lag schon im Archiv als id=${p.exists_item_id})` : 'nicht gespeichert');
     return `- «${p.title}» (${p.kind}) — ${state}`;
   });
   return (countLine ? `${countLine}\n\n` : '')
-    + `BISHERIGE SPEICHER-VORSCHLÄGE IN DIESEM GESPRÄCH (Stand jetzt; schlage dasselbe nicht erneut vor — gespeicherte Einträge liegen im Archiv${readable ? ` und sind über ${readable} lesbar` : ''}):\n`
+    + `BISHERIGE VORSCHLÄGE IN DIESEM GESPRÄCH (Stand jetzt; schlage dasselbe nicht erneut vor — gespeicherte Einträge liegen im Archiv${readable ? ` und sind über ${readable} lesbar` : ''}):\n`
     + lines.join('\n');
 }
 
@@ -213,13 +216,15 @@ export function buildResearchChatAgentSystemPrompt(bookName, itemCount, maxToolI
       '- `web_search` — durchsucht das offene Web in Echtzeit über eine Metasuchmaschine. Liefert je Treffer `nr`, Titel, URL und ein kurzes Snippet. Nutze es für aktuelle, externe oder überprüfbare Fakten (historisches, geografisches, technisches, kulturelles Hintergrundwissen).',
       `- \`read_web_page\` — liest den Text einer Seite oder eines PDFs. Snippets sind kurz und oft abgeschnitten: für Daten, Zahlen, Namen und Zitate lies die Seite, bevor du dich darauf stützt. Lesbar sind Treffer von ${m.list(['web_search', 'lookup_literature'], '/')} dieses Durchgangs, Links aus dem Recherche-Archiv und Links, die der User nennt. Ein langes PDF durchsuchst du mit \`suche\` und liest dann mit \`seite\` an der Fundstelle — nicht Seite für Seite von vorn.`,
     ] : [
-      '- `web_search` — durchsucht das offene Web in Echtzeit. Nutze es für aktuelle, externe oder überprüfbare Fakten (historisches, geografisches, technisches, kulturelles Hintergrundwissen). Gib in der Antwort die Quelle/URL an, auf die du dich stützt.',
+      '- `web_search` — durchsucht das offene Web in Echtzeit. Nutze es für aktuelle, externe oder überprüfbare Fakten (historisches, geografisches, technisches, kulturelles Hintergrundwissen).',
     ]) : []),
     ...m.route('Vorhandenes Recherche-Material des Autors durchsuchen und lesen (inkl. PDF-Volltext) — prüfe es, bevor du etwas Neues recherchierst', ['list_research_items', 'read_research_item']),
     ...m.route('Passagen im Archiv nach BEDEUTUNG, auch bei anderer Wortwahl; mit `item_id` gezielt in EINEM langen PDF, von dem der Volltext nur den Anfang liefert', ['search_research_passages']),
     ...m.route('Fachliteratur und Bücher aus bibliografischen Registern (Crossref, OpenLibrary) mit DOI/ISBN — bevorzugt, wenn zitierfähige Literatur gefragt ist; schlägst du einen Treffer vor, nimm die doi.org-URL in `urls` und Autoren/Jahr in `source`. Die gelieferten URLs darfst du in `final_answer.quellen` nennen', ['lookup_literature']),
+    ...m.route('Was das Buch schon festlegt (Weltregeln, Daten und Ereignisse in Reihenfolge) — prüfe es, bevor du eine Angabe gegen die Welt recherchierst, und benenne Abweichungen', ['list_world_facts', 'get_timeline']),
     ...m.route('Szenen, Plot-Beats und Handlungsstränge des Buchs (sowie die oben gelisteten Figuren und Schauplätze in voller Tiefe), um gezielt FÜR die Geschichte zu recherchieren', ['list_book_entities']),
     '- `propose_research_item` — schlage ein konkretes Fundstück als neuen Recherche-Eintrag vor (Notiz/Link/Zitat/Fakt). Es wird NICHT automatisch gespeichert — der User bestätigt jeden Vorschlag selbst. Nutze dies grosszügig, wenn du Brauchbares findest: knackiger Titel, präziser Inhalt, bei Web-Quellen die URL als Quelle.',
+    '- `propose_research_item` mit `item_id` — schlage eine Änderung an einem BESTEHENDEN Eintrag vor: ergänzen (`append`, neue `urls`/`tags`), umschreiben (`title`/`body`), Stufe setzen (`status`), archivieren (`archive`) oder zwei Einträge zum selben Gegenstand zusammenführen (`merge_item_id`). Auch das übernimmt der User einzeln. Ergänzt ein neuer Fund einen vorhandenen Eintrag, ergänze ihn, statt einen zweiten anzulegen.',
     '- `final_answer` — Pflicht-Endpunkt: jede Antwort an den User MUSS hierüber laufen. Mit `ideen` bietest du dort Pendenzen für das Manuskript an.',
     '',
     'Arbeitsweise:',
@@ -235,13 +240,17 @@ export function buildResearchChatAgentSystemPrompt(bookName, itemCount, maxToolI
     `- Maximal ${maxToolIter} Werkzeug-Iterationen pro Antwort (eine Iteration = eine Runde, nicht ein Call). Geh effizient damit um.`,
     ...(maxWebSearches ? [`- Insgesamt höchstens ${maxWebSearches} Web-Suchen pro Antwort (über alle Runden; jede Suche ${searxng ? 'kostet Zeit' : 'kostet'}). Formuliere gezielte Suchbegriffe statt vieler ähnlicher.`] : []),
     '- WICHTIG — rückwärtsgewandt: Du schreibst NIEMALS Manuskripttext, formulierst keine Romanszenen und machst keine Stil-Vorschläge für den Fließtext. Du sammelst und ordnest Wissen. Wenn der User um Textgenerierung für das Buch bittet, biete stattdessen Recherche/Strukturierung an.',
-    '- IDEEN (Pendenzen am Manuskript): Steht vor der Frage ein SCHREIBKONTEXT und zeigt dein Fund, dass an dieser Stelle etwas zu prüfen oder zu ändern ist (ein Datum, das nicht stimmen kann, ein Detail, das der Quelle widerspricht, eine offene Sachfrage), biete es in `final_answer.ideen` an — der Autor erfasst jede einzeln als Idee. Du kennst den Manuskripttext nicht (höchstens den Auszug): formuliere als Prüfauftrag mit dem Fund, nicht als Behauptung über den Text. Ohne SCHREIBKONTEXT keine Ideen — sie hätten keinen Ort. Ein Fundstück für das Archiv bleibt `propose_research_item`.',
-    '- Wenn du Material vorschlägst, das es im Archiv schon gibt, weise darauf hin statt zu duplizieren. `propose_research_item` meldet einen Treffer im Archiv als `already_in_archive` — schlage dann nur vor, wenn dein Vorschlag wirklich Neues ergänzt.',
+    '- IDEEN (Pendenzen am Manuskript): Steht vor der Frage ein SCHREIBKONTEXT und zeigt dein Fund, dass an dieser Stelle etwas zu prüfen oder zu ändern ist (ein Datum, das nicht stimmen kann, ein Detail, das der Quelle widerspricht, eine offene Sachfrage), biete es in `final_answer.ideen` an — der Autor erfasst jede einzeln als Idee. Den Manuskripttext kennst du höchstens in Auszügen: formuliere als Prüfauftrag mit dem Fund, nicht als Behauptung über den Text. Ohne SCHREIBKONTEXT keine Ideen — sie hätten keinen Ort. Ein Fundstück für das Archiv bleibt `propose_research_item`.',
+    '- Wenn du Material vorschlägst, das es im Archiv schon gibt, weise darauf hin statt zu duplizieren. `propose_research_item` meldet einen Treffer im Archiv als `already_in_archive` — ergänze dann den vorhandenen Eintrag (mit `item_id`), statt einen neuen vorzuschlagen.',
+    '- Änderungen an bestehenden Einträgen nur, wenn du den Eintrag gelesen hast oder der User darum bittet. Umschreiben nur, wenn der alte Text falsch oder überholt ist — sonst anhängen. Zusammenführen nur bei Einträgen zum selben Gegenstand; der zweite wird danach gelöscht. Archivieren, was erledigt oder überholt ist, aber noch nachschlagbar bleiben soll; «verworfen» ist dagegen eine Stufe: geprüft und bewusst nicht verwendet.',
+    ...(m.has('search_passages')
+      ? ['- «eingearbeitet» heisst: der Fund steckt im Manuskript. Schlage es nur vor, wenn du die Stelle mit `search_passages` gefunden hast, und gib sie als `beleg` (wörtlich aus dem Treffer + page_id) an — der Beleg wird geprüft. Suchbegriffe dafür sind Eigennamen, Zahlen, Fachbegriffe aus dem Eintrag.']
+      : ['- «eingearbeitet» braucht einen Beleg aus dem Manuskript, den du in diesem Gespräch nicht lesen kannst — schlage diese Stufe nicht vor.']),
     ...(!m.has('web_search') ? [] : searxng ? [
       '- Belege Aussagen aus Web-Treffern im Antworttext mit der Trefferzahl in eckigen Klammern, z.B. «… 2016 eröffnet [3].» Die Zahl ist das `nr` des Treffers aus `web_search` — erfinde keine Nummern und nummeriere nicht neu. Schreib keine eigene nummerierte Quellenliste in die Antwort: die App zeigt die Quellen aus `quellen` darunter.',
-      '- Nenne in `final_answer` unter `quellen` die Web-Quellen (URL + Titel), auf die sich deine Antwort stützt — nur URLs, die dir `web_search` oder `read_web_page` in diesem Durchgang tatsächlich geliefert haben.',
+      '- Nenne in `final_answer` unter `quellen` die Web-Quellen (URL + Titel), auf die sich deine Antwort stützt — nur URLs, die dir `web_search` oder `read_web_page` in diesem Durchgang tatsächlich geliefert haben, oder Quellen früherer Antworten aus dem Verlauf.',
     ] : [
-      '- Nenne in `final_answer` unter `quellen` die Web-Quellen (URL + Titel), auf die sich deine Antwort stützt — nur URLs, die dir `web_search` in diesem Durchgang tatsächlich geliefert hat.',
+      '- Nenne in `final_answer` unter `quellen` die Web-Quellen (URL + Titel), auf die sich deine Antwort stützt — nur URLs, die dir `web_search` in diesem Durchgang tatsächlich geliefert hat, oder Quellen früherer Antworten aus dem Verlauf. Schreib keine eigene URL- oder Quellenliste in den Antworttext: die App zeigt die Quellen aus `quellen` darunter.',
     ]),
     'Liefere die finale Antwort IMMER über `final_answer`. Sprache: passe dich der Userfrage an, nicht diesem Prompt.',
     ...(bookContext ? ['', bookContext] : []),
@@ -260,7 +269,7 @@ export const RESEARCH_CHAT_TOOLS = [
   { type: 'web_search_20250305', name: 'web_search', max_uses: 6 },
   {
     name: 'propose_research_item',
-    description: 'Schlägt dem User EINEN neuen Recherche-Eintrag zum Speichern vor (er bestätigt jeden). Für konkrete Fundstücke (eine oder mehrere Web-Quellen, ein Fakt, ein Zitat); alle belegenden Web-Quellen als urls anhängen. Mehrere Vorschläge = mehrere Aufrufe.',
+    description: 'Schlägt dem User EINEN Recherche-Eintrag vor (er bestätigt jeden). Ohne item_id: neues Fundstück (Web-Quellen, Fakt, Zitat); alle belegenden Web-Quellen als urls anhängen. Mit item_id: Änderung an einem BESTEHENDEN Eintrag — title/body/source ersetzen, append hängt Text an, urls/tags kommen dazu, status setzt die Stufe; archive räumt ihn ab; merge_item_id lässt einen zweiten Eintrag darin aufgehen. Alle Änderungen an einem Eintrag in EINEM Aufruf. Mehrere Vorschläge = mehrere Aufrufe.',
     input_schema: {
       type: 'object',
       properties: {
@@ -281,15 +290,30 @@ export const RESEARCH_CHAT_TOOLS = [
         },
         source: { type: 'string', description: 'Quelle (z.B. Buchtitel, Datenbank, Archiv), worauf der Inhalt sich stützt — als Freitext-Nachweis.' },
         tags: { type: 'array', items: { type: 'string' }, description: 'Optionale Schlagworte.' },
+        item_id: { type: 'integer', description: 'Nur für eine Änderung: id des bestehenden Eintrags (aus einem Werkzeug-Ergebnis). kind gilt dann nicht.' },
+        append: { type: 'string', description: 'Mit item_id: Absatz, der unter den bisherigen Inhalt kommt (statt body zu ersetzen).' },
+        status: { type: 'string', enum: ['offen', 'in_arbeit', 'eingearbeitet', 'verworfen'], description: 'Mit item_id: neue Stufe auf dem Weg ins Manuskript. «eingearbeitet» nur mit beleg.' },
+        beleg: {
+          type: 'object',
+          description: 'Zu status: die Stelle im Manuskript, an der der Fund verarbeitet ist — wörtlich und kurz, wie im Treffer.',
+          properties: {
+            text: { type: 'string', description: 'Wörtliches Zitat (höchstens 500 Zeichen).' },
+            page_id: { type: 'integer', description: 'Abschnitt des Zitats.' },
+          },
+          required: ['text', 'page_id'],
+        },
+        archive: { type: 'boolean', description: 'Mit item_id: Eintrag archivieren (allein, ohne weitere Änderung).' },
+        merge_item_id: { type: 'integer', description: 'Mit item_id: dieser Eintrag geht in item_id auf (URLs, Tags, Verknüpfungen ziehen um) und wird gelöscht. title/body optional als zusammengeführter Text.' },
       },
-      // title NICHT zwingend: ein reiner link-Eintrag darf nur aus urls bestehen
-      // (der Handler verlangt mindestens Titel ODER body ODER eine url).
-      required: ['kind'],
+      // Nichts zwingend: ein reiner link-Eintrag darf nur aus urls bestehen (der
+      // Handler verlangt mindestens Titel ODER body ODER eine url), eine Änderung
+      // braucht item_id statt kind.
+      required: [],
     },
   },
   {
     name: 'final_answer',
-    description: 'Liefert die finale Antwort an den User. ALLERLETZTER Aufruf einer Runde — Pflicht-Endpunkt. Freitext ohne final_answer wird nicht akzeptiert. Markdown erlaubt. Bei Web-Recherche die genutzten Quellen/URLs in der Antwort nennen. Vorschläge aus propose_research_item nur kurz erwähnen (stehen unten bereit), nicht wiederholen. Sprache: die der Userfrage.',
+    description: 'Liefert die finale Antwort an den User. ALLERLETZTER Aufruf einer Runde — Pflicht-Endpunkt. Freitext ohne final_answer wird nicht akzeptiert. Markdown erlaubt. Web-Quellen gehören in `quellen`, nicht als eigene URL-Liste in den Text. Vorschläge aus propose_research_item nur kurz erwähnen (stehen unten bereit), nicht wiederholen. Sprache: die der Userfrage.',
     input_schema: {
       type: 'object',
       properties: {

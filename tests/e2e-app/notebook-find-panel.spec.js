@@ -81,3 +81,25 @@ test('Find-Leiste wandert auch mit der Ideen-Karte mit', async ({ page }) => {
   await expect.poll(async () => (await geo(page)).cardRight).toBeCloseTo(before.cardRight, 0);
   await expect.poll(() => anchored(page), { message: 'Find-Leiste kommt nicht zurueck' }).toBe(true);
 });
+
+test('Ersetzen springt zum nächsten Treffer, nicht an den Anfang', async ({ page }) => {
+  await openEditor(page);
+  await page.keyboard.press('Control+F');
+  await expect(page.locator('.edit-find')).toBeVisible();
+  const data = () => page.evaluate(() => {
+    const d = window.Alpine.$data(document.querySelector('.edit-find'));
+    return { n: d.findMatches.length, i: d.findIndex };
+  });
+
+  await page.locator('.edit-find-input').first().fill('e');
+  await expect.poll(async () => (await data()).n, { timeout: 5000 }).toBeGreaterThan(4);
+  await page.evaluate(() => window.Alpine.$data(document.querySelector('.edit-find'))._selectFindMatch(2));
+  const before = await data();
+
+  // Ersatz enthält den Suchbegriff: der eingefügte Text darf nicht der nächste
+  // Treffer sein — weiter geht es beim alten Treffer 3, jetzt auf Index 5.
+  await page.locator('.edit-find-input--replace').fill('EEE');
+  await page.locator('.edit-find .edit-find-btn--text').nth(0).click();
+  await expect.poll(async () => (await data()).n, { timeout: 5000 }).toBe(before.n + 2);
+  expect((await data()).i).toBe(5);
+});

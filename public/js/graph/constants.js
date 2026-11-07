@@ -34,7 +34,10 @@ export const SCHICHT_COLOR = {
                          band: 'rgba(255,245,220,0.25)', label: '#888' },
 };
 
-// Vertikale Ebene pro Schicht (0 = oben)
+// Vertikale Ebene pro Schicht (0 = oben). «andere» (keine oder unklare Schicht)
+// liegt in einem eigenen Band unter allen echten Schichten — teilte es die Ebene mit
+// der Mittelschicht, stünden dort in Büchern mit vielen Randfiguren die meisten
+// Figuren in einem Band, und «ohne Angabe» sähe aus wie «Mittelschicht».
 export const SCHICHT_LEVEL = {
   wirtschaftselite:    0,
   gehobenes_buergertum:1,
@@ -43,7 +46,7 @@ export const SCHICHT_LEVEL = {
   migrantenmilieu:     4,
   prekariat:           5,
   unterwelt:           6,
-  andere:              2,
+  andere:              7,
 };
 
 // ── Figurentyp-Palette ────────────────────────────────────────────────────────
@@ -69,7 +72,8 @@ export const BZ = {
   elternteil:      { color: '#888',    highlight: '#555',    arrows: 'to',   dashes: false },
   kind:            { color: '#888',    highlight: '#555',    arrows: 'from', dashes: false },
   geschwister:     { color: '#2d6a9f', highlight: '#1d4b73', arrows: '',     dashes: [5,5] },
-  freund:          { color: '#639922', highlight: '#3B6D11', arrows: '',     dashes: [4,3] },
+  verwandt:        { color: '#888',    highlight: '#555',    arrows: '',     dashes: [2,4] },
+  freund:         { color: '#639922', highlight: '#3B6D11', arrows: '',     dashes: [4,3] },
   feind:           { color: '#E24B4A', highlight: '#B03030', arrows: '',     dashes: [4,3] },
   kollege:         { color: '#c4a55a', highlight: '#8a6a20', arrows: '',     dashes: [4,3] },
   bekannt:         { color: '#999',    highlight: '#555',    arrows: '',     dashes: [4,3] },
@@ -98,7 +102,7 @@ export const BZ_SOZIO_COLOR = {
   sozial:   '#639922',
 };
 export const BZ_SOZIO_CAT = {
-  elternteil: 'familie', kind: 'familie', geschwister: 'familie',
+  elternteil: 'familie', kind: 'familie', geschwister: 'familie', verwandt: 'familie',
   patronage: 'macht',  mentor: 'macht', schuetzling: 'macht', vorgesetzter: 'macht', untergebener: 'macht',
   feind: 'konflikt', rivale: 'konflikt',
   geschaeft: 'geschaeft', kollege: 'geschaeft', komplize: 'geschaeft',

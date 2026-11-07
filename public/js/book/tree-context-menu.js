@@ -88,7 +88,6 @@ export const treeContextMenuMethods = {
   },
 
   pagetreeCtxOpenBadge(badge) {
-    this.closeActionMenu();
     if (!badge) return;
     if (badge.kind === 'ideen') {
       if (badge.scope === 'page') this.openIdeenForPage(badge.id);
@@ -99,13 +98,11 @@ export const treeContextMenuMethods = {
 
   pagetreeCtxReviewChapter() {
     const chapterId = this._pagetreeCtxChapterId();
-    this.closeActionMenu();
     if (chapterId != null) this.openKapitelReviewForChapter(chapterId);
   },
 
   pagetreeCtxOpen() {
     const target = this.actionMenuTarget;
-    this.closeActionMenu();
     if (!target) return;
     if (target.kind === 'page') {
       const page = this._findTreePage(target.id);
@@ -118,7 +115,6 @@ export const treeContextMenuMethods = {
 
   async pagetreeCtxEdit() {
     const target = this.actionMenuTarget;
-    this.closeActionMenu();
     if (!target || target.kind !== 'page') return;
     const page = this._findTreePage(target.id);
     if (!page) return;
@@ -133,7 +129,6 @@ export const treeContextMenuMethods = {
 
   async pagetreeCtxLektorieren() {
     const target = this.actionMenuTarget;
-    this.closeActionMenu();
     if (!target || target.kind !== 'page') return;
     const page = this._findTreePage(target.id);
     if (!page) return;
@@ -145,7 +140,6 @@ export const treeContextMenuMethods = {
   // Alle Abschnitte des Kapitels (inkl. Unterkapitel) als Serien-Lektorat.
   pagetreeCtxLektorierenChapter() {
     const target = this.actionMenuTarget;
-    this.closeActionMenu();
     if (!target || target.kind !== 'chapter') return;
     this.batchCheck?.(target.id);
   },
@@ -163,7 +157,6 @@ export const treeContextMenuMethods = {
   async pagetreeCtxSetStatus(status) {
     const target = this.actionMenuTarget;
     const current = this._pagetreeCtxStatus(target);
-    this.closeActionMenu();
     if (!target) return;
     if (target.kind === 'page') {
       await this.setPageEditStatus(target.id, current === status ? null : status);
@@ -175,7 +168,6 @@ export const treeContextMenuMethods = {
   // Seite oder Kapitel umbenennen (Titel per appPrompt, vorbelegt).
   async pagetreeCtxRename() {
     const target = this.actionMenuTarget;
-    this.closeActionMenu();
     if (!target || !this.canEdit()) return;
     const chapterId = this._pagetreeCtxChapterId(target);
     const current = chapterId == null
@@ -207,7 +199,6 @@ export const treeContextMenuMethods = {
   // gegenseitig mit (renameChapterById / renamePageById).
   async pagetreeCtxAlignTitles() {
     const target = this.actionMenuTarget;
-    this.closeActionMenu();
     if (!this.canEdit() || !this._pagetreeCtxTitlesDiffer(target)) return;
     const ch = this._findTreeChapter(target.chapterId);
     await this.renamePageById(Number(target.id), ch.name);
@@ -240,7 +231,6 @@ export const treeContextMenuMethods = {
 
   pagetreeCtxShare() {
     const target = this.actionMenuTarget;
-    this.closeActionMenu();
     if (!target) return;
     const chapterId = this._pagetreeCtxChapterId(target);
     if (chapterId == null) this.openShareLinksForPage(target.id);
@@ -268,7 +258,6 @@ export const treeContextMenuMethods = {
 
   pagetreeCtxToggleExclude() {
     const target = this.actionMenuTarget;
-    this.closeActionMenu();
     const chapterId = this._pagetreeCtxChapterId(target);
     if (chapterId == null || !this.canEdit()) return;
     // Ueber einen Vorfahren ausgeschlossen: das eigene Flag zu setzen aenderte
@@ -280,7 +269,6 @@ export const treeContextMenuMethods = {
   // Seite aus dem Kontextmenü löschen (danger, bestätigungspflichtig).
   async pagetreeCtxDeletePage() {
     const target = this.actionMenuTarget;
-    this.closeActionMenu();
     if (!target || target.kind !== 'page' || !this.canEdit()) return;
     const page = this._findTreePage(target.id);
     if (!page) return;
@@ -302,7 +290,6 @@ export const treeContextMenuMethods = {
   // ein leeres Kapitel stehen — derselbe Zustand wie nach „Abschnitt loeschen".
   async pagetreeCtxDeleteChapter() {
     const target = this.actionMenuTarget;
-    this.closeActionMenu();
     const chapterId = this._pagetreeCtxChapterId(target);
     if (chapterId == null || !this.canEdit()) return;
     const item = this._findTreeChapter(chapterId);
@@ -335,7 +322,6 @@ export const treeContextMenuMethods = {
   // dann Baum + Flat-Liste lokal einhängen und zur neuen Seite springen.
   async pagetreeCtxNewPage() {
     const target = this.actionMenuTarget;
-    this.closeActionMenu();
     const chapterId = this._pagetreeCtxChapterId(target);
     if (chapterId == null || !this.canEdit()) return;
     const item = this._findTreeChapter(chapterId);
@@ -367,7 +353,6 @@ export const treeContextMenuMethods = {
   // derselben Ebene (kein Match → ans Ende). createChapter liest `newChapterTitle`.
   async pagetreeCtxNewChapter() {
     const target = this.actionMenuTarget;
-    this.closeActionMenu();
     if (!target || !this.canEdit()) return;
     let afterChapterId = null;
     if (target.kind === 'chapter') {
@@ -401,7 +386,6 @@ export const treeContextMenuMethods = {
     const target = this.actionMenuTarget;
     const ok = this._pagetreeCtxCanAddSubchapter(target);
     const parentId = this._pagetreeCtxChapterId(target);
-    this.closeActionMenu();
     if (!ok || !this.canEdit()) return;
     const name = await this.appPrompt({
       message: this.t('pagetreeCtx.newSubchapterPrompt'),
@@ -415,7 +399,6 @@ export const treeContextMenuMethods = {
 
   async pagetreeCtxExport() {
     const target = this.actionMenuTarget;
-    this.closeActionMenu();
     const chapterId = this._pagetreeCtxChapterId(target);
     if (chapterId != null) {
       await this.openExportFor('chapter', chapterId);

@@ -8,7 +8,7 @@ import { userSettingsMethods } from '../user-settings.js';
 import { aiAccessState, aiAccessMethods } from '../user-settings-ai-access.js';
 import { EVT } from '../events.js';
 import { takeCardRequest, CARD_REQUEST } from './card-request.js';
-import { scrollToWhenReady } from '../app/app-navigation.js';
+import { scrollToWhenReady } from '../utils/scroll-when-ready.js';
 
 export function registerUserSettingsCard() {
   if (typeof window === 'undefined' || !window.Alpine) return;

@@ -120,6 +120,7 @@ export const ideenMethods = {
     this._releasePickerPopover?.();
     this.closeActionMenu();
     this.errorMessage = '';
+    this.ideenCheckResult = '';
     this.busy = false;
   },
 
@@ -145,7 +146,9 @@ export const ideenMethods = {
     if (content.length > IDEE_MAX_LEN) { this.errorMessage = app.t('ideen.error.contentTooLong'); return; }
     const place = _activePlace(app);
     const bookId = Alpine.store('nav').selectedBookId;
-    if (!place || !bookId) return;
+    // Das Feld bleibt waehrend des Speicherns fokussiert (readonly statt
+    // disabled), ein zweites Enter darf also hier ankommen.
+    if (!place || !bookId || this.busy) return;
 
     this.busy = true;
     try {
@@ -161,6 +164,7 @@ export const ideenMethods = {
       this.errorMessage = '';
       this._publishIdeenCount();
       this._noteBoardHintPlace(bookId, place);
+      this._seriesActive = true;
     } catch (e) {
       this.errorMessage = app.t('ideen.error.save');
     } finally {
@@ -179,6 +183,19 @@ export const ideenMethods = {
     const next = keys.includes(key) ? keys : [...keys, key];
     this._boardHintPlaces = { bookId, keys: next };
     if (next.length >= BOARD_HINT_PLACES) this.boardHintDue = true;
+  },
+
+  // Nach einem Abschnittswechsel den Cursor zurueck ins Anlegen-Feld — aber nur,
+  // wenn in dieser Karte schon angelegt wurde (Ideen in Serie, Abschnitt fuer
+  // Abschnitt) und kein anderes Eingabefeld ihn gerade hat: wer im Editor
+  // schreibt, dem nimmt die Karte nichts weg.
+  _refocusAfterPlaceChange() {
+    if (!this._seriesActive || !window.__app.showIdeenCard) return;
+    this.$nextTick(() => {
+      const ae = document.activeElement;
+      if (ae && ae !== document.body && (ae.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(ae.tagName))) return;
+      this.$el?.querySelector('.ideen-input-row .ideen-input')?.focus();
+    });
   },
 
   openBoardFromHint() {

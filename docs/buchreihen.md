@@ -31,7 +31,7 @@ Die Reihe ist der **einzige Ort** für Reihentitel und Bandnummer; `book_publica
 
 Kopiert aus dem **eigenen** Katalog des Vorbands (gleiche `user_email`; bei mehreren Mitarbeitenden hat jede Person ihren eigenen) ausgewählte Figuren, Schauplätze und Welt-Fakten. Vorausgewählt ist alles Gepflegte, das im Band noch fehlt. Schon Vorhandenes (gleiche Herkunft oder gleicher Name bzw. gleiche Aussage) wird übersprungen; eine zweite Übernahme legt nichts doppelt an.
 
-Was mitkommt: Stammdaten (keine `stale`-Einträge), Figuren-Aliasse und -Eigenschaften, Beziehungen zwischen übernommenen Figuren (als `origin='manual'`, ohne Belege), die Orts-Hierarchie, soweit der Elternort mitkommt, Koordinaten. Was nicht mitkommt: alles mit Kapitel-/Abschnittsbezug des Vorbands (Vorkommen, erste Erwähnung, Schlüsselzitate, Bogen, Präsenz, Kapitel-Brücke der Fakten, Lebensereignisse, Szenen) — deren IDs gehören zum alten Buch.
+Was mitkommt: Stammdaten (keine `stale`-Einträge), Figuren-Aliasse und -Eigenschaften, Beziehungen zwischen übernommenen Figuren (als `origin='manual'`, ohne Belege), Schulweg (nur die Autor-Felder — kein offener Vorschlag, keine Klassenangaben), Berufsweg und Hobbys (nur aktive Zeilen, ohne Zitat und Abschnitt), die Orts-Hierarchie, soweit der Elternort mitkommt, Koordinaten. Was nicht mitkommt: alles mit Kapitel-/Abschnittsbezug des Vorbands (Vorkommen, erste Erwähnung, Schlüsselzitate, Bogen, Präsenz, Kapitel-Brücke der Fakten, Lebensereignisse, Szenen) — deren IDs gehören zum alten Buch.
 
 **Wie die Analyse die Kopien respektiert** (die Pflicht-Invariante des Features; ohne sie wäre der Katalog nach dem ersten Lauf entwertet, weil am Anfang eines Bandes kaum Text steht):
 

@@ -78,6 +78,11 @@ html:has(.research-dialog[open]) { overflow: hidden; }
   overflow-y: auto;
   flex: 1 1 auto;
   min-height: 0;
+  /* Deckender Hintergrund ist Pflicht, nicht Optik: einen transparenten
+     Scroller scrollt Chromium auf Bildschirmen mit Pixeldichte 1 nicht auf dem
+     Compositor (LCD-Text), sondern rastert den Inhalt bei jedem Frame neu — ein
+     langer Fundtext ruckelt dann beim Scrollen. */
+  background: var(--color-card-bg);
 }
 
 /* ── Bild ───────────────────────────────────────────────────────────────── */
@@ -122,12 +127,12 @@ html:has(.research-dialog[open]) { overflow: hidden; }
    20 000 Zeichen. Lesegrösse und ruhige Zeilenhöhe; volle Dialogbreite statt
    eines begrenzten Satzspiegels, weil lang erfasste Extension-Texte in einer
    schmalen Column sonst extrem früh umbrechen (leerer rechter Raum).
-   `pre-wrap` erhält die Absatzumbrüche des erfassten Texts. */
+   Der Text kommt als gerendertes Markdown (itemBodyHtml): Absätze und
+   Umbrüche liefert der Renderer, darum kein `pre-wrap`. */
 .research-dialog__text {
   font-size: var(--font-size-reading);
   line-height: var(--lh-relaxed);
   color: var(--color-text);
-  white-space: pre-wrap;
   overflow-wrap: anywhere;
   hyphens: auto;
 }
@@ -256,6 +261,8 @@ textarea.recherche-input--tall { min-height: 40vh; }
   padding: 0;
   max-height: 45vh;
   overflow-y: auto;
+  /* Deckend: sonst kein Compositor-Scroll bei Pixeldichte 1 (siehe entities/recherche/dialog.css). */
+  background: var(--color-card-bg);
 }
 .research-transcript__segment {
   display: grid;

@@ -71,7 +71,7 @@
         <!-- Lesen: ungekappt, Lesegroesse, begrenzter Satzspiegel -->
         <div class="research-dialog__text" x-show="!detailEditing && item.body"
              :class="{ 'research-dialog__text--quote': item.kind === 'quote' }"
-             x-text="item.body"></div>
+             x-html="itemBodyHtml(item)"></div>
 
         <!-- Bearbeiten: nur die Textfelder tauschen. Die Felder selbst kommen aus
              demselben Fragment wie der Anlegen-Dialog (recherche-form-fields) und

@@ -97,6 +97,13 @@ export function registerSearchCard() {
           type: 'card:refresh',
           handler: (e) => { if (e?.detail?.name === 'search') this.runSearch(); },
         }, {
+          // Palette «Alle Treffer in der Suche» (openSearchWithQuery).
+          type: 'search:query',
+          handler: (e) => {
+            const d = e?.detail;
+            if (d?.q) this.runQuery(d.q, d.kinds);
+          },
+        }, {
           // Root/Entity-Karten stossen „ähnliche Stellen zu X" an (findSimilar).
           type: 'search:similar',
           handler: (e) => {
@@ -392,6 +399,18 @@ export function registerSearchCard() {
       } finally {
         if (seq === this._searchSeq) this.loading = false;
       }
+    },
+
+    // Volltext mit vorgegebener Anfrage + Arten im aktuellen Buch (aus der Palette).
+    runQuery(q, kinds) {
+      this.mode = 'fts';
+      this.likeEntity = null;
+      this.notIndexed = false;
+      this.q = String(q || '');
+      const valid = (kinds || []).filter(k => ALL_KINDS.includes(k));
+      this.activeKinds = valid.length ? valid : [...DEFAULT_KINDS];
+      if (Alpine.store('nav').selectedBookId) this.scopeMode = 'book';
+      this.runSearch();
     },
 
     // „Ähnliche Stellen zu dieser Figur/Szene/Seite" — von Entity-Karten via

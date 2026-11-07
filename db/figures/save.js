@@ -1,8 +1,10 @@
 const { db } = require('../connection');
 const { NOW_ISO_SQL } = require('../now');
+const { normNaehe } = require('../../lib/relation-naehe');
 const { matchFiguren } = require('../../lib/entity-match');
 const { dedupRelations, relationKey, _cleanRefName, resolveErstePageId, enrichBelegWithIds, _arcToFlat } = require('./refs');
 const { listFigureAliasesByFigure } = require('./aliases');
+const { suppressRelation, loadSuppressedRelationKeys } = require('./relation-edits');
 const { onlyInChapters } = require('../write-helpers');
 require('../migrations');
 
@@ -184,6 +186,7 @@ function _collectRelations(f, idMaps, out) {
       from: f.id, to: bz.figur_id, typ: bz.typ,
       beschreibung: bz.beschreibung || null,
       machtverhaltnis: bz.machtverhaltnis ?? null,
+      naehe: normNaehe(bz.naehe),
       belege: belegeArr.length ? JSON.stringify(belegeArr) : null,
     });
   }
@@ -232,7 +235,7 @@ function saveFigurenToDb(bookId, figuren, userEmail, idMaps, opts = {}) {
          ki_geschlecht, ki_geburtstag, updated_at)
       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ${NOW_ISO_SQL})`);
     const insTag = db.prepare('INSERT OR IGNORE INTO figure_tags (figure_id, tag) VALUES (?, ?)');
-    const insRel = db.prepare('INSERT INTO figure_relations (book_id, from_fig_id, to_fig_id, typ, beschreibung, machtverhaltnis, belege, user_email) VALUES (?, ?, ?, ?, ?, ?, ?, ?)');
+    const insRel = db.prepare('INSERT INTO figure_relations (book_id, from_fig_id, to_fig_id, typ, beschreibung, machtverhaltnis, naehe, belege, user_email) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)');
 
     const validIds = new Set(figuren.map(f => f.id));
     const allRelations = [];
@@ -258,7 +261,7 @@ function saveFigurenToDb(bookId, figuren, userEmail, idMaps, opts = {}) {
       const fromId = figIdToRowId[r.from];
       const toId   = figIdToRowId[r.to];
       if (fromId == null || toId == null) continue;
-      insRel.run(bookId, fromId, toId, r.typ, r.beschreibung, r.machtverhaltnis, r.belege, em);
+      insRel.run(bookId, fromId, toId, r.typ, r.beschreibung, r.machtverhaltnis, r.naehe, r.belege, em);
     }
   })();
 }
@@ -354,7 +357,7 @@ function _reconcileFiguren(bookId, figuren, em, idMaps, opts) {
     // 5. Bestand der Beziehungen NACH dem Löschen verschwundener Figuren (CASCADE)
     //    festhalten; geschrieben wird in Schritt 7.
     const prevRels = db.prepare(
-      'SELECT from_fig_id, to_fig_id, typ, beschreibung, machtverhaltnis, origin FROM figure_relations WHERE book_id = ? AND user_email IS ?'
+      'SELECT from_fig_id, to_fig_id, typ, beschreibung, machtverhaltnis, naehe, origin FROM figure_relations WHERE book_id = ? AND user_email IS ?'
     ).all(bookId, em);
 
     const _cols = `fig_id, name, kurzname, typ, geburtstag, geschlecht, beruf, wohnadresse, aeusseres,
@@ -440,18 +443,26 @@ function _reconcileFiguren(bookId, figuren, em, idMaps, opts) {
 }
 
 const _relSame = (a, b) => _txt(a.beschreibung) === _txt(b.beschreibung)
-  && (a.machtverhaltnis ?? null) == (b.machtverhaltnis ?? null);
+  && (a.machtverhaltnis ?? null) == (b.machtverhaltnis ?? null)
+  && (a.naehe ?? null) == (b.naehe ?? null);
+
+const _pairOf = (a, b) => (a < b ? `${a}|${b}` : `${b}|${a}`);
 
 // Beziehungen eines Reconcile-Laufs schreiben.
-//   Analyse (manual=false): nur origin='ki' wird neu aufgebaut; vom Autor angelegte
-//     Beziehungen ('manual') bleiben stehen, und eine KI-Beziehung, die eine manuelle
-//     auf demselben Paar mit demselben (bzw. inversen) Typ doppelt, entfällt.
+//   Analyse (manual=false): nur origin='ki' wird neu aufgebaut. Vom Autor angelegte
+//     oder korrigierte Beziehungen ('manual') bleiben stehen und SPERREN ihr Paar:
+//     keine KI-Beziehung kommt daneben, gleich welchen Typs — sonst stünde nach einer
+//     Korrektur «elternteil → geschwister» beim nächsten Lauf beides da. Vom Autor
+//     verworfene KI-Kanten (Löschmarke, db/figures/relation-edits.js) kommen nicht
+//     wieder.
 //   Katalog-PUT (manual=true): der Body ist autoritativ (Full-Replace). Eine
 //     unveränderte KI-Beziehung behält origin='ki'; neue oder in Beschreibung/
-//     Machtverhältnis geänderte werden 'manual', eine schon manuelle bleibt es.
+//     Machtverhältnis geänderte werden 'manual', eine schon manuelle bleibt es. Eine
+//     KI-Beziehung, die der Body weglässt, obwohl beide Figuren bleiben, gilt als vom
+//     Autor gelöscht und bekommt ihre Löschmarke.
 function _writeRelations(bookId, em, manual, prevRels, figIdToRowId, allRelations, validIds, { keepKi = false } = {}) {
   const insRel = db.prepare(
-    `INSERT ${keepKi ? 'OR IGNORE ' : ''}INTO figure_relations (book_id, from_fig_id, to_fig_id, typ, beschreibung, machtverhaltnis, belege, user_email, origin) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
+    `INSERT ${keepKi ? 'OR IGNORE ' : ''}INTO figure_relations (book_id, from_fig_id, to_fig_id, typ, beschreibung, machtverhaltnis, naehe, belege, user_email, origin) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
   );
   const rows = [];
   for (const r of dedupRelations(allRelations, validIds, { byTyp: manual })) {
@@ -466,16 +477,29 @@ function _writeRelations(bookId, em, manual, prevRels, figIdToRowId, allRelation
     for (const r of rows) {
       const prev = prevByKey.get(`${r.fromId}|${r.toId}|${r.typ}`);
       const origin = prev && prev.origin === 'ki' && _relSame(prev, r) ? 'ki' : 'manual';
-      insRel.run(bookId, r.fromId, r.toId, r.typ, r.beschreibung, r.machtverhaltnis, r.belege, em, origin);
+      insRel.run(bookId, r.fromId, r.toId, r.typ, r.beschreibung, r.machtverhaltnis, r.naehe, r.belege, em, origin);
+    }
+    const kept = new Set(rows.map(r => relationKey(r.fromId, r.toId, r.typ)));
+    const liveIds = new Set(Object.values(figIdToRowId));
+    for (const p of prevRels) {
+      if (p.origin !== 'ki' || !liveIds.has(p.from_fig_id) || !liveIds.has(p.to_fig_id)) continue;
+      if (!kept.has(relationKey(p.from_fig_id, p.to_fig_id, p.typ))) suppressRelation(bookId, em, p.from_fig_id, p.to_fig_id, p.typ);
     }
     return;
   }
   if (!keepKi) db.prepare("DELETE FROM figure_relations WHERE book_id = ? AND user_email IS ? AND origin = 'ki'").run(bookId, em);
-  const manualKeys = new Set(prevRels.filter(p => p.origin === 'manual')
-    .map(p => relationKey(p.from_fig_id, p.to_fig_id, p.typ)));
+  const manualPairs = new Set(prevRels.filter(p => p.origin === 'manual')
+    .map(p => _pairOf(p.from_fig_id, p.to_fig_id)));
+  const suppressed = loadSuppressedRelationKeys(bookId, em);
+  // Liefert der Lauf keine Nähe (lokaler Provider, Teil-Lauf), bleibt die bekannte
+  // stehen — sie stammt aus einem früheren Lauf oder dem Job `figuren-naehe`.
+  const prevNaehe = new Map(prevRels.filter(p => p.naehe != null)
+    .map(p => [relationKey(p.from_fig_id, p.to_fig_id, p.typ), p.naehe]));
   for (const r of rows) {
-    if (manualKeys.has(relationKey(r.fromId, r.toId, r.typ))) continue;
-    insRel.run(bookId, r.fromId, r.toId, r.typ, r.beschreibung, r.machtverhaltnis, r.belege, em, 'ki');
+    const key = relationKey(r.fromId, r.toId, r.typ);
+    if (manualPairs.has(_pairOf(r.fromId, r.toId)) || suppressed.has(key)) continue;
+    insRel.run(bookId, r.fromId, r.toId, r.typ, r.beschreibung, r.machtverhaltnis,
+      r.naehe ?? prevNaehe.get(key) ?? null, r.belege, em, 'ki');
   }
 }
 

@@ -367,3 +367,202 @@ test('Figuren: Kennungen fig_id/draft#id, mehrdeutiger Name → Fehler statt ers
   assert.match((await executePlotChatTool('propose_thread', { name: 'T', figur: 'der fremde', begruendung: 'b' }, ctx2)).error, /Mehrdeutig/);
   assert.equal((await executePlotChatTool('propose_thread', { name: 'T', figur: 'fig_fremd', begruendung: 'b' }, ctx2)).ok, true);
 });
+
+// ── Beat-Beziehungen, Status, Schauplätze, Motive ───────────────────────────
+
+const motifs = require('../../db/motifs');
+db.prepare(
+  `INSERT INTO locations (book_id, loc_id, name, user_email, updated_at)
+   VALUES (?, 'loc_hafen', 'Hafen', ?, strftime('%Y-%m-%dT%H:%M:%fZ','now')),
+          (?, 'loc_turm', 'Turm', ?, strftime('%Y-%m-%dT%H:%M:%fZ','now')),
+          (?, 'loc_turm2', 'Turm', ?, strftime('%Y-%m-%dT%H:%M:%fZ','now'))`
+).run(BOOK, USER, BOOK, USER, BOOK, USER);
+const motifSpiegel = motifs.createMotif(BOOK, USER, { name: 'Spiegel' });
+const relCount = () => db.prepare('SELECT COUNT(*) AS n FROM plot_beat_relations WHERE book_id = ?').get(BOOK).n;
+
+test('propose_beat_relation: bestehende Beats, gesammelt statt geschrieben; Typ, Selbst-Kante, Dublette → error', async () => {
+  const ctx = mkCtx();
+  const before = relCount();
+  const out = await executePlotChatTool('propose_beat_relation', {
+    from_beat_id: beatA.id, to_beat_id: beatB.id, typ: 'bereitet-vor', begruendung: 'Brief kündigt Abschied an',
+  }, ctx);
+  assert.equal(out.ok, true);
+  assert.equal(relCount(), before);
+  assert.deepEqual(
+    { type: ctx.proposals[0].type, from: ctx.proposals[0].from_beat_id, to: ctx.proposals[0].to_beat_id, typ: ctx.proposals[0].typ },
+    { type: 'relation_create', from: beatA.id, to: beatB.id, typ: 'bereitet-vor' },
+  );
+  assert.deepEqual(ctx.proposals[0].labels, { from: 'Brief kommt an', to: 'Abschied' });
+
+  assert.match((await executePlotChatTool('propose_beat_relation', { from_beat_id: beatA.id, to_beat_id: beatB.id, typ: 'erklaert', begruendung: 'b' }, ctx)).error, /typ/);
+  assert.ok((await executePlotChatTool('propose_beat_relation', { from_beat_id: beatA.id, to_beat_id: beatA.id, typ: 'spiegelt', begruendung: 'b' }, ctx)).error);
+  assert.ok((await executePlotChatTool('propose_beat_relation', { from_beat_id: beatA.id, to_beat_id: 999999, typ: 'spiegelt', begruendung: 'b' }, ctx)).error);
+  assert.match((await executePlotChatTool('propose_beat_relation', { from_beat_id: beatA.id, to_beat_id: beatB.id, typ: 'bereitet-vor', begruendung: 'b' }, ctx)).error, /schon/);
+
+  // Steht die Kante schon im Board, ist der Vorschlag keiner.
+  const rel = plot.createBeatRelation(BOOK, USER, { fromBeatId: beatB.id, toBeatId: beatA.id, typ: 'spiegelt' });
+  const ctx2 = mkCtx();
+  assert.match((await executePlotChatTool('propose_beat_relation', { from_beat_id: beatB.id, to_beat_id: beatA.id, typ: 'spiegelt', begruendung: 'b' }, ctx2)).error, /steht schon/);
+  plot.deleteBeatRelation(rel.id, USER);
+});
+
+test('propose_beat_relation: neuer Beat derselben Antwort per beat_ref, nur auf beat_create', async () => {
+  const ctx = mkCtx();
+  await executePlotChatTool('propose_act', { name: 'Finale', begruendung: 'b' }, ctx);
+  await executePlotChatTool('propose_beat', { act_id: act2.id, titel: 'Brief wird verbrannt', begruendung: 'Payoff' }, ctx);
+  const out = await executePlotChatTool('propose_beat_relation', {
+    from_beat_id: beatA.id, to_beat_ref: 2, typ: 'bereitet-vor', begruendung: 'Setup → Payoff',
+  }, ctx);
+  assert.equal(out.ok, true);
+  const p = ctx.proposals[2];
+  assert.equal(p.to_beat_ref, 2);
+  assert.equal(p.to_beat_id, undefined);
+  assert.equal(p.labels.to, 'Brief wird verbrannt');
+  // ref 1 ist ein Akt, kein Beat.
+  assert.ok((await executePlotChatTool('propose_beat_relation', { from_beat_ref: 1, to_beat_id: beatB.id, typ: 'fuehrt-zu', begruendung: 'b' }, ctx)).error);
+});
+
+test('propose_beat_relation: verworfener Beat bekommt keine neue Kante', async () => {
+  const gone = plot.createBeat(BOOK, act2.id, USER, { titel: 'Alte Idee', verworfen: 1 });
+  const ctx = mkCtx();
+  assert.match((await executePlotChatTool('propose_beat_relation', { from_beat_id: gone.id, to_beat_id: beatA.id, typ: 'fuehrt-zu', begruendung: 'b' }, ctx)).error, /Verworfene/);
+  plot.deleteBeat(gone.id);
+});
+
+test('propose_beat: Status, Schauplätze und Motive — Kennung oder Name, mehrdeutig → Fehler', async () => {
+  const ctx = mkCtx();
+  const out = await executePlotChatTool('propose_beat', {
+    act_id: act2.id, titel: 'Treffen am Hafen', status: 'im_buch', orte: ['Hafen', 'loc_turm'], motive: ['Spiegel'], begruendung: 'steht in Kapitel 3',
+  }, ctx);
+  assert.equal(out.ok, true);
+  const p = ctx.proposals[0];
+  assert.equal(p.fields.status, 'im_buch');
+  assert.deepEqual(p.fields.location_ids, ['loc_hafen', 'loc_turm']);
+  assert.deepEqual(p.fields.motif_ids, [motifSpiegel.id]);
+  assert.deepEqual(p.labels.orte, ['Hafen', 'Turm']);
+  assert.deepEqual(p.labels.motive, ['Spiegel']);
+
+  assert.match((await executePlotChatTool('propose_beat', { act_id: act2.id, titel: 'X', orte: ['Turm'], begruendung: 'b' }, ctx)).error, /Mehrdeutige.*loc_turm2/);
+  assert.match((await executePlotChatTool('propose_beat', { act_id: act2.id, titel: 'X', motive: ['Nebel'], begruendung: 'b' }, ctx)).error, /Nebel/);
+  assert.match((await executePlotChatTool('propose_beat', { act_id: act2.id, titel: 'X', status: 'fertig', begruendung: 'b' }, ctx)).error, /status/);
+});
+
+test('propose_beat mit beat_id: Orte/Motive setzen mit Vorher-Werten, leeren, No-Op fällt weg', async () => {
+  const b = plot.createBeat(BOOK, act2.id, USER, {
+    titel: 'Turmszene', locationIds: plot.resolveLocationIds(BOOK, ['loc_turm']), motifIds: [motifSpiegel.id],
+  });
+  const ctx = mkCtx();
+  const out = await executePlotChatTool('propose_beat', { beat_id: b.id, orte: ['loc_hafen'], leeren: ['motive'], status: 'im_buch', begruendung: 'b' }, ctx);
+  assert.equal(out.ok, true);
+  const p = ctx.proposals[0];
+  assert.deepEqual(p.fields.location_ids, ['loc_hafen']);
+  assert.deepEqual(p.before.location_ids, ['loc_turm']);
+  assert.deepEqual(p.fields.motif_ids, []);
+  assert.deepEqual(p.before.motif_ids, [motifSpiegel.id]);
+  assert.equal(p.before.status, 'geplant');
+  assert.deepEqual(p.labels.orte_before, ['Turm']);
+  assert.deepEqual(p.labels.motive_before, ['Spiegel']);
+  // Gleiche Orte → kein Vorschlag.
+  assert.match((await executePlotChatTool('propose_beat', { beat_id: b.id, orte: ['loc_turm'], begruendung: 'b' }, ctx)).error, /ändert/);
+  plot.deleteBeat(b.id);
+});
+
+test('boardOutline/katalogOutline: Beziehungen, Orte, Motive mit Kennung', () => {
+  const b = plot.createBeat(BOOK, act2.id, USER, { titel: 'Hafenszene', locationIds: plot.resolveLocationIds(BOOK, ['loc_hafen']), motifIds: [motifSpiegel.id] });
+  const rel = plot.createBeatRelation(BOOK, USER, { fromBeatId: beatA.id, toBeatId: b.id, typ: 'bereitet-vor' });
+  const { katalogOutline } = require('../../routes/jobs/plot-chat-context');
+  const state = loadBoardState(BOOK, USER, chapterNames);
+  const text = boardOutline(state);
+  assert.match(text, new RegExp(`→ bereitet-vor \\[#${b.id}\\] «Hafenszene»`));
+  assert.match(text, /Orte: Hafen · Motive: Spiegel/);
+  const kat = katalogOutline(state);
+  assert.match(kat, /Hafen · loc_id loc_hafen/);
+  assert.match(kat, new RegExp(`Spiegel · motiv_id ${motifSpiegel.id}`));
+  plot.deleteBeatRelation(rel.id, USER);
+  plot.deleteBeat(b.id);
+});
+
+test('Gedächtnis: übernommene Beziehung, danach gelöscht → removed', () => {
+  const { proposalState } = require('../../routes/jobs/plot-chat-context');
+  const rel = plot.createBeatRelation(BOOK, USER, { fromBeatId: beatA.id, toBeatId: beatB.id, typ: 'motiviert' });
+  const p = { type: 'relation_create', from_beat_id: beatA.id, to_beat_id: beatB.id, typ: 'motiviert', applied_at: 'x', applied_id: rel.id };
+  assert.equal(proposalState(p, loadBoardState(BOOK, USER, chapterNames)), 'applied');
+  plot.deleteBeatRelation(rel.id, USER);
+  assert.equal(proposalState(p, loadBoardState(BOOK, USER, chapterNames)), 'removed');
+});
+
+test('klassischer Pfad: ein abgelehnter früherer Vorschlag verschiebt act_ref nicht', async () => {
+  const { collectClassicProposals } = require('../../routes/jobs/plot-chat');
+  const ctx = mkCtx();
+  // Nr. 1 scheitert (Akt-Position auf einem unbekannten Akt), Nr. 2 = «B», Nr. 3 = «C»;
+  // der Beat meint mit act_ref 2 den Akt «B».
+  const { proposals, rejected } = await collectClassicProposals([
+    { werkzeug: 'propose_act', name: 'A', after_act_id: 999999, begruendung: 'b' },
+    { werkzeug: 'propose_act', name: 'B', begruendung: 'b' },
+    { werkzeug: 'propose_act', name: 'C', begruendung: 'b' },
+    { werkzeug: 'propose_beat', act_ref: 2, titel: 'Im Akt B', begruendung: 'b' },
+  ], ctx, null);
+  assert.equal(rejected, 1);
+  const beat = proposals.find(p => p.type === 'beat_create');
+  assert.equal(proposals[beat.act_ref - 1].name, 'B');
+});
+
+test('klassischer Pfad: Bezug auf einen abgelehnten Vorschlag wird abgelehnt, nicht umgebogen', async () => {
+  const { collectClassicProposals } = require('../../routes/jobs/plot-chat');
+  const ctx = mkCtx();
+  const { proposals, rejected } = await collectClassicProposals([
+    { werkzeug: 'propose_act', name: 'A', after_act_id: 999999, begruendung: 'b' },
+    { werkzeug: 'propose_act', name: 'B', begruendung: 'b' },
+    { werkzeug: 'propose_beat', act_ref: 1, titel: 'Im Akt A', begruendung: 'b' },
+  ], ctx, null);
+  assert.equal(rejected, 2);
+  assert.ok(!proposals.some(p => p.type === 'beat_create'));
+});
+
+test('unbekannter Werkzeugname im klassischen Pfad zählt mit (Modellnummer bleibt stabil)', async () => {
+  const { collectClassicProposals } = require('../../routes/jobs/plot-chat');
+  const ctx = mkCtx();
+  const { proposals } = await collectClassicProposals([
+    { werkzeug: 'propose_unbekannt', name: 'X' },
+    { werkzeug: 'propose_act', name: 'B', begruendung: 'b' },
+    { werkzeug: 'propose_beat', act_ref: 2, titel: 'Im Akt B', begruendung: 'b' },
+  ], ctx, null);
+  const beat = proposals.find(p => p.type === 'beat_create');
+  assert.ok(beat);
+  assert.equal(proposals[beat.act_ref - 1].name, 'B');
+});
+
+test('propose_beat_relation: Setup/Payoff in Gegenrichtung ist eine Dublette (Board und dieselbe Antwort)', async () => {
+  const rel = plot.createBeatRelation(BOOK, USER, { fromBeatId: beatB.id, toBeatId: beatA.id, typ: 'zahlt-ein' });
+  const ctx = mkCtx();
+  const out = await executePlotChatTool('propose_beat_relation', { from_beat_id: beatA.id, to_beat_id: beatB.id, typ: 'bereitet-vor', begruendung: 'b' }, ctx);
+  assert.match(out.error, /steht schon im Board/);
+  plot.deleteBeatRelation(rel.id, USER);
+  const ctx2 = mkCtx();
+  assert.equal((await executePlotChatTool('propose_beat_relation', { from_beat_id: beatA.id, to_beat_id: beatB.id, typ: 'bereitet-vor', begruendung: 'b' }, ctx2)).ok, true);
+  assert.match((await executePlotChatTool('propose_beat_relation', { from_beat_id: beatB.id, to_beat_id: beatA.id, typ: 'zahlt-ein', begruendung: 'b' }, ctx2)).error, /schon vorgeschlagen/);
+  // Kausalität ist gerichtet: fuehrt-zu in Gegenrichtung ist eine andere Aussage.
+  assert.equal((await executePlotChatTool('propose_beat_relation', { from_beat_id: beatB.id, to_beat_id: beatA.id, typ: 'fuehrt-zu', begruendung: 'b' }, ctx2)).ok, true);
+});
+
+test('boardOutline: eingehende Kanten stehen auch beim Ziel-Beat', () => {
+  const rel = plot.createBeatRelation(BOOK, USER, { fromBeatId: beatB.id, toBeatId: beatA.id, typ: 'zahlt-ein' });
+  const text = boardOutline(loadBoardState(BOOK, USER, chapterNames));
+  assert.match(text, new RegExp(`← zahlt-ein von \\[#${beatB.id}\\]`));
+  plot.deleteBeatRelation(rel.id, USER);
+});
+
+test('klassischer Pfad: mitgeschickte Standardwerte (verworfen:false, eigene Zelle) führen nicht zur Ablehnung', async () => {
+  const { collectClassicProposals } = require('../../routes/jobs/plot-chat');
+  const ctx = mkCtx();
+  const { proposals, rejected } = await collectClassicProposals([
+    { werkzeug: 'propose_beat', act_id: act2.id, titel: 'Neu mit Default', verworfen: false, begruendung: 'b' },
+    { werkzeug: 'propose_beat', beat_id: beatA.id, act_id: act1.id, titel: 'Brief kommt an (neu)', verworfen: false, begruendung: 'b' },
+  ], ctx, null);
+  assert.equal(rejected, 0);
+  assert.deepEqual(proposals.map(p => p.type), ['beat_create', 'beat_update']);
+  assert.ok(!('verworfen' in proposals[1].fields), 'unverändertes verworfen ist kein Feld');
+  // Eine andere Zelle bleibt eine Verschiebung.
+  const r = await executePlotChatTool('propose_beat', { beat_id: beatA.id, act_id: act2.id, titel: 'X', begruendung: 'b' }, mkCtx());
+  assert.match(r.error, /propose_beat_move/);
+});

@@ -1,5 +1,7 @@
 const { db } = require('../connection');
-const { figIdMaps, _cleanRefName, enrichBelegWithIds } = require('./refs');
+const { figIdMaps, _cleanRefName, enrichBelegWithIds, relationKey } = require('./refs');
+const { loadSuppressedRelationKeys } = require('./relation-edits');
+const { normNaehe } = require('../../lib/relation-naehe');
 require('../migrations');
 const { isUngroupedChapterName } = require('../../lib/ungrouped-chapter');
 
@@ -99,8 +101,11 @@ function addFigurenBeziehungen(bookId, beziehungen, userEmail, idMaps) {
     'SELECT COUNT(*) as cnt FROM figure_relations WHERE book_id = ? AND ((from_fig_id = ? AND to_fig_id = ?) OR (from_fig_id = ? AND to_fig_id = ?)) AND user_email IS ?'
   );
   const ins = db.prepare(
-    'INSERT INTO figure_relations (book_id, from_fig_id, to_fig_id, typ, beschreibung, machtverhaltnis, belege, user_email) VALUES (?, ?, ?, ?, ?, ?, ?, ?)'
+    'INSERT INTO figure_relations (book_id, from_fig_id, to_fig_id, typ, beschreibung, machtverhaltnis, naehe, belege, user_email) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)'
   );
+  // Vom Autor verworfene KI-Kanten (Löschmarke, ./relation-edits.js) kommen nicht wieder;
+  // ein besetztes Paar — auch durch eine Kante des Autors — sperrt pairExists unten.
+  const suppressed = loadSuppressedRelationKeys(bookId, em);
   db.transaction(() => {
     const seenInBatch = new Set();
     for (const bz of beziehungen) {
@@ -108,6 +113,7 @@ function addFigurenBeziehungen(bookId, beziehungen, userEmail, idMaps) {
       const fromId = figIdToRowId[bz.von];
       const toId   = figIdToRowId[bz.zu];
       if (fromId == null || toId == null) continue;
+      if (suppressed.has(relationKey(fromId, toId, bz.typ))) continue;
       const [a, b] = bz.von < bz.zu ? [bz.von, bz.zu] : [bz.zu, bz.von];
       const key = `${a}|${b}`;
       if (seenInBatch.has(key)) continue;
@@ -118,7 +124,7 @@ function addFigurenBeziehungen(bookId, beziehungen, userEmail, idMaps) {
             .map(x => enrichBelegWithIds(x, idMaps))
         : [];
       const belege = belegeArr.length ? JSON.stringify(belegeArr) : null;
-      ins.run(bookId, fromId, toId, bz.typ, bz.beschreibung || null, bz.machtverhaltnis ?? null, belege, em);
+      ins.run(bookId, fromId, toId, bz.typ, bz.beschreibung || null, bz.machtverhaltnis ?? null, normNaehe(bz.naehe), belege, em);
       seenInBatch.add(key);
     }
   })();

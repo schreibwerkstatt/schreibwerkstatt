@@ -20,8 +20,15 @@
             :disabled="figurSchulJobLoading" @click="runFigurSchulVorschlag()"
             :data-tip="$app.t('figuren.schule.jobHint')"
             x-text="figurSchulJobLoading ? $app.t('figuren.schule.jobRunning') : $app.t('figuren.schule.jobRun')"></button>
+    <!-- Berufsweg + Hobbys: Vorschläge mit Beleg, übernommen im Steckbrief
+         (book/figuren-stationen.js). Immer, unabhängig vom Schulsystem. -->
+    <button type="button" class="btn-compact"
+            :disabled="figurStationJobLoading" @click="runFigurStationenVorschlag()"
+            :data-tip="$app.t('figuren.stationen.jobHint')"
+            x-text="figurStationJobLoading ? $app.t('figuren.stationen.jobRunning') : $app.t('figuren.stationen.jobRun')"></button>
   </div>
   <p class="card-status" x-show="figurSchulJobStatus" x-cloak x-text="figurSchulJobStatus"></p>
+  <p class="card-status" x-show="figurStationJobStatus" x-cloak x-text="figurStationJobStatus"></p>
 
   <!-- Figurenwahl -->
   <div class="filter-bar">
@@ -133,8 +140,18 @@
                         <template x-if="m.stufe"><span class="figur-cv-marke-stufe" x-text="'·\u00a0' + m.stufe"></span></template>
                       </span>
                       <span class="figur-cv-text" x-text="evt.ereignis"></span>
-                      <span class="tag figur-cv-subtyp" x-show="evt.subtyp && evt.subtyp !== 'sonstiges'"
-                            x-text="figurenLebenslaufSubtypLabel(evt)"></span>
+                      <template x-if="evt.subtyp && evt.subtyp !== 'sonstiges'">
+                        <span class="gz-subtyp-badge figur-cv-subtyp" :class="'gz-subtyp-badge--' + evt.subtyp">
+                          <svg class="icon gz-subtyp-icon" aria-hidden="true"><use :href="'/icons.svg#' + subtypIcon(evt.subtyp)"/></svg>
+                          <span x-text="figurenLebenslaufSubtypLabel(evt)"></span>
+                        </span>
+                      </template>
+                      <template x-if="evt.station">
+                        <span class="gz-subtyp-badge figur-cv-subtyp" :class="'figur-cv-station--' + evt.station">
+                          <svg class="icon gz-subtyp-icon" aria-hidden="true"><use :href="'/icons.svg#' + (evt.station === 'berufe' ? 'briefcase' : 'puzzle')"/></svg>
+                          <span x-text="figurenLebenslaufStationLabel(evt)"></span>
+                        </span>
+                      </template>
                     </li>
                   </template>
                 </ul>

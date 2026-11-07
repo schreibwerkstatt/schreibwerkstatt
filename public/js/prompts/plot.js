@@ -15,6 +15,7 @@
 
 import { _obj, _str, _nullableEnum } from './schema-utils.js';
 import { _jsonOnly } from './state.js';
+import { BEAT_REL_TYPES } from '../book/plot/constants.js';
 import {
   _figurenLinesDetail, _orteLines, _zeitstrahlLines, _kontinuitaetLines, _rechercheLines,
   _werkstattFigurenLines, _kapitelLines, _relationsLines, _szenenLines, _weltgesetzeLines,
@@ -39,8 +40,8 @@ export const PLOT_KONFLIKT_TYP_ENUM = [
 ];
 
 // Kuratierte Relations-Typen, die eine Befund-Aktion anlegen darf (from = Beat des
-// Befunds). Spiegel der kuratierten Frontend-Vorschläge in plot_beat_relations.
-export const PLOT_AKTION_REL_TYPES = ['bereitet-vor', 'zahlt-ein', 'fuehrt-zu', 'motiviert', 'blockiert', 'spiegelt'];
+// Befunds) — dieselben wie die Auswahl im Beat-Edit (SSoT book/plot/constants.js).
+export const PLOT_AKTION_REL_TYPES = BEAT_REL_TYPES;
 
 // Aktions-Arten im Modell-Output. 'keine' existiert nur im Schema (Constrained
 // Decoding verträgt ein immer vorhandenes Objekt besser als null|Objekt); der Job

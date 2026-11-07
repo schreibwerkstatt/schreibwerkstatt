@@ -145,6 +145,20 @@ export function matchStillValid(m, term, caseSensitive) {
   }
 }
 
+// Index des ersten Treffers in `matches[from..to)`, der an oder hinter
+// `range` beginnt; -1, wenn keiner. Damit geht es nach einem Ersetzen beim
+// nächsten Treffer hinter der Ersetzung weiter — nicht am Anfang, und nicht im
+// eingefügten Text, falls er den Suchbegriff selbst enthält. Geteilt von
+// Notebook-Finder (editor/find.js) und Bucheditor (cards/book-editor/find.js).
+export function firstMatchFrom(matches, range, from = 0, to = matches.length) {
+  for (let k = from; k < to; k++) {
+    try {
+      if (rangeOf(matches[k]).compareBoundaryPoints(Range.START_TO_START, range) >= 0) return k;
+    } catch { return k; }
+  }
+  return -1;
+}
+
 // Registriert das Highlight-Paar (alle Treffer / aktueller Treffer) unter zwei
 // CSS-Namen und kapselt das Neuzeichnen. Bewusst eine Factory statt Modul-
 // Singletons: sonst braucht jeder Konsument seine eigene `_hlAll/_hlCurrent`-

@@ -134,3 +134,33 @@ test('Indexzeile ohne gerechneten Wert faellt NICHT auf den Katalog zurueck', ()
   assert.equal(row.alter_abgeleitet, null);
   assert.equal(row.hatAlter, false);
 });
+
+test('Stichtag: Alter aus der Server-Geburt, exakt mit Monat, Spanne ohne, Filter «amStichtag»', async () => {
+  const { stichtagAus } = await import('../../public/js/book/figuren-alter.js');
+  const figuren = [
+    figur({ id: 'fig_a', name: 'Anna' }),
+    figur({ id: 'fig_b', name: 'Bert' }),
+    figur({ id: 'fig_c', name: 'Cleo' }),
+    figur({ id: 'fig_d', name: 'Dora' }),
+  ];
+  const geburten = {
+    fig_a: { y: 1985, m: 3, d: 12, quelle: 'steckbrief' },
+    fig_b: { y: 1986, m: null, d: null, quelle: 'alters_index' },
+    fig_d: { y: 2005, m: 1, d: null, quelle: 'steckbrief' },
+  };
+  const rows = computeAlterRows(figuren, null, { stichtag: stichtagAus(2001, '6'), geburten });
+  const by = Object.fromEntries(rows.map(r => [r.id, r]));
+  assert.deepEqual(by.fig_a.stichtag_alter, { alter: 16, exakt: true });
+  assert.deepEqual(by.fig_b.stichtag_alter, { alter_von: 14, alter_bis: 15, exakt: false });
+  assert.equal(by.fig_c.stichtag_alter, null);
+  assert.equal(by.fig_d.stichtag_alter.vor_geburt, true);
+  assert.equal(by.fig_d.stichtag_sort, -1);
+  // Ganzes Jahr: auch bei bekanntem Geburtsmonat eine Spanne.
+  const [a] = computeAlterRows([figuren[0]], null, { stichtag: stichtagAus(2001, ''), geburten });
+  assert.equal(a.stichtag_alter.exakt, false);
+  // Filter: nur, wer am Stichtag schon geboren ist.
+  const nur = computeAlterRows(figuren, null, { stichtag: stichtagAus(2001, '6'), geburten, nur: 'amStichtag' });
+  assert.deepEqual(nur.map(r => r.id).sort(), ['fig_a', 'fig_b']);
+  // Ohne Jahr kein Stichtag.
+  assert.equal(stichtagAus(null, '6'), null);
+});

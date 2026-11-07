@@ -60,14 +60,15 @@ export const WORLD_TOOLS = [
   },
   {
     name: 'get_figure_age',
-    description: 'Alter bzw. Jahrgang einer Figur, deterministisch im Server gerechnet: Geburtsjahr mit Quelle, wörtliche Altersangaben aus dem Text und — mit `jahr` oder `ereignis` — das Alter zu diesem Jahr bzw. zu passenden datierten Ereignissen des Zeitstrahls. Für «wie alt war X, als Y passierte?», «welcher Jahrgang ist X?». Rechne Alter NIE selbst aus Jahreszahlen.',
+    description: 'Alter, Jahrgang, Berufsweg und Hobbys, im Server gerechnet: Geburtsjahr mit Quelle, wörtliche Altersangaben; mit `jahr` (+`monat`) oder `ereignis` Alter und Tätigkeit dazu. Ohne Figur, mit `jahr`: alle Figuren zum Stichtag. Für «wie alt war X, als Y passierte?», «was arbeitete X 1995?». Rechne Alter NIE selbst.',
     input_schema: {
       type: 'object',
       properties: {
         figur_id:   FIGUR_ID,
         figur_name: FIGUR_NAME,
-        jahr:       { type: 'integer', description: 'Optional: Kalenderjahr, für das das Alter gerechnet wird.' },
-        ereignis:   { type: 'string',  description: 'Optional: Stichwort eines Ereignisses (Teilstring, z.B. "Mauerfall"), gesucht in den datierten Ereignissen des Zeitstrahls.' },
+        jahr:       { type: 'integer', description: 'Optional: Kalenderjahr; ohne Figur Stichtag für alle.' },
+        monat:      { type: 'integer', description: 'Optional: Monat 1–12 zu jahr.' },
+        ereignis:   { type: 'string',  description: 'Optional: Stichwort eines datierten Zeitstrahl-Ereignisses (Teilstring, z.B. "Mauerfall").' },
       },
       required: [],
     },

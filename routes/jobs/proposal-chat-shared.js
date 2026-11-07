@@ -34,12 +34,51 @@ function cleanProposalInput(v) {
   return out;
 }
 
+// ── Bezüge zwischen Vorschlägen derselben Antwort (act_ref, idee_ref, …) ──────
+// Das Modell nummeriert seine Vorschläge in Aufrufreihenfolge — klassisch die
+// Einträge von `vorschlaege`, agentisch die propose_*-Aufrufe einer Runde, bevor es
+// eine Quittung sieht. Ein abgelehnter Vorschlag zählt dabei mit. Gespeichert wird
+// aber nur, was durchkam (ref = Index + 1, so löst das Frontend auf). Die
+// Aufrufnummer (`seq`) ist darum die Nummer des Modells; ctx.seqToRef übersetzt sie
+// in den gespeicherten ref. Ohne diese Übersetzung zeigte ein Bezug nach einer
+// Ablehnung still auf den nächsten Vorschlag gleichen Typs.
+
+/** Nächste Aufrufnummer vergeben — einmal je Vorschlags-Aufruf, auch wenn er scheitert. */
+function nextProposalSeq(ctx) {
+  if (!ctx.seqToRef) ctx.seqToRef = {};
+  ctx.proposalSeq = (ctx.proposalSeq || 0) + 1;
+  ctx.currentSeq = ctx.proposalSeq;
+  return ctx.proposalSeq;
+}
+
+/**
+ * Bezug `n` (Nummer des Modells) auf einen Vorschlag dieser Antwort auflösen.
+ * @returns {{ ref: number, p: object } | { error: string }}  ref = gespeicherter ref
+ */
+function refProposal(ctx, n, type, what) {
+  let ref = n;
+  if (ctx.seqToRef) {
+    ref = ctx.seqToRef[n];
+    if (!ref) {
+      return err(n <= (ctx.proposalSeq || 0)
+        ? `${what} ${n}: dieser Vorschlag wurde abgelehnt und gibt es nicht — korrigiere ihn zuerst oder verweise auf einen bestehenden Eintrag.`
+        : `${what} ${n}: einen Vorschlag mit dieser Nummer gibt es in dieser Antwort nicht.`);
+    }
+  }
+  const p = ctx.proposals[ref - 1];
+  if (!p || p.type !== type) return err(`${what} ${n} zeigt auf keinen passenden Vorschlag dieser Antwort.`);
+  return { ref, p };
+}
+
 /** Vorschlag an ctx.proposals hängen (ref = Index + 1) und dem Modell quittieren. */
 function pushProposal(ctx, proposal, input) {
   const begruendung = str(input?.begruendung, MAX_BEGRUENDUNG);
   const p = { ...proposal, ref: ctx.proposals.length + 1, ...(begruendung ? { begruendung } : {}) };
   ctx.proposals.push(p);
-  return { ok: true, ref: p.ref, hinweis: 'Vorschlag gesammelt — der User übernimmt ihn selbst. Nicht wiederholen.' };
+  // Quittiert wird die Nummer des Modells (Aufrufnummer), nicht der Index.
+  const seq = ctx.seqToRef && ctx.currentSeq ? ctx.currentSeq : p.ref;
+  if (ctx.seqToRef) ctx.seqToRef[seq] = p.ref;
+  return { ok: true, ref: seq, hinweis: 'Vorschlag gesammelt — der User übernimmt ihn selbst. Nicht wiederholen.' };
 }
 
 /**
@@ -92,6 +131,7 @@ function oneLine(s, max) {
 }
 
 module.exports = {
+  nextProposalSeq, refProposal,
   MAX_BEGRUENDUNG, MEMORY_LABEL_MAX,
   err, cleanProposalInput, pushProposal, proposalState, sessionProposalMemory, oneLine,
 };

@@ -7,6 +7,8 @@ import { sharedMethods } from './graph/shared.js';
 import { figurengraphMethods } from './graph/figurengraph.js';
 import { familiengraphMethods } from './graph/familiengraph.js';
 import { soziogrammMethods } from './graph/soziogramm.js';
+import { soziogrammControlMethods } from './graph/soziogramm-controls.js';
+export { soziogrammState } from './graph/soziogramm-controls.js';
 
 export const graphMethods = {
   ...coreMethods,
@@ -14,4 +16,5 @@ export const graphMethods = {
   ...figurengraphMethods,
   ...familiengraphMethods,
   ...soziogrammMethods,
+  ...soziogrammControlMethods,
 };

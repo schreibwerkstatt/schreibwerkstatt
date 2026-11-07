@@ -64,7 +64,7 @@
           <span class="action-sep" aria-hidden="true"></span>
           <span class="action-group">
             <span class="icon-btn-badge-wrap" x-show="canReview()">
-              <button :aria-pressed="showChatCard" type="button" class="icon-btn icon-btn--ghost" @click="toggleChatCard()" :class="{ 'is-active': showChatCard }" :disabled="currentPageEmpty" :data-tip="t('editor.btn.chatTitle')" :aria-label="t('editor.btn.chat')"><svg class="icon" aria-hidden="true"><use href="/icons.svg#message-square"/></svg></button>
+              <button :aria-pressed="showChatCard" type="button" class="icon-btn icon-btn--ghost" @click="toggleChatCard()" :class="{ 'is-active': showChatCard }" :disabled="currentPageEmpty" :data-tip="withHotkey(t('editor.btn.chatTitle'), 'pageChat')" :aria-label="t('editor.btn.chat')"><svg class="icon" aria-hidden="true"><use href="/icons.svg#message-square"/></svg></button>
               <span class="icon-btn-badge" x-show="currentPageChatSessionCount > 0" x-text="currentPageChatSessionCount" :data-tip="t('editor.btn.chatCountTitle', { n: currentPageChatSessionCount })"></span>
             </span>
             <button :aria-pressed="showReferenceCard" type="button" class="icon-btn icon-btn--ghost" @click="toggleReferenceCard()" :class="{ 'is-active': showReferenceCard }" :data-tip="t('editor.btn.referenceTitle')" :aria-label="t('editor.btn.reference')"><svg class="icon" aria-hidden="true"><use href="/icons.svg#book-open"/></svg></button>

@@ -1,7 +1,8 @@
 import { escHtml } from '../utils.js';
+import { tnRaw } from '../i18n.js';
 import { sameId, activeFilterId } from '../chapter-filter.js';
 import { createGraphTooltip, adaptNodeColor, graphTheme } from '../graph-kit.js';
-import { normalizeRelationTyp, canonicalRelation } from '../book/beziehung-typen.js';
+import { normalizeRelationTyp, canonicalRelation, naeheOf } from '../book/beziehung-typen.js';
 import {
   DEFAULT_FONT,
   TYP_COLOR,
@@ -91,6 +92,8 @@ export const sharedMethods = {
     // Mit «eine Seite reicht» bliebe um jede Hauptfigur das halbe Netz bunt.
     this._figurenEdges.update(this._figurenEdges.get().map(e => {
       if (!ch || (activeIds.has(e.from) && activeIds.has(e.to))) {
+        // Begegnungs-Kanten (Soziogramm) tragen ihre eigene, gedämpfte Farbe.
+        if (e.restoreColor) return { id: e.id, color: e.restoreColor };
         if (soziogrammModus) {
           const color = theme.ink(BZ_SOZIO_COLOR[BZ_SOZIO_CAT[e.typ] || 'sozial']);
           return { id: e.id, color: { color, highlight: color } };
@@ -157,6 +160,7 @@ export const sharedMethods = {
             label: '',
             typ: bz.typ,
             beschreibung: bz.beschreibung || '',
+            naehe: naeheOf(bz),
             color: { color, highlight: color },
             arrows,
             dashes: false,
@@ -212,8 +216,10 @@ export const sharedMethods = {
       const pair = fromF && toF
         ? `${escHtml(fromF.kurzname || fromF.name)} ${arrow} ${escHtml(toF.kurzname || toF.name)}`
         : '';
-      const html = `<strong>${escHtml(typLabel)}</strong>`
-        + (pair ? `<em>${pair}</em>` : '')
+      const naehe = e.naehe ? window.__app.t(e.naehe.geschaetzt ? 'graph.sozio.naeheTip' : 'graph.sozio.naeheTipTyp',
+        { label: window.__app.t('figuren.naehe.' + e.naehe.wert) }) : '';
+      const html = `<strong>${escHtml(e.begegnung ? tnRaw('graph.sozio.begegnungTip', e.begegnung) : typLabel)}</strong>`
+        + (pair || naehe ? `<em>${[pair, naehe ? escHtml(naehe) : ''].filter(Boolean).join(' · ')}</em>` : '')
         + (e.beschreibung ? `<p>${escHtml(e.beschreibung)}</p>` : '');
       showTipAt(html, event.clientX, event.clientY);
     });

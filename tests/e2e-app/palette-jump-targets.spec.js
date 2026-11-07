@@ -64,3 +64,37 @@ test('Esc schliesst die Palette, ohne window-Esc-Handler auszuloesen', async ({ 
   await expect(input).toBeHidden();
   expect(await page.evaluate(() => window.__escSeen)).toBe(0);
 });
+
+// Volltext `?`: Textstellen und übrige Arten kommen aus zwei Anfragen mit festen
+// Plätzen — acht Figuren-Treffer verdrängen den Abschnitt nicht. Meldet der
+// Server weitere Treffer, öffnet die letzte Zeile die Suchkarte mit der Anfrage.
+test('Volltext: Abschnitt bleibt neben vielen Figuren sichtbar, «Alle Treffer» öffnet die Suche', async ({ page }) => {
+  await bootApp(page);
+  const bookId = await selectSeededBook(page);
+  const seen = [];
+  await page.route('**/search?*', (route) => {
+    const u = new URL(route.request().url());
+    const kinds = u.searchParams.get('kind') || '';
+    seen.push(kinds);
+    const hit = (kind, i, title) => ({ kind, entity_id: i, nav_id: i, book_id: bookId, title, snippet: '', rank: -1 });
+    const body = kinds.startsWith('page')
+      ? { hits: [hit('page', 901, 'Die Textstelle')], more: true }
+      : { hits: Array.from({ length: 8 }, (_, i) => hit('figure', 100 + i, 'Figur ' + i)), more: false };
+    route.fulfill({ contentType: 'application/json', body: JSON.stringify(body) });
+  });
+
+  await page.evaluate(() => window.dispatchEvent(new CustomEvent('palette:open')));
+  const input = page.locator('.palette-input');
+  await input.fill('? textstelle');
+  const items = page.locator('.palette-item');
+  await expect(items.filter({ hasText: 'Die Textstelle' })).toBeVisible();
+  const all = items.filter({ hasText: 'Alle Treffer in der Suche öffnen' });
+  await expect(all).toBeVisible();
+  // 1 Abschnitt + 7 Figuren + «Alle Treffer».
+  await expect(items).toHaveCount(9);
+
+  await all.click();
+  await expect(input).toBeHidden();
+  await expect(page.locator('.search-q')).toHaveValue('textstelle');
+  await expect.poll(() => seen.some(k => k.includes('page') && k.includes('figure'))).toBe(true);
+});

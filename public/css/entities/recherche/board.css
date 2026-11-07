@@ -242,7 +242,6 @@ textarea.recherche-input { resize: vertical; min-height: 2.75rem; }
   font-size: var(--font-size-sm);
   line-height: var(--lh-base);
   color: color-mix(in srgb, var(--color-text) 85%, var(--color-muted));
-  white-space: pre-wrap;
   word-break: break-word;
   display: -webkit-box;
   -webkit-line-clamp: 3;
@@ -250,6 +249,14 @@ textarea.recherche-input { resize: vertical; min-height: 2.75rem; }
   -webkit-box-orient: vertical;
   overflow: hidden;
 }
+/* Gerendertes Markdown im Anriss: keine Block-Abstände, Überschriften in
+   Fliesstextgrösse — der Zeilen-Cap zählt sonst Leerraum statt Text. */
+.research-item-text :is(.chat-p, .chat-list, .chat-quote, .chat-pre, .chat-heading) {
+  margin-top: 0;
+  margin-bottom: 0;
+}
+.research-item-text .chat-heading { font-size: inherit; }
+.research-item-text .chat-list li { margin-bottom: 0; }
 .research-item-text--quote {
   font-style: italic;
   padding-left: var(--space-sm);

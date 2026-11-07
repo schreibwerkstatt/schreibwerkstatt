@@ -57,7 +57,7 @@
                unbenutzbar, egal wie viele Zeilen der Cap zulaesst. -->
           <div class="research-item-text" x-show="item.body"
                :class="{ 'research-item-text--quote': item.kind === 'quote' }"
-               x-text="item.body"></div>
+               x-html="itemBodyHtml(item)"></div>
 
           <!-- @include recherche-item-urls -->
 

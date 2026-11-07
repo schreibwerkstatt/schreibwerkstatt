@@ -68,6 +68,7 @@
       rows="2"
       :disabled="chatLoading"
       @keydown.enter="$enter($event, () => sendChatMessage(), { multiline: true })"
+      @keydown.escape="$app.returnFromAside($event)"
     ></textarea>
     <button type="button" class="chat-send-btn" @click="sendChatMessage()" :disabled="chatLoading || !chatInput.trim()" :aria-label="$app.t('chat.send')">
       <span x-show="chatLoading" class="spinner"></span>

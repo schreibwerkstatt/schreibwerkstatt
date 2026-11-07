@@ -82,7 +82,7 @@
           <div class="reference-row-head">
             <span class="reference-row-title" x-text="fig.name"></span>
             <span x-show="fig.typ" class="tag" x-text="$app.t('figuren.type.' + fig.typ)"></span>
-            <span x-show="$app.figurJahrLabel(fig)" class="tag" :data-tip="$app.t('figuren.jahrAlterTip')" x-text="$app.figurJahrLabel(fig)"></span>
+            <span x-show="$app.figurJahrLabel(fig)" class="tag" :data-tip="$app.figurJahrTip(fig)" x-text="$app.figurJahrLabel(fig)"></span>
             <span x-show="fig.geburtstag" class="tag" :data-tip="$app.t('figuren.birthYearTip')" x-text="$app.t('figuren.birthYear', { jahr: fig.geburtstag })"></span>
             <span x-show="fig.refCtx === 'chapter'" class="tag" :data-tip="$app.t('reference.ctx.chapterTip')" x-text="$app.t('reference.ctx.chapter')"></span>
           </div>
@@ -143,6 +143,12 @@
           <div class="reference-row-head">
             <span class="reference-row-title" x-text="ev.ereignis"></span>
             <span x-show="referenceEventDate(ev)" class="tag" x-text="referenceEventDate(ev)"></span>
+            <template x-if="ev.subtyp && ev.subtyp !== 'sonstiges'">
+              <span class="gz-subtyp-badge" :class="'gz-subtyp-badge--' + ev.subtyp">
+                <svg class="icon gz-subtyp-icon" aria-hidden="true"><use :href="'/icons.svg#' + subtypIcon(ev.subtyp)"/></svg>
+                <span x-text="$app.t('events.subtyp.' + ev.subtyp)"></span>
+              </span>
+            </template>
             <span x-show="ev.refCtx === 'chapter'" class="tag" :data-tip="$app.t('reference.ctx.chapterTip')" x-text="$app.t('reference.ctx.chapter')"></span>
           </div>
           <!-- Kapitel als Anzeige-Referenz (static): ein Sprung in die

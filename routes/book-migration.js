@@ -24,14 +24,15 @@ router.get('/:bookId', async (req, res) => {
   if (!bookId) return res.status(400).json({ error_code: 'ID_REQUIRED' });
   setContext({ book: bookId });
 
-  // Optionale Extra-Bloecke via Query-Flags (?analysis=1&lektorat=1&chats=1&research=1).
+  // Optionale Extra-Bloecke via Query-Flags (?analysis=1&lektorat=1&chats=1&research=1&werk=1).
   const includes = normalizeIncludes({
     analysis: req.query.analysis === '1' || req.query.analysis === 'true',
     lektorat: req.query.lektorat === '1' || req.query.lektorat === 'true',
     chats:    req.query.chats === '1' || req.query.chats === 'true',
     research: req.query.research === '1' || req.query.research === 'true',
+    werk:     req.query.werk === '1' || req.query.werk === 'true',
   });
-  const wantsExtras = includes.analysis || includes.lektorat || includes.chats || includes.research;
+  const wantsExtras = Object.values(includes).some(Boolean);
 
   // Extra-Bloecke enthalten potenziell personenbezogene Daten (Chats/Lektorat
   // aller Mitarbeitenden) → nur fuer Owner. Reiner Content-Export bleibt viewer.
@@ -117,6 +118,7 @@ router.get('/:bookId', async (req, res) => {
     if (extras.lektorat) zip.file('lektorat.json', JSON.stringify(extras.lektorat));
     if (extras.chats)    zip.file('chats.json', JSON.stringify(extras.chats));
     if (extras.research) zip.file('research.json', JSON.stringify(extras.research));
+    if (extras.werk)     zip.file('werk.json', JSON.stringify(extras.werk));
     buf = await zip.generateAsync({ type: 'nodebuffer', compression: 'DEFLATE' });
   } catch (e) {
     logger.error(`swbook-Export ZIP fehlgeschlagen (book=${bookId}): ${e.message}`);

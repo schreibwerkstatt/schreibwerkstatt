@@ -5,11 +5,14 @@
 
 import { ideenMethods } from '../book/ideen.js';
 import { ideenLinkMethods } from '../book/ideen-links.js';
+import { ideenCheckState, ideenCheckMethods } from '../book/ideen-check.js';
 import { pickerPopoverState, pickerPopoverMethods } from '../picker-popover.js';
 import { actionMenuState, actionMenuMethods } from '../action-menu.js';
 import { setupCardLifecycle } from './card-lifecycle.js';
 import { IDEE_STATUSES } from '../book/ideen-shared.js';
 import { EVT } from '../events.js';
+import { takeCardRequest, CARD_REQUEST } from './card-request.js';
+import { applyQuoteToInput } from '../editor/aside-hotkeys.js';
 
 export function registerIdeenCard() {
   if (typeof window === 'undefined' || !window.Alpine) return;
@@ -36,6 +39,8 @@ export function registerIdeenCard() {
     ...pickerPopoverState(),
     // Aktionsmenü einer Idee (action-menu.js), Ziel = Ideen-ID.
     ...actionMenuState(),
+    // Auto-Erledigt-Check: Hinweise verwerfen, von Hand prüfen (book/ideen-check.js).
+    ...ideenCheckState(),
     loading: false,
     busy: false,
     errorMessage: '',
@@ -44,6 +49,10 @@ export function registerIdeenCard() {
     // Seitenwechsel ist genau der Moment, in dem gezaehlt werden soll.
     _boardHintPlaces: null,
     boardHintDue: false,
+    // In dieser Karte wurde angelegt: nach einem Abschnittswechsel kehrt der
+    // Cursor ins Feld zurueck (book/ideen.js#_refocusAfterPlaceChange).
+    // Zurueckgesetzt erst beim Schliessen der Karte, nicht beim Seitenwechsel.
+    _seriesActive: false,
     _lifecycle: null,
 
     init() {
@@ -53,18 +62,24 @@ export function registerIdeenCard() {
         // gebunden — onShow soll auch greifen, wenn kein Buch in der Combobox
         // aktiv ist (currentPage bzw. ideenChapterId reicht).
         showNeedsBookId: false,
+        timerKeys: ['_ideenCheckPollTimer'],
         onShow: async () => {
           await this.loadIdeen();
           this.$nextTick(() => {
             const ta = this.$el?.querySelector('.ideen-input');
             if (ta) ta.focus();
+            this._takeIdeenQuote();
           });
         },
+        onHide: () => { this._seriesActive = false; },
         onBookChanged: () => this.resetIdeen(),
         onViewReset: () => this.resetIdeen(),
         extraListeners: [
           { type: 'ideen:reset', handler: () => this.resetIdeen() },
           { type: EVT.IDEEN_STAGES_CHANGED, handler: (e) => this._onStagesChanged(e) },
+          { type: EVT.CARD_REQUEST, handler: (e) => {
+            if (e.detail?.key === CARD_REQUEST.IDEEN_QUOTE && window.__app.showIdeenCard) this._takeIdeenQuote();
+          } },
           // Offline vorgemerkte Ideen sind auf dem Server: neu laden, damit die
           // temporären IDs den echten weichen (repo/ideen-queue.js).
           { type: EVT.IDEEN_QUEUE_CHANGED, handler: (e) => { if (e.detail?.flushed && window.__app.showIdeenCard) this.loadIdeen(); } },
@@ -75,14 +90,14 @@ export function registerIdeenCard() {
       this.$watch(() => window.__app.currentPage?.id, async (pid) => {
         if (window.__app.ideenScope !== 'page') return;
         if (!pid) { this.resetIdeen(); return; }
-        if (window.__app.showIdeenCard) await this.loadIdeen();
+        if (window.__app.showIdeenCard) { await this.loadIdeen(); this._refocusAfterPlaceChange(); }
       });
 
       // Chapter-Modus: Kapitelwechsel triggert Reload (wenn offen).
       this.$watch(() => window.__app.ideenChapterId, async (cid) => {
         if (window.__app.ideenScope !== 'chapter') return;
         if (!cid) { this.resetIdeen(); return; }
-        if (window.__app.showIdeenCard) await this.loadIdeen();
+        if (window.__app.showIdeenCard) { await this.loadIdeen(); this._refocusAfterPlaceChange(); }
       });
 
       // Kapitelreview-Kapitelwahl synchronisieren: wechselt User dort das
@@ -116,8 +131,16 @@ export function registerIdeenCard() {
       this._releasePickerPopover();
     },
 
+    // Markierung aus dem Text (⌘/Strg+Shift+2, editor/aside-hotkeys.js) als
+    // Zitat ins Eingabefeld — gespeichert wird erst mit Enter.
+    _takeIdeenQuote() {
+      const text = takeCardRequest(CARD_REQUEST.IDEEN_QUOTE);
+      if (text) applyQuoteToInput(this, 'newContent', this.$el?.querySelector('.ideen-input'), text);
+    },
+
     ...ideenMethods,
     ...ideenLinkMethods,
+    ...ideenCheckMethods,
     ...pickerPopoverMethods,
     ...actionMenuMethods,
   }));

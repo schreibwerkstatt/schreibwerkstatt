@@ -11,7 +11,7 @@
   <dl class="figur-steckbrief-grid">
     <template x-if="$app.figurJahrLabel(f)">
       <div class="figur-fact">
-        <dt x-text="$app.t('figuren.field.jahrAlter')"></dt>
+        <dt x-text="$app.figurJahrFieldLabel(f)"></dt>
         <dd>
           <span x-text="$app.figurJahrLabel(f)"></span>
           <span x-show="$app.figurJahrAnchor(f)" class="figur-jahr-anchor" x-text="' — ' + $app.figurJahrAnchor(f)"></span>

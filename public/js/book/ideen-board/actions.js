@@ -13,7 +13,7 @@ import {
 } from '../ideen-shared.js';
 import {
   buildLaneOrder, buildBoard, chapterFilterOptions, statusTotals, boardColumns, IDEE_SORT_MANUAL,
-  columnSortOf, nextColumnSort, compareIdeeManual, cellOrderAfterDrop, laneKeyResolver,
+  columnSortOf, nextColumnSort, compareIdeeManual, cellOrderAfterDrop, laneKeyResolver, ideeRevealPatch,
 } from './model.js';
 import { memoMethods } from '../../cards/card-memo.js';
 import { isSelectedBook, loadToken } from '../../cards/book-guard.js';
@@ -95,6 +95,20 @@ export const ideenBoardActions = {
       }));
   },
   lanes() { return this.board().lanes; },
+  // Spaltenbreiten: eine Stufe ohne sichtbare Karte (leer, oder ausgeblendet wie
+  // per Default «erledigt») wird schmal, damit die belegte nicht auf ein Viertel
+  // der Breite gequetscht wird — bei 100 offenen Ideen brach sonst jede auf vier
+  // bis fuenf Zeilen um. Die Spalte selbst bleibt (Zaehler, Drop-Ziel). Die
+  // Groessen stehen im CSS (`--ideen-track`/`--ideen-track-slim`).
+  columnTracks() {
+    const cols = this.statuses();
+    const shown = new Set();
+    for (const row of this.lanes()) {
+      for (const s of cols) if (row.columns[s]?.length || row.folded?.[s]) shown.add(s);
+    }
+    if (!shown.size) return null;
+    return cols.map(s => (shown.has(s) ? 'var(--ideen-track)' : 'var(--ideen-track-slim)')).join(' ');
+  },
   hiddenCount() { return this.board().hiddenByFilter; },
   visibleCount() { return this.board().visible; },
   totalCount() { return this.board().total; },
@@ -209,6 +223,7 @@ export const ideenBoardActions = {
       if (!isCurrent()) return;
       this.ideen = ideen;
       this.stages = normalizeIdeeStages(data?.stages);
+      this.autoCheckOn = data?.auto_check !== false;
       this.laneOrder = buildLaneOrder(Alpine.store('nav').tree);
       this.errorMessage = '';
       this._publishCounts();
@@ -299,6 +314,31 @@ export const ideenBoardActions = {
     if (!row) return;
     this.ideen = this.ideen.map(i => (i.id === row.id ? row : i));
     this._memos = {};
+  },
+
+  // Eine Idee ins Bild holen (z.B. gerade aus dem Ideen-Chat übernommen):
+  // Filter, die sie ausblenden, und Klappungen ihrer Bahn zurücknehmen
+  // (model.js#ideeRevealPatch), dann zur Karte bzw. Listenzeile scrollen und
+  // sie kurz aufleuchten lassen.
+  async revealIdee(id) {
+    const idee = (this.ideen || []).find(i => i.id === id);
+    if (!idee) return;
+    const patch = ideeRevealPatch(idee, {
+      laneOrder: this.laneOrder, filterChapterId: this.filterChapterId,
+      showErledigt: this.showErledigt, showVerworfen: this.showVerworfen, query: this.query,
+      collapsedLanes: this.collapsedLanes, collapsedChapters: this.collapsedChapters,
+    });
+    if (Object.keys(patch).length) { Object.assign(this, patch); this._memos = {}; }
+    await this.$nextTick();
+    await this._ensureBoardSortables();
+    const el = this.$root?.querySelector(`[data-idee-card-id="${id}"], [data-idee-row-id="${id}"]`);
+    if (!el) return;
+    const reduce = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
+    el.scrollIntoView({ block: 'nearest', inline: 'nearest', behavior: reduce ? 'auto' : 'smooth' });
+    el.classList.remove('idee-reveal-flash');
+    void el.offsetWidth;
+    el.classList.add('idee-reveal-flash');
+    setTimeout(() => el.classList.remove('idee-reveal-flash'), 1600);
   },
 
   // Nur echte Anker (Kapitel, Seiten) — die Ziele beim Zuordnen einer Buch-Idee.

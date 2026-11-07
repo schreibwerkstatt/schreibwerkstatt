@@ -242,6 +242,40 @@ export function makeIdeeFilter({ laneOrder, filterChapterId = '', showErledigt =
 }
 
 /**
+ * Was am Board-Zustand zu ändern ist, damit eine bestimmte Idee sichtbar wird
+ * (z.B. gerade aus dem Ideen-Chat übernommen): blendet der Filter sie aus,
+ * fällt genau die Bedingung, die sie trifft; ist ihre Bahn eingeklappt oder in
+ * ein eingeklapptes Kapitel gefaltet, klappt die Kette auf. Liefert nur die
+ * geänderten Felder (leeres Objekt = sie ist schon sichtbar) — immer neue
+ * Listen, der Board-Memo vergleicht per Identität.
+ */
+export function ideeRevealPatch(idee, {
+  laneOrder, filterChapterId = '', showErledigt = true, showVerworfen = true, query = '',
+  collapsedLanes = [], collapsedChapters = [],
+}) {
+  const patch = {};
+  if (!idee) return patch;
+  const filter = { laneOrder, filterChapterId, showErledigt, showVerworfen, query };
+  const status = ideeStatus(idee);
+  if (!showErledigt && status === 'erledigt') patch.showErledigt = filter.showErledigt = true;
+  if (!showVerworfen && status === 'verworfen') patch.showVerworfen = filter.showVerworfen = true;
+  if (query && !matchesQuery(idee, (query || '').trim().toLowerCase())) patch.query = filter.query = '';
+  if (!makeIdeeFilter(filter)(idee)) patch.filterChapterId = '';
+
+  const laneKey = laneKeyResolver(laneOrder)(idee);
+  const chain = chapterChain(idee.lane_chapter_id ?? idee.chapter_id ?? null, chapterLaneMap(laneOrder)).map(l => l.key);
+  const unfoldLanes = new Set([laneKey, ...chain]);
+  if ((collapsedLanes || []).some(k => unfoldLanes.has(k))) {
+    patch.collapsedLanes = collapsedLanes.filter(k => !unfoldLanes.has(k));
+  }
+  const unfoldChapters = new Set(chain);
+  if ((collapsedChapters || []).some(k => unfoldChapters.has(k))) {
+    patch.collapsedChapters = collapsedChapters.filter(k => !unfoldChapters.has(k));
+  }
+  return patch;
+}
+
+/**
  * Listenansicht: dieselben Ideen wie das Raster nach demselben Filter, flach —
  * jede mit ihrer Bahn (fuer Ort-Spalte und Buch-Reihenfolge). `laneIndex` ist
  * die Position der Bahn im Baum; eine unbekannte Bahn steht hinten, wie die

@@ -4,6 +4,9 @@ const { isUngroupedChapterName } = require('../../lib/ungrouped-chapter');
 
 // Gerichtete Beziehungstypen und ihre Inverse. A→B elternteil ≡ B→A kind,
 // A→B mentor ≡ B→A schuetzling. Für Dedup-Zwecke als identisch betrachtet.
+// Synchroner Spiegel von `RELATION_INVERSES` in public/js/book/beziehung-typen.js
+// (die esm-bridge ist async, relationKey läuft im synchronen Write-Pfad); Gleichheit
+// gegated in tests/unit/beziehung-typen.test.mjs.
 const RELATION_INVERSES = { elternteil: 'kind', kind: 'elternteil', mentor: 'schuetzling', schuetzling: 'mentor', vorgesetzter: 'untergebener', untergebener: 'vorgesetzter' };
 
 /** Richtungsfreier Schlüssel einer Beziehung: ungeordnetes Paar + Typ, wobei ein

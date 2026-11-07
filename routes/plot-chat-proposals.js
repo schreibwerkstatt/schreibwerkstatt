@@ -6,7 +6,10 @@
 const { makeChatProposalStatusRouter } = require('./chat-proposal-status');
 const plotDb = require('../db/plot');
 
-const GETTERS = { beat_create: plotDb.getBeatMeta, act_create: plotDb.getAct, thread_create: plotDb.getThread };
+const GETTERS = {
+  beat_create: plotDb.getBeatMeta, act_create: plotDb.getAct, thread_create: plotDb.getThread,
+  relation_create: plotDb.getBeatRelation,
+};
 
 // Gibt es das von einem übernommenen create-Vorschlag Angelegte noch (im selben
 // Buch, beim selben User)? Nach Undo/Löschen darf er erneut übernommen werden.

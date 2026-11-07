@@ -54,6 +54,13 @@ test('Revisionsliste: Sitzung, Vergleich, Anheften, Sperre im Edit-Modus', async
   const errors = [];
   page.on('pageerror', (e) => errors.push(String(e)));
   page.on('console', (m) => { if (m.type() === 'error' && /Alpine|Expression/i.test(m.text())) errors.push(m.text()); });
+  // Nutzungs-Event der Viewer-Sitzung (docs/usage-events.md): eins je Oeffnen–Schliessen.
+  const views = [];
+  page.on('request', (r) => {
+    if (new URL(r.url()).pathname !== '/usage/event') return;
+    const body = JSON.parse(r.postData() || '{}');
+    if (body.event === 'revision.view') views.push(body.meta);
+  });
 
   const pid = await openFreshPage(page);
   try {
@@ -99,6 +106,30 @@ test('Revisionsliste: Sitzung, Vergleich, Anheften, Sperre im Edit-Modus', async
     await expect(dlg.locator('.revision-viewer__title')).toContainText('Meilenstein E2E');
     await dlg.locator('.revision-viewer__close').click();
     await expect(dlg).toBeHidden();
+    // Erste Sitzung: Vergleich, auch gegen den aktuellen Stand, ein Schritt zurueck.
+    await expect.poll(() => views.length).toBe(1);
+    expect(views[0]).toEqual({ diff: 'yes', current: 'yes', steps: 1 });
+
+    // Tastatur: die Uhrzeit ist der Oeffnen-Knopf der Zeile.
+    const openBtn = page.locator('.page-revisions-section .page-revisions-row__open').first();
+    await openBtn.focus();
+    await page.keyboard.press('Enter');
+    await expect(dlg).toBeVisible();
+    // Tab-Leiste nach WAI-ARIA: → wechselt den Tab und nimmt den Fokus mit,
+    // statt durch die Revisionen zu blaettern.
+    const tabs = dlg.locator('.revision-viewer__tabs [role="tab"]');
+    await tabs.first().focus();
+    await page.keyboard.press('ArrowRight');
+    await expect(tabs.nth(1)).toHaveAttribute('aria-selected', 'true');
+    await expect(tabs.nth(1)).toBeFocused();
+    await expect(dlg.locator('[role="tabpanel"]:visible')).toHaveCount(1);
+    // Esc speichert einen getippten Namen, statt ihn zu verwerfen.
+    await label.fill('Meilenstein Esc');
+    await page.keyboard.press('Escape');
+    await expect(dlg).toBeHidden();
+    await expect(page.locator('.page-revisions-section .page-revisions-label')).toHaveText('Meilenstein Esc');
+    await expect.poll(() => views.length).toBe(2);
+    expect(views[1]).toEqual({ diff: 'yes', current: 'no', steps: 0 });
 
     // Edit-Modus sperrt Wiederherstellen (Puffer kennt den Restore nicht).
     await page.evaluate(() => { window.__app.editMode = true; });

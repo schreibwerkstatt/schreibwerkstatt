@@ -9,7 +9,7 @@ const { buildFigNameLookup, consolidationFitsCap, skippedChapterIds } = require(
 const {
   preMergeChapterFiguren, applySozialschichtModeVote, mergeDuplicateFiguren,
   validateBeziehungenDescriptions, backfillFiguren, dropPseudoFiguren, ensureUniqueFigIds, applyAliasClusters,
-  annotateBeziehungenNames, rebindBeziehungenByName, dropCopiedRelations,
+  annotateBeziehungenNames, rebindBeziehungenByName, dropCopiedRelations, preferBeziehungNames,
 } = require('../figuren-merge');
 const { komplettMaxTokens } = require('./tokens');
 const { runKonsolBatched, KONSOL_SINGLE_RESERVE } = require('./figuren-konsol');
@@ -161,6 +161,9 @@ async function runPhase2(ctx, chapterFiguren, chapterAssignments, chapterSzenen)
           costTier(COST_LABEL.figuren),
         );
         if (!Array.isArray(figResult?.figuren)) throw i18nError('job.error.figurenMissing');
+        // Die ids bleiben die des Modells; nur Kanten, deren figur_id nicht zum
+        // geschriebenen Zielnamen passt, werden über den Namen gebunden.
+        preferBeziehungNames(figResult.figuren, log);
       } catch (e) {
         if (e.name === 'AbortError') throw e;
         // Truncation trotz Preflight (das Reasoning lässt sich nicht vorab schätzen): in
@@ -174,7 +177,8 @@ async function runPhase2(ctx, chapterFiguren, chapterAssignments, chapterSzenen)
     }
     // `f.id ||` erhält die im Fallback und in der Teil-Konsolidierung vergebenen ids (und
     // damit den dort gemachten Rebind); die Einzel-Konsolidierung bringt ihre eigene, in
-    // sich konsistente ID-Welt mit und wird bewusst NICHT nachgebunden.
+    // sich konsistente ID-Welt mit; dort bindet nur preferBeziehungNames Kanten nach, deren
+    // figur_id dem mitgeschriebenen Zielnamen widerspricht.
     figuren = figResult.figuren.map((f, i) => ({ ...f, id: f.id || ('fig_' + (i + 1)) }));
   }
   const { figuren: mergedFiguren, mergedCount, stage1Saved, stage2Saved, idRemap } = mergeDuplicateFiguren(figuren);

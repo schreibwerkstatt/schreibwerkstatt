@@ -84,3 +84,31 @@ test('Prompt: Lese-Werkzeuge existieren im Buch-Chat, Schema deckt die Vorschlag
   assert.match(classic[0].text, /ANTWORTFORMAT/);
   assert.match(classic[1].text, /TEXTPASSAGEN/);
 });
+
+test('Zusammenführen: Ziel/Quelle weg → blockiert, abgeschlossenes Ziel + offene Quelle → blockiert, Text geändert → stale', () => {
+  const merge = (over = {}) => ({ type: 'idee_merge', idee_id: 1, merge_ids: [3], fields: { content: 'Neu' }, before: { content: 'Alt' }, ...over });
+  const withThird = [...ideen, { id: 3, content: 'Dublette', status: 'offen', links: [] }];
+  assert.deepEqual(ideenProposalStatus(merge(), [], withThird, STAGES), { state: 'open', removed: false, blocked: null, stale: false });
+  assert.equal(ideenProposalStatus(merge({ idee_id: 99 }), [], withThird, STAGES).blocked.key, 'ideenBoard.chat.block.ideeGone');
+  assert.equal(ideenProposalStatus(merge(), [], ideen, STAGES).blocked.key, 'ideenBoard.chat.block.mergeGone');
+  assert.equal(ideenProposalStatus(merge({ idee_id: 2 }), [], withThird, STAGES).blocked.key, 'ideenBoard.chat.block.mergeClosed');
+  assert.equal(ideenProposalStatus(merge({ before: { content: 'Anders' } }), [], withThird, STAGES).stale, true);
+  assert.equal(ideenProposalStatus(merge({ applied_at: 'x' }), [], [], STAGES).state, 'applied', 'Quellen sind nach dem Übernehmen weg — bleibt übernommen');
+  assert.deepEqual(ideeUpdateRows(merge()).map(r => r.key), ['content']);
+  assert.deepEqual(ideeUpdateRows(merge({ fields: {} })), []);
+  // Aufgehende Idee seit dem Vorschlag geändert → gesperrt (sie würde gelöscht).
+  const snap = { content: 'Alt', sources: { 3: 'Dublette' } };
+  assert.equal(ideenProposalStatus(merge({ before: snap }), [], withThird, STAGES).blocked, null);
+  const edited = withThird.map(i => (i.id === 3 ? { ...i, content: 'Dublette, ergänzt' } : i));
+  assert.equal(ideenProposalStatus(merge({ before: snap }), [], edited, STAGES).blocked.key, 'ideenBoard.chat.block.mergeSourceChanged');
+});
+
+test('Board-Zusammenführen: Ziel ist eine offene, sonst die älteste; Text ohne Wiederholung', async () => {
+  const { mergeTargetOf, mergedContentOf } = await import('../../public/js/book/ideen-board/list.js');
+  const a = { id: 5, content: 'Erledigt alt', status: 'erledigt', created_at: '2025-01-01' };
+  const b = { id: 6, content: 'Offen  neu', status: 'offen', created_at: '2026-02-01' };
+  const c = { id: 7, content: 'offen neu', status: 'in_arbeit', created_at: '2026-01-01' };
+  assert.equal(mergeTargetOf([a, b, c]).id, 7);
+  assert.equal(mergeTargetOf([a, { ...a, id: 4, created_at: '2025-06-01' }]).id, 5);
+  assert.equal(mergedContentOf(c, [b, a]), 'offen neu · Erledigt alt');
+});

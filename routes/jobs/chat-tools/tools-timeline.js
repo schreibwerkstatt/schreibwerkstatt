@@ -20,10 +20,11 @@ const { getFigureRow } = require('../../../db/book-chat/figures');
 const { listFigureAges, getFigureAgeScan } = require('../../../db/figure-ages');
 const { getBookSettings } = require('../../../db/book-settings');
 const { getDescendantChapterIds } = require('../../../db/book-order');
-const { birthCandidates, resolveBirth } = require('../../../lib/figure-birth');
+const { birthCandidates, resolveBirth, resolveBirthsForFigures } = require('../../../lib/figure-birth');
 const { activeBookSchulsystem } = require('../../../lib/buchtyp');
-const { getSchoolPath } = require('../../../db/figure-school-paths');
-const { schoolPath } = require('../../../lib/esm-bridge');
+const { getSchoolPath, listFiguresForSchoolPath } = require('../../../db/figure-school-paths');
+const { schoolPath, ageAtModule, figureStationen } = require('../../../lib/esm-bridge');
+const { listStationenForFigure } = require('../../../db/figure-stationen');
 const { schoolLabel } = require('../../../lib/school-labels');
 const { _truncateResult, _findFigure, offeredList, toolHint } = require('./shared');
 
@@ -183,25 +184,45 @@ function tool_get_timeline(input, ctx) {
 // vorhandenen Daten (docs/figur-alter.md, docs/figur-lebenslauf.md): Steckbrief-Feld
 // `geburtstag`, Geburts-Ereignis im Zeitstrahl, Alters-Index (figure_ages). Kein
 // KI-Call, keine Schätzung — fehlt ein Geburtsjahr, sagt das Ergebnis genau das.
+// Die Rechnung selbst (`ageAt`) liegt in public/js/book/age-at.js — dieselbe wie der
+// Stichtag im Reiter «Alter» der Figuren-Karte.
 
 const AGE_EVENT_LIMIT = 10;
 const AGE_BELEGE_LIMIT = 5;
 
-/** Alter zum Zeitpunkt `at` bei Geburt `birth` (je {y, m?, d?}). Mit Monat (+Tag) auf
- *  beiden Seiten exakt, sonst als Spanne [n−1, n] — ohne Geburtstag im Jahr ist nicht
- *  entscheidbar, ob er schon war. */
-function ageAt(birth, at) {
-  if (!Number.isInteger(birth?.y) || !Number.isInteger(at?.y)) return null;
-  const n = at.y - birth.y;
-  let von = n - 1, bis = n;
-  if (birth.m && at.m) {
-    if (at.m > birth.m) von = bis = n;
-    else if (at.m < birth.m) von = bis = n - 1;
-    else if (birth.d && at.d) von = bis = (at.d >= birth.d ? n : n - 1);
+const _monat = (m) => (Number.isInteger(m) && m >= 1 && m <= 12 ? m : null);
+
+// Berufsweg und Hobbys (docs/figur-lebenslauf.md «Berufsweg und Hobbys»): nur
+// übernommene/vom Autor erfasste Zeilen, keine offenen Vorschläge. «Am Stichtag»
+// rechnet book/figure-stationen.js — dieselbe Rechnung wie die Alterstabelle.
+const STATIONEN_LIMIT = 12;
+function _stationKurz(kind, s) {
+  return {
+    ...(kind === 'berufe'
+      ? { art: s.art, taetigkeit: s.taetigkeit, ...(s.arbeitgeber ? { arbeitgeber: s.arbeitgeber } : {}) }
+      : { hobby: s.hobby }),
+    ...(s.ort ? { ort: s.ort } : {}),
+    ...(s.von_jahr != null ? { von: s.von_monat ? `${s.von_jahr}-${String(s.von_monat).padStart(2, '0')}` : s.von_jahr } : {}),
+    ...(s.bis_jahr != null ? { bis: s.bis_monat ? `${s.bis_jahr}-${String(s.bis_monat).padStart(2, '0')}` : s.bis_jahr } : {}),
+    ...(s.notiz ? { notiz: s.notiz } : {}),
+  };
+}
+async function _stationenFor(figureId) {
+  const out = {};
+  for (const kind of ['berufe', 'hobbys']) {
+    const list = listStationenForFigure(kind, figureId, { nurAktiv: true });
+    if (list.length) out[kind] = list;
   }
-  const out = von === bis ? { alter: bis, exakt: true } : { alter_von: von, alter_bis: bis, exakt: false };
-  if (bis < 0) out.vor_geburt = true;
   return out;
+}
+async function _stationenAm(stationen, jahr, monat) {
+  const { stationenAm } = await figureStationen();
+  const out = {};
+  for (const [kind, list] of Object.entries(stationen)) {
+    const am = stationenAm(list, { jahr, monat });
+    if (am.length) out[kind] = am.map(s => ({ ..._stationKurz(kind, s), ...(s.unsicher ? { beginn_unbekannt: true } : {}) }));
+  }
+  return Object.keys(out).length ? out : null;
 }
 
 /** Schulstufe-Rechner für eine Figur — null ohne Schulsystem des Buchs oder ohne
@@ -242,6 +263,16 @@ async function _schoolStager(ctx, fig, birth, lang) {
       const r = sp.schoolStagesForYear({ ...args, jahr });
       return r ? { herbst: fmt(r.herbst), ...(r.fruehjahr ? { fruehjahr: fmt(r.fruehjahr) } : {}) } : null;
     },
+    // Schulzeit als Zeiträume je Stufe — «wann ging X in die Primarschule».
+    zeiten() {
+      const z = sp.schulZeiten(args);
+      if (!z) return null;
+      return {
+        stufen: z.stufen.map(st => ({ stufe: schoolLabel(sp.stufeLabelKey(st.stufe), lang), von: st.von, bis: st.bis })),
+        einschulung: z.einschulung, abschluss: z.abschluss,
+        ...(z.unsicher ? { unsicher: true, einschulung_alternative: z.einschulung_alternative, hinweis: 'Geburtstag relativ zum Einschulungs-Stichtag unbekannt: alle Grenzen ggf. ein Jahr verschoben.' } : {}),
+      };
+    },
     zuDatum(jahr, monat) {
       if (!monat) return this.zumJahr(jahr);
       return fmt(sp.schoolStageAt({ ...args, jahr, monat }));
@@ -249,9 +280,51 @@ async function _schoolStager(ctx, fig, birth, lang) {
   };
 }
 
+// Ohne Figur, mit `jahr`: alle Figuren zum Stichtag in EINEM Aufruf. Die Frage
+// «wer ist im Juni 2001 wie alt» kostete sonst einen Aufruf je Figur.
+async function _ageTableAt(input, ctx) {
+  const userEmail = ctx.userEmail || '';
+  const { ageAt } = await ageAtModule();
+  const monat = _monat(input.monat);
+  const lang = getBookSettings(ctx.bookId, userEmail)?.language || 'de';
+  const figs = listFiguresForSchoolPath(ctx.bookId, userEmail);
+  const births = resolveBirthsForFigures(ctx.bookId, userEmail, figs);
+  const figuren = [], ohne = [];
+  for (const f of figs) {
+    const birth = births.get(f.id);
+    if (!birth) { ohne.push(f.name); continue; }
+    const row = {
+      fig_id: f.fig_id, name: f.name,
+      geburt: { jahr: birth.y, ...(birth.m ? { monat: birth.m } : {}), quelle: birth.quelle },
+      ...ageAt(birth, { y: input.jahr, m: monat }),
+    };
+    if (birth.widerspruch) row.geburtsjahr_widerspruch = birth.widerspruch;
+    const schule = await _schoolStager(ctx, f, birth, lang);
+    const stufe = schule?.zuDatum(input.jahr, monat);
+    if (stufe) row.schulstufe = stufe;
+    const zeiten = schule?.zeiten();
+    if (zeiten) row.schulzeit = zeiten;
+    const taetig = await _stationenAm(await _stationenFor(f.id), input.jahr, monat);
+    if (taetig) row.taetigkeiten = taetig;
+    figuren.push(row);
+  }
+  return _truncateResult({
+    stichtag: { jahr: input.jahr, ...(monat ? { monat } : {}) },
+    total_mit_geburt: figuren.length,
+    total_ohne_geburt: ohne.length,
+    ...(monat ? {} : { rechnung: 'Ohne Monat: Alter als Spanne, wo der Geburtstag im Jahr offen ist.' }),
+    figuren,
+    ohne_geburtsjahr: ohne,
+  });
+}
+
 async function tool_get_figure_age(input, ctx) {
   const userEmail = ctx.userEmail || '';
-  if (!input?.figur_id && !input?.figur_name) return { error: 'figur_id oder figur_name erforderlich.', errorKey: 'chat.toolError.missingParam', errorParams: { param: 'figur_id/figur_name' } };
+  if (!input?.figur_id && !input?.figur_name) {
+    if (Number.isInteger(input?.jahr)) return _ageTableAt(input, ctx);
+    return { error: 'figur_id, figur_name oder jahr erforderlich.', errorKey: 'chat.toolError.missingParam', errorParams: { param: 'figur_id/figur_name/jahr' } };
+  }
+  const { ageAt } = await ageAtModule();
   const fig = _findFigure(input, ctx);
   if (!fig) return { error: 'Figur nicht gefunden', errorKey: 'chat.toolError.figureNotFound', hint: 'Prüfe die Figurenliste im System-Prompt.' };
 
@@ -267,7 +340,14 @@ async function tool_get_figure_age(input, ctx) {
     zeitlinie_real: !!getBookSettings(ctx.bookId, userEmail)?.zeitlinie_real,
   };
   const schule = await _schoolStager(ctx, fig, birth, getBookSettings(ctx.bookId, userEmail)?.language || 'de');
-  if (schule) out.schulweg = { weg: schule.weg, quelle: schule.weg_quelle };
+  if (schule) {
+    out.schulweg = { weg: schule.weg, quelle: schule.weg_quelle };
+    const zeiten = schule.zeiten();
+    if (zeiten) out.schulweg.schulzeit = zeiten;
+  }
+
+  const stationen = await _stationenFor(fig.id);
+  for (const [kind, list] of Object.entries(stationen)) out[kind] = list.slice(0, STATIONEN_LIMIT).map(st => _stationKurz(kind, st));
 
   if (ageRow) {
     out.alters_index = {
@@ -281,9 +361,12 @@ async function tool_get_figure_age(input, ctx) {
   }
 
   if (Number.isInteger(input?.jahr)) {
-    out.zum_jahr = { jahr: input.jahr, ...(birth ? ageAt(birth, { y: input.jahr }) : { hinweis: 'Kein Geburtsjahr bekannt — Alter nicht berechenbar.' }) };
-    const stufe = schule?.zumJahr(input.jahr);
+    const monat = _monat(input.monat);
+    out.zum_jahr = { jahr: input.jahr, ...(monat ? { monat } : {}), ...(birth ? ageAt(birth, { y: input.jahr, m: monat }) : { hinweis: 'Kein Geburtsjahr bekannt — Alter nicht berechenbar.' }) };
+    const stufe = monat ? schule?.zuDatum(input.jahr, monat) : schule?.zumJahr(input.jahr);
     if (stufe) out.zum_jahr.schulstufe = stufe;
+    const taetig = await _stationenAm(stationen, input.jahr, monat);
+    if (taetig) out.zum_jahr.taetigkeiten = taetig;
   }
 
   const needle = typeof input?.ereignis === 'string' ? input.ereignis.trim() : '';
@@ -321,5 +404,4 @@ module.exports = {
   tool_list_continuity_issues,
   tool_get_timeline,
   tool_get_figure_age,
-  ageAt,
 };

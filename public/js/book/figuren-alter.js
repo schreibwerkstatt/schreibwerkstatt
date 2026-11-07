@@ -7,6 +7,12 @@
 //   2. Der Alters-Index (GET /figures/:id/alter, Job `figur-alter`): das Alter,
 //      wie es im TEXT steht — mit woertlichem Beleg und Sprungziel.
 //
+// Dazu der STICHTAG (Jahr, optional Monat): eine Spalte «Alter am Stichtag» fuer
+// alle Figuren, gerechnet aus der Geburt, die der Server aufloest (`geburten` in
+// GET …/alter, lib/figure-birth.js) mit derselben Rechnung wie das Buch-Chat-
+// Werkzeug `get_figure_age` (book/age-at.js). Hat das Buch ein Schulsystem, steht
+// daneben die Klasse an diesem Tag (book/figuren-schulweg.js).
+//
 // Die Tabelle funktioniert OHNE Lauf: sie zeigt dann, was der Katalog weiss. Der
 // Analyse-Knopf ergaenzt die Textfunde und macht Widersprueche sichtbar. Genau
 // dafuer bleiben beide Werte sichtbar — ein einziger „richtiger" Wert waere eine
@@ -19,12 +25,29 @@ import { startPoll } from '../cards/job-helpers.js';
 import { tFetchError } from '../i18n.js';
 import { typRank, byTypDannName } from './figur-typen.js';
 import { activeFilterId, sameId } from '../chapter-filter.js';
+import { ageAt } from './age-at.js';
+import { schulStufeFuerEreignis } from './figuren-schulweg.js';
+import { schulZeiten, stufeLabelKey, schoolStageAt, schoolStagesForYear } from './school-path.js';
 
 /** Pure Verbindung von Katalog und Alters-Index + Filter + Sortierung.
  *  Ausserhalb von Alpine testbar. `ages` = Map fig_id → Index-Zeile.
  *  `kapitelId` (bereits per activeFilterId bereinigt) waehlt die Figuren, die im
  *  Kapitel auftreten — die Alterswerte bleiben die des ganzen Buchs. */
-export function computeAlterRows(figuren, ages, { suche = '', typ = '', nur = '', kapitelId = '' } = {}) {
+/** Stichtag aus den Eingaben: { y, m } oder null ohne gueltiges Jahr. */
+export function stichtagAus(jahr, monat) {
+  if (!Number.isInteger(jahr)) return null;
+  const m = Number(monat);
+  return { y: jahr, m: Number.isInteger(m) && m >= 1 && m <= 12 ? m : null };
+}
+
+/** Sortierwert der Stichtag-Spalte: das sichere bzw. obere Alter, vor der Geburt -1. */
+function _stichtagSort(a) {
+  if (!a) return null;
+  if (a.vor_geburt) return -1;
+  return a.alter ?? a.alter_bis ?? null;
+}
+
+export function computeAlterRows(figuren, ages, { suche = '', typ = '', nur = '', kapitelId = '', stichtag = null, geburten = null } = {}) {
   const q = (suche || '').toLowerCase();
   const rows = [];
   for (const f of (figuren || [])) {
@@ -74,11 +97,21 @@ export function computeAlterRows(figuren, ages, { suche = '', typ = '', nur = ''
       belege: a?.belege ?? [],
       // Ein Wert steht hier nur, wenn irgendeine Quelle etwas hergibt.
       hatAlter: alterVon != null || abgeleitet != null,
+      geburt: geburten?.[f.id] || null,
+      stichtag_alter: null,
+      stichtag_sort: null,
     };
+    if (stichtag && row.geburt) {
+      row.stichtag_alter = ageAt(row.geburt, stichtag);
+      row.stichtag_sort = _stichtagSort(row.stichtag_alter);
+    }
     if (nur === 'mitAlter' && !row.hatAlter) continue;
     if (nur === 'ohneAlter' && row.hatAlter) continue;
-    if (nur === 'widerspruch' && !row.widerspruch) continue;
+    // Widerspruch heisst beides: Textfund gegen Rechnung (Index) und Geburtsjahre,
+    // die sich zwischen Steckbrief, Zeitstrahl und Alters-Index widersprechen.
+    if (nur === 'widerspruch' && !row.widerspruch && !row.geburt?.widerspruch) continue;
     if (nur === 'beleg' && !row.belege.length) continue;
+    if (nur === 'amStichtag' && (!stichtag || row.stichtag_sort == null || row.stichtag_sort < 0)) continue;
     rows.push(row);
   }
   return rows.sort(byTypDannName);
@@ -177,9 +210,12 @@ export const figurenAlterMethods = {
     // Optionen wie in der Figurenliste (figurenKapitelOptionen) — wirksam nur ein
     // angebotener Wert, sonst stuende eine leere Tabelle unter «Alle Kapitel».
     const kapitelId = activeFilterId(f?.kapitelId, this.figurenKapitelOptionen());
-    return this._memo('alterRows', [figuren, data, suche, typ, nur, kapitelId], () => {
+    const st = this.figurenAlterStichtag;
+    const stJahr = st?.jahr ?? null, stMonat = st?.monat ?? '';
+    return this._memo('alterRows', [figuren, data, suche, typ, nur, kapitelId, stJahr, stMonat], () => {
       const ages = new Map((data?.figuren || []).map(r => [r.fig_id, r]));
-      return computeAlterRows(figuren, ages, { suche, typ, nur, kapitelId });
+      const stichtag = stichtagAus(stJahr, stMonat);
+      return computeAlterRows(figuren, ages, { suche, typ, nur, kapitelId, stichtag, geburten: data?.geburten || null });
     });
   },
 
@@ -202,8 +238,90 @@ export const figurenAlterMethods = {
       total: rows.length,
       mitAlter: rows.filter(r => r.hatAlter).length,
       mitBeleg: rows.filter(r => r.belege.length).length,
-      widerspruch: rows.filter(r => r.widerspruch).length,
+      widerspruch: rows.filter(r => r.widerspruch || r.geburt?.widerspruch).length,
     }));
+  },
+
+  // ── Stichtag ──────────────────────────────────────────────────────────────
+  figurenAlterStichtagAktiv() {
+    return !!stichtagAus(this.figurenAlterStichtag?.jahr ?? null, this.figurenAlterStichtag?.monat);
+  },
+
+  // Monatsnamen in der UI-Sprache; Mitte des Monats, damit keine Zeitzone den
+  // Monat kippt.
+  figurenAlterMonatOptionen() {
+    const loc = Alpine.store('shell').uiLocale;
+    return this._memo('alterMonate', [loc], () => {
+      const fmt = dateTimeFormat(loc, { month: 'long' });
+      return Array.from({ length: 12 }, (_, i) => ({ value: String(i + 1), label: fmt.format(new Date(Date.UTC(2000, i, 15, 12))) }));
+    });
+  },
+
+  figurenAlterStichtagLabel() {
+    const st = stichtagAus(this.figurenAlterStichtag?.jahr ?? null, this.figurenAlterStichtag?.monat);
+    if (!st) return '';
+    if (!st.m) return String(st.y);
+    const name = this.figurenAlterMonatOptionen()[st.m - 1]?.label || String(st.m);
+    return `${name} ${st.y}`;
+  },
+
+  // Spanne bleibt Spanne: ohne Geburts- oder Stichtagsmonat ist offen, ob der
+  // Geburtstag schon war.
+  figurenAlterStichtagWert(row) {
+    const a = row.stichtag_alter;
+    if (!a) return row.geburt ? '' : '–';
+    if (a.vor_geburt) return this._t('figuren.alter.stichtag.vorGeburt');
+    if (a.exakt) return String(a.alter);
+    if (a.alter_von < 0) return this._t('figuren.alter.stichtag.geburtsjahr');
+    return `${a.alter_von}–${a.alter_bis}`;
+  },
+
+  figurenAlterStichtagSchule(row) {
+    const st = stichtagAus(this.figurenAlterStichtag?.jahr ?? null, this.figurenAlterStichtag?.monat);
+    if (!st || !row.geburt || row.stichtag_alter?.vor_geburt) return '';
+    const r = this._figurSchulRechnung({ id: row.id });
+    if (!r.system) return '';
+    const args = { ...r, geburt: r.geburt || row.geburt, jahr: st.y };
+    const stufe = schulStufeFuerEreignis({ ...args, monat: st.m }, (k, p) => this._t(k, p));
+    if (stufe) return stufe;
+    // Ausserhalb der Schulzeit: sagen, auf welcher Seite — «–» laese sich wie
+    // «nicht berechenbar».
+    const pos = st.m ? schoolStageAt({ ...args, monat: st.m }) : schoolStagesForYear(args)?.herbst;
+    if (pos?.status === 'vor_einschulung') return this._t('figuren.schule.vorEinschulung');
+    if (pos?.status === 'abgeschlossen') return this._t('figuren.schule.abgeschlossen', { jahr: pos.abschluss_jahr });
+    return '';
+  },
+
+  // Schulzeit als Zeiträume je Stufe (book/school-path.js#schulZeiten) — dieselbe
+  // Rechnung wie die Klasse am Stichtag und das Chat-Werkzeug. Memoized je Zeile:
+  // das Template liest Liste und Unsicherheit getrennt.
+  figurenAlterSchulzeit(row) {
+    const r = this._figurSchulRechnung({ id: row.id });
+    if (!r.system) return null;
+    const geburt = r.geburt || row.geburt;
+    return this._memo('alterSchulzeit:' + row.id, [r.system, geburt, r.figur?.weg, r.figur?.einschulung_jahr, r.figur?.repetitionen, Alpine.store('shell').uiLocale], () => {
+      const z = schulZeiten({ ...r, geburt });
+      if (!z) return null;
+      return {
+        stufen: z.stufen.map(st => ({ label: this._t(stufeLabelKey(st.stufe)), zeit: `${st.von}–${st.bis}` })),
+        tip: z.unsicher ? this._t('figuren.alter.schulzeitUnsicher', { a: z.einschulung, b: z.einschulung_alternative }) : '',
+      };
+    });
+  },
+
+  // Geburtsjahre aus mehreren Quellen, die sich widersprechen — gerechnet wird mit
+  // der ersten (Steckbrief › Geburts-Ereignis › Alters-Index, lib/figure-birth.js).
+  figurenAlterGeburtWiderspruchTip(row) {
+    const w = row.geburt?.widerspruch;
+    if (!w?.length) return '';
+    const liste = w.map(x => `${this._t('figuren.alter.geburtQuelle.' + x.quelle)} ${x.jahr}`).join(', ');
+    return this._t('figuren.alter.geburtWiderspruchTip', { liste });
+  },
+
+  figurenAlterSpalten() {
+    const schule = this.figurSchulSystem() ? 1 : 0;
+    // Stichtag: Alter + Tätigkeit (Berufsweg/Hobbys), mit Schulsystem dazu die Klasse.
+    return 8 + schule + (this.figurenAlterStichtagAktiv() ? 2 + schule : 0);
   },
 
   // ── Anzeige-Helfer ────────────────────────────────────────────────────────

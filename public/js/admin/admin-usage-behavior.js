@@ -134,6 +134,16 @@ export const adminUsageBehaviorMethods = {
     })));
   },
 
+  // Abschnitts-Revisionen: Viewer, Vergleich, Wiederherstellen nach Alter, Anheften.
+  // Feste Reihenfolge der Kennzahlen (Server), darum ohne Sortierung.
+  adminUsageBehaviorRevisions() {
+    const b = this.adminUsageBehavior;
+    const t = window.__app.t.bind(window.__app);
+    return _derive(b, 'revisions', () => (b.revisions || []).map(r => ({
+      ...r, label: t(`admin.usage.behavior.revision.${r.key}`),
+    })));
+  },
+
   // Leseaktivitaet je Person (kumuliert, nicht periodisch).
   adminUsageBehaviorReading() {
     return this.adminUsageBehavior?.reading?.perUser || [];

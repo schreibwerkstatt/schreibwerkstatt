@@ -69,6 +69,25 @@ export function ideenProposalStatus(p, proposals, ideen, stages = null) {
     out.stale = Object.keys(b).some(k => (idee[k] ?? null) !== (b[k] ?? null));
     return out;
   }
+  if (p.type === 'idee_merge') {
+    const keep = _find(ideen, p.idee_id);
+    if (!keep) { out.blocked = { key: 'ideenBoard.chat.block.ideeGone' }; return out; }
+    const sources = (p.merge_ids || []).map(id => _find(ideen, id));
+    if (sources.some(s => !s)) { out.blocked = { key: 'ideenBoard.chat.block.mergeGone' }; return out; }
+    if (!IDEE_OPEN_STATUSES.includes(keep.status) && sources.some(s => IDEE_OPEN_STATUSES.includes(s.status))) {
+      out.blocked = { key: 'ideenBoard.chat.block.mergeClosed' };
+      return out;
+    }
+    // Die aufgehenden Ideen werden gelöscht: wurde eine seit dem Vorschlag
+    // geändert, ginge der neue Text verloren — neu vorschlagen lassen statt still löschen.
+    const srcBefore = p.before?.sources;
+    if (srcBefore && sources.some(s => (s.content ?? null) !== (srcBefore[s.id] ?? null))) {
+      out.blocked = { key: 'ideenBoard.chat.block.mergeSourceChanged' };
+      return out;
+    }
+    out.stale = (keep.content ?? null) !== (p.before?.content ?? null);
+    return out;
+  }
   if (p.type === 'link_create') {
     let ideeId = p.idee_id;
     if (p.idee_ref) {
@@ -93,6 +112,12 @@ export function ideenProposalStatus(p, proposals, ideen, stages = null) {
  * → [{ key, before, after, diff? }]  diff = markierte Wort-Diff-Teile (diff/diff-parts.js) für den Text
  */
 export function ideeUpdateRows(p) {
+  if (p?.type === 'idee_merge') {
+    if (!('content' in (p.fields || {}))) return [];
+    const before = String(p.before?.content || '');
+    const after = String(p.fields.content || '');
+    return [{ key: 'content', before, after, diff: diffParts(before, after) }];
+  }
   if (p?.type !== 'idee_update') return [];
   const f = p.fields || {};
   const b = p.before || {};
@@ -151,9 +176,17 @@ export const ideenProposalMethods = {
       // vor dem Übernehmen gegen den aktuellen Abschnitt prüfen (Server, gleiche
       // Normalisierung wie beim Vorschlagen). Fehlt er, nur nach Rückfrage.
       if (!p._written && !(await this._confirmIdeenBeleg(msg, pi, p))) return;
+      // Zusammenführen löscht die aufgehenden Ideen — einmal ausdrücklich bestätigen.
+      if (!p._written && p.type === 'idee_merge' && !(await app.appConfirm({
+        message: app.tn('ideenBoard.chat.mergeConfirm', (p.merge_ids || []).length),
+        confirmLabel: app.t('ideenBoard.chat.mergeConfirmLabel'),
+        danger: true,
+      }))) return;
       this.busy = true;
+      let writtenId = null;
       const r = await applyProposalOnce('/ideen/chat-proposal', msg, pi, async () => {
         const id = await this._applyIdeenProposalByType(p, list);
+        writtenId = id;
         this.busy = false;
         this.errorMessage = '';
         this._memos = {};
@@ -161,7 +194,15 @@ export const ideenProposalMethods = {
         await this._ensureBoardSortables();
         return id;
       });
-      if (r.ok) { trackChatProposal('ideen', 'applied', p.type); return; }
+      // Neue oder umgehängte Idee sofort im Board zeigen — auch wenn ein Filter
+      // oder eine eingeklappte Bahn sie verdecken würde. Gilt, sobald das Board
+      // geschrieben ist, auch wenn danach nur der Status-PATCH scheitert.
+      const f = p.fields || {};
+      if (writtenId != null && (p.type === 'idee_create' || (p.type === 'idee_update' && ('page_id' in f || 'chapter_id' in f)))) {
+        await this.revealIdee(writtenId);
+      }
+      if (r.ok) { if (!r.already) trackChatProposal('ideen', 'applied', p.type); return; }
+      if (r.phase === 'cancelled') return;
       if (r.phase === 'write') p._error = r.error?.body ? tFetchError(r.error) : app.t('ideenBoard.chat.applyError');
       // Das Board ist geändert, nur der Status fehlt — der nächste Klick holt nur
       // den Status nach.
@@ -177,7 +218,8 @@ export const ideenProposalMethods = {
   // und fragt nach. Ein Prüf-Fehler (offline, Server) bricht ab, statt
   // ungeprüft zu übernehmen.
   async _confirmIdeenBeleg(msg, pi, p) {
-    if (p.type !== 'idee_update' || p.fields?.status !== 'erledigt' || !p.beleg?.text) return true;
+    // Gilt für jeden Beleg — «erledigt» wie «verworfen» stützen sich auf eine Textstelle.
+    if (p.type !== 'idee_update' || !p.beleg?.text) return true;
     const app = window.__app;
     let r;
     try {
@@ -190,7 +232,9 @@ export const ideenProposalMethods = {
     }
     p._belegMissing = r?.checked === true && r.found === false;
     if (!p._belegMissing) return true;
-    return !!(await app.appConfirm({ message: app.t('ideenBoard.chat.belegGoneConfirm') }));
+    return !!(await app.appConfirm({
+      message: app.t('ideenBoard.chat.belegGoneConfirm', { status: this.statusLabel(p.fields?.status || 'erledigt') }),
+    }));
   },
 
   async discardIdeenProposal(msg, pi, discard = true) {
@@ -228,6 +272,17 @@ export const ideenProposalMethods = {
       for (const k of ['content', 'status', 'page_id', 'chapter_id']) if (k in f) body[k] = f[k];
       const row = await fetchJson(`/ideen/${p.idee_id}`, { method: 'PATCH', headers: JSON_HEADERS, body: JSON.stringify(body) });
       this._replaceIdee(row);
+      return p.idee_id;
+    }
+    if (p.type === 'idee_merge') {
+      const f = p.fields || {};
+      const r = await fetchJson(`/ideen/${p.idee_id}/merge`, {
+        method: 'POST', headers: JSON_HEADERS,
+        body: JSON.stringify({ source_ids: p.merge_ids, ...('content' in f ? { content: f.content } : {}) }),
+      });
+      const removed = new Set(r.removed_ids || []);
+      this.ideen = (this.ideen || []).filter(i => !removed.has(i.id));
+      this._replaceIdee(r.idee);
       return p.idee_id;
     }
     if (p.type === 'link_create') {

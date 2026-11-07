@@ -5,17 +5,20 @@
      die Zeitspanne und das Delta der ganzen Sitzung und klappt die weiteren
      Saves auf. Das Gerät steht nur, wenn die Liste mehr als eines kennt. Unterzeilen
      lassen Quelle, Gerät und Person weg — sie sind in
-     einer Sitzung per Definition dieselben wie an der Kopfzeile. -->
+     einer Sitzung per Definition dieselben wie an der Kopfzeile.
+     Öffnen: die Uhrzeit ist der Knopf (Tastatur, Screenreader). Die Fläche
+     der Zeile ist nur Maus-Abkürzung ohne Rolle — ein role=button mit Knöpfen
+     darin läse der Screenreader als einen einzigen Knopf. Darum stoppen die
+     Knöpfe in der Zeile ihren Klick. -->
 <div class="history-item history-item--clickable page-revisions-row"
      :class="{ 'page-revisions-row--child': row.child, 'page-revisions-row--pinned': row.rev.pinned, 'page-revisions-row--session': row.size > 1 }"
-     role="button"
-     tabindex="0"
-     @click="openViewer(row.rev)"
-     @keydown.enter.prevent="openViewer(row.rev)"
-     @keydown.space.prevent="openViewer(row.rev)"
-     :data-tip="$app.t('editor.revisions.viewer.openTitle')">
-  <span class="history-date page-revisions-row__time"
-        x-text="row.group === null ? $app.formatDate(row.rev.created_at) : rowTime(row)"></span>
+     @click="openViewer(row.rev)">
+  <button type="button"
+          class="history-date page-revisions-row__time page-revisions-row__open"
+          @click.stop="openViewer(row.rev)"
+          :aria-label="$app.t('editor.revisions.viewer.openLabel', { when: $app.formatDate(row.rev.created_at) })"
+          :data-tip="$app.t('editor.revisions.viewer.openTitle')"
+          x-text="row.group === null ? $app.formatDate(row.rev.created_at) : rowTime(row)"></button>
   <span class="page-revisions-label" x-show="row.rev.pinned && row.rev.label" x-text="row.rev.label"></span>
   <span class="page-revisions-row__source" x-show="!row.child" x-text="sourceLabel(row.rev.source)"></span>
   <span class="page-revisions-row__client" x-show="row.rev.client && !row.child && hasClientChoice()"
@@ -24,7 +27,6 @@
   <template x-if="row.size > 1">
     <button type="button" class="page-revisions-group-toggle"
             @click.stop="toggleGroup(row.group)"
-            @keydown.enter.stop @keydown.space.stop
             :aria-expanded="row.open"
             :data-tip="$app.t(row.open ? 'editor.revisions.group.collapse' : 'editor.revisions.group.expand')">
       <span class="history-chevron" :class="{ open: row.open }" aria-hidden="true"></span>
@@ -33,7 +35,7 @@
   </template>
   <span class="tag page-revisions-summary" x-show="summaryLabel(row.rev)" x-text="summaryLabel(row.rev)"></span>
   <template x-if="splitLink(row.rev)">
-    <span class="revision-split" @keydown.enter.stop @keydown.space.stop>
+    <span class="revision-split" @click.stop>
       <span class="revision-split__dir" x-text="$app.t('editor.revisions.split.' + splitLink(row.rev).dir)"></span>
       <button type="button" class="entity-ref" x-entity-ref="{ type: 'seite', id: splitLink(row.rev).pageId }"></button>
     </span>
@@ -63,7 +65,6 @@
             x-show="canWrite() || row.rev.pinned"
             :class="{ 'is-active': row.rev.pinned }"
             @click.stop="canWrite() && togglePin(row.rev)"
-            @keydown.enter.stop @keydown.space.stop
             :disabled="!canWrite() || pinningId === row.rev.id"
             :aria-pressed="!!row.rev.pinned"
             :aria-label="$app.t(row.rev.pinned ? 'editor.revisions.unpin' : 'editor.revisions.pin')"
@@ -74,7 +75,6 @@
             class="btn-toggle-saved btn-toggle-saved--off"
             x-show="canWrite()"
             @click.stop="restore(row.rev)"
-            @keydown.enter.stop @keydown.space.stop
             :disabled="!canRestore() || restoringId === row.rev.id"
             :data-tip="restoreTip($app.t('editor.revisions.restoreTitle'))"
             x-text="restoringId === row.rev.id ? $app.t('editor.revisions.restoring') : $app.t('editor.revisions.restore')"></button>
@@ -82,7 +82,6 @@
             class="btn-toggle-saved btn-toggle-saved--off"
             x-show="canWrite() && hasPrevRevFor(row.rev)"
             @click.stop="restorePrevious(row.rev)"
-            @keydown.enter.stop @keydown.space.stop
             :disabled="!canRestore() || restoringId !== null"
             :data-tip="restorePrevTip(row.rev)"
             x-text="$app.t('editor.revisions.restorePrev')"></button>

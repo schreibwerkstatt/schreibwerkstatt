@@ -71,6 +71,12 @@ test('Beziehungsprüfung: Fall Adrian/Peter/Gisela/Stefan', () => {
   const two = r.conflicts.find(c => c.rule === 'maxParents');
   assert.deepEqual([...two.figures].sort(), ['Adrian', 'Gisela', 'Peter', 'Stefan']);
   assert.ok(two.sources.includes('relation:5079') && two.sources.includes('relation:5170'), 'Quellen mit Beziehungs-ID');
+  // Lesbare Quellen für die Konfliktliste: Namen und Typ statt IDs.
+  assert.ok(two.refs.some(x => x.kind === 'relation' && x.from === 'Stefan' && x.to === 'Adrian' && x.typ === 'elternteil'));
+  assert.ok(two.refs.some(x => x.kind === 'relation' && x.from === 'Gisela' && x.to === 'Adrian' && x.typ === 'ehepartner'));
+  assert.equal(two.refs.length, two.sources.length);
+  const ev = r.conflicts.find(c => c.sources.includes('event:2243'));
+  assert.deepEqual(ev.refs.find(x => x.kind === 'event'), { kind: 'event', fig: 'Adrian', title: 'Stefan beichtet Adrian die Beziehung zu Renate' });
   assert.ok(two.main, 'Stefan ist Hauptfigur');
   assert.ok(r.conflicts.some(c => c.rule === 'textContradiction' && c.sources.includes('event:2243')), 'Ereignis nennt den Bruder');
   assert.ok(r.conflicts.some(c => c.rule === 'textContradiction' && c.sources.includes('relation:5097')), 'Schwager ≠ Schwiegervater');
@@ -118,6 +124,21 @@ test('Beziehungsprüfung: Ereigniswort belastet nur Figuren mit passendem Geschl
   assert.ok(tc, 'Widerspruch zu Adrian gemeldet');
   assert.ok(!r.pairs.has('fig_1|fig_2'), 'Ehe Stefan–Renate bleibt');
   assert.ok(r.pairs.has('fig_1|fig_33'));
+});
+
+test('Beziehungsprüfung: Schulfreunde mit weit auseinanderliegenden Jahrgängen (peerAgeGap)', () => {
+  const F = (id, name, geburtstag) => ({ fig_id: id, pk: Number(id.slice(2)), name, geschlecht: 'männlich', geburtstag });
+  const figs = [F('f_1', 'Fabio', '1986'), F('f_2', 'Thomas', '1964'), F('f_3', 'Reto', '1985'), F('f_4', 'Ernst', '1950')];
+  const R = (from, to, beschreibung) => ({ from_fig_id: from, to_fig_id: to, typ: 'freund', beschreibung });
+  const r = checkRelations(relCtx(figs, [
+    R('f_1', 'f_2', 'Schulwegfreund seit der ersten Klasse, der sich später der Metal-Szene zuwendet.'),
+    R('f_1', 'f_3', 'Freund aus der Dreier-Clique.'),
+    R('f_1', 'f_4', 'Väterlicher Freund, der ihm Ratschläge gibt.'),
+  ], new Map()));
+  const hits = r.conflicts.filter(c => c.rule === 'peerAgeGap');
+  assert.equal(hits.length, 1, 'nur Thomas: Reto ist gleich alt, Ernst ohne Gleichaltrigen-Wort');
+  assert.deepEqual([...hits[0].figures].sort(), ['Fabio', 'Thomas']);
+  assert.ok(r.pairs.has('f_1|f_2'), 'Paar fällt aus den Fakten-Aufgaben');
 });
 
 test('Beziehungsprüfung: fremder Name nur als ganzer Name, nicht als Namensteil einer Rollenfigur', () => {
@@ -403,4 +424,31 @@ test('KI-Fragevarianten: alle Namen der Vorlage, keine fremden', () => {
   assert.ok(keepsQuestion('Mit wem ist Stefan verheiratet?', 'Wer ist Stefans Ehefrau?', names));
   assert.ok(!keepsQuestion('Wer ist Giselas Schwiegertochter?', 'Wer ist Stefans Ehefrau?', names), 'Name fehlt, fremder Name');
   assert.ok(!keepsQuestion('Stefan', 'Wer ist Stefans Ehefrau?', names), 'zu kurz');
+});
+
+test('Beziehungsprüfung: foreignTarget — Text nennt eine Figur ohne Kante zur Ausgangsfigur', () => {
+  const F = (id, name, g, kurzname) => ({ fig_id: id, pk: Number(id.slice(2)), name, kurzname, geschlecht: g });
+  const R = (from, to, typ, beschreibung) => ({ from_fig_id: from, to_fig_id: to, typ, beschreibung });
+  const figs = [
+    F('f_1', 'Ernst', 'männlich'), F('f_2', 'Peter', 'männlich'), F('f_3', 'Sarahs Mutter', 'weiblich'),
+    F('f_4', 'Samuel', 'männlich'), F('f_5', 'Alte Frau an der Ziegelfeldstrasse', 'weiblich'),
+    F('f_6', 'Nervenarzt an der Musterung in Brugg', 'männlich'),
+    F('f_7', 'Judith', 'weiblich'), F('f_8', 'Frank', 'männlich'),
+    F('f_9', 'Stefan', 'männlich'), F('f_10', 'Oliver', 'männlich'),
+    F('f_11', 'Prostituierte von der Haslistrasse', 'weiblich', 'Prostituierte'),
+    F('f_12', 'Sandra', 'weiblich'), F('f_13', 'Renate', 'weiblich'), F('f_14', 'Manuel', 'männlich'),
+  ];
+  const run = (rels) => checkRelations(relCtx(figs, rels, new Map())).conflicts.filter(c => c.rule === 'foreignTarget');
+  // Prod-Fälle: ganzer Name einer Figur ohne Kante, Kopfwort einer Rollenfigur mit Artikel.
+  assert.equal(run([R('f_1', 'f_2', 'bekannt', 'Er kennt Sarahs Mutter aus dem Wahlbüro.')]).length, 1);
+  assert.equal(run([R('f_4', 'f_5', 'andere', 'Der Nervenarzt erklärt ihn für militäruntauglich.')]).length, 1);
+  // Kleingeschriebenes Wort ist kein Name, Gattungswort ohne Artikel keine Rollenfigur,
+  // Genitiv nennt das Ziel.
+  assert.equal(run([R('f_7', 'f_8', 'liebesbeziehung', 'Ihr Liebhaber, den sie nicht ernst nimmt.'),
+    R('f_7', 'f_1', 'bekannt', 'Ein Nachbar.')]).length, 0);
+  assert.equal(run([R('f_9', 'f_10', 'freund', 'Gemeinsam saufen sie und besuchen Prostituierte.')]).length, 0);
+  assert.equal(run([R('f_12', 'f_13', 'bekannt', 'Sie begleitet die Geburt von Renates Sohn Manuel.')]).length, 0);
+  // Besteht eine Kante zur genannten Figur, ist das kein verrutschtes Ziel.
+  assert.equal(run([R('f_1', 'f_2', 'bekannt', 'Er kennt Sarahs Mutter aus dem Wahlbüro.'),
+    R('f_1', 'f_3', 'bekannt', 'Aus dem Wahlbüro.')]).length, 0);
 });

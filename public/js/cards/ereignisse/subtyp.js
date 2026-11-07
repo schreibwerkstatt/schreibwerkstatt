@@ -25,6 +25,12 @@ export const SUBTYP_ICON = {
   entdeckung:        'compass',
   verlust:           'heart-crack',
   sieg:              'trophy',
+  ausbildung:        'graduation-cap',
+  abschluss:         'award',
+  stellenantritt:    'briefcase',
+  berufswechsel:     'arrow-right-left',
+  jobverlust:        'user-x',
+  pensionierung:     'armchair',
   extern_politisch:  'landmark',
   extern_wirtschaftlich: 'banknote',
   extern_natur:      'mountain',
@@ -51,10 +57,11 @@ export function bandMarkerColor(subtyp, extern) {
 // Instantane Subtypen (Momente, kein Zeitraum): bekommen nie einen Span-Balken,
 // auch wenn die Daten ein Ende-Jahr tragen (z.B. Geburt mit Ende = „Jetzt" der
 // Geschichte → sonst 50-Jahre-Spanne statt Punkt). Dauer-faehige Subtypen
-// (liebe, krankheit, reise, umzug, konflikt, extern_*) bleiben Spannen.
+// (liebe, krankheit, reise, umzug, konflikt, ausbildung, extern_*) bleiben Spannen.
 export const POINT_SUBTYPES = new Set([
   'geburt', 'tod', 'hochzeit', 'trennung',
   'wendepunkt', 'entdeckung', 'sieg', 'verlust',
+  'abschluss', 'stellenantritt', 'berufswechsel', 'jobverlust', 'pensionierung',
 ]);
 
 // Spannen-Hoehe eines Listen-Events in Jahren (0 = Punkt-Event). Geclampt, weil

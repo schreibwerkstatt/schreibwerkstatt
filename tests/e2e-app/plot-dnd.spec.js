@@ -51,6 +51,9 @@ test('plot: Beat per SortableJS-Drag umsortieren persistiert', async ({ page }) 
   }, { bookId, actId: ids.actId });
 
   for (let attempt = 0; attempt < 4 && (await persistedLast()) !== ids.b1; attempt++) {
+    // Andere Specs hinterlassen Akte auf demselben Board: die eigene Spalte kann
+    // rechts ausserhalb des Sichtbereichs liegen — ein Drag dorthin trifft nichts.
+    await page.locator(cell).scrollIntoViewIfNeeded();
     const grip = await page.locator(`.card--plot .plot-board .plot-beat[data-beat-id="${ids.b1}"] .plot-beat-grip`).boundingBox();
     const d = await page.locator(`.card--plot .plot-board .plot-beat[data-beat-id="${ids.b3}"]`).boundingBox();
     await page.mouse.move(grip.x + grip.width / 2, grip.y + grip.height / 2);

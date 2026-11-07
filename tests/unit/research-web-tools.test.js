@@ -391,7 +391,8 @@ test('read_web_page: Byte-Budget je Antwort — Rest als Deckel, danach errorKey
   const ctx = mkCtx();
   await executeResearchTool('web_search', { query: 'q' }, ctx);
   await executeResearchTool('read_web_page', { url: 'https://ex.com/1' }, ctx);
-  assert.equal(opts[0].maxBytes, MAX_FETCH_BYTES);
+  // Erster Abruf: höchstens ein Dokument-Deckel (lib/url-scrape#MAX_PDF_BYTES).
+  assert.equal(opts[0].maxBytes, Math.min(MAX_FETCH_BYTES, urlScrape.MAX_PDF_BYTES));
   urlScrape.scrapeUrl = async (u, o) => { opts.push(o); return { title: 'S', text: 'x', finalUrl: u, bytes: 1000 }; };
   await executeResearchTool('read_web_page', { url: 'https://ex.com/2' }, ctx);
   assert.equal(opts[1].maxBytes, 1000, 'zweiter Abruf bekommt nur den Rest');
@@ -460,4 +461,53 @@ test('read_web_page: Archiv-URLs werden je Lauf einmal gelesen (URL-Index)', asy
   assert.ok(![...m2.values()].includes('https://idx.example.org/b'), 'Archiv nur beim ersten Aufruf gelesen');
   ctx.userMessageUrls.push('https://neu.example.org/x');
   assert.ok([...syncUrlIndex(ctx).values()].includes('https://neu.example.org/x'), 'neue Lauf-URLs kommen dazu');
+});
+
+test('web_search parallel: Treffernummern in Aufrufreihenfolge, auch wenn die zweite Suche zuerst antwortet', async () => {
+  const delays = { eins: 30, zwei: 0 };
+  searxng.search = async (q) => {
+    await new Promise(r => setTimeout(r, delays[q]));
+    return { results: q === 'eins' ? [hit(1), hit(2)] : [hit(3)], unresponsive: [] };
+  };
+  const ctx = mkCtx();
+  const [a, b] = await Promise.all([
+    executeResearchTool('web_search', { query: 'eins' }, ctx),
+    executeResearchTool('web_search', { query: 'zwei' }, ctx),
+  ]);
+  assert.deepEqual(a.treffer.map(t => t.nr), [1, 2]);
+  assert.deepEqual(b.treffer.map(t => t.nr), [3]);
+  assert.deepEqual(ctx.web.results.map(r => r.url), ['https://ex.com/1', 'https://ex.com/2', 'https://ex.com/3']);
+});
+
+test('web_search parallel: eine gescheiterte Suche hält die Reihenfolge der übrigen nicht auf', async () => {
+  searxng.search = async (q) => {
+    if (q === 'kaputt') { await new Promise(r => setTimeout(r, 10)); throw new Error('down'); }
+    await new Promise(r => setTimeout(r, q === 'eins' ? 20 : 0));
+    return { results: q === 'eins' ? [hit(1)] : [hit(2)], unresponsive: [] };
+  };
+  const ctx = mkCtx();
+  const [a, x, b] = await Promise.all([
+    executeResearchTool('web_search', { query: 'eins' }, ctx),
+    executeResearchTool('web_search', { query: 'kaputt' }, ctx),
+    executeResearchTool('web_search', { query: 'zwei' }, ctx),
+  ]);
+  assert.ok(x.error);
+  assert.deepEqual([a.treffer[0].nr, b.treffer[0].nr], [1, 2]);
+});
+
+test('read_web_page parallel: gleichzeitige Abrufe teilen das Byte-Budget statt es je ganz zu sehen', async () => {
+  const { MAX_FETCH_BYTES } = require('../../routes/jobs/research-web-tools');
+  const opts = [];
+  urlScrape.scrapeUrl = async (u, o) => {
+    opts.push(o);
+    await new Promise(r => setTimeout(r, 5));
+    return { title: 'S', text: 'x', finalUrl: u, bytes: 10 };
+  };
+  stubSearch([[hit(1), hit(2), hit(3)]]);
+  const ctx = mkCtx();
+  await executeResearchTool('web_search', { query: 'q' }, ctx);
+  await Promise.all([1, 2, 3].map(n => executeResearchTool('read_web_page', { url: `https://ex.com/${n}` }, ctx)));
+  const total = opts.reduce((a, o) => a + o.maxBytes, 0);
+  assert.ok(total <= MAX_FETCH_BYTES, `Summe der Deckel ${total} > Budget ${MAX_FETCH_BYTES}`);
+  assert.equal(ctx.web.bytesReserved, 0, 'Reservierung nach den Abrufen wieder frei');
 });

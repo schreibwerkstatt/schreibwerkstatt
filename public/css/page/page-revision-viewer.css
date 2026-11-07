@@ -78,6 +78,9 @@ html:has(.revision-viewer[open]) {
 }
 .revision-viewer__close:hover { background: var(--color-hover); }
 
+/* Wrapper der tabs-Komponente (Tab-Leiste + Body): keine eigene Box, damit
+   Leiste und Body direkte Flex-Kinder des Dialogs bleiben. */
+.revision-viewer__tabset { display: contents; }
 .revision-viewer__tabs {
   display: flex;
   gap: 0.25rem;
@@ -98,7 +101,7 @@ html:has(.revision-viewer[open]) {
   margin-bottom: calc(-1 * var(--space-1));
 }
 .revision-viewer__tab:hover { color: var(--color-text); }
-.revision-viewer__tab.is-active {
+.revision-viewer__tab.tabs-btn--active {
   color: var(--color-text);
   border-color: var(--color-border);
   background: var(--color-card-bg);
@@ -133,6 +136,8 @@ html:has(.revision-viewer[open]) {
   overflow: auto;
   padding: 1rem 1.25rem;
   min-height: 0;
+  /* Deckend: sonst kein Compositor-Scroll bei Pixeldichte 1 (siehe entities/recherche/dialog.css). */
+  background: var(--color-card-bg);
 }
 .revision-viewer__hint {
   color: var(--color-muted);

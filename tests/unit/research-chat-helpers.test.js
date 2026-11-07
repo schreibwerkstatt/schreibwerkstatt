@@ -17,7 +17,7 @@ process.env.SESSION_SECRET = process.env.SESSION_SECRET || 'test-secret';
 require('../../db/migrations');
 const { db } = require('../../db/schema');
 const {
-  toolsForRound, validateAnswerSources, proposalsOnlyFallback, sessionProposalMemory,
+  toolsForRound, validateAnswerSources, proposalsOnlyFallback, sessionProposalMemory, sessionPriorSources,
 } = require('../../routes/jobs/research-chat-helpers');
 const { researchChatGate } = require('../../lib/research-chat-gate');
 const appSettings = require('../../lib/app-settings');
@@ -330,4 +330,33 @@ test('markProposalUrls: verified nur für in diesem Lauf abgerufene/gelieferte U
   const other = [{ urls: [{ url: 'https://archiv.example/a' }] }];
   markProposalUrls(other, { bookId: 99999 });
   assert.equal(other[0].urls[0].verified, false);
+});
+
+test('sessionProposalMemory mit Buch: gelöschte gespeicherte Einträge erscheinen nicht mehr als gespeichert', () => {
+  const sid = db.prepare(
+    "INSERT INTO chat_sessions (book_id, kind, user_email, created_at, last_message_at) VALUES (?, 'research', ?, ?, ?)"
+  ).run(BOOK_ID, USER, NOW, NOW).lastInsertRowid;
+  const alive = createItem({ bookId: BOOK_ID, userEmail: USER, kind: 'note', title: 'Lebt', body: 'x', urls: [] });
+  db.prepare(
+    "INSERT INTO chat_messages (session_id, role, content, context_info, created_at) VALUES (?, 'assistant', 'x', ?, ?)"
+  ).run(sid, JSON.stringify({ proposals: [
+    { kind: 'note', title: 'Gespeichert', saved_item_id: alive },
+    { kind: 'note', title: 'Gelöscht', saved_item_id: 999999 },
+  ] }), NOW);
+  const mem = sessionProposalMemory(sid, 30, BOOK_ID);
+  assert.equal(mem[0].saved_item_id, alive);
+  assert.equal(mem[1].saved_item_id, null);
+});
+
+test('sessionPriorSources: geprüfte Quellen der jüngsten Antworten, dedupliziert, neueste zuerst', () => {
+  const sid = db.prepare(
+    "INSERT INTO chat_sessions (book_id, kind, user_email, created_at, last_message_at) VALUES (?, 'research', ?, ?, ?)"
+  ).run(BOOK_ID, USER, NOW, NOW).lastInsertRowid;
+  const ins = db.prepare(
+    "INSERT INTO chat_messages (session_id, role, content, context_info, created_at) VALUES (?, 'assistant', 'x', ?, ?)"
+  );
+  ins.run(sid, JSON.stringify({ mode: 'research', answer_sources: [{ url: 'https://alt.example/a', title: 'Alt' }] }), '2026-01-01T00:00:01.000Z');
+  ins.run(sid, JSON.stringify({ mode: 'research', answer_sources: [{ url: 'https://neu.example/b', title: 'Neu' }, { url: 'https://alt.example/a', title: 'Alt' }] }), '2026-01-01T00:00:02.000Z');
+  assert.deepEqual(sessionPriorSources(sid).map(s => s.url), ['https://neu.example/b', 'https://alt.example/a']);
+  assert.deepEqual(sessionPriorSources(sid, { answers: 1 }).map(s => s.url), ['https://neu.example/b', 'https://alt.example/a']);
 });

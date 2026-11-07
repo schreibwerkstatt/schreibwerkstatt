@@ -30,6 +30,7 @@ import { ttsProofMethods } from './editor/notebook/tts-proof.js';
 import { synonymMethods } from './editor/synonyme.js';
 import { figurLookupMethods } from './editor/figur-lookup.js';
 import { shortcutsMethods } from './editor/shortcuts.js';
+import { asideHotkeyMethods } from './editor/aside-hotkeys.js';
 import { featuresUsageMethods } from './features-usage.js';
 import { initialLektoratState } from './app/app-state.js';
 import { appUiMethods } from './app/app-ui.js';
@@ -309,6 +310,7 @@ document.addEventListener('alpine:init', () => {
     ...synonymMethods,
     ...figurLookupMethods,
     ...shortcutsMethods,
+    ...asideHotkeyMethods,
     ...appUiMethods,
     ...appChromeMethods,
     ...appKomplettMethods,

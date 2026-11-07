@@ -108,6 +108,7 @@ export function registerBookEditorCard() {
     _autosave: null,          // createAutosaveTimers, Key = pageId
     _savedFlash: null,        // createTimerBag, nullt savedAt nach SAVED_FLASH_MS
     _queueRun: null,          // Promise des laufenden Queue-Durchlaufs
+    _findResume: null,        // Find-Position über ein Neuladen (find.js#_captureFindResume)
     _loadToken: 0,            // Re-Entry-Guard gegen überholende _load-Responses
     _pendingMousedown: null,
     _findRecomputeTimer: null,
@@ -298,7 +299,9 @@ export function registerBookEditorCard() {
       this._historyDropAll();
       this._teardownDiagramObserver();
       this._memos = {};
-      // Treffer zeigen auf die alten Block-Knoten — nach dem Neuaufbau neu suchen.
+      // Treffer zeigen auf die alten Block-Knoten — nach dem Neuaufbau neu
+      // suchen und beim gemerkten Treffer weitermachen.
+      this._captureFindResume();
       this.findMatches = [];
       this.findIndex = -1;
       this._findAnchor = null;
@@ -321,7 +324,7 @@ export function registerBookEditorCard() {
         this.$nextTick(() => {
           this._initOutlineObserver();
           window.__app?._bindScrollFade?.(this.$root.querySelector('.book-editor-outline'));
-          if (this.findOpen) this.recomputeFindMatches();
+          if (this.findOpen) this._resumeFind();
         });
         // Verankerte Leser-Kommentare des Buchs laden + über den Stream auflösen.
         this._loadBookComments();

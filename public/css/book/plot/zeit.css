@@ -55,6 +55,13 @@
     color: var(--color-muted);
   }
 
+  /* Warum der Vorschlag unsicher ist (andere Szene, ausserhalb Akt) — eigene Zeile. */
+  .plot-zeit-vorschlag-warn {
+    flex-basis: 100%;
+    margin: 0;
+    color: var(--color-mittel-text);
+  }
+
   /* Belege eines Zeitvorschlags (Beat-Edit + Durchsicht): Datum — Ereignis. */
   .plot-zeit-belege {
     flex-basis: 100%;

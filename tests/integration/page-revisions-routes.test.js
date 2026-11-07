@@ -56,6 +56,11 @@ const revRows = () => db.prepare(
   'SELECT id, body_html, source, summary, created_at, pinned, label FROM page_revisions WHERE page_id = ? ORDER BY created_at, id',
 ).all(PAGE);
 
+// Nutzungs-Events (docs/usage-events.md) der Revisions-Routen, aelteste zuerst.
+const usage = (event) => db.prepare(
+  'SELECT meta_json FROM usage_events WHERE event = ? AND user_email = ? ORDER BY rowid',
+).all(event, OWNER).map(r => JSON.parse(r.meta_json || '{}'));
+
 test('erster Save sichert den Ausgangsstand, datiert auf dessen updated_at', async () => {
   assert.equal(revRows().length, 0);
   const r = await api('PUT', `/content/pages/${PAGE}`, { html: '<p>Neuer Text</p>', expected_updated_at: OLD });
@@ -82,6 +87,8 @@ test('Restore schreibt Quelle restore + Summary mit Ursprung', async () => {
   const last = revRows().at(-1);
   assert.equal(last.source, 'restore');
   assert.equal(last.summary, `restored from #${base.id}`);
+  // Nutzungs-Event mit dem Alter der Ziel-Revision (Ausgangsstand von 2025).
+  assert.deepEqual(usage('revision.restore'), [{ ageBucket: 'older' }]);
 });
 
 test('PATCH anheften: editor-Recht, Validierung, Name', async () => {
@@ -101,6 +108,18 @@ test('PATCH anheften: editor-Recht, Validierung, Name', async () => {
   assert.equal(ok.json.revision.pinned, 1);
   assert.equal(ok.json.revision.label, 'Meilenstein');
   assert.equal(ok.json.revision.body_html, undefined);
+
+  // Nutzungs-Events: abgelehnte/ungueltige Anfragen zaehlen nicht; Umbenennen
+  // einer angehefteten Revision ist `rename`, nicht ein zweites Anheften.
+  await api('PATCH', `/content/pages/${PAGE}/revisions/${target.id}`, { pinned: true, label: 'Neu' });
+  await api('PATCH', `/content/pages/${PAGE}/revisions/${target.id}`, { pinned: false });
+  await api('PATCH', `/content/pages/${PAGE}/revisions/${target.id}`, { pinned: true, label: 'Meilenstein' });
+  assert.deepEqual(usage('revision.pin'), [
+    { action: 'pin', named: 'yes' },
+    { action: 'rename', named: 'yes' },
+    { action: 'unpin', named: 'no' },
+    { action: 'pin', named: 'yes' },
+  ]);
 });
 
 test('Liste: pinned nur ohne Cursor, older am Fensterrand', async () => {

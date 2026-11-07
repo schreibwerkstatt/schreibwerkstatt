@@ -152,6 +152,7 @@ function tool_get_figure_relations(input, ctx) {
       typ: r.typ,
       beschreibung: r.beschreibung || null,
       machtverhaltnis: r.machtverhaltnis ?? null,
+      naehe: r.naehe ?? null,
       belege: Array.isArray(belege) ? belege.slice(0, 3) : [],
     };
   });
@@ -240,6 +241,7 @@ function tool_get_figure_profile(input, ctx) {
       to:   { fig_id: r.to_fig_id,   name: r.to_name },
       typ: r.typ, beschreibung: r.beschreibung || null,
       machtverhaltnis: r.machtverhaltnis ?? null,
+      naehe: r.naehe ?? null,
     })),
   });
 }

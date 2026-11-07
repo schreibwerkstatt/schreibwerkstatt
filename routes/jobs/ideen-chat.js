@@ -76,7 +76,8 @@ const ideenChat = makeProposalChatJob({
   stateSummary: (s) => `${s.ideen.length} Ideen, ${s.pages.length} Abschnitte`,
   // Gekürzte Ideenliste: der Rest bleibt über `list_ideen` lesbar — nur in diesem
   // Lauf angeboten (sonst fehlt das Werkzeug bewusst, die Ideen stehen im Vorspann).
-  extraReadTools: (base) => (base.ideen.trimmed ? ['list_ideen'] : []),
+  // Die Ideen stehen im Vorspann; list_ideen nur, wenn die Liste dort gekürzt ist.
+  withholdReadTools: (base) => (base.ideen.trimmed ? [] : ['list_ideen']),
   executeTool: executeIdeenChatTool,
   proposeToolNames: PROPOSE_TOOLS,
   classicFallbackNote: 'nur Ideen/Gliederung',

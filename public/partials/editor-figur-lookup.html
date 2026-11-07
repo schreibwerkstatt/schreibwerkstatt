@@ -19,7 +19,7 @@
               <span x-text="figurLookupGeburt()"></span>
             </div>
             <div x-show="$app.figurJahrLabel(figurLookupData)" class="figur-lookup-row">
-              <span class="figur-lookup-label" x-text="$app.t('figuren.field.jahrAlter')"></span>
+              <span class="figur-lookup-label" x-text="$app.figurJahrFieldLabel(figurLookupData)"></span>
               <span x-text="$app.figurJahrLabel(figurLookupData)"></span>
             </div>
             <div x-show="$app.figurJahrAnchor(figurLookupData)" class="figur-lookup-row figur-lookup-row--anchor">

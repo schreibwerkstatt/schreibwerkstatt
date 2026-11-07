@@ -29,6 +29,9 @@
     </div>
   </template>
 
+  <!-- Waehrend des Speicherns `readonly`, nicht `disabled`: ein deaktiviertes
+       Feld verliert den Fokus, und wer Ideen in Serie anlegt, tippt nach Enter
+       sofort die naechste (book/ideen.js#addIdee). -->
   <div class="ideen-input-row">
     <textarea
       class="ideen-input"
@@ -36,9 +39,10 @@
       :placeholder="$app.ideenScope === 'chapter' ? $app.t('ideen.placeholderChapter') : $app.t('ideen.placeholder')"
       :aria-label="$app.ideenScope === 'chapter' ? $app.t('ideen.placeholderChapter') : $app.t('ideen.placeholder')"
       rows="2"
-      :disabled="busy"
+      :readonly="busy"
       data-spellcheck="spelling"
       @keydown.enter="$enter($event, () => addIdee(), { multiline: true })"
+      @keydown.escape="$app.returnFromAside($event)"
     ></textarea>
     <button type="button"
       class="ideen-add-btn"
@@ -83,7 +87,18 @@
     <!-- Offene Ideen -->
     <template x-if="!loading && offeneIdeen().length > 0">
       <div class="ideen-section">
-        <div class="card-section-title" x-text="$app.t('ideen.sectionOpen')"></div>
+        <!-- Kopf mit «Gegen Text prüfen» (nur Abschnitt): stösst den Auto-Erledigt-Check
+             von Hand an (book/ideen-check.js); Treffer erscheinen als Hinweis an der Idee. -->
+        <div class="card-section-head">
+          <div class="card-section-title" x-text="$app.t('ideen.sectionOpen')"></div>
+          <button type="button" class="btn-compact btn-compact--ghost" x-show="$app.ideenScope === 'page'"
+                  @click="runIdeenCheck()" :disabled="ideenCheckRunning"
+                  :data-tip="$app.t('ideen.check.tip')">
+            <span x-show="ideenCheckRunning" class="spinner"></span>
+            <span x-text="ideenCheckRunning ? $app.t('ideen.check.running') : $app.t('ideen.check.run')"></span>
+          </button>
+        </div>
+        <div x-show="ideenCheckResult" class="card-status" x-text="ideenCheckResult"></div>
         <template x-for="idee in offeneIdeen()" :key="idee.id">
           <div class="idee-item" :class="{'idee-item--moving': movingId === idee.id}" :data-idee-id="idee.id"
                @contextmenu="if (!busy && editingId !== idee.id && movingId !== idee.id) openMenu($event, idee)" x-long-press>
@@ -103,6 +118,7 @@
               <div class="idee-content" :class="movingId === idee.id ? 'idee-content--moving' : ''" x-text="idee.content"></div>
             </template>
             <!-- @include ideen-link-chips -->
+            <!-- @include ideen-check-hint -->
             <template x-if="editingId === idee.id">
               <div class="idee-edit"
                    @keydown="$editKeys($event, { save: () => commitEditIdee(idee), cancel: () => cancelEditIdee() })"

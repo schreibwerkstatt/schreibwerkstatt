@@ -26,9 +26,10 @@
 //   loadContext(session, userEmail, { outlineBudgetChars }) → { state, toolCtx, … }  // beide Pfade
 //   promptParts(base) → Objekt   // chat-eigene Felder für buildSystemPrompt
 //   stateSummary(state) → String // Log-Zeile des agentischen Starts
-//   extraReadTools?(base) → string[]  // Katalog-Lese-Werkzeuge, die NUR in diesem Lauf
-//                                     // zusätzlich angeboten werden (Ideen-Chat: list_ideen,
-//                                     // wenn die Ideenliste gekürzt ist)
+//   withholdReadTools?(base) → string[]  // Lese-Werkzeuge der Tabelle, die DIESER Lauf nicht
+//                                        // anbietet, weil der Vorspann sie überflüssig macht
+//                                        // (list_ideen / get_plot_board, solange Ideenliste
+//                                        // bzw. Board ungekürzt im Vorspann stehen)
 //   executeTool(name, input, ctx), proposeToolNames (Set),
 //   classicFallbackNote          // Log, wenn die Passagen-Suche ausfällt
 // }
@@ -60,7 +61,7 @@ const { prepareChatTools } = require('./chat-tools/select');
 const { maxToolIterFor, agentLimits } = require('./agentic-chat/limits');
 const { getBookSettings } = require('../../db/book-settings');
 const { narrativeLabels } = require('./narrative-labels');
-const { cleanProposalInput } = require('./proposal-chat-shared');
+const { cleanProposalInput, nextProposalSeq } = require('./proposal-chat-shared');
 
 const MAX_ITER_MARKER = '__i18n:chat.errors.maxIterReached__';
 const EMPTY_MARKERS = new Set([MAX_ITER_MARKER, '__i18n:chat.errors.emptyAnswer__']);
@@ -82,28 +83,6 @@ function splitPromptBlocks(blocks) {
 const _chars = (blocks) => blocks.reduce((n, b) => n + (b.text?.length || 0), 0);
 const _msgChars = (msgs) => msgs.reduce((n, m) => n + (typeof m.content === 'string' ? m.content.length : 0), 0);
 
-/**
- * Lese-Werkzeuge aus dem Katalog, die nur in DIESEM Lauf zusätzlich angeboten
- * werden (die Zugriffstabelle kennt keine Bedingung). Gleich gerendert wie der
- * Satz (Querverweise nur auf Angebotenes), vor den Ausgabe-Werkzeugen eingereiht;
- * Namen, die schon angeboten sind oder im Katalog fehlen, fallen weg.
- * → { tools, toolNames, offeredTools }
- */
-function withExtraReadTools({ tools, toolNames, offeredTools }, names, prompts, outputTools = []) {
-  const defs = names
-    .filter(n => !offeredTools.has(n))
-    .map(n => (prompts.CHAT_TOOLS || []).find(t => t.name === n))
-    .filter(Boolean);
-  if (!defs.length) return { tools, toolNames, offeredTools };
-  const rendered = prompts.renderChatTools([...defs, ...tools]).slice(0, defs.length);
-  const outNames = new Set(outputTools.map(t => t.name));
-  const read = tools.filter(t => !outNames.has(t.name));
-  const out = tools.filter(t => outNames.has(t.name));
-  const next = [...read, ...rendered, ...out];
-  const nextNames = next.map(t => t.name);
-  return { tools: next, toolNames: nextNames, offeredTools: new Set(nextNames) };
-}
-
 function makeProposalChatJob(cfg) {
   const { kind, label } = cfg;
   // ctx des laufenden agentischen Jobs je Logger (pro Job eine Instanz): parseFinal
@@ -124,8 +103,11 @@ function makeProposalChatJob(cfg) {
   }
 
   // Vorschlags-Aufrufe beider Pfade durch dieselbe Säuberung (leer = nicht angegeben).
+  // Jeder Vorschlags-Aufruf bekommt seine Aufrufnummer (Bezüge *_ref, proposal-chat-shared.js).
   function runTool(name, input, ctx) {
-    return cfg.executeTool(name, cfg.proposeToolNames.has(name) ? cleanProposalInput(input) : input, ctx);
+    if (!cfg.proposeToolNames.has(name)) return cfg.executeTool(name, input, ctx);
+    nextProposalSeq(ctx);
+    return cfg.executeTool(name, cleanProposalInput(input), ctx);
   }
 
   /**
@@ -137,7 +119,8 @@ function makeProposalChatJob(cfg) {
     let rejected = 0;
     for (const v of Array.isArray(vorschlaege) ? vorschlaege : []) {
       const name = v?.werkzeug;
-      if (!cfg.proposeToolNames.has(name)) { rejected++; continue; }
+      // Auch ein unbrauchbarer Eintrag trägt eine Nummer: das Modell zählt ihn mit.
+      if (!cfg.proposeToolNames.has(name)) { nextProposalSeq(ctx); rejected++; continue; }
       const out = await runTool(name, v, ctx);
       if (out?.error) {
         rejected++;
@@ -259,10 +242,11 @@ function makeProposalChatJob(cfg) {
 
     loadSession: (sessionId, userEmail) => getSessionWithBookName(parseInt(sessionId), userEmail, kind),
 
-    async prepare({ session, userEmail, aiCfg, logger, jobSignal, message, history }) {
+    // `provider`: derselbe, den der Loop für die Calls nutzt — Slim/voll und die
+    // Deckel hängen daran.
+    async prepare({ session, userEmail, provider, aiCfg, logger, jobSignal, message, history }) {
       const p = await getPrompts(userEmail);
       const { buildSystemPrompt, proposeTools, forceFinalInstruction } = cfg.prompts(p);
-      const provider = resolveProvider({ userEmail });
       const maxIter = maxToolIterFor(cfg.maxIterSettingKey, 8, provider, userEmail);
       const limits = agentLimits(maxIter, aiCfg);
       const embOn = embed.isEnabled();
@@ -270,12 +254,11 @@ function makeProposalChatJob(cfg) {
       const base = await cfg.loadContext(session, userEmail, { outlineBudgetChars: outlineBudgetChars(aiCfg) });
       // Werkzeugsatz wie in allen agentischen Chats (chat-tools/select.js): Slim/voll,
       // ohne Werkzeuge ohne Endpunkt oder Daten; Handler-Hinweise folgen ctx.offeredTools.
-      const prepared = prepareChatTools({
+      const { tools, toolNames, offeredTools, toolSet, unavailable } = prepareChatTools({
         chat: kind, prompts: p, provider, userEmail,
         ctx: { ...base.toolCtx, logger }, outputTools: proposeTools,
+        withhold: cfg.withholdReadTools?.(base) || [],
       });
-      const { toolSet, unavailable } = prepared;
-      const { tools, toolNames, offeredTools } = withExtraReadTools(prepared, cfg.extraReadTools?.(base) || [], p, proposeTools);
       // Erst-Kontext wie im agentischen Buch-Chat: die semantisch nächsten Passagen zur
       // Frage (+ letzte Runde) stehen schon in Iteration 1 im Vorspann der Frage — eine
       // Frage, die den Text betrifft, braucht dann oft keine Lese-Runde. Non-fatal;
@@ -314,6 +297,8 @@ function makeProposalChatJob(cfg) {
         roundResultCapChars: limits.roundResultCapChars,
         inputTokenCap: limits.inputTokenCap,
         forceFinalInstruction,
+        // Vorschläge sammeln nur: kein Runden-Deckel, auch im Synthese-Turn erlaubt.
+        collectTools: cfg.proposeToolNames,
         ...(preamble ? { userPreamble: `${preamble}\n\n${QUESTION_HEAD}` } : {}),
         cacheHistory: true,
         ctx,
@@ -345,10 +330,10 @@ function makeProposalChatJob(cfg) {
       return proposalsOnlyFallback(antwort || MAX_ITER_MARKER, ctx?.proposals?.length || 0) || MAX_ITER_MARKER;
     },
 
-    buildContextInfo: ({ toolLog, iter, ctx, stopReason, costUsd }) => ({
+    buildContextInfo: ({ toolLog, rounds, ctx, stopReason, costUsd }) => ({
       mode: kind,
       tool_calls: toolLog,
-      iterations: iter + 1,
+      iterations: rounds,
       ...(stopReason ? { stop_reason: stopReason } : {}),
       ...(costUsd > 0 ? { cost_usd: Math.round(costUsd * 10000) / 10000 } : {}),
       ...(ctx.proposals.length ? { proposals: ctx.proposals } : {}),
@@ -357,8 +342,8 @@ function makeProposalChatJob(cfg) {
 
     buildCompletePayload: ({ base, ctx }) => ({ ...base, proposals: ctx.proposals.length }),
 
-    buildSummary: ({ sessionId, toolLog, iter, ctx }) =>
-      `${label} session=${sessionId}, ${toolLog.length} Tool-Calls, ${iter + 1} Iter, ${ctx.proposals.length} Vorschläge`,
+    buildSummary: ({ sessionId, toolLog, rounds, ctx }) =>
+      `${label} session=${sessionId}, ${toolLog.length} Tool-Calls, ${rounds} Runden, ${ctx.proposals.length} Vorschläge`,
 
     // Endpunkt lehnt Function-Calling erst zur Laufzeit ab → dieselbe Frage klassisch.
     fallbackJob: runClassic,
@@ -378,4 +363,4 @@ function makeProposalChatJob(cfg) {
   return { runAgent, runClassic, runDispatch, usesTools, collectClassicProposals, proposalsOnlyFallback };
 }
 
-module.exports = { makeProposalChatJob, splitPromptBlocks, outlineBudgetChars, withExtraReadTools };
+module.exports = { makeProposalChatJob, splitPromptBlocks, outlineBudgetChars };

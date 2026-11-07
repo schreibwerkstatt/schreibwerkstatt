@@ -34,6 +34,8 @@ const MAX_PAGE_READS = 6;
 // Byte-Budget je Antwort über alle Abrufe (Rohbytes, HTML wie PDF). Jeder Abruf
 // bekommt höchstens den Rest als Deckel (lib/url-scrape#scrapeUrl `maxBytes`).
 const MAX_FETCH_BYTES = 30 * 1024 * 1024;
+// Grösstes einzelne Dokument: so viel reserviert ein Abruf vom Budget, solange er läuft.
+const { MAX_PDF_BYTES: MAX_DOC_BYTES } = require('../../lib/url-scrape');
 const PAGE_TEXT_MAX = 12000;
 // Platz im Tool-Result neben dem Seitentext (Titel, URLs, Hinweise, JSON-Hülle) —
 // Richtwert für den Seitendeckel des Jobs; der Handler misst die Hülle selbst.
@@ -92,7 +94,21 @@ async function tool_web_search(input, ctx) {
   }
   web.searches++;
   web.queries.push(query);
+  // Suchen einer Runde laufen parallel (agentic-chat/run-tools.js#parallelTools).
+  // Die Treffernummer ist die Position in web.results — angehängt wird darum in
+  // Aufrufreihenfolge: jede Suche wartet vor dem Anhängen auf ihre Vorgängerin und
+  // gibt die Nachfolgerin erst frei, wenn auch die Vorgängerin fertig ist.
+  const prev = web.appendTurn || Promise.resolve();
+  let release;
+  web.appendTurn = new Promise((r) => { release = r; });
+  try {
+    return await _searchNumbered(query, web, ctx, prev);
+  } finally {
+    prev.then(release, release);
+  }
+}
 
+async function _searchNumbered(query, web, ctx, prev) {
   let out;
   try {
     out = await searxng.search(query, {
@@ -113,6 +129,7 @@ async function tool_web_search(input, ctx) {
     return { error: `Keine Treffer, und Suchmaschinen sind gerade gesperrt (${out.unresponsive.slice(0, 3).join('; ')}) — ein Ausfall, keine Fehlanzeige. Sag das in der Antwort, statt «nichts gefunden».`, errorKey: 'chat.toolError.serviceUnavailable' };
   }
 
+  await prev;
   const treffer = out.results.map((r) => {
     web.results.push({ url: r.url, title: r.title });
     return {
@@ -170,7 +187,7 @@ async function tool_read_web_page(input, ctx) {
   const knownUrl = _knownUrl(rawUrl, ctx);
   if (!knownUrl) {
     return {
-      error: `URL stammt nicht aus einer bekannten Quelle. Lesbar sind nur Treffer von ${offeredList(ctx, ['web_search', 'lookup_literature'], '/')} dieses Durchgangs, Links im Recherche-Archiv und Links aus der Nachricht des Users.`,
+      error: `URL stammt nicht aus einer bekannten Quelle. Lesbar sind nur Treffer von ${offeredList(ctx, ['web_search', 'lookup_literature'], '/')} dieses Durchgangs, Quellen früherer Antworten dieses Gesprächs, Links im Recherche-Archiv und Links aus der Nachricht des Users.`,
       errorKey: 'chat.toolError.urlNotKnown',
     };
   }
@@ -185,7 +202,9 @@ async function tool_read_web_page(input, ctx) {
       errorKey: 'chat.toolError.pageReadCap', errorParams: { max: MAX_PAGE_READS },
     };
   }
-  const bytesLeft = MAX_FETCH_BYTES - web.bytes;
+  // Laufende Abrufe derselben Runde (parallel, run-tools.js#parallelTools) haben
+  // ihren Anteil schon reserviert — sonst sähe jeder dasselbe Restbudget.
+  const bytesLeft = MAX_FETCH_BYTES - web.bytes - (web.bytesReserved || 0);
   if (!cached && bytesLeft <= 0) {
     return {
       error: `Download-Budget dieser Antwort aufgebraucht (${Math.round(MAX_FETCH_BYTES / 1048576)} MB). Weiterlesen oder Suchen in einem schon gelesenen Dokument geht weiterhin.`,
@@ -193,12 +212,18 @@ async function tool_read_web_page(input, ctx) {
     };
   }
   if (!cached) web.fetches++;
+  // Reserviert wird höchstens, was ein Dokument laden darf (PDF-Deckel in
+  // lib/url-scrape) — ein einzelner Abruf bekommt so dasselbe wie bisher.
+  const reserve = cached ? 0 : Math.min(bytesLeft, MAX_DOC_BYTES);
+  web.bytesReserved = (web.bytesReserved || 0) + reserve;
 
   let page;
   try {
-    page = await cachedScrape(knownUrl, web, cached ? {} : { maxBytes: bytesLeft, signal: ctx.jobSignal });
+    page = await cachedScrape(knownUrl, web, cached ? {} : { maxBytes: reserve, signal: ctx.jobSignal });
+    web.bytesReserved -= reserve;
     if (!cached) web.bytes += Number(page?.bytes) || 0;
   } catch (e) {
+    web.bytesReserved -= reserve;
     if (e?.name === 'AbortError' && ctx.jobSignal?.aborted) throw e;
     // Auch ein gescheiterter Abruf hat geladen (zu gross, kein Text-Dokument,
     // unlesbares PDF) — lib/url-scrape gibt die Bytes am Fehler mit.

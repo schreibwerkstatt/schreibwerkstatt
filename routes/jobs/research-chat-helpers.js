@@ -13,10 +13,14 @@ const { cleanStr, TITLE_MAX } = require('../../lib/research-validate');
 const { resolvePageBookId, resolveChapterBookId } = require('../../lib/content-ownership');
 const contentStore = require('../../lib/content-store');
 const { itemIdsAtPlace } = require('../../db/research-items');
-const { sessionProposalContextInfos, messageContextInfo, activeResearchItemsByIds } = require('../../db/research-jobs');
+const {
+  sessionProposalContextInfos, messageContextInfo, activeResearchItemsByIds,
+  sessionAnswerSourceInfos, existingResearchItemIds,
+} = require('../../db/research-jobs');
 const { syncUrlIndex } = require('./research-url-index');
 const { htmlToTextForPrompt } = require('./shared');
 const { normalizeChatIdeeProposals } = require('../../lib/chat-idee-proposals');
+const { CHANGE_TYPES } = require('../../db/research-changes');
 
 /**
  * Werkzeugliste unter dem Web-Such-Gesamtdeckel: `max_uses` des serverseitigen
@@ -99,7 +103,7 @@ function validateAnswerSources(raw, webResults, { max = 20, extra = [] } = {}) {
  * Geht als Block in den System-Prompt, damit Folge-Turns sie nicht erneut
  * vorschlagen und „speicher das zweite" verstehen.
  */
-function sessionProposalMemory(sessionId, limit = 30) {
+function sessionProposalMemory(sessionId, limit = 30, bookId = null) {
   const out = [];
   for (const raw of sessionProposalContextInfos(sessionId)) {
     let ci;
@@ -115,6 +119,16 @@ function sessionProposalMemory(sessionId, limit = 30) {
         });
         continue;
       }
+      if (CHANGE_TYPES.has(p?.type)) {
+        out.push({
+          kind: 'change',
+          item_id: p.item_id,
+          title: String(p.labels?.item || '').slice(0, 120),
+          what: changeSummary(p),
+          change_state: p.applied_at ? 'applied' : (p.status === 'discarded' ? 'discarded' : 'open'),
+        });
+        continue;
+      }
       const title = p.title || p.urls?.[0]?.url || String(p.body || '').replace(/\s+/g, ' ').slice(0, 60);
       if (!title) continue;
       out.push({
@@ -125,7 +139,57 @@ function sessionProposalMemory(sessionId, limit = 30) {
       });
     }
   }
-  return out.slice(-limit);
+  const list = out.slice(-limit);
+  // Gespeichert und inzwischen gelöscht: das Gedächtnis darf den Eintrag nicht mehr
+  // als «im Archiv als id=X» nennen — read_research_item fände ihn nicht.
+  if (bookId) {
+    const ids = [...new Set(list.flatMap(e => [e.saved_item_id, e.exists_item_id]).filter(Boolean))];
+    const alive = existingResearchItemIds(ids, bookId);
+    for (const e of list) {
+      if (e.saved_item_id && !alive.has(e.saved_item_id)) e.saved_item_id = null;
+      if (e.exists_item_id && !alive.has(e.exists_item_id)) e.exists_item_id = null;
+    }
+  }
+  return list;
+}
+
+/**
+ * Geprüfte Quellen der jüngsten Antworten dieser Session (context_info.answer_sources),
+ * dedupliziert, neueste zuerst. Ihre Herkunft ist dieselbe wie die eines Treffers
+ * dieses Laufs (damals gesucht bzw. gelesen und gegen die Treffer geprüft) — eine
+ * Folgefrage («lies die zweite Quelle genauer») darf sie lesen und belegen.
+ */
+function sessionPriorSources(sessionId, { answers = 5, max = 40 } = {}) {
+  const out = [];
+  const seen = new Set();
+  for (const raw of sessionAnswerSourceInfos(sessionId, answers)) {
+    let ci;
+    try { ci = JSON.parse(raw); } catch { continue; }
+    for (const s of Array.isArray(ci?.answer_sources) ? ci.answer_sources : []) {
+      const n = normalizeUrl(s?.url);
+      if (!n || seen.has(n)) continue;
+      seen.add(n);
+      out.push({ url: s.url, title: s.title || s.url });
+      if (out.length >= max) return out;
+    }
+  }
+  return out;
+}
+
+/** Kurzform einer Änderung fürs Gedächtnis («Status → eingearbeitet, Text angehängt»). */
+function changeSummary(p) {
+  if (p.type === 'research_archive') return 'archivieren';
+  if (p.type === 'research_merge') return `Eintrag id=${p.merge_item_id} hineinführen`;
+  const f = p.fields || {};
+  const parts = [];
+  if (f.status) parts.push(`Status → ${f.status}`);
+  if (f.title) parts.push('Titel neu');
+  if (f.body) parts.push('Text neu');
+  if (f.append) parts.push('Text angehängt');
+  if (f.source) parts.push('Quelle neu');
+  if (p.urls?.length) parts.push(`${p.urls.length} URL(s) dazu`);
+  if (f.tags?.length) parts.push(`Tags ${f.tags.join(', ')}`);
+  return parts.join(', ') || 'Änderung';
 }
 
 // Platzhalter des Loops für „keine Antwort" (agentic-chat.js) — mit Vorschlägen
@@ -252,6 +316,6 @@ function markProposalUrls(proposals, { ctx = null, webResults = [], pages = [], 
 
 module.exports = {
   markProposalUrls, researchIdeeProposals,
-  toolsForRound, validateAnswerSources, sessionProposalMemory, proposalsOnlyFallback,
+  toolsForRound, validateAnswerSources, sessionProposalMemory, sessionPriorSources, proposalsOnlyFallback,
   researchMessageContext, readMessageContext, loadResearchContext,
 };

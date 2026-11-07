@@ -25,10 +25,11 @@ const PROPOSAL_KINDS = ['note', 'link', 'quote', 'fact'];
 const _key = (msg, pi) => `${msg?.id ?? 'x'}:${pi}`;
 
 export const researchProposalMethods = {
-  // Ohne die Ideen-Vorschläge (`idee_create`, chat-idee-proposals.js): die stehen
-  // laut Job HINTER den Fundstücken, der Index `pi` bleibt so der Index in proposals.
+  // Nur neue Fundstücke (ohne `type`): Änderungen an bestehenden Einträgen
+  // (research-chat-changes.js) und Ideen (`idee_create`, chat-idee-proposals.js)
+  // stehen laut Job HINTER ihnen, der Index `pi` bleibt so der Index in proposals.
   researchProposals(msg) {
-    return ((msg?.context_info?.proposals) || []).filter(p => p?.type !== 'idee_create');
+    return ((msg?.context_info?.proposals) || []).filter(p => p && !p.type);
   },
   isProposalSaved(msg, pi) { return !!this.researchProposals(msg)[pi]?.saved_item_id; },
   isProposalSaving(msg, pi) { return !!this._proposalSaving[_key(msg, pi)]; },
@@ -136,7 +137,7 @@ export const researchProposalMethods = {
     if (!msg?.id || !p || p.saved_item_id || this._proposalSaving[k]) return p?.saved_item_id || null;
     this._proposalSaving = { ...this._proposalSaving, [k]: true };
     try {
-      const ctx = this.researchChatUseContext ? this.researchChatContextTarget() : null;
+      const ctx = this._proposalLinkTarget(msg);
       const edits = this._proposalEditsPayload(msg, pi);
       const res = await sendJson('/research/chat-proposal', 'POST', {
         message_id: msg.id,
@@ -220,6 +221,19 @@ export const researchProposalMethods = {
     }
   },
   isProposalToSourceBusy(msg, pi) { return !!this._proposalSaving[`src:${_key(msg, pi)}`]; },
+
+  // Verknüpfungsziel beim Speichern: die Stelle, für die die Frage gestellt wurde
+  // (context_info.research_context der Antwort) — auch die Ideen derselben Antwort
+  // hängen dort, und der Prompt hat dem Modell genau diese Stelle genannt. Ältere
+  // Antworten ohne das Feld: der Kontext-Chip von jetzt.
+  _proposalLinkTarget(msg) {
+    const ci = msg?.context_info || {};
+    if ('research_context' in ci) {
+      const rc = ci.research_context;
+      return rc?.kind && rc?.id ? { kind: rc.kind, id: rc.id } : null;
+    }
+    return this.researchChatUseContext ? this.researchChatContextTarget() : null;
+  },
 
   // ── Kontext-Chip „für Seite/Kapitel recherchieren" ───────────────────────
   // Ziel: der Seiten-/Kapitel-Filter des Boards (Sprung vom Seiten-Indikator)

@@ -22,7 +22,7 @@
 const { db } = require('./connection');
 require('./migrations');
 const { NOW_ISO_SQL } = require('./now');
-const { IDEA_LINK_KINDS, openStatusSql, normalizeIdeeStatus } = require('../lib/ideen-status');
+const { IDEA_LINK_KINDS, openStatusSql, normalizeIdeeStatus, isOpenIdeeStatus: isOpenStatus } = require('../lib/ideen-status');
 
 // target_kind → { col, table, pk, nameCol, bookCol } fuer Validierung und
 // Display-JOIN. `bookCol` traegt die Buch-Pruefung: der FK allein liesse eine
@@ -51,12 +51,27 @@ const SELECT_ROW = `
          i.chapter_id, c.chapter_name,
          COALESCE(i.chapter_id, p.chapter_id) AS lane_chapter_id,
          COALESCE(c.chapter_name, pc.chapter_name) AS lane_chapter_name,
-         i.content, i.status, i.status_at, i.sort_order, i.created_at, i.updated_at
+         i.content, i.status, i.status_at, i.sort_order, i.created_at, i.updated_at,
+         h.beleg AS hint_beleg, h.page_id AS hint_page_id, hp.page_name AS hint_page_name,
+         h.begruendung AS hint_begruendung, h.created_at AS hint_at
     FROM ideen i
     LEFT JOIN pages    p  ON p.page_id     = i.page_id
     LEFT JOIN chapters c  ON c.chapter_id  = i.chapter_id
     LEFT JOIN chapters pc ON pc.chapter_id = p.chapter_id
+    LEFT JOIN idee_check_hints h ON h.idee_id = i.id
+    LEFT JOIN pages    hp ON hp.page_id    = h.page_id
 `;
+
+// Hinweis des Auto-Erledigt-Checks (db/ideen-check.js) als ein Feld
+// `check_hint` statt fünf flacher Spalten — null, wenn keiner vorliegt.
+function _shapeHint(row) {
+  row.check_hint = row.hint_beleg ? {
+    beleg: row.hint_beleg, page_id: row.hint_page_id, page_name: row.hint_page_name || '',
+    begruendung: row.hint_begruendung || '', at: row.hint_at,
+  } : null;
+  delete row.hint_beleg; delete row.hint_page_id; delete row.hint_page_name;
+  delete row.hint_begruendung; delete row.hint_at;
+}
 
 // ── Verknuepfungen ──────────────────────────────────────────────────────────
 
@@ -65,6 +80,7 @@ const SELECT_ROW = `
 // keine Snapshot-Spalte, ein umbenanntes Motiv heisst sofort ueberall neu.
 function attachLinks(rows) {
   if (!rows.length) return rows;
+  for (const r of rows) if ('hint_beleg' in r) _shapeHint(r);
   const ids = rows.map(r => r.id);
   const ph = ids.map(() => '?').join(',');
   const byIdea = new Map();
@@ -294,6 +310,9 @@ function createIdee({ bookId, pageId, chapterId, userEmail, content }) {
 function updateIdee(id, userEmail, fields) {
   const sets = [];
   const vals = [];
+  // Hinweis-Löschen und UPDATE in einer Transaktion: scheitert das UPDATE (CHECK,
+  // FK), bleibt der Hinweis stehen.
+  let dropHint = null;
   if (typeof fields.content === 'string') { sets.push('content = ?'); vals.push(fields.content); }
   if (typeof fields.status === 'string') {
     sets.push('status = ?');    vals.push(fields.status);
@@ -304,15 +323,32 @@ function updateIdee(id, userEmail, fields) {
     // Gleicher Status ist kein Wechsel und behaelt den Platz.
     sets.push('sort_order = CASE WHEN status = ? THEN sort_order ELSE 0 END');
     vals.push(fields.status);
+    // Ein Stufenwechsel beantwortet den Auto-Check-Hinweis — er ist danach
+    // erledigt (abgehakt) oder überholt (verworfen, wieder in Arbeit).
+    dropHint = () => db.prepare(`DELETE FROM idee_check_hints WHERE idee_id = ?
+                 AND idee_id IN (SELECT id FROM ideen WHERE user_email = ? AND status <> ?)`)
+      .run(id, userEmail, fields.status);
   }
   // Anker: Zahl setzt, null leert — ein Wechsel Seite ↔ Kapitel setzt beide in
   // einem UPDATE, damit der CHECK (hoechstens ein Anker) nie dazwischen greift.
+  const anchorTouched = (typeof fields.page_id === 'number' || fields.page_id === null)
+    || (typeof fields.chapter_id === 'number' || fields.chapter_id === null);
   if (typeof fields.page_id === 'number' || fields.page_id === null)       { sets.push('page_id = ?');    vals.push(fields.page_id); }
   if (typeof fields.chapter_id === 'number' || fields.chapter_id === null) { sets.push('chapter_id = ?'); vals.push(fields.chapter_id); }
   if (!sets.length) return 0;
   sets.push(`updated_at = ${NOW_ISO_SQL}`);
   vals.push(id, userEmail);
-  return db.prepare(`UPDATE ideen SET ${sets.join(', ')} WHERE id = ? AND user_email = ?`).run(...vals).changes;
+  return db.transaction(() => {
+    if (dropHint) dropHint();
+    // Ein neuer Ort macht den Hinweis hinfällig: sein Beleg stammt vom alten.
+    if (anchorTouched) {
+      db.prepare(`DELETE FROM idee_check_hints WHERE idee_id = ?
+                   AND idee_id IN (SELECT id FROM ideen WHERE user_email = ?
+                                    AND (page_id IS NOT ? OR chapter_id IS NOT ?))`)
+        .run(id, userEmail, fields.page_id === undefined ? null : fields.page_id, fields.chapter_id === undefined ? null : fields.chapter_id);
+    }
+    return db.prepare(`UPDATE ideen SET ${sets.join(', ')} WHERE id = ? AND user_email = ?`).run(...vals).changes;
+  })();
 }
 
 /**
@@ -331,6 +367,48 @@ const reorderIdeen = db.transaction((bookId, userEmail, ids) => {
   return true;
 });
 
+/**
+ * Dubletten zusammenführen: `sourceIds` gehen in `targetId` auf. Verknüpfungen
+ * der Quellen wandern an das Ziel (eine schon vorhandene Kante bleibt einmal),
+ * `content` ersetzt den Text des Ziels (ohne: Text bleibt), danach fallen die
+ * Quellen. Ort und Stufe des Ziels bleiben — wer anderes will, ändert danach.
+ * Ganz oder gar nicht; → { ok } | { error_code }.
+ *
+ * Ein abgeschlossenes Ziel nimmt keine offene Quelle auf: die offene Pendenz
+ * verschwände sonst in einer erledigten Idee.
+ */
+const mergeIdeen = db.transaction((targetId, sourceIds, userEmail, content = null) => {
+  const own = db.prepare('SELECT id, book_id, status FROM ideen WHERE id = ? AND user_email = ?');
+  const target = own.get(targetId, userEmail);
+  if (!target) return { error_code: 'IDEE_NOT_FOUND' };
+  const sources = [];
+  for (const sid of sourceIds) {
+    const r = own.get(sid, userEmail);
+    if (!r) return { error_code: 'IDEE_NOT_FOUND' };
+    if (r.book_id !== target.book_id) return { error_code: 'BOOK_MISMATCH' };
+    sources.push(r);
+  }
+  if (!isOpenStatus(target.status) && sources.some(r => isOpenStatus(r.status))) {
+    return { error_code: 'MERGE_TARGET_CLOSED' };
+  }
+  const ph = sourceIds.map(() => '?').join(',');
+  for (const kind of IDEA_LINK_KINDS) {
+    const col = LINK_TARGETS[kind].col;
+    db.prepare(`
+      INSERT OR IGNORE INTO idea_links (idea_id, target_kind, ${col})
+      SELECT ?, target_kind, ${col} FROM idea_links WHERE target_kind = ? AND idea_id IN (${ph})
+    `).run(targetId, kind, ...sourceIds);
+  }
+  if (typeof content === 'string') {
+    db.prepare(`UPDATE ideen SET content = ?, updated_at = ${NOW_ISO_SQL} WHERE id = ? AND user_email = ?`)
+      .run(content, targetId, userEmail);
+  } else {
+    db.prepare(`UPDATE ideen SET updated_at = ${NOW_ISO_SQL} WHERE id = ? AND user_email = ?`).run(targetId, userEmail);
+  }
+  db.prepare(`DELETE FROM ideen WHERE id IN (${ph}) AND user_email = ?`).run(...sourceIds, userEmail);
+  return { ok: true };
+});
+
 function deleteIdee(id, userEmail) {
   return db.prepare('DELETE FROM ideen WHERE id = ? AND user_email = ?').run(id, userEmail).changes;
 }
@@ -346,6 +424,7 @@ module.exports = {
   createIdee,
   updateIdee,
   reorderIdeen,
+  mergeIdeen,
   deleteIdee,
   addIdeaLink,
   removeIdeaLink,

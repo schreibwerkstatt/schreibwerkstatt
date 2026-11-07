@@ -18,7 +18,7 @@
 // Root behält:
 //   - `loadFiguren` (von vielen Modulen gerufen)
 
-import { graphMethods } from '../graph.js';
+import { graphMethods, soziogrammState } from '../graph.js';
 import { presenceMethods } from '../book/figuren-presence.js';
 import { figurenAlterMethods } from '../book/figuren-alter.js';
 import { figurenLebenslaufMethods } from '../book/figuren-lebenslauf.js';
@@ -39,6 +39,7 @@ import { plotBacklinkMethods } from '../book/plot-backlinks.js';
 import { figurPflegeMethods } from '../book/figuren-pflege.js';
 import { figurenRelCheckState, figurenRelCheckMethods } from '../book/figuren-relcheck.js';
 import { figurenSchulwegMethods } from '../book/figuren-schulweg.js';
+import { figurenStationenMethods } from '../book/figuren-stationen.js';
 import { listWindowState, listWindowMethods } from '../list-window.js';
 
 // Felder, die die Listensuche trifft. Der Typ zählt mit seinem angezeigten
@@ -131,6 +132,8 @@ export function registerFigurenCard() {
     // GET /figures/:id/alter; null heisst „noch nicht geladen", nicht „leer".
     figurenAlterData: null,
     figurenAlterFilters: { suche: '', typ: '', nur: '', kapitelId: '' },
+    // Stichtag der Alterstabelle: Jahr (Zahl) + Monat ('1'..'12' oder '' = ganzes Jahr).
+    figurenAlterStichtag: { jahr: null, monat: '' },
     figurenAlterLoading: false,
     figurenAlterProgress: 0,
     figurenAlterStatus: '',
@@ -170,6 +173,18 @@ export function registerFigurenCard() {
     figurSchulJobProgress: 0,
     figurSchulJobStatus: '',
     _figurSchulPollTimer: null,
+    // Berufsweg und Hobbys (book/figuren-stationen.js): `figurStationenData` =
+    // { berufe, hobbys } je fig_id aus GET /figures/:id/stationen; null = nicht
+    // geladen. `figurStationEdit` = { figId, kind, id|null } der offenen Zeile.
+    figurStationenData: null,
+    figurStationEdit: null,
+    figurStationDraft: {},
+    figurStationBusy: false,
+    figurStationError: '',
+    figurStationJobLoading: false,
+    figurStationJobProgress: 0,
+    figurStationJobStatus: '',
+    _figurStationPollTimer: null,
     _figurenNetwork: null,
     _figurenHash: null,
     _figurenNodes: null,
@@ -186,6 +201,8 @@ export function registerFigurenCard() {
     ...listWindowState(),
     // Beziehungsprüfung (book/figuren-relcheck.js): Hinweisliste + Markierung im Detail.
     ...figurenRelCheckState(),
+    // Soziogramm-Schalter + Nähe-Job (graph/soziogramm-controls.js).
+    ...soziogrammState(),
     _lifecycle: null,
 
     init() {
@@ -206,6 +223,7 @@ export function registerFigurenCard() {
           if (this.figurenGraphModus === 'alter') this.ensureFigurenAlter();
           this.loadPlotBacklinks('figure');
           this.loadFigurenSchulwege();
+          this.loadFigurenStationen();
           await root.loadFiguren(Alpine.store('nav').selectedBookId);
           this.loadFigurenRelCheck();
           await this.$nextTick();
@@ -226,13 +244,16 @@ export function registerFigurenCard() {
           ctx._resetFigurenAlter();
           ctx._resetFigurPflege();
           ctx._resetFigurSchulweg();
+          ctx._resetFigurStationen();
           ctx._resetFigurenRelCheck();
+          ctx._resetSoziogramm();
           if (!root.showFiguresCard) return;
           const bookId = Alpine.store('nav').selectedBookId;
           if (!bookId) return;
           ctx.plotBacklinks = {};
           ctx.loadPlotBacklinks('figure');
           ctx.loadFigurenSchulwege();
+          ctx.loadFigurenStationen();
           await root.loadFiguren(bookId);
           // Schneller Folge-Buchwechsel: Ergebnis verwerfen, der neue
           // book:changed-Handler rendert.
@@ -252,7 +273,9 @@ export function registerFigurenCard() {
           ctx._resetFigurenAlter();
           ctx._resetFigurPflege();
           ctx._resetFigurSchulweg();
+          ctx._resetFigurStationen();
           ctx._resetFigurenRelCheck();
+          ctx._resetSoziogramm();
           ctx.figurenGraphModus = 'liste';
           ctx.figurenGraphKapitelId = null;
           ctx.figurenGraphFullscreen = false;
@@ -355,6 +378,8 @@ export function registerFigurenCard() {
       this._lifecycle?.destroy();
       if (this._figurenAlterPollTimer) { clearInterval(this._figurenAlterPollTimer); this._figurenAlterPollTimer = null; }
       if (this._figurSchulPollTimer) { clearInterval(this._figurSchulPollTimer); this._figurSchulPollTimer = null; }
+      if (this._figurStationPollTimer) { clearInterval(this._figurStationPollTimer); this._figurStationPollTimer = null; }
+      if (this._soziogrammNaehePollTimer) { clearInterval(this._soziogrammNaehePollTimer); this._soziogrammNaehePollTimer = null; }
       this._themeObserver?.disconnect();
       this._themeObserver = null;
       if (this._figurenNetwork) { this._figurenNetwork.destroy(); this._figurenNetwork = null; }
@@ -432,6 +457,7 @@ export function registerFigurenCard() {
       this.figurenAlterStatus = '';
       this.figurenAlterOpenId = null;
       this.figurenAlterFilters = { suche: '', typ: '', nur: '', kapitelId: '' };
+      this.figurenAlterStichtag = { jahr: null, monat: '' };
       // Die Spaltenwahl zeigt auf Figuren des alten Buchs — sie muss mit, sonst
       // steht die Matrix beim naechsten Oeffnen leer da, ohne zu sagen warum.
       this.figurenLebenslaufIds = [];
@@ -446,6 +472,7 @@ export function registerFigurenCard() {
     ...figurPflegeMethods,
     ...figurenRelCheckMethods,
     ...figurenSchulwegMethods,
+    ...figurenStationenMethods,
     ...listWindowMethods,
   }));
 }

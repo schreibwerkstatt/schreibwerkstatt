@@ -280,10 +280,10 @@ const runBookChatJobAgent = makeAgenticChatJob({
     return antwort;
   },
 
-  buildContextInfo: ({ toolLog, iter, ctx, stopReason, costUsd }) => ({
+  buildContextInfo: ({ toolLog, rounds, ctx, stopReason, costUsd }) => ({
     mode: 'agent',
     tool_calls: toolLog,
-    iterations: iter + 1,
+    iterations: rounds,
     ...(stopReason ? { stop_reason: stopReason } : {}),
     ...(costUsd > 0 ? { cost_usd: Math.round(costUsd * 10000) / 10000 } : {}),
     ...(ctx.citations?.length ? { citations: ctx.citations } : {}),
@@ -297,8 +297,8 @@ const runBookChatJobAgent = makeAgenticChatJob({
     ...(ctx.images.length ? { images: ctx.images } : {}),
   }),
 
-  buildSummary: ({ sessionId, toolLog, iter }) =>
-    `Agent session=${sessionId}, ${toolLog.length} Tool-Calls, ${iter + 1} Iter`,
+  buildSummary: ({ sessionId, toolLog, rounds }) =>
+    `Agent session=${sessionId}, ${toolLog.length} Tool-Calls, ${rounds} Runden`,
 
   // Endpunkt/Modell sprechen kein Tool-Protokoll (400/404/422 mit Tool-Bezug, oder
   // `ai.openai-compat.tools=false` waehrend der Job schon lief): statt den Job zu

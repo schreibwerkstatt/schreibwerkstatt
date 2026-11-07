@@ -50,6 +50,7 @@ import { primaryPersonLabel } from '../sources/fields.js';
 import { referenceInterviewMethods, referenceInterviewState } from './reference-interview.js';
 import { referenceContextMethods } from './reference-context.js';
 import { referencePlanMethods, referencePlanState } from './reference-plan.js';
+import { subtypIcon } from './ereignisse/subtyp.js';
 
 const TABS = ['plan', 'figuren', 'orte', 'szenen', 'ereignisse', 'recherche', 'quellen', 'verwandt'];
 // Immer sichtbarer Reiter — Rückfall, wenn der gewählte ausgeblendet ist.
@@ -486,6 +487,8 @@ export function registerReferenceCard() {
     },
 
     // ── Render-Helfer ─────────────────────────────────────────────────────────
+    // Subtyp-Badge: Icon + Farbe aus derselben Quelle wie die Ereignisse-Karte.
+    subtypIcon,
     referenceEventDate(ev) {
       if (ev?.datum_label) return ev.datum_label;
       if (ev?.datum_year != null) return String(ev.datum_year);
