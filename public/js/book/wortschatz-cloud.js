@@ -10,8 +10,10 @@
 //   'key'  — auffällige Wörter, Grösse ∝ Keyness gegen die übrigen Bücher
 // Der zweite Modus existiert nur, wenn es überhaupt ein Referenzkorpus gab.
 //
-// Layout: d3-cloud (lazy via lazy-libs.js). Der Lauf ist asynchron — die Lib
-// misst jedes Wort auf einem Offscreen-Canvas und arbeitet über mehrere Ticks.
+// Layout: d3-cloud (lazy via lazy-libs.js). Jedes Wort wird als Sprite auf einem
+// Offscreen-Canvas gemessen und dann platziert; der Lauf verteilt das in
+// Häppchen über mehrere Ticks, damit die Karte bedienbar und der Lauf
+// abbrechbar bleibt.
 
 import { loadWordCloud } from '../lazy-libs.js';
 import { compareText } from '../i18n.js';
@@ -30,6 +32,8 @@ const FONT_MAX = 76;
 // Muss zur CSS-Familie in wortschatz.css passen — d3-cloud misst mit genau
 // diesem Font auf dem Canvas, und eine Abweichung erzeugt Überlappungen.
 const CLOUD_FONT = 'Inter, system-ui, sans-serif';
+// Wörter je Tick, bevor der Lauf an den Browser zurückgibt.
+const CLOUD_CHUNK = 12;
 
 /** Wählt die Wörter für einen Modus aus den `terms`-Zeilen.
  *  Pure Funktion, damit die Auswahl ohne Alpine und ohne Canvas testbar ist.
@@ -115,9 +119,9 @@ export const wortschatzCloudMethods = {
     // Laufs ein (Modus zweimal schnell umgeschaltet), wird es verworfen.
     const run = (this._wsCloudRun = (this._wsCloudRun || 0) + 1);
 
-    let cloud;
+    let CloudLayout;
     try {
-      cloud = await loadWordCloud();
+      CloudLayout = await loadWordCloud();
     } catch {
       this.wsCloudBuilding = false;
       this.wsCloudError = true;
@@ -126,47 +130,60 @@ export const wortschatzCloudMethods = {
     if (run !== this._wsCloudRun) return;
 
     const scale = cloudFontScale(rows);
-    const layout = cloud()
+    // Fester Kasten um den Ursprung (overflow aus), fixer Zufallsgenerator:
+    // gleiche Analyse ⇒ gleiches Bild.
+    const layout = new CloudLayout()
       .size([CLOUD_W, CLOUD_H])
-      .words(rows.map((r, i) => ({
-        text: r.term,
-        size: scale(r.weight),
-        weight: r.weight,
-        sign: r.sign,
-        idx: i,
-        pageId: r.row.first_page_id ?? null,
-        pageName: r.row.first_page_name || '',
-        count: r.row.count,
-        keyness: r.row.keyness,
-      })))
-      .padding(3)
-      .font(CLOUD_FONT)
-      .fontSize(d => d.size)
-      .rotate((d, i) => cloudRotation(d, i))
-      // Fixer Zufallsgenerator: gleiche Analyse ⇒ gleiches Bild.
-      .random(() => 0.5)
-      .on('end', (placed) => {
-        if (run !== this._wsCloudRun) return;
-        this.wsCloudLayout = placed;
-        this.wsCloudBuilding = false;
-        // d3-cloud lässt Wörter weg, für die kein Platz mehr war. Die Zahl wird
-        // ausgewiesen — eine stillschweigend gekürzte Wolke liest sich als
-        // vollständig (dieselbe Regel wie beim Einmalwort-Deckel).
-        this.wsCloudDropped = rows.length - placed.length;
-        // Das SVG wird erst durch `x-show` sichtbar, wenn wsCloudLayout gefüllt
-        // ist — malen also im nächsten Tick, sonst greift $refs ins Leere.
-        this.$nextTick(() => this.wsPaintCloud(placed));
-      });
+      .overflow(false)
+      .random(() => 0.5);
+    // Rotation nach Rang (Index in `rows`), Platzierung grösste zuerst.
+    const words = rows.map((r, i) => ({
+      text: r.term,
+      size: Math.trunc(scale(r.weight)),
+      rotate: cloudRotation(r, i),
+      weight: r.weight,
+      sign: r.sign,
+      idx: i,
+      pageId: r.row.first_page_id ?? null,
+      pageName: r.row.first_page_name || '',
+      count: r.row.count,
+      keyness: r.row.keyness,
+    })).sort((a, b) => b.size - a.size || a.idx - b.idx);
 
-    this._wsCloudLayout = layout;
-    layout.start();
+    const placed = [];
+    try {
+      for (let i = 0; i < words.length; i++) {
+        if (i > 0 && i % CLOUD_CHUNK === 0) {
+          await new Promise(resolve => setTimeout(resolve, 0));
+          if (run !== this._wsCloudRun) return;
+        }
+        const w = words[i];
+        const sprite = layout.getSprite(w.text, {
+          font: CLOUD_FONT, size: w.size, rotate: w.rotate, padding: 3, datum: w,
+        });
+        const hit = sprite && layout.place(sprite);
+        if (hit) placed.push({ ...hit.datum, x: hit.x, y: hit.y });
+      }
+    } catch {
+      if (run === this._wsCloudRun) { this.wsCloudBuilding = false; this.wsCloudError = true; }
+      return;
+    }
+    if (run !== this._wsCloudRun) return;
+    this.wsCloudLayout = placed;
+    this.wsCloudBuilding = false;
+    // d3-cloud lässt Wörter weg, für die kein Platz mehr war. Die Zahl wird
+    // ausgewiesen — eine stillschweigend gekürzte Wolke liest sich als
+    // vollständig (dieselbe Regel wie beim Einmalwort-Deckel).
+    this.wsCloudDropped = rows.length - placed.length;
+    // Das SVG wird erst durch `x-show` sichtbar, wenn wsCloudLayout gefüllt
+    // ist — malen also im nächsten Tick, sonst greift $refs ins Leere.
+    this.$nextTick(() => this.wsPaintCloud(placed));
   },
 
+  // Bricht einen laufenden Layout-Lauf ab: der Lauf prüft zwischen den Häppchen,
+  // ob seine Nummer noch die aktuelle ist.
   _wsCloudStop() {
-    if (this._wsCloudLayout) {
-      try { this._wsCloudLayout.stop(); } catch { /* Lauf war schon fertig */ }
-      this._wsCloudLayout = null;
-    }
+    this._wsCloudRun = (this._wsCloudRun || 0) + 1;
   },
 
   /** Die platzierten Wörter als `<text>`-Knoten ins SVG malen.

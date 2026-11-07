@@ -1,11 +1,10 @@
 'use strict';
 // Wrapper fuer asynchrone Auth-Handler.
 //
-// Express 4 faengt die Rejection eines `async`-Handlers NICHT: der Fehler wird
-// zur unbehandelten Promise-Rejection, und der Request bleibt offen, bis der
-// Browser aufgibt. Auf den Anmeldepfaden ist das die schlechteste aller
-// Antworten — der Nutzer sieht einen haengenden Ladebalken statt einer
-// Fehlermeldung, und im Log steht nichts, was zur Route zurueckfuehrt.
+// Express 5 reicht die Rejection eines `async`-Handlers an die allgemeine
+// Fehlerkette, die mit `500 INTERNAL` und einem Log ohne Routenbezug antwortet.
+// Auf den Anmeldepfaden soll der Fehler stattdessen mit dem Label der Route im
+// Log stehen und mit dem Code, den die Anmelde-Clients erwarten.
 //
 // Darum laeuft jeder async-Handler unter routes/auth/ durch diesen Wrapper.
 // Er antwortet mit 500 und einem `error_code`, damit die Client-Seite dem

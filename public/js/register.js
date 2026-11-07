@@ -25,7 +25,7 @@
     }
     const s = document.createElement('script');
     s.type = 'module';
-    s.src = '/vendor/altcha-3.0.11.min.js';
+    s.src = '/vendor/altcha-3.5.0.min.js';
     document.head.appendChild(s);
   }
 

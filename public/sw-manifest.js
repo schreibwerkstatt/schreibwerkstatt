@@ -5,7 +5,7 @@
 // __SHELL_BUILD: content hash over all listed assets → drives SHELL_CACHE.
 // __SHELL_MANIFEST: the coherent set precached atomically at SW install.
 // __VENDOR_SET: current vendor/ + fonts/ files — VENDOR_CACHE prune list.
-self.__SHELL_BUILD = "c7346506f291f098";
+self.__SHELL_BUILD = "e1b14039a492658e";
 self.__SHELL_MANIFEST = [
   "/css/admin/admin-backup.css",
   "/css/admin/admin-home.css",
@@ -1291,17 +1291,17 @@ self.__VENDOR_SET = [
   "/vendor/LICENSES/mermaid-LICENSE.txt",
   "/vendor/LICENSES/sortablejs-LICENSE.txt",
   "/vendor/LICENSES/visnetwork-LICENSE.txt",
-  "/vendor/alpine-3.15.12.min.js",
-  "/vendor/alpine-anchor-3.15.12.min.js",
-  "/vendor/alpine-collapse-3.15.12.min.js",
-  "/vendor/alpine-focus-3.15.12.min.js",
-  "/vendor/alpine-resize-3.15.12.min.js",
-  "/vendor/altcha-3.0.11.min.js",
-  "/vendor/chart-4.5.1.umd.min.js",
-  "/vendor/d3-cloud-1.2.9.js",
+  "/vendor/alpine-3.17.5.min.js",
+  "/vendor/alpine-anchor-3.17.5.min.js",
+  "/vendor/alpine-collapse-3.17.5.min.js",
+  "/vendor/alpine-focus-3.17.5.min.js",
+  "/vendor/alpine-resize-3.17.5.min.js",
+  "/vendor/altcha-3.5.0.min.js",
+  "/vendor/chart-4.6.1.umd.min.js",
+  "/vendor/d3-cloud-2.0.0.js",
   "/vendor/diff-9.0.0.min.js",
-  "/vendor/jsmind-0.8.7.css",
-  "/vendor/jsmind-0.8.7.js",
+  "/vendor/jsmind-0.9.1.css",
+  "/vendor/jsmind-0.9.1.js",
   "/vendor/leaflet-1.9.4/images/layers-2x.png",
   "/vendor/leaflet-1.9.4/images/layers.png",
   "/vendor/leaflet-1.9.4/images/marker-icon-2x.png",
@@ -1310,7 +1310,7 @@ self.__VENDOR_SET = [
   "/vendor/leaflet-1.9.4/leaflet.css",
   "/vendor/leaflet-1.9.4/leaflet.js",
   "/vendor/markdown-it-15.0.3.esm.min.js",
-  "/vendor/mermaid-11.16.0.min.js",
-  "/vendor/sortable-1.15.6.min.js",
-  "/vendor/vis-network-10.0.2.min.js",
+  "/vendor/mermaid-12.3.0.min.js",
+  "/vendor/sortable-1.15.7.min.js",
+  "/vendor/vis-network-10.1.4.min.js",
 ];

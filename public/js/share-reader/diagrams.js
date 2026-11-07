@@ -27,7 +27,7 @@ import { mermaidThemeConfig } from './mermaid-theme.js';
 
 const DIAGRAM_SEL = 'pre.mermaid';
 const RENDER_CLASS = 'mermaid-render';
-const VENDOR_SRC = '/vendor/mermaid-11.16.0.min.js';
+const VENDOR_SRC = '/vendor/mermaid-12.3.0.min.js';
 
 let _libPromise = null;
 

@@ -136,7 +136,7 @@ ${adminHtml}    </div>
   // ueberhaupt eine Form auf der Seite steht.
   const hasPwForm = !!adminHtml || blocks.some(b => b.includes('data-login-endpoint'));
   const scripts = hasPwForm
-    ? `${altcha.isEnabled() ? '<script type="module" src="/vendor/altcha-3.0.11.min.js"></script>\n' : ''}<script src="/js/credential-login.js"></script>\n`
+    ? `${altcha.isEnabled() ? '<script type="module" src="/vendor/altcha-3.5.0.min.js"></script>\n' : ''}<script src="/js/credential-login.js"></script>\n`
     : '';
   res.set('Cache-Control', 'no-store');
   res.send(renderPublicShell({

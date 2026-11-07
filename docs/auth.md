@@ -31,7 +31,7 @@ routes/auth/
   shell.js               /login · /auth/logout · /auth/avatar · /invite/:token · ENV-Pfade
   render.js              SSR-Bausteine der Pre-Auth-Seiten (Schale, Formular, Hinweisseite)
   credential-login.js    geteilter Kern JEDER Passwort-Anmeldung
-  async-route.js         Rejection-Wrapper (Express 4 lässt async-Handler sonst hängen)
+  async-route.js         Rejection-Wrapper (Log mit Routen-Label, 500 INTERNAL_ERROR)
   providers/
     index.js             Registry + Vertrag
     google.js            OIDC

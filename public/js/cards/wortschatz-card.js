@@ -32,8 +32,7 @@ export function registerWortschatzCard() {
     wsCloudError: false,
     // Wie viele Wörter d3-cloud mangels Platz weglassen musste.
     wsCloudDropped: 0,
-    // Laufender Layout-Handle + Lauf-Nummer (verwirft Ergebnisse überholter Läufe).
-    _wsCloudLayout: null,
+    // Lauf-Nummer: verwirft Ergebnisse überholter bzw. abgebrochener Läufe.
     _wsCloudRun: 0,
     _wortschatzPollTimer: null,
     // Memo der Einmalwort-Zeilen (Wortlänge angereichert). Der Getter läuft pro

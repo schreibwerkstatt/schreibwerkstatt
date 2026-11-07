@@ -200,7 +200,7 @@ ${altchaWidget()}    <div class="public-form-actions">
   res.set('Cache-Control', 'no-store');
   res.send(renderPublicShell({
     lang, title, mainHtml,
-    scripts: `${altcha.isEnabled() ? '<script type="module" src="/vendor/altcha-3.0.11.min.js"></script>\n' : ''}<script src="/js/password-form.js"></script>\n`,
+    scripts: `${altcha.isEnabled() ? '<script type="module" src="/vendor/altcha-3.5.0.min.js"></script>\n' : ''}<script src="/js/password-form.js"></script>\n`,
   }));
 }
 
@@ -337,7 +337,7 @@ ${altchaWidget()}    <div class="public-form-actions">
     <a class="public-btn" href="/login">${t('auth.forgot.back')}</a>
   </section>
 </main>`,
-    scripts: `${altcha.isEnabled() ? '<script type="module" src="/vendor/altcha-3.0.11.min.js"></script>\n' : ''}<script src="/js/password-form.js"></script>\n`,
+    scripts: `${altcha.isEnabled() ? '<script type="module" src="/vendor/altcha-3.5.0.min.js"></script>\n' : ''}<script src="/js/password-form.js"></script>\n`,
   }));
 });
 

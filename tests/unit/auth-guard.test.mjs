@@ -20,7 +20,6 @@ delete process.env.ADMIN_EMAIL;
 require('../../db/migrations');
 
 const express = require('express');
-require('../../lib/async-routes').install();
 const { errorHandler } = require('../../lib/async-routes');
 const { makeAuthGuard, wantsLoginRedirect } = require('../../lib/auth-guard');
 // Eine Sitzung gilt nur mit bestehendem, nicht gesperrtem Konto (Auth-Guard

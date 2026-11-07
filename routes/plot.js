@@ -595,5 +595,6 @@ router.delete('/brainstorm-runs/:id', (req, res) => {
   res.json({ ok: true });
 });
 
-module.exports = router;
-module.exports.buildPlotBoard = buildPlotBoard;
+// Router + benannter Export. Der Cast laesst das Import-Gate den Export am
+// ungetypten Router auch unter TypeScript 7 sehen (dort greift die Expando-Form nicht).
+module.exports = Object.assign(/** @type {Function} */ (router), { buildPlotBoard });

@@ -5,7 +5,7 @@
   "license": "AGPL-3.0-or-later",
   "main": "server.js",
   "engines": {
-    "node": ">=22 <26"
+    "node": ">=24 <27"
   },
   "scripts": {
     "prestart": "node scripts/sync-version.js && node scripts/sw-manifest.js",
@@ -33,7 +33,7 @@
   "devDependencies": {
     "@playwright/test": "^1.65.0",
     "fake-indexeddb": "^6.2.7",
-    "typescript": "^5.9.3"
+    "typescript": "~5.9.3"
   },
   "dependencies": {
     "@mozilla/readability": "^0.6.0",
@@ -46,7 +46,7 @@
     "dotenv": "^18.0.9",
     "epub-gen-memory": "^1.1.2",
     "esbuild": "0.28.2",
-    "express": "^4.22.3",
+    "express": "^5.3.0",
     "express-session": "^1.19.0",
     "helmet": "^8.3.0",
     "hyphenation.de": "^0.2.1",
@@ -58,7 +58,7 @@
     "mammoth": "^1.13.0",
     "node-cron": "^4.6.0",
     "nodemailer": "^10.3.1",
-    "openid-client": "^5.7.1",
+    "openid-client": "^6.8.9",
     "pdfkit": "^0.20.2",
     "playwright": "^1.65.0",
     "sharp": "^0.35.5",

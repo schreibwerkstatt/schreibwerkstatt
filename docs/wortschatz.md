@@ -332,8 +332,10 @@ Template-Content ab. Reiter `terms` | `phrases` | `hapax` | `cloud` | `chapters`
 
 [public/js/book/wortschatz-cloud.js](../public/js/book/wortschatz-cloud.js),
 Fragment [wortschatz-cloud.html](../public/partials/wortschatz-cloud.html),
-Layout via d3-cloud (lazy, `loadWordCloud()` in
-[lazy-libs.js](../public/js/lazy-libs.js)).
+Layout via d3-cloud (ESM-Build, lazy per `loadWordCloud()` in
+[lazy-libs.js](../public/js/lazy-libs.js)): je Wort ein Sprite, platziert
+grösstes zuerst in einem festen Kasten (`overflow(false)`), in Häppchen über
+mehrere Ticks — ein Moduswechsel bricht den laufenden Lauf ab.
 
 Die Wolke fügt **keine eigene Auswahl** hinzu: sie zeichnet dieselben
 `lexicon_terms`-Zeilen wie die Tabellen, nur nach Gewicht skaliert. Zwei Modi,

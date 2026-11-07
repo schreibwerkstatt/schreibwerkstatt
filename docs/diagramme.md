@@ -76,7 +76,7 @@ Focus-Editor bleibt unberührt.
 
 ### Warum der Server auch für den Bildschirm rendert
 
-`vendor/mermaid-11.16.0.min.js` ist **3,4 MB** (~1 MB gzip) — mit Abstand die
+`vendor/mermaid-12.3.0.min.js` ist **3,4 MB** (~1 MB gzip) — mit Abstand die
 grösste Lib im Bestand. Sie nur zu laden, um ein fertiges Bild anzuzeigen, ist der
 falsche Preis: der Renderer existiert für die Exportwege ohnehin, sein Cache ist
 inhaltsadressiert, und ein gerendertes Diagramm wiegt ~11 KB pro Theme. Der

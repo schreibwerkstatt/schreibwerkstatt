@@ -1,6 +1,6 @@
 /* Figuren-Werkstatt — Vorwärts-Entwicklung von Figuren als Mindmap (jsMind).
    Datei UNLAYERED (kein @layer components): überschreibt Vendor-CSS
-   vendor/jsmind-0.8.7.css, das selbst unlayered lädt. Gelayerte Regeln
+   vendor/jsmind-0.9.1.css, das selbst unlayered lädt. Gelayerte Regeln
    verlieren generell gegen Unlayered — Spezifität rettet das nicht.
    Akzentfarbe = --card-accent-werkstatt, Mapping in card-accents.css. */
 

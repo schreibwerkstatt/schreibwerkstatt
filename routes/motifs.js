@@ -437,5 +437,6 @@ router.delete('/:id', (req, res) => {
   res.json({ ok: true });
 });
 
-module.exports = router;
-module.exports.buildMotifGraph = buildMotifGraph;
+// Router + benannter Export. Der Cast laesst das Import-Gate den Export am
+// ungetypten Router auch unter TypeScript 7 sehen (dort greift die Expando-Form nicht).
+module.exports = Object.assign(/** @type {Function} */ (router), { buildMotifGraph });

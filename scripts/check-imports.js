@@ -55,7 +55,11 @@ const isHit = l => MISSING_NAME_CODES.test(l) || MISSING_EXPORT_CODES.test(l) ||
 
 let tscBin;
 try {
-  tscBin = require.resolve('typescript/bin/tsc');
+  // Ueber package.json + bin-Feld: TypeScript 7 gibt bin/tsc nicht in der
+  // exports-Map frei, require.resolve('typescript/bin/tsc') scheitert dort.
+  const pkgPath = require.resolve('typescript/package.json');
+  const pkg = require(pkgPath);
+  tscBin = path.join(path.dirname(pkgPath), typeof pkg.bin === 'string' ? pkg.bin : pkg.bin.tsc);
 } catch {
   console.error('[check-imports] typescript nicht gefunden — devDependencies fehlen. Fix: npm ci');
   process.exit(1);

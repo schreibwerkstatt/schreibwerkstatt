@@ -148,7 +148,7 @@ apt-get install -y -qq curl ca-certificates sqlite3 git >/dev/null
 # Auch ein vorhandenes, zu altes Node wird ersetzt (package.json#engines:
 # >=22): native Module wie better-sqlite3 liefern fuer aeltere Majors keine
 # Prebuilds mehr, und ohne make/g++ auf der LXC scheitert dann `npm install`.
-NODE_MAJOR=22
+NODE_MAJOR=24
 node_major() { node -p 'process.versions.node.split(".")[0]' 2>/dev/null || echo 0; }
 if ! command -v node &>/dev/null || [ "$(node_major)" -lt "$NODE_MAJOR" ]; then
   echo "→ Node.js ${NODE_MAJOR} (LTS) installieren…"

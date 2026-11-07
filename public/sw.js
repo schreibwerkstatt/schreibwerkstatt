@@ -325,7 +325,7 @@ self.addEventListener('install', (event) => {
 
 // Der VENDOR_CACHE ist generationsunabhängig und überlebt jeden Deploy — darum
 // räumt ihn niemand sonst auf. Ohne diesen Schritt bliebe jede ersetzte
-// Vendor-Version (neuer Dateiname, z.B. alpine-3.15.12 → 3.15.13) für immer
+// Vendor-Version (neuer Dateiname, z.B. alpine-3.15.12 → 3.17.5) für immer
 // liegen. Entfernt wird, was nicht mehr im aktuellen Bestand steht; ein
 // trotzdem angefragter Alt-Pfad fällt ohnehin auf das Netz zurück (cache-first).
 async function pruneVendorCache() {

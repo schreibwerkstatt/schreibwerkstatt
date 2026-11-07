@@ -179,5 +179,6 @@ router.get('/page/recent', (req, res) => {
   }
 });
 
-module.exports = router;
-module.exports.listRecentPages = listRecentPages;
+// Router + benannter Export. Der Cast laesst das Import-Gate den Export am
+// ungetypten Router auch unter TypeScript 7 sehen (dort greift die Expando-Form nicht).
+module.exports = Object.assign(/** @type {Function} */ (router), { listRecentPages });

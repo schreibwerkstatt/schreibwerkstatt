@@ -64,6 +64,10 @@ export function mermaidThemeConfig(theme) {
   const c = MERMAID_TOKENS[dark ? 'dark' : 'default'];
   return {
     theme: 'base',
+    // Bild wie bisher: dagre-Layout und klassische Optik. Ohne beides nimmt
+    // mermaid ELK und den «neo»-Look (Verlaufsrahmen, Schatten).
+    layout: 'dagre',
+    look: 'classic',
     themeVariables: {
       darkMode: dark,
       background: c['page-view-bg'],

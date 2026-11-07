@@ -121,10 +121,10 @@
     // (Kapitel-Längenverteilung), dessen panel-Spread `x-collapse` mitbringt.
     // Sein alpine:init-Listener muss vor Alpine.start registriert sein — sonst
     // registriert der Core einen warnenden Stub → Console-Guard rot.
-    await import('/public/vendor/alpine-collapse-3.15.12.min.js');
+    await import('/public/vendor/alpine-collapse-3.17.5.min.js');
     // focus-Plugin (x-trap am Sync-Konflikt-Modal) aus demselben Grund vor dem Core.
-    await import('/public/vendor/alpine-focus-3.15.12.min.js');
-    await import('/public/vendor/alpine-3.15.12.min.js');
+    await import('/public/vendor/alpine-focus-3.17.5.min.js');
+    await import('/public/vendor/alpine-3.17.5.min.js');
     // Alpine.initTree laeuft ueber den bereits injizierten DOM; auf das Ende
     // des ersten Ticks warten, damit x-for/x-if-Klone stehen.
     await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)));

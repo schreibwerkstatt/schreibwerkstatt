@@ -8,7 +8,7 @@
 // muessen dafuer angefasst werden.
 
 const express = require('express');
-const { Issuer, generators } = require('openid-client');
+const oidc = require('openid-client');
 const logger = require('../../../logger');
 const appUsers = require('../../../db/app-users');
 const { recordUsageEvent } = require('../../../lib/usage-events');
@@ -19,28 +19,32 @@ const { bodyLang, safeReturnTo, renderDenied } = require('../render');
 
 const ID = 'google';
 
-// OIDC-Client wird einmalig initialisiert und gecacht. Bei Aenderung relevanter
-// app_settings-Keys verworfen, damit die neue Konfiguration beim naechsten
-// Login greift — ohne Server-Restart.
-let oidcClient = null;
+// OIDC-Konfiguration (Discovery + Client-Zugang) wird einmalig geladen und
+// gecacht. Bei Aenderung der Zugangs-Keys verworfen, damit die neue
+// Konfiguration beim naechsten Login greift — ohne Server-Restart.
+let oidcConfig = null;
 appSettings.on('changed', ({ key }) => {
-  if (key === 'app.public_url' || key === 'auth.google.client_id' || key === 'auth.google.client_secret') {
-    oidcClient = null;
+  if (key === 'auth.google.client_id' || key === 'auth.google.client_secret') {
+    oidcConfig = null;
   }
 });
 
-async function getClient() {
-  if (oidcClient) return oidcClient;
-  const googleIssuer = await Issuer.discover('https://accounts.google.com');
+async function getConfig() {
+  if (oidcConfig) return oidcConfig;
+  oidcConfig = await oidc.discovery(
+    new URL('https://accounts.google.com'),
+    appSettings.get('auth.google.client_id'),
+    appSettings.get('auth.google.client_secret'),
+  );
+  return oidcConfig;
+}
+
+// Redirect-URI aus app.public_url — bei jedem Flow frisch gelesen, damit eine
+// geaenderte oeffentliche URL ohne Neustart greift.
+function redirectUri() {
   const appUrl = publicUrl();
   if (!appUrl) throw new Error('app.public_url ist nicht gesetzt — Admin muss die öffentliche URL in den App-Einstellungen hinterlegen.');
-  oidcClient = new googleIssuer.Client({
-    client_id: appSettings.get('auth.google.client_id'),
-    client_secret: appSettings.get('auth.google.client_secret'),
-    redirect_uris: [`${appUrl}/auth/callback`],
-    response_types: ['code'],
-  });
-  return oidcClient;
+  return `${appUrl}/auth/callback`;
 }
 
 function isConfigured() {
@@ -60,17 +64,27 @@ router.get('/auth/login', async (req, res) => {
     );
   }
   try {
-    const client = await getClient();
-    const state = generators.state();
-    const nonce = generators.nonce();
+    const config = await getConfig();
+    const redirect_uri = redirectUri();
+    const state = oidc.randomState();
+    const nonce = oidc.randomNonce();
+    const codeVerifier = oidc.randomPKCECodeVerifier();
+    const codeChallenge = await oidc.calculatePKCECodeChallenge(codeVerifier);
     const returnTo = safeReturnTo(req.query.returnTo);
     // Mehrere parallele Login-Flows (z.B. mehrere Tabs) nebeneinander erlauben:
-    // State → { nonce, returnTo } ablegen, im Callback gezielt nachschlagen.
+    // State → { nonce, codeVerifier, returnTo } ablegen, im Callback gezielt nachschlagen.
     const pending = Array.isArray(req.session.oidcPending) ? req.session.oidcPending : [];
-    pending.push({ state, nonce, returnTo, ts: Date.now() });
+    pending.push({ state, nonce, codeVerifier, returnTo, ts: Date.now() });
     while (pending.length > MAX_PENDING_FLOWS) pending.shift();
     req.session.oidcPending = pending;
-    const url = client.authorizationUrl({ scope: 'openid email profile', state, nonce });
+    const url = oidc.buildAuthorizationUrl(config, {
+      redirect_uri,
+      scope: 'openid email profile',
+      state,
+      nonce,
+      code_challenge: codeChallenge,
+      code_challenge_method: 'S256',
+    }).href;
     req.session.save((saveErr) => {
       if (saveErr) {
         logger.error('Session save error: ' + saveErr.message);
@@ -87,25 +101,29 @@ router.get('/auth/login', async (req, res) => {
 // GET /auth/callback → Token validieren, Session anlegen.
 router.get('/auth/callback', async (req, res) => {
   try {
-    const client = await getClient();
-    const appUrl = publicUrl();
-    const params = client.callbackParams(req);
+    const config = await getConfig();
+    // Die Callback-URL, wie Google sie aufgerufen hat: Redirect-URI (muss mit
+    // der im Login-Schritt identisch sein) plus die Query-Parameter.
+    const currentUrl = new URL(redirectUri());
+    currentUrl.search = new URL(req.originalUrl, 'http://x').search;
+    const state = currentUrl.searchParams.get('state');
     // Passenden pending-Flow suchen (Mehrtab-Support).
     const pending = Array.isArray(req.session.oidcPending) ? req.session.oidcPending : [];
-    const flowIdx = pending.findIndex(f => f.state === params.state);
+    const flowIdx = pending.findIndex(f => f.state === state);
     const flow = flowIdx >= 0 ? pending[flowIdx] : null;
     if (!flow) {
-      logger.warn(`Auth callback: kein passender Login-Flow für state=${params.state}`);
+      logger.warn(`Auth callback: kein passender Login-Flow für state=${state}`);
       return res.status(400).send(
         'Anmeldung abgelaufen oder ungültig. <a href="/login">Erneut anmelden</a>'
       );
     }
-    const tokenSet = await client.callback(
-      `${appUrl}/auth/callback`,
-      params,
-      { state: flow.state, nonce: flow.nonce }
-    );
-    const claims = tokenSet.claims();
+    const tokens = await oidc.authorizationCodeGrant(config, currentUrl, {
+      expectedState: flow.state,
+      expectedNonce: flow.nonce,
+      pkceCodeVerifier: flow.codeVerifier,
+      idTokenExpected: true,
+    });
+    const claims = tokens.claims() || {};
     const email = (claims.email || '').toLowerCase();
     const ip = clientIp(req);
     const userAgent = req.headers['user-agent'] || null;

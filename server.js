@@ -1,6 +1,4 @@
 require('dotenv').config();
-// Async-Handler-Rejections an die Express-Fehlerkette reichen (vor jedem Router).
-require('./lib/async-routes').install();
 const crypto = require('crypto');
 const express = require('express');
 const compression = require('compression');
@@ -115,6 +113,7 @@ const app = express();
 app.set('trust proxy', 1);
 // Während des Graceful Shutdowns: 503 SHUTTING_DOWN statt neuer Arbeit.
 app.use(require('./lib/shutdown').gate);
+app.use(require('./lib/async-routes').bodyDefault);
 app.use(helmet({
   contentSecurityPolicy: false,
   crossOriginEmbedderPolicy: false,
@@ -302,13 +301,13 @@ const PUBLIC_ASSETS = new Set([
   '/sw-domain.js',
   // ALTCHA-PoW-Widget (Custom-Element): von register.html + /login per
   // dynamic `<script type="module">` nachgeladen, sobald ALTCHA aktiv ist.
-  '/vendor/altcha-3.0.11.min.js',
+  '/vendor/altcha-3.5.0.min.js',
   // mermaid: share-reader/diagrams.js laedt die Lib nach, wenn der geteilte Text
   // einen `pre.mermaid` enthaelt. Ohne Freigabe bekaeme der ANONYME Leser die
   // Login-HTML statt des Skripts und saehe statt des Diagramms dessen Quelltext.
   // Einzelfreigabe statt eines `/vendor/`-Prefix: der Reader braucht genau diese
   // eine Datei, alle uebrigen Vendor-Libs gehoeren hinter den Auth-Guard.
-  '/vendor/mermaid-11.16.0.min.js',
+  '/vendor/mermaid-12.3.0.min.js',
 ]);
 // Pre-auth-erlaubte Prefixes: landing.html + register.html ziehen /css/tokens.css
 // + /css/landing.css (+ deren @import-Sub-Tokens) und Variable-Fonts aus /fonts/.
@@ -550,8 +549,8 @@ app.use((req, _res, next) => {
 if (appBundle) app.use(bundleLib.bundleShell(appBundle));
 app.use(staticServe);
 
-// Finaler JSON-Fehler-Handler: fängt synchrone Throws UND (dank
-// lib/async-routes#install) Rejections von async-Handlern.
+// Finaler JSON-Fehler-Handler: fängt synchrone Throws und (Express 5)
+// Rejections von async-Handlern.
 app.use(require('./lib/async-routes').errorHandler);
 
 const server = app.listen(PORT, '0.0.0.0', () => {

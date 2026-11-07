@@ -4,7 +4,7 @@ Ausführliche Anleitung für den Betrieb und das Selbst-Hosting von Schreibwerks
 
 ## Voraussetzungen
 
-- Node.js v22–25 (`engines: >=22 <26`; Node 20 ist EOL, und `npm test` übergibt Globs an `node --test` (erst ab Node 21); Node 26 noch nicht unterstützt: better-sqlite3 11.x baut nicht gegen das V8 in Node 26 — Bump auf 12.x ausstehend). Empfohlen: `.nvmrc` (Node 24).
+- Node.js v24–26 (`engines: >=24 <27`; unpdf 2 verlangt Node 24, und `npm test` übergibt Globs an `node --test`). Empfohlen: `.nvmrc` (Node 24); Umstieg einer bestehenden Installation auf 26: [Node-Major wechseln](#node-major-wechseln).
 - Öffentliche HTTPS-URL (Reverse-Proxy mit TLS) für Produktion.
 - Login-Pfad: **Admin-Bootstrap** (Email+Passwort via ENV) und/oder **Google OAuth2** (Callback `https://<domain>/auth/callback`). Mindestens einer muss konfiguriert sein.
 
@@ -75,6 +75,38 @@ Die **macOS-App** braucht das Token nicht: sie kommt aus dem [Mac App Store](htt
 ```bash
 git pull && npm ci --omit=dev && systemctl restart schreibwerkstatt
 ```
+
+### Node-Major wechseln
+
+Gilt für jeden Major-Sprung innerhalb von `engines` (z. B. 24 → 26). Node kommt auf Prod aus der NodeSource-Quelle (`/etc/apt/sources.list.d/nodesource.sources`), und **dieselbe** System-Node fährt den Dienst und den self-hosted CI-Runner. Ein neuer Major hat eine neue Modul-ABI: die nativen Module (`better-sqlite3`, `sharp`) müssen neu gebaut werden, sonst bricht der Start mit `NODE_MODULE_VERSION`-Fehler ab. Die beiden Lockfile-Stempel überspringen den Install aber, solange `package-lock.json` gleich bleibt — darum werden sie von Hand verworfen.
+
+Voraussetzung: ein Release, dessen `engines` den Ziel-Major erlaubt, ist deployt. Schritte als root im Container:
+
+```bash
+# 1. Sicherung
+systemctl start schreibwerkstatt-backup.service
+
+# 2. Quelle umstellen und Node tauschen
+sed -i 's/node_24\.x/node_26.x/' /etc/apt/sources.list.d/nodesource.sources
+apt-get update && apt-get install -y nodejs
+node -v && npm -v
+
+# 3. Native Module der App neu bauen (als App-User, im Installationsziel)
+su -s /bin/bash github-runner -c 'cd /opt/schreibwerkstatt && npm rebuild better-sqlite3 sharp'
+
+# 4. Stempel verwerfen — der nächste Deploy bzw. CI-Lauf installiert dann frisch
+rm -f /opt/schreibwerkstatt/node_modules/.deployed-lock-sha
+rm -f /opt/actions-runner/_work/schreibwerkstatt/schreibwerkstatt/node_modules/.ci-lock-sha
+
+# 5. Neustart und Kontrolle
+systemctl restart schreibwerkstatt
+journalctl -u schreibwerkstatt -n 30 --no-pager
+su -s /bin/bash github-runner -c "cd /opt/schreibwerkstatt && node -e \"require('better-sqlite3');require('sharp');require('playwright').chromium.launch({args:['--no-sandbox']}).then(b=>b.close()).then(()=>console.log('ok'))\""
+```
+
+Der nächste Push auf `main` fährt den Runner dann mit `npm ci` unter dem neuen Major. Headless-Chromium hängt an der Playwright-, nicht an der Node-Version und bleibt.
+
+Rückweg: Quelle auf `node_24.x` zurückstellen, `apt-get install -y --allow-downgrades nodejs=24.*`, dann Schritte 3–5 wiederholen.
 
 ### Stopp & Neustart
 

@@ -34,14 +34,14 @@ async function deleteDraft(page, id) {
 
 test('Vendor-CSS laedt mit der Werkstatt und steht vor dem App-CSS', async ({ page }) => {
   await bootApp(page);
-  expect(await page.locator('link[href="vendor/jsmind-0.8.7.css"]').count(),
+  expect(await page.locator('link[href="vendor/jsmind-0.9.1.css"]').count(),
     'kein Eager-Load in index.html').toBe(0);
 
   const draft = await openWerkstattWithDraft(page, `CSS-Probe ${RUN}`);
   try {
     const order = await page.evaluate(() => {
       const links = [...document.head.querySelectorAll('link[rel="stylesheet"]')].map(l => l.getAttribute('href'));
-      return { vendor: links.indexOf('vendor/jsmind-0.8.7.css'), app: links.indexOf('css/entities/figur-werkstatt.css') };
+      return { vendor: links.indexOf('vendor/jsmind-0.9.1.css'), app: links.indexOf('css/entities/figur-werkstatt.css') };
     });
     expect(order.vendor).toBeGreaterThanOrEqual(0);
     expect(order.vendor, 'figur-werkstatt.css muss das Vendor-CSS ueberschreiben').toBeLessThan(order.app);

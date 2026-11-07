@@ -112,5 +112,6 @@ router.get('/:book_id', (req, res) => {
   });
 });
 
-module.exports = router;
-module.exports.buildLexiconSummary = buildLexiconSummary;
+// Router + benannter Export. Der Cast laesst das Import-Gate den Export am
+// ungetypten Router auch unter TypeScript 7 sehen (dort greift die Expando-Form nicht).
+module.exports = Object.assign(/** @type {Function} */ (router), { buildLexiconSummary });

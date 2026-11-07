@@ -80,7 +80,7 @@ function _loadGlobal(src, pick, label) {
 export function loadVis() {
   if (window.vis?.Network) return Promise.resolve(window.vis);
   if (!_visPromise) {
-    _visPromise = _loadGlobal('vendor/vis-network-10.0.2.min.js', () => (window.vis?.Network ? window.vis : null), 'vis-network')
+    _visPromise = _loadGlobal('vendor/vis-network-10.1.4.min.js', () => (window.vis?.Network ? window.vis : null), 'vis-network')
       .catch(err => { _visPromise = null; throw err; });
   }
   return _visPromise;
@@ -89,7 +89,7 @@ export function loadVis() {
 export function loadChart() {
   if (typeof window.Chart !== 'undefined') return Promise.resolve(window.Chart);
   if (!_chartPromise) {
-    _chartPromise = _loadGlobal('vendor/chart-4.5.1.umd.min.js', () => window.Chart, 'chart.js')
+    _chartPromise = _loadGlobal('vendor/chart-4.6.1.umd.min.js', () => window.Chart, 'chart.js')
       .catch(err => { _chartPromise = null; throw err; });
   }
   return _chartPromise;
@@ -101,8 +101,8 @@ export function loadJsMind() {
     // Das Vendor-CSS laedt erst mit der Werkstatt, nicht mit jeder Seite.
     // figur-werkstatt.css ueberschreibt es — darum vor das App-CSS.
     _jsMindPromise = Promise.all([
-      _ensureCssFirst('vendor/jsmind-0.8.7.css'),
-      _loadGlobal('vendor/jsmind-0.8.7.js', () => window.jsMind, 'jsMind'),
+      _ensureCssFirst('vendor/jsmind-0.9.1.css'),
+      _loadGlobal('vendor/jsmind-0.9.1.js', () => window.jsMind, 'jsMind'),
     ]).then(([, jm]) => jm)
       .catch(err => { _jsMindPromise = null; throw err; });
   }
@@ -112,7 +112,7 @@ export function loadJsMind() {
 export function loadSortable() {
   if (typeof window.Sortable !== 'undefined') return Promise.resolve(window.Sortable);
   if (!_sortablePromise) {
-    _sortablePromise = _loadGlobal('vendor/sortable-1.15.6.min.js', () => window.Sortable, 'Sortable')
+    _sortablePromise = _loadGlobal('vendor/sortable-1.15.7.min.js', () => window.Sortable, 'Sortable')
       .catch(err => { _sortablePromise = null; throw err; });
   }
   return _sortablePromise;
@@ -127,18 +127,17 @@ export function loadDiff() {
   return _diffPromise;
 }
 
-/** d3-cloud (Wortwolke der Wortschatz-Karte). Der UMD-Build hängt sich unter
- *  `window.d3.layout.cloud` ein und bringt sein einziges Paket-Dependency
- *  (d3-dispatch) gebundelt mit — es braucht kein d3 daneben.
- *
- *  Der Layout-Lauf misst jedes Wort auf einem Offscreen-Canvas; das ist der
- *  Grund, warum er asynchron über mehrere Ticks arbeitet und nicht einfach ein
- *  Array zurückgibt. Aufrufer warten auf das `end`-Event, siehe
+/** d3-cloud (Wortwolke der Wortschatz-Karte) als eigenständiger ESM-Build ohne
+ *  Abhängigkeiten, per dynamic import wie markdown-it. Liefert die Klasse
+ *  `CloudLayout`; Sprites und Platzierung steuert der Aufrufer selbst, siehe
  *  public/js/book/wortschatz-cloud.js. */
 export function loadWordCloud() {
-  if (window.d3?.layout?.cloud) return Promise.resolve(window.d3.layout.cloud);
   if (!_cloudPromise) {
-    _cloudPromise = _loadGlobal('vendor/d3-cloud-1.2.9.js', () => window.d3?.layout?.cloud, 'd3-cloud')
+    _cloudPromise = import('../vendor/d3-cloud-2.0.0.js')
+      .then(m => {
+        if (typeof m.default !== 'function') throw new Error('d3-cloud geladen, aber Default-Export (CloudLayout) fehlt');
+        return m.default;
+      })
       .catch(err => { _cloudPromise = null; throw err; });
   }
   return _cloudPromise;
@@ -156,7 +155,7 @@ export function loadWordCloud() {
 export function loadMermaid() {
   if (window.mermaid) return Promise.resolve(window.mermaid);
   if (!_mermaidPromise) {
-    _mermaidPromise = _loadGlobal('vendor/mermaid-11.16.0.min.js', () => window.mermaid, 'mermaid')
+    _mermaidPromise = _loadGlobal('vendor/mermaid-12.3.0.min.js', () => window.mermaid, 'mermaid')
       .catch(err => { _mermaidPromise = null; throw err; });
   }
   return _mermaidPromise;

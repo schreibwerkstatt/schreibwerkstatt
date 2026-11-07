@@ -333,5 +333,6 @@ router.delete('/:bookId/:id', (req, res) => {
   }
 });
 
-module.exports = router;
-module.exports.captureSnapshot = captureSnapshot;
+// Router + benannter Export. Der Cast laesst das Import-Gate den Export am
+// ungetypten Router auch unter TypeScript 7 sehen (dort greift die Expando-Form nicht).
+module.exports = Object.assign(/** @type {Function} */ (router), { captureSnapshot });
