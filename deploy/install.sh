@@ -21,6 +21,11 @@ echo ""
 # Build-Toolchain scheitert dann `npm install`.
 NODE_MIN=24
 NODE_MAJOR=26
+# Build-Toolchain: npm baut better-sqlite3 beim Install per node-gyp aus
+# binding.gyp, auch wo ein Prebuild passen wuerde — ohne make/g++ bricht
+# `npm install` (und jeder spaetere Deploy) mit `not found: make` ab.
+apt-get update -qq && apt-get install -y make g++ python3
+
 node_major() { node -p 'process.versions.node.split(".")[0]' 2>/dev/null || echo 0; }
 if ! command -v node &>/dev/null || [ "$(node_major)" -lt "$NODE_MIN" ]; then
   echo "Node.js fehlt oder ist zu alt. Installiere Node.js ${NODE_MAJOR} (LTS)..."

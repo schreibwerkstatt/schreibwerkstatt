@@ -140,10 +140,13 @@ echo ""
 
 # ── Pakete ───────────────────────────────────────────────────────────────────
 # sqlite3-CLI ist hier PFLICHT (nicht optional wie auf Prod): der Golden-Snapshot
-# und der Reset laufen ueber `sqlite3 .backup`.
+# und der Reset laufen ueber `sqlite3 .backup`. make/g++/python3: npm baut
+# better-sqlite3 beim Install per node-gyp aus binding.gyp, auch wo ein
+# Prebuild passen wuerde — ohne Toolchain bricht jeder Deploy mit
+# `not found: make` ab.
 echo "→ Systempakete…"
 apt-get update -qq
-apt-get install -y -qq curl ca-certificates sqlite3 git >/dev/null
+apt-get install -y -qq curl ca-certificates sqlite3 git make g++ python3 >/dev/null
 
 # Auch ein vorhandenes, zu altes Node wird ersetzt (unter package.json#engines,
 # NODE_MIN); installiert wird NODE_MAJOR, dieselbe Version wie Prod. Native
