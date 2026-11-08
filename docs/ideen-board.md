@@ -628,7 +628,7 @@ Pendenzen, die **direkt an diesem Abschnitt** hängen, gegen seinen neuen Text
 * **Auslöser** ist `PUT /content/pages/:id` (auch der gemergte Konflikt-Write) —
   der Speicherweg aller drei Editoren und der nativen Clients; kein Editor-Code
   ist beteiligt. `noteIdeenPageSave` entprellt je (Abschnitt, User) um
-  `DEBOUNCE_MS` (3 min) und tut nichts, wenn der Schalter aus ist oder keine
+  `DEBOUNCE_MS` (15 min) und tut nichts, wenn der Schalter aus ist oder keine
   offene Abschnitts-Idee existiert.
 * **«Grösser»** misst `changedWordCount` (Wort-Multimenge) gegen den Ausgangsstand
   in `idee_check_baselines`: ab `MIN_CHANGED_WORDS` (40) läuft der Job über die

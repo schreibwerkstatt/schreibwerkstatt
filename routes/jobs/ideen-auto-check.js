@@ -38,7 +38,7 @@ const { pageQuoteHaystack } = require('./ideen-chat-tools');
 
 const router = express.Router();
 
-const DEBOUNCE_MS = 3 * 60 * 1000;
+const DEBOUNCE_MS = 15 * 60 * 1000;
 const MIN_CHANGED_WORDS = 40;
 const MAX_IDEEN = 40;
 const MAX_BELEG = 500;
