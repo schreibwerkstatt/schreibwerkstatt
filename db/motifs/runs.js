@@ -140,9 +140,27 @@ function saveBrainstormCache(bookId, userEmail, chunkKey, pagesSig, result, prov
 function deleteBrainstormCache(bookId, userEmail) {
   return _stmtDeleteBrainstormCache.run(parseInt(bookId), userEmail || '').changes;
 }
+// Nach einem VOLLSTÄNDIGEN Lauf: Chunk-Zeilen dieses Providers löschen, die der
+// aktuelle Schnitt nicht mehr adressiert (Kapitel zerfällt in weniger Teile,
+// Wechsel Single-/Multi-Pass, gelöschtes Kapitel). Sie würden nie wieder gelesen.
+const _stmtListBrainstormCacheKeys = db.prepare(
+  'SELECT chunk_key FROM motif_brainstorm_cache WHERE book_id = ? AND user_email = ? AND provider = ?'
+);
+const _stmtDeleteBrainstormCacheKey = db.prepare(
+  'DELETE FROM motif_brainstorm_cache WHERE book_id = ? AND user_email = ? AND provider = ? AND chunk_key = ?'
+);
+const pruneBrainstormCache = db.transaction((bookId, userEmail, provider, keepKeys) => {
+  const keep = new Set(keepKeys);
+  const bid = parseInt(bookId);
+  let n = 0;
+  for (const { chunk_key } of _stmtListBrainstormCacheKeys.all(bid, userEmail || '', provider || '')) {
+    if (!keep.has(chunk_key)) n += _stmtDeleteBrainstormCacheKey.run(bid, userEmail || '', provider || '', chunk_key).changes;
+  }
+  return n;
+});
 
 module.exports = {
   insertBrainstormRun, listBrainstormRuns, getBrainstormRun, deleteBrainstormRun,
   insertConsistencyRun, listConsistencyRuns, getConsistencyRun, deleteConsistencyRun,
-  loadBrainstormCache, saveBrainstormCache, deleteBrainstormCache,
+  loadBrainstormCache, saveBrainstormCache, deleteBrainstormCache, pruneBrainstormCache,
 };

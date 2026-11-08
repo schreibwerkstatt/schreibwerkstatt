@@ -40,6 +40,9 @@ export function computePresence(figuren, chapterOrder) {
   const order = chapterOrder || [];
   const chapters = order.map(c => c.label);
   const chapterIds = order.map(c => c.value);
+  // Spaltenkopf: echte Kapitelnummer im Buch (nicht der Spaltenindex), damit
+  // «Spalte 12» auch Kapitel 12 ist; ohne Nummer der Index als Notbehelf.
+  const chapterNums = order.map((c, i) => c.num || String(i + 1));
   const n = chapters.length;
   const idToCol = new Map();
   chapterIds.forEach((id, i) => idToCol.set(String(id), i));
@@ -92,7 +95,7 @@ export function computePresence(figuren, chapterOrder) {
   for (const r of rows) r.share = grandTotal > 0 ? r.total / grandTotal : 0;
 
   return {
-    chapters, chapterIds, rows, maxCell, grandTotal,
+    chapters, chapterIds, chapterNums, rows, maxCell, grandTotal,
     episodic: detectEpisodic(rows, n),
     findings: computeFindings(rows, chapters),
   };
@@ -157,9 +160,16 @@ export function computeFindings(rows, chapters) {
 export const presenceMethods = {
   // Memoisiert (ein _memo-Helper pro Modul, CLAUDE.md). Deps: Katalog + Kapitel-
   // achse — beide stabil, solange sich die Figuren nicht ändern.
+  // Spaltenachse = der ganze Kapitelbaum in Lesereihenfolge (auch Kapitel ohne
+  // Figurenauftritt und ausgeschlossene): eine Lücke in der Präsenz ist nur dann
+  // eine, wenn das Kapitel ohne Figur als Spalte dasteht.
   figurenPresenceData() {
     const figuren = Alpine.store('catalog').figuren;
-    const chapterOrder = this.figurenKapitelOptionen();
+    const root = window.__app;
+    const tree = Alpine.store('nav').tree;
+    const chapterOrder = this._memo('presenceAxis', [tree, root._chapterLabelMap], () =>
+      (tree || []).filter(i => i.type === 'chapter' && !i.solo)
+        .map(c => ({ value: c.id, label: root._kapitelLabel(c.id), num: root._kapitelNummer(c.id) })));
     return this._memo('presence', [figuren, chapterOrder], () => computePresence(figuren, chapterOrder));
   },
 

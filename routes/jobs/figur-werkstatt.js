@@ -19,6 +19,7 @@ const { getDraftFigure, insertWerkstattRun } = require('../../db/draft-figures')
 const { scopedDraft } = require('../draft-figures-acl');
 const plotDb = require('../../db/plot');
 const motifsDb = require('../../db/motifs');
+const { motifScoreFloor } = require('../../lib/motif-floor');
 const embed = require('../../lib/embed');
 const { semanticQuery } = require('../../lib/semantic-retrieval');
 const contentStore = require('../../lib/content-store');
@@ -171,6 +172,8 @@ function _loadFigurMotive(draft, userEmail, logger) {
     const { motifs } = motifsDb.figureMotifUsage(draft.book_id, userEmail, {
       draftFigureId: draft.id,
       sourceFigureId: draft.source_figure_id,
+      // Derselbe Score-Floor wie Konstellation und Figuren-Badge.
+      minScore: motifScoreFloor(),
     });
     if (!motifs.length) return [];
     const scanned = motifsDb.hasOccurrences(draft.book_id, userEmail);

@@ -24,6 +24,7 @@
 // ideen-backlinks.html nimmt dafür `ideaSource` aus dem Wrapper-x-data).
 
 import { fetchJson } from '../utils.js';
+import { isSelectedBook } from '../cards/book-guard.js';
 import { ideeStatus } from './ideen-shared.js';
 
 export const ideenBacklinkMethods = {
@@ -40,9 +41,13 @@ export const ideenBacklinkMethods = {
     if (!bookId) { this[into] = {}; return; }
     try {
       const data = await fetchJson(`/ideen/links?book_id=${bookId}&target_kind=${targetKind}`);
+      // Buch inzwischen gewechselt: die Anrisse des alten Buchs nicht ins neue legen
+      // (die IDs kollidieren zwischen Büchern nicht sicher).
+      if (!isSelectedBook(bookId)) return;
       this[into] = data?.links || {};
       if (into === 'ideaBacklinks') this._ideaBacklinkBookId = bookId;
     } catch {
+      if (!isSelectedBook(bookId)) return;
       this[into] = {};
       if (into === 'ideaBacklinks') this._ideaBacklinkBookId = null;
     }

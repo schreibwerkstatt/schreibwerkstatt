@@ -7,8 +7,10 @@ import { i18nMarkerKey } from '../i18n.js';
 import { startPoll, runningJobStatus } from '../cards/job-helpers.js';
 import { isSelectedBook } from '../cards/book-guard.js';
 import { memoMethods } from '../cards/card-memo.js';
-import { activeFilterId } from '../chapter-filter.js';
 import { nameGuardMethods } from './kontinuitaet-nameguard.js';
+import { kontinuitaetViewMethods, kontinuitaetSeverity } from './kontinuitaet-view.js';
+
+export { KONTINUITAET_SEVERITIES, kontinuitaetSeverity } from './kontinuitaet-view.js';
 
 // Server-Fehlercodes der Start-Routen → Hinweis in der Karte (Rest: generisch).
 const START_ERROR_KEYS = {
@@ -21,42 +23,10 @@ const START_ERROR_KEYS = {
   KOMPLETT_ANALYSIS_RUNNING: 'error.KOMPLETT_ANALYSIS_RUNNING',
 };
 
-// Triage-Status eines Befunds (Filter `status`): '' = aktiv (offen + erledigt, ohne
-// „kein Fehler"), 'open' = nur offene, 'resolved' = nur erledigte, 'dismissed' = nur
-// als „kein Fehler" markierte, 'discarded' = von der Prüfung selbst verworfene
-// (Entwarnung, erfundenes Zitat, Verify) — sie liegen in `result.discarded`, nie in
-// `result.issues`, und zählen in keinem anderen Filter. 'missing' = offene Befunde
-// eines früheren Laufs, die der letzte nicht mehr gemeldet hat (`missing_since`).
-export const KONTINUITAET_STATUS_FILTERS = ['', 'open', 'resolved', 'dismissed', 'missing', 'discarded'];
-function _matchesStatus(issue, status) {
-  if (status === 'discarded') return !!issue.discarded;
-  if (issue.discarded) return false;
-  if (status === 'dismissed') return !!issue.dismissed;
-  if (issue.dismissed) return false;
-  if (status === 'missing') return !issue.resolved && !!issue.missing_since;
-  if (status === 'open') return !issue.resolved;
-  if (status === 'resolved') return !!issue.resolved;
-  return true;
-}
-
-// Schwere eines Befunds, normalisiert: fehlend/unbekannt = niedrig. SSoT für
-// Filter, Sortierung, Tab-Zähler und Tag — sonst zählt ein Tab andere Zeilen,
-// als sein Filter zeigt.
-export const KONTINUITAET_SEVERITIES = ['kritisch', 'mittel', 'niedrig'];
-export function kontinuitaetSeverity(issue) {
-  const s = issue?.schwere;
-  return KONTINUITAET_SEVERITIES.includes(s) ? s : 'niedrig';
-}
-
 // Quellen-URL der Faktencheck-Befunde ist KI-Output: nur http(s) wird ein Link.
 export function kontinuitaetSafeUrl(url) {
   const u = typeof url === 'string' ? url.trim() : '';
   return /^https?:\/\//i.test(u) ? u : '';
-}
-
-// Quell-Liste je Status-Filter: die Verworfenen sind eine eigene Liste des Checks.
-export function kontinuitaetSource(result, status) {
-  return (status === 'discarded' ? result?.discarded : result?.issues) || [];
 }
 
 export const kontinuitaetMethods = {
@@ -171,10 +141,10 @@ export const kontinuitaetMethods = {
       this._memos = {};
       this.kontinuitaetLoadError = false;
       this.kontinuitaetResult = data;
-      // Tab «Verworfen» ist nur sichtbar, solange es Verworfene gibt — sonst stünde der
-      // Filter auf einer leeren, unsichtbaren Liste.
+      // Der Fokus «Nicht mehr gemeldet» ist nur sichtbar, solange es solche Befunde
+      // gibt — sonst stünde der Filter auf einer leeren, unsichtbaren Liste.
       const filters = Alpine.store('catalogUi').kontinuitaetFilters;
-      if (filters.status === 'discarded' && !data?.discarded?.length) filters.status = '';
+      if (filters.fokus === 'missing' && !(data?.issues || []).some(i => i.missing_since && !i.resolved && !i.dismissed)) filters.fokus = '';
     } catch (e) {
       if (!isSelectedBook(bookId)) return;
       // Nur ohne angezeigtes Ergebnis zum Fehlerzustand: ein fehlgeschlagener
@@ -194,11 +164,6 @@ export const kontinuitaetMethods = {
 
   kontinuitaetSafeUrl(url) { return kontinuitaetSafeUrl(url); },
   kontinuitaetSeverity(issue) { return kontinuitaetSeverity(issue); },
-
-  // Alle Filter auf ihre Defaults (Zustand „Alle weggefiltert").
-  kontinuitaetResetFilters() {
-    Object.assign(Alpine.store('catalogUi').kontinuitaetFilters, { figurId: '', kapitelId: '', schwere: '', status: '', suche: '' });
-  },
 
   // Zeile auf-/zuklappen (Klick + Enter/Space).
   kontinuitaetToggleIssue(issue, i) {
@@ -230,72 +195,10 @@ export const kontinuitaetMethods = {
     });
   },
 
-  // Issues gefiltert nach UI-Filtern (figurId, kapitel). Reads figuren+tree
-  // from root. Muss eine Methode sein (keine `get`-Syntax): `kontinuitaetMethods`
-  // wird per `...spread` in die Alpine.data-Factory übernommen, und Spread ruft
-  // Getter auf und speichert nur den Wert — die Reaktivität auf Filter/Result
-  // ginge verloren, und der Wert wäre zur Spread-Zeit `[]`.
-  //
-  // Memoisiert, weil das Template die Liste (ueber kontinuitaetIssuesSorted)
-  // viermal pro Render liest und jeder Durchlauf den Kapitelnamen-Index neu aufbaute.
-  kontinuitaetIssuesFiltered() {
-    const filters = Alpine.store('catalogUi').kontinuitaetFilters;
-    const issues = kontinuitaetSource(this.kontinuitaetResult, filters.status || '');
-    const chapters = this._kontinuitaetChapters();
-    const figuren = window.__app.$store.catalog.figuren || [];
-    const pages = Alpine.store('nav').pages || [];
-    const kapitelId = filters.kapitelId ? activeFilterId(filters.kapitelId, this.kontinuitaetKapitelOptionen()) : '';
-    return this._memo(
-      'filtered',
-      [issues, chapters, pages, figuren, filters.figurId, kapitelId, filters.schwere, filters.status, filters.suche],
-      () => this._computeKontinuitaetIssuesFiltered(issues, chapters, figuren, { ...filters, kapitelId }),
-    );
-  },
-
-  _computeKontinuitaetIssuesFiltered(issues, chapters, figuren, filters) {
-    const chapterOf = this._kontinuitaetChapterResolver(chapters);
-    const q = (filters.suche || '').trim().toLowerCase();
-    return issues.filter(issue => {
-      if (!_matchesStatus(issue, filters.status || '')) return false;
-      if (filters.figurId) {
-        if (issue.fig_ids?.length) {
-          if (!issue.fig_ids.includes(filters.figurId)) return false;
-        } else {
-          const selectedName = figuren.find(f => f.id === filters.figurId)?.name || '';
-          if (selectedName && !(issue.figuren || []).includes(selectedName)) return false;
-        }
-      }
-      if (filters.kapitelId && !chapterOf(issue).has(String(filters.kapitelId))) return false;
-      if (filters.schwere && kontinuitaetSeverity(issue) !== filters.schwere) return false;
-      if (q && !this._kontinuitaetSearchText(issue).includes(q)) return false;
-      return true;
-    });
-  },
-
   // Suchtext = was Zeile + Detail zeigen (Typ, Text, Empfehlung, Figuren, Stellen, Quelle).
   _kontinuitaetSearchText(i) {
     return [this.kontinuitaetTypLabel(i.typ), i.beschreibung, i.empfehlung, ...(i.figuren || []),
       i.stelle_a, i.stelle_b, i.quelle].filter(Boolean).join('\n').toLowerCase();
-  },
-
-  // Memoisiert auf die (ihrerseits memoisierte) gefilterte Liste: das Template
-  // liest sie viermal pro Render (Zaehler, Leer-Zustand, x-for).
-  kontinuitaetIssuesSorted() {
-    const filtered = this.kontinuitaetIssuesFiltered();
-    return this._memo('sorted', [filtered], () => this._sortKontinuitaetIssues(filtered));
-  },
-
-  _sortKontinuitaetIssues(filtered) {
-    const order = { kritisch: 0, mittel: 1, niedrig: 2 };
-    const list = filtered.slice();
-    list.sort((a, b) => {
-      // Erledigte ans Ende, danach nach Schwere.
-      const ra = a.resolved ? 1 : 0;
-      const rb = b.resolved ? 1 : 0;
-      if (ra !== rb) return ra - rb;
-      return order[kontinuitaetSeverity(a)] - order[kontinuitaetSeverity(b)];
-    });
-    return list;
   },
 
   // Selektions-/Render-Key: bevorzugt die DB-Issue-ID (stabil bis zum nächsten
@@ -362,32 +265,9 @@ export const kontinuitaetMethods = {
     });
   },
 
-  // Status-Wechsel in place: gefilterte UND sortierte Liste sowie Tab-Zähler neu berechnen.
-  _invalidateKontinuitaetSort() {
-    if (this._memos) { delete this._memos.sorted; delete this._memos.filtered; delete this._memos.counts; }
-  },
-
   // Anzahl offener Befunde (nicht erledigt, nicht „kein Fehler") im aktuellen Check.
   kontinuitaetOpenCount() {
     return (this.kontinuitaetResult?.issues || []).filter(i => !i.resolved && !i.dismissed).length;
-  },
-
-  // Befunde, die der Status-Filter zeigt — Basis der Schwere-Zähler in den Tabs,
-  // damit „Kritisch 3" auch drei sichtbare Zeilen meint.
-  kontinuitaetIssuesInStatus() {
-    const status = Alpine.store('catalogUi').kontinuitaetFilters.status || '';
-    return kontinuitaetSource(this.kontinuitaetResult, status).filter(i => _matchesStatus(i, status));
-  },
-
-  // Anzahl der von der Prüfung verworfenen Befunde (Tab «Verworfen (N)»).
-  kontinuitaetDiscardedCount() {
-    return (this.kontinuitaetResult?.discarded || []).length;
-  },
-
-  // Befunde des Checks insgesamt (geführte + verworfene) — für Filterleiste und Leer-Zustände.
-  kontinuitaetAllIssues() {
-    const r = this.kontinuitaetResult;
-    return [...(r?.issues || []), ...(r?.discarded || [])];
   },
 
   // Grund eines Verwurfs als Satz (i18n), Rohwert als Fallback.
@@ -415,23 +295,6 @@ export const kontinuitaetMethods = {
       this._kontinuitaetTriageFailed();
       console.error('[kontinuitaetRestoreDiscarded]', e);
     }
-  },
-
-  // Tab-Zähler { all, kritisch, mittel, niedrig } im aktuellen Status-Filter,
-  // mit derselben Schwere-Normalisierung wie der Filter. Memoisiert (pro Render
-  // sieben Lesezugriffe).
-  kontinuitaetSeverityCounts() {
-    const status = Alpine.store('catalogUi').kontinuitaetFilters.status || '';
-    const issues = kontinuitaetSource(this.kontinuitaetResult, status);
-    return this._memo('counts', [issues, status], () => {
-      const counts = { all: 0, kritisch: 0, mittel: 0, niedrig: 0 };
-      for (const i of issues) {
-        if (!_matchesStatus(i, status)) continue;
-        counts.all++;
-        counts[kontinuitaetSeverity(i)]++;
-      }
-      return counts;
-    });
   },
 
   // Menschliches Label für den Issue-Typ. Freitext-Feld (Prompt-gesteuert) → i18n-Key
@@ -596,4 +459,5 @@ export const kontinuitaetMethods = {
 
   // Namens-/Konsistenz-Waechter (eigenes Modul, gleiche Karte).
   ...nameGuardMethods,
+  ...kontinuitaetViewMethods,
 };

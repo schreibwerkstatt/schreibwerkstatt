@@ -167,7 +167,8 @@ test('alterstabelle: Reiter rendert, Filter greifen, Belege klappen auf', async 
     const store = window.Alpine.store('catalog');
     store.figuren = store.figuren.map(f => f.id === aId
       ? { ...f, kapitel: [{ chapter_id: chapterId, name: 'x', haeufigkeit: 1 }] } : f);
-    return window.__app._chapterLabelMap.get(chapterId) ?? window.__app._chapterLabelMap.get(String(chapterId));
+    // Auswertungs-Label mit Kapitelnummer (app-ui.js#_kapitelLabel).
+    return window.__app._kapitelLabel(chapterId);
   }, { aId: seeded.aId, chapterId: realPage.chapterId });
   expect(chap).toBeTruthy();
   await expect(boxes.nth(1)).toBeVisible();

@@ -13,9 +13,8 @@
 import {
   patchSortableOnce,
   revertSortable,
-  markDragIgnore,
-  unmarkDragIgnore,
-  BASE_SORTABLE_OPTS,
+  boardSortableOpts,
+  endBoardDrag,
 } from '../../sortable-dnd.js';
 
 export const dndMethods = {
@@ -25,8 +24,7 @@ export const dndMethods = {
     // Falls ein Drag durch Reattach/Teardown unterbrochen wurde, Drag-Klasse +
     // gemessene Karten-Höhe nicht permanent stehen lassen (sonst bleiben leere
     // Zellen aufgebläht bzw. auf einer veralteten Höhe).
-    document.body.classList.remove('plot-dnd-active');
-    document.body.style.removeProperty('--plot-drag-h');
+    endBoardDrag();
   },
 
   // Reattach coalescen: strukturelle Änderungen (Akt-/Strang-CRUD, Fork, loadBoard)
@@ -52,63 +50,18 @@ export const dndMethods = {
     if (!Sortable) return;
     patchSortableOnce(Sortable);
     this._destroySortables();
-    // Während eines Drags eine Klasse auf <body> setzen → CSS bläht leere
-    // Swimlane-Zellen zur erreichbaren Drop-Zone auf (sonst min-height: 0, eine
-    // leere Akt×Strang-Zelle wäre kaum als Drop-Ziel zu treffen). onStart/onEnd
-    // statt onChoose/onUnchoose: ein reiner Klick (ohne Drag) toggelt nichts.
-    // `--plot-drag-h` = Höhe der gezogenen Karte → die aufgeblähte Drop-Zone ist
-    // exakt so hoch wie das gezogene Element, statt eines fixen (oft zu grossen)
-    // Leerrechtecks (CSS liest die Var mit Fallback).
-    const setDragging = (on, item) => {
-      document.body.classList.toggle('plot-dnd-active', on);
-      if (on && item) {
-        const h = Math.round(item.getBoundingClientRect().height);
-        if (h > 0) document.body.style.setProperty('--plot-drag-h', `${h}px`);
-      } else {
-        document.body.style.removeProperty('--plot-drag-h');
-      }
-    };
-    // Im Native-Vollbild rendert nur der Teilbaum des Fullscreen-Elements (Top-
-    // Layer). SortableJS hängt den `position:fixed`-Fallback-Ghost (forceFallback)
-    // aber an `document.body` — ausserhalb des Top-Layers, also unsichtbar hinter
-    // dem Vollbild-Element. Folge: der User zieht im Vollbild blind, verfehlt die
-    // Ziel-Zellen und muss mehrfach loslassen. Fix: den frisch erzeugten Ghost
-    // (`Sortable.ghost`, existiert ab onStart) in das Fullscreen-Element umhängen.
-    // `position:fixed` bleibt viewport-relativ (die Plot-Karte stellt keinen
-    // Containing-Block via transform/filter), die Optik ändert sich also nicht —
-    // der Ghost wird nur sichtbar. SortableJS räumt ihn via `parentNode` auf,
-    // das Umhängen ist also cleanup-sicher.
-    const relocateGhostForFullscreen = () => {
-      const fsEl = document.fullscreenElement;
-      const ghost = Sortable.ghost;
-      if (fsEl && ghost && !fsEl.contains(ghost)) fsEl.appendChild(ghost);
-    };
-    // Geteiltes Präzisions-Tuning aus BASE_SORTABLE_OPTS (forceFallback-Ghost,
-    // swapThreshold gegen Nachbar-Flackern, invertSwap für stabile Backward-Drops,
-    // revertOnSpill gegen Item-Loss). `handle` = der Drag-Griff (.plot-beat-grip,
-    // nur im Ansichtsmodus gerendert): einzige Greiffläche, so dass die übrige
-    // Karte voll klickbar bleibt (Status zyklen, Titel→Edit, Tags→Figur springen)
-    // ohne Drag/Klick-Konflikt. Kein `filter` nötig — der Griff fehlt im Edit-
-    // Modus, ein bearbeiteter Beat ist also nie ziehbar.
-    const baseOpts = {
-      ...BASE_SORTABLE_OPTS,
-      // Grosszügiger Trefferradius um jede Zelle — zusammen mit der min-height der
-      // Drop-Zonen (plot/board.css/plot/swimlane.css) fängt auch ein schneller
-      // Akt-/Zell-übergreifender Drag zuverlässig im Ziel, statt im Spalten-Gap zu
-      // verpuffen. Niedriger Wert (10) verfehlte schnelle Cross-Cell-Drags.
-      emptyInsertThreshold: 24,
-      scroll: true,
+    // Karten-Board-Optionen + Drag-Zustand aus sortable-dnd.js#boardSortableOpts
+    // (gleich in Plot, Ideen-Board, Recherche-Status). `handle` = der Drag-Griff
+    // (.plot-beat-grip, nur im Ansichtsmodus gerendert): einzige Greiffläche, so
+    // dass die übrige Karte voll klickbar bleibt (Status zyklen, Titel→Edit,
+    // Tags→Figur springen). Kein `filter` nötig — der Griff fehlt im Edit-Modus,
+    // ein bearbeiteter Beat ist also nie ziehbar.
+    const baseOpts = boardSortableOpts(Sortable, {
       draggable: '.plot-beat',
       handle: '.plot-beat-grip',
       group: { name: 'plot-beats', pull: true, put: ['plot-beats'] },
-      chosenClass: 'plot-beat-chosen',
-      ghostClass: 'plot-beat-ghost',
-      dragClass: 'plot-beat-drag-active',
-      onChoose: markDragIgnore,
-      onUnchoose: unmarkDragIgnore,
-      onStart: (evt) => { setDragging(true, evt.item); relocateGhostForFullscreen(); },
-      onEnd: (evt) => { setDragging(false); unmarkDragIgnore(evt); this.onBeatSortEnd(evt); },
-    };
+      onEnd: (evt) => this.onBeatSortEnd(evt),
+    });
     // Eine Sortable-Instanz pro Beat-Zelle (.plot-beats[data-plot-cell]). Flaches
     // Board und Grid sind beide im DOM (x-show); die jeweils versteckten Container
     // sind geometrielos → nie Drop-Ziel, das Binden bleibt unschädlich.

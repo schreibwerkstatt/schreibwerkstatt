@@ -1,4 +1,5 @@
 // Teil von appHashRouterMethods (siehe Facade app-hash-router.js).
+import { exitFullscreenOnNavigation } from '../../fullscreen.js';
 // Schreib-Richtung: State → URL. Baut den Hash aus dem aktuellen State und
 // schreibt ihn per push/replace in die History.
 //
@@ -141,7 +142,7 @@ export const hashBuildMethods = {
       // Alle Karten zu → zurueck auf die Uebersicht. Das ist eine Navigation wie
       // jede andere, und replaceState feuert kein hashchange: ohne den Aufruf
       // hier bliebe der Heimweg in der Reichweitenmessung unsichtbar.
-      if (location.hash) { history.replaceState(null, '', cleanUrl); this._trackPageview(); }
+      if (location.hash) { exitFullscreenOnNavigation(); history.replaceState(null, '', cleanUrl); this._trackPageview(); }
       return;
     }
     if (location.hash === newHash) return;
@@ -151,6 +152,8 @@ export const hashBuildMethods = {
     if (oldCat && oldCat === newCat) {
       history.replaceState(null, '', newHash);
     } else {
+      // Kategorie-Wechsel = Sprung in eine andere Ansicht → Vollbild verlassen.
+      exitFullscreenOnNavigation();
       history.pushState(null, '', newHash);
     }
     // pushState/replaceState feuern kein hashchange → Plausible manuell triggern.

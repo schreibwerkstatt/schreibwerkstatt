@@ -46,6 +46,9 @@ export const buchlandkarteMethods = {
 
   bookMapChapterName(chapterId) {
     if (chapterId == null) return window.__app?.t?.('buchlandkarte.noChapter') || '';
+    // Mit Kapitelnummer (app-ui.js#_kapitelLabel); Fallback der Name aus der Navigationsliste.
+    const numbered = window.__app?._kapitelLabel?.(chapterId);
+    if (numbered) return numbered;
     const p = (Alpine.store('nav').pages || []).find(x => String(x.chapter_id) === String(chapterId));
     return p?.chapterName || window.__app?.t?.('buchlandkarte.chapterFallback', { id: chapterId }) || ('#' + chapterId);
   },

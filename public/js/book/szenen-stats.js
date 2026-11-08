@@ -28,6 +28,7 @@ export function activeSzenen(szenen) {
 }
 
 import { sameId } from '../chapter-filter.js';
+import { figurAnzeigeName } from './figur-name.js';
 
 // Kapitel-Schlüssel: ID, sonst Name (Szene ohne auflösbares Kapitel).
 function kapitelKey(s) {
@@ -128,7 +129,7 @@ export function szenenNachFigur(szenen, figuren) {
   for (const f of (figuren || [])) {
     const total = counts.get(f.id) || 0;
     if (total === 0) continue;
-    out.push({ id: f.id, name: f.kurzname || f.name, total, wenig: total < WENIG_SZENEN });
+    out.push({ id: f.id, name: figurAnzeigeName(f), total, wenig: total < WENIG_SZENEN });
   }
   return out;
 }

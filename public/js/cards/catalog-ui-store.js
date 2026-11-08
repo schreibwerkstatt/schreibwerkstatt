@@ -12,6 +12,8 @@
 // localStorage persistiert. `_figuresPollTimer` (reconnect-relevant) bleibt
 // bewusst am Root (app-state.js).
 
+import { KONTINUITAET_FILTER_DEFAULTS, KONTINUITAET_VIEW_DEFAULTS } from '../book/kontinuitaet-view.js';
+
 export function registerCatalogUiStore() {
   if (typeof window === 'undefined' || !window.Alpine) return;
   window.Alpine.store('catalogUi', {
@@ -41,6 +43,7 @@ export function registerCatalogUiStore() {
     selectedSongId: null,
     songsFilters: { figurId: '', kapitelId: '', genre: '', kontextTyp: '', suche: '' },
 
-    kontinuitaetFilters: { figurId: '', kapitelId: '', schwere: '', status: '', suche: '' },
+    kontinuitaetFilters: { ...KONTINUITAET_FILTER_DEFAULTS },
+    kontinuitaetView: { ...KONTINUITAET_VIEW_DEFAULTS },
   });
 }

@@ -1,4 +1,4 @@
-// Ansichts-Menue der Plot-Filterleiste (plot-view-menu.html): die drei
+// Ansichts-Menue der Plot-Filterleiste (view-menu.html): die drei
 // Schalter des Arbeitsmodus stehen in einem Menue statt als Haken in der
 // Leiste. Gegen die echte App, weil `menu()` und die per User persistierten
 // Schalter erst in der gebooteten Karte zusammenspielen.
@@ -24,12 +24,12 @@ test('plot: Ansichts-Menue schaltet, bleibt dabei offen und zaehlt Abweichungen 
   try {
     await page.evaluate(() => window.__app.togglePlotCard());
     const card = page.locator('.card--plot');
-    const toggle = card.locator('.plot-view-toggle');
-    const panel = card.locator('.plot-view-menu-panel');
+    const toggle = card.locator('.view-menu-toggle');
+    const panel = card.locator('.view-menu-panel');
     const item = (label) => panel.locator('[role="menuitemcheckbox"]', { hasText: label });
     await expect(toggle).toBeVisible();
     // Die Haken stehen nicht mehr einzeln in der Leiste.
-    await expect(card.locator('.filter-bar .filter-toggle')).toHaveCount(0);
+    await expect(card.locator('.filter-bar input[type="checkbox"]')).toHaveCount(0);
     await expect(toggle.locator('.btn-count')).toBeHidden();
 
     await toggle.click();

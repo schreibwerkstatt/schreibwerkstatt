@@ -93,8 +93,10 @@ function resolveFigureIds(bookId, userEmail, figIds) {
   return [...new Set(out)];
 }
 
+const _filterStmts = new Map();
 function _filterIds(sql, bookId, ids, extra = []) {
-  const stmt = db.prepare(sql);
+  let stmt = _filterStmts.get(sql);
+  if (!stmt) { stmt = db.prepare(sql); _filterStmts.set(sql, stmt); }
   const bid = parseInt(bookId);
   const out = [];
   for (const raw of ids || []) {
@@ -128,10 +130,13 @@ function validPageIds(bookId, pageIds) {
 // verschiedenen Motiv-Mengen.
 //
 // `occurrenceCount` kommt mit, weil ein Motiv OHNE Ist-Belege etwas anderes
-// aussagt als eines mit: „geplant" ist nicht „trägt".
+// aussagt als eines mit: „geplant" ist nicht „trägt". Unter DEMSELBEN Score-Floor
+// wie Graph und Konsistenz (`minScore`, 0 = alle) — sonst nennt die Figuren-
+// Werkstatt eine andere Zahl als die Konstellation.
 const _stmtMotifsForFigure = db.prepare(`
   SELECT DISTINCT m.id, m.name, COALESCE(m.farbe, t.farbe) AS farbe, m.position,
-         (SELECT COUNT(*) FROM motif_occurrences o WHERE o.motif_id = m.id) AS occurrenceCount
+         (SELECT COUNT(*) FROM motif_occurrences o
+           WHERE o.motif_id = m.id AND (o.score IS NULL OR o.score >= ?)) AS occurrenceCount
     FROM motifs m
     LEFT JOIN themes t ON t.id = m.theme_id
    WHERE m.book_id = ? AND m.user_email = ?
@@ -143,13 +148,33 @@ const _stmtMotifsForFigure = db.prepare(`
    ORDER BY m.position, m.id
 `);
 
-function figureMotifUsage(bookId, userEmail, { draftFigureId = null, sourceFigureId = null } = {}) {
+function figureMotifUsage(bookId, userEmail, { draftFigureId = null, sourceFigureId = null, minScore = 0 } = {}) {
   const dId = draftFigureId != null ? parseInt(draftFigureId) : null;
   const sId = sourceFigureId != null ? parseInt(sourceFigureId) : null;
   if (dId == null && sId == null) return { motifs: [] };
-  const motifs = _stmtMotifsForFigure.all(parseInt(bookId), userEmail, dId, dId, sId, sId);
+  const floor = Number(minScore) || 0;
+  const motifs = _stmtMotifsForFigure.all(floor, parseInt(bookId), userEmail, dId, dId, sId, sId);
   return { motifs };
 }
+
+// Mehrere Brücken eines Motivs in EINER Transaktion setzen (PUT /:id/links).
+// `sets` = { figures?, draftFigures?, beats?, chapters?, pages? } mit bereits
+// validierten INTEGER-IDs; ein fehlender Schlüssel lässt die Brücke unberührt.
+// Rückgabe false, wenn das Motiv inzwischen gelöscht ist — dann wird nichts
+// geschrieben (kein halber Stand, kein FK-Fehler mittendrin). Die einzelnen
+// Setter sind selbst Transaktionen; verschachtelt laufen sie als Savepoints.
+const _stmtMotifExistsL = db.prepare('SELECT 1 FROM motifs WHERE id = ?');
+const _BRIDGE_SETTERS = {
+  figures: setMotifFigures, draftFigures: setMotifDraftFigures, beats: setMotifBeats,
+  chapters: setMotifChapters, pages: setMotifPages,
+};
+const setMotifLinks = db.transaction((motifId, sets) => {
+  if (!_stmtMotifExistsL.get(parseInt(motifId))) return false;
+  for (const [key, setter] of Object.entries(_BRIDGE_SETTERS)) {
+    if (sets[key] !== undefined) setter(motifId, sets[key]);
+  }
+  return true;
+});
 
 // Alle fünf Soll-Brücken eines Buchs in Lesereihenfolge — einziger Konsument ist
 // der Graph-Payload (db/motifs/graph.js), der sie auf die Motive verteilt.
@@ -166,6 +191,6 @@ function bridgeRows(bookId, userEmail) {
 
 module.exports = {
   setMotifFigures, setMotifDraftFigures, setMotifBeats, setMotifChapters, setMotifPages,
-  resolveFigureIds, validBeatIds, validDraftFigureIds, validChapterIds, validPageIds,
+  setMotifLinks, resolveFigureIds, validBeatIds, validDraftFigureIds, validChapterIds, validPageIds,
   bridgeRows, figureMotifUsage,
 };

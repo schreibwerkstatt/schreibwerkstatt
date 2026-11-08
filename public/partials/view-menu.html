@@ -1,0 +1,40 @@
+<!-- Ansichts-Menue der Filterleiste (Fragment, string-seitiger @include in die
+     .filter-bar einer Karte). Einziges Markup des Musters: die Karte liefert
+     nur `viewMenuSpec()` = { tip, items } (Vertrag in public/js/view-menu.js,
+     DESIGN.md „Ansichts-Menue"). Die Zahl am Knopf sagt, wie viele Schalter
+     von der Grundansicht abweichen. Schalter halten den Klick an (`.stop`):
+     das Menue bleibt fuer den naechsten offen. Ohne Eintrag (nichts, was die
+     Karte gerade anbieten kann) faellt der Knopf ganz weg.
+     Gegated: tests/unit/view-menu-single-place.test.mjs. -->
+<span x-data="viewMenu()" class="view-menu" x-show="viewMenuSpec().items.length > 0">
+  <button type="button" class="btn-compact view-menu-toggle" x-bind="trigger" aria-haspopup="menu"
+          :class="{ 'is-active': open }" :data-tip="viewMenuSpec().tip">
+    <svg class="icon" aria-hidden="true"><use href="/icons.svg#list-filter"/></svg>
+    <span x-text="$app.t('viewMenu.toggle')"></span>
+    <span class="btn-count" x-show="changeCount(viewMenuSpec()) > 0" x-text="changeCount(viewMenuSpec())"></span>
+  </button>
+  <div class="context-menu context-menu--dropdown view-menu-panel" x-bind="panel" x-cloak>
+    <div class="context-menu-header" x-text="$app.t('viewMenu.toggle')"></div>
+    <template x-for="it in viewMenuSpec().items" :key="it.key">
+      <div class="view-menu-row" role="none">
+        <template x-if="it.kind === 'toggle'">
+          <button type="button" class="context-menu-item context-menu-item--icon" role="menuitemcheckbox"
+                  :class="{ 'context-menu-item--on': it.on }" :aria-checked="it.on ? 'true' : 'false'"
+                  :disabled="!!it.disabled" :data-tip="it.tip || null" @click.stop="it.toggle()">
+            <svg class="icon" aria-hidden="true"><use :href="it.on ? '/icons.svg#check' : '/icons.svg#square'"/></svg>
+            <span x-text="it.label"></span>
+          </button>
+        </template>
+        <template x-if="it.kind === 'header'">
+          <div class="context-menu-header context-menu-header--inline" x-text="it.label"></div>
+        </template>
+        <template x-if="it.kind === 'sep'">
+          <div class="context-menu-sep" role="separator"></div>
+        </template>
+        <template x-if="it.kind === 'hint'">
+          <p class="view-menu-hint" x-text="it.text"></p>
+        </template>
+      </div>
+    </template>
+  </div>
+</span>

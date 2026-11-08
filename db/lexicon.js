@@ -156,7 +156,7 @@ const _replace = db.transaction((bookId, { stats, terms, phrases, chapters, idio
       yule_k: c.yule_k ?? null,
       lex_density: c.lex_density ?? null,
       delta: c.delta ?? null,
-      delta_top_json: c.delta_top ? JSON.stringify(c.delta_top) : null,
+      delta_top_json: _deltaJson(c),
     });
   }
   for (const f of idiolect || []) {
@@ -244,6 +244,22 @@ function listLexiconNgrams(bookId) {
   return _stmtListNgrams.all(bookId);
 }
 
+// `delta_top_json` hält Begründung UND Block-Zugehörigkeit des Kapitel-Deltas:
+// `{ top: [{term,z}], block: { first, last, chapters, tokens } | null }`. Ein Block
+// (kurze Nachbarkapitel, gemeinsam gemessen — lib/lexicon/chapters.js#_deltaUnits)
+// ist Teil derselben Aussage wie die Begründung, darum dieselbe Spalte. Gelesen
+// wird auch die reine Liste der Scans vor LEXICON_VERSION 7 (bis zum Neu-Scan).
+function _deltaJson(c) {
+  if (!c.delta_top) return null;
+  return JSON.stringify({ top: c.delta_top, block: c.delta_block || null });
+}
+function _parseDeltaJson(json) {
+  if (!json) return { delta_top: null, delta_block: null };
+  const v = JSON.parse(json);
+  if (Array.isArray(v)) return { delta_top: v, delta_block: null };
+  return { delta_top: v.top || null, delta_block: v.block || null };
+}
+
 // Kapitel-Band in Buchreihenfolge (`position` = Reihenfolge des Scans). Der Name
 // kommt per JOIN — keine Snapshot-Spalte.
 const _stmtListChapters = db.prepare(`
@@ -256,7 +272,7 @@ const _stmtListChapters = db.prepare(`
 `);
 function listChapterLexicon(bookId) {
   return _stmtListChapters.all(bookId).map(({ delta_top_json, ...r }) => ({
-    ...r, delta_top: delta_top_json ? JSON.parse(delta_top_json) : null,
+    ...r, ..._parseDeltaJson(delta_top_json),
   }));
 }
 

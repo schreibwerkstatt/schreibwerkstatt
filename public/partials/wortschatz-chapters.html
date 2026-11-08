@@ -4,7 +4,10 @@
 
      Delta ohne Begründung wäre eine Behauptung: neben der Zahl stehen die häufigen
      Wörter, die das Kapitel öfter bzw. seltener benutzt als der Rest. Auffällige
-     Kapitel (Delta mehr als eine Standardabweichung über dem Mittel) sind markiert. -->
+     Kapitel (Delta mehr als eine Standardabweichung über dem Mittel) sind markiert.
+     Kurze Kapitel tragen das Delta ihres Blocks (`delta_block`, Stern + Spanne vor
+     der Begründung); eine Zeile je Kapitel, weil die übrigen Spalten pro Kapitel
+     gelten. -->
 <div role="tabpanel" x-show="wortschatzTab === 'chapters'">
   <p class="wortschatz-list-hint" x-text="$app.t('wortschatz.chapters.hint')"></p>
   <p class="wortschatz-list-hint" x-show="wsDeltaNote()" x-text="wsDeltaNote()"></p>
@@ -33,7 +36,7 @@
           <tr :class="{ 'wortschatz-row--outlier': wsDeltaOutlier(c) }">
             <td>
               <button type="button" class="entity-ref"
-                      x-entity-ref="{ type: 'kapitel', id: c.chapter_id, label: c.chapter_name || undefined }"></button>
+                      x-entity-ref="{ type: 'kapitel', id: c.chapter_id, name: c.chapter_name || undefined }"></button>
             </td>
             <td class="wortschatz-num" x-text="wsNum(c.tokens)"></td>
             <td class="wortschatz-num">
@@ -45,6 +48,7 @@
             <td class="wortschatz-num" x-text="wsPercent(c.lex_density)"></td>
             <td class="wortschatz-num">
               <span class="tag" :class="{ 'wortschatz-keyness--high': wsDeltaOutlier(c) }" x-text="wsNum(c.delta, 2)"></span>
+              <span class="wortschatz-approx" x-show="c.delta_block" :title="wsDeltaBlockTip(c)">*</span>
             </td>
             <td class="wortschatz-reason" x-text="wsDeltaReason(c)"></td>
           </tr>

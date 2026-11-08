@@ -1,0 +1,78 @@
+<!-- Motiv-Werkstatt: Baum Thema → Motiv im Seitenpanel (Fragment-Include aus
+     motiv-panel.html, motivCard-Scope), sichtbar ohne Auswahl. Suche über Name,
+     Beschreibung und Trigger (geteilt mit der Gliederung). Themen per Griff
+     umsortieren, Motive per Griff innerhalb eines Themas oder in ein anderes ziehen
+     (book/motiv/dnd.js) — ohne Griff bei aktiver Suche. Hover über einem Motiv
+     hebt seinen Knoten in der Konstellation hervor. Methoden: book/motiv/outline.js. -->
+<div class="motiv-tree">
+  <div class="filter-bar filter-bar--inline motiv-tree-filter" x-show="motifs.length || themes.length">
+    <span class="filter-search-wrap">
+      <input class="filter-search-input" type="text" x-model="motivQuery"
+             :placeholder="$app.t('motiv.outline.search')" :aria-label="$app.t('motiv.outline.search')">
+      <button type="button" class="search-clear--icon" x-show="motivQuery" @click="motivQuery = ''"
+              :aria-label="$app.t('search.clear')" :data-tip="$app.t('search.clear')">
+        <svg class="icon" aria-hidden="true"><use href="/icons.svg#x"/></svg>
+      </button>
+    </span>
+    <span class="filter-count" x-show="motivQuery" x-text="motivVisibleCount() + ' / ' + motifs.length"></span>
+  </div>
+  <p class="muted-msg muted-msg--sm" x-show="!motifs.length && !themes.length" x-text="$app.t('motiv.empty.hint')"></p>
+  <p class="muted-msg muted-msg--sm" x-show="motivQuery && !motivGroups().length" x-text="$app.t('motiv.outline.noMatch')"></p>
+
+  <!-- Themen-Gruppen: nur x-for-Anker + Gruppen im Sortable-Container. -->
+  <div class="motiv-tree-themes" x-init="_initThemeSortable($el)">
+    <template x-for="g in motivGroups().filter(x => x.theme)" :key="g.key">
+      <div class="motiv-tree-group" :data-theme-id="g.theme.id">
+        <div class="motiv-tree-theme hover-reveal-host">
+          <span class="drag-grip motiv-theme-grip" role="img" x-show="motivTreeDraggable()"
+                :data-tip="$app.t('motiv.theme.dragHint')" :aria-label="$app.t('motiv.theme.dragHint')">
+            <svg class="icon" aria-hidden="true"><use href="/icons.svg#grip-vertical"/></svg>
+          </span>
+          <!-- Thema-Farbe: Swatch öffnet ein Palette-Popover (theme-aware --palette-*). -->
+          <div class="color-picker">
+            <button type="button" class="color-picker__swatch"
+                    :style="{ '--col-accent': 'var(--palette-' + themeSwatchKey(g.theme) + ')' }"
+                    @click.stop="toggleThemeColorPicker(g.theme.id)"
+                    :data-tip="$app.t('motiv.theme.color')" :aria-label="$app.t('motiv.theme.color')"></button>
+            <div class="color-picker__popover" x-show="themeColorPickerId === g.theme.id" x-cloak
+                 @click.outside="themeColorPickerId === g.theme.id && (themeColorPickerId = null)">
+              <button :aria-pressed="!g.theme.farbe" type="button" class="color-picker__opt color-picker__opt--none"
+                      :class="{ 'color-picker__opt--on': !g.theme.farbe }"
+                      @click="setThemeColor(g.theme, null)"
+                      :data-tip="$app.t('motiv.theme.colorAuto')" :aria-label="$app.t('motiv.theme.colorAuto')"></button>
+              <template x-for="key in themeColorKeys()" :key="key">
+                <button :aria-pressed="g.theme.farbe === key" type="button" class="color-picker__opt"
+                        :style="{ '--col-accent': 'var(--palette-' + key + ')' }"
+                        :class="{ 'color-picker__opt--on': g.theme.farbe === key }"
+                        @click="setThemeColor(g.theme, key)" :aria-label="$app.t('plot.palette.' + key)" :data-tip="$app.t('plot.palette.' + key)"></button>
+              </template>
+            </div>
+          </div>
+          <button type="button" class="motiv-tree-name motiv-tree-name--theme" @click="selectTheme(g.theme.id)"
+                  x-text="g.theme.name" :data-tip="$app.t('motiv.theme.editTip')"></button>
+          <span class="motiv-tree-count" x-text="g.total"></span>
+          <button type="button" class="icon-btn icon-btn--ghost hover-reveal" @click="createMotifAt(g.theme.id)"
+                  :data-tip="$app.t('motiv.graph.menu.addMotif')" :aria-label="$app.t('motiv.graph.menu.addMotif')">
+            <svg class="icon" aria-hidden="true"><use href="/icons.svg#plus"/></svg>
+          </button>
+          <button type="button" class="icon-btn icon-btn--ghost hover-reveal" @click="deleteTheme(g.theme)"
+                  :data-tip="$app.t('common.delete')" :aria-label="$app.t('common.delete')">
+            <svg class="icon" aria-hidden="true"><use href="/icons.svg#trash"/></svg>
+          </button>
+        </div>
+        <!-- @include motiv-tree-motifs -->
+      </div>
+    </template>
+  </div>
+
+  <!-- «Ohne Thema»: nicht umsortierbar als Gruppe, aber Drop-Ziel für Motive. -->
+  <template x-for="g in motivGroups().filter(x => !x.theme)" :key="g.key">
+    <div class="motiv-tree-group motiv-tree-group--loose">
+      <div class="motiv-tree-theme">
+        <span class="motiv-tree-name motiv-tree-name--loose" x-text="$app.t('motiv.noTheme')"></span>
+        <span class="motiv-tree-count" x-text="g.total"></span>
+      </div>
+      <!-- @include motiv-tree-motifs -->
+    </div>
+  </template>
+</div>

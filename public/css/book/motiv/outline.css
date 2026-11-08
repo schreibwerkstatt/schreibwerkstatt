@@ -1,0 +1,248 @@
+@layer components {
+/* Motiv-Werkstatt — Baum im Seitenpanel, Gliederungs-Ansicht und der geteilte
+   Detail-Editor (Reiter, Trigger-Chips, gruppierte Fundstellen, Beziehungen).
+   Ergänzt book/motiv.css; Akzent var(--card-accent). */
+
+/* ── Baum Thema → Motiv (Seitenpanel, ohne Auswahl) ───────────────────── */
+.motiv-tree { display: flex; flex-direction: column; gap: var(--space-xs); }
+.motiv-tree-filter .filter-search-wrap { flex: 1 1 auto; }
+.motiv-tree-themes { display: flex; flex-direction: column; gap: var(--space-xs); }
+.motiv-tree-group { display: flex; flex-direction: column; gap: var(--space-1); }
+.motiv-tree-ghost { opacity: 0.5; }
+
+.motiv-tree-theme,
+.motiv-tree-motif {
+  display: flex;
+  align-items: center;
+  --drag-grip-host-gap: var(--space-2xs);
+  gap: var(--drag-grip-host-gap);
+  min-width: 0;
+}
+.motiv-tree-theme { padding-bottom: var(--space-1); border-bottom: 1px solid var(--color-border); }
+/* Motive eingerückt unter ihrem Thema; die Liste ist zugleich Drop-Ziel und
+   braucht darum auch leer eine Höhe. */
+.motiv-tree-motifs {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  min-height: var(--space-md);
+  padding-left: var(--space-md);
+}
+.motiv-tree-motif { padding: var(--space-1) 0; }
+.motiv-tree-motif:hover { background: var(--color-bg); }
+
+.motiv-tree-name {
+  flex: 1 1 auto;
+  min-width: 0;
+  padding: var(--space-1) var(--space-2xs);
+  border: 1px solid transparent;
+  border-radius: var(--radius-none);
+  background: none;
+  color: var(--color-text);
+  font-family: inherit;
+  font-size: var(--font-size-sm);
+  text-align: left;
+  cursor: pointer;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.motiv-tree-name:hover { border-color: var(--color-border); background: var(--color-bg); }
+.motiv-tree-name--theme { font-weight: var(--fw-semibold); }
+.motiv-tree-name--loose { cursor: default; color: var(--color-muted); font-style: italic; }
+.motiv-tree-name--loose:hover { border-color: transparent; background: none; }
+/* Geist (geplant, im Text nicht gefunden): gedämpft + gestrichelt, wie der
+   Umriss-Knoten in der Konstellation. */
+.motiv-tree-name--ghost,
+.motiv-outline-name--ghost {
+  color: var(--color-muted);
+  text-decoration: underline dashed;
+  text-underline-offset: 3px;
+}
+.motiv-tree-count {
+  flex: none;
+  min-width: 1.5rem;
+  font-size: var(--font-size-xs);
+  font-variant-numeric: tabular-nums;
+  color: var(--color-muted);
+  text-align: right;
+}
+
+/* ── Mini-Verlauf über die Kapitel ───────────────────────────────────── */
+/* Eine Zelle je Oberkapitel bzw. Kapitelfolge (höchstens SPARK_MAX_CELLS,
+   outline.js), Intensität aus --heatmap-t wie im Verlaufsband, aber auf das
+   Maximum der Zeile normiert. overflow: hidden fängt den Rest ab, falls die
+   Leiste schmaler wird als ihre Mindestbreite. */
+.motiv-spark {
+  flex: none;
+  display: inline-flex;
+  align-items: stretch;
+  overflow: hidden;
+  gap: var(--space-1);
+  width: 4.5rem;
+  height: 0.75rem;
+}
+.motiv-spark--wide { width: 8rem; }
+.motiv-spark-cell {
+  flex: 1 1 0;
+  min-width: var(--space-1);
+  background: var(--color-border);
+  opacity: 0.5;
+}
+.motiv-spark-cell--on {
+  opacity: 1;
+  background: color-mix(in srgb, var(--card-accent) var(--heatmap-t, 50%), var(--color-bg));
+}
+
+/* ── Detail-Editor: Reiter + Panels ──────────────────────────────────── */
+.motiv-detail-tabs { margin-top: var(--space-2xs); }
+.motiv-detail-panel {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2xs);
+  padding: var(--space-sm) 0 var(--space-xs);
+}
+
+/* Trigger-Begriffe als entfernbare Chips (Werte, keine Verweise → kein entity-ref). */
+.motiv-trigger-chips { display: flex; flex-wrap: wrap; gap: var(--space-2xs); }
+.motiv-trigger-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  max-width: 100%;
+  padding: var(--space-1) var(--space-1) var(--space-1) var(--space-2xs);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-none);
+  background: var(--color-tag-bg);
+  color: var(--color-tag-text);
+  font-size: var(--font-size-xs);
+}
+.motiv-trigger-chip-text { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.motiv-trigger-chip-remove {
+  display: inline-flex;
+  padding: 0;
+  border: none;
+  background: none;
+  color: var(--color-muted);
+  cursor: pointer;
+}
+.motiv-trigger-chip-remove:hover { color: var(--color-text); }
+.motiv-trigger-chip-remove .icon { width: 12px; height: 12px; }
+
+/* Fundstellen: Leiste (Quellen-Filter + Einzel-Scan), Gruppen je Kapitel. */
+.motiv-occ-toolbar { display: flex; align-items: center; gap: var(--space-2xs); flex-wrap: wrap; }
+.motiv-occ-filter { flex: 1 1 8rem; min-width: 0; }
+.motiv-occ-group { display: flex; flex-direction: column; gap: var(--space-2xs); }
+.motiv-occ-group-head { display: flex; align-items: center; gap: var(--space-2xs); margin-top: var(--space-2xs); }
+
+/* Beziehungen: eine Zeile je Kante — Typ-Knopf (öffnet das Typ-Menü) + Partner. */
+.motiv-rel-list { display: flex; flex-direction: column; gap: var(--space-2xs); }
+.motiv-rel-list .motiv-rel { display: flex; }
+.motiv-rel-typ-btn {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  padding: var(--space-1) var(--space-2xs);
+  border: 1px solid transparent;
+  border-radius: var(--radius-none);
+  background: none;
+  color: var(--color-muted);
+  font-family: inherit;
+  font-size: var(--font-size-xs);
+  cursor: pointer;
+}
+.motiv-rel-typ-btn:hover,
+.motiv-rel-typ-btn[aria-expanded="true"] { border-color: var(--color-border); color: var(--color-text); }
+.motiv-rel-typ-btn .icon { width: 12px; height: 12px; }
+
+/* ── Gliederung (vierte Ansicht) ─────────────────────────────────────── */
+.motiv-outline { display: flex; flex-direction: column; gap: var(--space-sm); margin-top: var(--space-sm); }
+.motiv-outline-scroll { overflow-x: auto; }
+.motiv-outline-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: var(--font-size-sm);
+}
+.motiv-outline-table thead th {
+  /* Kein padding-Shorthand: padding-right gehört dem Sortier-Chevron von
+     .sortable-th (DESIGN.md „Sortierbare Tabelle" → Padding-Falle). */
+  padding-block: var(--space-2xs);
+  padding-left: var(--space-xs);
+  border-bottom: 1px solid var(--color-border);
+  font-size: var(--font-size-xs);
+  font-weight: var(--fw-semibold);
+  color: var(--color-muted);
+  text-align: left;
+  white-space: nowrap;
+}
+.motiv-outline-table td {
+  padding: var(--space-1) var(--space-xs);
+  border-bottom: 1px solid var(--color-border);
+  vertical-align: middle;
+}
+.motiv-outline-num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.motiv-outline-table thead th.motiv-outline-num { text-align: right; }
+.motiv-outline-muted { color: var(--color-muted); }
+
+/* Themen-Kopfzeile: getönt, Farbtupfer des Themas vorn. */
+.motiv-outline-group th {
+  padding: var(--space-xs) var(--space-xs) var(--space-2xs);
+  background: var(--color-bg);
+  border-bottom: 1px solid var(--color-border);
+  text-align: left;
+  font-weight: var(--fw-semibold);
+}
+.motiv-outline-group-head { display: inline-flex; align-items: center; gap: var(--space-2xs); }
+.motiv-outline-swatch {
+  flex: none;
+  width: 10px;
+  height: 10px;
+  background: var(--col-accent, var(--card-accent));
+}
+
+.motiv-outline-name {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2xs);
+  max-width: 100%;
+  padding: var(--space-1) var(--space-2xs);
+  border: 1px solid transparent;
+  border-radius: var(--radius-none);
+  background: none;
+  color: var(--color-text);
+  font-family: inherit;
+  font-size: inherit;
+  font-weight: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.motiv-outline-name:hover { border-color: var(--color-border); }
+.motiv-outline-name--loose { color: var(--color-muted); font-style: italic; font-weight: var(--fw-regular); }
+.motiv-outline-namecell { min-width: 10rem; }
+.motiv-outline-namewrap { display: flex; align-items: center; gap: var(--space-2xs); }
+.motiv-outline-row:hover td { background: var(--color-bg); }
+.motiv-outline-row.is-open td { background: var(--color-tag-bg); border-bottom-color: transparent; }
+.motiv-outline-triggers {
+  max-width: 16rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--color-muted);
+  font-size: var(--font-size-xs);
+}
+
+/* Aufgeklappte Zeile: Detail-Editor in voller Tabellenbreite, Text auf eine
+   lesbare Breite gedeckelt. */
+.motiv-outline-detailrow > td {
+  padding: var(--space-xs) var(--space-sm) var(--space-sm);
+  border-left: 3px solid var(--card-accent);
+  background: var(--color-surface);
+}
+.motiv-outline-detail { max-width: 52rem; }
+
+@media (max-width: 640px) {
+  .motiv-spark--wide { width: 5rem; }
+  .motiv-outline-triggers { max-width: 8rem; }
+}
+}

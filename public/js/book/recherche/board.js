@@ -289,4 +289,16 @@ export const rechercheBoardMethods = {
   kindLabel(k) { return window.__app.t(`recherche.kind.${k}`); },
   linkKindLabel(k) { return window.__app.t(`recherche.linkKind.${k}`); },
   hasItems() { return (this.items || []).length > 0; },
+
+  // Ansichts-Menü der Filterleiste (view-menu.html, Vertrag in view-menu.js).
+  // Archivierte lädt der Server nur auf Wunsch (`archived=1`) — darum lädt der
+  // Schalter die Liste neu. Gemerkt pro Buch über RECHERCHE_FILTER_SCOPES.
+  viewMenuSpec() {
+    const t = (k, p) => window.__app.t(k, p);
+    return {
+      tip: t('recherche.view.tip'),
+      items: [{ kind: 'toggle', key: 'archived', on: this.showArchived, label: t('recherche.filter.showArchived'),
+        toggle: () => { this.showArchived = !this.showArchived; this.applyFilters(); } }],
+    };
+  },
 };

@@ -47,10 +47,8 @@
       <div x-data="combobox($app.t('sources.filter.tag'), $app.t('sources.filter.allTags'))"
            x-modelable="value" x-model="srcFilterTag"
            x-effect="options = srcTagOptions()"></div>
-      <label class="filter-toggle">
-        <input type="checkbox" x-model="srcShowArchived">
-        <span x-text="$app.t('sources.showArchived')"></span>
-      </label>
+      <!-- Ansicht: Archiv einblenden (sources/manage.js#viewMenuSpec) -->
+      <!-- @include view-menu -->
       <span class="filter-count" x-text="sourceRows().length + ' / ' + sourcesVisibleTotal()"></span>
     </div>
   </div>

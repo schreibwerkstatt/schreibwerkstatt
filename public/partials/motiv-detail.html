@@ -1,0 +1,223 @@
+<!-- Motiv-Werkstatt: Detail-Editor eines Motivs (Fragment-Include, motivCard-Scope).
+     Geteilt von Seitenpanel (motiv-panel.html, detailHost 'graph') und Gliederung
+     (motiv-outline.html, detailHost 'outline'): gerendert nur dort, wo die aktive
+     Ansicht ist — nie an zwei Orten zugleich. Reiter über Alpine.data('tabs'),
+     Tastatur über $editKeys am Editor (Cmd/Ctrl+S speichert, Esc verwirft bzw.
+     schliesst). Methoden: book/motiv/{crud,detail}.js. -->
+<template x-if="selectedMotif() && motivView === detailHost">
+  <div class="motiv-editor" @keydown="$editKeys($event, { save: () => saveMotifEdit(), cancel: () => escMotifEdit() })">
+    <div class="motiv-editor-head">
+      <div class="motiv-editor-titlerow">
+        <!-- Rückweg: im Panel zur Gliederung, in der Gliederung Zeile zuklappen —
+             beides selectMotif(null), das ausstehende Edits zuerst speichert. -->
+        <button type="button" class="icon-btn icon-btn--ghost" @click="selectMotif(null)" :disabled="busy"
+                :data-tip="$app.t(detailHost === 'outline' ? 'motiv.outline.collapse' : 'motiv.motif.backToList')"
+                :aria-label="$app.t(detailHost === 'outline' ? 'motiv.outline.collapse' : 'motiv.motif.backToList')">
+          <svg class="icon" aria-hidden="true"><use :href="detailHost === 'outline' ? '/icons.svg#chevron-up' : '/icons.svg#arrow-left'"/></svg>
+        </button>
+        <input type="text" class="motiv-name-input" x-model="editName" data-spellcheck="spelling"
+               :aria-label="$app.t('motiv.motif.name')"
+               @keydown.enter="$enter($event, () => saveMotifEdit())">
+        <button type="button" class="icon-btn icon-btn--ghost" @click="deleteMotif(selectedMotif())"
+                :data-tip="$app.t('motiv.motif.delete')" :aria-label="$app.t('motiv.motif.delete')">
+          <svg class="icon" aria-hidden="true"><use href="/icons.svg#trash"/></svg>
+        </button>
+      </div>
+      <div class="motiv-editor-actions" x-show="motifDirty()" x-cloak>
+        <button type="button" class="icon-btn icon-btn--ghost icon-btn--success"
+                @click="saveMotifEdit()" :disabled="busy || !editName.trim()"
+                :data-tip="$app.t('common.save')" :aria-label="$app.t('common.save')">
+          <svg class="icon" aria-hidden="true"><use href="/icons.svg#check"/></svg>
+        </button>
+        <button type="button" class="icon-btn icon-btn--ghost"
+                @click="cancelMotifEdit()" :disabled="busy"
+                :data-tip="$app.t('common.cancel')" :aria-label="$app.t('common.cancel')">
+          <svg class="icon" aria-hidden="true"><use href="/icons.svg#x"/></svg>
+        </button>
+      </div>
+    </div>
+
+    <div x-data="tabs(motivDetailTabs())" x-modelable="value" x-model="motivDetailTab">
+      <div class="tabs tabs--scrollable motiv-detail-tabs" x-bind="tablist" :aria-label="$app.t('motiv.detail.tabs')">
+        <template x-for="tab in tabs" :key="tab">
+          <button class="tabs-btn" x-bind="tabBtn(tab)">
+            <span x-text="$app.t('motiv.detail.tab.' + tab)"></span>
+            <span class="tabs-btn-count" x-show="motivDetailTabCount(tab) != null" x-text="motivDetailTabCount(tab)"></span>
+          </button>
+        </template>
+      </div>
+
+      <!-- Details: Thema, Beschreibung, Trigger-Begriffe, Ideen an diesem Motiv -->
+      <div class="motiv-detail-panel" x-bind="panel('details')">
+        <label class="motiv-field-label" x-text="$app.t('motiv.motif.theme')"></label>
+        <div x-data="combobox($app.t('motiv.motif.themeOptional'), $app.t('motiv.noTheme'))"
+             x-modelable="value" x-model="editThemeId" x-effect="options = themeOptions()"></div>
+
+        <label class="motiv-field-label" x-text="$app.t('motiv.motif.beschreibung')"></label>
+        <textarea class="motiv-textarea" rows="3" data-spellcheck="spelling"
+                  :placeholder="$app.t('motiv.motif.beschreibungHint')"
+                  x-model="editBeschreibung"></textarea>
+
+        <!-- Trigger als Chips: Enter oder Komma übernimmt, × entfernt. Ein getippter,
+             nicht übernommener Begriff zählt beim Speichern mit. -->
+        <label class="motiv-field-label" x-text="$app.t('motiv.motif.triggers')"></label>
+        <div class="motiv-trigger-chips" x-show="editTriggerTerms.length">
+          <template x-for="(term, i) in editTriggerTerms" :key="term">
+            <span class="motiv-trigger-chip">
+              <span class="motiv-trigger-chip-text" x-text="term"></span>
+              <button type="button" class="motiv-trigger-chip-remove" @click="removeTriggerTerm(i)"
+                      :data-tip="$app.t('common.remove')" :aria-label="$app.t('motiv.motif.triggerRemove', { term })">
+                <svg class="icon" aria-hidden="true"><use href="/icons.svg#x"/></svg>
+              </button>
+            </span>
+          </template>
+        </div>
+        <input type="text" class="motiv-inline-input motiv-trigger-input" x-model="newTriggerTerm"
+               :placeholder="$app.t('motiv.motif.triggersHint')"
+               :aria-label="$app.t('motiv.motif.triggers')"
+               @input="onTriggerInput()"
+               @keydown.enter="$enter($event, () => newTriggerTerm.trim() ? addTriggerTerm() : saveMotifEdit())">
+
+        <!-- Ideen-Plaketten: eigene Pendenzen, die an diesem Motiv hängen.
+             Read-only — gesetzt wird die Kante auf der Ideen-Seite. -->
+        <div x-data="{ ideaOwnerId: null }" x-effect="ideaOwnerId = selectedMotifId"><!-- @include ideen-backlinks --></div>
+      </div>
+
+      <!-- Fundstellen (Ist): nach Kapitel gruppiert, filterbar nach Quelle,
+           Einzel-Scan dieses Motivs. -->
+      <div class="motiv-detail-panel" x-bind="panel('occ')">
+        <div class="motiv-occ-toolbar">
+          <div class="motiv-occ-filter"
+               x-data="combobox({ placeholder: $app.t('motiv.occ.filterAll'), emptyLabel: $app.t('motiv.occ.filterAll'), label: $app.t('motiv.occ.filterLabel') })"
+               x-modelable="value" x-model="occSourceFilter" x-effect="options = occSourceOptions()"></div>
+          <button type="button" class="btn-compact" @click="scanMotif(selectedMotifId)"
+                  :disabled="scanning || motifDirty()"
+                  :data-tip="motifDirty() ? $app.t('motiv.occ.rescanSaveFirst') : $app.t('motiv.occ.rescanTip')">
+            <span x-show="scanning" class="spinner"></span>
+            <span x-text="$app.t('motiv.occ.rescan')"></span>
+          </button>
+        </div>
+        <div class="motiv-hint motiv-hint--action" x-show="triggerRescanMotifId === selectedMotifId && !scanning" x-cloak>
+          <span class="motiv-hint-text" x-text="$app.t('motiv.occ.triggersChanged')"></span>
+        </div>
+        <p class="muted-msg muted-msg--sm" x-show="!occLoading && !occurrences.length" x-text="$app.t('motiv.occ.empty')"></p>
+        <p class="muted-msg muted-msg--sm" x-show="occurrences.length && !occGroups().length" x-text="$app.t('motiv.occ.filterEmpty')"></p>
+        <template x-for="g in occGroups()" :key="g.key">
+          <div class="motiv-occ-group">
+            <p class="card-section-title card-section-title--inline motiv-occ-group-head">
+              <span x-text="occGroupLabel(g)"></span>
+              <span class="badge" x-text="g.items.length"></span>
+            </p>
+            <div class="motiv-occ-list">
+              <template x-for="o in g.items" :key="o.id">
+                <button type="button" class="motiv-occ-row" @click="gotoOccurrence(o)">
+                  <span class="motiv-occ-loc" x-text="occRowLabel(o)"></span>
+                  <span class="motiv-occ-snip" x-text="o.snippet" x-show="o.snippet"></span>
+                  <span class="motiv-occ-meta">
+                    <span class="badge motiv-occ-conf" x-show="o.score != null"
+                          x-text="Math.round(o.score * 100) + '%'"
+                          :data-tip="$app.t('motiv.occ.confidence')"></span>
+                    <span class="badge-source" x-text="$app.t('motiv.occ.source.' + o.source)"></span>
+                  </span>
+                </button>
+              </template>
+            </div>
+          </div>
+        </template>
+      </div>
+
+      <!-- Soll-Verknüpfungen. Puffer (editXxx), gespeichert mit dem einen Motiv-Save.
+           Solange etwas ungespeichert ist, sind die Referenzen nicht klickbar: der
+           Sprung in eine andere Karte verwürfe den Puffer. -->
+      <div class="motiv-detail-panel" x-bind="panel('links')">
+        <div class="motiv-link-group">
+          <span class="motiv-field-label" x-text="$app.t('motiv.link.figures')"></span>
+          <div class="entity-refs">
+            <template x-for="f in editFigures" :key="'k'+f.figId">
+              <span class="entity-ref-group"><button type="button" class="entity-ref" x-entity-ref="{ type: 'figur', id: f.figId, name: f.name, static: motifDirty() }"></button>
+                <button type="button" class="entity-ref-remove" @click="toggleLink('figures', f)" :data-tip="$app.t('common.remove')" :aria-label="$app.t('common.remove')"><svg class="icon" aria-hidden="true"><use href="/icons.svg#x"/></svg></button></span>
+            </template>
+            <template x-for="f in editDraftFigures" :key="'d'+f.id">
+              <span class="entity-ref-group"><button type="button" class="entity-ref" x-entity-ref="{ type: 'werkstatt', id: f.id, label: f.name, static: motifDirty() }"></button>
+                <button type="button" class="entity-ref-remove" @click="toggleLink('draftFigures', f)" :data-tip="$app.t('common.remove')" :aria-label="$app.t('common.remove')"><svg class="icon" aria-hidden="true"><use href="/icons.svg#x"/></svg></button></span>
+            </template>
+          </div>
+          <!-- Eine Combobox, zwei Quellen gruppiert (fig:/draft:-Präfix → addFigureLink).
+               Transient + $event.detail, weil x-modelable-Sync asynchron ist. -->
+          <div x-data="combobox({ placeholder: $app.t('motiv.link.addFigure'), transient: true })"
+               x-effect="options = [
+                 ...($store.catalog.figuren||[]).map(f=>({value:'fig:'+f.id, label:f.name, group:$app.t('motiv.link.figureGroup.katalog')})),
+                 ...(allDraftFiguren||[]).map(d=>({value:'draft:'+d.id, label:d.name, group:$app.t('motiv.link.figureGroup.werkstatt')}))
+               ]"
+               @combobox-change="addFigureLink($event.detail)"></div>
+        </div>
+        <div class="motiv-link-group">
+          <span class="motiv-field-label" x-text="$app.t('motiv.link.beats')"></span>
+          <div class="entity-refs">
+            <template x-for="b in editBeats" :key="b.id">
+              <span class="entity-ref-group"><button type="button" class="entity-ref" x-entity-ref="{ type: 'beat', id: b.id, label: b.titel, static: motifDirty() }"></button>
+                <button type="button" class="entity-ref-remove" @click="toggleLink('beats', b)" :data-tip="$app.t('common.remove')" :aria-label="$app.t('common.remove')"><svg class="icon" aria-hidden="true"><use href="/icons.svg#x"/></svg></button></span>
+            </template>
+          </div>
+          <div x-data="combobox({ placeholder: $app.t('motiv.link.addBeat'), transient: true })"
+               x-effect="options = (allActs||[]).flatMap(a=>(allBeats||[]).filter(b=>String(b.actId)===String(a.id)).map(b=>({value:String(b.id),label:b.titel||'?',group:a.name})))"
+               @combobox-change="addLink('beats', $event.detail)"></div>
+        </div>
+        <div class="motiv-link-group">
+          <span class="motiv-field-label" x-text="$app.t('motiv.link.chapters')"></span>
+          <div class="entity-refs">
+            <template x-for="c in editChapters" :key="c.id">
+              <span class="entity-ref-group"><button type="button" class="entity-ref" x-entity-ref="{ type: 'kapitel', id: c.id, name: c.name, static: motifDirty() }"></button>
+                <button type="button" class="entity-ref-remove" @click="toggleLink('chapters', c)" :data-tip="$app.t('common.remove')" :aria-label="$app.t('common.remove')"><svg class="icon" aria-hidden="true"><use href="/icons.svg#x"/></svg></button></span>
+            </template>
+          </div>
+          <div x-data="combobox({ placeholder: $app.t('motiv.link.addChapter'), transient: true })"
+               x-effect="options = ($store.nav.tree||[]).filter(t=>t.type==='chapter' && !String(t.id).startsWith('solo-')).map(c=>({value:String(c.id),label:c.name}))"
+               @combobox-change="addLink('chapters', $event.detail)"></div>
+        </div>
+        <div class="motiv-link-group">
+          <span class="motiv-field-label" x-text="$app.t('motiv.link.pages')"></span>
+          <div class="entity-refs">
+            <template x-for="p in editPages" :key="p.id">
+              <span class="entity-ref-group"><button type="button" class="entity-ref" x-entity-ref="{ type: 'seite', id: p.id, name: p.name, static: motifDirty() }"></button>
+                <button type="button" class="entity-ref-remove" @click="toggleLink('pages', p)" :data-tip="$app.t('common.remove')" :aria-label="$app.t('common.remove')"><svg class="icon" aria-hidden="true"><use href="/icons.svg#x"/></svg></button></span>
+            </template>
+          </div>
+          <div x-data="combobox({ placeholder: $app.t('motiv.link.addPage'), transient: true })"
+               x-effect="options = ($store.nav.pages||[]).map(p=>({value:String(p.id),label:p.name,group:p.chapterName||''}))"
+               @combobox-change="addLink('pages', $event.detail)"></div>
+        </div>
+      </div>
+
+      <!-- Motiv ↔ Motiv: Richtung + Typ (Klick ändert den Typ über das Aktionsmenü),
+           Partner als Referenz. Sofort-Aktionen, nicht Teil des Motiv-Saves. -->
+      <div class="motiv-detail-panel" x-bind="panel('relations')">
+        <p class="muted-msg muted-msg--sm" x-show="!relationsForSelected().length" x-text="$app.t('motiv.relations.empty')"></p>
+        <div class="motiv-rel-list">
+          <template x-for="r in relationsForSelected()" :key="r.id">
+            <div class="motiv-rel">
+              <button type="button" class="motiv-rel-typ-btn" aria-haspopup="menu"
+                      :aria-expanded="isActionMenuOpen('motivrel:' + r.id)"
+                      @click="openRelationTypMenu($event, r)"
+                      :data-tip="$app.t('motiv.relations.changeTyp')">
+                <span x-text="(r.outgoing ? '→ ' : '← ') + motifRelLabel(r.typ)"></span>
+                <svg class="icon" aria-hidden="true"><use href="/icons.svg#chevron-down"/></svg>
+              </button>
+              <span class="entity-ref-group"><button type="button" class="entity-ref" x-entity-ref="{ type: 'motiv', id: r.otherId, label: r.otherName }"></button>
+                <button type="button" class="entity-ref-remove" @click="deleteRelation(r)" :data-tip="$app.t('motiv.relations.delete')" :aria-label="$app.t('motiv.relations.delete')"><svg class="icon" aria-hidden="true"><use href="/icons.svg#x"/></svg></button></span>
+            </div>
+          </template>
+        </div>
+        <div class="motiv-relation-add">
+          <div x-data="combobox($app.t('motiv.relations.target'), '')" x-modelable="value" x-model="newRelationTargetId"
+               x-effect="options = relationTargetOptions()"></div>
+          <div class="motiv-rel-typ" x-data="combobox($app.t('motiv.relations.typPick'))"
+               x-modelable="value" x-model="newRelationTyp"
+               x-effect="options = motifRelTypes().map(tp => ({ value: tp, label: motifRelLabel(tp) }))"></div>
+          <button type="button" class="btn-compact" @click="addRelation()"
+                  :disabled="!newRelationTargetId || !newRelationTyp.trim()" x-text="$app.t('motiv.relations.add')"></button>
+        </div>
+      </div>
+    </div>
+  </div>
+</template>

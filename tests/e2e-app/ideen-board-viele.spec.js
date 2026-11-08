@@ -4,8 +4,8 @@
 // * Spaltenkoepfe und Bahntitel kleben beim Scrollen — das Raster ist dafuer
 //   sein eigener, auf Fensterhoehe gedeckelter Scrollbereich. Ohne Deckel
 //   scrollt die Seite, und `sticky` haengt an einem Kasten, der sich nie bewegt.
-// * Eine Stufe ohne sichtbare Karte (leer oder ausgeblendet) wird schmal, die
-//   belegte bekommt die Breite (actions.js#columnTracks).
+// * Alle Stufen-Spalten sind gleich breit — leer oder voll, ein- oder
+//   ausgeblendet (ideen-board.css).
 //
 // Haengt an Hoehenkette und Grid-Geometrie — darum hier, nicht im Harness.
 const { test, expect } = require('../e2e/_helpers/fixtures');
@@ -21,7 +21,7 @@ async function cleanup(page, bookId) {
   }, { id: bookId, prefix: PREFIX });
 }
 
-test('ideen-board: 100+ offene Ideen — Koepfe kleben, leere Spalten schmal', async ({ page }) => {
+test('ideen-board: 100+ offene Ideen — Koepfe kleben, Spalten gleich breit', async ({ page }) => {
   test.setTimeout(90000);
   await page.setViewportSize({ width: 1440, height: 900 });
   await bootApp(page);
@@ -43,11 +43,13 @@ test('ideen-board: 100+ offene Ideen — Koepfe kleben, leere Spalten schmal', a
     const board = page.locator('#ideen-board-card .ideen-board');
     await expect(board.locator('[data-idee-card-id]').first()).toBeVisible();
 
-    // Belegte Spalte «Offen» deutlich breiter als die leeren daneben.
+    // Alle Stufen gleich breit: «Offen» voll, «Erledigt» per Default
+    // ausgeblendet, «In Arbeit» leer. Hinge die Breite am Inhalt, spraenge das
+    // Raster beim ersten Zug in eine leere Stufe um.
     const widths = await page.$$eval('#ideen-board-card .ideen-board-head-col',
-      els => els.map(e => [e.className.match(/ideen-board-head-col--(\w+)/)[1], e.getBoundingClientRect().width]));
-    const w = Object.fromEntries(widths);
-    expect(w.offen).toBeGreaterThan(2 * w.erledigt);
+      els => els.map(e => e.getBoundingClientRect().width));
+    expect(widths.length).toBeGreaterThan(1);
+    expect(Math.max(...widths) - Math.min(...widths)).toBeLessThan(2);
 
     // Weit hinein scrollen: Kopf klebt am oberen Rand des Rasters, und der
     // Titel der Bahn, die gerade durchs Bild laeuft, steht direkt darunter.

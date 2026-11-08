@@ -20,6 +20,13 @@ const { bookSettingsSigPart, buildBookPagesSig } = require('./komplett/utils');
 
 const VALID_TYP = new Set(['thema', 'motiv']);
 
+// Vergleichsschlüssel für die Dublettenprüfung: Unicode-NFC, Kleinschreibung,
+// ß ≡ ss (Schweizer Texte schreiben «Strasse», die KI gern «Straße»), Leerraum
+// zusammengefasst. Sonst kämen «Straße» und «Strasse» als zwei Vorschläge.
+function _nameKey(name) {
+  return String(name || '').normalize('NFC').toLowerCase().replace(/ß/g, 'ss').replace(/\s+/g, ' ').trim();
+}
+
 // Ein KI-Vorschlag → Katalog-Eintrag normalisieren (Feld-Trim + Typ-Whitelist).
 function _normalizeSuggestion(v) {
   return {
@@ -57,7 +64,7 @@ async function runMotifBrainstormJob(jobId, bookId, userEmail, { force = false }
     // für die Dedup als auch als „NICHT wiederholen"-Kontext an die KI (chunk-übergreifend).
     const existingThemes = motifsDb.listThemes(bookId, userEmail).map(t => t.name);
     const existingMotifs = motifsDb.listMotifs(bookId, userEmail).map(m => m.name);
-    const seen = new Set([...existingThemes, ...existingMotifs].map(n => n.toLowerCase()));
+    const seen = new Set([...existingThemes, ...existingMotifs].map(_nameKey));
 
     // Cache-Signatur pro Chunk: Modell + Prompt-Schema-Version. Buchtyp/-Kontext
     // fliessen über bookSettingsSigPart in die pages_sig (wie die Komplettanalyse) —
@@ -103,7 +110,7 @@ async function runMotifBrainstormJob(jobId, bookId, userEmail, { force = false }
       for (const item of raw) {
         if (!item || typeof item.name !== 'string' || !item.name.trim()) continue;
         const v = _normalizeSuggestion(item);
-        const key = v.name.toLowerCase();
+        const key = _nameKey(v.name);
         if (seen.has(key)) continue;
         seen.add(key);
         (v.typ === 'thema' ? existingThemes : existingMotifs).push(v.name);
@@ -116,7 +123,12 @@ async function runMotifBrainstormJob(jobId, bookId, userEmail, { force = false }
     const totalChars = pageContents.reduce((s, p) => s + (p.text ? p.text.length : 0), 0);
     const { groupOrder, groups } = groupByChapter(pageContents);
 
+    const throwIfAborted = () => {
+      if (signal()?.aborted) { const e = new Error('aborted'); e.name = 'AbortError'; throw e; }
+    };
+    let usedKeys;
     if (totalChars <= SINGLE_PASS_LIMIT) {
+      usedKeys = ['__singlepass__'];
       logger.info(`Motiv-Brainstorm Single-Pass: book=${bookId} text=${totalChars} Zeichen, Katalog=${seen.size}`);
       updateJob(jobId, { statusText: 'job.phase.motivBrainstorm', progress: 15 });
       const pagesSig = buildBookPagesSig(pageContents, bookSettings, cacheVersion);
@@ -125,8 +137,10 @@ async function runMotifBrainstormJob(jobId, bookId, userEmail, { force = false }
     } else {
       const { chunkOrder, chunks } = splitGroupsIntoChunks(groups, groupOrder, PER_CHUNK_LIMIT);
       logger.info(`Motiv-Brainstorm Multi-Pass: book=${bookId} text=${totalChars} Zeichen, ${chunkOrder.length} Chunks, Katalog=${seen.size}`);
+      usedKeys = chunkOrder;
       for (let i = 0; i < chunkOrder.length; i++) {
-        if (signal()?.aborted) break;
+        // Abbruch = Abbruch: kein Teil-Ergebnis als fertiger Lauf in der Historie.
+        throwIfAborted();
         const chunkKey = chunkOrder[i];
         const group = chunks.get(chunkKey);
         const from = 15 + Math.floor((i / chunkOrder.length) * 80);
@@ -144,7 +158,13 @@ async function runMotifBrainstormJob(jobId, bookId, userEmail, { force = false }
           buildSinglePassBookText(new Map([[chunkKey, group]]), [chunkKey]), from, to));
       }
     }
-    logger.info(`Motiv-Brainstorm Cache: book=${bookId} ${hits} HIT / ${misses} MISS${force ? ' (force)' : ''}`);
+    throwIfAborted();
+    // Vollständiger Lauf: Chunk-Zeilen, die der aktuelle Schnitt nicht mehr
+    // adressiert, wegräumen (best-effort).
+    let pruned = 0;
+    try { pruned = motifsDb.pruneBrainstormCache(bookId, userEmail, provider, usedKeys); }
+    catch (e) { logger.warn(`Motiv-Brainstorm-Cache-Prune fehlgeschlagen book=${bookId}: ${e.message}`); }
+    logger.info(`Motiv-Brainstorm Cache: book=${bookId} ${hits} HIT / ${misses} MISS${pruned ? `, ${pruned} verwaist entfernt` : ''}${force ? ' (force)' : ''}`);
 
     // Lauf historisieren (best-effort — ein DB-Fehler darf das Ergebnis nicht
     // verschlucken). Nur echte Vorschläge persistieren; leere Läufe sind nicht

@@ -29,9 +29,10 @@ export function registerBuchlandkarteCard() {
     bookMapAxisMode: 'pca',
     bookMapPoles: emptyBookMapPoles(),
     // Anzeige des Ergebnisses: gezeigtes Achsenpaar ('0-1', '0-order', …) und
-    // Färbung ('chapter' | 'order').
+    // Färbung ('chapter' | 'order'); `null` = noch nicht gewählt, dann
+    // entscheidet buchlandkarte/map.js#bookMapEffectiveColorMode nach Kapitelzahl.
     bookMapAxisPair: '0-1',
-    bookMapColorMode: 'chapter',
+    bookMapColorMode: null,
     // KI-Benennung der PCA-Achsen ([{ neg, pos, diff }] je Achse).
     bookMapLabels: null,
     bookMapLabelLoading: false,

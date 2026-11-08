@@ -77,17 +77,16 @@
 /* Eine Spalte fuer die Bahnbeschriftung, danach eine je Stufe. Die Spaltenbreite
    liegt am Container (nicht am Viewport): das Board steht je nach Zustand in der
    normalen Kartenbreite oder im Vollbild. Reicht der Platz nicht, scrollt die
-   Flaeche horizontal statt die Spalten unlesbar schmal zu quetschen. */
+   Flaeche horizontal statt die Spalten unlesbar schmal zu quetschen.
+   Alle Stufen sind gleich breit — leer oder voll, ein- oder ausgeblendet:
+   haengt die Breite am Inhalt, springt das Raster beim Ziehen einer Karte in
+   eine leere Stufe um, und die Bahnen darunter verrutschen. */
 .ideen-board {
   --ideen-lane-w: 11rem;
   --ideen-col-w: 13rem;
   --ideen-cols: 4;
-  --ideen-track: minmax(var(--ideen-col-w), 1fr);
-  /* Spalte ohne sichtbare Karte (actions.js#columnTracks): schmal, aber noch
-     breit genug fuer Titel, Zaehler und als Drop-Ziel. */
-  --ideen-track-slim: minmax(7rem, 0.4fr);
   display: grid;
-  grid-template-columns: var(--ideen-lane-w) var(--ideen-col-tracks, repeat(var(--ideen-cols), var(--ideen-track)));
+  grid-template-columns: var(--ideen-lane-w) repeat(var(--ideen-cols), minmax(var(--ideen-col-w), 1fr));
   gap: var(--space-xs);
   /* Eigener Scrollbereich in beiden Achsen, auf die sichtbare Hoehe gedeckelt
      (Rahmen wie die Editor-Leiste, DESIGN.md „Split mit Leiste"). Der
@@ -300,16 +299,9 @@
   border-top: 1px solid var(--color-border);
   min-height: 2.5rem;
   min-width: 0;
+  /* Drop-Zone + Platzhalter im Drag (components/board-dnd.css). */
+  --board-dnd-accent: var(--ideen-status-accent);
 }
-/* Waehrend eines Drags leere Zellen zur erreichbaren Drop-Zone aufblaehen
-   (Klasse an <body> aus ideen-board/actions.js). */
-body.ideen-dnd-active .ideen-board-cell {
-  min-height: 4rem;
-  border-radius: var(--radius-none);
-  outline: 1px dashed color-mix(in srgb, var(--ideen-status-accent) 55%, transparent);
-  outline-offset: var(--space-3);
-}
-
 /* Drag einer Buch-Idee: das Inhaltsverzeichnis der Sidebar ist Drop-Ziel
    (ideen-board/tree-drop.js). Der Eintrag unter dem Zeiger wird markiert —
    das Board selbst zeigt nur belegte Bahnen, die Sidebar jeden Anker. */
@@ -322,6 +314,9 @@ body.ideen-tree-drop-active .page-tree .tree-drop-target {
 
 /* ── Karte ──────────────────────────────────────────────────────────────── */
 .idee-board-card {
+  /* Rahmen des Drag-Klons (components/board-dnd.css) — der haengt im <body>
+     ohne Karten-Kontext, darum das globale Ideen-Token. */
+  --board-dnd-clone-accent: var(--card-accent-ideen);
   display: flex;
   flex-direction: column;
   gap: var(--space-6);
@@ -432,36 +427,10 @@ body.ideen-tree-drop-active .page-tree .tree-drop-target {
 }
 .idee-board-step:hover { color: var(--color-text); border-color: var(--card-accent); }
 
-/* ── SortableJS-Drag-Zustaende ──────────────────────────────────────────── */
-/* Klassennamen aus ideen-board/actions.js; derselbe Satz wie am Recherche-
-   Status-Board, weil beide denselben Kern (public/js/sortable-dnd.js) mit
-   forceFallback fahren und dieselben drei Rollen zu zeigen haben. */
-/* Ghost: reservierter Slot am Ziel — gestrichelter Rahmen, Inhalt unsichtbar
-   (der Drag-Klon ist die einzige sichtbare Repraesentation der Karte). */
-.idee-board-card.idee-board-card--ghost {
-  background: color-mix(in srgb, var(--ideen-status-accent, var(--color-border)) 14%, transparent);
-  border: 1px dashed var(--ideen-status-accent, var(--color-border));
-  border-left-width: 3px;
-  opacity: 1;
-}
-.idee-board-card.idee-board-card--ghost > * { visibility: hidden; }
-.idee-board-card.idee-board-card--chosen { background: var(--color-accent-bg); }
-/* Drag-Klon: forceFallback klont nach <body> — dort fehlt der Spalten-Kontext,
-   also kein --ideen-status-accent (Rahmen sonst konturlos: var() ohne Wert →
-   currentColor) und kein .card--ideenboard, also kein --card-accent. Beides
-   explizit zurueckfallen lassen. `transition: none` ist Pflicht: SortableJS
-   setzt den Klon per inline transform pro Mousemove, und die von .idee-board-card
-   geerbte transform-Transition liesse ihn der Maus hinterherlerpen statt
-   mitzugehen. `opacity: 1` haelt auch eine verworfene Karte am Zeiger lesbar. */
-.idee-board-card.idee-board-card--dragging {
-  box-shadow: 0 12px 28px var(--color-shadow);
-  background: var(--color-card-bg);
-  border: 1px solid var(--card-accent, var(--card-accent-ideen));
-  border-radius: var(--radius-none);
-  opacity: 0.95;
-  cursor: grabbing;
-  transition: none;
-}
+/* ── Drag ───────────────────────────────────────────────────────────────── */
+/* Platzhalter, Klon, Pickup und Drop-Zone: components/board-dnd.css. Die
+   Farben setzen .ideen-board-cell (Zone, Platzhalter) und .idee-board-card
+   (Klon). */
 
 /* ── Verknuepfungs-Chips ────────────────────────────────────────────────── */
 /* ── Ideen-Referenzen auf den Gegenseiten ───────────────────────────────── */
@@ -482,18 +451,6 @@ body.ideen-tree-drop-active .page-tree .tree-drop-target {
     --ideen-lane-w: 7rem;
     --ideen-col-w: 10rem;
   }
-}
-
-/* ── Stufen pro Buch ────────────────────────────────────────────────────── */
-/* Hinweis am Ende des Stufen-Menues (ideen-board-stages.html): Fliesstext
-   unter den Schaltern, linksbuendig in Menue-Breite. */
-.ideen-board-stages-hint {
-  margin: var(--space-xs) 0 0;
-  padding: var(--space-xs) var(--space-md) var(--space-2xs);
-  border-top: var(--border-thin) solid var(--color-border);
-  font-size: var(--font-size-xs);
-  line-height: 1.45;
-  color: var(--color-muted);
 }
 
 /* ── Alter einer offenen Pendenz ─────────────────────────────────────────── */

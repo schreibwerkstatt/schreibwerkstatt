@@ -50,6 +50,14 @@ test('Figur: Kurzname als Label, voller Name als Tooltip, Klick öffnet die Figu
   assert.deepEqual(app.calls, [['figur', 5]]);
 });
 
+test('Figur mit einteiligem Namen: Kurzname ersetzt ihn nicht (Künstlerkürzel «Ro» bei «Robert»)', () => {
+  const app = fakeApp();
+  app.figurenById = new Map([[7, { id: 7, name: 'Robert', kurzname: 'Ro' }]]);
+  const m = resolveEntityRef({ type: 'figur', id: 7 }, app);
+  assert.equal(m.label, 'Robert');
+  assert.equal(m.title, null);
+});
+
 test('Kapitel per Name führt zur Kapitel-Navigation mit aufgelöster ID', () => {
   const app = fakeApp();
   const m = resolveEntityRef({ type: 'kapitel', name: 'ankunft' }, app);

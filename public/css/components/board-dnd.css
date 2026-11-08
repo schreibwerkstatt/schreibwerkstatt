@@ -1,0 +1,58 @@
+/* === Karten-Board-Drag: Plot-Werkstatt, Ideen-Board, Recherche-Status ======
+   Einzige Optik fuer das Ziehen von Karten zwischen Board-Zellen. Mechanik und
+   Klassen kommen aus public/js/sortable-dnd.js#boardSortableOpts; das Board
+   traegt nur Geometrie bei:
+   - `.board-dnd-zone` am SortableJS-Container jeder Zelle,
+   - `--board-dnd-accent` an der Zelle (Rahmen von Drop-Zone und Platzhalter;
+     die Karte erbt ihn — wandert der Platzhalter, nimmt er die Farbe der
+     Zielzelle an),
+   - `--board-dnd-clone-accent` an der Karte (Rahmen des Klons; der haengt im
+     <body> ohne Zell-Kontext, darum ein globales Token wie
+     `--card-accent-plot`, sonst faellt der Rahmen auf currentColor).
+
+   Layer `utilities`: die Zustaende ueberschreiben die Karten-Optik der Boards
+   (Rahmen, Deckkraft einer erledigten Karte, Hover-Transition) unabhaengig von
+   Selektor-Gewicht und Ladereihenfolge — sie gelten nur, solange ein Drag
+   laeuft. */
+@layer utilities {
+/* Drop-Zone waehrend eines Drags (`board-dnd-active` an <body>): jede Zelle
+   hat eine treffbare Mindesthoehe = Hoehe der gezogenen Karte, gedeckelt auf
+   6rem — eine lange Notiz bliese sonst jede leere Zelle und damit das ganze
+   Board auf. Die Zielzelle faellt trotzdem nie unter die Kartenhoehe: der
+   Platzhalter behaelt sie (startBoardDrag). */
+body.board-dnd-active .board-dnd-zone {
+  min-height: min(var(--sortable-drag-h, 4rem), 6rem);
+  border-radius: var(--radius-none);
+  outline: 1px dashed color-mix(in srgb, var(--board-dnd-accent, var(--card-accent)) 55%, transparent);
+  outline-offset: var(--space-3);
+}
+
+/* Platzhalter: reservierter Slot an der Landeposition — gestrichelter
+   Akzentrahmen, Inhalt unsichtbar (der Klon ist die einzige sichtbare Karte). */
+.board-dnd-ghost {
+  background: color-mix(in srgb, var(--board-dnd-accent, var(--card-accent)) 14%, transparent);
+  border: 1px dashed var(--board-dnd-accent, var(--card-accent));
+  border-left-width: 3px;
+  opacity: 1;
+}
+.board-dnd-ghost > * { visibility: hidden; }
+
+/* Pickup: kurzer Highlight beim Greifen, vor dem Drag-Start. */
+.board-dnd-chosen { background: var(--color-accent-bg); }
+
+/* Klon am Zeiger (forceFallback klont in <body>). `transition: none` ist
+   Pflicht: SortableJS setzt sein transform pro Mousemove inline, und eine von
+   der Karte geerbte transform-Transition (Hover-Lift) liesse ihn der Maus
+   hinterherlerpen statt mitzugehen. `opacity` haelt auch eine gedaempfte
+   (erledigte, verworfene) Karte am Zeiger lesbar. Steht nach `.board-dnd-chosen`:
+   der Klon traegt dessen Klasse mit. */
+.board-dnd-dragging {
+  box-shadow: var(--shadow-drag);
+  background: var(--color-card-bg);
+  border: 1px solid var(--board-dnd-clone-accent, var(--card-accent));
+  border-radius: var(--radius-none);
+  opacity: 0.95;
+  cursor: grabbing;
+  transition: none;
+}
+}

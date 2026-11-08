@@ -59,7 +59,7 @@ const declValue = (body, prop) => {
 // REGEL: die globale `label`-Regel traegt keine vertikale Margin
 // ───────────────────────────────────────────────────────────
 // Nackter Typ-Selektor `label` (kein Klassen-/Nachfahren-Kontext) trifft die
-// ganze App. Eine Klasse (`.filter-toggle`) oder ein Nachfahren-Selektor
+// ganze App. Eine Klasse (`.form-inline-field`) oder ein Nachfahren-Selektor
 // (`.admin-usage-range label`) darf das lokal entscheiden — nur die globale
 // Voreinstellung darf es nicht.
 test('globale label-Regel setzt keine vertikale Margin', () => {
@@ -93,7 +93,7 @@ test('globale label-Regel setzt keine vertikale Margin', () => {
 // Diese Klassen sind Glieder einer zentrierten Zeile (Filterleiste, Inline-Feld,
 // Profil-Leiste). Eine einseitige vertikale Margin/Padding an ihnen ist derselbe
 // Fehler wie an der globalen Regel, nur lokal.
-const ROW_MEMBERS = ['.filter-toggle', '.filter-count', '.form-inline-field', '.filter-search-wrap'];
+const ROW_MEMBERS = ['.view-menu', '.filter-count', '.form-inline-field', '.filter-search-wrap'];
 
 test('Zeilen-Bausteine zentrierter Leisten tragen keine einseitige vertikale Margin', () => {
   const offenders = [];
@@ -101,7 +101,7 @@ test('Zeilen-Bausteine zentrierter Leisten tragen keine einseitige vertikale Mar
     const css = stripComments(readFileSync(file, 'utf8'));
     for (const { selector, body } of ruleBlocks(css)) {
       // Nur Regeln, deren letztes Glied genau dieser Baustein ist (nicht
-      // `.filter-toggle input`, das ist ein Kind).
+      // `.view-menu .icon`, das ist ein Kind).
       const targets = selector.split(',').map((s) => s.trim()).filter((s) => ROW_MEMBERS.includes(s.split(' ').pop().split('>').pop().trim()));
       if (!targets.length) continue;
       const mt = declValue(body, 'margin-top');

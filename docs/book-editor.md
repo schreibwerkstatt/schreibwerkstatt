@@ -65,6 +65,7 @@ Geteilt mit dem Notebook-Editor: [shared/text-find.js](../public/js/editor/share
 | `_memos` | Memo-Cache (`_memo(key, deps, fn)` aus [card-memo.js](../public/js/cards/card-memo.js)) für `outlineNodes` + Block-Index |
 | `findOpen/Term/Replace/CaseSensitive/WholeWord/Matches/Index` | Find/Replace-State |
 | `visiblePageId` / `collapsedChapters` / `outlineOpen` | Outline / TOC (Sticky-Sidebar) |
+| `outlinePinnedPageId` | per Klick im Inhaltsverzeichnis angesprungener Abschnitt: bleibt markiert bis zur nächsten eigenen Eingabe (Rad, Touch, Taste, Maustaste) — ein kurzer letzter Abschnitt erreicht die Oberkante nie, der Vorgänger gewänne sonst die Markierung |
 | `_outlineObserver` | `IntersectionObserver` für Active-Outline-Item |
 | `_histories` / `_histTick` | Undo-Verläufe `Map<pageId, createEditHistory>` bzw. Reaktivitäts-Zähler für `bookEditorCanUndo/-Redo` (der Kern ist framework-frei). Verworfen bei `_load`, `_resetSession`, `destroy`; pro Seite bei „Server-Fassung übernehmen" |
 

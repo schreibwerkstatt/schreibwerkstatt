@@ -1,5 +1,6 @@
 // Teil von appHashRouterMethods (siehe Facade app-hash-router.js).
 // Lifecycle: haengt die Watcher auf, die den Hash schreiben, und raeumt sie ab.
+import { exitFullscreenOnNavigation } from '../../fullscreen.js';
 export const hashSetupMethods = {
   _setupHashRouting() {
     // Re-init sammelt sonst mehrfache $watch — bei jedem Property-Change feuern
@@ -61,7 +62,10 @@ export const hashSetupMethods = {
       const off = this.$watch(getter, () => this._updateHash());
       if (typeof off === 'function') this._hashWatcherTeardowns.push(off);
     }
-    window.addEventListener('hashchange', () => this._applyHash(), { signal: this._abortCtrl?.signal });
+    window.addEventListener('hashchange', () => {
+      exitFullscreenOnNavigation();
+      this._applyHash();
+    }, { signal: this._abortCtrl?.signal });
   },
 
   _teardownHashRouting() {

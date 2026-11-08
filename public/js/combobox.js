@@ -203,8 +203,8 @@ export function comboboxData(cfg = {}) {
         } else {
           this.highlighted = this._allOptions.findIndex(o => String(o.value) === String(this.value));
         }
-        // Breite an den Trigger angleichen, damit das Dropdown wie ein <select>
-        // mindestens trigger-breit ist.
+        // Mindestbreite = Trigger (wie ein <select>); lange Labels (Satz-Titel
+        // von Kapiteln) dürfen die Liste bis zum CSS-Deckel verbreitern.
         const trig = this.$refs.cbTrigger;
         const w = trig ? Math.max(trig.offsetWidth, this._compact ? 180 : 0) : 0;
         this.ddWidth = w ? w + 'px' : null;
@@ -442,7 +442,7 @@ export function comboboxData(cfg = {}) {
           // Scope sitzt am Dropdown, weil es beide Seiten umschliesst; pro
           // Combobox-Instanz vergibt Alpine darin genau eine Nummer.
           '<template x-if="open">',
-          '<div class="combobox-dropdown" x-id="[\'cb-opt\']" :style="ddWidth ? { width: ddWidth } : {}" x-anchor.bottom-start.fixed="$refs.cbTrigger">',
+          '<div class="combobox-dropdown" x-id="[\'cb-opt\']" :style="ddWidth ? { minWidth: ddWidth } : {}" x-anchor.bottom-start.fixed="$refs.cbTrigger">',
           '  <input type="text" class="combobox-search" x-model="query" x-ref="cbInput"',
           '         :placeholder="$app.t(\'common.searchShort\')" role="searchbox" :aria-label="$app.t(\'common.searchShort\')">',
           '  <ul class="combobox-list" role="listbox"',

@@ -5,6 +5,7 @@
 
 import { fetchJson, sendJson, tzOpts, localeTag } from '../../utils.js';
 import { startPoll } from '../../cards/job-helpers.js';
+import { loadToken, isSelectedBook } from '../../cards/book-guard.js';
 
 export const brainstormMethods = {
   // force=true verwirft den Delta-Cache und brainstormt das ganze Buch neu
@@ -21,6 +22,9 @@ export const brainstormMethods = {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ book_id: bookId, force: force === true }),
       });
+      // Buch während des POST gewechselt: kein Poller mehr — er legte die
+      // Vorschläge des alten Buchs ins neue, und «Übernehmen» legte sie dort an.
+      if (!isSelectedBook(bookId)) return;
       this.motivBrainstormJobId = jobId;
       startPoll(this, {
         timerProp: '_brainstormPollTimer',
@@ -57,8 +61,13 @@ export const brainstormMethods = {
   // Vorschlag übernehmen → Theme bzw. Motiv anlegen, dann aus der Liste nehmen.
   // Motiv-Vorschläge dürfen beim Übernehmen einem Thema zugeordnet werden
   // (s.themeIdDraft aus der Combobox in der Vorschlagskarte).
+  // Doppelklick-Schutz je Vorschlag: der Server kennt keine Namens-Eindeutigkeit,
+  // ein zweiter Klick legte das Motiv doppelt an. `adopting` steht am Vorschlag
+  // selbst (die Karte bindet :disabled daran).
   async adoptSuggestion(s) {
     const bookId = this.$store.nav.selectedBookId;
+    if (!s || s.adopting || !bookId) return;
+    s.adopting = true;
     try {
       if (s.typ === 'thema') {
         await sendJson('/motifs/themes', 'POST', { book_id: bookId, name: s.name, beschreibung: s.beschreibung });
@@ -70,6 +79,7 @@ export const brainstormMethods = {
       this.dismissSuggestion(s);
       await this.loadBoard();
     } catch (e) { this.errorMessage = window.__app.t('motiv.error.save'); }
+    finally { s.adopting = false; }
   },
 
   // ── Brainstorm-Lauf-Historie ───────────────────────────────────────────────
@@ -79,10 +89,11 @@ export const brainstormMethods = {
   async loadBrainstormRuns() {
     const bookId = this.$store.nav.selectedBookId;
     if (!bookId) { this.brainstormRuns = []; return; }
+    const isCurrent = loadToken(this, '_brainstormRunsSeq', bookId);
     try {
       const rows = await fetchJson(`/motifs/brainstorm-runs?book_id=${bookId}`);
-      this.brainstormRuns = Array.isArray(rows) ? rows : [];
-    } catch (e) { this.brainstormRuns = []; }
+      if (isCurrent()) this.brainstormRuns = Array.isArray(rows) ? rows : [];
+    } catch (e) { if (isCurrent()) this.brainstormRuns = []; }
   },
 
   // Toggle: Klick auf den aktiven Eintrag schliesst das Panel; sonst Detail laden
@@ -90,8 +101,10 @@ export const brainstormMethods = {
   async openBrainstormRun(run) {
     if (!run || this.brainstorming) return;
     if (this.selectedBrainstormRunId === run.id) { this._clearSuggestionPanel(); return; }
+    const bookId = this.$store.nav.selectedBookId;
     try {
       const detail = await fetchJson(`/motifs/brainstorm-runs/${run.id}`);
+      if (!isSelectedBook(bookId)) return;
       if (!detail?.result) throw new Error('no result');
       this.suggestions = detail.result.vorschlaege || [];
       this.selectedBrainstormRunId = detail.id;

@@ -2,31 +2,18 @@
 // plus Auswahl + Fundstellen-Laden. Nach jeder Mutation lokalen State + Graph
 // aktualisieren (loadBoard) statt Teil-Patches — die Boards sind klein.
 
-import { fetchJson, sendJson, isSaveShortcut } from '../../utils.js';
+import { fetchJson, sendJson } from '../../utils.js';
+import { isSelectedBook } from '../../cards/book-guard.js';
 import { THEME_COLOR_KEYS, defaultThemeColorKey } from './graph.js';
 import { MOTIF_REL_TYPES } from './constants.js';
+import { splitTriggerInput, mergeTriggerTerms } from './detail.js';
 
 export const crudMethods = {
   _bookId() { return this.$store.nav.selectedBookId; },
 
-  // Panel-weite Tastaturkürzel (am Karten-Root, damit sie auch bei Fokus im Graph/
-  // Chip greifen): Cmd/Ctrl+S speichert das gewählte Motiv bzw. Thema, Escape verwirft
-  // ungespeicherte Änderungen — oder schliesst den Editor, wenn nichts dirty ist.
-  // Combobox/EntityPicker konsumieren Escape selbst, solange ihr Dropdown offen ist
-  // (stopPropagation dort), und offene Popover/Menüs regeln ihr Escape ebenfalls selbst.
-  onPanelKeydown(event) {
-    if (isSaveShortcut(event)) {
-      event.preventDefault();
-      if (this.selectedMotif()) this.saveMotifEdit();
-      else if (this.selectedTheme()) this.saveThemeEdit();
-      return;
-    }
-    if (event.key === 'Escape') {
-      if (this.actionMenuKey != null || this.themeColorPickerId != null) return;
-      if (this.selectedMotif()) { event.preventDefault(); this.escMotifEdit(); }
-      else if (this.selectedTheme()) { event.preventDefault(); this.escThemeEdit(); }
-    }
-  },
+  // Tastatur: beide Editoren (Motiv, Thema) hängen am eigenen Container
+  // `$editKeys` (Cmd/Ctrl+S speichert, Esc → die esc*-Methoden unten). Comboboxen
+  // konsumieren Esc selbst, solange ihr Dropdown offen ist.
   // Escape im Motiv-Editor: ungespeicherte Änderungen verwerfen, sonst Editor schliessen.
   async escMotifEdit() {
     if (this.motifDirty()) { this.cancelMotifEdit(); return; }
@@ -34,6 +21,8 @@ export const crudMethods = {
   },
   // Escape im Themen-Editor: analog (verwerfen → sonst zurück zur Themen-Liste).
   async escThemeEdit() {
+    // Offener Farbwähler im Editor: Esc schliesst nur ihn.
+    if (this.themeColorPickerId != null) { this.themeColorPickerId = null; return; }
     if (this.themeDirty()) { this.cancelThemeEdit(); return; }
     await this.deselectTheme();
   },
@@ -66,6 +55,7 @@ export const crudMethods = {
     try {
       await sendJson(`/motifs/themes/${theme.id}`, 'DELETE');
       if (this.selectedThemeId === theme.id) { this.selectedThemeId = null; this._loadThemeBuffer(null); }
+      // loadBoard räumt Thema-Auswahlen, die auf das gelöschte Thema zeigen.
       await this.loadBoard();
     } catch (e) { this.errorMessage = window.__app.t('motiv.error.save'); }
   },
@@ -222,11 +212,12 @@ export const crudMethods = {
     this.editName = m ? (m.name || '') : '';
     this.editThemeId = m && m.theme_id ? String(m.theme_id) : '';
     this.editBeschreibung = m ? (m.beschreibung || '') : '';
-    this.editTriggers = m ? (m.trigger_terms || []).join(', ') : '';
+    this.editTriggerTerms = m ? (m.trigger_terms || []).slice() : [];
+    this.newTriggerTerm = '';
   },
-  // Trigger-Puffer (Komma-Text) auf die kanonische Term-Liste normalisieren.
+  // Trigger-Puffer (Chips + noch nicht übernommener Eingabe-Draft) als Term-Liste.
   _bufferTriggerTerms() {
-    return (this.editTriggers || '').split(',').map(s => s.trim()).filter(Boolean);
+    return mergeTriggerTerms(this.editTriggerTerms, splitTriggerInput(this.newTriggerTerm));
   },
   // Ungespeicherte Änderungen an den Kern-Feldern (Name/Thema/Beschreibung/Trigger)?
   _coreDirty() {
@@ -252,13 +243,27 @@ export const crudMethods = {
   },
   // Motiv speichern: geänderte Kern-Felder als PATCH und/oder geänderte Soll-Links
   // als Full-Replace-PUT — ein Save-Button für beides, danach ein loadBoard.
-  async saveMotifEdit() {
+  // Läuft schon ein Save (Klick daneben + Zeilenwechsel, Cmd+S + Knopf), warten
+  // alle weiteren Aufrufe auf DENSELBEN Lauf: kein zweiter PATCH, und der
+  // Auswahlwechsel sieht danach einen sauberen Puffer statt eines halben Stands.
+  saveMotifEdit() {
+    if (this._motifSaving) return this._motifSaving;
+    this._motifSaving = this._saveMotifEditNow().finally(() => { this._motifSaving = null; });
+    return this._motifSaving;
+  },
+  async _saveMotifEditNow() {
     const m = this.selectedMotif();
     if (!m || !this.motifDirty()) return;
     const coreDirty = this._coreDirty();
     const linksDirty = this.linksDirty();
     const name = (this.editName || '').trim();
     if (coreDirty && !name) { this.errorMessage = window.__app.t('motiv.error.nameRequired'); return; }
+    const triggers = this._bufferTriggerTerms();
+    const triggersChanged = triggers.join('\u0000') !== (m.trigger_terms || []).join('\u0000');
+    // Was gesendet wird — nach dem Save werden nur Felder aus dem Server-Stand
+    // nachgeladen, die seither unverändert sind. Wer während des Requests weiter-
+    // tippt, behält seine Eingabe (sie ist danach wieder „ungespeichert").
+    const sent = this._motifBufferSnapshot();
     this.busy = true;
     try {
       if (coreDirty) {
@@ -266,8 +271,10 @@ export const crudMethods = {
           name,
           theme_id: this.editThemeId ? Number(this.editThemeId) : null,
           beschreibung: this.editBeschreibung || '',
-          trigger_terms: this._bufferTriggerTerms(),
+          trigger_terms: triggers,
         });
+        // Neue Trigger wirken erst nach einem Scan — die Fundstellen bieten ihn an.
+        if (triggersChanged) this.triggerRescanMotifId = m.id;
       }
       if (linksDirty) {
         await sendJson(`/motifs/${m.id}/links`, 'PUT', {
@@ -279,12 +286,45 @@ export const crudMethods = {
         });
       }
       await this.loadBoard();
-      const sel = this.selectedMotif();
-      this._loadMotifBuffer(sel);
-      this._loadLinkBuffer(sel);
+      // Inzwischen ein anderes Motiv gewählt (Buchwechsel, Reset): dessen Puffer
+      // gehören nicht diesem Save.
+      if (this.selectedMotifId === m.id) this._reloadUnchangedBuffers(this.selectedMotif(), sent);
       this.errorMessage = '';
     } catch (e) { this.errorMessage = window.__app.t('motiv.error.save'); }
     finally { this.busy = false; }
+  },
+  // Momentaufnahme aller Puffer als Vergleichsschlüssel (Kern-Felder einzeln,
+  // Verknüpfungen je Brücke als ID-Liste).
+  _motifBufferSnapshot() {
+    const ids = (arr, k) => (arr || []).map(x => String(x[k])).join(',');
+    return {
+      editName: this.editName,
+      editThemeId: this.editThemeId,
+      editBeschreibung: this.editBeschreibung,
+      triggers: this._bufferTriggerTerms().join('\u0000'),
+      editFigures: ids(this.editFigures, 'figId'),
+      editDraftFigures: ids(this.editDraftFigures, 'id'),
+      editBeats: ids(this.editBeats, 'id'),
+      editChapters: ids(this.editChapters, 'id'),
+      editPages: ids(this.editPages, 'id'),
+    };
+  },
+  // Nach dem Save: jedes Feld, das seit dem Senden unverändert ist, aus dem
+  // Server-Stand neu füllen; geänderte Felder (weitergetippt) stehen lassen.
+  _reloadUnchangedBuffers(m, sent) {
+    if (!m) { this._loadMotifBuffer(null); this._loadLinkBuffer(null); return; }
+    const now = this._motifBufferSnapshot();
+    if (now.editName === sent.editName) this.editName = m.name || '';
+    if (now.editThemeId === sent.editThemeId) this.editThemeId = m.theme_id ? String(m.theme_id) : '';
+    if (now.editBeschreibung === sent.editBeschreibung) this.editBeschreibung = m.beschreibung || '';
+    if (now.triggers === sent.triggers) {
+      this.editTriggerTerms = (m.trigger_terms || []).slice();
+      this.newTriggerTerm = '';
+    }
+    const fresh = { editFigures: 'figures', editDraftFigures: 'draftFigures', editBeats: 'beats', editChapters: 'chapters', editPages: 'pages' };
+    for (const [buf, src] of Object.entries(fresh)) {
+      if (now[buf] === sent[buf]) this[buf] = (m[src] || []).map(x => ({ ...x }));
+    }
   },
   async deleteMotif(motif) {
     if (!await window.__app.appConfirm({ message: window.__app.t('motiv.motif.confirmDelete', { name: motif.name }), danger: true })) return;
@@ -310,13 +350,19 @@ export const crudMethods = {
     const from = this.selectedMotifId;
     const to = this.newRelationTargetId ? Number(this.newRelationTargetId) : null;
     const typ = (this.newRelationTyp || '').trim();
-    if (!from || !to || from === to || !typ) return;
+    // Doppelklick: der zweite Request bekäme 409 und meldete „existiert schon",
+    // obwohl der erste gerade erfolgreich war.
+    if (!from || !to || from === to || !typ || this._relationAdding) return;
+    this._relationAdding = true;
     try {
       await sendJson('/motifs/relations', 'POST', { from_motif_id: from, to_motif_id: to, typ });
       this.newRelationTargetId = '';
       this.newRelationTyp = '';
       await this.loadBoard();
-    } catch (e) { this.errorMessage = window.__app.t('motiv.error.save'); }
+    } catch (e) {
+      // 409: das Paar trägt diesen Typ schon — sagen, statt still nichts zu tun.
+      this.errorMessage = window.__app.t(e?.status === 409 ? 'motiv.relations.exists' : 'motiv.error.save');
+    } finally { this._relationAdding = false; }
   },
   async deleteRelation(rel) {
     try { await sendJson(`/motifs/relations/${rel.id}`, 'DELETE'); await this.loadBoard(); }
@@ -423,23 +469,30 @@ export const crudMethods = {
   // Plot-Beats fürs Verknüpfungs-Combobox (lazy, einmal pro Board-Load).
   // Akte werden mitgeladen, damit die Beats im Combobox nach Akt gruppiert
   // erscheinen (opt.group) statt als flache Liste.
+  // Das Flag steht VOR dem Fetch (kein Doppel-Request bei schnellem Motivwechsel)
+  // und fällt bei einem Fehler zurück, damit die nächste Auswahl es erneut versucht.
+  // loadBoard setzt es zurück (in der Plot-Werkstatt neu angelegte Beats).
   async _ensureBeats() {
     if (this._beatsLoaded) return;
     this._beatsLoaded = true;
+    const bookId = this._bookId();
     try {
-      const data = await fetchJson(`/plot?book_id=${this._bookId()}`);
+      const data = await fetchJson(`/plot?book_id=${bookId}`);
+      if (!isSelectedBook(bookId)) return;
       this.allBeats = (data.beats || []).map(b => ({ id: b.id, titel: b.titel, actId: b.act_id }));
       this.allActs = (data.acts || []).map(a => ({ id: a.id, name: a.name }));
-    } catch (e) { this.allBeats = []; this.allActs = []; }
+    } catch (e) { if (isSelectedBook(bookId)) this._beatsLoaded = false; }
   },
   // Werkstatt-Figuren (draft_figures) fürs Figuren-Combobox (Gruppe „Plotwerkstatt").
   async _ensureDraftFiguren() {
     if (this._draftFigurenLoaded) return;
     this._draftFigurenLoaded = true;
+    const bookId = this._bookId();
     try {
-      const data = await fetchJson(`/draft-figures/${this._bookId()}`);
+      const data = await fetchJson(`/draft-figures/${bookId}`);
+      if (!isSelectedBook(bookId)) return;
       this.allDraftFiguren = (Array.isArray(data) ? data : []).map(d => ({ id: d.id, name: d.name }));
-    } catch (e) { this.allDraftFiguren = []; }
+    } catch (e) { if (isSelectedBook(bookId)) this._draftFigurenLoaded = false; }
   },
 
   // Ausstehende Puffer-Änderungen des aktuell gewählten Motivs committen (wie das
@@ -464,37 +517,25 @@ export const crudMethods = {
     this.selectedMotifId = id;
     if (!sameId) {
       this.occurrences = [];
+      this.occSourceFilter = '';
       this._loadMotifBuffer(this.motifById(id));
       this._loadLinkBuffer(this.motifById(id));
     }
+    // Graph sofort spiegeln (auch das Aufheben bei null), nicht erst nach dem Fetch.
+    this._highlightNode(id);
     if (!id) return;
-    this.occExpanded = this._readSectionExpanded('occ', id);
-    this.linksExpanded = this._readSectionExpanded('links', id);
-    this.relationsExpanded = this._readSectionExpanded('relations', id);
     this._ensureBeats();
     this._ensureDraftFiguren();
+    // Lade-Token: bei schnellem Wechsel A→B darf die spätere Antwort für A die
+    // Fundstellen von B nicht überschreiben.
+    const seq = ++this._occSeq;
     this.occLoading = true;
     try {
       const data = await fetchJson(`/motifs/${id}/occurrences`);
+      if (seq !== this._occSeq || this.selectedMotifId !== id) return;
       this.occurrences = data.occurrences || [];
     } catch (e) { /* Fundstellen sind optional; kein harter Fehler */ }
-    finally { this.occLoading = false; }
-    this._highlightNode(id);
-  },
-
-  // Auf-/Zuklapp-Zustand einer Panel-Sektion (occ/links/relations) pro Motiv
-  // (localStorage; Default offen → nur der zugeklappte Zustand wird gespeichert,
-  // offen räumt den Key).
-  _sectionExpandedKey(section, id) { return `sw:motiv:${section}-expanded:${id}`; },
-  _readSectionExpanded(section, id) {
-    try { return localStorage.getItem(this._sectionExpandedKey(section, id)) !== '0'; }
-    catch (e) { return true; }
-  },
-  _persistSectionExpanded(section, id, open) {
-    try {
-      if (open) localStorage.removeItem(this._sectionExpandedKey(section, id));
-      else localStorage.setItem(this._sectionExpandedKey(section, id), '0');
-    } catch (e) { /* localStorage optional */ }
+    finally { if (seq === this._occSeq) this.occLoading = false; }
   },
 
   // Anzahl Soll-Verknüpfungen über alle fünf Brücken (Badge in der Sektion) —

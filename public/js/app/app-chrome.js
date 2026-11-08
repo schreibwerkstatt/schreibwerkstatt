@@ -117,8 +117,8 @@ export const appChromeMethods = {
 
   // Dünner Wrapper um die geteilte scroll-fade.js#bindScrollFade — als Methode am
   // Root verfügbar für Sub-Komponenten (z.B. Bucheditor-Inhaltsverzeichnis).
-  _bindScrollFade(el) {
-    bindScrollFade(el);
+  _bindScrollFade(el, opts) {
+    bindScrollFade(el, opts);
   },
 
   _avatarInitials() {

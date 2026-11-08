@@ -190,6 +190,19 @@ export const sourcesMethods = {
       : this.sources.filter(s => !s.archived).length;
   },
 
+  // Ansichts-Menü der Filterleiste (view-menu.html, Vertrag in view-menu.js).
+  // Der Archiv-Schalter erscheint nur, wenn es Archiviertes gibt (oder er noch
+  // steht) — ohne Eintrag blendet das Partial den Knopf ganz aus.
+  viewMenuSpec() {
+    const t = (k, p) => window.__app.t(k, p);
+    const items = [];
+    if (this.srcShowArchived || this.sources.some(s => s.archived)) {
+      items.push({ kind: 'toggle', key: 'archived', on: this.srcShowArchived, label: t('sources.showArchived'),
+        toggle: () => { this.srcShowArchived = !this.srcShowArchived; } });
+    }
+    return { tip: t('sources.view.tip'), items };
+  },
+
   sourceTypeLabel(cslType) {
     const t = SOURCE_TYPES.includes(cslType) ? cslType : DEFAULT_SOURCE_TYPE;
     return window.__app.t(`sources.type.${t}`);

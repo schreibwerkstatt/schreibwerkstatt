@@ -3,6 +3,7 @@
 
 import { _intensityBottomPct } from '../constants.js';
 import { compareText } from '../../../i18n.js';
+import { figurAnzeigeName } from '../../figur-name.js';
 
 export const tensionMethods = {
   // ── Spannungsbogen ─────────────────────────────────────────────────────────
@@ -94,7 +95,7 @@ export const tensionMethods = {
       const opts = [];
       for (const id of catIds) {
         const f = figById?.get(id);
-        opts.push({ value: `c:${id}`, label: f ? (f.kurzname || f.name) : String(id) });
+        opts.push({ value: `c:${id}`, label: f ? figurAnzeigeName(f) : String(id) });
       }
       for (const id of draftIds) {
         const d = this.draftFigurenById?.get(parseInt(id));

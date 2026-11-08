@@ -53,6 +53,7 @@ import { installFetchGuard } from './app/boot/fetch-guard.js';
 import { registerServiceWorker } from './app/boot/sw-register.js';
 import { setupInternalLinkA11y } from './app/boot/internal-links.js';
 import { registerAppMagics, registerAllCards } from './app/register-cards.js';
+import { installXShowGuard } from './app/boot/x-show-guard.js';
 
 // ── Boot (vor alpine:init) ───────────────────────────────────────────────────
 installFetchGuard();
@@ -60,6 +61,7 @@ registerServiceWorker();
 setupInternalLinkA11y();
 
 document.addEventListener('alpine:init', () => {
+  if (!installXShowGuard()) console.error('[x-show-guard] Alpine-Interna fehlen — Schutz nicht aktiv');
   registerAppMagics();
   registerAllCards();
 

@@ -88,7 +88,7 @@
                  :class="{ 'erzaehlprofil-chapter--deviation': ch.pov_abweichung || ch.tempus_abweichung }">
               <div class="erzaehlprofil-chapter-head">
                 <button type="button" class="entity-ref"
-                        x-entity-ref="{ type: 'kapitel', id: ch.chapter_id, name: ch.kapitel, label: ch.kapitel || '—' }"></button>
+                        x-entity-ref="{ type: 'kapitel', id: ch.chapter_id, name: ch.kapitel || '—' }"></button>
                 <span class="tag erzaehlprofil-pov-tag"
                       :class="{ 'erzaehlprofil-pov-tag--deviation': ch.pov_abweichung }"
                       x-text="erzaehlprofilPovLabel(ch.perspektive)"></span>

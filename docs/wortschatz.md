@@ -380,15 +380,47 @@ zählen nur buchweit.
 
 **Burrows's Delta gegen das Durchschnittskapitel:** Merkmale sind die 150 häufigsten
 Wortformen des Buchs, **mit** Funktionswörtern (sie tragen die Stilsignatur und sind
-thematisch neutral). Relative Häufigkeiten je Kapitel werden über die Kapitel
-z-standardisiert; Delta = Mittel der |z|. Gerechnet nur für Kapitel ab
-`DELTA_MIN_TOKENS` (1500) und erst ab `DELTA_MIN_CHAPTERS` (3) solchen Kapiteln —
-darunter ist eine relative Häufigkeit Rauschen bzw. jedes Kapitel gleich weit von der
-Mitte. `delta_top` hält die stärksten Merkmale mit Vorzeichen; die Karte zeigt sie als
-„öfter: … · seltener: …". Ohne Begründung wäre die Zahl eine Behauptung.
+thematisch neutral). Relative Häufigkeiten je **Delta-Einheit** werden über die
+Einheiten z-standardisiert; Delta = Mittel der |z|. `delta_top` hält die stärksten
+Merkmale mit Vorzeichen; die Karte zeigt sie als „öfter: … · seltener: …". Ohne
+Begründung wäre die Zahl eine Behauptung.
 
-Hervorgehoben wird **relativ** (Delta > Mittel + 1 Standardabweichung der Kapitel),
-weil Delta keinen festen Normalbereich hat.
+**Delta-Einheiten** (`_deltaUnits`): unter `DELTA_MIN_TOKENS` (1500) ist eine
+relative Häufigkeit Rauschen. Darum:
+
+- Ein Kapitel ab 1500 Token ist seine eigene Einheit.
+- Kürzere Kapitel werden mit ihren **direkten Nachbarn in Leserichtung** gierig zu
+  Blöcken ab 1500 Token gebündelt. Ein langes Kapitel unterbricht den Lauf — ein
+  Block ist eine zusammenhängende Textstrecke.
+- Ein zu kurzer Rest am Laufende geht in den vorigen Block desselben Laufs, nie in
+  ein langes Kapitel (das behält sein eigenes Delta). Hat ein Lauf keinen vollen
+  Block (kurze Kapitel zwischen zwei langen, zusammen unter 1500), bleiben seine
+  Kapitel ohne Delta.
+- Delta gibt es erst ab `DELTA_MIN_CHAPTERS` (3) Einheiten — mit zwei ist jede gleich
+  weit von der Mitte. Darunter zeigt die Karte den Hinweis `wortschatz.chapters.noDelta`.
+
+Ein Buch aus lauter langen Kapiteln rechnet damit genau wie ohne Bündelung. Die
+übrigen Kennzahlen (Wörter, MATTR, MTLD, Dichte) bleiben **je Kapitel**; nur das
+Delta gilt für den Block. Jede Kapitelzeile trägt darum `delta`/`delta_top` ihrer
+Einheit und `delta_block` = `{ first, last, chapters, tokens }` (`first`/`last` =
+1-basierte Position in Leserichtung) bzw. `null` für ein einzeln gemessenes Kapitel.
+Gespeichert im JSON von `chapter_lexicon.delta_top_json` als `{ top, block }` — keine
+eigene Spalte.
+
+Die Karte bleibt bei **einer Zeile je Kapitel** (die übrigen Spalten gelten pro
+Kapitel): ein gebündeltes Kapitel zeigt das Block-Delta mit Stern (Tooltip: Spanne,
+Kapitelzahl, Wörter), die Begründung beginnt mit der Spanne «Kap. 12–14»
+(`wortschatz.chapters.block`), und über der Tabelle steht `wortschatz.chapters.blockNote`.
+
+Hervorgehoben wird **relativ** (Delta > Mittel + 1 Standardabweichung der
+Einheiten — ein Block zählt einmal, nicht je Kapitel), weil Delta keinen festen
+Normalbereich hat.
+
+**Welche Kapitel zählen:** der Scan liest `bookTree` + `flattenTree`, also den ganzen
+Baum inklusive Unterkapitel und vom Export ausgeschlossener Kapitel. Jedes Kapitel
+mit eigenen Abschnitten ist eine Zeile (Abschnitte eines Unterkapitels zählen zum
+Unterkapitel, nicht zum Oberkapitel); ein Kapitel, das nur Unterkapitel gliedert,
+hat keine eigene Zeile.
 
 ## Figuren-Idiolekt (Reiter „Figuren")
 

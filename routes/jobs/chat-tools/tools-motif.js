@@ -5,16 +5,12 @@
 // es real im Text fand (motif_occurrences). Pro Buch + User skopiert. Read-only,
 // kein KI-Call (liest die schon vorhandenen Motiv-Tabellen).
 
-const { listMotifs, listOccurrences, getGraph } = require('../../../db/motifs');
+const { listMotifs, listOccurrences, getGraph, hasOccurrences } = require('../../../db/motifs');
 const { _truncateResult } = require('./shared');
-const appSettings = require('../../../lib/app-settings');
-
-// Dieselbe Cosinus-Untergrenze wie die Motiv-Karte (routes/motifs.js#_motifFloor)
-// und der Konsistenz-Job: sonst nennt der Buch-Chat Zahlen und Stellen, die die
-// Karte als zu schwach ausblendet — zwei Bestände für dieselbe Frage.
-function _motifFloor() {
-  return Number(appSettings.get('motif.scan.min_score')) || 0;
-}
+// Dieselbe Cosinus-Untergrenze wie die Motiv-Karte und der Konsistenz-Job: sonst
+// nennt der Buch-Chat Zahlen und Stellen, die die Karte als zu schwach ausblendet —
+// zwei Bestände für dieselbe Frage.
+const { motifScoreFloor: _motifFloor } = require('../../../lib/motif-floor');
 
 const MOTIF_DESC_PREVIEW = 400;
 const OCC_SNIPPET_PREVIEW = 300;
@@ -51,12 +47,15 @@ function _motifOverview(ctx) {
 
   const themeNameById = new Map(graph.themes.map(t => [t.id, t.name]));
   const motifNameById = new Map(graph.motifs.map(m => [m.id, m.name]));
+  // Ungescannt ist ungeprüft, nicht abwesend: ohne Ist-Index gibt es weder
+  // ist_count noch Geister — sonst hiesse jedes geplante Motiv „fehlt im Text".
+  const scanned = hasOccurrences(ctx.bookId, userEmail);
 
   let geister = 0;
   const motifs = graph.motifs.map(m => {
     const { soll, count: sollCount } = _sollSummary(m);
     // Geist = geplant, aber fehlt: hat Soll-Verknüpfungen, aber 0 reale Fundstellen.
-    const geist = sollCount > 0 && m.occurrenceCount === 0;
+    const geist = scanned && sollCount > 0 && m.occurrenceCount === 0;
     if (geist) geister++;
     return {
       id: m.id,
@@ -67,7 +66,7 @@ function _motifOverview(ctx) {
         : (m.beschreibung || null),
       trigger_terms: m.trigger_terms || [],
       ...(Object.keys(soll).length ? { soll } : {}),
-      ist_count: m.occurrenceCount,
+      ...(scanned ? { ist_count: m.occurrenceCount } : {}),
       ...(geist ? { geist: true } : {}),
     };
   });
@@ -92,7 +91,10 @@ function _motifOverview(ctx) {
     ...(relations.length ? { relations } : {}),
     total_themes: themes.length,
     total_motifs: motifs.length,
-    geister,
+    scanned,
+    ...(scanned ? { geister } : {
+      hint: 'Der Motiv-Scan lief für dieses Buch noch nie — es gibt keine Fundstellen-Zahlen. Das heisst UNGEPRÜFT, nicht «kommt im Text nicht vor».',
+    }),
     soll_ist_legende: 'soll = wo das Motiv laut Plan tragen soll (verknüpfte Figuren/Beats/Kapitel/Abschnitte). ist_count = wie oft die KI-Motiverkennung das Motiv real im Text fand (motif_occurrences). geist=true heisst: geplant, aber 0 Fundstellen (fallengelassen oder noch nicht geschrieben). Fundstellen-Detail eines Motivs: erneut mit motif_id bzw. motif_name aufrufen.',
   });
 }
@@ -126,6 +128,15 @@ function _motifOccurrences(input, ctx) {
   const rows = listOccurrences(motif.id, _motifFloor());
 
   if (!rows.length) {
+    if (!hasOccurrences(ctx.bookId, ctx.userEmail || '')) {
+      return {
+        motif_id: motif.id,
+        name: motif.name,
+        scanned: false,
+        occurrences: [],
+        hint: 'Der Motiv-Scan lief für dieses Buch noch nie — ungeprüft, nicht abwesend.',
+      };
+    }
     return {
       motif_id: motif.id,
       name: motif.name,

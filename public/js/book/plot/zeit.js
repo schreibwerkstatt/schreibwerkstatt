@@ -21,6 +21,7 @@
 import { fetchJson } from '../../utils.js';
 import { formatZeitKey } from './zeit-format.js';
 import { befundSeverityTone } from '../../utils/befund-severity.js';
+import { figurAnzeigeName } from '../figur-name.js';
 
 export const zeitMethods = {
   async loadZeitVorschlaege() {
@@ -87,7 +88,7 @@ export const zeitMethods = {
     if (!Number.isFinite(geb) || key.yearTo < geb) return null;
     const von = Math.max(0, key.yearFrom - geb), bis = key.yearTo - geb;
     const fig = (Alpine.store('catalog').figuren || []).find(f => f.id === figId);
-    const figur = fig ? (fig.kurzname || fig.name) : figId;
+    const figur = fig ? figurAnzeigeName(fig) : figId;
     const alter = von === bis ? String(von) : `${von}–${bis}`;
     const app = window.__app;
     return {
@@ -130,7 +131,7 @@ export const zeitMethods = {
     const fig = (Alpine.store('catalog').figuren || []).find(f => f.id === figId);
     const app = window.__app;
     const params = {
-      von, bis, figur: fig ? (fig.kurzname || fig.name) : figId, geburtsjahr: geb,
+      von, bis, figur: fig ? figurAnzeigeName(fig) : figId, geburtsjahr: geb,
       alterVon: act.alter.von, alterBis: act.alter.bis,
     };
     return { text: app.t('plot.aktFenster.cell', params), tip: app.t('plot.aktFenster.tip', params) };

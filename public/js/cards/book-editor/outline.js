@@ -55,6 +55,10 @@ export const bookEditorOutlineMethods = {
         for (const [id, top] of visible) {
           if (top < bestTop) { bestTop = top; bestId = id; }
         }
+        // Angesprungener Abschnitt gewinnt bis zur nächsten eigenen Eingabe
+        // (s. outlinePinnedPageId) — auch während des sanften Scrollens dorthin,
+        // und auch wenn er als kurzer letzter Abschnitt das Band nie erreicht.
+        if (this.outlinePinnedPageId != null) bestId = String(this.outlinePinnedPageId);
         if (bestId != null) {
           const next = parseInt(bestId, 10);
           if (next !== this.visiblePageId) {
@@ -109,6 +113,13 @@ export const bookEditorOutlineMethods = {
       if (!el) return;
       el.scrollIntoView({ block: 'start', behavior: 'smooth' });
       this.visiblePageId = pageId;
+      this.outlinePinnedPageId = pageId;
+      // Eigene Eingabe des Users (Rad, Touch, Taste, Klick — auch auf die
+      // Scrollleiste) löst die Markierung wieder; ab da zählt die Lage im Band.
+      const unpin = () => { if (this.outlinePinnedPageId === pageId) this.outlinePinnedPageId = null; };
+      for (const type of ['wheel', 'touchmove', 'keydown', 'mousedown']) {
+        window.addEventListener(type, unpin, { once: true, passive: true });
+      }
     },
 
     // Hält den aktiven Outline-Eintrag im sichtbaren Bereich des sticky, höhen-

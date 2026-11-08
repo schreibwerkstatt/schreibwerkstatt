@@ -17,15 +17,16 @@
 const express = require('express');
 const {
   makeJobLogger, updateJob, completeJob, failJob, i18nError, jsonBody, jobAbortControllers,
-  aiCall, getPrompts, getBookPrompts, loadOrderedBookContents,
+  aiCall, getPrompts, getBookPrompts,
   tps, _modelName,
   startBookJob,
 } = require('./shared');
 const motifsDb = require('../../db/motifs');
 const { getBookSettings } = require('../../db/schema');
-const { computeMotifFindings } = require('../../lib/motif-consistency');
+const { computeMotifFindings, chapterStructure, relFamily } = require('../../lib/motif-consistency');
+const contentStore = require('../../lib/content-store');
 const { tServerParams } = require('../../lib/i18n-server');
-const appSettings = require('../../lib/app-settings');
+const { motifScoreFloor } = require('../../lib/motif-floor');
 const { resolveProvider } = require('../../lib/ai');
 
 const SEVERITY = ['kritisch', 'stark', 'mittel', 'schwach', 'niedrig'];
@@ -36,39 +37,30 @@ const SEVERITY = ['kritisch', 'stark', 'mittel', 'schwach', 'niedrig'];
 const BELEGE_PRO_MOTIV = 3;
 const BELEG_MAX_CHARS = 240;
 
-function _belegeFor(motifs, floor) {
+// Belegstellen + Sprungziel aus EINER Lesung je Motiv (listOccurrences liefert
+// nach Score sortiert, die ersten sind die tragfaehigsten).
+//   belege — die staerksten Auszuege fuer den Prompt
+//   ziele  — Sprungziel je Motiv: die staerkste Fundstelle mit einer Seite.
+//            Deterministisch aus dem Index gebaut, NICHT aus dem Modelltext — ein
+//            Befund soll an eine echte Stelle springen, und ein halluziniertes
+//            Sprungziel faellt niemandem auf.
+function _belegeUndZiele(motifs, floor) {
   const belege = {};
+  const ziele = {};
   for (const m of motifs) {
     if (!m.occurrenceCount) continue;
-    const rows = motifsDb.listOccurrences(m.id, floor).slice(0, BELEGE_PRO_MOTIV);
-    const clean = rows
+    const rows = motifsDb.listOccurrences(m.id, floor);
+    const clean = rows.slice(0, BELEGE_PRO_MOTIV)
       .map(r => ({
         kapitel: r.chapter_name || null,
         snippet: String(r.snippet || '').replace(/\s+/g, ' ').trim().slice(0, BELEG_MAX_CHARS),
       }))
       .filter(r => r.snippet);
     if (clean.length) belege[m.id] = clean;
+    const row = rows.find(r => r.page_id || r.scene_page_id);
+    if (row) ziele[m.id] = { page_id: row.page_id || row.scene_page_id, page_name: row.page_name || null };
   }
-  return belege;
-}
-
-// Sprungziel je Motiv: die staerkste Fundstelle mit einer Seite. Deterministisch
-// aus dem Index gebaut, NICHT aus dem Modelltext — ein Befund soll an eine echte
-// Stelle springen, und ein halluziniertes Sprungziel faellt niemandem auf.
-function _belegZiele(motifs, floor) {
-  const ziele = {};
-  for (const m of motifs) {
-    if (!m.occurrenceCount) continue;
-    const row = motifsDb.listOccurrences(m.id, floor)
-      .find(r => r.page_id || r.scene_page_id);
-    if (row) {
-      ziele[m.id] = {
-        page_id: row.page_id || row.scene_page_id,
-        page_name: row.page_name || null,
-      };
-    }
-  }
-  return ziele;
+  return { belege, ziele };
 }
 
 const _norm = (s) => (s || '').trim().toLowerCase().replace(/\s+/g, ' ');
@@ -83,15 +75,18 @@ async function runMotifConsistencyJob(jobId, bookId, userEmail) {
     // Score-Floor wie die Konstellation (routes/motifs.js#_motifFloor): die KI muss
     // ueber DIESELBEN Zahlen urteilen, die die Autorin im Graph sieht — sonst meldet
     // sie eine Luecke, die auf dem Bildschirm keine ist.
-    const floor = Number(appSettings.get('motif.scan.min_score')) || 0;
+    const floor = motifScoreFloor();
 
     updateJob(jobId, { statusText: 'job.phase.motivConsistencyCollect', progress: 5 });
     const graph = motifsDb.getGraph(bookId, userEmail, floor);
     if (!graph.motifs.length) throw i18nError('job.error.motivKatalogLeer');
 
-    // Kapitel in echter Buchorganizer-Reihenfolge (ueber die Content-Store-Facade).
-    const { chaptersFlat } = await loadOrderedBookContents(bookId);
-    const kapitel = (chaptersFlat || []).map(c => ({ id: c.id, name: c.name }));
+    // Kapitel-Struktur des ganzen Baums (ueber die Content-Store-Facade) — DIESELBE
+    // wie GET /motifs/consistency, inkl. Unterkapitel und ausgeschlossener Kapitel.
+    // Sonst waeren die Vorbefunde im Prompt nicht die, die die Autorin sieht, und
+    // die K-Nummern im Kapitel-Verlauf verschoben sich.
+    const structure = chapterStructure(await contentStore.bookTree(bookId));
+    const kapitel = structure.order.map(id => ({ id, name: structure.names.get(id) }));
 
     // Ist der Index ueberhaupt befuellt? Ungescannt heisst ungeprueft, nicht
     // abwesend — der Prompt bekommt das ausdruecklich gesagt, sonst meldet das
@@ -105,15 +100,18 @@ async function runMotifConsistencyJob(jobId, bookId, userEmail) {
     const locale = settings?.language || 'de';
     const messbefunde = computeMotifFindings({
       motifs: graph.motifs, relations: graph.relations,
-      chapterOrder: kapitel.map(k => k.id), scanned,
+      structure, scanned,
     });
+    // Freitext-Typen (geistNachbar gilt fuer jeden Typ) haben kein Label — dann
+    // der Typ selbst statt eines rohen i18n-Keys im Prompt.
+    const typLabel = (typ) => (relFamily(typ) ? tServerParams(`motiv.relation.type.${typ}`, null, locale) : typ);
     const vorbefunde = messbefunde.map(f => tServerParams(`motiv.check.${f.code}`, {
       motiv: f.motiv || '', partner: f.partner || '',
-      typ: f.typ ? tServerParams(`motiv.relation.type.${f.typ}`, null, locale) : '',
+      typ: f.typ ? typLabel(f.typ) : '',
       ...(f.params || {}),
     }, locale));
 
-    const belege = _belegeFor(graph.motifs, floor);
+    const { belege, ziele } = _belegeUndZiele(graph.motifs, floor);
     const { BUCH_KONTEXT } = await getBookPrompts(bookId, userEmail);
 
     logger.info(`Motiv-Consistency Start: book=${bookId} motive=${graph.motifs.length} themen=${graph.themes.length} kanten=${graph.relations.length} kapitel=${kapitel.length} belege=${Object.keys(belege).length} vorbefunde=${vorbefunde.length} gescannt=${scanned}`);
@@ -137,7 +135,6 @@ async function runMotifConsistencyJob(jobId, bookId, userEmail) {
     // (Modelle, die den Marker nicht zurueckgeben) — und sonst uebergreifend.
     const validIds = new Set(graph.motifs.map(m => m.id));
     const idByName = new Map(graph.motifs.map(m => [_norm(m.name), m.id]));
-    const ziele = _belegZiele(graph.motifs, floor);
 
     const konflikte = result.konflikte
       .filter(k => k && typeof k.problem === 'string' && k.problem.trim())

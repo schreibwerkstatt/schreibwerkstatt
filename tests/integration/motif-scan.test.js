@@ -60,3 +60,23 @@ test('motif-scan (Trigger-Pfad): findet Fundstellen + Full-Replace', async () =>
   await motifScan.runMotifScanJob(jobId2, BOOK, USER);
   assert.equal(motifsDb.listOccurrences(motif.id).length, 0);
 });
+
+test('motif-scan mit onlyMotifId: nur dieses Motiv wird neu geschrieben', async () => {
+  ctx.dbSeed.reset();
+  ctx.dbSeed.setBook({
+    books: [{ id: BOOK, name: 'Motiv-Integrationsbuch' }],
+    chapters: [{ id: 5001, book_id: BOOK, name: 'Kapitel 1' }],
+    pages: [{ id: 6001, book_id: BOOK, chapter_id: 5001, name: 'Seite A' }],
+    pageBodies: { 6001: '<p>Regen über dem Spiegel des Sees.</p>' },
+  });
+  searchIndex.upsertPage(6001);
+
+  const wasser = motifsDb.createMotif(BOOK, USER, { name: 'Wasser', triggerTerms: ['Regen'] });
+  const spiegel = motifsDb.createMotif(BOOK, USER, { name: 'Spiegel', triggerTerms: ['Spiegel'] });
+
+  const jobId = shared.createJob('motif-scan', BOOK, USER, 'job.label.motivScan', null, `${BOOK}:m${wasser.id}`);
+  await motifScan.runMotifScanJob(jobId, BOOK, USER, wasser.id);
+  assert.equal(shared.jobs.get(jobId).status, 'done');
+  assert.equal(motifsDb.listOccurrences(wasser.id).length, 1, 'gewähltes Motiv gescannt');
+  assert.equal(motifsDb.listOccurrences(spiegel.id).length, 0, 'anderes Motiv unberührt');
+});

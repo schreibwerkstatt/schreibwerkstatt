@@ -97,9 +97,9 @@ describe('adaptNodeColor', () => {
     band: 'rgba(212,232,255,0.35)', label: '#1d4b73', font: { color: '#fff' },
   };
 
-  test('Light-Mode normalisiert auf die drei vis-Schlüssel', () => {
+  test('Light-Mode normalisiert auf die vier vis-Schlüssel', () => {
     assert.deepStrictEqual(Object.keys(adaptNodeColor(spec, light)).sort(),
-      ['background', 'border', 'highlight']);
+      ['background', 'border', 'highlight', 'hover']);
     assert.strictEqual(adaptNodeColor(spec, light).background, '#D4E8FF');
   });
 
@@ -115,5 +115,15 @@ describe('adaptNodeColor', () => {
   test('Dark-Mode hält die Border als Erkennungsanker lesbar', () => {
     const out = adaptNodeColor(spec, dark);
     assert.ok(luminance(parseColor(out.border)) > luminance(parseColor(spec.border)));
+  });
+
+  // Ohne hover zeichnet vis beim Überfahren seine hellblaue Default-Fläche
+  // (#D2E5FF) — unter heller Dark-Mode-Schrift ist der Knoten dann unlesbar.
+  test('hover gleicht highlight in beiden Modi', () => {
+    for (const theme of [light, dark]) {
+      const out = adaptNodeColor(spec, theme);
+      assert.deepStrictEqual(out.hover, out.highlight);
+      assert.notStrictEqual(out.hover, out.highlight);
+    }
   });
 });

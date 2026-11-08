@@ -73,7 +73,7 @@
     </span>
     <div x-data="catalogFilter('figur')"
          x-modelable="value" x-model="$store.catalogUi.orteFilters.figurId"
-         x-effect="options = $store.catalog.figuren.filter(f => $store.catalog.orte.some(o => (o.figuren || []).includes(f.id))).map(f => ({value: f.id, label: f.kurzname || f.name}))"
+         x-effect="options = $store.catalog.figuren.filter(f => $store.catalog.orte.some(o => (o.figuren || []).includes(f.id))).map(f => ({value: f.id, label: $app.figurAnzeigeName(f)}))"
          >
     </div>
     <div x-data="catalogFilter('chapter')"

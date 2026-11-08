@@ -85,7 +85,32 @@ export function registerPaletteCard() {
           try { p.prepare?.(root); } catch (e) { console.error('[palette prepare]', e); }
         }
       }
-      this.$nextTick(() => this.$refs.paletteInput?.focus());
+      this._focusPaletteInputNow();
+      // Nachfassen, falls Alpine das Overlay beim Flush neu schreibt oder der
+      // Fokus-Trap beim Aktivieren dazwischenfunkt.
+      this.$nextTick(() => this._focusPaletteInput());
+      requestAnimationFrame(() => this._focusPaletteInput());
+    },
+
+    // Fokus SYNCHRON im Klick-/Tasten-Handler setzen: iOS/iPadOS öffnet die
+    // Bildschirmtastatur nur, wenn focus() noch im Aufruf-Stack der Geste
+    // läuft — ein $nextTick liegt schon ausserhalb, das Feld wäre zwar
+    // fokussiert, aber ohne Tastatur. Zu diesem Zeitpunkt hat x-show das
+    // Overlay noch nicht eingeblendet (display:none nimmt keinen Fokus an),
+    // deshalb wird die Sperre hier vorgezogen — x-show setzt beim Flush
+    // denselben Zustand.
+    _focusPaletteInputNow() {
+      const overlay = this.$refs.paletteInput?.closest('.palette-overlay')
+        || document.querySelector('.palette-overlay');
+      if (overlay?.style.display === 'none') overlay.style.removeProperty('display');
+      this._focusPaletteInput();
+    },
+
+    _focusPaletteInput() {
+      if (!this.paletteOpen) return;
+      const input = this.$refs.paletteInput;
+      if (!input || document.activeElement === input) return;
+      try { input.focus({ preventScroll: true }); } catch { input.focus(); }
     },
 
     // Overlay in den aktuell obersten Layer haengen (Fullscreen-Element, sonst

@@ -72,3 +72,15 @@ test('leeres Kapitel: Unterkapitel eines ausgeschlossenen Oberkapitels zählt ni
   const out = computeNextSteps({ ...base, tree, isExcluded }, open);
   assert.deepEqual(out[0].params, { id: 3, name: 'Draussen' });
 });
+
+test('Analyse veraltet: ab drei nach dem Lauf geänderten Abschnitten, Key je Lauf', () => {
+  const at = '2026-05-30T09:40:00.000Z';
+  const pages = (n, m) => [
+    ...Array.from({ length: n }, (_, i) => ({ id: i, updated_at: '2026-07-01T00:00:00.000Z' })),
+    ...Array.from({ length: m }, (_, i) => ({ id: 100 + i, updated_at: '2026-05-01T00:00:00.000Z' })),
+  ];
+  assert.deepEqual(computeNextSteps({ ...base, analysisAt: at, pages: pages(2, 5) }, open), []);
+  const out = computeNextSteps({ ...base, analysisAt: at, pages: pages(3, 5) }, open);
+  assert.deepEqual(out, [{ kind: 'analysisStale', key: `overview.analysisStale.7.${at}`, params: { n: 3, total: 8 } }]);
+  assert.deepEqual(computeNextSteps({ ...base, pages: pages(5, 0) }, open), [], 'ohne Lauf kein Hinweis');
+});

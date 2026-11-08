@@ -133,9 +133,9 @@ test('ideen-board: Bahnen aus dem Baum, Stufen-Spalten, Filter blendet aus und s
   await expect(card.locator('.ideen-board-head-col--verworfen .board-col-count')).toHaveText('1');
 
   // Einblenden bringt sie zurueck — sie war nie weg.
-  // Der Haken sitzt im Stufen-Menue der Filterleiste.
-  await card.locator('.ideen-board-stages-toggle').click();
-  await card.locator('.ideen-board-stages-menu [role="menuitemcheckbox"]', { hasText: 'Verworfene anzeigen' }).click();
+  // Der Haken sitzt im Ansichts-Menue der Filterleiste.
+  await card.locator('.view-menu-toggle').click();
+  await card.locator('.view-menu-panel [role="menuitemcheckbox"]', { hasText: 'Verworfene anzeigen' }).click();
   await page.keyboard.press('Escape');
   await expect(card.locator(`[data-idee-card-id="${made.b}"]`)).toHaveCount(1);
 
@@ -301,7 +301,7 @@ test('ideen-board: Drag-Klon haengt am Zeiger und traegt die Karte in die Spalte
   // Mehr als fallbackTolerance(5px), sonst startet SortableJS den Zug nicht.
   await page.mouse.move(grip.x + grip.width / 2 + 8, grip.y + grip.height / 2 + 14, { steps: 4 });
 
-  const clone = page.locator('body > .idee-board-card--dragging');
+  const clone = page.locator('body > .idee-board-card.board-dnd-dragging');
   await expect(clone).toBeVisible();
 
   // ── Der Klon haengt am Zeiger ───────────────────────────────────────────
@@ -333,7 +333,7 @@ test('ideen-board: Drag-Klon haengt am Zeiger und traegt die Karte in die Spalte
 
   // Der zurueckgelassene Slot ist als Platzhalter erkennbar, nicht als zweite
   // Karte: Inhalt unsichtbar (der Klon ist die einzige sichtbare Karte).
-  await expect(source).toHaveClass(/idee-board-card--ghost/);
+  await expect(source).toHaveClass(/board-dnd-ghost/);
   const ghostChildVisible = await source.evaluate(
     el => getComputedStyle(el.firstElementChild).visibility);
   expect(ghostChildVisible).toBe('hidden');
@@ -351,8 +351,8 @@ test('ideen-board: Drag-Klon haengt am Zeiger und traegt die Karte in die Spalte
     return data.ideen.find(i => i.id === args.ideeId)?.status === 'in_arbeit';
   }, { bookId, ideeId: made.ideeId }, { timeout: 10000 });
   // Kein Drag-Rest: der Klon ist weg, die Drop-Zonen sind wieder normal.
-  await expect(page.locator('body > .idee-board-card--dragging')).toHaveCount(0);
-  await expect(page.locator('body.ideen-dnd-active')).toHaveCount(0);
+  await expect(page.locator('body > .idee-board-card.board-dnd-dragging')).toHaveCount(0);
+  await expect(page.locator('body.board-dnd-active')).toHaveCount(0);
 });
 
 // Quer zur Bahn: eine offene, verankerte Idee zieht per Drag in die Buch-Bahn
@@ -608,7 +608,7 @@ test('ideen-board: manuell sortieren per Drag in der Spalte, gespeichert', async
 // eigene Bahn; die Stufe bleibt).
 //
 // Das Ziel wird erst NACH dem Drag-Start gemessen: dann blaehen sich die leeren
-// Zellen zur Drop-Zone auf (body.ideen-dnd-active), und alles darunter rueckt —
+// Zellen zur Drop-Zone auf (body.board-dnd-active), und alles darunter rueckt —
 // ein vorher gemessener Punkt laege in der Bahn darueber.
 async function dragGripTo(page, grip, target, dy = 24) {
   await page.mouse.move(grip.x + grip.width / 2, grip.y + grip.height / 2);

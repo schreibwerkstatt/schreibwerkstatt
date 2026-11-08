@@ -14,7 +14,7 @@
      Aktionsmenue der Karte (Abschnitt „Status" in recherche-item-menu.html).
      Eine Reihenfolge INNERHALB der Spalte gibt es nicht: `research_items` hat
      keine sort_order, die Ordnung kommt aus der gewaehlten Sortierung. -->
-<div class="research-status-board" :class="{ 'is-refreshing': refreshing }"
+<div class="research-status-board" x-init="$app._bindScrollFade($el, { idleMs: 200 })" :class="{ 'is-refreshing': refreshing }"
      x-show="!loading && items.length > 0" x-cloak>
   <template x-for="st in statuses()" :key="st">
     <div class="research-status-column" :class="'research-status-column--' + st">
@@ -26,7 +26,7 @@
       <!-- SortableJS-Container: haelt ausser dem x-for-Anker nur die Karten.
            `data-research-status-cell` ist das Ziel-Status-Attribut, das
            onStatusSortEnd ausliest. -->
-      <div class="research-status-cell" :data-research-status-cell="st">
+      <div class="research-status-cell board-dnd-zone" :data-research-status-cell="st">
         <template x-for="item in itemsForStatus(st)" :key="item.id">
           <div class="research-status-card hover-reveal-host" :data-research-card-id="item.id"
                @contextmenu="if (!busy) openItemMenu($event, 'status', item)" x-long-press

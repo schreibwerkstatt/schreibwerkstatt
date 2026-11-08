@@ -36,18 +36,24 @@ export function registerMotivCard() {
     selectedThemeId: null,
     occurrences: [],
     occLoading: false,
-    // Panel-Sektionen auf-/zugeklappt (pro Motiv in localStorage persistiert,
-    // gesetzt bei jeder Auswahl in selectMotif; Default offen): Fundstellen (Ist),
-    // Soll-Verknüpfungen und Motiv↔Motiv-Beziehungen.
-    occExpanded: true,
-    linksExpanded: true,
-    relationsExpanded: true,
+    // Detail-Editor (Seitenpanel + Gliederung): gewählter Reiter (details | occ |
+    // links | relations), kartenweit in localStorage gemerkt (detail.js).
+    motivDetailTab: 'details',
+    // Fundstellen-Reiter: Quelle filtern ('' = alle, 'semantic', 'trigger').
+    occSourceFilter: '',
+    // Motiv, dessen Trigger zuletzt gespeichert wurden und das noch nicht neu
+    // gescannt ist — der Fundstellen-Reiter bietet dann „Nur dieses Motiv neu suchen" an.
+    triggerRescanMotifId: null,
+    // Suche über Baum (Seitenpanel) und Gliederung: Name, Beschreibung, Trigger.
+    motivQuery: '',
     // Edit-Puffer der Kern-Felder (Name/Thema/Beschreibung/Trigger) — explizit
-    // gespeichert via Save/Cancel-Leiste, kein Feld-Autosave.
+    // gespeichert via Save/Cancel-Leiste, kein Feld-Autosave. Trigger als Liste
+    // (Chips) plus Eingabe-Draft.
     editThemeId: '',
     editName: '',
     editBeschreibung: '',
-    editTriggers: '',
+    editTriggerTerms: [],
+    newTriggerTerm: '',
     // Edit-Puffer des Themen-Editors (Name/Beschreibung) — explizit gespeichert
     // via Save/Cancel, kein Feld-Autosave (App-Standard, wie der Motiv-Editor).
     editThemeName: '',
@@ -60,8 +66,9 @@ export function registerMotivCard() {
     editBeats: [],
     editChapters: [],
     editPages: [],
-    // Ansicht: Konstellation (Graph), Kapitel-Verlaufsband (Heatmap Motiv × Kapitel)
-    // oder Konsistenz-Befunde (deterministische Messung der Motiv-Kanten)
+    // Ansicht: Konstellation (Graph), Kapitel-Verlaufsband (Heatmap Motiv × Kapitel),
+    // Konsistenz-Befunde (deterministische Messung der Motiv-Kanten) oder
+    // Gliederung (bearbeitbare Baum-Tabelle Thema → Motiv)
     motivView: 'graph',
     // Kapitel-Verlaufsband — aufgeklapptes Zell-Detail (`motifId:chapterId`) und
     // die dafür geholten Fundstellen. Der Cache liegt pro Motiv (eine Bandzeile
@@ -69,6 +76,9 @@ export function registerMotivCard() {
     // geleert, weil ein Scan-Lauf die Zahlen darunter verschiebt.
     activeBandDetailKey: null,
     bandOccCache: {},
+    // Aufgeklappte Hauptkapitel-Spalten des Bands (chapterId → true). Pro Buch;
+    // Default zu (Spalten = oberste Kapitel, Teilbaum summiert).
+    bandExpanded: {},
     bandDetailLoading: false,
     // Konsistenz-Befunde (GET /motifs/consistency — Messung, kein KI-Lauf).
     // checksScanned=false heisst: der Ist-Index ist leer, es wurde also nicht
@@ -109,6 +119,9 @@ export function registerMotivCard() {
     scanning: false,
     scanProgress: 0,
     motivScanJobId: null,
+    // Breite des Seitenpanels neben der Konstellation (px, null = Default aus
+    // dem CSS); per Griff gezogen, in localStorage gemerkt (panel-resize.js).
+    motivPanelWidth: null,
     // Native-Fullscreen-Status (gespiegelt vom fullscreenchange-Listener) — mehr
     // Platz für die Konstellation. Toggle in graphMethods.toggleMotivFullscreen.
     motivFullscreen: false,
@@ -146,10 +159,27 @@ export function registerMotivCard() {
     _consistencyPollTimer: null,
     _embedPollTimer: null,
     _layoutSaveTimer: null,
+    // Buch, zu dem der ausstehende Layout-Save gehört (beim Planen gemerkt).
+    _layoutSaveBookId: null,
+    // Lade-Token der Nebenlesungen (Befunde, Läufe) gegen späte Antworten
+    _checksLoadSeq: 0,
+    _consistencyRunsSeq: 0,
+    _brainstormRunsSeq: 0,
+    // Generation des Band-Fundstellen-Caches: loadBoard/Reset zählen hoch, eine
+    // vorher gestartete Lesung schreibt dann nicht in den frischen Cache.
+    _bandOccGen: 0,
+    // Laufender Beziehungs-Anlege-Request (Doppelklick-Schutz)
+    _relationAdding: false,
     // Persistiertes Knoten-Layout (node_id → {x,y}); aus loadBoard, beim Ziehen gespeichert.
     _savedPositions: null,
-    // SortableJS-Instanz der Themen-Liste (Reihenfolge per Drag)
+    // SortableJS-Instanzen des Baums: Themen-Reihenfolge + je Gruppe eine
+    // Motiv-Liste (Motive zwischen Themen ziehen)
     _themeSortable: null,
+    _motifSortables: null,
+    // Lade-Token der Fundstellen (selectMotif) gegen späte Antworten
+    _occSeq: 0,
+    // Laufender Motiv-Save (saveMotifEdit) — weitere Aufrufe warten darauf
+    _motifSaving: null,
     _lifecycle: null,
 
     init() {
@@ -159,34 +189,44 @@ export function registerMotivCard() {
       const onSelectMotif = (e) => {
         const id = parseInt(e.detail?.motifId);
         if (!id) return;
-        if (!this.motifs.length) { this._pendingMotifId = id; return; }
-        if (this.motifById(id) && this.selectedMotifId !== id) this.selectMotif(id);
+        if (this.selectedMotifId === id) return;
+        if (this.motifById(id)) { this.selectMotif(id); return; }
+        // Noch nicht geladen ODER seit dem letzten Load angelegt (Board veraltet):
+        // parken und — bei offener Karte mit Board — frisch laden; loadBoard wendet
+        // die geparkte ID an. Sonst ginge der Sprung still verloren.
+        this._pendingMotifId = id;
+        if (this.motifs.length && window.__app.showMotivCard) this.loadBoard();
       };
 
       this._lifecycle = setupCardLifecycle(this, {
         name: 'motiv',
         showFlag: 'showMotivCard',
-        timerKeys: ['_scanPollTimer', '_brainstormPollTimer', '_consistencyPollTimer', '_embedPollTimer', '_layoutSaveTimer'],
+        // _layoutSaveTimer bewusst NICHT hier: ein ausstehender Drag-Save wird beim
+        // Buchwechsel noch unter dem ALTEN Buch geschrieben (_flushLayoutSave),
+        // statt verworfen zu werden.
+        timerKeys: ['_scanPollTimer', '_brainstormPollTimer', '_consistencyPollTimer', '_embedPollTimer'],
         onShow: () => this.loadBoard(),
-        onBookChanged: () => {
+        // Wechsel = Save, kein stilles Verwerfen (wie beim Motivwechsel): offene
+        // Puffer erst committen, dann zurücksetzen. Die Motiv-/Themen-Routen hängen
+        // an der ID, nicht am gewählten Buch — der Save trifft das richtige Objekt.
+        onBookChanged: async () => {
+          this._flushLayoutSave();
+          await this._commitPendingEdits();
           this.resetMotiv();
           if (window.__app.showMotivCard && this.$store.nav.selectedBookId) this.loadBoard();
         },
-        onViewReset: () => this.resetMotiv(),
+        onViewReset: async () => {
+          this._flushLayoutSave();
+          await this._commitPendingEdits();
+          this.resetMotiv();
+        },
         onCardRefresh: () => this.loadBoard(),
         extraListeners: [{ type: 'motiv:select', handler: onSelectMotif }],
       });
 
-      // Auf-/Zuklappen der Panel-Sektionen pro Motiv persistieren.
-      this.$watch('occExpanded', (v) => {
-        if (this.selectedMotifId) this._persistSectionExpanded('occ', this.selectedMotifId, v);
-      });
-      this.$watch('linksExpanded', (v) => {
-        if (this.selectedMotifId) this._persistSectionExpanded('links', this.selectedMotifId, v);
-      });
-      this.$watch('relationsExpanded', (v) => {
-        if (this.selectedMotifId) this._persistSectionExpanded('relations', this.selectedMotifId, v);
-      });
+      this.motivDetailTab = this._readDetailTab();
+      this.$watch('motivDetailTab', (v) => this._persistDetailTab(v));
+      this.motivPanelWidth = this._readPanelWidth();
 
       // Theme-Wechsel (Hell/Dunkel) → Konstellation neu zeichnen. Die Farben
       // stecken im gezeichneten Canvas-Bild, ein CSS-Wechsel erreicht sie nicht.
@@ -216,9 +256,9 @@ export function registerMotivCard() {
 
     destroy() {
       // Ausstehende Layout-Speicherung noch flushen, solange das Netzwerk lebt.
-      if (this._layoutSaveTimer) { clearTimeout(this._layoutSaveTimer); this._layoutSaveTimer = null; this._saveLayout(); }
-      this._detachGraphMenuListeners();
+      this._flushLayoutSave();
       this._destroyThemeSortable();
+      this._destroyMotifSortables();
       this._themeObserver?.disconnect();
       this._themeObserver = null;
       this.closeActionMenu();

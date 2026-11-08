@@ -41,6 +41,10 @@ const ALPHA_OFF = '22';
 // Verlaufsfärbung: Anfang → Ende. Zwei Serienfarben statt Theme-Tokens, weil
 // beide auf Hell und Dunkel lesbar sind; dieselben zwei stehen in der Legende
 // (buchlandkarte.css, .buchlandkarte-gradient).
+// Ab so vielen Kapiteln wiederholen sich die Serienfarben und die Legende wird
+// länger als die Karte — ohne eigene Wahl färbt die Karte dann nach Buchverlauf.
+export const CHAPTER_COLOR_MAX = 12;
+
 const ORDER_FROM = '#5b6ee1';
 const ORDER_TO = '#e08a3c';
 
@@ -187,6 +191,13 @@ export const mapMethods = {
     }];
   },
 
+  // Wirksame Färbung: die Wahl des Users, sonst nach Kapitelzahl (CHAPTER_COLOR_MAX).
+  bookMapEffectiveColorMode() {
+    if (this.bookMapColorMode) return this.bookMapColorMode;
+    const n = (Alpine.store('nav').tree || []).filter(i => i.type === 'chapter' && !i.solo).length;
+    return n > CHAPTER_COLOR_MAX ? 'order' : 'chapter';
+  },
+
   async renderBookMap() {
     if (!this.bookMapHasMap()) return;
     const canvas = document.getElementById('bookMapCanvas');
@@ -199,7 +210,7 @@ export const mapMethods = {
     const t = (k, p) => window.__app?.t?.(k, p) || k;
     const points = this._bookMapPoints();
     const chunksById = new Map((this.bookMapResult?.pages || []).map(p => [p.id, p.chunks]));
-    const byOrder = this.bookMapColorMode === 'order';
+    const byOrder = this.bookMapEffectiveColorMode() === 'order';
     const [a, b] = this._bookMapPair();
 
     const base = chartOptions(pal, { legend: !byOrder, legendKind: 'items' });

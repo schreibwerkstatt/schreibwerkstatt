@@ -12,10 +12,9 @@
   <div class="ideen-board-wrap">
     <!-- Eigener Scrollbereich (auf Fensterhoehe gedeckelt, CSS): nur so kleben
          Spaltenkoepfe und Bahntitel — der horizontale Scroll macht das Raster
-         ohnehin zum Scroll-Container. Spalten ohne sichtbare Karte werden
-         schmal (`--ideen-col-tracks`, actions.js#columnTracks). -->
+         ohnehin zum Scroll-Container. Alle Stufen-Spalten sind gleich breit
+         (CSS). -->
     <div class="ideen-board" :class="'ideen-board--cols-' + statuses().length"
-         :style="{ '--ideen-col-tracks': columnTracks() }"
          x-show="!loading && !isListView() && lanes().length > 0" x-cloak>
       <!-- Spaltenkoepfe: Stufe + Gesamtzahl ueber den ganzen Bestand (nicht ueber
            die gefilterte Sicht — sonst zeigte die Spalte „verworfen" beim
@@ -102,7 +101,7 @@
                  bindet die Drop-Gruppe an DIESE Bahn. Quer zur Bahn zieht nur
                  eine offene Idee: das verschiebt ihren Anker (Buch-Bahn =
                  Anker loesen). -->
-            <div class="ideen-board-cell" :class="'ideen-board-cell--' + st"
+            <div class="ideen-board-cell board-dnd-zone" :class="'ideen-board-cell--' + st"
                  :data-idee-status-cell="st" :data-idee-lane="lane.lane.key">
               <template x-for="idee in (lane.collapsed ? [] : lane.columns[st])" :key="idee.id">
                 <div class="idee-board-card hover-reveal-host"

@@ -3,6 +3,7 @@
 
 import { fetchJson } from '../../utils.js';
 import { startPoll } from '../../cards/job-helpers.js';
+import { isSelectedBook } from '../../cards/book-guard.js';
 
 export const scanMethods = {
   // Ist die semantische Erkennung aktiv? (Embedding-Backend an — /config).
@@ -34,7 +35,9 @@ export const scanMethods = {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ book_id: bookId }),
       });
-    } catch (e) { fail(); return; }
+    } catch (e) { if (isSelectedBook(bookId)) fail(); return; }
+    // Buch während des POST gewechselt → nicht mehr nachfassen (Reset lief schon).
+    if (!isSelectedBook(bookId)) return;
     startPoll(this, {
       timerProp: '_embedPollTimer',
       jobId: r.jobId,
@@ -43,7 +46,8 @@ export const scanMethods = {
         if (r.rerunQueued && round < 3) { await this._followEmbedIndex(bookId, round + 1); return; }
         this.indexing = false;
         this.embedIndexStale = false;
-        if (this.motifs.length) await this.runScan();
+        // Der Scan gehört zum indizierten Buch — nicht zu einem inzwischen gewählten.
+        if (isSelectedBook(bookId) && this.motifs.length) await this.runScan();
       },
       onNotFound: () => { this.indexing = false; },
       onError: fail,
@@ -51,9 +55,21 @@ export const scanMethods = {
   },
 
   async runScan() {
+    if (!this.motifs.length) { this.errorMessage = window.__app.t('motiv.scan.noMotifs'); return; }
+    await this._startScan({});
+  },
+
+  // Nur ein Motiv neu suchen (nach einer Trigger-Änderung): derselbe Job mit
+  // `motif_id`, dieselbe Fortschrittsleiste. Danach Board + Fundstellen frisch.
+  async scanMotif(id) {
+    if (!id) return;
+    await this._startScan({ motif_id: id });
+    if (this.triggerRescanMotifId === id) this.triggerRescanMotifId = null;
+  },
+
+  async _startScan(extra) {
     const bookId = this.$store.nav.selectedBookId;
     if (!bookId || this.scanning) return;
-    if (!this.motifs.length) { this.errorMessage = window.__app.t('motiv.scan.noMotifs'); return; }
     this.scanning = true;
     this.scanProgress = 0;
     this.errorMessage = '';
@@ -61,8 +77,9 @@ export const scanMethods = {
       const { jobId } = await fetchJson('/jobs/motif-scan', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ book_id: bookId }),
+        body: JSON.stringify({ book_id: bookId, ...extra }),
       });
+      if (!isSelectedBook(bookId)) return;
       this.motivScanJobId = jobId;
       startPoll(this, {
         timerProp: '_scanPollTimer',

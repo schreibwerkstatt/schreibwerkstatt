@@ -203,19 +203,6 @@
    eigenstaendigen Leiste waechst das Suchfeld ohnehin (Wrapper-Regeln unten). */
 .filter-search-input--wide { min-width: 12rem; flex: 1; }
 
-/* Checkbox-Schalter in der Filterleiste („Archivierte anzeigen"). Traegt dieselbe
-   Compact-Typografie wie Suchfeld und Combobox daneben — siehe Hoehen-Invariante
-   in DESIGN.md. */
-.filter-toggle {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--space-xs);
-  font-size: var(--font-size-mini);
-  line-height: 1.4;
-  color: var(--color-muted);
-  white-space: nowrap;
-  cursor: pointer;
-}
 /* Scope auf .filter-bar noetig: die generische `input[type=text]`-Regel
    (card-form/form-elements.css) hat hoehere Spezifitaet (0,1,1) als eine nackte
    Klasse (0,1,0) und wuerde sonst font-size/padding/width ueberschreiben — das

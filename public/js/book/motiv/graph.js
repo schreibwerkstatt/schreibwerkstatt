@@ -5,6 +5,7 @@
 // keinen State mit dem Figuren-Graph.
 
 import { sendJson, escHtml } from '../../utils.js';
+import { tnRaw } from '../../i18n.js';
 import { toggleWrapFullscreen } from '../../fullscreen.js';
 import { ensureVis, graphPlaceholder, createGraphTooltip, graphTheme, paletteColors } from '../../graph-kit.js';
 
@@ -79,16 +80,21 @@ function _themeColor(themeId, themes, paletteVars) {
 
 export const graphMethods = {
   _graphSignature() {
+    // Alle fünf Soll-Brücken: jede ändert motifLinkCount und damit die Geist-Optik.
     const m = this.motifs.map(x =>
-      `${x.id}:${x.name || ''}:${x.theme_id || 0}:${x.occurrenceCount || 0}:${(x.occAvgScore || 0).toFixed(3)}:${(x.figures || []).length}:${(x.draftFigures || []).length}:${(x.beats || []).length}:${(x.chapters || []).length}`
+      `${x.id}:${x.name || ''}:${x.theme_id || 0}:${x.occurrenceCount || 0}:${(x.occAvgScore || 0).toFixed(3)}:${(x.figures || []).length}:${(x.draftFigures || []).length}:${(x.beats || []).length}:${(x.chapters || []).length}:${(x.pages || []).length}`
     ).join('|');
-    const r = this.relations.map(x => `${x.from_motif_id}-${x.to_motif_id}:${x.typ}`).join('|');
+    // Befund-Kanten (rot gestrichelt) gehören zum Bild: die Befunde kommen nach
+    // dem Graph-Payload an, ohne sie in der Signatur bliebe die Kante grau.
+    const flagged = [...this.checkedRelationIds()].sort((a, b) => a - b).join(',');
+    const r = this.relations.map(x => `${x.id}:${x.from_motif_id}-${x.to_motif_id}:${x.typ}`).join('|') + '#' + flagged;
     const t = this.themes.map(x => `${x.id}:${x.name || ''}:${x.farbe || ''}`).join(',');
     const layers = `${this.layerFigures}${this.layerBeats}${this.layerChapters}`;
     // Theme im Schlüssel: die Farben liegen im gezeichneten Canvas-Bild, ein
     // blosser CSS-Wechsel erreicht sie nicht.
     const theme = this._graphTheme?.dark ? 'dark' : 'light';
-    return [m, r, t, layers, this.$store.shell?.uiLocale, theme].join('##');
+    // Gescannt-Zustand: ohne Ist-Index gibt es keine Geister (isGhost).
+    return [m, r, t, layers, this.$store.shell?.uiLocale, theme, this.checksScanned ? 's' : 'u'].join('##');
   },
 
   async renderMotivGraph() {
@@ -302,31 +308,65 @@ export const graphMethods = {
       const release = nodes.filter(n => n.fixed).map(n => ({ id: n.id, fixed: false }));
       if (release.length) this._motivNodes?.update(release);
       if (this.selectedMotifId) this._highlightNode(this.selectedMotifId);
+      // Ansicht auf alle Knoten einpassen. vis-network zoomt nur nach einer
+      // Stabilisierung selbst ein — bei gespeicherter Anordnung (allPlaced) läuft
+      // keine, dann bliebe der Default-Ausschnitt und Knoten lägen ausserhalb.
+      // rAF: der Container hat beim Kartenöffnen evtl. noch nicht seine Endgrösse.
+      requestAnimationFrame(() => this._motivNetwork?.fit());
     };
     if (allPlaced) afterStable();
     else this._motivNetwork.once('stabilizationIterationsDone', afterStable);
   },
 
   // Knoten-Positionen debounced speichern (mehrere Drags koaleszieren).
+  // Das Buch wird beim PLANEN gemerkt: wechselt es vor Ablauf, schreibt der Flush
+  // die Anordnung noch unter dem Buch, zu dem sie gehört.
   _scheduleLayoutSave() {
     clearTimeout(this._layoutSaveTimer);
-    this._layoutSaveTimer = setTimeout(() => this._saveLayout(), 500);
+    this._layoutSaveBookId = this.$store.nav.selectedBookId;
+    this._layoutSaveTimer = setTimeout(() => {
+      this._layoutSaveTimer = null;
+      this._saveLayout(this._layoutSaveBookId);
+    }, 500);
   },
 
-  async _saveLayout() {
+  // Ausstehenden Save sofort ausführen (Buchwechsel, View-Reset, destroy) — solange
+  // das Netzwerk noch lebt.
+  _flushLayoutSave() {
+    if (!this._layoutSaveTimer) return;
+    clearTimeout(this._layoutSaveTimer);
+    this._layoutSaveTimer = null;
+    this._saveLayout(this._layoutSaveBookId);
+  },
+
+  async _saveLayout(bookIdArg) {
     if (!this._motivNetwork) return;
-    const bookId = this.$store.nav.selectedBookId;
+    const bookId = bookIdArg || this.$store.nav.selectedBookId;
     if (!bookId) return;
     const positions = this._motivNetwork.getPositions();
-    this._savedPositions = positions; // lokal spiegeln, damit Re-Render die Anordnung hält
+    // Lokal spiegeln, damit Re-Render die Anordnung hält — nur fürs aktuelle Buch.
+    if (String(bookId) === String(this.$store.nav.selectedBookId)) this._savedPositions = positions;
     try {
       await sendJson('/motifs/layout', 'PUT', { book_id: bookId, positions });
     } catch (e) { /* Layout ist reine Ansicht — Fehler nicht hart melden */ }
   },
 
+  // Auswahl im Graph spiegeln; null hebt sie auf (Panel geschlossen, Zeile zu).
+  // Über die ROHE Instanz: `this._motivNetwork` ist via Karten-State ein
+  // reaktiver Proxy, und die Auswahl-API von vis-network liest private Felder
+  // (`#…`) — über den Proxy wirft sie „Private element is not present".
   _highlightNode(motifId) {
-    if (!this._motivNetwork) return;
-    try { this._motivNetwork.selectNodes([nodeId('motif', motifId)]); } catch (_) { /* Knoten evtl. (noch) nicht da */ }
+    const net = this._motivNetwork && (window.Alpine?.raw ? window.Alpine.raw(this._motivNetwork) : this._motivNetwork);
+    if (!net) return;
+    try {
+      if (motifId) net.selectNodes([nodeId('motif', motifId)]);
+      else net.unselectAll();
+    } catch (_) { /* Knoten evtl. (noch) nicht da */ }
+  },
+  // Hover über einer Baum-Zeile: Knoten vorübergehend markieren; beim Verlassen
+  // (id null) zurück auf die echte Auswahl.
+  _hoverNode(motifId) {
+    this._highlightNode(motifId || this.selectedMotifId || null);
   },
 
   // Detail-Tooltip beim Hovern über einen Knoten (Motiv bzw. Thema), analog zum
@@ -342,19 +382,18 @@ export const graphMethods = {
       const themeLabel = theme ? theme.name : t('motiv.noTheme');
       const ghost = this.isGhost(m);
       const occ = m.occurrenceCount || 0;
-      const links = (m.figures?.length || 0) + (m.draftFigures?.length || 0)
-        + (m.beats?.length || 0) + (m.chapters?.length || 0) + (m.pages?.length || 0);
+      const links = this.motifLinkCount(m);
       const stats = [];
       if (ghost) {
         stats.push(`<span class="motiv-tip-ghost">${escHtml(t('motiv.tip.ghost'))}</span>`);
       } else if (occ > 0) {
-        let line = escHtml(t('motiv.tip.occurrences', { n: occ }));
+        let line = escHtml(tnRaw('motiv.tip.occurrences', occ));
         if (m.occAvgScore) line += ' · ' + escHtml(t('motiv.tip.confidence', { pct: Math.round(m.occAvgScore * 100) }));
         stats.push(line);
       } else {
         stats.push(escHtml(t('motiv.tip.noOccurrences')));
       }
-      if (links > 0) stats.push(escHtml(t('motiv.tip.links', { n: links })));
+      if (links > 0) stats.push(escHtml(tnRaw('motiv.tip.links', links)));
       return `<strong>${escHtml(m.name)}</strong>`
         + `<em>${escHtml(themeLabel)}</em>`
         + (m.beschreibung ? `<p>${escHtml(m.beschreibung)}</p>` : '')
@@ -364,7 +403,7 @@ export const graphMethods = {
     const themeTipHtml = (th) => {
       const count = this.motifs.filter(m => m.theme_id === th.id).length;
       return `<strong>${escHtml(th.name)}</strong>`
-        + `<em>${escHtml(t('motiv.tip.themeMotifs', { n: count }))}</em>`
+        + `<em>${escHtml(tnRaw('motiv.tip.themeMotifs', count))}</em>`
         + (th.beschreibung ? `<p>${escHtml(th.beschreibung)}</p>` : '');
     };
 
@@ -395,8 +434,13 @@ export const graphMethods = {
     this.$nextTick(() => this.renderMotivGraph());
   },
 
+  // redraw vor fit: war der Container beim letzten Zeichnen ausgeblendet (Band-,
+  // Befund- oder Gliederungs-Ansicht), kennt vis-network noch die 0-Grösse und
+  // passte gegen sie ein.
   fitGraph() {
-    this._motivNetwork?.fit({ animation: { duration: 400 } });
+    if (!this._motivNetwork) return;
+    this._motivNetwork.redraw();
+    this._motivNetwork.fit({ animation: { duration: 400 } });
   },
 
   // Zoom-Schritt der Steuerelemente am Graphen (faktor > 1 = naeher heran).
@@ -443,6 +487,8 @@ export const graphMethods = {
 
   // Knoten-Typ für den offenen Menü-Kontext: 'theme' | 'motif' | 'canvas' | 'other'.
   graphMenuKind() {
+    // Dasselbe Aktionsmenü dient auch dem Beziehungstyp (Schlüssel `motivrel:`).
+    if (!String(this.actionMenuKey || '').startsWith('motivgraph:')) return 'none';
     if (!this.actionMenuTarget) return 'canvas';
     const kind = parseNode(this.actionMenuTarget)?.kind;
     return (kind === 'theme' || kind === 'motif') ? kind : 'other';

@@ -21,7 +21,8 @@
   align-items: stretch;
   overflow-x: auto;
   padding-bottom: var(--space-sm);
-  scroll-snap-type: x proximity;
+  /* Bewusst ohne scroll-snap: der Snap korrigiert die Position nach dem
+     Trackpad-Scroll sichtbar nach und laesst das H-Scrollen ruckeln. */
   transition: opacity 0.12s ease;
 }
 /* Refetch bei Filter/Sort/Suche: gleiche Regel wie die Liste (gedimmt + inert
@@ -42,7 +43,6 @@
   border: 1px solid var(--color-border);
   border-radius: var(--radius-md);
   padding: var(--space-sm);
-  scroll-snap-align: start;
 }
 
 /* Stufen-Farben: offen neutral, in Arbeit warnend-warm, eingearbeitet ok,
@@ -72,16 +72,9 @@
   gap: var(--space-sm);
   flex: 1 1 auto;
   min-height: 3rem;
+  /* Drop-Zone + Platzhalter im Drag (components/board-dnd.css). */
+  --board-dnd-accent: var(--status-accent);
 }
-/* Waehrend eines Drags leere Spalten zur erreichbaren Drop-Zone aufblaehen
-   (gesetzt an <body> in recherche/status.js). */
-body.research-dnd-active .research-status-cell {
-  min-height: 6rem;
-  border-radius: var(--radius-none);
-  outline: 1px dashed color-mix(in srgb, var(--status-accent) 55%, transparent);
-  outline-offset: var(--space-3);
-}
-
 .research-status-column-empty {
   margin: 0;
   text-align: center;
@@ -90,6 +83,9 @@ body.research-dnd-active .research-status-cell {
 
 /* ── Karte ──────────────────────────────────────────────────────────────── */
 .research-status-card {
+  /* Rahmen des Drag-Klons (components/board-dnd.css) — der haengt im <body>
+     ohne Spalten-Kontext, darum das globale Recherche-Token. */
+  --board-dnd-clone-accent: var(--card-accent-recherche);
   display: flex;
   flex-direction: column;
   gap: var(--space-6);
@@ -104,6 +100,9 @@ body.research-dnd-active .research-status-cell {
   transition: transform var(--transition-fast);
 }
 .research-status-card:hover { transform: translateY(-1px); box-shadow: var(--shadow-sm); }
+/* Waehrend des H-Scrolls (`.is-scrolling`, scroll-fade.js) kein Hover-Lift —
+   gleiche Regel und Begruendung wie an der Plot-Beat-Karte. */
+.research-status-board.is-scrolling .research-status-card:hover { transform: none; box-shadow: none; transition: none; }
 .research-status-card--pinned { background: var(--color-bg); }
 .research-status-card--archived { opacity: 0.6; }
 .research-status-card--open { border-color: var(--card-accent); }
@@ -171,31 +170,10 @@ body.research-dnd-active .research-status-cell {
   color: var(--color-muted);
 }
 
-/* ── SortableJS-Drag-Zustaende ──────────────────────────────────────────── */
-/* Ghost: reservierter Slot am Ziel — gestrichelter Rahmen, Inhalt unsichtbar
-   (der Drag-Klon ist die einzige sichtbare Repraesentation). */
-.research-status-card.research-status-card--ghost {
-  background: color-mix(in srgb, var(--status-accent) 14%, transparent);
-  border: 1px dashed var(--status-accent);
-  border-left-width: 3px;
-  opacity: 1;
-}
-.research-status-card.research-status-card--ghost > * { visibility: hidden; }
-.research-status-card.research-status-card--chosen { background: var(--color-accent-bg); }
-/* Drag-Klon: forceFallback klont in <body> — dort fehlt der Spalten-Kontext,
-   also kein --status-accent. Explizit auf den Karten-Akzent zurueckfallen, sonst
-   bleibt der Rahmen konturlos (var() ohne Wert → currentColor). Und `transition:
-   none`, weil SortableJS den Klon per inline transform pro Mousemove setzt: eine
-   geerbte transform-Transition liesse ihn der Maus nur hinterherlerpen. */
-.research-status-card.research-status-card--dragging {
-  box-shadow: 0 12px 28px var(--color-shadow);
-  background: var(--color-card-bg);
-  border: 1px solid var(--card-accent, var(--card-accent-recherche));
-  border-radius: var(--radius-none);
-  opacity: 0.95;
-  cursor: grabbing;
-  transition: none;
-}
+/* ── Drag ───────────────────────────────────────────────────────────────── */
+/* Platzhalter, Klon, Pickup und Drop-Zone: components/board-dnd.css. Die
+   Farben setzen .research-status-cell (Zone, Platzhalter) und
+   .research-status-card (Klon). */
 
 /* ── Status-Plakette (Liste + Detailansicht) ────────────────────────────── */
 /* Damit beide Ansichten dieselbe Aussage zeigen. Kein palette-badge (die

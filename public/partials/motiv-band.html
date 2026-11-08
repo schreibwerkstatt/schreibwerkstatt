@@ -3,9 +3,9 @@
      HTML-Partial-LOC-Limits; die Sichtbarkeits-Weiche (motivView === 'band')
      sitzt am Platzhalter dort, nicht hier. -->
   <div class="muted-msg muted-msg--spaced"
-       x-show="bandMotifs().length === 0 || bandChapters().length === 0"
+       x-show="bandMotifs().length === 0 || bandColumns().length === 0"
        x-text="$app.t('motiv.band.empty')"></div>
-  <template x-if="bandMotifs().length > 0 && bandChapters().length > 0">
+  <template x-if="bandMotifs().length > 0 && bandColumns().length > 0">
     <div class="heatmap-wrap">
       <div class="heatmap-legend" x-text="$app.t('motiv.band.legend')"></div>
       <div class="heatmap-scroll">
@@ -14,8 +14,25 @@
             <tr>
               <th class="heatmap-rowhead" x-text="$app.t('motiv.band.motif')"></th>
               <th class="heatmap-numcol" x-text="$app.t('motiv.band.total')"></th>
-              <template x-for="ch in bandChapters()" :key="ch.id">
-                <th :data-tip="ch.name"><span x-text="ch.name"></span></th>
+              <!-- Hauptkapitel-Spalten: ein Kapitel mit Unterkapiteln klappt per Klick
+                   auf seinen Kopf auf (eigene Spalte + Unterkapitel) bzw. zu
+                   (eine Spalte für den ganzen Teilbaum). -->
+              <template x-for="col in bandColumns()" :key="col.key">
+                <!-- Kopf = Kapitelnummer (schmale Spalte, auch bei Satz-Titeln und
+                     vielen Kapiteln), der volle Name steht im Tooltip und als
+                     aria-label. -->
+                <th class="motiv-band-numcol" :class="{ 'motiv-band-col--sub': col.depth > 1 }"
+                    :aria-label="col.name"
+                    :data-tip="col.collapsible ? $app.t(col.expanded ? 'motiv.band.collapseCol' : 'motiv.band.expandCol', { name: col.name }) : col.name">
+                  <template x-if="col.collapsible">
+                    <span class="internal-link motiv-band-colhead" @click="toggleBandColumn(col)"
+                          :aria-expanded="col.expanded ? 'true' : 'false'">
+                      <span class="history-chevron" :class="{ open: col.expanded }" aria-hidden="true"></span>
+                      <span x-text="col.num || col.name"></span>
+                    </span>
+                  </template>
+                  <template x-if="!col.collapsible"><span x-text="col.num || col.name"></span></template>
+                </th>
               </template>
             </tr>
           </thead>
@@ -35,23 +52,23 @@
                      Praedikat: eine leere Zelle hat nichts aufzuloesen und darf
                      weder Klick-Cursor noch Tab-Stopp anbieten. Nie role=button
                      am <td> — das nähme Screenreadern die Tabellen-Navigation. -->
-                <template x-for="ch in bandChapters()" :key="ch.id">
+                <template x-for="col in bandColumns()" :key="col.key">
                   <td class="heatmap-cell"
                       :class="[
-                        bandCellClass(bandCount(m.id, ch.id)),
-                        { 'heatmap-cell--clickable': bandCellClickable(m.id, ch.id),
-                          'heatmap-cell--active': activeBandDetailKey === bandDetailKey(m.id, ch.id) }
+                        bandCellClass(bandColCount(m.id, col)),
+                        { 'heatmap-cell--clickable': bandCellClickable(m.id, col),
+                          'heatmap-cell--active': activeBandDetailKey === bandDetailKey(m.id, col) }
                       ]"
-                      :style="bandCellVars(bandCount(m.id, ch.id))"
-                      :data-tip="ch.name + ' · ' + $app.t('motiv.band.hits', { n: bandCount(m.id, ch.id) })">
-                    <template x-if="bandCellClickable(m.id, ch.id)">
+                      :style="bandCellVars(bandColCount(m.id, col))"
+                      :data-tip="col.name + ' · ' + $app.tn('motiv.band.hits', bandColCount(m.id, col))">
+                    <template x-if="bandCellClickable(m.id, col)">
                       <button type="button" class="heatmap-cell-btn"
-                              @click="toggleBandDetail(m.id, ch.id)"
-                              :aria-expanded="activeBandDetailKey === bandDetailKey(m.id, ch.id) ? 'true' : 'false'"
-                              x-text="bandCount(m.id, ch.id)"></button>
+                              @click="toggleBandDetail(m.id, col)"
+                              :aria-expanded="activeBandDetailKey === bandDetailKey(m.id, col) ? 'true' : 'false'"
+                              x-text="bandColCount(m.id, col)"></button>
                     </template>
-                    <template x-if="!bandCellClickable(m.id, ch.id)">
-                      <span x-text="bandCount(m.id, ch.id) || ''"></span>
+                    <template x-if="!bandCellClickable(m.id, col)">
+                      <span x-text="bandColCount(m.id, col) || ''"></span>
                     </template>
                   </td>
                 </template>

@@ -22,6 +22,7 @@
 
 import { fetchJson } from '../utils.js';
 import { beatReadingOrder } from '../book/plot/constants.js';
+import { figurAnzeigeName } from '../book/figur-name.js';
 
 /** Aktiv = nicht verworfen (Spalte `verworfen` ODER Alt-Status 'verworfen'). */
 const isActive = (b) => !b?.verworfen && b?.status !== 'verworfen';
@@ -72,7 +73,7 @@ export function planCastNames(beat, { figuren = [], draftFigures = [], threads =
   if (!beat) return [];
   const figById = new Map((figuren || []).map(f => [String(f.id), f]));
   const draftById = new Map((draftFigures || []).map(d => [String(d.id), d]));
-  const figName = (id) => { const f = figById.get(String(id)); return f ? (f.kurzname || f.name) : null; };
+  const figName = (id) => { const f = figById.get(String(id)); return f ? figurAnzeigeName(f) : null; };
   const draftName = (id) => draftById.get(String(id))?.name || null;
   const names = [
     ...(beat.fig_ids || []).map(figName),

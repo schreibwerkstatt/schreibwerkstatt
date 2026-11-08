@@ -97,6 +97,19 @@ test('Motiv-Beziehungen: create ist idempotent (UNIQUE), delete', () => {
   assert.equal(motifs.listRelations(BOOK, USER).filter(r => r.from_motif_id === a.id).length, 0);
 });
 
+test('Motiv-Beziehungen: Typ ändern, Kollision mit bestehendem Typ meldet false', () => {
+  const a = motifs.createMotif(BOOK, USER, { name: 'Brücke' });
+  const b = motifs.createMotif(BOOK, USER, { name: 'Abgrund' });
+  const r1 = motifs.createRelation(a.id, b.id, 'kontrastiert');
+  const r2 = motifs.createRelation(a.id, b.id, 'bricht');
+  assert.equal(motifs.updateRelationTyp(r1, 'verdraengt'), true);
+  const typOf = (id) => motifs.listRelations(BOOK, USER).find(r => r.id === id)?.typ;
+  assert.equal(typOf(r1), 'verdraengt');
+  // r2 auf den Typ von r1 → UNIQUE(from,to,typ) → unverändert, false
+  assert.equal(motifs.updateRelationTyp(r2, 'verdraengt'), false);
+  assert.equal(typOf(r2), 'bricht');
+});
+
 test('Soll-Brücken + Scoping-Validatoren + Graph-Payload', () => {
   const figId = seedFigur(BOOK, USER, 'F-WATER', 'Nixe');
   const figIntId = db.prepare('SELECT id FROM figures WHERE fig_id = ?').get('F-WATER').id;

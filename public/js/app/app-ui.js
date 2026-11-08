@@ -1,7 +1,8 @@
 import { fetchText, tzOpts, formatRelativeShort, charBadgeLabel, localeTag, charsToNormseiten, formatNumber } from '../utils.js';
 import { avatarHue } from '../avatar.js';
 import { isRetryableSaveError } from '../editor/notebook/save-errors.js';
-import { idOptions, sameId } from '../chapter-filter.js';
+import { idOptions, sameId, numberedKapitelLabel } from '../chapter-filter.js';
+import { figurAnzeigeName } from '../book/figur-name.js';
 
 // Pure Filter-Logik für die Musik-Liste. Songs[].figuren sind { fig_id, name,
 // kontext_typ }. Die Suche trifft Titel, Interpret, Genre, Stimmung, Beschreibung
@@ -28,6 +29,9 @@ export function applySongsFilters(songs, filters, figNames = null) {
 // Partial-Loader. Reine `this.*`-basierte Methoden ohne Querabhängigkeiten
 // zu Job-Queues oder Routing — für die Hash-/Job-/View-Module vorgesehen.
 export const appUiMethods = {
+  // Kurzer Anzeigename einer Figur für Templates (Filter-Optionen) — SSoT book/figur-name.js.
+  figurAnzeigeName(f) { return figurAnzeigeName(f); },
+
   setStatus(msg, spinner = false, duration = 0) {
     this.status = msg;
     this.statusSpinner = spinner;
@@ -69,8 +73,7 @@ export const appUiMethods = {
   // Elternkapitel, chapter-filter.js#buildKapitelLabels) bzw. der Abschnittsname.
   // Reihenfolge = Buchreihenfolge. IDs, die der Baum nicht (mehr) kennt, fallen weg.
   _kapitelOptionen(ids) {
-    const labels = this._chapterLabelMap;
-    return idOptions(ids, id => labels?.get(Number(id)), id => this._chapterIdIdx(Number(id)));
+    return idOptions(ids, id => this._kapitelLabel(id), id => this._chapterIdIdx(Number(id)));
   },
   _seitenOptionen(ids) {
     const pages = this.$store.nav.pages || [];
@@ -79,8 +82,15 @@ export const appUiMethods = {
       return i != null ? pages[i]?.name : null;
     }, id => this._pageIdIdx(Number(id)));
   },
+  // Auswertungs-Label: Kapitelnummer vor dem (disambiguierten) Namen, damit
+  // gekürzte Titel unterscheidbar bleiben («12 · I'd finally book…»). Sidebar,
+  // Organizer, Editoren, Palette und Share-Auswahl zeigen den Namen ohne Nummer.
   _kapitelLabel(id) {
-    return this._chapterLabelMap?.get(Number(id)) || '';
+    const name = this._chapterLabelMap?.get(Number(id));
+    return name ? numberedKapitelLabel(this._chapterNumberMap?.get(Number(id)), name) : '';
+  },
+  _kapitelNummer(id) {
+    return this._chapterNumberMap?.get(Number(id)) || '';
   },
 
   orteKapitelOptionen() {

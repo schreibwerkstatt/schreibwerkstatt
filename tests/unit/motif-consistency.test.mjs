@@ -177,3 +177,54 @@ test('jeder Befund-Code hat Text + Hinweis in beiden Locales', () => {
     }
   }
 });
+
+// ── Ganzer Kapitelbaum (chapterStructure) ────────────────────────────────────
+const { chapterStructure } = require('../../lib/motif-consistency.js');
+
+// Teil 1 (nur Gliederung) › 1.1, 1.2 · Teil 2 (eigener Text) › 2.1 · 3 … 8 flach
+const TREE = {
+  chapters: [
+    { id: 100, name: 'Teil 1', pages: [], subchapters: [
+      { id: 101, name: '1.1', pages: [{ id: 1 }], subchapters: [] },
+      { id: 102, name: '1.2', pages: [{ id: 2 }], subchapters: [] },
+    ] },
+    { id: 200, name: 'Teil 2', pages: [{ id: 3 }], subchapters: [
+      { id: 201, name: '2.1', pages: [{ id: 4 }], subchapters: [] },
+    ] },
+    ...[3, 4, 5, 6, 7, 8].map(n => ({ id: n, name: `K${n}`, pages: [{ id: 10 + n }], subchapters: [] })),
+  ],
+};
+
+test('chapterStructure: Reihenfolge, Bogen nur über Text-Kapitel, Teilbäume', () => {
+  const s = chapterStructure(TREE);
+  assert.deepEqual(s.order.slice(0, 5), [100, 101, 102, 200, 201]);
+  assert.ok(!s.arcOrder.includes(100), 'reines Gliederungs-Kapitel zählt nicht im Bogen');
+  assert.ok(s.arcOrder.includes(200), 'Kapitel mit eigenem Text zählt');
+  assert.deepEqual([...s.descendants.get(100)].sort(), [100, 101, 102]);
+  assert.equal(s.names.get(201), '2.1');
+});
+
+test('sollIstDivergenz: Soll auf Oberkapitel deckt Fundstellen im Unterkapitel', () => {
+  const structure = chapterStructure(TREE);
+  const motifs = [motif(1, 'Wasser', [101, 102], { soll: [100] })];
+  assert.deepEqual(codes(computeMotifFindings({ motifs, relations: [], structure })), []);
+  const weg = [motif(1, 'Wasser', [3], { soll: [100] })];
+  assert.deepEqual(codes(computeMotifFindings({ motifs: weg, relations: [], structure })), ['sollIstDivergenz']);
+});
+
+test('Kantengrad zählt Partner, nicht Kanten; Gegenrichtung meldet einmal', () => {
+  const motifs = [motif(1, 'A', [1]), motif(2, 'B', [2])];
+  const relations = [rel(1, 1, 2, 'kontrastiert'), rel(2, 2, 1, 'bricht')];
+  const fs = computeMotifFindings({ motifs, relations, chapterOrder: [1, 2] });
+  assert.deepEqual(codes(fs), ['kontrastOhneBeruehrung'], 'ein Befund je Paar');
+});
+
+test('geistNachbar: Geist am Ausgangsende wird auch gemeldet', () => {
+  const motifs = [motif(1, 'Geist', [], { count: 0 }), motif(2, 'Belegt', [1])];
+  const fs = computeMotifFindings({ motifs, relations: [rel(5, 1, 2, 'verstaerkt')], chapterOrder: [1] });
+  assert.equal(fs.length, 1);
+  assert.equal(fs[0].code, 'geistNachbar');
+  assert.equal(fs[0].motiv_id, 2, 'am belegten Ende gemeldet');
+  assert.equal(fs[0].partner_id, 1, 'Partner ist der Geist');
+  assert.equal(fs[0].relation_id, 5);
+});

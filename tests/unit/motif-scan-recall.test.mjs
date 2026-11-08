@@ -7,21 +7,35 @@ import { createRequire } from 'node:module';
 const require = createRequire(import.meta.url);
 const { _triggerQuery, _computeTopK } = require('../../routes/jobs/motif-scan.js');
 
+// _triggerQuery steuert die Präfix-Regel über die Syntax von buildMatchQuery, die
+// sonst JEDES Wort ab 3 Zeichen selbst zum Präfix macht. Darum hier der ganze Weg
+// bis zum MATCH-Ausdruck, nicht nur der Zwischenstring.
+const { buildMatchQuery } = require('../../lib/search/match-query.js');
+const fts = (term) => buildMatchQuery(_triggerQuery(term));
+
 test('_triggerQuery: Einzelwörter ab 5 Zeichen werden Präfix (Flexion), kurze bleiben exakt', () => {
   // Lange Einzelwörter → Präfix (fängt Wassers/Wasserns/Wasserfall).
   assert.equal(_triggerQuery('Wasser'), 'Wasser*');
   assert.equal(_triggerQuery('Spiegel'), 'Spiegel*');
-  // Kurze Wörter bleiben exakt (Präfix überdehnte: See* → Seele).
-  assert.equal(_triggerQuery('See'), 'See');
-  assert.equal(_triggerQuery('Weg'), 'Weg');
-  // Genau an der Schwelle (5) → Präfix.
-  assert.equal(_triggerQuery('Blume'), 'Blume*');
+  assert.equal(_triggerQuery('Blume'), 'Blume*');      // genau an der Schwelle (5)
+  // Kurze Wörter bleiben exakt (Präfix überdehnte: See* → Seele) — auch NACH
+  // buildMatchQuery, deren Auto-Präfix ab 3 Zeichen sonst greift.
+  assert.equal(_triggerQuery('See'), '"See"');
+  assert.equal(fts('See'), '"See"');
+  assert.equal(fts('Weg'), '"Weg"');
 });
 
-test('_triggerQuery: vom Autor gesetztes * bleibt, Mehrwort geht unverändert durch', () => {
-  assert.equal(_triggerQuery('Wass*'), 'Wass*');          // eigenes Präfix respektiert
-  assert.equal(_triggerQuery('das Lied'), 'das Lied');    // Mehrwort: buildMatchQuery UND-verknüpft
-  assert.equal(_triggerQuery('  '), '');                  // leer bleibt leer
+test('_triggerQuery: Mehrwort ist eine exakte Phrase, kein UND über Präfixe', () => {
+  assert.equal(_triggerQuery('rotes Kleid'), '"rotes Kleid"');
+  assert.equal(fts('rotes Kleid'), '"rotes Kleid"');
+  assert.equal(fts('  das   Lied '), '"das Lied"');    // Leerraum normalisiert
+  assert.equal(fts('das "rote" Kleid*'), '"das rote Kleid"'); // Anführung/Stern im Mehrwort entfernt
+});
+
+test('_triggerQuery: vom Autor gesetztes * bleibt, leer bleibt leer', () => {
+  assert.equal(_triggerQuery('Wass*'), 'Wass*');
+  assert.match(fts('Wass*'), /"Wass"\*/);
+  assert.equal(_triggerQuery('  '), '');
   assert.equal(_triggerQuery(null), '');
 });
 

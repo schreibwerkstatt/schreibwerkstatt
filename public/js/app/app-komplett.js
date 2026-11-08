@@ -234,10 +234,12 @@ export const appKomplettMethods = {
     try {
       const { lastRun } = await fetchJson(`/jobs/last-run?type=komplett-analyse&book_id=${bookId}`, { signal });
       this.$store.jobs.alleAktualisierenLastRun = lastRun ? formatLastRun(lastRun, (k, p) => this.t(k, p), this.$store.shell.uiLocale) : null;
+      this.$store.jobs.alleAktualisierenLastRunAt = lastRun || null;
     } catch (e) {
       if (e?.name === 'AbortError') return;
       console.error('[loadLastKomplettRun]', e);
       this.$store.jobs.alleAktualisierenLastRun = null;
+      this.$store.jobs.alleAktualisierenLastRunAt = null;
     }
   },
 

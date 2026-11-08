@@ -14,6 +14,7 @@
 // eine Figur vor der Komplettanalyse ist eine Kopfzeile, kein Formular voller „—".
 
 import { numberFormat, charsToNormseiten } from './utils/format.js';
+import { figurAnzeigeName } from './book/figur-name.js';
 
 // Wie viele Namen eine Liste zeigt, bevor sie auf „+N" kürzt.
 const LIST_MAX = 4;
@@ -48,7 +49,7 @@ function umfang(app, { words, chars }) {
 
 const figurName = (app, id) => {
   const f = app?.figurenById?.get?.(id);
-  return f ? (f.kurzname || f.name) : '';
+  return figurAnzeigeName(f);
 };
 const ortName = (app, id) => app?.orteById?.get?.(id)?.name || '';
 const szenen = (app) => app?.$store?.catalog?.szenen || [];
@@ -129,7 +130,7 @@ function kapitel(c, app) {
     .map(f => ({ f, h: (f.kapitel || []).find(k => sameId(k.chapter_id, c.id))?.haeufigkeit || 0 }))
     .filter(x => x.h > 0 && !x.f.stale)
     .sort((a, b) => b.h - a.h)
-    .map(x => x.f.kurzname || x.f.name);
+    .map(x => figurAnzeigeName(x.f));
   row(rows, tr(app, 'entityRef.preview.figures'), joinList(app, imKapitel));
   const meta = [
     parent ? tr(app, 'entityRef.preview.inChapter', { name: parent.name }) : '',

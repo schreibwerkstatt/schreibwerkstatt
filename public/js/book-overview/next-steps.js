@@ -10,6 +10,9 @@ export const NEXT_STEPS_MAX = 3;
 const FIGUREN_MIN_CHARS = 20000;
 // Ab so vielen Abschnitten trägt eine buchweite Frage (Reihenfolge, Bögen).
 const BOOK_CHAT_MIN_PAGES = 8;
+// Ab so vielen seit der letzten Komplettanalyse geänderten Abschnitten weist die
+// Übersicht darauf hin, dass Figuren, Szenen, Orte usw. nicht mehr zum Text passen.
+export const ANALYSIS_STALE_MIN_PAGES = 3;
 // Buchtypen ohne Figurenensemble — dort ist «Figuren erkennen» kein Schritt.
 const OHNE_FIGUREN = new Set(['journalismus', 'sachbuch', 'wissenschaft', 'essay', 'blog', 'lyrik']);
 
@@ -24,10 +27,18 @@ const OHNE_FIGUREN = new Set(['journalismus', 'sachbuch', 'wissenschaft', 'essay
  */
 export function computeNextSteps(d, isOpen) {
   const out = [];
-  const push = (kind, params = {}) => {
-    const key = `overview.${kind}.${d.bookId}`;
+  // `keySuffix`: der Schritt gilt nur für einen Stand (Veraltet-Hinweis je
+  // Analyse-Lauf) — wegklicken blendet ihn bis zum nächsten Lauf aus.
+  const push = (kind, params = {}, keySuffix = '') => {
+    const key = `overview.${kind}.${d.bookId}${keySuffix ? '.' + keySuffix : ''}`;
     if (isOpen(key)) out.push({ kind, key, params });
   };
+
+  // Komplettanalyse veraltet: Abschnitte, die nach ihrem Ende geändert wurden.
+  if (d.analysisAt) {
+    const n = (d.pages || []).filter(p => p.updated_at && p.updated_at > d.analysisAt).length;
+    if (n >= ANALYSIS_STALE_MIN_PAGES) push('analysisStale', { n, total: (d.pages || []).length }, d.analysisAt);
+  }
 
   // Erstes angelegtes, noch leeres Kapitel (ohne Unterkapitel, weder selbst
   // noch über ein Oberkapitel vom Export ausgeschlossen): dort steht die Schreibfront.
@@ -71,6 +82,8 @@ export const nextStepsMethods = {
       bookChatSessions: this.overviewBookChatSessions,
       isFinished: this.overviewIsFinished,
       isExcluded: this._chapterRollup().isExcluded,
+      analysisAt: Alpine.store('jobs').alleAktualisierenLastRunAt,
+      pages: Alpine.store('nav').pages || [],
     };
     // Kein Memo: `hints.dismissed` und `nav.tree` wechseln ihre Identität bei
     // jeder Änderung, die Auswahl selbst ist ein einziger Durchlauf.
@@ -78,6 +91,7 @@ export const nextStepsMethods = {
   },
 
   overviewNextStepText(s) {
+    if (s.kind === 'analysisStale') return window.__app.tn('overview.next.analysisStale.text', s.params.n, s.params);
     return window.__app.t(`overview.next.${s.kind}.text`, s.params);
   },
 
@@ -95,5 +109,6 @@ export const nextStepsMethods = {
     if (s.kind === 'bookChat') return app.openBookChatDraft(app.t('overview.next.bookChat.question'));
     if (s.kind === 'ideenCheck' && !app.showIdeenBoardCard) return app.toggleIdeenBoardCard();
     if (s.kind === 'figuren' && !app.showFiguresCard) return app.toggleFiguresCard();
+    if (s.kind === 'analysisStale') return app.alleAktualisieren();
   },
 };

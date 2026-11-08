@@ -2,11 +2,12 @@
 // Wird von allen Render-Pfaden geteilt. SSoT für sämtliche Graph-Farben:
 // Schicht- und Typ-Paletten leben ausschliesslich hier, die Render-Slices
 // importieren nur noch.
+import { figurAnzeigeName } from '../book/figur-name.js';
 
 export const DEFAULT_FONT = { size: 13, face: 'system-ui, -apple-system, sans-serif' };
 
 // Node-Label aus einer Figur: Kurzname + optionales Geburtsdatum in zweiter Zeile.
-export const nodeLabel = f => (f.kurzname || f.name) + (f.geburtstag ? '\n* ' + f.geburtstag : '');
+export const nodeLabel = f => figurAnzeigeName(f) + (f.geburtstag ? '\n* ' + f.geburtstag : '');
 
 // ── Sozialschicht-Palette (Schweiz, Mittelland, 1990er–2010er) ───────────────
 // Jeder Eintrag hält alle Schicht-Visuals an einer Stelle:

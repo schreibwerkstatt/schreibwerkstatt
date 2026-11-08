@@ -24,6 +24,8 @@ const searchIndex = require('../../lib/search');
 const contentStore = require('../../lib/content-store');
 const { plainSnippet: _plainSnippet, makeLiveSnippets } = require('../../lib/anchor-snippet');
 const logger = require('../../logger');
+const { toIntId } = require('../../lib/validate');
+const { getBookRole, hasMinRole } = require('../../db/book-access');
 
 const motifScanRouter = express.Router();
 
@@ -43,17 +45,24 @@ function _computeTopK(entityCount) {
   return Math.max(TOP_K_BASE, Math.min(TOP_K_MAX, Math.ceil((entityCount || 0) * TOP_K_FRACTION)));
 }
 
-// FTS-Query eines wörtlichen Trigger-Begriffs. Einzelwörter ab TRIGGER_PREFIX_MIN
-// Zeichen werden als Präfix gesucht (`Wasser` → `Wasser*`), damit deutsche Flexion
-// (Wassers, Wasserns, Wasserfall) mitgefunden wird — der grösste Recall-Verlust bei
-// exaktem Token-Match. Kurze Begriffe (See, Weg) bleiben exakt (Präfix überdehnt
-// sonst: See* → Seele, sehen). Ein vom Autor selbst gesetztes `*` bleibt respektiert;
-// Mehrwort-Begriffe gehen unverändert durch (buildMatchQuery UND-verknüpft sie).
+// FTS-Query eines wörtlichen Trigger-Begriffs. Der Ausdruck geht durch
+// lib/search#buildMatchQuery, die JEDES Wort ab 3 Zeichen selbst zum Präfix macht
+// und Mehrwort-Eingaben UND-verknüpft — darum steuert diese Funktion die Präfix-
+// Regel ausdrücklich über deren Syntax (Anführungszeichen = exakt):
+//   - Einzelwort ab TRIGGER_PREFIX_MIN Zeichen → Präfix (`Wasser` → `Wasser*`),
+//     damit deutsche Flexion (Wassers, Wasserfall) mitgefunden wird.
+//   - kürzeres Einzelwort → exakt (`"See"`); Präfix überdehnte: See* → Seele.
+//   - Mehrwort-Begriff → exakte Phrase (`"rotes Kleid"`). Ohne Anführungszeichen
+//     träfe jede Seite, auf der «rot…» und «Kleid…» irgendwo stehen — und ein
+//     Trigger-Treffer zählt als 100 % und fällt nie unter den Score-Floor.
+//   - ein vom Autor selbst gesetztes `*` am Einzelwort bleibt respektiert.
 const TRIGGER_PREFIX_MIN = 5;
 function _triggerQuery(term) {
-  const t = String(term || '').trim();
-  if (!t || /\s/.test(t) || t.endsWith('*')) return t;
-  return t.length >= TRIGGER_PREFIX_MIN ? `${t}*` : t;
+  const t = String(term || '').replace(/"/g, ' ').replace(/\s+/g, ' ').trim();
+  if (!t) return '';
+  if (/\s/.test(t)) return `"${t.replace(/\*+$/, '').trim()}"`;
+  if (t.endsWith('*')) return t;
+  return t.length >= TRIGGER_PREFIX_MIN ? `${t}*` : `"${t}"`;
 }
 
 function _occKey(kind, entityId) { return `${kind}:${entityId}`; }
@@ -96,9 +105,10 @@ async function _scanMotif(bookId, motif, useSemantic, signalFn, topK, userEmail 
   for (const term of motif.trigger_terms || []) {
     const q = _triggerQuery(term);
     if (!q) continue;
-    let r;
-    try { r = searchIndex.query(q, { bookId, kinds: SCAN_KINDS, limit: topK, user: userEmail }); }
-    catch (e) { logger.warn(`[motiv-scan] FTS "${term}" fehlgeschlagen: ${e.message}`); continue; }
+    // Ein fehlgeschlagener Begriff wirft weiter: der Lauf überspringt dann das
+    // ganze Motiv und lässt seine bisherigen Fundstellen stehen — ein Full-Replace
+    // ohne diesen Begriff räumte dessen Treffer stillschweigend ab.
+    const r = searchIndex.query(q, { bookId, kinds: SCAN_KINDS, limit: topK, user: userEmail });
     for (const h of (r.hits || [])) {
       if (!own(h)) continue;
       const key = _occKey(h.kind, h.entity_id);
@@ -110,7 +120,10 @@ async function _scanMotif(bookId, motif, useSemantic, signalFn, topK, userEmail 
   return [...found.values()];
 }
 
-async function runMotifScanJob(jobId, bookId, userEmail) {
+// `onlyMotifId`: nur dieses Motiv scannen (Knopf „Nur dieses Motiv neu suchen"
+// nach einer Trigger-Änderung). Gleicher Pfad wie der Buch-Scan, nur die Motiv-
+// Liste ist auf eins gefiltert — Full-Replace, Score-Floor und Cap bleiben gleich.
+async function runMotifScanJob(jobId, bookId, userEmail, onlyMotifId = null) {
   const log = makeJobLogger(jobId);
   try {
     const signal = () => jobAbortControllers.get(jobId)?.signal;
@@ -129,7 +142,8 @@ async function runMotifScanJob(jobId, bookId, userEmail) {
       completeJob(jobId, { motifs: 0, occurrences: 0, semantic: true, skipped: 'noIndex' }, null, 'übersprungen (kein Index)');
       return;
     }
-    const motifs = motifsDb.listMotifs(bookId, userEmail);
+    const motifs = motifsDb.listMotifs(bookId, userEmail)
+      .filter(m => !onlyMotifId || m.id === onlyMotifId);
     // Fundstellen-Cap einmal pro Lauf aus der Buchgrösse ableiten (Seiten + Szenen
     // im FTS-Index), damit dichte Motive in grossen Büchern nicht bei 40 plateauen.
     const topK = _computeTopK(searchIndex.countEntities(bookId, SCAN_KINDS));
@@ -179,6 +193,11 @@ async function scanAllBooks() {
   let enqueued = 0, skipped = 0;
   const semantic = embed.isEnabled();
   for (const { book_id, user_email } of scopes) {
+    // Wer das Buch nicht mehr sehen darf (Zugriff entzogen), bekommt keinen Scan:
+    // sonst schriebe der Cron Auszüge des Buchs in dessen Zeilen weiter. Gleiche
+    // Mindestrolle wie der manuelle Start.
+    const role = getBookRole(book_id, user_email);
+    if (!role || !hasMinRole(role, 'lektor')) { skipped++; continue; }
     // Ohne fertigen Index endete der Lauf ohnehin als Skip.
     if (semantic && !retrieval.indexReady(book_id)) { skipped++; continue; }
     if (findActiveJobId('motif-scan', book_id, user_email)) { skipped++; continue; }
@@ -186,15 +205,28 @@ async function scanAllBooks() {
     enqueueJob(jobId, () => runMotifScanJob(jobId, book_id, user_email));
     enqueued++;
   }
-  logger.info(`Motiv-Scan (Cron): ${enqueued} Scope(s) eingereiht, ${skipped} übersprungen (läuft bereits).`);
+  logger.info(`Motiv-Scan (Cron): ${enqueued} Scope(s) eingereiht, ${skipped} übersprungen (läuft bereits, kein Index oder kein Zugriff).`);
   return { enqueued, skipped };
 }
 
-motifScanRouter.post('/motif-scan', jsonBody, (req, res) => startBookJob(req, res, {
-  type: 'motif-scan',
-  minRole: 'lektor',
-  label: 'job.label.motivScan',
-  run: (jobId, { bookId, userEmail }) => runMotifScanJob(jobId, bookId, userEmail),
-}));
+// Body `{ book_id, motif_id? }`. Mit `motif_id` ein Einzel-Scan: eigener Dedup-
+// Schlüssel, damit der Einzel-Scan von Motiv B nicht den laufenden von A
+// zurückbekommt; das Motiv muss Buch + User gehören.
+motifScanRouter.post('/motif-scan', jsonBody, (req, res) => {
+  const motifId = req.body?.motif_id == null ? null : toIntId(req.body.motif_id);
+  if (req.body?.motif_id != null && !motifId) return res.status(400).json({ error_code: 'INVALID_ID' });
+  return startBookJob(req, res, {
+    type: 'motif-scan',
+    minRole: 'lektor',
+    label: 'job.label.motivScan',
+    dedupId: motifId ? (bookId) => `${bookId}:m${motifId}` : null,
+    precheck: motifId ? (bookId, userEmail) => {
+      const m = motifsDb.getMotif(motifId);
+      return (m && m.book_id === bookId && m.user_email === userEmail)
+        ? null : { status: 404, error_code: 'MOTIF_NOT_FOUND' };
+    } : null,
+    run: (jobId, { bookId, userEmail }) => runMotifScanJob(jobId, bookId, userEmail, motifId),
+  });
+});
 
 module.exports = { motifScanRouter, runMotifScanJob, scanAllBooks, _triggerQuery, _computeTopK, _scanMotif };

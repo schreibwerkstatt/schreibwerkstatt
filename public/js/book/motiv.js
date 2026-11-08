@@ -10,6 +10,9 @@ import { brainstormMethods } from './motiv/brainstorm.js';
 import { dndMethods } from './motiv/dnd.js';
 import { bandMethods } from './motiv/band.js';
 import { consistencyMethods } from './motiv/consistency.js';
+import { detailMethods } from './motiv/detail.js';
+import { outlineMethods } from './motiv/outline.js';
+import { panelResizeMethods } from './motiv/panel-resize.js';
 
 export const motivMethods = {
   ...lifecycleMethods,
@@ -20,4 +23,7 @@ export const motivMethods = {
   ...dndMethods,
   ...bandMethods,
   ...consistencyMethods,
+  ...detailMethods,
+  ...outlineMethods,
+  ...panelResizeMethods,
 };

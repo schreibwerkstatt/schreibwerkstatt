@@ -69,27 +69,34 @@ export function readable(color, dark) {
 
 // Node-Farbspezifikation für den dunklen Grund nachführen: die pastellige Füllung
 // wird gegen die Oberfläche abgemischt (dunkle, getönte Fläche), die gesättigte
-// Border bleibt der Erkennungsanker. Rückgabe ist immer auf die drei von vis
+// Border bleibt der Erkennungsanker. Rückgabe ist immer auf die vier von vis
 // gelesenen Schlüssel normalisiert — die Paletten führen daneben noch Werte für
 // Bänder und Labels, die im color-Objekt nichts verloren haben.
+// `hover` ist Pflicht und gleicht `highlight`: fehlt er, zeichnet vis beim Hover
+// seine Default-Fläche (#D2E5FF, hellblau) — unter heller Dark-Mode-Schrift bzw.
+// weisser Schicht-Schrift ist der Knoten dann unlesbar.
+export function withHover(color) {
+  return { ...color, hover: { ...color.highlight } };
+}
+
 export function adaptNodeColor(spec, theme) {
   if (!spec) return spec;
   if (!theme.dark) {
-    return { background: spec.background, border: spec.border, highlight: spec.highlight };
+    return withHover({ background: spec.background, border: spec.border, highlight: spec.highlight });
   }
   const surf = theme.surfaceRgb;
   const fill = parseColor(spec.background);
   const bg = fill ? toCss(mix(fill, surf, 0.80)) : spec.background;
   const hiSrc = parseColor(spec.highlight?.background) || fill;
   const hi = hiSrc ? toCss(mix(hiSrc, surf, 0.62)) : spec.highlight?.background;
-  return {
+  return withHover({
     background: bg,
     border: readable(spec.border, true),
     highlight: {
       background: hi,
       border: readable(spec.highlight?.border || spec.border, true),
     },
-  };
+  });
 }
 
 // ── Theme-Auflösung ──────────────────────────────────────────────────────────

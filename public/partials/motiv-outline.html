@@ -1,0 +1,133 @@
+<!-- Motiv-Werkstatt: Gliederung (vierte Ansicht, nested via <div id="partial-motiv-outline">,
+     motivCard-Scope). Bearbeitbare Baum-Tabelle: je Thema eine Kopfzeile, darunter
+     seine Motive mit Kennzahlen. Klick auf ein Motiv klappt darunter den geteilten
+     Detail-Editor auf (motiv-detail.html), Klick auf ein Thema den Themen-Editor
+     (motiv-panel-theme.html). Sortieren wirkt innerhalb der Themengruppen; «#»
+     stellt die Gliederungsreihenfolge wieder her. Jeder Eintrag ist ein eigenes
+     <tbody>, weil Zeile und aufgeklappte Detailzeile eine Wurzel brauchen.
+     Methoden: book/motiv/outline.js. -->
+<div class="motiv-outline">
+  <div class="filter-bar motiv-outline-filter" x-show="motifs.length || themes.length">
+    <span class="filter-search-wrap">
+      <input class="filter-search-input" type="text" x-model="motivQuery"
+             :placeholder="$app.t('motiv.outline.search')" :aria-label="$app.t('motiv.outline.search')">
+      <button type="button" class="search-clear--icon" x-show="motivQuery" @click="motivQuery = ''"
+              :aria-label="$app.t('search.clear')" :data-tip="$app.t('search.clear')">
+        <svg class="icon" aria-hidden="true"><use href="/icons.svg#x"/></svg>
+      </button>
+    </span>
+    <span class="filter-count" x-text="motivVisibleCount() + ' / ' + motifs.length"></span>
+  </div>
+
+  <div class="card-empty card-empty--compact" x-show="!motifs.length && !themes.length">
+    <p class="card-empty-text" x-text="$app.t('motiv.empty.hint')"></p>
+  </div>
+  <p class="muted-msg muted-msg--sm" x-show="motivQuery && !motivGroups().length" x-text="$app.t('motiv.outline.noMatch')"></p>
+
+  <div class="motiv-outline-scroll" x-show="motivGroups().length">
+    <table class="motiv-outline-table"
+           x-data="sortableTable({
+             rows: () => outlineRows(),
+             defaultKey: 'pos',
+             persistKey: 'motiv.outline',
+             types: { pos: 'number', name: 'string', occ: 'number', avg: 'number', links: 'number', rels: 'number', checks: 'number' },
+           })">
+      <thead><tr>
+        <th class="motiv-outline-num" x-bind="sortTh('pos')" :data-tip="$app.t('motiv.outline.col.posTip')">#</th>
+        <th x-bind="sortTh('name')" x-text="$app.t('motiv.outline.col.name')"></th>
+        <th x-text="$app.t('motiv.outline.col.triggers')"></th>
+        <th class="motiv-outline-num" x-bind="sortTh('occ')" x-text="$app.t('motiv.outline.col.occ')"></th>
+        <th class="motiv-outline-num" x-bind="sortTh('avg')" :data-tip="$app.t('motiv.occ.confidence')" x-text="$app.t('motiv.outline.col.avg')"></th>
+        <th x-text="$app.t('motiv.outline.col.spark')"></th>
+        <th class="motiv-outline-num" x-bind="sortTh('links')" x-text="$app.t('motiv.outline.col.links')"></th>
+        <th class="motiv-outline-num" x-bind="sortTh('rels')" x-text="$app.t('motiv.outline.col.rels')"></th>
+        <th class="motiv-outline-num" x-bind="sortTh('checks')" x-text="$app.t('motiv.outline.col.checks')"></th>
+      </tr></thead>
+      <template x-for="it in outlineItems(sorted)" :key="it.key">
+        <tbody :class="it.kind === 'group' ? 'motiv-outline-groupbody' : 'motiv-outline-motifbody'">
+          <!-- Themen-Kopfzeile -->
+          <template x-if="it.kind === 'group'">
+            <tr class="motiv-outline-group" :class="{ 'is-open': it.g.theme && selectedThemeId === it.g.theme.id }">
+              <th colspan="9" scope="rowgroup">
+                <span class="motiv-outline-group-head">
+                  <span class="motiv-outline-swatch" x-show="it.g.theme"
+                        :style="it.g.theme ? { '--col-accent': 'var(--palette-' + themeSwatchKey(it.g.theme) + ')' } : {}"></span>
+                  <template x-if="it.g.theme">
+                    <button type="button" class="motiv-outline-name motiv-outline-name--theme"
+                            :aria-expanded="selectedThemeId === it.g.theme.id"
+                            @click="toggleOutlineTheme(it.g.theme.id)">
+                      <span class="history-chevron" :class="{ open: selectedThemeId === it.g.theme.id }" aria-hidden="true"></span>
+                      <span x-text="it.g.theme.name"></span>
+                    </button>
+                  </template>
+                  <span class="motiv-outline-name--loose" x-show="!it.g.theme" x-text="$app.t('motiv.noTheme')"></span>
+                  <span class="badge" x-text="it.g.total"></span>
+                  <button type="button" class="icon-btn icon-btn--ghost" x-show="it.g.theme"
+                          @click="createMotifAt(it.g.theme?.id)"
+                          :data-tip="$app.t('motiv.graph.menu.addMotif')" :aria-label="$app.t('motiv.graph.menu.addMotif')">
+                    <svg class="icon" aria-hidden="true"><use href="/icons.svg#plus"/></svg>
+                  </button>
+                </span>
+              </th>
+            </tr>
+          </template>
+          <!-- Themen-Editor unter der Kopfzeile -->
+          <template x-if="it.kind === 'group' && it.g.theme && selectedThemeId === it.g.theme.id">
+            <tr class="motiv-outline-detailrow" @click.outside="onOutlineThemeOutside($event, it.g.theme.id)">
+              <td colspan="9">
+                <div class="motiv-outline-detail" x-data="{ detailHost: 'outline' }">
+                  <!-- @include motiv-panel-theme -->
+                </div>
+              </td>
+            </tr>
+          </template>
+          <!-- Motiv-Zeile -->
+          <template x-if="it.kind === 'motif'">
+            <tr class="motiv-outline-row" :class="{ 'is-open': selectedMotifId === it.m.id }">
+              <td class="motiv-outline-num motiv-outline-muted" x-text="(it.r.pos % 100000) + 1"></td>
+              <td class="motiv-outline-namecell"><div class="motiv-outline-namewrap">
+                <button type="button" class="motiv-outline-name" :class="{ 'motiv-outline-name--ghost': isGhost(it.m) }"
+                        :aria-expanded="selectedMotifId === it.m.id"
+                        @click="toggleOutlineMotif(it.m.id)">
+                  <span class="history-chevron" :class="{ open: selectedMotifId === it.m.id }" aria-hidden="true"></span>
+                  <span x-text="it.m.name"></span>
+                </button>
+                <span class="badge-source" x-show="isGhost(it.m)" x-text="$app.t('motiv.outline.ghost')"
+                      :data-tip="$app.t('motiv.tip.ghost')"></span>
+              </div></td>
+              <td class="motiv-outline-triggers"
+                  x-text="(it.m.trigger_terms || []).length ? it.m.trigger_terms.join(', ') : '—'"></td>
+              <td class="motiv-outline-num" x-text="it.r.occ"></td>
+              <td class="motiv-outline-num motiv-outline-muted" x-text="it.r.avg >= 0 ? it.r.avg + '%' : '—'"></td>
+              <td>
+                <span class="motiv-spark motiv-spark--wide" role="img"
+                      :aria-label="$app.tn('motiv.outline.sparkLabel', it.r.occ)">
+                  <template x-for="c in motifSpark(it.m)" :key="c.key">
+                    <span class="motiv-spark-cell" :class="{ 'motiv-spark-cell--on': c.n > 0 }"
+                          :style="sparkCellVars(c)" :data-tip="sparkCellTip(c)"></span>
+                  </template>
+                </span>
+              </td>
+              <td class="motiv-outline-num" x-text="it.r.links"></td>
+              <td class="motiv-outline-num" x-text="it.r.rels"></td>
+              <td class="motiv-outline-num">
+                <span x-show="it.r.checks > 0" class="badge-warn" x-text="it.r.checks"></span>
+                <span x-show="!it.r.checks" class="motiv-outline-muted">—</span>
+              </td>
+            </tr>
+          </template>
+          <!-- Aufgeklappt: Detail-Editor (geteiltes Fragment) -->
+          <template x-if="it.kind === 'motif' && selectedMotifId === it.m.id">
+            <tr class="motiv-outline-detailrow" @click.outside="onOutlineMotifOutside($event, it.m.id)">
+              <td colspan="9">
+                <div class="motiv-outline-detail" x-data="{ detailHost: 'outline' }">
+                  <!-- @include motiv-detail -->
+                </div>
+              </td>
+            </tr>
+          </template>
+        </tbody>
+      </template>
+    </table>
+  </div>
+</div>

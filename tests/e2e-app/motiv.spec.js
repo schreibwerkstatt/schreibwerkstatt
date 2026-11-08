@@ -109,6 +109,7 @@ test('Motiv-Werkstatt: erste Combobox-Auswahl landet sofort im Link-Puffer (dirt
     const card = window.Alpine.$data(document.querySelector('.card--motiv'));
     card.newMotifName = 'Combobox-Regression';
     await card.addMotif(); // selektiert das neue Motiv
+    card.motivDetailTab = 'links'; // Verknüpfungen leben im eigenen Reiter
   });
 
   // Kapitel-Verknüpfung über die ECHTE Combobox wählen (3. Link-Gruppe) —
@@ -263,4 +264,199 @@ test('Motiv-Werkstatt: Themen-Editor legt ein Motiv direkt im Thema an', async (
   expect(result.err).toBe('');
 
   guard.assertClean('Motiv-Werkstatt Schnellweg');
+});
+
+async function openMotivCard(page) {
+  await bootApp(page);
+  await selectSeededBook(page);
+  await page.evaluate(() => window.__app.toggleMotivCard());
+  await page.waitForFunction(() => {
+    const el = document.querySelector('.card--motiv');
+    if (!el) return false;
+    const c = window.Alpine.$data(el);
+    return c && !c.loading;
+  }, null, { timeout: 15000 });
+}
+
+// Baum im Seitenpanel: ohne Auswahl stehen die Motive unter ihrem Thema; ein
+// Klick öffnet den Editor, der Rückweg hebt auch die Markierung im Graph auf.
+test('Motiv-Werkstatt: Baum im Panel öffnet Motive, Zurück hebt die Graph-Markierung auf', async ({ page }) => {
+  const guard = attachConsoleGuard(page);
+  await openMotivCard(page);
+
+  const ids = await page.evaluate(async () => {
+    const card = window.Alpine.$data(document.querySelector('.card--motiv'));
+    card.newThemeName = 'Baum-Thema';
+    await card.addTheme();
+    const themeId = card.selectedThemeId;
+    card.newThemeMotifName = 'Baum-Motiv';
+    await card.addMotifToTheme();
+    const motifId = card.selectedMotifId;
+    await card.selectMotif(null);
+    card.setMotivView('graph');
+    return { themeId, motifId };
+  });
+
+  const row = page.locator(`.motiv-tree-motif[data-motif-id="${ids.motifId}"]`);
+  await expect(row, 'Motiv steht im Baum').toBeVisible();
+  await expect(page.locator(`.motiv-tree-group[data-theme-id="${ids.themeId}"] .motiv-tree-motif[data-motif-id="${ids.motifId}"]`),
+    'unter seinem Thema').toHaveCount(1);
+
+  await row.locator('.motiv-tree-name').click();
+  await expect(page.locator('.motiv-panel .motiv-editor .motiv-name-input')).toHaveValue('Baum-Motiv');
+
+  await page.waitForFunction(() => !!window.Alpine.$data(document.querySelector('.card--motiv'))._motivNetwork, null, { timeout: 10000 });
+  await page.locator('.motiv-panel .motiv-editor-titlerow .icon-btn').first().click();
+  await expect(row, 'zurück im Baum').toBeVisible();
+  // Rohe Instanz: die Auswahl-API liest private Felder, über den Alpine-Proxy wirft sie.
+  const selected = await page.evaluate(async (id) => {
+    const c = window.Alpine.$data(document.querySelector('.card--motiv'));
+    const net = () => window.Alpine.raw(c._motivNetwork);
+    await c.selectMotif(id);
+    const whileOpen = net().getSelectedNodes();
+    await c.selectMotif(null);
+    return { whileOpen, after: net().getSelectedNodes().length };
+  }, ids.motifId);
+  expect(selected.whileOpen, 'Auswahl im Graph gespiegelt').toEqual(['m' + ids.motifId]);
+  expect(selected.after, 'Graph-Auswahl aufgehoben').toBe(0);
+
+  guard.assertClean('Motiv-Werkstatt Baum');
+});
+
+// Gliederung: Zeile aufklappen zeigt den geteilten Detail-Editor in der Tabelle
+// (nicht im Panel); Klick daneben speichert, die Zeile bleibt offen.
+test('Motiv-Werkstatt: Gliederung — Zeile aufklappen, Klick daneben speichert', async ({ page }) => {
+  const guard = attachConsoleGuard(page);
+  await openMotivCard(page);
+
+  const motifId = await page.evaluate(async () => {
+    const card = window.Alpine.$data(document.querySelector('.card--motiv'));
+    card.newMotifName = 'Gliederung-Motiv';
+    await card.addMotif();
+    const id = card.selectedMotifId;
+    await card.selectMotif(null);
+    card.setMotivView('outline');
+    return id;
+  });
+
+  const table = page.locator('.motiv-outline-table');
+  await expect(table).toBeVisible();
+  const nameBtn = table.locator('.motiv-outline-row .motiv-outline-name', { hasText: 'Gliederung-Motiv' });
+  await nameBtn.click();
+  const nameInput = table.locator('.motiv-outline-detail .motiv-name-input');
+  await expect(nameInput).toHaveValue('Gliederung-Motiv');
+  await expect(page.locator('.motiv-panel .motiv-editor'), 'nicht zugleich im Panel').toHaveCount(0);
+
+  await nameInput.fill('Gliederung umbenannt');
+  await page.locator('.motiv-outline-filter .filter-search-input').click(); // Klick daneben
+  await page.waitForFunction((id) => {
+    const c = window.Alpine.$data(document.querySelector('.card--motiv'));
+    return c.motifById(id)?.name === 'Gliederung umbenannt' && !c.motifDirty();
+  }, motifId, { timeout: 5000 });
+  await expect(nameInput, 'Zeile bleibt offen').toBeVisible();
+
+  guard.assertClean('Motiv-Werkstatt Gliederung');
+});
+
+// Detail-Editor: Trigger als Chips (Komma übernimmt, nicht bestätigter Draft
+// zählt beim Speichern mit); Beziehungstyp ändern; Duplikat wird gemeldet.
+test('Motiv-Werkstatt: Trigger-Chips, Beziehungstyp ändern, Duplikat-Meldung', async ({ page }) => {
+  const guard = attachConsoleGuard(page);
+  await openMotivCard(page);
+
+  await page.evaluate(async () => {
+    const card = window.Alpine.$data(document.querySelector('.card--motiv'));
+    card.setMotivView('graph');
+    card.motivDetailTab = 'details';
+    card.newMotifName = 'Chip-Ziel';
+    await card.addMotif();
+    card.newMotifName = 'Chip-Motiv';
+    await card.addMotif();
+  });
+
+  const input = page.locator('.motiv-panel .motiv-trigger-input');
+  await input.fill('Regen, Fluss,');
+  await expect(page.locator('.motiv-panel .motiv-trigger-chip')).toHaveCount(2);
+  await input.fill('ertrinken'); // nicht mit Enter bestätigt
+
+  const result = await page.evaluate(async () => {
+    const card = window.Alpine.$data(document.querySelector('.card--motiv'));
+    await card.saveMotifEdit();
+    const m = card.selectedMotif();
+    const target = card.motifs.find(x => x.name === 'Chip-Ziel');
+    card.newRelationTargetId = String(target.id);
+    card.newRelationTyp = 'verstaerkt';
+    await card.addRelation();
+    const rel = card.relationsForSelected()[0];
+    await card.setRelationTyp(rel, 'kontrastiert');
+    const typAfter = card.relationsForSelected()[0]?.typ;
+    card.errorMessage = '';
+    card.newRelationTargetId = String(target.id);
+    card.newRelationTyp = 'kontrastiert';
+    await card.addRelation(); // Duplikat
+    return {
+      triggers: m.trigger_terms,
+      rescanOffered: card.triggerRescanMotifId === m.id,
+      typAfter,
+      relCount: card.relationsForSelected().length,
+      err: card.errorMessage,
+      expectedErr: window.__app.t('motiv.relations.exists'),
+    };
+  });
+
+  expect(result.triggers).toEqual(['Regen', 'Fluss', 'ertrinken']);
+  expect(result.rescanOffered, 'Einzel-Scan nach Trigger-Änderung angeboten').toBe(true);
+  expect(result.typAfter).toBe('kontrastiert');
+  expect(result.relCount).toBe(1);
+  expect(result.err).toBe(result.expectedErr);
+
+  guard.assertClean('Motiv-Werkstatt Chips/Beziehungen');
+});
+
+
+// Baum: ein Motiv per Griff in ein anderes Thema ziehen setzt theme_id und
+// ordnet es dort an der Drop-Stelle ein (SortableJS-Fallback, echter Zeiger).
+test('Motiv-Werkstatt: Baum — Motiv per Drag in ein anderes Thema verschieben', async ({ page }) => {
+  const guard = attachConsoleGuard(page);
+  await openMotivCard(page);
+
+  const ids = await page.evaluate(async () => {
+    const card = window.Alpine.$data(document.querySelector('.card--motiv'));
+    card.setMotivView('graph');
+    card.newThemeName = 'Drag-Quelle';
+    await card.addTheme();
+    const fromTheme = card.selectedThemeId;
+    card.newThemeMotifName = 'Drag-Motiv';
+    await card.addMotifToTheme();
+    const motifId = card.selectedMotifId;
+    card.newThemeName = 'Drag-Ziel';
+    await card.addTheme();
+    const toTheme = card.selectedThemeId;
+    card.newThemeMotifName = 'Drag-Nachbar';
+    await card.addMotifToTheme();
+    await card.selectMotif(null);
+    return { fromTheme, toTheme, motifId };
+  });
+
+  const row = page.locator(`.motiv-tree-motif[data-motif-id="${ids.motifId}"]`);
+  await expect(row).toBeVisible();
+  await page.waitForTimeout(400); // Sortable bindet lazy nach dem Mount
+  const grip = await row.locator('.motiv-motif-grip').boundingBox();
+  const target = await page.locator(`.motiv-tree-motifs[data-group="${ids.toTheme}"]`).boundingBox();
+
+  await page.mouse.move(grip.x + grip.width / 2, grip.y + grip.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(grip.x + grip.width / 2 + 8, grip.y + grip.height / 2 + 14, { steps: 4 });
+  await page.mouse.move(target.x + 30, target.y + 2, { steps: 12 });
+  await page.waitForTimeout(80);
+  await page.mouse.up();
+
+  await page.waitForFunction(({ motifId, toTheme }) => {
+    const c = window.Alpine.$data(document.querySelector('.card--motiv'));
+    return c.motifById(motifId)?.theme_id === toTheme && !c.loading;
+  }, ids, { timeout: 5000 });
+  await expect(page.locator(`.motiv-tree-group[data-theme-id="${ids.toTheme}"] .motiv-tree-motif[data-motif-id="${ids.motifId}"]`),
+    'im Ziel-Thema gerendert').toHaveCount(1);
+
+  guard.assertClean('Motiv-Werkstatt Baum-Drag');
 });

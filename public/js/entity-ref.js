@@ -40,6 +40,8 @@
 import { buildEntityPreview, PREVIEW_BUILDERS } from './entity-ref-preview.js';
 import { installEntityRefPreview } from './entity-ref-popover.js';
 import { sameStructureTitle } from './structure-title.js';
+import { figurAnzeigeName } from './book/figur-name.js';
+import { numberedKapitelLabel } from './chapter-filter.js';
 
 const t = (app, key) => (app?.t ? app.t(key) : key);
 
@@ -91,7 +93,9 @@ const fromMap = (mapName) => (app, spec) => {
 export const TYPES = {
   kapitel: {
     resolve: findChapter,
-    label: (c) => c.name,
+    // Kapitelnummer vor dem aktuellen Namen (chapter-filter.js#numberedKapitelLabel);
+    // die Nummer trennt auch gleichnamige Kapitel, darum kein Elternpfad.
+    label: (c, app) => numberedKapitelLabel(app?._kapitelNummer?.(c.id), c.name),
     // Kapitel-Referenzen führen immer zur Kapitelbewertung (openChapterById
     // fällt nur dort auf die erste Seite zurück, wo das Buch keine hat).
     open: (app, c) => app.openChapterById(c.id),
@@ -107,7 +111,7 @@ export const TYPES = {
   },
   figur: {
     resolve: fromMap('figurenById'),
-    label: (f) => f.kurzname || f.name,
+    label: (f) => figurAnzeigeName(f),
     title: (f) => f.name,
     open: (app, f) => app.openFigurById(f.id),
   },

@@ -9,6 +9,7 @@ import { resetFilterScopes, restoreFilterScopes } from '../../filter-persist.js'
 import { getDeviceId } from '../../device-id.js';
 import { EVT } from '../../events.js';
 import { settleShowLoads } from '../../cards/card-lifecycle.js';
+import { KONTINUITAET_FILTER_DEFAULTS, KONTINUITAET_VIEW_DEFAULTS } from '../../book/kontinuitaet-view.js';
 
 // Filterleisten der Katalog-Karten. Sie leben in `Alpine.store('catalogUi')` und
 // werden pro Buch im localStorage gehalten — Mechanik, Spec-Form und die drei
@@ -24,7 +25,10 @@ export const FILTER_SCOPES = [
   { scope: 'szenenFilters',       key: 'szenenFilters',       defaults: { wertung: '', figurId: '', kapitelId: '', seiteId: '', ortId: '', suche: '' } },
   { scope: 'orteFilters',         key: 'orteFilters',         defaults: { figurId: '', kapitelId: '', szeneId: '', suche: '' } },
   { scope: 'songsFilters',        key: 'songsFilters',        defaults: { figurId: '', kapitelId: '', genre: '', kontextTyp: '', suche: '' } },
-  { scope: 'kontinuitaetFilters', key: 'kontinuitaetFilters', defaults: { figurId: '', kapitelId: '', schwere: '', status: '', suche: '' } },
+  { scope: 'kontinuitaetFilters', key: 'kontinuitaetFilters', defaults: KONTINUITAET_FILTER_DEFAULTS },
+  // Ansicht-Menü der Kontinuität (welche Triage-Stände die Liste führt) — eigener
+  // Scope, damit «Filter zurücksetzen» die Ansicht nicht anfasst.
+  { scope: 'kontinuitaetView',    key: 'kontinuitaetView',    defaults: KONTINUITAET_VIEW_DEFAULTS },
 ];
 
 // Kartenwechsel als sanfter Cross-Fade (View Transitions API). Progressive

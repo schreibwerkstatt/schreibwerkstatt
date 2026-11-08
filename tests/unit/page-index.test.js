@@ -269,3 +269,69 @@ test('page_stats.sentences stammt aus derselben Satzzerlegung wie die Satzlänge
   assert.equal(Math.round((idx.sentence_words / idx.sentences) * 10) / 10, idx.avg_sentence_len);
   assert.equal(JSON.parse(idx.sentence_lens).length, idx.sentences);
 });
+
+// ── Englische Bücher (book_settings.language = 'en', lib/style-lang.js) ──────
+
+test('EN: Füllwörter nach englischer Liste, deutsche Liste greift nicht', () => {
+  const text = 'I really just wanted to leave. Basically, it was actually quite late.';
+  assert.equal(computeStyleStats(text).filler_count, 0, 'deutsches Profil kennt kein „really"');
+  // really, just, basically, actually, quite
+  assert.equal(computeStyleStats(text, { language: 'en' }).filler_count, 5);
+});
+
+test('EN: Passiv = be/get + Partizip, Zustandsadjektive und -ed-Nomen zählen nicht', () => {
+  const passives = (t) => JSON.parse(computeStyleStats(t, { language: 'en' }).style_samples).passive.map(s => s.token);
+  const count = (t) => computeStyleStats(t, { language: 'en' }).passive_count;
+  assert.deepEqual(passives('The letter was sent. The house was built in 1902.'), ['was sent', 'was built']);
+  assert.equal(count('He was never told. They were quickly taken away. It was later sold.'), 3, 'Adverb dazwischen');
+  assert.equal(count('I got lost.'), 1, 'get-Passiv');
+  assert.deepEqual(passives('It was being decided.'), ['being decided'], '„was being" verliert das Partizip nicht');
+  assert.equal(count("It wasn't finished."), 1, 'Kontraktion');
+  assert.equal(count('I was tired. She was interested in books. He was naked. It was red.'), 0);
+  assert.equal(count('Er wurde gesehen.'), 0, 'deutsches werden ist im englischen Profil kein Passiv');
+});
+
+test('EN: Adverbien = -ly ohne Adjektiv-/Nomen-Ausnahmen plus feste Formen', () => {
+  const advs = (t) => JSON.parse(computeStyleStats(t, { language: 'en' }).style_samples).adverb.map(s => s.token);
+  assert.deepEqual(advs('She quietly closed the door. Otherwise nothing happened.'), ['quietly', 'Otherwise']);
+  assert.deepEqual(advs('The only lonely family was early and friendly.'), []);
+  assert.deepEqual(advs('He often came here.'), ['often', 'here']);
+});
+
+test('EN: Flesch Reading Ease statt Amstad', () => {
+  // 2 Sätze, 8 Wörter, je 1 Silbe → 206.835 − 1.015·4 − 84.6·1 = 118.2
+  const en = computeStyleStats('The cat sat down. The dog ran off.', { language: 'en' });
+  assert.equal(en.flesch_de, 118.2);
+  // Amstad derselbe Text: 180 − 4 − 58.5 = 117.5
+  assert.equal(computeStyleStats('The cat sat down. The dog ran off.').flesch_de, 117.5);
+});
+
+test('EN: Silbenzählung kennt stumme Endungen', () => {
+  const { _countSyllablesEn: syl } = require('../../lib/style-lang');
+  const cases = { make: 1, makes: 1, table: 2, horses: 2, walked: 1, wanted: 2, played: 1, carried: 2,
+    yellow: 2, beautiful: 3, readability: 5, I: 1, the: 1 };
+  for (const [w, n] of Object.entries(cases)) assert.equal(syl(w), n, w);
+});
+
+test('EN: Pronomen landen in denselben Gruppen-Schlüsseln wie DE', () => {
+  const text = 'I closed my door and we left. He took his coat; she and they followed. “I know,” you said.';
+  const { pronoun_counts: pc } = computePronounsAndDialog(text, [], 'en');
+  assert.equal(pc.ich.narr, 2, 'I + my');
+  assert.equal(pc.ich.dlg, 1, 'I im Dialog');
+  assert.equal(pc.wir.narr, 1);
+  assert.equal(pc.er.narr, 2, 'He + his');
+  assert.equal(pc.sie_sg.narr, 2, 'she + they');
+  assert.equal(pc.du.narr, 1);
+  // Deutsches Profil: „man" ist im Englischen ein Nomen — darf nur DE zählen.
+  assert.equal(computePronounsAndDialog('The man left.', [], 'en').pronoun_counts.man.narr, 0);
+  assert.equal(computePronounsAndDialog('I left.').pronoun_counts.ich.narr, 0, 'DE kennt „I" nicht');
+});
+
+test('EN: computePageIndex reicht die Sprache an Pronomen und Stil durch', () => {
+  const { computePageIndex, METRICS_VERSION } = require('../../lib/page-index');
+  const r = computePageIndex('I was really sent away. I knew it.', { language: 'en' });
+  assert.equal(JSON.parse(r.pronoun_counts).ich.narr, 2);
+  assert.equal(r.filler_count, 1);
+  assert.equal(r.passive_count, 1);
+  assert.equal(r.metrics_version, METRICS_VERSION);
+});

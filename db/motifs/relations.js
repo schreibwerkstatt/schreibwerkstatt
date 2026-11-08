@@ -25,6 +25,9 @@ const _stmtInsertRelation = db.prepare(`
   VALUES (?, ?, ?, ${NOW_ISO_SQL})
 `);
 const _stmtDeleteRelation = db.prepare('DELETE FROM motif_relations WHERE id = ?');
+// OR IGNORE: kollidiert der neue Typ mit einer bestehenden Kante desselben Paars
+// (UNIQUE from/to/typ), bleibt die Zeile unverändert und changes=0.
+const _stmtUpdateRelationTyp = db.prepare('UPDATE OR IGNORE motif_relations SET typ = ? WHERE id = ?');
 
 function listRelations(bookId, userEmail) {
   return _stmtListRelations.all(parseInt(bookId), userEmail);
@@ -47,5 +50,10 @@ function createRelation(fromMotifId, toMotifId, typ) {
 function deleteRelation(id) {
   _stmtDeleteRelation.run(parseInt(id));
 }
+// Typ einer bestehenden Kante ändern. false = Duplikat (dieses Paar trägt den
+// Typ schon) — der Aufrufer meldet das, statt still nichts zu tun.
+function updateRelationTyp(id, typ) {
+  return _stmtUpdateRelationTyp.run(String(typ), parseInt(id)).changes > 0;
+}
 
-module.exports = { listRelations, getRelationOwner, createRelation, deleteRelation };
+module.exports = { listRelations, getRelationOwner, createRelation, deleteRelation, updateRelationTyp };

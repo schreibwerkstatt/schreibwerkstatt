@@ -104,35 +104,9 @@
         </button>
       </template>
     </div>
-    <div class="tabs">
-      <template x-for="st in ['', 'open', 'resolved', 'dismissed']" :key="'st-' + st">
-        <button type="button" class="tabs-btn"
-                :class="{ 'tabs-btn--active': ($store.catalogUi.kontinuitaetFilters.status || '') === st }"
-                :aria-pressed="($store.catalogUi.kontinuitaetFilters.status || '') === st ? 'true' : 'false'"
-                @click="$store.catalogUi.kontinuitaetFilters.status = st"
-                x-text="$app.t('kontinuitaet.status.' + (st || 'active'))"></button>
-      </template>
-      <!-- Offene Befunde früherer Läufe, die der letzte Lauf nicht mehr gemeldet hat. -->
-      <button type="button" class="tabs-btn" x-show="kontinuitaetMissingIssues().length > 0"
-              :class="{ 'tabs-btn--active': $store.catalogUi.kontinuitaetFilters.status === 'missing' }"
-              :aria-pressed="$store.catalogUi.kontinuitaetFilters.status === 'missing' ? 'true' : 'false'"
-              :data-tip="$app.t('kontinuitaet.missing.tip')"
-              @click="$store.catalogUi.kontinuitaetFilters.status = 'missing'">
-        <span x-text="$app.t('kontinuitaet.status.missing')"></span>
-        <span class="tabs-btn-count" x-text="kontinuitaetMissingIssues().length"></span>
-      </button>
-      <!-- Von der Prüfung selbst verworfene Befunde (Entwarnung, erfundenes Zitat, Verify). -->
-      <button type="button" class="tabs-btn" x-show="kontinuitaetDiscardedCount() > 0"
-              :class="{ 'tabs-btn--active': $store.catalogUi.kontinuitaetFilters.status === 'discarded' }"
-              :aria-pressed="$store.catalogUi.kontinuitaetFilters.status === 'discarded' ? 'true' : 'false'"
-              @click="$store.catalogUi.kontinuitaetFilters.status = 'discarded'">
-        <span x-text="$app.t('kontinuitaet.status.discarded')"></span>
-        <span class="tabs-btn-count" x-text="kontinuitaetDiscardedCount()"></span>
-      </button>
-    </div>
     <div x-data="catalogFilter('figur')"
          x-modelable="value" x-model="$store.catalogUi.kontinuitaetFilters.figurId"
-         x-effect="options = $store.catalog.figuren.filter(f => kontinuitaetAllIssues().some(i => i.fig_ids?.length ? i.fig_ids.includes(f.id) : (i.figuren||[]).includes(f.name))).map(f => ({value: f.id, label: f.kurzname || f.name}))"
+         x-effect="options = $store.catalog.figuren.filter(f => kontinuitaetAllIssues().some(i => i.fig_ids?.length ? i.fig_ids.includes(f.id) : (i.figuren||[]).includes(f.name))).map(f => ({value: f.id, label: $app.figurAnzeigeName(f)}))"
          >
     </div>
     <div x-data="catalogFilter('chapter')"
@@ -140,6 +114,21 @@
          x-effect="options = kontinuitaetKapitelOptionen()"
          >
     </div>
+    <!-- Fokus: offene Befunde früherer Läufe, die der letzte Lauf nicht mehr gemeldet hat.
+         Übersteuert die Ansicht (book/kontinuitaet-view.js#kontinuitaetVisible). -->
+    <div class="tabs" x-show="kontinuitaetMissingIssues().length > 0">
+      <button type="button" class="tabs-btn"
+              :class="{ 'tabs-btn--active': $store.catalogUi.kontinuitaetFilters.fokus === 'missing' }"
+              :aria-pressed="$store.catalogUi.kontinuitaetFilters.fokus === 'missing' ? 'true' : 'false'"
+              :data-tip="$app.t('kontinuitaet.missing.tip')"
+              @click="kontinuitaetToggleFokusMissing()">
+        <span x-text="$app.t('kontinuitaet.status.missing')"></span>
+        <span class="tabs-btn-count" x-text="kontinuitaetMissingIssues().length"></span>
+      </button>
+    </div>
+    <!-- Ansichts-Menue (Erledigte / «Kein Fehler» / Verworfene), Eintraege aus
+         book/kontinuitaet-view.js#viewMenuSpec -->
+    <!-- @include view-menu -->
     <span class="filter-count" x-text="kontinuitaetResult ? kontinuitaetIssuesSorted().length + ' / ' + kontinuitaetSeverityCounts().all : ''"></span>
   </div>
 
@@ -147,9 +136,14 @@
     <div class="kontinuitaet-result">
 
       <!-- Keine Probleme -->
-      <div x-show="kontinuitaetResult.issues?.length === 0 && $store.catalogUi.kontinuitaetFilters.status !== 'discarded'" class="kontinuitaet-ok" x-text="$app.t('kontinuitaet.noIssues')"></div>
-      <p x-show="$store.catalogUi.kontinuitaetFilters.status === 'discarded'" class="card-hint" x-text="$app.t('kontinuitaet.discard.hint')"></p>
-      <div x-show="$store.catalogUi.kontinuitaetFilters.status === 'missing'" class="kontinuitaet-missing-hint">
+      <div x-show="kontinuitaetResult.issues?.length === 0" class="kontinuitaet-ok" x-text="$app.t('kontinuitaet.noIssues')"></div>
+      <!-- Alles von der Ansicht verborgen (Grundansicht blendet Erledigte aus). -->
+      <div x-show="kontinuitaetResult.issues?.length > 0 && kontinuitaetIssuesVisible().length === 0 && kontinuitaetHiddenCount() > 0"
+           class="kontinuitaet-allhidden card-empty card-empty--compact">
+        <p class="card-empty-text" x-text="$app.tn('kontinuitaet.view.allHidden', kontinuitaetHiddenCount())"></p>
+        <button type="button" class="btn-compact card-empty-cta" @click="kontinuitaetShowHidden()" x-text="$app.t('kontinuitaet.view.showHidden')"></button>
+      </div>
+      <div x-show="$store.catalogUi.kontinuitaetFilters.fokus === 'missing'" class="kontinuitaet-missing-hint">
         <p class="card-hint" x-text="$app.t('kontinuitaet.missing.hint')"></p>
         <button type="button" class="btn-compact" x-show="kontinuitaetMissingIssues().length"
                 @click="kontinuitaetRecheckMissing()" :disabled="kontinuitaetRecheckIds.length > 0 || kontinuitaetLoading">
@@ -158,7 +152,7 @@
         </button>
       </div>
       <!-- Alle weggefiltert -->
-      <div x-show="kontinuitaetIssuesInStatus().length > 0 && kontinuitaetIssuesSorted().length === 0" class="kontinuitaet-nomatch">
+      <div x-show="kontinuitaetIssuesVisible().length > 0 && kontinuitaetIssuesSorted().length === 0" class="kontinuitaet-nomatch">
         <span x-text="$app.t('kontinuitaet.noMatch')"></span>
         <button type="button" class="btn-compact" @click="kontinuitaetResetFilters()" x-text="$app.t('kontinuitaet.resetFilters')"></button>
       </div>

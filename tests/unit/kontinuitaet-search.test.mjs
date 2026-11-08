@@ -4,7 +4,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
-const filters = { figurId: '', kapitelId: '', schwere: '', status: '', suche: '' };
+const filters = { figurId: '', kapitelId: '', schwere: '', fokus: '', suche: '' };
 const stores = { nav: { tree: [], pages: [], selectedBookId: 1 }, catalog: { figuren: [] }, catalogUi: { kontinuitaetFilters: filters } };
 globalThis.Alpine = { store: (k) => stores[k] };
 globalThis.window = globalThis.window || {};

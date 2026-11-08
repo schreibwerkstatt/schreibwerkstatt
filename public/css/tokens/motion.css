@@ -21,6 +21,7 @@
   --shadow-sm:        0 2px 8px var(--color-shadow);          /* Karten-Lift */
   --shadow-md:        0 4px 12px var(--color-shadow-med);     /* Popover/Dropdown */
   --shadow-lg:        0 12px 40px var(--color-shadow-strong); /* Modal */
+  --shadow-drag:      0 12px 28px var(--color-shadow);        /* Karte am Zeiger (board-dnd.css) */
   --shadow-inset-top: 0 -2px 10px var(--color-shadow-soft);   /* Job-Queue-Footer */
 
   /* === Opacity-Stufen === */

@@ -61,7 +61,10 @@ export const kapitelMethods = {
   _chapterBuckets(seed, fill) {
     const { roots } = this._chapterRollup();
     const buckets = new Map();
-    for (const r of roots) buckets.set(Number(r.id), { id: r.id, name: r.name, ...seed() });
+    // Anzeigename mit Kapitelnummer (app-ui.js#_kapitelLabel): Satz-Titel, die
+    // gleich anfangen, bleiben auch gekürzt unterscheidbar.
+    const label = (r) => window.__app?._kapitelLabel?.(r.id) || r.name;
+    for (const r of roots) buckets.set(Number(r.id), { id: r.id, name: label(r), ...seed() });
     fill(buckets);
     const out = [];
     for (const r of roots) {

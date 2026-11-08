@@ -1,4 +1,4 @@
-// Geteilter SortableJS-Kern für Alpine-x-for-Boards (Buchorganizer + Plot-Werkstatt).
+// Geteilter SortableJS-Kern für Alpine-x-for-Boards (Buchorganizer, Plot-Werkstatt, Ideen-Board, Recherche-Status, Motive).
 // Kapselt die drift-anfälligen, hart erarbeiteten Bausteine, die beide Boards
 // identisch brauchen — Ziel: der nächste SortableJS-Versionssprung wird an EINER
 // Stelle verifiziert, nicht in jedem Board separat.
@@ -43,6 +43,10 @@ export function sortableIndexOf(el) {
 // x-for-Scope weiterhin auf den verschobenen Node → Orphan/Duplikat-Nodes,
 // driftender DOM, falsche Positionen. Nach Revert ist Alpine alleiniger DOM-
 // Besitzer; das Modell (vom Aufrufer mutiert) ist die Wahrheit, x-for rendert neu.
+// Darum muss das Modell NOCH VOR dem ersten await auf dem Ziel stehen
+// (optimistisch, bei Fehler zurueck): sonst zeigt das Board die Karte bis zur
+// Server-Antwort wieder in der Quellzelle — sie flackert zurueck und springt
+// dann ans Ziel.
 export function revertSortable(evt) {
   const { item, from, oldIndex } = evt;
   if (!item || !from || !Number.isFinite(oldIndex)) return;
@@ -93,3 +97,79 @@ export const BASE_SORTABLE_OPTS = Object.freeze({
   direction: 'vertical',
   revertOnSpill: true,
 });
+
+// ── Karten-Boards (Plot-Werkstatt, Ideen-Board, Recherche-Status) ───────────
+// Ein Board = Spalten/Zellen mit Karten, die per Griff zwischen Zellen wandern.
+// Alle drei ziehen gleich: dieselben Sortable-Optionen (boardSortableOpts),
+// derselbe Drag-Zustand (startBoardDrag/endBoardDrag) und dieselbe Optik aus
+// components/board-dnd.css. Das Board liefert nur Geometrie und Drop-Logik:
+// Zellen tragen `.board-dnd-zone`, Karten setzen `--board-dnd-accent` (Rahmen
+// von Platzhalter und Drop-Zone) und `--board-dnd-clone-accent` (Rahmen des
+// Klons im <body>, muss ohne Spalten-Kontext aufloesen).
+export const BOARD_DND_ACTIVE = 'board-dnd-active';
+
+// Drag-Zustand. onStart/onEnd statt onChoose/onUnchoose: ein reiner Klick
+// toggelt nichts.
+// * `board-dnd-active` an <body> → leere Zellen werden zur Drop-Zone.
+// * `--sortable-drag-h` an <body> = Hoehe der gezogenen Karte; die Drop-Zone
+//   ist so hoch wie das Gezogene (gedeckelt, board-dnd.css).
+// * Der Platzhalter (evt.item mit ghostClass) behaelt diese Hoehe. Er wandert in
+//   die Zielzelle, und ist die schmaler als die Quelle (Ideen-Board: Stufen ohne
+//   Karte sind schmale Spalten), braeche sein unsichtbarer Inhalt dort auf viele
+//   Zeilen um — die ganze Bahn wuerde mitten im Drag mehrfach so hoch. Und eine
+//   Zielzelle schrumpft nie unter die Kartenhoehe, sobald der Platzhalter
+//   eindringt (sonst fiele der Zeiger aus der Trefferzone, die Karte spraenge
+//   beim Loslassen zurueck).
+// * Im Native-Vollbild rendert nur der Teilbaum des Fullscreen-Elements;
+//   SortableJS haengt den Fallback-Klon aber an <body>, also unsichtbar hinter
+//   das Vollbild. Darum den Klon (`Sortable.ghost`, existiert ab onStart) ins
+//   Fullscreen-Element umhaengen; `position: fixed` bleibt viewport-relativ, und
+//   SortableJS raeumt ihn ueber `parentNode` auf.
+export function startBoardDrag(Sortable, evt) {
+  document.body.classList.add(BOARD_DND_ACTIVE);
+  const item = evt?.item;
+  const h = item ? Math.round(item.getBoundingClientRect().height) : 0;
+  if (h > 0) {
+    document.body.style.setProperty('--sortable-drag-h', `${h}px`);
+    item.style.height = `${h}px`;
+    item.style.overflow = 'hidden';
+  }
+  const fsEl = document.fullscreenElement;
+  const ghost = Sortable?.ghost;
+  if (fsEl && ghost && !fsEl.contains(ghost)) fsEl.appendChild(ghost);
+}
+
+// Gegenstueck zu startBoardDrag; auch beim Teardown aufrufen (ohne evt), damit
+// ein unterbrochener Drag keine aufgeblaehten Zellen stehen laesst.
+export function endBoardDrag(evt) {
+  document.body.classList.remove(BOARD_DND_ACTIVE);
+  document.body.style.removeProperty('--sortable-drag-h');
+  evt?.item?.style.removeProperty('height');
+  evt?.item?.style.removeProperty('overflow');
+}
+
+// Sortable-Optionen eines Karten-Boards. Das Board gibt `draggable`, `handle`,
+// `group` und seine Drop-Logik (`onEnd`) mit; `onStart` fuer Zusatzarbeit beim
+// Drag-Start. Weitere Overrides (z.B. `emptyInsertThreshold`, `sort`) gehen per
+// Spread durch und brauchen eine Begruendung am Aufrufer.
+// * emptyInsertThreshold 24: grosszuegiger Trefferradius um jede leere Zelle —
+//   ein schneller Zug ueber mehrere Zellen faengt im Ziel statt im Spalten-Gap.
+// * invertSwap false: Board-Zellen sind flache Listen, keine verschachtelten.
+//   Der invertierte Swap-Bereich liesse die obere von zwei Karten nicht unter
+//   die untere ziehen — bei zwei Karten der einzige moegliche Zug.
+export function boardSortableOpts(Sortable, { onStart, onEnd, ...opts }) {
+  return {
+    ...BASE_SORTABLE_OPTS,
+    invertSwap: false,
+    emptyInsertThreshold: 24,
+    scroll: true,
+    chosenClass: 'board-dnd-chosen',
+    ghostClass: 'board-dnd-ghost',
+    dragClass: 'board-dnd-dragging',
+    onChoose: markDragIgnore,
+    onUnchoose: unmarkDragIgnore,
+    ...opts,
+    onStart: (evt) => { startBoardDrag(Sortable, evt); onStart?.(evt); },
+    onEnd: (evt) => { endBoardDrag(evt); unmarkDragIgnore(evt); onEnd?.(evt); },
+  };
+}

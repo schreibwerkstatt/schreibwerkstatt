@@ -95,10 +95,8 @@
            x-modelable="value" x-model="sortBy"
            x-effect="options = sortOptions()"
            @combobox-change="sortBy = $event.detail; applySort()"></div>
-      <label class="filter-toggle">
-        <input type="checkbox" x-model="showArchived" @change="applyFilters()">
-        <span x-text="$app.t('recherche.filter.showArchived')"></span>
-      </label>
+      <!-- Ansicht: Archiv einblenden (book/recherche/board.js#viewMenuSpec) -->
+      <!-- @include view-menu -->
     </div>
   </div>
 

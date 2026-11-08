@@ -14,7 +14,7 @@ export const FIGUREN_BASIS_SCHEMA = `{
       "id": "fig_1",
       "katalog_id": "ID aus dem mitgegebenen Katalog (z.B. K12), wenn die Figur dort schon steht; sonst leer",
       "name": "Vollständiger Name",
-      "kurzname": "Vorname oder Spitzname",
+      "kurzname": "Vorname oder Rufname, mit dem die Figur im Text angesprochen wird",
       "typ": "hauptfigur|nebenfigur|antagonist|mentor|randfigur|andere",
       "geburtstag": "JJJJ oder leer wenn unbekannt",
       "geschlecht": "männlich|weiblich|divers|unbekannt",
@@ -76,6 +76,7 @@ export const figurenBasisRules = (kontext = '') => `Regeln:
 - Nur fiktive Charaktere oder Figuren die aktiv an der Buchhandlung teilnehmen – keine Orte oder Objekte
 - Nur einzelne Personen: keine Sammelbegriffe («die Vorfahren», «die Familie»), keine Metaphern oder Vergleiche, keine bloss erschlossenen Personen («Vater von X (implizit)»). Eine namenlose Person nur, wenn sie selbst in der Handlung auftritt
 - name: ohne Klammerzusatz und ohne Erklärung – Ruf- oder Kosename gehört in kurzname, ein Geburtsname als «geb. X» ans Ende. Dieselbe Person heisst überall gleich, auch wenn sie im Lauf der Handlung heiratet oder den Namen wechselt
+- kurzname: nur ein Name, mit dem andere Figuren oder die Erzählstimme die Person tatsächlich ansprechen oder nennen (Vorname, Ruf-, Kosename). KEIN Künstlerkürzel, keine Signatur, kein Pseudonym für ein Werk, kein Initial-Kürzel, kein Titel eines Albums/Buchs – solche Angaben gehören in beschreibung oder hintergrund. Leer lassen, wenn es keinen solchen Namen gibt
 - KEINE historischen oder realen Personen die nur erwähnt, zitiert oder als Referenz genannt werden (z.B. Napoleon, Einstein, ein Politiker, eine Künstlerin)
 - Sortiert nach Wichtigkeit (zentral zuerst)
 - KONSERVATIV heisst belegt, NICHT knapp: Nur Figuren, Beziehungen und Eigenschaften aufnehmen die im Text belegt sind – aber vorhandene Belege voll ausschöpfen. Unterscheide Spekulation (verboten) von textgestützter Schlussfolgerung (erwünscht – was der Text klar nahelegt, darf benannt werden). Ein leeres Feld ist nur dann richtig, wenn der Text wirklich nichts hergibt; wo Belege da sind, schreibe ausführlich und konkret statt in Stichworten.

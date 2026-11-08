@@ -7,7 +7,7 @@
 /* Toolbar (Neu · Aus Bibliothek · Filterleiste), Filterleiste, breites Suchfeld
    und Archiv-Schalter kommen vollstaendig aus den geteilten Bausteinen
    `.card-toolbar` (card-form/card-shell.css) + `.filter-bar--inline` /
-   `.filter-search-input--wide` / `.filter-toggle` (entity-list.css). */
+   `.filter-search-input--wide` (entity-list.css). */
 
 /* Refetch bei bereits geladener Liste: Tabelle bleibt stehen, wird nur gedimmt
    und klick-inert — kein Skeleton-Swap, der bei jedem Reload flackert. */

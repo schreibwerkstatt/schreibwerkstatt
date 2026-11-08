@@ -36,7 +36,7 @@
     </span>
     <div x-data="catalogFilter('figur')"
          x-modelable="value" x-model="$store.catalogUi.songsFilters.figurId"
-         x-effect="options = $store.catalog.figuren.filter(f => $store.catalog.songs.some(s => (s.figuren || []).some(x => x.fig_id === f.id))).map(f => ({value: f.id, label: f.kurzname || f.name}))">
+         x-effect="options = $store.catalog.figuren.filter(f => $store.catalog.songs.some(s => (s.figuren || []).some(x => x.fig_id === f.id))).map(f => ({value: f.id, label: $app.figurAnzeigeName(f)}))">
     </div>
     <div x-data="catalogFilter('chapter')"
          x-modelable="value" x-model="$store.catalogUi.songsFilters.kapitelId"

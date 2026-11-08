@@ -123,7 +123,9 @@
 /* ── Zwei-Spalten-Layout ──────────────────────────────────────────────── */
 .motiv-layout {
   display: grid;
-  grid-template-columns: 1fr 20rem;
+  /* Panel-Breite per Griff (.motiv-panel-handle, book/motiv/panel-resize.js);
+     ohne Wahl der Default hier. */
+  grid-template-columns: minmax(0, 1fr) var(--motiv-panel-w, 22rem);
   gap: var(--space-md);
   align-items: start;
   /* Bezugsrahmen für den absolut positionierten Hover-Tooltip (#motiv-tooltip
@@ -177,7 +179,27 @@
   gap: var(--space-xs);
 }
 
-/* ── Themen-Liste (leere Auswahl) ─────────────────────────────────────── */
+/* Griff an der Spaltengrenze Graph | Panel: Mitte des Spaltenabstands, über die
+   ganze Höhe (Optik wie der Griff der .aside-split-Leisten). Mechanik:
+   column-resize.js. Gestapelt (schmal) ohne Griff. */
+.motiv-panel-handle {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  right: calc(var(--motiv-panel-w, 22rem) + var(--space-md) / 2 - 3px);
+  width: 6px;
+  cursor: col-resize;
+  background: transparent;
+  z-index: 1;
+  touch-action: none;
+  transition: background var(--transition-slow);
+}
+.motiv-panel-handle:hover,
+.motiv-panel-handle.dragging,
+.motiv-panel-handle:focus-visible { background: var(--color-accent-soft); }
+.motiv-panel-handle:focus-visible { outline: var(--focus-ring); outline-offset: var(--focus-ring-offset-inset); }
+
+/* Kopf der Brainstorm-Vorschläge. */
 .motiv-panel-heading {
   display: flex;
   align-items: center;
@@ -188,38 +210,6 @@
   border-left: 3px solid var(--card-accent);
   padding-left: var(--space-xs);
 }
-/* Heading, das zugleich collapsible-toggle ist (Fundstellen-Sektion): Button-Reset
-   + volle Breite klickbar, aber Heading-Optik statt uppercase/muted. */
-.motiv-panel-heading.collapsible-toggle {
-  width: 100%;
-  text-align: left;
-  font-family: inherit;
-  text-transform: none;
-  letter-spacing: normal;
-}
-.motiv-theme-list { display: flex; flex-direction: column; gap: var(--space-2xs); }
-.motiv-theme-rows { display: flex; flex-direction: column; gap: var(--space-2xs); }
-.motiv-theme-row { display: flex; align-items: center; --drag-grip-host-gap: var(--space-2xs); gap: var(--drag-grip-host-gap); }
-.motiv-theme-row--ghost { opacity: 0.5; }
-/* Thema-Name: klickbares Label (öffnet den Themen-Editor im Panel). */
-.motiv-theme-name {
-  flex: 1;
-  min-width: 0;
-  padding: var(--space-1) var(--space-2xs);
-  border: 1px solid transparent;
-  border-radius: var(--radius-none);
-  background: none;
-  color: var(--color-text);
-  font-family: inherit;
-  font-size: var(--font-size-sm);
-  text-align: left;
-  cursor: pointer;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.motiv-theme-name:hover { border-color: var(--color-border); background: var(--color-bg); }
-
 /* Thema-Farbe: Swatch + Palette-Popover via .color-picker*
    (components/color-picker.css), geteilt mit der Plot-Werkstatt. */
 
@@ -345,6 +335,7 @@
 /* ── Mobile: gestapelt ────────────────────────────────────────────────── */
 @media (max-width: 959.98px) {
   .motiv-layout { grid-template-columns: 1fr; }
+  .motiv-panel-handle { display: none; }
   .motiv-graph-container { height: clamp(300px, 60vh, 480px); }
   /* Gestapelt scrollt die SEITE, nicht das Panel — ein eigener Scrollport waere
      hier ein zweites Scrollfeld unter dem Daumen. Darum overflow zurueck auf
@@ -407,6 +398,32 @@
   height: 10px;
   border-radius: var(--radius-none);
 }
+/* Kapitel-Spalten schmal: Kopf = Kapitelnummer, Zelle = Trefferzahl. Bei
+   Satz-Titeln und vielen Kapiteln bleibt das Band so lesbar breit; der Name
+   steht im Tooltip. */
+.motiv-band-wrap th.motiv-band-numcol {
+  padding: var(--space-6) var(--space-2xs);
+  text-align: center;
+  min-width: 26px;
+  font-variant-numeric: tabular-nums;
+}
+.motiv-band-wrap td.heatmap-cell {
+  padding: var(--space-6) var(--space-2xs);
+  text-align: center;
+  min-width: 26px;
+}
+/* Aufklappbarer Spaltenkopf (Kapitel mit Unterkapiteln): Chevron + Nummer. */
+.motiv-band-colhead {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2xs);
+}
+/* Unterkapitel-Spalten eines aufgeklappten Kapitels: gedämpft, damit die
+   Hauptkapitel als Gliederung lesbar bleiben. */
+.motiv-band-wrap th.motiv-band-col--sub {
+  color: var(--color-muted);
+  font-weight: var(--fw-regular);
+}
 
 /* ── Konsistenz-Befunde (dritte Ansicht) ──────────────────────────────────
    Deterministische Messung der Motiv-Kanten gegen den Ist-Index. Visuell wie die
@@ -422,8 +439,18 @@
   cursor: pointer;
 }
 .motiv-check--open { border-color: var(--card-accent); }
-.motiv-check-head { display: flex; align-items: center; gap: var(--space-xs); }
-.motiv-check-text { font-size: var(--font-size-xs); color: var(--color-muted); flex: 1 1 auto; overflow-wrap: anywhere; }
+/* Kopfzeile trägt nur Plakette + Verweise (Motiv, Abschnitt), der Befundtext
+   steht darunter in voller Breite. Text und Chips in einer Zeile quetschten die
+   Chips bei mehrsätzigen KI-Befunden auf «Ei…» zusammen. */
+.motiv-check-head { display: flex; align-items: center; gap: var(--space-xs); flex-wrap: wrap; }
+.motiv-check-head .history-chevron { margin-left: auto; }
+.motiv-check-text {
+  margin: var(--space-2xs) 0 0;
+  font-size: var(--font-size-sm);
+  line-height: 1.45;
+  color: var(--color-text);
+  overflow-wrap: anywhere;
+}
 /* Kopfzeile der KI-Schicht: Plakette + Erklärsatz + Auslöser in einer Reihe.
    Der Knopf rechts, damit die Messung darüber nicht wie sein Ergebnis aussieht. */
 .motiv-checks-head--ai { margin-top: var(--space-sm); padding-top: var(--space-sm); border-top: 1px solid var(--color-border); }
@@ -431,11 +458,13 @@
 .motiv-consistency { display: flex; flex-direction: column; gap: var(--space-xs); }
 .motiv-consistency-fazit { margin: 0; font-size: var(--font-size-sm); color: var(--color-text); }
 .motiv-check-hint {
-  margin-top: var(--space-2xs);
-  font-size: var(--font-size-xs);
+  margin-top: var(--space-xs);
+  padding-top: var(--space-xs);
+  border-top: 1px solid var(--color-border);
+  font-size: var(--font-size-sm);
+  line-height: 1.45;
   color: var(--color-text);
-  display: flex;
-  gap: var(--space-2xs);
-  flex-wrap: wrap;
+  overflow-wrap: anywhere;
 }
+.motiv-check-hint .entity-meta-label { margin-right: var(--space-2xs); }
 }

@@ -90,7 +90,7 @@
               <td><button type="button" class="entity-ref" x-entity-ref="{ type: 'seite', id: row.id, label: row.name }"></button></td>
               <td>
                 <button type="button" class="entity-ref" x-show="row.chapterId != null"
-                        x-entity-ref="{ type: 'kapitel', id: row.chapterId, label: row.chapterName }"></button>
+                        x-entity-ref="{ type: 'kapitel', id: row.chapterId, name: row.chapterName }"></button>
                 <span x-show="row.chapterId == null" x-text="row.chapterName"></span>
               </td>
               <td class="buchlandkarte-num" x-text="row.distancePct + '%'"></td>

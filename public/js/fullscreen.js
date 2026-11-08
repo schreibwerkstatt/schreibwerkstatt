@@ -32,6 +32,16 @@ export async function toggleWrapFullscreen(wrap) {
   await wrap.requestFullscreen();
 }
 
+// Navigation weg von der Vollbild-Ansicht (Hash-Router: Kategorie-Wechsel,
+// Zurück/Vorwärts) beendet das Vollbild. **Why:** das Ziel — z.B. die Figur,
+// die man im Plot-Board anklickt — liegt ausserhalb des Vollbild-Elements und
+// bliebe sonst unsichtbar dahinter. Auswahl innerhalb derselben Karte (Beat,
+// Fundstück) ist keine Navigation in diesem Sinn und bleibt im Vollbild.
+export function exitFullscreenOnNavigation() {
+  if (typeof document === 'undefined' || !document.fullscreenElement) return;
+  try { document.exitFullscreen?.()?.catch?.(() => {}); } catch {}
+}
+
 export function attachFullscreenSync({ resolveWrap, onChange, signal }) {
   const handler = () => {
     const wrap = typeof resolveWrap === 'function' ? resolveWrap() : resolveWrap;

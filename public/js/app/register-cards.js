@@ -104,6 +104,7 @@ import { registerTabs } from '../tabs.js';
 import { registerToggleSwitch } from '../toggle-switch.js';
 import { registerSettingField } from '../setting-field.js';
 import { registerMenu } from '../menu.js';
+import { registerViewMenu } from '../view-menu.js';
 import { registerLongPress } from '../action-menu.js';
 import { registerModal } from '../modal.js';
 import { registerEntityRef } from '../entity-ref.js';
@@ -253,6 +254,7 @@ export function registerAllCards() {
   registerToggleSwitch();
   registerSettingField();
   registerMenu();
+  registerViewMenu();
   registerLongPress();
   registerModal();
   registerEntityRef();

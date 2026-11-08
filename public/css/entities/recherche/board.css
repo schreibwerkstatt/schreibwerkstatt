@@ -5,7 +5,7 @@
 /* Toolbar (Neu + Filterleiste), Filterleiste, breites Suchfeld und
    Archiv-Schalter kommen vollstaendig aus den geteilten Bausteinen
    `.card-toolbar` (card-form/card-shell.css) + `.filter-bar--inline` /
-   `.filter-search-input--wide` / `.filter-toggle` (entity-list.css) — dieselbe
+   `.filter-search-input--wide` (entity-list.css) — dieselbe
    Bauform wie die Quellen-Karte. */
 
 /* ── Formular (Anlegen/Bearbeiten) ─────────────────────────────────────── */
@@ -397,7 +397,6 @@ textarea.recherche-input { resize: vertical; min-height: 2.75rem; }
   .card--recherche .filter-bar > .combobox-wrap--compact { flex: 1 1 45%; min-width: 0; }
   .card--recherche .filter-bar .filter-search-wrap { flex: 1 1 100%; }
   .card--recherche .filter-bar .filter-search-input { width: 100%; min-width: 0; }
-  .card--recherche .filter-bar .filter-toggle { flex: 1 1 100%; }
   .research-item-actions { margin-left: 0; }
   .research-item-head { gap: var(--space-2xs); }
   /* iOS-Zoom-Schutz: Prosa-Inputs ≥16px (Klassen-font-size kann darunter liegen). */

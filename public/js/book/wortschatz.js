@@ -158,11 +158,14 @@ export const wortschatzMethods = {
 
   // ── Kapitel-Band ──────────────────────────────────────────────────────────
   // Auffällig ist ein Kapitel, dessen Delta mehr als eine Standardabweichung über
-  // dem Mittel der Kapitel liegt. Relativ, nicht absolut: Delta hat keinen festen
-  // Normalbereich, es misst den Abstand zum Durchschnittskapitel DIESES Buchs.
+  // dem Mittel der Delta-Einheiten liegt. Relativ, nicht absolut: Delta hat keinen
+  // festen Normalbereich, es misst den Abstand zur Durchschnittseinheit DIESES Buchs.
+  // Ein Block kurzer Kapitel (`delta_block`) zählt dabei einmal, nicht je Kapitel.
   wsDeltaOutlier(row) {
     if (row?.delta == null) return false;
-    const vals = (this.wortschatzData?.chapters || []).map(c => c.delta).filter(v => v != null);
+    const vals = (this.wortschatzData?.chapters || [])
+      .filter(c => c.delta != null && (!c.delta_block || c.delta_block.first === c.position))
+      .map(c => c.delta);
     if (vals.length < 3) return false;
     const mean = vals.reduce((a, b) => a + b, 0) / vals.length;
     const sd = Math.sqrt(vals.reduce((a, b) => a + (b - mean) ** 2, 0) / vals.length);
@@ -171,6 +174,8 @@ export const wortschatzMethods = {
 
   // Begründung des Deltas in Worten: welche häufigen Wörter das Kapitel öfter bzw.
   // seltener benutzt als der Rest. Ohne sie ist die Zahl eine Behauptung.
+  // Bei einem Block steht die Blockspanne davor: die Begründung gilt für alle seine
+  // Kapitel gemeinsam.
   wsDeltaReason(row) {
     const top = row?.delta_top || [];
     const more = top.filter(d => d.z > 0).map(d => d.term);
@@ -178,19 +183,52 @@ export const wortschatzMethods = {
     const t = window.__app?.t;
     if (!t || (!more.length && !less.length)) return '';
     const parts = [];
+    const block = this.wsDeltaBlockLabel(row);
+    if (block) parts.push(block);
     if (more.length) parts.push(t('wortschatz.chapters.more', { words: more.join(', ') }));
     if (less.length) parts.push(t('wortschatz.chapters.less', { words: less.join(', ') }));
     return parts.join(' · ');
   },
 
-  // Hinweis, warum das Kapitel-Band (noch) kein Delta hat.
+  // Spanne eines Blocks als Kapitelnummern des Baums (app-ui.js#_kapitelNummer,
+  // dieselbe Nummer wie in allen Auswertungs-Labels). `first`/`last` sind
+  // Positionen unter den Kapiteln mit Text; ohne Baum-Nummer bleibt die Position.
+  _wsBlockRange(b) {
+    const rows = this.wortschatzData?.chapters || [];
+    const num = (pos) => {
+      const r = rows.find(c => c.position === pos);
+      return (r && window.__app?._kapitelNummer?.(r.chapter_id)) || pos;
+    };
+    return { from: num(b.first), to: num(b.last) };
+  },
+
+  // „Kap. 12–14" für ein Kapitel, dessen Delta über einen Block kurzer
+  // Nachbarkapitel gerechnet ist; sonst ''.
+  wsDeltaBlockLabel(row) {
+    const b = row?.delta_block;
+    if (!b) return '';
+    return window.__app?.t?.('wortschatz.chapters.block', this._wsBlockRange(b)) || '';
+  },
+
+  wsDeltaBlockTip(row) {
+    const b = row?.delta_block;
+    if (!b) return '';
+    return window.__app?.t?.('wortschatz.chapters.blockTip', {
+      ...this._wsBlockRange(b), chapters: b.chapters, words: this.wsNum(b.tokens),
+    }) || '';
+  },
+
+  // Hinweis über der Tabelle: warum es (noch) kein Delta gibt, oder dass kurze
+  // Kapitel für das Delta zu Blöcken zusammengefasst sind.
   wsDeltaNote() {
     const d = this.wortschatzData;
     const rows = d?.chapters || [];
-    if (!rows.length || rows.some(c => c.delta != null)) return '';
-    return window.__app?.t?.('wortschatz.chapters.noDelta', {
-      min: this.wsNum(d.thresholds?.deltaMinTokens), chapters: d.thresholds?.deltaMinChapters,
-    }) || '';
+    if (!rows.length) return '';
+    const t = window.__app?.t;
+    const params = { min: this.wsNum(d.thresholds?.deltaMinTokens), chapters: d.thresholds?.deltaMinChapters };
+    if (!rows.some(c => c.delta != null)) return t?.('wortschatz.chapters.noDelta', params) || '';
+    if (rows.some(c => c.delta_block)) return t?.('wortschatz.chapters.blockNote', params) || '';
+    return '';
   },
 
   // ── Figuren-Idiolekt ──────────────────────────────────────────────────────

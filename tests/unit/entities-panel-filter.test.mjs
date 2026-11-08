@@ -114,7 +114,8 @@ test('selectEventsForView: flatten + sort + figure-attach', () => {
   assert.equal(out.inChapter.length, 1);
   assert.equal(out.inChapter[0].ereignis, 'Reise');
   assert.equal(out.inChapter[0].figure_id, 1);
-  assert.equal(out.inChapter[0].figure_kurzname, 'A');
+  // Einteiliger Name: der Kurzname verkürzt nichts → voller Name (book/figur-name.js).
+  assert.equal(out.inChapter[0].figure_label, 'Anna');
 });
 
 test('selectEventsForView: Ereignis ohne page_id und ohne chapter_id wird ignoriert', () => {

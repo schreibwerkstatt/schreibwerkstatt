@@ -150,12 +150,14 @@ schreibt keine einzige Idee um. Daraus folgt:
   (`400 IDEE_STATUS_INACTIVE`); derselbe Status noch einmal ist kein Wechsel,
   damit ein PATCH, der ihn mitschickt, nicht scheitert.
 
-Eingestellt wird im Board selbst, im Menü **Stufen** am Ende der Filterleiste
-([ideen-board-stages.html](../public/partials/ideen-board-stages.html)), weil man
+Eingestellt wird im Board selbst, im Menü **Ansicht** am Ende der Filterleiste
+(gemeinsames [view-menu.html](../public/partials/view-menu.html), Einträge aus
+[ideen-board/view-menu.js](../public/js/book/ideen-board/view-menu.js)), weil man
 dort sieht, was die Einstellung bewirkt. Dasselbe Menü trägt oben die beiden
 Ansichts-Haken (Erledigte/Verworfene anzeigen, nur für mich) und darunter die
 Stufen des Buchs (für alle) — ein Ort für die Frage „welche Spalten", die zwei
-Geltungsbereiche getrennt beschriftet. Die Einstellung reist im Bundle mit
+Geltungsbereiche getrennt beschriftet. Die Zahl am Knopf zählt nur die beiden
+Ansichts-Haken; Buch-Stufen und Auto-Check sind Einstellungen. Die Einstellung reist im Bundle mit
 (`SETTINGS_KEYS` in [lib/book-bundle.js](../lib/book-bundle.js)) — `.swbook` und
 Fassungs-Restore.
 
@@ -433,12 +435,16 @@ macht es ohnehin zum Scroll-Container, und ohne Höhendeckel scrollte die Seite
 statt seiner — die `sticky`-Spaltenköpfe klebten an einem Kasten, der sich nie
 bewegt. So bleiben Spaltenköpfe und der **Bahntitel** (klebt darunter, Höhe der
 Kopfzeile per `x-resize` als `--ideen-head-h`) stehen, auch mitten in einer Bahn
-mit zwanzig Karten. **Spalten ohne sichtbare Karte** — leer oder ausgeblendet
-wie per Default «erledigt» — werden schmal (`columnTracks` in
-[actions.js](../public/js/book/ideen-board/actions.js) → `--ideen-col-tracks`,
-Grössen `--ideen-track`/`--ideen-track-slim` im CSS); sonst bekäme die einzige
-belegte Spalte ein Viertel der Breite, und jede Idee bräche auf vier, fünf
-Zeilen um. Die schmale Spalte bleibt Drop-Ziel und zeigt ihren Zähler.
+mit zwanzig Karten. **Alle Stufen-Spalten sind gleich breit** — leer oder voll,
+im Ansichts-Menü ein- oder ausgeblendet (`minmax(--ideen-col-w, 1fr)` je Stufe,
+[ideen-board.css](../public/css/entities/ideen-board.css)). Hinge die Breite am
+Inhalt, spränge das Raster um, sobald man eine Karte in eine leere Stufe zieht,
+und die Bahnen darunter verrutschten. Zieht man eine Karte in eine andere
+Spalte, behält ihr Platzhalter die
+Höhe der Karte ([sortable-dnd.js](../public/js/sortable-dnd.js)#`startBoardDrag`,
+geteilt mit Plot-Werkstatt und Recherche-Status) — sonst bräche er in einer
+schmaleren Zielspalte auf viele Zeilen um und die Bahn schösse mitten im Drag hoch.
+Gegated: [tests/e2e-app/ideen-board-drag-height.spec.js](../tests/e2e-app/ideen-board-drag-height.spec.js).
 Gegated: [tests/e2e-app/ideen-board-viele.spec.js](../tests/e2e-app/ideen-board-viele.spec.js).
 
 **Vollbild:** Knopf im Kartenkopf schaltet die ganze Karte ins Native-Vollbild

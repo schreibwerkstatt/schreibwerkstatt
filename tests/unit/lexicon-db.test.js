@@ -122,7 +122,8 @@ test('replaceBookLexicon: Kapitel-Band und Idiolekt, gelöschte Ziele fallen weg
     stats: { version: 3, tokens: 100, idiolect_coverage: 0.4 },
     terms: [], phrases: [],
     chapters: [
-      { chapter_id: 51, tokens: 60, types: 30, delta: 1.2, delta_top: [{ term: 'und', z: -1.5 }] },
+      { chapter_id: 51, tokens: 60, types: 30, delta: 1.2, delta_top: [{ term: 'und', z: -1.5 }],
+        delta_block: { first: 1, last: 3, chapters: 3, tokens: 1600 } },
       { chapter_id: 999, tokens: 5, types: 5 }, // gibt es nicht (mehr)
       { chapter_id: 50, tokens: 40, types: 20, delta: null, delta_top: null },
     ],
@@ -131,7 +132,9 @@ test('replaceBookLexicon: Kapitel-Band und Idiolekt, gelöschte Ziele fallen weg
   const ch = lexiconDb.listChapterLexicon(1);
   assert.deepEqual(ch.map(c => c.chapter_name), ['Zwei', 'Eins'], 'Reihenfolge des Scans, nicht der IDs');
   assert.deepEqual(ch[0].delta_top, [{ term: 'und', z: -1.5 }]);
+  assert.deepEqual(ch[0].delta_block, { first: 1, last: 3, chapters: 3, tokens: 1600 });
   assert.equal(ch[1].delta_top, null);
+  assert.equal(ch[1].delta_block, null);
 
   // Betrachter ohne eigene Figuren sieht die des Besitzers.
   const idi = lexiconDb.listFigureIdiolect(1, 'lektor@lexicon.test', AUTOR);

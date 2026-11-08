@@ -10,12 +10,13 @@
 // (getGraph), die Kapitel-Reihenfolge + Namen aus dem geladenen Sidebar-Tree.
 
 import { fetchJson } from '../../utils.js';
+import { isSelectedBook } from '../../cards/book-guard.js';
 
 export const bandMethods = {
-  // Ansicht umschalten (Konstellation ↔ Verlaufsband). Zurück auf den Graph muss
+  // Ansicht umschalten (Konstellation / Verlaufsband / Befunde / Gliederung). Zurück auf den Graph muss
   // neu gezeichnet + eingepasst werden (Canvas war ausgeblendet → 0-Grösse).
   setMotivView(mode) {
-    const next = (mode === 'band' || mode === 'checks') ? mode : 'graph';
+    const next = ['band', 'checks', 'outline'].includes(mode) ? mode : 'graph';
     if (this.motivView === next) return;
     this.motivView = next;
     // Zell-Detail gehört zum Band; es beim Verlassen offen zu lassen, hiesse beim
@@ -27,11 +28,14 @@ export const bandMethods = {
   // Kapitel in Lesereihenfolge (depth-first) aus dem Sidebar-Tree — nur echte
   // Kapitel (keine Solo-Seiten-Pseudo-Kapitel; occChapters kennt nur echte
   // chapter_ids, Top-Level-Seiten fallen server-seitig raus).
+  // `name` ist das Auswertungs-Label mit Kapitelnummer (app-ui.js#_kapitelLabel),
+  // `num` die Nummer allein — sie steht im schmalen Spaltenkopf, der Name im Tooltip.
   bandChapters() {
-    return this._memo('bandChapters', [this.$store.nav.tree], () =>
+    const root = globalThis.window?.__app;
+    return this._memo('bandChapters', [this.$store.nav.tree, root?._chapterLabelMap], () =>
       (this.$store.nav.tree || [])
         .filter(t => t.type === 'chapter' && !t.solo)
-        .map(t => ({ id: t.id, name: t.name, depth: t.depth || 1 })));
+        .map(t => ({ id: t.id, name: root?._kapitelLabel?.(t.id) || t.name, num: root?._kapitelNummer?.(t.id) || '', depth: t.depth || 1 })));
   },
 
   // Motive fürs Band: nur solche mit ≥1 Fundstelle (all-leere Zeilen wären Rauschen;
@@ -69,12 +73,72 @@ export const bandMethods = {
     return this._bandIndex().get(motifId)?.get(chapterId) || 0;
   },
 
-  // Grösste Zellen-Zahl über alle sichtbaren Zeilen — Normierungs-Basis der Intensität.
+  // ── Spalten: Hauptkapitel, aufklappbar ─────────────────────────────────────
+  // Spalten sind die obersten Kapitel; ein zugeklapptes Kapitel zählt seinen
+  // GANZEN Teilbaum (wie die Präsenz-Matrix der Buchübersicht — dieselben Daten,
+  // dieselben Zahlen). Aufgeklappt zeigt es eine Spalte für seinen eigenen Text
+  // und daneben seine Unterkapitel (die ihrerseits aufklappbar sind).
+  // Spalte = { key, id, name, num, depth, ids[], collapsible, expanded }; `key` trennt
+  // die Teilbaum-Summe (`<id>+`) von der eigenen Spalte (`<id>`).
+  bandColumns() {
+    return this._memo('bandColumns', [this.$store.nav.tree, this.bandExpanded, globalThis.window?.__app?._chapterLabelMap],
+      () => this._computeBandColumns(this.bandChapters(), this.$store.nav.tree || [], this.bandExpanded));
+  },
+
+  _computeBandColumns(chapters, tree, expanded) {
+    const known = new Set(chapters.map(c => c.id));
+    const parentOf = new Map();
+    for (const t of tree) if (t.type === 'chapter' && !t.solo) parentOf.set(t.id, t.parent_id ?? null);
+    const kids = new Map();
+    const roots = [];
+    for (const c of chapters) {
+      const p = parentOf.get(c.id);
+      if (p != null && known.has(p)) {
+        if (!kids.has(p)) kids.set(p, []);
+        kids.get(p).push(c);
+      } else roots.push(c);
+    }
+    const subtree = (c) => [c.id, ...(kids.get(c.id) || []).flatMap(subtree)];
+    const out = [];
+    const emit = (c) => {
+      const children = kids.get(c.id) || [];
+      if (!children.length) {
+        out.push({ key: String(c.id), id: c.id, name: c.name, num: c.num, depth: c.depth, ids: [c.id], collapsible: false, expanded: false });
+      } else if (!expanded[c.id]) {
+        out.push({ key: c.id + '+', id: c.id, name: c.name, num: c.num, depth: c.depth, ids: subtree(c), collapsible: true, expanded: false });
+      } else {
+        out.push({ key: String(c.id), id: c.id, name: c.name, num: c.num, depth: c.depth, ids: [c.id], collapsible: true, expanded: true });
+        children.forEach(emit);
+      }
+    };
+    roots.forEach(emit);
+    return out;
+  },
+
+  toggleBandColumn(col) {
+    if (!col?.collapsible) return;
+    this.bandExpanded = { ...this.bandExpanded, [col.id]: !col.expanded };
+    // Die Spalte des offenen Details gibt es danach evtl. nicht mehr.
+    this.activeBandDetailKey = null;
+  },
+
+  // Fundstellen eines Motivs in einer Spalte (Summe über deren Kapitel).
+  bandColCount(motifId, col) {
+    const byCh = this._bandIndex().get(motifId);
+    if (!byCh || !col) return 0;
+    let n = 0;
+    for (const id of col.ids) n += byCh.get(id) || 0;
+    return n;
+  },
+
+  // Grösste Zellen-Zahl über die SICHTBAREN Spalten — Normierungs-Basis der
+  // Intensität (eine Teilbaum-Summe ist grösser als jede Einzelspalte).
   bandMax() {
-    return this._memo('bandMax', [this.motifs], () => {
+    return this._memo('bandMax', [this.motifs, this.bandColumns()], () => {
       let max = 0;
-      for (const byCh of this._bandIndex().values()) {
-        for (const n of byCh.values()) if (n > max) max = n;
+      const cols = this.bandColumns();
+      for (const m of this.motifs) {
+        for (const col of cols) { const n = this.bandColCount(m.id, col); if (n > max) max = n; }
       }
       return max;
     });
@@ -115,8 +179,16 @@ export const bandMethods = {
   // Rowhead-Klick: Motiv wählen und in die Konstellation wechseln (Detail-Panel +
   // Knoten-Highlight leben dort). Das Band ist die Übersicht, der Graph das Detail.
   bandSelectMotif(motifId) {
-    this.selectMotif(motifId);
-    this.setMotivView('graph');
+    return this._selectMotifInGraph(motifId);
+  },
+
+  // Motiv wählen und in die Konstellation wechseln — aber nur, wenn die Auswahl
+  // gelang: schlägt der Commit offener Edits fehl, bleibt die alte Auswahl stehen,
+  // und ein Ansichtswechsel zeigte das falsche Motiv im Panel. Geteilt von Band,
+  // Befunden und KI-Urteil.
+  async _selectMotifInGraph(motifId) {
+    await this.selectMotif(motifId);
+    if (this.selectedMotifId === motifId) this.setMotivView('graph');
   },
 
   // Farb-Swatch der Motiv-Zeile (Thema-Farbe, deckungsgleich mit dem Graph).
@@ -136,15 +208,15 @@ export const bandMethods = {
   // Eine leere Zelle hat nichts aufzulösen und darf weder Klick-Cursor noch
   // Tab-Stopp anbieten (SSoT für :class-Bindung UND Handler, damit die Optik
   // nicht mehr verspricht, als der Klick einlöst).
-  bandCellClickable(motifId, chapterId) {
-    return this.bandCount(motifId, chapterId) > 0;
+  bandCellClickable(motifId, col) {
+    return this.bandColCount(motifId, col) > 0;
   },
 
-  bandDetailKey(motifId, chapterId) { return `${motifId}:${chapterId}`; },
+  bandDetailKey(motifId, col) { return `${motifId}:${col.key}`; },
 
-  async toggleBandDetail(motifId, chapterId) {
-    if (!this.bandCellClickable(motifId, chapterId)) return;
-    const key = this.bandDetailKey(motifId, chapterId);
+  async toggleBandDetail(motifId, col) {
+    if (!this.bandCellClickable(motifId, col)) return;
+    const key = this.bandDetailKey(motifId, col);
     if (this.activeBandDetailKey === key) { this.activeBandDetailKey = null; return; }
     this.activeBandDetailKey = key;
     await this._ensureBandOccurrences(motifId);
@@ -155,9 +227,14 @@ export const bandMethods = {
   // Der Cache lebt nur bis zum nächsten loadBoard() (Scan-Lauf → frische Zahlen).
   async _ensureBandOccurrences(motifId) {
     if (this.bandOccCache[motifId]) return;
+    // Generation + Buch merken: ein loadBoard (Scan-Lauf) oder Buchwechsel während
+    // der Lesung macht diese Antwort zur alten Wahrheit — nicht in den frischen Cache.
+    const gen = this._bandOccGen;
+    const bookId = this.$store.nav.selectedBookId;
     this.bandDetailLoading = true;
     try {
       const data = await fetchJson(`/motifs/${motifId}/occurrences`);
+      if (gen !== this._bandOccGen || !isSelectedBook(bookId)) return;
       // NEUES Objekt statt Mutation: bandActiveDetail() memoisiert über die
       // Cache-Referenz — eine In-Place-Ergänzung verschiebt sie nicht und das
       // Detail bliebe nach dem Laden leer.
@@ -177,28 +254,31 @@ export const bandMethods = {
   // beide x-show), und jeder Aufruf filtert sonst die Fundstellenliste erneut.
   bandActiveDetail() {
     return this._memo('bandActiveDetail',
-      [this.activeBandDetailKey, this.bandOccCache, this.motifs, this.$store.nav.tree],
+      [this.activeBandDetailKey, this.bandOccCache, this.motifs, this.bandColumns()],
       () => this._computeBandActiveDetail());
   },
 
+  // Gefiltert auf die Kapitel DER SPALTE — bei einer zugeklappten Teilbaum-Spalte
+  // also auf alle ihre Unterkapitel, genau wie die Zellzahl.
   _computeBandActiveDetail() {
     const key = this.activeBandDetailKey;
     if (!key) return null;
-    const [motifIdStr, chapterIdStr] = key.split(':');
-    const motifId = parseInt(motifIdStr, 10);
-    const chapterId = parseInt(chapterIdStr, 10);
+    const sep = key.indexOf(':');
+    const motifId = parseInt(key.slice(0, sep), 10);
+    const colKey = key.slice(sep + 1);
     const motif = this.motifById(motifId);
-    const chapter = this.bandChapters().find(c => c.id === chapterId);
-    if (!motif || !chapter) return null;
+    const col = this.bandColumns().find(c => c.key === colKey);
+    if (!motif || !col) return null;
+    const ids = new Set(col.ids);
     const loaded = this.bandOccCache[motifId];
     return {
       key,
       motifId,
-      chapterId,
+      chapterId: col.id,
       motifName: motif.name,
-      chapterName: chapter.name,
-      count: this.bandCount(motifId, chapterId),
-      occurrences: loaded ? loaded.filter(o => o.chapter_id === chapterId) : [],
+      chapterName: col.name,
+      count: this.bandColCount(motifId, col),
+      occurrences: loaded ? loaded.filter(o => ids.has(o.chapter_id)) : [],
     };
   },
 };

@@ -1,0 +1,28 @@
+<!-- Motiv-Werkstatt: Motiv-Liste EINER Baum-Gruppe (Fragment-Include aus
+     motiv-tree.html, im Scope einer Gruppe `g`). Eigener Sortable-Container je
+     Gruppe; `data-group` = Thema-ID bzw. leer für «Ohne Thema» (dnd.js liest ihn
+     als Drop-Ziel). Zeile: Griff, Name (öffnet den Editor), Geist-Marker,
+     Mini-Verlauf über die Kapitel, Fundstellen-Zahl. -->
+<div class="motiv-tree-motifs" :data-group="g.theme ? g.theme.id : ''" x-init="_initMotifSortable($el)">
+  <template x-for="m in g.motifs" :key="m.id">
+    <div class="motiv-tree-motif" :data-motif-id="m.id"
+         @mouseenter="hoverTreeMotif(m.id)" @mouseleave="hoverTreeMotif(null)">
+      <span class="drag-grip motiv-motif-grip" role="img" x-show="motivTreeDraggable()"
+            :data-tip="$app.t('motiv.motif.dragHint')" :aria-label="$app.t('motiv.motif.dragHint')">
+        <svg class="icon" aria-hidden="true"><use href="/icons.svg#grip-vertical"/></svg>
+      </span>
+      <button type="button" class="motiv-tree-name" :class="{ 'motiv-tree-name--ghost': isGhost(m) }"
+              @click="selectMotif(m.id)" @focus="hoverTreeMotif(m.id)" @blur="hoverTreeMotif(null)"
+              :data-tip="isGhost(m) ? $app.t('motiv.tip.ghost') : null">
+        <span x-text="m.name"></span>
+      </button>
+      <span class="motiv-spark" aria-hidden="true">
+        <template x-for="c in motifSpark(m)" :key="c.key">
+          <span class="motiv-spark-cell" :class="{ 'motiv-spark-cell--on': c.n > 0 }" :style="sparkCellVars(c)"></span>
+        </template>
+      </span>
+      <span class="motiv-tree-count" x-text="m.occurrenceCount || 0"
+            :data-tip="$app.tn('motiv.tip.occurrences', m.occurrenceCount || 0)"></span>
+    </div>
+  </template>
+</div>

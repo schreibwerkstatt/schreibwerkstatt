@@ -88,7 +88,10 @@ test('quellen: anlegen, filtern, bearbeiten, archivieren, loeschen, Fundstellen 
   const testRow = page.locator('.sources-table tbody tr').filter({ hasText: 'Testquelle' });
   await testRow.getByRole('button', { name: 'Archivieren', exact: true }).click();
   await page.waitForFunction(() => document.querySelectorAll('.sources-table tbody tr').length === 2);
-  await page.check('#sources-card .filter-toggle input');
+  // Der Archiv-Schalter sitzt im Ansichts-Menue der Filterleiste (view-menu.html).
+  await page.locator('#sources-card .view-menu-toggle').click();
+  await page.locator('#sources-card .view-menu-panel [role="menuitemcheckbox"]', { hasText: 'Archivierte zeigen' }).click();
+  await page.keyboard.press('Escape');
   await page.waitForFunction(() => document.querySelectorAll('.sources-table tbody tr').length === 3);
   // x-show → alle drei Badges liegen im DOM, nur eines ist sichtbar.
   await expect(page.locator('.sources-archived-badge:visible')).toHaveCount(1);

@@ -118,6 +118,7 @@ export const bookscopeMethods = {
     this.$store.jobs.alleAktualisierenPassMode = null;
     this.$store.jobs.alleAktualisierenScope = null;
     this.$store.jobs.alleAktualisierenLastRun = null;
+    this.$store.jobs.alleAktualisierenLastRunAt = null;
     this.showKomplettStatus = false;
     this.resetDailyProgress();
     if (this.$store.nav.selectedBookId) this.loadDailyProgress(this.$store.nav.selectedBookId);
@@ -333,7 +334,7 @@ export const bookscopeMethods = {
       // Last-Run-Stempel gehört zum Buch, nicht zur View — Buch bleibt bei
       // Home-Klick gewählt, also für das aktuelle Buch neu laden statt nullen.
       if (this.$store.nav.selectedBookId && typeof this.loadLastKomplettRun === 'function') this.loadLastKomplettRun(this.$store.nav.selectedBookId);
-      else this.$store.jobs.alleAktualisierenLastRun = null;
+      else { this.$store.jobs.alleAktualisierenLastRun = null; this.$store.jobs.alleAktualisierenLastRunAt = null; }
       this.$store.jobs.alleAktualisierenProgress = 0;
       this.$store.jobs.alleAktualisierenTokIn = 0;
       this.$store.jobs.alleAktualisierenTokOut = 0;

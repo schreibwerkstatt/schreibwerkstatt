@@ -146,7 +146,8 @@ export const presenceMethods = {
   _presenceContext() {
     const { roots, rootOf, rootOfName } = this._chapterRollup();
     return {
-      chapters: roots.map(c => ({ id: c.id, name: c.name })),
+      // Zeilen-Label mit Kapitelnummer (app-ui.js#_kapitelLabel).
+      chapters: roots.map(c => ({ id: c.id, name: window.__app?._kapitelLabel?.(c.id) || c.name })),
       resolveRoot: (chapterId, chapterName) => (chapterId != null
         ? rootOf(chapterId)
         : (chapterName ? rootOfName(chapterName) : null)),

@@ -8,9 +8,8 @@ const express = require('express');
 const motifsDb = require('../db/motifs');
 const { getDraftFigure } = require('../db/draft-figures');
 const contentStore = require('../lib/content-store');
-const { computeMotifFindings } = require('../lib/motif-consistency');
+const { computeMotifFindings, chapterStructure } = require('../lib/motif-consistency');
 const embed = require('../lib/embed');
-const appSettings = require('../lib/app-settings');
 const semanticChunks = require('../db/semantic-chunks');
 const { toIntId } = require('../lib/validate');
 const { guardBook, sessionEmail } = require('../lib/acl');
@@ -28,14 +27,17 @@ const MAX_TERMS = 40;
 // Entity per :id laden + Owner (user_email) + Buch-ACL prüfen. SSoT für :id-Handler.
 // Der Login-Check steht VOR dem Guard, weil der Besitz über die E-Mail geprüft
 // wird — ohne ihn erschiene „nicht angemeldet" als 404. Gleicher Code wie der Guard.
-function _loadOwned(req, res, getFn, notFoundCode) {
+// minRole: `editor` für Mutationen; Lesungen mit der Rolle, die auch die Liste bzw.
+// den Job-Start erlaubt — sonst sieht ein Lektor seinen Lauf in der Historie und
+// bekommt beim Öffnen 403, ein Viewer den Graph, aber nicht die Fundstellen dahinter.
+function _loadOwned(req, res, getFn, notFoundCode, minRole = 'editor') {
   const userEmail = sessionEmail(req);
   if (!userEmail) { res.status(401).json({ error_code: 'NOT_LOGGED_IN' }); return null; }
   const id = toIntId(req.params.id);
   if (!id) { res.status(400).json({ error_code: 'INVALID_ID' }); return null; }
   const row = getFn(id);
   if (!row || row.user_email !== userEmail) { res.status(404).json({ error_code: notFoundCode }); return null; }
-  if (!guardBook(req, res, row.book_id, 'editor')) return null;
+  if (!guardBook(req, res, row.book_id, minRole)) return null;
   return row;
 }
 
@@ -48,8 +50,13 @@ function _optStr(v, max) {
   const s = String(v).trim();
   return s ? s.slice(0, max) : null;
 }
+// Farbe = Palette-Schlüssel (`blue`, `wine` …), aufgelöst gegen `--palette-*`-Tokens.
+// Alles andere wird verworfen statt gespeichert.
+const _COLOR_KEY = /^[a-z][a-z0-9-]{0,31}$/;
 function _colorOrNull(v) {
-  return v == null ? null : String(v).slice(0, 32);
+  if (v == null) return null;
+  const s = String(v).trim();
+  return _COLOR_KEY.test(s) ? s : null;
 }
 function _terms(v) {
   if (!Array.isArray(v)) return null;
@@ -73,9 +80,7 @@ function _embedIndexInfo(bookId, userEmail) {
 
 // Cosinus-Floor für die Ist-Fundstellen (App-Setting; 0 = alle zeigen). Blendet
 // unwahrscheinliche semantische Treffer aus Liste + Ist-Dichte; wörtliche bleiben.
-function _motifFloor() {
-  return Number(appSettings.get('motif.scan.min_score')) || 0;
-}
+const { motifScoreFloor: _motifFloor } = require('../lib/motif-floor');
 
 // ── Graph-Payload (Themen + Motive mit Soll-Links & Ist-Count + Beziehungen) ──
 
@@ -101,19 +106,10 @@ router.get('/', (req, res) => {
 // (literales Segment, kein Konflikt). Ab `viewer` — ein Lektor darf die Befunde
 // sehen, ohne am Katalog schreiben zu dürfen.
 //
-// Kapitel-Reihenfolge über die Content-Store-Facade (kein Direkt-SQL auf chapters);
-// ausgeschlossene Kapitel bleiben drin — sie tragen trotzdem Fundstellen, und der
-// Buchbogen ist eine Positions-, keine Auswahlfrage.
-function _chapterOrder(tree) {
-  const out = [];
-  (function walk(chapters) {
-    for (const c of chapters || []) {
-      out.push(c.id);
-      walk(c.subchapters);
-    }
-  })(tree?.chapters);
-  return out;
-}
+// Kapitel-Struktur über die Content-Store-Facade (kein Direkt-SQL auf chapters):
+// der GANZE Baum inkl. ausgeschlossener Kapitel — sie tragen trotzdem Fundstellen,
+// und der Buchbogen ist eine Positions-, keine Auswahlfrage. Dieselbe Struktur
+// liest der KI-Job (lib/motif-consistency.js#chapterStructure).
 
 // Rueckrichtung Motiv → Figuren-Werkstatt: welche Motive haengen an DIESER
 // Werkstatt-Figur? Pendant zu GET /plot/figure-usage, speist das Motiv-Badge im
@@ -142,14 +138,19 @@ router.get('/figure-usage', (req, res) => {
   // Katalog-Eintrag haengen — sonst haengt dieselbe Figur je nach Herkunft an
   // zwei verschiedenen Motiv-Mengen.
   const { motifs } = motifsDb.figureMotifUsage(bookId, userEmail, {
-    draftFigureId: draft.id, sourceFigureId: draft.source_figure_id,
+    draftFigureId: draft.id, sourceFigureId: draft.source_figure_id, minScore: _motifFloor(),
   });
+  // `occurrenceCount` geht nur mit, wenn gescannt wurde — „0 Fundstellen" auf einem
+  // nie erhobenen Index wäre eine Falschaussage (ungescannt ist ungeprüft).
+  const scanned = motifsDb.hasOccurrences(bookId, userEmail);
+  const out = scanned ? motifs : motifs.map(({ occurrenceCount: _drop, ...m }) => m);
   res.json({
     motifCount: motifs.length,
     // „geplant" ist nicht „traegt": ein Motiv ohne Ist-Belege sagt etwas anderes
-    // aus als eines mit. Das Badge nennt darum beide Zahlen.
-    belegteCount: motifs.filter(m => (m.occurrenceCount || 0) > 0).length,
-    motifs,
+    // aus als eines mit. Das Badge nennt darum beide Zahlen — ungescannt null.
+    belegteCount: scanned ? motifs.filter(m => (m.occurrenceCount || 0) > 0).length : null,
+    scanned,
+    motifs: out,
   });
 });
 
@@ -164,9 +165,9 @@ router.get('/consistency', async (req, res) => {
     // statt jede Kante als „Motiv kommt nicht vor" zu markieren (ungescannt ist
     // ungeprüft, nicht abwesend) — das Frontend weist den Zustand aus.
     const scanned = motifsDb.hasOccurrences(bookId, userEmail);
-    const chapterOrder = _chapterOrder(await contentStore.bookTree(bookId, req));
+    const structure = chapterStructure(await contentStore.bookTree(bookId, req));
     const befunde = computeMotifFindings({
-      motifs: graph.motifs, relations: graph.relations, chapterOrder, scanned,
+      motifs: graph.motifs, relations: graph.relations, structure, scanned,
     });
     res.json({ befunde, scanned, motifs: graph.motifs.length, relations: graph.relations.length });
   } catch (e) {
@@ -267,7 +268,24 @@ router.post('/relations', jsonBody, (req, res) => {
   }
   if (!guardBook(req, res, from.book_id, 'editor')) return;
   const id = motifsDb.createRelation(fromId, toId, typ);
+  // Die Kante gibt es schon (UNIQUE from/to/typ) — melden statt `id: null` als Erfolg.
+  if (!id) return res.status(409).json({ error_code: 'RELATION_EXISTS' });
   res.json({ id, from_motif_id: fromId, to_motif_id: toId, typ });
+});
+
+// Typ einer Beziehung ändern (statt löschen + neu anlegen). 409, wenn das Paar
+// den Zieltyp schon trägt.
+router.patch('/relations/:id', jsonBody, (req, res) => {
+  const userEmail = sessionEmail(req);
+  const id = toIntId(req.params.id);
+  if (!id) return res.status(400).json({ error_code: 'INVALID_ID' });
+  const typ = _str(req.body?.typ, MAX_TYP);
+  if (!typ) return res.status(400).json({ error_code: 'TYP_REQ' });
+  const owner = motifsDb.getRelationOwner(id);
+  if (!owner || owner.user_email !== userEmail) return res.status(404).json({ error_code: 'RELATION_NOT_FOUND' });
+  if (!guardBook(req, res, owner.book_id, 'editor')) return;
+  if (!motifsDb.updateRelationTyp(id, typ)) return res.status(409).json({ error_code: 'RELATION_EXISTS' });
+  res.json({ id, typ });
 });
 
 router.delete('/relations/:id', (req, res) => {
@@ -296,7 +314,7 @@ router.get('/brainstorm-runs', (req, res) => {
 });
 
 router.get('/brainstorm-runs/:id', (req, res) => {
-  const run = _loadOwned(req, res, motifsDb.getBrainstormRun, 'RUN_NOT_FOUND');
+  const run = _loadOwned(req, res, motifsDb.getBrainstormRun, 'RUN_NOT_FOUND', 'viewer');
   if (!run) return;
   res.json(run);
 });
@@ -326,7 +344,7 @@ router.get('/consistency-runs', (req, res) => {
 });
 
 router.get('/consistency-runs/:id', (req, res) => {
-  const run = _loadOwned(req, res, motifsDb.getConsistencyRun, 'RUN_NOT_FOUND');
+  const run = _loadOwned(req, res, motifsDb.getConsistencyRun, 'RUN_NOT_FOUND', 'viewer');
   if (!run) return;
   res.json(run);
 });
@@ -379,33 +397,28 @@ router.put('/order', jsonBody, (req, res) => {
 });
 
 // Soll-Verknüpfungen setzen (Full-Replace aller fünf Brücken). figures als fig_id,
-// draftFigures als INTEGER draft_figures.id (Werkstatt-Figuren).
+// draftFigures als INTEGER draft_figures.id (Werkstatt-Figuren). Erst alles
+// validieren, dann in EINER Transaktion schreiben — kein halber Stand, wenn das
+// Motiv zwischendurch gelöscht wird.
 router.put('/:id/links', jsonBody, (req, res) => {
   const motif = _loadOwned(req, res, motifsDb.getMotif, 'MOTIF_NOT_FOUND');
   if (!motif) return;
   const b = motif.book_id;
   const userEmail = motif.user_email;
-  if (req.body?.figures !== undefined) {
-    motifsDb.setMotifFigures(motif.id, motifsDb.resolveFigureIds(b, userEmail, req.body.figures));
-  }
-  if (req.body?.draftFigures !== undefined) {
-    motifsDb.setMotifDraftFigures(motif.id, motifsDb.validDraftFigureIds(b, userEmail, req.body.draftFigures));
-  }
-  if (req.body?.beats !== undefined) {
-    motifsDb.setMotifBeats(motif.id, motifsDb.validBeatIds(b, userEmail, req.body.beats));
-  }
-  if (req.body?.chapters !== undefined) {
-    motifsDb.setMotifChapters(motif.id, motifsDb.validChapterIds(b, req.body.chapters));
-  }
-  if (req.body?.pages !== undefined) {
-    motifsDb.setMotifPages(motif.id, motifsDb.validPageIds(b, req.body.pages));
-  }
+  const body = req.body || {};
+  const sets = {};
+  if (body.figures !== undefined) sets.figures = motifsDb.resolveFigureIds(b, userEmail, body.figures);
+  if (body.draftFigures !== undefined) sets.draftFigures = motifsDb.validDraftFigureIds(b, userEmail, body.draftFigures);
+  if (body.beats !== undefined) sets.beats = motifsDb.validBeatIds(b, userEmail, body.beats);
+  if (body.chapters !== undefined) sets.chapters = motifsDb.validChapterIds(b, body.chapters);
+  if (body.pages !== undefined) sets.pages = motifsDb.validPageIds(b, body.pages);
+  if (!motifsDb.setMotifLinks(motif.id, sets)) return res.status(404).json({ error_code: 'MOTIF_NOT_FOUND' });
   res.json({ ok: true });
 });
 
 // Fundstellen-Detail eines Motivs (Ist-Index, Seiten-/Szenen-Kontext via JOIN).
 router.get('/:id/occurrences', (req, res) => {
-  const motif = _loadOwned(req, res, motifsDb.getMotif, 'MOTIF_NOT_FOUND');
+  const motif = _loadOwned(req, res, motifsDb.getMotif, 'MOTIF_NOT_FOUND', 'viewer');
   if (!motif) return;
   res.json({ occurrences: motifsDb.listOccurrences(motif.id, _motifFloor()) });
 });

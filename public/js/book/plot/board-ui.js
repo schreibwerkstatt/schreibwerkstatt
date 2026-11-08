@@ -46,13 +46,26 @@ export const boardUiMethods = {
     setUserPref(Alpine.store('session').currentUser?.email, DENSITY_PREF_KEY, this.plotDensity);
   },
 
-  // Wie viele Schalter des Ansichts-Menues (plot-view-menu.html) von der
-  // Grundansicht abweichen — die Zahl am Knopf. Gezaehlt wird nur, was gerade
-  // angeboten wird: ein Archiv-Haken ohne archivierte Akte wirkt nicht.
-  plotViewChanges() {
-    return (this.plotShowArchived && this.archivedActCount() > 0 ? 1 : 0)
-      + (this.plotHideImBuch ? 1 : 0)
-      + (this.plotDensity === 'compact' ? 1 : 0);
+  // Ansichts-Menü der Filterleiste (view-menu.html, Vertrag in view-menu.js):
+  // Archiv nur, solange es archivierte Akte gibt — sonst wirkt der Haken nicht;
+  // die Beat-Schalter nur, solange es Beats gibt.
+  viewMenuSpec() {
+    const t = (k, p) => window.__app.t(k, p);
+    const items = [];
+    if (this.archivedActCount() > 0) {
+      items.push({ kind: 'toggle', key: 'archived', on: this.plotShowArchived,
+        label: t('plot.archive.show', { n: this.archivedActCount() }),
+        toggle: () => { this.plotShowArchived = !this.plotShowArchived; } });
+    }
+    if (this.beats.length > 0) {
+      items.push({ kind: 'toggle', key: 'hideImBuch', on: this.plotHideImBuch,
+        label: t('plot.filter.hideImBuch'),
+        toggle: () => { this.plotHideImBuch = !this.plotHideImBuch; } });
+      items.push({ kind: 'toggle', key: 'density', on: this.plotDensity === 'compact',
+        label: t('plot.density.compact'),
+        toggle: () => this.setPlotDensity(this.plotDensity !== 'compact') });
+    }
+    return { tip: t('plot.view.tip'), items };
   },
 
   // ── Akte einklappen ──────────────────────────────────────────────────────

@@ -2,10 +2,10 @@
 // `this` = die ideenBoardCard-Instanz.
 
 import { fetchJson } from '../../utils.js';
-import { patchIdee, deleteIdee as removeIdee, overlayPendingIdeen } from '../../repo/ideen-queue.js';
+import { patchIdee, patchedIdeeRow, deleteIdee as removeIdee, overlayPendingIdeen } from '../../repo/ideen-queue.js';
 import { loadSortable } from '../../lazy-libs.js';
 import {
-  patchSortableOnce, revertSortable, markDragIgnore, unmarkDragIgnore, BASE_SORTABLE_OPTS,
+  patchSortableOnce, revertSortable, boardSortableOpts, endBoardDrag,
 } from '../../sortable-dnd.js';
 import {
   IDEE_STATUSES, IDEE_OPTIONAL_STATUSES, ideeStatus, isOpenIdee, LANE_BOOK,
@@ -45,7 +45,6 @@ export const ideenBoardActions = {
   // (book_settings.ideen_stages, buchweit). Der Server normalisiert und
   // antwortet mit dem gespeicherten Stand — der wird uebernommen, nicht der
   // eigene Wunsch.
-  optionalStages() { return IDEE_OPTIONAL_STATUSES; },
   async toggleStage(s) {
     const app = window.__app;
     const bookId = Alpine.store('nav').selectedBookId;
@@ -95,20 +94,6 @@ export const ideenBoardActions = {
       }));
   },
   lanes() { return this.board().lanes; },
-  // Spaltenbreiten: eine Stufe ohne sichtbare Karte (leer, oder ausgeblendet wie
-  // per Default «erledigt») wird schmal, damit die belegte nicht auf ein Viertel
-  // der Breite gequetscht wird — bei 100 offenen Ideen brach sonst jede auf vier
-  // bis fuenf Zeilen um. Die Spalte selbst bleibt (Zaehler, Drop-Ziel). Die
-  // Groessen stehen im CSS (`--ideen-track`/`--ideen-track-slim`).
-  columnTracks() {
-    const cols = this.statuses();
-    const shown = new Set();
-    for (const row of this.lanes()) {
-      for (const s of cols) if (row.columns[s]?.length || row.folded?.[s]) shown.add(s);
-    }
-    if (!shown.size) return null;
-    return cols.map(s => (shown.has(s) ? 'var(--ideen-track)' : 'var(--ideen-track-slim)')).join(' ');
-  },
   hiddenCount() { return this.board().hiddenByFilter; },
   visibleCount() { return this.board().visible; },
   totalCount() { return this.board().total; },
@@ -293,16 +278,22 @@ export const ideenBoardActions = {
     await this._patchIdee(idee, { status });
   },
 
+  // Optimistisch: die Idee steht sofort am Ziel, bei Fehler wieder am alten
+  // Stand. Pflicht fuer den Drop (sortable-dnd.js#revertSortable): sonst
+  // springt die Karte bis zur Antwort in ihre Quellzelle zurueck.
   async _patchIdee(idee, body) {
     const app = window.__app;
+    const prev = (this.ideen || []).find(i => i.id === idee.id) || idee;
+    this._replaceIdee(patchedIdeeRow(prev, body));
     this.busy = true;
     try {
-      const row = await patchIdee(idee, body);
+      const row = await patchIdee(prev, body);
       this._replaceIdee(row);
       this.errorMessage = '';
       this._publishCounts();
       return row;
     } catch {
+      this._replaceIdee(prev);
       this.errorMessage = app.t('ideenBoard.error.save');
       return null;
     } finally {
@@ -405,7 +396,7 @@ export const ideenBoardActions = {
   _destroyBoardSortables() {
     for (const s of (this._boardSortables || [])) { try { s.destroy(); } catch { /* schon weg */ } }
     this._boardSortables = [];
-    document.body.classList.remove('ideen-dnd-active');
+    endBoardDrag();
     this._stopTreeDrop();
   },
 
@@ -417,17 +408,12 @@ export const ideenBoardActions = {
     const cells = this.$root?.querySelectorAll('[data-idee-status-cell]') || [];
     for (const el of cells) {
       const laneKey = el.dataset.ideeLane || '';
-      this._boardSortables.push(new Sortable(el, {
-        ...BASE_SORTABLE_OPTS,
-        // Flache Zellen, keine verschachtelten Listen: der invertierte Swap-
-        // Bereich des Kerns liesse die obere von zwei Karten nicht unter die
-        // untere ziehen — bei zwei Karten der einzige moegliche Zug.
-        invertSwap: false,
+      // Karten-Board-Optionen + Drag-Zustand: sortable-dnd.js#boardSortableOpts.
+      this._boardSortables.push(new Sortable(el, boardSortableOpts(Sortable, {
         // Eine leere Zelle faengt nur, wenn der Zeiger IN ihr steht: seit
         // offene Ideen quer zur Bahn ziehen, griffe ein Saum die leere Zelle
         // der Bahn darueber, sobald man am oberen Zellrand umsortiert.
         emptyInsertThreshold: 0,
-        scroll: true,
         draggable: '.idee-board-card',
         handle: '.idee-board-grip',
         sort: this.isColumnManual(el.dataset.ideeStatusCell || ''),
@@ -444,27 +430,16 @@ export const ideenBoardActions = {
             return fromLane === laneKey || this._canDropMove(fromLane, laneKey, toStatus, dragEl);
           },
         },
-        chosenClass: 'idee-board-card--chosen',
-        ghostClass: 'idee-board-card--ghost',
-        dragClass: 'idee-board-card--dragging',
-        onChoose: markDragIgnore,
-        onUnchoose: unmarkDragIgnore,
         onStart: (evt) => {
-          document.body.classList.add('ideen-dnd-active');
           const dragged = (this.ideen || []).find(i => i.id === parseInt(evt.item?.dataset?.ideeCardId, 10));
           if (this.canMove(dragged)) this._trackTreeDrop();
-          const fsEl = document.fullscreenElement;
-          const ghost = Sortable.ghost;
-          if (fsEl && ghost && !fsEl.contains(ghost)) fsEl.appendChild(ghost);
         },
         onEnd: (evt) => {
-          document.body.classList.remove('ideen-dnd-active');
           const treeLane = this._treeDropLane;
           this._stopTreeDrop();
-          unmarkDragIgnore(evt);
           this.onBoardSortEnd(evt, treeLane);
         },
-      }));
+      })));
     }
   },
 

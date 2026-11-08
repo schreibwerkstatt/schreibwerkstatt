@@ -13,8 +13,10 @@
     gap: var(--space-md);
     align-items: flex-start;
     overflow-x: auto;
+    /* Bewusst ohne scroll-snap: der Snap korrigierte die Position nach dem
+       Trackpad-Scroll sichtbar nach (Springen auf den Spaltenanfang) und liess
+       das H-Scrollen ruckeln. Das Strang-Grid (swimlane.css) snappt ebenfalls nicht. */
     padding: var(--space-sm) var(--space-2xs) var(--space-lg);
-    scroll-snap-type: x proximity;
   }
 
   /* --col-accent: pro-Akt-Akzent (Inline via :style aus actAccent()); Default
@@ -30,7 +32,6 @@
     border: 1px solid var(--color-border);
     border-radius: var(--radius-md);
     padding: var(--space-sm);
-    scroll-snap-align: start;
   }
 
   /* ── Spalten-Kopf (sticky beim Seiten-Scroll) ──────────────────────────── */
@@ -111,11 +112,13 @@
     flex-direction: column;
     gap: var(--space-sm);
     min-height: 28px;
+    /* Drop-Zone + Platzhalter im Drag (components/board-dnd.css). */
+    --board-dnd-accent: var(--col-accent, var(--card-accent));
   }
   /* Ruhezustand: Drop-Zone auf Inhaltshöhe — ein Akt mit einem Beat zeigt
-     keine leere Fläche darunter. Während eines Drags (body.plot-dnd-active,
-     dnd.js) bekommt jede Spalte einen grosszügigen Drop-Floor, damit auch
-     kurze/leere Spalten treffbar bleiben (Pendant zur Swimlane-Zelle). */
+     keine leere Fläche darunter. Während eines Drags bekommt jede Zelle den
+     Drop-Floor aus components/board-dnd.css, damit auch kurze/leere Spalten
+     treffbar bleiben. */
   .plot-column-body .plot-beats { flex: 1 1 auto; }
   /* Leerer Akt (nur der <template>-Anker): Drop-Zone + Gap kollabieren, sonst
      klafft ein Leerrechteck über «+ Beat». Drop-Ziel bleibt via
@@ -123,12 +126,12 @@
      Pendant zur leeren .plot-swim-cell (swimlane.css). */
   .plot-column-body:not(:has(.plot-beat)) { gap: var(--space-2xs); }
   .plot-column-body .plot-beats:not(:has(.plot-beat)) { min-height: 0; }
-  body.plot-dnd-active .plot-column-body .plot-beats {
-    min-height: max(120px, calc(var(--plot-drag-h, 72px) * 2));
-  }
 
   /* ── Beat-Karte ────────────────────────────────────────────────────────── */
   .plot-beat {
+    /* Rahmen des Drag-Klons (components/board-dnd.css) — der hängt im <body>
+       ohne Spalten-Kontext, darum das globale Plot-Token. */
+    --board-dnd-clone-accent: var(--card-accent-plot);
     background: var(--color-card-bg);
     border: 1px solid var(--color-border);
     border-left: 3px solid var(--color-muted);
@@ -157,38 +160,20 @@
      .plot-beat--editing; Cursor zurück auf default als Signal. */
   .plot-beat--editing { cursor: default; }
   .plot-beat--editing:hover { transform: none; box-shadow: none; }
+  /* Während des H-Scrolls (`.is-scrolling`, scroll-fade.js) gleiten die Karten
+     unter dem stehenden Cursor durch — ohne diese Regel hebt und senkt sich jede
+     kurz (Hover-Lift + Schatten + Deckkraft bei „Im Buch") und das Board flackert.
+     Bewusst nicht `pointer-events: none`: SortableJS' Autoscroll beim Ziehen
+     scrollt dasselbe Board und braucht die Karten als Drop-Ziel. */
+  .plot-board.is-scrolling .plot-beat:hover,
+  .plot-swimlane.is-scrolling .plot-beat:hover { transform: none; box-shadow: none; transition: none; }
+  .plot-board.is-scrolling .plot-beat--im_buch:hover,
+  .plot-swimlane.is-scrolling .plot-beat--im_buch:hover { opacity: 0.72; }
 
-  /* ── SortableJS-Drag-Zustände (eigene Klassen via baseOpts in plot/dnd.js) ──
-     Klare Landezone, damit der User vor dem Loslassen sieht, wo die Karte landet. */
-  /* Ghost: reservierter Slot an der Ziel-Position — gestrichelter Akzentrahmen +
-     getönter Hintergrund, Inhalt unsichtbar (der Drag-Klon ist die einzige
-     sichtbare Repräsentation). */
-  .plot-beat.plot-beat-ghost {
-    background: color-mix(in srgb, var(--col-accent, var(--card-accent)) 14%, transparent);
-    border: 1px dashed var(--col-accent, var(--card-accent));
-    border-left-width: 3px;
-    opacity: 1;
-  }
-  .plot-beat.plot-beat-ghost > * { visibility: hidden; }
-  /* Chosen: kurzer Pickup-Highlight bei mousedown vor Drag-Start. */
-  .plot-beat.plot-beat-chosen { background: var(--color-accent-bg); }
-  /* Drag-Klon (forceFallback klont in <body>): Schatten suggeriert „in der Hand".
-     Im <body> fehlt der Spalten-Kontext → kein --col-accent/--card-accent; darum
-     explizit auf den globalen Plot-Akzent zurückfallen, sonst bliebe der Rahmen
-     unsichtbar (var() ohne Wert → currentColor) und der Klon wirkt konturlos. */
-  .plot-beat.plot-beat-drag-active {
-    box-shadow: 0 12px 28px var(--color-shadow);
-    background: var(--color-card-bg);
-    border: 1px solid var(--card-accent, var(--card-accent-plot));
-    border-radius: var(--radius-none);
-    opacity: 0.95;
-    cursor: grabbing;
-    /* SortableJS positioniert den Fallback-Klon via inline transform:translate3d
-       pro Mousemove. Die geerbte `transition: transform` (für den Hover-Lift)
-       würde jede Positions-Aktualisierung animieren → der Klon lerpt der Maus
-       nur hinterher und bleibt scheinbar am Startplatz kleben. */
-    transition: none;
-  }
+  /* ── Drag ─────────────────────────────────────────────────────────────── */
+  /* Platzhalter, Klon, Pickup und Drop-Zone: components/board-dnd.css. Die
+     Farben setzen .plot-beats (Akt-Farbe der Zielzelle) und .plot-beat
+     (Klon im Plot-Akzent). */
 
   /* Kopfzeile der Beat-Karte: Griff + Titel + Status-Badges (Textstellen-Chip,
      Konflikt-Warnung, Drift, Zeitbefund). Die Schnellaktionen (Verwerfen/
@@ -473,10 +458,10 @@
     cursor: pointer;
   }
   .plot-add-beat-btn:hover { border-color: var(--card-accent); color: var(--color-text); }
-  /* Während eines Beat-Drags (body.plot-dnd-active, dnd.js) keine Pointer-Events auf
+  /* Während eines Beat-Drags (body.board-dnd-active, sortable-dnd.js) keine Pointer-Events auf
      den Add-Buttons: sonst zieht der Pointer über dem „+" dessen :hover-Akzent-Border
      und der gestrichelt umrandete Button liest sich fälschlich als Drop-Zone. */
-  body.plot-dnd-active .plot-add-beat-btn { pointer-events: none; }
+  body.board-dnd-active .plot-add-beat-btn { pointer-events: none; }
   .plot-add-beat-btn .icon { width: 14px; height: 14px; }
 
   /* ── Neuer Akt ─────────────────────────────────────────────────────────── */

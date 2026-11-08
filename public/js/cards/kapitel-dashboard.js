@@ -31,6 +31,7 @@ import { computeGrowth } from './kapitel-growth.js';
 import { computeKapitelStil } from './kapitel-stil.js';
 import { computeFortschritt } from './kapitel-fortschritt.js';
 import { compareText } from '../i18n.js';
+import { figurAnzeigeName } from '../book/figur-name.js';
 
 // Lesegeschwindigkeit fuer die Lesezeit-Angabe des Umfang-Tiles. Bewusst eine
 // runde, konservative Zahl fuer stilles Lesen belletristischer Prosa — die
@@ -137,7 +138,7 @@ export function computeEntityRanking(entities, ids, { limit = 6, extraCounts = n
     if (count <= 0) continue;
     rows.push({
       id: e.id,
-      name: e.kurzname || e.name,
+      name: figurAnzeigeName(e),
       fullName: e.name,
       typ: e.typ || null,
       count,

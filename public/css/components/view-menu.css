@@ -1,0 +1,20 @@
+@layer components {
+/* === Ansichts-Menue der Filterleiste (public/partials/view-menu.html) ===
+   Knopf = .btn-compact + .btn-count, Panel = .context-menu--dropdown; hier steht
+   nur, was das generische Kontextmenue nicht hat. Einziger Ort fuer
+   `.view-menu*` (gegated: tests/unit/view-menu-single-place.test.mjs). */
+
+/* Zeilen-Wrapper je Eintrag (x-for braucht ein Wurzel-Element): faellt aus dem
+   Layout, damit Schalter/Trenner direkt im Flex-Spalten-Menue stehen. */
+.view-menu-row { display: contents; }
+
+/* Erklaersatz unter einer Schalter-Gruppe: Fliesstext in Menue-Breite. */
+.view-menu-hint {
+  margin: var(--space-xs) 0 0;
+  padding: var(--space-xs) var(--space-md) var(--space-2xs);
+  border-top: var(--border-thin) solid var(--color-border);
+  font-size: var(--font-size-xs);
+  line-height: 1.45;
+  color: var(--color-muted);
+}
+}

@@ -13,7 +13,7 @@ useTmpDb('lexicon-extensions');
 
 const { tokenize, tokenizeSegments } = require('../../lib/lexicon/tokenize');
 const { buildNameStopwords } = require('../../lib/lexicon/names');
-const { analyzeChapters, DELTA_MIN_TOKENS } = require('../../lib/lexicon/chapters');
+const { analyzeChapters, _deltaUnits, DELTA_MIN_TOKENS } = require('../../lib/lexicon/chapters');
 const { analyzeIdiolect, IDIOLECT_MIN_TOKENS } = require('../../lib/lexicon/idiolect');
 const { msgUtterances } = require('../../lib/html-text');
 const { analyzeBook } = require('../../lib/lexicon/analyze');
@@ -115,8 +115,58 @@ test('analyzeChapters: das abweichende Kapitel hat das höchste Delta, mit Begr�
 test('analyzeChapters: zu kurze oder zu wenige Kapitel → Delta null, Masse trotzdem da', () => {
   const short = new Map([[1, ['aa', 'bb', 'cc']], [2, ['aa', 'bb', 'dd']], [3, ['ee', 'ff', 'gg']]]);
   const rows = analyzeChapters(short, frequencies([...short.values()].flat()));
-  assert.ok(rows.every(r => r.delta === null && r.delta_top === null));
+  assert.ok(rows.every(r => r.delta === null && r.delta_top === null && r.delta_block === null));
   assert.ok(rows.every(r => r.types === 3));
+});
+
+test('_deltaUnits: lange Kapitel einzeln, kurze Nachbarn gierig zu Blöcken, langes Kapitel unterbricht', () => {
+  const M = DELTA_MIN_TOKENS;
+  const units = (lens) => _deltaUnits(lens.map(tokens => ({ tokens })));
+  // Nur lange Kapitel: wie ohne Bündelung.
+  assert.deepEqual(units([M, M + 1, 2 * M]), [[0], [1], [2]]);
+  // Kurze Kapitel: Block schliesst, sobald er die Schwelle erreicht.
+  assert.deepEqual(units([700, 800, 600, 900, 500, 1000]), [[0, 1], [2, 3], [4, 5]]);
+  // Zu kurzer Rest geht in den vorigen Block desselben Laufs.
+  assert.deepEqual(units([700, 800, 600, 900, 300]), [[0, 1], [2, 3, 4]]);
+  // Ein langes Kapitel unterbricht den Lauf; der Rest davor geht nicht ins lange Kapitel.
+  assert.deepEqual(units([800, 800, 200, M, 900, 700]), [[0, 1, 2], [3], [4, 5]]);
+  // Lauf ohne vollen Block bleibt ohne Einheit.
+  assert.deepEqual(units([M, 400, 300, M]), [[0], [3]]);
+  assert.deepEqual(units([400, 300]), []);
+});
+
+test('analyzeChapters: kurze Kapitel bekommen das Delta ihres Blocks, Masse bleiben je Kapitel', () => {
+  const half = Math.ceil(DELTA_MIN_TOKENS / 2);
+  // 8 kurze Kapitel → 4 Blöcke; der dritte Block (Kap. 5–6) ist der abweichende.
+  const chTokens = new Map();
+  for (let i = 1; i <= 8; i++) chTokens.set(i, chapterText(half, i === 5 || i === 6));
+  const bookFreq = frequencies([...chTokens.values()].flat());
+  const rows = analyzeChapters(chTokens, bookFreq, { isContentWord: () => true });
+  assert.equal(rows.length, 8);
+  assert.ok(rows.every(r => r.tokens === half && r.mattr != null), 'Diversitätsmasse je Kapitel');
+  assert.ok(rows.every(r => r.delta != null && r.delta_block), 'jedes Kapitel trägt ein Block-Delta');
+  assert.deepEqual(rows[4].delta_block, { first: 5, last: 6, chapters: 2, tokens: 2 * half });
+  assert.equal(rows[4].delta, rows[5].delta);
+  assert.deepEqual(rows[4].delta_top, rows[5].delta_top);
+  const top = [...rows].sort((a, b) => b.delta - a.delta)[0];
+  assert.equal(top.delta_block.first, 5);
+});
+
+test('analyzeChapters: gemischtes Buch — lange Kapitel einzeln, kurzer Lauf als Block', () => {
+  // Längen als Vielfache der Textperiode (3 × 400), damit Block und lange Kapitel
+  // dieselbe Verteilung haben und nur das „odd"-Kapitel abweicht.
+  const half = 1200, n = 2 * half;
+  assert.ok(half < DELTA_MIN_TOKENS && n >= DELTA_MIN_TOKENS);
+  const chTokens = new Map([
+    [1, chapterText(n)], [2, chapterText(half)], [3, chapterText(half)], [4, chapterText(n)], [5, chapterText(n, true)],
+  ]);
+  const rows = analyzeChapters(chTokens, frequencies([...chTokens.values()].flat()), { isContentWord: () => true });
+  assert.equal(rows[0].delta_block, null);
+  assert.deepEqual(rows[1].delta_block, { first: 2, last: 3, chapters: 2, tokens: 2 * half });
+  assert.equal(rows[1].delta, rows[2].delta);
+  assert.equal(rows[3].delta_block, null);
+  assert.ok(rows.every(r => r.delta != null));
+  assert.equal([...rows].sort((a, b) => b.delta - a.delta)[0].chapter_id, 5);
 });
 
 test('analyzeBook: Kapitel-Band nur für Seiten mit Kapitel, in Buchreihenfolge', async () => {

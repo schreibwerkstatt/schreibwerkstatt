@@ -10,6 +10,7 @@
 // CSS-Custom-Highlight-API analog zu editor/find.js — keine DOM-Mutation.
 
 import { STOPWORDS_DE_BASE } from '../../shared/stopwords-de.js';
+import { figurAnzeigeName } from '../../book/figur-name.js';
 
 // Wortzeichen: Unicode-Buchstaben (\p{L}) + Marks (\p{M}) + Ziffern (\p{N})
 // + Apostroph/Bindestrich, damit Namen wie "O'Brien" / "Anna-Lena" als
@@ -128,7 +129,7 @@ export function selectEventsForView(figures, pageId, chapterId) {
         ...ev,
         figure_id: fig.id,
         figure_name: fig.name,
-        figure_kurzname: fig.kurzname || null,
+        figure_label: figurAnzeigeName(fig) || null,
       };
       if (pid != null && evPid === pid) onPage.push(enriched);
       else if (cid != null && evCid === cid && evPid == null) inChapter.push(enriched);

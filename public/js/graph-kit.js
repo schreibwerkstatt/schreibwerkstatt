@@ -12,6 +12,7 @@ export {
   observeThemeChange,
   paletteColors,
   adaptNodeColor,
+  withHover,
   readable,
   isDarkTheme,
   parseColor,

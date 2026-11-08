@@ -5,15 +5,14 @@
   Motiv↔Motiv-Beziehungen = Kanten, Soll-Layer (Figuren/Beats/Kapitel) zuschaltbar.
   KI-Motiverkennung (Job motif-scan) füllt den Ist-Index; nie generativ im Text.
 -->
-<div class="card card--motiv fullscreen-shell" x-data="motivCard" x-show="$app.showMotivCard" x-cloak
-     @keydown="onPanelKeydown($event)">
+<div class="card card--motiv fullscreen-shell" x-data="motivCard" x-show="$app.showMotivCard" x-cloak>
   <div class="card-header card-header--subline">
     <div class="card-header-titlebar">
       <span class="card-eyebrow" x-text="$app.selectedBookName"></span>
       <span class="card-title" x-text="$app.t('motiv.title')"></span>
       <div class="card-subline" x-show="motifs.length > 0">
         <span class="card-timestamp"
-              x-text="$app.t('motiv.stats', { motifs: motivStats().motifs, themes: motivStats().themes, withOcc: motivStats().withOcc, ghosts: motivStats().ghosts })"></span>
+              x-text="motivStatsLabel()"></span>
       </div>
     </div>
     <div class="card-header-aside">
@@ -92,6 +91,9 @@
       <span x-text="$app.t('motiv.view.checks')"></span>
       <span class="tabs-btn-count" x-show="checks.length" x-text="checks.length"></span>
     </button>
+    <button type="button" class="tabs-btn" role="tab"
+            :class="{ 'tabs-btn--active': motivView === 'outline' }" :aria-selected="motivView === 'outline'"
+            @click="setMotivView('outline')" x-text="$app.t('motiv.view.outline')"></button>
   </div>
 
   <!-- Anlege-Leiste: Thema und Motiv anlegen (beide Formen in EINER Zeile). -->
@@ -140,7 +142,7 @@
     </button>
   </div>
 
-  <div class="motiv-layout" x-show="motivView === 'graph'">
+  <div class="motiv-layout" x-show="motivView === 'graph'" :style="motivPanelVars()">
     <!-- Konstellations-Graph -->
     <div id="motiv-graph" class="motiv-graph-container" role="img" :aria-label="$app.t('motiv.graph.ariaLabel')" x-long-press></div>
     <!-- Minimale Steuerelemente am Graphen (wie in der Figuren-Karte): Zoom und
@@ -165,9 +167,17 @@
     <!-- Hover-Detail-Tooltip (absolut über dem Graph, positioniert in graph.js) -->
     <div id="motiv-tooltip" class="graph-tooltip"></div>
 
+    <!-- Griff an der Spaltengrenze: Panel-Breite ziehen (Doppelklick = zurück).
+         Absolut positioniert, belegt also keine Rasterzelle. -->
+    <div class="motiv-panel-handle" x-init="_initPanelResize($el)"></div>
+
     <!-- Seitenpanel (nested Partial — HTML-Partial-LOC-Limit) -->
     <div id="partial-motiv-panel"></div>
   </div>
+
+  <!-- Gliederung: bearbeitbare Baum-Tabelle Thema → Motiv mit aufklappbaren
+       Zeilen (nested Partial — HTML-Partial-LOC-Limit). -->
+  <div id="partial-motiv-outline" x-show="motivView === 'outline'" x-cloak></div>
 
   <!-- Kapitel-Verlaufsband: Motiv × Kapitel als Heatmap (Ist-Dichte über den
        Buchbogen). Zeigt, wo ein Motiv trägt und wo es verschwindet — die
@@ -188,7 +198,7 @@
       <div class="history-item hover-reveal-host internal-link" :class="{ 'history-item--open': selectedBrainstormRunId === r.id }"
            @click="openBrainstormRun(r)">
         <span class="history-date" x-text="formatRunDate(r.created_at)"></span>
-        <span class="tag" x-text="$app.t('motiv.brainstorm.vorschlagCount', { n: r.vorschlag_count })"></span>
+        <span class="tag" x-text="$app.tn('motiv.brainstorm.vorschlagCount', r.vorschlag_count)"></span>
         <span x-show="r.model" class="tag" x-text="r.model"></span>
         <span class="history-chevron" :class="{ open: selectedBrainstormRunId === r.id }" aria-hidden="true"></span>
         <button type="button" class="history-item-delete hover-reveal"
@@ -224,7 +234,7 @@
             <div class="motiv-sugg-theme" x-show="s.typ === 'motiv' && themes.length"
                  x-data="combobox($app.t('motiv.motif.themeOptional'), $app.t('motiv.noTheme'))"
                  x-modelable="value" x-model="s.themeIdDraft" x-effect="options = themeOptions()"></div>
-            <button type="button" class="btn-compact" @click="adoptSuggestion(s)" x-text="$app.t('motiv.brainstorm.adopt')"></button>
+            <button type="button" class="btn-compact" :disabled="s.adopting" @click="adoptSuggestion(s)" x-text="$app.t('motiv.brainstorm.adopt')"></button>
             <button type="button" class="icon-btn icon-btn--ghost" @click="dismissSuggestion(s)"
                     :data-tip="$app.t('motiv.brainstorm.dismiss')" :aria-label="$app.t('motiv.brainstorm.dismiss')">
               <svg class="icon" aria-hidden="true"><use href="/icons.svg#x"/></svg>

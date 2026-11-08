@@ -7,6 +7,7 @@
 
 import { fetchJson } from '../utils.js';
 import { normalizeEvents, sortEvents, eventGroupKey, addRefPair } from '../cards/ereignisse/model.js';
+import { figurAnzeigeName } from './figur-name.js';
 
 export const ereignisseMethods = {
   _buildGlobalZeitstrahl() {
@@ -45,7 +46,7 @@ export const ereignisseMethods = {
           seite:   ev.seite || '',
           chapter_id: ev.chapter_id ?? null,
           page_id:    ev.page_id ?? null,
-          figur:   { id: f.id, name: f.kurzname || f.name, typ: f.typ },
+          figur:   { id: f.id, name: figurAnzeigeName(f), typ: f.typ },
         });
       }
     }

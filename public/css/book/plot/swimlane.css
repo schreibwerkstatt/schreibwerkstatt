@@ -198,22 +198,13 @@
   /* Leere Zelle (nur der <template>-Anker, keine .plot-beat-Karte): Drop-Zone +
      Zwischen-Gap kollabieren, damit kein hohes Leerrechteck über dem +-Button
      klafft. Die Zelle bleibt trotzdem Drop-Ziel — SortableJS' emptyInsertThreshold
-     erweitert den Trefferbereich (dnd.js). `:not(:has())`, weil `.plot-beats` durch
+     erweitert den Trefferbereich (sortable-dnd.js#boardSortableOpts). `:not(:has())`, weil `.plot-beats` durch
      den Alpine-<template>-Anker nie CSS-`:empty` ist. */
   .plot-swim-cell:not(:has(.plot-beat)) { gap: var(--space-2xs); min-height: 0; }
   .plot-swim-cell .plot-beats:not(:has(.plot-beat)) { min-height: 0; }
-  /* Während eines Drags (body.plot-dnd-active, gesetzt in dnd.js onStart/onEnd):
-     JEDE Zelle hält eine Mindest-Drop-Höhe — auch die Zielzelle, sobald der Ghost
-     eindringt. Ohne diesen Floor kollabiert eine leere Zelle auf 0 (kaum zu
-     treffen) bzw. schrumpft beim Eindringen des Ghosts auf dessen Höhe, sodass der
-     Cursor aus der Trefferzone fällt und der Beat beim Loslassen zurückspringt
-     (Rubber-Banding). Bewusst OHNE `:not(:has())`, damit der Floor auch mit Ghost
-     greift. Nur während des Drags — danach (Klasse weg) kehren die Zellen zur
-     natürlichen, kompakten Höhe zurück. Höhe = `--plot-drag-h` (Höhe der gezogenen
-     Karte, in dnd.js gesetzt) → der Drop-Floor ist exakt so hoch wie das gezogene
-     Element statt eines fixen, oft zu grossen Rechtecks. Fallback ohne Var. */
-  body.plot-dnd-active .plot-swim-cell { min-height: var(--plot-drag-h, 88px); }
-  body.plot-dnd-active .plot-swim-cell .plot-beats { min-height: var(--plot-drag-h, 72px); }
+  /* Während eines Drags hält jede Zelle die Drop-Zonen-Höhe aus
+     components/board-dnd.css (.board-dnd-zone an .plot-beats) — auch eine
+     leere, die im Ruhezustand oben auf 0 kollabiert. */
   .plot-swim-cell-foot { display: flex; gap: var(--space-2xs); }
   /* Kompakte Icon-Add-/Brainstorm-Buttons in der Zelle (Basis: .plot-add-beat-btn). */
   .plot-add-beat-btn--cell { flex: 1 1 auto; width: auto; padding: var(--space-2xs); }

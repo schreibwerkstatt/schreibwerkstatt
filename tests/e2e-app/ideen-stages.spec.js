@@ -52,10 +52,10 @@ test('ideen-stages: zwei Stufen → zwei Spalten, Zuschalten ueber „Spalten", 
     const probe = card.locator(`[data-idee-card-id="${idee.id}"]`);
     await expect(probe.locator('.idee-board-step:visible')).toHaveText(['Erledigt']);
 
-    // Zuschalten ueber das Stufen-Menue der Filterleiste. Ohne die Stufe
+    // Zuschalten ueber das Ansichts-Menue der Filterleiste. Ohne die Stufe
     // `verworfen` bietet es auch das Einblenden der Verworfenen nicht an.
-    const toggle = card.locator('.ideen-board-stages-toggle');
-    const stagesMenu = card.locator('.ideen-board-stages-menu');
+    const toggle = card.locator('.view-menu-toggle');
+    const stagesMenu = card.locator('.view-menu-panel');
     const stageItem = (label) => stagesMenu.locator('[role="menuitemcheckbox"]', { hasText: label });
     await toggle.click();
     await expect(stagesMenu).toBeVisible();

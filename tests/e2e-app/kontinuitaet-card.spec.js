@@ -5,8 +5,9 @@
 // leeren Ergebnis. Hier liefert eine Route-Interception den Check mit den echten
 // Kapitel-/Abschnitts-IDs des Seeds; geprüft wird, was nur am gerenderten DOM
 // steht: aufgelöster `__i18n:`-Marker der Zusammenfassung, Schwere-Zähler mit
-// derselben Normalisierung wie der Filter, abwählbarer aktiver Tab, Status
-// «Erledigt», Filter-Reset, Tastatur-Aufklappen, Quellen-Link nur für http(s),
+// derselben Normalisierung wie der Filter, abwählbarer aktiver Tab, Ansicht-Menü
+// (Erledigte/«Kein Fehler», pro Konto+Buch gespeichert), Filter-Reset ohne
+// Ansichts-Reset, «alles ausgeblendet», Tastatur-Aufklappen, Quellen-Link nur für http(s),
 // Kapitelanfang-Kennzeichnung, sichtbarer Triage-Rollback und Lade-Fehler mit Retry.
 
 const { test, expect } = require('@playwright/test');
@@ -66,30 +67,57 @@ test('Kontinuität: Zusammenfassung, Zähler, Filter, Detail, Quelle', async ({ 
   await card.locator('.collapsible-toggle', { hasText: await tr(page, 'kontinuitaet.summary') }).click();
   await expect(card.locator('.kontinuitaet-summary')).toHaveText(await tr(page, 'kontinuitaet.faktencheck.summaryFound'));
 
-  // Aktiv = ohne «kein Fehler»: 3 Befunde; der ohne Schwere zählt als niedrig.
+  // Grundansicht: Erledigte ausgeblendet, «kein Fehler» verborgen → 2 Befunde;
+  // der ohne Schwere zählt als niedrig. Knopf «Ansicht» ohne Abweichungs-Zahl.
   const sevTabs = card.locator('.filter-bar .tabs').first().locator('.tabs-btn');
-  await expect(rows).toHaveCount(3);
-  await expect(sevTabs.nth(0).locator('.tabs-btn-count')).toHaveText('3');
+  const viewBtn = card.locator('.view-menu-toggle');
+  const viewItems = card.locator('.view-menu-panel [role="menuitemcheckbox"]');
+  await expect(rows).toHaveCount(2);
+  await expect(sevTabs.nth(0).locator('.tabs-btn-count')).toHaveText('2');
   await expect(sevTabs.nth(1).locator('.tabs-btn-count')).toHaveText('1');
-  await expect(sevTabs.nth(2).locator('.tabs-btn-count')).toHaveText('1');
+  await expect(sevTabs.nth(2).locator('.tabs-btn-count')).toHaveText('0');
+  await expect(sevTabs.nth(2)).toBeDisabled();
   await expect(sevTabs.nth(3).locator('.tabs-btn-count')).toHaveText('1');
+  await expect(viewBtn.locator('.btn-count')).toBeHidden();
 
   // Niedrig-Tab zeigt genau die gezählte Zeile.
   await sevTabs.nth(3).click();
   await expect(sevTabs.nth(3)).toHaveAttribute('aria-pressed', 'true');
   await expect(rows).toHaveCount(1);
 
-  // Status «Erledigt» + niedrig → nichts; der aktive Tab zählt 0, bleibt aber abwählbar.
-  const statusTabs = card.locator('.filter-bar .tabs').nth(1).locator('.tabs-btn');
-  await statusTabs.filter({ hasText: await tr(page, 'kontinuitaet.status.resolved') }).click();
-  await expect(rows).toHaveCount(0);
-  await expect(sevTabs.nth(3).locator('.tabs-btn-count')).toHaveText('0');
-  await expect(sevTabs.nth(3)).toBeEnabled();
-  await expect(sevTabs.nth(1)).toBeDisabled();
+  // Ansicht: Erledigte einblenden → der erledigte «mittel» zählt, das Menü bleibt offen.
+  await viewBtn.click();
+  const hideResolved = viewItems.filter({ hasText: await tr(page, 'kontinuitaet.view.hideResolved', { n: 1 }) });
+  await expect(hideResolved).toHaveAttribute('aria-checked', 'true');
+  await hideResolved.click();
+  await expect(hideResolved).toHaveAttribute('aria-checked', 'false');
+  await expect(hideResolved).toBeVisible();
+  await expect(sevTabs.nth(2).locator('.tabs-btn-count')).toHaveText('1');
+  await expect(viewBtn.locator('.btn-count')).toHaveText('1');
+  // «Kein Fehler» einblenden → auch der markierte Befund kommt dazu.
+  await viewItems.filter({ hasText: await tr(page, 'kontinuitaet.view.showDismissed', { n: 1 }) }).click();
+  await expect(sevTabs.nth(0).locator('.tabs-btn-count')).toHaveText('4');
+  await expect(viewBtn.locator('.btn-count')).toHaveText('2');
+  await page.keyboard.press('Escape');
 
-  // Filter zurücksetzen → wieder alle aktiven.
+  // Gespeichert pro Konto und Buch.
+  const saved = await page.evaluate((id) => {
+    const key = Object.keys(localStorage).find(k => k.endsWith(`:${id}:kontinuitaetView`));
+    return key ? JSON.parse(localStorage.getItem(key)) : null;
+  }, bookId);
+  expect(saved).toEqual({ hideResolved: false, showDismissed: true, showDiscarded: false });
+
+  // Alles weggefiltert → «Filter zurücksetzen» setzt nur die Filter zurück, die Ansicht bleibt.
+  await card.locator('.filter-bar .filter-search-input').fill('gibt es sicher nicht');
+  await expect(rows).toHaveCount(0);
   await card.locator('.kontinuitaet-nomatch button').click();
-  await expect(rows).toHaveCount(3);
+  await expect(rows).toHaveCount(4);
+  await expect(viewBtn.locator('.btn-count')).toHaveText('2');
+
+  // Zurück zur Grundansicht für den Rest des Tests.
+  await page.evaluate(() => Object.assign(window.Alpine.store('catalogUi').kontinuitaetView,
+    { hideResolved: true, showDismissed: false, showDiscarded: false }));
+  await expect(rows).toHaveCount(2);
 
   // Tastatur: Enter auf der Zeile klappt auf. Nach dem Filter-Reset zieht der
   // Editor den Fokus gelegentlich noch an sich — darum nachfassen, bis er sitzt
@@ -123,6 +151,25 @@ test('Kontinuität: Zusammenfassung, Zähler, Filter, Detail, Quelle', async ({ 
 // Befunde tragen nur page_a_id/page_b_id, die Stelle beginnt mit dem Abschnittsnamen,
 // und das KI-Feld `kapitel` nennt das falsche Kapitel. Die Combobox muss trotzdem
 // jedes betroffene Kapitel anbieten und nach dem Anker filtern.
+test('Kontinuität: alles erledigt → Hinweis «ausgeblendet» mit Einblenden', async ({ page }) => {
+  const guard = attachConsoleGuard(page);
+  await bootApp(page);
+  const bookId = await selectSeededBook(page);
+  const [ch1, ch2] = await seedChapters(page);
+  const check = mockCheck(ch1, ch2);
+  check.issues = check.issues.map(i => ({ ...i, resolved: i.dismissed ? false : true }));
+  await page.route(`**/jobs/kontinuitaet/${bookId}`, json(check));
+  const card = await openCard(page);
+  const hint = card.locator('.kontinuitaet-allhidden');
+  await expect(hint).toBeVisible({ timeout: 20000 });
+  await expect(hint.locator('.card-empty-text')).toHaveText(await page.evaluate(() => window.__app.tn('kontinuitaet.view.allHidden', 4)));
+  await expect(card.locator('.entity-list .entity-row')).toHaveCount(0);
+  await hint.locator('button').click();
+  await expect(card.locator('.entity-list .entity-row')).toHaveCount(4);
+  await expect(hint).toBeHidden();
+  guard.assertClean('Kontinuität alles ausgeblendet');
+});
+
 test('Kontinuität: Kapitel-Filter folgt den verankerten Abschnitten', async ({ page }) => {
   const guard = attachConsoleGuard(page);
   await bootApp(page);
@@ -189,7 +236,7 @@ test('Kontinuität: Lade-Fehler zeigt Retry statt «noch keine Analyse»', async
   await expect(card.locator('.card-empty-text', { hasText: await tr(page, 'common.noAnalysisYet') })).toBeHidden();
   fail = false;
   await card.locator('.card-empty button', { hasText: await tr(page, 'kontinuitaet.error.retry') }).click();
-  await expect(card.locator('.entity-list .entity-row')).toHaveCount(3);
+  await expect(card.locator('.entity-list .entity-row')).toHaveCount(2);
 });
 
 test('Kontinuität: «Nicht mehr gemeldet» — Tab, Badge, Datum, Sammel-Nachprüfen', async ({ page }) => {
@@ -207,8 +254,8 @@ test('Kontinuität: «Nicht mehr gemeldet» — Tab, Badge, Datum, Sammel-Nachpr
   const card = await openCard(page);
   await expect(card.locator('.entity-list .entity-row').first()).toBeVisible({ timeout: 20000 });
 
-  // Zählt als offen (aktiv: 3 + 1) und trägt die Markierung.
-  await expect(card.locator('.entity-list .entity-row')).toHaveCount(4);
+  // Zählt als offen (Grundansicht: 2 + 1) und trägt die Markierung.
+  await expect(card.locator('.entity-list .entity-row')).toHaveCount(3);
   await expect(card.locator('.kontinuitaet-missing-badge:visible')).toHaveCount(1);
 
   const tab = card.locator('.tabs-btn', { hasText: await tr(page, 'kontinuitaet.status.missing') });

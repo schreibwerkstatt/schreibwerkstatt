@@ -172,6 +172,10 @@ test('kontinuitaetIssuesSorted: Erledigt-Umschalten sortiert sofort neu', () => 
 
   before[0].resolved = true;
   ctx._invalidateKontinuitaetSort();
+  // Grundansicht blendet Erledigte aus: die Zeile verschwindet sofort.
+  assert.deepEqual(ctx.kontinuitaetIssuesSorted().map(i => i.id), [3, 1]);
+  // Mit eingeblendeten Erledigten rückt sie ans Ende.
+  stores.catalogUi.kontinuitaetView = { hideResolved: false, showDismissed: false, showDiscarded: false };
   assert.deepEqual(ctx.kontinuitaetIssuesSorted().map(i => i.id), [3, 1, 2]);
 });
 

@@ -162,3 +162,28 @@ test('ideen-board: Vollbild-Knopf und Verknuepfungs-Picker im Top-Layer', async 
     await page.evaluate((id) => fetch(`/ideen/${id}`, { method: 'DELETE' }), ideeId);
   }
 });
+
+// Ein Sprung in eine andere Ansicht (Figur aus dem Plot-Board, Abschnitt aus dem
+// Ideen-Board …) beendet das Vollbild — das Ziel läge sonst hinter dem
+// Vollbild-Element. Auswahl innerhalb derselben Karte (Beat) bleibt im Vollbild.
+// SSoT: Hash-Router (build.js#_writeHash bei Kategorie-Wechsel, setup.js#hashchange).
+test('Vollbild: Navigation in eine andere Ansicht verlässt das Vollbild', async ({ page }) => {
+  await bootApp(page);
+  await selectSeededBook(page);
+  await page.evaluate(() => window.__app.togglePlotCard());
+  await page.waitForSelector('#plot-split');
+  await page.waitForTimeout(1000);
+
+  await page.evaluate(() => document.getElementById('plot-split').requestFullscreen());
+  await page.waitForFunction(() => document.fullscreenElement?.id === 'plot-split');
+
+  // Gleiche Kategorie (Beat-Permalink) → bleibt im Vollbild.
+  await page.evaluate(() => { window.__app.$store.nav.plotBeatId = 999999; });
+  await page.waitForFunction(() => location.hash.includes('/plot/999999'));
+  expect(await page.evaluate(() => document.fullscreenElement?.id)).toBe('plot-split');
+  await page.evaluate(() => { window.__app.$store.nav.plotBeatId = null; });
+
+  // Kategorie-Wechsel (Figurenkarte) → Vollbild aus.
+  await page.evaluate(() => window.__app.toggleFiguresCard());
+  await page.waitForFunction(() => !document.fullscreenElement, null, { timeout: 5000 });
+});

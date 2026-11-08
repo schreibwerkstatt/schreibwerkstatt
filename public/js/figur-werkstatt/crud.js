@@ -275,6 +275,8 @@ export const crudMethods = {
     const app = window.__app;
     if (!u || !u.motifs?.length) return '';
     const names = u.motifs.map(m => m.name).filter(Boolean).join(', ');
+    // Ungescannt (belegteCount null): keine Belegzahl nennen — ungeprüft ist nicht 0.
+    if (u.belegteCount == null) return app.t('werkstatt.motifUsage.tipUnscanned', { names });
     return app.t('werkstatt.motifUsage.tip', { names, belegt: u.belegteCount, n: u.motifCount });
   },
 

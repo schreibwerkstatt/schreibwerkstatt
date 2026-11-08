@@ -38,6 +38,9 @@ export function registerJobsStore() {
     alleAktualisierenLoading: false,
     alleAktualisierenStatus: '',
     alleAktualisierenLastRun: null,
+    // Rohes ISO-Ende des letzten Komplett-Laufs (Vergleich mit Abschnitts-Änderungen,
+    // book-overview/next-steps.js); alleAktualisierenLastRun ist der Anzeige-Text.
+    alleAktualisierenLastRunAt: null,
     alleAktualisierenProgress: 0,
     alleAktualisierenTokIn: 0,
     alleAktualisierenTokOut: 0,

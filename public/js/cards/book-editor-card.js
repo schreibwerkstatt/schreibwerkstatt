@@ -69,6 +69,10 @@ const sessionState = () => ({
   // IntersectionObserver. collapsedChapters: Set<chapterId> für eingeklappte
   // Kapitel-Gruppen.
   visiblePageId: null,
+  // Per Klick im Inhaltsverzeichnis angesprungener Abschnitt: bleibt markiert
+  // bis zur nächsten eigenen Eingabe — ein kurzer letzter Abschnitt erreicht die
+  // Oberkante nie, und der Vorgänger darüber gewänne sonst die Markierung.
+  outlinePinnedPageId: null,
   collapsedChapters: {},
 
   // Kommentar-Leiste (verankerte Leser-Kommentare des ganzen Buchs) —

@@ -19,9 +19,8 @@ import { loadSortable } from '../../lazy-libs.js';
 import {
   patchSortableOnce,
   revertSortable,
-  markDragIgnore,
-  unmarkDragIgnore,
-  BASE_SORTABLE_OPTS,
+  boardSortableOpts,
+  endBoardDrag,
 } from '../../sortable-dnd.js';
 import { STATUSES, PLACE_LINK_KINDS } from './shared.js';
 import { memoMethods } from '../../cards/card-memo.js';
@@ -99,11 +98,17 @@ export const rechercheStatusMethods = {
     const app = window.__app;
     if (!item || !STATUSES.includes(status)) return;
     if (this.itemStatus(item) === status) return;
+    // Optimistisch: sofort in der Zielspalte, bei Fehler zurueck — sonst
+    // springt die Karte nach dem Drop bis zur Antwort in ihre Quellspalte
+    // (sortable-dnd.js#revertSortable).
+    const prev = (this.items || []).find(i => i.id === item.id) || item;
+    this._replaceItem({ ...prev, status });
     this.busy = true;
     try {
       this._replaceItem(await this._patchItem(item.id, { status }));
       this.errorMessage = '';
     } catch {
+      this._replaceItem(prev);
       this.errorMessage = app.t('recherche.error.save');
     } finally {
       this.busy = false;
@@ -130,7 +135,7 @@ export const rechercheStatusMethods = {
     this._statusSortables = [];
     // Ein durch Teardown unterbrochener Drag darf die aufgeblaehten Drop-Zonen
     // nicht stehen lassen.
-    document.body.classList.remove('research-dnd-active');
+    endBoardDrag();
   },
 
   _initStatusSortables() {
@@ -140,36 +145,13 @@ export const rechercheStatusMethods = {
     this._destroyStatusSortables();
     const cells = this.$root?.querySelectorAll('[data-research-status-cell]') || [];
     if (!cells.length) return;
-    // Im Native-Vollbild rendert nur der Teilbaum des Fullscreen-Elements;
-    // SortableJS haengt den Fallback-Ghost aber an <body> und damit hinter das
-    // Vollbild-Element. Gleiche Nachbesserung wie im Plot-Board.
-    const relocateGhostForFullscreen = () => {
-      const fsEl = document.fullscreenElement;
-      const ghost = Sortable.ghost;
-      if (fsEl && ghost && !fsEl.contains(ghost)) fsEl.appendChild(ghost);
-    };
-    const opts = {
-      ...BASE_SORTABLE_OPTS,
-      emptyInsertThreshold: 24,
-      scroll: true,
+    // Karten-Board-Optionen + Drag-Zustand: sortable-dnd.js#boardSortableOpts.
+    const opts = boardSortableOpts(Sortable, {
       draggable: '.research-status-card',
       handle: '.research-status-grip',
       group: { name: 'research-status', pull: true, put: ['research-status'] },
-      chosenClass: 'research-status-card--chosen',
-      ghostClass: 'research-status-card--ghost',
-      dragClass: 'research-status-card--dragging',
-      onChoose: markDragIgnore,
-      onUnchoose: unmarkDragIgnore,
-      onStart: () => {
-        document.body.classList.add('research-dnd-active');
-        relocateGhostForFullscreen();
-      },
-      onEnd: (evt) => {
-        document.body.classList.remove('research-dnd-active');
-        unmarkDragIgnore(evt);
-        this.onStatusSortEnd(evt);
-      },
-    };
+      onEnd: (evt) => this.onStatusSortEnd(evt),
+    });
     for (const el of cells) this._statusSortables.push(new Sortable(el, opts));
   },
 

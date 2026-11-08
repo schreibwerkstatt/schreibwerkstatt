@@ -6,6 +6,7 @@ füllt (`METRICS_VERSION`).
 
 | Teil | Ort |
 |---|---|
+| Sprachprofile (Füllwörter, Adverbien, Passiv, Silben + Flesch, Pronomen) | [lib/style-lang.js](../lib/style-lang.js) |
 | Lesepfad (Namens-JOIN, ohne `style_samples`) | [db/style-stats.js](../db/style-stats.js) |
 | Verdichtung Kapitel-Raster, P90, Ich-Anteil | [lib/stil-heatmap.js](../lib/stil-heatmap.js) |
 | Rhythmus-Band, Satzanfänge (Buch + pro Kapitel) | [lib/stil-rhythmus.js](../lib/stil-rhythmus.js) |
@@ -33,6 +34,38 @@ füllt (`METRICS_VERSION`).
   Rhythmus-Band nutzen `percentileSorted` aus `lib/percentile.js` (Index
   `floor((n-1)·p)`, kein Interpolieren). Ein Kapitel aus einer Seite zeigt damit exakt den
   Seiten-P90.
+
+## Buchsprache
+
+Die wortbasierten Metriken rechnen nach `book_settings.language` (`bookLanguage` in
+[db/lexicon.js](../db/lexicon.js), `en` → Englisch, alles andere → Deutsch). Der einzige
+Rechenpfad ist `syncBook` ([routes/sync.js](../routes/sync.js)) — Nacht-Sync, «Neu berechnen»,
+Snapshot-Restore, Import-Baseline —, er reicht die Sprache an `computePageIndex` weiter. Ein
+Sprachwechsel in den Bucheinstellungen wirkt ab dem nächsten Sync; `syncBook` rechnet jede
+Seite neu.
+
+| Metrik | Deutsch | Englisch |
+|---|---|---|
+| Füllwörter | kuratierte Liste (eigentlich, halt, ziemlich …) | kuratierte Liste (just, really, actually …) |
+| Passiv | jede `werden`-Form, auch Futur und Infinitiv | `be`/`get` + Partizip II (regelmässig auf -ed oder unregelmässige Liste), bis zu zwei Gradwörter/-ly-Adverbien dazwischen; Zustandsadjektive (`was tired`) und -ed-Nomen zählen nicht. Drilldown-Token = Hilfsverb + Partizip |
+| Adverbien | feste Liste + Suffixe -weise, -mals, -wärts, -halber | feste Liste + -ly (ohne Adjektive/Nomen wie `lonely`, `family`, `early`) + -wise |
+| Flesch | Amstad: 180 − ASL − 58,5·ASW | Reading Ease: 206,835 − 1,015·ASL − 84,6·ASW, englische Silbenzählung (stumme -e/-es/-ed) |
+| Pronomen | ich/mich/mein …, er, sie, wir … | I/me/my …, he, she/they, we … |
+
+`page_stats.flesch_de` und `book_stats_history.avg_flesch_de` tragen den Flesch-Wert **der
+Buchsprache**; der Spaltenname ist historisch. Beide Formeln haben dieselbe Richtung (höher =
+leichter) und ähnliche Bänder, die Heatmap färbt ohnehin relativ zum Buch. Buchübergreifende
+Mittel (Autorenprofil, Meine Statistik) mischen bei gemischtsprachigen Büchern beide Skalen.
+
+Die Pronomen-**Schlüssel** sind sprachunabhängig (`ich`, `du`, `er`, `sie_sg`, `wir`,
+`ihr_pl`, `man`); Ich-Anteil und das Pronomen-Werkzeug der agentischen Chats lesen sie ohne
+Sprachwissen. `they` steht wie das deutsche Plural-„sie" in `sie_sg`, `you` in `du`, nur
+`yourselves` in `ihr_pl`, `man` hat im Englischen nur `oneself`.
+
+LIX, Satzlängen, Satzanfänge und Dialog-Erkennung sind sprachneutral. Grenze: Der Wort-Tokenizer
+(`\p{L}+`) zerlegt englische Kontraktionen (`don't` → `don` + `t`).
+
+Änderung an einem Sprachprofil ⇒ `METRICS_VERSION` erhöhen.
 
 ## Satzerkennung
 
@@ -70,14 +103,14 @@ Paar über eine Seitengrenze zählt nirgends.
 
 ## Ich-Anteil (Erzähltext)
 
-Spalte `first_person_share`: Anteil der Pronomen 1. Person (`ich` + `wir`) an allen Pronomen
-1. und 3. Person (`er` + `sie_sg`), **nur `narr`** aus `page_stats.pronoun_counts` — direkte
+Spalte `first_person_share`: Anteil der Pronomen 1. Person (Gruppen `ich` + `wir`) an allen
+Pronomen 1. und 3. Person (`er` + `sie_sg`; Wortformen je Buchsprache, siehe oben), **nur `narr`** aus `page_stats.pronoun_counts` — direkte
 Rede zählt nicht. Prozent mit einer Nachkommastelle; `null` (Anzeige „–") unter
 `PERSPECTIVE_MIN_PRONOUNS` = 20 erzählenden Pronomen, damit kurze Kapitel nicht mit jedem
 „mir" umkippen.
 
-Bewusst **kein** Etikett „Perspektive": `sie` deckt Singular und Plural, `sein` auch das
-Verb — beides schiebt Richtung 3. Person. Die Zahl taugt dafür, einen Wechsel zwischen Ich-
+Bewusst **kein** Etikett „Perspektive": `sie`/`they` deckt Singular und Plural, `sein` auch
+das Verb — beides schiebt Richtung 3. Person. Die Zahl taugt dafür, einen Wechsel zwischen Ich-
 und Er/Sie-Erzählung **zwischen Kapiteln** zu sehen, nicht dafür, die Erzählperspektive
 eines Kapitels zu bestimmen. Die Spalte ist richtungslos gefärbt (Primary-Skala).
 

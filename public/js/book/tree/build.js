@@ -1,6 +1,6 @@
 import { fetchJson } from '../../utils.js';
 import { EVT } from '../../events.js';
-import { buildKapitelLabels } from '../../chapter-filter.js';
+import { buildKapitelLabels, buildKapitelNumbers } from '../../chapter-filter.js';
 
 // nav.tree → { len, byId } fuer _chapterExcludedByAncestor.
 const chapterIndexCache = new WeakMap();
@@ -151,6 +151,10 @@ export const treeBuildMethods = {
     this._chapterIdOrderMap = chapterIdMap;
     // Anzeigename je Kapitel-ID für die Filter-Optionen (app-ui.js#_kapitelOptionen).
     this._chapterLabelMap = buildKapitelLabels(this.$store.nav.tree);
+    // Kapitelnummer je ID (chapter-filter.js#buildKapitelNumbers) — Auswertungs-
+    // Labels stellen sie vor den Namen (app-ui.js#_kapitelLabel). Neu gebaut
+    // zusammen mit _chapterLabelMap, darum reicht dieses als Memo-Abhängigkeit.
+    this._chapterNumberMap = buildKapitelNumbers(this.$store.nav.tree);
     this._pageOrderMap = nameMap;
     this._pageIdOrderMap = idMap;
     // Jeder Pfad, der den Baum in place aendert, baut die Indexe neu (auch der

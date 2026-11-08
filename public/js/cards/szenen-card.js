@@ -15,6 +15,7 @@ import {
   szenenNachFigur, szenenWertungCounts, szenenKapitelOptionen, szenenSeitenOptionen,
   buildKapitelLabels, wertungOf,
 } from '../book/szenen-stats.js';
+import { numberedKapitelLabel } from '../chapter-filter.js';
 import { lsGet, lsSet } from '../safe-storage.js';
 import { plotBacklinkMethods } from '../book/plot-backlinks.js';
 import { listWindowState, listWindowMethods } from '../list-window.js';
@@ -70,8 +71,12 @@ export function registerSzenenCard() {
       const tree = Alpine.store('nav').tree;
       return this._memo('labels', [tree], () => buildKapitelLabels(tree));
     },
+    // Auswertungs-Label mit Kapitelnummer (app-ui.js#_kapitelLabel).
     kapitelLabel(chapterId, fallback) {
-      return (chapterId != null && this._kapitelLabels().get(chapterId)) || fallback || '';
+      if (chapterId == null) return fallback || '';
+      const name = this._kapitelLabels().get(chapterId);
+      if (!name) return fallback || '';
+      return numberedKapitelLabel(window.__app?._kapitelNummer?.(chapterId), name);
     },
     _labelOf() { return (id, n) => this.kapitelLabel(id, n); },
 

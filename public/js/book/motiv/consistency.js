@@ -15,25 +15,36 @@
 
 import { fetchJson } from '../../utils.js';
 import { startPoll } from '../../cards/job-helpers.js';
+import { loadToken, isSelectedBook } from '../../cards/book-guard.js';
 import { befundSeverityClass } from '../../utils/befund-severity.js';
 
 export const consistencyMethods = {
+  // Lade-Token: die Befunde sind die langsamste Nebenlesung des Board-Loads; eine
+  // späte Antwort des vorigen Buchs (oder eines überholten Loads) wird verworfen.
   async loadMotifChecks() {
     const bookId = this.$store.nav.selectedBookId;
     if (!bookId) return;
+    const isCurrent = loadToken(this, '_checksLoadSeq', bookId);
     this.checksLoading = true;
     try {
       const data = await fetchJson(`/motifs/consistency?book_id=${bookId}`);
+      if (!isCurrent()) return;
       this.checks = data.befunde || [];
       this.checksScanned = !!data.scanned;
     } catch (e) {
+      if (!isCurrent()) return;
       // Non-fatal: die Befunde sind eine Zusatzsicht, kein Board-Blocker. Ein
       // Fehler darf weder den Graph noch das Verlaufsband verschlucken.
       this.checks = [];
       this.checksScanned = true;
     } finally {
-      this.checksLoading = false;
+      if (isCurrent.latest()) this.checksLoading = false;
     }
+    // Die Liste ist nach Index geschlüsselt — eine offene Zeile zeigte nach dem
+    // Reload auf einen anderen Befund.
+    this.selectedCheckIdx = null;
+    // Befund-Kanten stecken im gezeichneten Bild (Signatur dedupliziert).
+    if (this.motivView === 'graph') this.$nextTick(() => this.renderMotivGraph());
   },
 
   // Befund-Satz aus Code + Parametern. Motiv-/Partnername und der übersetzte
@@ -66,11 +77,19 @@ export const consistencyMethods = {
     return befundSeverityClass(f && f.schwere);
   },
 
+  // Hat der Befund ein Motiv? Buchweite KI-Befunde tragen `motiv: '—'` ohne id —
+  // dafür kein (leerer) Motiv-Chip.
+  hasCheckMotif(f) {
+    if (!f) return false;
+    if (f.motiv_id != null) return true;
+    const name = String(f.motiv || '').trim();
+    return !!name && name !== '—' && name !== '-';
+  },
+
   // Befund anklicken → Motiv in der Konstellation auswählen (und dorthin wechseln).
   gotoCheckMotif(f) {
     if (!f || f.motiv_id == null) return;
-    this.setMotivView('graph');
-    this.selectMotif(f.motiv_id);
+    return this._selectMotifInGraph(f.motiv_id);
   },
 
   // Kanten, zu denen ein Befund vorliegt — die Konstellation zeichnet sie als
@@ -96,6 +115,9 @@ export const consistencyMethods = {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ book_id: bookId }),
       });
+      // Buch während des POST gewechselt: der Reset lief schon, ein jetzt
+      // gestarteter Poller schriebe das Ergebnis ins neue Buch.
+      if (!isSelectedBook(bookId)) return;
       this.motivConsistencyJobId = jobId;
       startPoll(this, {
         timerProp: '_consistencyPollTimer',
@@ -137,8 +159,7 @@ export const consistencyMethods = {
   // Ziel; die Fundstelle ist ein eigener Knopf (springt in den Buchtext).
   gotoKonfliktMotiv(k) {
     if (!k || k.motiv_id == null) return;
-    this.setMotivView('graph');
-    this.selectMotif(k.motiv_id);
+    return this._selectMotifInGraph(k.motiv_id);
   },
 
   konfliktSeverityLabel(k) {
@@ -155,18 +176,21 @@ export const consistencyMethods = {
   async loadConsistencyRuns() {
     const bookId = this.$store.nav.selectedBookId;
     if (!bookId) { this.consistencyRuns = []; return; }
+    const isCurrent = loadToken(this, '_consistencyRunsSeq', bookId);
     try {
       const rows = await fetchJson(`/motifs/consistency-runs?book_id=${bookId}`);
-      this.consistencyRuns = Array.isArray(rows) ? rows : [];
-    } catch (e) { this.consistencyRuns = []; }
+      if (isCurrent()) this.consistencyRuns = Array.isArray(rows) ? rows : [];
+    } catch (e) { if (isCurrent()) this.consistencyRuns = []; }
   },
 
   // Toggle wie die Brainstorm-Historie: Klick auf den offenen Lauf schliesst ihn.
   async openConsistencyRun(run) {
     if (!run || this.consistencyRunning) return;
     if (this.selectedConsistencyRunId === run.id) { this.dismissConsistency(); return; }
+    const bookId = this.$store.nav.selectedBookId;
     try {
       const detail = await fetchJson(`/motifs/consistency-runs/${run.id}`);
+      if (!isSelectedBook(bookId)) return;
       if (!detail?.result) throw new Error('no result');
       this.consistencyResult = {
         konflikte: detail.result.konflikte || [],

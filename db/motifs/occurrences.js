@@ -137,7 +137,8 @@ function hasOccurrences(bookId, userEmail) {
 
 // ── Soll-Motive einer Seite (passiver Lektorat-Kontext) ─────────────────────
 // Motive, deren Soll-Brücke auf DIESE Seite (motif_pages) oder auf DEREN Kapitel
-// (motif_chapters) zeigt. Reiner Hintergrundkontext für den Stil-Pass des
+// bzw. eines seiner Oberkapitel (motif_chapters, Elternkette über
+// chapters.parent_chapter_id) zeigt — ein Soll auf «Teil 1» gilt auch in «1.1». Reiner Hintergrundkontext für den Stil-Pass des
 // Lektorats: motivtragende Formulierungen (wiederkehrende Bilder, Trigger-Terme)
 // sollen NICHT als Wiederholung/Klischee/Stilfehler wegkorrigiert werden. Kein
 // Ist-Index, kein Drift-Urteil — nur das geplante Soll. Pro Buch + User skopiert.
@@ -148,16 +149,22 @@ const _stmtPageMotifs = db.prepare(`
    WHERE m.book_id = ? AND m.user_email = ?
      AND (
        m.id IN (SELECT motif_id FROM motif_pages    WHERE page_id = ?)
-       OR m.id IN (SELECT motif_id FROM motif_chapters WHERE chapter_id = ?)
+       OR m.id IN (
+         WITH RECURSIVE anc(chapter_id) AS (
+           SELECT ? WHERE ? IS NOT NULL
+           UNION
+           SELECT c.parent_chapter_id FROM chapters c JOIN anc ON c.chapter_id = anc.chapter_id
+            WHERE c.parent_chapter_id IS NOT NULL
+         )
+         SELECT motif_id FROM motif_chapters WHERE chapter_id IN (SELECT chapter_id FROM anc)
+       )
      )
    ORDER BY m.position, m.id
 `);
 function getPageMotifs(bookId, chapterId, pageId, userEmail) {
   if (!bookId || !pageId || !userEmail) return [];
-  const rows = _stmtPageMotifs.all(
-    parseInt(bookId), userEmail, parseInt(pageId),
-    chapterId ? parseInt(chapterId) : null,
-  );
+  const ch = chapterId ? parseInt(chapterId) : null;
+  const rows = _stmtPageMotifs.all(parseInt(bookId), userEmail, parseInt(pageId), ch, ch);
   return rows.map(r => ({
     name: r.name,
     beschreibung: r.beschreibung,

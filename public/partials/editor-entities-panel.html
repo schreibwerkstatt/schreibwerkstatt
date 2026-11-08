@@ -120,10 +120,10 @@
                     <dd x-text="entityPopover.data.datum_label || entityPopover.data.datum"></dd>
                   </div>
                 </template>
-                <template x-if="entityPopover.data?.figure_kurzname || entityPopover.data?.figure_name">
+                <template x-if="entityPopover.data?.figure_label || entityPopover.data?.figure_name">
                   <div class="entity-popover-meta-row">
                     <dt x-text="$app.t('entities.figure')"></dt>
-                    <dd x-text="entityPopover.data.figure_kurzname || entityPopover.data.figure_name"></dd>
+                    <dd x-text="entityPopover.data.figure_label || entityPopover.data.figure_name"></dd>
                   </div>
                 </template>
               </dl>

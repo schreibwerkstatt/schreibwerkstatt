@@ -1,0 +1,71 @@
+{
+  "version": "6.2.0",
+  "date": "2026-11-08",
+  "entries": [
+    {
+      "kind": "neu",
+      "de": "Motiv-Werkstatt: neue Ansicht «Gliederung» zeigt Themen und Motive als bearbeitbare Tabelle mit Fundstellen, Kapitel-Verlauf und Befunden. Motive ziehst du dort direkt um oder in ein anderes Thema.",
+      "en": "Motif workshop: the new \"Outline\" view shows themes and motifs as an editable table with occurrences, chapter trend and findings. Drag motifs to reorder them or move them to another theme."
+    },
+    {
+      "kind": "neu",
+      "de": "Motiv-Werkstatt: der Motiv-Editor ist in die Reiter Details, Fundstellen, Verknüpfungen und Beziehungen geteilt. Trigger gibst du als Chips ein, und «Nur dieses Motiv neu suchen» aktualisiert gezielt seine Fundstellen.",
+      "en": "Motif workshop: the motif editor is split into Details, Occurrences, Links and Relations tabs. Enter triggers as chips, and \"Search only this motif again\" refreshes just its occurrences."
+    },
+    {
+      "kind": "neu",
+      "de": "Motiv-Werkstatt: ohne Auswahl zeigt das Seitenpanel jetzt alle Themen mit ihren Motiven als Baum. Das Panel lässt sich an seinem Rand breiter oder schmaler ziehen.",
+      "en": "Motif workshop: with nothing selected, the side panel now shows all themes with their motifs as a tree. Drag its edge to make the panel wider or narrower."
+    },
+    {
+      "kind": "neu",
+      "de": "Stil-Heatmap, Statistik und Autorenprofil rechnen Füllwörter, Passiv, Adverbien, Lesbarkeit und Ich-Anteil jetzt in der Buchsprache. Englische Bücher bekommen damit passende Werte.",
+      "en": "Style heatmap, statistics and author profile now measure filler words, passive voice, adverbs, readability and first-person share in the book's language. English books get fitting values."
+    },
+    {
+      "kind": "neu",
+      "de": "Buchübersicht: wurden Abschnitte seit der letzten Komplettanalyse geändert, weist dich «Nächste Schritte» darauf hin und bietet «Buch analysieren» an.",
+      "en": "Book overview: if sections changed since the last full analysis, \"Next steps\" tells you and offers \"Analyze book\"."
+    },
+    {
+      "kind": "verbessert",
+      "de": "Auswertungen zeigen Kapitel jetzt mit Nummer vor dem Namen, etwa «12 · Der Tanzkurs». Kapitel mit ähnlich beginnenden Titeln sind in Filtern und Tabellen so wieder unterscheidbar.",
+      "en": "Analyses now show chapters with their number before the name, e.g. \"12 · The dance class\". Chapters with similar titles are easy to tell apart again in filters and tables."
+    },
+    {
+      "kind": "verbessert",
+      "de": "Plot-Werkstatt, Ideen-Board, Recherche, Quellen und Kontinuität: was ein- oder ausgeblendet wird, stellst du überall im selben Menü «Ansicht» am Ende der Filterleiste ein.",
+      "en": "Plot workshop, Ideas board, Research, Sources and Continuity: what is shown or hidden is now set in the same \"View\" menu at the end of the filter bar everywhere."
+    },
+    {
+      "kind": "verbessert",
+      "de": "Kontinuität: Erledigte, «Kein Fehler» und Verworfene blendest du über das Ansicht-Menü ein oder aus, pro Buch gemerkt. Sind alle Befunde ausgeblendet, sagt dir die Karte, wie viele es sind.",
+      "en": "Continuity: show or hide resolved, \"not an error\" and discarded findings from the View menu, remembered per book. If all findings are hidden, the card tells you how many."
+    },
+    {
+      "kind": "verbessert",
+      "de": "Wortschatz-Karte: sehr kurze Kapitel werden für das Delta mit ihren Nachbarn zu Blöcken zusammengefasst. So bekommen auch Bücher mit vielen kurzen Kapiteln einen aussagekräftigen Wert.",
+      "en": "Vocabulary card: very short chapters are grouped with their neighbours into blocks for the delta. Books with many short chapters now get a meaningful value too."
+    },
+    {
+      "kind": "verbessert",
+      "de": "Ideen-Board: alle Stufen-Spalten sind gleich breit, und eine gezogene Karte behält ihre Höhe. Das Board springt beim Ziehen nicht mehr um.",
+      "en": "Ideas board: all stage columns are the same width, and a dragged card keeps its height. The board no longer jumps around while dragging."
+    },
+    {
+      "kind": "verbessert",
+      "de": "Motiv-Werkstatt: Verlaufsband und Befunde berücksichtigen jetzt Unterkapitel. Ein Motiv gilt erst als «fehlend», wenn das Buch schon einmal nach Motiven durchsucht wurde.",
+      "en": "Motif workshop: the trend band and findings now include subchapters. A motif only counts as \"missing\" once the book has been searched for motifs."
+    },
+    {
+      "kind": "verbessert",
+      "de": "Buchlandkarte: bei mehr als zwölf Kapiteln färbt die Karte die Punkte nach Buchverlauf statt nach Kapitel. Die Legende bleibt so übersichtlich.",
+      "en": "Book map: with more than twelve chapters, points are coloured by position in the book instead of by chapter. That keeps the legend readable."
+    },
+    {
+      "kind": "behoben",
+      "de": "Bucheditor: nach einem Klick im Inhaltsverzeichnis auf einen kurzen letzten Abschnitt blieb der vorige markiert. Jetzt bleibt der angeklickte Abschnitt markiert.",
+      "en": "Book editor: after clicking a short last section in the table of contents, the previous one stayed highlighted. The clicked section now stays highlighted."
+    }
+  ]
+}

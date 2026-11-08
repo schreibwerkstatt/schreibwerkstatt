@@ -141,8 +141,11 @@ export const stilMethods = {
 
   // Kapitelname der Zeile; `null` heisst „keinem Kapitel zugeordnet" — das Label
   // dafür ist UI-Text und kommt darum nicht aus der Antwort.
-  stilChapterName(name) {
-    return name || window.__app.t('stil.unassigned');
+  // Mit `key` (Kapitel-ID der Zeile) steht die Kapitelnummer davor
+  // (app-ui.js#_kapitelLabel), wie in allen Auswertungs-Labels.
+  stilChapterName(name, key) {
+    if (!name) return window.__app.t('stil.unassigned');
+    return (key != null && key !== '__uncat__' && window.__app._kapitelLabel?.(key)) || name;
   },
 
   // Render-fertige Zeilen inkl. Zell-Klassen und -Variablen. Memoized über den
@@ -241,7 +244,7 @@ export const stilMethods = {
         key,
         metricKey,
         metricLabel: this.stilMetricLabel(metricKey),
-        chapterName: this.stilChapterName(data.chapterName),
+        chapterName: this.stilChapterName(data.chapterName, chapterKey),
         entries: data.entries || [],
       };
     } catch (e) {

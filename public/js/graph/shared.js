@@ -1,7 +1,7 @@
 import { escHtml } from '../utils.js';
 import { tnRaw } from '../i18n.js';
 import { sameId, activeFilterId } from '../chapter-filter.js';
-import { createGraphTooltip, adaptNodeColor, graphTheme } from '../graph-kit.js';
+import { createGraphTooltip, adaptNodeColor, withHover, graphTheme } from '../graph-kit.js';
 import { normalizeRelationTyp, canonicalRelation, naeheOf } from '../book/beziehung-typen.js';
 import {
   DEFAULT_FONT,
@@ -14,6 +14,7 @@ import {
   nodeLabel,
 } from './constants.js';
 import { schichtOf } from './soziogramm-layout.js';
+import { figurAnzeigeName } from '../book/figur-name.js';
 
 // Gemeinsame Methoden: Typ-Color, Node-Basis, Edge-Bau, Tooltip, Kapitel-Filter.
 // Werden in graphMethods gespreaded und nutzen `this`-Refs aus Card.
@@ -82,8 +83,8 @@ export const sharedMethods = {
       }
       return {
         id: f.id,
-        color: { background: theme.dim.background, border: theme.dim.border,
-                 highlight: { background: theme.dim.background, border: theme.dim.border } },
+        color: withHover({ background: theme.dim.background, border: theme.dim.border,
+                 highlight: { background: theme.dim.background, border: theme.dim.border } }),
         font: { ...DEFAULT_FONT, color: theme.dim.font },
       };
     }));
@@ -214,7 +215,7 @@ export const sharedMethods = {
       const typLabel = window.__app.t('figuren.bz.' + e.typ);
       const arrow = e.arrows === 'to' ? '→' : e.arrows === 'from' ? '←' : '↔';
       const pair = fromF && toF
-        ? `${escHtml(fromF.kurzname || fromF.name)} ${arrow} ${escHtml(toF.kurzname || toF.name)}`
+        ? `${escHtml(figurAnzeigeName(fromF))} ${arrow} ${escHtml(figurAnzeigeName(toF))}`
         : '';
       const naehe = e.naehe ? window.__app.t(e.naehe.geschaetzt ? 'graph.sozio.naeheTip' : 'graph.sozio.naeheTipTyp',
         { label: window.__app.t('figuren.naehe.' + e.naehe.wert) }) : '';

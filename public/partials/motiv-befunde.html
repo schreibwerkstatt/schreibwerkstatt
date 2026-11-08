@@ -35,11 +35,13 @@
         <div class="motiv-check-head">
           <span class="severity-tag" :class="checkSeverityClass(f)" x-text="checkSeverityLabel(f)"></span>
           <!-- Motiv-Sprung innerhalb der Werkstatt: Konstellation zeigen + auswählen. -->
-          <button type="button" class="entity-ref"
-                  x-entity-ref="{ type: 'motiv', id: f.motiv_id, name: f.motiv, onOpen: f.motiv_id != null ? () => gotoCheckMotif(f) : null }"></button>
-          <span class="motiv-check-text" x-text="checkText(f)"></span>
+          <template x-if="hasCheckMotif(f)">
+            <button type="button" class="entity-ref"
+                    x-entity-ref="{ type: 'motiv', id: f.motiv_id, name: f.motiv, onOpen: f.motiv_id != null ? () => gotoCheckMotif(f) : null }"></button>
+          </template>
           <span class="history-chevron" :class="{ open: selectedCheckIdx === idx }" aria-hidden="true"></span>
         </div>
+        <p class="motiv-check-text" x-text="checkText(f)"></p>
         <div x-show="selectedCheckIdx === idx && checkHint(f)" class="motiv-check-hint" x-cloak>
           <span class="entity-meta-label" x-text="$app.t('motiv.checks.hint')"></span>
           <span x-text="checkHint(f)"></span>
@@ -88,9 +90,11 @@
              @click="selectedKonfliktIdx = selectedKonfliktIdx === idx ? null : idx">
           <div class="motiv-check-head">
             <span class="severity-tag" :class="konfliktSeverityClass(k)" x-text="konfliktSeverityLabel(k)"></span>
-            <button type="button" class="entity-ref"
-                    x-entity-ref="{ type: 'motiv', id: k.motiv_id, name: k.motiv, onOpen: k.motiv_id != null ? () => gotoKonfliktMotiv(k) : null }"></button>
-            <span class="motiv-check-text" x-text="k.problem"></span>
+            <!-- Buchweiter Befund (motiv «—», ohne id): kein leerer Motiv-Chip. -->
+            <template x-if="hasCheckMotif(k)">
+              <button type="button" class="entity-ref"
+                      x-entity-ref="{ type: 'motiv', id: k.motiv_id, name: k.motiv, onOpen: k.motiv_id != null ? () => gotoKonfliktMotiv(k) : null }"></button>
+            </template>
             <!-- Sprungziel kommt deterministisch aus dem Fund-Index, nicht aus dem
                  Modelltext (ein erfundenes Ziel fiele niemandem auf). -->
             <template x-if="k.fundstelle && k.fundstelle.page_id">
@@ -99,6 +103,7 @@
             </template>
             <span class="history-chevron" :class="{ open: selectedKonfliktIdx === idx }" aria-hidden="true"></span>
           </div>
+          <p class="motiv-check-text" x-text="k.problem"></p>
           <div x-show="selectedKonfliktIdx === idx && k.vorschlag" class="motiv-check-hint" x-cloak>
             <span class="entity-meta-label" x-text="$app.t('motiv.consistency.suggestion')"></span>
             <span x-text="k.vorschlag"></span>
@@ -116,7 +121,7 @@
       <div class="history-item hover-reveal-host internal-link" :class="{ 'history-item--open': selectedConsistencyRunId === r.id }"
            @click="openConsistencyRun(r)">
         <span class="history-date" x-text="formatRunDate(r.created_at)"></span>
-        <span class="tag" x-text="$app.t('motiv.consistency.konfliktCount', { n: r.konflikt_count })"></span>
+        <span class="tag" x-text="$app.tn('motiv.consistency.konfliktCount', r.konflikt_count)"></span>
         <span x-show="r.model" class="tag" x-text="r.model"></span>
         <span class="history-chevron" :class="{ open: selectedConsistencyRunId === r.id }" aria-hidden="true"></span>
         <button type="button" class="history-item-delete hover-reveal"

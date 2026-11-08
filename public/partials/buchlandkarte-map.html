@@ -60,11 +60,11 @@
                    x-effect="bookMapResult; bookMapLabels; options = bookMapAxisPairOptions()"></div>
               <span class="buchlandkarte-view-label" x-text="$app.t('buchlandkarte.view.color')"></span>
               <div class="seg-toggle" role="group" :aria-label="$app.t('buchlandkarte.view.color')">
-                <button type="button" :class="{ 'seg-toggle--active': bookMapColorMode === 'chapter' }"
-                        :aria-pressed="bookMapColorMode === 'chapter' ? 'true' : 'false'"
+                <button type="button" :class="{ 'seg-toggle--active': bookMapEffectiveColorMode() === 'chapter' }"
+                        :aria-pressed="bookMapEffectiveColorMode() === 'chapter' ? 'true' : 'false'"
                         @click="bookMapColorMode = 'chapter'" x-text="$app.t('buchlandkarte.color.chapter')"></button>
-                <button type="button" :class="{ 'seg-toggle--active': bookMapColorMode === 'order' }"
-                        :aria-pressed="bookMapColorMode === 'order' ? 'true' : 'false'"
+                <button type="button" :class="{ 'seg-toggle--active': bookMapEffectiveColorMode() === 'order' }"
+                        :aria-pressed="bookMapEffectiveColorMode() === 'order' ? 'true' : 'false'"
                         @click="bookMapColorMode = 'order'" x-text="$app.t('buchlandkarte.color.order')"></button>
               </div>
             </div>
@@ -72,7 +72,7 @@
             <div class="buchlandkarte-canvas-wrap">
               <canvas id="bookMapCanvas" role="img"></canvas>
             </div>
-            <div x-show="bookMapColorMode === 'order'" class="buchlandkarte-scale">
+            <div x-show="bookMapEffectiveColorMode() === 'order'" class="buchlandkarte-scale">
               <span x-text="$app.t('buchlandkarte.color.start')"></span>
               <span class="buchlandkarte-scale-bar buchlandkarte-scale-bar--order" aria-hidden="true"></span>
               <span x-text="$app.t('buchlandkarte.color.end')"></span>

@@ -44,21 +44,50 @@ test('get_motifs: Geist-Motiv (Soll-Link, 0 Fundstellen) → geist:true + geiste
   const motif = motifDb.createMotif(BOOK_ID, userEmail, {
     themeId: theme.id, name: 'Wasser', beschreibung: 'Reinigung', triggerTerms: ['Regen', 'Fluss'],
   });
-  // Soll-Verknüpfung zu einem Kapitel, aber KEINE Fundstellen → Geist.
+  // Soll-Verknüpfung zu einem Kapitel, aber KEINE Fundstellen → Geist. Der Scan
+  // lief (ein anderes Motiv hat eine Fundstelle) — sonst wäre es ungeprüft.
   motifDb.setMotifChapters(motif.id, [73020]);
+  const belegt = motifDb.createMotif(BOOK_ID, userEmail, { name: 'Feuer' });
+  motifDb.replaceOccurrences(belegt.id, BOOK_ID, [
+    { kind: 'page', pageId: 73021, score: null, snippet: 'Flamme.', source: 'trigger' },
+  ]);
 
   const result = bookChatTools.TOOLS.get_motifs({}, { bookId: BOOK_ID, userEmail });
   assert.equal(result.total_themes, 1);
-  assert.equal(result.total_motifs, 1);
+  assert.equal(result.total_motifs, 2);
+  assert.equal(result.scanned, true);
   assert.equal(result.geister, 1);
 
-  const m = result.motifs[0];
+  const m = result.motifs.find(x => x.name === 'Wasser');
   assert.equal(m.name, 'Wasser');
   assert.equal(m.thema, 'Schuld & Vergebung');
   assert.deepEqual(m.trigger_terms, ['Regen', 'Fluss']);
   assert.deepEqual(m.soll.kapitel, ['Kapitel Eins']);
   assert.equal(m.ist_count, 0);
   assert.equal(m.geist, true);
+});
+
+test('get_motifs: nie gescannt → kein ist_count, kein Geist, Hinweis «ungeprüft»', () => {
+  const BOOK_ID = 7307;
+  const userEmail = 'autor@werk.dev';
+  ctx.dbSeed.setBook({
+    books: [{ id: BOOK_ID, name: 'B' }],
+    chapters: [{ id: 73070, book_id: BOOK_ID, name: 'K1' }],
+    pages: [{ id: 73071, book_id: BOOK_ID, name: 'P1', chapter_id: 73070 }],
+  });
+  const motif = motifDb.createMotif(BOOK_ID, userEmail, { name: 'Wasser' });
+  motifDb.setMotifChapters(motif.id, [73070]);
+
+  const result = bookChatTools.TOOLS.get_motifs({}, { bookId: BOOK_ID, userEmail });
+  assert.equal(result.scanned, false);
+  assert.equal(result.geister, undefined);
+  assert.match(result.hint, /UNGEPRÜFT/);
+  assert.equal(result.motifs[0].ist_count, undefined);
+  assert.equal(result.motifs[0].geist, undefined);
+
+  const detail = bookChatTools.TOOLS.get_motifs({ motif_id: motif.id }, { bookId: BOOK_ID, userEmail });
+  assert.equal(detail.scanned, false);
+  assert.deepEqual(detail.occurrences, []);
 });
 
 test('get_motifs: Motiv mit Fundstellen → ist_count gesetzt, kein Geist; Beziehungen auf Namen aufgelöst', () => {
@@ -124,8 +153,16 @@ test('get_motifs mit Motiv (Fundstellen): per motif_name → Fundstellen mit pag
 test('get_motifs mit Motiv (Fundstellen): Geist-Motiv (0 Fundstellen) → occurrences:[] + hint', () => {
   const BOOK_ID = 7305;
   const userEmail = 'autor@werk.dev';
-  ctx.dbSchema.upsertBookByName(BOOK_ID, 'B');
+  ctx.dbSeed.setBook({
+    books: [{ id: BOOK_ID, name: 'B' }],
+    pages: [{ id: 73051, book_id: BOOK_ID, name: 'P1' }],
+  });
   const motif = motifDb.createMotif(BOOK_ID, userEmail, { name: 'Leeres Motiv' });
+  // Gescannt (ein anderes Motiv ist belegt) — sonst hiesse 0 «ungeprüft».
+  const other = motifDb.createMotif(BOOK_ID, userEmail, { name: 'Anderes' });
+  motifDb.replaceOccurrences(other.id, BOOK_ID, [
+    { kind: 'page', pageId: 73051, score: null, snippet: 'x', source: 'trigger' },
+  ]);
 
   const result = bookChatTools.TOOLS.get_motifs(
     { motif_id: motif.id },

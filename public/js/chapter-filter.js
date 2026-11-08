@@ -35,6 +35,31 @@ export function buildKapitelLabels(tree) {
   return labels;
 }
 
+// Kapitelnummer je Kapitel-ID in Lesereihenfolge über den ganzen Kapitelbaum
+// (ausgeschlossene Kapitel zählen mit): Oberkapitel «1», «2», …, Unterkapitel
+// «2.1», «2.1.3». Seiten ohne Kapitel (`solo`) bekommen keine Nummer. `tree` ist
+// der flache `nav.tree` (Eltern stehen vor ihren Kindern).
+export function buildKapitelNumbers(tree) {
+  const nums = new Map();
+  const childCount = new Map(); // parent_id (oder 'root') → bisher vergebene Kinder
+  for (const c of tree || []) {
+    if (c.type !== 'chapter' || c.solo) continue;
+    const parentNum = c.parent_id != null ? nums.get(c.parent_id) : null;
+    const key = parentNum ? c.parent_id : 'root';
+    const n = (childCount.get(key) || 0) + 1;
+    childCount.set(key, n);
+    nums.set(c.id, parentNum ? `${parentNum}.${n}` : String(n));
+  }
+  return nums;
+}
+
+/** Auswertungs-Label eines Kapitels: Nummer vor dem Namen («12 · Name»). Ohne
+ *  Nummer (Kapitel unbekannt) bleibt der Name. */
+export function numberedKapitelLabel(num, name) {
+  if (!name) return num ? String(num) : '';
+  return num ? `${num} · ${name}` : name;
+}
+
 /** Combobox-Optionen aus IDs: dedupliziert, in Buchreihenfolge (`idxOf`), Label
  *  über `labelOf`. IDs ohne Label (Kapitel gelöscht) fallen weg — eine Option, die
  *  nichts mehr benennt, liesse sich nicht wählen. */

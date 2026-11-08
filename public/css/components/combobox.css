@@ -41,9 +41,12 @@
 /* Position kommt von x-anchor (Floating UI, `.fixed`-Strategie) — entkommt
    overflow-clippenden Vorfahren (horizontal scrollende Container wie das
    Plot-Swimlane-Grid) und flippt automatisch nach oben, wenn unten kein Platz
-   ist. left/top werden von x-anchor inline gesetzt, die Breite via ddWidth. */
+   ist. left/top werden von x-anchor inline gesetzt, die Mindestbreite (=
+   Trigger) via ddWidth; lange Labels verbreitern die Liste bis zum Deckel. */
 .combobox-dropdown {
   position: fixed;
+  width: max-content;
+  max-width: min(28rem, calc(100vw - 2 * var(--space-md)));
   z-index: var(--z-header);
   background: var(--color-surface);
   border: var(--border-thin) solid var(--color-border-focus);

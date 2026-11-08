@@ -6,7 +6,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { buildKapitelLabels, idOptions } from '../../public/js/chapter-filter.js';
 
-const filters = { figurId: '', kapitelId: '', schwere: '', status: '' };
+const filters = { figurId: '', kapitelId: '', schwere: '', fokus: '' };
 const vater = { type: 'chapter', id: 4, name: 'Der Vater', pages: [] };
 const unauff = { type: 'chapter', id: 11, name: 'Der Unauffällige', pages: [] };
 const nihil = { type: 'chapter', id: 13, name: 'Der Nihilist', pages: [] };

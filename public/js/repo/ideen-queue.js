@@ -215,7 +215,14 @@ function _withFields(base, fields) {
 }
 
 function _assumePatched(idee, fields) {
-  const row = { ...idee, ...fields, pending: true };
+  return { ...patchedIdeeRow(idee, fields), pending: true };
+}
+
+// Wie der Server eine Idee nach PATCH `fields` zurueckgibt (Anker exklusiv:
+// Abschnitt ODER Kapitel). Auch fuer die optimistische Anzeige vor der Antwort
+// (ideen-board/actions.js#_patchIdee).
+export function patchedIdeeRow(idee, fields) {
+  const row = { ...idee, ...fields };
   if ('page_id' in fields && !('chapter_id' in fields)) row.chapter_id = null;
   if ('chapter_id' in fields && !('page_id' in fields)) row.page_id = null;
   if (fields.status && fields.status !== idee.status) row.status_at = _nowIso();

@@ -193,6 +193,14 @@ Kapitelnamen sind **nicht eindeutig**: gleichnamige Unterkapitel («Einleitung»
 
 Gegated durch [tests/unit/chapter-filter-ids.test.mjs](../tests/unit/chapter-filter-ids.test.mjs) (jede `catalogFilter('chapter'|'page')`-Combobox bindet ein `…Id`-Feld, kein Filter-Scope führt `kapitel`/`seite`, keine eigene Name→ID-Map über `chapter_name`), dazu [chapter-name-map.test.js](../tests/unit/chapter-name-map.test.js) und je Karte ein Fall mit gleichnamigen Kapiteln.
 
+## Kapitelnummern in Auswertungen
+
+Auswertungen beschriften Kapitel mit **Nummer vor dem Namen** («12 · I'd finally book that dance class.»). **Why:** Kapiteltitel sind oft ganze Sätze mit gleichem Anfang («I'd …», «I would not …»); gekürzt in Filtern, Kacheln und Matrizen waren sie nicht mehr unterscheidbar.
+
+- Nummern: [chapter-filter.js](../public/js/chapter-filter.js)#`buildKapitelNumbers` über den **ganzen Kapitelbaum** in Lesereihenfolge — Oberkapitel «1», «2», Unterkapitel «2.1», «2.1.3»; ausgeschlossene Kapitel zählen mit, Seiten ohne Kapitel (`solo`) bekommen keine. Gebaut zusammen mit `_chapterLabelMap` als `_chapterNumberMap` ([tree/build.js](../public/js/book/tree/build.js)), darum reicht `_chapterLabelMap` als Memo-Abhängigkeit.
+- Labels nur über `$app._kapitelLabel(id)` (Nummer + disambiguierter Name, [app-ui.js](../public/js/app/app-ui.js)) bzw. `_kapitelNummer(id)` für schmale Spaltenköpfe (Figuren-Präsenz, Motiv-Verlaufsband: Nummer im Kopf, Name im Tooltip). Daraus lesen `_kapitelOptionen` (alle Katalog-Filter), die Kapitel-Referenz (`x-entity-ref` Typ `kapitel`, [entity-ref.js](../public/js/entity-ref.js)), die Kacheln der Buchübersicht, Stil-Heatmap, Szenen, Buchlandkarte und die Block-Spannen des Wortschatz-Deltas. Eine Kapitel-Referenz mit ID gibt den Servernamen deshalb als `name` (Rückfall), nie als `label` mit — sonst überschriebe er die Nummer.
+- **Ohne Nummer** bleiben die Gliederung selbst und die Schreibflächen: Sidebar, Buchorganizer, die drei Editoren, Command-Palette, Share-Auswahl (`_chapterLabelMap` direkt).
+
 ## Folder-Import nutzt Hierarchie
 
 [routes/jobs/folder-import.js](../routes/jobs/folder-import.js) erzeugt Jahr-Kapitel (top-level) + Monat-Sub-Kapitel (`parent_chapter_id = Jahr-ID`). Siehe [docs/folder-import.md](folder-import.md).

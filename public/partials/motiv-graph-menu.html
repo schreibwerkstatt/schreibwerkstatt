@@ -1,4 +1,5 @@
-<!-- Graph-Kontextmenü (Fragment-Include aus motiv.html) — ein einzelnes, aus dem
+<!-- Aktionsmenü der Karte: Graph-Kontextmenü + Beziehungstyp (Fragment-Include aus
+     motiv.html). Graph-Kontextmenü — ein einzelnes, aus dem
      Graph heraus teleportiertes .context-menu (Mechanik aus action-menu.js). Der
      Graph sitzt in einem eigenen Canvas-Container; cursor-verankert an die
      Rechtsklick-Position. Läuft im Scope der motivCard (Include vor Alpine-Init).
@@ -52,6 +53,23 @@
           <svg class="icon" aria-hidden="true"><use href="/icons.svg#trash"/></svg>
           <span x-text="$app.t('motiv.graph.menu.deleteMotif')"></span>
         </button>
+      </div>
+    </template>
+
+    <!-- Beziehungstyp einer Motiv-Kante ändern (aus dem Detail-Editor, Reiter
+         Beziehungen). Ein Klick wählt den Typ. -->
+    <template x-if="relationMenuRel()">
+      <div>
+        <div class="context-menu-header" x-text="$app.t('motiv.relations.changeTyp')"></div>
+        <template x-for="tp in motifRelTypes()" :key="tp">
+          <button type="button" role="menuitemradio" class="context-menu-item context-menu-item--icon"
+                  :aria-checked="relationMenuRel()?.typ === tp"
+                  :class="{ 'context-menu-item--on': relationMenuRel()?.typ === tp }"
+                  @click="setRelationTyp(relationMenuRel(), tp)">
+            <svg class="icon" aria-hidden="true"><use :href="relationMenuRel()?.typ === tp ? '/icons.svg#check' : '/icons.svg#circle'"/></svg>
+            <span x-text="motifRelLabel(tp)"></span>
+          </button>
+        </template>
       </div>
     </template>
 

@@ -44,6 +44,7 @@
 
 import { comboboxData } from '../combobox.js';
 import { compareText } from '../i18n.js';
+import { figurAnzeigeName } from '../book/figur-name.js';
 
 function _store(name) { return window.Alpine?.store?.(name) || {}; }
 
@@ -60,7 +61,7 @@ function _memo(self, deps, build) {
   return val;
 }
 
-const _figLabel = (f) => f.kurzname || f.name;
+const _figLabel = figurAnzeigeName;
 
 // Jede Builder-Funktion liest ihre reaktiven Quellen und liefert { deps, build }.
 const BUILDERS = {

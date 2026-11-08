@@ -22,6 +22,7 @@ import { ereignisEditMethods } from './ereignisse/edit.js';
 import { memoMethods } from './card-memo.js';
 import { activeFilterId, hasId, sameId } from '../chapter-filter.js';
 import { listWindowState, listWindowMethods } from '../list-window.js';
+import { figurAnzeigeName } from '../book/figur-name.js';
 
 export { hasEventYear, formatEventDateParts };
 export { subtypIcon, bandMarkerColor, eventSpanYears, POINT_SUBTYPES };
@@ -170,7 +171,7 @@ export function registerEreignisseCard() {
       return this._memo('figOpt', [events, figuren], () => {
         const ids = new Set();
         for (const ev of (events || [])) for (const f of ev.figuren) if (f.id != null) ids.add(f.id);
-        return (figuren || []).filter(f => ids.has(f.id)).map(f => ({ value: f.id, label: f.kurzname || f.name }));
+        return (figuren || []).filter(f => ids.has(f.id)).map(f => ({ value: f.id, label: figurAnzeigeName(f) }));
       });
     },
 
