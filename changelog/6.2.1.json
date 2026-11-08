@@ -1,0 +1,41 @@
+{
+  "version": "6.2.1",
+  "date": "2026-11-08",
+  "entries": [
+    {
+      "kind": "neu",
+      "de": "Figuren: eine Figur kann als Ich-Erzählstimme markiert sein und weitere Namen tragen, etwa einen Spitznamen. Die Komplettanalyse füllt beides vor, im Steckbrief kannst du es korrigieren.",
+      "en": "Characters: a character can be marked as the first-person narrator and carry further names, such as a nickname. The full analysis fills both in, and you can correct them in the profile."
+    },
+    {
+      "kind": "verbessert",
+      "de": "Figurenalter findet mehr Altersangaben: auch Stellen wie «Thomas, 37 Jahre,», «ist fünf geworden» oder Ich-Sätze der Erzählstimme, und Spitznamen zählen mit.",
+      "en": "Character age finds more age clues: phrases like \"Thomas, 37,\", \"turned five\" or first-person sentences of the narrator, and nicknames count too."
+    },
+    {
+      "kind": "verbessert",
+      "de": "Autorenprofil und Meine Statistik: schreibst du in mehreren Sprachen, werden die Kennzahlen und die Lesbarkeit je Sprache verglichen. Nur der Dialoganteil steht über alle Bücher.",
+      "en": "Author profile and My statistics: if you write in several languages, the figures and readability are compared per language. Only the dialogue share is shown across all books."
+    },
+    {
+      "kind": "verbessert",
+      "de": "Komplettanalyse: Szenen werden zuverlässiger ihrem Schauplatz zugeordnet, und als Schauplatz gelten nur noch echte Orte statt Möbelstücke oder Situationen.",
+      "en": "Full analysis: scenes are matched to their location more reliably, and only real places count as locations, not furniture or situations."
+    },
+    {
+      "kind": "verbessert",
+      "de": "Admin-Einstellungen: einfache KI-Aufgaben wie Synonyme, Chat-Titel oder Ortssuche laufen auf einem schnelleren, günstigeren Claude-Modell. Welches Modell die Stufen «Standard» und «Leicht» nutzen, stellst du dort ein.",
+      "en": "Admin settings: simple AI tasks such as synonyms, chat titles or place lookup run on a faster, cheaper Claude model. You choose there which model the \"Standard\" and \"Light\" tiers use."
+    },
+    {
+      "kind": "verbessert",
+      "de": "Ideen-Board: der Erledigt-Check startet erst 15 Minuten nach deinem letzten Speichern, damit kurze Pausen beim Schreiben ihn nicht auslösen.",
+      "en": "Ideas board: the done check now starts 15 minutes after your last save, so short breaks while writing no longer trigger it."
+    },
+    {
+      "kind": "behoben",
+      "de": "Eine Komplettanalyse, die über Nacht lief, erschien in der Job-Übersicht als abgebrochen, obwohl sie noch arbeitete.",
+      "en": "A full analysis running overnight showed up as aborted in the job overview although it was still working."
+    }
+  ]
+}

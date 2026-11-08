@@ -59,12 +59,18 @@ function endJobRun(jobId, status, tokensIn, tokensOut, cacheReadIn, cacheCreatio
 }
 
 /** Setzt alle hängenden job_runs (status 'running' oder 'queued') auf 'error'.
- *  Gibt die Anzahl bereinigter Einträge zurück. */
-function cleanupStuckJobRuns() {
+ *  `keepJobIds`: Jobs, die dieser Prozess gerade ausführt oder in der Queue hält —
+ *  sie hängen nicht und bleiben unangetastet. Beim Boot leer (das letzte
+ *  Server-Leben ist vorbei, jede offene Zeile ist tot); der Nacht-Cron übergibt die
+ *  In-Memory-Jobs, sonst stünde eine über 23:00 laufende Komplettanalyse bis zu
+ *  ihrem Ende als «gestorben» da. Gibt die Anzahl bereinigter Einträge zurück. */
+function cleanupStuckJobRuns({ keepJobIds = [] } = {}) {
+  const keep = [...new Set(keepJobIds)].filter(Boolean);
   const result = db.prepare(
     `UPDATE job_runs SET status = 'error', ended_at = ${NOW_ISO_SQL}, error = 'Job-Prozess gestorben (Server-Neustart oder Absturz)'
-     WHERE status IN ('running', 'queued')`
-  ).run();
+     WHERE status IN ('running', 'queued')
+       AND job_id NOT IN (SELECT value FROM json_each(?))`
+  ).run(JSON.stringify(keep));
   return result.changes;
 }
 

@@ -28,6 +28,8 @@ export function buildFiguresBasisConsolidationPrompt(bookName, chapterFiguren, b
     return `## Kapitel: ${cf.kapitel}\n` + (cf.figuren || []).map(f => {
       const meta = [f.typ, f.beruf, f.geburtstag ? `*${f.geburtstag}` : '', f.geschlecht].filter(Boolean).join(', ');
       return `- ${f.name}${f.kurzname && f.kurzname !== f.name ? ` («${f.kurzname}»)` : ''} (${meta}): ${f.beschreibung || ''}` +
+        (f.ist_erzaehler ? '\n  Ich-Erzählstimme: ja' : '') +
+        (f.weitere_namen?.length ? '\n  Weitere Namen: ' + f.weitere_namen.join(', ') : '') +
         (f.rolle ? '\n  Rolle: ' + f.rolle : '') +
         (f.motivation ? '\n  Motivation: ' + f.motivation : '') +
         (f.konflikt ? '\n  Konflikt: ' + f.konflikt : '') +

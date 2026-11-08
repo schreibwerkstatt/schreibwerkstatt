@@ -60,7 +60,7 @@ Dieselbe Regel gilt für den Vorperioden-Vergleich und das Wochen-Delta („dies
 
 ## Lesbarkeit & Wortformen
 
-Wert = zeichengewichteter Schnitt (Lesbarkeit) bzw. Summe (Wortformen) über den letzten Snapshot je Buch. Der Trendpfeil vergleicht mit dem Stand vor 30 Tagen, **nur über Bücher, die zu beiden Zeitpunkten existierten**. Wortformen werden je Buch gezählt und addiert — dasselbe Wort in zwei Büchern zählt zweimal (darum nicht „Wortschatz", siehe [wortschatz.md](wortschatz.md)).
+Wert = zeichengewichteter Schnitt (Lesbarkeit) bzw. Summe (Wortformen) über den letzten Snapshot je Buch. Der Trendpfeil vergleicht mit dem Stand vor 30 Tagen, **nur über Bücher, die zu beiden Zeitpunkten existierten**. Die Lesbarkeit (Flesch, LIX, Satzlänge) wird **je Messsprache** gemittelt ([readability.js](../public/js/cards/my-stats-compute/readability.js)#`computeReadability`, Sprache je Buch aus `languages` von `/me/profile-stats-history`, normalisiert über [lib/style-lang.js](../lib/style-lang.js)#`styleLanguage`); bei mehr als einer Sprache steht je Sprache eine Gruppe mit Sprachpräfix, Hauptsprache (mehr Text) zuerst, Trend je Gruppe. **Why:** Flesch nach Amstad und nach Flesch sind zwei Formeln, LIX und Satzlänge liegen im Englischen systematisch tiefer — ein gemischter Schnitt wäre keine der beiden Skalen ([stil-heatmap.md](stil-heatmap.md#buchsprache)). Wortformen bleiben eine Summe über alle Bücher. Wortformen werden je Buch gezählt und addiert — dasselbe Wort in zwei Büchern zählt zweimal (darum nicht „Wortschatz", siehe [wortschatz.md](wortschatz.md)).
 
 ## Bücher & Ziele / Prognose
 

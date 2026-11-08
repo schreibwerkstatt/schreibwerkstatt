@@ -363,6 +363,7 @@ export {
   buildAutorenprofilPrompt,
   SCHEMA_AUTORENPROFIL,
   AUTORENPROFIL_METRIC_LABELS,
+  AUTORENPROFIL_LANGUAGE_LABELS,
 } from './prompts/autorenprofil.js';
 
 export {

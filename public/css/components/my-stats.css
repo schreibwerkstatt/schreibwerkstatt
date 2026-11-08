@@ -85,6 +85,9 @@
   color: var(--color-muted);
   vertical-align: baseline;
 }
+/* Sprachgruppe der Lesbarkeit: nur Template-Klammer, die Kennzahlen bleiben
+   Zellen des umgebenden .overview-consistency-grid. */
+.mystats-readability-group { display: contents; }
 
 /* ── Aufwand: Schreiben vs. Überarbeiten ─────────────────────────────────── */
 .mystats-effort-bar {

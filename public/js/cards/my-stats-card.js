@@ -37,6 +37,8 @@ export function registerMyStatsCard() {
     myStatsWriting: [],
     myStatsLektorat: [],
     myStatsSessions: [],
+    // Messsprache je Buch ({ book_id: 'de'|'en' }) — Lesbarkeit wird je Sprache gemittelt.
+    myStatsLanguages: {},
     myStatsMetric: 'chars',
     myStatsStreakMode: 'activity', // 'activity' | 'goal' — Streak-Heatmap-Faerbung
     // Globaler Zeitraum-Filter (steuert die ganze Karte). Preset-Tage
@@ -95,6 +97,7 @@ export function registerMyStatsCard() {
         this.myStatsWriting = Array.isArray(hist.writing) ? hist.writing : [];
         this.myStatsLektorat = Array.isArray(hist.lektorat) ? hist.lektorat : [];
         this.myStatsSessions = Array.isArray(hist.sessions) ? hist.sessions : [];
+        this.myStatsLanguages = (hist.languages && typeof hist.languages === 'object') ? hist.languages : {};
       } catch (e) {
         console.error('[myStats load]', e);
         this.myStatsError = window.__app.t('mystats.loadError');
@@ -103,6 +106,7 @@ export function registerMyStatsCard() {
         this.myStatsWriting = [];
         this.myStatsLektorat = [];
         this.myStatsSessions = [];
+        this.myStatsLanguages = {};
       } finally {
         this.myStatsLoading = false;
       }
@@ -304,7 +308,8 @@ export function registerMyStatsCard() {
 
     // ── Lesbarkeit (1), Aufwand (2), Pro-Buch-Zeit (3), Wochen-Delta (4) ────
     myStatsReadability() {
-      return this._memo('readability', [this.myStatsHistory], () => computeReadability(this.myStatsHistory));
+      return this._memo('readability', [this.myStatsHistory, this.myStatsLanguages],
+        () => computeReadability(this.myStatsHistory, new Date(), this.myStatsLanguages));
     },
     myStatsWeekDelta() {
       const detail = this.myStatsData?.books_detail;
@@ -436,6 +441,12 @@ export function registerMyStatsCard() {
     },
 
     // Flesch-DE in Klartext-Band (4 Stufen).
+    // Sprachpraefix einer Lesbarkeits-Kennzahl — nur bei mehrsprachigem Werk.
+    myStatsLangPrefix(group) {
+      if (!this.myStatsReadability().multiLanguage) return '';
+      return window.__app.t('lang.' + group.language) + ' · ';
+    },
+
     myStatsFleschLabel(v) {
       if (v == null) return '';
       const key = v >= 70 ? 'easy' : v >= 50 ? 'medium' : v >= 30 ? 'hard' : 'veryHard';

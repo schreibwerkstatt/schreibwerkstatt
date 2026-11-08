@@ -64,3 +64,22 @@ test('Prompt-Labels decken jede Kennzahl ab (sonst steht ein Code-Key im Prompt)
     assert.ok(AUTORENPROFIL_METRIC_LABELS[m.key], `Label fehlt fuer ${m.key}`);
   }
 });
+
+test('Mehrsprachig ohne gleichsprachiges Paar: Entwicklung leer, mit Begründung Sprachunterschied', () => {
+  const p = buildAutorenprofilPrompt({ ...base, buecher: 2, mehrsprachig: true, entwicklungMoeglich: false });
+  assert.match(p, /"entwicklung": LEERES Array/);
+  assert.match(p, /Sprachunterschied, keine Entwicklung/);
+  // Konstanten dürfen die Sprachgrenze überspannen, aber nicht auf sprachgebundene Zahlen.
+  assert.match(p, /nur auf die Buch-Stilprofile und den Dialoganteil/);
+});
+
+test('Mehrsprachig mit gleichsprachigem Paar: Entwicklung nur innerhalb einer Sprache', () => {
+  const p = buildAutorenprofilPrompt({ ...base, buecher: 3, mehrsprachig: true, entwicklungMoeglich: true });
+  assert.match(p, /ausschliesslich zwischen Buechern DERSELBEN Sprache/);
+  assert.doesNotMatch(p, /LEERES Array/);
+});
+
+test('Sprachnamen decken jede Messsprache ab', async () => {
+  const { AUTORENPROFIL_LANGUAGE_LABELS } = await import('../../public/js/prompts/autorenprofil.js');
+  for (const lang of ['de', 'en']) assert.ok(AUTORENPROFIL_LANGUAGE_LABELS[lang], lang);
+});

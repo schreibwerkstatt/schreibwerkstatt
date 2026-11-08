@@ -34,7 +34,8 @@ const { db } = require('../../db/connection');
 const { getBookSettings } = require('../../db/book-settings');
 const { replaceFigureAges, getFigureAgeScan } = require('../../db/figure-ages');
 const { computeFigureYears, bookYearSpan } = require('../../lib/figure-years');
-const { buildFigureNamePatterns } = require('../../lib/page-index');
+const { buildFigureNamePatterns, findDialogRanges } = require('../../lib/page-index');
+const { styleProfile, PRONOUN_GROUPS_DE, PRONOUN_GROUPS_EN } = require('../../lib/style-lang');
 const { hasMsgThread, msgThreadLines, msgUtterances, stripMsgThreads } = require('../../lib/html-text');
 const {
   AGE_ANALYSIS_VERSION, buildNameIndex, scanPage, scanMsgUtterances, selectCandidates, isStrong,
@@ -92,7 +93,7 @@ function computeContentSig(pages, figuren, model, { zeitlinieReal = false, yearM
   for (const p of pages) h.update(`|p${p.id}:${p.updated_at || ''}`);
   for (const f of figuren) {
     const y = yearMap?.get(f.id);
-    h.update(`|f${f.id}:${f.name}:${f.kurzname || ''}:${f.geburtstag || ''}:${y?.jahr_im_roman ?? ''}:${y?.geburtsjahr ?? ''}`);
+    h.update(`|f${f.id}:${f.name}:${f.kurzname || ''}:${f.weitere_namen || ''}:${f.ist_erzaehler ? 'E' : ''}:${f.geburtstag || ''}:${y?.jahr_im_roman ?? ''}:${y?.geburtsjahr ?? ''}`);
   }
   return h.digest('hex');
 }
@@ -176,7 +177,7 @@ async function runFigurAlterJob(jobId, bookId, userEmail, { force = false } = {}
     updateJob(jobId, { statusText: 'job.phase.figurAlterCollect', progress: 4 });
 
     const figuren = db.prepare(`
-      SELECT id, fig_id, name, kurzname, typ, geburtstag
+      SELECT id, fig_id, name, kurzname, weitere_namen, ist_erzaehler, typ, geburtstag
       FROM figures
       WHERE book_id = ? AND user_email IS ? AND stale = 0
       ORDER BY sort_order, id
@@ -202,7 +203,14 @@ async function runFigurAlterJob(jobId, bookId, userEmail, { force = false } = {}
     }
 
     // ── Schicht 1: Kandidatensaetze ──────────────────────────────────────────
-    const patterns = figuren.map(f => ({ id: f.id, patterns: buildFigureNamePatterns(f.name, f.kurzname) }));
+    const patterns = figuren.map(f => ({ id: f.id, patterns: buildFigureNamePatterns(f.name, f.kurzname, f.weitere_namen) }));
+    // Ich-Erzählstimme (figures.ist_erzaehler): genau eine markierte Figur und kein
+    // anderslautender Erzählstandpunkt in den Bucheinstellungen. Bei mehreren Ich-Stimmen
+    // wäre «ich» mehrdeutig — dann bleibt es bei den Namensfunden.
+    const erzaehler = figuren.filter(f => f.ist_erzaehler);
+    const narratorId = erzaehler.length === 1 && (!settings?.erzaehlperspektive || settings.erzaehlperspektive === 'ich')
+      ? erzaehler[0].id : null;
+    const ichPronomen = (styleProfile(settings?.language) === styleProfile('en') ? PRONOUN_GROUPS_EN : PRONOUN_GROUPS_DE).ich;
     const nameIndex = buildNameIndex(patterns);
     if (!nameIndex) throw i18nError('job.error.figurAlterNoFiguren');
 
@@ -224,7 +232,8 @@ async function runFigurAlterJob(jobId, bookId, userEmail, { force = false } = {}
       };
       pageText.set(p.id, prose);
       pageMeta.set(p.id, { page_name: meta.page_name, chapter: meta.chapter, chapter_id: meta.chapter_id, ordinal: i });
-      const funde = scanPage(prose, nameIndex, meta);
+      const funde = scanPage(prose, nameIndex, meta,
+        narratorId != null ? { id: narratorId, pronouns: ichPronomen, dialogRanges: findDialogRanges(prose) } : null);
       if (withMsgs) funde.push(...scanMsgUtterances(msgUtterances(msgThreadLines(p.html)), nameIndex, { ...meta, offset: prose.length }));
       for (const c of funde) byFigur.get(c.figure_id)?.push(c);
       p.html = null;
@@ -412,7 +421,7 @@ async function runFigurAlterJob(jobId, bookId, userEmail, { force = false } = {}
           buildFigurAlterPrompt(bundle.map(b => ({
             name: b.fig.name, kurzname: b.fig.kurzname, typ: b.fig.typ,
             geburtstag: b.fig.geburtstag,
-            stellen: b.stellen.map(s => ({ satz: s.satz, chapter: s.chapter, page_name: s.page_name, indirekt: s.indirekt, semantisch: !!s.semantisch })),
+            stellen: b.stellen.map(s => ({ satz: s.satz, chapter: s.chapter, page_name: s.page_name, indirekt: s.indirekt, semantisch: !!s.semantisch, erzaehler: !!s.erzaehler })),
           })), BUCH_KONTEXT, buchJahre),
           systemPrompt, from, to, 4000, 0.25, MAX_OUT_TOKENS, undefined, SCHEMA_FIGUR_ALTER,
         );

@@ -113,8 +113,24 @@ function _figFields(f, idMaps) {
 const CURATED_FIELDS = [
   'name', 'kurzname', 'typ', 'geburtstag', 'geschlecht', 'beruf', 'wohnadresse',
   'aeusseres', 'stimme', 'hintergrund', 'beschreibung', 'sozialschicht', 'praesenz',
-  'rolle', 'motivation', 'konflikt', 'entwicklung', 'arc',
+  'rolle', 'motivation', 'konflikt', 'entwicklung', 'arc', 'ist_erzaehler',
 ];
+
+// Weitere Ruf-/Spitznamen aus der Analyse (figures.weitere_namen, Migration 361): eine
+// kurze, bereinigte Liste ohne Name/Kurzname. Kein kuratiertes Feld — der Katalog-PUT
+// schreibt sie nie (ein Client ohne das Feld löschte sie sonst), nur die Analyse.
+const MAX_WEITERE_NAMEN = 8;
+function normWeitereNamen(f) {
+  const own = new Set([f?.name, f?.kurzname].filter(Boolean).map(x => String(x).trim().toLowerCase()));
+  const out = [];
+  for (const raw of Array.isArray(f?.weitere_namen) ? f.weitere_namen : []) {
+    const n = typeof raw === 'string' ? raw.trim() : '';
+    if (!n || n.length > 60 || own.has(n.toLowerCase()) || out.some(o => o.toLowerCase() === n.toLowerCase())) continue;
+    out.push(n);
+    if (out.length >= MAX_WEITERE_NAMEN) break;
+  }
+  return out.length ? JSON.stringify(out) : null;
+}
 
 // Alle persistierbaren Spalten einer Figur als benannte Parameter.
 function _figColumns(f, v, sortOrder) {
@@ -128,6 +144,9 @@ function _figColumns(f, v, sortOrder) {
     entwicklung: v.entwicklungFlat, arc: v.arcJson,
     erste_erwaehnung: v.ersteErwaehnung, erste_erwaehnung_page_id: v.erstPageId,
     schluesselzitate: v.zitate, sort_order: sortOrder,
+    // null = nicht mitgeliefert (Aufrufer setzt den Bestand bzw. 0).
+    ist_erzaehler: f.ist_erzaehler == null ? null : (f.ist_erzaehler ? 1 : 0),
+    weitere_namen: normWeitereNamen(f),
   };
 }
 
@@ -232,8 +251,8 @@ function saveFigurenToDb(bookId, figuren, userEmail, idMaps, opts = {}) {
         (book_id, fig_id, name, kurzname, typ, geburtstag, geschlecht, beruf, wohnadresse, aeusseres, stimme, hintergrund,
          beschreibung, sozialschicht, praesenz, rolle, motivation, konflikt, entwicklung, arc,
          erste_erwaehnung, erste_erwaehnung_page_id, schluesselzitate, sort_order, user_email, ki_name,
-         ki_geschlecht, ki_geburtstag, updated_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ${NOW_ISO_SQL})`);
+         ki_geschlecht, ki_geburtstag, ist_erzaehler, weitere_namen, updated_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ${NOW_ISO_SQL})`);
     const insTag = db.prepare('INSERT OR IGNORE INTO figure_tags (figure_id, tag) VALUES (?, ?)');
     const insRel = db.prepare('INSERT INTO figure_relations (book_id, from_fig_id, to_fig_id, typ, beschreibung, machtverhaltnis, naehe, belege, user_email) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)');
 
@@ -251,7 +270,8 @@ function saveFigurenToDb(bookId, figuren, userEmail, idMaps, opts = {}) {
         f.beschreibung || null, f.sozialschicht || null,
         f.praesenz || null, f.rolle || null, f.motivation || null, f.konflikt || null,
         v.entwicklungFlat, v.arcJson, v.ersteErwaehnung, v.erstPageId, v.zitate,
-        i, em, f.name, f.geschlecht || null, f.geburtstag || null
+        i, em, f.name, f.geschlecht || null, f.geburtstag || null,
+        f.ist_erzaehler ? 1 : 0, normWeitereNamen(f),
       );
       figIdToRowId[f.id] = fid;
       _writeFigTags(insTag, fid, f);
@@ -362,7 +382,8 @@ function _reconcileFiguren(bookId, figuren, em, idMaps, opts) {
 
     const _cols = `fig_id, name, kurzname, typ, geburtstag, geschlecht, beruf, wohnadresse, aeusseres,
         stimme, hintergrund, beschreibung, sozialschicht, praesenz, rolle, motivation, konflikt,
-        entwicklung, arc, erste_erwaehnung, erste_erwaehnung_page_id, schluesselzitate, sort_order`.split(',').map(c => c.trim());
+        entwicklung, arc, erste_erwaehnung, erste_erwaehnung_page_id, schluesselzitate, sort_order,
+        ist_erzaehler, weitere_namen`.split(',').map(c => c.trim());
     const insFig = db.prepare(`
       INSERT INTO figures (${_cols.join(', ')}, book_id, user_email, manually_edited, ki_name,
         ki_geschlecht, ki_geburtstag, stale, updated_at)
@@ -393,6 +414,9 @@ function _reconcileFiguren(bookId, figuren, em, idMaps, opts) {
       let writeTags = true;
       if (existingId != null) {
         const prev = prevById.get(existingId);
+        // Nicht mitgeliefert ist keine Änderung; die Rufnamen gehören der Analyse.
+        if (cols.ist_erzaehler == null) cols.ist_erzaehler = prev.ist_erzaehler ? 1 : 0;
+        if (manual || cols.weitere_namen == null) cols.weitere_namen = prev.weitere_namen ?? null;
         let edited = prev.manually_edited ? 1 : 0;
         if (manual) {
           if (!edited && _curatedChanged(prev, prevTags.get(existingId), f, cols)) edited = 1;
@@ -421,6 +445,8 @@ function _reconcileFiguren(bookId, figuren, em, idMaps, opts) {
       } else {
         fid = insFig.run({
           ...cols, book_id: bookId, user_email: em,
+          ist_erzaehler: cols.ist_erzaehler ? 1 : 0,
+          weitere_namen: manual ? null : cols.weitere_namen,
           // Im Katalog angelegt = vom Autor kuratiert; kein Analyse-Name.
           manually_edited: manual ? 1 : 0, ki_name: manual ? null : f.name,
           ki_geschlecht: manual ? null : (f.geschlecht || null),
@@ -504,4 +530,5 @@ function _writeRelations(bookId, em, manual, prevRels, figIdToRowId, allRelation
 }
 
 module.exports = {
+  normWeitereNamen,
   planFigurenMatch, saveFigurenToDb };

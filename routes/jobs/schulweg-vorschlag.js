@@ -212,7 +212,7 @@ async function runSchulwegVorschlagJob(jobId, bookId, userEmail, { nachKatalog =
       .map(p => ({ page_id: p.id, text: htmlToTextForPrompt(String(p.html || p.text || '').replace(/\s+/g, ' ')) }));
     throwIfAborted();
 
-    const nameIndex = buildNameIndex(figuren.map(f => ({ id: f.id, patterns: buildFigureNamePatterns(f.name, f.kurzname) })));
+    const nameIndex = buildNameIndex(figuren.map(f => ({ id: f.id, patterns: buildFigureNamePatterns(f.name, f.kurzname, f.weitere_namen) })));
     const byFig = nameIndex ? collectStellen(pageTexts, nameIndex) : new Map();
     const blocks = figuren
       .map(f => ({ fig: f, stellen: pickStellen(byFig.get(f.id) || []) }))

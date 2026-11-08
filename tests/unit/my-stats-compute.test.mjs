@@ -133,15 +133,32 @@ test('computeReadability: chars-gewichteter Mittelwert ueber letztes Snapshot je
   ];
   const r = computeReadability(rows);
   assert.ok(r.hasData);
+  assert.equal(r.multiLanguage, false);
+  const [g] = r.groups;
   // (60*3000 + 80*1000) / 4000 = 65
-  assert.equal(r.flesch, 65);
-  assert.equal(r.lix, (45 * 3000 + 35 * 1000) / 4000);
+  assert.equal(g.flesch, 65);
+  assert.equal(g.lix, (45 * 3000 + 35 * 1000) / 4000);
+});
+
+test('computeReadability: je Messsprache gemittelt, nie über die Sprachgrenze', () => {
+  const rows = [
+    { book_id: 1, recorded_at: '2026-06-10', chars: 3000, avg_flesch_de: 55, avg_lix: 45, avg_sentence_len: 14 },
+    { book_id: 2, recorded_at: '2026-06-10', chars: 1000, avg_flesch_de: 85, avg_lix: 25, avg_sentence_len: 9 },
+    { book_id: 3, recorded_at: '2026-06-10', chars: 1000, avg_flesch_de: 65, avg_lix: 35, avg_sentence_len: 12 },
+  ];
+  // Buch 3 ohne Angabe gilt als Deutsch (lib/style-lang.js#styleLanguage).
+  const r = computeReadability(rows, new Date(), { 1: 'de', 2: 'en' });
+  assert.equal(r.multiLanguage, true);
+  assert.deepEqual(r.groups.map(g => g.language), ['de', 'en'], 'Hauptsprache zuerst');
+  assert.equal(r.groups[0].flesch, (55 * 3000 + 65 * 1000) / 4000);
+  assert.equal(r.groups[1].flesch, 85);
+  assert.equal(r.groups[1].sentenceLen, 9);
 });
 
 test('computeReadability: ohne Werte → hasData false, Trends 0', () => {
   const r = computeReadability([{ book_id: 1, recorded_at: '2026-06-01', chars: 1000, avg_flesch_de: null, avg_lix: null, avg_sentence_len: null }]);
   assert.equal(r.hasData, false);
-  assert.equal(r.fleschTrend, 0);
+  assert.deepEqual(r.groups, []);
 });
 
 test('computeReadability: Trend vergleicht mit ~30 Tagen zuvor', () => {
@@ -149,10 +166,10 @@ test('computeReadability: Trend vergleicht mit ~30 Tagen zuvor', () => {
     { book_id: 1, recorded_at: isoDaysAgo(40), chars: 1000, avg_flesch_de: 50, avg_lix: 50, avg_sentence_len: 12 },
     { book_id: 1, recorded_at: isoDaysAgo(0),  chars: 1000, avg_flesch_de: 60, avg_lix: 45, avg_sentence_len: 12 },
   ];
-  const r = computeReadability(rows);
-  assert.equal(r.fleschTrend, 1, 'Flesch gestiegen');
-  assert.equal(r.lixTrend, -1, 'LIX gesunken');
-  assert.equal(r.sentenceLenTrend, 0, 'Satzlaenge unveraendert');
+  const [g] = computeReadability(rows).groups;
+  assert.equal(g.fleschTrend, 1, 'Flesch gestiegen');
+  assert.equal(g.lixTrend, -1, 'LIX gesunken');
+  assert.equal(g.sentenceLenTrend, 0, 'Satzlaenge unveraendert');
 });
 
 test('computeWeeklyDelta: Zuwachs diese Woche vs. letzte Woche', () => {
@@ -984,8 +1001,8 @@ test('computeReadability / computeVocabTrend: Trend nur ueber Buecher, die zu be
     { book_id: 2, recorded_at: isoDaysAgo(2), chars: 50000, avg_flesch_de: 20, unique_words: 9000 },
   ];
   const r = computeReadability(rows);
-  assert.equal(r.fleschTrend, 0);
-  assert.equal(r.trendBooks, 1);
+  assert.equal(r.groups[0].fleschTrend, 0);
+  assert.equal(r.groups[0].trendBooks, 1);
   assert.equal(r.refIso, isoDaysAgo(30));
   const v = T.computeVocabTrend(rows);
   assert.equal(v.total, 10000, 'Anzeige summiert alle Buecher');

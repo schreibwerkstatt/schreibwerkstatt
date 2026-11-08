@@ -9,6 +9,9 @@ const { _normalizeName } = require('../../figuren-merge');
 const appSettings = require('../../../../../lib/app-settings');
 const { getContextConfigFor, providerClass } = require('../../../../../lib/ai');
 const { PHASE_END } = require('../../../../../lib/komplett-scope');
+const {
+  answerOrtRefMap, knownOrtRefs, resolveSzenenOrtRefs, anchorGapSzenen, placeGapSzenen,
+} = require('../../szenen-ort-refs');
 
 /**
  * Cloud-Multi-Pass: System-Blöcke eines Chunk-Calls. Läuft danach ein Gap-Pass
@@ -123,16 +126,20 @@ async function runMultiPassCompletenessGaps(ctx, { chunkTexts, chapters, concurr
     { name: 'szenen',  arr: chapters.chapterSzenen,  field: 'szenen',  keyOf: szeneKey,         isValid: (s) => s && s.titel },
   ];
   // Global-Known (über alle Chunks) als Anzeige-Liste + Normalisierungs-Set pro Strom.
-  const knownSet = {}, knownDisp = {};
+  // knownObj hält zur Anzeige-Liste die Objekte (Szenen: Anker für `nach`).
+  const knownSet = {}, knownDisp = {}, knownObj = {};
   for (const s of STREAMS) {
     knownSet[s.name] = new Set();
     knownDisp[s.name] = [];
+    knownObj[s.name] = [];
     for (const c of (s.arr || [])) for (const it of (c[s.field] || [])) {
       const k = _normalizeName(s.keyOf(it));
       if (!k || knownSet[s.name].has(k)) continue;
-      knownSet[s.name].add(k); knownDisp[s.name].push(s.keyOf(it));
+      knownSet[s.name].add(k); knownDisp[s.name].push(s.keyOf(it)); knownObj[s.name].push(it);
     }
   }
+  // Schon erfasste Orte mit Kennung (bek_N): Gap-Szenen verweisen darauf statt auf Namen.
+  const orteRefs = knownOrtRefs(knownDisp.orte);
 
   updateJob(jobId, { statusText: 'job.phase.completenessChunks', statusParams: { n: chunkTexts.length } });
   const perChunk = await settledAll(chunkTexts.map(({ chunk, key, pagesSig, chText }, chunkIdx) => async () => {
@@ -146,6 +153,8 @@ async function runMultiPassCompletenessGaps(ctx, { chunkTexts, chapters, concurr
     // Chunk-lokale Akkumulatoren, gesät mit dem globalen Known-Katalog.
     const seen = {}, disp = {}, fresh = {};
     for (const s of STREAMS) { seen[s.name] = new Set(knownSet[s.name]); disp[s.name] = knownDisp[s.name].slice(); fresh[s.name] = []; }
+    // Die Szenen-Liste im Prompt als Objekte, für `nach` → Anker (anchorGapSzenen).
+    const shownSzenen = knownObj.szenen.slice();
     // Gleicher Präfix wie der Basis-Call dieses Chunks → Kapiteltext per cache_read.
     const parts = _chunkCallParts(ctx, chunk, chText, sys.SYSTEM_KOMPLETT_EXTRAKTION_BLOCKS);
     let roundFailed = false;
@@ -154,7 +163,7 @@ async function runMultiPassCompletenessGaps(ctx, { chunkTexts, chapters, concurr
       try {
         res = await retryOnTransientAi(() => call(jobId, tok,
           prompts.buildChunkGapPrompt(chunk.name, bookName, chunk.pages.length, parts.chText, {
-            figuren: disp.figuren, orte: disp.orte, fakten: disp.fakten, szenen: disp.szenen,
+            figuren: disp.figuren, orte: orteRefs.lines, fakten: disp.fakten, szenen: disp.szenen,
           }),
           parts.system, null, null, claudeExtractCap, 0.2, null, prompts.SCHEMA_KOMPLETT_EXTRAKTION, gapTier,
         ), { log, label: `${chunkLabel} (Gap ${round}/${completenessPasses})` });
@@ -164,15 +173,21 @@ async function runMultiPassCompletenessGaps(ctx, { chunkTexts, chapters, concurr
         roundFailed = true;
         break;
       }
+      if (Array.isArray(res?.szenen)) resolveSzenenOrtRefs(res.szenen, answerOrtRefMap(res.orte), orteRefs.map);
       let anyNew = 0;
+      const roundSzenen = [];
       for (const s of STREAMS) {
         for (const it of (res?.[s.field] || [])) {
           if (!s.isValid(it)) continue;
           const k = _normalizeName(s.keyOf(it));
           if (!k || seen[s.name].has(k)) continue;
           seen[s.name].add(k); disp[s.name].push(s.keyOf(it)); fresh[s.name].push(it); anyNew++;
+          if (s.name === 'szenen') roundSzenen.push(it);
         }
       }
+      // `nach` zeigt in die Liste DIESER Runde → vor dem Cache zum Titel-Anker machen.
+      anchorGapSzenen(roundSzenen, shownSzenen.concat(roundSzenen));
+      shownSzenen.push(...roundSzenen);
       log.info(`${chunkLabel} Gap ${round}: +${anyNew} neu.`);
       if (anyNew === 0) break; // loop-until-dry
     }
@@ -193,6 +208,7 @@ async function runMultiPassCompletenessGaps(ctx, { chunkTexts, chapters, concurr
       const items = f[s.name];
       if (!items?.length || !s.arr[i]) continue;
       if (s.name === 'figuren') appendFigurenKollisionsfrei(s.arr[i][s.field], items);
+      else if (s.name === 'szenen') placeGapSzenen(s.arr[i][s.field], items);
       else s.arr[i][s.field].push(...items);
       totals[s.name] += items.length;
     }
@@ -218,7 +234,12 @@ async function _extractCloudChunk(ctx, { chunk, chText, chunkLabel, claudeExtrac
   const extractOnce = (label, pages, sysBlocks, text) => retryOnTransientAi(() => call(jobId, tok,
     prompts.buildExtraktionKomplettChapterPrompt(chunk.name, bookName, pages.length, text, ctx.katalogBlock),
     sysBlocks, null, null, claudeExtractCap, 0.2, null, prompts.SCHEMA_KOMPLETT_EXTRAKTION, extractTier,
-  ), { log, label }).then(res => assertChunkFields(res, label));
+  ), { log, label }).then(res => {
+    assertChunkFields(res, label);
+    // Pro Antwort auflösen: die Hälften vergeben beide ort_1… (szenen-ort-refs.js).
+    resolveSzenenOrtRefs(res.szenen, answerOrtRefMap(res.orte));
+    return res;
+  });
   try {
     return await extractOnce(chunkLabel, chunk.pages, parts.system, parts.chText);
   } catch (e) {
@@ -343,6 +364,7 @@ async function extractMultiPass(ctx, { chunks, chunkOrder, claudeExtractCap, cal
         passB = await callExtract(`${chunkLabel} Pass B`,
           prompts.buildExtraktionOrtePassPrompt(chunk.name, bookName, chunk.pages.length, chText, ctx.katalogBlock),
           sys.SYSTEM_KOMPLETT_ORTE_PASS_BLOCKS, null, null, 6000, prompts.SCHEMA_KOMPLETT_ORTE_PASS);
+        if (Array.isArray(passB?.szenen)) resolveSzenenOrtRefs(passB.szenen, answerOrtRefMap(passB.orte));
         saveChapterExtractCache(bookIdInt, email, ortKey, pagesSig, passB, effectiveProvider);
       }
 

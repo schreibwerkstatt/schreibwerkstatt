@@ -349,6 +349,8 @@ function listFigurenWithDetails(bookId, userEmail) {
       manually_edited: !!f.manually_edited,
       name: f.name,
       kurzname: f.kurzname,
+      weitere_namen: _parseJsonArray(f.weitere_namen),
+      ist_erzaehler: !!f.ist_erzaehler,
       typ: f.typ,
       geburtstag: f.geburtstag,
       geschlecht: f.geschlecht,

@@ -81,7 +81,7 @@ function ortePassResponse() {
     szenen: [{
       seite: 'Seite Eins', kapitel: 'Kapitel Eins', titel: 'Anna im Wald',
       wertung: 'mittel', kommentar: 'kurze Szene',
-      figuren_namen: ['Anna'], orte_namen: ['Wald'],
+      figuren_namen: ['Anna'], orte_refs: ['ort_1'],
     }],
   };
 }
@@ -180,6 +180,13 @@ test('Komplettanalyse Single-Pass: 1 Kapitel, P1 + P8 → done', async () => {
   ).all(BOOK_ID, 'tester@test.dev');
   assert.equal(ortRows.length, 1);
   assert.equal(ortRows[0].name, 'Wald');
+  // Die Szene verweist per Kennung (orte_refs: ort_1) — die Verknüpfung steht.
+  const sceneLoc = ctx.dbSchema.db.prepare(`
+    SELECT l.name FROM scene_locations sl
+    JOIN locations l ON l.id = sl.location_id
+    JOIN figure_scenes s ON s.id = sl.scene_id
+    WHERE s.book_id = ? AND s.titel = 'Anna im Wald'`).all(BOOK_ID);
+  assert.deepEqual(sceneLoc.map(r => r.name), ['Wald']);
 
   // World-Fakten persisted. Single-Pass-Fakt unter 'Gesamtbuch' matcht kein Kapitel,
   // bekommt aber über seinen eindeutigen Seitennamen ('Seite Eins' → page 1200 →

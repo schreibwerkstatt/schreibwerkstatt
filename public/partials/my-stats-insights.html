@@ -78,32 +78,39 @@
 <template x-if="myStatsHasReadability">
   <div class="overview-tile overview-tile--medium">
     <div class="overview-tile-label">
-      <span x-text="$app.t('mystats.readability')"></span>
+      <span x-text="$app.t('mystats.readability')"
+            :data-tip="myStatsReadability().multiLanguage ? $app.t('mystats.readabilityLangTip') : null"></span>
       <span class="mystats-scope-tag" x-text="myStatsScope('current')"></span>
     </div>
     <div class="overview-consistency-grid">
-      <div class="overview-consistency-item" x-show="myStatsReadability().flesch !== null">
-        <span class="overview-consistency-value">
-          <span x-text="myStatsDec(myStatsReadability().flesch)"></span>
-          <svg class="icon mystats-trend" aria-hidden="true" :data-tip="myStatsTrendTip(myStatsReadability().refIso)"><use :href="'/icons.svg#' + myStatsTrendIcon(myStatsReadability().fleschTrend)"></use></svg>
-        </span>
-        <span class="overview-consistency-label"
-              x-text="$app.t('mystats.flesch') + ' · ' + myStatsFleschLabel(myStatsReadability().flesch)"></span>
-      </div>
-      <div class="overview-consistency-item" x-show="myStatsReadability().lix !== null">
-        <span class="overview-consistency-value">
-          <span x-text="myStatsDec(myStatsReadability().lix)"></span>
-          <svg class="icon mystats-trend" aria-hidden="true" :data-tip="myStatsTrendTip(myStatsReadability().refIso)"><use :href="'/icons.svg#' + myStatsTrendIcon(myStatsReadability().lixTrend)"></use></svg>
-        </span>
-        <span class="overview-consistency-label" x-text="$app.t('mystats.lix')"></span>
-      </div>
-      <div class="overview-consistency-item" x-show="myStatsReadability().sentenceLen !== null">
-        <span class="overview-consistency-value">
-          <span x-text="myStatsDec(myStatsReadability().sentenceLen)"></span>
-          <svg class="icon mystats-trend" aria-hidden="true" :data-tip="myStatsTrendTip(myStatsReadability().refIso)"><use :href="'/icons.svg#' + myStatsTrendIcon(myStatsReadability().sentenceLenTrend)"></use></svg>
-        </span>
-        <span class="overview-consistency-label" x-text="$app.t('mystats.sentenceLen')"></span>
-      </div>
+      <!-- Je Messsprache eine Gruppe (Flesch-Formel, LIX- und Satzlaengen-Niveau
+           unterscheiden sich je Sprache); einsprachig genau eine, ohne Sprachpraefix. -->
+      <template x-for="g in myStatsReadability().groups" :key="g.language">
+        <div class="mystats-readability-group">
+          <div class="overview-consistency-item" x-show="g.flesch !== null">
+            <span class="overview-consistency-value">
+              <span x-text="myStatsDec(g.flesch)"></span>
+              <svg class="icon mystats-trend" aria-hidden="true" :data-tip="myStatsTrendTip(myStatsReadability().refIso)"><use :href="'/icons.svg#' + myStatsTrendIcon(g.fleschTrend)"></use></svg>
+            </span>
+            <span class="overview-consistency-label"
+                  x-text="myStatsLangPrefix(g) + $app.t('mystats.flesch') + ' · ' + myStatsFleschLabel(g.flesch)"></span>
+          </div>
+          <div class="overview-consistency-item" x-show="g.lix !== null">
+            <span class="overview-consistency-value">
+              <span x-text="myStatsDec(g.lix)"></span>
+              <svg class="icon mystats-trend" aria-hidden="true" :data-tip="myStatsTrendTip(myStatsReadability().refIso)"><use :href="'/icons.svg#' + myStatsTrendIcon(g.lixTrend)"></use></svg>
+            </span>
+            <span class="overview-consistency-label" x-text="myStatsLangPrefix(g) + $app.t('mystats.lix')"></span>
+          </div>
+          <div class="overview-consistency-item" x-show="g.sentenceLen !== null">
+            <span class="overview-consistency-value">
+              <span x-text="myStatsDec(g.sentenceLen)"></span>
+              <svg class="icon mystats-trend" aria-hidden="true" :data-tip="myStatsTrendTip(myStatsReadability().refIso)"><use :href="'/icons.svg#' + myStatsTrendIcon(g.sentenceLenTrend)"></use></svg>
+            </span>
+            <span class="overview-consistency-label" x-text="myStatsLangPrefix(g) + $app.t('mystats.sentenceLen')"></span>
+          </div>
+        </div>
+      </template>
       <div class="overview-consistency-item" x-show="myStatsHasVocab()" :data-tip="$app.t('mystats.uniqueWordsTip')">
         <span class="overview-consistency-value">
           <span x-text="_myStatsFmt(myStatsVocabTrend().total)"></span>

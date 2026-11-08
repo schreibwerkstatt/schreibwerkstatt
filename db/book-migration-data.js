@@ -245,8 +245,8 @@ function restoreAnalysis(bookId, data, ctx) {
   const insFig = db.prepare(`INSERT INTO figures
     (book_id,fig_id,name,kurzname,typ,geburtstag,geschlecht,beruf,beschreibung,sort_order,meta,updated_at,user_email,
      sozialschicht,praesenz,rolle,motivation,konflikt,entwicklung,erste_erwaehnung,erste_erwaehnung_page_id,
-     schluesselzitate,wohnadresse,aeusseres,stimme,hintergrund,arc,manually_edited,ki_name)
-    VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`);
+     schluesselzitate,wohnadresse,aeusseres,stimme,hintergrund,arc,manually_edited,ki_name,ist_erzaehler,weitere_namen)
+    VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`);
   for (const r of arr('figures')) {
     const res = insFig.run(
       bookId, _uniqueKey(usedFig, r.fig_id), r.name, r.kurzname ?? null, r.typ ?? null, r.geburtstag ?? null,
@@ -255,7 +255,7 @@ function restoreAnalysis(bookId, data, ctx) {
       r.motivation ?? null, r.konflikt ?? null, r.entwicklung ?? null, r.erste_erwaehnung ?? null,
       pageOf(r.erste_erwaehnung_page_id), r.schluesselzitate ?? null, r.wohnadresse ?? null,
       r.aeusseres ?? null, r.stimme ?? null, r.hintergrund ?? null, r.arc ?? null,
-      r.manually_edited ? 1 : 0, r.ki_name ?? null,
+      r.manually_edited ? 1 : 0, r.ki_name ?? null, r.ist_erzaehler ? 1 : 0, r.weitere_namen ?? null,
     );
     figMap.set(r.id, res.lastInsertRowid);
   }

@@ -28,7 +28,8 @@ require('./migrations');
 const _stmtBooks = db.prepare(`
   SELECT b.book_id,
          b.created_at,
-         COALESCE(bs.exclude_from_stats, 0) AS excluded
+         COALESCE(bs.exclude_from_stats, 0) AS excluded,
+         bs.language
     FROM books b
     LEFT JOIN book_settings bs ON bs.book_id = b.book_id
    WHERE b.owner_email IS NOT NULL

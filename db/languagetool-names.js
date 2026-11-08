@@ -7,7 +7,7 @@
 const { db } = require('./connection');
 
 const _stmtFigures = db.prepare(
-  `SELECT name, kurzname FROM figures WHERE book_id = ?`
+  `SELECT name, kurzname, weitere_namen FROM figures WHERE book_id = ?`
 );
 const _stmtLocations = db.prepare(
   `SELECT name FROM locations WHERE book_id = ?`
@@ -20,6 +20,8 @@ function listBookNames(bookId) {
   for (const f of _stmtFigures.all(bookId)) {
     if (f.name) out.push(f.name);
     if (f.kurzname) out.push(f.kurzname);
+    // Ruf-/Spitznamen aus der Analyse («Lotti») sind ebenso wenig Tippfehler.
+    try { for (const n of JSON.parse(f.weitere_namen || '[]')) if (typeof n === 'string' && n) out.push(n); } catch { /* kaputtes JSON: keine Rufnamen */ }
   }
   for (const l of _stmtLocations.all(bookId)) if (l.name) out.push(l.name);
   return out;

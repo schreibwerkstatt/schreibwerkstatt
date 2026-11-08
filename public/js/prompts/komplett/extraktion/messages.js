@@ -140,6 +140,27 @@ function _knownList(names) {
   return arr.length ? arr.map(n => `- ${n}`).join('\n') : '(noch keine)';
 }
 
+/** Nummerierte Liste — der Gap-Pass nennt mit `nach` die Nummer der Szene, hinter der
+ *  eine nachgezogene Szene spielt (szenen-ort-refs.js#placeGapSzenen). */
+function _numberedList(items) {
+  const arr = (items || []).filter(Boolean);
+  return arr.length ? arr.map((n, i) => `${i + 1}. ${n}`).join('\n') : '(noch keine)';
+}
+
+/** Schon erfasste Schauplätze als «bek_N: Name»-Zeilen (szenen-ort-refs.js#knownOrtRefs)
+ *  samt Verweis-Regel für die Szenen eines Gap-/Backfill-Passes. `neueOrte`: ob der Pass
+ *  zusätzlich neue Orte (mit eigener id) anlegen darf. */
+// Position einer nachgezogenen Szene: eine Zahl statt eines Zitats — kostet ein Token.
+const _SZENE_NACH_RULE = 'szenen[].nach: Nummer der erfassten Szene aus der Liste, HINTER der die neue Szene im Text spielt (0 = vor allen Szenen ihres Kapitels). Mehrere neue Szenen hinter derselben Nummer in Leserichtung ausgeben.';
+
+function _ortRefsBlock(orteLines, neueOrte = false) {
+  return `<bekannte_schauplaetze>
+${_knownList(orteLines)}
+</bekannte_schauplaetze>
+
+szenen[].orte_refs: Kennungen aus <bekannte_schauplaetze> (z.B. «bek_3»)${neueOrte ? ' oder die id eines in dieser Antwort neu erfassten Orts' : ''} – keine Namen. Der spezifischste passende Ort; leeres Array wenn kein konkreter Ort.`;
+}
+
 /** Gap-Pass A1: fehlende Figuren-Stammdaten (OHNE Lebensereignisse – die zieht der
  *  E-Pass über die finale Figurenliste nach). Reuse von SYSTEM_KOMPLETT_FIGUREN_STAMM_BLOCKS
  *  + SCHEMA_KOMPLETT_FIGUREN_STAMM. */
@@ -194,14 +215,18 @@ Im «seite»-Feld jedes Faktums den reinen Abschnittstitel aus dem zugehörigen 
 /** Gap-Pass Szenen: fehlende Szenen. Reuse von SYSTEM_KOMPLETT_ORTE_PASS_BLOCKS +
  *  SCHEMA_KOMPLETT_ORTE_PASS. orte/songs dürfen leer bleiben – im Job wird nur das
  *  szenen-Array additiv vereinigt. */
-export function buildSzenenGapPrompt(bookName, knownScenes) {
+export function buildSzenenGapPrompt(bookName, knownScenes, knownOrteLines = []) {
   return `<aufgabe>
-Du hast das Buch «${bookName}» bereits einmal in Szenen zerlegt. Unten die bereits erfassten Szenen. Durchsuche den Buchtext (im System-Prompt oben) GRÜNDLICH ERNEUT und gib AUSSCHLIESSLICH Szenen aus, die in dieser Liste FEHLEN – übergangene Handlungsabschnitte, Nebenszenen, kurze aber klar abgegrenzte Abschnitte. Bereits erfasste Szenen NICHT erneut ausgeben. orte und songs als leere Arrays zurückgeben (in diesem Pass nicht gefragt). Wenn keine weitere Szene existiert: leeres szenen-Array.
+Du hast das Buch «${bookName}» bereits einmal in Szenen zerlegt. Unten die bereits erfassten Szenen in Leserichtung. Durchsuche den Buchtext (im System-Prompt oben) GRÜNDLICH ERNEUT und gib AUSSCHLIESSLICH Szenen aus, die in dieser Liste FEHLEN – übergangene Handlungsabschnitte, Nebenszenen, kurze aber klar abgegrenzte Abschnitte. Bereits erfasste Szenen NICHT erneut ausgeben. orte und songs als leere Arrays zurückgeben (in diesem Pass nicht gefragt). Wenn keine weitere Szene existiert: leeres szenen-Array.
 </aufgabe>
 
 <bereits_erfasste_szenen>
-${_knownList(knownScenes)}
+${_numberedList(knownScenes)}
 </bereits_erfasste_szenen>
+
+${_SZENE_NACH_RULE}
+
+${_ortRefsBlock(knownOrteLines)}
 
 Der Text ist in Kapitel-Sektionen gegliedert (## Kapitelname) mit Abschnitten darunter (### Abschnittstitel). Für szenen[].kapitel den reinen ## Kapitelnamen, für szenen[].seite den reinen ### Abschnittstitel (jeweils ohne Markierung) verwenden.
 
@@ -223,11 +248,17 @@ Du hast das Kapitel «${chapterName}» des Buchs «${bookName}» bereits einmal 
 
 ${sect('figuren', known.figuren)}
 
-${sect('schauplaetze', known.orte)}
-
 ${sect('fakten', known.fakten)}
 
-${sect('szenen', known.szenen)}
+<bereits_erfasste_szenen>
+${_numberedList(known.szenen)}
+</bereits_erfasste_szenen>
+
+${_SZENE_NACH_RULE}
+
+Die schon erfassten Schauplätze stehen unten mit Kennung; neue Schauplätze nur ausgeben, wenn sie dort FEHLEN.
+
+${_ortRefsBlock(known.orte, true)}
 
 Für alle Kapitel-Felder immer genau «${chapterName}» verwenden – die ### Überschriften im Text sind Abschnittstitel, keine Kapitelnamen.
 
@@ -241,6 +272,12 @@ ${chText == null
  *  und meldet, wie viele es im Passus wiedererkannt hat (erkannte_*) und welche NAMENTLICH
  *  genannten FEHLEN (fehlende_*). Der Score wird im Job berechnet. Kein Katalog-Eingriff. */
 export function buildCoverageAuditPrompt(bookName, chapterName, chText, knownFiguren, knownOrte) {
+  // chText null: der Ausschnitt ist das Kapitel «chapterName» im gecachten Buchtext des
+  // System-Prompts (Single-Pass) — dort steht ein anderes Antwortschema, darum das Format
+  // hier ausdrücklich (beim geteilten Buch-Präfix schickt der Provider kein Schema mit).
+  const textBlock = chText == null
+    ? `<text>Der Ausschnitt ist das Kapitel «${chapterName}» (## Header) im Buchtext des System-Prompts oben. Nur dieses Kapitel prüfen.</text>`
+    : `<kapiteltext kapitel="${chapterName}">\n${chText}\n</kapiteltext>`;
   return `<aufgabe>
 Prüfe die Vollständigkeit der bisherigen Analyse des Buchs «${bookName}» an diesem Kapitel-Ausschnitt. Unten stehen die bereits im Katalog erfassten Figuren und Schauplätze. Lies den Kapiteltext GENAU und melde:
 - erkannte_figuren / erkannte_orte: Anzahl der bereits erfassten Figuren/Schauplätze, die in diesem Ausschnitt tatsächlich vorkommen.
@@ -256,9 +293,10 @@ ${_knownList(knownFiguren)}
 ${_knownList(knownOrte)}
 </katalog_schauplaetze>
 
-<kapiteltext kapitel="${chapterName}">
-${chText}
-</kapiteltext>`;
+Antworte in diesem Pass AUSSCHLIESSLICH mit diesem JSON (ein im System-Prompt beschriebenes Schema gilt hier nicht):
+{"erkannte_figuren": 0, "fehlende_figuren": ["Name"], "erkannte_orte": 0, "fehlende_orte": ["Name"]}
+
+${textBlock}`;
 }
 
 // ── Gezielte Nachzieh-Pässe (Coverage-Feedback + Szenen-Backfill, Claude Single-Pass) ──
@@ -302,7 +340,7 @@ Der Text ist in Kapitel-Sektionen gegliedert (## Kapitelname). Für alle Kapitel
 /** Szenen-Backfill: für diese Kapitel wurde 0 Szenen extrahiert, obwohl sie substanziellen
  *  Text haben. Extrahiere gezielt deren Szenen. Reuse von SYSTEM_KOMPLETT_ORTE_PASS_BLOCKS +
  *  SCHEMA_KOMPLETT_ORTE_PASS (nur das szenen-Array wird verwendet). */
-export function buildTargetedSzenenPrompt(bookName, chapterNames) {
+export function buildTargetedSzenenPrompt(bookName, chapterNames, knownOrteLines = []) {
   return `<aufgabe>
 Für die unten genannten Kapitel des Buchs «${bookName}» wurde bisher KEINE Szene erfasst, obwohl sie erzählenden Text enthalten. Zerlege JEDES dieser Kapitel in seine Handlungsabschnitte (Szenen). Nutze den Buchtext im System-Prompt. orte und songs als leere Arrays zurückgeben. Wenn ein Kapitel wirklich nur aus Exposition/Beschreibung ohne Handlungsabschnitt besteht, dafür keine Szene ausgeben.
 </aufgabe>
@@ -312,6 +350,8 @@ ${_knownList(chapterNames)}
 </kapitel_ohne_szenen>
 
 Für szenen[].kapitel exakt den betreffenden Kapitelnamen (aus dem ## Header) verwenden, für szenen[].seite den reinen ### Abschnittstitel (jeweils ohne Markierung).
+
+${_ortRefsBlock(knownOrteLines)}
 
 <text>Der Buchtext steht im System-Prompt oben.</text>`;
 }

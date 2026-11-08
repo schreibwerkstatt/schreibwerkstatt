@@ -118,7 +118,6 @@
 }
 .chat-context-badge {
   display: inline-block;
-  margin-left: var(--space-6);
   padding: 0 var(--space-5);
   font-size: var(--font-size-micro);
   border: 0.5px solid var(--color-border);
@@ -527,6 +526,9 @@
   color: var(--color-muted);
   margin-right: var(--space-xs);
 }
+/* Belegzeile ist Fliesstext, kein Flex-Container mit gap: der Abstand zum
+   Abschnitts-Verweis kommt hier vom Badge selbst (gleich wie das Zitat). */
+.book-chat-citation .chat-context-badge { margin-left: var(--space-xs); }
 .book-chat-citation--invalid .book-chat-citation-quote {
   text-decoration: line-through;
   text-decoration-color: var(--color-err-text);

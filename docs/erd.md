@@ -1,6 +1,6 @@
 # ERD — schreibwerkstatt
 
-Stand: Schema-Version 360, 197 Tabellen (ohne `sqlite_*`/`schema_version`/FTS5-Shadow-Tables; inkl. FTS5-Virtual `search_index`/`search_trigram`/`chat_messages_fts` + `search_meta`).
+Stand: Schema-Version 361, 197 Tabellen (ohne `sqlite_*`/`schema_version`/FTS5-Shadow-Tables; inkl. FTS5-Virtual `search_index`/`search_trigram`/`chat_messages_fts` + `search_meta`).
 
 Quelle: Squashed-Schema-Snapshot in [db/squashed-schema.js](../db/squashed-schema.js) (regeneriert via `node tools/dump-schema.js`) + [db/migrations.js](../db/migrations.js). Drift gegen die Legacy-Migration-Kette ist durch [tests/unit/squash-drift.test.mjs](../tests/unit/squash-drift.test.mjs) gegated. Mermaid-Diagramme — in VSCode mit „Markdown Preview Mermaid Support" (oder GitHub) direkt sichtbar.
 
@@ -909,6 +909,8 @@ erDiagram
     TEXT    ki_geschlecht "Geschlecht aus der letzten Komplettanalyse; Indizien-Vergleich bei manually_edited=1"
     TEXT    ki_geburtstag "Geburtsdatum aus der letzten Komplettanalyse; Indizien-Vergleich bei manually_edited=1"
     INTEGER origin_figure_id FK "SET NULL — Figur im Vorband, aus der diese per «Aus Vorband übernehmen» kopiert wurde"
+    INTEGER ist_erzaehler "0|1, Ich-Erzählstimme (Analyse, Autor kann korrigieren); Alters-Analyse ordnet Ich-Sätze zu"
+    TEXT    weitere_namen "JSON-Array weiterer Ruf-/Spitznamen aus der Analyse; nicht figure_aliases (Autor-bestätigt)"
   }
   figure_aliases {
     INTEGER id         PK

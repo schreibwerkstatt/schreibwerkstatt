@@ -73,19 +73,23 @@ async function runAutorenprofilJob(jobId, userEmail) {
 
     const prompts = await getPrompts(userEmail);
     const { buildAutorenprofilPrompt, SCHEMA_AUTORENPROFIL, AUTORENPROFIL_METRIC_LABELS,
-            getLocalePromptsForBook } = prompts;
+            AUTORENPROFIL_LANGUAGE_LABELS, getLocalePromptsForBook } = prompts;
     const { SYSTEM_AUTORENPROFIL } = getLocalePromptsForBook(
       _localeFor(measurement.books, userEmail), null, null, false, null, null, false,
     );
 
     const messung = renderAuthorProfileMeasurement(measurement, {
-      nameById, labels: AUTORENPROFIL_METRIC_LABELS,
+      nameById, labels: AUTORENPROFIL_METRIC_LABELS, languageNames: AUTORENPROFIL_LANGUAGE_LABELS,
     });
 
     updateJob(jobId, { statusText: 'job.phase.distillingStyle', progress: 35 });
     const tok = { in: 0, out: 0, ms: 0 };
     const result = await aiCall(jobId, tok,
-      buildAutorenprofilPrompt({ messung, profile, buecher: measurement.counts.measured }),
+      buildAutorenprofilPrompt({
+        messung, profile, buecher: measurement.counts.measured,
+        mehrsprachig: measurement.multiLanguage,
+        entwicklungMoeglich: measurement.developmentAvailable,
+      }),
       SYSTEM_AUTORENPROFIL,
       35, 97, 2500, 0.3, null, undefined, SCHEMA_AUTORENPROFIL,
     );
@@ -93,12 +97,13 @@ async function runAutorenprofilJob(jobId, userEmail) {
     const profilText = (result?.autorenprofil || '').trim();
     if (!profilText) throw i18nError('job.error.autorenprofilMissing');
 
-    // Entwicklung bei nur EINEM Buch verwerfen, auch wenn das Modell welche
-    // liefert: sie waere per Konstruktion unbelegt. Der Prompt verbietet es,
-    // der Server erzwingt es — dieselbe Arbeitsteilung wie bei der
-    // Belegzitat-Verifikation der Buchbewertung.
-    const mehrereBuecher = measurement.counts.measured >= 2;
-    const entwicklung = mehrereBuecher && Array.isArray(result.entwicklung) ? result.entwicklung : [];
+    // Entwicklung ohne zwei Buecher DERSELBEN Sprache verwerfen, auch wenn das
+    // Modell welche liefert: sie waere per Konstruktion unbelegt (ein Buch) oder ein
+    // Sprachunterschied (je Sprache ein Buch). Der Prompt verbietet es, der Server
+    // erzwingt es — dieselbe Arbeitsteilung wie bei der Belegzitat-Verifikation der
+    // Buchbewertung.
+    const entwicklung = measurement.developmentAvailable && Array.isArray(result.entwicklung)
+      ? result.entwicklung : [];
     const konstanten = Array.isArray(result.konstanten) ? result.konstanten : [];
 
     saveAuthorProfileRun(userEmail, {

@@ -30,6 +30,9 @@ const PATCHABLE_FIELDS = {
 // serverseitig nur die Form pruefen — die Listen sind SSoT im Browser-Bundle
 // (figur-typen.js, i18n figuren.praesenz.* / figuren.schicht.*).
 const KEY_FIELDS = new Set(['typ', 'praesenz', 'sozialschicht']);
+// Ja/Nein-Felder (Wert true/false, gespeichert als 0/1): die Ich-Erzählstimme
+// (figures.ist_erzaehler, Migration 361) — die Analyse setzt sie, der Autor korrigiert.
+const FLAG_FIELDS = new Set(['ist_erzaehler']);
 const KEY_RE = /^[a-z_]*$/;
 
 /** Prueft den PATCH-Body. Liefert `{ fields }` (normalisiert: getrimmt, '' → null)
@@ -40,6 +43,11 @@ function validateFigurePatch(body) {
   if (!src || Array.isArray(src)) return { error: { error_code: 'INVALID_VALUE', field: 'fields' } };
   const fields = {};
   for (const [k, v] of Object.entries(src)) {
+    if (FLAG_FIELDS.has(k)) {
+      if (typeof v !== 'boolean') return { error: { error_code: 'INVALID_VALUE', field: k } };
+      fields[k] = v ? 1 : 0;
+      continue;
+    }
     const max = PATCHABLE_FIELDS[k];
     if (!max) return { error: { error_code: 'INVALID_VALUE', field: k, reason: 'unknown' } };
     if (v != null && typeof v !== 'string') return { error: { error_code: 'INVALID_VALUE', field: k } };

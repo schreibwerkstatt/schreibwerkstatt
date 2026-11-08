@@ -246,7 +246,8 @@ function buildFigNameLookup(figuren, chapterFiguren, chapterAssignments, chapter
     if (f.name && !(f.name in nameToId)) nameToId[f.name] = f.id;
   }
   for (const f of figuren) {
-    for (const alt of [f.kurzname, ...(f.__aliasNamen || [])]) {
+    // weitere_namen: Ruf-/Spitznamen aus der Extraktion («Lotti»), gleicher Rang wie der Kurzname.
+    for (const alt of [f.kurzname, ...(f.__aliasNamen || []), ...(Array.isArray(f.weitere_namen) ? f.weitere_namen : [])]) {
       if (alt && alt !== f.name && !(alt in nameToId)) nameToId[alt] = f.id;
     }
   }

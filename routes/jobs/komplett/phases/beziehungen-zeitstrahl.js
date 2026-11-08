@@ -48,7 +48,7 @@ async function runPhase3b(ctx, figuren) {
 
   try {
     const { computeFigureMentions } = require('../../../../lib/page-index');
-    const figInput = figuren.map(f => ({ id: f.id, name: f.name, kurzname: f.kurzname || '' }));
+    const figInput = figuren.map(f => ({ id: f.id, name: f.name, kurzname: f.kurzname || '', weitere_namen: f.weitere_namen }));
     const figPages = new Map();
     for (let pi = 0; pi < pageContents.length; pi++) {
       const mentions = computeFigureMentions(pageContents[pi].text, figInput);

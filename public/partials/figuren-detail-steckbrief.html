@@ -6,7 +6,7 @@
      Schleifenvariable `f`; Root-Zugriffe laufen über `$app`.
 -->
 <!-- ===== Gruppe: Steckbrief (objektive Fakten) ===== -->
-<section class="figur-group" x-show="figurEditId !== f.id && ($app.figurJahrLabel(f) || f.geburtsjahr != null || f.rolle || f.beruf || (f.sozialschicht && f.sozialschicht !== 'andere') || f.praesenz || f.wohnadresse || f.erste_erwaehnung || f.aeusseres || f.stimme)">
+<section class="figur-group" x-show="figurEditId !== f.id && ($app.figurJahrLabel(f) || f.geburtsjahr != null || f.ist_erzaehler || f.weitere_namen?.length || f.rolle || f.beruf || (f.sozialschicht && f.sozialschicht !== 'andere') || f.praesenz || f.wohnadresse || f.erste_erwaehnung || f.aeusseres || f.stimme)">
   <h4 class="figur-group-title" x-text="$app.t('figuren.group.steckbrief')"></h4>
   <dl class="figur-steckbrief-grid">
     <template x-if="$app.figurJahrLabel(f)">
@@ -20,6 +20,12 @@
     </template>
     <template x-if="f.geburtsjahr != null">
       <div class="figur-fact"><dt x-text="$app.t('figuren.field.geburtsjahr')"></dt><dd x-text="f.geburtsjahr"></dd></div>
+    </template>
+    <template x-if="f.weitere_namen?.length">
+      <div class="figur-fact"><dt x-text="$app.t('figuren.field.weitere_namen')"></dt><dd x-text="f.weitere_namen.join(', ')"></dd></div>
+    </template>
+    <template x-if="f.ist_erzaehler">
+      <div class="figur-fact"><dt x-text="$app.t('figuren.field.ist_erzaehler')"></dt><dd x-text="$app.t('figuren.field.ist_erzaehlerJa')"></dd></div>
     </template>
     <template x-if="f.rolle">
       <div class="figur-fact"><dt x-text="$app.t('figuren.field.rolle')"></dt><dd x-text="f.rolle"></dd></div>

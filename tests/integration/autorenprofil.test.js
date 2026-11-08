@@ -96,6 +96,27 @@ test('Nur ein Buch: eine behauptete Entwicklung wird serverseitig verworfen', as
   db.prepare('UPDATE book_lexicon SET tokens = 50000 WHERE book_id = ?').run(7002);
 });
 
+
+test('Zwei Sprachen, je ein Buch: Entwicklung verworfen, Messung je Sprache im Prompt', async () => {
+  const { db } = require('../../db/connection');
+  db.prepare("UPDATE book_settings SET language = 'en' WHERE book_id = ?").run(7002);
+  ctx.mockAi.on(() => true, ANTWORT); // liefert trotzdem eine Entwicklung
+
+  const jobId = ctx.shared.createJob('autorenprofil', 0, AUTOR, 'job.label.autorenprofil', {}, AUTOR);
+  ctx.shared.enqueueJob(jobId, () => ctx.autorenprofil.runAutorenprofilJob(jobId, AUTOR));
+  const job = await waitForJob(ctx.shared, jobId);
+  assert.equal(job.status, 'done', job.error || '');
+
+  const prompt = ctx.mockAi.log[0].prompt;
+  assert.match(prompt, /Sprachen: (Deutsch: Erstling; Englisch: Zweitwerk|Englisch: Zweitwerk; Deutsch: Erstling)\./);
+  assert.match(prompt, /== Ueber alle Sprachen ==/);
+  assert.match(prompt, /Sprachunterschied, keine Entwicklung/);
+  // Ein deutsches und ein englisches Buch sind kein Vergleichspaar: der Server verwirft.
+  assert.deepEqual(job.result.entwicklung, []);
+  assert.equal(job.result.konstanten.length, 1);
+
+  db.prepare("UPDATE book_settings SET language = 'de' WHERE book_id = ?").run(7002);
+});
 test('Leere KI-Antwort wird zum Fehler, nicht zu einem leeren Profil', async () => {
   ctx.mockAi.on(() => true, { autorenprofil: '   ', konstanten: [], entwicklung: [] });
   const jobId = ctx.shared.createJob('autorenprofil', 0, AUTOR, 'job.label.autorenprofil', {}, AUTOR);

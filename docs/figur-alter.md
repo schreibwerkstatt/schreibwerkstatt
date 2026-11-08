@@ -28,7 +28,7 @@ Meldung): sie schreibt Figurenstamm und Zeitstrahl gerade neu.
 
 | # | Wer | Was | Wo |
 |---|-----|-----|----|
-| 1 | deterministisch | **Kandidatensätze**: Muster (Ziffer, Zahlwort, Ordinal-Geburtstag, Geburtsjahr in beiden Leserichtungen, englische Formen) + Figurenname im Satzfenster, inkl. Pronomen-Anschluss aus dem Vorsatz | [lib/figure-age/patterns.js](../lib/figure-age/patterns.js), [scan.js](../lib/figure-age/scan.js) |
+| 1 | deterministisch | **Kandidatensätze**: Muster (Ziffer, Zahlwort, Ordinal-Geburtstag, Geburtsjahr in beiden Leserichtungen, Apposition «Thomas, 37 Jahre,», «fünf geworden», «mit dreissig», englische Formen) + Figurenname (inkl. weitere Rufnamen) im Satzfenster, inkl. Pronomen-Anschluss aus dem Vorsatz und Ich-Erzählstimme | [lib/figure-age/patterns.js](../lib/figure-age/patterns.js), [scan.js](../lib/figure-age/scan.js) |
 | 1b | deterministisch | **semantische Nachlese** (`semanticQuery`) für Figuren, bei denen die Muster wenig finden — „wie alt ist X" trifft ein Embedding-Index besser als eine Wortsuche. Die Passage (bis ~1500 Zeichen) wird per `passageStellen` auf den **Satz mit der Angabe** zugeschnitten, nicht auf ihren Anfang; die Figur muss in der Passage genannt sein. Non-fatal ohne Index | [routes/jobs/figur-alter.js](../routes/jobs/figur-alter.js) |
 | 2 | Modell | **was behaupten diese Sätze** — ein Call pro Figuren-Bündel. Nur das Modell sieht, dass „an ihrem sechzehnten Geburtstag" ein Alter nennt und „1912 kehrte sie zurück" nur ein Bezugsjahr | [prompts/figur-alter.js](../public/js/prompts/figur-alter.js) |
 | 3 | deterministisch | **Zitat nachschlagen, Zahl prüfen, Spanne bilden, Widerspruch melden** | [lib/figure-age/consolidate.js](../lib/figure-age/consolidate.js) |
@@ -111,6 +111,23 @@ Absender aus der geltenden Namenszeile seiner Seite ([html-text.js](../lib/html-
 indirekt; der Satz trägt ihn als „Name: …" voran. Nachrichten ohne Namenszeile ihrer Seite —
 meist die ausgehenden — ergeben nur mit Figur im Text etwas — kein Rückgriff auf den Satz
 davor, denn wem das Telefon gehört, steht nur in einer Namenszeile.
+
+**Apposition und Kurzformen.** «Thomas, 37 Jahre, Schweizer» (Profil-, Besetzungs-,
+Zeitungsstil) greift nur, wenn hinter «Jahre» die Apposition endet (Komma, Klammer,
+Satzende) — «zwei Jahre später» ist eine Dauer. «Anna (12)» nur direkt hinter einem
+Namen, schwach. «ist Lotti fünf geworden»: Zahl direkt vor «geworden», das Subjekt darf
+dazwischen stehen. «mit dreissig» ohne «Jahren» nur, wenn kein Substantiv folgt
+(«mit drei Freunden») und keine Einheit (km, kg …); schwach, das Modell entscheidet.
+
+**Ich-Erzählstimme.** Trägt genau eine Figur `ist_erzaehler` (Komplettanalyse, in der
+Figurenkarte korrigierbar) und steht der Erzählstandpunkt nicht auf etwas anderem als
+«ich», bekommt sie Angaben aus Sätzen ohne Namen: wenn die Angabe in der Erzählung steht
+(nicht in direkter Rede, `findDialogRanges` — dort spricht eine andere Figur von sich)
+und ein Ich-Pronomen der Erzählung den Satz trägt, im Satz selbst oder, wenn er keine
+Figur nennt, im Satz davor. Die Stelle geht als indirekt mit Hinweis
+«[Ich-Erzählstimme dieser Figur]» ans Modell. Bei mehreren Ich-Stimmen bleibt «ich»
+mehrdeutig und unzugeordnet. **Weitere Rufnamen** (`weitere_namen`, «Lotti») zählen im
+Namensindex wie der Kurzname ([lib/figure-name-patterns.js](../lib/figure-name-patterns.js)).
 
 ## Bündel und Abbruch
 

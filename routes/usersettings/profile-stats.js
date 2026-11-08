@@ -9,6 +9,7 @@ const { listBookIdsForUser } = require('../../db/book-access');
 const bookCategories = require('../../db/book-categories');
 const { localIsoDate, localIsoDaysAgo } = require('../../lib/local-date');
 const { NORMSEITE_CHARS } = require('../../lib/normseite');
+const { styleLanguage } = require('../../lib/style-lang');
 const logger = require('../../logger');
 const { sessionEmail } = require('../../lib/acl');
 const contentStore = require('../../lib/content-store');
@@ -220,7 +221,7 @@ function register(router) {
   router.get('/profile-stats-history', (req, res) => {
     const email = sessionEmail(req);
     const owned = ownedBooksForStats(email);
-    if (!owned.length) return res.json({ history: [], writing: [], lektorat: [], sessions: [] });
+    if (!owned.length) return res.json({ history: [], writing: [], lektorat: [], sessions: [], languages: {} });
     try {
       const ph = owned.map(() => '?').join(',');
       const history = db.prepare(`
@@ -251,7 +252,15 @@ function register(router) {
         FROM writing_session WHERE user_email = ? AND book_id IN (${ph}) AND seconds > 0
         ORDER BY date ASC
       `).all(email, ...owned);
-      res.json({ history, writing, lektorat, sessions });
+      // Messsprache je Buch (lib/style-lang.js#styleLanguage): die Lesbarkeit wird
+      // je Sprache gemittelt — Flesch nach Amstad und nach Flesch sind zwei Formeln,
+      // ein gemischter Schnitt waere keine der beiden Skalen.
+      const languages = {};
+      for (const r of db.prepare(`SELECT book_id, language FROM book_settings WHERE book_id IN (${ph})`).all(...owned)) {
+        languages[r.book_id] = styleLanguage(r.language);
+      }
+      for (const id of owned) if (!languages[id]) languages[id] = styleLanguage(null);
+      res.json({ history, writing, lektorat, sessions, languages });
     } catch (e) {
       logger.error('[me/profile-stats-history] DB-Fehler: ' + e.message, { user: email });
       res.status(500).json({ error_code: 'DB_ERROR' });

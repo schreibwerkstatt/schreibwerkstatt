@@ -84,6 +84,35 @@ test('PATCH pflegt eine Figur und markiert sie als vom Autor gepflegt', async ()
   assert.equal(paul.manually_edited, true);
 });
 
+test('Ich-Erzählstimme + Rufnamen: Analyse setzt, Autor korrigiert, PUT löscht keine Rufnamen', async () => {
+  const { saveFigurenToDb } = require('../../db/figures');
+  const idMaps = { chNameToId: { 'Kapitel 1': CH }, pageNameToIdByChapter: { [CH]: { Anfang: PAGE } } };
+  const analyse = (erz) => saveFigurenToDb(BOOK, [
+    { id: 'fig_1', name: 'Anna Berg', ist_erzaehler: erz, weitere_namen: ['Anni', 'Anna Berg', 'anni'] },
+    { id: 'fig_2', name: 'Paul Kern' }, { id: 'fig_3', name: 'Pauli' },
+  ], ME, idMaps, { reconcile: true, onMissing: 'stale' });
+  analyse(true);
+  let anna = (await call('GET', `/figures/${BOOK}`)).body.figuren.find(f => f.name === 'Anna Berg');
+  assert.equal(anna.ist_erzaehler, true);
+  assert.deepEqual(anna.weitere_namen, ['Anni'], 'ohne Name und ohne Doppel');
+
+  // Katalog-PUT eines Clients, der die Rufnamen nicht mitschickt: sie bleiben.
+  const get = await call('GET', `/figures/${BOOK}`);
+  const stripped = get.body.figuren.map(({ weitere_namen: _w, ...f }) => f);
+  assert.equal((await call('PUT', `/figures/${BOOK}`, { figuren: stripped })).status, 200);
+  anna = (await call('GET', `/figures/${BOOK}`)).body.figuren.find(f => f.name === 'Anna Berg');
+  assert.deepEqual(anna.weitere_namen, ['Anni']);
+
+  // Der Autor nimmt die Markierung zurück — der nächste Lauf setzt sie nicht wieder.
+  assert.equal((await call('PATCH', `/figures/${BOOK}/${anna.id}`, { fields: { ist_erzaehler: 'ja' } })).status, 400);
+  const r = await call('PATCH', `/figures/${BOOK}/${anna.id}`, { fields: { ist_erzaehler: false } });
+  assert.deepEqual(r.body.changed, ['ist_erzaehler']);
+  analyse(true);
+  anna = (await call('GET', `/figures/${BOOK}`)).body.figuren.find(f => f.name === 'Anna Berg');
+  assert.equal(anna.ist_erzaehler, false);
+  assert.equal(anna.manually_edited, true);
+});
+
 test('PATCH: Validierung, unbekannte Figur, Viewer ohne Schreibrecht', async () => {
   assert.equal((await call('PATCH', `/figures/${BOOK}/fig_2`, { fields: { name: '' } })).status, 400);
   assert.equal((await call('PATCH', `/figures/${BOOK}/fig_2`, { fields: { unbekannt: 'x' } })).status, 400);

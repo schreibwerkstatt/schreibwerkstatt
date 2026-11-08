@@ -40,9 +40,11 @@ function _figurBlock(f, nr) {
     const ort = [s.chapter, s.page_name].filter(Boolean).join(' › ');
     // Semantische Nachlese: die Figur steht irgendwo in derselben Passage, nicht
     // zwingend im Satz davor — der Bezug ist dort noch loser.
-    const hinweis = s.indirekt
-      ? (s.semantisch ? ' [Figur in der Umgebung genannt]' : ' [Figur steht im Satz davor]')
-      : '';
+    // Ich-Erzählstimme: kein Name im Satz, «ich» der Erzählung meint diese Figur.
+    const hinweis = s.erzaehler ? ' [Ich-Erzählstimme dieser Figur]'
+      : s.indirekt
+        ? (s.semantisch ? ' [Figur in der Umgebung genannt]' : ' [Figur steht im Satz davor]')
+        : '';
     return `  (${nr}.${i + 1})${ort ? ` [${ort}]` : ''}${hinweis} ${s.satz}`;
   });
   return `${nr}. ${f.name}${kopf ? ` (${kopf})` : ''}\n${stellen.length ? stellen.join('\n') : '  (keine Stellen gefunden)'}`;

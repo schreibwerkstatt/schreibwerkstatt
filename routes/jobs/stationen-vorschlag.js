@@ -161,7 +161,7 @@ async function runStationenVorschlagJob(jobId, bookId, userEmail, { nachKatalog 
       .map(p => ({ page_id: p.id, text: htmlToTextForPrompt(String(p.html || p.text || '').replace(/\s+/g, ' ')) }));
     throwIfAborted();
 
-    const nameIndex = buildNameIndex(figuren.map(f => ({ id: f.id, patterns: buildFigureNamePatterns(f.name, f.kurzname) })));
+    const nameIndex = buildNameIndex(figuren.map(f => ({ id: f.id, patterns: buildFigureNamePatterns(f.name, f.kurzname, f.weitere_namen) })));
     const berufStellen = nameIndex ? stellenLib.collectStellen(pageTexts, nameIndex, BERUF_RE) : new Map();
     const hobbyStellen = nameIndex ? stellenLib.collectStellen(pageTexts, nameIndex, HOBBY_RE) : new Map();
 

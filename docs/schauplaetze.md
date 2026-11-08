@@ -2,6 +2,10 @@
 
 Katalog der Orte eines Buchs: von der Komplettanalyse erkannt, vom Autor korrigiert, ergänzt und hierarchisch geordnet. Karte `orteCard` ([public/js/cards/orte-card.js](../public/js/cards/orte-card.js), Partials `orte*.html`), Routen [routes/locations.js](../routes/locations.js), Tabelle `locations` ([erd.md](erd.md)). Geo-Karte und Verortung: [geocode.md](geocode.md). Analyse-Pipeline: [komplett.md](komplett.md) (P3).
 
+## Was als Schauplatz gilt
+
+Die Extraktion (`ORTE_RULES` in [schema-strings.js](../public/js/prompts/komplett/schema-strings.js)) erfasst grosszügig jeden Ort, an dem sich eine Figur aufhält, etwas geschieht oder den der Text beschreibt — auch einmalige Nebenschauplätze, Fahrzeuge und virtuelle Räume (Chat, Forum). Bloss genannte Orte nimmt sie nicht auf: Herkunft einer Figur, Reiseziel im Nebensatz, Nachrichten- und Weltgeschehen, Vergleiche. **Why:** sonst bestand ein Roman-Katalog zur Hälfte aus Orten ohne Szene und mit einer einzigen Kapitelnennung (Länder aus den Nachrichten, Ferienziele), und die echten Schauplätze gingen darin unter. Ein früher so erfasster Ort wird beim nächsten Lauf nicht mehr gefunden und fällt auf «nicht mehr im Text» (`stale`), gelöscht wird er nicht.
+
 ## Zwei Schreibwege
 
 | Weg | Code | Was er schreibt |

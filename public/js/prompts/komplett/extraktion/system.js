@@ -16,12 +16,14 @@ import {
   _schemaBody,
   _ASSIGNMENTS_SCHEMA_BLOCK,
   _EREIGNIS_RULES,
+  SZENEN_ORTE_REFS_RULE,
 } from '../schema-strings.js';
 
 // Kombiniertes Schema für Komplett-Extraktion (P1+P5 merged).
 // buildSystemKomplett() bettet es in den System-Prompt ein → Caching über alle Kapitel-Calls.
-// figuren_namen / orte_namen / figur_name: Klarnamen statt IDs, da konsolidierte IDs
-// erst nach P2/P3 bekannt sind. Remapping nach der Konsolidierung in jobs.js.
+// figuren_namen / figur_name: Klarnamen statt IDs, da konsolidierte IDs erst nach P2
+// bekannt sind. Szenen verweisen auf Orte DERSELBEN Antwort per id (orte_refs); der Server
+// löst sie sofort zum Ortsnamen auf (routes/jobs/komplett/szenen-ort-refs.js).
 function buildKomplettSchemaStatic(kontext = '') {
   const schemaPart = `Priorität: Figuren und deren Beziehungen korrekt erfassen. Fakten und Szenen vollständig erfassen.
 
@@ -39,7 +41,7 @@ Antworte mit diesem JSON-Schema:
       "wertung": "stark|mittel|schwach",
       "kommentar": "Begründung der wertung + Verbesserungshinweis (2-3 Sätze): WARUM ist die Szene stark/mittel/schwach – konkret festgemacht an Spannung, Tempo, Figurenentwicklung, Konflikt/Ziel, Dialog oder Struktur. Bei «mittel»/«schwach» mindestens einen konkreten, umsetzbaren Verbesserungshinweis nennen; bei «stark» benennen, was sie trägt.",
       "figuren_namen": ["Figurenname exakt wie im Text"],
-      "orte_namen": ["Schauplatzname exakt wie im Text"]
+      "orte_refs": ["id aus orte dieser Antwort, z.B. ort_3"]
     }
   ],
   "assignments": [
@@ -77,7 +79,7 @@ Kernregeln:
 - KONSERVATIV: Nur aufnehmen was im Text eindeutig belegt ist. Im Zweifel weglassen.
 - Keine historischen/realen Personen die nur erwähnt werden.
 - kapitel[].name: immer der Kapitelname (aus dem ## Header oder dem Prompt-Kontext), niemals Abschnittstitel.
-- figuren_namen / orte_namen / figur_name: Klarnamen exakt wie im Text.
+- figuren_namen / figur_name: Klarnamen exakt wie im Text. orte_refs: ids aus orte dieser Antwort (ort_1, …).
 - Songs: nur mit konkretem Titel oder Interpret aufnehmen; kontext_typ Pflicht.
 - Ereignisse: datum_label = Original-String, datum_year/month/day strukturiert (jeweils null wenn unbekannt). Ist das Jahr nicht explizit, aber aus dem Kontext erschliessbar (verankerte Jahreszahl + relative Angaben, Lebensspanne, Epoche), das abgeleitete Jahr trotzdem in datum_year eintragen und datum_unsicher=true setzen; sonst datum_unsicher=false. subtyp aus Whitelist; im Zweifel 'sonstiges'. Gleiches Ereignis bei allen beteiligten Figuren identisch formulieren.
 - Leere Arrays wenn nichts gefunden.
@@ -103,7 +105,7 @@ Szenen-Regeln:
 - seite: NUR der reine Abschnittstitel, OHNE die «### »-Markierung am Anfang. Aus «### Was macht Adrian?» wird «Was macht Adrian?». Wortwörtlich sonst (Gross-/Kleinschreibung, Satzzeichen). Leer lassen wenn kein passender ### Header identifizierbar. Der Kapitelname ist NIE ein gültiger Wert für seite.
 - kapitel: NUR der reine Kapitelname aus dem ## Header, OHNE die «## »-Markierung.
 - figuren_namen: aktiv beteiligte Figuren – Namen exakt wie im Text (vollständiger Name oder Spitzname); leeres Array wenn keine Figur beteiligt
-- orte_namen: Schauplatz der Szene – exakter Name wie im Text; leeres Array wenn kein konkreter Ort erwähnt
+${SZENEN_ORTE_REFS_RULE}
 - wertung: «stark» = überzeugend/spannend, «mittel» = verbesserungswürdig, «schwach» = klare Schwächen
 - kommentar MUSS die wertung begründen (woran festgemacht) und bei «mittel»/«schwach» einen konkreten Verbesserungshinweis geben – keine reine Zusammenfassung des Inhalts
 - Kein Cap auf Anzahl Szenen – vollständige Erfassung aller Handlungsabschnitte wichtiger als Kürze. Pro Kapitel mit Handlung mindestens eine Szene.
@@ -215,7 +217,7 @@ function buildKomplettSchemaOrteSzenen(_kontext = '') {
       "wertung": "stark|mittel|schwach",
       "kommentar": "Begründung der wertung + Verbesserungshinweis (2-3 Sätze): WARUM ist die Szene stark/mittel/schwach – konkret festgemacht an Spannung, Tempo, Figurenentwicklung, Konflikt/Ziel, Dialog oder Struktur. Bei «mittel»/«schwach» mindestens einen konkreten, umsetzbaren Verbesserungshinweis nennen; bei «stark» benennen, was sie trägt.",
       "figuren_namen": ["Figurenname exakt wie im Text"],
-      "orte_namen": ["Schauplatzname exakt wie im Text"]
+      "orte_refs": ["id aus orte dieser Antwort, z.B. ort_3"]
     }
   ]
 }`;
@@ -244,7 +246,7 @@ ${SONGS_RULES}
 Szenen-Regeln:
 - seite: NUR der reine Titel eines ### Headers im aktuellen ## Kapitel, OHNE «### »-Markierung. NIEMALS den Kapitelnamen. Bei Unklarheit: leer.
 - figuren_namen: Klarnamen exakt wie im Text; leeres Array wenn keine Figur beteiligt.
-- orte_namen: exakter Name wie im Text; leeres Array wenn kein konkreter Ort.
+${SZENEN_ORTE_REFS_RULE}
 - wertung: «stark» = überzeugend/spannend, «mittel» = verbesserungswürdig, «schwach» = klare Schwächen.
 - kommentar MUSS die wertung begründen (woran festgemacht) und bei «mittel»/«schwach» einen konkreten Verbesserungshinweis geben – keine reine Zusammenfassung des Inhalts.`;
 }

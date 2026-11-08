@@ -63,6 +63,8 @@ function rebindBeziehungenByName(figuren, log) {
     }
   }
   let rebound = 0, dropped = 0;
+  // Verworfene Kanten «Von → Ziel» fürs Log (Selbst-Referenzen nicht: die sind gewollt weg).
+  const lost = [];
   for (const f of (figuren || [])) {
     if (!Array.isArray(f?.beziehungen)) continue;
     f.beziehungen = f.beziehungen.filter(bz => {
@@ -70,15 +72,19 @@ function rebindBeziehungenByName(figuren, log) {
       // Ohne Zielnamen ist die figur_id chunk-lokal und nach der globalen Neunummerierung
       // bedeutungslos — sie träfe die Figur, die zufällig denselben Index hat. Verwerfen:
       // eine fehlende Kante ist besser als eine zur falschen Figur.
-      if (!bz.name) { dropped++; return false; }
+      if (!bz.name) { dropped++; lost.push(`${f.name} → (ohne Namen)`); return false; }
       const target = idByName.get(_normalizeName(bz.name));
-      if (!target || target === f.id) { dropped++; return false; }
+      if (!target) { dropped++; lost.push(`${f.name} → ${bz.name}`); return false; }
+      if (target === f.id) { dropped++; return false; }
       if (target !== bz.figur_id) { bz.figur_id = target; rebound++; }
       return true;
     });
   }
   if ((rebound || dropped) && log) {
     log.info(`Beziehungs-Ziele über Namen neu gebunden – ${rebound} korrigiert, ${dropped} unauflösbar entfernt.`);
+    if (lost.length) {
+      log.info(`Beziehungen ohne auflösbares Ziel: ${lost.slice(0, 12).join('; ')}${lost.length > 12 ? ` … (+${lost.length - 12})` : ''}`);
+    }
   }
   return { rebound, dropped };
 }

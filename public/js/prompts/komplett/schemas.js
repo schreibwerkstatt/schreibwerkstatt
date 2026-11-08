@@ -58,6 +58,8 @@ const _figurSchemaProps = (arr = _arr, { bzName = false } = {}) => ({
   katalog_id: _str,
   name: _str,
   kurzname: _str,
+  weitere_namen: arr(_str, 'namen'),
+  ist_erzaehler: { type: 'boolean' },
   typ: _str,
   geburtstag: _str,
   geschlecht: _str,
@@ -149,7 +151,8 @@ function _szenenField() {
     wertung: { type: 'string', enum: ['stark', 'mittel', 'schwach'] },
     kommentar: _str,
     figuren_namen: _arr(_str, 'namen'),
-    orte_namen: _arr(_str, 'namen'),
+    // Kennungen aus orte derselben Antwort (szenen-ort-refs.js löst sie zum Namen auf).
+    orte_refs: _arr(_str, 'namen'),
   }), 'szenen');
 }
 

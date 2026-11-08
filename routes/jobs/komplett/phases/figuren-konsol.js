@@ -145,8 +145,30 @@ function restoreOmittedFiguren(input, figuren) {
     const t = nameTokens(nm);
     if (t.length) outTokens.push(t);
   };
+  // Erzählstimme und Rufnamen der Eingabe tragen: das Modell gibt beide oft nicht weiter,
+  // obwohl die Eingabezeile sie nennt. Zuordnung über dieselbe Spur (Name, Kurzname,
+  // quellnamen) wie unten.
+  const inputByKey = new Map();
+  for (const cf of (input || [])) for (const g of (cf.figuren || [])) {
+    if (!g || !(g.ist_erzaehler === true || g.weitere_namen?.length)) continue;
+    for (const k of [g.name, g.kurzname].map(normName).filter(Boolean)) {
+      if (!inputByKey.has(k)) inputByKey.set(k, []);
+      inputByKey.get(k).push(g);
+    }
+  }
   for (const f of (figuren || [])) {
     if (!f) continue;
+    if (inputByKey.size) {
+      const keys = [f.name, f.kurzname, ...(Array.isArray(f.quellnamen) ? f.quellnamen : [])].map(normName).filter(Boolean);
+      const srcs = new Set(keys.flatMap(k => inputByKey.get(k) || []));
+      for (const g of srcs) {
+        if (g.ist_erzaehler === true) f.ist_erzaehler = true;
+        if (g.weitere_namen?.length) {
+          const all = [...(f.weitere_namen || []), ...g.weitere_namen].filter(n => typeof n === 'string' && n.trim());
+          f.weitere_namen = [...new Map(all.map(n => [n.trim().toLowerCase(), n.trim()])).values()];
+        }
+      }
+    }
     addName(f.name);
     addName(f.kurzname);
     for (const q of (Array.isArray(f.quellnamen) ? f.quellnamen : [])) addName(q);

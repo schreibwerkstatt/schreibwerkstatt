@@ -35,6 +35,27 @@ test('Altersmuster: Ziffer, Zahlwort, Ordinal-Geburtstag, Englisch', () => {
   assert.ok(alter('Im Alter von neunzehn verliess sie die Stadt.').includes(19));
 });
 
+test('Altersmuster: Apposition, «geworden», «mit dreissig» — und was keine Angabe ist', () => {
+  const alter = s => extractAgeSignals(s).filter(x => x.art === 'alter').map(x => x.wert);
+  // Profil-/Besetzungs-Stil ohne "alt" und ohne Kopula.
+  assert.deepEqual(alter('Thomas, 37 Jahre, Schweizer.'), [37]);
+  assert.deepEqual(alter('Phillip, dreiunddreissig Jahre, Deutscher.'), [33]);
+  assert.deepEqual(alter('Anna (12) kam herein.'), [12]);
+  // Subjekt zwischen Kopula und Zahl.
+  assert.deepEqual(alter('Letzte Woche ist Lotti fünf geworden.'), [5]);
+  assert.deepEqual(alter('Sie ist letzte Woche 40 geworden.'), [40]);
+  // "mit X" ohne "Jahren".
+  assert.deepEqual(alter('Verkatert sein mit dreissig ist die beste Methode.'), [30]);
+  assert.deepEqual(alter('Mit zweiunddreissig hatte ich eine Midlifekrise.'), [32]);
+  // Dauer, Menge, Uhrzeit, Kapitelnummer: keine Altersangabe.
+  assert.deepEqual(alter('Zwei Jahre später kam er zurück.'), []);
+  assert.deepEqual(alter('Es dauerte drei Jahre, bis sie ging.'), []);
+  assert.deepEqual(alter('Er kam mit drei Freunden.'), []);
+  assert.deepEqual(alter('Sie fuhr mit 80 km/h.'), []);
+  assert.deepEqual(alter('Der Raum ist zwei Meter breit geworden.'), []);
+  assert.deepEqual(alter('Kapitel 3 (12)'), []);
+});
+
 test('Geburtsjahr in beiden Leserichtungen', () => {
   const geb = s => extractAgeSignals(s).filter(x => x.art === 'geburtsjahr').map(x => x.wert);
   assert.deepEqual(geb('Geboren 1850 in Prag.'), [1850]);
@@ -103,6 +124,30 @@ test('scanPage bindet die Angabe an die Figur — auch ueber den Pronomen-Anschl
   assert.ok(anna.satz.includes('Anna Berg'), 'Vorsatz mit im Fenster');
   assert.ok(konrad && !konrad.indirekt);
   assert.equal(konrad.page_id, 7);
+});
+
+test('scanPage: Ich-Erzählstimme bekommt die Angabe der Erzählung, nicht die direkte Rede', () => {
+  const { findDialogRanges } = require('../../lib/page-index');
+  const { PRONOUN_GROUPS_DE } = require('../../lib/style-lang');
+  const idx = buildNameIndex([
+    { id: 1, patterns: [{ text: 'Liliane' }, { text: 'Lilli' }] },
+    { id: 2, patterns: [{ text: 'Thomas' }, { text: 'Tom' }] },
+  ]);
+  const text = 'Ich blinzle eine Wimper von meinem Auge und erhebe mich mit einem Seufzen. '
+    + 'Verkatert sein mit dreissig ist definitiv die beste Methode. '
+    + 'Tom lacht. «Mit zweiunddreissig hatte ich eine Midlifekrise.»';
+  const narrator = { id: 1, pronouns: PRONOUN_GROUPS_DE.ich, dialogRanges: findDialogRanges(text) };
+  const hits = scanPage(text, idx, {}, narrator);
+  const lilli = hits.filter(h => h.figure_id === 1);
+  assert.equal(lilli.length, 1, 'genau die Erzähl-Angabe');
+  assert.ok(lilli[0].satz.includes('dreissig'));
+  assert.equal(lilli[0].erzaehler, true);
+  assert.equal(lilli[0].indirekt, true, 'das Modell prüft den Bezug');
+  // Toms «ich» in direkter Rede gehört nicht der Erzählerin; Tom selbst bekommt sie über den Satz davor.
+  assert.ok(!lilli.some(h => h.satz.includes('zweiunddreissig')));
+  assert.ok(hits.some(h => h.figure_id === 2 && h.satz.includes('zweiunddreissig')));
+  // Ohne Erzählstimme bleibt der Satz ohne Kandidaten (Verhalten wie bisher).
+  assert.equal(scanPage(text, idx, {}).filter(h => h.figure_id === 1).length, 0);
 });
 
 test('scanPage: Zahl ohne Figur im Fenster ergibt keinen Kandidaten', () => {

@@ -36,6 +36,7 @@
        x-text="$app.t('autorenprofil.skip.excluded', { books: apBookNames(apSkipped.excluded) })"></p>
 
     <p class="card-hint" x-show="apSingleBook" x-cloak x-text="$app.t('autorenprofil.singleBook')"></p>
+    <p class="card-hint" x-show="apMultiLanguage" x-cloak x-text="$app.t('autorenprofil.multiLanguage')"></p>
     <p class="card-hint" x-show="apData?.comparable && !apData?.trendAvailable" x-cloak
        x-text="$app.t('autorenprofil.trendNeedsMore')"></p>
   </div>
@@ -117,52 +118,65 @@
     </template>
   </div>
 
-  <div class="muted-msg muted-msg--spaced" x-show="apIsEmpty" x-cloak
-       x-text="$app.t('autorenprofil.empty')"></div>
-
-  <div class="table-scroll card-section" x-show="apData && !apLoading && apCounts.measured > 0" x-cloak>
-    <table class="ap-table">
-      <thead>
-        <tr>
-          <th class="ap-metric-th" x-text="$app.t('autorenprofil.col.metric')"></th>
-          <template x-for="b in apBooks" :key="b.book_id">
-            <th class="ap-book-th">
-              <span class="ap-book-name" x-text="apBookName(b.book_id)"></span>
-              <span class="ap-book-meta" x-text="$app.t('autorenprofil.tokens', { n: apNum(b.tokens, 0) })"></span>
-            </th>
-          </template>
-          <th class="ap-median-th" x-show="apData?.comparable" x-text="$app.t('autorenprofil.col.median')"></th>
-          <th class="ap-trend-th" x-show="apData?.trendAvailable"
-              :data-tip="$app.t('autorenprofil.col.trendTip')"
-              x-text="$app.t('autorenprofil.col.trend')"></th>
-        </tr>
-      </thead>
-      <template x-for="g in apGroups()" :key="g.group">
-        <tbody>
-          <tr class="ap-group-row">
-            <th :colspan="apBooks.length + 1 + (apData?.comparable ? 1 : 0) + (apData?.trendAvailable ? 1 : 0)"
-                x-text="$app.t('autorenprofil.group.' + g.group)"></th>
-          </tr>
-          <template x-for="m in g.metrics" :key="m.key">
-            <tr>
-              <th scope="row" class="ap-metric-td"
-                  :data-tip="$app.t('autorenprofil.metricTip.' + m.key)"
-                  x-text="$app.t('autorenprofil.metric.' + m.key)"></th>
-              <template x-for="b in apBooks" :key="b.book_id">
-                <td class="ap-value-td">
-                  <span class="ap-value" x-text="apValue(b.metrics[m.key], m)"></span>
-                  <span class="ap-dev" x-show="apData?.comparable" x-text="apDeviation(b, m.key)"></span>
-                </td>
-              </template>
-              <td class="ap-median-td" x-show="apData?.comparable" x-text="apValue(m.median, m)"></td>
-              <td class="ap-trend-td" x-show="apData?.trendAvailable"
-                  :class="apTrendClass(m)" x-text="apTrend(m)"></td>
-            </tr>
-          </template>
-        </tbody>
-      </template>
-    </table>
+  <!-- Ein Vergleichsabschnitt je Sprache (+ einer ueber alle Sprachen fuer die
+       sprachneutralen Kennzahlen). Ein einsprachiges Werk hat genau einen
+       Abschnitt ohne Ueberschrift. Median, Abstand und Richtung gelten nur
+       innerhalb des Abschnitts. -->
+  <div class="card-section" x-show="apData && !apLoading && apCounts.measured > 0" x-cloak>
+    <template x-for="sec in apSections" :key="sec.kind + ':' + (sec.language || '')">
+      <div class="card-section">
+        <span class="card-section-title" x-show="apMultiLanguage" x-text="apSectionTitle(sec)"></span>
+        <p class="card-hint" x-show="apMultiLanguage && sec.kind === 'language' && !sec.comparable"
+           x-text="$app.t('autorenprofil.section.needsSecondBook')"></p>
+        <div class="table-scroll">
+          <table class="ap-table">
+            <thead>
+              <tr>
+                <th class="ap-metric-th" x-text="$app.t('autorenprofil.col.metric')"></th>
+                <template x-for="b in apSectionBooks(sec)" :key="b.book_id">
+                  <th class="ap-book-th">
+                    <span class="ap-book-name" x-text="apBookName(b.book_id)"></span>
+                    <span class="ap-book-meta" x-text="$app.t('autorenprofil.tokens', { n: apNum(b.tokens, 0) })"></span>
+                  </th>
+                </template>
+                <th class="ap-median-th" x-show="sec.comparable" x-text="$app.t('autorenprofil.col.median')"></th>
+                <th class="ap-trend-th" x-show="sec.trendAvailable"
+                    :data-tip="$app.t('autorenprofil.col.trendTip')"
+                    x-text="$app.t('autorenprofil.col.trend')"></th>
+              </tr>
+            </thead>
+            <template x-for="g in apGroups(sec)" :key="g.group">
+              <tbody>
+                <tr class="ap-group-row">
+                  <th :colspan="apSectionBooks(sec).length + 1 + (sec.comparable ? 1 : 0) + (sec.trendAvailable ? 1 : 0)"
+                      x-text="$app.t('autorenprofil.group.' + g.group)"></th>
+                </tr>
+                <template x-for="m in g.metrics" :key="m.key">
+                  <tr>
+                    <th scope="row" class="ap-metric-td"
+                        :data-tip="$app.t('autorenprofil.metricTip.' + m.key)"
+                        x-text="$app.t('autorenprofil.metric.' + m.key)"></th>
+                    <template x-for="b in apSectionBooks(sec)" :key="b.book_id">
+                      <td class="ap-value-td">
+                        <span class="ap-value" x-text="apValue(b.metrics[m.key], m)"></span>
+                        <span class="ap-dev" x-show="sec.comparable" x-text="apDeviation(b, m.key)"></span>
+                      </td>
+                    </template>
+                    <td class="ap-median-td" x-show="sec.comparable" x-text="apValue(m.median, m)"></td>
+                    <td class="ap-trend-td" x-show="sec.trendAvailable"
+                        :class="apTrendClass(m)" x-text="apTrend(m)"></td>
+                  </tr>
+                </template>
+              </tbody>
+            </template>
+          </table>
+        </div>
+      </div>
+    </template>
   </div>
+
+  <div class="muted-msg card-section" x-show="apIsEmpty" x-cloak
+       x-text="$app.t('autorenprofil.empty')"></div>
 
   <p class="card-hint card-section" x-show="apData && apCounts.measured > 0" x-cloak
      x-text="$app.t('autorenprofil.footnote')"></p>

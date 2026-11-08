@@ -22,7 +22,7 @@ const { LOC_MANUAL_FIELDS, serializeManualFields } = require('./location-fields'
 const FIG_COPY_COLS = [
   'name', 'kurzname', 'typ', 'geburtstag', 'geschlecht', 'beruf', 'beschreibung',
   'sozialschicht', 'rolle', 'motivation', 'konflikt', 'entwicklung', 'wohnadresse',
-  'aeusseres', 'stimme', 'hintergrund', 'sort_order',
+  'aeusseres', 'stimme', 'hintergrund', 'sort_order', 'weitere_namen',
 ];
 const LOC_COPY_COLS = [
   'name', 'typ', 'beschreibung', 'stimmung', 'sort_order', 'lat', 'lng', 'land', 'geo_query', 'geo_land',

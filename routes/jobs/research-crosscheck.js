@@ -110,7 +110,7 @@ function validateFindings(raw, batch) {
 
 async function runResearchCrosscheckJob(jobId, bookId, itemId, userEmail) {
   const logger = makeJobLogger(jobId);
-  // Stufe «leicht» (shared/model-tier.js) — vor chunkLimitsFor, die liest das Bag-Modell.
+  // Stufe «standard» (shared/model-tier.js) — vor chunkLimitsFor, die liest das Bag-Modell.
   applyTierAiOverrides(jobId, 'research-crosscheck', resolveProvider({ userEmail }), logger);
   const signal = jobAbortControllers.get(jobId)?.signal;
   try {

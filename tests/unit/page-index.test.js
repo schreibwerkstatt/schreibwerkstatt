@@ -335,3 +335,36 @@ test('EN: computePageIndex reicht die Sprache an Pronomen und Stil durch', () =>
   assert.equal(r.passive_count, 1);
   assert.equal(r.metrics_version, METRICS_VERSION);
 });
+
+// Wortgrenze der Stil-Metriken = Wortgrenze des Wortschatzes (lib/lexicon/tokenize.js):
+// eine Kontraktion ist EIN Wort. Zerlegt („don" + „t") hob sie Satzlänge und
+// Wortzahl an und drückte die Silben je Wort — Flesch und LIX verschoben sich.
+test('Kontraktionen sind ein Wort — in beiden Sprachen, gerader und typografischer Apostroph', () => {
+  const en = computeStyleStats("I don't know. She couldn’t stay.", { language: 'en' });
+  assert.equal(en.sentence_words, 6);
+  assert.equal(en.avg_sentence_len, 3);
+  const de = computeStyleStats("Wie geht's dir? Gibt’s Neues?");
+  assert.equal(de.sentence_words, 5);
+  // Satzanfang mit typografischem Apostroph = derselbe wie mit geradem.
+  const op = JSON.parse(computeStyleStats("Don't go. Don’t stay.", { language: 'en' }).opener_counts);
+  assert.equal(op.counts["don't"], 2);
+  assert.equal(op.repeats, 1);
+});
+
+test('LIX zählt Buchstaben: der Apostroph macht kein Wort lang', () => {
+  // „couldn't" hat sieben Buchstaben (> 6 → lang), „didn't" fünf (kurz).
+  const lix = (t) => computeStyleStats(t, { language: 'en' }).lix;
+  // 2 Wörter / 1 Satz, 1 langes Wort: 2 + 100·1/2 = 52
+  assert.equal(lix("Couldn't stay."), 52);
+  // 2 Wörter / 1 Satz, kein langes: 2
+  assert.equal(lix("Didn't stay."), 2);
+});
+
+test('Wiederholung: Kontraktionen treffen die Stoppwortliste, auch mit typografischem Apostroph', () => {
+  // lib/stopwords-en.js führt „couldn't" gerade; zerlegt („couldn" + „t") hätte
+  // „couldn" als häufigstes Wort gegolten.
+  const top = (t) => JSON.parse(computeStyleStats(t, { language: 'en' }).repetition_data).top.map(r => r.word);
+  const words = top('She couldn’t sleep. She couldn’t eat. She couldn’t breathe. Silence, silence, silence.');
+  assert.ok(!words.includes("couldn't") && !words.includes('couldn'), words.join(','));
+  assert.ok(words.includes('silence'));
+});

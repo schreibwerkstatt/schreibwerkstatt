@@ -55,15 +55,23 @@ Seite neu.
 `page_stats.flesch_de` und `book_stats_history.avg_flesch_de` tragen den Flesch-Wert **der
 Buchsprache**; der Spaltenname ist historisch. Beide Formeln haben dieselbe Richtung (höher =
 leichter) und ähnliche Bänder, die Heatmap färbt ohnehin relativ zum Buch. Buchübergreifende
-Mittel (Autorenprofil, Meine Statistik) mischen bei gemischtsprachigen Büchern beide Skalen.
+Auswertungen vergleichen nur innerhalb einer Messsprache ([lib/style-lang.js](../lib/style-lang.js)#`styleLanguage`:
+`en` oder sonst `de`): Meine Statistik mittelt die Lesbarkeit je Sprache
+([my-stats.md](my-stats.md#lesbarkeit--wortformen)), das Autorenprofil vergleicht je Sprache
+([autorenprofil.md](autorenprofil.md)). **Why:** zwei Formeln, zwei Wortlisten — ein gemischter Schnitt
+ist keine der beiden Skalen, und ein Sprachwechsel sähe aus wie eine Stilentwicklung.
 
 Die Pronomen-**Schlüssel** sind sprachunabhängig (`ich`, `du`, `er`, `sie_sg`, `wir`,
 `ihr_pl`, `man`); Ich-Anteil und das Pronomen-Werkzeug der agentischen Chats lesen sie ohne
 Sprachwissen. `they` steht wie das deutsche Plural-„sie" in `sie_sg`, `you` in `du`, nur
 `yourselves` in `ihr_pl`, `man` hat im Englischen nur `oneself`.
 
-LIX, Satzlängen, Satzanfänge und Dialog-Erkennung sind sprachneutral. Grenze: Der Wort-Tokenizer
-(`\p{L}+`) zerlegt englische Kontraktionen (`don't` → `don` + `t`).
+LIX, Satzlängen, Satzanfänge und Dialog-Erkennung sind sprachneutral. Die Wortgrenze ist die des
+Wortschatzes ([lib/lexicon/tokenize.js](../lib/lexicon/tokenize.js)#`TOKEN_RE`, übernommen in
+[lib/sentence-split.js](../lib/sentence-split.js)#`STYLE_WORD_RE`): Buchstaben aller Schriften,
+Kontraktionen mit innerem Apostroph sind **ein** Wort (`don't`, `geht's`). Typografische Apostrophe
+werden für Listen-Vergleiche (Stoppwörter, Füllwörter, Satzanfänge) auf `'` gefaltet; ein langes Wort
+(LIX, > 6) zählt Buchstaben ohne Apostroph.
 
 Änderung an einem Sprachprofil ⇒ `METRICS_VERSION` erhöhen.
 

@@ -58,6 +58,10 @@ function _mergeFigurFields(canon, other, { sum }) {
   canon.schluesselzitate = [...zit].slice(0, 5);
   const eig = new Set([...(canon.eigenschaften || []), ...(other.eigenschaften || [])]);
   canon.eigenschaften = [...eig];
+  // Rufnamen beider Varianten; die Erzählstimme bleibt es, wenn eine Variante sie trägt.
+  const wn = [...(canon.weitere_namen || []), ...(other.weitere_namen || [])].filter(n => typeof n === 'string' && n.trim());
+  if (wn.length) canon.weitere_namen = [...new Map(wn.map(n => [n.trim().toLowerCase(), n.trim()])).values()];
+  if (other.ist_erzaehler === true) canon.ist_erzaehler = true;
   canon.kapitel = (canon.kapitel || []).map(copyKap);
   unionKapitel(canon, other.kapitel, { sum, fallback: 1 });
 }

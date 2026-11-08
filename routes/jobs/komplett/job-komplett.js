@@ -468,7 +468,7 @@ async function runKomplettAnalyseJob(jobId, bookId, bookName, userEmail, provide
         'SELECT name FROM locations WHERE book_id = ? AND user_email IS ? AND stale = 0 ORDER BY sort_order'
       ).all(bookIdInt, email).map(o => o.name);
       coverage = await runNonCritical('Coverage-Self-Audit',
-        () => runCoverageAudit(ctx, figuren.map(f => f.name), orteNamen), log);
+        () => runCoverageAudit(ctx, figuren.map(f => f.name), orteNamen, { singlePass: isSinglePass }), log);
       if (coverage && coverage.score != null) {
         const minScore = Number(appSettings.get('ai.komplett.coverage_min_score')) || 0.8;
         if (coverage.score < minScore) warnings.push({ key: 'job.warn.coverageLow', params: { score: coverage.score } });

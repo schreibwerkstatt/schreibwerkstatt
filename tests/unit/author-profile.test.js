@@ -37,7 +37,8 @@ function mk(specs) {
   const books = [], lexicon = [], pageStats = [];
   specs.forEach((s, i) => {
     const id = s.book_id ?? 100 + i;
-    books.push({ book_id: id, created_at: `2020-0${i + 1}-01T00:00:00Z`, excluded: s.excluded ? 1 : 0 });
+    books.push({ book_id: id, created_at: `2020-0${i + 1}-01T00:00:00Z`, excluded: s.excluded ? 1 : 0,
+                 language: s.language ?? null });
     if (s.noLexicon) return;
     lexicon.push({
       book_id: id, tokens: s.tokens ?? LONG, pages: 10, scanned_at: '2026-01-01T00:00:00Z',
@@ -47,11 +48,17 @@ function mk(specs) {
     pageStats.push({
       book_id: id, pages: 10,
       words: s.words ?? 1000, chars: 6000, sentences: s.sentences ?? 100,
-      dialog_chars: 1200, adverb_count: 20, passive_count: 5, filler_count: 10,
+      dialog_chars: s.dialog_chars ?? 1200, adverb_count: 20, passive_count: 5, filler_count: 10,
       lix_w: 40 * 1000, lix_wsum: 1000, flesch_w: 60 * 1000, flesch_wsum: 1000,
     });
   });
   return { books, lexicon, pageStats };
+}
+
+/** Kennzahl `key` im Abschnitt `kind` (Default: der einzige eines einsprachigen Werks). */
+function metric(r, key, kind = 'all', language) {
+  const sec = r.sections.find(s => s.kind === kind && (language === undefined || s.language === language));
+  return sec?.metrics.find(m => m.key === key);
 }
 
 test('Satzbau kommt aus den Summen, nicht aus Seitenmittelwerten', () => {
@@ -88,7 +95,7 @@ test('Nicht gerechnete Buecher werden benannt, nicht verschwiegen', () => {
 test('Ein Buch: Werte ja, Median und Abweichung nein', () => {
   const r = computeAuthorProfile(mk([{ words: 1000, sentences: 100 }]));
   assert.equal(r.comparable, false);
-  assert.equal(r.metrics.find(m => m.key === 'satzlaenge').median, null);
+  assert.equal(metric(r, 'satzlaenge').median, null);
   assert.equal(r.books[0].deviation.satzlaenge, null);
   // Der Messwert selbst bleibt stehen — „kein Vergleich" ist nicht „kein Wert".
   assert.equal(r.books[0].metrics.satzlaenge, 10);
@@ -100,7 +107,7 @@ test('Ab zwei Buechern gibt es Median und Abweichung', () => {
     { words: 1200, sentences: 100 },  // 12
   ]));
   assert.equal(r.comparable, true);
-  assert.equal(r.metrics.find(m => m.key === 'satzlaenge').median, 10);
+  assert.equal(metric(r, 'satzlaenge').median, 10);
   assert.equal(r.books[0].deviation.satzlaenge, -20);
   assert.equal(r.books[1].deviation.satzlaenge, 20);
 });
@@ -108,7 +115,7 @@ test('Ab zwei Buechern gibt es Median und Abweichung', () => {
 test('Richtung erst ab drei Buechern — und das mittlere zaehlt in keiner Haelfte', () => {
   const two = computeAuthorProfile(mk([{ words: 800, sentences: 100 }, { words: 1200, sentences: 100 }]));
   assert.equal(two.trendAvailable, false);
-  assert.equal(two.metrics.find(m => m.key === 'satzlaenge').trend, null);
+  assert.equal(metric(two, 'satzlaenge').trend, null);
 
   // Werte 10 / 100 / 20: erste Haelfte [10], zweite [20] ⇒ +100 %.
   // Zaehlte das mittlere Buch mit, kaeme etwas voellig anderes heraus.
@@ -118,7 +125,7 @@ test('Richtung erst ab drei Buechern — und das mittlere zaehlt in keiner Haelf
     { words: 2000, sentences: 100 },
   ]));
   assert.equal(three.trendAvailable, true);
-  const tr = three.metrics.find(m => m.key === 'satzlaenge').trend;
+  const tr = metric(three, 'satzlaenge').trend;
   assert.equal(tr.first, 10);
   assert.equal(tr.second, 20);
   assert.equal(tr.pct, 100);
@@ -129,7 +136,97 @@ test('Konto ohne Buecher: leere Form statt null — die Karte unterscheidet das 
   assert.equal(r.counts.total, 0);
   assert.equal(r.comparable, false);
   assert.deepEqual(r.books, []);
-  assert.ok(r.metrics.length > 0, 'Kennzahlen-Katalog steht auch ohne Daten');
+  assert.equal(r.sections.length, 1);
+  assert.ok(r.sections[0].metrics.length > 0, 'Kennzahlen-Katalog steht auch ohne Daten');
+});
+
+// ── Mehrsprachiges Werk ────────────────────────────────────────────────────────
+// Flesch nach Amstad und nach Flesch sind zwei Formeln, Füllwort-/Adverb-/Passiv-
+// listen zwei Listen. Ein deutsches und ein englisches Buch nebeneinander gemittelt
+// liessen einen Sprachwechsel wie eine Stilentwicklung aussehen.
+
+test('Mehrsprachig: sprachgebundene Kennzahlen nur innerhalb der Sprache verglichen', () => {
+  const r = computeAuthorProfile(mk([
+    { language: 'de', words: 1200, sentences: 100 },  // 12
+    { language: 'en', words: 800, sentences: 100 },   // 8
+    { language: 'de', words: 1400, sentences: 100 },  // 14
+  ]));
+  assert.equal(r.multiLanguage, true);
+  assert.deepEqual(r.languages, ['de', 'en'], 'Hauptsprache (mehr Text) zuerst');
+  assert.deepEqual(r.sections.map(s => [s.kind, s.language]),
+    [['language', 'de'], ['language', 'en'], ['crossLanguage', null]]);
+  // Deutscher Median nur aus den deutschen Büchern: (12 + 14) / 2.
+  assert.equal(metric(r, 'satzlaenge', 'language', 'de').median, 13);
+  // Ein englisches Buch allein: kein Vergleich, keine Abweichung.
+  const en = r.sections.find(s => s.language === 'en');
+  assert.equal(en.comparable, false);
+  assert.equal(metric(r, 'satzlaenge', 'language', 'en').median, null);
+  assert.equal(r.books[1].deviation.satzlaenge, null);
+  // Sprachgebundene Kennzahl taucht im sprachübergreifenden Abschnitt nicht auf.
+  assert.equal(metric(r, 'satzlaenge', 'crossLanguage'), undefined);
+  assert.equal(metric(r, 'fleschDe', 'crossLanguage'), undefined);
+});
+
+test('Mehrsprachig: Dialoganteil ist sprachneutral und wird über alle Bücher verglichen', () => {
+  const r = computeAuthorProfile(mk([
+    { language: 'de', dialog_chars: 600 },   // 10 %
+    { language: 'en', dialog_chars: 1800 },  // 30 %
+  ]));
+  const cross = r.sections.find(s => s.kind === 'crossLanguage');
+  assert.deepEqual(cross.metrics.map(m => m.key), ['dialogAnteil']);
+  assert.equal(cross.comparable, true);
+  assert.ok(Math.abs(metric(r, 'dialogAnteil', 'crossLanguage').median - 0.2) < 1e-9);
+  assert.ok(Math.abs(r.books[0].deviation.dialogAnteil - -50) < 1e-9);
+  // Je Sprache nur ein Buch: Vergleich ja (Dialog), Entwicklung nein.
+  assert.equal(r.comparable, true);
+  assert.equal(r.developmentAvailable, false);
+  assert.equal(r.sections.find(s => s.language === 'de').metrics.some(m => m.key === 'dialogAnteil'), false);
+});
+
+test('Entwicklung braucht zwei Bücher DERSELBEN Sprache', () => {
+  const zwei = computeAuthorProfile(mk([{ language: 'en' }, { language: 'en' }, { language: 'de' }]));
+  assert.equal(zwei.developmentAvailable, true);
+  const einsprachig = computeAuthorProfile(mk([{}, {}]));
+  assert.equal(einsprachig.developmentAvailable, true);
+  assert.equal(einsprachig.multiLanguage, false);
+  assert.equal(computeAuthorProfile(mk([{}])).developmentAvailable, false);
+});
+
+test('Unbekannte Sprachangabe gilt als Deutsch — dieselbe Regel wie die Messung', () => {
+  const r = computeAuthorProfile(mk([{ language: null }, { language: 'fr' }, { language: 'de' }]));
+  assert.equal(r.multiLanguage, false);
+  assert.deepEqual(r.languages, ['de']);
+  assert.equal(r.sections.length, 1);
+  assert.equal(r.sections[0].kind, 'all');
+});
+
+test('Basis-Signatur: die Sprache zählt nur im mehrsprachigen Werk', () => {
+  const ein = mk([{ book_id: 910, language: 'de' }, { book_id: 911, language: 'de' }]);
+  ein.lexicon.forEach((l, i) => { l.content_sig = `s${i}`; });
+  assert.equal(authorProfileBasisSig(computeAuthorProfile(ein)), '910:s0|911:s1',
+    'einsprachige Signaturen bleiben unverändert — kein Profil wird grundlos veraltet');
+  const misch = mk([{ book_id: 910, language: 'de' }, { book_id: 911, language: 'en' }]);
+  misch.lexicon.forEach((l, i) => { l.content_sig = `s${i}`; });
+  assert.equal(authorProfileBasisSig(computeAuthorProfile(misch)), '910:de:s0|911:en:s1');
+});
+
+test('Prompt-Messung: mehrsprachig je Sprache getrennt, mit Hinweis auf die Vergleichbarkeit', () => {
+  const r = computeAuthorProfile(mk([
+    { book_id: 100, language: 'en' }, { book_id: 101, language: 'de' }, { book_id: 102, language: 'en' },
+  ]));
+  const txt = renderAuthorProfileMeasurement(r, {
+    nameById: { 100: 'Erstling', 101: 'Zweitwerk', 102: 'Drittes' },
+    labels: { satzlaenge: 'Satzlaenge', dialogAnteil: 'Dialoganteil' },
+    languageNames: { de: 'Deutsch', en: 'Englisch' },
+  });
+  assert.match(txt, /Sprachen: Englisch: Erstling, Drittes; Deutsch: Zweitwerk\./);
+  assert.match(txt, /nur innerhalb einer Sprache vergleichbar/);
+  assert.match(txt, /== Englisch ==/);
+  assert.match(txt, /== Ueber alle Sprachen ==/);
+  // Im deutschen Abschnitt steht kein englisches Buch.
+  const de = txt.split('== Deutsch ==')[1].split('==')[0];
+  assert.match(de, /Satzlaenge: Zweitwerk/);
+  assert.ok(!/Erstling/.test(de));
 });
 
 // ── DB-Schicht: die Aggregation im SQL ─────────────────────────────────────────
@@ -203,6 +300,21 @@ test('DB: Werk-Reihenfolge ist die Spaltenachse (aeltestes Buch zuerst)', () => 
   const r = getAuthorProfile(AUTOR);
   const ids = r.books.map(b => b.book_id);
   assert.deepEqual(ids, [...ids].sort((a, b) => a - b), 'nach created_at aufsteigend');
+});
+
+test('DB: Buchsprache kommt aus book_settings und trennt die Vergleiche', () => {
+  seedBook(604, AUTOR, '2020-04-01T00:00:00Z');
+  seedPage(6041, 604, { words: 900, sentences: 100 });
+  db.prepare("INSERT INTO book_settings (book_id, language, updated_at) VALUES (604, 'en', '2020-04-01T00:00:00Z')").run();
+  const r = getAuthorProfile(AUTOR);
+  assert.equal(r.books.find(b => b.book_id === 604).language, 'en');
+  assert.equal(r.books.find(b => b.book_id === 601).language, 'de', 'ohne Einstellung gilt Deutsch');
+  assert.equal(r.multiLanguage, true);
+  db.prepare('DELETE FROM book_settings WHERE book_id = 604').run();
+  db.prepare('DELETE FROM page_stats WHERE book_id = 604').run();
+  db.prepare('DELETE FROM pages WHERE book_id = 604').run();
+  db.prepare('DELETE FROM book_lexicon WHERE book_id = 604').run();
+  db.prepare('DELETE FROM books WHERE book_id = 604').run();
 });
 
 // ── Basis-Signatur + Deutung (Stufe 2) ────────────────────────────────────────

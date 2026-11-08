@@ -23,6 +23,9 @@ const { komplettMaxTokens } = require('./tokens');
 const { extractMultiPass } = require('./extraktion/multi-pass');
 const { resolveSinglePassFakten } = require('./extraktion/fakten-pass');
 const { PHASE_END } = require('../../../../lib/komplett-scope');
+const {
+  answerOrtRefMap, knownOrtRefs, resolveSzenenOrtRefs, anchorGapSzenen, placeGapSzenen,
+} = require('../szenen-ort-refs');
 
 /** Teilt ein Array in Gruppen der Grösse `size` (≥1). */
 function _chunkArray(arr, size) {
@@ -107,6 +110,9 @@ async function runSinglePassCompletenessGaps(ctx, { bookSystemBlock, claudeExtra
   const knownOrte = passB.orte || [];
   const knownFakten = passB.fakten || [];
   const knownSzenen = passB.szenen || [];
+  // Die Szenen des Gap-Passes verweisen auf die schon erfassten Orte (bek_N), nicht auf
+  // freie Namen — die Orte-Gap läuft parallel und kennt sie noch nicht.
+  const orteRefs = knownOrtRefs(knownOrte);
   const faktKey = (f) => `${f.subjekt || ''}: ${f.fakt || ''}`;
   const szeneKey = (s) => `${s.titel || ''} (${s.kapitel || ''})`;
   const gapConcurrency = Math.max(1, parseInt(appSettings.get('ai.claude.phase1_concurrency'), 10) || 4);
@@ -146,7 +152,7 @@ async function runSinglePassCompletenessGaps(ctx, { bookSystemBlock, claudeExtra
     () => runCompletenessGap(ctx, {
       label: 'Single-Pass Szenen', statusText: 'job.phase.completenessSzenen',
       knownNames: knownSzenen.map(szeneKey),
-      buildPrompt: (known) => prompts.buildSzenenGapPrompt(bookName, known),
+      buildPrompt: (known) => prompts.buildSzenenGapPrompt(bookName, known, orteRefs.lines),
       systemBlocks: [bookSystemBlock, ...toSystemBlocks(sys.SYSTEM_KOMPLETT_ORTE_PASS_BLOCKS, '1h')],
       schema: prompts.SCHEMA_KOMPLETT_ORTE_PASS,
       extractItems: (r) => r?.szenen,
@@ -188,7 +194,10 @@ async function runSinglePassCompletenessGaps(ctx, { bookSystemBlock, claudeExtra
     log.info(`Completeness: +${freshFakten.length} Fakten ergänzt (gesamt ${passB.fakten.length}).`);
   }
   if (freshSzenen.length) {
-    passB.szenen = knownSzenen.concat(freshSzenen);
+    resolveSzenenOrtRefs(freshSzenen, orteRefs.map);
+    // Die Gap-Liste zeigte die bekannten Szenen und danach die neuen in Fundreihenfolge.
+    anchorGapSzenen(freshSzenen, knownSzenen.concat(freshSzenen));
+    passB.szenen = placeGapSzenen(knownSzenen.slice(), freshSzenen);
     log.info(`Completeness: +${freshSzenen.length} Szenen ergänzt (gesamt ${passB.szenen.length}).`);
   }
   return { stammFiguren, passB, gapFailed };
@@ -281,10 +290,11 @@ async function runSceneBackfill(ctx, { bookSystemBlock, claudeExtractCap, passB 
   if (!targets.length) return passB;
   updateJob(jobId, { statusText: 'job.phase.sceneBackfill' });
   log.info(`Szenen-Backfill: ${targets.length} Kapitel ohne Szene (≥${minChars} Zeichen) – gezielter Nachzieh-Pass.`);
+  const orteRefs = knownOrtRefs(passB.orte);
   let res;
   try {
     res = await retryOnTransientAi(() => call(jobId, tok,
-      prompts.buildTargetedSzenenPrompt(bookName, targets),
+      prompts.buildTargetedSzenenPrompt(bookName, targets, orteRefs.lines),
       [bookSystemBlock, ...toSystemBlocks(sys.SYSTEM_KOMPLETT_ORTE_PASS_BLOCKS, '1h')],
       null, null, claudeExtractCap, 0.2, null, prompts.SCHEMA_KOMPLETT_ORTE_PASS, gapTier,
     ), { log, label: 'Szenen-Backfill' });
@@ -299,6 +309,7 @@ async function runSceneBackfill(ctx, { bookSystemBlock, claudeExtractCap, passB 
   }
   const fresh = res.szenen.filter(s => s && s.titel);
   if (!fresh.length) return passB;
+  resolveSzenenOrtRefs(fresh, orteRefs.map);
   // Dedup gegen bestehende Szenen (titel+kapitel, normalisiert).
   const seen = new Set((passB.szenen || []).map(s => `${_normalizeName(s.titel)}|${_normalizeName(s.kapitel)}`));
   const add = [];
@@ -364,6 +375,8 @@ async function extractSinglePassSplit(ctx, { claudeExtractCap }) {
   // Pflichtfelder von B: fehlt eines, ist die Antwort nicht die verlangte — sie würde
   // als «Buch ohne Orte/Szenen» gecacht. Ein legitim leeres Buch liefert [].
   if (!Array.isArray(passB.orte) || !Array.isArray(passB.szenen)) throw i18nError('job.error.extractFieldMissing', { label: 'B' });
+  const droppedRefs = resolveSzenenOrtRefs(passB.szenen, answerOrtRefMap(passB.orte));
+  if (droppedRefs) log.warn(`Single-Pass B: ${droppedRefs} Szenen-Ortsverweis(e) ohne Ort in der Antwort verworfen.`);
   // Fakten-Pass (C): nicht fatal, abgeschnitten → kapitelgruppenweise Rettung
   // (./extraktion/fakten-pass.js). Ein Ausfall hinterlässt leere Fakten + Warnung.
   const fc = await resolveSinglePassFakten(ctx, faktenRes, { bookSystemBlock, claudeExtractCap });
@@ -442,6 +455,7 @@ async function extractSinglePassLocal(ctx, { callExtract }) {
   const r = await callExtract('Single-Pass Extraktion (lokal)',
     prompts.buildExtraktionKomplettChapterPrompt('Gesamtbuch', bookName, pageContents.length, fullBookText, ctx.katalogBlock),
     sys.SYSTEM_KOMPLETT_EXTRAKTION_BLOCKS, 12, 28, 16000, prompts.SCHEMA_KOMPLETT_EXTRAKTION);
+  if (Array.isArray(r?.szenen)) resolveSzenenOrtRefs(r.szenen, answerOrtRefMap(r.orte));
   return {
     passA: { figuren: r?.figuren, assignments: r?.assignments },
     passB: { orte: r?.orte, songs: r?.songs, fakten: r?.fakten, szenen: r?.szenen },

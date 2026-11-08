@@ -15,6 +15,8 @@ export const FIGUREN_BASIS_SCHEMA = `{
       "katalog_id": "ID aus dem mitgegebenen Katalog (z.B. K12), wenn die Figur dort schon steht; sonst leer",
       "name": "Vollständiger Name",
       "kurzname": "Vorname oder Rufname, mit dem die Figur im Text angesprochen wird",
+      "weitere_namen": ["Weitere Ruf-, Spitz- oder Kosenamen aus dem Text (z.B. «Lotti»); leer wenn keine"],
+      "ist_erzaehler": false,
       "typ": "hauptfigur|nebenfigur|antagonist|mentor|randfigur|andere",
       "geburtstag": "JJJJ oder leer wenn unbekannt",
       "geschlecht": "männlich|weiblich|divers|unbekannt",
@@ -77,6 +79,8 @@ export const figurenBasisRules = (kontext = '') => `Regeln:
 - Nur einzelne Personen: keine Sammelbegriffe («die Vorfahren», «die Familie»), keine Metaphern oder Vergleiche, keine bloss erschlossenen Personen («Vater von X (implizit)»). Eine namenlose Person nur, wenn sie selbst in der Handlung auftritt
 - name: ohne Klammerzusatz und ohne Erklärung – Ruf- oder Kosename gehört in kurzname, ein Geburtsname als «geb. X» ans Ende. Dieselbe Person heisst überall gleich, auch wenn sie im Lauf der Handlung heiratet oder den Namen wechselt
 - kurzname: nur ein Name, mit dem andere Figuren oder die Erzählstimme die Person tatsächlich ansprechen oder nennen (Vorname, Ruf-, Kosename). KEIN Künstlerkürzel, keine Signatur, kein Pseudonym für ein Werk, kein Initial-Kürzel, kein Titel eines Albums/Buchs – solche Angaben gehören in beschreibung oder hintergrund. Leer lassen, wenn es keinen solchen Namen gibt
+- weitere_namen: nur Namen, unter denen die Figur im Text tatsächlich genannt oder angesprochen wird und die weder name noch kurzname sind (Spitz-, Kose-, Koseformen wie «Lotti» neben «Lotte»). Keine Rollenbezeichnungen («Mama», «der Arzt»), keine Pronomen. Höchstens ein paar; leer wenn keine
+- ist_erzaehler: true NUR für die Figur, die in der Ich-Form erzählt (die Stimme der Erzählung, nicht wer in direkter Rede «ich» sagt). In einem Buch ohne Ich-Erzählstimme bei allen false; bei wechselnden Ich-Erzählstimmen jede davon true
 - KEINE historischen oder realen Personen die nur erwähnt, zitiert oder als Referenz genannt werden (z.B. Napoleon, Einstein, ein Politiker, eine Künstlerin)
 - Sortiert nach Wichtigkeit (zentral zuerst)
 - KONSERVATIV heisst belegt, NICHT knapp: Nur Figuren, Beziehungen und Eigenschaften aufnehmen die im Text belegt sind – aber vorhandene Belege voll ausschöpfen. Unterscheide Spekulation (verboten) von textgestützter Schlussfolgerung (erwünscht – was der Text klar nahelegt, darf benannt werden). Ein leeres Feld ist nur dann richtig, wenn der Text wirklich nichts hergibt; wo Belege da sind, schreibe ausführlich und konkret statt in Stichworten.
@@ -102,14 +106,21 @@ export const ORTE_SCHEMA = `{
   ]
 }`;
 
+// Szene → Schauplatz per id derselben Antwort (Server löst zum Namen auf:
+// routes/jobs/komplett/szenen-ort-refs.js). Geteilt von allen Extraktions-Schemas mit Szenen.
+export const SZENEN_ORTE_REFS_RULE = '- orte_refs: ids (Feld «id») der Schauplätze aus «orte» DIESER Antwort, an denen die Szene spielt – der spezifischste passende Ort (der Raum, nicht das Gebäude, wenn der Raum erfasst ist). Spielt die Szene an einem Ort, der noch nicht in «orte» steht, ihn dort aufnehmen und referenzieren. Keine Namen, nur ids. Leeres Array wenn kein konkreter Ort.';
+
 export const ORTE_RULES = `Regeln:
 - Eindeutige IDs (ort_1, ort_2, …)
 - katalog_id: nur aus einem mitgegebenen Katalog übernehmen, sonst leer lassen; zwei Orte mit verschiedener katalog_id nie zusammenführen.
-- SEHR GROSSZÜGIG erfassen: alle Schauplätze inklusive Nebenschauplätze und einmaliger Erwähnungen; lieber inkludieren als weglassen. haeufigkeit=1 ist gültig.
+- SEHR GROSSZÜGIG erfassen: alle Schauplätze inklusive Nebenschauplätze, auch wenn die Handlung nur einmal dort ist; lieber inkludieren als weglassen. haeufigkeit=1 ist gültig.
+- Schauplatz heisst: eine Figur hält sich dort auf, dort geschieht etwas, oder der Text beschreibt den Ort. Das gilt auch für Fahrzeuge (Zug, Auto) und virtuelle Räume (Chat, Forum), in denen sich eine Figur aufhält. NICHT erfassen sind Orte, die nur beiläufig genannt werden, ohne dass eine Figur dort ist oder dort etwas geschieht: Herkunft einer Figur («ein Verwandter aus Namibia»), Reiseziel im Nebensatz («Ferien in Las Vegas»), Welt- und Nachrichtengeschehen («Krieg in Afghanistan», «Angriff auf das Pentagon»), Vergleiche und Redewendungen.
+- Ein Schauplatz ist ein ORT (Stadt, Gebäude, Raum, Landschaft) – kein Möbelstück, keine Einrichtung, kein Gegenstand und keine Situation. Couch, Bett, Kücheninsel, Balkonsofa, Schreibtisch gehören zum Raum, in dem sie stehen («Wohnzimmer in Toms Wohnung», nicht «Couch»); eine Momentaufnahme («Hauswand in der Sommernacht») ist der Ort ohne die Situation («Strasse vor der WG»). Kein Zusatz in Klammern und keine Doppelnamen mit «/» – ein Ort, ein Name.
+- Gleichnamige Räume an verschiedenen Orten (Küche der WG, Küche in Toms Wohnung) eindeutig benennen: Raum + Gebäude/Besitzer.
 - figuren_namen: Klarnamen der Figuren, die am Ort auftreten – exakt wie im Text (vollständiger Name oder Spitzname, KEINE ID); leeres Array wenn keine Figur klar zuordenbar
 - kapitel: flaches Array der Kapitelnamen (Strings), in denen der Ort aktiv vorkommt – jeder Kapitelname höchstens einmal
 - land: ISO-3166-1-alpha-2 in Kleinbuchstaben. Belege das Land aus dem Text (genannte Stadt/Region/Land). Ist im Text kein anderes Land erkennbar, ordne den Ort dem HAUPT-SCHAUPLATZLAND des Buchs zu (falls im Kontext angegeben). Reine Innenräume/Gebäude ohne geografischen Hinweis erben das Land der umgebenden Stadt/Region. Nur leer lassen, wenn weder Text noch Hauptland eine Zuordnung erlauben.
-- COVERAGE-FIRST bei der AUFNAHME: Im Zweifel jeden benannten Schauplatz aufnehmen – Dubletten werden nachgelagert konsolidiert, ein ausgelassener Ort ist verloren.
+- COVERAGE-FIRST bei der AUFNAHME: Im Zweifel jeden benannten Schauplatz aufnehmen – Dubletten werden nachgelagert konsolidiert, ein ausgelassener Ort ist verloren. Der Zweifel betrifft Name und Dubletten, nicht die Frage, ob ein bloss genannter Ort ein Schauplatz ist (siehe oben).
 - Kein Cap auf Anzahl Orte – vollständige Erfassung wichtiger als Kürze`;
 
 // ── Musik-Schema (Songs/Musikstücke) ────────────────────────────────────────

@@ -145,19 +145,36 @@ export function registerAutorenprofilCard() {
       return value;
     },
 
-    apGroups() {
-      return this._apMemo('groups', [this.apData], () => {
-        const metrics = this.apData?.metrics || [];
-        const order = [];
-        const byGroup = new Map();
-        for (const m of metrics) {
-          if (!byGroup.has(m.group)) { byGroup.set(m.group, []); order.push(m.group); }
-          byGroup.get(m.group).push(m);
-        }
-        return order.map(g => ({ group: g, metrics: byGroup.get(g) }));
-      });
+    /** Kennzahlen eines Vergleichsabschnitts nach Gruppe (Satzbau, Wortschatz, …). */
+    apGroups(section) {
+      return this._apMemo('groups:' + (section?.kind || '') + ':' + (section?.language || ''),
+        [this.apData, section], () => {
+          const order = [];
+          const byGroup = new Map();
+          for (const m of section?.metrics || []) {
+            if (!byGroup.has(m.group)) { byGroup.set(m.group, []); order.push(m.group); }
+            byGroup.get(m.group).push(m);
+          }
+          return order.map(g => ({ group: g, metrics: byGroup.get(g) }));
+        });
     },
 
+    /** Bücher eines Abschnitts in Werk-Reihenfolge. */
+    apSectionBooks(section) {
+      const ids = new Set(section?.bookIds || []);
+      return this.apBooks.filter(b => ids.has(b.book_id));
+    },
+
+    /** Überschrift eines Abschnitts — nur bei mehrsprachigem Werk. */
+    apSectionTitle(section) {
+      const t = window.__app.t;
+      if (section?.kind === 'language') return t('lang.' + section.language);
+      if (section?.kind === 'crossLanguage') return t('autorenprofil.section.crossLanguage');
+      return '';
+    },
+
+    get apSections() { return this.apData?.sections || []; },
+    get apMultiLanguage() { return !!this.apData?.multiLanguage; },
     get apBooks() { return this.apData?.books || []; },
     get apCounts() { return this.apData?.counts || { total: 0, measured: 0 }; },
     get apSkipped() { return this.apData?.skipped || { excluded: [], unscanned: [], tooShort: [] }; },

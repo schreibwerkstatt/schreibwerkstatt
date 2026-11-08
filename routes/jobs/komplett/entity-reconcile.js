@@ -39,11 +39,13 @@ const { COST_LABEL, costTier } = require('./cost-labels');
 // zuerst der beste Kandidat JEDES Incomings, bevor ein Zweitkandidat drankommt — sonst
 // belegen wenige Incomings mit vielen ähnlichen Kandidaten den ganzen Deckel. Mehrere
 // kleine Calls statt eines grossen: ein Paar kostet wenig, ein gescheiterter Call
-// verliert nur seinen Teil. Der Gesamtdeckel (240 Paare) reicht, um bei ~250 Szenen
-// den Erstkandidaten jedes Incomings vorzulegen; was er abschneidet, bleibt getrennt und
-// kehrt beim nächsten Lauf als stale-Dublette wieder. Ein Call kostet Cent-Beträge.
+// verliert nur seinen Teil. Der Gesamtdeckel (600 Paare) legt bei ~250 Szenen Erst- UND
+// Zweitkandidaten jedes Incomings vor; was er abschneidet, bleibt getrennt und kehrt
+// beim nächsten Lauf als stale-Dublette wieder. Ein Call kostet Cent-Beträge — die
+// Trefferquote der vorgelegten Szenen-Paare lag bei gut einem Drittel, ein
+// abgeschnittenes Paar kostet also eher eine Szenen-ID als ein vorgelegtes Geld.
 const JUDGE_PAIR_CAP = 24;
-const JUDGE_MAX_CALLS = 10;
+const JUDGE_MAX_CALLS = 25;
 const JUDGE_RANKS = 2;
 const JUDGE_CONCURRENCY = 3;
 

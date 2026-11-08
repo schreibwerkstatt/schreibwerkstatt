@@ -62,7 +62,7 @@ function findFigureForSchoolPath(bookId, figId, userEmail) {
 }
 
 const _listFigs = db.prepare(`
-  SELECT f.id, f.fig_id, f.name, f.kurzname, f.geburtstag,
+  SELECT f.id, f.fig_id, f.name, f.kurzname, f.weitere_namen, f.geburtstag,
          sp.source, sp.weg, sp.einschulung_jahr, sp.repetitionen_json
   FROM figures f
   LEFT JOIN figure_school_paths sp ON sp.figure_id = f.id

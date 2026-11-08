@@ -33,6 +33,9 @@ export const FIGUR_EDIT_FIELDS = [
   { key: 'beruf', max: 200, spell: true },
   { key: 'rolle', max: 400, spell: true },
   { key: 'praesenz', options: 'praesenz' },
+  // Ja/Nein: die Ich-Erzählstimme (figures.ist_erzaehler) — die Alters-Analyse ordnet ihr
+  // die Ich-Sätze der Erzählung zu.
+  { key: 'ist_erzaehler', flag: true },
   { key: 'sozialschicht', options: 'schicht' },
   { key: 'wohnadresse', max: 400, spell: true },
   { key: 'beschreibung', max: 4000, spell: true, area: true },
@@ -50,6 +53,10 @@ const _norm = (v) => (v == null ? '' : String(v).trim());
 export function figurEditDiff(fig, draft) {
   const out = {};
   for (const d of FIGUR_EDIT_FIELDS) {
+    if (d.flag) {
+      if (!!draft?.[d.key] !== !!fig?.[d.key]) out[d.key] = !!draft?.[d.key];
+      continue;
+    }
     const next = _norm(draft?.[d.key]);
     if (next !== _norm(fig?.[d.key])) out[d.key] = next || null;
   }
@@ -70,7 +77,7 @@ export const figurPflegeMethods = {
 
   startFigurEdit(f) {
     this.figurEditId = f.id;
-    this.figurEditDraft = Object.fromEntries(FIGUR_EDIT_FIELDS.map(d => [d.key, f[d.key] ?? '']));
+    this.figurEditDraft = Object.fromEntries(FIGUR_EDIT_FIELDS.map(d => [d.key, d.flag ? !!f[d.key] : (f[d.key] ?? '')]));
     this.figurEditError = '';
   },
 
