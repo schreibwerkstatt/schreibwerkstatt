@@ -27,13 +27,22 @@ const JOB_TIERS = Object.freeze({
   'stationen-vorschlag': 'light',
   'schulweg-vorschlag':  'light',
   'research-link':       'light',
-  'research-crosscheck': 'light',
   'ideen-auto-check':    'light',
   'finetune-export':     'light',
-  // Standard: Zusammenfassen und Ableiten über viele Abschnitte, aber kein Urteil
-  // über das ganze Buch.
+  'figuren-naehe':       'light',
+  'source-pdf-draft':    'light',
+  'folder-import':       'light',
+  // Kein Job-Typ, sondern ein Einzel-Call im Chat-Job (routes/jobs/chat-title.js):
+  // der Titel-Einzeiler läuft per Call-Tier, die Chat-Antwort selbst bleibt stark.
+  'chat-title':          'light',
+  // Standard: Zusammenfassen, Herausziehen und Abgleichen über viele Abschnitte,
+  // aber kein literarisches Urteil über das ganze Buch.
   'rueckblick':          'standard',
   'figur-alter':         'standard',
+  'research-crosscheck': 'standard',
+  'source-detect':       'standard',
+  'struktur-check':      'standard',
+  'book-map-label':      'standard',
 });
 
 const TIER_KEYS = Object.freeze({

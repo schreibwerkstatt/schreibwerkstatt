@@ -7,7 +7,7 @@
 //   • Klassische Chats: Ablehnung (stop_reason refusal) → Hinweis-Marker, leere
 //     Antwort → Leer-Marker, nie eine leere Assistant-Nachricht.
 //   • Bewertungs-Pflichtfelder (shared/review-validate.js) für Buch- und Kapitelbewertung.
-//   • Session-Titel: abbrechbar/zeitbegrenzt und im Kosten-Ledger gebucht.
+//   • Session-Titel: abbrechbar/zeitbegrenzt, auf der Stufe «leicht» und im Kosten-Ledger gebucht.
 
 const test = require('node:test');
 const assert = require('node:assert/strict');
@@ -120,14 +120,18 @@ test('generateSessionTitle: Call bekommt ein Signal und wird im Ledger gebucht',
   const sid = db.prepare(`INSERT INTO chat_sessions (book_id, user_email, kind, created_at, last_message_at)
     VALUES (77, 'u@x', 'research', '2026-01-01', '2026-01-01')`).run().lastInsertRowid;
   let seenSignal = null;
-  mockCall = async (_p, _s, _o, _m, signal) => {
+  let seenTier;
+  mockCall = async (_p, _s, _o, _m, signal, _prov, _schema, tier) => {
     seenSignal = signal;
+    seenTier = tier;
     return { text: '{"titel":"Ein Titel"}', truncated: false, tokensIn: 300, tokensOut: 12, provider: 'claude', model: 'claude-sonnet-4-5' };
   };
   const session = { id: sid, title: null, user_email: 'u@x', kind: 'research', book_id: 77 };
   const titel = await generateSessionTitle({ session, userMessage: 'Frage', assistantAnswer: 'Antwort', provider: 'claude' });
   assert.equal(titel, 'Ein Titel');
   assert.ok(seenSignal instanceof AbortSignal, 'Titel-Call muss abbrechbar/zeitbegrenzt sein');
+  // Stufe «leicht» als Call-Tier (shared/model-tier.js): nur der Titel, nicht die Chat-Antwort.
+  assert.equal(seenTier, 'claude-haiku-5-5');
   const row = db.prepare('SELECT tokens_in, tokens_out, source FROM ai_cost_ledger WHERE source_ref = ?').get(`chatjob:title:${sid}`);
   assert.ok(row, 'Ledger-Zeile fehlt');
   assert.equal(row.tokens_in, 300);

@@ -10,6 +10,7 @@ const { db } = require('../../db/schema');
 const ai = require('../../lib/ai');
 const { getPromptsForProvider } = require('../../lib/prompts-loader');
 const { recordChatLedgerEntry } = require('../../db/cost-ledger');
+const { tierModel } = require('./shared/model-tier');
 
 const MAX_TITLE_LEN = 80;
 // Hartes Zeitlimit des Titel-Calls: ein Einzeiler aus ~4000 Zeichen. Er läuft
@@ -55,7 +56,11 @@ async function generateSessionTitle({ session, userMessage, assistantAnswer, pro
     // unten, der fertige Chat-Turn bleibt unberührt (kein failJob).
     const timeout = AbortSignal.timeout(TITLE_TIMEOUT_MS);
     const callSignal = signal ? AbortSignal.any([signal, timeout]) : timeout;
-    const res = await ai.callAI(convo, systemPrompt, null, 120, callSignal, provider, SCHEMA_CHAT_TITLE);
+    // Stufe «leicht» nur für diesen Einzeiler, als Call-Tier: die Chat-Antwort im
+    // selben Job bleibt auf ihrem Modell (shared/model-tier.js#JOB_TIERS).
+    const titleModel = tierModel('chat-title', provider);
+    const tier = provider === 'claude' && titleModel ? titleModel : undefined;
+    const res = await ai.callAI(convo, systemPrompt, null, 120, callSignal, provider, SCHEMA_CHAT_TITLE, tier);
     _recordTitleCost(session, provider, res);
     const { text, truncated } = res;
     if (truncated) throw new Error('Titel-Antwort truncated');

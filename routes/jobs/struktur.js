@@ -24,7 +24,7 @@ const {
   createJob, enqueueJob, findActiveJobId,
   jsonBody,
   contentHttpError, htmlToTextForPrompt,
-  _modelName,
+  applyTierAiOverrides,
 } = require('./shared');
 const contentStore = require('../../lib/content-store');
 const { getBookSettings } = require('../../db/schema');
@@ -115,7 +115,9 @@ async function runStrukturJob(jobId, bookId, userEmail, onlyPageId = null) {
   // jedem Beitrag. Bewusst HIER und nicht im globalen Prompt-Hash: eine
   // Vokabular-Aenderung soll die Struktur-Befunde neu erheben, nicht die teuren
   // Lektorat- und Komplettanalyse-Caches wegwerfen.
-  const cacheVersion = `${_modelName(effectiveProvider)}:${PROMPTS_VERSION || ''}:${STRUKTUR_VOKABULAR_SIGNATUR}`;
+  // Stufe «standard» (shared/model-tier.js); das Modell geht in die Befund-Signatur.
+  const model = applyTierAiOverrides(jobId, 'struktur-check', effectiveProvider, logger);
+  const cacheVersion = `${model}:${PROMPTS_VERSION || ''}:${STRUKTUR_VOKABULAR_SIGNATUR}`;
 
   try {
     updateJob(jobId, { statusText: 'job.phase.loadingPages', progress: 0 });

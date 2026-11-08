@@ -385,10 +385,12 @@ Drei Stufen: **stark** = `ai.claude.model`, **standard** = `ai.claude.model.tier
 
 | Stufe | Jobs | Begründung |
 |---|---|---|
-| standard | `rueckblick`, `figur-alter` | Zusammenfassen/Ableiten über viele Abschnitte, kein Urteil über das ganze Buch |
-| leicht | `synonym`, `geocode-resolve`, `stationen-vorschlag`, `schulweg-vorschlag`, `research-link`, `research-crosscheck`, `ideen-auto-check`, `finetune-export` | kurze, mechanische Calls mit nachgelagerter Prüfung (Belegpflicht, Geocoder, Katalog) |
+| standard | `rueckblick`, `figur-alter`, `research-crosscheck`, `source-detect`, `struktur-check`, `book-map-label` | Zusammenfassen, Herausziehen, Abgleichen über viele Abschnitte — kein literarisches Urteil über das ganze Buch |
+| leicht | `synonym`, `geocode-resolve`, `stationen-vorschlag`, `schulweg-vorschlag`, `research-link`, `ideen-auto-check`, `finetune-export`, `figuren-naehe`, `source-pdf-draft`, `folder-import` (Datums-Fallback), `chat-title` | kurze, mechanische Calls mit nachgelagerter Prüfung (Belegpflicht, Geocoder, Register, Katalog, Bestätigung durch den User) |
 
-**Bewusst stark und ungestuft:** Lektorat, alle fünf Chats und die Komplettanalyse-Familie samt Extraktion, Kontinuität, Erzählprofil, Buch-/Kapitelbewertung — dort entsteht die Qualität, und Lektorat, Chats und Komplettanalyse haben eigene Override-Familien. Eine Per-Job-Einstellung (`ai.claude.model.synonym`, `.finetune`) schlägt die Stufe. Bei eigenem KI-Zugang greift keine Stufe.
+**Bewusst stark und ungestuft:** Lektorat, alle fünf Chats (agentisch bzw. Textersetzung), die Komplettanalyse-Familie samt Extraktion, Kontinuität und deren Nachprüfung, Erzählprofil, Weltfakten-Faktencheck (agentisch mit Web), Buch-/Kapitelbewertung, Exposé (geht nach aussen), Stil- und Autorenprofil (literarisches Urteil), Titel-Varianten und die Werkstätten (Figuren, Plot, Motive: Brainstorm + Konsistenz) — dort ist das Ergebnis ein Urteil oder kreativer Text, den der Autor direkt liest. Eine Per-Job-Einstellung (`ai.claude.model.synonym`, `.finetune`) schlägt die Stufe. Bei eigenem KI-Zugang greift keine Stufe.
+
+`chat-title` ist kein Job-Typ, sondern der Titel-Call im Chat-Job ([chat-title.js](../routes/jobs/chat-title.js)): er geht als Per-Call-Tier an `callAI`, damit die Chat-Antwort im selben Job-Kontext auf ihrem Modell bleibt.
 
 Pflicht beim Anbinden eines Jobs: `applyTierAiOverrides(jobId, type, effectiveProvider, logger)` **vor** `chunkLimitsFor` aufrufen (die Chunk-Grenzen lesen Fenster und Output-Cap des Bag-Modells), und das zurückgegebene Modell statt `_modelName()` in die cacheVersion des Jobs schreiben.
 

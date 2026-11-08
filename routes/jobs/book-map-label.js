@@ -13,7 +13,9 @@ const express = require('express');
 const {
   makeJobLogger, updateJob, completeJob, failJob, i18nError, jsonBody,
   aiCall, getPrompts, tps, startBookJob, htmlToTextForPrompt,
+  applyTierAiOverrides,
 } = require('./shared');
+const { resolveProvider } = require('../../lib/ai');
 const contentStore = require('../../lib/content-store');
 const { toIntId } = require('../../lib/validate');
 
@@ -60,6 +62,8 @@ function _label(v) {
 
 async function runBookMapLabelJob(jobId, bookId, userEmail, axes) {
   const logger = makeJobLogger(jobId);
+  // Stufe «standard» (shared/model-tier.js).
+  applyTierAiOverrides(jobId, 'book-map-label', resolveProvider({ userEmail }), logger);
   try {
     const { buildBookMapAxisSystem, buildBookMapAxisPrompt, SCHEMA_BOOK_MAP_AXES } = await getPrompts(userEmail);
     updateJob(jobId, { statusText: 'job.phase.loadingPages', progress: 5 });

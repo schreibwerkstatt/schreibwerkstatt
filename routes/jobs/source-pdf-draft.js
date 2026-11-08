@@ -27,7 +27,9 @@ const {
   makeJobLogger, updateJob, completeJob, failJob, i18nError,
   createJob, enqueueJob, findActiveJobId,
   aiCall, getPrompts, tps,
+  applyTierAiOverrides,
 } = require('./shared');
+const { resolveProvider } = require('../../lib/ai');
 const { listPoolSources, listSources } = require('../../db/sources');
 const { parsePersonName } = require('../../lib/bib-parse');
 const { lookupDoi, lookupIsbn, searchWork, normalizeDoi, normalizeIsbn } = require('../../lib/source-lookup');
@@ -130,6 +132,8 @@ async function _viaIdentifier(kind, candidates, text, logger) {
  */
 async function runSourcePdfDraftJob(jobId, bookId, userEmail, { text, buffer, name }) {
   const logger = makeJobLogger(jobId);
+  // Stufe «leicht» (shared/model-tier.js).
+  applyTierAiOverrides(jobId, 'source-pdf-draft', resolveProvider({ userEmail }), logger);
   try {
     const tok = { in: 0, out: 0, ms: 0 };
     const body = String(text || '');

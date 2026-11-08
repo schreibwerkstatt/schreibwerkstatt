@@ -11,6 +11,7 @@ const express = require('express');
 const {
   makeJobLogger, updateJob, completeJob, failJob, i18nError,
   aiCall, getPrompts, jobs, createJob, enqueueJob, findActiveJobId, isJobActive, throwIfCancelled,
+  applyTierAiOverrides,
 } = require('./shared');
 const contentStore = require('../../lib/content-store');
 const { detectDate, detectDateInText, firstLineFromHtml, extractTitle, scoreSample, parseMonthToken } = require('../../lib/import-parsers/date-detect');
@@ -95,6 +96,8 @@ function _monthFromRaw(monthRaw) {
 
 async function runFolderImportJob(jobId, { userEmail, mode, bookName, bookId, grouping = 'year-month', zipLimits = FOLDER_ZIP_LIMITS }) {
   const log = makeJobLogger(jobId);
+  // Stufe «leicht» (shared/model-tier.js).
+  applyTierAiOverrides(jobId, 'folder-import', resolveProvider({ userEmail }), log);
   // Import-Log (lib/import-audit.js): i18n-Key + Params, Result-JSON liefert
   // es ans Frontend (Collapsible "Import-Log").
   const { entries: auditLog, audit } = makeImportAudit(log);

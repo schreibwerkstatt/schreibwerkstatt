@@ -3,7 +3,8 @@
 // JOB_TIERS ordnet Job-Typen «standard»/«leicht» zu, alles andere läuft stark auf
 // `ai.claude.model`. Eine Per-Job-Einstellung schlägt die Stufe, ein fremder Provider
 // und ein eigener KI-Zugang bekommen nie ein Stufen-Modell. Lektorat, Chats und die
-// Komplettanalyse sind bewusst ungestuft — das hält der letzte Test fest.
+// Komplettanalyse sowie die Urteils- und Kreativ-Jobs (Bewertung, Exposé, Stil-/Autorenprofil,
+// Titel-Varianten, Werkstätten) sind bewusst ungestuft — das hält der letzte Test fest.
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
@@ -44,6 +45,12 @@ test('Stufen-Defaults: standard = Sonnet 5.5, leicht = Haiku 5.5, sonst stark', 
     assert.equal(tier.tierModel('geocode-resolve', 'claude'), 'claude-haiku-5-5');
     assert.equal(tier.tierModel('finetune-export', 'claude', { jobKey: 'finetune' }), 'claude-haiku-5-5');
     assert.equal(tier.tierModel('review', 'claude'), 'claude-opus-5-5');
+    for (const t of ['research-crosscheck', 'source-detect', 'struktur-check', 'book-map-label']) {
+      assert.equal(tier.jobTier(t), 'standard', t);
+    }
+    for (const t of ['figuren-naehe', 'source-pdf-draft', 'folder-import', 'chat-title']) {
+      assert.equal(tier.jobTier(t), 'light', t);
+    }
   } finally { teardown(); }
 });
 
@@ -77,11 +84,13 @@ test('applyTierAiOverrides bindet das Modell nur im Job-Kontext, nie für fremde
   } finally { teardown(); }
 });
 
-test('Lektorat, Chats und Komplettanalyse bleiben ungestuft', () => {
+test('Lektorat, Chats, Komplettanalyse und Urteils-/Kreativ-Jobs bleiben stark', () => {
   const { tier, teardown } = _bootstrap();
   try {
     for (const t of ['check', 'lektorat', 'chat', 'book-chat', 'research-chat', 'plot-chat', 'ideen-chat',
-      'komplett-analyse', 'kontinuitaet', 'erzaehlprofil', 'review', 'chapter-review']) {
+      'komplett-analyse', 'kontinuitaet', 'kontinuitaet-recheck', 'erzaehlprofil', 'faktencheck', 'review',
+      'chapter-review', 'expose', 'stilprofil', 'autorenprofil', 'headline-variants', 'werkstatt-brainstorm',
+      'werkstatt-consistency', 'plot-brainstorm', 'plot-consistency', 'motif-brainstorm', 'motif-consistency']) {
       assert.equal(tier.jobTier(t), 'strong', t);
     }
   } finally { teardown(); }

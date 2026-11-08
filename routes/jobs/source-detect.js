@@ -23,7 +23,7 @@ const {
   aiCall, getPrompts, getBookPrompts,
   loadOrderedBookContents, loadPageContents,
   groupByChapter, splitGroupsIntoChunks, buildSinglePassBookText,
-  chunkLimitsFor, tps, _modelName,
+  chunkLimitsFor, tps, applyTierAiOverrides,
 } = require('./shared');
 const { resolveProvider } = require('../../lib/ai');
 const {
@@ -152,6 +152,8 @@ async function runSourceDetectJob(jobId, bookId, userEmail, { chapterId = null }
   // eingeschlossen). Die boot-eingefrorenen Konstanten leiten sich aus den
   // ai.claude.*-Settings ab und passen bei lokalen Modellen nicht ins Fenster.
   const effectiveProvider = resolveProvider({ userEmail });
+  // Stufe «standard» (shared/model-tier.js) — vor chunkLimitsFor, die liest das Bag-Modell.
+  const model = applyTierAiOverrides(jobId, 'source-detect', effectiveProvider, logger);
   const { singlePass: SINGLE_PASS_LIMIT, perChunk: PER_CHUNK_LIMIT } = chunkLimitsFor(effectiveProvider);
   try {
     const signal = () => jobAbortControllers.get(jobId)?.signal;
@@ -312,7 +314,7 @@ async function runSourceDetectJob(jobId, bookId, userEmail, { chapterId = null }
           foundCount: vorschlaege.length,
           verifiedCount: verified,
           result: { vorschlaege },
-          model: _modelName(effectiveProvider),
+          model,
         });
       } catch (e) { logger.warn(`Lauf-Historisierung fehlgeschlagen book=${bookId}: ${e.message}`); }
     }

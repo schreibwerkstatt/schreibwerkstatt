@@ -12,7 +12,9 @@ const express = require('express');
 const {
   makeJobLogger, updateJob, completeJob, failJob, i18nError, jsonBody, jobAbortControllers,
   aiCall, getPrompts, getBookPrompts, tps, startBookJob,
+  applyTierAiOverrides,
 } = require('./shared');
+const { resolveProvider } = require('../../lib/ai');
 const { listRelationsForNaehe, setRelationNaehe } = require('../../db/figures/naehe');
 const { normNaehe } = require('../../lib/relation-naehe');
 
@@ -22,6 +24,8 @@ const MAX_OUT_TOKENS = 4000;
 
 async function runFigurenNaeheJob(jobId, bookId, userEmail, { alle = false } = {}) {
   const logger = makeJobLogger(jobId);
+  // Stufe «leicht» (shared/model-tier.js).
+  applyTierAiOverrides(jobId, 'figuren-naehe', resolveProvider({ userEmail }), logger);
   try {
     const { buildNaeheSystemPrompt, buildNaehePrompt, buildNaeheSchema } = await getPrompts(userEmail);
     const signal = () => jobAbortControllers.get(jobId)?.signal;
