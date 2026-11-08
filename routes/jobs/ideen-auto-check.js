@@ -33,6 +33,7 @@ const logger = require('../../logger');
 const {
   makeJobLogger, updateJob, completeJob, failJob, aiCall, getPrompts, tps, jsonBody,
   htmlToText, createJob, enqueueJob, findActiveJobId, chunkLimitsFor, i18nError,
+  applyTierAiOverrides,
 } = require('./shared');
 const { pageQuoteHaystack } = require('./ideen-chat-tools');
 
@@ -104,6 +105,8 @@ function enqueueIdeenAutoCheck(pageId, bookId, userEmail) {
 
 async function runIdeenAutoCheckJob(jobId, pageId, bookId, userEmail) {
   const log = makeJobLogger(jobId);
+  // Stufe «leicht» (shared/model-tier.js) — vor chunkLimitsFor, die liest das Bag-Modell.
+  applyTierAiOverrides(jobId, 'ideen-auto-check', resolveProvider({ userEmail }), log);
   try {
     updateJob(jobId, { statusText: 'job.phase.loadingPages', progress: 5 });
     const ideen = ideenCheck.listOpenPageIdeen(pageId, userEmail).slice(0, MAX_IDEEN);

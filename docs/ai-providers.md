@@ -373,10 +373,24 @@ Präzedenz: **per-Call-Tier > Job-Bag > Profil > Instanz-Setting.**
 | `_komplettAiOverrides` ([job-shared.js](../routes/jobs/komplett/job-shared.js)) | `claude`, `openai-compat` | `ai.<provider>.{model,context_window,max_tokens_out,timeout_ms}.komplett` (+ `effort.komplett` nur Claude) |
 | `_bookChatClaudeOverrides` ([book-chat.js](../routes/jobs/chat/book-chat.js)) | `claude` (Tool-Use) | `ai.claude.*.bookchat` |
 | `applyLektoratAiOverrides` ([lektorat-split.js](../routes/jobs/lektorat-split.js)) | `claude` | `ai.claude.model.lektorat` (leer = globales Modell) + `ai.claude.effort.lektorat` (Default `medium`, nur wenn das Lektorat-Modell adaptiv denkt; ohne Feld denkt Sonnet 5 auf `high` minutenlang stumm). Das effektive Modell fliesst in die Lektorat-cacheVersion und in `page_checks.model` |
-| `applySynonymAiOverrides` ([synonyme.js](../routes/jobs/synonyme.js)) | `claude` | `ai.claude.model.synonym` (leer = globales Modell) + `ai.claude.effort.synonym` (Default `low`, nur wenn das Synonym-Modell adaptiv denkt). Interaktiver Kurz-Call: ein schnelles Modell (Sonnet 5.5) neben einem schweren globalen halbiert die Wartezeit. Modell + Effort fliessen in die Synonym-cacheVersion |
+| `applyTierAiOverrides` ([shared/model-tier.js](../routes/jobs/shared/model-tier.js)) | `claude` | Modellstufen, siehe unten. Setzt `model` (+ optional weitere Bag-Felder) und zieht das Modell in `job_runs` nach |
+| `applySynonymAiOverrides` ([synonyme.js](../routes/jobs/synonyme.js)) | `claude` | Stufe «leicht» bzw. `ai.claude.model.synonym` + `ai.claude.effort.synonym` (Default `low`, nur wenn das Synonym-Modell adaptiv denkt). Modell + Effort fliessen in die Synonym-cacheVersion |
 | `applyReviewAiOverrides` ([shared/model.js](../routes/jobs/shared/model.js)) | `claude` | `ai.claude.effort.review` (Default `high`, nur wenn das Modell adaptiv denkt) für Buch- und Kapitelbewertung. Ohne Feld gälte der Modell-Default, und der wechselt mit dem Modell (Opus 5.5: `medium`). Der Effort fliesst in die Review-cacheVersion |
 
 Ollama hat bewusst keinen Override-Satz: dort ist das Modell an das geladene Gewicht gebunden.
+
+#### Modellstufen (nur Claude)
+
+Drei Stufen: **stark** = `ai.claude.model`, **standard** = `ai.claude.model.tier.standard` (Default `claude-sonnet-5-5`), **leicht** = `ai.claude.model.tier.light` (Default `claude-haiku-5-5`); eine leere Stufe folgt dem starken Modell. Welcher Job-Typ auf welcher Stufe läuft, steht **nur** in `JOB_TIERS` ([routes/jobs/shared/model-tier.js](../routes/jobs/shared/model-tier.js)); ein Typ, der dort fehlt, läuft stark.
+
+| Stufe | Jobs | Begründung |
+|---|---|---|
+| standard | `rueckblick`, `figur-alter` | Zusammenfassen/Ableiten über viele Abschnitte, kein Urteil über das ganze Buch |
+| leicht | `synonym`, `geocode-resolve`, `stationen-vorschlag`, `schulweg-vorschlag`, `research-link`, `research-crosscheck`, `ideen-auto-check`, `finetune-export` | kurze, mechanische Calls mit nachgelagerter Prüfung (Belegpflicht, Geocoder, Katalog) |
+
+**Bewusst stark und ungestuft:** Lektorat, alle fünf Chats und die Komplettanalyse-Familie samt Extraktion, Kontinuität, Erzählprofil, Buch-/Kapitelbewertung — dort entsteht die Qualität, und Lektorat, Chats und Komplettanalyse haben eigene Override-Familien. Eine Per-Job-Einstellung (`ai.claude.model.synonym`, `.finetune`) schlägt die Stufe. Bei eigenem KI-Zugang greift keine Stufe.
+
+Pflicht beim Anbinden eines Jobs: `applyTierAiOverrides(jobId, type, effectiveProvider, logger)` **vor** `chunkLimitsFor` aufrufen (die Chunk-Grenzen lesen Fenster und Output-Cap des Bag-Modells), und das zurückgegebene Modell statt `_modelName()` in die cacheVersion des Jobs schreiben.
 
 ### Timeout + Retry: geteilte Mechanik, provider-eigene Auslöser
 

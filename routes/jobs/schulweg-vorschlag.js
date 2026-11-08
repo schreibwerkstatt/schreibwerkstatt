@@ -30,6 +30,7 @@ const {
   loadOrderedBookContents, loadPageContents, htmlToTextForPrompt,
   chunkLimitsFor, tps, bundleBlocks,
   startBookJob, komplettRunningPrecheck,
+  applyTierAiOverrides,
 } = require('./shared');
 const { resolveProvider } = require('../../lib/ai');
 const { getBookSettings, getBookSchulsystem } = require('../../db/book-settings');
@@ -166,6 +167,8 @@ function _schonUebernommen(v, f) {
 
 async function runSchulwegVorschlagJob(jobId, bookId, userEmail, { nachKatalog = false } = {}) {
   const logger = makeJobLogger(jobId);
+  // Stufe «leicht» (shared/model-tier.js) — vor chunkLimitsFor, die liest das Bag-Modell.
+  applyTierAiOverrides(jobId, 'schulweg-vorschlag', resolveProvider({ userEmail }), logger);
   const { buildSchulwegSystemPrompt, buildSchulwegPrompt, buildSchulwegSchema } = await getPrompts(userEmail);
   const { perChunk: PER_CHUNK_LIMIT } = chunkLimitsFor(resolveProvider({ userEmail }));
 

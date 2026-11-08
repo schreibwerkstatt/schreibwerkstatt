@@ -2,7 +2,7 @@
 //
 // Die KI-Synonymsuche ist ein interaktiver Kurz-Call im Kontextmenue. Auf einem
 // denkenden globalen Modell (Opus 5.5) wartet der User sonst ~8 s auf eine Wortliste.
-// `applySynonymAiOverrides` routet `ai.claude.model.synonym` (z.B. Sonnet 5.5) und
+// `applySynonymAiOverrides` routet die Stufe «leicht» bzw. `ai.claude.model.synonym` und
 // bindet `ai.claude.effort.synonym` (Default 'low') — Effort nur, wenn das so gewaehlte
 // Modell adaptiv denkt. Modell und Effort gehen in die cacheVersion.
 
@@ -35,14 +35,26 @@ function _bootstrap() {
 
 const quietLogger = { info() {}, warn() {}, error() {} };
 
-test('applySynonymAiOverrides: ohne Synonym-Modell folgt es dem globalen, Effort low', () => {
+test('applySynonymAiOverrides: ohne Synonym-Modell folgt es der Stufe «leicht», Effort low', () => {
   const { syn, cfg, appSettings, logCtx, teardown } = _bootstrap();
   try {
     appSettings.set('ai.claude.model', 'claude-opus-5-5', { updatedBy: 'test' });
     logCtx.runWithContext({ job: 'synonym' }, () => {
+      assert.deepEqual(syn.applySynonymAiOverrides('claude', quietLogger), { model: 'claude-haiku-5-5', cacheSuffix: ':e=low' });
+      assert.deepEqual(logCtx.getContext().aiJob, { provider: 'claude', effort: 'low', model: 'claude-haiku-5-5' });
+      assert.deepEqual(cfg._claudeOutputConfigParams('claude-haiku-5-5'), { output_config: { effort: 'low' } });
+    });
+  } finally { teardown(); }
+});
+
+test('applySynonymAiOverrides: leere Stufe «leicht» folgt dem globalen Modell', () => {
+  const { syn, appSettings, logCtx, teardown } = _bootstrap();
+  try {
+    appSettings.set('ai.claude.model', 'claude-opus-5-5', { updatedBy: 'test' });
+    appSettings.set('ai.claude.model.tier.light', '', { updatedBy: 'test' });
+    logCtx.runWithContext({ job: 'synonym' }, () => {
       assert.deepEqual(syn.applySynonymAiOverrides('claude', quietLogger), { model: 'claude-opus-5-5', cacheSuffix: ':e=low' });
       assert.deepEqual(logCtx.getContext().aiJob, { provider: 'claude', effort: 'low' });
-      assert.deepEqual(cfg._claudeOutputConfigParams('claude-opus-5-5'), { output_config: { effort: 'low' } });
     });
   } finally { teardown(); }
 });
@@ -54,7 +66,7 @@ test('applySynonymAiOverrides: ai.claude.model.synonym routet das Modell nur im 
     appSettings.set('ai.claude.model.synonym', 'claude-sonnet-5-5', { updatedBy: 'test' });
     logCtx.runWithContext({ job: 'synonym' }, () => {
       assert.deepEqual(syn.applySynonymAiOverrides('claude', quietLogger), { model: 'claude-sonnet-5-5', cacheSuffix: ':e=low' });
-      assert.deepEqual(logCtx.getContext().aiJob, { provider: 'claude', model: 'claude-sonnet-5-5', effort: 'low' });
+      assert.deepEqual(logCtx.getContext().aiJob, { provider: 'claude', effort: 'low', model: 'claude-sonnet-5-5' });
       assert.equal(cfg._resolveClaudeModel(), 'claude-sonnet-5-5');
     });
     assert.equal(cfg._resolveClaudeModel(), 'claude-opus-5-5');

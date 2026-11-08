@@ -24,6 +24,7 @@ const {
   loadOrderedBookContents, loadPageContents, htmlToTextForPrompt,
   chunkLimitsFor, tps, bundleBlocks,
   startBookJob, komplettRunningPrecheck,
+  applyTierAiOverrides,
 } = require('./shared');
 const { resolveProvider } = require('../../lib/ai');
 const { listFiguresForSchoolPath } = require('../../db/figure-school-paths');
@@ -133,6 +134,8 @@ const _key = (kind, r) => `${foldWord(kind === 'berufe' ? r.taetigkeit : r.hobby
 
 async function runStationenVorschlagJob(jobId, bookId, userEmail, { nachKatalog = false } = {}) {
   const logger = makeJobLogger(jobId);
+  // Stufe «leicht» (shared/model-tier.js) — vor chunkLimitsFor, die liest das Bag-Modell.
+  applyTierAiOverrides(jobId, 'stationen-vorschlag', resolveProvider({ userEmail }), logger);
   const { buildStationenSystemPrompt, buildStationenPrompt, buildStationenSchema } = await getPrompts(userEmail);
   const { perChunk: PER_CHUNK_LIMIT } = chunkLimitsFor(resolveProvider({ userEmail }));
 

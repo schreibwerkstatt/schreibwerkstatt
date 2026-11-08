@@ -163,9 +163,9 @@ async function runFinetuneExportJob(jobId, bookId, bookName, userEmail, opts) {
       // (author-chat/event-data.js#isSetting). Fertig/unfertig für Meta-Fragen.
       homeLand: String(settings.schauplatz_land || settings.region || '').toLowerCase(),
       bookSettings: settings,
-      // Modell der KI-Teile (`ai.claude.model.finetune`, Standard Haiku) — geht
-      // in jeden versionTag der Augment-Caches.
-      aiModel: applyFinetuneAiOverrides(resolveProvider({ userEmail }), logger),
+      // Modell der KI-Teile (Stufe «leicht» bzw. `ai.claude.model.finetune`) —
+      // geht in jeden versionTag der Augment-Caches.
+      aiModel: applyFinetuneAiOverrides(resolveProvider({ userEmail }), logger, jobId),
       ...data,
     };
     // Zeitstrahl einmal angereichert: Szenen-Sampler (Inhalt statt Lektorat),

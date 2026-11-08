@@ -17,6 +17,8 @@
         <h4 class="admin-settings-subheading"><span x-text="$app.t('admin.settings.claude.standardTitle')"></span></h4>
         <div x-data="settingField({ k: 'ai.claude.api_key', type: 'password', label: 'admin.settings.label.apiKey' })"></div>
         <div x-data="settingField({ k: 'ai.claude.model', label: 'admin.settings.label.model', ph: 'claude-opus-5-5', help: 'admin.settings.help.claudeModel', models: 'claude' })"></div>
+        <div x-data="settingField({ k: 'ai.claude.model.tier.standard', label: 'admin.settings.label.aiClaudeModelTierStandard', ph: 'claude-sonnet-5-5', help: 'admin.settings.help.tierStandardModel', models: 'claude' })"></div>
+        <div x-data="settingField({ k: 'ai.claude.model.tier.light', label: 'admin.settings.label.aiClaudeModelTierLight', ph: 'claude-haiku-5-5', help: 'admin.settings.help.tierLightModel', models: 'claude' })"></div>
         <div x-data="settingField({ k: 'ai.claude.effort.lektorat', label: 'admin.settings.label.aiClaudeEffortLektorat', ph: 'medium', help: 'admin.settings.help.lektoratEffort' })"></div>
         <div x-data="settingField({ k: 'ai.claude.effort.komplett', label: 'admin.settings.label.aiClaudeEffortKomplett', ph: 'high', help: 'admin.settings.help.komplettEffort' })"></div>
         <div x-data="settingField({ k: 'ai.claude.effort.review', label: 'admin.settings.label.aiClaudeEffortReview', ph: 'high', help: 'admin.settings.help.reviewEffort' })"></div>

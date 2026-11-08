@@ -8,7 +8,7 @@ const {
 const {
   makeJobLogger, updateJob, setJobModel, completeJob, failJob, i18nError,
   aiCall, getPrompts, getBookPrompts,
-  _modelName, tps,
+  tps, tierModel, applyTierAiOverrides,
   jobs, runningJobs, createJob, enqueueJob, jobKey, findActiveJobId,
   jsonBody,
 } = require('./shared');
@@ -16,7 +16,6 @@ const { toIntId } = require('../../lib/validate');
 const { setContext } = require('../../lib/log-context');
 const appSettings = require('../../lib/app-settings');
 const { resolveProvider, _claudeUsesAdaptiveThinking } = require('../../lib/ai');
-const { usesOwnAccess } = require('../../lib/ai/profile');
 const { guardBook, sessionEmail } = require('../../lib/acl');
 
 const synonymeRouter = express.Router();
@@ -35,29 +34,21 @@ function _synonymKeyHash(wort, satz, bookSettings, cacheVersion) {
 }
 
 // Modell + Effort der Synonymsuche als EIN Job-Bag (setContext ersetzt `aiJob` ganz).
-// Nur Claude. Die Suche ist ein interaktiver Kurz-Call: `ai.claude.model.synonym`
-// erlaubt ein schnelles Modell neben einem schweren globalen, `ai.claude.effort.synonym`
-// (Default 'low') verhindert, dass ein denkendes Modell fuer eine Wortliste lange
-// stumm nachdenkt. Effort nur bei adaptivem Denken — aeltere Modelle kuerzten sonst
-// die sichtbare Antwort. Rueckgabe: das effektiv laufende Modell + `:e=<effort>`
-// fuer die cacheVersion.
+// Nur Claude. Das Modell kommt aus der Stufe «leicht» bzw. `ai.claude.model.synonym`
+// (shared/model-tier.js), `ai.claude.effort.synonym` (Default 'low') verhindert, dass
+// ein denkendes Modell fuer eine Wortliste lange stumm nachdenkt. Effort nur bei
+// adaptivem Denken — aeltere Modelle kuerzten sonst die sichtbare Antwort.
+// Rueckgabe: das effektiv laufende Modell + `:e=<effort>` fuer die cacheVersion.
 function applySynonymAiOverrides(effectiveProvider, logger) {
-  const baseModel = _modelName(effectiveProvider);
-  if (effectiveProvider !== 'claude') return { model: baseModel, cacheSuffix: '' };
-  // Eigener Zugang: jobOverride ignoriert das Instanz-Modell, die cacheVersion auch.
-  const override = usesOwnAccess() ? '' : String(appSettings.get('ai.claude.model.synonym') || '').trim();
-  const model = override || baseModel;
-  const bag = { provider: 'claude' };
-  if (override) bag.model = override;
+  const model = tierModel('synonym', effectiveProvider, { jobKey: 'synonym' });
+  if (effectiveProvider !== 'claude') return { model, cacheSuffix: '' };
   let cacheSuffix = '';
+  const extra = {};
   if (_claudeUsesAdaptiveThinking(model)) {
     const effort = String(appSettings.get('ai.claude.effort.synonym') || '').trim().toLowerCase();
-    if (effort) { bag.effort = effort; cacheSuffix = `:e=${effort}`; }
+    if (effort) { extra.effort = effort; cacheSuffix = `:e=${effort}`; }
   }
-  if (Object.keys(bag).length > 1) {
-    setContext({ aiJob: bag });
-    logger.info(`Synonym-Override: ${JSON.stringify(bag)}.`);
-  }
+  applyTierAiOverrides(null, 'synonym', effectiveProvider, logger, { jobKey: 'synonym', extra });
   return { model, cacheSuffix };
 }
 

@@ -8,6 +8,7 @@ const state    = require('./state');
 const queue    = require('./queue');
 const jobsMod  = require('./jobs');
 const model    = require('./model');
+const modelTier = require('./model-tier');
 const ai       = require('./ai');
 const loader   = require('./loader');
 const queries  = require('./queries');
@@ -72,6 +73,8 @@ module.exports = {
 
   _modelName: model._modelName,
   applyReviewAiOverrides: model.applyReviewAiOverrides,
+  applyTierAiOverrides: modelTier.applyTierAiOverrides,
+  tierModel: modelTier.tierModel,
   settledAll: ai.settledAll,
   retryOnTransientAi: ai.retryOnTransientAi,
 

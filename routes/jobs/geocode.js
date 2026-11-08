@@ -16,7 +16,9 @@ const {
   aiCall, getPrompts, tps,
   createJob, enqueueJob, findActiveJobId, jsonBody,
   jobAbortControllers,
+  applyTierAiOverrides,
 } = require('./shared');
+const { resolveProvider } = require('../../lib/ai');
 const { geocode } = require('../../lib/geocode');
 const { NOW_ISO_SQL } = require('../../db/now');
 const { toIntId } = require('../../lib/validate');
@@ -164,6 +166,8 @@ function _parentChains(locIds, bookId, userEmail) {
 
 async function runGeocodeResolveJob(jobId, items, bookId, userEmail) {
   const logger = makeJobLogger(jobId);
+  // Stufe «leicht» (shared/model-tier.js) — vor chunkLimitsFor, die liest das Bag-Modell.
+  applyTierAiOverrides(jobId, 'geocode-resolve', resolveProvider({ userEmail }), logger);
   try {
     logger.info(`Geocode-Resolve: ${items.length} Label(s)`);
     updateJob(jobId, { statusText: 'job.phase.geocodeResolving', progress: 10 });

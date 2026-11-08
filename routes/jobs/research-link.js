@@ -9,7 +9,9 @@ const {
   makeJobLogger, updateJob, completeJob, failJob, i18nError,
   aiCall, getPrompts, tps,
   createJob, enqueueJob, findActiveJobId, jsonBody, jobAbortControllers,
+  applyTierAiOverrides,
 } = require('./shared');
+const { resolveProvider } = require('../../lib/ai');
 const { toIntId } = require('../../lib/validate');
 const { setContext } = require('../../lib/log-context');
 const { guardBook, sessionEmail } = require('../../lib/acl');
@@ -50,6 +52,8 @@ const ART_TO_KIND = { figur: 'figure', ort: 'location', szene: 'scene', beat: 'b
 
 async function runResearchLinkJob(jobId, itemId, bookId, userEmail, { signal } = {}) {
   const logger = makeJobLogger(jobId);
+  // Stufe «leicht» (shared/model-tier.js) — vor chunkLimitsFor, die liest das Bag-Modell.
+  applyTierAiOverrides(jobId, 'research-link', resolveProvider({ userEmail }), logger);
   try {
     updateJob(jobId, { statusText: 'job.phase.researchLinking', progress: 15 });
     const item = researchItemForLinking(itemId, bookId);

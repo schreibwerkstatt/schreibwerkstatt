@@ -23,7 +23,9 @@ const {
   makeJobLogger, updateJob, completeJob, failJob, i18nError,
   aiCall, getPrompts, tps, htmlToTextForPrompt, jobAbortControllers,
   createJob, enqueueJob, findActiveJobId, jsonBody,
+  applyTierAiOverrides,
 } = require('./shared');
+const { resolveProvider } = require('../../lib/ai');
 const { toIntId } = require('../../lib/validate');
 const { setContext } = require('../../lib/log-context');
 const { guardBook, sessionEmail } = require('../../lib/acl');
@@ -108,6 +110,8 @@ function validateFindings(raw, batch) {
 
 async function runResearchCrosscheckJob(jobId, bookId, itemId, userEmail) {
   const logger = makeJobLogger(jobId);
+  // Stufe «leicht» (shared/model-tier.js) — vor chunkLimitsFor, die liest das Bag-Modell.
+  applyTierAiOverrides(jobId, 'research-crosscheck', resolveProvider({ userEmail }), logger);
   const signal = jobAbortControllers.get(jobId)?.signal;
   try {
     updateJob(jobId, { statusText: 'job.phase.researchCrosscheckPassages', progress: 5 });

@@ -26,7 +26,7 @@ const {
   makeJobLogger, updateJob, completeJob, failJob, i18nError, jsonBody, jobAbortControllers,
   aiCall, getPrompts, getBookPrompts,
   loadOrderedBookContents, loadPageContents, htmlToTextForPrompt,
-  chunkLimitsFor, tps, _modelName,
+  chunkLimitsFor, tps, applyTierAiOverrides,
   startBookJob, komplettRunningPrecheck, bundleBlocks,
 } = require('./shared');
 const { resolveProvider } = require('../../lib/ai');
@@ -160,8 +160,9 @@ async function runFigurAlterJob(jobId, bookId, userEmail, { force = false } = {}
   const logger = makeJobLogger(jobId);
   const { buildFigurAlterSystemPrompt, buildFigurAlterPrompt, SCHEMA_FIGUR_ALTER } = await getPrompts(userEmail);
   const effectiveProvider = resolveProvider({ userEmail });
+  // Stufe «standard» (shared/model-tier.js) — vor chunkLimitsFor, die liest das Bag-Modell.
+  const model = applyTierAiOverrides(jobId, 'figur-alter', effectiveProvider, logger);
   const { perChunk: PER_CHUNK_LIMIT } = chunkLimitsFor(effectiveProvider);
-  const model = _modelName(effectiveProvider);
 
   try {
     const signal = () => jobAbortControllers.get(jobId)?.signal;

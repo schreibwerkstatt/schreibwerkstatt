@@ -15,7 +15,7 @@ const {
   aiCall, getPrompts, getBookPrompts,
   loadOrderedBookContents, loadPageContents,
   chunkLimitsFor, BATCH_SIZE, jobAbortControllers,
-  _modelName, tps, getFiguren,
+  tps, getFiguren, applyTierAiOverrides,
   jsonBody,
   startBookJob,
 } = require('./shared');
@@ -77,8 +77,10 @@ async function runRueckblickJob(jobId, bookId, userEmail, zeitraum) {
 
     const { resolveProvider } = require('../../lib/ai');
     const effectiveProvider = resolveProvider({ userEmail });
+    // Stufe «standard» (shared/model-tier.js) — vor chunkLimitsFor, die liest das Bag-Modell.
+    const model = applyTierAiOverrides(jobId, 'rueckblick', effectiveProvider, logger);
     const { singlePass: SINGLE_PASS_LIMIT, perChunk: PER_CHUNK_LIMIT } = chunkLimitsFor(effectiveProvider);
-    const cacheVersion = `${_modelName(effectiveProvider)}:${PROMPTS_VERSION || ''}`;
+    const cacheVersion = `${model}:${PROMPTS_VERSION || ''}`;
 
     // Optionaler Entitäts-Kontext (verbessert Personen-/Orts-Verknüpfung, kein Muss).
     // Pro Entität Name + kompakte Info (Rolle/Beruf/Alias bzw. Typ/Land) — hilft
@@ -216,7 +218,6 @@ async function runRueckblickJob(jobId, bookId, userEmail, zeitraum) {
     // jüngsten Zeile, damit die Client-Neugenerierungs-Sperre nach einem reinen
     // Lösch-Vorgang (Zusammenfassung unverändert, Eintrag aber weg) wieder greift
     // statt dauerhaft „nicht aktuell" anzuzeigen.
-    const model = _modelName(effectiveProvider);
     if (JSON.stringify(r) !== latestRueckblickJson(bookIdInt, email, zeitraum)) {
       insertRueckblick(bookIdInt, email, zeitraum, r, model, entries.length);
     } else {
