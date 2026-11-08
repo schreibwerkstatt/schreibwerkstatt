@@ -17,6 +17,7 @@ const { db } = require('./connection');
 require('./migrations');
 const { NOW_ISO_SQL } = require('./now');
 const { factKey } = require('./world-facts');
+const { LOC_MANUAL_FIELDS, serializeManualFields } = require('./location-fields');
 
 const FIG_COPY_COLS = [
   'name', 'kurzname', 'typ', 'geburtstag', 'geschlecht', 'beruf', 'beschreibung',
@@ -147,15 +148,16 @@ function copyFromPrequel(sourceBookId, targetBookId, userEmail, sel = {}) {
       .all(sourceBookId, email).filter(r => want.loc.has(r.id));
     const insLoc = db.prepare(`
       INSERT INTO locations (${LOC_COPY_COLS.join(', ')}, book_id, user_email, loc_id, manually_edited,
-        manually_created, ki_name, origin_location_id, stale, updated_at)
-      VALUES (${LOC_COPY_COLS.map(c => '@' + c).join(', ')}, @book_id, @user_email, @loc_id, 1, 1, NULL,
-        @origin, 0, ${NOW_ISO_SQL})`);
+        manual_fields, manually_created, ki_name, origin_location_id, stale, updated_at)
+      VALUES (${LOC_COPY_COLS.map(c => '@' + c).join(', ')}, @book_id, @user_email, @loc_id, 1,
+        @manual_fields, 1, NULL, @origin, 0, ${NOW_ISO_SQL})`);
     const parkLoc = db.prepare("UPDATE locations SET loc_id = 'man_' || id WHERE id = ?");
     const locMap = new Map();
     for (const r of srcLocs) {
       if (t.locOrigin.has(r.id) || t.locName.has(_norm(r.name))) continue;
       const row = Object.fromEntries(LOC_COPY_COLS.map(c => [c, r[c] ?? null]));
-      const id = insLoc.run({ ...row, book_id: targetBookId, user_email: email, loc_id: `carry_${r.id}`, origin: r.id })
+      const id = insLoc.run({ ...row, book_id: targetBookId, user_email: email, loc_id: `carry_${r.id}`, origin: r.id,
+        manual_fields: serializeManualFields(new Set(LOC_MANUAL_FIELDS)) })
         .lastInsertRowid;
       parkLoc.run(id);
       locMap.set(r.id, id);

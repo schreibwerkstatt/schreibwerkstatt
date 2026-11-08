@@ -27,7 +27,7 @@ const {
   aiCall, getPrompts, getBookPrompts,
   loadOrderedBookContents, loadPageContents, htmlToTextForPrompt,
   chunkLimitsFor, tps, _modelName,
-  startBookJob, findActiveJobId, bundleBlocks,
+  startBookJob, komplettRunningPrecheck, bundleBlocks,
 } = require('./shared');
 const { resolveProvider } = require('../../lib/ai');
 const { db } = require('../../db/connection');
@@ -485,18 +485,10 @@ async function runFigurAlterJob(jobId, bookId, userEmail, { force = false } = {}
 const figurAlterRouter = express.Router();
 
 // 'editor': das Ergebnis ist ein Analyse-Index am Buch, kein Lesevorgang.
-// Läuft eine Komplettanalyse, schreibt sie Figurenstamm und Zeitstrahl gerade neu —
-// dann 409 statt eines Laufs auf halbem Stand. Steht `figurAlter` in ihrem Umfang,
-// reiht sie die Alters-Analyse danach selbst ein (komplett/pruef-jobs.js); dieselbe
-// Antwort wie bei Kontinuität/Erzählprofil (komplett/index.js#_komplettDedup).
+// Läuft eine Komplettanalyse → 409 (shared/start-job.js#komplettRunningPrecheck).
 figurAlterRouter.post('/figur-alter', jsonBody, (req, res) => startBookJob(req, res, {
   type: 'figur-alter', minRole: 'editor', label: 'job.label.figurAlter',
-  precheck: (bookId, userEmail) => {
-    const komplettId = findActiveJobId('komplett-analyse', bookId, userEmail);
-    return komplettId
-      ? { status: 409, error_code: 'KOMPLETT_ANALYSIS_RUNNING', jobId: komplettId, params: { jobId: komplettId } }
-      : null;
-  },
+  precheck: komplettRunningPrecheck,
   run: (jobId, { bookId, userEmail }) => runFigurAlterJob(jobId, bookId, userEmail, { force: req.body?.force === true }),
 }));
 

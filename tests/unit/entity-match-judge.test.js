@@ -153,6 +153,20 @@ test('rankJudgePairs: erst der beste Kandidat jedes Incomings, hoechstens zwei j
   assert.deepEqual(ranked.map(u => `${u.index}:${u.existingId}`), ['0:1', '1:4', '0:2']);
 });
 
+test('rankJudgePairs: Szenen nach Indizien vor Titel-Aehnlichkeit, Figuren/Orte nach Namen', () => {
+  // Prod-Fall «Der Amoklauf» (2026-11-07): «Entfremdeter Sonntagstisch mit Mario» teilt mit
+  // zwei fremden Szenen nur das Wort «Mario» (Indizien 0); das Gegenstueck auf demselben
+  // Abschnitt mit denselben Figuren (Indizien 3) hat einen tieferen Titel-Wert.
+  const unsure = [
+    { index: 0, existingId: 1, sim: 0.25, evidence: 0 },
+    { index: 0, existingId: 2, sim: 0.25, evidence: 0 },
+    { index: 0, existingId: 3, sim: 0.2, evidence: 3 },
+  ];
+  assert.deepEqual(rankJudgePairs(unsure, 'szene').ranked.map(u => u.existingId), [3, 1]);
+  assert.deepEqual(rankJudgePairs(unsure, 'figur').ranked.map(u => u.existingId), [1, 2]);
+  assert.deepEqual(rankJudgePairs(unsure, 'ort').ranked.map(u => u.existingId), [1, 2]);
+});
+
 test('ein gescheiterter Teil kostet nur seine Paare', async () => {
   const n = JUDGE_PAIR_CAP + 1;
   const incoming = Array.from({ length: n }, (_, i) => ({ id: `ort_${i}`, name: `Ort ${i}` }));

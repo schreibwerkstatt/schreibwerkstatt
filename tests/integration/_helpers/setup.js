@@ -111,6 +111,9 @@ function bootstrap() {
     try { fs.unlinkSync(`${dbFile}-wal`); } catch (_) {}
     try { fs.unlinkSync(`${dbFile}-shm`); } catch (_) {}
   }
+  // Netz für Files ohne ctx.cleanup() oder mit Crash: sonst bleibt die DB in
+  // /dev/shm liegen und belegt RAM bis zum Reboot (wie tests/unit/_helpers/tmp-db.js).
+  process.once('exit', cleanup);
 
   return { mockAi, dbSeed, komplett, review, kapitel, rueckblick, lektorat, synonyme, sourceDetect, sourcePdfDraft, figurAlter, motifConsistency, autorenprofil, shared, dbSchema, dbFile, cleanup };
 }

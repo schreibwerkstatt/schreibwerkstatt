@@ -142,6 +142,21 @@ test('matchLocations: hint (vom Judge bestaetigt) schlaegt die Regel', () => {
   assert.equal(matchLocations(existing, incoming, { hint }).matchOf.get(0), 7);
 });
 
+test('dedupeLocationsWithinRun: je Kapitel die höhere Häufigkeit, leere Felder gefüllt, Eingabe unverändert', () => {
+  const k1 = { name: 'K1', haeufigkeit: 1 };
+  const input = [
+    { name: 'Mathys AG (Bettlach)', typ: 'GEBAEUDE', kapitel: [k1] },
+    { name: 'Mathys AG Produktionsstätte Bettlach', typ: 'GEBAEUDE', land: 'ch', erste_erwaehnung: 'K1',
+      kapitel: [{ name: 'K1', haeufigkeit: 3 }, { name: 'K2', haeufigkeit: 1 }] },
+  ];
+  const { orte } = dedupeLocationsWithinRun(input);
+  assert.equal(orte.length, 1);
+  assert.deepEqual(orte[0].kapitel, [{ name: 'K1', haeufigkeit: 3 }, { name: 'K2', haeufigkeit: 1 }]);
+  assert.equal(orte[0].land, 'ch');
+  assert.equal(orte[0].erste_erwaehnung, 'K1');
+  assert.equal(k1.haeufigkeit, 1, 'Rohdaten der Extraktion bleiben unverändert');
+});
+
 test('dedupeLocationsWithinRun: merged Teilmengen, sammelt Unsicheres', () => {
   const { orte } = dedupeLocationsWithinRun([
     { name: 'Mathys AG (Bettlach)', typ: 'GEBAEUDE', figuren_namen: ['Der Vater'], kapitel: ['K1'], beschreibung: 'kurz' },

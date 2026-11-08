@@ -103,15 +103,75 @@ test('runPhase3 Single-Pass: im Dedup aufgegangene Variante bleibt auflösbar', 
   assert.equal(ortNameToIdLower['mathys ag'], orte[0].id);
 });
 
+test('runPhase3 Multi-Pass: doppelt gelieferter Ort der KI wird zusammengeführt, Variante bleibt auflösbar', async () => {
+  const { bookId, chapterId } = newBook();
+  const { ctx } = makeCtx(bookId, chapterId, () => ({
+    orte: [
+      { name: 'Mathys AG', typ: 'GEBAEUDE', figuren_namen: ['Anna'], kapitel: ['Kapitel 1'] },
+      { name: 'Mathys AG Produktionsstätte Bettlach', typ: 'GEBAEUDE', figuren_namen: ['Bert'], kapitel: ['Kapitel 1'] },
+      { name: 'Marktplatz', typ: 'ANDERE', figuren_namen: [], kapitel: ['Kapitel 1'] },
+    ],
+  }));
+  const chapterOrte = [{ kapitel: 'Kapitel 1', orte: [{ name: 'Mathys AG' }, { name: 'Marktplatz' }] }];
+  const { orte, ortNameToId } = await runPhase3(ctx, chapterOrte, [], false,
+    { Anna: 'fig_1', Bert: 'fig_2' }, { anna: 'fig_1', bert: 'fig_2' });
+  assert.equal(orte.length, 2, 'keine Dublette');
+  const mathys = orte.find(o => o.name.startsWith('Mathys'));
+  assert.deepEqual([...mathys.figuren].sort(), ['fig_1', 'fig_2'], 'Figuren beider Varianten');
+  assert.equal(ortNameToId['Mathys AG'], mathys.id);
+  assert.equal(db.prepare('SELECT COUNT(*) n FROM locations WHERE book_id = ?').get(bookId).n, 2);
+});
+
+test('runPhase3 Fallback: Varianten über Kapitel hinweg werden zusammengeführt', async () => {
+  const { bookId, chapterId } = newBook();
+  const { ctx } = makeCtx(bookId, chapterId, () => { throw new Error('KI aus'); });
+  const chapterOrte = [
+    { kapitel: 'Kapitel 1', orte: [{ name: 'Mathys AG', typ: 'GEBAEUDE', figuren_namen: ['Anna'], kapitel: ['Kapitel 1'] }] },
+    { kapitel: 'Kapitel 1', orte: [{ name: 'Mathys AG Produktionsstätte Bettlach', typ: 'GEBAEUDE', figuren_namen: ['Bert'], kapitel: ['Kapitel 1'] }] },
+  ];
+  const { orte } = await runPhase3(ctx, chapterOrte, [], false,
+    { Anna: 'fig_1', Bert: 'fig_2' }, { anna: 'fig_1', bert: 'fig_2' });
+  assert.equal(orte.length, 1);
+  assert.deepEqual([...orte[0].figuren].sort(), ['fig_1', 'fig_2']);
+});
+
 test('buildFallbackOrte: Kapitel werden vereinigt, Rohdaten bleiben unverändert', () => {
   const chapterOrte = [
     { kapitel: 'K1', orte: [{ name: 'Wald', kapitel: [{ name: 'K1', haeufigkeit: 1 }] }] },
-    { kapitel: 'K2', orte: [{ name: 'wald', kapitel: [{ name: 'K2', haeufigkeit: 2 }, { name: 'K1', haeufigkeit: 4 }] }] },
+    { kapitel: 'K2', orte: [{ name: 'wald', typ: 'NATUR', kapitel: [{ name: 'K2', haeufigkeit: 2 }, { name: 'K1', haeufigkeit: 4 }] }] },
   ];
   const out = buildFallbackOrte(chapterOrte, {}, {});
   assert.equal(out.length, 1);
-  assert.deepEqual(out[0].kapitel, [{ name: 'K1', haeufigkeit: 4 }, { name: 'K2', haeufigkeit: 2 }]);
+  // Über Chunks summiert: ein grosses Kapitel liegt auf mehreren Chunks gleichen Namens.
+  assert.deepEqual(out[0].kapitel, [{ name: 'K1', haeufigkeit: 5 }, { name: 'K2', haeufigkeit: 2 }]);
+  assert.equal(out[0].typ, 'NATUR', 'leeres Feld aus späterem Vorkommen gefüllt');
   assert.deepEqual(chapterOrte[0].orte[0].kapitel, [{ name: 'K1', haeufigkeit: 1 }], 'Eingabe nicht mutiert');
+});
+
+test('buildFallbackOrte: innerhalb eines Chunks Maximum, nicht Summe', () => {
+  const out = buildFallbackOrte([
+    { kapitel: 'K1', orte: [
+      { name: 'Bahnhof', kapitel: [{ name: 'K1', haeufigkeit: 2 }] },
+      { name: 'Bahnhof', kapitel: [{ name: 'K1', haeufigkeit: 3 }] },
+    ] },
+  ], {}, {});
+  assert.deepEqual(out[0].kapitel, [{ name: 'K1', haeufigkeit: 3 }]);
+});
+
+test('buildFallbackOrte: verschiedene Katalog-Anker bleiben getrennt, ankerloser geht im einzigen auf', () => {
+  const zwei = buildFallbackOrte([
+    { kapitel: 'K1', orte: [{ name: 'Bahnhof', katalog_id: 'L1' }] },
+    { kapitel: 'K2', orte: [{ name: 'Bahnhof', katalog_id: 'L2' }, { name: 'Bahnhof' }] },
+  ], {}, {});
+  assert.equal(zwei.length, 3, 'zwei Anker → ankerloser bleibt eigener Eintrag');
+  const einer = buildFallbackOrte([
+    { kapitel: 'K1', orte: [{ name: 'Bahnhof', katalog_id: 'L1', kapitel: [{ name: 'K1', haeufigkeit: 1 }] }] },
+    { kapitel: 'K2', orte: [{ name: 'bahnhof', land: 'ch', kapitel: [{ name: 'K2', haeufigkeit: 1 }] }] },
+  ], {}, {});
+  assert.equal(einer.length, 1);
+  assert.equal(einer[0].katalog_id, 'L1');
+  assert.equal(einer[0].land, 'ch');
+  assert.deepEqual(einer[0].kapitel.map(k => k.name), ['K1', 'K2']);
 });
 
 test('buildOrtNameLookup: Alias überschreibt nie einen echten Ortsnamen', () => {
@@ -135,4 +195,19 @@ test('ortAliasesFromSources: eindeutige Variante wird Alias, mehrdeutige nicht',
   assert.deepEqual(aliases[0], ['Mathys AG Bettlach']);
   assert.deepEqual(aliases[1], []);
   assert.deepEqual(aliases[2], []);
+});
+
+test('listLocationsForBook: erste Erwähnung als Kapitelname → erste_erwaehnung_chapter_id', () => {
+  const { listLocationsForBook } = require('../../db/locations-read');
+  const { bookId, chapterId } = newBook();
+  const ins = db.prepare(`INSERT INTO locations (book_id, loc_id, name, erste_erwaehnung, user_email, updated_at)
+    VALUES (?, ?, ?, ?, ?, ?)`);
+  ins.run(bookId, 'ort_1', 'Wald', 'Kapitel 1', USER, NOW);
+  ins.run(bookId, 'ort_2', 'See', 'Irgendein Abschnitt', USER, NOW);
+  ins.run(bookId, 'ort_3', 'Berg', 'constructor', USER, NOW);
+  const { orte } = listLocationsForBook(bookId, USER);
+  const by = Object.fromEntries(orte.map(o => [o.name, o]));
+  assert.equal(by.Wald.erste_erwaehnung_chapter_id, chapterId);
+  assert.equal(by.See.erste_erwaehnung_chapter_id, null);
+  assert.equal(by.Berg.erste_erwaehnung_chapter_id, null, 'Prototyp-Schlüssel sind kein Kapitel');
 });

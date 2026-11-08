@@ -4,10 +4,10 @@
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import path from 'node:path';
 import JSZip from 'jszip';
+import { useTmpDb } from '../_helpers/tmp-db.js';
 
-process.env.DB_PATH = path.join('/tmp', `builders-${process.pid}-${Date.now()}.db`);
+useTmpDb('builders');
 await import('../../../db/schema.js');
 
 const { buildTxt }  = await import('../../../lib/export-builders/txt.js');

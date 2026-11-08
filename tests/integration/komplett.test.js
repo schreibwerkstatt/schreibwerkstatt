@@ -1521,19 +1521,30 @@ test('Prüf-Jobs: Alters-Analyse unabhängig von der Provider-Klasse, abwählbar
   const { enqueuePruefJobs } = require('../../routes/jobs/komplett/pruef-jobs');
   const { normalizeKomplettScope } = require('../../lib/komplett-scope');
 
-  // Lokale Klasse: Kontinuität/Erzählprofil fallen weg, die Alters-Analyse nicht.
+  // Lokale Klasse: Kontinuität/Erzählprofil fallen weg, Alters-Analyse und
+  // Berufsweg-Vorschlag nicht. Der Schulweg-Vorschlag fehlt: das Buch hat kein Schulsystem.
   const lokal = enqueuePruefJobs({ bookId: BOOK_ID, bookName: 'Buch', userEmail: email,
     scope: normalizeKomplettScope(null), provider: 'ollama' });
-  assert.deepEqual(Object.keys(lokal), ['figur-alter']);
+  assert.deepEqual(Object.keys(lokal).sort(), ['figur-alter', 'stationen-vorschlag']);
   // Läuft sie schon, bleibt es bei diesem Job.
   const again = enqueuePruefJobs({ bookId: BOOK_ID, bookName: 'Buch', userEmail: email,
     scope: normalizeKomplettScope(null), provider: 'ollama' });
   assert.equal(again['figur-alter'], lokal['figur-alter']);
   await waitForJob(ctx.shared, lokal['figur-alter'], { timeoutMs: 8000 });
+  // Ohne Figuren endet der eingereihte Berufsweg-Vorschlag still, nicht als Fehler.
+  const stationenJob = await waitForJob(ctx.shared, lokal['stationen-vorschlag'], { timeoutMs: 8000 });
+  assert.equal(stationenJob.status, 'done', `still beendet, nicht ${stationenJob.status}: ${stationenJob.error || ''}`);
+  assert.equal(stationenJob.result?.skipped, 'job.error.stationenNoFiguren');
 
   const ab = enqueuePruefJobs({ bookId: BOOK_ID, bookName: 'Buch', userEmail: email,
     scope: normalizeKomplettScope({ figurAlter: false }), provider: 'ollama' });
   assert.equal(ab['figur-alter'], undefined, 'abgewählt wird sie nicht eingereiht');
+  assert.ok(ab['stationen-vorschlag'], 'der Berufsweg-Vorschlag bleibt im Umfang');
+  await waitForJob(ctx.shared, ab['stationen-vorschlag'], { timeoutMs: 8000 });
+
+  const ohne = enqueuePruefJobs({ bookId: BOOK_ID, bookName: 'Buch', userEmail: email,
+    scope: normalizeKomplettScope({ figurAlter: false, stationen: false }), provider: 'ollama' });
+  assert.deepEqual(ohne, {}, 'abgewählt wird nichts eingereiht');
 });
 
 test('Komplettanalyse Teil-Lauf: abgewählter Katalog-Schritt friert den Konsolidierungs-Checkpoint NICHT ein', async () => {

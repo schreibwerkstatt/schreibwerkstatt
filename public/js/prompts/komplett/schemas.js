@@ -110,6 +110,10 @@ const _ortSchemaWith = (arr) => _obj({
   figuren_namen: arr(_str, 'namen'),
 });
 
+// Rolle einer Figur am Song — Werte = lib/song-fig-rollen.js (gegated in
+// tests/unit/songs-prompt.test.mjs).
+const _songFigRolle = { type: 'string', enum: ['spielt', 'singt', 'komponiert', 'hört', 'erwähnt'] };
+
 const _songSchemaWith = (arr) => _obj({
   id: _str,
   titel: _str,
@@ -120,7 +124,7 @@ const _songSchemaWith = (arr) => _obj({
   stimmung: _str,
   erste_erwaehnung: _str,
   kapitel: arr(_obj({ name: _str, haeufigkeit: _num }), 'kapitel'),
-  figuren_namen: arr(_str, 'namen'),
+  figuren_namen: arr(_obj({ name: _str, rolle: _songFigRolle }), 'namen'),
 });
 
 let _ortSchema = _ortSchemaWith(_arr);
@@ -266,7 +270,13 @@ export function _rebuildKomplettSchemas() {
   SCHEMA_KOMPLETT_ORTE_PASS = _buildOrtePassSchema();
   SCHEMA_KOMPLETT_FAKTEN_PASS = _buildFaktenPassSchema();
   SCHEMA_KOMPLETT_EVENTS = _buildEventsPassSchema();
-  SCHEMA_FIGUREN_KONSOL = _obj({ figuren: { type: 'array', items: _obj(_figurSchemaProps(_plainArr, { bzName: true })) } });
+  // `quellnamen`: Eingabenamen, die das Modell in diese Figur zusammengeführt hat. Ohne
+  // das Feld ist eine Zusammenführung unter neuem Namen von einer weggelassenen Figur
+  // nicht zu unterscheiden (phases/figuren-konsol.js#restoreOmittedFiguren).
+  SCHEMA_FIGUREN_KONSOL = _obj({ figuren: { type: 'array', items: _obj({
+    ..._figurSchemaProps(_plainArr, { bzName: true }),
+    quellnamen: _plainArr(_str),
+  }) } });
   SCHEMA_BEZIEHUNGEN = _buildBeziehungenSchema();
 }
 
@@ -274,9 +284,19 @@ _rebuildKomplettSchemas();
 
 // ── Statische Schemas (nicht _isLocal-abhängig) ──────────────────────────────
 
-export const SCHEMA_ORTE_KONSOL = _obj({ orte: { type: 'array', items: _ortSchemaWith(_plainArr) } });
+// `quellnamen` (wie SCHEMA_FIGUREN_KONSOL): Eingabenamen bzw. -titel, die das Modell in
+// diesen Eintrag zusammengeführt hat. Ohne sie ist ein absichtlich aufgegangenes Synonym
+// von einem vergessenen Eintrag nicht zu unterscheiden (phases/orte/orte-merge.js
+// #restoreOmittedOrte, phases/orte/songs-merge.js#restoreOmittedSongs).
+const _withQuellnamen = (schema) => ({
+  ...schema,
+  required: [...schema.required, 'quellnamen'],
+  properties: { ...schema.properties, quellnamen: _plainArr(_str) },
+});
 
-export const SCHEMA_SONGS_KONSOL = _obj({ songs: { type: 'array', items: _songSchemaWith(_plainArr) } });
+export const SCHEMA_ORTE_KONSOL = _obj({ orte: { type: 'array', items: _withQuellnamen(_ortSchemaWith(_plainArr)) } });
+
+export const SCHEMA_SONGS_KONSOL = _obj({ songs: { type: 'array', items: _withQuellnamen(_songSchemaWith(_plainArr)) } });
 
 export const SCHEMA_SOZIOGRAMM_KONSOL = _obj({
   figuren:     { type: 'array', items: _obj({ id: _str, sozialschicht: _str }) },

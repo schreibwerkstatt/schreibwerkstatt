@@ -24,7 +24,7 @@ export const FILTER_SCOPES = [
   { scope: 'szenenFilters',       key: 'szenenFilters',       defaults: { wertung: '', figurId: '', kapitelId: '', seiteId: '', ortId: '', suche: '' } },
   { scope: 'orteFilters',         key: 'orteFilters',         defaults: { figurId: '', kapitelId: '', szeneId: '', suche: '' } },
   { scope: 'songsFilters',        key: 'songsFilters',        defaults: { figurId: '', kapitelId: '', genre: '', kontextTyp: '', suche: '' } },
-  { scope: 'kontinuitaetFilters', key: 'kontinuitaetFilters', defaults: { figurId: '', kapitelId: '', schwere: '', status: '' } },
+  { scope: 'kontinuitaetFilters', key: 'kontinuitaetFilters', defaults: { figurId: '', kapitelId: '', schwere: '', status: '', suche: '' } },
 ];
 
 // Kartenwechsel als sanfter Cross-Fade (View Transitions API). Progressive

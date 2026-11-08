@@ -9,6 +9,9 @@ const { bootstrap } = require('./setup');
 
 const mode = process.argv[2];
 const ctx = bootstrap();
+// Der Elternprozess liest job_runs NACH unserem Exit und räumt die DB selbst
+// weg (cleanupDb) — das Exit-Aufräumen von bootstrap() darf hier nicht greifen.
+process.removeListener('exit', ctx.cleanup);
 const { db } = require('../../../db/connection');
 const shared = require('../../../routes/jobs/shared');
 const { jobAbortControllers } = require('../../../routes/jobs/shared/state');

@@ -1,8 +1,8 @@
-// Zwei Katalogfiguren zusammenführen — geteilter Client-Weg für die Stellen, an
-// denen eine Dublette sichtbar wird: Redundanz-Radar (Figuren-Paar) und die
-// Figurenkarte (ausgemusterte Figur «zusammenführen mit…»). Die Bucheinstellungen
-// (Danger-Zone, book-settings/merge.js) bedienen alle drei Gattungen über ihren
-// eigenen Kandidaten-State und rufen dieselbe Route.
+// Zwei Katalogfiguren zusammenführen, adressiert über die Zeilen-ID — der Weg
+// des Redundanz-Radars (Figuren-Paar), das die fig_id nicht kennt (sie ändert
+// sich mit jeder Komplettanalyse). Danger-Zone und der Zeilen-Knopf
+// «zusammenführen mit…» der Katalog-Listen nehmen den Gattungs-Kern
+// book/entity-merge.js; die Erfolgsmeldung `figurMergeMessage` teilen alle.
 //
 // Server: POST /figures/:book_id/merge { source, target } (fig_id, editor-ACL),
 // Merge-Kern db/entity-merge.js#mergeFigures. Die Quelle wird gelöscht; ihr Name,

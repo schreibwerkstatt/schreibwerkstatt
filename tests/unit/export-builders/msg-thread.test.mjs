@@ -5,10 +5,10 @@
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import path from 'node:path';
 import JSZip from 'jszip';
+import { useTmpDb } from '../_helpers/tmp-db.js';
 
-process.env.DB_PATH = path.join('/tmp', `msg-thread-export-${process.pid}-${Date.now()}.db`);
+useTmpDb('msg-thread-export');
 await import('../../../db/schema.js');
 
 const { parseHtmlToBlocks } = await import('../../../lib/pdf-render/html-walker.js');

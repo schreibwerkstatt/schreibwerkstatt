@@ -143,6 +143,9 @@ test('alterstabelle: Reiter rendert, Filter greifen, Belege klappen auf', async 
   // mit Vorschau tragen bewusst kein data-tip).
   await expect(orte.first()).not.toHaveAttribute('data-tip', /.*/);
   if (realPage.chapter) {
+    // Erst in den Blick scrollen, dann überfahren: hover() scrollt sonst selbst,
+    // und jedes Scrollen schliesst die Vorschau absichtlich (entity-ref-popover.js).
+    await orte.first().scrollIntoViewIfNeeded();
     await orte.first().hover();
     const pop = page.locator('.entity-ref-preview');
     await expect(pop.locator('.entity-ref-preview__title')).toHaveText(realPage.name);

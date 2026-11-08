@@ -117,7 +117,7 @@
        statt an der Leiste. -->
   <div class="filter-bar" x-show="beats.length > 0 || archivedActCount() > 0" x-cloak>
     <span class="filter-search-wrap" x-show="beats.length > 0">
-      <input type="text" class="filter-search-input" x-model.debounce.200ms="plotFilters.text"
+      <input type="text" class="filter-search-input filter-search-input--wide" x-model.debounce.200ms="plotFilters.text"
              :placeholder="$app.t('plot.filter.searchPlaceholder')"
              :aria-label="$app.t('plot.filter.searchPlaceholder')">
       <button type="button" class="search-clear--icon" x-show="plotFilters.text" @click="plotFilters.text=''" :aria-label="$app.t('search.clear')" :data-tip="$app.t('search.clear')"><svg class="icon" aria-hidden="true"><use href="/icons.svg#x"/></svg></button>

@@ -13,6 +13,10 @@ export function buildFiguresBasisConsolidationPrompt(bookName, chapterFiguren, b
     : '';
   // Das Schema der Konsolidierung trägt `beziehungen.name` (schemas.js#_bzItem): im Teil
   // gibt es für Ziele aus anderen Teilen keine id, und eine erfundene träfe eine fremde Figur.
+  // Erhaltungsregel: ohne sie lässt das Modell Randfiguren mit einer Szene still weg —
+  // der Code stellt jede Eingabefigur ohne Spur in der Ausgabe wieder her
+  // (routes/jobs/komplett/phases/figuren-konsol.js#restoreOmittedFiguren).
+  const erhaltRegel = '\n- Keine Figur der Eingabe weglassen, auch keine Randfigur mit nur einer Erwähnung: jede steht entweder als eigener Eintrag in der Ausgabe oder ist in eine andere Figur zusammengeführt. quellnamen: alle Eingabenamen, die du in diesen Eintrag zusammengeführt hast (genau so geschrieben wie oben), auch der eigene Eingabename, wenn du ihn geändert hast; sonst leer';
   const nameRegel = '\n- beziehungen.name: Name der Zielfigur — Pflicht bei jeder Beziehung. Hat die Zielfigur in deiner Ausgabe einen eigenen Eintrag, genau der Name dieses Eintrags (auch wenn du ihn geändert oder zur Unterscheidung von Namensvettern ergänzt hast), dazu ihre figur_id; sonst der Name genau so geschrieben wie oben und figur_id leer';
   const synthInput = chapterFiguren.map(cf => {
     const nameById = Object.fromEntries((cf.figuren || []).map(f => [f.id, f.name]));
@@ -52,7 +56,7 @@ ${synthInput}
 Antworte mit diesem JSON-Schema:
 ${FIGUREN_BASIS_SCHEMA}
 
-${figurenBasisRules(buchKontext)}${nameRegel}`;
+${figurenBasisRules(buchKontext)}${nameRegel}${erhaltRegel}`;
 }
 
 // ── Alias-Cluster (F3, Claude Multi-Pass, VOR der Konsolidierung) ─────────────

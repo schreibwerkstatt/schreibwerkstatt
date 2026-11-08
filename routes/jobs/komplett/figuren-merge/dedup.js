@@ -5,6 +5,7 @@
 
 const { normName: _normalizeName, nameTokens: _nameTokens, nameQualifier, stripNameQualifier } = require('../../../../lib/name-normalize');
 const { figureEvidence, figureDistinctive, FIGURE_CONTRADICTION } = require('../../../../lib/entity-match');
+const { unionKapitel, fillEmpty, copyKap } = require('../../../../lib/entity-match/merge-fields');
 
 // Katalog-Anker (`katalog_id`): die Extraktion meldet, welche Bestandsfigur sie meint.
 // Zwei Einträge mit VERSCHIEDENEM Anker sind zwei Figuren, egal wie ähnlich die Namen
@@ -37,33 +38,36 @@ function _anchorRefused(canon, f, opts) {
  *  Vorab Stufe 0: gleicher Katalog-Anker, ausser bei hartem Widerspruch (`_anchorRefused`).
  *  Namens-Normalisierung (_normalizeName/_nameTokens) kommt aus lib/name-normalize. */
 
-/** Fasst zwei Figuren zu einer kanonischen Figur zusammen. `canon` wird mutiert.
- *  Gibt nichts zurück – Caller kümmert sich um idRemap. */
 function _arcWeight(a) {
   if (!a || typeof a !== 'object') return 0;
   return (a.anfang ? 1 : 0) + (a.ende ? 1 : 0) + (Array.isArray(a.wendepunkte) ? a.wendepunkte.length : 0);
 }
 
-function _mergeFigurInto(canon, other) {
-  if (!_anchor(canon) && _anchor(other)) canon.katalog_id = other.katalog_id;
-  for (const field of ['kurzname', 'typ', 'geburtstag', 'geschlecht', 'beruf', 'wohnadresse', 'sozialschicht',
-                       'aeusseres', 'stimme', 'hintergrund',
-                       'rolle', 'motivation', 'konflikt', 'entwicklung', 'erste_erwaehnung', 'praesenz']) {
-    if (!canon[field] && other[field]) canon[field] = other[field];
-  }
+// Felder, die beim Verschmelzen aus dem Partner gefüllt werden, wenn sie leer sind.
+const FILL_FIELDS = ['kurzname', 'typ', 'geburtstag', 'geschlecht', 'beruf', 'wohnadresse', 'sozialschicht',
+  'aeusseres', 'stimme', 'hintergrund',
+  'rolle', 'motivation', 'konflikt', 'entwicklung', 'erste_erwaehnung', 'praesenz', 'beschreibung'];
+
+// Arc, Zitate, Eigenschaften, Kapitel — geteilt von Vorab-Merge und Varianten-Merge.
+// `sum`: Kapitel-Häufigkeiten addieren (nur über Phase-1-Chunks, siehe unionKapitel).
+function _mergeFigurFields(canon, other, { sum }) {
+  fillEmpty(canon, other, FILL_FIELDS);
   // Arc: reichere Variante (mehr belegte Stationen) gewinnt.
   if (_arcWeight(other.arc) > _arcWeight(canon.arc)) canon.arc = other.arc;
-  if (!canon.beschreibung && other.beschreibung) canon.beschreibung = other.beschreibung;
   const zit = new Set([...(canon.schluesselzitate || []), ...(other.schluesselzitate || [])]);
   canon.schluesselzitate = [...zit].slice(0, 5);
-  const kapByName = new Map();
-  for (const k of (canon.kapitel || [])) kapByName.set(k.name, k.haeufigkeit || 1);
-  for (const k of (other.kapitel || [])) {
-    kapByName.set(k.name, (kapByName.get(k.name) || 0) + (k.haeufigkeit || 1));
-  }
-  canon.kapitel = [...kapByName.entries()].map(([name, haeufigkeit]) => ({ name, haeufigkeit }));
-  const eigSet = new Set([...(canon.eigenschaften || []), ...(other.eigenschaften || [])]);
-  canon.eigenschaften = [...eigSet];
+  const eig = new Set([...(canon.eigenschaften || []), ...(other.eigenschaften || [])]);
+  canon.eigenschaften = [...eig];
+  canon.kapitel = (canon.kapitel || []).map(copyKap);
+  unionKapitel(canon, other.kapitel, { sum, fallback: 1 });
+}
+
+/** Fasst zwei Figuren zu einer kanonischen Figur zusammen (`canon` wird mutiert, idRemap
+ *  pflegt der Caller). Varianten-Merge NACH der Konsolidierung: beide Einträge beschreiben
+ *  dieselben Nennungen unter zwei Namen, darum je Kapitel die höhere Häufigkeit. */
+function _mergeFigurInto(canon, other) {
+  if (!_anchor(canon) && _anchor(other)) canon.katalog_id = other.katalog_id;
+  _mergeFigurFields(canon, other, { sum: false });
   const bzByFig = new Map();
   for (const b of (canon.beziehungen || [])) bzByFig.set(b.figur_id, b);
   for (const b of (other.beziehungen || [])) if (!bzByFig.has(b.figur_id)) bzByFig.set(b.figur_id, b);
@@ -333,24 +337,10 @@ function preMergeChapterFiguren(chapterFiguren) {
       }
 
       if (canon) {
-        for (const field of ['kurzname', 'typ', 'geburtstag', 'geschlecht', 'beruf', 'wohnadresse', 'sozialschicht',
-                             'aeusseres', 'stimme', 'hintergrund',
-                             'rolle', 'motivation', 'konflikt', 'entwicklung', 'erste_erwaehnung', 'praesenz',
-                             'beschreibung']) {
-          if (!canon[field] && f[field]) canon[field] = f[field];
-        }
-        if (_arcWeight(f.arc) > _arcWeight(canon.arc)) canon.arc = f.arc;
         if (!_anchor(canon) && anchor) canon.katalog_id = f.katalog_id;
-        const zit = new Set([...(canon.schluesselzitate || []), ...(f.schluesselzitate || [])]);
-        canon.schluesselzitate = [...zit].slice(0, 5);
-        const eig = new Set([...(canon.eigenschaften || []), ...(f.eigenschaften || [])]);
-        canon.eigenschaften = [...eig];
-        const kapByName = new Map();
-        for (const k of (canon.kapitel || [])) kapByName.set(k.name, k.haeufigkeit || 1);
-        for (const k of (f.kapitel || [])) {
-          kapByName.set(k.name, (kapByName.get(k.name) || 0) + (k.haeufigkeit || 1));
-        }
-        canon.kapitel = [...kapByName.entries()].map(([name, haeufigkeit]) => ({ name, haeufigkeit }));
+        // Über Chunks hinweg: ein grosses Kapitel liegt in mehreren Chunks gleichen Namens,
+        // jeder zählt nur seine Abschnitte → Summe.
+        _mergeFigurFields(canon, f, { sum: true });
         _carryRelations(canon, f);
         if (partial) {
           // Der vollere Name wird Kanon; der kürzere bleibt als Alias/Kurzname.

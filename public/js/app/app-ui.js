@@ -3,18 +3,20 @@ import { avatarHue } from '../avatar.js';
 import { isRetryableSaveError } from '../editor/notebook/save-errors.js';
 import { idOptions, sameId } from '../chapter-filter.js';
 
-// Pure Filter-Logik für die Musik-Liste. Songs[].figuren kann String (fig_id)
-// oder Object ({ fig_id }) enthalten — je nachdem ob der Server das per-Figur-
-// Kontext-Override mitliefert. Filter normalisiert beide Formen. `kapitelId` ist
-// der bereits wirksame Wert (activeFilterId), Kapitel per ID (chapter-filter.js).
-export function applySongsFilters(songs, filters) {
+// Pure Filter-Logik für die Musik-Liste. Songs[].figuren sind { fig_id, name,
+// kontext_typ }. Die Suche trifft Titel, Interpret, Genre, Stimmung, Beschreibung
+// und die Namen der verknüpften Figuren (`figNames`: fig_id → Suchtext aus dem
+// Figuren-Katalog, Fallback der mitgelieferte Name). `kapitelId` ist der bereits
+// wirksame Wert (activeFilterId), Kapitel per ID (chapter-filter.js).
+export function applySongsFilters(songs, filters, figNames = null) {
   const q = filters.suche ? filters.suche.toLowerCase() : '';
   return (songs || []).filter(s => {
     if (q) {
-      const hay = `${s.titel || ''} ${s.interpret || ''} ${s.genre || ''} ${s.beschreibung || ''}`.toLowerCase();
+      const figs = (s.figuren || []).map(x => figNames?.[x.fig_id] || x.name || '').join(' ');
+      const hay = `${s.titel || ''} ${s.interpret || ''} ${s.genre || ''} ${s.stimmung || ''} ${s.beschreibung || ''} ${figs}`.toLowerCase();
       if (!hay.includes(q)) return false;
     }
-    if (filters.figurId && !(s.figuren || []).some(x => (x.fig_id || x) === filters.figurId)) return false;
+    if (filters.figurId && !(s.figuren || []).some(x => x.fig_id === filters.figurId)) return false;
     if (filters.kapitelId && !(s.kapitel || []).some(k => sameId(k.chapter_id, filters.kapitelId))) return false;
     if (filters.genre && s.genre !== filters.genre) return false;
     if (filters.kontextTyp && s.kontext_typ !== filters.kontextTyp) return false;

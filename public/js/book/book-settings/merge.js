@@ -9,30 +9,19 @@
 // Ereignisse). Hier wählt der Autor Quelle + Ziel; der Server hängt alle Referenzen
 // um und löscht die Quelle (Merge-Kern db/entity-merge.js).
 //
-// Grenze, die das Panel auch sichtbar sagt (merge.hint): nur Figuren bekommen einen
-// dauerhaften Alias (figure_aliases). Bei Schauplätzen und Szenen legt die nächste
-// Komplettanalyse für einen Namen, der noch im Buchtext steht, wieder einen Eintrag
-// an — die umgehängten Referenzen bleiben beim Ziel.
+// Grenze, die das Panel auch sichtbar sagt (merge.hint): Figuren und Schauplätze
+// bekommen einen dauerhaften Alias (figure_aliases/location_aliases). Bei Szenen legt
+// die nächste Komplettanalyse für einen Titel, der noch im Buchtext steht, wieder
+// einen Eintrag an — die umgehängten Referenzen bleiben beim Ziel. Ein verwaister
+// Schauplatz taugt nicht als Ziel (Server: TARGET_STALE), die Ziel-Liste blendet ihn aus.
 //
 // Buchwechsel während eines Requests: die Kandidaten tragen das Buch, zu dem sie
 // gehören (`mergeCandidatesBookId`); eine Antwort, die nach dem Wechsel eintrifft,
 // wird verworfen statt in die Listen des neuen Buchs geschrieben.
 
 import { fetchJson } from './_shared.js';
-import { figurMergeMessage } from '../figur-merge.js';
+import { MERGE_KIND_CFG, MERGE_KINDS, confirmEntityMerge, postEntityMerge, entityMergeMessage, reloadCatalogsAfterMerge } from '../entity-merge.js';
 import { compareText } from '../../i18n.js';
-
-// Pro Gattung: Endpunkt-Basis, Listen-Feld der GET-Antwort, Namensfeld und die
-// Body-Schlüssel des POST. Die `id` ist bei Figuren/Schauplätzen die öffentliche
-// TEXT-Kennung (fig_id/loc_id), bei Szenen die INTEGER-PK — jeweils genau so, wie
-// der zugehörige GET sie ausliefert.
-const MERGE_KIND_CFG = {
-  figur: { list: 'figuren', nameKey: 'name',  url: (b) => `/figures/${b}`,        body: (s, t) => ({ source: s, target: t }) },
-  szene: { list: 'szenen',  nameKey: 'titel', url: (b) => `/figures/scenes/${b}`, body: (s, t) => ({ source_id: Number(s), target_id: Number(t) }) },
-  ort:   { list: 'orte',    nameKey: 'name',  url: (b) => `/locations/${b}`,      body: (s, t) => ({ source: s, target: t }) },
-};
-
-export const MERGE_KINDS = Object.keys(MERGE_KIND_CFG);
 
 export const mergeMethods = {
   // Gattungs-Reihenfolge des Panels. Getter statt Literal im Template, damit die
@@ -104,39 +93,19 @@ export const mergeMethods = {
     const tgt = this._mergeEntry(kind, sel.target);
     if (!src || !tgt) return;
 
-    if (!await window.__app.appConfirm({
-      message: window.__app.t('merge.confirm', { source: src.name, target: tgt.name }),
-      confirmLabel: window.__app.t('merge.button'),
-      danger: true,
-    })) return;
+    if (!await confirmEntityMerge(src.name, tgt.name)) return;
 
     this.mergeBusy = kind; // Gattung, deren Knopf den Spinner zeigt; truthy sperrt alle
     this.mergeError = '';
     this.mergeMessage = '';
     try {
-      const r = await fetch(`${cfg.url(bookId)}/merge`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(cfg.body(sel.source, sel.target)),
-      });
-      const data = await r.json().catch(() => null);
-      if (!r.ok) throw new Error(window.__app.tError(data));
+      const data = await postEntityMerge(kind, bookId, sel.source, sel.target);
       // Buch gewechselt, während der Merge lief: er ist geschehen, aber Meldung,
       // Auswahl und Kandidaten gehören dem alten Buch — der Reset hat sie geleert.
       if (!this._isSelectedBook(bookId)) return;
-
-      // `moved` zählt die umgehängten Zeilen pro Brücke — für den User genügt die Summe.
-      const moved = Object.values(data?.moved || {}).reduce((a, n) => a + (Number(n) || 0), 0);
-      this.mergeMessage = kind === 'figur'
-        ? figurMergeMessage(data, src, tgt)
-        : window.__app.t('merge.done', { source: src.name, target: tgt.name, n: moved });
+      this.mergeMessage = entityMergeMessage(kind, data, src, tgt);
       this.mergeSel[kind] = { source: '', target: '' };
-      // Offene/zwischengespeicherte Kataloge nachziehen, damit die gelöschte Quelle
-      // aus den Entitäten-Karten verschwindet (gleiches Vorgehen wie beim
-      // stale-Bulk-Cleanup in admin.js).
-      window.__app.loadFiguren?.(bookId);
-      window.__app.loadOrte?.(bookId);
-      window.__app.loadSzenen?.(bookId);
+      reloadCatalogsAfterMerge(bookId);
       await this.loadMergeCandidates();
       this._flash('mergeMessage', 8000, '');
     } catch (e) {

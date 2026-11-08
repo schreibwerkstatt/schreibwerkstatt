@@ -9,13 +9,14 @@
 const { db } = require('./connection');
 require('./migrations');
 const { inClause } = require('../lib/validate');
-const { pageChapters } = require('./content-names');
+const { pageChapters, firstMentionChapterResolver } = require('./content-names');
+const { manualFieldSet } = require('./location-fields');
 
 function listLocationsForBook(bookId, userEmail) {
   const rows = db.prepare(`
     SELECT l.id, l.loc_id, l.name, l.typ, l.beschreibung, l.erste_erwaehnung, l.erste_erwaehnung_page_id,
            l.stimmung, l.land, l.lat, l.lng, l.geo_query, l.geo_land, l.stale, l.updated_at,
-           l.manually_edited, l.manually_created, p.loc_id AS parent_loc_id
+           l.manually_edited, l.manually_created, l.manual_fields, l.ki_name, p.loc_id AS parent_loc_id
     FROM locations l
     LEFT JOIN locations p ON p.id = l.parent_id
     WHERE l.book_id = ? AND l.user_email IS ?
@@ -54,6 +55,10 @@ function listLocationsForBook(bookId, userEmail) {
     }
   }
 
+  // «Erste Erwähnung» darf laut Schema auch ein Kapitelname sein; ohne Abschnitts-
+  // Treffer zeigt die Karte dann einen Kapitel-Verweis statt Rohtext.
+  const firstMentionChapter = firstMentionChapterResolver(bookId);
+
   const orte = rows.map(r => ({
     id:                       r.loc_id,
     stale:                    !!r.stale,
@@ -62,7 +67,8 @@ function listLocationsForBook(bookId, userEmail) {
     beschreibung:             r.beschreibung,
     erste_erwaehnung:         r.erste_erwaehnung,
     erste_erwaehnung_page_id: r.erste_erwaehnung_page_id || null,
-    stimmung:                 r.stimmung,
+    erste_erwaehnung_chapter_id: r.erste_erwaehnung_page_id ? null : firstMentionChapter(r.erste_erwaehnung),
+    stimmung:                r.stimmung,
     land:                     r.land || null,
     lat:                      r.lat != null ? r.lat : null,
     lng:                      r.lng != null ? r.lng : null,
@@ -71,6 +77,10 @@ function listLocationsForBook(bookId, userEmail) {
     parent:                   r.parent_loc_id || null,
     manually_edited:          !!r.manually_edited,
     manually_created:         !!r.manually_created,
+    // Vom Autor geschützte Felder; `analysis_known` = die Analyse hat den Ort je
+    // geliefert (sonst gibt es keine Analyse-Werte zum Übernehmen).
+    manual_fields:            [...manualFieldSet(r)],
+    analysis_known:           r.ki_name != null,
     figuren:                  figMap[r.id] || [],
     kapitel:                  kapMap[r.id] || (pageChapterMap[r.erste_erwaehnung_page_id] ? [pageChapterMap[r.erste_erwaehnung_page_id]] : []),
   }));
@@ -94,16 +104,16 @@ function getLocationName(locationId, opts = {}) {
 
 // Orts-Hierarchie als schlanke Map loc_id → parent_loc_id (nur Orte mit Elternort).
 // Für Rechnungen, die „liegt A in B" brauchen (Zeit-Messung der Plot-Werkstatt),
-// ohne die Figuren-/Kapitel-Joins von listLocationsForBook. Buchweit, ohne
-// user_email-Filter — wie die Beat-Orts-Brücke (db/plot/beats.js
-// #resolveLocationIds), die ihre Orte ebenfalls nur übers Buch auflöst.
+// ohne die Figuren-/Kapitel-Joins von listLocationsForBook. Scope Buch + User: die
+// loc_id (`ort_N`) ist nur je Analyse eindeutig — zwei Leute am selben Buch haben
+// je ein `ort_1`, und ohne Filter überschriebe die eine Hierarchie die andere.
 const _stmtLocParents = db.prepare(`
   SELECT l.loc_id, p.loc_id AS parent_loc_id
     FROM locations l JOIN locations p ON p.id = l.parent_id
-   WHERE l.book_id = ?
+   WHERE l.book_id = ? AND l.user_email IS ?
 `);
-function locationParentMap(bookId) {
-  return new Map(_stmtLocParents.all(bookId).map(r => [r.loc_id, r.parent_loc_id]));
+function locationParentMap(bookId, userEmail) {
+  return new Map(_stmtLocParents.all(bookId, userEmail || null).map(r => [r.loc_id, r.parent_loc_id]));
 }
 
 // Schlanke Namensliste (loc_id, Name, Elternort) für Auswahl und Auflösung — etwa

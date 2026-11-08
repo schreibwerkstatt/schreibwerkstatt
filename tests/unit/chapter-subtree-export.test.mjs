@@ -8,10 +8,10 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { createRequire } from 'node:module';
-import path from 'node:path';
 import JSZip from 'jszip';
+import { useTmpDb } from './_helpers/tmp-db.js';
 
-process.env.DB_PATH = path.join('/tmp', `chapter-subtree-${process.pid}-${Date.now()}.db`);
+useTmpDb('chapter-subtree');
 await import('../../db/schema.js');
 
 const require_ = createRequire(import.meta.url);

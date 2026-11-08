@@ -7,7 +7,8 @@ const express = require('express');
 const { patchOrtCoords } = require('../db/schema');
 const { listLocationsForBook } = require('../db/locations-read');
 const {
-  createLocation, updateLocation, deleteLocation, deleteStaleLocations, locationPk, LocationEditError,
+  createLocation, updateLocation, restoreLocationAnalysis, deleteLocation, deleteStaleLocations, locationRef,
+  LocationEditError,
 } = require('../db/locations-edit');
 const { mergeLocations } = require('../db/entity-merge');
 const logger = require('../logger');
@@ -51,9 +52,10 @@ router.patch('/:book_id/coords', jsonBody, (req, res) => {
   res.json({ ok: true, updated });
 });
 
-// Stammdaten eines Schauplatzes korrigieren (setzt manually_edited — die nächste
-// Komplettanalyse überschreibt die Felder dann nicht). Body: beliebige Teilmenge von
-// { name, typ, beschreibung, stimmung, land, parent }; parent = loc_id oder null.
+// Stammdaten eines Schauplatzes korrigieren. Tatsächlich geänderte Felder landen in
+// manual_fields — die nächste Komplettanalyse überschreibt genau diese nicht. Body:
+// beliebige Teilmenge von { name, typ, beschreibung, stimmung, land, parent };
+// parent = loc_id oder null (schützt nichts, die Hierarchie fasst die Analyse nie an).
 router.patch('/:book_id/:id', jsonBody, (req, res) => {
   try {
     const r = updateLocation(req.bookId, sessionEmail(req), req.params.id, req.body || {});
@@ -62,8 +64,21 @@ router.patch('/:book_id/:id', jsonBody, (req, res) => {
   } catch (e) { sendEditError(res, e); }
 });
 
+// «Analyse-Werte übernehmen»: Schutz aufheben und den letzten Analysewert sofort
+// zurückschreiben. Body: { fields?: [...] } — ohne `fields` alle geschützten Felder.
+router.post('/:book_id/:id/restore-analysis', jsonBody, (req, res) => {
+  try {
+    const fields = Array.isArray(req.body?.fields) ? req.body.fields.map(String) : null;
+    const r = restoreLocationAnalysis(req.bookId, sessionEmail(req), req.params.id, fields);
+    if (r.restored.includes('name') || r.restored.includes('beschreibung')) searchIndex.upsertLocation(r.id);
+    res.json({ ok: true, changed: r.changed, restored: r.restored, unprotected: r.unprotected });
+  } catch (e) { sendEditError(res, e); }
+});
+
 // Zwei Schauplätze zusammenführen: Referenzen der Quelle wandern aufs Ziel, die
 // Quelle wird gelöscht (Merge-Kern db/entity-merge.js). `source`/`target` sind loc_ids.
+// Ein verwaistes Ziel ist gesperrt (409 TARGET_STALE): das Ergebnis stünde mit allen
+// Verknüpfungen als «nicht mehr im Text» da und fiele beim Aufräumen weg.
 router.post('/:book_id/merge', jsonBody, (req, res) => {
   const bookId = req.bookId;
   const src = String(req.body?.source || '').trim();
@@ -71,10 +86,12 @@ router.post('/:book_id/merge', jsonBody, (req, res) => {
   if (!src || !tgt) return res.status(400).json({ error_code: 'INVALID_ID' });
   if (src === tgt) return res.status(409).json({ error_code: 'SAME_ENTITY' });
   const userEmail = sessionEmail(req);
-  const sId = locationPk(bookId, userEmail, src);
-  const tId = locationPk(bookId, userEmail, tgt);
-  if (!sId) return res.status(404).json({ error_code: 'NOT_FOUND', side: 'source' });
-  if (!tId) return res.status(404).json({ error_code: 'NOT_FOUND', side: 'target' });
+  const s = locationRef(bookId, userEmail, src);
+  const t = locationRef(bookId, userEmail, tgt);
+  if (!s) return res.status(404).json({ error_code: 'NOT_FOUND', side: 'source' });
+  if (!t) return res.status(404).json({ error_code: 'NOT_FOUND', side: 'target' });
+  if (t.stale) return res.status(409).json({ error_code: 'TARGET_STALE' });
+  const sId = s.id, tId = t.id;
 
   const result = mergeLocations(bookId, userEmail, sId, tId);
   searchIndex.remove('location', sId);

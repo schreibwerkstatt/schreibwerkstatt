@@ -18,6 +18,7 @@ import {
 import { lsGet, lsSet } from '../safe-storage.js';
 import { plotBacklinkMethods } from '../book/plot-backlinks.js';
 import { listWindowState, listWindowMethods } from '../list-window.js';
+import { entityMergePickerState, entityMergePickerResetState, entityMergePickerMethods } from '../book/entity-merge-picker.js';
 
 export function registerSzenenCard() {
   if (typeof window === 'undefined' || !window.Alpine) return;
@@ -31,9 +32,12 @@ export function registerSzenenCard() {
     plotBacklinks: {},
     // Liste rendert schrittweise (list-window.js), wie Orte und Ereignisse.
     ...listWindowState(),
+    // «zusammenführen mit…» an Szenen, die nicht mehr im Text stehen.
+    ...entityMergePickerState(),
     ...memoMethods,
     ...plotBacklinkMethods,
     ...listWindowMethods,
+    ...entityMergePickerMethods,
 
     get _filters() { return Alpine.store('catalogUi').szenenFilters; },
     get _szenen() { return Alpine.store('catalog').szenen; },
@@ -175,7 +179,7 @@ export function registerSzenenCard() {
       this._lifecycle = setupCardLifecycle(this, {
         name: 'szenen',
         showFlag: 'showSzenenCard',
-        resetState: () => ({ plotBacklinks: {}, szenenError: '', staleDeleting: false, _memos: {}, ...listWindowState() }),
+        resetState: () => ({ plotBacklinks: {}, szenenError: '', staleDeleting: false, _memos: {}, ...entityMergePickerResetState(), ...listWindowState() }),
         load: (root) => {
           this.loadPlotBacklinks('scene');
           return root.loadSzenen(Alpine.store('nav').selectedBookId);

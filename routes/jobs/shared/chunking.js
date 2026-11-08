@@ -11,9 +11,10 @@
 // muss dafür exakt den echten Titel sehen.
 //
 // Invarianten:
-// - Kein Abschnitt über dem Limit → Ergebnis byte-identisch zum reinen Seiten-Split
-//   (Chunk-Keys, Seiten-Objekte, Reihenfolge): Delta-Caches und der geteilte
-//   Prompt-Cache-Präfix der Komplettanalyse bleiben stabil.
+// - Ein Kapitel unter dem Limit bleibt ein Chunk mit Original-Key und denselben
+//   Seiten-Objekten: Delta-Caches und der geteilte Prompt-Cache-Präfix der
+//   Komplettanalyse bleiben stabil. Kapitel über dem Limit werden gleichmässig geteilt
+//   (splitGroupsIntoChunks).
 // - Pro Chunk höchstens ein Eintrag je Abschnitt: vor Teil 2..n wird der laufende
 //   Chunk geschlossen.
 // - Cache-Signaturen über `chunk.pages` hängen `pageSigSuffix(p)` an — sonst trügen
@@ -136,6 +137,14 @@ function pageSigSuffix(p) {
  * Nicht aufzuteilende Kapitel behalten ihren Original-Key (bestehende Cache-Einträge bleiben gültig).
  * Sub-Chunks erhalten den Key "${chapterKey}__sub${idx}". Ein einzelner Abschnitt über dem
  * Limit wird vorher in Teile zerlegt (siehe Modulkopf).
+ *
+ * Ein Kapitel über dem Limit wird in möglichst GLEICH GROSSE Chunks geteilt, nicht bis zum
+ * Limit aufgefüllt: Ziel je Chunk = Rest / verbleibende Chunks, neu gerechnet nach jedem
+ * Schnitt; geschnitten wird an der Abschnittsgrenze, die näher am Ziel liegt.
+ * **Why:** ein Kapitel knapp über dem Limit zerfiel gefüllt in 16 + 2 Abschnitte — der
+ * grosse Chunk bestimmte die Laufzeit der Extraktion, der Zwerg kostete einen eigenen Call.
+ * Preis: ein neuer Abschnitt in einem geteilten Kapitel kann alle Schnitte dieses Kapitels
+ * verschieben (Delta-Cache-MISS für das ganze Kapitel statt nur den letzten Chunk).
  * Gibt { chunkOrder, chunks } zurück – gleiche Struktur wie groupByChapter, drop-in verwendbar.
  */
 function splitGroupsIntoChunks(groups, groupOrder, perChunkLimit) {
@@ -148,19 +157,30 @@ function splitGroupsIntoChunks(groups, groupOrder, perChunkLimit) {
       chunks.set(key, group);
       continue;
     }
+    const units = group.pages.flatMap(whole => splitPageIntoParts(whole, perChunkLimit));
+    let remaining = units.reduce((s, u) => s + u.text.length, 0);
+    let chunksLeft = Math.ceil(remaining / perChunkLimit);
     let currentPages = [], currentChars = 0, subIdx = 0;
     const flush = () => {
       chunkOrder.push(`${key}__sub${subIdx}`);
       chunks.set(`${key}__sub${subIdx}`, { name: group.name, pages: currentPages });
+      remaining -= currentChars;
+      chunksLeft = Math.max(1, Math.max(chunksLeft - 1, Math.ceil(remaining / perChunkLimit)));
       currentPages = []; currentChars = 0; subIdx++;
     };
-    for (const whole of group.pages) {
-      for (const page of splitPageIntoParts(whole, perChunkLimit)) {
+    for (const page of units) {
+      const len = page.text.length;
+      if (currentPages.length > 0) {
         const laterPart = page.part && page.part.nr > 1;
-        if ((laterPart || currentChars + page.text.length > perChunkLimit) && currentPages.length > 0) flush();
-        currentPages.push(page);
-        currentChars += page.text.length;
+        const target = remaining / chunksLeft;
+        const overLimit = currentChars + len > perChunkLimit;
+        // Vor dem Abschnitt schneiden, wenn der Chunk ohne ihn näher am Ziel liegt.
+        const closerWithout = chunksLeft > 1 && currentChars + len > target
+          && (target - currentChars) < (currentChars + len - target);
+        if (laterPart || overLimit || closerWithout) flush();
       }
+      currentPages.push(page);
+      currentChars += len;
     }
     if (currentPages.length > 0) flush();
   }

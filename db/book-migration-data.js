@@ -30,6 +30,7 @@ const { normalizeDatumFields } = require('../lib/datum-parse');
 const { normNaehe } = require('../lib/relation-naehe');
 const { suppressRelation } = require('./figures/relation-edits');
 const { normalizeIdeeStatus } = require('../lib/ideen-status');
+const { manualFieldSet, serializeManualFields } = require('./location-fields');
 const { normFaktKategorie, markWorldFactsScanned } = require('./world-facts');
 const searchIndex = require('../lib/search');
 const { collectResearch, restoreResearch } = require('./book-migration-data/research');
@@ -315,13 +316,12 @@ function restoreAnalysis(bookId, data, ctx) {
   const usedLoc = new Set();
   const insLoc = db.prepare(`INSERT INTO locations
     (book_id,loc_id,name,typ,beschreibung,erste_erwaehnung,erste_erwaehnung_page_id,stimmung,sort_order,user_email,
-     updated_at,lat,lng,land,geo_query,geo_land,manually_edited,manually_created,ki_name)
-    VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`);
+     updated_at,lat,lng,land,geo_query,geo_land,manually_edited,manually_created,ki_name,manual_fields,ki_typ,ki_beschreibung,ki_stimmung,ki_land) VALUES (${Array(24).fill('?').join(',')})`);
   for (const r of arr('locations')) {
     const res = insLoc.run(bookId, _uniqueKey(usedLoc, r.loc_id), r.name, r.typ ?? null, r.beschreibung ?? null,
       r.erste_erwaehnung ?? null, pageOf(r.erste_erwaehnung_page_id), r.stimmung ?? null, r.sort_order ?? 0, email,
       r.updated_at || _now(), r.lat ?? null, r.lng ?? null, r.land ?? null, r.geo_query ?? null, r.geo_land ?? null,
-      r.manually_edited ? 1 : 0, r.manually_created ? 1 : 0, r.ki_name ?? null);
+      r.manually_edited ? 1 : 0, r.manually_created ? 1 : 0, r.ki_name ?? null, serializeManualFields(manualFieldSet(r)), r.ki_typ ?? null, r.ki_beschreibung ?? null, r.ki_stimmung ?? null, r.ki_land ?? null);
     locMap.set(r.id, res.lastInsertRowid);
   }
   // Hierarchie erst nach allen Inserts: der Elternort kann später im Export stehen.

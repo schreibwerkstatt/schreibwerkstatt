@@ -106,8 +106,8 @@ function buildLocationSamples(ctx) {
       pushQA('authorChat|ort-first|' + l.loc_id,
         langIsEn ? `When is ${l.name} first mentioned?` : `Wann wird ${l.name} zum ersten Mal erwähnt?`,
         langIsEn
-          ? `${l.name} is first introduced in the section «${l.erste_erwaehnung}».`
-          : `${l.name} wird zum ersten Mal im Abschnitt «${l.erste_erwaehnung}» erwähnt.`, { unit });
+          ? `${l.name} is first mentioned in «${l.erste_erwaehnung}».`
+          : `${l.name} wird zum ersten Mal in «${l.erste_erwaehnung}» erwähnt.`, { unit });
     }
   }
 
@@ -139,7 +139,7 @@ function buildLocationSamples(ctx) {
     const list = locs.slice(0, 12).map(l => l.name).join(', ');
     pushQA('authorChat|locsByFig|' + f.fig_id,
       langIsEn ? `Which locations does ${f.name} visit?` : `An welchen Orten ist ${f.name} unterwegs?`,
-      list);
+      list, { unit: 'fig:' + f.fig_id });
   }
   for (const [key, group] of locsByChapter) {
     if (group.items.length < 1) continue;
@@ -210,7 +210,7 @@ function buildLocationSamples(ctx) {
     const stations = seq.slice(0, 12).map(e => e.loc.name).join(' → ');
     pushQA('authorChat|figJourney|' + fid,
       langIsEn ? `Trace ${fname}'s journey through the book.` : `Zeichne ${fname}s Reise durchs Buch nach.`,
-      stations);
+      stations, { unit: 'fig:' + fid });
   }
 }
 

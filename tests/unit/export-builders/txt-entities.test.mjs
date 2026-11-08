@@ -5,9 +5,9 @@
 // Lauf: `node --test tests/unit/export-builders/txt-entities.test.mjs`
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import path from 'node:path';
+import { useTmpDb } from '../_helpers/tmp-db.js';
 
-process.env.DB_PATH = path.join('/tmp', `txt-entities-${process.pid}-${Date.now()}.db`);
+useTmpDb('txt-entities');
 await import('../../../db/schema.js');
 const { htmlToText } = await import('../../../lib/export-builders/txt.js');
 

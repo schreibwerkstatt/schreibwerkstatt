@@ -67,10 +67,13 @@ test('schauplätze: anlegen, Unterort eingerückt, bearbeiten, Typ übersetzt, l
   const saved = await page.evaluate(async ({ bookId, id }) =>
     (await (await fetch(`/locations/${bookId}`)).json()).orte.find(o => o.id === id), { bookId, id: ids.hotel });
   expect(saved.manually_edited).toBe(true);
+  expect(saved.manual_fields).toContain('name');
   expect(saved.parent).toBe(ids.stadt);
+  // Selbst angelegt, nie von der Analyse gefunden: nichts zum Übernehmen.
+  await expect(detail.getByRole('button', { name: /Analyse-Werte übernehmen|Use analysis values/ })).toHaveCount(0);
 
   // 4) Löschen (selbst angelegt): Bestätigungsdialog, Kind fällt auf die Wurzel.
-  await stadtRow.locator('.entity-row-delete').click();
+  await stadtRow.locator('.entity-row-action.danger').click();
   await page.locator('#app-confirm-dialog[open] .confirm-dialog-btn--danger').click();
   await expect(card.locator('.ort-list .entity-row', { hasText: stadtName })).toHaveCount(0);
   await expect(card.locator('.ort-list > div', { has: page.locator(`.entity-row[data-ortid="${ids.hotel}"]`) }))

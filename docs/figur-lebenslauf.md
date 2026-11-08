@@ -164,7 +164,8 @@ schultyp-neutrale Stufe «Oberstufe» (allein bzw. → Lehre) für Figuren, dere
 der Text offenlässt; Standardweg `oberstufe_lehre`. Quellen im Kommentar von `SCHUL_VORLAGEN`.
 
 **KI-Vorschlag** (Job `schulweg-vorschlag`, `POST /jobs/schulweg-vorschlag`, ab
-`editor`, Knopf im Lebenslauf-Reiter;
+`editor`, Knopf im Lebenslauf-Reiter, ausserdem von der Komplettanalyse nach dem
+Katalog eingereiht — Schritt `schulweg`, siehe «Komplettanalyse» unten;
 [routes/jobs/schulweg-vorschlag.js](../routes/jobs/schulweg-vorschlag.js), Prompt
 [prompts/schulweg.js](../public/js/prompts/schulweg.js)):
 
@@ -287,7 +288,14 @@ Route — derselbe 400 wie die Fehlermeldung am Feld), `stationenAlsEreignisse`
 Einträge in der Zeile ihres Alters, mit eigenem Badge statt Subtyp. Eine Figur
 mit Stationen, aber ohne Lebensereignisse taugt als Spalte.
 
-**Komplettanalyse:** sie schreibt keine Stationen. Berufliche Wendepunkte, die
+**Komplettanalyse:** sie schreibt selbst keine Stationen, reiht aber nach dem
+Katalog die beiden Vorschlags-Jobs ein (Umfangs-Schritte `schulweg` und `stationen`,
+[pruef-jobs.js](../routes/jobs/komplett/pruef-jobs.js)) — den Schulweg nur, wenn das
+Buch ein Schulsystem gespeichert hat. So eingereiht (`nachKatalog`) endet ein Lauf
+ohne Figuren bzw. ohne aktives Schulsystem still mit `skipped` statt mit einer
+Fehlermeldung. Beide schreiben weiterhin nur Vorschläge; einen Delta-Skip haben sie
+nicht, jeder Lauf kostet seine (kleinen) Calls. Läuft eine Komplettanalyse, antworten
+beide POST-Routen mit `409 KOMPLETT_ANALYSIS_RUNNING`. Berufliche Wendepunkte, die
 sie als Lebensereignis findet, tragen die Subtypen `ausbildung`, `abschluss`,
 `stellenantritt`, `berufswechsel`, `jobverlust`, `pensionierung` — datierte
 Ereignisse im Zeitstrahl, keine Zeiträume. Das Feld `figures.beruf` bleibt die

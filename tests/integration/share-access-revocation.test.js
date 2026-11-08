@@ -15,10 +15,9 @@
 
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const path = require('node:path');
-const os = require('node:os');
+const { useTmpDb } = require('../unit/_helpers/tmp-db');
 
-process.env.DB_PATH = path.join(os.tmpdir(), `share-access-revocation-${process.pid}-${Date.now()}.db`);
+useTmpDb('share-access-revocation');
 process.env.LOG_LEVEL = process.env.LOG_LEVEL || 'error';
 
 const express = require('express');

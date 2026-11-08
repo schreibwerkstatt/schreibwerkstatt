@@ -22,8 +22,12 @@ function listKatalogAnker(bookId, userEmail) {
   return { figuren, orte };
 }
 
+// Aktive Orte, die die Analyse liefern kann: ein selbst angelegter Ort, den sie nie
+// gefunden hat (ki_name NULL), zählt nicht — sonst hielte der Kollaps-Riegel einen
+// gültigen Lauf für kollabiert, nur weil der Autor viele Orte selbst erfasst hat.
 function countActiveLocations(bookId, userEmail) {
-  return db.prepare('SELECT COUNT(*) AS c FROM locations WHERE book_id = ? AND user_email IS ? AND stale = 0')
+  return db.prepare(`SELECT COUNT(*) AS c FROM locations WHERE book_id = ? AND user_email IS ? AND stale = 0
+      AND (manually_created = 0 OR ki_name IS NOT NULL)`)
     .get(bookId, userEmail || null).c;
 }
 

@@ -6,10 +6,9 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
-const path = require('node:path');
-const os = require('node:os');
+const { useTmpDb } = require('../unit/_helpers/tmp-db');
 
-process.env.DB_PATH = path.join(os.tmpdir(), `finetune-history-${process.pid}-${Date.now()}.db`);
+useTmpDb('finetune-history');
 process.env.LOG_LEVEL = process.env.LOG_LEVEL || 'error';
 
 const express = require('express');

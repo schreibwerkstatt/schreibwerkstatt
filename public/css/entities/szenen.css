@@ -122,12 +122,6 @@
 .szenen-liste-section { padding: var(--space-xs) 0; }
 
 /* Zeilen-Hauptteil: Titel + einzeiliger Anriss des KI-Kommentars. */
-.szenen-row-main {
-  display: flex;
-  flex-direction: column;
-  flex: 1;
-  min-width: 0;
-}
 .szenen-row-snippet {
   font-size: var(--font-size-mini);
   color: var(--color-muted);

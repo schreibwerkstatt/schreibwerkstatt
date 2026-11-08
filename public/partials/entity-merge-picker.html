@@ -1,0 +1,32 @@
+<!-- «zusammenführen mit…» einer Katalog-Zeile, die nicht mehr im Text steht
+     (Figuren · Schauplätze · Szenen): EIN Picker-Popover je Karte, am
+     Zeilen-Knopf verankert. Methods: public/js/book/entity-merge-picker.js
+     (gespreadet in figurenCard, orteCard, szenenCard), Merge-Kern
+     public/js/book/entity-merge.js. Eingebunden als String-Include
+     (app-ui.js#_resolveIncludes) ausserhalb der Zeilen-Schleife. -->
+<template x-teleport="body">
+  <div class="picker-popover entity-merge-popover"
+       x-ref="mergePickPopover"
+       x-show="mergePick.kind !== null" x-cloak
+       :style="{ top: pickerPopoverPos.top + 'px', left: pickerPopoverPos.left + 'px' }"
+       @keydown.escape.window="mergePick.kind !== null && cancelMergePick()"
+       role="dialog" :aria-label="$app.t('merge.pickTitle')">
+    <div class="picker-popover__head">
+      <span class="picker-popover__title" x-text="$app.t('merge.pickTitle')"></span>
+      <span class="picker-popover__subject" x-text="mergePickSourceName()"></span>
+    </div>
+
+    <div x-data="combobox({ placeholder: $app.t('merge.targetPlaceholder'), label: $app.t('merge.target') })"
+         x-modelable="value" x-model="mergePick.targetId"
+         x-effect="options = entityMergeTargetOptions(mergePick.kind, mergePick.sourceId, $store.catalog)"></div>
+
+    <p class="card-form-error" x-show="mergePick.error" x-text="mergePick.error"></p>
+
+    <div class="picker-popover__actions">
+      <button type="button" class="btn-compact danger" @click="confirmMergePick()"
+              :disabled="mergePick.busy || !mergePick.targetId" x-text="$app.t('merge.button')"></button>
+      <button type="button" class="btn-compact" @click="cancelMergePick()"
+              :disabled="mergePick.busy" x-text="$app.t('common.cancel')"></button>
+    </div>
+  </div>
+</template>

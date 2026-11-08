@@ -20,6 +20,7 @@ import { lsGet, lsSet } from '../safe-storage.js';
 import { formatLastRun } from '../utils/date.js';
 import { plotBacklinkMethods } from '../book/plot-backlinks.js';
 import { listWindowState, listWindowMethods } from '../list-window.js';
+import { entityMergePickerState, entityMergePickerResetState, entityMergePickerMethods } from '../book/entity-merge-picker.js';
 import { compareText } from '../i18n.js';
 
 export function registerOrteCard() {
@@ -60,7 +61,9 @@ export function registerOrteCard() {
     // Pflege-Formular (book/orte-edit.js): { mode: null|'new'|'edit', id, draft, busy, error }.
     ortEdit: closedOrtEdit(),
     plotBacklinks: {},        // loc_id → Beats der Plot-Werkstatt (Detail „Im Plot“), non-fatal
-    ortMergeTarget: '',       // Ziel-loc_id der «Zusammenführen mit …»-Auswahl im Detail
+    ortMergeTarget: '',       // Ziel-loc_id der «Zusammenführen mit …»-Auswahl im Detail (aktive Orte)
+    // «zusammenführen mit…» an verwaisten Orten: geteilter Zeilen-Picker.
+    ...entityMergePickerState(),
 
     init() {
       this.$watch('viewMode', (v) => {
@@ -89,7 +92,7 @@ export function registerOrteCard() {
         name: 'orte',
         showFlag: 'showOrteCard',
         timerKeys: ['_ortePollTimer', '_geocodeJobTimer', '_orteMapStatusTimer'],
-        resetState: { plotBacklinks: {}, orteProgress: 0, orteStatus: '', orteError: '', staleDeleting: false, orteRealEnabled: false, geocodingId: null, geocodingAll: false, highlightOrtId: null, orteMapStatus: '', ortMergeTarget: '', ...listWindowState() },
+        resetState: { plotBacklinks: {}, orteProgress: 0, orteStatus: '', orteError: '', staleDeleting: false, orteRealEnabled: false, geocodingId: null, geocodingAll: false, highlightOrtId: null, orteMapStatus: '', ortMergeTarget: '', ...entityMergePickerResetState(), ...listWindowState() },
         load: (root) => { this.loadPlotBacklinks('location'); return root.loadOrte(Alpine.store('nav').selectedBookId); },
         onShow: async (root) => {
           const tasks = [root.loadOrte(Alpine.store('nav').selectedBookId), this.loadOrteReal(), this.loadPlotBacklinks('location')];
@@ -116,7 +119,7 @@ export function registerOrteCard() {
     get orteFiltered() {
       const root = window.__app;
       const f = Alpine.store('catalogUi').orteFilters;
-      const sig = [root.$store.catalog.orte, root.$store.catalog.szenen, f.suche || '', f.figurId || '', f.kapitelId || '', f.szeneId || '', root._chapterLabelMap, root._chapterIdOrderMap];
+      const sig = [root.$store.catalog.orte, root.$store.catalog.szenen, root.$store.catalog.figuren, f.suche || '', f.figurId || '', f.kapitelId || '', f.szeneId || '', root._chapterLabelMap, root._chapterIdOrderMap];
       const c = this._orteFilteredCache;
       if (c && c.sig.length === sig.length && c.sig.every((v, i) => v === sig[i])) return c.val;
       const { val, depth } = this._nestByParent(this._computeOrteFiltered());
@@ -205,7 +208,19 @@ export function registerOrteCard() {
       const f = Alpine.store('catalogUi').orteFilters;
       const q = f.suche ? f.suche.toLowerCase() : '';
       const kapitelId = activeFilterId(f.kapitelId, root.orteKapitelOptionen());
-      const matchText = (o) => !q || [o.name, o.typ, o.stimmung, o.beschreibung, o.land]
+      // Die Suche trifft auch über die Elternkette: «Olten» findet «Hotel Krone › Zimmer 12».
+      const byId = new Map(root.$store.catalog.orte.map(o => [o.id, o]));
+      const ancestorNames = (o) => {
+        const out = [];
+        for (let p = byId.get(o.parent), n = 0; p && n < 8; p = byId.get(p.parent), n++) out.push(p.name);
+        return out;
+      };
+      // … und über die Namen der Figuren am Ort: «Anna» findet ihre Schauplätze.
+      const figNames = q
+        ? new Map((root.$store.catalog.figuren || []).map(x => [x.id, `${x.name || ''} ${x.kurzname || ''}`]))
+        : null;
+      const matchText = (o) => !q || [o.name, o.typ, o.stimmung, o.beschreibung, o.land, ...ancestorNames(o),
+        ...(o.figuren || []).map(id => figNames.get(id))]
         .some(v => v && String(v).toLowerCase().includes(q));
       return root.$store.catalog.orte.filter(o =>
         matchText(o) &&
@@ -229,5 +244,6 @@ export function registerOrteCard() {
     ...orteInsightMethods,
     ...plotBacklinkMethods,
     ...listWindowMethods,
+    ...entityMergePickerMethods,
   }));
 }

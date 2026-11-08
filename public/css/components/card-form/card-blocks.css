@@ -187,17 +187,20 @@
    Das Standalone-Chrome (Unterrand + padding-/margin-bottom) muss dann weg — es
    zaehlt bei `align-items: center` der Toolbar zur Box-Hoehe und kippt alle
    Controls gegenueber der Button-Mittellinie nach oben, plus eine Trennlinie
-   unter nur einem Teil der Zeile. Konsumenten: Quellen, Recherche. */
+   unter nur einem Teil der Zeile. Konsumenten: Quellen, Recherche.
+   Basis `auto` (natuerliche Breite, alle Glieder in einer Zeile): passt die
+   Leiste nicht mehr neben die Knoepfe, bricht sie als GANZE Zeile darunter um
+   und waechst dort auf volle Breite — mit Basis 0 quetschte sie sich daneben
+   und stapelte ihre Filter senkrecht. */
 .filter-bar--inline {
-  flex: 1;
+  flex: 1 1 auto;
   margin-bottom: 0;
   padding-bottom: 0;
   border-bottom: 0;
 }
 
-/* Breites Suchfeld statt der 120px-Default-Spalte — fuer Leisten, in denen das
-   Suchfeld das Hauptfilter ist (Freitext ueber Titel/Autor/Body) und den freien
-   Platz der Zeile aufnehmen soll. */
+/* Breites, wachsendes Suchfeld in der eingebetteten Leiste (`--inline`). In der
+   eigenstaendigen Leiste waechst das Suchfeld ohnehin (Wrapper-Regeln unten). */
 .filter-search-input--wide { min-width: 12rem; flex: 1; }
 
 /* Checkbox-Schalter in der Filterleiste („Archivierte anzeigen"). Traegt dieselbe
@@ -228,7 +231,10 @@
   border-radius: var(--radius-md);
   background: var(--color-bg);
   color: var(--color-text);
-  width: 120px;
+  /* 11rem: nach Abzug des Clear-X (26px) bleibt Platz fuer zwei, drei Woerter.
+     Kein prozentuales max-width: es nimmt dem Feld die Mindestbreite, und die
+     Inline-Leiste der Quellen quetschte sich dann neben die Toolbar-Knoepfe. */
+  width: 11rem;
   box-sizing: border-box;
 }
 .filter-bar .filter-search-input:focus,
@@ -236,6 +242,19 @@
 /* Wrapper fuer Suchfeld + Clear-X (reusable .search-clear--icon aus search.css). */
 .filter-search-wrap { position: relative; display: inline-flex; align-items: center; }
 .filter-search-wrap .filter-search-input { padding-right: 26px; /* Breite des Clear-X, keine Rasterstufe */ }
+/* Das Suchfeld nimmt den freien Platz der Zeile: der Clear-X-Wrapper ist das
+   Flex-Glied und waechst, das Feld fuellt ihn. Basis 12rem — die Leiste bricht
+   um, bevor das Feld zu schmal wird.
+   Eigenstaendige Leiste: `min-width: 0` erlaubt in sehr schmalen Spalten
+   (Leiste neben dem Editor) trotzdem das Schrumpfen.
+   Eingebettete Leiste (`--inline`, nur mit `--wide`): die Mindestbreite 12rem
+   bleibt am WRAPPER, denn sie ist die min-content-Breite der Leiste in der
+   `.card-toolbar` — mit `min-width: 0` quetschte sich die Leiste neben die
+   Toolbar-Knoepfe, statt als eigene Zeile darunter umzubrechen. */
+.filter-bar:not(.filter-bar--inline) > .filter-search-wrap { flex: 1 1 12rem; min-width: 0; }
+.filter-bar:not(.filter-bar--inline) > .filter-search-wrap > .filter-search-input { width: 100%; min-width: 0; }
+.filter-bar--inline > .filter-search-wrap:has(> .filter-search-input--wide) { flex: 1 1 12rem; min-width: 12rem; }
+.filter-bar--inline > .filter-search-wrap > .filter-search-input--wide { width: 100%; min-width: 0; }
 
 /* Alle Filter-Bar-Controls auf identische Hoehe bringen, ausgerichtet am
    Suchfeld (.filter-search-input). Sie teilen bereits font-size (12px),
@@ -255,7 +274,8 @@
 
 @media (max-width: 600px) {
   .filter-bar .filter-search-input { width: 100%; }
-  .filter-search-wrap { flex: 1 1 100%; }
+  .filter-search-wrap,
+  .filter-bar:not(.filter-bar--inline) > .filter-search-wrap { flex: 1 1 100%; }
   .filter-bar > .combobox-wrap--compact { flex: 1 1 45%; min-width: 0; }
   .filter-count { width: 100%; text-align: right; }
 }

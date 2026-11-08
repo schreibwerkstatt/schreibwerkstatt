@@ -17,6 +17,7 @@
   </div>
 
   <div x-show="szenenError" class="card-status card-status--error" role="alert" x-text="szenenError"></div>
+  <p class="card-form-saved" x-show="mergePickMessage" x-cloak x-text="mergePickMessage"></p>
 
   <!-- Leer-Hinweis mit CTA -->
   <div x-show="!$store.catalog.szenen.length && !cardLoading" class="card-empty">
@@ -110,18 +111,23 @@
         <div>
           <div class="entity-row internal-link"
                :data-szeneid="s.id"
+               :aria-expanded="$store.catalogUi.selectedSzeneId === s.id"
                :class="{ 'entity-row--selected': $store.catalogUi.selectedSzeneId === s.id, 'entity-row--stale': s.stale }"
                @click="$store.catalogUi.selectedSzeneId = $store.catalogUi.selectedSzeneId === s.id ? null : s.id">
             <span class="severity-tag"
                   :class="'severity-tag--' + wertungOf(s)"
                   x-text="$app.t('szenen.rating.' + wertungOf(s))"></span>
             <!-- Titel + Anriss des Kommentars (Begründung/Verbesserungshinweis); voll im Detail. -->
-            <span class="szenen-row-main">
+            <span class="entity-row-main">
               <span class="entity-row-title" x-text="s.titel"></span>
               <span class="szenen-row-snippet" x-show="s.kommentar && $store.catalogUi.selectedSzeneId !== s.id" x-text="s.kommentar"></span>
             </span>
             <span x-show="s.stale" class="tag tag--stale" :data-tip="$app.t('szenen.staleHint')" x-text="$app.t('szenen.staleBadge')"></span>
-            <button type="button" x-show="s.stale" class="icon-btn danger entity-row-delete"
+            <button type="button" x-show="s.stale" class="btn-compact entity-row-action"
+                    aria-haspopup="dialog" :aria-expanded="mergePick.kind === 'szene' && mergePick.sourceId === String(s.id)"
+                    @click.stop="openMergePick($event, 'szene', s)"
+                    :data-tip="$app.t('merge.rowTip')" x-text="$app.t('merge.rowAction')"></button>
+            <button type="button" x-show="s.stale" class="icon-btn danger entity-row-action"
                     @click.stop="deleteStale(s)"
                     :aria-label="$app.t('common.delete')" :data-tip="$app.t('entity.deleteStale')">
               <svg class="icon" aria-hidden="true"><use href="/icons.svg#trash"/></svg>
@@ -169,4 +175,5 @@
 
     <!-- @include szenen-grid -->
   </div>
+  <!-- @include entity-merge-picker -->
 </div>

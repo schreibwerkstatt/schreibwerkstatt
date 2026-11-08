@@ -36,7 +36,7 @@
     </span>
     <div x-data="catalogFilter('figur')"
          x-modelable="value" x-model="$store.catalogUi.songsFilters.figurId"
-         x-effect="options = $store.catalog.figuren.filter(f => $store.catalog.songs.some(s => (s.figuren || []).some(x => (x.fig_id || x) === f.id))).map(f => ({value: f.id, label: f.kurzname || f.name}))">
+         x-effect="options = $store.catalog.figuren.filter(f => $store.catalog.songs.some(s => (s.figuren || []).some(x => x.fig_id === f.id))).map(f => ({value: f.id, label: f.kurzname || f.name}))">
     </div>
     <div x-data="catalogFilter('chapter')"
          x-modelable="value" x-model="$store.catalogUi.songsFilters.kapitelId"
@@ -85,22 +85,27 @@
             <template x-if="s.erste_erwaehnung_page_id">
               <button type="button" class="entity-ref" x-entity-ref="{ type: 'seite', id: s.erste_erwaehnung_page_id }"></button>
             </template>
-            <template x-if="!s.erste_erwaehnung_page_id">
+            <template x-if="!s.erste_erwaehnung_page_id && s.erste_erwaehnung_chapter_id">
+              <button type="button" class="entity-ref" x-entity-ref="{ type: 'kapitel', id: s.erste_erwaehnung_chapter_id, name: s.erste_erwaehnung }"></button>
+            </template>
+            <template x-if="!s.erste_erwaehnung_page_id && !s.erste_erwaehnung_chapter_id">
               <span x-text="s.erste_erwaehnung"></span>
             </template>
           </div>
-          <div x-show="s.figuren?.length > 0" class="entity-meta-row">
-            <span class="entity-meta-label" x-text="$app.t('songs.figuren')"></span>
-            <span class="entity-refs">
-              <template x-for="f in s.figuren" :key="(f.fig_id || f)">
-                <button type="button" class="entity-ref" x-entity-ref="{ type: 'figur', id: f.fig_id || f }"></button>
-              </template>
-            </span>
-          </div>
+          <template x-for="g in $app.songFigurGruppen(s)" :key="g.rolle">
+            <div class="entity-meta-row">
+              <span class="entity-meta-label" x-text="g.label"></span>
+              <span class="entity-refs">
+                <template x-for="figId in g.figIds" :key="figId">
+                  <button type="button" class="entity-ref" x-entity-ref="{ type: 'figur', id: figId }"></button>
+                </template>
+              </span>
+            </div>
+          </template>
           <div x-show="s.kapitel?.length > 1" class="entity-meta-row">
             <span class="entity-meta-label" x-text="$app.t('songs.kapitel')"></span>
             <span class="entity-refs">
-              <template x-for="k in s.kapitel" :key="k.name">
+              <template x-for="k in s.kapitel" :key="k.chapter_id ?? k.name">
                 <button type="button" class="entity-ref" x-entity-ref="{ type: 'kapitel', id: k.chapter_id, name: k.name, count: k.haeufigkeit }"></button>
               </template>
             </span>

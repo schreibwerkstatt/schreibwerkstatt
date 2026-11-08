@@ -1354,11 +1354,17 @@ CSS: [public/css/components/my-stats.css](public/css/components/my-stats.css). S
 **Klassen:**
 - `.entity-list` — Container
 - `.entity-list--accented` — mit linkem Akzentstreifen
-- `.entity-row` / `.entity-row--selected` — Zeile
-- `.entity-row-title` / `.entity-row-meta`
+- `.entity-row` / `.entity-row--selected` / `.entity-row--stale` — Zeile
+- `.entity-row-title` / `.entity-row-meta`; Titel mit Unterzeile → beide in `.entity-row-main`
+- `.entity-row-action` — Aktion in der Zeile (Löschen, «zusammenführen mit…»); bleibt auf gedämpften Zeilen voll sichtbar
+- `.entity-row--stale` / `.entity-row--resolved` — gedämpft (nicht mehr im Text / erledigt): nur der Inhalt, nie die Aktionen
 - `.entity-meta-row` / `.entity-meta-label` / `.entity-meta-value` — Detail-Box
 
 CSS: [public/css/entities/entity-list.css](public/css/entities/entity-list.css). Wiederverwendbar für jede neue Listen-Karte; nicht selbst neu bauen.
+
+**Zusammenführen an stale-Zeilen:** Figuren, Schauplätze und Szenen tragen in der Zeile den Knopf «zusammenführen mit…» (`openMergePick($event, kind, entry)`), der ein `.picker-popover` mit den aktiven Einträgen derselben Gattung öffnet. Methods [book/entity-merge-picker.js](public/js/book/entity-merge-picker.js), Markup [partials/entity-merge-picker.html](public/partials/entity-merge-picker.html) (einmal je Karte, ausserhalb der Zeilen-Schleife), Merge-Kern [book/entity-merge.js](public/js/book/entity-merge.js) — denselben ruft die Danger-Zone der Bucheinstellungen.
+
+**Umbruch:** Der Titel (bzw. `.entity-row-main`) behält mindestens 10rem; was daneben nicht passt (stale-Badge, Zusammenführen, Löschen …), bricht in eine zweite Zeile um. Ein direktes Kind `.history-chevron` sitzt absolut oben rechts und wandert nie mit. **Mobil (≤600px)** steht der Titel allein auf Zeile 1, alles andere darunter. Darum Titel und Chevron immer als **direkte** Kinder der Zeile setzen, nie in eigene Wrapper.
 
 **Verteilung als Filter-Umschalter** (Szenen-Karte, [szenen-uebersicht.html](public/partials/szenen-uebersicht.html)): Eine Zählübersicht über der Liste (pro Kapitel / Figur / Seite) ist kein reiner Schmuck, sondern der schnellste Weg in den Filter. Jeder Eintrag ist ein `<button>` mit `:aria-pressed` + `.is-active`; ein Klick setzt den passenden Filter der Filterleiste, ein zweiter hebt ihn auf. Der Filterstand selbst lebt nur in der Filterleiste (Combobox zeigt ihn an) — die Übersicht liest ihn, hält ihn nicht doppelt. Kapitel als Zeile *Name | gestapelter Balken | Anzahl*: Balkenlänge = Anteil am grössten Kapitel (`--bar-share`), Segmente nach Anzahl (`--seg-grow`, wie `.plot-dist-bar`). Gezählt wird nur, was im Text steht (keine stale-Einträge). CSS: [entities/szenen.css](public/css/entities/szenen.css).
 
@@ -1805,7 +1811,7 @@ CSS in [public/css/layout/utilities.css](public/css/layout/utilities.css). Mobil
 
 ### Regel: Karten-Inhalt nutzt die volle Breite
 
-Listen, Zeilen und Card-Inhalte spannen **immer** die volle verfügbare Card-Breite. Keine `max-width`-Klammer und keine künstliche Lese-Breite, die auf breiten Screens (1440 px+) eine leere Spalte rechts hinterlässt — das wirkt wie ein Bug, nicht wie Absicht. Gestreckte Zeilen (Name links, Aktion/Badge rechts) sind erwünscht; sie werden über Flex/Grid-Spaltenstruktur sauber ausgerichtet, **nicht** über eine Breitenbegrenzung gebändigt. Gilt insbesondere für Figuren-Liste (`.figur-item`) und Buchorganizer (`.organizer-page`).
+Listen, Zeilen und Card-Inhalte spannen **immer** die volle verfügbare Card-Breite. Keine `max-width`-Klammer und keine künstliche Lese-Breite, die auf breiten Screens (1440 px+) eine leere Spalte rechts hinterlässt — das wirkt wie ein Bug, nicht wie Absicht. Gestreckte Zeilen (Name links, Aktion/Badge rechts) sind erwünscht; sie werden über Flex/Grid-Spaltenstruktur sauber ausgerichtet, **nicht** über eine Breitenbegrenzung gebändigt. Gilt insbesondere für Katalog-Listen (`.entity-row`) und Buchorganizer (`.organizer-page`).
 
 ### Zwei-Spalten (Sidebar + Main)
 
@@ -2045,13 +2051,21 @@ Das Suchfeld sitzt in einem `.filter-search-wrap` (position:relative) zusammen m
 Clear-X. `.search-clear--icon` ist der wiederverwendbare X-Button (aus [search.css](public/css/search.css),
 geteilt mit der Sidebar-Page-Suche) — nur sichtbar (`x-show`), wenn das Suchfeld befüllt ist.
 
-**Bausteine** (alle in [entity-list.css](public/css/entities/entity-list.css), frei kombinierbar):
+**Jedes Suchfeld, das eine Liste filtert, ist dieses Markup** — auch ein einzelnes Feld ohne
+weitere Filter (Hilfe, Wörterbuch, O-Töne, Chat-Verlauf). Steht die Suche in einer Kopfzeile
+neben Titel/Knöpfen, ist sie eine eingebettete `.filter-bar--inline` (Muster: Bibliotheks-Picker
+der Quellen). Immer `type="text"`, nie `type="search"` (der Browser zeichnete ein zweites X);
+Feature-CSS setzt am Feld höchstens Breite/Flex. Die globale Suche (`.search-q`) und die
+Navigationssuche (`.search-affix` + `.page-search`, Seitenbaum, Buchorganizer) sind eigene
+Muster. Gegated: [filter-search-single-place.test.mjs](tests/unit/filter-search-single-place.test.mjs).
+
+**Bausteine** (CSS in [card-blocks.css](public/css/components/card-form/card-blocks.css), frei kombinierbar):
 
 | Klasse | Wirkung | Wann |
 |---|---|---|
 | `.filter-bar` | Eigenständige Filterzeile über der Liste, mit Unterrand als Abschluss | Default — direktes Kind der Karte |
-| `.filter-bar--inline` | Nimmt das Standalone-Chrome zurück (kein Unterrand/`padding-bottom`/`margin-bottom`) + `flex: 1` | Leiste sitzt in einer `.card-toolbar` neben Buttons |
-| `.filter-search-input--wide` | Suchfeld wird 12rem breit + wachsend statt der 120px-Default-Spalte | Freitext ist das Hauptfilter der Leiste |
+| `.filter-bar--inline` | Nimmt das Standalone-Chrome zurück (kein Unterrand/`padding-bottom`/`margin-bottom`) + `flex: 1 1 auto` — passt die Leiste nicht neben die Knöpfe, bricht sie als ganze Zeile darunter um und füllt sie | Leiste sitzt in einer `.card-toolbar` neben Buttons |
+| `.filter-search-input--wide` | In `.filter-bar--inline`: Suchfeld nimmt den freien Platz der Leiste, Mindestbreite 12rem am `.filter-search-wrap` (bricht unter die Toolbar-Knöpfe statt sich daneben zu quetschen) | Nur in `--inline` nötig — in der eigenständigen `.filter-bar` nimmt das Suchfeld **immer** den freien Platz der Zeile, Basis 12rem, umbrechend |
 | `.filter-toggle` | `<label>` mit Checkbox in Compact-Typografie der Nachbarn | Boolean-Filter („Archivierte anzeigen") |
 | `.filter-count` | Trefferzähler, per `margin-left: auto` ans rechte Ende | Optional, immer letztes Kind |
 
@@ -3314,7 +3328,7 @@ Drei Editoren leben in eigenen Subfoldern (`book/`, `focus/`, `notebook/`); edit
 ### entities/
 | File | Inhalt |
 |------|--------|
-| [entities/figuren.css](public/css/entities/figuren.css) | Figuren-Karte, **Liste + Detail**: Listenzeile (`.figur-item`, stale-Zustand, `.figur-typ-dot`), die drei Detail-Gruppen (Steckbrief/Charakter/Im Buch), Beziehungszeile (`.figur-bz-*`), Schicht-/Präsenz-Plakette, Entwicklungsbogen, Schlüsselzitate. Hier steht auch die **Farbton-Zuordnung je Figurentyp** (`--fig-hue`), die sich Listenpunkt und Legendenpunkt teilen. |
+| [entities/figuren.css](public/css/entities/figuren.css) | Figuren-Karte, **Liste + Detail**: Listenpunkt `.figur-typ-dot` (die Zeile selbst ist die geteilte `.entity-row`), die drei Detail-Gruppen (Steckbrief/Charakter/Im Buch), Beziehungszeile (`.figur-bz-*`), Schicht-/Präsenz-Plakette, Entwicklungsbogen, Schlüsselzitate. Hier steht auch die **Farbton-Zuordnung je Figurentyp** (`--fig-hue`), die sich Listenpunkt und Legendenpunkt teilen. |
 | [entities/figuren-graph.css](public/css/entities/figuren-graph.css) | Figuren-Karte, **Netz-Ansicht**: Rahmen + Vollbild (`.figuren-graph-wrap`, native `:fullscreen` und `.is-fullscreen`-Rückfall), Werkzeugleiste, Kapitel-Filter, Knoten- und Kanten-Legende inkl. Sozialschicht-Bändern. Getrennt von `figuren.css`, weil beides zusammen über dem CSS-Limit liegt und die zwei Bereiche nur die Karte teilen. |
 | [entities/figuren-alter.css](public/css/entities/figuren-alter.css) | Alterstabelle der Figuren (5. Reiter): Kopfzeile mit Analyse-Knopf, Tabelle mit aufklappbarer Beleg-Zeile, Konfidenz-/Widerspruch-Tags. Akzent via `var(--card-accent)` von `.card--figuren`. |
 | [entities/figuren-lebenslauf.css](public/css/entities/figuren-lebenslauf.css) | Lebenslauf der Figuren (6. Reiter): Auswahl-Chip-Reihe, Phasen-x-Figuren-Matrix mit `table-layout: fixed`, Jahr-/Alter-Marke pro Ereignis. Akzent via `var(--card-accent)` von `.card--figuren`. |

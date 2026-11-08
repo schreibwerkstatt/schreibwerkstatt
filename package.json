@@ -1,6 +1,6 @@
 {
   "name": "schreibwerkstatt",
-  "version": "6.0.0",
+  "version": "6.1.0",
   "description": "Schreibwerkstatt — Schreiben, Lektorat und Buchanalyse mit KI",
   "license": "AGPL-3.0-or-later",
   "main": "server.js",
@@ -19,6 +19,7 @@
     "test:integration": "DB_FSYNC=off node --test --test-concurrency=4 \"tests/integration/*.test.js\"",
     "test:e2e": "playwright test",
     "test:smoke": "node scripts/smoke-parallel.js",
+    "test:ci": "node scripts/test-ci.js",
     "test:focus": "playwright test tests/e2e/focus-editor.spec.js tests/e2e/focus-client-contract.spec.js && env -u GIO_MODULE_DIR playwright test --project=webkit tests/e2e/focus-client-contract.webkit.spec.js && playwright test --config=playwright.app.config.js tests/e2e-app/focus-editor-app.spec.js tests/e2e-app/focus-acceptance-app.spec.js",
     "check:clients": "node scripts/check-clients-compat.js",
     "contract:build": "node scripts/contract-build.js",

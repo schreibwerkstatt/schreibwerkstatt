@@ -47,10 +47,20 @@ const JUDGE_MAX_CALLS = 10;
 const JUDGE_RANKS = 2;
 const JUDGE_CONCURRENCY = 3;
 
+// Stärke eines Kandidaten je Gattung. Figuren und Orte: Namens-Ähnlichkeit zuerst — dort
+// ist der Name das Hauptsignal, die Indizien sind dünn. Szenen: Indizien zuerst (gleicher
+// Abschnitt, gemeinsame Figuren und Orte). Szenentitel sind Freitext, ein gemeinsames
+// Titelwort ist oft nur ein Figurenname («Renate», «Mario»); nach Titel-Ähnlichkeit
+// sortiert, verdrängten solche Paare das echte Gegenstück auf demselben Abschnitt aus den
+// vorgelegten Rängen (gemessen am Lauf vom 2026-11-07, «Der Amoklauf»).
+const _bySim = (a, b) => (b.sim - a.sim) || (b.evidence - a.evidence);
+const _byEvidence = (a, b) => (b.evidence - a.evidence) || (b.sim - a.sim);
+const STRENGTH = { figur: _bySim, ort: _bySim, szene: _byEvidence };
+
 /** Ordnet die unsicheren Paare für den Judge: ohne Dubletten, je Incoming höchstens
  *  JUDGE_RANKS Kandidaten, Rang vor Stärke (alle Erstkandidaten zuerst), innerhalb eines
- *  Rangs nach Namens-Ähnlichkeit, dann Indizien. Rein. */
-function rankJudgePairs(unsure) {
+ *  Rangs nach der Stärke der Gattung (STRENGTH). Rein. */
+function rankJudgePairs(unsure, kind = 'figur') {
   const byIndex = new Map();
   const seen = new Set();
   for (const u of (unsure || [])) {
@@ -60,7 +70,7 @@ function rankJudgePairs(unsure) {
     if (!byIndex.has(u.index)) byIndex.set(u.index, []);
     byIndex.get(u.index).push(u);
   }
-  const strength = (a, b) => (b.sim - a.sim) || (b.evidence - a.evidence);
+  const strength = STRENGTH[kind] || _bySim;
   const ranked = [];
   for (const list of byIndex.values()) {
     list.sort(strength).slice(0, JUDGE_RANKS).forEach((u, rank) => ranked.push({ u, rank }));
@@ -127,7 +137,7 @@ async function judgeEntityPairs(ctx, kind, { incoming, existing, unsure }) {
   if (!unsure?.length) return hints;
 
   const exById = new Map(existing.map(r => [r.id, r]));
-  const { ranked, total } = rankJudgePairs(unsure);
+  const { ranked, total } = rankJudgePairs(unsure, kind);
   const pairs = [];
   for (const u of ranked) {
     const inc = incoming[u.index];

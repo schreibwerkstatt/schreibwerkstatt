@@ -197,7 +197,7 @@ export const kontinuitaetMethods = {
 
   // Alle Filter auf ihre Defaults (Zustand „Alle weggefiltert").
   kontinuitaetResetFilters() {
-    Object.assign(Alpine.store('catalogUi').kontinuitaetFilters, { figurId: '', kapitelId: '', schwere: '', status: '' });
+    Object.assign(Alpine.store('catalogUi').kontinuitaetFilters, { figurId: '', kapitelId: '', schwere: '', status: '', suche: '' });
   },
 
   // Zeile auf-/zuklappen (Klick + Enter/Space).
@@ -247,13 +247,14 @@ export const kontinuitaetMethods = {
     const kapitelId = filters.kapitelId ? activeFilterId(filters.kapitelId, this.kontinuitaetKapitelOptionen()) : '';
     return this._memo(
       'filtered',
-      [issues, chapters, pages, figuren, filters.figurId, kapitelId, filters.schwere, filters.status],
+      [issues, chapters, pages, figuren, filters.figurId, kapitelId, filters.schwere, filters.status, filters.suche],
       () => this._computeKontinuitaetIssuesFiltered(issues, chapters, figuren, { ...filters, kapitelId }),
     );
   },
 
   _computeKontinuitaetIssuesFiltered(issues, chapters, figuren, filters) {
     const chapterOf = this._kontinuitaetChapterResolver(chapters);
+    const q = (filters.suche || '').trim().toLowerCase();
     return issues.filter(issue => {
       if (!_matchesStatus(issue, filters.status || '')) return false;
       if (filters.figurId) {
@@ -266,8 +267,15 @@ export const kontinuitaetMethods = {
       }
       if (filters.kapitelId && !chapterOf(issue).has(String(filters.kapitelId))) return false;
       if (filters.schwere && kontinuitaetSeverity(issue) !== filters.schwere) return false;
+      if (q && !this._kontinuitaetSearchText(issue).includes(q)) return false;
       return true;
     });
+  },
+
+  // Suchtext = was Zeile + Detail zeigen (Typ, Text, Empfehlung, Figuren, Stellen, Quelle).
+  _kontinuitaetSearchText(i) {
+    return [this.kontinuitaetTypLabel(i.typ), i.beschreibung, i.empfehlung, ...(i.figuren || []),
+      i.stelle_a, i.stelle_b, i.quelle].filter(Boolean).join('\n').toLowerCase();
   },
 
   // Memoisiert auf die (ihrerseits memoisierte) gefilterte Liste: das Template

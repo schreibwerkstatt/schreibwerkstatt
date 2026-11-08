@@ -1,5 +1,5 @@
 'use strict';
-// db/songs.js#saveSongsToDb + phases/orte.js#dedupeSongsWithinRun — Identitaet
+// db/songs.js#saveSongsToDb + phases/orte/songs-merge.js#dedupeSongsWithinRun — Identitaet
 // der Musikbibliothek ueber Komplettanalyse-Laeufe.
 //
 // Die Komplettanalyse nummeriert die Songs jedes Laufs neu (`song_1…N`). Diese
@@ -15,8 +15,8 @@ useTmpDb('songs-save');
 
 require('../../db/migrations');
 const { db } = require('../../db/connection');
-const { saveSongsToDb, listSongsForBook, songKey } = require('../../db/songs');
-const { dedupeSongsWithinRun, buildFallbackSongs } = require('../../routes/jobs/komplett/phases/orte');
+const { saveSongsToDb, listSongsForBook, songKey, SONG_FIG_ROLLEN } = require('../../db/songs');
+const { dedupeSongsWithinRun, buildFallbackSongs, remapSongFiguren } = require('../../routes/jobs/komplett/phases/orte');
 
 const USER = 'autor@x.ch';
 const NOW = new Date().toISOString();
@@ -119,7 +119,7 @@ test('dedupeSongsWithinRun: fuehrt Dubletten zusammen und nummeriert eindeutig',
     { titel: 'Imagine' },
   ]);
   assert.deepEqual(out.map(s => s.id), ['song_1', 'song_2']);
-  assert.deepEqual(out[0].figuren, ['fig_1', 'fig_2']);
+  assert.deepEqual(out[0].figuren, [{ fig_id: 'fig_1', kontext_typ: null }, { fig_id: 'fig_2', kontext_typ: null }]);
   assert.deepEqual(out[0].kapitel, [{ name: 'K1', haeufigkeit: 3 }, { name: 'K2', haeufigkeit: 1 }]);
   assert.equal(out[0].beschreibung, 'im Auto');
 });
@@ -130,5 +130,99 @@ test('buildFallbackSongs: Figurennamen aufgeloest, ueber Kapitel zusammengefuehr
     { songs: [{ titel: 'HEROES', interpret: 'Bowie', figuren_namen: ['Ben'] }] },
   ], { Anna: 'fig_a', Ben: 'fig_b' }, { anna: 'fig_a', ben: 'fig_b' });
   assert.equal(out.length, 1);
-  assert.deepEqual(out[0].figuren, ['fig_a', 'fig_b']);
+  assert.deepEqual(out[0].figuren.map(f => f.fig_id), ['fig_a', 'fig_b']);
+});
+
+test('songKey: fuehrender Artikel beim Interpreten zaehlt nicht', () => {
+  assert.equal(songKey({ titel: 'Yesterday', interpret: 'The Beatles' }), songKey({ titel: 'Yesterday', interpret: 'Beatles' }));
+  assert.equal(songKey({ titel: 'Schrei nach Liebe', interpret: 'Die Ärzte' }), songKey({ titel: 'Schrei nach Liebe', interpret: 'Ärzte' }));
+});
+
+test('dedupeSongsWithinRun: Eintrag ohne Interpret geht im einzigen mit Interpret auf', () => {
+  const out = dedupeSongsWithinRun([
+    { titel: 'Bohemian Rhapsody', interpret: '', kapitel: [{ name: 'K1', haeufigkeit: 1 }] },
+    { titel: 'Bohemian Rhapsody', interpret: 'Queen', kapitel: [{ name: 'K3', haeufigkeit: 2 }] },
+  ]);
+  assert.equal(out.length, 1);
+  assert.equal(out[0].interpret, 'Queen');
+  assert.deepEqual(out[0].kapitel.map(k => k.name).sort(), ['K1', 'K3']);
+});
+
+test('dedupeSongsWithinRun: mehrere Interpreten (Cover) bleiben getrennt, auch der ohne', () => {
+  const out = dedupeSongsWithinRun([
+    { titel: 'Hallelujah', interpret: 'Leonard Cohen' },
+    { titel: 'Hallelujah', interpret: 'Jeff Buckley' },
+    { titel: 'Hallelujah' },
+  ]);
+  assert.equal(out.length, 3);
+});
+
+test('dedupeSongsWithinRun: Eingabe bleibt unveraendert, Kontext nach Rang', () => {
+  const k = { name: 'K1', haeufigkeit: 1 };
+  const out = dedupeSongsWithinRun([
+    { titel: 'X', kontext_typ: 'erwähnt', kapitel: [k] },
+    { titel: 'X', kontext_typ: 'leitmotiv', kapitel: [{ name: 'K1', haeufigkeit: 5 }] },
+  ]);
+  assert.equal(k.haeufigkeit, 1, 'Rohdaten der Extraktion duerfen nicht mutiert werden');
+  assert.equal(out[0].kapitel[0].haeufigkeit, 5);
+  assert.equal(out[0].kontext_typ, 'leitmotiv');
+});
+
+test('buildFallbackSongs: Haeufigkeit ueber Chunks summiert, innerhalb eines Chunks Maximum', () => {
+  const out = buildFallbackSongs([
+    { kapitel: 'K1', songs: [
+      { titel: 'Heroes', interpret: 'Bowie', kapitel: [{ name: 'K1', haeufigkeit: 2 }] },
+      { titel: 'Heroes', interpret: 'Bowie', kapitel: [{ name: 'K1', haeufigkeit: 2 }] },
+    ] },
+    { kapitel: 'K1', songs: [{ titel: 'Heroes', interpret: 'Bowie', kapitel: [{ name: 'K1', haeufigkeit: 3 }] }] },
+  ], {}, {});
+  assert.deepEqual(out[0].kapitel, [{ name: 'K1', haeufigkeit: 5 }]);
+});
+
+test('remapSongFiguren: Rolle je Figur, unbekannte Rolle und Name fallen weg', () => {
+  const out = remapSongFiguren([
+    { name: 'Anna', rolle: 'spielt' },
+    { name: 'ben', rolle: 'tanzt' },
+    { name: 'Niemand', rolle: 'hört' },
+    'Anna',
+  ], { Anna: 'fig_a' }, { anna: 'fig_a', ben: 'fig_b' });
+  assert.deepEqual(out, [{ fig_id: 'fig_a', kontext_typ: 'spielt' }, { fig_id: 'fig_b', kontext_typ: null }]);
+});
+
+test('saveSongsToDb: nachgelieferter oder verlorener Interpret behaelt die song_uid', () => {
+  const { bookId } = newBook();
+  saveSongsToDb(bookId, [{ titel: 'Bohemian Rhapsody' }, { titel: 'Heroes', interpret: 'Bowie' }], USER);
+  const before = db.prepare('SELECT song_uid, titel FROM songs WHERE book_id = ? ORDER BY titel').all(bookId);
+  saveSongsToDb(bookId, [{ titel: 'Bohemian Rhapsody', interpret: 'Queen' }, { titel: 'Heroes' }], USER);
+  const after = db.prepare('SELECT song_uid, titel, interpret FROM songs WHERE book_id = ? ORDER BY titel').all(bookId);
+  assert.deepEqual(after.map(r => r.song_uid), before.map(r => r.song_uid));
+  assert.equal(after[0].interpret, 'Queen');
+  assert.equal(after[1].interpret, 'Bowie', 'leerer Interpret ueberschreibt den belegten nicht');
+});
+
+test('saveSongsToDb: Interpret-loser Abgleich nur bei genau einem Kandidaten', () => {
+  const { bookId } = newBook();
+  saveSongsToDb(bookId, [{ titel: 'Hallelujah', interpret: 'Cohen' }, { titel: 'Hallelujah', interpret: 'Buckley' }], USER);
+  const uids = new Set(db.prepare('SELECT song_uid FROM songs WHERE book_id = ?').all(bookId).map(r => r.song_uid));
+  saveSongsToDb(bookId, [{ titel: 'Hallelujah' }], USER);
+  const [row] = db.prepare('SELECT song_uid FROM songs WHERE book_id = ?').all(bookId);
+  assert.equal(uids.size, 2);
+  assert.ok(!uids.has(row.song_uid), 'mehrdeutig → neuer Song, keine geratene Identitaet');
+});
+
+test('saveSongsToDb + listSongsForBook: Figuren-Rolle und erste Erwaehnung als Kapitel', () => {
+  const { bookId, chapterId } = newBook();
+  db.prepare('INSERT INTO figures (book_id, fig_id, name, user_email, updated_at) VALUES (?, ?, ?, ?, ?)').run(bookId, 'fig_1', 'Anna', USER, NOW);
+  saveSongsToDb(bookId, [{
+    titel: 'Heroes', erste_erwaehnung: 'Kapitel 1',
+    figuren: [{ fig_id: 'fig_1', kontext_typ: 'singt' }],
+  }, {
+    titel: 'Imagine', figuren: [{ fig_id: 'fig_1', kontext_typ: 'tanzt' }],
+  }], USER);
+  const r = listSongsForBook(bookId, USER);
+  const heroes = r.songs.find(s => s.titel === 'Heroes');
+  assert.deepEqual(heroes.figuren, [{ fig_id: 'fig_1', name: 'Anna', kontext_typ: 'singt' }]);
+  assert.equal(heroes.erste_erwaehnung_chapter_id, chapterId);
+  assert.equal(r.songs.find(s => s.titel === 'Imagine').figuren[0].kontext_typ, null);
+  assert.ok(SONG_FIG_ROLLEN.includes('singt'));
 });

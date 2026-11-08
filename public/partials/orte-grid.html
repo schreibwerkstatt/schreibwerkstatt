@@ -29,7 +29,11 @@
           <td><span class="tag entity-typ-tag" x-text="o.typLabelText"></span></td>
           <td class="entity-grid-cell-title">
             <span x-text="o.name"></span>
-            <button type="button" x-show="o.stale || o.manually_created" class="icon-btn danger entity-row-delete"
+            <button type="button" x-show="o.stale" class="btn-compact entity-row-action"
+                    aria-haspopup="dialog" :aria-expanded="mergePick.kind === 'ort' && mergePick.sourceId === String(o.id)"
+                    @click.stop="openMergePick($event, 'ort', o)"
+                    :data-tip="$app.t('merge.rowTip')" x-text="$app.t('merge.rowAction')"></button>
+            <button type="button" x-show="o.stale || o.manually_created" class="icon-btn danger entity-row-action"
                     @click.stop="$app.deleteOrt(o)"
                     :aria-label="$app.t('common.delete')" :data-tip="$app.t(o.stale ? 'entity.deleteStale' : 'orte.deleteManual')">
               <svg class="icon" aria-hidden="true"><use href="/icons.svg#trash"/></svg>
@@ -44,7 +48,7 @@
           <td x-text="o.stimmung"></td>
           <td>
             <span class="entity-refs">
-              <template x-for="k in (o.kapitel || [])" :key="k.name">
+              <template x-for="k in (o.kapitel || [])" :key="k.chapter_id ?? k.name">
                 <button type="button" class="entity-ref" x-entity-ref="{ type: 'kapitel', id: k.chapter_id, name: k.name }"></button>
               </template>
             </span>

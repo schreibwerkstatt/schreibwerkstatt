@@ -41,6 +41,14 @@
   --figur-rail-w: 3px;
   --figur-rail: calc(var(--figur-rail-w) + var(--space-xs));
 }
+/* Rahmen + Akzentstreifen kommen vom geteilten `.entity-detail` (entity-list.css).
+   Links um die Marginalien-Schiene breiter: die Akzent-Ticks der Gruppen- und
+   Sektionstitel haengen per negativem Rand nach links aus dem Textfluss und
+   brauchen dieses Polster, sonst stehen die Titel links neben der Textspalte. */
+.entity-list--accented .entity-detail.figur-detail {
+  padding: var(--space-lg) var(--space-lg) var(--space-lg)
+    calc(var(--space-lg) - var(--space-3) + var(--figur-rail));
+}
 .figur-group {
   margin-top: var(--space-lg);
   padding-top: var(--space-md);
@@ -164,7 +172,7 @@
 
 /* === Figuren: Listen-Bereich === */
 /* Verhindert Scroll-Anchoring im Listen-Bereich: wenn figur-detail aufklappt,
-   soll kein figur-item als Anchor gewählt und die Scroll-Position nicht
+   soll keine Figuren-Zeile als Anchor gewählt und die Scroll-Position nicht
    angepasst werden (was die sticky Sidebar verschiebt). */
 .figur-list-section,
 .figur-list-section * {
@@ -345,24 +353,8 @@
 }
 
 
-.figur-item {
-  display: flex;
-  align-items: center;
-  gap: var(--space-sm);
-  padding: var(--space-sm) var(--space-10);
-  border: 0.5px solid var(--color-border);
-  border-radius: var(--radius-md);
-  margin-bottom: var(--space-2xs);
-  cursor: pointer;
-  user-select: none;
-}
-.figur-item:hover { background: var(--color-hover); }
-
-/* Verwaiste Figur: in der letzten Komplettanalyse nicht mehr gefunden, aber
-   wegen externer Verknüpfungen (Plot/Recherche/Events) bewusst erhalten. Gedämpft
-   dargestellt, ohne aus der Liste zu verschwinden. */
-.figur-item--stale { opacity: 0.6; }
-.figur-item--stale .figur-name { font-style: italic; }
+/* «nicht mehr im Text»-Badge, geteilt von allen Katalog-Listen (Figuren,
+   Schauplätze, Szenen); die Zeile selbst ist `.entity-row--stale` (entity-list.css). */
 .tag--stale {
   background: color-mix(in srgb, var(--palette-gray) 18%, var(--color-surface));
   color: var(--color-muted);
@@ -400,12 +392,6 @@
   border-radius: 50%;
   flex-shrink: 0;
   background: var(--fig-hue, var(--color-border));
-}
-
-.figur-name {
-  font-size: var(--font-size-sm);
-  font-weight: var(--fw-regular);
-  flex: 1;
 }
 
 .figur-beziehung-item {
@@ -482,15 +468,4 @@
   flex-wrap: wrap;
   gap: var(--space-6);
 }
-
-/* «zusammenführen mit…» unter einer ausgemusterten Figur: Frage, Ziel-Combobox,
-   Knöpfe in einer umbrechenden Zeile. */
-.figur-merge-panel {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: var(--space-6) var(--space-sm);
-  padding: var(--space-xs) var(--space-sm) var(--space-sm);
-}
-.figur-merge-panel .card-form-error { flex-basis: 100%; }
 }

@@ -121,13 +121,14 @@
   <!-- Figurenliste (Reiter «Liste») -->
   <div x-show="$store.catalog.figuren.length > 0 && figurenGraphModus === 'liste'" class="figur-list-section">
     <p class="card-form-saved" x-show="figurPflegeMessage" x-cloak x-text="figurPflegeMessage"></p>
+    <p class="card-form-saved" x-show="mergePickMessage" x-cloak x-text="mergePickMessage"></p>
     <!-- @include figuren-relcheck -->
 
     <!-- Filter: Suche (Name, Kurzname, Beschreibung, Rolle, Beruf, Eigenschaften,
          Typ) · Typ · Kapitel · Abschnitt · Sortierung -->
     <div class="filter-bar">
       <span class="filter-search-wrap">
-        <input type="text" x-model="$store.catalogUi.figurenFilters.suche" :placeholder="$app.t('figuren.searchPlaceholder')" :aria-label="$app.t('common.search')" class="filter-search-input">
+        <input type="text" x-model="$store.catalogUi.figurenFilters.suche" :placeholder="$app.t('figuren.searchPlaceholder')" :aria-label="$app.t('common.search')" class="filter-search-input filter-search-input--wide">
         <button type="button" class="search-clear--icon" x-show="$store.catalogUi.figurenFilters.suche" @click="$store.catalogUi.figurenFilters.suche=''" :aria-label="$app.t('search.clear')" :data-tip="$app.t('search.clear')"><svg class="icon" aria-hidden="true"><use href="/icons.svg#x"/></svg></button>
       </span>
       <div x-data="catalogFilter('figurTyp')"
@@ -154,26 +155,27 @@
     </div>
     <p class="muted-msg muted-msg--sm" x-show="filteredFiguren().length === 0" x-text="$app.t('figuren.noMatch')"></p>
 
+    <div class="entity-list entity-list--accented">
     <template x-for="f in listWindowed(filteredFiguren())" :key="f.id">
       <div>
         <!-- Zeile = Aufklapp-Schalter. Kein <button>, weil sie selbst Buttons
              (Löschen, Kapitel-Referenz) enthält; darum role/tabindex/aria-expanded
              und Enter/Space nur auf der Zeile selbst (.self), nicht aus den Kindern. -->
-        <div class="figur-item" :class="{ 'figur-item--stale': f.stale }" :data-figid="f.id"
+        <div class="entity-row" :class="{ 'entity-row--stale': f.stale, 'entity-row--selected': $store.catalogUi.selectedFigurId === f.id }" :data-figid="f.id"
              role="button" tabindex="0"
              :aria-expanded="$store.catalogUi.selectedFigurId === f.id"
              @click="$store.catalogUi.selectedFigurId = $store.catalogUi.selectedFigurId === f.id ? null : f.id;"
              @keydown.enter.self.prevent="$store.catalogUi.selectedFigurId = $store.catalogUi.selectedFigurId === f.id ? null : f.id;"
              @keydown.space.self.prevent="$store.catalogUi.selectedFigurId = $store.catalogUi.selectedFigurId === f.id ? null : f.id;">
           <span class="figur-typ-dot" :class="'figur-typ-dot--' + (f.typ || 'unknown')"></span>
-          <span class="figur-name" x-text="f.name"></span>
+          <span class="entity-row-title" x-text="f.name"></span>
           <span x-show="f.stale" class="tag tag--stale" :data-tip="$app.t('figuren.staleHint')" x-text="$app.t('figuren.staleBadge')"></span>
           <span x-show="f.manually_edited" class="tag tag--curated" :data-tip="$app.t('figuren.curatedHint')" x-text="$app.t('figuren.curatedBadge')"></span>
-          <button type="button" x-show="f.stale" class="btn-compact entity-row-delete"
-                  :aria-expanded="figurMergeSourceId === f.id"
-                  @click.stop="toggleFigurMerge(f)"
-                  :data-tip="$app.t('figuren.mergeStaleTip')" x-text="$app.t('figuren.mergeStale')"></button>
-          <button type="button" x-show="f.stale" class="icon-btn danger entity-row-delete"
+          <button type="button" x-show="f.stale" class="btn-compact entity-row-action"
+                  aria-haspopup="dialog" :aria-expanded="mergePick.kind === 'figur' && mergePick.sourceId === String(f.id)"
+                  @click.stop="openMergePick($event, 'figur', f)"
+                  :data-tip="$app.t('merge.rowTip')" x-text="$app.t('merge.rowAction')"></button>
+          <button type="button" x-show="f.stale" class="icon-btn danger entity-row-action"
                   @click.stop="$app.deleteStaleFigur(f)"
                   :aria-label="$app.t('common.delete')" :data-tip="$app.t('entity.deleteStale')">
             <svg class="icon" aria-hidden="true"><use href="/icons.svg#trash"/></svg>
@@ -192,21 +194,6 @@
           </template>
           <span class="history-chevron" :class="{ open: $store.catalogUi.selectedFigurId === f.id }" aria-hidden="true"></span>
         </div>
-        <!-- Ausgemusterte Figur in eine aktive zusammenführen (book/figuren-pflege.js):
-             Ziel wählen, Bestätigung im Dialog. Die ausgemusterte wird gelöscht, ihr Name
-             wird dauerhafter Alias des Ziels. -->
-        <template x-if="f.stale && figurMergeSourceId === f.id">
-          <div class="figur-merge-panel">
-            <span class="card-hint" x-text="$app.t('figuren.mergeStaleQuestion', { name: f.name })"></span>
-            <div x-data="combobox($app.t('merge.targetPlaceholder'))"
-                 x-modelable="value" x-model="figurMergeTargetId"
-                 x-effect="options = $store.catalog.figuren.filter(x => !x.stale && x.id !== f.id).map(x => ({ value: x.id, label: x.name }))"></div>
-            <button type="button" class="btn-compact danger" :disabled="!figurMergeTargetId || figurMergeBusy"
-                    @click="confirmFigurMerge(f)" x-text="$app.t('merge.button')"></button>
-            <button type="button" class="btn-compact" @click="toggleFigurMerge(f)" x-text="$app.t('common.cancel')"></button>
-            <p class="card-form-error" x-show="figurMergeError" x-text="figurMergeError"></p>
-          </div>
-        </template>
         <!-- @include figuren-detail -->
       </div>
     </template>
@@ -214,6 +201,8 @@
             x-show="listWindowRest(filteredFiguren()) > 0" x-cloak
             x-list-more="listWindowMore()" @click="listWindowMore()"
             x-text="$app.t('common.showMore', { n: listWindowRest(filteredFiguren()) })"></button>
+    </div>
+    <!-- @include entity-merge-picker -->
   </div>
 
 </div>

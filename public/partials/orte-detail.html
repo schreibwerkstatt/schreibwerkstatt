@@ -19,7 +19,10 @@
   <template x-if="o.erste_erwaehnung_page_id">
     <button type="button" class="entity-ref" x-entity-ref="{ type: 'seite', id: o.erste_erwaehnung_page_id }"></button>
   </template>
-  <template x-if="!o.erste_erwaehnung_page_id">
+  <template x-if="!o.erste_erwaehnung_page_id && o.erste_erwaehnung_chapter_id">
+    <button type="button" class="entity-ref" x-entity-ref="{ type: 'kapitel', id: o.erste_erwaehnung_chapter_id, name: o.erste_erwaehnung }"></button>
+  </template>
+  <template x-if="!o.erste_erwaehnung_page_id && !o.erste_erwaehnung_chapter_id">
     <span x-text="o.erste_erwaehnung"></span>
   </template>
 </div>
@@ -79,13 +82,23 @@
   </div>
 </template>
 
+<div x-show="o.manual_fields?.length > 0" class="entity-meta-row">
+  <span class="entity-meta-label" x-text="$app.t('orte.manualFields')"></span>
+  <span x-text="ortManualFieldsLabel(o)"></span>
+</div>
+
 <div class="ort-detail-actions">
   <button type="button" class="btn-compact" @click.stop="startOrtEdit(o)" :disabled="ortEdit.mode !== null">
     <svg class="icon" aria-hidden="true"><use href="/icons.svg#pencil"/></svg>
     <span x-text="$app.t('orte.edit.action')"></span>
   </button>
+  <button type="button" class="btn-compact" x-show="o.manual_fields?.length > 0 && o.analysis_known"
+          @click.stop="restoreOrtAnalysis(o)" :data-tip="$app.t('orte.restore.tip')"
+          x-text="$app.t('orte.restore.action')"></button>
   <button type="button" class="btn-compact" x-show="$store.config.semanticSearchEnabled" @click.stop="$app.findSimilar('location', o.id, o.name)" x-text="$app.t('search.semantic.similarEntity')"></button>
-  <span class="ort-merge">
+  <!-- Verwaiste Orte führt der Zeilen-Knopf «zusammenführen mit…» zusammen
+       (entity-merge-picker); hier nur aktive. -->
+  <span class="ort-merge" x-show="!o.stale">
     <div x-data="combobox({ placeholder: $app.t('orte.merge.placeholder') })"
          x-modelable="value" x-model="ortMergeTarget"
          x-effect="options = ortMergeOptions(o)"></div>

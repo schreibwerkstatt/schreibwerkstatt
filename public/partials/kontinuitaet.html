@@ -80,6 +80,10 @@
   <!-- Filter-Leiste — MUSS ausserhalb x-if bleiben, sonst trackt Alpine x-effect
        der Comboboxen die Parent-Reaktivität nicht und options bleibt leer. -->
   <div x-show="kontinuitaetAllIssues().length > 0" class="filter-bar" x-cloak>
+    <span class="filter-search-wrap">
+      <input type="text" x-model="$store.catalogUi.kontinuitaetFilters.suche" :placeholder="$app.t('common.search')" :aria-label="$app.t('common.search')" class="filter-search-input">
+      <button type="button" class="search-clear--icon" x-show="$store.catalogUi.kontinuitaetFilters.suche" @click="$store.catalogUi.kontinuitaetFilters.suche=''" :aria-label="$app.t('search.clear')" :data-tip="$app.t('search.clear')"><svg class="icon" aria-hidden="true"><use href="/icons.svg#x"/></svg></button>
+    </span>
     <div class="tabs">
       <button type="button" class="tabs-btn"
               :class="{ 'tabs-btn--active': $store.catalogUi.kontinuitaetFilters.schwere === '' }"

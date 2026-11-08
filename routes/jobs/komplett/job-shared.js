@@ -363,8 +363,8 @@ const { buildAttributeContradictions, runAttributeContradictionCheck } = require
 // noch per lowercase einem konsolidierten Eintrag zuordnen lassen. Bei Figuren sind das
 // Spitznamen, Teilnamen, Epitheta, Schreibvarianten; bei Orten benennt die Orte-
 // Konsolidierung um («Rumpel-Restaurant» → «Rumpel», «Schützi» → «Schützenmatte (Schützi)»),
-// und die deterministische Alias-Brücke (phases/orte.js#ortAliasesFromSources) erkennt nur
-// SAME-Paare aus den Kapitel-Orten, nicht die Namen der Szenen. Bevor sie gedroppt werden,
+// und die Alias-Brücke (phases/orte/orte-merge.js#ortAliasesFromSources) kennt nur die
+// Kapitel-Orte (Quellnamen der Konsolidierung, sonst SAME-Paare), nicht die Namen der Szenen. Bevor sie gedroppt werden,
 // mappt ein billiger Auflösungs-Call (Kandidaten + Katalognamen → Zuordnung oder «») sie –
 // gefundene Treffer werden als lowercase-Aliase in die Lower-Map eingespeist, sodass der
 // anschliessende Remap sie auflöst. Nur Cloud-Klasse (der Call urteilt über Namensvarianten

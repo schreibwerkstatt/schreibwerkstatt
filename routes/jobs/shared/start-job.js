@@ -59,4 +59,16 @@ function startBookJob(req, res, {
   res.json({ jobId });
 }
 
-module.exports = { startBookJob };
+/** Vorbedingung der Jobs, die den Katalog der Komplettanalyse lesen (Alters-Analyse,
+ *  Schulweg-, Berufsweg-Vorschlag): läuft für Buch + User eine Komplettanalyse, schreibt
+ *  sie Figurenstamm und Zeitstrahl gerade neu → 409 mit ihrer Job-ID statt eines Laufs
+ *  auf halbem Stand. Steht der Schritt in ihrem Umfang, reiht sie den Job danach selbst
+ *  ein (komplett/pruef-jobs.js). Dieselbe Antwort wie komplett/index.js#_komplettDedup. */
+function komplettRunningPrecheck(bookId, userEmail) {
+  const komplettId = findActiveJobId('komplett-analyse', bookId, userEmail);
+  return komplettId
+    ? { status: 409, error_code: 'KOMPLETT_ANALYSIS_RUNNING', jobId: komplettId, params: { jobId: komplettId } }
+    : null;
+}
+
+module.exports = { startBookJob, komplettRunningPrecheck };

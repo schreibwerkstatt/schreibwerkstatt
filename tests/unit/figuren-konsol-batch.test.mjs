@@ -144,7 +144,7 @@ test('mergeKonsolParts: Figur eines anderen Teils (nur Beziehungsziel) wird verw
     // Teil A erfindet einen dünnen Eintrag für das Beziehungsziel Anna Weber und
     // fasst Hans/Hansi unter einem neuen kanonischen Namen zusammen.
     { input: inputA, figuren: [
-      { id: 'fig_1', name: 'Johann «Hansi» Meier', beziehungen: [{ name: 'Anna Weber', typ: 'freund' }] },
+      { id: 'fig_1', name: 'Johann «Hansi» Meier', quellnamen: ['Hans Meier', 'Hansi'], beziehungen: [{ name: 'Anna Weber', typ: 'freund' }] },
       { id: 'fig_2', name: 'Anna Weber', beschreibung: 'dünn', beziehungen: [] },
     ] },
     { input: inputB, figuren: [{ id: 'fig_1', name: 'Anna Weber', beschreibung: 'voller Steckbrief', beziehungen: [] }] },
@@ -248,4 +248,39 @@ test('mergeKonsolParts: Eingabe-Kante mit Rohnamen kommt nicht dazu, wenn die KI
   const robert = out.find(f => f.name === 'Robert');
   assert.equal(robert.beziehungen.length, 1);
   assert.equal(robert.beziehungen[0].figur_id, out.find(f => f.name === 'Herr Koch (Primarlehrer)').id);
+});
+
+// ── 4. restoreOmittedFiguren: Erhaltungsprüfung nach der Konsolidierung ─────────
+const { restoreOmittedFiguren } = require_('../../routes/jobs/komplett/phases/figuren-konsol');
+
+test('restoreOmittedFiguren: weggelassene Randfigur kommt zurück, Zusammengeführtes nicht', () => {
+  // Prod-Fall «Der Amoklauf» (2026-11-07): Diego, Joshua, Ursina standen in Phase 1,
+  // fehlten nach der Konsolidierung ohne Spur im Katalog.
+  const input = [{ kapitel: 'A', figuren: [
+    fig('fig_1', 'Stefan'),
+    fig('fig_2', 'Diego', { beziehungen: [{ figur_id: 'fig_1', name: 'Stefan', typ: 'kollege' }, { figur_id: 'fig_9', typ: 'x' }] }),
+    fig('fig_3', 'der Alte'),
+    fig('fig_4', 'Herr Koch'),
+    fig('fig_5', 'Vermieterin', { kurzname: 'Vermieterin' }),
+  ] }];
+  const out = [
+    { id: 'fig_1', name: 'Stefan', beziehungen: [] },
+    { id: 'fig_2', name: 'Gregor', quellnamen: ['der Alte'], beziehungen: [] },
+    { id: 'fig_3', name: 'Herr Koch (Primarlehrer)', beziehungen: [] },
+  ];
+  const restored = restoreOmittedFiguren(input, out);
+  assert.deepEqual(restored, ['Diego', 'Vermieterin']);
+  assert.equal(out.length, 5);
+  const diego = out.find(f => f.name === 'Diego');
+  assert.equal(diego.id, undefined, 'id vergibt der Aufrufer');
+  assert.deepEqual(diego.beziehungen, [{ name: 'Stefan', typ: 'kollege' }], 'nur Kanten mit Namen, ohne chunk-lokale id');
+  assert.ok(out.every(f => !('quellnamen' in f)), 'quellnamen wird entfernt');
+  assert.equal(input[0].figuren[1].id, 'fig_2', 'Eingabe unverändert');
+});
+
+test('mergeKonsolParts: weggelassene Figur eines Teils bekommt eine eindeutige id', () => {
+  const input = [{ kapitel: 'A', figuren: [fig('fig_1', 'Stefan'), fig('fig_2', 'Joshua')] }];
+  const out = mergeKonsolParts([{ input, figuren: [{ id: 'fig_1', name: 'Stefan', beziehungen: [] }] }], null);
+  assert.deepEqual(out.map(f => f.name), ['Stefan', 'Joshua']);
+  assert.equal(new Set(out.map(f => f.id)).size, 2);
 });

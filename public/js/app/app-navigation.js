@@ -51,7 +51,7 @@ export const appNavigationMethods = {
       // Nur eine sichtbare Zeile: bis der Reiterwechsel gerendert ist, steht die
       // Zeile in der ausgeblendeten Liste (offsetParent null, Position 0).
       scrollToWhenReady(() => {
-        const el = document.querySelector(`.figur-item[data-figid="${fid}"]`);
+        const el = document.querySelector(`[data-figid="${fid}"]`);
         return el?.offsetParent ? el : null;
       });
     } finally {

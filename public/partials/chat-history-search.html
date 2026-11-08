@@ -7,9 +7,13 @@
 -->
 <div class="chat-history-title" x-text="$app.t('chat.history')"></div>
 <div class="filter-bar chat-hist-search">
-  <input type="search" class="filter-search-input" x-model="histQuery"
-         @input="onHistInput()" @keydown.enter="$enter($event, () => runHistSearch())" @keydown.escape.stop="clearHistSearch()"
-         :placeholder="$app.t('chat.historySearch.placeholder')" :aria-label="$app.t('chat.historySearch.placeholder')">
+  <span class="filter-search-wrap">
+    <input type="text" class="filter-search-input" x-model="histQuery"
+           @input="onHistInput()" @keydown.enter="$enter($event, () => runHistSearch())" @keydown.escape.stop="clearHistSearch()"
+           :placeholder="$app.t('chat.historySearch.placeholder')" :aria-label="$app.t('chat.historySearch.placeholder')">
+    <button type="button" class="search-clear--icon" x-show="histQuery" @click="clearHistSearch()"
+            :aria-label="$app.t('search.clear')" :data-tip="$app.t('search.clear')"><svg class="icon" aria-hidden="true"><use href="/icons.svg#x"/></svg></button>
+  </span>
   <div class="seg-toggle" x-show="histKind === 'page'">
     <button :aria-pressed="histScope === 'page'" type="button" :class="{ 'seg-toggle--active': histScope === 'page' }" @click="setHistScope('page')" x-text="$app.t('chat.historySearch.scopePage')"></button>
     <button :aria-pressed="histScope === 'book'" type="button" :class="{ 'seg-toggle--active': histScope === 'book' }" @click="setHistScope('book')" x-text="$app.t('chat.historySearch.scopeBook')"></button>

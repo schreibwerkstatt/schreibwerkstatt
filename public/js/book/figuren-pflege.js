@@ -4,8 +4,9 @@
 //     (db/figures/patch.js). Der Server setzt dabei `manually_edited` — die
 //     Komplettanalyse überschreibt die gepflegten Felder danach nicht mehr
 //     (Abzeichen «vom Autor gepflegt» in der Liste).
-//   * Ausgemusterte Figur «zusammenführen mit…»: wählt eine aktive Ziel-Figur und
-//     ruft den geteilten Merge-Weg (book/figur-merge.js).
+//   * «zusammenführen mit…» an einer ausgemusterten Figur ist der geteilte
+//     Zeilen-Picker aller Katalog-Listen (book/entity-merge-picker.js); hier nur
+//     dessen Reset beim Buchwechsel.
 //
 // Kein `get x()` in diesem gespreadeten Modul (Spread-Getter-Falle).
 
@@ -14,7 +15,6 @@
 const _t = (key, params) => window.__app?.t?.(key, params) ?? key;
 import { FIGUR_TYPEN } from './figur-typen.js';
 import { SCHICHT_LEVEL } from '../graph/constants.js';
-import { mergeFigurPair, figurMergeMessage } from './figur-merge.js';
 
 // Präsenz-Stufen — Persistenz-Konstante, deckungsgleich mit dem Prompt-Enum
 // (prompts/komplett/schemas.js) und den i18n-Keys figuren.praesenz.<key>.
@@ -111,42 +111,11 @@ export const figurPflegeMethods = {
     }
   },
 
-  // ── Ausgemusterte Figur zusammenführen ──────────────────────────────────────
-  toggleFigurMerge(f) {
-    this.figurMergeSourceId = this.figurMergeSourceId === f.id ? null : f.id;
-    this.figurMergeTargetId = '';
-    this.figurMergeError = '';
-  },
-
-  async confirmFigurMerge(f) {
-    const bookId = Alpine.store('nav').selectedBookId;
-    if (!bookId || this.figurMergeBusy || !this.figurMergeTargetId) return;
-    const target = (Alpine.store('catalog').figuren || []).find(x => x.id === this.figurMergeTargetId);
-    if (!target) return;
-    this.figurMergeBusy = true;
-    this.figurMergeError = '';
-    try {
-      const data = await mergeFigurPair(bookId, { id: f.id, name: f.name }, { id: target.id, name: target.name });
-      if (!data || String(Alpine.store('nav').selectedBookId) !== String(bookId)) return;
-      this.figurMergeSourceId = null;
-      this.figurMergeTargetId = '';
-      this.figurPflegeMessage = figurMergeMessage(data, f, target);
-    } catch (e) {
-      console.error('[confirmFigurMerge]', e);
-      this.figurMergeError = e.message;
-    } finally {
-      this.figurMergeBusy = false;
-    }
-  },
-
   // Buchwechsel/View-Reset: Formular, Merge-Auswahl und Meldung gehören zum alten Buch.
   _resetFigurPflege() {
     this.cancelFigurEdit();
     this.figurEditBusy = false;
-    this.figurMergeSourceId = null;
-    this.figurMergeTargetId = '';
-    this.figurMergeBusy = false;
-    this.figurMergeError = '';
+    this._resetMergePick();
     this.figurPflegeMessage = '';
   },
 };

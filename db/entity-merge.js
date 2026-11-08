@@ -54,6 +54,7 @@ const { NOW_ISO_SQL } = require('./now');
 const { normName } = require('../lib/name-normalize');
 const { relationKey } = require('./figures/refs');
 const { addFigureAliases } = require('./figures/aliases');
+const { addLocationAliases } = require('./location-aliases');
 const { suppressRelation } = require('./figures/relation-edits');
 
 // Skalar-Felder, die aus der Quelle nachgefuellt werden — aber NUR, wenn sie beim
@@ -432,12 +433,16 @@ function mergeLocations(bookId, userEmail, sourceId, targetId) {
     if (source.parent_id != null && _isAncestorOrSelf(targetId, source.parent_id)) parentExtra.parent_id = null;
 
     const filled = _fillEmpty('locations', LOC_FILL, source, target, parentExtra);
+    // Dauerhafter Alias: Name, letzter Analysename und Aliasse der Quelle — sonst legt
+    // die nächste Komplettanalyse die Quelle unter ihrem Textnamen wieder an.
+    const sourceAliases = db.prepare('SELECT alias FROM location_aliases WHERE location_id = ?').all(sourceId).map(r => r.alias);
+    const aliasesAdded = addLocationAliases(targetId, bookId, [source.name, source.ki_name, ...sourceAliases]);
     db.prepare('DELETE FROM locations WHERE id = ?').run(sourceId);
 
     return {
       kind: 'location', sourceId, targetId,
       sourceName: source.name, targetName: target.name,
-      moved, filled,
+      moved, filled, aliasesAdded,
     };
   })();
 }

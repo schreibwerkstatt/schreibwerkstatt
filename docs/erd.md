@@ -1,6 +1,6 @@
 # ERD — schreibwerkstatt
 
-Stand: Schema-Version 359, 196 Tabellen (ohne `sqlite_*`/`schema_version`/FTS5-Shadow-Tables; inkl. FTS5-Virtual `search_index`/`search_trigram`/`chat_messages_fts` + `search_meta`).
+Stand: Schema-Version 360, 197 Tabellen (ohne `sqlite_*`/`schema_version`/FTS5-Shadow-Tables; inkl. FTS5-Virtual `search_index`/`search_trigram`/`chat_messages_fts` + `search_meta`).
 
 Quelle: Squashed-Schema-Snapshot in [db/squashed-schema.js](../db/squashed-schema.js) (regeneriert via `node tools/dump-schema.js`) + [db/migrations.js](../db/migrations.js). Drift gegen die Legacy-Migration-Kette ist durch [tests/unit/squash-drift.test.mjs](../tests/unit/squash-drift.test.mjs) gegated. Mermaid-Diagramme — in VSCode mit „Markdown Preview Mermaid Support" (oder GitHub) direkt sichtbar.
 
@@ -284,6 +284,7 @@ erDiagram
   locations ||--o{ scene_locations       : in
   locations ||--o{ location_figures      : has
   locations ||--o{ location_chapters     : at
+  locations ||--o{ location_aliases      : "alias"
   locations ||--o{ locations             : parent
   figures ||--o{ figures                 : "übernommen aus Vorband"
   locations ||--o{ locations             : "übernommen aus Vorband"
@@ -1106,11 +1107,23 @@ erDiagram
     TEXT    user_email
     INTEGER stale        "1 = im letzten Komplettanalyse-Lauf nicht mehr erkannt (statt Löschen → FK-Refs überleben)"
     INTEGER parent_id    FK "übergeordneter Schauplatz (SET NULL), nur vom Autor gepflegt"
-    INTEGER manually_edited  "1 = Stammdaten vom Autor korrigiert → Analyse überschreibt sie nicht"
+    INTEGER manually_edited  "1 = mindestens ein Stammdatenfeld vom Autor korrigiert (Details: manual_fields)"
+    TEXT    manual_fields    "JSON-Array der vom Autor geschützten Felder (name/typ/beschreibung/stimmung/land) → Analyse überschreibt nur diese nicht"
     INTEGER manually_created "1 = vom Autor angelegt → Analyse markiert nie stale"
     TEXT    ki_name      "zuletzt von der Analyse gelieferter Name (Match-Schlüssel nach Umbenennung)"
+    TEXT    ki_typ          "zuletzt von der Analyse gelieferter Typ («Analyse-Werte übernehmen»)"
+    TEXT    ki_beschreibung "zuletzt von der Analyse gelieferte Beschreibung"
+    TEXT    ki_stimmung     "zuletzt von der Analyse gelieferte Stimmung"
+    TEXT    ki_land         "zuletzt von der Analyse geliefertes Land"
     INTEGER origin_location_id FK "SET NULL — Ort im Vorband, aus dem dieser per «Aus Vorband übernehmen» kopiert wurde"
     TEXT    updated_at
+  }
+  location_aliases {
+    INTEGER id          PK
+    INTEGER location_id FK "CASCADE"
+    INTEGER book_id     FK "CASCADE"
+    TEXT    alias       "Anzeigeform, UNIQUE(location_id, alias); beim Merge aus Name/ki_name der Quelle"
+    TEXT    created_at
   }
   location_figures {
     INTEGER location_id PK,FK
@@ -1198,6 +1211,7 @@ erDiagram
   locations ||--o{ scene_locations    : in
   locations ||--o{ location_figures   : has
   locations ||--o{ location_chapters  : at
+  locations ||--o{ location_aliases   : "alias (CASCADE)"
   locations ||--o{ locations          : parent
   figures   ||--o{ figures            : "origin (Vorband)"
   locations ||--o{ locations          : "origin (Vorband)"

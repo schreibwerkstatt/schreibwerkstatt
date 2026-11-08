@@ -15,6 +15,8 @@ export const KOMPLETT_STEPS = [
   { key: 'erzaehlprofil', group: 'pruefung', cloudOnly: true  },
   { key: 'coverage',      group: 'pruefung', cloudOnly: true  },
   { key: 'figurAlter',    group: 'pruefung', cloudOnly: false },
+  { key: 'schulweg',      group: 'pruefung', cloudOnly: false },
+  { key: 'stationen',     group: 'pruefung', cloudOnly: false },
 ];
 
 export const KOMPLETT_CORE_STEPS = ['seiten', 'extraktion', 'figuren', 'weltfakten'];

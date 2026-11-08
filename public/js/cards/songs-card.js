@@ -25,7 +25,10 @@ export function registerSongsCard() {
       const root = window.__app;
       const f = Alpine.store('catalogUi').songsFilters;
       const kapitelId = activeFilterId(f.kapitelId, root.songsKapitelOptionen());
-      return applySongsFilters(root.$store.catalog.songs, { ...f, kapitelId }).sort((a, b) => {
+      const figNames = f.suche
+        ? Object.fromEntries((root.$store.catalog.figuren || []).map(x => [x.id, `${x.name || ''} ${x.kurzname || ''}`]))
+        : null;
+      return applySongsFilters(root.$store.catalog.songs, { ...f, kapitelId }, figNames).sort((a, b) => {
         const aK = Math.min(...(a.kapitel || []).map(k => root._chapterIdIdx(k.chapter_id)), 9999);
         const bK = Math.min(...(b.kapitel || []).map(k => root._chapterIdIdx(k.chapter_id)), 9999);
         if (aK !== bK) return aK - bK;

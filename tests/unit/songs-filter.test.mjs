@@ -10,13 +10,13 @@ const SONGS = [
     id: 'song_1', titel: 'Heroes', interpret: 'David Bowie', genre: 'Rock',
     kontext_typ: 'hört', stimmung: 'melancholisch', beschreibung: 'Im Auto',
     kapitel: [{ chapter_id: 1, name: 'Kapitel 1', haeufigkeit: 2 }],
-    figuren: ['fig_1', { fig_id: 'fig_2', kontext_typ: 'spielt' }],
+    figuren: [{ fig_id: 'fig_1', name: 'Anna', kontext_typ: null }, { fig_id: 'fig_2', name: 'Ben', kontext_typ: 'spielt' }],
   },
   {
     id: 'song_2', titel: 'Mondscheinsonate', interpret: 'Beethoven', genre: 'Klassik',
     kontext_typ: 'spielt', stimmung: 'ruhig', beschreibung: '',
     kapitel: [{ chapter_id: 2, name: 'Kapitel 2', haeufigkeit: 1 }],
-    figuren: ['fig_3'],
+    figuren: [{ fig_id: 'fig_3', name: 'Clara', kontext_typ: 'spielt' }],
   },
   {
     id: 'song_3', titel: 'Imagine', interpret: 'John Lennon', genre: 'Pop',
@@ -58,12 +58,12 @@ test('applySongsFilters: kontextTyp-Filter', () => {
   assert.deepEqual(out.map(s => s.id), ['song_3']);
 });
 
-test('applySongsFilters: figurId matcht String-Form (s.figuren = ["fig_1"])', () => {
+test('applySongsFilters: figurId matcht einzelne Figur', () => {
   const out = applySongsFilters(SONGS, { ...EMPTY, figurId: 'fig_3' });
   assert.deepEqual(out.map(s => s.id), ['song_2']);
 });
 
-test('applySongsFilters: figurId matcht Object-Form (s.figuren = [{fig_id, kontext_typ}])', () => {
+test('applySongsFilters: figurId matcht Figur mit Rolle', () => {
   const out = applySongsFilters(SONGS, { ...EMPTY, figurId: 'fig_2' });
   assert.deepEqual(out.map(s => s.id), ['song_1']);
 });
@@ -85,4 +85,15 @@ test('applySongsFilters: leeres Songs-Array', () => {
 test('applySongsFilters: figurId ohne Treffer → leer', () => {
   const out = applySongsFilters(SONGS, { ...EMPTY, figurId: 'fig_99' });
   assert.deepEqual(out, []);
+});
+
+test('applySongsFilters: Suche matcht Stimmung', () => {
+  const out = applySongsFilters(SONGS, { ...EMPTY, suche: 'melanchol' });
+  assert.deepEqual(out.map(s => s.id), ['song_1']);
+});
+
+test('applySongsFilters: Suche matcht Figurennamen (Katalog vor mitgeliefertem Namen)', () => {
+  assert.deepEqual(applySongsFilters(SONGS, { ...EMPTY, suche: 'clara' }).map(s => s.id), ['song_2']);
+  const figNames = { fig_3: 'Clara Kurz Clärli' };
+  assert.deepEqual(applySongsFilters(SONGS, { ...EMPTY, suche: 'clärli' }, figNames).map(s => s.id), ['song_2']);
 });

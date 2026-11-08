@@ -37,7 +37,7 @@
         <div x-data="combobox($app.t('merge.targetPlaceholder'))"
              :aria-labelledby="'merge-target-label-' + k"
              x-modelable="value" x-model="mergeSel[k].target"
-             x-effect="options = mergeLists[k].filter(e => e.id !== mergeSel[k].source).map(e => ({ value: e.id, label: e.stale ? e.name + ' · ' + $app.t('merge.staleSuffix') : e.name }))"
+             x-effect="options = mergeLists[k].filter(e => e.id !== mergeSel[k].source && !(k === 'ort' && e.stale)).map(e => ({ value: e.id, label: e.stale ? e.name + ' · ' + $app.t('merge.staleSuffix') : e.name }))"
   ></div>
       </div>
 

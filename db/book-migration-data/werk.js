@@ -32,7 +32,7 @@ const WERK_TABLES = [
   // Publikation + Ausgabe
   'book_publication', 'docx_export_profile', 'pdf_export_profile',
   // Katalog-Ergänzungen
-  'figure_aliases',
+  'figure_aliases', 'location_aliases',
   // Figuren-Werkstatt, Plot, Motive
   'draft_figures', 'plot_threads', 'plot_acts', 'plot_beats', 'plot_beat_relations',
   'plot_beat_figures', 'plot_beat_locations', 'plot_beat_draft_figures',

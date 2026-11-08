@@ -115,14 +115,77 @@ function _inputTargetsByDesc(input) {
   return out;
 }
 
+/** Namensliste fürs Log: die ersten acht, Rest als «…». */
+function sampleNames(names) {
+  return names.slice(0, 8).join(', ') + (names.length > 8 ? ' …' : '');
+}
+
+/** Erhaltungsprüfung nach einem Konsolidierungs-Call: jede Eingabefigur, die in der
+ *  Ausgabe keine Spur hat, wird aus der Eingabe übernommen.
+ *
+ *  **Why:** das Modell lässt Randfiguren mit einer einzigen Szene still weg; der Backfill
+ *  aus Szenen/Events (figuren-merge/nachlauf.js) greift erst ab zwei Vorkommen. Die Figur
+ *  fehlte dann im Katalog, und der Szenen-Remap verwarf ihre Verknüpfungen.
+ *
+ *  Spur = Name oder Kurzname einer Ausgabefigur, ein Eintrag in deren `quellnamen`
+ *  (Zusammenführung unter neuem Namen), oder die Namensbestandteile der Eingabe stecken in
+ *  einem Ausgabenamen («Herr Koch» → «Herr Koch (Primarlehrer)»). Übernommene Figuren
+ *  tragen keine id (die vergibt der Aufrufer); ihre Kanten behalten nur den Zielnamen,
+ *  weil die chunk-lokale figur_id in der ID-Welt der Ausgabe eine fremde Figur träfe.
+ *  Entfernt `quellnamen` aus der Ausgabe. Mutiert `figuren` (append), liefert die Namen
+ *  der übernommenen Figuren. Konsumenten: mergeKonsolParts (Teile), phases/figuren.js
+ *  (Einzel-Call). */
+function restoreOmittedFiguren(input, figuren) {
+  const covered = new Set();
+  const outTokens = [];
+  const addName = (nm) => {
+    const k = normName(nm);
+    if (!k) return;
+    covered.add(k);
+    const t = nameTokens(nm);
+    if (t.length) outTokens.push(t);
+  };
+  for (const f of (figuren || [])) {
+    if (!f) continue;
+    addName(f.name);
+    addName(f.kurzname);
+    for (const q of (Array.isArray(f.quellnamen) ? f.quellnamen : [])) addName(q);
+    delete f.quellnamen;
+  }
+  const isCovered = (g) => {
+    const keys = [g.name, g.kurzname].map(normName).filter(Boolean);
+    if (!keys.length || keys.some(k => covered.has(k))) return true;
+    const tk = nameTokens(g.name);
+    return tk.length > 0 && outTokens.some(ot => tk.every(t => ot.includes(t)));
+  };
+  const restored = [];
+  const seen = new Set();
+  for (const cf of (input || [])) for (const g of (cf.figuren || [])) {
+    const key = normName(g?.name);
+    if (!key || seen.has(key) || isCovered(g)) continue;
+    seen.add(key);
+    const { id: _id, ...rest } = g;
+    figuren.push({
+      ...rest,
+      beziehungen: (g.beziehungen || [])
+        .filter(bz => bz && bz.name)
+        .map(({ figur_id: _fid, ...bz }) => bz),
+    });
+    restored.push(g.name);
+  }
+  return restored;
+}
+
 function mergeKonsolParts(parts, log) {
   const out = [];
   let n = 0;
   let foreign = 0;
   let retargeted = 0;
   let carriedDup = 0;
+  const restoredNames = [];
   const inputByPart = parts.map(p => _inputNames(p.input));
   for (const [pi, { input, figuren }] of parts.entries()) {
+    restoredNames.push(...restoreOmittedFiguren(input, figuren));
     const figById = new Map();
     for (const f of (figuren || [])) if (f?.id != null && f.name) figById.set(String(f.id), f);
     // Zielname einer KI-Kante. Trägt sie den Rohnamen («Sebastian»), das Modell hat die
@@ -196,6 +259,7 @@ function mergeKonsolParts(parts, log) {
     }
     out.push(...partOut);
   }
+  if (restoredNames.length) log?.info(`Figuren-Teile: ${restoredNames.length} von der KI weggelassene Figur(en) aus der Eingabe übernommen: ${sampleNames(restoredNames)}.`);
   if (foreign) log?.info(`Figuren-Teile: ${foreign} Figur(en) verworfen, die nur als Beziehungsziel aus einem anderen Teil stammten.`);
   if (retargeted) log?.info(`Figuren-Teile: ${retargeted} Beziehungs-Ziel(e) über die Eingabe-Beschreibung korrigiert.`);
   if (carriedDup) log?.info(`Figuren-Teile: ${carriedDup} Eingabe-Kante(n) nicht übernommen, die Beschreibung steht schon auf einer KI-Kante.`);
@@ -265,5 +329,5 @@ async function runKonsolBatched(ctx, preMerged, { cap, charsPerToken, fromPct, t
 
 module.exports = {
   KONSOL_SINGLE_RESERVE, KONSOL_BATCH_RESERVE,
-  planKonsolBatches, mergeKonsolParts, runKonsolBatched,
+  planKonsolBatches, mergeKonsolParts, runKonsolBatched, restoreOmittedFiguren, sampleNames,
 };

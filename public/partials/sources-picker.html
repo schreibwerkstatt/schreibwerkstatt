@@ -6,15 +6,17 @@
     <div class="sources-picker-head">
       <svg class="icon" aria-hidden="true"><use href="/icons.svg#book-open"/></svg>
       <span class="sources-picker-title" x-text="$app.t('sources.picker.title')"></span>
-      <span class="filter-search-wrap sources-picker-search">
-        <input type="text" class="filter-search-input" x-model="srcPoolFilter"
-               :placeholder="$app.t('sources.picker.search')" :aria-label="$app.t('sources.picker.search')">
-        <button type="button" class="search-clear--icon" x-show="srcPoolFilter" @click="srcPoolFilter = ''"
-                :aria-label="$app.t('search.clear')" :data-tip="$app.t('search.clear')"><svg class="icon" aria-hidden="true"><use href="/icons.svg#x"/></svg></button>
-      </span>
-      <div x-data="combobox($app.t('sources.filter.tag'), $app.t('sources.filter.allTags'))"
-           x-modelable="value" x-model="srcPoolTag"
-           x-effect="options = srcTagOptions()"></div>
+      <div class="filter-bar filter-bar--inline">
+        <span class="filter-search-wrap sources-picker-search">
+          <input type="text" class="filter-search-input" x-model="srcPoolFilter"
+                 :placeholder="$app.t('sources.picker.search')" :aria-label="$app.t('sources.picker.search')">
+          <button type="button" class="search-clear--icon" x-show="srcPoolFilter" @click="srcPoolFilter = ''"
+                  :aria-label="$app.t('search.clear')" :data-tip="$app.t('search.clear')"><svg class="icon" aria-hidden="true"><use href="/icons.svg#x"/></svg></button>
+        </span>
+        <div x-data="combobox($app.t('sources.filter.tag'), $app.t('sources.filter.allTags'))"
+             x-modelable="value" x-model="srcPoolTag"
+             x-effect="options = srcTagOptions()"></div>
+      </div>
       <button type="button" class="icon-btn icon-btn--ghost" @click="closeSourcePicker()"
               :data-tip="$app.t('common.close')" :aria-label="$app.t('common.close')"><svg class="icon" aria-hidden="true"><use href="/icons.svg#x"/></svg></button>
     </div>

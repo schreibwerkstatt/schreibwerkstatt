@@ -1,0 +1,46 @@
+{
+  "version": "6.1.0",
+  "date": "2026-11-08",
+  "entries": [
+    {
+      "kind": "neu",
+      "de": "Figuren-, Schauplatz- und Szenen-Karte: an einem Eintrag, der nicht mehr im Text steht, gibt es jetzt «zusammenführen mit…» direkt in der Liste. Alle Verknüpfungen wandern zum gewählten aktiven Eintrag mit.",
+      "en": "Characters, Places and Scenes cards: an entry that no longer appears in the text now has \"merge into…\" right in the list. All its links move to the active entry you pick."
+    },
+    {
+      "kind": "neu",
+      "de": "Schauplätze-Karte: deine Korrekturen schützen jetzt nur die Felder, die du wirklich geändert hast. «Analyse-Werte übernehmen» hebt den Schutz wieder auf und zeigt, was die Buchanalyse erkannt hat.",
+      "en": "Places card: your corrections now protect only the fields you actually changed. \"Use analysis values\" lifts the protection again and shows what the book analysis found."
+    },
+    {
+      "kind": "neu",
+      "de": "Komplettanalyse: nach dem Katalog schlägt sie jetzt auch Schullaufbahn, Berufsweg und Hobbys deiner Figuren vor, jeweils mit Textbeleg. Übernehmen tust du jeden Vorschlag selbst.",
+      "en": "Full analysis: after the catalog it now also suggests your characters' school path, career and hobbies, each backed by a passage. You accept every suggestion yourself."
+    },
+    {
+      "kind": "neu",
+      "de": "Musik-Karte: die Figuren eines Songs stehen jetzt nach Rolle geordnet — wer ihn spielt, singt, komponiert, hört oder nur erwähnt.",
+      "en": "Music card: a song's characters are now grouped by role — who plays, sings, composes, listens to or just mentions it."
+    },
+    {
+      "kind": "neu",
+      "de": "Kontinuitäts-Karte: ein Suchfeld filtert die Befunde nach Figur, Beschreibung oder Textstelle.",
+      "en": "Continuity card: a search field filters the findings by character, description or passage."
+    },
+    {
+      "kind": "verbessert",
+      "de": "Schauplätze zusammenführen: der Name des aufgelösten Schauplatzes gilt danach als zweiter Name des Ziels. Die nächste Buchanalyse legt ihn nicht mehr als eigenen Eintrag an.",
+      "en": "Merging places: the merged place's name now counts as a second name of the target. The next book analysis no longer creates it as a separate entry."
+    },
+    {
+      "kind": "verbessert",
+      "de": "Schauplätze- und Musik-Karte: die Suche findet einen Ort auch über die Figuren, die dort auftreten, und einen Song über seine Stimmung. «Erste Erwähnung» führt als Link zum Kapitel.",
+      "en": "Places and Music cards: search now finds a place by the characters who appear there, and a song by its mood. \"First mention\" links to the chapter."
+    },
+    {
+      "kind": "behoben",
+      "de": "Komplettanalyse grosser Bücher: einzelne Schauplätze und Songs fehlten danach im Katalog, und die Nennungen einer Figur je Kapitel waren zu hoch gezählt.",
+      "en": "Full analysis of large books: some places and songs were missing from the catalog afterwards, and a character's mentions per chapter were counted too high."
+    }
+  ]
+}

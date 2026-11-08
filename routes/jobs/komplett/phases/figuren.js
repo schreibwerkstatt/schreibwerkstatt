@@ -12,7 +12,7 @@ const {
   annotateBeziehungenNames, rebindBeziehungenByName, dropCopiedRelations, preferBeziehungNames,
 } = require('../figuren-merge');
 const { komplettMaxTokens } = require('./tokens');
-const { runKonsolBatched, KONSOL_SINGLE_RESERVE } = require('./figuren-konsol');
+const { runKonsolBatched, restoreOmittedFiguren, sampleNames, KONSOL_SINGLE_RESERVE } = require('./figuren-konsol');
 const { providerClass, getContextConfigFor } = require('../../../../lib/ai');
 const { COST_LABEL, costTier } = require('../cost-labels');
 const { ankerHints, mergeHints } = require('../katalog-anker');
@@ -29,6 +29,10 @@ const { relationTypes } = require('../../../../lib/esm-bridge');
 // davon (nach Merge + Nachtrag aus Szenen/Ereignissen) wiederbringen, sonst bricht
 // der Job ab, bevor etwas geschrieben ist. Ein Buch, das wirklich so stark
 // geschrumpft ist, räumt der Autor in der Danger-Zone auf (verwaiste löschen).
+// Abbruch statt «Bestand bleibt» wie bei Orten/Songs (phases/orte.js): die Figuren-IDs
+// dieses Laufs tragen alles danach — Szenen, Beziehungen, Ereignisse, Zeitstrahl. Liefe
+// der Job mit dem alten Bestand weiter, hingen diese Schritte an Figuren, die der Lauf
+// gar nicht kennt. Orte und Songs sind Blätter: ihr Bestand kann stehen bleiben.
 const KOLLAPS_MIN_BESTAND = 5;
 const KOLLAPS_MIN_ANTEIL = 0.3;
 function assertFigurenNichtKollabiert(aktiv, neu) {
@@ -161,6 +165,17 @@ async function runPhase2(ctx, chapterFiguren, chapterAssignments, chapterSzenen)
           costTier(COST_LABEL.figuren),
         );
         if (!Array.isArray(figResult?.figuren)) throw i18nError('job.error.figurenMissing');
+        // Weggelassene Eingabefiguren zurückholen, mit frischer id hinter denen des Modells.
+        const restored = restoreOmittedFiguren(preMerged, figResult.figuren);
+        if (restored.length) {
+          let maxIdx = 0;
+          for (const f of figResult.figuren) {
+            const m = /^fig_(\d+)$/.exec(f?.id || '');
+            if (m) maxIdx = Math.max(maxIdx, parseInt(m[1], 10));
+          }
+          for (const f of figResult.figuren) if (!f.id) f.id = 'fig_' + (++maxIdx);
+          log.info(`Phase-2-Figuren-Konsolidierung: ${restored.length} von der KI weggelassene Figur(en) aus der Eingabe übernommen: ${sampleNames(restored)}.`);
+        }
         // Die ids bleiben die des Modells; nur Kanten, deren figur_id nicht zum
         // geschriebenen Zielnamen passt, werden über den Namen gebunden.
         preferBeziehungNames(figResult.figuren, log);

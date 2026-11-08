@@ -71,7 +71,7 @@ test('buildSongsConsolidationPrompt: Inputs werden eingebettet', async () => {
       songs: [
         { titel: 'Heroes', interpret: 'Bowie', genre: 'Rock',
           kontext_typ: 'hört', beschreibung: 'Im Auto', stimmung: 'melancholisch',
-          figuren_namen: ['Anna'], kapitel: [{ name: 'Kapitel 1', haeufigkeit: 2 }] },
+          figuren_namen: [{ name: 'Anna', rolle: 'singt' }], kapitel: [{ name: 'Kapitel 1', haeufigkeit: 2 }] },
       ],
     },
   ];
@@ -83,7 +83,7 @@ test('buildSongsConsolidationPrompt: Inputs werden eingebettet', async () => {
   assert.match(prompt, /Bowie/);
   assert.match(prompt, /Kapitel 1/);
   // Figuren-Referenz per Klarname (nicht fig_id): Input-Zeile + Hinweisliste kanonischer Namen.
-  assert.match(prompt, /Figuren: Anna/);
+  assert.match(prompt, /Figuren: Anna \(singt\)/);
   assert.match(prompt, /verwende in «figuren_namen» exakt diese Schreibweise/);
   assert.match(prompt, /"songs":/, 'SONGS_SCHEMA im Prompt eingebettet');
 });
@@ -93,4 +93,18 @@ test('PROMPTS_VERSION ist gebumpt nach Songs-Einführung', async () => {
   // Version 15 oder höher (Songs-Pipeline = 14 → 15 Bump).
   const v = parseInt(m.PROMPTS_VERSION, 10);
   assert.ok(v >= 15, `PROMPTS_VERSION = ${m.PROMPTS_VERSION}, erwartet ≥ 15`);
+});
+
+test('Songs-Schema: figuren_namen tragen Name + Rolle, Rollen = lib/song-fig-rollen.js', async () => {
+  const m = await freshPrompts('claude');
+  const { createRequire } = await import('node:module');
+  const { SONG_FIG_ROLLEN } = createRequire(import.meta.url)('../../lib/song-fig-rollen.js');
+  const { FIG_ROLLEN } = await import('../../public/js/book/songs.js');
+  assert.deepEqual([...FIG_ROLLEN].sort(), [...SONG_FIG_ROLLEN].sort(), 'Detailansicht kennt alle Rollen');
+  for (const s of [m.SCHEMA_SONGS_KONSOL, m.SCHEMA_KOMPLETT_EXTRAKTION]) {
+    const item = s.properties.songs.items.properties.figuren_namen.items;
+    assert.ok(item.properties.name);
+    assert.deepEqual([...item.properties.rolle.enum].sort(), [...SONG_FIG_ROLLEN].sort());
+  }
+  assert.match(m.SYSTEM_KOMPLETT_EXTRAKTION, /"rolle": "spielt\|singt\|komponiert\|hört\|erwähnt"/);
 });

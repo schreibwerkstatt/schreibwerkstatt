@@ -2,7 +2,7 @@
   "version": "0.2.0",
   "configurations": [
     {
-      "name": "Lektorat starten",
+      "name": "Schreibwerkstatt starten",
       "type": "node",
       "request": "launch",
       "program": "${workspaceFolder}/server.js",

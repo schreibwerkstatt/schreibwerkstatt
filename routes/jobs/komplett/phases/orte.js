@@ -1,111 +1,38 @@
 'use strict';
 // Phase 3: Orte + Songs konsolidieren (inkl. regelbasierter Fallback-Merges) +
-// Prelim-figurenKompakt + paralleler Orte-Call (Multi-Pass).
+// Prelim-figurenKompakt + paralleler Orte-Call (Multi-Pass). Die puren Merges liegen in
+// ./orte/orte-merge.js und ./orte/songs-merge.js und werden hier mit exportiert.
 const { saveOrteToDb, saveSongsToDb, planOrteMatch } = require('../../../../db/schema');
-const { songKey, listSongIdsForBook } = require('../../../../db/songs');
+const { listSongIdsForBook } = require('../../../../db/songs');
 const searchIndex = require('../../../../lib/search');
 const { updateJob, i18nErrText } = require('../../shared');
 const { _remapFigNames, consolidationFitsCap, skippedChapterIds } = require('../utils');
 const { komplettMaxTokens } = require('./tokens');
 const { getContextConfigFor } = require('../../../../lib/ai');
 const { COST_LABEL, costTier } = require('../cost-labels');
-const { dedupeLocationsWithinRun, scoreLocationPair, SAME } = require('../../../../lib/entity-match');
+const { dedupeLocationsWithinRun } = require('../../../../lib/entity-match');
 const { judgeEntityPairs } = require('../entity-reconcile');
 const { ankerHints, mergeHints } = require('../katalog-anker');
 const { locationHintKey } = require('../../../../lib/entity-match');
 const { countActiveLocations } = require('../../../../db/katalog-anker');
 const { loadOrteFromDb, countSongsInDb } = require('../scope');
 const { PHASE_END } = require('../../../../lib/komplett-scope');
+const { foldIncomingAliases } = require('../../../../db/location-aliases');
+const { buildFallbackOrte, restoreOmittedOrte, buildOrtNameLookup, ortAliasesFromSources } = require('./orte/orte-merge');
+const {
+  dedupeSongsWithinRun, remapSongFiguren, withFiguren: _withFiguren, buildFallbackSongs, restoreOmittedSongs,
+} = require('./orte/songs-merge');
 
 // Kollaps-Riegel wie bei den Figuren (phases/figuren.js): liefert die Konsolidierung bei
 // einem gewachsenen Bestand (fast) nichts, würde der Reconcile den ganzen Ortskatalog
 // ausmustern bzw. saveSongsToDb die Musikbibliothek samt Deep-Links löschen. Dann bleibt
-// der Bestand stehen, und der Lauf meldet die Degradierung.
+// der Bestand stehen, und der Lauf meldet die Degradierung. Anders als bei den Figuren
+// (dort Abbruch, Begründung in phases/figuren.js) hängt an Orten und Songs kein späterer
+// Schritt, der die IDs dieses Laufs bräuchte.
 const KOLLAPS_MIN_BESTAND = 5;
 const KOLLAPS_MIN_ANTEIL = 0.3;
 function _kollabiert(bestand, neu) {
   return bestand >= KOLLAPS_MIN_BESTAND && neu < Math.ceil(bestand * KOLLAPS_MIN_ANTEIL);
-}
-
-/** Vereinigt die Kapitel-Liste von `src` in `target.kapitel` (in place): Kapitel per
- *  Name (String oder { name, haeufigkeit }), je Kapitel die höhere Häufigkeit. */
-function _unionKapitel(target, src) {
-  for (const kap of (src || [])) {
-    const name = typeof kap === 'object' && kap ? kap.name : kap;
-    const hit = target.kapitel.find(x => (typeof x === 'object' && x ? x.name : x) === name);
-    if (!hit) target.kapitel.push(kap);
-    else if (typeof hit === 'object' && typeof kap === 'object' && (kap.haeufigkeit || 0) > (hit.haeufigkeit || 0)) {
-      hit.haeufigkeit = kap.haeufigkeit;
-    }
-  }
-}
-
-/** Regelbasierter Orte-Merge als Fallback, wenn die KI-Konsolidierung scheitert (z.B.
- *  aiTruncated bei kleinem lokalem Modell). Flattet chapterOrte über alle Kapitel, dedupliziert
- *  nach Name (case-insensitive, erstes Vorkommen gewinnt; figuren-Refs und Kapitel vereinigt)
- *  und löst figuren_namen gegen die kanonische Figurenliste zu fig_ids auf – analog Single-Pass.
- *  Ohne Kapitel-Union behielte ein Ort, der in mehreren Kapiteln vorkommt, nur das erste. */
-function buildFallbackOrte(chapterOrte, figNameToId, figNameToIdLower) {
-  const byName = new Map();
-  for (const ch of (chapterOrte || [])) {
-    for (const o of (ch.orte || [])) {
-      const key = (o.name || '').trim().toLowerCase();
-      if (!key) continue;
-      const figIds = _remapFigNames(o.figuren_namen, figNameToId, figNameToIdLower);
-      if (!byName.has(key)) {
-        // Kapitel-Array kopieren: der Merge unten erweitert es, chapterOrte bleibt roh.
-        byName.set(key, { ...o, figuren: [...new Set(figIds)], kapitel: (o.kapitel || []).map(k => (typeof k === 'object' && k ? { ...k } : k)) });
-      } else {
-        const ex = byName.get(key);
-        ex.figuren = [...new Set([...ex.figuren, ...figIds])];
-        _unionKapitel(ex, o.kapitel);
-        if (!ex.beschreibung && o.beschreibung) ex.beschreibung = o.beschreibung;
-      }
-    }
-  }
-  // loc_id IMMER sequenziell neu vergeben: die kapitelweise extrahierten Orte tragen
-  // pro Kapitel neu startende ids (ort_1, ort_2, …), nach dem Flatten kollidieren also
-  // verschiedene Namen auf derselben id → UNIQUE(book_id, loc_id, user_email) in
-  // saveOrteToDb. Das run-interne Text-Handle ist frei wählbar (ortNameToId wird daraus
-  // gebaut, downstream zählt die DB-id), darum hier kollisionsfrei durchnummerieren.
-  return [...byName.values()].map((o, i) => ({ ...o, id: 'ort_' + (i + 1) }));
-}
-
-/** Songs eines Laufs nach Titel+Interpret (songKey, dieselbe Identitaet wie im
- *  Schreibpfad) zusammenfuehren: Figuren vereinigt, Kapitel vereinigt (je Kapitel die
- *  hoehere Haeufigkeit), leere Textfelder aus spaeteren Vorkommen gefuellt. Vergibt die
- *  lauf-interne id `song_1…N` neu — sie ist KEINE Identitaet (die stellt saveSongsToDb
- *  ueber songKey her), nur muss sie innerhalb des Laufs eindeutig sein. */
-function dedupeSongsWithinRun(songs) {
-  const byKey = new Map();
-  for (const s of (songs || [])) {
-    const k = songKey(s);
-    if (!k) continue;
-    const ex = byKey.get(k);
-    if (!ex) {
-      byKey.set(k, { ...s, figuren: [...new Set(s.figuren || [])], kapitel: [...(s.kapitel || [])] });
-      continue;
-    }
-    ex.figuren = [...new Set([...ex.figuren, ...(s.figuren || [])])];
-    _unionKapitel(ex, s.kapitel);
-    for (const f of ['interpret', 'genre', 'kontext_typ', 'beschreibung', 'stimmung', 'erste_erwaehnung']) {
-      if (!ex[f] && s[f]) ex[f] = s[f];
-    }
-  }
-  return [...byKey.values()].map((s, i) => ({ ...s, id: 'song_' + (i + 1) }));
-}
-
-/** Regelbasierter Songs-Merge als Fallback, wenn die KI-Konsolidierung scheitert (analog
- *  buildFallbackOrte): flattet chapterSongs über alle Kapitel, löst figuren_namen gegen die
- *  kanonische Figurenliste zu fig_ids auf und führt nach Titel+Interpret zusammen. */
-function buildFallbackSongs(chapterSongs, figNameToId, figNameToIdLower) {
-  const flat = [];
-  for (const ch of (chapterSongs || [])) {
-    for (const s of (ch.songs || [])) {
-      flat.push({ ...s, figuren: _remapFigNames(s.figuren_namen, figNameToId, figNameToIdLower) });
-    }
-  }
-  return dedupeSongsWithinRun(flat);
 }
 
 /** Phase 3: Orte konsolidieren + Name→ID Lookup.
@@ -163,6 +90,8 @@ async function runPhase3(ctx, chapterOrte, figurenKompakt, isSinglePass, figName
   } else {
     updateJob(jobId, { progress: PHASE_END.figurenConsolidate, statusText: 'job.phase.consolidatingOrte' });
     let orteResultRaw = prefetched;
+    // Quellnamen der KI-Konsolidierung (Kapitelname → Ausgabe-Ort), für die Aliasse unten.
+    let quellOf = new Map();
     // Prompt erst hier bauen: im Parallel-Pfad (prefetchAttempted) ist der Call längst
     // gelaufen, und der Prompt trägt den ganzen Ortskatalog — ihn dort zu bauen wäre
     // ein grosser String für nichts.
@@ -208,18 +137,31 @@ async function runPhase3(ctx, chapterOrte, figurenKompakt, isSinglePass, figName
       orte = buildFallbackOrte(chapterOrte, figNameToId, figNameToIdLower);
       updateJob(jobId, { progress: PHASE_END.orteConsolidate });
     } else {
-      // Beide KI-Pfade (parallel vorab geholt / seriell) gleich behandeln:
-      // * id IMMER neu vergeben — eine doppelte ort_N der KI liefe in
-      //   UNIQUE(book_id, loc_id, user_email) und bräche die Transaktion (wie Songs).
-      // * figuren_namen → fig_ids auflösen, sonst gingen alle Ort↔Figur-Links verloren.
-      orte = orteResultRaw.orte.map((o, i) => ({
-        ...o,
-        id: 'ort_' + (i + 1),
-        figuren: _remapFigNames(o.figuren_namen, figNameToId, figNameToIdLower),
-      }));
+      // Was das Modell weggelassen hat, kommt aus den Kapitel-Orten zurück — sonst
+      // markierte der Abgleich den Bestandsort als «nicht mehr im Text».
+      const res = restoreOmittedOrte(orteResultRaw.orte, chapterOrte, figNameToId, figNameToIdLower);
+      quellOf = res.quellOf;
+      if (res.restored.length) {
+        log.info(`Orte-Konsolidierung: ${res.restored.length} von der KI weggelassene Ort(e) aus den Kapiteln übernommen: `
+          + `${res.restored.slice(0, 5).map(o => `«${o.name}»`).join(', ')}${res.restored.length > 5 ? ', …' : ''}.`);
+      }
+      orte = [...orteResultRaw.orte, ...res.restored];
       updateJob(jobId, { progress: PHASE_END.orteConsolidate });
     }
-    aliasesByIdx = ortAliasesFromSources(orte, chapterOrte);
+    // Beide Multi-Pass-Wege (KI-Konsolidierung, regelbasierter Fallback) wie der
+    // Single-Pass durch den Varianten-Dedup: die KI liefert denselben Ort gelegentlich
+    // doppelt, der Fallback führt nur exakt gleiche Namen zusammen — ohne Dedup ordnet
+    // der Abgleich nur einen davon dem Bestand zu, der andere wird eine neue Zeile.
+    // Danach id IMMER neu vergeben (eine doppelte ort_N liefe in UNIQUE(book_id, loc_id,
+    // user_email)) und figuren_namen → fig_ids auflösen.
+    const { orte: deduped, aliases: dedupAliases } = dedupeLocationsWithinRun(orte);
+    orte = deduped.map((o, i) => ({
+      ...o,
+      id: 'ort_' + (i + 1),
+      figuren: _remapFigNames(o.figuren_namen, figNameToId, figNameToIdLower),
+    }));
+    const srcAliases = ortAliasesFromSources(orte, chapterOrte, quellOf, dedupAliases);
+    aliasesByIdx = orte.map((_, i) => [...new Set([...(dedupAliases?.[i] || []), ...(srcAliases[i] || [])])]);
   }
   // Name-Match + stale: locations.id bleibt ueber Re-Analysen stabil (FK-Refs wie
   // research_item_links.location_id ueberleben); verschwundene Orte werden als stale
@@ -227,6 +169,20 @@ async function runPhase3(ctx, chapterOrte, figurenKompakt, isSinglePass, figName
   // Graubereich des Cross-Run-Matchings vom Judge beurteilen lassen, BEVOR gespeichert
   // wird (Begründung siehe entity-reconcile.js): «Kreuz (Olten)» vs. «Kreuz (Bern)»
   // trennt die Regel selbst, «Schulhaus Frohheim» vs. «Frohheim-Schule Olten» nicht.
+  // Aliasse aus manuellen Merges: liefert der Lauf Name und Alias desselben Orts,
+  // werden sie hier ein Eintrag; der Alias-Name bleibt für die Szenen auflösbar.
+  {
+    const folded = foldIncomingAliases(bookIdInt, email, orte);
+    if (folded.orte !== orte) {
+      const keptAliases = [];
+      let k = 0;
+      for (let i = 0; i < orte.length && k < folded.orte.length; i++) {
+        if (orte[i].id === folded.orte[k].id) { keptAliases.push(aliasesByIdx[i] || []); k++; }
+      }
+      orte = folded.orte;
+      aliasesByIdx = orte.map((_, i) => [...(keptAliases[i] || []), ...folded.foldedNames[i]]);
+    }
+  }
   const bestand = countActiveLocations(bookIdInt, email);
   if (_kollabiert(bestand, orte.length)) {
     log.error(`Orte-Konsolidierung kollabiert: ${orte.length} Orte gegen ${bestand} aktive im Katalog – Bestand bleibt.`);
@@ -261,54 +217,6 @@ async function runPhase3(ctx, chapterOrte, figurenKompakt, isSinglePass, figName
   return { orte, ortNameToId, ortNameToIdLower };
 }
 
-/** Name → loc_id-Lookup für remapSzenen. Erst die Namen der Orte selbst, danach die
- *  aufgegangenen Varianten (`aliasesByIdx[i]` = Namen, die in orte[i] verschmolzen sind)
- *  — ein Alias überschreibt nie einen echten Ortsnamen. */
-function buildOrtNameLookup(orte, aliasesByIdx = []) {
-  const ortNameToId = {}, ortNameToIdLower = {};
-  for (const o of orte) {
-    if (!o?.name) continue;
-    ortNameToId[o.name] = o.id;
-    ortNameToIdLower[o.name.toLowerCase()] = o.id;
-  }
-  orte.forEach((o, i) => {
-    for (const alias of (aliasesByIdx[i] || [])) {
-      if (!alias) continue;
-      if (!(alias in ortNameToId)) ortNameToId[alias] = o.id;
-      const lk = alias.toLowerCase();
-      if (!(lk in ortNameToIdLower)) ortNameToIdLower[lk] = o.id;
-    }
-  });
-  return { ortNameToId, ortNameToIdLower };
-}
-
-/** Multi-Pass: welche Kapitel-Ortsnamen hat die Konsolidierung in einen anders benannten
- *  Ort aufgehen lassen? Die KI-Antwort nennt ihre Quellnamen nicht; darum deterministisch
- *  über dieselbe Verdikt-Schicht wie der Within-Run-Dedup: ein Kapitel-Name ohne exakten
- *  Treffer wird Alias genau des EINEN konsolidierten Orts mit Verdikt SAME. Mehrdeutig
- *  oder ohne Treffer → kein Alias (die Szene verliert dann wie bisher den Link, statt
- *  falsch verknüpft zu werden). Reine Synonyme («die Burg» → «Festung Hohenstein»)
- *  erkennt das nicht. */
-function ortAliasesFromSources(orte, chapterOrte) {
-  const aliases = orte.map(() => []);
-  const known = new Set(orte.map(o => String(o?.name || '').trim().toLowerCase()).filter(Boolean));
-  const seen = new Set();
-  for (const ch of (chapterOrte || [])) {
-    for (const src of (ch.orte || [])) {
-      const name = String(src?.name || '').trim();
-      const lk = name.toLowerCase();
-      if (!name || known.has(lk) || seen.has(lk)) continue;
-      seen.add(lk);
-      const hits = [];
-      orte.forEach((o, i) => {
-        if (scoreLocationPair({ name, typ: src.typ }, { name: o.name, typ: o.typ }).verdict === SAME) hits.push(i);
-      });
-      if (hits.length === 1) aliases[hits[0]].push(name);
-    }
-  }
-  return aliases;
-}
-
 /** Phase 3 Songs: Musikbibliothek konsolidieren analog zu Orten.
  *  Single-Pass: Songs aus Pass B übernehmen (figuren_namen → fig_id via figNameToId aufgelöst).
  *  Multi-Pass: KI-Call konsolidiert dedupliziert (Titel+Interpret) über alle Kapitel. */
@@ -319,10 +227,7 @@ async function runPhase3Songs(ctx, chapterSongs, figurenKompakt, isSinglePass, f
   if (isSinglePass) {
     updateJob(jobId, { progress: PHASE_END.songsConsolidate, statusText: 'job.phase.consolidatingSongs' });
     const raw = chapterSongs[0]?.songs || [];
-    songs = dedupeSongsWithinRun(raw.map(s => ({
-      ...s,
-      figuren: _remapFigNames(s.figuren_namen, figNameToId, figNameToIdLower),
-    })));
+    songs = dedupeSongsWithinRun(_withFiguren(raw, figNameToId, figNameToIdLower));
     log.info(`Phase 3 Songs übersprungen (Single-Pass, ${songs.length} Songs aus P1 übernommen).`);
   } else {
     updateJob(jobId, { statusText: 'job.phase.consolidatingSongs' });
@@ -334,27 +239,45 @@ async function runPhase3Songs(ctx, chapterSongs, figurenKompakt, isSinglePass, f
     } else {
       // Songs-Range 55→56 (klein, ~3K Out): lässt 56→58 frei für P3b.
       let songsResultRaw = null;
-      try {
-        songsResultRaw = await call(jobId, tok,
-          prompts.buildSongsConsolidationPrompt(bookName, chapterSongs, figurenKompakt),
-          sys.SYSTEM_ORTE_BLOCKS, 55, 56, undefined, 0.2, komplettMaxTokens(effectiveProvider), prompts.SCHEMA_SONGS_KONSOL,
-          costTier(COST_LABEL.orte),
-        );
-      } catch (e) {
-        if (e.name === 'AbortError') throw e;
-        // Wie Orte/Figuren/Zeitstrahl: nicht katalog-kritisch – die Songs sind kapitelweise
-        // bereits extrahiert. Ein Konsolidierungs-Fehler (typisch: aiTruncated) darf den Job
-        // inkl. bereits gespeicherter Figuren/Orte NICHT verwerfen.
-        log.warn(`Songs-Konsolidierung fehlgeschlagen (${i18nErrText(e)}) – Fallback auf kapitel-extrahierte Songs.`);
+      const promptText = prompts.buildSongsConsolidationPrompt(bookName, chapterSongs, figurenKompakt);
+      const cap = komplettMaxTokens(effectiveProvider);
+      const fit = consolidationFitsCap({
+        promptText, dataText: JSON.stringify(chapterSongs.flatMap(c => c.songs || [])),
+        charsPerToken: getContextConfigFor(effectiveProvider).charsPerToken, cap,
+      });
+      if (!fit.fits) {
+        // Preflight wie bei den Orten: passt die Antwort nicht unter den Cap, ist die
+        // Truncation sicher und ihr Ausgang derselbe regelbasierte Merge — ohne Umweg dorthin.
+        log.warn(`Songs-Konsolidierung übersprungen – erwarteter Output ~${fit.estOut} Tokens über dem `
+          + `Cap ${fit.cap} (Truncation wäre sicher). Fallback auf kapitel-extrahierte Songs. `
+          + 'Abhilfe: ai.komplett.extract_max_tokens erhöhen.');
         ctx.warnings?.push({ key: 'job.warn.songsKonsolidierungDegraded' });
+      } else {
+        try {
+          songsResultRaw = await call(jobId, tok,
+            promptText,
+            sys.SYSTEM_ORTE_BLOCKS, 55, 56, undefined, 0.2, cap, prompts.SCHEMA_SONGS_KONSOL,
+            costTier(COST_LABEL.orte),
+          );
+        } catch (e) {
+          if (e.name === 'AbortError') throw e;
+          // Wie Orte/Figuren/Zeitstrahl: nicht katalog-kritisch – die Songs sind kapitelweise
+          // bereits extrahiert. Ein Konsolidierungs-Fehler (typisch: aiTruncated) darf den Job
+          // inkl. bereits gespeicherter Figuren/Orte NICHT verwerfen.
+          log.warn(`Songs-Konsolidierung fehlgeschlagen (${i18nErrText(e)}) – Fallback auf kapitel-extrahierte Songs.`);
+          ctx.warnings?.push({ key: 'job.warn.songsKonsolidierungDegraded' });
+        }
       }
       if (Array.isArray(songsResultRaw?.songs)) {
         // Die id der KI wird verworfen: doppelt oder fehlend liefe sie in
         // UNIQUE(book_id, song_uid, user_email) und braeche die Transaktion.
-        songs = dedupeSongsWithinRun(songsResultRaw.songs.map(s => ({
-          ...s,
-          figuren: _remapFigNames(s.figuren_namen, figNameToId, figNameToIdLower),
-        })));
+        // Weggelassene Kapitel-Songs zurückholen, bevor saveSongsToDb sie samt Deep-Links löscht.
+        const restored = restoreOmittedSongs(songsResultRaw.songs, chapterSongs, figNameToId, figNameToIdLower);
+        if (restored.length) {
+          log.info(`Songs-Konsolidierung: ${restored.length} von der KI weggelassene Song(s) aus den Kapiteln übernommen: `
+            + `${restored.slice(0, 5).map(x => `«${x.titel}»`).join(', ')}${restored.length > 5 ? ', …' : ''}.`);
+        }
+        songs = dedupeSongsWithinRun([..._withFiguren(songsResultRaw.songs, figNameToId, figNameToIdLower), ...restored]);
       } else {
         if (songsResultRaw !== null) {
           log.warn('Songs-Konsolidierung lieferte kein songs-Array – Fallback auf kapitel-extrahierte Songs.');
@@ -435,13 +358,14 @@ async function runPhase3OrteCall(ctx, chapterOrte, figurenKompaktForPrompt) {
     // Läuft parallel zu Phase 2 (Figuren) in Promise.all – ein Reject würde auch das
     // P2-Ergebnis verwerfen. null zurückgeben; runPhase3 fällt dann auf den regelbasierten
     // Orte-Merge zurück (kapitel-extrahierte Orte), statt den Job zu killen.
-        log.warn(`Orte-Konsolidierung (parallel) fehlgeschlagen (${i18nErrText(e)}) – Fallback auf kapitel-extrahierte Orte.`);
+    log.warn(`Orte-Konsolidierung (parallel) fehlgeschlagen (${i18nErrText(e)}) – Fallback auf kapitel-extrahierte Orte.`);
     ctx.warnings?.push({ key: 'job.warn.orteKonsolidierungDegraded' });
     return null;
   }
 }
 
 module.exports = {
-  runPhase3, runPhase3Songs, buildPrelimFigurenKompakt, runPhase3OrteCall, dedupeSongsWithinRun, buildFallbackSongs,
+  runPhase3, runPhase3Songs, buildPrelimFigurenKompakt, runPhase3OrteCall, dedupeSongsWithinRun, buildFallbackSongs, remapSongFiguren,
+  restoreOmittedOrte, restoreOmittedSongs,
   buildFallbackOrte, buildOrtNameLookup, ortAliasesFromSources,
 };

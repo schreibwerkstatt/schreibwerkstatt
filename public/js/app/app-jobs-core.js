@@ -49,6 +49,8 @@ const JOB_NAV_CARD = {
   'book-map':          'buchlandkarte',
   'book-map-label':    'buchlandkarte',
   'figur-alter':       'figures',
+  'schulweg-vorschlag': 'figures',
+  'stationen-vorschlag': 'figures',
   'figur-anchor':      'figurWerkstatt',
   'headline-variants': 'titelwerkstatt',
   'interview-transcribe': 'recherche',

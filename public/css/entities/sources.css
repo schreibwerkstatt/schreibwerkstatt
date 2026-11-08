@@ -230,6 +230,7 @@
   font-size: var(--font-size-sm);
 }
 .sources-picker-search { flex: 1; min-width: 8rem; }
+.sources-picker .sources-picker-search .filter-search-input { width: 100%; }
 
 .sources-picker-list {
   list-style: none;

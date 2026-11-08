@@ -1,7 +1,7 @@
 // splitGroupsIntoChunks / halveChunkPages (routes/jobs/shared/chunking.js):
 // ein Abschnitt über dem Chunk-Limit wird in Teile mit gleicher Identität zerlegt;
-// Bücher ohne übergrossen Abschnitt chunken byte-identisch zum reinen Seiten-Split
-// (Delta-Cache-Keys + geteilter Prompt-Cache-Präfix der Komplettanalyse).
+// Kapitel unter dem Limit bleiben unverändert (Delta-Cache-Keys + geteilter
+// Prompt-Cache-Präfix der Komplettanalyse), Kapitel darüber werden gleichmässig geteilt.
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
@@ -11,31 +11,6 @@ const require = createRequire(import.meta.url);
 const {
   splitGroupsIntoChunks, splitPageIntoParts, halveChunkPages, pageSigSuffix,
 } = require('../../routes/jobs/shared/chunking.js');
-
-// Referenz: der reine Seiten-Split ohne Teil-Zerlegung.
-function legacySplit(groups, groupOrder, perChunkLimit) {
-  const chunkOrder = [], chunks = new Map();
-  for (const key of groupOrder) {
-    const group = groups.get(key);
-    const totalChars = group.pages.reduce((s, p) => s + p.text.length, 0);
-    if (totalChars <= perChunkLimit) { chunkOrder.push(key); chunks.set(key, group); continue; }
-    let currentPages = [], currentChars = 0, subIdx = 0;
-    for (const page of group.pages) {
-      if (currentChars + page.text.length > perChunkLimit && currentPages.length > 0) {
-        chunkOrder.push(`${key}__sub${subIdx}`);
-        chunks.set(`${key}__sub${subIdx}`, { name: group.name, pages: currentPages });
-        currentPages = []; currentChars = 0; subIdx++;
-      }
-      currentPages.push(page);
-      currentChars += page.text.length;
-    }
-    if (currentPages.length > 0) {
-      chunkOrder.push(`${key}__sub${subIdx}`);
-      chunks.set(`${key}__sub${subIdx}`, { name: group.name, pages: currentPages });
-    }
-  }
-  return { chunkOrder, chunks };
-}
 
 const render = (chunk) => chunk.pages.map(p => `### ${p.title}\n${p.text}`).join('\n\n---\n\n');
 const sig = (chunk) => chunk.pages.map(p => `${p.id}:${p.updated_at}${pageSigSuffix(p)}`).sort().join('|');
@@ -63,23 +38,45 @@ function makeBook(pageSizes) {
   return { groups, groupOrder };
 }
 
-test('kein übergrosser Abschnitt → byte-identisch zum Seiten-Split', () => {
+test('Kapitel unter dem Limit bleibt ein Chunk mit Original-Key und denselben Seiten-Objekten', () => {
+  const { groups, groupOrder } = makeBook([[10, 20, 30], [40]]);
+  const { chunkOrder, chunks } = splitGroupsIntoChunks(groups, groupOrder, 100000);
+  assert.deepStrictEqual(chunkOrder, groupOrder);
+  for (const k of groupOrder) assert.strictEqual(chunks.get(k), groups.get(k));
+});
+
+test('Kapitel über dem Limit wird gleichmässig geteilt, Seiten unverändert und lückenlos', () => {
   // Satz ≈ 70 Zeichen; Limit 3000 → Seiten bis ~40 Sätze passen einzeln.
   const { groups, groupOrder } = makeBook([[10, 20, 30], [40], [5, 5, 5, 5, 5, 5, 5, 5, 5, 5], [38, 39, 2]]);
-  for (const limit of [3000, 5000, 100000]) {
+  for (const limit of [3000, 5000]) {
     for (const g of groups.values()) for (const p of g.pages) assert.ok(p.text.length <= limit);
-    const a = splitGroupsIntoChunks(groups, groupOrder, limit);
-    const b = legacySplit(groups, groupOrder, limit);
-    assert.deepStrictEqual(a.chunkOrder, b.chunkOrder);
-    for (const k of a.chunkOrder) {
-      const ca = a.chunks.get(k), cb = b.chunks.get(k);
-      assert.equal(ca.name, cb.name);
-      assert.equal(ca.pages.length, cb.pages.length);
-      ca.pages.forEach((p, i) => assert.strictEqual(p, cb.pages[i], 'gleiche Seiten-Objekte'));
-      assert.equal(render(ca), render(cb));
-      assert.equal(sig(ca), sig(cb));
+    const { chunkOrder, chunks } = splitGroupsIntoChunks(groups, groupOrder, limit);
+    for (const key of groupOrder) {
+      const g = groups.get(key);
+      const total = g.pages.reduce((s, p) => s + p.text.length, 0);
+      const mine = chunkOrder.filter(k => k === key || k.startsWith(`${key}__sub`));
+      if (total <= limit) { assert.deepEqual(mine, [key]); continue; }
+      assert.deepEqual(mine, mine.map((_, i) => `${key}__sub${i}`));
+      const flat = mine.flatMap(k => chunks.get(k).pages);
+      flat.forEach((p, i) => assert.strictEqual(p, g.pages[i], 'gleiche Seiten-Objekte, gleiche Reihenfolge'));
+      assert.equal(flat.length, g.pages.length);
+      for (const k of mine) {
+        assert.equal(chunks.get(k).name, g.name);
+        assert.ok(chunks.get(k).pages.reduce((s, p) => s + p.text.length, 0) <= limit, `${k} ≤ Limit`);
+      }
+      assert.equal(mine.length, Math.ceil(total / limit), `${key}: so wenige Chunks wie nötig`);
     }
   }
+});
+
+test('Kapitel knapp über dem Limit: zwei etwa gleich grosse Chunks statt Fülle + Zwerg', () => {
+  // Prod-Fall «Der Amoklauf» (2026-11-07): 18 Abschnitte knapp über dem Limit wurden
+  // gefüllt in 16 + 2 geteilt.
+  const { groups, groupOrder } = makeBook([Array(18).fill(10)]);
+  const total = groups.get('100').pages.reduce((s, p) => s + p.text.length, 0);
+  const limit = Math.ceil(total / 1.05);
+  const { chunkOrder, chunks } = splitGroupsIntoChunks(groups, groupOrder, limit);
+  assert.deepEqual(chunkOrder.map(k => chunks.get(k).pages.length), [9, 9]);
 });
 
 test('übergrosser Abschnitt wird in Teile ≤ Limit an Satzgrenzen zerlegt', () => {

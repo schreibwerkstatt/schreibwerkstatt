@@ -1,8 +1,10 @@
 'use strict';
 // Manuelle Pflege des Schauplatz-Katalogs (docs/schauplaetze.md): anlegen, Stammdaten
-// korrigieren, Elternort setzen, löschen. Gegenstück zum Analyse-Schreibpfad
-// db/locations-write.js#saveOrteToDb, der die hier gesetzten Flags respektiert:
-//   manually_edited  → die Analyse überschreibt Name/Typ/Beschreibung/Stimmung/Land nicht
+// korrigieren, Elternort setzen, Analyse-Werte wiederherstellen, löschen. Gegenstück
+// zum Analyse-Schreibpfad db/locations-write.js#saveOrteToDb, der die hier gesetzten
+// Flags respektiert:
+//   manual_fields    → die Analyse überschreibt genau diese Stammdatenfelder nicht
+//                      (manually_edited = «mindestens eins», db/location-fields.js)
 //   manually_created → die Analyse markiert den Ort nie «nicht mehr im Text»
 // `parent_id` fasst die Analyse gar nicht an — die Hierarchie pflegt nur der Autor.
 //
@@ -13,6 +15,7 @@
 const { db } = require('./connection');
 require('./migrations');
 const { NOW_ISO_SQL } = require('./now');
+const { LOC_MANUAL_FIELDS, KI_COL, manualFieldSet, serializeManualFields } = require('./location-fields');
 
 const LIMITS = { name: 200, typ: 40, stimmung: 200, beschreibung: 4000 };
 
@@ -23,7 +26,9 @@ class LocationEditError extends Error {
 function _row(bookId, userEmail, locId) {
   if (locId == null || locId === '') return null;
   return db.prepare(
-    'SELECT id, loc_id, name, parent_id, stale, manually_created FROM locations WHERE book_id = ? AND user_email IS ? AND loc_id = ?'
+    `SELECT id, loc_id, name, typ, beschreibung, stimmung, land, parent_id, stale, manually_created,
+            manually_edited, manual_fields, ki_name, ki_typ, ki_beschreibung, ki_stimmung, ki_land
+       FROM locations WHERE book_id = ? AND user_email IS ? AND loc_id = ?`
   ).get(bookId, userEmail || null, String(locId)) || null;
 }
 
@@ -82,34 +87,79 @@ function createLocation(bookId, userEmail, input) {
     // PK kennen wir erst nach dem Insert, darum erst ein eindeutiger Platzhalter.
     const { lastInsertRowid: id } = db.prepare(`
       INSERT INTO locations (book_id, loc_id, name, typ, beschreibung, stimmung, land, parent_id, sort_order,
-        user_email, manually_created, manually_edited, stale, updated_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, 1, 0, ${NOW_ISO_SQL})
+        user_email, manually_created, manually_edited, manual_fields, stale, updated_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, 1, ?, 0, ${NOW_ISO_SQL})
     `).run(bookId, 'new_' + Date.now() + '_' + Math.random().toString(36).slice(2, 8), f.name,
-      f.typ ?? null, f.beschreibung ?? null, f.stimmung ?? null, f.land ?? null, parentId, sort, userEmail || null);
+      f.typ ?? null, f.beschreibung ?? null, f.stimmung ?? null, f.land ?? null, parentId, sort, userEmail || null,
+      serializeManualFields(new Set(LOC_MANUAL_FIELDS)));
     const locId = 'man_' + id;
     db.prepare('UPDATE locations SET loc_id = ? WHERE id = ?').run(locId, id);
     return { id: Number(id), locId };
   })();
 }
 
+// Stammdaten korrigieren. Nur tatsächlich geänderte Felder landen im UPDATE und in
+// `manual_fields` — ein Request, der nur den Elternort setzt oder unveränderte Werte
+// mitschickt, schützt nichts vor der Analyse. Wird ein Feld zum ersten Mal geschützt
+// und fehlt sein Analysewert noch (Altbestand), sichert der aktuelle Wert ihn — das
+// ist bis dahin der Analysewert (Muster db/figures/patch.js).
 function updateLocation(bookId, userEmail, locId, input) {
   const row = _row(bookId, userEmail, locId);
   if (!row) throw new LocationEditError('NOT_FOUND', 404);
   const f = _fields(input || {});
-  const sets = [];
-  const vals = [];
-  for (const [k, v] of Object.entries(f)) { sets.push(`${k} = ?`); vals.push(v); }
-  if (input && 'parent' in input) {
-    sets.push('parent_id = ?');
-    vals.push(_resolveParent(bookId, userEmail, input.parent, row.id));
+  const manual = manualFieldSet(row);
+  const cols = {};
+  for (const [k, v] of Object.entries(f)) {
+    if ((row[k] ?? null) === v) continue;
+    cols[k] = v;
+    if (!manual.has(k)) {
+      if (!row.manually_created && row[KI_COL[k]] == null) cols[KI_COL[k]] = row[k];
+      manual.add(k);
+    }
   }
-  if (!sets.length) return { id: row.id, locId: row.loc_id, changed: false };
+  if (input && 'parent' in input) {
+    const parentId = _resolveParent(bookId, userEmail, input.parent, row.id);
+    if (parentId !== row.parent_id) cols.parent_id = parentId;
+  }
+  if (!Object.keys(cols).length) return { id: row.id, locId: row.loc_id, changed: false };
+  const sets = Object.keys(cols).map(k => `${k} = ?`);
+  const vals = Object.values(cols);
   // Neuer Name = neues Toponym: der Geocode-Resolve-Cache gilt nicht mehr (die
   // Koordinaten bleiben — der Autor hat den Pin bewusst gesetzt).
-  if ('name' in f && f.name !== row.name) sets.push('geo_query = NULL', 'geo_land = NULL');
-  db.prepare(`UPDATE locations SET ${sets.join(', ')}, manually_edited = 1, updated_at = ${NOW_ISO_SQL} WHERE id = ?`)
-    .run(...vals, row.id);
+  if ('name' in cols) sets.push('geo_query = NULL', 'geo_land = NULL');
+  const mf = serializeManualFields(manual);
+  sets.push('manual_fields = ?', 'manually_edited = ?');
+  vals.push(mf, mf ? 1 : 0);
+  db.prepare(`UPDATE locations SET ${sets.join(', ')}, updated_at = ${NOW_ISO_SQL} WHERE id = ?`).run(...vals, row.id);
   return { id: row.id, locId: row.loc_id, changed: true };
+}
+
+// «Analyse-Werte übernehmen»: hebt den Schutz der Felder auf (alle oder `fields`) und
+// setzt sie sofort auf den letzten Analysewert, wo einer bekannt ist. Ohne bekannten
+// Wert bleibt der aktuelle stehen, bis der nächste Lauf ihn liefert. Ein nie von der
+// Analyse gefundener Ort (selbst angelegt, ohne ki_name) hat nichts zum Übernehmen.
+function restoreLocationAnalysis(bookId, userEmail, locId, fields = null) {
+  const row = _row(bookId, userEmail, locId);
+  if (!row) throw new LocationEditError('NOT_FOUND', 404);
+  if (row.manually_created && row.ki_name == null) throw new LocationEditError('NO_ANALYSIS', 409);
+  const manual = manualFieldSet(row);
+  const wanted = Array.isArray(fields) ? fields.filter(x => manual.has(x)) : [...manual];
+  const cols = {};
+  const restored = [];
+  for (const k of wanted) {
+    manual.delete(k);
+    const ki = row[KI_COL[k]];
+    if (ki != null && ki !== row[k]) { cols[k] = ki; restored.push(k); }
+  }
+  if (!wanted.length) return { id: row.id, changed: false, restored, unprotected: [] };
+  const sets = Object.keys(cols).map(k => `${k} = ?`);
+  const vals = Object.values(cols);
+  if ('name' in cols) sets.push('geo_query = NULL', 'geo_land = NULL');
+  const mf = serializeManualFields(manual);
+  sets.push('manual_fields = ?', 'manually_edited = ?');
+  vals.push(mf, mf ? 1 : 0);
+  db.prepare(`UPDATE locations SET ${sets.join(', ')}, updated_at = ${NOW_ISO_SQL} WHERE id = ?`).run(...vals, row.id);
+  return { id: row.id, changed: true, restored, unprotected: wanted };
 }
 
 // Löschen ist nur für verwaiste («nicht mehr im Text») und vom Autor angelegte Orte
@@ -134,12 +184,13 @@ function deleteStaleLocations(bookId, userEmail) {
   return ids;
 }
 
-// loc_id → INTEGER-PK im Buch-/Konto-Scope (Merge-Route).
-function locationPk(bookId, userEmail, locId) {
-  return _row(bookId, userEmail, locId)?.id ?? null;
+// loc_id → { id, stale } im Buch-/Konto-Scope (Merge-Route); null = nicht gefunden.
+function locationRef(bookId, userEmail, locId) {
+  const r = _row(bookId, userEmail, locId);
+  return r ? { id: r.id, stale: !!r.stale } : null;
 }
 
 module.exports = {
-  createLocation, updateLocation, deleteLocation, deleteStaleLocations, locationPk,
+  createLocation, updateLocation, restoreLocationAnalysis, deleteLocation, deleteStaleLocations, locationRef,
   LocationEditError,
 };

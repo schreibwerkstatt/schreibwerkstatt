@@ -117,6 +117,20 @@ function listSongChaptersWithNames(songIds) {
   `).all(...values);
 }
 
+/** Löst eine «erste Erwähnung» (laut Extraktions-Schema Kapitel- ODER Abschnittsname)
+ *  gegen die heutigen Kapitelnamen des Buchs auf: liefert eine Funktion name → chapter_id
+ *  oder null. Nur eindeutige Namen (chapterNameMap); die Kapitel werden erst beim ersten
+ *  Aufruf gelesen. Geteilt von Songs und Orten, deren Lesepfad ohne Abschnitts-Treffer
+ *  einen Kapitel-Verweis statt Rohtext liefert. */
+function firstMentionChapterResolver(bookId) {
+  let map = null;
+  return (name) => {
+    if (!name) return null;
+    map ??= chapterIdsByName(bookId);
+    return Object.hasOwn(map, name) ? map[name] : null;
+  };
+}
+
 /** Welt-Fakten der Kategorien `kategorien` mit Kapitelname, eine Zeile je
  *  Fakt-Kapitel-Bezug (Fakten ohne Kapitel mit chapter_name NULL). Dünne Hülle um
  *  den SSoT-Lesepfad db/world-facts.js#listWorldFacts — nur für Konsumenten, die
@@ -182,6 +196,7 @@ module.exports = {
   listFigureEventsWithNames,
   listScenesWithChapterNames,
   listSongChaptersWithNames,
+  firstMentionChapterResolver,
   listWorldFactsWithChapterNames,
   listFigureDeathsWithChapterNames,
   listFigureScenesWithChapterNames,

@@ -1,6 +1,7 @@
 'use strict';
-// Prüfung nach dem Katalog: Kontinuität, Erzählprofil und Alters-Analyse laufen als EIGENE
-// Jobs, die die Komplettanalyse nach dem Katalog einreiht — nicht als Phasen in ihr.
+// Prüfung nach dem Katalog: Kontinuität, Erzählprofil, Alters-Analyse sowie Schul- und
+// Berufsweg-Vorschlag laufen als EIGENE Jobs, die die Komplettanalyse nach dem Katalog
+// einreiht — nicht als Phasen in ihr.
 //
 // Why: als Phasen hingen sie am Konsolidierungs-Checkpoint der Katalog-Pipeline. Jede
 // Lücke in dessen Signatur (eine Bucheinstellung, die nur die Prüfung liest) schaltete
@@ -12,6 +13,7 @@ const { createJob, enqueueJob, findActiveJobId, jobs } = require('../shared');
 const { bus } = require('../shared/events');
 const { providerClass } = require('../../../lib/ai');
 const appSettings = require('../../../lib/app-settings');
+const { getBookSchulsystem } = require('../../../db/book-settings');
 
 /** Ruft `fn` einmal auf, sobald der Job `jobId` terminal ist (done/error/cancelled —
  *  auch abgebrochen, solange er noch wartete). */
@@ -35,19 +37,37 @@ function _afterJobEnds(jobId, fn) {
  *  startet sie nicht mehr. */
 function enqueuePruefJobs({ bookId, bookName, userEmail, scope, provider }) {
   const out = {};
-  // Alters-Analyse: liest den frisch geschriebenen Figurenstamm samt Zeitstrahl, schickt
-  // nur Kandidatensätze (nicht das ganze Buch) und läuft mit jeder Provider-Klasse —
-  // darum ausserhalb des Cloud-Gates und ohne Warten auf das Erzählprofil. Ohne `force`:
-  // ihr Delta-Skip greift, wenn Text und Figuren seit dem letzten Lauf gleich sind.
+  // Alters-Analyse, Schulweg- und Berufsweg-Vorschlag: lesen den frisch geschriebenen
+  // Figurenstamm, schicken nur Kandidatensätze (nicht das ganze Buch, also kein geteilter
+  // 1h-Block) und laufen mit jeder Provider-Klasse — darum ausserhalb des Cloud-Gates und
+  // ohne Warten auf das Erzählprofil. Die Alters-Analyse ohne `force`: ihr Delta-Skip
+  // greift, wenn Text und Figuren seit dem letzten Lauf gleich sind. Die beiden
+  // Vorschlags-Jobs schreiben nur Vorschläge, nie den Stand des Autors; `nachKatalog`
+  // macht «nichts zu tun» (keine Figuren, kein Schulsystem) zu einem stillen Ende statt
+  // einer Fehlermeldung, die der User nicht ausgelöst hat.
+  const once = (key, type, label, run) => {
+    const existing = findActiveJobId(type, bookId, userEmail);
+    if (existing) { out[key] = existing; return; }
+    const jobId = createJob(type, bookId, userEmail, label);
+    enqueueJob(jobId, () => run(jobId));
+    out[key] = jobId;
+  };
   if (scope.figurAlter) {
     const { runFigurAlterJob } = require('../figur-alter');
-    const existing = findActiveJobId('figur-alter', bookId, userEmail);
-    if (existing) out['figur-alter'] = existing;
-    else {
-      const jobId = createJob('figur-alter', bookId, userEmail, 'job.label.figurAlter');
-      enqueueJob(jobId, () => runFigurAlterJob(jobId, bookId, userEmail));
-      out['figur-alter'] = jobId;
-    }
+    once('figur-alter', 'figur-alter', 'job.label.figurAlter',
+      (jobId) => runFigurAlterJob(jobId, bookId, userEmail));
+  }
+  // Ohne gespeichertes Schulsystem rechnet das Buch keine Schullaufbahn (Bucheinstellungen
+  // › «Schule» aus) — dann gar nicht erst einreihen. Den Buchtyp prüft der Lauf selbst.
+  if (scope.schulweg && getBookSchulsystem(bookId)) {
+    const { runSchulwegVorschlagJob } = require('../schulweg-vorschlag');
+    once('schulweg-vorschlag', 'schulweg-vorschlag', 'job.label.schulwegVorschlag',
+      (jobId) => runSchulwegVorschlagJob(jobId, bookId, userEmail, { nachKatalog: true }));
+  }
+  if (scope.stationen) {
+    const { runStationenVorschlagJob } = require('../stationen-vorschlag');
+    once('stationen-vorschlag', 'stationen-vorschlag', 'job.label.stationenVorschlag',
+      (jobId) => runStationenVorschlagJob(jobId, bookId, userEmail, { nachKatalog: true }));
   }
   if (providerClass(provider) !== 'cloud') return out;
   // Lazy: job.js lädt diese Datei über job-komplett.js — ein Top-Level-require wäre zirkulär.

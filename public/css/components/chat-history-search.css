@@ -9,10 +9,11 @@
   padding-bottom: 0;
   border-bottom: none;
 }
-.chat-hist-search .filter-search-input {
+.chat-hist-search > .filter-search-wrap {
   flex: 1;
   min-width: 0;
 }
+.chat-hist-search .filter-search-wrap .filter-search-input { width: 100%; }
 
 .chat-hist-hit { align-items: flex-start; }
 .chat-hist-hit-body {

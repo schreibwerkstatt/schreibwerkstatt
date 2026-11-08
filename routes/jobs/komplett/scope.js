@@ -49,7 +49,11 @@ function countSzenenInDb(bookIdInt, email) {
 // sie den Katalog unter ihm neu — unabhängig davon, ob der Schritt im Umfang steht.
 // Der Faktencheck gehört dazu: er liest den Welt-Fakten-Index, den die Analyse ersetzt;
 // die Alters-Analyse liest Figurenstamm und Zeitstrahl.
-const STEP_JOB_TYPES = { kontinuitaet: 'kontinuitaet', erzaehlprofil: 'erzaehlprofil', faktencheck: 'faktencheck', figurAlter: 'figur-alter' };
+// Schulweg- und Berufsweg-Vorschlag lesen den Figurenstamm samt Geburtsdaten.
+const STEP_JOB_TYPES = {
+  kontinuitaet: 'kontinuitaet', erzaehlprofil: 'erzaehlprofil', faktencheck: 'faktencheck',
+  figurAlter: 'figur-alter', schulweg: 'schulweg-vorschlag', stationen: 'stationen-vorschlag',
+};
 
 /** Laufender/wartender Prüf-Job für Buch + User → `{ jobId, step }`, sonst null. */
 function activeStepJob(bookId, userEmail) {

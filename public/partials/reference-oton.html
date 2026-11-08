@@ -18,10 +18,16 @@
     <div class="muted-msg muted-msg--sm muted-msg--block" x-text="$app.t('interview.noTranscript')"></div>
   </template>
 
-  <input type="text" class="filter-search-input" x-show="refIvSegments.length > 8"
-         x-model="refIvQuery" :placeholder="$app.t('interview.filterSegments')"
-         :aria-label="$app.t('interview.filterSegments')"
-         autocomplete="off" data-bwignore data-1p-ignore data-lpignore="true" data-form-type="other">
+  <div class="filter-bar" x-show="refIvSegments.length > 8">
+    <span class="filter-search-wrap">
+      <input type="text" class="filter-search-input filter-search-input--wide"
+             x-model="refIvQuery" :placeholder="$app.t('interview.filterSegments')"
+             :aria-label="$app.t('interview.filterSegments')"
+             autocomplete="off" data-bwignore data-1p-ignore data-lpignore="true" data-form-type="other">
+      <button type="button" class="search-clear--icon" x-show="refIvQuery" @click="refIvQuery=''"
+              :aria-label="$app.t('search.clear')" :data-tip="$app.t('search.clear')"><svg class="icon" aria-hidden="true"><use href="/icons.svg#x"/></svg></button>
+    </span>
+  </div>
 
   <template x-for="seg in refIvFiltered()" :key="'ro-' + seg.id">
     <div class="reference-oton-row">

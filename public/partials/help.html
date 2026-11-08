@@ -25,12 +25,14 @@
       <p class="card-hint card-hint--lead card-section" x-text="$app.t('help.intro')"></p>
 
       <div class="filter-bar card-section">
-        <input type="text" class="filter-search-input filter-search-input--wide" x-model="helpQuery"
-               :placeholder="$app.t('help.filter')" :aria-label="$app.t('help.filter')">
-        <button type="button" class="search-clear--icon" x-show="helpQuery" x-cloak @click="helpQuery = ''"
-                :aria-label="$app.t('search.clear')" :data-tip="$app.t('search.clear')">
-          <svg class="icon" aria-hidden="true"><use href="/icons.svg#x"/></svg>
-        </button>
+        <span class="filter-search-wrap">
+          <input type="text" class="filter-search-input filter-search-input--wide" x-model="helpQuery"
+                 :placeholder="$app.t('help.filter')" :aria-label="$app.t('help.filter')">
+          <button type="button" class="search-clear--icon" x-show="helpQuery" x-cloak @click="helpQuery = ''"
+                  :aria-label="$app.t('search.clear')" :data-tip="$app.t('search.clear')">
+            <svg class="icon" aria-hidden="true"><use href="/icons.svg#x"/></svg>
+          </button>
+        </span>
       </div>
 
       <p class="card-hint card-section" x-show="helpSections().length === 0" x-cloak

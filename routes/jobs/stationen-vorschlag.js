@@ -23,7 +23,7 @@ const {
   aiCall, getPrompts, getBookPrompts,
   loadOrderedBookContents, loadPageContents, htmlToTextForPrompt,
   chunkLimitsFor, tps, bundleBlocks,
-  startBookJob,
+  startBookJob, komplettRunningPrecheck,
 } = require('./shared');
 const { resolveProvider } = require('../../lib/ai');
 const { listFiguresForSchoolPath } = require('../../db/figure-school-paths');
@@ -131,7 +131,7 @@ function verifyStation(kind, v, ctx) {
 
 const _key = (kind, r) => `${foldWord(kind === 'berufe' ? r.taetigkeit : r.hobby)}|${r.von_jahr ?? ''}`;
 
-async function runStationenVorschlagJob(jobId, bookId, userEmail) {
+async function runStationenVorschlagJob(jobId, bookId, userEmail, { nachKatalog = false } = {}) {
   const logger = makeJobLogger(jobId);
   const { buildStationenSystemPrompt, buildStationenPrompt, buildStationenSchema } = await getPrompts(userEmail);
   const { perChunk: PER_CHUNK_LIMIT } = chunkLimitsFor(resolveProvider({ userEmail }));
@@ -145,7 +145,11 @@ async function runStationenVorschlagJob(jobId, bookId, userEmail) {
     updateJob(jobId, { statusText: 'job.phase.stationenCollect', progress: 4 });
     const { stationTitel } = await figureStationen();
     const figuren = listFiguresForSchoolPath(bookId, userEmail);
-    if (!figuren.length) throw i18nError('job.error.stationenNoFiguren');
+    if (!figuren.length) {
+      // Von der Komplettanalyse eingereiht: «nichts zu tun» ist kein Fehler des Users.
+      if (nachKatalog) return completeJob(jobId, { skipped: 'job.error.stationenNoFiguren' });
+      throw i18nError('job.error.stationenNoFiguren');
+    }
     const births = resolveBirthsForFigures(bookId, userEmail, figuren);
 
     const { chMap, pages } = await loadOrderedBookContents(bookId);
@@ -278,6 +282,8 @@ const stationenVorschlagRouter = express.Router();
 // 'editor': der Lauf legt Vorschläge an Figuren ab.
 stationenVorschlagRouter.post('/stationen-vorschlag', jsonBody, (req, res) => startBookJob(req, res, {
   type: 'stationen-vorschlag', minRole: 'editor', label: 'job.label.stationenVorschlag',
+  // Läuft eine Komplettanalyse → 409 (sie schreibt den Figurenstamm gerade neu).
+  precheck: komplettRunningPrecheck,
   run: (jobId, { bookId, userEmail }) => runStationenVorschlagJob(jobId, bookId, userEmail),
 }));
 

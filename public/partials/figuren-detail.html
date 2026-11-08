@@ -13,7 +13,7 @@
      baute die Liste ihn für jede Figur des Katalogs vorab auf.
 -->
 <template x-if="$store.catalogUi.selectedFigurId === f.id">
-<div class="figur-detail">
+<div class="entity-detail figur-detail">
   <p x-show="f.beschreibung" x-text="f.beschreibung" class="figur-beschreibung"></p>
   <div class="figur-detail-actions">
     <button type="button" class="btn-compact" x-show="$store.config.semanticSearchEnabled" @click.stop="$app.findSimilar('figure', f.id, f.name)" x-text="$app.t('search.semantic.similarEntity')"></button>

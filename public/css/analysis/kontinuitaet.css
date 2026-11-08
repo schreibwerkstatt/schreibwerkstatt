@@ -8,6 +8,7 @@
 
 @media (max-width: 600px) {
   .kontinuitaet-result { padding: var(--space-xs) 0 var(--space-md); }
+  .kontinuitaet-row-stellen { flex-basis: 100%; }
 }
 
 .kontinuitaet-result {
@@ -33,8 +34,11 @@
 /* Stellen-Paar in der Zeile (Stelle A ↔ Stelle B) als Entitäts-Referenzen.
    Stellen-Texte sind KI-Freitext und können lang sein — umbrechen statt
    abschneiden. */
+/* Die Stellen sind der Hauptinhalt der Zeile (sie hat keinen Titel): wie
+   `.entity-row-title` mindestens 10rem, mobil eine eigene volle Zeile — sonst
+   presst der Umbruch sie neben Schwere/Typ/Badges auf wenige Pixel. */
 .kontinuitaet-row-stellen {
-  flex: 1;
+  flex: 1 1 10rem;
   min-width: 0;
 }
 .kontinuitaet-row-stellen .entity-ref { white-space: normal; }
@@ -61,11 +65,8 @@
 }
 
 /* ── Erledigt-Status ─────────────────────────────────────────────────────────
-   Gültig bis zur nächsten Komplettanalyse. Erledigte Zeilen gedimmt + ans Ende
-   sortiert (Sortierung in kontinuitaet.js). */
-.entity-row--resolved {
-  opacity: var(--opacity-disabled);
-}
+   Gültig bis zur nächsten Komplettanalyse. Erledigte Zeilen gedimmt (geteilte
+   Regel in entity-list.css) + ans Ende sortiert (kontinuitaet.js). */
 .entity-row--resolved .kontinuitaet-row-stellen,
 .entity-row--resolved .entity-typ-tag {
   text-decoration: line-through;

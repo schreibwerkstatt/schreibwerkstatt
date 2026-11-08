@@ -65,8 +65,8 @@ test('figurenliste: Einstiegsreiter, nur dort sichtbar, breite Suche, Graph-Klic
 
   // Breite Suche: der Beruf allein findet die Figur.
   await list.locator('.filter-search-input').fill(`hebamme${RUN}`);
-  await expect(list.locator('.figur-item')).toHaveCount(1);
-  await expect(list.locator('.figur-item .figur-name')).toHaveText(A_NAME);
+  await expect(list.locator('[data-figid]')).toHaveCount(1);
+  await expect(list.locator('[data-figid] .entity-row-title')).toHaveText(A_NAME);
   await list.locator('.filter-search-input').fill('');
 
   // Andere Reiter: keine Liste darunter.
@@ -91,7 +91,7 @@ test('figurenliste: Einstiegsreiter, nur dort sichtbar, breite Suche, Graph-Klic
 
   await expect.poll(() => cardData(page, 'c.figurenGraphModus')).toBe('liste');
   await expect(list).toBeVisible();
-  const row = list.locator(`.figur-item[data-figid="${bId}"]`);
+  const row = list.locator(`[data-figid="${bId}"]`);
   await expect(row).toHaveAttribute('aria-expanded', 'true');
   await expect(row).toBeInViewport();
 });

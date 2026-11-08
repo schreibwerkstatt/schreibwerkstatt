@@ -48,12 +48,18 @@ Ereignisse:
 ${JSON.stringify(events)}`;
 }
 
+// Figuren-Ref eines Songs im Konsolidierungs-Input: «Anna (spielt)»; ältere Extrakte
+// tragen noch reine Namen.
+const _songFigLabel = f => (typeof f === 'object' && f
+  ? `${f.name || ''}${f.rolle ? ` (${f.rolle})` : ''}`
+  : String(f ?? ''));
+
 export function buildSongsConsolidationPrompt(bookName, chapterSongs, figurenKompakt) {
   const synthInput = chapterSongs.map(cs =>
     `## Kapitel: ${cs.kapitel}\n` + (cs.songs || []).map(s =>
       `- «${s.titel || ''}»${s.interpret ? ` — ${s.interpret}` : ''} (${s.genre || 'andere'} / ${s.kontext_typ || '?'}): ${s.beschreibung || ''}` +
       (s.stimmung ? ` | Stimmung: ${s.stimmung}` : '') +
-      (s.figuren_namen?.length ? ` | Figuren: ${s.figuren_namen.join(', ')}` : '') +
+      (s.figuren_namen?.length ? ` | Figuren: ${s.figuren_namen.map(_songFigLabel).join(', ')}` : '') +
       (s.kapitel?.length ? ` | Kapitel: ` + s.kapitel.map(k => k.name + (k.haeufigkeit > 1 ? ' ×' + k.haeufigkeit : '')).join(', ') : '')
     ).join('\n')
   ).join('\n\n');
@@ -69,7 +75,11 @@ ${synthInput}
 Antworte mit diesem JSON-Schema:
 ${SONGS_SCHEMA}
 
-${SONGS_RULES}`;
+${SONGS_RULES}
+
+Konsolidierungs-Regeln:
+- Keinen Song der Eingabe weglassen: jeder steht entweder als eigener Eintrag in der Ausgabe oder ist in einen anderen Song zusammengeführt.
+- quellnamen: zusätzliches Feld je Song – alle Eingabetitel, die du in diesen Eintrag zusammengeführt hast (genau so geschrieben wie oben), auch der eigene Eingabetitel, wenn du ihn geändert hast; sonst leeres Array.`;
 }
 
 export function buildLocationsConsolidationPrompt(bookName, chapterOrte, figurenKompakt) {
@@ -101,7 +111,9 @@ Konsolidierungs-Regeln:
 - figuren_namen: Figuren-Namenslisten der zusammengeführten Orte vereinen (gleicher Name nur einmal); Klarnamen exakt wie in der bekannten Figurenliste.
 - beschreibung/stimmung: bei Merge die Informationen zusammenführen und die präziseste/reichste Formulierung wählen.
 - Gleicher Name, aber klar verschiedene Orte (z.B. zwei verschiedene Gasthäuser «zum Löwen», zwei Städte gleichen Namens) bleiben getrennte Einträge.
-- Hierarchisch verschachtelte Orte (Raum in Gebäude in Stadt) nur zusammenführen, wenn der Text sie tatsächlich gleichsetzt – sonst als eigenständige Schauplätze behalten.`;
+- Hierarchisch verschachtelte Orte (Raum in Gebäude in Stadt) nur zusammenführen, wenn der Text sie tatsächlich gleichsetzt – sonst als eigenständige Schauplätze behalten.
+- Keinen Schauplatz der Eingabe weglassen: jeder steht entweder als eigener Eintrag in der Ausgabe oder ist in einen anderen Schauplatz zusammengeführt.
+- quellnamen: zusätzliches Feld je Ort – alle Eingabenamen, die du in diesen Eintrag zusammengeführt hast (genau so geschrieben wie oben), auch der eigene Eingabename, wenn du ihn geändert hast; sonst leeres Array.`;
 }
 
 // ── Entitäten-Paar-Urteil (Graubereich des Matchings) ────────────────────────

@@ -127,7 +127,7 @@ router.get('/time-check', (req, res) => {
   res.json({
     befunde: computeTimeFindings({
       beats, figures: _figureTimeMap(bookId, userEmail),
-      bookSpan: bookYearSpan(bookId, userEmail), locParents: locationParentMap(bookId),
+      bookSpan: bookYearSpan(bookId, userEmail), locParents: locationParentMap(bookId, userEmail),
     }),
     scanned: beats.some(b => b.key),
   });

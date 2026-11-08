@@ -5,7 +5,7 @@
 // __SHELL_BUILD: content hash over all listed assets → drives SHELL_CACHE.
 // __SHELL_MANIFEST: the coherent set precached atomically at SW install.
 // __VENDOR_SET: current vendor/ + fonts/ files — VENDOR_CACHE prune list.
-self.__SHELL_BUILD = "0ba856c2f1a87f97";
+self.__SHELL_BUILD = "a5075553b694cc61";
 self.__SHELL_MANIFEST = [
   "/css/admin/admin-backup.css",
   "/css/admin/admin-home.css",
@@ -307,6 +307,8 @@ self.__SHELL_MANIFEST = [
   "/js/book/buchlandkarte/matrix.js",
   "/js/book/diary-calendar.js",
   "/js/book/diary-date.js",
+  "/js/book/entity-merge-picker.js",
+  "/js/book/entity-merge.js",
   "/js/book/ereignisse.js",
   "/js/book/erzaehlprofil.js",
   "/js/book/export.js",
@@ -1107,6 +1109,7 @@ self.__SHELL_MANIFEST = [
   "/partials/editor-synonyme.html",
   "/partials/editor-table-dialog.html",
   "/partials/editor-toolbar.html",
+  "/partials/entity-merge-picker.html",
   "/partials/epub-export-headings.html",
   "/partials/epub-export.html",
   "/partials/ereignisse-edit.html",

@@ -18,7 +18,9 @@ const { figIdMaps } = require('./figures/refs');
 const { NOW_ISO_SQL } = require('./now');
 const { toRefString: _toRefString, chapterNameMap, onlyInChapters } = require('./write-helpers');
 const logger = require('../logger');
-const { matchLocations } = require('../lib/entity-match');
+const { matchLocations, normLocName, locationHintKey } = require('../lib/entity-match');
+const { manualFieldSet } = require('./location-fields');
+const { listLocationAliasesByLocation, foldIncomingAliases } = require('./location-aliases');
 
 // Geo-Koordinate als Number normalisieren + auf gueltigen Bereich clampen.
 // Fremd-Input (Nominatim / Marker-Drag) → null bei NaN/leer, sonst geklemmt.
@@ -81,8 +83,33 @@ function planOrteMatch(bookId, orte, userEmail, chNameToId = null, hint = null) 
       .filter(v => v != null),
     figures: (o.figuren || []).map(fid => byFigId[fid]).filter(v => v != null),
   }));
-  const plan = matchLocations(exCands, incoming, { hint });
+  const plan = matchLocations(exCands, incoming, { hint: _withAliasHints(bookId, userEmail, existing, incoming, hint) });
   return { ...plan, existing };
+}
+
+// Aliasse (location_aliases, beim manuellen Zusammenführen entstanden) als bestätigte
+// Paare: liefert die Analyse den Namen der weggemergten Quelle, landet er beim Ziel
+// statt als neue Zeile. Ein echter Name eines anderen Bestandsorts schlägt den Alias
+// (dann kein Hint), und explizite Hints (Katalog-Anker, Judge) schlagen beide.
+function _withAliasHints(bookId, userEmail, existing, incoming, hint) {
+  const aliasMap = listLocationAliasesByLocation(bookId, userEmail);
+  if (!aliasMap.size) return hint;
+  const names = new Set(existing.map(ex => normLocName(ex.name)).filter(Boolean));
+  const aliasTo = new Map();
+  for (const [locId, aliases] of aliasMap) {
+    for (const a of aliases) {
+      const k = normLocName(a);
+      if (k && !names.has(k) && !aliasTo.has(k)) aliasTo.set(k, locId);
+    }
+  }
+  const out = new Map();
+  for (const o of incoming) {
+    const exId = aliasTo.get(normLocName(o.name));
+    if (exId != null) out.set(locationHintKey(o), exId);
+  }
+  if (!out.size) return hint;
+  for (const [k, v] of (hint || [])) out.set(k, v);
+  return out;
 }
 
 // Reconcile statt Delete+Re-Insert, damit locations.id (und FK-Refs darauf:
@@ -138,12 +165,16 @@ function saveOrteToDb(bookId, orte, userEmail, chNameToId = null, pageNameToIdBy
   // verschwundene werden geloescht (User autoritativ).
   const matchByName = opts.matchBy === 'name';
   const onMissingStale = opts.onMissing === 'stale';
+  // Name und Alias desselben Bestandsorts im selben Lauf → ein Eintrag (der Job faltet
+  // schon vorher, damit seine Szenen-Auflösung die Namen kennt; hier für alle anderen
+  // Aufrufer — ein zweites Falten findet nichts mehr).
+  if (matchByName) orte = foldIncomingAliases(bookId, userEmail, orte).orte;
   let droppedFigRefs = 0;
 
   db.transaction(() => {
     const existing = db.prepare(
       `SELECT id, loc_id, name, typ, beschreibung, stimmung, lat, lng, land,
-              manually_edited, manually_created
+              manually_edited, manually_created, manual_fields
        FROM locations WHERE book_id = ? AND ${emailCond}`
     ).all(bookId, ...emailVal);
     const prevById = Object.fromEntries(existing.map(r => [r.id, r]));
@@ -207,7 +238,9 @@ function saveOrteToDb(bookId, orte, userEmail, chNameToId = null, pageNameToIdBy
       // Vom Autor angelegte Orte hat die Analyse nie gefunden — «nicht mehr im Text»
       // waere fuer sie falsch. Sie bleiben aktiv und raeumen nur den Namespace.
       const markStale = db.prepare("UPDATE locations SET stale = 1, loc_id = 'orphan_' || id WHERE id = ?");
-      const parkManual = db.prepare("UPDATE locations SET loc_id = 'man_' || id WHERE id = ?");
+      // Selbst angelegte Orte reihen sich hinter die Analyse-Orte (die bekommen 0…n-1).
+      const parkManual = db.prepare("UPDATE locations SET loc_id = 'man_' || id, sort_order = ? WHERE id = ?");
+      let manualSort = orte.length;
       // Nur in Kapiteln belegt, deren Extraktion ausgefallen ist (`opts.keepChapterIds`):
       // das Fehlen sagt nichts, der Ort bleibt aktiv (Muster figures/save.js).
       const parkKept = db.prepare("UPDATE locations SET loc_id = 'kept_' || id WHERE id = ?");
@@ -216,7 +249,7 @@ function saveOrteToDb(bookId, orte, userEmail, chNameToId = null, pageNameToIdBy
         JOIN locations l ON l.id = lc.location_id WHERE l.book_id = ? AND l.user_email IS ?`).all(bookId, userEmail || null) : [],
         opts.keepChapterIds);
       for (const ex of missing) {
-        if (ex.manually_created) parkManual.run(ex.id);
+        if (ex.manually_created) parkManual.run(manualSort++, ex.id);
         else if (onlyInSkipped(ex.id)) parkKept.run(ex.id);
         else markStale.run(ex.id);
       }
@@ -236,8 +269,10 @@ function saveOrteToDb(bookId, orte, userEmail, chNameToId = null, pageNameToIdBy
 
     const upd = db.prepare(`
       UPDATE locations SET loc_id=?, name=?, typ=?, beschreibung=?, erste_erwaehnung=?, erste_erwaehnung_page_id=?, stimmung=?,
-        land=?, lat=?, lng=?, sort_order=?, ki_name=COALESCE(?, ki_name), ${matchByName ? 'stale=0, ' : ''}updated_at=${NOW_ISO_SQL}
+        land=?, lat=?, lng=?, sort_order=?, ki_name=COALESCE(?, ki_name), ${matchByName ? 'stale=0, manually_created=0, ' : ''}updated_at=${NOW_ISO_SQL}
       WHERE id=?`);
+    // Letzter Analysewert je Stammdatenfeld (Quelle für «Analyse-Werte übernehmen»).
+    const setKi = db.prepare('UPDATE locations SET ki_typ = ?, ki_beschreibung = ?, ki_stimmung = ?, ki_land = ? WHERE id = ?');
     const ins = db.prepare(`
       INSERT INTO locations (book_id, loc_id, name, typ, beschreibung, erste_erwaehnung, erste_erwaehnung_page_id, stimmung,
         land, lat, lng, sort_order, user_email, ki_name, stale, updated_at)
@@ -282,15 +317,16 @@ function saveOrteToDb(bookId, orte, userEmail, chNameToId = null, pageNameToIdBy
       // Der Name, den die Analyse liefert — nur im Analyse-Modus, damit ein spaeter
       // umbenannter Ort weiter ueber seinen Textnamen gefunden wird (planOrteMatch).
       const kiName = matchByName ? (o.name || null) : null;
+      const kiLand = land;
       let locDbId = existingId;
       if (existingId != null) {
         // Vom Autor korrigierte Stammdaten gewinnen gegen die Analyse; sie liefert dann
         // nur noch die abgeleiteten Felder (Kapitel, Figuren, erste Erwaehnung).
-        let { name, typ, beschreibung, stimmung } = o;
-        if (matchByName && prev.manually_edited) {
-          ({ name, typ, beschreibung, stimmung } = prev);
-          land = prev.land;
-        }
+        // Pro Feld: nur die vom Autor korrigierten Felder (manual_fields) bleiben stehen.
+        const vals = { name: o.name, typ: o.typ, beschreibung: o.beschreibung, stimmung: o.stimmung, land };
+        if (matchByName) for (const f of manualFieldSet(prev)) vals[f] = prev[f];
+        const { name, typ, beschreibung, stimmung } = vals;
+        land = vals.land;
         // integer id (und scene_locations) bleibt erhalten; loc_id wird auf den
         // frischen Lauf-Wert gesetzt (matched-Rows wurden vorab auf 'tmp_<id>' geparkt).
         upd.run(o.id, name, typ || null, beschreibung || null,
@@ -322,6 +358,7 @@ function saveOrteToDb(bookId, orte, userEmail, chNameToId = null, pageNameToIdBy
           if (g) setGeo.run(g.geo_query, g.geo_land || null, locDbId);
         }
       }
+      if (matchByName) setKi.run(o.typ || null, o.beschreibung || null, o.stimmung || null, kiLand, locDbId);
       for (const fid of (o.figuren || [])) {
         const ref = _toRefString(fid);
         const rowId = ref ? figIdToRowId[ref] : null;

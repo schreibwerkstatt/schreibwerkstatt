@@ -29,7 +29,7 @@ const {
   aiCall, getPrompts, getBookPrompts,
   loadOrderedBookContents, loadPageContents, htmlToTextForPrompt,
   chunkLimitsFor, tps, bundleBlocks,
-  startBookJob,
+  startBookJob, komplettRunningPrecheck,
 } = require('./shared');
 const { resolveProvider } = require('../../lib/ai');
 const { getBookSettings, getBookSchulsystem } = require('../../db/book-settings');
@@ -164,7 +164,7 @@ function _schonUebernommen(v, f) {
   return true;
 }
 
-async function runSchulwegVorschlagJob(jobId, bookId, userEmail) {
+async function runSchulwegVorschlagJob(jobId, bookId, userEmail, { nachKatalog = false } = {}) {
   const logger = makeJobLogger(jobId);
   const { buildSchulwegSystemPrompt, buildSchulwegPrompt, buildSchulwegSchema } = await getPrompts(userEmail);
   const { perChunk: PER_CHUNK_LIMIT } = chunkLimitsFor(resolveProvider({ userEmail }));
@@ -178,7 +178,11 @@ async function runSchulwegVorschlagJob(jobId, bookId, userEmail) {
     updateJob(jobId, { statusText: 'job.phase.schulwegCollect', progress: 4 });
     const sp = await schoolPath();
     const system = sp.resolveSchulsystem(await activeBookSchulsystem(bookId));
-    if (!system) throw i18nError('job.error.schulwegNoSystem');
+    if (!system) {
+      // Von der Komplettanalyse eingereiht: «nichts zu tun» ist kein Fehler des Users.
+      if (nachKatalog) return completeJob(jobId, { skipped: 'job.error.schulwegNoSystem' });
+      throw i18nError('job.error.schulwegNoSystem');
+    }
     const lang = getBookSettings(bookId, userEmail)?.language || 'de';
 
     // Gefragt werden Figuren, deren Schulstufe sich rechnen lässt: mit Geburt oder
@@ -193,7 +197,11 @@ async function runSchulwegVorschlagJob(jobId, bookId, userEmail) {
       if (f.source === 'autor') autor++;
       figuren.push({ ...f, geburt: birth, geburtsjahr: birth?.y ?? null });
     }
-    if (!figuren.length) throw i18nError('job.error.schulwegNoFiguren');
+    if (!figuren.length) {
+      // Von der Komplettanalyse eingereiht: «nichts zu tun» ist kein Fehler des Users.
+      if (nachKatalog) return completeJob(jobId, { skipped: 'job.error.schulwegNoFiguren' });
+      throw i18nError('job.error.schulwegNoFiguren');
+    }
 
     const { chMap, pages } = await loadOrderedBookContents(bookId);
     const contents = await loadPageContents(pages, chMap, 1, null, signal(), { keepHtml: true });
@@ -336,8 +344,10 @@ const schulwegVorschlagRouter = express.Router();
 schulwegVorschlagRouter.post('/schulweg-vorschlag', jsonBody, (req, res) => startBookJob(req, res, {
   type: 'schulweg-vorschlag', minRole: 'editor', label: 'job.label.schulwegVorschlag',
   // Synchron (startBookJob wartet nicht): nur «gibt es eins»; den Buchtyp prüft der
-  // Lauf selbst über activeBookSchulsystem.
-  precheck: (bookId) => (getBookSchulsystem(bookId) ? null : 'SCHULSYSTEM_MISSING'),
+  // Lauf selbst über activeBookSchulsystem. Läuft eine Komplettanalyse → 409.
+  precheck: (bookId, userEmail) => (getBookSchulsystem(bookId)
+    ? komplettRunningPrecheck(bookId, userEmail)
+    : 'SCHULSYSTEM_MISSING'),
   run: (jobId, { bookId, userEmail }) => runSchulwegVorschlagJob(jobId, bookId, userEmail),
 }));
 

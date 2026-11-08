@@ -175,3 +175,129 @@ test('Ganzer Katalog lässt sich nicht mehr per PUT ersetzen', async () => {
   const r = await api('PUT', `/locations/${book}`, { orte: [] });
   assert.equal(r.status, 404);
 });
+
+// ── Feld-Schutz, Wiederherstellen, Aliase ───────────────────────────────────
+
+test('Feld-Schutz: nur geänderte Felder, Elternort allein schützt nichts', async () => {
+  const book = newBook();
+  dbSchema.saveOrteToDb(book, [
+    { id: 'ort_1', name: 'Olten', typ: 'stadt', beschreibung: 'KI Olten' },
+    { id: 'ort_2', name: 'Hotel Krone', typ: 'gebaeude', beschreibung: 'KI alt', stimmung: 'ruhig' },
+  ], USER, {}, {}, ANALYSE);
+
+  // Elternort + unverändert mitgeschickte Felder → kein Schutz.
+  const p1 = await api('PATCH', `/locations/${book}/ort_2`, { parent: 'ort_1', name: 'Hotel Krone', typ: 'gebaeude' });
+  assert.equal(p1.json.changed, true);
+  let r = row(book, "name = 'Hotel Krone'");
+  assert.equal(r.manually_edited, 0);
+  assert.equal(r.manual_fields, null);
+
+  // Nur die Beschreibung geändert → nur sie ist geschützt.
+  await api('PATCH', `/locations/${book}/ort_2`, { beschreibung: 'Meine Krone' });
+  r = row(book, 'id = ?', r.id);
+  assert.deepEqual(JSON.parse(r.manual_fields), ['beschreibung']);
+  assert.equal(r.manually_edited, 1);
+  assert.equal(r.ki_beschreibung, 'KI alt', 'Analysewert gesichert');
+
+  dbSchema.saveOrteToDb(book, [
+    { id: 'ort_1', name: 'Olten', typ: 'stadt' },
+    { id: 'ort_2', name: 'Hotel Krone', typ: 'gebaeude', beschreibung: 'KI neu', stimmung: 'laut' },
+  ], USER, {}, {}, ANALYSE);
+  r = row(book, 'id = ?', r.id);
+  assert.equal(r.beschreibung, 'Meine Krone', 'geschütztes Feld bleibt');
+  assert.equal(r.stimmung, 'laut', 'ungeschütztes Feld folgt der Analyse');
+  assert.equal(r.ki_beschreibung, 'KI neu');
+  assert.ok(r.parent_id, 'Hierarchie bleibt');
+
+  // Gleicher Wert erneut → nichts geändert.
+  const p3 = await api('PATCH', `/locations/${book}/${r.loc_id}`, { beschreibung: 'Meine Krone' });
+  assert.equal(p3.json.changed, false);
+});
+
+test('Analyse-Werte übernehmen: Schutz weg, Analysewert zurück; selbst angelegt → 409', async () => {
+  const book = newBook();
+  dbSchema.saveOrteToDb(book, [{ id: 'ort_1', name: 'Burg', typ: 'gebaeude', beschreibung: 'KI-Text' }], USER, {}, {}, ANALYSE);
+  await api('PATCH', `/locations/${book}/ort_1`, { name: 'Die Feste', beschreibung: 'Meins' });
+  const list = (await api('GET', `/locations/${book}`)).json.orte;
+  assert.deepEqual(list[0].manual_fields, ['name', 'beschreibung']);
+  assert.equal(list[0].analysis_known, true);
+
+  const res = await api('POST', `/locations/${book}/ort_1/restore-analysis`, {});
+  assert.equal(res.status, 200);
+  assert.deepEqual(res.json.restored.sort(), ['beschreibung', 'name']);
+  const r = row(book, "loc_id = 'ort_1'");
+  assert.equal(r.name, 'Burg');
+  assert.equal(r.beschreibung, 'KI-Text');
+  assert.equal(r.manual_fields, null);
+  assert.equal(r.manually_edited, 0);
+
+  const man = (await api('POST', `/locations/${book}`, { name: 'Café' })).json.id;
+  const no = await api('POST', `/locations/${book}/${man}/restore-analysis`, {});
+  assert.equal(no.status, 409);
+  assert.equal(no.json.error_code, 'NO_ANALYSIS');
+});
+
+test('Selbst angelegter Ort, den die Analyse findet: Flag weg, Stammdaten bleiben', async () => {
+  const book = newBook();
+  const id = (await api('POST', `/locations/${book}`, { name: 'Café Mira', beschreibung: 'Meins' })).json.id;
+  dbSchema.saveOrteToDb(book, [{ id: 'ort_1', name: 'Café Mira', beschreibung: 'KI' }], USER, {}, {}, ANALYSE);
+  const r = row(book, "name = 'Café Mira'");
+  assert.equal(r.loc_id, 'ort_1');
+  assert.equal(r.manually_created, 0, 'jetzt ein Analyse-Ort');
+  assert.equal(r.beschreibung, 'Meins', 'Autorentext bleibt geschützt');
+  assert.equal(r.ki_beschreibung, 'KI');
+  // Verschwindet er aus dem Text, wird er wie jeder Analyse-Ort verwaist.
+  dbSchema.saveOrteToDb(book, [{ id: 'ort_1', name: 'Bahnhof' }], USER, {}, {}, ANALYSE);
+  assert.equal(row(book, 'id = ?', r.id).stale, 1);
+});
+
+test('Selbst angelegte Orte reihen sich hinter die Analyse-Orte', async () => {
+  const book = newBook();
+  await api('POST', `/locations/${book}`, { name: 'Café' });
+  dbSchema.saveOrteToDb(book, [{ id: 'ort_1', name: 'A' }, { id: 'ort_2', name: 'B' }], USER, {}, {}, ANALYSE);
+  const names = db.prepare('SELECT name FROM locations WHERE book_id = ? ORDER BY sort_order, id').all(book).map(r => r.name);
+  assert.deepEqual(names, ['A', 'B', 'Café']);
+});
+
+test('Merge: verwaistes Ziel → 409; Quellname wird Alias, nächste Analyse legt ihn nicht neu an', async () => {
+  const book = newBook();
+  dbSchema.saveOrteToDb(book, [{ id: 'ort_1', name: 'Schulhaus Frohheim' }, { id: 'ort_2', name: 'Frohheimschule' }], USER, {}, {}, ANALYSE);
+  // ort_2 verschwindet → verwaist (loc_id orphan_<id>).
+  dbSchema.saveOrteToDb(book, [{ id: 'ort_1', name: 'Schulhaus Frohheim' }, { id: 'ort_9', name: 'Bahnhof' }], USER, {}, {}, ANALYSE);
+  const stale = row(book, "name = 'Frohheimschule'");
+  assert.equal(stale.stale, 1);
+  const bad = await api('POST', `/locations/${book}/merge`, { source: 'ort_1', target: stale.loc_id });
+  assert.equal(bad.status, 409);
+  assert.equal(bad.json.error_code, 'TARGET_STALE');
+
+  const ok = await api('POST', `/locations/${book}/merge`, { source: stale.loc_id, target: 'ort_1' });
+  assert.equal(ok.status, 200);
+  assert.deepEqual(ok.json.aliasesAdded, ['Frohheimschule']);
+
+  dbSchema.saveOrteToDb(book, [
+    { id: 'ort_1', name: 'Schulhaus Frohheim' }, { id: 'ort_2', name: 'Frohheimschule' }, { id: 'ort_3', name: 'Bahnhof' },
+  ], USER, {}, {}, ANALYSE);
+  const all = db.prepare('SELECT name, stale FROM locations WHERE book_id = ? ORDER BY id').all(book);
+  assert.equal(all.filter(r => r.name === 'Frohheimschule').length, 0, 'keine neue Zeile für den Alias');
+  assert.equal(all.length, 2);
+});
+
+test('Kollaps-Zählung ignoriert nie gefundene, selbst angelegte Orte', async () => {
+  const { countActiveLocations } = require('../../db/katalog-anker');
+  const book = newBook();
+  for (const n of ['A', 'B', 'C']) await api('POST', `/locations/${book}`, { name: n });
+  dbSchema.saveOrteToDb(book, [{ id: 'ort_1', name: 'Hafen' }, { id: 'ort_2', name: 'A' }], USER, {}, {}, ANALYSE);
+  assert.equal(countActiveLocations(book, USER), 2, 'Hafen + der gefundene «A»');
+});
+
+test('locationParentMap ist pro User: gleiche loc_id zweier Analysen kollidiert nicht', async () => {
+  const { locationParentMap } = require('../../db/locations-read');
+  const book = newBook();
+  const OTHER = 'zweit@test.dev';
+  db.prepare('INSERT OR IGNORE INTO app_users (email, display_name) VALUES (?, ?)').run(OTHER, 'Z');
+  dbSchema.saveOrteToDb(book, [{ id: 'ort_1', name: 'Olten' }, { id: 'ort_2', name: 'Krone' }], USER, {}, {}, ANALYSE);
+  dbSchema.saveOrteToDb(book, [{ id: 'ort_1', name: 'Bern' }, { id: 'ort_2', name: 'Bär' }], OTHER, {}, {}, ANALYSE);
+  await api('PATCH', `/locations/${book}/ort_2`, { parent: 'ort_1' });
+  assert.equal(locationParentMap(book, USER).get('ort_2'), 'ort_1');
+  assert.equal(locationParentMap(book, OTHER).size, 0);
+});

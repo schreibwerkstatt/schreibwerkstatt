@@ -125,10 +125,15 @@
               <p class="muted-msg muted-msg--sm" x-text="$app.t('spellcheck.dict.empty')"></p>
             </template>
             <template x-if="dictEntries.length">
-              <div class="lt-dict-search">
-                <input type="search"
-                       x-model="dictFilter"
-                       :placeholder="$app.t('spellcheck.dict.searchPlaceholder')">
+              <div class="filter-bar lt-dict-search">
+                <span class="filter-search-wrap">
+                  <input type="text" class="filter-search-input filter-search-input--wide"
+                         x-model="dictFilter"
+                         :placeholder="$app.t('spellcheck.dict.searchPlaceholder')"
+                         :aria-label="$app.t('spellcheck.dict.searchPlaceholder')">
+                  <button type="button" class="search-clear--icon" x-show="dictFilter" @click="dictFilter=''"
+                          :aria-label="$app.t('search.clear')" :data-tip="$app.t('search.clear')"><svg class="icon" aria-hidden="true"><use href="/icons.svg#x"/></svg></button>
+                </span>
               </div>
             </template>
             <div class="lt-dict-list" x-show="dictEntries.length">

@@ -31,6 +31,8 @@ function clipAround(text, re, max = SATZ_MAX) {
 /** Gleichmässig über den Buchbogen verteilt auswählen (erste + letzte immer). */
 function spread(list, max) {
   if (list.length <= max) return list;
+  // max = 1 hiesse (max - 1) = 0 im Nenner → Index NaN → undefined-Eintrag.
+  if (max <= 1) return max === 1 ? [list[0]] : [];
   const out = [];
   for (let i = 0; i < max; i++) out.push(list[Math.round((i * (list.length - 1)) / (max - 1))]);
   return [...new Set(out)];

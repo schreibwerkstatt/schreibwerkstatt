@@ -9,9 +9,10 @@ import os from 'os';
 import path from 'path';
 import fs from 'fs';
 import { createRequire } from 'module';
+import { useTmpDb } from './_helpers/tmp-db.js';
 
 const require = createRequire(import.meta.url);
-process.env.DB_PATH = path.join(os.tmpdir(), `migration-runner-test-${process.pid}-${Date.now()}.db`);
+useTmpDb('migration-runner-test');
 require('../../db/migrations');
 const { db } = require('../../db/connection');
 const { loadFileMigrations, runFileMigrations } = require('../../db/migration-runner');

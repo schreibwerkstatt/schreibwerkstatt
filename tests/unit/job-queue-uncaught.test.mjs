@@ -6,12 +6,11 @@
 // Lauf: `node --test tests/unit/job-queue-uncaught.test.mjs`
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import os from 'os';
-import path from 'path';
 import { createRequire } from 'module';
+import { useTmpDb } from './_helpers/tmp-db.js';
 
 const require = createRequire(import.meta.url);
-process.env.DB_PATH = path.join(os.tmpdir(), `job-queue-test-${process.pid}-${Date.now()}.db`);
+useTmpDb('job-queue-test');
 delete process.env.ADMIN_EMAIL;
 require('../../db/migrations');
 const { createJob, enqueueJob, jobs } = require('../../routes/jobs/shared');

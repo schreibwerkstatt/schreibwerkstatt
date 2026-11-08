@@ -1,5 +1,5 @@
 @layer components {
-/* === Entity-Liste (geteilt: Orte, Szenen, Kontinuität, …) ===
+/* === Entity-Liste (geteilt: Figuren, Orte, Szenen, Songs, Kontinuität, …) ===
    Pattern: kompakte Klick-Zeile + ausklappbarer Detail-Drawer.
 */
 .entity-list {
@@ -10,25 +10,35 @@
 }
 .entity-row {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
-  gap: var(--space-sm);
+  gap: var(--space-3) var(--space-sm);
   padding: var(--space-sm) var(--space-sm);
   cursor: pointer;
   border-bottom: 1px solid var(--color-border);
   font-size: var(--font-size-base);
   position: relative;
 }
-.entity-row:hover { background: var(--color-hover); }
+/* Hover-Tönung nur mit Zeiger: auf Touch bliebe sie nach dem Antippen stehen
+   und sähe aus wie «ausgewählt». */
+@media (hover: hover) {
+  .entity-row:hover { background: var(--color-hover); }
+}
 .entity-row--selected { background: var(--color-hover); }
-/* In der letzten Komplettanalyse nicht mehr erkannt — wegen externer Verknuepfungen
-   (Recherche/Plot/Szenen) bewusst erhalten statt geloescht, gedaempft dargestellt
-   (spiegelt .figur-item--stale). */
-.entity-row--stale { opacity: 0.6; }
+/* Gedämpfte Zeile — EIN Zustand für «tritt in den Hintergrund»:
+   `--stale` = in der letzten Komplettanalyse nicht mehr erkannt (wegen externer
+   Verknüpfungen bewusst erhalten statt gelöscht), `--resolved` = erledigter
+   Kontinuitäts-Befund. Gedämpft wird der Inhalt, nicht die Aktionen: Löschen und
+   «zusammenführen mit…» sind auf genau diesen Zeilen die eigentliche Handlung
+   und dürfen nicht deaktiviert aussehen. */
+.entity-row:is(.entity-row--stale, .entity-row--resolved) > :not(.entity-row-action) {
+  opacity: var(--opacity-disabled);
+}
 .entity-row--stale .entity-row-title { font-style: italic; }
 
-/* Löschbutton auf stale-Zeilen (Orte/Szenen/Figuren, geteilte Klasse). Kompakt,
-   schrumpft nicht; erscheint nur bei stale (x-show im Markup). button.danger färbt rot. */
-.entity-row-delete {
+/* Aktion in der Zeile (Löschen, «zusammenführen mit…» auf stale-Zeilen; geteilte
+   Klasse aller Katalog-Listen). Kompakt, schrumpft nicht; button.danger färbt rot. */
+.entity-row-action {
   flex: 0 0 auto;
   min-width: 0;
   padding: var(--space-2xs) var(--space-5);
@@ -50,19 +60,44 @@
   opacity: var(--opacity-faint);
   transition: opacity var(--transition-slow);
 }
-.entity-list--accented .entity-row:hover::before,
 .entity-list--accented .entity-row--selected::before { opacity: 1; }
+@media (hover: hover) {
+  .entity-list--accented .entity-row:hover::before { opacity: 1; }
+}
 .entity-list--accented .entity-detail {
   border-left: 3px solid var(--card-accent, var(--color-border));
   padding-left: calc(var(--space-lg) - var(--space-3));
 }
+/* Titel behält mindestens 10rem: reicht die Zeile nicht für Titel + Badges +
+   Aktionen (stale-Einträge tragen bis zu vier mehr), brechen die übrigen in eine
+   zweite Zeile um, statt den Titel auf null zu drücken. Nur als direktes Kind
+   der Zeile — im Spalten-Wrapper `.entity-row-main` wäre die Basis eine Höhe. */
+.entity-row > .entity-row-title { flex: 1 1 10rem; }
 .entity-row-title {
   font-weight: var(--fw-bold);
-  flex: 1;
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+/* Titel + Unterzeile (z.B. Kommentar-Anriss der Szenen) als ein Block: der
+   Wrapper nimmt in der Zeile den Platz des Titels ein, auch mobil (unten). */
+.entity-row-main {
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 10rem;
+  min-width: 0;
+}
+/* Klapp-Chevron: fester Platz oben rechts, ausserhalb des Umbruchs — als
+   letztes Flex-Kind landete er allein auf einer eigenen Zeile, sobald Badges
+   und Aktionen die vorige genau füllten. `top` zentriert ihn auf Zeile 1. */
+.entity-row:has(> .history-chevron) {
+  padding-right: calc(var(--space-sm) + var(--space-xl));
+}
+.entity-row > .history-chevron {
+  position: absolute;
+  right: var(--space-sm);
+  top: calc(var(--space-sm) + 3px);
 }
 .entity-row-meta {
   font-size: var(--font-size-mini);
@@ -77,6 +112,11 @@
   width: 96px;
   text-align: center;
   flex-shrink: 0;
+  /* Feste Breite: ein längeres Label (Übersetzung, neuer Typ) kürzt, statt in
+     den Titel daneben zu laufen. */
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .entity-detail {
@@ -185,24 +225,27 @@
 .skeleton-tile__line  { width: 80%; }
 
 /* === Mobile-Breakpoints für Listen-Rows ===
-   Single-line entity-row sprengt auf <600px. Title bekommt volle Breite,
-   Meta + Tags rutschen darunter, Typ-Tag wird schmaler.
+   Single-line entity-row sprengt auf <600px. Der Titel (oder sein Wrapper
+   `.entity-row-main`) steht allein auf der ersten Zeile (der Chevron sitzt
+   ohnehin absolut rechts daneben); Anker, Status-Badges, Aktionen und Meta
+   rutschen gemeinsam darunter. Typ-/Severity-Tag werden schmaler.
 */
 @media (max-width: 600px) {
-  .entity-row {
-    flex-wrap: wrap;
-    row-gap: var(--space-3);
-    column-gap: var(--space-6);
-  }
-  .entity-row-title {
+  .entity-row { column-gap: var(--space-6); }
+  .entity-row > .entity-row-title,
+  .entity-row > .entity-row-main {
     flex-basis: 100%;
     order: -1;
+  }
+  .entity-row .entity-row-title {
     white-space: normal;
     overflow: visible;
     text-overflow: clip;
     overflow-wrap: anywhere;
   }
   .entity-row-meta { max-width: 100%; }
+  /* Interpret steht mobil auf eigener Zeile — der Trenner davor wäre verwaist. */
+  .song-interpret .song-sep { display: none; }
   .entity-typ-tag {
     width: auto;
     min-width: 0;

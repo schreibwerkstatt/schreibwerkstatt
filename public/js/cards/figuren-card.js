@@ -24,6 +24,7 @@ import { figurenAlterMethods } from '../book/figuren-alter.js';
 import { figurenLebenslaufMethods } from '../book/figuren-lebenslauf.js';
 import { setupCardLifecycle } from './card-lifecycle.js';
 import { CARD_REQUEST } from './card-request.js';
+import { EVT } from '../events.js';
 import { attachFullscreenSync } from '../fullscreen.js';
 import { observeThemeChange } from '../graph-kit.js';
 // Datums-Anzeige der Lebensereignisse: dieselbe reine Funktion wie in der
@@ -37,6 +38,7 @@ import { memoMethods } from './card-memo.js';
 import { activeFilterId, sameId } from '../chapter-filter.js';
 import { plotBacklinkMethods } from '../book/plot-backlinks.js';
 import { figurPflegeMethods } from '../book/figuren-pflege.js';
+import { entityMergePickerState, entityMergePickerMethods } from '../book/entity-merge-picker.js';
 import { figurenRelCheckState, figurenRelCheckMethods } from '../book/figuren-relcheck.js';
 import { figurenSchulwegMethods } from '../book/figuren-schulweg.js';
 import { figurenStationenMethods } from '../book/figuren-stationen.js';
@@ -147,16 +149,13 @@ export function registerFigurenCard() {
     figurenLebenslaufIds: [],
     figurenLebenslaufFilters: { suche: '', typ: '' },
     // Katalog-Pflege (book/figuren-pflege.js): Steckbrief-Formular einer Figur
-    // (`figurEditId` = fig_id der Figur in Bearbeitung) und «zusammenführen mit…»
-    // einer ausgemusterten Figur (`figurMergeSourceId`).
+    // (`figurEditId` = fig_id der Figur in Bearbeitung); «zusammenführen mit…»
+    // einer ausgemusterten Figur über den geteilten Zeilen-Picker (mergePick).
     figurEditId: null,
     figurEditDraft: {},
     figurEditBusy: false,
     figurEditError: '',
-    figurMergeSourceId: null,
-    figurMergeTargetId: '',
-    figurMergeBusy: false,
-    figurMergeError: '',
+    ...entityMergePickerState(),
     figurPflegeMessage: '',
     // Schullaufbahn (book/figuren-schulweg.js): `figurSchulData` = { schulsystem,
     // wege, geburten, handlungsjahr } aus GET /figures/:id/schulwege; null = nicht
@@ -282,6 +281,18 @@ export function registerFigurenCard() {
         },
         // Sprung auf einen Reiter (Figur in der Liste, Job-Queue: figur-alter → «Alter»).
         tabRequest: { key: CARD_REQUEST.FIGUREN_TAB, apply: (mode) => this.setFigurenGraphModus(mode) },
+        // Schul-/Berufsweg-Vorschläge, die die Komplettanalyse eingereiht hat, enden ohne
+        // Poller der Karte: Vorschläge des aktuellen Buchs nachladen.
+        extraListeners: [{
+          type: EVT.JOB_FINISHED,
+          handler: (ev) => {
+            const d = ev.detail || {};
+            if (d.job?.status !== 'done') return;
+            if (String(d.bookId) !== String(Alpine.store('nav').selectedBookId)) return;
+            if (d.type === 'schulweg-vorschlag') this.loadFigurenSchulwege();
+            else if (d.type === 'stationen-vorschlag') this.loadFigurenStationen();
+          },
+        }],
       });
 
       // Reiter „Alter" ist der einzige, der Daten nachlaedt (der Alters-Index
@@ -470,6 +481,7 @@ export function registerFigurenCard() {
     ...figurenLebenslaufMethods,
     ...plotBacklinkMethods,
     ...figurPflegeMethods,
+    ...entityMergePickerMethods,
     ...figurenRelCheckMethods,
     ...figurenSchulwegMethods,
     ...figurenStationenMethods,

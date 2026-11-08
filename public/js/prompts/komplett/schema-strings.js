@@ -113,8 +113,9 @@ export const ORTE_RULES = `Regeln:
 
 // ── Musik-Schema (Songs/Musikstücke) ────────────────────────────────────────
 // Parallel zu ORTE_SCHEMA. Pflicht-Feld kontext_typ (hört/spielt/erwähnt/
-// leitmotiv/diegetisch); figuren_namen = Klarnamen (wer hört/spielt/komponiert/
-// singt) – wie Szenen, NICHT als fig_id-Referenz: der Song-Extraktions-Pass (B)
+// leitmotiv/diegetisch); figuren_namen = Klarnamen samt Rolle der Figur am Song
+// (spielt/singt/komponiert/hört/erwähnt → song_figures.kontext_typ) – wie Szenen,
+// NICHT als fig_id-Referenz: der Song-Extraktions-Pass (B)
 // läuft parallel zu A1 und kennt dessen fig_ids nicht. Auflösung Name → kanonische
 // fig_id erst nach P2 via figNameToId (runPhase3Songs).
 
@@ -130,7 +131,7 @@ export const SONGS_SCHEMA = `{
       "stimmung": "Grundatmosphäre in 2-3 Worten (z.B. melancholisch, euphorisch, beklemmend)",
       "erste_erwaehnung": "Kapitelname oder Abschnittsname der ersten Erwähnung (leer wenn unklar)",
       "kapitel": [{ "name": "Kapitelname", "haeufigkeit": 2 }],
-      "figuren_namen": ["Figurenname exakt wie im Text"]
+      "figuren_namen": [{ "name": "Figurenname exakt wie im Text", "rolle": "spielt|singt|komponiert|hört|erwähnt" }]
     }
   ]
 }`;
@@ -140,7 +141,7 @@ export const SONGS_RULES = `Regeln:
 - SEHR GROSSZÜGIG erfassen: jeden namentlich genannten Song, Track, Klassik-Stück, Hymne, Soundtrack, jede konkrete Band/Interpret-Erwähnung als eigenen Eintrag, auch bei einmaliger Erwähnung.
 - KEINE generischen Genre-Erwähnungen ohne konkreten Titel/Interpret («Klassische Musik im Hintergrund» reicht nicht). Pflicht: mindestens titel ODER interpret.
 - kontext_typ: «hört» = Figur konsumiert (Radio, Kopfhörer, Konzert); «spielt» = Figur produziert aktiv (Instrument, Gesang); «erwähnt» = Song wird im Dialog/Erzähltext genannt, ohne dass jemand ihn hört oder spielt; «leitmotiv» = Song zieht sich als wiederkehrendes Motiv durchs Buch; «diegetisch» = Musik im Hintergrund einer Szene (Bar, Auto, Party) ohne aktive Figur-Bindung.
-- figuren_namen: Klarnamen der Figuren, die den Song hören/spielen/erwähnen – exakt wie im Text (vollständiger Name oder Spitzname, KEINE ID); leeres Array wenn keine Figur klar zuordenbar
+- figuren_namen: je Figur, die den Song hört, spielt, singt, komponiert oder erwähnt, ein Eintrag – name = Klarname exakt wie im Text (vollständiger Name oder Spitzname, KEINE ID); rolle = was GENAU diese Figur mit dem Song tut: «spielt» (Instrument), «singt», «komponiert» (hat ihn geschrieben), «hört», «erwähnt» (spricht nur darüber). Die rolle gilt pro Figur und kann vom kontext_typ des Songs abweichen. Leeres Array wenn keine Figur klar zuordenbar
 - kapitel: absteigend nach Häufigkeit; haeufigkeit = Anzahl Abschnitte mit aktivem Vorkommen
 - Klassische Stücke ohne Interpret: Komponist als interpret eintragen («Beethoven» für «Mondscheinsonate»)
 - Kein Cap – vollständige Erfassung wichtiger als Kürze`;

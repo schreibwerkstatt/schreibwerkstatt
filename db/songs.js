@@ -9,20 +9,32 @@ require('./migrations');
 const { NOW_ISO_SQL } = require('./now');
 const { toRefString: _toRefString, chapterNameMap } = require('./write-helpers');
 const { inClause: _inClause } = require('../lib/validate');
-const { listSongChaptersWithNames } = require('./content-names');
+const { listSongChaptersWithNames, firstMentionChapterResolver } = require('./content-names');
+
+const { SONG_FIG_ROLLEN } = require('../lib/song-fig-rollen');
+
+const _norm = v => String(v ?? '')
+  .normalize('NFKC')
+  .toLowerCase()
+  .replace(/[„“”"'‚‘’«»‹›]/g, '')
+  .replace(/\s+/g, ' ')
+  .trim();
+// Interpret ohne fuehrenden Artikel: «The Beatles» und «Beatles», «Die Ärzte» und
+// «Ärzte» sind dieselbe Band.
+const normInterpret = v => _norm(v).replace(/^(the|die)\s+/, '');
+
+// Normalisierter Titel allein — fuer den Abgleich, wenn der Interpret nur auf einer
+// Seite belegt ist.
+function songTitleKey(s) {
+  return _norm(s?.titel ?? s?.title) || null;
+}
 
 // Identitaet eines Songs ueber Laeufe: normalisierter Titel + Interpret. Exakt,
 // nicht fuzzy — kurze Titel sind schlechte Fuzzy-Kandidaten, und Songs fehlen
 // die Indizien (Typ, Land, Koordinaten), mit denen Orte den Graubereich klaeren.
 function songKey(s) {
-  const norm = v => String(v ?? '')
-    .normalize('NFKC')
-    .toLowerCase()
-    .replace(/[„“”"'‚‘’«»‹›]/g, '')
-    .replace(/\s+/g, ' ')
-    .trim();
-  const titel = norm(s?.titel ?? s?.title);
-  return titel ? `${titel}\u0000${norm(s?.interpret)}` : null;
+  const titel = songTitleKey(s);
+  return titel ? `${titel}\u0000${normInterpret(s?.interpret)}` : null;
 }
 
 // Schreibt die Musikbibliothek eines Laufs. Die `id` der Eingabe-Songs ist nur
@@ -85,7 +97,7 @@ function saveSongsToDb(bookId, songs, userEmail, chNameToId = null, pageNameToId
     };
 
     const upd = db.prepare(`
-      UPDATE songs SET titel=?, interpret=?, genre=?, beschreibung=?, stimmung=?,
+      UPDATE songs SET titel=?, interpret=COALESCE(?, interpret), genre=?, beschreibung=?, stimmung=?,
         kontext_typ=?, erste_erwaehnung=?, erste_erwaehnung_page_id=?,
         sort_order=?, updated_at=${NOW_ISO_SQL}
       WHERE id=?`);
@@ -112,6 +124,28 @@ function saveSongsToDb(bookId, songs, userEmail, chNameToId = null, pageNameToId
       const match = k ? byKey.get(k)?.shift() : null;
       plan.push({ s, titel, match });
     }
+    // Zweite Runde, erst nach allen exakten Treffern (ein leerer Interpret ueberschreibt
+    // dabei den belegten nicht, siehe COALESCE im UPDATE): ist der Interpret nur auf
+    // einer Seite belegt (dieser Lauf hat ihn nachgeliefert oder verloren), gilt
+    // ein Bestands-Song mit gleichem Titel als derselbe — aber nur, wenn es genau
+    // einen solchen Kandidaten gibt. Sonst wuerde ein Nachtrag die song_uid und
+    // damit jeden Deep-Link neu vergeben.
+    for (const p of plan) {
+      if (p.match) continue;
+      const t = songTitleKey(p.s);
+      const mitInterpret = !!normInterpret(p.s.interpret);
+      const cands = [];
+      for (const rows of byKey.values()) {
+        for (const r of rows) {
+          if (songTitleKey(r) === t && !!normInterpret(r.interpret) !== mitInterpret) cands.push({ rows, r });
+        }
+      }
+      if (cands.length === 1) {
+        const { rows, r } = cands[0];
+        rows.splice(rows.indexOf(r), 1);
+        p.match = r;
+      }
+    }
     const kept = new Set(plan.filter(p => p.match).map(p => p.match.id));
     const del = db.prepare('DELETE FROM songs WHERE id = ?');
     for (const r of existing) if (!kept.has(r.id)) del.run(r.id);
@@ -135,7 +169,7 @@ function saveSongsToDb(bookId, songs, userEmail, chNameToId = null, pageNameToId
         // figuren: entweder String (fig_id) oder Objekt { fig_id, kontext_typ }
         const ref = _toRefString(typeof f === 'object' && f ? (f.fig_id ?? f.id) : f);
         const rowId = ref ? figIdToRowId[ref] : null;
-        const fKtx = (typeof f === 'object' && f && f.kontext_typ) ? f.kontext_typ : null;
+        const fKtx = (typeof f === 'object' && f && SONG_FIG_ROLLEN.includes(f.kontext_typ)) ? f.kontext_typ : null;
         if (rowId != null) insSf.run(songDbId, rowId, fKtx);
       }
       for (const k of (s.kapitel || [])) {
@@ -165,17 +199,21 @@ function listSongsForBook(bookId, userEmail) {
   const { sql: idSql, values: idVals } = _inClause(songIds);
   const figMap = {};
   for (const sf of db.prepare(`
-    SELECT sf.song_id, f.fig_id, sf.kontext_typ
+    SELECT sf.song_id, f.fig_id, f.name, sf.kontext_typ
     FROM song_figures sf
     JOIN figures f ON f.id = sf.figure_id
     WHERE sf.song_id IN ${idSql}
   `).all(...idVals)) {
-    (figMap[sf.song_id] ??= []).push({ fig_id: sf.fig_id, kontext_typ: sf.kontext_typ });
+    (figMap[sf.song_id] ??= []).push({ fig_id: sf.fig_id, name: sf.name, kontext_typ: sf.kontext_typ });
   }
   const kapMap = {};
   for (const sc of listSongChaptersWithNames(songIds)) {
     (kapMap[sc.song_id] ??= []).push({ chapter_id: sc.chapter_id, name: sc.chapter_name, haeufigkeit: sc.haeufigkeit });
   }
+
+  // «Erste Erwaehnung» darf laut Schema auch ein Kapitelname sein; ohne Abschnitts-
+  // Treffer zeigt die Karte dann einen Kapitel-Verweis statt Rohtext.
+  const firstMentionChapter = firstMentionChapterResolver(bookId);
 
   const songs = rows.map(r => ({
     id:                       r.song_uid,
@@ -187,6 +225,7 @@ function listSongsForBook(bookId, userEmail) {
     stimmung:                 r.stimmung,
     erste_erwaehnung:         r.erste_erwaehnung,
     erste_erwaehnung_page_id: r.erste_erwaehnung_page_id || null,
+    erste_erwaehnung_chapter_id: r.erste_erwaehnung_page_id ? null : firstMentionChapter(r.erste_erwaehnung),
     figuren:                  figMap[r.id] || [],
     kapitel:                  kapMap[r.id] || [],
   }));
@@ -201,8 +240,11 @@ function listSongIdsForBook(bookId) {
 }
 
 module.exports = {
+  SONG_FIG_ROLLEN,
+  normInterpret,
   saveSongsToDb,
   listSongIdsForBook,
   listSongsForBook,
   songKey,
+  songTitleKey,
 };

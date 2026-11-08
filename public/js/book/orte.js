@@ -4,10 +4,11 @@
 import { fetchJson } from '../utils.js';
 import { loadToken } from '../cards/book-guard.js';
 import { assignCatalogList } from '../cards/catalog-store.js';
+import { confirmEntityMerge, postEntityMerge, reloadCatalogsAfterMerge } from './entity-merge.js';
 
 // Server-`error_code` der Pflege-Routen → i18n-Key; Unbekanntes fällt auf den
 // generischen Speicherfehler.
-const EDIT_ERRORS = new Set(['NAME_REQUIRED', 'FIELD_TOO_LONG', 'INVALID_LAND', 'PARENT_NOT_FOUND', 'PARENT_CYCLE', 'NOT_FOUND', 'NOT_DELETABLE']);
+const EDIT_ERRORS = new Set(['NAME_REQUIRED', 'FIELD_TOO_LONG', 'INVALID_LAND', 'PARENT_NOT_FOUND', 'PARENT_CYCLE', 'NOT_FOUND', 'NOT_DELETABLE', 'NO_ANALYSIS']);
 
 async function _send(method, url, body) {
   const r = await fetch(url, {
@@ -61,21 +62,31 @@ export const orteMethods = {
   },
 
   // Quelle in Ziel verschmelzen (Kapitel, Figuren, Szenen, Plot-Beats, Recherche-
-  // Links und Unterorte wandern mit). Szenen neu laden — ihre ort_ids zeigen danach
-  // aufs Ziel.
+  // Links und Unterorte wandern mit, der Quellname wird Alias des Ziels). Geteilter
+  // Client-Weg book/entity-merge.js; die Kataloge laden danach neu (Szenen-ort_ids).
   async mergeOrt(sourceId, targetId) {
     const bookId = this.$store.nav.selectedBookId;
     const src = this.$store.catalog.orte.find(o => o.id === sourceId);
     const tgt = this.$store.catalog.orte.find(o => o.id === targetId);
     if (!src || !tgt) return false;
-    if (!await this.appConfirm({
-      message: this.t('orte.merge.confirm', { source: src.name, target: tgt.name }),
-      confirmLabel: this.t('orte.merge.action'),
-    })) return false;
-    await _send('POST', `/locations/${bookId}/merge`, { source: sourceId, target: targetId });
-    await Promise.all([this.loadOrte(bookId), this.loadSzenen(bookId)]);
+    if (!await confirmEntityMerge(src.name, tgt.name)) return false;
+    await postEntityMerge('ort', bookId, sourceId, targetId);
+    await reloadCatalogsAfterMerge(bookId);
     this.$store.catalogUi.selectedOrtId = targetId;
     return true;
+  },
+
+  // «Analyse-Werte übernehmen»: Schutz aller Felder aufheben, bekannte Analysewerte
+  // sofort zurückschreiben. Wirft bei Fehler.
+  async restoreOrtAnalysis(o) {
+    if (!o || !o.manual_fields?.length) return;
+    if (!await this.appConfirm({
+      message: this.t('orte.restore.confirm', { name: o.name }),
+      confirmLabel: this.t('orte.restore.action'),
+    })) return;
+    const bookId = this.$store.nav.selectedBookId;
+    await _send('POST', `/locations/${bookId}/${encodeURIComponent(o.id)}/restore-analysis`, {});
+    await this.loadOrte(bookId);
   },
 
   // Endgültig löschen — nur verwaiste («nicht mehr im Text») und selbst angelegte
@@ -92,6 +103,7 @@ export const orteMethods = {
       await this.loadOrte(this.$store.nav.selectedBookId);
     } catch (e) {
       console.error('[deleteOrt]', e);
+      await this.appAlert({ message: this.ortEditErrorText(e) });
     }
   },
 
