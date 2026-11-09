@@ -1,0 +1,26 @@
+{
+  "version": "6.2.2",
+  "date": "2026-11-09",
+  "entries": [
+    {
+      "kind": "verbessert",
+      "de": "Komplettanalyse: im Dialog «Lauf-Umfang» siehst du vor dem Start, wie viele Kapitel neu gelesen werden und welche aus dem letzten Lauf kommen. Muss der ganze Text neu gelesen werden, sagt dir ein Hinweis warum.",
+      "en": "Full analysis: in the \"Run scope\" dialog you see before starting how many chapters will be read again and which come from the last run. If the whole text has to be read again, a note tells you why."
+    },
+    {
+      "kind": "verbessert",
+      "de": "Komplettanalyse: Nebenfiguren, die nur in einer einzigen Szene auftreten, landen jetzt als Randfigur in der Figurenliste, sofern ihr Name mehrfach im Text steht.",
+      "en": "Full analysis: minor characters who appear in only one scene now end up in the character list as peripheral characters, as long as their name appears several times in the text."
+    },
+    {
+      "kind": "behoben",
+      "de": "Motive, Beats, Figuren und die Buchlandkarte wurden nach einer kurzen Störung des Suchdienstes stellenweise nicht im Text verortet.",
+      "en": "Motifs, beats, characters and the book map were sometimes not located in the text after a brief outage of the search service."
+    },
+    {
+      "kind": "behoben",
+      "de": "Kostenstatistik: Auswertungen ohne KI, etwa der Wortschatz-Scan, erschienen dort als Läufe eines KI-Modells.",
+      "en": "Cost statistics: analyses without AI, such as the vocabulary scan, showed up there as runs of an AI model."
+    }
+  ]
+}
