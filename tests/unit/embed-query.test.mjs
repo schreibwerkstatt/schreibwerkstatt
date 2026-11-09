@@ -68,3 +68,34 @@ test('embedOne force: Admin-Test geht auch bei ausgeschaltetem Backend', async (
     appSettings.set('embed.enabled', true);
   }
 });
+
+test('embedQuery background: übergeht den offenen Breaker und wiederholt mehr als einmal', async () => {
+  stubDown();
+  await assert.rejects(embed.embedQuery('frage'));
+  // Breaker offen. Hintergrund-Job: zwei Aussetzer, dann Antwort.
+  let fails = 2;
+  globalThis.fetch = async (url, opts) => {
+    calls++;
+    if (fails-- > 0) throw new TypeError('fetch failed');
+    const { input } = JSON.parse(opts.body);
+    return new Response(JSON.stringify({ data: input.map((_, index) => ({ index, embedding: [1, 2, 3] })) }), { status: 200 });
+  };
+  calls = 0;
+  const v = await embed.embedQuery('beat', { background: true });
+  assert.equal(v.length, 3);
+  assert.equal(calls, 3, 'zwei Retries, dann Erfolg');
+});
+
+test('embedQuery background: ein Fehlschlag öffnet den Breaker nicht', async () => {
+  let failOnce = true;
+  globalThis.fetch = async (url, opts) => {
+    calls++;
+    if (failOnce) { failOnce = false; throw new TypeError('fetch failed'); }
+    const { input } = JSON.parse(opts.body);
+    return new Response(JSON.stringify({ data: input.map((_, index) => ({ index, embedding: [1, 2, 3] })) }), { status: 200 });
+  };
+  await embed.embedQuery('beat', { background: true });
+  // Vordergrund-Anfrage danach läuft normal (kein breakerOpen).
+  const v = await embed.embedQuery('suche');
+  assert.equal(v.length, 3);
+});

@@ -97,7 +97,7 @@ function _ownHit(userEmail) {
 async function _anchorKern(bookId, query, signalFn, minScore, userEmail, snippetFor = null) {
   if (!query) return [];
   const hits = await retrieval.semanticQuery(bookId, query, {
-    kinds: SCAN_KINDS, topK: TOP_K, signal: signalFn(), strictRerank: true, user: userEmail,
+    kinds: SCAN_KINDS, topK: TOP_K, signal: signalFn(), strictRerank: true, user: userEmail, background: true,
   });
   const occs = _occsFromHits(hits, minScore, _ownHit(userEmail));
   if (!snippetFor) return occs;

@@ -120,6 +120,23 @@ function deleteChapterExtractCache(bookId, userEmail) {
   return c + b + u;
 }
 
+// Gibt es für dieses Buch überhaupt Extraktions-Einträge der aktuellen Cache-Version?
+// Die Signaturen enden auf `||<version>` (Basis-Chunk, Single-Pass) bzw. tragen
+// `||<version>||cp<n>` (Gap-Eintrag). Null heisst: Prompts, Modell, Effort oder
+// Buchkontext haben sich seit dem letzten Lauf geändert (Prognose im Start-Dialog,
+// routes/jobs/komplett/extract-plan.js). Suffix-Vergleich statt LIKE: die Version
+// trägt Modellnamen mit `_`/`-`.
+const _versionMatch = `(substr(pages_sig, -length(@tail)) = @tail OR instr(pages_sig, @tail || '||cp') > 0)`;
+const _countVersionStmts = ['chapter_extract_cache', 'book_extract_cache', 'ungrouped_extract_cache']
+  .map(t => db.prepare(
+    `SELECT COUNT(*) AS n FROM ${t} WHERE book_id = @book AND user_email = @email AND provider = @provider AND ${_versionMatch}`
+  ));
+
+function countExtractCacheForVersion(bookId, userEmail, provider, version) {
+  const args = { book: parseInt(bookId), email: userEmail || '', provider: provider || '', tail: `||${version || ''}` };
+  return _countVersionStmts.reduce((n, st) => n + st.get(args).n, 0);
+}
+
 // ── Delta-Cache: Buch-Review (Kapitelanalyse + Single-Pass-Review) ────────────
 // Spart bei grossen Büchern den Kapitelanalyse-Call, wenn pages_sig identisch
 // (page_id:updated_at + Prompt-Vars). chapterKey-Format identisch zum Extract-
@@ -368,6 +385,7 @@ module.exports = {
   loadChapterExtractCache,
   saveChapterExtractCache,
   deleteChapterExtractCache,
+  countExtractCacheForVersion,
   loadChapterReviewCache,
   saveChapterReviewCache,
   loadBookReviewCache,

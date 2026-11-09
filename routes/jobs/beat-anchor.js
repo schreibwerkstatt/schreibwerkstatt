@@ -74,7 +74,7 @@ async function _anchorBeat(bookId, beat, useSemantic, signalFn, minScore = 0, op
 
   if (useSemantic) {
     const hits = await retrieval.semanticQuery(bookId, query, {
-      kinds: SCAN_KINDS, topK: TOP_K, signal: signalFn(), strictRerank: true,
+      kinds: SCAN_KINDS, topK: TOP_K, signal: signalFn(), strictRerank: true, background: true,
       ...(scoped ? { user: opts.userEmail ?? null } : {}),
     });
     for (const h of hits) {

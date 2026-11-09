@@ -86,6 +86,28 @@ export const appKomplettMethods = {
       : this.t('komplett.delta.lastRun', { when });
   },
 
+  // Prognose des Extraktions-Caches (routes/jobs/komplett/extract-plan.js): wie viel
+  // Text der Lauf neu lesen müsste. Bewusst ohne Preis — die Zeit- und Umfangsangabe
+  // reicht für die Entscheidung. «Neu erstellen» leert den Cache, dann zählt alles.
+  komplettExtractText() {
+    const x = this.komplettDelta?.extract;
+    if (!x || !x.total) return '';
+    if (x.mode === 'single') {
+      if (this.komplettScopeForce || !x.cached) return this.t('komplett.delta.extractSingleFresh');
+      return this.t('komplett.delta.extractSingleCached');
+    }
+    if (this.komplettScopeForce) return this.tn('komplett.delta.extractAll', x.total);
+    const fresh = x.total - x.cached;
+    if (fresh === 0) return this.t('komplett.delta.extractNone');
+    if (fresh === x.total) return this.tn('komplett.delta.extractAll', x.total);
+    return this.tn('komplett.delta.extractPartial', fresh);
+  },
+
+  komplettExtractVersionChanged() {
+    const x = this.komplettDelta?.extract;
+    return !!(x && x.versionChanged && !this.komplettScopeForce);
+  },
+
   komplettDeltaChangedText() {
     const d = this.komplettDelta;
     if (!d?.changedChars) return '';

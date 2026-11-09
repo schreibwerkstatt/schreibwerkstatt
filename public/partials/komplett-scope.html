@@ -30,6 +30,8 @@
         <p class="card-hint" x-show="komplettDeltaLevel() === 'never'" x-text="t('komplett.delta.neverHint')"></p>
         <p class="komplett-delta-line" x-show="komplettDelta.lastRun" x-text="komplettDeltaLastRunText()"></p>
         <p class="komplett-delta-line" x-show="komplettDelta.changedChars > 0" x-text="komplettDeltaChangedText()"></p>
+        <p class="komplett-delta-line" x-show="komplettExtractText()" x-text="komplettExtractText()"></p>
+        <p class="card-hint" x-show="komplettExtractVersionChanged()" x-text="t('komplett.delta.extractVersionChanged')"></p>
         <p class="komplett-delta-line" x-show="komplettDelta.newPages > 0 || komplettDelta.deletedPages > 0"
            x-text="t('komplett.delta.pagesNewDeleted', { neu: komplettDelta.newPages, del: komplettDelta.deletedPages })"></p>
         <div class="komplett-delta-list" x-show="komplettDelta.topChapters?.some(c => c.id)">

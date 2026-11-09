@@ -13,6 +13,8 @@ const { komplettTextOpts } = require('./job-shared');
 const { lastKomplettRun, revisionBaselines, deletionsSince } = require('../../../db/komplett-delta');
 const { listKatalogAnker } = require('../../../db/katalog-anker');
 const { textDelta, catalogWordSet, novelNames, affectedFigures, komplettVerdict } = require('../../../lib/komplett-delta');
+const { forecastExtractCache } = require('./extract-plan');
+const logger = require('../../../logger');
 
 const MIN_PAGE_CHARS = 30; // wie job-komplett.js#loadPageContents
 const CAP_WORD = /[A-ZÄÖÜ][\p{L}\-']*/gu;
@@ -92,9 +94,20 @@ async function computeKomplettDelta(bookId, userEmail) {
     .slice(0, 5)
     .map(([id, chars]) => ({ id: id || null, chars }));
 
+  // Wie viel der Extraktion aus dem Delta-Cache käme (dieselben Keys wie der Job). Ein
+  // Volllauf nach einer Prompt- oder Modelländerung soll vor dem Start sichtbar sein,
+  // nicht erst an der Laufzeit. Nicht-fatal: ohne Prognose bleibt der Rest der Indikation.
+  let extract = null;
+  try {
+    extract = await forecastExtractCache(bookId, userEmail, contents);
+  } catch (e) {
+    logger.warn(`Komplett-Prognose (Extraktions-Cache) fehlgeschlagen: ${e.message}`);
+  }
+
   return {
     lastRun,
     totalChars,
+    extract,
     changedChars,
     added,
     removed,

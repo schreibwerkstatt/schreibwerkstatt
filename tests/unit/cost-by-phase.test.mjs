@@ -140,7 +140,10 @@ test('summarizeCostByPhase: teuerster Bucket zuerst, USD auf Cent gerundet', () 
 // Effort-Wechsel weiterhin den alten `__singlepass__`-Katalog aus book_extract_cache
 // — die Umstellung sähe dann wirkungslos aus, obwohl sie nur nicht griff.
 test('cacheVersion enthält Modell und Effort des Extraktions-Tiers, wie der Call sie auflöst', async () => {
-  const src = readFileSync(new URL('../../routes/jobs/komplett/job-komplett.js', import.meta.url), 'utf8');
+  // Gebaut im Extraktions-Plan (geteilt von Job und Prognose); der Job ruft ihn mit seinem Tier.
+  const src = readFileSync(new URL('../../routes/jobs/komplett/extract-plan.js', import.meta.url), 'utf8');
+  const jobSrc = readFileSync(new URL('../../routes/jobs/komplett/job-komplett.js', import.meta.url), 'utf8');
+  assert.match(jobSrc, /extractCacheVersions\(\{[^}]*extractTier/, 'der Job baut die Versionen mit seinem Extraktions-Tier');
   const chunkLine = src.split('\n').find(l => l.includes('const chunkCacheVersion ='));
   assert.match(chunkLine || '', /extractCacheBase\(\{[^}]*tier: extractTier/,
     'chunkCacheVersion muss über extractCacheBase mit dem Extraktions-Tier gebaut werden');

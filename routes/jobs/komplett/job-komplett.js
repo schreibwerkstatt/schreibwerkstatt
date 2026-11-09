@@ -20,7 +20,7 @@ const {
   makeJobLogger, updateJob, completeJob, failJob, i18nError, i18nErrText, contentHttpError,
   getPrompts, getBookPrompts,
   loadOrderedBookContents, idMapsFromContents, loadPageContents, groupByChapter, buildSinglePassBookText, cleanPageTextForAi,
-  chunkLimitsFor, resolveExtractSinglePassLimit, BATCH_SIZE, jobAbortControllers,
+  BATCH_SIZE, jobAbortControllers,
   fmtTok, tps,
   createJob, enqueueJob, findActiveJobId,
   summarizeCostByPhase, formatCostByPhase,
@@ -40,7 +40,7 @@ const { runBookRelationCheck } = require('../finetune-export/lib/relation-check-
 const {
   runPhase1, runPhase2, runPhase3, runPhase3Songs, runPhase3b,
   buildPrelimFigurenKompakt, runPhase3OrteCall,
-  runZeitstrahlPhase, runCoverageAudit, komplettMaxTokens,
+  runZeitstrahlPhase, runCoverageAudit,
 } = require('./phases');
 const { _komplettAiOverrides, resolveRemapNames, resolveRemapOrtNames, komplettTextOpts } = require('./job-shared');
 const { loadOrteFromDb, countSongsInDb, countSzenenInDb, activeStepJob } = require('./scope');
@@ -48,7 +48,10 @@ const { normalizeKomplettScope, isFullKomplettScope, skippedKomplettSteps, KOMPL
 const { enqueuePruefJobs } = require('./pruef-jobs');
 const { COST_LABEL, relabel } = require('./cost-labels');
 const { persistWorldFacts } = require('./world-facts-save');
-const { extractCacheBase, consolidationFlags } = require('./signatures');
+const { consolidationFlags } = require('./signatures');
+const {
+  buildExtractTier, resolveExtractLimits, resolveExtractFlags, extractCacheVersions,
+} = require('./extract-plan');
 const { loadKatalogAnker } = require('./katalog-anker');
 
 // Beziehungsprüfung über den fertigen Katalog (finetune-export/lib/relation-check.js):
@@ -115,11 +118,7 @@ async function runKomplettAnalyseJob(jobId, bookId, bookName, userEmail, provide
   // laufen über `settledAll` parallel; ein ALS-Patch würde den Nachbar-Call mittreffen.
   // Das `label` klassifiziert die Kosten (job.result.costByPhase) und beeinflusst den
   // Request nicht. Beide Felder leer → Verhalten identisch zu vorher.
-  const extractTier = effectiveProvider === 'claude' ? {
-    model: String(appSettings.get('ai.claude.model.komplett.extract') || '').trim() || undefined,
-    effort: String(appSettings.get('ai.claude.effort.komplett.extract') || '').trim().toLowerCase() || undefined,
-    label: COST_LABEL.extract,
-  } : { label: COST_LABEL.extract };
+  const extractTier = buildExtractTier(effectiveProvider);
   // Gap-/Coverage-Pässe laufen auf DEMSELBEN Tier (Modell + Effort) wie die
   // Basis-Extraktion, werden aber getrennt bepreist: sie hängen an eigenen
   // Hebeln (completeness_passes, coverage_audit_chapters) und vervielfachen die
@@ -129,28 +128,9 @@ async function runKomplettAnalyseJob(jobId, bookId, bookName, userEmail, provide
   const coverageTier = relabel(extractTier, COST_LABEL.coverage);
   // Geteilter Buch-Präfix → kein Schema (Cache-Regel, siehe ./call.js).
   const call = makeKomplettCall(effectiveProvider);
-  // Per-Provider-Skalierung aus dessen `ai.<p>.context_window` (lib/ai.js#getContextConfigFor).
-  // Bei Claude 200K-Kontext ≈ 420K Zeichen Single-Pass – reicht für fast alle Bücher.
-  // Gegen das EIGENE Output-Cap dieser Pipeline gerechnet, nicht gegen das provider-weite:
-  // `komplettMaxTokens` (Cloud: das Provider-Ceiling, lokal `ai.komplett.extract_max_tokens`)
-  // ist das Output-Cap der Pipeline. Es wirkt nur, wenn ein Call es im `maxTokens`-Slot
-  // übergibt (9. Argument von `call`, Muster phases/extraktion.js) — im `expectedChars`-Slot
-  // ist es bloss eine Fortschritts-Schätzung, und aiCall reserviert dann das Provider-Ceiling.
-  // Der Wert im `maxTokens`-Slot bestimmt auch den Kontext-Preflight in aiCall.
-  // Mit dem provider-weiten `max_tokens_out` läge die Chunk-Grenze unter dem, was die Calls
-  // tatsächlich tragen — bei einem lokalen Modell zerlegt das das Buch in deutlich mehr
-  // Chunks als nötig (mehr Calls, mehr chunk-übergreifende Dubletten in der Konsolidierung).
-  const { singlePass: singlePassLimit, perChunk: perChunkLimit } =
-    chunkLimitsFor(effectiveProvider, { maxTokensOut: komplettMaxTokens(effectiveProvider) });
-  // EXTRAKTIONS-Schwelle, entkoppelt von der Kontinuitäts-Schwelle (singlePassLimit): bei
-  // Opus 4.8 + 1M würde sonst fast jedes Buch Single-Pass extrahiert (schlechterer Long-Tail-
-  // Recall + Truncation-Risiko im 128K-Output). ai.komplett.extract_single_pass_cap > 0 zwingt
-  // die Extraktion in kapitelweise Chunks (Gap-Pässe + Alias-Cluster greifen), während
-  // Kontinuität/Erzählprofil weiter das ganze Buch sehen. Nur Claude.
-  const extractCapChars = isCloudModel
-    ? Math.max(0, parseInt(appSettings.get('ai.komplett.extract_single_pass_cap'), 10) || 0)
-    : 0;
-  const extractSinglePassLimit = resolveExtractSinglePassLimit(singlePassLimit, extractCapChars);
+  // Grenzen (gegen das Output-Cap der Pipeline) und Extraktions-Schwelle: ./extract-plan.js.
+  const { singlePassLimit, perChunkLimit, extractCapChars, extractSinglePassLimit } =
+    resolveExtractLimits(effectiveProvider);
   const prompts = await getPrompts(userEmail);
   const sys = await getBookPrompts(bookId, email);
   const tok = { in: 0, out: 0, ms: 0, inflight: new Map() };
@@ -209,37 +189,15 @@ async function runKomplettAnalyseJob(jobId, bookId, bookName, userEmail, provide
     const passMode = totalChars <= extractSinglePassLimit ? 'single' : 'multi';
     updateJob(jobId, { passMode });
 
-    // completeness_passes (geclampt) verändert den Single-Pass-Extraktionsinhalt (zusätzliche
-    // Long-Tail-Entitäten), muss also Teil der Cache-Version sein — sonst liefert ein Hochsetzen
-    // von 0→N bei unverändertem Seitenstand weiter den alten HIT ohne Long-Tail (stiller
-    // Qualitätsverlust). Über cacheVersion fliesst der Wert automatisch in den Single-Pass-Key,
-    // die Multi-Pass-Chunk-Keys und den Checkpoint-bookPagesSig (alle drei invalidieren).
-    const completenessPasses = Math.max(0, Math.min(3,
-      parseInt(appSettings.get('ai.komplett.completeness_passes'), 10) || 0));
-
-    // Content-verändernde Single-Pass-Erweiterung (nur Claude): der Szenen-Backfill
-    // mutiert den gecachten __singlepass__-Katalog. Wie completeness_passes muss sein
-    // Enablement in die cacheVersion, sonst friert ein Toggle den alten HIT ein. Einmal
-    // berechnen und via ctx durchreichen → cacheVersion und Verhalten lesen dieselben Werte.
-    // Der Coverage-Audit ist reine Messung (schreibt nichts) und gehört NICHT hinein.
-    const sceneBackfillEnabled = isCloudModel
-      && appSettings.get('ai.komplett.scene_backfill') !== false;
-    const sceneBackfillMinChars = Math.max(500, parseInt(appSettings.get('ai.komplett.scene_backfill_min_chars'), 10) || 3000);
+    // Inhalt verändernde Einstellungen (completeness_passes, Szenen-Backfill) und die
+    // Cache-Versionen daraus — was die Extraktions-Calls tatsächlich senden und wie sie
+    // aufgelöst werden. Bestandteile und Begründung: ./extract-plan.js + docs/komplett.md.
+    const { completenessPasses, sceneBackfillEnabled, sceneBackfillMinChars } = resolveExtractFlags(isCloudModel);
     const figureBatchSize = Math.max(1, parseInt(appSettings.get('ai.komplett.figure_batch_size'), 10) || 20);
-
-    // Cache-Version: was die Extraktions-Calls tatsächlich senden und wie sie aufgelöst
-    // werden — Modell + Effort des Extraktions-Tiers nach Auflösung, die System-Blöcke
-    // dieses Buchs (Buchkontext eingeschlossen) und die Extraktions-Prompt-Version
-    // (./signatures.js, Begründung dort). Dazu nur beim Single-Pass dessen Erweiterungen
-    // (Extraktions-Cap, Coverage-Stichprobe, Szenen-Backfill) und completeness_passes.
-    // Basis-Chunks des Multi-Pass tragen die Erweiterungen nicht: ein Toggle daran soll
-    // nicht alle Kapitel neu bezahlen (der :gap-Key trägt cp selbst).
-    const extractVersion = prompts.KOMPLETT_EXTRACT_VERSION || prompts.PROMPTS_VERSION || '';
-    const chunkCacheVersion = extractCacheBase({ provider: effectiveProvider, tier: extractTier, sys, extractVersion });
-    const singlePassAug = isCloudModel
-      ? `:esp${extractCapChars}:sb${sceneBackfillEnabled ? 1 : 0}:sbm${sceneBackfillMinChars}`
-      : '';
-    const cacheVersion = `${chunkCacheVersion}:cp${completenessPasses}${singlePassAug}`;
+    const { chunkCacheVersion, cacheVersion } = extractCacheVersions({
+      effectiveProvider, extractTier, sys, prompts, extractCapChars,
+      flags: { completenessPasses, sceneBackfillEnabled, sceneBackfillMinChars },
+    });
     // Buch-weite Signatur (Seitenstand + Settings + Modell/Prompt-Version) – dieselbe
     // Gate wie der chapter_extract_cache. Validiert den Checkpoint-Resume.
     const bookPagesSig = buildBookPagesSig(pageContents, getBookSettings(bookIdInt, email), cacheVersion);

@@ -102,6 +102,7 @@ module.exports = {
   loadChapterExtractCache:   aiCaches.loadChapterExtractCache,
   saveChapterExtractCache:   aiCaches.saveChapterExtractCache,
   deleteChapterExtractCache: aiCaches.deleteChapterExtractCache,
+  countExtractCacheForVersion: aiCaches.countExtractCacheForVersion,
   loadChapterReviewCache:    aiCaches.loadChapterReviewCache,
   saveChapterReviewCache:    aiCaches.saveChapterReviewCache,
   loadBookReviewCache:       aiCaches.loadBookReviewCache,

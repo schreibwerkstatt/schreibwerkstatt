@@ -90,14 +90,20 @@ function recordJobLedger(jobId) {
     const r = _selJobRun.get(jobId);
     if (!r) return;
     if (_chatSourced.has(r.type)) return;
+    // Lauf ohne KI-Call (Wortschatz-Scan, Anker, Redundanz …): job_runs trägt
+    // das Instanz-Modell trotzdem. Die Zeile bleibt (lastDoneJobRun liest sie
+    // jenseits der job_runs-Aufbewahrung), aber ohne Provider/Modell — sonst
+    // zählte die Kostenstatistik je Modell lauter Null-Läufe mit.
+    const usedAi = (r.tokens_in || 0) + (r.tokens_out || 0) + (r.cache_read_in || 0)
+      + (r.cache_creation_in || 0) + (r.cache_creation_1h_in || 0) > 0;
     _record({
       ts: r.ended_at,
       user_email: r.user_email,
       source: 'job',
       type: r.type,
       book_id: r.book_id,
-      provider: r.provider,
-      model: r.model,
+      provider: usedAi ? r.provider : null,
+      model: usedAi ? r.model : null,
       tokens_in: r.tokens_in,
       tokens_out: r.tokens_out,
       cache_read_in: r.cache_read_in,

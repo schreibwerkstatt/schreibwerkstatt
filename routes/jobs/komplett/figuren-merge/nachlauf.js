@@ -5,6 +5,7 @@
 
 const { _refToString } = require('../utils');
 const { normName: _normalizeName, nameTokens: _nameTokens } = require('../../../../lib/name-normalize');
+const { escapeRegex } = require('../../../../lib/regex-escape');
 
 /** Welle 4 · #12 – Mode-Vote für Sozialschicht (lokale Modelle).
  *  Phase 2 (Konsolidierung) bei kleinen Modellen wählt die sozialschicht
@@ -48,9 +49,36 @@ function applySozialschichtModeVote(chapterFiguren, figuren) {
  *  Einmal-Halluzinationen zu filtern. Token-Subset zu einer bestehenden Figur
  *  («Gerold» bei vorhandenem «Gerold Brunner») → kein Backfill, der
  *  Token-Fallback in buildFigNameLookup löst das auf. Mutiert `figuren`
- *  (append) und gibt die Anzahl neu angelegter Figuren zurück. */
+ *  (append) und gibt die Anzahl neu angelegter Figuren zurück.
+ *
+ *  Einmal-Vorkommen (`opts.bookText`): eine Figur, die nur in einer einzigen Szene
+ *  steht (Nebenfigur mit einem Abschnitt), fiele sonst still aus dem Katalog. Sie
+ *  wird als Randfigur nachgetragen, wenn ihr Name wie ein Eigenname aussieht
+ *  (kein Artikel am Anfang, kein kleingeschriebenes Wort — «Die Frau an der Bar»,
+ *  «Psychiater der Rosegg» bleiben draussen) UND mindestens zweimal wörtlich im
+ *  Buchtext steht. Der Textbeleg ersetzt die zweite Szene als Schutz gegen
+ *  Halluzination. */
 const NAME_HAS_LETTER_RE = /\p{L}/u;
-function backfillFiguren(figuren, chapterSzenen, chapterAssignments, log) {
+const ARTICLE_RE = /^(der|die|das|ein|eine|einer|eines|einem|einen|dem|den|des)$/i;
+const SINGLE_MENTION_MIN_TEXT_HITS = 2;
+
+function _looksLikeProperName(display) {
+  const tokens = display.trim().split(/\s+/).filter(Boolean);
+  if (!tokens.length || ARTICLE_RE.test(tokens[0])) return false;
+  // Jedes Wort beginnt gross (Bindestrich-/Apostroph-Teile zählen zum Wort).
+  return tokens.every(t => /^\p{Lu}/u.test(t));
+}
+
+/** Wörtliche Vorkommen als ganzes Wort (gross/klein wie geschrieben), höchstens `cap`. */
+function _countInText(text, name, cap) {
+  const re = new RegExp(`(?<![\\p{L}\\p{N}])${escapeRegex(name).replace(/\s+/g, '\\s+')}(?![\\p{L}\\p{N}])`, 'gu');
+  let n = 0;
+  while (n < cap && re.exec(text)) n++;
+  return n;
+}
+
+function backfillFiguren(figuren, chapterSzenen, chapterAssignments, log, opts = {}) {
+  const bookText = typeof opts.bookText === 'string' && opts.bookText ? opts.bookText : null;
   const resolved = new Set();
   const figTokens = [];
   for (const f of figuren) {
@@ -84,7 +112,12 @@ function backfillFiguren(figuren, chapterSzenen, chapterAssignments, log) {
 
   let created = 0;
   for (const { display, count } of refs.values()) {
-    if (count < 2) continue;
+    let typ = 'andere';
+    if (count < 2) {
+      if (!bookText || !_looksLikeProperName(display)) continue;
+      if (_countInText(bookText, display.trim(), SINGLE_MENTION_MIN_TEXT_HITS) < SINGLE_MENTION_MIN_TEXT_HITS) continue;
+      typ = 'randfigur';
+    }
     const key = _normalizeName(display);
     if (resolved.has(key)) continue;
     if (display.length < 2 || !NAME_HAS_LETTER_RE.test(display)) continue;
@@ -95,14 +128,14 @@ function backfillFiguren(figuren, chapterSzenen, chapterAssignments, log) {
     figuren.push({
       id: 'fig_' + maxIdx,
       name: display,
-      typ: 'andere',
+      typ,
       beziehungen: [],
       kapitel: [],
       eigenschaften: [],
     });
     resolved.add(key);
     created++;
-    log.info(`Backfill-Figur «${display}» aus Szenen/Events (${count} Vorkommen) – Phase-1 hatte sie ausgelassen.`);
+    log.info(`Backfill-Figur «${display}» aus Szenen/Events (${count} Vorkommen${typ === 'randfigur' ? ', im Buchtext belegt' : ''}) – Phase-1 hatte sie ausgelassen.`);
   }
   return created;
 }

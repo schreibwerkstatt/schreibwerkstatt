@@ -22,6 +22,7 @@ const { runKontinuitaetRecheckJob } = require('./job-recheck');
 const { normalizeKomplettScope } = require('../../../lib/komplett-scope');
 const { activeStepJob } = require('./scope');
 const { computeKomplettDelta } = require('./delta');
+const { SP_TRUNC_CP_TYPE } = require('./extract-plan');
 const logger = require('../../../logger');
 
 const komplettRouter = express.Router();
@@ -92,7 +93,7 @@ komplettRouter.post('/komplett-analyse', jsonBody, (req, res) => {
   if (req.body?.force === true) {
     const deleted = deleteChapterExtractCache(book_id, userEmail || '');
     deleteCheckpoint('komplett-consolidation', book_id, userEmail || '');
-    deleteCheckpoint('komplett-singlepass-truncated', book_id, userEmail || '');
+    deleteCheckpoint(SP_TRUNC_CP_TYPE, book_id, userEmail || '');
     logger.info(`Komplettanalyse: Neu-Erstellung angefordert – ${deleted} Cache-Eintraege geleert.`);
   }
   const label = book_name ? 'job.label.komplettBook' : 'job.label.komplett';
@@ -265,7 +266,7 @@ komplettRouter.delete('/chapter-cache/:book_id', (req, res) => {
   // F5: den Konsolidierungs-Checkpoint mitlöschen — sonst würde ein Re-Run nach dem Cache-Leeren
   // zwar Phase 1 neu extrahieren, aber (bei gleichem Inhalt) P2–P8 weiterhin überspringen.
   deleteCheckpoint('komplett-consolidation', bookId, userEmail);
-  deleteCheckpoint('komplett-singlepass-truncated', bookId, userEmail);
+  deleteCheckpoint(SP_TRUNC_CP_TYPE, bookId, userEmail);
   res.json({ ok: true, deleted });
 });
 

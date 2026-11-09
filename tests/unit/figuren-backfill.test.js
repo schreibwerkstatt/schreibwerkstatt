@@ -90,3 +90,39 @@ test('mehrere fehlende Namen werden alle angelegt', () => {
   );
   assert.equal(created, 2);
 });
+
+// Einmal-Vorkommen mit Textbeleg (opts.bookText): Nebenfigur mit einem Abschnitt.
+const BOOK = 'Ursina kam spät. Später sagte Ursina nichts. Die Frau an der Bar lachte. '
+  + 'Die Frau an der Bar ging. Der Psychiater der Rosegg schwieg, der Psychiater der Rosegg nickte. '
+  + 'Joshua winkte.';
+
+test('Einmal-Vorkommen: Eigenname mit ≥2 Textbelegen wird Randfigur', () => {
+  const figuren = [{ id: 'fig_1', name: 'Dieter' }];
+  const created = backfillFiguren(figuren, chSz(szene('Ursina')), [], log, { bookText: BOOK });
+  assert.equal(created, 1);
+  const u = figuren.find(f => f.name === 'Ursina');
+  assert.equal(u.typ, 'randfigur');
+});
+
+test('Einmal-Vorkommen: nur ein Textbeleg reicht nicht', () => {
+  const figuren = [{ id: 'fig_1', name: 'Dieter' }];
+  assert.equal(backfillFiguren(figuren, chSz(szene('Joshua')), [], log, { bookText: BOOK }), 0);
+});
+
+test('Einmal-Vorkommen: Rollen mit Artikel oder Kleinwort bleiben draussen', () => {
+  const figuren = [{ id: 'fig_1', name: 'Dieter' }];
+  const created = backfillFiguren(figuren,
+    chSz(szene('Die Frau an der Bar'), szene('Psychiater der Rosegg')), [], log, { bookText: BOOK });
+  assert.equal(created, 0);
+});
+
+test('Einmal-Vorkommen ohne Buchtext: Schwelle 2 bleibt', () => {
+  const figuren = [{ id: 'fig_1', name: 'Dieter' }];
+  assert.equal(backfillFiguren(figuren, chSz(szene('Ursina')), [], log), 0);
+});
+
+test('Einmal-Vorkommen: Wortgrenze — «Ursinas» ist kein Beleg für «Ursina»', () => {
+  const figuren = [{ id: 'fig_1', name: 'Dieter' }];
+  const text = 'Ursina ging. Ursinas Hund bellte.';
+  assert.equal(backfillFiguren(figuren, chSz(szene('Ursina')), [], log, { bookText: text }), 0);
+});

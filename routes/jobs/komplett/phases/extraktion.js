@@ -5,11 +5,9 @@ const {
   saveCheckpoint, loadCheckpoint, loadChapterExtractCache, saveChapterExtractCache, getBookSettings,
 } = require('../../../../db/schema');
 
-// Merker «Single-Pass ist an diesem Buch am Output-Cap gerissen». Ohne ihn startet jeder
-// Folgelauf A1/B/C wieder über das ganze Buch, lässt sie bis zum Cap laufen und verwirft
-// sie, bevor der Multi-Pass-Fallback greift — bezahlt und weggeworfen, in jedem Lauf.
-// Gilt, solange das Buch nicht deutlich kleiner geworden ist (Toleranz 10 %).
-const SP_TRUNC_CP_TYPE = 'komplett-singlepass-truncated';
+// Merker «Single-Pass ist an diesem Buch am Output-Cap gerissen» und die Chunk-Wahl:
+// ../extract-plan.js (geteilt mit der Prognose im Start-Dialog).
+const { SP_TRUNC_CP_TYPE, chooseExtractChunks, tooDenseChunkLimit } = require('../extract-plan');
 const {
   i18nError, i18nErrText, settledAll, retryOnTransientAi, splitGroupsIntoChunks, updateJob, toSystemBlocks,
 } = require('../../shared');
@@ -556,19 +554,18 @@ function writePhase1Checkpoint(ctx, chapters, partialFailure) {
  * Szenen/Assignments verwenden Klarnamen statt IDs; Remapping nach P2/P3-Konsolidierung.
  */
 async function runPhase1(ctx) {
-  const { jobId, call, tok, log, effectiveProvider, singlePassLimit, perChunkLimit: ctxPerChunkLimit,
-    prompts, groups, groupOrder, totalChars, extractTier } = ctx;
+  const { jobId, call, tok, log, effectiveProvider, singlePassLimit, perChunkLimit,
+    groups, groupOrder, totalChars, extractTier } = ctx;
 
-  // EXTRAKTIONS-Schwelle (ai.komplett.extract_single_pass_cap, entkoppelt von der
-  // Kontinuitäts-Schwelle singlePassLimit): entscheidet Single- vs. Multi-Pass UND – bei Claude –
-  // die Chunk-Obergrenze. So kann die Extraktion kapitelweise laufen (besserer Long-Tail-Recall),
-  // während Kontinuität/Erzählprofil weiter das ganze Buch sehen (singlePassLimit).
-  const extractLimit = ctx.extractSinglePassLimit || singlePassLimit;
-
-  // Claude packt alles in einen Chunk (extractLimit als obere Schranke), lokale
-  // Provider chunken nach `ai.<provider>.context_window` (siehe ctx.perChunkLimit aus chunkLimitsFor).
-  const perChunkLimit = effectiveProvider === 'claude' ? extractLimit : ctxPerChunkLimit;
-  const { chunkOrder, chunks } = splitGroupsIntoChunks(groups, groupOrder, perChunkLimit);
+  // Single- oder Multi-Pass und die Chunks dazu (../extract-plan.js). Die EXTRAKTIONS-
+  // Schwelle (ai.komplett.extract_single_pass_cap) entscheidet beides; Claude packt bis
+  // dahin alles in einen Chunk, lokale Provider chunken nach ihrem Kontextfenster.
+  const truncMarker = loadCheckpoint(SP_TRUNC_CP_TYPE, ctx.bookIdInt, ctx.email);
+  const plan = chooseExtractChunks({
+    effectiveProvider, groups, groupOrder, totalChars, singlePassLimit,
+    extractSinglePassLimit: ctx.extractSinglePassLimit, perChunkLimit, truncMarker,
+  });
+  const { extractLimit } = plan;
 
   // Output-Cap für lokale Extraktions-Calls (Single-Pass-lokal + Multi-Pass Split A/B):
   // ai.komplett.extract_max_tokens, gedeckelt aufs Provider-Ceiling (komplettMaxTokens).
@@ -584,24 +581,16 @@ async function runPhase1(ctx) {
     retryOnTransientAi(() => call(jobId, tok, prompt, system, fromPct, toPct, expectedChars, 0.2, komplettMaxTokens(effectiveProvider), schema, extractTier),
       { log, label });
 
-  log.info(`Phase 1 – ${totalChars} Zeichen, ${effectiveProvider} → ${totalChars <= extractLimit ? 'Single-Pass' : `Multi-Pass (${groupOrder.length} Kapitel → ${chunkOrder.length} Chunks)`}`);
+  log.info(`Phase 1 – ${totalChars} Zeichen, ${effectiveProvider} → ${totalChars <= extractLimit ? 'Single-Pass' : `Multi-Pass (${groupOrder.length} Kapitel → ${plan.primaryChunks} Chunks)`}`);
 
   let result;
-  const truncMarker = loadCheckpoint(SP_TRUNC_CP_TYPE, ctx.bookIdInt, ctx.email);
-  const knownTooDense = providerClass(effectiveProvider) === 'cloud'
-    && truncMarker?.provider === effectiveProvider
-    && Number(truncMarker.totalChars) > 0 && totalChars >= Number(truncMarker.totalChars) * 0.9;
-  if (totalChars <= extractLimit && knownTooDense) {
-    const fbPerChunk = Math.max(10000, Math.floor(extractLimit / 2));
-    const fb = splitGroupsIntoChunks(groups, groupOrder, fbPerChunk);
-    if (fb.chunkOrder.length > 1) {
-      log.info(`Phase 1 – Single-Pass riss zuletzt am Output-Cap (${truncMarker.totalChars} Zeichen) – direkt Multi-Pass (${fb.chunkOrder.length} Chunks).`);
-      const r = await extractMultiPass(ctx, { chunks: fb.chunks, chunkOrder: fb.chunkOrder, claudeExtractCap, callExtract });
-      writePhase1Checkpoint(ctx, r.chapters, r.partialFailure);
-      return r.chapters;
-    }
+  if (plan.tooDense) {
+    log.info(`Phase 1 – Single-Pass riss zuletzt am Output-Cap (${truncMarker.totalChars} Zeichen) – direkt Multi-Pass (${plan.chunkOrder.length} Chunks).`);
+    const r = await extractMultiPass(ctx, { chunks: plan.chunks, chunkOrder: plan.chunkOrder, claudeExtractCap, callExtract });
+    writePhase1Checkpoint(ctx, r.chapters, r.partialFailure);
+    return r.chapters;
   }
-  if (totalChars <= extractLimit) {
+  if (plan.mode === 'single') {
     try {
       result = await extractSinglePass(ctx, { claudeExtractCap, callExtract });
     } catch (e) {
@@ -612,7 +601,7 @@ async function runPhase1(ctx) {
       // Split — besteht es aus einem einzigen Abschnitt, wird der in Teile zerlegt
       // (shared/chunking.js). AbortError + andere Fehler bleiben fatal.
       if (e?.message === 'job.error.aiTruncated' && providerClass(effectiveProvider) === 'cloud') {
-        const fbPerChunk = Math.max(10000, Math.floor(extractLimit / 2));
+        const fbPerChunk = tooDenseChunkLimit(extractLimit);
         const { chunkOrder: fbOrder, chunks: fbChunks } = splitGroupsIntoChunks(groups, groupOrder, fbPerChunk);
         if (fbOrder.length > 1) {
           saveCheckpoint(SP_TRUNC_CP_TYPE, ctx.bookIdInt, ctx.email, { totalChars, provider: effectiveProvider });
@@ -626,7 +615,7 @@ async function runPhase1(ctx) {
       }
     }
   } else {
-    result = await extractMultiPass(ctx, { chunks, chunkOrder, claudeExtractCap, callExtract });
+    result = await extractMultiPass(ctx, { chunks: plan.chunks, chunkOrder: plan.chunkOrder, claudeExtractCap, callExtract });
   }
 
   const { chapters, partialFailure } = result;

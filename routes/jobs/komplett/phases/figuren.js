@@ -219,7 +219,7 @@ async function runPhase2(ctx, chapterFiguren, chapterAssignments, chapterSzenen)
     const schichtChanges = applySozialschichtModeVote(chapterFiguren, figuren);
     if (schichtChanges > 0) log.info(`Sozialschicht per Mehrheitsvotum korrigiert (${schichtChanges} Figuren).`);
   }
-  const backfilled = backfillFiguren(figuren, chapterSzenen, chapterAssignments, log);
+  const backfilled = backfillFiguren(figuren, chapterSzenen, chapterAssignments, log, { bookText: ctx.fullBookText });
   if (backfilled > 0) log.info(`${backfilled} Figur(en) aus Szenen/Events nachgetragen (Phase-1-Recall-Lücke).`);
   // Nach dem Backfill: der trägt Namen aus Szenen/Events nach und brächte sonst eine
   // «(implizit)»-Figur zurück.

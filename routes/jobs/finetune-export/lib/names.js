@@ -1,6 +1,7 @@
 'use strict';
 
 const { createHash } = require('crypto');
+const { escapeRegex: escapeRe } = require('../../../../lib/regex-escape');
 
 function hashSplit(id, seed) {
   const h = createHash('sha1').update(String(seed || 0) + '|' + id).digest();
@@ -56,7 +57,6 @@ function slugDisplayName(slug, bookText) {
   return m ? m[0].replace(/\s+/g, ' ') : '';
 }
 
-function escapeRe(s) { return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'); }
 
 // Name als ganzes Wort, case-insensitiv. Nicht `\b`: das kennt in JavaScript
 // nur ASCII-Buchstaben, ein Name, der mit Umlaut, ß oder Akzent beginnt oder

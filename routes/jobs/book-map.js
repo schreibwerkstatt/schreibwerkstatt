@@ -126,7 +126,7 @@ function _optionsKey(opts) {
 // Achse mit stillschweigend ersetztem Pol waere eine falsche Beschriftung.
 async function _resolvePole(pole, { bookId, userEmail, model, candidates, signal }) {
   if (pole.kind === 'text') {
-    const v = await embed.embedQuery(pole.text, { signal });
+    const v = await embed.embedQuery(pole.text, { signal, background: true });
     const u = v && bm.unitVector(v);
     if (!u) throw i18nError('job.error.bookMapPoleMissing', { name: pole.text });
     return { vector: u, label: pole.text };

@@ -87,7 +87,7 @@ async function _scanMotif(bookId, motif, useSemantic, signalFn, topK, userEmail 
   if (useSemantic) {
     const query = [motif.name, motif.beschreibung].map(s => String(s || '').trim()).filter(Boolean).join('. ');
     if (query) {
-      const hits = await retrieval.semanticQuery(bookId, query, { kinds: SCAN_KINDS, topK, signal: signalFn(), strictRerank: true, user: userEmail });
+      const hits = await retrieval.semanticQuery(bookId, query, { kinds: SCAN_KINDS, topK, signal: signalFn(), strictRerank: true, user: userEmail, background: true });
       for (const h of hits) {
         // Als Konfidenz zählt der rohe Cosinus (0–1, absolut interpretierbar für
         // %-Anzeige + Score-Floor). Reine FTS-Fusions-Kandidaten (kein Cosinus)

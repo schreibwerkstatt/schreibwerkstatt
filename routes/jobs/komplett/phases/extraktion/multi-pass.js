@@ -3,8 +3,9 @@
 // (Cloud: Extraktions-Tier, Halbierungs-Retry bei Truncation) und additiver Gap-Pass.
 // Facade: ../extraktion.js (runPhase1 wählt Single- oder Multi-Pass).
 const { loadChapterExtractCache, saveChapterExtractCache, getBookSettings } = require('../../../../../db/schema');
-const { i18nError, i18nErrText, settledAll, retryOnTransientAi, updateJob, toSystemBlocks, halveChunkPages, pageSigSuffix } = require('../../../shared');
+const { i18nError, i18nErrText, settledAll, retryOnTransientAi, updateJob, toSystemBlocks, halveChunkPages } = require('../../../shared');
 const { buildChapterSystemBlockText, bookSettingsSigPart, extractField } = require('../../utils');
+const { chunkPagesSig } = require('../../extract-plan');
 const { _normalizeName } = require('../../figuren-merge');
 const appSettings = require('../../../../../lib/app-settings');
 const { getContextConfigFor, providerClass } = require('../../../../../lib/ai');
@@ -280,10 +281,8 @@ async function extractMultiPass(ctx, { chunks, chunkOrder, claudeExtractCap, cal
     const chunk = chunks.get(chunkKey);
     return {
       chunk, key: chunkKey, ord,
-      // Kapitelname im Sig: er fliesst via buildExtraktionKomplettChapterPrompt(chunk.name)
-      // in den Prompt, steht aber nicht in page_id:updated_at. Ohne ihn liefert eine reine
-      // Kapitel-Umbenennung einen stale Cache-HIT mit altem Kapitelkontext. Rename → MISS.
-      pagesSig: chunk.pages.map(p => `${p.id}:${p.updated_at}${pageSigSuffix(p)}`).sort().join('|') + `||${settingsSig}||ch:${chunk.name || ''}||${chunkCacheVersion || ''}`,
+      // Signatur samt Kapitelname: ../../extract-plan.js#chunkPagesSig (geteilt mit der Prognose).
+      pagesSig: chunkPagesSig(chunk, settingsSig, chunkCacheVersion),
       chText: chunk.pages.map(p => `### ${p.title}\n${p.text}`).join('\n\n---\n\n'),
     };
   });
