@@ -1,6 +1,6 @@
 # ERD — schreibwerkstatt
 
-Stand: Schema-Version 361, 197 Tabellen (ohne `sqlite_*`/`schema_version`/FTS5-Shadow-Tables; inkl. FTS5-Virtual `search_index`/`search_trigram`/`chat_messages_fts` + `search_meta`).
+Stand: Schema-Version 363, 198 Tabellen (ohne `sqlite_*`/`schema_version`/FTS5-Shadow-Tables; inkl. FTS5-Virtual `search_index`/`search_trigram`/`chat_messages_fts` + `search_meta`).
 
 Quelle: Squashed-Schema-Snapshot in [db/squashed-schema.js](../db/squashed-schema.js) (regeneriert via `node tools/dump-schema.js`) + [db/migrations.js](../db/migrations.js). Drift gegen die Legacy-Migration-Kette ist durch [tests/unit/squash-drift.test.mjs](../tests/unit/squash-drift.test.mjs) gegated. Mermaid-Diagramme — in VSCode mit „Markdown Preview Mermaid Support" (oder GitHub) direkt sichtbar.
 
@@ -26,6 +26,7 @@ erDiagram
   books ||--o{ world_facts           : has
   books ||--o{ world_facts_scan      : has
   books ||--o{ world_fact_verdicts   : has
+  books ||--o{ world_fact_suppressions : has
   books ||--o{ figure_relations      : has
   books ||--o{ figure_relation_suppressions : has
   books ||--o{ zeitstrahl_events     : has
@@ -1177,6 +1178,7 @@ erDiagram
   world_fact_chapters {
     INTEGER fact_id    PK,FK "ON DELETE CASCADE"
     INTEGER chapter_id PK,FK "ON DELETE CASCADE"
+    INTEGER manual     "0|1, vom Autor gesetzt — bleibt beim Neubau der Brücken durch die Analyse stehen"
   }
   world_facts_scan {
     INTEGER id         PK
@@ -1195,6 +1197,16 @@ erDiagram
     TEXT    empfehlung
     TEXT    quelle       "Beleg-URL"
     TEXT    checked_at
+  }
+  world_fact_suppressions {
+    INTEGER id          PK
+    INTEGER book_id     FK "ON DELETE CASCADE"
+    TEXT    user_email  "UNIQUE(book_id, IFNULL(user_email,''), fact_key)"
+    TEXT    fact_key    "Aussage-Schlüssel der verworfenen Analyse-Aussage"
+    TEXT    subjekt
+    TEXT    fakt        "Wortlaut — Embedding-Abgleich gegen Umformulierungen"
+    INTEGER replaced_by FK "→ world_facts SET NULL — gepflegter Ersatz, erbt die Kapitel"
+    TEXT    created_at
   }
 
   figures   ||--o{ figure_tags        : tagged
@@ -1225,6 +1237,8 @@ erDiagram
   chapters  ||--o{ world_fact_chapters : tagged
   books     ||--o{ world_facts_scan   : scanned
   books     ||--o{ world_fact_verdicts : checked
+  books     ||--o{ world_fact_suppressions : suppressed
+  world_facts ||--o{ world_fact_suppressions : "ersetzt (SET NULL)"
 ```
 
 ### 3a · Figuren-Werkstatt (isoliert, kein Promotion-Pfad zu `figures`)
@@ -1834,6 +1848,7 @@ erDiagram
     REAL    tokens_per_sec
     TEXT    error
     TEXT    error_params  "JSON, i18n-Params zum error-Key"
+    INTEGER web_searches  "Anthropic-Web-Suchen des Laufs (Faktencheck) → Ledger"
   }
   ai_cost_ledger {
     INTEGER id          PK

@@ -57,7 +57,7 @@
                   :data-tip="$app.t('common.refresh')" :aria-label="$app.t('common.refresh')"><svg class="icon" aria-hidden="true"><use href="/icons.svg#rotate-cw"/></svg></button>
         </h4>
         <div x-show="adminApiTokensError" class="error-msg" x-text="adminApiTokensError"></div>
-        <div x-show="adminApiTokensLoading" class="muted-msg" x-text="$app.t('common.loading')"></div>
+        <div x-show="adminApiTokensLoading" x-skeleton="3" x-cloak></div>
         <div x-show="!adminApiTokensLoading && adminApiTokensList.length === 0"
              class="muted-msg" x-text="$app.t('admin.settings.api.empty')"></div>
 

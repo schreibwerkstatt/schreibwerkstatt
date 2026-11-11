@@ -21,6 +21,7 @@ const {
   commonPlotContext, consistencyExtras, rechercheContext, anchorContext, prioritize,
 } = require('./plot/context');
 const { normalizeKonflikte, normalizeErledigt, buildDeltaContext } = require('./plot/result');
+const { resolveBeatRefs } = require('./plot/beat-refs');
 
 const plotRouter = express.Router();
 
@@ -84,11 +85,14 @@ async function runPlotBrainstormJob(jobId, bookId, actId, threadId, userEmail) {
     );
 
     if (!Array.isArray(result?.vorschlaege)) throw i18nError('job.error.plot.vorschlaegeMissing');
+    // [#id]-Marker → «Titel»: Label und Begründung werden beim Übernehmen Titel und
+    // Beschreibung des neuen Beats (plot/beat-refs.js).
+    const titleOf = new Map(beats.map(b => [b.id, b.titel]));
     const vorschlaege = result.vorschlaege
       .filter(v => v && typeof v.label === 'string' && v.label.trim())
       .map(v => ({
-        label: v.label.trim(),
-        begruendung: typeof v.begruendung === 'string' ? v.begruendung.trim() : '',
+        label: resolveBeatRefs(v.label.trim(), titleOf),
+        begruendung: typeof v.begruendung === 'string' ? resolveBeatRefs(v.begruendung.trim(), titleOf) : '',
       }));
 
     // Lauf historisieren (nur bei echten Vorschlägen). Best-effort.
@@ -170,7 +174,7 @@ async function runPlotConsistencyJob(jobId, bookId, userEmail) {
       beats, belegById: _belegById(beats, anchorMap),
       typEnum: PLOT_KONFLIKT_TYP_ENUM, relTypes: PLOT_AKTION_REL_TYPES, hasDelta: !!delta,
     });
-    const erledigt = normalizeErledigt(result.erledigt, !!delta);
+    const erledigt = normalizeErledigt(result.erledigt, !!delta, beats);
     const fazit = result.fazit.trim();
     const vorlaufRunId = delta ? delta.runId : null;
 

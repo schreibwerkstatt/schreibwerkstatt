@@ -22,13 +22,13 @@
 <!-- Tags -->
 <div class="research-tags" x-show="item.tags && item.tags.length">
   <template x-for="tag in item.tags" :key="tag">
-    <span class="research-tag internal-link" @click="filterTag = tag; applyFilters()" x-text="tag"></span>
+    <span class="research-tag internal-link" @click="filterByTag(tag)" x-text="tag"></span>
   </template>
 </div>
 
 <!-- KI-Verknuepfungsvorschlaege -->
 <div class="research-suggestions" x-show="itemSuggestions(item)" x-cloak>
-  <div class="research-suggestions-head" x-text="$app.t('recherche.suggest.heading')"></div>
+  <div class="card-section-title" x-text="$app.t('recherche.suggest.heading')"></div>
   <template x-if="itemSuggestions(item) && itemSuggestions(item).length === 0">
     <div class="muted-msg muted-msg--sm" x-text="$app.t('recherche.suggest.none')"></div>
   </template>
@@ -40,5 +40,5 @@
       <button type="button" class="btn-compact" @click="acceptSuggestion(item, sg)" x-text="$app.t('recherche.suggest.accept')"></button>
     </div>
   </template>
-  <button type="button" class="research-suggestions-dismiss" @click="dismissSuggestions(item)" x-text="$app.t('recherche.suggest.dismiss')"></button>
+  <button type="button" class="research-suggestions-dismiss text-link" @click="dismissSuggestions(item)" x-text="$app.t('recherche.suggest.dismiss')"></button>
 </div>

@@ -130,10 +130,12 @@ export const loadMethods = {
     // Buch fallen unten durch den overviewBookId-Guard raus.
     if (this._loadingBookId === bookId) return;
     this._loadingBookId = bookId;
-    this.overviewLoading = true;
+    // `opts.silent` (Tab-Rueckkehr): kein Spinner, und der Fehler-Banner bleibt
+    // bis zur Antwort stehen, statt kurz zu verschwinden.
+    if (!opts.silent) this.overviewLoading = true;
     this.overviewBookId = bookId;
     // Fehlerstand des vorigen Loads verwerfen: der Banner gilt dem laufenden.
-    this.overviewLoadErrors = [];
+    if (!opts.silent) this.overviewLoadErrors = [];
     // Ausgefallene Teile sammeln (nach dem einen Retry aus fetchJsonRetry), statt
     // sie still zu schlucken — die Overview zeigt danach einen dezenten Hinweis +
     // Retry, damit ein ausgefallenes Tile nicht als „keine Daten" missverstanden wird.

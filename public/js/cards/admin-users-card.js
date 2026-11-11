@@ -4,6 +4,7 @@
 
 import { adminUsersMethods } from '../admin/admin-users.js';
 import { setupCardLifecycle } from './card-lifecycle.js';
+import { CARD_REQUEST } from './card-request.js';
 
 export function registerAdminUsersCard() {
   if (typeof window === 'undefined' || !window.Alpine) return;
@@ -56,6 +57,8 @@ export function registerAdminUsersCard() {
         if (this.adminUsersTab === 'requests') await this.adminUsersRequestsLoad();
       });
       this._lifecycle = setupCardLifecycle(this, {
+        showFlag: 'showAdminUsersCard',
+        tabRequest: { key: CARD_REQUEST.ADMIN_USERS_TAB, apply: (tab) => { this.adminUsersTab = tab; }, current: () => this.adminUsersTab },
         onViewReset: () => {
           this.adminUsersError = '';
           this.adminUsersInviteResult = null;

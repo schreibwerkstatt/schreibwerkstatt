@@ -16,7 +16,7 @@ export const hashSetupMethods = {
       'showKontinuitaetCard', 'showErzaehlprofilCard', 'showTagebuchRueckblickCard', 'showBookReviewCard', 'showBookChatCard',
       'showKapitelReviewCard', 'kapitelReviewChapterId',
       'showBookStatsCard', 'showStilCard', 'showFehlerHeatmapCard', 'showBuchlandkarteCard', 'buchlandkarteTab', 'showWortschatzCard', 'showStrukturCard', 'showTitelwerkstattCard',
-      'showBookSettingsCard', 'showUserSettingsCard', 'showMyStatsCard', 'showMyBooksCard', 'showHelpCard', 'showOnboardingCard',
+      'showBookSettingsCard', 'showUserSettingsCard', 'showMyStatsCard', 'showMyBooksCard', 'showAutorenprofilCard', 'showHelpCard', 'showOnboardingCard',
       'showAdminUsersCard', 'showAdminSettingsCard', 'showAdminUsageCard', 'adminUsageTab',
       'showAdminCategoriesCard', 'showAdminBooksCard', 'showAdminLogsCard', 'showAdminParseFailsCard',
       'showAdminJsErrorsCard', 'showAdminDevicesCard', 'showAdminBackupCard',
@@ -57,6 +57,8 @@ export const hashSetupMethods = {
       // #…/recherche/<itemId> (replace, gleiche Kategorie), Schliessen nullt ihn.
       () => this.$store.nav.rechercheItemId,
       () => this.$store.nav.searchScope,
+      // Reiter-Permalinks (URL_TABS): ein Eintrag je Karte, Wert = aktiver Reiter.
+      () => Object.entries(this.$store.nav.cardTab).join('|'),
     ];
     for (const getter of storeWatched) {
       const off = this.$watch(getter, () => this._updateHash());

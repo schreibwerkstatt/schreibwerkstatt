@@ -20,7 +20,7 @@ const _stmtStartJobRun = db.prepare(
   `UPDATE job_runs SET status = 'running', started_at = ${NOW_ISO_SQL} WHERE job_id = ?`
 );
 const _stmtEndJobRun = db.prepare(
-  `UPDATE job_runs SET status = ?, ended_at = ${NOW_ISO_SQL}, tokens_in = ?, tokens_out = ?, cache_read_in = ?, cache_creation_in = ?, cache_creation_1h_in = ?, tokens_per_sec = ?, error = ?, error_params = ? WHERE job_id = ?`
+  `UPDATE job_runs SET status = ?, ended_at = ${NOW_ISO_SQL}, tokens_in = ?, tokens_out = ?, cache_read_in = ?, cache_creation_in = ?, cache_creation_1h_in = ?, tokens_per_sec = ?, error = ?, error_params = ?, web_searches = ? WHERE job_id = ?`
 );
 
 function insertJobRun(job) {
@@ -45,13 +45,15 @@ function startJobRun(jobId) {
 function updateJobRunModel(jobId, provider, model) {
   db.prepare('UPDATE job_runs SET provider = ?, model = ? WHERE job_id = ?').run(provider || null, model || null, jobId);
 }
-function endJobRun(jobId, status, tokensIn, tokensOut, cacheReadIn, cacheCreationIn, cacheCreation1hIn, tokensPerSec, error, errorParams = null) {
+// webSearches: Anthropic-Web-Suchen des Laufs (server_tool_use 'web_search') — die
+// Suchgebühr rechnet recordJobLedger in die eingefrorenen Kosten ein.
+function endJobRun(jobId, status, tokensIn, tokensOut, cacheReadIn, cacheCreationIn, cacheCreation1hIn, tokensPerSec, error, errorParams = null, webSearches = 0) {
   const paramsJson = errorParams ? JSON.stringify(errorParams) : null;
   _stmtEndJobRun.run(
     status,
     tokensIn || 0, tokensOut || 0,
     cacheReadIn || 0, cacheCreationIn || 0, cacheCreation1hIn || 0,
-    tokensPerSec ?? null, error || null, paramsJson, jobId,
+    tokensPerSec ?? null, error || null, paramsJson, Math.max(0, parseInt(webSearches, 10) || 0), jobId,
   );
   // Eingefrorene Kosten ins persistente Ledger schreiben (chat-sourced Typen
   // werden dort uebersprungen — ihr Verbrauch laeuft ueber chat_messages).

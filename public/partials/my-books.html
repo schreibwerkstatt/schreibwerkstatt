@@ -16,7 +16,7 @@
 
   <p class="card-hint card-section" x-text="$app.t('mybooks.note')"></p>
 
-  <div x-show="myBooksLoading" class="muted-msg" x-text="$app.t('mybooks.loading')"></div>
+  <div x-show="myBooksLoading" x-skeleton="4" x-cloak></div>
   <p x-show="myBooksError" x-cloak class="card-form-error" x-text="myBooksError"></p>
   <p x-show="myBooksIsEmpty" x-cloak class="muted-msg" x-text="$app.t('mybooks.empty')"></p>
 

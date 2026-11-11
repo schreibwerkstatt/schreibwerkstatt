@@ -1,44 +1,89 @@
 <!-- Formularfelder eines Recherche-Fundstuecks — EINE Quelle fuer BEIDE Wege:
      Anlegen (recherche-create.html) und Bearbeiten (recherche-detail.html,
-     Modus detailEditing). Warum als Fragment: die zwei Formulare waren wortgleiche
-     Kopien und drifteten bei jeder Feld-Aenderung auseinander (Feldreihenfolge,
-     Textfeldhoehe, Spellcheck-Attribut, URL-Zeilen).
-     Beide binden dasselbe Kartenfeld `draft` — mehr als ein Formular ist nie
-     offen, weil beide in einem modalen <dialog> stehen. Datei-Anhang und die
-     Aktionszeile stehen bewusst NICHT hier: der Anhang gilt nur beim Anlegen
-     (ein `x-ref` zweimal im gleichen Scope waere ausserdem ambig), und die
-     Aktionen unterscheiden sich (createItem vs. saveEdit).
-     Scope + Methoden kommen aus rechercheCard. -->
-    <div class="recherche-form-row">
-      <div x-data="combobox($app.t('recherche.kindLabel'))"
+     Modus detailEditing). Beide binden dasselbe Kartenfeld `draft` — mehr als ein
+     Formular ist nie offen, weil startCreate und openDetail sich gegenseitig
+     schliessen (items.js).
+     Bauform wie das Quellen-Formular (sources-form.html): Raster
+     .card-form-grid, Beschriftung links, Erklaerung unter dem Feld, Tags ueber
+     den geteilten Baustein tagInput. Datei-Anhang und Aktionszeile stehen
+     bewusst NICHT hier: der Anhang gilt nur beim Anlegen (ein `x-ref` zweimal im
+     gleichen Scope waere ausserdem ambig), die Aktionen unterscheiden sich
+     (createItem vs. saveEdit). Scope + Methoden kommen aus rechercheCard. -->
+<div class="card-form-grid recherche-form-grid">
+  <div x-id="['fld']" class="card-form-row">
+    <span :id="$id('fld')" class="card-form-label" x-text="$app.t('recherche.form.kind')"></span>
+    <div class="card-form-field">
+      <div :aria-labelledby="$id('fld')" class="recherche-kind-combo"
+           x-data="combobox({ placeholder: $app.t('recherche.kindLabel'), compact: false })"
            x-modelable="value" x-model="draft.kind"
-           x-effect="options = kindOptions()" class="recherche-kind-combo"></div>
-      <input type="text" class="recherche-input recherche-title-input"
-             x-model="draft.title" :placeholder="$app.t('recherche.field.title')"
-             :aria-label="$app.t('recherche.field.title')" data-spellcheck="spelling">
+           x-effect="options = kindOptions()"></div>
+      <p class="card-form-field-note" x-text="$app.t('recherche.form.kind.hint')"></p>
     </div>
-    <textarea class="recherche-input recherche-input--tall" x-model="draft.body"
-              :placeholder="$app.t('recherche.field.body')" :aria-label="$app.t('recherche.field.body')"
-              data-spellcheck="spelling"></textarea>
-    <div class="recherche-urls">
-      <template x-for="(u, ui) in draft.urls" :key="ui">
-        <div class="recherche-url-row">
-          <input type="text" class="recherche-input recherche-url-input" x-model="u.url"
-                 :placeholder="$app.t('recherche.field.url')" :aria-label="$app.t('recherche.field.url')">
-          <input type="text" class="recherche-input recherche-url-label-input" x-model="u.label"
-                 :placeholder="$app.t('recherche.field.urlLabel')" :aria-label="$app.t('recherche.field.urlLabel')"
-                 data-spellcheck="spelling">
-          <button type="button" class="icon-btn" @click="removeUrlRow(draft, ui)"
-                  :data-tip="$app.t('recherche.field.urlRemove')" :aria-label="$app.t('recherche.field.urlRemove')"><svg class="icon" aria-hidden="true"><use href="/icons.svg#x"/></svg></button>
-        </div>
-      </template>
-      <button type="button" class="btn-compact recherche-url-add" @click="addUrlRow(draft)">
-        <svg class="icon" aria-hidden="true"><use href="/icons.svg#plus"/></svg>
-        <span x-text="$app.t('recherche.field.urlAdd')"></span>
-      </button>
+  </div>
+
+  <div x-id="['fld']" class="card-form-row">
+    <label :for="$id('fld')" class="card-form-label" x-text="$app.t('recherche.form.title')"></label>
+    <div class="card-form-field">
+      <input :id="$id('fld')" type="text" class="card-form-input recherche-title-input" x-model="draft.title"
+             maxlength="300" data-spellcheck="spelling">
     </div>
-    <input type="text" class="recherche-input" x-model="draft.source"
-           :placeholder="$app.t('recherche.field.source')" :aria-label="$app.t('recherche.field.source')"
-           data-spellcheck="spelling">
-    <input type="text" class="recherche-input" x-model="draft.tags"
-           :placeholder="$app.t('recherche.field.tags')" :aria-label="$app.t('recherche.field.tags')">
+  </div>
+
+  <div x-id="['fld']" class="card-form-row card-form-row--top">
+    <label :for="$id('fld')" class="card-form-label" x-text="$app.t('recherche.form.body')"></label>
+    <div class="card-form-field">
+      <textarea :id="$id('fld')" class="card-form-textarea recherche-body-input" x-model="draft.body"
+                data-spellcheck="spelling"></textarea>
+      <p class="card-form-field-note"
+         x-text="$app.t(draft.kind === 'quote' ? 'recherche.form.body.hintQuote' : 'recherche.form.body.hint')"></p>
+    </div>
+  </div>
+
+  <!-- Mehrere Links je Fundstueck: eine Zeile pro Adresse (URL + Bezeichnung +
+       Entfernen), Repeater wie die Personen im Quellen-Formular. -->
+  <div x-id="['fld']" class="card-form-row card-form-row--top">
+    <span :id="$id('fld')" class="card-form-label" x-text="$app.t('recherche.form.urls')"></span>
+    <div class="card-form-field">
+      <div class="pub-repeater" role="group" :aria-labelledby="$id('fld')">
+        <template x-for="(u, ui) in draft.urls" :key="ui">
+          <div class="pub-repeater-row recherche-url-row">
+            <input type="text" class="card-form-input recherche-url-input" x-model="u.url"
+                   :placeholder="$app.t('recherche.field.url')" :aria-label="$app.t('recherche.field.url')" maxlength="2000">
+            <input type="text" class="card-form-input recherche-url-label-input" x-model="u.label"
+                   :placeholder="$app.t('recherche.form.urlLabel')" :aria-label="$app.t('recherche.form.urlLabel')"
+                   maxlength="300" data-spellcheck="spelling">
+            <button type="button" class="btn-compact danger" @click="removeUrlRow(draft, ui)"
+                    :aria-label="$app.t('recherche.field.urlRemove')" x-text="$app.t('common.remove')"></button>
+          </div>
+        </template>
+        <button type="button" class="btn-compact" @click="addUrlRow(draft)">
+          <svg class="icon" aria-hidden="true"><use href="/icons.svg#plus"/></svg>
+          <span x-text="$app.t('recherche.field.urlAdd')"></span>
+        </button>
+      </div>
+      <p class="card-form-field-note" x-text="$app.t('recherche.form.urls.hint')"></p>
+    </div>
+  </div>
+
+  <div x-id="['fld']" class="card-form-row">
+    <label :for="$id('fld')" class="card-form-label" x-text="$app.t('recherche.form.source')"></label>
+    <div class="card-form-field">
+      <input :id="$id('fld')" type="text" class="card-form-input recherche-source-input" x-model="draft.source"
+             maxlength="1000" data-spellcheck="spelling">
+      <p class="card-form-field-note" x-text="$app.t('recherche.form.source.hint')"></p>
+    </div>
+  </div>
+
+  <!-- Tags gehoeren dem Fundstueck; Vorschlaege aus dem Tag-Pool des Buchs.
+       Deckel wie lib/research-validate.js (MAX_TAGS, TAG_MAX). -->
+  <div x-id="['fld']" class="card-form-row card-form-row--top">
+    <span :id="$id('fld')" class="card-form-label" x-text="$app.t('recherche.form.tags')"></span>
+    <div class="card-form-field">
+      <div :aria-labelledby="$id('fld')"
+           x-data="tagInput({ max: 20, maxLen: 60, placeholder: $app.t('recherche.form.tags.ph'), label: $app.t('recherche.form.tags') })"
+           x-modelable="tags" x-model="draft.tags"
+           x-effect="pool = (tagPool || []).map(r => r.tag)"></div>
+      <p class="card-form-field-note" x-text="$app.t('recherche.form.tags.hint')"></p>
+    </div>
+  </div>
+</div>

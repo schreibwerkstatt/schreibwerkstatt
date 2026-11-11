@@ -5,6 +5,8 @@
 // Die Enums (Befund-Typen, Relations-Typen) kommen als Argument aus dem Prompt-
 // Modul (public/js/prompts/plot.js) — eine Quelle für Prompt, Schema und Validierung.
 
+const { resolveBeatRefs } = require('./beat-refs');
+
 const SEVERITY = ['kritisch', 'stark', 'mittel', 'schwach', 'niedrig'];
 const STATUS_WERTE = ['im_buch', 'geplant'];
 const SEIT = ['neu', 'bestehend'];
@@ -72,10 +74,12 @@ function normalizeAktion(raw, { beatId, beatsById, relTypes }) {
 function normalizeKonflikte(raw, { beats, belegById = {}, typEnum, relTypes, hasDelta = false }) {
   const beatsById = new Map((beats || []).map(b => [b.id, b]));
   const titleIdx = buildTitleIndex(beats);
+  // [#id]-Marker im Freitext → «Titel» (plot/beat-refs.js); die Autorin sieht keine IDs.
+  const refs = t => resolveBeatRefs(t, id => beatsById.get(id)?.titel);
   return (Array.isArray(raw) ? raw : [])
     .filter(k => k && typeof k.problem === 'string' && k.problem.trim())
     .map(k => {
-      const beat = typeof k.beat === 'string' && k.beat.trim() ? k.beat.trim() : '—';
+      const beat = typeof k.beat === 'string' && k.beat.trim() ? refs(k.beat.trim()).trim() || '—' : '—';
       const rawId = _int(k.beat_id);
       let beatId = rawId != null && beatsById.has(rawId) ? rawId : null;
       if (beatId == null && beat !== '—') beatId = titleIdx.get(normTitle(beat)) ?? null;
@@ -84,8 +88,8 @@ function normalizeKonflikte(raw, { beats, belegById = {}, typEnum, relTypes, has
         beat_id: beatId,
         schwere: SEVERITY.includes(k.schwere) ? k.schwere : 'mittel',
         typ: typEnum.includes(k.typ) ? k.typ : FALLBACK_TYP,
-        problem: k.problem.trim(),
-        vorschlag: typeof k.vorschlag === 'string' ? k.vorschlag.trim() : '',
+        problem: refs(k.problem.trim()),
+        vorschlag: typeof k.vorschlag === 'string' ? refs(k.vorschlag.trim()) : '',
         aktion: normalizeAktion(k.aktion, { beatId, beatsById, relTypes }),
         fundstelle: (beatId != null ? belegById[beatId] : null) || null,
       };
@@ -96,9 +100,11 @@ function normalizeKonflikte(raw, { beats, belegById = {}, typEnum, relTypes, has
 
 // Behobene Befunde des Vorlaufs: kurze Strings. Ohne Vorlauf immer leer — das
 // Modell hat dann nichts, wogegen es „erledigt" behaupten könnte.
-function normalizeErledigt(raw, hasDelta) {
+function normalizeErledigt(raw, hasDelta, beats = []) {
   if (!hasDelta || !Array.isArray(raw)) return [];
-  return raw.filter(s => typeof s === 'string' && s.trim()).map(s => s.trim().slice(0, 300)).slice(0, 40);
+  const byId = new Map((beats || []).map(b => [b.id, b.titel]));
+  return raw.filter(s => typeof s === 'string' && s.trim())
+    .map(s => resolveBeatRefs(s.trim(), byId).slice(0, 300)).slice(0, 40);
 }
 
 function _ts(s) {

@@ -77,7 +77,7 @@ function _record(row) {
 
 const _selJobRun = db.prepare(`
   SELECT job_id, ended_at, user_email, type, book_id, provider, model,
-         tokens_in, tokens_out, cache_read_in, cache_creation_in, cache_creation_1h_in
+         tokens_in, tokens_out, cache_read_in, cache_creation_in, cache_creation_1h_in, web_searches
     FROM job_runs WHERE job_id = ?
 `);
 
@@ -95,7 +95,7 @@ function recordJobLedger(jobId) {
     // jenseits der job_runs-Aufbewahrung), aber ohne Provider/Modell — sonst
     // zählte die Kostenstatistik je Modell lauter Null-Läufe mit.
     const usedAi = (r.tokens_in || 0) + (r.tokens_out || 0) + (r.cache_read_in || 0)
-      + (r.cache_creation_in || 0) + (r.cache_creation_1h_in || 0) > 0;
+      + (r.cache_creation_in || 0) + (r.cache_creation_1h_in || 0) + (r.web_searches || 0) > 0;
     _record({
       ts: r.ended_at,
       user_email: r.user_email,
@@ -109,6 +109,7 @@ function recordJobLedger(jobId) {
       cache_read_in: r.cache_read_in,
       cache_creation_in: r.cache_creation_in,
       cache_creation_1h_in: r.cache_creation_1h_in,
+      web_searches: r.web_searches,
       source_ref: `job:${jobId}`,
     });
   } catch (e) {

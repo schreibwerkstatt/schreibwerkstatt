@@ -31,6 +31,7 @@ export const NARRATIV_TYPEN = [
   'klischee', 'pleonasmus', 'ki_geruch', 'show_vs_tell', 'passiv',
   'perspektivbruch', 'tempuswechsel',
   'dialogformat', 'namenskonsistenz', 'figurenmerkmal', 'anrede', 'schauplatzmerkmal',
+  'weltfakt', 'soziolekt',
 ];
 
 // Sachbuch / Essay / Blog: argumentierender Text ohne Figuren und ohne Szene.
@@ -208,9 +209,9 @@ export function lektoratStilTypen(buchtyp, { textsorte = null } = {}) {
 // tests/unit/lektorat-typen-drift.test.mjs).
 export const TYP_PRIORITAET = [
   'dialogformat', 'rechtschreibung', 'konjunktiv', 'grammatik',
-  'namenskonsistenz', 'figurenmerkmal', 'schauplatzmerkmal', 'anrede',
+  'namenskonsistenz', 'figurenmerkmal', 'schauplatzmerkmal', 'anrede', 'weltfakt',
   'begriffsinkonsistenz', 'autorenform', 'zuschreibung', 'unbelegt', 'wertung',
-  'pleonasmus', 'wiederholung', 'perspektivbruch', 'tempuswechsel',
+  'pleonasmus', 'wiederholung', 'perspektivbruch', 'tempuswechsel', 'soziolekt',
   'klischee', 'amtsdeutsch', 'ki_geruch', 'passiv', 'show_vs_tell',
   'hedging', 'filterwort', 'schwaches_verb', 'fuellwort', 'satzbau', 'stil',
 ];
@@ -256,6 +257,9 @@ export const STILISTISCHE_TYPEN = [
   'stil', 'satzbau', 'schwaches_verb', 'fuellwort', 'filterwort',
   'klischee', 'ki_geruch', 'show_vs_tell', 'passiv', 'pleonasmus', 'wiederholung',
   'hedging', 'amtsdeutsch',
+  // Sprechweise gegen das erfasste Register einer Figur: Ermessensfrage (Figuren
+  // entwickeln sich, sprechen situativ anders) — darum unter Schwelle und Obergrenze.
+  'soziolekt',
 ];
 
 // Union aller je gültigen Typen — Basis der Server-Validierung und Referenz für
@@ -277,7 +281,8 @@ const SPAN_KIND = {
   namenskonsistenz: 'name',
   pleonasmus: 'phrase', hedging: 'phrase',
   begriffsinkonsistenz: 'phrase', autorenform: 'phrase',
-  figurenmerkmal: 'phrase', anrede: 'phrase', schauplatzmerkmal: 'phrase',
+  figurenmerkmal: 'phrase', anrede: 'phrase', schauplatzmerkmal: 'phrase', weltfakt: 'phrase',
+  soziolekt: 'satz_oder_phrase',
   dialogformat: 'phrase',
   wiederholung: 'satz', fuellwort: 'satz', passiv: 'satz', tempuswechsel: 'satz',
   schwaches_verb: 'satz', unbelegt: 'satz',

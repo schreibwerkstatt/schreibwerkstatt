@@ -2,6 +2,7 @@
 // Liest SYSTEM_CHAT/SYSTEM_BOOK_CHAT live-bound aus core.js (von configurePrompts gesetzt).
 
 import { _isLocal, JSON_ONLY } from './state.js';
+import { buildPageChatWeltLines } from './blocks-welt.js';
 import { buildEditStatusBlock } from './edit-status-block.js';
 import { _obj, _str } from './schema-utils.js';
 import { SYSTEM_CHAT, SYSTEM_BOOK_CHAT } from './core.js';
@@ -298,6 +299,7 @@ export function buildChatSystemPrompt(pageName, pageText, figuren, review, syste
     page.push('');
   }
 
+  page.push(...buildPageChatWeltLines(opts.weltfakten, opts.soziolekte));
   const lekSzenen = Array.isArray(lektorat?.szenen) ? lektorat.szenen : [];
   if (lektorat && ((Array.isArray(lektorat.fehler) && lektorat.fehler.length > 0) || lekSzenen.length > 0 || lektorat.stilanalyse || lektorat.fazit)) {
     const datum = lektorat.checked_at ? lektorat.checked_at.slice(0, 16).replace('T', ' ') : null;

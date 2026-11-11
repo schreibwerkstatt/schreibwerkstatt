@@ -83,12 +83,6 @@
   color: var(--color-muted);
 }
 
-.changelog-status {
-  margin: 0;
-  color: var(--color-muted);
-  font-size: var(--font-size-sm);
-}
-
 .changelog-list {
   list-style: none;
   margin: 0;
@@ -177,14 +171,10 @@
 }
 
 /* Header-„?"-Button: steht ausserhalb von `.header-action-cluster`, richtet sich
-   aber auf dieselbe 28px-Chip-Höhe wie Heute-Ring + Avatar aus. min-width/height
-   neutralisiert den generischen Touch-Boost (icon-btn.css @media pointer:coarse →
-   40px), der ihn sonst auf Mobile grösser als die Nachbar-Controls macht. */
+   aber auf dieselbe 28px-Chip-Höhe wie Heute-Ring + Avatar aus. */
 .header-help-btn {
   width: 28px;
   height: 28px;
-  min-width: 0;
-  min-height: 0;
 }
 .header-help-btn[aria-pressed="true"] {
   color: var(--color-accent-text);

@@ -47,7 +47,7 @@
 
   <!-- @include ideen-link-picker -->
 
-  <div x-show="loading" class="muted-msg" x-text="$app.t('ideenBoard.loading')"></div>
+  <div x-show="loading" x-skeleton="5" x-cloak></div>
   <div x-show="!loading && totalCount() === 0 && lanes().length === 0" class="muted-msg" x-text="$app.t('ideenBoard.empty')"></div>
   <div x-show="!loading && totalCount() > 0 && (isListView() ? listRows().length === 0 : lanes().length === 0)" class="muted-msg"
        x-text="$app.t('ideenBoard.emptyFiltered')"></div>

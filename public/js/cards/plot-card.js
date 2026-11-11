@@ -288,6 +288,7 @@ export function registerPlotCard() {
           this.resetPlotChat(); this.plotChatOpen = false;
         },
         onCardRefresh: () => this.loadBoard(),
+        wake: () => this.loadBoard({ silent: true }),
       });
 
       // Strukturelle Änderungen (Akt-/Strang-CRUD, Fork/Unfork, loadBoard-Reassign)

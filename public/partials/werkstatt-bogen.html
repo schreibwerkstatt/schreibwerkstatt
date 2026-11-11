@@ -115,7 +115,7 @@
                       :data-tip="$app.t('common.close')" :aria-label="$app.t('common.close')"><svg class="icon" aria-hidden="true"><use href="/icons.svg#x"/></svg></button>
             </div>
             <div class="heatmap-detail-list">
-              <p class="muted-msg" x-show="arcDetailLoading" x-text="$app.t('werkstatt.arc.detail.loading')"></p>
+              <div x-show="arcDetailLoading" x-skeleton="3" x-cloak></div>
               <p class="muted-msg" x-show="!arcDetailLoading && !arcActiveDetail().occurrences.length"
                  x-text="$app.t('werkstatt.arc.detail.empty')"></p>
               <div class="motiv-occ-list" x-show="arcActiveDetail().occurrences.length">

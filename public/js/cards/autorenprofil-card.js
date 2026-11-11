@@ -61,8 +61,14 @@ export function registerAutorenprofilCard() {
       window.removeEventListener(EVT.JOB_FINISHED, this._onApJobFinished);
     },
 
+    // Skeleton nur beim ersten Laden. Ein Reload bei stehender Karte (Aufwachen
+    // nach Tabwechsel/Reconnect feuert CARD_REFRESH an jede offene Karte, ebenso
+    // Reklick und Job-Ende) ersetzt die Daten still: sonst tauscht das Template
+    // den ganzen Inhalt gegen das Skeleton und zurueck, und die Karte springt.
+    // Scheitert ein solcher Hintergrund-Reload, bleiben die alten Daten stehen.
     async loadAutorenprofil() {
-      this.apLoading = true;
+      const background = !!this.apData;
+      if (!background) this.apLoading = true;
       this.apError = '';
       try {
         const r = await fetch('/me/author-profile');
@@ -70,8 +76,10 @@ export function registerAutorenprofilCard() {
         this.apData = await r.json();
         this._apMemos = {};
       } catch (e) {
-        this.apError = window.__app.t('autorenprofil.loadError');
-        this.apData = null;
+        if (!background) {
+          this.apError = window.__app.t('autorenprofil.loadError');
+          this.apData = null;
+        }
       } finally {
         this.apLoading = false;
       }

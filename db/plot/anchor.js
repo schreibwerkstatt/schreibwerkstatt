@@ -9,15 +9,40 @@ const { NOW_ISO_SQL } = require('../now');
 // Buchtext auftaucht (Job beat-anchor). Full-Replace pro Beat je Lauf — kein
 // Handpflegen, kein content_hash. Pendant zu motifs#replaceOccurrences.
 
-// Lean-Liste für den Anchor-Job: nur die Felder, die als Query dienen + der
-// Status für die spätere Drift-Klassifikation. Kein Figuren-/Motiv-Scan.
+// Lean-Liste für den Anchor-Job: die Felder, die als Query dienen, der Status
+// für die Drift-Klassifikation und die Katalog-Figuren des Beats (`figure_ids`:
+// geerbte Strang-Hauptfigur + explizit verlinkte) für den Figuren-Scope der Suche.
+// Werkstatt-Figuren fehlen bewusst — sie stehen in keinem Erwähnungs-Index.
 const _stmtListBeatsForAnchor = db.prepare(`
-  SELECT id, titel, beschreibung, status, verworfen
-    FROM plot_beats
-   WHERE book_id = ? AND user_email = ?
+  SELECT b.id, b.titel, b.beschreibung, b.status, b.verworfen,
+         t.figure_id AS thread_figure_id,
+         (SELECT group_concat(bf.figure_id) FROM plot_beat_figures bf WHERE bf.beat_id = b.id) AS linked_figure_ids
+    FROM plot_beats b
+    LEFT JOIN plot_threads t ON t.id = b.thread_id
+   WHERE b.book_id = ? AND b.user_email = ?
 `);
 function listBeatsForAnchor(bookId, userEmail) {
-  return _stmtListBeatsForAnchor.all(parseInt(bookId), userEmail);
+  return _stmtListBeatsForAnchor.all(parseInt(bookId), userEmail).map(({ thread_figure_id, linked_figure_ids, ...b }) => {
+    const ids = [thread_figure_id, ...String(linked_figure_ids || '').split(',')]
+      .map(Number).filter(n => Number.isInteger(n) && n > 0);
+    return { ...b, figure_ids: [...new Set(ids)] };
+  });
+}
+
+// Wo im Text kommen diese Figuren vor? Abschnitte über den Erwähnungs-Index
+// (page_figure_mentions), Szenen über scene_figures. Speist `restrictTo` der
+// semantischen Suche: ein Beat-Beleg muss dort liegen, wo seine Figur auftritt —
+// sonst bestätigt ein thematisch ähnlicher Abschnitt über eine andere Figur den
+// Beat. `null` = kein Scope (keine Figur, oder die Figuren stehen in keinem
+// Index — ein leerer Scope hiesse sonst «nirgends im Text»).
+function anchorFigureScope(figureIds) {
+  const ids = (figureIds || []).map(Number).filter(n => Number.isInteger(n) && n > 0);
+  if (!ids.length) return null;
+  const ph = ids.map(() => '?').join(',');
+  const page = db.prepare(`SELECT DISTINCT page_id FROM page_figure_mentions WHERE figure_id IN (${ph})`).all(...ids).map(r => r.page_id);
+  const scene = db.prepare(`SELECT DISTINCT scene_id FROM scene_figures WHERE figure_id IN (${ph})`).all(...ids).map(r => r.scene_id);
+  if (!page.length && !scene.length) return null;
+  return { page, scene };
 }
 
 const _stmtDeleteOccForBeat = db.prepare('DELETE FROM plot_beat_occurrences WHERE beat_id = ?');
@@ -176,6 +201,6 @@ function beatAnchorStale(bookId, userEmail, statuses = ['im_buch']) {
 }
 
 module.exports = {
-  listBeatsForAnchor, replaceBeatOccurrences, beatOccurrenceMap, beatOccurrenceEntry, beatAnchorStale,
+  listBeatsForAnchor, anchorFigureScope, replaceBeatOccurrences, beatOccurrenceMap, beatOccurrenceEntry, beatAnchorStale,
   beatAnchorLastRun,
 };

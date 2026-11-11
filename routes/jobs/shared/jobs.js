@@ -192,6 +192,7 @@ function createJob(type, bookId, userEmail, label, labelParams = null, dedupId =
     provider, model,
     status: 'queued', progress: 0, statusText: 'job.queued', statusParams: null,
     tokensIn: 0, tokensOut: 0, cacheReadIn: 0, cacheCreationIn: 0, cacheCreation1hIn: 0, tokensPerSec: null,
+    webSearches: 0,
     maxTokensOut: MAX_TOKENS_OUT,
     result: null, error: null, errorParams: null,
     startedAt: null, endedAt: null,
@@ -254,7 +255,7 @@ function completeJob(id, result, tokensPerSec = null, detail = null) {
   }
   Object.assign(job, { status: 'done', progress: 100, result, tokensPerSec, endedAt: new Date().toISOString() });
   try {
-    endJobRun(id, 'done', job.tokensIn, job.tokensOut, job.cacheReadIn, job.cacheCreationIn, job.cacheCreation1hIn, tokensPerSec, null);
+    endJobRun(id, 'done', job.tokensIn, job.tokensOut, job.cacheReadIn, job.cacheCreationIn, job.cacheCreation1hIn, tokensPerSec, null, null, job.webSearches);
   } catch (e) {
     logger.error(`endJobRun: ${e.message}`, _jobLogCtx(job));
   }
@@ -290,7 +291,7 @@ function failJob(id, err) {
   const errorParams = isCancelled ? null : (err?.i18nParams || null);
   Object.assign(job, { status, error: errorMsg, errorParams, progress: isCancelled ? job.progress : 0, endedAt: new Date().toISOString() });
   try {
-    endJobRun(id, status, job.tokensIn, job.tokensOut, job.cacheReadIn, job.cacheCreationIn, job.cacheCreation1hIn, null, errorMsg, errorParams);
+    endJobRun(id, status, job.tokensIn, job.tokensOut, job.cacheReadIn, job.cacheCreationIn, job.cacheCreation1hIn, null, errorMsg, errorParams, job.webSearches);
   } catch (e) {
     logger.error(`endJobRun: ${e.message}`, _jobLogCtx(job));
   }

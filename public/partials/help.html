@@ -72,8 +72,7 @@
               x-text="$app.t('changelog.current', { version: $store.shell.appVersion })"></span>
       </p>
 
-      <p class="changelog-status card-section" x-show="changelogLoading" x-cloak
-         x-text="$app.t('changelog.loading')"></p>
+      <div x-show="changelogLoading" x-skeleton="3" x-cloak></div>
       <p class="card-form-error card-section" x-show="changelogError" x-cloak x-text="changelogError"></p>
       <div class="card-empty card-section"
            x-show="!changelogLoading && !changelogError && changelogReleases.length === 0" x-cloak>

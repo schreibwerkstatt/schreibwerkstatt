@@ -99,9 +99,9 @@ test('Automatik: das geöffnete Buch wird als zuletzt geöffnet gemerkt', async 
     email: window.Alpine.store('session').currentUser?.email,
     bookId: window.Alpine.store('nav').selectedBookId,
   }));
-  await expect.poll(() => page.evaluate((e) => JSON.parse(localStorage.getItem('offline_auto_u:' + e) || 'null')?.bookId, email))
+  await expect.poll(() => page.evaluate((e) => JSON.parse(localStorage.getItem('offline_auto_u:' + e) || 'null')?.bookIds?.[0], email))
     .toBe(String(bookId));
-  await expect.poll(() => page.evaluate(() => window.Alpine.store('session').offlineAuto)).toEqual({ enabled: true, bookId: String(bookId) });
+  await expect.poll(() => page.evaluate(() => window.Alpine.store('session').offlineAuto.bookIds[0])).toBe(String(bookId));
 });
 
 test('Benutzer-Einstellungen: Automatik lässt sich pro Gerät abschalten', async ({ page }) => {

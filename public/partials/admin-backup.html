@@ -18,7 +18,7 @@
 
   <p class="muted-msg" x-text="$app.t('admin.backup.intro')"></p>
 
-  <div x-show="backupLoading" class="muted-msg" x-text="$app.t('common.loading')"></div>
+  <div x-show="backupLoading" x-skeleton="3" x-cloak></div>
   <div x-show="backupError" class="error-msg" x-text="backupError"></div>
 
   <!-- Aktueller Stand -->

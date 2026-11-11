@@ -7,6 +7,7 @@
 // Chrome-Erweiterung — drei eigene Repos, drei eigene Versionsstraenge).
 
 import { tzOpts, localeTag, fetchJson } from '../utils.js';
+import { sameData } from '../utils/same-data.js';
 import { tFetchErrorRaw } from '../i18n.js';
 
 export const adminDevicesMethods = {
@@ -17,17 +18,23 @@ export const adminDevicesMethods = {
     await this._devicesLoad();
   },
 
-  async _devicesLoad() {
-    this.devicesLoading = true;
-    this.devicesError = '';
+  /** `silent`: Tab-Rueckkehr — keine Ladezeile ueber der Tabelle, gleiche
+   *  Daten werden verworfen, ein Fehler aendert nichts. */
+  async _devicesLoad({ silent = false } = {}) {
+    if (!silent) {
+      this.devicesLoading = true;
+      this.devicesError = '';
+    }
     try {
       const data = await fetchJson('/admin/devices');
-      this.devicesList = data.devices || [];
-      this.devicesLatestVersions = data.latestVersions || {};
+      const list = data.devices || [];
+      const latest = data.latestVersions || {};
+      if (!silent || !sameData(list, this.devicesList)) this.devicesList = list;
+      if (!silent || !sameData(latest, this.devicesLatestVersions)) this.devicesLatestVersions = latest;
     } catch (e) {
-      this.devicesError = tFetchErrorRaw(e);
+      if (!silent) this.devicesError = tFetchErrorRaw(e);
     } finally {
-      this.devicesLoading = false;
+      if (!silent) this.devicesLoading = false;
     }
   },
 

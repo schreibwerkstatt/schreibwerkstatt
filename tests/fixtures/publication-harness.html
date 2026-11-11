@@ -62,7 +62,7 @@
 
     // Nav-State lebt in Alpine.store('nav') (kein Root-Proxy mehr) — die Karte
     // liest selectedBookId/books direkt via $store.nav / Alpine.store('nav').
-    window.Alpine.store('nav', { books: [{ id: 102, name: 'Test-Buch' }], selectedBookId: 102, pages: [], tree: [] });
+    window.Alpine.store('nav', { books: [{ id: 102, name: 'Test-Buch' }], selectedBookId: 102, pages: [], tree: [], cardTab: {} });
     // Header-Donut-State lebt in Alpine.store('progress') — book-settings/settings.js
     // spiegelt is_finished + daily_goal_chars beim Speichern dorthin.
     window.Alpine.store('progress', { dailyProgressBookId: null, dailyProgressStats: [], dailyProgressIsFinished: false, dailyProgressDailyGoalChars: null, _dailyProgressLoadingBookId: null });

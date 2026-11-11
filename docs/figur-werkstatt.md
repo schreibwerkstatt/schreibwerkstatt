@@ -193,7 +193,7 @@ UI: Eintrag «Mit Katalogfigur verknüpfen» im Overflow-Menü des Figur-Details
 ## Locking & Konfliktverhalten
 
 - **Job-Dedup:** `findActiveJobId('werkstatt-brainstorm', `${draftId}|${knotenId}`, userEmail)` — Brainstorm pro (Draft, Knoten) eindeutig; Consistency pro Draft eindeutig.
-- **Dirty-Reload:** `card:refresh` ruft `appConfirm` mit `werkstatt.confirmReload` bei `isDirty()` und lädt danach den gewählten Draft **wirklich** neu (`_reloadSelectedDraft`: Formular aus der frischen Zeile, Canvas-Remount über `_mindmapMountKey` im `x-for`-Schlüssel). Ohne Remount blieben die verworfenen Knoten im Canvas und gingen beim nächsten Save über den neueren Server-Stand.
+- **Dirty-Reload:** `card:refresh` (Re-Klick; die Tab-Rückkehr lädt die Werkstatt nicht neu) ruft `appConfirm` mit `werkstatt.confirmReload` bei `isDirty()` und lädt danach den gewählten Draft **wirklich** neu (`_reloadSelectedDraft`: Formular aus der frischen Zeile, Canvas-Remount über `_mindmapMountKey` im `x-for`-Schlüssel). Ohne Remount blieben die verworfenen Knoten im Canvas und gingen beim nächsten Save über den neueren Server-Stand.
 - **Konflikt zweier Tabs/Geräte:** `PUT` mit `expectedUpdatedAt` → `409 DRAFT_CONFLICT` samt `current`; die Karte fragt, welcher Stand gilt (siehe jsMind-Editor oben).
 - **Tab-Close:** `beforeunload` zeigt native Browser-Prompt bei dirty-State (Custom-Modal in beforeunload nicht möglich).
 - **Draft-Wechsel:** `selectDraft(id)` ruft `saveDraft()` vor Wechsel — kein Edit-Loss.

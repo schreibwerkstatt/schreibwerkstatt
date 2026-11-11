@@ -6,6 +6,7 @@
 import { wortschatzMethods } from '../book/wortschatz.js';
 import { wortschatzCloudMethods } from '../book/wortschatz-cloud.js';
 import { setupCardLifecycle } from './card-lifecycle.js';
+import { CARD_REQUEST } from './card-request.js';
 
 // Stabile Leer-Referenz: ein frisch gebautes `[]` bei jedem Getter-Aufruf würde
 // den Memo-Vergleich unten immer verfehlen.
@@ -108,6 +109,7 @@ export function registerWortschatzCard() {
       this._lifecycle = setupCardLifecycle(this, {
         name: 'wortschatz',
         showFlag: 'showWortschatzCard',
+        tabRequest: { key: CARD_REQUEST.WORTSCHATZ_TAB, apply: (tab) => { this.wortschatzTab = tab; }, current: () => this.wortschatzTab },
         timerKeys: ['_wortschatzPollTimer'],
         onShow: async () => { await this.loadWortschatz(); },
         onBookChanged: async (e, ctx, root) => {
@@ -116,6 +118,7 @@ export function registerWortschatzCard() {
         },
         onViewReset: (e, ctx) => doReset(ctx),
         onCardRefresh: async (e, ctx) => { await ctx.loadWortschatz(); },
+        wake: (e, ctx) => ctx.loadWortschatz({ silent: true }),
       });
     },
 

@@ -179,6 +179,20 @@ export const aiMethods = {
   },
 
   // ── KI: Consistency ─────────────────────────────────────────────────────
+  // Der Knopf startet einen kostenpflichtigen KI-Lauf über das ganze Board —
+  // erst nach Rückfrage mit dem Zeitpunkt der letzten Prüfung (ein versehentlicher
+  // Klick hat sonst schon den vollen Prompt bezahlt, auch wenn sofort abgebrochen wird).
+  async confirmRunConsistency() {
+    const app = window.__app;
+    if (this.consistencyLoading || !this.beats.length) return;
+    const last = (this.consistencyRuns || [])[0];
+    const message = last
+      ? app.t('plot.consistency.confirm', { date: this.formatRunDate(last.created_at) })
+      : app.t('plot.consistency.confirmFirst');
+    if (!await app.appConfirm({ message, confirmLabel: app.t('plot.consistency.confirmStart') })) return;
+    return this.runConsistency();
+  },
+
   async runConsistency() {
     const app = window.__app;
     if (!this.beats.length) { this.errorMessage = app.t('plot.error.boardEmpty'); return; }

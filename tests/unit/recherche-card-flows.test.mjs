@@ -169,18 +169,17 @@ test('createItem: Buchwechsel während des POST verwirft die Antwort', async () 
 
 test('createItem: gescheiterter Anhang öffnet das neue Fundstück und behält die Meldung', async () => {
   let opened = null;
-  const c = card({ openDetail(it) { opened = it.id; } });
+  // openDetail schliesst das Anlegen, closeCreate leert die Meldung — sie muss
+  // danach trotzdem stehen.
+  const c = card({ openDetail(it) { opened = it.id; this.errorMessage = ''; } });
   c.draft = { kind: 'note', title: 'T', body: '', urls: [], source: '', tags: '' };
-  const listeners = [];
+  c.creating = true;
   c.$refs = {
-    createDialog: { open: true, addEventListener: (t, fn) => listeners.push(fn) },
     createFile: { files: [{ name: 'a.png', type: 'image/png', arrayBuffer: async () => new ArrayBuffer(1) }] },
   };
   responder = (url) => (url === '/research' ? { body: { id: 42 } } : { status: 500, body: {} });
   await c.createItem();
   assert.equal(opened, 42);
-  c.errorMessage = ''; // _onCreateClosed
-  listeners.forEach(fn => fn());
   assert.equal(c.errorMessage, 'recherche.error.image');
 });
 

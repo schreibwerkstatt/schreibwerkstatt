@@ -17,6 +17,7 @@
   <!-- Theme-Init synchron VOR dem ersten Paint, damit es FOUC verhindert.
        Kein defer/module – muss vor body-Render laufen. -->
   <script src="js/theme-init.js"></script>
+  <script src="js/ios-viewport.js"></script>
   <!-- Globaler JS-Fehler-Reporter (klassisch, vor ESM) → /telemetry/js-error.
        VOR failsafe-reveal.js, weil dieses den Boot-Ausfall über den hier
        exportierten window.__reportClientError meldet. -->
@@ -44,6 +45,7 @@
   <link rel="stylesheet" href="css/components/color-picker.css">
   <link rel="stylesheet" href="css/components/picker-popover.css">
   <link rel="stylesheet" href="css/components/selection-bar.css">
+  <link rel="stylesheet" href="css/components/tag-input.css">
   <link rel="stylesheet" href="css/components/buttons-badges.css">
   <link rel="stylesheet" href="css/components/seg-toggle.css">
   <link rel="stylesheet" href="css/components/file-btn.css">

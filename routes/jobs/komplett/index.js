@@ -201,12 +201,15 @@ komplettRouter.post('/faktencheck', jsonBody, (req, res) => {
   // hängt an deren Kontinuitäts-Check: während eines Laufs nicht starten.
   const komplettId = findActiveJobId('komplett-analyse', book_id, userEmail);
   if (komplettId) return res.status(409).json({ error_code: 'KOMPLETT_ANALYSIS_RUNNING', jobId: komplettId, params: { jobId: komplettId } });
+  // fact_id: nur diesen Fakt (neu) prüfen — «neu prüfen» in der Welt-Karte.
+  const factId = req.body?.fact_id != null ? toIntId(req.body.fact_id) : null;
+  if (req.body?.fact_id != null && !factId) return res.status(400).json({ error_code: 'INVALID_FACT_ID' });
   const existing = findActiveJobId('faktencheck', book_id, userEmail);
   if (existing) return res.json({ jobId: existing, existing: true });
   const label = book_name ? 'job.label.faktencheckBook' : 'job.label.faktencheck';
   const labelParams = book_name ? { name: book_name } : null;
   const jobId = createJob('faktencheck', book_id, userEmail, label, labelParams);
-  enqueueJob(jobId, () => runFaktencheckJob(jobId, book_id, book_name || '', userEmail));
+  enqueueJob(jobId, () => runFaktencheckJob(jobId, book_id, book_name || '', userEmail, undefined, { factId }));
   res.json({ jobId });
 });
 

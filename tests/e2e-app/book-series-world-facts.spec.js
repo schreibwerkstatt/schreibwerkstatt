@@ -68,3 +68,37 @@ test('Welt-Fakten: anlegen, als gepflegt markiert, ändern, löschen', async ({ 
   const left = await page.evaluate(async (id) => (await fetch(`/world-facts/${id}`)).json(), bookId);
   expect(left.fakten.some(f => String(f.fakt).includes(RUN))).toBe(false);
 });
+
+test('Welt-Fakten: Kapitel-Bezug im Formular wird manueller Bezug am Fakt', async ({ page }) => {
+  await bootApp(page);
+  const bookId = await selectSeededBook(page);
+  const card = page.locator('.card--weltfakten');
+  await page.evaluate(() => window.__app.toggleWorldFactsCard());
+  await expect(card).toBeVisible();
+  await card.getByRole('button', { name: 'Fakt', exact: true }).click();
+
+  const panel = card.locator('.weltfakten-edit-panel');
+  const fakt = `Die Brücke ${RUN} ist aus Holz`;
+  await panel.locator('textarea').fill(fakt);
+  const kapitelBox = panel.locator('.combobox-wrap--multi');
+  await expect(kapitelBox).toBeVisible();
+  await kapitelBox.locator('.combobox-trigger').click();
+  const first = kapitelBox.locator('.combobox-option').first();
+  const kapitelName = (await first.innerText()).trim();
+  await first.click();
+  await panel.locator('.card-section-title').click();
+  await panel.getByRole('button', { name: 'Speichern' }).click();
+
+  const row = card.locator('.weltfakten-row', { hasText: fakt });
+  await expect(row).toBeVisible();
+  await expect(row.locator('.weltfakten-row-meta .entity-ref')).toHaveCount(1);
+  const data = await page.evaluate(async (id) => (await fetch(`/world-facts/${id}`)).json(), bookId);
+  const f = data.fakten.find(x => x.fakt === fakt);
+  expect(f.chapter_refs).toHaveLength(1);
+  expect(f.chapter_refs[0].manual).toBe(true);
+  expect(kapitelName).toContain(f.chapter_refs[0].chapter_name);
+
+  await row.getByRole('button', { name: 'Löschen' }).click();
+  await page.locator('#app-confirm-dialog').getByRole('button', { name: 'Löschen' }).click();
+  await expect(row).toHaveCount(0);
+});

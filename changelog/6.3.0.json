@@ -1,0 +1,66 @@
+{
+  "version": "6.3.0",
+  "date": "2026-11-11",
+  "entries": [
+    {
+      "kind": "neu",
+      "de": "Lektorat: das Abschnitts-Lektorat prüft jetzt auch gegen die Welt-Fakten deines Buchs. Es meldet Stellen, die einem festgehaltenen Fakt widersprechen, und Sätze, in denen eine Figur anders spricht als sonst.",
+      "en": "Copy-editing: section copy-editing now also checks against your book's world facts. It flags passages that contradict a recorded fact and lines where a character speaks differently than usual."
+    },
+    {
+      "kind": "neu",
+      "de": "Welt-Fakten: gelöschte oder ersetzte Aussagen der Buchanalyse kommen beim nächsten Lauf nicht zurück. Unter «Ausgeblendete Aussagen» holst du sie bei Bedarf wieder.",
+      "en": "World facts: statements from the book analysis that you deleted or replaced no longer come back on the next run. Under \"Hidden statements\" you can bring them back if needed."
+    },
+    {
+      "kind": "neu",
+      "de": "Welt-Fakten: beim Bearbeiten wählst du die Kapitel eines Fakts selbst, und einzelne Fakten lässt du gezielt neu prüfen. Das Prüfergebnis siehst du auch in der Figur unter «Im Buch festgehalten».",
+      "en": "World facts: when editing, you choose a fact's chapters yourself, and you can re-check individual facts. The check result also shows in the character under \"Established in the book\"."
+    },
+    {
+      "kind": "neu",
+      "de": "Reiter haben jetzt eigene Links: ein Lesezeichen oder ein Neuladen öffnet die Karte wieder auf demselben Reiter, etwa in den Bucheinstellungen oder im Regal.",
+      "en": "Tabs now have their own links: a bookmark or a reload opens the card on the same tab again, for example in the book settings or on the shelf."
+    },
+    {
+      "kind": "verbessert",
+      "de": "Recherche: das Formular für Fundstücke ist neu geordnet, mit Erklärung zu jedem Feld. Tags setzt du als Chips mit Vorschlägen aus deinen anderen Fundstücken, wie bei den Quellen.",
+      "en": "Research: the form for findings has been reorganised, with an explanation for each field. You set tags as chips with suggestions from your other findings, as with sources."
+    },
+    {
+      "kind": "verbessert",
+      "de": "Plot-Werkstatt: der Knopf heisst jetzt «Plot prüfen» und fragt vor dem Start nach, weil die Prüfung ein kostenpflichtiger KI-Lauf ist. Dabei siehst du, wann zuletzt geprüft wurde.",
+      "en": "Plot workshop: the button is now called \"Check plot\" and asks before starting, since the check is a paid AI run. You also see when the last check was."
+    },
+    {
+      "kind": "verbessert",
+      "de": "Offline: die Einstellung «automatisch offline halten» legt jetzt die zwei zuletzt geöffneten Bücher auf dem Gerät ab statt nur eines.",
+      "en": "Offline: the \"Keep the last opened books offline automatically\" setting now stores the two most recently opened books on the device instead of just one."
+    },
+    {
+      "kind": "verbessert",
+      "de": "Kehrst du zur App zurück, bleiben Karten wie Recherche, Meine Statistik oder Autorenprofil ruhig stehen und aktualisieren sich nur, wenn sich etwas geändert hat.",
+      "en": "When you return to the app, cards like Research, My statistics or Author profile stay put and only update if something has changed."
+    },
+    {
+      "kind": "verbessert",
+      "de": "iPad: Eingabefelder zoomen beim Antippen nicht mehr in die Seite hinein. Knöpfe, Auswahllisten und Tooltips verhalten sich auf Touch wie erwartet.",
+      "en": "iPad: input fields no longer zoom into the page when tapped. Buttons, dropdowns and tooltips behave as expected on touch."
+    },
+    {
+      "kind": "behoben",
+      "de": "Plot-Werkstatt: Vorschläge aus Brainstorming und Plot-Chat zeigten statt eines Beat-Namens manchmal eine Nummer wie «#33».",
+      "en": "Plot workshop: suggestions from brainstorming and the plot chat sometimes showed a number like \"#33\" instead of a beat name."
+    },
+    {
+      "kind": "behoben",
+      "de": "Plot-Werkstatt: geplante Beats galten manchmal schon als geschrieben, nur weil eine Stelle dieselben Figuren und dasselbe Thema hatte.",
+      "en": "Plot workshop: planned beats were sometimes treated as already written just because a passage had the same characters and topic."
+    },
+    {
+      "kind": "behoben",
+      "de": "Vorlesen: in Safari stockte die Wiedergabe nach dem ersten Satz oder startete gar nicht, und die gewählte Geschwindigkeit ging verloren.",
+      "en": "Read aloud: in Safari, playback stalled after the first sentence or did not start at all, and the chosen speed was lost."
+    }
+  ]
+}

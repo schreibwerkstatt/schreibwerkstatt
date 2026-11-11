@@ -6,7 +6,7 @@
       <button type="button" class="icon-btn icon-btn--ghost" @click="adminUsersInvitesLoad()" :disabled="adminUsersInvitesLoading" :data-tip="$app.t('common.refresh')" :aria-label="$app.t('common.refresh')"><svg class="icon" aria-hidden="true"><use href="/icons.svg#rotate-cw"/></svg></button>
     </div>
 
-    <div x-show="adminUsersInvitesLoading" class="muted-msg" x-text="$app.t('common.loading')"></div>
+    <div x-show="adminUsersInvitesLoading" x-skeleton="3" x-cloak></div>
 
     <!-- Reminder-Result -->
     <div class="admin-users-invite-result" x-show="adminUsersInvitesResult">

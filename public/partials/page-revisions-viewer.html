@@ -83,8 +83,7 @@
         </div>
 
         <div class="revision-viewer__body">
-          <div x-show="viewerLoading" x-cloak class="revision-viewer__hint"
-               x-text="$app.t('editor.revisions.viewer.loading')"></div>
+          <div x-show="viewerLoading" x-skeleton="6" x-cloak></div>
           <div x-show="viewerError" x-cloak class="revision-viewer__hint revision-viewer__hint--error"
                role="alert" x-text="viewerError"></div>
 

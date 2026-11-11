@@ -1,0 +1,66 @@
+/* Schlagwort-Eingabe: gesetzte Schlagworte als entfernbare Chips, darunter das
+   Eingabefeld und Vorschlaege aus dem Pool. EINE Optik fuer jedes Formular, das
+   freie Schlagworte setzt (Quellen, Recherche-Fundstuecke). Mechanik und Markup
+   in public/js/tag-input.js (selbst-rendernd, Wrapper leer lassen), Regeln in
+   DESIGN.md „Schlagwort-Eingabe". Das Feld selbst ist .card-form-input. */
+@layer components {
+
+.tag-input {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-6);
+  min-width: 0;
+}
+
+.tag-input-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2xs);
+}
+.tag-input-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2xs);
+  padding: var(--space-2xs) var(--space-xs);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-none);
+  background: var(--color-surface);
+  color: var(--color-text);
+  font-size: var(--font-size-xs);
+  line-height: var(--lh-base);
+}
+.tag-input-chip-remove {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 14px;
+  height: 14px;
+  padding: 0;
+  border: none;
+  background: transparent;
+  color: var(--color-muted);
+  cursor: pointer;
+}
+.tag-input-chip-remove:hover,
+.tag-input-chip-remove:focus-visible { color: var(--color-text); }
+
+.tag-input-suggest {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2xs);
+}
+.tag-input-suggestion {
+  padding: var(--space-2xs) var(--space-6);
+  border: none;
+  border-radius: var(--radius-none);
+  background: var(--color-tag-bg);
+  color: var(--color-tag-text);
+  font-family: inherit;
+  font-size: var(--font-size-xs);
+  white-space: nowrap;
+  cursor: pointer;
+}
+.tag-input-suggestion:hover,
+.tag-input-suggestion:focus-visible { color: var(--color-text); }
+
+}

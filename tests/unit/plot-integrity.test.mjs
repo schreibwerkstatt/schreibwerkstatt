@@ -285,3 +285,71 @@ test('_anchorBeat: speichert semScore (Cosinus), überspringt FTS-Fusions-Kandid
     delete require.cache[require.resolve('../../routes/jobs/beat-anchor')];
   }
 });
+
+// ── Anchor-Job: Figuren-Scope + Rerank-Tor ────────────────────────────────────
+test('listBeatsForAnchor: figure_ids = geerbte Strang-Hauptfigur + verlinkte Figuren', () => {
+  const B = freshBook();
+  const now = new Date().toISOString();
+  const ins = db.prepare('INSERT INTO figures (book_id, fig_id, name, updated_at, user_email) VALUES (?, ?, ?, ?, ?)');
+  const stefan = Number(ins.run(B, 'fs', 'Stefan', now, USER).lastInsertRowid);
+  const renate = Number(ins.run(B, 'fr', 'Renate', now, USER).lastInsertRowid);
+  const t = plot.createThread(B, USER, { name: 'Stefan', figureId: stefan });
+  const a = plot.createAct(B, USER, { name: 'A' });
+  const b1 = plot.createBeat(B, a.id, USER, { titel: 'Im Strang', threadId: t.id, figureIds: [renate] });
+  const b2 = plot.createBeat(B, a.id, USER, { titel: 'Ohne Strang' });
+  const rows = new Map(plot.listBeatsForAnchor(B, USER).map(r => [r.id, r]));
+  assert.deepEqual([...rows.get(b1.id).figure_ids].sort(), [stefan, renate].sort());
+  assert.deepEqual(rows.get(b2.id).figure_ids, []);
+  // Figuren ohne Eintrag in einem Erwähnungs-Index → kein Scope (nicht «nirgends»).
+  assert.equal(plot.anchorFigureScope([stefan]), null);
+  assert.equal(plot.anchorFigureScope([]), null);
+});
+
+test('_anchorBeat: restrictTo geht an die Suche, Treffer ausserhalb des Figuren-Scopes fallen weg', async () => {
+  const retrieval = require('../../lib/semantic-retrieval');
+  const orig = retrieval.semanticQuery;
+  let seen = null;
+  retrieval.semanticQuery = async (_b, _q, opts) => {
+    seen = opts.restrictTo;
+    return [
+      { kind: 'page', entity_id: 11, text: 'mit Figur', semScore: 0.6, rerankScore: 0.9 },
+      { kind: 'page', entity_id: 99, text: 'andere Figur', semScore: 0.7, rerankScore: 0.9 },
+      { kind: 'scene', entity_id: 5, text: 'Szene mit Figur', semScore: 0.6, rerankScore: 0.9 },
+    ];
+  };
+  try {
+    delete require.cache[require.resolve('../../routes/jobs/beat-anchor')];
+    const { _anchorBeat } = require('../../routes/jobs/beat-anchor');
+    const beat = { id: 1, titel: 'Banklehre', beschreibung: '', status: 'im_buch' };
+    const restrictTo = { page: [11], scene: [5] };
+    const rows = await _anchorBeat(1, beat, true, () => undefined, 0.45, { promote: false, restrictTo });
+    assert.deepEqual(seen, restrictTo);
+    assert.deepEqual(rows.map(r => r.pageId ?? r.sceneId).sort(), [11, 5].sort());
+  } finally {
+    retrieval.semanticQuery = orig;
+    delete require.cache[require.resolve('../../routes/jobs/beat-anchor')];
+  }
+});
+
+test('_anchorBeat: Promotion braucht zusätzlich den Rerank-Wert; ohne Rerank-Wert gilt das Cosinus-Tor', async () => {
+  const retrieval = require('../../lib/semantic-retrieval');
+  const orig = retrieval.semanticQuery;
+  retrieval.semanticQuery = async () => ([
+    { kind: 'page', entity_id: 1, text: 'gleiches Thema', semScore: 0.66, rerankScore: 0.69 },
+    { kind: 'page', entity_id: 2, text: 'das Ereignis', semScore: 0.60, rerankScore: 0.75 },
+    { kind: 'page', entity_id: 3, text: 'Reranker aus', semScore: 0.58, rerankScore: null },
+  ]);
+  try {
+    delete require.cache[require.resolve('../../routes/jobs/beat-anchor')];
+    const { _anchorBeat } = require('../../routes/jobs/beat-anchor');
+    const beat = { id: 1, titel: 'Renate scheidet sich', beschreibung: '', status: 'geplant' };
+    const promo = await _anchorBeat(1, beat, true, () => undefined, 0.55, { promote: true, rerankFloor: 0.7 });
+    assert.deepEqual(promo.map(r => r.pageId), [2, 3]);
+    // Bestätigung (im_buch) kennt kein Rerank-Tor — echte Belege liegen dort auch bei 0.01–0.05.
+    const confirm = await _anchorBeat(1, { ...beat, status: 'im_buch' }, true, () => undefined, 0.45, { promote: false, rerankFloor: 0.7 });
+    assert.deepEqual(confirm.map(r => r.pageId), [1, 2, 3]);
+  } finally {
+    retrieval.semanticQuery = orig;
+    delete require.cache[require.resolve('../../routes/jobs/beat-anchor')];
+  }
+});

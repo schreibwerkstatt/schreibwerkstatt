@@ -4,6 +4,7 @@
 import { adminSettingsMethods } from '../admin/admin-settings.js';
 import { adminAiProfilesMethods } from '../admin/admin-ai-profiles.js';
 import { setupCardLifecycle } from './card-lifecycle.js';
+import { CARD_REQUEST } from './card-request.js';
 
 export function registerAdminSettingsCard() {
   if (typeof window === 'undefined' || !window.Alpine) return;
@@ -51,6 +52,8 @@ export function registerAdminSettingsCard() {
         if (t === 'profiles' && !this.adminProfilesList.length) this.adminProfilesLoad();
       });
       this._lifecycle = setupCardLifecycle(this, {
+        showFlag: 'showAdminSettingsCard',
+        tabRequest: { key: CARD_REQUEST.ADMIN_SETTINGS_TAB, apply: (tab) => { this.adminSettingsTab = tab; }, current: () => this.adminSettingsTab },
         onViewReset: () => {
           this.adminSettingsError = '';
           this.adminSettingsTestResult = null;

@@ -23,7 +23,7 @@
       <span class="picker-popover__subject" x-text="editName || selectedDraft()?.name || ''"></span>
     </div>
 
-    <p class="picker-popover__hint" x-show="linkCandidatesLoading" x-text="$app.t('common.loading')"></p>
+    <div x-show="linkCandidatesLoading" x-skeleton="3" x-cloak></div>
     <p class="picker-popover__hint" x-show="!linkCandidatesLoading && linkCandidates.length === 0"
        x-text="$app.t('werkstatt.link.none')"></p>
     <div x-show="!linkCandidatesLoading && linkCandidates.length > 0"

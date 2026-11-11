@@ -99,7 +99,7 @@ Der Helper macht:
 - `$watch(showFlag)` → bei `true` + `selectedBookId` → `cfg.onShow ?? cfg.load`.
 - `book:changed` → Timer clear + `resetState` + (sichtbar + Buch vorhanden) → `cfg.load`.
 - `view:reset` → Timer clear + `resetState` (KEIN Reload).
-- `card:refresh` → wenn `event.detail.name === cfg.name` und Buch vorhanden → `cfg.load`.
+- `card:refresh` → wenn `event.detail.name === cfg.name` und Buch vorhanden → `cfg.onCardRefresh` bzw. `cfg.load`. Trägt das Event `source: 'wake'` (Tab-Rückkehr nach >30 s, [bookscope.js](../public/js/app/app-view/bookscope.js)#`_refreshAfterWake`), gilt stattdessen `cfg.wake` — und `cardLoading` bleibt aus.
 - `destroy()` → `clearTimers` + `AbortController.abort()` (alle internen Listener weg).
 - `ctx.cardLoading` → `true`, solange einer dieser Lade-Hooks (Einblenden, Buchwechsel inkl. `onBookChanged`, `card:refresh`) läuft; parallele Hooks zählen mit. Vom Helper gesetzt, **nicht** im Karten-State deklarieren und nicht selbst schreiben. Lesen fürs Lade-Skelett (`x-skeleton`, [skeleton.js](../public/js/skeleton.js)) und als `!cardLoading` im Leerzustand — sonst zeigt die Karte „noch nichts da", während der erste Fetch läuft.
 
@@ -112,6 +112,7 @@ Der Helper macht:
 | `onBookChanged(e, ctx, root)` | Override; skipt das Default-`reset+load` (die `timerKeys` räumt der Helper trotzdem vorher ab). Nutzen für Karten mit Coalesce-Logik (Microtask, debounce). |
 | `onViewReset(e, ctx, root)` | Override fürs `view:reset`-Verhalten (die `timerKeys` räumt der Helper trotzdem vorher ab). Nutzen, wenn `view:reset` mehr räumt als `book:changed` (z.B. user-scoped Profile-Liste in PDF-Export). |
 | `resetStateView` | Eigenes Reset-Objekt nur fürs `view:reset` (wenn book vs. view unterschiedlich resetten). |
+| `wake` | Verhalten bei der Tab-Rückkehr (`card:refresh` mit `source: 'wake'`). Default: derselbe Hook wie beim Re-Klick, ohne `cardLoading`. `'skip'`: gar nicht laden (Karte hält Arbeitsstand, den ein Neuaufbau verwirft: Bucheditor, Figur-Werkstatt, Fassungen). Funktion `(e, ctx, root)`: eigener stiller Abgleich, Konvention `loadXxx({ silent: true })`. **Regel:** die Tab-Rückkehr ist kein User-Wunsch — nichts dimmen, kein Skelett/Spinner, keine Auswahl, kein Auf-/Zuklappzustand, kein Undo-Verlauf zurücksetzen, Fehler lassen den alten Stand stehen, unveränderte Antworten werden nicht zugewiesen ([utils/same-data.js](../public/js/utils/same-data.js)#`sameData`). Der Re-Klick bleibt sichtbar. Karten mit eigenem `card:refresh`-Listener prüfen `isWakeRefresh(e)` aus dem Helper. |
 | `refreshNeedsBookId: false` | Default: `card:refresh` ignoriert wenn kein Buch aktiv. False für Karten mit eigener Buch-Prüfung. |
 | `showNeedsBookId: false` | Analog für `$watch(showFlag)`. |
 | `extraListeners: [{ type, handler }]` | Zusätzliche Window-Events (z.B. `chat:reset`, `book-chat:reset`, `ideen:reset`, `kapitel-review:select`, `book-stats:select`, `job:reconnect`). Werden über denselben AbortController automatisch wieder abgemeldet. |
@@ -165,12 +166,12 @@ Custom-Events am `window`. Vollständige Liste:
 |-------|-----------|-------|-------|
 | `book:changed` | `_resetBookScopedState()` | alle Subs mit Buchscope | State resetten + bei offener Karte neu laden |
 | `view:reset` | `resetView()` | alle Subs | Lokalen State komplett nullen |
-| `card:refresh` `{ name }` | erneuter Klick auf offene Karte | passende Sub | Daten neu laden |
+| `card:refresh` `{ name, source? }` | erneuter Klick auf offene Karte; `source: 'wake'` bei Tab-Rückkehr nach >30 s | passende Sub | Daten neu laden (Wake: still, `cfg.wake`) |
 | `job:reconnect` `{ type, jobId, job, extra? }` | `checkPendingJobs()` | review/kapitel-review/figuren/komplett | Loading-State übernehmen + Polling starten |
 | `job:finished` `{ type, jobId, job, dedupId, bookId }` | `_detectFinishedJobs()` (Diff aus `/jobs/queue`) | Root + Subs | Sidebar/History idempotent updaten, auch wenn kein per-Card-Poller mehr läuft (Reload-Lücke). Konsumenten müssen idempotent sein — fired auch parallel zu per-Card-onDone. |
 | `chat:reset` / `book-chat:reset` | Seitenwechsel / User-Settings-Reset | chat-card, book-chat-card | Session leeren |
 | `kapitel-review:select` `{ chapterId }` | Sidebar / Hash-Router | kapitel-review-card | Chapter-ID setzen |
-| `card:request` `{ key }` | [card-request.js](../public/js/cards/card-request.js)#`openCardWith` (Palette, Querverweise, Job-Queue-Sprung) | Reiter (`*_TAB`): book-settings-card, figuren-card, pdf-export-card über `tabRequest` in [card-lifecycle.js](../public/js/cards/card-lifecycle.js); sonst chat-card, book-chat-card, user-settings-card | Wert liegt im Modul, damit eine erst durch den Sprung gemountete Karte ihn findet. Reiter-Wünsche holt der Lifecycle beim Mount, synchron beim Einblenden und auf das Event ab (sonst blitzt der gemerkte Reiter auf); übrige Wünsche holt die Karte nach dem Laden in `onShow` und im Listener per `takeCardRequest(key)` |
+| `card:request` `{ key }` | [card-request.js](../public/js/cards/card-request.js)#`openCardWith` (Palette, Querverweise, Job-Queue-Sprung) | Reiter (`*_TAB`): book-settings-card, figuren-card, pdf-/epub-/docx-export-card, wortschatz-card, motiv-card, my-books-card, admin-users-card, admin-settings-card über `tabRequest` in [card-lifecycle.js](../public/js/cards/card-lifecycle.js); sonst chat-card, book-chat-card, user-settings-card | Wert liegt im Modul, damit eine erst durch den Sprung gemountete Karte ihn findet. Reiter-Wünsche holt der Lifecycle beim Mount, synchron beim Einblenden und auf das Event ab (sonst blitzt der gemerkte Reiter auf); übrige Wünsche holt die Karte nach dem Laden in `onShow` und im Listener per `takeCardRequest(key)`. Reiter mit Permalink (`URL_TABS` in card-request.js) melden zusätzlich `tabRequest.current` an: der Lifecycle spiegelt den aktiven Reiter nach `$store.nav.cardTab[key]`, der Hash-Router hängt ihn an die Karten-URL (Grund-Reiter ohne Suffix) und öffnet einen Deep-Link über denselben Wunsch |
 | `book-stats:select` | Hash-Router | book-stats-card | Statistik-Tab wählen |
 | `palette:open` | global | palette-card | Command-Palette öffnen |
 | `app:update-available` | Service-Worker-Listener | Root-Banner | Update-Hinweis |

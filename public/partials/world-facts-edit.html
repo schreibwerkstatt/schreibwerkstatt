@@ -22,6 +22,14 @@
                data-spellcheck="spelling" :aria-label="$app.t('weltfakten.edit.subjekt')">
       </div>
     </div>
+    <div x-id="['fld']" class="card-form-row" x-show="wfKapitelAuswahl.length > 0">
+      <label :id="$id('fld')" class="card-form-label" x-text="$app.t('weltfakten.edit.kapitel')"></label>
+      <div class="card-form-field">
+        <div :aria-labelledby="$id('fld')" x-data="combobox({ placeholder: $app.t('weltfakten.edit.kapitelNone'), multiple: true, compact: false })"
+             x-modelable="value" x-model="wfEdit.draft.chapter_ids"
+             x-effect="options = wfKapitelAuswahl"></div>
+      </div>
+    </div>
     <div x-id="['fld']" class="card-form-row card-form-row--top">
       <label :for="$id('fld')" class="card-form-label" x-text="$app.t('weltfakten.edit.fakt')"></label>
       <div class="card-form-field">

@@ -13,7 +13,7 @@
     </div>
   </div>
 
-  <div x-show="adminUsersLoading" class="muted-msg" x-text="$app.t('common.loading')"></div>
+  <div x-show="adminUsersLoading" x-skeleton="5" x-cloak></div>
   <div x-show="adminUsersError" class="error-msg" x-text="adminUsersError"></div>
 
   <!-- Tab-Navigation Users / Invites / Requests -->

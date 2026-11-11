@@ -52,11 +52,17 @@ function _emailCond(userEmail) {
 //   die Fakten dieses Kapitels sind weg, bis ein späterer Lauf sie wieder findet.
 // - **Gepflegte Fakten (`manually_edited = 1`)** überleben den Full-Replace; eine
 //   gleichlautende Analyse-Aussage (gleicher factKey) legt keine zweite Zeile an,
-//   sondern liefert nur die Kapitel-Brücke der gepflegten.
+//   sondern liefert nur die Kapitel-Brücke der gepflegten. Ihre vom Autor gesetzten
+//   Kapitel-Bezüge (`world_fact_chapters.manual = 1`) bleiben stehen.
+// - **Verworfene Aussagen (`world_fact_suppressions`)** legen keine Zeile an; mit
+//   `replaced_by` liefern sie die Kapitel-Brücke des gepflegten Ersatzes. Abgleich über
+//   den factKey und — für Umformulierungen — über `matches` (factKey → { target }), den
+//   der Aufrufer vorab per Embedding-Ähnlichkeit berechnet (komplett/world-facts-match.js;
+//   ein synchroner DB-Schreibpfad kann nicht embedden). `target` null = verwerfen.
 // - setzt den Scan-Marker (`world_facts_scan`).
 //
 // chapterFakten: [{ kapitel, fakten: [{ kategorie, subjekt, fakt, seite }] }]
-function saveFaktenToDb(bookId, chapterFakten, userEmail, chNameToId = null, { keepChapterIds = null } = {}) {
+function saveFaktenToDb(bookId, chapterFakten, userEmail, chNameToId = null, { keepChapterIds = null, matches = null } = {}) {
   if (chNameToId == null) {
     const rows = db.prepare('SELECT chapter_id, chapter_name FROM chapters WHERE book_id = ?').all(bookId);
     chNameToId = chapterNameMap(rows);
@@ -98,6 +104,7 @@ function saveFaktenToDb(bookId, chapterFakten, userEmail, chNameToId = null, { k
     if (factChap != null) e.chapters.add(factChap);
   };
 
+  let count = 0;
   db.transaction(() => {
     // Behaltene Kapitel: deren bisherige Fakten vor dem Löschen einsammeln.
     if (keep) {
@@ -124,8 +131,18 @@ function saveFaktenToDb(bookId, chapterFakten, userEmail, chNameToId = null, { k
       SELECT id, subjekt, fakt, sort_order FROM world_facts
        WHERE book_id = ? AND ${emailCond} AND manually_edited = 1`).all(bookId, ...emailVal);
     const manualByKey = new Map(manualRows.map(r => [factKey(r.subjekt, r.fakt), r.id]));
-    const delWfc = db.prepare('DELETE FROM world_fact_chapters WHERE fact_id = ?');
+    const delWfc = db.prepare('DELETE FROM world_fact_chapters WHERE fact_id = ? AND manual = 0');
     for (const r of manualRows) delWfc.run(r.id);
+    // Verworfene Aussagen: exakter Schlüssel → Ersatz (oder null), ergänzt um die
+    // Ähnlichkeits-Treffer des Aufrufers. Ein Ersatz, der nicht mehr gepflegt ist, gilt
+    // als «verwerfen» (ON DELETE SET NULL hat ihn schon genullt).
+    const manualIds = new Set(manualRows.map(r => r.id));
+    const suppressed = new Map();
+    for (const r of db.prepare(`SELECT fact_key, replaced_by FROM world_fact_suppressions
+                                 WHERE book_id = ? AND ${emailCond}`).all(bookId, ...emailVal)) {
+      suppressed.set(r.fact_key, r.replaced_by);
+    }
+    for (const [k, m] of (matches || new Map())) if (!suppressed.has(k) && !manualByKey.has(k)) suppressed.set(k, m?.target ?? null);
 
     // Full-Replace der Analyse-Fakten (CASCADE räumt world_fact_chapters).
     db.prepare(`DELETE FROM world_facts WHERE book_id = ? AND ${emailCond} AND manually_edited = 0`).run(bookId, ...emailVal);
@@ -137,14 +154,47 @@ function saveFaktenToDb(bookId, chapterFakten, userEmail, chNameToId = null, { k
     let order = manualRows.reduce((m, r) => Math.max(m, (r.sort_order ?? 0) + 1), 0);
     for (const [key, e] of byKey) {
       // Dieselbe Aussage wie ein gepflegter Fakt: der Autor-Text gewinnt, die
-      // Fundstellen wandern an seine Zeile.
-      const factId = manualByKey.get(key)
-        ?? ins.run(bookId, e.kategorie, e.subjekt, e.fakt, e.seite, order++, userEmail || null).lastInsertRowid;
+      // Fundstellen wandern an seine Zeile. Eine verworfene Aussage legt nichts an;
+      // ersetzt sie ein gepflegter Fakt, bekommt der ihre Fundstellen.
+      let factId = manualByKey.get(key);
+      if (factId == null && suppressed.has(key)) {
+        const target = suppressed.get(key);
+        if (target == null || !manualIds.has(target)) continue;
+        factId = target;
+      }
+      if (factId == null) {
+        factId = ins.run(bookId, e.kategorie, e.subjekt, e.fakt, e.seite, order++, userEmail || null).lastInsertRowid;
+        count++;
+      }
       for (const c of e.chapters) insWfc.run(factId, c);
     }
     markWorldFactsScanned(bookId, userEmail);
   })();
-  return { count: byKey.size };
+  return { count };
+}
+
+/** Anker für den Ähnlichkeits-Abgleich einer neuen Analyse (komplett/world-facts-match.js):
+ *  verworfene Aussagen (`target` = gepflegter Ersatz oder null) und gepflegte Fakten
+ *  (`target` = ihre eigene ID). @returns {Array<{key, subjekt, fakt, target}>} */
+function listFactAnchors(bookId, userEmail) {
+  const { cond, vals } = _emailCond(userEmail);
+  const manual = db.prepare(`SELECT id, subjekt, fakt FROM world_facts
+                              WHERE book_id = ? AND ${cond} AND manually_edited = 1`).all(bookId, ...vals);
+  const manualIds = new Set(manual.map(r => r.id));
+  const sup = db.prepare(`SELECT fact_key, subjekt, fakt, replaced_by FROM world_fact_suppressions
+                           WHERE book_id = ? AND ${cond}`).all(bookId, ...vals);
+  return [
+    ...sup.map(r => ({ key: r.fact_key, subjekt: r.subjekt, fakt: r.fakt,
+      target: r.replaced_by != null && manualIds.has(r.replaced_by) ? r.replaced_by : null })),
+    ...manual.map(r => ({ key: factKey(r.subjekt, r.fakt), subjekt: r.subjekt, fakt: r.fakt, target: r.id })),
+  ];
+}
+
+/** Verworfene Analyse-Aussagen eines Buchs für die Welt-Karte (wiederherstellbar). */
+function listFactSuppressions(bookId, userEmail) {
+  const { cond, vals } = _emailCond(userEmail);
+  return db.prepare(`SELECT id, subjekt, fakt, replaced_by, created_at FROM world_fact_suppressions
+                      WHERE book_id = ? AND ${cond} ORDER BY created_at DESC, id DESC`).all(parseInt(bookId), ...vals);
 }
 
 function markWorldFactsScanned(bookId, userEmail) {
@@ -168,15 +218,18 @@ function markWorldFactsScanned(bookId, userEmail) {
  *  - `withChapterIds` setzt je Fakt `chapter_ids` parallel zu `kapitel` (Kapitel-Filter
  *    der Karte arbeitet auf IDs; KI-Kontexte bleiben ohne, ihr Prompt-Block unverändert)
  *    und `chapter_refs` ({chapter_id, chapter_name} je Kapitel, Faktencheck-Befunde).
- *  - `withManual` setzt je Fakt `manuell` (vom Autor gepflegt; Welt-Karte). KI-Kontexte
- *    bleiben ohne.
+ *  - `withManual` setzt je Fakt `manuell` (vom Autor gepflegt; Welt-Karte) und je
+ *    Kapitel-Bezug in `chapter_refs` `manual` (vom Autor gesetzt). KI-Kontexte bleiben ohne.
+ *  - `withVerdicts` setzt je geprüftem Fakt `pruefung` ({ urteil, beschreibung, quelle,
+ *    checked_at } aus dem Faktencheck-Cache, roh — `widerlegt` berücksichtigt zusätzlich
+ *    das «kein Fehler» des Autors). Welt-Karte.
  *
  *  Gemeinsamer Lesepfad fuer alle Konsumenten: der Namens-JOIN gehoert nach `db/`
  *  (Content-Store-Facade-Regel), nicht in einen Route- oder Job-Handler.
  *
  *  @returns {Array<{id,kategorie,subjekt,fakt,seite,kapitel:string[],chapter_ids?:number[],chapter_refs?:Array<{chapter_id:number,chapter_name:string}>,updated_at,widerlegt?}>}
  */
-function listWorldFacts(bookId, userEmail, { kategorien = null, subjekt = null, withRefuted = false, withChapterIds = false, withManual = false } = {}) {
+function listWorldFacts(bookId, userEmail, { kategorien = null, subjekt = null, withRefuted = false, withChapterIds = false, withManual = false, withVerdicts = false } = {}) {
   const bookIdInt = parseInt(bookId);
   if (!bookIdInt) return [];
   const email = userEmail || null;
@@ -188,7 +241,7 @@ function listWorldFacts(bookId, userEmail, { kategorien = null, subjekt = null, 
   const katCond = kats ? ` AND wf.kategorie IN (${kats.map(() => '?').join(',')})` : '';
   const rows = db.prepare(`
     SELECT wf.id, wf.kategorie, wf.subjekt, wf.fakt, wf.seite_label, wf.updated_at, wf.manually_edited,
-           c.chapter_id, c.chapter_name
+           c.chapter_id, c.chapter_name, wfc.manual AS chapter_manual
       FROM world_facts wf
       LEFT JOIN world_fact_chapters wfc ON wfc.fact_id = wf.id
       LEFT JOIN chapters c ON c.chapter_id = wfc.chapter_id
@@ -198,6 +251,7 @@ function listWorldFacts(bookId, userEmail, { kategorien = null, subjekt = null, 
 
   const subjQ = String(subjekt || '').trim().toLocaleLowerCase('de');
   const refuted = withRefuted ? refutedFactKeys(bookIdInt, email) : null;
+  const verdicts = withVerdicts ? getFactVerdicts(bookIdInt, email) : null;
   // Bridge-Zeilen (eine je Kapitel) zu einem Fakt zusammenfassen.
   const byId = new Map();
   for (const r of rows) {
@@ -214,6 +268,10 @@ function listWorldFacts(bookId, userEmail, { kategorien = null, subjekt = null, 
         updated_at: r.updated_at || null,
       };
       if (refuted) e.widerlegt = refuted.has(factKey(r.subjekt, r.fakt));
+      if (verdicts) {
+        const v = verdicts.get(factKey(r.subjekt, r.fakt));
+        if (v) e.pruefung = { urteil: v.urteil, beschreibung: v.beschreibung || '', quelle: v.quelle || null, checked_at: v.checked_at };
+      }
       if (withChapterIds) { e.chapter_ids = []; e.chapter_refs = []; }
       if (withManual) e.manuell = !!r.manually_edited;
       byId.set(r.id, e);
@@ -221,7 +279,10 @@ function listWorldFacts(bookId, userEmail, { kategorien = null, subjekt = null, 
     if (r.chapter_name && !e.kapitel.includes(r.chapter_name)) e.kapitel.push(r.chapter_name);
     if (withChapterIds && r.chapter_id != null && !e.chapter_ids.includes(r.chapter_id)) {
       e.chapter_ids.push(r.chapter_id);
-      e.chapter_refs.push({ chapter_id: r.chapter_id, chapter_name: r.chapter_name || '' });
+      e.chapter_refs.push({
+        chapter_id: r.chapter_id, chapter_name: r.chapter_name || '',
+        ...(withManual ? { manual: !!r.chapter_manual } : {}),
+      });
     }
   }
   return [...byId.values()];
@@ -362,6 +423,8 @@ function getWorldFactTitle(factId, opts = {}) {
 module.exports = {
   getWorldFactTitle,
   saveFaktenToDb,
+  listFactAnchors,
+  listFactSuppressions,
   markWorldFactsScanned,
   listWorldFacts,
   worldFactsScanState,

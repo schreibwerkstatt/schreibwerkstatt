@@ -61,10 +61,7 @@
     </div>
   </div>
 
-  <div x-show="loading" class="card-status">
-    <span class="spinner"></span>
-    <span x-text="$app.t('bookEditor.loading')"></span>
-  </div>
+  <div x-show="loading" x-skeleton="8" x-cloak></div>
   <div x-show="loadError" class="card-status book-editor-load-error" x-text="loadError"></div>
 
   <div class="book-editor-layout"

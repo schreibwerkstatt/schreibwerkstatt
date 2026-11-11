@@ -19,7 +19,7 @@
 
   <p class="card-hint card-section" x-text="$app.t('autorenprofil.intro')"></p>
 
-  <div x-show="apLoading" class="muted-msg" x-text="$app.t('common.loading')"></div>
+  <div x-show="apLoading" x-skeleton="5" x-cloak></div>
   <p x-show="apError" x-cloak class="card-form-error" x-text="apError"></p>
 
   <!-- Basis des Profils: woraus ist es gerechnet, und was fehlt darin.

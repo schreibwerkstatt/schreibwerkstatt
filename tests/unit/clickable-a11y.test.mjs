@@ -50,6 +50,8 @@ const ALLOW = [
     'Kachel mit zwei Klickzielen (Buchorganizer + Ideen-Board) darf kein role=button sein — dessen Kinder waeren fuer Screenreader unsichtbar; Flaeche ist Maus-Abkuerzung, Tastatur ueber den Titel-<button> und den Pendenzen-<button>'],
   ['public/partials/page-revisions-row.html', 'class="history-item history-item--clickable page-revisions-row"',
     'Zeile mit mehreren Knoepfen (Anheften, Wiederherstellen, Sitzung) darf kein role=button sein; Flaeche ist Maus-Abkuerzung, Tastatur ueber den Oeffnen-<button> (Uhrzeit)'],
+  ['public/partials/recherche-item.html', 'class="research-item-body research-item-body--clickable"',
+    'Zeile mit Titel-, Menue-, Link- und Verweis-Knoepfen darf kein role=button sein; Flaeche ist Maus-Abkuerzung, Tastatur ueber den Titel-<button>'],
   ['public/partials/snapshots-reader.html', 'class="snapshot-reader__backdrop"',
     'Backdrop des Fassungs-Readers; Tastatur schliesst per Esc bzw. Schliessen-Knopf'],
 ];

@@ -43,23 +43,27 @@
     // ── Audio-Mock (kein echtes Media-Decoding -> deterministisch, keine
     //    Console-Decode-Fehler). play() resolved + plant 'ended'; pause()
     //    bricht den geplanten 'ended' ab (wie ein echtes Media-Element). ──
+    // Der Kern nutzt EIN Element fuer alle Saetze (onended/onerror als
+    // Properties, neues `src` je Satz).
     class MockAudio {
-      constructor(src) {
-        this.src = src || '';
+      constructor() {
+        this._src = '';
         this.ended = false;
         this.error = null;
-        this._l = {};
+        this.onended = null;
+        this.onerror = null;
         this._timer = null;
         window.__audioInstances.push(this);
       }
-      addEventListener(ev, cb) { (this._l[ev] = this._l[ev] || []).push(cb); }
-      _emit(ev) { (this._l[ev] || []).forEach((cb) => cb()); }
+      get src() { return this._src; }
+      set src(v) { clearTimeout(this._timer); this._src = v || ''; this.ended = false; }
+      load() {}
       _schedule() {
         clearTimeout(this._timer);
         this._timer = setTimeout(() => {
           if (window.__ttsBlockEnd || this.ended) return;
           this.ended = true;
-          this._emit('ended');
+          this.onended?.();
         }, window.__ttsAudioMs);
       }
       play() {

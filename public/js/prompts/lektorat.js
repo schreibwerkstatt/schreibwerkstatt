@@ -61,6 +61,9 @@ import {
   _buildWoerterbuchBlock,
   _buildNachrichtenBlock,
 } from './blocks.js';
+import {
+  _buildWeltfaktenContextBlock, _buildSoziolektContextBlock, _buildWeltfaktBlock, _buildSoziolektBlock,
+} from './blocks-welt.js';
 import { textsorteLabel } from './textsorten.js';
 import { _buildNachbarBlocks } from './lektorat-nachbar.js';
 import { STOPWORDS, ERKLAERUNG_RULE, KORREKTUR_REGELN } from './core.js';
@@ -143,6 +146,10 @@ function _buildLektoratPromptBody(text, textLabel, {
   // Abschnitt enthält einen Nachrichtenverlauf (div.msg-thread) → Chat-Regelblock.
   hatNachrichten = false,
   woerterbuch = [],
+  // Welt-Fakten/Soziolekte dieses Abschnitts (lib/lektorat-weltfakten.js) — Grundlage
+  // der Typen «weltfakt»/«soziolekt»; ohne Einträge entfallen Kontext und Regeln.
+  weltfakten = [],
+  soziolekte = [],
   langCode = 'de',
   // Volle Locale der Buchsprache (z.B. 'en-GB'): wählt die Anführungszeichen-Norm.
   locale = null,
@@ -427,7 +434,11 @@ ${journal
       aktiv('amtsdeutsch')          && _buildAmtsdeutschBlock(),
       figurenkonsistenzBlock,
       schauplatzkonsistenzBlock,
+      aktiv('weltfakt') && weltfakten.length > 0 && _buildWeltfaktBlock(),
+      aktiv('soziolekt') && soziolekte.length > 0 && _buildSoziolektBlock(),
     ].filter(Boolean).join('\n') + '\n';
+  const weltBlock = _isLocal ? '' : (aktiv('weltfakt') ? _buildWeltfaktenContextBlock(weltfakten) : '')
+    + (aktiv('soziolekt') ? _buildSoziolektContextBlock(soziolekte) : '');
 
   // Lokal: szenen/stilanalyse/fazit werden aus Schema und Prompt gestrichen. Kleine Modelle
   // halluzinieren diese Felder oft generisch und das Generieren kostet spürbar Output-Tokens.
@@ -501,7 +512,7 @@ ${journal ? _buildJournalStilBlock(typen) : fach ? _buildFachStilBlock(typen) : 
 ${fach ? _buildFachWiederholungBlock(stopwords) : _buildWiederholungBlock(stopwords)}
 ${aktiv('schwaches_verb') ? _buildSchwacheVerbenBlock() : ''}
 ${_buildFuellwortBlock()}
-${spezialBlocks}${figurenBlock}${beziehungenBlock}${orteBlock}${motivBlock}${belegBlock}${woerterbuchBlock}${nachrichtenBlock}${nachbarBlock}${schreibfrontBlock}
+${spezialBlocks}${figurenBlock}${beziehungenBlock}${orteBlock}${weltBlock}${motivBlock}${belegBlock}${woerterbuchBlock}${nachrichtenBlock}${nachbarBlock}${schreibfrontBlock}
 ${selbstkontrollBlock}
 <originaltext label="${textLabel.replace(/:\s*$/, '')}">
 ${text}

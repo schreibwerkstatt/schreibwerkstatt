@@ -1,5 +1,5 @@
 @layer components {
-/* Welt-Fakten/Weltregeln-Karte (read-only). Reuse entity-list + filter-bar;
+/* Welt-Fakten/Weltregeln-Karte (Nachschlagen + Pflege). Reuse entity-list + filter-bar;
    eigene Klassen nur für die Kategorie-Gruppierung + Fakt-Zeile.
    Akzent über var(--card-accent) (Mapping in card-accents.css). */
 
@@ -134,6 +134,38 @@
   flex-wrap: wrap;
   align-items: center;
   gap: var(--space-2xs);
+}
+
+/* Faktencheck-Urteil unter der Aussage: Urteil als Etikett, bei Abweichung Begründung
+   und Beleg-Link. Abweichung in Warnfarbe, sonst gedämpft. */
+.weltfakten-pruefung {
+  margin: 0;
+  font-size: var(--font-size-xs);
+  color: var(--color-muted);
+  line-height: var(--lh-base);
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2xs) var(--space-xs);
+}
+.weltfakten-pruefung-urteil { font-weight: var(--fw-semibold); }
+.weltfakten-pruefung--falsch { color: var(--color-warn-text); }
+
+/* Verworfene Analyse-Aussagen: Text links, «Wiederherstellen» rechts. */
+.weltfakten-ausgeblendet { margin-top: var(--space-xs); }
+.weltfakten-ausgeblendet-row {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-sm);
+  padding: var(--space-6) var(--space-sm);
+}
+.weltfakten-ausgeblendet-row + .weltfakten-ausgeblendet-row { border-top: 1px solid var(--color-border); }
+.weltfakten-ausgeblendet-text {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2xs) var(--space-xs);
+  color: var(--color-muted);
 }
 
 /* Mobil: Spalten stapeln, Subjekt wird zur Label-Zeile über der Aussage. */

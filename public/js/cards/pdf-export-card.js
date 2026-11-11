@@ -168,7 +168,7 @@ export function registerPdfExportCard() {
         } }],
         // Sprung auf einen Reiter (Command-Palette). Ein Experten-Reiter schaltet
         // nur für diese Sitzung in den Experten-Modus; die gemerkte Wahl bleibt.
-        tabRequest: { key: CARD_REQUEST.PDF_EXPORT_TAB, apply: (tab) => this._applyTab(tab) },
+        tabRequest: { key: CARD_REQUEST.PDF_EXPORT_TAB, apply: (tab) => this._applyTab(tab), current: () => this.activeTab },
       });
     },
 

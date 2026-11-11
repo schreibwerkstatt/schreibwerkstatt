@@ -5,7 +5,7 @@
         <p class="muted-msg muted-msg--sm" x-text="$app.t('admin.profiles.intro')"></p>
         <div x-data="settingField({ k: 'ai.user_api.enabled', type: 'toggle', label: 'admin.settings.label.userApiEnabled', help: 'admin.settings.help.userApiEnabled' })"></div>
 
-        <div x-show="adminProfilesLoading" class="muted-msg" x-text="$app.t('common.loading')"></div>
+        <div x-show="adminProfilesLoading" x-skeleton="3" x-cloak></div>
         <div x-show="adminProfilesError" class="error-msg" x-text="adminProfilesError"></div>
 
         <div class="table-scroll" x-show="adminProfilesList.length && !adminProfilesEditing">

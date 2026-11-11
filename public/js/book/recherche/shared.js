@@ -25,5 +25,5 @@ export const PLACE_LINK_KINDS = ['chapter', 'page'];
 export function urlRowKey(item, u) { return `${item.id}:${u.url_id}`; }
 
 export function emptyDraft() {
-  return { kind: 'note', title: '', body: '', urls: [], source: '', tags: '', fileName: '' };
+  return { kind: 'note', title: '', body: '', urls: [], source: '', tags: [], fileName: '' };
 }

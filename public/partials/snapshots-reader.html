@@ -69,7 +69,7 @@
     <!-- Body: Bucheditor-Look (read-only), pro Seite Inline-Diff gegen den
          aktuellen Buchstand (gelöscht durchgestrichen, neu unterstrichen). -->
     <div class="snapshot-reader__body">
-      <div x-show="readerLoading" class="muted-msg" x-text="$app.t('snapshots.reader.loading')"></div>
+      <div x-show="readerLoading" x-skeleton="6" x-cloak></div>
       <div x-show="!readerLoading && !readerSections.length" class="muted-msg"
            x-text="$app.t('snapshots.reader.empty')"></div>
 

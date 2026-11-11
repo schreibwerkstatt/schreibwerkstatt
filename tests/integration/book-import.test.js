@@ -556,6 +556,10 @@ test('Werk-Round-Trip: Publikation, Plot, Share, KI-Ergebnis, Chat-Bild, Quelle 
   const img = ins("INSERT INTO chat_images (session_id,prompt,mime,size,image,created_at) VALUES (?,'Burg','image/png','1024x1024',?,?)", sess, Buffer.from([9, 9]), iso);
   ins("INSERT INTO chat_messages (session_id,role,content,context_info,created_at) VALUES (?,'assistant','Bild',?,?)", sess, JSON.stringify({ images: [{ image_id: img, prompt: 'Burg' }] }), iso);
   ins('INSERT INTO writing_time (user_email,book_id,date,seconds) VALUES (?,?,?,?)', OWNER, 962, '2026-05-29', 3600);
+  // Welt-Fakt: gepflegter Ersatz mit manuellem Kapitel-Bezug + Unterdrückung, die auf ihn zeigt.
+  const wf = ins("INSERT INTO world_facts (book_id,kategorie,subjekt,fakt,user_email,manually_edited,updated_at) VALUES (?,'ort','Turm','Der Turm hat sieben Stockwerke',?,1,?)", 962, OWNER, iso);
+  ins('INSERT INTO world_fact_chapters (fact_id,chapter_id,manual) VALUES (?,?,1)', wf, 9621);
+  ins("INSERT INTO world_fact_suppressions (book_id,user_email,fact_key,subjekt,fakt,replaced_by) VALUES (?,?,'turm: der turm hat neun stockwerke','Turm','Der Turm hat neun Stockwerke',?)", 962, OWNER, wf);
 
   const buffer = await buildBundleBuffer(962, { analysis: true, chats: true, werk: true }, { scopeEmail: OWNER });
   const job = await runImport(buffer);
@@ -595,6 +599,11 @@ test('Werk-Round-Trip: Publikation, Plot, Share, KI-Ergebnis, Chat-Bild, Quelle 
   assert.equal(ci.images[0].image_id, newImg);
 
   assert.equal(one('SELECT seconds FROM writing_time WHERE book_id = ?', nb).seconds, 3600);
+
+  const newWf = one("SELECT id FROM world_facts WHERE book_id = ? AND subjekt = 'Turm'", nb).id;
+  assert.deepEqual(one('SELECT chapter_id, manual FROM world_fact_chapters WHERE fact_id = ?', newWf), { chapter_id: newChap, manual: 1 });
+  const sup = one('SELECT fact_key, replaced_by FROM world_fact_suppressions WHERE book_id = ?', nb);
+  assert.equal(sup.replaced_by, newWf, 'Unterdrückung zeigt auf den neuen Ersatz-Fakt');
 
   // Quelle: in der Bibliothek des Importierenden angelegt, Text zeigt auf sie.
   const mine = one("SELECT id FROM sources WHERE owner_email = ? AND title = 'Die Quelle'", OWNER);

@@ -87,7 +87,7 @@
                 :data-tip="$app.t('editor.toolbar.xrefFmtTitleTip')"
                 x-text="$app.t('editor.toolbar.xrefFmtTitleShort')"></button>
       </div>
-      <div class="edit-cite-hint" x-show="xrefLoading" x-text="$app.t('common.loading')"></div>
+      <div x-show="xrefLoading" x-skeleton="3" x-cloak></div>
       <div class="edit-cite-hint" x-show="xrefError" x-text="$app.t('editor.toolbar.xrefLoadError')"></div>
       <div class="edit-cite-hint" x-show="!xrefLoading && !xrefError && xrefHits.length === 0"
            x-text="$app.t('editor.toolbar.xrefEmpty')"></div>
@@ -150,7 +150,7 @@
                 :data-tip="$app.t('editor.toolbar.citeKindParaphraseTip')"
                 x-text="$app.t('editor.toolbar.citeKindParaphrase')"></button>
       </div>
-      <div class="edit-cite-hint" x-show="citeLoading" x-text="$app.t('common.loading')"></div>
+      <div x-show="citeLoading" x-skeleton="3" x-cloak></div>
       <div class="edit-cite-hint" x-show="citeError" x-text="$app.t('editor.toolbar.citeLoadError')"></div>
       <div class="edit-cite-hint" x-show="!citeLoading && !citeError && citeHits.length === 0"
            x-text="$app.t('editor.toolbar.citeEmpty')"></div>

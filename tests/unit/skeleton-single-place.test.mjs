@@ -8,7 +8,11 @@
 //      `entity-skeleton-cell` oder `skeleton-tile` selbst.
 //   2. Kein Element traegt die Klasse `entity-skeleton` von Hand (setzt die
 //      Direktive).
-//   3. `skeletonMarkup` liefert die verlangte Anzahl, gedeckelt.
+//   3. Kein Partial zeigt Daten-Laden als Text (`common.loading` u. ä. per
+//      x-text) — das Laden einer Liste/eines Formulars zeigt das Skelett.
+//      Laufende Vorgänge („Suche läuft", „KI sucht", Upload) sind kein
+//      Daten-Laden und haben eigene Keys.
+//   4. `skeletonMarkup` liefert die verlangte Anzahl, gedeckelt.
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
@@ -42,6 +46,24 @@ test('Skelett-Zeilen und -Kacheln nur über x-skeleton', () => {
   }
   assert.deepEqual(offenders, [],
     'Handgeschriebenes Skelett — statt dessen <div x-show="…" x-skeleton="n"></div> (bzw. x-skeleton.tiles):\n'
+    + offenders.join('\n'));
+});
+
+test('Daten-Laden nie als Text-Hinweis', () => {
+  const offenders = [];
+  // `common.loading` traegt nur noch das aria-label des Skeletts (skeleton.js).
+  const TEXT_LOADER = /x-text="(?:\$app\.)?t\('(?:common\.loading|[\w.]+\.(?:loading|loadingMore))'\)"/;
+  // Vorgaenge mit eigenem Verb, kein Daten-Laden — und der Synonym-Picker:
+  // seine Spinner-Zeile teilt er mit dem Alpine-freien Kontextmenü-Picker
+  // (editor-synonyme/controller.js) und der Zeile „KI sucht …" daneben.
+  const PROCESS_KEYS = /'(search\.loading|komplett\.delta\.loading|editor\.synonym\.loading)'/;
+  for (const file of htmlFiles()) {
+    readFileSync(file, 'utf8').split('\n').forEach((line, i) => {
+      if (TEXT_LOADER.test(line) && !PROCESS_KEYS.test(line)) offenders.push(`${rel(file)}:${i + 1}`);
+    });
+  }
+  assert.deepEqual(offenders, [],
+    'Lade-Text statt Skelett — <div x-show="…" x-skeleton="n" x-cloak></div> (Buttons: .spinner + festes Label):\n'
     + offenders.join('\n'));
 });
 

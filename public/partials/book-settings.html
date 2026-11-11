@@ -23,7 +23,7 @@
     </div>
   </div>
 
-  <div x-show="bookSettingsLoading" class="muted-msg" x-text="$app.t('common.loading')"></div>
+  <div x-show="bookSettingsLoading" x-skeleton="5" x-cloak></div>
 
   <div x-show="!bookSettingsLoading"
        x-data="tabs(['book','context','school','sources','share','publication','expose','series','sync','danger'])"

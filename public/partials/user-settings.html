@@ -16,7 +16,7 @@
     </div>
   </div>
 
-  <div x-show="userSettingsLoading" class="muted-msg" x-text="$app.t('common.loading')"></div>
+  <div x-show="userSettingsLoading" x-skeleton="5" x-cloak></div>
 
   <div x-show="!userSettingsLoading" class="card-form-grid">
 

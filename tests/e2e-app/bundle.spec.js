@@ -26,7 +26,7 @@ test('Shell bootet aus dem Bündel, ohne eine Einzeldatei aus /js/ als Modul', a
   await selectSeededBook(page);
   guard.assertClean('Boot aus dem Bündel');
   // Erlaubt bleiben nur die klassischen Scripts aus index.html.
-  const classic = ['/js/theme-init.js', '/js/client-error.js', '/js/failsafe-reveal.js', '/js/plausible-init.js'];
+  const classic = ['/js/theme-init.js', '/js/ios-viewport.js', '/js/client-error.js', '/js/failsafe-reveal.js', '/js/plausible-init.js'];
   expect(moduleRequests.filter((p) => !classic.includes(p))).toEqual([]);
 });
 

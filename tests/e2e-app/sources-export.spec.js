@@ -34,11 +34,11 @@ test('quellen: Schlagworte setzen, filtern und als Verzeichnis exportieren', asy
 
   // Schlagwort im Formular: tippen + Enter, speichern → Chip an der Zeile.
   await page.locator('.sources-title', { hasText: 'Die Verwandlung' }).click();
-  await page.fill('#src-tag-input', 'Roman');
-  await page.press('#src-tag-input', 'Enter');
-  await expect(page.locator('.sources-form .export-chip', { hasText: 'Roman' })).toHaveCount(1);
+  await page.fill('.sources-form .tag-input-field', 'Roman');
+  await page.press('.sources-form .tag-input-field', 'Enter');
+  await expect(page.locator('.sources-form .tag-input-chip', { hasText: 'Roman' })).toHaveCount(1);
   // Vorschlag aus der Bibliothek.
-  await expect(page.locator('.sources-tag--suggest', { hasText: 'ZHAW' })).toHaveCount(1);
+  await expect(page.locator('.sources-form .tag-input-suggestion', { hasText: 'ZHAW' })).toHaveCount(1);
   await page.locator('.sources-form-actions button.primary').click();
   await expect(page.locator('.sources-form')).toBeHidden();
   await expect(page.locator('.sources-table tr', { hasText: 'Die Verwandlung' }).locator('.sources-tag', { hasText: 'Roman' })).toBeVisible();

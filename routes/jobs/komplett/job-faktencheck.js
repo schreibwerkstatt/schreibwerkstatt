@@ -28,7 +28,7 @@ const { callAIWithTools, parseJSON, getContextConfigFor, resolveProvider, maxPar
 // Spät gebunden für den Lauf (ai.callAIWithTools statt der destrukturierten Kopie):
 // der Integrationstest ersetzt den Provider-Call am Modul-Export.
 const ai = require('../../../lib/ai');
-const { factcheckGate } = require('../../../lib/factcheck-gate');
+const { factcheckGate, factCheckCategories } = require('../../../lib/factcheck-gate');
 const { webSearchMode } = require('../../../lib/websearch');
 const { judgeWithSearxng, makeEvidence } = require('./factcheck-web');
 const appSettings = require('../../../lib/app-settings');
@@ -50,11 +50,6 @@ function _factcheckModelName(provider) {
 // max_uses moderat je Kandidat — meist reicht 1–2 Suchen, um ein Datum/eine Angabe zu belegen.
 const WEB_SEARCH_TOOL = { type: 'web_search_20250305', name: 'web_search', max_uses: 3 };
 
-// Nur welt-externe, überprüfbare Kategorien. figur/objekt/organisation/regel/soziolekt/zeit
-// sind entweder fiktions-intern oder keine prüfbaren Tatsachenbehauptungen über die reale Welt.
-// `ort` nur, wenn das Buch reale Schauplätze deklariert (book_settings.orte_real) — ein
-// erfundener Ort ist nicht falsch, und jede Prüfung kostet Web-Suchen.
-const FACTCHECK_CATEGORIES = ['historie', 'ereignis', 'technik', 'kultur'];
 const _FACTCHECK_CANDIDATE_CAP = 20;
 // Parallele Judge-Calls: eigener, niedriger Deckel statt phase1_concurrency (bis 16) —
 // jeder Call kann mehrere Web-Suchen auslösen.
@@ -90,22 +85,31 @@ function _narrativeYearSpan(bookIdInt, email) {
  *    zweiter Lauf die nächsten Fakten statt dieselben.
  *  - Auf _FACTCHECK_CANDIDATE_CAP gedeckelt (Web-Suche ist teuer).
  *
+ *  - `factId`: nur diese eine Aussage, auch wenn sie schon ein Urteil trägt («neu prüfen»
+ *    in der Welt-Karte). Liegt sie ausserhalb der prüfbaren Kategorien, bleibt die Liste leer.
+ *
  *  @returns {{ candidates, total, pending, facts }} total = prüfbare Aussagen, pending = davon
  *           noch ohne festes Urteil, facts = Map key → { kapitel[] } aller prüfbaren Aussagen. */
-function buildFactCheckCandidates(bookIdInt, email) {
-  const { weltfakten_real_pruefen, orte_real } = getBookSettings(bookIdInt, email);
-  if (!weltfakten_real_pruefen) return { candidates: [], total: 0, pending: 0, facts: new Map() };
-  const kategorien = orte_real ? [...FACTCHECK_CATEGORIES, 'ort'] : FACTCHECK_CATEGORIES;
+function buildFactCheckCandidates(bookIdInt, email, { factId = null } = {}) {
+  const settings = getBookSettings(bookIdInt, email);
+  if (!settings?.weltfakten_real_pruefen) return { candidates: [], total: 0, pending: 0, facts: new Map() };
+  const kategorien = factCheckCategories(settings);
   const byKey = new Map();
   for (const f of listWorldFacts(bookIdInt, email, { kategorien })) {
     if (!String(f.fakt || '').trim()) continue;
     const key = worldFactKey(f.subjekt, f.fakt);
     let e = byKey.get(key);
     if (!e) {
-      e = { id: f.id, key, kategorie: f.kategorie, subjekt: f.subjekt || '', fakt: f.fakt || '', kapitel: [] };
+      e = { id: f.id, ids: [], key, kategorie: f.kategorie, subjekt: f.subjekt || '', fakt: f.fakt || '', kapitel: [] };
       byKey.set(key, e);
     }
+    e.ids.push(f.id);
     for (const k of f.kapitel || []) if (!e.kapitel.includes(k)) e.kapitel.push(k);
+  }
+  if (factId != null) {
+    const one = [...byKey.values()].find(c => c.ids.includes(factId));
+    if (!one) return { candidates: [], total: byKey.size, pending: 0, facts: new Map() };
+    return { candidates: [one], total: byKey.size, pending: 1, facts: new Map([[one.key, one]]) };
   }
   const verdicts = getFactVerdicts(bookIdInt, email);
   const all = [...byKey.values()];
@@ -128,21 +132,49 @@ function _validVerdict(v) {
   return v;
 }
 
-// Eine Runde verbuchen: Token-Summe, Cache-Zähler, Generierungszeit und Kosten-Bucket
-// (`tier.label` → tok.byPhase → job.result.costByPhase), wie aiCall es tut. Werkzeug-Calls
-// laufen nur über callAIWithTools, nicht über aiCall — darum bucht der Judge selbst. Vor
-// jedem truncated-Guard: auch ein abgeschnittener Call wird berechnet.
+// Anthropic-Server-Suche einer Runde: Anzahl Suchen (server_tool_use 'web_search' —
+// jede kostet eine Suchgebühr) und die Treffer-URLs (web_search_tool_result). Fehler-
+// Results tragen `content` als Objekt statt Array.
+function _serverSearchBlocks(r) {
+  let searches = 0;
+  const urls = [];
+  for (const b of r?.rawContentBlocks || []) {
+    if (b?.type === 'server_tool_use' && b.name === 'web_search') searches++;
+    if (b?.type === 'web_search_tool_result' && Array.isArray(b.content)) {
+      for (const x of b.content) if (x?.type === 'web_search_result' && x.url) urls.push(x.url);
+    }
+  }
+  return { searches, urls };
+}
+
+// Eine Runde verbuchen: Token-Summe, Cache-Zähler, Web-Suchen, Generierungszeit und
+// Kosten-Bucket (`tier.label` → tok.byPhase → job.result.costByPhase), wie aiCall es tut.
+// Werkzeug-Calls laufen nur über callAIWithTools, nicht über aiCall — darum bucht der
+// Judge selbst, und zwar auch am Job-Record (`tok.jobId`): endJobRun schreibt dessen
+// Summen ins Ledger; ohne updateJob stünde der Lauf dort mit 0 Token. Vor jedem
+// truncated-Guard: auch ein abgeschnittener Call wird berechnet.
 function _bookRound(tok, tier, provider, r) {
+  const { searches } = _serverSearchBlocks(r);
   tok.in += r.tokensIn || 0;
   tok.out += r.tokensOut || 0;
   tok.cacheRead = (tok.cacheRead || 0) + (r.cacheReadIn || 0);
   tok.cacheCreate = (tok.cacheCreate || 0) + (r.cacheCreationIn || 0);
+  tok.cacheCreate1h = (tok.cacheCreate1h || 0) + (r.cacheCreation1hIn || 0);
+  tok.webSearches = (tok.webSearches || 0) + searches;
   if (r.genDurationMs != null) tok.ms = (tok.ms || 0) + r.genDurationMs;
   recordCallCost(tok, tier, provider, {
     tokensIn: r.tokensIn || 0, tokensOut: r.tokensOut || 0,
     cacheReadIn: r.cacheReadIn || 0, cacheCreationIn: r.cacheCreationIn || 0,
     cacheCreation1hIn: r.cacheCreation1hIn || 0, genDurationMs: r.genDurationMs,
+    webSearches: searches,
   });
+  if (tok.jobId) {
+    updateJob(tok.jobId, {
+      tokensIn: tok.in, tokensOut: tok.out,
+      cacheReadIn: tok.cacheRead, cacheCreationIn: tok.cacheCreate, cacheCreation1hIn: tok.cacheCreate1h,
+      webSearches: tok.webSearches,
+    });
+  }
 }
 
 // Ein Judge-Call mit Web-Suche. Gibt den finalen Text zurück (JSON, ggf. mit Zitat-Prosa
@@ -150,7 +182,8 @@ function _bookRound(tok, tier, provider, r) {
 // BEVOR geparst wird: parseJSON repariert tolerant und machte aus dem Rumpf sonst ein
 // scheinbar vollständiges Urteil.
 //   Suchweg 'anthropic' (Default): Server-Tool web_search; Server-Tool-Turns können
-//     pausieren (`pause_turn`) → begrenzt fortsetzen.
+//     pausieren (`pause_turn`) → begrenzt fortsetzen. Treffer-URLs landen in
+//     `web.evidence` (falls übergeben) — dieselbe Beleg-Härtung wie auf dem SearXNG-Weg.
 //   Suchweg 'searxng' (`web` = { mode, provider, tools, evidence, language }): Function-
 //     Tools über ./factcheck-web.js mit dem effektiven Provider.
 async function _judgeOneFact(tok, userPrompt, systemPrompt, signal, callTools = callAIWithTools,
@@ -170,6 +203,7 @@ async function _judgeOneFact(tok, userPrompt, systemPrompt, signal, callTools = 
     if (signal?.aborted) throw new DOMException('Aborted', 'AbortError');
     const r = await callTools(messages, systemPrompt, [WEB_SEARCH_TOOL], null, null, signal, 'claude');
     _bookRound(tok, tier, 'claude', r);
+    if (web?.evidence) for (const u of _serverSearchBlocks(r).urls) web.evidence.add(u);
     if (r.truncated || r.stopReason === 'max_tokens') {
       const tokIn = r.tokensIn || 0;
       const tokOut = r.tokensOut || 0;
@@ -237,7 +271,7 @@ async function _researchEvidence(bookIdInt, cand, signal) {
   return out;
 }
 
-async function runFaktencheckJob(jobId, bookId, bookName, userEmail, provider = undefined) {
+async function runFaktencheckJob(jobId, bookId, bookName, userEmail, provider = undefined, { factId = null } = {}) {
   const bookIdInt = parseInt(bookId);
   const email = userEmail || null;
   const log = makeJobLogger(jobId);
@@ -260,7 +294,7 @@ async function runFaktencheckJob(jobId, bookId, bookName, userEmail, provider = 
     const systemPrompt = prompts.SYSTEM_FAKTENCHECK;
 
     updateJob(jobId, { statusText: 'job.phase.factcheckCandidates', progress: 5 });
-    const { candidates, total, pending, facts } = buildFactCheckCandidates(bookIdInt, email);
+    const { candidates, total, pending, facts } = buildFactCheckCandidates(bookIdInt, email, { factId });
     const warnings = [];
     if (pending > candidates.length) {
       warnings.push({ key: 'job.warn.factcheckCapped', params: { checked: candidates.length, total: pending } });
@@ -276,7 +310,7 @@ async function runFaktencheckJob(jobId, bookId, bookName, userEmail, provider = 
     const signal = jobAbortControllers.get(jobId)?.signal;
     const researchOn = retrieval.indexReady(bookIdInt);
     let researchUsed = 0;
-    const tok = { in: 0, out: 0, ms: 0, inflight: new Map() };
+    const tok = { in: 0, out: 0, ms: 0, inflight: new Map(), jobId };
     // Concurrency-Cap + Warmup wie die Verify-Stufe: Web-Such-Calls sind teuer und einzeln
     // langsam; ein paar parallel, aber kein TPM-Burst über Dutzende Fakten. Ein anderer
     // Provider zusätzlich unter seinem eigenen Parallel-Deckel (sonst täuscht der
@@ -292,13 +326,13 @@ async function runFaktencheckJob(jobId, bookId, bookName, userEmail, provider = 
     const settled = await settledAll(candidates.map((cand) => async () => {
       const recherche = researchOn ? await _researchEvidence(bookIdInt, cand, signal) : [];
       if (recherche.length) researchUsed++;
-      // SearXNG: gesehene URLs dieses Fakts (Treffer, gelesene Seite, Recherche-Belege).
-      const evidence = searxng ? makeEvidence() : null;
-      if (evidence) for (const r of recherche) if (r.url) evidence.add(r.url);
+      // Gesehene URLs dieses Fakts (Treffer, gelesene Seite, Recherche-Belege) — beide Suchwege.
+      const evidence = makeEvidence();
+      for (const r of recherche) if (r.url) evidence.add(r.url);
       const text = await _judgeOneFact(tok,
         prompts.buildWeltfaktRealityJudgePrompt(bookName, cand, { spanne, recherche, webSearchMode: mode }),
         systemPrompt, signal, ai.callAIWithTools, undefined,
-        searxng ? { mode, provider: effectiveProvider, tools: prompts.FACTCHECK_WEB_TOOLS, evidence, language: searchLanguage } : null);
+        searxng ? { mode, provider: effectiveProvider, tools: prompts.FACTCHECK_WEB_TOOLS, evidence, language: searchLanguage } : { mode, evidence });
       done++;
       updateJob(jobId, { progress: Math.min(92, 10 + Math.round((done / candidates.length) * 80)) });
       let v;
@@ -312,9 +346,9 @@ async function runFaktencheckJob(jobId, bookId, bookName, userEmail, provider = 
         log.info(`Faktencheck: «falsch» ohne belastbare Quelle → unklar (Fakt #${cand.id}).`);
         urteil = 'unklar';
       }
-      // SearXNG: die Quelle muss eine URL sein, die das Modell zu diesem Fakt gesehen hat.
-      // Eine aus dem Gedächtnis ergänzte URL belegt nichts.
-      if (urteil === 'falsch' && evidence && !evidence.has(quelle)) {
+      // Die Quelle muss eine URL sein, die das Modell zu diesem Fakt gesehen hat (Such-
+      // treffer, gelesene Seite, Recherche-Beleg). Eine aus dem Gedächtnis ergänzte URL belegt nichts.
+      if (urteil === 'falsch' && !evidence.has(quelle)) {
         log.info(`Faktencheck: «falsch» mit ungesehener Quelle → unklar (Fakt #${cand.id}).`);
         urteil = 'unklar';
       }
@@ -360,7 +394,10 @@ async function runFaktencheckJob(jobId, bookId, bookName, userEmail, provider = 
       count: normalizedIssues.length,
       checked: judged.length,
       candidates: candidates.length,
-      remaining: Math.max(0, pending - judged.length),
+      // «unklar» bleibt offen (kommt beim nächsten Lauf wieder dran) — nur feste Urteile schliessen.
+      remaining: Math.max(0, pending - judged.filter(v => v.urteil !== 'unklar').length),
+      webSearches: tok.webSearches || 0,
+      ...(factId != null ? { factId } : {}),
       total,
       researchEvidence: researchUsed,
       issues: normalizedIssues,

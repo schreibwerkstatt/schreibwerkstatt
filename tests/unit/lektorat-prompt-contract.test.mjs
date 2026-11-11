@@ -383,3 +383,30 @@ test('Stil-Obergrenze im Prompt folgt stylisticCap (narrativ + Fach, Kombi + Sti
   assert.match(fach, /nur die schwersten 7 behalten/);
   assert.match(prompts.buildLektoratPrompt(SAMPLE, { langCode: 'de' }), /nur die schwersten 10 behalten/);
 });
+
+// Welt-Fakten (Typen «weltfakt»/«soziolekt»): Kontext und Regeln nur, wenn Fakten
+// anliegen — ohne Grundlage soll das Modell nichts in diese Typen raten.
+test('Welt-Fakten: Kontext + Regeln nur mit Fakten, nie lokal', () => {
+  prompts.configurePrompts(cfg, 'claude');
+  const ohne = prompts.buildLektoratPrompt(SAMPLE, { langCode: 'de' });
+  assert.ok(!ohne.includes('Welt-Fakt-Regeln') && !ohne.includes('Etablierte Welt-Fakten'));
+  const mit = prompts.buildLektoratPrompt(SAMPLE, {
+    langCode: 'de',
+    weltfakten: [{ kategorie: 'ort', subjekt: 'Fluss', fakt: 'Der Fluss ist im Sommer ausgetrocknet' }],
+    soziolekte: [{ subjekt: 'Sie', fakt: 'Sie spricht breites Berndeutsch' }],
+  });
+  assert.ok(mit.includes('Welt-Fakt-Regeln (typ: «weltfakt»)'));
+  assert.ok(mit.includes('- Fluss: Der Fluss ist im Sommer ausgetrocknet'));
+  assert.ok(mit.includes('Soziolekt-Regeln (typ: «soziolekt»)'));
+  assert.ok(mit.includes('- Sie: Sie spricht breites Berndeutsch'));
+  // Stil-Pass führt beide Typen (sie sind nicht objektiv).
+  const stil = prompts.buildStilLektoratPrompt(SAMPLE, { langCode: 'de', weltfakten: [{ subjekt: 'Fluss', fakt: 'x' }] });
+  assert.ok(stil.includes('Welt-Fakt-Regeln'));
+  prompts.configurePrompts(cfg, 'ollama');
+  const lokal = prompts.buildLektoratPrompt(SAMPLE, { langCode: 'de', weltfakten: [{ subjekt: 'Fluss', fakt: 'x' }] });
+  assert.ok(!lokal.includes('Welt-Fakt'));
+  // Sach-Profil: Typ existiert nicht → kein Block.
+  prompts.configurePrompts(cfg, 'claude');
+  const sach = prompts.buildLektoratPrompt(SAMPLE, { langCode: 'de', buchtyp: 'sachbuch', weltfakten: [{ subjekt: 'Fluss', fakt: 'x' }] });
+  assert.ok(!sach.includes('Welt-Fakt'));
+});

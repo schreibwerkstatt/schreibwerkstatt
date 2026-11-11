@@ -3,10 +3,14 @@
 // Selbstständige Karte: hält eigenen State + fetcht /world-facts/:bookId. Daten
 // stammen aus der Komplettanalyse; der Autor kann Fakten anlegen, ändern und
 // löschen (POST/PATCH/DELETE /world-facts/:bookId). Angelegte/geänderte Fakten
-// sind «gepflegt» (manually_edited) — die nächste Analyse lässt sie stehen.
+// sind «gepflegt» (manually_edited) — die nächste Analyse lässt sie stehen; gelöschte
+// oder umformulierte Analyse-Aussagen bleiben verworfen (Liste «ausgeblendet»,
+// wiederherstellbar). Je prüfbarem Fakt zeigt die Karte das Faktencheck-Urteil samt
+// Beleg und startet auf Wunsch eine Einzelprüfung (POST /jobs/faktencheck mit fact_id).
 // Gruppierung nach Kategorie; Filter über Suche + Kategorie-Combobox.
 import { setupCardLifecycle } from './card-lifecycle.js';
 import { fetchJson } from '../utils.js';
+import { sameData } from '../utils/same-data.js';
 import { memoMethods } from './card-memo.js';
 import { activeFilterId, hasId } from '../chapter-filter.js';
 import { startPoll } from './job-helpers.js';
@@ -51,7 +55,7 @@ const FC_START_ERROR_KEYS = {
   FACTCHECK_DISABLED: 'kontinuitaet.faktencheck.disabled',
 };
 
-const _emptyEdit = () => ({ mode: null, id: null, draft: { kategorie: 'sonstiges', subjekt: '', fakt: '' }, busy: false, error: '' });
+const _emptyEdit = () => ({ mode: null, id: null, draft: { kategorie: 'sonstiges', subjekt: '', fakt: '', chapter_ids: [] }, busy: false, error: '' });
 
 const _katRank = new Map(KAT_ORDER.map((k, i) => [k, i]));
 function _normKat(k) {
@@ -73,7 +77,11 @@ export function registerWorldFactsCard() {
     wfFilters: { suche: '', kategorie: '', kapitelId: '', widerlegt: false },
     wfOpenGroups: {},
     // Faktencheck-Sektion: Buch-Opt-in (vom Server) + Laufzustand + Ergebnis des letzten Laufs.
-    wfFactcheck: { bookOptIn: false },
+    wfFactcheck: { bookOptIn: false, kategorien: [] },
+    // Verworfene Analyse-Aussagen (gelöscht/ersetzt), wiederherstellbar.
+    wfAusgeblendet: [],
+    // world_facts.id der laufenden Einzelprüfung (null = Gesamtlauf oder keiner).
+    wfFcFactId: null,
     wfFcRunning: false,
     wfFcProgress: 0,
     wfFcStatusKey: '',
@@ -96,12 +104,14 @@ export function registerWorldFactsCard() {
         timerKeys: ['_wfFcPollTimer'],
         resetState: {
           fakten: [], wfUpdatedAt: null, wfScanned: false, wfOpenGroups: {},
-          wfFactcheck: { bookOptIn: false }, wfFcRunning: false, wfFcProgress: 0,
+          wfFactcheck: { bookOptIn: false, kategorien: [] }, wfAusgeblendet: [], wfFcFactId: null,
+          wfFcRunning: false, wfFcProgress: 0,
           wfFcStatusKey: '', wfFcStatusParams: null, wfFcResult: null, wfFcError: '',
           wfEdit: _emptyEdit(), ...listWindowState(WF_GROUP_STEP),
         },
         filterScopes: WF_FILTER_SCOPES,
         load: () => this.loadWorldFacts(),
+        wake: () => this.loadWorldFacts({ silent: true }),
       });
     },
 
@@ -109,19 +119,28 @@ export function registerWorldFactsCard() {
       this._lifecycle?.destroy();
     },
 
-    async loadWorldFacts() {
+    /** `silent`: Tab-Rueckkehr — gleiche Daten aendern nichts; neue behalten
+     *  den Auf-/Zuklappzustand der bekannten Gruppen (neue Gruppen offen). */
+    async loadWorldFacts({ silent = false } = {}) {
       const bookId = Alpine.store('nav').selectedBookId;
       if (!bookId) return;
       try {
         const data = await fetchJson('/world-facts/' + bookId);
+        if (silent && sameData(data?.fakten || [], this.fakten) && (data?.updated_at || null) === this.wfUpdatedAt
+            && !!data?.scanned === this.wfScanned && !!data?.factcheck?.bookOptIn === this.wfFactcheck.bookOptIn) return;
+        const prevOpen = silent ? this.wfOpenGroups : {};
         this.fakten = data?.fakten || [];
         this.wfUpdatedAt = data?.updated_at || null;
         this.wfScanned = !!data?.scanned;
-        this.wfFactcheck = { bookOptIn: !!data?.factcheck?.bookOptIn };
+        this.wfFactcheck = {
+          bookOptIn: !!data?.factcheck?.bookOptIn,
+          kategorien: Array.isArray(data?.factcheck?.kategorien) ? data.factcheck.kategorien : [],
+        };
+        this.wfAusgeblendet = Array.isArray(data?.ausgeblendet) ? data.ausgeblendet : [];
         this._memos = {};
         // Glossar startet aufgeklappt — reine Nachschlage-Ansicht, alle Gruppen offen.
         const open = {};
-        for (const k of this.wfKategorieListe) open[k] = true;
+        for (const k of this.wfKategorieListe) open[k] = prevOpen[k] ?? true;
         this.wfOpenGroups = open;
       } catch (e) {
         console.error('[loadWorldFacts]', e);
@@ -207,12 +226,21 @@ export function registerWorldFactsCard() {
       });
     },
 
+    // Kann dieser Fakt einzeln (neu) geprüft werden? Instanz-Freigabe, Buch-Opt-in und
+    // eine der prüfbaren Kategorien (Server-SSoT lib/factcheck-gate.js#factCheckCategories).
+    wfCanRecheck(f) {
+      return !!Alpine.store('config').factcheckEnabled && this.wfFactcheck.bookOptIn
+        && this.wfFactcheck.kategorien.includes(_normKat(f.kategorie));
+    },
+
     // Faktencheck aus der Karte starten (dieselbe Route wie in der Kontinuitäts-Karte;
     // Befunde landen dort als typ='faktenfehler', hier als Markierung am Fakt).
-    async wfFactcheckRun() {
+    // Mit `factId` nur dieser Fakt — auch wenn er schon ein Urteil trägt.
+    async wfFactcheckRun(factId = null) {
       const bookId = Alpine.store('nav').selectedBookId;
       if (!bookId || this.wfFcRunning) return;
       this.wfFcRunning = true;
+      this.wfFcFactId = factId;
       this.wfFcProgress = 1;
       this.wfFcError = '';
       this.wfFcResult = null;
@@ -222,7 +250,10 @@ export function registerWorldFactsCard() {
         const resp = await fetch('/jobs/faktencheck', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ book_id: bookId, book_name: window.__app.selectedBookName || '' }),
+          body: JSON.stringify({
+            book_id: bookId, book_name: window.__app.selectedBookName || '',
+            ...(factId != null ? { fact_id: factId } : {}),
+          }),
         });
         const data = await resp.json().catch(() => ({}));
         if (!isSelectedBook(bookId)) return;
@@ -242,6 +273,8 @@ export function registerWorldFactsCard() {
           onDone: async (job) => {
             this._wfFcStop('');
             const r = job?.result || {};
+            // Einzelprüfung: das Urteil steht nach dem Neuladen am Fakt selbst.
+            if (r.factId != null) { await this.loadWorldFacts(); return; }
             this.wfFcResult = {
               checked: r.checked || 0, count: r.count || 0, remaining: r.remaining || 0,
               warnings: Array.isArray(r.warnings) ? r.warnings : [],
@@ -263,6 +296,7 @@ export function registerWorldFactsCard() {
 
     _wfFcStop(errorText) {
       this.wfFcRunning = false;
+      this.wfFcFactId = null;
       this.wfFcProgress = 0;
       this.wfFcStatusKey = '';
       this.wfFcStatusParams = null;
@@ -289,8 +323,18 @@ export function registerWorldFactsCard() {
     wfStartEdit(f) {
       this.wfEdit = {
         ..._emptyEdit(), mode: 'edit', id: f.id,
-        draft: { kategorie: _normKat(f.kategorie), subjekt: f.subjekt || '', fakt: f.fakt || '' },
+        draft: {
+          kategorie: _normKat(f.kategorie), subjekt: f.subjekt || '', fakt: f.fakt || '',
+          chapter_ids: (f.chapter_refs || []).filter(r => r.manual).map(r => r.chapter_id),
+        },
       };
+    },
+
+    // Alle Kapitel des Buchs als Auswahl für den Kapitel-Bezug des Autors (Buchreihenfolge).
+    get wfKapitelAuswahl() {
+      const root = window.__app;
+      return this._memo('kapAll', [root._chapterLabelMap, root._chapterIdOrderMap],
+        () => root._kapitelOptionen([...(root._chapterIdOrderMap?.keys() || [])]));
     },
 
     wfCancelEdit() {
@@ -308,7 +352,7 @@ export function registerWorldFactsCard() {
         const r = await fetch(url, {
           method: e.mode === 'new' ? 'POST' : 'PATCH',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(e.draft),
+          body: JSON.stringify({ ...e.draft, chapter_ids: (e.draft.chapter_ids || []).map(Number) }),
         });
         const data = await r.json().catch(() => null);
         if (!isSelectedBook(bookId)) return;
@@ -330,7 +374,31 @@ export function registerWorldFactsCard() {
       })) return;
       const r = await fetch(`/world-facts/${bookId}/${f.id}`, { method: 'DELETE' });
       if (!isSelectedBook(bookId)) return;
-      if (r.ok) await this.loadWorldFacts();
+      if (r.ok) { await this.loadWorldFacts(); return; }
+      // 401 behandelt der globale fetch-Wrapper (Session-Banner).
+      if (r.status !== 401) {
+        const data = await r.json().catch(() => null);
+        window.__app.appAlert({ message: window.__app.tError(data) });
+      }
+    },
+
+    // Verworfene Analyse-Aussage wieder zulassen: die nächste Analyse darf sie anlegen.
+    async wfRestore(s) {
+      const bookId = Alpine.store('nav').selectedBookId;
+      if (!bookId) return;
+      const r = await fetch(`/world-facts/${bookId}/suppressions/${s.id}`, { method: 'DELETE' });
+      if (!isSelectedBook(bookId)) return;
+      if (r.ok) { this.wfAusgeblendet = this.wfAusgeblendet.filter(x => x.id !== s.id); return; }
+      if (r.status !== 401) {
+        const data = await r.json().catch(() => null);
+        window.__app.appAlert({ message: window.__app.tError(data) });
+      }
+    },
+
+    // Beleg-Link des Faktenchecks: nur http(s) (der Server speichert nichts anderes).
+    wfQuelleUrl(f) {
+      const q = String(f?.pruefung?.quelle || '').trim();
+      return /^https?:\/\//i.test(q) ? q : '';
     },
 
     // Gefilterte Fakten nach Kategorie gruppiert, in kanonischer Reihenfolge:

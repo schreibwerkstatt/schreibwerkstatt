@@ -61,6 +61,8 @@ export function registerShareLinksCard() {
         name: 'shareLinks',
         showFlag: 'showShareLinksCard',
         load: () => this._loadAndPoll(),
+        // Tab-Rueckkehr: derselbe stille In-place-Abgleich wie der Poll.
+        wake: () => this._quietRefresh(),
         onShow: () => {
           this._applyPrefill();
           return this._loadAndPoll();

@@ -1,39 +1,27 @@
-<!-- Anlegen eines Fundstuecks — als Modal, nicht als Block ueber der Liste.
-     Warum: es ist DASSELBE Formular wie der Bearbeiten-Modus der Detailansicht
-     (geteiltes Fragment recherche-form-fields.html) und teilt jetzt auch dessen
-     Rahmen (Dialog-Shell .research-dialog*, public/css/entities/recherche/dialog.css)
-     — zwei verschiedene Rahmen um dieselben Felder driften auseinander. Nebeneffekt:
-     die Liste springt beim Anlegen nicht mehr nach unten weg.
-     Natives <dialog> + showModal() (Focus-Trap, Inert-Hintergrund, Fokus-Restore
-     und ESC kommen vom Browser); aufgezogen in items.js#startCreate, `@close` ist
-     der einzige Aufraeum-Punkt. Liegt im Top-Layer und ist damit auch ueber der
-     Vollbild-Karte sichtbar (harte Regel „Schwebende Elemente gehoeren in den
-     Top-Layer"). -->
-<dialog class="research-dialog research-dialog--create" x-ref="createDialog"
-        @close="_onCreateClosed()"
-        @cancel.prevent="closeCreate()"
-        @keydown="$editKeys($event, { save: () => createItem() })">
-  <div class="research-dialog__inner">
+<!-- Anlegen eines Fundstuecks — Inline-Formular in der Karte, Bauform wie das
+     Quellen-Formular (sources-form.html): Block zwischen Toolbar und Liste,
+     Felder aus dem geteilten Fragment recherche-form-fields (Raster
+     .card-form-grid), Aktionen darunter. Kein Modal: Anlegen ist ein kurzes
+     Formular ohne Lese-Inhalt daneben, und die Liste bleibt dabei sichtbar.
+     Sichtbarkeit haengt an `creating` (items.js#startCreate/closeCreate). -->
+<div class="recherche-create" x-show="creating" x-cloak
+     @keydown="$editKeys($event, { save: () => createItem(), cancel: () => closeCreate() })">
+  <div class="card-section-head">
+    <span class="card-section-title" x-text="$app.t('recherche.new')"></span>
+    <button type="button" class="icon-btn icon-btn--ghost" @click="closeCreate()"
+            :data-tip="$app.t('common.close')" :aria-label="$app.t('common.close')"><svg class="icon" aria-hidden="true"><use href="/icons.svg#x"/></svg></button>
+  </div>
 
-    <header class="research-dialog__head">
-      <h2 class="research-dialog__title" x-text="$app.t('recherche.new')"></h2>
-      <div class="research-item-actions research-dialog__actions">
-        <button type="button" class="icon-btn icon-btn--ghost" @click="closeCreate()"
-                :data-tip="$app.t('common.close')" :aria-label="$app.t('common.close')"><svg class="icon" aria-hidden="true"><use href="/icons.svg#x"/></svg></button>
-      </div>
-    </header>
+  <div class="recherche-form">
+    <!-- @include recherche-form-fields -->
 
-    <div class="research-dialog__scroll">
-      <!-- Fehler MUSS im Dialog stehen: die Karten-Statuszeile liegt hinter dem
-           Backdrop, „Speichern tut nichts" waere sonst die ganze Rueckmeldung. -->
-      <div x-show="errorMessage" class="card-status card-status--error" x-text="errorMessage"></div>
-      <div class="recherche-form">
-        <!-- @include recherche-form-fields -->
-
-        <!-- Datei-Anhang nur beim Anlegen (Bild/PDF nachtraeglich haengt am
-             Fundstueck selbst, nicht am Formular). Das echte File bleibt im
-             Input — ein Alpine-Proxy bricht File.arrayBuffer. -->
-        <div class="recherche-attach">
+    <!-- Datei-Anhang nur beim Anlegen (Bild/PDF nachtraeglich haengt am
+         Fundstueck selbst, nicht am Formular). Das echte File bleibt im
+         Input — ein Alpine-Proxy bricht File.arrayBuffer. -->
+    <div class="card-form-grid">
+      <div x-id="['fld']" class="card-form-row">
+        <span :id="$id('fld')" class="card-form-label" x-text="$app.t('recherche.form.attach')"></span>
+        <div class="recherche-attach" role="group" :aria-labelledby="$id('fld')">
           <label class="btn-compact recherche-attach-btn">
             <svg class="icon" aria-hidden="true"><use href="/icons.svg#file-plus"/></svg>
             <span x-text="$app.t('recherche.field.attach')"></span>
@@ -45,11 +33,13 @@
         </div>
       </div>
     </div>
-
-    <footer class="research-dialog__bar">
-      <button type="button" class="btn-compact" @click="closeCreate()" :disabled="busy" x-text="$app.t('recherche.cancel')"></button>
-      <button type="button" class="btn-compact recherche-primary" @click="createItem()" :disabled="busy" x-text="$app.t('recherche.save')"></button>
-    </footer>
-
   </div>
-</dialog>
+
+  <div class="recherche-create-actions">
+    <button type="button" class="primary" @click="createItem()" :disabled="busy">
+      <span x-show="busy" class="spinner"></span>
+      <span x-text="busy ? $app.t('common.saving') : $app.t('recherche.save')"></span>
+    </button>
+    <button type="button" @click="closeCreate()" :disabled="busy" x-text="$app.t('recherche.cancel')"></button>
+  </div>
+</div>

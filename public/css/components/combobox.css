@@ -155,6 +155,7 @@
    auf 1px hoch. */
 .combobox-wrap--compact .combobox-trigger {
   font-size: var(--size-compact-font-size);
+  line-height: var(--size-compact-line-height);
   padding: var(--size-compact-padding);
   border-width: var(--border-thin);
   border-color: var(--color-border);

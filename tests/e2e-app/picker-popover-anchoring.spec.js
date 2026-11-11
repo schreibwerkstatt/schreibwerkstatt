@@ -194,12 +194,12 @@ test('werkstatt: Verknuepfen-Picker haengt am Menue-Knopf, auch nach dem Nachlad
   try {
     const menuBtn = await openLinkPicker(page);
     const popover = page.locator('.werkstatt-link-picker');
-    await expect(popover.getByText('Wird geladen', { exact: false })).toBeVisible();
+    await expect(popover.locator('.entity-skeleton')).toBeVisible();
     await expectAnchored(page, popover, menuBtn, { side: 'below' });
     await expect(popover.locator('.picker-popover__subject')).toHaveText(name);
 
     // Nach dem Laden: Combobox oder Leer-Hinweis, neu gemessen.
-    await expect(popover.getByText('Wird geladen', { exact: false })).toBeHidden();
+    await expect(popover.locator('.entity-skeleton')).toBeHidden();
     await expectAnchored(page, popover, menuBtn, { side: 'below' });
     // Das Inline-Panel im Detail gibt es nicht mehr.
     await expect(page.locator('.card--werkstatt .werkstatt-detail .werkstatt-create-inline:visible')).toHaveCount(0);

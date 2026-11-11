@@ -19,7 +19,7 @@
         </div>
       </div>
 
-      <div x-show="bookAccessLoading" class="muted-msg" x-text="$app.t('common.loading')"></div>
+      <div x-show="bookAccessLoading" x-skeleton="3" x-cloak></div>
       <p class="card-form-error" x-show="bookAccessError" x-text="bookAccessError"></p>
 
       <div class="card-form-row card-form-row--top" x-show="!bookAccessLoading && bookAccessList.length">

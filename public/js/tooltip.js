@@ -120,7 +120,22 @@ import { mountInTopLayer } from './fullscreen.js';
     return node.closest('[data-tip]');
   }
 
+  // Touch kennt kein Hover: ein Tap liefert emulierte mouseover-/focus-Events,
+  // und der Tooltip bliebe danach über dem angetippten Knopf stehen, bis der
+  // nächste Tap irgendwo ihn wegräumt (oft über dem Popover, das der Tap
+  // gerade öffnete). Nach einer Touch-/Stift-Berührung darum keine Tooltips aus
+  // Maus-Emulation oder Tap-Fokus — Tastatur-Fokus (Tab) zeigt sie weiter.
+  const TOUCH_GRACE_MS = 800;
+  let lastTouchAt = -Infinity;
+  const fromTouch = () => performance.now() - lastTouchAt < TOUCH_GRACE_MS;
+  document.addEventListener('pointerdown', (e) => {
+    if (e.pointerType === 'mouse') return;
+    lastTouchAt = performance.now();
+    hide();
+  }, { capture: true, passive: true });
+
   document.addEventListener('mouseover', (e) => {
+    if (fromTouch()) return;
     const t = findTip(e.target);
     if (t && t !== currentTarget) show(t);
     else if (!t && currentTarget) hide();
@@ -133,6 +148,7 @@ import { mountInTopLayer } from './fullscreen.js';
     hide();
   });
   document.addEventListener('focusin', (e) => {
+    if (fromTouch()) return;
     const t = findTip(e.target);
     if (t) show(t);
   });

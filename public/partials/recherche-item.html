@@ -10,7 +10,10 @@
     <template x-for="item in items" :key="item.id">
       <div class="research-item hover-reveal-host" :data-research-id="item.id"
            @contextmenu="if (!busy) openItemMenu($event, 'list', item)" x-long-press :class="{ 'research-item--pinned': item.pinned, 'research-item--archived': item.archived, 'research-item--open': detailItemId === item.id, 'research-item--selected': bulkMode && isSelected(item.id) }">
-        <div class="research-item-body research-item-body--clickable internal-link" @click="onItemBodyClick(item, $event)">
+        <!-- Die Flaeche ist Maus-Abkuerzung, kein role=button: sie traegt Knoepfe
+             und Links, die fuer Screenreader sonst unsichtbar wuerden. Tastatur
+             ueber den Titel-<button>. -->
+        <div class="research-item-body research-item-body--clickable" @click="onItemBodyClick(item, $event)">
           <div class="research-item-head">
             <!-- Mehrfachauswahl: Checkbox nur im Auswahl-Modus (bulk.js). -->
             <input type="checkbox" class="research-item-select" x-show="bulkMode" x-cloak
@@ -20,7 +23,7 @@
             <!-- Titel als Button: der tastaturerreichbare Weg in die Detailansicht
                  (der Klick auf die ganze Zeile ist nur Maus-Komfort). Ohne eigenen
                  Titel steht die Typ-Bezeichnung da — sonst gaebe es kein Sprungziel. -->
-            <button type="button" class="research-item-title" @click="openDetail(item)"
+            <button type="button" class="research-item-title text-link" @click="bulkMode ? toggleSelect(item.id) : openDetail(item)"
                     x-text="item.title || kindLabel(item.kind)"></button>
             <!-- Einarbeitungs-Status: dieselbe Aussage wie die Spalte im
                  Status-Board, damit beide Ansichten nicht verschieden aussehen.
@@ -39,7 +42,7 @@
                x-if statt x-show: ein `src`-Binding hinter display:none laedt
                trotzdem und liefert bei Fundstuecken ohne Bild einen 404. -->
           <template x-if="item.has_image">
-            <button type="button" class="research-item-thumb" @click="openDetail(item)"
+            <button type="button" class="research-item-thumb" @click="bulkMode ? toggleSelect(item.id) : openDetail(item)"
                     :data-tip="$app.t('recherche.detail.open')" :aria-label="$app.t('recherche.detail.open')">
               <img class="research-item-image" :src="imageUrl(item)" :alt="item.title || ''" loading="lazy">
             </button>

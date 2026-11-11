@@ -103,6 +103,6 @@
   </ul>
   <div class="search-more" x-show="more && !loading">
     <button type="button" class="btn-toggle-saved btn-toggle-saved--off" @click="loadMore()" :disabled="loadingMore"
-            x-text="loadingMore ? $app.t('search.loadingMore') : $app.t('search.loadMore')"></button>
+            :aria-busy="loadingMore"><span class="spinner" x-show="loadingMore" x-cloak aria-hidden="true"></span><span x-text="$app.t('search.loadMore')"></span></button>
   </div>
 </div>

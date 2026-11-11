@@ -1,7 +1,6 @@
 // Card-Header-Close auf Touch-Mobile: ein Header mit Titelspalte bleibt einzeilig,
-// der Close-Button sitzt im Flex-Fluss hinter den Aktionen. Absolut oben rechts
-// verankert ueberlappte sein 40px-Touch-Target die Action-Icons (das reservierte
-// Header-Padding ist schmaler). Geometrie haengt am echten CSS — darum hier.
+// der Close-Button sitzt im Flex-Fluss hinter den Aktionen und ueberlappt die
+// Action-Icons nicht. Geometrie haengt am echten CSS — darum hier.
 
 const { test, expect } = require('../e2e/_helpers/fixtures');
 const { bootApp, selectSeededBook } = require('./_helpers/app');
@@ -27,10 +26,9 @@ for (const [id, toggle] of CARDS) {
       const c = h.querySelector(':scope > .btn-card-close').getBoundingClientRect();
       const btns = [...h.querySelectorAll('.card-actions button')]
         .map((b) => b.getBoundingClientRect()).filter((r) => r.width);
-      return { closeLeft: c.left, closeW: c.width, actionsRight: Math.max(...btns.map((r) => r.right)), headerRight: h.getBoundingClientRect().right, closeRight: c.right };
+      return { closeLeft: c.left, actionsRight: Math.max(...btns.map((r) => r.right)), headerRight: h.getBoundingClientRect().right, closeRight: c.right };
     }, id);
 
-    expect(geo.closeW, 'Touch-Target').toBeGreaterThanOrEqual(40);
     expect(geo.closeLeft - geo.actionsRight, 'Abstand Aktionen → Close').toBeGreaterThanOrEqual(8);
     expect(geo.closeRight).toBeLessThanOrEqual(geo.headerRight + 1);
   });

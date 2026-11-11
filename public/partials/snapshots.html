@@ -48,7 +48,7 @@
             x-text="capturing ? $app.t('snapshots.saving') : $app.t('snapshots.save')"></button>
   </div>
   <!-- @include snapshots-drift -->
-  <div x-show="loading" x-cloak class="muted-msg" x-text="$app.t('snapshots.loading')"></div>
+  <div x-show="loading" x-skeleton="4" x-cloak></div>
   <div x-show="!loading && !snapshots.length" x-cloak class="muted-msg" x-text="$app.t('snapshots.empty')"></div>
 
   <!-- Fassungs-Liste. -->

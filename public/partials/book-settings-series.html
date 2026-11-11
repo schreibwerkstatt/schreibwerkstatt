@@ -3,7 +3,7 @@
     <div class="card-form-grid" x-bind="panel('series')" x-cloak
          x-effect="onSeriesTabVisible(bookSettingsTab)">
 
-      <div x-show="seriesLoading" class="muted-msg" x-text="$app.t('common.loading')"></div>
+      <div x-show="seriesLoading" x-skeleton="3" x-cloak></div>
 
       <section class="book-settings-section" x-show="!seriesLoading">
         <h3 class="card-section-title" x-text="$app.t('series.title')"></h3>
@@ -96,7 +96,7 @@
           </div>
         </div>
 
-        <div x-show="carryLoading" class="muted-msg" x-text="$app.t('common.loading')"></div>
+        <div x-show="carryLoading" x-skeleton="3" x-cloak></div>
 
         <template x-if="carryLists && !carryLoading">
           <div>

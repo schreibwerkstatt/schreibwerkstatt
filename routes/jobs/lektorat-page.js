@@ -8,9 +8,10 @@
 const crypto = require('crypto');
 const {
   db, getBookLocale, getBookSettings, getChapterFigures, getChapterFigureRelations, getChapterLocations,
-  getPageMotifs,
+  getPageMotifs, listWorldFacts,
   loadLektoratCache, saveLektoratCache,
 } = require('../../db/schema');
+const { selectPageWorldFacts } = require('../../lib/lektorat-weltfakten');
 const { getPrompts, getBookPrompts, htmlToTextForPrompt, contentHttpError, loadOrderedBookContents, sigHash: _sigHash } = require('./shared');
 const contentStore = require('../../lib/content-store');
 const { resolveProvider, effectiveProviderClass } = require('../../lib/ai');
@@ -92,7 +93,17 @@ async function prepareLektoratRun(bookId, userEmail, logger) {
     // Locale) — dieselbe Menge, die den LanguageTool-Spellcheck filtert.
     dict: userDictionary.getCheckDict(userEmail, bookId, locale),
     local: _isLocalProvider(userEmail),
+    // Welt-Fakten-Index (lazy, einmal je Lauf): Grundlage der Typen «weltfakt»/«soziolekt».
+    _worldFacts: null,
   };
+}
+
+// Welt-Fakten dieses Abschnitts (lib/lektorat-weltfakten.js). Lokal leer — die Typen
+// stehen nicht im lokalen Set.
+function _pageWorldFacts(run, pd, text) {
+  if (run.local || !run.bookId) return { welt: [], soziolekte: [] };
+  if (!run._worldFacts) run._worldFacts = listWorldFacts(run.bookId, run.userEmail, { withChapterIds: true });
+  return selectPageWorldFacts({ facts: run._worldFacts, chapterId: pd.chapter_id, text, pageName: pd.name });
 }
 
 // Absatz-Lader für Nachbarseiten mit Cache pro page_id ({ first, last }), damit
@@ -244,7 +255,12 @@ async function checkOnePage(run, {
   // Geltende Textsorte der Seite (Override vor Buch-Default). Ausserhalb des
   // journalistischen Profils bleibt sie null und aendert nichts.
   const textsorte = effectiveTextsorte(pageId, bookSettings);
+  // Welt-Fakten + Soziolekte als Prüfgrundlage. Ohne passenden Fakt fallen die beiden
+  // Typen aus der Validierung — ein Befund ohne Grundlage wäre geraten.
+  const { welt: weltfakten, soziolekte } = _pageWorldFacts(run, pd, text);
   const validTypen = _validTypen(run, textsorte);
+  if (!weltfakten.length) validTypen.delete('weltfakt');
+  if (!soziolekte.length) validTypen.delete('soziolekt');
   // Regelbefunde zur direkten Rede: am Profil OHNE lokale Reduktion gemessen —
   // gerade lokale Modelle prüfen `dialogformat` nicht, die Regeln schon. Deterministisch
   // aus dem Text, darum ausserhalb des Caches und nicht in der Signatur.
@@ -283,6 +299,9 @@ async function checkOnePage(run, {
     // Nur gesetzt, wenn die Seite Wörterbuch-Wörter trägt: ein leeres `wb` würde
     // jede bestehende Cache-Zeile ohne Grund invalidieren.
     ...(woerterbuch.length ? { wb: woerterbuch } : {}),
+    // Nur gesetzt, wenn Fakten anliegen: Seiten ohne Welt-Bezug behalten ihren Cache.
+    ...(weltfakten.length ? { wf: weltfakten } : {}),
+    ...(soziolekte.length ? { sz: soziolekte } : {}),
     ..._runSig(local, text.length),
   }) : null;
   // Nachbearbeitung für frische und gecachte Ergebnisse, plus Wörterbuch-Backstop
@@ -316,7 +335,7 @@ async function checkOnePage(run, {
         stopwords: run.stopwords,
         erklaerungRule: run.erklaerungRule,
         korrekturRegeln: run.korrekturRegeln,
-        figuren, figurenBeziehungen, orte, motive, hatBelege, hatNachrichten,
+        figuren, figurenBeziehungen, orte, motive, hatBelege, hatNachrichten, weltfakten, soziolekte,
         woerterbuch: woerterbuch.slice(0, MAX_PROMPT_WORDS),
         // Wirksame Obergrenze skaliert mit der Textlänge – derselbe Wert wie im Backstop.
         stylisticCap: effectiveStylisticCap(text.length),

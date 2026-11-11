@@ -132,12 +132,10 @@
    <svg.icon> auf dieselbe feste Grösse (--icon-size-action) statt auf ihre je
    eigene font-size (.icon = 1em). Ohne das driften die Glyphen (Card-Close 18px,
    Toast 16px, Find 15px, Synonym/Figur ~17.6px, Heatmap 13px …) — sichtbar
-   uneinheitlich, besonders mobil, wo der Tap-Target unten auf 40px wächst, das
-   Glyph aber gleich bleiben soll. Direkter Child-Selektor (0,2,0) schlägt `.icon`
-   (0,1,0). Diese Liste umfasst den @media-(pointer:coarse)-Block unten (jeder
-   40px-Tap-Target-Button MUSS hier stehen) plus Buttons, die zwar normalisiert
-   werden, aber keinen 40px-Target vertragen (`.search-clear--icon`, absolut im
-   Suchfeld). Gegatet durch tests/unit/icon-size-consistency.test.mjs. */
+   uneinheitlich. Direkter Child-Selektor (0,2,0) schlägt `.icon` (0,1,0).
+   Auf Touch wachsen diese Knöpfe nicht (DESIGN.md „Touch“: Touch ändert das
+   Verhalten, nicht die Grösse). Gegatet durch
+   tests/unit/icon-size-consistency.test.mjs. */
 .icon-btn > .icon,
 .btn-card-close > .icon,
 .job-toast-close > .icon,
@@ -154,32 +152,5 @@
 .job-queue-cancel-btn > .icon {
   width: var(--icon-size-action);
   height: var(--icon-size-action);
-}
-
-/* Touch: auf coarse Pointern (Finger) vergrößerte Tap-Targets (≥40px). Nötig,
-   weil `data-tip`-Tooltips hover-basiert sind (auf Touch unsichtbar) und 28px
-   unter der empfohlenen Mindest-Tap-Größe liegen. Greift für alle Icon-only-
-   Buttons der App. `justify-content: center` ist Pflicht: das vergrößerte
-   min-width sprengt die symmetrische Padding-Box, und `button:has(> .icon)`
-   setzt nur `align-items` (vertikal) — ohne Justify rutscht das Sprite-Icon im
-   40px-Target nach links statt mittig zu sitzen. */
-@media (pointer: coarse) {
-  .icon-btn,
-  .btn-card-close,
-  .job-toast-close,
-  .organizer-delete-btn,
-  .chat-session-delete,
-  .history-item-delete,
-  .edit-find-close,
-  .figur-lookup-close,
-  .synonym-picker-close,
-  .entity-popover-close,
-  .heatmap-detail-close,
-  .search-clear,
-  .job-queue-cancel-btn {
-    min-width: 40px;
-    min-height: 40px;
-    justify-content: center;
-  }
 }
 }

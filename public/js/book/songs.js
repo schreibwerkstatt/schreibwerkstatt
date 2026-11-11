@@ -2,6 +2,7 @@
 
 import { fetchJson } from '../utils.js';
 import { loadToken } from '../cards/book-guard.js';
+import { assignCatalogList } from '../cards/catalog-store.js';
 import { compareText } from '../i18n.js';
 import { scrollToWhenReady } from '../utils/scroll-when-ready.js';
 
@@ -17,7 +18,8 @@ export const songsMethods = {
     try {
       const data = await fetchJson('/songs/' + bookId);
       if (!isCurrent()) return;
-      this.$store.catalog.songs = data?.songs || [];
+      // Gleiche Antwort → keine neue Array-Identitaet (catalog-store.js).
+      assignCatalogList('songs', bookId, data?.songs || []);
       this.$store.catalogUi.songsUpdatedAt = data?.updated_at || null;
     } catch (e) {
       console.error('[loadSongs]', e);

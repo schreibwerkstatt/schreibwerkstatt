@@ -7,13 +7,23 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createTtsPlayer, clearTtsAudioCache } from '../../public/js/tts-player.js';
 
+// Der Kern nutzt EIN Audio-Element fuer alle Segmente; `audios` zaehlt die
+// geladenen Segmente (jede `src`-Zuweisung), `lastAudio()` ist das Element.
 const audios = [];
+let element = null;
+let blockPlay = 0; // naechste n play()-Aufrufe scheitern mit NotAllowedError (Safari ohne Geste)
+let loads = 0;
 class FakeAudio {
-  constructor(src) { this.src = src; this.paused = true; this.currentTime = 0; this._l = {}; this.playbackRate = 1; audios.push(this); }
-  addEventListener(ev, cb) { (this._l[ev] = this._l[ev] || []).push(cb); }
-  play() { this.paused = false; return Promise.resolve(); }
+  constructor() { this._src = ''; this.paused = true; this.currentTime = 0; this.playbackRate = 1; this.defaultPlaybackRate = 1; this.onended = null; this.onerror = null; element = this; }
+  get src() { return this._src; }
+  set src(v) { this._src = v; this.currentTime = 0; this.playbackRate = this.defaultPlaybackRate; audios.push(v); }
+  load() { loads++; }
+  play() {
+    if (blockPlay > 0) { blockPlay--; return Promise.reject(Object.assign(new Error('not allowed'), { name: 'NotAllowedError' })); }
+    this.paused = false; return Promise.resolve();
+  }
   pause() { this.paused = true; }
-  end() { (this._l.ended || []).forEach(cb => cb()); }
+  end() { this.onended?.(); }
 }
 globalThis.Audio = FakeAudio;
 
@@ -41,9 +51,9 @@ function setup(requestImpl) {
   });
   return { player, calls, events };
 }
-const lastAudio = () => audios[audios.length - 1];
+const lastAudio = () => element;
 
-test.beforeEach(() => { audios.length = 0; clearTtsAudioCache(); });
+test.beforeEach(() => { audios.length = 0; blockPlay = 0; loads = 0; clearTtsAudioCache(); });
 
 test('liest alle Segmente der Reihe nach und meldet das Ende', async () => {
   const { player, calls, events } = setup(async () => ok());
@@ -171,4 +181,33 @@ test('Stop raeumt auf: keine weitere Wiedergabe, onStop mit Position', async () 
   assert.equal(events.stops[0].seg.text, 'B.');
   assert.equal(audios.length, 1);
   assert.equal(lastAudio().paused, true);
+});
+
+test('Autoplay-Sperre: Satz wird nicht uebersprungen, Session pausiert bis zur Geste', async () => {
+  const { player, events } = setup(async () => ok());
+  blockPlay = 1;
+  player.start(segs('Eins.', 'Zwei.'));
+  assert.ok(loads >= 1, 'start() schaltet das Element in der Geste frei');
+  await until(() => events.state?.paused === true);
+  assert.equal(events.state.index, 1);
+  assert.equal(audios.length, 1);
+  player.resume();
+  await until(() => !lastAudio().paused);
+  assert.equal(events.state.index, 1);
+  assert.equal(audios.length, 1, 'resume spielt denselben Satz, ohne neu zu laden');
+  lastAudio().end();
+  await until(() => audios.length === 2 && !lastAudio().paused);
+  assert.equal(events.state.index, 2);
+  player.stop();
+});
+
+test('Lesetempo ueberlebt den Wechsel zum naechsten Satz', async () => {
+  const { player } = setup(async () => ok());
+  player.start(segs('Eins.', 'Zwei.'));
+  await until(() => audios.length === 1 && !lastAudio().paused);
+  player.setRate(1.5);
+  lastAudio().end();
+  await until(() => audios.length === 2);
+  assert.equal(lastAudio().playbackRate, 1.5);
+  player.stop();
 });

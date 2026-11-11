@@ -142,6 +142,9 @@ export function registerBookEditorCard() {
         showFlag: 'showBookEditorCard',
         timerKeys: [],
         load: () => this._load(Alpine.store('nav').selectedBookId),
+        // Tab-Rueckkehr: kein Neuaufbau — er schloesse den aktiven Block, verwuerfe
+        // Undo-Verlauf und Scrollposition. Fremde Saves meldet der Stream selbst.
+        wake: 'skip',
         // Eigene Reset-Pfade statt `resetState`: ein sofortiges `blocks = []`
         // verwürfe ungespeicherte Blöcke im Autosave-Fenster (siehe
         // _resetSession).

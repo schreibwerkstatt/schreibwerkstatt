@@ -6,6 +6,7 @@
 
 import { localeTag, localIsoDate, dateTimeFormat, CHARS_PER_NORMSEITE } from '../utils.js';
 import { setupCardLifecycle } from './card-lifecycle.js';
+import { sameData } from '../utils/same-data.js';
 import { computeWritingTimeGrid, computeStreakStats, secondsByDate, computeWeekdayPattern, computeDerived,
          computeMilestones, computeReadability, computeWeeklyDelta, computePerBookTime, computeEffortSplit,
          computeVolumeDelta, computeHourPattern, computeGoalAttainment, computeBookGoals,
@@ -70,6 +71,7 @@ export function registerMyStatsCard() {
         name: 'myStats',
         refreshNeedsBookId: false,
         onCardRefresh: () => { this.loadMyStats(); this.loadMyJobStats(); },
+        wake: () => { this.loadMyStats({ silent: true }); this.loadMyJobStats({ silent: true }); },
       });
     },
 
@@ -79,7 +81,11 @@ export function registerMyStatsCard() {
       this._disconnectMyStatsThemeObserver();
     },
 
-    async loadMyStats() {
+    /** `silent`: Tab-Rueckkehr — Kacheln bleiben stehen, gleiche Daten aendern
+     *  nichts; neue Daten zeichnen den Chart neu, ohne die gewaehlte
+     *  Granularitaet zu ueberschreiben. Ein Fehler laesst den alten Stand stehen. */
+    async loadMyStats({ silent = false } = {}) {
+      if (silent) return this._syncMyStatsSilently();
       this.myStatsLoading = true;
       this.myStatsError = '';
       this._memos = {};
@@ -113,6 +119,34 @@ export function registerMyStatsCard() {
       this._applyAutoGran();
       // rAF in $nextTick: Canvas erst nach Layout-Pass vermessen (sonst 0×0).
       this.$nextTick(() => requestAnimationFrame(() => this.renderMyStatsChart()));
+    },
+
+    async _syncMyStatsSilently() {
+      try {
+        const [statsR, histR] = await Promise.all([
+          fetch('/me/profile-stats', { credentials: 'same-origin' }),
+          fetch('/me/profile-stats-history', { credentials: 'same-origin' }),
+        ]);
+        if (!statsR.ok || !histR.ok) return;
+        const data = await statsR.json();
+        const hist = await histR.json();
+        const next = {
+          myStatsData: data,
+          myStatsHistory: Array.isArray(hist.history) ? hist.history : [],
+          myStatsWriting: Array.isArray(hist.writing) ? hist.writing : [],
+          myStatsLektorat: Array.isArray(hist.lektorat) ? hist.lektorat : [],
+          myStatsSessions: Array.isArray(hist.sessions) ? hist.sessions : [],
+          myStatsLanguages: (hist.languages && typeof hist.languages === 'object') ? hist.languages : {},
+        };
+        const changed = Object.keys(next).filter(k => !sameData(next[k], this[k]));
+        if (!changed.length) return;
+        for (const k of changed) this[k] = next[k];
+        this.myStatsHistoryError = false;
+        this._memos = {};
+        this.$nextTick(() => requestAnimationFrame(() => this.renderMyStatsChart()));
+      } catch (e) {
+        console.error('[myStats sync]', e);
+      }
     },
 
     // Chart-Kachel steht, sobald es Inhalt gibt — auch ohne Historie (dann

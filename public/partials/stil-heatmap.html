@@ -92,7 +92,7 @@
            public/js/book/stil-heatmap.js#toggleStilDetail. -->
       <template x-if="stilDetailLoading">
         <div class="heatmap-detail">
-          <div class="muted-msg"><span class="spinner"></span><span x-text="$app.t('stil.detail.loading')"></span></div>
+          <div x-skeleton="3"></div>
         </div>
       </template>
       <template x-if="stilDetail && !stilDetailLoading">

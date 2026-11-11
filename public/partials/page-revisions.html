@@ -81,7 +81,7 @@
                   @click="loadMore()"
                   :disabled="loadingMore"
                   :data-tip="$app.t('editor.revisions.loadMoreTitle')"
-                  x-text="loadingMore ? $app.t('editor.revisions.loadingMore') : $app.t('editor.revisions.loadMore')"></button>
+                  :aria-busy="loadingMore"><span class="spinner" x-show="loadingMore" x-cloak aria-hidden="true"></span><span x-text="$app.t('editor.revisions.loadMore')"></span></button>
         </div>
       </div>
     </div>

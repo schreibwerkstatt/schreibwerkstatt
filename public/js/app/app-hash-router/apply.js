@@ -6,7 +6,7 @@
 // Anwendung getriggerte Watcher keinen Rueck-Schreibzyklus starten.
 import { EVT } from '../../events.js';
 import { EXCLUSIVE_CARDS } from '../../cards/feature-registry.js';
-import { openCardWith, CARD_REQUEST } from '../../cards/card-request.js';
+import { openCardWith, CARD_REQUEST, URL_TABS } from '../../cards/card-request.js';
 import { FIGUREN_TABS } from '../../graph/constants.js';
 
 // Hash-Views, deren Anwendung mechanisch identisch ist: „Karte oeffnen, falls sie
@@ -54,6 +54,25 @@ const HASH_VIEW_TABS = {
 };
 
 export const hashApplyMethods = {
+  // Karte mit Reiter-Permalink (URL_TABS) öffnen: der Reiter aus der URL geht
+  // als Reiter-Wunsch hinein, ohne Reiter der Grund-Reiter — sonst bliebe die
+  // Karte bei Zurück von `…/einstellungen/expose` auf `…/einstellungen` im
+  // Exposé stehen. Ein unbekannter Reiter fällt im Lifecycle weg.
+  async _openCardOnUrlTab(cardKey, tab) {
+    const entry = EXCLUSIVE_CARDS.find(c => c.key === cardKey);
+    const spec = URL_TABS[cardKey];
+    const open = async () => {
+      if (!this[entry.flag]) await this[entry.toggle]();
+      else { this._closeOtherMainCards(cardKey); this._scrollToCardByKey(cardKey); }
+    };
+    if (!spec) return open();
+    const known = !tab || spec.tabs.includes(tab);
+    await openCardWith(spec.request, known && tab ? tab : spec.default, open);
+    // Unbekannter Reiter: die URL nach dem Apply auf den echten Stand ziehen
+    // (während des Apply sind Hash-Writes gesperrt, darum nach dem Task).
+    if (!known) setTimeout(() => this._updateHash(), 0);
+  },
+
   // Figuren-Karte auf einem Reiter öffnen. Der Reiter geht als Karten-Wunsch
   // (card-request.js) rein: die Karte ist beim Deep-Link evtl. noch nicht gemountet.
   async _applyFigurenTab(tab) {
@@ -96,7 +115,7 @@ export const hashApplyMethods = {
       this._applyingHash = true;
       this._inHashApply = true;
       try {
-        if (!this.showMyBooksCard) await this.toggleMyBooksCard();
+        await this._openCardOnUrlTab('myBooks', parts[1]);
       } finally {
         this._applyingHash = false;
         this._inHashApply = false;
@@ -109,6 +128,19 @@ export const hashApplyMethods = {
       this._inHashApply = true;
       try {
         if (!this.showMyStatsCard) await this.toggleMyStatsCard();
+      } finally {
+        this._applyingHash = false;
+        this._inHashApply = false;
+      }
+      return;
+    }
+
+    if (parts[0] === 'autorenprofil') {
+      this._applyingHash = true;
+      this._inHashApply = true;
+      try {
+        if (!this.showAutorenprofilCard) await this.toggleAutorenprofilCard();
+        else this._scrollToCardByKey('autorenprofil');
       } finally {
         this._applyingHash = false;
         this._inHashApply = false;
@@ -174,9 +206,9 @@ export const hashApplyMethods = {
       try {
         const sub = parts[1] || 'users';
         if (sub === 'users') {
-          if (!this.showAdminUsersCard) await this.toggleAdminUsersCard();
+          await this._openCardOnUrlTab('adminUsers', parts[2]);
         } else if (sub === 'settings') {
-          if (!this.showAdminSettingsCard) await this.toggleAdminSettingsCard();
+          await this._openCardOnUrlTab('adminSettings', parts[2]);
         } else if (sub === 'usage') {
           // Tab VOR dem Oeffnen setzen: `adminUsageEnter` laedt beim Oeffnen den
           // aktuellen Tab — sonst holte es zuerst den alten Tab umsonst.
@@ -247,6 +279,7 @@ export const hashApplyMethods = {
       if (simpleKey) {
         const tab = HASH_VIEW_TABS[view];
         if (tab) this[tab[0]] = tab[1];
+        if (URL_TABS[simpleKey]) { await this._openCardOnUrlTab(simpleKey, arg); return; }
         const entry = EXCLUSIVE_CARDS.find(c => c.key === simpleKey);
         if (entry && !this[entry.flag]) await this[entry.toggle]();
         return;
@@ -340,8 +373,7 @@ export const hashApplyMethods = {
           if (arg) window.dispatchEvent(new CustomEvent(EVT.PLOT_FOCUS_BEAT, { detail: { beatId: arg } }));
           break;
         case 'motiv':
-          if (!this.showMotivCard) await this.toggleMotivCard();
-          else { this._closeOtherMainCards('motiv'); this._scrollToCardByKey('motiv'); }
+          await this._openCardOnUrlTab('motiv', arg);
           break;
         case 'ideen':
           if (!this.showIdeenBoardCard) await this.toggleIdeenBoardCard();

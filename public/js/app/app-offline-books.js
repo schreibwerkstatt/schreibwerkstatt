@@ -8,13 +8,19 @@
 // stösst den Sync danach neu an. Der Sync ist inkrementell — nur geänderte
 // Abschnitte gehen übers Netz.
 //
-// Zusätzlich zur ausdrücklichen Anheftung hält die App das ZULETZT GEÖFFNETE
-// Buch automatisch offline (abschaltbar pro Konto und Gerät, Benutzer-
-// Einstellungen). **Why:** angeheftet wird vor der Zugfahrt vergessen, und
-// dann fehlt genau das Buch, an dem man gerade schreibt. Gewünscht ist damit
-// die Menge „angeheftet ∪ zuletzt geöffnet"; was der SW darüber hinaus hält,
-// räumt der Abgleich (`_reconcileOfflineBooks`). Bei `saveData` (Datensparmodus)
-// lädt der automatische Teil nichts vor.
+// Zusätzlich zur ausdrücklichen Anheftung hält die App die ZULETZT GEÖFFNETEN
+// Bücher automatisch offline (höchstens `AUTO_OFFLINE_MAX`, abschaltbar pro
+// Konto und Gerät, Benutzer-Einstellungen). **Why:** angeheftet wird vor der
+// Zugfahrt vergessen, und dann fehlt genau das Buch, an dem man gerade
+// schreibt. Gewünscht ist damit die Menge „angeheftet ∪ zuletzt geöffnet";
+// was der SW darüber hinaus hält, räumt der Abgleich (`_reconcileOfflineBooks`).
+// Bei `saveData` (Datensparmodus) lädt der automatische Teil nichts vor.
+//
+// Mehrere Tabs teilen Absicht und SW-Ablage: die Absicht wird darum vor jedem
+// Abgleich frisch aus localStorage gelesen (`_refreshOfflineIntent`), und die
+// Automatik merkt sich mehr als ein Buch. **Why:** mit einem einzigen Merker
+// machte ein zweiter Tab mit einem anderen Buch dessen Buch zum „zuletzt
+// geöffneten" und räumte die Kopie des ersten weg, an dem dort geschrieben wird.
 //
 // `navigator.storage.persist()` fragt die App, sobald sie etwas offline ablegt
 // (also schon beim ersten automatischen Sync, nicht erst beim Anheften): ohne
@@ -52,28 +58,37 @@ export function writePinned(email, ids) {
 
 export const offlineAutoKey = (email) => `offline_auto_u:${email}`;
 
-// Automatik eines Kontos auf diesem Gerät: { enabled, bookId }. Default an.
+// So viele zuletzt geöffnete Bücher hält die Automatik — zwei Tabs mit je
+// einem Buch sind der Normalfall.
+export const AUTO_OFFLINE_MAX = 2;
+
+function normIds(ids) {
+  return [...new Set((Array.isArray(ids) ? ids : []).filter((x) => x != null).map(String))].slice(0, AUTO_OFFLINE_MAX);
+}
+
+// Automatik eines Kontos auf diesem Gerät: { enabled, bookIds } (neuestes
+// zuerst). Default an. Liest auch den Einzel-Merker `bookId` älterer Stände.
 export function readOfflineAuto(email) {
   const raw = email ? lsGetJSON(offlineAutoKey(email), null) : null;
-  return {
-    enabled: raw?.enabled !== false,
-    bookId: raw?.bookId != null ? String(raw.bookId) : null,
-  };
+  const ids = Array.isArray(raw?.bookIds) ? raw.bookIds : (raw?.bookId != null ? [raw.bookId] : []);
+  return { enabled: raw?.enabled !== false, bookIds: normIds(ids) };
 }
 
 export function writeOfflineAuto(email, auto) {
   if (!email) return false;
-  return lsSetJSON(offlineAutoKey(email), {
-    enabled: auto.enabled !== false,
-    bookId: auto.bookId != null ? String(auto.bookId) : null,
-  });
+  return lsSetJSON(offlineAutoKey(email), { enabled: auto.enabled !== false, bookIds: normIds(auto.bookIds) });
 }
 
-// Bücher, die offline liegen SOLLEN: angeheftet plus (Automatik an) das
-// zuletzt geöffnete. Reine Funktion, Strings, dedupliziert.
+// Neues „zuletzt geöffnet" vorne einreihen, gedeckelt. Reine Funktion.
+export function noteAutoBook(bookIds, id) {
+  return normIds([String(id), ...(bookIds || []).filter((x) => String(x) !== String(id))]);
+}
+
+// Bücher, die offline liegen SOLLEN: angeheftet plus (Automatik an) die
+// zuletzt geöffneten. Reine Funktion, Strings, dedupliziert.
 export function desiredOfflineBooks(pinned, auto) {
   const out = new Set((pinned || []).map(String));
-  if (auto?.enabled !== false && auto?.bookId != null) out.add(String(auto.bookId));
+  if (auto?.enabled !== false) for (const id of auto?.bookIds || []) out.add(String(id));
   return [...out];
 }
 
@@ -175,6 +190,9 @@ export const appOfflineBooksMethods = {
   _syncOfflineBooks() {
     const ctrl = swController();
     if (!ctrl || navigator.onLine === false) return;
+    // Offline aufgeschobenes Räumen (Buchwechsel, Automatik aus) nachholen.
+    this._reconcileOfflineBooks();
+    this._refreshOfflineIntent();
     const ids = this._desiredOfflineBooks();
     for (const bookId of ids) {
       try { ctrl.postMessage({ type: 'offline-book-sync', bookId }); } catch {}
@@ -182,15 +200,27 @@ export const appOfflineBooksMethods = {
     if (ids.length) this._requestPersistentStorage();
   },
 
-  // Buch geöffnet: wird das neue „zuletzt geöffnete". Das vorige fällt aus der
-  // Ablage, sofern es nicht angeheftet ist (`_reconcileOfflineBooks`).
+  // Absicht frisch aus localStorage: ein anderer Tab kann angeheftet,
+  // gelöst oder ein Buch geöffnet haben.
+  _refreshOfflineIntent() {
+    const s = this.$store.session;
+    const email = s.currentUser?.email;
+    if (!email || !this._offlineUserReady) return;
+    s.offlinePinned = readPinned(email);
+    s.offlineAuto = readOfflineAuto(email);
+  },
+
+  // Buch geöffnet: wird das neueste „zuletzt geöffnete". Das älteste über
+  // `AUTO_OFFLINE_MAX` fällt aus der Ablage, sofern es nicht angeheftet ist
+  // (`_reconcileOfflineBooks`).
   _noteBookOpenedForOffline(bookId, { sync = true } = {}) {
     if (bookId == null || !this._offlineUserReady) return;
     const s = this.$store.session;
     const id = String(bookId);
-    if (s.offlineAuto.bookId === id) return;
+    this._refreshOfflineIntent();
+    if (s.offlineAuto.bookIds[0] === id) return;
     const email = s.currentUser?.email;
-    s.offlineAuto = { ...s.offlineAuto, bookId: id };
+    s.offlineAuto = { ...s.offlineAuto, bookIds: noteAutoBook(s.offlineAuto.bookIds, id) };
     writeOfflineAuto(email, s.offlineAuto);
     if (!s.offlineAuto.enabled || saveDataOn()) return;
     this._reconcileOfflineBooks();
@@ -204,13 +234,16 @@ export const appOfflineBooksMethods = {
   // Schalter in den Benutzer-Einstellungen (pro Gerät).
   setOfflineAutoEnabled(enabled) {
     const s = this.$store.session;
+    this._refreshOfflineIntent();
     s.offlineAuto = { ...s.offlineAuto, enabled: !!enabled };
     writeOfflineAuto(s.currentUser?.email, s.offlineAuto);
     if (enabled) {
-      const id = s.offlineAuto.bookId;
+      const ids = s.offlineAuto.bookIds;
       const ctrl = swController();
-      if (id && ctrl && navigator.onLine !== false && !saveDataOn()) {
-        try { ctrl.postMessage({ type: 'offline-book-sync', bookId: id }); } catch {}
+      if (ids.length && ctrl && navigator.onLine !== false && !saveDataOn()) {
+        for (const id of ids) {
+          try { ctrl.postMessage({ type: 'offline-book-sync', bookId: id }); } catch {}
+        }
         this._requestPersistentStorage();
       }
     } else {
@@ -221,10 +254,16 @@ export const appOfflineBooksMethods = {
   // Räumt im SW, was nicht mehr gewünscht ist. Läuft erst, wenn sowohl das
   // Konto (Absicht) als auch der SW-Bestand bekannt sind — vorher wüsste der
   // Abgleich nicht, was gewollt ist, und würde ein angeheftetes Buch werfen.
+  // Ohne Verbindung wird nie geräumt; nachgeholt wird mit dem nächsten Sync
+  // (`online`-Event). **Why:** ein Buchwechsel im Zug machte das neue Buch zum
+  // „zuletzt geöffneten" und warf die Kopie des vorigen weg — das neue lässt
+  // sich offline nicht laden, das vorige war danach auch nicht mehr da.
   _reconcileOfflineBooks() {
     if (!this._offlineUserReady || !this._offlineStatusKnown) return;
+    if (navigator.onLine === false) return;
     const ctrl = swController();
     if (!ctrl) return;
+    this._refreshOfflineIntent();
     for (const id of staleOfflineBooks(this.$store.session.offlineBooks, this._desiredOfflineBooks())) {
       try { ctrl.postMessage({ type: 'offline-book-remove', bookId: id }); } catch {}
       const { [id]: _, ...rest } = this.$store.session.offlineBooks;
@@ -256,8 +295,8 @@ export const appOfflineBooksMethods = {
       // Netzfehler (status 0) bleibt sie — der nächste Sync versucht es erneut.
       if (msg.status === 403 || msg.status === 404) {
         if (this.isBookOffline(id)) this._unpinOfflineBook(id);
-        else if (s.offlineAuto.bookId === id) {
-          s.offlineAuto = { ...s.offlineAuto, bookId: null };
+        else if (s.offlineAuto.bookIds.includes(id)) {
+          s.offlineAuto = { ...s.offlineAuto, bookIds: s.offlineAuto.bookIds.filter((x) => x !== id) };
           writeOfflineAuto(s.currentUser?.email, s.offlineAuto);
           try { swController()?.postMessage({ type: 'offline-book-remove', bookId: id }); } catch {}
         }
@@ -287,7 +326,7 @@ export const appOfflineBooksMethods = {
   isBookAutoOffline(bookId) {
     if (bookId == null || this.isBookOffline(bookId)) return false;
     const a = this.$store.session.offlineAuto;
-    return a.enabled && a.bookId === String(bookId) && !saveDataOn();
+    return a.enabled && a.bookIds.includes(String(bookId)) && !saveDataOn();
   },
 
   async toggleBookOffline(bookId) {

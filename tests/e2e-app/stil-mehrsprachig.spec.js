@@ -98,3 +98,45 @@ test('Meine Statistik: Lesbarkeit je Sprache, nie gemischt', async ({ page }) =>
     .screenshot({ path: test.info().outputPath('mystats-lesbarkeit-mehrsprachig.png') });
   guard.assertClean('Meine Statistik mehrsprachig');
 });
+
+// Permalink + stiller Reload: die Karte hat eine eigene URL (#autorenprofil), ein
+// Deep-Link öffnet sie, und ein Reload bei stehender Karte (Aufwachen nach
+// Tabwechsel/Reconnect feuert CARD_REFRESH) lässt die Tabellen stehen statt sie
+// gegen das Skeleton zu tauschen — sonst springt die Karte.
+test('Autorenprofil: #autorenprofil-Permalink, Reload ohne Skeleton', async ({ page }) => {
+  const guard = attachConsoleGuard(page);
+  const measurement = computeAuthorProfile(profileInput([
+    { id: 9101, language: 'de', words: 1200, dialog: 600, lix: 45, flesch: 55 },
+    { id: 9103, language: 'de', words: 1400, dialog: 900, lix: 48, flesch: 52 },
+  ]));
+  let calls = 0;
+  await page.route('**/me/author-profile', async (route) => {
+    calls += 1;
+    if (calls > 1) await new Promise(r => setTimeout(r, 800));
+    await route.fulfill({ json: { ...measurement, profile: null, basisSig: 'x', profileStale: false } });
+  });
+  await bootApp(page);
+  await selectSeededBook(page);
+  await page.evaluate(() => window.__app.toggleAutorenprofilCard());
+  await expect(page).toHaveURL(/#autorenprofil$/);
+
+  const card = page.locator('.card--autorenprofil');
+  await expect(card.locator('.ap-table').first()).toBeVisible();
+  await page.evaluate(() => window.dispatchEvent(new CustomEvent('card:refresh', { detail: { name: 'autorenprofil' } })));
+  await expect.poll(() => calls).toBe(2);
+  // Während der verzögerte Reload läuft: Tabelle sichtbar, kein Skeleton.
+  // Bewusst ohne Retry gemessen — ein auto-wartendes toBeVisible() würde
+  // einfach das Ende des Reloads abwarten und das Springen nie sehen.
+  const midReload = await page.evaluate(() => {
+    const c = document.querySelector('.card--autorenprofil');
+    const vis = (el) => !!el && el.offsetParent !== null;
+    return { table: vis(c.querySelector('.ap-table')), skeleton: vis(c.querySelector('[x-skeleton]')) };
+  });
+  expect(midReload).toEqual({ table: true, skeleton: false });
+
+  // Deep-Link: Karte zu, dann per Hash wieder auf.
+  await page.evaluate(() => { window.__app.showAutorenprofilCard = false; });
+  await page.evaluate(() => { location.hash = '#autorenprofil'; });
+  await expect(card).toBeVisible();
+  guard.assertClean('Autorenprofil Permalink');
+});

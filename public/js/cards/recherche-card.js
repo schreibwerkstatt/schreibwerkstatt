@@ -65,12 +65,11 @@ export function registerRechercheCard() {
     busy: false,
     errorMessage: '',
 
-    // EIN Formular-Draft für BEIDE Wege — Anlegen (recherche-create.html) und
-    // Bearbeiten im Detail-Dialog teilen Felder-Fragment, Dialog-Shell und diesen
-    // Draft. Kein `creating`-Boolean daneben: ob der Anlegen-Dialog offen ist, weiss
-    // das <dialog> selbst (items.js#startCreate/closeCreate fahren es per
-    // showModal()/close()); ein zweites Flag wäre nur eine Kopie zum Auseinanderlaufen.
+    // EIN Formular-Draft für BEIDE Wege — Anlegen (recherche-create.html,
+    // Inline-Formular) und Bearbeiten teilen Felder-Fragment und diesen Draft.
+    // `creating` blendet das Anlegen-Formular ein (items.js#startCreate/closeCreate).
     draft: _emptyDraft(),
+    creating: false,
 
     // Detail-Dialog (recherche-detail.html): `detailItemId` ist die SSoT dafür,
     // WELCHES Fundstück offen ist — der Dialog selbst wird daraus in
@@ -197,6 +196,8 @@ export function registerRechercheCard() {
         timerKeys: ['_researchChatPollTimer', '_ivPollTimer', '_linkCheckTimer', '_crosscheckTimer'],
         filterScopes: RECHERCHE_FILTER_SCOPES,
         load: async () => { await this.loadRecherche(); await this._ensureStatusBoard(); },
+        // Tab-Rueckkehr: still; das Status-Board (Sortables) nur bei neuen Daten neu binden.
+        wake: async () => { if (await this.loadRecherche({ silent: true })) await this._ensureStatusBoard(); },
         extraListeners: [
           { type: 'recherche:filter-page', handler: (e) => this.filterToLinked('page', e.detail?.pageId) },
           { type: 'recherche:filter-chapter', handler: (e) => this.filterToLinked('chapter', e.detail?.chapterId) },
@@ -219,9 +220,9 @@ export function registerRechercheCard() {
         },
       });
 
-      // Karte zugeklappt (Exklusivität, Seitenwechsel, Hash-Navigation): BEIDE
-      // Dialoge ZWINGEND schliessen. Ein offenes <dialog> hält das restliche
-      // Dokument inert, und da es im Top-Layer liegt, verschwindet es mit der
+      // Karte zugeklappt (Exklusivität, Seitenwechsel, Hash-Navigation): Detail-
+      // Dialog ZWINGEND schliessen, das Anlegen-Formular verwerfen. Ein offenes
+      // <dialog> hält das restliche Dokument inert, und da es im Top-Layer liegt, verschwindet es mit der
       // display:none-Karte nur optisch — die App wirkte danach eingefroren.
       this.$watch(() => window.__app.showRechercheCard, (v) => {
         if (v) return;

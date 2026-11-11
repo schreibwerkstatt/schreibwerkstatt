@@ -22,13 +22,18 @@
 
       <h4 class="admin-settings-subheading"><span x-text="$app.t('admin.settings.plotAnchor.title')"></span></h4>
       <p class="muted-msg muted-msg--sm" x-text="$app.t('admin.settings.plotAnchor.hint')"></p>
-      <div x-data="settingField({ k: 'plot.anchor.min_score', type: 'num', base: 'plot.anchorMinScore', num: { min: 0, max: 1, step: 0.01 }, help: true })"></div>
-      <div x-data="settingField({ k: 'plot.anchor.confirm_min_score', type: 'num', base: 'plot.anchorConfirmMinScore', num: { min: 0, max: 1, step: 0.01 }, help: true })"></div>
-      <div x-data="settingField({ k: 'plot.anchor.promote_min_score', type: 'num', base: 'plot.anchorPromoteMinScore', num: { min: 0, max: 1, step: 0.01 }, help: true })"></div>
+      <div x-data="settingField({ k: 'plot.anchor.min_score', type: 'num', base: 'plotAnchorMinScore', num: { min: 0, max: 1, step: 0.01 }, help: true })"></div>
+      <div x-data="settingField({ k: 'plot.anchor.confirm_min_score', type: 'num', base: 'plotAnchorConfirmMinScore', num: { min: 0, max: 1, step: 0.01 }, help: true })"></div>
+      <div x-data="settingField({ k: 'plot.anchor.promote_min_score', type: 'num', base: 'plotAnchorPromoteMinScore', num: { min: 0, max: 1, step: 0.01 }, help: true })"></div>
+      <div x-data="settingField({ k: 'plot.anchor.promote_min_rerank', type: 'num', base: 'plotAnchorPromoteMinRerank', num: { min: 0, max: 1, step: 0.01 }, help: true })"></div>
 
       <h4 class="admin-settings-subheading"><span x-text="$app.t('admin.settings.figurAnchor.title')"></span></h4>
       <p class="muted-msg muted-msg--sm" x-text="$app.t('admin.settings.figurAnchor.hint')"></p>
       <div x-data="settingField({ k: 'werkstatt.anchor.min_score', type: 'num', base: 'werkstatt.anchorMinScore', num: { min: 0, max: 1, step: 0.01 }, help: true })"></div>
+
+      <h4 class="admin-settings-subheading"><span x-text="$app.t('admin.settings.weltfaktenMatch.title')"></span></h4>
+      <p class="muted-msg muted-msg--sm" x-text="$app.t('admin.settings.weltfaktenMatch.hint')"></p>
+      <div x-data="settingField({ k: 'weltfakten.match_min_score', type: 'num', base: 'weltfakten.matchMinScore', num: { min: 0.7, max: 0.99, step: 0.01 }, help: true })"></div>
 
       <h4 class="admin-settings-subheading"><span x-text="$app.t('admin.settings.motifScan.title')"></span></h4>
       <p class="muted-msg muted-msg--sm" x-text="$app.t('admin.settings.motifScan.hint')"></p>

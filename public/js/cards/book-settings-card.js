@@ -356,7 +356,7 @@ export function registerBookSettingsCard() {
         },
         // Verweis aus einer anderen Karte auf einen bestimmten Reiter
         // (book/book-settings/open-tab.js), Palette, Job-Queue-Sprung.
-        tabRequest: { key: CARD_REQUEST.BOOK_SETTINGS_TAB, apply: (tab) => { this.bookSettingsTab = tab; } },
+        tabRequest: { key: CARD_REQUEST.BOOK_SETTINGS_TAB, apply: (tab) => { this.bookSettingsTab = tab; }, current: () => this.bookSettingsTab },
         extraListeners: [
           { type: EVT.JOB_FINISHED, handler: (ev) => this._onJobFinished(ev.detail || {}) },
           {

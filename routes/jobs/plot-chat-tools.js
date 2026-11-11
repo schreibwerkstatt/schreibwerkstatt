@@ -52,6 +52,7 @@ const CLEAR_FIELD = { kapitel: 'chapter_id', figuren: 'figure_ids', orte: 'locat
 // legt sie am Board-Stand ab (state.plotConst). Die Plot-Route nimmt beim Typ Freitext; der
 // Chat bleibt bei der Auswahl, die auch der Beat-Edit anbietet.
 const { plotConstants } = require('../../lib/esm-bridge');
+const { resolveBeatRefs } = require('./plot/beat-refs');
 
 // Board-Stand pro Antwort einmal laden; Vorschläge ändern ihn nicht.
 function _state(ctx) {
@@ -529,6 +530,19 @@ function _proposeBeatRelation(input, ctx) {
   }, input);
 }
 
+// Freitextfelder eines Vorschlags: [#id]-Marker aus dem Board-Prompt durch
+// «Titel» ersetzen (plot/beat-refs.js) — sie würden sonst als Nummer im Beat oder
+// in der Vorschlagskarte stehen.
+const FREE_TEXT_FIELDS = ['titel', 'beschreibung', 'begruendung', 'name'];
+function _withBeatRefsResolved(input, state) {
+  const out = { ...input };
+  const titleOf = id => state.beatById.get(id)?.titel;
+  for (const k of FREE_TEXT_FIELDS) {
+    if (typeof out[k] === 'string') out[k] = resolveBeatRefs(out[k], titleOf);
+  }
+  return out;
+}
+
 const PROPOSE_HANDLERS = {
   propose_beat: _proposeBeat,
   propose_beat_move: _proposeBeatMove,
@@ -544,7 +558,7 @@ async function executePlotChatTool(name, input, ctx) {
     }
     const state = _state(ctx);
     if (!state.plotConst) state.plotConst = await plotConstants();
-    return PROPOSE_HANDLERS[name](input || {}, ctx);
+    return PROPOSE_HANDLERS[name](_withBeatRefsResolved(input || {}, state), ctx);
   }
   if (!ctx.offeredTools?.has(name)) throw new Error(`Unbekanntes Werkzeug: ${name}`);
   return executeCatalogTool(name, input, ctx);

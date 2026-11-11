@@ -96,6 +96,7 @@ import { registerCombobox } from '../combobox.js';
 import { registerCopyButton } from '../copy-button.js';
 import { registerFileDrop } from '../file-drop.js';
 import { registerRadioGroup } from '../radio-group.js';
+import { registerTagInput } from '../tag-input.js';
 import { registerSortableTable } from '../sortable-table.js';
 import { registerCatalogFilter } from '../catalog-filter.js';
 import { registerEntityPicker } from '../cards/entity-picker.js';
@@ -246,6 +247,7 @@ export function registerAllCards() {
   registerCopyButton();
   registerFileDrop();
   registerRadioGroup();
+  registerTagInput();
   registerSortableTable();
   registerCatalogFilter();
   registerEntityPicker();

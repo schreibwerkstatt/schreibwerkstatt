@@ -1,5 +1,6 @@
-// Schlagworte in der Quellen-Karte: Liste der Bibliothek laden, im Formular
-// setzen, Tabelle und Picker danach filtern. Wird in Alpine.data('sourcesCard')
+// Schlagworte in der Quellen-Karte: Liste der Bibliothek laden, Tabelle und
+// Picker danach filtern. Gesetzt werden sie im Formular ueber den geteilten
+// Baustein tagInput (public/js/tag-input.js). Wird in Alpine.data('sourcesCard')
 // gespreadet (public/js/cards/sources-card.js).
 //
 // Ein Schlagwort gehoert dem Bibliothekseintrag, nicht dem Buch — es gilt in
@@ -8,7 +9,7 @@
 // eigenen Bibliothek (GET /sources/tags), nicht aus der Buchliste.
 
 import { fetchJson } from '../utils.js';
-import { normalizeTagList, hasAnyTag, MAX_TAGS } from './fields.js';
+import { hasAnyTag } from './fields.js';
 import { compareText } from '../i18n.js';
 
 export const sourcesTagMethods = {
@@ -41,40 +42,5 @@ export const sourcesTagMethods = {
   /** Filter-Praedikat der Tabelle/des Pickers: ein gewaehltes Schlagwort. */
   srcMatchesTag(s, tag) {
     return hasAnyTag(s, tag ? [tag] : []);
-  },
-
-  // ── Formular ───────────────────────────────────────────────────────────────
-
-  /** Eingabe ins Draft uebernehmen. Komma trennt, damit „zhaw, cas" in einem
-   *  Zug zwei Schlagworte ergibt. */
-  addSrcDraftTag(raw = this.srcTagInput) {
-    const parts = String(raw || '').split(',');
-    this.srcDraft.tags = normalizeTagList([...(this.srcDraft.tags || []), ...parts]);
-    this.srcTagInput = '';
-  },
-
-  removeSrcDraftTag(tag) {
-    this.srcDraft.tags = (this.srcDraft.tags || []).filter(t => t !== tag);
-  },
-
-  /** Vorschlaege unter dem Eingabefeld: Schlagworte der Bibliothek, die am
-   *  Draft noch fehlen, gefiltert nach der laufenden Eingabe. */
-  srcTagSuggestions() {
-    const have = new Set((this.srcDraft.tags || []).map(t => t.toLowerCase()));
-    if (have.size >= MAX_TAGS) return [];
-    const q = String(this.srcTagInput || '').trim().toLowerCase();
-    return (this.srcPoolTags || [])
-      .map(t => t.tag)
-      .filter(t => !have.has(t.toLowerCase()) && (!q || t.toLowerCase().includes(q)))
-      .slice(0, 12);
-  },
-
-  onSrcTagKeydown(e) {
-    if (e.key === 'Enter' || e.key === ',') {
-      e.preventDefault();
-      this.addSrcDraftTag();
-    } else if (e.key === 'Backspace' && !this.srcTagInput && this.srcDraft.tags?.length) {
-      this.srcDraft.tags = this.srcDraft.tags.slice(0, -1);
-    }
   },
 };

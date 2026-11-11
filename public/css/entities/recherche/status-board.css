@@ -104,7 +104,7 @@
    gleiche Regel und Begruendung wie an der Plot-Beat-Karte. */
 .research-status-board.is-scrolling .research-status-card:hover { transform: none; box-shadow: none; transition: none; }
 .research-status-card--pinned { background: var(--color-bg); }
-.research-status-card--archived { opacity: 0.6; }
+.research-status-card--archived { opacity: var(--opacity-disabled); }
 .research-status-card--open { border-color: var(--card-accent); }
 
 /* Kopfzeile: Drag-Griff (components/drag-grip.css), Kind-Badge, Menue. */
@@ -134,7 +134,6 @@
   font-size: var(--font-size-xs);
   line-height: var(--lh-base);
   color: color-mix(in srgb, var(--color-text) 78%, var(--color-muted));
-  white-space: pre-wrap;
   word-break: break-word;
   display: -webkit-box;
   -webkit-line-clamp: 2;

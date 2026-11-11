@@ -18,7 +18,7 @@
     </div>
   </div>
 
-  <div x-show="adminSettingsLoading" class="muted-msg" x-text="$app.t('common.loading')"></div>
+  <div x-show="adminSettingsLoading" x-skeleton="5" x-cloak></div>
   <div x-show="adminSettingsError" class="error-msg error-msg--banner" x-text="adminSettingsError"></div>
   <div x-show="adminSettingsSaved" class="success-msg success-msg--banner">
     <span x-text="$app.t('admin.settings.saved', { count: adminSettingsSavedCount })"></span>

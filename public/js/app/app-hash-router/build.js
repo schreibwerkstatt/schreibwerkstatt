@@ -1,5 +1,6 @@
 // Teil von appHashRouterMethods (siehe Facade app-hash-router.js).
 import { exitFullscreenOnNavigation } from '../../fullscreen.js';
+import { URL_TABS } from '../../cards/card-request.js';
 // Schreib-Richtung: State → URL. Baut den Hash aus dem aktuellen State und
 // schreibt ihn per push/replace in die History.
 //
@@ -12,7 +13,8 @@ export const hashBuildMethods = {
   _computeHash() {
     if (this.showUserSettingsCard) return '#profil';
     if (this.showMyStatsCard) return '#meine-statistik';
-    if (this.showMyBooksCard) return '#meine-buecher';
+    if (this.showMyBooksCard) return '#meine-buecher' + this._urlTabSuffix('myBooks');
+    if (this.showAutorenprofilCard) return '#autorenprofil';
     if (this.showHelpCard) return '#hilfe';
     if (this.showOnboardingCard) return '#erste-schritte';
     // Volltextsuche: buch-skopiert (#book/:id/suche) wenn ein Buch gewählt ist
@@ -24,8 +26,8 @@ export const hashBuildMethods = {
     }
     // Folder-Import ist book-unabhaengig (new-book oder merge).
     if (this.showFolderImportCard) return '#import';
-    if (this.showAdminUsersCard) return '#admin/users';
-    if (this.showAdminSettingsCard) return '#admin/settings';
+    if (this.showAdminUsersCard) return '#admin/users' + this._urlTabSuffix('adminUsers');
+    if (this.showAdminSettingsCard) return '#admin/settings' + this._urlTabSuffix('adminSettings');
     if (this.showAdminUsageCard) {
       const tab = this.adminUsageTab;
       return '#admin/usage' + (tab && tab !== 'users' ? '/' + tab : '');
@@ -75,7 +77,7 @@ export const hashBuildMethods = {
     else if (this.showSzenenCard) parts.push('szenen');
     else if (this.showEreignisseCard) parts.push('ereignisse');
     else if (this.showPlotCard) parts.push('plot');
-    else if (this.showMotivCard) parts.push('motiv');
+    else if (this.showMotivCard) parts.push('motiv', ...this._urlTabPart('motiv'));
     else if (this.showWorldFactsCard) parts.push('fakten');
     else if (this.showRechercheCard) parts.push('recherche');
     else if (this.showIdeenBoardCard) parts.push('ideen');
@@ -92,20 +94,33 @@ export const hashBuildMethods = {
     else if (this.showFehlerHeatmapCard) parts.push('fehler');
     else if (this.showBuchlandkarteCard) parts.push(
       { redundanz: 'redundanz', matrix: 'buchverlauf' }[this.buchlandkarteTab] || 'landkarte');
-    else if (this.showWortschatzCard) parts.push('wortschatz');
+    else if (this.showWortschatzCard) parts.push('wortschatz', ...this._urlTabPart('wortschatz'));
     else if (this.showStrukturCard) parts.push('struktur');
     else if (this.showTitelwerkstattCard) parts.push('titel');
-    else if (this.showBookSettingsCard) parts.push('einstellungen');
+    else if (this.showBookSettingsCard) parts.push('einstellungen', ...this._urlTabPart('bookSettings'));
     else if (this.showFinetuneExportCard) parts.push('finetune');
     else if (this.showSnapshotsCard) parts.push('fassungen');
     else if (this.showExportCard) parts.push('export');
-    else if (this.showPdfExportCard) parts.push('pdf');
-    else if (this.showEpubExportCard) parts.push('epub');
-    else if (this.showDocxExportCard) parts.push('docx');
+    else if (this.showPdfExportCard) parts.push('pdf', ...this._urlTabPart('pdfExport'));
+    else if (this.showEpubExportCard) parts.push('epub', ...this._urlTabPart('epubExport'));
+    else if (this.showDocxExportCard) parts.push('docx', ...this._urlTabPart('docxExport'));
     else if (this.showBookOrganizerCard) parts.push('organize');
     else if (this.showBookEditorCard) parts.push('bucheditor');
     else if (this.showShareLinksCard) parts.push('share');
     return '#' + parts.join('/');
+  },
+
+  // Reiter-Permalink (URL_TABS): aktiver Reiter der Karte als letztes Segment,
+  // der Grund-Reiter bleibt weg. Reiter-Wechsel = gleiche Kategorie → replace.
+  _urlTabPart(cardKey) {
+    const spec = URL_TABS[cardKey];
+    const tab = spec && this.$store.nav.cardTab[spec.request];
+    return tab && tab !== spec.default && spec.tabs.includes(tab) ? [tab] : [];
+  },
+
+  _urlTabSuffix(cardKey) {
+    const part = this._urlTabPart(cardKey);
+    return part.length ? '/' + part[0] : '';
   },
 
   _hashCategory(hash) {
@@ -113,6 +128,8 @@ export const hashBuildMethods = {
     const parts = hash.replace(/^#/, '').split('/').filter(Boolean);
     if (parts[0] === 'profil') return 'profil';
     if (parts[0] === 'meine-statistik') return 'meine-statistik';
+    if (parts[0] === 'autorenprofil') return 'autorenprofil';
+    if (parts[0] === 'meine-buecher') return 'meine-buecher';
     if (parts[0] === 'hilfe') return 'hilfe';
     if (parts[0] === 'erste-schritte') return 'erste-schritte';
     if (parts[0] === 'search') return 'search';

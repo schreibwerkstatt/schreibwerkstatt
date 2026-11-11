@@ -37,7 +37,7 @@
     </div>
   </div>
 
-  <div x-show="myStatsLoading" class="muted-msg" x-text="$app.t('common.loading')"></div>
+  <div x-show="myStatsLoading" x-skeleton="4" x-cloak></div>
   <p x-show="myStatsError" x-cloak class="card-form-error" x-text="myStatsError"></p>
   <p x-show="myStatsIsEmpty" x-cloak class="muted-msg" x-text="$app.t('mystats.empty')"></p>
 

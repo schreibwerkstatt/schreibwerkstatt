@@ -29,6 +29,7 @@ export function registerAdminBackupCard() {
         name: 'adminBackup',
         refreshNeedsBookId: false,
         onCardRefresh: () => this.backupRefresh(),
+        wake: () => this._backupLoadInfo({ silent: true }),
         onViewReset: () => {
           this.backupInitialized = false;
           this.backupInfoData = null;

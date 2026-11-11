@@ -83,6 +83,7 @@ export function registerBookOverviewCard() {
         // `fresh` umgeht zusaetzlich den geteilten Stats-/Settings-Cache im
         // progress-Store — sonst waere „nochmal laden" ein Cache-Treffer.
         onCardRefresh: () => this.loadBookOverview(Alpine.store('nav').selectedBookId, { fresh: true }),
+        wake: () => this.loadBookOverview(Alpine.store('nav').selectedBookId, { fresh: true, silent: true }),
       });
 
       this._dayTimer = setInterval(() => {

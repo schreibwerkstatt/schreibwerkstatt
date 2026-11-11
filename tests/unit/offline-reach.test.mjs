@@ -4,10 +4,14 @@
 //   - die Suche läuft ohne Verbindung über die abgelegten Abschnitte (shared/offline-search.js).
 //
 // DIE INVARIANTEN:
-//   1. Gewünscht ist „angeheftet ∪ zuletzt geöffnet"; die Automatik ist per
-//      Default an und abschaltbar. Was der SW darüber hinaus hält, ist „stale".
-//   2. Ein Buchwechsel synct das neue Buch und räumt das vorige — ausser es
-//      ist angeheftet. Vor Kenntnis von Konto UND SW-Bestand wird nichts geräumt.
+//   1. Gewünscht ist „angeheftet ∪ zuletzt geöffnet" (die letzten
+//      AUTO_OFFLINE_MAX Bücher); die Automatik ist per Default an und
+//      abschaltbar. Was der SW darüber hinaus hält, ist „stale".
+//   2. Ein Buchwechsel synct das neue Buch und räumt das älteste über dem
+//      Deckel — ausser es ist angeheftet. Vor Kenntnis von Konto UND
+//      SW-Bestand wird nichts geräumt, ohne Verbindung nie.
+//   2a. Zwei Tabs mit je einem Buch räumen sich gegenseitig nichts weg; die
+//      Absicht wird vor dem Abgleich frisch aus localStorage gelesen.
 //   3. Ohne Verbindung wirft der Riegel für Job-Start/Diktat/Vorlesen/LT/Suche,
 //      meldet aber nur die ausdrücklichen Aktionen. Saves und Content-Reads
 //      laufen nie hinein.
@@ -33,10 +37,17 @@ const net = await import('../../public/js/app/boot/net-required.js');
 const search = await import('../../public/js/shared/offline-search.js');
 
 test('desiredOfflineBooks: angeheftet ∪ zuletzt geöffnet, Automatik abschaltbar', () => {
-  assert.deepEqual(books.desiredOfflineBooks(['1', 2], { enabled: true, bookId: '3' }).sort(), ['1', '2', '3']);
-  assert.deepEqual(books.desiredOfflineBooks(['1'], { enabled: true, bookId: 1 }), ['1']);
-  assert.deepEqual(books.desiredOfflineBooks(['1'], { enabled: false, bookId: '3' }), ['1']);
-  assert.deepEqual(books.desiredOfflineBooks([], { enabled: true, bookId: null }), []);
+  assert.deepEqual(books.desiredOfflineBooks(['1', 2], { enabled: true, bookIds: ['3', '4'] }).sort(), ['1', '2', '3', '4']);
+  assert.deepEqual(books.desiredOfflineBooks(['1'], { enabled: true, bookIds: ['1'] }), ['1']);
+  assert.deepEqual(books.desiredOfflineBooks(['1'], { enabled: false, bookIds: ['3'] }), ['1']);
+  assert.deepEqual(books.desiredOfflineBooks([], { enabled: true, bookIds: [] }), []);
+});
+
+test('noteAutoBook: neuestes vorne, ohne Doppel, gedeckelt', () => {
+  assert.equal(books.AUTO_OFFLINE_MAX, 2);
+  assert.deepEqual(books.noteAutoBook(['1'], 2), ['2', '1']);
+  assert.deepEqual(books.noteAutoBook(['2', '1'], '1'), ['1', '2']);
+  assert.deepEqual(books.noteAutoBook(['2', '1'], '3'), ['3', '2']);
 });
 
 test('staleOfflineBooks: was der SW hält, aber niemand will', () => {
@@ -46,15 +57,22 @@ test('staleOfflineBooks: was der SW hält, aber niemand will', () => {
 
 test('readOfflineAuto: Default an, pro Konto getrennt', () => {
   store.clear();
-  assert.deepEqual(books.readOfflineAuto('a@x'), { enabled: true, bookId: null });
-  books.writeOfflineAuto('a@x', { enabled: false, bookId: 7 });
-  assert.deepEqual(books.readOfflineAuto('a@x'), { enabled: false, bookId: '7' });
-  assert.deepEqual(books.readOfflineAuto('b@x'), { enabled: true, bookId: null });
+  assert.deepEqual(books.readOfflineAuto('a@x'), { enabled: true, bookIds: [] });
+  books.writeOfflineAuto('a@x', { enabled: false, bookIds: [7] });
+  assert.deepEqual(books.readOfflineAuto('a@x'), { enabled: false, bookIds: ['7'] });
+  assert.deepEqual(books.readOfflineAuto('b@x'), { enabled: true, bookIds: [] });
+  // Älterer Stand mit Einzel-Merker wird gelesen.
+  localStorage.setItem(books.offlineAutoKey('c@x'), JSON.stringify({ enabled: true, bookId: 5 }));
+  assert.deepEqual(books.readOfflineAuto('c@x'), { enabled: true, bookIds: ['5'] });
 });
 
 // Root-Methoden gegen eine Attrappe: Store + SW-Controller, der Nachrichten mitschreibt.
-function fakeRoot({ pinned = [], auto = { enabled: true, bookId: null }, held = {} } = {}) {
+function fakeRoot({ pinned = [], auto = { enabled: true, bookIds: [] }, held = {} } = {}) {
   const posted = [];
+  // Die Absicht liegt in localStorage — der Abgleich liest sie dort frisch.
+  books.writePinned('a@x', pinned);
+  books.writeOfflineAuto('a@x', auto);
+  auto = books.readOfflineAuto('a@x');
   setNavigator({
     onLine: true,
     serviceWorker: { controller: { postMessage: (m) => posted.push(m) } },
@@ -75,19 +93,47 @@ function fakeRoot({ pinned = [], auto = { enabled: true, bookId: null }, held = 
   return { root, posted };
 }
 
-test('Buchwechsel: neues Buch wird abgelegt, das vorige geräumt', () => {
+test('Buchwechsel: neues Buch wird abgelegt, das älteste über dem Deckel geräumt', () => {
   store.clear();
-  const { root, posted } = fakeRoot({ auto: { enabled: true, bookId: '1' }, held: { 1: { at: 'x' } } });
-  root._noteBookOpenedForOffline(2);
-  assert.equal(root.$store.session.offlineAuto.bookId, '2');
-  assert.deepEqual(books.readOfflineAuto('a@x').bookId, '2');
-  assert.ok(posted.some((m) => m.type === 'offline-book-remove' && m.bookId === '1'), 'voriges Buch geräumt');
-  assert.ok(posted.some((m) => m.type === 'offline-book-sync' && m.bookId === '2'), 'neues Buch gesynct');
+  const { root, posted } = fakeRoot({ auto: { enabled: true, bookIds: ['2', '1'] }, held: { 1: { at: 'x' }, 2: { at: 'x' } } });
+  root._noteBookOpenedForOffline(3);
+  assert.deepEqual(root.$store.session.offlineAuto.bookIds, ['3', '2']);
+  assert.deepEqual(books.readOfflineAuto('a@x').bookIds, ['3', '2']);
+  assert.deepEqual(posted.filter((m) => m.type === 'offline-book-remove').map((m) => m.bookId), ['1'], 'nur das älteste geräumt');
+  assert.ok(posted.some((m) => m.type === 'offline-book-sync' && m.bookId === '3'), 'neues Buch gesynct');
+});
+
+test('Zwei Tabs mit je einem Buch räumen sich nichts weg', () => {
+  store.clear();
+  // Tab A hat Buch 1 offen, Tab B (gleiches Gerät, gleicher localStorage) Buch 2.
+  const a = fakeRoot({ auto: { enabled: true, bookIds: ['1'] }, held: { 1: { at: 'x' } } });
+  const tabA = a.root;
+  const b = fakeRoot({ auto: { enabled: true, bookIds: ['1'] }, held: { 1: { at: 'x' } } });
+  b.root._noteBookOpenedForOffline(2);
+  // Tab A kennt in seinem Store noch den alten Stand; sein Abgleich liest frisch.
+  tabA.$store.session.offlineBooks = { 1: { at: 'x' }, 2: { at: 'y' } };
+  tabA._syncOfflineBooks();
+  assert.ok(!b.posted.some((m) => m.type === 'offline-book-remove'), 'Tab B räumt Buch 1 nicht');
+  assert.ok(!a.posted.some((m) => m.type === 'offline-book-remove'), 'Tab A räumt Buch 2 nicht');
+});
+
+test('Buchwechsel ohne Netz: voriges Buch bleibt bis zum nächsten Online-Sync', () => {
+  store.clear();
+  const { root, posted } = fakeRoot({ auto: { enabled: true, bookIds: ['2', '1'] }, held: { 1: { at: 'x' } } });
+  navigator.onLine = false;
+  root._noteBookOpenedForOffline(3);
+  assert.deepEqual(root.$store.session.offlineAuto.bookIds, ['3', '2'], 'Absicht folgt dem Wechsel');
+  assert.equal(posted.length, 0, 'offline weder geräumt noch gesynct');
+  assert.ok(root.$store.session.offlineBooks['1'], 'Kopie des vorigen Buchs bleibt');
+  navigator.onLine = true;
+  root._syncOfflineBooks();
+  assert.deepEqual(posted.map((m) => [m.type, m.bookId]),
+    [['offline-book-remove', '1'], ['offline-book-sync', '3'], ['offline-book-sync', '2']]);
 });
 
 test('Buchwechsel: angeheftetes Vorgängerbuch bleibt', () => {
   store.clear();
-  const { root, posted } = fakeRoot({ pinned: ['1'], auto: { enabled: true, bookId: '1' }, held: { 1: { at: 'x' } } });
+  const { root, posted } = fakeRoot({ pinned: ['1'], auto: { enabled: true, bookIds: ['1'] }, held: { 1: { at: 'x' } } });
   root._noteBookOpenedForOffline(2);
   assert.ok(!posted.some((m) => m.type === 'offline-book-remove'));
 });
@@ -105,7 +151,7 @@ test('Abgleich wartet auf Konto UND SW-Bestand', () => {
 
 test('Automatik aus: das automatisch abgelegte Buch fällt', () => {
   store.clear();
-  const { root, posted } = fakeRoot({ auto: { enabled: true, bookId: '5' }, held: { 5: {} } });
+  const { root, posted } = fakeRoot({ auto: { enabled: true, bookIds: ['5'] }, held: { 5: {} } });
   root.setOfflineAutoEnabled(false);
   assert.equal(books.readOfflineAuto('a@x').enabled, false);
   assert.deepEqual(posted.map((m) => [m.type, m.bookId]), [['offline-book-remove', '5']]);
@@ -113,7 +159,7 @@ test('Automatik aus: das automatisch abgelegte Buch fällt', () => {
 
 test('Anheftung aufheben: zuletzt geöffnetes Buch bleibt über die Automatik liegen', () => {
   store.clear();
-  const { root, posted } = fakeRoot({ pinned: ['5'], auto: { enabled: true, bookId: '5' }, held: { 5: {} } });
+  const { root, posted } = fakeRoot({ pinned: ['5'], auto: { enabled: true, bookIds: ['5'] }, held: { 5: {} } });
   root._unpinOfflineBook('5');
   assert.deepEqual(root.$store.session.offlinePinned, []);
   assert.ok(!posted.some((m) => m.type === 'offline-book-remove'));

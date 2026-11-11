@@ -45,6 +45,15 @@ Drei Felder ausser den Befunden: `szenen` (benotete Textbausteine), `stilanalyse
 
 `szenen` ist ein Persistenzformat (`page_checks.szenen_json`, drei Spalten `titel`/`wertung`/`kommentar`), dessen **Inhalt** vom Buchtyp abhängt: `szene` (erzählende Werke), `teilschritt` (Sachbuch, Essay, Blog, Wissenschaft, Journalismus), `eintrag` (Tagebuch). Die Form bleibt, die Frage an `wertung` wechselt — ein Tagebucheintrag wird nicht an Spannung und Figurenentwicklung gemessen, sondern daran, ob seine Stimme trägt. Achse: `lektoratEinheit` in [lektorat-typen.js](../public/js/prompts/lektorat-typen.js), Feldtexte im `SZENEN_FELD`-SSoT in [lektorat.js](../public/js/prompts/lektorat.js). Die Spaltennamen bleiben aus Kompatibilitätsgründen `szene-*`/`wertung`, auch wenn der Buchtyp keine Szene mehr meint; der Panel-Heading ist deshalb bewusst nicht buchtyp-skopiert (eine Migration, nur für ein Überschrift-Wort, wäre unverhältnismässig).
 
+### Welt-Fakten als Prüfgrundlage
+
+Zwei Typen des erzählenden Profils messen am Welt-Fakten-Index der Komplettanalyse ([komplett.md](komplett.md#welt-fakten-wer-den-index-liest)): **`weltfakt`** (Aussage widerspricht einem etablierten Fakt — Zahl, Lage, Regel der Welt, Zustand) und **`soziolekt`** (direkte Rede fällt ohne Anlass aus dem erfassten Register der Figur). Auswahl je Abschnitt in [lib/lektorat-weltfakten.js](../lib/lektorat-weltfakten.js): Fakten, deren Subjekt im Text steht (vor denen, die nur am Kapitel hängen), gedeckelt auf 40 Fakten / 4 000 Zeichen, dazu höchstens 12 `soziolekt`-Fakten der Figuren im Text. Regel- und Kontextblöcke: [blocks-welt.js](../public/js/prompts/blocks-welt.js).
+
+- **Ohne passenden Fakt gibt es den Typ nicht:** kein Kontext, kein Regelblock, und `checkOnePage` streicht ihn aus den gültigen Typen — ein Befund ohne Grundlage wäre geraten.
+- **Fakten aus diesem Abschnitt selbst fallen weg** (`seite` = Abschnittsname): ein Widerspruch zum eigenen, früher extrahierten Stand ist eine Überarbeitung, kein Fehler.
+- **Beide sind weich** (nie vorausgewählt): der Index ist KI-extrahiert, kein Kanon — ob Text oder Fakt veraltet ist, entscheidet der Autor; die `erklaerung` nennt den Fakt und lässt das offen. `weltfakt` ist ein Konsistenz-Befund (nie gekappt), `soziolekt` ein Ermessensbefund (unter Schwere-Schwelle und Obergrenze). Beide laufen im Stil-Pass, nicht im Objektiv-Pass; lokal gibt es sie nicht.
+- **Cache:** die ausgewählten Fakten gehen als `wf`/`sz` in die Signatur, nur wenn vorhanden — Abschnitte ohne Welt-Bezug behalten ihren Cache.
+
 ### Buch-Lektorat
 
 Mit `chapter_id` prüft derselbe Job nur die Abschnitte dieses Kapitels samt aller Unterkapitel, in Lesereihenfolge (`chapterPages` über `bookOutline`); der Nachbarkontext bleibt buchweit. Einstieg: Kontextmenü am Kapitelkopf in der Sidebar und Mehr-Menü der Kapitelansicht (`batchCheck(chapterId)`). Dedup bleibt pro Buch und User — es läuft höchstens ein Serien-Lauf, ein zweiter Start hängt sich an den laufenden.
@@ -68,7 +77,7 @@ Code: [public/js/editor/lektorat.js](../public/js/editor/lektorat.js) (Workflow)
 | Klasse | Typen | Vorausgewählt | Farbe |
 |---|---|---|---|
 | hart | Mechanik + Konsistenz/Form (rechtschreibung, grammatik, dialogformat, namens-/figuren-/schauplatzmerkmal, anrede, begriffsinkonsistenz, autorenform, konjunktiv) | ja | rot |
-| weich | `stil` + `SOFT_TYPEN` (Stil, Handwerk, hedging, Tempus-/Perspektivbruch) | nein | orange |
+| weich | `stil` + `SOFT_TYPEN` (Stil, Handwerk, hedging, Tempus-/Perspektivbruch, weltfakt, soziolekt) | nein | orange |
 | redaktionell | `EDITORIAL_TYPEN`: unbelegt, zuschreibung, wertung | **nie** | wertfrei (Akzent-Kante, `badge-neutral`) |
 
 **Ausnahme früher abgelehnt:** hat der Autor im Vorlauf Korrekturen übernommen, einen Befund aber stehen lassen, und meldet der neue Lauf dieselbe Stelle mit demselben Typ, trägt der Befund `abgelehnt: true` ([lib/lektorat-progress.js](../lib/lektorat-progress.js)#`markPreviouslyRejected`, Job `markRejectedSincePrevious`): nicht vorausgewählt, Tag „früher abgelehnt". Ohne Übernahme im Vorlauf ist nichts entschieden (die Liste kann nur geschlossen worden sein) — dann bleibt alles unmarkiert. Transient, nur im Job-Ergebnis.

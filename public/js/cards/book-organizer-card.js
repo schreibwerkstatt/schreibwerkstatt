@@ -96,6 +96,9 @@ export function registerBookOrganizerCard() {
           await ctx._rerender();
           ctx.loadRedaktion();
         },
+        // Tab-Rueckkehr: der Wake-`loadPages` feuert `pages:loaded` (Listener
+        // unten) — ein zweiter Neuaufbau hier waere doppelt.
+        wake: 'skip',
         onViewReset: (e, ctx) => {
           ctx.cancelBookMove();
           ctx._destroySortables();

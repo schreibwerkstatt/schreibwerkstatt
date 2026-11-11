@@ -17,6 +17,8 @@
 // `/me/books` — zusammengefuehrt in my-books-compute.js.
 
 import { setupCardLifecycle } from './card-lifecycle.js';
+import { CARD_REQUEST } from './card-request.js';
+import { sameData } from '../utils/same-data.js';
 import { localeTag, tzOpts, formatIsoDay, CHARS_PER_NORMSEITE } from '../utils.js';
 import {
   SHELF_TABS, mergeShelfRows, filterShelfRows, pinnedFirst, shelfTotals, mayToggleFinished,
@@ -42,7 +44,10 @@ export function registerMyBooksCard() {
       this._lifecycle = setupCardLifecycle(this, {
         name: 'myBooks',
         refreshNeedsBookId: false,
+        showFlag: 'showMyBooksCard',
+        tabRequest: { key: CARD_REQUEST.MY_BOOKS_TAB, apply: (tab) => { this.myBooksTab = tab; }, current: () => this.myBooksTab },
         onCardRefresh: () => this.loadMyBooks(),
+        wake: () => this.loadMyBooks({ silent: true }),
       });
     },
 
@@ -50,23 +55,29 @@ export function registerMyBooksCard() {
       this._lifecycle?.destroy();
     },
 
-    async loadMyBooks() {
-      this.myBooksLoading = true;
-      this.myBooksError = '';
+    /** `silent`: Tab-Rueckkehr — Tabelle bleibt stehen (kein Lade-Tausch per
+     *  `x-if`), gleiche Zeilen werden verworfen, ein Fehler aendert nichts. */
+    async loadMyBooks({ silent = false } = {}) {
+      if (!silent) {
+        this.myBooksLoading = true;
+        this.myBooksError = '';
+      }
       try {
         const r = await fetch('/me/books', { credentials: 'same-origin' });
         if (!r.ok) throw new Error('HTTP ' + r.status);
         const data = await r.json();
-        this.myBooksRows = mergeShelfRows(
+        const rows = mergeShelfRows(
           data.books || [],
           window.__app.$store.nav.books || [],
           this._categoryNames(),
         );
+        if (!silent || !sameData(rows, this.myBooksRows)) this.myBooksRows = rows;
       } catch (e) {
+        if (silent) return;
         this.myBooksError = window.__app.t('common.errorColon') + e.message;
         this.myBooksRows = [];
       } finally {
-        this.myBooksLoading = false;
+        if (!silent) this.myBooksLoading = false;
       }
     },
 

@@ -27,6 +27,16 @@
       </div>
     </div>
     <div class="card-header-aside">
+      <!-- Konsistenz-Prüfung: beschrifteter Knopf abseits der Icon-Gruppe, weil er
+           einen kostenpflichtigen KI-Lauf startet (Rückfrage in confirmRunConsistency)
+           und als Icon neben «Verankern» mit «neu laden» verwechselt wurde. -->
+      <button type="button" class="btn-compact"
+              @click="confirmRunConsistency()"
+              :disabled="consistencyLoading || !beats.length"
+              :data-tip="$app.t('plot.consistency.runTip')">
+        <span x-show="consistencyLoading" class="spinner"></span>
+        <span x-text="$app.t('plot.consistency.runLabel')"></span>
+      </button>
       <div class="card-actions card-actions--grouped">
         <!-- Undo/Redo (max 10 Schritte, book/plot/history.js) -->
         <button type="button" class="icon-btn icon-btn--ghost" @click="plotHistoryUndo()"
@@ -35,13 +45,6 @@
         <button type="button" class="icon-btn icon-btn--ghost" @click="plotHistoryRedo()"
                 :disabled="!_redoStack.length || busy"
                 :data-tip="$app.withHotkey($app.t('plot.history.redoTip'), 'redo')" :aria-label="$app.t('plot.history.redo')"><svg class="icon" aria-hidden="true"><use href="/icons.svg#redo"/></svg></button>
-        <button type="button" class="icon-btn icon-btn--ghost"
-                @click="runConsistency()"
-                :disabled="consistencyLoading || !beats.length"
-                :data-tip="$app.t('plot.consistency.run')" :aria-label="$app.t('plot.consistency.run')">
-          <span x-show="consistencyLoading" class="spinner"></span>
-          <svg x-show="!consistencyLoading" class="icon" aria-hidden="true"><use href="/icons.svg#rotate-cw"/></svg>
-        </button>
         <!-- Beat-Verankerung: findet je Beat die Fundstellen im Buchtext (Ist-Index
              via semantische Suche/FTS, kein callAI) → Drift-Badges auf den Karten.
              Achtungs-Punkt (icon-btn--attention), wenn der Ist-Index veraltet ist. -->
@@ -92,7 +95,7 @@
   <div x-show="errorMessage" class="card-status card-status--error" x-text="errorMessage"></div>
 
   <!-- Skeleton -->
-  <div x-show="loading && !acts.length" class="card-status" x-text="$app.t('plot.loading')"></div>
+  <div x-show="loading && !acts.length" x-skeleton="4" x-cloak></div>
 
   <!-- Beat-Verankerungs-Lauf (Ist-Index gegen den Buchtext) -->
   <div x-show="anchorLoading" class="card-status" x-html="anchorStatus || $app.t('plot.anchor.running')"></div>

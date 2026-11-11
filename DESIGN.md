@@ -39,6 +39,7 @@ Token-Referenz (Farben, Radien, Spacing, Schriftgrössen): [public/css/tokens.cs
 - [Setting-Field](#setting-field-settingfield) — ein Admin-Settings-Feld deklarativ
 - [Tabs / Modus-Toggle](#tabs--modus-toggle) — `.tabs` + `.tabs-btn`
 - [Form-Patterns](#form-patterns-settings--und-export-karten) — `.card-form-grid` + Wertspalten
+- [Schlagwort-Eingabe](#schlagwort-eingabe-taginput) — `tagInput`: freie Schlagworte als Chips mit Vorschlägen (Quellen, Recherche)
 - [Progress-Bar](#progress-bar) — `--progress` Custom-Prop
 - [Sequenz-Band](#sequenz-band-stil-rhythm-band) — lange Zahlenfolge in ihrer Reihenfolge (Satzrhythmus)
 - [Rangliste mit Balken](#rangliste-mit-balken-stil-opener-list) — Top-N ohne Tabelle
@@ -372,7 +373,7 @@ Dieselbe Mechanik gilt fuer Bausteine, die kein `.card-section` sind, aber aufei
 
 **Grösse muss mit umliegenden Form-Elementen matchen** — Combobox in Zeile mit `<input>`/`<button>` MUSS dieselbe Geometrie haben. Helper ist per Default **compact**; neben default-Input/Button → Object-Form `combobox({ placeholder, compact: false })`. Details + Compact-/Default-Sets siehe [Regel: Gleiche Höhe pro Form-Zeile](#regel-gleiche-höhe-pro-form-zeile). **Innerhalb `.card-form-row`** rendert auch eine compact-Combobox automatisch in Feldgrösse (volle Höhe + Surface-Hintergrund), damit sie zu den `<input>`-Feldern derselben Form passt — CSS-Override in `combobox.css`, kein Per-Call-Flag nötig.
 
-**Mobile = am Trigger verankert wie Desktop** — das Dropdown öffnet auf allen Geräten direkt unter dem Trigger (x-anchor, Flip nach oben wenn unten kein Platz). Kein Bottom-Sheet, kein Backdrop — das Popup bleibt im Kontext des angetippten Felds. Auf Touch (`innerWidth <= 600` **oder** `(hover: none) and (pointer: coarse)` — letzteres erfasst Tablets/breite Phones) wird **nicht** auto-fokussiert: der Fokus würde die Bildschirm-Tastatur öffnen, deren `resize` das verankerte Popup verschöbe; die Liste ist auch ohne Fokus voll bedienbar (`_isMobile()` in `combobox.js` steuert nur diesen Auto-Fokus-Skip). Lange Labels wrappen auf `max-width: 600px` statt zu ellipsen, und das Suchfeld nutzt dort `font-size: 16px` (verhindert iOS-Zoom).
+**Mobile = am Trigger verankert wie Desktop** — das Dropdown öffnet auf allen Geräten direkt unter dem Trigger (x-anchor, Flip nach oben wenn unten kein Platz). Kein Bottom-Sheet, kein Backdrop — das Popup bleibt im Kontext des angetippten Felds. Auf Touch (`innerWidth <= 600` **oder** `(hover: none) and (pointer: coarse)` — letzteres erfasst Tablets/breite Phones) wird **nicht** auto-fokussiert: der Fokus würde die Bildschirm-Tastatur öffnen, deren `resize` das verankerte Popup verschöbe; die Liste ist auch ohne Fokus voll bedienbar (`_isMobile()` in `combobox.js` steuert diesen Auto-Fokus-Skip). Tippt der User auf Touch selbst ins Suchfeld, schliesst ein Scroll ausserhalb die Liste nicht — das ist der Browser, der das Feld über die Tastatur schiebt; x-anchor führt nach. Touch-Verhalten allgemein: [Touch](#touch-ipad-tablets-phones). Lange Labels wrappen auf `max-width: 600px` statt zu ellipsen, und das Suchfeld nutzt dort `font-size: 16px` (verhindert iOS-Zoom).
 
 **Positionierung via x-anchor (Floating UI)** — das Popup wird über `x-anchor:bottom-start.fixed="$refs.cbTrigger"` am Trigger verankert (Desktop wie Mobile). `.fixed` = `position: fixed`-Strategie (entkommt overflow-clippenden Vorfahren), Flip nach oben passiert automatisch wenn unten kein Platz ist, und Floating UIs `autoUpdate` zieht das Popup bei Scroll **nach** (kein Close-on-Scroll mehr). Nur die Mindestbreite wird selbst gesetzt (`ddWidth` als `min-width`, = Trigger-Breite, min. 180px compact); längere Labels (Kapitel-Satztitel) verbreitern die Liste bis `max-width: min(28rem, 100vw − Rand)` ([combobox.css](public/css/components/combobox.css)); am Viewport-Rand rückt Floating UI (shift) sie ein. Plugin: `vendor/alpine-anchor-3.17.5.min.js`, geladen vor dem Alpine-Core. **`.fixed` gibt es erst ab anchor 3.15.x** — ältere Builds hardcoden `position: absolute`. **Voraussetzung:** kein Vorfahr darf `transform`/`will-change`/`contain` tragen — das etabliert einen Containing-Block für das `position: fixed`-Popup, dessen viewport-relative Koordinaten dann falsch liegen (landet in der Karte statt am Trigger); `.card` nutzt darum `animation-fill-mode: backwards`, nicht `both`.
 
@@ -676,7 +677,7 @@ Betrifft jeden Knopf mit eigenem `transform`. Wer den Druck-Effekt gar nicht wil
 - **Schliessen = immer `x`** (Sprite), nie `×`/`&#x2715;`/Text-„Schliessen". Siehe Icon-Liste unten.
 - **Destruktiv** (Löschen) = `trash`; **Entfernen/Chip/Dismiss** = `x`. Andere Semantik als Schliessen.
 - **Bündel-Trenner = `.action-sep`** (siehe [Aktions-Trennstrich](#aktions-trennstrich-action-sep--ssot-für-gebündelte-aktionsreihen)). Zerfällt eine Icon-Aktionsreihe semantisch (z.B. „Form bestätigen/abbrechen" ↔ „Datensatz verwerfen/löschen"), trennt **ausschliesslich** `<span class="action-sep" aria-hidden="true">` die Bündel — nie ein `border`-Hack oder `<hr>` pro Feature.
-- **Einheitliche Glyph-Grösse** für Icon-only Action-/Close-Buttons: `<svg.icon>` ist per Default `1em`, würde also mit der font-size jedes Buttons driften (Card-Close 18px, Toast 16px, Find 15px …). Darum normalisiert [components/icon-btn.css](public/css/components/icon-btn.css) die Glyph-Grösse aller Icon-only Action-/Close-Buttons auf `var(--icon-size-action)` (Token in [tokens/typography.css](public/css/tokens/typography.css)) — desktop wie mobil (wo der Tap-Target auf 40px wächst, das Glyph aber gleich bleibt). Neuer Icon-only Close-/Action-Button → in die Selektor-Liste dort aufnehmen. Invariante (coarse-Tap-Target-Set ⊆ Glyph-Norm-Set) gegatet durch [tests/unit/icon-size-consistency.test.mjs](tests/unit/icon-size-consistency.test.mjs).
+- **Einheitliche Glyph-Grösse** für Icon-only Action-/Close-Buttons: `<svg.icon>` ist per Default `1em`, würde also mit der font-size jedes Buttons driften (Card-Close 18px, Toast 16px, Find 15px …). Darum normalisiert [components/icon-btn.css](public/css/components/icon-btn.css) die Glyph-Grösse aller Icon-only Action-/Close-Buttons auf `var(--icon-size-action)` (Token in [tokens/typography.css](public/css/tokens/typography.css)) — auf Desktop und Touch gleich, die Knöpfe wachsen auf Touch nicht ([Touch](#touch-ipad-tablets-phones)). Neuer Icon-only Close-/Action-Button → in die Selektor-Liste dort aufnehmen. Gegatet durch [tests/unit/icon-size-consistency.test.mjs](tests/unit/icon-size-consistency.test.mjs).
 - **Reaktive Icons** via `<use :href="…">`, nie `x-text` (killt das SVG).
 - **Verboten:** Unicode-Glyphen als Icon-Inhalt eines Buttons (`× ✕ ↑ ↓ ← → ⤢ ⛶ …`). Ausnahme nur als visuell versteckter Fallback in `.history-chevron`-SPANs (kein Button).
 - **Neue Aktion** → erst Icon-Map (Icon-System + Icon-Button) prüfen/erweitern, Sprite-Symbol in [public/icons.svg](public/icons.svg) ergänzen, `SHELL_CACHE` bumpen.
@@ -1089,6 +1090,27 @@ Pflicht-Pattern (Wrapper-Div leer lassen, nur Attribute setzen):
 
 Referenz: [user-settings.html](public/partials/user-settings.html), [book-settings.html](public/partials/book-settings.html) (plain), [folder-import.html](public/partials/folder-import.html) (Variante `card` + `disabled`).
 
+### Schlagwort-Eingabe (`tagInput`)
+
+**Use:** ein Formular setzt freie Schlagworte an **einem** Objekt (Quelle, Recherche-Fundstück). Gesetzte Schlagworte stehen als entfernbare Chips über dem Feld, darunter Vorschläge aus dem Pool des Objekts (Bibliothek bzw. Buch), gefiltert nach der laufenden Eingabe. **Nicht** für Filter (Combobox) und nicht für Sammelaktionen (Auswahl-Leiste).
+
+**Mechanik:** `Alpine.data('tagInput')` aus [public/js/tag-input.js](public/js/tag-input.js), selbst-rendernd wie `combobox` — Wrapper leer lassen, nur Attribute. Enter oder Komma übernimmt (IME-sicher), Backspace im leeren Feld nimmt das letzte weg; getippter, nicht bestätigter Text geht beim Verlassen des Felds und bei Cmd/Ctrl+S mit, damit Speichern nichts still verwirft. Normalisierung (`normalizeTags`: getrimmt, ohne Dubletten unabhängig von Gross-/Kleinschreibung, gedeckelt) ist dieselbe, die die Karte vor dem Speichern anwendet.
+
+```html
+<div x-id="['fld']" class="card-form-row card-form-row--top">
+  <span :id="$id('fld')" class="card-form-label" x-text="$app.t('…tags')"></span>
+  <div class="card-form-field">
+    <div :aria-labelledby="$id('fld')"
+         x-data="tagInput({ max: 20, maxLen: 40, placeholder: $app.t('…'), label: $app.t('…') })"
+         x-modelable="tags" x-model="draft.tags"
+         x-effect="pool = tagPool.map(r => r.tag)"></div>
+    <p class="card-form-field-note" x-text="$app.t('…hint')"></p>
+  </div>
+</div>
+```
+
+**Karte liefert:** das Draft-Feld (Array), den Pool (Strings, per `x-effect`), die Deckel ihres Servers (`max`, `maxLen`). **Optik:** [components/tag-input.css](public/css/components/tag-input.css) (`.tag-input`, `-chips`, `-chip`, `-chip-remove`, `-field`, `-suggest`, `-suggestion`). Konsumenten: Quellen-Formular ([sources-form.html](public/partials/sources-form.html)), Recherche-Formular ([recherche-form-fields.html](public/partials/recherche-form-fields.html)). Gegated: [tag-input-single-place.test.mjs](tests/unit/tag-input-single-place.test.mjs).
+
 ### Toggle-Switch (`toggleSwitch`)
 
 **Regel:** Boolean-Einstellungen (An/Aus-Schalter) nutzen ausschliesslich `Alpine.data('toggleSwitch')` aus [public/js/toggle-switch.js](public/js/toggle-switch.js). **Kein handgeschriebenes `<label class="checkbox-row"><input type="checkbox" :checked=… @change=…><span>…</label>`** mehr — sonst driften Coercion (`=== true || === 'true'`), Geometrie und a11y pro Karte auseinander. Bei Berührung einer bestehenden Checkbox-Zeile: mitziehen.
@@ -1420,17 +1442,18 @@ CSS: [public/css/entities/entity-list.css](public/css/entities/entity-list.css).
 
 **Markup** (Liste, [recherche-item.html](public/partials/recherche-item.html)):
 ```html
-<button type="button" class="research-item-title" @click="openDetail(item)"
+<button type="button" class="research-item-title text-link" @click="bulkMode ? toggleSelect(item.id) : openDetail(item)"
         x-text="item.title || kindLabel(item.kind)"></button>
-<div class="research-item-text" x-show="item.body" x-text="item.body"></div>
+<div class="research-item-text" x-show="item.body" x-html="itemBodyHtml(item)"></div>
 ```
 
 **Klassen** [entities/recherche/board.css](public/css/entities/recherche/board.css) + [entities/recherche/dialog.css](public/css/entities/recherche/dialog.css):
-- `.research-item-text` — der Anriss: fester `-webkit-line-clamp` (3) + `overflow: hidden`
+- `.research-item-text` — der Anriss: fester `-webkit-line-clamp` (3) + `overflow: hidden`; Inhalt über `itemBodyHtml` (Markdown escaped, Zitat wörtlich) — dieselbe Quelle wie die Status-Board-Karte und der Dialog
+- `.research-item-body--clickable` — die ganze Zeile öffnet per Maus die Detailansicht, ist aber **kein** `.internal-link`: sie trägt Knöpfe und Links, die unter `role=button` für Screenreader verschwänden. Tastaturweg ist der Titel-`<button>`
 - `.research-item-thumb` / `.research-item-image` — Vorschaubild, klein (`max-height: 6rem`), öffnet die Detailansicht
 - `.research-dialog` — die geteilte `<dialog>`-Shell; `.research-dialog__scroll` scrollt, `__head` bleibt stehen
+- `.research-dialog__links` — feste Leiste **zwischen** `__head` und `__scroll`: «Verknüpfen»/KI-Vorschlag (`__link-actions`), bestehende Verknüpfungen, Tags und Vorschläge. Oben statt am Textende, damit sie bei langem Fund ohne Scrollen sichtbar sind und der Verknüpfen-Picker nach unten Platz für seine Auswahllisten hat; ab `40dvh` scrollt die Leiste selbst
 - `.research-dialog__text` — Lesesatz: `--font-size-reading`, `--lh-relaxed`, `max-width: 34rem`
-- `.research-dialog--create` — schmalere Variante fürs Anlegen (Formularspalte, keine Lesebreite)
 - `.research-dialog__bar` — Fussleiste **ausserhalb** von `__scroll`: Speichern/Abbrechen bleiben stehen, während das Formular scrollt
 
 **Regeln:**
@@ -1439,7 +1462,7 @@ CSS: [public/css/entities/entity-list.css](public/css/entities/entity-list.css).
 - **Der tastaturerreichbare Weg in die Detailansicht ist ein `<button>`** (der Titel). Der Klick auf die ganze Zeile ist nur Maus-Komfort und liegt in einer Allowlist-Prüfung (`onItemBodyClick`), die interaktive Kinder und aktive Textselektion ausnimmt.
 - **Lesen und Bearbeiten teilen die Detailansicht, verdrängen sich aber nicht gegenseitig:** ein Modus-Flag (`detailEditing`) tauscht nur die Textfelder. Verknüpfungen, Tags und Anhänge bleiben in beiden Modi bedienbar — zwei exklusive `x-if`-Zweige (Anzeigen ODER Formular) nehmen dem User genau die Funktionen weg, die er beim Redigieren braucht.
 - **Ein offenes `<dialog>` muss mit seiner Karte schliessen** (`$watch` auf den Show-Flag): es liegt im Top-Layer, verschwindet mit der `display:none`-Karte also nur optisch und hält das restliche Dokument inert — die App wirkt eingefroren. Gilt für **jeden** Dialog der Karte, nicht nur den Detail-Dialog.
-- **Anlegen gehört in denselben Dialog-Rahmen wie Bearbeiten, nicht als Block über die Liste.** Es sind dieselben Felder: EIN Feld-Fragment (`recherche-form-fields.html`), EIN Draft (`draft`), EINE Shell (`.research-dialog*`) — nur Aktionszeile und Datei-Anhang unterscheiden sich. Zwei Rahmen um dieselben Felder driften auseinander (Feldreihenfolge, Textfeldhöhe, Spellcheck-Attribut), und ein Inline-Formular schiebt die Liste beim Anlegen weg. Voraussetzung dafür: beide Wege sind exklusiv (beide modal) und der Draft wird **nur** von den Öffnern (`startCreate`/`startEdit`) gefüllt — die `@close`-Handler räumen nur ihre Flags, weil das native `close`-Event als eigener Task feuert und sonst den Draft des gerade geöffneten zweiten Dialogs überschreibt.
+- **Anlegen ist ein Inline-Formular in der Karte, kein Modal** (`.recherche-create`, Rahmen wie das Quellen-Formular, zwischen Toolbar und Liste, sichtbar über `creating`). Ein Modal lohnt sich für die Detailansicht (Lesen in voller Breite), nicht für ein kurzes Formular. Die Felder kommen trotzdem aus EINEM Fragment (`recherche-form-fields.html`) mit EINEM Draft (`draft`); `startCreate` und `openDetail` schliessen sich gegenseitig, und gefüllt wird der Draft **nur** von den Öffnern (`startCreate`/`startEdit`).
 - **Fehlermeldungen gehören in den offenen Dialog.** Die Statuszeile der Karte liegt hinter dem `::backdrop` — ohne eigene `.card-status`-Zeile im Dialog ist „Speichern tut nichts" die ganze Rückmeldung.
 - Kein `<details>`/`<summary>` für den Anriss; das ist keine klappbare Section (Pattern [Klappbarer Section-Toggle](#klappbarer-section-toggle-accordion)), sondern ein Overflow-Cap.
 
@@ -1689,7 +1712,8 @@ Die Zelle selbst bekommt **kein** `display`. Braucht sie nur Ausrichtung und kei
 
 | Zustand        | Klasse               | Inhalt |
 |----------------|----------------------|--------|
-| Loading        | `.card-status`       | i18n-Status + optional `.progress-bar-wrap` darüber |
+| Laufender Vorgang (KI-Job, Suche, Upload) | `.card-status` | i18n-Status mit eigenem Verb + optional `.progress-bar-wrap` darüber |
+| Daten laden    | `x-skeleton`         | kein Text — siehe [Skeleton-Loader](#skeleton-loader) |
 | Vorgang fertig / nichts gefunden nach einem Lauf | `.card-status` | z. B. „alle Vorschläge übernommen", „keine Konflikte" |
 | Leer           | `.card-empty` / `.muted-msg` | siehe [Leerzustand](#leerzustand) |
 | Error          | `.card-status--error`| Fehlermeldung als i18n-Key |
@@ -2036,7 +2060,10 @@ Konsumenten: Profil (Konto löschen, [user-settings.html](public/partials/user-s
 - **Wann:** solange der erste Datensatz unterwegs ist (`… && liste leer`), nicht bei jedem Nachladen über vorhandenem Inhalt.
 - **Flag:** immer `cardLoading` aus `setupCardLifecycle` (vom Helper gesetzt, solange Einblenden/Buchwechsel/Refresh laden — [docs/state-modell.md](docs/state-modell.md)); kein eigenes `xxxLoading` fürs Laden der Liste daneben. Job-Flags (`figurenLoading`, `kontinuitaetLoading`: ein KI-Lauf ist aktiv) sind etwas anderes und bleiben — das Skelett darf sie zusätzlich lesen, wenn ein Lauf ohne Ergebnis Platzhalter zeigen soll.
 - **Leerzustand wartet:** der `.card-empty` daneben trägt `&& !cardLoading` (bzw. das Fetch-Flag), sonst blitzt „noch nichts da" samt CTA auf, solange der Fetch läuft.
-- Gegated: [skeleton-single-place.test.mjs](tests/unit/skeleton-single-place.test.mjs) — kein handgeschriebenes `.entity-skeleton-row`/`.skeleton-tile` in Partials.
+- **Jedes Daten-Laden, nicht nur Listen:** Formulare (Einstellungen, Admin-Reiter), Popover-Listen (Querverweis-/Zitat-Suche, Verknüpfen-Picker), Detail-Listen (Fundstellen), Bucheditor-Stream — das Skelett steht an der Stelle des Inhalts. **Kein Lade-Text** („Wird geladen …", „X wird geladen …"); die Anzahl Zeilen folgt grob dem erwarteten Inhalt (Popover 3, Liste 4–6, Stream 8). `role="status"` + `aria-label` (`common.loading`) setzt die Direktive.
+- **«Mehr laden»-Knopf:** festes Label + `<span class="spinner" x-show="loadingMore">` davor, `:disabled`/`:aria-busy` — das Label wechselt nicht auf „Lädt …".
+- **Kein Daten-Laden** und deshalb Text mit eigenem Verb: laufende Vorgänge (KI-Job-Status, „Suche läuft …", „KI sucht …", Uploads, Vergleich berechnen).
+- Gegated: [skeleton-single-place.test.mjs](tests/unit/skeleton-single-place.test.mjs) — kein handgeschriebenes `.entity-skeleton-row`/`.skeleton-tile` in Partials, kein `x-text` mit `common.loading`/`*.loading`-Key ausserhalb der benannten Vorgänge.
 
 **Chat** (mehrzeiliges Schimmer-Pattern):
 - `.chat-skeleton-wrapper` + `.chat-skeleton-line`
@@ -2977,6 +3004,17 @@ Verbindlich pro Tile-Typ. `grid-auto-flow: row dense` füllt mittlere Lücken, T
 - Mobile-Regel mit Viewport-Bezug (Phone-Layout, Touch-Targets) → Media. Mobile-Regel mit Slot-Bezug (Tile schmal weil 2-Spalten-Grid auf Tablet) → Container.
 - Container-Name setzen, sobald mehr als ein Container im Komponenten-Baum nistet.
 
+### Touch (iPad, Tablets, Phones)
+
+**Touch ändert das Verhalten, nicht die Grösse.** Die App sieht auf dem iPad aus wie auf dem Desktop: gleiche Schrift, gleiche Knopf- und Zeilenhöhen, gleiche Dichte. Keine `@media (pointer: coarse)`-Regel vergrössert Knöpfe, Felder, Comboboxen, Menü- und Baumzeilen oder Symbol-Knöpfe ([icon-btn.css](public/css/components/icon-btn.css)). **Why:** die App ist eine dichte Arbeitsoberfläche für wenige, geübte Nutzer; fingergrosse Controls kosten auf dem iPad sichtbar Zeilen und Übersicht, und der Wunsch ist ausdrücklich dasselbe Bild auf allen Geräten. Gegated: [compact-control-height.spec.js](tests/e2e-app/compact-control-height.spec.js) (Touch-Höhe = Desktop-Höhe).
+
+Was Touch braucht, ist Verhalten. Bezug ist der **Zeiger**, nicht die Breite — ein iPad im Querformat ist so breit wie ein Laptop: Hover-Ersatz an `@media (hover: none)`, Erkennung in JS über `(hover: none) and (pointer: coarse)`.
+
+- **Kein Tap-Tooltip:** nach einer Touch-Berührung zeigt [tooltip.js](public/js/tooltip.js) keinen `data-tip` (emulierte mouseover/focus) — er bliebe sonst über dem angetippten Knopf stehen. `aria-label` bleibt der Name.
+- **Long-Press ohne Textauswahl:** Elemente mit `x-long-press` sperren auf Touch Auswahl und iOS-Callout ([context-menu.css](public/css/components/context-menu.css)), Eingabefelder darin bleiben markierbar.
+- **Kein Fokus-Zoom auf iOS/iPadOS:** [ios-viewport.js](public/js/ios-viewport.js) ergänzt dort `maximum-scale=1` (Safari ignoriert es fürs Pinch-Zoom, unterdrückt aber den Auto-Zoom auf Felder < 16px). Die 16px-Regeln je Feld (`max-width: 768px`) bleiben für das Phone-Layout.
+- **Prüfen:** iPad-Emulation mit `isMobile: true, hasTouch: true` (Chromium matcht dann `pointer: coarse`/`hover: none`).
+
 ---
 
 ## Print-Styles
@@ -3355,6 +3393,7 @@ Struktur: 8 thematische Subfolder unter [public/css/](public/css/) + Root-Solit�
 | [components/relation-conflicts.css](public/css/components/relation-conflicts.css) | `.relcheck-list` / `.relcheck-item` / `.relcheck-head` / `.relcheck-snippet` — Konfliktliste der Beziehungsprüfung (Fragment [relation-conflicts-list.html](public/partials/relation-conflicts-list.html)). Konsumenten: Fine-Tuning-Export (Prüfung vor dem Export) und Figuren-Karte (Hinweis über der Liste). |
 | [components/picker-popover.css](public/css/components/picker-popover.css) | `.picker-popover` / `__head` / `__title` / `__subject` / `__actions` — am Trigger verankertes Auswahl-Popover an einem Element (Kopf nennt das Element, darunter Felder, unten Aktionen). Mechanik in [picker-popover.js](public/js/picker-popover.js), Breite über `--picker-popover-w`. Siehe „Picker-Popover". |
 | [components/selection-bar.css](public/css/components/selection-bar.css) | `.selection-bar` / `__all` / `__count` / `__actions` / `__close` — Sammelaktionen für markierte Zeilen einer Liste/Tabelle, klebt oben. Mechanik in [selection-bar.js](public/js/selection-bar.js). Siehe „Auswahl-Leiste". |
+| [components/tag-input.css](public/css/components/tag-input.css) | `.tag-input` / `-chips` / `-chip` / `-chip-remove` / `-field` / `-suggest` / `-suggestion` — Schlagwort-Eingabe mit Chips und Vorschlägen. Mechanik in [tag-input.js](public/js/tag-input.js). Siehe „Schlagwort-Eingabe“. |
 | [components/editor-dialog.css](public/css/components/editor-dialog.css) | `.editor-dialog` / `__inner` / `__head` / `__title` / `__actions` / `__spacer` — Schale der modalen Notebook-Editor-Dialoge (natives `<dialog>`, Focus-Trap + ESC vom Browser). Geteilt von Diagramm- und Tabellen-Dialog; Breite pro Dialog über `--dlg-width`/`--dlg-max-width`. Der Rumpf (das eigentliche Werkzeug) bleibt beim Konsumenten. |
 | [components/snapshots.css](public/css/components/snapshots.css) | Fassungen-Karte (`snapshotsCard`): Capture-Leiste + Drift-Hinweis (`.snapshots-drift` „lohnt sich eine neue Fassung?", operational-status-Achse, `--worth`-Modifier amber-getönt + `.snapshots-drift__head`/`__tags`) + Fassungs-Liste + Buch-Level-Diff zweier Fassungen. Tabelle reuse `.entity-grid-table`; Diff-Zellen reuse `revision-diff-*` aus `page/page-revision-viewer.css` — hier nur snapshot-spezifische Zell-Tweaks. |
 
@@ -3415,7 +3454,7 @@ Drei Editoren leben in eigenen Subfoldern (`book/`, `focus/`, `notebook/`); edit
 | [entities/ideen-chat.css](public/css/entities/ideen-chat.css) | Ideen-Board: Ideen-Chat — Nachrichtenhöhe und Panel-Innenteile `.ideen-chat*` (Spalten-Layout: `.aside-split`, Hülle: `.chat-panel`) samt Schnellstart-Knöpfen und Beleg-Zeile; Vorschlagskarten über die geteilten `.chat-vorschlag*`-Klassen. |
 | [entities/entity-list.css](public/css/entities/entity-list.css) | `.entity-list` / `-row`, `.severity-tag*`, `.collapsible-*`, Skeleton, `.ort-*` Schauplätze. |
 | [entities/orte-map.css](public/css/entities/orte-map.css) | Orte-Karte View-Mode `map` (Geo-Karte via Leaflet): `.ort-map*` Container + Geocode-Liste. Nur bei `book_settings.orte_real`. |
-| [entities/recherche/board.css](public/css/entities/recherche/board.css) | Recherche-/Wissensboard (Board-Teil): Toolbar/Filter, Anlege-/Edit-Formular, einspaltige Schnipsel-Liste (`.recherche-list` + `.research-item`), Kind-Badges, Verknüpfungs-/Tag-Chips, KI-Vorschläge, Link-Picker, Link-Zeile (`.research-item-url-row`: Link + „als Quelle übernehmen"-`.icon-btn--ghost`, auf 22px kontext-verkleinert über `.research-url-tosource`, weil 28px die Zeilenhöhe einer `font-size-sm`-Liste bestimmen würde). Native-Vollbild (`.recherche-split:fullscreen`, Recherche- samt Chat-Karte, Toggle via `fullscreen.js` wie Plot-Board) → Liste zentriert mit Lese-Maximalbreite. |
+| [entities/recherche/board.css](public/css/entities/recherche/board.css) | Recherche-/Wissensboard (Board-Teil): Toolbar/Filter, Anlege-/Edit-Formular, einspaltige Schnipsel-Liste (`.recherche-list` + `.research-item`), Kind-Badges, Verknüpfungs-/Tag-Chips, KI-Vorschläge, Link-Picker, Link-Zeile (`.research-item-url-row`: Link + „Seite lesen"/„als Quelle übernehmen" als `.icon-btn--ghost`, auf 22px kontext-verkleinert über `.research-url-action`, weil 28px die Zeilenhöhe einer `font-size-sm`-Liste bestimmen würde). Native-Vollbild (`.recherche-split:fullscreen`, Recherche- samt Chat-Karte, Toggle via `fullscreen.js` wie Plot-Board) → Liste zentriert mit Lese-Maximalbreite. |
 | [entities/recherche/status-board.css](public/css/entities/recherche/status-board.css) | Recherche-Board, Ansicht „Status": Kanban ueber die Einarbeitungs-Stufen (`.research-status-board` mit vier gleich breiten Spalten, `.research-status-column--<status>` traegt die semantische Stufen-Farbe als `--status-accent`), Karte (`.research-status-card` + Drag-Griff `.research-status-grip`, SortableJS-Zustaende), Stelle-im-Buch-Chips, „eingearbeitet ohne Stelle"-Befund und die Status-Plakette (`.research-status-badge`) fuer Liste + Detailansicht. Laedt NACH board.css und benutzt dessen Vokabular (Kind-Badge, Titel-Button, Link-Chip) weiter. Mobile (≤700px) stapelt die Spalten. |
 | [entities/recherche/dialog.css](public/css/entities/recherche/dialog.css) | Geteilte `<dialog>`-Shell der Recherche-Karte (`.research-dialog*`) für Detailansicht **und** Anlegen-Modal: Panelbreite, stehender `__head`, scrollender `__scroll`, `__bar`-Fussleiste, Mobile als vollflächiges Blatt. `__text` setzt den Volltext in Lesegrösse mit begrenztem Satzspiegel, `__figure`/`__image` zeigen das Bild gross (bis 60vh), `__doc`/`__figcaption` tragen die Anhang-Aktionen. Dazu `textarea.recherche-input--tall` fürs Redigieren langer Funde. |
 | [entities/recherche/chat.css](public/css/entities/recherche/chat.css) | Recherche-Chat als eigene Karte neben der Recherche-Karte: breite Leistenstufe (`--aside-w-wide` am `.recherche-split`, weil Web-Such-Antworten und Fundstück-Vorschläge mehr Zeilenbreite brauchen; Spalten-Layout: `.main-aside-split`, Hülle: `.card--chat` wie der Abschnitts-Chat; Vollbild ohne Sticky-Versatz) plus die Innenteile (`.research-chat*`: Quellenliste, Suchbegriffe `.research-chat-queries`, Speicher-Vorschläge mit Aktionsspalte + Bearbeiten-Formular, Kontext-Chip `.research-chat-context-chip`). |

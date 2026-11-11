@@ -91,7 +91,7 @@
       </div>
     </div>
 
-    <div class="muted-msg muted-msg--sm" x-show="srcExportLoading" x-text="$app.t('sources.export.loading')"></div>
+    <div x-show="srcExportLoading" x-skeleton="4" x-cloak></div>
     <p class="card-form-error" x-show="srcExportError" x-cloak x-text="srcExportError"></p>
 
     <div x-show="!srcExportLoading && !srcExportError" x-cloak>

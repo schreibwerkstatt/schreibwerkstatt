@@ -63,6 +63,8 @@ module.exports = {
   saveFaktenToDb: worldFacts.saveFaktenToDb,
   listWorldFacts: worldFacts.listWorldFacts,
   worldFactsScanState: worldFacts.worldFactsScanState,
+  listFactAnchors: worldFacts.listFactAnchors,
+  listFactSuppressions: worldFacts.listFactSuppressions,
   getFactVerdicts: worldFacts.getFactVerdicts,
   saveFactVerdicts: worldFacts.saveFactVerdicts,
   refutedFactKeys: worldFacts.refutedFactKeys,

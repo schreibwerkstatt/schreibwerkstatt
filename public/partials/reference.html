@@ -174,7 +174,7 @@
 
     <!-- Recherche -->
     <div x-show="referenceTab === 'recherche'" class="reference-panel">
-      <div x-show="referenceRechercheLoading" class="card-status" x-text="$app.t('reference.loading')"></div>
+      <div x-show="referenceRechercheLoading" x-skeleton="4" x-cloak></div>
       <div class="search-status search-status--error" x-show="referenceRechercheError && !referenceRechercheLoading"
            x-text="referenceRechercheError"></div>
       <template x-if="!referenceRechercheLoading && !referenceRechercheError && referenceRechercheItems().length === 0">
@@ -206,7 +206,7 @@
          gepflegt wird die Quelle im Quellenverzeichnis — dorthin verlinkt jede
          Zeile. Read-only. -->
     <div x-show="referenceTab === 'quellen'" class="reference-panel">
-      <div x-show="referenceSourcesLoading" class="card-status" x-text="$app.t('reference.loading')"></div>
+      <div x-show="referenceSourcesLoading" x-skeleton="4" x-cloak></div>
       <div class="search-status search-status--error" x-show="referenceSourcesError && !referenceSourcesLoading"
            x-text="referenceSourcesError"></div>
       <template x-if="!referenceSourcesLoading && !referenceSourcesError && referenceQuellen().length === 0">

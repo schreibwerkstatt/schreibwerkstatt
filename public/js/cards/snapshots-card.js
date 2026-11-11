@@ -105,6 +105,9 @@ export function registerSnapshotsCard() {
         },
         onViewReset: () => this.reset(),
         onCardRefresh: () => this.loadSnapshots(Alpine.store('nav').selectedBookId, { fresh: true }),
+        // Tab-Rueckkehr: nicht nachladen — `_autoSelectCompare` setzte sonst den
+        // gewaehlten Vergleich zurueck, waehrend darunter der alte Diff steht.
+        wake: 'skip',
       });
     },
 

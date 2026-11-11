@@ -52,7 +52,6 @@ export function registerSourcesCard() {
     // Schlagworte der eigenen Bibliothek ([{ tag, count }], GET /sources/tags)
     // und die laufende Eingabe im Formular (sources/tags.js).
     srcPoolTags: [],
-    srcTagInput: '',
 
     // Detail-Formular. `srcEditingId`: null = zu, 'new' = Anlage, sonst die id.
     srcEditingId: null,
@@ -173,6 +172,7 @@ export function registerSourcesCard() {
         timerKeys: ['_srcIndexTimer', '_srcPdfPollTimer'],
         filterScopes: SRC_FILTER_SCOPES,
         load: () => { this.loadSources(); this.loadSourceTags(); },
+        wake: () => { this.loadSources({ silent: true }); this.loadSourceTags(); },
         extraListeners: [
           // Permalink #book/X/quellen/<sourceId>: der Hash-Router dispatcht das
           // Event, _focusSourceById hebt die Zeile hervor (bzw. merkt sie bis
@@ -202,8 +202,7 @@ export function registerSourcesCard() {
           srcPoolError: '',
           srcPoolFilter: '',
           srcPoolTag: '',
-          srcTagInput: '',
-          srcExportOpen: false,
+                srcExportOpen: false,
           srcExportRows: [],
           srcExportError: '',
           srcImportOpen: false,

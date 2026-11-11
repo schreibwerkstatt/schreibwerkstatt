@@ -101,6 +101,7 @@ button.primary .btn-count {
 /* Grösse synchron mit .combobox-wrap--compact über --size-compact-*. */
 .btn-compact {
   font-size: var(--size-compact-font-size);
+  line-height: var(--size-compact-line-height);
   padding: var(--size-compact-padding);
 }
 /* Download-/Store-Links in Knopf-Gestalt (Exposé-DOCX, Client-Downloads):

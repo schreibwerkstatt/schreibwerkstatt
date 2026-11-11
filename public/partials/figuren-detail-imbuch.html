@@ -6,7 +6,7 @@
      Schleifenvariable `f`; Root-Zugriffe laufen über `$app`.
 -->
 <!-- ===== Gruppe: Im Buch (Auftritte, Beziehungen, Zeitstrahl) ===== -->
-<section class="figur-group" x-show="f.kapitel?.length > 1 || $app.songsByFigurId.get(f.id)?.length || f.beziehungen?.length || f.lebensereignisse?.length">
+<section class="figur-group" x-show="f.kapitel?.length > 1 || $app.songsByFigurId.get(f.id)?.length || f.beziehungen?.length || f.lebensereignisse?.length || f.welt_fakten?.length">
   <h4 class="figur-group-title" x-text="$app.t('figuren.group.imBuch')"></h4>
   <!-- Kapitelauftritte -->
   <div class="figur-kapitelauftritte" x-show="f.kapitel?.length > 1">
@@ -29,6 +29,19 @@
         <button type="button" class="entity-ref" x-entity-ref="{ type: 'song', id: s.id, label: (s.titel || '') + (s.interpret ? ' — ' + s.interpret : '') }"></button>
       </template>
     </div>
+  </div>
+  <!-- Welt-Fakten zur Figur (Kategorien figur/soziolekt, Subjekt = ein Name der Figur):
+       was die Komplettanalyse über sie festhält — Pflege in der Welt-Karte. -->
+  <div x-show="f.welt_fakten?.length" class="figur-weltfakten">
+    <div class="card-section-title" x-text="$app.t('figuren.field.weltFakten')"></div>
+    <ul class="figur-weltfakten-list">
+      <template x-for="(wf, wi) in (f.welt_fakten || [])" :key="wi">
+        <li>
+          <span x-show="wf.kategorie === 'soziolekt'" class="tag" x-text="$app.t('weltfakten.kategorie.soziolekt')"></span>
+          <span x-text="wf.fakt"></span>
+        </li>
+      </template>
+    </ul>
   </div>
   <!-- Beziehungen -->
   <div x-show="f.beziehungen?.length">

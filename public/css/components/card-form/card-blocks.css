@@ -212,7 +212,7 @@
 .filter-bar .filter-search-input,
 .selection-bar .filter-search-input {
   font-size: var(--font-size-mini);
-  line-height: 1.4;
+  line-height: var(--size-compact-line-height);
   padding: var(--space-xs) var(--space-sm);
   border: var(--border-thin) solid var(--color-border);
   border-radius: var(--radius-md);
@@ -245,19 +245,17 @@
 
 /* Alle Filter-Bar-Controls auf identische Hoehe bringen, ausgerichtet am
    Suchfeld (.filter-search-input). Sie teilen bereits font-size (12px),
-   vertikales Padding (--space-xs) und 0.5px-Border; die einzige Abweichung war
-   die line-height (Suchfeld 1.4 vs. combobox/tabs geerbtes `normal` ~1.2). Tabs
+   vertikales Padding (--space-xs), 0.5px-Border und --size-compact-line-height
+   (tokens/typography.css, auch an .btn-compact und Compact-Combobox). Tabs
    bekommen zusaetzlich radius-md + 12px-Font + space-xs-Padding (die generische
    .tabs-Komponente ist sonst hoeher/eckiger). Scope auf .filter-bar laesst
-   eigenstaendige View-Toggle-Tabs (.tabs.entity-view-toggle) und combobox--compact
-   ausserhalb von Filter-Bars unberuehrt. */
+   eigenstaendige View-Toggle-Tabs (.tabs.entity-view-toggle) unberuehrt. */
 .filter-bar .tabs { border-radius: var(--radius-md); }
 .filter-bar .tabs-btn {
   font-size: var(--font-size-mini);
   padding: var(--space-xs) var(--space-md);
-  line-height: 1.4;
+  line-height: var(--size-compact-line-height);
 }
-.filter-bar .combobox-wrap--compact .combobox-trigger { line-height: 1.4; }
 
 @media (max-width: 600px) {
   .filter-bar .filter-search-input { width: 100%; }

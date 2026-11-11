@@ -16,6 +16,8 @@
 // export-card-base.js (geteilt mit PDF + DOCX).
 
 import { EVT } from '../events.js';
+import { setupCardLifecycle } from './card-lifecycle.js';
+import { CARD_REQUEST } from './card-request.js';
 import { headingStyleSlice } from './export-heading-style.js';
 import { exportScopeSlice, exportJobSlice, unnumberedChipsSlice, exportSnapshotSlice } from './export-card-base.js';
 import { isSelectedBook, loadToken } from './book-guard.js';
@@ -66,6 +68,7 @@ export function registerEpubExportCard() {
     }),
 
     activeTab: 'typography',
+    _lifecycle: null,
 
     pub: _EMPTY_META(),
     pubLoaded: false,
@@ -81,6 +84,13 @@ export function registerEpubExportCard() {
     _onViewReset: null,
 
     init() {
+      // Nur für den Reiter-Wunsch (Palette, Permalink): Laden und Reset hängen
+      // unten an eigenen Listenern. Vor dem Show-Watch angemeldet, damit der
+      // Reiter im selben Flush wie das Einblenden steht.
+      this._lifecycle = setupCardLifecycle(this, {
+        showFlag: 'showEpubExportCard',
+        tabRequest: { key: CARD_REQUEST.EPUB_EXPORT_TAB, apply: (tab) => { this.activeTab = tab; }, current: () => this.activeTab },
+      });
       this.$watch(() => window.__app.showEpubExportCard, async (visible) => {
         if (!visible) return;
         // Bei jedem Öffnen das Neueste aus /publication ziehen — book_publication
@@ -129,6 +139,7 @@ export function registerEpubExportCard() {
       if (this._onBookChanged)  window.removeEventListener(EVT.BOOK_CHANGED, this._onBookChanged);
       if (this._onViewReset)    window.removeEventListener(EVT.VIEW_RESET,   this._onViewReset);
       this._unbindPreset();
+      this._lifecycle?.destroy();
     },
 
     // ── Publikations-Meta (book_publication, geteilt mit PDF + BookSettings) ──

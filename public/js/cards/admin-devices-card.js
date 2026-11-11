@@ -23,6 +23,7 @@ export function registerAdminDevicesCard() {
         name: 'adminDevices',
         refreshNeedsBookId: false,
         onCardRefresh: () => this.devicesRefresh(),
+        wake: () => this._devicesLoad({ silent: true }),
         onViewReset: () => {
           this.devicesList = [];
           this.devicesError = '';

@@ -37,7 +37,14 @@ const EDGE = 8;
  * @returns {{top:number,left:number}}
  */
 export function computePopoverPos(r, pw, ph, { align = 'end' } = {}) {
-  const ideal = align === 'start' ? r.left : r.right - pw;
+  // Rechtsbuendig ragte ein Popover an einem Trigger nahe dem LINKEN Rand
+  // (Knopf am Zeilenanfang, z.B. «Verknuepfen» im Recherche-Dialog) links aus
+  // dem Viewport und wuerde an den Rand geklemmt — dann stuende es losgeloest
+  // vom Trigger, halb ausserhalb seines Dialogs. In diesem Fall linksbuendig
+  // am Trigger ansetzen, sofern es so passt.
+  const flipStart = align === 'end' && r.left != null
+    && r.right - pw < EDGE && r.left + pw <= window.innerWidth - EDGE;
+  const ideal = (align === 'start' || flipStart) ? r.left : r.right - pw;
   const left = Math.max(EDGE, Math.min(window.innerWidth - pw - EDGE, ideal));
   const top = (r.bottom + ph + EDGE > window.innerHeight)
     ? Math.max(EDGE, r.top - ph - GAP)

@@ -554,17 +554,6 @@
   gap: var(--space-2xs);
 }
 .sources-tag { white-space: nowrap; }
-.sources-tag-suggest {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--space-2xs);
-  margin-top: var(--space-6);
-}
-.sources-tag--suggest {
-  border: none;
-  cursor: pointer;
-}
-.sources-tag--suggest:hover { color: var(--color-text); }
 
 /* ── Export-Panel ─────────────────────────────────────────────────────────── */
 /* Rahmen teilt es mit .sources-picker (oben); Kopfzeile ist .sources-picker-head. */

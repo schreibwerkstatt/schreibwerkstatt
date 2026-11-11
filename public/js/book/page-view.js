@@ -34,7 +34,9 @@ const IMAGE_FALLBACK_PX = 320;
 //                 Korrektur schreibt die AUSSAGE um (abschwächen, Zuschreibung
 //                 streichen, Wertung neutralisieren), oft ist statt dessen ein
 //                 Beleg die richtige Antwort. Nie vorausgewählt, eigene Farbe.
-export const SOFT_TYPEN = new Set(['satzbau', 'wiederholung', 'schwaches_verb', 'fuellwort', 'filterwort', 'klischee', 'pleonasmus', 'ki_geruch', 'show_vs_tell', 'passiv', 'perspektivbruch', 'tempuswechsel', 'hedging', 'amtsdeutsch']);
+// `weltfakt` und `soziolekt` sind weich: sie messen am KI-extrahierten Welt-Fakten-Index,
+// keinem kuratierten Kanon — ob Text oder Fakt veraltet ist, entscheidet der Autor.
+export const SOFT_TYPEN = new Set(['satzbau', 'wiederholung', 'schwaches_verb', 'fuellwort', 'filterwort', 'klischee', 'pleonasmus', 'ki_geruch', 'show_vs_tell', 'passiv', 'perspektivbruch', 'tempuswechsel', 'hedging', 'amtsdeutsch', 'weltfakt', 'soziolekt']);
 export const EDITORIAL_TYPEN = new Set(['unbelegt', 'zuschreibung', 'wertung']);
 
 /** 'hard' | 'soft' | 'editorial' */

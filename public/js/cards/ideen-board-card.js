@@ -120,6 +120,7 @@ export function registerIdeenBoardCard() {
         filterScopes: IDEEN_BOARD_FILTER_SCOPES,
         resetState: { editingId: null, linkPickerIdeeId: null, assigningId: null, busy: false, selectedIds: [] },
         load: async () => { await this.loadBoard(); },
+        wake: () => this.loadBoard({ silent: true }),
         // Reset + bei offener Karte gleich das neue Buch laden — sonst bliebe
         // das Board leer stehen, bis jemand es neu öffnet.
         onBookChanged: () => {

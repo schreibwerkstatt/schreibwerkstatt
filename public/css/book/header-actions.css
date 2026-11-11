@@ -32,15 +32,12 @@
   border-radius: var(--radius-none);
 }
 /* Inner controls fit innerhalb der 28px-Chip-Höhe (= Höhe von Ring + Avatar),
-   damit alle Header-Controls gleich hoch sind. min-width/min-height neutralisiert
-   den generischen Touch-Boost (icon-btn.css @media pointer:coarse → 40px), der
-   sonst den Ghost-Button aus dem Chip sprengt und den Hintergrund über den
-   Nachbar-Button überlappen lässt. Das Chip selbst bleibt tap-bar. */
+   damit alle Header-Controls gleich hoch sind. min-width: 0 hebt die 28px-
+   Mindestbreite von .icon-btn auf. */
 .header-action-cluster .icon-btn--ghost {
   width: 22px;
   height: 22px;
   min-width: 0;
-  min-height: 0;
 }
 
 /* Primärbutton „Buch analysieren" mit integriertem Fortschrittsring */

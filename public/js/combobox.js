@@ -352,9 +352,16 @@ export function comboboxData(cfg = {}) {
           // ein natives <select>). Scrollen INNERHALB des Dropdowns (Options-
           // Liste) laesst es offen — Capture-Phase, um jeden Scroll zu sehen,
           // target-Check schliesst Eigen-Scroll aus.
+          // Touch: tippt der User ins Suchfeld, faehrt die Bildschirm-Tastatur
+          // hoch und der Browser (iPad-Safari) scrollt das Feld ueber sie —
+          // dieser Scroll stammt nicht vom User und schloesse die Liste in
+          // dem Moment, in dem er tippen will. Solange der Fokus in der
+          // Combobox steht, darf x-anchor nachfuehren statt zu schliessen.
           this._onScroll = (e) => {
             const dd = this._rootEl.querySelector('.combobox-dropdown');
             if (dd && (e.target === dd || dd.contains(e.target))) return;
+            if (this._isMobile() && this._rootEl.contains(document.activeElement)
+                && document.activeElement?.matches?.('input')) return;
             this.close();
           };
           document.addEventListener('mousedown', this._onOutside);

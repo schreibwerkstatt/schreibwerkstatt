@@ -4,6 +4,7 @@
 import { fetchJson, escHtml } from '../../utils.js';
 import { isSelectedBook } from '../../cards/book-guard.js';
 import { emptyDraft as _emptyDraft } from './shared.js';
+import { normalizeTags } from '../../tag-input.js';
 
 export const rechercheItemMethods = {
   // ── Native-Dialog schliessen (geteilter Idiom) ────────────────────────────
@@ -17,47 +18,29 @@ export const rechercheItemMethods = {
     else onClosed.call(this);
   },
 
-  // ── Anlegen (Dialog) ──────────────────────────────────────────────────────
+  // ── Anlegen (Inline-Formular, partials/recherche-create.html) ────────────
   // Anlegen und Bearbeiten fahren auf DEMSELBEN `draft` und teilen dieselben
-  // Formularfelder (partials/recherche-form-fields.html) in derselben Dialog-Shell.
-  // Zwei Drafts + zwei Formular-Kopien waren die Drift-Quelle; exklusiv sind die
-  // beiden Wege ohnehin, weil beide in einem modalen <dialog> stehen.
+  // Formularfelder (partials/recherche-form-fields.html). Exklusiv: startCreate
+  // schliesst die Detailansicht, openDetail schliesst das Anlegen.
   startCreate() {
     this.draft = _emptyDraft();
-    // Anlegen und Detailansicht schliessen sich aus — sonst schreibt der User in
-    // ein Formular, während hinter dem Dialog ein zweites offen steht.
     this.closeDetail();
     this.clearCreateFile();
-    // Native showModal() erst nach dem Render: der Dialog steht im selben Tick
-    // noch nicht am DOM (analog openDetail).
+    this.errorMessage = '';
+    this.creating = true;
     this.$nextTick(() => {
-      const dlg = this.$refs?.createDialog;
-      if (dlg && typeof dlg.showModal === 'function' && !dlg.open) dlg.showModal();
+      document.querySelector('#recherche-card .recherche-create .recherche-title-input')?.focus();
     });
   },
-  // Über dlg.close() gehen, damit Schliessen-Knopf, Abbrechen und ESC denselben Weg
-  // nehmen — das close-Event ruft _onCreateClosed als einzigen Aufräum-Punkt (Muster
-  // closeDetail). Bewusst KEIN Backdrop-Klick am Anlegen-Dialog: hier steht ein
-  // frisch getippter (womöglicherweise langer) Text, den ein Fehlklick daneben nicht
-  // wegwerfen darf — dieselbe Überlegung wie der `!detailEditing`-Guard am
-  // Detail-Dialog.
-  closeCreate() { this._closeNativeDialog('createDialog', this._onCreateClosed); },
-  // Die close-Handler beider Dialoge fassen die Textfelder von `draft` NICHT an:
-  // das native close-Event feuert als eigener Task (nicht synchron zu dlg.close()),
-  // und `draft` teilen sich Anlegen und Bearbeiten — ein Reset hier würde den Draft
-  // überschreiben, den der gerade geöffnete zweite Dialog schon gefüllt hat
-  // (openDetail(item, { edit: true }) schliesst zuerst diesen Dialog). Gefüllt wird
-  // `draft` ausschliesslich von startCreate/startEdit.
-  _onCreateClosed() {
+  // Fasst die Textfelder von `draft` NICHT an: `draft` teilt sich das Anlegen mit
+  // dem Bearbeiten, und openDetail(item, { edit: true }) schliesst zuerst das
+  // Anlegen und füllt dann `draft`. Gefüllt wird `draft` nur von
+  // startCreate/startEdit.
+  closeCreate() {
+    if (!this.creating) return;
+    this.creating = false;
     this.clearCreateFile();
     this.errorMessage = '';
-  },
-  // Meldung, die das Schliessen des Anlegen-Dialogs ueberleben soll: nach dem
-  // close-Handler (registriert NACH dem @close des Templates) erneut setzen.
-  _keepErrorAfterCreateClose(msg) {
-    const dlg = this.$refs?.createDialog;
-    if (!msg || !dlg?.open) return;
-    dlg.addEventListener('close', () => { this.errorMessage = msg; }, { once: true });
   },
 
   // Datei-Auswahl beim Anlegen: File NICHT in reaktivem State halten (ein Alpine-
@@ -119,7 +102,7 @@ export const rechercheItemMethods = {
         row = await post({ allow_duplicate: true });
       }
       // Buch inzwischen gewechselt: das Fundstueck liegt im alten Buch und gehoert
-      // nicht in die Liste des neuen (der Reset hat den Dialog schon geschlossen).
+      // nicht in die Liste des neuen (der Reset hat das Anlegen schon geschlossen).
       if (!isSelectedBook(bookId)) return;
       this.items = [row, ...this.items];
       // Datei nachladen (image/* → Bild, application/pdf → Dokument); uploadXxx
@@ -132,16 +115,15 @@ export const rechercheItemMethods = {
       if (!isSelectedBook(bookId)) return;
       this._loadTags();
       if (!uploaded) {
-        // Das Fundstueck steht, nur der Anhang fehlt: nicht im Anlegen-Dialog
+        // Das Fundstueck steht, nur der Anhang fehlt: nicht im Anlegen-Formular
         // bleiben (ein zweites Speichern legte eine Dublette an), sondern das neue
         // Fundstueck oeffnen, wo der Anhang erneut gewaehlt werden kann. Die
-        // Meldung erst NACH dem close-Event des Anlegen-Dialogs setzen —
-        // _onCreateClosed leert errorMessage, und das Event feuert als eigener Task.
-        this._keepErrorAfterCreateClose(this.errorMessage);
+        // Meldung nach openDetail wieder setzen — dessen closeCreate leert sie.
+        const msg = this.errorMessage;
         this.openDetail(row);
+        this.errorMessage = msg;
         return;
       }
-      // Dialog zu (raeumt draft + Datei-Input im close-Handler).
       this.closeCreate();
     } catch (e) {
       if (isSelectedBook(bookId)) this.errorMessage = this._rechercheErrorText(e, 'recherche.error.save');
@@ -160,8 +142,7 @@ export const rechercheItemMethods = {
     this.detailItemId = item.id;
     this.detailEditing = false;
     this.closeActionMenu();
-    // Anlegen-Dialog wirklich schliessen (nicht bloss das Flag): er liegt sonst
-    // als zweites Panel im Top-Layer.
+    // Anlegen und Detailansicht schliessen sich aus (gemeinsamer `draft`).
     this.closeCreate();
     if (edit) this.startEdit(item);
     // Permalink-Spiegel: offenes Fundstück → #…/recherche/<itemId>. detailItemId
@@ -198,7 +179,7 @@ export const rechercheItemMethods = {
       body: item.body || '',
       urls: (item.urls || []).map(u => ({ url: u.url || '', label: u.label || '' })),
       source: item.source || '',
-      tags: (item.tags || []).join(', '),
+      tags: [...(item.tags || [])],
       fileName: '',
     };
   },
@@ -270,7 +251,9 @@ export const rechercheItemMethods = {
   },
 
   _draftBody(d) {
-    const tags = (d.tags || '').split(',').map(s => s.trim()).filter(Boolean);
+    // Deckel wie lib/research-validate.js (MAX_TAGS, TAG_MAX); der Server
+    // normalisiert autoritativ, hier nur nichts schicken, was er still kappt.
+    const tags = normalizeTags(d.tags, { max: 20, maxLen: 60 });
     const urls = (d.urls || [])
       .map(u => ({ url: (u.url || '').trim(), label: (u.label || '').trim() }))
       .filter(u => u.url);

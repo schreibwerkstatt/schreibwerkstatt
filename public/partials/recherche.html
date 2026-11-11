@@ -102,6 +102,9 @@
 
   <!-- @include recherche-bulk-bar -->
 
+  <!-- Anlegen: Inline-Formular zwischen Toolbar und Liste (wie Quellen). -->
+  <!-- @include recherche-create -->
+
   <!-- Skeleton während Loading vor erstem Datensatz -->
   <div x-show="loading" class="recherche-skeleton entity-list--accented" x-cloak>
     <template x-for="i in 4" :key="i">
@@ -117,7 +120,7 @@
   </div>
 
   <!-- Empty-State mit CTA: kein Eintrag → direkt anlegen. -->
-  <div x-show="!loading && !errorMessage && items.length === 0" class="card-empty" x-cloak>
+  <div x-show="!loading && !errorMessage && !creating && items.length === 0" class="card-empty" x-cloak>
     <p class="card-empty-text" x-text="$app.t('recherche.empty')"></p>
     <p class="card-empty-hint" x-text="$app.t('recherche.emptyHint')"></p>
     <button type="button" class="primary card-empty-cta" @click="startCreate()" :disabled="busy">
@@ -143,13 +146,9 @@
     <!-- @include recherche-status-board -->
   </template>
 
-  <!-- Die zwei Dialoge der Karte (natives <dialog>, Top-Layer — also auch ueber
-       dem Vollbild): Detailansicht eines Fundstuecks und Anlegen. Geschlossen
-       sind sie display:none und damit kein Layout-Kind, offen liegen sie im
-       Top-Layer. Sie teilen die Shell (.research-dialog*) UND die
-       Formularfelder (recherche-form-fields). -->
+  <!-- Detailansicht eines Fundstuecks (natives <dialog>, Top-Layer — also auch
+       ueber dem Vollbild). Geschlossen display:none und damit kein Layout-Kind. -->
   <!-- @include recherche-detail -->
-  <!-- @include recherche-create -->
   <!-- @include recherche-link-picker -->
   <!-- @include recherche-item-menu -->
 </div><!-- /.card--recherche -->

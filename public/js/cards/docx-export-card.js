@@ -13,6 +13,8 @@
 // export-card-base.js (geteilt mit PDF + EPUB).
 
 import { EVT } from '../events.js';
+import { setupCardLifecycle } from './card-lifecycle.js';
+import { CARD_REQUEST } from './card-request.js';
 import { exportScopeSlice, exportJobSlice, unnumberedChipsSlice, exportSnapshotSlice, profileTransferSlice } from './export-card-base.js';
 
 export function registerDocxExportCard() {
@@ -43,6 +45,7 @@ export function registerDocxExportCard() {
     creating: false,
 
     activeTab: 'layout',
+    _lifecycle: null,
 
     saving: false,
     savedAt: null,
@@ -51,6 +54,13 @@ export function registerDocxExportCard() {
     _onViewReset: null,
 
     init() {
+      // Nur für den Reiter-Wunsch (Palette, Permalink): Laden und Reset hängen
+      // unten an eigenen Listenern. Vor dem Show-Watch angemeldet, damit der
+      // Reiter im selben Flush wie das Einblenden steht.
+      this._lifecycle = setupCardLifecycle(this, {
+        showFlag: 'showDocxExportCard',
+        tabRequest: { key: CARD_REQUEST.DOCX_EXPORT_TAB, apply: (tab) => { this.activeTab = tab; }, current: () => this.activeTab },
+      });
       this.$watch(() => window.__app.showDocxExportCard, async (visible) => {
         if (!visible) return;
         if (!this.profiles.length) await this.loadProfiles();
@@ -89,6 +99,7 @@ export function registerDocxExportCard() {
       if (this._onBookChanged)  window.removeEventListener(EVT.BOOK_CHANGED, this._onBookChanged);
       if (this._onViewReset)    window.removeEventListener(EVT.VIEW_RESET,   this._onViewReset);
       this._unbindPreset();
+      this._lifecycle?.destroy();
     },
 
     canEdit() {

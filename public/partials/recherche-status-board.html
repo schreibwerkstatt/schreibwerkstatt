@@ -43,14 +43,14 @@
               </div>
             </div>
 
-            <button type="button" class="research-item-title research-status-card-title"
+            <button type="button" class="research-item-title research-status-card-title text-link"
                     @click="openDetail(item)"
                     x-text="item.title || kindLabel(item.kind)"></button>
 
             <!-- Kurzer Anriss: ein Fundstueck ohne Titel waere sonst nur seine
                  Typbezeichnung. Zwei Zeilen Cap — eine Kanban-Karte darf nicht
                  auf Textlaenge wachsen; der Volltext steht in der Detailansicht. -->
-            <div class="research-status-card-text" x-show="item.body" x-text="item.body"></div>
+            <div class="research-status-card-text" x-show="item.body" x-html="itemBodyHtml(item)"></div>
 
             <!-- Stelle im Buch: Kapitel-/Seiten-Verknuepfungen als Sprungziele.
                  Read-only — entfernt wird eine Verknuepfung in der Detailansicht,

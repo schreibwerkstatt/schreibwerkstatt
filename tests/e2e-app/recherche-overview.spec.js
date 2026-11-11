@@ -60,7 +60,7 @@ test('recherche: Liste zeigt Anriss, Detailansicht zeigt Volltext und bleibt ver
     .toBeLessThanOrEqual(96 + 1);
 
   // ── Detailansicht: Volltext, lesbar gesetzt ───────────────────────────────
-  const dialog = page.locator('dialog.research-dialog:not(.research-dialog--create)');
+  const dialog = page.locator('dialog.research-dialog');
   await longItem.locator('.research-item-title').click();
   await expect(dialog).toBeVisible();
   const detailText = dialog.locator('.research-dialog__text');
@@ -92,11 +92,11 @@ test('recherche: Liste zeigt Anriss, Detailansicht zeigt Volltext und bleibt ver
 
   // ── Bearbeiten IM Dialog: Verknuepfen bleibt erreichbar ───────────────────
   await dialog.getByRole('button', { name: 'Bearbeiten' }).click();
-  await expect(dialog.locator('textarea.recherche-input--tall')).toBeVisible();
+  await expect(dialog.locator('textarea.recherche-body-input')).toBeVisible();
   // Genau der Regressionsfall: im Bearbeiten-Modus war die Verknuepfen-Aktion
   // vorher weg, weil Anzeige- und Formular-Zweig sich ausgeschlossen haben.
-  await expect(dialog.locator('.research-dialog__foot button').first()).toBeVisible();
-  await dialog.locator('.research-dialog__foot button').first().click();
+  await expect(dialog.locator('.research-dialog__link-actions button').first()).toBeVisible();
+  await dialog.locator('.research-dialog__link-actions button').first().click();
   await expect(dialog.locator('.recherche-link-picker')).toBeVisible();
   await dialog.locator('.recherche-link-picker .btn-compact').last().click(); // Abbrechen
   await expect(dialog.locator('.recherche-link-picker')).toBeHidden();
@@ -119,53 +119,57 @@ test('recherche: Liste zeigt Anriss, Detailansicht zeigt Volltext und bleibt ver
   }, [made.long, made.img]);
 });
 
-// Anlegen laeuft im gleichen Dialog-Rahmen wie Bearbeiten und aus DEMSELBEN
-// Felder-Fragment (recherche-form-fields.html). Der Feld-Vergleich unten ist die
-// eigentliche Drift-Schranke: baut jemand das Anlegen-Formular wieder als eigene
-// Kopie, weichen die Signaturen ab und dieser Test wird rot.
-test('recherche: Anlegen im Modal — gleiche Felder wie im Bearbeiten-Modus', async ({ page }) => {
+// Anlegen ist ein Inline-Formular in der Karte (recherche-create.html), kein
+// Modal: Toolbar-Knopf blendet es ein, Speichern legt an und blendet es aus.
+test('recherche: Anlegen als Inline-Formular in der Karte', async ({ page }) => {
   await bootApp(page);
   const bookId = await selectSeededBook(page);
   await page.evaluate((id) => { location.hash = `#book/${id}/recherche`; }, bookId);
   await expect(page.locator('#recherche-card')).toBeVisible();
 
-  const createDlg = page.locator('dialog.research-dialog--create');
-  const detailDlg = page.locator('dialog.research-dialog:not(.research-dialog--create)');
-
-  // Kein Inline-Formular mehr: der Toolbar-Knopf zieht ein Modal auf.
-  await expect(createDlg).toBeHidden();
+  const form = page.locator('#recherche-card .recherche-create');
+  await expect(form).toBeHidden();
   await page.locator('#recherche-card .card-toolbar > button.btn-compact').first().click();
-  await expect(createDlg).toBeVisible();
+  await expect(form).toBeVisible();
+  // Kein Dialog: nichts im Top-Layer, der Rest der Karte bleibt bedienbar.
+  await expect(page.locator('dialog.research-dialog[open]')).toHaveCount(0);
+  await expect(form.locator('input.recherche-title-input')).toBeFocused();
 
-  // Feld-Signatur des Anlegen-Formulars (Reihenfolge + Klassen + Platzhalter).
-  const sig = (dlg) => dlg.locator('.recherche-form').first().evaluate((form) => [
-    ...form.querySelectorAll('.recherche-kind-combo, input.recherche-input, textarea.recherche-input'),
-  ].map(el => `${el.tagName}|${el.className}|${el.placeholder || ''}`));
-  const createSig = await sig(createDlg);
-  expect(createSig.length).toBeGreaterThan(3);
+  await form.locator('input.recherche-title-input').fill('Inline-Fund');
+  await form.locator('textarea.recherche-body-input').fill('Inline erfasst.');
+  // Tags als Chips (Baustein tagInput): Komma trennt, Enter uebernimmt.
+  const tagField = form.locator('.tag-input-field');
+  await tagField.fill('Archiv, Brief');
+  await tagField.press('Enter');
+  await expect(form.locator('.tag-input-chip')).toHaveText(['Archiv', 'Brief']);
+  await form.locator('.recherche-create-actions button.primary').click();
 
-  await createDlg.locator('input.recherche-title-input').fill('Modal-Fund');
-  await createDlg.locator('textarea.recherche-input').fill('Im Modal erfasst.');
-  await createDlg.locator('.research-dialog__bar button.recherche-primary').click();
-
-  // Gespeichert → Dialog zu, Eintrag in der Liste.
-  await expect(createDlg).toBeHidden();
-  const row = page.locator('.research-item', { hasText: 'Modal-Fund' }).first();
+  await expect(form).toBeHidden();
+  const row = page.locator('.research-item', { hasText: 'Inline-Fund' }).first();
   await expect(row).toBeVisible();
 
-  // Bearbeiten-Modus der Detailansicht: dieselben Felder, mit den Werten des Funds.
+  // Bearbeiten: dasselbe Formular im Detail-Dialog, mit den Werten des Funds und
+  // derselben Aktionszeile (Speichern zuerst) in der festen Fussleiste.
   await row.locator('.research-item-title').click();
-  await expect(detailDlg).toBeVisible();
+  const detailDlg = page.locator('dialog.research-dialog[open]');
   await detailDlg.getByRole('button', { name: 'Bearbeiten' }).click();
-  await expect(detailDlg.locator('textarea.recherche-input--tall')).toBeVisible();
-  expect(await sig(detailDlg)).toEqual(createSig);
-  await expect(detailDlg.locator('input.recherche-title-input')).toHaveValue('Modal-Fund');
-  await expect(detailDlg.locator('textarea.recherche-input')).toHaveValue('Im Modal erfasst.');
+  await expect(detailDlg.locator('input.recherche-title-input')).toHaveValue('Inline-Fund');
+  await expect(detailDlg.locator('.tag-input-chip')).toHaveText(['Archiv', 'Brief']);
+  await expect(detailDlg.locator('.research-dialog__bar button').first()).toHaveClass(/\bprimary\b/);
+  await detailDlg.locator('.tag-input-chip-remove').first().click();
+  await detailDlg.locator('.research-dialog__bar button.primary').click();
+  await expect(detailDlg.locator('.research-dialog__bar')).toBeHidden();
+  await expect(detailDlg.locator('.research-tag')).toHaveText(['Brief']);
+  await page.keyboard.press('Escape');
+  await expect(detailDlg).toHaveCount(0);
 
-  // Schliessen raeumt beide Wege auf (kein inertes Dokument zurueck).
-  await page.keyboard.press('Escape'); // verlaesst den Bearbeiten-Modus
-  await page.keyboard.press('Escape'); // schliesst den Dialog
-  await expect(detailDlg).toBeHidden();
+  // Esc verwirft ein offenes Anlegen-Formular.
+  await page.locator('#recherche-card .card-toolbar > button.btn-compact').first().click();
+  await expect(form).toBeVisible();
+  await form.locator('input.recherche-title-input').fill('verworfen');
+  await page.keyboard.press('Escape');
+  await expect(form).toBeHidden();
+  await expect(page.locator('.research-item', { hasText: 'verworfen' })).toHaveCount(0);
 
   await page.evaluate(async (id) => {
     const rows = await fetch(`/research?book_id=${id}`).then(r => r.json());
@@ -200,7 +204,7 @@ test('recherche: Markdown im Beschreibungstext wird gerendert, Zitat bleibt Wort
   const quoteTeaser = page.locator(`[data-research-id="${made.quote}"] .research-item-text`);
   await expect(quoteTeaser).toHaveText('Er sagte: **nie** wieder.');
 
-  const dialog = page.locator('dialog.research-dialog:not(.research-dialog--create)');
+  const dialog = page.locator('dialog.research-dialog');
   await page.locator(`[data-research-id="${made.md}"] .research-item-title`).click();
   await expect(dialog.locator('.research-dialog__text li')).toHaveCount(2);
   await expect(dialog.locator('.research-dialog__text strong')).toHaveText('Fall-Eckdaten');

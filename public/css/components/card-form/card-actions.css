@@ -64,8 +64,7 @@
 @media (max-width: 480px) {
   /* Text-Buttons (Speichern/Abbrechen/Export) bekommen eine Mindestbreite,
      damit sie tappbar bleiben. Icon-only Buttons sind davon ausgenommen — sie
-     behalten ihre kompakte Quadrat-Größe (Touch-Tap-Target ≥40px kommt aus
-     icon-btn.css @media pointer:coarse), sonst reissen 80px-Slots die Action-
+     behalten ihre kompakte Quadrat-Größe, sonst reissen 80px-Slots die Action-
      Icons unnötig weit auseinander. */
   .card-actions button:not(.icon-btn) { min-width: 80px; }
 }

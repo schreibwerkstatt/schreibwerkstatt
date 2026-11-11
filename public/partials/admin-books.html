@@ -7,7 +7,7 @@
     </div>
   </div>
 
-  <div x-show="loading" class="muted-msg" x-text="$app.t('common.loading')"></div>
+  <div x-show="loading" x-skeleton="4" x-cloak></div>
   <p class="card-form-error" x-show="error" x-text="error"></p>
 
   <div class="card-form-grid" x-show="!loading">

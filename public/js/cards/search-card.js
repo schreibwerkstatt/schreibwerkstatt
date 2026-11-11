@@ -5,7 +5,7 @@
 // Ohne Verbindung durchsucht sie stattdessen die auf dem Geraet abgelegten
 // Abschnitte des aktuellen Buchs (shared/offline-search.js).
 
-import { setupCardLifecycle } from './card-lifecycle.js';
+import { setupCardLifecycle, isWakeRefresh } from './card-lifecycle.js';
 import { formatRelativeShort } from '../utils.js';
 import { startPoll } from './job-helpers.js';
 import { tRaw, tErrorRaw } from '../i18n.js';
@@ -95,7 +95,9 @@ export function registerSearchCard() {
         onViewReset: () => this.resetSearch(),
         extraListeners: [{
           type: 'card:refresh',
-          handler: (e) => { if (e?.detail?.name === 'search') this.runSearch(); },
+          // Tab-Rueckkehr: Treffer stehen lassen — ein neuer Lauf verwirft die
+          // per „Mehr laden" nachgeholten Seiten.
+          handler: (e) => { if (e?.detail?.name === 'search' && !isWakeRefresh(e)) this.runSearch(); },
         }, {
           // Palette «Alle Treffer in der Suche» (openSearchWithQuery).
           type: 'search:query',

@@ -5,6 +5,7 @@
 // filtern serverseitig auf die Läufe des angemeldeten Users.
 
 import { fetchJson } from '../utils.js';
+import { sameData } from '../utils/same-data.js';
 
 export const myStatsJobsState = () => ({
   // '' = alle Bücher, sonst Buch-ID als String.
@@ -22,21 +23,25 @@ export const myStatsJobsMethods = {
     return this.myJobsBookId ? `book_id=${encodeURIComponent(this.myJobsBookId)}` : '';
   },
 
-  async loadMyJobStats() {
+  /** `silent`: Tab-Rueckkehr — aufgeklappte Zeile und ihre Laeufe bleiben,
+   *  gleiche Zahlen werden verworfen, ein Fehler aendert nichts. */
+  async loadMyJobStats({ silent = false } = {}) {
     const filter = this.myJobsBookId;
-    this.myJobStatsLoading = true;
-    this.myJobsExpandedType = null;
-    this.myJobRuns = {};
+    if (!silent) {
+      this.myJobStatsLoading = true;
+      this.myJobsExpandedType = null;
+      this.myJobRuns = {};
+    }
     try {
       const q = this._myJobsQuery();
       const rows = await fetchJson(`/jobs/stats${q ? '?' + q : ''}`);
       if (filter !== this.myJobsBookId) return;
-      this.myJobStats = rows;
+      if (!silent || !sameData(rows, this.myJobStats)) this.myJobStats = rows;
     } catch (e) {
       console.error('[myStats] Job-Statistiken laden fehlgeschlagen:', e);
-      if (filter === this.myJobsBookId) this.myJobStats = [];
+      if (filter === this.myJobsBookId && !silent) this.myJobStats = [];
     } finally {
-      if (filter === this.myJobsBookId) this.myJobStatsLoading = false;
+      if (filter === this.myJobsBookId && !silent) this.myJobStatsLoading = false;
     }
   },
 

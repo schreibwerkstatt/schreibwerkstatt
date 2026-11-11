@@ -64,8 +64,21 @@ function _toOcc(kind, entityId, score, snippet, source) {
 // `opts.snippetFor` (hit → Auszug | null): Live-Auszug (lib/anchor-snippet.js),
 // null = Stelle steht so nicht mehr auf der Seite → Treffer verworfen. Default:
 // Chunk-Text.
+//
+// `opts.restrictTo` ({ page:[ids], scene:[ids] } | null): Figuren-Scope aus
+// db/plot#anchorFigureScope — gesucht wird nur, wo die Figur des Beats vorkommt,
+// und zwar VOR dem topK-Schnitt (semanticQuery#restrictTo), damit der Filter keine
+// Belege kostet. Bewusst nicht über Figurennamen im Suchtext: der Name träfe jede
+// Stelle mit der Figur, Cosinus und Rerank stiegen für jeden Beat (gemessen am
+// Buch «Der Amoklauf»: geplante Beats mit Rerank 0.8–0.9) — Drift und Promotion
+// verlören ihre Aussage.
+//
+// `opts.rerankFloor` (nur Promotion): Untergrenze des Cross-Encoder-Werts. Der
+// Cosinus allein trennt «dasselbe Thema» nicht von «dieses Ereignis»; ein Treffer
+// ohne Rerank-Wert (Reranker aus) fällt auf das reine Cosinus-Tor zurück.
 async function _anchorBeat(bookId, beat, useSemantic, signalFn, minScore = 0, opts = {}) {
-  const { promote = minScore > 0, snippetFor = null } = opts;
+  const { promote = minScore > 0, snippetFor = null, restrictTo = null, rerankFloor = 0 } = opts;
+  const inScope = h => !restrictTo || (restrictTo[h.kind] || []).includes(Number(h.entity_id));
   const scoped = Object.prototype.hasOwnProperty.call(opts, 'userEmail');
   const own = h => !scoped || h.kind !== 'scene' || getSceneTitleForUser(h.entity_id, opts.userEmail ?? null) != null;
   const found = new Map();
@@ -76,11 +89,13 @@ async function _anchorBeat(bookId, beat, useSemantic, signalFn, minScore = 0, op
     const hits = await retrieval.semanticQuery(bookId, query, {
       kinds: SCAN_KINDS, topK: TOP_K, signal: signalFn(), strictRerank: true, background: true,
       ...(scoped ? { user: opts.userEmail ?? null } : {}),
+      ...(restrictTo ? { restrictTo } : {}),
     });
     for (const h of hits) {
       if (h.semScore == null) continue;
-      if (!own(h)) continue;
+      if (!own(h) || !inScope(h)) continue;
       if (minScore > 0 && h.semScore < minScore) continue;
+      if (promote && rerankFloor > 0 && h.rerankScore != null && h.rerankScore < rerankFloor) continue;
       const snippet = snippetFor ? await snippetFor(h) : _plainSnippet(h.text);
       if (snippet == null) continue;
       found.set(_occKey(h.kind, h.entity_id), _toOcc(h.kind, h.entity_id, h.semScore, snippet, 'semantic'));
@@ -93,7 +108,7 @@ async function _anchorBeat(bookId, beat, useSemantic, signalFn, minScore = 0, op
     try { r = searchIndex.query(beat.titel || '', { bookId, kinds: SCAN_KINDS, limit: TOP_K, ...(scoped ? { user: opts.userEmail ?? null } : {}) }); }
     catch (e) { logger.warn(`[beat-anchor] FTS "${beat.titel}" fehlgeschlagen: ${e.message}`); return []; }
     for (const h of (r.hits || [])) {
-      if (!own(h)) continue;
+      if (!own(h) || !inScope(h)) continue;
       found.set(_occKey(h.kind, h.entity_id), _toOcc(h.kind, h.entity_id, null, _plainSnippet(h.snippet || h.title), 'trigger'));
     }
   }
@@ -121,6 +136,8 @@ async function runBeatAnchorJob(jobId, bookId, userEmail) {
     const promoteFloor = Number(appSettings.get('plot.anchor.promote_min_score')) || 0;
     // Bestätigungs-Schwelle für „im Buch"-Beats (Cosinus). 0 = jeder semantische Treffer.
     const confirmFloor = Number(appSettings.get('plot.anchor.confirm_min_score')) || 0;
+    // Zweites Promotion-Tor: Cross-Encoder-Wert (nur wenn der Reranker läuft). 0 = aus.
+    const rerankFloor = Number(appSettings.get('plot.anchor.promote_min_rerank')) || 0;
     // Verankert werden nicht-verworfene Beats beider Status:
     //   - „im Buch": Treffer ≥ confirmFloor (Soll-Ist-Drift — ist das laut Plan
     //     Geschriebene wirklich im Text?).
@@ -151,7 +168,10 @@ async function runBeatAnchorJob(jobId, bookId, userEmail) {
       // Full-Replace mit [] — ein Ausfall ist keine Aussage „nicht im Text").
       let rows;
       try {
-        rows = await _anchorBeat(bookId, beat, useSemantic, signal, minScore, { promote, userEmail, snippetFor });
+        rows = await _anchorBeat(bookId, beat, useSemantic, signal, minScore, {
+          promote, userEmail, snippetFor, rerankFloor,
+          restrictTo: plotDb.anchorFigureScope(beat.figure_ids),
+        });
       } catch (e) {
         if (e.name === 'AbortError') throw e;
         failed++;

@@ -26,17 +26,20 @@
   <script>
     window.__sent = [];
     window.__fail = false;
+    // `__audios` zaehlt die geladenen Saetze; der Kern nutzt EIN Element.
     window.__audios = [];
     class MockAudio {
-      constructor(src) { this.src = src; this.paused = true; this.ended = false; this._l = {}; this.playbackRate = 1; window.__audios.push(this); }
-      addEventListener(ev, cb) { (this._l[ev] = this._l[ev] || []).push(cb); }
+      constructor() { this._src = ''; this.paused = true; this.ended = false; this.playbackRate = 1; this.defaultPlaybackRate = 1; this.onended = null; this.onerror = null; }
+      get src() { return this._src; }
+      set src(v) { this._src = v; this.ended = false; this.playbackRate = this.defaultPlaybackRate; window.__audios.push(this); }
+      load() {}
       play() { this.paused = false; return Promise.resolve(); }
       pause() { this.paused = true; }
     }
     window.Audio = MockAudio;
     window.__endAudio = () => {
       const a = window.__audios[window.__audios.length - 1];
-      if (a && !a.ended) { a.ended = true; (a._l.ended || []).forEach(cb => cb()); }
+      if (a && !a.ended) { a.ended = true; a.onended?.(); }
     };
     window.fetch = (url, opts) => {
       const u = String(url);

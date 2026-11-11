@@ -241,7 +241,10 @@ export const bookscopeMethods = {
       if (!needsRetry) {
         for (const c of EXCLUSIVE_CARDS) {
           if (this[c.flag]) {
-            window.dispatchEvent(new CustomEvent(EVT.CARD_REFRESH, { detail: { name: c.key } }));
+            // `refreshName` wie beim Re-Klick (_shared.js) — die Figuren-Karte
+            // hoert auf 'figuren', nicht auf ihren Registry-Key. `source: 'wake'`
+            // laesst die Karte still abgleichen (card-lifecycle.js#WAKE).
+            window.dispatchEvent(new CustomEvent(EVT.CARD_REFRESH, { detail: { name: c.refreshName || c.key, source: 'wake' } }));
           }
         }
       }

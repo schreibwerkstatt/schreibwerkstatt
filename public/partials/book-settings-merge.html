@@ -16,7 +16,7 @@
     <span x-text="' — ' + $app.t('merge.text')"></span>
   </div>
 
-  <div x-show="mergeLoading" x-cloak class="muted-msg" x-text="$app.t('common.loading')"></div>
+  <div x-show="mergeLoading" x-skeleton="3" x-cloak></div>
 
   <template x-for="k in mergeKinds" :key="k">
     <div class="book-settings-merge-kind">

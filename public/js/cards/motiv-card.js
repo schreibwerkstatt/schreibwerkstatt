@@ -4,6 +4,7 @@
 
 import { motivMethods } from '../book/motiv.js';
 import { setupCardLifecycle } from './card-lifecycle.js';
+import { CARD_REQUEST } from './card-request.js';
 import { attachFullscreenSync } from '../fullscreen.js';
 import { observeThemeChange } from '../graph-kit.js';
 import { ideenBacklinkMethods } from '../book/ideen-backlinks.js';
@@ -201,6 +202,7 @@ export function registerMotivCard() {
       this._lifecycle = setupCardLifecycle(this, {
         name: 'motiv',
         showFlag: 'showMotivCard',
+        tabRequest: { key: CARD_REQUEST.MOTIV_TAB, apply: (view) => { this.motivView = view; }, current: () => this.motivView },
         // _layoutSaveTimer bewusst NICHT hier: ein ausstehender Drag-Save wird beim
         // Buchwechsel noch unter dem ALTEN Buch geschrieben (_flushLayoutSave),
         // statt verworfen zu werden.
@@ -221,6 +223,7 @@ export function registerMotivCard() {
           this.resetMotiv();
         },
         onCardRefresh: () => this.loadBoard(),
+        wake: () => this.loadBoard({ silent: true }),
         extraListeners: [{ type: 'motiv:select', handler: onSelectMotif }],
       });
 

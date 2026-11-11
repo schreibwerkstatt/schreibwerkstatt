@@ -341,6 +341,32 @@ function listFigurenWithDetails(bookId, userEmail) {
 
   const yearMap = computeFigureYears(bookId, em);
 
+  // Welt-Fakten der Kategorien figur/soziolekt, deren Subjekt einer der Namen der Figur
+  // ist (Name, Kurzname, weitere Namen; normalisiert). Ein Welt-Fakt kennt keine
+  // Figuren-ID — die Zuordnung über den Namen ist die einzige, darum nur bei exakt
+  // gleichem Namen. Mehrdeutige Namen (zwei Figuren «Anna») tragen den Fakt an beiden.
+  const _nn = (s) => String(s || '').normalize('NFC').toLocaleLowerCase('de').replace(/\s+/g, ' ').trim();
+  const factsBySubj = new Map();
+  for (const r of db.prepare(`
+    SELECT kategorie, subjekt, fakt FROM world_facts
+     WHERE book_id = ? AND user_email IS ? AND kategorie IN ('figur', 'soziolekt') AND subjekt IS NOT NULL
+     ORDER BY sort_order, id`).all(bookId, em)) {
+    const k = _nn(r.subjekt);
+    if (!factsBySubj.has(k)) factsBySubj.set(k, []);
+    factsBySubj.get(k).push({ kategorie: r.kategorie, fakt: r.fakt });
+  }
+  const weltFaktenFor = (f) => {
+    const seen = new Set();
+    const out = [];
+    for (const n of [f.name, f.kurzname, ..._parseJsonArray(f.weitere_namen)]) {
+      const k = _nn(n);
+      if (!k || seen.has(k)) continue;
+      seen.add(k);
+      out.push(...(factsBySubj.get(k) || []));
+    }
+    return out;
+  };
+
   const figuren = figs.map(f => {
     const fy = yearMap?.get(f.id) || null;
     return {
@@ -375,6 +401,7 @@ function listFigurenWithDetails(bookId, userEmail) {
       seiten: seitenMap[f.fig_id] || [],
       lebensereignisse: evtMap[f.id] || [],
       beziehungen: relMap[f.fig_id] || [],
+      welt_fakten: factsBySubj.size ? weltFaktenFor(f) : [],
       jahr_im_roman:   fy ? fy.jahr_im_roman   : null,
       geburtsjahr:     fy ? fy.geburtsjahr     : null,
       alter_im_roman:  fy ? fy.alter_im_roman  : null,

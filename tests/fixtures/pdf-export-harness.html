@@ -72,7 +72,7 @@
 
     // Nav-State lebt in Alpine.store('nav') (kein Root-Proxy mehr) — die Karte
     // liest selectedBookId/tree/pages direkt via $store.nav / Alpine.store('nav').
-    window.Alpine.store('nav', { books: [], selectedBookId: 1, pages: [], tree: [] });
+    window.Alpine.store('nav', { books: [], selectedBookId: 1, pages: [], tree: [], cardTab: {} });
 
     // Combobox-Stub für die Harness — die echte Implementation lebt in
     // public/js/app.js (mid-file, nicht trivial extrahierbar). Tests interagieren

@@ -79,7 +79,7 @@
   <!-- @include ideen-link-picker -->
 
   <div class="ideen-list aside-split-scroll">
-    <div x-show="loading" class="ideen-loading" x-text="$app.t('common.loading')"></div>
+    <div x-show="loading" x-skeleton="4" class="ideen-loading" x-cloak></div>
 
     <div x-show="!loading && ideen.length === 0" class="muted-msg muted-msg--sm muted-msg--block"
          x-text="$app.ideenScope === 'chapter' ? $app.t('ideen.emptyChapter') : $app.t('ideen.empty')"></div>

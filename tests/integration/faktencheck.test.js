@@ -215,3 +215,36 @@ test('_judgeOneFact: auch nach der letzten Runde noch pause_turn → wirft statt
   await assert.rejects(() => _judgeOneFact(tok, 'prompt', 'system', null, stub),
     (e) => e.message === 'job.error.factcheckVerdictInvalid');
 });
+
+test('_judgeOneFact (Anthropic): zählt Web-Suchen und sammelt Treffer-URLs als Beleg', async () => {
+  const { _judgeOneFact } = require('../../routes/jobs/komplett/job-faktencheck');
+  const { makeEvidence } = require('../../routes/jobs/komplett/factcheck-web');
+  const tok = { in: 0, out: 0 };
+  const evidence = makeEvidence();
+  const stub = async () => ({
+    text: '{"urteil":"falsch","quelle":"https://nasa.gov/apollo11"}', stopReason: 'end_turn', tokensIn: 10, tokensOut: 5,
+    rawContentBlocks: [
+      { type: 'server_tool_use', id: 's1', name: 'web_search', input: { query: 'Mondlandung' } },
+      { type: 'web_search_tool_result', tool_use_id: 's1', content: [{ type: 'web_search_result', url: 'https://nasa.gov/apollo11', title: 'Apollo 11' }] },
+      { type: 'server_tool_use', id: 's2', name: 'web_search', input: { query: 'Apollo 11 Jahr' } },
+      { type: 'web_search_tool_result', tool_use_id: 's2', content: { type: 'web_search_tool_result_error', error_code: 'unavailable' } },
+    ],
+  });
+  await _judgeOneFact(tok, 'prompt', 'system', null, stub, undefined, { mode: 'anthropic', evidence });
+  assert.equal(tok.webSearches, 2, 'beide Suchen zählen, auch die gescheiterte');
+  assert.equal(tok.in, 10);
+  assert.ok(evidence.has('https://nasa.gov/apollo11'), 'Treffer-URL ist Beleg');
+  assert.ok(!evidence.has('https://example.org/erfunden'));
+});
+
+test('endJobRun: Web-Suchen landen im Ledger samt Suchgebühr', () => {
+  const { insertJobRun, endJobRun } = require('../../db/job-runs');
+  const jobId = 'fc-ledger-' + Date.now();
+  insertJobRun({ id: jobId, type: 'faktencheck', bookId: BOOK, userEmail: EMAIL, provider: 'claude', model: 'claude-sonnet-4-6', label: null, status: 'running' });
+  endJobRun(jobId, 'done', 1000, 100, 0, 0, 0, null, null, null, 4);
+  const row = db.prepare("SELECT web_searches, usd FROM ai_cost_ledger WHERE source_ref = ?").get('job:' + jobId);
+  assert.equal(row.web_searches, 4);
+  const { costUsd } = require('../../lib/pricing');
+  const ohne = costUsd({ provider: 'claude', model: 'claude-sonnet-4-6', tokensIn: 1000, tokensOut: 100 });
+  assert.ok(row.usd > ohne, 'Suchgebühr eingerechnet');
+});

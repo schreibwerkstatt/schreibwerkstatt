@@ -14,7 +14,7 @@
 //
 // Umschlüsseln je Fremdschlüssel-Ziel:
 //   books → neues Buch · pages/chapters → Import-Maps · app_users → Importer
-//   figures/locations/figure_scenes → Maps des Analyse-Blocks · research_items →
+//   figures/locations/figure_scenes/world_facts → Maps des Analyse-Blocks · research_items →
 //   Recherche-Block · chat_sessions → Chat-Block · sources → Quellen-Abgleich
 //   · eine Tabelle dieser Liste → ihre eigene Map aus diesem Lauf.
 // Fehlt die Ziel-ID (Block nicht im Bundle, Zeile verworfen): nullbare Spalte →
@@ -45,7 +45,7 @@ const WERK_TABLES = [
   // Share-Links mit neuen Tokens, Kommentare, Fazits
   'share_links', 'share_comments', 'share_feedback',
   // Entscheide und Einstellungen des Autors
-  'redundancy_dismissals', 'name_guard_ignores', 'world_fact_verdicts',
+  'redundancy_dismissals', 'name_guard_ignores', 'world_fact_verdicts', 'world_fact_suppressions',
   'user_dictionary', 'languagetool_disabled_rules',
   // KI-Ergebnisse
   'book_reviews', 'chapter_reviews', 'narrative_report', 'chapter_narrative_profile',
@@ -170,7 +170,7 @@ function restoreSources(sources, email) {
   return map;
 }
 
-const _ENTITY = { figures: 'figure', locations: 'location', figure_scenes: 'scene' };
+const _ENTITY = { figures: 'figure', locations: 'location', figure_scenes: 'scene', world_facts: 'fact' };
 
 function restoreWerk(bookId, data, ctx) {
   const counts = {};

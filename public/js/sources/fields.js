@@ -12,6 +12,7 @@
 // darauf, nicht eine zweite Wahrheit ueber das Schema.
 
 import { parseIssuedDate } from './issued-date.js';
+import { normalizeTags } from '../tag-input.js';
 
 /** Deckungsgleich mit CSL_TYPES in db/sources.js. Laufen die auseinander,
  *  bietet das Formular einen Typ an, den die Route mit 400 INVALID_VALUE
@@ -183,22 +184,10 @@ export { personLabel, primaryPersonLabel } from './search.js';
 export const MAX_TAGS = 20;
 export const MAX_TAG_LEN = 40;
 
-/** Schlagwort-Liste wie der Server sie ablegt: getrimmt, Innen-Whitespace
- *  einfach, ohne Dubletten (Gross-/Kleinschreibung egal, erste Form gewinnt). */
+/** Schlagwort-Liste wie der Server sie ablegt — Normalisierung des geteilten
+ *  Bausteins (public/js/tag-input.js) mit den Deckeln der Bibliothek. */
 export function normalizeTagList(list) {
-  if (!Array.isArray(list)) return [];
-  const out = [];
-  const seen = new Set();
-  for (const raw of list) {
-    if (typeof raw !== 'string') continue;
-    const tag = raw.replace(/\s+/g, ' ').trim().slice(0, MAX_TAG_LEN).trim();
-    const key = tag.toLowerCase();
-    if (!tag || seen.has(key)) continue;
-    seen.add(key);
-    out.push(tag);
-    if (out.length >= MAX_TAGS) break;
-  }
-  return out;
+  return normalizeTags(list, { max: MAX_TAGS, maxLen: MAX_TAG_LEN });
 }
 
 /** Traegt die Quelle eines der Schlagworte (Gross-/Kleinschreibung egal)?

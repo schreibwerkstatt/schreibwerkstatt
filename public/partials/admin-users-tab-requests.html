@@ -16,7 +16,7 @@
       <button type="button" class="icon-btn icon-btn--ghost" @click="adminUsersRequestsLoad()" :disabled="adminUsersRequestsLoading" :data-tip="$app.t('common.refresh')" :aria-label="$app.t('common.refresh')"><svg class="icon" aria-hidden="true"><use href="/icons.svg#rotate-cw"/></svg></button>
     </div>
 
-    <div x-show="adminUsersRequestsLoading" class="muted-msg" x-text="$app.t('common.loading')"></div>
+    <div x-show="adminUsersRequestsLoading" x-skeleton="3" x-cloak></div>
 
     <!-- Approve-Result mit Invite-URL (falls Mailer disabled) -->
     <div class="admin-users-invite-result" x-show="adminUsersRequestsResult">

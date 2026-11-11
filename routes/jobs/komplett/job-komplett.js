@@ -276,7 +276,7 @@ async function runKomplettAnalyseJob(jobId, bookId, bookName, userEmail, provide
     }
 
     // Welt-Fakten persistieren (Full-Replace) — abfragbar im Buch-Chat via list_world_facts.
-    persistWorldFacts(ctx, chapterFakten, idMaps.chNameToId);
+    await persistWorldFacts(ctx, chapterFakten, idMaps.chNameToId);
 
     // ── Phase 2 + 3: Figuren + Orte konsolidieren ────────────────────────────
     // Multi-Pass: P2 (Figuren-AI) und P3 (Orte-AI) sind unabhängig und werden parallel

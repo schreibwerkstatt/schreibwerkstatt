@@ -26,7 +26,7 @@
     <span x-show="devicesLatestVersions.extension">Chrome <code x-text="devicesLatestVersions.extension"></code></span>
   </p>
 
-  <div x-show="devicesLoading" class="muted-msg" x-text="$app.t('common.loading')"></div>
+  <div x-show="devicesLoading" x-skeleton="4" x-cloak></div>
   <div x-show="devicesError" class="error-msg" x-text="devicesError"></div>
 
   <div class="table-scroll" x-show="devicesList.length">

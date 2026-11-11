@@ -3,6 +3,7 @@
 // `this._memo` über den gemeinsamen `this._memos`-Speicher pro Card-Instanz.
 
 import { fetchJson } from '../../utils.js';
+import { sameData } from '../../utils/same-data.js';
 import { memoMethods } from '../../cards/card-memo.js';
 
 export const lifecycleMethods = {
@@ -13,20 +14,36 @@ export const lifecycleMethods = {
   // Buchwechsel-/Doppel-Load-Race: nach JEDEM await prüfen, ob diese Antwort
   // noch gilt (gleiches Buch, kein jüngerer loadBoard) — sonst schriebe ein
   // langsamer Load des alten Buchs dessen Board über das neue.
-  async loadBoard() {
+  //
+  // `silent`: Tab-Rueckkehr — erst holen, dann vergleichen. Ist das Board
+  // unveraendert, bleibt alles stehen, auch der Undo-Verlauf; nur echte
+  // Aenderungen laufen durch den normalen Pfad.
+  async loadBoard({ silent = false } = {}) {
     const app = window.__app;
     const bookId = Alpine.store('nav').selectedBookId;
     const seq = (this._boardLoadSeq = (this._boardLoadSeq || 0) + 1);
     const stale = () => seq !== this._boardLoadSeq || Alpine.store('nav').selectedBookId !== bookId;
     if (!bookId) { this.acts = []; this.threads = []; this.beats = []; this.draftFiguren = []; this.motifsCatalog = []; this.themesCatalog = []; return; }
-    this.loading = true;
-    this._memos = {};
-    // Jeder Reload kann fremde/serverseitige Änderungen mitbringen (Fork/Unfork,
-    // Fehler-Rollback, zweites Gerät) — Undo-Records darauf wären inkonsistent.
-    this._clearHistory();
+    if (!silent) {
+      this.loading = true;
+      this._memos = {};
+      // Jeder Reload kann fremde/serverseitige Änderungen mitbringen (Fork/Unfork,
+      // Fehler-Rollback, zweites Gerät) — Undo-Records darauf wären inkonsistent.
+      this._clearHistory();
+    }
     try {
       const data = await fetchJson(`/plot?book_id=${bookId}`);
       if (stale()) return;
+      if (silent) {
+        const same = sameData(data.acts || [], this.acts) && sameData(data.threads || [], this.threads)
+          && sameData(data.beats || [], this.beats) && sameData(data.relations || [], this.relations)
+          && sameData(data.geburtsjahre || {}, this.geburtsjahre)
+          && sameData(data.geburtsjahrAusText || [], this.geburtsjahrAusText)
+          && sameData(data.beatAnchor || null, this.beatAnchorInfo);
+        if (same) return;
+        this._memos = {};
+        this._clearHistory();
+      }
       this.acts = Array.isArray(data.acts) ? data.acts : [];
       this.threads = Array.isArray(data.threads) ? data.threads : [];
       this.beats = Array.isArray(data.beats) ? data.beats : [];
@@ -44,7 +61,7 @@ export const lifecycleMethods = {
       this.loadIdeaBacklinks('beat');
       this.loadIdeaBacklinks('thread', { into: 'threadIdeaBacklinks' });
     } catch (e) {
-      if (stale()) return;
+      if (stale() || silent) return;
       this.errorMessage = app.t('plot.error.load');
       this.acts = []; this.threads = []; this.beats = []; this.relations = []; this.geburtsjahre = {}; this.geburtsjahrAusText = [];
       this.beatAnchorInfo = null;

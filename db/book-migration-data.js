@@ -395,10 +395,10 @@ function restoreAnalysis(bookId, data, ctx) {
       r.sort_order ?? 0, email, r.updated_at || _now(), r.manually_edited ? 1 : 0);
     factMap.set(r.id, res.lastInsertRowid);
   }
-  const insWfc = db.prepare('INSERT OR IGNORE INTO world_fact_chapters (fact_id,chapter_id) VALUES (?,?)');
+  const insWfc = db.prepare('INSERT OR IGNORE INTO world_fact_chapters (fact_id,chapter_id,manual) VALUES (?,?,?)');
   for (const r of arr('worldFactChapters')) {
     const fid = factMap.get(r.fact_id); const cid = chapterOf(r.chapter_id);
-    if (fid && cid) insWfc.run(fid, cid);
+    if (fid && cid) insWfc.run(fid, cid, r.manual ? 1 : 0);
   }
   if (arr('worldFacts').length) markWorldFactsScanned(bookId, email);
 
@@ -497,7 +497,7 @@ function restoreAnalysis(bookId, data, ctx) {
 
   // Fuer den Recherche-Block: dessen Verknuepfungen auf Figuren/Orte/Szenen
   // zeigen auf genau diese neu angelegten Zeilen.
-  ctx.entityMaps = { figure: figMap, location: locMap, scene: sceneMap };
+  ctx.entityMaps = { figure: figMap, location: locMap, scene: sceneMap, fact: factMap };
 
   counts.figures = figMap.size;
   counts.locations = locMap.size;

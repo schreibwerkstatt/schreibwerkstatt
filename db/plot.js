@@ -54,7 +54,7 @@ module.exports = {
   getPlotConsistencyRun: runs.getPlotConsistencyRun, deletePlotConsistencyRun: runs.deletePlotConsistencyRun,
   insertPlotBrainstormRun: runs.insertPlotBrainstormRun, listPlotBrainstormRuns: runs.listPlotBrainstormRuns,
   getPlotBrainstormRun: runs.getPlotBrainstormRun, deletePlotBrainstormRun: runs.deletePlotBrainstormRun,
-  listBeatsForAnchor: anchor.listBeatsForAnchor, replaceBeatOccurrences: anchor.replaceBeatOccurrences,
+  listBeatsForAnchor: anchor.listBeatsForAnchor, anchorFigureScope: anchor.anchorFigureScope, replaceBeatOccurrences: anchor.replaceBeatOccurrences,
   beatOccurrenceMap: anchor.beatOccurrenceMap, beatOccurrenceEntry: anchor.beatOccurrenceEntry,
   beatAnchorStale: anchor.beatAnchorStale, beatAnchorLastRun: anchor.beatAnchorLastRun,
 };

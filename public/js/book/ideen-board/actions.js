@@ -2,6 +2,7 @@
 // `this` = die ideenBoardCard-Instanz.
 
 import { fetchJson } from '../../utils.js';
+import { sameData } from '../../utils/same-data.js';
 import { patchIdee, patchedIdeeRow, deleteIdee as removeIdee, overlayPendingIdeen } from '../../repo/ideen-queue.js';
 import { loadSortable } from '../../lazy-libs.js';
 import {
@@ -194,18 +195,26 @@ export const ideenBoardActions = {
   ...memoMethods,
 
   // ── Laden ────────────────────────────────────────────────────────────────
-  async loadBoard() {
+  /** `silent`: Tab-Rueckkehr — Board bleibt stehen (kein `loading`), gleiche
+   *  Daten werden verworfen, ein Fehler laesst den alten Stand stehen. */
+  async loadBoard({ silent = false } = {}) {
     const app = window.__app;
     const bookId = Alpine.store('nav').selectedBookId;
     if (!bookId) { this.resetBoard(); return; }
     const isCurrent = loadToken(this, '_boardLoadSeq', bookId);
-    this.loading = true;
-    this._memos = {};
+    let changed = false;
+    if (!silent) {
+      this.loading = true;
+      this._memos = {};
+    }
     try {
       const data = await fetchJson(`/ideen/board?book_id=${bookId}`);
       // Offline vorgemerkte Writes darüberlegen (repo/ideen-queue.js).
       const ideen = await overlayPendingIdeen(Array.isArray(data?.ideen) ? data.ideen : [], (r) => String(r.book_id) === String(bookId));
       if (!isCurrent()) return;
+      if (silent && sameData(ideen, this.ideen) && sameData(normalizeIdeeStages(data?.stages), this.stages)
+          && (data?.auto_check !== false) === this.autoCheckOn) return;
+      changed = true;
       this.ideen = ideen;
       this.stages = normalizeIdeeStages(data?.stages);
       this.autoCheckOn = data?.auto_check !== false;
@@ -215,11 +224,11 @@ export const ideenBoardActions = {
       this._memos = {};
       this._pruneSelection();
     } catch {
-      if (!isCurrent()) return;
+      if (!isCurrent() || silent) return;
       this.errorMessage = app.t('ideenBoard.error.load');
       this.ideen = [];
     } finally {
-      if (isCurrent.latest()) {
+      if (isCurrent.latest() && (!silent || changed)) {
         this.loading = false;
         this._memos = {};
         await this._ensureBoardSortables();

@@ -467,4 +467,14 @@
   flex-wrap: wrap;
   gap: var(--space-6);
 }
+
+/* Welt-Fakten zur Figur (Detail «Im Buch»): schlichte Liste, Soziolekt mit Etikett. */
+.figur-weltfakten-list {
+  margin: 0;
+  padding-left: 1.1em;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2xs);
+}
+.figur-weltfakten-list .tag { margin-right: var(--space-2xs); }
 }

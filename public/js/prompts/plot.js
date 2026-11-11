@@ -22,7 +22,7 @@ import {
   _straengeLines,
 } from './plot/lines.js';
 import {
-  DATEN_REGEL, _boardOutline, _hasArchivedActs, _hasOwnActs, _hasThreadInheritance,
+  DATEN_REGEL, BEAT_REF_REGEL, _boardOutline, _hasArchivedActs, _hasOwnActs, _hasThreadInheritance,
   _reihenfolgeRegel, _spannungLines, _cutNote, _kuerzungsRegel, _deltaBlock, plotSprachRegel,
 } from './plot/board.js';
 
@@ -128,6 +128,7 @@ export function buildPlotBrainstormPrompt(target, acts, beats, buchKontext, figu
   return `Die Autorin skizziert die Handlung ihres Buches als Beat-Board und braucht 3–7 prägnante neue Beats (Handlungspunkte) für den Akt ${aktLabel}${threadInfo ? ` im Strang "${threadInfo.name}"` : ''}.
 
 ${DATEN_REGEL}
+${BEAT_REF_REGEL}
 
 AKTUELLES BOARD${_cutNote(kuerzungen, 'beats')}:
 ${_boardOutline(acts, beats, threads, null, { descMax })}
@@ -262,6 +263,7 @@ Der Marker ist Ähnlichkeit, kein Beweis — urteile am Beleg-Ausschnitt, nicht 
   return `Du prüfst die GEPLANTE Handlung (Beat-Board) der Autorin auf Stimmigkeit — in sich und gegen die tatsächliche Buchrealität (Kapitel + analysierte Szenen). Sei schonungslos, aber konstruktiv.
 
 ${DATEN_REGEL}
+${BEAT_REF_REGEL}
 
 GEPLANTES BEAT-BOARD${_cutNote(k, 'beats')}:
 ${_boardOutline(acts, beats, threads, anchorMap, { descMax })}

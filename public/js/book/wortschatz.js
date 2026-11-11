@@ -7,21 +7,31 @@
 // Kopie davon: eine Frontend-Kopie driftet unbemerkt gegen den Server.
 
 import { formatNumber, localeTag, tzOpts } from '../utils.js';
+import { sameData } from '../utils/same-data.js';
 import { startPoll } from '../cards/job-helpers.js';
 import { tRaw } from '../i18n.js';
 
 // Kein `get x()` in diesem gespreadeten Modul — Spread würde Getter beim Mount
 // mit falschem `this` auslösen. Reine Getter leben inline im Karten-Literal.
 export const wortschatzMethods = {
-  async loadWortschatz() {
+  /** `silent`: Tab-Rueckkehr — gleiche Daten nicht neu zuweisen (der Watcher
+   *  baute sonst die Wortwolke neu auf), Fehler lassen den alten Stand stehen. */
+  async loadWortschatz({ silent = false } = {}) {
     const bookId = Alpine.store('nav').selectedBookId;
     if (!bookId) { this.wortschatzData = null; return; }
-    this.wortschatzLoadError = false;
+    if (!silent) this.wortschatzLoadError = false;
     try {
       const r = await fetch('/lexicon/' + encodeURIComponent(bookId), { credentials: 'same-origin' });
-      if (!r.ok) { this.wortschatzData = null; this.wortschatzLoadError = true; return; }
-      this.wortschatzData = await r.json();
+      if (!r.ok) {
+        if (silent) return;
+        this.wortschatzData = null; this.wortschatzLoadError = true; return;
+      }
+      const data = await r.json();
+      if (silent && sameData(data, this.wortschatzData)) return;
+      this.wortschatzData = data;
+      this.wortschatzLoadError = false;
     } catch {
+      if (silent) return;
       this.wortschatzData = null;
       this.wortschatzLoadError = true;
     }

@@ -155,6 +155,9 @@ export function registerFigurWerkstattCard() {
 
       this._lifecycle = setupCardLifecycle(this, {
         name: 'figurWerkstatt',
+        // Tab-Rueckkehr: kein Reload — er fragte bei ungespeicherter Arbeit
+        // „verwerfen?" bzw. baute die Mindmap samt Auswahl neu auf.
+        wake: 'skip',
         showFlag: 'showFigurWerkstattCard',
         timerKeys: ['_brainstormPollTimer', '_consistencyPollTimer', '_anchorPollTimer'],
         // Kein resetState-Literal: der Reset dieser Karte muss die jsMind-

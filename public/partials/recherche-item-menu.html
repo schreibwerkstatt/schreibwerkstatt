@@ -15,6 +15,15 @@
   <div class="context-menu research-item-menu" x-ref="actionMenu" x-bind="actionMenuPanel()" x-cloak>
     <template x-for="item in itemMenuItems()" :key="actionMenuKey">
       <div x-data="{ menuCtx: actionMenuTarget.ctx }">
+        <!-- Bearbeiten: derselbe Weg wie der Stift der Listenzeile (Detailansicht im
+             Bearbeiten-Modus) — auf der Board-Karte der einzige. Im Dialog selbst
+             steht der Knopf schon im Kopf. -->
+        <template x-if="menuCtx !== 'detail'">
+          <button type="button" class="context-menu-item context-menu-item--icon" role="menuitem" @click="openDetail(item, { edit: true })" :disabled="busy">
+            <svg class="icon" aria-hidden="true"><use href="/icons.svg#pencil"/></svg>
+            <span x-text="$app.t('recherche.edit')"></span>
+          </button>
+        </template>
         <button type="button" class="context-menu-item context-menu-item--icon" role="menuitem" @click="openLinkPicker(item, actionMenuAnchor())">
           <svg class="icon" aria-hidden="true"><use href="/icons.svg#external-link"/></svg>
           <span x-text="$app.t('recherche.link.add')"></span>

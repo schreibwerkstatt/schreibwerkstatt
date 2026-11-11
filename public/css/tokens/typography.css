@@ -63,6 +63,10 @@
   /* === Compact-Controls (Buttons + Dropdowns nebeneinander gleich hoch) === */
   --size-compact-font-size: 12px;
   --size-compact-padding: 4px 10px;
+  /* Gemeinsame Zeilenhöhe: Knopf, Combobox-Trigger und Filter-Suchfeld sind
+     nur dann gleich hoch, wenn auch die line-height übereinstimmt — der Knopf
+     erbte sonst `normal` (~1.2) und lag 2px unter dem Feld daneben. */
+  --size-compact-line-height: 1.4;
 
   /* === Default-Controlgrösse (button, combobox-trigger, input, select) === */
   --size-default-padding-y: 8px;

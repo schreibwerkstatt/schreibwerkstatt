@@ -2,6 +2,7 @@
 // und die geteilten Item-Helfer (Listen-Mutation, Indikator-Maps, Labels).
 
 import { fetchJson } from '../../utils.js';
+import { sameData } from '../../utils/same-data.js';
 import { isSelectedBook, loadToken } from '../../cards/book-guard.js';
 import { toggleWrapFullscreen } from '../../fullscreen.js';
 import { KINDS, LINK_KINDS, emptyDraft as _emptyDraft } from './shared.js';
@@ -10,10 +11,12 @@ import { rechercheCrosscheckState } from './crosscheck.js';
 
 export const rechercheBoardMethods = {
   // ── Lifecycle ──────────────────────────────────────────────────────────────
-  async loadRecherche() {
+  /** `silent`: Tab-Rueckkehr — nicht dimmen, gleiche Daten verwerfen, Fehler
+   *  lassen den alten Stand stehen. Liefert true, wenn `items` neu gesetzt wurde. */
+  async loadRecherche({ silent = false } = {}) {
     const app = window.__app;
     const bookId = Alpine.store('nav').selectedBookId;
-    if (!bookId) { this.items = []; return; }
+    if (!bookId) { this.items = []; return true; }
     // Sequenz + Buch-Guard: Filter-/Such-Refetches laufen parallel (jeder
     // Tastendruck), und eine ältere Antwort — oder die des vorigen Buchs — darf
     // die jüngere nicht überschreiben.
@@ -21,12 +24,14 @@ export const rechercheBoardMethods = {
     // Skeleton nur beim Erstladen (noch keine Daten). Bei Filter-/Sort-/Such-
     // Refetches bleibt die Liste stehen und wird nur gedimmt (refreshing) — sonst
     // flackert bei jedem Tastendruck das Skeleton auf und wieder weg.
-    if (this.items.length > 0) this.refreshing = true; else this.loading = true;
+    if (this.items.length === 0) this.loading = true;
+    else if (!silent) this.refreshing = true;
     // Memo-Speicher der Karte leeren (Status-Buckets in recherche/status.js).
     // Die Deps haengen an der `items`-Referenz und verfallen darum ohnehin — der
     // Reset ist die Konvention, damit ein spaeterer Memo mit anderen Deps nicht
     // still ueber einen Buchwechsel hinweg gilt.
-    this._memos = {};
+    if (!silent) this._memos = {};
+    let changed = false;
     try {
       const qs = new URLSearchParams({ book_id: String(bookId) });
       if (this.filterKind) qs.set('kind', this.filterKind);
@@ -36,8 +41,12 @@ export const rechercheBoardMethods = {
       if (this.showArchived) qs.set('archived', '1');
       if (this.sortBy && this.sortBy !== 'updated') qs.set('sort', this.sortBy);
       const rows = await fetchJson(`/research?${qs.toString()}`);
-      if (!isCurrent()) return;
-      this.items = Array.isArray(rows) ? rows : [];
+      if (!isCurrent()) return false;
+      const next = Array.isArray(rows) ? rows : [];
+      if (silent && sameData(next, this.items)) return false;
+      changed = true;
+      this._memos = {};
+      this.items = next;
       this._rechercheLoadedBookId = bookId;
       this.errorMessage = '';
       this._loadTags();
@@ -46,7 +55,8 @@ export const rechercheBoardMethods = {
       // ohne await: eine fehlende Nebenlesung darf das Board nicht aufhalten.
       this.loadIdeaBacklinks('research');
     } catch (e) {
-      if (!isCurrent()) return;
+      if (!isCurrent() || silent) return false;
+      changed = true;
       // 503 SEARCH_FAILED (Volltextsuche gescheitert) sagt mehr als „Laden fehlgeschlagen".
       this.errorMessage = this._rechercheErrorText(e, 'recherche.error.load');
       this.items = [];
@@ -55,10 +65,11 @@ export const rechercheBoardMethods = {
       // sonst mitten im laufenden Refetch verschwinden.
       if (isCurrent.latest()) { this.loading = false; this.refreshing = false; }
     }
-    if (!isCurrent()) return;
+    if (!isCurrent()) return changed;
     // Deep-Link-Ziel (#…/recherche/<itemId>), das vor dem Load ankam, jetzt
     // fokussieren — das Item existiert erst nach diesem Load in `items`.
     if (this._pendingFocusItemId != null) this._focusRechercheItemById(this._pendingFocusItemId);
+    return changed;
   },
 
   async _loadTags() {
@@ -119,7 +130,7 @@ export const rechercheBoardMethods = {
     this.linkTargets = {};
     this._linkTargetsBookId = null;
     this.draft = _emptyDraft();
-    // Erst BEIDE Dialoge schliessen, dann die Marker nullen: ein offenes <dialog>
+    // Erst Detail-Dialog und Anlegen schliessen, dann die Marker nullen: ein offenes <dialog>
     // bleibt sonst im Top-Layer stehen und hält das Dokument inert.
     this.closeDetail();
     this.closeCreate();
@@ -184,6 +195,15 @@ export const rechercheBoardMethods = {
 
   // ── Filter ───────────────────────────────────────────────────────────────
   applyFilters() { return this.loadRecherche(); },
+  // Tag-Chip (Liste und Detail-Dialog): filtert die Liste. Aus dem Dialog
+  // heraus schliesst er sich im Lesemodus, sonst filterte die Liste unsichtbar
+  // hinter dem Backdrop; im Bearbeiten-Modus bleibt er offen (kein stilles
+  // Verwerfen des Entwurfs).
+  filterByTag(tag) {
+    this.filterTag = tag;
+    if (this.detailItemId != null && !this.detailEditing) this.closeDetail();
+    return this.applyFilters();
+  },
   clearFilters() {
     this.filterKind = ''; this.filterTag = ''; this.filterText = '';
     this.filterLinked = ''; this.filterLinkedKind = ''; this.filterLinkedTargetId = '';

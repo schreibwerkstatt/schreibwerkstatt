@@ -12,6 +12,8 @@ const {
   getFiguren, getLatestReview, getLatestPageCheck, getOpenIdeen, buildChatMessageHistory,
 } = require('../shared');
 const contentStore = require('../../../lib/content-store');
+const { listWorldFacts } = require('../../../db/schema');
+const { selectPageWorldFacts } = require('../../../lib/lektorat-weltfakten');
 const { hasMsgThread } = require('../../../lib/html-text');
 const { generateSessionTitle } = require('../chat-title');
 const { recordChatLedgerForMessage } = require('../../../db/cost-ledger');
@@ -142,6 +144,11 @@ async function runChatJob(jobId, sessionId, userMsgId, message, userEmail) {
     const review  = getLatestReview(session.book_id, userEmail);
     const ideen    = getOpenIdeen(session.page_id, userEmail);
     const lektorat = getLatestPageCheck(session.page_id, userEmail);
+    // Welt-Fakten + Sprechweise zu diesem Abschnitt (gleiche Auswahl wie das Lektorat).
+    const { welt: weltfakten, soziolekte } = selectPageWorldFacts({
+      facts: listWorldFacts(session.book_id, userEmail, { withChapterIds: true }),
+      chapterId: pageChapterId, text: pageText, pageName: pd.name,
+    });
     const { SYSTEM_CHAT: chatSysPrompt } = await getBookPrompts(session.book_id, userEmail);
     const bookTitles = await _loadBookTitles(session.book_id, logger);
 
@@ -189,7 +196,7 @@ async function runChatJob(jobId, sessionId, userMsgId, message, userEmail) {
     const editStatus = stand && chain.includes(stand.status) ? { status: stand.status, stale: stand.stale, chain } : null;
     const systemPrompt = buildChatSystemPrompt(session.page_name || '–', promptText, figuren, review,
       chatSysPrompt, pageChangeNote, ideen, lektorat, { figurenMaxChars: figurenBlockChars(aiCfg), editStatus, hatNachrichten: hasMsgThread(pd.html),
-        bookTitles, currentPageId: session.page_id });
+        bookTitles, currentPageId: session.page_id, weltfakten, soziolekte });
 
     // Buch-Kontext: pro Frage andere Bytes → NICHT im System-Prompt (er bräche den
     // Präfix hinter Block 2, der ganze Verlauf würde jede Runde neu bezahlt), sondern

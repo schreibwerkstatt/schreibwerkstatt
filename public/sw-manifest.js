@@ -5,7 +5,7 @@
 // __SHELL_BUILD: content hash over all listed assets → drives SHELL_CACHE.
 // __SHELL_MANIFEST: the coherent set precached atomically at SW install.
 // __VENDOR_SET: current vendor/ + fonts/ files — VENDOR_CACHE prune list.
-self.__SHELL_BUILD = "be59fb96acf88e2a";
+self.__SHELL_BUILD = "b29eb78780da0c40";
 self.__SHELL_MANIFEST = [
   "/css/admin/admin-backup.css",
   "/css/admin/admin-home.css",
@@ -113,6 +113,7 @@ self.__SHELL_MANIFEST = [
   "/css/components/sortable-table.css",
   "/css/components/status-msg.css",
   "/css/components/tabs.css",
+  "/css/components/tag-input.css",
   "/css/components/toggle-switch.css",
   "/css/components/tooltip.css",
   "/css/components/url-short.css",
@@ -805,6 +806,7 @@ self.__SHELL_MANIFEST = [
   "/js/i18n/de.json",
   "/js/i18n/en.json",
   "/js/interview/timecode.js",
+  "/js/ios-viewport.js",
   "/js/komplett-scope.js",
   "/js/lazy-libs.js",
   "/js/list-window.js",
@@ -824,6 +826,7 @@ self.__SHELL_MANIFEST = [
   "/js/prompts.js",
   "/js/prompts/autorenprofil.js",
   "/js/prompts/blocks-fach.js",
+  "/js/prompts/blocks-welt.js",
   "/js/prompts/blocks.js",
   "/js/prompts/book-chat-output.js",
   "/js/prompts/book-outline.js",
@@ -961,6 +964,7 @@ self.__SHELL_MANIFEST = [
   "/js/tab-id.js",
   "/js/table/table-html.js",
   "/js/tabs.js",
+  "/js/tag-input.js",
   "/js/theme-init.js",
   "/js/today-ring.js",
   "/js/toggle-switch.js",
@@ -984,6 +988,7 @@ self.__SHELL_MANIFEST = [
   "/js/utils/keys.js",
   "/js/utils/markdown.js",
   "/js/utils/net.js",
+  "/js/utils/same-data.js",
   "/js/utils/scroll-when-ready.js",
   "/js/utils/text-match.js",
   "/js/utils/textarea.js",

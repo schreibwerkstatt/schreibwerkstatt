@@ -275,6 +275,7 @@ function _recordCallCostUnsafe(tok, tier, provider, m) {
     tokensIn: m.tokensIn, tokensOut: m.tokensOut,
     cacheReadIn: m.cacheReadIn, cacheCreationIn: m.cacheCreationIn,
     cacheCreation1hIn: m.cacheCreation1hIn,
+    webSearches: m.webSearches,
   });
   const bucket = label || 'other';
   tok.byPhase = tok.byPhase || {};

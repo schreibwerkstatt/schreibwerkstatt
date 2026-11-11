@@ -182,6 +182,36 @@ test('Lektorat: mehrdeutige Fundstelle trägt mehrdeutig=true, auch aus dem Cach
   assert.equal(j2.result.fehler[0].mehrdeutig, true);
 });
 
+// Welt-Fakten als Prüfgrundlage: ohne passenden Fakt gibt es «weltfakt» nicht (der
+// Befund fällt in der Validierung), mit Fakt steht er im Prompt und der Befund bleibt.
+// Der Fakt geht in die Cache-Signatur.
+test('Lektorat: «weltfakt» nur mit passendem Welt-Fakt, Fakt in Prompt und Signatur', async () => {
+  const BOOK_ID = 206;
+  const PAGE_ID = 2071;
+  ctx.dbSeed.setBook({
+    chapters: [{ id: 2070, book_id: BOOK_ID, name: 'Kap G' }],
+    pages: [
+      { id: PAGE_ID, book_id: BOOK_ID, chapter_id: 2070, name: 'Aufstieg', updated_at: '2026-05-01T10:00:00Z' },
+      { id: 2072, book_id: BOOK_ID, chapter_id: 2070, name: 'Ankunft', updated_at: '2026-05-01T10:00:00Z' },
+    ],
+    pageBodies: { [PAGE_ID]: '<p>Der Turm hatte neun Stockwerke.</p>', 2072: '<p>Ein Turm.</p>' },
+  });
+  ctx.mockAi.on((e) => e.schemaKeys.includes('fehler') && e.schemaKeys.includes('szenen'), {
+    fehler: [{ typ: 'weltfakt', original: 'neun Stockwerke', korrektur: 'sieben Stockwerke', erklaerung: 'laut Welt-Fakten: sieben' }],
+    szenen: [], stilanalyse: 'ok', fazit: 'ok',
+  });
+  const ohne = await runCheck(BOOK_ID, PAGE_ID);
+  assert.equal(ohne.result.fehler.length, 0, 'ohne Fakt kein «weltfakt»-Befund');
+
+  ctx.dbSchema.saveFaktenToDb(BOOK_ID, [{ kapitel: 'Kap G', fakten: [
+    { kategorie: 'ort', subjekt: 'Turm', fakt: 'Der Turm hat sieben Stockwerke', seite: 'Ankunft' },
+  ] }], 'tester@test.dev');
+  const mit = await runCheck(BOOK_ID, PAGE_ID);
+  assert.equal(ctx.mockAi.log.length, 2, 'neuer Fakt → Cache-MISS');
+  assert.ok(ctx.mockAi.log.at(-1).prompt.includes('- Turm: Der Turm hat sieben Stockwerke'));
+  assert.deepEqual(mit.result.fehler.map(f => f.typ), ['weltfakt']);
+});
+
 // ── Lektorat Batch ───────────────────────────────────────────────────────────
 
 test('Batch-Lektorat-Cache: zweiter Lauf nur für geänderte Seite', async () => {

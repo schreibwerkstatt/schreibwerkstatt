@@ -42,5 +42,9 @@ export function registerNavStore() {
     // der Hash-Router liest ihn beim Cold-Open, um zwischen #book/:id/suche
     // (buch-skopiert) und #search (buchübergreifend) zu unterscheiden.
     searchScope: 'book',
+    // Permalink-Spiegel der Karten-Reiter: Reiter-Wunsch-Schlüssel
+    // (CARD_REQUEST.*_TAB) → aktiver Reiter. Geschrieben von setupCardLifecycle
+    // (`tabRequest.current`), gelesen vom Hash-Router (URL_TABS in card-request.js).
+    cardTab: {},
   });
 }

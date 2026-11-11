@@ -6,7 +6,7 @@
   springt dorthin.
 -->
 <div x-show="referenceTab === 'plan'" class="reference-panel">
-  <div x-show="referencePlanLoading" class="card-status" x-text="$app.t('reference.loading')"></div>
+  <div x-show="referencePlanLoading" x-skeleton="4" x-cloak></div>
   <div class="search-status search-status--error" x-show="referencePlanError && !referencePlanLoading"
        x-text="referencePlanError"></div>
   <template x-if="!referencePlanLoading && !referencePlanError && referencePlanBeats().length === 0">

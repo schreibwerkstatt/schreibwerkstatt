@@ -194,7 +194,7 @@
         <button type="button" class="organizer-delete-btn" @click="prov.card.closeConflict()" :data-tip="$app.t('common.close')" :aria-label="$app.t('common.close')"><svg class="icon" aria-hidden="true"><use href="/icons.svg#x"/></svg></button>
       </div>
       <template x-if="!prov.card.conflictData">
-        <div class="muted-msg" x-text="$app.t('common.loading')"></div>
+        <div x-skeleton="3"></div>
       </template>
       <template x-if="prov.card.conflictData">
         <div class="blog-conflict-body">

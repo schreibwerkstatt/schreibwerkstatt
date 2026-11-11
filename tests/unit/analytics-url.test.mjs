@@ -19,7 +19,7 @@ const HOST = 'https://schreibwerkstatt.example';
 
 // Je ein Vertreter jeder Zweig-Sorte aus app-hash-router/build.js#_computeHash.
 const HASHES = [
-  '', '#profil', '#meine-statistik', '#meine-buecher', '#hilfe', '#erste-schritte',
+  '', '#profil', '#meine-statistik', '#meine-buecher', '#autorenprofil', '#hilfe', '#erste-schritte',
   '#search', '#import', '#admin/users', '#admin/settings', '#admin/usage',
   '#admin/usage/tokens', '#admin/logs', '#admin/js-errors',
   '#book/42', '#book/42/suche', '#book/42/figuren', '#book/42/figur/318',

@@ -119,6 +119,22 @@ export function createTtsPlayer(o) {
 
   let rt = null;
   let rate = 1;
+  // Ein Audio-Element fuer alle Segmente, freigeschaltet in der Klick-Geste
+  // (start/resume). Safari erlaubt `play()` nur kurz nach einer Geste — ein
+  // frisches `new Audio()` nach 12 s Kaltstart-Synthese wurde abgelehnt. Ein
+  // Element, das in der Geste `load()`/`play()` gesehen hat, bleibt freigegeben.
+  let el = null;
+  let unlocked = false;
+  function element() {
+    if (!el && typeof Audio !== 'undefined') el = new Audio();
+    return el;
+  }
+  // Muss synchron im Klick-Handler laufen (start/resume werden von dort gerufen).
+  function unlock() {
+    const a = element();
+    if (!a || unlocked) return;
+    try { a.load(); } catch { /* noop */ }
+  }
   // Laufende Mittelwerte: Synthese-Dauer vs. Abspiel-Dauer pro Segment. Daraus
   // die Vorauslade-Tiefe — wer langsamer synthetisiert als vorliest, braucht
   // mehr Vorlauf, sonst entstehen Luecken.
@@ -243,8 +259,10 @@ export function createTtsPlayer(o) {
   function playBlob(r, blob) {
     return new Promise((resolve) => {
       const url = URL.createObjectURL(blob);
-      const audio = new Audio(url);
-      try { audio.playbackRate = rate; } catch { /* noop */ }
+      const audio = element();
+      audio.src = url;
+      // Ein neues `src` setzt playbackRate auf defaultPlaybackRate zurueck.
+      try { audio.defaultPlaybackRate = rate; audio.playbackRate = rate; } catch { /* noop */ }
       r.audio = audio;
       let done = false;
       let wake = null;
@@ -254,27 +272,39 @@ export function createTtsPlayer(o) {
         done = true;
         wake();
         if (r.audio === audio) { r.audio = null; r.resumeAudio = null; }
+        if (audio.onended === onEnded) audio.onended = null;
+        if (audio.onerror === onError) audio.onerror = null;
         try { audio.pause(); } catch { /* noop */ }
         try { URL.revokeObjectURL(url); } catch { /* noop */ }
         resolve(how);
       };
-      audio.addEventListener('ended', () => {
+      const onEnded = () => {
         if (Number.isFinite(audio.duration) && audio.duration > 0) {
           stats.audioMs += (audio.duration * 1000) / (rate || 1);
           stats.audioN++;
         }
         finish('ended');
-      });
-      audio.addEventListener('error', () => {
+      };
+      const onError = () => {
         if (done || rt !== r) return;
         log(`audio playback error, skipping segment: ${audio.error?.message || ''}`, 'warn');
         finish('ended');
-      });
+      };
+      audio.onended = onEnded;
+      audio.onerror = onError;
       const tryPlay = () => {
         let p;
         try { p = audio.play(); } catch { p = null; }
-        p?.catch?.((e) => {
+        p?.then?.(() => { unlocked = true; }, (e) => {
           if (done || r.paused || rt !== r) return;
+          // Autoplay-Sperre: der Satz ist nicht kaputt, nur die Geste fehlt.
+          // Pausieren statt ueberspringen — „Weiter" (eine Geste) spielt ihn.
+          if (e?.name === 'NotAllowedError') {
+            log(`audio.play() blocked by autoplay policy, pausing: ${e?.message || ''}`, 'warn');
+            r.paused = true;
+            emit();
+            return;
+          }
           log(`audio.play() rejected, skipping segment: ${e?.message || ''}`, 'warn');
           finish('ended');
         });
@@ -386,6 +416,7 @@ export function createTtsPlayer(o) {
   function start(segs, startIdx = 0) {
     if (rt) stop();
     if (!Array.isArray(segs) || !segs.length) return false;
+    unlock();
     const r = {
       segs,
       i: Math.max(0, Math.min(startIdx | 0, segs.length - 1)),
@@ -440,7 +471,9 @@ export function createTtsPlayer(o) {
     const r = rt;
     if (!r || !r.paused) return;
     r.paused = false;
-    r.resumeAudio?.();
+    // Liegt schon ein Satz am Element, schaltet dessen play() in der Geste frei;
+    // load() wuerde ihn zuruecksetzen.
+    if (r.resumeAudio) r.resumeAudio(); else unlock();
     kick(r);
     emit();
   }
@@ -491,7 +524,7 @@ export function createTtsPlayer(o) {
     const n = Number(v);
     if (!Number.isFinite(n) || n <= 0) return;
     rate = n;
-    if (rt?.audio) { try { rt.audio.playbackRate = n; } catch { /* noop */ } }
+    if (rt?.audio) { try { rt.audio.defaultPlaybackRate = n; rt.audio.playbackRate = n; } catch { /* noop */ } }
     emit();
   }
 

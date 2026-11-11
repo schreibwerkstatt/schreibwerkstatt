@@ -12,6 +12,7 @@
 // er die alte Liste bis zum Buchwechsel.
 
 import { fetchJson } from '../utils.js';
+import { sameData } from '../utils/same-data.js';
 import { EVT } from '../events.js';
 import { formatFull } from './format.js';
 import { filterSources, primaryPersonLabel } from './search.js';
@@ -44,22 +45,30 @@ async function _send(url, method, payload) {
 
 export const sourcesMethods = {
   // ── Laden ──────────────────────────────────────────────────────────────────
-  async loadSources() {
+  /** `silent`: Hintergrund-Abgleich (Tab-Rueckkehr, Lifecycle-`wake`) — kein
+   *  Dimmen der Tabelle, und unveraenderte Daten werden nicht neu zugewiesen,
+   *  sonst blinkt die Karte bei jedem Tab-Wechsel, ohne dass sich etwas tut. */
+  async loadSources({ silent = false } = {}) {
     const bookId = _bookId();
     if (!bookId) return;
     const first = this.sources.length === 0;
     if (first) this.sourcesLoading = true;
-    else this.sourcesRefreshing = true;
-    this.sourcesError = '';
-    this._memos = {};
+    else if (!silent) this.sourcesRefreshing = true;
+    if (!silent) {
+      this.sourcesError = '';
+      this._memos = {};
+    }
     try {
       // Archivierte kommen immer mit; das Ausblenden passiert clientseitig, damit
       // der Archiv-Schalter kein Roundtrip ist und die Zaehler stimmen.
       const list = await fetchJson(`/sources?book_id=${encodeURIComponent(bookId)}&archived=1`);
-      this.sources = Array.isArray(list) ? list : [];
-      this._memos = {};
+      const next = Array.isArray(list) ? list : [];
+      if (!silent || !sameData(next, this.sources)) {
+        this.sources = next;
+        this._memos = {};
+      }
     } catch (e) {
-      this.sourcesError = window.__app.t('sources.loadError');
+      if (!silent) this.sourcesError = window.__app.t('sources.loadError');
       console.error('[sources] Laden fehlgeschlagen:', e);
     } finally {
       this.sourcesLoading = false;
@@ -67,7 +76,7 @@ export const sourcesMethods = {
     }
     // Kennzahlen hinterher und ohne await auf den Listenpfad: sie sind ein
     // Nebenwert, ihr Fehlschlag darf die Tabelle nicht blockieren.
-    this.loadQuoteStats();
+    this.loadQuoteStats({ silent });
     // Deep-Link-Ziel (#…/quellen/<sourceId>), das vor dem Load ankam, jetzt
     // fokussieren — die Quelle existiert erst nach diesem Load in `sources`.
     if (this._pendingFocusSourceId != null) this._focusSourceById(this._pendingFocusSourceId);
@@ -110,14 +119,15 @@ export const sourcesMethods = {
 
   /** Zitat-Kennzahlen des Buchs (Zitat-Anteil + woertlich/Paraphrase).
    *  Fehler bleiben still — die Zahlen sind Zusatzinformation, kein Inhalt. */
-  async loadQuoteStats() {
+  async loadQuoteStats({ silent = false } = {}) {
     const bookId = _bookId();
     if (!bookId) { this.quoteStats = null; return; }
     try {
       const s = await fetchJson(`/sources/stats?book_id=${encodeURIComponent(bookId)}`);
-      this.quoteStats = s && typeof s === 'object' ? s : null;
+      const next = s && typeof s === 'object' ? s : null;
+      if (!silent || !sameData(next, this.quoteStats)) this.quoteStats = next;
     } catch (e) {
-      this.quoteStats = null;
+      if (!silent) this.quoteStats = null;
       console.error('[sources] Zitat-Kennzahlen fehlgeschlagen:', e);
     }
   },
@@ -227,7 +237,6 @@ export const sourcesMethods = {
     this._clearPdfDraft();
     this.srcEditingId = 'new';
     this.srcDraft = draftFromSource(null);
-    this.srcTagInput = '';
     this.srcFormError = '';
     this.closeSourceCitations();
     this.closeSourceExport();
@@ -239,7 +248,6 @@ export const sourcesMethods = {
     this._clearPdfDraft();
     this.srcEditingId = s.id;
     this.srcDraft = draftFromSource(s);
-    this.srcTagInput = '';
     this.srcFormError = '';
     this.closeSourceExport();
     this.closeSourceImport();
@@ -292,9 +300,6 @@ export const sourcesMethods = {
   async saveSource() {
     const bookId = _bookId();
     if (!bookId || !this.srcCanSave()) return;
-    // Ein getipptes, noch nicht mit Enter bestaetigtes Schlagwort gilt mit —
-    // sonst verschwindet es beim Speichern kommentarlos.
-    if (this.srcTagInput) this.addSrcDraftTag();
     this.sourcesBusy = true;
     this.srcFormError = '';
     try {

@@ -12,7 +12,7 @@
 import { _isLocal, _jsonOnly } from './state.js';
 import { buildPassageBlockLines } from './chat-pre-context.js';
 import { toolMentions } from './chat-tools/mentions.js';
-import { _reihenfolgeRegel } from './plot/board.js';
+import { _reihenfolgeRegel, BEAT_REF_REGEL } from './plot/board.js';
 import { buildProposalMemoryBlock } from './proposal-memory.js';
 import { BEAT_REL_TYPES, STATUSES } from '../book/plot/constants.js';
 
@@ -247,6 +247,7 @@ export function buildPlotChatSystemPrompt(bookName, ctx = {}) {
       'Meldet ein Vorschlags-Werkzeug einen Fehler (unbekannte id, falscher Akt, mehrdeutige Figur), korrigiere den Aufruf — rate keine ids, sie stehen im Board im Vorspann der Frage.',
       'Ein leerer Wert heisst «nicht ändern». Ein Feld leeren (z.B. das Kapitel eines Beats entfernen) nur über `leeren`.',
     ]),
+    BEAT_REF_REGEL,
     'Löschen kannst du nicht vorschlagen. Statt einen Beat zu löschen, schlage vor, ihn zu verwerfen (`propose_beat` mit beat_id und verworfen: true).',
     'Schlage nicht ungefragt das ganze Board um. Bei offenen Fragen („was meinst du?") antworte erst inhaltlich und biete Vorschläge an; bei klaren Aufträgen („mach mir drei Beats für …") schlage direkt vor.',
     '',

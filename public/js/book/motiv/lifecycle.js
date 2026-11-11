@@ -3,6 +3,7 @@
 // abgeleiteten Aggregate memoized. Rein rückwärtsgewandt/planend.
 
 import { fetchJson } from '../../utils.js';
+import { sameData } from '../../utils/same-data.js';
 import { memoMethods } from '../../cards/card-memo.js';
 import { loadToken } from '../../cards/book-guard.js';
 
@@ -13,15 +14,24 @@ export const lifecycleMethods = {
   // Buchwechsel-/Doppel-Load-Guard: eine verspätete Antwort des vorigen Buchs
   // setzte sonst dessen _savedPositions, und der nächste Drag schriebe das
   // Layout des alten Buchs unter dem neuen zurück.
-  async loadBoard() {
+  //
+  // `silent`: Tab-Rueckkehr — ohne Ladeanzeige; ist der Payload unveraendert,
+  // bleibt alles stehen (offenes Band-Detail, aufgeklappter Befund, Graph).
+  async loadBoard({ silent = false } = {}) {
     const bookId = this.$store.nav.selectedBookId;
     if (!bookId) return;
     const isCurrent = loadToken(this, '_boardLoadSeq', bookId);
-    this.loading = true;
-    this.errorMessage = '';
+    if (!silent) {
+      this.loading = true;
+      this.errorMessage = '';
+    }
     try {
       const data = await fetchJson(`/motifs?book_id=${bookId}`);
       if (!isCurrent()) return;
+      if (silent && sameData(data.themes || [], this.themes) && sameData(data.motifs || [], this.motifs)
+          && sameData(data.relations || [], this.relations) && sameData(data.layout || {}, this._savedPositions)
+          && !!data.embedIndex?.stale === this.embedIndexStale) return;
+      this.errorMessage = '';
       this.themes = data.themes || [];
       this.motifs = data.motifs || [];
       this.relations = data.relations || [];
@@ -59,9 +69,9 @@ export const lifecycleMethods = {
         if (this.motifById(pid)) this.selectMotif(pid);
       }
     } catch (e) {
-      if (isCurrent()) this.errorMessage = window.__app.t('motiv.error.load');
+      if (isCurrent() && !silent) this.errorMessage = window.__app.t('motiv.error.load');
     } finally {
-      if (isCurrent.latest()) this.loading = false;
+      if (isCurrent.latest() && !silent) this.loading = false;
     }
   },
 

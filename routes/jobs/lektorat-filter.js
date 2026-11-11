@@ -45,7 +45,7 @@ function dedupFehler(fehler) {
 const STYLISTIC_TYPEN = new Set([
   'stil', 'satzbau', 'schwaches_verb', 'fuellwort', 'filterwort',
   'klischee', 'ki_geruch', 'show_vs_tell', 'passiv', 'pleonasmus', 'wiederholung',
-  'hedging', 'amtsdeutsch',
+  'hedging', 'amtsdeutsch', 'soziolekt',
 ]);
 
 const DEFAULT_STYLISTIC_CAP = 10;

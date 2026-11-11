@@ -4,6 +4,7 @@
 // beim Boot wird die DB geswappt). Backend: routes/admin-backup.js.
 
 import { fmtBytes, fetchJson } from '../utils.js';
+import { sameData } from '../utils/same-data.js';
 import { tFetchErrorRaw } from '../i18n.js';
 
 export const adminBackupMethods = {
@@ -14,15 +15,20 @@ export const adminBackupMethods = {
     await this._backupLoadInfo();
   },
 
-  async _backupLoadInfo() {
-    this.backupLoading = true;
-    this.backupError = '';
+  /** `silent`: Tab-Rueckkehr — Abschnitte bleiben stehen, gleiche Daten werden
+   *  verworfen, ein Fehler aendert nichts. */
+  async _backupLoadInfo({ silent = false } = {}) {
+    if (!silent) {
+      this.backupLoading = true;
+      this.backupError = '';
+    }
     try {
-      this.backupInfoData = await fetchJson('/admin/backup/info', { cache: 'no-store' });
+      const info = await fetchJson('/admin/backup/info', { cache: 'no-store' });
+      if (!silent || !sameData(info, this.backupInfoData)) this.backupInfoData = info;
     } catch (e) {
-      this.backupError = tFetchErrorRaw(e);
+      if (!silent) this.backupError = tFetchErrorRaw(e);
     } finally {
-      this.backupLoading = false;
+      if (!silent) this.backupLoading = false;
     }
   },
 

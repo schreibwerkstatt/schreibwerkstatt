@@ -1,5 +1,5 @@
 import { EVT } from '../events.js';
-import { takeCardRequest } from './card-request.js';
+import { takeCardRequest, isKnownTab } from './card-request.js';
 import { ownedFilterKeys, resetFilterScopes, restoreFilterScopes, watchFilterScopes } from '../filter-persist.js';
 
 // Lade-Promises der Karten, die gerade eingeblendet wurden (Show-Watcher unten).
@@ -51,6 +51,12 @@ export function settleShowLoads(maxMs) {
 //                              und auf das Event bei schon offener Karte.
 //                              Karten rufen takeCardRequest fuer *_TAB nie
 //                              selbst (gegated: card-tab-request-single-place).
+//                              Optional `current()`: liefert den aktiven
+//                              Reiter; der Helper spiegelt ihn nach
+//                              `$store.nav.cardTab[key]`, woraus der Hash-
+//                              Router den Reiter-Permalink baut (URL_TABS in
+//                              card-request.js). Reiter, die URL_TABS nicht
+//                              kennt, verwirft der Helper vor `apply`.
 //   beforeBookChanged(e, ctx, r) — awaited BEFORE the default reset+load on
 //                              `book:changed`; the card still holds the old
 //                              book's state (e.g. ask whether to save it)
@@ -60,6 +66,18 @@ export function settleShowLoads(maxMs) {
 //                              (timerKeys are still cleared first)
 //   onCardRefresh(e, ctx, r) — runs in place of cfg.load on `card:refresh`
 //                              (name-match + book-id check are handled by helper)
+//   wake                     — Verhalten bei `card:refresh` mit `source: 'wake'`
+//                              (Tab-Rueckkehr nach >30 s, app-view/bookscope.js
+//                              #_refreshAfterWake). Default: derselbe Hook wie
+//                              beim Re-Klick, aber ohne `cardLoading`. `'skip'`:
+//                              gar nicht neu laden (Karte haelt Arbeitsstand,
+//                              den ein Neuaufbau verwirft). Funktion
+//                              `(e, ctx, r)`: eigener stiller Abgleich.
+//                              Regel: die Tab-Rueckkehr ist kein User-Wunsch —
+//                              nichts dimmen, kein Skelett, keine Auswahl,
+//                              kein Auf-/Zuklappzustand und kein Undo-Verlauf
+//                              zuruecksetzen, unveraenderte Daten nicht neu
+//                              zuweisen. Der Re-Klick bleibt sichtbar.
 //   resetState               — object or factory `() => ({…})` (see applyReset)
 //   resetStateView           — override resetState specifically on `view:reset`
 //   refreshNeedsBookId       — default true; set false if cfg.load checks itself
@@ -89,6 +107,12 @@ export function settleShowLoads(maxMs) {
 // Lifecycle returns { signal, destroy } — signal is the AbortController signal
 // used internally; cards can attach their own listeners with `{ signal }` to get
 // cleanup-for-free.
+/** `card:refresh` aus der Tab-Rueckkehr (nicht vom Re-Klick des Users). Fuer
+ *  Karten mit eigenem CARD_REFRESH-Listener neben dem Helper. */
+export function isWakeRefresh(e) {
+  return e?.detail?.source === 'wake';
+}
+
 export function setupCardLifecycle(ctx, cfg) {
   const abort = new AbortController();
   const { signal } = abort;
@@ -137,7 +161,9 @@ export function setupCardLifecycle(ctx, cfg) {
   const applyTabRequest = () => {
     if (!cfg.tabRequest) return;
     const value = takeCardRequest(cfg.tabRequest.key);
-    if (value != null && value !== '') cfg.tabRequest.apply(value);
+    if (value == null || value === '') return;
+    if (!isKnownTab(cfg.tabRequest.key, value)) return;
+    cfg.tabRequest.apply(value);
   };
 
   if (cfg.showFlag && (cfg.load || cfg.onShow || cfg.onHide || cfg.tabRequest)) {
@@ -176,6 +202,11 @@ export function setupCardLifecycle(ctx, cfg) {
   const onCardRefresh = (e) => {
     if (e.detail?.name !== cfg.name) return;
     if (cfg.refreshNeedsBookId !== false && !Alpine.store('nav').selectedBookId) return;
+    if (isWakeRefresh(e)) {
+      if (cfg.wake === 'skip') return;
+      if (typeof cfg.wake === 'function') return cfg.wake(e, ctx, root());
+      return cfg.onCardRefresh ? cfg.onCardRefresh(e, ctx, root()) : cfg.load?.(root());
+    }
     if (cfg.onCardRefresh) track(() => cfg.onCardRefresh(e, ctx, root()));
     else if (cfg.load) track(() => cfg.load(root()));
   };
@@ -203,6 +234,16 @@ export function setupCardLifecycle(ctx, cfg) {
 
   for (const { type, handler } of (cfg.extraListeners || [])) {
     window.addEventListener(type, handler, { signal });
+  }
+
+  if (cfg.tabRequest?.current) {
+    const key = cfg.tabRequest.key;
+    const mirror = (tab) => {
+      const nav = Alpine.store('nav');
+      if (nav && nav.cardTab[key] !== tab) nav.cardTab[key] = tab;
+    };
+    mirror(cfg.tabRequest.current());
+    ctx.$watch(() => cfg.tabRequest.current(), mirror);
   }
 
   if (cfg.tabRequest) {

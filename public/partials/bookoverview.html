@@ -18,7 +18,7 @@
   </div>
 
   <!-- Loading / Empty -->
-  <div x-show="overviewLoading && !overviewLatest()" class="muted-msg muted-msg--spaced" x-text="$app.t('overview.loading')"></div>
+  <div x-show="overviewLoading && !overviewLatest()" x-skeleton="4" x-cloak></div>
   <div x-show="!overviewLoading && !overviewLatest() && (!overviewCoverage || overviewCoverage.total_pages === 0)" class="muted-msg muted-msg--spaced" x-text="$app.t('overview.empty')"></div>
 
   <!-- Fehlerhinweis: mindestens ein Endpoint ist auch nach Retry ausgefallen.

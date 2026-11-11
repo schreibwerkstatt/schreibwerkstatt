@@ -3,19 +3,13 @@
 // Hintergrund: <svg.icon> ist per Default 1em, skaliert also mit der font-size
 // des Buttons. Die Close-/Action-Buttons der App setzen aber je eigene
 // font-sizes (Card-Close 18px, Toast 16px, Find 15px, Synonym/Figur ~17.6px,
-// Heatmap 13px …) → die Glyphen sind unterschiedlich gross, besonders sichtbar
-// mobil (@media (pointer: coarse) bläst den Tap-Target auf 40px, das Glyph aber
-// bleibt seiner font-size ausgeliefert). components/icon-btn.css normalisiert
-// darum die Glyph-Grösse (`> .icon { width/height: var(--icon-size-action) }`).
+// Heatmap 13px …) → die Glyphen wären unterschiedlich gross.
+// components/icon-btn.css normalisiert darum die Glyph-Grösse
+// (`> .icon { width/height: var(--icon-size-action) }`).
 //
-// Invariante (der eigentliche Bug): ein Button, der mobil auf 40px Tap-Target
-// wächst, dessen Glyph aber seiner eigenen font-size ausgeliefert bleibt, sieht
-// im vergrösserten Target fehlgrossgross aus. Also MUSS jeder Button im
-// @media (pointer: coarse)-Tap-Target-Block auch eine normalisierte Glyph-Grösse
-// haben: coarse-Set ⊆ Normalisierungs-Set. Die Umkehrung gilt bewusst NICHT —
-// ein Button darf glyph-normalisiert sein, ohne 40px-Target zu brauchen (z.B.
-// `.search-clear--icon`, absolut im Suchfeld positioniert, wo 40px die Box
-// sprengen würde). Wer einen enlarge-Button ohne Glyph-Norm einträgt: CI rot.
+// Zweite Invariante: auf Touch wachsen diese Knöpfe nicht (DESIGN.md „Touch“:
+// Touch ändert das Verhalten, nicht die Grösse) — kein `@media (pointer: coarse)`
+// in icon-btn.css.
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
@@ -44,20 +38,12 @@ const normMatch = css.match(/([^{}]*>\s*\.icon[^{}]*)\{\s*width:\s*var\(--icon-s
 assert.ok(normMatch, 'Glyph-Normalisierungs-Regel mit var(--icon-size-action) fehlt in icon-btn.css');
 const normClasses = classesFromSelectorList(normMatch[1]);
 
-// Block 2: der @media (pointer: coarse) Tap-Target-Block
-const coarseMatch = css.match(/@media\s*\(pointer:\s*coarse\)\s*\{([\s\S]*?)\{\s*min-width:\s*40px/);
-assert.ok(coarseMatch, '@media (pointer: coarse) Tap-Target-Block fehlt in icon-btn.css');
-const coarseClasses = classesFromSelectorList(coarseMatch[1]);
-
-test('Icon-only-Button-Listen: Tap-Target-Set ⊆ Glyph-Normalisierung', () => {
-  const enlargedWithoutNorm = [...coarseClasses].filter((c) => !normClasses.has(c));
-  assert.deepEqual(
-    enlargedWithoutNorm,
-    [],
-    `Diese Buttons bekommen mobil einen 40px-Tap-Target, aber KEINE normalisierte Glyph-Grösse (Icon sieht im vergrösserten Target fehlgross aus): ${enlargedWithoutNorm.join(', ')}`,
-  );
-  assert.ok(normClasses.size >= coarseClasses.size, 'Normalisierungs-Set muss das Tap-Target-Set umfassen');
+test('Glyph-Normalisierung umfasst die bekannten Icon-only-Buttons', () => {
   assert.ok(normClasses.size >= 10, 'Erwartet mindestens die bekannten Icon-only-Buttons in der Normalisierungs-Liste');
+});
+
+test('Symbol-Knöpfe wachsen auf Touch nicht', () => {
+  assert.doesNotMatch(css, /@media[^{]*pointer:\s*coarse/, 'icon-btn.css darf auf Touch keine eigene Grösse setzen (DESIGN.md „Touch“)');
 });
 
 test('--icon-size-action Token ist definiert', () => {

@@ -33,9 +33,29 @@
         </div>
       </header>
 
+      <!-- Verknuepfen/Tags/KI-Vorschlaege: feste Leiste zwischen Kopf und
+           Scrollbereich, in BEIDEN Modi bedienbar. Oben statt am Textende: bei
+           langem Fund ohne Scrollen sichtbar, und der Verknuepfen-Picker hat nach
+           unten Platz fuer seine Auswahllisten. -->
+      <div class="research-dialog__links">
+        <div class="research-dialog__link-actions">
+          <button type="button" class="btn-compact research-link-add" @click="openLinkPicker(item, $el)">
+            <svg class="icon" aria-hidden="true"><use href="/icons.svg#external-link"/></svg>
+            <span x-text="$app.t('recherche.link.add')"></span>
+          </button>
+          <button type="button" class="btn-compact" @click="suggestLinks(item)" :disabled="busy || suggestBusy(item.id)">
+            <svg class="icon" aria-hidden="true"><use href="/icons.svg#zap"/></svg>
+            <span x-text="$app.t('recherche.suggest.btn')"></span>
+          </button>
+          <button type="button" class="btn-compact" x-show="canCrosscheck(item)" @click="runCrosscheck(item)" :disabled="crosscheckRunning"
+                  :data-tip="$app.t('recherche.crosscheck.itemTip')" x-text="$app.t('recherche.crosscheck.itemBtn')"></button>
+        </div>
+        <!-- @include recherche-item-relations -->
+      </div>
+
       <div class="research-dialog__scroll">
         <!-- Fehler MUSS im Dialog stehen: die Karten-Statuszeile liegt hinter dem
-             Backdrop (gleiche Zeile im Anlegen-Dialog). -->
+             Backdrop. -->
         <div x-show="errorMessage" class="card-status card-status--error" x-text="errorMessage"></div>
         <!-- Bild gross statt Neuer-Tab-Rohdatei. „In neuem Tab oeffnen" bleibt
              als Weg zum echten Pixel-Zoom (native Bildansicht des Browsers). -->
@@ -73,16 +93,12 @@
              :class="{ 'research-dialog__text--quote': item.kind === 'quote' }"
              x-html="itemBodyHtml(item)"></div>
 
-        <!-- Bearbeiten: nur die Textfelder tauschen. Die Felder selbst kommen aus
-             demselben Fragment wie der Anlegen-Dialog (recherche-form-fields) und
-             binden dasselbe `draft` — nur die Aktionszeile ist hier eine andere. -->
+        <!-- Bearbeiten: nur die Textfelder tauschen. Die Felder kommen aus
+             demselben Fragment wie das Anlegen-Formular (recherche-form-fields)
+             und binden dasselbe `draft`. -->
         <div class="recherche-form" x-show="detailEditing" x-cloak
              @keydown="$editKeys($event, { save: () => saveEdit(item) })">
           <!-- @include recherche-form-fields -->
-          <div class="recherche-form-actions">
-            <button type="button" class="btn-compact recherche-primary" @click="saveEdit(item)" :disabled="busy" x-text="$app.t('recherche.save')"></button>
-            <button type="button" class="btn-compact" @click="cancelEdit()" :disabled="busy" x-text="$app.t('recherche.cancel')"></button>
-          </div>
         </div>
 
         <!-- Links + Quelle nur im Lesemodus: im Formular sind dieselben Angaben
@@ -93,23 +109,18 @@
         </div>
 
         <!-- @include recherche-findings -->
-
-        <!-- Verknuepfen/Tags/KI-Vorschlaege bleiben in BEIDEN Modi bedienbar. -->
-        <!-- @include recherche-item-relations -->
-
-        <div class="research-dialog__foot">
-          <button type="button" class="btn-compact research-link-add" @click="openLinkPicker(item, $el)">
-            <svg class="icon" aria-hidden="true"><use href="/icons.svg#external-link"/></svg>
-            <span x-text="$app.t('recherche.link.add')"></span>
-          </button>
-          <button type="button" class="btn-compact" @click="suggestLinks(item)" :disabled="busy || suggestBusy(item.id)">
-            <svg class="icon" aria-hidden="true"><use href="/icons.svg#zap"/></svg>
-            <span x-text="$app.t('recherche.suggest.btn')"></span>
-          </button>
-          <button type="button" class="btn-compact" x-show="canCrosscheck(item)" @click="runCrosscheck(item)" :disabled="crosscheckRunning"
-                  :data-tip="$app.t('recherche.crosscheck.itemTip')" x-text="$app.t('recherche.crosscheck.itemBtn')"></button>
-        </div>
       </div>
+
+      <!-- Aussen vor __scroll: ein Weg aus dem Formular muss ohne Scrollen
+           erreichbar sein, egal wie lang der Text ist. Knoepfe, Reihenfolge und
+           Ausrichtung wie im Anlegen- und im Quellen-Formular. -->
+      <footer class="research-dialog__bar" x-show="detailEditing" x-cloak>
+        <button type="button" class="primary" @click="saveEdit(item)" :disabled="busy">
+          <span x-show="busy" class="spinner"></span>
+          <span x-text="busy ? $app.t('common.saving') : $app.t('recherche.save')"></span>
+        </button>
+        <button type="button" @click="cancelEdit()" :disabled="busy" x-text="$app.t('recherche.cancel')"></button>
+      </footer>
     </div>
   </template>
 </dialog>

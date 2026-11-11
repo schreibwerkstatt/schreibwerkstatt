@@ -145,4 +145,22 @@
     max-width: min(280px, calc(100vw - 2 * var(--space-md)));
   }
 }
+
+/* Long-Press (`x-long-press`, action-menu.js) öffnet das Kontextmenü. iOS
+   startet beim Halten zugleich die Textauswahl samt Lupe bzw. das native
+   Link-Callout — beides läge über dem eigenen Menü, und die Auswahl bricht
+   den Druck oft per pointercancel ab, bevor das Menü aufgeht. Auf Touch darum
+   am Long-Press-Element weder Auswahl noch Callout; Eingabefelder darin
+   bleiben markierbar (Inline-Edit einer Karte). */
+@media (hover: none) {
+  [x-long-press] {
+    -webkit-touch-callout: none;
+    -webkit-user-select: none;
+    user-select: none;
+  }
+  [x-long-press] :is(input, textarea, [contenteditable="true"]) {
+    -webkit-user-select: text;
+    user-select: text;
+  }
+}
 }
