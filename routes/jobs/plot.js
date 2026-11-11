@@ -27,9 +27,11 @@ const plotRouter = express.Router();
 
 // Output-Budget: adaptives Denken (Claude 4.7+/5) zählt gegen max_tokens. Eine
 // knappe Grenze bricht die JSON-Antwort nach dem Denken ab (truncated → Job-Fehler).
-// Gedeckelt per Math.min gegen den Provider-Cap.
-const BRAINSTORM_MAX_TOKENS = 8000;
-const CONSISTENCY_MAX_TOKENS = 16000;
+// Gedeckelt per Math.min gegen den Provider-Cap. Consistency auf grossem Board
+// (~90 Beats + Vorlauf-Delta) braucht auf Opus 5.x mit Default-Effort mehr als 16K
+// allein fürs Denken; der Deckel kostet nichts, gezahlt wird nur der echte Output.
+const BRAINSTORM_MAX_TOKENS = 16000;
+const CONSISTENCY_MAX_TOKENS = 48000;
 
 // Zielakt passt zum Strang (Hybrid-Akte): ein Strang mit eigener Aktstruktur
 // brainstormt nur in seinen eigenen Akten, ein Strang ohne (und die „ohne
