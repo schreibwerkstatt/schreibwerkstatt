@@ -111,3 +111,31 @@ test('Undo am Absatzanfang lässt den Caret im eigenen Absatz', async ({ page })
   // Nicht awaiten: nach Änderungen wartet cancelEdit auf den Verwerfen-Dialog.
   await page.evaluate(() => { window.__app.cancelEdit(); });
 });
+
+// Reine Formatierung (Text unverändert): Undo lässt die Auswahl stehen, damit
+// man direkt anders formatieren kann — sie fällt nicht zum Caret zusammen.
+test('Undo von Fett lässt das markierte Wort markiert', async ({ page }) => {
+  await openPageInEdit(page, 1);
+  await caretToEnd(page);
+  await page.keyboard.type(' FETTPROBE');
+  await page.waitForTimeout(650);
+  await page.evaluate((sel) => {
+    const p = [...document.querySelectorAll(`${sel} > p`)].find(x => x.textContent.includes('FETTPROBE'));
+    const walker = document.createTreeWalker(p, NodeFilter.SHOW_TEXT);
+    let t;
+    while ((t = walker.nextNode()) && !t.nodeValue.includes('FETTPROBE'));
+    const i = t.nodeValue.indexOf('FETTPROBE');
+    const r = document.createRange();
+    r.setStart(t, i);
+    r.setEnd(t, i + 'FETTPROBE'.length);
+    getSelection().removeAllRanges();
+    getSelection().addRange(r);
+  }, EDIT_SEL);
+  await page.keyboard.press('Control+b');
+  await expect(page.locator(`${EDIT_SEL} :is(b, strong)`, { hasText: 'FETTPROBE' })).toHaveCount(1);
+  await page.keyboard.press('Control+z');
+  await expect(page.locator(`${EDIT_SEL} :is(b, strong)`, { hasText: 'FETTPROBE' })).toHaveCount(0);
+  expect(await page.evaluate(() => getSelection().toString())).toBe('FETTPROBE');
+  // Nicht awaiten: nach Änderungen wartet cancelEdit auf den Verwerfen-Dialog.
+  await page.evaluate(() => { window.__app.cancelEdit(); });
+});

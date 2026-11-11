@@ -167,6 +167,47 @@ export function restoreCaretAtOffset(root, offset) {
   }
 }
 
+// Auswahl als Text-Offsets [start, end] ab Editor-Anfang (null ohne Auswahl im
+// Editor). Für Restores, die den Text nicht ändern (Fett, Kursiv, Absatzart):
+// dort bleibt die Auswahl des Users stehen, statt zum Caret zusammenzufallen.
+function captureSelectionOffsets(root) {
+  const start = captureCaretOffset(root);
+  if (start == null) return null;
+  const sel = root.ownerDocument?.defaultView?.getSelection?.();
+  const range = sel?.rangeCount ? sel.getRangeAt(0) : null;
+  if (!range || range.collapsed || !root.contains(range.endContainer)) return { start, end: start };
+  const pre = range.cloneRange();
+  pre.selectNodeContents(root);
+  pre.setEnd(range.endContainer, range.endOffset);
+  return { start, end: pre.toString().length };
+}
+
+function restoreSelectionOffsets(root, { start, end }) {
+  if (end === start) { restoreCaretAtOffset(root, start); return; }
+  const doc = root.ownerDocument;
+  if (!doc?.createTreeWalker || !doc?.createRange) return;
+  try {
+    const range = doc.createRange();
+    if (typeof range.setStart !== 'function') return;
+    const walker = doc.createTreeWalker(root, (typeof NodeFilter !== 'undefined' ? NodeFilter.SHOW_TEXT : 4));
+    let pos = 0;
+    let startSet = false;
+    let n;
+    while ((n = walker.nextNode())) {
+      const len = n.nodeValue.length;
+      if (!startSet && start <= pos + len) { range.setStart(n, start - pos); startSet = true; }
+      if (startSet && end <= pos + len) {
+        range.setEnd(n, end - pos);
+        const sel = doc.defaultView?.getSelection?.();
+        if (sel?.removeAllRanges && sel?.addRange) { sel.removeAllRanges(); sel.addRange(range); }
+        return;
+      }
+      pos += len;
+    }
+    restoreCaretAtOffset(root, start);
+  } catch { /* Best-Effort */ }
+}
+
 // `input`-Event nach einem Restore. `inputType` ist HARTER VERTRAG, nicht Kosmetik:
 // die Boot-Glue des nativen macOS-Clients erkennt genau 'historyUndo'/'historyRedo',
 // um den Umfang-Hinweis zu zeigen, und braucht das Event ausserdem für Dirty-Flag,
@@ -396,6 +437,12 @@ export function createEditHistory({
     if (!el || !snap) return;
     applying = true;
     try {
+      // Vor dem Tausch: die getauschten Knoten nehmen die Auswahl mit.
+      const liveSel = captureSelectionOffsets(el);
+      const keepSelection = () => {
+        if (liveSel) restoreSelectionOffsets(el, liveSel);
+        else restoreCaretAtOffset(el, snap.caretOffset);
+      };
       let part = null;
       try { part = restorePartial(el, from, snap); } catch { part = null; }
       if (part) {
@@ -407,7 +454,7 @@ export function createEditHistory({
           if (part.after) placeCaretInNodes(doc, [part.after], 0);
           else if (part.before) placeCaretInNodes(doc, [part.before], Infinity);
         } else if (part.oldText === newText) {
-          restoreCaretAtOffset(el, snap.caretOffset);
+          keepSelection();
         } else {
           // Ans Ende des geänderten Bereichs — innerhalb der getauschten Blöcke,
           // damit eine Absatzgrenze nicht in den Vorgänger kippt.
@@ -417,7 +464,9 @@ export function createEditHistory({
       } else {
         const oldText = el.textContent || '';
         mountHtml(el, snap.html || '');
-        restoreCaretAtOffset(el, changedCaretOffset(oldText, el.textContent || '', snap.caretOffset));
+        const newText = el.textContent || '';
+        if (oldText === newText) keepSelection();
+        else restoreCaretAtOffset(el, changedCaretOffset(oldText, newText, snap.caretOffset));
       }
       el.focus?.();
       if (typeof onRestored === 'function') {
