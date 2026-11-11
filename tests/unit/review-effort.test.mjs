@@ -63,3 +63,18 @@ test('applyReviewAiOverrides: Sonnet 4.6, fremde Provider und leerer Wert bleibe
     });
   } finally { teardown(); }
 });
+
+test('applyEffortSetting: Plot-Werkstatt bindet ai.claude.effort.plot (Default medium)', () => {
+  const { model, appSettings, logCtx, teardown } = _bootstrap();
+  try {
+    appSettings.set('ai.claude.model', 'claude-opus-5-5', { updatedBy: 'test' });
+    logCtx.runWithContext({ job: 'plot-consistency' }, () => {
+      assert.equal(model.applyEffortSetting('ai.claude.effort.plot', 'claude', quietLogger, 'Plot'), ':e=medium');
+      assert.deepEqual(logCtx.getContext().aiJob, { provider: 'claude', effort: 'medium' });
+    });
+    appSettings.set('ai.claude.effort.plot', 'low', { updatedBy: 'test' });
+    logCtx.runWithContext({ job: 'plot-consistency' }, () => {
+      assert.equal(model.applyEffortSetting('ai.claude.effort.plot', 'claude', quietLogger, 'Plot'), ':e=low');
+    });
+  } finally { teardown(); }
+});

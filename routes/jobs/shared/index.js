@@ -72,6 +72,7 @@ module.exports = {
   systemChars: require('./review-sig').systemChars,
 
   _modelName: model._modelName,
+  applyEffortSetting: model.applyEffortSetting,
   applyReviewAiOverrides: model.applyReviewAiOverrides,
   applyTierAiOverrides: modelTier.applyTierAiOverrides,
   tierModel: modelTier.tierModel,

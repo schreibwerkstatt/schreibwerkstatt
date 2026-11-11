@@ -18,20 +18,25 @@ function _modelName(prov, opts) {
   return aiSetting('claude', 'model', opts) || 'claude-sonnet-4-6';
 }
 
-// Effort der Buch- und Kapitelbewertung (`ai.claude.effort.review`) als Job-Bag binden.
+// Effort-Setting eines Jobs (`ai.claude.effort.<x>`) als Job-Bag binden.
 // Nur Claude und nur auf Modellen mit adaptivem Denken: ohne Feld waehlt die API den
 // Modell-Default, und der liegt je nach Modell verschieden (Opus 5.5: 'medium', davor
-// 'high') — ein Modellwechsel verschoebe sonst still die Denk-Tiefe der Bewertung.
-// Auf Sonnet 4.6 und aelter (kein Thinking) bleibt das Feld weg.
+// 'high') — ein Modellwechsel verschoebe sonst still die Denk-Tiefe des Jobs.
+// Auf Sonnet 4.6 und aelter (kein Thinking) bleibt das Feld weg. Leerer Wert = kein Feld.
 // Rueckgabe: `:e=<effort>` fuer die cacheVersion oder ''.
-function applyReviewAiOverrides(effectiveProvider, logger) {
+function applyEffortSetting(settingKey, effectiveProvider, logger, label) {
   if (effectiveProvider !== 'claude') return '';
   if (!_claudeUsesAdaptiveThinking(_modelName(effectiveProvider))) return '';
-  const effort = String(appSettings.get('ai.claude.effort.review') || '').trim().toLowerCase();
+  const effort = String(appSettings.get(settingKey) || '').trim().toLowerCase();
   if (!effort) return '';
   setContext({ aiJob: { provider: 'claude', effort } });
-  logger?.info(`Review-Effort: ${effort}.`);
+  logger?.info(`${label}-Effort: ${effort}.`);
   return `:e=${effort}`;
 }
 
-module.exports = { _modelName, applyReviewAiOverrides };
+// Buch- und Kapitelbewertung (`ai.claude.effort.review`).
+function applyReviewAiOverrides(effectiveProvider, logger) {
+  return applyEffortSetting('ai.claude.effort.review', effectiveProvider, logger, 'Review');
+}
+
+module.exports = { _modelName, applyEffortSetting, applyReviewAiOverrides };

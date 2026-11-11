@@ -10,7 +10,7 @@ const express = require('express');
 const {
   makeJobLogger, updateJob, completeJob, failJob, i18nError,
   aiCall, getPrompts,
-  tps, createJob, enqueueJob, findActiveJobId, jsonBody, _modelName,
+  tps, createJob, enqueueJob, findActiveJobId, jsonBody, _modelName, applyEffortSetting,
 } = require('./shared');
 const { toIntId } = require('../../lib/validate');
 const { guardBook, sessionEmail } = require('../../lib/acl');
@@ -32,6 +32,11 @@ const plotRouter = express.Router();
 // allein fürs Denken; der Deckel kostet nichts, gezahlt wird nur der echte Output.
 const BRAINSTORM_MAX_TOKENS = 16000;
 const CONSISTENCY_MAX_TOKENS = 48000;
+
+// Denk-Tiefe beider Plot-Jobs (`ai.claude.effort.plot`), nur Claude mit adaptivem Denken.
+function _applyPlotEffort(userEmail, logger) {
+  applyEffortSetting('ai.claude.effort.plot', resolveProvider({ userEmail }), logger, 'Plot');
+}
 
 // Zielakt passt zum Strang (Hybrid-Akte): ein Strang mit eigener Aktstruktur
 // brainstormt nur in seinen eigenen Akten, ein Strang ohne (und die „ohne
@@ -60,6 +65,7 @@ async function runPlotBrainstormJob(jobId, bookId, actId, threadId, userEmail) {
   const { buildPlotSystemPrompt, buildPlotBrainstormPrompt, SCHEMA_PLOT_BRAINSTORM } = await getPrompts(userEmail);
 
   try {
+    _applyPlotEffort(userEmail, logger);
     const acts = plotDb.listActs(bookId, userEmail);
     const act = acts.find(a => a.id === actId);
     if (!act) throw i18nError('job.error.plot.actMissing');
@@ -141,6 +147,7 @@ async function runPlotConsistencyJob(jobId, bookId, userEmail) {
   } = await getPrompts(userEmail);
 
   try {
+    _applyPlotEffort(userEmail, logger);
     const acts = plotDb.listActs(bookId, userEmail);
     const ctx = await commonPlotContext(bookId, userEmail);
     const { BUCH_KONTEXT, limits, beats, outlineBeats, figuren, werkstattFiguren, kapitel, orte, zeitstrahl, threads, kuerzungen, locale } = ctx;
