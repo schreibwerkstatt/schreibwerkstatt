@@ -130,6 +130,16 @@ Entwickelt, getestet und im Repo gehalten wird ohne Build: Browser-ESM unter `pu
 - **Gegated** durch den CI-Schritt «Bündel-Smoke»: Bündel bauen, dann [smoke.spec.js](../tests/e2e-app/smoke.spec.js), die drei `sw-*.spec.js` und [bundle.spec.js](../tests/e2e-app/bundle.spec.js) dagegen (prüft, dass das Bündel wirklich geladen wurde, dass der SW es precacht und offline daraus bootet, und dass das OTA-ZIP unverändert aus den Einzeldateien kommt); [tests/unit/bundle.test.js](../tests/unit/bundle.test.js) für Hash-Prüfung, Header und das Bündel-Manifest.
 - **Why:** ein Boot zog ~1000 parallele Requests (Module, Stylesheets, Preloads); jeder Aussetzer im Browser liess den ganzen Modul-Graphen scheitern. Gebündelt sind es ~15 Dateien und ein Viertel der Bytes.
 
+## Gepatchte Vendor-Dateien
+
+### Alpine-Scheduler-Patch
+
+[public/vendor/alpine-3.17.5.min.js](../public/vendor/alpine-3.17.5.min.js) trägt einen Eingriff in Alpines Effekt-Scheduler (`ai`, Kopfkommentar der Datei verweist hierher):
+
+- **Was:** ein Effekt, der im laufenden Flush schon gelaufen ist und im selben Flush erneut ausgelöst wird, wird neu eingereiht (`B.includes(e, vt+1)` statt `B.includes(e)`) — dieselbe Regel wie Vues eigener Scheduler, der ab dem laufenden Index sucht. Ein Effekt, der sich gerade selbst auslöst, bleibt weiter aussen vor. Neu-Einreihungen sind je Flush auf 2000 gedeckelt (`__swRequeue`); darüber gilt das alte Verhalten, damit sich gegenseitig auslösende Effekte den Tab nicht einfrieren.
+- **Why:** ungepatcht fand `includes` den schon gelaufenen Job im Flush-Array und verwarf die Auslösung — die Änderung kam nie an, bis sich der Wert das nächste Mal änderte. Am sichtbarsten bei `x-show`: Flag `false`, Element sichtbar, `_x_isShown: true`, und zwar ohne dass `_x_toggleAndCascadeWithTransitions` überhaupt aufgerufen wurde — [x-show-guard.js](../public/js/app/boot/x-show-guard.js) (der die Reihenfolge verspäteter Rückrufe absichert) sieht diesen Fall darum nicht. Betroffen war jedes Binding, nicht nur `x-show`.
+- **Alpine-Update:** den Patch in der neuen Datei nachziehen (drei Stellen: Variable `__swRequeue`, Bedingung in `ai`, Rücksetzen am Ende von `ci` — Namen der Minifizierung ändern sich). Gegated doppelt: [alpine-scheduler-patch.test.mjs](../tests/unit/alpine-scheduler-patch.test.mjs) prüft per Muster, dass jede Alpine-Kerndatei in `public/vendor/` die drei Stellen und den Kopfkommentar trägt (schlägt bei einem unveränderten Neu-Download sofort in den Unit-Tests an); [x-show-guard.spec.js](../tests/e2e-app/x-show-guard.spec.js) (Flag-Wechsel aus einem späteren Effekt desselben Flushs; Ping-Pong-Deckel) prüft das Verhalten und wird ohne Patch rot.
+
 ## Eigenbau statt Library — bewusst
 
 Die folgenden Teile sind geprüft und bleiben Eigenbau. Wer eine Library dafür vorschlägt, widerlegt zuerst die Begründung.

@@ -19,6 +19,10 @@
 // zu diesem Zustand passt. Gilt für jedes `x-show` der App, mit und ohne
 // `x-transition`/`x-collapse` (die rufen dieselben Rückrufe).
 //
+// Nicht abgedeckt (und hier nicht abdeckbar): ein Flag-Wechsel, den Alpines
+// Scheduler gar nicht erst an x-show weiterreicht — dafür der Scheduler-Patch im
+// Vendor-Alpine, docs/architektur.md#alpine-scheduler-patch.
+//
 // Muss im `alpine:init`-Listener laufen: dann ist die Prototyp-Methode
 // definiert, aber noch kein `x-show` ausgewertet. Fehlt die Methode (anderes
 // Alpine-Release), bleibt alles beim Alten — der E2E-Test

@@ -1,0 +1,41 @@
+{
+  "version": "6.4.3",
+  "date": "2026-11-11",
+  "entries": [
+    {
+      "kind": "neu",
+      "de": "Blog-Bücher: «Zu Blog pushen» öffnet jetzt einen Dialog, der zeigt, was sich gegenüber dem Blog ändert. Von dort pushst du als Entwurf, veröffentlichst sofort oder planst einen Termin.",
+      "en": "Blog books: \"Push to blog\" now opens a dialog showing what changes compared to the blog. From there you push as a draft, publish right away or schedule a date."
+    },
+    {
+      "kind": "neu",
+      "de": "Buchorganizer und Statusleiste des Editors zeigen bei Blog-Büchern, ob ein Beitrag im Blog Entwurf, geplant oder veröffentlicht ist.",
+      "en": "For blog books, the book organizer and the editor's status bar show whether a post is a draft, scheduled or published on the blog."
+    },
+    {
+      "kind": "verbessert",
+      "de": "WordPress: ältere Beiträge aus dem klassischen Editor kommen mit ihren Absätzen in die App. Bereits eingelesene, noch unbearbeitete Beiträge liest «Unbearbeitete neu einlesen» korrekt nach.",
+      "en": "WordPress: older posts from the classic editor arrive in the app with their paragraphs. \"Re-read unedited posts\" fixes posts already imported that you have not changed yet."
+    },
+    {
+      "kind": "verbessert",
+      "de": "HubSpot: Listen, Tabellen, Code und hoch-/tiefgestellter Text bleiben beim Übernehmen erhalten. «Neue Posts importieren» holt später hinzugekommene Beiträge nach.",
+      "en": "HubSpot: lists, tables, code and superscript/subscript text survive the import. \"Import new posts\" fetches posts added later."
+    },
+    {
+      "kind": "behoben",
+      "de": "Blog-Sync: im Blog veröffentlichte Beiträge standen in der App weiter als «Entwurf». Nach Trennen und erneutem Verbinden entstanden doppelte Beiträge.",
+      "en": "Blog sync: posts published on the blog still showed as \"Draft\" in the app. Disconnecting and reconnecting created duplicate posts."
+    },
+    {
+      "kind": "behoben",
+      "de": "Blog-Sync: Formatierungen, die der Blog nicht zurückliefert, gingen still verloren. Jetzt sagt dir die App vor dem Pushen, welche Stelle das betrifft.",
+      "en": "Blog sync: formatting the blog does not return was silently lost. The app now tells you which passage is affected before pushing."
+    },
+    {
+      "kind": "behoben",
+      "de": "Eine geschlossene Karte, etwa der Editor, blieb manchmal weiter sichtbar. Sie verschwindet jetzt zuverlässig.",
+      "en": "A closed card, such as the editor, sometimes stayed visible. It now disappears reliably."
+    }
+  ]
+}
