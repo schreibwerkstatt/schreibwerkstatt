@@ -1,9 +1,12 @@
 <!-- Fragment: Viewer der Revisionsliste (natives <dialog>, geoeffnet via
      showModal() in page-revisions/viewer.js#openViewer). Eingebunden per
      Include-Marker in page-revisions.html, im Scope von pageRevisionsCard. -->
+<!-- Scroll-Sperre der Seite als Klasse am <html> (page-revision-viewer.css):
+     globaler Zustand als Klasse, nie per html:has() (public/css/CLAUDE.md). -->
 <dialog class="revision-viewer"
         x-ref="viewerDialog"
-        @close="viewerOpen = false"
+        x-effect="document.documentElement.classList.toggle('revision-viewer-open', viewerOpen)"
+        @close="viewerOpen && dismissViewer()"
         @keydown.escape="dismissViewer()"
         @keydown.left="onViewerArrow($event, 'prev')"
         @keydown.right="onViewerArrow($event, 'next')"
@@ -12,23 +15,37 @@
     <div class="revision-viewer__inner">
       <header class="revision-viewer__head">
         <div class="revision-viewer__meta">
+          <!-- Anheften + Name im Titel. Angeheftet = von der Retention
+               ausgenommen; mit Schreibrecht ist der Name direkt im Titel
+               editierbar, ohne Schreibrecht steht er als Text. -->
           <h2 class="revision-viewer__title">
-            <span x-text="revisionTitle(viewerRev)"></span>
-            <span class="revision-viewer__date" x-show="viewerRev.pinned && viewerRev.label"
+            <button type="button"
+                    class="revision-viewer__pin"
+                    x-show="canWrite() || viewerRev.pinned"
+                    :class="{ 'is-active': viewerRev.pinned }"
+                    @click="togglePin(viewerRev)"
+                    :disabled="!canWrite() || pinningId === viewerRev.id"
+                    :aria-pressed="!!viewerRev.pinned"
+                    :aria-label="$app.t(viewerRev.pinned ? 'editor.revisions.unpin' : 'editor.revisions.pin')"
+                    :data-tip="$app.t(viewerRev.pinned ? 'editor.revisions.unpinTitle' : 'editor.revisions.pinTitle')"><svg class="icon" aria-hidden="true"><use href="/icons.svg#pin"/></svg></button>
+            <span x-show="!(viewerRev.pinned && canWrite())" x-text="revisionTitle(viewerRev)"></span>
+            <input type="text"
+                   class="revision-viewer__label"
+                   x-show="viewerRev.pinned && canWrite()"
+                   x-model="viewerLabelDraft"
+                   maxlength="120"
+                   :placeholder="$app.t('editor.revisions.labelPlaceholder')"
+                   :aria-label="$app.t('editor.revisions.labelPlaceholder')"
+                   data-spellcheck="spelling"
+                   @keydown.enter="$enter($event, () => saveViewerLabel())"
+                   @blur="saveViewerLabel()">
+            <span class="revision-viewer__date" x-show="viewerRev.pinned && (viewerRev.label || canWrite())"
                   x-text="$app.formatDate(viewerRev.created_at)"></span>
           </h2>
           <span class="badge badge-ok" x-text="sourceLabel(viewerRev.source)"></span>
           <span class="tag" x-show="summaryLabel(viewerRev)" x-text="summaryLabel(viewerRev)"></span>
-          <span class="user-chip"
-                x-show="viewerRev.user_email && $app.bookSharedFlags?.[$store.nav.selectedBookId]"
-                :class="{ 'user-chip--self': isOwnRevision(viewerRev) }"
-                :data-tip="viewerRev.user_email">
-            <span class="user-chip__avatar"
-                  :style="`--avatar-hue: ${$app.userAvatarHue(viewerRev.user_email)}`"
-                  x-text="$app.userInitials(viewerRev.user_email)"></span>
-            <span class="user-chip__name"
-                  x-text="isOwnRevision(viewerRev) ? $app.t('editor.revisions.byYou') : $app.userDisplayName(viewerRev.user_email)"></span>
-          </span>
+          <span x-user-chip="viewerRev.user_email"
+                x-show="$app.bookSharedFlags?.[$store.nav.selectedBookId]"></span>
           <span class="tag" x-text="formatChars(viewerRev.chars) + ' ' + $app.t('editor.revisions.chars')"></span>
           <span class="tag" x-show="viewerRev.client"
                 :data-tip="$app.t('editor.revisions.clientTitle')"
@@ -40,31 +57,6 @@
                 :data-tip="$app.t('editor.revisions.viewer.close')"
                 :aria-label="$app.t('editor.revisions.viewer.close')"><svg class="icon" aria-hidden="true"><use href="/icons.svg#x"/></svg></button>
       </header>
-
-      <!-- Anheften + Name. Angeheftet = von der Retention ausgenommen. -->
-      <div class="revision-viewer__pin" x-show="canWrite() || viewerRev.pinned">
-        <button type="button"
-                class="revision-viewer__btn"
-                :class="{ 'is-active': viewerRev.pinned }"
-                @click="togglePin(viewerRev)"
-                :disabled="!canWrite() || pinningId === viewerRev.id"
-                :aria-pressed="!!viewerRev.pinned"
-                :data-tip="$app.t(viewerRev.pinned ? 'editor.revisions.unpinTitle' : 'editor.revisions.pinTitle')">
-          <svg class="icon" aria-hidden="true"><use href="/icons.svg#pin"/></svg>
-          <span x-text="$app.t(viewerRev.pinned ? 'editor.revisions.unpin' : 'editor.revisions.pin')"></span>
-        </button>
-        <input type="text"
-               class="revision-viewer__label"
-               x-show="viewerRev.pinned"
-               x-model="viewerLabelDraft"
-               :readonly="!canWrite()"
-               maxlength="120"
-               :placeholder="$app.t('editor.revisions.labelPlaceholder')"
-               :aria-label="$app.t('editor.revisions.labelPlaceholder')"
-               data-spellcheck="spelling"
-               @keydown.enter="$enter($event, () => saveViewerLabel())"
-               @blur="saveViewerLabel()">
-      </div>
 
       <!-- Tab+Panel-Set ueber Alpine.data('tabs') (DESIGN.md «Tabs»): ARIA,
            Roving-Tabindex und Pfeil-Tastatur kommen aus der Komponente. Der
@@ -114,6 +106,10 @@
                         x-text="$app.t('editor.revisions.viewer.compareWithCurrent')"></button>
               </div>
             </div>
+            <!-- Vergleich «aktuell» ohne Server: lief gegen den lokalen Stand. -->
+            <div x-show="!viewerDiffLoading && !viewerDiffError && viewerDiffLocal" x-cloak
+                 class="revision-viewer__hint"
+                 x-text="$app.t('editor.revisions.viewer.currentLocal')"></div>
             <div x-show="viewerDiffLoading" x-cloak class="revision-viewer__hint"
                  x-text="$app.t('editor.revisions.viewer.diffLoading')"></div>
             <div x-show="!viewerDiffLoading && viewerDiffError" x-cloak
@@ -169,7 +165,7 @@
                   class="revision-viewer__btn revision-viewer__btn--primary"
                   x-show="canWrite()"
                   @click="restoreFromViewer()"
-                  :disabled="!canRestore() || restoringId === viewerRev?.id || viewerLoading"
+                  :disabled="!canRestore() || restoringId !== null || viewerLoading"
                   :data-tip="restoreTip('')"
                   x-text="restoringId === viewerRev?.id ? $app.t('editor.revisions.restoring') : $app.t('editor.revisions.viewer.restore')"></button>
         </div>

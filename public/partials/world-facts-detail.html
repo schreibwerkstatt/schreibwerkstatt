@@ -1,0 +1,33 @@
+<!-- Detail eines Welt-Fakts: der aufgeklappte Eintrag der Liste (Prüfung, Aktionen,
+     Pflegeformular). Fragment-Include in world-facts.html INNERHALB des `x-for` über die
+     Fakten — Scope `worldFactsCard` + Schleifenvariable `f`. `x-if`: das Detail existiert
+     nur für den aufgeklappten Fakt, nicht vorab für jede Zeile. -->
+<template x-if="wfOpenId === f.id">
+  <div class="entity-detail weltfakten-detail">
+    <p class="weltfakten-pruefung" x-show="f.pruefung"
+       :class="'weltfakten-pruefung--' + (f.pruefung?.urteil || '')">
+      <span class="weltfakten-pruefung-urteil" x-text="$app.t('weltfakten.pruefung.' + (f.pruefung?.urteil || 'unklar'))"></span>
+      <span x-show="f.pruefung?.urteil !== 'korrekt' && f.pruefung?.beschreibung" x-text="f.pruefung?.beschreibung"></span>
+      <a x-show="wfQuelleUrl(f)" class="text-link" :href="wfQuelleUrl(f)" target="_blank" rel="noopener noreferrer"
+         x-text="$app.t('weltfakten.pruefung.quelle')"></a>
+    </p>
+    <div class="entity-detail-actions weltfakten-detail-actions" x-show="!(wfEdit.mode === 'edit' && wfEdit.id === f.id)">
+      <button type="button" class="btn-compact" x-show="wfCanRecheck(f)" :disabled="wfFcRunning"
+              @click="wfFactcheckRun(f.id)">
+        <svg class="icon" aria-hidden="true"><use href="/icons.svg#rotate-cw"/></svg>
+        <span x-text="$app.t('weltfakten.factcheck.recheck')"></span>
+      </button>
+      <button type="button" class="btn-compact" :disabled="wfEdit.mode !== null" @click="wfStartEdit(f)">
+        <svg class="icon" aria-hidden="true"><use href="/icons.svg#pencil"/></svg>
+        <span x-text="$app.t('weltfakten.edit.editTitle')"></span>
+      </button>
+      <button type="button" class="btn-compact danger" :disabled="wfEdit.mode !== null" @click="wfDelete(f)">
+        <svg class="icon" aria-hidden="true"><use href="/icons.svg#trash"/></svg>
+        <span x-text="$app.t('common.delete')"></span>
+      </button>
+    </div>
+    <template x-if="wfEdit.mode === 'edit' && wfEdit.id === f.id">
+      <!-- @include world-facts-edit -->
+    </template>
+  </div>
+</template>

@@ -609,6 +609,14 @@ mit `myCardOptions() { return this.cardData.map(...); }` am Karten-Scope.
 
 ---
 
+## Personen-Chip
+
+**Jede Anzeige einer Person** (Initialen-Bubble + Name, z.B. «wer hat diese Version gespeichert») ist `<span x-user-chip="email"></span>` ([public/js/user-chip.js](public/js/user-chip.js), CSS [components/user-chip.css](public/css/components/user-chip.css)). Element leer lassen; die Direktive setzt `.user-chip`, `--self` für den angemeldeten User, die E-Mail als Tooltip, die Avatar-Farbe (`userAvatarHue`) und den Namen («Du»/«You» für sich selbst, sonst `userDisplayName`). Ohne E-Mail bleibt das Element verborgen; weitere Sichtbarkeitsbedingungen (z.B. nur in geteilten Büchern) setzt der Konsument per `x-show` daneben. Feature-CSS darf den Chip in seiner Zeile anordnen (`flex`, Abstand), nie seine Innenteile stylen.
+
+Konsumenten: Revisionszeile, Revisions-Viewer, Fassungen-Tabelle. Präsenz-Pips (`.presence-pip`), Kommentar-Avatare und das Teilen-Menü sind eigene Bausteine ohne Namen und gehören nicht dazu. Gegated: [user-chip-single-place.test.mjs](tests/unit/user-chip-single-place.test.mjs).
+
+---
+
 ## URL als Link-Text (`.url-short`)
 
 **Use:** Jeder Link, dessen sichtbarer Text eine URL ist (kein Label vorhanden): Recherche-Fundstücke, Speicher-Vorschläge und Quellenliste im Recherche-Chat, Werkzeug-Verlauf der agentischen Chats, nackte URLs in Chat-Antworten (Markdown-Linkify).
@@ -3431,7 +3439,7 @@ Struktur: 8 thematische Subfolder unter [public/css/](public/css/) + Root-Solit�
 | [components/comment-rail.css](public/css/components/comment-rail.css) | Geteilte **Kommentar-Karten-Optik** (`.comment-rail__thread` + Quote-Snippet, Meta/Avatar-Pip, Body, Antwort-Box, `.comment-rail-diff`) für alle drei Leisten: Notebook-Leseansicht + Bucheditor (SPA-Tokens) und Share-Reader (`--share-*`). Neutrale `--cr-*`-Schnittstelle (Fallback auf SPA-Tokens → die zwei SPA-Leisten brauchen kein Mapping; Share mappt alle `--cr-*` in `share.css` auf `body.share-page`). Kontext-spezifisch bleiben Layout, Aktions-Buttons und die `::highlight()`-Regeln. |
 | [components/icons.css](public/css/components/icons.css) | `.icon`-Klasse, SVG-Sprite-Konsumenten. |
 | [components/job-toast.css](public/css/components/job-toast.css) | `.job-toast` (Job-Done-Floater). |
-| [components/user-chip.css](public/css/components/user-chip.css) | User-Avatar-Chip. |
+| [components/user-chip.css](public/css/components/user-chip.css) | Personen-Chip; Markup setzt `x-user-chip`. Siehe „Personen-Chip". |
 | [components/feature-tiles.css](public/css/components/feature-tiles.css) | Palette (Hero/Overlay/Panel/Item), Quick-Pills. |
 | [components/tooltip.css](public/css/components/tooltip.css) | `.tip-layer` / `.tip-bubble` / `.tip-arrow` für `[data-tip]`. |
 | [components/url-short.css](public/css/components/url-short.css) | `.url-short` — URL als Link-Text einzeilig mit Ellipse; Text-Kürzung aus `utils/url-display.js`. Siehe „URL als Link-Text". |

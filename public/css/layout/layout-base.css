@@ -64,7 +64,7 @@
   color: var(--color-warn-text);
   border-bottom: 2px solid var(--color-warn-text);
 }
-:root:has(.focus-editor.is-active) .session-banner--offline {
+body.focus-mode .session-banner--offline {
   padding: var(--space-2xs) var(--space-10);
   font-size: var(--font-size-xs);
   font-weight: var(--fw-regular);
@@ -75,7 +75,7 @@
   opacity: 0.55;
   pointer-events: none;
 }
-:root:has(.focus-editor.is-active) .session-banner--offline:hover { opacity: 1; }
+body.focus-mode .session-banner--offline:hover { opacity: 1; }
 
 /* Ohne Verbindung: Server-pflichtige Aktionen gedimmt (KI-Chats, Diktat,
    Vorlesen, alles mit `data-needs-net`). Bleiben klickbar — der Klick meldet

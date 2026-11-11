@@ -99,48 +99,36 @@
         </button>
         <div x-show="wfGroupOpen(g.kategorie)" x-cloak :id="'wf-group-' + g.kategorie" class="entity-list entity-list--accented">
           <template x-for="f in listWindowed(g.fakten, g.kategorie)" :key="f.id">
-            <div class="weltfakten-row" :class="{ 'weltfakten-row--nosubj': !f.subjekt }"
-                 @contextmenu="wfOpenMenu($event, f)" x-long-press>
-              <span x-show="f.subjekt" class="weltfakten-subjekt" x-text="f.subjekt"></span>
-              <div class="weltfakten-row-body">
-                <div class="weltfakten-row-line">
-                  <span class="weltfakten-fakt" x-text="f.fakt"></span>
-                  <span x-show="f.manuell" class="tag weltfakten-manual-tag"
-                        :data-tip="$app.t('weltfakten.manualHint')" x-text="$app.t('weltfakten.manual')"></span>
-                  <span x-show="f.widerlegt" class="badge badge-warn weltfakten-widerlegt"
-                        :data-tip="$app.t('weltfakten.widerlegtTip')" x-text="$app.t('weltfakten.widerlegt')"></span>
-                  <!-- Ein ⋯-Knopf je Zeile, das Menü ist eine Instanz ausserhalb der
-                       Liste (unten): drei Icon-Knöpfe je Fakt trugen in grossen Büchern
-                       den Grossteil der Knoten der Karte. -->
-                  <span class="weltfakten-row-actions">
+            <div class="weltfakten-item">
+              <!-- Zeile = Aufklapp-Schalter wie bei Szenen/Figuren; Aktionen im Detail.
+                   Rechtsklick/Long-Press öffnet dieselben Aktionen als Menü. -->
+              <div class="weltfakten-row internal-link"
+                   :class="{ 'weltfakten-row--nosubj': !f.subjekt, 'weltfakten-row--selected': wfOpenId === f.id }"
+                   :aria-expanded="wfOpenId === f.id"
+                   @click="wfToggleOpen(f)"
+                   @contextmenu="wfOpenMenu($event, f)" x-long-press>
+                <span x-show="f.subjekt" class="weltfakten-subjekt" x-text="f.subjekt"></span>
+                <div class="weltfakten-row-body">
+                  <div class="weltfakten-row-line">
+                    <span class="weltfakten-fakt" x-text="f.fakt"></span>
+                    <span x-show="f.manuell" class="tag weltfakten-manual-tag"
+                          :data-tip="$app.t('weltfakten.manualHint')" x-text="$app.t('weltfakten.manual')"></span>
+                    <span x-show="f.widerlegt" class="badge badge-warn weltfakten-widerlegt"
+                          :data-tip="$app.t('weltfakten.widerlegtTip')" x-text="$app.t('weltfakten.widerlegt')"></span>
                     <template x-if="wfFcFactId === f.id"><span class="spinner" aria-hidden="true"></span></template>
-                    <button type="button" class="icon-btn icon-btn--ghost" @click="wfOpenMenu($event, f)"
-                            :disabled="wfEdit.mode !== null"
-                            :data-tip="$app.t('weltfakten.actions')" :aria-label="$app.t('weltfakten.actions')"
-                            :aria-expanded="isActionMenuOpen('fakt:' + f.id)" aria-haspopup="menu">
-                      <svg class="icon" aria-hidden="true"><use href="/icons.svg#more-horizontal"/></svg>
-                    </button>
-                  </span>
-                </div>
-                <template x-if="wfEdit.mode === 'edit' && wfEdit.id === f.id">
-                  <!-- @include world-facts-edit -->
-                </template>
-                <p class="weltfakten-pruefung" x-show="f.pruefung" x-cloak
-                   :class="'weltfakten-pruefung--' + (f.pruefung?.urteil || '')">
-                  <span class="weltfakten-pruefung-urteil" x-text="$app.t('weltfakten.pruefung.' + (f.pruefung?.urteil || 'unklar'))"></span>
-                  <span x-show="f.pruefung?.urteil !== 'korrekt' && f.pruefung?.beschreibung" x-text="f.pruefung?.beschreibung"></span>
-                  <a x-show="wfQuelleUrl(f)" class="text-link" :href="wfQuelleUrl(f)" target="_blank" rel="noopener noreferrer"
-                     x-text="$app.t('weltfakten.pruefung.quelle')"></a>
-                </p>
-                <div class="entity-refs weltfakten-row-meta" x-show="f.chapter_refs?.length || f.seite">
-                  <template x-for="k in (f.chapter_refs || [])" :key="k.chapter_id">
-                    <button type="button" class="entity-ref" x-entity-ref="{ type: 'kapitel', id: k.chapter_id, name: k.chapter_name }"></button>
-                  </template>
-                  <template x-if="f.seite">
-                    <button type="button" class="entity-ref" x-entity-ref="{ type: 'seite', name: f.seite, kapitel: (f.kapitel || [])[0] }"></button>
-                  </template>
+                    <span class="history-chevron weltfakten-row-chevron" :class="{ open: wfOpenId === f.id }" aria-hidden="true"></span>
+                  </div>
+                  <div class="entity-refs weltfakten-row-meta" x-show="f.chapter_refs?.length || f.seite">
+                    <template x-for="k in (f.chapter_refs || [])" :key="k.chapter_id">
+                      <button type="button" class="entity-ref" x-entity-ref="{ type: 'kapitel', id: k.chapter_id, name: k.chapter_name }"></button>
+                    </template>
+                    <template x-if="f.seite">
+                      <button type="button" class="entity-ref" x-entity-ref="{ type: 'seite', name: f.seite, kapitel: (f.kapitel || [])[0] }"></button>
+                    </template>
+                  </div>
                 </div>
               </div>
+              <!-- @include world-facts-detail -->
             </div>
           </template>
           <button type="button" class="btn-compact list-window-more"

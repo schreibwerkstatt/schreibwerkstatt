@@ -33,30 +33,22 @@
       <span x-text="$app.t('editor.revisions.group.count', { n: row.size })"></span>
     </button>
   </template>
-  <span class="tag page-revisions-summary" x-show="summaryLabel(row.rev)" x-text="summaryLabel(row.rev)"></span>
-  <template x-if="splitLink(row.rev)">
+  <span class="tag page-revisions-summary" x-show="row.summary" x-text="row.summary"></span>
+  <template x-if="row.split">
     <span class="revision-split" @click.stop>
-      <span class="revision-split__dir" x-text="$app.t('editor.revisions.split.' + splitLink(row.rev).dir)"></span>
-      <button type="button" class="entity-ref" x-entity-ref="{ type: 'seite', id: splitLink(row.rev).pageId }"></button>
+      <span class="revision-split__dir" x-text="$app.t('editor.revisions.split.' + row.split.dir)"></span>
+      <button type="button" class="entity-ref" x-entity-ref="{ type: 'seite', id: row.split.pageId }"></button>
     </span>
   </template>
-  <span class="user-chip"
-        x-show="!row.child && row.rev.user_email && $app.bookSharedFlags?.[$store.nav.selectedBookId]"
-        :class="{ 'user-chip--self': isOwnRevision(row.rev) }"
-        :data-tip="row.rev.user_email">
-    <span class="user-chip__avatar"
-          :style="`--avatar-hue: ${$app.userAvatarHue(row.rev.user_email)}`"
-          x-text="$app.userInitials(row.rev.user_email)"></span>
-    <span class="user-chip__name"
-          x-text="isOwnRevision(row.rev) ? $app.t('editor.revisions.byYou') : $app.userDisplayName(row.rev.user_email)"></span>
-  </span>
+  <span x-user-chip="row.rev.user_email"
+        x-show="!row.child && $app.bookSharedFlags?.[$store.nav.selectedBookId]"></span>
   <span class="page-revisions-row__nums">
     <span class="page-revisions-row__chars" x-text="formatChars(row.rev.chars) + ' ' + $app.t('editor.revisions.chars')"></span>
-    <template x-if="rowDelta(row) !== null">
+    <template x-if="row.delta !== null">
       <span class="tag revision-delta"
-            :class="deltaClass(rowDelta(row))"
+            :class="deltaClass(row.delta)"
             :data-tip="rowDeltaTip(row)"
-            x-text="formatDelta(rowDelta(row))"></span>
+            x-text="formatDelta(row.delta)"></span>
     </template>
   </span>
   <span class="page-revisions-row__actions">
@@ -75,7 +67,7 @@
             class="btn-toggle-saved btn-toggle-saved--off"
             x-show="canWrite()"
             @click.stop="restore(row.rev)"
-            :disabled="!canRestore() || restoringId === row.rev.id"
+            :disabled="!canRestore() || restoringId !== null"
             :data-tip="restoreTip($app.t('editor.revisions.restoreTitle'))"
             x-text="restoringId === row.rev.id ? $app.t('editor.revisions.restoring') : $app.t('editor.revisions.restore')"></button>
     <button type="button"

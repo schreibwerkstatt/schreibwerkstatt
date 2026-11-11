@@ -44,7 +44,8 @@
 /* Glossar-Zeile: Subjekt als feste linke Schlüssel-Spalte, Aussage rechts
    daneben (durch dezenten Divider getrennt), Kapitel/Seite darunter im
    Body-Block. Mehr Padding + Zeilenabstand als die kompakte entity-row,
-   weil dies eine Lese-/Nachschlage-Ansicht ohne Klick-Drawer ist. */
+   weil dies eine Lese-/Nachschlage-Ansicht ist. Klick klappt das Detail
+   (.entity-detail) mit Prüfung + Aktionen auf, wie bei Szenen/Figuren. */
 .weltfakten-row {
   display: grid;
   grid-template-columns: minmax(6rem, 12rem) 1fr;
@@ -54,9 +55,30 @@
   border-left: 3px solid var(--card-accent);
 }
 
-.weltfakten-row + .weltfakten-row {
+.weltfakten-item + .weltfakten-item {
   border-top: 1px solid var(--color-border);
 }
+@media (hover: hover) {
+  .weltfakten-row:hover { background: var(--color-hover); }
+}
+.weltfakten-row--selected { background: var(--color-hover); }
+
+/* Chevron rechts oben in der Aussage-Zeile, ausserhalb des Umbruchs. */
+.weltfakten-row-chevron { margin-left: auto; flex-shrink: 0; }
+
+/* Aufgeklapptes Detail: Prüfung, dann Aktionen, ggf. Pflegeformular. */
+.weltfakten-detail {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-sm);
+}
+.weltfakten-detail-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-xs);
+  margin: 0;
+}
+.weltfakten-detail .weltfakten-edit-panel { margin-bottom: 0; }
 
 /* Fakt ohne Subjekt: Aussage füllt die volle Breite, kein Spalten-Divider. */
 .weltfakten-row--nosubj { grid-template-columns: 1fr; }
@@ -86,7 +108,7 @@
   line-height: var(--lh-base);
 }
 
-/* Aussage + Marken + Pflege-Knöpfe in einer Zeile; die Knöpfe rechtsbündig. */
+/* Aussage + Marken + Chevron in einer Zeile. */
 .weltfakten-row-line {
   display: flex;
   flex-wrap: wrap;
@@ -94,11 +116,6 @@
   gap: var(--space-xs);
 }
 .weltfakten-row-line > .weltfakten-fakt { flex: 1 1 16em; }
-.weltfakten-row-actions {
-  display: inline-flex;
-  gap: var(--space-2xs);
-  margin-left: auto;
-}
 
 /* «Gepflegt»: vom Autor angelegt/geändert, die Analyse lässt den Fakt stehen. */
 .weltfakten-manual-tag {

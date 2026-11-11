@@ -55,10 +55,12 @@ test('Welt-Fakten: anlegen, als gepflegt markiert, ändern, löschen', async ({ 
   await expect(row).toBeVisible();
   await expect(row.locator('.weltfakten-manual-tag')).toBeVisible();
 
-  // Zeilenaktionen liegen im Aktionsmenü: ⋯-Knopf hier, Rechtsklick beim Löschen.
+  // Klick auf die Zeile klappt das Detail mit den Aktionen auf; Rechtsklick öffnet sie als Menü.
   const menu = page.locator('.context-menu[x-ref="actionMenu"]:visible');
-  await row.getByRole('button', { name: 'Aktionen zu diesem Fakt' }).click();
-  await menu.getByRole('menuitem', { name: 'Fakt bearbeiten' }).click();
+  await row.locator('.weltfakten-fakt').click();
+  const detail = card.locator('.weltfakten-detail');
+  await expect(detail).toBeVisible();
+  await detail.getByRole('button', { name: 'Fakt bearbeiten' }).click();
   const edited = `${fakt} und ein Dach`;
   await card.locator('.weltfakten-edit-panel textarea').fill(edited);
   await card.locator('.weltfakten-edit-panel').getByRole('button', { name: 'Speichern' }).click();
@@ -102,8 +104,8 @@ test('Welt-Fakten: Kapitel-Bezug im Formular wird manueller Bezug am Fakt', asyn
   expect(f.chapter_refs[0].manual).toBe(true);
   expect(kapitelName).toContain(f.chapter_refs[0].chapter_name);
 
-  await row.getByRole('button', { name: 'Aktionen zu diesem Fakt' }).click();
-  await page.locator('.context-menu[x-ref="actionMenu"]:visible').getByRole('menuitem', { name: 'Löschen' }).click();
+  await row.locator('.weltfakten-fakt').click();
+  await card.locator('.weltfakten-detail').getByRole('button', { name: 'Löschen' }).click();
   await page.locator('#app-confirm-dialog').getByRole('button', { name: 'Löschen' }).click();
   await expect(row).toHaveCount(0);
 });

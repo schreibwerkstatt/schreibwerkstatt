@@ -177,10 +177,11 @@
 
 /* Im Fokus auffälliger und nicht im hidden Header-Bereich. Position oberhalb
    des Editor-Bodys, mit höherem Kontrast, ignoriert die globale #status-
-   display:none-Regel. Scope via :has() — Banner lebt im Notebook-Partial
-   (ausserhalb .focus-editor), Pinning wird vom aktiven Focus-Cardroot
-   getriggert, nicht von der body.focus-mode-Class. */
-:root:has(.focus-editor.is-active) .editor-conflict-banner {
+   display:none-Regel. Scope über body.focus-mode (gesetzt zusammen mit
+   .focus-editor.is-active in focus/chrome.js#markFocusChrome); globaler
+   Zustand als Klasse, nie per :root:has() (public/css/CLAUDE.md). Der Banner lebt nur
+   im Notebook-Partial der SPA; die nativen Schalen haben ihn nicht. */
+body.focus-mode .editor-conflict-banner {
   position: fixed;
   top: 8px;
   left: 50%;

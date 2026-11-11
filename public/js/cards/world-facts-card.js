@@ -92,6 +92,8 @@ export function registerWorldFactsCard() {
     _wfFcPollTimer: null,
     // Pflegeformular: mode null | 'new' | 'edit' (id = world_facts.id).
     wfEdit: _emptyEdit(),
+    // Aufgeklappter Fakt (world_facts.id): Detail mit Prüfung + Aktionen.
+    wfOpenId: null,
     // Gruppen rendern schrittweise (list-window.js), ein Fenster je Kategorie.
     ...listWindowState(WF_GROUP_STEP),
     // Aktionsmenü je Fakt (action-menu.js); Ziel = world_facts.id.
@@ -110,7 +112,7 @@ export function registerWorldFactsCard() {
           wfFactcheck: { bookOptIn: false, kategorien: [] }, wfAusgeblendet: [], wfFcFactId: null,
           wfFcRunning: false, wfFcProgress: 0,
           wfFcStatusKey: '', wfFcStatusParams: null, wfFcResult: null, wfFcError: '',
-          wfEdit: _emptyEdit(), ...listWindowState(WF_GROUP_STEP),
+          wfEdit: _emptyEdit(), wfOpenId: null, ...listWindowState(WF_GROUP_STEP),
         },
         filterScopes: WF_FILTER_SCOPES,
         load: () => this.loadWorldFacts(),
@@ -127,6 +129,12 @@ export function registerWorldFactsCard() {
     wfOpenMenu(ev, f) {
       if (this.wfEdit.mode !== null) return;
       this.openActionMenu(ev, 'fakt:' + f.id, f.id);
+    },
+    // Klick auf die Zeile klappt das Detail auf/zu; ein offenes Pflegeformular
+    // eines anderen Fakts bleibt dabei unangetastet (Zuklappen nur ohne Edit).
+    wfToggleOpen(f) {
+      if (this.wfEdit.mode === 'edit' && this.wfEdit.id === f.id) return;
+      this.wfOpenId = this.wfOpenId === f.id ? null : f.id;
     },
     wfMenuFakt() {
       return this.fakten.find(f => f.id === this.actionMenuTarget) || null;
@@ -335,6 +343,8 @@ export function registerWorldFactsCard() {
     },
 
     wfStartEdit(f) {
+      // Das Formular lebt im Detail — Bearbeiten aus dem Menü klappt den Fakt auf.
+      this.wfOpenId = f.id;
       this.wfEdit = {
         ..._emptyEdit(), mode: 'edit', id: f.id,
         draft: {

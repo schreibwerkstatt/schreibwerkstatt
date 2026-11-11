@@ -64,14 +64,20 @@
   gap: var(--space-6);
 }
 
+/* Raster statt Flex-Wrap: Zeile 1 = Fehlertyp-Chip + Schliess-Knopf, der
+   Titel steht darunter über die volle Breite. Mit Wrap rutschte der Knopf je
+   nach Titellänge auf die Titelzeile oder allein in eine eigene. */
 .lt-popover__header {
-  display: flex;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
   align-items: center;
-  gap: var(--space-6);
-  flex-wrap: wrap;
+  gap: var(--space-xs) var(--space-6);
 }
 
 .lt-popover__badge {
+  grid-column: 1;
+  grid-row: 1;
+  justify-self: start;
   display: inline-block;
   padding: var(--space-1) var(--space-5);
   border-radius: var(--radius-none);
@@ -84,19 +90,20 @@
 }
 
 .lt-popover__title {
+  grid-column: 1 / -1;
   font-weight: var(--fw-semibold);
   color: var(--color-text);
 }
 
-/* Sichtbarer Schliess-Knopf, rechts im Header (`margin-left: auto` schiebt ihn
-   an die Kante, egal wie viele Header-Chips davor stehen). Nur Outside-Click
+/* Sichtbarer Schliess-Knopf, rechte Spalte der ersten Header-Zeile (neben dem
+   Fehlertyp; im Formular-Popover ohne Chip allein rechts). Nur Outside-Click
    und Escape zu haben reicht nicht: der Popover haengt im contenteditable, auf
    Touch ist „daneben tippen" ein Klick in den Text, und Escape erwartet nicht
    jeder. 24x24 als Trefferflaeche (Glyph selbst ist kleiner). */
 .lt-popover__close {
   appearance: none;
-  margin-left: auto;
-  flex: 0 0 auto;
+  grid-column: 2;
+  grid-row: 1;
   display: inline-flex;
   align-items: center;
   justify-content: center;

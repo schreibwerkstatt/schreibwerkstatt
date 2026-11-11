@@ -58,6 +58,8 @@ export function registerPageRevisionsCard() {
     // Re-Entry-Guard: Antworten eines frueheren Seitenwechsels verwerfen.
     _loadSeq: 0,
     _memos: {},
+    // Window-Listener der Karte, abgebaut in destroy().
+    _abortCtrl: null,
 
     ...viewerState(),
 
@@ -71,25 +73,28 @@ export function registerPageRevisionsCard() {
         this.loadRevisions(pid);
       });
 
-      this._onRevisionsChanged = (e) => {
+      this._abortCtrl = new AbortController();
+      window.addEventListener(EVT.PAGE_REVISIONS_CHANGED, (e) => {
         const pid = e?.detail?.pageId;
         if (!pid || pid !== this._pageId) return;
+        // Ein Save hat den gespeicherten Stand geaendert: der Vergleich
+        // «aktuell» im offenen Viewer muss ihn neu holen.
+        this._currentBody = null;
         // `keepDepth`: ein Autosave darf ein nachgeladenes Fenster nicht wieder
-        // auf die jueng­sten 100 zusammenfallen lassen — der Autosave feuert im
+        // auf die juengsten 100 zusammenfallen lassen — der Autosave feuert im
         // Minutentakt, das Blaettern waere sonst nicht haltbar.
         this.loadRevisions(pid, { keepDepth: true });
-      };
-      window.addEventListener(EVT.PAGE_REVISIONS_CHANGED, this._onRevisionsChanged);
+      }, { signal: this._abortCtrl.signal });
     },
 
     destroy() {
-      if (this._onRevisionsChanged) {
-        window.removeEventListener(EVT.PAGE_REVISIONS_CHANGED, this._onRevisionsChanged);
-      }
+      this._abortCtrl?.abort();
+      this._abortCtrl = null;
     },
 
     reset() {
       this._loadSeq++;
+      this._resetPageScope();
       this.revisions = [];
       this.pinnedRevs = [];
       this.older = null;
@@ -100,19 +105,28 @@ export function registerPageRevisionsCard() {
       this.loading = false;
       this.restoringId = null;
       this.pinningId = null;
+      this._pageId = null;
+      this._memos = {};
+    },
+
+    // Was zur angezeigten Seite gehoert und beim Seitenwechsel faellt:
+    // Filter, Aufklappzustand, offener Viewer, Body-Cache.
+    _resetPageScope() {
       this.filterSource = '';
       this.filterUser = '';
       this.expanded = {};
-      this._pageId = null;
-      this._memos = {};
-      this._resetBodyCache();
       this.closeViewer();
+      this._resetBodyCache();
     },
 
     // `keepDepth` haelt die bereits nachgeladene Tiefe: statt des Default-Fensters
-    // wird so viel angefordert, wie geladen war. Server-Deckel ist 500 — bei mehr
-    // Tiefe faellt die Liste bewusst auf 500 zurueck (der Rest ist einen Klick
-    // entfernt) statt eine unbegrenzte Antwort zu verlangen.
+    // wird so viel angefordert, wie geladen war, plus eins — der neue Save
+    // schiebt das Fenster um eine Zeile, ohne Zuschlag fiele die aelteste
+    // geladene heraus. Steht der Viewer auf einer Revision am Fensterrand,
+    // reicht die Tiefe mindestens bis zu ihrer Vorgaengerin, sonst verloere
+    // ‹/› den Halt. Server-Deckel ist 500 — bei mehr Tiefe faellt die Liste
+    // bewusst auf 500 zurueck (der Rest ist einen Klick entfernt) statt eine
+    // unbegrenzte Antwort zu verlangen.
     //
     // Kein `__fresh=1`: die Frische dieses Pfades garantiert der Service Worker
     // (CONTENT_VOLATILE_REGEX in public/sw.js liefert die Revisionsliste
@@ -121,15 +135,13 @@ export function registerPageRevisionsCard() {
     async loadRevisions(pageId, { keepDepth = false } = {}) {
       if (!pageId) return;
       const samePage = pageId === this._pageId;
-      const depth = keepDepth && samePage ? Math.min(500, this.revisions.length) : 0;
-      if (!samePage) {
-        // Seitenwechsel: Filter/Aufklappzustand gehoeren zur alten Seite.
-        this.filterSource = '';
-        this.filterUser = '';
-        this.expanded = {};
-        this.closeViewer();
-        this._resetBodyCache();
+      let depth = 0;
+      if (keepDepth && samePage) {
+        const n = this.revisions.length;
+        const viewIdx = this.viewerRev ? this.revisions.findIndex(r => r.id === this.viewerRev.id) : -1;
+        depth = Math.min(500, Math.max(n > 100 ? n + 1 : 0, viewIdx >= 0 ? viewIdx + 2 : 0));
       }
+      if (!samePage) this._resetPageScope();
       this._pageId = pageId;
       const seq = ++this._loadSeq;
       this.loading = true;
@@ -216,6 +228,7 @@ export function registerPageRevisionsCard() {
       return this._memo('visible', [this.revisions, this.filterSource, this.filterUser], () =>
         this.revisions.filter(r => this._matchesFilter(r)));
     },
+    _uiLocale() { return Alpine.store('shell').uiLocale; },
 
     // Delta-Rechner gegen die vollstaendige Liste (page-revisions-groups.js).
     _deltas() {
@@ -229,9 +242,10 @@ export function registerPageRevisionsCard() {
     // bei aufgeklappter Sitzung die weiteren Saves dahinter. `size` > 1 nur an
     // der Kopfzeile, `oldest` = aeltester Save der Sitzung (Zeitspanne).
     // `delta`: zugeklappte Sitzung = ganze Sitzung, sonst der einzelne Save;
-    // am Tag die Summe seiner angezeigten Sitzungen.
+    // am Tag die Summe seiner angezeigten Sitzungen. `summary`/`split` je
+    // Zeile einmal gerechnet, nicht je Template-Bindung.
     listDays() {
-      return this._memo('days', [this.revisions, this.older, this.hasMore, this.filterSource, this.filterUser, this.expanded], () => {
+      return this._memo('days', [this.revisions, this.pinnedRevs, this.older, this.hasMore, this.filterSource, this.filterUser, this.expanded, this._uiLocale()], () => {
         const d = this._deltas();
         const groups = filterGroups(groupRevisions(this.revisions), r => this._matchesFilter(r));
         return groupByDay(groups, iso => (iso ? localIsoDate(new Date(iso)) : '')).map(day => {
@@ -241,11 +255,11 @@ export function registerPageRevisionsCard() {
             const head = g.items[0];
             const oldest = g.items[g.items.length - 1];
             const span = g.items.length > 1 && !open;
-            rows.push({ k: `r${head.id}`, rev: head, oldest, size: g.items.length, group: g.key, open, child: false,
-              delta: span ? d.span(head, oldest) : d.span(head, head) });
+            rows.push(this._row('r', head, { oldest, size: g.items.length, group: g.key, open,
+              delta: span ? d.span(head, oldest) : d.span(head, head) }));
             if (open) {
               for (const rev of g.items.slice(1)) {
-                rows.push({ k: `r${rev.id}`, rev, oldest: rev, size: 0, group: g.key, open, child: true, delta: d.span(rev, rev) });
+                rows.push(this._row('r', rev, { group: g.key, open, child: true, delta: d.span(rev, rev) }));
               }
             }
           }
@@ -255,41 +269,50 @@ export function registerPageRevisionsCard() {
     },
 
     pinnedRows() {
-      return this._memo('pinnedRows', [this.pinnedRevs, this.revisions, this.older, this.hasMore], () => {
+      return this._memo('pinnedRows', [this.pinnedRevs, this.revisions, this.older, this.hasMore, this._uiLocale()], () => {
         const d = this._deltas();
-        return this.pinnedRevs.map(rev => ({ k: `p${rev.id}`, rev, oldest: rev, size: 0, group: null, open: false, child: false, delta: d.span(rev, rev) }));
+        return this.pinnedRevs.map(rev => this._row('p', rev, { delta: d.span(rev, rev) }));
       });
+    },
+
+    _row(prefix, rev, { oldest = rev, size = 0, group = null, open = false, child = false, delta = null } = {}) {
+      return { k: prefix + rev.id, rev, oldest, size, group, open, child, delta,
+        summary: this.summaryLabel(rev), split: this.splitLink(rev) };
     },
 
     toggleGroup(key) {
       this.expanded = { ...this.expanded, [key]: !this.expanded[key] };
     },
 
-    // Filter-Optionen nur aus dem, was in der geladenen Liste vorkommt.
-    hasSourceChoice() {
-      return new Set(this.revisions.map(r => r.source)).size > 1;
+    // Filter-Optionen nur aus dem, was in der geladenen Liste vorkommt — ein
+    // Durchlauf je geladener Liste fuer beide Comboboxen und die Schalter.
+    // Geraet nur zeigen, wenn die Liste mehr als eines kennt — sonst steht auf
+    // jeder Zeile dieselbe Angabe.
+    filterOptions() {
+      return this._memo('filterOpts', [this.revisions, this._uiLocale()], () => {
+        const sources = new Set(this.revisions.map(r => r.source));
+        const users = new Set(this.revisions.map(r => r.user_email || ''));
+        const clients = new Set(this.revisions.map(r => r.client).filter(Boolean));
+        return {
+          sources: [...sources].map(s => ({ value: s, label: this.sourceLabel(s) })),
+          users: [...users].filter(Boolean).map(e => ({ value: e, label: this.userLabel(e) })),
+          hasSource: sources.size > 1,
+          hasUser: users.size > 1,
+          hasClient: clients.size > 1,
+        };
+      });
     },
-    hasUserChoice() {
-      return new Set(this.revisions.map(r => r.user_email || '')).size > 1;
-    },
+    hasSourceChoice() { return this.filterOptions().hasSource; },
+    hasUserChoice() { return this.filterOptions().hasUser; },
+    hasClientChoice() { return this.filterOptions().hasClient; },
 
-    // Geraet nur zeigen, wenn die geladene Liste mehr als eines kennt — sonst
-    // steht auf jeder Zeile dieselbe Angabe.
-    hasClientChoice() {
-      return this._memo('clients', [this.revisions], () =>
-        new Set(this.revisions.map(r => r.client).filter(Boolean)).size > 1);
-    },
-
-    isOwnRevision(rev) {
-      if (!rev?.user_email) return false;
-      const me = Alpine.store('session').currentUser?.email;
-      return !!me && String(me).toLowerCase() === String(rev.user_email).toLowerCase();
-    },
-
+    // Personen-Name in der Filter-Combobox; im Chip setzt ihn x-user-chip.
     userLabel(email) {
       const app = window.__app;
       if (!email) return app.t('editor.revisions.filter.noUser');
-      return this.isOwnRevision({ user_email: email }) ? app.t('editor.revisions.byYou') : app.userDisplayName(email);
+      const me = Alpine.store('session').currentUser?.email;
+      return me && String(me).toLowerCase() === String(email).toLowerCase()
+        ? app.t('userChip.self') : app.userDisplayName(email);
     },
 
     sourceLabel(src) {
@@ -347,10 +370,10 @@ export function registerPageRevisionsCard() {
     },
     hasPrevRevFor(rev) { return !!this._prevRevFor(rev); },
 
-    // Zeichen-Delta der Zeile/des Tages, in listDays/pinnedRows gerechnet.
-    // Die allererste Revision rechnet gegen den leeren Stand, eine noch nicht
-    // nachgeladene Vorgaengerin ergibt kein Delta (revisionDeltas).
-    rowDelta(row) { return row?.delta ?? null; },
+    // Zeichen-Delta der Zeile/des Tages steht als `row.delta`/`day.delta`,
+    // gerechnet in listDays/pinnedRows. Die allererste Revision rechnet gegen
+    // den leeren Stand, eine noch nicht nachgeladene Vorgaengerin ergibt kein
+    // Delta (revisionDeltas).
     rowDeltaTip(row) {
       return window.__app.t(row.size > 1 && !row.open ? 'editor.revisions.deltaSessionTitle' : 'editor.revisions.deltaTitle');
     },
@@ -473,13 +496,23 @@ export function registerPageRevisionsCard() {
       if (!rev?.id || this.pinningId || !this.canWrite() || !this._pageId) return;
       const app = window.__app;
       this.pinningId = rev.id;
+      const pageId = this._pageId;
       try {
-        await contentRepo.pinRevision(this._pageId, rev.id, { pinned, label });
+        await contentRepo.pinRevision(pageId, rev.id, { pinned, label });
       } catch (e) {
         console.error('[pageRevisions:pin]', e);
         app.setStatus?.(app.t('editor.revisions.pinFailed') + ' ' + revisionErrorText(e, 'common.unknownError'), true, 6000);
       } finally {
         this.pinningId = null;
+        // Waehrend des Requests getippter Name (viewer.js#saveViewerLabel).
+        // Nicht nachschicken, wenn dieser Request dieselbe Revision geloest
+        // hat — sonst heftete der Name sie wieder an.
+        const queued = this._queuedLabel;
+        this._queuedLabel = null;
+        if (queued && queued.pageId === this._pageId && queued.pageId === pageId
+            && (pinned || queued.rev.id !== rev.id)) {
+          this.setPinned(queued.rev, true, queued.label);
+        }
       }
     },
 

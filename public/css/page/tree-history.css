@@ -401,12 +401,6 @@
   white-space: nowrap;
 }
 .page-revisions-row > .user-chip { flex: 0 1 auto; min-width: 0; }
-.page-revisions-row > .user-chip .user-chip__name {
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
 .page-revisions-row > .page-revisions-row__client {
   font-size: var(--font-size-xs);
   color: var(--color-muted);

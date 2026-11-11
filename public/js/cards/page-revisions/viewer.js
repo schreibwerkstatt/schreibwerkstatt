@@ -44,6 +44,9 @@ export function viewerState() {
     viewerDiffUnchanged: false,
     viewerDiffLoading: false,
     viewerDiffError: '',
+    // Vergleich «aktuell» lief gegen den lokalen Stand, weil der Server nicht
+    // erreichbar war — die Vorlage zeigt dazu einen Hinweis.
+    viewerDiffLocal: false,
     viewerLabelDraft: '',
     _viewerSeq: 0,
     _diffSeq: 0,
@@ -51,7 +54,17 @@ export function viewerState() {
     // Seite. Revisionen sind unveraenderlich; beim Blaettern im Vergleich ist
     // jede Revision einmal «diese» und einmal «Vorgaengerin» — ohne Cache
     // zwei Abrufe je Schritt. Geleert beim Seitenwechsel (_resetBodyCache).
-    _bodyCache: new Map(),
+    // Eingefroren: Alpines Reaktivitaet laesst nicht erweiterbare Objekte
+    // unverpackt (nichts im Template haengt am Cache); `get`/`set` der Map
+    // wirken trotzdem, weil Object.freeze die Eintraege nicht sperrt.
+    _bodyCache: Object.freeze(new Map()),
+    // Gespeicherter aktueller Stand fuer den Vergleich «aktuell», einmal je
+    // Viewer-Sitzung vom Server; verworfen beim Schliessen und bei
+    // `page-revisions:changed` (ein Save hat ihn ueberholt).
+    _currentBody: null,
+    // Name, der waehrend eines laufenden Anheften-Requests gespeichert werden
+    // sollte — wird danach nachgeschickt statt still verworfen.
+    _queuedLabel: null,
     // Nutzung der laufenden Viewer-Sitzung (Oeffnen bis Schliessen), gemeldet
     // als ein `revision.view` beim Schliessen (docs/usage-events.md). null =
     // Viewer zu. Nur Kategorien und eine Zahl, kein Inhalt.
@@ -65,7 +78,7 @@ const BODY_CACHE_MAX = 40;
 // Uebersetzter Satz zu einem Ladefehler: bekannter `error_code` → `error.<code>`,
 // sonst der Fallback-Key. Nie die rohe Fehlermeldung (`HTTP 500: …`).
 export function revisionErrorText(e, fallbackKey) {
-  const code = e?.code || (e?.message === 'REVISION_NOT_FOUND' ? 'REVISION_NOT_FOUND' : null);
+  const code = e?.code;
   if (code) {
     const key = 'error.' + code;
     const msg = tRaw(key);
@@ -95,6 +108,7 @@ export const viewerMethods = {
     this.viewerDiffHtml = '';
     this.viewerDiffUnchanged = false;
     this.viewerDiffError = '';
+    this.viewerDiffLocal = false;
     this._diffSeq++;
     this.viewerLabelDraft = rev.label || '';
     this.viewerLoading = true;
@@ -130,7 +144,7 @@ export const viewerMethods = {
     const hit = this._bodyCache.get(revId);
     if (hit && hit.pageId === pageId) return hit;
     const data = await fetchJson(`/content/pages/${pageId}/revisions/${revId}`);
-    if (!data?.revision) throw new Error('REVISION_NOT_FOUND');
+    if (!data?.revision) throw Object.assign(new Error('REVISION_NOT_FOUND'), { code: 'REVISION_NOT_FOUND' });
     const entry = { pageId, body: String(data.revision.body_html || ''), prev: data.prev || null };
     if (this._pageId === pageId) {
       this._bodyCache.set(revId, entry);
@@ -140,7 +154,8 @@ export const viewerMethods = {
   },
 
   _resetBodyCache() {
-    this._bodyCache = new Map();
+    this._bodyCache = Object.freeze(new Map());
+    this._currentBody = null;
   },
 
   // Navigation laeuft ueber die ganze geladene Liste (ungefiltert, ungruppiert):
@@ -155,13 +170,17 @@ export const viewerMethods = {
   hasPrevRev() { return !!this._siblingRev('prev'); },
   hasNextRev() { return !!this._siblingRev('next'); },
   // Am Fensterrand ist die aeltere Nachbarin `older` (nicht in der Liste):
-  // erst nachladen, damit ‹/› von dort aus weiter funktioniert.
+  // erst nachladen, damit ‹/› von dort aus weiter funktioniert. Wurde der
+  // Viewer waehrenddessen geschlossen, gewechselt oder die Seite verlassen,
+  // bleibt er zu — sonst oeffnete ihn die spaete Antwort wieder.
   async gotoRev(direction) {
     const target = this._siblingRev(direction);
     if (!target) return;
     if (this._viewerUsage) this._viewerUsage.steps += 1;
     if (direction === 'prev' && !this.revisions.some(r => r.id === target.id) && this.hasMore) {
+      const seq = this._viewerSeq;
       await this.loadMore();
+      if (seq !== this._viewerSeq || !this.viewerOpen) return;
     }
     const inList = this.revisions.find(r => r.id === target.id);
     this.openViewer(inList || target, { keepMode: true });
@@ -186,8 +205,10 @@ export const viewerMethods = {
     this.viewerDiffHtml = '';
     this.viewerDiffUnchanged = false;
     this.viewerDiffError = '';
+    this.viewerDiffLocal = false;
     this.viewerDiffLoading = false;
     this._diffSeq++;
+    this._currentBody = null;
     this.viewerLabelDraft = '';
     const dlg = this.$refs?.viewerDialog;
     if (dlg && dlg.open) dlg.close();
@@ -243,6 +264,7 @@ export const viewerMethods = {
     this.viewerDiffHtml = '';
     this.viewerDiffUnchanged = false;
     this.viewerDiffError = '';
+    this.viewerDiffLocal = false;
     if (this.viewerMode === 'diff' && !this.viewerLoading && !this.viewerError) await this._ensureDiff();
   },
 
@@ -259,9 +281,15 @@ export const viewerMethods = {
     this.viewerDiffError = '';
     try {
       const diffLib = await loadDiff();
-      const leftHtml = this.viewerCompare === 'current'
-        ? await this._loadCurrentBody()
-        : await this._loadPrevRevisionBody();
+      let leftHtml;
+      let local = false;
+      if (this.viewerCompare === 'current') {
+        const cur = await this._loadCurrentBody();
+        leftHtml = cur.html;
+        local = cur.local;
+      } else {
+        leftHtml = await this._loadPrevRevisionBody();
+      }
       if (!current()) return;
       const t = (k, p) => app?.t?.(k, p);
       const out = renderSideBySide(leftHtml, this.viewerBody, diffLib, {
@@ -272,6 +300,7 @@ export const viewerMethods = {
       });
       this.viewerDiffHtml = out.html;
       this.viewerDiffUnchanged = out.unchanged;
+      this.viewerDiffLocal = local;
     } catch (e) {
       console.error('[pageRevisions:viewer:diff]', e);
       if (current()) this.viewerDiffError = revisionErrorText(e, 'editor.revisions.viewer.diffFailed');
@@ -292,15 +321,24 @@ export const viewerMethods = {
 
   // Gespeicherter Stand, nicht der Editor-Puffer: «Wiederherstellen» ersetzt den
   // gespeicherten Stand. Frisch vom Server, weil ein zweites Geraet inzwischen
-  // geschrieben haben kann.
+  // geschrieben haben kann — einmal je Viewer-Sitzung (`_currentBody`), nicht
+  // bei jedem ‹/›. Ist der Server nicht erreichbar, vergleicht der Viewer gegen
+  // den lokal geladenen Stand und sagt das (`local: true` → Hinweis); dieser
+  // Ersatz wird nicht gemerkt, der naechste Vergleich fragt den Server neu.
   async _loadCurrentBody() {
-    if (!this._pageId) return '';
+    const pageId = this._pageId;
+    if (!pageId) return { html: '', local: false };
+    if (this._currentBody?.pageId === pageId) return this._currentBody;
     try {
-      const page = await contentRepo.loadPage(this._pageId, { fresh: true });
-      return String(page?.html || '');
+      const page = await contentRepo.loadPage(pageId, { fresh: true });
+      const entry = { pageId, html: String(page?.html || ''), local: false };
+      if (this._pageId === pageId) this._currentBody = entry;
+      return entry;
     } catch (e) {
       console.error('[pageRevisions:viewer:current]', e);
-      return String(window.__app?.originalHtml || '');
+      const app = window.__app;
+      if (app?.currentPage?.id !== pageId) throw e;
+      return { pageId, html: String(app.originalHtml || ''), local: true };
     }
   },
 
@@ -326,11 +364,18 @@ export const viewerMethods = {
     if (this.canRestore()) this.restoreFromViewer();
   },
 
+  // Laeuft gerade ein Anheften-Request, wird der Name danach nachgeschickt
+  // (setPinned → `_queuedLabel`) — sonst ginge ein schnell nachgetippter Name
+  // still verloren.
   async saveViewerLabel() {
     const rev = this.viewerRev;
     if (!rev?.pinned) return;
     const label = this.viewerLabelDraft.trim();
     if (label === (rev.label || '')) return;
+    if (this.pinningId) {
+      this._queuedLabel = { rev, label, pageId: this._pageId };
+      return;
+    }
     await this.setPinned(rev, true, label);
   },
 };

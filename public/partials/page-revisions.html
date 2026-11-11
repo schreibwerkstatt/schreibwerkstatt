@@ -21,13 +21,13 @@
         <span x-text="$app.t('editor.revisions.filter.source')"></span>
         <div x-data="combobox($app.t('editor.revisions.filter.allSources'), $app.t('editor.revisions.filter.allSources'))"
              x-modelable="value" x-model="filterSource"
-             x-effect="options = [...new Set(revisions.map(r => r.source))].map(s => ({ value: s, label: sourceLabel(s) }))"></div>
+             x-effect="options = filterOptions().sources"></div>
       </label>
       <label class="page-revisions-filter" x-show="hasUserChoice()">
         <span x-text="$app.t('editor.revisions.filter.user')"></span>
         <div x-data="combobox($app.t('editor.revisions.filter.allUsers'), $app.t('editor.revisions.filter.allUsers'))"
              x-modelable="value" x-model="filterUser"
-             x-effect="options = [...new Set(revisions.map(r => r.user_email || ''))].filter(Boolean).map(e => ({ value: e, label: userLabel(e) }))"></div>
+             x-effect="options = filterOptions().users"></div>
       </label>
       <span class="tag" x-show="isFiltered()"
             x-text="$app.t('editor.revisions.filter.hint', { shown: _visibleRevisions().length, loaded: revisions.length })"></span>
@@ -46,6 +46,10 @@
           </div>
         </template>
   
+        <!-- Filter ohne Treffer in der geladenen Liste. -->
+        <p class="muted-msg muted-msg--sm" x-show="isFiltered() && _visibleRevisions().length === 0" x-cloak
+           x-text="$app.t('editor.revisions.filter.empty')"></p>
+
         <!-- Geschichte nach Kalendertag (App-Zeitzone); Tageskopf mit dem
              Zeichen-Delta des Tages (gefiltert: der angezeigten Sitzungen),
              Zeilen zeigen nur die Uhrzeit. -->

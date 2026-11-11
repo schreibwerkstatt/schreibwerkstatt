@@ -522,11 +522,6 @@ export function registerSnapshotsCard() {
       return Number(cur.chars || 0) - Number(prev.chars || 0);
     },
 
-    isOwn(snap) {
-      const me = Alpine.store('session').currentUser?.email;
-      return !!me && !!snap?.user_email && String(me).toLowerCase() === String(snap.user_email).toLowerCase();
-    },
-
     // Vergleich zweier Fassungen: ...snapshotsCompareMethods (siehe oben).
   }));
 }

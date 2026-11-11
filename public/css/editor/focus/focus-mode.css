@@ -312,10 +312,14 @@ body.palette-open { overflow: hidden; overscroll-behavior: contain; }
 /* Im Fokus-Modus liegt #editor-card auf --z-overlay (2000). Popovers, die
    nach <body> teleportiert sind (Synonym-Menu/Picker, Figur-Lookup),
    bleiben sonst mit ihrem Default --z-popover (1000) unter dem Overlay
-   und werden unsichtbar. Im Fokus-Modus über das Overlay heben.
-   Scope via :has() statt body.focus-mode — Selektor reagiert direkt auf den
-   aktiven Focus-Cardroot, ohne globale Body-Class-Kopplung. */
-:root:has(.focus-editor.is-active) :is(.synonym-menu, .synonym-picker, .figur-lookup, .lt-popover) {
+   und werden unsichtbar. Darum liegen sie immer über dem Overlay — ohne
+   Bedingung: body.focus-mode setzen die nativen Schalen nicht, deren
+   Focus-Editor ebenfalls auf --z-overlay liegt, und ein Wurzel-:has() ist
+   ausgeschlossen (public/css/CLAUDE.md). Ausserhalb des Fokus-Modus liegt auf dieser
+   Höhe nur die Palette, die beim Öffnen den Fokus und damit das Popover nimmt.
+   `:root` hebt die Spezifität über die Grundregeln, die im Editor-Bündel nach
+   dieser Datei laden (synonym-menu.css, spellcheck.css). */
+:root :is(.synonym-menu, .synonym-picker, .figur-lookup, .lt-popover) {
   z-index: calc(var(--z-overlay) + 1);
 }
 

@@ -23,8 +23,10 @@
 }
 
 /* Hintergrund-Scroll sperren, solange der Viewer offen ist — nur der
-   Text-Pane (.revision-viewer__body) scrollt, nicht body/background. */
-html:has(.revision-viewer[open]) {
+   Text-Pane (.revision-viewer__body) scrollt, nicht body/background. Die
+   Klasse setzt der Dialog selbst (x-effect auf viewerOpen); kein
+   html:has(), siehe Kommentar in page-revisions-viewer.html. */
+html.revision-viewer-open {
   overflow: hidden;
 }
 
@@ -55,7 +57,7 @@ html:has(.revision-viewer[open]) {
   font-weight: var(--fw-semibold);
   color: var(--color-text);
   display: inline-flex;
-  align-items: baseline;
+  align-items: center;
   gap: 0.5rem;
 }
 .revision-viewer__date {
@@ -108,15 +110,27 @@ html:has(.revision-viewer[open]) {
 }
 
 /* Anheften + Name unter dem Kopf. */
+/* Anheften im Titel: Icon-Knopf vor dem Titeltext, Name als Titel-Eingabe. */
 .revision-viewer__pin {
-  display: flex;
-  flex-wrap: wrap;
+  display: inline-flex;
   align-items: center;
-  gap: var(--space-sm);
-  padding: var(--space-sm) var(--space-md) 0;
+  justify-content: center;
+  flex: none;
+  background: transparent;
+  border: 0;
+  color: var(--color-muted);
+  cursor: pointer;
+  padding: 0.2rem;
+  border-radius: var(--radius-none);
 }
-.revision-viewer__btn.is-active { color: var(--color-accent-text); }
-.revision-viewer__label { flex: 1 1 16em; min-width: 0; }
+.revision-viewer__pin:hover:not(:disabled) { background: var(--color-hover); color: var(--color-text); }
+.revision-viewer__pin:disabled { cursor: default; }
+.revision-viewer__pin.is-active { color: var(--color-accent-text); }
+.revision-viewer__label {
+  width: min(18em, 100%);
+  min-width: 0;
+  font: inherit;
+}
 
 /* Vergleichsrichtung ueber dem Diff. */
 .revision-viewer__compare {

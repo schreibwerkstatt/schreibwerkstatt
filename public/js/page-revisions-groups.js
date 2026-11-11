@@ -32,15 +32,18 @@ function _joinable(newer, older, gapMs) {
  *  im selben Client aus derselben Quelle, keine Luecke ueber `gapMs`. Quelle,
  *  Person und Geraet sind damit innerhalb einer Sitzung gleich — die Zeile
  *  blendet sie an den Unterzeilen aus, und `filterGroups` darf am Kopf
- *  entscheiden. `items[0]` ist der juengste
- *  Stand der Sitzung (Kopfzeile), `key` seine id. Angeheftete Revisionen und
- *  solche mit Summary (Ausgangsstand, Wiederherstellung, Teilen) stehen allein. */
+ *  entscheiden. `items[0]` ist der juengste Stand der Sitzung (Kopfzeile).
+ *  `key` ist die id des AELTESTEN Saves: die laufende Sitzung waechst mit
+ *  jedem Autosave vorne, ihr aeltester Save bleibt — so bleibt eine
+ *  aufgeklappte Sitzung beim Neuladen der Liste aufgeklappt. Angeheftete
+ *  Revisionen und solche mit Summary (Ausgangsstand, Wiederherstellung,
+ *  Teilen) stehen allein. */
 export function groupRevisions(revs, { gapMs = SESSION_GAP_MS } = {}) {
   const out = [];
   for (const rev of Array.isArray(revs) ? revs : []) {
     const cur = out[out.length - 1];
     const last = cur?.items[cur.items.length - 1];
-    if (last && _joinable(last, rev, gapMs)) cur.items.push(rev);
+    if (last && _joinable(last, rev, gapMs)) { cur.items.push(rev); cur.key = rev.id; }
     else out.push({ key: rev.id, items: [rev] });
   }
   return out;

@@ -95,7 +95,7 @@ test('Revisionsliste: Sitzung, Vergleich, Anheften, Sperre im Edit-Modus', async
     await expect(dlg.locator('.revision-diff-body .diff-add').first()).toBeVisible();
 
     // Anheften + Name.
-    await dlg.locator('.revision-viewer__pin .revision-viewer__btn').click();
+    await dlg.locator('.revision-viewer__pin').click();
     const label = dlg.locator('.revision-viewer__label');
     await expect(label).toBeVisible();
     await label.fill('Meilenstein E2E');
@@ -103,7 +103,7 @@ test('Revisionsliste: Sitzung, Vergleich, Anheften, Sperre im Edit-Modus', async
     const pinnedHead = page.locator('.page-revisions-section__head');
     await expect(pinnedHead).toBeVisible();
     await expect(page.locator('.page-revisions-section .page-revisions-label')).toHaveText('Meilenstein E2E');
-    await expect(dlg.locator('.revision-viewer__title')).toContainText('Meilenstein E2E');
+    await expect(label).toHaveValue('Meilenstein E2E');
     await dlg.locator('.revision-viewer__close').click();
     await expect(dlg).toBeHidden();
     // Erste Sitzung: Vergleich, auch gegen den aktuellen Stand, ein Schritt zurueck.

@@ -1,7 +1,8 @@
 @layer components {
 /* user-chip: Avatar (Initialen-Bubble, deterministische Hue per Email) + Name.
-   Verwendet in Revisions-Liste, Konflikt-Banner, ggf. spaeter Tree-Tooltip.
-   --avatar-hue als Inline-Style aus userAvatarHue(email) gesetzt. */
+   Markup + Inhalt setzt ausschliesslich die Direktive x-user-chip
+   (public/js/user-chip.js, DESIGN.md «Personen-Chip»): Revisionsliste,
+   Revisions-Viewer, Fassungen. */
 
 .user-chip {
   display: inline-flex;
@@ -14,6 +15,10 @@
   font-size: var(--font-size-xs);
   line-height: 1.2;
 }
+
+/* Ohne E-Mail setzt x-user-chip `hidden`; die display-Regel oben schlüge das
+   UA-[hidden] sonst. */
+.user-chip[hidden] { display: none; }
 
 .user-chip--self {
   border-color: var(--color-accent);
@@ -36,7 +41,10 @@
 }
 
 
+/* min-width: 0 — schrumpft in einer Flex-Wirtszeile (Revisionszeile), statt
+   die Aktionen daneben hinauszuschieben. */
 .user-chip__name {
+  min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;

@@ -1,0 +1,36 @@
+{
+  "version": "6.4.2",
+  "date": "2026-11-11",
+  "entries": [
+    {
+      "kind": "verbessert",
+      "de": "Rückgängig im Editor: schreibst du ohne Pause durch, wird alle drei Sekunden ein eigener Schritt daraus. Ein Rückgängig nimmt so nicht mehr die ganze Strecke auf einmal zurück.",
+      "en": "Undo in the editor: if you keep typing without a pause, every three seconds becomes its own step. One undo no longer takes back the whole stretch at once."
+    },
+    {
+      "kind": "verbessert",
+      "de": "Rückgängig und Wiederholen reagieren in langen Abschnitten spürbar schneller. Der Cursor landet danach genau an der Stelle der Änderung.",
+      "en": "Undo and redo respond noticeably faster in long sections. Afterwards the cursor lands exactly where the change was."
+    },
+    {
+      "kind": "verbessert",
+      "de": "Welt-Fakten-Karte: ein Klick auf einen Fakt klappt ihn auf, mit Prüfergebnis sowie den Knöpfen zum Neu-Prüfen, Bearbeiten und Löschen. Per Rechtsklick gibt es dieselben Aktionen als Menü.",
+      "en": "World facts card: clicking a fact expands it, with the check result and buttons to re-check, edit and delete. Right-click offers the same actions as a menu."
+    },
+    {
+      "kind": "verbessert",
+      "de": "Versionen eines Abschnitts: eine aufgeklappte Sitzung bleibt offen, während du weiterschreibst. Ist der Server nicht erreichbar, vergleicht «mit aktuellem Stand» gegen den Stand auf deinem Gerät und sagt das dazu.",
+      "en": "Section versions: an expanded session stays open while you keep writing. If the server is unreachable, \"compare with current\" uses the copy on your device and says so."
+    },
+    {
+      "kind": "behoben",
+      "de": "Rückgängig einer Formatierung wie Fett oder Kursiv hob die Markierung auf. Der markierte Text bleibt jetzt markiert.",
+      "en": "Undoing formatting such as bold or italic cleared the selection. The selected text now stays selected."
+    },
+    {
+      "kind": "behoben",
+      "de": "Versionen eines Abschnitts: ein Name, den du während des Anheftens eingetippt hast, ging verloren. Passt kein Eintrag zum Filter, steht jetzt ein Hinweis statt einer leeren Liste.",
+      "en": "Section versions: a name typed while pinning was in progress got lost. If no entry matches the filter, a note now replaces the empty list."
+    }
+  ]
+}

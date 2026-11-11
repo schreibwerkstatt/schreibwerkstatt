@@ -109,6 +109,7 @@ import { registerViewMenu } from '../view-menu.js';
 import { registerLongPress } from '../action-menu.js';
 import { registerModal } from '../modal.js';
 import { registerEntityRef } from '../entity-ref.js';
+import { registerUserChip } from '../user-chip.js';
 import { registerSkeleton } from '../skeleton.js';
 import { registerListWindow } from '../list-window.js';
 import { registerAsideResize } from '../aside-resize.js';
@@ -260,6 +261,7 @@ export function registerAllCards() {
   registerLongPress();
   registerModal();
   registerEntityRef();
+  registerUserChip();
   registerSkeleton();
   registerListWindow();
   registerAsideResize();

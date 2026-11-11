@@ -17,7 +17,15 @@ test('groupRevisions: Autosaves einer Sitzung buendeln, Luecke trennt', () => {
   const list = [rev(0), rev(2), rev(5), rev(30), rev(31)];
   const groups = groupRevisions(list);
   assert.deepEqual(groups.map(g => g.items.length), [3, 2]);
-  assert.equal(groups[0].key, list[0].id, 'Kopf = juengster Stand');
+  assert.equal(groups[0].items[0].id, list[0].id, 'Kopf = juengster Stand');
+  assert.equal(groups[0].key, list[2].id, 'Schluessel = aeltester Save der Sitzung');
+});
+
+test('groupRevisions: Schluessel bleibt, wenn die laufende Sitzung vorne waechst', () => {
+  const list = [rev(1), rev(3), rev(6)];
+  const before = groupRevisions(list)[0].key;
+  const after = groupRevisions([{ ...list[0], id: 9999, created_at: new Date(T0).toISOString() }, ...list])[0].key;
+  assert.equal(after, before);
 });
 
 test('groupRevisions: anderer User, Client oder Aktions-Quelle steht allein', () => {

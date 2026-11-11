@@ -84,14 +84,7 @@
             </td>
             <td x-text="$app.formatDate(s.created_at)"></td>
             <td x-show="$app.bookSharedFlags?.[$store.nav.selectedBookId]">
-              <span class="user-chip" x-show="s.user_email"
-                    :class="{ 'user-chip--self': isOwn(s) }" :data-tip="s.user_email">
-                <span class="user-chip__avatar"
-                      :style="`--avatar-hue: ${$app.userAvatarHue(s.user_email)}`"
-                      x-text="$app.userInitials(s.user_email)"></span>
-                <span class="user-chip__name"
-                      x-text="isOwn(s) ? $app.t('snapshots.byYou') : $app.userDisplayName(s.user_email)"></span>
-              </span>
+              <span x-user-chip="s.user_email"></span>
             </td>
             <td class="snapshots-num" x-text="formatNum(s.chars)"></td>
             <td class="snapshots-num" x-text="formatNum(s.pages)"></td>
