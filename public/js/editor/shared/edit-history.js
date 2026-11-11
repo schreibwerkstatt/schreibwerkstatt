@@ -75,6 +75,21 @@ export function captureCaretOffset(root) {
   return pre.toString().length;
 }
 
+// Gemeinsamer Anfang und gemeinsames Ende zweier Folgen (Strings oder Arrays),
+// ohne Überlappung: `pre + suf <= min(a.length, b.length)`. `same(i, j)`
+// vergleicht a[i] mit b[j]. Basis für die Caret-Rechnung (Zeichen) und für den
+// Block-Abgleich des Restores (Top-Level-Blöcke).
+export function commonAffix(a, b, same) {
+  const max = Math.min(a.length, b.length);
+  let pre = 0;
+  while (pre < max && same(pre, pre)) pre++;
+  let suf = 0;
+  while (suf < max - pre && same(a.length - 1 - suf, b.length - 1 - suf)) suf++;
+  return { pre, suf };
+}
+
+const textAffix = (a, b) => commonAffix(a, b, (i, j) => a.charCodeAt(i) === b.charCodeAt(j));
+
 // Text-Offset durch eine Umschreibung tragen (Rebase nach Remote-Merge): im
 // gemeinsamen Anfang bleibt er, im gemeinsamen Ende verschiebt er sich um die
 // Längendifferenz, mitten im geänderten Bereich landet er an dessen Ende.
@@ -82,12 +97,7 @@ export function captureCaretOffset(root) {
 // oberhalb in den falschen Absatz.
 export function mapCaretOffset(oldText, newText, offset) {
   if (offset == null || oldText === newText) return offset;
-  const max = Math.min(oldText.length, newText.length);
-  let pre = 0;
-  while (pre < max && oldText.charCodeAt(pre) === newText.charCodeAt(pre)) pre++;
-  let suf = 0;
-  while (suf < max - pre
-    && oldText.charCodeAt(oldText.length - 1 - suf) === newText.charCodeAt(newText.length - 1 - suf)) suf++;
+  const { pre, suf } = textAffix(oldText, newText);
   if (offset <= pre) return offset;
   if (offset >= oldText.length - suf) return offset + (newText.length - oldText.length);
   return newText.length - suf;
@@ -101,13 +111,7 @@ export function mapCaretOffset(oldText, newText, offset) {
 // Text (reine Formatierung) zählt der gemerkte Offset.
 export function changedCaretOffset(oldText, newText, fallback) {
   if (oldText === newText) return fallback;
-  const max = Math.min(oldText.length, newText.length);
-  let pre = 0;
-  while (pre < max && oldText.charCodeAt(pre) === newText.charCodeAt(pre)) pre++;
-  let suf = 0;
-  while (suf < max - pre
-    && oldText.charCodeAt(oldText.length - 1 - suf) === newText.charCodeAt(newText.length - 1 - suf)) suf++;
-  return newText.length - suf;
+  return newText.length - textAffix(oldText, newText).suf;
 }
 
 export function restoreCaretAtOffset(root, offset) {
