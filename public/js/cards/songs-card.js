@@ -12,16 +12,29 @@ import { applySongsFilters } from '../app/app-ui.js';
 import { activeFilterId } from '../chapter-filter.js';
 import { formatLastRun } from '../utils/date.js';
 import { compareText } from '../i18n.js';
+import { memoMethods } from './card-memo.js';
+import { listWindowState, listWindowMethods } from '../list-window.js';
 
 export function registerSongsCard() {
   if (typeof window === 'undefined' || !window.Alpine) return;
   window.Alpine.data('songsCard', () => ({
     _lifecycle: null,
+    _memos: {},               // Memo-Speicher (card-memo.js)
+    // Liste rendert schrittweise (list-window.js).
+    ...listWindowState(),
 
     // Gefilterte + sortierte Songs für Liste/Grid. Filter-State + Kapitel-Order
     // leben am Root (app-navigation schreibt die Filter, der Tree liefert die
-    // Order-Map), darum via window.__app gelesen.
+    // Order-Map), darum via window.__app gelesen. Memoisiert: Liste, Fenster-Rest
+    // und Zähler lesen ihn je Render.
     get songsFiltered() {
+      const root = window.__app;
+      const f = Alpine.store('catalogUi').songsFilters;
+      return this._memo('songsFiltered',
+        [root.$store.catalog.songs, root.$store.catalog.figuren, f.suche, f.kapitelId, f.figurId, f.kontextTyp, f.genre, root._chapterIdOrderMap],
+        () => this._computeSongsFiltered());
+    },
+    _computeSongsFiltered() {
       const root = window.__app;
       const f = Alpine.store('catalogUi').songsFilters;
       const kapitelId = activeFilterId(f.kapitelId, root.songsKapitelOptionen());
@@ -43,9 +56,16 @@ export function registerSongsCard() {
     },
 
     init() {
+      // Ausgewählter Song (Deep-Link, Palette, Entitäts-Referenz) muss im
+      // gerenderten Fenster stehen, sonst findet der Sprung seine Zeile nicht.
+      this.$watch(() => {
+        const id = Alpine.store('catalogUi').selectedSongId;
+        return id == null ? -1 : this.songsFiltered.findIndex(s => s.id === id);
+      }, (idx) => this.listWindowReveal(idx));
       this._lifecycle = setupCardLifecycle(this, {
         name: 'songs',
         showFlag: 'showSongsCard',
+        resetState: () => ({ _memos: {}, ...listWindowState() }),
         load: (root) => root.loadSongs(Alpine.store('nav').selectedBookId),
         onShow: (root) => {
           const tasks = [root.loadSongs(Alpine.store('nav').selectedBookId)];
@@ -58,5 +78,8 @@ export function registerSongsCard() {
     destroy() {
       this._lifecycle?.destroy();
     },
+
+    ...memoMethods,
+    ...listWindowMethods,
   }));
 }

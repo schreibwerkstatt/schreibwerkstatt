@@ -38,12 +38,28 @@ export function registerOrteCard() {
     highlightOrtId: null,     // Cross-Highlight Marker ↔ Locate-Liste
     orteMapStatus: '',
     geoLocked: lsGet('orte.geoLocked') !== '0', // verortete Marker gegen versehentliches Ziehen sperren (Default an)
-    _geoUndoStack: [],        // Pin-Positions-History (max 10) — siehe orte-map.js
+    _geoUndoStack: [],        // Koordinaten-Verlauf (max 10 Schritte) — siehe orte-map-edit.js
     _geoRedoStack: [],
+    geoHistoryBusy: false,    // Undo/Redo speichert gerade (sperrt die Knöpfe)
+    // Manuelles Platzieren (book/orte-map-place.js).
+    placingOrtId: null,       // Ort im Platzier-Modus: nächster Karten-Klick setzt ihn
+    mapSearchQuery: '',       // Ortssuche auf der Karte (GET /geocode)
+    mapSearchResults: null,   // null = keine Suche gelaufen, [] = nichts gefunden
+    mapSearchActive: null,    // aktuell angezeigter Treffer
+    mapSearchBusy: false,
+    mapLayer: lsGet('orte.mapLayer') === 'satellite' ? 'satellite' : 'map', // Kartenhintergrund
+    _placeEscHandler: null,   // Esc-Listener (Capture) während des Platzier-Modus
+    _searchHitLayer: null,    // Leaflet-Kreis am Suchtreffer (Runtime-Handle)
+    _zoomAnchor: null,        // Zoom-Anker nach Drag/Platzieren (orte-map.js#_installZoomAnchor)
+    _geoRev: 0,               // zählt Koordinaten-Änderungen in place → Memo-Dep der Karten-Listen
+    _memos: {},               // Memo-Speicher (card-memo.js)
     _geoLang: 'de',
-    _bookLand: null,          // book_settings.schauplatz_land → Geocode-Länder-Bias
+    _bookLand: null,          // book_settings.schauplatz_land → Startansicht der Karte ohne verorteten Ort
     _map: null,               // Leaflet-Instanz (transienter Runtime-Handle)
     _markers: null,           // Leaflet-LayerGroup
+    _tileLayer: null,         // Leaflet-TileLayer (Runtime-Handle)
+    _tileUrl: null,           // URL, mit der _tileLayer gebaut wurde
+    _geocodeCancel: null,     // bricht eine laufende KI-Verortung beim Teardown ab
     _markerById: {},          // ort-id → Leaflet-Marker (Cross-Highlight-Lookup)
     _unlocatedLatLng: {},     // ort-id → { lat, lng }: stabile Raster-Position unverorteter Pins
     _gridRowsCache: null,     // Memo fuer orteGridRows() (Land-Label-Sort im Grid)
@@ -92,7 +108,7 @@ export function registerOrteCard() {
         name: 'orte',
         showFlag: 'showOrteCard',
         timerKeys: ['_ortePollTimer', '_geocodeJobTimer', '_orteMapStatusTimer'],
-        resetState: { plotBacklinks: {}, orteProgress: 0, orteStatus: '', orteError: '', staleDeleting: false, orteRealEnabled: false, geocodingId: null, geocodingAll: false, highlightOrtId: null, orteMapStatus: '', ortMergeTarget: '', ...entityMergePickerResetState(), ...listWindowState() },
+        resetState: { plotBacklinks: {}, orteProgress: 0, orteStatus: '', orteError: '', staleDeleting: false, orteRealEnabled: false, geocodingId: null, geocodingAll: false, geoHistoryBusy: false, highlightOrtId: null, orteMapStatus: '', ortMergeTarget: '', ...entityMergePickerResetState(), ...listWindowState() },
         load: (root) => { this.loadPlotBacklinks('location'); return root.loadOrte(Alpine.store('nav').selectedBookId); },
         onShow: async (root) => {
           const tasks = [root.loadOrte(Alpine.store('nav').selectedBookId), this.loadOrteReal(), this.loadPlotBacklinks('location')];

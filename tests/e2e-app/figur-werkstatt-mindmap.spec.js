@@ -93,7 +93,7 @@ test('Namensfeld und Wurzel-Knoten bleiben gekoppelt, der Server haelt es fest',
 
     // Wurzel im Canvas umbenennen → Formular.
     await root.dblclick();
-    const editor = page.locator(`${CARD} jmnode input`);
+    const editor = page.locator(`${CARD} jmnode .jsmind-editor`);
     await editor.fill(`${name} canvas`);
     await editor.press('Enter');
     await expect(nameInput).toHaveValue(`${name} canvas`);
@@ -188,6 +188,130 @@ test('Vollbild zeigt nur die Mindmap, Knoten-Menue bleibt sichtbar', async ({ pa
 
     await page.evaluate(() => document.exitFullscreen());
     await expect(page.locator(`${CARD} .werkstatt-mindmap-controls button[aria-pressed]`)).toHaveAttribute('aria-pressed', 'false');
+  } finally {
+    await deleteDraft(page, draft.id);
+  }
+});
+
+// Ein neuer Knoten wächst beim Tippen mit (mindmap-editor.js): Knotenbreite
+// und Nachbar-Layout folgen dem Text, nicht erst nach Enter. Lange Titel
+// brechen um, statt den Knoten über max-width zu ziehen.
+test('Knoten waechst beim Bearbeiten mit, Nachbarn ruecken mit', async ({ page }) => {
+  await bootApp(page);
+  const draft = await openWerkstattWithDraft(page, `Wachs-Probe ${RUN}`);
+  try {
+    const node = page.locator(`${CARD} jmnode[nodeid="custom"]`);
+    await node.click();
+    await page.keyboard.press('Tab');                       // neuer Unterknoten, sofort im Edit
+    const editor = page.locator(`${CARD} jmnode .jsmind-editor`);
+    await expect(editor).toBeFocused();
+    const editing = page.locator(`${CARD} jmnode.is-editing`);
+    const w0 = (await editing.boundingBox()).width;
+    await editor.fill('');
+    await editor.pressSequentially('Eine deutlich längere Beschriftung');
+    await expect.poll(async () => (await editing.boundingBox()).width).toBeGreaterThan(w0 + 40);
+
+    // Über max-width: Umbruch (Höhe wächst), Breite bleibt gedeckelt.
+    const h1 = (await editing.boundingBox()).height;
+    await editor.pressSequentially(' und noch viel mehr Text, der sicher umbrechen muss');
+    await expect.poll(async () => (await editing.boundingBox()).height).toBeGreaterThan(h1 + 5);
+    const maxW = await editing.evaluate((el) => parseFloat(getComputedStyle(el).maxWidth));
+    expect((await editing.boundingBox()).width).toBeLessThanOrEqual(maxW + 1);
+
+    // jsMind kennt die neue Grösse bereits (Layout live, nicht erst nach Enter).
+    const sizes = await editing.evaluate((el) => {
+      const jm = window.Alpine.$data(el.closest('.card--werkstatt'))._jm;
+      const n = jm.get_node(el.getAttribute('nodeid'));
+      return { client: el.clientWidth, jm: n._data.view.width };
+    });
+    expect(sizes.jm).toBe(sizes.client);
+
+    await page.keyboard.press('Enter');
+    await expect(page.locator(`${CARD} jmnode.is-editing`)).toHaveCount(0);
+    await expect(page.locator(`${CARD} jmnode`, { hasText: 'Eine deutlich längere Beschriftung' })).toHaveCount(1);
+  } finally {
+    await deleteDraft(page, draft.id);
+  }
+});
+
+test('Startansicht: Ebene 2 offen, tiefer eingeklappt; Aufklappen-Knopf zeigt alles', async ({ page }) => {
+  await bootApp(page);
+  const bookId = await selectSeededBook(page);
+  const name = `Tiefe-Probe ${RUN}`;
+  const mindmap = {
+    meta: { name: 'figur-werkstatt', version: '1' }, format: 'node_tree',
+    data: { id: 'root', topic: name, children: [
+      { id: 'a', topic: 'Ast', expanded: true, children: [
+        { id: 'a1', topic: 'Zweig', expanded: true, children: [{ id: 'a1x', topic: 'Blatt tief' }] },
+      ] },
+    ] },
+  };
+  const draft = await page.evaluate(async ({ bookId, name, mindmap }) => {
+    const r = await fetch(`/draft-figures/${bookId}`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name, mindmap }),
+    });
+    return r.json();
+  }, { bookId, name, mindmap });
+  try {
+    await page.evaluate(() => window.__app.toggleFigurWerkstattCard());
+    await page.evaluate((id) => window.dispatchEvent(new CustomEvent('figur-werkstatt:select', { detail: { draftId: id } })), draft.id);
+    await expect(page.locator(`${CARD} jmnode.root`)).toHaveText(name);
+    await expect(page.locator(`${CARD} jmnode[nodeid="a1"]`)).toBeVisible();
+    await expect(page.locator(`${CARD} jmnode[nodeid="a1x"]`)).toBeHidden();
+
+    await page.locator(`${CARD} .werkstatt-mindmap-controls button`, { has: page.locator('use[href$="#chevrons-up-down"]') }).click();
+    await expect(page.locator(`${CARD} jmnode[nodeid="a1x"]`)).toBeVisible();
+
+    // Eingepasst: alle sichtbaren Knoten liegen im Canvas.
+    const inside = await page.evaluate((card) => {
+      const box = document.querySelector(`${card} .werkstatt-mindmap`).getBoundingClientRect();
+      return [...document.querySelectorAll(`${card} jmnode`)].filter(n => n.offsetParent).every((n) => {
+        const r = n.getBoundingClientRect();
+        return r.left >= box.left - 1 && r.right <= box.right + 1 && r.top >= box.top - 1 && r.bottom <= box.bottom + 1;
+      });
+    }, CARD);
+    expect(inside).toBe(true);
+  } finally {
+    await deleteDraft(page, draft.id);
+  }
+});
+
+// Drag-Plugin (vendor/jsmind-0.9.1.draggable-node.js): Knoten auf einen anderen
+// ziehen hängt ihn um; die Figur wird dirty und Rückgängig trägt den Schritt.
+test('Knoten per Ziehen umhaengen, Rueckgaengig stellt zurueck', async ({ page }) => {
+  await bootApp(page);
+  const draft = await openWerkstattWithDraft(page, `Drag-Probe ${RUN}`);
+  try {
+    const parentOf = (id) => page.evaluate(({ card, id }) => {
+      const jm = window.Alpine.raw(window.Alpine.$data(document.querySelector(card))._jm);
+      return jm.get_node(id)?.parent?.id;
+    }, { card: CARD, id });
+    expect(await parentOf('aussehen')).toBe('steckbrief');
+
+    // Maus-Events treffen nur Sichtbares: Canvas ganz ins Bild holen.
+    await page.setViewportSize({ width: 1400, height: 1000 });
+    await page.locator(`${CARD} .werkstatt-mindmap`).evaluate((el) => el.scrollIntoView({ block: 'center' }));
+    await page.evaluate(() => window.Alpine.$data(document.querySelector('.card--werkstatt')).fitMindmap());
+    const src = await page.locator(`${CARD} jmnode[nodeid="aussehen"]`).boundingBox();
+    const dst = await page.locator(`${CARD} jmnode[nodeid="custom"]`).boundingBox();
+    await page.mouse.move(src.x + src.width / 2, src.y + src.height / 2);
+    await page.mouse.down();
+    // Das Plugin sucht sein Ziel per Intervall (200 ms Verzug, 100 ms Takt).
+    // Ablegen auf der von der Wurzel abgewandten Seite des Ziels (data-side
+    // aus mindmap-view.js#_tagMindmapNodes).
+    const side = await page.locator(`${CARD} jmnode[nodeid="custom"]`).getAttribute('data-side');
+    const tx = side === 'left' ? dst.x - src.width / 2 - 30 : dst.x + dst.width + src.width / 2 + 30;
+    const ty = dst.y + dst.height / 2;
+    for (let i = 1; i <= 12; i++) {
+      await page.mouse.move(src.x + (tx - src.x) * i / 12, src.y + (ty - src.y) * i / 12);
+      await page.waitForTimeout(40);
+    }
+    await page.waitForTimeout(450);
+    await page.mouse.up();
+
+    await expect.poll(() => parentOf('aussehen')).toBe('custom');
+    await page.locator(`${CARD} .werkstatt-mindmap-controls button`, { has: page.locator('use[href$="#undo"]') }).click();
+    await expect.poll(() => parentOf('aussehen')).toBe('steckbrief');
   } finally {
     await deleteDraft(page, draft.id);
   }

@@ -47,7 +47,7 @@
 
           <!-- Vorschläge an die Ideen: jeder einzeln übernehmen/verwerfen -->
           <template x-if="msg.role === 'assistant' && ideenProposals(msg).length">
-            <div class="chat-vorschlaege ideen-chat-proposals">
+            <div class="chat-vorschlaege chat-vorschlaege--wide ideen-chat-proposals">
               <template x-for="(p, pi) in ideenProposals(msg)" :key="pi">
                 <div class="chat-vorschlag"
                      :class="{ 'chat-vorschlag--applied': ideenProposalStatus(msg, pi).state === 'applied', 'chat-vorschlag--discarded': ideenProposalStatus(msg, pi).state === 'discarded', 'chat-vorschlag--stale': ideenProposalStatus(msg, pi).state === 'open' && (ideenProposalStatus(msg, pi).stale || ideenProposalStatus(msg, pi).blocked) }">
@@ -70,8 +70,8 @@
                   <!-- Neue Idee -->
                   <template x-if="p.type === 'idee_create'">
                     <div class="chat-vorschlag-diff">
-                      <div class="ideen-chat-proposal-text" x-text="p.fields?.content"></div>
-                      <div class="ideen-chat-proposal-meta">
+                      <div class="chat-vorschlag-text" x-text="p.fields?.content"></div>
+                      <div class="chat-vorschlag-meta">
                         <span x-text="p.labels?.anchor ? $app.t('ideenBoard.chat.meta.anchor', { name: p.labels.anchor }) : $app.t('ideenBoard.chat.meta.bookAnchor')"></span>
                       </div>
                     </div>
@@ -82,25 +82,26 @@
                     <div class="chat-vorschlag-diff">
                       <div class="chat-vorschlag-title" x-text="p.labels?.idee"></div>
                       <template x-for="row in ideenProposalRows(p)" :key="row.key">
-                        <div class="ideen-chat-proposal-row">
-                          <span class="ideen-chat-proposal-field" x-text="$app.t('ideenBoard.chat.field.' + row.key)"></span>
+                        <div class="chat-vorschlag-row">
+                          <span class="chat-vorschlag-field" x-text="$app.t('ideenBoard.chat.field.' + row.key)"></span>
                           <template x-if="row.diff">
                             <span class="chat-word-diff"><template x-for="(part, di) in row.diff" :key="di"><span :class="part.c" x-text="part.v"></span></template></span>
                           </template>
                           <template x-if="!row.diff">
-                            <span><span class="finding-original" x-text="row.status ? statusLabel(row.before) : (row.before || $app.t('ideenBoard.chat.meta.bookAnchorShort'))"></span> <span class="finding-korrektur" x-text="row.status ? statusLabel(row.after) : (row.after || $app.t('ideenBoard.chat.meta.bookAnchorShort'))"></span></span>
+                            <span class="chat-vorschlag-change"><span class="chat-vorschlag-before" x-text="row.status ? statusLabel(row.before) : (row.before || $app.t('ideenBoard.chat.meta.bookAnchorShort'))"></span><svg class="icon chat-vorschlag-arrow" aria-hidden="true"><use href="/icons.svg#arrow-right"/></svg><span class="chat-vorschlag-after" x-text="row.status ? statusLabel(row.after) : (row.after || $app.t('ideenBoard.chat.meta.bookAnchorShort'))"></span></span>
                           </template>
                         </div>
                       </template>
                       <!-- Beleg: beim Vorschlagen geprüft; fehlt er beim Übernehmen im aktuellen Text, steht das statt «geprüft» da -->
-                      <div x-show="p.beleg?.text" class="ideen-chat-beleg">
-                        <span class="ideen-chat-proposal-field" x-text="p._belegMissing ? $app.t('ideenBoard.chat.belegMissing') : $app.t('ideenBoard.chat.field.beleg')"></span>
+                      <div x-show="p.beleg?.text" class="chat-vorschlag-row ideen-chat-beleg">
+                        <span class="chat-vorschlag-field" x-text="$app.t('ideenBoard.chat.field.beleg')" :data-tip="$app.t('ideenBoard.chat.belegChecked')"></span>
                         <span>
-                          <q x-text="p.beleg?.text"></q>
+                          <q class="chat-vorschlag-quote" x-text="p.beleg?.text"></q>
                           <button type="button" class="entity-ref" x-show="p.beleg?.page_id"
                                   x-entity-ref="{ type: 'seite', id: p.beleg?.page_id, label: p.labels?.beleg_page }"></button>
                         </span>
                       </div>
+                      <div x-show="p.beleg?.text && p._belegMissing" class="chat-vorschlag-note" x-text="$app.t('ideenBoard.chat.belegMissing')"></div>
                     </div>
                   </template>
 
@@ -108,8 +109,8 @@
                   <template x-if="p.type === 'idee_merge'">
                     <div class="chat-vorschlag-diff">
                       <div class="chat-vorschlag-title" x-text="p.labels?.idee"></div>
-                      <div class="ideen-chat-proposal-row">
-                        <span class="ideen-chat-proposal-field" x-text="$app.t('ideenBoard.chat.field.mergeIn')"></span>
+                      <div class="chat-vorschlag-row">
+                        <span class="chat-vorschlag-field" x-text="$app.t('ideenBoard.chat.field.mergeIn')"></span>
                         <ul class="ideen-chat-merge-list">
                           <template x-for="m in (p.labels?.merged || [])" :key="m.id">
                             <li><span x-text="m.text"></span> <span class="ideen-chat-merge-anchor" x-show="m.anchor" x-text="'· ' + m.anchor"></span></li>
@@ -117,8 +118,8 @@
                         </ul>
                       </div>
                       <template x-for="row in ideenProposalRows(p)" :key="row.key">
-                        <div class="ideen-chat-proposal-row">
-                          <span class="ideen-chat-proposal-field" x-text="$app.t('ideenBoard.chat.field.' + row.key)"></span>
+                        <div class="chat-vorschlag-row">
+                          <span class="chat-vorschlag-field" x-text="$app.t('ideenBoard.chat.field.' + row.key)"></span>
                           <span class="chat-word-diff"><template x-for="(part, di) in row.diff" :key="di"><span :class="part.c" x-text="part.v"></span></template></span>
                         </div>
                       </template>
@@ -129,16 +130,16 @@
                   <template x-if="p.type === 'link_create'">
                     <div class="chat-vorschlag-diff">
                       <div class="chat-vorschlag-title" x-text="p.labels?.idee"></div>
-                      <div class="ideen-chat-proposal-meta">
+                      <div class="chat-vorschlag-meta">
                         <span x-text="$app.t('ideenBoard.chat.meta.link', { kind: ideenProposalLinkKind(p), name: p.labels?.target || '' })"></span>
                       </div>
                     </div>
                   </template>
 
                   <div x-show="p.begruendung" class="chat-vorschlag-begruendung" x-text="p.begruendung"></div>
-                  <div x-show="ideenProposalStatus(msg, pi).state === 'open' && ideenProposalStatus(msg, pi).blocked" class="ideen-chat-proposal-note" x-text="ideenProposalBlockedText(msg, pi)"></div>
-                  <div x-show="ideenProposalStatus(msg, pi).state === 'open' && !ideenProposalStatus(msg, pi).blocked && ideenProposalStatus(msg, pi).stale" class="ideen-chat-proposal-note" x-text="$app.t('ideenBoard.chat.stale')"></div>
-                  <div x-show="ideenProposalStatus(msg, pi).removed" class="ideen-chat-proposal-note" x-text="$app.t('ideenBoard.chat.removed')"></div>
+                  <div x-show="ideenProposalStatus(msg, pi).state === 'open' && ideenProposalStatus(msg, pi).blocked" class="chat-vorschlag-note" x-text="ideenProposalBlockedText(msg, pi)"></div>
+                  <div x-show="ideenProposalStatus(msg, pi).state === 'open' && !ideenProposalStatus(msg, pi).blocked && ideenProposalStatus(msg, pi).stale" class="chat-vorschlag-note" x-text="$app.t('ideenBoard.chat.stale')"></div>
+                  <div x-show="ideenProposalStatus(msg, pi).removed" class="chat-vorschlag-note" x-text="$app.t('ideenBoard.chat.removed')"></div>
                   <div x-show="p._error" class="chat-vorschlag-error" x-text="p._error"></div>
                 </div>
               </template>

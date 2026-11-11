@@ -133,6 +133,9 @@
   margin-right: var(--space-lg);
 }
 .pdfx-check + .pdfx-check { margin-top: var(--space-5); }
+/* Checkbox-Gruppe als Wertspalte beginnt mit Text: Beschriftung ohne den
+   Feld-Innenabstand von .card-form-label (wie bei .form-check). */
+.card-form-row:has(> * > .pdfx-check:first-child) > .card-form-label { padding-top: 0; }
 .pdfx-check--leading {
   display: flex;
   margin-bottom: var(--space-10);

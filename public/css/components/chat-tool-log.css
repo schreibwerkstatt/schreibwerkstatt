@@ -105,10 +105,13 @@
   }
 
   /* Gruppe gleicher Aufrufe: Sammelzeile als Klapp-Knopf, ohne die Versalien des
-     Abschnitts-Toggles — sie liest sich wie eine Zeile. */
+     Abschnitts-Toggles — sie liest sich wie eine Zeile.
+     `center`, nicht `baseline`: der leere Mask-Chevron hat seine Unterkante als
+     Grundlinie und stünde sonst über dem Text. Die Textteile haben dieselbe
+     Grösse, ihre Grundlinie bleibt gemeinsam; `center` gilt je Flex-Zeile. */
   .chat-tool-log-group-toggle {
     flex-wrap: wrap;
-    align-items: baseline;
+    align-items: center;
     gap: var(--space-2xs) var(--space-6);
     padding: var(--space-2xs) 0;
     font-size: inherit;

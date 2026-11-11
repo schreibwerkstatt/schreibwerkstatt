@@ -54,7 +54,7 @@
 export function registerConfigStore() {
   if (typeof window === 'undefined' || !window.Alpine) return;
   window.Alpine.store('config', {
-    mapTiles: { url: 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', attribution: '' },
+    mapTiles: { url: 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', attribution: '', satellite: null },
     languagetoolEnabled: false,
     languagetoolDebounceMs: 1500,
     researchChatEnabled: false,

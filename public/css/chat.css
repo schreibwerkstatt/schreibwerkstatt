@@ -214,83 +214,7 @@
   .table-scroll > .chat-table { min-width: max-content; }
 }
 
-/* Änderungsvorschläge — auch ausserhalb von .chat-msg verwendbar (Werkstatt-Brainstorm). */
-.chat-vorschlaege {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-6);
-}
-/* Bubble-Breite nur im Chat-Kontext, sonst volle Breite. */
-.chat-msg .chat-vorschlaege { max-width: 88%; }
-.chat-vorschlag {
-  border: 0.5px solid var(--color-border);
-  border-left: 2px solid var(--color-primary);
-  padding: var(--space-sm) var(--space-10);
-  background: var(--color-surface);
-  font-size: var(--font-size-sm);
-}
-.chat-vorschlag-title {
-  font-weight: var(--fw-bold);
-  margin-bottom: var(--space-xs);
-  overflow-wrap: anywhere;
-}
-.chat-vorschlag--applied {
-  opacity: var(--opacity-muted);
-  border-left-color: var(--color-ok-border);
-}
-
-.chat-vorschlag-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  margin-bottom: var(--space-6);
-  gap: var(--space-sm);
-}
-.chat-vorschlag-label {
-  font-size: var(--font-size-xs);
-  font-weight: var(--fw-regular);
-  color: var(--color-primary);
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
-}
-.chat-vorschlag-btn {
-  font-size: var(--font-size-xs);
-  padding: var(--space-2xs) var(--space-10);
-  border: 0.5px solid var(--color-primary);
-  color: var(--color-primary);
-  background: transparent;
-  cursor: pointer;
-}
-.chat-vorschlag-btn:hover:not(:disabled) {
-  background: var(--color-primary);
-  color: var(--color-surface);
-}
-.chat-vorschlag-btn:disabled { opacity: var(--opacity-muted); cursor: default; }
-
-.chat-vorschlag-diff {
-  margin-bottom: var(--space-xs);
-}
-.chat-vorschlag-diff:hover { background: var(--color-hover); }
-.chat-vorschlag-begruendung {
-  color: var(--color-muted);
-  font-size: var(--font-size-xs);
-  font-style: italic;
-}
-.chat-vorschlag-error {
-  color: var(--color-err-text);
-  font-size: var(--font-size-xs);
-  margin-top: var(--space-xs);
-}
-.chat-vorschlag--discarded { opacity: var(--opacity-muted); border-left-color: var(--color-border); }
-.chat-vorschlag--stale { opacity: var(--opacity-muted); border-left-color: var(--color-warn-text); }
-.chat-vorschlag-actions {
-  display: inline-flex;
-  flex-wrap: wrap;
-  gap: var(--space-xs);
-}
-.chat-vorschlag-btn--ghost { border-color: var(--color-border); color: var(--color-muted); }
-.chat-vorschlaege-actions { display: flex; justify-content: flex-end; gap: var(--space-xs); }
-.chat-vorschlag-heading { display: inline-flex; align-items: center; gap: var(--space-xs); }
+/* Vorschlagskarten (.chat-vorschlag*): components/chat-vorschlag.css */
 /* «Erneut fragen» unter einer unbeantworteten Frage (Abschnitts-Chat) */
 .chat-retry-row { display: flex; justify-content: flex-end; margin-top: var(--space-xs); }
 /* Hinweise unter einer Antwort (Parse-Fallback, gekürzter Verlauf) und über dem
@@ -302,15 +226,6 @@
 }
 /* Ideen-Vorschläge (Abschnitts-, Buch- und Recherche-Chat, chat-idee-vorschlaege.html) */
 .chat-msg .chat-idee-vorschlaege { margin-top: var(--space-6); }
-.chat-idee-anchor {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: baseline;
-  gap: var(--space-xs);
-  margin-bottom: var(--space-xs);
-  font-size: var(--font-size-xs);
-}
-.chat-idee-text { overflow-wrap: anywhere; white-space: pre-wrap; margin-bottom: var(--space-xs); }
 .chat-idee-edit { width: 100%; margin-bottom: var(--space-xs); }
 /* Titelvarianten (Seiten-Chat) */
 .chat-titel-varianten {
@@ -546,16 +461,12 @@
    Gilt für alle fünf Chats (Werkzeug-Verlauf: components/chat-tool-log.css). */
 @media (max-width: 768px) {
   .chat-msg--assistant .chat-msg-bubble,
-  .chat-msg .chat-vorschlaege,
   .chat-msg .chat-titel-varianten { max-width: 100%; }
   .chat-context-info,
   .book-chat-extras,
   .chat-token-info,
   .chat-image-cap,
   .chat-msg-hint,
-  .chat-vorschlag-begruendung,
-  .chat-vorschlag-error,
-  .chat-idee-anchor,
   .chat-titel-doppelt,
   .chat-session-preview { font-size: var(--font-size-sm); }
   .chat-context-info,

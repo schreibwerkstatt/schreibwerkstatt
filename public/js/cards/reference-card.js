@@ -386,7 +386,7 @@ export function registerReferenceCard() {
       return Math.round((hit?.score || 0) * 100) + '%';
     },
     activateVerwandt(hit) {
-      if (hit?.entity_id != null) window.__app?.gotoPageById?.(hit.entity_id);
+      if (hit?.entity_id != null) window.__app?.gotoPageById?.(hit.entity_id, { snippet: hit.snippet || '' });
     },
 
     // Text der aktuellen Auswahl bzw. des Absatzes am Cursor — nur innerhalb des

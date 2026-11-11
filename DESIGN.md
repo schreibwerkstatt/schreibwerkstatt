@@ -151,7 +151,7 @@ Pflicht-Reihenfolge: **Use → Markup → Klassen → Regeln → Beispiele**. We
 - **Ein Gate prüft Eigenbau-Signale, nicht Verhalten:** (1) jeder Konsument läuft über den Kern (z. B. jede `new Sortable` über `boardSortableOpts`), (2) die Klassen der Optik haben nur in deren Datei Regeln, (3) das Pflicht-Markup steht (z. B. `board-dnd-zone` an jeder Zelle), (4) der naheliegende Umweg ist zu (z. B. natives HTML5-Drag). Bewusste Ausnahmen stehen als Allowlist **mit Begründung** im Test. Ein neuer Gate wird einmal mutationsgeprüft (Muster absichtlich brechen → rot). Verhalten und Geometrie prüft daneben ein Spec in `tests/e2e-app/`.
 - **Die Gates selbst driften nicht:** [single-place-registry.test.mjs](tests/unit/single-place-registry.test.mjs) verlangt, dass jeder `*-single-place`-Test in einer Kontextdatei (CLAUDE.md, DESIGN.md, docs/) verlinkt ist, und dass jeder dort verlinkte Test existiert.
 
-**Beispiele:** [Board-Drag](#board-drag-karten-zwischen-zellen-ziehen), [Drag-Griff](#drag-griff-sortierbare-kartezeile), [Picker-Popover](#picker-popover-picker-popover), [Auswahl-Leiste](#auswahl-leiste-selection-bar), [Ansichts-Menü](#ansichts-menü-filterleiste), [Leerzustand](#leerzustand). Vollständige Liste: Tabelle „Mechanisch durchgesetzt" in [CLAUDE.md](CLAUDE.md).
+**Beispiele:** [Board-Drag](#board-drag-karten-zwischen-zellen-ziehen), [Drag-Griff](#drag-griff-sortierbare-kartezeile), [Picker-Popover](#picker-popover-picker-popover), [Auswahl-Leiste](#auswahl-leiste-selection-bar), [Ansichts-Menü](#ansichts-menü-filterleiste), [Leerzustand](#leerzustand), [Chat-Vorschlagskarte](#chat-vorschlagskarte-chat-vorschlag). Vollständige Liste: Tabelle „Mechanisch durchgesetzt" in [CLAUDE.md](CLAUDE.md).
 
 ## Token-Pflicht (keine ad-hoc-Werte)
 
@@ -1657,6 +1657,7 @@ CSS: [public/css/layout/utilities.css](public/css/layout/utilities.css). `overfl
 - `types` (optional): pro Spalte `number` | `date` | `string`. Ohne Eintrag wird der Typ aus dem ersten Non-Null-Sample-Wert geraten (ISO-Datum, Number, sonst String mit Locale-Compare). `null`/`undefined` sinkt immer ans Ende, unabhaengig von `dir`.
 - Jede sortierbare `<th>` nimmt genau einen Spread: `x-bind="sortTh('key')"`. Er setzt `sortable-th` (+ `--asc`/`--desc`, Cursor + Chevron-Platz), `aria-sort` (Screen-Reader), `tabindex="0"` und loest `sortBy('key')` per Klick, **Enter** und **Leertaste** aus (Toggle asc→desc, oder neuer Key → asc). Kein handverdrahtetes `@click`/`:class`/`:aria-sort` daneben — sonst fehlt die Tastatur-Bedienung. Weitere Klassen (z.B. Zahlen-Spalte) und Attribute (`data-tip`) bleiben normal am `<th>`.
 - Spalten ohne Sortier-Sinn (Action-Buttons, ungeordnete Render-Spalten wie „Status mit Badge" wenn Sort darueber nichts bringt): `<th>` ohne `sortTh` lassen.
+- **Schrittweise gerendert, ohne Zutun:** sortiert wird die ganze Liste (`sortedAll`), `sorted` liefert nur das Fenster vom Anfang her (150 Zeilen, `LIST_WINDOW_STEP` aus [list-window.js](public/js/list-window.js)); den Knopf «Weitere anzeigen» hängt die Komponente selbst als `<tfoot class="sortable-table-more">` an, er lädt beim Heranscrollen nach. Kein `listWindowed(sorted)` und kein eigener Knopf im Template. `window: false` nur für eine Tabelle, die nie gross wird und alle Zeilen zugleich braucht. **Why:** eine Zeile mit Entitäts-Referenzen kostet Alpine Millisekunden; das Schauplatz-Grid eines Buchs mit 441 Orten blockierte beim Öffnen Sekunden den Main-Thread.
 
 **CSS:** [public/css/components/sortable-table.css](public/css/components/sortable-table.css). Chevron-Pfeile via CSS-Triangles (currentColor → theme-faehig). Inaktive Spalte zeigt doppeltes Pfeil-Paar gedimmt, aktive Richtung voll opaque.
 
@@ -2421,6 +2422,43 @@ cancelXyz()       { this.xyzId = null; this._releasePickerPopover(); }
 **Konsumenten:** Recherche — Verknüpfen eines Fundstücks ([recherche-link-picker.html](public/partials/recherche-link-picker.html), aus Liste, Board-Karte und Detail-Dialog). Ideen — Verknüpfen ([ideen-link-picker.html](public/partials/ideen-link-picker.html), Ideen-Karte + Ideen-Board), Verschieben ([ideen.html](public/partials/ideen.html)), Zuordnen ([ideen-board-add.html](public/partials/ideen-board-add.html)); die drei teilen sich `pickerPopoverPos`. Buchorganizer — Abschnitt in anderes Buch ([organizer-book-move.html](public/partials/organizer-book-move.html), Warnung als `__hint` statt Rückfrage-Dialog). Figur-Werkstatt — mit Katalogfigur verknüpfen ([werkstatt-link-picker.html](public/partials/werkstatt-link-picker.html), lädt nach dem Öffnen und misst über `_refinePickerPopover` neu).
 
 ---
+
+## Chat-Vorschlagskarte (`.chat-vorschlag`)
+
+**Use:** jeder Vorschlag, den ein Chat zum einzelnen Übernehmen/Verwerfen anbietet — Abschnitts-Chat (Textersetzung), Ideen-Vorschläge aus Abschnitts-, Buch- und Recherche-Chat, Plot-Chat, Ideen-Chat, Recherche-Chat (neue Fundstücke und Änderungen an bestehenden).
+
+**Optik:** ausschliesslich [components/chat-vorschlag.css](public/css/components/chat-vorschlag.css). Die Karte liefert nur Daten; Feature-CSS trägt höchstens Teile, die es nirgends sonst gibt (Merge-Liste, URL-Spalte, Ziel-Kopf).
+
+```html
+<div class="chat-vorschlaege chat-vorschlaege--wide">          <!-- --wide: Board-Chats, volle Bubble-Breite -->
+  <div class="chat-vorschlag" :class="{ 'chat-vorschlag--applied': …, 'chat-vorschlag--discarded': …, 'chat-vorschlag--stale': … }">
+    <div class="chat-vorschlag-header">
+      <span class="chat-vorschlag-label">Idee ändern</span>      <!-- Art bzw. Zustand -->
+      <span class="chat-vorschlag-actions"><button class="chat-vorschlag-btn">…</button><button class="chat-vorschlag-btn chat-vorschlag-btn--ghost">…</button></span>
+    </div>
+    <div class="chat-vorschlag-diff">
+      <div class="chat-vorschlag-title">Betroffenes Objekt</div>
+      <div class="chat-vorschlag-row">
+        <span class="chat-vorschlag-field">Stufe</span>
+        <span class="chat-vorschlag-change"><span class="chat-vorschlag-before">Offen</span><svg class="icon chat-vorschlag-arrow" aria-hidden="true"><use href="/icons.svg#arrow-right"/></svg><span class="chat-vorschlag-after">Erledigt</span></span>
+      </div>
+      <div class="chat-vorschlag-row"><span class="chat-vorschlag-field">Text</span><span class="chat-word-diff">…</span></div>
+      <div class="chat-vorschlag-row"><span class="chat-vorschlag-field">Beleg</span><span><q class="chat-vorschlag-quote">…</q> <button class="entity-ref" …></button></span></div>
+    </div>
+    <div class="chat-vorschlag-begruendung">…</div>
+    <div class="chat-vorschlag-note">Warum (noch) nicht übernehmbar</div>
+    <div class="chat-vorschlag-error">…</div>
+  </div>
+</div>
+```
+
+**Regeln:**
+- **Wechsel eines Werts** (Stufe, Status, Ort, Name, Spannung, Position) ist `.chat-vorschlag-change`: alt gedämpft, Pfeil, neu. **Nie** das Lektorat-Pillenpaar `.finding-original`/`.finding-korrektur` — rot/grün gestapelt liest sich «Offen → Erledigt» wie ein Korrekturbefund. Ausnahme ist der Abschnitts-Chat, dessen Vorschlag eine Textkorrektur ist.
+- **Text-Änderung** (Beschreibung, Ideentext) ist der Wort-Diff (`.chat-word-diff` + `diff-parts.js`).
+- **Feldzeilen** haben eine feste Label-Spalte (`--chat-vorschlag-field-w`), damit die Werte einer Karte bündig stehen; Labels bleiben kurz («Beleg», Erklärung als `data-tip`).
+- Neuer Eintrag: Fliesstext als `.chat-vorschlag-text`, Zusatzangaben (Ort, Kapitel, Figuren) als `.chat-vorschlag-meta` darunter.
+
+**Gegated:** [chat-vorschlag-single-place.test.mjs](tests/unit/chat-vorschlag-single-place.test.mjs).
 
 ## Auswahl-Leiste (`.selection-bar`)
 
@@ -3267,6 +3305,7 @@ Geografische Karte mit Markern (aktuell: Orte-Karte View-Mode `map`, nur bei `bo
 - Container nutzt `x-show` (nicht `x-if`) → `$refs` bleibt verfügbar; nach Sichtbarwerden `map.invalidateSize()` (Container hatte 0px in `display:none`).
 - Tiles: OSM Public (`tile.openstreetmap.org`) — Browser-Requests, Betreiber-Sache. Attribution via `tileLayer`-Option Pflicht.
 - Marker-Popup-HTML mit `escHtml()` escapen (KI-/User-Felder).
+- Manuelles Setzen: Marker ziehbar mit `autoPan`, Platzier-Modus (`.ort-map--placing` = Fadenkreuz, Leiste `.ort-map-placing-bar` mit Abbrechen), Ortssuche `.ort-map-search` links in `.ort-map-actions`, Hintergrund-Knopf Karte/Luftbild. Verhalten: [docs/geocode.md](docs/geocode.md#frontend).
 - CSS: [public/css/entities/orte-map.css](public/css/entities/orte-map.css).
 
 ---
@@ -3301,6 +3340,7 @@ Struktur: 8 thematische Subfolder unter [public/css/](public/css/) + Root-Solit�
 | [card-accents.css](public/css/card-accents.css) | `.card--<key> { --card-accent: var(--card-accent-<key>); }` — SSoT für Karten-Akzentfarben (alle Karten). |
 | [chat.css](public/css/chat.css) | Abschnitts-/Buch-Chat; `.chat-panel*` als gemeinsame Hülle der drei Board-Chats (Plot, Ideen, Recherche). |
 | [components/chat-history-search.css](public/css/components/chat-history-search.css) | Suche im Verlauf von Abschnitts-/Buch-Chat (Suchzeile, Treffer, angesprungene Nachricht). |
+| [components/chat-vorschlag.css](public/css/components/chat-vorschlag.css) | Vorschlagskarte aller Chats (`.chat-vorschlag*`): Kopf mit Art/Zustand und Knöpfen, Feldzeilen mit fester Label-Spalte, Wechsel alt → neu (`.chat-vorschlag-change`), Beleg-Zitat, Hinweis, Begründung. Siehe „Chat-Vorschlagskarte". |
 | [components/chat-tool-log.css](public/css/components/chat-tool-log.css) | Werkzeug-Verlauf der vier agentischen Chats (Buch-, Recherche-, Plot-, Ideen-Chat; Fragmente `chat-tool-log` + `chat-tool-log-row`): Rundenköpfe mit Modell-Notiz, Zeilen (Tätigkeit · Gegenstand · Ergebnis), Sammelzeile gleicher Aufrufe als Klapp-Knopf ohne Versalien, Live-Variante unter dem Antwort-Skelett. |
 | [search.css](public/css/search.css) | Volltext-Suche, Buchwahl. |
 | [tokens-est.css](public/css/tokens-est.css) | Token-Schätzung Inline-Badges + Tooltip. Nur das — der Figuren-Bestand, den die Datei entgegen ihrem Namen lange mittrug, liegt in `entities/figuren*.css`. |
@@ -3451,13 +3491,13 @@ Drei Editoren leben in eigenen Subfoldern (`book/`, `focus/`, `notebook/`); edit
 | [entities/entity-grid.css](public/css/entities/entity-grid.css) | Entity-Grid (Matrix-Ansicht für Szenen + Schauplätze): sortierbare Tabelle, View-Toggle (`.entity-view-toggle`, `.entity-grid-*`). |
 | [entities/ideen.css](public/css/entities/ideen.css) | Ideen-Karte. |
 | [entities/ideen-board.css](public/css/entities/ideen-board.css) | Ideen-Board (Raster Bahn × Stufe) + das geteilte Chip-Vokabular der Ideen-Verknüpfungen. |
-| [entities/ideen-chat.css](public/css/entities/ideen-chat.css) | Ideen-Board: Ideen-Chat — Nachrichtenhöhe und Panel-Innenteile `.ideen-chat*` (Spalten-Layout: `.aside-split`, Hülle: `.chat-panel`) samt Schnellstart-Knöpfen und Beleg-Zeile; Vorschlagskarten über die geteilten `.chat-vorschlag*`-Klassen. |
+| [entities/ideen-chat.css](public/css/entities/ideen-chat.css) | Ideen-Board: Ideen-Chat — Nachrichtenhöhe und Panel-Innenteile `.ideen-chat*` (Spalten-Layout: `.aside-split`, Hülle: `.chat-panel`) samt Merge-Liste der Vorschläge; Vorschlagskarten aus components/chat-vorschlag.css. |
 | [entities/entity-list.css](public/css/entities/entity-list.css) | `.entity-list` / `-row`, `.severity-tag*`, `.collapsible-*`, Skeleton, `.ort-*` Schauplätze. |
 | [entities/orte-map.css](public/css/entities/orte-map.css) | Orte-Karte View-Mode `map` (Geo-Karte via Leaflet): `.ort-map*` Container + Geocode-Liste. Nur bei `book_settings.orte_real`. |
 | [entities/recherche/board.css](public/css/entities/recherche/board.css) | Recherche-/Wissensboard (Board-Teil): Toolbar/Filter, Anlege-/Edit-Formular, einspaltige Schnipsel-Liste (`.recherche-list` + `.research-item`), Kind-Badges, Verknüpfungs-/Tag-Chips, KI-Vorschläge, Link-Picker, Link-Zeile (`.research-item-url-row`: Link + „Seite lesen"/„als Quelle übernehmen" als `.icon-btn--ghost`, auf 22px kontext-verkleinert über `.research-url-action`, weil 28px die Zeilenhöhe einer `font-size-sm`-Liste bestimmen würde). Native-Vollbild (`.recherche-split:fullscreen`, Recherche- samt Chat-Karte, Toggle via `fullscreen.js` wie Plot-Board) → Liste zentriert mit Lese-Maximalbreite. |
 | [entities/recherche/status-board.css](public/css/entities/recherche/status-board.css) | Recherche-Board, Ansicht „Status": Kanban ueber die Einarbeitungs-Stufen (`.research-status-board` mit vier gleich breiten Spalten, `.research-status-column--<status>` traegt die semantische Stufen-Farbe als `--status-accent`), Karte (`.research-status-card` + Drag-Griff `.research-status-grip`, SortableJS-Zustaende), Stelle-im-Buch-Chips, „eingearbeitet ohne Stelle"-Befund und die Status-Plakette (`.research-status-badge`) fuer Liste + Detailansicht. Laedt NACH board.css und benutzt dessen Vokabular (Kind-Badge, Titel-Button, Link-Chip) weiter. Mobile (≤700px) stapelt die Spalten. |
 | [entities/recherche/dialog.css](public/css/entities/recherche/dialog.css) | Geteilte `<dialog>`-Shell der Recherche-Karte (`.research-dialog*`) für Detailansicht **und** Anlegen-Modal: Panelbreite, stehender `__head`, scrollender `__scroll`, `__bar`-Fussleiste, Mobile als vollflächiges Blatt. `__text` setzt den Volltext in Lesegrösse mit begrenztem Satzspiegel, `__figure`/`__image` zeigen das Bild gross (bis 60vh), `__doc`/`__figcaption` tragen die Anhang-Aktionen. Dazu `textarea.recherche-input--tall` fürs Redigieren langer Funde. |
-| [entities/recherche/chat.css](public/css/entities/recherche/chat.css) | Recherche-Chat als eigene Karte neben der Recherche-Karte: breite Leistenstufe (`--aside-w-wide` am `.recherche-split`, weil Web-Such-Antworten und Fundstück-Vorschläge mehr Zeilenbreite brauchen; Spalten-Layout: `.main-aside-split`, Hülle: `.card--chat` wie der Abschnitts-Chat; Vollbild ohne Sticky-Versatz) plus die Innenteile (`.research-chat*`: Quellenliste, Suchbegriffe `.research-chat-queries`, Speicher-Vorschläge mit Aktionsspalte + Bearbeiten-Formular, Kontext-Chip `.research-chat-context-chip`). |
+| [entities/recherche/chat.css](public/css/entities/recherche/chat.css) | Recherche-Chat als eigene Karte neben der Recherche-Karte: breite Leistenstufe (`--aside-w-wide` am `.recherche-split`, weil Web-Such-Antworten und Fundstück-Vorschläge mehr Zeilenbreite brauchen; Spalten-Layout: `.main-aside-split`, Hülle: `.card--chat` wie der Abschnitts-Chat; Vollbild ohne Sticky-Versatz) plus die Innenteile (`.research-chat*`: Quellenliste, Suchbegriffe `.research-chat-queries`, Link-Zeilen und Bearbeiten-Formular der Fundstück-Vorschläge (Karte selbst: components/chat-vorschlag.css), Kontext-Chip `.research-chat-context-chip`). |
 | [entities/sources.css](public/css/entities/sources.css) | Quellenverzeichnis-Karte: Toolbar/Filter-Bar (Compact-Höhen-Scope für `.filter-search-input`), Quellen-Tabelle (`.sources-table` via `sortableTable`), Zitier-Badge (`.sources-cite-badge`, Hue aus `--card-accent`), Detail-Formular, Fundstellen-Panel, Zitat-Kennzahlen-Reihe (`.sources-quote-stats` / `-stat` / `-stat-value` / `-stat-label` / `-stats-hint`: Zitat-Anteil + wörtlich/Paraphrase/belegte Quellen — schlichte Wert/Label-Reihe am Tabellenfuss, bewusst kein Tile-Grid). Enthält ausserdem `.sources-preview` (hängend eingerückte Formatter-Vorschau) — **geteilt** mit dem Quellen-Tab der Bucheinstellungen. |
 | [entities/ereignisse-subtyp.css](public/css/entities/ereignisse-subtyp.css) | Event-Subtyp-Badges + Marker-Farbe im Zeitstrahl: Mapping `.gz-item--subtyp-<typ>` auf die gemeinsame `--gz-subtyp-color`-Prop (SSoT der Hues = `--card-accent-event-*` in `tokens/colors.css`), konsumiert von Marker (`.gz-marker`) und Badge. |
 | [entities/ereignisse-span.css](public/css/entities/ereignisse-span.css) | Spannen-Events im Zeitstrahl: `.gz-item--span` verlängert den Marker vertikal proportional zur Jahr-Differenz (CSS-Custom-Prop `--span-years`); reine Punkt-Events unverändert. |
@@ -3504,7 +3544,7 @@ Drei Editoren leben in eigenen Subfoldern (`book/`, `focus/`, `notebook/`); edit
 | [book/plot/board.css](public/css/book/plot/board.css) | Plot-Werkstatt (Beat-Board / Kanban): Board-Layout, Spalten, Beat-Karten, Beat-Edit, Add-Beat/Akt, Vollbild + Mobile. |
 | [book/plot/widgets.css](public/css/book/plot/widgets.css) | Plot-Werkstatt-Widgets: KI-Brainstorm, Consistency-Panel, Coverage, Status-Verteilungsbalken, Akt-Farbpalette, Beat-Intensität, Spannungsbogen. Ergänzt plot/board.css. |
 | [book/plot/swimlane.css](public/css/book/plot/swimlane.css) | Plot-Werkstatt: Swimlane-Grid (Akte × Stränge) + Strang-Leiste. Ergänzt plot/board.css + plot/widgets.css. |
-| [book/plot/chat.css](public/css/book/plot/chat.css) | Plot-Werkstatt: Plot-Chat als eigene Karte neben der Plot-Karte — breite Leistenstufe (`--aside-w-wide` am `.plot-split`; Spalten-Layout: `.main-aside-split`, Hülle: `.card--chat`; Vollbild ohne Sticky-Versatz) plus Innenteile `.plot-chat*`; die Vorschlagskarten nutzen die geteilten `.chat-vorschlag*`-Klassen aus chat.css, hier nur Innenteile (Meta-Zeile, Feld-Diff-Raster, Hinweis). Ergänzt plot/board.css. |
+| [book/plot/chat.css](public/css/book/plot/chat.css) | Plot-Werkstatt: Plot-Chat als eigene Karte neben der Plot-Karte — breite Leistenstufe (`--aside-w-wide` am `.plot-split`; Spalten-Layout: `.main-aside-split`, Hülle: `.card--chat`; Vollbild ohne Sticky-Versatz) plus Innenteile `.plot-chat*`; die Vorschlagskarten kommen aus components/chat-vorschlag.css. Ergänzt plot/board.css. |
 | [book/plot/relations.css](public/css/book/plot/relations.css) | Plot-Werkstatt: Beat-zu-Beat-Beziehungen (Kausalität + Setup/Payoff) — read-only Badges auf der Beat-Karte + Beziehungs-Editor (Typ-/Ziel-Combobox + Chips). Ergänzt plot/board.css. |
 | [book/plot/tools.css](public/css/book/plot/tools.css) | Plot-Werkstatt: Board-Werkzeuge — Beat verschieben ohne Drag (Akt/Strang-Combobox + oben/unten im Beat-Edit), Dichte „nur Titel“ (`.plot--compact`), einklappbare Akte (`.plot-column--collapsed` / `.plot-swim-*--collapsed`), Befund-Typ-Filter/-Aktion/„erledigt“ der Konsistenz-Liste. Lädt nach relations.css. |
 | [book/plot/zeit.css](public/css/book/plot/zeit.css) | Plot-Werkstatt: erzählte Zeit am Beat — Befund-Plakette der Zeit-Messung `.plot-beat-timecheck--{kritisch,mittel,niedrig}` (Variante von `.plot-beat-anchor`), gestrichelter Zeit-Tag für unverstandene Angaben (`.tag--zeit-unklar`), „verstanden als“-Hinweis und Zeitvorschlag im Beat-Edit Alters-Chip `.tag--alter`, (`.plot-zeit-hint`, `.plot-zeit-vorschlag`, Herleitung `.plot-zeit-vorschlag-beleg`), Durchsicht der Zeitvorschläge (`.plot-zeit-review*`). Lädt nach tools.css. |

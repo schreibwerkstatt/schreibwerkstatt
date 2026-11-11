@@ -28,6 +28,7 @@ const ALLOW = new Map([
   ['css/editor/book/book-editor.css|.book-editor-page-body[contenteditable="true"]:focus-visible', 'Bucheditor-Schreibflaeche: Toenung + Caret'],
   ['css/editor/book/book-editor-head.css|.book-editor-head__field', 'Bucheditor-Kopffelder im Satzspiegel (Dachzeile/Titel/Lead), Toenung + Caret'],
   ['css/page/page-view.css|.page-content-view--editing', 'Notebook-Edit-Modus: Rail links + Toenung markieren die Schreibflaeche'],
+  ['css/entities/figur-werkstatt.css|.werkstatt-mindmap jmnode .jsmind-editor', 'Mindmap-Knoten im Bearbeiten: Akzent-Rahmen am Knoten (.is-editing) + Caret, ein Ring im Knoten verdoppelte den Rahmen'],
   ['css/editor/notebook/page-head.css|.page-head .page-head__input:focus', 'Abschnittstitel im Blatt: Toenung + Caret, Ring braeche den Gleichlauf mit der Leseansicht'],
 ]);
 

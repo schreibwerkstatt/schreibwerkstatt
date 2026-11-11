@@ -123,6 +123,7 @@
               <span class="szenen-row-snippet" x-show="s.kommentar && $store.catalogUi.selectedSzeneId !== s.id" x-text="s.kommentar"></span>
             </span>
             <span x-show="s.stale" class="tag tag--stale" :data-tip="$app.t('szenen.staleHint')" x-text="$app.t('szenen.staleBadge')"></span>
+            <span x-show="!s.stale && s.text_geaendert" class="tag" :data-tip="$app.t('szenen.textChangedHint')" x-text="$app.t('szenen.textChangedBadge')"></span>
             <button type="button" x-show="s.stale" class="btn-compact entity-row-action"
                     aria-haspopup="dialog" :aria-expanded="mergePick.kind === 'szene' && mergePick.sourceId === String(s.id)"
                     @click.stop="openMergePick($event, 'szene', s)"
@@ -145,6 +146,23 @@
           </div>
           <div x-show="$store.catalogUi.selectedSzeneId === s.id" class="entity-detail" x-cloak>
             <p x-show="s.kommentar" x-text="s.kommentar" class="entity-detail-text"></p>
+            <!-- Jüngstes Lektorat des Abschnitts: frischere Wertung auf dem Text von heute,
+                 aber für den ganzen Abschnitt — nicht dieser Szene zugeordnet. -->
+            <template x-if="s.lektorat">
+              <div class="szenen-lektorat">
+                <span class="card-section-title" x-text="$app.t('szenen.lektorat.title', { datum: $app.formatDate(s.lektorat.checked_at) })"></span>
+                <template x-for="(l, i) in s.lektorat.szenen" :key="i">
+                  <div class="szenen-lektorat-item">
+                    <span class="severity-tag" :class="'severity-tag--' + wertungOf(l)" x-text="$app.t('szenen.rating.' + wertungOf(l))"></span>
+                    <span class="szenen-lektorat-text">
+                      <span class="entity-row-title" x-text="l.titel"></span>
+                      <span x-show="l.kommentar" class="szenen-lektorat-kommentar" x-text="l.kommentar"></span>
+                    </span>
+                  </div>
+                </template>
+                <p x-show="s.lektorat.szenen.length > 1" class="card-hint" x-text="$app.t('szenen.lektorat.wholeSection')"></p>
+              </div>
+            </template>
             <button type="button" class="btn-compact entity-detail-actions" x-show="$store.config.semanticSearchEnabled" @click.stop="$app.findSimilar('scene', s.id, s.titel)" x-text="$app.t('search.semantic.similarEntity')"></button>
             <div x-show="(s.fig_ids || []).length > 0" class="entity-meta-row">
               <span class="entity-meta-label" x-text="$app.t('szenen.figuren')"></span>

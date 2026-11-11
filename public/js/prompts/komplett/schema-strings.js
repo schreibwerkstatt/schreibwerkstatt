@@ -108,7 +108,15 @@ export const ORTE_SCHEMA = `{
 
 // Szene → Schauplatz per id derselben Antwort (Server löst zum Namen auf:
 // routes/jobs/komplett/szenen-ort-refs.js). Geteilt von allen Extraktions-Schemas mit Szenen.
-export const SZENEN_ORTE_REFS_RULE = '- orte_refs: ids (Feld «id») der Schauplätze aus «orte» DIESER Antwort, an denen die Szene spielt – der spezifischste passende Ort (der Raum, nicht das Gebäude, wenn der Raum erfasst ist). Spielt die Szene an einem Ort, der noch nicht in «orte» steht, ihn dort aufnehmen und referenzieren. Keine Namen, nur ids. Leeres Array wenn kein konkreter Ort.';
+// Szenen-Titel und -Kommentar: Schema-Beschreibung + Regelzeile, geteilt vom kombinierten
+// (Claude) und vom Orte+Szenen-Schema (lokal). Keine geraden Anführungszeichen — die
+// Schema-Texte stehen in einem JSON-String-Literal.
+export const SZENE_TITEL_SPEC = 'Knapper Szenentitel als Stichwort-Phrase, kein ganzer Satz, kein Schlusspunkt, höchstens 60 Zeichen (z.B. «Blutschwur im Wald», «Renates Flucht aus der Küche»)';
+export const SZENE_KOMMENTAR_SPEC = 'Begründung der wertung + Verbesserungshinweis (2-3 Sätze, bei jeder wertung mindestens 2): WARUM ist die Szene stark/mittel/schwach – konkret festgemacht an Spannung, Tempo, Figurenentwicklung, Konflikt/Ziel, Dialog oder Struktur. Bei «mittel»/«schwach» mindestens einen konkreten, umsetzbaren Verbesserungshinweis nennen; bei «stark» benennen, was sie trägt.';
+export const SZENE_TITEL_RULE = '- titel: Stichwort-Phrase wie eine Kapitelüberschrift, kein ganzer Satz, kein Schlusspunkt, höchstens 60 Zeichen – nicht die Handlung nacherzählen.';
+export const SZENE_KOMMENTAR_RULE = '- kommentar: 2-3 Sätze, auch bei «stark» nie nur einer. MUSS die wertung begründen (woran festgemacht) und bei «mittel»/«schwach» einen konkreten Verbesserungshinweis geben – keine reine Zusammenfassung des Inhalts.';
+
+export const SZENEN_ORTE_REFS_RULE ='- orte_refs: ids (Feld «id») der Schauplätze aus «orte» DIESER Antwort, an denen die Szene spielt – der spezifischste passende Ort (der Raum, nicht das Gebäude, wenn der Raum erfasst ist). Spielt die Szene an einem Ort, der noch nicht in «orte» steht, ihn dort aufnehmen und referenzieren. Keine Namen, nur ids. Leeres Array wenn kein konkreter Ort.';
 
 export const ORTE_RULES = `Regeln:
 - Eindeutige IDs (ort_1, ort_2, …)

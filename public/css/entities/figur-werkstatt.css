@@ -168,8 +168,12 @@
   width: 100%;
   height: clamp(420px, 70vh, 760px);
   border: var(--border-thin) solid var(--color-border);
-  border-radius: var(--radius-none);
-  background: var(--color-surface);
+  border-radius: var(--radius-lg);
+  /* Punktraster als Arbeitsfläche — Farbe aus dem Border-Token, damit es im
+     Dark-Theme mitgeht. */
+  background-color: var(--color-bg);
+  background-image: radial-gradient(var(--color-border) 1px, transparent 1px);
+  background-size: var(--space-lg) var(--space-lg);
   overflow: hidden;
   position: relative;
 }
@@ -182,25 +186,20 @@
   overflow: hidden;
 }
 
+/* Werkzeugleiste rechts in der Kopfzeile des Abschnitts (auch im Vollbild,
+   die Kopfzeile gehört zur Vollbild-Section). */
 .werkstatt-mindmap-controls {
   display: inline-flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: var(--space-xs);
+  margin-left: auto;
 }
 
-/* Overlay-Variante: Toolbar oben rechts in der Mindmap-Canvas-Ecke,
-   leichter Surface-Hintergrund für Lesbarkeit gegen jsMind-Linien. */
-.werkstatt-mindmap-controls--overlay {
-  position: absolute;
-  top: 8px;
-  right: 8px;
-  z-index: var(--z-sticky);
-  padding: var(--space-xs);
-  background: color-mix(in srgb, var(--color-surface) 88%, transparent);
-  border: var(--border-thin) solid var(--color-border);
-  border-radius: var(--radius-none);
-  box-shadow: var(--shadow-sm);
-  backdrop-filter: blur(4px);
+.werkstatt-mindmap-controls-sep {
+  width: var(--border-thin);
+  align-self: stretch;
+  background: var(--color-border);
 }
 
 .werkstatt-mindmap-controls .icon-btn[aria-pressed="true"] {
@@ -209,62 +208,121 @@
   color: var(--color-primary);
 }
 
-/* jsMind-Theme-Brücke: globale Tokens statt --card-accent, damit Mindmap
-   sich farblich an die übrige UI anlehnt (Primary/Border) und nicht den
-   Werkstatt-Card-Akzent überall wiederholt. */
+/* Karten-Look der Mindmap. Kein jsMind-Theme (config theme:null) — alle
+   Knoten-Optik steht hier. Ebene kommt als data-depth aus dem Render-Hook
+   (mindmap.js), VOR jsMinds Grössenmessung: Schrift/Abstand je Ebene sind
+   darum erlaubt. data-side (Seite zur Wurzel) setzt erst das Layout — dort
+   nur Grössen-neutrales (Inset-Schatten als Akzentleiste). */
 .werkstatt-mindmap jmnode {
+  --mm-pad-y: var(--space-sm);
+  --mm-pad-x: var(--space-md);
+  max-width: 260px;
+  padding: var(--mm-pad-y) var(--mm-pad-x);
   background: var(--color-surface);
   color: var(--color-text);
   border: var(--border-thin) solid var(--color-border);
-  border-radius: var(--radius-none);
-  font-family: var(--font-sans);
-  font-size: var(--font-size-base);
-  padding: var(--space-6) var(--space-10);
+  border-radius: var(--radius-lg);
   box-shadow: var(--shadow-sm);
-  /* Long-Press öffnet das Knoten-Menü (mindmap.js#_attachLongPress) — iOS
-     legte sonst Textauswahl + System-Callout darüber. */
+  font-family: var(--font-sans);
+  font-size: var(--font-size-sm);
+  line-height: var(--lh-tight);
+  white-space: normal;
+  overflow-wrap: anywhere;
+  cursor: pointer;
+  transition: border-color var(--transition-base), background var(--transition-base);
+  /* Long-Press öffnet das Knoten-Menü — iOS legte sonst Textauswahl +
+     System-Callout darüber. */
   -webkit-touch-callout: none;
   -webkit-user-select: none;
   user-select: none;
 }
-/* Inline-Editor (F2/Doppelklick) im Knoten: Textauswahl muss dort gehen. */
-.werkstatt-mindmap jmnode input {
-  -webkit-user-select: text;
-  user-select: text;
+/* Hauptzweige: grösser, Akzentleiste zur Wurzel hin. */
+.werkstatt-mindmap jmnode[data-depth="1"] {
+  font-size: var(--font-size-base);
+  font-weight: var(--fw-semibold);
+  background: var(--color-history-active-bg);
+}
+.werkstatt-mindmap jmnode[data-depth="1"][data-side="right"] {
+  box-shadow: inset 3px 0 0 var(--color-primary), var(--shadow-sm);
+}
+.werkstatt-mindmap jmnode[data-depth="1"][data-side="left"] {
+  box-shadow: inset -3px 0 0 var(--color-primary), var(--shadow-sm);
 }
 .werkstatt-mindmap jmnode.root {
+  max-width: 320px;
+  padding: var(--space-md) var(--space-lg);
   background: var(--color-primary);
   color: var(--color-bg);
   border-color: var(--color-primary);
-  font-weight: var(--fw-semibold);
   font-family: var(--font-serif);
+  font-size: var(--font-size-lg);
+  font-weight: var(--fw-semibold);
 }
 .werkstatt-mindmap jmnode:hover {
-  background: var(--color-hover);
+  border-color: var(--color-primary);
 }
 .werkstatt-mindmap jmnode.selected {
-  background: var(--color-history-active-bg);
   border-color: var(--color-primary);
-  color: var(--color-text);
+  outline: 2px solid var(--color-primary);
+  outline-offset: 1px;
 }
-/* jsMind-Default ist 11×11px mit 10px Font — schwer lesbar (besonders mit
-   expander_style:'number'). Override: 18×18, eckig (Badge-Regel).
-   jsMind positioniert den Expander auf Layout-Punkt (basiert auf pspace=14
-   und Default-Größe 11×11). translate kompensiert die Vergrößerung um
-   (18-11)/2 = 3.5px nach links/oben — sonst wandert das Kästchen nach
-   unten/rechts vom Layout-Anker weg. Bei jsMind-Upgrade prüfen. */
+/* Bearbeiten: unsichtbarer Spiegel bestimmt die Grösse, die Textarea liegt
+   darüber (mindmap-editor.js) — der Knoten wächst beim Tippen mit. */
+.werkstatt-mindmap jmnode.is-editing {
+  cursor: text;
+  border-color: var(--color-primary);
+}
+.werkstatt-mindmap .jsmind-editor-mirror {
+  visibility: hidden;
+  white-space: pre-wrap;
+}
+.werkstatt-mindmap jmnode .jsmind-editor {
+  position: absolute;
+  top: var(--mm-pad-y);
+  left: var(--mm-pad-x);
+  width: calc(100% - 2 * var(--mm-pad-x));
+  height: calc(100% - 2 * var(--mm-pad-y));
+  margin: 0;
+  padding: 0;
+  border: 0;
+  outline: none;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  line-height: inherit;
+  resize: none;
+  overflow: hidden;
+  overflow-wrap: anywhere;
+  -webkit-user-select: text;
+  user-select: text;
+}
+.werkstatt-mindmap jmnode.root .jsmind-editor {
+  top: var(--space-md);
+  left: var(--space-lg);
+  width: calc(100% - 2 * var(--space-lg));
+  height: calc(100% - 2 * var(--space-md));
+}
+/* Schatten beim Umhängen (Drag-Plugin): Karte am Zeiger. */
+.werkstatt-mindmap jmnode.jsmind-draggable-shadow-node {
+  box-shadow: var(--shadow-drag);
+  border-color: var(--color-primary);
+  cursor: grabbing;
+}
+/* Expander: Zahl der Kinder, eckig (Badge-Regel). jsMind positioniert ihn
+   auf einen Layout-Punkt für 11×11px; translate kompensiert die Vergrösserung
+   um (18-11)/2 = 3.5px. Bei jsMind-Upgrade prüfen. */
 .werkstatt-mindmap jmexpander {
   width: 18px;
   height: 18px;
   line-height: 16px;
-  font-size: var(--font-size-base);
+  font-size: var(--font-size-xs);
   font-weight: var(--fw-semibold);
   border-radius: var(--radius-none);
   border-color: var(--color-border);
   background: var(--color-surface);
-  color: var(--color-text);
+  color: var(--color-muted);
   transform: translate(-3.5px, -3.5px);
-  transition: background 120ms ease, border-color 120ms ease, color 120ms ease;
+  transition: background var(--transition-base), border-color var(--transition-base), color var(--transition-base);
 }
 .werkstatt-mindmap jmexpander:hover {
   background: var(--color-history-active-bg);

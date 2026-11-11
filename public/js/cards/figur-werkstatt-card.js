@@ -99,6 +99,8 @@ export function registerFigurWerkstattCard() {
     _mindmapEl: null,
     _topicMarkers: null,
     _themeObs: null,
+    // Listener am Canvas (Kontextmenü, Touch-Pan), fällt in _destroyMindmap.
+    _mmAbort: null,
     _brainstormJobId: null,
     _brainstormJobDraftId: null,
     _consistencyJobId: null,
@@ -221,6 +223,7 @@ export function registerFigurWerkstattCard() {
           this.mindmapFullscreen = active;
           if (this._jm) {
             try { this._jm.resize(); } catch {}
+            this.fitMindmap();
           }
         },
       });

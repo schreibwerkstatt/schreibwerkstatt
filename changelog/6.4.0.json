@@ -1,0 +1,61 @@
+{
+  "version": "6.4.0",
+  "date": "2026-11-11",
+  "entries": [
+    {
+      "kind": "neu",
+      "de": "Orte-Karte: mit «Platzieren» legst du einen Schauplatz per Klick in die Karte. Über das Suchfeld springst du zu einer Adresse, und Cmd/Ctrl+Z macht jede Kartenänderung rückgängig.",
+      "en": "Locations map: use \"Place\" to drop a location on the map with one click. The search field jumps to an address, and Cmd/Ctrl+Z undoes any map change."
+    },
+    {
+      "kind": "neu",
+      "de": "Orte-Karte: ein Knopf wechselt zwischen Strassenkarte und Luftbild, sofern die Administration einen Luftbild-Hintergrund eingerichtet hat.",
+      "en": "Locations map: a button switches between street map and aerial view, provided your admin has set up an aerial background."
+    },
+    {
+      "kind": "neu",
+      "de": "Szenen-Karte: zu jeder Szene siehst du jetzt das Lektorat ihres Abschnitts. Ein Hinweis «Text geändert» zeigt, wenn der Abschnitt seit der Analyse bearbeitet wurde.",
+      "en": "Scenes card: each scene now shows the copy-edit of its section. A \"Text changed\" badge tells you when the section was edited since the analysis."
+    },
+    {
+      "kind": "verbessert",
+      "de": "Orte-Karte: «Alle suchen» setzt Pins zuverlässiger in die richtige Gemeinde und das richtige Land. Findet sich nichts Passendes, bleibt der Pin rot, statt in einem fremden Land zu landen.",
+      "en": "Locations map: \"Locate all\" places pins more reliably in the right town and country. If nothing fits, the pin stays red instead of landing in a foreign country."
+    },
+    {
+      "kind": "verbessert",
+      "de": "Suche und Wortschatz: springst du von einem Treffer in den Abschnitt, ist die Fundstelle markiert. Die Markierung bleibt einige Sekunden stehen, bis du klickst.",
+      "en": "Search and vocabulary: when you jump from a result into the section, the passage is highlighted. The highlight stays for a few seconds until you click."
+    },
+    {
+      "kind": "verbessert",
+      "de": "Figuren-Werkstatt, Mindmap: Zweige lassen sich ziehen sowie alle auf einmal auf- und zuklappen. «Alles einpassen» holt die ganze Mindmap ins Bild.",
+      "en": "Character workshop, mind map: you can drag branches and expand or collapse all of them at once. \"Fit to view\" brings the whole mind map into view."
+    },
+    {
+      "kind": "verbessert",
+      "de": "Chats: Vorschläge aus Abschnitts-, Ideen-, Plot- und Recherche-Chat sehen jetzt überall gleich aus. Jede Änderung zeigt alt und neu nebeneinander.",
+      "en": "Chats: suggestions from the section, ideas, plot and research chats now look the same everywhere. Each change shows old and new side by side."
+    },
+    {
+      "kind": "verbessert",
+      "de": "Szenen-Titel der Komplettanalyse und des Lektorats sind jetzt kurze Stichworte statt ganzer Sätze. Listen und Übersichten lesen sich dadurch leichter.",
+      "en": "Scene titles from the full analysis and copy-editing are now short keywords instead of full sentences. Lists and overviews read more easily."
+    },
+    {
+      "kind": "verbessert",
+      "de": "Schauplätze, Figuren und Ereignisse öffnen bei grossen Büchern schneller. Lange Listen zeigen erst einen Teil, «Weitere anzeigen» lädt den Rest.",
+      "en": "Locations, characters and events open faster in large books. Long lists show a first batch, and \"Show more\" loads the rest."
+    },
+    {
+      "kind": "verbessert",
+      "de": "Tagesring: in der Wochenansicht sind Tage über dem Ziel unterschiedlich hoch. So siehst du, an welchem Tag du am meisten geschrieben hast.",
+      "en": "Daily ring: in the week view, days above your goal now differ in height. That shows you on which day you wrote the most."
+    },
+    {
+      "kind": "behoben",
+      "de": "Plot-Werkstatt: der Konsistenzcheck brach bei umfangreichen Plots ohne Ergebnis ab.",
+      "en": "Plot workshop: the consistency check stopped without a result on extensive plots."
+    }
+  ]
+}

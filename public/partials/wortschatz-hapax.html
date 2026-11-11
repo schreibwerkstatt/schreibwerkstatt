@@ -39,7 +39,7 @@
             <td class="wortschatz-num" x-text="wsNum(h.len)"></td>
             <td>
               <button type="button" class="entity-ref" x-show="h.first_page_id"
-                      x-entity-ref="{ type: 'seite', id: h.first_page_id, label: h.first_page_name || undefined }"></button>
+                      x-entity-ref="{ type: 'seite', id: h.first_page_id, label: h.first_page_name || undefined, snippet: h.term }"></button>
             </td>
           </tr>
         </template>

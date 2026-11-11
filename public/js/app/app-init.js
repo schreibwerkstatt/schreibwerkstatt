@@ -341,6 +341,7 @@ export const appInitMethods = {
         this.$store.config.mapTiles = {
           url: cfg.mapTiles.url,
           attribution: cfg.mapTiles.attribution || '',
+          satellite: cfg.mapTiles.satellite?.url ? cfg.mapTiles.satellite : null,
         };
       }
 

@@ -22,13 +22,24 @@ const { matchLocations, normLocName, locationHintKey } = require('../lib/entity-
 const { manualFieldSet } = require('./location-fields');
 const { listLocationAliasesByLocation, foldIncomingAliases } = require('./location-aliases');
 
-// Geo-Koordinate als Number normalisieren + auf gueltigen Bereich clampen.
-// Fremd-Input (Nominatim / Marker-Drag) → null bei NaN/leer, sonst geklemmt.
-function _clampCoord(v, max) {
+// Geo-Koordinate als Number normalisieren. Fremd-Input (Nominatim / Marker-Drag)
+// → null bei NaN/leer. Breite wird geklemmt, Länge auf [-180, 180) umgerechnet:
+// Leaflet liefert auf den Welt-Kopien jenseits der Datumsgrenze Werte wie 190,
+// die denselben Punkt meinen wie -170 — Klemmen setzte ihn auf 180.
+function _num(v) {
   if (v == null || v === '') return null;
   const n = Number(v);
-  if (!Number.isFinite(n)) return null;
-  return Math.max(-max, Math.min(max, n));
+  return Number.isFinite(n) ? n : null;
+}
+function _lat(v) {
+  const n = _num(v);
+  return n == null ? null : Math.max(-90, Math.min(90, n));
+}
+function _lng(v) {
+  const n = _num(v);
+  if (n == null) return null;
+  if (n >= -180 && n < 180) return n;
+  return ((n + 180) % 360 + 360) % 360 - 180;
 }
 
 // Match-Planung Orte (NUR LESEND) — SSoT fuer beide Seiten: `saveOrteToDb` ruft sie
@@ -310,8 +321,8 @@ function saveOrteToDb(bookId, orte, userEmail, chNameToId = null, pageNameToIdBy
         if (m) { o.lat = m.lat; o.lng = m.lng; }
         if (!o.land && (prev?.land || m?.land)) o.land = prev?.land || m.land;
       }
-      const lat = _clampCoord(o.lat, 90);
-      const lng = _clampCoord(o.lng, 180);
+      const lat = _lat(o.lat);
+      const lng = _lng(o.lng);
       // land normalisiert auf ISO-3166-1-alpha-2 lowercase; alles andere → NULL.
       let land = /^[A-Za-z]{2}$/.test(String(o.land || '').trim()) ? String(o.land).trim().toLowerCase() : null;
       // Der Name, den die Analyse liefert — nur im Analyse-Modus, damit ein spaeter
@@ -383,9 +394,10 @@ function saveOrteToDb(bookId, orte, userEmail, chNameToId = null, pageNameToIdBy
 // löschen). Bewusst KEIN Full-Replace via saveOrteToDb: dort hängen Match-/
 // Reconcile-Heuristiken (clearedCoords, loc_id-Tausch) am ganzen Array — bei
 // nebenläufigen Einzel-Edits race-anfällig. Hier wird streng pro loc_id nur
-// lat/lng gesetzt; geht eine Koordinate auf NULL, wird zusätzlich der Geocode-
-// Resolve-Cache (geo_query/geo_land) genullt — der User signalisiert mit dem
-// Löschen „wieder von vorn geocodierbar". Andere Felder/Relationen unberührt.
+// lat/lng gesetzt und der Geocode-Resolve-Cache (geo_query/geo_land) genullt:
+// jeder Patch ist eine Hand-Entscheidung des Users (Ziehen, Löschen, Undo), die
+// Position stammt danach nicht mehr aus dem KI-Treffer, und ein gelöschter Ort
+// soll wieder von vorn geocodierbar sein. Andere Felder/Relationen unberührt.
 // patches: [{ id (=loc_id), lat, lng }]. Liefert die Zahl geänderter Rows.
 function patchOrtCoords(bookId, patches, userEmail) {
   const emailCond = userEmail ? 'user_email = ?' : 'user_email IS NULL';
@@ -400,13 +412,13 @@ function patchOrtCoords(bookId, patches, userEmail) {
   db.transaction(() => {
     for (const p of (patches || [])) {
       if (!p || p.id == null) continue;
-      const lat = _clampCoord(p.lat, 90);
-      const lng = _clampCoord(p.lng, 180);
+      const lat = _lat(p.lat);
+      const lng = _lng(p.lng);
       const locId = String(p.id);
       const info = upd.run(lat, lng, bookId, locId, ...emailVal);
       if (info.changes) {
         changed += info.changes;
-        if (lat == null || lng == null) clearGeo.run(bookId, locId, ...emailVal);
+        clearGeo.run(bookId, locId, ...emailVal);
       }
     }
   })();
@@ -460,6 +472,7 @@ module.exports = {
   planOrteMatch,
   saveOrteToDb,
   patchOrtCoords,
+  _lng,
   backfillLocationChaptersFromScenes,
   getChapterLocations,
 };

@@ -150,6 +150,13 @@ router.get('/config', (req, res) => {
     mapTiles: {
       url: tileFrontendUrl(),
       attribution: String(appSettings.get('geocode.tiles.attribution') || '').trim(),
+      // Luftbild als zweiter, umschaltbarer Hintergrund; null = kein Umschalter.
+      satellite: String(appSettings.get('geocode.tiles.satellite.url') || '').trim()
+        ? {
+          url: String(appSettings.get('geocode.tiles.satellite.url')).trim(),
+          attribution: String(appSettings.get('geocode.tiles.satellite.attribution') || '').trim(),
+        }
+        : null,
     },
     // Recherche-Chat (agentisch, mit Web-Suche) — Claude-only. Das Panel in der
     // Recherche-Karte erscheint nur, wenn der EFFEKTIVE Provider dieses Users Claude

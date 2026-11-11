@@ -257,8 +257,9 @@ export const wortschatzMethods = {
     window.__app?.toggleStilCard?.();
   },
 
-  wsGotoPage(pageId) {
+  // `term`: das Wort selbst — markiert seine erste Stelle im Abschnitt.
+  wsGotoPage(pageId, term = '') {
     if (pageId == null) return;
-    window.__app?.gotoPageById?.(Number(pageId));
+    window.__app?.gotoPageById?.(Number(pageId), { snippet: term });
   },
 };

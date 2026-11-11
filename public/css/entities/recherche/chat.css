@@ -13,82 +13,22 @@
    selbst — die Leiste klebt an seiner Oberkante statt unter der App-Kopfzeile. */
 .recherche-split:fullscreen { --sticky-top: 0px; --sticky-bottom: 0px; }
 
-/* Speicher-Vorschläge unter einer Assistant-Antwort */
-.research-chat-proposals {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-2xs);
-  margin-top: var(--space-sm);
-  padding-top: var(--space-sm);
-  border-top: 1px solid var(--color-border);
-}
-.research-chat-proposals-head {
-  font-size: var(--font-size-sm);
-  font-weight: var(--fw-semibold);
-  color: var(--color-muted);
-}
-.research-chat-proposals-headrow {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--space-sm);
-}
-/* Ein Vorschlag liest sich von oben nach unten: Typ-Badge, Titel, Text, Links,
-   Tags — darunter die Aktionen als eigene Zeile. Nebeneinander (Text | Aktionen)
-   bliebe dem Text in der Leiste kaum eine halbe Spalte. */
-.research-chat-proposal {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-2xs);
-  padding: var(--space-xs) 0;
-}
-.research-chat-proposal + .research-chat-proposal { border-top: 1px dashed var(--color-border); }
-.research-chat-proposal-main {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: var(--space-2xs);
-  min-width: 0;
-}
-.research-chat-proposal-actions {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: var(--space-2xs);
-}
-.research-chat-proposal-exists-actions {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--space-2xs);
-}
-.research-chat-proposal--saved .research-chat-proposal-main { opacity: 0.6; }
+/* Speicher-Vorschläge unter einer Assistant-Antwort: Karte samt Feldzeilen aus
+   components/chat-vorschlag.css; hier nur Bearbeiten-Formular, Text-Kappung
+   und die Link-Zeilen (geteilt mit recherche-chat-changes.html). */
 .research-chat-proposal-edit {
   display: flex;
   flex-direction: column;
   gap: var(--space-2xs);
-  align-self: stretch;
+  margin-bottom: var(--space-xs);
   min-width: 0;
 }
-.research-chat-proposal-tags,
-.research-chat-proposal-exists {
-  font-size: var(--font-size-sm);
-  color: var(--color-muted);
-}
-.research-chat-proposal-exists { font-style: italic; }
-.research-chat-proposal-body {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-2xs);
-  align-self: stretch;
-  min-width: 0;
-}
-.research-chat-proposal-title { font-weight: var(--fw-semibold); }
+/* Web-Funde bringen lange Auszüge mit — vier Zeilen genügen zum Einordnen,
+   den Volltext zeigt das Board nach dem Speichern. */
 .research-chat-proposal-snippet {
-  font-size: var(--font-size-sm);
-  color: var(--color-muted);
   overflow: hidden;
   display: -webkit-box;
-  -webkit-line-clamp: 2;
+  -webkit-line-clamp: 4;
   -webkit-box-orient: vertical;
 }
 /* Ein Link je Zeile: Label, echter Host, ggf. «nicht geprüft», Weglassen-Knopf.
@@ -142,11 +82,7 @@
   text-decoration: line-through;
   opacity: 0.6;
 }
-.research-chat-proposal-saved {
-  font-size: var(--font-size-sm);
-  color: var(--color-muted);
-  white-space: nowrap;
-}
+
 
 /* Inline-Zitatmarker in der Antwort (aus den `<cite index>`-Tags des Modells) */
 .chat-cite {
@@ -224,13 +160,9 @@
 .research-chat-source-num { color: var(--color-muted); flex-shrink: 0; }
 .research-chat-source-title { word-break: break-word; }
 
-/* Änderungen an bestehenden Einträgen (recherche-chat-changes.html): geteilte
-   `.chat-vorschlag*`-Karten (chat.css), hier nur die Innenteile. Volle
-   Bubble-Breite wie die Fundstück-Vorschläge — Vorher/Nachher braucht Zeilen. */
-.chat-msg .research-chat-changes {
-  max-width: none;
-  margin-top: var(--space-sm);
-}
+/* Änderungen an bestehenden Einträgen (recherche-chat-changes.html): Karte
+   samt Feldzeilen aus components/chat-vorschlag.css, hier nur der Ziel-Kopf
+   (welcher Eintrag, beim Zusammenführen welcher in welchen) und die URL-Spalte. */
 .research-chat-change-target {
   display: flex;
   flex-wrap: wrap;
@@ -244,37 +176,15 @@
   align-items: center;
   gap: var(--space-2xs);
 }
-.research-chat-change-row {
-  display: grid;
-  grid-template-columns: minmax(5.5rem, auto) minmax(0, 1fr);
-  gap: var(--space-sm);
-  margin-top: var(--space-2xs);
-}
-.research-chat-change-field {
-  color: var(--color-muted);
-  font-size: var(--font-size-xs);
-}
-.research-chat-change-text {
-  white-space: pre-line;
-  overflow-wrap: anywhere;
-}
 .research-chat-change-urls {
   display: flex;
   flex-direction: column;
   gap: var(--space-2xs);
   min-width: 0;
 }
-.research-chat-change-preview .research-chat-change-text {
+.research-chat-change-preview-text {
   margin-top: var(--space-2xs);
   color: var(--color-muted);
-  font-size: var(--font-size-sm);
-}
-.research-chat-change-beleg q { font-style: italic; }
-
-/* Mobile: Feld-Label über den Wert, damit der Wert die volle Breite bekommt. */
-@media (max-width: 768px) {
-  .research-chat-change-field { font-size: var(--font-size-sm); }
-  .research-chat-change-row { grid-template-columns: minmax(0, 1fr); gap: 0; }
 }
 
 }

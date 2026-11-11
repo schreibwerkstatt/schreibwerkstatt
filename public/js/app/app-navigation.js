@@ -268,14 +268,25 @@ export const appNavigationMethods = {
     if (!page) return;
     // Mit Fundstelle scrollt nur die Markierung (zur Textstelle, die Karte
     // kommt dabei mit ins Bild); findet sie die Stelle nicht, springt sie
-    // ersatzweise an den Anfang des Abschnitts.
-    await this.selectPage(page, { skipCardScroll: !!snippet });
+    // ersatzweise an den Anfang des Abschnitts — aber nur, solange der User
+    // seit dem Sprung nichts selbst getan hat: der Fehlschlag steht erst nach
+    // den Ladeschritten von selectPage fest (Sekunden), und ein Hochscrollen
+    // dann risse ihn aus dem Text, den er inzwischen liest.
+    let userMoved = false;
+    const onUser = () => { userMoved = true; };
+    const USER_EVENTS = ['wheel', 'touchmove', 'pointerdown', 'keydown'];
+    if (snippet) for (const t of USER_EVENTS) window.addEventListener(t, onUser, { capture: true, passive: true });
+    const stopWatch = () => { for (const t of USER_EVENTS) window.removeEventListener(t, onUser, { capture: true }); };
+    try {
+      await this.selectPage(page, { skipCardScroll: !!snippet });
+    } catch (e) { stopWatch(); throw e; }
     if (snippet && String(this.currentPage?.id) === String(page.id)) {
       highlightOccurrenceOnPage(snippet, {
         pageId: page.id,
-        onMiss: () => this._scrollToEditorCard(),
+        onHit: stopWatch,
+        onMiss: () => { stopWatch(); if (!userMoved) this._scrollToEditorCard(); },
       });
-    }
+    } else stopWatch();
   },
 
   // Erster Abschnitt im Teilbaum: ein Kapitel, das nur Unterkapitel trägt,

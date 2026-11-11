@@ -248,7 +248,8 @@
 .pub-repeater-row .card-form-input { flex: 1 1 0; min-width: 0; }
 /* Nur-Anzeige-Wert in der Wertspalte (Reihe): Schrift und Oberkante wie das Label. */
 .pub-static-value {
-  padding-top: var(--space-6);
+  /* Lesewert neben .card-form-label: dieselbe Oberkante wie deren Text. */
+  padding-top: var(--size-default-text-inset);
   font-size: var(--font-size-sm);
 }
 .pub-matter-card {

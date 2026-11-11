@@ -1,26 +1,31 @@
-// Geo-Karten-Methoden der Orte-Karte (View-Mode 'map'). Nur aktiv, wenn das
-// Buch auf "Orte real" (book_settings.orte_real) steht. Leaflet laedt lazy.
-// Wird in Alpine.data('orteCard') gespreadet; Root-Zugriffe via window.__app.
+// Geo-Karten-Methoden der Orte-Karte (View-Mode 'map'): Aufbau, Marker, Popup,
+// Sperre. Nur aktiv, wenn das Buch auf "Orte real" (book_settings.orte_real)
+// steht. Leaflet laedt lazy. Wird in Alpine.data('orteCard') gespreadet;
+// Root-Zugriffe via window.__app.
 //
-// Marker-Koordinaten leben auf den Orten selbst (o.lat/o.lng). Manuelle Aenderungen
-// (Marker-Drag, Undo/Redo, Georeferenz entfernen) persistiert der Koordinaten-Patch
-// (app.patchOrtCoords → PATCH /locations/:id/coords) optimistisch: erst In-Memory
-// setzen, dann patchen, bei Fehler zuruecksetzen + Status. Die KI-Verortung
-// (_geocodeViaAI) persistiert der Geocode-Job serverseitig selbst und spiegelt die
-// Werte hier nur in-memory. _map/_markers sind transiente Leaflet-Runtime-Handles
-// (wie Timer), kein fachlicher State.
+// Marker-Koordinaten leben auf den Orten selbst (o.lat/o.lng). Alles, was sie
+// aendert (Drag, Verlauf, KI-Verortung, Georeferenz loeschen), steht in
+// orte-map-edit.js. _map/_markers/_tileLayer sind transiente Leaflet-Runtime-
+// Handles (wie Timer), kein fachlicher State.
 
 import { fetchJson, escHtml } from '../utils.js';
 import { loadLeaflet } from '../lazy-libs.js';
-import { countryLabel } from '../country-codes.js';
-import { startPoll } from '../cards/job-helpers.js';
+import { countryLabel, countryView } from '../country-codes.js';
 import { isSelectedBook } from '../cards/book-guard.js';
 import { lsSet } from '../safe-storage.js';
+import { orteMapEditMethods } from './orte-map-edit.js';
+import { orteMapPlaceMethods } from './orte-map-place.js';
 
 // Fallback-Tile-URL, falls /config noch nicht geladen ist ($store.config.mapTiles
 // liefert die konfigurierte URL — self-hosted Tile-Server via app_settings
 // geocode.tiles.url).
 const OSM_TILES_DEFAULT = 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png';
+
+// Pixel-Versatz eines erbenden Unterort-Pins zu seinem Elternort (je weiteres
+// Kind am selben Elternort eine Stufe weiter, vier pro Reihe).
+export function inheritedPinOffset(slot) {
+  return [14 + (slot % 4) * 10, 14 + Math.floor(slot / 4) * 10];
+}
 
 export const orteMapMethods = {
   // Liest orte_real + Sprache aus den Buch-Einstellungen. Schaltet bei
@@ -46,9 +51,17 @@ export const orteMapMethods = {
     return countryLabel(code, this._geoLang || 'de');
   },
 
-  // Gefilterte Orte mit gesetzten Koordinaten (Marker-Quelle).
+  // Gefilterte Orte mit gesetzten Koordinaten (Marker-Quelle). Memo auf die
+  // orteFiltered-Referenz + `_geoRev` (Koordinaten ändern sich in place).
   orteMapped() {
-    return this.orteFiltered.filter(o => o.lat != null && o.lng != null);
+    const list = this.orteFiltered;
+    return this._memo('orteMapped', [list, this._geoRev], () => list.filter(o => o.lat != null && o.lng != null));
+  },
+
+  // Orte ohne Koordinaten (im aktuellen Filter) — Quelle für Batch-Geocode + Zähler.
+  unlocatedOrte() {
+    const list = this.orteFiltered;
+    return this._memo('unlocatedOrte', [list, this._geoRev], () => list.filter(o => o.lat == null || o.lng == null));
   },
 
   // Karten-Status setzen. Abschluss-/Fehlermeldungen leeren sich nach kurzer Zeit
@@ -85,21 +98,34 @@ export const orteMapMethods = {
 
   // Position, die ein unverorteter Ort von seinem nächsten verorteten Elternort
   // erbt (Raum im Hotel → Pin beim Hotel). null, wenn keine Kette verortet ist.
+  // Eine Map über alle Orte, memoisiert — das Template fragt je Zeile.
   inheritedLatLng(o) {
-    const byId = window.__app.orteById;
-    const seen = new Set([o.id]);
-    for (let p = o.parent ? byId.get(o.parent) : null; p && !seen.has(p.id); p = p.parent ? byId.get(p.parent) : null) {
-      if (p.lat != null && p.lng != null) return { lat: p.lat, lng: p.lng };
-      seen.add(p.id);
-    }
-    return null;
+    const orte = window.__app.$store.catalog.orte;
+    const map = this._memo('inheritedLatLng', [orte, this._geoRev], () => {
+      const byId = window.__app.orteById;
+      const out = new Map();
+      for (const c of orte) {
+        if (c.lat != null && c.lng != null) continue;
+        const seen = new Set([c.id]);
+        for (let p = c.parent ? byId.get(c.parent) : null; p && !seen.has(p.id); p = p.parent ? byId.get(p.parent) : null) {
+          if (p.lat != null && p.lng != null) { out.set(c.id, { lat: p.lat, lng: p.lng }); break; }
+          seen.add(p.id);
+        }
+      }
+      return out;
+    });
+    return map.get(o.id) || null;
   },
 
   // Map lazy aufbauen + Marker rendern. Idempotent — mehrfaches Aufrufen
-  // (Tab-Wechsel) erzeugt genau eine Instanz.
+  // (Tab-Wechsel) erzeugt genau eine Instanz. Nach dem Laden von Leaflet erneut
+  // prüfen, ob Buch und Karten-Tab noch dieselben sind (schneller Wechsel).
   async ensureOrteMap() {
     if (!this.orteRealEnabled) return;
+    const bookId = Alpine.store('nav').selectedBookId;
     const L = await loadLeaflet();
+    await this.$nextTick();
+    if (!isSelectedBook(bookId) || !this.orteRealEnabled || this.viewMode !== 'map') return;
     const el = this.$refs.orteMapEl;
     if (!el) return;
     if (!this._map) {
@@ -108,16 +134,35 @@ export const orteMapMethods = {
       // feuert dann ihr zoomanim-rAF auf Marker, deren Map-Panes schon weg sind
       // (_animateZoom liest null) → Crash. Instant-Zoom umgeht den Pfad ganz.
       this._map = L.map(el, { scrollWheelZoom: true, zoomAnimation: false }).setView([20, 0], 2);
-      const tiles = this.$store.config.mapTiles || {};
-      L.tileLayer(tiles.url || OSM_TILES_DEFAULT, {
-        maxZoom: 19,
-        attribution: tiles.attribution || window.__app.t('orte.map.attribution'),
-      }).addTo(this._map);
       this._markers = L.layerGroup().addTo(this._map);
+      this._installZoomAnchor();
+      this._installMapPlace();
     }
+    this._syncTileLayer(L);
+    // Grösse VOR dem Zeichnen neu messen: Einpassen und das Pin-Raster rechnen in
+    // Pixeln, und der Container war bis eben versteckt (bzw. hat seit dem letzten
+    // Besuch evtl. eine andere Breite).
+    this._map.invalidateSize({ pan: false });
     this._renderOrteMarkers(L);
-    // Container wird erst mit dem Tab sichtbar → Groesse nach Layout neu messen.
-    setTimeout(() => this._map?.invalidateSize(), 0);
+  },
+
+  // Tile-Layer an die konfigurierte URL und den gewählten Hintergrund (mapLayer:
+  // Karte/Luftbild, orte-map-place.js) angleichen. /config kann nach dem ersten
+  // Kartenaufbau eintreffen — dann beim nächsten Öffnen tauschen.
+  _syncTileLayer(L) {
+    const tiles = this.$store.config.mapTiles || {};
+    const sat = this.mapLayer === 'satellite' && tiles.satellite?.url ? tiles.satellite : null;
+    const url = sat ? sat.url : (tiles.url || OSM_TILES_DEFAULT);
+    if (this._tileLayer && this._tileUrl === url) return;
+    this._tileLayer?.remove();
+    this._tileLayer = L.tileLayer(url, {
+      maxZoom: 19,
+      // Luftbild: nur die eigene Attribution — der OSM-Default wäre dort falsch.
+      attribution: sat ? (sat.attribution || '') : (tiles.attribution || window.__app.t('orte.map.attribution')),
+    }).addTo(this._map);
+    // Kacheln unter die Marker legen (ein später getauschter Layer käme sonst obenauf).
+    this._tileLayer.bringToBack();
+    this._tileUrl = url;
   },
 
   // Marker nach einer Filteraenderung neu zeichnen (nur im Karten-Tab, Map muss
@@ -130,6 +175,58 @@ export const orteMapMethods = {
     this._renderOrteMarkers(window.L);
   },
 
+  // Ausschnitt einpassen: auf die verorteten Marker, sonst aufs Schauplatz-Land
+  // des Buchs. Wechselt der Ausschnitt, werden die geparkten roten Pins neu in
+  // der Mitte verteilt — ihre gemerkten Positionen gehörten zum alten Ausschnitt
+  // und lägen jetzt ausserhalb des Bilds.
+  _fitOrteView(pts) {
+    if (pts.length) {
+      this._map.fitBounds(pts, { padding: [30, 30], maxZoom: 13 });
+    } else {
+      const v = countryView(this._bookLand);
+      if (!v) return;
+      this._map.setView(v.center, v.zoom);
+    }
+    this._unlocatedLatLng = {};
+  },
+
+  // Zoom-Anker: nach dem Ziehen eines Markers zoomen Mausrad und +/− um genau
+  // diesen Punkt statt um Mauszeiger bzw. Kartenmitte — der frisch gesetzte Pin
+  // bleibt an seiner Bildschirmstelle stehen, der User kann ihn reinzoomen und
+  // nachjustieren, ohne ihn zu suchen. Der Anker fällt weg, sobald der User die
+  // Karte selbst verschiebt oder in die Karte klickt (dann gilt wieder das
+  // normale Verhalten). Eingehängt über Leaflets Wheel-Handler (`_lastMousePos`
+  // ist der Zoompunkt von `_performZoom`) und die Instanz-Methoden zoomIn/Out.
+  _installZoomAnchor() {
+    const map = this._map;
+    this._zoomAnchor = null;
+    const anchorPoint = () => {
+      const a = this._zoomAnchor;
+      if (!a) return null;
+      // Anker ausserhalb des sichtbaren Ausschnitts → nicht mehr sinnvoll.
+      if (!map.getBounds().contains(a)) { this._zoomAnchor = null; return null; }
+      return a;
+    };
+    const wheel = map.scrollWheelZoom;
+    if (wheel && typeof wheel._performZoom === 'function') {
+      const perform = wheel._performZoom;
+      wheel._performZoom = function () {
+        const a = anchorPoint();
+        if (a) this._lastMousePos = map.latLngToContainerPoint(a);
+        return perform.call(this);
+      };
+    }
+    const zoomBy = (orig, sign) => function (delta, options) {
+      const a = anchorPoint();
+      if (!a) return orig.call(map, delta, options);
+      const d = delta || (window.L.Browser.any3d ? map.options.zoomDelta : 1);
+      return map.setZoomAround(a, map.getZoom() + sign * d, options);
+    };
+    map.zoomIn = zoomBy(map.zoomIn, 1);
+    map.zoomOut = zoomBy(map.zoomOut, -1);
+    map.on('dragstart click', () => { this._zoomAnchor = null; });
+  },
+
   // `fit` nur beim Erstaufbau / Filterwechsel / Batch-Geocode (zeigt bewusst den
   // ganzen Treffer-Satz). In-Place-Updates (Einzel-Drag, Einzel-Geocode, Georef
   // löschen, Undo/Redo) rendern mit fit=false → der vom User eingestellte Zoom/
@@ -140,31 +237,30 @@ export const orteMapMethods = {
     this._markerById = {};
     const pts = [];
     for (const o of this.orteMapped()) {
-      this._addOrtMarker(L, o, [o.lat, o.lng], false);
+      this._addOrtMarker(L, o, [o.lat, o.lng], 'located');
       pts.push([o.lat, o.lng]);
     }
-    // Verortete Marker einpassen → die Pixel-Mitte liefert danach den
-    // Ankerpunkt für die Orte ohne Georeferenz.
-    if (fit && pts.length) this._map.fitBounds(pts, { padding: [30, 30], maxZoom: 13 });
-    // Unverortete Orte als Raster UNTER der Kartenmitte verteilen (Pixel-Offsets,
-    // zoom-unabhängig). Niemals alle auf denselben Punkt stapeln: gestapelte
-    // draggable-Marker fangen den mousedown ab und blockieren das Map-Panning
-    // (die Kartenmitte ist genau der natürliche Greifpunkt zum Verschieben).
-    // Einmal vergebene Pin-Positionen je Ort cachen (_unlocatedLatLng), damit ein
-    // bereits platzierter Pin beim nächsten Render nicht wegspringt, nur weil ein
-    // anderer Ort verortet wurde — nur neue Orte bekommen einen frischen Slot.
-    // Unverortete Unterorte mit verortetem Elternort sitzen bei diesem (eigener,
-    // gestrichelter Pin, leicht versetzt, damit er den Eltern-Marker nicht verdeckt).
-    // Ziehen setzt wie bei jedem Pin eigene Koordinaten.
+    // Erst einpassen → die Pixel-Mitte liefert danach den Ankerpunkt für die
+    // Orte ohne Georeferenz.
+    if (fit) this._fitOrteView(pts);
+    // Unverortete Unterorte mit verortetem Elternort sitzen bei diesem: eigener,
+    // gestrichelter Pin, per iconAnchor um feste Pixel versetzt (zoomfest — ein
+    // Versatz in Koordinaten liefe beim Herauszoomen vom Elternort weg).
+    // Ganz unverortete Orte als Raster UNTER der Kartenmitte verteilen. Niemals
+    // alle auf denselben Punkt stapeln: gestapelte draggable-Marker fangen den
+    // mousedown ab und blockieren das Map-Panning (die Kartenmitte ist genau der
+    // natürliche Greifpunkt zum Verschieben). Vergebene Pin-Positionen je Ort
+    // cachen (_unlocatedLatLng), damit ein platzierter Pin nicht wegspringt, nur
+    // weil ein anderer Ort verortet wurde — nur neue Orte bekommen einen Slot.
     const unlocated = [];
-    let inheritedSlot = 0;
+    const slotsAt = new Map();
     for (const o of this.unlocatedOrte()) {
       const ll = this.inheritedLatLng(o);
       if (!ll) { unlocated.push(o); continue; }
-      const p = this._map.latLngToContainerPoint([ll.lat, ll.lng]);
-      const q = this._map.containerPointToLatLng([p.x + 14 + (inheritedSlot % 4) * 10, p.y + 14 + Math.floor(inheritedSlot / 4) * 10]);
-      inheritedSlot++;
-      this._addOrtMarker(L, o, [q.lat, q.lng], true, true);
+      const key = `${ll.lat},${ll.lng}`;
+      const slot = slotsAt.get(key) || 0;
+      slotsAt.set(key, slot + 1);
+      this._addOrtMarker(L, o, [ll.lat, ll.lng], 'inherited', inheritedPinOffset(slot));
     }
     if (unlocated.length) {
       const size = this._map.getSize();
@@ -182,71 +278,28 @@ export const orteMapMethods = {
           this._unlocatedLatLng[o.id] = ll;
           slot++;
         }
-        this._addOrtMarker(L, o, [ll.lat, ll.lng], true);
+        this._addOrtMarker(L, o, [ll.lat, ll.lng], 'unlocated');
       }
     }
   },
 
-  // --- Undo/Redo der Pin-Positionen (max 10 Schritte) ----------------------
-  // Eine Marker-Verschiebung legt die vorherige Position auf _geoUndoStack.
-  // Stacks halten Snapshots { id, lat, lng } (lat/lng=null = unverortet).
-
-  // Vorherige Position vor einer Verschiebung sichern. Neuer Zug verwirft den
-  // Redo-Stack (klassische Undo/Redo-Semantik); Stack auf 10 Einträge gekappt.
-  _pushGeoHistory(snap) {
-    this._geoUndoStack.push(snap);
-    if (this._geoUndoStack.length > 10) this._geoUndoStack.shift();
-    this._geoRedoStack = [];
-  },
-
-  // Snapshot anwenden: gespeicherte Koordinaten zurückschreiben + patchen + neu
-  // rendern. Schlägt der Patch fehl, Änderung verwerfen und den Gegen-Stack NICHT
-  // befüllen, damit Undo/Redo konsistent zum Serverstand bleiben.
-  async _applyGeoSnapshot(snap, counterStack) {
-    const app = window.__app;
-    const target = app.$store.catalog.orte.find(x => x.id === snap.id);
-    if (!target) return; // Ort gelöscht → Eintrag verfällt still
-    const cur = { id: snap.id, lat: target.lat, lng: target.lng };
-    target.lat = snap.lat;
-    target.lng = snap.lng;
-    const ok = await app.patchOrtCoords([{ id: snap.id, lat: snap.lat, lng: snap.lng }]);
-    if (!ok) {
-      target.lat = cur.lat;
-      target.lng = cur.lng;
-      this.setOrteMapStatus(app.t('orte.map.saveFailed'));
-      return;
-    }
-    counterStack.push(cur);
-    if (this.viewMode === 'map') {
-      const L = await loadLeaflet();
-      this._renderOrteMarkers(L, false);
-    }
-  },
-
-  async undoGeoMove() {
-    const snap = this._geoUndoStack.pop();
-    if (snap) await this._applyGeoSnapshot(snap, this._geoRedoStack);
-  },
-
-  async redoGeoMove() {
-    const snap = this._geoRedoStack.pop();
-    if (snap) await this._applyGeoSnapshot(snap, this._geoUndoStack);
-  },
-
-  // History leeren (Buchwechsel / View-Reset / Teardown).
-  _resetGeoHistory() {
-    this._geoUndoStack = [];
-    this._geoRedoStack = [];
-  },
-
-  // Einen Marker bauen + verdrahten. `unlocated` → roter Pin in der Kartenmitte
-  // (kein lat/lng am Ort); `inherited` → gestrichelter Pin beim Elternort.
-  // Dragend setzt echte Koordinaten → wird blau.
-  _addOrtMarker(L, o, latlng, unlocated, inherited = false) {
-    const opts = { draggable: true };
-    if (unlocated) {
-      const cls = inherited ? 'ort-marker-pin ort-marker-pin--inherited' : 'ort-marker-pin ort-marker-pin--unlocated';
-      opts.icon = L.divIcon({ className: cls, iconSize: [18, 18] });
+  // Einen Marker bauen + verdrahten. kind: 'located' (Standard-Marker),
+  // 'unlocated' (roter Pin in der Kartenmitte), 'inherited' (gestrichelter Pin
+  // beim Elternort, um `offset` Pixel versetzt). Ablegen speichert echte
+  // Koordinaten — beim versetzten Pin die Stelle, an der der Pin sichtbar liegt,
+  // nicht sein Anker; Längengrade auf die Hauptwelt umgerechnet (Welt-Kopien
+  // jenseits der Datumsgrenze liefern sonst lng > 180).
+  _addOrtMarker(L, o, latlng, kind, offset = null) {
+    // autoPan: zieht man einen Pin an den Kartenrand, schiebt die Karte mit.
+    const opts = { draggable: true, autoPan: true };
+    if (kind !== 'located') {
+      const [dx, dy] = offset || [0, 0];
+      opts.icon = L.divIcon({
+        className: `ort-marker-pin ort-marker-pin--${kind}`,
+        iconSize: [18, 18],
+        iconAnchor: [9 - dx, 9 - dy],
+        popupAnchor: [dx, dy - 9],
+      });
     }
     const marker = L.marker(latlng, opts);
     marker.bindPopup(this._buildPopupHtml(o), { minWidth: 160, maxWidth: 240, maxHeight: 300 });
@@ -255,31 +308,16 @@ export const orteMapMethods = {
     marker.on('popupopen', (e) => this._initPopupRefs(e.popup.getElement()));
     // Marker-Klick spiegelt die Selektion in die Locate-Liste (Cross-Highlight).
     marker.on('click', () => this._selectFromMap(o.id));
-    marker.on('dragend', async () => {
-      const ll = marker.getLatLng();
-      const app = window.__app;
-      const target = app.$store.catalog.orte.find(x => x.id === o.id);
-      if (!target) return;
-      const prev = { lat: target.lat, lng: target.lng };
-      // Vorherige Position auf den Undo-Stack legen, BEVOR sie überschrieben
-      // wird (bei „unlocated" Pins lat/lng=null → Undo macht ihn wieder rot).
-      this._pushGeoHistory({ id: o.id, lat: prev.lat, lng: prev.lng });
-      target.lat = ll.lat;
-      target.lng = ll.lng;
-      const ok = await app.patchOrtCoords([{ id: o.id, lat: ll.lat, lng: ll.lng }]);
-      if (!ok) {
-        // Patch fehlgeschlagen → Position + History-Eintrag zurücknehmen, Marker
-        // an die alte Stelle zurücksetzen (Re-Render bewahrt den Viewport).
-        this._geoUndoStack.pop();
-        target.lat = prev.lat;
-        target.lng = prev.lng;
-        this.setOrteMapStatus(app.t('orte.map.saveFailed'));
-        this._renderOrteMarkers(L, false);
-        return;
+    marker.on('dragend', () => {
+      let ll = marker.getLatLng();
+      if (offset && this._map) {
+        const p = this._map.latLngToContainerPoint(ll);
+        ll = this._map.containerPointToLatLng([p.x + offset[0], p.y + offset[1]]);
       }
-      // War der Pin „unlocated" (rot), wird er durch das Speichern verortet →
-      // neu rendern, damit er als regulärer (blauer) Marker erscheint.
-      if (unlocated) this._renderOrteMarkers(L, false);
+      // Zoom-Anker vor wrap(): die sichtbare Stelle in der aktuellen Welt-Kopie.
+      this._zoomAnchor = L.latLng(ll.lat, ll.lng);
+      ll = ll.wrap();
+      this._onMarkerDropped(o.id, ll.lat, ll.lng);
     });
     marker.addTo(this._markers);
     this._markerById[o.id] = marker;
@@ -288,7 +326,7 @@ export const orteMapMethods = {
     // Zweck ist gerade, vom User platziert zu werden. Marker werden bewusst
     // immer mit draggable:true erzeugt, damit der Drag-Handler existiert und
     // sich später per disable()/enable() umschalten lässt.
-    if (!unlocated && this.geoLocked) marker.dragging?.disable();
+    if (kind === 'located' && this.geoLocked) marker.dragging?.disable();
   },
 
   // Lock-Sperre umschalten: schützt verortete Marker vor versehentlichem
@@ -350,6 +388,8 @@ export const orteMapMethods = {
     if (o.erste_erwaehnung && o.erste_erwaehnung_page_id) {
       h += `<div class="entity-refs ort-popup__row">${ref({ type: 'seite', id: Number(o.erste_erwaehnung_page_id), name: o.erste_erwaehnung })}</div>`;
     }
+    // Klick-Platzieren (orte-map-place.js; Klick per Delegation in _installMapPlace).
+    h += `<div class="ort-popup__actions"><button type="button" class="btn-compact" data-place-ort="${esc(o.id)}">${esc(app.t('orte.map.place'))}</button></div>`;
     return h + `</div>`;
   },
 
@@ -365,7 +405,10 @@ export const orteMapMethods = {
     this.highlightOrtId = id;
   },
 
-  // Locate-Row-Hover → Marker zentrieren + Popup öffnen (Gegenrichtung).
+  // Klick auf einen Ortsnamen der Locate-Liste → Marker zentrieren + Popup
+  // öffnen (Gegenrichtung). Auch rote und erbende Pins — die Liste zeigt, wo sie
+  // liegen. Bewusst Klick statt Hover: Überfahren der Liste schwenkte sonst die
+  // Karte bei jeder Zeile.
   focusMapMarker(id) {
     this.highlightOrtId = id;
     const marker = this._markerById?.[id];
@@ -374,168 +417,13 @@ export const orteMapMethods = {
     marker.openPopup();
   },
 
-  // Orte ohne Koordinaten (im aktuellen Filter) — Quelle für Batch-Geocode + Zähler.
-  unlocatedOrte() {
-    return this.orteFiltered.filter(o => o.lat == null || o.lng == null);
-  },
-
-  // KI-first-Verortung für eine Liste von Orten. Der Server normalisiert jedes
-  // Label zuerst auf eine präzise reale Anfrage („Badi Olten" → „Olten") und
-  // geocodet sie dann — verhindert, dass der tolerante Geocoder das rohe Label
-  // auf einen falschen Treffer (z.B. in DE) zieht. Resolved → Set der ids mit
-  // Treffer. Koordinaten (und geo_query/geo_land) persistiert der Job selbst;
-  // hier werden sie nur in-memory gespiegelt. Misses bleiben unverortet (roter
-  // Pin, User schiebt zurecht).
-  async _geocodeViaAI(items) {
-    const app = window.__app;
-    const hitIds = new Set();
-    if (!items.length || !Alpine.store('nav').selectedBookId) return hitIds;
-    let resp;
-    try {
-      resp = await fetchJson('/jobs/geocode-resolve', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          book_id: Alpine.store('nav').selectedBookId,
-          items: items.map(o => ({ id: o.id, name: (o.name || '').trim() })),
-        }),
-      });
-    } catch (e) { console.error('[geocodeViaAI]', e); return hitIds; }
-    if (!resp?.jobId) return hitIds;
-
-    const results = await new Promise((resolve) => {
-      startPoll(this, {
-        timerProp: '_geocodeJobTimer',
-        jobId: resp.jobId,
-        onDone: (job) => resolve(Array.isArray(job?.result?.results) ? job.result.results : []),
-        onError: () => resolve([]),
-        onNotFound: () => resolve([]),
-      });
-    });
-
-    // Der Job hat lat/lng + geo_query/geo_land bereits serverseitig persistiert.
-    // Hier nur die In-Memory-Orte spiegeln (Marker/Popup ohne Reload korrekt).
-    for (const r of results) {
-      if (!r || r.lat == null || r.lng == null) continue;
-      const t = app.$store.catalog.orte.find(x => x.id === r.id);
-      if (t) {
-        t.lat = r.lat;
-        t.lng = r.lng;
-        t.geo_query = r.ort || null;
-        t.geo_land = r.land || null;
-      }
-      hitIds.add(r.id);
-    }
-    return hitIds;
-  },
-
-  // Einen Ort verorten (KI-first): das Label wird serverseitig auf eine präzise
-  // reale Anfrage normalisiert und dann geocodet. Bleibt der Ort danach
-  // unverortet (rein fiktiv / kein Treffer), zeigt der Render-Pfad einen roten
-  // Pin in der Kartenmitte (User korrigiert per Drag).
-  async geocodeOrt(o) {
-    if (this.geocodingId || this.geocodingAll) return;
-    const app = window.__app;
-    this.geocodingId = o.id;
-    this.setOrteMapStatus(app.t('orte.map.aiResolving', { name: o.name }), true);
-    try {
-      const hit = (await this._geocodeViaAI([o])).has(o.id);
-      this.setOrteMapStatus(app.t(hit ? 'orte.map.geocoded' : 'orte.map.unresolved', { name: o.name }));
-      if (this.viewMode === 'map') {
-        const L = await loadLeaflet();
-        this._renderOrteMarkers(L, false);
-        // Treffer → auf die neue Position zoomen. Kein Treffer → der rote
-        // Mitte-Pin liegt bereits sichtbar in der Kartenmitte, kein setView.
-        const target = app.$store.catalog.orte.find(x => x.id === o.id);
-        if (hit && target) this._map?.setView([target.lat, target.lng], Math.max(this._map.getZoom(), 6));
-      }
-    } catch (e) {
-      console.error('[geocodeOrt]', e);
-    } finally {
-      this.geocodingId = null;
-    }
-  },
-
-  // Batch (KI-first): alle gefilterten Orte ohne Koordinaten gehen in EINEN
-  // KI-Job, der jedes Label normalisiert + geocodet. Rest bleibt unverortet.
-  async geocodeAllUnlocated() {
-    if (this.geocodingId || this.geocodingAll) return;
-    const app = window.__app;
-    const todo = this.unlocatedOrte();
-    if (!todo.length) return;
-    this.geocodingAll = true;
-    this.setOrteMapStatus(app.t('orte.map.batchAi', { n: todo.length }), true);
-    try {
-      const hits = (await this._geocodeViaAI(todo)).size;
-      if (this.viewMode === 'map') {
-        const L = await loadLeaflet();
-        // Batch: fit=true zeigt bewusst den ganzen frisch verorteten Satz.
-        this._renderOrteMarkers(L, true);
-      }
-      this.setOrteMapStatus(app.t('orte.map.batchDone', { hits, total: todo.length }));
-    } finally {
-      this.geocodingAll = false;
-    }
-  },
-
-  // Falsch gesetzte Georeferenz löschen — Schauplatz bleibt, nur lat/lng raus.
-  // Marker verschwindet, Ort wird wieder geocodierbar.
-  async clearGeoref(o) {
-    const app = window.__app;
-    const target = app.$store.catalog.orte.find(x => x.id === o.id);
-    if (!target || (target.lat == null && target.lng == null)) return;
-    const prev = { lat: target.lat, lng: target.lng };
-    target.lat = null;
-    target.lng = null;
-    const ok = await app.patchOrtCoords([{ id: o.id, lat: null, lng: null }]);
-    if (!ok) {
-      target.lat = prev.lat;
-      target.lng = prev.lng;
-      this.setOrteMapStatus(app.t('orte.map.saveFailed'));
-      return;
-    }
-    this.setOrteMapStatus(app.t('orte.map.georefCleared', { name: o.name }));
-    if (this.viewMode === 'map') {
-      const L = await loadLeaflet();
-      this._renderOrteMarkers(L, false);
-    }
-  },
-
-  // Alle Georeferenzen des Buchs auf einmal entfernen (lat/lng raus, Schauplätze
-  // bleiben). Operiert auf allen Orten, nicht nur dem aktuellen Filter. Marker
-  // verschwinden, alles wird wieder geocodierbar. Destruktiv → Bestätigung.
-  async clearAllGeorefs() {
-    if (this.geocodingId || this.geocodingAll) return;
-    const app = window.__app;
-    const located = app.$store.catalog.orte.filter(o => o.lat != null || o.lng != null);
-    if (!located.length) return;
-    const ok = await app.appConfirm({
-      message: app.t('orte.map.clearAllConfirm', { n: located.length }),
-      confirmLabel: app.t('orte.map.clearAll'),
-      danger: true,
-    });
-    if (!ok) return;
-    const prev = located.map(o => ({ id: o.id, lat: o.lat, lng: o.lng }));
-    for (const o of located) { o.lat = null; o.lng = null; }
-    const saved = await app.patchOrtCoords(located.map(o => ({ id: o.id, lat: null, lng: null })));
-    if (!saved) {
-      for (const p of prev) {
-        const t = app.$store.catalog.orte.find(x => x.id === p.id);
-        if (t) { t.lat = p.lat; t.lng = p.lng; }
-      }
-      this.setOrteMapStatus(app.t('orte.map.saveFailed'));
-      return;
-    }
-    this.setOrteMapStatus(app.t('orte.map.allGeorefsCleared', { n: located.length }));
-    if (this.viewMode === 'map') {
-      const L = await loadLeaflet();
-      this._renderOrteMarkers(L, false);
-    }
-  },
-
   _teardownMap() {
+    // Laufende KI-Verortung loslassen (ihr Poll-Timer räumt der Lifecycle ab).
+    this._geocodeCancel?.();
+    this._teardownMapPlace();
     this._resetGeoHistory();
     this._unlocatedLatLng = {};
+    this._zoomAnchor = null;
     this._gridRowsCache = null;
     clearTimeout(this._orteMapStatusTimer);
     if (this._map) {
@@ -547,6 +435,11 @@ export const orteMapMethods = {
       this._map = null;
       this._markers = null;
       this._markerById = {};
+      this._tileLayer = null;
+      this._tileUrl = null;
     }
   },
+
+  ...orteMapEditMethods,
+  ...orteMapPlaceMethods,
 };

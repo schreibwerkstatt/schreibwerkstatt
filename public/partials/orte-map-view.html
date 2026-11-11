@@ -1,16 +1,37 @@
 <!-- Geo-Karte (View-Mode 'map'): Marker je verorteter Schauplatz + Geocode-Liste.
      Fragment-Include von orte.html, Scope `orteCard`, Logik in book/orte-map.js.
      Unverortete Unterorte erben die Position ihres Elternorts (Marker gestrichelt). -->
-<div x-show="$store.catalog.orte.length > 0 && viewMode === 'map'" class="ort-map-view" x-cloak>
+<div x-show="$store.catalog.orte.length > 0 && viewMode === 'map'" class="ort-map-view" x-cloak
+     @keydown="onOrteMapKeydown($event)">
   <div class="ort-map-actions">
+    <!-- Ortssuche: verschiebt nur den Ausschnitt (orte-map-place.js#runMapSearch). -->
+    <span class="ort-map-search">
+      <input type="text" class="ort-map-search-input" x-model="mapSearchQuery"
+             @keydown.enter="$enter($event, () => runMapSearch())"
+             @keydown.escape.stop="clearMapSearch()"
+             :placeholder="$app.t('orte.map.search.placeholder')"
+             :aria-label="$app.t('orte.map.search.label')">
+      <button type="button" class="icon-btn" :disabled="!mapSearchQuery.trim() || mapSearchBusy"
+              @click="runMapSearch()"
+              :data-tip="$app.t('orte.map.search.label')" :aria-label="$app.t('orte.map.search.label')">
+        <svg class="icon" aria-hidden="true"><use href="/icons.svg#search"/></svg>
+      </button>
+    </span>
+    <button type="button" class="icon-btn" x-show="hasSatelliteLayer()"
+            :aria-pressed="mapLayer === 'satellite'"
+            @click="toggleMapLayer()"
+            :data-tip="$app.t(mapLayer === 'satellite' ? 'orte.map.layer.toMap' : 'orte.map.layer.toSatellite')"
+            :aria-label="$app.t(mapLayer === 'satellite' ? 'orte.map.layer.toMap' : 'orte.map.layer.toSatellite')">
+      <svg class="icon" aria-hidden="true"><use href="/icons.svg#image"/></svg>
+    </button>
     <button type="button" class="icon-btn"
-            :disabled="_geoUndoStack.length === 0"
+            :disabled="_geoUndoStack.length === 0 || geoHistoryBusy"
             @click="undoGeoMove()"
             :data-tip="$app.t('orte.map.undoTip')" :aria-label="$app.t('orte.map.undo')">
       <svg class="icon" aria-hidden="true"><use href="/icons.svg#undo"/></svg>
     </button>
     <button type="button" class="icon-btn"
-            :disabled="_geoRedoStack.length === 0"
+            :disabled="_geoRedoStack.length === 0 || geoHistoryBusy"
             @click="redoGeoMove()"
             :data-tip="$app.t('orte.map.redoTip')" :aria-label="$app.t('orte.map.redo')">
       <svg class="icon" aria-hidden="true"><use href="/icons.svg#redo"/></svg>
@@ -22,6 +43,19 @@
             :aria-label="$app.t(geoLocked ? 'orte.map.unlock' : 'orte.map.lock')">
       <svg class="icon" aria-hidden="true"><use :href="(geoLocked ? '/icons.svg#lock' : '/icons.svg#lock-open')"/></svg>
     </button>
+  </div>
+  <div x-show="mapSearchResults && mapSearchResults.length === 0" class="muted-msg muted-msg--sm"
+       x-text="$app.t('orte.map.search.noResults')"></div>
+  <div x-show="mapSearchResults && mapSearchResults.length > 1" class="ort-map-search-results">
+    <template x-for="(r, i) in (mapSearchResults || [])" :key="i">
+      <button type="button" class="btn-compact"
+              :aria-pressed="mapSearchActive === r"
+              @click="pickMapSearchResult(r)" x-text="r.displayName"></button>
+    </template>
+  </div>
+  <div x-show="placingOrtId != null" class="ort-map-placing-bar" role="status">
+    <span x-text="$app.t('orte.map.placing', { name: placingOrtName() })"></span>
+    <button type="button" class="btn-compact" @click="cancelPlaceOrt()" x-text="$app.t('common.cancel')"></button>
   </div>
   <div x-ref="orteMapEl" class="ort-map" role="application" :aria-label="$app.t('orte.map.tab')"></div>
   <p class="card-hint card-hint--sm" x-text="$app.t(geoLocked ? 'orte.map.lockedHint' : 'orte.map.dragHint')"></p>
@@ -35,20 +69,26 @@
             x-text="geocodingAll ? $app.t('orte.map.geocoding') : $app.t('orte.map.geocodeAll')"></button>
   </div>
   <div x-show="orteMapStatus" class="card-status" x-text="orteMapStatus"></div>
-  <!-- Nur die Locate-Liste per x-if (läuft über alle Orte): der Leaflet-Container
-       oben bleibt per x-show stehen, die Karten-Instanz hängt an ihm. -->
+  <!-- Nur die Locate-Liste per x-if: der Leaflet-Container oben bleibt per x-show
+       stehen, die Karten-Instanz hängt an ihm. Die Liste rendert schrittweise
+       (list-window.js, dasselbe Fenster wie die Listenansicht). -->
   <template x-if="viewMode === 'map'">
   <div class="ort-map-locate-list">
-    <template x-for="o in orteFiltered" :key="o.id">
+    <template x-for="o in listWindowed(orteFiltered)" :key="o.id">
       <div class="ort-map-locate-row" :data-ortid="o.id"
            :class="{ 'ort-map-locate-row--active': highlightOrtId === o.id }"
-           :style="{ '--ort-depth': ortDepth(o.id) }"
-           @mouseenter="if (o.lat != null && o.lng != null) focusMapMarker(o.id)">
+           :style="{ '--ort-depth': ortDepth(o.id) }">
         <span class="tag entity-typ-tag" x-text="ortTypLabel(o.typ)"></span>
-        <span class="ort-map-locate-name" x-text="o.name"></span>
+        <span class="ort-map-locate-name internal-link text-link" @click="focusMapMarker(o.id)"
+              :data-tip="$app.t('orte.map.showOnMap')" x-text="o.name"></span>
         <span x-show="o.lat != null && o.lng != null" class="ort-map-located" x-text="$app.t('orte.map.located')"></span>
         <span x-show="(o.lat == null || o.lng == null) && inheritedLatLng(o)" class="ort-map-located ort-map-located--inherited"
               :data-tip="$app.t('orte.map.inheritedTip')" x-text="$app.t('orte.map.inherited')"></span>
+        <button type="button" class="btn-compact"
+                :aria-pressed="placingOrtId === o.id"
+                @click="placingOrtId === o.id ? cancelPlaceOrt() : startPlaceOrt(o.id)"
+                :data-tip="$app.t('orte.map.placeTip')"
+                x-text="$app.t(placingOrtId === o.id ? 'common.cancel' : 'orte.map.place')"></button>
         <button type="button" class="btn-compact"
                 :disabled="geocodingId === o.id || geocodingAll || (o.lat != null && o.lng != null)"
                 @click="geocodeOrt(o)"
@@ -60,6 +100,10 @@
                 x-text="$app.t('orte.map.clearGeoref')"></button>
       </div>
     </template>
+    <button type="button" class="btn-compact list-window-more"
+            x-show="listWindowRest(orteFiltered) > 0" x-cloak
+            x-list-more="listWindowMore()" @click="listWindowMore()"
+            x-text="$app.t('common.showMore', { n: listWindowRest(orteFiltered) })"></button>
   </div>
   </template>
   <div class="ort-map-footer" x-show="$store.catalog.orte.some(o => o.lat != null && o.lng != null)">

@@ -249,7 +249,7 @@ test('Seiten-Chat: Ideen-Vorschlag am Kapitel erfassen', async ({ page }) => {
 
     const idee = page.locator('#chat-card .chat-idee-vorschlaege .chat-vorschlag');
     await expect(idee.locator('.chat-idee-anchor .entity-ref')).toBeVisible();
-    await expect(idee.locator('.chat-idee-anchor .muted-msg')).toHaveText(/Kapitel|chapter/);
+    await expect(idee.locator('.chat-idee-anchor > span')).toHaveText(/Kapitel|chapter/);
     await idee.getByRole('button', { name: /Als Idee erfassen|Note as idea/ }).click();
     await expect(idee).toHaveClass(/chat-vorschlag--applied/);
     created = await page.evaluate(async (cid) => (await (await fetch('/ideen?chapter_id=' + cid)).json()), chapterId);

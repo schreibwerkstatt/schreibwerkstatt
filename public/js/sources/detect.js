@@ -163,7 +163,7 @@ export const sourcesDetectMethods = {
 
   gotoDetected(v) {
     if (v?.page_id == null) return;
-    window.__app.gotoPageById(v.page_id);
+    window.__app.gotoPageById(v.page_id, { snippet: v.erwaehnung || '' });
   },
 
   /** Das Werk liegt schon im Pool, aber in einer anderen Arbeit: nur die

@@ -192,6 +192,7 @@
 .card-form-row .combobox-wrap--compact .combobox-trigger {
   padding: var(--size-default-padding-y) var(--space-10);
   font-size: var(--font-size-base);
+  line-height: normal;
   background: var(--color-surface);
   border-width: 1px;
   border-color: var(--color-border-input);

@@ -87,3 +87,11 @@ test('sortRows: numeric:true Collator sortiert "item2" vor "item10"', () => {
   const out = sortRows(rows, 'k', 'asc');
   assert.deepEqual(out.map((r) => r.k), ['item1', 'item2', 'item10']);
 });
+
+test('windowRows: kürzt auf das Fenster, kurze Listen bleiben dieselbe Referenz', async () => {
+  const { windowRows } = await import('../../public/js/sortable-table.js');
+  const rows = Array.from({ length: 5 }, (_, i) => ({ i }));
+  assert.deepEqual(windowRows(rows, 3).map(r => r.i), [0, 1, 2]);
+  assert.equal(windowRows(rows, 5), rows);
+  assert.equal(windowRows(rows, 10), rows);
+});

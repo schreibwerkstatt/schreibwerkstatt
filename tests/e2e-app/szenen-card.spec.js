@@ -28,7 +28,12 @@ function mockSzenen(ch1, ch2) {
     { id: 31, chapter_id: ch2.id, kapitel: ch2.name, page_id: p2, seite: 'S2', titel: 'Heimkehr', wertung: 'schwach', kommentar: 'Kein Konflikt.', fig_ids: [], ort_ids: [] },
     // Gleiche Seite: «Zebra» steht im Text VOR «Ankunft».
     { id: 11, chapter_id: ch1.id, kapitel: ch1.name, page_id: p1, seite: 'S1', titel: 'Zebra', wertung: 'stark', kommentar: 'Traegt das Tempo.', fig_ids: [], ort_ids: [] },
-    { id: 12, chapter_id: ch1.id, kapitel: ch1.name, page_id: p1, seite: 'S1', titel: 'Ankunft', wertung: 'mittel', kommentar: 'Der Dialog zieht sich.', fig_ids: [], ort_ids: [] },
+    { id: 12, chapter_id: ch1.id, kapitel: ch1.name, page_id: p1, seite: 'S1', titel: 'Ankunft', wertung: 'mittel', kommentar: 'Der Dialog zieht sich.', fig_ids: [], ort_ids: [],
+      text_geaendert: true,
+      lektorat: { checked_at: '2026-11-05T09:00:00.000Z', szenen: [
+        { titel: 'Bahnsteig', wertung: 'stark', kommentar: 'Jetzt mit Konflikt.' },
+        { titel: 'Taxi', wertung: 'schwach', kommentar: null },
+      ] } },
     { id: 99, chapter_id: ch1.id, kapitel: ch1.name, page_id: p1, seite: 'S1', titel: 'Verschwunden', wertung: 'stark', kommentar: '', fig_ids: [], ort_ids: [], stale: true },
   ];
 }
@@ -121,4 +126,28 @@ test('Szenen: stale-Szenen gesammelt loeschen', async ({ page }) => {
   expect(deleted).toBe(true);
 
   guard.assertClean('Szenen-Karte: Sammel-Loeschen');
+});
+
+test('Szenen-Detail: Lektorat-Wertung des Abschnitts + «Text geändert»', async ({ page }) => {
+  const guard = attachConsoleGuard(page);
+  const { card } = await openWithScenes(page);
+  const row = card.locator('.entity-row', { hasText: 'Ankunft' });
+  await expect(row.locator('.tag:not(.tag--stale)')).toBeVisible();
+  // Ohne Flag kein Hinweis.
+  await expect(card.locator('.entity-row', { hasText: 'Zebra' }).locator('.tag:not(.tag--stale)')).toBeHidden();
+
+  await row.click();
+  const block = card.locator('.szenen-lektorat:visible');
+  await expect(block).toHaveCount(1);
+  await expect(block.locator('.szenen-lektorat-item')).toHaveCount(2);
+  await expect(block.locator('.szenen-lektorat-item').first().locator('.severity-tag--stark')).toBeVisible();
+  await expect(block.locator('.szenen-lektorat-item').nth(1).locator('.severity-tag--schwach')).toBeVisible();
+  await expect(block.locator('.szenen-lektorat-kommentar').first()).toHaveText('Jetzt mit Konflikt.');
+  // Zwei Lektorat-Szenen → Hinweis, dass sie dem ganzen Abschnitt gelten.
+  await expect(block.locator('.card-hint')).toBeVisible();
+
+  // Szene ohne Lektorat: kein Block.
+  await card.locator('.entity-row', { hasText: 'Zebra' }).click();
+  await expect(card.locator('.szenen-lektorat:visible')).toHaveCount(0);
+  guard.assertClean('Szenen-Karte: Lektorat');
 });

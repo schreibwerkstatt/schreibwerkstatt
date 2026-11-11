@@ -211,6 +211,7 @@
   <link rel="stylesheet" href="css/chat.css">
   <link rel="stylesheet" href="css/components/chat-history-search.css">
   <link rel="stylesheet" href="css/components/chat-tool-log.css">
+  <link rel="stylesheet" href="css/components/chat-vorschlag.css">
   <link rel="stylesheet" href="css/search.css">
   <link rel="stylesheet" href="css/tokens-est.css">
   <!-- safari-fallback muss spät: Override-Wirkung via @supports not -->
@@ -527,7 +528,7 @@
               <div class="today-ring-week" role="img" :aria-label="t('todayRing.week')">
                 <template x-for="bar in headerWeekBars()" :key="bar.iso">
                   <span class="today-ring-week-col">
-                    <span class="today-ring-week-track">
+                    <span class="today-ring-week-track" :style="{ '--goal': bar.goalPct + '%' }">
                       <span class="today-ring-week-bar"
                             :class="{ 'today-ring-week-bar--today': bar.isToday, 'today-ring-week-bar--reached': bar.reached }"
                             :style="{ '--bar': Math.max(bar.chars > 0 ? 10 : 3, bar.pct) + '%' }"

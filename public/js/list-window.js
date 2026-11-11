@@ -1,5 +1,6 @@
 // Liste schrittweise rendern — der eine Baustein für Karten-Listen, die bei
-// grossen Büchern tausend Zeilen tragen (Ereignisse, Schauplätze).
+// grossen Büchern tausend Zeilen tragen (Ereignisse, Schauplätze). Tabellen über
+// `sortableTable` bekommen dasselbe Fenster ohne eigenes Zutun (sortable-table.js).
 //
 // Eine Zeile mit Entitäts-Referenzen, Badges und Bindings kostet Alpine einige
 // Millisekunden; tausend davon blockieren beim Öffnen der Karte Sekunden lang den
@@ -68,21 +69,28 @@ export const listWindowMethods = {
 // damit beim zügigen Scrollen keine Lücke aufgeht.
 const ROOT_MARGIN = '0px 0px 800px 0px';
 
+// Ruft `fn`, sobald `el` in den Vorlauf vor dem Sichtfeld kommt, und erneut,
+// solange es nach dem Nachladen dort steht. Liefert die Aufräum-Funktion.
+// Geteilt von `x-list-more` und der Tabellen-Fusszeile in sortable-table.js.
+export function observeListMore(el, fn) {
+  if (typeof IntersectionObserver === 'undefined') return () => {};
+  let frame = 0;
+  const io = new IntersectionObserver((entries) => {
+    if (!entries.some(e => e.isIntersecting)) return;
+    fn();
+    // Steht der Knopf nach dem Nachladen noch im Vorlauf (kurze Zeilen), meldet
+    // der Observer keinen neuen Wechsel — neu beobachten erzwingt eine Meldung.
+    cancelAnimationFrame(frame);
+    frame = requestAnimationFrame(() => { io.unobserve(el); io.observe(el); });
+  }, { rootMargin: ROOT_MARGIN });
+  io.observe(el);
+  return () => { cancelAnimationFrame(frame); io.disconnect(); };
+}
+
 export function registerListWindow() {
   if (typeof window === 'undefined' || !window.Alpine) return;
   window.Alpine.directive('list-more', (el, { expression }, { evaluateLater, cleanup }) => {
-    if (typeof IntersectionObserver === 'undefined') return;
     const more = evaluateLater(expression);
-    let frame = 0;
-    const io = new IntersectionObserver((entries) => {
-      if (!entries.some(e => e.isIntersecting)) return;
-      more();
-      // Steht der Knopf nach dem Nachladen noch im Vorlauf (kurze Zeilen), meldet
-      // der Observer keinen neuen Wechsel — neu beobachten erzwingt eine Meldung.
-      cancelAnimationFrame(frame);
-      frame = requestAnimationFrame(() => { io.unobserve(el); io.observe(el); });
-    }, { rootMargin: ROOT_MARGIN });
-    io.observe(el);
-    cleanup(() => { cancelAnimationFrame(frame); io.disconnect(); });
+    cleanup(observeListMore(el, () => more()));
   });
 }

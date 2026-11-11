@@ -12,6 +12,7 @@
 let _visPromise = null;
 let _chartPromise = null;
 let _jsMindPromise = null;
+let _jsMindDragPromise = null;
 let _sortablePromise = null;
 let _diffPromise = null;
 let _leafletPromise = null;
@@ -102,11 +103,23 @@ export function loadJsMind() {
     // figur-werkstatt.css ueberschreibt es — darum vor das App-CSS.
     _jsMindPromise = Promise.all([
       _ensureCssFirst('vendor/jsmind-0.9.1.css'),
-      _loadGlobal('vendor/jsmind-0.9.1.js', () => window.jsMind, 'jsMind'),
-    ]).then(([, jm]) => jm)
+      // Das Drag-Plugin muss vor dem ersten `new jsMind()` registriert sein.
+      _loadGlobal('vendor/jsmind-0.9.1.js', () => window.jsMind, 'jsMind').then(loadJsMindDraggable),
+    ]).then(() => window.jsMind)
       .catch(err => { _jsMindPromise = null; throw err; });
   }
   return _jsMindPromise;
+}
+
+// Drag-Plugin der Mindmap (Knoten umhängen). UMD, registriert sich am
+// globalen jsMind — darum nur nach dem Kern, aus loadJsMind.
+export function loadJsMindDraggable() {
+  if (window.jsMindDraggableNode) return Promise.resolve(window.jsMindDraggableNode);
+  if (!_jsMindDragPromise) {
+    _jsMindDragPromise = _loadGlobal('vendor/jsmind-0.9.1.draggable-node.js', () => window.jsMindDraggableNode, 'jsMind-draggable-node')
+      .catch(err => { _jsMindDragPromise = null; throw err; });
+  }
+  return _jsMindDragPromise;
 }
 
 export function loadSortable() {

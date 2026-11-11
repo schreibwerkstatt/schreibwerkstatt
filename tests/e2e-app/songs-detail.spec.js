@@ -81,3 +81,30 @@ test('Songs: Sprung auf einen Song öffnet die geschlossene Karte, leert Filter 
   await expect(card.locator('.entity-detail').filter({ hasText: 'Beschreibung Beta' })).toBeVisible();
   expect(await page.evaluate(() => window.Alpine.store('catalogUi').songsFilters.suche)).toBe('');
 });
+
+// Die Liste rendert schrittweise (list-window.js): erst ein Fenster, der Rest über
+// «Weitere anzeigen». Ein Sprung auf einen Song hinter dem Fenster (Deep-Link,
+// Palette, Verweis) zieht das Fenster mit, sonst stünde die Zeile nicht im DOM.
+test('Songs: Liste schrittweise, Sprung hinter das Fenster deckt die Zeile auf', async ({ page }) => {
+  await bootApp(page);
+  const bookId = await selectSeededBook(page);
+  const N = 200;
+  const pad = (i) => String(i).padStart(3, '0');
+  await page.route(`**/songs/${bookId}`, route => route.fulfill({
+    status: 200, contentType: 'application/json',
+    body: JSON.stringify({
+      updated_at: '2026-01-01T00:00:00.000Z',
+      songs: Array.from({ length: N }, (_, i) => ({ id: `song_${pad(i)}`, titel: `Song ${pad(i)}`, kapitel: [], figuren: [] })),
+    }),
+  }));
+  await page.evaluate(() => window.__app.toggleSongsCard());
+  const card = page.locator('.card--songs');
+  const rows = card.locator('.song-list .entity-row');
+  const step = await page.evaluate(() => Alpine.$data(document.querySelector('.card--songs')).listWindowStep);
+  await expect(rows).toHaveCount(step);
+  await expect(card.locator('.list-window-more:visible')).toHaveCount(1);
+
+  const target = `song_${pad(N - 1)}`;
+  await page.evaluate((id) => { Alpine.store('catalogUi').selectedSongId = id; }, target);
+  await expect(card.locator(`.entity-row[data-song-id="${target}"]`)).toHaveCount(1);
+});

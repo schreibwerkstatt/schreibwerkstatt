@@ -133,22 +133,30 @@ function clampDay(dayDelta, iso) {
 
 // Letzte `days` Kalendertage (aeltester zuerst) als Balken-Daten fuer das
 // Header-Popover. Heute-Balken = Live-Delta, deckt sich mit dem Donut.
+//
+// Skala = max(Ziel, bester Tag im Fenster): `pct` ist die Balkenhoehe relativ
+// dazu, `goalPct` die Hoehe der Ziel-Linie. Gegen das Ziel gekappt waeren alle
+// Tage ueber dem Ziel gleich hoch — wer es regelmaessig uebertrifft, saehe nur
+// volle Balken. Ob ein Tag das Ziel erreicht, sagt `reached` (Farbe) und die
+// Ziel-Linie, nicht die Hoehe.
 export function computeWeekBars({ stats = [], tokEsts = {}, days = 7, goalChars = CHARS_PER_NORMSEITE, todayIso = localIsoDate(), pages } = {}) {
   const goal = Math.max(1, Number(goalChars) || CHARS_PER_NORMSEITE);
   const dayDelta = makeDayDelta({ stats, tokEsts, todayIso, pages });
-  const out = [];
+  const rows = [];
   for (let i = days - 1; i >= 0; i--) {
     const iso = isoMinusDays(todayIso, i);
-    const chars = clampDay(dayDelta, iso);
-    out.push({
-      iso,
-      chars,
-      pct: Math.max(0, Math.min(100, Math.round((chars / goal) * 100))),
-      reached: chars >= goal,
-      isToday: iso === todayIso,
-    });
+    rows.push({ iso, chars: clampDay(dayDelta, iso) });
   }
-  return out;
+  const scale = Math.max(goal, ...rows.map(r => r.chars));
+  const goalPct = Math.round((goal / scale) * 100);
+  return rows.map(({ iso, chars }) => ({
+    iso,
+    chars,
+    pct: Math.round((chars / scale) * 100),
+    goalPct,
+    reached: chars >= goal,
+    isToday: iso === todayIso,
+  }));
 }
 
 // Aktuelle Schreib-Serie: aufeinanderfolgende Tage mit Zeichen > 0, rueckwaerts

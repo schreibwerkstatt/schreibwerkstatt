@@ -5,7 +5,7 @@
 // __SHELL_BUILD: content hash over all listed assets → drives SHELL_CACHE.
 // __SHELL_MANIFEST: the coherent set precached atomically at SW install.
 // __VENDOR_SET: current vendor/ + fonts/ files — VENDOR_CACHE prune list.
-self.__SHELL_BUILD = "b29eb78780da0c40";
+self.__SHELL_BUILD = "39115c3f2b6a9a53";
 self.__SHELL_MANIFEST = [
   "/css/admin/admin-backup.css",
   "/css/admin/admin-home.css",
@@ -71,6 +71,7 @@ self.__SHELL_MANIFEST = [
   "/css/components/card-form/form-elements.css",
   "/css/components/chat-history-search.css",
   "/css/components/chat-tool-log.css",
+  "/css/components/chat-vorschlag.css",
   "/css/components/color-picker.css",
   "/css/components/combobox.css",
   "/css/components/comment-rail.css",
@@ -375,6 +376,8 @@ self.__SHELL_MANIFEST = [
   "/js/book/ort-typen.js",
   "/js/book/orte-edit.js",
   "/js/book/orte-insights.js",
+  "/js/book/orte-map-edit.js",
+  "/js/book/orte-map-place.js",
   "/js/book/orte-map.js",
   "/js/book/orte.js",
   "/js/book/page-view.js",
@@ -774,6 +777,8 @@ self.__SHELL_MANIFEST = [
   "/js/figur-werkstatt/import.js",
   "/js/figur-werkstatt/job-poll.js",
   "/js/figur-werkstatt/jobs.js",
+  "/js/figur-werkstatt/mindmap-editor.js",
+  "/js/figur-werkstatt/mindmap-view.js",
   "/js/figur-werkstatt/mindmap.js",
   "/js/figur-werkstatt/runs.js",
   "/js/figure/figure-html.js",
@@ -1341,6 +1346,7 @@ self.__VENDOR_SET = [
   "/vendor/d3-cloud-2.0.0.js",
   "/vendor/diff-9.0.0.min.js",
   "/vendor/jsmind-0.9.1.css",
+  "/vendor/jsmind-0.9.1.draggable-node.js",
   "/vendor/jsmind-0.9.1.js",
   "/vendor/leaflet-1.9.4/images/layers-2x.png",
   "/vendor/leaflet-1.9.4/images/layers.png",

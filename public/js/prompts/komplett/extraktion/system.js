@@ -17,6 +17,10 @@ import {
   _ASSIGNMENTS_SCHEMA_BLOCK,
   _EREIGNIS_RULES,
   SZENEN_ORTE_REFS_RULE,
+  SZENE_TITEL_SPEC,
+  SZENE_KOMMENTAR_SPEC,
+  SZENE_TITEL_RULE,
+  SZENE_KOMMENTAR_RULE,
 } from '../schema-strings.js';
 
 // Kombiniertes Schema für Komplett-Extraktion (P1+P5 merged).
@@ -37,9 +41,9 @@ Antworte mit diesem JSON-Schema:
     {
       "seite": "NUR der reine Abschnittstitel aus einem ### Header – OHNE die ###-Markierung und OHNE führende Leerzeichen. Beispiel: aus «### Was macht Adrian?» wird «Was macht Adrian?». NIEMALS den Kapitelnamen als seite. Leer wenn kein passender ### Header identifizierbar.",
       "kapitel": "NUR der reine Kapitelname aus dem ## Header – OHNE die ##-Markierung. Beispiel: aus «## Der Vater» wird «Der Vater». Nicht der ### Abschnitts-Header. Leer wenn unklar.",
-      "titel": "Kurze Szenenbezeichnung (1 Satz)",
+      "titel": "${SZENE_TITEL_SPEC}",
       "wertung": "stark|mittel|schwach",
-      "kommentar": "Begründung der wertung + Verbesserungshinweis (2-3 Sätze): WARUM ist die Szene stark/mittel/schwach – konkret festgemacht an Spannung, Tempo, Figurenentwicklung, Konflikt/Ziel, Dialog oder Struktur. Bei «mittel»/«schwach» mindestens einen konkreten, umsetzbaren Verbesserungshinweis nennen; bei «stark» benennen, was sie trägt.",
+      "kommentar": "${SZENE_KOMMENTAR_SPEC}",
       "figuren_namen": ["Figurenname exakt wie im Text"],
       "orte_refs": ["id aus orte dieser Antwort, z.B. ort_3"]
     }
@@ -107,7 +111,8 @@ Szenen-Regeln:
 - figuren_namen: aktiv beteiligte Figuren – Namen exakt wie im Text (vollständiger Name oder Spitzname); leeres Array wenn keine Figur beteiligt
 ${SZENEN_ORTE_REFS_RULE}
 - wertung: «stark» = überzeugend/spannend, «mittel» = verbesserungswürdig, «schwach» = klare Schwächen
-- kommentar MUSS die wertung begründen (woran festgemacht) und bei «mittel»/«schwach» einen konkreten Verbesserungshinweis geben – keine reine Zusammenfassung des Inhalts
+${SZENE_TITEL_RULE}
+${SZENE_KOMMENTAR_RULE}
 - Kein Cap auf Anzahl Szenen – vollständige Erfassung aller Handlungsabschnitte wichtiger als Kürze. Pro Kapitel mit Handlung mindestens eine Szene.
 - Nur wenn ein Kapitel ausschliesslich aus Exposition/Beschreibung ohne Handlungsabschnitt besteht: «szenen» als leeres Array
 
@@ -213,9 +218,9 @@ function buildKomplettSchemaOrteSzenen(_kontext = '') {
     {
       "seite": "NUR der reine Abschnittstitel aus einem ### Header – OHNE ###-Markierung (Beispiel: aus «### Was macht Adrian?» wird «Was macht Adrian?»). NIE der Kapitelname. Leer wenn unklar.",
       "kapitel": "NUR der reine Kapitelname aus dem ## Header – OHNE ##-Markierung. Nicht der ### Abschnitts-Header. Leer wenn unklar.",
-      "titel": "Kurze Szenenbezeichnung (1 Satz)",
+      "titel": "${SZENE_TITEL_SPEC}",
       "wertung": "stark|mittel|schwach",
-      "kommentar": "Begründung der wertung + Verbesserungshinweis (2-3 Sätze): WARUM ist die Szene stark/mittel/schwach – konkret festgemacht an Spannung, Tempo, Figurenentwicklung, Konflikt/Ziel, Dialog oder Struktur. Bei «mittel»/«schwach» mindestens einen konkreten, umsetzbaren Verbesserungshinweis nennen; bei «stark» benennen, was sie trägt.",
+      "kommentar": "${SZENE_KOMMENTAR_SPEC}",
       "figuren_namen": ["Figurenname exakt wie im Text"],
       "orte_refs": ["id aus orte dieser Antwort, z.B. ort_3"]
     }
@@ -248,7 +253,8 @@ Szenen-Regeln:
 - figuren_namen: Klarnamen exakt wie im Text; leeres Array wenn keine Figur beteiligt.
 ${SZENEN_ORTE_REFS_RULE}
 - wertung: «stark» = überzeugend/spannend, «mittel» = verbesserungswürdig, «schwach» = klare Schwächen.
-- kommentar MUSS die wertung begründen (woran festgemacht) und bei «mittel»/«schwach» einen konkreten Verbesserungshinweis geben – keine reine Zusammenfassung des Inhalts.`;
+${SZENE_TITEL_RULE}
+${SZENE_KOMMENTAR_RULE}`;
 }
 
 /** Schema-Block nur für Fakten (Claude-Single-Pass C, parallel zu A1/B).

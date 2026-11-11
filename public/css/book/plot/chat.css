@@ -1,8 +1,7 @@
 @layer components {
 /* Plot-Chat: eigene Karte als Leiste neben der Plot-Karte (plot.html,
-   plot-chat.html) — Muster des Recherche-Chats. Vorschlagskarten nutzen die
-   geteilten `.chat-vorschlag*`-Klassen (chat.css), hier nur die
-   Plot-spezifischen Innenteile. Ergänzt plot/board.css. */
+   plot-chat.html) — Muster des Recherche-Chats. Vorschlagskarten samt
+   Feldzeilen kommen aus components/chat-vorschlag.css. Ergänzt plot/board.css. */
 
 /* ── Plot-Karte | Chat-Karte ──────────────────────────────────────────────
    Geometrie aus layout/aside-split.css (`.main-aside-split`, `--aside-first`),
@@ -16,47 +15,5 @@
    selbst — die Leiste klebt an seiner Oberkante statt unter der App-Kopfzeile. */
 .plot-split:fullscreen { --sticky-top: 0px; --sticky-bottom: 0px; }
 
-/* Vorschläge: volle Bubble-Breite statt der 88% des Seiten-Chats — Beat-Diffs
-   brauchen die Zeile. */
-.chat-msg .plot-chat-proposals {
-  max-width: none;
-  margin-top: var(--space-sm);
-}
-.plot-chat-proposal-text {
-  white-space: pre-line;
-  margin-bottom: var(--space-xs);
-  overflow-wrap: anywhere;
-}
-.plot-chat-proposal-meta {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--space-2xs) var(--space-sm);
-  color: var(--color-muted);
-  font-size: var(--font-size-xs);
-}
-.plot-chat-proposal-row {
-  display: grid;
-  grid-template-columns: minmax(5.5rem, auto) minmax(0, 1fr);
-  gap: var(--space-sm);
-  margin-top: var(--space-2xs);
-  overflow-wrap: anywhere;
-}
-.plot-chat-proposal-field {
-  color: var(--color-muted);
-  font-size: var(--font-size-xs);
-}
-.plot-chat-proposal-note {
-  color: var(--color-warn-text);
-  font-size: var(--font-size-xs);
-  margin-top: var(--space-xs);
-}
-
-/* Mobile: Meta-/Feldzeilen lesbar statt 11px; Feld-Label über den Wert,
-   damit der Wert die volle Breite bekommt. */
-@media (max-width: 768px) {
-  .plot-chat-proposal-meta,
-  .plot-chat-proposal-field,
-  .plot-chat-proposal-note { font-size: var(--font-size-sm); }
-  .plot-chat-proposal-row { grid-template-columns: minmax(0, 1fr); gap: 0; }
-}
+/* Vorschlagskarten samt Innenteilen: components/chat-vorschlag.css. */
 }

@@ -19,7 +19,7 @@ const {
   applyTierAiOverrides,
 } = require('./shared');
 const { resolveProvider } = require('../../lib/ai');
-const { geocode } = require('../../lib/geocode');
+const { geocodeAnchored } = require('../../lib/geocode');
 const { NOW_ISO_SQL } = require('../../db/now');
 const { toIntId } = require('../../lib/validate');
 const { guardBook, sessionEmail } = require('../../lib/acl');
@@ -164,6 +164,24 @@ function _parentChains(locIds, bookId, userEmail) {
   return out;
 }
 
+// Schwerpunkt der Buch-Region: Median der schon verorteten Orte im Buch-Land.
+// Bias fuer den Geocoder — ein mehrdeutiger Name («Engelberg», «Schafmatt»)
+// landet so beim gleichnamigen Ort in der Gegend des Buchs statt beim
+// bekanntesten. Median statt Mittel: ein paar Orte am anderen Landesende ziehen
+// ihn nicht weg. Erst ab MIN_BIAS_POINTS, sonst ist der «Schwerpunkt» Zufall.
+const MIN_BIAS_POINTS = 5;
+function _regionCenter(bookId, userEmail, region) {
+  if (!bookId || !region) return null;
+  const rows = db.prepare(
+    `SELECT lat, lng FROM locations
+      WHERE book_id = ? AND user_email IS ? AND lat IS NOT NULL AND lng IS NOT NULL
+        AND LOWER(COALESCE(geo_land, land, '')) = ?`
+  ).all(bookId, userEmail || null, region.toLowerCase());
+  if (rows.length < MIN_BIAS_POINTS) return null;
+  const med = (arr) => { const s = arr.slice().sort((a, b) => a - b); return s[Math.floor(s.length / 2)]; };
+  return { lat: med(rows.map(r => r.lat)), lng: med(rows.map(r => r.lng)) };
+}
+
 async function runGeocodeResolveJob(jobId, items, bookId, userEmail) {
   const logger = makeJobLogger(jobId);
   // Stufe «leicht» (shared/model-tier.js) — vor chunkLimitsFor, die liest das Bag-Modell.
@@ -215,6 +233,7 @@ async function runGeocodeResolveJob(jobId, items, bookId, userEmail) {
     // teilen sich denselben realen Ort. Spart externe Calls (auf Public-Nominatim
     // je ≥1.1 s serialisiert).
     const lookupCache = new Map();
+    const center = _regionCenter(bookId, userEmail, region);
     const results = [];
     for (const it of items) {
       const r = resolved.get(String(it.id));
@@ -225,7 +244,10 @@ async function runGeocodeResolveJob(jobId, items, bookId, userEmail) {
       if (!lookupCache.has(key)) {
         // Abbruch (User-Cancel) nicht bis zum letzten Label durchlaufen.
         if (signal?.aborted) { const e = new Error('aborted'); e.name = 'AbortError'; throw e; }
-        const cands = await geocode(r.ort, { lang: language, region: effRegion });
+        // Bias nur fuer Orte im Buch-Land — «Paris» soll nicht an den Pariser
+        // Ort gezogen werden, der Olten am naechsten liegt.
+        const bias = center && String(effRegion).toLowerCase() === region.toLowerCase() ? center : null;
+        const cands = await geocodeAnchored(r.ort, { lang: language, region: effRegion, bias });
         const c = cands[0];
         lookupCache.set(key, c ? { lat: c.lat, lng: c.lng, displayName: c.displayName } : null);
       }

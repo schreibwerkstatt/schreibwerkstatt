@@ -70,4 +70,7 @@
 
   /* === Default-Controlgrösse (button, combobox-trigger, input, select) === */
   --size-default-padding-y: 8px;
+  /* Feldrand + Innenabstand: Oberkante der Textzeile in Input/Combobox/Radio —
+     Beschriftungen und Lesewerte neben einem Feld setzen hier an. */
+  --size-default-text-inset: calc(var(--size-default-padding-y) + var(--space-1));
 }

@@ -51,6 +51,8 @@ export const jobsMethods = {
       this.errorMessage = window.__app.t('werkstatt.error.knotenGone');
       return;
     }
+    // Ein eingeklappter Vorfahr liesse den neuen Knoten unsichtbar entstehen.
+    this._revealNode(parentId);
     const ok = this._mutateMindmap(jm => jm.add_node(parentId, _newNodeId(), v.label));
     if (ok) {
       this.brainstormResult.vorschlaege = this.brainstormResult.vorschlaege.filter((_, i) => i !== idx);

@@ -37,7 +37,7 @@
 
           <!-- Vorschläge ans Board: jeder einzeln übernehmen/verwerfen -->
           <template x-if="msg.role === 'assistant' && plotProposals(msg).length">
-            <div class="chat-vorschlaege plot-chat-proposals">
+            <div class="chat-vorschlaege chat-vorschlaege--wide plot-chat-proposals">
               <template x-for="(p, pi) in plotProposals(msg)" :key="pi">
                 <div class="chat-vorschlag"
                      :class="{ 'chat-vorschlag--applied': plotProposalStatus(msg, pi).state === 'applied', 'chat-vorschlag--discarded': plotProposalStatus(msg, pi).state === 'discarded', 'chat-vorschlag--stale': plotProposalStatus(msg, pi).state === 'open' && (plotProposalStatus(msg, pi).stale || plotProposalStatus(msg, pi).blocked) }">
@@ -63,8 +63,8 @@
                   <template x-if="p.type === 'beat_create'">
                     <div class="chat-vorschlag-diff">
                       <div class="chat-vorschlag-title" x-text="p.fields?.titel"></div>
-                      <div class="plot-chat-proposal-text" x-show="p.fields?.beschreibung" x-text="p.fields?.beschreibung"></div>
-                      <div class="plot-chat-proposal-meta">
+                      <div class="chat-vorschlag-text" x-show="p.fields?.beschreibung" x-text="p.fields?.beschreibung"></div>
+                      <div class="chat-vorschlag-meta">
                         <span x-show="plotProposalWhere(p)" x-text="plotProposalWhere(p)"></span>
                         <span x-show="p.labels?.chapter" x-text="$app.t('plot.chat.meta.chapter', { name: p.labels?.chapter })"></span>
                         <span x-show="p.fields?.intensitaet" x-text="$app.t('plot.chat.meta.intensity', { n: p.fields?.intensitaet })"></span>
@@ -85,7 +85,7 @@
                   <template x-if="p.type === 'act_create' || p.type === 'thread_create'">
                     <div class="chat-vorschlag-diff">
                       <div class="chat-vorschlag-title" x-text="p.name"></div>
-                      <div class="plot-chat-proposal-meta">
+                      <div class="chat-vorschlag-meta">
                         <span x-show="plotProposalWhere(p)" x-text="plotProposalWhere(p)"></span>
                         <span x-show="p.labels?.figur" x-text="$app.t('plot.chat.meta.mainFigure', { name: p.labels?.figur })"></span>
                       </div>
@@ -97,13 +97,13 @@
                     <div class="chat-vorschlag-diff">
                       <div class="chat-vorschlag-title" x-text="p.labels?.beat"></div>
                       <template x-for="row in plotProposalRows(p)" :key="row.key">
-                        <div class="plot-chat-proposal-row">
-                          <span class="plot-chat-proposal-field" x-text="$app.t('plot.chat.field.' + row.key)"></span>
+                        <div class="chat-vorschlag-row">
+                          <span class="chat-vorschlag-field" x-text="$app.t('plot.chat.field.' + row.key)"></span>
                           <template x-if="row.diff">
                             <span class="chat-word-diff"><template x-for="(part, di) in row.diff" :key="di"><span :class="part.c" x-text="part.v"></span></template></span>
                           </template>
                           <template x-if="!row.diff && !row.flag">
-                            <span><span class="finding-original" x-text="row.before"></span> <span class="finding-korrektur" x-text="row.after"></span></span>
+                            <span class="chat-vorschlag-change"><span class="chat-vorschlag-before" x-text="row.before"></span><svg class="icon chat-vorschlag-arrow" aria-hidden="true"><use href="/icons.svg#arrow-right"/></svg><span class="chat-vorschlag-after" x-text="row.after"></span></span>
                           </template>
                           <template x-if="row.flag">
                             <span x-text="$app.t(row.flag === 'on' ? 'plot.chat.verworfenOn' : 'plot.chat.verworfenOff')"></span>
@@ -117,36 +117,32 @@
                   <template x-if="p.type === 'beat_move'">
                     <div class="chat-vorschlag-diff">
                       <div class="chat-vorschlag-title" x-text="p.labels?.beat"></div>
-                      <div class="plot-chat-proposal-meta">
-                        <span class="finding-original" x-text="plotProposalFrom(p)"></span>
-                        <span class="finding-korrektur" x-text="plotProposalWhere(p)"></span>
-                      </div>
+                      <span class="chat-vorschlag-change"><span class="chat-vorschlag-before" x-text="plotProposalFrom(p)"></span><svg class="icon chat-vorschlag-arrow" aria-hidden="true"><use href="/icons.svg#arrow-right"/></svg><span class="chat-vorschlag-after" x-text="plotProposalWhere(p)"></span></span>
                     </div>
                   </template>
                   <template x-if="p.type === 'act_update'">
                     <div class="chat-vorschlag-diff">
-                      <span class="finding-original" x-text="p.before?.name"></span>
-                      <span class="finding-korrektur" x-text="p.name"></span>
+                      <span class="chat-vorschlag-change"><span class="chat-vorschlag-before" x-text="p.before?.name"></span><svg class="icon chat-vorschlag-arrow" aria-hidden="true"><use href="/icons.svg#arrow-right"/></svg><span class="chat-vorschlag-after" x-text="p.name"></span></span>
                     </div>
                   </template>
                   <template x-if="p.type === 'thread_update'">
                     <div class="chat-vorschlag-diff">
                       <div class="chat-vorschlag-title" x-text="p.labels?.thread"></div>
-                      <div class="plot-chat-proposal-row" x-show="p.fields?.name">
-                        <span class="plot-chat-proposal-field" x-text="$app.t('plot.chat.field.name')"></span>
-                        <span><span class="finding-original" x-text="p.before?.name"></span> <span class="finding-korrektur" x-text="p.fields?.name"></span></span>
+                      <div class="chat-vorschlag-row" x-show="p.fields?.name">
+                        <span class="chat-vorschlag-field" x-text="$app.t('plot.chat.field.name')"></span>
+                        <span class="chat-vorschlag-change"><span class="chat-vorschlag-before" x-text="p.before?.name"></span><svg class="icon chat-vorschlag-arrow" aria-hidden="true"><use href="/icons.svg#arrow-right"/></svg><span class="chat-vorschlag-after" x-text="p.fields?.name"></span></span>
                       </div>
-                      <div class="plot-chat-proposal-row" x-show="p.labels?.figur">
-                        <span class="plot-chat-proposal-field" x-text="$app.t('plot.chat.field.mainFigure')"></span>
-                        <span><span class="finding-original" x-text="p.labels?.figur_before || '—'"></span> <span class="finding-korrektur" x-text="p.labels?.figur"></span></span>
+                      <div class="chat-vorschlag-row" x-show="p.labels?.figur">
+                        <span class="chat-vorschlag-field" x-text="$app.t('plot.chat.field.mainFigure')"></span>
+                        <span class="chat-vorschlag-change"><span class="chat-vorschlag-before" x-text="p.labels?.figur_before || '—'"></span><svg class="icon chat-vorschlag-arrow" aria-hidden="true"><use href="/icons.svg#arrow-right"/></svg><span class="chat-vorschlag-after" x-text="p.labels?.figur"></span></span>
                       </div>
                     </div>
                   </template>
 
                   <div x-show="p.begruendung" class="chat-vorschlag-begruendung" x-text="p.begruendung"></div>
-                  <div x-show="plotProposalStatus(msg, pi).state === 'open' && plotProposalStatus(msg, pi).blocked" class="plot-chat-proposal-note" x-text="plotProposalStatus(msg, pi).blocked ? $app.t(plotProposalStatus(msg, pi).blocked.key, plotProposalStatus(msg, pi).blocked.params || {}) : ''"></div>
-                  <div x-show="plotProposalStatus(msg, pi).state === 'open' && !plotProposalStatus(msg, pi).blocked && plotProposalStatus(msg, pi).stale" class="plot-chat-proposal-note" x-text="$app.t('plot.chat.stale')"></div>
-                  <div x-show="plotProposalStatus(msg, pi).removed" class="plot-chat-proposal-note" x-text="$app.t('plot.chat.removed')"></div>
+                  <div x-show="plotProposalStatus(msg, pi).state === 'open' && plotProposalStatus(msg, pi).blocked" class="chat-vorschlag-note" x-text="plotProposalStatus(msg, pi).blocked ? $app.t(plotProposalStatus(msg, pi).blocked.key, plotProposalStatus(msg, pi).blocked.params || {}) : ''"></div>
+                  <div x-show="plotProposalStatus(msg, pi).state === 'open' && !plotProposalStatus(msg, pi).blocked && plotProposalStatus(msg, pi).stale" class="chat-vorschlag-note" x-text="$app.t('plot.chat.stale')"></div>
+                  <div x-show="plotProposalStatus(msg, pi).removed" class="chat-vorschlag-note" x-text="$app.t('plot.chat.removed')"></div>
                   <div x-show="p._error" class="chat-vorschlag-error" x-text="p._error"></div>
                 </div>
               </template>

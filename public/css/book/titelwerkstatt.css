@@ -82,6 +82,9 @@
   align-items: baseline;
   font-weight: var(--fw-medium);
 }
+/* Leerer Mask-Chevron: seine Grundlinie ist die Unterkante, bei `baseline`
+   stünde er über dem Namen. */
+.tw-row-name > .history-chevron { align-self: center; }
 .tw-row-dach,
 .tw-row-titel {
   overflow: hidden;

@@ -67,7 +67,7 @@
           <input type="text" id="pub-author-file-as" class="card-form-input" x-model="bookPublication.author_file_as" maxlength="200" :placeholder="$app.t('publication.authorFileAsPlaceholder')">
           <p class="card-form-hint" x-text="$app.t('publication.authorFileAsHint')"></p>
         </div>
-        <div class="card-form-row">
+        <div class="card-form-row card-form-row--compact">
           <span class="card-form-label" id="pub-coauthors-label" x-text="$app.t('publication.coAuthors')"></span>
           <div class="pub-repeater" role="group" aria-labelledby="pub-coauthors-label">
             <template x-for="(c, i) in (bookPublication.co_authors || [])" :key="i">

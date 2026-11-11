@@ -8,6 +8,8 @@
 //   - bogen.js       — Bogen im Buch (Ist-Index + Messung, Kern x Kapitel)
 //   - context-menu.js — Rechtsklick-Menü auf Mindmap-Knoten
 //   - history.js     — Rückgängig/Wiederholen + geschütztes Löschen von Knoten
+//   - mindmap-view.js — Einpassen, Zoom, Auf-/Zuklappen, Touch-Pan, Knoten-Markierung
+//   - mindmap-editor.js — mitwachsende Knoten-Bearbeitung (an der jsMind-Instanz)
 
 import { mindmapMethods, resolveTopic, resolveMindmapForDisplay } from './figur-werkstatt/mindmap.js';
 import { crudMethods } from './figur-werkstatt/crud.js';
@@ -18,6 +20,7 @@ import { bogenMethods } from './figur-werkstatt/bogen.js';
 import { memoMethods } from './cards/card-memo.js';
 import { contextMenuMethods } from './figur-werkstatt/context-menu.js';
 import { historyMethods } from './figur-werkstatt/history.js';
+import { mindmapViewMethods } from './figur-werkstatt/mindmap-view.js';
 
 export const figurWerkstattMethods = {
   ...crudMethods,
@@ -31,6 +34,7 @@ export const figurWerkstattMethods = {
   ...memoMethods,
   ...contextMenuMethods,
   ...historyMethods,
+  ...mindmapViewMethods,
 };
 
 export { resolveTopic, resolveMindmapForDisplay };

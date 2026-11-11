@@ -70,7 +70,8 @@
 /* Marker für Orte ohne Georeferenz: roter Punkt in der Kartenmitte. Signalisiert
    „noch nicht verortet" — User zieht ihn an die richtige Stelle (dragend speichert). */
 /* Unverorteter Unterort, der die Position seines Elternorts erbt: Hohl-Pin,
-   damit er sich von echten (blauen) und ganz unverorteten (roten) unterscheidet. */
+   damit er sich von echten (blauen) und ganz unverorteten (roten) unterscheidet.
+   Der Pixel-Versatz zum Elternort kommt aus dem iconAnchor (orte-map.js). */
 .ort-marker-pin--inherited {
   width: 18px;
   height: 18px;
@@ -93,7 +94,8 @@
   cursor: grab;
 }
 
-/* Marker-Popup (Leaflet). Inhalt als x-html-Sink — Felder serverseitig escaped. */
+/* Marker-Popup (Leaflet). Inhalt ist ein HTML-String — alle Felder escapt
+   _buildPopupHtml (orte-map.js) per escHtml im Browser. */
 .ort-map .leaflet-popup-content-wrapper {
   border-radius: var(--radius-none);
   background: var(--color-surface);
@@ -163,4 +165,66 @@
 @media (max-width: 600px) {
   .ort-map { height: 440px; }
   .ort-map-locate-row { flex-wrap: wrap; }
+}
+
+/* Manuelles Platzieren (orte-map-place.js): Ortssuche links in der Aktionszeile,
+   Trefferliste, Platzier-Leiste, Fadenkreuz im Platzier-Modus. */
+.ort-map-search {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2xs);
+  margin-right: auto;
+  min-width: 0;
+}
+
+.ort-map-search-input {
+  width: 18rem;
+  max-width: 100%;
+}
+
+.ort-map-search-results {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2xs);
+}
+
+.ort-map-search-results .btn-compact[aria-pressed="true"] {
+  border-color: var(--card-accent);
+}
+
+.ort-map-placing-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-sm);
+  padding: var(--space-2xs) var(--space-xs);
+  border-left: 3px solid var(--card-accent);
+  background: color-mix(in srgb, var(--card-accent) 12%, transparent);
+  font-size: var(--font-size-xs);
+}
+
+/* Leaflet setzt grab/grabbing über .leaflet-grab/.leaflet-interactive. */
+.ort-map.ort-map--placing,
+.ort-map.ort-map--placing.leaflet-grab,
+.ort-map.ort-map--placing .leaflet-interactive {
+  cursor: crosshair;
+}
+
+/* Suchtreffer: Ring ohne Füllung, nicht klickbar (Platzier-Klick geht durch). */
+.ort-map .ort-map-search-hit {
+  stroke: var(--card-accent);
+  stroke-width: 3;
+  fill: var(--card-accent);
+  fill-opacity: 0.15;
+}
+
+.ort-popup__actions {
+  display: flex;
+  justify-content: flex-end;
+}
+
+@media (max-width: 600px) {
+  .ort-map-actions { flex-wrap: wrap; }
+  .ort-map-search { flex-basis: 100%; }
+  .ort-map-search-input { width: auto; flex: 1; }
 }

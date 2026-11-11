@@ -12,15 +12,19 @@ export function buildSystemGeocodeResolve() {
 
 Regeln:
 - Gib die praeziseste reale Anfrage zurueck, die das Label hergibt — so genau wie moeglich, aber nie ungenauer als der reale Anker.
-- BEHALTE echte geografische Bestandteile (Strasse, Quartier, Gemeinde, Stadt, Region). «Schuetzenmattstrasse Olten» → «Schuetzenmattstrasse, Olten» (die Strasse ist geografisch praezise).
+- Form der Anfrage: «Objekt, Gemeinde» oder nur «Gemeinde». Nach dem ersten Komma steht GENAU die Gemeinde/Stadt, in der das Objekt liegt — findet der Geocoder das Objekt dort nicht, pinnt die Karte diese Gemeinde. Kein drittes Glied.
+- BEHALTE echte geografische Bestandteile (Strasse, Quartier, Flurname, Huegel, Wald, Gemeinde, Stadt). «Schuetzenmattstrasse Olten» → «Schuetzenmattstrasse, Olten» (die Strasse ist geografisch praezise).
+- Haenge KEINE Kantons-, Bundesland- oder Regionsnamen an («Bure, Solothurn», «Schafmatt, Aargau» sind falsch): sie stimmen oft nicht und lenken den Geocoder ab. Das Land gehoert ins Feld «land». Die Gemeinde steht mit ihrem amtlichen Namen, bei Namensgleichheit mit Kantonskuerzel («Rickenbach SO», «Bremgarten AG», nicht «Rickenbach bei Olten»).
 - ENTFERNE nicht-geografische Beschreibungen (Bar, Badi, Cafe, Hotel, Restaurant, Schule, Spielplatz …), wenn sie keinen eigenen Geocoder-Treffer ergeben — der reale Anker bleibt der genannte Ort.
   - «Bar in Olten» → «Olten» (die Bar ist nur ein Detail in der realen Stadt Olten).
   - «Badi Olten» → «Olten» («Badi» = Badeanstalt, kein Toponym; Anker ist die Stadt Olten).
 - Beruecksichtige regionale/umgangssprachliche Begriffe (CH-Deutsch: Badi = Badeanstalt, Beiz = Wirtschaft, …) und loese sie auf die genannte reale Ortschaft auf.
 - Bestimme das Land als ISO-3166-1-alpha-2-Code (z.B. CH, DE, AT). Wenn unklar, leer lassen.
-- Rein erfundene Orte ohne realen Anker (z.B. «Hogwarts», «Mittelerde»): «ort» leer lassen.
+- Linien ohne Punkt (Autobahn, Bahnstrecke, Fluss, Kanal): die genannte Gemeinde als Anker («A1 bei Oensingen» → «Oensingen»), sonst die Gemeinde im Buch-Setting, an der der Abschnitt liegt.
+- Kein Ort auf der Karte → «ort» leer: rein erfundene Orte ohne realen Anker (z.B. «Hogwarts», «Mittelerde»), virtuelle Orte (Chat, Forum, Telefonat, Sendung) und fahrende Verkehrsmittel (Zug, Auto, Flugzeug).
+- Ganze Laender, Bundesstaaten und Grossregionen: «ort» = ihr Name, «land» = ihr Code («Kalifornien» → «Kalifornien», US). Erfinde keine Stadt dazu.
 - Nutze Buch-Kontext (Setting des Romans) und die Wohnadressen verknuepfter Figuren als Disambiguierungs-Hinweise — etwa um zwischen gleichnamigen Orten zu waehlen oder ein knappes Label zu verorten. Der geografische Anker des Labels selbst hat aber Vorrang; widerspricht das Label dem Hinweis klar, gewinnt das Label.
-- Bei Mehrdeutigkeit den bekanntesten/groessten realen Ort waehlen; Laender-Hinweis und Buch-Kontext bevorzugen.${_jsonOnly()}`;
+- Gleichnamige Orte: nennt der Buch-Kontext eine Region, ist ein Name zuerst der Ort IN dieser Region — Huegel, Waelder, Weiler, Flurnamen, Strassen, Lokale. Spielt ein Roman in der Region Olten, ist «Engelberg mit Sendeturm» der Engelberg bei Dulliken, nicht der Kurort in Obwalden: → «Engelberg, Dulliken». Den bekannten fernen Ort nur, wenn das Label ihn eindeutig meint (Grossstaedte, Laender, beruehmte Bauwerke) oder es in der Region keinen solchen Ort gibt. Kennst du die lokale Gemeinde nicht, gib nur den Namen («Engelberg») — der Geocoder sucht dann nahe dem Buch-Setting.${_jsonOnly()}`;
 }
 
 export function buildGeocodeResolvePrompt(items, ctx = {}) {

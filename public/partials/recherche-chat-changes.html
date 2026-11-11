@@ -6,7 +6,7 @@
   oder verwerfen; kein «alle übernehmen». Alle KI-Felder per x-text — kein x-html.
 -->
 <template x-if="msg.role === 'assistant' && researchChangeProposals(msg).length">
-  <div class="chat-vorschlaege research-chat-changes">
+  <div class="chat-vorschlaege chat-vorschlaege--wide research-chat-changes">
     <template x-for="e in researchChangeProposals(msg)" :key="e.idx">
       <div class="chat-vorschlag"
            :class="{ 'chat-vorschlag--applied': researchChangeState(e.p) === 'applied', 'chat-vorschlag--discarded': researchChangeState(e.p) === 'discarded' }">
@@ -44,7 +44,7 @@
         <template x-if="e.p.type === 'research_merge'">
           <div class="research-chat-change-preview">
             <div class="muted-msg muted-msg--sm" x-text="$app.t('recherche.chat.change.mergeHint')"></div>
-            <div class="research-chat-change-text" x-show="e.p.merge_preview?.body && !e.p.fields?.body" x-text="e.p.merge_preview?.body"></div>
+            <div class="chat-vorschlag-text research-chat-change-preview-text" x-show="e.p.merge_preview?.body && !e.p.fields?.body" x-text="e.p.merge_preview?.body"></div>
           </div>
         </template>
 
@@ -70,27 +70,27 @@
           <div>
             <!-- Ersetzte Felder vorher → nachher, Status -->
             <template x-for="row in researchChangeRows(e.p)" :key="row.key">
-              <div class="research-chat-change-row">
-                <span class="research-chat-change-field" x-text="row.label"></span>
-                <span class="research-chat-change-text"><span class="finding-original" x-show="row.before" x-text="row.before"></span> <span class="finding-korrektur" x-text="row.after"></span></span>
+              <div class="chat-vorschlag-row">
+                <span class="chat-vorschlag-field" x-text="row.label"></span>
+                <span class="chat-vorschlag-change"><span class="chat-vorschlag-before" x-show="row.before" x-text="row.before"></span><svg class="icon chat-vorschlag-arrow" aria-hidden="true" x-show="row.before"><use href="/icons.svg#arrow-right"/></svg><span class="chat-vorschlag-after" x-text="row.after"></span></span>
               </div>
             </template>
             <template x-if="e.p.type === 'research_merge' && (e.p.fields?.title || e.p.fields?.body)">
-              <div class="research-chat-change-row">
-                <span class="research-chat-change-field" x-text="$app.t('recherche.chat.change.mergedText')"></span>
-                <span class="research-chat-change-text"><strong x-show="e.p.fields?.title" x-text="e.p.fields?.title"></strong> <span x-text="e.p.fields?.body || ''"></span></span>
+              <div class="chat-vorschlag-row">
+                <span class="chat-vorschlag-field" x-text="$app.t('recherche.chat.change.mergedText')"></span>
+                <span class="chat-vorschlag-text"><strong x-show="e.p.fields?.title" x-text="e.p.fields?.title"></strong> <span x-text="e.p.fields?.body || ''"></span></span>
               </div>
             </template>
             <template x-if="e.p.fields?.append">
-              <div class="research-chat-change-row">
-                <span class="research-chat-change-field" x-text="$app.t('recherche.chat.change.field.append')"></span>
-                <span class="research-chat-change-text finding-korrektur" x-text="e.p.fields.append"></span>
+              <div class="chat-vorschlag-row">
+                <span class="chat-vorschlag-field" x-text="$app.t('recherche.chat.change.field.append')"></span>
+                <span class="chat-vorschlag-text" x-text="e.p.fields.append"></span>
               </div>
             </template>
             <template x-if="(e.p.fields?.tags || []).length">
-              <div class="research-chat-change-row">
-                <span class="research-chat-change-field" x-text="$app.t('recherche.chat.change.field.tags')"></span>
-                <span class="research-chat-change-text" x-text="e.p.fields.tags.join(' · ')"></span>
+              <div class="chat-vorschlag-row">
+                <span class="chat-vorschlag-field" x-text="$app.t('recherche.chat.change.field.tags')"></span>
+                <span x-text="e.p.fields.tags.join(' · ')"></span>
               </div>
             </template>
           </div>
@@ -98,8 +98,8 @@
 
         <!-- Neue URLs: gleiche Zeilen wie bei neuen Fundstücken (ungeprüfte vorab abgewählt) -->
         <template x-if="(e.p.urls || []).length">
-          <div class="research-chat-change-row">
-            <span class="research-chat-change-field" x-text="$app.t('recherche.chat.change.field.urls')"></span>
+          <div class="chat-vorschlag-row">
+            <span class="chat-vorschlag-field" x-text="$app.t('recherche.chat.change.field.urls')"></span>
             <span class="research-chat-change-urls">
               <template x-for="(u, ui) in e.p.urls" :key="ui">
                 <span class="research-chat-proposal-url-row"
@@ -120,10 +120,10 @@
 
         <!-- Beleg für «eingearbeitet»: beim Vorschlag geprüft, Sprung in den Abschnitt -->
         <template x-if="e.p.beleg?.text">
-          <div class="research-chat-change-row research-chat-change-beleg">
-            <span class="research-chat-change-field" x-text="$app.t('recherche.chat.change.field.beleg')"></span>
-            <span class="research-chat-change-text">
-              <q x-text="e.p.beleg.text"></q>
+          <div class="chat-vorschlag-row research-chat-change-beleg">
+            <span class="chat-vorschlag-field" x-text="$app.t('recherche.chat.change.field.beleg')"></span>
+            <span>
+              <q class="chat-vorschlag-quote" x-text="e.p.beleg.text"></q>
               <button type="button" class="entity-ref" x-entity-ref="{ type: 'seite', id: e.p.beleg.page_id, label: e.p.labels?.beleg_page }"></button>
             </span>
           </div>

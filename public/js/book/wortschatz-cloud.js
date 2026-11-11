@@ -225,7 +225,7 @@ export const wortschatzCloudMethods = {
   wsCloudClick(e) {
     const el = e.target?.closest?.('text[data-page]');
     if (!el) return;
-    this.wsGotoPage(Number(el.getAttribute('data-page')));
+    this.wsGotoPage(Number(el.getAttribute('data-page')), el.textContent || '');
   },
 
   wsCloudTip(w) {

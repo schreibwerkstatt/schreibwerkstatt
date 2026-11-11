@@ -123,9 +123,18 @@ textarea:disabled,
 .card-form-label {
   font-weight: var(--fw-bold);
   font-size: var(--font-size-sm);
-  padding-top: var(--space-6);
+  /* Feldrand + Feld-Innenabstand: setzt die Beschriftung (`align-items: start`)
+     auf die Textzeile von Input, Combobox, Radio und Textarea. */
+  padding-top: var(--size-default-text-inset);
   color: var(--color-text);
 }
+/* Wertspalte beginnt mit Text statt mit einem umrandeten Feld (Checkbox-Gruppe,
+   Erklaersatz ueber dem Feld): ohne Feld-Innenabstand stuende die Beschriftung
+   sonst eine halbe Zeile unter der ersten Textzeile. */
+.card-form-row:has(> .form-check, > * > :first-child:is(.form-check, .card-form-field-note)) > .card-form-label { padding-top: 0; }
+/* Wertspalte beginnt mit einem Kompakt-Knopf (`.btn-compact`, Innenabstand aus
+   `--size-compact-padding`): Beschriftung auf dessen Textzeile. */
+.card-form-row--compact > .card-form-label { padding-top: var(--space-5); }
 /* Das padding-top setzt die Beschriftung im Raster (`align-items: start`) auf die
    erste Feldzeile. In einer einzeiligen, zentrierten Leiste neben Knöpfen oder
    Combobox kippte es den Text unter deren Mittellinie. */
@@ -449,7 +458,8 @@ select[aria-invalid="true"],
     gap: var(--space-sm);
     margin-bottom: var(--space-lg);
   }
-  .card-form-label { padding-top: 0; }
+  .card-form-label,
+  .card-form-row--compact > .card-form-label { padding-top: 0; }
   .card-form-field { gap: var(--space-sm); }
   .card-form-row > :is(.card-form-hint, .card-form-error, .muted-msg) { grid-column: 1; }
   .form-inline { gap: var(--space-10) var(--space-lg); }

@@ -28,6 +28,15 @@ test('computeWeekBars: pct + reached gegen Ziel', () => {
   assert.equal(today.chars, 1500);       // 3300 - 1800
   assert.equal(today.pct, 100);
   assert.equal(today.reached, true);
+  assert.equal(today.goalPct, 100);
+});
+
+test('computeWeekBars: Tage ueber dem Ziel skalieren am besten Tag, nicht gekappt', () => {
+  // Ziel 500, Tage 500/600/600 + heute 1500 → Skala 1500.
+  const bars = computeWeekBars({ stats: STATS, tokEsts: { 1: { chars: 3300 } }, goalChars: 500, todayIso: TODAY });
+  assert.deepEqual(bars.map(b => b.pct), [0, 0, 0, 33, 40, 40, 100]);
+  assert.equal(bars[0].goalPct, 33);
+  assert.equal(bars.slice(3).every(b => b.reached), true);
 });
 
 test('computeWritingStreak: aufeinanderfolgende Schreibtage', () => {

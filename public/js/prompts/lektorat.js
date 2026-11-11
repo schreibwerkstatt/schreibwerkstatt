@@ -68,6 +68,10 @@ import { textsorteLabel } from './textsorten.js';
 import { _buildNachbarBlocks } from './lektorat-nachbar.js';
 import { STOPWORDS, ERKLAERUNG_RULE, KORREKTUR_REGELN } from './core.js';
 
+// Titelform aller Einheiten: Stichwort statt Inhaltssatz, damit Listen und Übersichten
+// einheitlich lesen (gleiche Vorgabe wie die Szenen der Komplettanalyse).
+const TITEL_FORM = 'als Stichwort-Phrase, kein ganzer Satz, kein Schlusspunkt, höchstens 60 Zeichen';
+
 // ── Das «szenen»-Feld, je Bewertungseinheit ───────────────────────────────────
 // EIN SSoT für Schema-Felder UND Regelblock. Vorher standen beides als zwei
 // getrennte `fach ? … : …`-Ternaries nebeneinander – Schema und Regeln konnten
@@ -82,7 +86,7 @@ import { STOPWORDS, ERKLAERUNG_RULE, KORREKTUR_REGELN } from './core.js';
 const SZENEN_FELD = {
   szene: {
     nomen: 'Szenen',
-    titel: '"Kurze Szenenbezeichnung (1 Satz)"',
+    titel: `"Knapper Szenentitel ${TITEL_FORM} (z.B. «Blutschwur im Wald»)"`,
     kommentar: '"1-2 Sätze: was funktioniert, was fehlt (Spannung, Tempo, Figurenentwicklung). KEINE konkreten Fehler aus dem «fehler»-Array wiederholen (keine Wortwahl-, Stil-, Grammatik-, Wiederholungs-, Füllwort-Hinweise zu Einzelstellen). Nur szenen-übergreifende Beobachtungen (Spannungsbogen, Tempo, Konflikt, Figurenentwicklung, Schauplatzwirkung)."',
     regeln: () => `
 Szenen-Regeln:
@@ -92,13 +96,13 @@ Szenen-Regeln:
   },
   teilschritt: {
     nomen: 'Teilabschnitte',
-    titel: '"Kurze Bezeichnung des Argumentations-/Darstellungsschritts (1 Satz)"',
+    titel: `"Kurze Bezeichnung des Argumentations-/Darstellungsschritts ${TITEL_FORM}"`,
     kommentar: '"1-2 Sätze: trägt der Schritt, ist er nachvollziehbar belegt, schliesst er an den vorigen an. KEINE konkreten Fehler aus dem «fehler»-Array wiederholen (keine Wortwahl-, Stil-, Grammatik-, Wiederholungs-, Hedging-Hinweise zu Einzelstellen). Nur schritt-übergreifende Beobachtungen (Argumentationsführung, Beleglage, Aufbau, Anschluss)."',
     regeln: (profil) => _buildFachAbschnittRegelnBlock(profil),
   },
   eintrag: {
     nomen: 'Einträge',
-    titel: '"Kurze Bezeichnung des Eintrags – Datum oder Thema (1 Satz)"',
+    titel: `"Kurze Bezeichnung des Eintrags – Datum oder Thema, ${TITEL_FORM}"`,
     kommentar: '"1-2 Sätze: trägt die Stimme des Eintrags, wie weit der Eintrag über die Notiz hinausgeht, was er bewusst auslässt. KEINE konkreten Fehler aus dem «fehler»-Array wiederholen (keine Wortwahl-, Stil-, Grammatik-, Wiederholungs-, Füllwort-Hinweise zu Einzelstellen). Nur eintrag-übergreifende Beobachtungen (Stimme, Dichte, Verhältnis von Alltagsnotiz und Reflexion)."',
     // Der Tagebucheintrag hat keine Handlung, die über ihn hinausgetragen werden
     // muss. Zu fragen ist nicht Spannung, sondern Dichte – und die genretypische

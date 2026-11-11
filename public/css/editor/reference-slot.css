@@ -54,6 +54,9 @@
   flex-wrap: wrap;
   gap: var(--space-xs);
 }
+/* Leerer Mask-Chevron: seine Grundlinie ist die Unterkante, bei `baseline`
+   stünde er über dem Text. `center` gilt je Flex-Zeile. */
+.reference-row-head > .history-chevron { align-self: center; }
 
 .reference-row-title {
   font-weight: var(--fw-semibold);

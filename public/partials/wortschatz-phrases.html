@@ -31,7 +31,7 @@
             <td class="wortschatz-num" x-text="wsNum(p.log_dice, 2)"></td>
             <td>
               <button type="button" class="entity-ref" x-show="p.first_page_id"
-                      x-entity-ref="{ type: 'seite', id: p.first_page_id, label: p.first_page_name || undefined }"></button>
+                      x-entity-ref="{ type: 'seite', id: p.first_page_id, label: p.first_page_name || undefined, snippet: p.phrase }"></button>
             </td>
           </tr>
         </template>

@@ -73,4 +73,13 @@
   outline: 2px solid var(--color-accent);
   outline-offset: -2px;
 }
+/* Fusszeile «Weitere anzeigen» der schrittweise gerenderten Tabelle — die
+   Komponente hängt sie selbst an (sortable-table.js); Knopf-Optik ist
+   `.list-window-more` (entity-list.css). Ohne Zellrahmen/Hover der Datenzeilen. */
+.sortable-table-more td {
+  border: none;
+  background: none;
+  padding-bottom: var(--space-md);
+}
+
 }

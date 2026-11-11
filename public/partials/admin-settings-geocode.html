@@ -14,6 +14,8 @@
       <p class="muted-msg muted-msg--sm" x-text="$app.t('admin.settings.geocode.tilesHint')"></p>
       <div x-data="settingField({ k: 'geocode.tiles.url', type: 'url', base: 'geocode.tiles', help: true })"></div>
       <div x-data="settingField({ k: 'geocode.tiles.attribution', base: 'geocode.tilesAttribution', help: true })"></div>
+      <div x-data="settingField({ k: 'geocode.tiles.satellite.url', type: 'url', base: 'geocode.satelliteUrl', help: true })"></div>
+      <div x-data="settingField({ k: 'geocode.tiles.satellite.attribution', base: 'geocode.satelliteAttribution', help: true })"></div>
       <div class="admin-settings-actions">
         <button type="button" @click="adminSettingsTest('tiles')" x-text="$app.t('admin.settings.test.tiles')"></button>
       </div>

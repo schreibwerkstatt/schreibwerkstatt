@@ -135,4 +135,26 @@
 
 /* Grid: stale-Zeilen gedämpft wie in der Liste (.entity-row--stale). */
 .card--szenen .entity-grid-row--stale { opacity: 0.6; }
+
+/* Lektorat-Wertung des Abschnitts im Szenen-Detail. */
+.szenen-lektorat {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  margin: 0 0 var(--space-6);
+}
+.szenen-lektorat-item {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-5);
+}
+.szenen-lektorat-text {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+.szenen-lektorat-kommentar {
+  color: var(--color-muted);
+  line-height: 1.5;
+}
 }

@@ -6,7 +6,7 @@ import { createRequire } from 'node:module';
 
 const require = createRequire(import.meta.url);
 const { parseNominatimResults, parsePhotonResults } = require('../../routes/geocode.js');
-const { geocode, parseToponym, preferCountry } = require('../../lib/geocode.js');
+const { geocode, parseToponym, onlyCountry, splitAnchor, inTown } = require('../../lib/geocode.js');
 
 test('geocode: leere Query → leeres Array (kein Netzwerk-Call)', async () => {
   assert.deepEqual(await geocode(''), []);
@@ -73,20 +73,40 @@ test('parsePhotonResults: [lon,lat]-Reihenfolge → {lat,lng} + zusammengesetzte
         properties: { name: 'Zürich', state: 'Zürich', country: 'Schweiz', countrycode: 'CH' } },
     ],
   });
-  assert.deepEqual(out, [{ lat: 47.3769, lng: 8.5417, displayName: 'Zürich, Zürich, Schweiz', countrycode: 'ch' }]);
+  assert.deepEqual(out, [{ lat: 47.3769, lng: 8.5417, displayName: 'Zürich, Zürich, Schweiz', countrycode: 'ch', area: 'Zürich' }]);
+  // county (Bezirk) bleibt aus area draussen — er heisst oft wie sein Hauptort.
+  const [h] = parsePhotonResults({ features: [{ geometry: { coordinates: [7.87, 47.38] },
+    properties: { name: 'Hauptstrasse', city: 'Hauenstein-Ifenthal', county: 'Amtei Olten-Gösgen' } }] });
+  assert.equal(inTown(h, 'olten'), false);
 });
 
-test('preferCountry: bevorzugt Treffer im Zielland, faellt sonst auf alle zurueck', () => {
+test('onlyCountry: nur Treffer im Zielland, sonst leer (kein Fehltreffer im Nachbarland)', () => {
   const cands = [
     { displayName: 'Olten, DE', countrycode: 'de' },
     { displayName: 'Olten, CH', countrycode: 'ch' },
   ];
-  // Treffer im Land → nur diese.
-  assert.deepEqual(preferCountry(cands, 'ch'), [{ displayName: 'Olten, CH', countrycode: 'ch' }]);
-  // Kein Treffer im Land → ungefilterte Liste (nie schlechter als ohne Hinweis).
-  assert.deepEqual(preferCountry(cands, 'fr'), cands);
-  // Kein cc → unveraendert.
-  assert.deepEqual(preferCountry(cands, null), cands);
+  assert.deepEqual(onlyCountry(cands, 'ch'), [{ displayName: 'Olten, CH', countrycode: 'ch' }]);
+  // Index ohne das Zielland (Photon mit Europa-Ausschnitt, «Boston» → England):
+  // lieber unverortet als falsch verortet.
+  assert.deepEqual(onlyCountry(cands, 'us'), []);
+  assert.deepEqual(onlyCountry(cands, null), cands);
+});
+
+test('splitAnchor: Gemeinde nach dem ersten Komma, erstes Wort gefaltet', () => {
+  assert.deepEqual(splitAnchor('Hammerstrasse, Olten'), { town: 'olten', rest: 'Olten' });
+  assert.deepEqual(splitAnchor('Fröschenlochstrasse, Rickenbach bei Olten'),
+    { town: 'rickenbach', rest: 'Rickenbach bei Olten' });
+  assert.deepEqual(splitAnchor('Schöngrund, Zürich'), { town: 'zurich', rest: 'Zürich' });
+  assert.equal(splitAnchor('Olten'), null);
+  assert.equal(splitAnchor('Bahnhof, '), null);
+});
+
+test('inTown: Photon-area bzw. Nominatim-displayName enthaelt die Gemeinde', () => {
+  assert.equal(inTown({ area: 'Hauptstrasse, Eppenberg, Wöschnau' }, 'eppenberg'), true);
+  assert.equal(inTown({ area: 'Schafmatt, Oltingen' }, 'olten'), false);
+  assert.equal(inTown({ area: 'Hambergstraße, Lohne (Oldenburg)' }, 'olten'), false);
+  assert.equal(inTown({ area: 'Fröschenlochstrasse, Rickenbach SO' }, 'rickenbach'), true);
+  assert.equal(inTown({ displayName: 'Hammerallee, Olten, Solothurn, Schweiz' }, 'olten'), true);
 });
 
 test('parsePhotonResults: verwirft Features ohne gueltige Koordinaten', () => {

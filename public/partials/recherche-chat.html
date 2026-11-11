@@ -71,82 +71,92 @@
           <!-- Speicher-Vorschläge: erst der Klick speichert (POST /research/chat-proposal);
                Gespeichert-Status ist serverseitig persistiert. -->
           <template x-if="msg.role === 'assistant' && researchProposals(msg).length">
-            <div class="research-chat-proposals">
-              <div class="research-chat-proposals-headrow">
-                <span class="research-chat-proposals-head" x-text="$app.t('recherche.chat.proposalsHead')"></span>
-                <button type="button" class="btn-compact" x-show="researchSavableProposals(msg).length > 1"
-                        @click="saveAllResearchProposals(msg)"
+            <div class="chat-vorschlaege chat-vorschlaege--wide research-chat-proposals">
+              <div class="chat-vorschlaege-actions" x-show="researchSavableProposals(msg).length > 1">
+                <button type="button" class="chat-vorschlag-btn" @click="saveAllResearchProposals(msg)"
                         x-text="$app.t('recherche.chat.proposalSaveAll', { n: researchSavableProposals(msg).length })"></button>
               </div>
               <template x-for="(prop, pi) in researchProposals(msg)" :key="pi">
-                <div class="research-chat-proposal" :class="{ 'research-chat-proposal--saved': isProposalSaved(msg, pi) }">
-                  <div class="research-chat-proposal-main">
-                    <span class="research-kind-badge palette-badge" :class="'research-kind-badge--' + prop.kind" x-text="kindLabel(prop.kind)"></span>
-                    <div class="research-chat-proposal-body" x-show="!proposalEdit(msg, pi)">
-                      <span class="research-chat-proposal-title" x-show="prop.title" x-text="prop.title"></span>
-                      <span class="research-chat-proposal-snippet" x-show="prop.body" x-text="prop.body"></span>
-                      <!-- Je Link: echter Host neben dem Label, Warn-Zeile bei ungeprüfter URL
-                           (vorab abgewählt, research-chat-proposals.js), Weglassen vor dem
-                           Speichern (edits.urls). -->
-                      <template x-for="(u, ui) in (prop.urls || [])" :key="ui">
-                        <span class="research-chat-proposal-url-row"
-                              :class="{ 'research-chat-proposal-url-row--removed': isProposalUrlRemoved(msg, pi, u), 'research-chat-proposal-url-row--unverified': isProposalUrlUnverified(u) }">
-                          <a class="research-chat-proposal-url url-short" :href="u.url" target="_blank" rel="noopener noreferrer" :data-tip="u.url" x-text="urlText(u)"></a>
-                          <span class="research-chat-proposal-url-host" x-show="proposalUrlHost(u)" x-text="proposalUrlHost(u)"></span>
-                          <span class="research-chat-proposal-url-unverified" x-show="isProposalUrlUnverified(u)"
-                                :data-tip="$app.t('recherche.chat.proposalUrlUnverifiedTip')"><svg class="icon" aria-hidden="true"><use href="/icons.svg#alert-triangle"/></svg><span x-text="$app.t('recherche.chat.proposalUrlUnverified')"></span></span>
-                          <button type="button" class="icon-btn icon-btn--ghost" x-show="!isProposalSaved(msg, pi)"
-                                  @click="toggleProposalUrl(msg, pi, u)"
-                                  :data-tip="$app.t(isProposalUrlRemoved(msg, pi, u) ? 'recherche.chat.proposalUrlRestore' : 'recherche.chat.proposalUrlRemove')"
-                                  :aria-label="$app.t(isProposalUrlRemoved(msg, pi, u) ? 'recherche.chat.proposalUrlRestore' : 'recherche.chat.proposalUrlRemove')"><svg class="icon" aria-hidden="true"><use :href="isProposalUrlRemoved(msg, pi, u) ? '/icons.svg#undo' : '/icons.svg#x'"/></svg></button>
-                        </span>
+                <div class="chat-vorschlag research-chat-proposal" :class="{ 'chat-vorschlag--applied': isProposalSaved(msg, pi) }">
+                  <div class="chat-vorschlag-header">
+                    <span class="chat-vorschlag-heading">
+                      <span class="chat-vorschlag-label" x-text="isProposalSaved(msg, pi) ? $app.t('recherche.chat.proposalSaved') : $app.t('recherche.chat.proposalNew')"></span>
+                      <span class="research-kind-badge palette-badge" :class="'research-kind-badge--' + prop.kind" x-text="kindLabel(prop.kind)"></span>
+                    </span>
+                    <span class="chat-vorschlag-actions">
+                      <template x-if="!isProposalSaved(msg, pi) && !proposalExistsId(msg, pi)">
+                        <button type="button" class="chat-vorschlag-btn" @click="saveResearchProposal(msg, pi)" :disabled="isProposalSaving(msg, pi)">
+                          <span x-show="isProposalSaving(msg, pi)" class="spinner"></span>
+                          <span x-text="$app.t('recherche.chat.proposalSave')"></span>
+                        </button>
                       </template>
-                      <span class="research-chat-proposal-tags" x-show="(prop.tags || []).length" x-text="(prop.tags || []).join(' · ')"></span>
-                      <span class="research-chat-proposal-exists" x-show="proposalExistsId(msg, pi)"
-                            x-text="$app.t(prop.exists_match === 'title' ? 'recherche.chat.proposalExistsTitle' : 'recherche.chat.proposalExists')"></span>
-                    </div>
-                    <!-- Bearbeiten vor dem Speichern (Felder, die das Board ohnehin kennt) -->
-                    <template x-if="proposalEdit(msg, pi)">
-                      <div class="research-chat-proposal-edit">
-                        <div x-data="combobox($app.t('recherche.kindLabel'))"
-                             x-modelable="value" x-model="proposalEdit(msg, pi).kind"
-                             x-effect="options = proposalKindOptions()" class="recherche-kind-combo"></div>
-                        <input type="text" class="recherche-input" x-model="proposalEdit(msg, pi).title"
-                               :placeholder="$app.t('recherche.field.title')" :aria-label="$app.t('recherche.field.title')" data-spellcheck="spelling">
-                        <textarea class="recherche-input" rows="3" x-model="proposalEdit(msg, pi).body"
-                                  :placeholder="$app.t('recherche.field.body')" :aria-label="$app.t('recherche.field.body')" data-spellcheck="spelling"></textarea>
-                        <input type="text" class="recherche-input" x-model="proposalEdit(msg, pi).tagsText"
-                               :placeholder="$app.t('recherche.chat.proposalTagsPlaceholder')" :aria-label="$app.t('recherche.chat.proposalTagsPlaceholder')">
-                      </div>
-                    </template>
-                  </div>
-                  <div class="research-chat-proposal-actions">
-                    <template x-if="!isProposalSaved(msg, pi) && !proposalExistsId(msg, pi)">
-                      <button type="button" class="btn-compact" @click="saveResearchProposal(msg, pi)" :disabled="isProposalSaving(msg, pi)"
-                              x-text="$app.t('recherche.chat.proposalSave')"></button>
-                    </template>
-                    <template x-if="!isProposalSaved(msg, pi) && proposalExistsId(msg, pi)">
-                      <span class="research-chat-proposal-exists-actions">
-                        <button type="button" class="btn-compact" @click="openResearchProposalItem(proposalExistsId(msg, pi))"
+                      <template x-if="!isProposalSaved(msg, pi) && proposalExistsId(msg, pi)">
+                        <button type="button" class="chat-vorschlag-btn" @click="openResearchProposalItem(proposalExistsId(msg, pi))"
                                 x-text="$app.t('recherche.chat.proposalOpenExisting')"></button>
-                        <button type="button" class="btn-compact" @click="saveResearchProposal(msg, pi, { allowDuplicate: true })"
+                      </template>
+                      <template x-if="!isProposalSaved(msg, pi) && proposalExistsId(msg, pi)">
+                        <button type="button" class="chat-vorschlag-btn chat-vorschlag-btn--ghost" @click="saveResearchProposal(msg, pi, { allowDuplicate: true })"
                                 :disabled="isProposalSaving(msg, pi)" x-text="$app.t('recherche.chat.proposalSaveAnyway')"></button>
-                      </span>
-                    </template>
-                    <template x-if="isProposalSaved(msg, pi)">
-                      <button type="button" class="btn-compact research-chat-proposal-saved"
-                              @click="openResearchProposalItem(prop.saved_item_id)"
-                              :data-tip="$app.t('recherche.chat.proposalOpenSaved')"
-                              x-text="$app.t('recherche.chat.proposalSaved')"></button>
-                    </template>
-                    <button type="button" class="icon-btn icon-btn--ghost" x-show="!isProposalSaved(msg, pi)"
-                            @click="toggleProposalEdit(msg, pi)"
-                            :data-tip="$app.t(proposalEdit(msg, pi) ? 'recherche.chat.proposalEditDone' : 'recherche.chat.proposalEdit')"
-                            :aria-label="$app.t(proposalEdit(msg, pi) ? 'recherche.chat.proposalEditDone' : 'recherche.chat.proposalEdit')"><svg class="icon" aria-hidden="true"><use :href="proposalEdit(msg, pi) ? '/icons.svg#x' : '/icons.svg#pencil'"/></svg></button>
-                    <button type="button" class="icon-btn icon-btn--ghost" x-show="(prop.urls || []).length"
-                            @click="proposalToSource(msg, pi)" :disabled="isProposalToSourceBusy(msg, pi) || isProposalSaving(msg, pi)"
-                            :data-tip="$app.t('recherche.chat.proposalToSource')" :aria-label="$app.t('recherche.chat.proposalToSource')"><svg class="icon" aria-hidden="true"><use href="/icons.svg#book-open"/></svg></button>
+                      </template>
+                      <template x-if="isProposalSaved(msg, pi)">
+                        <button type="button" class="chat-vorschlag-btn" @click="openResearchProposalItem(prop.saved_item_id)"
+                                :data-tip="$app.t('recherche.chat.proposalOpenSaved')" x-text="$app.t('recherche.chat.proposalOpenExisting')"></button>
+                      </template>
+                      <button type="button" class="chat-vorschlag-btn chat-vorschlag-btn--ghost" x-show="!isProposalSaved(msg, pi)"
+                              @click="toggleProposalEdit(msg, pi)"
+                              x-text="$app.t(proposalEdit(msg, pi) ? 'recherche.chat.proposalEditDone' : 'recherche.chat.proposalEdit')"></button>
+                      <button type="button" class="chat-vorschlag-btn chat-vorschlag-btn--ghost" x-show="(prop.urls || []).length"
+                              @click="proposalToSource(msg, pi)" :disabled="isProposalToSourceBusy(msg, pi) || isProposalSaving(msg, pi)"
+                              x-text="$app.t('recherche.chat.proposalToSource')"></button>
+                    </span>
                   </div>
+
+                  <!-- Bearbeiten vor dem Speichern (Felder, die das Board ohnehin kennt) -->
+                  <template x-if="proposalEdit(msg, pi)">
+                    <div class="research-chat-proposal-edit">
+                      <div x-data="combobox($app.t('recherche.kindLabel'))"
+                           x-modelable="value" x-model="proposalEdit(msg, pi).kind"
+                           x-effect="options = proposalKindOptions()" class="recherche-kind-combo"></div>
+                      <input type="text" class="recherche-input" x-model="proposalEdit(msg, pi).title"
+                             :placeholder="$app.t('recherche.field.title')" :aria-label="$app.t('recherche.field.title')" data-spellcheck="spelling">
+                      <textarea class="recherche-input" rows="3" x-model="proposalEdit(msg, pi).body"
+                                :placeholder="$app.t('recherche.field.body')" :aria-label="$app.t('recherche.field.body')" data-spellcheck="spelling"></textarea>
+                      <input type="text" class="recherche-input" x-model="proposalEdit(msg, pi).tagsText"
+                             :placeholder="$app.t('recherche.chat.proposalTagsPlaceholder')" :aria-label="$app.t('recherche.chat.proposalTagsPlaceholder')">
+                    </div>
+                  </template>
+
+                  <div class="chat-vorschlag-diff" x-show="!proposalEdit(msg, pi)">
+                    <div class="chat-vorschlag-title" x-show="prop.title" x-text="prop.title"></div>
+                    <div class="chat-vorschlag-text research-chat-proposal-snippet" x-show="prop.body" x-text="prop.body"></div>
+                    <!-- Je Link: echter Host neben dem Label, Warn-Zeile bei ungeprüfter URL
+                         (vorab abgewählt, research-chat-proposals.js), Weglassen vor dem
+                         Speichern (edits.urls). -->
+                    <div class="chat-vorschlag-row" x-show="(prop.urls || []).length">
+                      <span class="chat-vorschlag-field" x-text="$app.t('recherche.chat.proposalField.urls')"></span>
+                      <span class="research-chat-change-urls">
+                        <template x-for="(u, ui) in (prop.urls || [])" :key="ui">
+                          <span class="research-chat-proposal-url-row"
+                                :class="{ 'research-chat-proposal-url-row--removed': isProposalUrlRemoved(msg, pi, u), 'research-chat-proposal-url-row--unverified': isProposalUrlUnverified(u) }">
+                            <a class="research-chat-proposal-url url-short" :href="u.url" target="_blank" rel="noopener noreferrer" :data-tip="u.url" x-text="urlText(u)"></a>
+                            <span class="research-chat-proposal-url-host" x-show="proposalUrlHost(u)" x-text="proposalUrlHost(u)"></span>
+                            <span class="research-chat-proposal-url-unverified" x-show="isProposalUrlUnverified(u)"
+                                  :data-tip="$app.t('recherche.chat.proposalUrlUnverifiedTip')"><svg class="icon" aria-hidden="true"><use href="/icons.svg#alert-triangle"/></svg><span x-text="$app.t('recherche.chat.proposalUrlUnverified')"></span></span>
+                            <button type="button" class="icon-btn icon-btn--ghost" x-show="!isProposalSaved(msg, pi)"
+                                    @click="toggleProposalUrl(msg, pi, u)"
+                                    :data-tip="$app.t(isProposalUrlRemoved(msg, pi, u) ? 'recherche.chat.proposalUrlRestore' : 'recherche.chat.proposalUrlRemove')"
+                                    :aria-label="$app.t(isProposalUrlRemoved(msg, pi, u) ? 'recherche.chat.proposalUrlRestore' : 'recherche.chat.proposalUrlRemove')"><svg class="icon" aria-hidden="true"><use :href="isProposalUrlRemoved(msg, pi, u) ? '/icons.svg#undo' : '/icons.svg#x'"/></svg></button>
+                          </span>
+                        </template>
+                      </span>
+                    </div>
+                    <div class="chat-vorschlag-row" x-show="(prop.tags || []).length">
+                      <span class="chat-vorschlag-field" x-text="$app.t('recherche.chat.proposalField.tags')"></span>
+                      <span x-text="(prop.tags || []).join(' · ')"></span>
+                    </div>
+                  </div>
+                  <div class="chat-vorschlag-note" x-show="!isProposalSaved(msg, pi) && proposalExistsId(msg, pi)"
+                       x-text="$app.t(prop.exists_match === 'title' ? 'recherche.chat.proposalExistsTitle' : 'recherche.chat.proposalExists')"></div>
                 </div>
               </template>
             </div>
