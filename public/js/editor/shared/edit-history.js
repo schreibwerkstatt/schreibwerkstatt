@@ -49,6 +49,11 @@
 // hier.
 
 const DEFAULT_DEBOUNCE_MS = 500;
+// Höchstdauer einer Tipp-Strecke als EIN Schritt. Der Debounce allein trennt
+// nur an Pausen: wer ohne 500-ms-Lücke durchschreibt, bekäme sonst einen
+// Riesenschritt — dieselbe Fehlerklasse wie der WebKit-Stack (Modulkopf), nur
+// abgeschwächt. Etwa ein Satz.
+const DEFAULT_MAX_WAIT_MS = 3000;
 const DEFAULT_MAX = 100;
 
 // Gleicher Inhalt bis auf Block-IDs. Die IDs setzen Save und Merge-Vorbereitung
@@ -182,6 +187,7 @@ export function createEditHistory({
   onRestored = null,
   onChange = null,
   debounceMs = DEFAULT_DEBOUNCE_MS,
+  maxWaitMs = DEFAULT_MAX_WAIT_MS,
   max = DEFAULT_MAX,
 } = {}) {
   if (typeof getRoot !== 'function') throw new Error('createEditHistory: getRoot erforderlich');
@@ -190,6 +196,8 @@ export function createEditHistory({
   let stack = [];
   let idx = -1;
   let timer = null;
+  // Beginn der laufenden Tipp-Strecke (erster pushSoon nach Leerlauf).
+  let burstStart = 0;
   // Während eines Restores: kein Push. Das Restore mutiert das DOM und feuert
   // selbst ein `input` — ohne dieses Flag würde der Restore-Stand als neuer
   // Stack-Eintrag landen und Redo wäre nach einem Undo sofort tot.
@@ -262,10 +270,13 @@ export function createEditHistory({
       notify();
     },
 
-    // Entprellt: eine Tipp-Serie wird zu EINEM Schritt.
+    // Entprellt: eine Tipp-Serie wird zu EINEM Schritt — höchstens `maxWaitMs`
+    // lang, dann wird sie eingelöst und die nächste Strecke beginnt.
     pushSoon() {
       if (applying) return;
+      if (timer && Date.now() - burstStart >= maxWaitMs) pushNow();
       const wasIdle = !timer;
+      if (wasIdle) burstStart = Date.now();
       cancelTimer();
       timer = setTimeout(() => { timer = null; pushNow(); }, debounceMs);
       // Offene Tipp-Strecke macht Undo schon jetzt möglich (siehe canUndo).

@@ -178,6 +178,20 @@ test('pushSoon entprellt eine Tipp-Serie zu EINEM Schritt', async () => {
   assert.equal(el.innerHTML, '<p>start</p>');
 });
 
+test('pushSoon: eine Strecke ohne Pause wird nach maxWaitMs eingelöst', async () => {
+  const { history, el } = makeHistory({ debounceMs: 30, maxWaitMs: 50 });
+  // Anschläge alle 10 ms — der Debounce allein liefe nie ab.
+  for (let i = 1; i <= 10; i++) {
+    setHtml(el, `<p>start ${'x'.repeat(i)}</p>`);
+    history.pushSoon();
+    await new Promise(r => setTimeout(r, 10));
+  }
+  assert.ok(history.size() >= 2, 'mindestens ein Zwischenschritt mitten in der Strecke');
+  await new Promise(r => setTimeout(r, 60));
+  const steps = history.size() - 1;
+  assert.ok(steps >= 2 && steps < 10, `mehrere Schritte, aber nicht je Anschlag (${steps})`);
+});
+
 test('undo löst einen offenen Debounce ein statt ihn zu verlieren', () => {
   const { history, el } = makeHistory({ debounceMs: 10_000 });
   setHtml(el, '<p>gerade getippt</p>');
