@@ -133,3 +133,28 @@ export function formatIsoDay(iso, uiLocale, opts = { day: 'numeric', month: 'sho
   const d = isoNoonUtc(iso);
   return d ? dateTimeFormat(uiLocale, { ...opts, timeZone: 'UTC' }).format(d) : '';
 }
+
+// Offset der Zone `tz` zum Zeitpunkt `ms` in Minuten (Wanduhr − UTC).
+function _tzOffsetMin(ms, tz) {
+  const parts = new Intl.DateTimeFormat('en-US', {
+    timeZone: tz, hourCycle: 'h23',
+    year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', second: '2-digit',
+  }).formatToParts(new Date(ms));
+  const get = (t) => Number(parts.find(p => p.type === t)?.value);
+  const wall = Date.UTC(get('year'), get('month') - 1, get('day'), get('hour'), get('minute'), get('second'));
+  return Math.round((wall - Math.floor(ms / 1000) * 1000) / 60000);
+}
+
+// Wanduhrzeit der App-Zeitzone (`YYYY-MM-DDTHH:mm` aus `<input type=
+// datetime-local>`) → UTC-ISO-String. Das Eingabefeld kennt keine Zone; ohne
+// Umrechnung planten Browser in einer anderen Zone als `appTimezone` den
+// Blog-Beitrag zur falschen Stunde. Zwei Durchgaenge fangen den DST-Wechsel
+// zwischen Schaetzung und Ergebnis. Ungueltige Eingabe → ''.
+export function zonedWallToIso(value, tz = appTimezone) {
+  const m = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})(?::(\d{2}))?$/.exec(String(value || ''));
+  if (!m) return '';
+  const wall = Date.UTC(+m[1], +m[2] - 1, +m[3], +m[4], +m[5], +(m[6] || 0));
+  let ms = wall - _tzOffsetMin(wall, tz) * 60000;
+  ms = wall - _tzOffsetMin(ms, tz) * 60000;
+  return Number.isFinite(ms) ? new Date(ms).toISOString() : '';
+}

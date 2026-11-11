@@ -342,6 +342,12 @@
 .badge--sync-conflict    { background: var(--color-err-bg);  color: var(--color-err-text); }
 .badge--sync-new         { background: var(--color-tag-bg);  color: var(--color-tag-text); }
 .badge--sync-locked      { background: var(--color-warn-bg); color: var(--color-muted); }
+/* Remote-Status des Beitrags drüben (Push-Dialog, Zeilen-Badge). */
+.badge--remote-draft     { background: var(--color-tag-bg);  color: var(--color-tag-text); }
+.badge--remote-pending   { background: var(--color-tag-bg);  color: var(--color-tag-text); }
+.badge--remote-scheduled { background: var(--color-warn-bg); color: var(--color-warn-text); }
+.badge--remote-published { background: var(--color-ok-bg);   color: var(--color-ok-text); }
+.badge--remote-private   { background: var(--color-tag-bg);  color: var(--color-tag-text); }
 .organizer-sync-push,
 .organizer-sync-conflict {
   flex: none;
@@ -355,65 +361,6 @@
   font-variant-numeric: tabular-nums;
 }
 .organizer-sync-push-pct { font-size: 0.85em; }
-
-/* Konflikt-Diff-Modal */
-.blog-conflict-overlay {
-  position: fixed; inset: 0;
-  background: var(--color-overlay);
-  display: flex; align-items: center; justify-content: center;
-  z-index: var(--z-popover);
-  padding: var(--space-xs);
-}
-.blog-conflict-modal {
-  background: var(--color-surface);
-  border-radius: var(--radius-md);
-  width: min(1100px, 100%);
-  max-height: 90vh;
-  display: flex; flex-direction: column;
-  border: 0.5px solid var(--color-border);
-  box-shadow: var(--shadow-lg);
-}
-.blog-conflict-header {
-  display: flex; justify-content: space-between; align-items: center;
-  padding: var(--space-3) var(--space-xs);
-  border-bottom: 0.5px solid var(--color-border);
-}
-.blog-conflict-body {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: var(--space-3);
-  padding: var(--space-3);
-  overflow: auto;
-  flex: 1 1 auto;
-}
-.blog-conflict-side {
-  border: 0.5px solid var(--color-border);
-  border-left: 3px solid var(--card-accent-blog);
-  border-radius: var(--radius-none);
-  padding: var(--space-3);
-  background: var(--color-bg);
-  display: flex; flex-direction: column; gap: var(--space-2xs);
-  min-height: 200px;
-}
-.blog-conflict-side-header h4 {
-  margin: 0; font-size: var(--font-size-sm);
-  color: var(--color-text);
-}
-.blog-conflict-content {
-  font-size: var(--font-size-sm);
-  line-height: 1.55;
-  overflow: auto;
-  max-height: 60vh;
-}
-.blog-conflict-content p { margin: 0 0 var(--space-2xs); }
-.blog-conflict-actions {
-  display: flex; gap: var(--space-2xs); justify-content: flex-end;
-  padding: var(--space-3) var(--space-xs);
-  border-top: 0.5px solid var(--color-border);
-}
-@media (max-width: 720px) {
-  .blog-conflict-body { grid-template-columns: 1fr; }
-}
 
 /* Kapitellängen-Collapse am Organizer-Fuss: optisch vom Tree absetzen.
    Bar-/Listen-Styling kommt aus book-overview/kapitel.css (geteiltes

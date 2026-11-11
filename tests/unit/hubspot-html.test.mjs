@@ -124,13 +124,12 @@ test('appToHubspotHtml round-trips hr + pre from editor', () => {
   assert.match(out, /<p>y<\/p>/);
 });
 
-// ── Quellenangaben + Verzeichnis (Push-only) ────────────────────────────────
+// ── Quellenangaben + Verzeichnis ────────────────────────────────────────────
 //
-// HubSpot ist Push-only (kein Pull, kein Update-vom-Remote — docs/hubspot-sync.md).
-// Darum braucht das angehaengte Verzeichnis KEINEN Marker: es kann nichts
-// zurueckwandern und damit nichts akkumulieren. Der Chip selbst ueberlebt die
-// Allowlist nicht (`span` steht in keiner Map) und wird zu Klartext — genau
-// richtig, ein Verweis auf `sources.id` waere im HubSpot-Post ohnehin toter Ballast.
+// Der Chip ueberlebt die Allowlist nicht (`span` steht in keiner Map) und wird
+// zu Klartext — ein Verweis auf `sources.id` waere im HubSpot-Post toter
+// Ballast. Das Verzeichnis traegt im Push die Marker-Klasse (siehe unten
+// „Push-Zusaetze"), damit „HubSpot uebernehmen" es wieder herausschneidet.
 
 const { buildCiteHtml } = await import('../../public/js/sources/cite-html.js');
 const { bibliographySectionHtml } = await import('../../lib/bibliography.js');
@@ -160,7 +159,8 @@ test('appToHubspotHtml: angehaengtes Verzeichnis ueberlebt als h2 + Liste', () =
   assert.match(out, /<p>Text\.<\/p>/);
   assert.match(out, /<h2>Quellenverzeichnis<\/h2>/);
   assert.match(out, /<li>Kafka, F\. \(1915\)\. <em>Die Verwandlung<\/em>\.<\/li>/);
-  // Der Marker-<div> waere hier ohnehin sinnlos — die Allowlist entpackt ihn.
+  // Ohne Marker-Wrapper bleibt das Verzeichnis klassenlos; einen <div> gibt
+  // die Allowlist nie aus.
   assert.doesNotMatch(out, /<div/);
   assert.ok(out.indexOf('Text.') < out.indexOf('Quellenverzeichnis'));
 });
@@ -228,4 +228,83 @@ test('appToHubspotHtml({ images: true }): Bilder mit https-src bleiben, Figure m
 test('belegtes Blockzitat mit Absaetzen bleibt mehrteilig', () => {
   const out = appToHubspotHtml('<blockquote data-src="4"><p>a</p><p>b</p></blockquote>');
   assert.equal(out, '<blockquote><p>a</p><p>b</p></blockquote>');
+});
+
+// ── Push-Zusaetze (Lead, Verzeichnis) wandern nie in den Abschnitt zurueck ──
+
+test('Push markiert Lead und Verzeichnis, Zuruecklesen schneidet beides heraus', () => {
+  const section = bibliographySectionHtml(HUB_BIB, { list: true, marker: true });
+  const pushed = appToHubspotHtml(`<p class="ms-head__lead"><em>Der Lead.</em></p><p>Text.</p>${section}`);
+  assert.match(pushed, /^<p class="ms-head__lead"><em>Der Lead\.<\/em><\/p><p>Text\.<\/p>/);
+  assert.match(pushed, /<h2 class="sw-bibliography">Quellenverzeichnis<\/h2><ul class="sw-bibliography">/);
+  assert.doesNotMatch(pushed, /<div/);
+  const stats = {};
+  const back = hubspotToAppHtml(pushed, { stats });
+  assert.equal(back, '<p>Text.</p>');
+  assert.equal(stats.lead, 'Der Lead.');
+  assert.equal(stats.bibliographyRemoved, true);
+  // Zweiter Zyklus: nichts akkumuliert.
+  const again = appToHubspotHtml(`<p class="ms-head__lead"><em>Der Lead.</em></p>${back}${section}`);
+  assert.equal(again.match(/Der Lead/g).length, 1);
+  assert.equal(again.match(/Quellenverzeichnis/g).length, 1);
+});
+
+test('Zuruecklesen ohne Marker-Klassen: Rueckfall ueber Lead-Text und Verzeichnis-Titel', () => {
+  const stats = {};
+  const out = hubspotToAppHtml('<p><em>Der Lead.</em></p><p>Text.</p><h2>Fazit</h2><p>Ende.</p><h2>Quellenverzeichnis</h2><ul><li>Kafka</li></ul>',
+    { lead: 'Der Lead.', bibTitle: 'Quellenverzeichnis', stats });
+  assert.equal(out, '<p>Text.</p><h2>Fazit</h2><p>Ende.</p>');
+  assert.equal(stats.lead, undefined, 'unmarkierter Lead aendert die Titel-Werkstatt nicht');
+});
+
+test('Rueckfall greift nicht, wenn der erste Absatz nicht der Lead ist', () => {
+  const out = hubspotToAppHtml('<p>Anderer Anfang.</p><p>Text.</p>', { lead: 'Der Lead.' });
+  assert.equal(out, '<p>Anderer Anfang.</p><p>Text.</p>');
+});
+
+test('App-Klassen bleiben draussen, nur Marker-Klassen gehen mit', () => {
+  const out = appToHubspotHtml('<p class="todo x">a</p><p class="ms-head__kicker"><strong>K</strong></p>');
+  assert.equal(out, '<p>a</p><p><strong>K</strong></p>');
+});
+
+// ── Listen und Zellen ────────────────────────────────────────────────────────
+
+test('verschachtelte Listen bleiben verschachtelt (beide Richtungen)', () => {
+  const html = '<ul><li>A<ul><li>B</li><li>C</li></ul></li><li>D</li></ul>';
+  assert.equal(appToHubspotHtml(html), html);
+  assert.equal(hubspotToAppHtml(html), html);
+  assert.equal(hubspotToAppHtml('<ol><li>A</li><ol><li>B</li></ol></ol>'), '<ol><li>A<ol><li>B</li></ol></li></ol>');
+});
+
+test('mehrere Absaetze in li/td bleiben durch <br> getrennt', () => {
+  assert.equal(appToHubspotHtml('<ul><li><p>eins</p><p>zwei</p></li></ul>'), '<ul><li>eins<br>zwei</li></ul>');
+  assert.equal(hubspotToAppHtml('<ul><li><p>eins</p><p>zwei</p></li></ul>'), '<ul><li>eins<br>zwei</li></ul>');
+  assert.equal(appToHubspotHtml('<table><tr><td><p>a</p><p>b</p></td></tr></table>'),
+    '<table><tbody><tr><td>a<br>b</td></tr></tbody></table>');
+});
+
+// ── Jinja nur im Import, nur innerhalb eines Textstuecks ─────────────────────
+
+test('Jinja-Filter loescht nie ueber Absatzgrenzen', () => {
+  assert.equal(hubspotToAppHtml('<p>Preis {{</p><p>Mitte</p><p>}} Ende {% x %}</p>'),
+    '<p>Preis {{</p><p>Mitte</p><p>}} Ende</p>');
+});
+
+test('Push laesst geschweifte Klammern stehen (als Entity, kein HubL) und der Import auch', () => {
+  const pushed = appToHubspotHtml('<p>Template {{ name }} und {% raw %}</p>');
+  assert.equal(pushed, '<p>Template &#123;{ name }} und &#123;% raw %}</p>');
+  assert.equal(hubspotToAppHtml(pushed), '<p>Template {{ name }} und {% raw %}</p>');
+});
+
+// ── Inline-Auszeichnung, Listenstart, Codebloecke ───────────────────────────
+
+test('sup, sub, s/del/strike, code und ol[start] bleiben erhalten', () => {
+  const out = appToHubspotHtml('<p>H<sub>2</sub>O x<sup>2</sup> <s>a</s> <del>b</del> <strike>c</strike> <code>x=1</code></p><ol start="5"><li>x</li></ol><ol start="1"><li>y</li></ol>');
+  assert.equal(out, '<p>H<sub>2</sub>O x<sup>2</sup> <s>a</s> <s>b</s> <s>c</s> <code>x=1</code></p><ol start="5"><li>x</li></ol><ol><li>y</li></ol>');
+  assert.match(hubspotToAppHtml('<p><sup>1</sup><code>c</code></p>'), /<sup>1<\/sup><code>c<\/code>/);
+});
+
+test('<pre> mit <br> behaelt die Zeilenumbrueche', () => {
+  assert.equal(hubspotToAppHtml('<pre>line1<br>line2<br>  line3</pre>'), '<pre>line1\nline2\n  line3</pre>');
+  assert.equal(hubspotToAppHtml('<pre><div>a</div><div>b</div></pre>'), '<pre>a\nb\n</pre>');
 });

@@ -15,10 +15,20 @@ test('newer: vorhandenes a, fehlendes b -> a neuer', () => {
   assert.equal(newer('2024-01-01T00:00:00.000Z', null), true);
 });
 
-test('newer: lexikografischer ISO-Vergleich', () => {
+test('newer: ISO-Vergleich', () => {
   assert.equal(newer('2024-02-01T00:00:00.000Z', '2024-01-01T00:00:00.000Z'), true);
   assert.equal(newer('2024-01-01T00:00:00.000Z', '2024-02-01T00:00:00.000Z'), false);
   assert.equal(newer('2024-01-01T00:00:00.000Z', '2024-01-01T00:00:00.000Z'), false);
+});
+
+test('newer: Millisekunden fehlen (Java Instant) -> Zeit, nicht String', () => {
+  assert.equal(newer('2024-01-01T10:00:00Z', '2024-01-01T10:00:00.500Z'), false);
+  assert.equal(newer('2024-01-01T10:00:01Z', '2024-01-01T10:00:00.500Z'), true);
+});
+
+test('newer: zonenloser WordPress-Stamp gilt als UTC', () => {
+  assert.equal(newer('2024-01-01T10:00:00', '2024-01-01T09:59:59.000Z'), true);
+  assert.equal(newer('2024-01-01T10:00:00', '2024-01-01T10:00:00.001Z'), false);
 });
 
 test('classifyPull: kein Link -> create', () => {

@@ -24,6 +24,8 @@ function _stmt(col, kind) {
           ON CONFLICT(${col}, src_key) WHERE ${col} IS NOT NULL
           DO UPDATE SET remote_src = excluded.remote_src, remote_id = excluded.remote_id`,
     clear: `DELETE FROM sync_media_cache WHERE ${col} = ?`,
+    list: `SELECT src_key, remote_src, remote_id FROM sync_media_cache WHERE ${col} = ? ORDER BY id`,
+    del: `DELETE FROM sync_media_cache WHERE ${col} = ? AND src_key = ?`,
   }[kind];
   _stmts[k] = db.prepare(sql);
   return _stmts[k];
@@ -48,4 +50,16 @@ function clearCachedMedia(owner) {
   return _stmt(col, 'clear').run(id).changes;
 }
 
-module.exports = { getCachedMedia, putCachedMedia, clearCachedMedia };
+/** Alle Eintraege einer Verbindung: `[{ srcKey, src, id }]`. */
+function listCachedMedia(owner) {
+  const [col, id] = _col(owner);
+  return _stmt(col, 'list').all(id).map(r => ({ srcKey: r.src_key, src: r.remote_src, id: r.remote_id }));
+}
+
+/** Einen Eintrag verwerfen (Bild drueben geloescht). */
+function deleteCachedMedia(owner, srcKey) {
+  const [col, id] = _col(owner);
+  return _stmt(col, 'del').run(id, String(srcKey)).changes;
+}
+
+module.exports = { getCachedMedia, putCachedMedia, clearCachedMedia, listCachedMedia, deleteCachedMedia };

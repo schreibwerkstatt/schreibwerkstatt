@@ -234,8 +234,9 @@ dauerhaft** zum gewöhnlichen Codeblock: derselbe Verlust-Mechanismus wie beim
 Quellen-Chip ohne `data-src`, nur ohne Rettungsanker (der Chip behält seinen
 lesbaren Text, ein Diagramm verliert sein Bild).
 
-HubSpot braucht das nicht — dort gibt es keinen Pull zurück (einmaliger
-Initial-Import, danach nur Create-Draft-Push).
+HubSpot hat keinen Pull, liest aber an einer Stelle zurück: „HubSpot
+übernehmen" im Konflikt-Diff. Dort kommt das Diagramm heute als klassenloses
+`<pre>` an — der Abschnitt behält danach einen Codeblock statt des Diagramms.
 
 ## Serverseitiges Rendering
 

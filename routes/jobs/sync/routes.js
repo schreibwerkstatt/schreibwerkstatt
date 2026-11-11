@@ -7,6 +7,8 @@
 //                  Menge: ein zweiter Push fuer ANDERE Abschnitte ist ein
 //                  eigener Job, nicht der laufende (sonst pollte das UI fuer
 //                  Abschnitt B den Job von Abschnitt A und meldete „fertig").
+//                  Optional `publish: 'now'` | `publish_at: ISO`: nach dem
+//                  Push veroeffentlichen bzw. planen (push.js#runSyncPushJob).
 //   bookExclusive  Typen, die Seiten + Links eines Buchs anlegen (Import,
 //                  Pull): laeuft einer davon fuer das Buch — egal von wem —,
 //                  antwortet die Route 409 P_SYNC_RUNNING. Die Verbindung gehoert
@@ -25,6 +27,22 @@ function activeBookJob(bookId, types) {
     if (!set.has(job.type) || job.bookId !== key) continue;
     if (job.status === 'queued' || job.status === 'running') return job;
   }
+  return null;
+}
+
+// Veroeffentlichen nach dem Push: `publish: 'now'` oder `publish_at: <ISO>`
+// (Zukunft, hoechstens zwei Jahre). Liefert `{ mode: 'now' }`,
+// `{ mode: 'schedule', at }`, null (nur pushen) oder false (ungueltig).
+const MAX_SCHEDULE_MS = 2 * 366 * 86400_000;
+function _publishOpts(body) {
+  if (body?.publish_at != null && body.publish_at !== '') {
+    const ms = Date.parse(String(body.publish_at));
+    const now = Date.now();
+    if (!Number.isFinite(ms) || ms <= now + 60_000 || ms > now + MAX_SCHEDULE_MS) return false;
+    return { mode: 'schedule', at: new Date(ms).toISOString() };
+  }
+  if (body?.publish === 'now') return { mode: 'now' };
+  if (body?.publish != null && body.publish !== '' && body.publish !== false) return false;
   return null;
 }
 
@@ -50,10 +68,15 @@ function mountSyncJobRoute(router, provider, spec) {
 
     let pageIds = null;
     let dedupId = null;
+    let publish = null;
     if (spec.withPages) {
       pageIds = _pageIds(req.body);
       if (!pageIds.length) return res.status(400).json({ error_code: `${P}_PAGE_IDS_REQUIRED` });
-      dedupId = `${bookId}:${pageIds.join(',')}`;
+      publish = _publishOpts(req.body);
+      if (publish === false) return res.status(400).json({ error_code: `${P}_PUBLISH_INVALID` });
+      // Der Modus gehoert zum Dedup: ein „veroeffentlichen" waehrend eines
+      // laufenden reinen Pushs derselben Abschnitte ist ein eigener Auftrag.
+      dedupId = `${bookId}:${pageIds.join(',')}${publish ? `:${publish.mode}` : ''}`;
     }
     const existing = findActiveJobId(spec.type, dedupId ?? bookId, userEmail);
     if (existing) return res.json({ jobId: existing, existing: true });
@@ -66,7 +89,7 @@ function mountSyncJobRoute(router, provider, spec) {
     const labelParams = spec.withPages ? { count: pageIds.length } : null;
     const jobId = createJob(spec.type, bookId, userEmail, spec.label, labelParams, dedupId);
     enqueueJob(jobId, () => (spec.withPages
-      ? spec.run(jobId, bookId, userEmail, pageIds)
+      ? spec.run(jobId, bookId, userEmail, pageIds, publish)
       : spec.run(jobId, bookId, userEmail)));
     res.json({ jobId });
   });

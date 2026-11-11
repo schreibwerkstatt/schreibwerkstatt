@@ -5,7 +5,7 @@
 // __SHELL_BUILD: content hash over all listed assets → drives SHELL_CACHE.
 // __SHELL_MANIFEST: the coherent set precached atomically at SW install.
 // __VENDOR_SET: current vendor/ + fonts/ files — VENDOR_CACHE prune list.
-self.__SHELL_BUILD = "742a337b6f69697d";
+self.__SHELL_BUILD = "570dc8dc5aea9547";
 self.__SHELL_MANIFEST = [
   "/css/admin/admin-backup.css",
   "/css/admin/admin-home.css",
@@ -56,6 +56,7 @@ self.__SHELL_MANIFEST = [
   "/css/book/plot/tools.css",
   "/css/book/plot/widgets.css",
   "/css/book/plot/zeit.css",
+  "/css/book/sync-dialogs.css",
   "/css/book/titelwerkstatt.css",
   "/css/card-accents.css",
   "/css/chat.css",
@@ -602,6 +603,7 @@ self.__SHELL_MANIFEST = [
   "/js/cards/stil-card.js",
   "/js/cards/struktur-card.js",
   "/js/cards/stt-store.js",
+  "/js/cards/sync/push-dialog.js",
   "/js/cards/sync/sync-core.js",
   "/js/cards/szenen-card.js",
   "/js/cards/tagebuch-rueckblick-card.js",
@@ -1299,6 +1301,7 @@ self.__SHELL_MANIFEST = [
   "/partials/sources.html",
   "/partials/stil-heatmap.html",
   "/partials/struktur.html",
+  "/partials/sync-dialogs.html",
   "/partials/szenen-grid.html",
   "/partials/szenen-uebersicht.html",
   "/partials/szenen.html",

@@ -10,9 +10,17 @@
 //   fetchRemote(client, link, 'precheck'|'reconcile') · isGone(remote) · lossyParts(remote)
 //   preparePush({ conn, client, bookId, signal, logger }) → state (u.a. resolveImage)
 //   render({ appHtml, bib, hl, state }) → Post-Body
-//   create({ client, conn, state, title, body, teaser }) → Remote
+//   create({ client, conn, state, title, body, teaser, slug }) → Remote
 //   update({ client, link, state, title, body, teaser }) → Remote
+//     `teaser` geht als Meta-Description/Excerpt mit, `slug` nur beim Anlegen
 //   linkAfterPush({ pageId, conn, remote, link, pushedAt }) · touchPush(conn)
+//   findExistingRemote({ client, conn, title, logger }) → Remote | null und
+//     linkFromRemote(remote) → Link-Form fuer `update` (optional, beide zusammen)
+//   publish({ client, conn, pageId, remote, publish }) → Remote (optional;
+//     `publish` = { mode: 'now' } | { mode: 'schedule', at }). Setzt den
+//     Status am Link selbst. `publishNeedsTeaser`: Anbieter verlangt eine
+//     Meta-Description zum Veroeffentlichen (HubSpot) — ohne Teaser wird der
+//     Abschnitt vor dem Schreiben abgewiesen, statt halb gepusht zu scheitern.
 //
 // Ablauf pro Abschnitt (fuer beide Anbieter gleich):
 //   0. Sync-Punkt `pushedAt` nehmen, BEVOR die Seite gelesen wird (siehe unten)
@@ -26,7 +34,9 @@
 //      ein Fehler hier trifft nur diesen Abschnitt, nie den ganzen Job
 //   4. Link schreiben, SOFORT nach dem Remote-Write: ohne Link legte der
 //      naechste Push denselben Beitrag ein zweites Mal an
-//   5. Create: lokaler Name bekommt den app-internen Datums-Praefix von heute
+//   5. Optional veroeffentlichen/planen (`publish`). Scheitert nur das, ist der
+//      Push gelungen und der Toast warnt gelb — der Inhalt liegt drueben.
+//   6. Create: lokaler Name bekommt den app-internen Datums-Praefix von heute
 //      (`result.renamed`, sync-core.js#_applyPushRenames); scheitert das, ist
 //      der Push trotzdem gelungen
 // Geht kein Abschnitt durch, endet der Job als Fehler mit dem ersten Grund —
@@ -40,6 +50,7 @@ const { splitDatePrefix, outgoingTitle } = require('../../../lib/blog-title');
 const { getHeadline } = require('../../../db/headline');
 const { localIsoDate } = require('../../../lib/local-date');
 const { isNotFound, codedError } = require('../../../lib/sync/request');
+const { slugify } = require('../../../lib/slug');
 
 function abortSignal(jobId) {
   return jobAbortControllers.get(jobId)?.signal || null;
@@ -54,9 +65,25 @@ function pushErrorKey(provider, code) {
   return `${provider.key}.error.${known.has(code) ? code : `${provider.prefix}_PUSH_FAILED`}`;
 }
 
+/** i18n-Key eines Sync-Fehlers ausserhalb des Pushs (Abgleich, Import, Pull):
+ *  `<key>.error.<CODE>` fuer die Codes, die beide Anbieter mit Text fuehren
+ *  (Transport, Anmeldung, Verbindung), sonst `fallback` (z.B.
+ *  `BLOG_RECONCILE_FAILED`). Ohne Mapping zeigte der Toast den nackten Code. */
+const COMMON_ERROR_SUFFIXES = [
+  'AUTH_FAILED', 'FORBIDDEN', 'RATE_LIMIT', 'UPSTREAM', 'TIMEOUT', 'FETCH_FAILED',
+  'INVALID_JSON', 'RESPONSE_TOO_LARGE', 'NOT_CONNECTED', 'REQUIRES_BLOG_TYPE', 'SYNC_RUNNING',
+];
+function errorKey(provider, code, fallback) {
+  const P = provider.prefix;
+  const known = new Set([...(provider.pushErrorKeys || []), ...COMMON_ERROR_SUFFIXES.map(x => `${P}_${x}`)]);
+  return `${provider.key}.error.${known.has(code) ? code : fallback}`;
+}
+
 /** Vorab-Pruefung. Liefert null (weiter) oder `{ code, blocks? }` (Abschnitt
- *  ueberspringen). Wirft nicht fuer Remote-Fehler — die landen im Ergebnis. */
-async function precheck(provider, { client, link, pageId, pageName, logger }) {
+ *  ueberspringen). Wirft nicht fuer Remote-Fehler — die landen im Ergebnis.
+ *  `seen.stamp` bekommt den Remote-Stempel, gegen den `changedSincePrecheck`
+ *  unmittelbar vor dem Schreiben noch einmal vergleicht. */
+async function precheck(provider, { client, link, pageId, pageName, logger, seen: out = {} }) {
   const P = provider.prefix;
   const tag = `${provider.logTag}-Push: Page ${pageId} "${pageName}"`;
   const remoteRef = `${provider.remoteLabel} ${provider.remoteId(link)}`;
@@ -83,6 +110,7 @@ async function precheck(provider, { client, link, pageId, pageName, logger }) {
   }
   const seen = provider.linkStamp(link);
   const now = provider.remoteStamp(current);
+  out.stamp = now || null;
   if (seen && now && newer(now, seen)) {
     provider.db.setConflictState(pageId, 'detected');
     logger.info(`${tag} — ${remoteRef} drueben geaendert (${now} > ${seen}), Konflikt gesetzt`);
@@ -96,6 +124,32 @@ async function precheck(provider, { client, link, pageId, pageName, logger }) {
     return { code: `${P}_UNSUPPORTED_BLOCKS`, blocks: lossy };
   }
   return null;
+}
+
+/** Zweiter Stempel-Vergleich direkt vor dem Remote-Write. Zwischen Vorab-
+ *  Pruefung und Update liegen Quellen, Rendering und Bild-Uploads (bis zu
+ *  Minuten) — wer den Beitrag in dieser Zeit drueben bearbeitet, haette sonst
+ *  keinen Konflikt bekommen, sein Edit waere still ueberschrieben worden.
+ *  Liefert true, wenn drueben inzwischen jemand geschrieben hat. */
+async function changedSincePrecheck(provider, { client, link, stamp }) {
+  if (!stamp) return false;
+  const current = await provider.fetchRemote(client, link, 'precheck');
+  const now = provider.remoteStamp(current);
+  return !!(now && newer(now, stamp));
+}
+
+// Pushes pro Verbindung nacheinander (Anbieter + Buch). Zwei parallele Jobs
+// (anderer Abschnitts-Satz, Mitautor, `jobs.max_concurrent > 1`) koennten sonst
+// fuer denselben neuen Abschnitt beide `create` aufrufen: zwei Posts drueben,
+// der zweite Link ueberschriebe den ersten, ein Post bliebe verwaist.
+const _pushChains = new Map();
+function _serialized(key, fn) {
+  const prev = _pushChains.get(key) || Promise.resolve();
+  const run = prev.catch(() => {}).then(fn);
+  const tail = run.catch(() => {});
+  _pushChains.set(key, tail);
+  tail.then(() => { if (_pushChains.get(key) === tail) _pushChains.delete(key); });
+  return run;
 }
 
 /** Lokaler Name nach einem Create (Datums-Praefix). Liefert
@@ -125,7 +179,11 @@ async function _renameAfterCreate({ pageId, pageRow, localName, logger, tag }) {
   }
 }
 
-async function runSyncPushJob(provider, jobId, bookId, userEmail, pageIds) {
+function runSyncPushJob(provider, jobId, bookId, userEmail, pageIds, publish = null) {
+  return _serialized(`${provider.key}:${bookId}`, () => _runSyncPushJob(provider, jobId, bookId, userEmail, pageIds, publish));
+}
+
+async function _runSyncPushJob(provider, jobId, bookId, userEmail, pageIds, publish) {
   const logger = makeJobLogger(jobId);
   const P = provider.prefix;
   try {
@@ -136,6 +194,7 @@ async function runSyncPushJob(provider, jobId, bookId, userEmail, pageIds) {
 
     const ids = (pageIds || []).map(x => parseInt(x, 10)).filter(n => Number.isInteger(n) && n > 0);
     if (!ids.length) throw codedError(`${P}_NO_PAGES`);
+    if (publish && typeof provider.publish !== 'function') throw codedError(`${P}_PUBLISH_UNSUPPORTED`);
 
     const state = await provider.preparePush({ conn, client, bookId, signal, logger });
     // Neu hochgeladene Bilder zaehlen (src geaendert = Upload). Verworfene
@@ -146,8 +205,8 @@ async function runSyncPushJob(provider, jobId, bookId, userEmail, pageIds) {
     let pageImagesDropped = 0;
     if (typeof state.resolveImage === 'function') {
       const inner = state.resolveImage;
-      state.resolveImage = async (src) => {
-        const r = await inner(src);
+      state.resolveImage = async (src, opts) => {
+        const r = await inner(src, opts);
         if (r && r.src && r.src !== src && !r.cached) imagesUploaded++;
         if (!r || !r.src) pageImagesDropped++;
         return r;
@@ -159,6 +218,8 @@ async function runSyncPushJob(provider, jobId, bookId, userEmail, pageIds) {
     let pushed = 0;
     let createdRemote = 0;
     let conflictSkipped = 0;
+    let published = 0;
+    const publishFailed = [];
     const errors = [];
     const renamed = [];
 
@@ -188,9 +249,12 @@ async function runSyncPushJob(provider, jobId, bookId, userEmail, pageIds) {
         continue;
       }
 
+      // Link erst hier lesen (nicht vor der Schleife): ein vorausgegangener,
+      // serialisierter Job kann ihn eben angelegt haben.
       const link = provider.db.getLinkByPage(pageId);
+      const seen = {};
       if (link) {
-        const blocked = await precheck(provider, { client, link, pageId, pageName: pageRow.name, logger });
+        const blocked = await precheck(provider, { client, link, pageId, pageName: pageRow.name, logger, seen });
         if (blocked) {
           if (blocked.code === `${P}_CONFLICT`) conflictSkipped++;
           errors.push({ pageId, ...blocked });
@@ -222,11 +286,39 @@ async function runSyncPushJob(provider, jobId, bookId, userEmail, pageIds) {
         const hl = getHeadline(pageId);
         const title = outgoingTitle(pageRow.name, hl) || String(pageRow.name || `Page ${pageId}`).trim();
         const teaser = String(hl?.teaser || '').trim();
+        if (publish && provider.publishNeedsTeaser && !teaser) {
+          logger.info(`${provider.logTag}-Push: Page ${pageId} "${pageRow.name}" ohne Teaser, Veroeffentlichen abgewiesen`);
+          errors.push({ pageId, code: `${P}_PUBLISH_NEEDS_TEASER` });
+          continue;
+        }
         pageImagesDropped = 0;
         const body = await provider.render({ appHtml, bib, hl, state });
 
-        const args = { client, conn, link, state, title, body, teaser };
-        const remote = link ? await provider.update(args) : await provider.create(args);
+        if (link && await changedSincePrecheck(provider, { client, link, stamp: seen.stamp })) {
+          provider.db.setConflictState(pageId, 'detected');
+          logger.info(`${provider.logTag}-Push: Page ${pageId} "${pageRow.name}" — ${provider.remoteLabel} ${provider.remoteId(link)} waehrend des Pushs drueben geaendert, Konflikt gesetzt`);
+          conflictSkipped++;
+          errors.push({ pageId, code: `${P}_CONFLICT` });
+          continue;
+        }
+        // Slug nur beim Anlegen, aus dem Titel; danach nie mehr — ein geaenderter
+        // Slug braeche jeden Link auf den Beitrag. Teaser = Meta-Description
+        // (HubSpot) bzw. Excerpt (WordPress), das setzt der Anbieter.
+        const slug = link ? undefined : (slugify(title) || undefined);
+        const args = { client, conn, link, state, title, body, teaser, metaDescription: teaser, slug };
+        // Vor einem Create: liegt drueben schon ein passender, unverknuepfter
+        // Entwurf (Antwort eines frueheren Creates verloren, Link mit dem
+        // Trennen weg)? Dann den aktualisieren statt einen zweiten anzulegen.
+        let remote;
+        const existing = !link && typeof provider.findExistingRemote === 'function'
+          ? await provider.findExistingRemote({ client, conn, title, logger })
+          : null;
+        if (existing) {
+          remote = await provider.update({ ...args, link: provider.linkFromRemote(existing) });
+          logger.info(`${provider.logTag}-Push: Page ${pageId} -> bestehender ${provider.remoteLabel} ${existing.id} wiederverwendet statt neu angelegt`);
+        } else {
+          remote = link ? await provider.update(args) : await provider.create(args);
+        }
         provider.linkAfterPush({ pageId, conn, remote, link, pushedAt });
         if (pageImagesDropped) {
           imagesDropped += pageImagesDropped;
@@ -239,6 +331,18 @@ async function runSyncPushJob(provider, jobId, bookId, userEmail, pageIds) {
           // Die eigene Umbenennung ist kein lokaler Edit: ihr Stempel wird der
           // Sync-Punkt — aber nur, wenn dazwischen niemand gespeichert hat.
           if (r.syncedAt) provider.linkAfterPush({ pageId, conn, remote, link, pushedAt: r.syncedAt });
+        }
+        // Veroeffentlichen erst nach dem letzten linkAfterPush: der setzte den
+        // Status sonst auf den des eben geschriebenen Entwurfs zurueck.
+        if (publish) {
+          try {
+            await provider.publish({ client, conn, pageId, remote, publish });
+            published++;
+            logger.info(`${provider.logTag}-Push: Page ${pageId} "${pageRow.name}" ${publish.mode === 'schedule' ? `geplant auf ${publish.at}` : 'veroeffentlicht'}`);
+          } catch (e) {
+            logger.warn(`${provider.logTag}-Push: Page ${pageId} "${pageRow.name}" gepusht, Veroeffentlichen fehlgeschlagen: ${e.code || e.message}`);
+            publishFailed.push(title);
+          }
         }
         if (link) {
           logger.info(`${provider.logTag}-Push: Page ${pageId} "${pageRow.name}" -> ${provider.remoteLabel} ${remote?.id || provider.remoteId(link)} aktualisiert`);
@@ -254,7 +358,7 @@ async function runSyncPushJob(provider, jobId, bookId, userEmail, pageIds) {
           errors.push({ pageId, code: `${P}_REMOTE_GONE` });
         } else {
           logger.warn(`${provider.logTag}-Push: Page ${pageId} "${pageRow.name}" Fehler ${e.code || e.message}`);
-          errors.push({ pageId, code: e.code || `${P}_PUSH_FAILED` });
+          errors.push({ pageId, code: e.code || `${P}_PUSH_FAILED`, ...(e.location ? { location: e.location } : {}) });
         }
       }
     }
@@ -264,19 +368,23 @@ async function runSyncPushJob(provider, jobId, bookId, userEmail, pageIds) {
     logger.info(`${provider.logTag}-Push: ${pushed} aktualisiert, ${createdRemote} neu, ${conflictSkipped} Konflikt, ${imagesUploaded} Bilder hochgeladen, ${imagesDropped} verworfen, ${errors.length} Fehler.`);
     if (errors.length && pushed + createdRemote === 0) {
       const first = errors[0];
+      // Weiterleitung mit bekanntem Ziel: der Toast nennt die vermutlich
+      // richtige Blog-URL (`<key>.error.<CODE>_TO`).
+      if (first.location && first.code === `${P}_REDIRECT`) throw i18nError(`${pushErrorKey(provider, first.code)}_TO`, { location: first.location });
       throw i18nError(pushErrorKey(provider, first.code), first.blocks ? { blocks: first.blocks.join(', ') } : null);
     }
     const toastWarnings = imagesDropped
       ? [{ key: 'sync.push.imagesDropped', params: { count: imagesDropped, pages: imagesDroppedPages.join(', ') } }]
       : [];
+    if (publishFailed.length) toastWarnings.push({ key: 'sync.publish.failed', params: { pages: publishFailed.join(', ') } });
     completeJob(jobId, {
-      pushed, createdRemote, conflictSkipped, imagesUploaded, imagesDropped, errors, renamed, toastWarnings,
+      pushed, createdRemote, conflictSkipped, published, imagesUploaded, imagesDropped, errors, renamed, toastWarnings,
     }, null,
-      `${pushed + createdRemote} gepusht / ${errors.length} Fehler`);
+      `${pushed + createdRemote} gepusht / ${published} veroeffentlicht / ${errors.length} Fehler`);
   } catch (e) {
     if (e.name !== 'AbortError') makeJobLogger(jobId).error(`${provider.logTag}-Push-Fehler: ${e.code || e.message}`);
     failJob(jobId, e);
   }
 }
 
-module.exports = { runSyncPushJob, abortSignal, throwIfAborted, pushErrorKey };
+module.exports = { runSyncPushJob, abortSignal, throwIfAborted, pushErrorKey, errorKey };

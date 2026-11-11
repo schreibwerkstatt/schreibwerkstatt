@@ -70,7 +70,7 @@ test('backoffMs: capped at 2000', () => {
 });
 
 test('ALLOWED_STATUS list', () => {
-  assert.deepEqual(ALLOWED_STATUS, ['draft', 'publish', 'private']);
+  assert.deepEqual(ALLOWED_STATUS, ['draft', 'publish', 'private', 'future']);
 });
 
 test('createWpClient: rejects http base_url', () => {

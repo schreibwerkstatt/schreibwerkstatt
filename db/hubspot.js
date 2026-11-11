@@ -128,9 +128,12 @@ function setPortalId(connId, portalId) {
   return _stmtSetPortalId.run(String(portalId), parseInt(connId, 10)).changes > 0;
 }
 
+// Import laeuft beliebig oft (holt neue Posts nach): `initial_import_done_at`
+// bleibt der erste Lauf, `last_import_at` ist der juengste.
 const _stmtMarkImported = db.prepare(`
   UPDATE hubspot_connections
-     SET initial_import_done_at = ${NOW_ISO_SQL}, last_import_at = ${NOW_ISO_SQL}, updated_at = ${NOW_ISO_SQL}
+     SET initial_import_done_at = COALESCE(initial_import_done_at, ${NOW_ISO_SQL}),
+         last_import_at = ${NOW_ISO_SQL}, updated_at = ${NOW_ISO_SQL}
    WHERE id = ?
 `);
 function markInitialImportDone(connId) {
@@ -179,6 +182,12 @@ const _stmtListLinksForConn = db.prepare(`
 `);
 function listLinksForConnection(hubId) {
   return _stmtListLinksForConn.all(parseInt(hubId, 10));
+}
+
+const _stmtLinkedPageIds = db.prepare('SELECT page_id FROM hubspot_page_links WHERE hub_id = ?');
+/** Set der verknuepften page_ids einer Verbindung (Import: Wiederverknuepfen). */
+function linkedPageIds(hubId) {
+  return new Set(_stmtLinkedPageIds.all(parseInt(hubId, 10)).map(r => r.page_id));
 }
 
 // Ein Push (oder Import) ist ein Sync-Punkt: er setzt den Konfliktstatus zurueck.
@@ -231,13 +240,15 @@ function markConflictResolvedApp(pageId, remoteUpdatedAt) {
 }
 
 // „HubSpot uebernehmen": der Draft-Stand ist jetzt der gemeinsame Stand.
+// `pulledAt`: Stempel der eigenen Writes (Seite/Titel-Werkstatt) — ein Save
+// dazwischen gilt so nicht als schon abgeglichen; ohne ihn „jetzt".
 const _stmtMarkPulled = db.prepare(`
   UPDATE hubspot_page_links
-     SET hubspot_updated_at = ?, last_pulled_at = ${NOW_ISO_SQL}, conflict_state = NULL
+     SET hubspot_updated_at = ?, last_pulled_at = COALESCE(?, ${NOW_ISO_SQL}), conflict_state = NULL
    WHERE page_id = ?
 `);
-function markLinkPulled(pageId, { remoteUpdatedAt }) {
-  _stmtMarkPulled.run(String(remoteUpdatedAt || '') || null, parseInt(pageId, 10));
+function markLinkPulled(pageId, { remoteUpdatedAt, pulledAt = null }) {
+  _stmtMarkPulled.run(String(remoteUpdatedAt || '') || null, pulledAt || null, parseInt(pageId, 10));
 }
 
 // Abgleich: Status und URL des Remote nachziehen (in HubSpot publiziert → die
@@ -267,6 +278,7 @@ module.exports = {
   getLinkByPage,
   getLinkByPost,
   listLinksForConnection,
+  linkedPageIds,
   upsertLink,
   setConflictState,
   markConflictResolvedApp,

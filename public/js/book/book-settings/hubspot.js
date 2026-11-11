@@ -104,6 +104,15 @@ export const hubspotMethods = {
   async saveHubspotConnection() {
     const bookId = this._selectedBookId();
     if (!bookId || !this.hubspotFormReady()) return;
+    // Anderer Blog = Zielwechsel: der Server verwirft Verknuepfungen und
+    // Import-Stand (db/hubspot.js#upsertConnection). Vorher sagen, was folgt.
+    const prevBlog = this.hubspotConnection?.blogId;
+    if (prevBlog && String(prevBlog) !== String(this.hubspotForm.blogId)) {
+      const ok = await window.__app.appConfirm({
+        message: window.__app.t('hubspot.connect.targetChangeConfirm'), danger: true,
+      });
+      if (!ok) return;
+    }
     this._setHubspotBusy('save');
     try {
       const data = await postSyncJson(`/hubspot/${bookId}/connect`, {
@@ -155,6 +164,8 @@ export const hubspotMethods = {
   },
 
 
+  // Wiederholbar: der erste Lauf importiert alles, jeder weitere holt neue
+  // Posts nach (verknuepfte bleiben unberuehrt).
   startHubspotImport() {
     return this._startHubspotJob('hubspot-import', 'HUBSPOT_IMPORT_FAILED', 'hubspotImportJobId');
   },

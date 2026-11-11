@@ -186,6 +186,7 @@ export function registerBookSettingsCard() {
     blogImportJobId: null,
     blogPullJobId: null,
     blogReconcileJobId: null,
+    blogRepullJobId: null,
     // HubSpot-Sync (Initial-Import + Create-Draft-Push).
     hubspotConnection: null,
     hubspotForm: { token: '', blogId: '', authorId: '' },
@@ -281,6 +282,7 @@ export function registerBookSettingsCard() {
           blogImportJobId: null,
           blogPullJobId: null,
           blogReconcileJobId: null,
+          blogRepullJobId: null,
           hubspotConnection: null,
           hubspotForm: { token: '', blogId: '', authorId: '' },
           hubspotBlogs: [],
@@ -417,16 +419,17 @@ export function registerBookSettingsCard() {
       if (!this._isFormBook(detail.bookId)) return;
       // Blog-Sync: Status nachladen, lokale Job-IDs nullen. Import/Pull legen
       // Abschnitte + Kapitel an → Sidebar-Tree neu laden.
-      if (t === 'blog-import' || t === 'blog-pull' || t === 'blog-push' || t === 'blog-reconcile') {
+      if (t === 'blog-import' || t === 'blog-pull' || t === 'blog-push' || t === 'blog-reconcile' || t === 'blog-repull') {
         this.blogImportJobId = null;
         this.blogPullJobId = null;
         this.blogReconcileJobId = null;
+        this.blogRepullJobId = null;
         const degraded = detail.job?.result?.citesDegraded || 0;
         this.blogCiteWarning = degraded
           ? window.__app.t('blog.status.citesDegraded', { n: degraded })
           : '';
         this.loadBlogStatus();
-        if (t === 'blog-import' || t === 'blog-pull') window.__app.loadPages?.();
+        if (t === 'blog-import' || t === 'blog-pull' || t === 'blog-repull') window.__app.loadPages?.();
         return;
       }
       if (t === 'hubspot-import' || t === 'hubspot-push' || t === 'hubspot-reconcile') {

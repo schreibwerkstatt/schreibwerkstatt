@@ -1,6 +1,7 @@
 import { EVT } from '../../events.js';
 import { startPoll } from '../job-helpers.js';
 import { isSelectedBook } from '../book-guard.js';
+import { pushDialogMethods, PUBLISHABLE_STATES } from './push-dialog.js';
 
 // Push-Poller pro Seite: `_pushTimers[pageId]` hält ein Halter-Objekt, in dessen
 // `timer` startPoll seinen Handle schreibt. Stoppen = Intervall räumen UND
@@ -31,10 +32,15 @@ function stopPushPoller(holder) {
 //   viewUrl(page, providerMeta, link) → URL-String oder '' (optional)
 //   onBookChange  — optional, wird in book:changed nach Core-Reset gerufen
 //   pushErrorCode — Fallback-Error-Code-String
-//   confirmPush(pageId) → boolean | Promise<boolean> (optional). Wird in `push()`
-//                         vor dem Backend-Call aufgerufen; liefert `false` →
-//                         Push abgebrochen (z.B. wenn ein UI-Dialog erst eine
-//                         Bestätigung einholen muss).
+//   remoteState(link) → 'draft'|'published'|'scheduled'|'private'|'pending'|null
+//   liveUpdate    — true: Update an einem veröffentlichten Beitrag ist sofort
+//                   live (WordPress); sonst landet es im Draft-Puffer (HubSpot)
+//   pushNote      — optional, i18n-Key: Hinweis im Push-Dialog bei
+//                   verknüpften Beiträgen (HubSpot: Module/CTAs gehen verloren)
+//   publishNote   — optional, i18n-Key: Voraussetzung fürs Veröffentlichen
+//
+// Jeder Push läuft über den Push-Dialog (sync/push-dialog.js): Vorschau gegen
+// den Blogstand, dann pushen, veröffentlichen oder planen.
 //
 // Status-Modell und Konflikt-Diff sind für alle Provider gleich (Server-Seite:
 // routes/jobs/sync/push.js, routes/sync-router.js):
@@ -48,12 +54,54 @@ function stopPushPoller(holder) {
 // Sync-Punkt = der jüngere von last_pulled_at/last_pushed_at — dieselbe Regel
 // wie lib/blog-merge.js#classifyPull.
 
+// ISO-Stamp → ms. Zonenlose Stamps (WordPress `modified_gmt`:
+// `2026-05-19T20:29:35`) sind UTC — `Date.parse` laese sie sonst als Ortszeit.
+export function stampMs(s) {
+  const str = String(s || '');
+  const ms = Date.parse(/T\d\d:\d\d(:\d\d(\.\d+)?)?$/.test(str) ? `${str}Z` : str);
+  return Number.isFinite(ms) ? ms : NaN;
+}
+
+// Zeitvergleich zweier ISO-Stamps per Date.parse (Fallback String) —
+// Frontend-Pendant zu lib/blog-merge.js#newer: Remote-Stamps ohne
+// Millisekunden sortierten als String falsch.
+export function stampNewer(a, b) {
+  if (!a) return false;
+  if (!b) return true;
+  const ta = stampMs(a);
+  const tb = stampMs(b);
+  if (Number.isFinite(ta) && Number.isFinite(tb)) return ta > tb;
+  return String(a) > String(b);
+}
+
 // Jüngster von mehreren ISO-Stamps ('' wenn keiner). Frontend-Pendant zu
 // lib/blog-merge.js#latest — beide Provider rechnen ihren Sync-Status damit.
 export function latestStamp(...stamps) {
   let out = '';
-  for (const s of stamps) if (s && String(s) > out) out = String(s);
+  for (const s of stamps) if (stampNewer(s, out)) out = String(s);
   return out;
+}
+
+// Kennungen der Push-Sperre (lib/wp-html/lossy.js#wpLossyBlocks) → lesbarer
+// Begriff im Tooltip. Bekannte haben einen eigenen Key, `wp:<block>`,
+// `format:style-<eigenschaft>` und übrige `format:<klasse>` einen mit
+// Platzhalter; was keiner Regel folgt, bleibt roh.
+const LOCKED_KEYS = new Set([
+  'more', 'nextpage', 'figure', 'gallery', 'background',
+  'iframe', 'object', 'embed', 'video', 'audio', 'picture', 'source',
+  'format:text-align', 'format:drop-cap', 'format:color', 'format:font-size', 'format:font-family',
+  'format:align', 'format:image-size', 'format:block-style', 'format:list-start',
+]);
+export function lockedPartKey(id) {
+  const s = String(id || '').trim();
+  if (LOCKED_KEYS.has(s)) return { key: `sync.locked.${s.replace(/^format:/, 'format_').replace(/-/g, '_')}`, params: null };
+  let m = /^wp:(.+)$/.exec(s);
+  if (m) return { key: 'sync.locked.wpBlock', params: { name: m[1].replace(/^core\//, '') } };
+  m = /^format:style-(.+)$/.exec(s);
+  if (m) return { key: 'sync.locked.formatStyle', params: { name: m[1] } };
+  m = /^format:(.+)$/.exec(s);
+  if (m) return { key: 'sync.locked.formatClass', params: { name: m[1] } };
+  return null;
 }
 
 export const SYNC_STATUS_LABELS = {
@@ -74,7 +122,7 @@ export function computeSyncStatus(page, link) {
   if (link.locked_blocks) return 'locked';
   const lastSync = latestStamp(link.last_pushed_at, link.last_pulled_at);
   const localUpdated = latestStamp(page?.updated_at, link.headline_updated_at);
-  if (localUpdated && lastSync && localUpdated > lastSync) return 'push-needed';
+  if (localUpdated && lastSync && stampNewer(localUpdated, lastSync)) return 'push-needed';
   return 'synced';
 }
 
@@ -86,6 +134,8 @@ export function createSyncCard(spec) {
   const reconcileType = spec.jobTypes?.reconcile || null;
   const linkRefreshTypes = new Set([pushType, ...(reconcileType ? [reconcileType] : [])]);
   const globalWindowKey = `__${spec.key}Card`;
+  // Fehler-Praefix des Anbieters ('BLOG' | 'HUBSPOT'), aus dem Push-Fallback.
+  const P = (spec.pushErrorCode || `${spec.key.toUpperCase()}_PUSH_FAILED`).replace(/_PUSH_FAILED$/, '');
 
   return () => {
     const base = {
@@ -100,6 +150,16 @@ export function createSyncCard(spec) {
       conflictOpen: null,
       conflictData: null,
 
+      ...pushDialogMethods(spec),
+
+      // x-model der beiden <dialog> (partials/sync-dialogs.html): ESC/Backdrop
+      // schliessen. Accessoren gehören hierher, nicht in ein gespreadetes
+      // Methoden-Objekt — `...obj` kopiert einen Getter als festen Wert.
+      get conflictVisible() { return !!this.conflictOpen; },
+      set conflictVisible(v) { if (!v) this.closeConflict(); },
+      get pushDialogVisible() { return !!this.pushDialog; },
+      set pushDialogVisible(v) { if (!v) this.pushDialog = null; },
+
       init() {
         window[globalWindowKey] = this;
         this._onPagesLoaded = () => this.loadLinks();
@@ -113,6 +173,7 @@ export function createSyncCard(spec) {
           this.pushProgress = {};
           this.conflictOpen = null;
           this.conflictData = null;
+          this.pushDialog = null;
           if (typeof spec.onBookChange === 'function') spec.onBookChange.call(this);
         };
         this._onJobFinished = (ev) => {
@@ -189,20 +250,37 @@ export function createSyncCard(spec) {
       statusTip(page) {
         const s = this.statusFor(page);
         if (s === 'locked') {
-          const blocks = this.linksMap[page.id]?.locked_blocks || '';
-          return window.__app?.t('sync.status.lockedTip', { blocks }) || '';
+          const app = window.__app;
+          const raw = String(this.linksMap[page.id]?.locked_blocks || '');
+          const blocks = raw.split(/\s*,\s*/).filter(Boolean).map((id) => {
+            const k = lockedPartKey(id);
+            const txt = k ? app?.t(k.key, k.params || {}) : '';
+            return txt && txt !== k?.key ? txt : id;
+          }).join(', ');
+          return app?.t('sync.status.lockedTip', { blocks }) || '';
         }
         return this.statusLabel(s);
       },
 
+      // Push-Knopf: lokale Änderung offen, oder ein synchroner Entwurf bzw.
+      // geplanter Beitrag, den der Dialog veröffentlichen/umplanen kann.
       canPush(page) {
         const s = this.statusFor(page);
-        return !!s && CAN_PUSH_STATUSES.includes(s);
+        if (!s) return false;
+        if (CAN_PUSH_STATUSES.includes(s)) return true;
+        return s === 'synced' && PUBLISHABLE_STATES.includes(this.remoteState(page));
+      },
+
+      pushTip(page) {
+        const s = this.statusFor(page);
+        const key = s === 'synced' ? 'sync.action.publish' : `${spec.key}.action.push`;
+        return window.__app?.t(key) || '';
       },
 
       async openConflict(pageId) {
         const bookId = Alpine.store('nav').selectedBookId;
         if (!bookId) return;
+        await window.__app?._ensurePartial?.('sync-dialogs');
         this.conflictOpen = pageId;
         this.conflictData = null;
         try {
@@ -223,6 +301,7 @@ export function createSyncCard(spec) {
         } catch (e) {
           console.error(`[sync:${spec.key}] Konflikt-Diff laden fehlgeschlagen:`, e);
           this.conflictOpen = null;
+          this._reportError(await this._errorCodeOf(e), `${P}_RESOLVE_FAILED`);
         }
       },
 
@@ -244,7 +323,7 @@ export function createSyncCard(spec) {
             body: JSON.stringify({ resolve: side }),
           });
           const data = await res.json();
-          if (!res.ok) throw new Error(data.error_code || `${spec.key.toUpperCase()}_RESOLVE_FAILED`);
+          if (!res.ok) throw new Error(data.error_code || `${P}_RESOLVE_FAILED`);
           this.closeConflict();
           await this.loadLinks();
           // Der Server hat die Seite gerade überschrieben (kein Bust im Browser).
@@ -256,7 +335,33 @@ export function createSyncCard(spec) {
           }
         } catch (e) {
           console.error(`[sync:${spec.key}] Konflikt lösen fehlgeschlagen:`, e);
+          this._reportError(e?.message, `${P}_RESOLVE_FAILED`);
         }
+      },
+
+      // Fehler ohne Job (Push-Start abgelehnt, Diff nicht ladbar, Konflikt
+      // nicht loesbar) als roter Toast — der Job-Toast greift hier nicht, und in
+      // der Konsole sieht ihn niemand. `code` ist ein Server-`error_code`; hat
+      // er keinen `<key>.error.*`-Text, gilt der Fallback.
+      _reportError(code, fallbackCode) {
+        const app = window.__app;
+        if (!app?._showJobToast) return;
+        const tryKey = (c) => {
+          if (!c) return '';
+          const k = `${spec.key}.error.${c}`;
+          const txt = app.t(k);
+          return txt && txt !== k ? txt : '';
+        };
+        const message = tryKey(code) || tryKey(fallbackCode) || tryKey(`${P}_SYNC_FAILED`) || String(code || fallbackCode || '');
+        app._showJobToast({ message, severity: 'err', jobType: null, bookId: Alpine.store('nav').selectedBookId ?? null });
+      },
+
+      // Antwort-Code aus einem fehlgeschlagenen fetch (Response oder Error).
+      async _errorCodeOf(e) {
+        if (e && typeof e.json === 'function') {
+          try { return (await e.json())?.error_code || ''; } catch { return ''; }
+        }
+        return e?.message || '';
       },
 
       viewUrl(page) {
@@ -264,24 +369,25 @@ export function createSyncCard(spec) {
         return spec.viewUrl(page, this.providerMeta, this.linksMap[page.id] || null);
       },
 
-      async push(pageId) {
+      push(pageId) {
+        return this.openPushDialog(pageId);
+      },
+
+      // opts: {} (nur pushen) | { publish: 'now' } | { publish_at: ISO }
+      async _startPush(pageId, opts = {}) {
         const bookId = Alpine.store('nav').selectedBookId;
         if (!bookId) return;
         if (this.pushBusy[pageId]) return;
-        if (typeof spec.confirmPush === 'function') {
-          const ok = await spec.confirmPush.call(this, pageId);
-          if (!ok) return;
-        }
         this.pushBusy = { ...this.pushBusy, [pageId]: true };
         this.pushProgress = { ...this.pushProgress, [pageId]: 0 };
         try {
           const res = await fetch(`/jobs/${pushType}`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ book_id: bookId, page_ids: [pageId] }),
+            body: JSON.stringify({ book_id: bookId, page_ids: [pageId], ...opts }),
           });
           const data = await res.json();
-          if (!res.ok) throw new Error(data.error_code || spec.pushErrorCode || `${spec.key.toUpperCase()}_PUSH_FAILED`);
+          if (!res.ok) throw new Error(data.error_code || `${P}_PUSH_FAILED`);
           if (data.jobId) {
             window.dispatchEvent(new CustomEvent(EVT.JOB_ENQUEUED, { detail: { type: pushType, jobId: data.jobId } }));
             this._pollPush(pageId, data.jobId);
@@ -289,6 +395,7 @@ export function createSyncCard(spec) {
         } catch (e) {
           console.error(`[sync:${spec.key}] Push fehlgeschlagen:`, e);
           this._clearPushBusy(pageId);
+          this._reportError(e?.message, spec.pushErrorCode);
         }
       },
 

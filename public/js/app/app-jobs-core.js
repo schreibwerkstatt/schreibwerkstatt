@@ -216,6 +216,7 @@ export const appJobsCoreMethods = {
       'blog-pull':             'toast.job.blogPull',
       'blog-push':             'toast.job.blogPush',
       'blog-reconcile':        'toast.job.blogReconcile',
+      'blog-repull':           'toast.job.blogRepull',
       'hubspot-import':        'toast.job.hubspotImport',
       'hubspot-push':          'toast.job.hubspotPush',
       'hubspot-reconcile':     'toast.job.hubspotReconcile',
@@ -237,7 +238,7 @@ export const appJobsCoreMethods = {
     // (z.B. synonyme, lektorat-single). Sonst landet AI_UNREACHABLE nur im Log.
     if (!labelKey && !isError) return;
     // Gelungener Job mit Teilverlust (z.B. Blog-Push ohne nicht hochladbare
-    // Bilder): `result.toastWarnings: [{ key, params }]` macht den Toast gelb.
+    // Bilder): `result.toastWarnings: [{ key, params, n? }]` macht den Toast gelb.
     const warnings = !isError && Array.isArray(job.result?.toastWarnings) ? job.result.toastWarnings : [];
     const severity = isError ? 'err' : (warnings.length ? 'warn' : 'ok');
     const suffixKey = isError ? 'toast.job.failed' : 'toast.job.done';
@@ -249,7 +250,8 @@ export const appJobsCoreMethods = {
       if (detailText && detailText !== job.error) message += `: ${detailText}`;
       else if (job.error) message += `: ${job.error}`;
     }
-    if (warnings.length) message += `: ${warnings.map(w => this.t(w.key, w.params || {})).join(' ')}`;
+    // `n` gesetzt → Zähl-Text über tn() (`<key>` + `<key>One`, docs/i18n.md).
+    if (warnings.length) message += `: ${warnings.map(w => (w.n != null ? this.tn(w.key, w.n, w.params || {}) : this.t(w.key, w.params || {}))).join(' ')}`;
     this._showJobToast({ message, severity, jobType: detail.type, bookId: detail.bookId ?? null });
   },
 

@@ -8,6 +8,9 @@
 //   editDraft(id)   Draft drueben aendern (Stempel springt vor)
 //   deletePost(id)  Post drueben loeschen (GET/PATCH → 404)
 //   publish(id)     Post drueben publizieren (state + url)
+// Push-Dialog: POST …/draft/push-live und POST …/schedule landen in
+// `state.published` bzw. `state.scheduled`; `onBeforeDraftPatch(id)` laeuft
+// direkt vor einem PATCH (Race-Tests: drueben aendert jemand waehrend des Pushs).
 
 const { HUBSPOT_BASE } = require('../../../lib/hubspot-client');
 
@@ -31,7 +34,10 @@ function makeMock() {
     deleted: new Set(),
     files: [],          // POST /files/v3/files
     calls: [],
+    published: [],      // POST …/draft/push-live
+    scheduled: [],      // POST /cms/v3/blogs/posts/schedule
     failOnCreate: false,
+    onBeforeDraftPatch: null,
   };
 
   const findPost = (id) => state.created.find(p => p.id === id) || state.posts.find(p => p.id === id);
@@ -72,12 +78,35 @@ function makeMock() {
       state.files.push({ id, name, folderPath: opts.body?.get?.('folderPath') });
       return jsonResponse({ id, url: `https://f.hubspotusercontent-eu1.net/hubfs/4242/${name}` });
     }
+    const fileMatch = path.match(/^\/files\/v3\/files\/([^/]+)$/);
+    if (fileMatch && method === 'GET') {
+      const f = state.files.find(x => x.id === decodeURIComponent(fileMatch[1]));
+      return f ? jsonResponse(f) : new Response('not found', { status: 404 });
+    }
+    const liveMatch = path.match(/^\/cms\/v3\/blogs\/posts\/([^/]+)\/draft\/push-live$/);
+    if (liveMatch && method === 'POST') {
+      const id = decodeURIComponent(liveMatch[1]);
+      const p = findPost(id);
+      if (!p) return new Response('not found', { status: 404 });
+      Object.assign(p, state.drafts[id] || {}, { state: 'PUBLISHED', url: `https://blog.example.com/p/${id}` });
+      state.published.push(id);
+      return new Response(null, { status: 204 });
+    }
+    if (path === '/cms/v3/blogs/posts/schedule' && method === 'POST') {
+      const body = JSON.parse(opts.body || '{}');
+      const p = findPost(String(body.id));
+      if (!p) return new Response('not found', { status: 404 });
+      Object.assign(p, { state: 'SCHEDULED', publishDate: body.publishDate });
+      state.scheduled.push({ id: String(body.id), publishDate: body.publishDate });
+      return new Response(null, { status: 204 });
+    }
     const draftMatch = path.match(/^\/cms\/v3\/blogs\/posts\/([^/]+)\/draft$/);
     if (draftMatch) {
       const id = decodeURIComponent(draftMatch[1]);
       if (state.deleted.has(id) || !findPost(id)) return new Response('not found', { status: 404 });
       if (method === 'GET') return jsonResponse(state.drafts[id] || findPost(id));
       if (method === 'PATCH') {
+        if (state.onBeforeDraftPatch) state.onBeforeDraftPatch(id);
         const body = JSON.parse(opts.body || '{}');
         const updated = { ...(state.drafts[id] || findPost(id)), ...body, id, updated: tick() };
         state.drafts[id] = updated;

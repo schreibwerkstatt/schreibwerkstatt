@@ -1,6 +1,7 @@
 'use strict';
-// HubSpot-Sync-Jobs: einmaliger Initial-Import (alle PUBLISHED-Posts des
-// konfigurierten Autors + Blogs in Jahres-Kapitel), selektiver Push, Abgleich.
+// HubSpot-Sync-Jobs: Import (alle PUBLISHED-Posts des konfigurierten Autors +
+// Blogs in Jahres-Kapitel; wiederholbar, holt neue Posts nach), selektiver
+// Push, Abgleich.
 // Mapping 1 Buch == 1 Blog, 1 Post == 1 Page.
 //
 // Push, Abgleich und die POST-Routen teilen sich beide Blog-Syncs
@@ -10,12 +11,12 @@
 // meldet, statt ihn zu ueberschreiben. Hier steht nur der Import.
 
 const express = require('express');
-const { updateJob, completeJob, failJob, makeJobLogger } = require('./shared');
+const { updateJob, completeJob, failJob, makeJobLogger, i18nError } = require('./shared');
 const hubspot = require('../../db/hubspot');
 const { seedImportBaseline } = require('../../lib/import-baseline');
-const { codedError } = require('../../lib/sync/request');
 const hubspotProvider = require('../../lib/sync/providers/hubspot');
-const { createLinkedPageFromHubspotPost, postDate } = hubspotProvider;
+const { relinkToastWarnings } = require('../../lib/sync/relink');
+const { createLinkedPageFromHubspotPost, buildRelinkIndex, importErrorI18n, postDate } = hubspotProvider;
 const { runSyncPushJob, abortSignal, throwIfAborted } = require('./sync/push');
 const { runSyncReconcileJob } = require('./sync/reconcile');
 const { mountSyncJobRoute } = require('./sync/routes');
@@ -27,37 +28,50 @@ async function runHubspotImportJob(jobId, bookId, userEmail) {
   try {
     hubspotProvider.requireBook(bookId, userEmail);
     const conn = hubspotProvider.resolveConn(bookId);
-    if (conn.initialImportDoneAt) throw codedError('HUBSPOT_ALREADY_IMPORTED');
     const client = hubspotProvider.client(conn, abortSignal(jobId));
 
     updateJob(jobId, { statusText: 'job.hubspot.import.fetch', progress: 1 });
 
-    // Alle Posts puffern, dann aufsteigend nach Datum sortieren. HubSpot liefert
-    // newest-first; ungesteuert laegen Jahres-Kapitel und Seiten
-    // reverse-chronologisch.
+    // Alle veroeffentlichten Posts des Blogs puffern, dann aufsteigend nach
+    // Datum sortieren. HubSpot liefert newest-first; ungesteuert laegen
+    // Jahres-Kapitel und Seiten reverse-chronologisch. Autor und Status prueft
+    // der Job selbst (die Filter-Parameter gehen nur als Vorauswahl mit) — so
+    // laesst sich zaehlen, was ein anderer Autor geschrieben hat.
     const posts = [];
-    for await (const post of client.iteratePosts({
-      authorId: conn.authorId,
-      blogId: conn.blogId,
-      state: 'PUBLISHED',
-    })) {
+    let otherAuthor = 0;
+    for await (const post of client.iteratePosts({ blogId: conn.blogId, state: 'PUBLISHED' })) {
       throwIfAborted(jobId);
+      const state = String(post?.state || post?.currentState || 'PUBLISHED');
+      if (state !== 'PUBLISHED') continue;
+      if (post.blogAuthorId != null && String(post.blogAuthorId) !== String(conn.authorId)) {
+        otherAuthor++;
+        continue;
+      }
       posts.push(post);
     }
     posts.sort((a, b) => postDate(a).localeCompare(postDate(b)));
 
+    // Wiederholbar: verknuepfte Posts ueberspringt der Import, unverknuepfte
+    // Abschnitte gleichen Namens (nach Trennen/Zielwechsel) werden wieder
+    // verknuepft statt doppelt angelegt.
+    const relink = await buildRelinkIndex({ conn, bookId });
     let imported = 0;
     let skipped = 0;
+    let relinked = 0;
+    let relinkConflicts = 0;
     const chapterCache = new Map();
     for (let i = 0; i < posts.length; i++) {
       throwIfAborted(jobId);
       const post = posts[i];
       const created = await createLinkedPageFromHubspotPost({
-        conn, bookId, post, chapterCache, userEmail, logger,
+        conn, bookId, post, chapterCache, userEmail, logger, relink,
       });
       if (!created) {
-        logger.info(`HubSpot-Import: Post ${post.id} bereits verlinkt, skip`);
         skipped++;
+      } else if (created.relinked) {
+        relinked++;
+        if (created.conflict) relinkConflicts++;
+        logger.info(`HubSpot-Import: Post ${post.id} -> bestehende Page ${created.id} "${created.name}" wieder verknuepft${created.conflict ? ' (Konflikt: Text weicht ab)' : ''}`);
       } else {
         logger.info(`HubSpot-Import: Post ${post.id} -> Page ${created.id} "${created.name}"`);
         imported++;
@@ -72,16 +86,31 @@ async function runHubspotImportJob(jobId, bookId, userEmail) {
     hubspot.markInitialImportDone(conn.id);
     if (imported > 0) await seedImportBaseline(bookId, userEmail, logger, 'HubSpot-Import');
 
-    logger.info(`HubSpot-Initial-Import: ${imported} importiert, ${skipped} bereits verlinkt.`);
-    completeJob(jobId, { imported, skipped, totalCount: posts.length }, null, `${imported} Posts importiert`);
+    logger.info(`HubSpot-Import: ${imported} importiert, ${relinked} wieder verknuepft (${relinkConflicts} Konflikt), ${skipped} bereits verknuepft, ${otherAuthor} von anderem Autor.`);
+    completeJob(jobId, {
+      imported, skipped, relinked, relinkConflicts, otherAuthor, totalCount: posts.length,
+      // Beitraege anderer Autoren bleiben draussen (das Buch ist das Archiv des
+      // eingestellten Autors) — der Toast sagt aber, dass es sie gibt.
+      toastWarnings: [
+        ...relinkToastWarnings(relinkConflicts),
+        ...(otherAuthor > 0 ? [{ key: 'hubspot.import.otherAuthor', n: otherAuthor }] : []),
+      ],
+    }, null, `${imported} Posts importiert`);
   } catch (e) {
     if (e.name !== 'AbortError') makeJobLogger(jobId).error(`HubSpot-Import-Fehler: ${e.code || e.message}`);
-    failJob(jobId, e);
+    // Fehlertext als i18n-Key (hubspot.error.<CODE>), nicht als roher Code.
+    if (e.name === 'AbortError' || !e.code) failJob(jobId, e);
+    else {
+      const { key, params } = importErrorI18n(e.code);
+      const err = i18nError(key, params);
+      err.code = e.code;
+      failJob(jobId, err);
+    }
   }
 }
 
-function runHubspotPushJob(jobId, bookId, userEmail, pageIds) {
-  return runSyncPushJob(hubspotProvider, jobId, bookId, userEmail, pageIds);
+function runHubspotPushJob(jobId, bookId, userEmail, pageIds, publish = null) {
+  return runSyncPushJob(hubspotProvider, jobId, bookId, userEmail, pageIds, publish);
 }
 
 function runHubspotReconcileJob(jobId, bookId, userEmail) {

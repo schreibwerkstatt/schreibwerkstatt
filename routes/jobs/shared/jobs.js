@@ -400,6 +400,7 @@ const JOB_TYPE_LABELS = {
   'blog-pull':             'job.label.blogPull',
   'blog-push':             'job.label.blogPush',
   'blog-reconcile':        'job.label.blogReconcile',
+  'blog-repull':           'job.label.blogRepull',
   'hubspot-import':        'job.label.hubspotImport',
   'hubspot-push':          'job.label.hubspotPush',
   'hubspot-reconcile':     'job.label.hubspotReconcile',

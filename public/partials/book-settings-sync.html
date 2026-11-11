@@ -108,6 +108,14 @@
             <span x-show="blogReconcileJobId" class="spinner"></span>
             <span x-text="$app.t('blog.action.reconcile')"></span>
           </button>
+          <button type="button"
+                  x-show="blogConnection?.initialImportDoneAt"
+                  @click="startBlogRepull()"
+                  :disabled="blogBusy || blogRepullJobId"
+                  :data-tip="$app.t('blog.action.repullHint')">
+            <span x-show="blogRepullJobId" class="spinner"></span>
+            <span x-text="$app.t('blog.action.repull')"></span>
+          </button>
           <button type="button" class="danger"
                   x-show="blogConnection"
                   @click="disconnectBlog()"
@@ -146,7 +154,7 @@
             <span class="sync-status-label" x-text="$app.t('hubspot.status.imported')"></span>
             <span class="sync-status-value">
               <template x-if="hubspotConnection?.initialImportDoneAt">
-                <span x-text="$app.formatLastRun(hubspotConnection.initialImportDoneAt)"></span>
+                <span x-text="$app.formatLastRun(hubspotConnection.lastImportAt || hubspotConnection.initialImportDoneAt)"></span>
               </template>
               <template x-if="!hubspotConnection?.initialImportDoneAt">
                 <span class="muted" x-text="$app.t('hubspot.status.notImported')"></span>
@@ -199,11 +207,12 @@
             <span x-text="hubspotConnection ? $app.t('hubspot.connect.update') : $app.t('hubspot.connect.save')"></span>
           </button>
           <button type="button"
-                  x-show="hubspotConnection && !hubspotConnection.initialImportDoneAt"
+                  x-show="hubspotConnection"
                   @click="startHubspotImport()"
-                  :disabled="hubspotBusy || hubspotImportJobId">
+                  :disabled="hubspotBusy || hubspotImportJobId"
+                  :data-tip="hubspotConnection?.initialImportDoneAt ? $app.t('hubspot.action.importNewHint') : ''">
             <span x-show="hubspotImportJobId" class="spinner"></span>
-            <span x-text="$app.t('hubspot.action.import')"></span>
+            <span x-text="hubspotConnection?.initialImportDoneAt ? $app.t('hubspot.action.importNew') : $app.t('hubspot.action.import')"></span>
           </button>
           <button type="button"
                   x-show="hubspotConnection?.initialImportDoneAt"

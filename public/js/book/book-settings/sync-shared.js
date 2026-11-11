@@ -22,7 +22,8 @@ export function syncErrorText(providerKey, code) {
   return code;
 }
 
-/** POST mit JSON-Body. Wirft `Error(error_code || failCode)` bei !ok. */
+/** POST mit JSON-Body. Wirft `Error(error_code || failCode)` bei !ok; der
+ *  Fehler traegt die Antwortfelder (`location` einer Blog-Weiterleitung). */
 export async function postSyncJson(url, body, failCode) {
   const res = await fetch(url, {
     method: 'POST',
@@ -30,7 +31,7 @@ export async function postSyncJson(url, body, failCode) {
     body: JSON.stringify(body || {}),
   });
   const data = await res.json().catch(() => ({}));
-  if (!res.ok) throw new Error(data.error_code || failCode);
+  if (!res.ok) throw Object.assign(new Error(data.error_code || failCode), { location: data.location || null });
   return data;
 }
 

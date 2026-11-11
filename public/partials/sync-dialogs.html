@@ -1,0 +1,129 @@
+<!--
+  Dialoge der Blog-Syncs (WordPress, HubSpot), je verbundenem Anbieter einmal.
+  Liegt im Root (index.html), nicht in einer Karte: beide gehen aus dem
+  Buchorganizer UND aus dem Notebook-Editor auf — in einer per x-show
+  versteckten Karte blieben sie unsichtbar. Lazy geladen beim ersten Öffnen
+  (sync-core.js#openConflict, sync/push-dialog.js#openPushDialog).
+  Natives <dialog> über das modal()-Primitiv (DESIGN.md «Modal-Shell»): ESC,
+  Backdrop und Fokus kommen vom Browser; x-model koppelt an die Getter/Setter
+  `pushDialogVisible`/`conflictVisible` der Sync-Karte.
+-->
+<template x-for="prov in $syncProviders" :key="'sync-dialogs-' + prov.key">
+  <div class="display-contents">
+
+    <!-- Push-Dialog: Vorschau gegen den Blogstand + pushen/veröffentlichen/planen -->
+    <dialog class="sync-dialog sync-push-dialog" x-data="modal()" x-modelable="open" x-model="prov.card.pushDialogVisible"
+            :aria-labelledby="'sync-push-title-' + prov.key">
+      <template x-if="prov.card.pushDialog">
+        <div class="sync-dialog-inner">
+          <div class="sync-dialog-header">
+            <div class="sync-dialog-titlebar">
+              <span class="card-eyebrow" x-text="prov.card.pushDialog.name"></span>
+              <span class="card-title" :id="'sync-push-title-' + prov.key" x-text="t(prov.key + '.push.title')"></span>
+            </div>
+            <template x-if="prov.card.pushDialog.remoteState">
+              <span class="badge" :class="'badge--remote-' + prov.card.pushDialog.remoteState"
+                    x-text="t('sync.remote.' + prov.card.pushDialog.remoteState)"></span>
+            </template>
+            <button type="button" class="organizer-delete-btn" @click="close()" :data-tip="t('common.close')" :aria-label="t('common.close')"><svg class="icon" aria-hidden="true"><use href="/icons.svg#x"/></svg></button>
+          </div>
+
+          <div class="sync-dialog-body">
+            <template x-if="prov.card.pushDialog.loading">
+              <div x-skeleton="3"></div>
+            </template>
+            <template x-if="!prov.card.pushDialog.loading && prov.card.pushDialog.linked && !prov.card.pushDialog.error">
+              <div class="display-contents">
+                <p class="card-section-title" x-text="t('sync.push.previewTitle')"></p>
+                <template x-if="prov.card.pushDialog.unchanged">
+                  <p class="muted-msg muted-msg--sm" x-text="t('sync.push.previewUnchanged')"></p>
+                </template>
+                <template x-if="!prov.card.pushDialog.unchanged">
+                  <div class="sync-push-diff" x-html="prov.card.pushDialog.diffHtml"></div>
+                </template>
+              </div>
+            </template>
+            <template x-if="prov.card.pushDialog.error">
+              <p class="card-status card-status--error" x-text="prov.card.pushDialog.error"></p>
+            </template>
+            <template x-if="prov.card.pushDialogNote()">
+              <p class="sync-dialog-note" x-text="t(prov.card.pushDialogNote())"></p>
+            </template>
+            <template x-if="prov.card.pushDialogProviderNote()">
+              <p class="sync-dialog-note sync-dialog-note--warn" x-text="prov.card.pushDialogProviderNote()"></p>
+            </template>
+            <template x-if="prov.card.pushDialogCanPublish() && prov.card.pushDialogPublishNote()">
+              <p class="sync-dialog-note" x-text="prov.card.pushDialogPublishNote()"></p>
+            </template>
+            <template x-if="prov.card.pushDialogCanPublish()">
+              <div class="card-form-row sync-push-schedule" x-id="['sched']">
+                <label class="card-form-label" :for="$id('sched')" x-text="t('sync.push.scheduleLabel')"></label>
+                <input type="datetime-local" class="card-form-input" :id="$id('sched')"
+                       x-model="prov.card.pushDialog.scheduleAt">
+              </div>
+            </template>
+          </div>
+
+          <div class="sync-dialog-actions">
+            <button type="button" class="btn-compact" @click="close()" x-text="t('common.cancel')"></button>
+            <template x-if="prov.card.pushDialogCanPublish()">
+              <button type="button" :disabled="!prov.card.pushDialog.scheduleAt"
+                      @click="prov.card.confirmPushDialog('schedule')"
+                      x-text="t('sync.push.schedule')"></button>
+            </template>
+            <template x-if="prov.card.pushDialogCanPublish()">
+              <button type="button" @click="prov.card.confirmPushDialog('now')"
+                      x-text="t('sync.push.publishNow')"></button>
+            </template>
+            <template x-if="prov.card.pushDialog.hasLocalChange">
+              <button type="button" class="primary" @click="prov.card.confirmPushDialog('draft')"
+                      x-text="t(prov.card.pushDialog.linked
+                        ? (prov.card.pushDialog.remoteState === 'published' ? 'sync.push.updateLive' : 'sync.push.update')
+                        : 'sync.push.createDraft')"></button>
+            </template>
+          </div>
+        </div>
+      </template>
+    </dialog>
+
+    <!-- Konflikt-Diff: App-Inhalt vs. Remote-Inhalt, User wählt die Quelle. -->
+    <dialog class="sync-dialog sync-conflict-dialog" x-data="modal()" x-modelable="open" x-model="prov.card.conflictVisible"
+            :aria-labelledby="'sync-conflict-title-' + prov.key">
+      <div class="sync-dialog-inner">
+        <div class="sync-dialog-header">
+          <span class="card-title" :id="'sync-conflict-title-' + prov.key" x-text="t(prov.key + '.conflict.title')"></span>
+          <button type="button" class="organizer-delete-btn" @click="close()" :data-tip="t('common.close')" :aria-label="t('common.close')"><svg class="icon" aria-hidden="true"><use href="/icons.svg#x"/></svg></button>
+        </div>
+        <template x-if="!prov.card.conflictData">
+          <div class="sync-dialog-body"><div x-skeleton="3"></div></div>
+        </template>
+        <template x-if="prov.card.conflictData">
+          <div class="sync-conflict-body">
+            <div class="sync-conflict-side">
+              <div class="sync-conflict-side-header">
+                <h4 x-text="t('sync.conflict.local', { appName: $store.shell.appName })"></h4>
+                <span class="muted" x-text="prov.card.conflictData.local.name"></span>
+              </div>
+              <div class="sync-conflict-content" x-html="prov.card.conflictData.local.html"></div>
+            </div>
+            <div class="sync-conflict-side">
+              <div class="sync-conflict-side-header">
+                <h4 x-text="t(prov.key + '.conflict.remote')"></h4>
+                <span class="muted" x-text="prov.card.conflictData.remote.title"></span>
+              </div>
+              <div class="sync-conflict-content" x-html="prov.card.conflictData.remote.html"></div>
+            </div>
+          </div>
+        </template>
+        <div class="sync-dialog-actions" x-show="prov.card.conflictData">
+          <button type="button" class="btn-compact" @click="close()" x-text="t('common.cancel')"></button>
+          <button type="button" @click="prov.card.resolveConflict('remote')"
+                  x-text="t(prov.key + '.conflict.takeRemote')"></button>
+          <button type="button" @click="prov.card.resolveConflict('app')"
+                  x-text="t('sync.conflict.keepApp')"></button>
+        </div>
+      </div>
+    </dialog>
+
+  </div>
+</template>

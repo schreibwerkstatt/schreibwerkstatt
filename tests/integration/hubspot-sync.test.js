@@ -99,17 +99,28 @@ test('hubspot-import: zwei PUBLISHED-Posts → Pages + Jahres-Kapitel + Link-Ein
   }
 });
 
-test('hubspot-import: bereits importiert → HUBSPOT_ALREADY_IMPORTED', async () => {
+test('hubspot-import: zweiter Import holt nur neue Posts nach, keine Dubletten', async () => {
   const BOOK_ID = 71;
   seedBlogBook(BOOK_ID);
   hubspot.upsertConnection({ bookId: BOOK_ID, token: 'pat-x', blogId: '555', authorId: '111' });
-  hubspot.markInitialImportDone(hubspot.getConnection(BOOK_ID).id);
-
-  const jobId = ctx.shared.createJob('hubspot-import', BOOK_ID, 'tester@test.dev', 'job.label.hubspotImport');
-  ctx.shared.enqueueJob(jobId, () => hubspotSync.runHubspotImportJob(jobId, BOOK_ID, 'tester@test.dev'));
-  const job = await waitForJob(ctx.shared, jobId, { timeoutMs: 4000 });
-  assert.equal(job.status, 'error');
-  assert.match(String(job.error || ''), /HUBSPOT_ALREADY_IMPORTED/);
+  const post = (id, name, day) => ({
+    id, name, htmlTitle: name, publishDate: `${day}T10:00:00.000Z`, state: 'PUBLISHED',
+    blogAuthorId: '111', postBody: `<p>${name}</p>`,
+  });
+  mock.state.posts = [post('2001', 'Alt', '2025-05-01')];
+  const run = async () => {
+    const jobId = ctx.shared.createJob('hubspot-import', BOOK_ID, 'tester@test.dev', 'job.label.hubspotImport');
+    ctx.shared.enqueueJob(jobId, () => hubspotSync.runHubspotImportJob(jobId, BOOK_ID, 'tester@test.dev'));
+    return waitForJob(ctx.shared, jobId, { timeoutMs: 6000 });
+  };
+  assert.equal((await run()).status, 'done');
+  mock.state.posts = [post('2002', 'Neu', '2025-07-01'), post('2001', 'Alt', '2025-05-01')];
+  const job = await run();
+  assert.equal(job.status, 'done', `got ${job.status}: ${job.error || ''}`);
+  const links = hubspot.listLinksForConnection(hubspot.getConnection(BOOK_ID).id);
+  assert.deepEqual(links.map(l => l.hubspot_post_id).sort(), ['2001', '2002']);
+  const pages = ctx.dbSchema.db.prepare('SELECT COUNT(*) AS n FROM pages WHERE book_id = ?').get(BOOK_ID);
+  assert.equal(pages.n, 2, 'der zweite Import legt nur den neuen Post an');
 });
 
 test('hubspot-push: Erst-Push erstellt Draft + Link; Re-Push aktualisiert den Buffer (PATCH /draft)', async () => {
@@ -204,7 +215,7 @@ test('hubspot-push: Titel ohne Datums-Praefix, Titel-Werkstatt gewinnt, Lead + T
   assert.equal(p2.name, 'Die Schlagzeile');
   assert.equal(p2.htmlTitle, 'Die Schlagzeile');
   assert.equal(p2.postSummary, 'A &amp; B');
-  assert.match(p2.postBody, /^<p><em>Der Lead\.<\/em><\/p>/);
+  assert.match(p2.postBody, /^<p class="ms-head__lead"><em>Der Lead\.<\/em><\/p>/);
 });
 
 // ── Gemeinsamer Sync-Kern: Vorab-Pruefung, Remote weg, Abgleich, Bilder ──────
@@ -358,4 +369,82 @@ test('hubspot-import: zwei parallele Laeufe legen jeden Post genau einmal an (ke
   assert.equal(results.filter(Boolean).length, 1);
   const pages = ctx.dbSchema.db.prepare('SELECT page_id FROM pages WHERE book_id = ?').all(BOOK_ID);
   assert.equal(pages.length, 1, 'die Seite des Verlierers ist wieder weg');
+});
+
+// ── Push-Dialog: veroeffentlichen, planen, Teaser-Pflicht, Race ──────────────
+
+async function pushJobWith(bookId, pageIds, publish) {
+  const jobId = ctx.shared.createJob('hubspot-push', bookId, 'tester@test.dev', 'job.label.hubspotPushCount', { count: pageIds.length });
+  ctx.shared.enqueueJob(jobId, () => hubspotSync.runHubspotPushJob(jobId, bookId, 'tester@test.dev', pageIds, publish));
+  return waitForJob(ctx.shared, jobId, { timeoutMs: 4000 });
+}
+
+async function pageWithTeaser(bookId, teaser) {
+  seedBlogBook(bookId);
+  hubspot.upsertConnection({ bookId, token: 'pat-x', blogId: '555', authorId: '111' });
+  const contentStore = require('../../lib/content-store');
+  const page = await contentStore.createPage({ book_id: bookId, name: 'Beitrag', html: '<p>Text</p>' }, null);
+  if (teaser) require('../../db/headline').setHeadline(page.id, bookId, { teaser });
+  return { page, contentStore };
+}
+
+test('hubspot-push: «veroeffentlichen» pusht, schaltet live und zieht Status/URL nach; Teaser = Meta-Description, Slug aus dem Titel', async () => {
+  const BOOK_ID = 81;
+  const { page } = await pageWithTeaser(BOOK_ID, 'Worum es geht.');
+  const job = await pushJobWith(BOOK_ID, [page.id], { mode: 'now' });
+  assert.equal(job.status, 'done', `got ${job.status}: ${job.error || ''}`);
+  assert.equal(job.result.published, 1);
+  const created = mock.state.created[0];
+  assert.equal(created.metaDescription, 'Worum es geht.');
+  assert.equal(created.slug, 'beitrag');
+  assert.deepEqual(mock.state.published, [created.id]);
+  const link = hubspot.getLinkByPage(page.id);
+  assert.equal(link.hubspot_state, 'PUBLISHED');
+  assert.match(link.hubspot_url || '', /blog\.example\.com/);
+});
+
+test('hubspot-push: «planen» setzt den Termin, Status SCHEDULED', async () => {
+  const BOOK_ID = 82;
+  const { page } = await pageWithTeaser(BOOK_ID, 'Teaser.');
+  const at = new Date(Date.now() + 3 * 86400_000).toISOString();
+  const job = await pushJobWith(BOOK_ID, [page.id], { mode: 'schedule', at });
+  assert.equal(job.status, 'done', `got ${job.status}: ${job.error || ''}`);
+  assert.equal(mock.state.scheduled.length, 1);
+  assert.equal(mock.state.scheduled[0].publishDate, at);
+  assert.equal(hubspot.getLinkByPage(page.id).hubspot_state, 'SCHEDULED');
+});
+
+test('hubspot-push: veroeffentlichen ohne Teaser → abgewiesen, bevor etwas geschrieben wird', async () => {
+  const BOOK_ID = 83;
+  const { page } = await pageWithTeaser(BOOK_ID, '');
+  const job = await pushJobWith(BOOK_ID, [page.id], { mode: 'now' });
+  assert.equal(job.status, 'error');
+  assert.match(String(job.error || ''), /HUBSPOT_PUBLISH_NEEDS_TEASER/);
+  assert.equal(mock.state.created.length, 0);
+  assert.equal(mock.state.published.length, 0);
+});
+
+test('hubspot-push: Draft wird WAEHREND des Pushs drueben geaendert → Konflikt, kein PATCH', async () => {
+  const BOOK_ID = 84;
+  const { page, postId, contentStore } = await pushedPage(BOOK_ID);
+  await contentStore.savePage(page.id, { html: '<p>Lokal neu</p>' }, null);
+  // Die Vorab-Pruefung sieht den alten Stand; erst der zweite Blick direkt vor
+  // dem Schreiben sieht den fremden Edit. Simuliert ueber den ersten GET …/draft
+  // nach der Vorab-Pruefung: der Draft-Stempel springt zwischen den Lesern vor.
+  let draftReads = 0;
+  const origFetch = globalThis.fetch;
+  globalThis.fetch = async (url, opts = {}) => {
+    const u = String(url);
+    if (/\/draft$/.test(u) && (opts.method || 'GET') === 'GET' && ++draftReads === 2) mock.editDraft(postId, { postBody: '<p>Drueben</p>' });
+    return origFetch(url, opts);
+  };
+  try {
+    const job = await pushJob(BOOK_ID, [page.id]);
+    assert.equal(job.status, 'error');
+    assert.match(String(job.error || ''), /HUBSPOT_CONFLICT/);
+    assert.equal(mock.state.updated.length, 0, 'der fremde Edit wird nicht ueberschrieben');
+    assert.equal(hubspot.getLinkByPage(page.id).conflict_state, 'detected');
+  } finally {
+    globalThis.fetch = origFetch;
+  }
 });

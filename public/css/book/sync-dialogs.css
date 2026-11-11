@@ -1,0 +1,98 @@
+/* Dialoge der Blog-Syncs (partials/sync-dialogs.html): Push-Dialog mit
+   Vorschau und Konflikt-Diff. Natives <dialog> (DESIGN.md «Modal-Shell»):
+   `margin: auto` ist Pflicht, sonst klebt der Dialog oben links. */
+@layer components {
+.sync-dialog {
+  background: var(--color-surface);
+  color: var(--color-text);
+  border: 0.5px solid var(--color-border);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-lg);
+  width: min(760px, calc(100% - 2 * var(--space-xs)));
+  max-height: 90dvh;
+  padding: 0;
+  margin: auto;
+}
+.sync-conflict-dialog { width: min(1100px, calc(100% - 2 * var(--space-xs))); }
+.sync-dialog::backdrop { background: var(--color-overlay); }
+
+.sync-dialog-inner {
+  display: flex; flex-direction: column;
+  max-height: 90dvh;
+}
+.sync-dialog-header {
+  display: flex; align-items: center; gap: var(--space-2xs);
+  padding: var(--space-3) var(--space-xs);
+  border-bottom: 0.5px solid var(--color-border);
+}
+.sync-dialog-titlebar {
+  display: flex; flex-direction: column;
+  flex: 1 1 auto; min-width: 0;
+}
+.sync-dialog-header .organizer-delete-btn { margin-left: auto; }
+.sync-dialog-body {
+  display: flex; flex-direction: column; gap: var(--space-2xs);
+  padding: var(--space-3) var(--space-xs);
+  overflow: auto;
+  flex: 1 1 auto;
+}
+.sync-dialog-note {
+  margin: 0;
+  font-size: var(--font-size-sm);
+  color: var(--color-muted);
+}
+.sync-dialog-note--warn { color: var(--color-warn-text); }
+.sync-dialog-actions {
+  display: flex; flex-wrap: wrap; gap: var(--space-2xs); justify-content: flex-end;
+  padding: var(--space-3) var(--space-xs);
+  border-top: 0.5px solid var(--color-border);
+}
+
+/* Vorschau: Inline-Wort-Diff Blogstand → App-Stand (page-revision-diff.js
+   #renderInline); die Wort-Markierung kommt aus components/diff-marks.css. */
+.sync-push-diff {
+  font-size: var(--font-size-sm);
+  line-height: 1.55;
+  max-height: 50dvh;
+  overflow: auto;
+  border: 0.5px solid var(--color-border);
+  border-left: 3px solid var(--card-accent-blog);
+  padding: var(--space-3);
+  background: var(--color-bg);
+}
+.sync-push-diff .diff-line { margin: 0 0 var(--space-2xs); }
+.sync-push-diff .diff-line--eq { color: var(--color-muted); }
+
+/* Konflikt-Diff: zwei Spalten, App links, Remote rechts. */
+.sync-conflict-body {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--space-3);
+  padding: var(--space-3);
+  overflow: auto;
+  flex: 1 1 auto;
+}
+.sync-conflict-side {
+  border: 0.5px solid var(--color-border);
+  border-left: 3px solid var(--card-accent-blog);
+  border-radius: var(--radius-none);
+  padding: var(--space-3);
+  background: var(--color-bg);
+  display: flex; flex-direction: column; gap: var(--space-2xs);
+  min-height: 200px;
+}
+.sync-conflict-side-header h4 {
+  margin: 0; font-size: var(--font-size-sm);
+  color: var(--color-text);
+}
+.sync-conflict-content {
+  font-size: var(--font-size-sm);
+  line-height: 1.55;
+  overflow: auto;
+  max-height: 60dvh;
+}
+.sync-conflict-content p { margin: 0 0 var(--space-2xs); }
+@media (max-width: 720px) {
+  .sync-conflict-body { grid-template-columns: 1fr; }
+}
+}

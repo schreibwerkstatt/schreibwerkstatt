@@ -121,12 +121,21 @@ test('Push: ein Bild wird einmal hochgeladen, nicht bei jedem Push', async () =>
     assert.equal(wp.media.length, 1);
     assert.match(wp.posts.find(p => p.id === 32).content.raw, /img-5000\.png/);
 
-    // „Verbindung prüfen" leert den Cache: ein drueben geloeschtes Bild kaeme sonst nie wieder.
+    // „Verbindung prüfen" prueft den Cache je Medium: ein noch vorhandenes Bild
+    // bleibt (kein Doppel-Upload), ein drueben geloeschtes faellt heraus und
+    // wird beim naechsten Push neu hochgeladen.
     await runJob('blog-reconcile', bookId, (id) => blogSync.runBlogReconcileJob(id, bookId, null));
     await contentStore.savePage(page.id, { html: `<p>Dritter Stand.</p><figure><img src="${PNG_DATA_URI}" alt="Punkt"></figure>` }, null);
     const third = await runJob('blog-push', bookId, (id) => blogSync.runBlogPushJob(id, bookId, null, [page.id]));
     assert.equal(third.status, 'done', JSON.stringify(third.error));
-    assert.equal(wp.media.length, 2);
+    assert.equal(wp.media.length, 1, 'Medium lebt noch: kein zweiter Upload');
+
+    wp.media.splice(0, 1);
+    await runJob('blog-reconcile', bookId, (id) => blogSync.runBlogReconcileJob(id, bookId, null));
+    await contentStore.savePage(page.id, { html: `<p>Vierter Stand.</p><figure><img src="${PNG_DATA_URI}" alt="Punkt"></figure>` }, null);
+    const fourth = await runJob('blog-push', bookId, (id) => blogSync.runBlogPushJob(id, bookId, null, [page.id]));
+    assert.equal(fourth.status, 'done', JSON.stringify(fourth.error));
+    assert.equal(wp.media.length, 1, 'geloeschtes Medium wird neu hochgeladen');
   } finally {
     restore();
   }

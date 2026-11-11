@@ -1,8 +1,27 @@
 // Teil von bookSettingsMethods (siehe Facade book-settings.js).
 import { fetchJson } from './_shared.js';
 import {
-  syncErrorText, postSyncJson, rehydrateSyncJobs, startSyncJob, deleteSyncConnection,
+  syncErrorText, rehydrateSyncJobs, startSyncJob, deleteSyncConnection, postSyncJson,
 } from './sync-shared.js';
+
+/** Blog-URL in der Form, die der Server speichert (lib/wp-client.js#validateBaseUrl:
+ *  Origin + Pfad ohne Schrägstrich am Ende) — sonst gälte schon ein `/` am Ende
+ *  als Zielwechsel. */
+function normalizeBlogUrl(raw) {
+  try {
+    const u = new URL(String(raw || '').trim());
+    return u.origin + u.pathname.replace(/\/+$/, '');
+  } catch { return String(raw || '').trim(); }
+}
+
+/** Fehlertext für Test/Connect. Eine weiterleitende Blog-URL nennt die Adresse,
+ *  auf die WordPress umleitet (`location` aus der Antwort). */
+function blogErrorText(e) {
+  if (e?.message === 'BLOG_REDIRECT' && e.location) {
+    return window.__app.t('blog.error.BLOG_REDIRECT_TO', { location: e.location });
+  }
+  return syncErrorText('blog', e?.message);
+}
 
 export const blogMethods = {
 
@@ -24,9 +43,9 @@ export const blogMethods = {
         this.blogForm.username      = this.blogConnection.username || '';
         this.blogForm.defaultStatus = this.blogConnection.defaultStatus || 'draft';
       }
-      const jobs = await rehydrateSyncJobs(bookId, ['blog-import', 'blog-pull', 'blog-reconcile']);
+      const jobs = await rehydrateSyncJobs(bookId, ['blog-import', 'blog-pull', 'blog-reconcile', 'blog-repull']);
       if (!this._isFormBook(bookId)) return;
-      [this.blogImportJobId, this.blogPullJobId, this.blogReconcileJobId] = jobs;
+      [this.blogImportJobId, this.blogPullJobId, this.blogReconcileJobId, this.blogRepullJobId] = jobs;
     } catch (e) {
       console.error('[blog] Status laden fehlgeschlagen:', e);
     }
@@ -61,14 +80,16 @@ export const blogMethods = {
     if (!bookId || !this.blogFormReady()) return;
     this._setBlogBusy('test');
     try {
+      // Leeres Feld bei gespeicherter Verbindung: der Server testet das
+      // gespeicherte Passwort (nur gegen dieselbe URL + denselben Benutzer).
       const data = await postSyncJson(`/blog/${bookId}/test`, {
         baseUrl: this.blogForm.baseUrl.trim(),
         username: this.blogForm.username.trim(),
-        password: this.blogForm.password,
+        password: this.blogForm.password || (this.blogConnection ? '__keep__' : ''),
       }, 'BLOG_TEST_FAILED');
       this.blogMessage = window.__app.t('blog.connect.testOk', { name: data.name || this.blogForm.username });
     } catch (e) {
-      this.blogError = syncErrorText('blog', e.message);
+      this.blogError = blogErrorText(e);
     } finally {
       this._setBlogBusy(null);
     }
@@ -78,6 +99,16 @@ export const blogMethods = {
   async saveBlogConnection() {
     const bookId = this._selectedBookId();
     if (!bookId || !this.blogFormReady()) return;
+    // Andere Blog-URL = anderes Ziel: der Server verwirft Verknüpfungen und
+    // Import-Stand (db/blogs.js#upsertConnection). Vorher sagen, was folgt.
+    const prevUrl = this.blogConnection?.baseUrl;
+    if (prevUrl && normalizeBlogUrl(this.blogForm.baseUrl) !== normalizeBlogUrl(prevUrl)) {
+      const ok = await window.__app.appConfirm({
+        message: window.__app.t('blog.connect.targetChangeConfirm', { from: prevUrl, to: normalizeBlogUrl(this.blogForm.baseUrl) }),
+        danger: true,
+      });
+      if (!ok) return;
+    }
     this._setBlogBusy('save');
     try {
       const body = {
@@ -94,7 +125,7 @@ export const blogMethods = {
       // Links/Import-Stand verworfen → Badges im Buchorganizer neu laden.
       if (data.connection?.targetChanged) window.__blogCard?.loadLinks?.();
     } catch (e) {
-      this.blogError = syncErrorText('blog', e.message);
+      this.blogError = blogErrorText(e);
     } finally {
       this._setBlogBusy(null);
     }
@@ -143,5 +174,14 @@ export const blogMethods = {
   async startBlogReconcile() {
     if (!await window.__app.appConfirm({ message: window.__app.t('blog.action.reconcileConfirm') })) return;
     return this._startBlogJob('blog-reconcile', 'BLOG_RECONCILE_FAILED', 'blogReconcileJobId');
+  },
+
+
+  // Reparatur: verknüpfte Abschnitte, die seit dem letzten Abgleich lokal
+  // unverändert sind, noch einmal aus WordPress einlesen (Absätze alter
+  // Classic-Posts, Titel). Bearbeitete Abschnitte bleiben, wie sie sind.
+  async startBlogRepull() {
+    if (!await window.__app.appConfirm({ message: window.__app.t('blog.action.repullConfirm') })) return;
+    return this._startBlogJob('blog-repull', 'BLOG_REPULL_FAILED', 'blogRepullJobId');
   },
 };

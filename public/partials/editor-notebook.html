@@ -62,12 +62,16 @@
                     :data-tip="prov.card.statusTip(currentPage)"
                     x-text="prov.card.statusLabel(prov.card.statusFor(currentPage))"></span>
             </template>
+            <template x-if="prov.card.remoteState(currentPage)">
+              <span class="badge" :class="'badge--remote-' + prov.card.remoteState(currentPage)"
+                    x-text="prov.card.remoteStateLabel(currentPage)"></span>
+            </template>
             <template x-if="prov.card.canPush(currentPage) || prov.card.pushBusy[currentPage?.id]">
               <button type="button" class="btn-compact editor-sync-push"
                       @click="prov.card.push(currentPage.id)"
                       :disabled="!!prov.card.pushBusy[currentPage?.id]"
-                      :data-tip="t(prov.key + '.action.push')"
-                      :aria-label="t(prov.key + '.action.push')">
+                      :data-tip="prov.card.pushTip(currentPage)"
+                      :aria-label="prov.card.pushTip(currentPage)">
                 <template x-if="!prov.card.pushBusy[currentPage?.id]">
                   <svg class="icon" aria-hidden="true"><use href="/icons.svg#arrow-up"/></svg>
                 </template>

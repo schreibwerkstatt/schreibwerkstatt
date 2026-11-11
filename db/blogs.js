@@ -271,6 +271,17 @@ function setConflictState(pageId, state) {
 const _stmtRefreshMeta = db.prepare(`
   UPDATE blog_page_links SET wp_status = COALESCE(?, wp_status), wp_slug = COALESCE(?, wp_slug) WHERE page_id = ?
 `);
+/** Nach dem Veroeffentlichen/Planen aus dem Push-Dialog: Status, Slug und den
+ *  neuen `modified_gmt` als gesehenen Stand uebernehmen (der Statuswechsel ist
+ *  der eigene Write, kein fremder Edit). */
+function markLinkPublished(pageId, { wpStatus = null, wpSlug = null, wpModifiedAt = null } = {}) {
+  return db.prepare(`
+    UPDATE blog_page_links
+       SET wp_status = COALESCE(?, wp_status), wp_slug = COALESCE(?, wp_slug),
+           wp_modified_at = COALESCE(?, wp_modified_at)
+     WHERE page_id = ?`).run(wpStatus, wpSlug, wpModifiedAt, pageId).changes > 0;
+}
+
 function refreshLinkMeta(pageId, { wpStatus = null, wpSlug = null } = {}) {
   return _stmtRefreshMeta.run(wpStatus, wpSlug, parseInt(pageId, 10)).changes > 0;
 }
@@ -282,6 +293,22 @@ const _stmtSetLocked = db.prepare('UPDATE blog_page_links SET locked_blocks = ? 
 function setLockedBlocks(pageId, blocks) {
   const list = Array.isArray(blocks) ? blocks.filter(Boolean) : [];
   _stmtSetLocked.run(list.length ? list.join(', ') : null, parseInt(pageId, 10));
+}
+
+const _stmtLinkedPageIds = db.prepare('SELECT page_id FROM blog_page_links WHERE blog_id = ?');
+/** Set der verknuepften page_ids einer Verbindung (Wieder-Anschluss, lib/sync/relink.js). */
+function linkedPageIds(blogId) {
+  return new Set(_stmtLinkedPageIds.all(parseInt(blogId, 10)).map(r => r.page_id));
+}
+
+// Juengster gesehener WordPress-Stempel der Verbindung (WP-Uhr) — Cursor des
+// Delta-Pulls (lib/blog-pull.js#pullCursor). Alle Werte stammen aus
+// `modified_gmt` und haben dasselbe Format, MAX ist also der juengste.
+const _stmtMaxModified = db.prepare(`
+  SELECT MAX(wp_modified_at) AS m FROM blog_page_links WHERE blog_id = ? AND wp_modified_at <> ''
+`);
+function maxLinkModifiedAt(blogId) {
+  return _stmtMaxModified.get(parseInt(blogId, 10))?.m || null;
 }
 
 const _stmtDeleteLink = db.prepare('DELETE FROM blog_page_links WHERE page_id = ?');
@@ -308,6 +335,9 @@ module.exports = {
   markConflictResolvedApp,
   setConflictState,
   refreshLinkMeta,
+  markLinkPublished,
+  maxLinkModifiedAt,
+  linkedPageIds,
   setLockedBlocks,
   deleteLink,
 };

@@ -15,8 +15,9 @@ const blogs = require('../../db/blogs');
 const contentStore = require('../../lib/content-store');
 const { classifyPull } = require('../../lib/blog-merge');
 const {
-  applyPostToPage, createLinkedPageFromPost, postYear,
+  applyPostToPage, createLinkedPageFromPost, postYear, pullCursor, repullPages,
 } = require('../../lib/blog-pull');
+const { buildRelinkIndex, relinkToastWarnings } = require('../../lib/sync/relink');
 const { seedImportBaseline } = require('../../lib/import-baseline');
 const { headlineUpdatedAt } = require('../../db/headline');
 const { wpLossyBlocks } = require('../../lib/wp-html');
@@ -28,11 +29,26 @@ const { mountSyncJobRoute, activeBookJob } = require('./sync/routes');
 const blogSyncRouter = express.Router();
 
 // Job-Typen, die Seiten + Links eines Buchs anlegen: pro Buch exklusiv.
-const BOOK_EXCLUSIVE_TYPES = ['blog-import', 'blog-pull'];
+const BOOK_EXCLUSIVE_TYPES = ['blog-import', 'blog-pull', 'blog-repull'];
 
 /** Aktiver (queued/running) Import/Pull fuer dieses Buch, egal von wem. */
 function _activeBookSyncJob(bookId) {
   return activeBookJob(bookId, BOOK_EXCLUSIVE_TYPES);
+}
+
+/** Eine Seite der Post-Liste. Jenseits der letzten Seite antwortet WordPress
+ *  400 (`rest_post_invalid_page_number`) — das passiert, wenn waehrend des
+ *  Laufs drueben Posts geloescht werden und `X-WP-TotalPages` schrumpft. Das ist
+ *  das Ende der Liste, kein Fehler des ganzen Laufs. */
+async function _listPage(wp, args) {
+  try {
+    return await wp.listPosts(args);
+  } catch (e) {
+    if (args.page > 1 && /_HTTP_400$/.test(String(e?.code || ''))) {
+      return { posts: [], totalPages: args.page - 1, total: 0, endOfList: true };
+    }
+    throw e;
+  }
 }
 
 async function runBlogImportJob(jobId, bookId, userEmail) {
@@ -52,14 +68,19 @@ async function runBlogImportJob(jobId, bookId, userEmail) {
     let totalCount = 0;
     let imported = 0;
     let skipped = 0;
+    let relinked = 0;
+    let relinkConflicts = 0;
     const chapterCache = new Map();
+    // Unverlinkte Abschnitte desselben Buchs (nach Zielwechsel oder Trennen):
+    // passende Posts haengen sich daran, statt eine Dublette anzulegen.
+    const relink = await buildRelinkIndex({ bookId });
     // Zaehlt Quellen-Chips, die ohne `data-src` zurueckkamen (KSES, siehe
     // lib/wp-html.js#_degradeCitesWithoutPointer) und darum zu Klartext wurden.
     const citeStats = {};
 
     do {
       throwIfAborted(jobId);
-      const { posts, totalPages: tp, total } = await wp.listPosts({ page, perPage: 100 });
+      const { posts, totalPages: tp, total } = await _listPage(wp, { page, perPage: 100 });
       totalPages = tp || 1;
       if (page === 1) totalCount = total;
 
@@ -70,11 +91,17 @@ async function runBlogImportJob(jobId, bookId, userEmail) {
         // UNIQUE(blog_id, wp_post_id) zu scheitern (und davor eine verwaiste
         // Seite anzulegen).
         const created = await createLinkedPageFromPost({
-          conn, bookId, post, chapterCache, userEmail, citeStats, logger,
+          conn, bookId, post, chapterCache, userEmail, citeStats, logger, relink,
           wpModifiedAt: post.modified_gmt || post.date_gmt || '',
         });
         if (!created) {
           skipped++;
+          continue;
+        }
+        if (created.relinked) {
+          relinked++;
+          if (created.conflict) relinkConflicts++;
+          logger.info(`Blog-Import: WP-Post ${post.id} -> bestehende Page ${created.id} "${created.name}" wieder verknuepft${created.conflict ? ' (Inhalt weicht ab, Konflikt)' : ''}`);
           continue;
         }
         logger.info(`Blog-Import: WP-Post ${post.id} -> Page ${created.id} "${created.name}" (Kapitel ${postYear(post)})`);
@@ -94,12 +121,13 @@ async function runBlogImportJob(jobId, bookId, userEmail) {
     // Vortags-Baseline (Donut braucht prevChars vor heute, sonst Schreiben am
     // Import-Tag = 0). Analog folder-import.
     if (imported > 0) await seedImportBaseline(bookId, userEmail, logger, 'Blog-Import');
+    if (relinked) logger.info(`Blog-Import: ${relinked} bestehende Abschnitte wieder verknuepft, davon ${relinkConflicts} mit abweichendem Inhalt.`);
 
     if (citeStats.citesDegraded) {
       logger.warn(`Blog-Import: ${citeStats.citesDegraded} Quellenangabe(n) ohne Zeiger — als Klartext uebernommen (WP-Benutzer ohne unfiltered_html?).`);
     }
     logger.info(`Initial-Import: ${imported} Posts importiert, ${skipped} bereits verlinkt.`);
-    completeJob(jobId, { imported, skipped, totalCount, citesDegraded: citeStats.citesDegraded || 0 }, null,
+    completeJob(jobId, { imported, skipped, relinked, relinkConflicts, totalCount, citesDegraded: citeStats.citesDegraded || 0, toastWarnings: relinkToastWarnings(relinkConflicts) }, null,
       `${imported} Posts importiert`);
   } catch (e) {
     if (e.name !== 'AbortError') makeJobLogger(jobId).error(`Blog-Import-Fehler: ${e.message}`);
@@ -119,6 +147,12 @@ async function runBlogPullJob(jobId, bookId, userEmail) {
 
     updateJob(jobId, { statusText: 'job.blog.pull.fetch', progress: 1 });
     const startedAt = new Date().toISOString();
+    // Ab wann fragen: frueherer von App-Start des letzten Laufs und juengstem
+    // gesehenen WordPress-Stempel minus Marge (lib/blog-pull.js#pullCursor).
+    const modifiedAfter = pullCursor({
+      lastPullAt: conn.lastPullAt,
+      maxSeenModifiedGmt: blogs.maxLinkModifiedAt(conn.id),
+    });
 
     let page = 1;
     let totalPages = 1;
@@ -126,6 +160,10 @@ async function runBlogPullJob(jobId, bookId, userEmail) {
     let created = 0;
     let conflicts = 0;
     let skipped = 0;
+    let relinked = 0;
+    // Wieder-Anschluss auch beim Pull-Create (lib/sync/relink.js): erst gebaut,
+    // wenn der erste unverlinkte Post kommt.
+    let relink = null;
     const renamed = []; // [{ pageId, name }] — Frontend zieht Tree + offenen Titel nach
     const chapterCache = new Map();
     // Siehe runBlogImportJob: Chips, die KSES den Zeiger genommen hat.
@@ -133,10 +171,7 @@ async function runBlogPullJob(jobId, bookId, userEmail) {
 
     do {
       throwIfAborted(jobId);
-      const { posts, totalPages: tp } = await wp.listPosts({
-        page, perPage: 100,
-        modifiedAfter: conn.lastPullAt || undefined,
-      });
+      const { posts, totalPages: tp } = await _listPage(wp, { page, perPage: 100, modifiedAfter });
       totalPages = tp || 1;
 
       for (const post of posts) {
@@ -145,11 +180,18 @@ async function runBlogPullJob(jobId, bookId, userEmail) {
         const wpModified = post.modified_gmt || post.date_gmt || '';
 
         if (!link) {
+          if (!relink) relink = await buildRelinkIndex({ bookId });
           const createdPage = await createLinkedPageFromPost({
-            conn, bookId, post, chapterCache, userEmail, citeStats, logger, wpModifiedAt: wpModified,
+            conn, bookId, post, chapterCache, userEmail, citeStats, logger, relink, wpModifiedAt: wpModified,
           });
           if (!createdPage) {
             skipped++;
+            continue;
+          }
+          if (createdPage.relinked) {
+            relinked++;
+            if (createdPage.conflict) conflicts++;
+            logger.info(`Blog-Pull: WP-Post ${post.id} -> bestehende Page ${createdPage.id} "${createdPage.name}" wieder verknuepft${createdPage.conflict ? ' (Inhalt weicht ab, Konflikt)' : ''}`);
             continue;
           }
           logger.info(`Blog-Pull: WP-Post ${post.id} -> Page ${createdPage.id} "${createdPage.name}" neu angelegt`);
@@ -160,6 +202,9 @@ async function runBlogPullJob(jobId, bookId, userEmail) {
         // Push-Sperre nachfuehren: drueben eine Galerie eingefuegt (oder wieder
         // entfernt) aendert, ob die App den Beitrag schreiben darf.
         blogs.setLockedBlocks(link.page_id, wpLossyBlocks(post?.content?.raw || ''));
+        // Status/Slug bei JEDEM gesehenen Post nachziehen, auch ohne Inhalts-
+        // aenderung: „in WordPress veroeffentlicht" soll in der App ankommen.
+        blogs.refreshLinkMeta(link.page_id, { wpStatus: post.status || null, wpSlug: post.slug || null });
         const pageRow = await contentStore.loadPage(link.page_id).catch(() => null);
         if (!pageRow) {
           logger.warn(`Blog-Pull: Page ${link.page_id} (WP-Post ${post.id}) nicht gefunden, uebersprungen`);
@@ -191,7 +236,7 @@ async function runBlogPullJob(jobId, bookId, userEmail) {
             // ueberschreiben — das ist dann ein Konflikt wie oben.
             ({ name: newName, syncedAt } = await applyPostToPage({
               pageId: link.page_id, bookId, pageRow, post, userEmail, citeStats,
-              expectedUpdatedAt: pageRow.updated_at,
+              expectedUpdatedAt: pageRow.updated_at, baseUrl: conn.baseUrl,
             }));
           } catch (e) {
             if (e?.code !== 'PAGE_CONFLICT') throw e;
@@ -221,7 +266,7 @@ async function runBlogPullJob(jobId, bookId, userEmail) {
       logger.warn(`Blog-Pull: ${citeStats.citesDegraded} Quellenangabe(n) ohne Zeiger — als Klartext uebernommen (WP-Benutzer ohne unfiltered_html?).`);
     }
     logger.info(`Pull: ${updated} aktualisiert, ${created} neu, ${conflicts} Konflikt, ${skipped} unverändert.`);
-    completeJob(jobId, { updated, created, conflicts, skipped, renamed, citesDegraded: citeStats.citesDegraded || 0 }, null,
+    completeJob(jobId, { updated, created, relinked, conflicts, skipped, renamed, citesDegraded: citeStats.citesDegraded || 0 }, null,
       `${updated} aktualisiert / ${created} neu / ${conflicts} Konflikt`);
   } catch (e) {
     if (e.name !== 'AbortError') makeJobLogger(jobId).error(`Blog-Pull-Fehler: ${e.message}`);
@@ -229,12 +274,45 @@ async function runBlogPullJob(jobId, bookId, userEmail) {
   }
 }
 
-function runBlogPushJob(jobId, bookId, userEmail, pageIds) {
-  return runSyncPushJob(wordpress, jobId, bookId, userEmail, pageIds);
+function runBlogPushJob(jobId, bookId, userEmail, pageIds, publish = null) {
+  return runSyncPushJob(wordpress, jobId, bookId, userEmail, pageIds, publish);
 }
 
 function runBlogReconcileJob(jobId, bookId, userEmail) {
   return runSyncReconcileJob(wordpress, jobId, bookId, userEmail);
+}
+
+/**
+ * Reparatur «Unbearbeitete neu einlesen»: jeder verknuepfte Abschnitt, der seit
+ * dem letzten Abgleich lokal unveraendert ist, bekommt den WordPress-Stand neu
+ * (lib/blog-pull.js#repullPages — Revision davor, Konflikt-/Lokal-Schutz). Fuer
+ * Abschnitte, die ein aelterer Import beschaedigt hat (Classic-Absaetze,
+ * HTML-Codes im Titel). Uebersprungene zaehlen in den gelben Toast.
+ */
+async function runBlogRepullJob(jobId, bookId, userEmail) {
+  const logger = makeJobLogger(jobId);
+  try {
+    wordpress.requireBook(bookId, userEmail);
+    const conn = wordpress.resolveConn(bookId);
+    const pageIds = blogs.listLinksForBlog(conn.id).map(l => l.page_id);
+    updateJob(jobId, { statusText: 'job.blog.repull.progress', statusParams: { current: 0, total: pageIds.length }, progress: 1 });
+    const out = await repullPages({
+      bookId, pageIds, userEmail, logger, signal: abortSignal(jobId),
+      onProgress: (current, total) => updateJob(jobId, {
+        statusText: 'job.blog.repull.progress', statusParams: { current, total },
+        progress: Math.min(98, 1 + Math.round((current / Math.max(1, total)) * 97)),
+      }),
+    });
+    const skippedLocal = out.skipped.filter(x => x.reason === 'LOCAL_CHANGES' || x.reason === 'CONFLICT').length;
+    logger.info(`Blog-Reparatur: ${out.repulled.length} neu eingelesen, ${out.skipped.length} uebersprungen (${skippedLocal} lokal bearbeitet/Konflikt).`);
+    completeJob(jobId, {
+      repulled: out.repulled.length, skipped: out.skipped, renamed: out.renamed,
+      toastWarnings: skippedLocal ? [{ key: 'sync.repull.skipped', n: skippedLocal }] : [],
+    }, null, `${out.repulled.length} neu eingelesen`);
+  } catch (e) {
+    if (e.name !== 'AbortError') logger.error(`Blog-Reparatur-Fehler: ${e.code || e.message}`);
+    failJob(jobId, e);
+  }
 }
 
 mountSyncJobRoute(blogSyncRouter, wordpress, {
@@ -247,7 +325,10 @@ mountSyncJobRoute(blogSyncRouter, wordpress, {
   type: 'blog-reconcile', label: 'job.label.blogReconcile', run: runBlogReconcileJob,
 });
 mountSyncJobRoute(blogSyncRouter, wordpress, {
+  type: 'blog-repull', label: 'job.label.blogRepull', run: runBlogRepullJob, bookExclusive: BOOK_EXCLUSIVE_TYPES,
+});
+mountSyncJobRoute(blogSyncRouter, wordpress, {
   type: 'blog-push', label: 'job.label.blogPushCount', run: runBlogPushJob, withPages: true,
 });
 
-module.exports = { blogSyncRouter, runBlogImportJob, runBlogPullJob, runBlogPushJob, runBlogReconcileJob, _activeBookSyncJob };
+module.exports = { blogSyncRouter, runBlogImportJob, runBlogPullJob, runBlogPushJob, runBlogReconcileJob, runBlogRepullJob, _activeBookSyncJob, _listPage };

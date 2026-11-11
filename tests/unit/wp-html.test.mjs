@@ -105,10 +105,10 @@ test('appToWpHtml: blockquote', () => {
   assert.match(out, /<blockquote class="wp-block-quote">/);
 });
 
-test('appToWpHtml: code block', () => {
+test('appToWpHtml: code block (Text in <code>, wie Gutenbergs core/code ihn liest)', () => {
   const out = appToWpHtml('<pre>console.log(1)</pre>');
   assert.match(out, /<!-- wp:code -->/);
-  assert.match(out, /<pre class="wp-block-code">console\.log\(1\)<\/pre>/);
+  assert.match(out, /<pre class="wp-block-code"><code>console\.log\(1\)<\/code><\/pre>/);
 });
 
 test('Diagramm-Block ueberlebt den Push→Pull-Round-Trip', async () => {

@@ -4,7 +4,8 @@
 // get/create/update, media). `edit(id, patch)` simuliert eine Aenderung in
 // WordPress (bumpt modified_gmt). `beforeWrite` (async, optional) laeuft in jedem
 // Post-Create/-Update, bevor WordPress antwortet — so laesst sich ein lokaler
-// Save WAEHREND des Pushs nachstellen. `media` zaehlt die Uploads.
+// Save WAEHREND des Pushs nachstellen. `media` zaehlt die Uploads;
+// POST/GET /media/:id aendert bzw. liest ein Medium (Alt-Text, Cache-Pruefung).
 
 function makeWpStub({ posts = [], me = { id: 1, name: 'Editor', capabilities: { edit_posts: true } } } = {}) {
   const state = {
@@ -46,6 +47,14 @@ function makeWpStub({ posts = [], me = { id: 1, name: 'Editor', capabilities: { 
       return respond(201, item);
     }
 
+    const mediaMatch = u.pathname.match(/^\/wp-json\/wp\/v2\/media\/(\d+)$/);
+    if (mediaMatch) {
+      const item = state.media.find(m => m.id === Number(mediaMatch[1]));
+      if (!item) return respond(404, { code: 'rest_post_invalid_id' });
+      if (method === 'POST') Object.assign(item, JSON.parse(init.body || '{}'));
+      return respond(200, item);
+    }
+
     if (u.pathname === '/wp-json/wp/v2/posts' && method === 'GET') {
       const perPage = parseInt(u.searchParams.get('per_page') || '10', 10);
       const page = parseInt(u.searchParams.get('page') || '1', 10);
@@ -77,6 +86,7 @@ function makeWpStub({ posts = [], me = { id: 1, name: 'Editor', capabilities: { 
       if (payload.content) post.content = { rendered: payload.content, raw: payload.content };
       if (payload.excerpt) post.excerpt = { rendered: `<p>${payload.excerpt}</p>`, raw: payload.excerpt };
       if (payload.status) post.status = payload.status;
+      if (payload.date_gmt) post.date_gmt = payload.date_gmt;
       post.modified_gmt = new Date().toISOString().replace('Z', '');
       return respond(200, post);
     }
