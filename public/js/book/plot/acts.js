@@ -58,8 +58,8 @@ export const actsMethods = {
   startEditAct(act) {
     this.editingActId = act.id;
     this.actDraft = act.name;
-    // Flaches Board + Grid sind beide im DOM (eines via x-show versteckt) — die
-    // sichtbare Titel-Eingabe fokussieren, nicht die display:none-Variante.
+    // Die sichtbare Titel-Eingabe fokussieren (nur das aktive Board ist
+    // gerendert; der Filter fängt eine versteckte Karte ab).
     this.$nextTick(() => {
       const inputs = [...(this.$root?.querySelectorAll('.plot-column-title-input') || [])];
       (inputs.find(el => el.offsetParent !== null) || inputs[0])?.focus();

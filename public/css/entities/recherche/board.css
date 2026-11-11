@@ -132,9 +132,10 @@ textarea.recherche-input { resize: vertical; min-height: 2.75rem; }
 }
 .research-item--pinned { background: var(--color-bg); }
 .research-item--archived { opacity: var(--opacity-disabled); }
-/* Die Zeile, die gerade im Detail-Dialog offen ist — sichtbar erst nach dem
-   Schliessen, dann weiss der User sofort, wo er war. */
+/* Die aufgeklappte Zeile (recherche-item-detail.html) hebt sich ab und zeigt
+   ihre Aktionen (Stift, ⋯) ohne Hover — Auswahl-Delta zu components/hover-reveal.css. */
 .research-item--open { border-color: var(--card-accent); }
+.research-item--open .hover-reveal { opacity: 1; }
 
 /* Kurzes Hervorheben beim Springen aus dem Referenz-Slot zum Schnipsel. */
 @keyframes researchItemFlash {
@@ -145,6 +146,8 @@ textarea.recherche-input { resize: vertical; min-height: 2.75rem; }
 
 .research-item-body { display: flex; flex-direction: column; gap: var(--space-sm); }
 .research-item-body--clickable { cursor: pointer; }
+/* Anriss der zugeklappten Zeile: dieselbe Spalte wie der Zeilenkörper. */
+.research-item-preview { display: flex; flex-direction: column; gap: var(--space-sm); }
 
 .research-item-head {
   display: flex;
@@ -198,7 +201,7 @@ textarea.recherche-input { resize: vertical; min-height: 2.75rem; }
 
 /* Vorschaubild: Button (öffnet die Detailansicht) als blosse Hülle ums <img>.
    Klein gehalten — die Liste ist eine Übersicht, nicht die Bildansicht; gross
-   liegt das Bild im Detail-Dialog (recherche/dialog.css). */
+   liegt das Bild in der aufgeklappten Zeile (recherche/detail.css). */
 .research-item-thumb {
   display: inline-flex;
   align-self: flex-start;
@@ -410,5 +413,17 @@ textarea.recherche-input { resize: vertical; min-height: 2.75rem; }
   font-size: var(--font-size-xs);
   color: var(--color-warn-text);
   cursor: pointer;
+}
+
+/* Ergebnis-Zeilen der Werkzeuge (Link-Prüfung, Abgleich): × ganz rechts. */
+.recherche-status-dismiss { margin-left: auto; }
+
+/* Kein Treffer bei vorhandenem Bestand: Meldung + «Filter zurücksetzen». */
+.recherche-no-match {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-sm);
+  margin-block: var(--card-gap-tight);
 }
 }

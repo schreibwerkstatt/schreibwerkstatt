@@ -5,26 +5,26 @@
   aus cards/reference-plan.js. Read-only — gepflegt wird im Board, jede Zeile
   springt dorthin.
 -->
-<div x-show="referenceTab === 'plan'" class="reference-panel">
+<template x-if="referenceTab === 'plan'">
+<div class="reference-panel" x-data="{ rowKind: 'beat' }">
   <div x-show="referencePlanLoading" x-skeleton="4" x-cloak></div>
   <div class="search-status search-status--error" x-show="referencePlanError && !referencePlanLoading"
        x-text="referencePlanError"></div>
   <template x-if="!referencePlanLoading && !referencePlanError && referencePlanBeats().length === 0">
     <div class="muted-msg muted-msg--sm muted-msg--block" x-text="$app.t('reference.empty.plan')"></div>
   </template>
-  <template x-for="beat in referencePlanBeats()" :key="'rp-' + beat.id">
-    <div class="reference-row reference-row--clickable internal-link" @click="openReferenceBeat(beat)"
+  <template x-for="row in referencePlanBeats()" :key="'rp-' + row.id">
+    <div class="reference-row reference-row--clickable internal-link" @click="openReferenceBeat(row)" data-ref-jump
          :data-tip="$app.t('reference.plan.openTip')">
       <div class="reference-row-head">
-        <span class="reference-row-title" x-text="beat.titel"></span>
-        <span x-show="beat.status" class="tag" x-text="referencePlanStatus(beat)"></span>
-        <span x-show="beat.refCtx === 'chapter'" class="tag" :data-tip="$app.t('reference.plan.chapterTip')" x-text="$app.t('reference.ctx.chapter')"></span>
+        <span class="reference-row-title" x-text="row.titel"></span>
+        <span x-show="row.status" class="tag" x-text="referencePlanStatus(row)"></span>
+        <span x-show="row.refCtx === 'chapter'" class="tag" :data-tip="$app.t('reference.plan.chapterTip')" x-text="$app.t('reference.ctx.chapter')"></span>
       </div>
-      <div class="reference-row-sub" x-show="referencePlanMeta(beat)" x-text="referencePlanMeta(beat)"></div>
-      <div class="reference-row-desc" x-show="beat.beschreibung" x-text="beat.beschreibung"></div>
-      <div class="reference-row-sub" x-show="referencePlanCast(beat)" x-text="referencePlanCast(beat)"></div>
-      <div class="reference-row-sub" x-show="referencePlanMotifs(beat)"
-           x-text="$app.t('reference.plan.motifs', { list: referencePlanMotifs(beat) })"></div>
+      <div class="reference-row-sub" x-show="referencePlanMeta(row)" x-text="referencePlanMeta(row)"></div>
+      <div class="reference-row-desc" x-show="row.beschreibung" x-text="row.beschreibung"></div>
+      <!-- @include reference-row-tail -->
     </div>
   </template>
 </div>
+</template>

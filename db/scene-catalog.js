@@ -38,7 +38,7 @@ function listScenesWithRefs(bookId, userEmail) {
 }
 
 /** Jüngstes Lektorat mit Szenen-Bewertung je Abschnitt (Map page_id →
- *  { checked_at, szenen }), nur für die übergebenen Abschnitte und nur des
+ *  { check_id, checked_at, szenen }), nur für die übergebenen Abschnitte und nur des
  *  Users, dem auch der Szenen-Katalog gehört. Läufe ohne Szenen (lokaler
  *  Provider, leerer Abschnitt) zählen nicht — sonst verdeckte ein solcher Lauf
  *  die letzte echte Bewertung. Lesezeit-Verknüpfung, der Katalog bleibt
@@ -50,8 +50,8 @@ function latestLektoratSzenenByPage(userEmail, pageIds) {
   if (!userEmail || !pageIds.length) return out;
   const { sql, values } = inClause(pageIds);
   const rows = db.prepare(`
-    SELECT page_id, checked_at, szenen_json FROM (
-      SELECT page_id, checked_at, szenen_json,
+    SELECT id, page_id, checked_at, szenen_json FROM (
+      SELECT id, page_id, checked_at, szenen_json,
              ROW_NUMBER() OVER (PARTITION BY page_id ORDER BY checked_at DESC, id DESC) AS rn
       FROM page_checks
       WHERE user_email = ? AND page_id IN ${sql}
@@ -65,7 +65,7 @@ function latestLektoratSzenenByPage(userEmail, pageIds) {
     szenen = szenen
       .filter(x => x && typeof x.titel === 'string')
       .map(x => ({ titel: x.titel, wertung: x.wertung || null, kommentar: x.kommentar || null }));
-    if (szenen.length) out.set(r.page_id, { checked_at: r.checked_at, szenen });
+    if (szenen.length) out.set(r.page_id, { check_id: r.id, checked_at: r.checked_at, szenen });
   }
   return out;
 }

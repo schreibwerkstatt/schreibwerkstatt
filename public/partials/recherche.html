@@ -33,15 +33,32 @@
   </div>
 
   <div x-show="errorMessage" class="card-status card-status--error" x-text="errorMessage"></div>
-  <div x-show="linkCheckStatus" x-cloak class="card-status" x-text="linkCheckStatus"></div>
-  <div x-show="crosscheckStatus" x-cloak class="card-status" x-text="crosscheckStatus"></div>
+  <!-- Ergebnis-Zeilen der Werkzeuge und Hinweise: bleiben stehen, bis man sie
+       wegklickt (ein Befund mit «ungeprüft» soll nicht von selbst verschwinden),
+       aber nicht länger. Waehrend ein Lauf noch arbeitet, kein ×. -->
+  <div x-show="linkCheckStatus" x-cloak class="card-status">
+    <span x-text="linkCheckStatus"></span>
+    <button type="button" class="icon-btn icon-btn--ghost recherche-status-dismiss" x-show="!linkCheckRunning"
+            @click="linkCheckStatus = ''" :data-tip="$app.t('common.close')" :aria-label="$app.t('common.close')"><svg class="icon" aria-hidden="true"><use href="/icons.svg#x"/></svg></button>
+  </div>
+  <div x-show="crosscheckStatus" x-cloak class="card-status">
+    <span x-text="crosscheckStatus"></span>
+    <button type="button" class="icon-btn icon-btn--ghost recherche-status-dismiss" x-show="!crosscheckRunning"
+            @click="crosscheckStatus = ''" :data-tip="$app.t('common.close')" :aria-label="$app.t('common.close')"><svg class="icon" aria-hidden="true"><use href="/icons.svg#x"/></svg></button>
+  </div>
+  <div x-show="noticeMessage" x-cloak class="card-status">
+    <span x-text="noticeMessage"></span>
+    <button type="button" class="btn-compact" x-show="_rechercheFiltersActive()" @click="clearFilters()" x-text="$app.t('recherche.filter.reset')"></button>
+    <button type="button" class="icon-btn icon-btn--ghost recherche-status-dismiss"
+            @click="noticeMessage = ''" :data-tip="$app.t('common.close')" :aria-label="$app.t('common.close')"><svg class="icon" aria-hidden="true"><use href="/icons.svg#x"/></svg></button>
+  </div>
 
 
   <!-- Ansicht-Umschalter (Liste / Status-Board). Zwei Blicke auf DENSELBEN
        Bestand: die Liste zeigt, was gesammelt ist, das Board, wo es auf dem Weg
        in den Buchtext steht. Filterleiste und Sortierung gelten fuer beide —
        darum steht der Umschalter darueber und nicht in der Filterleiste. -->
-  <div x-show="!loading && items.length > 0" class="tabs entity-view-toggle" role="tablist" :aria-label="$app.t('recherche.viewLabel')">
+  <div x-show="!loading && hasBestand()" class="tabs entity-view-toggle" role="tablist" :aria-label="$app.t('recherche.viewLabel')">
     <template x-for="m in ['list','status']" :key="m">
       <button type="button" role="tab"
               class="tabs-btn"
@@ -58,13 +75,30 @@
       <svg class="icon" aria-hidden="true"><use href="/icons.svg#plus"/></svg>
       <span x-text="$app.t('recherche.new')"></span>
     </button>
-    <button type="button" class="btn-compact" x-show="viewMode === 'list' && items.length > 0"
+    <button type="button" class="btn-compact" x-show="viewMode === 'list' && hasBestand()"
             :class="{ 'is-active': bulkMode }" :aria-pressed="bulkMode ? 'true' : 'false'"
             @click="toggleBulkMode()" x-text="$app.t('recherche.bulk.start')"></button>
-    <button type="button" class="btn-compact" x-show="items.length > 0" @click="checkLinks()" :disabled="linkCheckRunning"
-            :data-tip="$app.t('recherche.linkCheck.tip')" x-text="$app.t('recherche.linkCheck.btn')"></button>
-    <button type="button" class="btn-compact" x-show="items.length > 0" @click="runCrosscheck()" :disabled="crosscheckRunning"
-            :data-tip="$app.t('recherche.crosscheck.tip')" x-text="$app.t('recherche.crosscheck.btn')"></button>
+    <!-- Werkzeuge fuers ganze Board: selten gebraucht, darum hinter einem Knopf
+         statt als zwei breite Knoepfe in der Toolbar (menu.js). -->
+    <span x-data="menu()" x-show="hasBestand()">
+      <button type="button" class="icon-btn icon-btn--ghost" x-bind="trigger" aria-haspopup="menu"
+              :class="{ 'is-active': open }"
+              :data-tip="$app.t('recherche.tools.tip')" :aria-label="$app.t('recherche.tools.tip')">
+        <svg class="icon" aria-hidden="true"><use href="/icons.svg#more-horizontal"/></svg>
+      </button>
+      <div class="context-menu context-menu--dropdown" x-bind="panel" x-cloak>
+        <button type="button" class="context-menu-item context-menu-item--icon" role="menuitem"
+                @click="checkLinks()" :disabled="linkCheckRunning" :data-tip="$app.t('recherche.linkCheck.tip')">
+          <svg class="icon" aria-hidden="true"><use href="/icons.svg#external-link"/></svg>
+          <span x-text="$app.t('recherche.linkCheck.btn')"></span>
+        </button>
+        <button type="button" class="context-menu-item context-menu-item--icon" role="menuitem"
+                @click="runCrosscheck()" :disabled="crosscheckRunning" :data-tip="$app.t('recherche.crosscheck.tip')">
+          <svg class="icon" aria-hidden="true"><use href="/icons.svg#check"/></svg>
+          <span x-text="$app.t('recherche.crosscheck.btn')"></span>
+        </button>
+      </div>
+    </span>
     <div class="filter-bar filter-bar--inline">
       <div x-data="combobox($app.t('recherche.filter.allKinds'), $app.t('recherche.filter.allKinds'))"
            x-modelable="value" x-model="filterKind"
@@ -97,6 +131,9 @@
            @combobox-change="sortBy = $event.detail; applySort()"></div>
       <!-- Ansicht: Archiv einblenden (book/recherche/board.js#viewMenuSpec) -->
       <!-- @include view-menu -->
+      <!-- «n von m»: ein ausgeblendetes Fundstueck ist sonst von einem fehlenden
+           nicht zu unterscheiden (Bestand aus GET /research/count). -->
+      <span class="filter-count" x-show="!loading && hasBestand()" x-text="countLabel()"></span>
     </div>
   </div>
 
@@ -120,13 +157,22 @@
   </div>
 
   <!-- Empty-State mit CTA: kein Eintrag → direkt anlegen. -->
-  <div x-show="!loading && !errorMessage && !creating && items.length === 0" class="card-empty" x-cloak>
+  <div x-show="!loading && !errorMessage && !creating && items.length === 0 && !hasBestand()" class="card-empty" x-cloak>
     <p class="card-empty-text" x-text="$app.t('recherche.empty')"></p>
     <p class="card-empty-hint" x-text="$app.t('recherche.emptyHint')"></p>
     <button type="button" class="primary card-empty-cta" @click="startCreate()" :disabled="busy">
       <svg class="icon" aria-hidden="true"><use href="/icons.svg#plus"/></svg>
       <span x-text="$app.t('recherche.new')"></span>
     </button>
+  </div>
+
+  <!-- Kein Treffer, obwohl das Buch Fundstuecke hat: Filter/Suche oder das
+       ausgeblendete Archiv. Gilt fuer beide Ansichten (derselbe Bestand). -->
+  <div x-show="isFilteredEmpty()" x-cloak class="recherche-no-match">
+    <p class="muted-msg muted-msg--sm"
+       x-text="onlyArchivedHidden() ? $app.t('recherche.noMatchArchived') : $app.t('recherche.noMatch')"></p>
+    <button type="button" class="btn-compact" x-show="_rechercheFiltersActive()" @click="clearFilters()" x-text="$app.t('recherche.filter.reset')"></button>
+    <button type="button" class="btn-compact" x-show="onlyArchivedHidden()" @click="showArchivedNow()" x-text="$app.t('recherche.filter.showArchived')"></button>
   </div>
 
   <!-- Schnipsel-Liste (Ansicht „Liste") -->
@@ -146,9 +192,6 @@
     <!-- @include recherche-status-board -->
   </template>
 
-  <!-- Detailansicht eines Fundstuecks (natives <dialog>, Top-Layer — also auch
-       ueber dem Vollbild). Geschlossen display:none und damit kein Layout-Kind. -->
-  <!-- @include recherche-detail -->
   <!-- @include recherche-link-picker -->
   <!-- @include recherche-item-menu -->
 </div><!-- /.card--recherche -->

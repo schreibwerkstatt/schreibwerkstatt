@@ -5,7 +5,7 @@
 // mal nur am inneren Verlauf — dort lief die Leiste auf niedrigen Bildschirmen
 // über den Viewport, und ihr Eingabefeld war erst am Seitenende erreichbar.
 // Die Geometrie steht deshalb nur in layout/aside-split.css; Konsumenten setzen
-// `--aside-w` / `--aside-scroll-max` am Split-Element.
+// `--aside-w` am Split-Element.
 //
 // Geprüft wird die Form, an der ein Nachbau zu erkennen ist:
 //   1. eine klebende Spalte mit Viewport-Höhendeckel (`position: sticky` +
@@ -89,8 +89,8 @@ test('.aside-split*-Geometrie nur in aside-split.css', () => {
     }
   }
   assert.deepEqual(hits, [],
-    'Leisten-Geometrie ausserhalb von aside-split.css — stattdessen --aside-w / ' +
-    `--aside-scroll-max am Split-Element setzen:\n  ${hits.join('\n  ')}`);
+    'Leisten-Geometrie ausserhalb von aside-split.css — stattdessen --aside-w ' +
+    `am Split-Element setzen:\n  ${hits.join('\n  ')}`);
 });
 
 test('Layout-Dateien kennen keine Karten-IDs', () => {

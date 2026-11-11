@@ -1,8 +1,11 @@
 @layer components {
 /* === Card-Actions (Button-Gruppe im card-header) === */
+/* Abstand zwischen den Aktions-Icons. Am Header deklariert, weil auch der
+   Close-Knopf (Direkt-Kind des Headers, nicht der Leiste) ihn liest. */
+.card-header { --card-actions-gap: var(--space-6); }
 .card-actions {
   display: flex;
-  gap: var(--space-6);
+  gap: var(--card-actions-gap, var(--space-6));
   flex-wrap: wrap;
   align-items: center;
   margin-left: auto;
@@ -37,7 +40,8 @@
      zusammen (statt links gruppiert + ⋯-Overflow einzeln nach rechts gerissen).
      Rechtsbündig hält zugleich das an die ⋯-Overflow-Kante gekoppelte
      `.context-menu--dropdown` (right: 0) vom linken Rand fern. */
-  .card-actions { width: 100%; gap: var(--space-xs); justify-content: flex-end; }
+  .card-header { --card-actions-gap: var(--space-xs); }
+  .card-actions { width: 100%; justify-content: flex-end; }
   .card-actions button { flex: 1 1 auto; min-width: 0; }
   /* Gruppierte Editor-Toolbar (Prüfen/Bearbeiten/Fokus/Chat/Ideen/Teilen):
      viele Buttons → natürliche Breite + kompakteres Padding/Schrift, damit sie
@@ -69,24 +73,34 @@
   .card-actions button:not(.icon-btn) { min-width: 80px; }
 }
 
-/* === Close-Button in Card-Header === */
+/* === Close-Button in Card-Header ===
+   Optik = `.icon-btn--ghost` (Fläche, Füllung, Farbe, Hover), damit der
+   Schliessen-Knopf neben den Aktions-Icons des Headers gleich gross und gleich
+   gewichtet steht. Nur Abstand/Schrumpfen sind eigen.
+   Abstand: der Knopf ist Direkt-Kind des `.card-header` (gap --space-10), die
+   Aktions-Icons stehen in `.card-actions` (gap --card-actions-gap). Der negative Rand
+   zieht ihn auf denselben Abstand wie zwischen den Aktions-Icons. */
 .btn-card-close {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  background: none;
-  border: none;
-  color: var(--color-muted);
-  font-size: var(--font-size-lg);
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  background: var(--icon-ghost-fill);
+  border: var(--border-thin) solid transparent;
+  border-radius: var(--radius-none);
+  color: var(--color-text);
+  font-size: var(--font-size-base);
   line-height: 1;
-  padding: var(--space-2xs) var(--space-6);
   cursor: pointer;
-  border-radius: 0;
-  margin-left: var(--space-xs);
+  margin-left: calc(var(--card-actions-gap, var(--space-6)) - var(--space-10));
   flex-shrink: 0;
+  transition: background var(--transition-fast), color var(--transition-fast);
 }
 .btn-card-close:hover {
-  background: var(--color-border);
+  background: var(--icon-ghost-fill-hover);
+  border-color: var(--color-border);
   color: var(--color-text);
 }
 

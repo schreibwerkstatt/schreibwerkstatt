@@ -136,7 +136,10 @@ html:has(.revision-viewer[open]) {
   overflow: auto;
   padding: 1rem 1.25rem;
   min-height: 0;
-  /* Deckend: sonst kein Compositor-Scroll bei Pixeldichte 1 (siehe entities/recherche/dialog.css). */
+  /* Deckender Hintergrund ist Pflicht, nicht Optik: einen transparenten
+     Scroller scrollt Chromium auf Bildschirmen mit Pixeldichte 1 nicht auf dem
+     Compositor (LCD-Text), sondern rastert den Inhalt bei jedem Frame neu — ein
+     langer Text ruckelt dann beim Scrollen. Gilt für jeden Scroll-Container. */
   background: var(--color-card-bg);
 }
 .revision-viewer__hint {

@@ -55,14 +55,18 @@ test('Welt-Fakten: anlegen, als gepflegt markiert, ändern, löschen', async ({ 
   await expect(row).toBeVisible();
   await expect(row.locator('.weltfakten-manual-tag')).toBeVisible();
 
-  await row.getByRole('button', { name: 'Fakt bearbeiten' }).click();
+  // Zeilenaktionen liegen im Aktionsmenü: ⋯-Knopf hier, Rechtsklick beim Löschen.
+  const menu = page.locator('.context-menu[x-ref="actionMenu"]:visible');
+  await row.getByRole('button', { name: 'Aktionen zu diesem Fakt' }).click();
+  await menu.getByRole('menuitem', { name: 'Fakt bearbeiten' }).click();
   const edited = `${fakt} und ein Dach`;
   await card.locator('.weltfakten-edit-panel textarea').fill(edited);
   await card.locator('.weltfakten-edit-panel').getByRole('button', { name: 'Speichern' }).click();
   const rowEdited = card.locator('.weltfakten-row', { hasText: edited });
   await expect(rowEdited).toBeVisible();
 
-  await rowEdited.getByRole('button', { name: 'Löschen' }).click();
+  await rowEdited.locator('.weltfakten-fakt').click({ button: 'right' });
+  await menu.getByRole('menuitem', { name: 'Löschen' }).click();
   await page.locator('#app-confirm-dialog').getByRole('button', { name: 'Löschen' }).click();
   await expect(rowEdited).toHaveCount(0);
   const left = await page.evaluate(async (id) => (await fetch(`/world-facts/${id}`)).json(), bookId);
@@ -98,7 +102,8 @@ test('Welt-Fakten: Kapitel-Bezug im Formular wird manueller Bezug am Fakt', asyn
   expect(f.chapter_refs[0].manual).toBe(true);
   expect(kapitelName).toContain(f.chapter_refs[0].chapter_name);
 
-  await row.getByRole('button', { name: 'Löschen' }).click();
+  await row.getByRole('button', { name: 'Aktionen zu diesem Fakt' }).click();
+  await page.locator('.context-menu[x-ref="actionMenu"]:visible').getByRole('menuitem', { name: 'Löschen' }).click();
   await page.locator('#app-confirm-dialog').getByRole('button', { name: 'Löschen' }).click();
   await expect(row).toHaveCount(0);
 });

@@ -46,7 +46,7 @@
   display: flex;
   flex-direction: column;
   gap: var(--space-sm);
-  /* Deckend: sonst kein Compositor-Scroll bei Pixeldichte 1 (siehe entities/recherche/dialog.css). */
+  /* Deckend: sonst kein Compositor-Scroll bei Pixeldichte 1 (siehe page/page-revision-viewer.css). */
   background: var(--color-card-bg);
 }
 .offline-rescue-item {

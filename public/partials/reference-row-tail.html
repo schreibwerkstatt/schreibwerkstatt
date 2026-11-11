@@ -1,0 +1,25 @@
+<!--
+  Zeilen-Ende jeder Referenz-Zeile im Referenz-Slot neben dem Notebook-Editor:
+  Verweise (Kapitel, Figuren, Orte, Motive …) und «in Abschnitten». Fragment-
+  Include (Marker @include reference-row-tail) im x-for jedes Reiters; erwartet
+  `row` (Zeilen-Objekt) und `rowKind` (x-data am Reiter-Panel) im Scope.
+  Abfolge und Zuordnung je Objektart: cards/reference-rows.js. Jeder Chip
+  springt zu seinem Objekt, die Zeile selbst in ihre Karte.
+-->
+<div class="reference-row-sub reference-row-refs" x-show="referenceRowRefs(rowKind, row).shown.length">
+  <span class="entity-refs">
+    <template x-for="(r, ri) in referenceRowRefs(rowKind, row).shown" :key="'rr-' + ri + '-' + r.type + (r.id ?? r.name)">
+      <button type="button" class="entity-ref" x-entity-ref="r"></button>
+    </template>
+    <span class="entity-ref-more" x-show="referenceRowRefs(rowKind, row).more" x-text="'+' + referenceRowRefs(rowKind, row).more"></span>
+  </span>
+</div>
+<div class="reference-row-sub reference-row-refs" x-show="referenceRowPages(rowKind, row).shown.length">
+  <span x-text="$app.t('reference.ctx.onPages')"></span>
+  <span class="entity-refs">
+    <template x-for="pid in referenceRowPages(rowKind, row).shown" :key="'rp-' + pid">
+      <button type="button" class="entity-ref" x-entity-ref="{ type: 'seite', id: pid }"></button>
+    </template>
+    <span class="entity-ref-more" x-show="referenceRowPages(rowKind, row).more" x-text="'+' + referenceRowPages(rowKind, row).more"></span>
+  </span>
+</div>

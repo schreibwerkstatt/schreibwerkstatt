@@ -75,7 +75,24 @@ export function registerTabs() {
         return {
           role: 'tablist',
           ['@keydown']: (e) => this._onKeydown(e),
+          ['@wheel']: (e) => this._onWheel(e),
         };
+      },
+
+      // Mausrad → horizontal scrollen. Die Reihe scrollt horizontal ohne
+      // sichtbare Scrollbar (tabs.css); ein Rad ohne Shift liefert nur deltaY
+      // und käme sonst nie an die hinteren Tabs. Nur abfangen, solange die
+      // Reihe in diese Richtung noch scrollen kann — am Anschlag scrollt die
+      // Seite wie gewohnt weiter.
+      _onWheel(e) {
+        const el = e.currentTarget;
+        if (!el || el.scrollWidth <= el.clientWidth) return;
+        if (e.ctrlKey || Math.abs(e.deltaX) >= Math.abs(e.deltaY)) return;
+        const max = el.scrollWidth - el.clientWidth;
+        const dy = e.deltaMode === 1 ? e.deltaY * 16 : e.deltaY;
+        if ((dy < 0 && el.scrollLeft <= 0) || (dy > 0 && el.scrollLeft >= max - 1)) return;
+        e.preventDefault();
+        el.scrollLeft += dy;
       },
 
       // Spread pro Tab-<button>. Roving-Tabindex: aktiver Tab tabbar (0),

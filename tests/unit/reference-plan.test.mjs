@@ -3,7 +3,7 @@
 // der Beat-Verankerung (occ_top[].page_id), nie aus dem Plan selbst.
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { orderPlanBeats, selectPlanBeatsForPage, planCastNames } from '../../public/js/cards/reference-plan.js';
+import { orderPlanBeats, selectPlanBeatsForPage, planCastLookup, planCastRefs, planMotifRefs } from '../../public/js/cards/reference-plan.js';
 
 const plan = {
   acts: [{ id: 10, position: 1 }, { id: 11, position: 0 }],
@@ -76,16 +76,31 @@ test('orderPlanBeats: Lesereihenfolge pro Lane, eigene Akte vor geteilten', () =
   assert.deepEqual(ordered.map(b => b.id), [15, 14, 13, 12, 11, 16, 10]);
 });
 
-test('planCastNames: Katalog + Werkstatt + geerbte Strang-Figur + Orte, dedupliziert', () => {
-  const ctx = {
+test('planCastRefs: Katalog + Werkstatt + geerbte Strang-Figur + Orte als Referenzen, dedupliziert', () => {
+  const lookup = planCastLookup({
     figuren: [{ id: 'f1', name: 'Anna Berg', kurzname: 'Anna' }, { id: 'f2', name: 'Ben' }],
     draftFigures: [{ id: 4, name: 'Cleo (Werkstatt)' }],
-    threads: [{ id: 3, fig_id: 'f2' }, { id: 6, draft_figure_id: 4 }],
-  };
+    threads: [{ id: 3, fig_id: 'f2' }, { id: 6, draft_figure_id: 4 }, { id: 7, fig_id: 'f1' }],
+  });
   assert.deepEqual(
-    planCastNames({ fig_ids: ['f1'], draft_fig_ids: [4], thread_id: 3, locations: [{ name: 'Hafen' }] }, ctx),
-    ['Anna', 'Cleo (Werkstatt)', 'Ben', 'Hafen']);
-  // Strang-Figur schon explizit am Beat → keine Doppelnennung
-  assert.deepEqual(planCastNames({ draft_fig_ids: [4], thread_id: 6 }, ctx), ['Cleo (Werkstatt)']);
-  assert.deepEqual(planCastNames(null, ctx), []);
+    planCastRefs({ fig_ids: ['f1'], draft_fig_ids: [4], thread_id: 3, locations: [{ id: 9, name: 'Hafen' }] }, lookup),
+    [
+      { type: 'figur', id: 'f1' },
+      { type: 'werkstatt', id: 4, label: 'Cleo (Werkstatt)' },
+      { type: 'figur', id: 'f2', inherited: true },
+      { type: 'ort', id: 9, label: 'Hafen' },
+    ]);
+  // Strang-Figur schon explizit am Beat → keine Doppelnennung (Werkstatt wie Katalog)
+  assert.deepEqual(planCastRefs({ draft_fig_ids: [4], thread_id: 6 }, lookup),
+    [{ type: 'werkstatt', id: 4, label: 'Cleo (Werkstatt)' }]);
+  assert.deepEqual(planCastRefs({ fig_ids: ['f1'], thread_id: 7 }, lookup), [{ type: 'figur', id: 'f1' }]);
+  // Figur, die der Katalog nicht kennt, fällt weg statt als «#fig_x» zu stehen
+  assert.deepEqual(planCastRefs({ fig_ids: ['fig_unbekannt'] }, lookup), []);
+  assert.deepEqual(planCastRefs(null, lookup), []);
+});
+
+test('planMotifRefs: Motive mit ID als Motiv-Referenzen, Label vom Beat', () => {
+  assert.deepEqual(planMotifRefs({ motifs: [{ id: 2, name: 'Wasser' }, { name: 'ohne ID' }] }),
+    [{ type: 'motiv', id: 2, label: 'Wasser' }]);
+  assert.deepEqual(planMotifRefs(null), []);
 });

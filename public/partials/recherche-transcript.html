@@ -1,13 +1,13 @@
 <!--
-  Interview-Transkription im Detail-Dialog eines Recherche-Fundstücks.
+  Interview-Transkription in der aufgeklappten Zeile eines Recherche-Fundstücks.
   Fragment-Include (Marker @include recherche-transcript), `item` kommt aus dem
-  umschliessenden x-for-Scope (recherche-detail.html).
+  umschliessenden x-for-Scope (recherche-item-detail.html).
 
   Vier Zustände, bewusst getrennt sichtbar: keine Aufnahme · Aufnahme ohne Lauf ·
   Lauf läuft · Wortlaut da. Ein einziger „Transkribieren"-Knopf ohne Zustand
   liesse den Nutzer im Unklaren, ob gerade etwas passiert oder das Backend fehlt.
 -->
-<div class="research-transcript" x-show="item.kind === 'transcript' || ivTranscript">
+<div class="research-transcript">
   <div class="research-transcript__head">
     <svg class="icon" aria-hidden="true"><use href="/icons.svg#mic"/></svg>
     <span class="research-transcript__title" x-text="$app.t('interview.section')"></span>

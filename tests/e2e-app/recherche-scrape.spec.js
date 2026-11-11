@@ -53,8 +53,6 @@ test('recherche: Link lesen ist verdrahtet und meldet ein geblocktes Ziel', asyn
     .getByRole('button', { name: 'Diese Seite lesen und Titel, Text und Herkunft ins Fundstück übernehmen' })
     .click();
 
-  // `.first()`: die Karte fuehrt den Status-Block zweimal (Board + Detail-Dialog),
-  // beide an dasselbe `errorMessage` gebunden.
   await expect(page.locator('#recherche-card .card-status--error').first())
     .toContainText('zeigt nicht ins offene Netz');
 

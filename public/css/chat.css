@@ -358,9 +358,19 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
+  background: none;
+  border: none;
+  border-radius: var(--radius-none);
+  color: var(--color-muted);
+  line-height: 1;
+  cursor: pointer;
   padding: 0 var(--space-xs);
   font-size: var(--font-size-base);
   flex-shrink: 0;
+}
+.chat-session-delete:hover:not(:disabled) {
+  background: var(--color-border);
+  color: var(--color-text);
 }
 
 @media (max-width: 480px) {

@@ -1,88 +1,46 @@
 @layer components {
-/* === Dialog-Shell der Recherche-Karte ===
-   Detailansicht (public/partials/recherche-detail.html, items.js#openDetail):
-   den Fund LESEN — Volltext ungekappt, in Lesegrösse über die volle
-   Panelbreite, Bild gross statt als Rohdatei im neuen Tab. Anlegen ist kein
-   Dialog, sondern ein Inline-Formular in der Karte (recherche-create.html).
-   Via showModal(); Backdrop über ::backdrop; Focus-Trap, Inert-Hintergrund
-   und ESC kommen vom Browser. Akzentfarbe via var(--card-accent) (Mapping in
-   card-accents.css). */
+/* === Aufgeklappte Zeile der Recherche-Liste ===
+   Detailansicht (public/partials/recherche-item-detail.html, items.js#openDetail):
+   den Fund in der Zeile selbst LESEN — Volltext ungekappt, in Lesegrösse über
+   die volle Zeilenbreite, Bild gross statt als Rohdatei im neuen Tab — und dort
+   auch bearbeiten. Muster Figuren/Orte: Zeile klappt auf, kein Dialog. Anlegen
+   ist ein Inline-Formular über der Liste (recherche-create.html). Akzentfarbe
+   via var(--card-accent) (Mapping in card-accents.css). */
 
-.research-dialog {
-  background: var(--color-card-bg);
-  color: var(--color-text);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-xl);
-  box-shadow: var(--shadow-lg);
-  width: min(56rem, calc(100% - 2rem));
-  max-height: calc(100dvh - 4rem);
-  padding: 0;
-  margin: auto;
-}
-.research-dialog[open] {
-  display: flex;
-  flex-direction: column;
-}
-.research-dialog::backdrop { background: var(--color-overlay); }
-
-/* Hintergrund-Scroll sperren, solange ein Dialog offen ist — nur
-   .research-dialog__scroll scrollt (Muster des Revisions-Viewers). */
-html:has(.research-dialog[open]) { overflow: hidden; }
-
-.research-dialog__inner {
-  display: flex;
-  flex-direction: column;
-  flex: 1 1 auto;
-  min-height: 0;
-}
-
-/* ── Kopf: bleibt stehen, während der Inhalt scrollt ─────────────────────── */
-.research-dialog__head {
-  display: flex;
-  align-items: center;
-  gap: var(--space-xs);
-  flex-wrap: wrap;
-  padding: var(--space-md) var(--space-lg);
-  border-bottom: 1px solid var(--color-border);
-}
-.research-dialog__title {
-  margin: 0;
-  font-size: var(--font-size-lg);
-  font-weight: var(--fw-semibold);
-  min-width: 0;
-  word-break: break-word;
-}
-/* Erbt position: relative von .research-item-actions (das Aktionsmenü-Fragment
-   positioniert sein Dropdown absolut daran). */
-.research-dialog__actions {
-  align-items: center;
-  flex-wrap: wrap;
-}
-
-.research-dialog__scroll {
+.research-detail {
   display: flex;
   flex-direction: column;
   gap: var(--space-md);
-  padding: var(--space-lg);
-  overflow-y: auto;
-  flex: 1 1 auto;
-  min-height: 0;
-  /* Deckender Hintergrund ist Pflicht, nicht Optik: einen transparenten
-     Scroller scrollt Chromium auf Bildschirmen mit Pixeldichte 1 nicht auf dem
-     Compositor (LCD-Text), sondern rastert den Inhalt bei jedem Frame neu — ein
-     langer Fundtext ruckelt dann beim Scrollen. */
-  background: var(--color-card-bg);
+  padding-top: var(--space-sm);
+  border-top: 1px solid var(--color-border);
+  /* Text in der offenen Zeile ist zum Markieren da, nicht zum Klicken. */
+  cursor: auto;
+}
+
+/* ── Verknüpfungs-Leiste (oberster Block) ────────────────────────────────── */
+/* Verknüpfen + KI-Vorschlag als sichtbare Buttons (nicht nur im Kebab): dass man
+   ein Fundstück von hier aus verknüpfen kann, muss man sehen. Oben statt am
+   Textende: bei langem Fund ohne Scrollen erreichbar. */
+.research-detail__links {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-6);
+}
+.research-detail__link-actions {
+  display: flex;
+  gap: var(--space-xs);
+  flex-wrap: wrap;
 }
 
 /* ── Bild ───────────────────────────────────────────────────────────────── */
-.research-dialog__figure {
+.research-detail__figure {
   margin: 0;
   display: flex;
   flex-direction: column;
   gap: var(--space-6);
   align-items: flex-start;
 }
-.research-dialog__image {
+.research-detail__image {
   max-width: 100%;
   max-height: 60vh;
   width: auto;
@@ -91,19 +49,19 @@ html:has(.research-dialog[open]) { overflow: hidden; }
 }
 /* Bildunterschrift trägt die Aktionen zum Bild: „in neuem Tab öffnen“ und das
    Entfernen des Anhangs (Icon-only, Label im Tooltip). */
-.research-dialog__figcaption {
+.research-detail__figcaption {
   display: flex;
   align-items: center;
   gap: var(--space-xs);
   font-size: var(--font-size-sm);
   color: var(--color-muted);
 }
-.research-dialog__figcaption a { color: var(--card-accent); }
+.research-detail__figcaption a { color: var(--card-accent); }
 
 /* ── Dokument ───────────────────────────────────────────────────────────── */
-/* Anhang-Zeile: Link (.research-item-doc, geteilt mit dem Board) + Entfernen.
+/* Anhang-Zeile: Link (.research-item-doc, geteilt mit dem Anriss) + Entfernen.
    Der Button steht neben dem <a>, nicht darin — verschachtelte Interaktion. */
-.research-dialog__doc {
+.research-detail__doc {
   display: flex;
   align-items: center;
   gap: var(--space-xs);
@@ -113,89 +71,63 @@ html:has(.research-dialog[open]) { overflow: hidden; }
 
 /* ── Lesemodus ──────────────────────────────────────────────────────────── */
 /* Der eigentliche Grund für diese Ansicht: ein erfasster Artikel trägt bis zu
-   20 000 Zeichen. Lesegrösse und ruhige Zeilenhöhe; volle Dialogbreite statt
-   eines begrenzten Satzspiegels, weil lang erfasste Extension-Texte in einer
-   schmalen Column sonst extrem früh umbrechen (leerer rechter Raum).
+   20 000 Zeichen. Lesegrösse und ruhige Zeilenhöhe über die volle Zeilenbreite.
    Der Text kommt als gerendertes Markdown (itemBodyHtml): Absätze und
    Umbrüche liefert der Renderer, darum kein `pre-wrap`. */
-.research-dialog__text {
+.research-detail__text {
   font-size: var(--font-size-reading);
   line-height: var(--lh-relaxed);
   color: var(--color-text);
   overflow-wrap: anywhere;
   hyphens: auto;
 }
-.research-dialog__text--quote {
+/* Gekappt in der Liste: ~10 Zeilen, unten ausgeblendet. Volltext per Umschalter.
+   max-height statt line-clamp — der Text besteht aus Block-Absätzen. */
+.research-detail__textwrap {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--space-xs);
+}
+.research-detail__text--clamped {
+  max-height: calc(10 * var(--lh-relaxed) * 1em);
+  overflow: hidden;
+  mask-image: linear-gradient(to bottom, #000 70%, transparent);
+}
+.research-detail__more { font-size: var(--font-size-sm); }
+.research-detail__text--quote {
   font-style: italic;
   padding-left: var(--space-md);
   border-left: 3px solid var(--card-accent);
   color: color-mix(in srgb, var(--color-text) 88%, var(--color-muted));
 }
 
-.research-dialog__meta {
+.research-detail__meta {
   display: flex;
   flex-direction: column;
   gap: var(--space-6);
 }
 
-/* ── Verknüpfungs-Leiste (zwischen __head und __scroll) ─────────────────── */
-/* Verknüpfen + KI-Vorschlag als sichtbare Buttons (nicht nur im Kebab): dass man
-   ein Fundstück von hier aus verknüpfen kann, muss man sehen. Fest oben statt am
-   Textende: bei langem Fund ohne Scrollen erreichbar, und der Verknüpfen-Picker
-   klappt nach unten mit Platz für seine Auswahllisten auf. Viele Verknüpfungen
-   oder Vorschläge scrollen in der Leiste selbst, statt den Text zu verdrängen. */
-.research-dialog__links {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-6);
-  flex: 0 0 auto;
-  max-height: 40dvh;
-  overflow-y: auto;
-  padding: var(--space-sm) var(--space-lg);
-  border-bottom: 1px solid var(--color-border);
-}
-.research-dialog__link-actions {
-  display: flex;
-  gap: var(--space-xs);
-  flex-wrap: wrap;
-}
-
-/* ── Aktionsleiste am Fuss (aussERHALB von __scroll) ─────────────────────── */
-/* Speichern/Abbrechen im Bearbeiten-Modus bleiben stehen, während das Formular
-   scrollt — ein Weg aus dem Dialog muss ohne Scrollen erreichbar sein.
-   Linksbündig, Speichern zuerst: dieselbe Aktionszeile wie im Anlegen-Formular
+/* ── Aktionszeile des Bearbeitens ───────────────────────────────────────── */
+/* Linksbündig, Speichern zuerst: dieselbe Aktionszeile wie im Anlegen-Formular
    (.recherche-create-actions) und im Quellen-Formular. */
-.research-dialog__bar {
+.research-detail__bar {
   display: flex;
   gap: var(--space-xs);
   flex-wrap: wrap;
-  padding: var(--space-sm) var(--space-lg);
-  border-top: 1px solid var(--color-border);
+  margin-top: var(--space-sm);
 }
 
-/* Grosses Textfeld in beiden Dialogen (geteiltes Formular-Fragment): ein Fund,
-   der gelesen werden musste, lässt sich nicht in vier Zeilen redigieren — und
-   beim Anlegen landet hier der Volltext eines erfassten Artikels. */
+/* Grosses Textfeld (geteiltes Formular-Fragment, Anlegen + Bearbeiten): ein
+   Fund, der gelesen werden musste, lässt sich nicht in vier Zeilen redigieren —
+   und beim Anlegen landet hier der Volltext eines erfassten Artikels. */
 .recherche-body-input { min-height: 40vh; }
 
-/* ── Mobile: Vollflächiges Blatt statt schwebendem Panel ─────────────────── */
 @media (max-width: 640px) {
-  .research-dialog {
-    width: 100%;
-    max-width: none;
-    max-height: 100dvh;
-    height: 100dvh;
-    border: 0;
-    border-radius: 0;
-  }
-  .research-dialog__head { padding: var(--space-sm) var(--space-md); }
-  .research-dialog__links { padding: var(--space-xs) var(--space-md); }
-  .research-dialog__scroll { padding: var(--space-md); }
-  .research-dialog__bar { padding: var(--space-xs) var(--space-md); }
-  .research-dialog__image { max-height: 45vh; }
+  .research-detail__image { max-height: 45vh; }
 }
 
-/* === Interview-Transkription im Detail-Dialog ===
+/* === Interview-Transkription in der aufgeklappten Zeile ===
    Vier Zustände (keine Aufnahme · Aufnahme ohne Lauf · Lauf läuft · Wortlaut da)
    sind bewusst getrennt sichtbar, darum eigener Block statt einer Zeile beim
    PDF-Anhang. */
@@ -262,7 +194,7 @@ html:has(.research-dialog[open]) { overflow: hidden; }
   padding: 0;
   max-height: 45vh;
   overflow-y: auto;
-  /* Deckend: sonst kein Compositor-Scroll bei Pixeldichte 1 (siehe entities/recherche/dialog.css). */
+  /* Deckend: sonst kein Compositor-Scroll bei Pixeldichte 1 (siehe page/page-revision-viewer.css). */
   background: var(--color-card-bg);
 }
 .research-transcript__segment {

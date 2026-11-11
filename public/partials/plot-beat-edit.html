@@ -8,8 +8,8 @@
        === beat.id: beim Wechsel auf einen anderen Beat hat dessen startEditBeat
        den Wert schon umgesetzt, sodass dieser alte Handler nicht gegen-speichert.
        (Escape verwirft weiterhin via cancelEditBeat.) -->
-  <!-- x-id: eindeutige Label-IDs pro Edit-Instanz (flaches Board + Grid liegen
-       beide im DOM, eine beat.id allein waere doppelt vergeben). -->
+  <!-- x-id: eindeutige Label-IDs pro Edit-Instanz (das Markup steht im flachen
+       Board und im Grid, eine beat.id allein taugt nicht als Label-ID). -->
   <div class="plot-beat-edit"
        x-id="['pbe-int', 'pbe-chap', 'pbe-zeit', 'pbe-fig', 'pbe-motif', 'pbe-ort', 'pbe-rel', 'pbe-move']"
        @keydown="$editKeys($event, { save: () => commitEditBeat(beat), cancel: () => cancelEditBeat() })"

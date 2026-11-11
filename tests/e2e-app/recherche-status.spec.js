@@ -67,11 +67,18 @@ test('recherche: Status-Board sortiert in Spalten, das Aktionsmenue verschiebt, 
   await page.evaluate((id) => { location.hash = `#book/${id}/recherche`; }, bookId);
   await expect(page.locator('#recherche-card')).toBeVisible();
 
-  // ── Liste: die Default-Stufe traegt KEINE Plakette ───────────────────────
-  // Wer die Achse nie benutzt, sieht die Liste unveraendert — `offen` an jeder
-  // Zeile zu wiederholen waere Rauschen ohne Aussage.
+  // ── Liste: jede Zeile traegt ihre Stufe als Plakette, auch `offen` ───────
+  // Sie ist das Klickziel fuer den Status (Menue nur mit dem Status-Abschnitt).
   const listRow = page.locator(`[data-research-id="${made.withPlace}"]`);
-  await expect(listRow.locator('.research-status-badge')).toBeHidden();
+  const offenBadge = listRow.locator('.research-status-badge');
+  await expect(offenBadge).toBeVisible();
+  await expect(offenBadge).toHaveClass(/research-status-badge--offen/);
+  await offenBadge.click();
+  const statusMenu = page.locator('.research-item-menu');
+  await expect(statusMenu.getByRole('menuitemradio')).toHaveCount(4);
+  await expect(statusMenu.getByRole('menuitem', { name: /Bearbeiten|Löschen/ })).toHaveCount(0);
+  await page.keyboard.press('Escape');
+  await expect(statusMenu).toBeHidden();
 
   // ── Umschalten aufs Board ─────────────────────────────────────────────────
   const board = page.locator('.research-status-board');
@@ -171,7 +178,8 @@ test('recherche: „Verknuepfen" im Menue einer Board-Karte oeffnet den Picker o
 
   const picker = page.locator('.recherche-link-picker');
   await expect(picker).toBeVisible();
-  await expect(page.locator('dialog.research-dialog[open]')).toHaveCount(0);
+  // Verknuepfen aus der Board-Karte bleibt im Board: kein Wechsel in die Liste.
+  await expect(page.locator('#recherche-card .research-detail')).toHaveCount(0);
   const [pb, ab] = await Promise.all([picker.boundingBox(), trigger.boundingBox()]);
   expect(Math.min(Math.abs(pb.y - (ab.y + ab.height)), Math.abs(pb.y + pb.height - ab.y))).toBeLessThan(12);
   await picker.locator('button').last().focus();

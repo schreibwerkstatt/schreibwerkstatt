@@ -307,12 +307,14 @@ export const pageViewMethods = {
     // Lektor/Viewer bekämen bei jedem Seitenwechsel einen 403.
     if (!this.currentPage?.chapter_id || !this.$store.nav.selectedBookId || !this.canEdit()) {
       this.chapterFigures = [];
+      this.chapterFiguresFallback = false;
       return;
     }
     // Bei nur einer Seite pro Kapitel liefert der Endpoint alle Buchfiguren → nicht hilfreich
     const chapter = this.$store.nav.tree?.find(c => c.id === this.currentPage.chapter_id);
     if (chapter && chapter.pages?.length <= 1) {
       this.chapterFigures = [];
+      this.chapterFiguresFallback = false;
       return;
     }
     // Buch- und Seitenwechsel während des Fetches: die Antwort gehört dann zu
@@ -325,10 +327,12 @@ export const pageViewMethods = {
       const data = await fetchJson(`/figures/chapter/${bookId}/${this.currentPage.chapter_id}`);
       if (!stillCurrent()) return;
       this.chapterFigures = (data?.figuren || []).map(_sanitizeFigur);
+      this.chapterFiguresFallback = !!data?.fallback;
     } catch (e) {
       if (!stillCurrent()) return;
       console.error('[loadChapterFigures]', e);
       this.chapterFigures = [];
+      this.chapterFiguresFallback = false;
     }
   },
 

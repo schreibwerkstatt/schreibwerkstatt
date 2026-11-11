@@ -62,9 +62,9 @@ export const dndMethods = {
       group: { name: 'plot-beats', pull: true, put: ['plot-beats'] },
       onEnd: (evt) => this.onBeatSortEnd(evt),
     });
-    // Eine Sortable-Instanz pro Beat-Zelle (.plot-beats[data-plot-cell]). Flaches
-    // Board und Grid sind beide im DOM (x-show); die jeweils versteckten Container
-    // sind geometrielos → nie Drop-Ziel, das Binden bleibt unschädlich.
+    // Eine Sortable-Instanz pro Beat-Zelle (.plot-beats[data-plot-cell]). Nur das
+    // aktive Board (flach bzw. Grid, x-if) ist gerendert; wechselt es mit dem
+    // ersten/letzten Strang, bindet der `threads`-Watch über _scheduleReattach neu.
     const cells = this.$root.querySelectorAll('[data-plot-cell]');
     for (const el of cells) this._sortables.push(new Sortable(el, baseOpts));
   },

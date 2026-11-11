@@ -1,24 +1,27 @@
 <!-- Aktionsmenue eines Recherche-Fundstuecks: EINE teleportierte Instanz fuer
-     Liste, Board-Karte und Detail-Dialog (Mechanik aus action-menu.js). Geoeffnet
-     per ⋯-Knopf (recherche-item-menu-trigger.html) und per Rechtsklick/Long-Press
+     Listenzeile und Board-Karte (Mechanik aus action-menu.js). Geoeffnet per
+     ⋯-Knopf (recherche-item-menu-trigger.html) und per Rechtsklick/Long-Press
      auf Listenzeile bzw. Board-Karte. Ziel = { ctx, id }; `item` und `menuCtx`
-     stehen darunter wie in den drei Kontexten, darum ist das Markup wortgleich.
-     Teleport nach <body>: Liste und Detail-Dialog klippen per Overflow; im
-     Dialog bzw. Vollbild haengt action-menu.js das Menue zur Anzeigezeit in den
-     sichtbaren Host. „Verknuepfen" oeffnet in allen drei Kontexten den Picker auf
-     Kartenebene (recherche-link-picker.html) am Menue-Anker. Die KI-Vorschlaege
-     zeigt nur recherche-item-relations — auf der Board-Karte (menuCtx 'status')
-     oeffnet der Eintrag darum zuerst die Detailansicht. Die Upload-Eintraege halten
+     stehen darunter wie in beiden Kontexten, darum ist das Markup wortgleich.
+     Teleport nach <body>: die Liste klippt per Overflow; im Vollbild haengt
+     action-menu.js das Menue zur Anzeigezeit in den sichtbaren Host.
+     „Verknuepfen" oeffnet in beiden Kontexten den Picker auf Kartenebene
+     (recherche-link-picker.html) am Menue-Anker. Die KI-Vorschlaege zeigt nur
+     recherche-item-relations — auf der Board-Karte (menuCtx 'status') klappt
+     der Eintrag darum zuerst die Zeile in der Liste auf. Die Upload-Eintraege halten
      den Klick an (`@click.stop`): das Menue muss offen bleiben, bis die Dateiwahl
      zurueckkommt — sonst waere das Input mit dem Menue schon aus dem DOM. -->
 <template x-teleport="body">
   <div class="context-menu research-item-menu" x-ref="actionMenu" x-bind="actionMenuPanel()" x-cloak>
     <template x-for="item in itemMenuItems()" :key="actionMenuKey">
-      <div x-data="{ menuCtx: actionMenuTarget.ctx }">
-        <!-- Bearbeiten: derselbe Weg wie der Stift der Listenzeile (Detailansicht im
-             Bearbeiten-Modus) — auf der Board-Karte der einzige. Im Dialog selbst
-             steht der Knopf schon im Kopf. -->
-        <template x-if="menuCtx !== 'detail'">
+      <!-- `statusOnly`: von der Status-Plakette der Listenzeile geoeffnet —
+           dasselbe Menue, nur der Status-Abschnitt (board.js#openItemMenu). -->
+      <div x-data="{ menuCtx: actionMenuTarget.ctx, statusOnly: actionMenuTarget.only === 'status' }">
+        <div x-show="!statusOnly">
+        <!-- Bearbeiten: derselbe Weg wie der Stift der Listenzeile (Zeile
+             aufgeklappt im Bearbeiten-Modus) — auf der Board-Karte der einzige.
+             Steht das Fundstueck schon im Formular, entfaellt der Eintrag. -->
+        <template x-if="!(detailEditing && detailItemId === item.id)">
           <button type="button" class="context-menu-item context-menu-item--icon" role="menuitem" @click="openDetail(item, { edit: true })" :disabled="busy">
             <svg class="icon" aria-hidden="true"><use href="/icons.svg#pencil"/></svg>
             <span x-text="$app.t('recherche.edit')"></span>
@@ -40,6 +43,7 @@
              bleibt klickbar und setzt nichts (setItemStatus ist bei Gleichstand ein
              No-op, schliesst aber das Menue). -->
         <div class="context-menu-sep" role="separator"></div>
+        </div>
         <div class="context-menu-header context-menu-header--inline" x-text="$app.t('recherche.status.label')"></div>
         <template x-for="st in statuses()" :key="st">
           <button type="button" class="context-menu-item context-menu-item--icon" role="menuitemradio"
@@ -51,6 +55,7 @@
           </button>
         </template>
 
+        <div x-show="!statusOnly">
         <div class="context-menu-sep" role="separator"></div>
         <button type="button" class="context-menu-item context-menu-item--icon" role="menuitem" @click="togglePin(item)">
           <svg class="icon" aria-hidden="true"><use href="/icons.svg#pin"/></svg>
@@ -86,6 +91,7 @@
           <svg class="icon" aria-hidden="true"><use href="/icons.svg#trash"/></svg>
           <span x-text="$app.t('recherche.delete')"></span>
         </button>
+        </div>
       </div>
     </template>
   </div>

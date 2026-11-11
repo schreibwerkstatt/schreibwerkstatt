@@ -51,6 +51,7 @@ function addCheck(bookId, pageId, checkedAt, szenen, email = USER) {
   db.prepare(`INSERT INTO page_checks (page_id, book_id, checked_at, error_count, errors_json, szenen_json, user_email)
               VALUES (?, ?, ?, 0, '[]', ?, ?)`)
     .run(pageId, bookId, checkedAt, szenen == null ? null : JSON.stringify(szenen), email);
+  return db.prepare('SELECT MAX(id) AS id FROM page_checks').get().id;
 }
 
 test('jüngstes Lektorat mit Szenen hängt an der Szene; Lauf ohne Szenen verdeckt es nicht', () => {
@@ -58,13 +59,14 @@ test('jüngstes Lektorat mit Szenen hängt an der Szene; Lauf ohne Szenen verdec
   const page = addPage(bookId, chapterId, T1);
   addSzene(bookId, chapterId, page, 'Ankunft', T2);
   addCheck(bookId, page, T0, [{ titel: 'alt', wertung: 'schwach', kommentar: 'a' }]);
-  addCheck(bookId, page, T1, [{ titel: 'neu', wertung: 'mittel', kommentar: 'b' }, { titel: 'zwei', wertung: 'stark' }]);
+  const checkId = addCheck(bookId, page, T1, [{ titel: 'neu', wertung: 'mittel', kommentar: 'b' }, { titel: 'zwei', wertung: 'stark' }]);
   addCheck(bookId, page, T2, []);      // z.B. lokaler Provider: keine Szenen
   addCheck(bookId, page, T3, null);
   addCheck(bookId, page, T3, [{ titel: 'fremd', wertung: 'stark' }], OTHER);
 
   const [s] = listScenesForBook(bookId, USER).szenen;
   assert.equal(s.lektorat.checked_at, T1);
+  assert.equal(s.lektorat.check_id, checkId, 'Sprung in den Verlauf braucht die Check-ID');
   assert.deepEqual(s.lektorat.szenen, [
     { titel: 'neu', wertung: 'mittel', kommentar: 'b' },
     { titel: 'zwei', wertung: 'stark', kommentar: null },

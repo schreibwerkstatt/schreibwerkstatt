@@ -3,7 +3,7 @@
 // wie ein Laptop und bekommt keine Phone-Regel ab. Geometrie haengt am echten
 // Shell-CSS (Tokens + Komponenten), darum hier und nicht im Fixture-Harness.
 //
-// Weg aus der Praxis: Recherche-Fundstueck im Detail-Dialog → «Verknuepfen» →
+// Weg aus der Praxis: Recherche-Fundstueck aufgeklappt → «Verknuepfen» →
 // Picker mit zwei Comboboxen. Dazu Tooltip nach Tap und das
 // Offenbleiben der Combobox, wenn der Browser beim Tippen ins Suchfeld scrollt.
 const { test, expect } = require('../e2e/_helpers/fixtures');
@@ -31,32 +31,41 @@ async function openLinkPicker(page, body = 'Notiz') {
   }, [bookId, body]);
   created.push(itemId);
   await page.evaluate(([b, i]) => { location.hash = `#book/${b}/recherche/${i}`; }, [bookId, itemId]);
-  const dlg = page.locator('.research-dialog[open]');
-  await expect(dlg).toBeVisible();
-  await dlg.locator('.research-link-add').tap();
-  const picker = dlg.locator('.picker-popover:visible');
+  const row = page.locator(`[data-research-id="${itemId}"]`);
+  await expect(row.locator('.research-detail')).toBeVisible();
+  // Der Deep-Link scrollt die Zeile weich nach oben — erst ruhig, dann tippen.
+  await expect.poll(async () => {
+    const a = await row.boundingBox(); await page.waitForTimeout(120); const b = await row.boundingBox();
+    return a && b && a.y === b.y;
+  }).toBe(true);
+  await row.locator('.research-link-add').tap();
+  const picker = page.locator('.recherche-link-picker:visible');
   await expect(picker).toBeVisible();
-  return picker;
+  return { picker, row };
 }
 
-// Langer Fund: «Verknuepfen» steht oben im Dialog (feste Leiste unter dem Kopf),
-// nicht nach dem Volltext am unteren Bildschirmrand — dort hatten Picker und
-// Auswahllisten keinen Platz. Picker klappt nach unten am Knopf auf, im Dialog,
+// Langer Fund: «Verknuepfen» steht oben in der aufgeklappten Zeile (Leiste unter
+// dem Kopf), nicht nach dem Volltext am unteren Bildschirmrand — dort hatten
+// Picker und Auswahllisten keinen Platz. Picker klappt nach unten am Knopf auf,
 // und die Verknuepfung laesst sich komplett per Tap setzen.
 test('iPad: langer Fund — Verknuepfen oben, Picker nach unten, Verknuepfung per Tap', async ({ page }) => {
   await bootApp(page);
   const long = Array.from({ length: 60 }, (_, i) => `Absatz ${i + 1}: ` + 'Lorem ipsum dolor sit amet. '.repeat(6)).join('\n\n');
-  const picker = await openLinkPicker(page, long);
-  const dlg = page.locator('.research-dialog[open]');
+  const { picker, row } = await openLinkPicker(page, long);
   const geo = await page.evaluate(() => {
-    const d = document.querySelector('.research-dialog[open]').getBoundingClientRect();
-    const b = document.querySelector('.research-dialog[open] .research-link-add').getBoundingClientRect();
-    const p = [...document.querySelectorAll('.research-dialog[open] .picker-popover')].find((e) => e.getClientRects().length).getBoundingClientRect();
-    return { d: { left: d.left, top: d.top, bottom: d.bottom }, b: { left: b.left, bottom: b.bottom }, p: { left: p.left, top: p.top }, vh: innerHeight };
+    const d = document.querySelector('.research-item--open').getBoundingClientRect();
+    const b = document.querySelector('.research-item--open .research-link-add').getBoundingClientRect();
+    const p = [...document.querySelectorAll('.recherche-link-picker')].find((e) => e.getClientRects().length).getBoundingClientRect();
+    const t = document.querySelector('.research-item--open .research-detail__text').getBoundingClientRect();
+    return { d: { left: d.left, top: d.top, bottom: d.bottom }, b: { left: b.left, bottom: b.bottom }, p: { left: p.left, right: p.right, top: p.top }, t: { top: t.top }, vh: innerHeight };
   });
-  expect(geo.b.bottom, 'Knopf in der oberen Hälfte').toBeLessThan(geo.vh / 2);
+  expect(geo.b.bottom, 'Knopf über dem Volltext, nicht danach').toBeLessThanOrEqual(geo.t.top);
+  expect(geo.b.bottom, 'Knopf im Bild').toBeLessThan(geo.vh);
   expect(geo.p.top, 'Picker unter dem Knopf').toBeGreaterThanOrEqual(geo.b.bottom);
-  expect(geo.p.left, 'Picker am Knopf, nicht an den Rand geklemmt').toBeGreaterThanOrEqual(geo.d.left);
+  // Am Knopf: der Picker deckt dessen linke Kante horizontal ab (passt er rechts
+  // nicht ins Bild, rückt er nach links, bleibt aber über dem Knopf).
+  expect(geo.p.left, 'Picker am Knopf').toBeLessThanOrEqual(geo.b.left);
+  expect(geo.p.right, 'Picker am Knopf').toBeGreaterThan(geo.b.left);
 
   await picker.locator('.combobox-trigger').nth(1).tap();
   const opt = page.locator('.combobox-dropdown [role=option]').first();
@@ -65,12 +74,12 @@ test('iPad: langer Fund — Verknuepfen oben, Picker nach unten, Verknuepfung pe
   expect(box.y + box.height, 'Option im Bildschirm').toBeLessThanOrEqual(geo.vh);
   await opt.tap();
   await picker.locator('.picker-popover__actions button').first().tap();
-  await expect(dlg.locator('.research-dialog__links .research-links .entity-ref')).toHaveCount(1);
+  await expect(row.locator('.research-detail__links .research-links .entity-ref')).toHaveCount(1);
 });
 
 test('iPad: Combobox bleibt offen, wenn der Browser beim Tippen ins Suchfeld scrollt', async ({ page }) => {
   await bootApp(page);
-  const picker = await openLinkPicker(page);
+  const { picker } = await openLinkPicker(page);
   await picker.locator('.combobox-trigger').first().tap();
   const search = page.locator('.combobox-dropdown .combobox-search');
   await expect(search).toBeVisible();

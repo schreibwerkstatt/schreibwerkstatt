@@ -1,0 +1,46 @@
+{
+  "version": "6.4.1",
+  "date": "2026-11-11",
+  "entries": [
+    {
+      "kind": "neu",
+      "de": "Referenz-Leiste neben dem Abschnitt: ein neuer Reiter «Weltfakten» zeigt, was das Buch an dieser Stelle über die Welt festhält.",
+      "en": "Reference panel next to the section: a new \"World facts\" tab shows what the book establishes about its world at this point."
+    },
+    {
+      "kind": "neu",
+      "de": "Referenz-Leiste: ein Klick auf eine Figur, einen Schauplatz, eine Szene oder ein Ereignis öffnet sie in ihrer Karte. Ungespeicherte Änderungen im Abschnitt werden vorher gespeichert.",
+      "en": "Reference panel: clicking a character, location, scene or event opens it in its card. Unsaved changes in the section are saved first."
+    },
+    {
+      "kind": "neu",
+      "de": "Recherche-Karte: ein Fundstück klappt jetzt direkt in der Liste auf, samt Volltext, Verknüpfungen und Bearbeiten. Die Adresse im Browser führt genau zu diesem Fundstück zurück.",
+      "en": "Research card: an item now expands right in the list, with full text, links and editing. The browser address leads straight back to that item."
+    },
+    {
+      "kind": "neu",
+      "de": "Szenen-Karte: «Im Lektorat-Verlauf öffnen» springt in den Abschnitt der Szene und öffnet genau das Lektorat, aus dem die Bewertung stammt.",
+      "en": "Scenes card: \"Open in copy-edit history\" jumps to the scene's section and opens exactly the copy-edit the rating comes from."
+    },
+    {
+      "kind": "verbessert",
+      "de": "Recherche-Karte: oben steht, wie viele Fundstücke der Filter zeigt («3 von 12»). Trifft er nichts, bringt «Filter zurücksetzen» wieder alles in die Liste.",
+      "en": "Research card: the top shows how many items the filter shows (\"3 of 12\"). If nothing matches, \"Reset filters\" brings everything back."
+    },
+    {
+      "kind": "verbessert",
+      "de": "Referenz-Leiste: in grossen Büchern wechselt sie spürbar schneller zwischen Reitern und Abschnitten. Lange Listen zeigen zuerst einen Teil, der Rest kommt mit «Weitere anzeigen».",
+      "en": "Reference panel: in large books it switches tabs and sections noticeably faster. Long lists show a first batch, the rest comes with \"Show more\"."
+    },
+    {
+      "kind": "verbessert",
+      "de": "Welt-Fakten-Karte: die Aktionen zu einem Fakt liegen jetzt im ⋯-Menü der Zeile, auch per Rechtsklick. Die Karte lädt in grossen Büchern dadurch schneller.",
+      "en": "World facts card: the actions for a fact now sit in the row's ⋯ menu, also via right-click. The card loads faster in large books as a result."
+    },
+    {
+      "kind": "verbessert",
+      "de": "Reiterleisten: passen nicht alle Reiter auf die Breite, scrollst du sie mit dem Mausrad zur Seite.",
+      "en": "Tab bars: if not all tabs fit, you can scroll them sideways with the mouse wheel."
+    }
+  ]
+}

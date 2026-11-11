@@ -1,7 +1,7 @@
 <!-- Verknuepfungen + Tags eines Recherche-Fundstuecks und die
      KI-Verknuepfungsvorschlaege (der Verknuepfen-Picker ist ein Picker-Popover
      auf Kartenebene: recherche-link-picker.html). Fragment (string-seitiger @include),
-     weil der Block sowohl im x-for der Liste als auch im Detail-Dialog steht —
+     weil der Block sowohl im Anriss als auch in der aufgeklappten Zeile steht —
      beide nennen das Fundstueck `item`, das Markup ist darum wortgleich teilbar.
      Die Vorschlaege haengen an `suggestions[item.id]` — pro Fundstueck, nicht
      pro Oberflaeche. -->
@@ -19,8 +19,9 @@
      Read-only — gesetzt wird die Kante auf der Ideen-Seite. -->
 <div x-data="{ ideaOwnerId: item.id }"><!-- @include ideen-backlinks --></div>
 
-<!-- Tags -->
-<div class="research-tags" x-show="item.tags && item.tags.length">
+<!-- Tags. Im Bearbeiten-Modus stehen sie als Eingabe im Formular — beides
+     zugleich waere doppelt (wie Links und Quelle in recherche-item-detail). -->
+<div class="research-tags" x-show="item.tags && item.tags.length && !(detailEditing && detailItemId === item.id)">
   <template x-for="tag in item.tags" :key="tag">
     <span class="research-tag internal-link" @click="filterByTag(tag)" x-text="tag"></span>
   </template>

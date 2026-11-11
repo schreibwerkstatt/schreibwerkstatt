@@ -1,7 +1,7 @@
 // Recherche-Board: das Aktionsmenue eines Fundstuecks (recherche-item-menu.html)
 // muss ganz sichtbar und bedienbar sein, auch wenn sein Container kuerzer ist
-// als das Menue — ein kurzer Fund im Detail-Dialog (der per Overflow klippt)
-// und eine Liste mit einem einzigen Eintrag. Dazu seine Schliessregeln (Scroll,
+// als das Menue — ein kurzer Fund in der aufgeklappten Zeile und eine Liste mit
+// einem einzigen Eintrag. Dazu seine Schliessregeln (Scroll,
 // Doppelklick), die beide in action-menu.js#openActionMenu liegen. Geometrie-Aussage
 // gegen das echte Shell-CSS, darum hier und nicht im Fixture-Harness.
 const { test, expect } = require('../e2e/_helpers/fixtures');
@@ -54,7 +54,7 @@ async function openAndCheckMenu(page, trigger, menu) {
   await expectMenuFullyUsable(page, menu);
 }
 
-test('recherche: Aktionsmenue bei kurzem Inhalt nicht geklippt (Detail-Dialog + Liste mit einem Eintrag)', async ({ page }) => {
+test('recherche: Aktionsmenue bei kurzem Inhalt nicht geklippt (aufgeklappte Zeile + Liste mit einem Eintrag)', async ({ page }) => {
   await bootApp(page);
   const bookId = await selectSeededBook(page);
 
@@ -82,13 +82,12 @@ test('recherche: Aktionsmenue bei kurzem Inhalt nicht geklippt (Detail-Dialog + 
   await page.keyboard.press('Escape');
   await expect(page.locator('.research-item-menu')).toBeHidden();
 
-  // ── Detail-Dialog eines kurzen Funds (Permalink) ──────────────────────────
+  // ── Aufgeklappte Zeile eines kurzen Funds (Permalink) ─────────────────────
   await page.evaluate(([b, i]) => { location.hash = `#book/${b}/recherche/${i}`; }, [bookId, itemId]);
-  const dlg = page.locator('.research-dialog[open]');
-  await expect(dlg).toBeVisible();
+  await expect(row.locator('.research-detail')).toBeVisible();
   await openAndCheckMenu(page,
-    dlg.locator('.research-dialog__actions > .icon-btn[aria-haspopup="menu"]'),
-    dlg.locator('.research-item-menu'));
+    row.locator('.research-item-actions > .icon-btn[aria-haspopup="menu"]'),
+    page.locator('.research-item-menu'));
 });
 
 // Scroll-Fall: das Menue haengt an den Viewport-Koordinaten des Triggers

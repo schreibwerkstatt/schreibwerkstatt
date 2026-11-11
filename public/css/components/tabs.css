@@ -146,18 +146,25 @@
     transform: scaleX(0);
   }
 
-  /* Count-Badge im Tab (rechts vom Label). Reuse Stil von .btn-count. */
+  /* Count-Badge im Tab (rechts vom Label) — die EINZIGE Zähler-Optik in
+     Reitern; Karten setzen keine eigene `*-tab-count`-Klasse daneben.
+     Mittig zum Label über die Flex-Achse des `.tabs-btn` (align-items:
+     center), nicht über vertical-align; min-width + tabular-nums halten
+     ein-/zweistellige Zahlen gleich breit. */
   .tabs-btn-count {
-    display: inline-block;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 1.25rem;
     margin-left: var(--space-6);
     padding: 0 var(--space-6);
+    font-variant-numeric: tabular-nums;
     font-size: var(--font-size-xs);
     font-weight: var(--fw-semibold);
     line-height: 1.4;
     background: var(--color-border);
     color: var(--color-text);
     border-radius: var(--radius-none);
-    vertical-align: middle;
   }
   .tabs-btn--active .tabs-btn-count,
   .tabs-btn[aria-selected="true"] .tabs-btn-count {

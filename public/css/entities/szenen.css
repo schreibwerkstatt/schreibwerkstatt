@@ -141,7 +141,10 @@
   display: flex;
   flex-direction: column;
   gap: var(--space-3);
-  margin: 0 0 var(--space-6);
+  margin: var(--space-3) 0 0;
+}
+.szenen-lektorat-open {
+  align-self: flex-start;
 }
 .szenen-lektorat-item {
   display: flex;

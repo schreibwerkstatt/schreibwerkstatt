@@ -1,0 +1,109 @@
+<!-- Aufgeklappte Zeile eines Recherche-Fundstuecks (Muster Figuren/Orte: Zeile
+     klappt auf, kein Dialog). LESEN in Lesetypografie (Volltext ungekappt, Bild
+     gross) — und Bearbeiten als Schalter DARIN, ohne dass Verknuepfungen, Tags
+     und Anhaenge dabei verschwinden. Fragment von recherche-item.html, steht im
+     x-for der Liste und spricht das Fundstueck darum als `item` an; offen ist
+     hoechstens eines (`detailItemId`, items.js#openDetail, gespiegelt in
+     #…/recherche/<id>).
+     `@click.outside` committet ein offenes Bearbeiten (Inline-Edit-Regel,
+     public/CLAUDE.md «Edit-Formulare»); Filter und Zeitpunkt in
+     items.js#onDetailClickOutside. -->
+<div class="research-detail" @click.outside="onDetailClickOutside(item, $event)">
+
+  <!-- Verknuepfen/KI-Vorschlaege/Abgleich + bestehende Verknuepfungen und Tags:
+       in BEIDEN Modi bedienbar, oben statt am Textende — bei langem Fund ohne
+       Scrollen sichtbar. -->
+  <div class="research-detail__links">
+    <div class="research-detail__link-actions">
+      <button type="button" class="btn-compact research-link-add" @click="openLinkPicker(item, $el)">
+        <svg class="icon" aria-hidden="true"><use href="/icons.svg#external-link"/></svg>
+        <span x-text="$app.t('recherche.link.add')"></span>
+      </button>
+      <button type="button" class="btn-compact" @click="suggestLinks(item)" :disabled="busy || suggestBusy(item.id)">
+        <svg class="icon" aria-hidden="true"><use href="/icons.svg#zap"/></svg>
+        <span x-text="$app.t('recherche.suggest.btn')"></span>
+      </button>
+      <button type="button" class="btn-compact" x-show="canCrosscheck(item)" @click="runCrosscheck(item)" :disabled="crosscheckRunning"
+              :data-tip="$app.t('recherche.crosscheck.itemTip')" x-text="$app.t('recherche.crosscheck.itemBtn')"></button>
+    </div>
+    <!-- @include recherche-item-relations -->
+  </div>
+
+  <!-- Bild gross statt Neuer-Tab-Rohdatei. „In neuem Tab oeffnen" bleibt als Weg
+       zum echten Pixel-Zoom. x-if statt x-show: ein `src`-Binding hinter
+       display:none laedt trotzdem und liefert bei Fundstuecken ohne Bild einen 404. -->
+  <template x-if="item.has_image">
+    <figure class="research-detail__figure">
+      <img class="research-detail__image" :src="imageUrl(item)" :alt="item.title || ''">
+      <!-- Entfernen sitzt am Anhang selbst, nicht nur im Kebab: Bild und PDF
+           haengen unabhaengig am Fundstueck und gehen einzeln weg. -->
+      <figcaption class="research-detail__figcaption">
+        <a :href="imageUrl(item)" target="_blank" rel="noopener noreferrer" x-text="$app.t('recherche.image.open')"></a>
+        <button type="button" class="icon-btn icon-btn--ghost" @click="removeImage(item)" :disabled="busy"
+                :data-tip="$app.t('recherche.image.remove')" :aria-label="$app.t('recherche.image.remove')"><svg class="icon" aria-hidden="true"><use href="/icons.svg#trash"/></svg></button>
+      </figcaption>
+    </figure>
+  </template>
+
+  <div class="research-detail__doc" x-show="item.has_doc">
+    <a class="research-item-doc" :href="docUrl(item)" target="_blank" rel="noopener noreferrer">
+      <svg class="icon" aria-hidden="true"><use href="/icons.svg#file-plus"/></svg>
+      <span class="research-item-doc-name" x-text="item.doc_name || $app.t('recherche.doc.fallbackName')"></span>
+      <span class="research-item-doc-meta" x-show="item.doc_pages" x-text="$app.tn('recherche.doc.pages', item.doc_pages)"></span>
+    </a>
+    <button type="button" class="icon-btn icon-btn--ghost" @click="removeDoc(item)" :disabled="busy"
+            :data-tip="$app.t('recherche.doc.remove')" :aria-label="$app.t('recherche.doc.remove')"><svg class="icon" aria-hidden="true"><use href="/icons.svg#trash"/></svg></button>
+  </div>
+
+  <!-- Interview-Transkription: Aufnahme, Sprecher, Wortlaut. Eigenes Fragment,
+       weil der Block sein eigenes Zustandsmodell hat. -->
+  <!-- x-if statt x-show im Fragment: der Block ist gross und gilt nur fuer
+       Transkript-Fundstuecke — sonst baute jedes Aufklappen ihn versteckt mit. -->
+  <template x-if="item.kind === 'transcript' || ivTranscript">
+    <!-- @include recherche-transcript -->
+  </template>
+
+  <!-- Lesen: Lesegroesse, langer Text gekappt (ein erfasster Artikel hat bis zu
+       20 000 Zeichen und schoebe sonst die ganze Liste weg). `full` lebt lokal:
+       das umgebende x-if baut den Block bei jedem Aufklappen neu, also startet
+       jede Zeile wieder gekappt. Schwelle per Zeichenzahl statt Messung. -->
+  <div class="research-detail__textwrap" x-show="!detailEditing && item.body"
+       x-data="{ full: false }">
+    <div class="research-detail__text"
+         :class="{ 'research-detail__text--quote': item.kind === 'quote', 'research-detail__text--clamped': !full && isLongBody(item) }"
+         x-html="itemBodyHtml(item)"></div>
+    <button type="button" class="text-link research-detail__more" x-show="isLongBody(item)" x-cloak
+            :aria-expanded="full" @click="full = !full"
+            x-text="full ? $app.t('recherche.detail.textLess') : $app.t('recherche.detail.textMore')"></button>
+  </div>
+
+  <!-- Bearbeiten: nur die Textfelder tauschen. Die Felder kommen aus demselben
+       Fragment wie das Anlegen-Formular (recherche-form-fields) und binden
+       dasselbe `draft`. x-if statt x-show: das Formular (Combobox, tagInput)
+       entsteht erst beim Bearbeiten, nicht bei jedem Aufklappen zum Lesen. -->
+  <template x-if="detailEditing">
+  <div class="recherche-form"
+       @keydown="$editKeys($event, { save: () => saveEdit(item), cancel: () => cancelEdit() })">
+    <!-- @include recherche-form-fields -->
+    <!-- Fehler beim Speichern IM Formular, nicht in der Kartenzeile oben. -->
+    <div x-show="formError" x-cloak class="card-status card-status--error" role="alert" x-text="formError"></div>
+    <!-- Knoepfe, Reihenfolge und Ausrichtung wie im Anlegen- und im Quellen-Formular. -->
+    <div class="research-detail__bar">
+      <button type="button" class="primary" @click="saveEdit(item)" :disabled="busy">
+        <span x-show="busy" class="spinner"></span>
+        <span x-text="busy ? $app.t('common.saving') : $app.t('recherche.save')"></span>
+      </button>
+      <button type="button" @click="cancelEdit()" :disabled="busy" x-text="$app.t('recherche.cancel')"></button>
+    </div>
+  </div>
+  </template>
+
+  <!-- Links + Quelle nur im Lesemodus: im Formular sind dieselben Angaben als
+       Eingabefelder da, beides gleichzeitig waere doppelt. -->
+  <div class="research-detail__meta" x-show="!detailEditing">
+    <!-- @include recherche-item-urls -->
+    <div x-show="item.source" class="research-item-source" x-text="item.source"></div>
+  </div>
+
+  <!-- @include recherche-findings -->
+</div>

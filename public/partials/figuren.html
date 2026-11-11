@@ -171,15 +171,19 @@
           <span class="entity-row-title" x-text="f.name"></span>
           <span x-show="f.stale" class="tag tag--stale" :data-tip="$app.t('figuren.staleHint')" x-text="$app.t('figuren.staleBadge')"></span>
           <span x-show="f.manually_edited" class="tag tag--curated" :data-tip="$app.t('figuren.curatedHint')" x-text="$app.t('figuren.curatedBadge')"></span>
-          <button type="button" x-show="f.stale" class="btn-compact entity-row-action"
+          <template x-if="f.stale">
+          <button type="button" class="btn-compact entity-row-action"
                   aria-haspopup="dialog" :aria-expanded="mergePick.kind === 'figur' && mergePick.sourceId === String(f.id)"
                   @click.stop="openMergePick($event, 'figur', f)"
                   :data-tip="$app.t('merge.rowTip')" x-text="$app.t('merge.rowAction')"></button>
-          <button type="button" x-show="f.stale" class="icon-btn danger entity-row-action"
+          </template>
+          <template x-if="f.stale">
+          <button type="button" class="icon-btn danger entity-row-action"
                   @click.stop="$app.deleteStaleFigur(f)"
                   :aria-label="$app.t('common.delete')" :data-tip="$app.t('entity.deleteStale')">
             <svg class="icon" aria-hidden="true"><use href="/icons.svg#trash"/></svg>
           </button>
+          </template>
           <span class="tag" x-text="$app.t('figuren.type.' + f.typ)"></span>
           <span x-show="$app.figurJahrLabel(f)" class="tag" :data-tip="$app.figurJahrTip(f)" x-text="$app.figurJahrLabel(f)"></span>
           <span x-show="f.geburtstag" class="tag" :data-tip="$app.t('figuren.birthYearTip')" x-text="$app.t('figuren.birthYear', { jahr: f.geburtstag })"></span>

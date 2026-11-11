@@ -2,27 +2,14 @@
 /* === Referenz-Slot (read-only Begleitpanel neben dem Notebook-Editor) ===
    Companion im 420px-Slot (Mutex mit Seiten-Chat + Ideen). Kartenrahmen +
    Header teilt sich das .card-/.card-header-Muster; hier nur die Slot-eigenen
-   Teile: Scope-Hinweis, Tab-Zähler, Panel-Listenzeilen. */
+   Teile: Scope-Hinweis, Panel-Listenzeilen. Tab-Zähler: `.tabs-btn-count`. */
 
 .card--reference {
   --card-accent: var(--card-accent-recherche);
 }
 
-.reference-tab-count {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  min-width: 1.25rem;
-  margin-left: var(--space-xs);
-  padding: 0 var(--space-3);
-  font-size: var(--font-size-xs);
-  font-weight: var(--fw-semibold);
-  line-height: 1.4;
-  color: var(--color-muted);
-  background: var(--color-border);
-  border-radius: var(--radius-none);
-}
-
+/* Höhe: `.reference-body` ist der `.aside-split-scroll` der Leiste und füllt
+   wie bei Chat und Ideen den Rest bis zum Klebe-Rahmen (layout/aside-split.css). */
 .reference-body {
   margin-top: var(--space-sm);
 }
@@ -32,8 +19,11 @@
   flex-direction: column;
 }
 
+/* Zeilenrhythmus (DESIGN.md «Listenzeile mit Anriss»): Titel und Inhalt
+   immer sichtbar → abgesetzt durch Abstand, nicht durch eine Linie; die
+   einzige Linie trennt Einträge voneinander. */
 .reference-row {
-  padding: var(--space-sm) 0;
+  padding: var(--space-md) 0;
   border-bottom: 1px solid var(--color-border);
 }
 .reference-row:last-child { border-bottom: none; }
@@ -48,15 +38,31 @@
 }
 .reference-row--clickable:hover { background: var(--color-surface); }
 
+/* Kopfzeile jedes Reiters: Titel, dahinter die Chips (Typ, Jahr, Status,
+   Ereignistyp, «Kapitel» …). `center` je Flex-Zeile statt `baseline`: die
+   Chips haben eigenes Padding/Rahmen, an der Grundlinie stünden ungleich
+   gebaute Chips versetzt. */
 .reference-row-head {
   display: flex;
-  align-items: baseline;
+  align-items: center;
   flex-wrap: wrap;
   gap: var(--space-xs);
+  margin-bottom: var(--space-6);
 }
-/* Leerer Mask-Chevron: seine Grundlinie ist die Unterkante, bei `baseline`
-   stünde er über dem Text. `center` gilt je Flex-Zeile. */
-.reference-row-head > .history-chevron { align-self: center; }
+
+/* Ein Chip-Mass für alle Reiter: `.tag` und Ereignistyp-Badge bekommen
+   dieselbe Schrift, Zeilenhöhe, Innenabstand und Rahmenstärke, damit sie in
+   einer Zeile gleich hoch sitzen. Farbe bleibt bei der jeweiligen Klasse. */
+.reference-row-head > .tag,
+.reference-row-head > .gz-subtyp-badge {
+  display: inline-flex;
+  align-items: center;
+  font-size: var(--font-size-xs);
+  line-height: 1.4;
+  padding: var(--space-1) var(--space-6);
+  white-space: nowrap;
+}
+.reference-row-head > .tag { border: 0.5px solid transparent; }
 
 .reference-row-title {
   font-weight: var(--fw-semibold);
@@ -64,12 +70,13 @@
 }
 
 .reference-row-sub {
-  margin-top: var(--space-2xs);
+  margin-top: var(--space-xs);
   font-size: var(--font-size-sm);
   color: var(--color-muted);
 }
 
-/* Zeile mit Entitäts-Referenzen (Abschnitte, Kapitel) hinter einem Label. */
+/* Zeile mit Entitäts-Referenzen: Verweise und «in Abschnitten» (Fragment
+   reference-row-tail.html, gleich für jeden Reiter). */
 .reference-row-refs {
   display: flex;
   flex-wrap: wrap;
@@ -78,7 +85,7 @@
 }
 
 .reference-row-desc {
-  margin-top: var(--space-3);
+  margin-top: var(--space-xs);
   font-size: var(--font-size-sm);
   color: var(--color-text);
   line-height: 1.45;

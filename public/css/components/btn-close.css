@@ -9,12 +9,15 @@
 
    ADOPTIERT: .figur-lookup-close, .synonym-picker-close, .heatmap-detail-close.
    NACHZIEHEN bei Beruehrung (gleiches Vorgehen wie bei .danger-zone):
-   .btn-card-close, .edit-find-close, .book-editor-find-close,
+   .edit-find-close, .book-editor-find-close,
    .entity-popover-close, .job-toast-close,
    .revision-viewer__close, .shortcuts-close. Sie tragen heute je eigene
    font-size/padding-Werte — beim Umstellen den bestehenden Wert als
    --close-size/--close-pad setzen, NICHT auf den Default vereinheitlichen
-   (das waere eine unbeabsichtigte Groessenaenderung an acht Stellen).
+   (das waere eine unbeabsichtigte Groessenaenderung an sieben Stellen).
+
+   .btn-card-close gehoert NICHT hierher: er steht im Kartenkopf neben den
+   Aktions-Icons und traegt deren Ghost-Optik (card-actions.css).
 
    Destruktives Entfernen (Chip loeschen, Sitzung/Seite/Kapitel loeschen) ist
    KEIN Schliessen und gehoert nicht hierher — eigene Semantik, eigenes Icon. */

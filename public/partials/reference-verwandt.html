@@ -6,7 +6,8 @@
 -->
 <!-- Verwandte Stellen (Semantik) — auf Knopfdruck ähnliche bestehende Seiten
      zur ganzen Seite oder zum markierten Absatz. Read-only, rückwärtsgewandt. -->
-<div x-show="referenceTab === 'verwandt'" class="reference-panel">
+<template x-if="referenceTab === 'verwandt'">
+<div class="reference-panel">
   <template x-if="!referenceHasContext()">
     <div class="muted-msg muted-msg--sm muted-msg--block" x-text="$app.t('reference.verwandt.noPage')"></div>
   </template>
@@ -39,7 +40,7 @@
       </template>
 
       <template x-for="hit in verwandtResults()" :key="'vw-' + hit.entity_id">
-        <div class="reference-row reference-row--clickable internal-link" @click="activateVerwandt(hit)"
+        <div class="reference-row reference-row--clickable internal-link" @click="activateVerwandt(hit)" data-ref-jump
              :data-tip="$app.t('reference.verwandt.openTip')">
           <div class="reference-row-head">
             <span class="reference-row-title" x-text="hit.title || $app.t('search.untitled')"></span>
@@ -51,3 +52,4 @@
     </div>
   </template>
 </div>
+</template>

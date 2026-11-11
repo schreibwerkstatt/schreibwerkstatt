@@ -26,9 +26,15 @@ function isWordChar(ch) {
  *  „im Abschnitt" nennt, wo der Editor sie auch markiert — „Anna" nicht in
  *  „Annahme". Case-insensitiv. */
 export function containsWholeWord(text, name) {
+  return containsWholeWordLower(text ? String(text).toLowerCase() : '', name);
+}
+
+/** Wie containsWholeWord, aber `lowText` ist schon kleingeschrieben. Für viele
+ *  Namen gegen denselben Text: das Kleinschreiben einer langen Seite je Name
+ *  kostete im Referenz-Slot den Grossteil der Filterzeit. */
+export function containsWholeWordLower(lowText, name) {
   const lowName = String(name || '').trim().toLowerCase();
-  if (!text || !lowName) return false;
-  const lowText = String(text).toLowerCase();
+  if (!lowText || !lowName) return false;
   let from = 0;
   for (;;) {
     const idx = lowText.indexOf(lowName, from);

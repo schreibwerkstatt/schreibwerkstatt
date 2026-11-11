@@ -36,176 +36,172 @@
     <div class="tabs tabs--scrollable" x-bind="tablist">
       <button class="tabs-btn" x-bind="tabBtn('plan')" x-show="referenceTabVisible('plan')">
         <span x-text="$app.t('reference.tab.plan')"></span>
-        <span class="reference-tab-count" x-show="referenceCount('plan') > 0" x-text="referenceCount('plan')"></span>
+        <span class="tabs-btn-count" x-show="referenceCount('plan') > 0" x-text="referenceCount('plan')"></span>
       </button>
       <button class="tabs-btn" x-bind="tabBtn('figuren')">
         <span x-text="$app.t('reference.tab.figuren')"></span>
-        <span class="reference-tab-count" x-show="referenceCount('figuren') > 0" x-text="referenceCount('figuren')"></span>
+        <span class="tabs-btn-count" x-show="referenceCount('figuren') > 0" x-text="referenceCount('figuren')"></span>
       </button>
       <button class="tabs-btn" x-bind="tabBtn('orte')">
         <span x-text="$app.t('reference.tab.orte')"></span>
-        <span class="reference-tab-count" x-show="referenceCount('orte') > 0" x-text="referenceCount('orte')"></span>
+        <span class="tabs-btn-count" x-show="referenceCount('orte') > 0" x-text="referenceCount('orte')"></span>
       </button>
       <button class="tabs-btn" x-bind="tabBtn('szenen')">
         <span x-text="$app.t('reference.tab.szenen')"></span>
-        <span class="reference-tab-count" x-show="referenceCount('szenen') > 0" x-text="referenceCount('szenen')"></span>
+        <span class="tabs-btn-count" x-show="referenceCount('szenen') > 0" x-text="referenceCount('szenen')"></span>
       </button>
       <button class="tabs-btn" x-bind="tabBtn('ereignisse')">
         <span x-text="$app.t('reference.tab.ereignisse')"></span>
-        <span class="reference-tab-count" x-show="referenceCount('ereignisse') > 0" x-text="referenceCount('ereignisse')"></span>
+        <span class="tabs-btn-count" x-show="referenceCount('ereignisse') > 0" x-text="referenceCount('ereignisse')"></span>
+      </button>
+      <button class="tabs-btn" x-bind="tabBtn('weltfakten')">
+        <span x-text="$app.t('reference.tab.weltfakten')"></span>
+        <span class="tabs-btn-count" x-show="referenceCount('weltfakten') > 0" x-text="referenceCount('weltfakten')"></span>
       </button>
       <button class="tabs-btn" x-bind="tabBtn('recherche')">
         <span x-text="$app.t('reference.tab.recherche')"></span>
-        <span class="reference-tab-count" x-show="referenceCount('recherche') > 0" x-text="referenceCount('recherche')"></span>
+        <span class="tabs-btn-count" x-show="referenceCount('recherche') > 0" x-text="referenceCount('recherche')"></span>
       </button>
       <button class="tabs-btn" x-bind="tabBtn('quellen')" x-show="referenceTabVisible('quellen')">
         <span x-text="$app.t('reference.tab.quellen')"></span>
-        <span class="reference-tab-count" x-show="referenceCount('quellen') > 0" x-text="referenceCount('quellen')"></span>
+        <span class="tabs-btn-count" x-show="referenceCount('quellen') > 0" x-text="referenceCount('quellen')"></span>
       </button>
       <button class="tabs-btn" x-bind="tabBtn('verwandt')" x-show="referenceTabVisible('verwandt')">
         <span x-text="$app.t('reference.tab.verwandt')"></span>
-        <span class="reference-tab-count" x-show="referenceCount('verwandt') > 0" x-text="referenceCount('verwandt')"></span>
+        <span class="tabs-btn-count" x-show="referenceCount('verwandt') > 0" x-text="referenceCount('verwandt')"></span>
       </button>
     </div>
   </div>
 
+  <!-- Jeder Reiter hängt an `x-if`, nicht `x-show`: nur der aktive steht im DOM.
+       Mit `x-show` baute ein Scope-Wechsel alle Reiter neu (grosses Buch: ~22K
+       Knoten). Die Zähler der Reiterleiste rechnen aus den Daten, nicht aus dem DOM. -->
   <div class="reference-body aside-split-scroll">
     <!-- @include reference-plan -->
 
     <!-- Figuren -->
-    <div x-show="referenceTab === 'figuren'" class="reference-panel">
+    <template x-if="referenceTab === 'figuren'">
+    <div class="reference-panel" x-data="{ rowKind: 'figur' }">
       <template x-if="referenceFiguren().length === 0">
         <div class="muted-msg muted-msg--sm muted-msg--block" x-text="$app.t('reference.empty.figuren')"></div>
       </template>
-      <template x-for="fig in referenceFiguren()" :key="'rf-' + (fig.id ?? fig.name)">
-        <div class="reference-row">
+      <template x-for="row in listWindowed(referenceFiguren(), 'figuren')" :key="'rf-' + (row.id ?? row.name)">
+        <div class="reference-row reference-row--clickable internal-link" @click="openReferenceEntity('figur', row.id)" data-ref-jump
+             :data-tip="$app.t('reference.figuren.openTip')">
           <div class="reference-row-head">
-            <span class="reference-row-title" x-text="fig.name"></span>
-            <span x-show="fig.typ" class="tag" x-text="$app.t('figuren.type.' + fig.typ)"></span>
-            <span x-show="$app.figurJahrLabel(fig)" class="tag" :data-tip="$app.figurJahrTip(fig)" x-text="$app.figurJahrLabel(fig)"></span>
-            <span x-show="fig.geburtstag" class="tag" :data-tip="$app.t('figuren.birthYearTip')" x-text="$app.t('figuren.birthYear', { jahr: fig.geburtstag })"></span>
-            <span x-show="fig.refCtx === 'chapter'" class="tag" :data-tip="$app.t('reference.ctx.chapterTip')" x-text="$app.t('reference.ctx.chapter')"></span>
+            <span class="figur-typ-dot" :class="'figur-typ-dot--' + (row.typ || 'unknown')"></span>
+            <span class="reference-row-title" x-text="row.name"></span>
+            <span x-show="row.typ" class="tag" x-text="$app.t('figuren.type.' + row.typ)"></span>
+            <span x-show="$app.figurJahrLabel(row)" class="tag" :data-tip="$app.figurJahrTip(row)" x-text="$app.figurJahrLabel(row)"></span>
+            <span x-show="row.geburtstag" class="tag" :data-tip="$app.t('figuren.birthYearTip')" x-text="$app.t('figuren.birthYear', { jahr: row.geburtstag })"></span>
+            <span x-show="row.refCtx === 'chapter'" class="tag" :data-tip="$app.t('reference.ctx.chapterTip')" x-text="$app.t('reference.ctx.chapter')"></span>
           </div>
-          <div class="reference-row-sub" x-show="fig.rolle" x-text="fig.rolle"></div>
-          <div class="reference-row-desc" x-show="fig.beschreibung" x-text="fig.beschreibung"></div>
+          <div class="reference-row-sub" x-show="row.rolle" x-text="row.rolle"></div>
+          <div class="reference-row-desc" x-show="row.beschreibung" x-text="row.beschreibung"></div>
+          <!-- @include reference-row-tail -->
         </div>
       </template>
+      <button type="button" class="btn-compact list-window-more"
+              x-show="listWindowRest(referenceFiguren(), 'figuren') > 0" x-cloak
+              x-list-more="listWindowMore('figuren')" @click="listWindowMore('figuren')"
+              x-text="$app.t('common.showMore', { n: listWindowRest(referenceFiguren(), 'figuren') })"></button>
     </div>
+    </template>
 
     <!-- Orte -->
-    <div x-show="referenceTab === 'orte'" class="reference-panel">
+    <template x-if="referenceTab === 'orte'">
+    <div class="reference-panel" x-data="{ rowKind: 'ort' }">
       <template x-if="referenceOrte().length === 0">
         <div class="muted-msg muted-msg--sm muted-msg--block" x-text="$app.t('reference.empty.orte')"></div>
       </template>
-      <template x-for="ort in referenceOrte()" :key="'ro-' + (ort.id ?? ort.name)">
-        <div class="reference-row">
+      <template x-for="row in listWindowed(referenceOrte(), 'orte')" :key="'ro-' + (row.id ?? row.name)">
+        <div class="reference-row reference-row--clickable internal-link" @click="openReferenceEntity('ort', row.id)" data-ref-jump
+             :data-tip="$app.t('reference.orte.openTip')">
           <div class="reference-row-head">
-            <span class="reference-row-title" x-text="ort.name"></span>
-            <span x-show="ort.refCtx === 'chapter'" class="tag" :data-tip="$app.t('reference.ctx.chapterTip')" x-text="$app.t('reference.ctx.chapter')"></span>
+            <span class="reference-row-title" x-text="row.name"></span>
+            <span x-show="row.typ" class="tag" x-text="referenceOrtTyp(row)"></span>
+            <span x-show="row.refCtx === 'chapter'" class="tag" :data-tip="$app.t('reference.ctx.chapterTip')" x-text="$app.t('reference.ctx.chapter')"></span>
           </div>
-          <div class="reference-row-desc" x-show="ort.beschreibung" x-text="ort.beschreibung"></div>
+          <div class="reference-row-sub" x-show="referenceOrtMeta(row)" x-text="referenceOrtMeta(row)"></div>
+          <div class="reference-row-desc" x-show="row.beschreibung" x-text="row.beschreibung"></div>
+          <!-- @include reference-row-tail -->
         </div>
       </template>
+      <button type="button" class="btn-compact list-window-more"
+              x-show="listWindowRest(referenceOrte(), 'orte') > 0" x-cloak
+              x-list-more="listWindowMore('orte')" @click="listWindowMore('orte')"
+              x-text="$app.t('common.showMore', { n: listWindowRest(referenceOrte(), 'orte') })"></button>
     </div>
+    </template>
 
     <!-- Szenen -->
-    <div x-show="referenceTab === 'szenen'" class="reference-panel">
+    <template x-if="referenceTab === 'szenen'">
+    <div class="reference-panel" x-data="{ rowKind: 'szene' }">
       <template x-if="referenceSzenen().length === 0">
         <div class="muted-msg muted-msg--sm muted-msg--block" x-text="$app.t('reference.empty.szenen')"></div>
       </template>
-      <template x-for="s in referenceSzenen()" :key="'rs-' + s.id">
-        <div class="reference-row">
+      <template x-for="row in listWindowed(referenceSzenen(), 'szenen')" :key="'rs-' + row.id">
+        <div class="reference-row reference-row--clickable internal-link" @click="openReferenceEntity('szene', row.id)" data-ref-jump
+             :data-tip="$app.t('reference.szenen.openTip')">
           <div class="reference-row-head">
-            <span class="reference-row-title" x-text="s.titel || $app.t('entities.scene')"></span>
-            <span x-show="s.wertung" class="tag" :class="'badge--wertung-' + s.wertung" x-text="s.wertung"></span>
-            <span x-show="s.refCtx === 'chapter'" class="tag" :data-tip="$app.t('reference.ctx.chapterTip')" x-text="$app.t('reference.ctx.chapter')"></span>
+            <span class="reference-row-title" x-text="row.titel || $app.t('entities.scene')"></span>
+            <span x-show="row.wertung" class="tag" :class="'badge--wertung-' + row.wertung" x-text="row.wertung"></span>
+            <span x-show="row.refCtx === 'chapter'" class="tag" :data-tip="$app.t('reference.ctx.chapterTip')" x-text="$app.t('reference.ctx.chapter')"></span>
           </div>
-          <div class="reference-row-desc" x-show="s.zusammenfassung || s.beschreibung" x-text="s.zusammenfassung || s.beschreibung"></div>
-          <div class="reference-row-sub reference-row-refs" x-show="referenceRowPageIds(s).length">
-            <span x-text="$app.t('reference.ctx.onPages')"></span>
-            <span class="entity-refs">
-              <template x-for="pid in referenceRowPageIds(s)" :key="'pg-' + pid">
-                <button type="button" class="entity-ref" x-entity-ref="{ type: 'seite', id: pid }"></button>
-              </template>
-            </span>
-          </div>
+          <div class="reference-row-desc" x-show="row.zusammenfassung || row.beschreibung" x-text="row.zusammenfassung || row.beschreibung"></div>
+          <!-- @include reference-row-tail -->
         </div>
       </template>
+      <button type="button" class="btn-compact list-window-more"
+              x-show="listWindowRest(referenceSzenen(), 'szenen') > 0" x-cloak
+              x-list-more="listWindowMore('szenen')" @click="listWindowMore('szenen')"
+              x-text="$app.t('common.showMore', { n: listWindowRest(referenceSzenen(), 'szenen') })"></button>
     </div>
+    </template>
 
-    <!-- Ereignisse (konsolidierte Chronologie) -->
-    <div x-show="referenceTab === 'ereignisse'" class="reference-panel">
-      <template x-if="referenceEreignisse().length === 0">
-        <div class="muted-msg muted-msg--sm muted-msg--block" x-text="$app.t('reference.empty.ereignisse')"></div>
-      </template>
-      <template x-for="(ev, ei) in referenceEreignisse()" :key="'re-' + (ev.id ?? ei)">
-        <div class="reference-row">
-          <div class="reference-row-head">
-            <span class="reference-row-title" x-text="ev.ereignis"></span>
-            <span x-show="referenceEventDate(ev)" class="tag" x-text="referenceEventDate(ev)"></span>
-            <template x-if="ev.subtyp && ev.subtyp !== 'sonstiges'">
-              <span class="gz-subtyp-badge" :class="'gz-subtyp-badge--' + ev.subtyp">
-                <svg class="icon gz-subtyp-icon" aria-hidden="true"><use :href="'/icons.svg#' + subtypIcon(ev.subtyp)"/></svg>
-                <span x-text="$app.t('events.subtyp.' + ev.subtyp)"></span>
-              </span>
-            </template>
-            <span x-show="ev.refCtx === 'chapter'" class="tag" :data-tip="$app.t('reference.ctx.chapterTip')" x-text="$app.t('reference.ctx.chapter')"></span>
-          </div>
-          <!-- Kapitel als Anzeige-Referenz (static): ein Sprung in die
-               Kapitelbewertung schlösse den Editor, neben dem der Slot steht. -->
-          <div class="reference-row-sub reference-row-refs" x-show="referenceEventChapters(ev).length">
-            <span class="entity-refs">
-              <template x-for="(k, ki) in referenceEventChapters(ev)" :key="'k-' + ki">
-                <span class="entity-ref" x-entity-ref="{ ...k, static: true }"></span>
-              </template>
-            </span>
-          </div>
-          <div class="reference-row-sub reference-row-refs" x-show="referenceRowPageIds(ev).length">
-            <span x-text="$app.t('reference.ctx.onPages')"></span>
-            <span class="entity-refs">
-              <template x-for="pid in referenceRowPageIds(ev)" :key="'pg-' + pid">
-                <button type="button" class="entity-ref" x-entity-ref="{ type: 'seite', id: pid }"></button>
-              </template>
-            </span>
-          </div>
-        </div>
-      </template>
-    </div>
+    <!-- @include reference-ereignisse -->
+
+    <!-- @include reference-weltfakten -->
 
     <!-- Recherche -->
-    <div x-show="referenceTab === 'recherche'" class="reference-panel">
+    <template x-if="referenceTab === 'recherche'">
+    <div class="reference-panel" x-data="{ rowKind: 'recherche' }">
       <div x-show="referenceRechercheLoading" x-skeleton="4" x-cloak></div>
       <div class="search-status search-status--error" x-show="referenceRechercheError && !referenceRechercheLoading"
            x-text="referenceRechercheError"></div>
       <template x-if="!referenceRechercheLoading && !referenceRechercheError && referenceRechercheItems().length === 0">
         <div class="muted-msg muted-msg--sm muted-msg--block" x-text="$app.t('reference.empty.recherche')"></div>
       </template>
-      <template x-for="item in referenceRechercheItems()" :key="'rr-' + item.id">
+      <template x-for="row in referenceRechercheItems()" :key="'rr-' + row.id">
         <div class="reference-row-group">
           <div class="reference-row reference-row--clickable internal-link"
-               @click="refIsTranscript(item) ? refIvToggle(item.id) : openRechercheItem(item)"
-               :data-tip="refIsTranscript(item) ? $app.t('interview.openTip') : $app.t('reference.recherche.openTip')">
+               @click="refIsTranscript(row) ? refIvToggle(row.id) : openRechercheItem(row)"
+               :data-ref-jump="!refIsTranscript(row)"
+               :data-tip="refIsTranscript(row) ? $app.t('interview.openTip') : $app.t('reference.recherche.openTip')">
             <div class="reference-row-head">
-              <span class="history-chevron" x-show="refIsTranscript(item)"
-                    :class="{ open: refIvOpenId === item.id }" aria-hidden="true"></span>
-              <span class="reference-row-title" x-text="referenceRechercheText(item)"></span>
-              <span class="tag" x-text="referenceRechercheKind(item)"></span>
-              <span x-show="item.refCtx === 'chapter'" class="tag" :data-tip="$app.t('reference.ctx.chapterTip')" x-text="$app.t('reference.ctx.chapter')"></span>
+              <span class="history-chevron" x-show="refIsTranscript(row)"
+                    :class="{ open: refIvOpenId === row.id }" aria-hidden="true"></span>
+              <span class="reference-row-title" x-text="referenceRechercheText(row)"></span>
+              <span class="tag" x-text="referenceRechercheKind(row)"></span>
+              <span x-show="row.refCtx === 'chapter'" class="tag" :data-tip="$app.t('reference.ctx.chapterTip')" x-text="$app.t('reference.ctx.chapter')"></span>
             </div>
-            <div class="reference-row-desc" x-show="item.title && item.body" x-text="item.body"></div>
-            <div class="reference-row-sub" x-show="item.source" x-text="item.source"></div>
+            <div class="reference-row-sub" x-show="row.source" x-text="row.source"></div>
+            <div class="reference-row-desc" x-show="row.title && row.body" x-text="row.body"></div>
+            <!-- @include reference-row-tail -->
           </div>
 
           <!-- @include reference-oton -->
         </div>
       </template>
     </div>
+    </template>
 
     <!-- Quellen: welche Quellen sind hier belegt (Seite/Kapitel bzw. ganzes Buch).
          Der Fund-Index ist die Ableitung der Quellennachweise im Seiten-HTML;
          gepflegt wird die Quelle im Quellenverzeichnis — dorthin verlinkt jede
          Zeile. Read-only. -->
-    <div x-show="referenceTab === 'quellen'" class="reference-panel">
+    <template x-if="referenceTab === 'quellen'">
+    <div class="reference-panel">
       <div x-show="referenceSourcesLoading" x-skeleton="4" x-cloak></div>
       <div class="search-status search-status--error" x-show="referenceSourcesError && !referenceSourcesLoading"
            x-text="referenceSourcesError"></div>
@@ -213,7 +209,7 @@
         <div class="muted-msg muted-msg--sm muted-msg--block" x-text="$app.t('reference.empty.quellen')"></div>
       </template>
       <template x-for="row in referenceQuellen()" :key="'rq-' + row.source.id">
-        <div class="reference-row reference-row--clickable internal-link" @click="openReferenceSource(row)"
+        <div class="reference-row reference-row--clickable internal-link" @click="openReferenceSource(row)" data-ref-jump
              :data-tip="$app.t('reference.quellen.openTip')">
           <div class="reference-row-head">
             <span class="reference-row-title" x-text="referenceQuelleTitle(row)"></span>
@@ -233,6 +229,7 @@
         </div>
       </template>
     </div>
+    </template>
 
     <!-- @include reference-verwandt -->
   </div>

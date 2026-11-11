@@ -33,6 +33,13 @@
 // geschriebene Erwaehnung noch nicht, und eine nur umschriebene Figur steht
 // nicht im Text.
 //
+// SPRÜNGE — jede Zeile führt zu ihrem Objekt (Figur/Ort/Szene/Ereignis über
+// openReferenceEntity → entity-ref.js#TYPES, Plan/Recherche/Quellen per
+// Permalink, Verwandt in den Abschnitt); Objekte, die eine Zeile nur erwähnt
+// (Besetzung, Kapitel, Abschnitte), stehen als `x-entity-ref`-Chips darin.
+// Ein Sprung in eine Buchkarte schliesst den Editor samt Slot (Exklusivität);
+// eine ungespeicherte Bearbeitung speichert der Slot vorher (reference-jump.js).
+//
 // Beim Einblenden geladen: Plan (/plot/), Recherche (/research), Quellen
 // (/sources + /sources/citations, Gruppierung pure in sources/cited-index.js) —
 // alle vorab, weil Reiter-Zähler und die Sichtbarkeit von Plan/Quellen davon
@@ -50,9 +57,12 @@ import { primaryPersonLabel } from '../sources/fields.js';
 import { referenceInterviewMethods, referenceInterviewState } from './reference-interview.js';
 import { referenceContextMethods } from './reference-context.js';
 import { referencePlanMethods, referencePlanState } from './reference-plan.js';
+import { referenceWeltfaktenMethods, referenceWeltfaktenState } from './reference-weltfakten.js';
 import { subtypIcon } from './ereignisse/subtyp.js';
+import { referenceJumpMethods, referenceJumpState } from './reference-jump.js';
+import { listWindowMethods, listWindowState } from '../list-window.js';
 
-const TABS = ['plan', 'figuren', 'orte', 'szenen', 'ereignisse', 'recherche', 'quellen', 'verwandt'];
+const TABS = ['plan', 'figuren', 'orte', 'szenen', 'ereignisse', 'weltfakten', 'recherche', 'quellen', 'verwandt'];
 // Immer sichtbarer Reiter — Rückfall, wenn der gewählte ausgeblendet ist.
 const FALLBACK_TAB = 'figuren';
 // Abschnitte, die eine Quellen-Zeile ausgeschrieben nennt; der Rest wird gezählt.
@@ -77,6 +87,8 @@ export function registerReferenceCard() {
     referenceRecherche: [],
     referenceRechercheLoading: false,
     referenceRechercheError: '',
+    // Weltfakten-Reiter (Slice cards/reference-weltfakten.js).
+    ...referenceWeltfaktenState(),
     // Quellen-Tab: die Quellen des Buchs (Anzeigedaten) + der Fund-Index
     // (welche Quelle steht auf welcher Seite). Beides buchweit geladen, die
     // Scope-Umschaltung filtert clientseitig.
@@ -97,8 +109,23 @@ export function registerReferenceCard() {
     _verwandtSelText: '',             // zuletzt in .page-content-view erfasste Auswahl/Absatz
     _refPageText: '',
     _refPageTextKey: null,
+    // Live-Stand des Editors im Bearbeitungsmodus (Slice reference-context.js):
+    // Namens-Treffer sollen eben Getipptes kennen, nicht erst den letzten Save.
+    _refLiveHtml: '',
+    _refLiveRev: 0,
     _memos: {},
     _lifecycle: null,
+    // Figuren/Orte/Szenen/Ereignisse im Buch-Scope tragen ganze Kataloge —
+    // ein Fenster je Reiter (Schlüssel = Reiter-Name), list-window.js.
+    ...listWindowState(),
+    // Sprünge + Speichern davor (Slice cards/reference-jump.js).
+    ...referenceJumpState(),
+    // Katalog-Listen, die der Slot für dieses Buch schon nachgeladen hat — ein
+    // Buch ohne Figuren/Orte soll nicht bei jedem Einblenden neu fragen.
+    _refCatalogTried: {},
+    // Laufnummer der Fundstellen-Lader: Save-Watcher und SOURCES_CHANGED können
+    // gleichzeitig laden; nur die jüngste Antwort zählt.
+    _refCitationsSeq: 0,
 
     init() {
       this._lifecycle = setupCardLifecycle(this, {
@@ -144,10 +171,11 @@ export function registerReferenceCard() {
       // neue `updated_at` heisst also: gerade gespeichert, ein eben eingefügter
       // Quellennachweis ist jetzt im Index. Nur die Fundstellen nachladen (die
       // Quellenliste selbst ändert ein Seiten-Save nicht) und nur mit offenem
-      // Slot + Tab — beim Einblenden lädt _onVisibleReference ohnehin frisch.
+      // Slot — beim Einblenden lädt _onVisibleReference ohnehin frisch. Bewusst
+      // unabhängig vom gewählten Reiter: der Zähler am Quellen-Reiter steht immer
+      // im Bild, und ein Wechsel auf den Reiter lädt nicht nach.
       this.$watch(() => window.__app?.currentPage?.updated_at, () => {
-        if (window.__app?.showReferenceCard && this.referenceTab === 'quellen'
-            && this.referenceSources.length) {
+        if (window.__app?.showReferenceCard && this.referenceSources.length) {
           this._loadReferenceCitations();
         }
       });
@@ -156,6 +184,8 @@ export function registerReferenceCard() {
       // verloren (Fokus-Steal) — darum den zuletzt erfassten Text puffern.
       document.addEventListener('selectionchange', () => this._captureVerwandtSel(),
         { signal: this._lifecycle.signal });
+      this._installReferenceJumpGuard(this._lifecycle.signal);
+      this._installReferenceLiveText(this._lifecycle.signal);
     },
 
     destroy() { this._verwandtAbort?.abort(); this._lifecycle?.destroy(); },
@@ -164,7 +194,7 @@ export function registerReferenceCard() {
       this.referenceRecherche = [];
       this.referenceRechercheLoading = false;
       this.referenceRechercheError = '';
-      Object.assign(this, referencePlanState(), referenceInterviewState());
+      Object.assign(this, referencePlanState(), referenceWeltfaktenState(), referenceInterviewState());
       this.referenceSources = [];
       this.referenceCitations = [];
       this.referenceSourcesLoading = false;
@@ -174,6 +204,9 @@ export function registerReferenceCard() {
       this._refPageText = '';
       this._refPageTextKey = null;
       this._memos = {};
+      this._refCatalogTried = {};
+      this._resetReferenceLiveText();
+      Object.assign(this, listWindowState());
     },
 
     _resetVerwandt() {
@@ -199,14 +232,30 @@ export function registerReferenceCard() {
       const bookId = Alpine.store('nav').selectedBookId;
       if (!bookId) return;
       const cat = Alpine.store('catalog');
-      if (!(cat.figuren || []).length) app.loadFiguren?.(bookId);
-      if (!(cat.orte || []).length) app.loadOrte?.(bookId);
-      if (!(cat.szenen || []).length) app.loadSzenen?.(bookId);
-      if (!(cat.globalZeitstrahl || []).length) app._reloadZeitstrahl?.();
+      this._ensureCatalog('figuren', () => app.loadFiguren?.(bookId), cat.figuren);
+      this._ensureCatalog('orte', () => app.loadOrte?.(bookId), cat.orte);
+      this._ensureCatalog('szenen', () => app.loadSzenen?.(bookId), cat.szenen);
+      this._ensureCatalog('globalZeitstrahl', () => app._reloadZeitstrahl?.(), cat.globalZeitstrahl);
       this._ensureVisibleTab();
       this._loadReferenceRecherche();
+      this._loadReferenceWeltfakten();
       this._loadReferenceSources();
       this._loadReferencePlan();
+      // Gemerkter Reiter «Verwandt»: beim Einblenden suchen wie beim Reiterwechsel
+      // — der Tab-Watcher feuert hier nicht, weil sich der Reiter nicht ändert.
+      if (this.referenceTab === 'verwandt') this._maybeAutoVerwandt();
+    },
+
+    /** Leere Katalog-Liste einmal je Buch nachladen — ein Buch ohne Figuren
+     *  fragt sonst bei jedem Einblenden neu. Die Lader schlucken ihre Fehler
+     *  (leer und gescheitert sehen gleich aus); darum zählt ein Lauf ohne Netz
+     *  nicht als Versuch, damit das nächste Einblenden online nachholt. */
+    async _ensureCatalog(key, load, list) {
+      if ((list || []).length || this._refCatalogTried[key]) return;
+      const bookId = Alpine.store('nav').selectedBookId;
+      await load();
+      if (this._staleBook(bookId) || navigator.onLine === false) return;
+      this._refCatalogTried = { ...this._refCatalogTried, [key]: true };
     },
 
     async _loadReferenceRecherche() {
@@ -270,12 +319,17 @@ export function registerReferenceCard() {
     async _loadReferenceCitations() {
       const bookId = Alpine.store('nav').selectedBookId;
       if (!bookId) { this.referenceCitations = []; return; }
+      const seq = ++this._refCitationsSeq;
+      const superseded = () => this._staleBook(bookId) || seq !== this._refCitationsSeq;
       try {
         const rows = await fetchJson(`/sources/citations?book_id=${encodeURIComponent(bookId)}`);
-        if (this._staleBook(bookId)) return;
+        if (superseded()) return;
         this.referenceCitations = Array.isArray(rows) ? rows : [];
+        // Ein früherer Fehlschlag (Save-Nachladen) darf nicht stehen bleiben,
+        // wenn der nächste Lauf durchgeht.
+        this.referenceSourcesError = '';
       } catch {
-        if (this._staleBook(bookId)) return;
+        if (superseded()) return;
         this.referenceCitations = [];
         this.referenceSourcesError = window.__app.t('reference.quellen.loadError');
       }
@@ -510,6 +564,9 @@ export function registerReferenceCard() {
       location.hash = `#book/${bookId}/recherche/${item.id}`;
     },
 
+    ...listWindowMethods,
+    ...referenceJumpMethods,
+    ...referenceWeltfaktenMethods,
     ...referenceInterviewMethods,
     ...referencePlanMethods,
     // Kontext-Regel + gefilterte Listen (Slice cards/reference-context.js).

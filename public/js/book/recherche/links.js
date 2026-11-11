@@ -14,7 +14,7 @@ const LINK_CHECK_ERRORS = new Set(['SSRF_BLOCKED', 'TIMEOUT', 'REDIRECT', 'NETWO
 export const rechercheLinkMethods = {
   // ── Verknüpfungen ──────────────────────────────────────────────────────────
   // Picker-Popover (DESIGN.md „Picker-Popover"), verankert an `anchor`
-  // (Menue-Anker in Liste/Board-Karte, Verknuepfen-Knopf im Detail-Dialog).
+  // (Menue-Anker in Liste/Board-Karte, Verknuepfen-Knopf in der aufgeklappten Zeile).
   async openLinkPicker(item, anchor = null) {
     await this.ensureLinkTargets();
     this.linkPickerItemId = item.id;

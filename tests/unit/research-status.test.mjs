@@ -162,16 +162,6 @@ test('Stelle im Buch = nur Kapitel/Seite; „eingearbeitet ohne Stelle" ist ein 
   }
 });
 
-test('Die Plakette erscheint nur, wenn die Stufe gesetzt wurde', () => {
-  const ctx = boardCtx([]);
-  assert.equal(ctx.showStatusBadge({ status: DEFAULT_RESEARCH_STATUS }), false,
-    'Der Default traegt keine Plakette — sonst steht an jeder unbearbeiteten Zeile ein Abzeichen ohne Aussage');
-  assert.equal(ctx.showStatusBadge({ status: null }), false, 'kein Status = Default');
-  for (const st of RESEARCH_STATUSES.slice(1)) {
-    assert.equal(ctx.showStatusBadge({ status: st }), true, st);
-  }
-});
-
 test('Der PATCH-Deskriptor validiert gegen dieselbe Menge', () => {
   const src = read('routes/research.js');
   assert.match(src, /!RESEARCH_STATUS_SET\.has\(b\.status\)/,

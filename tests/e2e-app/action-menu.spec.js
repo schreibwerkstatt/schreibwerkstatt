@@ -1,9 +1,7 @@
 // Aktionsmenue (public/js/action-menu.js) gegen die echte App: ⋯-Knopf,
 // Rechtsklick und Long-Press oeffnen DASSELBE Menue; Esc schliesst und gibt den
-// Fokus zurueck; ein Menue, das zuletzt im Detail-Dialog aufging, kommt beim
-// naechsten Oeffnen aus der Liste wieder unter <body> (sonst laege es unsichtbar
-// im geschlossenen Dialog). Gegen das Shell-CSS und den echten Template-Baum,
-// darum e2e-app und kein Harness.
+// Fokus zurueck und laesst eine aufgeklappte Zeile darunter offen. Gegen das
+// Shell-CSS und den echten Template-Baum, darum e2e-app und kein Harness.
 const { test, expect } = require('../e2e/_helpers/fixtures');
 const { bootApp, selectSeededBook } = require('./_helpers/app');
 
@@ -77,7 +75,7 @@ test('ideen-karte: Rechtsklick zeigt dasselbe Menue wie der ⋯-Knopf, Esc gibt 
   await expect(item.locator('.idee-status-badge')).not.toHaveClass(/idee-status-badge--offen/);
 });
 
-test('recherche: Long-Press oeffnet das Menue; nach dem Detail-Dialog geht es in der Liste wieder sichtbar auf', async ({ browser }) => {
+test('recherche: Long-Press oeffnet das Menue; in der aufgeklappten Zeile schliesst Esc nur das Menue', async ({ browser }) => {
   test.skip(test.info().project.name !== 'chromium', 'CDP-Touch nur in Chromium');
   const ctx = await browser.newContext({ hasTouch: true });
   const page = await ctx.newPage();
@@ -107,31 +105,20 @@ test('recherche: Long-Press oeffnet das Menue; nach dem Detail-Dialog geht es in
     await page.waitForTimeout(700);
     await expect(menu).toBeVisible();
     await cdp.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
-    // Der nachgereichte Klick oeffnet weder die Detailansicht noch schliesst er das Menue.
+    // Der nachgereichte Klick klappt die Zeile nicht auf und schliesst das Menue nicht.
     await page.waitForTimeout(250);
     await expect(menu).toBeVisible();
-    await expect(page.locator('.research-dialog[open]')).toHaveCount(0);
+    await expect(row.locator('.research-detail')).toHaveCount(0);
     await page.keyboard.press('Escape');
     await expect(menu).toBeHidden();
 
-    // Im Detail-Dialog oeffnen: das Menue liegt dann im Dialog (Top-Layer).
+    // Aufgeklappte Zeile (Permalink): Menue daraus oeffnen. Erst ruhig stellen —
+    // der Deep-Link scrollt die Zeile weich ins Bild, und ein Scroll nach dem
+    // Oeffnen schliesst das Menue zu Recht. `force` klickt blind auf die
+    // Koordinate: vorher abwarten, dass der Knopf aktiv ist, ruhig steht und am
+    // Klickpunkt obenauf liegt. Sonst nennt die Meldung, was darueber liegt.
     await page.evaluate(([b, i]) => { location.hash = `#book/${b}/recherche/${i}`; }, [bookId, itemId]);
-    const dlg = page.locator('.research-dialog[open]');
-    await expect(dlg).toBeVisible();
-    await dlg.locator('.research-dialog__actions .icon-btn[aria-haspopup="menu"]').click();
-    await expect(dlg.locator('.research-item-menu')).toBeVisible();
-    // Erstes Esc schliesst das Menue (und nur das), zweites den Dialog.
-    await page.keyboard.press('Escape');
-    await expect(dlg.locator('.research-item-menu')).toBeHidden();
-    await expect(page.locator('.research-dialog[open]')).toHaveCount(1);
-    await page.keyboard.press('Escape');
-    await expect(page.locator('.research-dialog[open]')).toHaveCount(0);
-
-    // Zurueck in der Liste: das Menue darf nicht im geschlossenen Dialog stecken.
-    // `force` klickt blind auf die Koordinate: vorher abwarten, dass der Knopf
-    // aktiv ist, ruhig steht (der Deep-Link scrollt die Zeile weich ins Bild —
-    // ein Scroll nach dem Oeffnen schliesst das Menue zu Recht) und am Klickpunkt
-    // obenauf liegt. Sonst nennt die Meldung, was darueber liegt.
+    await expect(row.locator('.research-detail')).toBeVisible();
     const listBtn = row.locator('.research-item-actions > .icon-btn[aria-haspopup="menu"]');
     const probe = () => listBtn.evaluate((b) => {
       const r = b.getBoundingClientRect();
@@ -147,7 +134,10 @@ test('recherche: Long-Press oeffnet das Menue; nach dem Detail-Dialog geht es in
     }).toMatchObject({ disabled: false, onTop: true, still: true });
     await listBtn.click({ force: true });
     await expect(menu).toBeVisible();
-    expect(await menu.evaluate((el) => !el.closest('dialog'))).toBe(true);
+    // Esc schliesst das Menue (und nur das): die Zeile bleibt aufgeklappt.
+    await page.keyboard.press('Escape');
+    await expect(menu).toBeHidden();
+    await expect(row.locator('.research-detail')).toBeVisible();
   } finally {
     await ctx.close();
   }

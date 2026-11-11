@@ -9,7 +9,7 @@ import { startPoll } from '../../cards/job-helpers.js';
 export function rechercheCrosscheckState() {
   return {
     crosscheckRunning: false,
-    // Fundstueck-Id eines Einzel-Abgleichs (Detail-Dialog), null = ganzes Board.
+    // Fundstueck-Id eines Einzel-Abgleichs (aufgeklappte Zeile), null = ganzes Board.
     crosscheckItemId: null,
     crosscheckStatus: '',
     _crosscheckTimer: null,

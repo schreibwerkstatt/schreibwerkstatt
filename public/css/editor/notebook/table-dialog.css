@@ -67,7 +67,7 @@
   max-height: 56vh;
   border: 0.5px solid var(--color-border);
   border-radius: var(--radius-none);
-  /* Deckend: sonst kein Compositor-Scroll bei Pixeldichte 1 (siehe entities/recherche/dialog.css). */
+  /* Deckend: sonst kein Compositor-Scroll bei Pixeldichte 1 (siehe page/page-revision-viewer.css). */
   background: var(--color-surface);
 }
 .table-dialog-grid {

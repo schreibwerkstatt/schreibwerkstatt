@@ -1,6 +1,6 @@
 <!--
   O-Töne eines Interview-Transkripts im Referenz-Panel neben dem Notebook-Editor.
-  Fragment-Include (Marker @include reference-oton), `item` kommt aus dem
+  Fragment-Include (Marker @include reference-oton), `row` kommt aus dem
   umschliessenden x-for-Scope (reference.html, Recherche-Tab).
 
   Jeder Redebeitrag geht per Klick als BELEGTES Blockzitat in den Artikel — die
@@ -11,7 +11,7 @@
      Blockzitat in den Artikel. Nur hier und nicht im Recherche-Board —
      das Board ist eine Hauptkarte und schliesst den Editor, in den der
      O-Ton soll. -->
-<div class="reference-oton" x-show="refIsTranscript(item) && refIvOpenId === item.id" x-cloak>
+<div class="reference-oton" x-show="refIsTranscript(row) && refIvOpenId === row.id" x-cloak>
   <div x-show="refIvLoading" x-skeleton="4" x-cloak></div>
   <div class="search-status search-status--error" x-show="refIvError" x-text="refIvError"></div>
   <template x-if="!refIvLoading && !refIvError && refIvSegments.length === 0">
@@ -38,7 +38,7 @@
       <div class="reference-oton-text" x-text="seg.text"></div>
       <button type="button" class="btn-compact reference-oton-insert"
               :disabled="refIvBusyId === seg.id || !$app.editMode"
-              @click="refIvInsert(item.id, seg)"
+              @click="refIvInsert(row.id, seg)"
               :data-tip="$app.editMode ? $app.t('interview.insertTip') : $app.t('interview.needEditMode')"
               x-text="$app.t('interview.insert')"></button>
     </div>

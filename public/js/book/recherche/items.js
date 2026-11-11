@@ -7,26 +7,22 @@ import { emptyDraft as _emptyDraft } from './shared.js';
 import { normalizeTags } from '../../tag-input.js';
 
 export const rechercheItemMethods = {
-  // ── Native-Dialog schliessen (geteilter Idiom) ────────────────────────────
-  // Dialog per dlg.close() schliessen, damit ESC/Backdrop/Button denselben Weg
-  // nehmen — das native close-Event ruft den onClosed-Hook als einzigen
-  // Aufräum-Punkt. Steht der Dialog noch nicht am DOM (oder wurde schon per
-  // close-Event abgeräumt), geht der Hook direkt durch.
-  _closeNativeDialog(refName, onClosed) {
-    const dlg = this.$refs?.[refName];
-    if (dlg?.open) dlg.close();
-    else onClosed.call(this);
-  },
-
   // ── Anlegen (Inline-Formular, partials/recherche-create.html) ────────────
   // Anlegen und Bearbeiten fahren auf DEMSELBEN `draft` und teilen dieselben
-  // Formularfelder (partials/recherche-form-fields.html). Exklusiv: startCreate
-  // schliesst die Detailansicht, openDetail schliesst das Anlegen.
-  startCreate() {
+  // Formularfelder (partials/recherche-form-fields.html). Offen ist darum
+  // höchstens EIN Formular: startCreate speichert ein laufendes Bearbeiten
+  // zuerst, und Bearbeiten bei offenem Anlegen fragt, ob der Entwurf verworfen
+  // werden darf (openDetail). LESEN geht neben dem Anlegen — wer beim Erfassen
+  // in einem anderen Fundstück nachschaut, verliert seinen Entwurf nicht.
+  async startCreate() {
+    if (this.detailEditing && this.detailItemId != null) {
+      const prev = (this.items || []).find(i => i.id === this.detailItemId);
+      if (prev && !(await this.commitEdit(prev))) return;
+    }
     this.draft = _emptyDraft();
-    this.closeDetail();
     this.clearCreateFile();
     this.errorMessage = '';
+    this.formError = '';
     this.creating = true;
     this.$nextTick(() => {
       document.querySelector('#recherche-card .recherche-create .recherche-title-input')?.focus();
@@ -40,7 +36,16 @@ export const rechercheItemMethods = {
     if (!this.creating) return;
     this.creating = false;
     this.clearCreateFile();
-    this.errorMessage = '';
+    this.formError = '';
+  },
+  // Hat das Anlegen-Formular Inhalt, der beim Schliessen verloren ginge? Der
+  // Typ allein zählt nicht (er hat immer einen Wert).
+  createDirty() {
+    if (!this.creating) return false;
+    const d = this.draft || {};
+    return !!((d.title || '').trim() || (d.body || '').trim() || (d.source || '').trim()
+      || (d.urls || []).some(u => (u.url || '').trim() || (u.label || '').trim())
+      || (d.tags || []).length || d.fileName);
   },
 
   // Datei-Auswahl beim Anlegen: File NICHT in reaktivem State halten (ein Alpine-
@@ -50,6 +55,10 @@ export const rechercheItemMethods = {
     const file = ev?.target?.files?.[0];
     if (!file) { this.draft.fileName = ''; return; }
     this.draft.fileName = file.name;
+    // Typ nur nachziehen, wo der Server ihn beim Upload ohnehin umstellt
+    // (routes/research-media.js: aus note/link wird image/document) — ein
+    // bewusst gewähltes Zitat oder Faktum bleibt, was es ist.
+    if (!['note', 'link', 'image', 'document'].includes(this.draft.kind)) return;
     if ((file.type || '').startsWith('image/')) this.draft.kind = 'image';
     else if (file.type === 'application/pdf') this.draft.kind = 'document';
   },
@@ -66,7 +75,7 @@ export const rechercheItemMethods = {
     const file = this.$refs?.createFile?.files?.[0] || null;
     const hasText = !!((d.title || '').trim() || (d.body || '').trim() || (d.urls || []).some(u => (u.url || '').trim()));
     if (!hasText && !file) {
-      this.errorMessage = app.t('recherche.error.empty');
+      this.formError = app.t('recherche.error.empty');
       return;
     }
     this.busy = true;
@@ -93,10 +102,9 @@ export const rechercheItemMethods = {
           message: app.t('recherche.error.duplicateUrlConfirm', { title: e.body?.params?.title || '' }),
         });
         if (!ok || !isSelectedBook(bookId)) {
-          if (!ok) {
-            this.closeCreate();
-            this._focusRechercheItemById(e.body.existing_id);
-          }
+          // Nein: das bestehende Fundstück zum Lesen aufklappen, das Formular
+          // samt Entwurf bleibt offen (Lesen geht neben dem Anlegen).
+          if (!ok) this._focusRechercheItemById(e.body.existing_id);
           return;
         }
         row = await post({ allow_duplicate: true });
@@ -114,65 +122,125 @@ export const rechercheItemMethods = {
       }
       if (!isSelectedBook(bookId)) return;
       this._loadTags();
+      this._loadResearchTotals();
       if (!uploaded) {
         // Das Fundstueck steht, nur der Anhang fehlt: nicht im Anlegen-Formular
         // bleiben (ein zweites Speichern legte eine Dublette an), sondern das neue
         // Fundstueck oeffnen, wo der Anhang erneut gewaehlt werden kann. Die
         // Meldung nach openDetail wieder setzen — dessen closeCreate leert sie.
+        // Die Meldung des Uploads über das Öffnen retten: der Zeilenwechsel darf
+        // den Grund, warum der Anhang fehlt, nicht wegräumen.
         const msg = this.errorMessage;
-        this.openDetail(row);
+        this.closeCreate();
+        await this.openDetail(row);
         this.errorMessage = msg;
         return;
       }
       this.closeCreate();
+      // Neu laden statt vorne einfügen: Position und Sichtbarkeit bestimmen
+      // Sortierung und Filter des Servers (angeheftet zuerst). Danach die neue
+      // Zeile zeigen — oder sagen, dass der Filter sie ausblendet.
+      await this.loadRecherche();
+      if (!isSelectedBook(bookId)) return;
+      if ((this.items || []).some(i => i.id === row.id)) this._flashResearchRow(row.id);
+      else this.noticeMessage = app.t('recherche.createdHidden');
     } catch (e) {
-      if (isSelectedBook(bookId)) this.errorMessage = this._rechercheErrorText(e, 'recherche.error.save');
+      if (isSelectedBook(bookId)) this.formError = this._rechercheErrorText(e, 'recherche.error.save');
     } finally {
       this.busy = false;
     }
   },
 
-  // ── Detail-Dialog (Lesen) ────────────────────────────────────────────────
-  // Ein Klick auf ein Fundstück ÖFFNET es, er bearbeitet es nicht: der Volltext
-  // eines erfassten Artikels (bis 20 000 Zeichen) ist in einem Formularfeld nicht
-  // lesbar. Bearbeiten ist im Dialog ein eigener Schalter — Verknüpfungen, Tags
-  // und Anhänge bleiben dabei sichtbar und bedienbar.
-  openDetail(item, { edit = false } = {}) {
+  // Zeile ins Bild holen und kurz hervorheben (Permalink-Sprung, neu angelegt).
+  _flashResearchRow(id) {
+    this.$nextTick(() => {
+      const el = this.$root?.querySelector(`[data-research-id="${id}"]`);
+      if (!el) return;
+      el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      el.classList.remove('research-item--flash');
+      void el.offsetWidth; // Reflow → Animation startet auch beim zweiten Mal neu
+      el.classList.add('research-item--flash');
+      setTimeout(() => el.classList.remove('research-item--flash'), 1600);
+    });
+  },
+
+  // ── Aufgeklappte Zeile (Lesen) ──────────────────────────────────────────
+  // Muster Figuren/Orte: ein Klick klappt das Fundstück in der Liste auf, kein
+  // Dialog. Er ÖFFNET es zum Lesen, er bearbeitet es nicht: der Volltext eines
+  // erfassten Artikels (bis 20 000 Zeichen) ist in einem Formularfeld nicht
+  // lesbar. Bearbeiten ist darin ein eigener Schalter — Verknüpfungen, Tags und
+  // Anhänge bleiben dabei sichtbar und bedienbar. Offen ist höchstens eine Zeile.
+  // Das Status-Board hat keine Zeile zum Aufklappen: von dort wechselt das
+  // Öffnen in die Liste (wie ein Sprung in die Orte-Karte).
+  async openDetail(item, { edit = false } = {}) {
     if (!item) return;
+    // Läuft in einer anderen Zeile ein Bearbeiten, wird es erst gespeichert
+    // (Inline-Edit-Regel: nichts still verwerfen). Scheitert das Speichern,
+    // bleibt das Formular offen und die Meldung stehen.
+    // Bearbeiten teilt sich `draft` mit dem Anlegen: ein Entwurf mit Inhalt
+    // geht nur nach Rückfrage verloren. Lesen lässt das Anlegen offen.
+    if (edit && this.creating) {
+      if (this.createDirty()) {
+        const app = window.__app;
+        const ok = await app.appConfirm({
+          message: app.t('recherche.confirmDiscardCreate'),
+          confirmLabel: app.t('recherche.discardCreate'), danger: true,
+        });
+        if (!ok) return;
+      }
+      this.closeCreate();
+    }
+    if (this.detailEditing && this.detailItemId != null && this.detailItemId !== item.id) {
+      const prev = (this.items || []).find(i => i.id === this.detailItemId);
+      if (prev && !(await this.commitEdit(prev))) return;
+    }
     this.detailItemId = item.id;
     this.detailEditing = false;
     this.closeActionMenu();
-    // Anlegen und Detailansicht schliessen sich aus (gemeinsamer `draft`).
-    this.closeCreate();
     if (edit) this.startEdit(item);
+    if (this.viewMode === 'status') this.viewMode = 'list';
     // Permalink-Spiegel: offenes Fundstück → #…/recherche/<itemId>. detailItemId
     // bleibt SSoT in der Karte (analog editingBeatId ↔ plotBeatId in der Plot-
     // Werkstatt).
     if (window.Alpine) window.Alpine.store('nav').rechercheItemId = item.id;
-    // Transkript-Block des Dialogs fuellen. Nur fuer Transkript-Fundstuecke —
-    // fuer eine Notiz waere es ein 404 bei jedem Oeffnen.
+    // Transkript-Block füllen. Nur für Transkript-Fundstücke — für eine Notiz
+    // wäre es ein 404 bei jedem Öffnen.
     if (item.kind === 'transcript') this.ivLoadTranscript?.(item.id);
     else { this.ivTranscript = null; this.ivSegments = []; this.ivSpeakerKeys = []; }
-    // Native showModal() erst nach dem Render: der Dialoginhalt hängt an
-    // detailItems (x-for über 0/1 Element) und existiert im selben Tick noch nicht.
+    // Schliesst das Aufklappen eine längere Zeile darüber, rutscht diese Zeile
+    // nach oben aus dem Bild — dann ihren Kopf zurückholen.
     this.$nextTick(() => {
-      const dlg = this.$refs?.detailDialog;
-      if (dlg && typeof dlg.showModal === 'function' && !dlg.open) dlg.showModal();
+      const el = this.$root?.querySelector?.(`[data-research-id="${item.id}"]`);
+      const top = el?.getBoundingClientRect?.().top;
+      if (top != null && (top < 0 || top > window.innerHeight * 0.85)) {
+        el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      }
     });
   },
-  closeDetail() { this._closeNativeDialog('detailDialog', this._onDetailClosed); },
-  _onDetailClosed() {
+  // Kopf-/Titel-Klick: auf- bzw. zuklappen. Eine Zeile im Bearbeiten-Modus
+  // klappt nicht per Klick zu — raus geht es über Speichern/Abbrechen.
+  toggleDetail(item) {
+    if (this.detailItemId !== item.id) return this.openDetail(item);
+    if (!this.detailEditing) this.closeDetail();
+  },
+  closeDetail() {
     this.detailItemId = null;
     this.detailEditing = false;
     this.cancelLinkPicker();
-    // Ein im Dialog geöffnetes Aktionsmenü schliesst mit ihm.
+    // Ein in der Zeile geöffnetes Aktionsmenü schliesst mit ihr.
     this.closeActionMenu();
     if (window.Alpine) window.Alpine.store('nav').rechercheItemId = null;
   },
 
-  // ── Bearbeiten (nur im Detail-Dialog) ────────────────────────────────────
+  // ── Bearbeiten (nur in der aufgeklappten Zeile) ──────────────────────────
   startEdit(item) {
     this.detailEditing = true;
+    // Der Klick, der das Bearbeiten öffnet (Stift im Zeilenkopf, Eintrag im
+    // Aktionsmenü), liegt ausserhalb von `.research-detail` und erreicht dessen
+    // @click.outside erst danach — ohne diese Sperre speicherte er sofort wieder.
+    this._editOpening = true;
+    setTimeout(() => { this._editOpening = false; }, 0);
+    this.formError = '';
     this.draft = {
       kind: item.kind || 'note',
       title: item.title || '',
@@ -183,10 +251,41 @@ export const rechercheItemMethods = {
       fileName: '',
     };
   },
-  // Zurück in den Lesemodus — der Dialog bleibt offen (und damit der Permalink).
+  // Zurück in den Lesemodus — die Zeile bleibt offen (und damit der Permalink).
   cancelEdit() {
     this.detailEditing = false;
+    this.formError = '';
     this.draft = _emptyDraft();
+  },
+  // Commit eines offenen Bearbeitens (Klick daneben, Wechsel auf eine andere
+  // Zeile). Nur wenn noch DIESES Fundstück im Formular steht; ein laufender
+  // Request zählt als «schon unterwegs». Liefert true, wenn das Formular zu ist.
+  // Klick daneben (@click.outside der aufgeklappten Zeile). Kein Commit für den
+  // öffnenden Klick und für Klicks in schwebende Teile der Zeile, die ausserhalb
+  // hängen: Verknüpfen-Picker, Aktionsmenü (beide teleportiert), Rückfrage-
+  // Dialog, Tooltip.
+  onDetailClickOutside(item, ev) {
+    if (!this.detailEditing || this.detailItemId !== item?.id || this._editOpening) return;
+    if (ev?.target?.closest?.('.picker-popover, .context-menu, dialog, .tip-layer')) return;
+    this.commitEdit(item);
+  },
+  async commitEdit(item) {
+    if (!this.detailEditing || this.detailItemId !== item?.id) return true;
+    if (this.busy) return false;
+    return this.saveEdit(item);
+  },
+  // Wechsel ins Status-Board: dort gibt es keine aufgeklappte Zeile, also auch
+  // keinen Permalink darauf. Ein offenes Bearbeiten wird erst gespeichert;
+  // scheitert das, bleibt die Liste stehen (nichts still verwerfen).
+  // Der Klick auf den Reiter löst zugleich den Click-outside-Commit der Zeile
+  // aus; läuft dessen Request schon, wird er abgewartet statt als Fehlschlag
+  // gewertet.
+  async _closeDetailForBoard() {
+    if (this.detailItemId == null) return;
+    for (let i = 0; this.busy && i < 200; i++) await new Promise(r => setTimeout(r, 50));
+    const item = (this.items || []).find(i => i.id === this.detailItemId);
+    if (item && !(await this.commitEdit(item))) { this.viewMode = 'list'; return; }
+    if (this.viewMode === 'status') this.closeDetail();
   },
 
   // URL-Zeilen des geteilten Formular-Fragments (Anlegen + Bearbeiten, `draft`).
@@ -198,6 +297,13 @@ export const rechercheItemMethods = {
   // laufen durch den Chat-Renderer (escaped, html:false, lädt markdown-it nach).
   // Ein Zitat ist Wortlaut: escaped, nur Zeilenumbrüche — ein `*` im Original
   // darf dort nicht zur Hervorhebung werden.
+  // Ab hier wird der Lesetext der aufgeklappten Zeile gekappt (CSS-Zeilen-Cap
+  // + «Ganzen Text anzeigen»). Etwa so viel, wie der Cap ohnehin zeigt — kürzere
+  // Texte bekommen keinen Umschalter, der nichts aufdeckt.
+  isLongBody(item) {
+    return (item?.body?.length || 0) > 900;
+  },
+
   itemBodyHtml(item) {
     const body = item?.body || '';
     if (!body) return '';
@@ -205,36 +311,39 @@ export const rechercheItemMethods = {
     return this._renderChatMarkdown(body);
   },
 
-  // Klick auf den Eintrag öffnet die Detailansicht — ausser auf interaktiven
+  // Klick auf Kopf oder Anriss klappt die Zeile auf/zu — ausser auf interaktiven
   // Elementen (Aktions-Buttons, Links, Datei-Inputs, Tag-/Link-Chips) sowie
   // dem Verknüpfen-Picker (inkl. Combobox-Dropdown, dessen Optionen <li> sind
   // und sonst durchblubbern würden), die ihre eigene Aktion behalten.
   onItemBodyClick(item, ev) {
     if (this.busy) return;
     if (ev.target.closest('a, button, input, label, .research-tag, .entity-ref, .combobox-wrap')) return;
-    // Im Auswahl-Modus markiert ein Klick, statt den Dialog zu oeffnen.
+    // Im Auswahl-Modus markiert ein Klick, statt aufzuklappen.
     if (this.bulkMode) { this.toggleSelect(item.id); return; }
     // Textselektion nicht abwürgen: hat der User Text markiert (Drag löst am
-    // Ende ebenfalls ein click aus), nicht den Dialog aufziehen.
+    // Ende ebenfalls ein click aus), nicht auf-/zuklappen.
     const sel = window.getSelection();
     if (sel && !sel.isCollapsed && sel.toString().trim()) return;
-    this.openDetail(item);
+    this.toggleDetail(item);
   },
 
   async saveEdit(item) {
-    const app = window.__app;
-    if (this.busy) return;
+    if (this.busy) return false;
     this.busy = true;
     try {
       this._replaceItem(await this._patchItem(item.id, this._draftBody(this.draft)));
-      // Nach dem Speichern zurück in den Lesemodus, Dialog bleibt offen: der
+      // Nach dem Speichern zurück in den Lesemodus, die Zeile bleibt offen: der
       // User will sehen, was er geschrieben hat.
       this.detailEditing = false;
       this.draft = _emptyDraft();
-      this.errorMessage = '';
+      this.formError = '';
       this._loadTags();
+      return true;
     } catch (e) {
-      this.errorMessage = this._rechercheErrorText(e, 'recherche.error.save');
+      // Meldung IM Formular: die Kartenzeile oben läge bei einer Zeile weiter
+      // unten ausserhalb des Bildes, und das Formular bliebe ohne Grund offen.
+      this.formError = this._rechercheErrorText(e, 'recherche.error.save');
+      return false;
     } finally {
       this.busy = false;
     }
@@ -274,15 +383,21 @@ export const rechercheItemMethods = {
   },
 
   async toggleArchive(item) {
+    // Steht genau dieses Fundstück im Formular, zuerst speichern: das Menü
+    // zählt nicht als «Klick daneben», und das Archivieren klappt die Zeile zu.
+    if (this.detailEditing && this.detailItemId === item.id) {
+      if (!(await this.commitEdit(item))) return;
+      item = (this.items || []).find(i => i.id === item.id) || item;
+    }
     try {
       await this._patchItem(item.id, { archived: !item.archived });
       // Bei aktivem „nur aktive"-Filter verschwindet das Item aus der Liste.
-      // Dann muss auch der Detail-Dialog zu: sein Inhalt hängt an `items`, er
-      // stünde sonst leer offen.
+      // Dann gilt auch die aufgeklappte Zeile nicht mehr (detailItemId zeigte ins Leere).
       if (!this.showArchived) {
         this.items = this.items.filter(i => i.id !== item.id);
         if (this.detailItemId === item.id) this.closeDetail();
-      } else { item.archived = item.archived ? 0 : 1; }
+      } else { this._replaceItem({ ...item, archived: item.archived ? 0 : 1 }); }
+      this._loadResearchTotals();
       // Archivierte Items zählen nicht im Seiten-/Kapitel-Indikator.
       if ((item.links || []).some(l => l.target_kind === 'page')) this._refreshRechercheCounts('page');
       if ((item.links || []).some(l => l.target_kind === 'chapter')) this._refreshRechercheCounts('chapter');
@@ -300,6 +415,7 @@ export const rechercheItemMethods = {
       this.items = this.items.filter(i => i.id !== item.id);
       if (this.detailItemId === item.id) this.closeDetail();
       this._loadTags();
+      this._loadResearchTotals();
       if ((item.links || []).some(l => l.target_kind === 'page')) this._refreshRechercheCounts('page');
       if ((item.links || []).some(l => l.target_kind === 'chapter')) this._refreshRechercheCounts('chapter');
     } catch { this.errorMessage = app.t('recherche.error.delete'); }

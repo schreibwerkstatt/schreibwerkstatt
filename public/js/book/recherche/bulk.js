@@ -24,7 +24,16 @@ export const rechercheBulkMethods = {
   // schon gefiltert): ein Filterwechsel darf keine unsichtbare Auswahl
   // mitschleppen, die dann still mitgeloescht wird.
   selectionVisibleIds() { return this.items.map(i => i.id); },
-  toggleBulkMode() {
+  // Beim Einstieg ein offenes Bearbeiten speichern und die Zeile zuklappen:
+  // im Auswahl-Modus markiert ein Klick, eine offene Zeile daneben ist nur im Weg.
+  async toggleBulkMode() {
+    if (!this.bulkMode && this.detailItemId != null) {
+      if (this.detailEditing) {
+        const prev = (this.items || []).find(i => i.id === this.detailItemId);
+        if (prev && !(await this.commitEdit(prev))) return;
+      }
+      this.closeDetail();
+    }
     this.bulkMode = !this.bulkMode;
     if (!this.bulkMode) this.bulkClear();
   },

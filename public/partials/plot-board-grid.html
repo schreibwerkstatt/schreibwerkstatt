@@ -10,7 +10,7 @@
      Deskriptor ein Header- ODER Lane-Block (display:contents-Wrapper) — so bleibt
      das Beat-Zell-Markup an EINER Stelle.
      Beat-Markup (Ansicht/Bearbeiten) ist mit plot-board-flat.html synchron zu halten. -->
-<div class="plot-swimlane" x-init="$app._bindScrollFade($el, { idleMs: 200 })" x-show="threads.length" x-cloak>
+<template x-if="threads.length"><div class="plot-swimlane" x-init="$app._bindScrollFade($el, { idleMs: 200 })">
   <div class="plot-swim">
 
     <template x-for="row in gridRows()" :key="row.key">
@@ -284,6 +284,4 @@
     </template>
   </div>
 
-  <!-- Strang-Aktions-Dropdown (teleportiert nach .card--plot) — eigenes Fragment, File-Limit. -->
-  <!-- @include plot-thread-menu -->
-</div>
+</div></template>

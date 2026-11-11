@@ -27,6 +27,8 @@ export function registerSzenenCard() {
     szenenError: '',
     staleDeleting: false,
     viewMode: lsGet('szenen.viewMode') === 'grid' ? 'grid' : 'list', // 'list' | 'grid'
+    // Lektorat-Block im Szenen-Detail: Klappzustand je Browser, Default zu.
+    lektoratOpen: lsGet('szenen.lektoratOpen') === '1',
     _lifecycle: null,
     _memos: {},
     // Map Szenen-id → Beats, deren Verankerung diese Szene trifft (Detail „Im Plot“).
@@ -173,8 +175,22 @@ export function registerSzenenCard() {
       }
     },
 
+    // Sprung in den Abschnitt der Szene mit genau dem Lektorat-Eintrag geöffnet,
+    // aus dem die Wertung stammt (Muster fehler-heatmap.js#fehlerHeatmapJumpToPage).
+    // Fehlt der Eintrag im Verlauf (inzwischen gelöscht), bleibt es beim Abschnitt.
+    async openLektoratEntry(s) {
+      const root = window.__app;
+      const page = (Alpine.store('nav').pages || []).find(p => String(p.id) === String(s.page_id));
+      if (!page) return;
+      await root.selectPage(page);
+      if (String(root.currentPage?.id) !== String(page.id)) return;
+      const entry = (root.pageHistory || []).find(e => String(e.id) === String(s.lektorat?.check_id));
+      if (entry && root.activeHistoryEntryId !== entry.id) await root.loadHistoryEntry(entry);
+    },
+
     init() {
       this.$watch('viewMode', (v) => lsSet('szenen.viewMode', v));
+      this.$watch('lektoratOpen', (v) => lsSet('szenen.lektoratOpen', v ? '1' : '0'));
       // Ausgewählte Szene muss im gerenderten Fenster stehen (Deep-Link, Palette);
       // beobachtet wird der Index, weil die Auswahl oft vor der Liste steht.
       this.$watch(() => {

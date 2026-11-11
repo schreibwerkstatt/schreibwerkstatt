@@ -1,0 +1,36 @@
+<!--
+  Ereignisse-Reiter im Referenz-Panel neben dem Notebook-Editor: die konsolidierte
+  Chronologie, im Kontext-Scope nach Seiten-/Kapitelanker gefiltert. Fragment-
+  Include (Marker @include reference-ereignisse in reference.html), Methoden in
+  cards/reference-context.js. Read-only — die Zeile springt in die Ereignisse-Karte,
+  jeder Chip zu seinem Objekt.
+-->
+<template x-if="referenceTab === 'ereignisse'">
+<div class="reference-panel" x-data="{ rowKind: 'ereignis' }">
+  <template x-if="referenceEreignisse().length === 0">
+    <div class="muted-msg muted-msg--sm muted-msg--block" x-text="$app.t('reference.empty.ereignisse')"></div>
+  </template>
+  <template x-for="(row, ei) in listWindowed(referenceEreignisse(), 'ereignisse')" :key="'re-' + (row.id ?? ei)">
+    <div class="reference-row reference-row--clickable internal-link" @click="openReferenceEntity('ereignis', row.id)" data-ref-jump
+         :data-tip="$app.t('reference.ereignisse.openTip')">
+      <div class="reference-row-head">
+        <span class="reference-row-title" x-text="row.ereignis"></span>
+        <span x-show="referenceEventDate(row)" class="tag" x-text="referenceEventDate(row)"></span>
+        <template x-if="row.subtyp && row.subtyp !== 'sonstiges'">
+          <span class="gz-subtyp-badge" :class="'gz-subtyp-badge--' + row.subtyp">
+            <svg class="icon gz-subtyp-icon" aria-hidden="true"><use :href="'/icons.svg#' + subtypIcon(row.subtyp)"/></svg>
+            <span x-text="$app.t('events.subtyp.' + row.subtyp)"></span>
+          </span>
+        </template>
+        <span x-show="row.refCtx === 'chapter'" class="tag" :data-tip="$app.t('reference.ctx.chapterTip')" x-text="$app.t('reference.ctx.chapter')"></span>
+      </div>
+      <div class="reference-row-desc" x-show="row.bedeutung" x-text="row.bedeutung"></div>
+      <!-- @include reference-row-tail -->
+    </div>
+  </template>
+  <button type="button" class="btn-compact list-window-more"
+          x-show="listWindowRest(referenceEreignisse(), 'ereignisse') > 0" x-cloak
+          x-list-more="listWindowMore('ereignisse')" @click="listWindowMore('ereignisse')"
+          x-text="$app.t('common.showMore', { n: listWindowRest(referenceEreignisse(), 'ereignisse') })"></button>
+</div>
+</template>

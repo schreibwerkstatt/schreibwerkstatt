@@ -99,7 +99,8 @@
         </button>
         <div x-show="wfGroupOpen(g.kategorie)" x-cloak :id="'wf-group-' + g.kategorie" class="entity-list entity-list--accented">
           <template x-for="f in listWindowed(g.fakten, g.kategorie)" :key="f.id">
-            <div class="weltfakten-row" :class="{ 'weltfakten-row--nosubj': !f.subjekt }">
+            <div class="weltfakten-row" :class="{ 'weltfakten-row--nosubj': !f.subjekt }"
+                 @contextmenu="wfOpenMenu($event, f)" x-long-press>
               <span x-show="f.subjekt" class="weltfakten-subjekt" x-text="f.subjekt"></span>
               <div class="weltfakten-row-body">
                 <div class="weltfakten-row-line">
@@ -108,20 +109,16 @@
                         :data-tip="$app.t('weltfakten.manualHint')" x-text="$app.t('weltfakten.manual')"></span>
                   <span x-show="f.widerlegt" class="badge badge-warn weltfakten-widerlegt"
                         :data-tip="$app.t('weltfakten.widerlegtTip')" x-text="$app.t('weltfakten.widerlegt')"></span>
+                  <!-- Ein ⋯-Knopf je Zeile, das Menü ist eine Instanz ausserhalb der
+                       Liste (unten): drei Icon-Knöpfe je Fakt trugen in grossen Büchern
+                       den Grossteil der Knoten der Karte. -->
                   <span class="weltfakten-row-actions">
-                    <button type="button" class="icon-btn" x-show="wfCanRecheck(f)" @click="wfFactcheckRun(f.id)"
-                            :disabled="wfFcRunning || wfEdit.mode !== null"
-                            :aria-label="$app.t('weltfakten.factcheck.recheck')" :data-tip="$app.t('weltfakten.factcheck.recheck')">
-                      <span x-show="wfFcFactId === f.id" class="spinner" aria-hidden="true"></span>
-                      <svg x-show="wfFcFactId !== f.id" class="icon" aria-hidden="true"><use href="/icons.svg#rotate-cw"/></svg>
-                    </button>
-                    <button type="button" class="icon-btn" @click="wfStartEdit(f)" :disabled="wfEdit.mode !== null"
-                            :aria-label="$app.t('weltfakten.edit.editTitle')" :data-tip="$app.t('weltfakten.edit.editTitle')">
-                      <svg class="icon" aria-hidden="true"><use href="/icons.svg#pencil"/></svg>
-                    </button>
-                    <button type="button" class="icon-btn danger" @click="wfDelete(f)" :disabled="wfEdit.mode !== null"
-                            :aria-label="$app.t('common.delete')" :data-tip="$app.t('common.delete')">
-                      <svg class="icon" aria-hidden="true"><use href="/icons.svg#trash"/></svg>
+                    <template x-if="wfFcFactId === f.id"><span class="spinner" aria-hidden="true"></span></template>
+                    <button type="button" class="icon-btn icon-btn--ghost" @click="wfOpenMenu($event, f)"
+                            :disabled="wfEdit.mode !== null"
+                            :data-tip="$app.t('weltfakten.actions')" :aria-label="$app.t('weltfakten.actions')"
+                            :aria-expanded="isActionMenuOpen('fakt:' + f.id)" aria-haspopup="menu">
+                      <svg class="icon" aria-hidden="true"><use href="/icons.svg#more-horizontal"/></svg>
                     </button>
                   </span>
                 </div>
@@ -154,6 +151,33 @@
       </div>
     </template>
   </div>
+
+  <!-- Aktionsmenü eines Fakts (⋯, Rechtsklick, Long-Press): eine Instanz je Karte. -->
+  <template x-teleport="body">
+    <div class="context-menu" x-ref="actionMenu" x-bind="actionMenuPanel()" x-cloak>
+      <template x-if="wfMenuFakt()">
+        <div>
+          <button type="button" role="menuitem" class="context-menu-item context-menu-item--icon"
+                  x-show="wfCanRecheck(wfMenuFakt())" :disabled="wfFcRunning"
+                  @click="wfFactcheckRun(wfMenuFakt().id)">
+            <svg class="icon" aria-hidden="true"><use href="/icons.svg#rotate-cw"/></svg>
+            <span x-text="$app.t('weltfakten.factcheck.recheck')"></span>
+          </button>
+          <button type="button" role="menuitem" class="context-menu-item context-menu-item--icon"
+                  @click="wfStartEdit(wfMenuFakt())">
+            <svg class="icon" aria-hidden="true"><use href="/icons.svg#pencil"/></svg>
+            <span x-text="$app.t('weltfakten.edit.editTitle')"></span>
+          </button>
+          <div class="context-menu-sep" role="separator"></div>
+          <button type="button" role="menuitem" class="context-menu-item context-menu-item--icon context-menu-item--danger"
+                  @click="wfDelete(wfMenuFakt())">
+            <svg class="icon" aria-hidden="true"><use href="/icons.svg#trash"/></svg>
+            <span x-text="$app.t('common.delete')"></span>
+          </button>
+        </div>
+      </template>
+    </div>
+  </template>
 
   <!-- Verworfene Analyse-Aussagen: gelöscht oder durch einen gepflegten Fakt ersetzt. Die
        Analyse legt sie (und ihre Umformulierungen) nicht wieder an, bis sie hier zurückkommen. -->

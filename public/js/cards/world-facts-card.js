@@ -16,6 +16,7 @@ import { activeFilterId, hasId } from '../chapter-filter.js';
 import { startPoll } from './job-helpers.js';
 import { isSelectedBook } from './book-guard.js';
 import { listWindowState, listWindowMethods } from '../list-window.js';
+import { actionMenuState, actionMenuMethods } from '../action-menu.js';
 
 // Harte Kategorie-Gruppierung — SSoT für Reihenfolge + Icon je Key. Spiegelt die
 // Whitelist FAKT_KATEGORIE_WL (db/schema.js) und das Prompt-Enum
@@ -93,6 +94,8 @@ export function registerWorldFactsCard() {
     wfEdit: _emptyEdit(),
     // Gruppen rendern schrittweise (list-window.js), ein Fenster je Kategorie.
     ...listWindowState(WF_GROUP_STEP),
+    // Aktionsmenü je Fakt (action-menu.js); Ziel = world_facts.id.
+    ...actionMenuState(),
     _lifecycle: null,
     // _memos: nicht-reaktiver Memo-Cache (lazy via _memo, Reset in loadWorldFacts) —
     // bewusst nicht im reaktiven Initial-State, analog book-overview/load.js.
@@ -116,7 +119,17 @@ export function registerWorldFactsCard() {
     },
 
     destroy() {
+      this.closeActionMenu();
       this._lifecycle?.destroy();
+    },
+
+    // Im Pflegeformular bleibt der native Rechtsklick (Textfeld), kein Menü.
+    wfOpenMenu(ev, f) {
+      if (this.wfEdit.mode !== null) return;
+      this.openActionMenu(ev, 'fakt:' + f.id, f.id);
+    },
+    wfMenuFakt() {
+      return this.fakten.find(f => f.id === this.actionMenuTarget) || null;
     },
 
     /** `silent`: Tab-Rueckkehr — gleiche Daten aendern nichts; neue behalten
@@ -150,6 +163,7 @@ export function registerWorldFactsCard() {
     // Memo-Helper (cards/card-memo.js); Reset bei Reload.
     ...memoMethods,
     ...listWindowMethods,
+    ...actionMenuMethods,
 
     // Einmal pro fakten-Satz: Counts je Kategorie + vorhandene Kategorien (kanonisch sortiert).
     get _wfIndex() {

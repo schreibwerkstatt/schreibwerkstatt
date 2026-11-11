@@ -46,6 +46,7 @@ export const bookscopeMethods = {
     this.newPageCreating = false;
     this.newPageError = '';
     this.chapterFigures = [];
+    this.chapterFiguresFallback = false;
     this.entitiesEnabledForCurrentBook = false;
     this.pageHistory = [];
     this.activeHistoryEntryId = null;

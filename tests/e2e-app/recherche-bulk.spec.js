@@ -32,9 +32,9 @@ test('recherche: Auswählen markiert, Tag ergänzen und Archivieren wirken auf g
   await page.locator('#recherche-card .card-toolbar button', { hasText: 'Auswählen' }).click();
   await expect(page.locator('#recherche-card .selection-bar')).toBeVisible();
   await row(made.a).locator('.research-item-select').check();
-  // Klick auf den Eintrag selbst markiert im Auswahl-Modus, statt den Dialog zu oeffnen.
+  // Klick auf den Eintrag selbst markiert im Auswahl-Modus, statt ihn aufzuklappen.
   await row(made.b).locator('.research-item-text, .research-item-head').first().click({ position: { x: 200, y: 5 } });
-  await expect(page.locator('.research-dialog[open]')).toHaveCount(0);
+  await expect(page.locator('#recherche-card .research-detail')).toHaveCount(0);
   await expect(page.locator('#recherche-card .selection-bar__all')).toContainText('2');
 
   await page.locator('#recherche-card .selection-bar .filter-search-input').fill('bulktag');
@@ -53,7 +53,23 @@ test('recherche: Auswählen markiert, Tag ergänzen und Archivieren wirken auf g
   await expect(row(made.b)).toHaveCount(0);
   await expect(row(made.c)).toBeVisible();
 
-  // Link-Pruefung und Abgleich stehen in der Toolbar.
-  await expect(page.locator('#recherche-card .card-toolbar button', { hasText: 'Links prüfen' })).toBeVisible();
-  await expect(page.locator('#recherche-card .card-toolbar button', { hasText: 'Mit Manuskript abgleichen' })).toBeVisible();
+  // Link-Pruefung und Abgleich stehen im Werkzeug-Menue der Toolbar.
+  const tools = page.locator('#recherche-card .card-toolbar [aria-label="Werkzeuge fürs ganze Board"]');
+  await tools.click();
+  const toolsMenu = page.locator('#recherche-card .card-toolbar .context-menu--dropdown');
+  await expect(toolsMenu.getByRole('menuitem', { name: 'Links prüfen' })).toBeVisible();
+  await expect(toolsMenu.getByRole('menuitem', { name: 'Mit Manuskript abgleichen' })).toBeVisible();
+  await page.keyboard.press('Escape');
+
+  // Suche ohne Treffer: eigene Meldung mit «Filter zurücksetzen», kein
+  // Leerzustand des leeren Buchs; Umschalter und «Auswählen» bleiben stehen.
+  await page.locator('#recherche-card .filter-bar .filter-search-input').fill('zzzkeintreffer');
+  const noMatch = page.locator('#recherche-card .recherche-no-match');
+  await expect(noMatch).toBeVisible();
+  await expect(page.locator('#recherche-card .card-empty')).toBeHidden();
+  await expect(page.locator('#recherche-card .entity-view-toggle')).toBeVisible();
+  await expect(page.locator('#recherche-card .filter-count')).toContainText('0 von');
+  await noMatch.getByRole('button', { name: 'Filter zurücksetzen' }).click();
+  await expect(row(made.c)).toBeVisible();
+  await expect(noMatch).toBeHidden();
 });

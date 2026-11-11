@@ -124,15 +124,19 @@
             </span>
             <span x-show="s.stale" class="tag tag--stale" :data-tip="$app.t('szenen.staleHint')" x-text="$app.t('szenen.staleBadge')"></span>
             <span x-show="!s.stale && s.text_geaendert" class="tag" :data-tip="$app.t('szenen.textChangedHint')" x-text="$app.t('szenen.textChangedBadge')"></span>
-            <button type="button" x-show="s.stale" class="btn-compact entity-row-action"
+            <template x-if="s.stale">
+            <button type="button" class="btn-compact entity-row-action"
                     aria-haspopup="dialog" :aria-expanded="mergePick.kind === 'szene' && mergePick.sourceId === String(s.id)"
                     @click.stop="openMergePick($event, 'szene', s)"
                     :data-tip="$app.t('merge.rowTip')" x-text="$app.t('merge.rowAction')"></button>
-            <button type="button" x-show="s.stale" class="icon-btn danger entity-row-action"
+            </template>
+            <template x-if="s.stale">
+            <button type="button" class="icon-btn danger entity-row-action"
                     @click.stop="deleteStale(s)"
                     :aria-label="$app.t('common.delete')" :data-tip="$app.t('entity.deleteStale')">
               <svg class="icon" aria-hidden="true"><use href="/icons.svg#trash"/></svg>
             </button>
+            </template>
             <!-- Stelle ist primäre Info der Szene: bleibt auch mobil sichtbar. -->
             <span class="entity-refs">
               <template x-if="s.kapitel">
@@ -144,23 +148,36 @@
             </span>
             <span class="history-chevron" :class="{ open: $store.catalogUi.selectedSzeneId === s.id }" aria-hidden="true"></span>
           </div>
-          <div x-show="$store.catalogUi.selectedSzeneId === s.id" class="entity-detail" x-cloak>
+          <!-- x-if, nicht x-show: das Detail (Lektorat-Befunde, Figuren-/Ort-Chips)
+               existiert nur für die aufgeklappte Zeile — versteckt mitgerendert trug
+               es den Grossteil der Knoten der Karte. -->
+          <template x-if="$store.catalogUi.selectedSzeneId === s.id">
+          <div class="entity-detail">
             <p x-show="s.kommentar" x-text="s.kommentar" class="entity-detail-text"></p>
             <!-- Jüngstes Lektorat des Abschnitts: frischere Wertung auf dem Text von heute,
                  aber für den ganzen Abschnitt — nicht dieser Szene zugeordnet. -->
             <template x-if="s.lektorat">
-              <div class="szenen-lektorat">
-                <span class="card-section-title" x-text="$app.t('szenen.lektorat.title', { datum: $app.formatDate(s.lektorat.checked_at) })"></span>
-                <template x-for="(l, i) in s.lektorat.szenen" :key="i">
-                  <div class="szenen-lektorat-item">
-                    <span class="severity-tag" :class="'severity-tag--' + wertungOf(l)" x-text="$app.t('szenen.rating.' + wertungOf(l))"></span>
-                    <span class="szenen-lektorat-text">
-                      <span class="entity-row-title" x-text="l.titel"></span>
-                      <span x-show="l.kommentar" class="szenen-lektorat-kommentar" x-text="l.kommentar"></span>
-                    </span>
+              <div class="collapsible-wrap" x-data="collapsible()" x-modelable="open" x-model="lektoratOpen">
+                <button type="button" class="collapsible-toggle" x-bind="trigger">
+                  <span class="history-chevron" x-bind="chevron" aria-hidden="true"></span>
+                  <span x-text="$app.t('szenen.lektorat.title', { datum: $app.formatDate(s.lektorat.checked_at) })"></span>
+                </button>
+                <div x-bind="panel" x-cloak>
+                  <div class="szenen-lektorat">
+                    <template x-for="(l, i) in s.lektorat.szenen" :key="i">
+                      <div class="szenen-lektorat-item">
+                        <span class="severity-tag" :class="'severity-tag--' + wertungOf(l)" x-text="$app.t('szenen.rating.' + wertungOf(l))"></span>
+                        <span class="szenen-lektorat-text">
+                          <span class="entity-row-title" x-text="l.titel"></span>
+                          <span x-show="l.kommentar" class="szenen-lektorat-kommentar" x-text="l.kommentar"></span>
+                        </span>
+                      </div>
+                    </template>
+                    <p x-show="s.lektorat.szenen.length > 1" class="card-hint" x-text="$app.t('szenen.lektorat.wholeSection')"></p>
+                    <button type="button" class="btn-compact szenen-lektorat-open" x-show="s.page_id != null && s.lektorat.check_id != null"
+                            @click.stop="openLektoratEntry(s)" x-text="$app.t('szenen.lektorat.openHistory')"></button>
                   </div>
-                </template>
-                <p x-show="s.lektorat.szenen.length > 1" class="card-hint" x-text="$app.t('szenen.lektorat.wholeSection')"></p>
+                </div>
               </div>
             </template>
             <button type="button" class="btn-compact entity-detail-actions" x-show="$store.config.semanticSearchEnabled" @click.stop="$app.findSimilar('scene', s.id, s.titel)" x-text="$app.t('search.semantic.similarEntity')"></button>
@@ -182,6 +199,7 @@
             </div>
             <div x-data="{ beatOwnerId: s.id }"><!-- @include plot-backlinks --></div>
           </div>
+          </template>
         </div>
       </template>
       <button type="button" class="btn-compact list-window-more"

@@ -4,7 +4,7 @@
      in dem ein am Trigger verankertes Popover geclippt bzw. eingesperrt würde.
      Die offene Lane via threadMenuLane(). Ziel ist die Karten-Wurzel, NICHT
      <body> — sonst läge das Menü im Native-Vollbild hinter dem ::backdrop
-     (Begründung in plot-anchor-popover.html). Fragment-Include aus plot-board-grid.html. -->
+     (Begründung in plot-anchor-popover.html). Fragment-Include aus plot.html (Kartenebene). -->
 <template x-teleport=".card--plot">
   <div class="context-menu" x-ref="actionMenu" x-bind="actionMenuPanel()" x-cloak>
     <template x-if="threadMenuLane()">

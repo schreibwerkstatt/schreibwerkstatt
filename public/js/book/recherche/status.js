@@ -35,12 +35,6 @@ export const rechercheStatusMethods = {
   // nicht in der Liste steht.
   itemStatus(item) { return STATUSES.includes(item?.status) ? item.status : STATUSES[0]; },
 
-  // Die Plakette in Liste + Detailansicht zeigt die Stufe nur, wenn jemand sie
-  // gesetzt hat: `offen` ist der Default, und ihn an jeder Zeile zu wiederholen
-  // ist Rauschen ohne Aussage (gleiche Regel wie beim Anheften — „nicht
-  // angeheftet" traegt auch kein Abzeichen). Wer die Achse nie benutzt, sieht
-  // die Liste unveraendert.
-  showStatusBadge(item) { return this.itemStatus(item) !== STATUSES[0]; },
 
   // Tooltip der Plakette: wer den Status wann gesetzt hat (status_by/_at, das
   // Board ist geteilt). Ohne Zuschreibung (Alt-Datensatz) nur die Achse.

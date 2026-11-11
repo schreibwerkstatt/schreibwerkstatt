@@ -89,7 +89,7 @@ body.snapshot-reader-open { overflow: hidden; overscroll-behavior: contain; }
   scrollbar-gutter: stable;
   scrollbar-width: thin;
   padding: var(--space-md) var(--space-lg) var(--space-2xl);
-  /* Deckend: sonst kein Compositor-Scroll bei Pixeldichte 1 (siehe entities/recherche/dialog.css). */
+  /* Deckend: sonst kein Compositor-Scroll bei Pixeldichte 1 (siehe page/page-revision-viewer.css). */
   background: var(--color-bg);
 }
 .snapshot-reader__body::-webkit-scrollbar { width: 10px; }

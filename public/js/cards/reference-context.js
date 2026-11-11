@@ -9,14 +9,19 @@
 // an dem sich die Reiter systematisch unterscheiden (siehe Kopf der Karte:
 // Figuren ueber figure_appearances ∪ Namensfund, Orte ueber location_chapters
 // ∪ Namensfund, Szenen ueber alle drei Toepfe, Ereignisse ueber die Bruecken-
-// IDs, Recherche ueber die Verknuepfungen).
+// IDs, Welt-Fakten ueber Herkunfts-Abschnitt/Subjekt ∪ Kapitel-Bruecke,
+// Recherche ueber die Verknuepfungen).
 //
-// Der Zustand dazu (`_memos`, `_refPageText`, `_refPageTextKey`) bleibt in der
-// Karte deklariert — ein Slice spreadet Methoden, keine eigene State-Insel.
+// Der Zustand dazu (`_memos`, `_refPageText`, `_refPageTextKey`, `_refLiveHtml`,
+// `_refLiveRev`) bleibt in der Karte deklariert — ein Slice spreadet Methoden, keine eigene State-Insel.
 // Schreibt nie in den Buchtext.
 
-import { containsWholeWord, selectScenesForView } from '../editor/notebook/entities.js';
+import { containsWholeWordLower, selectScenesForView } from '../editor/notebook/entities.js';
 import { memoMethods } from './card-memo.js';
+import { capRefs, ctxRow, rowRefs, rowPageIds } from './reference-rows.js';
+import { ortTypLabel } from '../book/ort-typen.js';
+import { countryLabel } from '../country-codes.js';
+import { selectWeltfaktenForPage } from './reference-weltfakten.js';
 
 /** Herkunft einer Zeile im Kontext-Scope: 'page' = haengt an der offenen Seite,
  *  'chapter' = haengt am Kapitel (andere Seite oder ohne Seitenbezug). Jede
@@ -25,6 +30,10 @@ import { memoMethods } from './card-memo.js';
  *  Kopie statt Mutation: die Katalog-Objekte im Store bleiben unberuehrt. */
 const markCtx = (list, refCtx, extra) =>
   list.map(x => ({ ...x, refCtx, ...(extra ? extra(x) : null) }));
+
+/** Wie markCtx, aber mit stabiler Zeilen-Identität je Quell-Array (ctxRow) —
+ *  für die Reiter, die beim Tippen neu rechnen (Namensfund im Seitentext). */
+const markCtxStable = (source, list, refCtx) => list.map(x => ctxRow(source, x, refCtx));
 
 /** Ist `id` in der Liste? Vergleich ueber Number, weil Bruecken-IDs je nach
  *  Route als Zahl oder String ankommen. Nur fuer die NUMERISCHEN Anker
@@ -49,16 +58,69 @@ function decodeEntities(s) {
   return _decoder.value;
 }
 
+/** Ruhe nach der letzten Eingabe, bevor der Slot den Editor-Stand neu liest.
+ *  Kürzer wirkt hektisch (Figuren springen während des Tippens umher), länger
+ *  träge; innerHTML einer langen Seite zu serialisieren kostet wenige ms. */
+const LIVE_TEXT_DEBOUNCE_MS = 800;
+
+/** Zeilen-Ende (Verweise + «in Abschnitten») je Zeilen-Objekt: Template fragt
+ *  pro Zeile mehrfach (x-show, x-for, «+N»). Schlüssel ist das Objekt — im
+ *  Kontext-Scope eine Kopie aus dem Listen-Memo, im Buch-Scope der Katalog-
+ *  Eintrag; beide werden bei neuem Stand ersetzt, nie mutiert. */
+const _rowTailCache = new WeakMap();
+function rowTailCached(row, key, fn) {
+  if (!row || typeof row !== 'object') return fn();
+  let m = _rowTailCache.get(row);
+  if (!m) { m = new Map(); _rowTailCache.set(row, m); }
+  if (!m.has(key)) m.set(key, fn());
+  return m.get(key);
+}
+
 export const referenceContextMethods = {
   // ── Memo (cards/card-memo.js) ──────────────────────────────────────────────
   ...memoMethods,
 
   _pageKey() {
     const p = window.__app?.currentPage;
-    return p ? (p.id + ':' + (p.updated_at || '')) : '';
+    return p ? (p.id + ':' + (p.updated_at || '') + ':' + this._refLiveRev) : '';
   },
 
-  // Plaintext der aktuellen Seite (Namens-Treffer für Figuren/Orte im Kontext).
+  // ── Live-Stand im Bearbeitungsmodus ────────────────────────────────────────
+  // `originalHtml` ist der zuletzt gespeicherte Stand; eine eben getippte
+  // Figur fehlte sonst bis zum nächsten (Auto-)Save in der Liste. Der Slot
+  // liest darum nach einer Eingabepause das HTML des Editors selbst — nur bei
+  // offenem Slot, nur aus dem Notebook-Editor (`.page-content-view`).
+  _installReferenceLiveText(signal) {
+    let timer = null;
+    const capture = () => {
+      timer = null;
+      const app = window.__app;
+      if (!app?.editMode || !app.showReferenceCard) return;
+      const el = app._getEditEl?.();
+      if (!el) return;
+      this._refLiveHtml = el.innerHTML;
+      this._refLiveRev++;
+    };
+    document.addEventListener('input', (e) => {
+      if (!e.target?.closest?.('.page-content-view')) return;
+      clearTimeout(timer);
+      timer = setTimeout(capture, LIVE_TEXT_DEBOUNCE_MS);
+    }, { capture: true, signal });
+    signal.addEventListener('abort', () => clearTimeout(timer));
+    // Bearbeitung beendet oder anderer Abschnitt: ab jetzt gilt wieder der
+    // gespeicherte Stand.
+    this.$watch(() => [window.__app?.editMode, window.__app?.currentPage?.id].join('|'),
+      () => this._resetReferenceLiveText());
+  },
+
+  _resetReferenceLiveText() {
+    if (!this._refLiveHtml) return;
+    this._refLiveHtml = '';
+    this._refLiveRev++;
+  },
+
+  // Plaintext der aktuellen Seite (Namens-Treffer für Figuren/Orte im Kontext):
+  // im Bearbeitungsmodus der Live-Stand, sonst der gespeicherte.
   // Tags werden zu Leerzeichen (sonst klebten Wörter an Blockgrenzen zusammen
   // und die Wortgrenzen-Prüfung schlüge fehl), danach Entities dekodiert —
   // `&amp;`/`&nbsp;` stünden sonst als Wortzeichen im Text.
@@ -67,7 +129,7 @@ export const referenceContextMethods = {
     if (!app?.currentPage) return '';
     const key = this._pageKey();
     if (this._refPageTextKey === key) return this._refPageText;
-    const html = app.originalHtml || '';
+    const html = (app.editMode && this._refLiveHtml) || app.originalHtml || '';
     this._refPageText = decodeEntities(html.replace(/<[^>]+>/g, ' '))
       .replace(/\s+/g, ' ').toLowerCase();
     this._refPageTextKey = key;
@@ -78,7 +140,8 @@ export const referenceContextMethods = {
   _nameInPage(names) {
     const txt = this._pageText();
     if (!txt) return false;
-    return names.some(n => containsWholeWord(txt, n));
+    // `_pageText()` ist schon kleingeschrieben — nicht je Name neu.
+    return names.some(n => containsWholeWordLower(txt, n));
   },
 
   _currentChapterName() {
@@ -98,7 +161,9 @@ export const referenceContextMethods = {
   referenceFiguren() {
     const app = window.__app;
     const all = Alpine.store('catalog').figuren || [];
-    const chapterFigs = app?.chapterFigures || [];
+    // Rückfall-Liste (Kapitel ohne Auftritts-Index = ganze Besetzung) sagt
+    // nichts über das Kapitel — sonst stünde jede Figur «im Kapitel».
+    const chapterFigs = app?.chapterFiguresFallback ? [] : (app?.chapterFigures || []);
     return this._memo('figuren', [this.referenceScope, this._pageKey(), all, chapterFigs], () => {
       if (!this._contextActive()) return all;
       const chapKeys = new Set(chapterFigs.map(figKey).filter(Boolean));
@@ -118,7 +183,7 @@ export const referenceContextMethods = {
       // Listen sprechen dieselbe Identitaet (`figKey`), sonst ist hier JEDE
       // Kapitel-Figur ein Waisenkind und steht ein zweites Mal in der Liste.
       const orphans = chapterFigs.filter(f => !figKey(f) || !known.has(figKey(f)));
-      return [...markCtx(onPage, 'page'), ...markCtx([...inChapter, ...orphans], 'chapter')];
+      return [...markCtxStable(all, onPage, 'page'), ...markCtxStable(all, [...inChapter, ...orphans], 'chapter')];
     });
   },
 
@@ -138,7 +203,7 @@ export const referenceContextMethods = {
         if (this._nameInPage([o.name])) onPage.push(o);
         else if (this._ortInChapter(o, cid)) inChapter.push(o);
       }
-      return [...markCtx(onPage, 'page'), ...markCtx(inChapter, 'chapter')];
+      return [...markCtxStable(all, onPage, 'page'), ...markCtxStable(all, inChapter, 'chapter')];
     });
   },
 
@@ -177,6 +242,41 @@ export const referenceContextMethods = {
    *  Geteilt von Szenen, Ereignissen und Quellen. */
   referenceRowPageIds(row) {
     return Array.isArray(row?.refPageIds) ? row.refPageIds : [];
+  },
+
+  /** Verweis-Zeile einer Zeile (Grammatik: cards/reference-rows.js), gekappt
+   *  als `{ shown, more }`. Plan-Beats bringen ihre Besetzung aus dem Plan-
+   *  Slice mit; sie hängt am Katalog-Stand und wird dort memoisiert. */
+  referenceRowRefs(kind, row) {
+    if (kind === 'beat') {
+      return capRefs([...this.referencePlanCast(row), ...this.referencePlanMotifs(row)]);
+    }
+    if (kind === 'recherche') {
+      return capRefs(this.referenceRechercheLinks(row)
+        .filter(l => l?.target_kind !== 'page')
+        .map(l => ({ type: l.target_kind, id: l.ref_id ?? l.target_id, label: l.label })));
+    }
+    if (kind === 'weltfakt') return capRefs(this.referenceWeltfaktChapters(row));
+    return rowTailCached(row, 'refs:' + kind, () => capRefs(rowRefs(kind, row)));
+  },
+
+  /** Ort-Typ als Kopf-Chip (wie in der Schauplatz-Liste). */
+  referenceOrtTyp(ort) {
+    return ort?.typ ? ortTypLabel(ort.typ, (k, p) => window.__app.t(k, p)) : '';
+  },
+
+  /** Meta-Zeile eines Orts: Land · Stimmung. */
+  referenceOrtMeta(ort) {
+    const lang = Alpine.store('session')?.uiLocale || 'de';
+    return [ort?.land ? countryLabel(ort.land, lang) : '', ort?.stimmung].filter(Boolean).join(' · ');
+  },
+
+  /** «in Abschnitten»-Zeile, gekappt als `{ shown, more }`. */
+  referenceRowPages(kind, row) {
+    const ctx = this._contextActive();
+    const pid = window.__app?.currentPage?.id ?? null;
+    return rowTailCached(row, `pages:${kind}:${ctx ? pid : 'book'}`,
+      () => capRefs(rowPageIds(kind, row, { contextActive: ctx, pageId: pid })));
   },
 
   // Ereignisse tragen ihre Anker als IDs (`page_ids`/`chapter_ids`, Bruecken
@@ -235,6 +335,21 @@ export const referenceContextMethods = {
       .filter(r => r.id != null || r.name);
   },
 
+  // Welt-Fakten: Herkunfts-Abschnitt/Subjekt im Text → 'page', Kapitel-Bruecke
+  // → 'chapter'. Regel pure in cards/reference-weltfakten.js#selectWeltfaktenForPage.
+  referenceWeltfaktenItems() {
+    const all = this.referenceWeltfakten || [];
+    const page = window.__app?.currentPage;
+    const cid = page?.chapter_id ?? null;
+    const pageName = page?.name || '';
+    return this._memo('weltfakten', [this.referenceScope, this._pageKey(), cid, pageName, all], () => {
+      if (!this._contextActive()) return all;
+      return selectWeltfaktenForPage(all, {
+        pageName, chapterId: cid, inText: (name) => this._nameInPage([name]),
+      });
+    });
+  },
+
   // Dieselbe Zweiteilung wie die Geschwister-Reiter: die Verknuepfung zeigt
   // entweder auf diese Seite oder auf ihr Kapitel. Gefiltert wurde schon
   // vorher nach beidem — neu ist, dass die Zeile sagt, welches von beiden.
@@ -255,8 +370,18 @@ export const referenceContextMethods = {
           inChapter.push(it);
         }
       }
-      return [...markCtx(onPage, 'page'), ...markCtx(inChapter, 'chapter')];
+      return [...markCtxStable(all, onPage, 'page'), ...markCtxStable(all, inChapter, 'chapter')];
     });
+  },
+
+  /** Verknüpfungen eines Fundstücks als Chips. Im Kontext-Scope ohne die auf
+   *  die offene Seite — sie ist der Grund, warum die Zeile hier steht, und als
+   *  Chip nur ein Sprung an den Ort, an dem man schon ist. */
+  referenceRechercheLinks(item) {
+    const links = Array.isArray(item?.links) ? item.links : [];
+    const pid = window.__app?.currentPage?.id;
+    if (!this._contextActive() || pid == null) return links;
+    return links.filter(l => !(l?.target_kind === 'page' && Number(l.target_id) === Number(pid)));
   },
 
   referenceCount(tab) {
@@ -266,6 +391,7 @@ export const referenceContextMethods = {
       case 'orte':       return this.referenceOrte().length;
       case 'szenen':     return this.referenceSzenen().length;
       case 'ereignisse': return this.referenceEreignisse().length;
+      case 'weltfakten': return this.referenceWeltfaktenItems().length;
       case 'recherche':  return this.referenceRechercheItems().length;
       case 'quellen':    return this.referenceQuellen().length;
       case 'verwandt':   return this.verwandtResults().length;

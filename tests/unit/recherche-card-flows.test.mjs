@@ -305,3 +305,120 @@ test('Abgleich: `failed` bekommt einen eigenen Hinweis', async () => {
   assert.match(c.crosscheckStatus, /recherche\.crosscheck\.doneClean/);
   assert.match(c.crosscheckStatus, /recherche\.crosscheck\.failedOne/);
 });
+
+// ── Entwürfe gehen nicht still verloren ──────────────────────────────────────
+// Anlegen und Bearbeiten teilen `draft`. Lesen geht neben dem Anlegen; erst das
+// Bearbeiten fragt, ob ein Entwurf mit Inhalt verworfen werden darf.
+function draftCard(extra = {}) {
+  return card({
+    closeCreate: rechercheItemMethods.closeCreate,
+    closeDetail: rechercheItemMethods.closeDetail,
+    cancelLinkPicker() {}, ivLoadTranscript() {},
+    $nextTick() {}, $root: null, viewMode: 'list', formError: '',
+    creating: true,
+    draft: { kind: 'note', title: 'Entwurf', body: '', urls: [], source: '', tags: [], fileName: '' },
+    ...extra,
+  });
+}
+
+test('openDetail zum Lesen lässt das Anlegen samt Entwurf offen', async () => {
+  const c = draftCard();
+  await c.openDetail({ id: 3, kind: 'note', title: 'Alt' });
+  assert.equal(c.detailItemId, 3);
+  assert.equal(c.creating, true);
+  assert.equal(c.draft.title, 'Entwurf');
+});
+
+test('openDetail zum Bearbeiten fragt bei Entwurf — Nein lässt alles stehen', async () => {
+  const c = draftCard();
+  confirmAnswer = false;
+  await c.openDetail({ id: 3, kind: 'note', title: 'Alt' }, { edit: true });
+  assert.equal(c.detailItemId, null);
+  assert.equal(c.creating, true);
+  assert.equal(c.draft.title, 'Entwurf');
+});
+
+test('openDetail zum Bearbeiten: Ja verwirft den Entwurf und öffnet das Formular', async () => {
+  const c = draftCard();
+  await c.openDetail({ id: 3, kind: 'note', title: 'Alt' }, { edit: true });
+  assert.equal(c.creating, false);
+  assert.equal(c.detailEditing, true);
+  assert.equal(c.draft.title, 'Alt');
+});
+
+test('openDetail zum Bearbeiten: leeres Anlegen-Formular schliesst ohne Rückfrage', async () => {
+  let asked = false;
+  const realConfirm = __app.appConfirm;
+  __app.appConfirm = async () => { asked = true; return true; };
+  const c = draftCard({ draft: { kind: 'quote', title: ' ', body: '', urls: [], source: '', tags: [], fileName: '' } });
+  await c.openDetail({ id: 3, kind: 'note', title: 'Alt' }, { edit: true });
+  __app.appConfirm = realConfirm;
+  assert.equal(asked, false, 'der Typ allein ist kein Entwurf');
+  assert.equal(c.creating, false);
+});
+
+test('toggleArchive speichert ein offenes Bearbeiten zuerst', async () => {
+  const c = draftCard({ creating: false, showArchived: false });
+  const item = { id: 5, kind: 'note', title: 'Vorher', links: [] };
+  c.items = [item];
+  c.detailItemId = 5;
+  c.startEdit(item);
+  c.draft.title = 'Nachher';
+  responder = (url, opts) => (opts.method === 'PATCH' && url === '/research/5'
+    ? { body: { ...item, ...JSON.parse(opts.body) } } : { body: { active: 0, archived: 1 } });
+  await c.toggleArchive(item);
+  const patches = calls.filter(x => x.opts.method === 'PATCH').map(x => JSON.parse(x.opts.body));
+  assert.equal(patches.length, 2);
+  assert.equal(patches[0].title, 'Nachher', 'erst gespeichert');
+  assert.deepEqual(patches[1], { archived: true }, 'dann archiviert');
+  assert.deepEqual(c.items, []);
+});
+
+test('createItem: «Nein» bei doppeltem Link lässt Formular und Entwurf stehen', async () => {
+  let focused = null;
+  const c = draftCard({ _focusRechercheItemById(id) { focused = id; } });
+  responder = () => ({ status: 409, body: { error_code: 'DUPLICATE_URL', existing_id: 9, params: { title: 'X' } } });
+  confirmAnswer = false;
+  await c.createItem();
+  assert.equal(focused, 9);
+  assert.equal(c.creating, true);
+  assert.equal(c.draft.title, 'Entwurf');
+});
+
+test('onCreateFilePick: ein bewusst gewählter Typ bleibt, eine Notiz wird zum Bild', () => {
+  const c = draftCard();
+  c.draft.kind = 'quote';
+  c.onCreateFilePick({ target: { files: [{ name: 'a.png', type: 'image/png' }] } });
+  assert.equal(c.draft.kind, 'quote');
+  c.draft.kind = 'note';
+  c.onCreateFilePick({ target: { files: [{ name: 'a.png', type: 'image/png' }] } });
+  assert.equal(c.draft.kind, 'image');
+});
+
+// ── Bestand vs. Treffer ──────────────────────────────────────────────────────
+test('Kein Treffer bei vorhandenem Bestand ist kein leeres Buch', () => {
+  const c = card({ showArchived: false, researchTotals: { active: 4, archived: 2 } });
+  c.items = [];
+  assert.equal(c.hasBestand(), true);
+  assert.equal(c.isFilteredEmpty(), true);
+  c.researchTotals = { active: 0, archived: 0 };
+  assert.equal(c.hasBestand(), false);
+  assert.equal(c.isFilteredEmpty(), false);
+});
+
+test('countLabel: «n von m» nur, wenn etwas ausgeblendet ist; Archiv zählt nur eingeblendet', () => {
+  const c = card({ showArchived: false, researchTotals: { active: 3, archived: 2 } });
+  c.items = [{ id: 1 }];
+  assert.equal(c.countLabel(), 'recherche.countFilteredOne|{"total":3,"n":1}');
+  c.items = [{ id: 1 }, { id: 2 }, { id: 3 }];
+  assert.equal(c.countLabel(), 'recherche.count|{"n":3}');
+  c.showArchived = true;
+  assert.equal(c.countLabel(), 'recherche.countFiltered|{"total":5,"n":3}');
+});
+
+test('onlyArchivedHidden: nur ohne Filter und mit ausgeblendetem Archiv', () => {
+  const c = card({ showArchived: false, researchTotals: { active: 0, archived: 2 } });
+  assert.equal(c.onlyArchivedHidden(), true);
+  c.filterText = 'x';
+  assert.equal(c.onlyArchivedHidden(), false);
+});

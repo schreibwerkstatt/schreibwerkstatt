@@ -1,10 +1,9 @@
-// Recherche-Board: Uebersicht (Anriss) vs. Detailansicht (Volltext lesen, darin
-// bearbeiten) — gegen die ECHTE App.
+// Recherche-Board: Uebersicht (Anriss) vs. aufgeklappte Zeile (Volltext lesen,
+// darin bearbeiten; Muster Figuren/Orte, kein Dialog) — gegen die ECHTE App.
 //
-// Warum hier und nicht als Fixture-Harness: der Anriss-Cap ist eine CSS-Hoehen-
-// Aussage (nur ein Browser mit dem VOLLEN Shell-CSS sieht, ob abgeschnitten wird),
-// und der Dialog haengt am nativen <dialog>/Top-Layer-Verhalten, das kein Harness
-// nachstellt. Der Smoke oeffnet die Karte, prueft aber kein Verhalten. Nichts
+// Warum hier und nicht als Fixture-Harness: der Anriss-Cap und die Lesebreite
+// sind CSS-Geometrie (nur ein Browser mit dem VOLLEN Shell-CSS sieht, ob
+// abgeschnitten wird). Der Smoke oeffnet die Karte, prueft aber kein Verhalten. Nichts
 // gestubbt: Anlegen, Bild-Upload und Klicks laufen ueber die echten Routen.
 const { test, expect } = require('../e2e/_helpers/fixtures');
 const { bootApp, selectSeededBook } = require('./_helpers/app');
@@ -16,7 +15,7 @@ const LONG_BODY = 'Im Landesarchiv liegen die Prozessakten in zwoelf Kartons. '.
 const PNG_8PX_B64 =
   'iVBORw0KGgoAAAANSUhEUgAAAAgAAAAICAIAAABLbSncAAAACXBIWXMAAAPoAAAD6AG1e1JrAAAAEUlEQVR4nGM4oaGBFTEMLQkAgl1GAWqNFmsAAAAASUVORK5CYII=';
 
-test('recherche: Liste zeigt Anriss, Detailansicht zeigt Volltext und bleibt verknuepfbar', async ({ page }) => {
+test('recherche: Liste zeigt Anriss, aufgeklappte Zeile zeigt Volltext und bleibt verknuepfbar', async ({ page }) => {
   await bootApp(page);
   const bookId = await selectSeededBook(page);
 
@@ -59,30 +58,41 @@ test('recherche: Liste zeigt Anriss, Detailansicht zeigt Volltext und bleibt ver
   expect(await thumb.locator('img').evaluate(el => el.getBoundingClientRect().height))
     .toBeLessThanOrEqual(96 + 1);
 
-  // ── Detailansicht: Volltext, lesbar gesetzt ───────────────────────────────
-  const dialog = page.locator('dialog.research-dialog');
+  // ── Aufgeklappte Zeile: Volltext, lesbar gesetzt — kein Dialog ───────────
+  const detail_ = longItem.locator('.research-detail');
   await longItem.locator('.research-item-title').click();
-  await expect(dialog).toBeVisible();
-  const detailText = dialog.locator('.research-dialog__text');
+  await expect(detail_).toBeVisible();
+  await expect(page.locator('dialog[open]')).toHaveCount(0);
+  await expect(longItem.locator('.research-item-title')).toHaveAttribute('aria-expanded', 'true');
+  // Der Anriss weicht dem Volltext.
+  await expect(teaser).toHaveCount(0);
+  const detailText = detail_.locator('.research-detail__text');
+  // Langer Text startet auch aufgeklappt gekappt (~10 Zeilen), der Umschalter
+  // «Ganzen Text anzeigen» hebt den Cap auf.
+  await expect(detailText).toHaveClass(/research-detail__text--clamped/);
+  const more = detail_.locator('.research-detail__more');
+  await expect(more).toHaveAttribute('aria-expanded', 'false');
+  await more.click();
+  await expect(more).toHaveAttribute('aria-expanded', 'true');
+  await expect(detailText).not.toHaveClass(/research-detail__text--clamped/);
   // Ungekappt: die sichtbare Hoehe ist die volle Inhaltshoehe.
   const detail = await detailText.evaluate(el => {
-    const scroll = el.closest('.research-dialog__scroll');
-    const cs = getComputedStyle(scroll);
+    const box = el.closest('.research-detail');
     return {
       h: el.getBoundingClientRect().height,
       full: el.scrollHeight,
       w: el.getBoundingClientRect().width,
       px: parseFloat(getComputedStyle(el).fontSize),
-      // Verfuegbare Textbreite des Panels (Scroll-Container minus Innenabstand).
-      availW: scroll.clientWidth - parseFloat(cs.paddingLeft) - parseFloat(cs.paddingRight),
+      // Verfuegbare Textbreite der Zeile.
+      availW: box.clientWidth,
     };
   });
   expect(detail.h).toBeGreaterThanOrEqual(detail.full - 1);
   expect(detail.h).toBeGreaterThan(teaserBox.h * 3);
   // Lesetypografie: Lesegroesse. Der Satzspiegel ist bewusst NICHT zusaetzlich
-  // gekappt — ein erfasster Artikel soll die Panelbreite nutzen statt in einer
+  // gekappt — ein erfasster Artikel soll die Zeilenbreite nutzen statt in einer
   // schmalen Column mit leerem rechten Raum zu brechen (siehe
-  // public/css/entities/recherche/dialog.css, Abschnitt Lesemodus). Geprueft wird
+  // public/css/entities/recherche/detail.css, Abschnitt Lesemodus). Geprueft wird
   // darum: volle verfuegbare Breite, und kein Ausbrechen daraus.
   expect(detail.px).toBeGreaterThanOrEqual(15);
   expect(detail.w).toBeLessThanOrEqual(detail.availW + 1);
@@ -90,27 +100,26 @@ test('recherche: Liste zeigt Anriss, Detailansicht zeigt Volltext und bleibt ver
   // Der Permalink zeigt aufs offene Fundstueck.
   expect(page.url()).toContain(`/recherche/${made.long}`);
 
-  // ── Bearbeiten IM Dialog: Verknuepfen bleibt erreichbar ───────────────────
-  await dialog.getByRole('button', { name: 'Bearbeiten' }).click();
-  await expect(dialog.locator('textarea.recherche-body-input')).toBeVisible();
+  // ── Bearbeiten IN der Zeile: Verknuepfen bleibt erreichbar ────────────────
+  await longItem.getByRole('button', { name: 'Bearbeiten' }).click();
+  await expect(detail_.locator('textarea.recherche-body-input')).toBeVisible();
   // Genau der Regressionsfall: im Bearbeiten-Modus war die Verknuepfen-Aktion
   // vorher weg, weil Anzeige- und Formular-Zweig sich ausgeschlossen haben.
-  await expect(dialog.locator('.research-dialog__link-actions button').first()).toBeVisible();
-  await dialog.locator('.research-dialog__link-actions button').first().click();
-  await expect(dialog.locator('.recherche-link-picker')).toBeVisible();
-  await dialog.locator('.recherche-link-picker .btn-compact').last().click(); // Abbrechen
-  await expect(dialog.locator('.recherche-link-picker')).toBeHidden();
-  await dialog.getByRole('button', { name: 'Abbrechen' }).click();          // Edit verlassen
+  await expect(detail_.locator('.research-detail__link-actions button').first()).toBeVisible();
+  await detail_.locator('.research-detail__link-actions button').first().click();
+  const picker = page.locator('.recherche-link-picker');
+  await expect(picker).toBeVisible();
+  await picker.locator('.btn-compact').last().click(); // Abbrechen
+  await expect(picker).toBeHidden();
+  // Esc im Formular verwirft (Inline-Edit), die Zeile bleibt offen.
+  await detail_.locator('textarea.recherche-body-input').press('Escape');
   await expect(detailText).toBeVisible();
-
-  // ── Schliessen per ESC raeumt Dialog + Permalink ──────────────────────────
-  await page.keyboard.press('Escape');
-  await expect(dialog).toBeHidden();
-  // Auf den Hash WARTEN, nicht sofort lesen: die Permalink-Spiegelung laeuft als
-  // Alpine-Effekt nach dem close-Event (sonst flaky).
+  // Ein Kopf-Klick klappt im Bearbeiten-Modus nicht zu — im Lesemodus schon.
+  await longItem.locator('.research-item-title').click();
+  await expect(detail_).toHaveCount(0);
+  await expect(teaser).toBeVisible();
+  // Zuklappen raeumt den Permalink. Auf den Hash WARTEN, nicht sofort lesen.
   await page.waitForFunction((id) => !location.hash.includes(`/recherche/${id}`), made.long);
-  // Und die Seite ist wieder bedienbar (kein zurueckgebliebenes inertes Dokument).
-  await expect(longItem.locator('.research-item-title')).toBeEnabled();
 
   // Aufraeumen: die App-Suite teilt eine DB, fremde Specs sollen die Fundstuecke
   // nicht mitzaehlen.
@@ -132,7 +141,7 @@ test('recherche: Anlegen als Inline-Formular in der Karte', async ({ page }) => 
   await page.locator('#recherche-card .card-toolbar > button.btn-compact').first().click();
   await expect(form).toBeVisible();
   // Kein Dialog: nichts im Top-Layer, der Rest der Karte bleibt bedienbar.
-  await expect(page.locator('dialog.research-dialog[open]')).toHaveCount(0);
+  await expect(page.locator('dialog[open]')).toHaveCount(0);
   await expect(form.locator('input.recherche-title-input')).toBeFocused();
 
   await form.locator('input.recherche-title-input').fill('Inline-Fund');
@@ -148,20 +157,27 @@ test('recherche: Anlegen als Inline-Formular in der Karte', async ({ page }) => 
   const row = page.locator('.research-item', { hasText: 'Inline-Fund' }).first();
   await expect(row).toBeVisible();
 
-  // Bearbeiten: dasselbe Formular im Detail-Dialog, mit den Werten des Funds und
-  // derselben Aktionszeile (Speichern zuerst) in der festen Fussleiste.
+  // Bearbeiten: dasselbe Formular in der aufgeklappten Zeile, mit den Werten des
+  // Funds und derselben Aktionszeile (Speichern zuerst).
   await row.locator('.research-item-title').click();
-  const detailDlg = page.locator('dialog.research-dialog[open]');
-  await detailDlg.getByRole('button', { name: 'Bearbeiten' }).click();
-  await expect(detailDlg.locator('input.recherche-title-input')).toHaveValue('Inline-Fund');
-  await expect(detailDlg.locator('.tag-input-chip')).toHaveText(['Archiv', 'Brief']);
-  await expect(detailDlg.locator('.research-dialog__bar button').first()).toHaveClass(/\bprimary\b/);
-  await detailDlg.locator('.tag-input-chip-remove').first().click();
-  await detailDlg.locator('.research-dialog__bar button.primary').click();
-  await expect(detailDlg.locator('.research-dialog__bar')).toBeHidden();
-  await expect(detailDlg.locator('.research-tag')).toHaveText(['Brief']);
-  await page.keyboard.press('Escape');
-  await expect(detailDlg).toHaveCount(0);
+  const detailBox = row.locator('.research-detail');
+  await row.getByRole('button', { name: 'Bearbeiten' }).click();
+  await expect(detailBox.locator('input.recherche-title-input')).toHaveValue('Inline-Fund');
+  await expect(detailBox.locator('.tag-input-chip')).toHaveText(['Archiv', 'Brief']);
+  await expect(detailBox.locator('.research-detail__bar button').first()).toHaveClass(/\bprimary\b/);
+  await detailBox.locator('.tag-input-chip-remove').first().click();
+  await detailBox.locator('.research-detail__bar button.primary').click();
+  await expect(detailBox.locator('.research-detail__bar')).toBeHidden();
+  await expect(detailBox.locator('.research-tag')).toHaveText(['Brief']);
+
+  // Klick daneben committet ein offenes Bearbeiten (Inline-Edit-Regel).
+  await row.getByRole('button', { name: 'Bearbeiten' }).click();
+  await detailBox.locator('input.recherche-title-input').fill('Inline-Fund neu');
+  await page.locator('#recherche-card .card-title').click();
+  await expect(detailBox.locator('.research-detail__bar')).toBeHidden();
+  await expect(row.locator('.research-item-title')).toHaveText('Inline-Fund neu');
+  await row.locator('.research-item-title').click();
+  await expect(detailBox).toHaveCount(0);
 
   // Esc verwirft ein offenes Anlegen-Formular.
   await page.locator('#recherche-card .card-toolbar > button.btn-compact').first().click();
@@ -204,11 +220,10 @@ test('recherche: Markdown im Beschreibungstext wird gerendert, Zitat bleibt Wort
   const quoteTeaser = page.locator(`[data-research-id="${made.quote}"] .research-item-text`);
   await expect(quoteTeaser).toHaveText('Er sagte: **nie** wieder.');
 
-  const dialog = page.locator('dialog.research-dialog');
-  await page.locator(`[data-research-id="${made.md}"] .research-item-title`).click();
-  await expect(dialog.locator('.research-dialog__text li')).toHaveCount(2);
-  await expect(dialog.locator('.research-dialog__text strong')).toHaveText('Fall-Eckdaten');
-  await page.keyboard.press('Escape');
+  const mdRow = page.locator(`[data-research-id="${made.md}"]`);
+  await mdRow.locator('.research-item-title').click();
+  await expect(mdRow.locator('.research-detail__text li')).toHaveCount(2);
+  await expect(mdRow.locator('.research-detail__text strong')).toHaveText('Fall-Eckdaten');
 
   await page.evaluate(async (ids) => {
     for (const id of ids) await fetch(`/research/${id}`, { method: 'DELETE' });

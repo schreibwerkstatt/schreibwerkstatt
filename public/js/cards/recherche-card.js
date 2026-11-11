@@ -58,6 +58,18 @@ export function registerRechercheCard() {
     _memos: {},
     _rechercheLoadSeq: 0,  // Lade-Token (book-guard.js#loadToken)
 
+    // Bestand ohne Filter ({ active, archived }, GET /research/count): trennt
+    // «Buch hat noch nichts» von «Filter trifft nichts» (board.js#hasBestand).
+    researchTotals: null,
+    // Neutraler Hinweis (z. B. «gespeichert, vom Filter ausgeblendet»).
+    noticeMessage: '',
+    // Fehler des offenen Formulars (Anlegen oder Bearbeiten), dort angezeigt
+    // statt in der Kartenzeile oben, die bei einer tiefen Zeile ausser Sicht ist.
+    formError: '',
+    // Das Archiv wurde nur für einen Permalink-Sprung eingeblendet: beim
+    // Zuklappen der Karte wieder aus (sonst bliebe es pro Buch gespeichert an).
+    _archivedByJump: false,
+
     loading: false,
     // Refetch bei Filter/Sort/Suche (Daten schon vorhanden): Liste bleibt stehen
     // und wird nur gedimmt, statt aufs Skeleton umzuschalten — kein Flackern.
@@ -71,13 +83,14 @@ export function registerRechercheCard() {
     draft: _emptyDraft(),
     creating: false,
 
-    // Detail-Dialog (recherche-detail.html): `detailItemId` ist die SSoT dafür,
-    // WELCHES Fundstück offen ist — der Dialog selbst wird daraus in
-    // items.js#openDetail per showModal() aufgezogen und spiegelt sich in
-    // #…/recherche/<itemId>. `detailEditing` schaltet darin auf das Formular;
-    // Verknüpfen/Tags/Anhänge bleiben in beiden Modi bedienbar.
+    // Aufgeklappte Zeile (recherche-item-detail.html): `detailItemId` ist die
+    // SSoT dafür, WELCHES Fundstück offen ist (höchstens eines, items.js#openDetail),
+    // gespiegelt in #…/recherche/<itemId>. `detailEditing` schaltet darin auf das
+    // Formular; Verknüpfen/Tags/Anhänge bleiben in beiden Modi bedienbar.
     detailItemId: null,
     detailEditing: false,
+    // Sperre für den Klick, der das Bearbeiten öffnet (items.js#startEdit).
+    _editOpening: false,
 
     filterKind: '',
     filterTag: '',
@@ -171,22 +184,6 @@ export function registerRechercheCard() {
 
     _lifecycle: null,
 
-    // Das offene Fundstück, aus `items` gelesen statt kopiert: nach jedem
-    // _replaceItem (Speichern, Upload, Verknüpfen) zeigt der Dialog damit den
-    // frischen Datensatz, ohne eigenen Sync-Pfad.
-    get detailItem() {
-      if (this.detailItemId == null) return null;
-      return (this.items || []).find(i => i.id === this.detailItemId) || null;
-    },
-    // Alias-Vehikel für den Dialog: die geteilten Fragmente (Aktionsmenü,
-    // URL-Zeilen, Verknüpfungen) sprechen das Fundstück als `item` an, weil sie
-    // im x-for der Liste stehen. Ein x-for über 0 oder 1 Element gibt dem Dialog
-    // denselben Namen — so bleibt das Markup EINE Quelle statt zweier Kopien.
-    get detailItems() {
-      const it = this.detailItem;
-      return it ? [it] : [];
-    },
-
     init() {
       this._lifecycle = setupCardLifecycle(this, {
         name: 'recherche',
@@ -220,12 +217,17 @@ export function registerRechercheCard() {
         },
       });
 
-      // Karte zugeklappt (Exklusivität, Seitenwechsel, Hash-Navigation): Detail-
-      // Dialog ZWINGEND schliessen, das Anlegen-Formular verwerfen. Ein offenes
-      // <dialog> hält das restliche Dokument inert, und da es im Top-Layer liegt, verschwindet es mit der
-      // display:none-Karte nur optisch — die App wirkte danach eingefroren.
+      // Karte zugeklappt (Exklusivität, Seitenwechsel, Hash-Navigation): offene
+      // Zeile zuklappen, das Anlegen-Formular verwerfen — beim nächsten Öffnen
+      // startet die Karte mit der Liste, nicht mit einem alten Formular.
       this.$watch(() => window.__app.showRechercheCard, (v) => {
         if (v) return;
+        // Offenes Bearbeiten nicht still verwerfen: speichern (best effort).
+        if (this.detailEditing && this.detailItemId != null) {
+          const prev = (this.items || []).find(i => i.id === this.detailItemId);
+          if (prev) this.commitEdit(prev);
+        }
+        if (this._archivedByJump) { this._archivedByJump = false; this.showArchived = false; }
         this.closeDetail();
         this.closeCreate();
         // Zugeklappte Karte haelt keine Drag-Container: das Board wird beim
@@ -239,6 +241,7 @@ export function registerRechercheCard() {
       // gebundene Instanz zeigte auf einen abgeraeumten Container.
       this.$watch('viewMode', (v) => {
         lsSet('recherche.viewMode', v === 'status' ? 'status' : 'list');
+        if (v === 'status') this._closeDetailForBoard();
         this._ensureStatusBoard();
       });
 
@@ -262,9 +265,9 @@ export function registerRechercheCard() {
     },
 
     // Deep-Link-Item (#book/X/recherche/<itemId>) öffnen: Schnipsel suchen →
-    // Detailansicht (LESEN, nicht Bearbeiten — ein geteilter Link soll zeigen,
-    // nicht in ein Formular führen) + die Zeile dahinter zentriert ins Bild und
-    // kurz hervorheben, damit sie nach dem Schliessen unter dem Cursor liegt.
+    // Zeile aufklappen (LESEN, nicht Bearbeiten — ein geteilter Link soll zeigen,
+    // nicht in ein Formular führen), ihren Kopf oben ins Bild holen und kurz
+    // hervorheben. openDetail wechselt aus dem Status-Board in die Liste.
     // Noch nicht geladene Liste → ID merken, loadRecherche ruft uns danach erneut
     // auf (analog _focusBeatById in der Plot-Werkstatt). Ist die Liste geladen und
     // das Fundstück fehlt, liegt es meist hinter dem Filter: Filter zurücksetzen
@@ -274,7 +277,13 @@ export function registerRechercheCard() {
     _focusRechercheItemById(rawId) {
       const id = parseInt(rawId, 10);
       this._pendingFocusItemId = null;
-      if (!Number.isInteger(id)) return;
+      // Verworfener Sprung: der Router hat die ID schon in den Store gelegt
+      // (apply.js) — ohne Rücknahme bliebe sie als toter Permalink in der URL.
+      const drop = () => {
+        const nav = window.Alpine?.store('nav');
+        if (nav && nav.rechercheItemId != null && this.detailItemId == null) nav.rechercheItemId = null;
+      };
+      if (!Number.isInteger(id)) return drop();
       const item = (this.items || []).find(i => i.id === id);
       if (!item) {
         if (!this._rechercheListSettled()) { this._pendingFocusItemId = id; return; }
@@ -282,25 +291,17 @@ export function registerRechercheCard() {
         // Letzte Stufe: archivierte Fundstücke blendet die Liste ohne Archiv aus.
         // Danach ist der Wunsch entweder auflösbar oder wird verworfen (kein Loop:
         // mit Archiv und ohne Filter greift keine der Stufen mehr).
-        if (!this.showArchived) { this._pendingFocusItemId = id; this.showArchived = true; this.loadRecherche(); }
-        return;
+        if (!this.showArchived) {
+          this._pendingFocusItemId = id;
+          this.showArchived = true;
+          this._archivedByJump = true;
+          this.loadRecherche();
+          return;
+        }
+        return drop();
       }
-      this.openDetail(item);
-      this.$nextTick(() => {
-        // Beide Ansichten stehen im Markup; das Sprungziel ist die SICHTBARE.
-        // Die Attribute sind darum verschieden (`data-research-id` in der Liste,
-        // `data-research-card-id` im Status-Board) — ein gemeinsamer Name traefe
-        // die versteckte Ansicht, und ein Scroll dorthin ist ein No-op.
-        const sel = this.viewMode === 'status'
-          ? `[data-research-card-id="${id}"]`
-          : `[data-research-id="${id}"]`;
-        const el = this.$root?.querySelector(sel);
-        if (!el) return;
-        el.scrollIntoView({ behavior: 'smooth', block: 'center' });
-        el.classList.remove('research-item--flash');
-        void el.offsetWidth; // Reflow → Animation startet auch beim zweiten Klick neu
-        el.classList.add('research-item--flash');
-        setTimeout(() => el.classList.remove('research-item--flash'), 1600);
+      Promise.resolve(this.openDetail(item)).then(() => {
+        if (this.detailItemId === id) this._flashResearchRow(id);
       });
     },
 

@@ -55,7 +55,7 @@ export const rechercheInterviewMethods = {
       }
       const data = await r.json();
       this._ivPatchItem(data.item);
-      // Transkript-Slot nur fuellen, wenn der Dialog noch dieses Fundstueck zeigt —
+      // Transkript-Slot nur fuellen, wenn noch dieses Fundstueck aufgeklappt ist —
       // sonst ueberschriebe der spaete Upload das inzwischen geoeffnete andere.
       if (this.detailItemId !== itemId) return;
       this.ivCanTranscribe = !!data.can_transcribe;
@@ -77,7 +77,7 @@ export const rechercheInterviewMethods = {
 
   /** Geändertes Item in die Board-Liste zurückspiegeln (kind wechselt auf
    *  'transcript', damit die Kachel den Player statt des Notizsymbols zeigt).
-   *  Reassign über _replaceItem: der Detail-Dialog liest `detailItem` aus
+   *  Reassign über _replaceItem: die aufgeklappte Zeile liest das Fundstück aus
    *  `items`, und die Memos (Status-Buckets) haengen an der `items`-Referenz. */
   _ivPatchItem(item) {
     if (!item?.id) return;
@@ -87,7 +87,7 @@ export const rechercheInterviewMethods = {
 
   // ── Transkript lesen ───────────────────────────────────────────────────────
 
-  // Der Transkript-Slot ist EINER fuer den ganzen Dialog. Lade-Token + Pruefung
+  // Der Transkript-Slot ist EINER fuer die aufgeklappte Zeile. Lade-Token + Pruefung
   // `detailItemId === itemId` nach jedem await: eine spaete Antwort (langsames
   // Netz, Job-Ende nach Wechsel des Fundstuecks) darf nicht das inzwischen
   // geoeffnete andere Fundstueck ueberschreiben.
@@ -121,8 +121,8 @@ export const rechercheInterviewMethods = {
     }
   },
 
-  // Laufenden Transkriptionslauf wieder aufnehmen (Reload, Tab-Wechsel, Dialog
-  // erneut geoeffnet). Job-ID aus dem localStorage (ivTranscribe legt sie ab),
+  // Laufenden Transkriptionslauf wieder aufnehmen (Reload, Tab-Wechsel, Zeile
+  // erneut aufgeklappt). Job-ID aus dem localStorage (ivTranscribe legt sie ab),
   // sonst beim Server nach dem aktiven Lauf fragen (Entity `i<itemId>`). Ohne
   // auffindbaren Job KEINE Sperre setzen — der Lauf ist dann verwaist, und ein
   // gesetztes ivRunningItemId hielte „Transkribieren" fuer jedes Fundstueck zu.

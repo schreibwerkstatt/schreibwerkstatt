@@ -22,7 +22,6 @@
 
 import { fetchJson } from '../utils.js';
 import { beatReadingOrder } from '../book/plot/constants.js';
-import { figurAnzeigeName } from '../book/figur-name.js';
 
 /** Aktiv = nicht verworfen (Spalte `verworfen` ODER Alt-Status 'verworfen'). */
 const isActive = (b) => !b?.verworfen && b?.status !== 'verworfen';
@@ -65,25 +64,56 @@ export function selectPlanBeatsForPage(ordered, { pageId, chapterId, threads = [
   ];
 }
 
-/** Besetzung eines Beats als Namensliste (dedupliziert, Reihenfolge: Katalog-
- *  Figuren, Werkstatt-Figuren, geerbte Strang-Hauptfigur, Orte). Katalog-
- *  Identitaet ist die TEXT-fig_id (nie durch Number() schicken), Werkstatt die
- *  INTEGER draft_figures.id. Pure. */
-export function planCastNames(beat, { figuren = [], draftFigures = [], threads = [] } = {}) {
+/** Nachschlage-Maps für planCastRefs — einmal je Katalog-/Plan-Stand bauen,
+ *  nicht je Beat und Render. Pure. */
+export function planCastLookup({ figuren = [], draftFigures = [], threads = [] } = {}) {
+  return {
+    figById: new Map((figuren || []).map(f => [String(f.id), f])),
+    draftById: new Map((draftFigures || []).map(d => [String(d.id), d])),
+    threadById: new Map((threads || []).map(t => [t.id, t])),
+  };
+}
+
+/** Besetzung eines Beats als Entitäts-Referenz-Specs (entity-ref.js), dedupliziert;
+ *  Reihenfolge: Katalog-Figuren, Werkstatt-Figuren, geerbte Strang-Hauptfigur
+ *  (`inherited: true` — Live-Vererbung, nie am Beat gespeichert), Orte.
+ *  Katalog-Identitaet ist die TEXT-fig_id (nie durch Number() schicken),
+ *  Werkstatt die INTEGER draft_figures.id. Figuren, die der Katalog (noch)
+ *  nicht kennt, fallen weg statt als «#fig_…» zu stehen; Werkstatt-Figuren und
+ *  Orte tragen ihr Label selbst (kein Frontend-Katalog bzw. Name am Beat). Pure. */
+export function planCastRefs(beat, lookup) {
   if (!beat) return [];
-  const figById = new Map((figuren || []).map(f => [String(f.id), f]));
-  const draftById = new Map((draftFigures || []).map(d => [String(d.id), d]));
-  const figName = (id) => { const f = figById.get(String(id)); return f ? figurAnzeigeName(f) : null; };
-  const draftName = (id) => draftById.get(String(id))?.name || null;
-  const names = [
-    ...(beat.fig_ids || []).map(figName),
-    ...(beat.draft_fig_ids || []).map(draftName),
-  ];
-  const t = beat.thread_id != null ? (threads || []).find(x => x.id === beat.thread_id) : null;
-  if (t?.fig_id) names.push(figName(t.fig_id));
-  else if (t?.draft_figure_id != null) names.push(draftName(t.draft_figure_id));
-  const orte = (beat.locations || []).map(l => l?.name);
-  return [...new Set([...names, ...orte].filter(Boolean))];
+  const { figById, draftById, threadById } = lookup || planCastLookup();
+  const out = [];
+  const seen = new Set();
+  const push = (spec) => {
+    const k = spec.type + ':' + String(spec.id);
+    if (seen.has(k)) return;
+    seen.add(k);
+    out.push(spec);
+  };
+  const fig = (id, extra) => { if (figById.has(String(id))) push({ type: 'figur', id, ...extra }); };
+  const draft = (id, extra) => {
+    const name = draftById.get(String(id))?.name;
+    if (name) push({ type: 'werkstatt', id, label: name, ...extra });
+  };
+  for (const id of beat.fig_ids || []) fig(id);
+  for (const id of beat.draft_fig_ids || []) draft(id);
+  const t = beat.thread_id != null ? threadById.get(beat.thread_id) : null;
+  if (t?.fig_id) fig(t.fig_id, { inherited: true });
+  else if (t?.draft_figure_id != null) draft(t.draft_figure_id, { inherited: true });
+  for (const l of beat.locations || []) {
+    if (l?.id != null) push({ type: 'ort', id: l.id, label: l.name });
+  }
+  return out;
+}
+
+/** Motive eines Beats als Referenz-Specs (Motiv-Werkstatt hat keinen
+ *  Frontend-Katalog → Label vom Beat). Pure. */
+export function planMotifRefs(beat) {
+  return (beat?.motifs || [])
+    .filter(m => m?.id != null)
+    .map(m => ({ type: 'motiv', id: m.id, label: m.name }));
 }
 
 export function referencePlanState() {
@@ -98,7 +128,8 @@ export const referencePlanMethods = {
   // Buchwechsel-Race: nach jedem await prüfen, ob das Buch noch dasselbe ist
   // (`_staleBook` der Karte). Werkstatt-Figuren (für die Besetzungszeile)
   // best-effort dazu, im Plan-Objekt abgelegt — so räumt der Reset von
-  // referencePlan sie mit ab.
+  // referencePlan sie mit ab. Beide Anfragen laufen gleichzeitig; ein Fehler
+  // der Werkstatt-Figuren kostet nur deren Namen in der Besetzung.
   async _loadReferencePlan() {
     const bookId = Alpine.store('nav').selectedBookId;
     if (!bookId) { this.referencePlan = null; return; }
@@ -106,15 +137,15 @@ export const referencePlanMethods = {
     this.referencePlanLoading = true;
     this.referencePlanError = '';
     try {
-      const r = await fetchJson(`/plot/?book_id=${encodeURIComponent(bookId)}`);
+      const draftsP = fetchJson(`/draft-figures/${encodeURIComponent(bookId)}`)
+        .then(d => (Array.isArray(d) ? d.map(x => ({ id: x.id, name: x.name })) : []))
+        .catch(() => []);
+      const [r, draftFigures] = await Promise.all([
+        fetchJson(`/plot/?book_id=${encodeURIComponent(bookId)}`),
+        draftsP,
+      ]);
       if (stale()) return;
       if (!r || !Array.isArray(r.beats)) { this.referencePlan = null; return; }
-      let draftFigures = [];
-      try {
-        const d = await fetchJson(`/draft-figures/${encodeURIComponent(bookId)}`);
-        draftFigures = Array.isArray(d) ? d.map(x => ({ id: x.id, name: x.name })) : [];
-      } catch { draftFigures = []; }
-      if (stale()) return;
       this.referencePlan = { ...r, draftFigures };
     } catch {
       if (stale()) return;
@@ -157,20 +188,21 @@ export const referencePlanMethods = {
     return [act?.name, thread?.name, beat?.zeit].filter(Boolean).join(' · ');
   },
 
-  /** Beteiligte Figuren + Orte als eine Zeile: Katalog-Figuren, Werkstatt-
-   *  Figuren und die vom Strang geerbte Hauptfigur (Live-Vererbung, nie am Beat
-   *  gespeichert), dann Orte. Pure Rechnung in planCastNames. */
+  /** Beteiligte Figuren, Werkstatt-Figuren, geerbte Strang-Hauptfigur und Orte
+   *  als Entitäts-Referenzen — jede springt zu ihrem Objekt. Pure Rechnung in
+   *  planCastRefs; die Maps werden je Katalog-/Plan-Stand einmal gebaut. */
   referencePlanCast(beat) {
-    return planCastNames(beat, {
-      figuren: Alpine.store('catalog').figuren || [],
-      draftFigures: this.referencePlan?.draftFigures || [],
-      threads: this.referencePlan?.threads || [],
-    }).join(', ');
+    const figuren = Alpine.store('catalog').figuren || [];
+    const plan = this.referencePlan;
+    const lookup = this._memo('planCastLookup', [figuren, plan], () => planCastLookup({
+      figuren, draftFigures: plan?.draftFigures || [], threads: plan?.threads || [],
+    }));
+    const inheritedTitle = window.__app.t('plot.beat.inheritedFigure');
+    return planCastRefs(beat, lookup)
+      .map(r => (r.inherited ? { ...r, title: inheritedTitle } : r));
   },
 
-  referencePlanMotifs(beat) {
-    return (beat?.motifs || []).map(m => m?.name).filter(Boolean).join(', ');
-  },
+  referencePlanMotifs(beat) { return planMotifRefs(beat); },
 
   referencePlanStatus(beat) {
     return beat?.status ? window.__app.t('plot.status.' + beat.status) : '';

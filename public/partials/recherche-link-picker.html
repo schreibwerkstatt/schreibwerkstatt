@@ -1,10 +1,11 @@
 <!-- Verknuepfen-Picker eines Recherche-Fundstuecks — Picker-Popover (DESIGN.md
      „Picker-Popover", Mechanik public/js/picker-popover.js). EINE Instanz auf
-     Kartenebene fuer Liste UND Detail-Dialog: openLinkPicker haengt sie zur
-     Anzeigezeit unter den sichtbaren Host (offener Dialog › Vollbild › body).
+     Kartenebene fuer Listenzeile (auch aufgeklappt) und Board-Karte:
+     openLinkPicker haengt sie zur Anzeigezeit unter den sichtbaren Host
+     (Vollbild › body).
 
-     Esc auf dem Popover bleibt dort (`.stop.prevent`): im Detail-Dialog
-     schloesse es sonst den ganzen Dialog statt nur den Picker. -->
+     Esc auf dem Popover bleibt dort (`.stop.prevent`): in der aufgeklappten
+     Zeile verwuerfe es sonst ein offenes Bearbeiten statt nur den Picker. -->
 <template x-teleport="body">
   <div class="picker-popover recherche-link-picker"
        x-ref="rechercheLinkPopover"

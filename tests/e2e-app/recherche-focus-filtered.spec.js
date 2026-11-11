@@ -1,6 +1,6 @@
 // Recherche-Board: Sprung auf ein Fundstück, das der aktive Filter ausblendet —
 // gegen die ECHTE App (Hash-Router → RECHERCHE_FOCUS_ITEM → _focusRechercheItemById,
-// Filterleiste mit Persistenz-Layer, Detail-Dialog).
+// Filterleiste mit Persistenz-Layer, aufgeklappte Zeile).
 // Erwartung: Filter zurücksetzen, neu laden, Detail öffnen. Ohne das blieb der
 // Sprungwunsch still liegen und die Karte zeigte nur die gefilterte Liste.
 const { test, expect } = require('../e2e/_helpers/fixtures');
@@ -33,11 +33,10 @@ test('recherche: Sprung auf ausgefiltertes Fundstück setzt den Filter zurück u
 
   await page.evaluate(([bid, id]) => { location.hash = `#book/${bid}/recherche/${id}`; }, [bookId, ids.hidden]);
 
-  const dialog = card.locator('dialog.research-dialog[open]').first();
-  await expect(dialog).toBeVisible();
-  await expect(dialog).toContainText('Versteckter Fakt');
+  const opened = row(ids.hidden).locator('.research-detail');
+  await expect(opened).toBeVisible();
+  await expect(row(ids.hidden)).toContainText('Versteckter Fakt');
   await expect(search).toHaveValue('');
-  await expect(row(ids.hidden)).toBeVisible();
 });
 
 test('recherche: Sprung auf archiviertes Fundstück blendet das Archiv ein und öffnet es', async ({ page }) => {
@@ -62,7 +61,7 @@ test('recherche: Sprung auf archiviertes Fundstück blendet das Archiv ein und �
   await expect(card.locator(`.recherche-list [data-research-id="${id}"]`)).toHaveCount(0);
 
   await page.evaluate(([bid, iid]) => { location.hash = `#book/${bid}/recherche/${iid}`; }, [bookId, id]);
-  const dialog = card.locator('dialog.research-dialog[open]').first();
-  await expect(dialog).toBeVisible();
-  await expect(dialog).toContainText('Archivierte Notiz');
+  const opened = card.locator(`.recherche-list [data-research-id="${id}"]`);
+  await expect(opened.locator('.research-detail')).toBeVisible();
+  await expect(opened).toContainText('Archivierte Notiz');
 });

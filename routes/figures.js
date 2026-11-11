@@ -34,8 +34,15 @@ require('./figures/scenes').register(router);
 router.get('/chapter/:book_id/:chapter_id', (req, res) => {
   const chapterId = toIntId(req.params.chapter_id);
   if (!chapterId) return res.status(400).json({ error_code: 'INVALID_ID' });
-  const figuren = getChapterFigures(req.bookId, chapterId, sessionEmail(req), { withYears: true });
-  res.json({ figuren });
+  // `fallback: true` = das Kapitel hat (noch) keine Auftritte im Index, die
+  // Liste ist die ganze Besetzung des Buchs. Der Editor-Highlighter kann damit
+  // leben (er matcht ohnehin Namen im Text); wer «gehört zum Kapitel» daraus
+  // liest — der Referenz-Slot —, muss den Rückfall erkennen können.
+  const email = sessionEmail(req);
+  let figuren = getChapterFigures(req.bookId, chapterId, email, { withYears: true, bookFallback: false });
+  const fallback = figuren.length === 0;
+  if (fallback) figuren = getChapterFigures(req.bookId, chapterId, email, { withYears: true });
+  res.json({ figuren, fallback });
 });
 
 // Gespeicherte Figuren eines Buchs laden. Die Aufloesung selbst (sechs

@@ -40,14 +40,26 @@ export const rechercheBoardMethods = {
       if ((this.filterText || '').trim()) qs.set('q', this.filterText.trim());
       if (this.showArchived) qs.set('archived', '1');
       if (this.sortBy && this.sortBy !== 'updated') qs.set('sort', this.sortBy);
-      const rows = await fetchJson(`/research?${qs.toString()}`);
+      // Bestand ohne Filter parallel (non-fatal): ohne ihn ist «Filter trifft
+      // nichts» nicht von «Buch hat noch nichts» zu unterscheiden.
+      const [rows, totals] = await Promise.all([
+        fetchJson(`/research?${qs.toString()}`),
+        fetchJson(`/research/count?book_id=${bookId}`).catch(() => null),
+      ]);
       if (!isCurrent()) return false;
+      if (totals) this.researchTotals = totals;
       const next = Array.isArray(rows) ? rows : [];
       if (silent && sameData(next, this.items)) return false;
       changed = true;
       this._memos = {};
       this.items = next;
       this._rechercheLoadedBookId = bookId;
+      // Offene Zeile nicht mehr in der Liste (Filter, von anderswo gelöscht):
+      // zuklappen, damit der Permalink nicht auf eine unsichtbare Zeile zeigt.
+      // Ein offenes Bearbeiten bleibt — dessen Entwurf verwirft kein Reload.
+      if (this.detailItemId != null && !this.detailEditing && !next.some(i => i.id === this.detailItemId)) {
+        this.closeDetail();
+      }
       this.errorMessage = '';
       this._loadTags();
       this.ensureLinkTargets();
@@ -124,14 +136,17 @@ export const rechercheBoardMethods = {
       if (this[k]) { clearInterval(this[k]); this[k] = null; }
     }
     this.items = [];
+    this.researchTotals = null;
+    this.noticeMessage = '';
+    this.formError = '';
+    this._archivedByJump = false;
     this._rechercheLoadedBookId = null;
     this._memos = {};
     this.tagPool = [];
     this.linkTargets = {};
     this._linkTargetsBookId = null;
     this.draft = _emptyDraft();
-    // Erst Detail-Dialog und Anlegen schliessen, dann die Marker nullen: ein offenes <dialog>
-    // bleibt sonst im Top-Layer stehen und hält das Dokument inert.
+    // Offene Zeile zuklappen und Anlegen schliessen, dann die Marker nullen.
     this.closeDetail();
     this.closeCreate();
     this._pendingFocusItemId = null;
@@ -176,16 +191,18 @@ export const rechercheBoardMethods = {
   },
 
   // ── Aktionsmenü (recherche-item-menu.html) ───────────────────────────────
-  // EIN Menü für Liste, Detail-Dialog und Board-Karte (action-menu.js);
+  // EIN Menü für Liste (auch aufgeklappt) und Board-Karte (action-menu.js);
   // Schlüssel `${ctx}:${id}`, Ziel { ctx, id }. Geöffnet per ⋯-Knopf und per
   // Rechtsklick/Long-Press auf Listenzeile bzw. Board-Karte.
-  openItemMenu(ev, ctx, item) {
-    this.openActionMenu(ev, `${ctx}:${item.id}`, { ctx, id: item.id });
+  // `only = 'status'`: dasselbe Menü, nur der Status-Abschnitt — geöffnet von
+  // der Status-Plakette der Listenzeile (ein Klick setzt die Stufe, darum
+  // Kontextmenü und kein Picker-Popover). Eigener Schlüssel, damit Plakette
+  // und ⋯-Knopf sich nicht gegenseitig als «zweiter Klick» schliessen.
+  openItemMenu(ev, ctx, item, only = null) {
+    this.openActionMenu(ev, `${ctx}:${item.id}${only ? ':' + only : ''}`, { ctx, id: item.id, only });
   },
   // Das Fundstück des offenen Menüs als 0/1-Liste (x-for im Menü, Schlüssel =
   // actionMenuKey: ein anderes Fundstück rendert den Inhalt neu).
-  // `detailItems` liest selbst aus `items` — ein zweiter Suchlauf dort fände
-  // nichts, was der erste nicht schon fand.
   itemMenuItems() {
     const id = this.actionMenuTarget?.id;
     if (id == null) return [];
@@ -194,20 +211,61 @@ export const rechercheBoardMethods = {
   },
 
   // ── Filter ───────────────────────────────────────────────────────────────
-  applyFilters() { return this.loadRecherche(); },
-  // Tag-Chip (Liste und Detail-Dialog): filtert die Liste. Aus dem Dialog
-  // heraus schliesst er sich im Lesemodus, sonst filterte die Liste unsichtbar
-  // hinter dem Backdrop; im Bearbeiten-Modus bleibt er offen (kein stilles
-  // Verwerfen des Entwurfs).
+  applyFilters() { this.noticeMessage = ''; return this.loadRecherche(); },
+  // Tag-Chip (zugeklappte und aufgeklappte Zeile): filtert die Liste. Die
+  // offene Zeile bleibt offen, solange sie im Filter liegt — sie trägt den Tag ja.
   filterByTag(tag) {
     this.filterTag = tag;
-    if (this.detailItemId != null && !this.detailEditing) this.closeDetail();
     return this.applyFilters();
   },
   clearFilters() {
     this.filterKind = ''; this.filterTag = ''; this.filterText = '';
     this.filterLinked = ''; this.filterLinkedKind = ''; this.filterLinkedTargetId = '';
+    this.noticeMessage = '';
     return this.loadRecherche();
+  },
+
+  // ── Bestand vs. Treffer ──────────────────────────────────────────────────
+  // `items` ist die GEFILTERTE Liste. Ob das Buch überhaupt Fundstücke hat,
+  // sagt `researchTotals` (GET /research/count); solange der fehlt, gilt die
+  // Liste als Bestand. Umschalter, Auswählen und Werkzeuge hängen am Bestand —
+  // sonst verschwänden sie bei jeder Suche ohne Treffer, und die Toolbar spränge.
+  hasBestand() {
+    const t = this.researchTotals;
+    return t ? (t.active + t.archived) > 0 : this.items.length > 0;
+  },
+  // Wie viele Fundstücke die Liste ohne Filter zeigen würde (Archiv-Schalter zählt mit).
+  bestandCount() {
+    const t = this.researchTotals;
+    if (!t) return this.items.length;
+    return t.active + (this.showArchived ? t.archived : 0);
+  },
+  // Kein Treffer, obwohl es Fundstücke gibt: Filter oder ausgeblendetes Archiv.
+  isFilteredEmpty() {
+    return !this.loading && !this.errorMessage && this.items.length === 0 && this.hasBestand();
+  },
+  // Nur das ausgeblendete Archiv hält die Liste leer (kein Filter aktiv).
+  onlyArchivedHidden() {
+    return !this.showArchived && !this._rechercheFiltersActive()
+      && (this.researchTotals?.archived || 0) > 0;
+  },
+  showArchivedNow() { this.showArchived = true; return this.applyFilters(); },
+  countLabel() {
+    const app = window.__app;
+    const n = this.items.length;
+    const total = this.bestandCount();
+    return n < total
+      ? app.tn('recherche.countFiltered', n, { total })
+      : app.tn('recherche.count', n);
+  },
+  // Bestand nach Anlegen/Löschen/Archivieren nachziehen, ohne die Liste neu zu laden.
+  async _loadResearchTotals() {
+    const bookId = Alpine.store('nav').selectedBookId;
+    if (!bookId) return;
+    try {
+      const t = await fetchJson(`/research/count?book_id=${bookId}`);
+      if (isSelectedBook(bookId)) this.researchTotals = t;
+    } catch { /* Zähler ist best-effort */ }
   },
   kindOptions() {
     const t = window.__app.t;
@@ -318,7 +376,7 @@ export const rechercheBoardMethods = {
     return {
       tip: t('recherche.view.tip'),
       items: [{ kind: 'toggle', key: 'archived', on: this.showArchived, label: t('recherche.filter.showArchived'),
-        toggle: () => { this.showArchived = !this.showArchived; this.applyFilters(); } }],
+        toggle: () => { this.showArchived = !this.showArchived; this._archivedByJump = false; this.applyFilters(); } }],
     };
   },
 };

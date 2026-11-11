@@ -504,6 +504,7 @@ export const pageMethods = {
     this.currentPageChatSessionCount = 0;
     if (!keepView) this.renderedPageHtml = '';
     this.chapterFigures = [];
+    this.chapterFiguresFallback = false;
     this.showChapterFigures = false;
     this.originalHtml = null;
     this.correctedHtml = null;

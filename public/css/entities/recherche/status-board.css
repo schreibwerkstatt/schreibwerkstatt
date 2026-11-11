@@ -105,7 +105,6 @@
 .research-status-board.is-scrolling .research-status-card:hover { transform: none; box-shadow: none; transition: none; }
 .research-status-card--pinned { background: var(--color-bg); }
 .research-status-card--archived { opacity: var(--opacity-disabled); }
-.research-status-card--open { border-color: var(--card-accent); }
 
 /* Kopfzeile: Drag-Griff (components/drag-grip.css), Kind-Badge, Menue. */
 .research-status-card-head {
@@ -192,7 +191,19 @@
   background: color-mix(in srgb, var(--status-accent) 12%, transparent);
   white-space: nowrap;
 }
-.research-status-badge--offen         { --status-accent: var(--color-muted); }
+/* In der Listenzeile ist die Plakette ein Knopf (öffnet den Status-Abschnitt
+   des Aktionsmenüs): Button-Defaults zurücknehmen, Hover über den Akzent. */
+button.research-status-badge {
+  font-family: inherit;
+  line-height: inherit;
+  cursor: pointer;
+}
+button.research-status-badge:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--status-accent) 24%, transparent);
+}
+/* `offen` ist die Grundstufe: gestrichelt und ohne Fläche — sie steht an jeder
+   unbearbeiteten Zeile und soll dort nicht lauter sein als die gesetzten. */
+.research-status-badge--offen         { --status-accent: var(--color-muted); border-style: dashed; background: transparent; }
 .research-status-badge--in_arbeit     { --status-accent: var(--color-warn-text); color: var(--color-warn-text); }
 .research-status-badge--eingearbeitet { --status-accent: var(--color-ok-border);   color: var(--color-ok-text); }
 .research-status-badge--verworfen     { --status-accent: var(--color-border); }

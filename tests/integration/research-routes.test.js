@@ -218,6 +218,20 @@ test('GET /page-counts + /chapter-counts: zählen verknüpfte, nicht-archivierte
   assert.equal(pc2.json[pageId], 1);
 });
 
+test('GET /count: Bestand ohne Filter, aktiv und archiviert getrennt', async () => {
+  const BOOK = 8319;
+  seedBook(BOOK);
+  const empty = await api('GET', `/research/count?book_id=${BOOK}`);
+  assert.deepEqual(empty.json, { active: 0, archived: 0 });
+  const a = await createItem(BOOK);
+  await createItem(BOOK);
+  await api('PATCH', `/research/${a.id}`, { archived: true });
+  const r = await api('GET', `/research/count?book_id=${BOOK}`);
+  assert.deepEqual(r.json, { active: 1, archived: 1 });
+  const bad = await api('GET', '/research/count');
+  assert.equal(bad.status, 400);
+});
+
 // ── Multi-URL (frisch eingeführt) ────────────────────────────────────────────
 
 test('POST /: urls — nur http(s), dedupliziert, Reihenfolge erhalten', async () => {

@@ -53,7 +53,6 @@
   --aside-w-wide:      clamp(420px, 32vw, 620px);
   --aside-w-min:       320px;
   --aside-w-max:       960px;
-  --aside-scroll-max:  min(52vh, 38rem);
   --sticky-top:        var(--space-xl);  /* 24px */
   --sticky-bottom:     max(var(--sticky-top), calc(var(--job-queue-h, 0px) + var(--space-sm)));
 

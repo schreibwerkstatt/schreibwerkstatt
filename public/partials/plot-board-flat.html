@@ -3,7 +3,7 @@
      dieses Board ist nur sichtbar, solange keine Stränge angelegt sind — sobald
      der erste Strang existiert, übernimmt plot-board-grid.html. Beat-Markup
      (Ansicht/Bearbeiten) ist mit dem Grid-Board synchron zu halten. -->
-<div class="plot-board" x-init="$app._bindScrollFade($el, { idleMs: 200 })" x-show="(acts.length || addingAct) && !threads.length" x-cloak>
+<template x-if="(acts.length || addingAct) && !threads.length"><div class="plot-board" x-init="$app._bindScrollFade($el, { idleMs: 200 })">
   <template x-for="act in sharedActs()" :key="act.id">
     <div class="plot-column"
          :class="{ 'plot-column--archiviert': !!act.archiviert, 'plot-column--collapsed': isActCollapsed(act.id) }"
@@ -180,4 +180,4 @@
       </div>
     </div>
   </div>
-</div>
+</div></template>

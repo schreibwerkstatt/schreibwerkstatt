@@ -5,7 +5,7 @@
 // __SHELL_BUILD: content hash over all listed assets → drives SHELL_CACHE.
 // __SHELL_MANIFEST: the coherent set precached atomically at SW install.
 // __VENDOR_SET: current vendor/ + fonts/ files — VENDOR_CACHE prune list.
-self.__SHELL_BUILD = "39115c3f2b6a9a53";
+self.__SHELL_BUILD = "cc2395dff8e088b1";
 self.__SHELL_MANIFEST = [
   "/css/admin/admin-backup.css",
   "/css/admin/admin-home.css",
@@ -122,6 +122,7 @@ self.__SHELL_MANIFEST = [
   "/css/components/view-menu.css",
   "/css/components/year-month-heatmap.css",
   "/css/editor/book/book-editor-head.css",
+  "/css/editor/book/book-editor-render.css",
   "/css/editor/book/book-editor.css",
   "/css/editor/figur-lookup.css",
   "/css/editor/focus/focus-content.css",
@@ -157,7 +158,7 @@ self.__SHELL_MANIFEST = [
   "/css/entities/orte.css",
   "/css/entities/recherche/board.css",
   "/css/entities/recherche/chat.css",
-  "/css/entities/recherche/dialog.css",
+  "/css/entities/recherche/detail.css",
   "/css/entities/recherche/status-board.css",
   "/css/entities/sources.css",
   "/css/entities/szenen.css",
@@ -580,7 +581,10 @@ self.__SHELL_MANIFEST = [
   "/js/cards/reference-card.js",
   "/js/cards/reference-context.js",
   "/js/cards/reference-interview.js",
+  "/js/cards/reference-jump.js",
   "/js/cards/reference-plan.js",
+  "/js/cards/reference-rows.js",
+  "/js/cards/reference-weltfakten.js",
   "/js/cards/search-card.js",
   "/js/cards/search-hit.js",
   "/js/cards/session-store.js",
@@ -1249,9 +1253,9 @@ self.__SHELL_MANIFEST = [
   "/partials/recherche-chat-changes.html",
   "/partials/recherche-chat.html",
   "/partials/recherche-create.html",
-  "/partials/recherche-detail.html",
   "/partials/recherche-findings.html",
   "/partials/recherche-form-fields.html",
+  "/partials/recherche-item-detail.html",
   "/partials/recherche-item-menu-trigger.html",
   "/partials/recherche-item-menu.html",
   "/partials/recherche-item-relations.html",
@@ -1261,9 +1265,12 @@ self.__SHELL_MANIFEST = [
   "/partials/recherche-status-board.html",
   "/partials/recherche-transcript.html",
   "/partials/recherche.html",
+  "/partials/reference-ereignisse.html",
   "/partials/reference-oton.html",
   "/partials/reference-plan.html",
+  "/partials/reference-row-tail.html",
   "/partials/reference-verwandt.html",
+  "/partials/reference-weltfakten.html",
   "/partials/reference.html",
   "/partials/relation-conflicts-list.html",
   "/partials/search.html",

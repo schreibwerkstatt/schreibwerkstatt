@@ -20,14 +20,6 @@
   background: var(--color-bg);
 }
 
-/* Zaehler im Reiter — dieselbe Rolle wie `.filter-count`, nur im Tab. */
-.mybooks-tab-count {
-  margin-left: var(--space-xs);
-  font-size: var(--font-size-mini);
-  color: var(--color-muted);
-  font-variant-numeric: tabular-nums;
-}
-
 /* ── Tabelle ─────────────────────────────────────────────────────────────── */
 .mybooks-table {
   width: 100%;

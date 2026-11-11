@@ -31,6 +31,11 @@ const CATALOG_LISTS = [
   'songsFiltered',         // Musik
   'filteredEreignisse()',  // Ereignisse
   'g.fakten',              // Weltfakten (Fenster je Kategorie)
+  'referenceFiguren()',    // Referenz-Slot neben dem Notebook-Editor (Buch-Scope = ganzer Katalog)
+  'referenceOrte()',
+  'referenceSzenen()',
+  'referenceEreignisse()',
+  'referenceWeltfaktenItems()',
 ];
 
 // `datei:ausdruck` → Begründung. Nur Schleifen, die nie buchgross werden.

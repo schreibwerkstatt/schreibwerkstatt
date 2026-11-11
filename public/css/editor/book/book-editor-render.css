@@ -1,0 +1,22 @@
+/* Bucheditor — Render-Budget des Manuskript-Streams.
+   Markup: public/partials/book-editor.html (.book-editor-row = ein Block des
+   Streams, Kapitelkopf oder Abschnitt). Der Stream hängt das ganze Buch auf
+   einmal ein; die Kosten beim Öffnen liegen fast vollständig in Stil und Layout
+   aller Abschnitte, nicht im JS. `content-visibility: auto` lässt den Browser
+   Layout und Malen für Zeilen ausserhalb des Sichtfelds überspringen; der Inhalt
+   bleibt im DOM (Suchen/Ersetzen, Kommentar-Anker, Strg+F, Block-Merge sehen ihn
+   unverändert), und eine Geometrie-Abfrage in eine übersprungene Zeile
+   (Kommentar-Leiste, Outline-Sprung) erzwingt deren Layout selbst.
+   `contain-intrinsic-block-size: auto …` merkt sich die zuletzt gerenderte Höhe,
+   damit der Scrollbalken nach dem ersten Durchscrollen stimmt; der Startwert ist
+   eine Schätzung für einen noch nie gerenderten Abschnitt. Nur die Blockachse:
+   eine gemerkte BREITE ginge als Mindestbreite in den Stream ein — blendet die
+   Kommentar-Leiste ein, könnte die Stream-Spalte nicht mehr schrumpfen und die
+   Leiste läge über dem Text. */
+
+@layer components {
+  .book-editor-row {
+    content-visibility: auto;
+    contain-intrinsic-block-size: auto 600px;
+  }
+}

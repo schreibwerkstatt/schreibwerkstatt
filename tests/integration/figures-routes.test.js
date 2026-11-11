@@ -130,3 +130,20 @@ test('Merge per Zeilen-ID: Quelle weg, ihr Name wird Alias des Ziels', async () 
   assert.equal((await call('POST', `/figures/${BOOK}/merge`, { source_id: 'x', target_id: tgt })).status, 400);
   assert.equal((await call('POST', `/figures/${BOOK}/merge`, { source_id: tgt, target_id: tgt })).status, 409);
 });
+
+test('GET /figures/chapter meldet den Rückfall auf die ganze Besetzung (fallback)', async () => {
+  // Ohne Auftritte im Kapitel: ganze Besetzung, als Rückfall gekennzeichnet —
+  // der Referenz-Slot darf daraus kein «im Kapitel» ableiten.
+  db.prepare(`DELETE FROM figure_appearances WHERE chapter_id = ?`).run(CH);
+  const none = await call('GET', `/figures/chapter/${BOOK}/${CH}`);
+  assert.equal(none.status, 200);
+  assert.equal(none.body.fallback, true);
+  assert.ok(none.body.figuren.length >= 2);
+
+  // Mit Auftritt: nur die Figuren des Kapitels, kein Rückfall.
+  const row = db.prepare(`SELECT id FROM figures WHERE book_id = ? AND fig_id = 'fig_1'`).get(BOOK);
+  db.prepare(`INSERT INTO figure_appearances (figure_id, chapter_id, haeufigkeit) VALUES (?, ?, 3)`).run(row.id, CH);
+  const some = await call('GET', `/figures/chapter/${BOOK}/${CH}`);
+  assert.equal(some.body.fallback, false);
+  assert.deepEqual(some.body.figuren.map(f => f.id), ['fig_1']);
+});

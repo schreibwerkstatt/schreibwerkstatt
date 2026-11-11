@@ -201,6 +201,21 @@ router.get('/tags', (req, res) => {
   res.json(rows);
 });
 
+// Bestand des Buchs ohne jeden Filter: aktive und archivierte Fundstuecke.
+// Die Karte unterscheidet damit «das Buch hat noch nichts» von «der Filter
+// trifft nichts» und zeigt «n von m» — aus der gefilterten Liste allein ist
+// beides nicht ablesbar.
+router.get('/count', (req, res) => {
+  const bookId = bookScope(req, res);
+  if (!bookId) return;
+  const r = db.prepare(
+    `SELECT COALESCE(SUM(archived = 0), 0) AS active,
+            COALESCE(SUM(archived <> 0), 0) AS archived
+       FROM research_items WHERE book_id = ?`
+  ).get(bookId);
+  res.json({ active: r.active, archived: r.archived });
+});
+
 // Verknüpfbare Entitäten des Buchs für den Link-Picker (book-shared).
 // Kapitel und Seiten kommen über die Content-Store-Facade — sie sind Buchinhalt,
 // und den liest keine Route direkt aus `chapters`/`pages`. Die Welt-Entitäten

@@ -30,7 +30,7 @@ function mockSzenen(ch1, ch2) {
     { id: 11, chapter_id: ch1.id, kapitel: ch1.name, page_id: p1, seite: 'S1', titel: 'Zebra', wertung: 'stark', kommentar: 'Traegt das Tempo.', fig_ids: [], ort_ids: [] },
     { id: 12, chapter_id: ch1.id, kapitel: ch1.name, page_id: p1, seite: 'S1', titel: 'Ankunft', wertung: 'mittel', kommentar: 'Der Dialog zieht sich.', fig_ids: [], ort_ids: [],
       text_geaendert: true,
-      lektorat: { checked_at: '2026-11-05T09:00:00.000Z', szenen: [
+      lektorat: { check_id: 777, checked_at: '2026-11-05T09:00:00.000Z', szenen: [
         { titel: 'Bahnsteig', wertung: 'stark', kommentar: 'Jetzt mit Konflikt.' },
         { titel: 'Taxi', wertung: 'schwach', kommentar: null },
       ] } },
@@ -138,6 +138,13 @@ test('Szenen-Detail: Lektorat-Wertung des Abschnitts + «Text geändert»', asyn
 
   await row.click();
   const block = card.locator('.szenen-lektorat:visible');
+  // Default zu; Aufklappen wird je Browser gemerkt.
+  await expect(block).toHaveCount(0);
+  const toggle = card.locator('.entity-detail:visible .collapsible-toggle');
+  await expect(toggle).toHaveAttribute('aria-expanded', 'false');
+  await toggle.click();
+  await expect(toggle).toHaveAttribute('aria-expanded', 'true');
+  expect(await page.evaluate(() => localStorage.getItem('szenen.lektoratOpen'))).toBe('1');
   await expect(block).toHaveCount(1);
   await expect(block.locator('.szenen-lektorat-item')).toHaveCount(2);
   await expect(block.locator('.szenen-lektorat-item').first().locator('.severity-tag--stark')).toBeVisible();
@@ -150,4 +157,24 @@ test('Szenen-Detail: Lektorat-Wertung des Abschnitts + «Text geändert»', asyn
   await card.locator('.entity-row', { hasText: 'Zebra' }).click();
   await expect(card.locator('.szenen-lektorat:visible')).toHaveCount(0);
   guard.assertClean('Szenen-Karte: Lektorat');
+});
+
+test('Szenen-Detail: «Im Lektorat-Verlauf öffnen» lädt genau diesen Verlaufseintrag', async ({ page }) => {
+  const guard = attachConsoleGuard(page);
+  await page.addInitScript(() => localStorage.setItem('szenen.lektoratOpen', '1'));
+  const { card, ch1 } = await openWithScenes(page);
+  const pageId = ch1.pageIds[0];
+  await page.route(`**/history/page/${pageId}`, json([
+    { id: 900, page_id: pageId, checked_at: '2026-11-06T09:00:00.000Z', error_count: 0 },
+    { id: 777, page_id: pageId, checked_at: '2026-11-05T09:00:00.000Z', error_count: 0 },
+  ]));
+  await page.route('**/history/check/777/details', json({ errors_json: [], szenen_json: [] }));
+
+  await card.locator('.entity-row', { hasText: 'Ankunft' }).click();
+  // Persistierter Zustand: Block steht gleich offen.
+  await card.locator('.szenen-lektorat:visible .szenen-lektorat-open').click();
+  await expect.poll(() => page.evaluate(() => window.__app.currentPage?.id)).toBe(pageId);
+  // Nicht der jüngste Eintrag (900), sondern der, aus dem die Wertung stammt.
+  await expect.poll(() => page.evaluate(() => window.__app.activeHistoryEntryId)).toBe(777);
+  guard.assertClean('Szenen-Karte: Sprung in den Lektorat-Verlauf');
 });

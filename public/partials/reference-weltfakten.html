@@ -1,0 +1,34 @@
+<!--
+  Weltfakten-Reiter im Referenz-Panel neben dem Notebook-Editor: die Welt-Fakten
+  des Buchs, im Kontext-Scope nach Herkunfts-Abschnitt/Subjekt bzw. Kapitel-
+  Brücke gefiltert. Fragment-Include (Marker in reference.html), Laden in
+  cards/reference-weltfakten.js, Kontext-Regel in cards/reference-context.js.
+  Read-only — die Zeile öffnet die Weltfakten-Karte, jeder Kapitel-Chip sein Kapitel.
+-->
+<template x-if="referenceTab === 'weltfakten'">
+<div class="reference-panel" x-data="{ rowKind: 'weltfakt' }">
+  <div x-show="referenceWeltfaktenLoading && !referenceWeltfakten.length" x-skeleton="4" x-cloak></div>
+  <div class="search-status search-status--error" x-show="referenceWeltfaktenError && !referenceWeltfaktenLoading"
+       x-text="referenceWeltfaktenError"></div>
+  <template x-if="!referenceWeltfaktenLoading && !referenceWeltfaktenError && referenceWeltfaktenItems().length === 0">
+    <div class="muted-msg muted-msg--sm muted-msg--block" x-text="$app.t('reference.empty.weltfakten')"></div>
+  </template>
+  <template x-for="row in listWindowed(referenceWeltfaktenItems(), 'weltfakten')" :key="'rw-' + row.id">
+    <div class="reference-row reference-row--clickable internal-link" @click="openReferenceWeltfakten()" data-ref-jump
+         :data-tip="$app.t('reference.weltfakten.openTip')">
+      <div class="reference-row-head">
+        <span class="reference-row-title" x-text="row.subjekt || $app.t('weltfakten.kategorie.' + (row.kategorie || 'sonstiges'))"></span>
+        <span x-show="row.subjekt && row.kategorie" class="tag" x-text="$app.t('weltfakten.kategorie.' + row.kategorie)"></span>
+        <span x-show="row.widerlegt" class="tag" :data-tip="$app.t('weltfakten.widerlegtTip')" x-text="$app.t('weltfakten.widerlegt')"></span>
+        <span x-show="row.refCtx === 'chapter'" class="tag" :data-tip="$app.t('reference.ctx.chapterTip')" x-text="$app.t('reference.ctx.chapter')"></span>
+      </div>
+      <div class="reference-row-desc" x-text="row.fakt"></div>
+      <!-- @include reference-row-tail -->
+    </div>
+  </template>
+  <button type="button" class="btn-compact list-window-more"
+          x-show="listWindowRest(referenceWeltfaktenItems(), 'weltfakten') > 0" x-cloak
+          x-list-more="listWindowMore('weltfakten')" @click="listWindowMore('weltfakten')"
+          x-text="$app.t('common.showMore', { n: listWindowRest(referenceWeltfaktenItems(), 'weltfakten') })"></button>
+</div>
+</template>

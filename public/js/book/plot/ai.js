@@ -267,9 +267,9 @@ export const aiMethods = {
   dismissConsistency() { this._clearConsistencyPanel(); },
 
   // ── Konsistenz-Triage: Befund ↔ Beat ──────────────────────────────────────
-  // Die sichtbare Karte eines Beats. Flaches Board und Swimlane-Grid liegen
-  // beide im DOM (eines via x-show versteckt) — der erste Treffer kann die
-  // unsichtbare Kopie sein, auf der scrollIntoView nichts tut. Nicht über
+  // Die sichtbare Karte eines Beats. Gerendert ist nur eines der beiden Boards
+  // (flach bzw. Grid, x-if); der Sichtbarkeits-Filter fängt den Moment ab, in
+  // dem die Karte selbst versteckt ist — dort tut scrollIntoView nichts. Nicht über
   // this.$root: aus einem verschachtelten x-data (Verschiebe-Block, Klapp-Panel)
   // zeigt $root auf diesen Block, nicht auf die Karte.
   _visibleBeatEl(beatId) {

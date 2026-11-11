@@ -10,15 +10,19 @@
         <span class="entity-row-title" x-text="o.name"></span>
         <span x-show="o.manually_created" class="tag ort-manual-tag" :data-tip="$app.t('orte.manualCreatedHint')" x-text="$app.t('orte.manualCreated')"></span>
         <span x-show="o.stale" class="tag tag--stale" :data-tip="$app.t('orte.staleHint')" x-text="$app.t('orte.staleBadge')"></span>
-        <button type="button" x-show="o.stale" class="btn-compact entity-row-action"
+        <template x-if="o.stale">
+        <button type="button" class="btn-compact entity-row-action"
                 aria-haspopup="dialog" :aria-expanded="mergePick.kind === 'ort' && mergePick.sourceId === String(o.id)"
                 @click.stop="openMergePick($event, 'ort', o)"
                 :data-tip="$app.t('merge.rowTip')" x-text="$app.t('merge.rowAction')"></button>
-        <button type="button" x-show="o.stale || o.manually_created" class="icon-btn danger entity-row-action"
+        </template>
+        <template x-if="o.stale || o.manually_created">
+        <button type="button" class="icon-btn danger entity-row-action"
                 @click.stop="$app.deleteOrt(o)"
                 :aria-label="$app.t('common.delete')" :data-tip="$app.t(o.stale ? 'entity.deleteStale' : 'orte.deleteManual')">
           <svg class="icon" aria-hidden="true"><use href="/icons.svg#trash"/></svg>
         </button>
+        </template>
         <span x-show="o.land" class="tag ort-land-tag" x-text="landLabel(o.land)"></span>
         <span x-show="o.stimmung" class="ort-stimmung" x-text="o.stimmung"></span>
         <template x-if="o.kapitel?.length">

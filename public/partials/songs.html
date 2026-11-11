@@ -74,7 +74,8 @@
           </template>
           <span class="history-chevron" :class="{ open: $store.catalogUi.selectedSongId === s.id }" aria-hidden="true"></span>
         </div>
-        <div x-show="$store.catalogUi.selectedSongId === s.id" class="entity-detail">
+        <template x-if="$store.catalogUi.selectedSongId === s.id">
+        <div class="entity-detail">
           <p x-show="s.beschreibung" x-text="s.beschreibung" class="entity-detail-text"></p>
           <div x-show="s.stimmung" class="entity-meta-row">
             <span class="entity-meta-label" x-text="$app.t('songs.stimmung')"></span>
@@ -111,6 +112,7 @@
             </span>
           </div>
         </div>
+        </template>
       </div>
     </template>
     <button type="button" class="btn-compact list-window-more"
