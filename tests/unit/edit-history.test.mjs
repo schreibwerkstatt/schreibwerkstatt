@@ -399,3 +399,107 @@ test('mapCaretOffset: Anfang bleibt, Ende wandert um die Längendifferenz, Mitte
   assert.equal(mapCaretOffset('abc', 'abc', 2), 2);
   assert.equal(mapCaretOffset('abc', 'xabc', null), null);
 });
+
+// ── Blockweiser Restore ────────────────────────────────────────────────────
+// Undo/Redo tauscht nur die Top-Level-Blöcke, in denen sich Ausgangs- und
+// Zielstand unterscheiden. Beweis über Knoten-Identität: ein unveränderter
+// Absatz ist nach dem Undo noch DASSELBE Element (Highlights, Layout bleiben).
+
+test('Undo tauscht nur den geänderten Block, Nachbarn bleiben dieselben Knoten', () => {
+  const { history, el } = makeHistory();
+  setHtml(el, '<p>eins</p><p>zwei</p><p>drei</p>');
+  history.pushNow();
+  const [p1, , p3] = el.children;
+  el.children[1].textContent = 'zwei plus';
+  history.pushNow();
+  history.undo();
+  assert.equal(el.innerHTML, '<p>eins</p><p>zwei</p><p>drei</p>');
+  assert.ok(el.children[0] === p1, 'Block davor nicht neu eingehängt');
+  assert.ok(el.children[2] === p3, 'Block danach nicht neu eingehängt');
+  history.redo();
+  assert.equal(el.innerHTML, '<p>eins</p><p>zwei plus</p><p>drei</p>');
+  assert.ok(el.children[0] === p1);
+  assert.ok(el.children[2] === p3);
+});
+
+test('Undo zur Baseline (nur als HTML gemerkt) läuft ebenfalls blockweise', () => {
+  const { history, el } = makeHistory();
+  setHtml(el, '<p>a</p><p>b</p>');
+  history.reset(el.innerHTML);
+  const pa = el.children[0];
+  setHtml(el, '');
+  el.append(pa);
+  el.insertAdjacentHTML('beforeend', '<p>b neu</p>');
+  history.pushNow();
+  history.undo();
+  assert.equal(el.innerHTML, '<p>a</p><p>b</p>');
+  assert.ok(el.children[0] === pa);
+});
+
+test('Blöcke hinzufügen/entfernen: Undo nimmt neue Absätze wieder heraus', () => {
+  const { history, el } = makeHistory();
+  setHtml(el, '<p>a</p><p>z</p>');
+  history.pushNow();
+  const [pa, pz] = el.children;
+  pz.insertAdjacentHTML('beforebegin', '<p>x</p><p>y</p>');
+  history.pushNow();
+  history.undo();
+  assert.equal(el.innerHTML, '<p>a</p><p>z</p>');
+  assert.ok(el.children[0] === pa);
+  assert.ok(el.children[1] === pz);
+  history.redo();
+  assert.equal(el.innerHTML, '<p>a</p><p>x</p><p>y</p><p>z</p>');
+});
+
+test('mountHtml läuft nur über die eingesetzten Blöcke', () => {
+  const mounted = [];
+  const { history, el } = makeHistory({
+    mountHtml: (node, html) => { mounted.push(html); node.innerHTML = html; },
+  });
+  setHtml(el, '<p>eins</p><p>zwei</p>');
+  history.pushNow();
+  el.children[1].textContent = 'zwei!';
+  history.pushNow();
+  history.undo();
+  assert.deepEqual(mounted, ['<p>zwei</p>']);
+});
+
+test('Rückfall aufs komplette Einhängen: Text direkt unter der Wurzel', () => {
+  const mounted = [];
+  const { history, el } = makeHistory({
+    mountHtml: (node, html) => { mounted.push(html); node.innerHTML = html; },
+  });
+  setHtml(el, 'loser Text<p>b</p>');
+  history.pushNow();
+  setHtml(el, 'loser Text<p>b!</p>');
+  history.pushNow();
+  history.undo();
+  assert.equal(el.innerHTML, 'loser Text<p>b</p>');
+  assert.deepEqual(mounted, ['loser Text<p>b</p>'], 'ganzes HTML, nicht nur ein Block');
+});
+
+test('Rückfall aufs komplette Einhängen: Pipeline ändert die Blockzahl', () => {
+  // Pipeline, die (wie ensureCaretSlot hinter <hr>) einen Absatz ergänzt.
+  const { history, el } = makeHistory({
+    mountHtml: (node, html) => { node.innerHTML = html + '<p class="slot"></p>'; },
+  });
+  setHtml(el, '<p>a</p><p>b</p>');
+  history.pushNow();
+  el.children[1].textContent = 'b!';
+  history.pushNow();
+  history.undo();
+  assert.equal(el.innerHTML, '<p>a</p><p>b</p><p class="slot"></p>',
+    'Ergebnis wie beim kompletten Einhängen, kein Slot mitten im Text');
+});
+
+test('Rückfall: Live-DOM passt nicht zum Ausgangsstand (Blockzahl)', () => {
+  const { history, el } = makeHistory();
+  setHtml(el, '<p>a</p><p>b</p>');
+  history.pushNow();
+  setHtml(el, '<p>a</p><p>b!</p>');
+  history.pushNow();
+  // Fremde Mutation ohne Push (z.B. ein Werkzeug, das nichts meldet).
+  el.insertAdjacentHTML('beforeend', '<p>fremd</p>');
+  history.undo();
+  assert.equal(el.innerHTML, '<p>a</p><p>b</p>');
+});

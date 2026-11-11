@@ -84,3 +84,30 @@ test('Strg+Z nach dem Tippen setzt den Caret an die Einfügestelle, nicht an den
   // Nicht awaiten: nach Änderungen wartet cancelEdit auf den Verwerfen-Dialog.
   await page.evaluate(() => { window.__app.cancelEdit(); });
 });
+
+// Absatzgrenze: «Ende Absatz 1» und «Anfang Absatz 2» sind derselbe Text-Offset.
+// Undo einer Eingabe am Absatzanfang muss den Caret in DEN Absatz setzen, in
+// dem getippt wurde — nicht ans Ende des vorigen.
+test('Undo am Absatzanfang lässt den Caret im eigenen Absatz', async ({ page }) => {
+  await openPageInEdit(page, 1);
+  await caretToEnd(page);
+  await page.keyboard.press('Enter');
+  await page.keyboard.type('GRENZPROBE');
+  await page.waitForTimeout(650);           // eigener Schritt
+  await page.keyboard.press('Home');
+  await page.keyboard.type('X');
+  await page.keyboard.press('Control+z');
+  await expect(page.locator(EDIT_SEL)).not.toContainText('XGRENZPROBE');
+  const where = await page.evaluate(() => {
+    const s = getSelection();
+    const n = s.anchorNode;
+    const block = (n.nodeType === 1 ? n : n.parentElement).closest('p');
+    const r = document.createRange();
+    r.selectNodeContents(block);
+    r.setEnd(s.anchorNode, s.anchorOffset);
+    return { text: block?.textContent, offsetInBlock: r.toString().length };
+  });
+  expect(where).toEqual({ text: 'GRENZPROBE', offsetInBlock: 0 });
+  // Nicht awaiten: nach Änderungen wartet cancelEdit auf den Verwerfen-Dialog.
+  await page.evaluate(() => { window.__app.cancelEdit(); });
+});

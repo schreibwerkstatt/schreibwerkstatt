@@ -1,5 +1,7 @@
-// Undo/Redo-Kern für contenteditable-Editoren — Snapshot-Stack aus rohem
-// `innerHTML` plus Caret-Text-Offset, entprellt zu satzweisen Schritten.
+// Undo/Redo-Kern für contenteditable-Editoren — Snapshot-Stack aus dem rohen
+// HTML der Top-Level-Blöcke plus Caret-Text-Offset, entprellt zu satzweisen
+// Schritten. Restore tauscht nur die geänderten Blöcke (siehe «Blockweise
+// Momentaufnahmen»).
 //
 // Framework-frei und ohne Import: keine Alpine-Bindung, kein Host-Zugriff, kein
 // DOM-Modul. Konsumenten sind der Notebook-Editor (editor/notebook/history.js,
@@ -27,7 +29,11 @@
 //
 // Vertrag mit dem Aufrufer:
 //   getRoot()            → das contenteditable (oder null, wenn gerade keins da ist)
-//   mountHtml(el, html)  → HTML einhängen. Bewusst injiziert, nicht importiert:
+//   mountHtml(el, html)  → HTML einhängen — in den Editor (Rückfall: komplett)
+//                          ODER in einen losgelösten <div> mit den
+//                          auszutauschenden Blöcken (Normalfall). Die Pipeline
+//                          darf sich also nicht auf «el ist der Editor»
+//                          verlassen. Bewusst injiziert, nicht importiert:
 //                          der Notebook-Editor braucht die volle Mount-Pipeline
 //                          (Block-Normalisierung, Caret-Slot, atomare Chips),
 //                          die Standalone-Schale genau ihren eigenen Mount
@@ -181,6 +187,120 @@ function dispatchHistoryInput(el, inputType) {
   } catch { /* last-resort swallow */ }
 }
 
+// ── Blockweise Momentaufnahmen ────────────────────────────────────────────
+// Ein Snapshot hält das HTML als Liste seiner Top-Level-Kinder (`blocks`, je
+// `outerHTML`; reiner Leerraum zwischen Blöcken als eigener Eintrag). `html`
+// ist daraus abgeleitet. Zwei Gewinne:
+//   - Restore ersetzt nur die Blöcke, in denen sich Ausgangs- und Zielstand
+//     unterscheiden (restorePartial). Ein Undo ändert fast immer ein, zwei
+//     Absätze — ein komplettes Neu-Einhängen kostete auf einem 34K-Abschnitt
+//     Parse + Stil + Layout des ganzen Texts und riss alle Highlight-Ranges ab.
+//   - Unveränderte Blöcke teilen sich über alle Snapshots denselben String
+//     (shareBlocks), der Stack wächst je Schritt um die geänderten Blöcke statt
+//     um den ganzen Abschnitt (Bucheditor: eine Historie pro Seite).
+// Nicht blockweise darstellbar (Text-/Inline-Runs, Kommentare direkt unter der
+// Wurzel) → `blocks: null`, der Snapshot trägt `html`, Restore hängt komplett
+// neu ein wie zuvor.
+const WS_ONLY_RE = /^[ \t\n\r]*$/;
+
+function serializeBlocks(parent) {
+  const kids = parent.childNodes;
+  const out = new Array(kids.length);
+  for (let i = 0; i < kids.length; i++) {
+    const n = kids[i];
+    if (n.nodeType === 1) out[i] = n.outerHTML;
+    else if (n.nodeType === 3 && WS_ONLY_RE.test(n.nodeValue)) out[i] = n.nodeValue;
+    else return null;
+  }
+  return out;
+}
+
+// Gleiche Blöcke am Anfang/Ende auf die Strings des Vorgängers umbiegen — der
+// neue, inhaltsgleiche String wird damit frei.
+function shareBlocks(prev, next) {
+  if (!prev || !next) return next;
+  const { pre, suf } = commonAffix(prev, next, (i, j) => prev[i] === next[j]);
+  for (let i = 0; i < pre; i++) next[i] = prev[i];
+  for (let k = 1; k <= suf; k++) next[next.length - k] = prev[prev.length - k];
+  return next;
+}
+
+function makeSnap(blocks, html, caretOffset) {
+  if (!blocks) return { blocks: null, html: html ?? '', caretOffset };
+  return { blocks, caretOffset, get html() { return this.blocks.join(''); } };
+}
+
+// Blöcke eines nur als HTML vorliegenden Snapshots (Baseline, Rebase) — einmal
+// inert geparst und am Snapshot gemerkt.
+function blocksOf(snap, doc) {
+  if (snap.blocks) return snap.blocks;
+  if (snap._parsed !== undefined) return snap._parsed;
+  let blocks = null;
+  try {
+    const t = doc.createElement('template');
+    t.innerHTML = snap.html || '';
+    blocks = t.content ? serializeBlocks(t.content) : null;
+  } catch { blocks = null; }
+  snap._parsed = blocks;
+  return blocks;
+}
+
+function sameSnapContent(a, b) {
+  if (a.blocks && b.blocks) {
+    if (a.blocks.length !== b.blocks.length) return false;
+    for (let i = 0; i < a.blocks.length; i++) if (!sameContent(a.blocks[i], b.blocks[i])) return false;
+    return true;
+  }
+  return sameContent(a.html, b.html);
+}
+
+const textOfNodes = (nodes) => {
+  let t = '';
+  for (const n of nodes) t += n.textContent || '';
+  return t;
+};
+
+// Caret in eine Knotenfolge setzen: Text-Offset innerhalb dieser Knoten. Ohne
+// Textknoten (leerer Absatz `<p><br></p>`) an den Anfang des ersten Knotens —
+// genau das konnte der Offset ab Editor-Anfang nicht: er traf an einer
+// Absatzgrenze immer das Ende des vorigen Absatzes.
+function placeCaretInNodes(doc, nodes, offset) {
+  if (!nodes.length || !doc?.createRange) return;
+  try {
+    const range = doc.createRange();
+    if (typeof range.setStart !== 'function') return;
+    const showText = (typeof NodeFilter !== 'undefined' ? NodeFilter.SHOW_TEXT : 4);
+    let remaining = Math.max(0, offset);
+    let placed = false;
+    outer: for (const node of nodes) {
+      if (node.nodeType === 3) {
+        if (remaining <= node.nodeValue.length) { range.setStart(node, remaining); placed = true; break; }
+        remaining -= node.nodeValue.length;
+        continue;
+      }
+      const walker = doc.createTreeWalker(node, showText);
+      let t;
+      while ((t = walker.nextNode())) {
+        if (remaining <= t.nodeValue.length) { range.setStart(t, remaining); placed = true; break outer; }
+        remaining -= t.nodeValue.length;
+      }
+    }
+    if (!placed) {
+      const hasText = nodes.some(n => (n.textContent || '').length > 0);
+      if (hasText) { range.selectNodeContents(nodes[nodes.length - 1]); range.collapse(false); }
+      else if (nodes[0].nodeType === 1) range.setStart(nodes[0], 0);
+      else range.setStart(nodes[0], 0);
+    }
+    range.collapse(true);
+    const sel = doc.defaultView?.getSelection?.()
+      ?? (typeof document !== 'undefined' ? document.getSelection?.() : null);
+    if (sel?.removeAllRanges && sel?.addRange) {
+      sel.removeAllRanges();
+      sel.addRange(range);
+    }
+  } catch { /* Best-Effort wie restoreCaretAtOffset */ }
+}
+
 export function createEditHistory({
   getRoot,
   mountHtml,
@@ -218,26 +338,87 @@ export function createEditHistory({
     cancelTimer();
     const el = getRoot();
     if (!el) return;
-    const html = el.innerHTML;
     const top = stack[idx];
+    const blocks = shareBlocks(top?.blocks, serializeBlocks(el));
+    const snap = makeSnap(blocks, blocks ? null : el.innerHTML, null);
     // Dedupe gegen die Spitze; reine ID-Änderungen frischen sie nur auf, damit
     // ein Restore dorthin die IDs nicht wieder abzieht.
-    if (top && sameContent(top.html, html)) { top.html = html; return; }
+    if (top && sameSnapContent(top, snap)) {
+      snap.caretOffset = top.caretOffset;
+      stack[idx] = snap;
+      return;
+    }
     if (idx < stack.length - 1) stack.length = idx + 1;   // Redo-Ast abschneiden
-    stack.push({ html, caretOffset: captureCaretOffset(el) });
+    snap.caretOffset = captureCaretOffset(el);
+    stack.push(snap);
     if (stack.length > max) stack.splice(0, stack.length - max);
     idx = stack.length - 1;
     notify();
   }
 
-  function restore(snap, inputType) {
+  // Nur die Blöcke austauschen, in denen sich `from` (= Live-DOM) und `snap`
+  // unterscheiden. Die neuen Blöcke laufen in einem losgelösten Container durch
+  // dieselbe `mountHtml`-Pipeline; erst wenn das glatt ging, wird das Live-DOM
+  // angefasst. null = nicht anwendbar → Aufrufer hängt komplett neu ein.
+  function restorePartial(el, from, snap) {
+    const doc = el.ownerDocument;
+    if (!from || !doc) return null;
+    const a = blocksOf(from, doc);
+    const b = blocksOf(snap, doc);
+    if (!a || !b) return null;
+    const kids = el.childNodes;
+    // Live-DOM muss dem Ausgangsstand entsprechen, sonst trifft der Index nicht.
+    if (kids.length !== a.length) return null;
+    const { pre, suf } = commonAffix(a, b, (i, j) => sameContent(a[i], b[j]));
+    const insert = b.slice(pre, b.length - suf);
+    // Trennlinie als letzter Block: die Pipeline hängt dahinter einen
+    // Schreib-Absatz an (Caret-Slot) — das kann nur das komplette Einhängen.
+    if (suf === 0 && /^<hr[\s>]/i.test(b[b.length - 1] || '')) return null;
+    let nodes = [];
+    if (insert.length) {
+      const scratch = doc.createElement('div');
+      mountHtml(scratch, insert.join(''));
+      // Die Pipeline hat Blöcke ergänzt oder verschmolzen → nicht 1:1 tauschbar.
+      if (scratch.childNodes.length !== insert.length) return null;
+      nodes = Array.from(scratch.childNodes);
+    }
+    const removed = Array.prototype.slice.call(kids, pre, a.length - suf);
+    const after = kids[a.length - suf] ?? null;
+    const before = pre > 0 ? kids[pre - 1] : null;
+    const oldText = textOfNodes(removed);
+    for (const n of removed) n.remove();
+    for (const n of nodes) el.insertBefore(n, after);
+    return { nodes, oldText, after, before };
+  }
+
+  function restore(from, snap, inputType) {
     const el = getRoot();
     if (!el || !snap) return;
     applying = true;
     try {
-      const oldText = el.textContent || '';
-      mountHtml(el, snap.html || '');
-      restoreCaretAtOffset(el, changedCaretOffset(oldText, el.textContent || '', snap.caretOffset));
+      let part = null;
+      try { part = restorePartial(el, from, snap); } catch { part = null; }
+      if (part) {
+        const doc = el.ownerDocument;
+        const newText = textOfNodes(part.nodes);
+        if (!part.nodes.length) {
+          // Nur Blöcke entfernt: Caret an den Anfang des Nachfolgers bzw. ans
+          // Ende des Vorgängers — dorthin, wo die Blöcke standen.
+          if (part.after) placeCaretInNodes(doc, [part.after], 0);
+          else if (part.before) placeCaretInNodes(doc, [part.before], Infinity);
+        } else if (part.oldText === newText) {
+          restoreCaretAtOffset(el, snap.caretOffset);
+        } else {
+          // Ans Ende des geänderten Bereichs — innerhalb der getauschten Blöcke,
+          // damit eine Absatzgrenze nicht in den Vorgänger kippt.
+          placeCaretInNodes(doc, part.nodes,
+            newText.length - textAffix(part.oldText, newText).suf);
+        }
+      } else {
+        const oldText = el.textContent || '';
+        mountHtml(el, snap.html || '');
+        restoreCaretAtOffset(el, changedCaretOffset(oldText, el.textContent || '', snap.caretOffset));
+      }
       el.focus?.();
       if (typeof onRestored === 'function') {
         try { onRestored(el, snap); } catch { /* Aufrufer-Glue darf das Restore nicht kippen */ }
@@ -252,7 +433,7 @@ export function createEditHistory({
     // Baseline setzen — Session-Start bzw. Seitenwechsel. Historie ist pro Seite.
     reset(html) {
       cancelTimer();
-      stack = [{ html: html ?? '', caretOffset: 0 }];
+      stack = [makeSnap(null, html ?? '', 0)];
       idx = 0;
       applying = false;
       notify();
@@ -299,8 +480,9 @@ export function createEditHistory({
       // Ohne Container kein Restore — den Index dann auch nicht bewegen, sonst
       // zeigt er auf einen Stand, der nie eingehängt wurde.
       if (idx <= 0 || !getRoot()) return false;
+      const from = stack[idx];
       idx--;
-      restore(stack[idx], 'historyUndo');
+      restore(from, stack[idx], 'historyUndo');
       notify();
       return true;
     },
@@ -312,8 +494,9 @@ export function createEditHistory({
       // getippte Strecke, und die wäre nicht mehr herstellbar.
       if (timer) { cancelTimer(); pushNow(); }
       if (idx < 0 || idx >= stack.length - 1 || !getRoot()) return false;
+      const from = stack[idx];
       idx++;
-      restore(stack[idx], 'historyRedo');
+      restore(from, stack[idx], 'historyRedo');
       notify();
       return true;
     },
@@ -341,9 +524,10 @@ export function createEditHistory({
         // Gemerkter Caret mitwandern: Remote-Blöcke verschieben die Offsets.
         const caretOffset = stack[i].caretOffset == null ? stack[i].caretOffset
           : mapCaretOffset(textOf(stack[i].html), textOf(html), stack[i].caretOffset);
-        kept.unshift({ html, caretOffset });
+        kept.unshift(makeSnap(null, html, caretOffset));
       }
-      kept.push({ html: el.innerHTML, caretOffset: captureCaretOffset(el) });
+      const liveBlocks = serializeBlocks(el);
+      kept.push(makeSnap(liveBlocks, liveBlocks ? null : el.innerHTML, captureCaretOffset(el)));
       stack = [];
       for (const e of kept) {
         const top = stack[stack.length - 1];
