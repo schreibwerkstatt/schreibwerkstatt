@@ -66,11 +66,17 @@ test('ideen-board: Drag in eine leere Stufe — Spalten gleich breit, Bahnhoehe 
     const g = await card.locator('.idee-board-grip').boundingBox();
     await page.mouse.move(g.x + g.width / 2, g.y + g.height / 2);
     await page.mouse.down();
-    // Mehr als fallbackTolerance (5px), sonst startet der Zug nicht.
-    await page.mouse.move(g.x + g.width / 2 + 8, g.y + g.height / 2 + 14, { steps: 4 });
+    // Mehr als fallbackTolerance (5px), sonst startet der Zug nicht. Nur
+    // waagrecht: der Griff sitzt knapp unter der Bahn darueber, und die waechst
+    // beim Drag-Start als Drop-Zone nach unten — ein Zug nach unten laege
+    // schon in ihr.
+    await page.mouse.move(g.x + g.width / 2 + 8, g.y + g.height / 2, { steps: 4 });
     // Ziel erst nach dem Drag-Start messen: dann sind die Drop-Zonen aufgezogen.
+    // Direkt hinspringen, ohne Zwischenpunkte: ein interpolierter Weg streift
+    // fremde Bahnen, SortableJS setzt den Platzhalter dorthin, und das Raster
+    // verschiebt sich unter dem gemessenen Ziel.
     const t = await target.boundingBox();
-    await page.mouse.move(t.x + t.width / 2, t.y + 24, { steps: 10 });
+    await page.mouse.move(t.x + t.width / 2, t.y + 24);
     // Im Ziel braucht SortableJS noch ein paar Bewegungen, bis der Platzhalter
     // dorthin wechselt.
     for (let i = 1; i <= 5; i++) {
