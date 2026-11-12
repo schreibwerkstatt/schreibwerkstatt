@@ -9,6 +9,7 @@ import { resetFilterScopes, restoreFilterScopes } from '../../filter-persist.js'
 import { getDeviceId } from '../../device-id.js';
 import { EVT } from '../../events.js';
 import { settleShowLoads } from '../../cards/card-lifecycle.js';
+import { startViewSwitch, endViewSwitch, isViewSwitchVisible } from '../view-switch.js';
 import { KONTINUITAET_FILTER_DEFAULTS, KONTINUITAET_VIEW_DEFAULTS } from '../../book/kontinuitaet-view.js';
 
 // Filterleisten der Katalog-Karten. Sie leben in `Alpine.store('catalogUi')` und
@@ -42,15 +43,33 @@ export const FILTER_SCOPES = [
 // geladen einblendet statt leer mit nachspringenden Kacheln. Solange zeigt der
 // Browser den alten Stand eingefroren — deshalb der Deckel.
 const SHOW_LOAD_WAIT_MS = 250;
-export async function _withCardTransition(ctx, apply) {
-  if (typeof document === 'undefined' || typeof document.startViewTransition !== 'function') {
+// `switchToken` (app/view-switch.js): der Kartenwechsel-Indikator geht IM
+// Callback aus, vor dem neuen Snapshot — sonst nähme der Cross-Fade die neue
+// Karte gedimmt auf und hellte sie danach sichtbar auf.
+//
+// Steht der Indikator schon (langsamer Wechsel, meist ein kalter Mount), läuft
+// KEIN Cross-Fade: während des Transition-Callbacks malt der Browser gar nicht,
+// auch der Compositor nicht — Spinner und Balken frören ein, und genau in dieser
+// Phase (Rendern der neuen Karte) sähe die App wieder tot aus (gemessen am
+// Prod-Buch: ~1 s Standbild). Der User hat das Signal ja schon; die Karte
+// blendet über ihr eigenes `cardFadeIn` ein.
+export async function _withCardTransition(ctx, apply, { switchToken = null } = {}) {
+  if (typeof document === 'undefined' || typeof document.startViewTransition !== 'function'
+      || isViewSwitchVisible()) {
     await apply();
+    // Im selben Tick wie der Flag-Wechsel: die neue Karte rendert ungedimmt.
+    endViewSwitch(switchToken);
+    await ctx.$nextTick?.();
     return;
   }
   const run = async () => {
-    await apply();
-    await ctx.$nextTick?.();
-    await settleShowLoads(SHOW_LOAD_WAIT_MS);
+    try {
+      await apply();
+      await ctx.$nextTick?.();
+      await settleShowLoads(SHOW_LOAD_WAIT_MS);
+    } finally {
+      endViewSwitch(switchToken);
+    }
     await ctx.$nextTick?.();
   };
   const vt = document.startViewTransition(run);
@@ -79,12 +98,8 @@ export async function _toggleCardGeneric(entry, opts = {}) {
       window.dispatchEvent(new CustomEvent(EVT.CARD_REFRESH, { detail: { name: entry.refreshName || entry.key } }));
       if (!opts.skipCardScroll) this._scrollToCardByKey(entry.key);
     } else {
-      // Schliessen = derselbe Weg wie das `x` im Karten-Header (`closeCard`):
-      // zurueck auf die Buchuebersicht statt auf eine leere Spalte. Ohne
-      // letzte Seite zu restaurieren — der User wollte die Karte weg, nicht
-      // in den Editor.
-      await _withCardTransition(this, () => { this[entry.flag] = false; });
-      await this._maybeOpenBookOverview({ restoreLastPage: false });
+      // Schliessen = derselbe Weg wie das `x` im Karten-Header (`closeCard`).
+      await this.closeCard(entry.key);
     }
     return;
   }
@@ -102,12 +117,20 @@ export async function _toggleCardGeneric(entry, opts = {}) {
   // aus, `#titel` im Roman kam bisher trotzdem durch.
   if (!matchesRequiredBuchtyp(entry, this.currentBuchtyp?.())) return;
   // Partial VOR der Transition laden — Netzwerk gehört nicht in den
-  // View-Transition-Callback (der friert das Rendering ein).
-  if (entry.partial) await this._ensurePartial(entry.partial);
-  await _withCardTransition(this, () => {
-    this._closeOtherMainCards(entry.key);
-    this[entry.flag] = true;
-  });
+  // View-Transition-Callback (der friert das Rendering ein). Der Indikator
+  // (app/view-switch.js) läuft ab hier, bis der Cross-Fade die neue Karte hat.
+  const sw = await startViewSwitch([entry.partial]);
+  try {
+    // Partial nicht ladbar (Netz weg): nicht umschalten — sonst schlösse der
+    // Wechsel die alte Ansicht und zeigte eine leere Karten-Hülle.
+    if (entry.partial && !(await this._ensurePartial(entry.partial))) return;
+    await _withCardTransition(this, () => {
+      this._closeOtherMainCards(entry.key);
+      this[entry.flag] = true;
+    }, { switchToken: sw });
+  } finally {
+    endViewSwitch(sw);
+  }
   if (!opts.skipCardScroll) this._scrollToCardByKey(entry.key);
   if (entry.auditEvent) this.logAuditEvent?.(entry.auditEvent, { book: this.$store.nav.selectedBookId });
   if (entry.loadDeps?.length) {
@@ -136,4 +159,5 @@ for (const entry of EXCLUSIVE_CARDS) {
 // Reset-Logik beim Buch-/Seitenwechsel. Buchebenen-Features und Editor sind
 // gegenseitig exklusiv (siehe CLAUDE.md-Regel "Feature-Toggle").
 
+export { startViewSwitch, endViewSwitch };
 export { EVT, EXCLUSIVE_CARDS, clearDraft, computeTodayRing, computeWeekBars, computeWritingStreak, contentRepo, decorateMentions, escHtml, fetchJson, fetchJsonRetry, getDeviceId, getLastPageId, htmlToText, readDraft, resetFilterScopes, restoreFilterScopes, setLastPageId };

@@ -1,5 +1,5 @@
 // Teil von appViewMethods (siehe Facade app-view.js).
-import { EVT, _withCardTransition, clearDraft, contentRepo, decorateMentions, escHtml, fetchJson, getDeviceId, htmlToText, readDraft, setLastPageId } from './_shared.js';
+import { EVT, _withCardTransition, clearDraft, endViewSwitch, startViewSwitch, contentRepo, decorateMentions, escHtml, fetchJson, getDeviceId, htmlToText, readDraft, setLastPageId } from './_shared.js';
 import { lsSet, lsRemove } from '../../safe-storage.js';
 
 // Wie lange `selectPage` aus einer anderen Karte auf den Seiteninhalt wartet,
@@ -65,38 +65,42 @@ export const pageMethods = {
     // Editor + Sub-Partials parallel laden. Sub-Karten (toolbar, find, synonyme,
     // figur-lookup, focus) sind Geschwister-Partials, keine nested children —
     // werden vom Cascade-Helper deshalb nicht automatisch mitgezogen.
-    await Promise.all([
-      this._ensurePartial('editor-notebook'),
-      this._ensurePartial('editor-toolbar'),
-      this._ensurePartial('editor-find'),
-      this._ensurePartial('editor-figur-lookup'),
-      this._ensurePartial('editor-synonyme'),
-      this._ensurePartial('editor-focus'),
-      prefetch && Promise.race([prefetch.promise, new Promise(r => setTimeout(r, PREFETCH_WAIT_MS))]),
-    ]);
-    // Während der Awaits wurde ein anderer Abschnitt gewählt: dessen Aufruf
-    // besitzt die Ansicht.
-    if (seq !== this._selectPageSeq) return;
-    // Exklusivität (bei `deferClose` die erste Runde, sonst die zweite): die
-    // Awaits oben sind Netz-Fetches und können bei schlechter Verbindung hängen.
-    // In dieser Zeit kann ein parallel laufender Landing-Pfad
-    // (`_maybeOpenBookOverview`) eine Buchkarte geöffnet haben — ohne diesen
-    // Re-Assert stünden Übersicht und Editor gleichzeitig offen. `resetPage`
-    // nur, wenn er oben nicht schon lief: ein zweiter Lauf würde die gerade
-    // aufgebaute Editor-Session wieder abräumen.
-    // `_loadCurrentPageContent` wendet einen schon eingetroffenen Prefetch
-    // synchron an — Umschalten und Inhalt landen im selben Render.
+    const partials = ['editor-notebook', 'editor-toolbar', 'editor-find', 'editor-figur-lookup', 'editor-synonyme', 'editor-focus'];
+    // Kartenwechsel-Indikator (app/view-switch.js) nur, wenn die alte Ansicht
+    // stehen bleibt (`deferClose`); Swap dimmt selbst, Edit/Fokus bauen sofort ab.
+    // Start NACH dem Prefetch-Anstoss: der Seiten-Fetch läuft während des Paint-Yields.
+    const sw = deferClose ? await startViewSwitch(partials) : null;
     let loaded;
-    const flip = () => {
-      this._closeOtherMainCards(null, { resetPage: deferClose });
-      this.currentPage = p;
-      if (keepIdeen) this.asideSlot = 'ideen';
-      this.showEditorCard = true;
-      this.analysisOut = '';
-      loaded = this._loadCurrentPageContent(p, { prefetch });
-    };
-    if (deferClose) await _withCardTransition(this, flip);
-    else flip();
+    try {
+      await Promise.all([
+        ...partials.map(n => this._ensurePartial(n)),
+        prefetch && Promise.race([prefetch.promise, new Promise(r => setTimeout(r, PREFETCH_WAIT_MS))]),
+      ]);
+      // Während der Awaits wurde ein anderer Abschnitt gewählt: dessen Aufruf
+      // besitzt die Ansicht.
+      if (seq !== this._selectPageSeq) return;
+      // Exklusivität (bei `deferClose` die erste Runde, sonst die zweite): die
+      // Awaits oben sind Netz-Fetches und können bei schlechter Verbindung hängen.
+      // In dieser Zeit kann ein parallel laufender Landing-Pfad
+      // (`_maybeOpenBookOverview`) eine Buchkarte geöffnet haben — ohne diesen
+      // Re-Assert stünden Übersicht und Editor gleichzeitig offen. `resetPage`
+      // nur, wenn er oben nicht schon lief: ein zweiter Lauf würde die gerade
+      // aufgebaute Editor-Session wieder abräumen.
+      // `_loadCurrentPageContent` wendet einen schon eingetroffenen Prefetch
+      // synchron an — Umschalten und Inhalt landen im selben Render.
+      const flip = () => {
+        this._closeOtherMainCards(null, { resetPage: deferClose });
+        this.currentPage = p;
+        if (keepIdeen) this.asideSlot = 'ideen';
+        this.showEditorCard = true;
+        this.analysisOut = '';
+        loaded = this._loadCurrentPageContent(p, { prefetch });
+      };
+      if (deferClose) await _withCardTransition(this, flip, { switchToken: sw });
+      else flip();
+    } finally {
+      endViewSwitch(sw);
+    }
     if (!skipCardScroll) this.$nextTick(() => this._scrollToEditorCard());
 
     if (typeof this._trackPageUsage === 'function' && this.$store.nav.selectedBookId) {

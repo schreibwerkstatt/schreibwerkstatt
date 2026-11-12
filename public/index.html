@@ -658,7 +658,8 @@
 <div class="layout-sidebar" x-show="hasSidebar" x-cloak>
   <div id="partial-sidebar"></div>
 </div><!-- end layout-sidebar -->
-<div class="layout-main" id="main-content" tabindex="-1">
+<div class="layout-main" id="main-content" tabindex="-1"
+     :class="{ 'is-view-switching': $store.shell.viewSwitching }" :aria-busy="$store.shell.viewSwitching ? 'true' : null">
 <div id="partial-admin-home"></div>
 <div id="partial-bookoverview"></div>
 <div id="partial-buchreview"></div>

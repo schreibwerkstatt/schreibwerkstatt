@@ -30,6 +30,8 @@
    `overflow-x: auto` der Kinder greifen. */
 .layout-main {
   min-width: 0;
+  /* Kantenlänge des Kartenwechsel-Spinners (unten, `.is-view-switching`). */
+  --view-switch-spinner: 40px;
 }
 
 /* Mobile (einspaltig): Sidebar/Tree stapelt sich ueber den Karten. Beim Oeffnen
@@ -156,6 +158,74 @@ body.col-resizing {
 }
 body.col-resizing iframe {
   pointer-events: none;
+}
+
+/* Kartenwechsel-Indikator (app/view-switch.js, `$store.shell.viewSwitching`):
+   drei Signale, damit der Klick sichtbar „angenommen" ist — auch im Dark-Theme,
+   wo leichtes Dimmen auf dunklem Grund untergeht (gemessen: 0.75 kaum sichtbar):
+   - alte Ansicht deutlich gedimmt und klick-gesperrt,
+   - Spinner mittig in der Hauptspalte (sticky, scrollt nicht weg),
+   - Balken am oberen Fensterrand in Akzentfarbe.
+   Kein Opacity-Übergang beim Einblenden: der Zustand wird direkt vor einem
+   blockierenden Mount gemalt, eine Transition stünde dort auf ihrem ersten
+   Frame. Spinner und Balken animieren nur `transform` — das läuft im
+   Compositor weiter, während der Main-Thread die neue Karte aufbaut. */
+.layout-main.is-view-switching > * {
+  opacity: var(--opacity-muted);
+  pointer-events: none;
+}
+/* Spinner: erstes Kind der Hauptspalte, sticky in Bildmitte; die negative
+   Unterkante hebt seine Höhe auf (kein Layout-Sprung der Ansicht darunter). */
+.layout-main.is-view-switching::before {
+  content: '';
+  display: block;
+  position: sticky;
+  inset-block-start: calc(45vh - var(--view-switch-spinner) / 2);
+  z-index: var(--z-sticky);
+  inline-size: var(--view-switch-spinner);
+  block-size: var(--view-switch-spinner);
+  margin-inline: auto;
+  margin-block-end: calc(-1 * var(--view-switch-spinner));
+  box-sizing: border-box;
+  border: var(--space-xs) solid var(--color-border);
+  border-block-start-color: var(--color-accent);
+  border-radius: 50%;
+  background: var(--color-surface);
+  box-shadow: var(--shadow-md);
+  pointer-events: none;
+  will-change: transform;
+  animation: viewSwitchSpin 0.8s linear infinite;
+}
+.layout-main.is-view-switching::after {
+  content: '';
+  position: fixed;
+  inset-block-start: 0;
+  inset-inline-start: 0;
+  inline-size: 40vw;
+  block-size: var(--space-xs);
+  background: var(--color-accent);
+  box-shadow: 0 0 var(--space-sm) var(--color-accent);
+  z-index: var(--z-banner);
+  pointer-events: none;
+  will-change: transform;
+  animation: viewSwitchSlide 1.1s linear infinite;
+}
+@keyframes viewSwitchSpin {
+  to { transform: rotate(360deg); }
+}
+/* Start halb im Bild: der erste gemalte Frame zeigt den Balken schon (bei
+   -100% kroch er die ersten ~300 ms unsichtbar herein). */
+@keyframes viewSwitchSlide {
+  from { transform: translateX(-50%); }
+  to   { transform: translateX(250%); }
+}
+/* Ohne Bewegung: stehender, voller Balken statt eines eingefrorenen Endbilds;
+   der Spinner bleibt als Ring mit Akzentbogen stehen (statisches Signal). */
+@media (prefers-reduced-motion: reduce) {
+  .layout-main.is-view-switching::after {
+    animation: none;
+    inline-size: 100vw;
+  }
 }
 
 }

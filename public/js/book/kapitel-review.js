@@ -1,6 +1,6 @@
 // Root-seitige Einstiegspunkte für die Kapitel-Bewertung (Sidebar + Hash-Router).
 // Job-Flow, Render, State + History leben in Alpine.data('kapitelReviewCard').
-import { _withCardTransition } from '../app/app-view/_shared.js';
+import { _withCardTransition, endViewSwitch, startViewSwitch } from '../app/app-view/_shared.js';
 
 // Stabiler Leerwert fuer den Memo-Schluessel (ein frisches `{}` je Aufruf brach ihn).
 const NO_STATS = Object.freeze({});
@@ -19,11 +19,16 @@ export const kapitelReviewMethods = {
     // Partial VOR dem Umschalten laden und Schliessen + Öffnen in einem Schritt
     // (wie `_toggleCardGeneric`): sonst stünde die Spalte zwischen dem Schliessen
     // der alten Karte und dem Partial-Load leer.
-    await this._ensurePartial('kapitelreview');
-    await _withCardTransition(this, () => {
-      this._closeOtherMainCards('kapitelReview');
-      this.showKapitelReviewCard = true;
-    });
+    const sw = await startViewSwitch(['kapitelreview']);
+    try {
+      if (!(await this._ensurePartial('kapitelreview'))) return;
+      await _withCardTransition(this, () => {
+        this._closeOtherMainCards('kapitelReview');
+        this.showKapitelReviewCard = true;
+      }, { switchToken: sw });
+    } finally {
+      endViewSwitch(sw);
+    }
     this._scrollToCardByKey('kapitelReview');
   },
 

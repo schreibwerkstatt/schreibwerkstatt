@@ -1,5 +1,5 @@
 // Teil von appViewMethods (siehe Facade app-view.js).
-import { EVT, EXCLUSIVE_CARDS, _toggleCardGeneric, _withCardTransition, fetchJson, generatedToggles, getLastPageId } from './_shared.js';
+import { EVT, EXCLUSIVE_CARDS, _toggleCardGeneric, _withCardTransition, endViewSwitch, fetchJson, generatedToggles, getLastPageId, startViewSwitch } from './_shared.js';
 import { openCardWith, CARD_REQUEST } from '../../cards/card-request.js';
 
 export const cardsMethods = {
@@ -33,8 +33,34 @@ export const cardsMethods = {
   async closeCard(key) {
     const entry = EXCLUSIVE_CARDS.find(c => c.key === key);
     if (!entry || !this[entry.flag]) return;
-    await _withCardTransition(this, () => { this[entry.flag] = false; });
-    await this._maybeOpenBookOverview({ restoreLastPage: false });
+    // Indikator bis die Übersicht steht (deren Partial ist evtl. noch kalt).
+    const sw = await startViewSwitch(['bookoverview']);
+    try {
+      await _withCardTransition(this, () => { this[entry.flag] = false; });
+      await this._maybeOpenBookOverview({ restoreLastPage: false });
+    } finally {
+      endViewSwitch(sw);
+    }
+  },
+
+  // Sprung in eine exklusive Hauptkarte ohne Toggle (Indikator-Sprünge):
+  // `beforeShow` läuft nach dem Partial-Load und vor dem Sichtbar-Schalten
+  // (Filter-Events, die der Lifecycle-Load beim Öffnen schon lesen soll).
+  async _jumpToMainCard(key, partial, beforeShow = null) {
+    const entry = EXCLUSIVE_CARDS.find(c => c.key === key);
+    if (!entry) return;
+    const sw = await startViewSwitch([partial]);
+    try {
+      if (!(await this._ensurePartial(partial))) return;
+      beforeShow?.();
+      if (!this[entry.flag]) {
+        this._closeOtherMainCards(key);
+        this[entry.flag] = true;
+      }
+      this._scrollToCardByKey(key);
+    } finally {
+      endViewSwitch(sw);
+    }
   },
 
 
@@ -197,15 +223,10 @@ export const cardsMethods = {
   async openRechercheForPage(pageId) {
     const pid = parseInt(pageId ?? this.currentPage?.id, 10);
     if (!pid) return;
-    await this._ensurePartial('recherche');
     // Filter-Event VOR dem Sichtbar-Schalten: bei frischem Öffnen liest der
     // Lifecycle-Load (rising edge) den schon gesetzten Filter → ein Fetch.
-    window.dispatchEvent(new CustomEvent(EVT.RECHERCHE_FILTER_PAGE, { detail: { pageId: pid } }));
-    if (!this.showRechercheCard) {
-      this._closeOtherMainCards('recherche');
-      this.showRechercheCard = true;
-    }
-    this._scrollToCardByKey('recherche');
+    await this._jumpToMainCard('recherche', 'recherche', () =>
+      window.dispatchEvent(new CustomEvent(EVT.RECHERCHE_FILTER_PAGE, { detail: { pageId: pid } })));
   },
 
   // Sprung vom Kapitel-Indikator im Pagetree: Recherche-Karte öffnen und auf die
@@ -213,25 +234,15 @@ export const cardsMethods = {
   async openRechercheForChapter(chapterId) {
     const cid = parseInt(chapterId, 10);
     if (!cid) return;
-    await this._ensurePartial('recherche');
-    window.dispatchEvent(new CustomEvent(EVT.RECHERCHE_FILTER_CHAPTER, { detail: { chapterId: cid } }));
-    if (!this.showRechercheCard) {
-      this._closeOtherMainCards('recherche');
-      this.showRechercheCard = true;
-    }
-    this._scrollToCardByKey('recherche');
+    await this._jumpToMainCard('recherche', 'recherche', () =>
+      window.dispatchEvent(new CustomEvent(EVT.RECHERCHE_FILTER_CHAPTER, { detail: { chapterId: cid } })));
   },
 
   // Sprung vom Plot-Indikator (Editor-Action-Menü + Kapitelansicht): Plot-
   // Werkstatt öffnen. Das Board ist buchweit (kein Seiten-/Kapitel-Filter) →
   // reines Öffnen, kein Toggle.
   async openPlotBoard() {
-    await this._ensurePartial('plot');
-    if (!this.showPlotCard) {
-      this._closeOtherMainCards('plot');
-      this.showPlotCard = true;
-    }
-    this._scrollToCardByKey('plot');
+    await this._jumpToMainCard('plot', 'plot');
   },
 
   // Sprung vom Ideen-Indikator im Pagetree: Seite öffnen (Page-Ideen sitzen im

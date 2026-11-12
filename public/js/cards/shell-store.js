@@ -21,6 +21,8 @@
 //   updateAvailable — neuer Service-Worker wartet; Banner bietet Reload an.
 //   updateRequired  — Server-Protokoll ist neuer als die Shell (shell-protocol.js);
 //                   das Update ist Pflicht, das Banner sagt es so.
+//   viewSwitching   — Kartenwechsel läuft (alte Ansicht gedimmt, Balken oben);
+//                   geschaltet ausschliesslich von app/view-switch.js.
 //   bossScreenActive— Chef-Taste (F9 im Seiten-Editor): schwarzer Vollbild-Vorhang.
 //   themePref       — Theme-Wahl ('auto'|'light'|'dark'), in localStorage gespiegelt.
 //   uiLocale        — UI-Sprache ('de'|'en'); Quelle für t()/tRaw() + Date-Locale.
@@ -48,6 +50,7 @@ export function registerShellStore() {
     appReady: false,
     updateAvailable: false,
     updateRequired: false,
+    viewSwitching: false,
     bossScreenActive: false,
     themePref: 'auto',
     uiLocale: '',
