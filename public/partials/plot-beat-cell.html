@@ -7,7 +7,12 @@
      Handler bleibt pro Board-Datei (flach vs. Zelle unterscheiden sich dort).
      WICHTIG: in diesem Kommentar nie die Marker-Delimiter ausschreiben — der
      Resolver wuerde sie erneut expandieren und der innere Delimiter beendet
-     diesen Kommentar vorzeitig (Doku-Text leckt sichtbar in jede Beat-Karte). -->
+     diesen Kommentar vorzeitig (Doku-Text leckt sichtbar in jede Beat-Karte).
+     Optionale Teile (Warn-Badge, Intensität, Anker, Zeit-Befund, Beschreibung,
+     Meta-Zeile, Ideen, Beziehungen) stehen auf x-if, nicht x-show: die Karte
+     wird je Beat geklont, und bei den meisten Beats sind diese Teile leer. Mit
+     x-show baute jede Karte sie trotzdem samt Bindings auf (119 statt 72 Knoten
+     je Karte; Filter leeren bei 333 Beats 700 statt 440 ms). -->
 <!-- Ansicht -->
 <template x-if="editingBeatId !== beat.id">
   <div class="plot-beat-view">
@@ -25,98 +30,112 @@
       <!-- Titel = Bearbeiten-Einstieg, darum ein echter Button (Tab + Enter). -->
       <button type="button" class="plot-beat-title" @click="startEditBeat(beat)" x-text="beat.titel"></button>
       <!-- Konsistenz-Warn-Badge: zeigt, dass der aktive Prüflauf diesen Beat beanstandet -->
-      <button type="button" class="plot-beat-warn" :class="'plot-beat-warn--' + befundSeverityTone(beatTopSeverity(beat))"
-              x-show="consistencyResult && beatKonflikte(beat).length"
-              @click.stop="focusKonfliktForBeat(beat)"
-              :data-tip="beatKonflikteTip(beat)" :aria-label="$app.t('plot.beat.konfliktBadge')">
-        <svg class="icon" aria-hidden="true"><use href="/icons.svg#alert-triangle"/></svg>
-      </button>
-      <span class="plot-beat-intensity" x-show="beat.intensitaet"
-            :data-tip="$app.t('plot.beat.intensitaet') + ': ' + beat.intensitaet + '/5'"
-            :aria-label="$app.t('plot.beat.intensitaet') + ': ' + beat.intensitaet + '/5'">
-        <template x-for="lvl in intensitaetScale()" :key="lvl">
-          <span class="plot-beat-intensity-pip" :class="{ 'plot-beat-intensity-pip--on': lvl <= (beat.intensitaet || 0) }"></span>
-        </template>
-      </span>
+      <template x-if="consistencyResult && beatKonflikte(beat).length">
+        <button type="button" class="plot-beat-warn" :class="'plot-beat-warn--' + befundSeverityTone(beatTopSeverity(beat))"
+                @click.stop="focusKonfliktForBeat(beat)"
+                :data-tip="beatKonflikteTip(beat)" :aria-label="$app.t('plot.beat.konfliktBadge')">
+          <svg class="icon" aria-hidden="true"><use href="/icons.svg#alert-triangle"/></svg>
+        </button>
+      </template>
+      <template x-if="beat.intensitaet">
+        <span class="plot-beat-intensity"
+              :data-tip="$app.t('plot.beat.intensitaet') + ': ' + beat.intensitaet + '/5'"
+              :aria-label="$app.t('plot.beat.intensitaet') + ': ' + beat.intensitaet + '/5'">
+          <template x-for="lvl in intensitaetScale()" :key="lvl">
+            <span class="plot-beat-intensity-pip" :class="{ 'plot-beat-intensity-pip--on': lvl <= (beat.intensitaet || 0) }"></span>
+          </template>
+        </span>
+      </template>
       <!-- Verankerungs-Badge (Soll status vs. Ist-Fundstellen aus der semantischen
            Suche). Nur „im Buch"-Beats werden verankert: 'confirmed' zeigt die
            Fundstellen-Zahl und öffnet bei Klick das Fundstellen-Popover (Liste →
            Sprung zur Textstelle); 'drift' (im_buch ohne Fund) warnt — ohne Popup,
            darum kein Button, sondern eine reine Plakette (role=img).
            'none' (geplant/verworfen) rendert nichts. -->
-      <button type="button" class="plot-beat-anchor" :class="'plot-beat-anchor--' + beatAnchorState(beat)"
-              x-show="beatAnchorState(beat) !== 'none' && beat.occ_count"
-              @click.stop="_rememberMenuTrigger($event); openBeatOccPopover($event, beat)"
-              aria-haspopup="menu" :aria-expanded="beatOccPopoverBeatId === beat.id"
-              :data-tip="beatAnchorTip(beat)" :aria-label="beatAnchorTip(beat)"
-              x-text="beat.occ_count"></button>
-      <span class="plot-beat-anchor plot-beat-anchor--drift" role="img"
-            x-show="beatAnchorState(beat) === 'drift'"
-            :data-tip="beatAnchorTip(beat)" :aria-label="beatAnchorTip(beat)"><span aria-hidden="true">!</span></span>
+      <template x-if="beatAnchorState(beat) !== 'none' && beat.occ_count">
+        <button type="button" class="plot-beat-anchor" :class="'plot-beat-anchor--' + beatAnchorState(beat)"
+                @click.stop="_rememberMenuTrigger($event); openBeatOccPopover($event, beat)"
+                aria-haspopup="menu" :aria-expanded="beatOccPopoverBeatId === beat.id"
+                :data-tip="beatAnchorTip(beat)" :aria-label="beatAnchorTip(beat)"
+                x-text="beat.occ_count"></button>
+      </template>
+      <template x-if="beatAnchorState(beat) === 'drift'">
+        <span class="plot-beat-anchor plot-beat-anchor--drift" role="img"
+              :data-tip="beatAnchorTip(beat)" :aria-label="beatAnchorTip(beat)"><span aria-hidden="true">!</span></span>
+      </template>
       <!-- Zeit-Messung an der Karte: Befunde dieses Beats (Liste bleibt im Panel
            unter dem Board), Ton = schwerster Befund. -->
-      <span class="plot-beat-anchor plot-beat-timecheck" role="img" :class="beatTimeCheckClass(beat)"
-            x-show="beatTimeChecks(beat).length"
-            :data-tip="beatTimeCheckTip(beat)" :aria-label="beatTimeCheckTip(beat)"><svg class="icon" aria-hidden="true"><use href="/icons.svg#calendar"/></svg></span>
-    </div>
-    <p class="plot-beat-desc" x-show="beat.beschreibung" x-text="beat.beschreibung"></p>
-    <div class="plot-beat-meta" x-show="beat.chapter_name || beat.zeit || (beat.fig_ids && beat.fig_ids.length) || (beat.draft_fig_ids && beat.draft_fig_ids.length) || (beat.motifs && beat.motifs.length) || (beat.locations && beat.locations.length) || inheritedChapterForBeat(beat) || inheritedFigureForBeat(beat)">
-      <button type="button" class="entity-ref" x-show="beat.chapter_name"
-              x-entity-ref="{ type: 'kapitel', id: beat.chapter_id, name: beat.chapter_name }"></button>
-      <!-- Live-Vererbung Strang → Beat (nie auf den Beat geschrieben): Kapitel des
-           Strangs, solange der Beat kein eigenes hat; Hauptfigur des Strangs, sofern
-           nicht schon explizit verlinkt. Gestrichelt = „geerbt". -->
-      <template x-if="inheritedChapterForBeat(beat)">
-        <button type="button" class="entity-ref"
-                x-entity-ref="{ type: 'kapitel', name: inheritedChapterForBeat(beat), inherited: true, title: $app.t('plot.beat.inheritedChapter') }"></button>
-      </template>
-      <template x-if="inheritedFigureForBeat(beat)">
-        <button type="button" class="entity-ref"
-                x-entity-ref="{ type: inheritedFigureForBeat(beat).kind === 'catalog' ? 'figur' : 'werkstatt', id: inheritedFigureForBeat(beat).id, label: inheritedFigureForBeat(beat).label, inherited: true, title: $app.t('plot.beat.inheritedFigure') }"></button>
-      </template>
-      <!-- Erzaehlte Zeit (Freitext). Keine Referenz: sie zeigt auf kein Objekt,
-           sondern ist eine Angabe ueber die Welt — die Pruefung dagegen laeuft
-           in der Zeit-Messung (lib/plot-time-consistency.js). -->
-      <span class="tag tag--zeit" x-show="beat.zeit"
-            :class="{ 'tag--zeit-unklar': zeitVerstanden(beat)?.ok === false }"
-            :data-tip="beatZeitTip(beat)"
-            x-text="beat.zeit"></span>
-      <!-- Alter der Strang-Figur zur Beat-Zeit (Steckbrief-Geburtsjahr) — eine
-           Angabe, kein Befund. -->
-      <span class="tag tag--alter" x-show="beatAlter(beat)" :data-tip="beatAlter(beat)?.tip"
-            x-text="beatAlter(beat)?.text"></span>
-      <template x-for="lo in (beat.locations || [])" :key="'l' + lo.id">
-        <button type="button" class="entity-ref" x-entity-ref="{ type: 'ort', id: lo.id, label: lo.name }"></button>
-      </template>
-      <template x-for="figId in (beat.fig_ids || [])" :key="figId">
-        <button type="button" class="entity-ref" x-entity-ref="{ type: 'figur', id: figId }"></button>
-      </template>
-      <template x-for="dfId in (beat.draft_fig_ids || [])" :key="'d' + dfId">
-        <button type="button" class="entity-ref"
-                x-entity-ref="{ type: 'werkstatt', id: dfId, label: draftFigurenById.get(dfId)?.name }"></button>
-      </template>
-      <!-- Motive (read-only): Soll-Verknüpfung aus der Motiv-Werkstatt (motif_beats).
-           Kuratiert wird sie dort; Klick springt in die Motiv-Werkstatt zum Motiv. -->
-      <template x-for="mo in (beat.motifs || [])" :key="'m' + mo.id">
-        <button type="button" class="entity-ref" x-entity-ref="{ type: 'motiv', id: mo.id, label: mo.name }"></button>
+      <template x-if="beatTimeChecks(beat).length">
+        <span class="plot-beat-anchor plot-beat-timecheck" role="img" :class="beatTimeCheckClass(beat)"
+              :data-tip="beatTimeCheckTip(beat)" :aria-label="beatTimeCheckTip(beat)"><svg class="icon" aria-hidden="true"><use href="/icons.svg#calendar"/></svg></span>
       </template>
     </div>
+    <template x-if="beat.beschreibung">
+      <p class="plot-beat-desc" x-text="beat.beschreibung"></p>
+    </template>
+    <template x-if="beat.chapter_name || beat.zeit || (beat.fig_ids && beat.fig_ids.length) || (beat.draft_fig_ids && beat.draft_fig_ids.length) || (beat.motifs && beat.motifs.length) || (beat.locations && beat.locations.length) || inheritedChapterForBeat(beat) || inheritedFigureForBeat(beat)">
+      <div class="plot-beat-meta">
+        <button type="button" class="entity-ref" x-show="beat.chapter_name"
+                x-entity-ref="{ type: 'kapitel', id: beat.chapter_id, name: beat.chapter_name }"></button>
+        <!-- Live-Vererbung Strang → Beat (nie auf den Beat geschrieben): Kapitel des
+             Strangs, solange der Beat kein eigenes hat; Hauptfigur des Strangs, sofern
+             nicht schon explizit verlinkt. Gestrichelt = „geerbt". -->
+        <template x-if="inheritedChapterForBeat(beat)">
+          <button type="button" class="entity-ref"
+                  x-entity-ref="{ type: 'kapitel', name: inheritedChapterForBeat(beat), inherited: true, title: $app.t('plot.beat.inheritedChapter') }"></button>
+        </template>
+        <template x-if="inheritedFigureForBeat(beat)">
+          <button type="button" class="entity-ref"
+                  x-entity-ref="{ type: inheritedFigureForBeat(beat).kind === 'catalog' ? 'figur' : 'werkstatt', id: inheritedFigureForBeat(beat).id, label: inheritedFigureForBeat(beat).label, inherited: true, title: $app.t('plot.beat.inheritedFigure') }"></button>
+        </template>
+        <!-- Erzaehlte Zeit (Freitext). Keine Referenz: sie zeigt auf kein Objekt,
+             sondern ist eine Angabe ueber die Welt — die Pruefung dagegen laeuft
+             in der Zeit-Messung (lib/plot-time-consistency.js). -->
+        <span class="tag tag--zeit" x-show="beat.zeit"
+              :class="{ 'tag--zeit-unklar': zeitVerstanden(beat)?.ok === false }"
+              :data-tip="beatZeitTip(beat)"
+              x-text="beat.zeit"></span>
+        <!-- Alter der Strang-Figur zur Beat-Zeit (Steckbrief-Geburtsjahr) — eine
+             Angabe, kein Befund. -->
+        <span class="tag tag--alter" x-show="beatAlter(beat)" :data-tip="beatAlter(beat)?.tip"
+              x-text="beatAlter(beat)?.text"></span>
+        <template x-for="lo in (beat.locations || [])" :key="'l' + lo.id">
+          <button type="button" class="entity-ref" x-entity-ref="{ type: 'ort', id: lo.id, label: lo.name }"></button>
+        </template>
+        <template x-for="figId in (beat.fig_ids || [])" :key="figId">
+          <button type="button" class="entity-ref" x-entity-ref="{ type: 'figur', id: figId }"></button>
+        </template>
+        <template x-for="dfId in (beat.draft_fig_ids || [])" :key="'d' + dfId">
+          <button type="button" class="entity-ref"
+                  x-entity-ref="{ type: 'werkstatt', id: dfId, label: draftFigurenById.get(dfId)?.name }"></button>
+        </template>
+        <!-- Motive (read-only): Soll-Verknüpfung aus der Motiv-Werkstatt (motif_beats).
+             Kuratiert wird sie dort; Klick springt in die Motiv-Werkstatt zum Motiv. -->
+        <template x-for="mo in (beat.motifs || [])" :key="'m' + mo.id">
+          <button type="button" class="entity-ref" x-entity-ref="{ type: 'motiv', id: mo.id, label: mo.name }"></button>
+        </template>
+      </div>
+    </template>
     <!-- Ideen-Referenzen: eigene Pendenzen, die an diesem Beat haengen. Read-only
          (gesetzt wird die Kante auf der Ideen-Seite) — gleiche Bauart wie die
          Motiv-Referenzen darueber. -->
-    <div x-data="{ ideaOwnerId: beat.id }"><!-- @include ideen-backlinks --></div>
+    <template x-if="ideasFor(beat.id).length">
+      <div x-data="{ ideaOwnerId: beat.id }"><!-- @include ideen-backlinks --></div>
+    </template>
 
     <!-- Beat-zu-Beat-Beziehungen (ausgehend): Kausal-/Setup-Payoff-Kanten, read-only.
          Klick springt zum Ziel-Beat (scrollToBeat). Kuratiert wird im Bearbeiten-Modus. -->
-    <div class="plot-beat-rels" x-show="beatRelationsOut(beat).length">
-      <template x-for="rel in beatRelationsOut(beat)" :key="rel.id">
-        <span class="plot-beat-rel">
-          <span class="plot-beat-rel-typ" x-text="relTypeLabel(rel.typ)"></span>
-          <button type="button" class="entity-ref"
-                  x-entity-ref="{ type: 'beat', id: rel.to_beat_id, label: relTargetTitle(rel), onOpen: () => scrollToBeat(rel.to_beat_id) }"></button>
-        </span>
-      </template>
-    </div>
+    <template x-if="beatRelationsOut(beat).length">
+      <div class="plot-beat-rels">
+        <template x-for="rel in beatRelationsOut(beat)" :key="rel.id">
+          <span class="plot-beat-rel">
+            <span class="plot-beat-rel-typ" x-text="relTypeLabel(rel.typ)"></span>
+            <button type="button" class="entity-ref"
+                    x-entity-ref="{ type: 'beat', id: rel.to_beat_id, label: relTargetTitle(rel), onOpen: () => scrollToBeat(rel.to_beat_id) }"></button>
+          </span>
+        </template>
+      </div>
+    </template>
   </div>
 </template>
 
