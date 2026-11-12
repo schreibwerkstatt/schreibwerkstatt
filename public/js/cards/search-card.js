@@ -12,6 +12,7 @@ import { tRaw, tErrorRaw } from '../i18n.js';
 import { searchOfflineBook } from '../shared/offline-search.js';
 import { isBrowserOffline, isOfflineRejection } from '../app/boot/net-required.js';
 import { activateSearchHit } from './search-hit.js';
+import { EVT } from '../events.js';
 
 const DEBOUNCE_MS = 220;
 // Volltext-Treffer pro Seite; weitere über «Mehr laden» (Server meldet `more`).
@@ -94,20 +95,20 @@ export function registerSearchCard() {
         },
         onViewReset: () => this.resetSearch(),
         extraListeners: [{
-          type: 'card:refresh',
+          type: EVT.CARD_REFRESH,
           // Tab-Rueckkehr: Treffer stehen lassen — ein neuer Lauf verwirft die
           // per „Mehr laden" nachgeholten Seiten.
           handler: (e) => { if (e?.detail?.name === 'search' && !isWakeRefresh(e)) this.runSearch(); },
         }, {
           // Palette «Alle Treffer in der Suche» (openSearchWithQuery).
-          type: 'search:query',
+          type: EVT.SEARCH_QUERY,
           handler: (e) => {
             const d = e?.detail;
             if (d?.q) this.runQuery(d.q, d.kinds);
           },
         }, {
           // Root/Entity-Karten stossen „ähnliche Stellen zu X" an (findSimilar).
-          type: 'search:similar',
+          type: EVT.SEARCH_SIMILAR,
           handler: (e) => {
             const d = e?.detail;
             if (d?.kind && d?.id) this.runSimilarToEntity(d.kind, d.id, d.label || '');

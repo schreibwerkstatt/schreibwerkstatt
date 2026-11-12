@@ -76,7 +76,7 @@ export function registerShareLinksCard() {
         },
         timerKeys: ['_pollTimer'],
         extraListeners: [
-          { type: 'share:prefill', handler: (e) => {
+          { type: EVT.SHARE_PREFILL, handler: (e) => {
               const d = e?.detail || {};
               if (d.kind === 'page') {
                 this.createKind = 'page';

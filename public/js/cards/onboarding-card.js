@@ -4,6 +4,7 @@
 // tatsaechlichen State (GET /me/onboarding) — kein Klick-Zaehler. Bietet zusaetzlich
 // den One-Click-Import eines gemeinfreien Beispielbuchs.
 import { setupCardLifecycle } from './card-lifecycle.js';
+import { EVT } from '../events.js';
 
 // Reihenfolge = Anzeige-Reihenfolge. `action` steuert die CTA des offenen Schritts.
 const STEP_KEYS = ['book', 'page', 'analysis', 'share'];
@@ -25,7 +26,7 @@ export function registerOnboardingCard() {
         showNeedsBookId: false,
         onShow: () => this.loadOnboarding(),
         extraListeners: [
-          { type: 'card:refresh', handler: (e) => { if (e?.detail?.name === 'onboarding') this.loadOnboarding(); } },
+          { type: EVT.CARD_REFRESH, handler: (e) => { if (e?.detail?.name === 'onboarding') this.loadOnboarding(); } },
         ],
       });
     },

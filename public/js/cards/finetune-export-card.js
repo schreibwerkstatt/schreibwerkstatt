@@ -23,6 +23,7 @@ import { DEFAULT_FINETUNE_PROFILE_ID, finetuneProfileById, exportOptions } from 
 import { createCardJobFeature } from './job-feature-card.js';
 import { setupCardLifecycle } from './card-lifecycle.js';
 import { runningJobStatus } from './job-helpers.js';
+import { EVT } from '../events.js';
 
 export function registerFinetuneExportCard() {
   if (typeof window === 'undefined' || !window.Alpine) return;
@@ -100,7 +101,7 @@ export function registerFinetuneExportCard() {
           finetuneRelCheck: { conflicts: [], mainCount: 0 },
           _finetuneAllowConflicts: false,
         },
-        extraListeners: [{ type: 'job:reconnect', handler: onJobReconnect }],
+        extraListeners: [{ type: EVT.JOB_RECONNECT, handler: onJobReconnect }],
       });
     },
 

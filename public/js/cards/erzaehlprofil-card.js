@@ -8,6 +8,7 @@ import { erzaehlprofilMethods } from '../book/erzaehlprofil.js';
 import { createCardJobFeature } from './job-feature-card.js';
 import { setupCardLifecycle } from './card-lifecycle.js';
 import { runningJobStatus } from './job-helpers.js';
+import { EVT } from '../events.js';
 
 export function registerErzaehlprofilCard() {
   if (typeof window === 'undefined' || !window.Alpine) return;
@@ -45,7 +46,7 @@ export function registerErzaehlprofilCard() {
           erzaehlprofilProgress: 0,
           erzaehlprofilStatus: '',
         },
-        extraListeners: [{ type: 'job:reconnect', handler: onJobReconnect }],
+        extraListeners: [{ type: EVT.JOB_RECONNECT, handler: onJobReconnect }],
       });
     },
 

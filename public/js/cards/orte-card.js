@@ -22,6 +22,7 @@ import { plotBacklinkMethods } from '../book/plot-backlinks.js';
 import { listWindowState, listWindowMethods } from '../list-window.js';
 import { entityMergePickerState, entityMergePickerResetState, entityMergePickerMethods } from '../book/entity-merge-picker.js';
 import { compareText } from '../i18n.js';
+import { EVT } from '../events.js';
 
 export function registerOrteCard() {
   if (typeof window === 'undefined' || !window.Alpine) return;
@@ -118,8 +119,8 @@ export function registerOrteCard() {
         extraListeners: [
           // Buchwechsel: Map verwerfen + auf Liste zuruecksetzen — neues Buch ist
           // evtl. nicht orte_real, und Marker-Daten stammen vom alten Buch.
-          { type: 'book:changed', handler: () => { this._teardownMap(); this.ortEdit = closedOrtEdit(); if (this.viewMode === 'map') this.viewMode = 'list'; } },
-          { type: 'view:reset', handler: () => { this._teardownMap(); if (this.viewMode === 'map') this.viewMode = 'list'; } },
+          { type: EVT.BOOK_CHANGED, handler: () => { this._teardownMap(); this.ortEdit = closedOrtEdit(); if (this.viewMode === 'map') this.viewMode = 'list'; } },
+          { type: EVT.VIEW_RESET, handler: () => { this._teardownMap(); if (this.viewMode === 'map') this.viewMode = 'list'; } },
         ],
       });
     },

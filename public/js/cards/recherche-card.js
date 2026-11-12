@@ -196,8 +196,8 @@ export function registerRechercheCard() {
         // Tab-Rueckkehr: still; das Status-Board (Sortables) nur bei neuen Daten neu binden.
         wake: async () => { if (await this.loadRecherche({ silent: true })) await this._ensureStatusBoard(); },
         extraListeners: [
-          { type: 'recherche:filter-page', handler: (e) => this.filterToLinked('page', e.detail?.pageId) },
-          { type: 'recherche:filter-chapter', handler: (e) => this.filterToLinked('chapter', e.detail?.chapterId) },
+          { type: EVT.RECHERCHE_FILTER_PAGE, handler: (e) => this.filterToLinked('page', e.detail?.pageId) },
+          { type: EVT.RECHERCHE_FILTER_CHAPTER, handler: (e) => this.filterToLinked('chapter', e.detail?.chapterId) },
           // Deep-Link-Permalink #book/X/recherche/<itemId>: Hash-Router dispatcht das
           // Event; _focusRechercheItemById öffnet das Item (bzw. merkt es bis zum Load vor).
           { type: EVT.RECHERCHE_FOCUS_ITEM, handler: (e) => this._focusRechercheItemById(e.detail?.itemId) },

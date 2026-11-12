@@ -105,7 +105,7 @@ export function registerBookOrganizerCard() {
           Object.assign(ctx, freshState());
         },
         extraListeners: [
-          { type: 'pages:loaded', handler: async () => {
+          { type: EVT.PAGES_LOADED, handler: async () => {
             if (!window.__app.showBookOrganizerCard) return;
             await loadSortable();
             await this._rerender();

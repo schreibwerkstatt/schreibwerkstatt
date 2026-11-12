@@ -8,6 +8,7 @@
 import { titelwerkstattMethods } from '../book/titelwerkstatt.js';
 import { setupCardLifecycle } from './card-lifecycle.js';
 import { HEADLINE_FIELDS } from '../headline/channels.js';
+import { EVT } from '../events.js';
 
 // Filterleiste pro Buch im localStorage (siehe public/js/filter-persist.js).
 // Die beiden Felder stehen weiterhin in `freshState()` (Regel „State explizit
@@ -64,7 +65,7 @@ export function registerTitelwerkstattCard() {
         onCardRefresh: async (e, ctx) => { await ctx.loadTitelwerkstatt(); },
         extraListeners: [
           // Reconnect eines laufenden Varianten-Jobs nach Reload/Tab-Wechsel.
-          { type: 'job:reconnect', handler: (e) => {
+          { type: EVT.JOB_RECONNECT, handler: (e) => {
             if (e.detail?.type !== 'headline-variants') return;
             const pageId = parseInt(String(e.detail.job?.entityId || '').replace(/^p/, ''));
             if (!pageId) return;

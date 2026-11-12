@@ -19,7 +19,7 @@
 export const EVT = {
   // ── Job-Queue ───────────────────────────────────────────────────────────
   JOB_ENQUEUED: 'job:enqueued',                 // detail: { type, jobId, job, extra? }
-  JOB_FINISHED: 'job:finished',                 // detail: { type, jobId, status }
+  JOB_FINISHED: 'job:finished',                 // detail: { type, jobId, job, dedupId, bookId }
   JOB_RECONNECT: 'job:reconnect',               // detail: { type, jobId, job, extra? }
 
   // ── Karten-Lifecycle / Navigation-Signale ───────────────────────────────
@@ -27,7 +27,7 @@ export const EVT = {
   // Zentral konsumiert von cards/card-lifecycle.js (Single Chokepoint).
   BOOK_CHANGED: 'book:changed',                 // kein detail
   VIEW_RESET: 'view:reset',                     // kein detail
-  CARD_REFRESH: 'card:refresh',                 // detail: { name }
+  CARD_REFRESH: 'card:refresh',                 // detail: { name, source? } — source 'wake' = Tab-Rückkehr
   BOOK_SETTINGS_UPDATED: 'book:settings:updated', // detail: { bookId }
   // Wunsch an eine Karte (Reiter, Session; cards/card-request.js).
   CARD_REQUEST: 'card:request',                 // detail: { key } (Wert liegt im Modul)
@@ -158,7 +158,7 @@ export const EVT = {
   RECHERCHE_FILTER_PAGE: 'recherche:filter-page',         // detail: { pageId }
   RECHERCHE_FILTER_CHAPTER: 'recherche:filter-chapter',   // detail: { chapterId }
   RECHERCHE_FOCUS_ITEM: 'recherche:focus-item',           // detail: { itemId }
-  BOOK_STATS_SELECT: 'book-stats:select',                 // detail: { metric }
+  BOOK_STATS_SELECT: 'book-stats:select',                 // detail: { metric, range }
   SHARE_PREFILL: 'share:prefill',                         // detail: { scope, id }
 
   // ── Export-Presets ───────────────────────────────────────────────────────

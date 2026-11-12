@@ -9,6 +9,7 @@ import { attachFullscreenSync } from '../fullscreen.js';
 import { observeThemeChange } from '../graph-kit.js';
 import { ideenBacklinkMethods } from '../book/ideen-backlinks.js';
 import { actionMenuState, actionMenuMethods } from '../action-menu.js';
+import { EVT } from '../events.js';
 
 export function registerMotivCard() {
   if (typeof window === 'undefined' || !window.Alpine) return;
@@ -224,7 +225,7 @@ export function registerMotivCard() {
         },
         onCardRefresh: () => this.loadBoard(),
         wake: () => this.loadBoard({ silent: true }),
-        extraListeners: [{ type: 'motiv:select', handler: onSelectMotif }],
+        extraListeners: [{ type: EVT.MOTIV_SELECT, handler: onSelectMotif }],
       });
 
       this.motivDetailTab = this._readDetailTab();

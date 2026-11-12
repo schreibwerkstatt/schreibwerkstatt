@@ -11,6 +11,7 @@ import { renderReviewHtml, bookReviewAxesFor } from '../book/review.js';
 import { escHtml, renderStars, noteTip } from '../utils.js';
 import { createCardJobFeature } from './job-feature-card.js';
 import { setupCardLifecycle } from './card-lifecycle.js';
+import { EVT } from '../events.js';
 
 export function registerBookReviewCard() {
   if (typeof window === 'undefined' || !window.Alpine) return;
@@ -57,8 +58,8 @@ export function registerBookReviewCard() {
           selectedBookReviewId: null,
         },
         extraListeners: [
-          { type: 'job:reconnect', handler: onJobReconnect },
-          { type: 'card:refresh', handler: onCardRefreshHistory },
+          { type: EVT.JOB_RECONNECT, handler: onJobReconnect },
+          { type: EVT.CARD_REFRESH, handler: onCardRefreshHistory },
         ],
       });
     },

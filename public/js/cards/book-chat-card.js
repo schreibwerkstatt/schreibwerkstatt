@@ -50,7 +50,7 @@ export function registerBookChatCard() {
         onBookChanged: () => this.resetBookChat(),
         onViewReset: () => this.resetBookChat(),
         extraListeners: [
-          { type: 'book-chat:reset', handler: () => this.resetBookChat() },
+          { type: EVT.BOOK_CHAT_RESET, handler: () => this.resetBookChat() },
           { type: EVT.CARD_REQUEST, handler: (e) => {
             if (e.detail?.key !== CARD_REQUEST.BOOK_CHAT_DRAFT || !this._bookChatShown) return;
             const text = takeCardRequest(CARD_REQUEST.BOOK_CHAT_DRAFT);

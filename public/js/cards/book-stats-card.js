@@ -7,6 +7,7 @@
 import { bookstatsMethods, _destroyStatsChart, _disconnectThemeObserver } from '../book/bookstats.js';
 import { setupCardLifecycle } from './card-lifecycle.js';
 import { getUserPref, setUserPref } from '../local-prefs.js';
+import { EVT } from '../events.js';
 
 const METRIC_PREF_KEY = 'bookStatsMetric';
 const METRIC_DEFAULT = 'chars';
@@ -81,7 +82,7 @@ export function registerBookStatsCard() {
           ctx.statusHistoryData = null;
           _destroyStatsChart();
         },
-        extraListeners: [{ type: 'book-stats:select', handler: onSelect }],
+        extraListeners: [{ type: EVT.BOOK_STATS_SELECT, handler: onSelect }],
       });
 
       // Chart beim Ausblenden der Karte zerstoeren, damit Chart.js'

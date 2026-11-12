@@ -90,7 +90,9 @@ test('events.js: Registry vorhanden, Werte eindeutig, Keys SCREAMING_SNAKE', () 
 // REGEL 1b: Keine String-Literal-Events in Dispatch/Listen-Calls
 // ───────────────────────────────────────────────────────────
 test('Event-Bus: keine String-Literale in CustomEvent/addEventListener/removeEventListener', () => {
-  const callRe = /(new CustomEvent|addEventListener|removeEventListener)\(\s*(['"])([^'"]+)\2/g;
+  // `type: '…'` deckt die `extraListeners` von setupCardLifecycle ab — der Helper
+  // ruft addEventListener mit dem Wert, das Literal stuende sonst ausserhalb des Gates.
+  const callRe = /(new CustomEvent\(|addEventListener\(|removeEventListener\(|\btype:)\s*(['"])([^'"]+)\2/g;
   const violations = [];
   for (const file of walk(JS_DIR, '.js')) {
     if (file === EVENTS_FILE) continue;

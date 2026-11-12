@@ -77,7 +77,7 @@ export function registerChatCard() {
         onBookChanged: () => this.resetChat(),
         onViewReset: () => this.resetChat(),
         extraListeners: [
-          { type: 'chat:reset', handler: () => this.resetChat() },
+          { type: EVT.CHAT_RESET, handler: () => this.resetChat() },
           { type: EVT.CARD_REQUEST, handler: (e) => {
             if (!this._chatShown) return;
             if (e.detail?.key === CARD_REQUEST.PAGE_CHAT_SESSION) {

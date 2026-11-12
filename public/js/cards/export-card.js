@@ -3,6 +3,7 @@
 
 import { exportMethods } from '../book/export.js';
 import { setupCardLifecycle } from './card-lifecycle.js';
+import { EVT } from '../events.js';
 
 export function registerExportCard() {
   if (typeof window === 'undefined' || !window.Alpine) return;
@@ -36,7 +37,7 @@ export function registerExportCard() {
           migrateWerk: true,
         },
         extraListeners: [
-          { type: 'export:preset', handler: (e) => this._applyExportPreset(e.detail) },
+          { type: EVT.EXPORT_PRESET, handler: (e) => this._applyExportPreset(e.detail) },
         ],
       });
       this.$watch(() => this.exportScope, () => this._ensurePicked());

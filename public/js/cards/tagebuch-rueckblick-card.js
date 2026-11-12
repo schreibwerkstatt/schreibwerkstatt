@@ -12,6 +12,7 @@ import { tagebuchRueckblickMethods } from '../book/tagebuch-rueckblick.js';
 import { createCardJobFeature } from './job-feature-card.js';
 import { setupCardLifecycle } from './card-lifecycle.js';
 import { runningJobStatus } from './job-helpers.js';
+import { EVT } from '../events.js';
 
 export function registerTagebuchRueckblickCard() {
   if (typeof window === 'undefined' || !window.Alpine) return;
@@ -91,8 +92,8 @@ export function registerTagebuchRueckblickCard() {
           rbBeleg: { key: null, label: '', belege: [] },
         },
         extraListeners: [
-          { type: 'job:reconnect', handler: onJobReconnect },
-          { type: 'rueckblick:select', handler: onRueckblickSelect },
+          { type: EVT.JOB_RECONNECT, handler: onJobReconnect },
+          { type: EVT.RUECKBLICK_SELECT, handler: onRueckblickSelect },
         ],
       });
 

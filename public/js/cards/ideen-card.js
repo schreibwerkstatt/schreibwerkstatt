@@ -75,7 +75,6 @@ export function registerIdeenCard() {
         onBookChanged: () => this.resetIdeen(),
         onViewReset: () => this.resetIdeen(),
         extraListeners: [
-          { type: 'ideen:reset', handler: () => this.resetIdeen() },
           { type: EVT.IDEEN_STAGES_CHANGED, handler: (e) => this._onStagesChanged(e) },
           { type: EVT.CARD_REQUEST, handler: (e) => {
             if (e.detail?.key === CARD_REQUEST.IDEEN_QUOTE && window.__app.showIdeenCard) this._takeIdeenQuote();

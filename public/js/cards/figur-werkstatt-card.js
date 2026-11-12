@@ -10,6 +10,7 @@ import { isSaveShortcut } from '../utils/keys.js';
 import { ideenBacklinkMethods } from '../book/ideen-backlinks.js';
 import { pickerPopoverState, pickerPopoverMethods } from '../picker-popover.js';
 import { actionMenuState, actionMenuMethods } from '../action-menu.js';
+import { EVT } from '../events.js';
 
 export function registerFigurWerkstattCard() {
   if (typeof window === 'undefined' || !window.Alpine) return;
@@ -210,7 +211,7 @@ export function registerFigurWerkstattCard() {
             e.returnValue = '';
           },
         }, {
-          type: 'figur-werkstatt:select',
+          type: EVT.FIGUR_WERKSTATT_SELECT,
           handler: onSelectDraft,
         }],
       });

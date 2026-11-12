@@ -14,6 +14,7 @@ import { memoMethods } from './card-memo.js';
 import { tileFormatMethods } from './tile-format.js';
 import { kapitelDashboardMethods, initialKapitelDashboardState } from './kapitel-dashboard.js';
 import { lsSet } from '../safe-storage.js';
+import { EVT } from '../events.js';
 
 function emptySlot() {
   return { loading: false, progress: 0, status: '', out: '', jobId: null, pollTimer: null };
@@ -110,8 +111,8 @@ export function registerKapitelReviewCard() {
         },
         onViewReset:   (e, ctx) => reset(ctx),
         extraListeners: [
-          { type: 'job:reconnect',         handler: onJobReconnect },
-          { type: 'job:finished',          handler: onJobFinished },
+          { type: EVT.JOB_RECONNECT,         handler: onJobReconnect },
+          { type: EVT.JOB_FINISHED,          handler: onJobFinished },
         ],
       });
     },
