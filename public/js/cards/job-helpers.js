@@ -34,14 +34,19 @@ function syncJobQueueItem(job) {
 // Generischer Job-Poller. `ctx` ist das Komponenten-Objekt (Root oder Card),
 // in dessen Feldern `timerProp` und `progressProp` geschrieben wird.
 //
-// config: { timerProp, jobId, lsKey?, progressProp?, progressTarget?, intervalMs?,
-//           onProgress, onNotFound, onError, onDone }
+// config: { timerProp, timerTarget?, jobId, lsKey?, progressProp?, progressTarget?,
+//           intervalMs?, onProgress, onNotFound, onError, onDone }
+// timerTarget: optionales Objekt, in dem der Timer-Handle unter `timerProp`
+//   liegt (Default `ctx`). Für mehrere gleichzeitige Polls derselben Art, z. B.
+//   den Lektorat-Check pro Abschnitt (`_checkPollTimers[pageId]`) — statt
+//   dynamischer Felder am Komponenten-Objekt.
 // progressTarget: optionales Objekt, in das `progressProp` geschrieben wird
 //   (Default `ctx`). Nötig, wenn die Progress-Property in einem Alpine.store
 //   statt am Komponenten-`ctx` liegt (z. B. Komplettanalyse → $store.jobs).
 // intervalMs: Default 2000. PDF-Export fährt 1000 für schnelleres UI-Feedback.
 export function startPoll(ctx, config) {
-  if (ctx[config.timerProp]) clearInterval(ctx[config.timerProp]);
+  const holder = config.timerTarget || ctx;
+  if (holder[config.timerProp]) clearInterval(holder[config.timerProp]);
   // `setInterval` wartet nicht auf den async-Body. Bei langsamem Storage/Netz
   // (z.B. Ceph-RBD-Stall) liegen mehrere Ticks gleichzeitig in-flight, ihre
   // fetches wurden vor dem `clearInterval` dispatcht → `onDone`/`onError`
@@ -56,7 +61,7 @@ export function startPoll(ctx, config) {
   // denselben timerProp übernommen, darf ein noch fliegender Tick weder
   // onProgress/onDone ausführen (Ergebnis des alten Buchs in der neuen Karte)
   // noch den Handle/lsKey des Nachfolgers wegräumen.
-  const owned = () => ctx[config.timerProp] === timer;
+  const owned = () => holder[config.timerProp] === timer;
   const detach = () => {
     done = true;
     clearInterval(timer);
@@ -66,7 +71,7 @@ export function startPoll(ctx, config) {
     const mine = owned();
     detach();
     if (!mine) return;
-    ctx[config.timerProp] = null;
+    holder[config.timerProp] = null;
     if (config.lsKey) lsRemove(config.lsKey);
   };
   // true = dieser Poller ist abgelöst/abgeräumt → still aussteigen.
@@ -118,7 +123,7 @@ export function startPoll(ctx, config) {
     skipped = 0;
     tick();
   }, config.intervalMs || 2000);
-  ctx[config.timerProp] = timer;
+  holder[config.timerProp] = timer;
   // Push-Pfad: Fortschritt direkt aus dem Stream-Snapshot (ohne `result`);
   // Terminal-Status und Reconnect (`null`) laufen über einen normalen Tick, der
   // das Ergebnis holt — so bleibt der Terminal-Pfad oben der einzige.

@@ -29,6 +29,7 @@ export const appInitMethods = {
     this._abortCtrl?.abort();
     if (this.$store.jobs._jobQueueTimer) clearInterval(this.$store.jobs._jobQueueTimer);
     if (this._statusTimer) clearTimeout(this._statusTimer);
+    for (const t of Object.values(this._checkPollTimers || {})) if (t) clearInterval(t);
     if (this._treeCatchUpTimer) { clearTimeout(this._treeCatchUpTimer); this._treeCatchUpTimer = null; }
     if (typeof this._teardownStatsObserver === 'function') this._teardownStatsObserver();
   },

@@ -15,15 +15,19 @@
 //   3. Durchgestrichene (~~migrierte~~) Zeilen duerfen NICHT mehr gespreadet
 //      werden — sonst behauptet die Doku eine Migration, die nicht stattfand.
 //
-// Die Feld-Inhalte pro Zeile bleiben Prosa (Gruppierungen, Kommentare,
-// Begruendungen) und sind nicht gegated — die Slice-Identitaet ist der Anker,
-// an dem die Doku bisher gerissen ist.
+//   4. Feld-Inventar: jedes Feld eines Slices (und jeder Fremd-Spread wie
+//      `...actionMenuState()`) steht mit seinem vollen Namen in der Zeile
+//      seines Slices. Gruppierungen und Begruendungen bleiben Prosa — aber
+//      ein Feld, das in keiner Zeile auftaucht, ist fuer Leser unsichtbar.
 
 import { test } from 'node:test';
 import { strict as assert } from 'node:assert';
 import { readFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { createRequire } from 'node:module';
+
+const ts = createRequire(import.meta.url)('typescript');
 
 const ROOT = resolve(fileURLToPath(import.meta.url), '..', '..', '..');
 const DOC = join(ROOT, 'docs', 'state-modell.md');
@@ -106,5 +110,52 @@ test('state-modell.md: keine lebende Tabellenzeile ohne Code-Slice', () => {
     stale, [],
     `Slice-Tabelle listet Slices, die app-state.js nicht mehr spreadet: ${stale.join(', ')}. `
     + 'Migrierten Slice ~~durchstreichen~~ + neues Zuhause nennen, nicht als lebenden Slice stehen lassen.'
+  );
+});
+
+/** Felder je Slice-Funktion: { sliceName: [feld | 'spread:fooState'] }. */
+function codeSliceFields(src) {
+  const sf = ts.createSourceFile(STATE, src, ts.ScriptTarget.Latest, true);
+  const unwrap = (e) => { while (e && ts.isParenthesizedExpression(e)) e = e.expression; return e; };
+  const out = {};
+  for (const st of sf.statements) {
+    if (!ts.isVariableStatement(st)) continue;
+    for (const d of st.declarationList.declarations) {
+      const init = d.initializer;
+      if (!init || !ts.isArrowFunction(init) || !ts.isIdentifier(d.name)) continue;
+      let body = unwrap(init.body);
+      if (body && ts.isBlock(body)) body = unwrap(body.statements.find(ts.isReturnStatement)?.expression);
+      if (!body || !ts.isObjectLiteralExpression(body)) continue;
+      out[d.name.text] = body.properties.map(p => ts.isSpreadAssignment(p)
+        ? 'spread:' + p.expression.getText().replace(/\(.*$/, '')
+        : p.name.getText());
+    }
+  }
+  return out;
+}
+
+/** Text der lebenden Tabellenzeile eines Slices. */
+function docRow(md, slice) {
+  return md.split('\n').find(l => l.startsWith('|') && !l.includes('~~')
+    && (l.split('|')[1] || '').includes('`' + slice + '`')) || '';
+}
+
+test('state-modell.md: jedes Slice-Feld steht in der Zeile seines Slices', () => {
+  const fields = codeSliceFields(src);
+  const missing = [];
+  for (const slice of slices) {
+    const row = docRow(md, slice);
+    for (const f of fields[slice] || []) {
+      const name = f.startsWith('spread:') ? f.slice(7) : f;
+      // Karten-Sichtbarkeit: Inventar ist EXCLUSIVE_CARDS (feature-registry.js),
+      // die Zeile nennt sie summarisch als `showXxxCard`-Flags.
+      if (slice === 'cardsState' && /^show\w+Card$/.test(name)) continue;
+      const re = new RegExp(`(^|[^\\w$])${name.replace(/\$/g, '\\$')}(?![\\w$])`);
+      if (!re.test(row)) missing.push(`${slice}.${name}`);
+    }
+  }
+  assert.deepEqual(
+    missing, [],
+    `Felder ohne Nennung in ihrer Slice-Zeile (vollen Feldnamen in die Zeile, Kurzformen wie a/B/C zaehlen nicht):\n  ${missing.join('\n  ')}`
   );
 });

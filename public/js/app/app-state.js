@@ -452,34 +452,34 @@ const lektoratState = () => ({
   tokEsts: {},
   _tokenEstGen: 0,
   pageLastChecked: {},
-  treeEditFilter: false, // Seitenbaum: nur unfertige Abschnitte (tree/edit-status.js)
+  // Lektorat-Check-Polls pro Abschnitt: pageId → Interval-Handle (startPoll mit
+  // `timerTarget`), damit ein Seitenwechsel den Poll der Ursprungsseite nicht
+  // abreisst. Ein abgeschlossener Poll setzt seinen Eintrag auf null.
+  _checkPollTimers: {},
   // Buchweite Badge-Count-Maps (ideenCounts, chapterIdeenCounts, rechercheCounts,
   // chapterRechercheCounts, plotBeatCounts, chapterPlotBeatCounts,
   // shareCommentCounts, shareLinkCounts) leben in Alpine.store('badges')
   // (cards/badges-store.js) und werden direkt via $store.badges / this.$store.badges
   // bzw. Alpine.store('badges') gelesen (kein Root-Proxy). Die abgeleiteten
   // currentPage*Count-Skalare der offenen Seite bleiben hier (page-/currentPage-gebunden).
-  // Scope der aktuell offenen Ideen-Karte: 'page' (neben Editor) oder
-  // 'chapter' (neben Kapitelreview). ideenChapterId nur in 'chapter'-Modus
-  // gesetzt. currentPageIdeenOpenCount/currentChapterIdeenOpenCount halten die
-  // Badge-Counts fuer den jeweiligen Toggle-Button.
-  ideenScope: 'page',
-  ideenChapterId: null,
-  currentChapterIdeenOpenCount: 0,
   showTokLegend: false,
   tokLegendPos: { x: 0, y: 0 },
   tokTooltipData: null,
   showPageStatusTip: false,
   pageStatusTipPos: { x: 0, y: 0 },
   pageStatusTipLines: [],
-  // Lektorat-Check-Polls werden per-pageId gehalten (`_checkPollTimer_<id>`),
-  // damit ein Seitenwechsel den Poll der Ursprungsseite nicht abreisst.
   // IntersectionObserver-basiertes Lazy-Loading der Token-Estimates für die
   // Sidebar (Server-Endpoint `/sync/page-stats/:bookId`). Refs hier, damit
   // _resetBookScopedState() / destroy() sauber aufräumen können.
   _statsObserver: null,
   _statsObserverMutation: null,
   _statsObserverState: null,
+});
+
+// Seitenbaum-Pflege, die nicht Navigation ist: der Stand-Filter der Sidebar und
+// der leise Nachzug des Baums nach fremden Struktur-Änderungen.
+const treeState = () => ({
+  treeEditFilter: false, // Seitenbaum: nur unfertige Abschnitte (tree/edit-status.js)
   // Leiser Nachzug des Seitenbaums (book/tree/catchup.js): Entprell-Timer, Re-Entry-
   // Guard, Strukturstand des Baums (undefined = unbekannt), eigener Struktur-Write
   // seither, zuletzt nachgezogener Stand (Schleifenschutz).
@@ -488,6 +488,17 @@ const lektoratState = () => ({
   _treeStructureAt: undefined,
   _structureOwnWrite: false,
   _structureCatchUpFor: null,
+});
+
+// Ideen-Leiste neben Editor bzw. Kapitelbewertung (asideSlot === 'ideen').
+const ideenAsideState = () => ({
+  // Scope der aktuell offenen Ideen-Karte: 'page' (neben Editor) oder
+  // 'chapter' (neben Kapitelreview). ideenChapterId nur in 'chapter'-Modus
+  // gesetzt. currentPageIdeenOpenCount/currentChapterIdeenOpenCount halten die
+  // Badge-Counts fuer den jeweiligen Toggle-Button.
+  ideenScope: 'page',
+  ideenChapterId: null,
+  currentChapterIdeenOpenCount: 0,
 });
 
 // bookReviewHistory wird von tree.js/loadPages geschrieben und von
@@ -501,13 +512,6 @@ const bookReviewState = () => ({
 const kapitelReviewState = () => ({
   kapitelReviewChapterId: '',
 });
-
-// Permalink-Spiegel der Werkstatt-/Plot-/Rückblick-Karten (werkstattDraftId,
-// werkstattDrafts, plotBeatId, rueckblickEntryId, pendingRueckblickZeitraum) leben
-// in Alpine.store('nav') (cards/nav-store.js). Die jeweilige Karte hält ihren SSoT
-// (selectedDraftId/editingBeatId/selectedRueckblickId) und spiegelt per $watch in den
-// Store; der Hash-Router liest/schreibt dort, weil er sie beim Cold-Open eines
-// Permalinks braucht, BEVOR die Karte gemountet ist.
 
 // Katalog-UI-State (Filter/Selektion/Lade-Stempel für figuren/ereignisse/szenen/
 // orte/songs/kontinuitaet, deren Daten in Alpine.store('catalog') liegen) lebt in
@@ -535,19 +539,6 @@ const featuresUsageState = () => ({
   recentPageIds: [],
 });
 
-// Collaboration-/Presence-/Soft-Lock-State lebt in Alpine.store('collab')
-// (cards/collab-store.js) und wird direkt via $store.collab / this.$store.collab
-// gelesen (kein Root-Proxy). Owner: app/app-collab.js + app/app-collab-lock.js.
-
-// Buch-Erstellungs-Modal (Trigger: Combobox-Footer "+ Neues Buch") ist eine eigene
-// Karte Alpine.data('bookCreateCard') auf dem <dialog> (cards/book-create-card.js) —
-// State + Methoden leben dort, nicht mehr im Root.
-
-// Tages-Schreibziel-Donut im Header lebt in Alpine.store('progress')
-// (cards/progress-store.js) — Daten im Store statt am Root, weil der Donut im
-// Root-Header rendert und es keine Karte gibt, die ihn hosten könnte.
-// Loader/Reset/headerTodayRing bleiben Root-Methoden (app-view/bookscope.js).
-
 // Entity-Linking pro Buch (Figuren-/Orte-Highlights + Szenen-/Ereignisse-Panel
 // im Notebook-Editor). Source-of-Truth ist book_settings.entities_enabled —
 // hier nur Spiegel, gesetzt von _loadBookFlagsForCurrentBook (beim Buchwechsel)
@@ -573,11 +564,8 @@ const entitiesState = () => {
   };
 };
 
-// Job-Infrastruktur-State (Queue-Footer, Job-Done-Toast, „Alle aktualisieren"/
-// Komplettanalyse-Status) lebt in Alpine.store('jobs') (cards/jobs-store.js) und
-// wird direkt via $store.jobs / this.$store.jobs gelesen (kein Root-Proxy).
-// Owner: app/app-jobs-core.js + app/app-komplett.js.
-
+// Geteilter State in Alpine.store(...) (nav, catalogUi, collab, jobs, progress, …):
+// Inventar und Zugriffsregeln in docs/state-modell.md, Ebene 3.
 export function initialLektoratState() {
   return {
     ...shellState(),
@@ -590,6 +578,8 @@ export function initialLektoratState() {
     ...statusState(),
     ...confirmDialogState(),
     ...lektoratState(),
+    ...treeState(),
+    ...ideenAsideState(),
     ...bookReviewState(),
     ...kapitelReviewState(),
     ...figurenState(),

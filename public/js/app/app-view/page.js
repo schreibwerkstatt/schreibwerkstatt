@@ -463,7 +463,7 @@ export const pageMethods = {
   // `originalHtml` wird trotzdem genullt: daran hängen `startEdit` und die
   // Reload-Wiederaufnahme, die den alten Text nie der neuen Seite zuordnen dürfen.
   resetPage({ keepView = false } = {}) {
-    // `_checkPollTimer_<pageId>` bewusst NICHT clearen: Poll der verlassenen
+    // `_checkPollTimers[pageId]` bewusst NICHT clearen: Poll der verlassenen
     // Seite muss weiterlaufen, damit `onDone` → `markPageChecked` den
     // Sidebar-Status aktualisiert (siehe lektorat.js startCheckPoll). Poll
     // räumt sich nach Job-Abschluss in job-helpers.js selbst auf.

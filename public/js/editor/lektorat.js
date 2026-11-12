@@ -314,7 +314,8 @@ export const lektoratMethods = {
     // (sonst feuert `onDone` nie → Sidebar-Status der Ursprungsseite bleibt
     // stale). Ein zweiter Check für eine andere Seite kollidiert nicht.
     this._startPoll({
-      timerProp: '_checkPollTimer_' + pageId,
+      timerTarget: this._checkPollTimers,
+      timerProp: String(pageId),
       jobId,
       lsKey: pageId != null ? 'lektorat_check_job_' + pageId : null,
       onProgress: (job) => {
