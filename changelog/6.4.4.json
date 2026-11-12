@@ -1,0 +1,11 @@
+{
+  "version": "6.4.4",
+  "date": "2026-11-12",
+  "entries": [
+    {
+      "kind": "verbessert",
+      "de": "Buchwahl: nach dem Wechsel in ein anderes Buch kannst du sofort einen Abschnitt in der Seitenleiste anklicken. Vor allem unterwegs mit schwacher Verbindung blieb die Leiste vorher mehrere Sekunden gesperrt.",
+      "en": "Book selection: after switching to another book you can click a section in the sidebar right away. Especially on the go with a weak connection, the sidebar used to stay locked for several seconds."
+    }
+  ]
+}
