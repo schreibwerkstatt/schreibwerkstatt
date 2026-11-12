@@ -15,10 +15,14 @@
                role=button: sie traegt Knoepfe und Links, die fuer Screenreader
                sonst unsichtbar wuerden. Tastatur ueber den Titel-<button>. -->
           <div class="research-item-head research-item-body--clickable" @click="onItemBodyClick(item, $event)">
-            <!-- Mehrfachauswahl: Checkbox nur im Auswahl-Modus (bulk.js). -->
-            <input type="checkbox" class="research-item-select" x-show="bulkMode" x-cloak
-                   :checked="isSelected(item.id)" @change="toggleSelect(item.id)"
-                   :aria-label="$app.t('recherche.bulk.select', { title: item.title || kindLabel(item.kind) })">
+            <!-- Mehrfachauswahl: Checkbox nur im Auswahl-Modus (bulk.js). Seltene
+                 Zeilenteile stehen auf x-if statt x-show: jede Zeile baut sie sonst
+                 versteckt mit (Knoten + Bindungen × Fundstücke beim Öffnen der Karte). -->
+            <template x-if="bulkMode">
+              <input type="checkbox" class="research-item-select"
+                     :checked="isSelected(item.id)" @change="toggleSelect(item.id)"
+                     :aria-label="$app.t('recherche.bulk.select', { title: item.title || kindLabel(item.kind) })">
+            </template>
             <span class="research-kind-badge palette-badge" :class="'research-kind-badge--' + item.kind" x-text="kindLabel(item.kind)"></span>
             <!-- Titel als Button: der tastaturerreichbare Weg zum Aufklappen. Ohne
                  eigenen Titel steht die Typ-Bezeichnung da — sonst gaebe es kein Klickziel. -->
@@ -56,11 +60,13 @@
                 </button>
               </template>
 
-              <a x-show="item.has_doc" class="research-item-doc" :href="docUrl(item)" target="_blank" rel="noopener noreferrer">
-                <svg class="icon" aria-hidden="true"><use href="/icons.svg#file-plus"/></svg>
-                <span class="research-item-doc-name" x-text="item.doc_name || $app.t('recherche.doc.fallbackName')"></span>
-                <span class="research-item-doc-meta" x-show="item.doc_pages" x-text="$app.tn('recherche.doc.pages', item.doc_pages)"></span>
-              </a>
+              <template x-if="item.has_doc">
+                <a class="research-item-doc" :href="docUrl(item)" target="_blank" rel="noopener noreferrer">
+                  <svg class="icon" aria-hidden="true"><use href="/icons.svg#file-plus"/></svg>
+                  <span class="research-item-doc-name" x-text="item.doc_name || $app.t('recherche.doc.fallbackName')"></span>
+                  <span class="research-item-doc-meta" x-show="item.doc_pages" x-text="$app.tn('recherche.doc.pages', item.doc_pages)"></span>
+                </a>
+              </template>
 
               <!-- Anriss mit festem Zeilen-Cap (CSS); der Volltext steht in der
                    aufgeklappten Zeile, lesbar gesetzt. -->
@@ -74,9 +80,11 @@
 
               <!-- Recherche-Abgleich: Manuskript weicht vom Fundstueck ab. Details +
                    Sprung zur Stelle in der aufgeklappten Zeile (recherche-findings.html). -->
-              <button type="button" class="research-findings-chip" x-show="itemFindings(item).length" x-cloak
-                      @click="bulkMode ? toggleSelect(item.id) : openDetail(item)"
-                      x-text="$app.t('recherche.crosscheck.chip', { n: itemFindings(item).length })"></button>
+              <template x-if="itemFindings(item).length">
+                <button type="button" class="research-findings-chip"
+                        @click="bulkMode ? toggleSelect(item.id) : openDetail(item)"
+                        x-text="$app.t('recherche.crosscheck.chip', { n: itemFindings(item).length })"></button>
+              </template>
 
               <!-- @include recherche-item-relations -->
             </div>

@@ -15,12 +15,20 @@
       </a>
       <!-- Ergebnis der Link-Pruefung (links.js#checkLinks): tot → Hinweis + Weg zur
            Archivkopie; gesperrt (401/403/429) → nur ein leiser Hinweis. -->
-      <span class="research-url-check research-url-check--dead" x-show="urlDead(u)" x-cloak
-            :data-tip="urlCheckTip(u)" x-text="$app.t('recherche.linkCheck.dead')"></span>
-      <a class="research-url-check research-url-check--archive" x-show="urlDead(u)" x-cloak
-         :href="waybackUrl(u)" target="_blank" rel="noopener noreferrer" x-text="$app.t('recherche.linkCheck.archive')"></a>
-      <span class="research-url-check research-url-check--blocked" x-show="urlBlocked(u)" x-cloak
-            :data-tip="urlCheckTip(u)" x-text="$app.t('recherche.linkCheck.blocked')"></span>
+      <!-- x-if statt x-show: die Hinweise sind selten, jede Link-Zeile baute
+           sie sonst versteckt mit (drei Elemente × Links × Fundstücke). -->
+      <template x-if="urlDead(u)">
+        <span class="research-url-check research-url-check--dead"
+              :data-tip="urlCheckTip(u)" x-text="$app.t('recherche.linkCheck.dead')"></span>
+      </template>
+      <template x-if="urlDead(u)">
+        <a class="research-url-check research-url-check--archive"
+           :href="waybackUrl(u)" target="_blank" rel="noopener noreferrer" x-text="$app.t('recherche.linkCheck.archive')"></a>
+      </template>
+      <template x-if="urlBlocked(u)">
+        <span class="research-url-check research-url-check--blocked"
+              :data-tip="urlCheckTip(u)" x-text="$app.t('recherche.linkCheck.blocked')"></span>
+      </template>
       <button type="button" class="icon-btn icon-btn--ghost research-url-action"
               @click="scrapeUrl(item, u)"
               :disabled="urlScrapeBusy(item, u)"
