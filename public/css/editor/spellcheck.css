@@ -368,18 +368,6 @@
 .lt-extension-banner__text { line-height: 1.35; }
 .lt-extension-banner__title { font-weight: var(--fw-semibold); margin-bottom: var(--space-2xs); }
 
-.lt-extension-banner__dismiss {
-  appearance: none;
-  background: transparent;
-  border: none;
-  cursor: pointer;
-  font-size: var(--font-size-sm);
-  color: var(--color-muted);
-  padding: var(--space-2xs) var(--space-6);
-}
-
-.lt-extension-banner__dismiss:hover { color: var(--color-text); }
-
 /* Per-Editor-Hooks (leer im MVP, vorhanden fuer kuenftige Tweaks). */
 .lt-popover[data-editor="focus"] { /* Focus-spezifische Anpassungen hier */ }
 .lt-popover[data-editor="book"]  { /* Bucheditor-spezifische Anpassungen hier */ }

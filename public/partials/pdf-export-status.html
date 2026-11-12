@@ -22,8 +22,8 @@
       <div class="card-form-warn pdfx-warn-list" x-show="exportWarnings.length" x-cloak role="status">
         <div class="pdfx-warn-head">
           <strong x-text="$app.t(exportWarningsSample ? 'pdfExport.warn.titleSample' : 'pdfExport.warn.title', { count: exportWarnings.length })"></strong>
-          <button type="button" class="btn-compact btn-compact--ghost" @click="dismissWarnings()"
-                  :aria-label="$app.t('pdfExport.warn.dismiss')" x-text="$app.t('pdfExport.warn.dismiss')"></button>
+          <button type="button" class="icon-btn icon-btn--ghost" @click="dismissWarnings()"
+                  :data-tip="$app.t('pdfExport.warn.dismiss')" :aria-label="$app.t('pdfExport.warn.dismiss')"><svg class="icon" aria-hidden="true"><use href="/icons.svg#x"/></svg></button>
         </div>
         <ul>
           <template x-for="w in exportWarnings" :key="w.id">

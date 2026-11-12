@@ -452,9 +452,9 @@
     <div class="lt-extension-banner__title" x-text="$app.t('spellcheck.extension_conflict.title')"></div>
     <div x-text="$app.t('spellcheck.extension_conflict.body')"></div>
   </div>
-  <button type="button" class="lt-extension-banner__dismiss"
+  <button type="button" class="icon-btn icon-btn--ghost"
           @click="dismissBanner()"
-          x-text="$app.t('spellcheck.extension_conflict.dismiss')"></button>
+          :data-tip="$app.t('spellcheck.extension_conflict.dismiss')" :aria-label="$app.t('spellcheck.extension_conflict.dismiss')"><svg class="icon" aria-hidden="true"><use href="/icons.svg#x"/></svg></button>
 </div>
 
 <div class="site-header-row">

@@ -1,3 +1,4 @@
+<!-- @expects item -->
 <!-- Verknuepfungen + Tags eines Recherche-Fundstuecks und die
      KI-Verknuepfungsvorschlaege (der Verknuepfen-Picker ist ein Picker-Popover
      auf Kartenebene: recherche-link-picker.html). Fragment (string-seitiger @include),
@@ -29,7 +30,13 @@
 
 <!-- KI-Verknuepfungsvorschlaege -->
 <div class="research-suggestions" x-show="itemSuggestions(item)" x-cloak>
-  <div class="card-section-title" x-text="$app.t('recherche.suggest.heading')"></div>
+  <div class="card-section-head">
+    <div class="card-section-title" x-text="$app.t('recherche.suggest.heading')"></div>
+    <button type="button" class="icon-btn icon-btn--ghost" @click="dismissSuggestions(item)"
+            :data-tip="$app.t('recherche.suggest.dismiss')" :aria-label="$app.t('recherche.suggest.dismiss')">
+      <svg class="icon" aria-hidden="true"><use href="/icons.svg#x"/></svg>
+    </button>
+  </div>
   <template x-if="itemSuggestions(item) && itemSuggestions(item).length === 0">
     <div class="muted-msg muted-msg--sm" x-text="$app.t('recherche.suggest.none')"></div>
   </template>
@@ -41,5 +48,4 @@
       <button type="button" class="btn-compact" @click="acceptSuggestion(item, sg)" x-text="$app.t('recherche.suggest.accept')"></button>
     </div>
   </template>
-  <button type="button" class="research-suggestions-dismiss text-link" @click="dismissSuggestions(item)" x-text="$app.t('recherche.suggest.dismiss')"></button>
 </div>

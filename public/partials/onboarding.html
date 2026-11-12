@@ -4,8 +4,8 @@
 <div class="card card--onboarding" x-data="onboardingCard" x-show="$app.showOnboardingCard" x-cloak>
   <div class="card-header">
     <span class="card-title" x-text="$app.t('onboarding.title')"></span>
-    <button type="button" class="ghost onboarding-dismiss" @click="dismiss()"
-            x-text="$app.t('onboarding.dismiss')"></button>
+    <button type="button" class="btn-card-close" @click="dismiss()"
+            :data-tip="$app.t('onboarding.dismiss')" :aria-label="$app.t('onboarding.dismiss')"><svg class="icon" aria-hidden="true"><use href="/icons.svg#x"/></svg></button>
   </div>
 
   <p class="card-hint card-hint--lead card-section" x-text="$app.t('onboarding.intro')"></p>

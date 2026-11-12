@@ -1,0 +1,21 @@
+{
+  "version": "6.4.5",
+  "date": "2026-11-12",
+  "entries": [
+    {
+      "kind": "verbessert",
+      "de": "Kartenwechsel: öffnest du eine andere Karte, siehst du sofort, dass sie lädt. Die alte Ansicht wird abgedunkelt, und ein Ladekreis samt Balken oben zeigt den Fortschritt.",
+      "en": "Switching cards: when you open another card, you now see right away that it is loading. The old view is dimmed, and a spinner plus a bar at the top show the progress."
+    },
+    {
+      "kind": "verbessert",
+      "de": "Plot-Werkstatt und Recherche: grosse Boards und lange Fundstück-Listen öffnen und filtern spürbar schneller.",
+      "en": "Plot workshop and research: large boards and long lists of findings open and filter noticeably faster."
+    },
+    {
+      "kind": "verbessert",
+      "de": "Hinweise und Banner schliesst du jetzt überall mit demselben ×-Knopf oben rechts – beim Einstieg, bei PDF-Export-Warnungen, bei Recherche-Vorschlägen und beim Rechtschreib-Hinweis.",
+      "en": "You now close hints and banners everywhere with the same × button at the top right – in the getting-started card, PDF export warnings, research suggestions and the spell-check notice."
+    }
+  ]
+}

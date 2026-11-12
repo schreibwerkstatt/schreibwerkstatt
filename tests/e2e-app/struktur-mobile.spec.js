@@ -58,7 +58,9 @@ test('Handy: langer Kapitelname scrollt in der Tabelle, nicht die Karte', async 
       tableScrolls: scroll ? scroll.scrollWidth > scroll.clientWidth : false,
     };
   });
-  expect(m.pageOverflow).toBe(0);
+  // ≤ 0, nicht = 0: mit `scrollbar-gutter: stable` und vertikal scrollender Seite
+  // ist scrollWidth um die Gutter-Breite kleiner als clientWidth (negativ = kein Überlauf).
+  expect(m.pageOverflow).toBeLessThanOrEqual(0);
   expect(m.cardOverflow).toBe(0);
   expect(m.cardRight).toBeLessThanOrEqual(360);
   expect(m.hasScroll).toBe(true);

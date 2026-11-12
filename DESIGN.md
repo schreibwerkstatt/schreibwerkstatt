@@ -27,6 +27,7 @@ Token-Referenz (Farben, Radien, Spacing, Schriftgrössen): [public/css/tokens.cs
 - [Action-Icon-Library](#action-icon-library-verbindlich) — **verbindlich**: Vokabular für alle Aktions-Buttons (icon-only vs. Label), Guard-Test
 - [Icon-System](#icon-system-lucide-sprite) — `<svg class="icon"><use href="/icons.svg#name"/></svg>` (Lucide-Sprite)
 - [Icon-Button](#icon-button-icon-btn) — generischer Icon-only Button (`.icon-btn` outlined + `--ghost`), SSoT für Canvas-/Header-/Board-Cluster
+- [Panel schliessen](#panel-schliessen) — wegklickbares Panel/Banner schliesst per ×-Icon oben rechts, nie per Text-Knopf
 - [Hover-Reveal](#hover-reveal-item-aktionen-auf-zuwendung) — Item-Aktionen (Board-Karte, Kommentar-Thread) erst auf Hover/Fokus, auf Touch immer
 - [Drag-Griff](#drag-griff-sortierbare-kartezeile) — einzige Greiffläche sortierbarer Karten/Zeilen, einheitlich positioniert (`.drag-grip`)
 - [Board-Drag](#board-drag-karten-zwischen-zellen-ziehen) — Karten zwischen Board-Zellen ziehen: eine Mechanik, eine Optik (`boardSortableOpts`, `.board-dnd-*`)
@@ -844,6 +845,36 @@ Neue Aktionen erweitern diese Tabelle und das Sprite (siehe [Icon-System](#icon-
 - **Klassen-Präfix** `icon-btn` — das Pattern teilt sich Vokabular über alle Features (Graph, Header, Board, Toolbar). Nicht in `toolbar-btn`/`*-icon-btn`-Basis o.ä. umbenennen oder forken.
 
 **Beispiele:** [public/partials/figuren.html:86-100](public/partials/figuren.html#L86), [public/partials/figur-werkstatt.html:210-233](public/partials/figur-werkstatt.html#L210).
+
+---
+
+## Panel schliessen
+
+**Use:** Ein Panel, eine Box oder ein Banner, das der User wegklicken kann (KI-Vorschläge, Export-Befunde, Hinweis-Banner, ausblendbare Karte), schliesst über **ein ×-Icon oben rechts** — nie über einen Text-Knopf («Ausblenden», «Vorschläge schliessen») irgendwo im Panel.
+
+**Markup (Panel im Kartenkörper):**
+```html
+<div class="…-suggestions">
+  <div class="card-section-head">
+    <div class="card-section-title" x-text="$app.t('….heading')"></div>
+    <button type="button" class="icon-btn icon-btn--ghost" @click="dismiss…()"
+            :data-tip="$app.t('….dismiss')" :aria-label="$app.t('….dismiss')">
+      <svg class="icon" aria-hidden="true"><use href="/icons.svg#x"/></svg>
+    </button>
+  </div>
+  …
+</div>
+```
+Ausblendbare **Karte**: `btn-card-close` im `.card-header` (gleiches Icon, gleiche Tooltip-Regel). Banner ohne Titelzeile: das `icon-btn icon-btn--ghost` als letztes Kind der Flex-Zeile, oben ausgerichtet.
+
+**Klassen:** keine eigenen — [`.icon-btn--ghost`](#icon-button-icon-btn), `.card-section-head` ([card-blocks.css](public/css/components/card-form/card-blocks.css)), `.btn-card-close`.
+
+**Regeln:**
+- Der bisherige Knopf-Text bleibt als i18n-Key und wandert in `data-tip` + `aria-label`; kein `x-text` am Schliessen-Knopf, keine eigene `…-dismiss`-Klasse mit Knopf-Reset.
+- **Kein ×** für: Entscheidungen je Eintrag («Ignorieren», «Noch offen», «Verwerfen»), Umschalter, die dasselbe Panel öffnen/schliessen («Zuklappen»), Fusszeilen von Dialogen (Abbrechen/Schliessen neben OK), dauerhaftes Abbestellen neben einer Aktion («Nicht mehr anzeigen» im Willkommens-Banner) und die Einmal-Anzeige eines Geheimnisses (Token: «Verbergen» ausgeschrieben).
+- Gegated: [panel-close-single-place.test.mjs](tests/unit/panel-close-single-place.test.mjs) — ein `<button>` mit `x-text` auf einem Schliessen-Key (`….dismiss`/`.close`/`.closePanel`/`.hide`) ist rot, ausser er steht mit Begründung in der Allowlist.
+
+**Beispiele:** [recherche-item-relations.html](public/partials/recherche-item-relations.html) (KI-Verknüpfungsvorschläge), [motiv.html](public/partials/motiv.html) (Brainstorm), [pdf-export-status.html](public/partials/pdf-export-status.html) (Befunde), [onboarding.html](public/partials/onboarding.html) (Karte).
 
 ---
 

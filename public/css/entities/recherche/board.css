@@ -343,8 +343,9 @@ textarea.recherche-input { resize: vertical; min-height: 2.75rem; }
   border-radius: var(--radius-none);
   background: var(--color-bg);
 }
-/* Titel ist .card-section-title; der Abstand kommt aus dem gap der Box. */
-.research-suggestions > .card-section-title { margin: 0; }
+/* Kopfzeile (Titel + ×) ist .card-section-head; der Abstand kommt aus dem gap der Box. */
+.research-suggestions > .card-section-head { margin: 0; }
+.research-suggestions > .card-section-head > .card-section-title { margin: 0; }
 .research-suggestion {
   display: flex;
   align-items: center;
@@ -353,15 +354,6 @@ textarea.recherche-input { resize: vertical; min-height: 2.75rem; }
 }
 .research-suggestion-reason { font-size: var(--font-size-sm); color: var(--color-muted); }
 .research-suggestion .btn-compact { margin-left: auto; }
-/* Link-Optik aus `.text-link`; hier nur Knopf-Reset, Grösse, Farbe. */
-.research-suggestions-dismiss {
-  align-self: flex-start;
-  background: none;
-  border: none;
-  padding: 0;
-  font-size: var(--font-size-sm);
-  color: var(--color-muted);
-}
 
 /* ── Vollbild: Karte (samt Chat-Leiste) nimmt den Viewport; die Liste bleibt einspaltig,
      aber zentriert mit lesbarer Maximalbreite (distraktionsfreier Lesemodus,

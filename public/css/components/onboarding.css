@@ -4,11 +4,6 @@
    (SSoT card-accents.css). Markup: public/partials/onboarding.html; Banner in
    public/index.html. Fortschritt kommt serverseitig (GET /me/onboarding). */
 
-.onboarding-dismiss {
-  margin-left: auto;
-  font-size: var(--font-size-mini);
-}
-
 /* Fortschrittszeile: Balken + „X/N". Balken nutzt das globale .progress-bar. */
 .onboarding-progress {
   display: flex;

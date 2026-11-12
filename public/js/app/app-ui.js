@@ -25,6 +25,20 @@ export function applySongsFilters(songs, filters, figNames = null) {
   });
 }
 
+// Roh-Text der Fragment-Partials, einmal je Seitenleben geholt (Promise, damit
+// parallele Auflösungen denselben Request teilen). Ein Fehlschlag fliegt aus dem
+// Cache, der nächste `_ensurePartial` darf es neu versuchen.
+const _fragmentText = new Map();
+function _fetchFragment(name) {
+  let p = _fragmentText.get(name);
+  if (!p) {
+    p = fetchText(`/partials/${name}.html`);
+    _fragmentText.set(name, p);
+    p.catch(() => _fragmentText.delete(name));
+  }
+  return p;
+}
+
 // Allgemeine UI-Helpers: Status, Sortierung, Filter-Listen, Datumformatierung,
 // Partial-Loader. Reine `this.*`-basierte Methoden ohne Querabhängigkeiten
 // zu Job-Queues oder Routing — für die Hash-/Job-/View-Module vorgesehen.
@@ -354,27 +368,25 @@ export const appUiMethods = {
   },
 
   // String-seitige Fragment-Includes: ersetzt jeden Marker `<!-- @include NAME -->`
-  // durch den Inhalt von `/partials/NAME.html` (rekursiv; jeder Name pro Pass nur
-  // einmal gefetcht). Reines Text-Splicing vor jeglichem DOM/Alpine-Processing —
-  // der eingefügte Markup-Block ist danach Teil des Template-Contents und wird pro
-  // x-for-Iteration normal geklont.
-  // `seen` bricht Selbst-/Zyklen-Referenzen by name ab: enthält ein Fragment einen
-  // Marker auf sich selbst (z.B. in einem Doku-Kommentar), wird der zu '' aufgelöst
-  // statt N-fach expandiert zu werden.
+  // durch den Inhalt von `/partials/NAME.html` (rekursiv). Reines Text-Splicing vor
+  // jeglichem DOM/Alpine-Processing — der eingefügte Markup-Block ist danach Teil
+  // des Template-Contents und wird pro x-for-Iteration normal geklont.
+  // Geschwister-Fragmente laden parallel, und jedes Fragment wird pro Seitenleben
+  // nur einmal geholt (`_fetchFragment`), auch wenn mehrere Partials es einbetten.
+  // `seen` bricht Selbst-/Zyklen-Referenzen by name ab: der Marker wird zu ''
+  // statt N-fach expandiert. Scope-Vertrag (`@expects`) + Marker-Hygiene sind
+  // gegated: tests/unit/partial-include-scope.test.mjs.
   async _resolveIncludes(html, seen = new Set()) {
     const re = /<!--\s*@include\s+([\w-]+)\s*-->/g;
-    const matches = [...html.matchAll(re)];
-    if (!matches.length) return html;
-    const cache = {};
-    for (const m of matches) {
-      const frag = m[1];
-      if (frag in cache) continue;
-      if (seen.has(frag)) { cache[frag] = ''; continue; }
-      cache[frag] = await this._resolveIncludes(
-        await fetchText(`/partials/${frag}.html`),
+    const names = [...new Set([...html.matchAll(re)].map(m => m[1]))];
+    if (!names.length) return html;
+    const resolved = Object.fromEntries(await Promise.all(names.map(async frag => [
+      frag,
+      seen.has(frag) ? '' : await this._resolveIncludes(
+        await _fetchFragment(frag),
         new Set([...seen, frag]),
-      );
-    }
-    return html.replace(re, (_, frag) => cache[frag] ?? '');
+      ),
+    ])));
+    return html.replace(re, (_, frag) => resolved[frag] ?? '');
   },
 };
