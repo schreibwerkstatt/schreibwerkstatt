@@ -315,6 +315,15 @@ export const treeLoadMethods = {
       if (this.$store.nav.selectedBookId !== bookId) return;
       this._overlayPendingStructure?.(bookId);
       this._treeBookId = bookId;
+      // Der neue Baum steht — Dimmen + Klick-Sperre des Buchwechsels JETZT
+      // aufheben, nicht erst im finally. Plaketten, Figuren, Bewertungen und
+      // Komplettlauf laden danach in zwei weiteren Netzrunden; die Sperre bis
+      // dorthin kostete auf schwacher Mobilverbindung mehrere Sekunden, obwohl
+      // der Baum laengst bedienbar war (Plaketten wurden oben fuer das neue
+      // Buch geleert, zeigen also nichts Fremdes). Nur der aktuelle Owner gibt
+      // frei — ein neuerer Wechsel besitzt das Flag selbst. `treeLoading`
+      // bleibt bis zum Ende stehen (Catch-up-/Stats-Guards lesen es).
+      if (this._bookLoadAbort === loadCtrl) this.treeSwitching = false;
       // Neue Baum-Identitaet → Such-Memo ist ohnehin kalt; bei Reload mit
       // aktiver Suche den kbd-Treffer auf den neuen Baum ziehen.
       if (this.pageSearch) this._recomputePageSearchActiveId?.();

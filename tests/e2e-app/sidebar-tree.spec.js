@@ -15,7 +15,9 @@
 //   5. Ein Reload desselben Buchs (Job/Wake) behält Suche und Baum; ein
 //      gescheiterter Reload leert den Baum nicht und meldet `false`.
 //   6. Zugeklappte Kapitel und der Kalendermodus rendern keine Abschnittszeilen.
-//   7. Ein Ein-Abschnitt-Kapitel führt den Kapitelnamen als Ganzes — der
+//   7. Ein Buchwechsel sperrt den Baum nur, bis er steht — nicht bis
+//      Figuren und Plaketten nachgeladen sind.
+//   8. Ein Ein-Abschnitt-Kapitel führt den Kapitelnamen als Ganzes — der
 //      lange Abschnittstitel daneben darf ihn nicht auf zwei Zeilen pressen.
 
 const { test, expect } = require('../e2e/_helpers/fixtures');
@@ -136,6 +138,26 @@ test.describe('Seitenbaum', () => {
     expect(res).toBe(false);
     expect(await page.evaluate(() => window.Alpine.store('nav').tree.length)).toBe(before);
     await expect(page.locator(`${TREE} a.page-item`).first()).toBeVisible();
+  });
+
+  // Buchwechsel auf schwacher Verbindung: die Sperre (.tree-card--loading)
+  // gilt nur bis der neue Baum steht. Figuren/Plaketten laden danach in
+  // weiteren Netzrunden — sie duerfen den Baum nicht gesperrt halten.
+  test('Buchwechsel gibt den Baum frei, bevor die Figuren da sind', async ({ page }) => {
+    let release;
+    const held = new Promise(r => { release = r; });
+    await page.route('**/figures/*', async route => { await held; await route.continue(); });
+    const done = page.evaluate(() => {
+      window.__app._treeBookId = null; // als Wechsel laden
+      return window.__app.loadPages({ source: 'bookSwitch' });
+    });
+    await expect(page.locator(`${TREE} a.page-item`).first()).toBeVisible();
+    await expect(page.locator('#partial-sidebar .card.tree-card--loading')).toHaveCount(0);
+    expect(await page.evaluate(() => window.__app.treeLoading)).toBe(true);
+    release();
+    expect(await done).toBe(true);
+    await page.unroute('**/figures/*');
+    expect(await page.evaluate(() => window.__app.treeLoading)).toBe(false);
   });
 
   // Ein-Abschnitt-Kapitel (Blog-Buch mit Jahres-Kapiteln): kurzer Kapitelname
