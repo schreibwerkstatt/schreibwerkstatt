@@ -118,6 +118,11 @@
 .synonym-hint {
   font-size: var(--font-size-mini);
   color: var(--color-muted);
+  /* Ellipse bewusst hier statt nur über `.truncate`: diese Datei reist im
+     Editor-Bundle der nativen Clients (lib/editor-bundle.js), utilities.css nicht. */
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
   flex: 1;
   min-width: 0;
 }

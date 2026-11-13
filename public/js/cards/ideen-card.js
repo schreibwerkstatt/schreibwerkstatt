@@ -64,10 +64,20 @@ export function registerIdeenCard() {
         showNeedsBookId: false,
         timerKeys: ['_ideenCheckPollTimer'],
         onShow: async () => {
-          await this.loadIdeen();
+          // Ins Feld nur, wenn sich der Fokus während des Ladens nicht bewegt hat:
+          // das Zitat-Kürzel fokussiert selbst, und wer schon mit Esc in den Text
+          // zurück ist oder woanders klickt, bekäme ihn sonst entrissen.
+          let focusMoved = false;
+          const onFocus = () => { focusMoved = true; };
+          document.addEventListener('focusin', onFocus, true);
+          try {
+            await this.loadIdeen();
+          } finally {
+            document.removeEventListener('focusin', onFocus, true);
+          }
           this.$nextTick(() => {
             const ta = this.$el?.querySelector('.ideen-input');
-            if (ta) ta.focus();
+            if (ta && !focusMoved) ta.focus();
             this._takeIdeenQuote();
           });
         },

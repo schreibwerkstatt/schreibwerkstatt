@@ -1,0 +1,51 @@
+{
+  "version": "6.4.6",
+  "date": "2026-11-13",
+  "entries": [
+    {
+      "kind": "verbessert",
+      "de": "Bearbeitungsstand: das Stufen-Abzeichen hat jetzt überall dieselbe Farbe, im Buchorganizer genauso wie im Abschnitt, in der Kapitelbewertung und im Bucheditor.",
+      "en": "Editing status: the stage badge now has the same colour everywhere, in the book organizer as well as in the section, the chapter review and the book editor."
+    },
+    {
+      "kind": "verbessert",
+      "de": "Chat-Verlauf: der Punkt «läuft» an einem Gespräch erscheint in allen Chats auch dann, wenn die Antwort in einem anderen Tab entsteht.",
+      "en": "Chat history: the “running” dot on a conversation now shows in every chat, even when the answer is being written in another tab."
+    },
+    {
+      "kind": "verbessert",
+      "de": "Fehlermeldungen sind jetzt überall verständlich. Bricht die Verbindung ab, steht dort ein Hinweis auf das Netz statt «Failed to fetch» oder «HTTP 502».",
+      "en": "Error messages are now readable everywhere. If the connection drops, you see a network notice instead of “Failed to fetch” or “HTTP 502”."
+    },
+    {
+      "kind": "behoben",
+      "de": "Wechselst du schnell das Buch, zeigen Karten wie Zeitstrahl, Wortschatz, Quellen oder Weltfakten keine Daten des vorherigen Buchs mehr an.",
+      "en": "When you switch books quickly, cards such as timeline, vocabulary, sources or world facts no longer show data from the previous book."
+    },
+    {
+      "kind": "behoben",
+      "de": "Eine offene Karte wie Erzählprofil, Buch-Review oder Titelwerkstatt blieb nach dem Sprung in ein anderes Buch leer. Sie lädt jetzt den Stand des neuen Buchs.",
+      "en": "An open card such as narrative profile, book review or title workshop stayed empty after jumping to another book. It now loads the new book."
+    },
+    {
+      "kind": "behoben",
+      "de": "Recherche: die Typ-Abzeichen der Fundstücke (Link, Zitat, Fakt …) und das Zitier-Abzeichen der Quellen waren immer grau. Sie haben wieder ihre Farbe.",
+      "en": "Research: the type badges of findings (link, quote, fact …) and the citation badge of sources were always grey. They have their colours again."
+    },
+    {
+      "kind": "behoben",
+      "de": "Lese-Links: «Kommentare anzeigen» bei einem Abschnitt öffnet die Kommentar-Leiste wieder. Im Lese-Link selbst verschwindet ein eben geschriebener Kommentar nicht mehr kurz.",
+      "en": "Read links: “Show comments” on a section opens the comment bar again. In the read link itself, a comment you just wrote no longer briefly disappears."
+    },
+    {
+      "kind": "behoben",
+      "de": "Ideen-Leiste neben dem Abschnitt: kehrst du kurz nach dem Öffnen mit Esc in den Text zurück, springt der Cursor nicht mehr von selbst ins Ideen-Feld.",
+      "en": "Ideas panel next to the section: if you press Esc right after opening it to go back to the text, the cursor no longer jumps into the ideas field on its own."
+    },
+    {
+      "kind": "behoben",
+      "de": "Hinweis-Fenster mit nur «OK» zeigten zusätzlich einen Abbrechen-Knopf. Der ist jetzt weg.",
+      "en": "Notice dialogs with just “OK” also showed a cancel button. It is gone now."
+    }
+  ]
+}
