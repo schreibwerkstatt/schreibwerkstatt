@@ -3,15 +3,15 @@
 // User-bound, nicht buch-bound — `showAutorenprofilCard` + `toggleAutorenprofilCard`
 // leben im Root (generiert aus EXCLUSIVE_CARDS). Daten: `GET /me/author-profile`.
 //
-// Lifecycle bewusst von Hand statt ueber setupCardLifecycle: der Helper ist fuer
-// buch-skopierte Karten gebaut und haengt `book:changed`-Reset-Handler an. Diese
-// Karte kennt kein Buch — ein Buchwechsel darf sie nicht zuruecksetzen. Gleiche
-// Entscheidung wie in my-stats-card.js und my-books-card.js.
+// Lifecycle ueber setupCardLifecycle mit `showNeedsBookId`/`refreshNeedsBookId:
+// false` und ohne `load`/`resetState`: die Karte kennt kein Buch, ein Buchwechsel
+// setzt sie weder zurueck noch laedt er sie neu (wie my-stats, my-books).
 //
 // Die Karte WERTET NICHT und faerbt keine Abweichung als gut/schlecht ein: eine
 // kuerzere Satzlaenge ist keine Note. Gezeigt werden Wert, Median und Abstand.
 
 import { EVT } from '../events.js';
+import { setupCardLifecycle } from './card-lifecycle.js';
 import { tFetchError } from '../i18n.js';
 import { formatNumber, fetchJson, sendJson } from '../utils.js';
 
@@ -31,16 +31,9 @@ export function registerAutorenprofilCard() {
     apEditText: '',
     apSaving: false,
     _apMemos: {},
+    _lifecycle: null,
 
     init() {
-      this.$watch(() => window.__app.showAutorenprofilCard, (visible) => {
-        if (visible) this.loadAutorenprofil();
-      });
-      this._onApRefresh = (ev) => {
-        if (ev?.detail?.name === 'autorenprofil') this.loadAutorenprofil();
-      };
-      window.addEventListener(EVT.CARD_REFRESH, this._onApRefresh);
-
       // Der Lauf persistiert serverseitig — nach dem Job wird neu geladen statt
       // das Job-Result in den State zu kopieren. So ist die Karte auch dann
       // richtig, wenn der Lauf in einem anderen Tab lief.
@@ -54,12 +47,20 @@ export function registerAutorenprofilCard() {
           this.loadAutorenprofil();
         }
       };
-      window.addEventListener(EVT.JOB_FINISHED, this._onApJobFinished);
+      this._lifecycle = setupCardLifecycle(this, {
+        name: 'autorenprofil',
+        showFlag: 'showAutorenprofilCard',
+        showNeedsBookId: false,
+        refreshNeedsBookId: false,
+        onShow: () => this.loadAutorenprofil(),
+        // Reklick, Aufwachen, Reconnect: still neu laden (Skeleton nur beim ersten Mal).
+        onCardRefresh: () => this.loadAutorenprofil(),
+        extraListeners: [{ type: EVT.JOB_FINISHED, handler: this._onApJobFinished }],
+      });
     },
 
     destroy() {
-      window.removeEventListener(EVT.CARD_REFRESH, this._onApRefresh);
-      window.removeEventListener(EVT.JOB_FINISHED, this._onApJobFinished);
+      this._lifecycle?.destroy();
     },
 
     // Skeleton nur beim ersten Laden. Ein Reload bei stehender Karte (Aufwachen

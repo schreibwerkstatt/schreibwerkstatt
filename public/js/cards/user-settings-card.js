@@ -7,6 +7,7 @@
 import { userSettingsMethods } from '../user-settings.js';
 import { aiAccessState, aiAccessMethods } from '../user-settings-ai-access.js';
 import { EVT } from '../events.js';
+import { setupCardLifecycle } from './card-lifecycle.js';
 import { takeCardRequest, CARD_REQUEST } from './card-request.js';
 import { scrollToWhenReady } from '../utils/scroll-when-ready.js';
 
@@ -68,24 +69,13 @@ export function registerUserSettingsCard() {
     _onViewReset: null,
     _onCardRequest: null,
     _loadingAll: false,
+    _lifecycle: null,
 
     init() {
-      this.$watch(() => window.__app.showUserSettingsCard, async (visible) => {
-        if (!visible) return;
-        this._loadingAll = true;
-        try {
-          await this._loadAll();
-        } finally {
-          this._loadingAll = false;
-        }
-        this._applySectionRequest();
-      });
-
       this._onViewReset = () => {
         this.userSettingsSaved = false;
         this.userSettingsError = '';
       };
-      window.addEventListener(EVT.VIEW_RESET, this._onViewReset);
 
       // Sprung auf einen Abschnitt (Command-Palette). Öffnet der Sprung die
       // Karte erst, holt der Lade-Watcher oben den Wunsch nach dem Laden ab —
@@ -95,7 +85,22 @@ export function registerUserSettingsCard() {
         await this.$nextTick();
         if (!this._loadingAll) this._applySectionRequest();
       };
-      window.addEventListener(EVT.CARD_REQUEST, this._onCardRequest);
+      // Benutzerbezogen, nicht buchbezogen: kein Reset/Reload beim Buchwechsel.
+      this._lifecycle = setupCardLifecycle(this, {
+        showFlag: 'showUserSettingsCard',
+        showNeedsBookId: false,
+        onShow: async () => {
+          this._loadingAll = true;
+          try {
+            await this._loadAll();
+          } finally {
+            this._loadingAll = false;
+          }
+          this._applySectionRequest();
+        },
+        onViewReset: () => this._onViewReset(),
+        extraListeners: [{ type: EVT.CARD_REQUEST, handler: this._onCardRequest }],
+      });
     },
 
     async _loadAll() {
@@ -174,8 +179,7 @@ export function registerUserSettingsCard() {
 
     destroy() {
       if (this._savedAtTimer) { clearTimeout(this._savedAtTimer); this._savedAtTimer = null; }
-      if (this._onViewReset) window.removeEventListener(EVT.VIEW_RESET, this._onViewReset);
-      if (this._onCardRequest) window.removeEventListener(EVT.CARD_REQUEST, this._onCardRequest);
+      this._lifecycle?.destroy();
     },
 
     ...userSettingsMethods,
