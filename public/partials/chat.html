@@ -80,7 +80,7 @@
   <div class="card-history-section" x-data="chatHistorySearch('page')">
     <!-- @include chat-history-search -->
     <div x-show="!histActive"
-         x-data="{ sessionList: { sessions: () => chatSessions, activeId: () => chatSessionId, running: id => isChatSessionRunning(id), deleteDisabled: id => isChatSessionRunning(id), load: id => loadChatSession(id), remove: id => deleteChatSession(id), untitledKey: 'chat.previewEmpty' } }">
+         x-data="{ sessionList: chatSessionList() }">
       <!-- @include chat-session-list -->
     </div>
   </div>
@@ -198,7 +198,7 @@
   <div x-show="bookChatSessions.length > 0" class="card-history-section" x-data="chatHistorySearch('book')">
     <!-- @include chat-history-search -->
     <div x-show="!histActive"
-         x-data="{ sessionList: { sessions: () => bookChatSessions, activeId: () => bookChatSessionId, running: id => isBookChatSessionActive(id), deleteDisabled: id => isBookChatSessionRunning(id), load: id => loadBookChatSession(id), remove: id => deleteBookChatSession(id), untitledKey: 'chat.previewEmpty' } }">
+         x-data="{ sessionList: bookChatSessionList() }">
       <!-- @include chat-session-list -->
     </div>
   </div>

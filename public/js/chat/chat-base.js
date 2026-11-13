@@ -450,6 +450,13 @@ export function makeChatMethods(cfg) {
   m[`is${L}SessionActive`] = function (id) {
     return m[`is${L}SessionRunning`].call(this, id) || runningInQueue(id);
   };
+  // Adapter für das Fragment chat-session-list.html: `x-data="{ sessionList: chatSessionList() }"`.
+  m[`${L[0].toLowerCase()}${L.slice(1)}SessionList`] = function () {
+    const call = (name) => (id) => m[name].call(this, id);
+    return { sessions: () => this[p.sessions], activeId: () => this[p.sessionId],
+      running: call(`is${L}SessionActive`), deleteDisabled: call(`is${L}SessionRunning`),
+      load: call(`load${L}Session`), remove: call(`delete${L}Session`), untitledKey: cfg.untitledKey || 'chat.previewEmpty' };
+  };
   // Feedback (Daumen hoch/runter) an einer Assistant-Antwort — alle Chats.
   // Erneuter Klick auf denselben Daumen nimmt es zurück. Optimistisch gesetzt,
   // bei Fehler zurückgerollt; Auswertung im Admin-Usage (db/chat-quality.js).

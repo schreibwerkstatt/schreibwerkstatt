@@ -2,10 +2,11 @@
      chat.html [Abschnitts- + Buch-Chat], ideen-chat.html, plot-chat.html und
      recherche-chat.html eingebunden). Geteilt ist nur das Markup; jeder Chat
      behält seine eigenen Methoden (docs/chats.md). Der Einbinder legt im
-     umgebenden Element `x-data="{ sessionList: { … } }"` die Adapter an:
+     umgebenden Element `x-data="{ sessionList: <label>SessionList() }"` an
+     (Adapter aus makeChatMethods, chat-base.js):
        sessions()        → Liste der Sitzungen
        activeId()        → ID der offenen Sitzung
-       running(id)       → Spinner «läuft» an der Zeile
+       running(id)       → Spinner «läuft» an der Zeile (auch Lauf aus anderem Tab/Warteschlange)
        deleteDisabled(id)→ Löschen gesperrt (Job läuft)
        load(id)          → Sitzung öffnen
        remove(id)        → Sitzung löschen

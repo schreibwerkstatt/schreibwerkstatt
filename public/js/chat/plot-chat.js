@@ -35,6 +35,7 @@ export const plotChatMethods = {
   ...plotProposalMethods,
 
   ...makeChatMethods({
+    untitledKey: 'plot.chat.untitled',
     label: 'PlotChat',
     props: {
       sessions: 'plotChatSessions',

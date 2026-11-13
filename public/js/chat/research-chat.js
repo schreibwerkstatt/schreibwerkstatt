@@ -91,6 +91,7 @@ export const researchChatMethods = {
   ...chatIdeeProposalMethods,
 
   ...makeChatMethods({
+    untitledKey: 'recherche.chat.untitled',
     label: 'ResearchChat',
     props: {
       sessions: 'researchChatSessions',

@@ -57,6 +57,7 @@ export const ideenChatMethods = {
   ...ideenProposalMethods,
 
   ...makeChatMethods({
+    untitledKey: 'ideenBoard.chat.untitled',
     label: 'IdeenChat',
     props: {
       sessions: 'ideenChatSessions',

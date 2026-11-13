@@ -177,7 +177,7 @@
 
   <!-- Session-Historie -->
   <div x-show="ideenChatSessions.length > 0" class="card-history-section"
-       x-data="{ sessionList: { sessions: () => ideenChatSessions, activeId: () => ideenChatSessionId, running: id => isIdeenChatSessionRunning(id), deleteDisabled: id => isIdeenChatSessionRunning(id), load: id => loadIdeenChatSession(id), remove: id => deleteIdeenChatSession(id), untitledKey: 'ideenBoard.chat.untitled' } }">
+       x-data="{ sessionList: ideenChatSessionList() }">
     <div class="chat-history-title" x-text="$app.t('chat.history')"></div>
     <!-- @include chat-session-list -->
   </div>

@@ -180,7 +180,7 @@
 
   <!-- Session-Historie -->
   <div x-show="plotChatSessions.length > 0" class="card-history-section"
-       x-data="{ sessionList: { sessions: () => plotChatSessions, activeId: () => plotChatSessionId, running: id => isPlotChatSessionRunning(id), deleteDisabled: id => isPlotChatSessionRunning(id), load: id => loadPlotChatSession(id), remove: id => deletePlotChatSession(id), untitledKey: 'plot.chat.untitled' } }">
+       x-data="{ sessionList: plotChatSessionList() }">
     <div class="chat-history-title" x-text="$app.t('chat.history')"></div>
     <!-- @include chat-session-list -->
   </div>

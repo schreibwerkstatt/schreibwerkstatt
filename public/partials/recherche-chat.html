@@ -206,7 +206,7 @@
 
   <!-- Session-Historie -->
   <div x-show="researchChatSessions.length > 0" class="card-history-section"
-       x-data="{ sessionList: { sessions: () => researchChatSessions, activeId: () => researchChatSessionId, running: id => isResearchChatSessionRunning(id), deleteDisabled: id => isResearchChatSessionRunning(id), load: id => loadResearchChatSession(id), remove: id => deleteResearchChatSession(id), untitledKey: 'recherche.chat.untitled' } }">
+       x-data="{ sessionList: researchChatSessionList() }">
     <div class="chat-history-title" x-text="$app.t('chat.history')"></div>
     <!-- @include chat-session-list -->
   </div>
