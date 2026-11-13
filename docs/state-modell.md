@@ -101,7 +101,7 @@ window.Alpine.data('orteCard', () => ({
 
 Der Helper macht:
 - `$watch(showFlag)` → bei `true` + `selectedBookId` → `cfg.onShow ?? cfg.load`.
-- `book:changed` → Timer clear + `resetState` + (sichtbar + Buch vorhanden) → `cfg.load`.
+- `book:changed` → Timer clear + `resetState` + (sichtbar + Buch vorhanden) → `cfg.load`, ohne `load` bei Buchkarten (`showNeedsBookId` nicht `false`) `cfg.onShow` — sonst bliebe eine offene Karte nach Job-Sprung/Zurück leer.
 - `view:reset` → Timer clear + `resetState` (KEIN Reload).
 - `card:refresh` → wenn `event.detail.name === cfg.name` und Buch vorhanden → `cfg.onCardRefresh` bzw. `cfg.load`. Trägt das Event `source: 'wake'` (Tab-Rückkehr nach >30 s, [bookscope.js](../public/js/app/app-view/bookscope.js)#`_refreshAfterWake`), gilt stattdessen `cfg.wake` — und `cardLoading` bleibt aus.
 - `destroy()` → `clearTimers` + `AbortController.abort()` (alle internen Listener weg).

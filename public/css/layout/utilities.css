@@ -15,17 +15,6 @@
   }
 }
 
-/* === Palette-Badge — Hue-getriebener Badge === */
-/* Basis-Pattern für alle Figuren-/Sozial-/Präsenz-Badges. Konsumenten setzen
-   genau eine Custom-Property `--badge-hue` (Default: --palette-gray) und
-   bekommen daraus per color-mix() Hintergrund + Textfarbe — mit Light/Dark
-   Theme-Awareness via --figpal-bg-mix / --figpal-text-mix. */
-.palette-badge {
-  --badge-hue: var(--palette-gray);
-  background: color-mix(in srgb, var(--badge-hue) var(--figpal-bg-mix), var(--color-surface));
-  color:      color-mix(in srgb, var(--badge-hue) var(--figpal-text-mix), var(--color-text));
-}
-
 /* === Tabular-Nums fuer Stats/Counter ===
    Numerische Werte sollen bei Live-Update nicht wackeln. Sammel-Selektor
    fuer alle Container, die primaer Zahlen anzeigen. Per-File-Wiederholungen
@@ -51,6 +40,18 @@
    koennen muss — im utilities-Layer gewaenne jede dieser Regeln gegen jede
    Komponente. */
 @layer components {
+/* === Palette-Badge — Hue-getriebener Badge ===
+   Basis-Pattern für alle Figuren-/Sozial-/Präsenz-/Typ-Badges. Konsumenten
+   setzen genau eine Custom-Property `--badge-hue` und bekommen daraus per
+   color-mix() Hintergrund + Textfarbe — Light/Dark über --figpal-bg-mix /
+   --figpal-text-mix. Bewusst `components`, und der Grau-Default steht als
+   var()-Fallback statt als Deklaration: eine `--badge-hue`-Zeile hier würde
+   (im utilities-Layer sogar immer) die Varianten der Konsumenten überstimmen. */
+.palette-badge {
+  background: color-mix(in srgb, var(--badge-hue, var(--palette-gray)) var(--figpal-bg-mix), var(--color-surface));
+  color:      color-mix(in srgb, var(--badge-hue, var(--palette-gray)) var(--figpal-text-mix), var(--color-text));
+}
+
 /* === Row-Utility: Flexbox-Wrapper für Button-Gruppen + Input-Reihen ===
    Mobile (≤480 px) stapelt sich der Inhalt automatisch (Inputs full-width,
    Buttons gleich verteilt). */

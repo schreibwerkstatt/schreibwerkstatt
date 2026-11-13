@@ -346,9 +346,11 @@ export function registerShareLinksCard() {
       // Seiten-Share: zur Seite navigieren, dann die Notebook-Leiste öffnen.
       const pageId = link.page_id;
       if (!pageId) { this.loadError = app.t('share.comments.pageGone'); return; }
-      app.gotoPageById(pageId);
-      // Verzögert, damit der Seitenwechsel-Reset der Leiste (commentRailVisible=false
-      // im currentPage-Watcher) zuerst läuft und das Öffnen gewinnt.
+      // Abwarten: bei geschlossener Editor-Karte setzt selectPage currentPage
+      // erst nach Partials + Prefetch. Danach noch einen Task verzögern, damit
+      // der Seitenwechsel-Reset der Leiste (commentRailVisible=false im
+      // currentPage-Watcher) zuerst läuft und das Öffnen gewinnt.
+      await app.gotoPageById(pageId);
       setTimeout(() => {
         window.dispatchEvent(new CustomEvent(EVT.COMMENTS_RAIL_GOTO));
       }, 0);

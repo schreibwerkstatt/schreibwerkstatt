@@ -151,7 +151,8 @@ export const appChromeMethods = {
     this.confirmDialogInputPlaceholder = '';
     this.confirmDialogMessage = message || '';
     this.confirmDialogConfirmLabel = confirmLabel || this.t('common.confirm');
-    this.confirmDialogCancelLabel = cancelLabel || this.t('common.cancel');
+    // `??`: appAlert übergibt bewusst '' → Cancel-Knopf aus (x-show).
+    this.confirmDialogCancelLabel = cancelLabel ?? this.t('common.cancel');
     this.confirmDialogDanger = !!danger;
     return this._openConfirmDialog(false);
   },

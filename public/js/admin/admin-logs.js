@@ -18,7 +18,14 @@ const ADMIN_LOGS_FLUSH_MS = 500;
 export const adminLogsMethods = {
   // ── Lifecycle ──────────────────────────────────────────────────────────────
   async adminLogsEnter() {
-    if (this.adminLogsInitialized) return;
+    if (this.adminLogsInitialized) {
+      // Wiederöffnen: _adminLogsLeave hat den Stream gestoppt. Ohne Filter die
+      // Lücke seit dem Schliessen über den Tail füllen, dann live weiter.
+      if (this.adminLogsHasFilter()) return;
+      await this._adminLogsLoadTail();
+      if (this.adminLogsLiveTail) this._adminLogsStartStream();
+      return;
+    }
     this.adminLogsInitialized = true;
     await this._adminLogsLoadTail();
     await this._adminLogsLoadFiles();

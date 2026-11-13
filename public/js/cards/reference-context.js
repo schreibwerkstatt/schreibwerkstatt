@@ -267,7 +267,7 @@ export const referenceContextMethods = {
 
   /** Meta-Zeile eines Orts: Land · Stimmung. */
   referenceOrtMeta(ort) {
-    const lang = Alpine.store('session')?.uiLocale || 'de';
+    const lang = Alpine.store('shell')?.uiLocale || 'de';
     return [ort?.land ? countryLabel(ort.land, lang) : '', ort?.stimmung].filter(Boolean).join(' · ');
   },
 

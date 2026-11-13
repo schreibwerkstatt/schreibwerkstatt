@@ -121,7 +121,6 @@
   --color-hover-strong: rgba(0, 0, 0, 0.07);
 
   /* Inverse-Text (auf dauerhaft dunklen Flächen) */
-  --color-text-inverse: #eee;
 
   /* Inline-Markierungen (Lektorat + Chat) */
   --color-mark-bg: rgba(255, 200, 50, 0.35);

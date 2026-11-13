@@ -185,6 +185,11 @@ export function setupCardLifecycle(ctx, cfg) {
     if (cfg.showFlag && !root()[cfg.showFlag]) return;
     if (!Alpine.store('nav').selectedBookId) return;
     if (cfg.load) await track(() => cfg.load(root()));
+    // Buchkarten nur mit `onShow` (Erzählprofil, Review, Titelwerkstatt …):
+    // der Reset oben hat ihren Stand geleert, ein erneutes Einblenden gibt es
+    // bei offener Karte nicht (Job-Sprung, Zurück/Vorwärts) → hier laden.
+    // Buchunabhängige Karten (showNeedsBookId: false) bleiben unberührt.
+    else if (cfg.onShow && cfg.showNeedsBookId !== false) await track(() => cfg.onShow(root()));
   };
   const defaultViewReset = () => {
     clearTimers();
