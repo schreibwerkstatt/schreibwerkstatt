@@ -177,7 +177,7 @@
 .kapitel-subchapters-heading {
   font-size: var(--font-size-xs);
   font-weight: var(--fw-semibold);
-  letter-spacing: 0.04em;
+  letter-spacing: var(--tracking-caps);
   text-transform: uppercase;
   color: var(--color-muted);
   background: transparent;

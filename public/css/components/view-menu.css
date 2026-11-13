@@ -14,7 +14,7 @@
   padding: var(--space-xs) var(--space-md) var(--space-2xs);
   border-top: var(--border-thin) solid var(--color-border);
   font-size: var(--font-size-xs);
-  line-height: 1.45;
+  line-height: var(--lh-base);
   color: var(--color-muted);
 }
 }

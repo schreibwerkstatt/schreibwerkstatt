@@ -1,0 +1,58 @@
+/* Bearbeitungsstand-Plakette (`.badge--redaktion-<stufe>`, `.badge--edit-*`) —
+   eine Optik für jede Stelle, die die Stufe eines Abschnitts zeigt:
+   Buchorganizer (organizer-page-actions.html), Notebook-Kopf, Kapitelbewertung
+   und Bucheditor (editor-page-status.html, Klasse aus
+   js/book/tree/edit-status.js#editStatusBadgeClass). Subklassen von `.badge`
+   (components/buttons-badges.css).
+
+   Beide Ketten (Redaktion: roh → gegengelesen → schlussredigiert → freigegeben;
+   Manuskript: rohfassung → ueberarbeitet → redigiert → final) teilen die Farbe
+   je Rang. Die Farbe ist fest aus der Palette, nicht aus `--card-accent` —
+   dieselbe Stufe sieht in jeder Karte gleich aus. Verlauf von „unfertig"
+   (grau) über amber und blau zu „fertig" (grün), damit die Kette als eine
+   Skala liest. Bauform wie `.palette-badge` (layout/utilities.css): Fläche und
+   Schrift per color-mix aus `--badge-hue`, Theme-aware über die Palette-Tokens.
+   Die Schrift mischt stärker zum Text als `--figpal-text-mix`: erst bei 55 %
+   Hue erreichen alle vier Stufen 4.5:1 in Light und Dark (dark gray 4.6:1). */
+@layer components {
+.badge--redaktion-roh,
+.badge--redaktion-rohfassung           { --badge-hue: var(--palette-gray); }
+.badge--redaktion-gegengelesen,
+.badge--redaktion-ueberarbeitet        { --badge-hue: var(--palette-amber); }
+.badge--redaktion-schlussredigiert,
+.badge--redaktion-redigiert            { --badge-hue: var(--palette-blue); }
+.badge--redaktion-freigegeben,
+.badge--redaktion-final                { --badge-hue: var(--palette-green); }
+
+:is(.badge--redaktion-roh, .badge--redaktion-rohfassung,
+    .badge--redaktion-gegengelesen, .badge--redaktion-ueberarbeitet,
+    .badge--redaktion-schlussredigiert, .badge--redaktion-redigiert,
+    .badge--redaktion-freigegeben, .badge--redaktion-final) {
+  background: color-mix(in srgb, var(--badge-hue) var(--figpal-bg-mix), var(--color-surface));
+  color:      color-mix(in srgb, var(--badge-hue) 55%, var(--color-text));
+}
+.badge--redaktion-schlussredigiert,
+.badge--redaktion-redigiert,
+.badge--redaktion-freigegeben,
+.badge--redaktion-final { font-weight: var(--fw-semibold); }
+
+/* Ohne Stufe (Notebook-Kopf): gedämpft, damit die leere Plakette nicht wie ein
+   Status liest. */
+.badge--edit-none {
+  background: transparent;
+  color: var(--color-muted);
+  outline: 1px dashed var(--color-border);
+  outline-offset: -1px;
+}
+
+/* Text nach dem Setzen der Stufe bearbeitet. Bewusst additiv statt als eigene
+   Farbe: die Stufe bleibt ablesbar, der gestrichelte Rahmen sagt „gilt so nicht
+   mehr". Ein umgefärbtes Badge würde die Information verschlucken, die es
+   gerade zu zeigen gilt. `.organizer-redaktion-badge--stale` ist der Name, den
+   der Buchorganizer setzt — gleiche Erscheinung. */
+.badge--edit-stale,
+.organizer-redaktion-badge--stale {
+  outline: 1px dashed var(--color-warn-text);
+  outline-offset: 1px;
+}
+}

@@ -18,7 +18,7 @@
   align-items: baseline;
   gap: var(--space-6) var(--space-10);
   padding-top: var(--space-6);
-  border-top: 0.5px solid var(--color-border);
+  border-top: var(--border-thin) solid var(--color-border);
   font-size: var(--font-size-xs);
 }
 .kapitel-dash-foot-label {
@@ -198,7 +198,7 @@
   flex-direction: column;
   gap: var(--space-xs);
   padding-top: var(--space-6);
-  border-top: 0.5px solid var(--color-border);
+  border-top: var(--border-thin) solid var(--color-border);
   font-size: var(--font-size-xs);
 }
 .kapitel-dash-progress-idle-list {

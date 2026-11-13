@@ -33,7 +33,7 @@
     --tabs-edge-shadow: color-mix(in oklab, var(--color-text) 15%, transparent);
     display: inline-flex;
     max-width: 100%;
-    border: 0.5px solid var(--color-border);
+    border: var(--border-thin) solid var(--color-border);
     border-radius: var(--radius-none);
     background-color: var(--color-surface);
     /* Scrollen statt Clippen. overflow-y bleibt hidden, damit der Radius die
@@ -82,7 +82,7 @@
   }
 
   .tabs-btn:not(:last-child) {
-    border-right: 0.5px solid var(--color-border);
+    border-right: var(--border-thin) solid var(--color-border);
   }
 
   .tabs-btn:hover {
@@ -127,7 +127,7 @@
 
   .tabs-btn:focus-visible {
     outline: 2px solid var(--color-border-focus);
-    outline-offset: -2px;
+    outline-offset: var(--focus-ring-offset-inset);
   }
 
   /* Disabled (z.B. leerer Filter-Bucket): ausgegraut, kein Hover, kein Active. */

@@ -12,7 +12,7 @@
   border: var(--border-thin) solid var(--color-border);
   border-radius: var(--radius-none);
   box-shadow: var(--shadow-md);
-  z-index: var(--z-popover);
+  z-index: var(--z-popover-top);
   display: flex;
   flex-direction: column;
   padding: var(--space-xs) 0;
@@ -34,7 +34,7 @@
   margin: calc(-1 * var(--space-xs)) 0 var(--space-2xs);
   background: var(--color-hover-light);
   font-size: var(--font-size-xs);
-  letter-spacing: 0.06em;
+  letter-spacing: var(--tracking-caps-wide);
   text-transform: uppercase;
   color: var(--color-muted);
   font-weight: var(--fw-bold);

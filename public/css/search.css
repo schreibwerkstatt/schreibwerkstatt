@@ -121,7 +121,7 @@
 .page-search {
   width: 100%;
   padding: var(--pad-btn-compact);
-  border: 0.5px solid var(--color-border-input);
+  border: var(--border-thin) solid var(--color-border-input);
   border-radius: var(--radius-md);
   font-size: var(--font-size-sm);
   background: var(--color-bg);
@@ -144,7 +144,7 @@
 .search-q {
   flex: 1;
   padding: var(--space-sm) var(--space-2xl) var(--space-sm) var(--space-10);
-  border: 0.5px solid var(--color-border-input);
+  border: var(--border-thin) solid var(--color-border-input);
   border-radius: var(--radius-md);
   font-size: var(--font-size-md);
   background: var(--color-bg);
@@ -185,7 +185,7 @@
 }
 .kind-pill {
   padding: var(--space-3) 9px;
-  border: 0.5px solid var(--color-border);
+  border: var(--border-thin) solid var(--color-border);
   border-radius: var(--radius-none);
   background: var(--color-bg);
   color: var(--color-muted);
@@ -200,7 +200,7 @@
 .search-scope-toggle {
   margin-left: auto;
   padding: var(--space-3) 9px;
-  border: 0.5px solid var(--color-border);
+  border: var(--border-thin) solid var(--color-border);
   border-radius: var(--radius-none);
   background: var(--color-bg);
   color: var(--color-muted);
@@ -236,7 +236,7 @@
 }
 .search-hit {
   padding: var(--space-sm) var(--space-10);
-  border: 0.5px solid var(--color-border);
+  border: var(--border-thin) solid var(--color-border);
   border-radius: var(--radius-none);
   background: var(--color-card-bg);
   cursor: pointer;
@@ -250,7 +250,7 @@
 }
 .search-hit-kind {
   padding: var(--space-1) var(--space-6);
-  border: 0.5px solid var(--color-border);
+  border: var(--border-thin) solid var(--color-border);
   border-radius: var(--radius-none);
   font-size: var(--font-size-xs);
   text-transform: uppercase;

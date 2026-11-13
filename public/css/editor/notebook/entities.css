@@ -204,7 +204,7 @@
 
   .entity-popover-desc {
     margin: 0;
-    line-height: 1.45;
+    line-height: var(--lh-base);
     color: var(--color-text);
   }
 
@@ -220,7 +220,7 @@
      Leiser als .entity-popover-desc — er sagt, warum hier nichts steht. */
   .entity-popover-hint {
     margin: 0;
-    line-height: 1.45;
+    line-height: var(--lh-base);
     font-size: 0.92em;
     color: var(--color-muted);
   }
@@ -241,7 +241,7 @@
   .entity-popover-meta-row dt {
     color: var(--color-subtle);
     text-transform: uppercase;
-    letter-spacing: 0.04em;
+    letter-spacing: var(--tracking-caps);
     font-size: 0.85em;
     padding-top: var(--space-2xs);
   }

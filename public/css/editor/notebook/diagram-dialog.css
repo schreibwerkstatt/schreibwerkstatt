@@ -52,7 +52,7 @@
   overflow-wrap: normal;
   overflow-x: auto;
   padding: var(--space-sm);
-  border: 0.5px solid var(--color-border);
+  border: var(--border-thin) solid var(--color-border);
   border-radius: var(--radius-none);
   background: var(--color-bg);
   color: var(--color-text);
@@ -85,7 +85,7 @@
   align-items: center;
   justify-content: center;
   padding: var(--space-sm);
-  border: 0.5px solid var(--color-border);
+  border: var(--border-thin) solid var(--color-border);
   border-radius: var(--radius-none);
   background: var(--color-bg);
   overflow: auto;

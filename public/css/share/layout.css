@@ -29,10 +29,6 @@ body.share-page {
   --cr-tag-bg: var(--share-hover);
   --cr-warn-bg: color-mix(in srgb, var(--share-accent-2) 18%, transparent);
   --cr-warn-text: var(--share-accent-2);
-  --cr-ok-bg: color-mix(in srgb, #3a8f3e 22%, transparent);
-  --cr-ok-text: var(--share-text);
-  --cr-err-bg: color-mix(in srgb, #c43838 20%, transparent);
-  --cr-err-text: var(--share-muted);
   /* Vom Reviewer erledigte Kommentare treten in der Leseansicht deutlicher
      zurueck als in den Editor-Rails (default 0.62). */
   --cr-resolved-opacity: 0.4;

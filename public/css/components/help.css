@@ -13,7 +13,7 @@
   font-weight: var(--fw-semibold);
   color: var(--color-muted);
   text-transform: uppercase;
-  letter-spacing: 0.04em;
+  letter-spacing: var(--tracking-caps);
 }
 
 .help-features {
@@ -74,7 +74,7 @@
    Count-Badge (tabs.css). */
 .help-tab-new {
   text-transform: uppercase;
-  letter-spacing: 0.04em;
+  letter-spacing: var(--tracking-caps);
   font-size: var(--font-size-mini);
 }
 
@@ -123,7 +123,7 @@
 
 .changelog-new {
   text-transform: uppercase;
-  letter-spacing: 0.04em;
+  letter-spacing: var(--tracking-caps);
   font-size: var(--font-size-mini);
   padding: var(--pad-badge);
   border-radius: var(--radius-none);
@@ -156,7 +156,7 @@
   font-size: var(--font-size-mini);
   font-weight: var(--fw-semibold);
   text-transform: uppercase;
-  letter-spacing: 0.04em;
+  letter-spacing: var(--tracking-caps);
   white-space: nowrap;
   background: color-mix(in oklch, var(--changelog-hue) 18%, var(--color-surface));
   color: color-mix(in oklch, var(--changelog-hue) 70%, var(--color-text));

@@ -134,7 +134,7 @@
 }
 
 /* Grid: stale-Zeilen gedämpft wie in der Liste (.entity-row--stale). */
-.card--szenen .entity-grid-row--stale { opacity: 0.6; }
+.card--szenen .entity-grid-row--stale { opacity: var(--opacity-disabled); }
 
 /* Lektorat-Wertung des Abschnitts im Szenen-Detail. */
 .szenen-lektorat {

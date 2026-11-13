@@ -44,7 +44,7 @@
 .tts-dock .tts-status.is-paused::before { background: var(--color-muted); }
 @keyframes ttsDotBreathe {
   0%, 100% { opacity: 1; }
-  50%      { opacity: 0.5; }
+  50%      { opacity: var(--opacity-muted); }
 }
 
 /* Der gerade vorgelesene Satz: weiche akzentfarbene Markierung in der

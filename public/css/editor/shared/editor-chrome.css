@@ -43,7 +43,7 @@
 }
 @keyframes save-indicator-pulse {
   0%, 100% { opacity: 1; transform: scale(1); }
-  50% { opacity: 0.35; transform: scale(0.7); }
+  50% { opacity: var(--opacity-faint); transform: scale(0.7); }
 }
 
 /* Im Focus dimmt der Card-Header (opacity-faint), aber der Save-Indicator

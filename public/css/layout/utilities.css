@@ -33,6 +33,24 @@
 /* === Utility-Klassen === */
 .display-contents { display: contents; }
 
+/* Bewusst im `utilities`-Layer: eine Utility ist eine Zusage am Markup
+   („diese Zeile kürzt ab", „diese Liste hat keine Browser-Einrückung"), die
+   keine Komponentenregel still zurücknehmen darf — der Layer gewinnt gegen
+   jede `components`-Regel unabhängig von deren Spezifität. Darum tragen die
+   beiden nur ihre drei Deklarationen und nichts, was eine Karte gezielt
+   variieren will (kein `display`, kein `max-width`). Mobile und Dark: keine
+   Abweichung — sie setzen weder Grösse noch Farbe. */
+.truncate {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.list-reset {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
 }
 
 /* Bewusst `components`, nicht `utilities`: `.row > *`, `.table-scroll > table`

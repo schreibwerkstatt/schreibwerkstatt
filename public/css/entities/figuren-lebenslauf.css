@@ -39,7 +39,7 @@
   /* Badge-Padding aus den Tokens: die Chips sind Klickziele, keine Inline-Tags —
      3px/4px liessen sie bei 2px Gap zu einem Block verschmelzen. */
   padding: var(--pad-badge);
-  border: 0.5px solid var(--color-border);
+  border: var(--border-thin) solid var(--color-border);
   /* Eckig, nicht Pille: `--radius-none` ist 0 und DESIGN.md haelt „Editorial-Eckig"
      fuer Badges/Tags/Chips fest. Rund ist dort dem An/Aus-Schalter vorbehalten. */
   border-radius: var(--radius-none);
@@ -49,7 +49,7 @@
   cursor: pointer;
 }
 .figur-cv-chip:hover:not(:disabled) { border-color: var(--card-accent); }
-.figur-cv-chip:disabled { opacity: 0.4; cursor: not-allowed; }
+.figur-cv-chip:disabled { opacity: var(--opacity-hint); cursor: not-allowed; }
 .figur-cv-chip--on {
   border-color: var(--card-accent);
   background: color-mix(in oklch, var(--card-accent) 14%, transparent);
@@ -70,12 +70,12 @@
   color: var(--color-muted);
   font-weight: var(--fw-regular);
   padding: var(--space-2xs) var(--space-md) var(--space-5) 0;
-  border-bottom: 0.5px solid var(--color-border);
+  border-bottom: var(--border-thin) solid var(--color-border);
   vertical-align: bottom;
 }
 .figur-cv-table td {
   padding: var(--space-xs) var(--space-md) var(--space-xs) 0;
-  border-bottom: 0.5px solid var(--color-border);
+  border-bottom: var(--border-thin) solid var(--color-border);
   vertical-align: top;
 }
 /* Die Phasen-Spalte bleibt schmal und fix, die Figuren-Spalten teilen den Rest. */
@@ -100,7 +100,7 @@
 
 .figur-cv-phase {
   vertical-align: top;
-  border-bottom: 0.5px solid var(--color-border);
+  border-bottom: var(--border-thin) solid var(--color-border);
 }
 .figur-cv-phase-name {
   display: block;

@@ -103,7 +103,7 @@
 .page-content-view--editing figcaption:is(:empty, :has(> br:only-child))::before {
   content: var(--figcaption-ph, '');
   color: var(--color-subtle);
-  opacity: 0.6;
+  opacity: var(--opacity-disabled);
   font-style: italic;
   pointer-events: none;
 }
@@ -199,7 +199,7 @@
   :is(p, h1, h2, h3, h4, h5, h6, li, pre):not(:has(> br))::after {
   content: '¶';
   color: var(--color-primary);
-  opacity: 0.4;
+  opacity: var(--opacity-hint);
   margin-inline-start: 0.15em;
   font-weight: var(--fw-regular);
   -webkit-user-select: none;
@@ -225,7 +225,7 @@
   display: inline-flex;
   align-items: center;
   line-height: 1;
-  opacity: 0.4;
+  opacity: var(--opacity-hint);
   white-space: pre;
 }
 
@@ -413,8 +413,7 @@
 
 
 /* Bearbeitungsstand im Kopf des Notebook-Editors (editor-page-status.html):
-   Plakette als Knopf, Farben aus book/buchorganizer.css (badge--redaktion-*).
-   Ohne Stufe gedämpft, damit die leere Plakette nicht wie ein Status liest. */
+   Plakette als Knopf, Farben aus components/edit-status-badge.css. */
 .editor-edit-status { display: inline-flex; }
 .editor-edit-status__trigger {
   border: 0;
@@ -422,11 +421,5 @@
   font-family: inherit;
 }
 .editor-edit-status__trigger:disabled { cursor: default; }
-.badge--edit-none {
-  background: transparent;
-  color: var(--color-muted);
-  outline: 1px dashed var(--color-border);
-  outline-offset: -1px;
-}
 .editor-edit-status__menu { right: auto; left: 0; }
 }

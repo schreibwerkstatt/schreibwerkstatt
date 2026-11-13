@@ -50,14 +50,14 @@
 .figur-alter-table td {
   text-align: left;
   padding: var(--space-xs) var(--space-sm);
-  border-bottom: 0.5px solid var(--color-border);
+  border-bottom: var(--border-thin) solid var(--color-border);
 }
 .figur-alter-table th {
   font-size: var(--font-size-xs);
   font-weight: var(--fw-semibold);
   color: var(--color-muted);
   text-transform: uppercase;
-  letter-spacing: 0.04em;
+  letter-spacing: var(--tracking-caps);
   white-space: nowrap;
 }
 /* Chevron-Platzreservierung aus `.sortable-th` (0,1,0) muss die th-Default-Regel
@@ -142,7 +142,7 @@
 .figur-alter-belege-row td {
   padding: var(--space-sm) var(--space-sm) var(--space-md) var(--space-xl);
   background: var(--color-hover-strong);
-  border-bottom: 0.5px solid var(--color-border);
+  border-bottom: var(--border-thin) solid var(--color-border);
 }
 .figur-alter-belege {
   list-style: none;

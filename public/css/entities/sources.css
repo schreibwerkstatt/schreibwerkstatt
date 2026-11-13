@@ -32,7 +32,7 @@
   padding: var(--space-xs) var(--space-sm);
   text-align: left;
   vertical-align: middle;
-  border-bottom: 0.5px solid var(--color-border);
+  border-bottom: var(--border-thin) solid var(--color-border);
 }
 /* Chevron-Platzreservierung aus `.sortable-th` (0,1,0) muss die th-Default-Regel
    darueber (0,1,1) schlagen, sonst laeuft der Sortier-Chevron in kurze
@@ -77,7 +77,7 @@
 .sources-cite-badge {
   display: inline-flex;
   align-items: center;
-  border: 0.5px solid var(--color-border);
+  border: var(--border-thin) solid var(--color-border);
   border-radius: var(--radius-none);
   padding: var(--space-2xs) var(--space-6);
   font-size: var(--font-size-mini);
@@ -116,15 +116,7 @@
 }
 
 /* ── Formular ─────────────────────────────────────────────────────────────── */
-
-.sources-form {
-  border: 1px solid var(--color-border);
-  border-left: 3px solid var(--card-accent);
-  border-radius: var(--radius-md);
-  background: var(--color-card-bg);
-  padding: var(--space-md);
-  margin-bottom: var(--space-md);
-}
+/* Rahmen `.sources-form`: card-blocks.css (`.card-edit-panel`). */
 
 .sources-form-title {
   font-weight: var(--fw-semibold);
@@ -536,7 +528,7 @@
 }
 .sources-lib-hit-snippet {
   color: var(--color-muted); font-size: var(--font-size-xs);
-  margin-top: var(--space-2xs); line-height: 1.45;
+  margin-top: var(--space-2xs); line-height: var(--lh-base);
   max-height: calc(1.45em * 3); overflow: hidden;
   display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical;
 }

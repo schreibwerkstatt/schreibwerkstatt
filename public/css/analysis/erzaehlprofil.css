@@ -94,7 +94,7 @@
 .erzaehlprofil-curve-col:focus-visible .erzaehlprofil-curve-bar { opacity: 1; }
 
 /* Höhere Intensität = kräftiger */
-.erzaehlprofil-curve-bar[data-level="4"] { opacity: 0.75; }
+.erzaehlprofil-curve-bar[data-level="4"] { opacity: var(--opacity-strong); }
 .erzaehlprofil-curve-bar[data-level="5"] { opacity: 0.95; }
 
 /* Leeres Kapitel: nur der Track bleibt sichtbar, kein Stummel. */
@@ -164,7 +164,7 @@
   font-size: var(--font-size-xs);
   font-weight: var(--fw-bold);
   text-transform: uppercase;
-  letter-spacing: 0.03em;
+  letter-spacing: var(--tracking-caps);
   color: var(--card-accent);
 }
 
@@ -306,7 +306,7 @@
 .erzaehlprofil-befund-prio {
   font-size: var(--font-size-mini);
   text-transform: uppercase;
-  letter-spacing: 0.03em;
+  letter-spacing: var(--tracking-caps);
   color: var(--color-muted);
 }
 

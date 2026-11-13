@@ -23,7 +23,7 @@
 }
 .confirm-dialog-message {
   font-size: var(--font-size-base, 0.95rem);
-  line-height: 1.45;
+  line-height: var(--lh-base);
   white-space: pre-wrap;
 }
 .confirm-dialog-field {

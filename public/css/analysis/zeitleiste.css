@@ -26,7 +26,7 @@
 .gz-item--section-start {
   margin-top: var(--space-20);
   padding-top: var(--space-18);
-  border-top: 0.5px solid var(--color-border);
+  border-top: var(--border-thin) solid var(--color-border);
 }
 
 .gz-item--section-start::before {
@@ -38,7 +38,7 @@
   background: var(--color-surface);
   font-size: var(--font-size-micro);
   font-weight: var(--fw-bold);
-  letter-spacing: 0.04em;
+  letter-spacing: var(--tracking-caps);
   text-transform: uppercase;
   color: var(--color-muted);
 }
@@ -222,7 +222,7 @@
   font-size: var(--font-size-mini);
   color: var(--color-muted);
   text-transform: uppercase;
-  letter-spacing: 0.04em;
+  letter-spacing: var(--tracking-caps);
 }
 
 .gz-chronology-total-value {
@@ -246,7 +246,7 @@
   --gz-band-lane-h: 16px;   /* Stapelschritt je Spur */
   --gz-band-marker: 11px;   /* Kantenlänge Punkt-Marker */
   --gz-axis-h: 17px;        /* Fussraum für die Jahres-Labels */
-  border: 0.5px solid var(--color-border);
+  border: var(--border-thin) solid var(--color-border);
   border-radius: var(--radius-none);
   background: linear-gradient(to bottom,
     color-mix(in srgb, var(--color-border) 6%, var(--color-surface)),
@@ -278,7 +278,7 @@
   top: 0;
   bottom: var(--gz-axis-h);
   width: 0;
-  border-left: 0.5px solid color-mix(in srgb, var(--color-border) 45%, transparent);
+  border-left: var(--border-thin) solid color-mix(in srgb, var(--color-border) 45%, transparent);
 }
 
 .gz-band-tick-label {

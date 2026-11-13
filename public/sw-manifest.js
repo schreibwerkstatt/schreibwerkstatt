@@ -5,7 +5,7 @@
 // __SHELL_BUILD: content hash over all listed assets → drives SHELL_CACHE.
 // __SHELL_MANIFEST: the coherent set precached atomically at SW install.
 // __VENDOR_SET: current vendor/ + fonts/ files — VENDOR_CACHE prune list.
-self.__SHELL_BUILD = "58cf32ed1fb4dfe6";
+self.__SHELL_BUILD = "8e8ce4eef277626f";
 self.__SHELL_MANIFEST = [
   "/css/admin/admin-backup.css",
   "/css/admin/admin-home.css",
@@ -83,6 +83,7 @@ self.__SHELL_MANIFEST = [
   "/css/components/device-tokens.css",
   "/css/components/diff-marks.css",
   "/css/components/drag-grip.css",
+  "/css/components/edit-status-badge.css",
   "/css/components/editor-dialog.css",
   "/css/components/entity-ref.css",
   "/css/components/feature-tiles.css",
@@ -106,6 +107,7 @@ self.__SHELL_MANIFEST = [
   "/css/components/offline-rescue.css",
   "/css/components/onboarding.css",
   "/css/components/picker-popover.css",
+  "/css/components/primitives.css",
   "/css/components/relation-conflicts.css",
   "/css/components/seg-toggle.css",
   "/css/components/selection-bar.css",
@@ -168,7 +170,6 @@ self.__SHELL_MANIFEST = [
   "/css/layout/aside-split.css",
   "/css/layout/base.css",
   "/css/layout/layout-base.css",
-  "/css/layout/safari-fallback.css",
   "/css/layout/twocolumn.css",
   "/css/layout/utilities.css",
   "/css/page/diary-anniversary.css",
@@ -262,6 +263,7 @@ self.__SHELL_MANIFEST = [
   "/js/book-organizer/mirror.js",
   "/js/book-organizer/persist.js",
   "/js/book-organizer/redaktion.js",
+  "/js/book-organizer/tree-walk.js",
   "/js/book-organizer/view.js",
   "/js/book-overview.js",
   "/js/book-overview/coverage.js",
@@ -432,6 +434,7 @@ self.__SHELL_MANIFEST = [
   "/js/book/tree.js",
   "/js/book/tree/build.js",
   "/js/book/tree/catchup.js",
+  "/js/book/tree/chapter-items.js",
   "/js/book/tree/edit-status.js",
   "/js/book/tree/first-page.js",
   "/js/book/tree/keyboard.js",
@@ -746,6 +749,7 @@ self.__SHELL_MANIFEST = [
   "/js/editor/shared/edit-counter.js",
   "/js/editor/shared/edit-history.js",
   "/js/editor/shared/editor-host.js",
+  "/js/editor/shared/highlights.js",
   "/js/editor/shared/history-rebase.js",
   "/js/editor/shared/html-clean.js",
   "/js/editor/shared/merge-telemetry.js",
@@ -791,6 +795,7 @@ self.__SHELL_MANIFEST = [
   "/js/figure/figure-html.js",
   "/js/file-drop.js",
   "/js/filter-persist.js",
+  "/js/floating-dismiss.js",
   "/js/fullscreen.js",
   "/js/graph-kit.js",
   "/js/graph-kit/theme.js",
@@ -908,6 +913,7 @@ self.__SHELL_MANIFEST = [
   "/js/redaktion/bedenken.js",
   "/js/redaktion/status.js",
   "/js/register.js",
+  "/js/repo/book-cache.js",
   "/js/repo/content.js",
   "/js/repo/ideen-queue.js",
   "/js/repo/save-ids.js",

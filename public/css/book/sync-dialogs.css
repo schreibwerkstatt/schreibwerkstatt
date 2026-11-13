@@ -5,7 +5,7 @@
 .sync-dialog {
   background: var(--color-surface);
   color: var(--color-text);
-  border: 0.5px solid var(--color-border);
+  border: var(--border-thin) solid var(--color-border);
   border-radius: var(--radius-md);
   box-shadow: var(--shadow-lg);
   width: min(760px, calc(100% - 2 * var(--space-xs)));
@@ -23,7 +23,7 @@
 .sync-dialog-header {
   display: flex; align-items: center; gap: var(--space-2xs);
   padding: var(--space-3) var(--space-xs);
-  border-bottom: 0.5px solid var(--color-border);
+  border-bottom: var(--border-thin) solid var(--color-border);
 }
 .sync-dialog-titlebar {
   display: flex; flex-direction: column;
@@ -45,7 +45,7 @@
 .sync-dialog-actions {
   display: flex; flex-wrap: wrap; gap: var(--space-2xs); justify-content: flex-end;
   padding: var(--space-3) var(--space-xs);
-  border-top: 0.5px solid var(--color-border);
+  border-top: var(--border-thin) solid var(--color-border);
 }
 
 /* Vorschau: Inline-Wort-Diff Blogstand → App-Stand (page-revision-diff.js
@@ -55,7 +55,7 @@
   line-height: 1.55;
   max-height: 50dvh;
   overflow: auto;
-  border: 0.5px solid var(--color-border);
+  border: var(--border-thin) solid var(--color-border);
   border-left: 3px solid var(--card-accent-blog);
   padding: var(--space-3);
   background: var(--color-bg);
@@ -73,7 +73,7 @@
   flex: 1 1 auto;
 }
 .sync-conflict-side {
-  border: 0.5px solid var(--color-border);
+  border: var(--border-thin) solid var(--color-border);
   border-left: 3px solid var(--card-accent-blog);
   border-radius: var(--radius-none);
   padding: var(--space-3);

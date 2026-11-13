@@ -12,7 +12,7 @@
 .ideen-input {
   flex: 1;
   padding: var(--space-sm) var(--space-10);
-  border: 0.5px solid var(--color-border-input);
+  border: var(--border-thin) solid var(--color-border-input);
   border-radius: var(--radius-md);
   font-size: var(--font-size-base);
   font-family: inherit;
@@ -34,7 +34,7 @@
 .ideen-section { margin-top: var(--space-md); }
 .idee-item {
   position: relative;
-  border: 0.5px solid var(--color-border);
+  border: var(--border-thin) solid var(--color-border);
   background: var(--color-bg);
   padding: var(--space-10) 38px var(--space-10) var(--space-md);
   margin-bottom: var(--space-6);
@@ -45,10 +45,10 @@
 .idee-status-badge {
   display: inline-block;
   font-size: var(--font-size-micro);
-  letter-spacing: 0.04em;
+  letter-spacing: var(--tracking-caps);
   text-transform: uppercase;
   background: var(--color-surface);
-  border: 0.5px solid var(--color-border);
+  border: var(--border-thin) solid var(--color-border);
   color: var(--color-muted);
   padding: var(--space-1) var(--space-6);
   border-radius: var(--radius-none);

@@ -14,7 +14,7 @@
 .mybooks-summary {
   padding: var(--space-sm) var(--space-md);
   margin-bottom: var(--space-md);
-  border: 0.5px solid var(--color-border);
+  border: var(--border-thin) solid var(--color-border);
   border-radius: var(--radius-md);
   border-left: 3px solid var(--card-accent, var(--color-accent));
   background: var(--color-bg);
@@ -95,7 +95,7 @@
   position: sticky;
   right: 0;
   background: var(--color-card-bg);
-  border-left: 0.5px solid var(--color-border);
+  border-left: var(--border-thin) solid var(--color-border);
 }
 /* Der Knopf-Streifen liegt in einem eigenen Kasten IN der Zelle. Ein
    `display: flex` auf dem <td> selbst nimmt der Zelle ihre Tabellenzellen-

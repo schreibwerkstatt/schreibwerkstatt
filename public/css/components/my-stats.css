@@ -144,7 +144,7 @@
   box-sizing: border-box;
   width: auto;
   padding: var(--size-compact-padding);
-  border: 0.5px solid var(--color-border-input);
+  border: var(--border-thin) solid var(--color-border-input);
   border-radius: var(--radius-md);
   font-size: var(--size-compact-font-size);
   background: var(--color-surface);
@@ -419,12 +419,12 @@
   color: var(--color-muted);
   font-weight: var(--fw-regular);
   padding: var(--space-2xs) var(--space-md) var(--space-5) 0;
-  border-bottom: 0.5px solid var(--color-border);
+  border-bottom: var(--border-thin) solid var(--color-border);
   white-space: nowrap;
 }
 .job-stats-table td {
   padding: var(--space-xs) var(--space-md) var(--space-xs) 0;
-  border-bottom: 0.5px solid var(--color-separator-on-dark);
+  border-bottom: var(--border-thin) solid var(--color-separator-on-dark);
   white-space: nowrap;
 }
 .job-stats-table tr:last-child td {
@@ -440,7 +440,7 @@
 .job-stats-row--clickable .history-chevron { margin-right: var(--space-6); }
 .job-stats-runs-row td {
   padding: var(--space-6) 0 var(--space-10) var(--space-18);
-  border-bottom: 0.5px solid var(--color-separator-on-dark);
+  border-bottom: var(--border-thin) solid var(--color-separator-on-dark);
 }
 .job-runs-table {
   width: 100%;
@@ -452,7 +452,7 @@
   color: var(--color-muted);
   font-weight: var(--fw-regular);
   padding: var(--space-2xs) var(--space-md) var(--space-xs) 0;
-  border-bottom: 0.5px solid var(--color-border);
+  border-bottom: var(--border-thin) solid var(--color-border);
   white-space: nowrap;
 }
 .job-runs-table td {

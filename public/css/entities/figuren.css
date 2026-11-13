@@ -51,7 +51,7 @@
 .figur-group {
   margin-top: var(--space-lg);
   padding-top: var(--space-md);
-  border-top: 0.5px solid var(--color-border);
+  border-top: var(--border-thin) solid var(--color-border);
 }
 .figur-group:first-of-type {
   margin-top: 0;
@@ -69,7 +69,7 @@
   font-size: var(--font-size-sm);
   font-weight: var(--fw-bold);
   text-transform: uppercase;
-  letter-spacing: 0.06em;
+  letter-spacing: var(--tracking-caps-wide);
   color: var(--color-text);
 }
 .figur-group-title::before {
@@ -322,7 +322,7 @@
   width: 16px;
   height: 12px;
   border-radius: var(--radius-none);
-  border: 0.5px solid var(--color-border);
+  border: var(--border-thin) solid var(--color-border);
   position: relative;
 }
 .figur-presence-legend-swatch--present {
@@ -341,7 +341,7 @@
   width: 16px;
   height: 16px;
   border-radius: var(--radius-none);
-  border: 0.5px solid var(--color-border);
+  border: var(--border-thin) solid var(--color-border);
   cursor: pointer;
 }
 
@@ -398,7 +398,7 @@
   align-items: baseline;
   gap: var(--space-6);
   padding: var(--space-sm) 0;
-  border-bottom: 0.5px solid var(--color-border);
+  border-bottom: var(--border-thin) solid var(--color-border);
   flex-wrap: wrap;
 }
 .figur-beziehung-item:last-child { border-bottom: none; }

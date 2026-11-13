@@ -81,7 +81,7 @@
   border-radius: var(--radius-none);
   background: color-mix(in srgb, var(--gz-subtyp-color, var(--color-accent)) 18%, var(--color-surface));
   color:      color-mix(in srgb, var(--gz-subtyp-color, var(--color-accent)) 75%, var(--color-text));
-  border: 0.5px solid color-mix(in srgb, var(--gz-subtyp-color, var(--color-accent)) 50%, var(--color-border));
+  border: var(--border-thin) solid color-mix(in srgb, var(--gz-subtyp-color, var(--color-accent)) 50%, var(--color-border));
   white-space: nowrap;
 }
 .gz-subtyp-icon {
@@ -106,7 +106,7 @@
   border-radius: var(--radius-none);
   background: var(--color-tag-bg);
   color: var(--color-tag-text);
-  border: 0.5px dashed var(--color-border-input);
+  border: var(--border-thin) dashed var(--color-border-input);
 }
 
 /* "Unbekannt"-Bucket: Marker dezent, Datum-Anzeige in Muted. */

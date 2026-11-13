@@ -33,7 +33,7 @@
   margin: var(--space-xs) var(--space-2xs);
 }
 
-@media (max-width: 700px) {
+@media (max-width: 768px) {
   /* Engere Gaps: auf Touch werden die Icon-Buttons auf ≥40px Tap-Target
      gestreckt — mit kleinerem Gap packen sie pro Reihe dichter beieinander. */
   /* Alle Action-Bars rechtsbündig — die Icons packen wie auf Desktop rechts

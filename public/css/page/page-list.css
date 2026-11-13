@@ -2,7 +2,7 @@
 /* === Page list === */
 .page-item {
   padding: var(--space-3) var(--space-sm) var(--space-xs) var(--space-6);
-  border: 0.5px solid transparent;
+  border: var(--border-thin) solid transparent;
   border-radius: var(--radius-md);
   margin-bottom: var(--space-1);
   display: grid;
@@ -193,15 +193,6 @@
   background: color-mix(in srgb, var(--card-accent-recherche) 14%, transparent);
 }
 
-/* === Tags === */
-.tag {
-  font-size: var(--font-size-xs);
-  background: var(--color-tag-bg);
-  border-radius: var(--radius-none);
-  padding: var(--space-2xs) var(--space-6);
-  color: var(--color-tag-text);
-}
-
 /* === Status === */
 #status {
   font-size: var(--font-size-sm);
@@ -216,20 +207,6 @@
   flex-wrap: wrap;
   gap: var(--space-xs);
 }
-
-/* === Spinner === */
-.spinner {
-  display: inline-block;
-  width: 13px;
-  height: 13px;
-  border: 2px solid var(--color-border);
-  border-top-color: var(--color-text);
-  border-radius: 50%;
-  animation: spin 0.7s linear infinite;
-  vertical-align: middle;
-  margin-right: var(--space-6);
-}
-@keyframes spin { to { transform: rotate(360deg); } }
 
 /* Drei Badges (T/W/Z) rechts im page-item */
 .tok-stats {

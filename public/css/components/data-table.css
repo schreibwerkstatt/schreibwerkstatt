@@ -21,7 +21,7 @@
   color: var(--color-muted);
   font-size: var(--font-size-xs);
   text-transform: uppercase;
-  letter-spacing: 0.04em;
+  letter-spacing: var(--tracking-caps);
 }
 .data-table th.sortable-th {
   padding-right: calc(var(--space-md) + var(--space-14));

@@ -18,7 +18,7 @@
     cursor: pointer;
   }
   .plot-brainstorm-btn:hover:not(:disabled) { background: var(--color-accent-hover); }
-  .plot-brainstorm-btn:disabled { opacity: 0.5; cursor: default; }
+  .plot-brainstorm-btn:disabled { opacity: var(--opacity-muted); cursor: default; }
   .plot-brainstorm-loading {
     display: flex;
     flex-direction: column;

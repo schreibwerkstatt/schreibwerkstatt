@@ -167,7 +167,7 @@
 .lektorat-tip {
   display: none;
   position: fixed;
-  z-index: var(--z-popover);
+  z-index: var(--z-popover-top);
   min-width: 180px;
   max-width: 340px;
   width: max-content;

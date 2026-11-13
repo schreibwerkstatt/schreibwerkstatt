@@ -21,7 +21,7 @@ const UNLAYERED = [
   'css/share.css',        // Reader gewinnt ueber den Layer-Rang
   'css/share/',
   'css/entities/orte-map.css', // Leaflet-CSS haengt zur Laufzeit unlayered dahinter
-  'css/entities/figur-werkstatt.css', // ueberschreibt vendor/jsmind-*.css (unlayered)
+  'css/entities/figur-werkstatt.css', // jsMind-Teil ueberschreibt vendor/jsmind-*.css (unlayered); Karten-Regeln liegen im Layer
   'css/landing.css',      // Standalone-Seiten (Landing/Register/Datenschutz) ohne SPA-Komponenten
 ];
 

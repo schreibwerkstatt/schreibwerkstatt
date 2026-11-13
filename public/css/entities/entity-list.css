@@ -147,7 +147,7 @@
   font-weight: var(--fw-bold);
   color: var(--color-muted);
   text-transform: uppercase;
-  letter-spacing: 0.03em;
+  letter-spacing: var(--tracking-caps);
   white-space: nowrap;
 }
 .entity-meta-value {
@@ -261,66 +261,6 @@
   .entity-skeleton-cell--meta { width: 50px; }
 }
 
-/* === Klappbarer Section-Toggle (Übersicht/Summary in Karten) === */
-.collapsible-toggle {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--space-6);
-  background: transparent;
-  border: none;
-  padding: var(--space-xs) 0;
-  font-size: var(--font-size-xs);
-  font-weight: var(--fw-bold);
-  text-transform: uppercase;
-  letter-spacing: 0.03em;
-  color: var(--color-muted);
-  cursor: pointer;
-}
-.collapsible-toggle:hover { color: var(--color-text); }
-/* Kein Press-Scale: `button:active { transform: scale(0.98) }` zieht bei einem
-   breiten Toggle (`.plot-tension-toggle`, `width: 100%`) die linke Kante um
-   ~1 % der Breite nach innen — der Chevron am Rand wandert unter dem Zeiger
-   weg, mouseup landet ausserhalb des Buttons und der Click feuert nicht. */
-.collapsible-toggle:active { transform: none; }
-
-/* === Klappbarer Section-Wrap (gehört zum collapsible-toggle) ===
-   Block-level Container, der Toggle + Section zusammenhält. Toggle bleibt
-   `inline-flex` (Default) — KEIN `display: flex; width: 100%` auf den
-   Button selber, das hat in der Vergangenheit horizontalen Wackel-Shift
-   beim Öffnen verursacht (PDF-Export-Karte). Mehrere Wraps untereinander
-   stapeln dann sauber als Block. */
-.collapsible-wrap {
-  padding: var(--space-xs) 0 var(--space-md);
-  margin-bottom: var(--space-sm);
-}
-/* Jedes `collapsible()`-Panel (Klasse setzt der `panel`-Spread): eigener
-   Formatierungskontext, damit Kind-Margins in der von `x-collapse` gemessenen
-   Höhe liegen. Abstände/Rahmen gehören an die Kinder, nie ans Panel
-   (public/js/collapsible.js, Punkt 3). */
-.collapse-panel { display: flow-root; }
-
-/* Das Panel animiert per `x-collapse` nur `height` (public/js/collapsible.js).
-   Vertikales Padding, Margin oder ein Border am Panel blieben als Boden der
-   Animation stehen und sprängen am Ende per `display: none` weg — darum liegt
-   jeder vertikale Abstand in der animierten Höhe: Abstand oben/unten als
-   Spacer-Pseudoelemente, die Linie links als Hintergrund, der die Spacer-
-   Anteile des äusseren Abstands ausspart. `flow-root` hält Kind-Margins in der
-   Höhe (über `.collapse-panel`). Folge für Konsumenten: das Panel selbst nicht
-   `display: flex/grid` machen (die Spacer würden Flex-Items) — Layout an ein
-   Kind legen. */
-.collapsible-section {
-  --collapsible-rule: 3px;
-  padding: 0 var(--space-md) 0 calc(var(--collapsible-rule) + var(--space-md));
-  background-image: linear-gradient(var(--color-border), var(--color-border));
-  background-repeat: no-repeat;
-  background-position: left 0 top var(--space-sm);
-  background-size: var(--collapsible-rule) calc(100% - 2 * var(--space-sm));
-}
-.collapsible-section::before,
-.collapsible-section::after { content: ''; display: block; }
-.collapsible-section::before { height: calc(var(--space-sm) + var(--space-6)); }
-.collapsible-section::after { height: calc(var(--space-10) + var(--space-sm)); }
-
 /* === Schauplätze (Orte) — Liste + Detail-Komponenten ===
    Layout via .entity-list. Akzent --card-accent-orte in card-accents.css. */
 .ort-list { padding: 0 0 var(--space-lg); }
@@ -382,7 +322,7 @@
   color: var(--card-accent);
   font-weight: var(--fw-semibold);
   text-transform: uppercase;
-  letter-spacing: 0.04em;
+  letter-spacing: var(--tracking-caps);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -414,13 +354,6 @@
    Stimmung eines Orts ist aber kein Badge-Verhalten. */
 @media (max-width: 480px) {
   .ort-stimmung { display: none; }
-}
-
-/* «Weitere anzeigen» am Ende einer schrittweise gerenderten Liste
-   (public/js/list-window.js) — lädt beim Heranscrollen selbst nach. */
-.list-window-more {
-  display: block;
-  margin: var(--space-md) auto 0;
 }
 
 }

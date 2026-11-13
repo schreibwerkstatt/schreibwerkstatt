@@ -54,7 +54,7 @@ button.entity-ref:active { transform: none; }
   font-weight: var(--fw-medium);
   text-transform: uppercase;
   font-size: 0.72em;
-  letter-spacing: 0.06em;
+  letter-spacing: var(--tracking-caps-wide);
   color: var(--ref-accent, var(--color-muted));
 }
 .entity-ref__label {
@@ -148,7 +148,7 @@ button.entity-ref:active { transform: none; }
   position: fixed;
   top: 0;
   left: 0;
-  z-index: var(--z-popover);
+  z-index: var(--z-popover-top);
   pointer-events: none;
   width: max-content;
   max-width: min(340px, calc(100vw - 2 * var(--space-md)));
@@ -174,7 +174,7 @@ button.entity-ref:active { transform: none; }
   font-size: var(--font-size-xs);
   font-weight: var(--fw-medium);
   text-transform: uppercase;
-  letter-spacing: 0.06em;
+  letter-spacing: var(--tracking-caps-wide);
   color: var(--ref-accent, var(--color-muted));
 }
 .entity-ref-preview__title {

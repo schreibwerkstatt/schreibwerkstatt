@@ -134,7 +134,7 @@
 .research-transcript {
   margin-top: var(--space-md);
   padding-top: var(--space-sm);
-  border-top: 0.5px solid var(--color-border);
+  border-top: var(--border-thin) solid var(--color-border);
 }
 .research-transcript__head {
   display: flex;
@@ -205,7 +205,7 @@
   padding: var(--space-2xs) 0;
 }
 .research-transcript__segment + .research-transcript__segment {
-  border-top: 0.5px solid var(--color-border);
+  border-top: var(--border-thin) solid var(--color-border);
 }
 /* Die Zeitmarke ist ein Sprungziel in der Aufnahme, kein Etikett — sie sieht
    darum anklickbar aus. */

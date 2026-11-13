@@ -40,7 +40,7 @@
     box-sizing: border-box;
   }
   .admin-logs-filter input.card-form-input {
-    border: 0.5px solid var(--color-border);
+    border: var(--border-thin) solid var(--color-border);
     border-radius: var(--radius-md);
     background: var(--color-bg);
     color: var(--color-text);
@@ -76,7 +76,7 @@
     animation: adminLogsPulse 1.6s ease-in-out infinite;
   }
   @keyframes adminLogsPulse {
-    0%, 100% { opacity: 0.6; }
+    0%, 100% { opacity: var(--opacity-disabled); }
     50%      { opacity: 1; }
   }
 

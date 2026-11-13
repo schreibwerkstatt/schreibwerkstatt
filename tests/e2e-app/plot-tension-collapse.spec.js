@@ -131,7 +131,7 @@ test('plot: Spannungsbogen klappt ohne Sprung bis auf Hoehe 0 zu und wieder auf'
   //    und `click` feuerte auf dem gemeinsamen Vorfahren statt am Toggle.
   //    Echte Maus statt `el.click()`: nur sie durchlaeuft :active.
   //    Mutationsprobe: `.collapsible-toggle:active { transform: none; }` in
-  //    css/entities/entity-list.css entfernen → aria-expanded bleibt stehen.
+  //    css/components/primitives.css entfernen → aria-expanded bleibt stehen.
   await page.setViewportSize({ width: 1600, height: 900 });
   await page.waitForTimeout(300);
   const toggle = page.locator('.card--plot .plot-tension-toggle');

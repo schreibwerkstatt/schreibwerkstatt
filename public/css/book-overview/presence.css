@@ -84,7 +84,7 @@
 }
 .overview-presence-cell--empty {
   background: transparent;
-  border: 0.5px dashed var(--color-border);
+  border: var(--border-thin) dashed var(--color-border);
 }
 /* Klickziel (heatmap-cell-btn) über die ganze Zelle — Füllung liegt darunter. */
 .overview-presence-btn {

@@ -50,6 +50,8 @@ const ALLOW_PREFIXES = ['leaflet-', 'ms-chapter--', 'ms-page--', 'ms-page__title
 const ALLOW_CLASSES = new Set([
   'pullquote',       // .callout.pullquote — Manuskript-Inhaltsstil, vom Autor im Buchtext gesetzt (DESIGN.md).
   'stilbox--spaced', // dokumentierte Stilbox-Variante (DESIGN.md), Geschwister von .stilbox--review-summary.
+  'card-edit-panel', // geteilter Bearbeiten-Rahmen (card-blocks.css); Markup traegt noch die gruppierten Altnamen — Eintrag faellt mit dem ersten Konsumenten.
+  'list-reset',      // Utility (layout/utilities.css); Markup-Umstellung der Kandidaten steht aus — Eintrag faellt mit dem ersten Konsumenten.
 ]);
 
 function walk(dir, exts) {

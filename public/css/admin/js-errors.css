@@ -17,7 +17,7 @@
   }
 
   .js-errors-row {
-    border: 0.5px solid var(--color-border);
+    border: var(--border-thin) solid var(--color-border);
     border-radius: var(--radius-none);
     background: var(--color-bg);
   }
@@ -95,7 +95,7 @@
   }
 
   .js-errors-detail {
-    border-top: 0.5px solid var(--color-border);
+    border-top: var(--border-thin) solid var(--color-border);
     padding: var(--space-2xs);
     background: var(--color-hover);
   }

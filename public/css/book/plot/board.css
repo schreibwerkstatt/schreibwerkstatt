@@ -155,7 +155,7 @@
   .plot-beat--im_buch   { border-left-color: var(--color-ok-border); opacity: 0.72; }
   .plot-beat--im_buch:hover,
   .plot-beat--im_buch.plot-beat--editing { opacity: 1; }
-  .plot-beat--verworfen { border-left-color: var(--color-border); opacity: 0.6; }
+  .plot-beat--verworfen { border-left-color: var(--color-border); opacity: var(--opacity-disabled); }
   /* Karte im Edit-Modus nicht ziehen (Textauswahl/Inputs) — SortableJS filtert
      .plot-beat--editing; Cursor zurück auf default als Signal. */
   .plot-beat--editing { cursor: default; }
@@ -434,7 +434,7 @@
     min-height: 2.25rem;
     font-family: inherit;
     font-size: var(--font-size-sm);
-    line-height: 1.45;
+    line-height: var(--lh-base);
     padding: var(--space-xs);
     border: 1px solid var(--card-accent);
     border-radius: var(--radius-none);

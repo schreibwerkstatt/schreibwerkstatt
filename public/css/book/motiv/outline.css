@@ -8,7 +8,7 @@
 .motiv-tree-filter .filter-search-wrap { flex: 1 1 auto; }
 .motiv-tree-themes { display: flex; flex-direction: column; gap: var(--space-xs); }
 .motiv-tree-group { display: flex; flex-direction: column; gap: var(--space-1); }
-.motiv-tree-ghost { opacity: 0.5; }
+.motiv-tree-ghost { opacity: var(--opacity-muted); }
 
 .motiv-tree-theme,
 .motiv-tree-motif {
@@ -87,7 +87,7 @@
   flex: 1 1 0;
   min-width: var(--space-1);
   background: var(--color-border);
-  opacity: 0.5;
+  opacity: var(--opacity-muted);
 }
 .motiv-spark-cell--on {
   opacity: 1;

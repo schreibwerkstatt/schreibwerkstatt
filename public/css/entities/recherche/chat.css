@@ -80,7 +80,7 @@
 .research-chat-proposal-url-row--removed .research-chat-proposal-url,
 .research-chat-proposal-url-row--removed .research-chat-proposal-url-host {
   text-decoration: line-through;
-  opacity: 0.6;
+  opacity: var(--opacity-disabled);
 }
 
 

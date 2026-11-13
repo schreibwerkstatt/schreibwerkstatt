@@ -8,7 +8,7 @@
   z-index: var(--z-popover);
   pointer-events: none;
   background: var(--color-surface);
-  border: 0.5px solid var(--color-border);
+  border: var(--border-thin) solid var(--color-border);
   border-radius: var(--radius-md);
   box-shadow: var(--shadow-sm);
   padding: var(--space-sm) var(--space-10);

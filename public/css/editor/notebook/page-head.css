@@ -216,7 +216,7 @@
      der Stelle des Titels wäre er selbst eine Behauptung. */
   .page-head .page-head__input::placeholder {
     color: var(--color-muted);
-    opacity: 0.4;
+    opacity: var(--opacity-hint);
     font-weight: var(--fw-regular);
   }
 

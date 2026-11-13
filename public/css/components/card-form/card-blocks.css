@@ -58,7 +58,7 @@
   font-size: var(--font-size-xs);
   font-weight: var(--fw-bold);
   text-transform: uppercase;
-  letter-spacing: 0.06em;
+  letter-spacing: var(--tracking-caps-wide);
   line-height: var(--lh-tight);
   color: var(--color-muted);
 }
@@ -302,4 +302,21 @@
   border-top: none;
 }
 
+/* === Bearbeiten-Panel einer Katalog-Karte ===
+   Gerahmter Block für das Anlegen/Bearbeiten eines Eintrags über der Liste:
+   Rahmen, Akzentleiste links in der Kartenfarbe, Kartenfläche. Neue Karten
+   setzen `.card-edit-panel`; die älteren Namen (Schauplätze, Quellen,
+   Weltfakten) stehen gruppiert daneben, damit ihr Markup unverändert gilt.
+   Dark über die Tokens; mobil keine Abweichung. */
+.card-edit-panel,
+.ort-edit-panel,
+.sources-form,
+.weltfakten-edit-panel {
+  border: 1px solid var(--color-border);
+  border-left: 3px solid var(--card-accent);
+  border-radius: var(--radius-md);
+  background: var(--color-card-bg);
+  padding: var(--space-md);
+  margin-bottom: var(--space-md);
+}
 }

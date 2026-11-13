@@ -25,7 +25,7 @@
   animation: sttRecPulse 1.4s ease-in-out infinite;
 }
 /* Pending = kurzer Wartezustand (getUserMedia laeuft) ohne Puls. */
-.stt-dock-btn.is-pending { opacity: 0.6; }
+.stt-dock-btn.is-pending { opacity: var(--opacity-disabled); }
 @keyframes sttRecPulse {
   0%, 100% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--color-err-border) 45%, transparent); }
   50%      { box-shadow: 0 0 0 5px color-mix(in srgb, var(--color-err-border) 0%, transparent); }
@@ -58,6 +58,6 @@
 }
 @keyframes sttDotBreathe {
   0%, 100% { opacity: 1; }
-  50%      { opacity: 0.5; }
+  50%      { opacity: var(--opacity-muted); }
 }
 }

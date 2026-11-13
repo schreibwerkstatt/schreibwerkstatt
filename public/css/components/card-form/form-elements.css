@@ -152,7 +152,7 @@ textarea:disabled,
   font-size: var(--font-size-xs);
   font-weight: var(--fw-bold);
   text-transform: uppercase;
-  letter-spacing: 0.06em;
+  letter-spacing: var(--tracking-caps-wide);
   color: var(--color-muted);
   line-height: var(--lh-tight);
   margin: 22px 0 var(--space-14);

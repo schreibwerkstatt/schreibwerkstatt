@@ -48,7 +48,7 @@
   font-size: var(--font-size-micro);
   color: var(--color-muted);
   text-transform: uppercase;
-  letter-spacing: 0.03em;
+  letter-spacing: var(--tracking-caps);
   text-align: center;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -69,7 +69,7 @@
 .ymheat-year:hover:not(:disabled) { color: var(--color-text); text-decoration: underline; }
 .ymheat-year--has { color: var(--color-text); font-weight: var(--fw-semibold); }
 .ymheat-year--active { color: var(--ymheat-accent); }
-.ymheat-year:disabled { cursor: default; opacity: 0.5; }
+.ymheat-year:disabled { cursor: default; opacity: var(--opacity-muted); }
 
 .ymheat-cell {
   position: relative;
@@ -78,12 +78,12 @@
   aspect-ratio: 1 / 1;
   border-radius: var(--radius-none);
   background: var(--color-tag-bg);
-  border: 0.5px solid transparent;
+  border: var(--border-thin) solid transparent;
   padding: 0;
   cursor: pointer;
   transition: filter var(--transition-base);
 }
-.ymheat-cell:disabled { cursor: default; opacity: 0.5; }
+.ymheat-cell:disabled { cursor: default; opacity: var(--opacity-muted); }
 .ymheat-cell:hover:not(:disabled) { filter: brightness(1.12); }
 .ymheat-cell--lvl0 { background: var(--color-tag-bg); }
 .ymheat-cell--lvl1 { background: color-mix(in srgb, var(--ymheat-accent) 22%, var(--color-bg)); }

@@ -1,0 +1,188 @@
+/* Geteilte Primitive, die quer durch die Karten benutzt werden und darum
+   keiner Feature-Datei gehören (Besitzer-Regel, public/css/CLAUDE.md):
+   `.tag`, `.spinner`, die History-Zeile (`.history-item*`, `.history-chevron`),
+   der klappbare Abschnitt (`.collapsible-toggle`/`-wrap`/`-section`,
+   `.collapse-panel`) und «Weitere anzeigen» (`.list-window-more`).
+
+   Lade-Position in index.html: direkt vor page/page-list.css, der frühesten
+   Datei, in der eine dieser Regeln vorher stand. Feature-Overrides dieser
+   Klassen stehen in später geladenen Dateien oder sind spezifischer
+   (`.<wrapper> .history-chevron`), gewinnen also weiterhin. */
+@layer components {
+/* === Tags === */
+.tag {
+  font-size: var(--font-size-xs);
+  background: var(--color-tag-bg);
+  border-radius: var(--radius-none);
+  padding: var(--space-2xs) var(--space-6);
+  color: var(--color-tag-text);
+}
+
+/* === Spinner === */
+.spinner {
+  display: inline-block;
+  width: 13px;
+  height: 13px;
+  border: 2px solid var(--color-border);
+  border-top-color: var(--color-text);
+  border-radius: 50%;
+  animation: spin 0.7s linear infinite;
+  vertical-align: middle;
+  margin-right: var(--space-6);
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* === History-Zeile (Verlauf, Revisionen, Läufe) === */
+.history-item {
+  display: flex;
+  align-items: center;
+  gap: var(--space-6) var(--space-10);
+  padding: var(--space-sm) var(--space-md);
+  border-radius: var(--radius-md);
+  border: var(--border-thin) solid var(--color-border);
+  margin-bottom: var(--space-xs);
+  cursor: pointer;
+  user-select: none;
+  flex-wrap: wrap;
+  background: transparent;
+  transition: background var(--transition-slow), border-color var(--transition-slow), border-radius var(--transition-slow);
+}
+.history-item:hover { background: var(--color-hover); border-color: var(--color-subtle); }
+.history-item--active {
+  background: var(--color-history-active-bg);
+  border-color: var(--color-primary);
+}
+.history-item--active:hover { background: var(--color-history-active-bg-hover); }
+.history-item--open {
+  border-bottom-left-radius: 0;
+  border-bottom-right-radius: 0;
+  border-bottom-color: transparent;
+  margin-bottom: 0;
+}
+/* Nicht-reaktivierbarer Eintrag (z.B. Plot-Brainstorm-Lauf mit gelöschtem Akt):
+   gedämpft + kein Klick-Cursor, Löschen bleibt möglich. */
+.history-item--disabled { cursor: default; opacity: var(--opacity-disabled); }
+.history-item--disabled:hover { background: transparent; border-color: var(--color-border); }
+
+/* Mobil: Badges/Buttons nicht umbrechen (unschönes Stapeln), sondern die
+   Zeile horizontal scrollbar machen. Gilt fuer Verlauf + page_revisions-Liste
+   (beide nutzen .history-item). */
+@media (max-width: 600px) {
+  .history-item {
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+  .history-item > * { flex-shrink: 0; }
+  .history-item .history-date { flex: 0 0 auto; }
+}
+
+.history-item-delete {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: var(--font-size-base);
+  line-height: 1;
+  padding: var(--space-2xs) var(--space-5);
+  border: none;
+  background: none;
+  color: var(--color-subtle);
+  cursor: pointer;
+  flex-shrink: 0;
+  margin-left: auto;
+}
+/* Ein-/Ausblenden: `.hover-reveal` an der Zeile (components/hover-reveal.css). */
+.history-item-delete:hover { color: var(--color-err-text); }
+
+@media (max-width: 480px) {
+  .history-item-delete {
+    padding: var(--space-6) var(--space-10);
+    font-size: var(--font-size-reading);
+  }
+}
+
+/* Klapp-Marker: CSS-Mask-Icon, rotiert bei `.open`. */
+.history-chevron {
+  display: inline-block;
+  width: 1em;
+  height: 1em;
+  font-size: var(--font-size-reading);
+  color: var(--color-subtle);
+  background-color: currentColor;
+  -webkit-mask: var(--icon-chevron-right) center / contain no-repeat;
+          mask: var(--icon-chevron-right) center / contain no-repeat;
+  transition: transform var(--transition-slow);
+  vertical-align: -0.125em;
+  text-indent: 100%;
+  white-space: nowrap;
+  overflow: hidden;
+}
+.history-chevron.open { transform: rotate(90deg); }
+
+/* === Klappbarer Section-Toggle (Übersicht/Summary in Karten) === */
+.collapsible-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-6);
+  background: transparent;
+  border: none;
+  padding: var(--space-xs) 0;
+  font-size: var(--font-size-xs);
+  font-weight: var(--fw-bold);
+  text-transform: uppercase;
+  letter-spacing: var(--tracking-caps);
+  color: var(--color-muted);
+  cursor: pointer;
+}
+.collapsible-toggle:hover { color: var(--color-text); }
+/* Kein Press-Scale: `button:active { transform: scale(0.98) }` zieht bei einem
+   breiten Toggle (`.plot-tension-toggle`, `width: 100%`) die linke Kante um
+   ~1 % der Breite nach innen — der Chevron am Rand wandert unter dem Zeiger
+   weg, mouseup landet ausserhalb des Buttons und der Click feuert nicht. */
+.collapsible-toggle:active { transform: none; }
+
+/* === Klappbarer Section-Wrap (gehört zum collapsible-toggle) ===
+   Block-level Container, der Toggle + Section zusammenhält. Toggle bleibt
+   `inline-flex` (Default) — KEIN `display: flex; width: 100%` auf den
+   Button selber, das hat in der Vergangenheit horizontalen Wackel-Shift
+   beim Öffnen verursacht (PDF-Export-Karte). Mehrere Wraps untereinander
+   stapeln dann sauber als Block. */
+.collapsible-wrap {
+  padding: var(--space-xs) 0 var(--space-md);
+  margin-bottom: var(--space-sm);
+}
+/* Jedes `collapsible()`-Panel (Klasse setzt der `panel`-Spread): eigener
+   Formatierungskontext, damit Kind-Margins in der von `x-collapse` gemessenen
+   Höhe liegen. Abstände/Rahmen gehören an die Kinder, nie ans Panel
+   (public/js/collapsible.js, Punkt 3). */
+.collapse-panel { display: flow-root; }
+
+/* Das Panel animiert per `x-collapse` nur `height` (public/js/collapsible.js).
+   Vertikales Padding, Margin oder ein Border am Panel blieben als Boden der
+   Animation stehen und sprängen am Ende per `display: none` weg — darum liegt
+   jeder vertikale Abstand in der animierten Höhe: Abstand oben/unten als
+   Spacer-Pseudoelemente, die Linie links als Hintergrund, der die Spacer-
+   Anteile des äusseren Abstands ausspart. `flow-root` hält Kind-Margins in der
+   Höhe (über `.collapse-panel`). Folge für Konsumenten: das Panel selbst nicht
+   `display: flex/grid` machen (die Spacer würden Flex-Items) — Layout an ein
+   Kind legen. */
+.collapsible-section {
+  --collapsible-rule: 3px;
+  padding: 0 var(--space-md) 0 calc(var(--collapsible-rule) + var(--space-md));
+  background-image: linear-gradient(var(--color-border), var(--color-border));
+  background-repeat: no-repeat;
+  background-position: left 0 top var(--space-sm);
+  background-size: var(--collapsible-rule) calc(100% - 2 * var(--space-sm));
+}
+.collapsible-section::before,
+.collapsible-section::after { content: ''; display: block; }
+.collapsible-section::before { height: calc(var(--space-sm) + var(--space-6)); }
+.collapsible-section::after { height: calc(var(--space-10) + var(--space-sm)); }
+
+/* «Weitere anzeigen» am Ende einer schrittweise gerenderten Liste
+   (public/js/list-window.js) — lädt beim Heranscrollen selbst nach. */
+.list-window-more {
+  display: block;
+  margin: var(--space-md) auto 0;
+}
+}

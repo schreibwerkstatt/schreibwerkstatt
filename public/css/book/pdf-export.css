@@ -3,10 +3,9 @@
    Gemeinsame Grammatik (Profil-Leiste, Anlege-Zeile, Scope-Picker, Tabs,
    Chips, Progress, Mobile) kommt aus export-shared.css. Weitere Patterns:
      card-form.css          → .card-form-grid / .card-form-row / .card-form-label / .card-form-field / .card-form-field-note / .card-form-textarea / .card-form-saved / .card-form-error / .card-form-hint
-     entity-list.css        → .collapsible-toggle / .collapsible-section
-     tree-history.css       → .history-chevron
+     primitives.css         → .collapsible-toggle / .collapsible-section / .history-chevron / .spinner
      tabs.css               → .tabs / .tabs-btn (+ .tabs--scrollable)
-     buttons-badges.css     → <button> / .primary / .danger / .spinner
+     buttons-badges.css     → <button> / .primary / .danger
      base.css               → .progress-bar-wrap / .progress-bar
    Diese Datei enthält nur die PDF-eigenen Eigenheiten (Inputs, Num-Grids,
    Schrift-Akkordeon, Farbpicker, Cover-Vorschau). */
@@ -18,7 +17,7 @@
 .pdfx-num-input {
   width: 100%;
   padding: var(--space-6) var(--space-sm);
-  border: 0.5px solid var(--color-border);
+  border: var(--border-thin) solid var(--color-border);
   border-radius: var(--radius-none);
   background: var(--color-surface);
   color: var(--color-text);
@@ -87,8 +86,8 @@
   min-width: 0;
   padding: var(--space-2xs) 0;
   font-size: var(--font-size-xs);
-  line-height: 1.2;
-  border: 0.5px solid var(--color-border);
+  line-height: var(--lh-tight);
+  border: var(--border-thin) solid var(--color-border);
   border-radius: var(--radius-none);
   background: var(--color-surface);
   color: var(--color-muted);
@@ -116,7 +115,7 @@
   gap: var(--space-1);
   font-size: var(--font-size-xs);
   color: var(--color-text);
-  line-height: 1.2;
+  line-height: var(--lh-tight);
 }
 .pdfx-hf-rowhead small { color: var(--color-muted); font-size: 0.72em; }
 
@@ -149,7 +148,7 @@
 }
 .pdfx-font-group + .pdfx-font-group {
   margin-top: var(--space-lg);
-  border-top: 0.5px solid var(--color-border);
+  border-top: var(--border-thin) solid var(--color-border);
   padding-top: var(--space-md);
 }
 .pdfx-font-role { /* override collapsible-wrap-Spacing nicht; nur kompaktere Reihen */
@@ -178,7 +177,7 @@
 .pdfx-font-preview {
   margin-top: var(--space-10);
   padding: var(--space-sm) var(--space-md);
-  border: 0.5px solid var(--color-border);
+  border: var(--border-thin) solid var(--color-border);
   border-radius: var(--radius-none);
   background: #ffffff;
   color: #1a1a1a;
@@ -198,7 +197,7 @@
   width: 36px;
   height: 28px;
   padding: 0;
-  border: 0.5px solid var(--color-border);
+  border: var(--border-thin) solid var(--color-border);
   border-radius: var(--radius-none);
   background: var(--color-surface);
   cursor: pointer;
@@ -229,7 +228,7 @@
   justify-content: center;
   width: 200px;
   height: 280px;
-  border: 0.5px dashed var(--color-border);
+  border: var(--border-thin) dashed var(--color-border);
   border-radius: var(--radius-none);
   background: var(--color-bg);
   color: var(--color-muted);
@@ -319,7 +318,7 @@
   max-width: 440px;
   height: auto;
   background: var(--color-bg);
-  border: 0.5px solid var(--color-border);
+  border: var(--border-thin) solid var(--color-border);
   border-radius: var(--radius-none);
 }
 .pdfx-ss-page { fill: var(--color-surface); stroke: var(--color-muted); stroke-width: 0.6; }

@@ -12,10 +12,6 @@
 /* Aufgeklappte Liste: Abstand zum Toggle-Kopf darüber. */
 .weltfakten-group .entity-list { margin-top: var(--space-6); }
 
-/* Gruppen-Kopf = .collapsible-toggle-Button (Chevron + Kategorie-Tag + Count).
-   Display/Padding kommen vom Pattern (entity-list.css) — hier nur Gap-Feinschliff. */
-.weltfakten-group-head { gap: var(--space-xs); }
-
 /* Kategorie-Tag mit Icon + Label: Breite an Inhalt statt feste entity-typ-tag-Spalte. */
 .weltfakten-kat-tag {
   display: inline-flex;
@@ -123,15 +119,8 @@
   color: var(--color-text);
 }
 
-/* Pflegeformular: Neuanlage über der Liste, Bearbeiten unter der Zeile. */
-.weltfakten-edit-panel {
-  border: 1px solid var(--color-border);
-  border-left: 3px solid var(--card-accent);
-  border-radius: var(--radius-md);
-  background: var(--color-card-bg);
-  padding: var(--space-md);
-  margin-bottom: var(--space-md);
-}
+/* Pflegeformular: Neuanlage über der Liste, Bearbeiten unter der Zeile.
+   Rahmen `.weltfakten-edit-panel`: card-blocks.css (`.card-edit-panel`). */
 .weltfakten-edit-actions {
   display: flex;
   flex-wrap: wrap;

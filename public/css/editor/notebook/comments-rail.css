@@ -86,7 +86,7 @@
   font-weight: var(--fw-semibold);
   color: var(--color-muted);
   text-transform: uppercase;
-  letter-spacing: 0.04em;
+  letter-spacing: var(--tracking-caps);
 }
 
 /* Allgemeine (nicht-verankerte) Kommentare: zentrierte Bande GANZ UNTEN unter
@@ -113,7 +113,7 @@
   font-size: var(--font-size-xs);
   font-weight: var(--fw-semibold);
   text-transform: uppercase;
-  letter-spacing: 0.04em;
+  letter-spacing: var(--tracking-caps);
   color: var(--color-muted);
   margin-block-end: var(--space-md);
 }

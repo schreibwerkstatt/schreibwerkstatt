@@ -13,7 +13,7 @@
   background: var(--color-hover, transparent);
   border: 1px solid var(--color-border, transparent);
   font-size: var(--font-size-xs);
-  line-height: 1.2;
+  line-height: var(--lh-tight);
 }
 
 /* Ohne E-Mail setzt x-user-chip `hidden`; die display-Regel oben schlüge das

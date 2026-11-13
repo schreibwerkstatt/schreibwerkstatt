@@ -22,7 +22,7 @@
 @layer components {
 
   .editor-dialog {
-    border: 0.5px solid var(--color-border);
+    border: var(--border-thin) solid var(--color-border);
     border-radius: var(--radius-md);
     box-shadow: var(--shadow-lg);
     background: var(--color-surface);
@@ -51,7 +51,7 @@
     justify-content: space-between;
     gap: var(--space-sm);
     padding: var(--space-10) var(--space-md);
-    border-bottom: 0.5px solid var(--color-border);
+    border-bottom: var(--border-thin) solid var(--color-border);
   }
 
   .editor-dialog__title { font-weight: var(--fw-semibold); }
@@ -61,7 +61,7 @@
     align-items: center;
     gap: var(--space-sm);
     padding: var(--space-10) var(--space-md);
-    border-top: 0.5px solid var(--color-border);
+    border-top: var(--border-thin) solid var(--color-border);
   }
 
   /* Schiebt die nachfolgenden Tasten an den rechten Rand der Aktionsleiste. */

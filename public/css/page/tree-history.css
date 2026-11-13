@@ -39,7 +39,7 @@
   row-gap: var(--space-2xs);
   align-items: start;
   padding: var(--space-6) var(--space-10) var(--space-6) var(--space-2xs);
-  border: 0.5px solid transparent;
+  border: var(--border-thin) solid transparent;
   border-radius: var(--radius-md);
   cursor: pointer;
   font-weight: var(--fw-semibold);
@@ -134,7 +134,7 @@
    analyse einfliesst. Bleibt durchgehend gedaempft (kein Hover-Aufhellen). */
 .tree-chapter--excluded > .tree-chapter-header { color: var(--color-muted); }
 .tree-chapter--excluded > .tree-chapter-pages { opacity: var(--opacity-hint); }
-.tree-chapter-excluded-tag { font-style: normal; text-transform: uppercase; letter-spacing: 0.04em; }
+.tree-chapter-excluded-tag { font-style: normal; text-transform: uppercase; letter-spacing: var(--tracking-caps); }
 
 /* === History === */
 .history-heading {
@@ -152,50 +152,6 @@
   border-top: 1px solid var(--color-border);
 }
 
-.history-item {
-  display: flex;
-  align-items: center;
-  gap: var(--space-6) var(--space-10);
-  padding: var(--space-sm) var(--space-md);
-  border-radius: var(--radius-md);
-  border: 0.5px solid var(--color-border);
-  margin-bottom: var(--space-xs);
-  cursor: pointer;
-  user-select: none;
-  flex-wrap: wrap;
-  background: transparent;
-  transition: background var(--transition-slow), border-color var(--transition-slow), border-radius var(--transition-slow);
-}
-.history-item:hover { background: var(--color-hover); border-color: var(--color-subtle); }
-.history-item--active {
-  background: var(--color-history-active-bg);
-  border-color: var(--color-primary);
-}
-.history-item--active:hover { background: var(--color-history-active-bg-hover); }
-.history-item--open {
-  border-bottom-left-radius: 0;
-  border-bottom-right-radius: 0;
-  border-bottom-color: transparent;
-  margin-bottom: 0;
-}
-/* Nicht-reaktivierbarer Eintrag (z.B. Plot-Brainstorm-Lauf mit gelöschtem Akt):
-   gedämpft + kein Klick-Cursor, Löschen bleibt möglich. */
-.history-item--disabled { cursor: default; opacity: 0.6; }
-.history-item--disabled:hover { background: transparent; border-color: var(--color-border); }
-
-/* Mobil: Badges/Buttons nicht umbrechen (unschönes Stapeln), sondern die
-   Zeile horizontal scrollbar machen. Gilt fuer Verlauf + page_revisions-Liste
-   (beide nutzen .history-item). */
-@media (max-width: 600px) {
-  .history-item {
-    flex-wrap: nowrap;
-    overflow-x: auto;
-    -webkit-overflow-scrolling: touch;
-  }
-  .history-item > * { flex-shrink: 0; }
-  .history-item .history-date { flex: 0 0 auto; }
-}
-
 .history-date {
   font-size: var(--font-size-sm);
   color: var(--color-muted);
@@ -205,30 +161,6 @@
 
 @media (max-width: 480px) {
   .history-date { min-width: 80px; }
-}
-
-.history-item-delete {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  font-size: var(--font-size-base);
-  line-height: 1;
-  padding: var(--space-2xs) var(--space-5);
-  border: none;
-  background: none;
-  color: var(--color-subtle);
-  cursor: pointer;
-  flex-shrink: 0;
-  margin-left: auto;
-}
-/* Ein-/Ausblenden: `.hover-reveal` an der Zeile (components/hover-reveal.css). */
-.history-item-delete:hover { color: var(--color-err-text); }
-
-@media (max-width: 480px) {
-  .history-item-delete {
-    padding: var(--space-6) var(--space-10);
-    font-size: var(--font-size-reading);
-  }
 }
 
 .btn-toggle-saved {
@@ -244,26 +176,9 @@
 .btn-toggle-saved--on  { background: var(--color-ok-bg);   color: var(--color-ok-text);   border-color: var(--color-ok-text); }
 .btn-toggle-saved--off { background: var(--color-warn-bg); color: var(--color-warn-text); border-color: var(--color-warn-text); }
 
-.history-chevron {
-  display: inline-block;
-  width: 1em;
-  height: 1em;
-  font-size: var(--font-size-reading);
-  color: var(--color-subtle);
-  background-color: currentColor;
-  -webkit-mask: var(--icon-chevron-right) center / contain no-repeat;
-          mask: var(--icon-chevron-right) center / contain no-repeat;
-  transition: transform var(--transition-slow);
-  vertical-align: -0.125em;
-  text-indent: 100%;
-  white-space: nowrap;
-  overflow: hidden;
-}
-.history-chevron.open { transform: rotate(90deg); }
-
 .history-detail {
-  border: 0.5px solid var(--color-border);
-  border-top: 0.5px dashed var(--color-border);
+  border: var(--border-thin) solid var(--color-border);
+  border-top: var(--border-thin) dashed var(--color-border);
   border-radius: 0 0 var(--radius-md) var(--radius-md);
   padding: var(--space-lg) var(--space-18) var(--space-18);
   margin: 0 0 var(--space-sm);
@@ -314,7 +229,7 @@
 /* Delta-Tag: Zeichen-Unterschied zur Vorgaengerversion. */
 .revision-delta--pos { background: var(--color-ok-bg); color: var(--color-ok-text); }
 .revision-delta--neg { background: var(--color-err-bg); color: var(--color-err-text); }
-.revision-delta--zero { opacity: 0.6; }
+.revision-delta--zero { opacity: var(--opacity-disabled); }
 
 /* Teilen-Verweis: Richtung + Entitäts-Referenz auf die andere Haelfte. */
 .revision-split { display: inline-flex; align-items: center; gap: var(--space-2xs); }
@@ -355,7 +270,7 @@
   gap: var(--space-sm);
   padding: 0 var(--space-md) var(--space-xs);
   margin-bottom: var(--space-xs);
-  border-bottom: 0.5px solid var(--color-border);
+  border-bottom: var(--border-thin) solid var(--color-border);
 }
 .page-revisions-day__label { font-size: var(--font-size-sm); font-weight: var(--fw-semibold); }
 .page-revisions-day__date { font-size: var(--font-size-xs); color: var(--color-muted); }
@@ -445,7 +360,7 @@
 /* Aktionen nur bei Zeigegeraeten zurueckgenommen, bis die Zeile Hover/Fokus
    hat — auf Touch bleiben sie voll sichtbar. Ein aktiver Pin bleibt sichtbar. */
 @media (hover: hover) {
-  .page-revisions-row .page-revisions-row__actions > * { opacity: 0.35; transition: opacity var(--transition-fast); }
+  .page-revisions-row .page-revisions-row__actions > * { opacity: var(--opacity-faint); transition: opacity var(--transition-fast); }
   .page-revisions-row:hover .page-revisions-row__actions > *,
   .page-revisions-row:focus-within .page-revisions-row__actions > *,
   .page-revisions-row .page-revisions-row__actions > .is-active { opacity: 1; }

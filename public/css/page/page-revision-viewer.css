@@ -264,7 +264,7 @@ html.revision-viewer-open {
 }
 .revision-diff-body .diff-empty-mark {
   color: var(--color-muted);
-  opacity: 0.4;
+  opacity: var(--opacity-hint);
 }
 
 .revision-diff-body .diff-cell--skip {

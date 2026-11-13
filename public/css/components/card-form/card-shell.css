@@ -52,7 +52,7 @@
   position: relative;
 }
 
-@media (max-width: 700px) {
+@media (max-width: 768px) {
   .card-header { flex-direction: column; align-items: flex-start; }
   /* Column-Stack schiebt den Close-Button sonst nach unten-links; oben-rechts
      verankern + rechts nur dann Platz reservieren, wenn wirklich ein Close-Button
@@ -118,7 +118,7 @@
   font-weight: var(--fw-medium);
   font-size: var(--font-size-lg);
   letter-spacing: -0.01em;
-  line-height: 1.2;
+  line-height: var(--lh-tight);
   resize: none;
   overflow: hidden;
   overflow-wrap: anywhere;
@@ -151,7 +151,7 @@
   /* basis 0 (nicht auto): sonst sprengt die max-content-Subline samt Close-Button die flex-wrap-Zeile. */
   flex: 1 1 0;
 }
-.card-header-titlebar .card-title { line-height: 1.2; }
+.card-header-titlebar .card-title { line-height: var(--lh-tight); }
 .card-subline {
   display: flex;
   flex-wrap: wrap;
@@ -218,7 +218,7 @@
    (flex 1 1 0 / min-width 0) und der Titel bricht bei Bedarf um.
    Reine Text-Button-Leisten OHNE Titelspalte (Export/Admin) sind ausgenommen
    und behalten ihren Full-Width-Stack (base .card-header column-Regel). */
-@media (max-width: 700px) {
+@media (max-width: 768px) {
   .card-header:has(.card-header-titlebar) {
     flex-direction: row;
     align-items: flex-start;

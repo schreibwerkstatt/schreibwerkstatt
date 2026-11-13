@@ -129,7 +129,7 @@
 .ideen-board-head-lane {
   font-size: var(--font-size-micro);
   text-transform: uppercase;
-  letter-spacing: 0.04em;
+  letter-spacing: var(--tracking-caps);
   color: var(--color-muted);
 }
 .ideen-board-head-col {
@@ -328,7 +328,7 @@ body.ideen-tree-drop-active .page-tree .tree-drop-target {
   position: relative;
   /* Nur transform animieren (Compositor-billig) — gleiche Ueberlegung wie an
      der Recherche-Status-Karte. */
-  transition: transform 0.12s ease;
+  transition: transform var(--transition-base);
 }
 .idee-board-card--verworfen { opacity: var(--opacity-muted); }
 

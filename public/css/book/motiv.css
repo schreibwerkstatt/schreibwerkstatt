@@ -447,7 +447,7 @@
 .motiv-check-text {
   margin: var(--space-2xs) 0 0;
   font-size: var(--font-size-sm);
-  line-height: 1.45;
+  line-height: var(--lh-base);
   color: var(--color-text);
   overflow-wrap: anywhere;
 }
@@ -462,7 +462,7 @@
   padding-top: var(--space-xs);
   border-top: 1px solid var(--color-border);
   font-size: var(--font-size-sm);
-  line-height: 1.45;
+  line-height: var(--lh-base);
   color: var(--color-text);
   overflow-wrap: anywhere;
 }

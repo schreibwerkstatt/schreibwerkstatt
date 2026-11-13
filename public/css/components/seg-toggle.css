@@ -9,7 +9,7 @@
   .seg-toggle button {
     font-size: var(--size-compact-font-size);
     padding: var(--size-compact-padding);
-    border: 0.5px solid var(--color-border);
+    border: var(--border-thin) solid var(--color-border);
     background: var(--color-surface);
     color: var(--color-muted);
     cursor: pointer;

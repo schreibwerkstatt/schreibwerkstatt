@@ -34,7 +34,7 @@
 
 .chat-vorschlag {
   --chat-vorschlag-field-w: 6.5rem;
-  border: 0.5px solid var(--color-border);
+  border: var(--border-thin) solid var(--color-border);
   border-left: 2px solid var(--color-primary);
   padding: var(--space-sm) var(--space-10);
   background: var(--color-surface);
@@ -74,14 +74,14 @@
 .chat-vorschlag-btn {
   font-size: var(--font-size-xs);
   padding: var(--space-2xs) var(--space-10);
-  border: 0.5px solid var(--color-primary);
+  border: var(--border-thin) solid var(--color-primary);
   color: var(--color-primary);
   background: transparent;
   cursor: pointer;
 }
 .chat-vorschlag-btn:hover:not(:disabled) {
   background: var(--color-primary);
-  color: var(--color-surface);
+  color: var(--color-on-primary);
 }
 .chat-vorschlag-btn:disabled { opacity: var(--opacity-muted); cursor: default; }
 .chat-vorschlag-btn--ghost { border-color: var(--color-border); color: var(--color-muted); }

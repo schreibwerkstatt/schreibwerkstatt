@@ -172,10 +172,11 @@ Wiederkehrende Werte gehen über Tokens. Ad-hoc-Werte (`box-shadow: 0 4px 12px .
 | **Font-Family** | `--font-sans` (Inter), `--font-serif` (Source Serif 4) | UI immer `--font-sans`, Reading-Frame + Headings `--font-serif`. |
 | **Font-Weight** | `--fw-regular` (400), `--fw-medium` (500), `--fw-semibold` (600), `--fw-bold` (700) | `font-weight: 600` → `var(--fw-semibold)`. |
 | **Line-Height** | `--lh-tight` (1.2), `--lh-base` (1.45), `--lh-relaxed` (1.6) | Headings/UI tight, Standard base, Reading-Frame relaxed. |
+| **Letter-Spacing** | `--tracking-caps` (0.04em), `--tracking-caps-wide` (0.06em) | Nur zu `text-transform: uppercase`: caps für Labels, Badges, Tabellenköpfe; wide für Abschnitts-Titel (`.card-section-title`) und überschriftartige Gruppen-Köpfe. Negatives Tracking der Headings bleibt literal. |
 | **Border-Width** | `--border-thin` (0.5px), `--border-thick` (2px) | Nur die **Abweichungen** vom Standard sind tokenisiert: dezenter Trenner bzw. Akzentband. Der Regelfall 1px steht literal (`border: 1px solid var(--color-border)`) — die Farbe ist das Token, die Breite nicht. |
 | **Radius** | `--radius-none` (0 — Badges/Tags/Pills, Listen-Elemente), `--radius-md` (3px — Inputs, Buttons), `--radius-lg` (6px — Cards, Popover-Menüs, Status-Banner), `--radius-xl` (10px — Modal, Confirm-Dialog, Shortcuts-Panel) | Editorial-Eckig bleibt Leitmotiv (Listen-Elemente hart auf 0), grössere Flächen leicht weichgespült. Nicht zu ad-hoc Pixel-Radius greifen; `calc()` auf `--radius-none` ist sinnlos (0 bleibt 0). |
 | **Text-Farben** | `--color-text`, `--color-muted`, `--color-subtle`, `--color-faint` | Body / sekundär / tertiär (alle ≥ 4.5:1) / dekorativ. `--color-faint` ist **nie** lesbarer Text (Skeleton, Fokus-Dim) — tertiärer Text ist `--color-subtle`. **Vollton vs. Schrift:** `--color-success`, `--color-accent`, `--color-pending` und die Severity-Volltöne (`--color-stark/-mittel/-schwach`) sind Flächen-/Rand-/Dot-Farben; als `color:` gilt das `-text`-Pendant (`--color-ok-text`, `--color-accent-text`, `--color-warn-text`, `--color-stark-text`/`-mittel-text`/`-schwach-text`). **Auf `--color-tag-bg`** (Badge, Chip, Zähler) ist Sekundärschrift `--color-tag-text`, nie `--color-muted`/`--color-subtle` — die Tag-Fläche hellt im Dark-Theme auf und drückt muted unter 4.5:1. Gegated: [css-contrast.test.mjs](tests/unit/css-contrast.test.mjs). |
-| **Z-Index** | `--z-base` (1), `--z-sticky` (100), `--z-header` (200), `--z-spellcheck` (400), `--z-dock` (500), `--z-popover` (1000), `--z-overlay` (2000), `--z-toolbar` (2100), `--z-tooltip` (2200), `--z-modal` (9500), `--z-banner` (10000), `--z-modal-front` (11000), `--z-toast` (12000), `--z-boss-screen` (13000) | Stapel-Reihenfolge — siehe Section „Z-Index-Stack" unten. |
+| **Z-Index** | `--z-base` (1), `--z-sticky` (100), `--z-header` (200), `--z-spellcheck` (400), `--z-dock` (500), `--z-popover` (1000), `--z-overlay` (2000), `--z-popover-top` (2050), `--z-toolbar` (2100), `--z-tooltip` (2200), `--z-modal` (9500), `--z-banner` (10000), `--z-modal-front` (11000), `--z-toast` (12000), `--z-boss-screen` (13000) | Stapel-Reihenfolge — siehe Section „Z-Index-Stack" unten. |
 
 ---
 
@@ -231,7 +232,7 @@ Eine eigenständige, per-Boolean klappbare Sektion nutzt **`Alpine.data('collaps
 
 **Parent-gesteuerter State** (persistiert, oder vom Parent zurückgesetzt — z.B. Reset bei Buchwechsel): zusätzlich `x-modelable="open" x-model="parentVar"` koppeln (analog combobox/numInput). Beispiel: [public/partials/plot-beat-edit.html](public/partials/plot-beat-edit.html).
 
-`.collapsible-wrap` (block-Container, Spacing pro Section) + `.collapsible-section` (Linie links, Innenabstand) + `.collapse-panel` (setzt der `panel`-Spread automatisch: `display: flow-root`) leben in [public/css/entities/entity-list.css](public/css/entities/entity-list.css).
+`.collapsible-wrap` (block-Container, Spacing pro Section) + `.collapsible-section` (Linie links, Innenabstand) + `.collapse-panel` (setzt der `panel`-Spread automatisch: `display: flow-root`) leben in [public/css/components/primitives.css](public/css/components/primitives.css).
 
 **Öffnen/Schliessen animiert die Panel-Höhe** — `x-collapse` (@alpinejs/collapse) reist im `panel`-Spread mit, Konsumenten-Markup bleibt unverändert. Drei Folgen:
 - **Das Panel trägt selbst kein Styling.** Das Plugin animiert ausschliesslich `height`; vertikales Padding, Margin oder ein Border **am Panel** bleibt als Boden der Animation stehen, die Höhe hält dort bis zum Ende der Transition und springt dann per `display: none` weg — sichtbares Ruckeln beim Zu- und Aufklappen. Ebenso kein `display: flex/grid` und kein `max-height`/Scrollen am Panel. Abstände, Rahmen, Layout und Scroll-Deckel gehören an ein **Kind**:
@@ -245,8 +246,8 @@ Eine eigenständige, per-Boolean klappbare Sektion nutzt **`Alpine.data('collaps
 - **Kein `x-transition` zusätzlich** aufs Panel (analog `.card`/`cardFadeIn`): zwei konkurrierende Mechaniken auf demselben Element wirken wabbelig. Reduced-Motion braucht keinen Sonderfall — der globale `transition-duration: 0s !important`-Override in [tokens/motion.css](public/css/tokens/motion.css) greift, und Alpines Transition-Helper liest die berechnete Dauer.
 
 **Regeln:**
-- Chevron rotiert via `.history-chevron.open` (90°). CSS in [public/css/page/tree-history.css](public/css/page/tree-history.css). Nur die Klasse `.open` dreht — **nicht** `.is-open` o.ä.
-- Button-Stil `.collapsible-toggle` (uppercase, kleinere Schrift, `inline-flex`). CSS in [public/css/entities/entity-list.css](public/css/entities/entity-list.css).
+- Chevron rotiert via `.history-chevron.open` (90°). CSS in [public/css/components/primitives.css](public/css/components/primitives.css). Nur die Klasse `.open` dreht — **nicht** `.is-open` o.ä.
+- Button-Stil `.collapsible-toggle` (uppercase, kleinere Schrift, `inline-flex`). CSS in [public/css/components/primitives.css](public/css/components/primitives.css).
 - Kein `<details>`/`<summary>` — nicht stylebar genug, andere optische Sprache.
 - **Nicht** für Listen-/Tree-Row-Chevrons verwenden, die per `selectedXId === item.id` oder einer Per-Item-Map (`chapterOpen[id]`, Tree-`item.open`) gesteuert werden — das ist Single-Select-/Tree-Expansion, kein eigenständiger Boolean-Toggle. Dort bleibt die `.history-chevron`-Rotation, der State aber im Selektionsmodell. Ebenso Sonderfälle mit eigener Persistenz (localStorage) oder State, der in eine Berechnung einfliesst.
 - **Toggle-Button NICHT lokal auf `display: flex; width: 100%` umstellen.** Hat in der Vergangenheit horizontalen Wackel-Shift beim Öffnen verursacht (PDF-Export-Karte). Block-Stapelung kommt vom `.collapsible-wrap`-Container, nicht vom Button selbst.
@@ -350,6 +351,7 @@ Dieselbe Mechanik gilt fuer Bausteine, die kein `.card-section` sind, aber aufei
 | `.muted-msg` | gedämpfte Zustandsmeldung | `--sm`, `--block`, `--spaced` |
 | `.progress-bar-wrap` + `.progress-bar` | Job-Fortschritt | — |
 | `.filter-bar` | Listenfilter (siehe [Filter-Bar](#filter-bar-listenfilter)) | `--inline` |
+| `.card-edit-panel` | gerahmter Anlegen-/Bearbeiten-Block über einer Katalog-Liste (Akzentleiste links) — Schauplätze, Quellen, Weltfakten tragen dafür noch `.ort-edit-panel`/`.sources-form`/`.weltfakten-edit-panel`, im selben Regelblock gruppiert | — |
 
 **`.card-hint` vs. `.muted-msg`:** der Hinweis **erklärt** und steht dauerhaft unter seinem Element; die Meldung **berichtet einen Zustand** („keine Einträge", „zuletzt geprüft am …") und erscheint an der Stelle des fehlenden Inhalts.
 
@@ -567,6 +569,11 @@ mit `myCardOptions() { return this.cardData.map(...); }` am Karten-Scope.
 **Severity-Tags** [public/css/entities/entity-list.css:143](public/css/entities/entity-list.css#L143):
 - `.severity-tag--kritisch` / `--stark` / `--mittel` / `--schwach` / `--niedrig`
 - Verwendet für Lektorats-/Kontinuitäts-Schweregrade.
+
+**Bearbeitungsstand-Plakette** (`.badge--redaktion-<stufe>`, `.badge--edit-none`, `.badge--edit-stale` in [public/css/components/edit-status-badge.css](public/css/components/edit-status-badge.css)):
+- Zeigt die Stufe eines Abschnitts (Buchorganizer, Notebook-Kopf, Kapitelbewertung, Bucheditor); Klasse aus `editStatusBadgeClass` ([edit-status.js](public/js/book/tree/edit-status.js)).
+- **Feste Palette-Farbe je Rang**, beide Ketten gleich: 0 grau → 1 amber → 2 blau → 3 grün (Rang 2/3 halbfett). Nicht `--card-accent` — dieselbe Stufe sieht in jeder Karte gleich aus. Bauform wie `.palette-badge`, Schrift mit 55 % Hue (≥ 4.5:1 Light + Dark).
+- `--edit-none` gestrichelt und gedämpft (keine Stufe), `--edit-stale` additiver gestrichelter Warn-Rahmen (Stufe bleibt ablesbar).
 
 **Umfangs-Plakette** (`.tok-badge` in [public/css/tokens-est.css](public/css/tokens-est.css)):
 - Zeigt den Umfang einer Seite bzw. eines Kapitels als Zeichenzahl (Sidebar-Baum, Notebook-Kopfleiste, Kapitelbewertung).
@@ -1876,7 +1883,7 @@ Kein neuer Marker ohne Eintrag hier.
 |---|---|---|
 | `480px` | Phone-Small (sehr enge Devices, harter Reflow) | 26 |
 | `600px` | Phone-Large — **Default-Mobile-Breakpoint** (Paar-Gegenstück `min-width: 600.02px`) | 56 |
-| `768px` | Tablet | 10 |
+| `768px` | Tablet — auch die Mobil-Schwelle des Karten-Gerüsts (`card-shell.css`/`card-actions.css`/`form-elements.css`: Kopf stapelt, Aktionen rechtsbündig, Felder auf 16px), damit Kopf und Formular derselben Karte gemeinsam umschalten | 16 |
 | `960px` | Desktop — hier schaltet [layout/twocolumn.css](public/css/layout/twocolumn.css) von einspaltig auf Sidebar+Main (`min-width: 960px` / `max-width: 959.98px`) | 7 |
 
 **Dokumentierte Abweichungen** (bestehend, nicht ausbauen — neue Komponenten nehmen die Leiter oben):
@@ -1913,6 +1920,8 @@ Pflicht-Check pro neuer Klasse:
 4. Image/SVG-Assets: hellem Theme-Hintergrund nicht unsichtbar (z. B. dunkles SVG-Icon auf dunklem Surface → `currentColor` oder Theme-spezifischer Filter)?
 
 Neuer Hue / Surface / Border: Token in beiden Theme-Blöcken (`:root` + `:root[data-theme="dark"]`) in [tokens/colors.css](public/css/tokens/colors.css) ergänzen. Kein Pro-Karten-`[data-theme="dark"]`-Override — alles über Tokens.
+
+**Browser-Untergrenze: Safari 18 / Chrome 119 / Firefox 128.** Grund ist die OKLCH Relative Color Syntax (`oklch(from …)`), mit der [tokens/colors.css](public/css/tokens/colors.css) die Dark-Akzente der Karten ableitet; `color-mix()`, `:has()` und Container-Queries liegen darunter und sind damit ohne Fallback nutzbar. Keine `@supports not (…)`-Ersatzregeln für ältere Browser.
 
 ---
 
@@ -2596,7 +2605,7 @@ cancelXyz()       { this.xyzId = null; this._releasePickerPopover(); }
 <div x-show="open" class="history-detail">…</div>
 ```
 
-CSS: [public/css/page/tree-history.css](public/css/page/tree-history.css). `.history-detail` hat einen gestrichelten Top-Border, der visuell anschliesst. Chevron + State (`open`) wiederverwenden — nicht neu definieren.
+CSS: `.history-item*` + `.history-chevron` in [public/css/components/primitives.css](public/css/components/primitives.css), `.history-detail` in [public/css/page/tree-history.css](public/css/page/tree-history.css). `.history-detail` hat einen gestrichelten Top-Border, der visuell anschliesst. Chevron + State (`open`) wiederverwenden — nicht neu definieren.
 
 ---
 
@@ -3172,6 +3181,7 @@ Kein eigenes `@media print {}` pro Karte einführen — der Aufwand für saubere
 | `--z-dock` | 500 | Schwebende Docks über dem Seitentext: Vorlesen (`.tts-dock`), Diktat (`.stt-dock`) — über dem LT-Overlay, unter Popovern |
 | `--z-popover` | 1000 | Synonym-Menu, Figur-Lookup, Combobox-Dropdown, Focus-Counter, Token-Setup-Inline-Hint, Ideen-Move-Picker, Graph-Tooltip |
 | `--z-overlay` | 2000 | Palette-Overlay, Fokus-Modus-Karte, künftige Fullscreen-Trigger ohne Modal-Charakter |
+| `--z-popover-top` | 2050 | Nach `<body>` teleportierte Popover: `.context-menu`, `.picker-popover`, `.entity-ref-preview`, `.lektorat-tip` — über Overlay-/Fokus-Modus-Ebene, sonst lägen sie unsichtbar unter der Karte, aus der sie geöffnet wurden; unter Toolbars und Tooltip |
 | `--z-toolbar` | 2100 | Edit-Bubble-Toolbar, Slash-Menü, Find-and-Replace — über der Vollbild-/Fokus-Karte, weil sie auf Selektion reagieren |
 | `--z-tooltip` | 2200 | Geteilter `[data-tip]`-Layer (`.tip-layer`) — über Vollbild-Karte und Toolbars, deren Knöpfe ihn auslösen |
 | `--z-modal` | 9500 | Confirm-Dialog Overlay-Backdrop |
@@ -3385,7 +3395,7 @@ Welche Datei besitzt welche Klassen. Bei neuer Klasse: erst hier prüfen, ob ein
 | [tokens/](public/css/tokens/)`*.css` | Custom-Properties sind global; sie konkurrieren nicht über die Kaskade. |
 | [share.css](public/css/share.css) + [share/](public/css/share/)`*.css` | Der Reader überschreibt bewusst die geteilten `components/`-Module (`manuscript-*`, `comment-rail`, `floating-dock`) und gewinnt über den Layer-Rang statt über Spezifitäts-Wettrüsten. |
 | [entities/orte-map.css](public/css/entities/orte-map.css) | `lazy-libs.js` hängt `vendor/leaflet-*/leaflet.css` **zur Laufzeit** an den `<head>` — unlayered und nach allem anderen. Läge unsere Datei in `components`, gewänne Leaflet gegen jeden unserer Overrides. |
-| [entities/figur-werkstatt.css](public/css/entities/figur-werkstatt.css) | Überschreibt `vendor/jsmind-*.css`, das selbst unlayered lädt — gleicher Grund wie Leaflet. |
+| [entities/figur-werkstatt.css](public/css/entities/figur-werkstatt.css) (nur der jsMind-Teil am Dateiende) | Die Overrides auf jsMinds Elemente (`.jsmind-inner`, `jmnode`, `jmexpander`, Knoten-Editor) überschreiben `vendor/jsmind-*.css`, das selbst unlayered lädt — gleicher Grund wie Leaflet. Die Karten-Regeln derselben Datei liegen in `@layer components`. |
 | [landing.css](public/css/landing.css) | Standalone-Seiten (Landing, Register, Datenschutz) ausserhalb der SPA-Shell; dort lädt keine Komponentenregel, gegen die ein Layer-Rang zählen könnte. |
 
 **2. Der Share-Reader lädt `tokens.css` nicht.** [share.html](public/share.html) verlinkt nur `share.css` + die geteilten `components/`-Module. `share.css` importiert von den Token-Modulen einzig [tokens/spacing.css](public/css/tokens/spacing.css) — `--space-*`, `--pad-*`, `--radius-*`, `--focus-ring-offset*` sind dort also **definiert**; `--font-size-*`, `--fw-*`, `--z-*`, `--color-*`, `--shadow-*` bleiben **undefiniert**. Daraus folgt für alle Dateien im share-erreichbaren Satz (`share.css`, `share/*`, sowie `components/{icons,manuscript-stream,manuscript-content,comment-rail,floating-dock}.css`):
@@ -3436,17 +3446,17 @@ Struktur: 8 thematische Subfolder unter [public/css/](public/css/) + Root-Solit�
 | [layout/twocolumn.css](public/css/layout/twocolumn.css) | `.layout` / `-sidebar` / `-main` (Seitenbaum + Hauptspalte), klebender Seitenbaum, `.sidebar-resize-handle`. |
 | [layout/aside-split.css](public/css/layout/aside-split.css) | **Split mit Leiste** — `.aside-split` / `--on` / `--aside-first`, `.aside-split-aside`, `.aside-split-scroll`; einzige Quelle für Hauptinhalt + klebende Leiste (siehe „Split mit Leiste"). |
 | [layout/utilities.css](public/css/layout/utilities.css) | Layer `utilities`: `.list-header`, Tabular-Nums-Gruppe, `.display-contents`. Layer `components` (Grundgerüst, das Karten überschreiben): `.palette-badge` (Grau nur als `var()`-Fallback — eine `--badge-hue`-Deklaration an der Basis überstimmte die Varianten), `.row`, `.table-scroll`, `.batch-status`. |
-| [layout/safari-fallback.css](public/css/layout/safari-fallback.css) | Safari < 16.2 `color-mix()`-Fallbacks via `@supports not (...)`. **Wichtig: muss spät in der Cascade geladen werden** (Override-Wirkung), darum eigenes File und nicht in andere Datei gemergt. |
 
 ### components/ (geteilt)
 | File | Inhalt |
 |------|--------|
 | [components/card-form/card-shell.css](public/css/components/card-form/card-shell.css) | `.card`, `.card-header*`, `.card-title*`, `.card-eyebrow`, `.card-subline*`, `.card-toolbar`, `cardFadeIn`. Die Karte selbst — was DARIN liegt, steht in `card-blocks.css`. |
-| [components/card-form/card-blocks.css](public/css/components/card-form/card-blocks.css) | **Geteiltes Vokabular des Kartenkörpers** (siehe „Karten-Innenraum“): Vertikalrhythmus (`.card-section`), `.card-section-head` (+ `--baseline`), `.card-section-title`, `.card-hint` (+ `--sm`/`--warn`/`--lead`), `.card-status` (+ `--error`), `.muted-msg*`, `.progress-bar*`, `.filter-bar*`/`.filter-count`/`.filter-search-*`, `.stale-cleanup-row`. Besitzer-Datei für Klassen, die quer durch alle Karten laufen — vorher lagen sie in `figuren.css`, `page-list.css`, `tree-history.css` und `entity-list.css`. |
+| [components/card-form/card-blocks.css](public/css/components/card-form/card-blocks.css) | **Geteiltes Vokabular des Kartenkörpers** (siehe „Karten-Innenraum“): Vertikalrhythmus (`.card-section`), `.card-section-head` (+ `--baseline`), `.card-section-title`, `.card-hint` (+ `--sm`/`--warn`/`--lead`), `.card-status` (+ `--error`), `.muted-msg*`, `.progress-bar*`, `.filter-bar*`/`.filter-count`/`.filter-search-*`, `.stale-cleanup-row`, `.card-edit-panel` (+ `.ort-edit-panel`/`.sources-form`/`.weltfakten-edit-panel`). Besitzer-Datei für Klassen, die quer durch alle Karten laufen. |
 | [components/card-form/form-elements.css](public/css/components/card-form/form-elements.css) | Form-Felder (`input`/`select`/`textarea`), `.card-form-*` Grid + Wertspalten-Bausteine (`.form-stack`/`-inline`/`-check`/`-radio-group`), `.card-empty*`. Die **Erscheinung** von `.card-form-hint`/`.card-form-field-note`/`.card-empty-hint` kommt aus `card-blocks.css` (`.card-hint`-Gruppe); hier steht nur noch deren Position im Raster. |
 | [components/card-form/card-actions.css](public/css/components/card-form/card-actions.css) | `.card-actions*`, `.action-group`/`.action-sep`, `.btn-card-close`. |
 | [components/combobox.css](public/css/components/combobox.css) | `.combobox-*` — Searchable-Select-Komponente (Trigger, Dropdown, Optionen, Gruppen-Header, Compact-Variante, Footer-Button). |
 | [components/buttons-badges.css](public/css/components/buttons-badges.css) | `<button>` Hierarchie, `.badge-*`, `.avatar-*`, `.btn-group`, `.btn-compact`. |
+| [components/edit-status-badge.css](public/css/components/edit-status-badge.css) | Bearbeitungsstand-Plakette `.badge--redaktion-<stufe>` (feste Palette-Farbe je Rang), `.badge--edit-none`, `.badge--edit-stale` (+ `.organizer-redaktion-badge--stale`). Siehe „Badges & Tags". |
 | [components/hover-reveal.css](public/css/components/hover-reveal.css) | `.hover-reveal-host` + `.hover-reveal` — Item-Aktionen erst auf Hover/Fokus/offenes Menü, auf Touch immer (Boards, Listen, Verläufe, Chat-Sitzungen, Kommentar-Threads). |
 | [components/board-dnd.css](public/css/components/board-dnd.css) | `.board-dnd-zone`, `.board-dnd-ghost`, `.board-dnd-chosen`, `.board-dnd-dragging` — einzige Optik für das Ziehen von Karten zwischen Board-Zellen (Plot-Werkstatt, Ideen-Board, Recherche-Status); Layer `utilities`. |
 | [components/drag-grip.css](public/css/components/drag-grip.css) | `.drag-grip` (+ `.drag-grip-host`) — einziger Drag-Griff-Stil für SortableJS-Karten/-Zeilen: `grip-vertical` 14px, Position über `--drag-grip-host-gap`, `1lh` hoch, drei Farbstufen (Plot-Beat, Recherche-Status, Ideen-Board, Motiv-Themen, Buchorganizer). |
@@ -3502,6 +3512,7 @@ Struktur: 8 thematische Subfolder unter [public/css/](public/css/) + Root-Solit�
 ### page/
 | File | Inhalt |
 |------|--------|
+| [components/primitives.css](public/css/components/primitives.css) | Geteilte Primitive ohne Feature-Besitzer: `.tag`, `.spinner` (+ `@keyframes spin`), History-Zeile `.history-item*` + `.history-item-delete`, Klapp-Marker `.history-chevron`, klappbarer Abschnitt `.collapsible-toggle`/`-wrap`/`-section` + `.collapse-panel`, `.list-window-more`. Lädt direkt vor `page/page-list.css` (früheste frühere Besitzer-Datei) — Feature-Overrides stehen später oder spezifischer. |
 | [page/page-list.css](public/css/page/page-list.css) | Seiten-Liste in Sidebar, `.tok-stats`, `.tok-totals`. |
 | [page/page-view.css](public/css/page/page-view.css) | `.page-content-view` Reading-Frame, Callouts, Marginalia-Stripe, Mention-/Channel-Chips. |
 | [page/stt-dock.css](public/css/page/stt-dock.css) | `.stt-dock` — STT-Diktat-Dock (Notebook-Edit), schwebend unten rechts im Edit-Feld. |
@@ -3510,7 +3521,7 @@ Struktur: 8 thematische Subfolder unter [public/css/](public/css/) + Root-Solit�
 | [page/sidebar-calendar.css](public/css/page/sidebar-calendar.css) | `.sidebar-calendar` — Monats-Grid + Stepper für Tagebuch-Sidebar. |
 | [page/diary-anniversary.css](public/css/page/diary-anniversary.css) | `.diary-anniversary` / `.diary-range` — Rückblick „An diesem Tag" + Zeitraum-Suche im Kalender-Sidebar. |
 | [page/page-revision-viewer.css](public/css/page/page-revision-viewer.css) | Page-Revision-Diff-Viewer: Spalten, Zellen (geändert = farbiger Rand, Fläche gehört der Markierung aus `components/diff-marks.css`). |
-| [page/tree-history.css](public/css/page/tree-history.css) | Sidebar-Tree, `.history-*`, `.history-chevron`. |
+| [page/tree-history.css](public/css/page/tree-history.css) | Sidebar-Tree, `.history-heading`/`-bar`/`-date`/`-detail`, `.btn-toggle-saved`, Revisionsliste. |
 | [page/tagebuch-rueckblick.css](public/css/page/tagebuch-rueckblick.css) | `.card--tagebuchRueckblick` — Rückblick-Karte: `.rb-period` (Zeitraum-Leiste: ‹ Serif-Zeitraum ›, Meta-Zeile, Aktionen, Aktualitäts-Hinweis), `.rb-essay` (Betrachtung als Serif-Lesetext, max 68ch), `.rb-tage` (bemerkenswerte Tage chronologisch, Datum als Sprungmarke mit Karten-Hue-Kante), `.rb-facets`/`.rb-chip` (worüber/wer/wo, Klick → `.rb-belege-strip` mit `.rb-timeline` — Eintragstage als Striche, Belegtage hervorgehoben, Position via `--pos`), `.rb-overview` (Kalender/Liste früherer Rückblicke). Kalender = geteiltes `.ymheat-*`-Pattern (`.rb-ymheat` setzt nur die Karten-Hue). |
 
 ### editor/
@@ -3555,7 +3566,7 @@ Drei Editoren leben in eigenen Subfoldern (`book/`, `focus/`, `notebook/`); edit
 | [entities/ideen.css](public/css/entities/ideen.css) | Ideen-Karte. |
 | [entities/ideen-board.css](public/css/entities/ideen-board.css) | Ideen-Board (Raster Bahn × Stufe) + das geteilte Chip-Vokabular der Ideen-Verknüpfungen. |
 | [entities/ideen-chat.css](public/css/entities/ideen-chat.css) | Ideen-Board: Ideen-Chat — Nachrichtenhöhe und Panel-Innenteile `.ideen-chat*` (Spalten-Layout: `.aside-split`, Hülle: `.chat-panel`) samt Merge-Liste der Vorschläge; Vorschlagskarten aus components/chat-vorschlag.css. |
-| [entities/entity-list.css](public/css/entities/entity-list.css) | `.entity-list` / `-row`, `.severity-tag*`, `.collapsible-*`, Skeleton, `.ort-*` Schauplätze. |
+| [entities/entity-list.css](public/css/entities/entity-list.css) | `.entity-list` / `-row`, `.severity-tag*`, Skeleton, `.ort-*` Schauplätze. |
 | [entities/orte-map.css](public/css/entities/orte-map.css) | Orte-Karte View-Mode `map` (Geo-Karte via Leaflet): `.ort-map*` Container + Geocode-Liste. Nur bei `book_settings.orte_real`. |
 | [entities/recherche/board.css](public/css/entities/recherche/board.css) | Recherche-/Wissensboard (Board-Teil): Toolbar/Filter, Anlege-/Edit-Formular, einspaltige Schnipsel-Liste (`.recherche-list` + `.research-item`), Kind-Badges, Verknüpfungs-/Tag-Chips, KI-Vorschläge, Link-Picker, Link-Zeile (`.research-item-url-row`: Link + „Seite lesen"/„als Quelle übernehmen" als `.icon-btn--ghost`, auf 22px kontext-verkleinert über `.research-url-action`, weil 28px die Zeilenhöhe einer `font-size-sm`-Liste bestimmen würde). Native-Vollbild (`.recherche-split:fullscreen`, Recherche- samt Chat-Karte, Toggle via `fullscreen.js` wie Plot-Board) → Liste zentriert mit Lese-Maximalbreite. |
 | [entities/recherche/status-board.css](public/css/entities/recherche/status-board.css) | Recherche-Board, Ansicht „Status": Kanban ueber die Einarbeitungs-Stufen (`.research-status-board` mit vier gleich breiten Spalten, `.research-status-column--<status>` traegt die semantische Stufen-Farbe als `--status-accent`), Karte (`.research-status-card` + Drag-Griff `.research-status-grip`, SortableJS-Zustaende), Stelle-im-Buch-Chips, „eingearbeitet ohne Stelle"-Befund und die Status-Plakette (`.research-status-badge`) fuer Liste + Detailansicht. Laedt NACH board.css und benutzt dessen Vokabular (Kind-Badge, Titel-Button, Link-Chip) weiter. Mobile (≤700px) stapelt die Spalten. |

@@ -123,7 +123,7 @@ body.snapshot-reader-open { overflow: hidden; overscroll-behavior: contain; }
 
 /* Geänderte/entfernte Seite: dezenter Akzent am Seitenkopf. */
 .snapshot-reader__page--changed .book-editor-page-header { border-bottom-color: var(--color-warn-text); }
-.snapshot-reader__page--removed .book-editor-page-body { opacity: 0.75; }
+.snapshot-reader__page--removed .book-editor-page-body { opacity: var(--opacity-strong); }
 
 /* Inline-Diff (eine Spalte, Lesefluss): die Block-Wrapper tragen .diff-line,
    die Wort-Markierung kommt aus components/diff-marks.css. */

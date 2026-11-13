@@ -27,7 +27,7 @@
     field-sizing: content;
     outline: none;
   }
-  .book-editor-head__field::placeholder { color: var(--color-muted); opacity: 0.6; }
+  .book-editor-head__field::placeholder { color: var(--color-muted); opacity: var(--opacity-disabled); }
   .book-editor-head__field:focus-visible {
     background: color-mix(in srgb, var(--card-accent, currentColor) 3%, transparent);
   }

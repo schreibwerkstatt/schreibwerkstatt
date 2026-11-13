@@ -86,7 +86,7 @@
   font-size: var(--font-size-micro);
   font-weight: var(--fw-semibold);
   text-transform: uppercase;
-  letter-spacing: 0.04em;
+  letter-spacing: var(--tracking-caps);
 }
 
 .lt-popover__title {
@@ -211,7 +211,7 @@
 
 .lt-popover__dict[disabled],
 .lt-popover__rule[disabled] {
-  opacity: 0.5;
+  opacity: var(--opacity-muted);
   cursor: default;
 }
 
@@ -267,7 +267,7 @@
 
 .lt-badge[data-state="disabled"] {
   color: var(--color-subtle);
-  opacity: 0.5;
+  opacity: var(--opacity-muted);
 }
 
 .lt-badge__icon .icon {
@@ -452,7 +452,7 @@ textarea[data-spellcheck="spelling"]:not(.card-title--input, .page-head__input) 
  * fuer idle/clean/disabled. Hover/Fokus aufs Feld macht Badge wieder voll
  * sichtbar (Container-Hover via .lt-field-wrap). */
 .lt-badge--form.lt-badge--quiet {
-  opacity: 0.4;
+  opacity: var(--opacity-hint);
 }
 .lt-field-wrap:hover > .lt-badge--form,
 .lt-field-wrap:focus-within > .lt-badge--form,

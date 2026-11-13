@@ -23,7 +23,7 @@
   padding-bottom: var(--space-sm);
   /* Bewusst ohne scroll-snap: der Snap korrigiert die Position nach dem
      Trackpad-Scroll sichtbar nach und laesst das H-Scrollen ruckeln. */
-  transition: opacity 0.12s ease;
+  transition: opacity var(--transition-base);
 }
 /* Refetch bei Filter/Sort/Suche: gleiche Regel wie die Liste (gedimmt + inert
    statt Skeleton-Swap). */
@@ -186,7 +186,7 @@
   font-size: var(--font-size-micro);
   font-weight: var(--fw-semibold);
   text-transform: uppercase;
-  letter-spacing: 0.03em;
+  letter-spacing: var(--tracking-caps);
   color: var(--color-muted);
   background: color-mix(in srgb, var(--status-accent) 12%, transparent);
   white-space: nowrap;

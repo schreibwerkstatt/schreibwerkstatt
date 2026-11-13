@@ -14,13 +14,13 @@
   color: var(--color-muted);
   font-weight: var(--fw-regular);
   padding: var(--space-2xs) var(--space-md) var(--space-5) 0;
-  border-bottom: 0.5px solid var(--color-border);
+  border-bottom: var(--border-thin) solid var(--color-border);
   vertical-align: bottom;
 }
 
 .ap-table td {
   padding: var(--space-xs) var(--space-md) var(--space-xs) 0;
-  border-bottom: 0.5px solid var(--color-border);
+  border-bottom: var(--border-thin) solid var(--color-border);
   vertical-align: top;
   font-variant-numeric: tabular-nums;
 }
@@ -56,9 +56,9 @@
   color: var(--card-accent);
   font-weight: var(--fw-semibold);
   font-size: var(--font-size-xs);
-  letter-spacing: 0.04em;
+  letter-spacing: var(--tracking-caps);
   text-transform: uppercase;
-  border-bottom: 0.5px solid var(--color-border);
+  border-bottom: var(--border-thin) solid var(--color-border);
 }
 
 .ap-value { display: block; }
@@ -89,7 +89,7 @@
 .ap-profile-text {
   margin: 0 0 var(--space-sm);
   white-space: pre-wrap;
-  line-height: 1.6;
+  line-height: var(--lh-relaxed);
 }
 
 .ap-profile-actions {
@@ -106,7 +106,7 @@
   margin-bottom: var(--space-sm);
   font-family: inherit;
   font-size: var(--font-size-base);
-  line-height: 1.6;
+  line-height: var(--lh-relaxed);
   resize: vertical;
 }
 

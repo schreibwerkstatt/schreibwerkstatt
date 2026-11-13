@@ -1,4 +1,4 @@
-// `.collapsible-section` (geteilte Klappsektion, css/entities/entity-list.css):
+// `.collapsible-section` (geteilte Klappsektion, css/components/primitives.css):
 // die Klapp-ANIMATION gegen die echte App.
 //
 // Warum hier und nicht als Fixture-Harness: die Aussage haengt an der echten

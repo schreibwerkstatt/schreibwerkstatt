@@ -60,6 +60,12 @@
   --lh-base:       1.45;  /* Standard-Text */
   --lh-relaxed:    1.6;   /* Reading-Frame, längere Absätze */
 
+  /* === Letter-Spacing für Versalien (text-transform: uppercase) ===
+     caps = Labels, Badges, Tabellenköpfe; caps-wide = Abschnitts-Titel
+     (.card-section-title) und Gruppen-Köpfe, die als Überschrift stehen. */
+  --tracking-caps:      0.04em;
+  --tracking-caps-wide: 0.06em;
+
   /* === Compact-Controls (Buttons + Dropdowns nebeneinander gleich hoch) === */
   --size-compact-font-size: 12px;
   --size-compact-padding: 4px 10px;

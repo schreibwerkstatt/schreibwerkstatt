@@ -89,7 +89,7 @@
 }
 
 .sidebar-calendar-day--out {
-  opacity: 0.35;
+  opacity: var(--opacity-faint);
 }
 
 .sidebar-calendar-day--has-page {
@@ -113,7 +113,7 @@
 
 .sidebar-calendar-day--today {
   outline: 1px dashed var(--color-primary);
-  outline-offset: -2px;
+  outline-offset: var(--focus-ring-offset-inset);
 }
 
 .sidebar-calendar-day--active {

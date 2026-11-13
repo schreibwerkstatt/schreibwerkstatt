@@ -35,7 +35,7 @@
   gap: var(--space-6) var(--space-10);
   margin-top: var(--space-sm);
   padding-top: var(--space-sm);
-  border-top: 0.5px solid var(--color-border);
+  border-top: var(--border-thin) solid var(--color-border);
 }
 .book-stats-group { display: contents; }
 .book-stats-group-badges {
@@ -55,7 +55,7 @@
 }
 .heatmap-scroll {
   overflow-x: auto;
-  border: 0.5px solid var(--color-border);
+  border: var(--border-thin) solid var(--color-border);
   border-radius: var(--radius-none);
 }
 .heatmap-table {
@@ -67,7 +67,7 @@
 .heatmap-table td {
   padding: var(--space-6) var(--space-10);
   text-align: right;
-  border-bottom: 0.5px solid var(--color-border);
+  border-bottom: var(--border-thin) solid var(--color-border);
   white-space: nowrap;
 }
 .heatmap-table thead th {
@@ -84,20 +84,20 @@
   text-align: center;
   font-size: var(--font-size-xs, 11px);
   text-transform: uppercase;
-  letter-spacing: 0.04em;
+  letter-spacing: var(--tracking-caps);
   color: var(--color-muted);
-  border-bottom: 0.5px solid var(--color-border);
+  border-bottom: var(--border-thin) solid var(--color-border);
   padding-bottom: var(--space-2xs);
 }
 .heatmap-cluster-row th + th.heatmap-cluster-head {
-  border-left: 0.5px solid var(--color-border);
+  border-left: var(--border-thin) solid var(--color-border);
 }
 .heatmap-cluster-row + tr th[colspan] { /* no-op selector to keep specificity comment near */ }
 /* Senkrechte Trennlinie an Cluster-Grenzen in der Typen-Reihe und im Body. */
 .heatmap-table thead tr:nth-child(2) th.heatmap-cluster-start,
 .heatmap-table tbody td.heatmap-cluster-start,
 .heatmap-table tfoot td.heatmap-cluster-start {
-  border-left: 0.5px solid var(--color-border);
+  border-left: var(--border-thin) solid var(--color-border);
 }
 .heatmap-table .heatmap-rowhead {
   text-align: left;
@@ -249,7 +249,7 @@
 .heatmap-detail {
   margin-top: var(--space-md);
   padding: var(--space-10) var(--space-md);
-  border: 0.5px solid var(--color-border);
+  border: var(--border-thin) solid var(--color-border);
   border-radius: var(--radius-none);
   background: var(--color-surface);
 }
@@ -272,7 +272,7 @@
 }
 .heatmap-detail-page {
   padding: var(--space-6) 0;
-  border-top: 0.5px dashed var(--color-border);
+  border-top: var(--border-thin) dashed var(--color-border);
 }
 .heatmap-detail-page:first-child {
   border-top: none;

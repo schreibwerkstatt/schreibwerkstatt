@@ -9,7 +9,7 @@
   font-size: var(--font-size-lg);
   font-weight: var(--fw-semibold);
   color: var(--color-text);
-  line-height: 1.2;
+  line-height: var(--lh-tight);
 }
 
 /* Tile als Button: Default-Button-Reset, damit das Tile wie ein klickbares

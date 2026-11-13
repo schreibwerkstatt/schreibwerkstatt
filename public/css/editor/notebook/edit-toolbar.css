@@ -21,7 +21,7 @@
   font-size: var(--font-size-sm);
   color: var(--color-text);
   cursor: pointer;
-  line-height: 1.2;
+  line-height: var(--lh-tight);
   font-family: inherit;
   min-width: 1.6em;
 }
@@ -229,7 +229,7 @@
 .edit-slash-group {
   padding: var(--space-6) var(--space-10) var(--space-1);
   font-size: var(--font-size-micro);
-  letter-spacing: 0.06em;
+  letter-spacing: var(--tracking-caps-wide);
   text-transform: uppercase;
   color: var(--color-muted);
 }
@@ -270,12 +270,12 @@
 .edit-slash-item--h2 .edit-slash-label {
   font-size: var(--font-size-lg);
   font-weight: var(--fw-semibold);
-  line-height: 1.2;
+  line-height: var(--lh-tight);
 }
 .edit-slash-item--h3 .edit-slash-label {
   font-size: var(--font-size-md);
   font-weight: var(--fw-semibold);
-  line-height: 1.2;
+  line-height: var(--lh-tight);
 }
 .edit-slash-item--blockquote .edit-slash-label {
   padding-left: var(--space-sm);
@@ -365,7 +365,7 @@
   font-family: inherit;
   color: var(--color-muted);
   cursor: pointer;
-  line-height: 1.2;
+  line-height: var(--lh-tight);
 }
 .edit-msg-btn:hover { color: var(--color-text); background: var(--color-bg); }
 .edit-msg-btn--active { color: var(--color-accent-text); background: var(--color-bg); font-weight: 600; }

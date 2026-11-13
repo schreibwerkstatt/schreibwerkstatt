@@ -17,7 +17,7 @@ button:disabled { opacity: var(--opacity-hint); cursor: not-allowed; transform: 
 
 button.primary {
   background: var(--color-primary);
-  color: var(--color-surface);
+  color: var(--color-on-primary);
   border-color: var(--color-primary);
 }
 button.primary:hover { background: var(--color-primary-hover); }
@@ -50,7 +50,7 @@ button.danger:hover { background: var(--color-err-bg); }
 }
 button.primary .btn-count {
   background: rgba(255, 255, 255, 0.25);
-  color: var(--color-surface);
+  color: var(--color-on-primary);
 }
 
 /* === Badges === */

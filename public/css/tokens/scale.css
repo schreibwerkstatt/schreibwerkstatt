@@ -8,6 +8,7 @@
   --z-dock:        500;   /* schwebende Docks (Vorlesen, Diktat) ueber dem Seitentext samt LT-Overlay, unter Popovern */
   --z-popover:     1000;  /* Synonym-Menu, Figur-Lookup, Combobox-Dropdown, Focus-Counter */
   --z-overlay:     2000;  /* Palette-Overlay, ähnliche Fullscreen-Trigger */
+  --z-popover-top: 2050;  /* nach <body> teleportierte Popover (Aktionsmenü, Picker-Popover, Entity-Ref-Vorschau, Lektorat-Tipp) — über Overlay/Vollbild-Ebene, unter Toolbars */
   --z-toolbar:     2100;  /* Edit-Bubble-Toolbar, Slash-Menü, Find-and-Replace — über Fullscreen-Karte */
   --z-tooltip:     2200;  /* geteilter [data-tip]-Layer — über Vollbild-Karte und Toolbars, deren Knöpfe ihn auslösen */
   --z-modal:       9500;  /* Confirm-Dialog Overlay */

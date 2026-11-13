@@ -26,13 +26,13 @@
 }
 .tw-cell-group {
   padding: 0;
-  border-bottom: 0.5px solid var(--color-border);
+  border-bottom: var(--border-thin) solid var(--color-border);
 }
 .tw-table th {
   text-align: left;
   font-weight: var(--fw-semibold);
   padding: var(--space-xs) var(--space-sm);
-  border-bottom: 0.5px solid var(--color-border);
+  border-bottom: var(--border-thin) solid var(--color-border);
 }
 .tw-table .sortable-th { padding-right: calc(var(--space-md) + var(--space-14)); }
 /* Die Überschrift steht über dem Namen, nicht über dem Chevron davor. */
@@ -64,7 +64,7 @@
   font: inherit;
 }
 .tw-row:hover { background: color-mix(in srgb, var(--card-accent) 10%, transparent); }
-.tw-row:focus-visible { outline: 2px solid var(--color-accent); outline-offset: -2px; }
+.tw-row:focus-visible { outline: 2px solid var(--color-accent); outline-offset: var(--focus-ring-offset-inset); }
 /* Innenabstand liegt in den Zellen, nicht an der Zeile: sonst zählte das Grid
    Prozente einer schmaleren Box als die Tabelle und das Raster driftet. */
 .tw-row-name,
@@ -108,13 +108,13 @@
 
 .tw-detail {
   padding: var(--space-xs) var(--space-sm) var(--space-sm);
-  border-top: 0.5px dashed var(--color-border);
+  border-top: var(--border-thin) dashed var(--color-border);
   background: color-mix(in srgb, var(--card-accent) 4%, transparent);
 }
 .tw-field + .tw-field {
   margin-top: var(--space-sm);
   padding-top: var(--space-sm);
-  border-top: 0.5px solid var(--color-border);
+  border-top: var(--border-thin) solid var(--color-border);
 }
 .tw-field-head {
   display: flex;
@@ -185,7 +185,7 @@
   gap: var(--space-2xs);
   padding: var(--space-2xs) 0;
 }
-.tw-variant + .tw-variant { border-top: 0.5px solid var(--color-border); }
+.tw-variant + .tw-variant { border-top: var(--border-thin) solid var(--color-border); }
 /* Herkunft der Variante bleibt sichtbar: ein Vorschlag der Maschine ist kein
    Vorschlag der Redaktion, auch wenn er daneben steht. */
 /* Plakette wie überall (`.badge` bringt Innenabstand + Blockfluss mit) — ohne
@@ -213,7 +213,7 @@
   flex-wrap: wrap;
   margin-top: var(--space-sm);
   padding-top: var(--space-xs);
-  border-top: 0.5px solid var(--color-border);
+  border-top: var(--border-thin) solid var(--color-border);
 }
 .tw-suggest .progress-bar-wrap { flex: 1 1 8rem; margin: 0; }
 

@@ -114,7 +114,7 @@
     font-size: var(--font-size-xs);
     font-weight: var(--fw-semibold);
     text-transform: uppercase;
-    letter-spacing: 0.04em;
+    letter-spacing: var(--tracking-caps);
     color: var(--color-muted);
     margin-block-end: var(--space-md);
   }
@@ -288,7 +288,7 @@
   }
 
   @keyframes book-editor-pulse {
-    0%, 100% { opacity: 0.4; }
+    0%, 100% { opacity: var(--opacity-hint); }
     50% { opacity: 1; }
   }
 
@@ -364,7 +364,7 @@
   }
   .book-editor-page-card--saving::before {
     background: var(--color-muted);
-    opacity: 0.6;
+    opacity: var(--opacity-disabled);
   }
   .book-editor-page-card--conflict::before,
   .book-editor-page-card--error::before {
@@ -386,7 +386,7 @@
     font-family: var(--font-sans);
     font-weight: var(--fw-medium);
     text-transform: uppercase;
-    letter-spacing: 0.06em;
+    letter-spacing: var(--tracking-caps-wide);
     color: var(--color-muted);
   }
   .book-editor-page-status {
@@ -567,7 +567,7 @@
     background: var(--color-bg);
     border-color: var(--card-accent, var(--color-border));
   }
-  .book-editor-find-btn:disabled { opacity: 0.4; cursor: default; }
+  .book-editor-find-btn:disabled { opacity: var(--opacity-hint); cursor: default; }
   .book-editor-find-btn--active {
     background: color-mix(in srgb, var(--card-accent, currentColor) 18%, var(--color-surface));
     border-color: var(--card-accent, currentColor);

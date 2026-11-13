@@ -25,7 +25,7 @@
 .book-settings-section {
   margin-top: var(--space-2xl);
   padding-top: var(--space-20);
-  border-top: 0.5px solid var(--color-border);
+  border-top: var(--border-thin) solid var(--color-border);
 }
 /* Nur die erste Section direkt im Reiter-Panel verliert die Linie. Sections in
    einem Wrapper (Exposé-Ergebnis im x-if) behalten sie — dort folgt die erste
@@ -74,7 +74,7 @@
   color: hsl(var(--avatar-hue, 220) var(--avatar-fg-sl));
   font-size: var(--font-size-xs);
   font-weight: var(--fw-bold);
-  letter-spacing: 0.04em;
+  letter-spacing: var(--tracking-caps);
   text-transform: uppercase;
   user-select: none;
 }
@@ -182,7 +182,7 @@
   column-gap: var(--space-3);
   row-gap: var(--space-1);
   padding: var(--space-3);
-  border: 0.5px solid var(--color-border);
+  border: var(--border-thin) solid var(--color-border);
   border-left: 3px solid var(--sync-accent, var(--card-accent-blog));
   border-radius: var(--radius-none);
   background: var(--color-bg);
@@ -212,7 +212,7 @@
   width: 150px;
   height: 200px;
   flex: 0 0 auto;
-  border: 0.5px dashed var(--color-border);
+  border: var(--border-thin) dashed var(--color-border);
   border-radius: var(--radius-none);
   background: var(--color-bg);
   color: var(--color-muted);
@@ -258,7 +258,7 @@
   gap: var(--space-sm);
   width: 100%;
   padding: var(--space-md);
-  border: 0.5px solid var(--color-border);
+  border: var(--border-thin) solid var(--color-border);
   border-radius: var(--radius-md);
   background: var(--color-bg);
 }

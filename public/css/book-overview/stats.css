@@ -136,7 +136,7 @@
   font-size: var(--font-size-micro);
   color: var(--color-muted);
   text-transform: uppercase;
-  letter-spacing: 0.04em;
+  letter-spacing: var(--tracking-caps);
 }
 .overview-bars7-total {
   margin-top: var(--space-2xs);

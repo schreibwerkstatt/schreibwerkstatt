@@ -38,7 +38,7 @@
   flex-direction: column;
   gap: var(--space-sm);
   padding: var(--space-14) var(--space-lg);
-  border: 0.5px solid var(--color-border);
+  border: var(--border-thin) solid var(--color-border);
   border-radius: var(--radius-md);
   background: var(--color-bg);
   min-width: 0;
@@ -73,7 +73,7 @@
   gap: var(--space-sm);
   padding: var(--space-10) var(--space-md);
   margin-bottom: var(--space-md);
-  border: 0.5px solid var(--color-warn-text);
+  border: var(--border-thin) solid var(--color-warn-text);
   border-left-width: 3px;
   border-radius: var(--radius-md);
   background: var(--color-warn-bg);
@@ -131,7 +131,7 @@
 .overview-tile-label {
   font-size: var(--font-size-xs);
   text-transform: uppercase;
-  letter-spacing: 0.04em;
+  letter-spacing: var(--tracking-caps);
   color: var(--color-muted);
   font-weight: var(--fw-semibold);
 }

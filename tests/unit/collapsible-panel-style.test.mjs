@@ -123,6 +123,6 @@ test('collapsible()-Panels tragen selbst keine vertikalen Abstaende, Rahmen oder
 test('collapsible-Panel-Spread setzt .collapse-panel (flow-root) und das CSS existiert', () => {
   const js = readFileSync(join(REPO_ROOT, 'public', 'js', 'collapsible.js'), 'utf8');
   assert.match(js, /\[':class'\]:\s*\(\)\s*=>\s*'collapse-panel'/);
-  const css = readFileSync(join(CSS_DIR, 'entities', 'entity-list.css'), 'utf8');
+  const css = readFileSync(join(CSS_DIR, 'components', 'primitives.css'), 'utf8');
   assert.match(css, /\.collapse-panel\s*\{\s*display:\s*flow-root;\s*\}/);
 });

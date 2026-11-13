@@ -27,7 +27,7 @@
 .overview-consistency-label {
   font-size: var(--font-size-xs);
   color: var(--color-muted);
-  line-height: 1.2;
+  line-height: var(--lh-tight);
 }
 
 /* ── Wochentag-Rhythmus ────────────────────────────────────────────────────── */
@@ -68,7 +68,7 @@
   font-size: var(--font-size-micro);
   color: var(--color-muted);
   text-transform: uppercase;
-  letter-spacing: 0.04em;
+  letter-spacing: var(--tracking-caps);
 }
 
 @container (max-width: 320px) {

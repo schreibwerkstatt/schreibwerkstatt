@@ -10,7 +10,7 @@
   max-height: min(82vh, 780px);
   overflow-y: auto;
   padding: var(--space-20);
-  border: 0.5px solid var(--color-border);
+  border: var(--border-thin) solid var(--color-border);
   border-radius: var(--radius-xl);
   background: var(--color-card-bg);
   color: var(--color-text);
@@ -151,7 +151,7 @@
 
 .komplett-scope-group--force {
   padding-top: var(--card-gap-tight);
-  border-top: 0.5px solid var(--color-border);
+  border-top: var(--border-thin) solid var(--color-border);
 }
 
 .komplett-scope-actions {
@@ -162,7 +162,7 @@
   gap: var(--space-sm);
   margin-top: var(--card-gap-section);
   padding-top: var(--card-gap-tight);
-  border-top: 0.5px solid var(--color-border);
+  border-top: var(--border-thin) solid var(--color-border);
 }
 .komplett-scope-presets,
 .komplett-scope-confirm {

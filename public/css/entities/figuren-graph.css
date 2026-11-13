@@ -47,7 +47,7 @@
   width: 100%;
   /* Mit dem Fenster wachsen, aber nie kleiner als ein brauchbares Netz. */
   height: clamp(600px, 78dvh, 1100px);
-  border: 0.5px solid var(--color-border);
+  border: var(--border-thin) solid var(--color-border);
   border-radius: var(--radius-md);
   background: var(--color-bg);
   overflow: hidden;
@@ -201,7 +201,7 @@
   display: block;
   padding: var(--space-2xl) var(--space-20);
   text-align: center;
-  line-height: 1.6;
+  line-height: var(--lh-relaxed);
 }
 
 .figur-soziogramm-hint {
