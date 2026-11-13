@@ -20,8 +20,9 @@
 //
 // Gespreadet in cards/figuren-card.js; Root-Zugriffe via window.__app.
 
-import { fetchJson, dateTimeFormat } from '../utils.js';
+import { fetchJson, sendJson, dateTimeFormat } from '../utils.js';
 import { startPoll } from '../cards/job-helpers.js';
+import { isSelectedBook } from '../cards/book-guard.js';
 import { tFetchError } from '../i18n.js';
 import { typRank, byTypDannName } from './figur-typen.js';
 import { activeFilterId, sameId } from '../chapter-filter.js';
@@ -124,15 +125,14 @@ export const figurenAlterMethods = {
     if (!bookId) { this.figurenAlterData = null; return; }
     // Buchwechsel waehrend des Requests: die Antwort gehoert zum alten Buch und
     // darf weder Daten noch Scan-Datum noch den Lade-Marker des neuen setzen.
-    const isCurrent = () => String(Alpine.store('nav').selectedBookId) === String(bookId);
     try {
       const data = await fetchJson(`/figures/${encodeURIComponent(bookId)}/alter`);
-      if (!isCurrent()) return;
+      if (!isSelectedBook(bookId)) return;
       this.figurenAlterData = data;
       this._figurenAlterLoadedBookId = String(bookId);
       this._memos = {};
     } catch (e) {
-      if (e?.name === 'AbortError' || !isCurrent()) return;
+      if (e?.name === 'AbortError' || !isSelectedBook(bookId)) return;
       this.figurenAlterData = null;
       this.figurenAlterStatus = this._t('figuren.alter.loadError');
     }
@@ -156,15 +156,11 @@ export const figurenAlterMethods = {
     this.figurenAlterProgress = 0;
     this.figurenAlterStatus = this._t('figuren.alter.running');
     try {
-      const j = await fetchJson('/jobs/figur-alter', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ book_id: bookId, force: true }),
-      });
+      const j = await sendJson('/jobs/figur-alter', 'POST', { book_id: bookId, force: true });
       if (!j?.jobId) throw new Error('no jobId');
       // Buchwechsel waehrend des POST: _resetFigurenAlter hat den Zustand schon
       // geraeumt; ein Poll des alten Jobs zeigte seinen Fortschritt im neuen Buch.
-      if (String(Alpine.store('nav').selectedBookId) !== String(bookId)) return;
+      if (!isSelectedBook(bookId)) return;
       this._pollFigurenAlter(j.jobId);
     } catch (e) {
       this.figurenAlterLoading = false;

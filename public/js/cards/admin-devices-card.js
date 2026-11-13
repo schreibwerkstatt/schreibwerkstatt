@@ -16,11 +16,11 @@ export function registerAdminDevicesCard() {
     _lifecycle: null,
 
     init() {
-      this.$watch(() => window.__app.showAdminDevicesCard, async (visible) => {
-        if (visible) await this.devicesEnter();
-      });
       this._lifecycle = setupCardLifecycle(this, {
         name: 'adminDevices',
+        showFlag: 'showAdminDevicesCard',
+        showNeedsBookId: false,
+        onShow: () => this.devicesEnter(),
         refreshNeedsBookId: false,
         onCardRefresh: () => this.devicesRefresh(),
         wake: () => this._devicesLoad({ silent: true }),

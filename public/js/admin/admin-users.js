@@ -3,7 +3,7 @@
 // `window.__app`, weil Alpine-Magics in JS-Methoden nicht zuverlaessig sind.
 
 import { fetchJson, sendJson } from '../utils.js';
-import { tFetchErrorRaw } from '../i18n.js';
+import { tFetchError, tRaw } from '../i18n.js';
 
 export const adminUsersMethods = {
   async adminUsersLoad() {
@@ -25,7 +25,7 @@ export const adminUsersMethods = {
       // und eine bestehende Zuweisung bleibt unangetastet.
       if (p) this.adminUsersProfiles = Array.isArray(p.profiles) ? p.profiles : [];
     } catch (e) {
-      this.adminUsersError = tFetchErrorRaw(e);
+      this.adminUsersError = tFetchError(e);
     } finally {
       this.adminUsersLoading = false;
     }
@@ -51,7 +51,7 @@ export const adminUsersMethods = {
       this.adminUsersInviteEmail = '';
       if (this.adminUsersTab === 'invites') await this.adminUsersInvitesLoad();
     } catch (e) {
-      this.adminUsersError = tFetchErrorRaw(e);
+      this.adminUsersError = tFetchError(e);
     } finally {
       this.adminUsersInviting = false;
     }
@@ -76,7 +76,7 @@ export const adminUsersMethods = {
       await this.adminUsersLoad();
       return j || {};
     } catch (e) {
-      this.adminUsersError = tFetchErrorRaw(e);
+      this.adminUsersError = tFetchError(e);
       return null;
     } finally {
       this.adminUsersPasswordBusy = null;
@@ -114,7 +114,7 @@ export const adminUsersMethods = {
       const j = await fetchJson('/admin/users/invites');
       this.adminUsersInvitesList = j.invites || [];
     } catch (e) {
-      this.adminUsersError = tFetchErrorRaw(e);
+      this.adminUsersError = tFetchError(e);
     } finally {
       this.adminUsersInvitesLoading = false;
     }
@@ -139,7 +139,7 @@ export const adminUsersMethods = {
       this.adminUsersInvitesResult = { id: inv.id, mail: j.mail };
       await this.adminUsersInvitesLoad();
     } catch (e) {
-      this.adminUsersError = tFetchErrorRaw(e);
+      this.adminUsersError = tFetchError(e);
     } finally {
       this.adminUsersInvitesBusy = null;
     }
@@ -156,7 +156,7 @@ export const adminUsersMethods = {
       await sendJson(`/admin/users/invites/${inv.id}`, 'DELETE');
       await this.adminUsersInvitesLoad();
     } catch (e) {
-      this.adminUsersError = tFetchErrorRaw(e);
+      this.adminUsersError = tFetchError(e);
     } finally {
       this.adminUsersInvitesBusy = null;
     }
@@ -169,20 +169,20 @@ export const adminUsersMethods = {
       const idx = this.adminUsersList.findIndex(u => u.email === user.email);
       if (idx >= 0) this.adminUsersList.splice(idx, 1, j.user);
     } catch (e) {
-      this.adminUsersError = tFetchErrorRaw(e);
+      this.adminUsersError = tFetchError(e);
     }
   },
 
   async adminUsersDelete(user) {
     const me = Alpine.store('session').currentUser?.email;
-    if (user.email === me) { this.adminUsersError = 'CANNOT_DELETE_SELF'; return; }
+    if (user.email === me) { this.adminUsersError = tRaw('error.CANNOT_DELETE_SELF'); return; }
     if (!await window.__app.appConfirm({ message: window.__app.t('admin.users.confirmDelete', { email: user.email }), danger: true })) return;
     this.adminUsersError = '';
     try {
       await sendJson(`/admin/users/${encodeURIComponent(user.email)}`, 'DELETE');
       await this.adminUsersLoad();
     } catch (e) {
-      this.adminUsersError = tFetchErrorRaw(e);
+      this.adminUsersError = tFetchError(e);
     }
   },
 
@@ -198,7 +198,7 @@ export const adminUsersMethods = {
       const j = await fetchJson(`/admin/users/${encodeURIComponent(user.email)}/audit?limit=50`);
       this.adminUsersAuditEvents = j.events || [];
     } catch (e) {
-      this.adminUsersError = tFetchErrorRaw(e);
+      this.adminUsersError = tFetchError(e);
     }
   },
 
@@ -213,7 +213,7 @@ export const adminUsersMethods = {
       const data = await fetchJson(`/admin/registration-requests?status=${encodeURIComponent(status)}`);
       this.adminUsersRequestsList = data.items || [];
     } catch (e) {
-      this.adminUsersError = tFetchErrorRaw(e);
+      this.adminUsersError = tFetchError(e);
     } finally {
       this.adminUsersRequestsLoading = false;
     }
@@ -230,7 +230,7 @@ export const adminUsersMethods = {
       await this.adminUsersRequestsLoad();
       await this.adminUsersLoad();
     } catch (e) {
-      this.adminUsersError = tFetchErrorRaw(e);
+      this.adminUsersError = tFetchError(e);
     } finally {
       this.adminUsersRequestsBusy = null;
     }
@@ -250,7 +250,7 @@ export const adminUsersMethods = {
       await sendJson(`/admin/registration-requests/${req.id}/deny`, 'POST', { reason });
       await this.adminUsersRequestsLoad();
     } catch (e) {
-      this.adminUsersError = tFetchErrorRaw(e);
+      this.adminUsersError = tFetchError(e);
     } finally {
       this.adminUsersRequestsBusy = null;
     }

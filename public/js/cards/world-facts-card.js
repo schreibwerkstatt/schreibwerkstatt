@@ -9,12 +9,13 @@
 // Beleg und startet auf Wunsch eine Einzelprüfung (POST /jobs/faktencheck mit fact_id).
 // Gruppierung nach Kategorie; Filter über Suche + Kategorie-Combobox.
 import { setupCardLifecycle } from './card-lifecycle.js';
-import { fetchJson } from '../utils.js';
+import { fetchJson, sendJson } from '../utils.js';
+import { tFetchError } from '../i18n.js';
 import { sameData } from '../utils/same-data.js';
 import { memoMethods } from './card-memo.js';
 import { activeFilterId, hasId } from '../chapter-filter.js';
 import { startPoll } from './job-helpers.js';
-import { isSelectedBook } from './book-guard.js';
+import { isSelectedBook, loadToken } from './book-guard.js';
 import { listWindowState, listWindowMethods } from '../list-window.js';
 import { actionMenuState, actionMenuMethods } from '../action-menu.js';
 
@@ -99,6 +100,8 @@ export function registerWorldFactsCard() {
     // Aktionsmenü je Fakt (action-menu.js); Ziel = world_facts.id.
     ...actionMenuState(),
     _lifecycle: null,
+    // Lade-Token (book-guard.js#loadToken) für loadWorldFacts.
+    _wfLoadSeq: 0,
     // _memos: nicht-reaktiver Memo-Cache (lazy via _memo, Reset in loadWorldFacts) —
     // bewusst nicht im reaktiven Initial-State, analog book-overview/load.js.
 
@@ -145,8 +148,10 @@ export function registerWorldFactsCard() {
     async loadWorldFacts({ silent = false } = {}) {
       const bookId = Alpine.store('nav').selectedBookId;
       if (!bookId) return;
+      const isCurrent = loadToken(this, '_wfLoadSeq', bookId);
       try {
         const data = await fetchJson('/world-facts/' + bookId);
+        if (!isCurrent()) return;
         if (silent && sameData(data?.fakten || [], this.fakten) && (data?.updated_at || null) === this.wfUpdatedAt
             && !!data?.scanned === this.wfScanned && !!data?.factcheck?.bookOptIn === this.wfFactcheck.bookOptIn) return;
         const prevOpen = silent ? this.wfOpenGroups : {};
@@ -373,18 +378,13 @@ export function registerWorldFactsCard() {
       e.error = '';
       try {
         const url = e.mode === 'new' ? `/world-facts/${bookId}` : `/world-facts/${bookId}/${e.id}`;
-        const r = await fetch(url, {
-          method: e.mode === 'new' ? 'POST' : 'PATCH',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ ...e.draft, chapter_ids: (e.draft.chapter_ids || []).map(Number) }),
-        });
-        const data = await r.json().catch(() => null);
+        await sendJson(url, e.mode === 'new' ? 'POST' : 'PATCH',
+          { ...e.draft, chapter_ids: (e.draft.chapter_ids || []).map(Number) });
         if (!isSelectedBook(bookId)) return;
-        if (!r.ok) throw new Error(window.__app.tError(data));
         this.wfEdit = _emptyEdit();
         await this.loadWorldFacts();
       } catch (err) {
-        if (isSelectedBook(bookId)) { this.wfEdit.error = err.message; this.wfEdit.busy = false; }
+        if (isSelectedBook(bookId)) { this.wfEdit.error = tFetchError(err); this.wfEdit.busy = false; }
       }
     },
 
@@ -396,27 +396,33 @@ export function registerWorldFactsCard() {
         confirmLabel: window.__app.t('common.delete'),
         danger: true,
       })) return;
-      const r = await fetch(`/world-facts/${bookId}/${f.id}`, { method: 'DELETE' });
-      if (!isSelectedBook(bookId)) return;
-      if (r.ok) { await this.loadWorldFacts(); return; }
-      // 401 behandelt der globale fetch-Wrapper (Session-Banner).
-      if (r.status !== 401) {
-        const data = await r.json().catch(() => null);
-        window.__app.appAlert({ message: window.__app.tError(data) });
+      try {
+        await fetchJson(`/world-facts/${bookId}/${f.id}`, { method: 'DELETE' });
+      } catch (err) {
+        this._wfAlertError(bookId, err);
+        return;
       }
+      if (isSelectedBook(bookId)) await this.loadWorldFacts();
+    },
+
+    // Fehler einer Pflege-Aktion als Hinweis — nicht nach Buchwechsel und nicht
+    // bei 401 (den behandelt der globale fetch-Wrapper per Session-Banner).
+    _wfAlertError(bookId, err) {
+      if (!isSelectedBook(bookId) || err?.status === 401) return;
+      window.__app.appAlert({ message: tFetchError(err) });
     },
 
     // Verworfene Analyse-Aussage wieder zulassen: die nächste Analyse darf sie anlegen.
     async wfRestore(s) {
       const bookId = Alpine.store('nav').selectedBookId;
       if (!bookId) return;
-      const r = await fetch(`/world-facts/${bookId}/suppressions/${s.id}`, { method: 'DELETE' });
-      if (!isSelectedBook(bookId)) return;
-      if (r.ok) { this.wfAusgeblendet = this.wfAusgeblendet.filter(x => x.id !== s.id); return; }
-      if (r.status !== 401) {
-        const data = await r.json().catch(() => null);
-        window.__app.appAlert({ message: window.__app.tError(data) });
+      try {
+        await fetchJson(`/world-facts/${bookId}/suppressions/${s.id}`, { method: 'DELETE' });
+      } catch (err) {
+        this._wfAlertError(bookId, err);
+        return;
       }
+      if (isSelectedBook(bookId)) this.wfAusgeblendet = this.wfAusgeblendet.filter(x => x.id !== s.id);
     },
 
     // Beleg-Link des Faktenchecks: nur http(s) (der Server speichert nichts anderes).

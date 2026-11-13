@@ -59,3 +59,25 @@ export function resolveCardPositions({ items, activeId = null, gap = DEFAULT_GAP
   for (const it of [...located, ...floating]) tops.set(it.id, it.top);
   return { tops, bottom: Math.max(0, Math.round(bottom)) };
 }
+
+// Beobachtete Elemente eines ResizeObservers als Set führen: jedes Element nur
+// einmal beobachten (erneutes observe() feuerte sonst sofort wieder) und aus
+// dem DOM gefallene wieder freigeben (`prune`) — die Karten werden bei jedem
+// Render neu gebaut, ohne Prune hielte das Set alle alten Knoten fest.
+// Einzige DOM-nahe Ausnahme in dieser Datei, geteilt von allen drei Leisten.
+export function createObservedSet(ro) {
+  const set = new Set();
+  return {
+    observe(el) {
+      if (!el || !ro || set.has(el)) return;
+      try { ro.observe(el); set.add(el); } catch {}
+    },
+    prune() {
+      for (const el of [...set]) {
+        if (el.isConnected) continue;
+        try { ro?.unobserve(el); } catch {}
+        set.delete(el);
+      }
+    },
+  };
+}

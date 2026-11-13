@@ -8,6 +8,7 @@ import { toggleWrapFullscreen } from '../../fullscreen.js';
 import { KINDS, LINK_KINDS, emptyDraft as _emptyDraft } from './shared.js';
 import { rechercheBulkState } from './bulk.js';
 import { rechercheCrosscheckState } from './crosscheck.js';
+import { isChapterItem } from '../tree/chapter-items.js';
 
 export const rechercheBoardMethods = {
   // ── Lifecycle ──────────────────────────────────────────────────────────────
@@ -121,7 +122,7 @@ export const rechercheBoardMethods = {
       const chapterOrder = new Map();
       let i = 0;
       for (const item of nav.tree) {
-        if (item.type === 'chapter' && !item.solo) chapterOrder.set(item.id, i++);
+        if (isChapterItem(item)) chapterOrder.set(item.id, i++);
       }
       const rank = (id) => chapterOrder.has(id) ? chapterOrder.get(id) : Number.MAX_SAFE_INTEGER;
       this.linkTargets.chapter = [...this.linkTargets.chapter].sort((a, b) => rank(a.id) - rank(b.id));

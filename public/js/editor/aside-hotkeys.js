@@ -146,8 +146,11 @@ export const asideHotkeyMethods = {
     event?.preventDefault?.();
     event?.stopPropagation?.();
     const editEl = document.querySelector('.page-content-view--editing');
-    const spot = _returnSpot || _lastTextSpot;
-    if (spot && spot.range.startContainer.isConnected && _pageContentHost(spot.range.startContainer)) {
+    // Erste noch gültige Stelle: ein gemerkter Rücksprung einer früheren Seite
+    // ist abgehängt — dann die letzte Auswahl im aktuellen Text.
+    const usable = (s) => s && s.range.startContainer.isConnected && _pageContentHost(s.range.startContainer);
+    const spot = [_returnSpot, _lastTextSpot].find(usable) || null;
+    if (spot) {
       if (editEl && editEl.contains(spot.range.startContainer)) editEl.focus({ preventScroll: true });
       else document.activeElement?.blur?.();
       const sel = window.getSelection();

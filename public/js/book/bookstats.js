@@ -15,6 +15,8 @@ import {
   rollingWindowForRange, tempoRows, trendSeries,
 } from './bookstats-avg.js';
 import { statusDistribution } from '../redaktion/status.js';
+import { isSelectedBook } from '../cards/book-guard.js';
+import { tFetchError } from '../i18n.js';
 
 
 // Chart-Labels kommen zur Render-Zeit über t() (siehe _metricLabel()), damit sie
@@ -254,7 +256,7 @@ export const bookstatsMethods = {
     ]);
 
     // Stale-Guard: spätere Response eines alten Buchs nicht in neuen State kippen.
-    if (String(bookId) !== String(Alpine.store('nav').selectedBookId)) return;
+    if (!isSelectedBook(bookId)) return;
 
     const failed = results.filter(r => r.status === 'rejected');
     for (const r of failed) console.error('[loadBookStats]', r.reason);
@@ -316,7 +318,7 @@ export const bookstatsMethods = {
         }
       }
     } catch (e) {
-      this.bookStatsSyncStatus = window.__app.t('common.errorColon') + escHtml(e.message || '');
+      this.bookStatsSyncStatus = window.__app.t('common.errorColon') + escHtml(tFetchError(e));
     } finally {
       this.bookStatsLoading = false;
     }

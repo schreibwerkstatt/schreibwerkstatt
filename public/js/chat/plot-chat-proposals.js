@@ -11,14 +11,13 @@
 // Format der Vorschläge: routes/jobs/plot-chat-tools.js (Kopfkommentar).
 // Deep-Doc: docs/plot-chat.md
 
-import { fetchJson } from '../utils.js';
+import { sendJson } from '../utils.js';
 import { tFetchError } from '../i18n.js';
 import { diffParts } from '../diff/diff-parts.js';
-import { persistProposalStatus, applyProposalOnce } from './proposal-status.js';
+import { persistProposalStatus, applyProposalOnce, proposalApplyError } from './proposal-status.js';
 import { trackChatProposal } from '../features-usage.js';
 import { sameBeatRelation } from '../book/plot/constants.js';
 
-const JSON_HEADERS = { 'Content-Type': 'application/json' };
 const CREATE_KIND = { beat_create: 'beat', act_create: 'act', thread_create: 'thread', relation_create: 'relation' };
 const BOARD_LIST = { beat: 'beats', act: 'acts', thread: 'threads', relation: 'relations' };
 
@@ -274,11 +273,8 @@ export const plotProposalMethods = {
     this.busy = false;
     p._applying = false;
     if (r.ok) { if (!r.already) trackChatProposal('plot', 'applied', p.type); return; }
-    if (r.phase === 'cancelled') return;
-    if (r.phase === 'write') p._error = r.error?.body ? tFetchError(r.error) : app.t('plot.chat.applyError');
-    // Das Board ist geändert, nur der Status fehlt — sichtbar machen statt
-    // verschlucken; der nächste Klick holt nur den Status nach.
-    else p._error = app.t('plot.chat.statusError');
+    const err = proposalApplyError(r, { applyKey: 'plot.chat.applyError', statusKey: 'plot.chat.statusError' });
+    if (err) p._error = err;
   },
 
   async discardPlotProposal(msg, pi, discard = true) {
@@ -300,10 +296,7 @@ export const plotProposalMethods = {
     const threadId = p.thread_ref ? refAppliedId(list, p.thread_ref, 'thread', board) : (p.thread_id ?? null);
 
     if (p.type === 'beat_create') {
-      const beat = await fetchJson('/plot/beats', {
-        method: 'POST', headers: JSON_HEADERS,
-        body: JSON.stringify({ book_id: bookId, act_id: actId, thread_id: threadId, ...p.fields }),
-      });
+      const beat = await sendJson('/plot/beats', 'POST', { book_id: bookId, act_id: actId, thread_id: threadId, ...p.fields });
       this.beats = [...this.beats, beat];
       this._memos = {};
       this._recordCreate('beat', beat.id);
@@ -326,9 +319,7 @@ export const plotProposalMethods = {
       for (const k of Object.keys(p.fields)) {
         before[k] = k === 'verworfen' ? (beat.verworfen ? 1 : 0) : snap[k];
       }
-      const updated = await fetchJson(`/plot/beats/${p.beat_id}`, {
-        method: 'PATCH', headers: JSON_HEADERS, body: JSON.stringify(p.fields),
-      });
+      const updated = await sendJson(`/plot/beats/${p.beat_id}`, 'PATCH', p.fields);
       this._replaceBeat({ ...updated, occ_count: beat.occ_count, occ_top: beat.occ_top });
       this._recordBeatFields(p.beat_id, before, { ...p.fields });
       window.__app.refreshPlotBeatCounts?.();
@@ -358,10 +349,7 @@ export const plotProposalMethods = {
     }
 
     if (p.type === 'act_create') {
-      const act = await fetchJson('/plot/acts', {
-        method: 'POST', headers: JSON_HEADERS,
-        body: JSON.stringify({ book_id: bookId, name: p.name, thread_id: threadId }),
-      });
+      const act = await sendJson('/plot/acts', 'POST', { book_id: bookId, name: p.name, thread_id: threadId });
       this.acts = [...this.acts, act];
       this._memos = {};
       this._recordCreate('act', act.id);
@@ -378,9 +366,7 @@ export const plotProposalMethods = {
 
     if (p.type === 'act_update') {
       const act = this.acts.find(a => a.id === p.act_id);
-      const updated = await fetchJson(`/plot/acts/${p.act_id}`, {
-        method: 'PATCH', headers: JSON_HEADERS, body: JSON.stringify({ name: p.name }),
-      });
+      const updated = await sendJson(`/plot/acts/${p.act_id}`, 'PATCH', { name: p.name });
       this.acts = this.acts.map(a => (a.id === updated.id ? updated : a));
       this._memos = {};
       this._recordActFields(p.act_id, { name: act.name }, { name: p.name });
@@ -389,14 +375,11 @@ export const plotProposalMethods = {
     }
 
     if (p.type === 'thread_create') {
-      const thread = await fetchJson('/plot/threads', {
-        method: 'POST', headers: JSON_HEADERS,
-        body: JSON.stringify({
+      const thread = await sendJson('/plot/threads', 'POST', {
           book_id: bookId, name: p.name,
           ...(p.figure_id ? { figure_id: p.figure_id } : {}),
           ...(p.draft_figure_id ? { draft_figure_id: p.draft_figure_id } : {}),
-        }),
-      });
+        });
       this.threads = [...this.threads, thread];
       this._memos = {};
       this._recordCreate('thread', thread.id);
@@ -410,9 +393,7 @@ export const plotProposalMethods = {
       for (const k of Object.keys(p.fields)) {
         before[k] = k === 'figure_id' ? (t.fig_id || null) : (t[k] ?? null);
       }
-      const updated = await fetchJson(`/plot/threads/${p.thread_id}`, {
-        method: 'PATCH', headers: JSON_HEADERS, body: JSON.stringify(p.fields),
-      });
+      const updated = await sendJson(`/plot/threads/${p.thread_id}`, 'PATCH', p.fields);
       this.threads = this.threads.map(x => (x.id === updated.id ? updated : x));
       this._memos = {};
       this._recordThreadFields(p.thread_id, before, { ...p.fields });
@@ -427,10 +408,7 @@ export const plotProposalMethods = {
       const had = (this.relations || []).find(r => sameBeatRelation(
         { from: r.from_beat_id, to: r.to_beat_id, typ: r.typ }, { from: fromId, to: toId, typ: p.typ }));
       if (had) return had.id;
-      const rel = await fetchJson('/plot/beat-relations', {
-        method: 'POST', headers: JSON_HEADERS,
-        body: JSON.stringify({ book_id: bookId, from_beat_id: fromId, to_beat_id: toId, typ: p.typ }),
-      });
+      const rel = await sendJson('/plot/beat-relations', 'POST', { book_id: bookId, from_beat_id: fromId, to_beat_id: toId, typ: p.typ });
       if (!(this.relations || []).some(r => r.id === rel.id)) {
         this.relations = [...(this.relations || []), rel];
         this._recordCreate('relation', rel.id);
@@ -468,9 +446,6 @@ export const plotProposalMethods = {
     const byId = new Map(ordered.map(a => [a.id, a]));
     this.acts = this.acts.map(a => byId.get(a.id) || a);
     this._memos = {};
-    await fetchJson('/plot/acts/order', {
-      method: 'PUT', headers: JSON_HEADERS,
-      body: JSON.stringify({ book_id: Alpine.store('nav').selectedBookId, order: ordered.map(a => a.id) }),
-    });
+    await sendJson('/plot/acts/order', 'PUT', { book_id: Alpine.store('nav').selectedBookId, order: ordered.map(a => a.id) });
   },
 };

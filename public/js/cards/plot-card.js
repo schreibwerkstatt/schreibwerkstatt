@@ -289,6 +289,9 @@ export function registerPlotCard() {
         },
         onCardRefresh: () => this.loadBoard(),
         wake: () => this.loadBoard({ silent: true }),
+        // Karte schliessen (anderes Feature / Home) darf keinen offenen Beat-Edit
+        // hinterlassen — sonst öffnet die Karte beim nächsten Mal direkt im Beat.
+        onHide: () => { if (this.editingBeatId != null) this.cancelEditBeat(); },
       });
 
       // Strukturelle Änderungen (Akt-/Strang-CRUD, Fork/Unfork, loadBoard-Reassign)
@@ -297,13 +300,6 @@ export function registerPlotCard() {
       // brauchen kein Reattach. _scheduleReattach coalesct Mehrfach-Feuer pro Frame.
       this.$watch('acts', () => this._scheduleReattach());
       this.$watch('threads', () => this._scheduleReattach());
-
-      // Karte schliessen (anderes Feature / Home) darf keinen offenen Beat-Edit
-      // hinterlassen — sonst öffnet die Karte beim nächsten Mal direkt im Beat.
-      // setupCardLifecycle kennt nur die true-Flanke; den Reset hängen wir hier an.
-      this.$watch(() => window.__app.showPlotCard, (visible) => {
-        if (!visible && this.editingBeatId != null) this.cancelEditBeat();
-      });
 
       // Cmd/Ctrl+Z / Cmd/Ctrl+Shift+Z + Cmd/Ctrl+Y — Guards (Karte sichtbar,
       // kein Eingabefeld, kein offener Dialog) in board-history-keys.js.

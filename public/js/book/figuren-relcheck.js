@@ -10,7 +10,9 @@
 //
 // Kein `get x()` in diesem gespreadeten Modul (Spread-Getter-Falle).
 
-import { fetchJson } from '../utils.js';
+import { fetchJson, sendJson } from '../utils.js';
+import { tFetchError } from '../i18n.js';
+import { loadToken, isSelectedBook } from '../cards/book-guard.js';
 
 export const figurenRelCheckState = () => ({
   // { conflicts, mainCount, edges } — `edges` = die Kanten hinter den Quellen
@@ -45,12 +47,12 @@ export function computeRelConflictIndex(check) {
 export const figurenRelCheckMethods = {
   async loadFigurenRelCheck() {
     const bookId = Alpine.store('nav').selectedBookId;
-    const seq = ++this._figurenRelCheckSeq;
+    const isCurrent = loadToken(this, '_figurenRelCheckSeq', bookId);
     if (!bookId) { this.figurenRelCheck = figurenRelCheckState().figurenRelCheck; return; }
     try {
       const r = await fetchJson(`/figures/${encodeURIComponent(bookId)}/relation-check`);
       // Buchwechsel oder neuer Katalog-Reload dazwischen: die spätere Antwort gilt.
-      if (seq !== this._figurenRelCheckSeq || String(Alpine.store('nav').selectedBookId) !== String(bookId)) return;
+      if (!isCurrent()) return;
       this.figurenRelCheck = { conflicts: r.conflicts || [], mainCount: r.mainCount || 0, edges: r.edges || [] };
     } catch (e) {
       console.error('[figuren] Beziehungsprüfung:', e);
@@ -100,19 +102,13 @@ export const figurenRelCheckMethods = {
     if (!bookId) return;
     this.figurBzBusy = true;
     try {
-      const r = await fetch(`/figures/${encodeURIComponent(bookId)}/relations/${encodeURIComponent(relId)}`, {
-        method,
-        headers: body ? { 'Content-Type': 'application/json' } : undefined,
-        body: body ? JSON.stringify(body) : undefined,
-      });
-      const data = await r.json().catch(() => null);
-      if (!r.ok) throw new Error(window.__app.tError(data));
-      if (String(Alpine.store('nav').selectedBookId) !== String(bookId)) return;
+      await sendJson(`/figures/${encodeURIComponent(bookId)}/relations/${encodeURIComponent(relId)}`, method, body);
+      if (!isSelectedBook(bookId)) return;
       await window.__app.loadFiguren(bookId);
       this.loadFigurenRelCheck();
     } catch (e) {
       console.error('[figuren] Beziehung ändern:', e);
-      window.__app.appAlert?.({ message: e.message || window.__app.t('figuren.relcheck.editError') });
+      window.__app.appAlert?.({ message: e?.body || e?.status === 0 ? tFetchError(e) : window.__app.t('figuren.relcheck.editError') });
     } finally {
       this.figurBzBusy = false;
     }

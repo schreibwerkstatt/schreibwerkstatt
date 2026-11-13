@@ -12,7 +12,7 @@ export const historyMethods = {
     try {
       const rows = await fetchJson('/history/page/' + pageId);
       // Späte Antwort einer inzwischen verlassenen Seite: nicht in deren Verlauf schreiben.
-      if (this.currentPage && String(this.currentPage.id) !== String(pageId)) return;
+      if (String(this.currentPage?.id) !== String(pageId)) return;
       this.pageHistory = rows;
     } catch (e) {
       console.error('[loadPageHistory]', e);

@@ -12,7 +12,8 @@
 // kuerzere Satzlaenge ist keine Note. Gezeigt werden Wert, Median und Abstand.
 
 import { EVT } from '../events.js';
-import { formatNumber } from '../utils.js';
+import { tFetchError } from '../i18n.js';
+import { formatNumber, fetchJson, sendJson } from '../utils.js';
 
 export function registerAutorenprofilCard() {
   if (typeof window === 'undefined' || !window.Alpine) return;
@@ -71,9 +72,7 @@ export function registerAutorenprofilCard() {
       if (!background) this.apLoading = true;
       this.apError = '';
       try {
-        const r = await fetch('/me/author-profile');
-        if (!r.ok) throw new Error(String(r.status));
-        this.apData = await r.json();
+        this.apData = await fetchJson('/me/author-profile');
         this._apMemos = {};
       } catch (e) {
         if (!background) {
@@ -213,14 +212,14 @@ export function registerAutorenprofilCard() {
       this.apGenerating = true;
       this.apGenError = '';
       try {
-        const res = await fetch('/jobs/autorenprofil', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(force ? { force: true } : {}),
-        });
-        const data = await res.json().catch(() => ({}));
-        if (res.status === 409 && data?.error_code === 'AUTHOR_PROFILE_EDITED') {
-          this.apGenerating = false;
+        const data = await sendJson('/jobs/autorenprofil', 'POST', force ? { force: true } : {});
+        this.apJobId = data.jobId;
+        window.dispatchEvent(new CustomEvent(EVT.JOB_ENQUEUED, {
+          detail: { type: 'autorenprofil', jobId: data.jobId },
+        }));
+      } catch (e) {
+        this.apGenerating = false;
+        if (e.status === 409 && e.code === 'AUTHOR_PROFILE_EDITED') {
           const ok = await window.__app.appConfirm({
             message: window.__app.t('autorenprofil.overwriteConfirm'),
             confirmLabel: window.__app.t('autorenprofil.overwriteConfirmYes'),
@@ -229,14 +228,7 @@ export function registerAutorenprofilCard() {
           if (ok) await this.generateAutorenprofil(true);
           return;
         }
-        if (!res.ok) throw new Error(window.__app.tError(data) || `HTTP ${res.status}`);
-        this.apJobId = data.jobId;
-        window.dispatchEvent(new CustomEvent(EVT.JOB_ENQUEUED, {
-          detail: { type: 'autorenprofil', jobId: data.jobId },
-        }));
-      } catch (e) {
-        this.apGenerating = false;
-        this.apGenError = e.message;
+        this.apGenError = tFetchError(e);
       }
     },
 
@@ -256,17 +248,11 @@ export function registerAutorenprofilCard() {
       this.apSaving = true;
       this.apGenError = '';
       try {
-        const res = await fetch('/me/author-profile', {
-          method: 'PUT',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ profil_text: this.apEditText }),
-        });
-        const data = await res.json().catch(() => ({}));
-        if (!res.ok) throw new Error(window.__app.tError(data) || `HTTP ${res.status}`);
+        await sendJson('/me/author-profile', 'PUT', { profil_text: this.apEditText });
         this.apEditing = false;
         await this.loadAutorenprofil();
       } catch (e) {
-        this.apGenError = e.message;
+        this.apGenError = tFetchError(e);
       } finally {
         this.apSaving = false;
       }

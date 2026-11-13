@@ -8,6 +8,7 @@
 import { fetchJson } from '../utils.js';
 import { normalizeEvents, sortEvents, eventGroupKey, addRefPair } from '../cards/ereignisse/model.js';
 import { figurAnzeigeName } from './figur-name.js';
+import { isSelectedBook } from '../cards/book-guard.js';
 
 export const ereignisseMethods = {
   _buildGlobalZeitstrahl() {
@@ -79,8 +80,11 @@ export const ereignisseMethods = {
   },
 
   async _reloadZeitstrahl() {
+    const bookId = this.$store.nav.selectedBookId;
+    if (!bookId) return;
     try {
-      const { ereignisse, chronology } = await fetchJson(`/figures/zeitstrahl/${this.$store.nav.selectedBookId}`);
+      const { ereignisse, chronology } = await fetchJson(`/figures/zeitstrahl/${bookId}`);
+      if (!isSelectedBook(bookId)) return;
       // Jahres-Kennzahlen (nur bei book_settings.zeitlinie_real serverseitig
       // berechnet, sonst null → Banner bleibt aus).
       this.$store.catalog.zeitstrahlChronology = chronology || null;
@@ -101,6 +105,7 @@ export const ereignisseMethods = {
       }
     } catch (e) {
       console.error('[reloadZeitstrahl]', e);
+      if (!isSelectedBook(bookId)) return;
       if (!this.$store.catalog.globalZeitstrahl.length) this._buildGlobalZeitstrahl();
     }
   },

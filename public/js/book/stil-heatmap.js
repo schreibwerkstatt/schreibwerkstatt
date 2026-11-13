@@ -11,8 +11,9 @@
 // Das Template liest darum ausschliesslich fertige Eigenschaften.
 
 import { escHtml, fetchJson, formatNumber, heatmapCellVars, HEATMAP_MIN_WORDS, localeTag, minMaxBy, tzOpts } from '../utils.js';
-import { isSelectedBook } from '../cards/book-guard.js';
+import { isSelectedBook, loadToken } from '../cards/book-guard.js';
 import { memoMethods } from '../cards/card-memo.js';
+import { tFetchError } from '../i18n.js';
 
 // Metrik-Schlüssel → i18n-Label. Reihenfolge = Spaltenreihenfolge in der Heatmap.
 // sampleBucket: Eimer im Drilldown-Endpunkt (/history/style-samples) bzw.
@@ -175,7 +176,7 @@ export const stilMethods = {
     } catch (e) {
       if (!isSelectedBook(bookId)) return;
       console.error('[loadStilStats]', e);
-      this.stilStatus = window.__app.t('common.errorColon') + escHtml(e.message || '');
+      this.stilStatus = window.__app.t('common.errorColon') + escHtml(tFetchError(e));
     } finally {
       this.stilLoading = false;
     }
@@ -194,7 +195,7 @@ export const stilMethods = {
       this.stilStatus = '';
     } catch (e) {
       if (!isSelectedBook(bookId)) { this.stilStatus = ''; return; }
-      this.stilStatus = window.__app.t('common.errorColon') + escHtml(e.message || '');
+      this.stilStatus = window.__app.t('common.errorColon') + escHtml(tFetchError(e));
     } finally {
       this.stilSyncing = false;
     }
@@ -234,12 +235,13 @@ export const stilMethods = {
     this.stilDetailLoading = true;
     // Re-Entry-Guard: bei schnellen Klicks darf nur die zuletzt geöffnete Zelle
     // ihr Ergebnis setzen, sonst überholt eine ältere Antwort die neuere.
-    const seq = ++this._stilDetailSeq;
+    // Zusätzlich verworfen nach Buchwechsel (book-guard.js#loadToken).
+    const bookId = Alpine.store('nav').selectedBookId;
+    const current = loadToken(this, '_stilDetailSeq', bookId);
     try {
-      const bookId = Alpine.store('nav').selectedBookId;
       const qs = new URLSearchParams({ chapter: String(chapterKey), bucket: def.sampleBucket });
       const data = await fetchJson(`/history/style-samples/${bookId}?${qs}`);
-      if (seq !== this._stilDetailSeq) return;
+      if (!current()) return;
       this.stilDetail = {
         key,
         metricKey,
@@ -248,11 +250,11 @@ export const stilMethods = {
         entries: data.entries || [],
       };
     } catch (e) {
-      if (seq !== this._stilDetailSeq) return;
+      if (!current()) return;
       console.error('[toggleStilDetail]', e);
       this.stilDetail = { key, metricKey, metricLabel: this.stilMetricLabel(metricKey), chapterName: '', entries: [] };
     } finally {
-      if (seq === this._stilDetailSeq) this.stilDetailLoading = false;
+      if (current.latest()) this.stilDetailLoading = false;
     }
   },
 

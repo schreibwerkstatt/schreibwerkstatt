@@ -19,7 +19,8 @@
 import { setupCardLifecycle } from './card-lifecycle.js';
 import { CARD_REQUEST } from './card-request.js';
 import { sameData } from '../utils/same-data.js';
-import { localeTag, tzOpts, formatIsoDay, CHARS_PER_NORMSEITE } from '../utils.js';
+import { localeTag, fmtDateTime, formatIsoDay, CHARS_PER_NORMSEITE, fetchJson, sendJson } from '../utils.js';
+import { tFetchError } from '../i18n.js';
 import {
   SHELF_TABS, mergeShelfRows, filterShelfRows, pinnedFirst, shelfTotals, mayToggleFinished,
 } from './my-books-compute.js';
@@ -37,14 +38,13 @@ export function registerMyBooksCard() {
     _lifecycle: null,
 
     init() {
-      this.$watch(() => window.__app.showMyBooksCard, (visible) => {
-        if (visible) this.loadMyBooks();
-      });
       // Buchübergreifend: kein Reset bei book:changed/view:reset, Refresh ohne Buch.
       this._lifecycle = setupCardLifecycle(this, {
         name: 'myBooks',
         refreshNeedsBookId: false,
         showFlag: 'showMyBooksCard',
+        showNeedsBookId: false,
+        onShow: () => this.loadMyBooks(),
         tabRequest: { key: CARD_REQUEST.MY_BOOKS_TAB, apply: (tab) => { this.myBooksTab = tab; }, current: () => this.myBooksTab },
         onCardRefresh: () => this.loadMyBooks(),
         wake: () => this.loadMyBooks({ silent: true }),
@@ -63,9 +63,7 @@ export function registerMyBooksCard() {
         this.myBooksError = '';
       }
       try {
-        const r = await fetch('/me/books', { credentials: 'same-origin' });
-        if (!r.ok) throw new Error('HTTP ' + r.status);
-        const data = await r.json();
+        const data = await fetchJson('/me/books', { credentials: 'same-origin' });
         const rows = mergeShelfRows(
           data.books || [],
           window.__app.$store.nav.books || [],
@@ -74,7 +72,7 @@ export function registerMyBooksCard() {
         if (!silent || !sameData(rows, this.myBooksRows)) this.myBooksRows = rows;
       } catch (e) {
         if (silent) return;
-        this.myBooksError = window.__app.t('common.errorColon') + e.message;
+        this.myBooksError = window.__app.t('common.errorColon') + tFetchError(e);
         this.myBooksRows = [];
       } finally {
         if (!silent) this.myBooksLoading = false;
@@ -125,14 +123,7 @@ export function registerMyBooksCard() {
       if (this.myBooksBusyId) return;
       this.myBooksBusyId = row.book_id;
       try {
-        const r = await fetch('/me/books/' + row.book_id, {
-          method: 'PUT',
-          headers: { 'Content-Type': 'application/json' },
-          credentials: 'same-origin',
-          body: JSON.stringify(patch),
-        });
-        if (!r.ok) throw new Error('HTTP ' + r.status);
-        const next = await r.json();
+        const next = await sendJson('/me/books/' + row.book_id, 'PUT', patch);
         row.pinned = !!next.pinned;
         row.archived = !!next.archived;
         row.pinned_at = next.pinned_at || null;
@@ -141,7 +132,7 @@ export function registerMyBooksCard() {
         // Mitschreiben zeigt sie bis zum naechsten Reload die alte Ordnung.
         this._mirrorToNavBooks(row);
       } catch (e) {
-        this.myBooksError = window.__app.t('common.errorColon') + e.message;
+        this.myBooksError = window.__app.t('common.errorColon') + tFetchError(e);
       } finally {
         this.myBooksBusyId = null;
       }
@@ -151,14 +142,7 @@ export function registerMyBooksCard() {
       if (this.myBooksBusyId || !this.myBooksMayFinish(row)) return;
       this.myBooksBusyId = row.book_id;
       try {
-        const r = await fetch('/booksettings/' + row.book_id + '/finished', {
-          method: 'PUT',
-          headers: { 'Content-Type': 'application/json' },
-          credentials: 'same-origin',
-          body: JSON.stringify({ is_finished: !row.is_finished }),
-        });
-        if (!r.ok) throw new Error('HTTP ' + r.status);
-        const next = await r.json();
+        const next = await sendJson('/booksettings/' + row.book_id + '/finished', 'PUT', { is_finished: !row.is_finished });
         row.is_finished = !!next.is_finished;
         // Zweiter Schreibpfad auf /booksettings neben dem Einstellungs-Formular:
         // den geteilten Rohstand ebenso verwerfen, sonst zeigt die Uebersicht
@@ -172,7 +156,7 @@ export function registerMyBooksCard() {
         // Erhoehung: einmal frisch laden.
         if (row.is_finished) this.loadMyBooks();
       } catch (e) {
-        this.myBooksError = window.__app.t('common.errorColon') + e.message;
+        this.myBooksError = window.__app.t('common.errorColon') + tFetchError(e);
       } finally {
         this.myBooksBusyId = null;
       }
@@ -222,9 +206,8 @@ export function registerMyBooksCard() {
       const uiLocale = window.Alpine.store('shell').uiLocale;
       // Reiner Kalendertag: genau dieser Tag, ohne TZ-Umrechnung.
       if (value.length === 10) return formatIsoDay(value, uiLocale, opts) || '–';
-      const d = new Date(value);
-      if (Number.isNaN(d.getTime())) return '–';
-      return d.toLocaleDateString(localeTag(uiLocale), tzOpts(opts));
+      if (Number.isNaN(new Date(value).getTime())) return '–';
+      return fmtDateTime(value, uiLocale, opts);
     },
   }));
 }

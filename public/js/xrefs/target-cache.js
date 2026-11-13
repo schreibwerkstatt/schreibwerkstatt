@@ -13,38 +13,27 @@
 // Labels des Profils. Das ist kein Fehler, sondern der Kern des Features.
 
 import { defaultChapterLabels, anchorNumbers } from './xref-number.js';
+import { makeBookCache } from '../repo/book-cache.js';
+import { fetchJson } from '../utils/net.js';
 
 // Ziele je Buch nur einmal holen. Sie aendern sich beim Umbauen des Buchs oder
 // beim Einfuegen einer Abbildung; beides dispatcht `xrefs:changed`.
-const _targetCache = new Map();
-// Laufende Anfragen je Buch: gleichzeitige Aufrufer (Leseansicht rendert,
-// Picker oeffnet) teilen sich einen Fetch. Eine Invalidierung waehrend des
-// Fetches verwirft ihn als Cache-Kandidaten — seine Antwort koennte den Stand
-// vor der Aenderung tragen.
-const _inflight = new Map();
+// Gleichzeitige Aufrufer (Leseansicht rendert, Picker oeffnet) teilen sich
+// einen Fetch; Dedup + Invalidierungs-Schutz liegen in makeBookCache.
+const _targets = makeBookCache(_fetchXrefTargets);
 
 export function invalidateXrefTargetCache(bookId = null) {
-  if (bookId == null) { _targetCache.clear(); _inflight.clear(); }
-  else { _targetCache.delete(String(bookId)); _inflight.delete(String(bookId)); }
+  _targets.invalidate(bookId);
 }
 
-export async function loadXrefTargets(bookId) {
-  const key = String(bookId);
-  if (_targetCache.has(key)) return _targetCache.get(key);
-  if (_inflight.has(key)) return _inflight.get(key);
-  const p = _fetchXrefTargets(key)
-    .then((out) => { if (_inflight.get(key) === p) _targetCache.set(key, out); return out; })
-    .finally(() => { if (_inflight.get(key) === p) _inflight.delete(key); });
-  _inflight.set(key, p);
-  return p;
+export function loadXrefTargets(bookId) {
+  return _targets.load(bookId);
 }
 
 async function _fetchXrefTargets(key) {
-  const res = await fetch(`/xrefs/targets?book_id=${encodeURIComponent(key)}`, {
+  const data = await fetchJson(`/xrefs/targets?book_id=${encodeURIComponent(key)}`, {
     headers: { Accept: 'application/json' },
   });
-  if (!res.ok) throw new Error(`HTTP ${res.status}`);
-  const data = await res.json();
   return {
     chapters: Array.isArray(data?.chapters) ? data.chapters : [],
     figures: Array.isArray(data?.figures) ? data.figures : [],

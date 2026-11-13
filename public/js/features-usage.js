@@ -8,6 +8,7 @@
 
 import { FEATURES, DEFAULT_RECENT_KEYS, featureByKey } from './cards/feature-registry.js';
 import { fetchJson } from './utils.js';
+import { loadToken } from './cards/book-guard.js';
 import { EVT } from './events.js';
 
 // Einmal-Quelle fuer den naechsten /usage/track-Call einer Karte. Die Palette
@@ -177,13 +178,15 @@ export const featuresUsageMethods = {
   // Wird bei Buch-Wechsel + nach Tracking-Bumps neu geladen.
   async loadRecentPages(bookId) {
     if (!bookId) { this.recentPageIds = []; return; }
+    const isCurrent = loadToken(this, '_recentPagesSeq', bookId);
     try {
       const rows = await fetchJson(`/usage/page/recent?book_id=${encodeURIComponent(bookId)}&limit=5`);
+      if (!isCurrent()) return;
       this.recentPageIds = (Array.isArray(rows) ? rows : [])
         .map(r => r.page_id)
         .filter(Number.isFinite);
     } catch (e) {
-      this.recentPageIds = [];
+      if (isCurrent()) this.recentPageIds = [];
     }
   },
 

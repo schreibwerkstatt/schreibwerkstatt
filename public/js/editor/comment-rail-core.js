@@ -13,28 +13,23 @@
 // Alpine-Proxy gewrapptes Range bricht (Host-Objekt) —, sondern pro Aufruf
 // frisch via locateRange lokalisiert.
 
-import { fetchJson } from '../utils.js';
+import { fetchJson, sendJson, escHtml } from '../utils.js';
 import { loadDiff } from '../lazy-libs.js';
 import { renderInline } from '../page-revision-diff.js';
-import { locateRange, resolveCurrentQuote, caretPosFromPoint } from '../share-anchor.js';
+import { locateRange, resolveCurrentQuote, caretPosFromPoint, anchorFromRow } from '../share-anchor.js';
 import { groupThreads } from './comment-threads.js';
 import { avatarInitials } from '../avatar.js';
 import { compareText } from '../i18n.js';
+import { highlightRegistry } from './shared/highlights.js';
 
-function anchorOf(root) {
-  return { bid: root.anchor_bid, quote: root.anchor_quote, start: root.anchor_start, end: root.anchor_end };
-}
+const anchorOf = anchorFromRow;
 
-function highlightsApi() {
-  return (typeof CSS !== 'undefined' && CSS.highlights && typeof Highlight !== 'undefined') ? CSS.highlights : null;
-}
+const highlightsApi = highlightRegistry;
 
 // Plaintext für renderInline (block-/wort-basiert) als ein <p> verpacken;
 // HTML-Sonderzeichen escapen, damit der DOMParser sie als Text liest.
 function wrapP(text) {
-  const esc = String(text == null ? '' : text)
-    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-  return `<p>${esc}</p>`;
+  return `<p>${escHtml(text == null ? '' : String(text))}</p>`;
 }
 
 // cfg:
@@ -345,13 +340,7 @@ export function createCommentRail(cfg) {
       if (!body || !token) return;
       this[K.savingReply] = rootId;
       try {
-        const res = await fetch(`/share/api/links/${encodeURIComponent(token)}/comments`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ parent_id: rootId, body }),
-        });
-        if (!res.ok) throw new Error('reply failed');
-        const reply = await res.json();
+        const reply = await sendJson(`/share/api/links/${encodeURIComponent(token)}/comments`, 'POST', { parent_id: rootId, body });
         this[K.comments] = [...this[K.comments], reply];
         this[K.replyDrafts][rootId] = '';
         this._railRecompute();
@@ -367,12 +356,7 @@ export function createCommentRail(cfg) {
       const resolved = !comment.resolved_at;
       this[K.savingResolve] = comment.id;
       try {
-        const res = await fetch(`/share/api/comments/${comment.id}/resolve`, {
-          method: 'PATCH',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ resolved }),
-        });
-        if (!res.ok) throw new Error('resolve failed');
+        await sendJson(`/share/api/comments/${comment.id}/resolve`, 'PATCH', { resolved });
         comment.resolved_at = resolved ? new Date().toISOString() : null;
         // Neu auflösen: erledigte Stellen verlieren ihr Highlight, und der
         // Status-Filter (offen/erledigt) blendet den Thread ggf. aus.
@@ -395,8 +379,7 @@ export function createCommentRail(cfg) {
       });
       if (!ok) return;
       try {
-        const res = await fetch(`/share/api/comments/${comment.id}`, { method: 'DELETE' });
-        if (!res.ok) throw new Error('delete failed');
+        await fetchJson(`/share/api/comments/${comment.id}`, { method: 'DELETE' });
         // Root-Delete kaskadiert serverseitig — Buch-Kommentare neu laden + Badge syncen.
         await this._railLoad();
         window.__app?.refreshShareCommentCounts?.();

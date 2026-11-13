@@ -9,7 +9,8 @@
 //
 // Der Kopf-Knopf der Karte schreibt diesen Store mit (save-paths.js).
 
-import { EVT } from './_shared.js';
+import { EVT, sendJson } from './_shared.js';
+import { tFetchError } from '../../i18n.js';
 import { CITATION_STYLES, DEFAULT_STYLE, formatFull } from '../../sources/format.js';
 
 // Beispielquelle der Live-Vorschau. Bewusst ein bekanntes Werk mit allen
@@ -106,16 +107,7 @@ export const citationMethods = {
     this.xrefError = '';
     const sent = this._snapKey('xref');
     try {
-      const r = await fetch(`/booksettings/${bookId}/xrefs`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(this._xrefSnapshot()),
-      });
-      if (!r.ok) {
-        const d = await r.json().catch(() => ({}));
-        throw new Error(window.__app.tError(d));
-      }
-      const data = await r.json();
+      const data = await sendJson(`/booksettings/${bookId}/xrefs`, 'PUT', this._xrefSnapshot());
       if (this._isFormBook(bookId)) this._settleSave('xref', sent, () => { this.bookXref = _xrefFrom(data); });
       this.xrefSaved = true;
       this._flash('xrefSaved');
@@ -125,7 +117,7 @@ export const citationMethods = {
       window.dispatchEvent(new CustomEvent(EVT.XREFS_CHANGED, { detail: { bookId } }));
       return true;
     } catch (e) {
-      this.xrefError = e.message;
+      this.xrefError = tFetchError(e);
       return false;
     } finally {
       this.xrefSaving = false;
@@ -141,16 +133,7 @@ export const citationMethods = {
     this.citationError = '';
     const sent = this._snapKey('citation');
     try {
-      const r = await fetch(`/booksettings/${bookId}/citation`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(this._citationSnapshot()),
-      });
-      if (!r.ok) {
-        const d = await r.json().catch(() => ({}));
-        throw new Error(window.__app.tError(d));
-      }
-      const data = await r.json();
+      const data = await sendJson(`/booksettings/${bookId}/citation`, 'PUT', this._citationSnapshot());
       if (this._isFormBook(bookId)) this._settleSave('citation', sent, () => { this.bookCitation = _citationFrom(data); });
       window.__app?.invalidateBookSettingsCache?.();
       this.citationSaved = true;
@@ -164,7 +147,7 @@ export const citationMethods = {
       window.dispatchEvent(new CustomEvent(EVT.SOURCES_CHANGED, { detail: { bookId } }));
       return true;
     } catch (e) {
-      this.citationError = e.message;
+      this.citationError = tFetchError(e);
       return false;
     } finally {
       this.citationSaving = false;

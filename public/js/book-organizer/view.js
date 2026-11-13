@@ -12,12 +12,11 @@ import { MAX_CHAPTER_DEPTH, COLLAPSE_THRESHOLD } from './constants.js';
 import { memoMethods } from '../cards/card-memo.js';
 import { numberFormat } from '../utils.js';
 import { sameStructureTitle } from '../structure-title.js';
+import { eachChapter } from './tree-walk.js';
 
-function _walkAll(chapters, out = []) {
-  for (const c of chapters) {
-    out.push(c);
-    _walkAll(c.subchapters || [], out);
-  }
+function _walkAll(chapters) {
+  const out = [];
+  eachChapter(chapters, (c) => out.push(c));
   return out;
 }
 
@@ -123,13 +122,7 @@ export const viewMethods = {
   // Sammelt alle Nachfahren-Kapitel-IDs eines Knotens (Cycle-Prevention bei DnD).
   _descendantIdsOf(ch) {
     const ids = new Set();
-    function walk(node) {
-      for (const sub of (node.subchapters || [])) {
-        ids.add(sub.id);
-        walk(sub);
-      }
-    }
-    walk(ch);
+    eachChapter(ch?.subchapters, (sub) => ids.add(sub.id));
     return ids;
   },
 
@@ -195,15 +188,11 @@ export const viewMethods = {
   // Kapitel aus der Move-Liste.
   _chapterOptions({ exclude = null } = {}) {
     const opts = [];
-    const walk = (list, depth) => {
-      for (const ch of list) {
-        if (ch.id !== exclude) {
-          opts.push({ value: ch.id, label: (depth > 1 ? '— '.repeat(depth - 1) : '') + ch.name });
-        }
-        walk(ch.subchapters || [], depth + 1);
+    eachChapter(this.workTree, (ch, _i, depth) => {
+      if (ch.id !== exclude) {
+        opts.push({ value: ch.id, label: (depth > 1 ? '— '.repeat(depth - 1) : '') + ch.name });
       }
-    };
-    walk(this.workTree, 1);
+    });
     return opts;
   },
 

@@ -4,6 +4,8 @@
 // der buch-unabhaengige Banner-State am Root (onboardingWelcome) + sein Loader
 // und die zwei Banner-Aktionen. Persistiert wird das Wegklicken serverseitig
 // (app_users.onboarding_state.welcomeDismissed) via PATCH /me/onboarding.
+import { sendJson } from '../utils.js';
+
 export const appOnboardingMethods = {
   // Beim Bootstrap aufgerufen (app-init): Banner nur zeigen, solange der User
   // ihn weder weggeklickt noch das Onboarding abgeschlossen hat. Non-blocking.
@@ -30,12 +32,11 @@ export const appOnboardingMethods = {
   async dismissOnboardingWelcome() {
     this.onboardingWelcome = false;
     try {
-      await fetch('/me/onboarding', {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ welcomeDismissed: true }),
-      });
-    } catch { /* non-fatal — Banner bleibt lokal ausgeblendet */ }
+      await sendJson('/me/onboarding', 'PATCH', { welcomeDismissed: true });
+    } catch (e) {
+      // non-fatal — Banner bleibt lokal ausgeblendet, kommt nach Reload wieder.
+      console.warn('[onboarding] dismiss', e);
+    }
   },
 
   // Beispielbuch (gemeinfreie Prosa, lib/demo-book.js) anlegen und hinein-

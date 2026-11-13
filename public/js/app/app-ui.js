@@ -1,4 +1,4 @@
-import { fetchText, tzOpts, formatRelativeShort, charBadgeLabel, localeTag, charsToNormseiten, formatNumber } from '../utils.js';
+import { fetchText, tzOpts, formatRelativeShort, charBadgeLabel, localeTag, charsToNormseiten, formatNumber, localIsoDate } from '../utils.js';
 import { avatarHue } from '../avatar.js';
 import { isRetryableSaveError } from '../editor/notebook/save-errors.js';
 import { idOptions, sameId, numberedKapitelLabel } from '../chapter-filter.js';
@@ -232,7 +232,8 @@ export const appUiMethods = {
     if (!ts) return '';
     const d = new Date(ts);
     const tag = localeTag(this.$store.shell.uiLocale);
-    const sameDay = d.toDateString() === new Date().toDateString();
+    // Tag in App-Zeitzone vergleichen — das Label rendert auch dort.
+    const sameDay = localIsoDate(d) === localIsoDate();
     if (sameDay) {
       return d.toLocaleTimeString(tag, tzOpts({ hour: '2-digit', minute: '2-digit' }));
     }

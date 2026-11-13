@@ -12,8 +12,10 @@
 // Server (`geburten` in GET …/schulwege, lib/figure-birth.js), der Browser leitet
 // sie nicht selbst her. Kein `get x()` (Spread-Getter-Falle).
 
-import { fetchJson } from '../utils.js';
+import { fetchJson, sendJson } from '../utils.js';
+import { tFetchError } from '../i18n.js';
 import { startPoll } from '../cards/job-helpers.js';
+import { isSelectedBook } from '../cards/book-guard.js';
 import {
   resolveSchulsystem, aktivesSchulsystem, figurWeg, wegGueltig, schoolStageAt, schoolStagesForYear,
   einschulungsJahre, repetitionsKlassen, pruefeKlassenangabe, SCHUL_GRENZEN,
@@ -61,14 +63,13 @@ export const figurenSchulwegMethods = {
   async loadFigurenSchulwege() {
     const bookId = Alpine.store('nav').selectedBookId;
     if (!bookId) { this.figurSchulData = null; return; }
-    const isCurrent = () => String(Alpine.store('nav').selectedBookId) === String(bookId);
     try {
       const data = await fetchJson(`/figures/${encodeURIComponent(bookId)}/schulwege`);
-      if (!isCurrent()) return;
+      if (!isSelectedBook(bookId)) return;
       this.figurSchulData = data;
       this._memos = {};
     } catch (e) {
-      if (e?.name === 'AbortError' || !isCurrent()) return;
+      if (e?.name === 'AbortError' || !isSelectedBook(bookId)) return;
       this.figurSchulData = null;
     }
   },
@@ -276,7 +277,7 @@ export const figurenSchulwegMethods = {
       this._applyFigurSchulweg(f.id, r.schulweg);
       this.cancelFigurSchulEdit();
     } catch (e) {
-      this.figurSchulError = e.message;
+      this.figurSchulError = tFetchError(e);
     } finally {
       this.figurSchulBusy = false;
     }
@@ -304,7 +305,7 @@ export const figurenSchulwegMethods = {
       this._applyFigurSchulweg(f.id, r.schulweg);
       return r;
     } catch (e) {
-      this.figurSchulError = e.message;
+      this.figurSchulError = tFetchError(e);
       return null;
     } finally {
       this.figurSchulBusy = false;
@@ -312,13 +313,7 @@ export const figurenSchulwegMethods = {
   },
 
   async _figurSchulRequest(bookId, figId, suffix, method, body = null) {
-    const res = await fetch(`/figures/${encodeURIComponent(bookId)}/schulwege/${encodeURIComponent(figId)}${suffix}`, {
-      method,
-      headers: body ? { 'Content-Type': 'application/json' } : {},
-      body: body ? JSON.stringify(body) : undefined,
-    });
-    const data = await res.json().catch(() => ({}));
-    if (!res.ok) throw new Error(window.__app.tError(data) || `HTTP ${res.status}`);
+    const data = await sendJson(`/figures/${encodeURIComponent(bookId)}/schulwege/${encodeURIComponent(figId)}${suffix}`, method, body);
     return data;
   },
 
@@ -380,14 +375,9 @@ export const figurenSchulwegMethods = {
     this.figurSchulJobProgress = 0;
     this.figurSchulJobStatus = _t('figuren.schule.jobRunning');
     try {
-      const res = await fetch('/jobs/schulweg-vorschlag', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ book_id: bookId }),
-      });
-      const j = await res.json().catch(() => ({}));
-      if (!res.ok || !j?.jobId) throw new Error(window.__app.tError(j) || _t('figuren.schule.jobError'));
-      if (String(Alpine.store('nav').selectedBookId) !== String(bookId)) return;
+      const j = await sendJson('/jobs/schulweg-vorschlag', 'POST', { book_id: bookId });
+      if (!j?.jobId) throw new Error(_t('figuren.schule.jobError'));
+      if (!isSelectedBook(bookId)) return;
       const finish = (status) => {
         this.figurSchulJobLoading = false;
         this.figurSchulJobProgress = 0;
@@ -407,7 +397,7 @@ export const figurenSchulwegMethods = {
       });
     } catch (e) {
       this.figurSchulJobLoading = false;
-      this.figurSchulJobStatus = e.message;
+      this.figurSchulJobStatus = tFetchError(e);
     }
   },
 };

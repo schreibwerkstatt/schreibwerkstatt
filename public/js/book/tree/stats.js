@@ -2,6 +2,7 @@ import { CHARS_PER_TOKEN, charBadgeLabel, charsToNormseiten, localDayDiff, local
 import { htmlToPlainText } from '../../html-text.js';
 import { EVT } from '../../events.js';
 import { sameStructureTitle } from '../../structure-title.js';
+import { isChapterItem } from './chapter-items.js';
 
 // Seiten-Status (Lektorat-Aktualität), Tooltip-Zeilen, Page-Stats-Sync nach Save
 // und Kapitel-Stat-Aggregation. `this` = die Alpine-Komponente (tree-Methoden
@@ -31,7 +32,7 @@ export function subtreeHitCounts(filtered) {
   if (counts) return counts;
   counts = new Map();
   const byId = new Map();
-  for (const it of filtered) if (it.type === 'chapter' && !it.solo) byId.set(it.id, it);
+  for (const it of filtered) if (isChapterItem(it)) byId.set(it.id, it);
   for (const it of byId.values()) {
     const n = it.pages?.length || 0;
     for (let cur = it, guard = 0; cur && guard < 64; cur = byId.get(cur.parent_id), guard++) {
@@ -188,7 +189,7 @@ export const treeStatsMethods = {
 
   _bookUsesSingleSectionChapters() {
     const leaves = (this.$store.nav.tree || []).filter(i =>
-      i.type === 'chapter' && !i.solo && !i.hasChildren && i.pages?.length > 0);
+      isChapterItem(i) && !i.hasChildren && i.pages?.length > 0);
     return leaves.length > 0 && leaves.every(i => i.pages.length === 1);
   },
 
@@ -200,7 +201,7 @@ export const treeStatsMethods = {
   // seinem einzigen Treffer, und das Kontextmenue der Zeile wirkte (Umbenennen,
   // Teilen, Export) auf das Kapitel statt auf den Abschnitt.
   _isSingleSectionChapter(item) {
-    if (!item || item.type !== 'chapter' || item.solo || item.hasChildren) return false;
+    if (!item || !isChapterItem(item) || item.hasChildren) return false;
     if (item.pages?.length !== 1) return false;
     return !this._treeIsFiltered() || (item.pageTotal ?? 1) === 1;
   },

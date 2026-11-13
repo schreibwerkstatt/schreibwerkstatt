@@ -15,6 +15,8 @@ import { tileFormatMethods } from './tile-format.js';
 import { kapitelDashboardMethods, initialKapitelDashboardState } from './kapitel-dashboard.js';
 import { lsSet } from '../safe-storage.js';
 import { EVT } from '../events.js';
+import { loadToken } from './book-guard.js';
+import { tFetchError } from '../i18n.js';
 
 function emptySlot() {
   return { loading: false, progress: 0, status: '', out: '', jobId: null, pollTimer: null };
@@ -35,6 +37,8 @@ export function registerKapitelReviewCard() {
 
     // kapitelReviewChapterId lebt am Root (Hash-Router + Sidebar lesen es).
     kapitelReviewHistory: {},
+    // Lade-Token (book-guard.js#loadToken) für loadKapitelReviewHistory.
+    _kapitelHistoryLoadSeq: 0,
     selectedKapitelReviewId: null,
     _kapitelReviewByChapter: {}, // { [chapterId]: emptySlot() }
     // Per-Kapitel-Flag „Sub-Kapitel mitbewerten" (default true wenn Subs vorhanden).
@@ -220,12 +224,16 @@ export function registerKapitelReviewCard() {
     },
 
     async loadKapitelReviewHistory(bookId) {
+      const isCurrent = loadToken(this, '_kapitelHistoryLoadSeq', bookId);
+      let history;
       try {
-        this.kapitelReviewHistory = await fetchJson('/history/chapter-reviews/' + bookId) || {};
+        history = await fetchJson('/history/chapter-reviews/' + bookId) || {};
       } catch (e) {
         console.error('[loadKapitelReviewHistory]', e);
-        this.kapitelReviewHistory = {};
+        history = {};
       }
+      // Buchwechsel (oder jüngerer Load) während des Fetch: Antwort verwerfen.
+      if (isCurrent()) this.kapitelReviewHistory = history;
     },
 
     // Wird beim Öffnen der Karte (über den $watch) aufgerufen — setzt ein
@@ -540,7 +548,7 @@ export function registerKapitelReviewCard() {
         await root.openNewSectionForWriting(newPage);
       } catch (e) {
         console.error('[createKapitelPage]', e);
-        root.newPageError = e.message || root.t('common.unknownError');
+        root.newPageError = tFetchError(e);
       } finally {
         root.newPageCreating = false;
       }

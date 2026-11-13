@@ -16,7 +16,8 @@ import {
   MERGE_KIND_CFG, mergeEntryName, confirmEntityMerge, postEntityMerge,
   entityMergeMessage, reloadCatalogsAfterMerge,
 } from './entity-merge.js';
-import { compareText } from '../i18n.js';
+import { compareText, tFetchError } from '../i18n.js';
+import { isSelectedBook } from '../cards/book-guard.js';
 
 const MESSAGE_MS = 8000;
 
@@ -94,14 +95,14 @@ export const entityMergePickerMethods = {
     this.mergePick.error = '';
     try {
       const data = await postEntityMerge(kind, bookId, sourceId, targetId);
-      if (String(Alpine.store('nav').selectedBookId) !== String(bookId)) return;
+      if (!isSelectedBook(bookId)) return;
       this.mergePick.busy = false;
       this.cancelMergePick();
       this._showMergePickMessage(entityMergeMessage(kind, data, src, tgt));
       await reloadCatalogsAfterMerge(bookId);
     } catch (e) {
       console.error('[confirmMergePick]', e);
-      this.mergePick.error = e.message;
+      this.mergePick.error = tFetchError(e);
     } finally {
       this.mergePick.busy = false;
     }

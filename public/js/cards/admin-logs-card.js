@@ -30,14 +30,11 @@ export function registerAdminLogsCard() {
     _lifecycle: null,
 
     init() {
-      this.$watch(() => window.__app.showAdminLogsCard, async (visible) => {
-        if (visible) {
-          await this.adminLogsEnter();
-        } else {
-          this._adminLogsLeave();
-        }
-      });
       this._lifecycle = setupCardLifecycle(this, {
+        showFlag: 'showAdminLogsCard',
+        showNeedsBookId: false,
+        onShow: () => this.adminLogsEnter(),
+        onHide: () => this._adminLogsLeave(),
         onViewReset: () => {
           this._adminLogsLeave();
           this._adminLogsResetList();

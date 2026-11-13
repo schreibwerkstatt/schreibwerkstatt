@@ -15,6 +15,9 @@ import {
   vorlageLabelKey, stufeLabelKey, wegLabelKey,
 } from '../school-path.js';
 
+import { fetchJson, sendJson } from './_shared.js';
+import { tFetchError } from '../../i18n.js';
+
 const SCHUL_VORLAGE_DEFAULT = 'ch_harmos';
 
 export const schoolMethods = {
@@ -82,9 +85,7 @@ export const schoolMethods = {
   async _schulFigurenMitEigenemWeg(neueVorlage) {
     const bookId = this._formBookId;
     try {
-      const r = await fetch(`/figures/${encodeURIComponent(bookId)}/schulwege`);
-      if (!r.ok) return 0;
-      const { wege = {} } = await r.json();
+      const { wege = {} } = await fetchJson(`/figures/${encodeURIComponent(bookId)}/schulwege`);
       const neu = new Set(wegKeys(schulsystemAusVorlage(neueVorlage)));
       return Object.values(wege).filter(w => w?.weg && !neu.has(w.weg)).length;
     } catch {
@@ -124,20 +125,14 @@ export const schoolMethods = {
     this.schulError = '';
     const sent = this._snapKey('school');
     try {
-      const r = await fetch(`/booksettings/${bookId}/schulsystem`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(this._schoolSnapshot()),
-      });
-      const d = await r.json().catch(() => ({}));
-      if (!r.ok) throw new Error(window.__app.tError(d));
+      const d = await sendJson(`/booksettings/${bookId}/schulsystem`, 'PUT', this._schoolSnapshot());
       if (this._isFormBook(bookId)) this._settleSave('school', sent, () => this._applySchoolSettings(d));
       this.schulSaved = true;
       this._flash('schulSaved');
       window.__app?.invalidateBookSettingsCache?.();
       return true;
     } catch (e) {
-      this.schulError = e.message;
+      this.schulError = tFetchError(e);
       return false;
     } finally {
       this.schulSaving = false;

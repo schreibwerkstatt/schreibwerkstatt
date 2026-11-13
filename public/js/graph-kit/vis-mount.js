@@ -16,7 +16,8 @@ export async function ensureVis(container) {
     await loadVis();
     return true;
   } catch (e) {
-    ph.textContent = e.message;
+    console.error('[vis-mount]', e);
+    ph.textContent = window.__app.t('graph.empty.visLoadError');
     return false;
   }
 }

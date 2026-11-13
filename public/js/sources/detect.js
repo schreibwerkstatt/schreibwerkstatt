@@ -18,7 +18,9 @@
 // dabei frisch vom Server — seit dem Lauf kann uebernommen, geloescht oder
 // zugeordnet worden sein.
 
-import { fetchJson, tzOpts, localeTag } from '../utils.js';
+import { fetchJson, sendJson, fmtDateTime } from '../utils.js';
+import { tFetchError } from '../i18n.js';
+import { isSelectedBook } from '../cards/book-guard.js';
 import { startPoll } from '../cards/job-helpers.js';
 import { draftToPayload, draftFromSource } from './fields.js';
 import { lsSet } from '../safe-storage.js';
@@ -74,11 +76,7 @@ export const sourcesDetectMethods = {
     try {
       const body = { book_id: bookId };
       if (this.srcDetectChapterId) body.chapter_id = Number(this.srcDetectChapterId);
-      const { jobId } = await fetchJson('/jobs/source-detect', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(body),
-      });
+      const { jobId } = await sendJson('/jobs/source-detect', 'POST', body);
       lsSet(DETECT_LS_KEY(bookId), jobId);
       this._pollSourceDetect(jobId);
     } catch (e) {
@@ -175,21 +173,13 @@ export const sourcesDetectMethods = {
     this.sourcesBusy = true;
     this.srcDetectError = '';
     try {
-      const r = await fetch(`/sources/${v.existing_source_id}/link`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ book_id: bookId }),
-      });
-      if (!r.ok) {
-        const data = await r.json().catch(() => ({}));
-        throw new Error(window.__app.tError(data) || `HTTP ${r.status}`);
-      }
+      await sendJson(`/sources/${v.existing_source_id}/link`, 'POST', { book_id: bookId });
       this.dismissDetected(v);
       await this.loadSources();
       this._sourcesChanged();
       this._flashSourcesSaved();
     } catch (e) {
-      this.srcDetectError = e.message;
+      this.srcDetectError = tFetchError(e);
     } finally {
       this.sourcesBusy = false;
     }
@@ -209,7 +199,7 @@ export const sourcesDetectMethods = {
       this._sourcesChanged();
       this._flashSourcesSaved();
     } catch (e) {
-      this.srcDetectError = e.message;
+      this.srcDetectError = tFetchError(e);
     } finally {
       this.sourcesBusy = false;
     }
@@ -267,16 +257,7 @@ export const sourcesDetectMethods = {
       url: v.url,
     });
     const payload = { ...draftToPayload(draft), book_id: bookId };
-    const r = await fetch('/sources', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload),
-    });
-    if (!r.ok) {
-      const data = await r.json().catch(() => ({}));
-      throw new Error(window.__app.tError(data) || `HTTP ${r.status}`);
-    }
-    return r.json().catch(() => ({}));
+    return sendJson('/sources', 'POST', payload);
   },
 
   // ── Lauf-Historie ──────────────────────────────────────────────────────────
@@ -288,8 +269,10 @@ export const sourcesDetectMethods = {
     if (!bookId) { this.srcDetectRuns = []; return; }
     try {
       const rows = await fetchJson(`/jobs/source-detect/runs?book_id=${encodeURIComponent(bookId)}`);
+      if (!isSelectedBook(bookId)) return;
       this.srcDetectRuns = Array.isArray(rows) ? rows : [];
     } catch (e) {
+      if (!isSelectedBook(bookId)) return;
       this.srcDetectRuns = [];
       console.error('[sources] Lauf-Historie fehlgeschlagen:', e);
     }
@@ -307,8 +290,10 @@ export const sourcesDetectMethods = {
       return;
     }
     this.srcDetectError = '';
+    const bookId = window.Alpine?.store('nav')?.selectedBookId;
     try {
       const detail = await fetchJson(`/jobs/source-detect/runs/${run.id}`);
+      if (!isSelectedBook(bookId)) return;
       // Der Server hat den Bibliotheks-Status beim Lesen frisch gerechnet —
       // „schon erfasst" stimmt damit fuer JETZT, nicht fuer den Lauf-Zeitpunkt.
       this.srcDetected = detail?.result?.vorschlaege || [];
@@ -322,6 +307,7 @@ export const sourcesDetectMethods = {
           : null,
       };
     } catch (e) {
+      if (!isSelectedBook(bookId)) return;
       this.srcDetectError = window.__app.t('sources.detect.runLoadError');
     }
   },
@@ -353,9 +339,6 @@ export const sourcesDetectMethods = {
   },
 
   formatDetectRunDate(iso) {
-    if (!iso) return '';
-    try {
-      return new Date(iso).toLocaleString(localeTag(window.Alpine?.store('shell')?.uiLocale), tzOpts());
-    } catch { return iso; }
+    return fmtDateTime(iso, window.Alpine?.store('shell')?.uiLocale);
   },
 };

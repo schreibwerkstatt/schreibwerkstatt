@@ -10,6 +10,8 @@
 //
 // Kein `get x()` in diesem gespreadeten Modul (Spread-Getter-Falle).
 import { SUBTYP_ICON } from './subtyp.js';
+import { sendJson } from '../../utils.js';
+import { tFetchError } from '../../i18n.js';
 
 const _t = (key, params) => window.__app?.t?.(key, params) ?? key;
 
@@ -85,13 +87,7 @@ export const ereignisEditMethods = {
     this.eventEditBusy = true;
     this.eventEditError = '';
     try {
-      const r = await fetch(`/figures/zeitstrahl/${encodeURIComponent(bookId)}/${encodeURIComponent(ev.id)}`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ fields }),
-      });
-      const data = await r.json().catch(() => null);
-      if (!r.ok) throw new Error(window.__app.tError(data));
+      await sendJson(`/figures/zeitstrahl/${encodeURIComponent(bookId)}/${encodeURIComponent(ev.id)}`, 'PATCH', { fields });
       if (String(Alpine.store('nav').selectedBookId) !== String(bookId)) return;
       // Nur schliessen, was noch offen ist: ein Klick auf «Bearbeiten» einer
       // anderen Zeile hat während des Requests schon deren Formular geöffnet.
@@ -100,7 +96,7 @@ export const ereignisEditMethods = {
       await window.__app._reloadZeitstrahl();
     } catch (e) {
       console.error('[saveEventEdit]', e);
-      this.eventEditError = e.message || _t('events.edit.saveError');
+      this.eventEditError = tFetchError(e);
     } finally {
       this.eventEditBusy = false;
     }

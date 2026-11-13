@@ -537,6 +537,7 @@ const chatsState = () => ({
 const featuresUsageState = () => ({
   recentFeatureKeys: ['review', 'figuren', 'bookchat'],
   recentPageIds: [],
+  _recentPagesSeq: 0, // loadToken-Zähler von loadRecentPages (Buchwechsel-Guard)
 });
 
 // Entity-Linking pro Buch (Figuren-/Orte-Highlights + Szenen-/Ereignisse-Panel

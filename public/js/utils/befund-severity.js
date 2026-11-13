@@ -10,8 +10,6 @@
 // zweitleichteste rot. Darum hier drei Stufen absteigender Warnfarbe:
 // schwerwiegend → rot, mittel → amber, leicht → neutral.
 
-export const BEFUND_SEVERITY_ORDER = ['kritisch', 'stark', 'mittel', 'schwach', 'niedrig'];
-
 const TONE = {
   kritisch: 'kritisch',
   stark: 'kritisch',
@@ -28,12 +26,6 @@ export function befundSeverityTone(schwere) {
 /** `.severity-tag--*`-Klasse für eine Befund-Schwere. */
 export function befundSeverityClass(schwere) {
   return 'severity-tag--' + befundSeverityTone(schwere);
-}
-
-/** Rang (höher = gravierender) für „höchste Schwere"-Vergleiche; unbekannt → 0. */
-export function befundSeverityRank(schwere) {
-  const i = BEFUND_SEVERITY_ORDER.indexOf(schwere);
-  return i < 0 ? 0 : BEFUND_SEVERITY_ORDER.length - i;
 }
 
 // In Alpine-Methods-Objekte spreadbar (Templates rufen die Methoden direkt).

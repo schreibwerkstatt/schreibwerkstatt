@@ -13,14 +13,12 @@
 // Format der Vorschläge: routes/jobs/ideen-chat-tools.js (Kopfkommentar).
 // Deep-Doc: docs/ideen-chat.md
 
-import { fetchJson } from '../utils.js';
+import { sendJson } from '../utils.js';
 import { tFetchError } from '../i18n.js';
 import { diffParts } from '../diff/diff-parts.js';
-import { persistProposalStatus, applyProposalOnce } from './proposal-status.js';
+import { persistProposalStatus, applyProposalOnce, proposalApplyError } from './proposal-status.js';
 import { trackChatProposal } from '../features-usage.js';
 import { IDEE_OPEN_STATUSES } from '../book/ideen-shared.js';
-
-const JSON_HEADERS = { 'Content-Type': 'application/json' };
 
 function _find(ideen, id) {
   return id == null ? null : (ideen || []).find(i => i.id === id) || null;
@@ -202,11 +200,8 @@ export const ideenProposalMethods = {
         await this.revealIdee(writtenId);
       }
       if (r.ok) { if (!r.already) trackChatProposal('ideen', 'applied', p.type); return; }
-      if (r.phase === 'cancelled') return;
-      if (r.phase === 'write') p._error = r.error?.body ? tFetchError(r.error) : app.t('ideenBoard.chat.applyError');
-      // Das Board ist geändert, nur der Status fehlt — der nächste Klick holt nur
-      // den Status nach.
-      else p._error = app.t('ideenBoard.chat.statusError');
+      const err = proposalApplyError(r, { applyKey: 'ideenBoard.chat.applyError', statusKey: 'ideenBoard.chat.statusError' });
+      if (err) p._error = err;
     } finally {
       this.busy = false;
       p._applying = false;
@@ -223,9 +218,7 @@ export const ideenProposalMethods = {
     const app = window.__app;
     let r;
     try {
-      r = await fetchJson('/ideen/chat-proposal/beleg-check', {
-        method: 'POST', headers: JSON_HEADERS, body: JSON.stringify({ message_id: msg.id, index: pi }),
-      });
+      r = await sendJson('/ideen/chat-proposal/beleg-check', 'POST', { message_id: msg.id, index: pi });
     } catch (e) {
       p._error = tFetchError(e);
       return false;
@@ -255,14 +248,11 @@ export const ideenProposalMethods = {
     const bookId = Alpine.store('nav').selectedBookId;
     if (p.type === 'idee_create') {
       const f = p.fields || {};
-      const row = await fetchJson('/ideen', {
-        method: 'POST', headers: JSON_HEADERS,
-        body: JSON.stringify({
+      const row = await sendJson('/ideen', 'POST', {
           book_id: bookId, content: f.content,
           ...(f.page_id ? { page_id: f.page_id } : {}),
           ...(f.chapter_id ? { chapter_id: f.chapter_id } : {}),
-        }),
-      });
+        });
       this.ideen = [row, ...(this.ideen || [])];
       return row.id;
     }
@@ -270,16 +260,13 @@ export const ideenProposalMethods = {
       const f = p.fields || {};
       const body = {};
       for (const k of ['content', 'status', 'page_id', 'chapter_id']) if (k in f) body[k] = f[k];
-      const row = await fetchJson(`/ideen/${p.idee_id}`, { method: 'PATCH', headers: JSON_HEADERS, body: JSON.stringify(body) });
+      const row = await sendJson(`/ideen/${p.idee_id}`, 'PATCH', body);
       this._replaceIdee(row);
       return p.idee_id;
     }
     if (p.type === 'idee_merge') {
       const f = p.fields || {};
-      const r = await fetchJson(`/ideen/${p.idee_id}/merge`, {
-        method: 'POST', headers: JSON_HEADERS,
-        body: JSON.stringify({ source_ids: p.merge_ids, ...('content' in f ? { content: f.content } : {}) }),
-      });
+      const r = await sendJson(`/ideen/${p.idee_id}/merge`, 'POST', { source_ids: p.merge_ids, ...('content' in f ? { content: f.content } : {}) });
       const removed = new Set(r.removed_ids || []);
       this.ideen = (this.ideen || []).filter(i => !removed.has(i.id));
       this._replaceIdee(r.idee);
@@ -287,10 +274,7 @@ export const ideenProposalMethods = {
     }
     if (p.type === 'link_create') {
       const ideeId = p.idee_ref ? refAppliedIdeeId(list, p.idee_ref, this.ideen) : p.idee_id;
-      const row = await fetchJson(`/ideen/${ideeId}/links`, {
-        method: 'POST', headers: JSON_HEADERS,
-        body: JSON.stringify({ target_kind: p.target_kind, target_id: p.target_id }),
-      });
+      const row = await sendJson(`/ideen/${ideeId}/links`, 'POST', { target_kind: p.target_kind, target_id: p.target_id });
       this._replaceIdee(row);
       return ideeId;
     }

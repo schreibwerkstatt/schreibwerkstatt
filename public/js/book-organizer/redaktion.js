@@ -12,6 +12,7 @@
 
 import { sendJson } from '../utils/net.js';
 import { statusLabelKey } from '../redaktion/status.js';
+import { isSelectedBook } from '../cards/book-guard.js';
 
 const _t = (k, p) => window.__app?.t?.(k, p) ?? k;
 
@@ -24,7 +25,7 @@ export const redaktionMethods = {
     const bookId = Alpine.store('nav').selectedBookId;
     if (!bookId) { this.redaktionEnabled = false; return; }
     await window.__app?.refreshPageStatus?.(bookId);
-    if (Alpine.store('nav').selectedBookId !== bookId) return;
+    if (!isSelectedBook(bookId)) return;
     this.redaktionEnabled = (Alpine.store('badges').editStatusChain || []).length > 0;
   },
 

@@ -10,8 +10,10 @@
 // Gerechnet wird ausschliesslich in book/figure-stationen.js — dieselbe Rechnung
 // wie im Buch-Chat-Werkzeug `get_figure_age`. Kein `get x()` (Spread-Getter-Falle).
 
-import { fetchJson } from '../utils.js';
+import { fetchJson, sendJson } from '../utils.js';
+import { tFetchError } from '../i18n.js';
 import { startPoll } from '../cards/job-helpers.js';
+import { isSelectedBook } from '../cards/book-guard.js';
 import { stationenAm, stationZeitraum, stationTitel, normalizeStation, JOB_ARTEN } from './figure-stationen.js';
 import { stichtagAus } from './figuren-alter.js';
 
@@ -27,14 +29,13 @@ export const figurenStationenMethods = {
   async loadFigurenStationen() {
     const bookId = Alpine.store('nav').selectedBookId;
     if (!bookId) { this.figurStationenData = null; return; }
-    const isCurrent = () => String(Alpine.store('nav').selectedBookId) === String(bookId);
     try {
       const data = await fetchJson(`/figures/${encodeURIComponent(bookId)}/stationen`);
-      if (!isCurrent()) return;
+      if (!isSelectedBook(bookId)) return;
       this.figurStationenData = data;
       this._memos = {};
     } catch (e) {
-      if (e?.name === 'AbortError' || !isCurrent()) return;
+      if (e?.name === 'AbortError' || !isSelectedBook(bookId)) return;
       this.figurStationenData = null;
     }
   },
@@ -146,17 +147,11 @@ export const figurenStationenMethods = {
     this.figurStationBusy = true;
     this.figurStationError = '';
     try {
-      const res = await fetch(`/figures/${encodeURIComponent(bookId)}/stationen/${kind}/${encodeURIComponent(f.id)}${suffix}`, {
-        method,
-        headers: body ? { 'Content-Type': 'application/json' } : {},
-        body: body ? JSON.stringify(body) : undefined,
-      });
-      const data = await res.json().catch(() => ({}));
-      if (!res.ok) throw new Error(window.__app.tError(data) || `HTTP ${res.status}`);
+      const data = await sendJson(`/figures/${encodeURIComponent(bookId)}/stationen/${kind}/${encodeURIComponent(f.id)}${suffix}`, method, body);
       await this.loadFigurenStationen();
       return data;
     } catch (e) {
-      this.figurStationError = e.message;
+      this.figurStationError = tFetchError(e);
       return null;
     } finally {
       this.figurStationBusy = false;
@@ -216,14 +211,9 @@ export const figurenStationenMethods = {
     this.figurStationJobProgress = 0;
     this.figurStationJobStatus = _t('figuren.stationen.jobRunning');
     try {
-      const res = await fetch('/jobs/stationen-vorschlag', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ book_id: bookId }),
-      });
-      const j = await res.json().catch(() => ({}));
-      if (!res.ok || !j?.jobId) throw new Error(window.__app.tError(j) || _t('figuren.stationen.jobError'));
-      if (String(Alpine.store('nav').selectedBookId) !== String(bookId)) return;
+      const j = await sendJson('/jobs/stationen-vorschlag', 'POST', { book_id: bookId });
+      if (!j?.jobId) throw new Error(_t('figuren.stationen.jobError'));
+      if (!isSelectedBook(bookId)) return;
       const finish = (status) => {
         this.figurStationJobLoading = false;
         this.figurStationJobProgress = 0;
@@ -243,7 +233,7 @@ export const figurenStationenMethods = {
       });
     } catch (e) {
       this.figurStationJobLoading = false;
-      this.figurStationJobStatus = e.message;
+      this.figurStationJobStatus = tFetchError(e);
     }
   },
 };

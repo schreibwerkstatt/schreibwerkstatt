@@ -17,6 +17,7 @@
 //   Template: Fragment plot-backlinks mit `x-data="{ beatOwnerId: f.id }"` darueber
 
 import { fetchJson } from '../utils.js';
+import { isSelectedBook } from '../cards/book-guard.js';
 
 export const plotBacklinkMethods = {
   /**
@@ -30,7 +31,7 @@ export const plotBacklinkMethods = {
     if (!bookId) { this.plotBacklinks = {}; return; }
     try {
       const data = await fetchJson(`/plot/links?book_id=${bookId}&kind=${kind}`);
-      if (Alpine.store('nav').selectedBookId !== bookId) return; // Buch inzwischen gewechselt
+      if (!isSelectedBook(bookId)) return; // Buch inzwischen gewechselt
       this.plotBacklinks = data?.links || {};
     } catch {
       this.plotBacklinks = {};

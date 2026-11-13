@@ -16,7 +16,7 @@
 // Bibliothekssuche: Sinn-Query über die Quellen-PDFs des Users (Pool-Scope).
 // Endpoint: GET /search/sources-semantic (user-skopiert, kein book_id).
 
-import { fetchJson } from '../utils.js';
+import { fetchJson, sendJson } from '../utils.js';
 import { startPoll } from '../cards/job-helpers.js';
 import { checkPdfFile, uploadPdf } from '../upload-pdf.js';
 import { tFetchError } from '../i18n.js';
@@ -50,7 +50,7 @@ export const sourcesDocMethods = {
       this._flashSourcesNotice();
       if (updated.index_job_id) this._pollSourceIndexJob(updated.index_job_id);
     } catch (e) {
-      this.srcDocError = e.message;
+      this.srcDocError = tFetchError(e);
     } finally {
       this.srcDocBusy = false;
       if (input) input.value = ''; // Reset, sonst ist derselbe File nicht neu wählbar.
@@ -75,15 +75,10 @@ export const sourcesDocMethods = {
     this.srcDocBusy = true;
     this.srcDocError = '';
     try {
-      const r = await fetch(`/sources/${this.srcEditingId}/doc`, { method: 'DELETE' });
-      if (!r.ok) {
-        const d = await r.json().catch(() => ({}));
-        throw new Error(app.tError(d) || `HTTP ${r.status}`);
-      }
-      this._applySourceDoc(await r.json().catch(() => ({})));
+      this._applySourceDoc(await sendJson(`/sources/${this.srcEditingId}/doc`, 'DELETE'));
       this._stopSourceIndexPoll();
     } catch (e) {
-      this.srcDocError = e.message;
+      this.srcDocError = tFetchError(e);
     } finally {
       this.srcDocBusy = false;
     }

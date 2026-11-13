@@ -1,37 +1,20 @@
 // Teil von appHashRouterMethods (siehe Facade app-hash-router.js).
 // Lifecycle: haengt die Watcher auf, die den Hash schreiben, und raeumt sie ab.
 import { exitFullscreenOnNavigation } from '../../fullscreen.js';
+import { EXCLUSIVE_CARDS } from '../../cards/feature-registry.js';
 export const hashSetupMethods = {
   _setupHashRouting() {
     // Re-init sammelt sonst mehrfache $watch — bei jedem Property-Change feuern
     // dann doppelte URL-Writes mit doppeltem History-Eintrag. Existierende
     // Teardowns vorab abräumen.
     this._teardownHashRouting();
+    // Karten-Flags aus EXCLUSIVE_CARDS (SSoT des Karten-Inventars) — eine neue
+    // Karte schreibt so ohne Hand-Pflege ihre URL. Dazu die Nicht-Karten-
+    // Quellen des Hashes (Editor, Seite, Kapitel-/Reiter-Wahl am Root).
     const watchers = [
       'currentPage', 'showEditorCard',
-      'showFiguresCard', 'showFigurWerkstattCard', 'showOrteCard', 'showSongsCard', 'showSzenenCard', 'showEreignisseCard', 'showPlotCard', 'showMotivCard', 'showWorldFactsCard',
-      'showRechercheCard',
-      'showIdeenBoardCard',
-      'showSourcesCard',
-      'showKontinuitaetCard', 'showErzaehlprofilCard', 'showTagebuchRueckblickCard', 'showBookReviewCard', 'showBookChatCard',
-      'showKapitelReviewCard', 'kapitelReviewChapterId',
-      'showBookStatsCard', 'showStilCard', 'showFehlerHeatmapCard', 'showBuchlandkarteCard', 'buchlandkarteTab', 'showWortschatzCard', 'showStrukturCard', 'showTitelwerkstattCard',
-      'showBookSettingsCard', 'showUserSettingsCard', 'showMyStatsCard', 'showMyBooksCard', 'showAutorenprofilCard', 'showHelpCard', 'showOnboardingCard',
-      'showAdminUsersCard', 'showAdminSettingsCard', 'showAdminUsageCard', 'adminUsageTab',
-      'showAdminCategoriesCard', 'showAdminBooksCard', 'showAdminLogsCard', 'showAdminParseFailsCard',
-      'showAdminJsErrorsCard', 'showAdminDevicesCard', 'showAdminBackupCard',
-      'showFinetuneExportCard',
-      'showSnapshotsCard',
-      'showExportCard',
-      'showPdfExportCard',
-      'showEpubExportCard',
-      'showDocxExportCard',
-      'showBookOrganizerCard',
-      'showBookEditorCard',
-      'showBookOverviewCard',
-      'showSearchCard',
-      'showFolderImportCard',
-      'showShareLinksCard',
+      'kapitelReviewChapterId', 'buchlandkarteTab', 'adminUsageTab',
+      ...EXCLUSIVE_CARDS.map(c => c.flag),
     ];
     this._hashWatcherTeardowns = [];
     for (const prop of watchers) {

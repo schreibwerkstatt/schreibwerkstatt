@@ -2,7 +2,7 @@
 // gespreadet). Ergebnisse stammen aus der Komplettanalyse (Phase 8) und werden
 // via _loadKontinuitaetHistory (GET) angezeigt; Anzeige + Filter + Resolve-Toggle.
 
-import { fetchJson, escHtml } from '../utils.js';
+import { fetchJson, sendJson, escHtml } from '../utils.js';
 import { i18nMarkerKey } from '../i18n.js';
 import { startPoll, runningJobStatus } from '../cards/job-helpers.js';
 import { isSelectedBook } from '../cards/book-guard.js';
@@ -64,21 +64,11 @@ export const kontinuitaetMethods = {
       this.kontinuitaetStatus = `<span class="error-msg">${escHtml(text)}</span>`;
     };
     try {
-      const resp = await fetch(url, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ book_id: bookId, book_name: root.selectedBookName || '' }),
-      });
-      const data = await resp.json().catch(() => ({}));
+      const data = await sendJson(url, 'POST', { book_id: bookId, book_name: root.selectedBookName || '' });
       // Buchwechsel während des Starts: der Reset (book:changed) hat die Karte
       // schon geleert — nichts mehr hineinschreiben, keinen Poller anhängen.
       if (!isSelectedBook(bookId)) return;
-      if (!resp.ok || !data.jobId) {
-        // 401 behandelt der globale fetch-Wrapper (Session-Banner).
-        if (resp.status === 401) { clearRunState(); return; }
-        showError(this._kontinuitaetStartErrorText(data));
-        return;
-      }
+      if (!data?.jobId) { showError(this._kontinuitaetStartErrorText(data)); return; }
       startPoll(this, {
         jobId: data.jobId,
         timerProp: '_kontinuitaetPollTimer',
@@ -100,8 +90,11 @@ export const kontinuitaetMethods = {
       });
     } catch (e) {
       if (!isSelectedBook(bookId)) return;
-      showError(root.t('kontinuitaet.error.startFailed'));
-      console.error('[_kontinuitaetStartJob]', e);
+      // 401 behandelt der globale fetch-Wrapper (Session-Banner).
+      if (e.status === 401) { clearRunState(); return; }
+      // Abgelehnter Start: karteneigener Hinweis bzw. error.CODE, sonst generisch.
+      showError(this._kontinuitaetStartErrorText(e.body));
+      if (!e.body) console.error('[_kontinuitaetStartJob]', e);
     }
   },
 

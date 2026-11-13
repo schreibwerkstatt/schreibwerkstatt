@@ -12,6 +12,7 @@
 
 import { fetchJson } from '../utils.js';
 import { IDEA_LINK_KINDS } from './ideen-shared.js';
+import { isSelectedBook } from '../cards/book-guard.js';
 
 export const ideenLinkMethods = {
   // Idee der Karte per ID — Kopfzeile der Picker-Popover (Verknuepfen,
@@ -39,7 +40,7 @@ export const ideenLinkMethods = {
     if (this._linkTargetsBookId !== bookId) { this.linkTargets = {}; this._linkTargetsBookId = null; }
     try {
       const data = await fetchJson(`/ideen/link-targets?book_id=${bookId}`);
-      if (Alpine.store('nav').selectedBookId !== bookId) return;
+      if (!isSelectedBook(bookId)) return;
       this.linkTargets = data;
       this._linkTargetsBookId = bookId;
     } catch {

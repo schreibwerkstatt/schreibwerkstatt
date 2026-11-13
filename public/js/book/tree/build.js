@@ -1,6 +1,7 @@
 import { fetchJson } from '../../utils.js';
 import { EVT } from '../../events.js';
 import { buildKapitelLabels, buildKapitelNumbers } from '../../chapter-filter.js';
+import { isSelectedBook } from '../../cards/book-guard.js';
 
 // nav.tree → { len, byId } fuer _chapterExcludedByAncestor.
 const chapterIndexCache = new WeakMap();
@@ -230,7 +231,7 @@ export const treeBuildMethods = {
     ]);
     // Da kein Endpunkt mehr wirft, landet auch ein Abbruch (Buchwechsel) hier —
     // mit leeren Maps, die nicht ueber das neue Buch geschrieben werden duerfen.
-    if (signal?.aborted || String(this.$store.nav.selectedBookId) !== String(bookId)) return;
+    if (signal?.aborted || !isSelectedBook(bookId)) return;
 
     this.pageLastChecked = ageMap || {};
     const badges = this.$store.badges;

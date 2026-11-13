@@ -13,11 +13,13 @@
 
 import { escHtml, fetchJson, formatNumber, heatmapCellVars, HEATMAP_MIN_WORDS, localeTag, minMaxBy, tzOpts } from '../utils.js';
 import { loadChart } from '../lazy-libs.js';
-import { isSelectedBook } from '../cards/book-guard.js';
+import { loadToken } from '../cards/book-guard.js';
+import { tFetchError } from '../i18n.js';
 import { highlightOccurrenceOnPage } from './passage-highlight.js';
 import { createChartHolder } from '../cards/chart-holder.js';
 import { chartPalette, crosshairPlugin, lineDataset, timeSeriesOptions, withAlpha } from '../cards/chart-style.js';
 import { memoMethods } from '../cards/card-memo.js';
+import { isChapterItem } from './tree/chapter-items.js';
 
 
 // Chart.js-Instanz + Theme-Observer als Modul-State (ausserhalb Alpines Proxy,
@@ -272,8 +274,7 @@ export const fehlerHeatmapMethods = {
     if (!bookId) return;
     // Nur die jüngste Anfrage darf schreiben: Modus-Wechsel und Buchwechsel
     // können eine ältere, langsamere Antwort überholen lassen.
-    const seq = ++this._fehlerHeatmapSeq;
-    const current = () => seq === this._fehlerHeatmapSeq && isSelectedBook(bookId);
+    const current = loadToken(this, '_fehlerHeatmapSeq', bookId);
     this.fehlerHeatmapLoading = true;
     this.fehlerHeatmapStatus = '';
     this._memos = {};
@@ -287,9 +288,9 @@ export const fehlerHeatmapMethods = {
     } catch (e) {
       if (!current()) return;
       console.error('[loadFehlerHeatmap]', e);
-      this.fehlerHeatmapStatus = window.__app.t('common.errorColon') + escHtml(e.message || '');
+      this.fehlerHeatmapStatus = window.__app.t('common.errorColon') + escHtml(tFetchError(e));
     } finally {
-      if (seq === this._fehlerHeatmapSeq) this.fehlerHeatmapLoading = false;
+      if (current.latest()) this.fehlerHeatmapLoading = false;
     }
   },
 
@@ -308,8 +309,7 @@ export const fehlerHeatmapMethods = {
     const bookId = Alpine.store('nav').selectedBookId;
     if (!bookId) return;
     // Wie loadFehlerHeatmap: nur die jüngste Anfrage schreibt (schneller Buchwechsel).
-    const seq = ++this._fehlerTrendSeq;
-    const current = () => seq === this._fehlerTrendSeq && isSelectedBook(bookId);
+    const current = loadToken(this, '_fehlerTrendSeq', bookId);
     try {
       const data = await fetchJson(`/history/fehler-trend/${bookId}`);
       if (!current()) return;
@@ -430,7 +430,7 @@ export const fehlerHeatmapMethods = {
     const locale = Alpine.store('shell').uiLocale;
     const tree = Alpine.store('nav').tree;
     return this._memo('rows', [data, locale, tree], () => {
-      const depth = new Map((tree || []).filter(i => i.type === 'chapter' && !i.solo).map(i => [String(i.id), i.depth]));
+      const depth = new Map((tree || []).filter(i => isChapterItem(i)).map(i => [String(i.id), i.depth]));
       return buildFehlerRows(data, this.fehlerHeatmapTypen, locale, (id) => depth.get(String(id)));
     });
   },

@@ -5,6 +5,7 @@
 import { fetchJson } from '../utils.js';
 import { VALID_FIGUR_TYPEN } from './figur-typen.js';
 import { assignCatalogList } from '../cards/catalog-store.js';
+import { isSelectedBook } from '../cards/book-guard.js';
 
 export function _cleanStr(v) {
   if (v === null || v === undefined) return null;
@@ -125,10 +126,9 @@ export const figurenMethods = {
   // Ladefehler stehen als Status in der Karte statt als „Noch keine Analyse"-
   // Leerzustand, dessen CTA eine teure Komplettanalyse anbietet.
   async loadFiguren(bookId, { signal } = {}) {
-    const isCurrent = () => String(this.$store.nav.selectedBookId) === String(bookId);
     try {
       const data = await fetchJson('/figures/' + bookId, { signal });
-      if (!isCurrent()) return;
+      if (!isSelectedBook(bookId)) return;
       this.$store.catalogUi.figurenStatus = '';
       // Identische Antwort: Katalog, Lookup-Index und Zeitstrahl stehen schon.
       if (!assignCatalogList('figuren', bookId, data?.figuren || [], (l) => l.map(_sanitizeFigur))) return;
@@ -137,7 +137,7 @@ export const figurenMethods = {
     } catch (e) {
       if (e?.name === 'AbortError') return;
       console.error('[loadFiguren]', e);
-      if (isCurrent()) this.$store.catalogUi.figurenStatus = this.t('figuren.loadError');
+      if (isSelectedBook(bookId)) this.$store.catalogUi.figurenStatus = this.t('figuren.loadError');
     }
   },
 

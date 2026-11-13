@@ -8,19 +8,15 @@
 // INNERHALB des Parents und wuerde Sub-Kapitel aus ihrem Parent herausreissen.
 // Massgeblich ist stattdessen die Depth-First-Reihenfolge von workTree
 // (`_chapterDfsRank`), plus soloPages davor.
+import { isChapterItem, findChapterItem } from '../book/tree/chapter-items.js';
+import { eachChapter } from './tree-walk.js';
 
 export const mirrorMethods = {
   // chapter-id → Depth-First-Rang aus dem Workstate (0-basiert, ueber alle Tiefen).
   _chapterDfsRank() {
     const rank = new Map();
     let i = 0;
-    const walk = (list) => {
-      for (const c of list) {
-        rank.set(c.id, i++);
-        walk(c.subchapters || []);
-      }
-    };
-    walk(this.workTree);
+    eachChapter(this.workTree, (c) => rank.set(c.id, i++));
     return rank;
   },
 
@@ -45,21 +41,17 @@ export const mirrorMethods = {
   _mirrorChapterOrderInRoot() {
     const nav = Alpine.store('nav');
     const meta = new Map();
-    const walk = (list) => {
-      list.forEach((c, i) => {
-        meta.set(c.id, {
-          priority: i + 1,
-          depth: c.depth,
-          parent_id: c.parent_id ?? null,
-          hasChildren: (c.subchapters?.length || 0) > 0,
-        });
-        walk(c.subchapters || []);
+    eachChapter(this.workTree, (c, i) => {
+      meta.set(c.id, {
+        priority: i + 1,
+        depth: c.depth,
+        parent_id: c.parent_id ?? null,
+        hasChildren: (c.subchapters?.length || 0) > 0,
       });
-    };
-    walk(this.workTree);
+    });
     const reparented = [];
     for (const it of nav.tree) {
-      if (it.type !== 'chapter' || it.solo) continue;
+      if (!isChapterItem(it)) continue;
       const m = meta.get(it.id);
       if (!m) continue;
       if ((it.parent_id ?? null) !== m.parent_id) reparented.push(m.parent_id);
@@ -83,7 +75,7 @@ export const mirrorMethods = {
   _expandSidebarChain(ids) {
     const nav = Alpine.store('nav');
     const byId = new Map();
-    for (const it of nav.tree) if (it.type === 'chapter' && !it.solo) byId.set(it.id, it);
+    for (const it of nav.tree) if (isChapterItem(it)) byId.set(it.id, it);
     let changed = false;
     for (const id of ids) {
       for (let cur = byId.get(id), guard = 0; cur && guard < 64; cur = byId.get(cur.parent_id), guard++) {
@@ -103,21 +95,17 @@ export const mirrorMethods = {
     // Move aendert keinen Namen, und ein History-Snapshot traegt die Namen von
     // damals — nach einer Umbenennung anderswo schriebe er den alten zurueck.
     const updates = new Map();
-    const collect = (list) => {
-      for (const c of list) {
-        c.pages.forEach((p, i) => {
-          updates.set(p.id, { chapter_id: c.id, priority: i + 1 });
-        });
-        collect(c.subchapters || []);
-      }
-    };
-    collect(this.workTree);
+    eachChapter(this.workTree, (c) => {
+      c.pages.forEach((p, i) => {
+        updates.set(p.id, { chapter_id: c.id, priority: i + 1 });
+      });
+    });
     this.soloPages.forEach((p, i) => {
       updates.set(p.id, { chapter_id: 0, priority: i + 1 });
     });
     const chapterName = new Map();
     for (const it of nav.tree) {
-      if (it.type === 'chapter' && !it.solo) chapterName.set(it.id, it.name);
+      if (isChapterItem(it)) chapterName.set(it.id, it.name);
     }
     for (const p of nav.pages) {
       const u = updates.get(p.id);
@@ -133,7 +121,7 @@ export const mirrorMethods = {
       : new Set(this._chapterDfsRank().keys());
     for (const chapId of targets) {
       if (!chapId) continue;
-      const treeCh = nav.tree.find(it => it.type === 'chapter' && !it.solo && it.id === chapId);
+      const treeCh = findChapterItem(nav.tree, chapId);
       if (!treeCh) continue;
       treeCh.pages = nav.pages
         .filter(p => p.chapter_id === chapId)

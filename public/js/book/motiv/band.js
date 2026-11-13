@@ -11,6 +11,7 @@
 
 import { fetchJson } from '../../utils.js';
 import { isSelectedBook } from '../../cards/book-guard.js';
+import { isChapterItem } from '../tree/chapter-items.js';
 
 export const bandMethods = {
   // Ansicht umschalten (Konstellation / Verlaufsband / Befunde / Gliederung). Zurück auf den Graph muss
@@ -34,7 +35,7 @@ export const bandMethods = {
     const root = globalThis.window?.__app;
     return this._memo('bandChapters', [this.$store.nav.tree, root?._chapterLabelMap], () =>
       (this.$store.nav.tree || [])
-        .filter(t => t.type === 'chapter' && !t.solo)
+        .filter(t => isChapterItem(t))
         .map(t => ({ id: t.id, name: root?._kapitelLabel?.(t.id) || t.name, num: root?._kapitelNummer?.(t.id) || '', depth: t.depth || 1 })));
   },
 
@@ -88,7 +89,7 @@ export const bandMethods = {
   _computeBandColumns(chapters, tree, expanded) {
     const known = new Set(chapters.map(c => c.id));
     const parentOf = new Map();
-    for (const t of tree) if (t.type === 'chapter' && !t.solo) parentOf.set(t.id, t.parent_id ?? null);
+    for (const t of tree) if (isChapterItem(t)) parentOf.set(t.id, t.parent_id ?? null);
     const kids = new Map();
     const roots = [];
     for (const c of chapters) {

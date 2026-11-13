@@ -13,6 +13,7 @@
 
 import { EVT } from './events.js';
 import { mountInTopLayer } from './fullscreen.js';
+import { installFloatingDismiss, makeRemovalWatcher } from './floating-dismiss.js';
 import { computePopoverPos } from './popover-anchor.js';
 
 // Kurz genug, um gewollt zu wirken, lang genug, dass Überstreichen einer
@@ -23,9 +24,7 @@ let layer = null;
 let current = null;
 let timer = null;
 
-const removalWatcher = typeof MutationObserver === 'function'
-  ? new MutationObserver(() => { if (current && !document.contains(current)) hide(); })
-  : null;
+const removalWatcher = makeRemovalWatcher(() => current, () => hide());
 
 function el(tag, cls, text) {
   const n = document.createElement(tag);
@@ -119,10 +118,7 @@ export function installEntityRefPreview() {
     const ref = refOf(e.target);
     if (ref?.matches(':focus-visible')) schedule(ref);
   });
-  document.addEventListener('focusout', () => hide());
   // Klick = Sprung: die Vorschau des verlassenen Orts soll nicht stehenbleiben.
   document.addEventListener('click', hide, true);
-  document.addEventListener('keydown', (e) => { if (e.key === 'Escape') hide(); });
-  window.addEventListener('scroll', hide, true);
-  window.addEventListener('resize', hide);
+  installFloatingDismiss(hide);
 }

@@ -172,8 +172,14 @@ export const slashMethods = {
     input.accept = 'image/png,image/jpeg,image/webp,image/gif';
     input.hidden = true;
     document.body.appendChild(input);
-    // Abgebrochener Datei-Dialog feuert kein `change`, nur `cancel`.
+    // Abgebrochener Datei-Dialog feuert kein `change`, nur `cancel` — ältere
+    // Safari nicht einmal das. Fallback: kehrt der Fokus ins Fenster zurück und
+    // liegt nach kurzer Frist keine Datei vor, das Feld ebenfalls abräumen
+    // (sonst bliebe je abgebrochenem Dialog ein verstecktes <input> im <body>).
     input.addEventListener('cancel', () => input.remove(), { once: true });
+    window.addEventListener('focus', () => {
+      setTimeout(() => { if (!input.files?.length) input.remove(); }, 1000);
+    }, { once: true });
     input.addEventListener('change', async () => {
       const file = input.files && input.files[0];
       input.remove();

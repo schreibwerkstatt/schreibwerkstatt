@@ -2,7 +2,7 @@
 // Alpine.data('adminCategoriesCard') gespreadet.
 
 import { fetchJson, sendJson } from '../utils.js';
-import { tFetchErrorRaw } from '../i18n.js';
+import { tFetchError } from '../i18n.js';
 
 export const adminCategoriesMethods = {
   async loadAll() {
@@ -12,7 +12,7 @@ export const adminCategoriesMethods = {
       const c = await fetchJson('/local/categories');
       this.categories = c.categories || [];
     } catch (e) {
-      this.error = tFetchErrorRaw(e);
+      this.error = tFetchError(e);
     } finally {
       this.loading = false;
     }
@@ -27,7 +27,7 @@ export const adminCategoriesMethods = {
       this.newCategoryName = '';
       await this.loadAll();
     } catch (e) {
-      this.error = tFetchErrorRaw(e);
+      this.error = tFetchError(e);
     } finally {
       this.busy = false;
     }
@@ -40,7 +40,7 @@ export const adminCategoriesMethods = {
       await sendJson(`/local/categories/${cat.id}`, 'PUT', { name: next.trim() });
       await this.loadAll();
     } catch (e) {
-      this.error = tFetchErrorRaw(e);
+      this.error = tFetchError(e);
     }
   },
 
@@ -54,7 +54,7 @@ export const adminCategoriesMethods = {
       await sendJson(`/local/categories/${cat.id}`, 'DELETE');
       await this.loadAll();
     } catch (e) {
-      this.error = tFetchErrorRaw(e);
+      this.error = tFetchError(e);
     }
   },
 

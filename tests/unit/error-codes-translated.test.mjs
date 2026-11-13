@@ -1,5 +1,5 @@
 // Drift guard: jeder `error_code`, den routes/ oder lib/ als Literal verschicken,
-// hat einen Text in BEIDEN Locales — `error.<CODE>` (tErrorRaw/tFetchErrorRaw in
+// hat einen Text in BEIDEN Locales — `error.<CODE>` (tErrorRaw/tFetchError in
 // public/js/i18n.js) oder den Key im Namespace der Karte, die die Route bedient
 // (FILE_NAMESPACES). Ohne Text zeigt das Frontend nur common.unknownError — der
 // User erfährt nicht, was schiefging. Ausnahme: Programmier-/Vertragsfehler, die

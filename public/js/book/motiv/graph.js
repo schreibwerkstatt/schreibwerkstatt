@@ -8,6 +8,7 @@ import { sendJson, escHtml } from '../../utils.js';
 import { tnRaw } from '../../i18n.js';
 import { toggleWrapFullscreen } from '../../fullscreen.js';
 import { ensureVis, graphPlaceholder, createGraphTooltip, graphTheme, paletteColors } from '../../graph-kit.js';
+import { isSelectedBook } from '../../cards/book-guard.js';
 
 // Themen-Palette: primär die vom Autor gewählte Farbe (themes.farbe = Palette-
 // Schlüssel, theme-aware --palette-*-Tokens wie in der Plot-Werkstatt); ohne Wahl
@@ -345,7 +346,7 @@ export const graphMethods = {
     if (!bookId) return;
     const positions = this._motivNetwork.getPositions();
     // Lokal spiegeln, damit Re-Render die Anordnung hält — nur fürs aktuelle Buch.
-    if (String(bookId) === String(this.$store.nav.selectedBookId)) this._savedPositions = positions;
+    if (isSelectedBook(bookId)) this._savedPositions = positions;
     try {
       await sendJson('/motifs/layout', 'PUT', { book_id: bookId, positions });
     } catch (e) { /* Layout ist reine Ansicht — Fehler nicht hart melden */ }

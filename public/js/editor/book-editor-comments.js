@@ -12,6 +12,7 @@
 
 import { createCommentRail } from './comment-rail-core.js';
 import { createCommentLayout } from './comment-rail-layout.js';
+import { scrollWindowToRange } from '../share-anchor.js';
 
 function streamEl() { return document.querySelector('.book-editor-stream'); }
 function layerEl() { return document.querySelector('.book-editor-comments__layer'); }
@@ -52,10 +53,7 @@ const rail = createCommentRail({
   // Nach jedem Thread-Set die vertikale Verankerung neu berechnen (post-render,
   // weil Kartenhöhen gemessen werden müssen).
   afterRecompute: (ctx) => ctx._scheduleCommentLayout(),
-  scrollToRange: (range) => {
-    const r = range.getBoundingClientRect();
-    if (r && r.height) window.scrollTo({ top: window.scrollY + r.top - 140, behavior: 'smooth' });
-  },
+  scrollToRange: (range) => scrollWindowToRange(range, 140),
   // Gegenrichtung (Klick im Text → Leiste): das passende Thread-Item in der
   // Leiste sichtbar scrollen. block:'nearest' scrollt den Leisten-Container, nicht
   // das Fenster. rAF, damit die Auswahl-DOM-Änderung (Foot aufgeklappt) gesetzt ist.

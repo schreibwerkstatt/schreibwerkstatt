@@ -59,12 +59,9 @@ export function registerFehlerHeatmapCard() {
           ctx._applyFehlerColumns(null);
           _destroyFehlerTrendChart();
         },
-      });
-
-      // Chart beim Ausblenden zerstören, damit Chart.js' Resize-Handler nicht auf
-      // dem versteckten Canvas crasht. Reopen baut es frisch (renderFehlerTrendChart).
-      this.$watch(() => window.__app.showFehlerHeatmapCard, (visible) => {
-        if (!visible) _destroyFehlerTrendChart();
+        // Chart beim Ausblenden zerstören, damit Chart.js' Resize-Handler nicht auf
+        // dem versteckten Canvas crasht. Reopen baut es frisch (renderFehlerTrendChart).
+        onHide: () => _destroyFehlerTrendChart(),
       });
     },
 

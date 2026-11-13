@@ -75,14 +75,6 @@ export function registerAdminUsageCard() {
     _lifecycle: null,
 
     init() {
-      this.$watch(() => window.__app.showAdminUsageCard, async (visible) => {
-        // Beim Schliessen der ganzen Karte (Hash-Router wechselt auf ein anderes
-        // Admin-Pane, ohne den Tab zu aendern) bleibt der Summary-Tab aktiv und
-        // die Charts haengen sonst mit aktivem ResizeObserver am versteckten
-        // Canvas -> Chart.js crasht beim naechsten Resize ("ownerDocument of null").
-        if (!visible) { this._adminUsageDestroyCharts(); return; }
-        await this.adminUsageEnter();
-      });
       // Tab-Wechsel laedt hier, nicht im Klick-Handler: der Hash-Router setzt
       // `adminUsageTab` erst NACH dem Oeffnen der Karte (Deep-Link
       // #admin/usage/billing, Back/Forward) — `adminUsageEnter` hat da schon den
@@ -108,6 +100,14 @@ export function registerAdminUsageCard() {
         if (this.adminUsageTab === 'jobs' || this.adminUsageTab === 'chat') this.adminUsageLoadTab();
       });
       this._lifecycle = setupCardLifecycle(this, {
+        showFlag: 'showAdminUsageCard',
+        showNeedsBookId: false,
+        onShow: () => this.adminUsageEnter(),
+        // Beim Schliessen der ganzen Karte (Hash-Router wechselt auf ein anderes
+        // Admin-Pane, ohne den Tab zu aendern) bleibt der Summary-Tab aktiv und
+        // die Charts haengen sonst mit aktivem ResizeObserver am versteckten
+        // Canvas -> Chart.js crasht beim naechsten Resize ("ownerDocument of null").
+        onHide: () => this._adminUsageDestroyCharts(),
         onViewReset: () => {
           this.adminUsageError = '';
           this.adminUsageTimeSeries = [];

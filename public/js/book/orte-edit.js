@@ -6,7 +6,7 @@
 
 import { ORT_TYPEN, ortTypLabel } from './ort-typen.js';
 import { countryOptions } from '../country-codes.js';
-import { compareText } from '../i18n.js';
+import { compareText, tFetchError } from '../i18n.js';
 import { entityMergeTargetOptions } from './entity-merge-picker.js';
 
 const EMPTY_DRAFT = { name: '', typ: '', beschreibung: '', stimmung: '', land: '', parent: '' };
@@ -130,8 +130,8 @@ export const orteEditMethods = {
       if (await window.__app.mergeOrt(o.id, target)) this.ortMergeTarget = '';
     } catch (e) {
       console.error('[mergeOrtInto]', e);
-      // postEntityMerge wirft mit übersetzter Server-Meldung (z.B. TARGET_STALE).
-      await window.__app.appAlert({ message: e?.message || window.__app.t('orte.merge.error') });
+      // Server-Meldung (z.B. TARGET_STALE), Netzfehler usw.
+      await window.__app.appAlert({ message: tFetchError(e) });
     }
   },
 };

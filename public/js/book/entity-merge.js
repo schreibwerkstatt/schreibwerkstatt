@@ -11,8 +11,10 @@
 // (book/orte.js#mergeOrt) nutzt denselben Weg.
 
 import { figurMergeMessage } from './figur-merge.js';
+import { sendJson } from '../utils/net.js';
+import { tFetchError } from '../i18n.js';
 
-// i18n über den Root, nicht über i18n.js — wie figur-merge.js.
+// Texte über den Root (`window.__app.t`) — wie figur-merge.js.
 const _t = (key, params) => window.__app?.t?.(key, params) ?? key;
 
 // Pro Gattung: Endpunkt-Basis, Listen-Feld der GET-Antwort, Namensfeld, Body-
@@ -41,17 +43,16 @@ export function confirmEntityMerge(sourceName, targetName) {
   });
 }
 
-/** POST des Merges. Wirft mit übersetzter Meldung; Rückgabe = Server-Antwort. */
+/** POST des Merges. Rückgabe = Server-Antwort. Wirft den `sendJson`-Fehler
+ *  (status/code/body), dessen `message` schon übersetzt ist (tFetchError). */
 export async function postEntityMerge(kind, bookId, sourceId, targetId) {
   const cfg = MERGE_KIND_CFG[kind];
-  const r = await fetch(`${cfg.url(bookId)}/merge`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(cfg.body(sourceId, targetId)),
-  });
-  const data = await r.json().catch(() => null);
-  if (!r.ok) throw new Error(window.__app.tError(data));
-  return data;
+  try {
+    return await sendJson(`${cfg.url(bookId)}/merge`, 'POST', cfg.body(sourceId, targetId));
+  } catch (e) {
+    e.message = tFetchError(e);
+    throw e;
+  }
 }
 
 /** Erfolgsmeldung; `src`/`tgt` tragen `name`. */

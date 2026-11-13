@@ -3,7 +3,7 @@
 // stream,download}.
 
 import { fetchJson } from '../utils.js';
-import { tFetchErrorRaw } from '../i18n.js';
+import { tFetchError } from '../i18n.js';
 
 // Zeilen je Seite der Liste. Gerendert wird immer nur eine Seite — die Liste
 // selbst kann bis ADMIN_LOGS_MAX_ENTRIES Einträge halten.
@@ -97,7 +97,7 @@ export const adminLogsMethods = {
       this.adminLogsOldestTs = oldest?.ts || null;
       this.adminLogsHasMore = entries.length >= 500;
     } catch (e) {
-      this.adminLogsError = tFetchErrorRaw(e);
+      this.adminLogsError = tFetchError(e);
     } finally {
       this.adminLogsLoading = false;
     }
@@ -128,7 +128,7 @@ export const adminLogsMethods = {
       if (oldest) this.adminLogsOldestTs = oldest.ts;
       this.adminLogsHasMore = !!data.hasMore;
     } catch (e) {
-      this.adminLogsError = tFetchErrorRaw(e);
+      this.adminLogsError = tFetchError(e);
     } finally {
       this.adminLogsLoading = false;
     }

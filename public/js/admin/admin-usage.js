@@ -5,8 +5,8 @@
 
 import { loadChart } from '../lazy-libs.js';
 import { barDataset, categoryAxis, chartOptions, chartPalette, seriesColor, valueAxis } from '../cards/chart-style.js';
-import { localIsoDate, tzOpts, localeTag, fetchJson, sendJson } from '../utils.js';
-import { tFetchErrorRaw } from '../i18n.js';
+import { localIsoDate, localeTag, fmtDateTime, fetchJson, sendJson } from '../utils.js';
+import { tFetchError } from '../i18n.js';
 
 function _fmt(n, locale, opts) {
   if (n === null || n === undefined || !Number.isFinite(n)) return '—';
@@ -164,7 +164,7 @@ export const adminUsageMethods = {
       if (seq === this._adminUsageSeq[tab]) applyFn(data);
     } catch (e) {
       if (seq === this._adminUsageSeq[tab]) {
-        this.adminUsageError = tFetchErrorRaw(e);
+        this.adminUsageError = tFetchError(e);
         delete this._adminUsageKeys[tab];
       }
     } finally {
@@ -269,7 +269,7 @@ export const adminUsageMethods = {
       row.budgetMode = j.user.budget_mode || 'none';
       row.overrun = !!(row.monthlyBudgetUsd && row.budgetMode !== 'none' && row.usd >= row.monthlyBudgetUsd);
       row._savedAt = Date.now();
-    } catch (e) { this.adminUsageError = tFetchErrorRaw(e); }
+    } catch (e) { this.adminUsageError = tFetchError(e); }
     finally { row._saving = false; }
   },
 
@@ -389,7 +389,7 @@ export const adminUsageMethods = {
 
   adminUsageDateTime(iso) {
     if (!iso) return '—';
-    return new Date(iso).toLocaleString(this._adminUsageLocale(), tzOpts({ dateStyle: 'short', timeStyle: 'short' }));
+    return fmtDateTime(iso, Alpine.store('shell').uiLocale, { dateStyle: 'short', timeStyle: 'short' });
   },
 
   // ── Tab: Summary (mit Charts) ──────────────────────────────────────────────
@@ -544,6 +544,6 @@ export const adminUsageMethods = {
       );
       this.adminUsageTimeSeries = data.series || [];
       this.adminUsageTimeSeriesKey = key;
-    } catch (e) { this.adminUsageError = tFetchErrorRaw(e); }
+    } catch (e) { this.adminUsageError = tFetchError(e); }
   },
 };

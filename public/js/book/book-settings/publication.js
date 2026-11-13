@@ -3,7 +3,8 @@
 // geteilt mit PDF- und EPUB-Export). Eigener Schreibpfad /publication/:id,
 // gespeichert über den Kopf-Knopf (save-paths.js).
 
-import { fetchJson } from './_shared.js';
+import { fetchJson, sendJson } from './_shared.js';
+import { tFetchError } from '../../i18n.js';
 
 export const publicationMethods = {
   /** Vergleichsstand für «ungespeichert»: ohne die Bild-Flags — die setzen
@@ -36,13 +37,7 @@ export const publicationMethods = {
       // Volle geladene Meta zurückschreiben: validateMeta whitelistet
       // serverseitig (Extra-Keys wie has_cover ignoriert), so bleiben auch die
       // Felder der EPUB-Karte (Typografie/OPF) erhalten.
-      const r = await fetch(`/publication/${bookId}`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ ...(this.bookPublication || {}) }),
-      });
-      if (!r.ok) { const d = await r.json().catch(() => ({})); throw new Error(window.__app.tError(d)); }
-      const saved = await r.json();
+      const saved = await sendJson(`/publication/${bookId}`, 'PUT', { ...(this.bookPublication || {}) });
       if (this._isFormBook(bookId)) {
         this._settleSave('publication', sent, () => {
           // Bild-Flags sind lokal ggf. frischer als die Antwort des PUT.
@@ -54,7 +49,7 @@ export const publicationMethods = {
       this._flash('pubSaved');
       return true;
     } catch (e) {
-      this.pubError = e.message;
+      this.pubError = tFetchError(e);
       return false;
     } finally {
       this.pubSaving = false;
@@ -99,17 +94,17 @@ export const publicationMethods = {
     if (!file || !bookId || this[m.busy]) return;
     this[m.busy] = true; this[m.error] = '';
     try {
-      const r = await fetch(`/publication/${bookId}/${m.path}`, {
+      await fetchJson(`/publication/${bookId}/${m.path}`, {
         method: 'POST',
         headers: { 'Content-Type': file.type || 'application/octet-stream' },
         body: file,
       });
-      if (!r.ok) { const d = await r.json().catch(() => null); throw new Error(d ? window.__app.tError(d) : window.__app.t('publication.imageInvalid')); }
       if (!this._isFormBook(bookId)) return;
       this.bookPublication[m.flag] = true;
       this.pubPreviewVersion++;
     } catch (e) {
-      this[m.error] = e.message || window.__app.t('publication.imageInvalid');
+      // Abgelehnt ohne lesbare Fehlerantwort (z.B. Proxy-413) → Bild ungültig.
+      this[m.error] = (e?.status > 0 && !e.body) ? window.__app.t('publication.imageInvalid') : tFetchError(e);
     } finally {
       this[m.busy] = false;
     }
@@ -126,13 +121,12 @@ export const publicationMethods = {
     })) return;
     this[m.busy] = true; this[m.error] = '';
     try {
-      const r = await fetch(`/publication/${bookId}/${m.path}`, { method: 'DELETE' });
-      if (!r.ok) { const d = await r.json().catch(() => ({})); throw new Error(window.__app.tError(d)); }
+      await sendJson(`/publication/${bookId}/${m.path}`, 'DELETE');
       if (!this._isFormBook(bookId)) return;
       this.bookPublication[m.flag] = false;
       this.pubPreviewVersion++;
     } catch (e) {
-      this[m.error] = e.message;
+      this[m.error] = tFetchError(e);
     } finally {
       this[m.busy] = false;
     }

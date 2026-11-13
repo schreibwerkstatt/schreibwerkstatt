@@ -2,6 +2,8 @@ import { EVT } from '../events.js';
 import { contentRepo } from '../repo/content.js';
 import { localIsoDate } from '../utils.js';
 import { MAX_CHAPTER_DEPTH } from '../book-organizer/constants.js';
+import { tFetchError } from '../i18n.js';
+import { isChapterItem } from './tree/chapter-items.js';
 // Pagetree-Rechtsklick-Menü. Aktionen pro Node-Typ:
 //   page    → Öffnen, Editieren (Notebook), Teilen, Exportieren, Neues Kapitel,
 //             Löschen (danger)
@@ -217,7 +219,7 @@ export const treeContextMenuMethods = {
     try {
       await contentRepo.updateChapter(chapterId, { name }, { bookId: this.$store.nav.selectedBookId });
     } catch (e) {
-      this.setStatus?.(this.t('bookOrganizer.saveFailed', { detail: e.message }));
+      this.setStatus?.(this.t('bookOrganizer.saveFailed', { detail: tFetchError(e) }));
       return false;
     }
     const item = this._mirrorChapterRename(chapterId, name); // tree/structure.js
@@ -246,13 +248,13 @@ export const treeContextMenuMethods = {
     try {
       await contentRepo.updateChapter(chapterId, { excluded: !!next }, { bookId: this.$store.nav.selectedBookId });
       for (const it of (this.$store.nav.tree || [])) {
-        if (it.type === 'chapter' && !it.solo && String(it.id) === String(chapterId)) it.excluded = !!next;
+        if (isChapterItem(it) && String(it.id) === String(chapterId)) it.excluded = !!next;
       }
       // Suchtreffer sind Kopien der Items (app.js#filteredTree) — ohne Reset
       // zeigte eine laufende Suche den alten Ausschluss weiter.
       this._bumpTreeRev();
     } catch (e) {
-      this.setStatus?.(this.t('bookOrganizer.saveFailed', { detail: e.message }));
+      this.setStatus?.(this.t('bookOrganizer.saveFailed', { detail: tFetchError(e) }));
     }
   },
 
@@ -344,7 +346,7 @@ export const treeContextMenuMethods = {
       const newPage = this._insertCreatedPageIntoTree(item, created);
       await this.openNewSectionForWriting(newPage);
     } catch (e) {
-      this.setStatus?.(this.t('bookOrganizer.saveFailed', { detail: e.message }));
+      this.setStatus?.(this.t('bookOrganizer.saveFailed', { detail: tFetchError(e) }));
     }
   },
 

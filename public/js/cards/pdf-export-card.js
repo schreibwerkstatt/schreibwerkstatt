@@ -16,7 +16,7 @@
 
 import { EVT } from '../events.js';
 import { headingStyleSlice } from './export-heading-style.js';
-import { exportScopeSlice, exportJobSlice, unnumberedChipsSlice, exportSnapshotSlice, profileTransferSlice, uniqueProfileName } from './export-card-base.js';
+import { exportScopeSlice, exportJobSlice, unnumberedChipsSlice, exportSnapshotSlice, exportSavedFlashSlice, profileTransferSlice, uniqueProfileName } from './export-card-base.js';
 import * as presets from './pdf-export-presets.js';
 import * as templates from './pdf-export-templates.js';
 import { pdfExportUiSlice } from './pdf-export-ui.js';
@@ -29,6 +29,7 @@ export function registerPdfExportCard() {
   window.Alpine.data('pdfExportCard', () => ({
     ...exportScopeSlice(),
     ...exportSnapshotSlice(),
+    ...exportSavedFlashSlice(),
     ...exportJobSlice({
       jobPath: '/jobs/pdf-export',
       defaultFilename: 'book.pdf',
@@ -98,8 +99,6 @@ export function registerPdfExportCard() {
     templateSel: '',
 
     saving: false,
-    savedAt: null,
-    _savedAtTimer: null,
 
     exportLowRes: 0,
     exportHyphenOff: [],
@@ -174,7 +173,7 @@ export function registerPdfExportCard() {
 
     destroy() {
       this._stopPoll();
-      if (this._savedAtTimer)     { clearTimeout(this._savedAtTimer);     this._savedAtTimer = null; }
+      this._clearSavedFlash();
       if (this._exportStatusTimer) { clearTimeout(this._exportStatusTimer); this._exportStatusTimer = null; }
       this._lifecycle?.destroy();
       this._unbindPreset();
@@ -341,9 +340,7 @@ export function registerPdfExportCard() {
         }
         this.activeProfile = await r.json();
         this._takeSnapshot();
-        this.savedAt = Date.now();
-        if (this._savedAtTimer) clearTimeout(this._savedAtTimer);
-        this._savedAtTimer = setTimeout(() => { this.savedAt = null; this._savedAtTimer = null; }, 2500);
+        this._flashSaved();
       } finally {
         this.saving = false;
       }

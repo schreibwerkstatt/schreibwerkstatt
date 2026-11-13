@@ -43,12 +43,6 @@ export function registerAdminUsersCard() {
     _lifecycle: null,
 
     init() {
-      this.$watch(() => window.__app.showAdminUsersCard, async (visible) => {
-        if (!visible) return;
-        await this.adminUsersLoad();
-        if (this.adminUsersTab === 'requests') await this.adminUsersRequestsLoad();
-        if (this.adminUsersTab === 'invites')  await this.adminUsersInvitesLoad();
-      });
       this.$watch(() => this.adminUsersTab, async (tab) => {
         if (tab === 'requests') await this.adminUsersRequestsLoad();
         if (tab === 'invites')  await this.adminUsersInvitesLoad();
@@ -58,6 +52,12 @@ export function registerAdminUsersCard() {
       });
       this._lifecycle = setupCardLifecycle(this, {
         showFlag: 'showAdminUsersCard',
+        showNeedsBookId: false,
+        onShow: async () => {
+          await this.adminUsersLoad();
+          if (this.adminUsersTab === 'requests') await this.adminUsersRequestsLoad();
+          if (this.adminUsersTab === 'invites')  await this.adminUsersInvitesLoad();
+        },
         tabRequest: { key: CARD_REQUEST.ADMIN_USERS_TAB, apply: (tab) => { this.adminUsersTab = tab; }, current: () => this.adminUsersTab },
         onViewReset: () => {
           this.adminUsersError = '';

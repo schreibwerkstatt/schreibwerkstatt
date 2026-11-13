@@ -70,6 +70,10 @@ function parseHashRouterFlags() {
   for (const lineMatch of m[1].matchAll(/['"](show[A-Z]\w+)['"]/g)) {
     flags.push(lineMatch[1]);
   }
+  // Karten-Flags kommen per Spread aus dem Register (SSoT) statt als Liste.
+  if (/\.\.\.EXCLUSIVE_CARDS\.map\(\s*c\s*=>\s*c\.flag\s*\)/.test(m[1])) {
+    for (const c of EXCLUSIVE_CARDS) flags.push(c.flag);
+  }
   return new Set(flags);
 }
 

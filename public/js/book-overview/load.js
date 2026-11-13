@@ -6,6 +6,7 @@
 import { fetchJsonRetry as fetchJsonRetryBase } from '../utils.js';
 import { komplettHiddenFor } from '../cards/feature-registry.js';
 import { memoMethods } from '../cards/card-memo.js';
+import { isSelectedBook } from '../cards/book-guard.js';
 import { assignCatalogList } from '../cards/catalog-store.js';
 
 const fetchJsonRetry = (url, opts) => fetchJsonRetryBase(url, opts, 'bookOverview');
@@ -125,10 +126,30 @@ export const loadMethods = {
 
   async loadBookOverview(bookId, opts = {}) {
     if (!bookId) return;
-    // Dedupe: laufender Load fürs gleiche Buch wird ignoriert. Buchwechsel
-    // setzt _loadingBookId auf die neue ID; In-flight-Antworten fürs alte
-    // Buch fallen unten durch den overviewBookId-Guard raus.
-    if (this._loadingBookId === bookId) return;
+    // Dedupe: laufender Load fürs gleiche Buch wird nicht verdoppelt. Ein
+    // ausdrücklicher Refresh (`fresh`) während des Loads wird aber gemerkt und
+    // läuft danach einmal — der laufende Load kann den Stand vor der Änderung
+    // tragen (und hat ggf. den Katalog-Cache benutzt). Buchwechsel setzt
+    // _loadingBookId auf die neue ID; In-flight-Antworten fürs alte Buch fallen
+    // durch den overviewBookId-Guard raus, ein gemerkter Refresh verfällt.
+    if (this._loadingBookId != null && String(this._loadingBookId) === String(bookId)) {
+      if (opts.fresh) this._pendingFreshLoad = { bookId, opts: { ...opts } };
+      return;
+    }
+    if (this._pendingFreshLoad && String(this._pendingFreshLoad.bookId) !== String(bookId)) {
+      this._pendingFreshLoad = null;
+    }
+    await this._loadBookOverviewOnce(bookId, opts);
+    const pending = this._pendingFreshLoad;
+    if (pending && this._loadingBookId == null
+        && String(pending.bookId) === String(bookId)
+        && String(this.overviewBookId) === String(bookId)) {
+      this._pendingFreshLoad = null;
+      await this.loadBookOverview(bookId, pending.opts);
+    }
+  },
+
+  async _loadBookOverviewOnce(bookId, opts) {
     this._loadingBookId = bookId;
     // `opts.silent` (Tab-Rueckkehr): kein Spinner, und der Fehler-Banner bleibt
     // bis zur Antwort stehen, statt kurz zu verschwinden.
@@ -278,7 +299,7 @@ export const loadMethods = {
       for (let i = 0; i < 30 && !treeBelongsTo(app, bookId); i++) {
         await new Promise(r => setTimeout(r, 100));
         if (this._overviewAborted()) return;
-        if (Alpine.store('nav').selectedBookId !== bookId) return;
+        if (!isSelectedBook(bookId)) return;
       }
       if (!treeBelongsTo(app, bookId)) return;
       const pages = Alpine.store('nav').pages || [];
@@ -290,13 +311,13 @@ export const loadMethods = {
       }).catch(() => null);
       if (!verdict?.stale) return;
       if (this._overviewAborted()) return;
-      if (Alpine.store('nav').selectedBookId !== bookId) return;
+      if (!isSelectedBook(bookId)) return;
       this._statsSyncBookId = bookId;
       try {
         const res = await fetch(`/sync/book/${bookId}`, { method: 'POST' });
         if (!res.ok) return;
         if (this._overviewAborted()) return;
-        if (!app.showBookOverviewCard || Alpine.store('nav').selectedBookId !== bookId) return;
+        if (!app.showBookOverviewCard || !isSelectedBook(bookId)) return;
         // Gezielter Reload: nur die stats-abhängigen Tiles + tokEsts, NICHT alle
         // Endpoints — Figuren/Orte/Szenen/Reviews/… ändert ein Stats-Sync nicht.
         await this._reloadStatsTiles(bookId, pages, app);
@@ -322,7 +343,7 @@ export const loadMethods = {
       fetchJsonRetry(`/history/page-stats/${bookId}`).catch(() => null),
     ]);
     if (this._overviewAborted()) return;
-    if (this.overviewBookId !== bookId || Alpine.store('nav').selectedBookId !== bookId) return;
+    if (this.overviewBookId !== bookId || !isSelectedBook(bookId)) return;
     if (Array.isArray(stats)) {
       this.overviewStats = stats;
       // Der Header-Donut liest dieselbe Zeitreihe aus dem geteilten Store.

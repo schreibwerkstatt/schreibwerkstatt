@@ -22,6 +22,7 @@
 import { createCommentRail } from './comment-rail-core.js';
 import { EVT } from '../events.js';
 import { notebookReadView as readView } from './notebook/read-view.js';
+import { scrollWindowToRange } from '../share-anchor.js';
 
 const rail = createCommentRail({
   scopeEl: readView,
@@ -140,7 +141,7 @@ export const editorCommentsRailMethods = {
       pane.scrollTo({ top: pane.scrollTop + (r.top - paneRect.top) - 80, behavior: 'smooth' });
       return;
     }
-    window.scrollTo({ top: window.scrollY + r.top - 140, behavior: 'smooth' });
+    scrollWindowToRange(range, 140);
   },
 
   collapseRail() { this.commentRailVisible = false; this._railClearHL(); this._mirrorFlag(); },

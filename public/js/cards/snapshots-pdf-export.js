@@ -8,7 +8,8 @@
 // Der Job baut das Bundle aus dem selbsttragenden Fassungs-Stand (snapshotToBundle)
 // und nutzt die eingefrorene publication_json der Fassung.
 
-import { fetchJson, downloadHref } from '../utils.js';
+import { fetchJson, sendJson, downloadHref } from '../utils.js';
+import { tFetchError } from '../i18n.js';
 import { startPoll } from './job-helpers.js';
 
 export const snapshotsPdfMethods = {
@@ -38,27 +39,18 @@ export const snapshotsPdfMethods = {
     this.pdfError = '';
     this.pdfStatus = app.t('snapshots.export.creating');
     try {
-      const r = await fetch('/jobs/pdf-export', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          scope: 'book',
-          entityId: parseInt(bookId, 10),
-          profile_id: parseInt(this.pdfProfileId, 10),
-          snapshot_id: this.readerSnap.id,
-        }),
+      const { jobId } = await sendJson('/jobs/pdf-export', 'POST', {
+        scope: 'book',
+        entityId: parseInt(bookId, 10),
+        profile_id: parseInt(this.pdfProfileId, 10),
+        snapshot_id: this.readerSnap.id,
       });
-      if (!r.ok) {
-        const d = await r.json().catch(() => ({}));
-        throw new Error(d?.error_code || `HTTP ${r.status}`);
-      }
-      const { jobId } = await r.json();
       this.pdfJobId = jobId;
       this._startPdfPoll(jobId);
     } catch (e) {
       console.error('[snapshots:exportPdf]', e);
       this.pdfExporting = false;
-      this.pdfError = app.t('snapshots.export.pdfFailed') + ' ' + (e.message || '');
+      this.pdfError = app.t('snapshots.export.pdfFailed') + ' ' + tFetchError(e);
       this.pdfStatus = '';
     }
   },

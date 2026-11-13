@@ -15,11 +15,10 @@ export function registerAdminCategoriesCard() {
     _lifecycle: null,
 
     init() {
-      this.$watch(() => window.__app.showAdminCategoriesCard, async (visible) => {
-        if (!visible) return;
-        await this.loadAll();
-      });
       this._lifecycle = setupCardLifecycle(this, {
+        showFlag: 'showAdminCategoriesCard',
+        showNeedsBookId: false,
+        onShow: () => this.loadAll(),
         onViewReset: () => { this.error = ''; },
       });
     },

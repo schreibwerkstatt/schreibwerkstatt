@@ -5,7 +5,8 @@
 // + Reader (Fassung nur-lesend oeffnen) + Export (HTML/TXT/MD/EPUB/DOCX sync,
 // PDF via Job) + Restore (ganzes Buch / einzelne Seite, snapshots-restore.js).
 
-import { fetchJson, numberFormat, fmtBytes } from '../utils.js';
+import { fetchJson, sendJson, numberFormat, fmtBytes } from '../utils.js';
+import { tFetchError } from '../i18n.js';
 import { loadDiff } from '../lazy-libs.js';
 import { fromSnapshotTree } from '../manuscript-stream.js';
 import { renderInline } from '../page-revision-diff.js';
@@ -88,20 +89,20 @@ export function registerSnapshotsCard() {
 
     init() {
       const app = window.__app;
+      // Karte erst durch das Öffnen gemountet: der Show-Watch sieht die
+      // Flanke nicht mehr, also hier laden.
       if (Alpine.store('nav').selectedBookId && app?.showSnapshotsCard) this.loadSnapshots(Alpine.store('nav').selectedBookId);
-
-      this.$watch(() => window.__app?.showSnapshotsCard, (on) => {
-        if (on && Alpine.store('nav').selectedBookId) this.loadSnapshots(Alpine.store('nav').selectedBookId);
-      });
 
       this._lifecycle = setupCardLifecycle(this, {
         name: 'snapshots',
+        showFlag: 'showSnapshotsCard',
+        onShow: () => this.loadSnapshots(Alpine.store('nav').selectedBookId),
         // Reset + bei offener Karte gleich das neue Buch laden — sonst bliebe
         // die Karte leer stehen, bis jemand sie neu öffnet.
         onBookChanged: () => {
           this.reset();
           const bookId = Alpine.store('nav').selectedBookId;
-          if (bookId && window.__app?.showSnapshotsCard) this.loadSnapshots(bookId);
+          if (bookId && window.__app?.showSnapshotsCard) return this.loadSnapshots(bookId);
         },
         onViewReset: () => this.reset(),
         onCardRefresh: () => this.loadSnapshots(Alpine.store('nav').selectedBookId, { fresh: true }),
@@ -193,25 +194,17 @@ export function registerSnapshotsCard() {
       if (!bookId || this.capturing) return;
       this.capturing = true;
       try {
-        const r = await fetch(`/snapshots/${bookId}`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            label: this.newLabel.trim() || null,
-            description: this.newDescription.trim() || null,
-          }),
+        await sendJson(`/snapshots/${bookId}`, 'POST', {
+          label: this.newLabel.trim() || null,
+          description: this.newDescription.trim() || null,
         });
-        if (!r.ok) {
-          const body = await r.json().catch(() => ({}));
-          throw new Error(body?.error_code || `HTTP ${r.status}`);
-        }
         this.newLabel = '';
         this.newDescription = '';
         await this.loadSnapshots(bookId, { fresh: true });
         app.setStatus?.(app.t('snapshots.captured'), false, 4000);
       } catch (e) {
         console.error('[snapshots:capture]', e);
-        const msg = e.message === 'BOOK_EMPTY' ? app.t('snapshots.errorEmpty') : (app.t('snapshots.captureFailed') + ' ' + (e.message || ''));
+        const msg = e.code === 'BOOK_EMPTY' ? app.t('snapshots.errorEmpty') : (app.t('snapshots.captureFailed') + ' ' + tFetchError(e));
         app.setStatus?.(msg, true, 6000);
       } finally {
         this.capturing = false;
@@ -257,8 +250,11 @@ export function registerSnapshotsCard() {
       this.deletingId = snap.id;
       try {
         const url = `/snapshots/${bookId}/${snap.id}${force ? '?force=1' : ''}`;
-        const r = await fetch(url, { method: 'DELETE' });
-        if (r.status === 409) {
+        await fetchJson(url, { method: 'DELETE' });
+        await this.loadSnapshots(bookId, { fresh: true });
+        app.setStatus?.(app.t('snapshots.deleted'), false, 3000);
+      } catch (e) {
+        if (e.status === 409) {
           // Veroeffentlichte Fassung ist schreibgeschuetzt → staerkere Bestaetigung,
           // dann mit force erneut.
           this.deletingId = null;
@@ -270,20 +266,13 @@ export function registerSnapshotsCard() {
           if (ok) return this.deleteSnapshot(snap, true);
           return;
         }
-        if (r.status === 403 && force) {
+        if (e.status === 403 && force) {
           // Veroeffentlichte Fassung: nur der Owner darf sie loeschen.
           app.setStatus?.(app.t('snapshots.deletePublishedOwnerOnly'), true, 6000);
           return;
         }
-        if (!r.ok) {
-          const body = await r.json().catch(() => ({}));
-          throw new Error(body?.error_code || `HTTP ${r.status}`);
-        }
-        await this.loadSnapshots(bookId, { fresh: true });
-        app.setStatus?.(app.t('snapshots.deleted'), false, 3000);
-      } catch (e) {
         console.error('[snapshots:delete]', e);
-        app.setStatus?.(app.t('snapshots.deleteFailed') + ' ' + (e.message || ''), true, 6000);
+        app.setStatus?.(app.t('snapshots.deleteFailed') + ' ' + tFetchError(e), true, 6000);
       } finally {
         this.deletingId = null;
       }
@@ -297,20 +286,12 @@ export function registerSnapshotsCard() {
       const next = !this.isPublished(snap);
       this.publishingId = snap.id;
       try {
-        const r = await fetch(`/snapshots/${bookId}/${snap.id}/publish`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ published: next }),
-        });
-        if (!r.ok) {
-          const body = await r.json().catch(() => ({}));
-          throw new Error(body?.error_code || `HTTP ${r.status}`);
-        }
+        await sendJson(`/snapshots/${bookId}/${snap.id}/publish`, 'POST', { published: next });
         await this.loadSnapshots(bookId, { fresh: true });
         app.setStatus?.(app.t(next ? 'snapshots.publishedOn' : 'snapshots.publishedOff', { n: snap.seq }), false, 4000);
       } catch (e) {
         console.error('[snapshots:publish]', e);
-        app.setStatus?.(app.t('snapshots.publishFailed') + ' ' + (e.message || ''), true, 6000);
+        app.setStatus?.(app.t('snapshots.publishFailed') + ' ' + tFetchError(e), true, 6000);
       } finally {
         this.publishingId = null;
       }

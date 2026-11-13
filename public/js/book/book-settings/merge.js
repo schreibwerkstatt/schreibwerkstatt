@@ -21,7 +21,7 @@
 
 import { fetchJson } from './_shared.js';
 import { MERGE_KIND_CFG, MERGE_KINDS, confirmEntityMerge, postEntityMerge, entityMergeMessage, reloadCatalogsAfterMerge } from '../entity-merge.js';
-import { compareText } from '../../i18n.js';
+import { compareText, tFetchError } from '../../i18n.js';
 
 export const mergeMethods = {
   // Gattungs-Reihenfolge des Panels. Getter statt Literal im Template, damit die
@@ -109,7 +109,7 @@ export const mergeMethods = {
       await this.loadMergeCandidates();
       this._flash('mergeMessage', 8000, '');
     } catch (e) {
-      if (this._isSelectedBook(bookId)) this.mergeError = e.message;
+      if (this._isSelectedBook(bookId)) this.mergeError = tFetchError(e);
     } finally {
       if (this._isSelectedBook(bookId)) this.mergeBusy = false;
     }

@@ -1,8 +1,8 @@
 // AdminJsErrorsCard-Methods. Wird im adminJsErrorsCard-Alpine-Scope gespreaded.
 // Root-Zugriffe via window.__app. Liest aus /admin/js-errors/list + DELETE.
 
-import { tzOpts, localeTag, fetchJson, sendJson } from '../utils.js';
-import { tFetchErrorRaw } from '../i18n.js';
+import { fmtDateTime, fetchJson, sendJson } from '../utils.js';
+import { tFetchError } from '../i18n.js';
 
 export const adminJsErrorsMethods = {
   // ── Lifecycle ────────────────────────────────────────────────────────────
@@ -23,7 +23,7 @@ export const adminJsErrorsMethods = {
       this.jsErrorsList = data.errors || [];
       this.jsErrorsExpanded = {};
     } catch (e) {
-      this.jsErrorsError = tFetchErrorRaw(e);
+      this.jsErrorsError = tFetchError(e);
     } finally {
       this.jsErrorsLoading = false;
     }
@@ -50,7 +50,7 @@ export const adminJsErrorsMethods = {
       await sendJson('/admin/js-errors/' + encodeURIComponent(id), 'DELETE');
       await this._jsErrorsLoad();
     } catch (e) {
-      this.jsErrorsError = tFetchErrorRaw(e);
+      this.jsErrorsError = tFetchError(e);
     }
   },
 
@@ -65,17 +65,13 @@ export const adminJsErrorsMethods = {
       await sendJson('/admin/js-errors', 'DELETE');
       await this._jsErrorsLoad();
     } catch (e) {
-      this.jsErrorsError = tFetchErrorRaw(e);
+      this.jsErrorsError = tFetchError(e);
     }
   },
 
   // ── Format ───────────────────────────────────────────────────────────────
   jsErrorsFmtTs(iso) {
-    if (!iso) return '';
-    const d = new Date(iso);
-    if (Number.isNaN(d.getTime())) return iso;
-    return d.toLocaleString(localeTag(Alpine.store('shell').uiLocale),
-      tzOpts({ dateStyle: 'medium', timeStyle: 'medium' }));
+    return fmtDateTime(iso, Alpine.store('shell').uiLocale, { dateStyle: 'medium', timeStyle: 'medium' });
   },
 
   // Quelle kompakt: nur Dateiname + Zeile (voller Pfad steht im Detail).

@@ -76,6 +76,13 @@ export function registerChatCard() {
         // book:changed + view:reset reuse resetChat (kein einfaches resetState).
         onBookChanged: () => this.resetChat(),
         onViewReset: () => this.resetChat(),
+        // Karte zu → Inline-Marken + Stellen-Hervorhebung weg (page-view.js
+        // zeigt Vorschläge nur bei offenem Seiten-Chat).
+        onHide: () => {
+          this._chatShown = false;
+          this.unlocateChatVorschlag();
+          window.__app?.updatePageView?.();
+        },
         extraListeners: [
           { type: EVT.CHAT_RESET, handler: () => this.resetChat() },
           { type: EVT.CARD_REQUEST, handler: (e) => {
@@ -91,14 +98,6 @@ export function registerChatCard() {
             }
           } },
         ],
-      });
-      // Karte zu → Inline-Marken + Stellen-Hervorhebung weg (page-view.js
-      // zeigt Vorschläge nur bei offenem Seiten-Chat).
-      this.$watch(() => window.__app?.showChatCard, (open) => {
-        if (open) return;
-        this._chatShown = false;
-        this.unlocateChatVorschlag();
-        window.__app?.updatePageView?.();
       });
       // Seitenstand gewechselt (Bearbeiten beendet/abgebrochen, gespeichert,
       // Remote-Stand übernommen, Fassung zurückgeholt) → Vorschlags-Zustände

@@ -2,6 +2,7 @@
 
 import { fetchJson } from '../utils.js';
 import { stopWerkstattJob } from './job-poll.js';
+import { loadToken } from '../cards/book-guard.js';
 
 // Server-error_codes, für die die Werkstatt eine eigene Meldung hat. Alles
 // andere fällt auf die Meldung der jeweiligen Aktion zurück.
@@ -80,11 +81,11 @@ export const crudMethods = {
     if (!bookId) { this.drafts = []; return; }
     // Stale-Schutz: bei Buchwechsel während des Fetch verwirft eine spätere
     // Antwort des alten Buchs den frisch geladenen State des neuen sonst.
-    const isStale = () => Alpine.store('nav').selectedBookId !== bookId;
+    const isCurrent = loadToken(this, '_draftsLoadSeq', bookId);
     this.loading = true;
     try {
       const rows = await fetchJson(`/draft-figures/${bookId}`);
-      if (isStale()) return;
+      if (!isCurrent()) return;
       this.drafts = Array.isArray(rows) ? rows : [];
       this.errorMessage = '';
       // Ideen-Plaketten je Werkstatt-Figur — non-fatal, ohne await.
@@ -103,17 +104,17 @@ export const crudMethods = {
         this.selectDraft(this.drafts[0].id);
       }
     } catch (e) {
-      if (isStale()) return;
+      if (!isCurrent()) return;
       this.errorMessage = app.t('werkstatt.error.load');
       this.drafts = [];
     } finally {
-      if (!isStale()) this.loading = false;
+      if (isCurrent.latest()) this.loading = false;
     }
     // Bogen-Ansicht (Ist-Index + Messung) nachziehen. Eigenstaendig vom Draft-
     // Load und best-effort: der Bogen ist eine Nebenansicht, sein Ausfall darf
     // die Werkstatt nicht blockieren (gleiche Regel wie loadConsistencyRuns in
     // der Plot-Werkstatt).
-    if (!isStale()) {
+    if (isCurrent()) {
       this._reattachAnchorJob?.();
       await this.loadArc();
     }

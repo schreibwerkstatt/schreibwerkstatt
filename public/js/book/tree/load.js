@@ -4,8 +4,10 @@ import { whenStructureQueueReady } from '../../repo/structure-queue.js';
 import { EVT } from '../../events.js';
 import { getLastBookId } from '../../local-prefs.js';
 import { sweepOrphanBookKeys } from '../../storage-sweep.js';
-import { compareText } from '../../i18n.js';
+import { compareText, tFetchError } from '../../i18n.js';
+import { isSelectedBook } from '../../cards/book-guard.js';
 import { isPageUnloading } from '../../page-unload.js';
+import { isChapterItem, findChapterItem } from './chapter-items.js';
 
 // Buch-/Seiten-Laden + Tree-Build, Buchwahl-Combobox, Kapitel-Anlage,
 // Token-Estimate-Backfill (Server-Push + IntersectionObserver-Lazy).
@@ -25,7 +27,7 @@ import { isPageUnloading } from '../../page-unload.js';
 // depth-first das letzte Item).
 export function insertChapterItem(tree, item, { afterChapterId = null, beforeChapterId = null } = {}) {
   const idxOf = (id) => tree.findIndex(
-    i => i.type === 'chapter' && !i.solo && String(i.id) === String(id));
+    i => isChapterItem(i) && String(i.id) === String(id));
   if (afterChapterId != null) {
     const at = idxOf(afterChapterId);
     if (at >= 0) {
@@ -118,7 +120,7 @@ export const treeLoadMethods = {
     if (!bookId) return;
     try {
       const map = await fetchJson('/history/page-ages/' + bookId);
-      if (this.$store.nav.selectedBookId === bookId) this.pageLastChecked = map || {};
+      if (isSelectedBook(bookId)) this.pageLastChecked = map || {};
     } catch { /* ignore */ }
   },
 
@@ -185,7 +187,7 @@ export const treeLoadMethods = {
       }
     } catch (e) {
       console.error('[loadBooks]', e);
-      this.setStatus(this.t('common.errorColon') + e.message);
+      this.setStatus(this.t('common.errorColon') + tFetchError(e));
     }
   },
 
@@ -301,7 +303,7 @@ export const treeLoadMethods = {
       const tree = await contentRepo.bookTree(bookId, { fresh: readsFresh(opts), signal });
 
       // Buch wurde gewechselt während die Anfrage lief → veraltete Daten verwerfen.
-      if (this.$store.nav.selectedBookId !== bookId) return;
+      if (!isSelectedBook(bookId)) return;
 
       // pages-Cache im Hintergrund aktualisieren (fire-and-forget)
       const qs = opts.source ? `?source=${encodeURIComponent(opts.source)}` : '';
@@ -312,7 +314,7 @@ export const treeLoadMethods = {
       // Offline vorgemerkte Abschnitte/Namen über den Server-Baum legen (app-outbox.js).
       // Die Warteschlange liegt in IndexedDB — beim Kaltstart erst geladen abwarten.
       await whenStructureQueueReady();
-      if (this.$store.nav.selectedBookId !== bookId) return;
+      if (!isSelectedBook(bookId)) return;
       this._overlayPendingStructure?.(bookId);
       this._treeBookId = bookId;
       // Der neue Baum steht — Dimmen + Klick-Sperre des Buchwechsels JETZT
@@ -440,7 +442,7 @@ export const treeLoadMethods = {
     this.newChapterCreating = true;
     this.newChapterError = '';
     try {
-      const findCh = (id) => this.$store.nav.tree.find(i => i.type === 'chapter' && !i.solo && String(i.id) === String(id));
+      const findCh = (id) => findChapterItem(this.$store.nav.tree, id);
       const parentItem = parentChapterId != null ? findCh(parentChapterId) : null;
       if (parentChapterId != null && !parentItem) return null;
       const afterItem = !parentItem && afterChapterId ? findCh(afterChapterId) : null;
@@ -483,9 +485,9 @@ export const treeLoadMethods = {
       return chapterItem;
     } catch (e) {
       console.error('[createChapter]', e);
-      this.newChapterError = e.message || this.t('common.unknownError');
+      this.newChapterError = tFetchError(e);
       if (e?.code === 'CHAPTER_MAX_DEPTH') this.setStatus?.(this.t('bookOrganizer.maxDepthReached'), false, 6000);
-      else if (parentChapterId != null) this.setStatus?.(this.t('bookOrganizer.createFailed', { detail: e.message }), false, 6000);
+      else if (parentChapterId != null) this.setStatus?.(this.t('bookOrganizer.createFailed', { detail: tFetchError(e) }), false, 6000);
       return null;
     } finally {
       this.newChapterCreating = false;
@@ -525,6 +527,8 @@ export const treeLoadMethods = {
       const data = await r.json();
       if (this._tokenEstGen !== gen) return;
       if (data && data.stats) this.tokEsts = { ...this.tokEsts, ...data.stats };
+      // Bulk hat alles gefüllt → der Observer hat nichts mehr nachzureichen.
+      if (!this.$store.nav.pages.some(p => !this.tokEsts[p.id])) this._teardownStatsObserver();
     } catch { /* Observer-Pfad übernimmt sukzessive */ }
   },
 

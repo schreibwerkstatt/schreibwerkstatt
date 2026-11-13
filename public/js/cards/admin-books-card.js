@@ -16,11 +16,10 @@ export function registerAdminBooksCard() {
     _lifecycle: null,
 
     init() {
-      this.$watch(() => window.__app.showAdminBooksCard, async (visible) => {
-        if (!visible) return;
-        await this.loadAll();
-      });
       this._lifecycle = setupCardLifecycle(this, {
+        showFlag: 'showAdminBooksCard',
+        showNeedsBookId: false,
+        onShow: () => this.loadAll(),
         onViewReset: () => { this.error = ''; },
       });
     },

@@ -52,6 +52,7 @@ import { CARET_BLOCK_SEL } from '../editor/shared/dom-block.js';
 import { EVT } from '../events.js';
 import { tErrorRaw, tRaw } from '../i18n.js';
 import { setupCardLifecycle } from './card-lifecycle.js';
+import { isSelectedBook, loadToken } from './book-guard.js';
 import { groupCitedSources } from '../sources/cited-index.js';
 import { primaryPersonLabel } from '../sources/fields.js';
 import { referenceInterviewMethods, referenceInterviewState } from './reference-interview.js';
@@ -221,7 +222,7 @@ export function registerReferenceCard() {
     /** Prädikat für Lader: hat das Buch seit `bookId` gewechselt? Nach jedem
      *  await prüfen — eine Antwort des alten Buchs darf das neue nicht füllen. */
     _staleBook(bookId) {
-      return Alpine.store('nav').selectedBookId !== bookId;
+      return !isSelectedBook(bookId);
     },
 
     // Beim Sichtbarwerden: Katalog-Daten defensiv nachladen (der Slot lebt
@@ -319,8 +320,8 @@ export function registerReferenceCard() {
     async _loadReferenceCitations() {
       const bookId = Alpine.store('nav').selectedBookId;
       if (!bookId) { this.referenceCitations = []; return; }
-      const seq = ++this._refCitationsSeq;
-      const superseded = () => this._staleBook(bookId) || seq !== this._refCitationsSeq;
+      const isCurrent = loadToken(this, '_refCitationsSeq', bookId);
+      const superseded = () => !isCurrent();
       try {
         const rows = await fetchJson(`/sources/citations?book_id=${encodeURIComponent(bookId)}`);
         if (superseded()) return;

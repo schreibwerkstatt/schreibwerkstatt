@@ -11,7 +11,9 @@
 // (editor/notebook/toolbar/cite.js#invalidateSourceCache). Ohne das Event zeigt
 // er die alte Liste bis zum Buchwechsel.
 
-import { fetchJson } from '../utils.js';
+import { fetchJson, sendJson } from '../utils.js';
+import { tFetchError } from '../i18n.js';
+import { isSelectedBook, loadToken } from '../cards/book-guard.js';
 import { sameData } from '../utils/same-data.js';
 import { EVT } from '../events.js';
 import { formatFull } from './format.js';
@@ -26,21 +28,6 @@ const SAVED_FLASH_MS = 2500;
 
 function _bookId() {
   return window.Alpine?.store('nav')?.selectedBookId || null;
-}
-
-// Schreibender Aufruf mit sprechender Fehlermeldung: `fetchJson` haengt die
-// Fehlerantwort als `err.body` an, `tError` macht daraus den lokalisierten Text
-// (CITEKEY_TAKEN, SOURCE_IDENTITY_REQ … brauchen jeweils eine eigene Meldung).
-async function _send(url, method, payload) {
-  try {
-    return await fetchJson(url, {
-      method,
-      headers: { 'Content-Type': 'application/json' },
-      body: payload ? JSON.stringify(payload) : undefined,
-    });
-  } catch (e) {
-    throw new Error(window.__app.tError(e.body || {}) || e.message);
-  }
 }
 
 export const sourcesMethods = {
@@ -58,21 +45,26 @@ export const sourcesMethods = {
       this.sourcesError = '';
       this._memos = {};
     }
+    const isCurrent = loadToken(this, '_sourcesLoadSeq', bookId);
     try {
       // Archivierte kommen immer mit; das Ausblenden passiert clientseitig, damit
       // der Archiv-Schalter kein Roundtrip ist und die Zaehler stimmen.
       const list = await fetchJson(`/sources?book_id=${encodeURIComponent(bookId)}&archived=1`);
+      if (!isCurrent()) return;
       const next = Array.isArray(list) ? list : [];
       if (!silent || !sameData(next, this.sources)) {
         this.sources = next;
         this._memos = {};
       }
     } catch (e) {
+      if (!isCurrent()) return;
       if (!silent) this.sourcesError = window.__app.t('sources.loadError');
       console.error('[sources] Laden fehlgeschlagen:', e);
     } finally {
-      this.sourcesLoading = false;
-      this.sourcesRefreshing = false;
+      if (isCurrent.latest()) {
+        this.sourcesLoading = false;
+        this.sourcesRefreshing = false;
+      }
     }
     // Kennzahlen hinterher und ohne await auf den Listenpfad: sie sind ein
     // Nebenwert, ihr Fehlschlag darf die Tabelle nicht blockieren.
@@ -124,9 +116,11 @@ export const sourcesMethods = {
     if (!bookId) { this.quoteStats = null; return; }
     try {
       const s = await fetchJson(`/sources/stats?book_id=${encodeURIComponent(bookId)}`);
+      if (!isSelectedBook(bookId)) return;
       const next = s && typeof s === 'object' ? s : null;
       if (!silent || !sameData(next, this.quoteStats)) this.quoteStats = next;
     } catch (e) {
+      if (!isSelectedBook(bookId)) return;
       if (!silent) this.quoteStats = null;
       console.error('[sources] Zitat-Kennzahlen fehlgeschlagen:', e);
     }
@@ -305,12 +299,12 @@ export const sourcesMethods = {
     try {
       const payload = draftToPayload(this.srcDraft);
       if (this.srcEditingId === 'new') {
-        const created = await _send('/sources', 'POST', { book_id: Number(bookId), ...payload });
+        const created = await sendJson('/sources', 'POST', { book_id: Number(bookId), ...payload });
         // Entwurf aus einem PDF (sources/pdf-draft.js): das PDF erst jetzt
         // anhaengen, wo es die Quelle gibt.
         await this._attachPendingPdf(created?.id);
       } else {
-        await _send(`/sources/${this.srcEditingId}`, 'PUT', payload);
+        await sendJson(`/sources/${this.srcEditingId}`, 'PUT', payload);
       }
       this.cancelSourceEdit();
       await this.loadSources();
@@ -318,7 +312,7 @@ export const sourcesMethods = {
       this._sourcesChanged();
       this._flashSourcesSaved();
     } catch (e) {
-      this.srcFormError = e.message;
+      this.srcFormError = tFetchError(e);
     } finally {
       this.sourcesBusy = false;
     }
@@ -332,11 +326,11 @@ export const sourcesMethods = {
     this.sourcesBusy = true;
     this.sourcesError = '';
     try {
-      await _send(`/sources/${s.id}`, 'PUT', { archived: s.archived ? 0 : 1 });
+      await sendJson(`/sources/${s.id}`, 'PUT', { archived: s.archived ? 0 : 1 });
       await this.loadSources();
       this._sourcesChanged();
     } catch (e) {
-      this.sourcesError = e.message;
+      this.sourcesError = tFetchError(e);
     } finally {
       this.sourcesBusy = false;
     }
@@ -378,9 +372,11 @@ export const sourcesMethods = {
       const list = await fetchJson(
         `/sources/pool?exclude_book_id=${encodeURIComponent(bookId)}`
       );
+      if (!isSelectedBook(bookId)) return;
       this.srcPool = Array.isArray(list) ? list : [];
       this._memos = {};
     } catch (e) {
+      if (!isSelectedBook(bookId)) return;
       this.srcPoolError = window.__app.t('sources.picker.loadError');
       console.error('[sources] Bibliothek laden fehlgeschlagen:', e);
     } finally {
@@ -403,7 +399,7 @@ export const sourcesMethods = {
     this.sourcesBusy = true;
     this.srcPoolError = '';
     try {
-      await _send(`/sources/${s.id}/link`, 'POST', { book_id: Number(bookId) });
+      await sendJson(`/sources/${s.id}/link`, 'POST', { book_id: Number(bookId) });
       this.srcPool = this.srcPool.filter(p => p.id !== s.id);
       this._memos = {};
       await this.loadSources();
@@ -413,7 +409,7 @@ export const sourcesMethods = {
       });
       this._flashSourcesNotice();
     } catch (e) {
-      this.srcPoolError = e.message;
+      this.srcPoolError = tFetchError(e);
     } finally {
       this.sourcesBusy = false;
     }
@@ -440,7 +436,7 @@ export const sourcesMethods = {
     this.sourcesBusy = true;
     this.sourcesError = '';
     try {
-      const res = await _send(`/sources/${s.id}/link?book_id=${encodeURIComponent(bookId)}`, 'DELETE');
+      const res = await sendJson(`/sources/${s.id}/link?book_id=${encodeURIComponent(bookId)}`, 'DELETE');
       if (this.srcEditingId === s.id) this.cancelSourceEdit();
       if (this.srcCitationsId === s.id) this.closeSourceCitations();
       await this.loadSources();
@@ -452,7 +448,7 @@ export const sourcesMethods = {
         : app.t('sources.removed');
       this._flashSourcesNotice();
     } catch (e) {
-      this.sourcesError = e.message;
+      this.sourcesError = tFetchError(e);
     } finally {
       this.sourcesBusy = false;
     }
@@ -501,7 +497,7 @@ export const sourcesMethods = {
     this.sourcesBusy = true;
     this.sourcesError = '';
     try {
-      const res = await _send(`/sources/${s.id}`, 'DELETE');
+      const res = await sendJson(`/sources/${s.id}`, 'DELETE');
       if (this.srcEditingId === s.id) this.cancelSourceEdit();
       if (this.srcCitationsId === s.id) this.closeSourceCitations();
       await this.loadSources();
@@ -512,7 +508,7 @@ export const sourcesMethods = {
         : app.t('sources.deleted');
       this._flashSourcesNotice();
     } catch (e) {
-      this.sourcesError = e.message;
+      this.sourcesError = tFetchError(e);
     } finally {
       this.sourcesBusy = false;
     }

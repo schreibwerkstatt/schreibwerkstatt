@@ -43,11 +43,9 @@ export async function activateSearchHit(root, hit) {
     case 'chapter':
       return root.openChapterById?.(hit.entity_id);
     case 'book': {
-      // FTS5 liefert book_id als String, selectedBookId ist numerisch →
-      // sonst greift der strikte Vergleich nie und reassignt bei jedem
-      // Treffer einen String.
-      const bid = Number(hit.book_id);
-      if (Number.isFinite(bid) && nav.selectedBookId !== bid) nav.selectedBookId = bid;
+      // selectedBookId ist immer ein String (Setter im nav-Store).
+      const bid = hit.book_id != null ? String(hit.book_id) : '';
+      if (bid && nav.selectedBookId !== bid) nav.selectedBookId = bid;
       root.toggleBookOverviewCard?.();
       return;
     }

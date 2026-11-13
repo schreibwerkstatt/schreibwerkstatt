@@ -88,8 +88,14 @@ export const pageChatApplyMethods = {
 
     if (root.editMode) {
       if (root.focusActive) return { mode: 'editor', done: [], failed: items.map(item => ({ item, reason: 'focus' })) };
+      // Seite + Chat-Session pinnen: während des Stil-Fetchs kann der User die
+      // Seite wechseln und dort wieder bearbeiten — die Ersetzung landete sonst
+      // im Editor der fremden Seite (Server-Pfad pinnt ebenso, s. unten).
+      const pageIdAtStart = root.currentPage.id;
+      const genAtStart = this._chatGen;
       // Anführungszeichen wie im Server-Pfad auf den Stil des Buchs ziehen.
       const quoteStyle = await loadQuoteStyle(root.$store?.nav?.selectedBookId);
+      if (root.currentPage?.id !== pageIdAtStart || this._chatGen !== genAtStart) return null;
       if (!root.editMode || root.focusActive) return { mode: 'editor', done: [], failed: items.map(item => ({ item, reason: 'notEditing' })) };
       const done = [];
       const failed = [];

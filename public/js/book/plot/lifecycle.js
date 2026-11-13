@@ -5,6 +5,7 @@
 import { fetchJson } from '../../utils.js';
 import { sameData } from '../../utils/same-data.js';
 import { memoMethods } from '../../cards/card-memo.js';
+import { loadToken } from '../../cards/book-guard.js';
 
 export const lifecycleMethods = {
   // ── Memo-Helper (cards/card-memo.js) ───────────────────────────────────────
@@ -21,8 +22,8 @@ export const lifecycleMethods = {
   async loadBoard({ silent = false } = {}) {
     const app = window.__app;
     const bookId = Alpine.store('nav').selectedBookId;
-    const seq = (this._boardLoadSeq = (this._boardLoadSeq || 0) + 1);
-    const stale = () => seq !== this._boardLoadSeq || Alpine.store('nav').selectedBookId !== bookId;
+    const isCurrent = loadToken(this, '_boardLoadSeq', bookId);
+    const stale = () => !isCurrent();
     if (!bookId) { this.acts = []; this.threads = []; this.beats = []; this.draftFiguren = []; this.motifsCatalog = []; this.themesCatalog = []; return; }
     if (!silent) {
       this.loading = true;
@@ -66,7 +67,7 @@ export const lifecycleMethods = {
       this.acts = []; this.threads = []; this.beats = []; this.relations = []; this.geburtsjahre = {}; this.geburtsjahrAusText = [];
       this.beatAnchorInfo = null;
     } finally {
-      if (seq === this._boardLoadSeq) this.loading = false;
+      if (isCurrent.latest()) this.loading = false;
     }
     // Werkstatt-Figuren separat laden — ein Fehler hier darf das Board nicht
     // leeren (Board ist die Primärdaten, Drafts nur Beilage fürs Picker/Badge).

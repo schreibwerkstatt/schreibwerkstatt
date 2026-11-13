@@ -1,5 +1,15 @@
 import { EVT } from '../events.js';
 import { downloadBlob } from '../utils.js';
+import { tFetchError } from '../i18n.js';
+import { isChapterItem } from './tree/chapter-items.js';
+
+// Download-Antworten laufen nicht über fetchJson (Blob statt JSON); ein Fehler
+// trägt dieselben Felder (status/code/body), damit tFetchError ihn übersetzt.
+async function _responseError(r) {
+  let body = null;
+  try { body = await r.json(); } catch (_) {}
+  return Object.assign(new Error(`HTTP ${r.status}`), { status: r.status, code: body?.error_code || null, body });
+}
 // Buch/Kapitel/Seite-Export. Methoden in Alpine.data('exportCard') gespreadet;
 // Root-Zugriffe via window.__app.
 
@@ -12,14 +22,10 @@ export const exportMethods = {
     try {
       const url = `/export/${encodeURIComponent(ref.scope)}/${encodeURIComponent(ref.id)}/${encodeURIComponent(fmt)}`;
       const r = await fetch(url);
-      if (!r.ok) {
-        let data = null;
-        try { data = await r.json(); } catch (_) {}
-        throw new Error(data ? window.__app.tError(data) : `HTTP ${r.status}`);
-      }
+      if (!r.ok) throw await _responseError(r);
       await this._downloadResponse(r, `${ref.scope}.${fmt}`);
     } catch (e) {
-      this.bookExportError = e.message || String(e);
+      this.bookExportError = tFetchError(e);
     } finally {
       this.bookExportLoading = null;
     }
@@ -43,14 +49,10 @@ export const exportMethods = {
       if (this.migrateWerk)     qs.set('werk', '1');
       const suffix = qs.toString() ? `?${qs}` : '';
       const r = await fetch(`/book-migration/${encodeURIComponent(bid)}${suffix}`);
-      if (!r.ok) {
-        let data = null;
-        try { data = await r.json(); } catch (_) {}
-        throw new Error(data ? app.tError(data) : `HTTP ${r.status}`);
-      }
+      if (!r.ok) throw await _responseError(r);
       await this._downloadResponse(r, `book-${bid}.swbook`);
     } catch (e) {
-      this.bookExportError = e.message || String(e);
+      this.bookExportError = tFetchError(e);
     } finally {
       this.bookExportLoading = null;
     }
@@ -86,7 +88,7 @@ export const exportMethods = {
     const app = window.__app;
     if (!app || !Array.isArray(Alpine.store('nav').tree)) return [];
     return Alpine.store('nav').tree
-      .filter(c => c.type === 'chapter' && !c.solo)
+      .filter(c => isChapterItem(c))
       .map(c => ({ value: c.id, label: c.name }));
   },
 

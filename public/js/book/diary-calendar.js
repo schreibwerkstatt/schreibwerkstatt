@@ -12,6 +12,7 @@ import { dateTimeFormat, fetchJson, formatIsoDay, localIsoDate } from '../utils.
 import { insertChapterItem } from './tree/load.js';
 import { isSelectedBook } from '../cards/book-guard.js';
 import { diaryDayKey } from './diary-date.js';
+import { isChapterItem, findChapterItem } from './tree/chapter-items.js';
 
 // Abbruch-Signal der Anlage-Kette in _createDiaryEntry: Buch während eines
 // awaits gewechselt. Kein Fehler für den User (er hat das Buch selbst gewechselt).
@@ -274,8 +275,7 @@ export const diaryCalendarMethods = {
   //   (Name "YYYY <Monatsname>" in Buchsprache, position = monthNum)
   async _resolveDiaryEntryChapter(yearChapterId, year, monthNum, bookId) {
     const subs = (this.$store.nav.tree || []).filter(it =>
-      it.type === 'chapter'
-        && !it.solo
+      isChapterItem(it)
         && String(it.parent_id) === String(yearChapterId)
     );
     if (!subs.length) return yearChapterId;
@@ -318,7 +318,7 @@ export const diaryCalendarMethods = {
   async _ensureDiaryYearChapter(year, bookId) {
     const yearStr = String(year);
     const existing = this.$store.nav.tree.find(
-      it => it.type === 'chapter' && !it.solo && it.name === yearStr
+      it => isChapterItem(it) && it.name === yearStr
     );
     if (existing) return existing.id;
     const created = await contentRepo.createChapter({
@@ -344,7 +344,7 @@ export const diaryCalendarMethods = {
     // einfuegen, sonst vor das erste spaetere. Kein globaler priority-Sort —
     // der wuerde Sub-Kapitel aus ihrem Parent reissen (siehe tree/load.js).
     const topLevel = this.$store.nav.tree.filter(
-      i => i.type === 'chapter' && !i.solo && (i.depth || 1) === 1);
+      i => isChapterItem(i) && (i.depth || 1) === 1);
     const prev = topLevel.filter(i => (i.priority ?? 0) < chapterItem.priority).pop();
     const next = topLevel.find(i => (i.priority ?? 0) > chapterItem.priority);
     this.$store.nav.tree = insertChapterItem(this.$store.nav.tree, chapterItem, {
@@ -383,9 +383,7 @@ export const diaryCalendarMethods = {
       if (!created?.id) throw new Error('createPage returned no id');
       _assertDiaryBook(bookId);
       this.$store.nav.pages = [...this.$store.nav.pages, created];
-      const treeCh = this.$store.nav.tree.find(
-        it => it.type === 'chapter' && !it.solo && String(it.id) === String(chapterId)
-      );
+      const treeCh = findChapterItem(this.$store.nav.tree, chapterId);
       if (treeCh) {
         treeCh.pages = [...treeCh.pages, created];
         treeCh.open = true;

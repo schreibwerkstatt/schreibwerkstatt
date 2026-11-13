@@ -15,12 +15,14 @@
 
 import { fetchJson, sendJson } from '../utils/net.js';
 import { startPoll } from '../cards/job-helpers.js';
+import { isSelectedBook } from '../cards/book-guard.js';
 import {
   HEADLINE_FIELDS, HEADLINE_LONG_FIELDS, HEADLINE_CHANNELS,
   channelFit, fieldLen, fillPct, fitState, fieldLabelKey, channelLabelKey,
 } from '../headline/channels.js';
 import { memoMethods } from '../cards/card-memo.js';
 import { lsSet } from '../safe-storage.js';
+import { isChapterItem } from './tree/chapter-items.js';
 
 const LS_KEY = (pageId) => `headline_job_${pageId}`;
 
@@ -40,11 +42,12 @@ export const titelwerkstattMethods = {
     this.twLoadError = false;
     try {
       const data = await fetchJson(`/headline/${bookId}`);
+      if (!isSelectedBook(bookId)) return;
       this.twEnabled = !!data.enabled;
       this.twPages = data.pages || {};
       this._twRev++;
     } catch {
-      this.twLoadError = true;
+      if (isSelectedBook(bookId)) this.twLoadError = true;
     }
   },
 
@@ -108,7 +111,7 @@ export const titelwerkstattMethods = {
   twChapterOptions() {
     const tree = window.Alpine?.store('nav')?.tree || [];
     return tree
-      .filter(it => it.type === 'chapter' && !it.solo)
+      .filter(it => isChapterItem(it))
       .map(it => ({
         value: String(it.id),
         label: '— '.repeat(Math.max(0, (it.depth || 1) - 1)) + (it.name || ''),
@@ -129,7 +132,7 @@ export const titelwerkstattMethods = {
     while (added) {
       added = false;
       for (const it of tree) {
-        if (it.type !== 'chapter' || it.solo) continue;
+        if (!isChapterItem(it)) continue;
         if (ids.has(String(it.parent_id)) && !ids.has(String(it.id))) {
           ids.add(String(it.id));
           added = true;

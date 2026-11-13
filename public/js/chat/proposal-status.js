@@ -5,6 +5,7 @@
 // ideen-chat-proposals.js bzw. chat-idee-proposals.js).
 
 import { fetchJson } from '../utils.js';
+import { tFetchError, tRaw } from '../i18n.js';
 
 // Felder, die der Server am Vorschlag führt; transiente (_busy, _error, _written, …) bleiben.
 const PERSISTED_KEYS = ['applied_at', 'applied_id', 'status', 'claimed_at'];
@@ -108,4 +109,16 @@ export async function applyProposalOnce(url, msg, index, write, { confirmReclaim
   delete p._written;
   delete p._appliedId;
   return { ok: true };
+}
+
+/**
+ * Fehlertext für ein gescheitertes `applyProposalOnce`-Ergebnis, `null` bei
+ * Erfolg oder Abbruch. `write`: das Board wurde nicht geändert — Server-Grund,
+ * sonst `applyKey`. `persist`: geändert, nur der Status fehlt — `statusKey`
+ * (der nächste Klick holt nur den Status nach). Geteilt von Plot- und Ideen-Chat.
+ */
+export function proposalApplyError(r, { applyKey, statusKey }) {
+  if (!r || r.ok || r.phase === 'cancelled') return null;
+  if (r.phase === 'write') return r.error?.body ? tFetchError(r.error) : tRaw(applyKey);
+  return tRaw(statusKey);
 }

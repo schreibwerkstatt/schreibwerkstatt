@@ -17,12 +17,13 @@
 // gerechnet wurde.
 
 import { startPoll } from '../cards/job-helpers.js';
-import { tRaw } from '../i18n.js';
-import { dateTimeFormat } from '../utils.js';
+import { tRaw, tFetchError } from '../i18n.js';
+import { dateTimeFormat, sendJson } from '../utils.js';
 import { mapMethods, _destroyBookMapChart as _destroyMap, _disconnectBookMapThemeObserver as _disconnectMap } from './buchlandkarte/map.js';
 import { axesMethods, emptyBookMapPoles } from './buchlandkarte/axes.js';
 import { matrixMethods, _destroyBookMatrix, _disconnectBookMatrixThemeObserver } from './buchlandkarte/matrix.js';
 import { resultCache } from './buchlandkarte/cache.js';
+import { isSelectedBook } from '../cards/book-guard.js';
 
 export { emptyBookMapPoles };
 
@@ -67,7 +68,7 @@ export const buchlandkarteMethods = {
     this.bookMapIndexError = false;
     if (!bookId || !this.$store.config?.semanticSearchEnabled) { this.bookMapIndexInfo = null; return; }
     // Späte Antwort für ein inzwischen abgewähltes Buch verwerfen.
-    const stale = () => Alpine.store('nav').selectedBookId !== bookId;
+    const stale = () => !isSelectedBook(bookId);
     try {
       const r = await fetch('/search/semantic/status?book_id=' + encodeURIComponent(bookId), { credentials: 'same-origin' });
       if (stale()) return;
@@ -147,27 +148,22 @@ export const buchlandkarteMethods = {
     _destroyBookMapChart();
     this.bookMapStatus = window.__app?.t?.('buchlandkarte.running') || '';
     try {
-      const r = await fetch('/jobs/book-map', {
-        method: 'POST', credentials: 'same-origin',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ book_id: bookId, granularity: this.bookMapGranularity, poles }),
-      });
-      const j = await r.json().catch(() => ({}));
+      const j = await sendJson('/jobs/book-map', 'POST', { book_id: bookId, granularity: this.bookMapGranularity, poles });
       // Buch während des POST gewechselt: onBookChanged hat die Anzeige schon
       // zurückgesetzt; den Job des alten Buches nicht in der neuen pollen.
-      if (Alpine.store('nav').selectedBookId !== bookId) return;
-      if (!r.ok || !j.jobId) {
+      if (!isSelectedBook(bookId)) return;
+      if (!j?.jobId) {
         this.bookMapLoading = false;
-        this.bookMapStatus = tRaw(
-          j.error_code === 'EMBED_DISABLED' ? 'buchlandkarte.needBackend' : 'buchlandkarte.error',
-        );
+        this.bookMapStatus = tRaw('buchlandkarte.error');
         return;
       }
       this._pollBookMap(j.jobId, bookId);
     } catch (e) {
-      if (Alpine.store('nav').selectedBookId !== bookId) return;
+      if (!isSelectedBook(bookId)) return;
       this.bookMapLoading = false;
-      this.bookMapStatus = tRaw('common.errorColon') + (e.message || '');
+      this.bookMapStatus = e.code === 'EMBED_DISABLED' ? tRaw('buchlandkarte.needBackend')
+        : e.status ? tRaw('buchlandkarte.error')
+        : tRaw('common.errorColon') + tFetchError(e);
     }
   },
 
@@ -175,7 +171,7 @@ export const buchlandkarteMethods = {
   // dessen Cache-Slot, auch wenn inzwischen ein anderes Buch gewählt ist —
   // angezeigt wird es dann nicht.
   _pollBookMap(jobId, bookId) {
-    const stale = () => Alpine.store('nav').selectedBookId !== bookId;
+    const stale = () => !isSelectedBook(bookId);
     const failed = (job) => {
       if (stale()) return;
       this.bookMapLoading = false;

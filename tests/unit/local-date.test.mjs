@@ -73,3 +73,13 @@ test('localDayDiff: Kalendertage in App-TZ (Europe/Zurich), nicht Browser-TZ', a
   assert.equal(localDayDiff(new Date('2026-04-04T12:00:00Z'), now), 30);
   assert.ok(Number.isNaN(localDayDiff('kaputt', now)));
 });
+
+test('fmtDateTime: leer → "", unparsebar → Eingabe, sonst App-Zeitzone', async () => {
+  const { fmtDateTime } = await import('../../public/js/utils.js');
+  assert.equal(fmtDateTime(null, 'de'), '');
+  assert.equal(fmtDateTime('', 'de'), '');
+  assert.equal(fmtDateTime('kein datum', 'de'), 'kein datum');
+  // 23:30 UTC ist in Europe/Zurich (Default) bereits der Folgetag.
+  const s = fmtDateTime('2026-01-14T23:30:00Z', 'de', { dateStyle: 'short' });
+  assert.match(s, /15/);
+});

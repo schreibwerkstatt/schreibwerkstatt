@@ -1,4 +1,5 @@
 import { EVT } from '../../events.js';
+import { isSelectedBook } from '../../cards/book-guard.js';
 import { komplettHiddenFor, isJournalisticBuchtyp } from '../../cards/feature-registry.js';
 
 // ACL-Rolle + editor-relevante book_settings-Spiegel pro Buch + abgeleitete
@@ -37,16 +38,15 @@ export const treePermissionsMethods = {
         });
         data = res.ok ? await res.json() : null;
       }
+      // Buch kann waehrend des Fetch gewechselt haben → nur uebernehmen (auch
+      // keinen Reset), wenn die Antwort noch zum ausgewaehlten Buch gehoert.
+      if (!isSelectedBook(id)) return;
       if (!data) { reset(); return; }
-      // Buch kann waehrend des Fetch gewechselt haben → nur uebernehmen, wenn
-      // die Antwort noch zum ausgewaehlten Buch gehoert.
-      if (String(this.$store.nav.selectedBookId) === id) {
-        this.entitiesEnabledForCurrentBook = !!data.entities_enabled;
-        this.citationStyleForCurrentBook = data.citation_style || CITE_FALLBACK.style;
-        this.citationLangForCurrentBook = data.language || CITE_FALLBACK.lang;
-      }
+      this.entitiesEnabledForCurrentBook = !!data.entities_enabled;
+      this.citationStyleForCurrentBook = data.citation_style || CITE_FALLBACK.style;
+      this.citationLangForCurrentBook = data.language || CITE_FALLBACK.lang;
     } catch (_) {
-      reset();
+      if (isSelectedBook(id)) reset();
     }
   },
 
@@ -87,7 +87,7 @@ export const treePermissionsMethods = {
     const id = bookId ? String(bookId) : '';
     if (!id) { this.currentBookRole = null; return; }
     if (Object.prototype.hasOwnProperty.call(this.bookRoles, id)) {
-      if (String(this.$store.nav.selectedBookId) === id) this.currentBookRole = this.bookRoles[id];
+      if (isSelectedBook(id)) this.currentBookRole = this.bookRoles[id];
       return;
     }
     let role = null;
@@ -112,7 +112,7 @@ export const treePermissionsMethods = {
       this.bookRoles[id] = role;
       this.bookSharedFlags[id] = shared;
     }
-    if (String(this.$store.nav.selectedBookId) === id) {
+    if (isSelectedBook(id)) {
       this.currentBookRole = role;
       // Shared-Flag steht jetzt fest → vollen Poll ggf. starten, ohne den schon
       // laufenden leichten Geraete-Ping (aus _startCollabPoll) abzureissen.

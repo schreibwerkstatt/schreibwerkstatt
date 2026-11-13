@@ -25,6 +25,7 @@
 import { loadMermaid } from '../lazy-libs.js';
 import { collectDiagrams, diagramCode, diagramKey, isDiagramEl } from './mermaid-html.js';
 import { mermaidThemeConfig } from './mermaid-theme.js';
+import { tRaw } from '../i18n.js';
 
 // Klasse des eingefuegten Render-Knotens. Traegt den Schluessel des Quelltexts,
 // damit ein zweiter Lauf ueber denselben Container nicht neu rendert.
@@ -278,7 +279,7 @@ async function _draw(pending, theme, opts = {}) {
       host.classList.add(ERROR_CLASS);
       // Kein x-html-Sink und kein innerHTML mit Fremdtext: die Meldung von
       // mermaid enthaelt Teile des Quelltexts.
-      host.textContent = opts.errorLabel || _errorLabel || 'Diagram error';
+      host.textContent = opts.errorLabel || _errorLabel || tRaw('editor.diagram.invalid');
       el.classList.remove(RENDERED_SOURCE_CLASS);
       failed++;
     }

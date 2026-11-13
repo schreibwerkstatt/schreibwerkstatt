@@ -16,11 +16,11 @@ export function registerAdminJsErrorsCard() {
     _lifecycle: null,
 
     init() {
-      this.$watch(() => window.__app.showAdminJsErrorsCard, async (visible) => {
-        if (visible) await this.jsErrorsEnter();
-        else this._jsErrorsLeave();
-      });
       this._lifecycle = setupCardLifecycle(this, {
+        showFlag: 'showAdminJsErrorsCard',
+        showNeedsBookId: false,
+        onShow: () => this.jsErrorsEnter(),
+        onHide: () => this._jsErrorsLeave(),
         onViewReset: () => {
           this._jsErrorsLeave();
           this.jsErrorsList = [];

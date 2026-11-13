@@ -7,7 +7,8 @@
 // Merge-Panel trägt der State das Buch, zu dem er gehört (`seriesBookId`); eine
 // Antwort, die nach einem Buchwechsel eintrifft, wird verworfen.
 
-import { fetchJson } from './_shared.js';
+import { fetchJson, sendJson } from './_shared.js';
+import { tFetchError } from '../../i18n.js';
 
 const CARRY_KINDS = ['figuren', 'orte', 'fakten'];
 
@@ -63,16 +64,10 @@ export const seriesMethods = {
     this.seriesError = '';
     this.seriesMessage = '';
     try {
-      const r = await fetch(`/book-series/${bookId}${path}`, {
-        method,
-        headers: body ? { 'Content-Type': 'application/json' } : undefined,
-        body: body ? JSON.stringify(body) : undefined,
-      });
-      const data = await r.json().catch(() => null);
-      if (!r.ok) throw new Error(window.__app.tError(data));
+      const data = await sendJson(`/book-series/${bookId}${path}`, method, body);
       return { bookId, data };
     } catch (e) {
-      if (this._isSelectedBook(bookId)) this.seriesError = e.message || window.__app.t('series.saveError');
+      if (this._isSelectedBook(bookId)) this.seriesError = tFetchError(e);
       return null;
     } finally {
       if (this._isSelectedBook(bookId)) this.seriesBusy = false;
@@ -171,13 +166,7 @@ export const seriesMethods = {
     this.carryError = '';
     this.carryMessage = '';
     try {
-      const r = await fetch(`/book-series/${bookId}/carryover`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ source_book_id: Number(this.carrySourceId), ...this.carrySel }),
-      });
-      const data = await r.json().catch(() => null);
-      if (!r.ok) throw new Error(window.__app.tError(data));
+      const data = await sendJson(`/book-series/${bookId}/carryover`, 'POST', { source_book_id: Number(this.carrySourceId), ...this.carrySel });
       if (!this._isSelectedBook(bookId)) return;
       this.carryMessage = window.__app.t('series.carry.done', {
         figuren: data.figuren, orte: data.orte, fakten: data.fakten,
@@ -187,7 +176,7 @@ export const seriesMethods = {
       window.__app.loadOrte?.(bookId);
       await this.loadCarryCandidates();
     } catch (e) {
-      if (this._isSelectedBook(bookId)) this.carryError = e.message || window.__app.t('series.carry.saveError');
+      if (this._isSelectedBook(bookId)) this.carryError = tFetchError(e);
     } finally {
       if (this._isSelectedBook(bookId)) this.carryBusy = false;
     }

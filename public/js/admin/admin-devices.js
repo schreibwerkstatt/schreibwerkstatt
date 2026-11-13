@@ -6,9 +6,9 @@
 // gegen das neueste Release der jeweiligen Plattform verglichen (macOS, Android,
 // Chrome-Erweiterung — drei eigene Repos, drei eigene Versionsstraenge).
 
-import { tzOpts, localeTag, fetchJson } from '../utils.js';
+import { fmtDateTime, fetchJson } from '../utils.js';
 import { sameData } from '../utils/same-data.js';
-import { tFetchErrorRaw } from '../i18n.js';
+import { tFetchError } from '../i18n.js';
 
 export const adminDevicesMethods = {
   // ── Lifecycle ────────────────────────────────────────────────────────────
@@ -32,7 +32,7 @@ export const adminDevicesMethods = {
       if (!silent || !sameData(list, this.devicesList)) this.devicesList = list;
       if (!silent || !sameData(latest, this.devicesLatestVersions)) this.devicesLatestVersions = latest;
     } catch (e) {
-      if (!silent) this.devicesError = tFetchErrorRaw(e);
+      if (!silent) this.devicesError = tFetchError(e);
     } finally {
       if (!silent) this.devicesLoading = false;
     }
@@ -46,10 +46,7 @@ export const adminDevicesMethods = {
   // ── Format ───────────────────────────────────────────────────────────────
   devicesFmtTs(iso) {
     if (!iso) return '—';
-    const d = new Date(iso);
-    if (Number.isNaN(d.getTime())) return iso;
-    return d.toLocaleString(localeTag(Alpine.store('shell').uiLocale),
-      tzOpts({ dateStyle: 'medium', timeStyle: 'short' }));
+    return fmtDateTime(iso, Alpine.store('shell').uiLocale);
   },
 
   // Status-Label: widerrufen / abgelaufen / aktiv.

@@ -9,6 +9,7 @@
 
 import { fetchJson } from '../../utils.js';
 import { befundSeverityClass } from '../../utils/befund-severity.js';
+import { isSelectedBook } from '../../cards/book-guard.js';
 
 export const timeCheckMethods = {
   async loadTimeChecks() {
@@ -18,7 +19,7 @@ export const timeCheckMethods = {
     this.loadZeitVorschlaege?.();
     try {
       const data = await fetchJson(`/plot/time-check?book_id=${bookId}`);
-      if (Alpine.store('nav').selectedBookId !== bookId) return;
+      if (!isSelectedBook(bookId)) return;
       this.timeChecks = Array.isArray(data.befunde) ? data.befunde : [];
     } catch (e) {
       // Non-fatal: die Messung ist eine Zusatzsicht, kein Board-Blocker.

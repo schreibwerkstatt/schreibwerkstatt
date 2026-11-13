@@ -1,5 +1,6 @@
 // Teil von bookSettingsMethods (siehe Facade book-settings.js).
-import { EVT, contentRepo } from './_shared.js';
+import { EVT, contentRepo, sendJson } from './_shared.js';
+import { tFetchError } from '../../i18n.js';
 
 export const adminMethods = {
 
@@ -18,13 +19,7 @@ export const adminMethods = {
     this.bookHistoryResetMessage = '';
     this.bookHistoryResetError   = '';
     try {
-      const r = await fetch(`/history/book/${bookId}`, { method: 'DELETE' });
-      if (!r.ok) {
-        let errData = null;
-        try { errData = await r.json(); } catch (_) {}
-        throw new Error(window.__app.tError(errData));
-      }
-      const data = await r.json();
+      const data = await sendJson(`/history/book/${bookId}`, 'DELETE');
       const d = data.deleted || {};
       this.bookHistoryResetMessage = window.__app.t('userSettings.resetSummary', {
         lektorate: d.page_checks || 0,
@@ -38,7 +33,7 @@ export const adminMethods = {
       }
       this._flash('bookHistoryResetMessage', 6000, '');
     } catch (e) {
-      this.bookHistoryResetError = e.message;
+      this.bookHistoryResetError = tFetchError(e);
     } finally {
       this.bookHistoryResetLoading = false;
     }
@@ -62,20 +57,13 @@ export const adminMethods = {
     this.staleCleanupError   = '';
     try {
       const [figRes, sceneRes, locRes] = await Promise.all([
-        fetch(`/figures/${bookId}/stale`, { method: 'DELETE' }),
-        fetch(`/figures/scenes/${bookId}/stale`, { method: 'DELETE' }),
-        fetch(`/locations/${bookId}/stale`, { method: 'DELETE' }),
+        sendJson(`/figures/${bookId}/stale`, 'DELETE'),
+        sendJson(`/figures/scenes/${bookId}/stale`, 'DELETE'),
+        sendJson(`/locations/${bookId}/stale`, 'DELETE'),
       ]);
-      for (const r of [figRes, sceneRes, locRes]) {
-        if (!r.ok) {
-          let errData = null;
-          try { errData = await r.json(); } catch (_) {}
-          throw new Error(window.__app.tError(errData));
-        }
-      }
-      const fig   = (await figRes.json()).deleted   || {};
-      const scene = (await sceneRes.json()).deleted || {};
-      const loc   = (await locRes.json()).deleted   || {};
+      const fig   = figRes?.deleted   || {};
+      const scene = sceneRes?.deleted || {};
+      const loc   = locRes?.deleted   || {};
       this.staleCleanupMessage = window.__app.t('book.settings.staleCleanupSummary', {
         figuren:      fig.figures    || 0,
         szenen:       scene.scenes   || 0,
@@ -89,7 +77,7 @@ export const adminMethods = {
       }
       this._flash('staleCleanupMessage', 6000, '');
     } catch (e) {
-      this.staleCleanupError = e.message;
+      this.staleCleanupError = tFetchError(e);
     } finally {
       this.staleCleanupLoading = false;
     }
@@ -118,7 +106,7 @@ export const adminMethods = {
       await app.loadBooks();
       app.setStatus(app.t('book.settings.deleteBookSummary', { name }), false, 5000);
     } catch (e) {
-      this.bookDeleteError = app.t('book.settings.deleteBookFailed', { msg: e.message });
+      this.bookDeleteError = app.t('book.settings.deleteBookFailed', { msg: tFetchError(e) });
     } finally {
       this.bookDeleteLoading = false;
     }

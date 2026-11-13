@@ -9,16 +9,18 @@
 // Kurzname und ihre Aliasse werden dauerhafte Aliasse des Ziels, damit die nächste
 // Komplettanalyse sie nicht als eigene Figur zurückbringt.
 
-// i18n über den Root (`window.__app.t`), nicht über i18n.js: das Modul hängt beim
-// Import Listener an `window` und machte die Figurenkarte ohne Browser unladbar.
+import { sendJson } from '../utils/net.js';
+import { tFetchError } from '../i18n.js';
+import { isSelectedBook } from '../cards/book-guard.js';
+
 const _t = (key, params) => window.__app?.t?.(key, params) ?? key;
 
 /** Bestätigt (appConfirm), führt `source` in `target` zusammen und lädt den
  *  Figuren-Katalog neu. `source`/`target` sind `{ id, name }` (Katalog-Kennung
  *  fig_id) oder `{ rowId, name }` (figures.id, so wie das Redundanz-Radar sie
  *  speichert — die fig_id ändert sich mit jeder Komplettanalyse).
- *  Rückgabe: Server-Antwort, `null` bei Abbruch durch den User. Wirft mit
- *  übersetzter Meldung bei einem Fehler. */
+ *  Rückgabe: Server-Antwort, `null` bei Abbruch durch den User. Wirft den
+ *  `sendJson`-Fehler (status/code/body) mit übersetzter `message` (tFetchError). */
 export async function mergeFigurPair(bookId, source, target) {
   const app = window.__app;
   const byRow = source?.rowId != null && target?.rowId != null;
@@ -30,16 +32,17 @@ export async function mergeFigurPair(bookId, source, target) {
     confirmLabel: _t('merge.button'),
     danger: true,
   })) return null;
-  const r = await fetch(`/figures/${encodeURIComponent(bookId)}/merge`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(byRow ? { source_id: sKey, target_id: tKey } : { source: sKey, target: tKey }),
-  });
-  const data = await r.json().catch(() => null);
-  if (!r.ok) throw new Error(app.tError(data));
+  let data;
+  try {
+    data = await sendJson(`/figures/${encodeURIComponent(bookId)}/merge`, 'POST',
+      byRow ? { source_id: sKey, target_id: tKey } : { source: sKey, target: tKey });
+  } catch (e) {
+    e.message = tFetchError(e);
+    throw e;
+  }
   // Nur nachladen, wenn der User inzwischen nicht das Buch gewechselt hat — der
   // Buchwechsel lädt den Katalog des neuen Buchs selbst.
-  if (String(Alpine.store('nav').selectedBookId) === String(bookId)) app.loadFiguren?.(bookId);
+  if (isSelectedBook(bookId)) app.loadFiguren?.(bookId);
   return data;
 }
 

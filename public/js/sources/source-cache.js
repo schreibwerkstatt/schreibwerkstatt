@@ -11,25 +11,25 @@
 // aendert, zuordnet oder loescht — beide Konsumenten haengen `invalidateSourceCache`
 // an dieses Event (und an `book:changed`).
 
-const _cache = new Map();
+import { makeBookCache } from '../repo/book-cache.js';
+import { fetchJson } from '../utils/net.js';
+
+// Dedup laufender Fetches + Schutz gegen `sources:changed` waehrend eines
+// Fetches (dessen Antwort traegt den alten Stand) liegen in makeBookCache.
+const _sources = makeBookCache(async (key) => {
+  const list = await fetchJson(`/sources?book_id=${encodeURIComponent(key)}`, {
+    headers: { Accept: 'application/json' },
+  });
+  return Array.isArray(list) ? list : [];
+});
 
 export function invalidateSourceCache(bookId = null) {
-  if (bookId == null) _cache.clear();
-  else _cache.delete(String(bookId));
+  _sources.invalidate(bookId);
 }
 
 /** Quellen des Buchs (`GET /sources?book_id=`). Wirft bei HTTP-Fehler — die
  *  Konsumenten entscheiden selbst, ob das ein Hinweis im Panel oder ein
  *  stiller Leerzustand ist. */
-export async function loadBookSources(bookId) {
-  const key = String(bookId);
-  if (_cache.has(key)) return _cache.get(key);
-  const res = await fetch(`/sources?book_id=${encodeURIComponent(key)}`, {
-    headers: { Accept: 'application/json' },
-  });
-  if (!res.ok) throw new Error(`HTTP ${res.status}`);
-  const list = await res.json();
-  const arr = Array.isArray(list) ? list : [];
-  _cache.set(key, arr);
-  return arr;
+export function loadBookSources(bookId) {
+  return _sources.load(bookId);
 }

@@ -3,7 +3,7 @@
 // der API-Key kommt nie zurueck, nur `has_api_key`.
 
 import { fetchJson, sendJson } from './utils.js';
-import { tFetchErrorRaw } from './i18n.js';
+import { tFetchError } from './i18n.js';
 
 // Protokollwert: „gespeicherten Key behalten" (wie bei den Admin-KI-Profilen).
 const KEY_UNCHANGED = '__unchanged__';
@@ -84,7 +84,7 @@ export const aiAccessMethods = {
       // Provider/Modell aendern Feature-Gates (/config: effektiver Provider + Klasse).
       await this._aiAccessRefreshConfig();
     } catch (e) {
-      this.aiAccessError = tFetchErrorRaw(e);
+      this.aiAccessError = tFetchError(e);
     } finally {
       this.aiAccessBusy = false;
     }
@@ -114,7 +114,7 @@ export const aiAccessMethods = {
       this._aiAccessApply(await sendJson('/me/ai-access', 'DELETE'));
       await this._aiAccessRefreshConfig();
     } catch (e) {
-      this.aiAccessError = tFetchErrorRaw(e);
+      this.aiAccessError = tFetchError(e);
     } finally {
       this.aiAccessBusy = false;
     }

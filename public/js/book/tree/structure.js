@@ -1,5 +1,6 @@
 import { EVT } from '../../events.js';
 import { contentRepo } from '../../repo/content.js';
+import { tFetchError } from '../../i18n.js';
 
 // Struktur-Pflege des Seitenbaums ohne Reload: frisch angelegte Abschnitte
 // einhaengen, den ersten Abschnitt eines neuen Kapitels anlegen, ein geloeschtes
@@ -91,7 +92,7 @@ export const treeStructureMethods = {
       const inserted = this._insertCreatedPageIntoTree(item, page);
       if (open) await this.openNewSectionForWriting(inserted);
     } catch (e) {
-      this.setStatus?.(this.t('bookOrganizer.saveFailed', { detail: e.message }));
+      this.setStatus?.(this.t('bookOrganizer.saveFailed', { detail: tFetchError(e) }));
     }
   },
 
@@ -119,7 +120,7 @@ export const treeStructureMethods = {
     try {
       await contentRepo.deleteChapter(chapterId, { bookId });
     } catch (e) {
-      this.setStatus?.(this.t('bookOrganizer.deleteFailed', { detail: e.message }));
+      this.setStatus?.(this.t('bookOrganizer.deleteFailed', { detail: tFetchError(e) }));
       return false;
     }
     const nav = this.$store.nav;

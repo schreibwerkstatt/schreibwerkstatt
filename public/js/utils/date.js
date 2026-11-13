@@ -39,6 +39,16 @@ export function dateTimeFormat(uiLocale, opts = {}) {
   return dtf;
 }
 
+// Zeitstempel (ISO-String, Date oder ms) als Datum + Uhrzeit in UI-Sprache und
+// App-Zeitzone. Leer → ''; unparsebar → Eingabe unverändert (statt
+// „Invalid Date"). Default `medium`/`short`; eigene Stile per `opts`.
+export function fmtDateTime(value, uiLocale, opts = { dateStyle: 'medium', timeStyle: 'short' }) {
+  if (value == null || value === '') return '';
+  const d = value instanceof Date ? value : new Date(value);
+  if (Number.isNaN(d.getTime())) return String(value);
+  return dateTimeFormat(uiLocale, opts).format(d);
+}
+
 // Pro Locale gecacht — Intl.RelativeTimeFormat-Konstruktion ist nicht gratis,
 // und _fmtRelativeLine wird pro Sidebar-Render mehrfach aufgerufen.
 const _RTF_CACHE = new Map();

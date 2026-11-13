@@ -49,8 +49,19 @@ function _bracketDocNums(inner, sources) {
 // nichts aus und zählen nicht als Gegenbeweis. Die Reihenfolge der Belegliste
 // taugt nicht zur Rückübersetzung (das Modell hält sie nicht zwingend ein) — die
 // Marker fallen dann weg, die Liste bleibt.
+// Quell-URLs kommen aus Web-Suchtreffern und landen als `href` im x-html der
+// Antwort und als `:href` der Quellenliste: nur http(s) bleibt verlinkbar
+// (Regel für Chat-Links). Andere Schemata (javascript:, data:) werden zu ''
+// und damit wie „ohne URL" behandelt; die Position in der Liste bleibt, weil
+// Zitat-Nummern sie adressieren.
+const _HTTP_RE = /^https?:\/\//i;
+export function linkableSources(list) {
+  if (!Array.isArray(list)) return [];
+  return list.map(s => (s && s.url && !_HTTP_RE.test(String(s.url)) ? { ...s, url: '' } : s));
+}
+
 export function listLocalNumbering(text, answerSources) {
-  const ans = Array.isArray(answerSources) ? answerSources.filter(a => a && a.url) : [];
+  const ans = linkableSources(answerSources).filter(a => a && a.url);
   if (!ans.length) return false;
   const nums = [];
   BRACKET_CITE_RE.lastIndex = 0;
@@ -89,6 +100,7 @@ export function resolveSource(sources, n) {
 // unter der Antwort. Sortiert nach Index, je URL nur einmal. Pure Variante der
 // researchCitedSources-Alpine-Methode (Test + Konsument teilen sie sich).
 export function citedSources(text, sources) {
+  sources = linkableSources(sources);
   if (!sources.length) return [];
   const nums = [];
   let m;
@@ -123,7 +135,7 @@ export function citedSources(text, sources) {
  */
 export function displaySources(text, sources, answerSources) {
   if (Array.isArray(answerSources) && answerSources.length) {
-    return answerSources
+    return linkableSources(answerSources)
       .filter(s => s && s.url)
       .map((s, i) => ({ n: i + 1, url: s.url, title: s.title || shortUrl(s.url) }));
   }
@@ -159,8 +171,8 @@ export function effectiveAnswerText(text, proposalCount) {
  */
 export function renderResearchAnswer({ text, sources, answerSources, proposalCount = 0, renderChatMarkdown, escHtml, t }) {
   const txt = effectiveAnswerText(text, proposalCount);
-  const srcs = Array.isArray(sources) ? sources : [];
-  const ans = Array.isArray(answerSources) ? answerSources.filter(a => a && a.url) : [];
+  const srcs = linkableSources(sources);
+  const ans = linkableSources(answerSources).filter(a => a && a.url);
   const i18nMatch = /^__i18n:([a-zA-Z0-9_.-]+)__$/.exec(txt);
   if (i18nMatch) {
     const resolved = t ? t(i18nMatch[1]) : i18nMatch[1];

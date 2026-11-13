@@ -14,7 +14,8 @@
 // Aufschlüsselung UND die Messbefunde in EINER Antwort — dieselbe Liste, die
 // die Befund-Sammelstelle liest (ein zweiter Lesepfad zeigte zwei Bestände).
 
-import { fetchJson } from '../utils.js';
+import { fetchJson, sendJson } from '../utils.js';
+import { isSelectedBook, loadToken } from '../cards/book-guard.js';
 import { startWerkstattJobPoll, reattachWerkstattJob } from './job-poll.js';
 import { werkstattErrorText } from './crud.js';
 
@@ -200,7 +201,7 @@ export const bogenMethods = {
     if (!bookId) { this.arc = null; return; }
     // Stale-Schutz wie loadDrafts: die Antwort eines inzwischen verlassenen
     // Buchs darf den Bogen des neuen nicht überschreiben.
-    const isStale = () => window.Alpine?.store('nav').selectedBookId !== bookId;
+    const isCurrent = loadToken(this, '_arcLoadSeq', bookId);
     let arc = null;
     try {
       arc = await fetchJson(`/draft-figures/${bookId}/arc`);
@@ -209,7 +210,7 @@ export const bogenMethods = {
       // sein Ausfall darf die Werkstatt nicht blockieren.
       arc = null;
     }
-    if (isStale()) return;
+    if (!isCurrent()) return;
     this.arc = arc;
     this.arcOccCache = {};
     this.activeArcDetailKey = null;
@@ -229,11 +230,7 @@ export const bogenMethods = {
     this.anchorLoading = true;
     this.anchorStatus = '';
     try {
-      const resp = await fetchJson('/jobs/figur-anchor', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ book_id: bookId }),
-      });
+      const resp = await sendJson('/jobs/figur-anchor', 'POST', { book_id: bookId });
       this._anchorJobId = resp.jobId;
       startWerkstattJobPoll(this, 'anchor', resp.jobId);
     } catch (e) {
@@ -254,7 +251,7 @@ export const bogenMethods = {
       queue = Array.isArray(queued) && queued.length > 0 ? queued : await fetchJson('/jobs/queue');
     } catch { return; }
     if (!Array.isArray(queue)) return;
-    if (window.Alpine?.store('nav').selectedBookId !== bookId || this._anchorJobId || this.anchorLoading) return;
+    if (!isSelectedBook(bookId) || this._anchorJobId || this.anchorLoading) return;
     // /jobs/queue liefert nur aktive (queued/running) Jobs des Users.
     const job = queue.find(j => j.type === 'figur-anchor' && String(j.bookId) === String(bookId));
     if (job) reattachWerkstattJob(this, 'anchor', job, null);

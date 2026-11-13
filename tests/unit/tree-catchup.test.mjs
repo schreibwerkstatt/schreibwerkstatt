@@ -44,10 +44,17 @@ test('parseContentPath verwirft alles andere still', () => {
   }
 });
 
+// Der Buch-Guard (cards/book-guard.js#isSelectedBook) liest die Buchwahl aus
+// `Alpine.store('nav')` — im Test ist das der Nav-Store des zuletzt gebauten Kontexts.
+function bindNav(ctx) {
+  globalThis.window = { ...(globalThis.window || {}), Alpine: { store: (k) => (k === 'nav' ? ctx.$store.nav : undefined) } };
+  return ctx;
+}
+
 // ── Cursor der Drift-Probe ─────────────────────────────────────────────────
 
 function ctxWithPages(pages) {
-  return { ...treeCatchUpMethods, $store: { nav: { pages, selectedBookId: '3' } } };
+  return bindNav({ ...treeCatchUpMethods, $store: { nav: { pages, selectedBookId: '3' } } });
 }
 
 test('_treeSince ist der juengste Seitenstand im gerenderten Baum', () => {
@@ -163,6 +170,7 @@ function routingCtx(selectedBookId = '3') {
     _scheduleTreeCatchUp: (r) => calls.push(['tree', r]),
     _catchUpBooks: () => calls.push(['books']),
   };
+  bindNav(ctx);
   return { ctx, calls };
 }
 
@@ -205,6 +213,7 @@ function pageCtx({ currentId = 7, editMode = false } = {}) {
     _refetchCurrentPage: async () => { calls.push('refetch'); },
     _pullRemoteIntoEditor: () => { calls.push('pull'); },
   };
+  bindNav(ctx);
   return { ctx, calls };
 }
 

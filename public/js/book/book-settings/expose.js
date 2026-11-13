@@ -8,10 +8,10 @@
 // setzt nur dieses Feld, gespeichert wird es wie alles andere über den
 // Speichern-Knopf der Karte.
 
-import { fetchJson, EVT } from './_shared.js';
+import { fetchJson, sendJson, EVT } from './_shared.js';
 import { exposeProfil } from '../../prompts.js';
-import { tzOpts, localeTag } from '../../utils.js';
-import { tFetchErrorRaw } from '../../i18n.js';
+import { fmtDateTime } from '../../utils.js';
+import { tFetchError } from '../../i18n.js';
 
 const _clone = (v) => (v == null ? v : JSON.parse(JSON.stringify(v)));
 
@@ -33,7 +33,7 @@ export const exposeMethods = {
       this.exposeLoaded = true;
     } catch (e) {
       // 403 für Rollen unter editor: der Reiter bleibt leer, kein Fehlerbanner.
-      if (e?.status !== 403 && this._isFormBook(bookId)) this.exposeError = tFetchErrorRaw(e);
+      if (e?.status !== 403 && this._isFormBook(bookId)) this.exposeError = tFetchError(e);
     }
   },
 
@@ -48,9 +48,11 @@ export const exposeMethods = {
     if (!bookId || (this.exposeRun?.id === id)) return;
     if (this.exposeDirty && !await window.__app.appConfirm({ message: window.__app.t('expose.discardEdits'), danger: true })) return;
     try {
-      this._setExposeRun(await fetchJson(`/expose/${bookId}/${id}`));
+      const run = await fetchJson(`/expose/${bookId}/${id}`);
+      if (!this._isFormBook(bookId)) return;
+      this._setExposeRun(run);
     } catch (e) {
-      this.exposeError = tFetchErrorRaw(e);
+      if (this._isFormBook(bookId)) this.exposeError = tFetchError(e);
     }
   },
 
@@ -60,18 +62,12 @@ export const exposeMethods = {
     this.exposeGenerating = true;
     this.exposeError = '';
     try {
-      const res = await fetch('/jobs/expose', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ book_id: Number(bookId) }),
-      });
-      const data = await res.json().catch(() => ({}));
-      if (!res.ok) throw new Error(window.__app.tError(data));
+      const data = await sendJson('/jobs/expose', 'POST', { book_id: Number(bookId) });
       this.exposeJobId = data.jobId;
       window.dispatchEvent(new CustomEvent(EVT.JOB_ENQUEUED, { detail: { type: 'expose', jobId: data.jobId } }));
     } catch (e) {
       this.exposeGenerating = false;
-      this.exposeError = e.message;
+      this.exposeError = tFetchError(e);
     }
   },
 
@@ -109,13 +105,7 @@ export const exposeMethods = {
     this.exposeError = '';
     const sent = JSON.stringify(this.exposeDraft);
     try {
-      const res = await fetch(`/expose/${bookId}/${this.exposeRun.id}`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ edited: this.exposeDraft }),
-      });
-      const data = await res.json().catch(() => ({}));
-      if (!res.ok) throw new Error(window.__app.tError(data));
+      const data = await sendJson(`/expose/${bookId}/${this.exposeRun.id}`, 'PATCH', { edited: this.exposeDraft });
       if (this._isFormBook(bookId)) {
         // Während des Speicherns weitergetippt → Entwurf behalten, bleibt ungespeichert.
         if (JSON.stringify(this.exposeDraft) === sent) this._setExposeRun(data);
@@ -126,7 +116,7 @@ export const exposeMethods = {
       this._flash('exposeSaved');
       return true;
     } catch (e) {
-      this.exposeError = e.message;
+      this.exposeError = tFetchError(e);
       return false;
     } finally {
       this.exposeSaving = false;
@@ -138,17 +128,12 @@ export const exposeMethods = {
     if (!bookId || !this.exposeRun) return;
     if (!await window.__app.appConfirm({ message: window.__app.t('expose.resetConfirm'), confirmLabel: window.__app.t('expose.resetToKi'), danger: true })) return;
     try {
-      const res = await fetch(`/expose/${bookId}/${this.exposeRun.id}`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ edited: null }),
-      });
-      const data = await res.json().catch(() => ({}));
-      if (!res.ok) throw new Error(window.__app.tError(data));
+      const data = await sendJson(`/expose/${bookId}/${this.exposeRun.id}`, 'PATCH', { edited: null });
+      if (!this._isFormBook(bookId)) return;
       this._setExposeRun(data);
       this.exposeHistory = this.exposeHistory.map(h => (h.id === data.id ? { ...h, has_edits: false } : h));
     } catch (e) {
-      this.exposeError = e.message;
+      this.exposeError = tFetchError(e);
     }
   },
 
@@ -156,12 +141,12 @@ export const exposeMethods = {
     const bookId = this._formBookId;
     if (!bookId || !await window.__app.appConfirm({ message: window.__app.t('expose.deleteConfirm'), confirmLabel: window.__app.t('expose.history.delete'), danger: true })) return;
     try {
-      const res = await fetch(`/expose/${bookId}/${id}`, { method: 'DELETE' });
-      if (!res.ok) { const d = await res.json().catch(() => ({})); throw new Error(window.__app.tError(d)); }
+      await sendJson(`/expose/${bookId}/${id}`, 'DELETE');
+      if (!this._isFormBook(bookId)) return;
       if (this.exposeRun?.id === id) this._setExposeRun(null);
       await this.loadExpose(bookId);
     } catch (e) {
-      this.exposeError = e.message;
+      this.exposeError = tFetchError(e);
     }
   },
 
@@ -195,9 +180,7 @@ export const exposeMethods = {
   },
 
   exposeWhen(ts) {
-    if (!ts) return '';
-    const d = new Date(ts);
-    return isNaN(d) ? ts : d.toLocaleString(localeTag(Alpine.store('shell').uiLocale), tzOpts({ dateStyle: 'medium', timeStyle: 'short' }));
+    return fmtDateTime(ts, Alpine.store('shell').uiLocale);
   },
 
   exposeRunLabel(h) {

@@ -4,6 +4,7 @@
 import { fetchJson, downloadHref, downloadBlob } from '../utils.js';
 import { FINETUNE_PROFILES, finetuneProfileById } from './finetune-profiles.js';
 import { studioYamlFor, modelfileFor } from './finetune-studio-files.js';
+import { isSelectedBook } from '../cards/book-guard.js';
 
 export const finetuneExportMethods = {
   // Gespeicherte Sets des Buchs, neuestes zuerst (überleben Neustarts, liegen
@@ -14,7 +15,7 @@ export const finetuneExportMethods = {
     if (!bookId) return;
     try {
       const { exports } = await fetchJson(`/jobs/finetune-export/list?book_id=${encodeURIComponent(bookId)}`);
-      if (Alpine.store('nav').selectedBookId !== bookId || this.finetuneLoading) return;
+      if (!isSelectedBook(bookId) || this.finetuneLoading) return;
       this.finetuneExports = exports || [];
       if (!this.finetuneExports.some(ex => ex.id === this.finetuneOpenId)) this.finetuneOpenId = null;
     } catch (e) {
@@ -28,7 +29,7 @@ export const finetuneExportMethods = {
     if (!bookId) return;
     try {
       const r = await fetchJson(`/jobs/finetune-export/relation-check?book_id=${encodeURIComponent(bookId)}`);
-      if (Alpine.store('nav').selectedBookId !== bookId) return;
+      if (!isSelectedBook(bookId)) return;
       this.finetuneRelCheck = { conflicts: r.conflicts || [], mainCount: r.mainCount || 0 };
     } catch (e) {
       console.error('[finetune] Beziehungsprüfung:', e);

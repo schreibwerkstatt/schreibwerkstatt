@@ -17,15 +17,11 @@
 // brechen als Alpine-Proxy); nur die numerischen `_anchorY`/`_railTop` landen
 // reaktiv auf den Thread-Objekten.
 
-import { locateRange } from '../share-anchor.js';
-import { resolveCardPositions } from '../comment-card-layout.js';
+import { anchorFromRow, anchorYOf } from '../share-anchor.js';
+import { resolveCardPositions, createObservedSet } from '../comment-card-layout.js';
 
 // Lückenabstand zwischen kollidierenden Karten (px).
 const CARD_GAP = 10;
-
-function anchorOf(root) {
-  return { bid: root.anchor_bid, quote: root.anchor_quote, start: root.anchor_start, end: root.anchor_end };
-}
 
 // cfg:
 //   scopeEl()  → Element mit den data-bid-Blöcken (Stream bzw. Read-View)
@@ -46,25 +42,15 @@ export function createCommentLayout(cfg) {
       if (typeof ResizeObserver !== 'undefined') {
         this._commentResizeObs = new ResizeObserver(() => this._scheduleCommentLayout());
       }
-      this._commentObserved = new Set();
+      this._commentObserved = createObservedSet(this._commentResizeObs);
       this._commentResizeHandler = () => this._scheduleCommentLayout();
       window.addEventListener('resize', this._commentResizeHandler);
     },
     // Element einmalig beobachten (Set verhindert das Re-Fire bei erneutem observe).
-    _observeForLayout(el) {
-      if (!el || !this._commentResizeObs || this._commentObserved.has(el)) return;
-      try { this._commentResizeObs.observe(el); this._commentObserved.add(el); } catch {}
-    },
+    _observeForLayout(el) { this._commentObserved?.observe(el); },
     // Aus dem DOM gefallene Elemente (gelöschter/weggefilterter Thread, Buch-
     // oder Seitenwechsel) nicht weiter beobachten und nicht festhalten.
-    _pruneObservedForLayout() {
-      if (!this._commentObserved) return;
-      for (const el of [...this._commentObserved]) {
-        if (el.isConnected) continue;
-        try { this._commentResizeObs?.unobserve(el); } catch {}
-        this._commentObserved.delete(el);
-      }
-    },
+    _pruneObservedForLayout() { this._commentObserved?.prune(); },
     _teardownCommentLayout() {
       try { this._commentResizeObs?.disconnect(); } catch {}
       this._commentResizeObs = null;
@@ -90,17 +76,7 @@ export function createCommentLayout(cfg) {
     // lokalisierte Range; „Stelle geändert"-Threads (kein Range) über die
     // Block-Oberkante; sonst null.
     _commentAnchorY(thread, view, layerTop) {
-      if (!thread.changed) {
-        const range = locateRange(view, anchorOf(thread.root));
-        if (range) { const r = range.getBoundingClientRect(); if (r.height || r.width) return r.top - layerTop; }
-      }
-      const bid = thread.root.anchor_bid;
-      if (bid) {
-        let blk = null;
-        try { blk = view.querySelector(`[data-bid="${CSS.escape(String(bid))}"]`); } catch {}
-        if (blk) return blk.getBoundingClientRect().top - layerTop;
-      }
-      return null;
+      return anchorYOf(view, anchorFromRow(thread.root), layerTop, { skipRange: !!thread.changed });
     },
 
     _layoutCommentCards() {

@@ -62,13 +62,13 @@ export function registerMyStatsCard() {
     _lifecycle: null,
 
     init() {
-      this.$watch(() => window.__app.showMyStatsCard, (visible) => {
-        if (visible) { this.loadMyStats(); this.loadMyJobStats(); }
-        else this._destroyChart();
-      });
       // Buchübergreifend: kein Reset bei book:changed/view:reset, Refresh ohne Buch.
       this._lifecycle = setupCardLifecycle(this, {
         name: 'myStats',
+        showFlag: 'showMyStatsCard',
+        showNeedsBookId: false,
+        onShow: () => Promise.all([this.loadMyStats(), this.loadMyJobStats()]),
+        onHide: () => this._destroyChart(),
         refreshNeedsBookId: false,
         onCardRefresh: () => { this.loadMyStats(); this.loadMyJobStats(); },
         wake: () => { this.loadMyStats({ silent: true }); this.loadMyJobStats({ silent: true }); },

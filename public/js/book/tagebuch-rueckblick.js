@@ -9,7 +9,7 @@
 // routes/jobs/rueckblick-dates.js#buildRueckblickCoverage) — dieselbe Quelle,
 // aus der der Job seine Einträge filtert. Die Karte parst keine Seitennamen.
 
-import { fetchJson, localeTag, tzOpts } from '../utils.js';
+import { fetchJson, localeTag, tzOpts, fmtDateTime } from '../utils.js';
 import { buildYmHeatRows } from './ymheatmap.js';
 import { isSelectedBook } from '../cards/book-guard.js';
 import { memoMethods } from '../cards/card-memo.js';
@@ -423,10 +423,8 @@ export const tagebuchRueckblickMethods = {
   // Datum + Uhrzeit eines History-Eintrags (TZ-aware).
   rueckblickEntryDate(iso) {
     if (!iso) return '';
-    try {
-      return new Date(iso).toLocaleString(localeTag(Alpine.store('shell').uiLocale),
-        tzOpts({ day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' }));
-    } catch { return iso; }
+    return fmtDateTime(iso, Alpine.store('shell').uiLocale,
+      { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' });
   },
 
   // Angezeigten Rückblick schliessen → zurück zur Übersicht desselben Zeitraums.

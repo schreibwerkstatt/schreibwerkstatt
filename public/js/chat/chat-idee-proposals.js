@@ -11,12 +11,10 @@
 // Transient am Vorschlagsobjekt: _draft, _editing, _busy, _error und
 // _written/_appliedId (Idee angelegt, Status noch nicht — proposal-status.js#applyProposalOnce).
 
-import { fetchJson } from '../utils.js';
+import { sendJson } from '../utils.js';
 import { tFetchError } from '../i18n.js';
 import { persistProposalStatus, applyProposalOnce } from './proposal-status.js';
 import { trackChatProposal } from '../features-usage.js';
-
-const JSON_HEADERS = { 'Content-Type': 'application/json' };
 
 // Sidebar-Plakette + Zähler des offenen Abschnitts bzw. Kapitels nachziehen
 // (eine neue Idee ist offen). Gleiche Maps wie book/ideen.js#_setTreeIdeenCount.
@@ -80,14 +78,10 @@ export const chatIdeeProposalMethods = {
     // Ist die Idee schon angelegt und nur der Status-PATCH gescheitert, legt ein
     // zweiter Klick keine Dublette an, sondern holt nur den Status nach.
     const r = await applyProposalOnce('/ideen/chat-proposal', msg, idx, async () => {
-      const row = await fetchJson('/ideen', {
-        method: 'POST',
-        headers: JSON_HEADERS,
-        // Anker: Abschnitt ODER Kapitel — genau eins steht in fields.
-        body: JSON.stringify({
-          book_id: bookId, content,
-          ...(p.fields.page_id != null ? { page_id: p.fields.page_id } : { chapter_id: p.fields.chapter_id }),
-        }),
+      // Anker: Abschnitt ODER Kapitel — genau eins steht in fields.
+      const row = await sendJson('/ideen', 'POST', {
+        book_id: bookId, content,
+        ...(p.fields.page_id != null ? { page_id: p.fields.page_id } : { chapter_id: p.fields.chapter_id }),
       });
       // Der Server legt sie ggf. an einen anderen Anker (Einabschnitts-Kapitel →
       // Abschnitt, lib/idee-anchor.js) — gezählt wird, wo sie wirklich hängt.

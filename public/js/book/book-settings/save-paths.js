@@ -18,6 +18,8 @@
 // die Buch-ID explizit, damit die Rückfrage beim Buchwechsel den Stand des
 // ALTEN Buchs noch auf das alte Buch schreiben kann.
 
+import { isSelectedBook } from '../../cards/book-guard.js';
+
 export const SAVE_PATHS = Object.freeze([
   { key: 'settings',    save: 'saveBookSettings',     saving: 'bookSettingsSaving', saved: 'bookSettingsSaved', error: 'bookSettingsError', loaded: 'bookSettingsLoaded',     snapshot: '_settingsSnapshot' },
   { key: 'publication', save: 'savePublication',      saving: 'pubSaving',          saved: 'pubSaved',          error: 'pubError',          loaded: 'bookPublicationLoaded',  snapshot: '_publicationSnapshot' },
@@ -64,12 +66,12 @@ export const savePathMethods = {
   _isFormBook(bookId) {
     return !!bookId
       && String(bookId) === String(this._formBookId)
-      && String(bookId) === String(this._selectedBookId());
+      && isSelectedBook(bookId);
   },
 
   /** Ist `bookId` das gerade gewählte Buch (Root-State spiegeln erlaubt)? */
   _isSelectedBook(bookId) {
-    return !!bookId && String(bookId) === String(this._selectedBookId());
+    return isSelectedBook(bookId);
   },
 
   // ── Ungespeichert-Erkennung ───────────────────────────────────────────────

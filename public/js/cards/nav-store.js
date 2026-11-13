@@ -28,7 +28,14 @@ export function registerNavStore() {
   if (typeof window === 'undefined' || !window.Alpine) return;
   window.Alpine.store('nav', {
     books: [],
-    selectedBookId: '',
+    // Immer String ('' = kein Buch): Hash, Buchliste, Suche (FTS) und Job-
+    // Payloads liefern die ID mal als Zahl, mal als String, und ein strikter
+    // `!==`-Vergleich an einer der vielen Lesestellen kippte dann still. Der
+    // Setter normalisiert jede Zuweisung; Vergleiche trotzdem über
+    // isSelectedBook()/loadToken() (cards/book-guard.js).
+    _selectedBookId: '',
+    get selectedBookId() { return this._selectedBookId; },
+    set selectedBookId(v) { this._selectedBookId = v == null ? '' : String(v); },
     pages: [],
     tree: [],
     werkstattDraftId: null,

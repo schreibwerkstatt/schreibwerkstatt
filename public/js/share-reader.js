@@ -15,7 +15,7 @@
 // thread-render/sheet (hier importiert) sowie dwell/read-depth/resume/reading-prefs/back-to-top/feedback/tts
 // (direkt aus share.html geladen, lesen #share-config selbst).
 
-import { locateRange, locateApprox, caretPosFromPoint } from './share-anchor.js';
+import { locateRange, locateApprox, caretPosFromPoint, scrollWindowToRange } from './share-anchor.js';
 import { groupThreads } from './editor/comment-threads.js';
 import { bindScrollFade } from './scroll-fade.js';
 import { el, parseTs, submitOnModEnter } from './share-reader/dom.js';
@@ -127,10 +127,15 @@ import { setupWakeLock } from './share-reader/wakelock.js';
     return arr.map(c => `${c.id}:${c.parent_id || 0}:${c.resolved ? 1 : 0}:${(c.body || '').length}`).join('|');
   }
   let lastSig = null;
+  // Poll (alle 10 s) und Reload nach eigenem Post laufen parallel: nur die
+  // jüngste Anfrage darf übernehmen, sonst verdrängt eine spät ankommende
+  // ältere Liste den eben geschriebenen Kommentar bis zum nächsten Poll.
+  let fetchSeq = 0;
   async function fetchThreads() {
+    const seq = ++fetchSeq;
     try {
       const next = await api.fetchThreads();
-      if (!next) return;
+      if (seq !== fetchSeq || !next) return;
       const sig = commentsSig(next);
       comments = next;
       if (sig === lastSig) return; // keine Änderung → kein Reflow
@@ -277,12 +282,7 @@ import { setupWakeLock } from './share-reader/wakelock.js';
     sheet.close();
     setActive(id, { reveal: false });
     const found = anchorRanges.find(a => a.id === id);
-    if (found) {
-      const rect = found.range.getBoundingClientRect();
-      if (rect && rect.height) {
-        window.scrollTo({ top: window.scrollY + rect.top - 120, behavior: 'smooth' });
-      }
-    }
+    if (found) scrollWindowToRange(found.range, 120);
   }
   function clearSelected() {
     document.querySelectorAll('.comment-rail__thread--selected').forEach(e => e.classList.remove('comment-rail__thread--selected'));

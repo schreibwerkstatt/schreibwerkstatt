@@ -8,6 +8,7 @@
 import { loadDiff } from '../lazy-libs.js';
 import { renderSideBySide } from '../page-revision-diff.js';
 import { diffSnapshots, diffPublication } from '../book-snapshot-diff.js';
+import { tFetchError } from '../i18n.js';
 
 export const snapshotsCompareMethods = {
   canCompare() {
@@ -45,14 +46,14 @@ export const snapshotsCompareMethods = {
       ]);
       const fromContent = a?.content;
       const toContent = b?.content;
-      if (!fromContent || !toContent) throw new Error('SNAPSHOT_NOT_FOUND');
+      if (!fromContent || !toContent) throw Object.assign(new Error('SNAPSHOT_NOT_FOUND'), { code: 'SNAPSHOT_NOT_FOUND' });
       this.diff = diffSnapshots(fromContent, toContent);
       // Publikations-Metadaten-Diff (Titelei/ISBN/Cover …) — die Felder, die der
       // Inhalts-Diff nicht sieht.
       this.pubDiff = diffPublication(a?.publication, b?.publication);
     } catch (e) {
       console.error('[snapshots:compare]', e);
-      this.diffError = e.message || 'compare failed';
+      this.diffError = tFetchError(e);
     } finally {
       this.diffLoading = false;
     }

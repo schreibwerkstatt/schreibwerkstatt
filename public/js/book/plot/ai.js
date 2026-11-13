@@ -9,6 +9,7 @@ import { normTitle } from './constants.js';
 import { EVT } from '../../events.js';
 import { attachDismiss, detachDismiss } from '../../cards/dismiss.js';
 import { computePopoverPos, refinePopoverPos } from '../../popover-anchor.js';
+import { isSelectedBook } from '../../cards/book-guard.js';
 
 export const aiMethods = {
   // ── KI: Brainstorm ──────────────────────────────────────────────────────
@@ -30,7 +31,7 @@ export const aiMethods = {
       });
       // Buch inzwischen gewechselt → resetPlot hat den Lauf-State schon geräumt;
       // kein Poll mehr ans neue Board hängen.
-      if (Alpine.store('nav').selectedBookId !== bookId) return;
+      if (!isSelectedBook(bookId)) return;
       this._brainstormJobId = resp.jobId;
       startPoll(this, {
         timerProp: '_brainstormPollTimer',
@@ -63,7 +64,7 @@ export const aiMethods = {
         },
       });
     } catch (e) {
-      if (Alpine.store('nav').selectedBookId !== bookId) return;
+      if (!isSelectedBook(bookId)) return;
       this.brainstormLoading = false;
       this.errorMessage = app.t('plot.error.brainstorm');
     }
@@ -125,10 +126,10 @@ export const aiMethods = {
     if (!bookId) { this.brainstormRuns = []; return; }
     try {
       const rows = await fetchJson(`/plot/brainstorm-runs?book_id=${bookId}`);
-      if (Alpine.store('nav').selectedBookId !== bookId) return;
+      if (!isSelectedBook(bookId)) return;
       this.brainstormRuns = Array.isArray(rows) ? rows : [];
     } catch (e) {
-      if (Alpine.store('nav').selectedBookId !== bookId) return;
+      if (!isSelectedBook(bookId)) return;
       this.brainstormRuns = [];
     }
   },
@@ -207,7 +208,7 @@ export const aiMethods = {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ book_id: bookId }),
       });
-      if (Alpine.store('nav').selectedBookId !== bookId) return;
+      if (!isSelectedBook(bookId)) return;
       this._consistencyJobId = resp.jobId;
       startPoll(this, {
         timerProp: '_consistencyPollTimer',
@@ -241,7 +242,7 @@ export const aiMethods = {
         },
       });
     } catch (e) {
-      if (Alpine.store('nav').selectedBookId !== bookId) return;
+      if (!isSelectedBook(bookId)) return;
       this.consistencyLoading = false;
       this.errorMessage = app.t('plot.error.consistency');
     }
@@ -345,10 +346,10 @@ export const aiMethods = {
     if (!bookId) { this.consistencyRuns = []; return; }
     try {
       const rows = await fetchJson(`/plot/consistency-runs?book_id=${bookId}`);
-      if (Alpine.store('nav').selectedBookId !== bookId) return;
+      if (!isSelectedBook(bookId)) return;
       this.consistencyRuns = Array.isArray(rows) ? rows : [];
     } catch (e) {
-      if (Alpine.store('nav').selectedBookId !== bookId) return;
+      if (!isSelectedBook(bookId)) return;
       this.consistencyRuns = [];
     }
   },
@@ -414,7 +415,7 @@ export const aiMethods = {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ book_id: bookId }),
       });
-      if (Alpine.store('nav').selectedBookId !== bookId) return;
+      if (!isSelectedBook(bookId)) return;
       this._anchorJobId = resp.jobId;
       startPoll(this, {
         timerProp: '_anchorPollTimer',
@@ -445,7 +446,7 @@ export const aiMethods = {
         },
       });
     } catch (e) {
-      if (Alpine.store('nav').selectedBookId !== bookId) return;
+      if (!isSelectedBook(bookId)) return;
       this.anchorLoading = false;
       this.errorMessage = app.t('plot.error.anchor');
     }

@@ -11,6 +11,9 @@
 // Normalisierung im Browser waere eine zweite Wahrheit darueber, was eine gueltige
 // Domain ist — und die beiden liefen garantiert auseinander.
 
+import { sendJson } from './_shared.js';
+import { tFetchError } from '../../i18n.js';
+
 export const RESEARCH_PROFILE_MAX = 1500;
 
 // Startpunkte fuer die Domain-Eingrenzung. Reine Eingabehilfe: ein Klick haengt
@@ -79,16 +82,7 @@ export const researchMethods = {
     this.researchError = '';
     const sent = this._snapKey('research');
     try {
-      const r = await fetch(`/booksettings/${bookId}/research`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(this._researchSnapshot()),
-      });
-      if (!r.ok) {
-        const d = await r.json().catch(() => ({}));
-        throw new Error(window.__app.tError(d));
-      }
-      const data = await r.json();
+      const data = await sendJson(`/booksettings/${bookId}/research`, 'PUT', this._researchSnapshot());
       // Normalisierten Stand zurückspiegeln: aus einer eingefügten URL wird der
       // Host, eine unbrauchbare Zeile fällt weg. Der User soll das sofort sehen
       // — ausser er hat inzwischen weitergetippt.
@@ -98,7 +92,7 @@ export const researchMethods = {
       window.__app?.invalidateBookSettingsCache?.();
       return true;
     } catch (e) {
-      this.researchError = e.message;
+      this.researchError = tFetchError(e);
       return false;
     } finally {
       this.researchSaving = false;

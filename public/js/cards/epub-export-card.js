@@ -19,7 +19,7 @@ import { EVT } from '../events.js';
 import { setupCardLifecycle } from './card-lifecycle.js';
 import { CARD_REQUEST } from './card-request.js';
 import { headingStyleSlice } from './export-heading-style.js';
-import { exportScopeSlice, exportJobSlice, unnumberedChipsSlice, exportSnapshotSlice } from './export-card-base.js';
+import { exportScopeSlice, exportJobSlice, unnumberedChipsSlice, exportSnapshotSlice, exportSavedFlashSlice } from './export-card-base.js';
 import { isSelectedBook, loadToken } from './book-guard.js';
 
 const _EMPTY_META = () => ({
@@ -49,6 +49,7 @@ export function registerEpubExportCard() {
   window.Alpine.data('epubExportCard', () => ({
     ...exportScopeSlice(),
     ...exportSnapshotSlice(),
+    ...exportSavedFlashSlice(),
     ...headingStyleSlice(),
     ...exportJobSlice({
       jobPath: '/jobs/epub-export',
@@ -78,66 +79,53 @@ export function registerEpubExportCard() {
     _pubLoadSeq: 0,
 
     saving: false,
-    savedAt: null,
-    _savedAtTimer: null,
-    _onBookChanged: null,
-    _onViewReset: null,
 
     init() {
-      // Nur für den Reiter-Wunsch (Palette, Permalink): Laden und Reset hängen
-      // unten an eigenen Listenern. Vor dem Show-Watch angemeldet, damit der
-      // Reiter im selben Flush wie das Einblenden steht.
       this._lifecycle = setupCardLifecycle(this, {
         showFlag: 'showEpubExportCard',
+        showNeedsBookId: false,
         tabRequest: { key: CARD_REQUEST.EPUB_EXPORT_TAB, apply: (tab) => { this.activeTab = tab; }, current: () => this.activeTab },
-      });
-      this.$watch(() => window.__app.showEpubExportCard, async (visible) => {
-        if (!visible) return;
         // Bei jedem Öffnen das Neueste aus /publication ziehen — book_publication
         // ist SSoT (im BookSettings-Publikation-Tab gepflegt); diese Karte hält
         // keinen eigenen Cache. Ein stale `pub` würde beim Full-Replace-Save
         // (savePublication) die dort gepflegte Titelei (Impressum, Widmung, …)
         // mit veralteten Werten überschreiben.
-        await this.loadPublication();
-        this._ensureExportPicked();
-        await this._loadExportSnapshots();
+        onShow: async () => {
+          await this.loadPublication();
+          this._ensureExportPicked();
+          await this._loadExportSnapshots();
+        },
+        // book:changed: laufenden Export räumen + Publikations-Meta neu laden.
+        onBookChanged: async () => {
+          this._resetExportRun();
+          this.pubLoaded = false;
+          this._pubBookId = null;
+          this.exportSnapshotId = '';
+          if (window.__app?.showEpubExportCard) { await this.loadPublication(); await this._loadExportSnapshots(); }
+          else { this.exportSnapshots = []; }
+        },
+        onViewReset: () => {
+          this._resetExportRun();
+          this._clearSavedFlash();
+          this.pub = _EMPTY_META();
+          this.pubLoaded = false;
+          this._pubBookId = null;
+          this.exportScope = 'book';
+          this.exportChapterId = null;
+          this.exportPageId = null;
+          this.exportSnapshots = [];
+          this.exportSnapshotId = '';
+          this.activeTab = 'typography';
+        },
       });
       this._initScopeWatches();
       this._bindPreset(EVT.EXPORT_EPUB_PRESET, '__epubExportPreset');
-
-      // book:changed: laufenden Export räumen + Publikations-Meta neu laden.
-      this._onBookChanged = async () => {
-        this._resetExportRun();
-        this.pubLoaded = false;
-        this._pubBookId = null;
-        this.exportSnapshotId = '';
-        if (window.__app?.showEpubExportCard) { await this.loadPublication(); await this._loadExportSnapshots(); }
-        else { this.exportSnapshots = []; }
-      };
-      window.addEventListener(EVT.BOOK_CHANGED, this._onBookChanged);
-
-      this._onViewReset = () => {
-        this._resetExportRun();
-        if (this._savedAtTimer) { clearTimeout(this._savedAtTimer); this._savedAtTimer = null; }
-        this.pub = _EMPTY_META();
-        this.pubLoaded = false;
-        this._pubBookId = null;
-        this.exportScope = 'book';
-        this.exportChapterId = null;
-        this.exportPageId = null;
-        this.exportSnapshots = [];
-        this.exportSnapshotId = '';
-        this.activeTab = 'typography';
-      };
-      window.addEventListener(EVT.VIEW_RESET, this._onViewReset);
     },
 
     destroy() {
       this._stopPoll();
-      if (this._savedAtTimer)      { clearTimeout(this._savedAtTimer);      this._savedAtTimer = null; }
+      this._clearSavedFlash();
       if (this._exportStatusTimer) { clearTimeout(this._exportStatusTimer); this._exportStatusTimer = null; }
-      if (this._onBookChanged)  window.removeEventListener(EVT.BOOK_CHANGED, this._onBookChanged);
-      if (this._onViewReset)    window.removeEventListener(EVT.VIEW_RESET,   this._onViewReset);
       this._unbindPreset();
       this._lifecycle?.destroy();
     },
@@ -190,9 +178,7 @@ export function registerEpubExportCard() {
         const saved = await r.json();
         if (!isSelectedBook(bookId)) return;
         this.pub = saved;
-        this.savedAt = Date.now();
-        if (this._savedAtTimer) clearTimeout(this._savedAtTimer);
-        this._savedAtTimer = setTimeout(() => { this.savedAt = null; this._savedAtTimer = null; }, 2500);
+        this._flashSaved();
       } finally {
         this.saving = false;
       }

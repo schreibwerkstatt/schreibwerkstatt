@@ -93,10 +93,11 @@ export const hubspotMethods = {
         postSyncJson(`/hubspot/${bookId}/blogs`, body, 'HUBSPOT_LISTS_FAILED'),
         postSyncJson(`/hubspot/${bookId}/authors`, body, 'HUBSPOT_LISTS_FAILED'),
       ]);
+      if (!this._isSelectedBook(bookId)) return;
       this.hubspotBlogs = blogs.blogs || [];
       this.hubspotAuthors = authors.authors || [];
     } catch (e) {
-      this.hubspotError = syncErrorText('hubspot', e.message);
+      if (this._isSelectedBook(bookId)) this.hubspotError = syncErrorText('hubspot', e.message);
     }
   },
 

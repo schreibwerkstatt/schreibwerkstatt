@@ -49,6 +49,7 @@ export function registerBookChatCard() {
         },
         onBookChanged: () => this.resetBookChat(),
         onViewReset: () => this.resetBookChat(),
+        onHide: () => { this._bookChatShown = false; },
         extraListeners: [
           { type: EVT.BOOK_CHAT_RESET, handler: () => this.resetBookChat() },
           { type: EVT.CARD_REQUEST, handler: (e) => {
@@ -58,7 +59,6 @@ export function registerBookChatCard() {
           } },
         ],
       });
-      this.$watch(() => window.__app?.showBookChatCard, (open) => { if (!open) this._bookChatShown = false; });
     },
 
     destroy() { this._lifecycle?.destroy(); },

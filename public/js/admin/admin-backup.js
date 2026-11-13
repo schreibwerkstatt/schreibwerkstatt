@@ -5,7 +5,7 @@
 
 import { fmtBytes, fetchJson } from '../utils.js';
 import { sameData } from '../utils/same-data.js';
-import { tFetchErrorRaw } from '../i18n.js';
+import { tFetchError } from '../i18n.js';
 
 export const adminBackupMethods = {
   // ── Lifecycle ────────────────────────────────────────────────────────────
@@ -26,7 +26,7 @@ export const adminBackupMethods = {
       const info = await fetchJson('/admin/backup/info', { cache: 'no-store' });
       if (!silent || !sameData(info, this.backupInfoData)) this.backupInfoData = info;
     } catch (e) {
-      if (!silent) this.backupError = tFetchErrorRaw(e);
+      if (!silent) this.backupError = tFetchError(e);
     } finally {
       if (!silent) this.backupLoading = false;
     }
@@ -66,7 +66,7 @@ export const adminBackupMethods = {
         body: buf,
       });
     } catch (e) {
-      this.backupRestoreError = this._backupErrLabel(e.code) || e.body?.message || tFetchErrorRaw(e);
+      this.backupRestoreError = this._backupErrLabel(e.code) || e.body?.message || tFetchError(e);
     } finally {
       this.backupRestoring = false;
     }

@@ -304,7 +304,13 @@ export const appJobsCoreMethods = {
   },
 
   // Gemeinsamer Abnehmer für Poll-Antwort und Stream-Event `queue`.
+  // Jede Übernahme zählt `_jobQueueApplyGen` hoch: eine Poll-Antwort, während
+  // deren Flug der Stream schon einen neueren Stand gebracht hat, ist veraltet
+  // und würde einen eben beendeten Job zurückholen — der nächste Snapshot
+  // meldete ihn dann ein zweites Mal als fertig (JOB_FINISHED, Tracking,
+  // CARD_REFRESH doppelt).
   _applyJobQueue(items) {
+    this._jobQueueApplyGen = (this._jobQueueApplyGen || 0) + 1;
     this._detectFinishedJobs(items);
     this.$store.jobs.jobQueueItems = items;
     this._jobQueueFailures = 0;
@@ -313,7 +319,10 @@ export const appJobsCoreMethods = {
 
   async _pollJobQueue() {
     try {
-      this._applyJobQueue(await fetchJson('/jobs/queue'));
+      const gen = this._jobQueueApplyGen || 0;
+      const items = await fetchJson('/jobs/queue');
+      if ((this._jobQueueApplyGen || 0) !== gen) return; // Stream war schneller
+      this._applyJobQueue(items);
     } catch (e) {
       // Ein Setzer schlägt fehl, wenn der Server down ist oder die Session
       // abgelaufen ist – kein Grund für dauerndes Poll-Spam. Nach 2 Fehlern

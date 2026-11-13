@@ -12,7 +12,8 @@
 // Namen (`srcPdfPendingName`) fuer die Anzeige. Ein Reload verliert die Datei —
 // darum auch kein Reconnect des Jobs: ohne Datei gaebe es nichts anzuhaengen.
 
-import { fetchJson } from '../utils.js';
+import { sendJson } from '../utils.js';
+import { tFetchError } from '../i18n.js';
 import { startPoll } from '../cards/job-helpers.js';
 import { checkPdfFile, uploadPdf } from '../upload-pdf.js';
 import { draftFromSource } from './fields.js';
@@ -55,7 +56,7 @@ export const sourcesPdfDraftMethods = {
       this._pollSourcePdf(jobId, file);
     } catch (e) {
       this._srcPdfIdle();
-      this.srcPdfError = e.message;
+      this.srcPdfError = tFetchError(e);
     }
   },
 
@@ -146,7 +147,7 @@ export const sourcesPdfDraftMethods = {
       await uploadPdf(`/sources/${sourceId}/doc`, file);
       _pendingPdf = null;
     } catch (e) {
-      this.sourcesError = window.__app.t('sources.pdfDraft.attachFailed', { error: e.message });
+      this.sourcesError = window.__app.t('sources.pdfDraft.attachFailed', { error: tFetchError(e) });
     }
   },
 
@@ -163,11 +164,7 @@ export const sourcesPdfDraftMethods = {
     this.srcFormError = '';
     try {
       if (!info.existing_linked) {
-        await fetchJson(`/sources/${id}/link`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ book_id: Number(bookId) }),
-        });
+        await sendJson(`/sources/${id}/link`, 'POST', { book_id: Number(bookId) });
       }
       const attach = !info.existing_has_doc && _pendingPdf;
       if (attach) await this._attachPendingPdf(id);
@@ -179,7 +176,7 @@ export const sourcesPdfDraftMethods = {
       this.sourcesNotice = app.t(attach ? 'sources.pdfDraft.usedExistingAttached' : 'sources.pdfDraft.usedExisting');
       this._flashSourcesNotice();
     } catch (e) {
-      this.srcFormError = app.tError(e.body || {}) || e.message;
+      this.srcFormError = tFetchError(e);
     } finally {
       this.sourcesBusy = false;
     }

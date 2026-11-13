@@ -1,7 +1,7 @@
 // Schauplatz-Methoden am Root-Spread (von app-view, Szenen-Trigger, toggleOrteCard
 // und der Schauplatz-Karte gerufen). Pflege-Endpunkte: docs/schauplaetze.md.
 
-import { fetchJson } from '../utils.js';
+import { fetchJson, sendJson } from '../utils.js';
 import { loadToken } from '../cards/book-guard.js';
 import { assignCatalogList } from '../cards/catalog-store.js';
 import { confirmEntityMerge, postEntityMerge, reloadCatalogsAfterMerge } from './entity-merge.js';
@@ -10,20 +10,8 @@ import { confirmEntityMerge, postEntityMerge, reloadCatalogsAfterMerge } from '.
 // generischen Speicherfehler.
 const EDIT_ERRORS = new Set(['NAME_REQUIRED', 'FIELD_TOO_LONG', 'INVALID_LAND', 'PARENT_NOT_FOUND', 'PARENT_CYCLE', 'NOT_FOUND', 'NOT_DELETABLE', 'NO_ANALYSIS']);
 
-async function _send(method, url, body) {
-  const r = await fetch(url, {
-    method,
-    headers: body ? { 'Content-Type': 'application/json' } : undefined,
-    body: body ? JSON.stringify(body) : undefined,
-  });
-  const json = await r.json().catch(() => ({}));
-  if (!r.ok) {
-    const err = new Error(json?.error_code || `HTTP ${r.status}`);
-    err.code = json?.error_code || null;
-    throw err;
-  }
-  return json;
-}
+// Pflege-Requests: `sendJson` wirft mit `code` (error_code) → ortEditErrorText.
+const _send = (method, url, body) => sendJson(url, method, body);
 
 export const orteMethods = {
   // Buchwechsel-/Doppel-Load-Guard: verspätete Antwort des vorigen Buchs (oder

@@ -10,6 +10,7 @@
 // via window.__app. Reine Compute-Funktionen exportiert → ohne Alpine testbar.
 
 import { typRank } from './figur-typen.js';
+import { isChapterItem } from './tree/chapter-items.js';
 
 // Typen, für die dramaturgische Befunde (Lücke / später Auftritt / früher Abgang) zählen.
 const CORE_TYPES = new Set(['hauptfigur', 'antagonist', 'mentor']);
@@ -168,7 +169,7 @@ export const presenceMethods = {
     const root = window.__app;
     const tree = Alpine.store('nav').tree;
     const chapterOrder = this._memo('presenceAxis', [tree, root._chapterLabelMap], () =>
-      (tree || []).filter(i => i.type === 'chapter' && !i.solo)
+      (tree || []).filter(i => isChapterItem(i))
         .map(c => ({ value: c.id, label: root._kapitelLabel(c.id), num: root._kapitelNummer(c.id) })));
     return this._memo('presence', [figuren, chapterOrder], () => computePresence(figuren, chapterOrder));
   },

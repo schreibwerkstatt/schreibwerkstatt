@@ -3,7 +3,9 @@
 // Gespreadet in figurenCard (State über soziogrammState(), Methoden hier).
 
 import { startPoll } from '../cards/job-helpers.js';
-import { tnRaw } from '../i18n.js';
+import { tnRaw, tFetchError } from '../i18n.js';
+import { sendJson } from '../utils/net.js';
+import { isSelectedBook } from '../cards/book-guard.js';
 
 const _t = (k, p) => window.__app.t(k, p);
 
@@ -67,15 +69,10 @@ export const soziogrammControlMethods = {
       this.soziogrammNaeheStatus = status;
     };
     try {
-      const res = await fetch('/jobs/figuren-naehe', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        // Alles offen eingeschätzt → ein erneuter Klick schätzt alle neu ein.
-        body: JSON.stringify({ book_id: bookId, alle: offen === 0 }),
-      });
-      const j = await res.json().catch(() => ({}));
-      if (!res.ok || !j?.jobId) throw new Error(window.__app.tError(j) || _t('graph.sozio.naeheError'));
-      if (String(Alpine.store('nav').selectedBookId) !== String(bookId)) return;
+      // Alles offen eingeschätzt → ein erneuter Klick schätzt alle neu ein.
+      const j = await sendJson('/jobs/figuren-naehe', 'POST', { book_id: bookId, alle: offen === 0 });
+      if (!j?.jobId) throw new Error(_t('graph.sozio.naeheError'));
+      if (!isSelectedBook(bookId)) { finish(''); return; }
       startPoll(this, {
         timerProp: '_soziogrammNaehePollTimer',
         jobId: j.jobId,
@@ -89,7 +86,7 @@ export const soziogrammControlMethods = {
         onNotFound: () => finish(_t('graph.sozio.naeheError')),
       });
     } catch (e) {
-      finish(e.message);
+      finish(tFetchError(e));
     }
   },
 };

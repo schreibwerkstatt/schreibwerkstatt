@@ -7,7 +7,7 @@
 import { loadChart } from '../lazy-libs.js';
 import { barDataset, categoryAxis, chartOptions, chartPalette, valueAxis } from '../cards/chart-style.js';
 import { FEATURES } from '../cards/feature-registry.js';
-import { localeTag, tzOpts } from '../utils.js';
+import { fmtDateTime } from '../utils.js';
 
 // Abgeleitete Zeilen ausserhalb des reaktiven Karten-States memoisieren
 // (Muster _matrixMemo in admin-usage.js): Schluessel ist das Report-Objekt.
@@ -36,7 +36,7 @@ export const adminUsageBehaviorMethods = {
   adminUsageDate(iso) {
     if (!iso) return '—';
     const d = new Date(iso.length <= 10 ? iso + 'T12:00:00Z' : iso);
-    return d.toLocaleDateString(localeTag(Alpine.store('shell').uiLocale), tzOpts({ day: '2-digit', month: '2-digit', year: 'numeric' }));
+    return fmtDateTime(d, Alpine.store('shell').uiLocale, { day: '2-digit', month: '2-digit', year: 'numeric' });
   },
 
   // Alle Karten der Registry, auch die ohne eine einzige Oeffnung im Zeitraum —

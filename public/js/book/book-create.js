@@ -11,6 +11,7 @@
 
 import { contentRepo } from '../repo/content.js';
 import { fetchJson } from '../utils.js';
+import { tFetchError } from '../i18n.js';
 
 export const bookCreateMethods = {
   openCreateBook() {
@@ -134,7 +135,7 @@ export const bookCreateMethods = {
       // wären ein Umweg vor der ersten Zeile.
       window.location.hash = '#book/' + created.id;
     } catch (e) {
-      const msg = e.detail || e.code || e.message || String(e);
+      const msg = e.detail || tFetchError(e);
       this.bookCreateError = app.t('book.create.errorGeneric', { msg });
     } finally {
       this.bookCreateBusy = false;

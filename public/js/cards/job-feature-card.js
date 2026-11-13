@@ -6,7 +6,7 @@
 import { fetchJson, escHtml } from '../utils.js';
 import { startPoll, runningJobStatus } from './job-helpers.js';
 import { lsSet } from '../safe-storage.js';
-import { tFetchErrorRaw } from '../i18n.js';
+import { tFetchError } from '../i18n.js';
 import { isSelectedBook } from './book-guard.js';
 
 // cfg:
@@ -44,9 +44,9 @@ export function createCardJobFeature(cfg) {
   function jobErrHtml(job) {
     return `<span class="error-msg">${window.__app.t('common.errorColon')}${escHtml(window.__app.t(job.error, job.errorParams))}</span>`;
   }
-  // Server-Fehler mit `error_code` übersetzt (tFetchErrorRaw), sonst die rohe Meldung.
+  // Server-Fehler mit `error_code` übersetzt (tFetchError), sonst die rohe Meldung.
   function errHtml(err) {
-    return `<span class="error-msg">${window.__app.t('common.errorColon')}${escHtml(tFetchErrorRaw(err))}</span>`;
+    return `<span class="error-msg">${window.__app.t('common.errorColon')}${escHtml(tFetchError(err))}</span>`;
   }
 
   const startPollMethod = function (jobId) {

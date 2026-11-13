@@ -172,3 +172,38 @@ export function locateApprox(rootEl, anchor) {
   const range = rangeFromOffsets(block, start, end);
   return range ? { range, approx: true } : null;
 }
+
+// Anker-Objekt aus einer Kommentar-Zeile der API (`anchor_*`-Spalten).
+export function anchorFromRow(row) {
+  return { bid: row.anchor_bid, quote: row.anchor_quote, start: row.anchor_start, end: row.anchor_end };
+}
+
+// Anker-Y einer Kommentar-Karte relativ zur Layer-Oberkante (`layerTop`,
+// viewport-px). Erst über die lokalisierte Range (Quote im Block gefunden);
+// sonst — „Stelle geändert", Quote weg, Block noch da — über die Block-
+// Oberkante; beides weg (Block gelöscht) → null. `skipRange`: Stelle ist
+// bekanntermassen geändert, gleich die Block-Oberkante nehmen.
+// Geteilt von Share-Reader-Leiste und beiden SPA-Leisten.
+export function anchorYOf(rootEl, anchor, layerTop, { skipRange = false } = {}) {
+  if (!anchor) return null;
+  if (!skipRange) {
+    const range = locateRange(rootEl, anchor);
+    if (range) { const r = range.getBoundingClientRect(); if (r.height || r.width) return r.top - layerTop; }
+  }
+  if (anchor.bid) {
+    let blk = null;
+    try { blk = rootEl.querySelector(`[data-bid="${CSS.escape(String(anchor.bid))}"]`); } catch {}
+    if (blk) return blk.getBoundingClientRect().top - layerTop;
+  }
+  return null;
+}
+
+// Fenster weich so scrollen, dass `range` `offset` px unter der Oberkante steht
+// (Platz für Kopfleiste). Ohne messbare Höhe (Range kollabiert/abgehängt) nichts.
+// Geteilt von Share-Reader (offset 120: schmale Leser-Kopfzeile) und den zwei
+// SPA-Leisten (140: App-Kopf + Karten-Kopf).
+export function scrollWindowToRange(range, offset) {
+  const r = range?.getBoundingClientRect?.();
+  if (!r || !r.height) return;
+  window.scrollTo({ top: window.scrollY + r.top - offset, behavior: 'smooth' });
+}

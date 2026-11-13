@@ -10,6 +10,7 @@
 import { fetchJson, sendJson } from '../../utils/net.js';
 import { statusLabelKey, weakestStatus } from '../../redaktion/status.js';
 import { bedenkenHinweis } from '../../redaktion/bedenken.js';
+import { isSelectedBook } from '../../cards/book-guard.js';
 
 // Memos ausserhalb von Alpine: in den reaktiven Root geschrieben, loeste jedes
 // Nachtragen (Map.set im Render) einen erneuten Render aus. Es gibt genau eine
@@ -35,7 +36,7 @@ export const treeEditStatusMethods = {
     try {
       r = await fetchJson('/redaktion/' + bookId, { signal });
     } catch { return; }
-    if (String(this.$store.nav.selectedBookId) !== String(bookId)) return;
+    if (!isSelectedBook(bookId)) return;
     this._applyPageStatus(r);
   },
 

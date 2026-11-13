@@ -14,6 +14,7 @@
 // Ganzwort-Treffer sein und mal nicht.
 
 import { isWordChar } from '../utils.js';
+import { highlightRegistry, registerHighlight } from './highlights.js';
 
 const isFindWordChar = (ch) => !!ch && (isWordChar(ch) || ch === '_');
 
@@ -171,9 +172,9 @@ export function createHighlightPair(allName, currentName) {
   let hlAll = null, hlCurrent = null;
 
   const ensure = () => {
-    if (typeof CSS === 'undefined' || !CSS.highlights || typeof Highlight === 'undefined') return false;
-    if (!hlAll) { hlAll = new Highlight(); CSS.highlights.set(allName, hlAll); }
-    if (!hlCurrent) { hlCurrent = new Highlight(); CSS.highlights.set(currentName, hlCurrent); }
+    if (!highlightRegistry()) return false;
+    if (!hlAll) hlAll = registerHighlight(allName);
+    if (!hlCurrent) hlCurrent = registerHighlight(currentName);
     return true;
   };
 

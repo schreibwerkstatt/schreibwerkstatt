@@ -140,22 +140,23 @@ export function tErrorRaw(response) {
   return tRaw('common.unknownError');
 }
 
-/** Fehlertext für einen `fetchJson`-Fehler (utils/net.js): Backend-Body über
- *  tErrorRaw, reiner Netzwerkausfall (status 0) als eigener Hinweis. Nie die
- *  rohe `HTTP 4xx`-Message — die ist für den User kein Satz. */
+/** Fehlertext für jeden geworfenen Request-Fehler — `fetchJson`/`sendJson`
+ *  (utils/net.js), roher `fetch` oder ein schon übersetzter `new Error(text)`:
+ *  - Fehlerantwort des Servers (`body`)  → tErrorRaw: `error.CODE` samt params,
+ *                                           Legacy-Freitext, sonst unknownError
+ *  - nur `code` ohne body                → `error.CODE`, sonst unknownError
+ *  - Netz weg (`status 0`, TypeError)    → common.networkError
+ *  - HTTP-Status ohne Antwort-Body       → common.unknownError
+ *  - sonst (eigener `new Error(text)`)   → dessen Message
+ *  Nie die rohe `HTTP 502`- oder „Failed to fetch"-Message: kein Satz für den
+ *  User und nicht übersetzt. */
 export function tFetchError(err) {
-  if (err?.body) return tErrorRaw(err.body);
-  if (err?.status === 0) return tRaw('common.networkError');
-  return tRaw('common.unknownError');
-}
-
-/** Fehlertext für einen geworfenen `fetchJson`/`sendJson`-Fehler (utils/net.js):
- *  übersetzter `error_code` (`error.CODE` samt `params`), ohne Übersetzung
- *  common.unknownError (Code nur in der Konsole), ohne Code die Error-Message. */
-export function tFetchErrorRaw(err) {
-  const code = err?.code;
-  if (code) return _errorCodeText(code, err.body?.params) ?? tRaw('common.unknownError');
-  return err?.message || tRaw('common.unknownError');
+  if (!err) return tRaw('common.unknownError');
+  if (err.body) return tErrorRaw(err.body);
+  if (err.code) return _errorCodeText(err.code, null) ?? tRaw('common.unknownError');
+  if (err.status === 0 || err.name === 'TypeError') return tRaw('common.networkError');
+  if (typeof err.status === 'number') return tRaw('common.unknownError');
+  return err.message || tRaw('common.unknownError');
 }
 
 // Alpine-Methoden: `t` referenziert `this.$store.shell.uiLocale`, damit Alpine bei Sprachwechsel re-evaluiert.

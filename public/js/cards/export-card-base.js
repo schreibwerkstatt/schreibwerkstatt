@@ -15,7 +15,8 @@
 // `tError` → `error.<code>`) — letzteres bleibt der `errorFor`-Hook.
 
 import { startPoll } from './job-helpers.js';
-import { downloadHref, downloadBlob } from '../utils.js';
+import { downloadHref, downloadBlob, fetchJson } from '../utils.js';
+import { loadToken } from './book-guard.js';
 
 // ── Scope-Auswahl (Buch/Kapitel/Seite) ───────────────────────────────────────
 // Vollständig format-unabhängig, keine Config. Liefert State + Methoden +
@@ -123,21 +124,25 @@ export function exportSnapshotSlice() {
   return {
     exportSnapshots: [],
     exportSnapshotId: '',   // '' = aktueller Stand (Live-Buch)
+    // Lade-Token (book-guard.js#loadToken) für _loadExportSnapshots.
+    _exportSnapLoadSeq: 0,
 
     async _loadExportSnapshots() {
       const bid = Alpine.store('nav').selectedBookId;
       if (!bid) { this.exportSnapshots = []; this.exportSnapshotId = ''; return; }
+      const isCurrent = loadToken(this, '_exportSnapLoadSeq', bid);
+      let d;
       try {
-        const r = await fetch(`/snapshots/${parseInt(bid)}`);
-        if (!r.ok) { this.exportSnapshots = []; this.exportSnapshotId = ''; return; }
-        const d = await r.json();
-        this.exportSnapshots = Array.isArray(d.snapshots) ? d.snapshots : [];
-        // Auswahl invalidieren, wenn die gemerkte Fassung nicht mehr existiert.
-        if (this.exportSnapshotId && !this.exportSnapshots.some(s => String(s.id) === String(this.exportSnapshotId))) {
-          this.exportSnapshotId = '';
-        }
+        d = await fetchJson(`/snapshots/${parseInt(bid)}`);
       } catch {
-        this.exportSnapshots = [];
+        d = null;
+      }
+      // Buchwechsel (oder jüngerer Load) während des Fetch: Antwort verwerfen.
+      if (!isCurrent()) return;
+      if (!d) { this.exportSnapshots = []; this.exportSnapshotId = ''; return; }
+      this.exportSnapshots = Array.isArray(d.snapshots) ? d.snapshots : [];
+      // Auswahl invalidieren, wenn die gemerkte Fassung nicht mehr existiert.
+      if (this.exportSnapshotId && !this.exportSnapshots.some(s => String(s.id) === String(this.exportSnapshotId))) {
         this.exportSnapshotId = '';
       }
     },
@@ -167,6 +172,29 @@ export function exportSnapshotSlice() {
       if (this.exportScope !== 'book') return null;
       const id = parseInt(this.exportSnapshotId);
       return Number.isFinite(id) && id > 0 ? id : null;
+    },
+  };
+}
+
+// ── „Gespeichert"-Hinweis ─────────────────────────────────────────────────────
+// Nach einem erfolgreichen Speichern (Profil bzw. Publikations-Meta) zeigt die
+// Karte kurz „Gespeichert" (`savedAt` gesetzt), danach verschwindet der Hinweis.
+const SAVED_FLASH_MS = 2500;
+export function exportSavedFlashSlice() {
+  return {
+    savedAt: null,
+    _savedAtTimer: null,
+
+    _flashSaved() {
+      this.savedAt = Date.now();
+      if (this._savedAtTimer) clearTimeout(this._savedAtTimer);
+      this._savedAtTimer = setTimeout(() => { this.savedAt = null; this._savedAtTimer = null; }, SAVED_FLASH_MS);
+    },
+
+    // Hinweis + Timer räumen (view:reset, destroy).
+    _clearSavedFlash() {
+      if (this._savedAtTimer) { clearTimeout(this._savedAtTimer); this._savedAtTimer = null; }
+      this.savedAt = null;
     },
   };
 }

@@ -1,6 +1,7 @@
 // Root-seitige Einstiegspunkte für die Kapitel-Bewertung (Sidebar + Hash-Router).
 // Job-Flow, Render, State + History leben in Alpine.data('kapitelReviewCard').
 import { _withCardTransition, endViewSwitch, startViewSwitch } from '../app/app-view/_shared.js';
+import { isChapterItem } from './tree/chapter-items.js';
 
 // Stabiler Leerwert fuer den Memo-Schluessel (ein frisches `{}` je Aufruf brach ihn).
 const NO_STATS = Object.freeze({});
@@ -58,18 +59,6 @@ export const kapitelReviewMethods = {
     this.gotoChapterById(chapterId);
   },
 
-  // Kapitel per Name (Analyse-Listen speichern Namen, keine IDs). Match per
-  // exaktem Namen, dann case-insensitive; ohne Treffer der Seiten-Fallback.
-  async openKapitelByName(name) {
-    if (!name) return;
-    const chapters = (this.$store.nav.tree || []).filter(i => i.type === 'chapter' && !i.solo);
-    const lc = String(name).toLowerCase();
-    const ch = chapters.find(c => c.name === name)
-      || chapters.find(c => c.name.toLowerCase() === lc);
-    if (ch) { await this.openChapterById(ch.id); return; }
-    this.gotoStelle(name, null);
-  },
-
   // Jedes Buch mit mindestens einem Kapitel, das Text traegt (eigene Abschnitte
   // oder Unterkapitel), hat eine Kapitelbewertung — auch wenn jedes Kapitel aus
   // genau einem Abschnitt besteht: die Bewertung (Achsen, Belege, Dashboard) ist
@@ -99,7 +88,7 @@ export const kapitelReviewMethods = {
     if (memo && memo.tree === tree && memo.treeLen === tree.length && memo.rev === rev
         && memo.pages === pages && memo.pagesLen === pages.length && memo.ts === ts) return memo.val;
     const hasText = (p) => { const e = ts[p.id]; return !e || e.chars > 0; };
-    const val = tree.some(i => i.type === 'chapter' && !i.solo && (i.pages || []).some(hasText));
+    const val = tree.some(i => isChapterItem(i) && (i.pages || []).some(hasText));
     this._chapterReviewEligibleMemo = {
       tree, treeLen: tree.length, rev, pages, pagesLen: pages.length, ts, val,
     };
@@ -110,10 +99,10 @@ export const kapitelReviewMethods = {
     if (!this._bookQualifiesForChapterReview()) return [];
     const tree = this.$store.nav.tree || [];
     const hasSub = (id) => tree.some(i =>
-      i.type === 'chapter' && !i.solo && String(i.parent_id) === String(id)
+      isChapterItem(i) && String(i.parent_id) === String(id)
     );
     return tree
-      .filter(i => i.type === 'chapter' && !i.solo && (i.pages.length > 0 || hasSub(i.id)))
+      .filter(i => isChapterItem(i) && (i.pages.length > 0 || hasSub(i.id)))
       .map(c => ({ id: c.id, name: c.name, pageCount: c.pages.length }));
   },
 };

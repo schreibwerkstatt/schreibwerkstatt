@@ -1,7 +1,7 @@
 // Teil von bookSettingsMethods (siehe Facade book-settings.js).
 // Reiter «Buch» und «Kontext»: book_settings (/booksettings/:id) samt Buchname,
 // Stilprofil und Kategorie. Speichern läuft über save-paths.js.
-import { EVT, contentRepo, countryOptions, fetchJson } from './_shared.js';
+import { EVT, contentRepo, countryOptions, fetchJson, sendJson } from './_shared.js';
 import { DEFAULT_DAILY_GOAL_CHARS } from '../../utils.js';
 import { tFetchError } from '../../i18n.js';
 
@@ -92,22 +92,14 @@ export const settingsMethods = {
       if (!name) throw new Error(window.__app.t('book.create.errorEmpty'));
       const renamed = name !== (currentBook?.name || '');
       if (renamed) await contentRepo.updateBook(bookId, { name });
-      const r = await fetch(`/booksettings/${bookId}`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload),
-      });
-      if (!r.ok) {
-        const data = await r.json().catch(() => ({}));
-        throw new Error(window.__app.tError(data));
-      }
+      await sendJson(`/booksettings/${bookId}`, 'PUT', payload);
       this._settleSave('settings', sent);
       this.bookSettingsSaved = true;
       this._flash('bookSettingsSaved');
       if (this._isSelectedBook(bookId)) this._afterSettingsSaved(payload, currentBook, renamed);
       return true;
     } catch (e) {
-      this.bookSettingsError = e.message;
+      this.bookSettingsError = tFetchError(e);
       return false;
     } finally {
       this.bookSettingsSaving = false;
@@ -143,17 +135,12 @@ export const settingsMethods = {
     if (!bookId || !this.bookAccessIsOwner()) return;
     this.bookAccessError = '';
     try {
-      const r = await fetch(`/booksettings/${bookId}`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ allow_lektor_book_chat: value ? 1 : 0 }),
-      });
-      if (!r.ok) { const d = await r.json().catch(() => ({})); throw new Error(window.__app.tError(d)); }
+      await sendJson(`/booksettings/${bookId}`, 'PUT', { allow_lektor_book_chat: value ? 1 : 0 });
       window.__app.invalidateBookSettingsCache?.();
     } catch (e) {
       if (this._isFormBook(bookId)) {
         this.bookSettingsAllowLektorBookChat = !value;
-        this.bookAccessError = e.message;
+        this.bookAccessError = tFetchError(e);
       }
     }
   },
@@ -169,18 +156,12 @@ export const settingsMethods = {
     this.stilprofilGenerating = true;
     this.stilprofilError = '';
     try {
-      const res = await fetch('/jobs/stilprofil', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ book_id: Number(bookId) }),
-      });
-      const data = await res.json().catch(() => ({}));
-      if (!res.ok) throw new Error(window.__app.tError(data));
+      const data = await sendJson('/jobs/stilprofil', 'POST', { book_id: Number(bookId) });
       this.stilprofilJobId = data.jobId;
       window.dispatchEvent(new CustomEvent(EVT.JOB_ENQUEUED, { detail: { type: 'stilprofil', jobId: data.jobId } }));
     } catch (e) {
       this.stilprofilGenerating = false;
-      this.stilprofilError = e.message;
+      this.stilprofilError = tFetchError(e);
     }
   },
 
@@ -260,20 +241,12 @@ export const settingsMethods = {
     const raw = value !== undefined ? value : this.bookCategoryId;
     const cid = raw === '' || raw === null || raw === undefined ? null : parseInt(raw, 10);
     try {
-      const r = await fetch(`/books/${bookId}/category`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ category_id: cid }),
-      });
-      if (!r.ok) {
-        const data = await r.json().catch(() => ({}));
-        throw new Error(window.__app.tError(data));
-      }
+      await sendJson(`/books/${bookId}/category`, 'PUT', { category_id: cid });
       // Eine zuvor gemeldete «Kategorie fehlt» ist mit der Auswahl erledigt.
       if (cid && this.bookSettingsError === window.__app.t('book.category.required')) this.bookSettingsError = '';
       await window.__app.loadBooks({ skipPages: true });
     } catch (e) {
-      this.bookSettingsError = e.message;
+      this.bookSettingsError = tFetchError(e);
     }
   },
 

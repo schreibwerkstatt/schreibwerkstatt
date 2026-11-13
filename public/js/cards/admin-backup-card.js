@@ -22,11 +22,11 @@ export function registerAdminBackupCard() {
     _lifecycle: null,
 
     init() {
-      this.$watch(() => window.__app.showAdminBackupCard, async (visible) => {
-        if (visible) await this.backupEnter();
-      });
       this._lifecycle = setupCardLifecycle(this, {
         name: 'adminBackup',
+        showFlag: 'showAdminBackupCard',
+        showNeedsBookId: false,
+        onShow: () => this.backupEnter(),
         refreshNeedsBookId: false,
         onCardRefresh: () => this.backupRefresh(),
         wake: () => this._backupLoadInfo({ silent: true }),

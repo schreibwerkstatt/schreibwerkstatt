@@ -13,7 +13,7 @@ const REPO = new URL('../../', import.meta.url).pathname;
 
 function fakeCard(overrides = {}) {
   globalThis.Alpine = { store: () => ({ selectedBookId: '7' }) };
-  globalThis.window = { __app: { t: (k) => k } };
+  globalThis.window = { __app: { t: (k) => k }, Alpine: globalThis.Alpine };
   const saved = [];
   const card = {
     ...savePathMethods,

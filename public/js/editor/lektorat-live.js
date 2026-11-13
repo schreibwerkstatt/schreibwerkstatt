@@ -44,6 +44,7 @@ import { stripLektoratMarks } from './shared/html-clean.js';
 import { isNoChange } from './shared/save-pipeline.js';
 import { loadQuoteStyle } from './shared/quote-normalize/api.js';
 import { patchBookedLists, mergeByOriginal, withoutOriginals, bookingEntry } from './lektorat-booking.js';
+import { highlightRegistry, registerHighlight } from './shared/highlights.js';
 
 const LIVE_RELOCATE_MS = 500;
 // Ein Save, der beim Start eines Laufs schon unterwegs ist, wird abgewartet
@@ -80,13 +81,10 @@ let _undone = [];
 let _anchorText = null;
 
 function _highlights() {
-  if (typeof CSS === 'undefined' || !CSS.highlights || typeof Highlight === 'undefined') return null;
+  if (!highlightRegistry()) return null;
   if (!_hl) {
     _hl = {};
-    for (const k of [...KINDS, 'ambiguous', 'active']) {
-      _hl[k] = new Highlight();
-      CSS.highlights.set('lektorat-live-' + k, _hl[k]);
-    }
+    for (const k of [...KINDS, 'ambiguous', 'active']) _hl[k] = registerHighlight('lektorat-live-' + k);
   }
   return _hl;
 }

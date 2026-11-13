@@ -121,7 +121,8 @@ test('Nav-Store: definiert books/selectedBookId/pages/tree', () => {
   const navSrc = readFileSync(NAV_STORE, 'utf8');
   assert.match(navSrc, /Alpine\.store\(\s*'nav'/, "nav-store.js muss Alpine.store('nav') registrieren");
   for (const f of NAV_FIELDS) {
-    assert.match(navSrc, new RegExp(`\\b${f}\\s*:`), `nav-store.js muss '${f}' definieren`);
+    // Feld oder Accessor (selectedBookId normalisiert per Getter/Setter auf String).
+    assert.match(navSrc, new RegExp(`\\b${f}\\s*:|\\bget\\s+${f}\\s*\\(`), `nav-store.js muss '${f}' definieren`);
   }
 });
 

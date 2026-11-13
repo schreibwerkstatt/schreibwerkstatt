@@ -7,10 +7,11 @@
 // Gespreadet in cards/redundanz-card.js.
 
 import { startPoll } from '../cards/job-helpers.js';
-import { tRaw } from '../i18n.js';
-import { tzOpts } from '../utils/date.js';
-import { fetchJson } from '../utils/net.js';
+import { tRaw, tFetchError } from '../i18n.js';
+import { fmtDateTime } from '../utils/date.js';
+import { fetchJson, sendJson } from '../utils/net.js';
 import { mergeFigurPair, figurMergeMessage } from './figur-merge.js';
+import { isSelectedBook } from '../cards/book-guard.js';
 
 // Fallback-Bänder (bge-m3-Cosinus), falls /config noch nicht geladen ist. Die
 // massgeblichen Werte stehen in Alpine.store('config').redundancyThresholds
@@ -77,12 +78,12 @@ export const redundanzMethods = {
     if (!bookId || !this.$store.config?.semanticSearchEnabled) { this.redundanzIndexInfo = null; return; }
     try {
       const r = await fetch('/search/semantic/status?book_id=' + encodeURIComponent(bookId), { credentials: 'same-origin' });
-      if (Alpine.store('nav').selectedBookId !== bookId) return;
+      if (!isSelectedBook(bookId)) return;
       if (!r.ok) { this.redundanzIndexInfo = null; return; }
       const j = await r.json();
-      if (Alpine.store('nav').selectedBookId !== bookId) return;
+      if (!isSelectedBook(bookId)) return;
       this.redundanzIndexInfo = j.enabled ? j : null;
-    } catch { if (Alpine.store('nav').selectedBookId === bookId) this.redundanzIndexInfo = null; }
+    } catch { if (isSelectedBook(bookId)) this.redundanzIndexInfo = null; }
   },
 
   // Zuletzt gespeichertes Ergebnis dieses Users. Läuft gerade ein Job, gewinnt
@@ -92,7 +93,7 @@ export const redundanzMethods = {
     if (!bookId || !this.redundanzAvailable) return;
     try {
       const j = await fetchJson('/redundancy/' + encodeURIComponent(bookId));
-      if (Alpine.store('nav').selectedBookId !== bookId) return;
+      if (!isSelectedBook(bookId)) return;
       this.redundanzDismissedCount = j.dismissedCount || 0;
       if (!this.redundanzLoading && !this.redundanzResult && j.result) {
         this._redundanzApplyResult(j.result);
@@ -112,7 +113,7 @@ export const redundanzMethods = {
     const active = (type) => fetchJson(`/jobs/active?type=${type}&book_id=${encodeURIComponent(bookId)}`)
       .then(j => j?.jobId || null).catch(() => null);
     const [scanJob, indexJob] = await Promise.all([active('redundancy'), active('embed-index')]);
-    if (Alpine.store('nav').selectedBookId !== bookId) return;
+    if (!isSelectedBook(bookId)) return;
     if (scanJob && !this._redundanzPollTimer) {
       this.redundanzLoading = true;
       this.redundanzProgress = 0;
@@ -133,22 +134,18 @@ export const redundanzMethods = {
     this.redundanzProgress = 0;
     this.redundanzStatus = tRaw('redundanz.running');
     try {
-      const r = await fetch('/jobs/redundancy', {
-        method: 'POST', credentials: 'same-origin',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          book_id: bookId,
-          threshold: this.redundanzThresholdValue(),
-          skip_adjacent: !!this.redundanzSkipAdjacent,
-        }),
+      const j = await sendJson('/jobs/redundancy', 'POST', {
+        book_id: bookId,
+        threshold: this.redundanzThresholdValue(),
+        skip_adjacent: !!this.redundanzSkipAdjacent,
       });
-      const j = await r.json().catch(() => ({}));
       // Buch während des POST gewechselt: den Job des alten Buches nicht in der
-      // (schon zurückgesetzten) Anzeige des neuen pollen.
-      if (Alpine.store('nav').selectedBookId !== bookId) return;
-      if (!r.ok || !j.jobId) {
+      // (schon zurückgesetzten) Anzeige des neuen pollen — und den Lade-Marker
+      // nicht stehen lassen, sofern dort kein eigener Lauf pollt.
+      if (!isSelectedBook(bookId)) { if (!this._redundanzPollTimer) this.redundanzLoading = false; return; }
+      if (!j?.jobId) {
         this.redundanzLoading = false;
-        this.redundanzStatus = j.error_code === 'EMBED_DISABLED' ? tRaw('redundanz.needBackend') : tRaw('redundanz.error');
+        this.redundanzStatus = tRaw('redundanz.error');
         return;
       }
       // Ein Lauf pro Buch: läuft schon einer (evtl. mit anderer Schwelle), kommt
@@ -156,9 +153,11 @@ export const redundanzMethods = {
       if (j.existing) this.redundanzStatus = tRaw('redundanz.alreadyRunning');
       this._pollRedundanz(j.jobId);
     } catch (e) {
-      if (Alpine.store('nav').selectedBookId !== bookId) return;
+      if (!isSelectedBook(bookId)) { if (!this._redundanzPollTimer) this.redundanzLoading = false; return; }
       this.redundanzLoading = false;
-      this.redundanzStatus = tRaw('common.errorColon') + (e.message || '');
+      this.redundanzStatus = e.code === 'EMBED_DISABLED' ? tRaw('redundanz.needBackend')
+        : e.status ? tRaw('redundanz.error')
+        : tRaw('common.errorColon') + tFetchError(e);
     }
   },
 
@@ -191,21 +190,16 @@ export const redundanzMethods = {
     this.redundanzIndexing = true;
     this.redundanzStatus = '';
     try {
-      const r = await fetch('/jobs/embed-index', {
-        method: 'POST', credentials: 'same-origin',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ book_id: bookId }),
-      });
-      const j = await r.json().catch(() => ({}));
-      if (Alpine.store('nav').selectedBookId !== bookId) return;
-      if (!r.ok || !j.jobId) {
+      const j = await sendJson('/jobs/embed-index', 'POST', { book_id: bookId });
+      if (!isSelectedBook(bookId)) { if (!this._redundanzIndexPollTimer) this.redundanzIndexing = false; return; }
+      if (!j?.jobId) {
         this.redundanzIndexing = false;
         this.redundanzStatus = tRaw('redundanz.indexError');
         return;
       }
       this._pollRedundanzIndex(j.jobId);
     } catch {
-      if (Alpine.store('nav').selectedBookId !== bookId) return;
+      if (!isSelectedBook(bookId)) { if (!this._redundanzIndexPollTimer) this.redundanzIndexing = false; return; }
       this.redundanzIndexing = false;
       this.redundanzStatus = tRaw('redundanz.indexError');
     }
@@ -273,7 +267,7 @@ export const redundanzMethods = {
     const r = this.redundanzResult;
     if (!r) return '';
     const date = r.createdAt
-      ? new Date(r.createdAt).toLocaleString(undefined, tzOpts({ dateStyle: 'medium', timeStyle: 'short' }))
+      ? fmtDateTime(r.createdAt, Alpine.store('shell').uiLocale)
       : '';
     return tRaw('redundanz.meta.run', { threshold: Number(r.threshold).toFixed(2), date });
   },
@@ -299,11 +293,8 @@ export const redundanzMethods = {
     if (this.redundanzBusyKey) return;
     this.redundanzBusyKey = key;
     try {
-      const j = await fetchJson(`/redundancy/${encodeURIComponent(bookId)}/dismissals`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ kind, a_id: pair.a_id, b_id: pair.b_id }),
-      });
+      const j = await sendJson(`/redundancy/${encodeURIComponent(bookId)}/dismissals`, 'POST',
+        { kind, a_id: pair.a_id, b_id: pair.b_id });
       this.redundanzDismissedCount = j.dismissedCount ?? this.redundanzDismissedCount + 1;
       const drop = (list) => (list || []).filter(p => pairKey(kind, p) !== key);
       if (kind === 'page') {
@@ -378,7 +369,7 @@ export const redundanzMethods = {
     this.redundanzBusyKey = key;
     try {
       const data = await mergeFigurPair(bookId, source, target);
-      if (!data || String(Alpine.store('nav').selectedBookId) !== String(bookId)) return;
+      if (!data || !isSelectedBook(bookId)) return;
       // Die Quelle gibt es nicht mehr: jedes Paar mit ihr ist erledigt.
       const gone = source.rowId;
       const f = this.redundanzResult.figures || {};
@@ -391,7 +382,7 @@ export const redundanzMethods = {
       this.redundanzStatus = figurMergeMessage(data, source, target);
     } catch (e) {
       console.error('[redundanz] zusammenführen:', e);
-      this.redundanzStatus = e.message || tRaw('redundanz.mergeError');
+      this.redundanzStatus = tFetchError(e) || tRaw('redundanz.mergeError');
     } finally {
       this.redundanzBusyKey = null;
     }

@@ -2,6 +2,7 @@
 import { contentRepo } from '../repo/content.js';
 import { EVT } from '../events.js';
 import { isTempId } from '../repo/structure-queue.js';
+import { tFetchError } from '../i18n.js';
 
 export const persistMethods = {
   async _rerender() {
@@ -82,7 +83,7 @@ export const persistMethods = {
         await root.loadPages({ fresh: true });
         return false;
       }
-      root.setStatus(root.t(errKey, { detail: e.message }));
+      root.setStatus(root.t(errKey, { detail: tFetchError(e) }));
       // Bei Fehler einmal voll resynchronisieren — Server-Zustand könnte
       // partiell mutiert sein. loadPages feuert `pages:loaded`, der Card-
       // Listener zieht den Snapshot nach.

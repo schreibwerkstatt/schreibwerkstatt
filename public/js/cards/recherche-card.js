@@ -215,24 +215,7 @@ export function registerRechercheCard() {
           this.resetRecherche(); this.resetResearchChat(); this.researchChatOpen = false;
           Object.assign(this, rechercheInterviewState());
         },
-      });
-
-      // Karte zugeklappt (Exklusivität, Seitenwechsel, Hash-Navigation): offene
-      // Zeile zuklappen, das Anlegen-Formular verwerfen — beim nächsten Öffnen
-      // startet die Karte mit der Liste, nicht mit einem alten Formular.
-      this.$watch(() => window.__app.showRechercheCard, (v) => {
-        if (v) return;
-        // Offenes Bearbeiten nicht still verwerfen: speichern (best effort).
-        if (this.detailEditing && this.detailItemId != null) {
-          const prev = (this.items || []).find(i => i.id === this.detailItemId);
-          if (prev) this.commitEdit(prev);
-        }
-        if (this._archivedByJump) { this._archivedByJump = false; this.showArchived = false; }
-        this.closeDetail();
-        this.closeCreate();
-        // Zugeklappte Karte haelt keine Drag-Container: das Board wird beim
-        // naechsten Oeffnen ueber den Lifecycle-Load neu gebunden.
-        this._destroyStatusSortables();
+        onHide: () => this._rechercheHidden(),
       });
 
       // Ansichtswechsel: Wahl merken und die Drag-Container des Status-Boards
@@ -255,6 +238,23 @@ export function registerRechercheCard() {
         signal: this._lifecycle.signal,
         onChange: (active) => { this.rechercheFullscreen = active; },
       });
+    },
+
+    // Karte zugeklappt (Exklusivität, Seitenwechsel, Hash-Navigation): offene
+    // Zeile zuklappen, das Anlegen-Formular verwerfen — beim nächsten Öffnen
+    // startet die Karte mit der Liste, nicht mit einem alten Formular.
+    _rechercheHidden() {
+      // Offenes Bearbeiten nicht still verwerfen: speichern (best effort).
+      if (this.detailEditing && this.detailItemId != null) {
+        const prev = (this.items || []).find(i => i.id === this.detailItemId);
+        if (prev) this.commitEdit(prev);
+      }
+      if (this._archivedByJump) { this._archivedByJump = false; this.showArchived = false; }
+      this.closeDetail();
+      this.closeCreate();
+      // Zugeklappte Karte haelt keine Drag-Container: das Board wird beim
+      // naechsten Oeffnen ueber den Lifecycle-Load neu gebunden.
+      this._destroyStatusSortables();
     },
 
     destroy() {

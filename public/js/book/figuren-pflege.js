@@ -10,11 +10,12 @@
 //
 // Kein `get x()` in diesem gespreadeten Modul (Spread-Getter-Falle).
 
-// i18n über den Root (`window.__app.t`), nicht über i18n.js: das Modul hängt beim
-// Import Listener an `window` und machte die Figurenkarte ohne Browser unladbar.
 const _t = (key, params) => window.__app?.t?.(key, params) ?? key;
+import { sendJson } from '../utils/net.js';
+import { tFetchError } from '../i18n.js';
 import { FIGUR_TYPEN } from './figur-typen.js';
 import { SCHICHT_LEVEL } from '../graph/constants.js';
+import { isSelectedBook } from '../cards/book-guard.js';
 
 // Präsenz-Stufen — Persistenz-Konstante, deckungsgleich mit dem Prompt-Enum
 // (prompts/komplett/schemas.js) und den i18n-Keys figuren.praesenz.<key>.
@@ -96,14 +97,8 @@ export const figurPflegeMethods = {
     this.figurEditBusy = true;
     this.figurEditError = '';
     try {
-      const r = await fetch(`/figures/${encodeURIComponent(bookId)}/${encodeURIComponent(f.id)}`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ fields }),
-      });
-      const data = await r.json().catch(() => null);
-      if (!r.ok) throw new Error(window.__app.tError(data));
-      if (String(Alpine.store('nav').selectedBookId) !== String(bookId)) return;
+      await sendJson(`/figures/${encodeURIComponent(bookId)}/${encodeURIComponent(f.id)}`, 'PATCH', { fields });
+      if (!isSelectedBook(bookId)) return;
       this.cancelFigurEdit();
       this.figurPflegeMessage = _t('figuren.edit.saved', { name: fields.name || f.name });
       await window.__app.loadFiguren(bookId);
@@ -112,7 +107,7 @@ export const figurPflegeMethods = {
       if ('geburtstag' in fields) this.loadFigurenSchulwege?.();
     } catch (e) {
       console.error('[saveFigurEdit]', e);
-      this.figurEditError = e.message || _t('figuren.edit.saveError');
+      this.figurEditError = tFetchError(e) || _t('figuren.edit.saveError');
     } finally {
       this.figurEditBusy = false;
     }

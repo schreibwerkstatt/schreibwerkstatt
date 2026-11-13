@@ -5,6 +5,8 @@ import { localIsoDate } from '../utils.js';
 import { MAX_CHAPTER_DEPTH } from './constants.js';
 import { sameStructureTitle } from '../structure-title.js';
 import { singleSectionOf } from './view.js';
+import { tFetchError } from '../i18n.js';
+import { isChapterItem, findChapterItem } from '../book/tree/chapter-items.js';
 
 export const crudMethods = {
   onRenameChapter(id, ev) {
@@ -55,7 +57,7 @@ export const crudMethods = {
       }
       return true;
     } catch (e) {
-      root.setStatus(root.t('bookOrganizer.saveFailed', { detail: e.message }));
+      root.setStatus(root.t('bookOrganizer.saveFailed', { detail: tFetchError(e) }));
       const ch = this._findChapter(id)?.node;
       if (ch && inputEl) inputEl.value = ch.name;
       return false;
@@ -103,7 +105,7 @@ export const crudMethods = {
       }
       return true;
     } catch (e) {
-      root.setStatus(root.t('bookOrganizer.saveFailed', { detail: e.message }));
+      root.setStatus(root.t('bookOrganizer.saveFailed', { detail: tFetchError(e) }));
       const page = this._findPage(id);
       if (page && inputEl) inputEl.value = page.name;
       return false;
@@ -226,12 +228,10 @@ export const crudMethods = {
 
   _mirrorCreatedPage(created, chapterId) {
     const nav = Alpine.store('nav');
-    const findChapterEntry = (id) => nav.tree.find(
-      it => it.type === 'chapter' && !it.solo && String(it.id) === String(id));
-    const newPage = { ...created, chapterName: chapterId ? (findChapterEntry(chapterId)?.name || null) : null };
+    const newPage = { ...created, chapterName: chapterId ? (findChapterItem(nav.tree, chapterId)?.name || null) : null };
     nav.pages.push(newPage);
     if (chapterId) {
-      const treeCh = findChapterEntry(chapterId);
+      const treeCh = findChapterItem(nav.tree, chapterId);
       if (treeCh) {
         // Reassignment statt push: Alpine-Reaktivität greift bei nested
         // Arrays nicht immer zuverlässig, wenn das Parent-Item kürzlich
@@ -310,7 +310,7 @@ export const crudMethods = {
       await contentRepo.deleteChapter(id, { bookId: nav.selectedBookId });
       for (let i = nav.tree.length - 1; i >= 0; i--) {
         const it = nav.tree[i];
-        if (it.type === 'chapter' && !it.solo && it.id === id) nav.tree.splice(i, 1);
+        if (isChapterItem(it) && it.id === id) nav.tree.splice(i, 1);
       }
       found.parentList.splice(found.index, 1);
       // Struktur-Mirror zieht priority/depth/parent_id/hasChildren der

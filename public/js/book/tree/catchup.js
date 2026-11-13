@@ -1,6 +1,7 @@
 import { contentRepo } from '../../repo/content.js';
 import { getDeviceId } from '../../device-id.js';
 import { EVT } from '../../events.js';
+import { isSelectedBook } from '../../cards/book-guard.js';
 
 // Leiser Nachzug des Seitenbaums — die zweite Haelfte von Stale-While-Revalidate.
 //
@@ -90,7 +91,7 @@ export const treeCatchUpMethods = {
       // abweicht — und zieht ihn dabei nach (public/sw.js, `__fresh`-Zweig),
       // sodass die Offline-Kopie mitwandert statt alt stehen zu bleiben.
       const tree = await contentRepo.bookTree(bookId, { fresh: catchUpReadsFresh(reason) });
-      if (this.$store.nav.selectedBookId !== bookId) return;
+      if (!isSelectedBook(bookId)) return;
       // Waehrend des Fetch hat ein Voll-Load uebernommen — laufend oder schon
       // fertig: seiner ist juenger. `treeLoading` allein sieht den zweiten Fall
       // nicht, die Generation schon.
@@ -149,7 +150,7 @@ export const treeCatchUpMethods = {
   // `force`: ein Anstoss des Event-Streams meldet eine NEUE Aenderung — die
   // Dedup-Regel (gleiche Frage, gleicher Cursor) greift dann nicht.
   async _checkTreeDrift(bookId, { force = false } = {}) {
-    if (!bookId || String(bookId) !== String(this.$store.nav.selectedBookId)) return;
+    if (!bookId || !isSelectedBook(bookId)) return;
     const since = this._treeSince();
     if (!since) return;
     const key = `${bookId}|${since}`;
@@ -162,7 +163,7 @@ export const treeCatchUpMethods = {
       const r = await fetch(`/content/books/${bookId}/changes?${params}`);
       if (!r.ok) return;
       const data = await r.json();
-      if (String(bookId) !== String(this.$store.nav.selectedBookId)) return;
+      if (!isSelectedBook(bookId)) return;
       // Strukturstand zuerst: ein Umbau (Kapitel angelegt/verschoben, Order-PUT
       // eines anderen Tabs) aendert keine Seite und stuende darum nie in `changes`.
       if (this._structureDrifted(data?.structure_at)) this._scheduleTreeCatchUp('structure');
@@ -204,7 +205,7 @@ export const treeCatchUpMethods = {
 
   _onStructureWritten(detail) {
     const bookId = detail?.bookId;
-    if (bookId != null && String(bookId) !== String(this.$store.nav.selectedBookId)) return;
+    if (bookId != null && !isSelectedBook(bookId)) return;
     this._structureOwnWrite = true;
   },
 
@@ -236,7 +237,7 @@ export const treeCatchUpMethods = {
   _onContentUpdated(detail) {
     if (!detail) return;
     if (detail.kind === 'tree') {
-      if (String(detail.bookId) !== String(this.$store.nav.selectedBookId)) return;
+      if (!isSelectedBook(detail.bookId)) return;
       this._scheduleTreeCatchUp('sw-revalidate');
       return;
     }

@@ -8,10 +8,11 @@
 // Kommentar-Leiste verankerte UND allgemeine Threads zeigt und voll bedienbar ist.
 
 import { setupCardLifecycle } from './card-lifecycle.js';
-import { fetchJson, localeTag, tzOpts } from '../utils.js';
+import { fetchJson, sendJson, localeTag, fmtDateTime } from '../utils.js';
+import { tFetchError, tRaw } from '../i18n.js';
 import { copyText } from '../copy-button.js';
 import { EVT } from '../events.js';
-import { isSelectedBook } from './book-guard.js';
+import { isSelectedBook, loadToken } from './book-guard.js';
 import { shareChapterOptions, sharePageOptions } from './share-target-options.js';
 
 export function registerShareLinksCard() {
@@ -39,6 +40,8 @@ export function registerShareLinksCard() {
     copiedToken: null,
     _copiedTimer: null,
     _lifecycle: null,
+    // Lade-Token (book-guard.js#loadToken) für loadLinks.
+    _linksLoadSeq: 0,
     // Live-Poll: aktualisiert Counts/Unread der Links, während die Karte sichtbar ist
     _pollTimer: null,
     // Aufgeklappte Statistik (Kapitel-Drop-off + Fazits) pro Link (Token oder null)
@@ -67,6 +70,8 @@ export function registerShareLinksCard() {
           this._applyPrefill();
           return this._loadAndPoll();
         },
+        // Poll stoppen, sobald die Karte ausgeblendet wird.
+        onHide: () => this._stopPolling(),
         resetState: {
           links: [],
           loadError: '',
@@ -89,11 +94,6 @@ export function registerShareLinksCard() {
               }
           } },
         ],
-      });
-      // Poll stoppen, sobald die Karte ausgeblendet wird (Lifecycle-Watch deckt
-      // nur die steigende Flanke ab).
-      this.$watch(() => window.__app.showShareLinksCard, (visible) => {
-        if (!visible) this._stopPolling();
       });
     },
 
@@ -120,19 +120,21 @@ export function registerShareLinksCard() {
     async loadLinks() {
       const bookId = Alpine.store('nav').selectedBookId;
       if (!bookId) return;
+      const isCurrent = loadToken(this, '_linksLoadSeq', bookId);
       this.loadingLinks = true;
       this.loadError = '';
       try {
         const rows = await fetchJson(`/share/api/links?book_id=${encodeURIComponent(bookId)}`);
+        if (!isCurrent()) return;
         this.links = Array.isArray(rows) ? rows : [];
         // Falls aktuelles Page-Target preselected werden soll
         if (!this.createPageId && window.__app?.currentPage?.id) {
           this.createPageId = String(window.__app.currentPage.id);
         }
       } catch (e) {
-        this.loadError = e.message || 'load failed';
+        if (isCurrent()) this.loadError = tFetchError(e);
       } finally {
-        this.loadingLinks = false;
+        if (isCurrent.latest()) this.loadingLinks = false;
       }
     },
 
@@ -245,16 +247,7 @@ export function registerShareLinksCard() {
       }
       this.creating = true;
       try {
-        const res = await fetch('/share/api/links', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(body),
-        });
-        const j = await res.json();
-        if (!res.ok) {
-          this.createError = window.__app.t('share.error.' + (j.error_code || 'generic'));
-          return;
-        }
+        const j = await sendJson('/share/api/links', 'POST', body);
         this.links = [j, ...this.links];
         this.createIntro = '';
         this.createExpiresAt = '';
@@ -265,10 +258,21 @@ export function registerShareLinksCard() {
         if (this._copiedTimer) clearTimeout(this._copiedTimer);
         this._copiedTimer = setTimeout(() => { this.copiedToken = null; }, 2500);
       } catch (e) {
-        this.createError = e.message || 'create failed';
+        this.createError = this._createErrorText(e);
       } finally {
         this.creating = false;
       }
+    },
+
+    // Fehlertext beim Anlegen: die Share-Codes haben eigene, präzisere Texte
+    // (`share.error.<CODE>`); sonst der allgemeine Request-Fehlertext.
+    _createErrorText(e) {
+      if (e?.code) {
+        const key = 'share.error.' + e.code;
+        const msg = tRaw(key);
+        if (msg !== key) return msg;
+      }
+      return tFetchError(e);
     },
 
     async revokeLink(token) {
@@ -279,12 +283,11 @@ export function registerShareLinksCard() {
       });
       if (!ok) return;
       try {
-        const res = await fetch(`/share/api/links/${encodeURIComponent(token)}`, { method: 'DELETE' });
-        if (!res.ok) throw new Error('revoke failed');
+        await fetchJson(`/share/api/links/${encodeURIComponent(token)}`, { method: 'DELETE' });
         await this.loadLinks();
         window.__app.refreshShareLinkCounts();
       } catch (e) {
-        this.loadError = e.message;
+        this.loadError = tFetchError(e);
       }
     },
 
@@ -306,20 +309,15 @@ export function registerShareLinksCard() {
       if (this.savingEdit) return;
       this.savingEdit = true;
       try {
-        const res = await fetch(`/share/api/links/${encodeURIComponent(token)}`, {
-          method: 'PATCH',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            intro: this.editIntro || null,
-            expires_at: this.editExpiresAt || null,
-            show_toc: this.editShowToc,
-          }),
+        await sendJson(`/share/api/links/${encodeURIComponent(token)}`, 'PATCH', {
+          intro: this.editIntro || null,
+          expires_at: this.editExpiresAt || null,
+          show_toc: this.editShowToc,
         });
-        if (!res.ok) throw new Error('patch failed');
         await this.loadLinks();
         this.cancelEdit();
       } catch (e) {
-        this.loadError = e.message;
+        this.loadError = tFetchError(e);
       } finally {
         this.savingEdit = false;
       }
@@ -364,14 +362,7 @@ export function registerShareLinksCard() {
     },
 
     formatExpires(iso) {
-      if (!iso) return '';
-      try {
-        const d = new Date(iso);
-        return d.toLocaleString(localeTag(Alpine.store('shell').uiLocale), tzOpts({
-          dateStyle: 'medium',
-          timeStyle: 'short',
-        }));
-      } catch { return iso; }
+      return fmtDateTime(iso, Alpine.store('shell').uiLocale);
     },
 
     // Erstellungs-Datum (gleiches Format wie formatExpires).

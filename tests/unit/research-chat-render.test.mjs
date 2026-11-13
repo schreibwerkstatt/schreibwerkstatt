@@ -300,3 +300,23 @@ test('listLocalNumbering: echter, nicht benannter Treffer zwischen benannten →
   ];
   assert.equal(listLocalNumbering('A [1]. B [2].', local), true);
 });
+
+// Quell-URLs aus Web-Treffern: nur http(s) wird verlinkt (Chat-Link-Regel).
+test('linkableSources: javascript:/data:-URLs verlieren den Link, Position bleibt', async () => {
+  const { linkableSources } = await import('../../public/js/chat/research-chat-render.js');
+  const out = linkableSources([
+    { url: 'https://a.example/x', title: 'A' },
+    { url: 'javascript:alert(1)', title: 'B' },
+    { url: 'data:text/html,x', title: 'C' },
+  ]);
+  assert.equal(out.length, 3);
+  assert.equal(out[0].url, 'https://a.example/x');
+  assert.equal(out[1].url, '');
+  assert.equal(out[2].url, '');
+  const html = renderResearchAnswer({
+    text: 'Satz <cite index="2-1">x</cite>.',
+    sources: [{ url: 'https://a.example' }, { url: 'javascript:alert(1)' }],
+    renderChatMarkdown: s => s, escHtml: s => s, t: k => k,
+  });
+  assert.doesNotMatch(html, /javascript:/);
+});

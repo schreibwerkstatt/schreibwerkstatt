@@ -15,7 +15,13 @@ export const appKomplettMethods = {
       confirmLabel: this.t('common.delete'),
       danger: true,
     })) return;
-    const { deleted } = await fetchJson(`/jobs/chapter-cache/${this.$store.nav.selectedBookId}`, { method: 'DELETE' });
+    let deleted;
+    try {
+      ({ deleted } = await fetchJson(`/jobs/chapter-cache/${this.$store.nav.selectedBookId}`, { method: 'DELETE' }));
+    } catch (e) {
+      await this.appAlert({ message: this.t('common.errorColon') + tFetchError(e) });
+      return;
+    }
     await this.appAlert({ message: this.t('app.cacheCleared', { n: deleted }) });
   },
 

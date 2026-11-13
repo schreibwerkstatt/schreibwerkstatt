@@ -1,5 +1,5 @@
 // Teil von bookSettingsMethods (siehe Facade book-settings.js).
-import { fetchJson } from './_shared.js';
+import { fetchJson, sendJson } from './_shared.js';
 import { tFetchError } from '../../i18n.js';
 
 export const accessMethods = {
@@ -72,35 +72,22 @@ export const accessMethods = {
     this.bookAccessError = '';
     this.shareInviteMessage = '';
     try {
-      const shareRes = await fetch(`/books/${bookId}/share`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email, role }),
-      });
-      const shareData = await shareRes.json().catch(() => ({}));
-      if (shareRes.ok) {
-        this.shareEmail = '';
-        await this.loadBookAccess();
-        // Das neue Mitglied gehoert jetzt zum Sichtkreis von `/me/users-light`.
-        window.__app.refreshUsersLight?.();
-        return;
-      }
-      if (shareData?.error_code === 'USER_NOT_FOUND' && this.shareCanInvite()) {
-        const inviteRes = await fetch('/me/invite', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ email }),
-        });
-        const inviteData = await inviteRes.json().catch(() => ({}));
-        if (!inviteRes.ok) throw new Error(window.__app.tError(inviteData));
+      try {
+        await sendJson(`/books/${bookId}/share`, 'POST', { email, role });
+      } catch (shareErr) {
+        if (shareErr?.code !== 'USER_NOT_FOUND' || !this.shareCanInvite()) throw shareErr;
+        await sendJson('/me/invite', 'POST', { email });
         this.shareEmail = '';
         this.shareInviteMessage = window.__app.t('book.share.inviteSent', { email });
         this._flash('shareInviteMessage', 6000, '');
         return;
       }
-      throw new Error(window.__app.tError(shareData));
+      this.shareEmail = '';
+      await this.loadBookAccess();
+      // Das neue Mitglied gehoert jetzt zum Sichtkreis von `/me/users-light`.
+      window.__app.refreshUsersLight?.();
     } catch (e) {
-      this.bookAccessError = e.message;
+      this.bookAccessError = tFetchError(e);
     } finally {
       this.shareBusy = false;
     }
@@ -112,16 +99,10 @@ export const accessMethods = {
     const bookId = this._formBookId;
     this.bookAccessError = '';
     try {
-      const r = await fetch(`/books/${bookId}/access/${encodeURIComponent(email)}`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ role: newRole }),
-      });
-      const data = await r.json().catch(() => ({}));
-      if (!r.ok) throw new Error(window.__app.tError(data));
+      await sendJson(`/books/${bookId}/access/${encodeURIComponent(email)}`, 'PUT', { role: newRole });
       await this.loadBookAccess();
     } catch (e) {
-      this.bookAccessError = e.message;
+      this.bookAccessError = tFetchError(e);
     }
   },
 
@@ -136,12 +117,10 @@ export const accessMethods = {
     })) return;
     this.bookAccessError = '';
     try {
-      const r = await fetch(`/books/${bookId}/access/${encodeURIComponent(email)}`, { method: 'DELETE' });
-      const data = await r.json().catch(() => ({}));
-      if (!r.ok) throw new Error(window.__app.tError(data));
+      await sendJson(`/books/${bookId}/access/${encodeURIComponent(email)}`, 'DELETE');
       await this.loadBookAccess();
     } catch (e) {
-      this.bookAccessError = e.message;
+      this.bookAccessError = tFetchError(e);
     }
   },
 
@@ -156,20 +135,14 @@ export const accessMethods = {
     })) return;
     this.bookAccessError = '';
     try {
-      const r = await fetch(`/books/${bookId}/transfer-ownership`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email }),
-      });
-      const data = await r.json().catch(() => ({}));
-      if (!r.ok) throw new Error(window.__app.tError(data));
+      await sendJson(`/books/${bookId}/transfer-ownership`, 'POST', { email });
       // Rollen cachen invalidieren + neu laden.
       window.__app.bookRoles = {};
       window.__app.currentBookRole = null;
       if (window.__app._loadBookRole) await window.__app._loadBookRole(bookId);
       await this.loadBookAccess();
     } catch (e) {
-      this.bookAccessError = e.message;
+      this.bookAccessError = tFetchError(e);
     }
   },
 

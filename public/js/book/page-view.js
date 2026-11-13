@@ -9,7 +9,7 @@ import { closestCiteEl } from '../sources/cite-html.js';
 import { DIAGRAM_SEL } from '../diagram/mermaid-html.js';
 import { MSG_THREAD_SEL } from '../messages/msg-html.js';
 import { contentRepo } from '../repo/content.js';
-import { tRaw, findingErklaerungRaw } from '../i18n.js';
+import { tRaw, findingErklaerungRaw, tFetchError } from '../i18n.js';
 import { _sanitizeFigur } from './figuren.js';
 import { isSelectedBook } from '../cards/book-guard.js';
 import { READ_VIEW_SEL, notebookReadView } from '../editor/notebook/read-view.js';
@@ -463,7 +463,7 @@ export const pageViewMethods = {
       return;
     }
     console.error('[viewTodoToggle]', err);
-    this.setStatus(this.t('page.todo.saveFailed', { msg: err.message }), false, 6000);
+    this.setStatus(this.t('page.todo.saveFailed', { msg: tFetchError(err) }), false, 6000);
   },
 
 

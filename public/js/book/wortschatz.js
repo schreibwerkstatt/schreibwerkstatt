@@ -6,10 +6,11 @@
 // Die Analyse-Version kommt vom Server (`thresholds.version`) — hier steht KEINE
 // Kopie davon: eine Frontend-Kopie driftet unbemerkt gegen den Server.
 
-import { formatNumber, localeTag, tzOpts } from '../utils.js';
+import { formatNumber, fmtDateTime, sendJson } from '../utils.js';
 import { sameData } from '../utils/same-data.js';
 import { startPoll } from '../cards/job-helpers.js';
-import { tRaw } from '../i18n.js';
+import { tRaw, tFetchError } from '../i18n.js';
+import { isSelectedBook } from '../cards/book-guard.js';
 
 // Kein `get x()` in diesem gespreadeten Modul — Spread würde Getter beim Mount
 // mit falschem `this` auslösen. Reine Getter leben inline im Karten-Literal.
@@ -22,16 +23,18 @@ export const wortschatzMethods = {
     if (!silent) this.wortschatzLoadError = false;
     try {
       const r = await fetch('/lexicon/' + encodeURIComponent(bookId), { credentials: 'same-origin' });
+      if (!isSelectedBook(bookId)) return;
       if (!r.ok) {
         if (silent) return;
         this.wortschatzData = null; this.wortschatzLoadError = true; return;
       }
       const data = await r.json();
+      if (!isSelectedBook(bookId)) return;
       if (silent && sameData(data, this.wortschatzData)) return;
       this.wortschatzData = data;
       this.wortschatzLoadError = false;
     } catch {
-      if (silent) return;
+      if (silent || !isSelectedBook(bookId)) return;
       this.wortschatzData = null;
       this.wortschatzLoadError = true;
     }
@@ -45,13 +48,9 @@ export const wortschatzMethods = {
     this.wortschatzLoading = true;
     this.wortschatzStatus = window.__app?.t?.('wortschatz.running') || '';
     try {
-      const r = await fetch('/jobs/lexicon-scan', {
-        method: 'POST', credentials: 'same-origin',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ book_id: bookId }),
-      });
-      const j = await r.json().catch(() => ({}));
-      if (!r.ok || !j.jobId) {
+      const j = await sendJson('/jobs/lexicon-scan', 'POST', { book_id: bookId });
+      if (!isSelectedBook(bookId)) { this.wortschatzLoading = false; this.wortschatzStatus = ''; return; }
+      if (!j?.jobId) {
         this.wortschatzLoading = false;
         this.wortschatzStatus = tRaw('wortschatz.error');
         return;
@@ -59,7 +58,8 @@ export const wortschatzMethods = {
       this._pollWortschatz(j.jobId);
     } catch (e) {
       this.wortschatzLoading = false;
-      this.wortschatzStatus = tRaw('common.errorColon') + (e.message || '');
+      if (!isSelectedBook(bookId)) { this.wortschatzStatus = ''; return; }
+      this.wortschatzStatus = tRaw('common.errorColon') + tFetchError(e);
     }
   },
 
@@ -136,11 +136,10 @@ export const wortschatzMethods = {
   wsScannedAt() {
     const at = this.wortschatzData?.stats?.scanned_at;
     if (!at) return '';
-    const d = new Date(at);
-    if (Number.isNaN(d.getTime())) return '';
-    return d.toLocaleString(localeTag(Alpine.store('shell').uiLocale), tzOpts({
+    if (Number.isNaN(new Date(at).getTime())) return '';
+    return fmtDateTime(at, Alpine.store('shell').uiLocale, {
       year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit',
-    }));
+    });
   },
 
   // Offenlegung des Deckels der Einmalwort-Liste: „300 von 4812". Ohne diese Zeile

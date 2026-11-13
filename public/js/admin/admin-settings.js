@@ -2,7 +2,7 @@
 
 import { formatNum } from '../num-input.js';
 import { localeTag, fetchJson, sendJson } from '../utils.js';
-import { tFetchErrorRaw } from '../i18n.js';
+import { tFetchError } from '../i18n.js';
 
 export const adminSettingsMethods = {
   async adminSettingsLoad() {
@@ -24,7 +24,7 @@ export const adminSettingsMethods = {
         this.adminSettingsProviderSubtab = cur;
       }
     } catch (e) {
-      this.adminSettingsError = tFetchErrorRaw(e);
+      this.adminSettingsError = tFetchError(e);
     } finally {
       this.adminSettingsLoading = false;
     }
@@ -79,7 +79,7 @@ export const adminSettingsMethods = {
         try {
           await sendJson(`/admin/settings/${encodeURIComponent(d.key)}`, 'PUT', { value: d.value });
         } catch (e) {
-          throw new Error(`${d.key}: ${e.code ? tFetchErrorRaw(e) : (e.status || e.message)}`);
+          throw new Error(`${d.key}: ${tFetchError(e)}`);
         }
       }
       this.adminSettingsSavedCount = dirty.length;
@@ -121,7 +121,7 @@ export const adminSettingsMethods = {
       const j = await r.json();
       this.adminSettingsTestResult = { kind, ...j, running: false };
     } catch (e) {
-      this.adminSettingsTestResult = { kind, ok: false, error: e.message, running: false };
+      this.adminSettingsTestResult = { kind, ok: false, error: tFetchError(e), running: false };
     }
   },
 
@@ -146,7 +146,7 @@ export const adminSettingsMethods = {
       this.adminApiTokensList = Array.isArray(data.tokens) ? data.tokens : [];
       this.adminApiTokensLoaded = true;
     } catch (e) {
-      this.adminApiTokensError = tFetchErrorRaw(e);
+      this.adminApiTokensError = tFetchError(e);
     } finally {
       this.adminApiTokensLoading = false;
     }
@@ -171,7 +171,7 @@ export const adminSettingsMethods = {
       this.adminApiTokensNewIncludeUsers = false;
       await this.adminApiTokensLoad();
     } catch (e) {
-      this.adminApiTokensError = tFetchErrorRaw(e);
+      this.adminApiTokensError = tFetchError(e);
     } finally {
       this.adminApiTokensCreating = false;
     }
@@ -183,7 +183,7 @@ export const adminSettingsMethods = {
       await sendJson(`/admin/api-tokens/${id}/revoke`, 'POST');
       await this.adminApiTokensLoad();
     } catch (e) {
-      this.adminApiTokensError = tFetchErrorRaw(e);
+      this.adminApiTokensError = tFetchError(e);
     }
   },
 
@@ -193,7 +193,7 @@ export const adminSettingsMethods = {
       await sendJson(`/admin/api-tokens/${id}`, 'DELETE');
       await this.adminApiTokensLoad();
     } catch (e) {
-      this.adminApiTokensError = tFetchErrorRaw(e);
+      this.adminApiTokensError = tFetchError(e);
     }
   },
 

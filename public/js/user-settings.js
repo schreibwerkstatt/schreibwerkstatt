@@ -3,7 +3,7 @@
 // Root-Zugriffe via window.__app.
 
 import { fetchJson, sendJson, fmtBytes, localeTag, configureLocaleRegion } from './utils.js';
-import { tFetchErrorRaw } from './i18n.js';
+import { tFetchError } from './i18n.js';
 
 // Protokollwert von DELETE /me/account. Bewusst NICHT lokalisiert und bewusst
 // derselbe String, den der native macOS-Client sendet — der Server kennt genau
@@ -33,17 +33,13 @@ export const userSettingsMethods = {
     this.userSettingsSaved  = false;
     this.userSettingsError  = '';
     try {
-      try {
-        await sendJson('/me/settings', 'PATCH', {
-          default_language:  this.userSettingsDefaultLanguage  || null,
-          default_region:    this.userSettingsDefaultRegion    || null,
-          default_buchtyp:   this.userSettingsDefaultBuchtyp   || null,
-          focus_granularity: this.userSettingsFocusGranularity || 'paragraph',
-          daily_goal_minutes: Math.max(0, Math.min(1440, Math.round(Number(this.userSettingsDailyGoal) || 0))),
-        });
-      } catch (e) {
-        throw new Error(tFetchErrorRaw(e));
-      }
+      await sendJson('/me/settings', 'PATCH', {
+        default_language:  this.userSettingsDefaultLanguage  || null,
+        default_region:    this.userSettingsDefaultRegion    || null,
+        default_buchtyp:   this.userSettingsDefaultBuchtyp   || null,
+        focus_granularity: this.userSettingsFocusGranularity || 'paragraph',
+        daily_goal_minutes: Math.max(0, Math.min(1440, Math.round(Number(this.userSettingsDailyGoal) || 0))),
+      });
       window.__app.focusGranularity = this.userSettingsFocusGranularity || 'paragraph';
       const region = this.userSettingsDefaultRegion || (Alpine.store('shell').uiLocale === 'en' ? 'US' : 'CH');
       Alpine.store('shell').defaultRegion = region;
@@ -55,7 +51,7 @@ export const userSettingsMethods = {
       if (this._savedAtTimer) clearTimeout(this._savedAtTimer);
       this._savedAtTimer = setTimeout(() => { this.userSettingsSaved = false; this._savedAtTimer = null; }, 2500);
     } catch (e) {
-      this.userSettingsError = e.message;
+      this.userSettingsError = tFetchError(e);
     } finally {
       this.userSettingsSaving = false;
     }
@@ -113,7 +109,7 @@ export const userSettingsMethods = {
       const data = await fetchJson('/me/device-tokens');
       this.deviceTokensList = Array.isArray(data.tokens) ? data.tokens : [];
     } catch (e) {
-      this.deviceTokensError = e.message;
+      this.deviceTokensError = tFetchError(e);
     } finally {
       this.deviceTokensLoading = false;
     }
@@ -130,7 +126,7 @@ export const userSettingsMethods = {
       this.deviceTokensNewName = '';
       await this.loadDeviceTokens();
     } catch (e) {
-      this.deviceTokensError = tFetchErrorRaw(e);
+      this.deviceTokensError = tFetchError(e);
     } finally {
       this.deviceTokensCreating = false;
     }
@@ -141,7 +137,7 @@ export const userSettingsMethods = {
     try {
       await sendJson(`/me/device-tokens/${id}/revoke`, 'POST');
       await this.loadDeviceTokens();
-    } catch (e) { this.deviceTokensError = tFetchErrorRaw(e); }
+    } catch (e) { this.deviceTokensError = tFetchError(e); }
   },
 
   async deviceTokensDelete(id) {
@@ -149,7 +145,7 @@ export const userSettingsMethods = {
     try {
       await sendJson(`/me/device-tokens/${id}`, 'DELETE');
       await this.loadDeviceTokens();
-    } catch (e) { this.deviceTokensError = tFetchErrorRaw(e); }
+    } catch (e) { this.deviceTokensError = tFetchError(e); }
   },
 
   deviceTokensDismissPlain() {
@@ -204,7 +200,7 @@ export const userSettingsMethods = {
       });
       let j = null;
       try { j = await r.json(); } catch (_) {}
-      if (!r.ok) throw new Error(j ? app.tError(j) : `HTTP ${r.status}`);
+      if (!r.ok) throw Object.assign(new Error(`HTTP ${r.status}`), { status: r.status, body: j });
 
       // Demo-Zugang: das Konto besteht weiter, die Inhalte sind neu gesaet
       // (Begruendung in lib/account-delete.js#resetDemoAccount). Kein Logout —
@@ -222,7 +218,7 @@ export const userSettingsMethods = {
       // eines nicht mehr existierenden Kontos weiterlebt.
       window.location.href = '/login';
     } catch (e) {
-      this.accountDeleteError = e.message;
+      this.accountDeleteError = tFetchError(e);
     } finally {
       this.accountDeleting = false;
     }

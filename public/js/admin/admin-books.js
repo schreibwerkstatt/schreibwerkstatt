@@ -2,7 +2,7 @@
 // Methoden werden in Alpine.data('adminBooksCard') gespreadet.
 
 import { fetchJson, sendJson, charsToNormseiten, formatNumber, fmtBytes } from '../utils.js';
-import { tFetchErrorRaw } from '../i18n.js';
+import { tFetchError } from '../i18n.js';
 
 export const adminBooksMethods = {
   async loadAll() {
@@ -19,7 +19,7 @@ export const adminBooksMethods = {
       }));
       this.users = (u.users || []).filter(usr => usr.status === 'active');
     } catch (e) {
-      this.error = tFetchErrorRaw(e);
+      this.error = tFetchError(e);
     } finally {
       this.loading = false;
     }
@@ -62,7 +62,7 @@ export const adminBooksMethods = {
       await sendJson(`/admin/books/${book.book_id}/assign-owner`, 'POST', { email });
       await this.loadAll();
     } catch (e) {
-      this.error = tFetchErrorRaw(e);
+      this.error = tFetchError(e);
     } finally {
       this.busy = false;
     }

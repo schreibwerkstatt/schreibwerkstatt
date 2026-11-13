@@ -42,10 +42,6 @@ export function registerAdminSettingsCard() {
     _lifecycle: null,
 
     init() {
-      this.$watch(() => window.__app.showAdminSettingsCard, async (visible) => {
-        if (!visible) return;
-        await this.adminSettingsLoad();
-      });
       // Profil-Liste erst beim Betreten des Sub-Tabs holen — die Karte oeffnet
       // meistens fuer etwas anderes.
       this.$watch('adminSettingsProviderSubtab', (t) => {
@@ -53,6 +49,8 @@ export function registerAdminSettingsCard() {
       });
       this._lifecycle = setupCardLifecycle(this, {
         showFlag: 'showAdminSettingsCard',
+        showNeedsBookId: false,
+        onShow: () => this.adminSettingsLoad(),
         tabRequest: { key: CARD_REQUEST.ADMIN_SETTINGS_TAB, apply: (tab) => { this.adminSettingsTab = tab; }, current: () => this.adminSettingsTab },
         onViewReset: () => {
           this.adminSettingsError = '';

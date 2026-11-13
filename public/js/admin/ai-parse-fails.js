@@ -2,8 +2,8 @@
 // gespreaded. Root-Zugriffe via window.__app. Liest aus
 // /admin/parse-fails/{files,file} + DELETE.
 
-import { tzOpts, localeTag, fetchJson, sendJson, fmtBytes } from '../utils.js';
-import { tFetchErrorRaw } from '../i18n.js';
+import { fmtDateTime, fetchJson, sendJson, fmtBytes } from '../utils.js';
+import { tFetchError } from '../i18n.js';
 
 export const adminParseFailsMethods = {
   // ── Lifecycle ────────────────────────────────────────────────────────────
@@ -25,7 +25,7 @@ export const adminParseFailsMethods = {
       this.parseFailsContent = {};
       this.parseFailsExpanded = {};
     } catch (e) {
-      this.parseFailsError = tFetchErrorRaw(e);
+      this.parseFailsError = tFetchError(e);
     } finally {
       this.parseFailsLoading = false;
     }
@@ -50,7 +50,7 @@ export const adminParseFailsMethods = {
           : data.content;
         this.parseFailsContent = { ...this.parseFailsContent, [name]: txt };
       } catch (e) {
-        this.parseFailsError = tFetchErrorRaw(e);
+        this.parseFailsError = tFetchError(e);
         return;
       }
     }
@@ -69,7 +69,7 @@ export const adminParseFailsMethods = {
       await sendJson('/admin/parse-fails/file?name=' + encodeURIComponent(name), 'DELETE');
       await this._parseFailsLoadFiles();
     } catch (e) {
-      this.parseFailsError = tFetchErrorRaw(e);
+      this.parseFailsError = tFetchError(e);
     }
   },
 
@@ -84,17 +84,13 @@ export const adminParseFailsMethods = {
       await sendJson('/admin/parse-fails', 'DELETE');
       await this._parseFailsLoadFiles();
     } catch (e) {
-      this.parseFailsError = tFetchErrorRaw(e);
+      this.parseFailsError = tFetchError(e);
     }
   },
 
   // ── Format ───────────────────────────────────────────────────────────────
   parseFailsFmtTs(iso) {
-    if (!iso) return '';
-    const d = new Date(iso);
-    if (Number.isNaN(d.getTime())) return iso;
-    return d.toLocaleString(localeTag(Alpine.store('shell').uiLocale),
-      tzOpts({ dateStyle: 'medium', timeStyle: 'medium' }));
+    return fmtDateTime(iso, Alpine.store('shell').uiLocale, { dateStyle: 'medium', timeStyle: 'medium' });
   },
 
   parseFailsFmtSize(bytes) {

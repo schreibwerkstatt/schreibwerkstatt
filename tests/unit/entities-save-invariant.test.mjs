@@ -41,8 +41,9 @@ test('entities.js benutzt keine DOM-Mutation am Editor-Inhalt', async () => {
 
 test('entities.js benutzt die CSS Custom Highlight API', async () => {
   const src = await readFile(MODULE_PATH, 'utf8');
-  assert.match(src, /CSS\.highlights\.set\b/, 'Highlight-API nicht registriert');
-  assert.match(src, /new\s+Highlight\s*\(\s*\)/, 'Highlight-Konstruktor nicht benutzt');
+  // Registrierung über den geteilten Helfer (editor/shared/highlights.js).
+  assert.match(src, /registerHighlight\(\s*HL_FIGURE/, 'Figuren-Highlight nicht registriert');
+  assert.match(src, /registerHighlight\(\s*HL_LOCATION/, 'Orte-Highlight nicht registriert');
 });
 
 test('entities.js arbeitet read-only mit Range-Objekten', async () => {

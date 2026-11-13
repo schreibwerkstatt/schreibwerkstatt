@@ -13,7 +13,9 @@
 // mit; ein Freitext-Pol geht immer.
 
 import { startPoll } from '../../cards/job-helpers.js';
-import { tRaw } from '../../i18n.js';
+import { tRaw, tFetchError } from '../../i18n.js';
+import { sendJson } from '../../utils/net.js';
+import { isSelectedBook } from '../../cards/book-guard.js';
 import { resultCache } from './cache.js';
 
 // Abschnitte je Achsenende in der Anzeige bzw. im KI-Prompt.
@@ -137,7 +139,7 @@ export const axesMethods = {
     const axes = res.projection.axes.map((_, k) => this._bookMapExtremeIds(k, EXTREMES_LABEL));
     this.bookMapLabelLoading = true;
     this.bookMapLabelStatus = tRaw('buchlandkarte.labels.running');
-    const stale = () => Alpine.store('nav').selectedBookId !== bookId || this.bookMapResult !== res;
+    const stale = () => !isSelectedBook(bookId) || this.bookMapResult !== res;
     const failed = (job) => {
       if (stale()) return;
       this.bookMapLabelLoading = false;
@@ -146,14 +148,9 @@ export const axesMethods = {
         : tRaw('buchlandkarte.labels.error');
     };
     try {
-      const r = await fetch('/jobs/book-map-label', {
-        method: 'POST', credentials: 'same-origin',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ book_id: bookId, axes }),
-      });
-      const j = await r.json().catch(() => ({}));
+      const j = await sendJson('/jobs/book-map-label', 'POST', { book_id: bookId, axes });
       if (stale()) return;
-      if (!r.ok || !j.jobId) { failed(null); return; }
+      if (!j?.jobId) { failed(null); return; }
       startPoll(this, {
         timerProp: '_bookMapLabelPollTimer',
         jobId: j.jobId,
@@ -175,8 +172,9 @@ export const axesMethods = {
       });
     } catch (e) {
       if (stale()) return;
+      if (e.status) { failed(null); return; }
       this.bookMapLabelLoading = false;
-      this.bookMapLabelStatus = tRaw('common.errorColon') + (e.message || '');
+      this.bookMapLabelStatus = tRaw('common.errorColon') + tFetchError(e);
     }
   },
 

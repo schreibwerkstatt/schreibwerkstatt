@@ -15,7 +15,7 @@ import { fetchJson, autosizeTextarea, mountAutosizeTextarea } from '../utils.js'
 import { createIdee, patchIdee, deleteIdee as removeIdee, overlayPendingIdeen } from '../repo/ideen-queue.js';
 import { IDEE_STATUSES, ideeStatus, isOpenIdee, normalizeIdeeStages, compareIdeeManual, IDEE_MAX_LEN, ideenPlace } from './ideen-shared.js';
 import { isTempId as isTempPageId, resolveTempId } from '../repo/structure-queue.js';
-import { loadToken } from '../cards/book-guard.js';
+import { loadToken, isSelectedBook } from '../cards/book-guard.js';
 
 // Aktive Scope-IDs aus Root lesen. Liefert { kind, id } oder null.
 function _activeScope(app) {
@@ -93,6 +93,7 @@ export const ideenMethods = {
     if (!bookId || this._stagesBookId === bookId) return;
     try {
       const data = await fetchJson(`/ideen/stages?book_id=${bookId}`);
+      if (!isSelectedBook(bookId)) return;
       this.stages = normalizeIdeeStages(data?.stages);
       this._stagesBookId = bookId;
     } catch { /* alle Stufen bleiben angeboten */ }
@@ -101,9 +102,9 @@ export const ideenMethods = {
   // Das Board hat die Stufen umgeschaltet (Event aus ideen-board/actions.js).
   _onStagesChanged(e) {
     const { bookId, stages } = e?.detail || {};
-    if (!bookId || bookId !== Alpine.store('nav').selectedBookId) return;
+    if (!isSelectedBook(bookId)) return;
     this.stages = normalizeIdeeStages(stages);
-    this._stagesBookId = bookId;
+    this._stagesBookId = String(bookId);
   },
 
   resetIdeen() {

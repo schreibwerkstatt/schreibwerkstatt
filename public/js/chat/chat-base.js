@@ -3,12 +3,18 @@
 // `this` ist die Card; Root-Zugriffe laufen über window.__app. Der Root setzt
 // die showXxxCard-Flag, die Card reagiert per $watch und ruft onVisible().
 
-import { escHtml, fmtTok, renderChatMarkdown, loadChatMarkdown, chatMarkdownReady, fetchJson } from '../utils.js';
+import { escHtml, fmtTok, renderChatMarkdown, loadChatMarkdown, chatMarkdownReady, fetchJson, sendJson } from '../utils.js';
 import { startPoll, runningJobStatus } from '../cards/job-helpers.js';
 import { tFetchError } from '../i18n.js';
 import { toolLogEntries, toolLogHeading } from './tool-log.js';
 import { makeDraftMethod } from './chat-draft.js';
 import { uuid } from '../utils/uuid.js';
+
+// Status-Zeile der Chat-Karten (landet per x-html): Text immer escapen.
+// kind: 'muted' (Hinweis) | 'error'.
+function statusHtml(kind, text) {
+  return `<span class="${kind}-msg">${escHtml(text)}</span>`;
+}
 
 const _toolLogCache = new WeakMap();
 
@@ -108,7 +114,7 @@ export function makeChatMethods(cfg) {
   // Statuszeile, wenn der laufende Job NICHT zum sichtbaren Gespräch gehört.
   function setElsewhereStatus() {
     const root = window.__app;
-    this[p.status] = `<span class="muted-msg">${escHtml(root.t('chat.runningElsewhere'))}</span>`;
+    this[p.status] = statusHtml('muted', root.t('chat.runningElsewhere'));
   }
 
   // Ein offenes, noch leeres Gespräch IST schon ein neues: es wird weiterbenutzt
@@ -132,11 +138,7 @@ export function makeChatMethods(cfg) {
         this[p.status] = '';
         return;
       }
-      const { id } = await fetchJson(cfg.newSessionUrl, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(cfg.newSessionBody(this)),
-      });
+      const { id } = await sendJson(cfg.newSessionUrl, 'POST', cfg.newSessionBody(this));
       if (gen(this) !== g) return;
       supersedeLoads(this);
       this[p.sessionId] = id;
@@ -205,7 +207,7 @@ export function makeChatMethods(cfg) {
             try { await loadSession.call(this, sessionId); }
             catch (e) { console.error(`[${L} onCancel reload]`, e); }
             if (stale() || !viewing()) return;
-            this[p.status] = `<span class="muted-msg">${escHtml(root.t('job.cancelled'))}</span>`;
+            this[p.status] = statusHtml('muted', root.t('job.cancelled'));
           } else {
             await loadSessions.call(this);
           }
@@ -215,11 +217,11 @@ export function makeChatMethods(cfg) {
         if (!viewing()) {
           // Fehler nicht verschlucken, aber auch nicht dem sichtbaren Gespräch
           // anhängen — er gehört zu dem Lauf, der woanders lief.
-          this[p.status] = `<span class="error-msg">${escHtml(root.t('chat.errorElsewhere', { msg: errLabel }))}</span>`;
+          this[p.status] = statusHtml('error', root.t('chat.errorElsewhere', { msg: errLabel }));
           await loadSessions.call(this);
           return;
         }
-        const errHtml = `<span class="error-msg">${root.t('common.errorColon')}${escHtml(errLabel)}</span>`;
+        const errHtml = statusHtml('error', root.t('common.errorColon') + errLabel);
         // Server-State neu laden: User-Msg ist serverseitig persistiert
         // (_handleChatPost), Assistant-Msg fehlt. Optimistischer Stub wird durch
         // Server-Stand ersetzt; danach kann der User eine neue Session starten
@@ -231,7 +233,7 @@ export function makeChatMethods(cfg) {
         // Anderes Gespräch inzwischen offen: Fehler als «anderswo» zeigen.
         if (stale()) return;
         if (!viewing()) {
-          this[p.status] = `<span class="error-msg">${escHtml(root.t('chat.errorElsewhere', { msg: errLabel }))}</span>`;
+          this[p.status] = statusHtml('error', root.t('chat.errorElsewhere', { msg: errLabel }));
           return;
         }
         this[p.status] = errHtml;
@@ -315,7 +317,7 @@ export function makeChatMethods(cfg) {
     } catch (e) {
       console.error(`[delete${L}Session]`, e);
       if (gen(this) === g) {
-        this[p.status] = `<span class="error-msg">${root.t('common.errorColon')}${escHtml(tFetchError(e))}</span>`;
+        this[p.status] = statusHtml('error', root.t('common.errorColon') + tFetchError(e));
       }
       return;
     }
@@ -353,7 +355,7 @@ export function makeChatMethods(cfg) {
     // kein zweiter parallel — der Server lehnte ihn ohnehin mit 409 ab. Hinweis
     // zeigen und den laufenden Job über den Active-Check sichtbar machen.
     if (runningInQueue(this[p.sessionId])) {
-      this[p.status] = `<span class="muted-msg">${escHtml(root.t('error.CHAT_JOB_RUNNING'))}</span>`;
+      this[p.status] = statusHtml('muted', root.t('error.CHAT_JOB_RUNNING'));
       if (!this[p.pollTimer]) await loadSession.call(this, this[p.sessionId]);
       return;
     }
@@ -382,15 +384,11 @@ export function makeChatMethods(cfg) {
     const g = gen(this);
     if (cfg.onBeforeSend) await cfg.onBeforeSend.call(this);
     try {
-      const { jobId } = await fetchJson(cfg.sendUrl, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        // `sendExtra`: zusätzliche Body-Felder eines Chats (Recherche-Chat:
-        // `context` des Kontext-Chips). Der Server legt sie an der User-Nachricht ab.
-        body: JSON.stringify({
-          session_id: sessionId, message: msg, client_msg_id: clientMsgId,
-          ...(cfg.sendExtra ? cfg.sendExtra(this) : {}),
-        }),
+      // `sendExtra`: zusätzliche Body-Felder eines Chats (Recherche-Chat:
+      // `context` des Kontext-Chips). Der Server legt sie an der User-Nachricht ab.
+      const { jobId } = await sendJson(cfg.sendUrl, 'POST', {
+        session_id: sessionId, message: msg, client_msg_id: clientMsgId,
+        ...(cfg.sendExtra ? cfg.sendExtra(this) : {}),
       });
       // Reset während des POST: die Karte zeigt ein anderes Buch/eine andere
       // Seite (oder nichts). Der Job läuft serverseitig weiter und erscheint
@@ -416,7 +414,7 @@ export function makeChatMethods(cfg) {
         if (tail && tail.clientMsgId === clientMsgId) msgs.pop();
         this[p.input] = msg;
         this[p.loading] = false;
-        const hint = `<span class="muted-msg">${escHtml(root.t('error.CHAT_JOB_RUNNING'))}</span>`;
+        const hint = statusHtml('muted', root.t('error.CHAT_JOB_RUNNING'));
         if (this[p.sessionId] === sessionId) {
           try { await loadSession.call(this, sessionId); }
           catch (err) { console.error(`[send${L}Message] reload`, err); }
@@ -433,7 +431,7 @@ export function makeChatMethods(cfg) {
       const tail = this[p.messages][this[p.messages].length - 1];
       if (tail && tail.clientMsgId === clientMsgId) tail.sendError = true;
       this[p.input] = msg;
-      this[p.status] = `<span class="error-msg">${root.t('common.errorColon')}${escHtml(tFetchError(e))}</span>`;
+      this[p.status] = statusHtml('error', root.t('common.errorColon') + tFetchError(e));
       this[p.loading] = false;
       this.$nextTick(() => scrollToBottom.call(this));
     }
@@ -462,16 +460,12 @@ export function makeChatMethods(cfg) {
     msg.feedback = next;
     msg._feedbackSaving = true;
     try {
-      await fetchJson(`/chat/message/${msg.id}/feedback`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ feedback: next }),
-      });
+      await sendJson(`/chat/message/${msg.id}/feedback`, 'PATCH', { feedback: next });
     } catch (e) {
       console.error(`[${L} feedback]`, e);
       msg.feedback = prev;
       const root = window.__app;
-      this[p.status] = `<span class="error-msg">${root.t('common.errorColon')}${escHtml(tFetchError(e))}</span>`;
+      this[p.status] = statusHtml('error', root.t('common.errorColon') + tFetchError(e));
     } finally {
       msg._feedbackSaving = false;
     }

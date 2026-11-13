@@ -15,13 +15,14 @@
 import { EVT } from '../events.js';
 import { setupCardLifecycle } from './card-lifecycle.js';
 import { CARD_REQUEST } from './card-request.js';
-import { exportScopeSlice, exportJobSlice, unnumberedChipsSlice, exportSnapshotSlice, profileTransferSlice } from './export-card-base.js';
+import { exportScopeSlice, exportJobSlice, unnumberedChipsSlice, exportSnapshotSlice, exportSavedFlashSlice, profileTransferSlice } from './export-card-base.js';
 
 export function registerDocxExportCard() {
   if (typeof window === 'undefined' || !window.Alpine) return;
   window.Alpine.data('docxExportCard', () => ({
     ...exportScopeSlice(),
     ...exportSnapshotSlice(),
+    ...exportSavedFlashSlice(),
     ...exportJobSlice({
       jobPath: '/jobs/docx-export',
       defaultFilename: 'book.docx',
@@ -48,56 +49,45 @@ export function registerDocxExportCard() {
     _lifecycle: null,
 
     saving: false,
-    savedAt: null,
-    _savedAtTimer: null,
-    _onBookChanged: null,
-    _onViewReset: null,
 
     init() {
-      // Nur für den Reiter-Wunsch (Palette, Permalink): Laden und Reset hängen
-      // unten an eigenen Listenern. Vor dem Show-Watch angemeldet, damit der
-      // Reiter im selben Flush wie das Einblenden steht.
       this._lifecycle = setupCardLifecycle(this, {
         showFlag: 'showDocxExportCard',
+        showNeedsBookId: false,
         tabRequest: { key: CARD_REQUEST.DOCX_EXPORT_TAB, apply: (tab) => { this.activeTab = tab; }, current: () => this.activeTab },
-      });
-      this.$watch(() => window.__app.showDocxExportCard, async (visible) => {
-        if (!visible) return;
-        if (!this.profiles.length) await this.loadProfiles();
-        this._ensureExportPicked();
-        await this._loadExportSnapshots();
+        // Profile sind user-scoped → einmal geladen reicht; Fassungen buch-scoped
+        // → bei jedem Öffnen frisch.
+        onShow: async () => {
+          if (!this.profiles.length) await this.loadProfiles();
+          this._ensureExportPicked();
+          await this._loadExportSnapshots();
+        },
+        onBookChanged: () => {
+          this._resetExportRun();
+          this._ensureExportPicked();
+          this.exportSnapshotId = '';
+          if (window.__app?.showDocxExportCard) return this._loadExportSnapshots();
+          this.exportSnapshots = [];
+        },
+        onViewReset: () => {
+          this._resetExportRun();
+          this._clearSavedFlash();
+          this.exportScope = 'book';
+          this.exportChapterId = null;
+          this.exportPageId = null;
+          this.exportSnapshots = [];
+          this.exportSnapshotId = '';
+          this.activeTab = 'layout';
+        },
       });
       this._initScopeWatches();
       this._bindPreset(EVT.EXPORT_DOCX_PRESET, '__docxExportPreset');
-
-      this._onBookChanged = () => {
-        this._resetExportRun();
-        this._ensureExportPicked();
-        this.exportSnapshotId = '';
-        if (window.__app?.showDocxExportCard) this._loadExportSnapshots();
-        else { this.exportSnapshots = []; }
-      };
-      window.addEventListener(EVT.BOOK_CHANGED, this._onBookChanged);
-
-      this._onViewReset = () => {
-        this._resetExportRun();
-        if (this._savedAtTimer) { clearTimeout(this._savedAtTimer); this._savedAtTimer = null; }
-        this.exportScope = 'book';
-        this.exportChapterId = null;
-        this.exportPageId = null;
-        this.exportSnapshots = [];
-        this.exportSnapshotId = '';
-        this.activeTab = 'layout';
-      };
-      window.addEventListener(EVT.VIEW_RESET, this._onViewReset);
     },
 
     destroy() {
       this._stopPoll();
-      if (this._savedAtTimer)      { clearTimeout(this._savedAtTimer);      this._savedAtTimer = null; }
+      this._clearSavedFlash();
       if (this._exportStatusTimer) { clearTimeout(this._exportStatusTimer); this._exportStatusTimer = null; }
-      if (this._onBookChanged)  window.removeEventListener(EVT.BOOK_CHANGED, this._onBookChanged);
-      if (this._onViewReset)    window.removeEventListener(EVT.VIEW_RESET,   this._onViewReset);
       this._unbindPreset();
       this._lifecycle?.destroy();
     },
@@ -211,9 +201,7 @@ export function registerDocxExportCard() {
         this.activeProfile = await r.json();
         const idx = this.profiles.findIndex(p => p.id === this.activeProfile.id);
         if (idx >= 0) this.profiles[idx].name = this.activeProfile.name;
-        this.savedAt = Date.now();
-        if (this._savedAtTimer) clearTimeout(this._savedAtTimer);
-        this._savedAtTimer = setTimeout(() => { this.savedAt = null; this._savedAtTimer = null; }, 2500);
+        this._flashSaved();
       } finally {
         this.saving = false;
       }

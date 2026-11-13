@@ -150,6 +150,9 @@ export function registerBookEditorCard() {
         // _resetSession).
         onBookChanged: () => this._resetSession({ reload: true }),
         onViewReset: () => this._resetSession({ reload: false }),
+        // Karte zu: Ungespeichertes jetzt speichern, nicht erst nach dem Autosave-
+        // Fenster — der User hat den Bucheditor verlassen.
+        onHide: () => { this._saveDirtyNow(); },
       });
 
       // Vertikale Verankerung der Kommentar-Karten: Observer für Stream-Reflow +
@@ -168,14 +171,9 @@ export function registerBookEditorCard() {
       const unregisterBusy = registerBusySource(() => this.dirtyCount > 0 || this.savingCount > 0);
       this._lifecycle.signal.addEventListener('abort', unregisterBusy, { once: true });
 
-      // Karte zu: Ungespeichertes jetzt speichern, nicht erst nach dem Autosave-
-      // Fenster — der User hat den Bucheditor verlassen.
-      this.$watch(() => window.__app?.showBookEditorCard, (shown) => {
-        if (!shown) this._saveDirtyNow();
-      });
-
       // Schreibzeit (book/writing-time.js) zählt im Bucheditor nur, solange ein
       // Abschnitt aktiviert ist — Lesen und Scrollen im Stream ist kein Schreiben.
+      // Eigener Watcher (kein Show-Hook): er hängt zusätzlich am aktiven Abschnitt.
       this.$watch(() => !!window.__app?.showBookEditorCard && this.activePageId != null, (writing) => {
         if (window.__app) window.__app.bookEditorWriting = writing;
       });

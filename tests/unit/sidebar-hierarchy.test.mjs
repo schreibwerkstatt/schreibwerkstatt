@@ -111,6 +111,8 @@ test('Kapitelbewertung verlangt Text im Unterbaum und merkt hasChildren-Aenderun
 test('Strukturstand: Nachzug nur bei Abweichung, je Stand hoechstens einmal', () => {
   const ctx = { ...treeCatchUpMethods, _treeStructureAt: 'A', _structureCatchUpFor: null, _structureOwnWrite: false,
     $store: { nav: { selectedBookId: '3' } } };
+  // Buch-Guard (cards/book-guard.js) liest die Buchwahl aus Alpine.store('nav').
+  globalThis.window = { ...(globalThis.window || {}), Alpine: { store: (k) => (k === 'nav' ? ctx.$store.nav : undefined) } };
   assert.equal(ctx._structureDrifted(undefined), false, 'Server ohne Feld');
   assert.equal(ctx._structureDrifted('A'), false);
   assert.equal(ctx._structureDrifted('B'), true);

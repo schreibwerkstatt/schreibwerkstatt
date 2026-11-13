@@ -11,8 +11,8 @@
 // überlappende Karten werden greedy nach unten weggeschoben. Bei Auswahl wird die
 // aktive Karte auf ihre exakte Anker-Höhe gepinnt, die übrigen darum herum gelegt.
 
-import { locateRange } from '../share-anchor.js';
-import { resolveCardPositions } from '../comment-card-layout.js';
+import { anchorYOf } from '../share-anchor.js';
+import { resolveCardPositions, createObservedSet } from '../comment-card-layout.js';
 
 const CARD_GAP = 10;
 // Unter diesem Viewport fällt die Leiste auf eine statische Stapel-Liste zurück
@@ -28,31 +28,12 @@ export function createCardLayout(opts) {
   const { article, getLayer, getAnchoredCards, getActiveId } = opts;
   let raf = null;
   let ro = null;
-  const observed = new Set();
+  let observed = createObservedSet(null);
   const supportsMM = typeof window !== 'undefined' && typeof window.matchMedia === 'function';
 
   function isFlat() { return supportsMM && window.matchMedia(FLAT_BELOW).matches; }
 
-  function observe(el) {
-    if (!el || !ro || observed.has(el)) return;
-    try { ro.observe(el); observed.add(el); } catch {}
-  }
-
-  // Anker-Y einer Karte relativ zur Layer-Oberkante. Erst über die lokalisierte
-  // Range (Quote im Block gefunden); sonst — „Stelle geändert", Quote weg, Block
-  // noch da — über die Block-Oberkante. Beides weg (Block gelöscht) → null.
-  function anchorY(card, view, layerTop) {
-    const a = card.anchor;
-    if (!a) return null;
-    const range = locateRange(view, a);
-    if (range) { const r = range.getBoundingClientRect(); if (r.height || r.width) return r.top - layerTop; }
-    if (a.bid) {
-      let blk = null;
-      try { blk = view.querySelector(`[data-bid="${CSS.escape(String(a.bid))}"]`); } catch {}
-      if (blk) return blk.getBoundingClientRect().top - layerTop;
-    }
-    return null;
-  }
+  const observe = (el) => observed.observe(el);
 
   function layout() {
     const layer = getLayer();
@@ -68,6 +49,8 @@ export function createCardLayout(opts) {
       }
       return;
     }
+    // Karten werden bei jedem Render neu gebaut — alte Knoten freigeben.
+    observed.prune();
     observe(view);
 
     const cards = getAnchoredCards();
@@ -86,7 +69,7 @@ export function createCardLayout(opts) {
       const el = layer.querySelector(`.share-thread[data-comment-id="${CSS.escape(String(c.id))}"]`);
       const marker = layer.querySelector(`.share-thread-marker[data-marker-for="${CSS.escape(String(c.id))}"]`);
       observe(el);
-      const y = anchorY(c, view, layerTop);
+      const y = anchorYOf(view, c.anchor, layerTop);
       return { id: c.id, el, marker, y, h: el ? el.offsetHeight : 0 };
     }).filter((it) => it.el);
 
@@ -122,7 +105,10 @@ export function createCardLayout(opts) {
   }
 
   function init() {
-    if (typeof ResizeObserver !== 'undefined') ro = new ResizeObserver(() => schedule());
+    if (typeof ResizeObserver !== 'undefined') {
+      ro = new ResizeObserver(() => schedule());
+      observed = createObservedSet(ro);
+    }
     window.addEventListener('resize', schedule);
   }
 

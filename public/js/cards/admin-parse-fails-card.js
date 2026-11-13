@@ -17,11 +17,11 @@ export function registerAdminParseFailsCard() {
     _lifecycle: null,
 
     init() {
-      this.$watch(() => window.__app.showAdminParseFailsCard, async (visible) => {
-        if (visible) await this.parseFailsEnter();
-        else this._parseFailsLeave();
-      });
       this._lifecycle = setupCardLifecycle(this, {
+        showFlag: 'showAdminParseFailsCard',
+        showNeedsBookId: false,
+        onShow: () => this.parseFailsEnter(),
+        onHide: () => this._parseFailsLeave(),
         onViewReset: () => {
           this._parseFailsLeave();
           this.parseFailsFiles = [];

@@ -9,7 +9,7 @@
 
 import { setupCardLifecycle } from './card-lifecycle.js';
 import { startPoll, runningJobStatus } from './job-helpers.js';
-import { tzOpts, localeTag } from '../utils.js';
+import { fmtDateTime } from '../utils.js';
 import { EVT } from '../events.js';
 
 export function registerFolderImportCard() {
@@ -229,9 +229,7 @@ export function registerFolderImportCard() {
     },
 
     fmtLogTime(iso) {
-      if (!iso) return '';
-      const tag = localeTag(Alpine.store('shell').uiLocale);
-      return new Date(iso).toLocaleTimeString(tag, tzOpts({ hour: '2-digit', minute: '2-digit', second: '2-digit' }));
+      return fmtDateTime(iso, Alpine.store('shell').uiLocale, { hour: '2-digit', minute: '2-digit', second: '2-digit' });
     },
 
     get runningStatusHtml() {

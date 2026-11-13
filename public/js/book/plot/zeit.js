@@ -22,6 +22,7 @@ import { fetchJson } from '../../utils.js';
 import { formatZeitKey } from './zeit-format.js';
 import { befundSeverityTone } from '../../utils/befund-severity.js';
 import { figurAnzeigeName } from '../figur-name.js';
+import { isSelectedBook } from '../../cards/book-guard.js';
 
 export const zeitMethods = {
   async loadZeitVorschlaege() {
@@ -29,7 +30,7 @@ export const zeitMethods = {
     if (!bookId) { this.zeitVorschlaege = []; return; }
     try {
       const data = await fetchJson(`/plot/zeit-vorschlaege?book_id=${bookId}`);
-      if (Alpine.store('nav').selectedBookId !== bookId) return;
+      if (!isSelectedBook(bookId)) return;
       this.zeitVorschlaege = Array.isArray(data.vorschlaege) ? data.vorschlaege : [];
       // Auswahl der Durchsicht: bestehende Entscheidungen bleiben, neue Vorschläge
       // starten vorausgewählt, wenn sie eindeutig sind.

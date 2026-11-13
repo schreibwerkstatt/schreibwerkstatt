@@ -50,7 +50,7 @@ Kein Key darf aus zwei Quellen ins Root-Objekt kommen (Slice-Feld, gespreadetes 
 | `figurenState` | nur noch `_figuresPollTimer` (Reconnect-relevant → Root). Filter/Selektion/Lade-Flags (`figurenLoading/Progress/Status`, `selectedFigurId`, `figurenFilters`) → `$store.catalogUi` |
 | ~~`ereignisseState` / `szenenState` / `orteState` / `songsState` / `kontinuitaetState`~~ | **migriert → `$store.catalogUi`** (Filter + `selectedXxxId` + `UpdatedAt`); kein Root-Slice mehr |
 | `chatsState` | `_checkDoneBeforeChat` |
-| `featuresUsageState` | recentFeatureKeys (Top-3 Quick-Pills), recentPageIds (Palette) |
+| `featuresUsageState` | recentFeatureKeys (Top-3 Quick-Pills), recentPageIds (Palette), _recentPagesSeq (Buchwechsel-Guard von loadRecentPages) |
 | ~~`bookCreateState`~~ | **migriert → Karte `bookCreateCard`** ([book-create-card.js](../public/js/cards/book-create-card.js) auf dem `<dialog>`); Root-Trigger `openCreateBook()` dispatcht `book-create:open` |
 | ~~`collabState`~~ | **migriert → `$store.collab`** ([collab-store.js](../public/js/cards/collab-store.js), siehe Ebene 3): `_collabSince`, `_collabPollTimer`, recentRemoteEdits (`Map<page_id, { isSelf, device }>` — `isSelf` trennt eigenes Zweit-Gerät von fremdem User, Tooltip via `remoteEditTip()`), collabToast/`_collabToastTimer`, livePresenceByPage, Heartbeat-Timer (`_presencePingTimer`/`_presencePingPageId`), Geräte-Ping (`_bookDevicePingTimer`/`_bookDevicePingBookId`/`_selfPageDeviceCount` — page-scoped Multi-Device-Erkennung), Lock-State (`_currentEditLock`, `_lockHeartbeatTimer`, foreignEditLock), Event-Stream-Glue (`_streamOff`, `_lastSent` — Tick-Stempel, gegen die [app-collab-stream.js](../public/js/app/app-collab-stream.js) bei offenem Buch-Stream die Timer-Ticks ausdünnt). Kein Root-Slice mehr; Owner bleibt [app-collab.js](../public/js/app/app-collab.js) und schreibt via `this.$store.collab.*` |
 | ~~`dailyProgressState`~~ | **migriert → `$store.progress`** ([progress-store.js](../public/js/cards/progress-store.js); Header-Donut neben Avatar). Loader/Reset/`headerTodayRing()` bleiben Root-Methoden (app-view/bookscope.js) |
@@ -100,7 +100,7 @@ window.Alpine.data('orteCard', () => ({
 ```
 
 Der Helper macht:
-- `$watch(showFlag)` → bei `true` + `selectedBookId` → `cfg.onShow ?? cfg.load`.
+- `$watch(showFlag)` → bei `true` + `selectedBookId` → `cfg.onShow ?? cfg.load`; bei `false` → `cfg.onHide`. Der Show-Hook meldet sein Promise an `settleShowLoads` (Cross-Fade wartet auf den Inhalt) und setzt `cardLoading`. Darum reagiert eine Karte auf Ein-/Ausblenden **nur** über `showFlag` + `onShow`/`load`/`onHide`, nie über einen eigenen `$watch(() => window.__app.showXxxCard)` daneben — der sähe weder Cross-Fade noch Skelett. Ein eigener Watcher bleibt nur, wenn er an mehr als dem Flag hängt (Bucheditor: Schreibzeit = sichtbar **und** Abschnitt aktiv).
 - `book:changed` → Timer clear + `resetState` + (sichtbar + Buch vorhanden) → `cfg.load`, ohne `load` bei Buchkarten (`showNeedsBookId` nicht `false`) `cfg.onShow` — sonst bliebe eine offene Karte nach Job-Sprung/Zurück leer.
 - `view:reset` → Timer clear + `resetState` (KEIN Reload).
 - `card:refresh` → wenn `event.detail.name === cfg.name` und Buch vorhanden → `cfg.onCardRefresh` bzw. `cfg.load`. Trägt das Event `source: 'wake'` (Tab-Rückkehr nach >30 s, [bookscope.js](../public/js/app/app-view/bookscope.js)#`_refreshAfterWake`), gilt stattdessen `cfg.wake` — und `cardLoading` bleibt aus.
@@ -118,13 +118,13 @@ Der Helper macht:
 | `resetStateView` | Eigenes Reset-Objekt nur fürs `view:reset` (wenn book vs. view unterschiedlich resetten). |
 | `wake` | Verhalten bei der Tab-Rückkehr (`card:refresh` mit `source: 'wake'`). Default: derselbe Hook wie beim Re-Klick, ohne `cardLoading`. `'skip'`: gar nicht laden (Karte hält Arbeitsstand, den ein Neuaufbau verwirft: Bucheditor, Figur-Werkstatt, Fassungen). Funktion `(e, ctx, root)`: eigener stiller Abgleich, Konvention `loadXxx({ silent: true })`. **Regel:** die Tab-Rückkehr ist kein User-Wunsch — nichts dimmen, kein Skelett/Spinner, keine Auswahl, kein Auf-/Zuklappzustand, kein Undo-Verlauf zurücksetzen, Fehler lassen den alten Stand stehen, unveränderte Antworten werden nicht zugewiesen ([utils/same-data.js](../public/js/utils/same-data.js)#`sameData`). Der Re-Klick bleibt sichtbar. Karten mit eigenem `card:refresh`-Listener prüfen `isWakeRefresh(e)` aus dem Helper. |
 | `refreshNeedsBookId: false` | Default: `card:refresh` ignoriert wenn kein Buch aktiv. False für Karten mit eigener Buch-Prüfung. |
-| `showNeedsBookId: false` | Analog für `$watch(showFlag)`. |
+| `showNeedsBookId: false` | Analog für `$watch(showFlag)`: `onShow`/`load` laufen auch ohne gewähltes Buch. Pflicht für buchunabhängige Karten (Admin-Karten, Meine Bücher, Meine Statistik, Export-Karten mit user-scoped Profilen) — dort lädt `book:changed` ohne eigenes `onBookChanged` auch nichts nach. |
 | `extraListeners: [{ type, handler }]` | Zusätzliche Window-Events (z.B. `EVT.BOOK_CHAT_RESET`, `EVT.BOOK_STATS_SELECT`, `EVT.JOB_RECONNECT` — immer als `EVT.*`-Konstante, siehe Event-Bus). Werden über denselben AbortController automatisch wieder abgemeldet. |
 | `filterScopes: [{ scope, key?, defaults }]` | Filterleisten der Karte, pro Buch im localStorage — siehe „Filter-Persistenz" unten. |
 
 **Rückgabewert:** `{ signal, destroy }`. `signal` ist der `AbortController.signal` der internen Listener — Karten können eigene `addEventListener(..., { signal })` damit registrieren und sparen sich das `removeEventListener`.
 
-**Wann nicht nutzen:** Karten ohne `book:changed`/`view:reset`/`card:refresh`-Trio (Editor-Slices wie [editor-find-card](../public/js/cards/editor-find-card.js), [editor-figur-lookup-card](../public/js/cards/editor-figur-lookup-card.js)) verwenden direkt `AbortController` ohne Helper. Karten mit komplett-anderer Reset-Semantik (Coalesce + microtask wie [book-overview-card](../public/js/cards/book-overview-card.js); zweistufiger Form-Unmount wie [pdf-export-card](../public/js/cards/pdf-export-card.js)) bleiben manuell — der Helper ist Convenience, nicht Pflicht.
+**Wann nicht nutzen:** Karten ohne `book:changed`/`view:reset`/`card:refresh`-Trio (Editor-Slices wie [editor-find-card](../public/js/cards/editor-find-card.js), [editor-figur-lookup-card](../public/js/cards/editor-figur-lookup-card.js)) verwenden direkt `AbortController` ohne Helper. Karten mit komplett-anderer Reset-Semantik (Coalesce + microtask wie [book-overview-card](../public/js/cards/book-overview-card.js)) bleiben manuell — der Helper ist Convenience, nicht Pflicht.
 
 ## Filter-Persistenz (pro Buch, localStorage)
 

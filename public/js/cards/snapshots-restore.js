@@ -6,11 +6,19 @@
 // Server: POST /snapshots/:bookId/:id/restore bzw. …/restore-node. Beide schreiben
 // an Ort und Stelle — bestehende Seiten behalten ihre ID (docs/fassungen.md).
 
+import { tFetchError } from '../i18n.js';
+
 // Fehlerantworten → anzeigbarer Text. RESTORE_RUNNING kommt, wenn fuer dieses
 // Buch gerade ein anderer Restore laeuft (zweiter Tab, Mitautor).
-function _restoreErrorMsg(app, code) {
-  if (code === 'RESTORE_RUNNING') return app.t('snapshots.restoreRunning');
-  return app.t('snapshots.restoreFailed') + ' ' + (code || '');
+function _restoreErrorMsg(app, err) {
+  if (err?.code === 'RESTORE_RUNNING') return app.t('snapshots.restoreRunning');
+  return app.t('snapshots.restoreFailed') + ' ' + tFetchError(err);
+}
+
+// Nicht-OK-Antwort als Fehler im Format von fetchJson (utils/net.js): `status`,
+// `code`, `body` — tFetchError übersetzt ihn.
+function _httpError(r, body) {
+  return Object.assign(new Error(`HTTP ${r.status}`), { status: r.status, code: body?.error_code || null, body });
 }
 
 export const snapshotsRestoreMethods = {
@@ -51,7 +59,7 @@ export const snapshotsRestoreMethods = {
         if (await this._confirmBusy(body)) return this.restoreSnapshot(snap, true);
         return;
       }
-      if (!r.ok) throw new Error(body?.error_code || `HTTP ${r.status}`);
+      if (!r.ok) throw _httpError(r, body);
       // Buchinhalt wurde serverseitig umgeschrieben → Tree neu laden und die
       // Fassungs-Liste auffrischen (Auto-Sicherung ist neu dazugekommen).
       await app.loadPages?.();
@@ -63,7 +71,7 @@ export const snapshotsRestoreMethods = {
       }
     } catch (e) {
       console.error('[snapshots:restore]', e);
-      app.setStatus?.(_restoreErrorMsg(app, e.message), true, 6000);
+      app.setStatus?.(_restoreErrorMsg(app, e), true, 6000);
     } finally {
       this.restoringId = null;
     }
@@ -111,7 +119,7 @@ export const snapshotsRestoreMethods = {
         if (await this._confirmBusy(body)) return this.restoreNode(s, true);
         return;
       }
-      if (!r.ok) throw new Error(body?.error_code || `HTTP ${r.status}`);
+      if (!r.ok) throw _httpError(r, body);
       await app.loadPages?.();
       if (body.failed) {
         app.setStatus?.(app.t('snapshots.restoredNodePartial', { name, failed: body.failed }), true, 8000);
@@ -124,7 +132,7 @@ export const snapshotsRestoreMethods = {
       this.loadDrift(bookId);
     } catch (e) {
       console.error('[snapshots:restoreNode]', e);
-      app.setStatus?.(_restoreErrorMsg(app, e.message), true, 6000);
+      app.setStatus?.(_restoreErrorMsg(app, e), true, 6000);
     } finally {
       this.restoringNodeKey = null;
     }

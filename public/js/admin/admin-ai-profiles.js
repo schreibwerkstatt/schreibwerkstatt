@@ -9,7 +9,7 @@
 // mitzieht, wenn der Admin die Instanz-Einstellung aendert.
 
 import { fetchJson, sendJson } from '../utils.js';
-import { tFetchErrorRaw } from '../i18n.js';
+import { tFetchError } from '../i18n.js';
 
 const EMPTY_PROFILE = {
   id: null, name: '', provider: 'openai-compat', model: '', host: '',
@@ -30,7 +30,7 @@ export const adminAiProfilesMethods = {
       const j = await fetchJson('/admin/ai-profiles');
       this.adminProfilesList = j.profiles || [];
     } catch (e) {
-      this.adminProfilesError = tFetchErrorRaw(e);
+      this.adminProfilesError = tFetchError(e);
     } finally {
       this.adminProfilesLoading = false;
     }
@@ -85,7 +85,7 @@ export const adminAiProfilesMethods = {
       this.adminProfilesEditing = false;
       await this.adminProfilesLoad();
     } catch (e) {
-      this.adminProfilesError = tFetchErrorRaw(e);
+      this.adminProfilesError = tFetchError(e);
     } finally {
       this.adminProfilesSaving = false;
     }
@@ -104,7 +104,7 @@ export const adminAiProfilesMethods = {
       await sendJson(`/admin/ai-profiles/${profile.id}`, 'DELETE');
       await this.adminProfilesLoad();
     } catch (e) {
-      this.adminProfilesError = tFetchErrorRaw(e);
+      this.adminProfilesError = tFetchError(e);
     }
   },
 

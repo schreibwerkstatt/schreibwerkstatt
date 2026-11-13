@@ -33,6 +33,7 @@
 // (MISSING_PAGE/-CHAPTER) und der Fehlerpfad lüde das ganze Buch neu.
 
 import { contentRepo } from '../repo/content.js';
+import { eachChapter } from './tree-walk.js';
 
 const HISTORY_MAX = 10;
 
@@ -40,14 +41,10 @@ const HISTORY_MAX = 10;
 // wenn beide Stände dieselben Kapitel und Seiten enthalten.
 function _workstateIdKey({ workTree, soloPages }) {
   const ids = [];
-  const walk = (list) => {
-    for (const c of list || []) {
-      ids.push('c' + c.id);
-      for (const p of c.pages || []) ids.push('p' + p.id);
-      walk(c.subchapters);
-    }
-  };
-  walk(workTree);
+  eachChapter(workTree, (c) => {
+    ids.push('c' + c.id);
+    for (const p of c.pages || []) ids.push('p' + p.id);
+  });
   for (const p of soloPages || []) ids.push('p' + p.id);
   return ids.sort().join(',');
 }
@@ -239,14 +236,10 @@ export const historyMethods = {
       const n = names.get(prefix + item.id);
       if (n != null) item.name = n;
     };
-    const walk = (list) => {
-      for (const c of list) {
-        rename(c, 'c');
-        for (const p of c.pages || []) rename(p, 'p');
-        walk(c.subchapters || []);
-      }
-    };
-    walk(workTree);
+    eachChapter(workTree, (c) => {
+      rename(c, 'c');
+      for (const p of c.pages || []) rename(p, 'p');
+    });
     for (const p of soloPages) rename(p, 'p');
     this.workTree = workTree;
     this.soloPages = soloPages;
@@ -257,14 +250,10 @@ export const historyMethods = {
   // 'c<id>'/'p<id>' → Name im aktuellen Workstate.
   _currentNames() {
     const names = new Map();
-    const walk = (list) => {
-      for (const c of list || []) {
-        names.set('c' + c.id, c.name);
-        for (const p of c.pages || []) names.set('p' + p.id, p.name);
-        walk(c.subchapters);
-      }
-    };
-    walk(this.workTree);
+    eachChapter(this.workTree, (c) => {
+      names.set('c' + c.id, c.name);
+      for (const p of c.pages || []) names.set('p' + p.id, p.name);
+    });
     for (const p of this.soloPages || []) names.set('p' + p.id, p.name);
     return names;
   },
@@ -314,10 +303,7 @@ export const historyMethods = {
   // umschreiben — sonst wuerden sie beim Einspielen als veraltet verworfen.
   _remapPageId(oldId, newId, ...extra) {
     const fixPages = (list) => { for (const p of list || []) if (p.id === oldId) p.id = newId; };
-    const walk = (list) => {
-      for (const c of list || []) { fixPages(c.pages); walk(c.subchapters); }
-    };
-    const fixSnap = (snap) => { if (snap) { walk(snap.workTree); fixPages(snap.soloPages); } };
+    const fixSnap = (snap) => { if (snap) { eachChapter(snap.workTree, (c) => fixPages(c.pages)); fixPages(snap.soloPages); } };
     for (const rec of [...this._undoStack, ...this._redoStack, ...extra]) {
       if (rec.kind === 'reorder') { fixSnap(rec.before); fixSnap(rec.after); }
       if ((rec.kind === 'rename-page' || rec.kind === 'create-page') && rec.id === oldId) rec.id = newId;

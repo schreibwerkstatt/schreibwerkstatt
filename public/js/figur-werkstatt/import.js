@@ -4,7 +4,8 @@
 // Referenz. Werkstatt-Jobs schliessen die Quell-Figur serverseitig vom Buch-
 // Kontext aus, damit sie sich nicht selbst referenziert.
 
-import { fetchJson } from '../utils.js';
+import { fetchJson, sendJson } from '../utils.js';
+import { isSelectedBook } from '../cards/book-guard.js';
 
 // Normalisierung fuer den Namensvergleich: getrimmt, kleingeschrieben. Bewusst
 // stumpf — er entscheidet nur die VORAUSWAHL im Verknuepfen-Dialog, nie die
@@ -22,6 +23,7 @@ export const importMethods = {
     this.errorMessage = '';
     try {
       const rows = await fetchJson(`/draft-figures/${bookId}/importable`);
+      if (!isSelectedBook(bookId)) return;
       this.importables = Array.isArray(rows) ? rows : [];
     } catch (e) {
       this.importables = [];
@@ -51,6 +53,7 @@ export const importMethods = {
     this._openPickerPopover(anchor, 'werkstattLinkPopover', () => this.cancelLinkFigure());
     try {
       const rows = await fetchJson(`/draft-figures/${bookId}/link-candidates`);
+      if (!isSelectedBook(bookId)) return;
       this.linkCandidates = Array.isArray(rows) ? rows : [];
       // Vorauswahl bei Namensgleichheit — der haeufigste Fall ist genau der,
       // und er soll ein Klick sein, keine Suche.
@@ -83,21 +86,18 @@ export const importMethods = {
     if (figureId !== null && !fid) return;
     this.busy = true;
     try {
-      const r = await fetch(`/draft-figures/by-id/${id}/link-figure`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ figureId: fid }),
-      });
-      const body = await r.json().catch(() => ({}));
-      if (r.status === 409 && body.existingDraftId) {
+      let body;
+      try {
+        body = await sendJson(`/draft-figures/by-id/${id}/link-figure`, 'POST', { figureId: fid });
+      } catch (e) {
+        if (e.status !== 409 || !e.body?.existingDraftId) throw e;
         // Die Katalog-Figur haengt schon an einem anderen Draft — dorthin
         // springen statt eine mehrdeutige Quelle zu erlauben.
         this.errorMessage = app.t('werkstatt.error.alreadyLinked');
         this.cancelLinkFigure();
-        this.selectDraft(body.existingDraftId);
+        this.selectDraft(e.body.existingDraftId);
         return;
       }
-      if (!r.ok) throw new Error(body.error_code || 'link failed');
       // Draft-Liste lokal nachziehen (der Server liefert die frische Zeile mit
       // aufgeloestem source_figure_name) und die Cross-Feature-Badges neu holen:
       // die Plot-/Motiv-Beteiligung haengt an der Quell-Figur.
@@ -125,25 +125,21 @@ export const importMethods = {
     if (!bookId || !figureId) return;
     this.busy = true;
     try {
-      // Direkter fetch statt fetchJson: 409 ALREADY_IMPORTED soll den
-      // existingDraftId-Body liefern, damit zum bestehenden Draft gesprungen
-      // werden kann statt Fehlermeldung.
-      const r = await fetch(`/draft-figures/${bookId}/import`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ figureId }),
-      });
-      const body = await r.json().catch(() => ({}));
-      if (r.status === 409 && body.error_code === 'ALREADY_IMPORTED' && body.existingDraftId) {
+      // 409 ALREADY_IMPORTED traegt `existingDraftId`: dann zum bestehenden
+      // Draft springen statt eine Fehlermeldung zu zeigen.
+      let body;
+      try {
+        body = await sendJson(`/draft-figures/${bookId}/import`, 'POST', { figureId });
+      } catch (e) {
+        if (e.status !== 409 || e.code !== 'ALREADY_IMPORTED' || !e.body?.existingDraftId) throw e;
         this.importing = false;
         this.importables = [];
         this.selectedImportFigureId = '';
         await this.loadDrafts();
-        this.selectDraft(body.existingDraftId);
+        this.selectDraft(e.body.existingDraftId);
         this.errorMessage = '';
         return;
       }
-      if (!r.ok) throw new Error(body?.error_code || `HTTP ${r.status}`);
       this.drafts = [body, ...this.drafts];
       this.importing = false;
       this.importables = [];

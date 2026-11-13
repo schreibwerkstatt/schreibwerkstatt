@@ -3,6 +3,7 @@
 // positioniert und befüllt. Hält die Pseudo-Slots auf den Targets frei,
 // damit ::before/::after dort für eigene Decorations verfügbar bleiben.
 import { EVT } from './events.js';
+import { installFloatingDismiss, makeRemovalWatcher } from './floating-dismiss.js';
 import { mountInTopLayer } from './fullscreen.js';
 
 (function () {
@@ -20,12 +21,7 @@ import { mountInTopLayer } from './fullscreen.js';
   // Klick selbst neu). Dabei feuert kein mouseout — das Element wird nicht
   // verlassen, sondern entfernt. Ohne diesen Watcher bliebe der Tooltip
   // verwaist stehen, bis der nächste Hover/Klick ihn wegräumt.
-  const removalWatcher =
-    typeof MutationObserver === 'function'
-      ? new MutationObserver(() => {
-          if (currentTarget && !document.contains(currentTarget)) hide();
-        })
-      : null;
+  const removalWatcher = makeRemovalWatcher(() => currentTarget, () => hide());
 
   function ensureLayer() {
     if (layer) return;
@@ -152,13 +148,8 @@ import { mountInTopLayer } from './fullscreen.js';
     const t = findTip(e.target);
     if (t) show(t);
   });
-  document.addEventListener('focusout', () => hide());
-  window.addEventListener('scroll', hide, true);
-  window.addEventListener('resize', hide);
+  installFloatingDismiss(hide);
   // Programmatisches Ausblenden (z.B. wenn ein Klick ein Popover über demselben
   // Trigger öffnet und der Hover-Tooltip sonst darüber hängen bliebe).
   window.addEventListener(EVT.TOOLTIP_HIDE, hide);
-  document.addEventListener('keydown', (e) => {
-    if (e.key === 'Escape') hide();
-  });
 })();
