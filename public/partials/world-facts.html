@@ -91,7 +91,7 @@
                 :aria-expanded="wfGroupOpen(g.kategorie)"
                 :aria-controls="'wf-group-' + g.kategorie">
           <span class="history-chevron" :class="{ open: wfGroupOpen(g.kategorie) }" aria-hidden="true"></span>
-          <span class="tag entity-typ-tag weltfakten-kat-tag">
+          <span class="tag entity-typ-tag weltfakten-kat-tag truncate">
             <svg class="icon" aria-hidden="true"><use :href="'/icons.svg#' + wfKatIcon(g.kategorie)"/></svg>
             <span x-text="wfKatLabel(g.kategorie)"></span>
           </span>

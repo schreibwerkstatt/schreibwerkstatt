@@ -19,7 +19,7 @@
 }
 
 /* Pflegeformular: Neuanlage über der Liste, Bearbeiten im Detail einer Zeile.
-   Rahmen `.ort-edit-panel`: card-blocks.css (`.card-edit-panel`). */
+   Rahmen: `.card-edit-panel` (card-blocks.css). */
 .ort-edit-actions,
 .ort-detail-actions {
   display: flex;

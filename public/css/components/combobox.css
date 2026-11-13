@@ -28,9 +28,6 @@
 .combobox-trigger:focus-within { border-color: var(--color-border-focus); }
 .combobox-value {
   flex: 1;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
   text-align: left;
 }
 .combobox-chevron {
@@ -71,9 +68,6 @@
 }
 .combobox-search:focus-visible { outline: none; border-bottom-color: var(--color-border-focus); }
 .combobox-list {
-  list-style: none;
-  margin: 0;
-  padding: 0;
   max-height: 220px;
   overflow-y: auto;
   /* Scroll-Chaining ans Fenster kappen: sonst scrollt am oberen/unteren Listen-

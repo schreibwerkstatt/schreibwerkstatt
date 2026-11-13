@@ -83,7 +83,7 @@
 
     <section class="rb-days" x-show="rueckblickResult?.bemerkenswerteTage?.length">
       <h3 class="card-section-title" x-text="$app.t('rueckblick.tage')"></h3>
-      <ol class="rb-tage">
+      <ol class="rb-tage list-reset">
         <template x-for="(tag, i) in (rueckblickResult?.bemerkenswerteTage || [])" :key="i">
           <li class="rb-tag-item">
             <button type="button" class="rb-tag-datum" @click="gotoRueckblickTag(tag.datum)"
@@ -166,7 +166,7 @@
           <div class="ymheat-row ymheat-row--head">
             <span class="ymheat-corner"></span>
             <template x-for="(mLabel, mi) in rbMonthLabels()" :key="mi">
-              <span class="ymheat-month-label" x-text="mLabel"></span>
+              <span class="ymheat-month-label truncate" x-text="mLabel"></span>
             </template>
           </div>
           <template x-for="row in rueckblickCalendar().years" :key="row.year">

@@ -420,7 +420,7 @@ export function comboboxData(cfg = {}) {
           '        :aria-expanded="open ? \'true\' : \'false\'"',
           '        :aria-labelledby="_labelledBy ? (_labelledBy + \' \' + _valId) : null"',
           '        :aria-label="_labelledBy ? null : ariaName">',
-          '  <span class="combobox-value" :id="_valId" x-text="selectedLabel || placeholder"></span>',
+          '  <span class="combobox-value truncate" :id="_valId" x-text="selectedLabel || placeholder"></span>',
           '  <svg class="combobox-chevron" :class="{\'combobox-chevron--open\': open}" width="10" height="10" viewBox="0 0 10 10" fill="none" aria-hidden="true"><path d="M1.5 3.5L5 7L8.5 3.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>',
           '</button>',
           // Das Dropdown existiert nur, solange es offen ist (`x-if`, nicht
@@ -452,7 +452,7 @@ export function comboboxData(cfg = {}) {
           '<div class="combobox-dropdown" x-id="[\'cb-opt\']" :style="ddWidth ? { minWidth: ddWidth } : {}" x-anchor.bottom-start.fixed="$refs.cbTrigger">',
           '  <input type="text" class="combobox-search" x-model="query" x-ref="cbInput"',
           '         :placeholder="$app.t(\'common.searchShort\')" role="searchbox" :aria-label="$app.t(\'common.searchShort\')">',
-          '  <ul class="combobox-list" role="listbox"',
+          '  <ul class="combobox-list list-reset" role="listbox"',
           '      :aria-activedescendant="highlighted >= 0 ? ($id(\'cb-opt\') + \'-\' + highlighted) : null">',
           '    <template x-for="row in groupedRows" :key="row.key">',
           // Die Markierung (`combobox-option--hl`) setzt `_syncHl` imperativ —

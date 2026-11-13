@@ -95,7 +95,7 @@
                 <span class="badge-source" x-show="isGhost(it.m)" x-text="$app.t('motiv.outline.ghost')"
                       :data-tip="$app.t('motiv.tip.ghost')"></span>
               </div></td>
-              <td class="motiv-outline-triggers"
+              <td class="motiv-outline-triggers truncate"
                   x-text="(it.m.trigger_terms || []).length ? it.m.trigger_terms.join(', ') : '—'"></td>
               <td class="motiv-outline-num" x-text="it.r.occ"></td>
               <td class="motiv-outline-num motiv-outline-muted" x-text="it.r.avg >= 0 ? it.r.avg + '%' : '—'"></td>

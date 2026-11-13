@@ -227,9 +227,6 @@
   color: var(--color-text);
   flex: 1 1 auto;
   min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
   cursor: pointer;
   padding: var(--space-2xs) var(--space-6);
   border-radius: var(--radius-none);

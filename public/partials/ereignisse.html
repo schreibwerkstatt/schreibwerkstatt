@@ -45,7 +45,7 @@
       <ul class="gz-chronology-list">
         <template x-for="c in ($store.catalog.zeitstrahlChronology?.chapters || [])" :key="c.chapter_id">
           <li class="gz-chronology-row">
-            <span class="gz-chronology-kap" x-text="c.name"></span>
+            <span class="gz-chronology-kap truncate" x-text="c.name"></span>
             <span class="gz-chronology-year" x-text="c.minYear === c.maxYear ? String(c.minYear) : $app.t('events.span', { start: c.minYear, ende: c.maxYear })"></span>
           </li>
         </template>

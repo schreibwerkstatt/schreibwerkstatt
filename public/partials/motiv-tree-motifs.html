@@ -12,7 +12,7 @@
             :data-tip="$app.t('motiv.motif.dragHint')" :aria-label="$app.t('motiv.motif.dragHint')">
         <svg class="icon" aria-hidden="true"><use href="/icons.svg#grip-vertical"/></svg>
       </span>
-      <button type="button" class="motiv-tree-name" :class="{ 'motiv-tree-name--ghost': isGhost(m) }"
+      <button type="button" class="motiv-tree-name truncate" :class="{ 'motiv-tree-name--ghost': isGhost(m) }"
               @click="selectMotif(m.id)" @focus="hoverTreeMotif(m.id)" @blur="hoverTreeMotif(null)"
               :data-tip="isGhost(m) ? $app.t('motiv.tip.ghost') : null">
         <span x-text="m.name"></span>

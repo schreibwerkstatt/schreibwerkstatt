@@ -47,13 +47,13 @@
             x-text="$app.t('sources.detect.adoptAll', { n: detectedAdoptable().length })"></button>
   </div>
 
-  <ul class="sources-detect-list" x-show="srcDetected.length > 0" x-cloak>
+  <ul class="sources-detect-list list-reset" x-show="srcDetected.length > 0" x-cloak>
     <template x-for="(v, i) in srcDetected" :key="i">
       <li class="sources-detect-item" :class="{ 'sources-detect-item--known': v.existing_source_id }">
         <div class="sources-detect-entry">
           <span class="sources-detect-entry-head">
             <span class="sources-detect-entry-title" x-text="v.title || $app.t('sources.untitled')"></span>
-            <span class="tag entity-typ-tag" x-text="$app.t('sources.type.' + v.csl_type)"></span>
+            <span class="tag entity-typ-tag truncate" x-text="$app.t('sources.type.' + v.csl_type)"></span>
             <!-- Bestaetigt = im Register wiedergefunden. Unbestaetigt heisst
                  nicht falsch, nur ungeprueft — darum Hinweis statt Warnung. -->
             <span class="badge-ok" x-show="v.verified" x-cloak
@@ -102,7 +102,7 @@
        Vorschlagsfeld oben — mit frisch gerechnetem Bibliotheks-Status. -->
   <div class="sources-detect-history" x-show="srcDetectRuns.length > 0" x-cloak>
     <span class="sources-detect-history-title" x-text="$app.t('sources.detect.history')"></span>
-    <ul class="sources-detect-run-list">
+    <ul class="sources-detect-run-list list-reset">
       <template x-for="run in srcDetectRuns" :key="run.id">
         <li class="sources-detect-run" :class="{ 'sources-detect-run--active': srcDetectRunId === run.id }">
           <button type="button" class="sources-detect-run-open text-link"

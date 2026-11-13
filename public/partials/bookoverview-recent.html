@@ -3,7 +3,7 @@
 <template x-if="overviewRecentPages().length > 0">
   <div class="overview-tile overview-tile--medium">
     <div class="overview-tile-label" x-text="$app.t('overview.recent')"></div>
-    <ul class="overview-recent-list">
+    <ul class="overview-recent-list list-reset">
       <template x-for="p in overviewRecentPages()" :key="p.id">
         <!-- Klickziel am inneren Element: .internal-link am <li> nähme mit
              role=button die Listen-Semantik weg. -->

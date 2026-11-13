@@ -27,9 +27,6 @@
 .diary-anniversary-empty { margin: 0; }
 
 .diary-anniversary-list {
-  list-style: none;
-  margin: 0;
-  padding: 0;
   display: flex;
   flex-direction: column;
   gap: var(--space-3);

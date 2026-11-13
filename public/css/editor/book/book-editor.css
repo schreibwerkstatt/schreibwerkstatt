@@ -206,9 +206,6 @@
   .book-editor-outline-chapter-name {
     flex: 1;
     min-width: 0;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
   }
   .book-editor-outline-count {
     font-size: var(--font-size-xs);
@@ -262,9 +259,6 @@
   .book-editor-outline-page-name {
     flex: 1;
     min-width: 0;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
   }
   .book-editor-outline-dot {
     width: 6px;

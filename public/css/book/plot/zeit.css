@@ -87,7 +87,6 @@
   .plot-zeit-review { margin-bottom: var(--space-sm); }
   .plot-zeit-review-body { padding-top: var(--space-xs); }
   .plot-zeit-review-body .card-hint { margin: 0 0 var(--space-xs); }
-  .plot-zeit-review-list { list-style: none; margin: 0; padding: 0; }
   .plot-zeit-review-row {
     display: grid;
     grid-template-columns: minmax(7rem, max-content) 1fr;

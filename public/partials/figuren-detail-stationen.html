@@ -13,7 +13,7 @@
        x-show="!figurStationenAktiv(f, kind).length && !figurStationenVorschlaege(f, kind).length && !figurStationEditing(f, kind)"
        x-text="$app.t('figuren.stationen.leer.' + kind)"></p>
 
-    <ul class="figur-station-list" x-show="figurStationenAktiv(f, kind).length">
+    <ul class="figur-station-list list-reset" x-show="figurStationenAktiv(f, kind).length">
       <template x-for="s in figurStationenAktiv(f, kind)" :key="s.id">
         <li class="figur-station">
           <template x-if="!figurStationEditing(f, kind, s)">

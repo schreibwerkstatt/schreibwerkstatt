@@ -805,7 +805,7 @@
     <button type="button" class="btn-close" @click="closeOfflineRescue()" :aria-label="t('common.close')"><svg class="icon" aria-hidden="true"><use href="/icons.svg#x"/></svg></button>
   </div>
   <p class="offline-rescue-hint" x-text="t('offline.rescue.hint')"></p>
-  <ul class="offline-rescue-list">
+  <ul class="offline-rescue-list list-reset">
     <template x-for="item in offlineRescueItems" :key="item.id">
       <li class="offline-rescue-item">
         <div class="offline-rescue-item-head">

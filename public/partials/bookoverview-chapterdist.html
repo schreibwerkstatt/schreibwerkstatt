@@ -16,7 +16,7 @@
             :class="{ 'overview-chapter-row--max': ch.isMax, 'overview-chapter-row--min': ch.isMin }"
             @click="_openKapitelReview(ch.id)"
             :data-tip="$app.t('overview.chapterReviewOpen', { name: ch.name })">
-          <span class="overview-chapter-name" :data-tip="ch.name" x-text="ch.name"></span>
+          <span class="overview-chapter-name truncate" :data-tip="ch.name" x-text="ch.name"></span>
           <div class="overview-chapter-bar-track overview-chapter-bar-track--diverge">
             <div class="overview-chapter-bar-fill"
                  :class="ch.isAbove ? 'overview-chapter-bar-fill--pos' : 'overview-chapter-bar-fill--neg'"

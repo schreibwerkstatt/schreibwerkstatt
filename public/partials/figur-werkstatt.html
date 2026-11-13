@@ -340,7 +340,7 @@
                          @click.stop="selectedKonfliktIdx = selectedKonfliktIdx === idx ? null : idx">
                       <span class="severity-tag" :class="befundSeverityClass(k.schwere)" x-text="$app.t('werkstatt.severity.' + k.schwere)"></span>
                       <span class="entity-row-title" x-text="k.feld"></span>
-                      <span class="entity-row-meta" x-text="k.problem"></span>
+                      <span class="entity-row-meta truncate" x-text="k.problem"></span>
                       <span class="history-chevron" :class="{ open: selectedKonfliktIdx === idx }" aria-hidden="true"></span>
                     </div>
                     <div x-show="selectedKonfliktIdx === idx" class="entity-detail" x-cloak>

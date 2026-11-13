@@ -120,7 +120,7 @@
             <!-- Titel + Anriss des Kommentars (Begründung/Verbesserungshinweis); voll im Detail. -->
             <span class="entity-row-main">
               <span class="entity-row-title" x-text="s.titel"></span>
-              <span class="szenen-row-snippet" x-show="s.kommentar && $store.catalogUi.selectedSzeneId !== s.id" x-text="s.kommentar"></span>
+              <span class="szenen-row-snippet truncate" x-show="s.kommentar && $store.catalogUi.selectedSzeneId !== s.id" x-text="s.kommentar"></span>
             </span>
             <span x-show="s.stale" class="tag tag--stale" :data-tip="$app.t('szenen.staleHint')" x-text="$app.t('szenen.staleBadge')"></span>
             <span x-show="!s.stale && s.text_geaendert" class="tag" :data-tip="$app.t('szenen.textChangedHint')" x-text="$app.t('szenen.textChangedBadge')"></span>

@@ -35,7 +35,7 @@
             <template x-for="(s, i) in synonymThesList" :key="'t'+i">
               <button type="button" class="synonym-entry" @click="applySynonym(s)">
                 <span class="synonym-word" x-text="s.wort"></span>
-                <span x-show="s.hinweis" class="synonym-hint" x-text="s.hinweis"></span>
+                <span x-show="s.hinweis" class="synonym-hint truncate" x-text="s.hinweis"></span>
               </button>
             </template>
           </div>
@@ -52,7 +52,7 @@
             <template x-for="(s, i) in synonymKiList" :key="'k'+i">
               <button type="button" class="synonym-entry" @click="applySynonym(s)">
                 <span class="synonym-word" x-text="s.wort"></span>
-                <span x-show="s.hinweis" class="synonym-hint" x-text="s.hinweis"></span>
+                <span x-show="s.hinweis" class="synonym-hint truncate" x-text="s.hinweis"></span>
               </button>
             </template>
           </div>

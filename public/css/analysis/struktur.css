@@ -49,9 +49,6 @@
 
   /* Vor der Freigabe offen — Liste unter den Hinweisen, über der Tabelle. */
   .struktur-bedenken-list {
-    list-style: none;
-    margin: 0;
-    padding: 0;
     display: flex;
     flex-direction: column;
     gap: var(--space-sm);
@@ -112,9 +109,6 @@
   }
 
   .struktur-regeln {
-    margin: 0;
-    padding: 0;
-    list-style: none;
     display: flex;
     flex-direction: column;
     gap: var(--space-md);

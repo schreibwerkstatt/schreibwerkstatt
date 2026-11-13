@@ -91,11 +91,11 @@
       <div class="edit-cite-hint" x-show="xrefError" x-text="$app.t('editor.toolbar.xrefLoadError')"></div>
       <div class="edit-cite-hint" x-show="!xrefLoading && !xrefError && xrefHits.length === 0"
            x-text="$app.t('editor.toolbar.xrefEmpty')"></div>
-      <ul class="edit-cite-list" role="listbox" x-show="xrefHits.length > 0">
+      <ul class="edit-cite-list list-reset" role="listbox" x-show="xrefHits.length > 0">
         <template x-for="(hit, i) in xrefHits" :key="hit.kind + ':' + hit.target">
           <li role="option"
               :aria-selected="i === xrefIdx"
-              class="edit-cite-item edit-xref-item"
+              class="edit-cite-item edit-xref-item truncate"
               :class="{ 'is-active': i === xrefIdx }"
               :data-depth="hit.depth"
               @mouseenter="xrefIdx = i"
@@ -154,11 +154,11 @@
       <div class="edit-cite-hint" x-show="citeError" x-text="$app.t('editor.toolbar.citeLoadError')"></div>
       <div class="edit-cite-hint" x-show="!citeLoading && !citeError && citeHits.length === 0"
            x-text="$app.t('editor.toolbar.citeEmpty')"></div>
-      <ul class="edit-cite-list" role="listbox" x-show="citeHits.length > 0">
+      <ul class="edit-cite-list list-reset" role="listbox" x-show="citeHits.length > 0">
         <template x-for="(hit, i) in citeHits" :key="hit.id">
           <li role="option"
               :aria-selected="i === citeIdx"
-              class="edit-cite-item"
+              class="edit-cite-item truncate"
               :class="{ 'is-active': i === citeIdx }"
               @mouseenter="citeIdx = i"
               @click="_commitCite(hit.src)"

@@ -9,13 +9,13 @@
       <span class="overview-fig-count" x-text="_fmtNum(overviewSongsCount())"></span>
       <span class="overview-fig-count-unit" x-text="$app.t('overview.unit.songs')"></span>
     </div>
-    <ul class="overview-song-list" x-show="overviewTopSongs().length > 0">
+    <ul class="overview-song-list list-reset" x-show="overviewTopSongs().length > 0">
       <template x-for="s in overviewTopSongs()" :key="s.id">
         <li class="overview-song-item"
             :data-tip="s.titel + (s.interpret ? ' · ' + s.interpret : '') + (s.total > 0 ? ' · ' + s.total : '')">
           <span class="overview-song-dot" aria-hidden="true"></span>
-          <span class="overview-song-titel" x-text="s.titel"></span>
-          <span class="overview-song-interpret" x-show="s.interpret" x-text="s.interpret"></span>
+          <span class="overview-song-titel truncate" x-text="s.titel"></span>
+          <span class="overview-song-interpret truncate" x-show="s.interpret" x-text="s.interpret"></span>
           <span class="overview-song-count" x-show="s.total > 0" x-text="s.total"></span>
         </li>
       </template>

@@ -6,6 +6,7 @@
   <link rel="stylesheet" href="/public/css/tokens.css">
   <link rel="stylesheet" href="/public/css/components/year-month-heatmap.css">
   <link rel="stylesheet" href="/public/css/page/tagebuch-rueckblick.css">
+  <link rel="stylesheet" href="/public/css/layout/utilities.css">
   <style>
     body { margin: 0; padding: 24px; font: 16px/1.5 system-ui, sans-serif; }
   </style>
@@ -61,7 +62,7 @@
           </span>
         </div>
       </div>
-      <ul class="rb-tage" data-test="tage">
+      <ul class="rb-tage list-reset" data-test="tage">
         <template x-for="(tag, i) in (rueckblickResult?.bemerkenswerteTage || [])" :key="i">
           <li class="rb-tag-item">
             <button type="button" class="rb-tag-datum" :data-test="'tag-' + tag.datum" @click="gotoRueckblickTag(tag.datum)"

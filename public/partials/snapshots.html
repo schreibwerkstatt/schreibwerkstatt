@@ -79,7 +79,7 @@
               <span x-text="fassungLabel(s)"></span>
               <span class="badge badge-ok snapshots-published-badge" x-show="isPublished(s)" x-cloak
                     :data-tip="publishedDateLabel(s)" x-text="$app.t('snapshots.publishedTag')"></span>
-              <span x-show="s.description" class="snapshots-desc" :data-tip="s.description"
+              <span x-show="s.description" class="snapshots-desc truncate" :data-tip="s.description"
                     x-text="s.description"></span>
             </td>
             <td x-text="$app.formatDate(s.created_at)"></td>

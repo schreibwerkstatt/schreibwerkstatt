@@ -102,9 +102,6 @@
 .entity-row-meta {
   font-size: var(--font-size-mini);
   color: var(--color-muted);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
   max-width: 40%;
 }
 .entity-typ-tag {
@@ -114,9 +111,6 @@
   flex-shrink: 0;
   /* Feste Breite: ein längeres Label (Übersetzung, neuer Typ) kürzt, statt in
      den Titel daneben zu laufen. */
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }
 
 .entity-detail {
@@ -268,9 +262,6 @@
   font-style: italic;
   color: var(--color-muted);
   font-size: var(--font-size-mini);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
   max-width: 30%;
 }
 
@@ -323,9 +314,6 @@
   font-weight: var(--fw-semibold);
   text-transform: uppercase;
   letter-spacing: var(--tracking-caps);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
   max-width: 18%;
 }
 

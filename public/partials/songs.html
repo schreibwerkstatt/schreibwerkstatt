@@ -58,12 +58,12 @@
     <template x-for="s in listWindowed(songsFiltered)" :key="s.id">
       <div>
         <div class="entity-row internal-link" :data-song-id="s.id" @click="$store.catalogUi.selectedSongId = $store.catalogUi.selectedSongId === s.id ? null : s.id">
-          <span x-show="s.kontext_typ" class="tag entity-typ-tag" x-text="$app.t('songs.kontextTyp.' + s.kontext_typ, { _default: s.kontext_typ })"></span>
+          <span x-show="s.kontext_typ" class="tag entity-typ-tag truncate" x-text="$app.t('songs.kontextTyp.' + s.kontext_typ, { _default: s.kontext_typ })"></span>
           <span class="entity-row-title">
             <span x-text="s.titel"></span>
             <span x-show="s.interpret" class="song-interpret"><span class="song-sep">:</span> <span x-text="s.interpret"></span></span>
           </span>
-          <span x-show="s.genre" class="song-genre" x-text="s.genre"></span>
+          <span x-show="s.genre" class="song-genre truncate" x-text="s.genre"></span>
           <template x-if="s.kapitel?.length">
             <span class="entity-refs entity-refs--collapse-mobile">
               <button type="button" class="entity-ref" x-entity-ref="{ type: 'kapitel', id: s.kapitel[0].chapter_id, name: s.kapitel[0].name }"></button>

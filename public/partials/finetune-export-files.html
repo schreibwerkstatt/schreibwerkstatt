@@ -36,17 +36,17 @@
       <div class="finetune-downloads">
         <button type="button" @click="finetuneDownload('train', ex.id)" :disabled="(ex.stats.train ?? 0) === 0">
           <svg class="icon" aria-hidden="true"><use href="/icons.svg#download"/></svg>
-          <span class="finetune-download-name">train.jsonl</span>
+          <span class="finetune-download-name truncate">train.jsonl</span>
           <span class="form-size-hint" x-show="ex.stats.trainBytes > 0" x-text="finetuneFormatBytes(ex.stats.trainBytes)"></span>
         </button>
         <button type="button" @click="finetuneDownload('val', ex.id)" :disabled="(ex.stats.val ?? 0) === 0">
           <svg class="icon" aria-hidden="true"><use href="/icons.svg#download"/></svg>
-          <span class="finetune-download-name">val.jsonl</span>
+          <span class="finetune-download-name truncate">val.jsonl</span>
           <span class="form-size-hint" x-show="ex.stats.valBytes > 0" x-text="finetuneFormatBytes(ex.stats.valBytes)"></span>
         </button>
         <button type="button" @click="finetuneDownload('all', ex.id)" x-show="ex.stats.allBytes > 0">
           <svg class="icon" aria-hidden="true"><use href="/icons.svg#download"/></svg>
-          <span class="finetune-download-name">all.jsonl</span>
+          <span class="finetune-download-name truncate">all.jsonl</span>
           <span class="form-size-hint" x-text="finetuneFormatBytes(ex.stats.allBytes)"></span>
         </button>
       </div>
@@ -59,36 +59,36 @@
       <div class="finetune-downloads">
         <button type="button" @click="finetuneDownload('eval', ex.id)" x-show="ex.stats.evalBytes > 0">
           <svg class="icon" aria-hidden="true"><use href="/icons.svg#download"/></svg>
-          <span class="finetune-download-name" x-text="$app.t('finetune.files.eval')"></span>
+          <span class="finetune-download-name truncate" x-text="$app.t('finetune.files.eval')"></span>
           <span class="form-size-hint" x-text="finetuneFormatBytes(ex.stats.evalBytes)"></span>
         </button>
         <button type="button" @click="finetuneDownloadJudge(ex.id)" x-show="ex.stats.evalBytes > 0">
           <svg class="icon" aria-hidden="true"><use href="/icons.svg#download"/></svg>
-          <span class="finetune-download-name" x-text="$app.t('finetune.files.evalJudge')"></span>
+          <span class="finetune-download-name truncate" x-text="$app.t('finetune.files.evalJudge')"></span>
         </button>
         <button type="button" @click="finetuneDownload('val-facts', ex.id)" x-show="ex.stats.valFactsBytes > 0">
           <svg class="icon" aria-hidden="true"><use href="/icons.svg#download"/></svg>
-          <span class="finetune-download-name">val-facts.jsonl</span>
+          <span class="finetune-download-name truncate">val-facts.jsonl</span>
           <span class="form-size-hint" x-text="finetuneFormatBytes(ex.stats.valFactsBytes)"></span>
         </button>
         <button type="button" @click="finetuneDownload('val-writing', ex.id)" x-show="ex.stats.valWritingBytes > 0">
           <svg class="icon" aria-hidden="true"><use href="/icons.svg#download"/></svg>
-          <span class="finetune-download-name">val-writing.jsonl</span>
+          <span class="finetune-download-name truncate">val-writing.jsonl</span>
           <span class="form-size-hint" x-text="finetuneFormatBytes(ex.stats.valWritingBytes)"></span>
         </button>
         <button type="button" @click="finetuneDownload('val-persona', ex.id)" x-show="ex.stats.valPersonaBytes > 0">
           <svg class="icon" aria-hidden="true"><use href="/icons.svg#download"/></svg>
-          <span class="finetune-download-name">val-persona.jsonl</span>
+          <span class="finetune-download-name truncate">val-persona.jsonl</span>
           <span class="form-size-hint" x-text="finetuneFormatBytes(ex.stats.valPersonaBytes)"></span>
         </button>
         <button type="button" @click="finetuneDownload('val-refusal', ex.id)" x-show="ex.stats.valRefusalBytes > 0">
           <svg class="icon" aria-hidden="true"><use href="/icons.svg#download"/></svg>
-          <span class="finetune-download-name">val-refusal.jsonl</span>
+          <span class="finetune-download-name truncate">val-refusal.jsonl</span>
           <span class="form-size-hint" x-text="finetuneFormatBytes(ex.stats.valRefusalBytes)"></span>
         </button>
         <button type="button" @click="finetuneDownload('val-editor', ex.id)" x-show="ex.stats.valEditorBytes > 0">
           <svg class="icon" aria-hidden="true"><use href="/icons.svg#download"/></svg>
-          <span class="finetune-download-name">val-editor.jsonl</span>
+          <span class="finetune-download-name truncate">val-editor.jsonl</span>
           <span class="form-size-hint" x-text="finetuneFormatBytes(ex.stats.valEditorBytes)"></span>
         </button>
       </div>
@@ -99,11 +99,11 @@
       <div class="finetune-downloads">
         <button type="button" @click="finetuneDownloadModelfile(ex.stats)" x-show="ex.stats.systemPrompt">
           <svg class="icon" aria-hidden="true"><use href="/icons.svg#download"/></svg>
-          <span class="finetune-download-name" x-text="$app.t('finetune.files.modelfile')"></span>
+          <span class="finetune-download-name truncate" x-text="$app.t('finetune.files.modelfile')"></span>
         </button>
         <button type="button" @click="finetuneDownloadStats(ex.id)">
           <svg class="icon" aria-hidden="true"><use href="/icons.svg#download"/></svg>
-          <span class="finetune-download-name">stats.json</span>
+          <span class="finetune-download-name truncate">stats.json</span>
         </button>
       </div>
     </div>

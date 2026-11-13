@@ -1,9 +1,6 @@
 @layer components {
 /* Recent-Pages-Liste (am Grid-Ende). */
 .overview-recent-list {
-  list-style: none;
-  margin: 0;
-  padding: 0;
   display: flex;
   flex-direction: column;
   gap: var(--space-2xs);

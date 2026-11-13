@@ -104,12 +104,12 @@ export function renderReviewHtml(r, axes, translate) {
   if (r.empfehlungen?.length) html += `
       <div class="bewertung-section">
         <div class="card-section-title">${escHtml(translate('review.section.empfehlungen'))}</div>
-        <ul class="rec-list">${r.empfehlungen.map(e => renderEmpfehlungItem(e, translate)).join('')}</ul>
+        <ul class="rec-list list-reset">${r.empfehlungen.map(e => renderEmpfehlungItem(e, translate)).join('')}</ul>
       </div>`;
   if (r.beispielzitate?.length) html += `
       <div class="bewertung-section">
         <div class="card-section-title">${escHtml(translate('review.section.zitate'))}</div>
-        <ul class="zitate-list">${r.beispielzitate.map(z => renderZitatItem(z, translate)).join('')}</ul>
+        <ul class="zitate-list list-reset">${r.beispielzitate.map(z => renderZitatItem(z, translate)).join('')}</ul>
       </div>`;
   if (r.fazit) html += `<div class="fazit fazit--review">${escMd(r.fazit)}</div>`;
   return html;

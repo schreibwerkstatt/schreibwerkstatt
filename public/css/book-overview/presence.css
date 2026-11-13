@@ -52,10 +52,7 @@
   /* Lange Kapitelnamen rotieren — schmale Spalten. */
   writing-mode: vertical-rl;
   transform: rotate(180deg);
-  white-space: nowrap;
   max-height: 90px;
-  overflow: hidden;
-  text-overflow: ellipsis;
   vertical-align: bottom;
   min-width: 18px;
 }
@@ -64,10 +61,7 @@
   color: var(--color-text);
   text-align: left;
   padding: 0 var(--space-sm) 0 var(--space-xs);
-  white-space: nowrap;
   max-width: 140px;
-  overflow: hidden;
-  text-overflow: ellipsis;
 }
 .overview-presence-cell {
   position: relative;

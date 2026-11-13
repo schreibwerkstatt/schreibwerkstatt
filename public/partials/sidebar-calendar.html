@@ -74,7 +74,7 @@
       <template x-if="diaryAnniversaryEntries().length === 0">
         <p class="muted-msg muted-msg--sm diary-anniversary-empty" x-text="t('diary.anniversary.empty')"></p>
       </template>
-      <ul class="diary-anniversary-list">
+      <ul class="diary-anniversary-list list-reset">
         <template x-for="entry in diaryAnniversaryEntries()" :key="entry.key">
           <li>
             <button type="button" class="diary-anniversary-item" @click="selectPage(entry.page)">
@@ -114,7 +114,7 @@
     <template x-if="diaryRangeFrom && diaryRangeTo && diaryRangeEntries().length === 0">
       <p class="muted-msg muted-msg--sm diary-anniversary-empty" x-text="t('diary.range.empty')"></p>
     </template>
-    <ul class="diary-anniversary-list" x-show="diaryRangeEntries().length > 0">
+    <ul class="diary-anniversary-list list-reset" x-show="diaryRangeEntries().length > 0">
       <template x-for="entry in diaryRangeEntries()" :key="entry.key">
         <li>
           <button type="button" class="diary-anniversary-item" @click="selectPage(entry.page)">

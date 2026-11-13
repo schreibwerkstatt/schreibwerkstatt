@@ -63,7 +63,7 @@
               <template x-if="item.has_doc">
                 <a class="research-item-doc" :href="docUrl(item)" target="_blank" rel="noopener noreferrer">
                   <svg class="icon" aria-hidden="true"><use href="/icons.svg#file-plus"/></svg>
-                  <span class="research-item-doc-name" x-text="item.doc_name || $app.t('recherche.doc.fallbackName')"></span>
+                  <span class="research-item-doc-name truncate" x-text="item.doc_name || $app.t('recherche.doc.fallbackName')"></span>
                   <span class="research-item-doc-meta" x-show="item.doc_pages" x-text="$app.tn('recherche.doc.pages', item.doc_pages)"></span>
                 </a>
               </template>

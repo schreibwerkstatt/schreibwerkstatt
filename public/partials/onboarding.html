@@ -20,7 +20,7 @@
 
   <p class="onboarding-alldone" x-show="allDone()" x-cloak x-text="$app.t('onboarding.allDone')"></p>
 
-  <ul class="onboarding-steps">
+  <ul class="onboarding-steps list-reset">
     <template x-for="(key, i) in stepKeys" :key="key">
       <li class="onboarding-step" :class="{ 'is-done': steps[key] }">
         <span class="onboarding-step-num" aria-hidden="true" x-text="steps[key] ? '' : (i + 1)"></span>

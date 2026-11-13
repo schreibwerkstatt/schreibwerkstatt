@@ -316,12 +316,6 @@
     color: var(--color-muted);
   }
 
-  .folder-import-outline-name {
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-  }
-
   .folder-import-outline-meta {
     color: var(--color-muted);
     white-space: nowrap;

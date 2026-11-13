@@ -48,7 +48,7 @@
               </template>
             </div>
           </div>
-          <button type="button" class="motiv-tree-name motiv-tree-name--theme" @click="selectTheme(g.theme.id)"
+          <button type="button" class="motiv-tree-name motiv-tree-name--theme truncate" @click="selectTheme(g.theme.id)"
                   x-text="g.theme.name" :data-tip="$app.t('motiv.theme.editTip')"></button>
           <span class="motiv-tree-count" x-text="g.total"></span>
           <button type="button" class="icon-btn icon-btn--ghost hover-reveal" @click="createMotifAt(g.theme.id)"
@@ -69,7 +69,7 @@
   <template x-for="g in motivGroups().filter(x => !x.theme)" :key="g.key">
     <div class="motiv-tree-group motiv-tree-group--loose">
       <div class="motiv-tree-theme">
-        <span class="motiv-tree-name motiv-tree-name--loose" x-text="$app.t('motiv.noTheme')"></span>
+        <span class="motiv-tree-name motiv-tree-name--loose truncate" x-text="$app.t('motiv.noTheme')"></span>
         <span class="motiv-tree-count" x-text="g.total"></span>
       </div>
       <!-- @include motiv-tree-motifs -->

@@ -25,7 +25,7 @@
   <template x-for="ch in overviewChapterBars(kind)" :key="ch.id">
     <li class="overview-chapter-row"
         :class="{ 'overview-chapter-row--worst': ch.isMax, 'overview-chapter-row--best': ch.isMin }">
-      <span class="overview-chapter-name" :data-tip="ch.name" x-text="ch.name"></span>
+      <span class="overview-chapter-name truncate" :data-tip="ch.name" x-text="ch.name"></span>
       <div class="overview-chapter-bar-track overview-chapter-bar-track--diverge"
            x-show="ch.showMedian">
         <div class="overview-chapter-bar-fill"

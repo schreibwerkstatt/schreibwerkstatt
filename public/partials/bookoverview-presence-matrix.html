@@ -19,7 +19,7 @@
       <tr>
         <th></th>
         <template x-for="col in overviewPresence(kind).cols" :key="col.id">
-          <th class="overview-presence-col-head"
+          <th class="overview-presence-col-head truncate"
               :data-tip="col.name"
               x-text="col.name"></th>
         </template>
@@ -30,7 +30,7 @@
         <tr>
           <!-- Klickziel im Kopf, nie am <th>/<td> selbst: role=button nähme
                Screenreadern die Tabellen-Navigation (DESIGN.md «Klickbare Nicht-Buttons»). -->
-          <th class="overview-presence-row-head" scope="row">
+          <th class="overview-presence-row-head truncate" scope="row">
             <span class="internal-link text-link"
                   @click="_openKapitelReview(row.id)"
                   :data-tip="$app.t('overview.chapterReviewOpen', { name: row.name })"

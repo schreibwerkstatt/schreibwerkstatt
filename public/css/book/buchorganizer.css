@@ -76,9 +76,6 @@
   color: var(--color-muted);
   font-size: var(--font-size-xs);
   max-width: 30%;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }
 
 .organizer-chapter-actions {

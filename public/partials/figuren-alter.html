@@ -204,7 +204,7 @@
           </tr>
           <tr x-show="figurenAlterOpenId === row.id" class="figur-alter-belege-row">
             <td :colspan="figurenAlterSpalten()">
-              <ul class="figur-alter-belege">
+              <ul class="figur-alter-belege list-reset">
                 <template x-for="(b, bi) in row.belege" :key="bi">
                   <li class="figur-alter-beleg">
                     <span class="tag" x-text="$app.t('figuren.alter.art.' + b.art) + ' ' + b.wert"></span>

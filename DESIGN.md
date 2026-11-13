@@ -351,7 +351,7 @@ Dieselbe Mechanik gilt fuer Bausteine, die kein `.card-section` sind, aber aufei
 | `.muted-msg` | gedämpfte Zustandsmeldung | `--sm`, `--block`, `--spaced` |
 | `.progress-bar-wrap` + `.progress-bar` | Job-Fortschritt | — |
 | `.filter-bar` | Listenfilter (siehe [Filter-Bar](#filter-bar-listenfilter)) | `--inline` |
-| `.card-edit-panel` | gerahmter Anlegen-/Bearbeiten-Block über einer Katalog-Liste (Akzentleiste links) — Schauplätze, Quellen, Weltfakten tragen dafür noch `.ort-edit-panel`/`.sources-form`/`.weltfakten-edit-panel`, im selben Regelblock gruppiert | — |
+| `.card-edit-panel` | gerahmter Anlegen-/Bearbeiten-Block über einer Katalog-Liste (Akzentleiste links) — Schauplätze, Quellen, Weltfakten | — |
 
 **`.card-hint` vs. `.muted-msg`:** der Hinweis **erklärt** und steht dauerhaft unter seinem Element; die Meldung **berichtet einen Zustand** („keine Einträge", „zuletzt geprüft am …") und erscheint an der Stelle des fehlenden Inhalts.
 
@@ -3445,13 +3445,13 @@ Struktur: 8 thematische Subfolder unter [public/css/](public/css/) + Root-Solit�
 | [layout/layout-base.css](public/css/layout/layout-base.css) | `.boss-screen`, `.dev-banner`, `.session-banner*` (oben fixed), Offline-Dimmung `:root.is-offline`, `.site-header-row`. |
 | [layout/twocolumn.css](public/css/layout/twocolumn.css) | `.layout` / `-sidebar` / `-main` (Seitenbaum + Hauptspalte), klebender Seitenbaum, `.sidebar-resize-handle`. |
 | [layout/aside-split.css](public/css/layout/aside-split.css) | **Split mit Leiste** — `.aside-split` / `--on` / `--aside-first`, `.aside-split-aside`, `.aside-split-scroll`; einzige Quelle für Hauptinhalt + klebende Leiste (siehe „Split mit Leiste"). |
-| [layout/utilities.css](public/css/layout/utilities.css) | Layer `utilities`: `.list-header`, Tabular-Nums-Gruppe, `.display-contents`. Layer `components` (Grundgerüst, das Karten überschreiben): `.palette-badge` (Grau nur als `var()`-Fallback — eine `--badge-hue`-Deklaration an der Basis überstimmte die Varianten), `.row`, `.table-scroll`, `.batch-status`. |
+| [layout/utilities.css](public/css/layout/utilities.css) | Layer `utilities`: `.list-header`, Tabular-Nums-Gruppe, `.display-contents`, `.truncate` (einzeilig mit Ellipse), `.list-reset` (Liste ohne Marker/Einzug). Weil `utilities` jede Komponentenregel schlägt, kommen die beiden nur an Elemente, deren Regeln diese Eigenschaften nirgends (Mobile, Modifier, Zustand) zurücksetzen — sonst bleibt der Dreizeiler in der Feature-Regel. Layer `components` (Grundgerüst, das Karten überschreiben): `.palette-badge` (Grau nur als `var()`-Fallback — eine `--badge-hue`-Deklaration an der Basis überstimmte die Varianten), `.row`, `.table-scroll`, `.batch-status`. |
 
 ### components/ (geteilt)
 | File | Inhalt |
 |------|--------|
 | [components/card-form/card-shell.css](public/css/components/card-form/card-shell.css) | `.card`, `.card-header*`, `.card-title*`, `.card-eyebrow`, `.card-subline*`, `.card-toolbar`, `cardFadeIn`. Die Karte selbst — was DARIN liegt, steht in `card-blocks.css`. |
-| [components/card-form/card-blocks.css](public/css/components/card-form/card-blocks.css) | **Geteiltes Vokabular des Kartenkörpers** (siehe „Karten-Innenraum“): Vertikalrhythmus (`.card-section`), `.card-section-head` (+ `--baseline`), `.card-section-title`, `.card-hint` (+ `--sm`/`--warn`/`--lead`), `.card-status` (+ `--error`), `.muted-msg*`, `.progress-bar*`, `.filter-bar*`/`.filter-count`/`.filter-search-*`, `.stale-cleanup-row`, `.card-edit-panel` (+ `.ort-edit-panel`/`.sources-form`/`.weltfakten-edit-panel`). Besitzer-Datei für Klassen, die quer durch alle Karten laufen. |
+| [components/card-form/card-blocks.css](public/css/components/card-form/card-blocks.css) | **Geteiltes Vokabular des Kartenkörpers** (siehe „Karten-Innenraum“): Vertikalrhythmus (`.card-section`), `.card-section-head` (+ `--baseline`), `.card-section-title`, `.card-hint` (+ `--sm`/`--warn`/`--lead`), `.card-status` (+ `--error`), `.muted-msg*`, `.progress-bar*`, `.filter-bar*`/`.filter-count`/`.filter-search-*`, `.stale-cleanup-row`, `.card-edit-panel`. Besitzer-Datei für Klassen, die quer durch alle Karten laufen. |
 | [components/card-form/form-elements.css](public/css/components/card-form/form-elements.css) | Form-Felder (`input`/`select`/`textarea`), `.card-form-*` Grid + Wertspalten-Bausteine (`.form-stack`/`-inline`/`-check`/`-radio-group`), `.card-empty*`. Die **Erscheinung** von `.card-form-hint`/`.card-form-field-note`/`.card-empty-hint` kommt aus `card-blocks.css` (`.card-hint`-Gruppe); hier steht nur noch deren Position im Raster. |
 | [components/card-form/card-actions.css](public/css/components/card-form/card-actions.css) | `.card-actions*`, `.action-group`/`.action-sep`, `.btn-card-close`. |
 | [components/combobox.css](public/css/components/combobox.css) | `.combobox-*` — Searchable-Select-Komponente (Trigger, Dropdown, Optionen, Gruppen-Header, Compact-Variante, Footer-Button). |

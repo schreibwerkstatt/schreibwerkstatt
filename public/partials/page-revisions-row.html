@@ -20,9 +20,9 @@
           :aria-label="$app.t('editor.revisions.viewer.openLabel', { when: $app.formatDate(row.rev.created_at) })"
           :data-tip="$app.t('editor.revisions.viewer.openTitle')"
           x-text="row.group === null ? $app.formatDate(row.rev.created_at) : rowTime(row)"></button>
-  <span class="page-revisions-label" x-show="row.rev.pinned && row.rev.label" x-text="row.rev.label"></span>
-  <span class="page-revisions-row__source" x-show="!row.child" x-text="sourceLabel(row.rev.source)"></span>
-  <span class="page-revisions-row__client" x-show="row.rev.client && !row.child && hasClientChoice()"
+  <span class="page-revisions-label truncate" x-show="row.rev.pinned && row.rev.label" x-text="row.rev.label"></span>
+  <span class="page-revisions-row__source truncate" x-show="!row.child" x-text="sourceLabel(row.rev.source)"></span>
+  <span class="page-revisions-row__client truncate" x-show="row.rev.client && !row.child && hasClientChoice()"
         :data-tip="$app.t('editor.revisions.clientTitle')"
         x-text="row.rev.client"></span>
   <template x-if="row.size > 1">
@@ -34,7 +34,7 @@
       <span x-text="$app.t('editor.revisions.group.count', { n: row.size })"></span>
     </button>
   </template>
-  <span class="tag page-revisions-summary" x-show="row.summary" x-text="row.summary"></span>
+  <span class="tag page-revisions-summary truncate" x-show="row.summary" x-text="row.summary"></span>
   <template x-if="row.split">
     <span class="revision-split" @click.stop>
       <span class="revision-split__dir" x-text="$app.t('editor.revisions.split.' + row.split.dir)"></span>

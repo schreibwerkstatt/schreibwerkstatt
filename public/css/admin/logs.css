@@ -106,9 +106,9 @@
   .log-row--debug { border-left-color: var(--color-subtle); opacity: 0.7; }
 
   .log-row-ts    { color: var(--color-subtle); white-space: nowrap; }
-  .log-row-scope { color: var(--color-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
-  .log-row-user  { color: var(--color-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
-  .log-row-book  { color: var(--color-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+  .log-row-scope { color: var(--color-muted); min-width: 0; }
+  .log-row-user  { color: var(--color-muted); min-width: 0; }
+  .log-row-book  { color: var(--color-muted); min-width: 0; }
   .log-row-msg   { color: var(--color-text); word-break: break-word; min-width: 0; }
 
   .log-badge {

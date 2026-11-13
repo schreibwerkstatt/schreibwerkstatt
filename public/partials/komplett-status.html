@@ -45,7 +45,7 @@
           <div class="progress-bar" :style="{ '--progress': $store.jobs.alleAktualisierenProgress + '%' }"></div>
         </div>
         <div class="komplett-progress-label">
-          <span class="komplett-status-text"
+          <span class="komplett-status-text truncate"
                 x-text="$store.jobs.alleAktualisierenStatus || t('komplett.done')"
                 :data-tip="$store.jobs.alleAktualisierenStatus || t('komplett.done')"></span>
           <span x-show="$store.jobs.alleAktualisierenTokIn > 0 || $store.jobs.alleAktualisierenTokOut > 0" class="komplett-tokens">
@@ -86,7 +86,7 @@
       <div class="komplett-cost-total">
         <span x-text="t('komplett.costTotal', { usd: ($store.jobs.alleAktualisierenCost?.totalUsd ?? 0).toFixed(2) })"></span>
       </div>
-      <ul class="komplett-cost-list">
+      <ul class="komplett-cost-list list-reset">
         <template x-for="p in ($store.jobs.alleAktualisierenCost?.phases || [])" :key="p.phase">
           <li class="komplett-cost-item"
               :data-tip="t('komplett.costTip', { calls: p.calls, models: (p.models || []).join(', ') || '–', seconds: p.seconds })">

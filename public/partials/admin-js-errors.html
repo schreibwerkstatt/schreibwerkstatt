@@ -26,7 +26,7 @@
         <div class="js-errors-row-head">
           <span class="js-errors-ts" x-text="jsErrorsFmtTs(e.created_at)"></span>
           <span class="js-errors-kind" :class="'js-errors-kind--' + e.kind" x-text="e.kind"></span>
-          <span class="js-errors-msg" x-text="e.message"></span>
+          <span class="js-errors-msg truncate" x-text="e.message"></span>
           <span class="js-errors-loc" x-text="jsErrorsLoc(e)"></span>
           <button type="button" class="js-errors-view"
                   @click="jsErrorsToggle(e.id)"

@@ -55,11 +55,6 @@
   border-color: var(--color-primary);
 }
 .szenen-kapitel-bar-row:disabled { cursor: default; }
-.szenen-kapitel-name {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
 .szenen-kapitel-track { display: block; }
 .szenen-kapitel-bar {
   display: flex;
@@ -125,9 +120,6 @@
 .szenen-row-snippet {
   font-size: var(--font-size-mini);
   color: var(--color-muted);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }
 @media (max-width: 480px) {
   .szenen-row-snippet { display: none; }

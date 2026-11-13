@@ -41,7 +41,7 @@
       <template x-for="sec in helpSections()" :key="sec.group">
         <section class="help-group card-section">
           <h3 class="help-group-title" x-text="$app.t(sec.labelKey)"></h3>
-          <ul class="help-features">
+          <ul class="help-features list-reset">
             <template x-for="e in sec.entries" :key="e.key">
               <li class="help-feature">
                 <div class="help-feature-head">
@@ -88,7 +88,7 @@
               <span class="badge-ok changelog-new" x-show="isNewRelease(rel.version)"
                     x-text="$app.t('changelog.newBadge')"></span>
             </div>
-            <ul class="changelog-entries">
+            <ul class="changelog-entries list-reset">
               <template x-for="(e, i) in rel.entries" :key="i">
                 <li class="changelog-entry" :class="'changelog-entry--' + e.kind">
                   <span class="changelog-kind" x-text="$app.t('changelog.kind.' + e.kind)"></span>

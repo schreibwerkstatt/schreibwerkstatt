@@ -49,9 +49,6 @@
    Der volle Wortlaut steht im Tooltip. */
 .komplett-status-text {
   min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }
 .komplett-tokens {
   font-size: var(--font-size-xs);
@@ -153,11 +150,6 @@
 }
 .komplett-cost-total {
   font-variant-numeric: tabular-nums;
-}
-.komplett-cost-list {
-  list-style: none;
-  margin: 0;
-  padding: 0;
 }
 .komplett-cost-item {
   display: flex;

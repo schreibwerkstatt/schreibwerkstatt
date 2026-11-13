@@ -127,7 +127,7 @@
               </span>
             </td>
             <td x-text="s.year || '—'"></td>
-            <td><span class="tag entity-typ-tag" x-text="s._typeLabel"></span></td>
+            <td><span class="tag entity-typ-tag truncate" x-text="s._typeLabel"></span></td>
             <td>
               <button type="button" class="sources-cite-badge palette-badge"
                       :class="s.cite_count > 0 ? 'sources-cite-badge--cited' : 'sources-cite-badge--uncited'"
@@ -176,7 +176,7 @@
     <p class="card-form-error" x-show="srcCitationsError" x-cloak x-text="srcCitationsError"></p>
     <p class="muted-msg muted-msg--sm" x-show="!srcCitationsLoading && !srcCitationsError && srcCitations.length === 0"
        x-cloak x-text="$app.t('sources.citations.empty')"></p>
-    <ul class="sources-citation-list" x-show="srcCitations.length > 0">
+    <ul class="sources-citation-list list-reset" x-show="srcCitations.length > 0">
       <template x-for="c in srcCitations" :key="c.page_id">
         <li class="sources-citation entity-refs">
           <template x-if="c.chapter_id != null">

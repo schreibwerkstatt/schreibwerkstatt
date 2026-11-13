@@ -151,7 +151,7 @@
 
       <section class="book-settings-section" x-show="exposeHistory.length > 1">
         <h3 class="card-section-title" x-text="$app.t('expose.history.title')"></h3>
-        <ul class="expose-history">
+        <ul class="expose-history list-reset">
           <template x-for="h in exposeHistory" :key="h.id">
             <li :class="{ 'expose-history-item--active': exposeRun?.id === h.id }">
               <span class="internal-link text-link" @click="openExposeRun(h.id)" x-text="exposeRunLabel(h)"></span>

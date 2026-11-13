@@ -41,7 +41,7 @@
                             :aria-label="$app.t(isSubchapterOpen(sub.id) ? 'sidebar.collapseAll' : 'sidebar.expandAll')">
                       <span class="history-chevron" :class="{ open: isSubchapterOpen(sub.id) }" aria-hidden="true"></span>
                     </button>
-                    <span class="kapitel-subchapter-name internal-link"
+                    <span class="kapitel-subchapter-name internal-link truncate"
                           role="button" tabindex="0"
                           @click="$app.kapitelReviewChapterId = String(sub.id)"
                           :data-tip="$app.t('kapitelReview.openSubchapterTip', { name: sub.name })"

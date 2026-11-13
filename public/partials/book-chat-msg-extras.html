@@ -47,7 +47,7 @@
           <figure class="chat-image">
             <img :src="'/chat/image/' + img.image_id" :alt="img.prompt || $app.t('chat.imageAlt')" loading="lazy">
             <figcaption class="chat-image-cap">
-              <span class="chat-image-prompt" x-text="img.prompt" :data-tip="img.prompt"></span>
+              <span class="chat-image-prompt truncate" x-text="img.prompt" :data-tip="img.prompt"></span>
               <a class="chat-image-dl"
                  :href="'/chat/image/' + img.image_id + '?download=1'"
                  :download="'bild-' + img.image_id"

@@ -57,7 +57,7 @@
             <template x-for="t in deviceTokensList" :key="t.id">
               <div class="device-tokens-row" :class="t.revoked_at ? 'is-revoked' : ''">
                 <div class="device-tokens-row-main">
-                  <span class="device-tokens-name" x-text="t.device_name"></span>
+                  <span class="device-tokens-name truncate" x-text="t.device_name"></span>
                   <span class="badge badge-neutral" x-text="deviceTokenScopeLabel(t)"></span>
                   <span class="badge"
                         :class="t.revoked_at ? 'badge-err' : (t.expires_at && t.expires_at < new Date().toISOString() ? 'badge-warn' : 'badge-ok')"

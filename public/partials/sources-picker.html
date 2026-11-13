@@ -26,14 +26,14 @@
        x-text="$app.t('sources.picker.empty')"></p>
     <p class="muted-msg muted-msg--sm" x-show="srcPool.length > 0 && srcPoolRows().length === 0" x-cloak
        x-text="$app.t('sources.noMatch')"></p>
-    <ul class="sources-picker-list" x-show="srcPoolRows().length > 0">
+    <ul class="sources-picker-list list-reset" x-show="srcPoolRows().length > 0">
       <template x-for="p in srcPoolRows()" :key="p.id">
         <li class="sources-picker-item">
           <span class="sources-picker-entry">
             <span class="sources-picker-author" x-text="p._author || '—'"></span>
             <span class="sources-picker-entry-title" x-text="p.title || $app.t('sources.untitled')"></span>
             <span class="sources-picker-meta">
-              <span class="tag entity-typ-tag" x-text="p._typeLabel"></span>
+              <span class="tag entity-typ-tag truncate" x-text="p._typeLabel"></span>
               <span x-show="p.year" x-text="p.year"></span>
               <template x-for="t in (p.tags || [])" :key="t"><span class="tag sources-tag" x-text="t"></span></template>
               <span class="sources-picker-books" x-show="p.book_count > 0"

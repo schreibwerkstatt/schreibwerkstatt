@@ -85,7 +85,7 @@
            :placeholder="$app.t('figuren.schule.abfragePlaceholder')"
            x-data="numInput({ integer: true, min: 1000, max: 2999, grouping: false })"
            x-modelable="value" x-model="figurSchulAbfrageJahr">
-    <ul class="figur-cv-jahr-list" x-show="figurSchulJahrUebersicht().length">
+    <ul class="figur-cv-jahr-list list-reset" x-show="figurSchulJahrUebersicht().length">
       <template x-for="z in figurSchulJahrUebersicht()" :key="z.id">
         <li>
           <span class="figur-typ-dot" :class="'figur-typ-dot--' + z.typ"></span>
@@ -124,7 +124,7 @@
             <template x-for="(zelle, zi) in zeile.zellen" :key="zi">
               <td class="figur-cv-cell">
                 <span class="figur-cv-cell-empty" x-show="!zelle.length" aria-hidden="true">·</span>
-                <ul class="figur-cv-events" x-show="zelle.length">
+                <ul class="figur-cv-events list-reset" x-show="zelle.length">
                   <template x-for="(evt, ei) in zelle" :key="ei">
                     <li class="figur-cv-event"
                         :class="{ 'figur-cv-event--clickable': evt.page_id != null }"

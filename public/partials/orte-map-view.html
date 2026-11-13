@@ -78,7 +78,7 @@
       <div class="ort-map-locate-row" :data-ortid="o.id"
            :class="{ 'ort-map-locate-row--active': highlightOrtId === o.id }"
            :style="{ '--ort-depth': ortDepth(o.id) }">
-        <span class="tag entity-typ-tag" x-text="ortTypLabel(o.typ)"></span>
+        <span class="tag entity-typ-tag truncate" x-text="ortTypLabel(o.typ)"></span>
         <span class="ort-map-locate-name internal-link text-link" @click="focusMapMarker(o.id)"
               :data-tip="$app.t('orte.map.showOnMap')" x-text="o.name"></span>
         <span x-show="o.lat != null && o.lng != null" class="ort-map-located" x-text="$app.t('orte.map.located')"></span>

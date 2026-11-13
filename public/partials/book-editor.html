@@ -86,7 +86,7 @@
                       :class="{ 'book-editor-outline-chapter--collapsed': !!collapsedChapters[node.chapterId] }"
                       @click="toggleChapterCollapse(node.chapterId)">
                 <span class="history-chevron" :class="{ open: !collapsedChapters[node.chapterId] }" aria-hidden="true"></span>
-                <span class="book-editor-outline-chapter-name" x-text="node.name"></span>
+                <span class="book-editor-outline-chapter-name truncate" x-text="node.name"></span>
                 <span class="book-editor-outline-count" x-text="node.count"></span>
               </button>
             </template>
@@ -104,7 +104,7 @@
                             }"
                             @click="scrollToBlock(pg.pageId)">
                       <span class="book-editor-outline-dot" aria-hidden="true"></span>
-                      <span class="book-editor-outline-page-name" x-text="node.single ? node.name : pg.name"></span>
+                      <span class="book-editor-outline-page-name truncate" x-text="node.single ? node.name : pg.name"></span>
                     </button>
                   </li>
                 </template>

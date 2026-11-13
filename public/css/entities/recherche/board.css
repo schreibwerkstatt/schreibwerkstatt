@@ -306,7 +306,6 @@ textarea.recherche-input { resize: vertical; min-height: 2.75rem; }
   max-width: 100%;
 }
 .research-item-doc .icon { width: 1em; height: 1em; flex-shrink: 0; }
-.research-item-doc-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .research-item-doc-meta { color: var(--color-muted); flex-shrink: 0; }
 
 .research-item-source {

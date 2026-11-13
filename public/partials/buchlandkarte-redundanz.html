@@ -82,7 +82,7 @@
 
       <div x-show="!redundanzVisiblePairs().length" class="muted-msg muted-msg--spaced" x-text="$app.t('redundanz.empty')"></div>
 
-      <ul class="redundanz-list" x-show="redundanzVisiblePairs().length">
+      <ul class="redundanz-list list-reset" x-show="redundanzVisiblePairs().length">
         <template x-for="pair in redundanzVisiblePairs()" :key="'p' + pair.a_id + ':' + pair.b_id">
           <li class="redundanz-pair">
             <div class="redundanz-pair-head">
@@ -116,7 +116,7 @@
           <h3 class="redundanz-figs-title" x-text="$app.t('redundanz.fig.title')"></h3>
           <p class="card-hint" x-text="$app.t('redundanz.fig.hint')"></p>
           <div x-show="!redundanzResult.figures.pairs.length" class="muted-msg muted-msg--spaced" x-text="$app.t('redundanz.fig.empty')"></div>
-          <ul class="redundanz-list" x-show="redundanzResult.figures.pairs.length">
+          <ul class="redundanz-list list-reset" x-show="redundanzResult.figures.pairs.length">
             <template x-for="pair in redundanzResult.figures.pairs" :key="'f' + pair.a_id + ':' + pair.b_id">
               <li class="redundanz-pair">
                 <div class="redundanz-pair-head">

@@ -47,7 +47,7 @@
       <div class="kapitel-dash-progress-idle">
         <div class="kapitel-dash-foot-label"
              x-text="$app.t('kapitelReview.dash.progressIdle', { n: kdFortschritt().brachTotal, days: kdFortschritt().brachDays, status: kdFortschritt().doneLabel })"></div>
-        <ul class="kapitel-dash-progress-idle-list">
+        <ul class="kapitel-dash-progress-idle-list list-reset">
           <template x-for="b in kdFortschritt().brach" :key="b.page.id">
             <li class="kapitel-dash-progress-idle-row">
               <button type="button" class="entity-ref"

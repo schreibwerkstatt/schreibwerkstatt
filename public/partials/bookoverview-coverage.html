@@ -35,7 +35,7 @@
        :aria-label="overviewTopFehlerAria()"
        :data-tip="$app.t('overview.openHeatmap')">
     <div class="overview-tile-label" x-text="$app.t('overview.topErrors')"></div>
-    <ul class="overview-error-bars">
+    <ul class="overview-error-bars list-reset">
       <template x-for="e in overviewTopFehler()" :key="e.typ">
         <li class="overview-error-bar-item">
           <div class="overview-error-bar-head">

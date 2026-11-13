@@ -20,7 +20,7 @@
                     :disabled="k.chapterId == null"
                     @click="toggleKapitelFilter(k)"
                     :data-tip="$app.t('szenen.tooltip', { stark: k.stark, mittel: k.mittel, schwach: k.schwach })">
-              <span class="szenen-kapitel-name" x-text="k.name"></span>
+              <span class="szenen-kapitel-name truncate" x-text="k.name"></span>
               <span class="szenen-kapitel-track">
                 <span class="szenen-kapitel-bar" :style="{ '--bar-share': k.share + '%' }">
                   <span class="szenen-kapitel-seg szenen-kapitel-seg--stark" x-show="k.stark" :style="{ '--seg-grow': k.stark }"></span>

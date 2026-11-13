@@ -304,14 +304,10 @@
 
 /* === Bearbeiten-Panel einer Katalog-Karte ===
    Gerahmter Block für das Anlegen/Bearbeiten eines Eintrags über der Liste:
-   Rahmen, Akzentleiste links in der Kartenfarbe, Kartenfläche. Neue Karten
-   setzen `.card-edit-panel`; die älteren Namen (Schauplätze, Quellen,
-   Weltfakten) stehen gruppiert daneben, damit ihr Markup unverändert gilt.
-   Dark über die Tokens; mobil keine Abweichung. */
-.card-edit-panel,
-.ort-edit-panel,
-.sources-form,
-.weltfakten-edit-panel {
+   Rahmen, Akzentleiste links in der Kartenfarbe, Kartenfläche. Konsumenten
+   (Schauplätze, Quellen, Weltfakten) tragen daneben ihre eigene Klasse nur als
+   Haken für Karten-CSS und Tests. Dark über die Tokens; mobil keine Abweichung. */
+.card-edit-panel {
   border: 1px solid var(--color-border);
   border-left: 3px solid var(--card-accent);
   border-radius: var(--radius-md);

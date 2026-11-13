@@ -3,7 +3,7 @@
      Partial — es lebt im Scope von `sourcesCard`.
      Welche Felder erscheinen, entscheidet der Quellentyp:
      public/js/sources/fields.js#fieldsForType. -->
-<div class="sources-form" x-show="srcEditingId !== null" x-cloak
+<div class="card-edit-panel sources-form" x-show="srcEditingId !== null" x-cloak
      @keydown="$editKeys($event, { save: () => saveSource(), cancel: () => cancelSourceEdit() })">
   <div class="card-section-head">
     <span class="sources-form-title"

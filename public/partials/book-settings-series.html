@@ -50,7 +50,7 @@
             </div>
             <div class="card-form-row">
               <span class="card-form-label" id="series-volumes-label" x-text="$app.t('series.volumes')"></span>
-              <ol class="series-members" aria-labelledby="series-volumes-label">
+              <ol class="series-members list-reset" aria-labelledby="series-volumes-label">
                 <template x-for="(m, i) in seriesData.members" :key="m.book_id">
                   <li class="series-member" :class="{ 'series-member--current': m.position === seriesData.position }">
                     <span class="series-member-pos" x-text="m.position"></span>

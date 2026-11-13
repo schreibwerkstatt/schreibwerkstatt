@@ -6,7 +6,7 @@
   <template x-for="o in listWindowed(orteFiltered)" :key="o.id">
     <div :class="{ 'ort-list-item--child': ortDepth(o.id) > 0 }" :style="{ '--ort-depth': ortDepth(o.id) }">
       <div class="entity-row internal-link" :class="{ 'entity-row--stale': o.stale, 'entity-row--selected': $store.catalogUi.selectedOrtId === o.id }" :data-ortid="o.id" :aria-expanded="$store.catalogUi.selectedOrtId === o.id" @click="$store.catalogUi.selectedOrtId = $store.catalogUi.selectedOrtId === o.id ? null : o.id">
-        <span class="tag entity-typ-tag" x-text="ortTypLabel(o.typ)"></span>
+        <span class="tag entity-typ-tag truncate" x-text="ortTypLabel(o.typ)"></span>
         <span class="entity-row-title" x-text="o.name"></span>
         <span x-show="o.manually_created" class="tag ort-manual-tag" :data-tip="$app.t('orte.manualCreatedHint')" x-text="$app.t('orte.manualCreated')"></span>
         <span x-show="o.stale" class="tag tag--stale" :data-tip="$app.t('orte.staleHint')" x-text="$app.t('orte.staleBadge')"></span>
@@ -24,7 +24,7 @@
         </button>
         </template>
         <span x-show="o.land" class="tag ort-land-tag" x-text="landLabel(o.land)"></span>
-        <span x-show="o.stimmung" class="ort-stimmung" x-text="o.stimmung"></span>
+        <span x-show="o.stimmung" class="ort-stimmung truncate" x-text="o.stimmung"></span>
         <template x-if="o.kapitel?.length">
           <span class="entity-refs entity-refs--collapse-mobile">
             <button type="button" class="entity-ref" x-entity-ref="{ type: 'kapitel', id: o.kapitel[0].chapter_id, name: o.kapitel[0].name }"></button>

@@ -76,9 +76,9 @@
         <div class="log-row" :class="'log-row--' + e.level">
           <span class="log-row-ts" x-text="adminLogsFmtTs(e.ts)"></span>
           <span class="log-badge" :class="'log-badge--' + e.level" x-text="e.level.toUpperCase()"></span>
-          <span class="log-row-scope" x-text="e.scope || '-'"></span>
-          <span class="log-row-user" x-text="e.user || '-'"></span>
-          <span class="log-row-book" x-text="e.book ? ('#' + e.book) : '-'"></span>
+          <span class="log-row-scope truncate" x-text="e.scope || '-'"></span>
+          <span class="log-row-user truncate" x-text="e.user || '-'"></span>
+          <span class="log-row-book truncate" x-text="e.book ? ('#' + e.book) : '-'"></span>
           <span class="log-row-msg" x-text="e.msg"></span>
           <button type="button" class="log-row-toggle"
                   x-show="e.stack && e.stack.length"

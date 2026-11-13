@@ -78,7 +78,7 @@
     <ul class="folder-import-outline" x-show="preview && previewOutlineFlat.length">
       <template x-for="(node, idx) in previewOutlineFlat" :key="idx">
         <li :class="'folder-import-outline-item is-' + node.type" :style="{ '--outline-depth': node.depth }">
-          <span class="folder-import-outline-name" x-text="node.name"></span>
+          <span class="folder-import-outline-name truncate" x-text="node.name"></span>
           <span class="folder-import-outline-meta" x-show="node.type === 'page'"
                 x-text="$app.t('folderImport.manuscript.pageChars', { n: node.chars || 0 })"></span>
         </li>

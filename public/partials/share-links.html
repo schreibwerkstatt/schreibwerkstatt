@@ -124,7 +124,7 @@
                 <h4 class="share-stats__heading" x-text="$app.t('share.readdepth.title')"></h4>
                 <template x-for="ch in statsReadDepth" :key="ch.chapter_id">
                   <div class="share-depth-row">
-                    <span class="share-depth-row__label" x-text="ch.chapter_name"></span>
+                    <span class="share-depth-row__label truncate" x-text="ch.chapter_name"></span>
                     <div class="share-depth-bar"><div class="share-depth-bar__fill" :style="{ '--depth': (ch.avg_depth_pct || 0) + '%' }"></div></div>
                     <span class="share-depth-row__pct" x-text="(ch.avg_depth_pct || 0) + '%'"></span>
                   </div>

@@ -25,8 +25,8 @@
         <span class="avatar-menu-header-avatar" x-text="_avatarInitials()"></span>
       </template>
       <div class="avatar-menu-header-text">
-        <div class="avatar-menu-name" x-text="$store.session.currentUser?.name || $store.session.currentUser?.email"></div>
-        <div class="avatar-menu-email" x-show="$store.session.currentUser?.name && $store.session.currentUser?.email && $store.session.currentUser.name !== $store.session.currentUser.email" x-text="$store.session.currentUser?.email"></div>
+        <div class="avatar-menu-name truncate" x-text="$store.session.currentUser?.name || $store.session.currentUser?.email"></div>
+        <div class="avatar-menu-email truncate" x-show="$store.session.currentUser?.name && $store.session.currentUser?.email && $store.session.currentUser.name !== $store.session.currentUser.email" x-text="$store.session.currentUser?.email"></div>
       </div>
     </div>
 

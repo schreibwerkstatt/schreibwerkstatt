@@ -14,7 +14,7 @@
   <div x-bind="panel" x-cloak>
     <div class="plot-zeit-review-body">
       <p class="card-hint" x-text="$app.t('plot.zeitVorschlag.reviewHint')"></p>
-      <ul class="plot-zeit-review-list">
+      <ul class="plot-zeit-review-list list-reset">
         <template x-for="v in zeitReviewList()" :key="v.beat_id">
           <li class="plot-zeit-review-row">
             <label class="plot-zeit-review-check">

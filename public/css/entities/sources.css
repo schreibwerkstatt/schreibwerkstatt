@@ -116,7 +116,7 @@
 }
 
 /* ── Formular ─────────────────────────────────────────────────────────────── */
-/* Rahmen `.sources-form`: card-blocks.css (`.card-edit-panel`). */
+/* Rahmen: `.card-edit-panel` (card-blocks.css). */
 
 .sources-form-title {
   font-weight: var(--fw-semibold);
@@ -186,9 +186,6 @@
 }
 
 .sources-citation-list {
-  list-style: none;
-  margin: 0;
-  padding: 0;
   display: flex;
   flex-direction: column;
   gap: var(--space-6);
@@ -225,9 +222,6 @@
 .sources-picker .sources-picker-search .filter-search-input { width: 100%; }
 
 .sources-picker-list {
-  list-style: none;
-  margin: 0;
-  padding: 0;
   display: flex;
   flex-direction: column;
   gap: var(--space-6);
@@ -342,9 +336,6 @@
 }
 
 .sources-detect-list {
-  list-style: none;
-  margin: 0;
-  padding: 0;
   display: flex;
   flex-direction: column;
   gap: var(--space-6);
@@ -428,9 +419,6 @@
   margin-bottom: var(--space-6);
 }
 .sources-detect-run-list {
-  list-style: none;
-  margin: 0;
-  padding: 0;
   display: flex;
   flex-direction: column;
   gap: var(--space-2xs);

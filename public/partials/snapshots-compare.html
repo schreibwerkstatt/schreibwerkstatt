@@ -80,7 +80,7 @@
       <!-- Kapitel-Aenderungen (Gliederung) — Match ueber die Kapitel-srcId. -->
       <div class="snapshots-chapters" x-show="chapterEntries().length" x-cloak>
         <h4 class="snapshots-pubdiff__title" x-text="$app.t('snapshots.chapters.title')"></h4>
-        <ul class="snapshots-entries">
+        <ul class="snapshots-entries list-reset">
           <template x-for="c in chapterEntries()" :key="'c' + c.srcId">
             <li class="snapshots-entry" :class="'snapshots-entry--' + c.status">
               <div class="snapshots-entry__head">
@@ -107,7 +107,7 @@
 
       <div x-show="!visibleEntries().length" class="muted-msg" x-text="$app.t('snapshots.noChanges')"></div>
 
-      <ul class="snapshots-entries">
+      <ul class="snapshots-entries list-reset">
         <template x-for="(entry, idx) in visibleEntries()" :key="entryKey(entry, idx)">
           <li class="snapshots-entry" :class="'snapshots-entry--' + entry.status">
             <div class="snapshots-entry__head internal-link"

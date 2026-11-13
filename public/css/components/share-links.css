@@ -224,9 +224,6 @@
 }
 .share-depth-row__label {
   flex: 0 0 40%;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }
 .share-depth-bar {
   flex: 1;

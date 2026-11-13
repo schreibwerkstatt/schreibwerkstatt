@@ -26,7 +26,7 @@
         <div class="parse-fails-row-head">
           <span class="parse-fails-ts" x-text="parseFailsFmtTs(f.mtime)"></span>
           <span class="parse-fails-size" x-text="parseFailsFmtSize(f.size)"></span>
-          <span class="parse-fails-name" x-text="f.name"></span>
+          <span class="parse-fails-name truncate" x-text="f.name"></span>
           <button type="button" class="parse-fails-view"
                   @click="parseFailsToggle(f.name)"
                   :aria-expanded="parseFailsExpanded[f.name] ? 'true' : 'false'">

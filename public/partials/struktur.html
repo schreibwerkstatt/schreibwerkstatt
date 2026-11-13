@@ -64,7 +64,7 @@
             x-text="$app.t('struktur.bedenken.title', { n: strukturBedenkenRows().length })"></span>
     </div>
     <p class="card-hint" x-text="$app.t('struktur.bedenken.hint')"></p>
-    <ul class="struktur-bedenken-list">
+    <ul class="struktur-bedenken-list list-reset">
       <template x-for="b in strukturBedenkenRows()" :key="b.id">
         <li class="struktur-bedenken-item">
           <div class="struktur-bedenken-head">
@@ -164,7 +164,7 @@
            list: (row.check?.result?.fehlendeWFragen || []).map(w => $app.t('struktur.wfrage.' + w)).join(', ')
          })"></p>
 
-      <ul class="struktur-regeln">
+      <ul class="struktur-regeln list-reset">
         <template x-for="r in strukturDetailRegeln(row)" :key="r.nr">
           <li class="struktur-regel" :class="'struktur-regel--' + r.status">
             <div class="struktur-regel-head">

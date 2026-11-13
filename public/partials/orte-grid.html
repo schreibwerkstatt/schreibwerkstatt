@@ -26,7 +26,7 @@
     <tbody>
       <template x-for="o in sorted" :key="o.id">
         <tr>
-          <td><span class="tag entity-typ-tag" x-text="o.typLabelText"></span></td>
+          <td><span class="tag entity-typ-tag truncate" x-text="o.typLabelText"></span></td>
           <td class="entity-grid-cell-title">
             <span x-text="o.name"></span>
             <button type="button" x-show="o.stale" class="btn-compact entity-row-action"

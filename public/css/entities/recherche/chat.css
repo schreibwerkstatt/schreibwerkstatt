@@ -51,9 +51,6 @@
 .research-chat-proposal-url-host {
   flex: 0 0 auto;
   max-width: 50%;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
   font-size: var(--font-size-sm);
   color: var(--color-muted);
 }

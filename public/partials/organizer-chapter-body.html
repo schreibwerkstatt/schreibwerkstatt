@@ -32,7 +32,7 @@
          :disabled="organizerSaving"
          autocomplete="off" data-bwignore data-1p-ignore data-lpignore="true" data-form-type="other" data-spellcheck="spelling"
          :aria-label="$app.t('bookOrganizer.renameChapter')">
-  <span class="organizer-section-name" x-show="singleSectionNameDiffers(ch)" x-text="ch.pages[0]?.name"
+  <span class="organizer-section-name truncate" x-show="singleSectionNameDiffers(ch)" x-text="ch.pages[0]?.name"
         :data-tip="$app.t('bookOrganizer.sectionNameDiffers')"></span>
   <span class="organizer-chapter-meta tag" x-show="!isSingleSectionChapter(ch)" x-text="$app.t('sidebar.pagesCountShort', { n: chapterPageTotal(ch) })"
         :data-tip="$app.tn('sidebar.pagesCount', chapterPageTotal(ch))"

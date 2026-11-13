@@ -138,8 +138,8 @@
                         <template x-for="(u, ui) in (prop.urls || [])" :key="ui">
                           <span class="research-chat-proposal-url-row"
                                 :class="{ 'research-chat-proposal-url-row--removed': isProposalUrlRemoved(msg, pi, u), 'research-chat-proposal-url-row--unverified': isProposalUrlUnverified(u) }">
-                            <a class="research-chat-proposal-url url-short" :href="u.url" target="_blank" rel="noopener noreferrer" :data-tip="u.url" x-text="urlText(u)"></a>
-                            <span class="research-chat-proposal-url-host" x-show="proposalUrlHost(u)" x-text="proposalUrlHost(u)"></span>
+                            <a class="research-chat-proposal-url url-short truncate" :href="u.url" target="_blank" rel="noopener noreferrer" :data-tip="u.url" x-text="urlText(u)"></a>
+                            <span class="research-chat-proposal-url-host truncate" x-show="proposalUrlHost(u)" x-text="proposalUrlHost(u)"></span>
                             <span class="research-chat-proposal-url-unverified" x-show="isProposalUrlUnverified(u)"
                                   :data-tip="$app.t('recherche.chat.proposalUrlUnverifiedTip')"><svg class="icon" aria-hidden="true"><use href="/icons.svg#alert-triangle"/></svg><span x-text="$app.t('recherche.chat.proposalUrlUnverified')"></span></span>
                             <button type="button" class="icon-btn icon-btn--ghost" x-show="!isProposalSaved(msg, pi)"

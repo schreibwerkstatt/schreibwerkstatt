@@ -73,9 +73,6 @@
 
 .device-tokens-name {
   font-weight: var(--fw-semibold);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }
 
 .device-tokens-meta {

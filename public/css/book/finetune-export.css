@@ -43,9 +43,6 @@
 .finetune-download-name {
   flex: 1;
   min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }
 .finetune-downloads .form-size-hint { margin-left: 0; }
 .finetune-download-group .card-form-hint { margin-top: var(--space-sm); }

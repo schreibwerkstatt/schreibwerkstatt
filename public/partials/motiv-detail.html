@@ -64,7 +64,7 @@
         <div class="motiv-trigger-chips" x-show="editTriggerTerms.length">
           <template x-for="(term, i) in editTriggerTerms" :key="term">
             <span class="motiv-trigger-chip">
-              <span class="motiv-trigger-chip-text" x-text="term"></span>
+              <span class="motiv-trigger-chip-text truncate" x-text="term"></span>
               <button type="button" class="motiv-trigger-chip-remove" @click="removeTriggerTerm(i)"
                       :data-tip="$app.t('common.remove')" :aria-label="$app.t('motiv.motif.triggerRemove', { term })">
                 <svg class="icon" aria-hidden="true"><use href="/icons.svg#x"/></svg>

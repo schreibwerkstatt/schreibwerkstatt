@@ -333,9 +333,6 @@
   flex: 1;
   font-size: var(--font-size-xs);
   color: var(--color-text);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
 }
 /* Laufender Job in der Historie: die Anzeige gehört der Zeile, die wirklich
    bearbeitet wird (siehe chat-base.js#is<Label>SessionRunning). */
@@ -410,9 +407,6 @@
 }
 .chat-image-prompt {
   flex: 1;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
 }
 .chat-image-dl {
   flex-shrink: 0;

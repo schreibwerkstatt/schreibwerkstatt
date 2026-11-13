@@ -187,7 +187,7 @@
     <ul class="overview-chapter-list">
       <template x-for="c in myStatsByCategory()" :key="c.categoryId == null ? '__none__' : c.categoryId">
         <li class="overview-chapter-row">
-          <span class="overview-chapter-name mystats-cat-name">
+          <span class="overview-chapter-name mystats-cat-name truncate">
             <span class="mystats-cat-dot" :style="{ background: c.color }" aria-hidden="true"></span>
             <span :data-tip="c.name" x-text="c.name"></span>
           </span>
@@ -214,7 +214,7 @@
     <ul class="overview-chapter-list">
       <template x-for="b in myStatsPerBookTime()" :key="b.book_id">
         <li class="overview-chapter-row">
-          <span class="overview-chapter-name" :data-tip="b.name" x-text="b.name"></span>
+          <span class="overview-chapter-name truncate" :data-tip="b.name" x-text="b.name"></span>
           <div class="overview-chapter-bar-track">
             <div class="overview-chapter-bar-fill" :style="{ width: b.pct + '%' }"></div>
           </div>

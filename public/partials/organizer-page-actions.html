@@ -71,7 +71,7 @@
                 :data-row-combo="page.id + ':redaktion'"
                 @click="openRowCombo(page.id, 'redaktion')"
                 :aria-label="$app.t('redaktion.setStatus')">
-          <span class="combobox-value" x-text="$app.t('redaktion.setStatus')"></span>
+          <span class="combobox-value truncate" x-text="$app.t('redaktion.setStatus')"></span>
           <svg class="combobox-chevron" width="10" height="10" viewBox="0 0 10 10" fill="none" aria-hidden="true"><path d="M1.5 3.5L5 7L8.5 3.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
         </button>
       </div>
@@ -91,7 +91,7 @@
             :data-row-combo="page.id + ':chapter'"
             @click="openRowCombo(page.id, 'chapter')"
             :aria-label="$app.t('bookOrganizer.moveTo')">
-      <span class="combobox-value" x-text="$app.t('bookOrganizer.moveTo')"></span>
+      <span class="combobox-value truncate" x-text="$app.t('bookOrganizer.moveTo')"></span>
       <svg class="combobox-chevron" width="10" height="10" viewBox="0 0 10 10" fill="none" aria-hidden="true"><path d="M1.5 3.5L5 7L8.5 3.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
     </button>
   </div>
@@ -111,7 +111,7 @@
             :aria-expanded="bookMovePageId === page.id"
             @click.stop="openBookMove($event, page)"
             :aria-label="$app.t('bookOrganizer.moveToBook')">
-      <span class="combobox-value" x-text="$app.t('bookOrganizer.moveToBook')"></span>
+      <span class="combobox-value truncate" x-text="$app.t('bookOrganizer.moveToBook')"></span>
       <svg class="combobox-chevron" width="10" height="10" viewBox="0 0 10 10" fill="none" aria-hidden="true"><path d="M1.5 3.5L5 7L8.5 3.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
     </button>
   </div>

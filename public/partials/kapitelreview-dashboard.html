@@ -143,7 +143,7 @@
            :data-tip="$app.t('overview.openHeatmap')"
            :aria-label="$app.t('kapitelReview.dash.topTypen')">
         <div class="overview-tile-label" x-text="$app.t('kapitelReview.dash.topTypen')"></div>
-        <ul class="overview-error-bars">
+        <ul class="overview-error-bars list-reset">
           <template x-for="e in kdTopTypen()" :key="e.typ">
             <li class="overview-error-bar-item">
               <div class="overview-error-bar-head">
@@ -170,7 +170,7 @@
           <span class="overview-tile-median" x-show="kdFiguren().total > kdFiguren().rows.length"
                 x-text="$app.t('kapitelReview.dash.more', { n: kdFiguren().total - kdFiguren().rows.length })"></span>
         </div>
-        <ul class="kapitel-dash-rank">
+        <ul class="kapitel-dash-rank list-reset">
           <template x-for="f in kdFiguren().rows" :key="f.id">
             <!-- Ranglisten-Zeile (Avatar, Name, Balken, Zahl) ist als Ganzes das
                  Klickziel und bleibt deshalb .internal-link statt x-entity-ref —
@@ -180,7 +180,7 @@
                 @click="$app.openFigurById(f.id)"
                 :data-tip="f.fullName + (f.extra > 0 ? ' · ' + $app.t('kapitelReview.dash.scenes', { n: f.extra }) : '')">
               <span class="kapitel-dash-rank-avatar" x-text="tileInitials(f.fullName)"></span>
-              <span class="kapitel-dash-rank-name" x-text="f.name"></span>
+              <span class="kapitel-dash-rank-name truncate" x-text="f.name"></span>
               <span class="kapitel-dash-rank-bar">
                 <span class="kapitel-dash-rank-fill" :style="{ width: f.pct + '%' }"></span>
               </span>
@@ -234,7 +234,7 @@
           <div class="overview-stacked-seg overview-stacked-seg--ohne"
                :style="{ flex: kdSzenen().wertung.ohne }" x-show="kdSzenen().wertung.ohne > 0"></div>
         </div>
-        <ul class="kapitel-dash-scenes">
+        <ul class="kapitel-dash-scenes list-reset">
           <template x-for="s in kdSzenen().list" :key="s.id">
             <li class="kapitel-dash-scene">
               <span class="kapitel-dash-scene-dot" :data-wertung="s.wertung || 'ohne'" aria-hidden="true"></span>

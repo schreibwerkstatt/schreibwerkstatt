@@ -120,7 +120,7 @@
 }
 
 /* Pflegeformular: Neuanlage über der Liste, Bearbeiten unter der Zeile.
-   Rahmen `.weltfakten-edit-panel`: card-blocks.css (`.card-edit-panel`). */
+   Rahmen: `.card-edit-panel` (card-blocks.css). */
 .weltfakten-edit-actions {
   display: flex;
   flex-wrap: wrap;

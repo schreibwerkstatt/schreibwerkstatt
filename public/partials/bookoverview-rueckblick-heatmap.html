@@ -21,7 +21,7 @@
             <div class="ymheat-row ymheat-row--head">
               <span class="ymheat-corner"></span>
               <template x-for="(mLabel, mi) in rueckblickMonthLabels()" :key="mi">
-                <span class="ymheat-month-label" x-text="mLabel"></span>
+                <span class="ymheat-month-label truncate" x-text="mLabel"></span>
               </template>
             </div>
             <template x-for="row in overviewRueckblickHeatmap().years" :key="row.year">

@@ -171,7 +171,7 @@
         <template x-for="r in stilRhythmData().rows" :key="r.key">
           <div class="stil-rhythm-row">
             <div class="stil-rhythm-label">
-              <span class="stil-rhythm-name"
+              <span class="stil-rhythm-name truncate"
                     :class="{ 'internal-link text-link': r.key !== '__uncat__' }"
                     @click="r.key !== '__uncat__' && stilJumpToChapter(r.key)"
                     x-text="stilChapterName(r.name, r.key)"></span>
@@ -219,10 +219,10 @@
              pct: stilPercent(stilOpenerView().repeatRatio),
            })"></p>
       </div>
-      <ul class="stil-opener-list">
+      <ul class="stil-opener-list list-reset">
         <template x-for="o in stilOpenerView().top" :key="o.word">
           <li class="stil-opener-row">
-            <span class="stil-opener-word" x-text="o.word"></span>
+            <span class="stil-opener-word truncate" x-text="o.word"></span>
             <span class="stil-opener-bar">
               <span class="stil-opener-fill" :style="{ '--opener-bar': (o.bar * 100) + '%' }"></span>
             </span>

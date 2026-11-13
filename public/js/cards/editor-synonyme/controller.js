@@ -286,7 +286,7 @@ export function createSynonymController({
       entry.appendChild(w);
       if (s.hinweis) {
         const h = document.createElement('span');
-        h.className = 'synonym-hint';
+        h.className = 'synonym-hint truncate';
         h.textContent = s.hinweis;
         entry.appendChild(h);
       }

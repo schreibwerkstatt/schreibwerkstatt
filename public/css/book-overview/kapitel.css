@@ -52,9 +52,6 @@
   border-left-color: var(--color-success);
 }
 .overview-chapter-name {
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
   font-size: var(--font-size-sm);
 }
 .overview-chapter-bar-track {

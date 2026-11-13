@@ -129,7 +129,7 @@
 .bullet-list.neg li::before     { content: '−'; color: var(--color-err-text); }
 
 /* === Review-Empfehlungen (prio + kategorie + text) === */
-.rec-list { list-style: none; padding: 0; margin: 0; display: flex; flex-direction: column; gap: var(--space-14); }
+.rec-list { display: flex; flex-direction: column; gap: var(--space-14); }
 .rec-item {
   display: grid;
   grid-template-columns: auto 1fr;
@@ -154,7 +154,7 @@
 .rec-text { grid-column: 1 / -1; grid-row: 2; color: var(--color-text); }
 
 /* === Review-Beispielzitate === */
-.zitate-list { list-style: none; padding: 0; margin: 0; display: flex; flex-direction: column; gap: var(--space-10); }
+.zitate-list { display: flex; flex-direction: column; gap: var(--space-10); }
 .zitat-item {
   padding: var(--space-sm) var(--space-md);
   background: var(--color-bg);

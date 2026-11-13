@@ -311,9 +311,6 @@
 .page-revisions-row > .page-revisions-summary {
   flex: 0 1 auto;
   min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }
 .page-revisions-row > .user-chip { flex: 0 1 auto; min-width: 0; }
 .page-revisions-row > .page-revisions-row__client {

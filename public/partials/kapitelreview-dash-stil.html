@@ -14,10 +14,10 @@
       <span class="overview-tile-label" x-text="$app.t('kapitelReview.dash.stil')"></span>
       <span class="overview-tile-median" x-text="$app.t('kapitelReview.dash.stilLink')"></span>
     </div>
-    <ul class="kapitel-dash-stil-list">
+    <ul class="kapitel-dash-stil-list list-reset">
       <template x-for="r in kdStil().rows" :key="r.key">
         <li class="kapitel-dash-stil-row" :data-tip="$app.t(r.tipKey)">
-          <span class="kapitel-dash-stil-label" x-text="$app.t(r.labelKey)"></span>
+          <span class="kapitel-dash-stil-label truncate" x-text="$app.t(r.labelKey)"></span>
           <span class="kapitel-dash-stil-value"
                 :class="r.dev ? 'kapitel-dash-stil-value--dev' : ''"
                 :data-tip="r.dev ? $app.t(r.dev === 'up' ? 'kapitelReview.dash.stilDevUp' : 'kapitelReview.dash.stilDevDown') : null"

@@ -43,9 +43,6 @@
   font-size: var(--font-size-sm);
   text-align: left;
   cursor: pointer;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }
 .motiv-tree-name:hover { border-color: var(--color-border); background: var(--color-bg); }
 .motiv-tree-name--theme { font-weight: var(--fw-semibold); }
@@ -117,7 +114,7 @@
   color: var(--color-tag-text);
   font-size: var(--font-size-xs);
 }
-.motiv-trigger-chip-text { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.motiv-trigger-chip-text { min-width: 0; }
 .motiv-trigger-chip-remove {
   display: inline-flex;
   padding: 0;
@@ -225,9 +222,6 @@
 .motiv-outline-row.is-open td { background: var(--color-tag-bg); border-bottom-color: transparent; }
 .motiv-outline-triggers {
   max-width: 16rem;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
   color: var(--color-muted);
   font-size: var(--font-size-xs);
 }

@@ -211,16 +211,10 @@
 .avatar-menu-name {
   font-size: var(--font-size-sm);
   color: var(--color-text);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }
 .avatar-menu-email {
   font-size: var(--font-size-xs);
   color: var(--color-subtle);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }
 
 .avatar-menu-section {

@@ -14,7 +14,7 @@
     <span class="severity-tag"
           :class="'severity-tag--' + kontinuitaetSeverity(issue)"
           x-text="$app.t('kontinuitaet.severity.' + kontinuitaetSeverity(issue))"></span>
-    <span class="tag entity-typ-tag" x-text="kontinuitaetTypLabel(issue.typ)"></span>
+    <span class="tag entity-typ-tag truncate" x-text="kontinuitaetTypLabel(issue.typ)"></span>
     <span class="kontinuitaet-row-stellen entity-refs">
       <button type="button" class="entity-ref"
               x-entity-ref="kontinuitaetStelleRef(issue.stelle_a, issue, 'a')"></button>

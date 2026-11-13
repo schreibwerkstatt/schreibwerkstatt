@@ -28,7 +28,7 @@
     <div class="chat-session-item chat-hist-hit internal-link" @click="openHistHit(hit)">
       <div class="chat-hist-hit-body">
         <div class="chat-hist-hit-head">
-          <span class="chat-session-preview" x-text="hit.title || $app.t('chat.previewEmpty')"></span>
+          <span class="chat-session-preview truncate" x-text="hit.title || $app.t('chat.previewEmpty')"></span>
           <span class="chat-hist-match" :class="'chat-hist-match--' + hit.match" :data-tip="histHitTip(hit)" :aria-label="histHitTip(hit)"></span>
           <span class="chat-session-meta" x-text="$app.formatDate(hit.created_at)"></span>
         </div>

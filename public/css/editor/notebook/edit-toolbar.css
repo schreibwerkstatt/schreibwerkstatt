@@ -118,9 +118,6 @@
   color: var(--color-muted);
 }
 .edit-cite-list {
-  list-style: none;
-  margin: 0;
-  padding: 0;
   max-height: 260px;
   overflow-y: auto;
 }
@@ -131,9 +128,6 @@
   color: var(--color-text);
   cursor: pointer;
   /* Lange Angaben nicht umbrechen lassen — die Liste soll scannbar bleiben. */
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }
 .edit-cite-item.is-active {
   background: var(--color-hover);

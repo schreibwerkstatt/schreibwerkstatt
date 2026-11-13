@@ -1,8 +1,8 @@
-/* Link-Text einer URL in einer Zeile mit Ellipse: `.url-short` am Element, das
-   den Text trägt (ein `<a>` oder ein `<span>` darin). Inhaltlich kürzt
-   `shortUrl`/`linkText` aus utils/url-display.js (Host + letztes Pfadstück),
-   geometrisch kürzt diese Klasse auf die verfügbare Breite — schmale Leiste,
-   Mobile. Die volle URL steht im `href` und als `data-tip` daneben.
+/* Link-Text einer URL in einer Zeile mit Ellipse: `.url-short truncate` am
+   Element, das den Text trägt (ein `<a>` oder ein `<span>` darin). Inhaltlich
+   kürzt `shortUrl`/`linkText` aus utils/url-display.js (Host + letztes
+   Pfadstück), geometrisch kürzt `.truncate` auf die Breite, die diese Klasse
+   dem Element gibt — schmale Leiste, Mobile. Die volle URL steht im `href` und als `data-tip` daneben.
    Kein `word-break: break-all` an URLs: es reisst sie an beliebiger Stelle und
    macht aus einem Link einen mehrzeiligen Block. */
 
@@ -11,9 +11,6 @@
     display: inline-block;
     max-width: 100%;
     min-width: 0;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
     vertical-align: bottom;
   }
 }

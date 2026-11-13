@@ -52,9 +52,6 @@
 
 /* ── Rangliste der Figuren im Kapitel ─────────────────────────────────────── */
 .kapitel-dash-rank {
-  list-style: none;
-  margin: 0;
-  padding: 0;
   display: flex;
   flex-direction: column;
   gap: var(--space-6);
@@ -86,9 +83,6 @@
   background: var(--card-accent, var(--color-accent));
 }
 .kapitel-dash-rank-name {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
   font-size: var(--font-size-sm);
 }
 .kapitel-dash-rank-bar {
@@ -111,9 +105,6 @@
 
 /* ── Szenen-Kurzliste ─────────────────────────────────────────────────────── */
 .kapitel-dash-scenes {
-  list-style: none;
-  margin: 0;
-  padding: 0;
   display: flex;
   flex-direction: column;
   gap: var(--space-2xs);
@@ -153,9 +144,6 @@
    RICHTUNG, kein Urteil (mehr Dialog ist kein Fehler) — darum Kartenakzent
    statt Gruen/Rot wie bei der Befunddichte. Regel: kapitel-stil.js. */
 .kapitel-dash-stil-list {
-  list-style: none;
-  margin: 0;
-  padding: 0;
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto auto;
   gap: var(--space-2xs) var(--space-10);
@@ -164,9 +152,6 @@
 .kapitel-dash-stil-row { display: contents; }
 .kapitel-dash-stil-label {
   color: var(--color-muted);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }
 .kapitel-dash-stil-value {
   text-align: right;
@@ -202,9 +187,6 @@
   font-size: var(--font-size-xs);
 }
 .kapitel-dash-progress-idle-list {
-  list-style: none;
-  margin: 0;
-  padding: 0;
   display: flex;
   flex-direction: column;
   gap: var(--space-xs);
