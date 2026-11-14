@@ -6,7 +6,7 @@ Karte `bookStatsCard` ([book-stats-card.js](../public/js/cards/book-stats-card.j
 
 | Metriken | Quelle | Zeitachse |
 |---|---|---|
-| Umfang, Satzlänge, LIX/Flesch, Abschn./Kap., Wortschatz | `book_stats_history` (`GET /history/book-stats/:id`) — eine Zeile je Buch und Tag aus `syncBook` ([routes/sync.js](../routes/sync.js)), nächtlich und manuell | Snapshot-Tage |
+| Umfang, Satzlänge, LIX/Flesch, Abschn./Kap., Wortschatz | `book_stats_history` (`GET /history/book-stats/:id`) — eine Zeile je Buch und Tag aus `syncBook` ([routes/sync.js](../routes/sync.js)), nächtlich und manuell; LIX/Flesch seitengewichtet nach Prosa-Wörtern ([stil-heatmap.md](stil-heatmap.md)) | Snapshot-Tage |
 | Schreib-, Lektorats-, Diktatzeit | `writing_time`/`lektorat_time`/`stt_time` (`GET /history/*-time/:id`), je User | nur aktive Tage |
 | Bearbeitungsstand | `GET /redaktion/:id/history` | nur Tage mit Stufenwechsel |
 | Zeichen pro Schreibstunde | Snapshot-Zuwachs ÷ Schreibzeit desselben Tags (`tempoRows`) | Tage mit Schreibzeit |

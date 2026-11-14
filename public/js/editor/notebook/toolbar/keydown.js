@@ -7,9 +7,10 @@
 // an Blockgrenzen und über Auswahlen: toolbar/keydown-delete.js; Verlauf:
 // toolbar/msg-thread.js; geschützte Nachbarn: toolbar/block-edge.js.
 
-import { getEditEl, _brLeftOfCaret, _formatStamp, findBlock, caretAtBlockStart, caretRangeIn } from './_shared.js';
+import { getEditEl, softBreakNoop, _formatStamp, findBlock, caretAtBlockStart, caretRangeIn } from './_shared.js';
 import { matchHistoryCommand } from '../../shared/shortcuts.js';
 import { isImeComposing } from '../../../utils/keys.js';
+import { closestMsgLine, isEmptyMsgLine } from '../../../messages/msg-html.js';
 
 const MODIFIER_KEYS = new Set(['Shift', 'Control', 'Alt', 'Meta', 'AltGraph', 'CapsLock']);
 // Tasten, die bei offenem Slash-Menü den Caret bewegen: das Menü schliesst, die
@@ -19,7 +20,9 @@ const SLASH_CLOSE_KEYS = new Set(['ArrowLeft', 'ArrowRight', 'Home', 'End', 'Pag
 export const keydownMethods = {
   // Reihenfolge ist verhaltensrelevant (z.B. Shift+Enter vor Enter-in-Todo).
   // Die Handler bis zum Focus-Hard-Stop laufen in BEIDEN Modi (Notebook +
-  // Focus); danach sind Slash + Block-Transforms tabu.
+  // Focus); danach sind Slash + Block-Transforms tabu. Ausnahme Shift+Enter:
+  // im Focus fängt focus/listeners.js#onSoftBreak die Taste am Container ab
+  // (stopPropagation), `_kbSoftBreak` greift dort nie.
   _onEditKeydown(e) {
     const app = window.__app;
     if (!app?.editMode) return;
@@ -104,13 +107,19 @@ export const keydownMethods = {
   // browser konsistent (WebKit + Chromium getestet). Auf einer bereits leeren
   // Soft-Break-Zeile (links steht ein <br>) keinen zweiten <br> einfügen — der
   // würde beim Save eh kollabieren (No-Op statt Doppel-Umbruch, der nach Reload
-  // verschwindet).
+  // verschwindet). Ausnahme Code-Block: dort ist die Leerzeile Inhalt
+  // (shared/soft-break.js#softBreakNoop).
+  // In einer leeren Nachrichtenzeile (Notebook) ebenfalls No-Op: das <br>
+  // stünde vor der ersten getippten Zeile, die Blase begänne mit einer
+  // Leerzeile — nach Enter ist die neue Nachricht schon da.
   _kbSoftBreak(e, app) {
     if (!(e.key === 'Enter' && e.shiftKey)) return false;
     e.preventDefault();
     const editEl = getEditEl();
     const sel = editEl ? document.getSelection() : null;
-    if (sel && _brLeftOfCaret(sel)) return true;
+    if (sel && softBreakNoop(sel)) return true;
+    const msgLine = sel?.rangeCount && !app.focusActive ? closestMsgLine(sel.anchorNode, editEl) : null;
+    if (msgLine && isEmptyMsgLine(msgLine)) return true;
     document.execCommand('insertLineBreak');
     app._markEditDirty?.();
     return true;

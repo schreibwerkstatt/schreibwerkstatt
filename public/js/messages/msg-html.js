@@ -153,6 +153,21 @@ export function isEmptyMsgLine(line) {
   return !line?.querySelector(MSG_LINE_CONTENT_SEL);
 }
 
+// Verlaufszeilen in einem (geparsten) Fragment, z.B. einer kopierten Auswahl:
+// jedes <p> mit Zeilenklasse und jedes <p> direkt im Verlauf, in
+// Dokumentreihenfolge, als { kind, text }; Zeilen ohne Text fallen weg. Eine
+// Auswahl innerhalb eines Verlaufs kopiert die Zeilen ohne den Verlauf darum —
+// darum zählt die Zeilenklasse auch ohne Eltern-<div>.
+export function msgLinesIn(root) {
+  const kindSel = Object.values(MSG_KIND_CLASS).map((c) => `p.${c}`).join(', ');
+  const out = [];
+  for (const p of root?.querySelectorAll?.(`${kindSel}, ${MSG_LINE_SEL}`) || []) {
+    const text = (p.textContent || '').replace(/\s+/g, ' ').trim();
+    if (text) out.push({ kind: msgKind(p), text });
+  }
+  return out;
+}
+
 // Leere Zeile der Art `kind`, mit <br> als Caret-Slot.
 export function createMsgLine(kind = 'in', doc = document) {
   const p = doc.createElement('p');

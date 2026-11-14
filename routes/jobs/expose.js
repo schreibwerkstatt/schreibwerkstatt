@@ -24,6 +24,7 @@ const {
   loadOrderedBookContents, loadPageContents, groupByChapter, splitGroupsIntoChunks, buildSinglePassBookText,
   chunkLimitsFor, BATCH_SIZE, jobAbortControllers, settledAll,
   _modelName, tps, jsonBody, startBookJob, systemChars: _systemChars,
+  bookTextOpts,
 } = require('./shared');
 const { narrativeLabels } = require('./narrative-labels');
 const { werkstandFor } = require('./review-context');
@@ -113,7 +114,7 @@ async function runExposeJob(jobId, bookId, userEmail) {
         statusText: 'job.phase.readingPages',
         statusParams: { from: i + 1, to: Math.min(i + BATCH_SIZE, total), total },
       });
-    }, jobAbortControllers.get(jobId)?.signal);
+    }, jobAbortControllers.get(jobId)?.signal, bookTextOpts(bookId, userEmail));
     if (!pageContents.length) { completeJob(jobId, { empty: true }); return; }
 
     const totalChars = pageContents.reduce((s, p) => s + p.text.length, 0);

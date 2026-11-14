@@ -14,6 +14,7 @@ const {
   makeJobLogger, updateJob, completeJob, failJob, i18nError, jsonBody,
   aiCall, getPrompts, tps, startBookJob, htmlToTextForPrompt,
   applyTierAiOverrides,
+  bookTextOpts,
 } = require('./shared');
 const { resolveProvider } = require('../../lib/ai');
 const contentStore = require('../../lib/content-store');
@@ -78,7 +79,7 @@ async function runBookMapLabelJob(jobId, bookId, userEmail, axes) {
       try {
         const pd = await contentStore.loadPage(id);
         if (pd && Number(pd.book_id) === Number(bookId)) {
-          const text = htmlToTextForPrompt(pd.html || '').trim();
+          const text = htmlToTextForPrompt(pd.html || '', bookTextOpts(bookId, userEmail)).trim();
           if (text) item = { name: pd.name || `#${id}`, text: _excerpt(text) };
         }
       } catch { /* fehlend → item bleibt null */ }

@@ -50,7 +50,9 @@ test('Text-Pfade (Prompt-Marken, TXT, WordPress) kennen die Klassen', async () =
   const { text, msgRanges } = htmlToPlainTextWithMsgRanges(`<div class="${MSG_THREAD_CLASS}">${lines}</div>`);
   assert.deepEqual(msgRanges.map(([a, b]) => text.slice(a, b)), [MSG_KIND_CLASS.in, MSG_KIND_CLASS.out]);
   const txt = read('lib/export-builders/txt.js');
-  assert.match(txt, new RegExp(`\\\\b${MSG_THREAD_CLASS}\\\\b`));
+  // TXT findet den Verlauf über html-text.js (zählt verschachtelte <div>).
+  assert.match(txt, /replaceMsgThreads\(/);
+  assert.match(read('lib/html-text.js'), new RegExp(`\\b${MSG_THREAD_CLASS}\\b`));
   for (const c of ['msg-name', 'msg-meta', 'msg-out']) assert.ok(KIND_CLASSES.includes(c) && txt.includes(`'${c}'`), `txt: ${c}`);
   assert.match(read('lib/wp-html.js'), new RegExp(`const MSG_THREAD_CLASS = '${MSG_THREAD_CLASS}';`));
 });
@@ -89,5 +91,29 @@ test('Export-Klasse msg-name-out: Erzeuger und beide Export-Stylesheets', () => 
   assert.match(read('lib/html-text.js'), /msg-name-out/);
   for (const f of ['lib/export-builders/epub/css.js', 'lib/export-builders/html.js']) {
     assert.match(read(f), /\.msg-thread p\.msg-name-out \{/, f);
+  }
+});
+
+// Bildschirm vs. Exporte: der Bildschirm leitet die Absender-Seite per :has()
+// ab, die Exporte rechnen msgNameSides. Die CSS-Kette deckt bis zu drei
+// Hinweise zwischen Absender und Nachricht ab; leere Zeilen zählen auf beiden
+// Wegen mit (Seite = die der nächsten Zeile, auch wenn sie leer ist).
+test('Absender-Seite: Bildschirm-CSS rechnet wie msgNameSides', async () => {
+  const { parseHTML } = await import('linkedom');
+  const css = read('public/css/components/manuscript-content.css');
+  const m = css.match(/\.msg-thread > (p\.msg-name:has\([^{]+\))\s*\{\s*align-self: flex-end;/);
+  assert.ok(m, 'Regel für den ausgehenden Absender gefunden');
+  const sel = m[1];
+  const cases = [
+    ['name', 'out'], ['name', 'in'], ['name', 'meta', 'out'], ['name', 'meta', 'meta', 'out'],
+    ['name', 'meta', 'meta', 'meta', 'out'], ['name', 'meta', 'meta', 'meta', 'in'],
+    ['name', 'name', 'out'], ['name'], ['name', 'meta'], ['in', 'name', 'out', 'name', 'meta', 'in'],
+  ];
+  for (const kinds of cases) {
+    const lines = kinds.map((k) => `<p class="${MSG_KIND_CLASS[k]}">x</p>`).join('');
+    const { document } = parseHTML(`<div class="${MSG_THREAD_CLASS}">${lines}</div>`);
+    const screen = [...document.querySelectorAll('p')].map((p, i) =>
+      (kinds[i] === 'name' ? (p.matches(sel) ? 'out' : 'in') : null));
+    assert.deepEqual(screen, msgNameSides(kinds), kinds.join(','));
   }
 });

@@ -34,6 +34,7 @@ const {
   makeJobLogger, updateJob, completeJob, failJob, aiCall, getPrompts, tps, jsonBody,
   htmlToText, createJob, enqueueJob, findActiveJobId, chunkLimitsFor, i18nError,
   applyTierAiOverrides,
+  bookTextOpts,
 } = require('./shared');
 const { pageQuoteHaystack } = require('./ideen-chat-tools');
 
@@ -111,7 +112,7 @@ async function runIdeenAutoCheckJob(jobId, pageId, bookId, userEmail) {
     updateJob(jobId, { statusText: 'job.phase.loadingPages', progress: 5 });
     const ideen = ideenCheck.listOpenPageIdeen(pageId, userEmail).slice(0, MAX_IDEEN);
     const page = await contentStore.loadPage(pageId);
-    const text = htmlToText(page?.html || '');
+    const text = htmlToText(page?.html || '', bookTextOpts(bookId, userEmail));
     if (!ideen.length || !text.trim()) {
       ideenCheck.setBaseline(pageId, userEmail, text);
       completeJob(jobId, { checked: 0, hints: 0 });

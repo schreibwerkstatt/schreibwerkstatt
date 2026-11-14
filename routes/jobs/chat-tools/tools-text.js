@@ -3,10 +3,11 @@
 // Zitate via Offset oder Pattern, Dialogerkennung. Die
 // semantische Suche (search_similar) liegt in tools-similar.js.
 
-const { htmlToText } = require('../shared');
+const { htmlToText, bookTextOpts } = require('../shared');
 const contentStore = require('../../../lib/content-store');
 const { htmlToPlainText, htmlToPlainTextWithMsgRanges } = require('../../../lib/html-text');
 const { findDialogRanges } = require('../../../lib/page-index');
+const { buildFigureNamePatterns, escapeRegex } = require('../../../lib/figure-name-patterns');
 const searchIndex = require('../../../lib/search');
 const semanticRetrieval = require('../../../lib/semantic-retrieval');
 const {
@@ -224,7 +225,7 @@ async function tool_get_pages(input, ctx) {
     }
     try {
       const pd = await contentStore.loadPage(pageId);
-      const text = htmlToText(pd.html || '');
+      const text = htmlToText(pd.html || '', bookTextOpts(ctx.bookId, ctx.userEmail));
       const latestCheck = _latestCheckForPage(pageId, ctx.userEmail);
       results.push({
         page_id: pageId,
@@ -286,7 +287,7 @@ async function tool_get_chapter_text(input, ctx) {
     if (ctx.jobSignal?.aborted) throw new DOMException('Aborted', 'AbortError');
     try {
       const pd = await contentStore.loadPage(row.id);
-      const text = htmlToText(pd.html || '');
+      const text = htmlToText(pd.html || '', bookTextOpts(ctx.bookId, ctx.userEmail));
       results.push({
         page_id:   row.id,
         page_name: row.name,
@@ -453,6 +454,25 @@ function _figureNamePatterns(figRow) {
   return names;
 }
 
+// Absenderzeile einer Nachricht nennt die Figur (Name, Kurzname, Namensteile,
+// ganze Woerter) — dieselbe Zuordnung wie der Figuren-Idiolekt
+// (lib/lexicon/idiolect.js#_figureGroups).
+function _senderRe(figRow) {
+  const pats = buildFigureNamePatterns(figRow.name, figRow.kurzname).map(p => escapeRegex(p.text));
+  return pats.length ? new RegExp(`(?<![\\p{L}\\p{M}])(?:${pats.join('|')})(?![\\p{L}\\p{M}])`, 'iu') : null;
+}
+
+// Mit Figur: eine Nachricht mit Absender gehoert genau diesem Absender (Name im
+// Umfeld zaehlt dann nicht — im Chat steht oft der Name des Gegenuebers daneben);
+// ohne Absender und bei Rede im Erzaehltext entscheidet das Namens-Umfeld.
+function _dialogueMatchesFigure(text, [a, b], sender, { figNames, senderRe }) {
+  if (sender) return !!senderRe && senderRe.test(sender);
+  const winStart = Math.max(0, a - DIALOGUE_SPEAKER_WINDOW);
+  const winEnd   = Math.min(text.length, b + DIALOGUE_SPEAKER_WINDOW);
+  const ctxLower = text.slice(winStart, winEnd).toLowerCase();
+  return figNames.some(n => ctxLower.includes(n));
+}
+
 function tool_get_dialogue(input, ctx) {
   const limit = Math.min(DIALOGUE_MAX_LIMIT, Math.max(1, Number.isInteger(input?.limit) ? input.limit : DIALOGUE_DEFAULT_LIMIT));
   const minLen = Math.max(1, Number.isInteger(input?.min_length) ? input.min_length : 4);
@@ -464,6 +484,7 @@ function tool_get_dialogue(input, ctx) {
     if (!figRow) return { error: 'Figur nicht gefunden', errorKey: 'chat.toolError.figureNotFound' };
     figNames = _figureNamePatterns(figRow).map(n => n.toLowerCase());
   }
+  const figMatch = figNames ? { figNames, senderRe: _senderRe(figRow) } : null;
 
   const pages = listPagesForDialogue(ctx.bookId, {
     chapterId: Number.isInteger(input?.chapter_id) ? input.chapter_id : null,
@@ -474,17 +495,17 @@ function tool_get_dialogue(input, ctx) {
   const results = [];
   let totalFound = 0;
   for (const p of pages) {
-    const { text, msgRanges } = htmlToPlainTextWithMsgRanges(p.body_html);
+    const { text, msgRanges, msgSenders } = htmlToPlainTextWithMsgRanges(p.body_html);
+    // Nachricht → Absender (lib/html-text.js, Regel wie msgUtterances). Eine
+    // Nachricht beginnt ihren Dialog-Bereich: findDialogRanges legt nur
+    // Ueberlappendes zusammen, und Nachrichten trennt mindestens ein Leerzeichen.
+    const senderAt = new Map(msgRanges.map(([s], i) => [s, msgSenders[i]]));
     const ranges = findDialogRanges(text, msgRanges);
     for (const [a, b] of ranges) {
       const segment = text.slice(a, b).trim();
       if (segment.length < minLen) continue;
-      if (figNames) {
-        const winStart = Math.max(0, a - DIALOGUE_SPEAKER_WINDOW);
-        const winEnd   = Math.min(text.length, b + DIALOGUE_SPEAKER_WINDOW);
-        const ctxLower = text.slice(winStart, winEnd).toLowerCase();
-        if (!figNames.some(n => ctxLower.includes(n))) continue;
-      }
+      const sender = senderAt.get(a) || null;
+      if (figMatch && !_dialogueMatchesFigure(text, [a, b], sender, figMatch)) continue;
       totalFound++;
       if (results.length >= limit) continue;
       const before = text.slice(Math.max(0, a - DIALOGUE_CONTEXT_CHARS), a).trim();
@@ -496,6 +517,7 @@ function tool_get_dialogue(input, ctx) {
         offset:     a,
         length:     b - a,
         text:       segment,
+        ...(sender ? { sender } : {}),
         before:     before || null,
         after:      after  || null,
       });

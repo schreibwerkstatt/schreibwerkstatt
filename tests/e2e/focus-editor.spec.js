@@ -519,6 +519,54 @@ test('Zweites Shift+Enter direkt hintereinander stapelt keine <br>', async ({ pa
   expect(twice).toBe(once);
 });
 
+test('Zweites Shift+Enter im Code-Block setzt die Leerzeile', async ({ page }) => {
+  // softBreakNoop: im <pre> ist `a<br><br>b` Inhalt (der Cleaner lässt
+  // es stehen), der Dedup gilt dort nicht — sonst gäbe es im Code keine Leerzeile.
+  await page.evaluate(() => window.harness.startEdit());
+  await enter(page);
+
+  await page.evaluate(() => {
+    const host = document.querySelector('#editor-card .focus-editor__content');
+    const pre = document.createElement('pre');
+    pre.innerHTML = '<code>ab</code>';
+    host.appendChild(pre);
+    const range = document.createRange();
+    range.setStart(pre.querySelector('code').firstChild, 1);
+    range.collapse(true);
+    getSelection().removeAllRanges();
+    getSelection().addRange(range);
+  });
+
+  await page.keyboard.press('Shift+Enter');
+  await page.keyboard.press('Shift+Enter');
+  await page.waitForTimeout(50);
+  const html = await page.evaluate(() =>
+    document.querySelector('#editor-card .focus-editor__content > pre code').innerHTML);
+  expect(html).toBe('a<br><br>b');
+});
+
+test('Shift+Enter in einer Überschrift setzt keinen Umbruch', async ({ page }) => {
+  // softBreakNoop: Überschriften sind einzeilig (lib/heading-breaks.js).
+  await page.evaluate(() => window.harness.startEdit());
+  await enter(page);
+  await page.evaluate(() => {
+    const host = document.querySelector('#editor-card .focus-editor__content');
+    const h = document.createElement('h2');
+    h.textContent = 'Titel';
+    host.appendChild(h);
+    const range = document.createRange();
+    range.setStart(h.firstChild, 2);
+    range.collapse(true);
+    getSelection().removeAllRanges();
+    getSelection().addRange(range);
+  });
+  await page.keyboard.press('Shift+Enter');
+  await page.waitForTimeout(50);
+  const html = await page.evaluate(() =>
+    document.querySelector('#editor-card .focus-editor__content > h2').innerHTML);
+  expect(html).toBe('Titel');
+});
+
 test('Shift+Enter ersetzt eine Auswahl durch den Umbruch', async ({ page }) => {
   // Nicht-kollabierte Auswahl: erst löschen (eigener Undo-Eintrag), dann den
   // Umbruch setzen — sonst bliebe der markierte Text stehen.

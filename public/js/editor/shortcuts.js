@@ -84,7 +84,28 @@ export const shortcutsMethods = {
     if (event.key === '/' && !event.ctrlKey && !event.metaKey && !event.altKey) {
       event.preventDefault();
       window.dispatchEvent(new CustomEvent(EVT.PALETTE_OPEN));
+      return;
     }
+    this._handleReadEditKey(event);
+  },
+
+  // `E` (ohne Modifier) in der Leseansicht des Notebook-Editors → Edit-Modus.
+  // Hauptkürzel neben ⌘/Strg+E: Browser-Erweiterungen (Claude in Chrome u.a.)
+  // belegen ⌘/Strg+E per chrome.commands, Chrome reicht den Chord dann nie an
+  // die Seite durch — eine Taste ohne Strg/Alt/⌘ kann eine Erweiterung nicht
+  // registrieren. Muster wie `/` und `?`: nur ausserhalb von Eingabefeldern
+  // (filtert der Aufrufer), und nur solange die Notebook-Karte die Leseansicht
+  // eines Abschnitts zeigt — sonst tippt ein `e` auf einem fremden Board oder
+  // hinter einem offenen Dialog nicht still eine Edit-Session auf.
+  _handleReadEditKey(event) {
+    if (event.ctrlKey || event.metaKey || event.altKey || event.shiftKey) return;
+    if (event.repeat || event.isComposing) return;
+    if ((event.key || '').toLowerCase() !== 'e') return;
+    if (!this.showEditorCard || !this.currentPage) return;
+    if (this.editMode || this.focusActive) return;
+    if (document.querySelector('dialog[open]')) return;
+    event.preventDefault();
+    this.startEdit?.();
   },
 
   _focusInputEl(el) {
@@ -179,7 +200,9 @@ export const shortcutsMethods = {
     });
   },
 
-  // Cmd/Ctrl+E → Notebook-Edit-Modus ein-/ausschalten (nur im Notebook, nicht im Focus)
+  // Cmd/Ctrl+E → Notebook-Edit-Modus ein-/ausschalten (nur im Notebook, nicht im
+  //   Focus). Alternative ohne Modifier: `E` (_handleReadEditKey), weil
+  //   Erweiterungen den Chord in Chrome abfangen können.
   // Cmd/Ctrl+Shift+Leertaste → Diktat starten/abschliessen (nur Notebook-Edit)
   // Cmd/Ctrl+P → Seitenbaum-Filter
   // Cmd/Ctrl+K → Command-Palette (ausser mit Markierung im Notebook-Text: Link)

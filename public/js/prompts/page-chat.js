@@ -21,10 +21,20 @@ export const SCHEMA_CHAT = _obj({
 });
 
 // Steht der Abschnitt mit einem Nachrichtenverlauf (div.msg-thread) im Prompt,
-// folgt dieser Hinweis dem Abschnittsinhalt. Marken-Wortlaut: lib/html-text.js
-// (der Chat-Prompt ist deutsch, die Marken darum auch). Lektorat-Pendant:
+// folgt dieser Hinweis dem Abschnittsinhalt. Der Chat-Prompt ist deutsch (nicht
+// pro Locale gebaut), die Marken im Abschnittstext stehen aber in der
+// Buchsprache — der Hinweis zitiert darum die Marken der Buchsprache
+// (`langCode`). Marken-Wortlaut: lib/html-text.js#MSG_THREAD_MARKS, gegated durch
+// tests/unit/msg-thread-prompt.test.mjs. Lektorat-Pendant:
 // blocks.js#_buildNachrichtenBlock.
-export const PAGE_CHAT_NACHRICHTEN_HINWEIS = 'Hinweis Nachrichtenverlauf: Text zwischen «[Nachrichtenverlauf (SMS/Chat, Schreibweise der Figuren)]» und «[Ende Nachrichtenverlauf]» sind Handy-/Chatnachrichten der Figuren, jede Zeile eine Nachricht, ein Absendername oder ein Zeitstempel. Kleinschreibung, Abkürzungen, fehlende oder doppelte Satzzeichen, Emojis und Umgangssprache sind dort gewollte Figurenrede — schlage dafür keine vorschlaege vor, ausser der Autor fragt ausdrücklich danach. Ein Vorschlag dort betrifft immer nur EINE Zeile, nie Absendername oder Zeitstempel, und zitiert nie die Marken selbst.';
+const _PAGE_CHAT_MSG_MARKS = {
+  de: ['Nachrichtenverlauf (SMS/Chat, Schreibweise der Figuren)', 'Ende Nachrichtenverlauf'],
+  en: ['Message thread (text/chat, the characters\' own spelling)', 'End of message thread'],
+};
+export function pageChatNachrichtenHinweis(langCode = 'de') {
+  const [label, end] = _PAGE_CHAT_MSG_MARKS[langCode] || _PAGE_CHAT_MSG_MARKS.de;
+  return `Hinweis Nachrichtenverlauf: Text zwischen «[${label}]» und «[${end}]» sind Handy-/Chatnachrichten der Figuren, jede Zeile eine Nachricht, ein Absendername oder ein Zeitstempel. Kleinschreibung, Abkürzungen, fehlende oder doppelte Satzzeichen, Emojis und Umgangssprache sind dort gewollte Figurenrede — schlage dafür keine vorschlaege vor, ausser der Autor fragt ausdrücklich danach. Ein Vorschlag dort betrifft immer nur EINE Zeile, nie Absendername oder Zeitstempel, und zitiert nie die Marken selbst.`;
+}
 
 // Regeln zum Feld `ideen`: Pendenzen, die der Autor als Idee am Abschnitt
 // oder an dessen Kapitel festhält (er bestätigt jede einzeln; Normalisierung

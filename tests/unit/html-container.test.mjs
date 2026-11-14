@@ -29,3 +29,14 @@ test('Einfache Anführungszeichen am class-Attribut', () => {
   const h = "<div class='poem'><p>Vers</p></div>";
   assert.equal(insideClassDiv(h, h.indexOf('Vers'), 'poem'), true);
 });
+
+test('Inneres <div> beendet den Container nicht (Tiefe zählt)', () => {
+  const h = '<div class="msg-thread"><div><p class="msg-in">eins</p></div><p class="msg-out">zwei</p></div><p>drei</p>';
+  assert.equal(insideClassDiv(h, h.indexOf('eins'), 'msg-thread'), true);
+  assert.equal(insideClassDiv(h, h.indexOf('zwei'), 'msg-thread'), true, 'nach dem inneren </div> noch im Verlauf');
+  assert.equal(insideClassDiv(h, h.indexOf('drei'), 'msg-thread'), false);
+  // Container im Container einer anderen Klasse, Grossschreibung, Leerzeichen um =.
+  const g = '<DIV class = "poem"><div class="x"><p>Vers</p></div><p>Nachsatz</p></DIV><p>Prosa</p>';
+  assert.equal(insideClassDiv(g, g.indexOf('Nachsatz'), 'poem'), true);
+  assert.equal(insideClassDiv(g, g.indexOf('Prosa'), 'poem'), false);
+});

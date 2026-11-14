@@ -25,6 +25,7 @@ const {
   jsonBody,
   contentHttpError, htmlToTextForPrompt,
   applyTierAiOverrides,
+  bookTextOpts,
 } = require('./shared');
 const contentStore = require('../../lib/content-store');
 const { getBookSettings } = require('../../db/schema');
@@ -146,7 +147,7 @@ async function runStrukturJob(jobId, bookId, userEmail, onlyPageId = null) {
 
       const pd = await contentStore.loadPage(p.id).catch(() => null);
       if (!pd) continue;
-      const text = htmlToTextForPrompt(pd.html || '');
+      const text = htmlToTextForPrompt(pd.html || '', bookTextOpts(bookId, userEmail));
       if (text.length < MIN_CHARS) { zuKurz++; continue; }
 
       const sig = _sig(text, ts, cacheVersion);

@@ -16,6 +16,7 @@ const {
   _modelName, applyReviewAiOverrides, tps,
   jobs, runningJobs, createJob, enqueueJob, jobKey, findActiveJobId,
   jsonBody, BATCH_SIZE, chunkLimitsFor,
+  bookTextOpts,
 } = require('./shared');
 const contentStore = require('../../lib/content-store');
 const { narrativeLabels } = require('./narrative-labels');
@@ -67,6 +68,7 @@ async function runChapterReviewJob(jobId, bookId, chapterId, chapterName, bookNa
   } = prompts;
   const { SYSTEM_KAPITELREVIEW_BLOCKS: SYSTEM_KAPITELREVIEW, SYSTEM_KAPITELANALYSE_BLOCKS: SYSTEM_KAPITELANALYSE } = await getBookPrompts(bookId, userEmail);
   const bookSettings = getBookSettings(bookId, userEmail);
+  const textOpts = bookTextOpts(bookId, userEmail);
   const narrative = narrativeLabels(bookSettings);
   const locale = `${bookSettings?.language || 'de'}-${bookSettings?.region || 'CH'}`;
   const reviewSchwerpunkt = getBuchtypReviewSchwerpunkt(locale, bookSettings?.buchtyp || null);
@@ -232,7 +234,7 @@ async function runChapterReviewJob(jobId, bookId, chapterId, chapterName, bookNa
       const batch = pages.slice(i, i + BATCH_SIZE);
       const results = await Promise.all(batch.map(async p => {
         const pd = await contentStore.loadPage(p.id).catch(e => { throw contentHttpError(e); });
-        const text = htmlToText(pd.html).trim();
+        const text = htmlToText(pd.html, textOpts).trim();
         if (text.length < MIN_PAGE_CHARS) return null;
         // id + updated_at tragen die Cache-Signatur der Teil-Analysen
         // (buildChapterPagesSig) — derselbe Stempel wie in der Buchbewertung.

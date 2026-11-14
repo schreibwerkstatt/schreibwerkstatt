@@ -24,6 +24,7 @@ const {
   aiCall, getPrompts, tps, htmlToTextForPrompt, jobAbortControllers,
   createJob, enqueueJob, findActiveJobId, jsonBody,
   applyTierAiOverrides,
+  bookTextOpts,
 } = require('./shared');
 const { resolveProvider } = require('../../lib/ai');
 const { toIntId } = require('../../lib/validate');
@@ -68,7 +69,7 @@ async function _passages(bookId, item, signal, logger) {
   for (const pageId of linked) {
     const page = await contentStore.loadPage(pageId).catch(() => null);
     if (!page || page.book_id !== bookId) continue;
-    const text = htmlToTextForPrompt(page.html || '').trim();
+    const text = htmlToTextForPrompt(page.html || '', bookTextOpts(bookId)).trim();
     if (text) out.push({ page_id: pageId, page_name: page.name || '', text: text.slice(0, PAGE_TEXT_MAX) });
   }
   if (out.length) return { passages: out, error: false };

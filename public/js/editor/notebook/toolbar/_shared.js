@@ -5,7 +5,7 @@
 import { getEditEl, placeCaretIn, WORD_RE, caretRangeIn, rangeAtEnd } from '../../utils.js';
 import { tzOpts, localeTag } from '../../../utils.js';
 import { CARET_BLOCK_SEL, findBlock, topLevelBlock, caretAtBlockStart, caretAtBlockEnd } from '../../shared/dom-block.js';
-import { brLeftOfCaret } from '../../shared/soft-break.js';
+import { brLeftOfCaret, softBreakNoop } from '../../shared/soft-break.js';
 import { TODO_ITEM_SEL, TODO_LIST_CLASS } from '../../shared/todo-html.js';
 import { MSG_THREAD_CLASS, MSG_THREAD_SEL, MSG_KIND_CLASS } from '../../../messages/msg-html.js';
 import { DIAGRAM_CLASS } from '../../../diagram/mermaid-html.js';
@@ -22,7 +22,7 @@ export { CARET_BLOCK_SEL, findBlock, topLevelBlock, caretAtBlockStart, caretAtBl
 // Soft-Break-Dedup lebt in shared/soft-break.js (auch vom Focus-Editor
 // konsumiert, der den Toolbar-Modulgraph nicht importieren darf) — hier unter
 // dem eingeführten Unterstrich-Namen re-exportiert.
-export { brLeftOfCaret as _brLeftOfCaret };
+export { brLeftOfCaret as _brLeftOfCaret, softBreakNoop };
 
 // Blocktyp-Definitionen für Slash-Transform. `tag` ist das Zielelement;
 // `className` optional (aktuell für .poem, .msg-thread + .todo). `innerClass`

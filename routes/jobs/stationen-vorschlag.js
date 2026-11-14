@@ -25,6 +25,7 @@ const {
   chunkLimitsFor, tps, bundleBlocks,
   startBookJob, komplettRunningPrecheck,
   applyTierAiOverrides,
+  bookTextOpts,
 } = require('./shared');
 const { resolveProvider } = require('../../lib/ai');
 const { listFiguresForSchoolPath } = require('../../db/figure-school-paths');
@@ -156,9 +157,10 @@ async function runStationenVorschlagJob(jobId, bookId, userEmail, { nachKatalog 
     const births = resolveBirthsForFigures(bookId, userEmail, figuren);
 
     const { chMap, pages } = await loadOrderedBookContents(bookId);
-    const contents = await loadPageContents(pages, chMap, 1, null, signal(), { keepHtml: true });
+    const textOpts = bookTextOpts(bookId, userEmail);
+    const contents = await loadPageContents(pages, chMap, 1, null, signal(), { keepHtml: true, ...textOpts });
     const pageTexts = contents.filter(p => p.html || p.text)
-      .map(p => ({ page_id: p.id, text: htmlToTextForPrompt(String(p.html || p.text || '').replace(/\s+/g, ' ')) }));
+      .map(p => ({ page_id: p.id, text: htmlToTextForPrompt(String(p.html || p.text || '').replace(/\s+/g, ' '), textOpts) }));
     throwIfAborted();
 
     const nameIndex = buildNameIndex(figuren.map(f => ({ id: f.id, patterns: buildFigureNamePatterns(f.name, f.kurzname, f.weitere_namen) })));

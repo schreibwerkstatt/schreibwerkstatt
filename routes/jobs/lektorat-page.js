@@ -135,13 +135,14 @@ async function loadLektoratPageList(bookId) {
   }));
 }
 
-function makeNeighbourLoader() {
+// `langCode`: Sprache der Verlauf-Marken wie im geprueften Abschnitt (run.langCode).
+function makeNeighbourLoader({ langCode = 'de' } = {}) {
   const cache = new Map();
   const load = async (page) => {
     if (!page) return null;
     if (cache.has(page.id)) return cache.get(page.id);
     try {
-      const t = htmlToTextForPrompt((await contentStore.loadPage(page.id)).html);
+      const t = htmlToTextForPrompt((await contentStore.loadPage(page.id)).html, { langCode });
       const paras = { first: firstParagraph(t), last: lastParagraph(t) };
       cache.set(page.id, paras);
       return paras;

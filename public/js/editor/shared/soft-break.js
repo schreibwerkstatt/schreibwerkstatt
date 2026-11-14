@@ -33,6 +33,24 @@ export function brLeftOfCaret(sel) {
   return !!(probe && probe.nodeType === 1 && probe.tagName === 'BR');
 }
 
+// Setzt Shift+Enter am Caret keinen Umbruch? (Das Event ist trotzdem verbraucht.)
+//   - In einer Überschrift: Überschriften sind einzeilig — Gliederung für
+//     Inhaltsverzeichnis und Navigation; jeder Export macht aus einem <br> dort
+//     ein Leerzeichen (lib/heading-breaks.js).
+//   - Links steht schon ein <br> — ausser im Code-Block: dort ist
+//     `a<br><br>b` eine Leerzeile im Code, die der Cleaner stehen lässt
+//     (lib/html-clean.js, Ausnahme `pre`), also Inhalt und kein Save-Rauschen.
+// `brLeftOfCaret` selbst bleibt ohne Ausnahme — `_kbPreEnter` erkennt mit ihr
+// die leere letzte Code-Zeile.
+export function softBreakNoop(sel) {
+  if (!sel || sel.rangeCount === 0) return false;
+  const n = sel.getRangeAt(0).startContainer;
+  const el = n.nodeType === 1 ? n : n.parentElement;
+  if (el?.closest('h1,h2,h3,h4,h5,h6')) return true;
+  if (!brLeftOfCaret(sel)) return false;
+  return !el?.closest('pre');
+}
+
 // Weichen Umbruch als <br>-ELEMENT setzen. Für Container, die auf ihren Blöcken
 // `white-space: pre-wrap` fahren (Focus-Editor, Invariante 11c): dort schreibt
 // `execCommand('insertLineBreak')` ein rohes `\n` statt eines <br> (gemessen:
@@ -50,8 +68,8 @@ export function insertSoftBreak(container) {
   // Auswahl zuerst löschen, danach ist der Caret kollabiert und die beiden
   // Zweige unten greifen wie bei leerer Auswahl.
   if (!sel.isCollapsed) document.execCommand('delete');
-  // Links steht schon ein <br> → kein zweiter (siehe brLeftOfCaret).
-  if (brLeftOfCaret(sel)) return true;
+  // Überschrift oder links schon ein <br> → kein Umbruch (siehe softBreakNoop).
+  if (softBreakNoop(sel)) return true;
 
   const doc = container.ownerDocument || document;
   const block = findBlock(sel.getRangeAt(0).startContainer, container) || container;

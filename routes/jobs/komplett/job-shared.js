@@ -3,11 +3,11 @@
 // Standalone-Kontinuitätscheck): Verify-Stufe (False-Positive-Filter gegen den
 // Originaltext), Anachronismus-Datenbasis, Per-Job-Claude-Overrides.
 
-const { db, getBookSettings, getBookLocale } = require('../../../db/schema');
+const { db, getBookSettings } = require('../../../db/schema');
 const { activeFigureSql } = require('../../../db/figures/active');
 const appSettings = require('../../../lib/app-settings');
 const { providerClass } = require('../../../lib/ai');
-const { updateJob, settledAll, jobAbortControllers, i18nError, i18nErrText } = require('../shared');
+const { updateJob, settledAll, jobAbortControllers, i18nError, i18nErrText, bookTextOpts } = require('../shared');
 const { _stelleQuote, _refToString } = require('./utils');
 const { COST_LABEL, costTier } = require('./cost-labels');
 const rerank = require('../../../lib/rerank');
@@ -507,7 +507,7 @@ function _komplettAiOverrides(effectiveProvider) {
 // Buchsprache (docs/nachrichtenverlauf.md). Ein Ort, damit Lauf und Delta denselben
 // Text sehen — sonst zaehlte jede Seite mit Verlauf als geaendert.
 function komplettTextOpts(bookId, userEmail) {
-  return { msgRows: true, langCode: (getBookLocale(bookId, userEmail || null) || 'de-CH').split('-')[0] };
+  return { msgRows: true, ...bookTextOpts(bookId, userEmail || null) };
 }
 
 module.exports = {

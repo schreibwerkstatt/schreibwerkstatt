@@ -18,7 +18,7 @@ const {
   sessionAnswerSourceInfos, existingResearchItemIds,
 } = require('../../db/research-jobs');
 const { syncUrlIndex } = require('./research-url-index');
-const { htmlToTextForPrompt } = require('./shared');
+const { htmlToTextForPrompt, bookTextOpts } = require('./shared');
 const { normalizeChatIdeeProposals } = require('../../lib/chat-idee-proposals');
 const { CHANGE_TYPES } = require('../../db/research-changes');
 
@@ -259,7 +259,7 @@ async function loadResearchContext(rc, bookId) {
     const pages = await contentStore.loadPagesBatch(metas, null, { onError: () => null }).catch(() => []);
     html = pages.filter(Boolean).map(p => p.html || '').join('\n');
   }
-  const text = htmlToTextForPrompt(html).trim();
+  const text = htmlToTextForPrompt(html, bookTextOpts(bookId)).trim();
   const excerpt = text.length > CONTEXT_EXCERPT_MAX ? text.slice(0, CONTEXT_EXCERPT_MAX) + ' …' : text;
   const ids = itemIdsAtPlace(bookId, rc.kind === 'page' ? { pageId: rc.id } : { chapterId: rc.id });
   const items = activeResearchItemsByIds(ids, CONTEXT_ITEMS_MAX);

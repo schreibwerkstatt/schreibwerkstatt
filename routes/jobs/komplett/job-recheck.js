@@ -19,6 +19,7 @@ const {
   makeJobLogger, updateJob, completeJob, failJob, i18nError,
   aiCall, getPrompts, getBookPrompts, tps, htmlToTextForPrompt,
 } = require('../shared');
+const { komplettTextOpts } = require('./job-shared');
 
 // Deckel des mitgegebenen Texts. A und B kommen immer mit (je bis PAGE_CAP), dann
 // die zuletzt geänderten Abschnitte, solange das Gesamtbudget reicht.
@@ -26,14 +27,17 @@ const PAGE_CAP = 60000;
 const TOTAL_CAP = 160000;
 const MAX_CHANGED_PAGES = 4;
 
-async function _pageText(pageId) {
+// `textOpts`: dieselbe Sicht auf Nachrichtenverläufe wie der Prüflauf
+// (komplett/job-shared.js#komplettTextOpts — Zeilenart im Text, Buchsprache),
+// sonst urteilte die Nachprüfung über einen Verlauf ohne Absender und Richtung.
+async function _pageText(pageId, textOpts) {
   const pd = await contentStore.loadPage(pageId).catch(() => null);
   if (!pd) return null;
-  return { id: pd.id, titel: pd.name || '', text: htmlToTextForPrompt(pd.html || '').slice(0, PAGE_CAP) };
+  return { id: pd.id, titel: pd.name || '', text: htmlToTextForPrompt(pd.html || '', textOpts).slice(0, PAGE_CAP) };
 }
 
 /** Abschnitte für einen Befund: A, B, dann seit `since` geänderte (neueste zuerst). */
-async function _collectSections(issue, pageMetas) {
+async function _collectSections(issue, pageMetas, textOpts = {}) {
   const out = [];
   let used = 0;
   const add = (p, rolle) => {
@@ -42,13 +46,13 @@ async function _collectSections(issue, pageMetas) {
     out.push({ ...p, rolle });
     used += p.text.length;
   };
-  if (issue.page_a_id) add(await _pageText(issue.page_a_id), 'a');
-  if (issue.page_b_id) add(await _pageText(issue.page_b_id), 'b');
+  if (issue.page_a_id) add(await _pageText(issue.page_a_id, textOpts), 'a');
+  if (issue.page_b_id) add(await _pageText(issue.page_b_id, textOpts), 'b');
   const changed = pageMetas
     .filter(m => m.updated_at && m.updated_at > issue.checked_at && m.id !== issue.page_a_id && m.id !== issue.page_b_id)
     .sort((x, y) => (y.updated_at > x.updated_at ? 1 : -1))
     .slice(0, MAX_CHANGED_PAGES);
-  for (const m of changed) add(await _pageText(m.id), 'geaendert');
+  for (const m of changed) add(await _pageText(m.id, textOpts), 'geaendert');
   return out;
 }
 
@@ -82,6 +86,7 @@ async function runKontinuitaetRecheckJob(jobId, bookId, bookName, userEmail, iss
   try {
     updateJob(jobId, { statusText: 'job.phase.loadingPages', progress: 2 });
     const pageMetas = await contentStore.listPages(bookId);
+    const textOpts = komplettTextOpts(bookId, userEmail);
     for (let i = 0; i < issueIds.length; i++) {
       const issue = getContinuityIssueForRecheck(issueIds[i]);
       if (!issue) continue;
@@ -92,7 +97,7 @@ async function runKontinuitaetRecheckJob(jobId, bookId, bookName, userEmail, iss
         statusParams: { n: i + 1, total: issueIds.length },
         progress: from,
       });
-      const sections = await _collectSections(issue, pageMetas);
+      const sections = await _collectSections(issue, pageMetas, textOpts);
       const raw = await aiCall(jobId, tok,
         prompts.buildKontinuitaetRecheckPrompt(bookName, issue, sections,
           _figurenInfo(issue.book_id, userEmail, issue.figuren)),

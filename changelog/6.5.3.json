@@ -1,0 +1,51 @@
+{
+  "version": "6.5.3",
+  "date": "2026-11-14",
+  "entries": [
+    {
+      "kind": "neu",
+      "de": "Abschnitt in der Leseansicht: drück die Taste E, um ihn zu bearbeiten. Das klappt auch, wenn eine Browser-Erweiterung ⌘/Strg+E abfängt.",
+      "en": "Section in reading view: press E to start editing. This works even when a browser extension intercepts ⌘/Ctrl+E."
+    },
+    {
+      "kind": "verbessert",
+      "de": "Stil-Heatmap, Autorenprofil und Buchentwicklung: Satzlänge, LIX, Flesch und Füllwort-Anteile stimmen jetzt auch in Kapiteln mit vielen Nachrichtenverläufen oder Tabellen.",
+      "en": "Style heatmap, author profile and book development: sentence length, LIX, Flesch and filler-word rates are now accurate in chapters with many message threads or tables."
+    },
+    {
+      "kind": "verbessert",
+      "de": "Export als Markdown, Text oder Substack: ein Zeilenumbruch in einer Nachricht bleibt erhalten, und die Folgezeilen rücken sauber ein.",
+      "en": "Markdown, text and Substack export: a line break inside a message is kept, and the following lines are indented neatly."
+    },
+    {
+      "kind": "verbessert",
+      "de": "Word-Export mit Sprechblasen: Nachrichten mit Emoji oder asiatischen Schriftzeichen bekommen eine passende Blasenbreite.",
+      "en": "Word export with speech bubbles: messages with emoji or Asian characters now get a fitting bubble width."
+    },
+    {
+      "kind": "verbessert",
+      "de": "Wortschatz, Reiter «Figuren»: auch ausgehende Nachrichten zählen jetzt für die Figur, deren Name über ihnen steht.",
+      "en": "Vocabulary, «Characters» tab: outgoing messages now also count for the character whose name stands above them."
+    },
+    {
+      "kind": "behoben",
+      "de": "Shift+Enter im Editor teilte in Safari und in der Mac-App manchmal den Absatz, statt nur eine neue Zeile zu beginnen.",
+      "en": "Shift+Enter in the editor sometimes split the paragraph in Safari and the Mac app instead of just starting a new line."
+    },
+    {
+      "kind": "behoben",
+      "de": "Rechtschreibprüfung im Editor: nach dem Korrigieren eines Worts blieb die Markierung manchmal stehen.",
+      "en": "Spell check in the editor: after correcting a word, its highlight sometimes stayed in place."
+    },
+    {
+      "kind": "behoben",
+      "de": "Exporte: ein Zeilenumbruch in einer Überschrift wird zum Leerzeichen, statt die Überschrift zu zerreissen. Im Editor setzt Shift+Enter in Überschriften keinen Umbruch mehr.",
+      "en": "Exports: a line break inside a heading becomes a space instead of breaking the heading apart. In the editor, Shift+Enter no longer adds a break inside headings."
+    },
+    {
+      "kind": "behoben",
+      "de": "WordPress-Sync: eine Nachrichten- oder Gedichtzeile, die nur ein Bild enthält, geht beim Hochladen nicht mehr verloren.",
+      "en": "WordPress sync: a message or poem line that contains only an image is no longer lost when uploading."
+    }
+  ]
+}

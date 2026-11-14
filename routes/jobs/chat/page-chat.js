@@ -10,6 +10,7 @@ const {
   getPrompts, getBookPrompts,
   htmlToText, htmlToTextForPrompt, jobAbortControllers,
   getFiguren, getLatestReview, getLatestPageCheck, getOpenIdeen, buildChatMessageHistory,
+  bookTextOpts,
 } = require('../shared');
 const contentStore = require('../../../lib/content-store');
 const { listWorldFacts } = require('../../../db/schema');
@@ -67,7 +68,7 @@ async function _pageChatBookContext(session, query, budget, signal, userEmail, l
 async function pageChatPreflight(session, userEmail) {
   let pd;
   try { pd = await contentStore.loadPage(session.page_id); } catch { return null; }
-  const chars = htmlToTextForPrompt(pd.html || '').length;
+  const chars = htmlToTextForPrompt(pd.html || '', bookTextOpts(session.book_id, userEmail)).length;
   const { pageMax } = pageChatBudget(getContextConfigFor(resolveProvider({ userEmail })));
   if (chars <= pageMax) return null;
   return { status: 422, error_code: 'PAGE_CHAT_PAGE_TOO_LARGE', params: { chars, max: pageMax } };
@@ -125,8 +126,9 @@ async function runChatJob(jobId, sessionId, userMsgId, message, userEmail) {
     // wechsel und schlägt keine `original` über eine Absatzgrenze vor (die der
     // Apply-Guard ohnehin abwiese). Der Matcher kollabiert Whitespace, `\n\n` in
     // einem `original` ist darum unschädlich.
-    const pageText = htmlToText(pd.html || '');
-    const promptText = htmlToTextForPrompt(pd.html || '');
+    const textOpts = bookTextOpts(session.book_id, userEmail);
+    const pageText = htmlToText(pd.html || '', textOpts);
+    const promptText = htmlToTextForPrompt(pd.html || '', textOpts);
     const pageUpdatedAt = pd.updated_at || null;
     const pageChapterId = pd.chapter_id ?? null;
     session.page_name = pd.name || null;
@@ -195,7 +197,7 @@ async function runChatJob(jobId, sessionId, userMsgId, message, userEmail) {
     const chain = stand ? statusChain(isJournalisticBook(getBookSettings(session.book_id, userEmail))) : [];
     const editStatus = stand && chain.includes(stand.status) ? { status: stand.status, stale: stand.stale, chain } : null;
     const systemPrompt = buildChatSystemPrompt(session.page_name || '–', promptText, figuren, review,
-      chatSysPrompt, pageChangeNote, ideen, lektorat, { figurenMaxChars: figurenBlockChars(aiCfg), editStatus, hatNachrichten: hasMsgThread(pd.html),
+      chatSysPrompt, pageChangeNote, ideen, lektorat, { figurenMaxChars: figurenBlockChars(aiCfg), editStatus, hatNachrichten: hasMsgThread(pd.html), langCode: textOpts.langCode,
         bookTitles, currentPageId: session.page_id, weltfakten, soziolekte });
 
     // Buch-Kontext: pro Frage andere Bytes → NICHT im System-Prompt (er bräche den

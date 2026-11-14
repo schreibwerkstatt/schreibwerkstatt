@@ -110,7 +110,7 @@ export const TEXT_TOOLS = [
   },
   {
     name: 'get_dialogue',
-    description: 'Dialog-Passagen, heuristisch erkannt: Anführungszeichen «»/„"/»«, Sprechverb + Doppelpunkt, Gedankenstrich am Zeilenanfang und jede Nachricht eines SMS-/Chat-Verlaufs (einfache gerade Quotes nicht — Apostroph-Fehltreffer). Mit Figur: nur Dialoge, in deren ±100-Zeichen-Umfeld ihr Name steht. Liefert results[{page_id, page_name, offset, length, text, before, after}]. Für «wie spricht X?» und der beste Einstieg für Zitat-Auswahl nach Eigenschaft (lustigste, schlagfertigste Stellen) — Pointen leben meist im Dialog.',
+    description: 'Dialog-Passagen, heuristisch erkannt: Anführungszeichen «»/„"/»«, Sprechverb + Doppelpunkt, Gedankenstrich am Zeilenanfang und jede Nachricht eines SMS-/Chat-Verlaufs (gerade Quotes nicht: Apostroph). Mit Figur: Nachrichten mit ihr als Absender (sender), sonst Dialoge mit ihrem Namen im ±100-Zeichen-Umfeld. Liefert results[{page_id, page_name, offset, length, text, sender?, before, after}]. Für «wie spricht X?» und Zitat-Auswahl nach Eigenschaft (lustigste, schlagfertigste Stellen) — Pointen leben meist im Dialog.',
     see: {
       quote_passage: 'Die Offsets passen in `quote_passage`.',
     },

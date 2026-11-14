@@ -83,3 +83,41 @@ test('Cmd+Shift+E bleibt der Focus-Toggle (nicht vom Nav-Handler geschluckt)', a
   await page.evaluate(() => window.__app.exitFocusMode());
   await page.waitForFunction(() => window.__app.focusActive === false, null, { timeout: 15000 });
 });
+// Taste E ohne Modifier: das Hauptkürzel, weil Erweiterungen (Claude in Chrome)
+// ⌘/Strg+E per chrome.commands vor der Seite abgreifen. Eine nackte Taste kann
+// keine Erweiterung registrieren — dafür darf sie nie beim Tippen auslösen.
+async function openFirstPage(page) {
+  await bootApp(page);
+  await selectSeededBook(page);
+  await page.evaluate(async (i) => {
+    await window.__app.selectPage(window.Alpine.store('nav').pages[i]);
+  }, 0);
+  await page.waitForFunction(() => window.__app.showEditorCard === true, null, { timeout: 15000 });
+  expect(await page.evaluate(() => window.__app.editMode)).toBe(false);
+}
+
+test('Taste E in der Leseansicht startet den Notebook-Editor', async ({ page }) => {
+  await openFirstPage(page);
+  await page.evaluate(() => document.activeElement?.blur?.());
+
+  const seen = await recordNextKey(page, 'e');
+
+  expect(seen[seen.length - 1].prevented).toBe(true);
+  await expect(page.locator(EDIT_SEL)).toBeVisible({ timeout: 15000 });
+  expect(await page.evaluate(() => window.__app.editMode)).toBe(true);
+
+  // Im Edit-Modus ist E wieder ein Buchstabe: kein preventDefault.
+  await page.locator(EDIT_SEL).click();
+  const typed = await recordNextKey(page, 'e');
+  expect(typed[typed.length - 1].prevented).toBe(false);
+  expect(await page.evaluate(() => window.__app.editMode)).toBe(true);
+});
+
+test('Taste E in einem Eingabefeld tippt, statt den Editor zu öffnen', async ({ page }) => {
+  await openFirstPage(page);
+  const search = page.locator('.page-search');
+  await search.focus();
+  await page.keyboard.press('e');
+  await expect(search).toHaveValue('e');
+  expect(await page.evaluate(() => window.__app.editMode)).toBe(false);
+});

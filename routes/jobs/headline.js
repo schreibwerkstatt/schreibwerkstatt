@@ -18,6 +18,7 @@ const {
   createJob, enqueueJob, findActiveJobId,
   jsonBody,
   contentHttpError, htmlToTextForPrompt,
+  bookTextOpts,
 } = require('./shared');
 const contentStore = require('../../lib/content-store');
 const { getBookSettings } = require('../../db/schema');
@@ -61,7 +62,7 @@ async function runHeadlineJob(jobId, bookId, pageId, userEmail, felder, anzahl) 
     updateJob(jobId, { statusText: 'job.phase.loadingPages', progress: 5 });
     const pd = await contentStore.loadPage(pageId)
       .catch(e => { throw contentHttpError(e); });
-    const text = htmlToTextForPrompt(pd?.html || '');
+    const text = htmlToTextForPrompt(pd?.html || '', bookTextOpts(bookId, userEmail));
     if (text.length < MIN_CHARS) {
       completeJob(jobId, { zuKurz: true, angelegt: 0 });
       return;

@@ -72,6 +72,8 @@ Handoff aus dem generischen Export-Dialog ([public/js/book/export.js](../public/
 
 ## Überschriften-Gestaltung (PDF + EPUB)
 
+**Überschriften im Manuskript sind einzeilig.** Ein `<br>` in `<h1>`–`<h6>` (Alt-Bestand, Import) wird in jedem Export zum Leerzeichen, am Rand fällt es weg — [lib/heading-breaks.js](../lib/heading-breaks.js), aufgerufen in `prepareCitations` (EPUB, HTML, Markdown, Text, Substack, Word) und im PDF-Renderer vor dem Walker. Der Editor setzt dort keinen weichen Umbruch. **Why:** die Ausgabewege lasen den Umbruch verschieden; Markdown schob den Rest der Überschrift in einen Absatz. Test: [tests/unit/export-builders/heading-breaks.test.mjs](../tests/unit/export-builders/heading-breaks.test.mjs).
+
 Kapitel-, Unterkapitel- und Abschnittsüberschriften gestalten beide Formate mit **denselben Feldern und derselben Bedeutung**. SSoT ist [lib/heading-style.js](../lib/heading-style.js) (Werte, Defaults, Validierung, Nummern-Text, Linienlänge); das PDF-Profil führt die Felder unter `config.chapter.*`, das EPUB buchweit in `book_publication` (Spaltenname in `EPUB_COLUMNS`, Migration 327). Gezeichnet wird im PDF von [lib/pdf-render/heading-deco.js](../lib/pdf-render/heading-deco.js), im EPUB als XHTML + CSS von [lib/export-builders/epub/heading.js](../lib/export-builders/epub/heading.js). Auswahllisten beider Karten: [public/js/cards/export-heading-style.js](../public/js/cards/export-heading-style.js) (deckungsgleich mit dem SSoT, gegated).
 
 | Feld (PDF `chapter.*`) | EPUB-Spalte | Werte | Wirkung |

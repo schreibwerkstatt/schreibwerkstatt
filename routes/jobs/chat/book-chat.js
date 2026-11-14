@@ -12,6 +12,7 @@ const {
   getPrompts, getBookPrompts,
   htmlToText, jobAbortControllers,
   getFiguren, getLatestReview,
+  bookTextOpts,
 } = require('../shared');
 const contentStore = require('../../../lib/content-store');
 const { generateSessionTitle } = require('../chat-title');
@@ -200,6 +201,7 @@ async function _loadAllPageTexts(bookId, cacheKey, jobId, jobSignal) {
     throw e;
   }
   const BATCH = 5;
+  const textOpts = bookTextOpts(bookId);
   const pageContents = [];
   for (let i = 0; i < pages.length; i += BATCH) {
     if (jobSignal?.aborted) throw new DOMException('Aborted', 'AbortError');
@@ -212,7 +214,7 @@ async function _loadAllPageTexts(bookId, cacheKey, jobId, jobSignal) {
     const results = await Promise.allSettled(batch.map(async p => {
       try {
         const pd = await contentStore.loadPage(p.id);
-        const text = htmlToText(pd.html || '').trim();
+        const text = htmlToText(pd.html || '', textOpts).trim();
         return text ? { name: p.name, id: p.id, slug: p.slug, book_slug: p.book_slug, text } : null;
       } catch { return null; }
     }));

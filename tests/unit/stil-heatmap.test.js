@@ -260,3 +260,30 @@ test('Ich-Anteil: null unter der Mindestzahl erzaehlender Pronomen', () => {
   assert.equal(r3.chapters[0].first_person_share, null);
   assert.equal(r3.perspectiveMinPronouns, PERSPECTIVE_MIN_PRONOUNS);
 });
+
+test('buildStilHeatmap: Dichten rechnen gegen die Prosa-Woerter (repetition_data.words)', () => {
+  // 100 Woerter Umfang, davon 50 Prosa (Rest: Nachrichtenverlauf/Tabelle). Die
+  // Zaehler stammen aus dem Prosatext — gegen den Umfang verduennt halbierten sie sich.
+  const rows = [row({ repetition_data: JSON.stringify({ score: 3, top: [], words: 50 }) })];
+  const c = buildStilHeatmap({ rows, metricsVersion: 7 }).chapters[0];
+  assert.equal(c.filler_per1k, 100);  // 5 / 50 * 1000
+  assert.equal(c.passive_per1k, 40);
+  assert.equal(c.adverb_per1k, 180);
+  assert.equal(c.words, 100, 'die Umfang-Spalte bleibt der Gesamttext');
+  // Zeile vor metrics_version 15 (ohne `words`): Gesamtumfang als Nenner.
+  assert.equal(buildStilHeatmap({ rows: [row()], metricsVersion: 7 }).chapters[0].filler_per1k, 50);
+});
+
+test('buildStilHeatmap: Satzlaenge, LIX und Flesch gewichten nach Prosa-Woertern', () => {
+  // Seite A: 100 Woerter, alles Prosa. Seite B: 1000 Woerter, davon nur 100 Prosa
+  // (Rest Nachrichtenverlauf). Beide Seiten zaehlen damit gleich viel.
+  const rows = [
+    row({ page_id: 1, lix: 20, flesch_de: 80, avg_sentence_len: 10 }),
+    row({ page_id: 2, words: 1000, lix: 60, flesch_de: 40, avg_sentence_len: 30,
+      repetition_data: JSON.stringify({ score: 3, top: [], words: 100 }) }),
+  ];
+  const c = buildStilHeatmap({ rows, metricsVersion: 7 }).chapters[0];
+  assert.equal(c.lix, 40);
+  assert.equal(c.flesch_de, 60);
+  assert.equal(c.avg_sentence_len, 20);
+});

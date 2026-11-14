@@ -7,7 +7,7 @@ const { aclParamGuard, guardBook, sessionEmail } = require('../lib/acl');
 const { pageBookGuard } = require('../lib/page-guard');
 const chatSessions = require('../db/chat-sessions');
 const chatQuality = require('../db/chat-quality');
-const { htmlToText, findActiveJobId, cancelJob } = require('./jobs/shared');
+const { htmlToText, bookTextOpts, findActiveJobId, cancelJob } = require('./jobs/shared');
 const { setContext } = require('../lib/log-context');
 const { searchChatHistory } = require('../lib/chat-search');
 const { stripHistoryNote } = require('../lib/chat-history-note');
@@ -47,7 +47,9 @@ router.post('/session', jsonBody, async (req, res) => {
   let openingPageText = null;
   try {
     const pd = await contentStore.loadPage(page_id, req);
-    openingPageText = htmlToText(pd.html || '');
+    // Gleiche Normalform wie der Job (chat/page-chat.js `pageText`), sonst
+    // meldete der Diff die Verlauf-Marken als Änderung.
+    openingPageText = htmlToText(pd.html || '', bookTextOpts(book_id, userEmail));
   } catch (e) {
     const status = e?.status ? ` status=${e.status}` : '';
     logger.warn(`[chat/session] Snapshot-Load fehlgeschlagen page=${page_id}${status}: ${e.message}`);

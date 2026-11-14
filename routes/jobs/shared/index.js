@@ -30,6 +30,15 @@ async function getBookPrompts(bookId, userEmail = null) {
   return getLocalePromptsForBook(locale, settings.buchtyp || null, settings.buch_kontext || null, !!settings.is_finished, settings.schauplatz_land || null, settings.stilprofil || null, !!settings.zeitlinie_real);
 }
 
+// Text-Optionen fuer htmlToText/htmlToTextForPrompt/loadPageContents eines Jobs
+// mit Buch: Nachrichtenverlauf-Marken in der Buchsprache (lib/html-text.js
+// #markMsgThreads), damit ein englisches Buch keine deutschen Marken im Prompt
+// traegt. Ohne Buch Deutsch, wie die Marken selbst.
+function bookTextOpts(bookId, userEmail = null) {
+  if (!bookId) return { langCode: 'de' };
+  return { langCode: getBookSettings(bookId, userEmail).language || 'de' };
+}
+
 // Rückwärtskompatibler Export – einige Module lesen _promptConfig direkt.
 const _promptConfig = getPromptConfig();
 
@@ -100,6 +109,7 @@ module.exports = {
 
   getPrompts,
   getBookPrompts,
+  bookTextOpts,
 
   getFiguren: queries.getFiguren,
   getLatestReview: queries.getLatestReview,

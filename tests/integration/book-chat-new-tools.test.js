@@ -113,6 +113,54 @@ test('get_dialogue: extrahiert Anführungszeichen-Dialoge', () => {
   }
 });
 
+test('get_dialogue: Nachricht trägt ihren Absender, Figur-Filter folgt ihm', () => {
+  const BOOK_ID = 8021;
+  const U = 'alice@example.com';
+  // Lena steht über der eingehenden, Tom über der ausgehenden Seite. Der Name
+  // «Tom» im Umfeld der eingehenden Nachricht macht sie nicht zu Toms.
+  const body = '<p>Tom starrte aufs Handy.</p><div class="msg-thread">'
+    + '<p class="msg-name">Lena</p><p class="msg-in">bist du schon da?</p>'
+    + '<p class="msg-name">Tom</p><p class="msg-out">gleich, 5 min</p></div>'
+    + '<div class="msg-thread"><p class="msg-in">wer ist da?</p></div>'
+    + '<p>Tom las es zweimal.</p>';
+  ctx.dbSeed.setBook({
+    books: [{ id: BOOK_ID, name: 'Msg' }],
+    chapters: [{ id: 80210, book_id: BOOK_ID, name: 'K1' }],
+    pages: [{ id: 80211, book_id: BOOK_ID, name: 'P1', chapter_id: 80210 }],
+    pageBodies: { 80211: body },
+  });
+  const { db } = require('../../db/connection');
+  db.prepare(`INSERT INTO figures (book_id, user_email, fig_id, name, kurzname, sort_order, updated_at)
+              VALUES (?, ?, 'fig_tom', 'Tom Berger', 'Tom', 0, '2026-01-01T00:00:00.000Z')`).run(BOOK_ID, U);
+  const call = (input) => bookChatTools.TOOLS.get_dialogue(input, { bookId: BOOK_ID, userEmail: U });
+
+  const all = call({});
+  const bySender = Object.fromEntries(all.results.map(r => [r.text, r.sender ?? null]));
+  assert.deepEqual(bySender, { 'bist du schon da?': 'Lena', 'gleich, 5 min': 'Tom', 'wer ist da?': null });
+
+  // Mit Figur: Toms Nachricht über den Absender; Lenas trotz «Tom» im Umfeld
+  // nicht; die Nachricht ohne Absender über das Namens-Umfeld (Fallback).
+  const tom = call({ figur_id: 'fig_tom' });
+  assert.deepEqual(tom.results.map(r => r.text), ['gleich, 5 min', 'wer ist da?']);
+});
+
+test('Verlauf-Marken in der Buchsprache: bookTextOpts + Lese-Werkzeug', async () => {
+  const BOOK_ID = 8022;
+  ctx.dbSeed.setBook({
+    books: [{ id: BOOK_ID, name: 'EN' }],
+    chapters: [{ id: 80220, book_id: BOOK_ID, name: 'K1' }],
+    pages: [{ id: 80221, book_id: BOOK_ID, name: 'P1', chapter_id: 80220 }],
+    pageBodies: { 80221: '<p>Before.</p><div class="msg-thread"><p class="msg-in">u there?</p></div>' },
+  });
+  const { bookTextOpts } = require('../../routes/jobs/shared');
+  assert.deepEqual(bookTextOpts(BOOK_ID), { langCode: 'de' });
+  ctx.dbSchema.saveBookSettings(BOOK_ID, { language: 'en', region: 'US' });
+  assert.deepEqual(bookTextOpts(BOOK_ID), { langCode: 'en' });
+  assert.deepEqual(bookTextOpts(null), { langCode: 'de' });
+  const r = await bookChatTools.TOOLS.get_pages({ ids: [80221] }, { bookId: BOOK_ID, userEmail: 'alice@example.com' });
+  assert.match(r.pages[0].text, /\[Message thread .*u there\? \[End of message thread\]/);
+});
+
 // ── list_revisions (Liste + diff) ───────────────────────────────────────────
 
 test('list_revisions diff: vergleicht zwei jüngste Revisionen, ohne diff die Liste', () => {

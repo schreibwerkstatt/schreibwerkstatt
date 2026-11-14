@@ -196,11 +196,24 @@ export function createSpellcheckController({
     }
     if (myReq !== seq) return; // stale
     if (result && result.disabled) { _renderMatches([]); badge.update('disabled'); return; }
+    // DOM hat sich waehrend der Anfrage geaendert. Massgeblich ist der Text,
+    // nicht das Markup: ein reiner Attribut-Wechsel (Autosave setzt `data-bid`
+    // an neuen Absaetzen) laesst die Offsets gueltig, weckt aber den
+    // MutationObserver nicht (er beobachtet keine Attribute). Wuerde die
+    // Antwort dann verworfen, liefe kein neuer Check — die Markierungen des
+    // vorigen Checks blieben auf dem korrigierten Wort stehen, bis wieder Text
+    // geaendert wird. Darum: Text gleich -> mit frischer Tabelle rendern (die
+    // Knoten koennen getauscht sein); Text anders -> neu pruefen.
+    let renderTable = table;
     const currentSnap = getHtml ? getHtml() : root.innerHTML;
-    if (currentSnap !== lastHtmlSnapshot) return; // DOM mutated mid-flight
-    const matches = filterProtectedMatches((result && Array.isArray(result.matches)) ? result.matches : [], table.protectedRanges);
-    _renderMatches(matches, table);
-    lastCheckedText = table.text;
+    if (currentSnap !== lastHtmlSnapshot) {
+      const fresh = buildOffsetTable(root);
+      if (fresh.text !== table.text) { _scheduleCheck(); return; }
+      renderTable = fresh;
+    }
+    const matches = filterProtectedMatches((result && Array.isArray(result.matches)) ? result.matches : [], renderTable.protectedRanges);
+    _renderMatches(matches, renderTable);
+    lastCheckedText = renderTable.text;
     _updateCount();
   }
 

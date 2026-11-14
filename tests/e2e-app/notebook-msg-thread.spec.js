@@ -96,6 +96,20 @@ test.describe('Notebook — Nachrichtenverlauf', () => {
 
   // Ein Schnitt am Rand einer Formatierung liess `<em></em>` zurück: die Zeile
   // galt als nicht leer, bekam keinen <br>-Slot und schrumpfte aufs Padding.
+  test('Shift+Enter in der leeren neuen Zeile setzt keinen Umbruch vor die Nachricht', async ({ page }) => {
+    await enterNotebookEdit(page);
+    await seed(page, '<div class="msg-thread"><p class="msg-name">Tom</p><p class="msg-in">Probe sitzen.</p></div><p>Danach</p>',
+      '.msg-in', 'end');
+    await page.keyboard.press('Enter');
+    await page.keyboard.press('Shift+Enter');
+    await page.keyboard.type('Kleiderschrank');
+    // Mitten in einer Nachricht bleibt Shift+Enter ein Umbruch.
+    await page.keyboard.press('Shift+Enter');
+    await page.keyboard.type('liegt');
+    expect(await readHtml(page)).toBe('<div class="msg-thread"><p class="msg-name">Tom</p><p class="msg-in">Probe sitzen.</p>'
+      + '<p class="msg-in">Kleiderschrank<br>liegt</p></div><p>Danach</p>');
+  });
+
   test('Enter am Rand einer Formatierung: neue Zeile hat volle Höhe', async ({ page }) => {
     await enterNotebookEdit(page);
     const lineHeights = () => page.evaluate(() => [...document

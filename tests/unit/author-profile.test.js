@@ -468,3 +468,31 @@ test('Ohne erkennbaren Autor wird nicht geraten', async () => {
   const row = db.prepare('SELECT stilprofil FROM book_settings WHERE book_id = ?').get(created.id);
   assert.ok(!row || !row.stilprofil);
 });
+
+test('DB: Dichten und Satzlaenge gegen die Prosa-Woerter (repetition_data.words)', () => {
+  seedBook(699, AUTOR, '2020-12-01T00:00:00Z');
+  seedPage(6991, 699, { words: 1000, sentences: 50 });
+  // 1000 Woerter Umfang, 500 davon Prosa; 10 Adverbien und 5 Fuellwoerter im Prosatext.
+  db.prepare("UPDATE page_stats SET adverb_count = 10, filler_count = 5, repetition_data = ? WHERE page_id = 6991")
+    .run(JSON.stringify({ top: [], score: 0, words: 500 }));
+  // Alte Zeile ohne `words` und eine kaputte JSON-Spalte: Umfang als Nenner.
+  seedPage(6992, 699, { words: 100, sentences: 10 });
+  db.prepare("UPDATE page_stats SET repetition_data = '{kaputt' WHERE page_id = 6992").run();
+  const buch = getAuthorProfile(AUTOR).books.find(b => b.book_id === 699);
+  assert.ok(Math.abs(buch.metrics.satzlaenge - 600 / 60) < 1e-9, `Satzlaenge ${buch.metrics.satzlaenge}`);
+  assert.ok(Math.abs(buch.metrics.adverbDichte - 10 / 600) < 1e-9, `adverbDichte ${buch.metrics.adverbDichte}`);
+  assert.ok(Math.abs(buch.metrics.fuellwortDichte - 5 / 600) < 1e-9);
+});
+
+test('DB: LIX und Flesch gewichten nach Prosa-Woertern', () => {
+  seedBook(698, AUTOR, '2020-11-01T00:00:00Z');
+  // A: 100 Woerter Prosa. B: 1000 Woerter, davon 100 Prosa — beide zaehlen gleich.
+  seedPage(6981, 698, { words: 100, sentences: 10 });
+  seedPage(6982, 698, { words: 1000, sentences: 10 });
+  db.prepare('UPDATE page_stats SET lix = 20, flesch_de = 80 WHERE page_id = 6981').run();
+  db.prepare('UPDATE page_stats SET lix = 60, flesch_de = 40, repetition_data = ? WHERE page_id = 6982')
+    .run(JSON.stringify({ top: [], score: 0, words: 100 }));
+  const buch = getAuthorProfile(AUTOR).books.find(b => b.book_id === 698);
+  assert.ok(Math.abs(buch.metrics.lix - 40) < 1e-9, `lix ${buch.metrics.lix}`);
+  assert.ok(Math.abs(buch.metrics.fleschDe - 60) < 1e-9, `flesch ${buch.metrics.fleschDe}`);
+});

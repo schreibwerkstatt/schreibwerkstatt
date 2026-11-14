@@ -18,6 +18,7 @@ const {
   tps, getFiguren, applyTierAiOverrides,
   jsonBody,
   startBookJob,
+  bookTextOpts,
 } = require('./shared');
 const {
   parseZeitraum: _parseZeitraum, entryDate: _entryDate, matchesZeitraum: _matchesZeitraum,
@@ -131,7 +132,7 @@ async function runRueckblickJob(jobId, bookId, userEmail, zeitraum) {
         statusText: 'job.phase.readingPages',
         statusParams: { from: i + 1, to: Math.min(i + BATCH_SIZE, total), total },
       });
-    }, jobAbortControllers.get(jobId)?.signal);
+    }, jobAbortControllers.get(jobId)?.signal, bookTextOpts(bookId, userEmail));
 
     if (!pageContents.length) { completeJob(jobId, { empty: true, zeitraum }); return; }
 

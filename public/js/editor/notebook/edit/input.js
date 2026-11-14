@@ -8,12 +8,13 @@ import { DIAGRAM_SEL, markDiagramsAtomic } from '../../../diagram/mermaid-html.j
 import { markFiguresAtomic } from '../../../figure/figure-html.js';
 import { markCitesAtomic } from '../../../sources/cite-html.js';
 import { markXrefsAtomic } from '../../../xrefs/xref-html.js';
-import { closestMsgLine, createMsgLine, msgKind } from '../../../messages/msg-html.js';
+import { closestMsgLine, createMsgLine, msgKind, setMsgKind, msgLinesIn, isEmptyMsgLine } from '../../../messages/msg-html.js';
 import { TODO_TEXT_SEL, createTodoItem } from '../../shared/todo-html.js';
 import { ensureSlotAfter } from '../toolbar/_shared.js';
 import { patchEditorHtml } from './patch-html.js';
 import { captureBlockCaret, restoreBlockCaret } from '../../shared/block-caret.js';
 import { mapCaretOffset } from '../../shared/edit-history.js';
+import { EDITOR_CLIP_TYPE } from '../../shared/paste.js';
 
 // Blöcke, die ein Ablegen in einen Absatz/Titel hineinsetzen kann.
 const DROPPED_BLOCK_SEL = 'p, h1, h2, h3, h4, h5, h6, div';
@@ -33,6 +34,13 @@ function placeCaretAtEnd(el) {
   const sel = document.getSelection();
   sel.removeAllRanges();
   sel.addRange(r);
+}
+
+// Verlaufszeilen aus dem Clipboard (eigene Fassung bevorzugt, sonst text/html).
+function copiedMsgLines(cd) {
+  const html = cd.getData(EDITOR_CLIP_TYPE) || cd.getData('text/html') || '';
+  if (!html) return [];
+  return msgLinesIn(new DOMParser().parseFromString(html, 'text/html').body);
 }
 
 export const inputMethods = {
@@ -159,7 +167,13 @@ export const inputMethods = {
     const todo = el?.closest(TODO_TEXT_SEL);
     const line = closestMsgLine(start, editEl);
     if (!cap && !todo && !line) return false;
-    const lines = (cd.getData('text/plain') || '').split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
+    // Kopierte Verlaufszeilen bringen ihre Art mit (Ein-/Ausgang, Absender,
+    // Hinweis); sonst schreibt jede Zeile die Art der Zielzeile weiter.
+    const copied = line ? copiedMsgLines(cd) : [];
+    const lines = copied.length >= 2
+      ? copied.map((l) => l.text)
+      : (cd.getData('text/plain') || '').split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
+    const kinds = copied.length >= 2 ? copied.map((l) => l.kind) : null;
     if (lines.length < 2) return false;
     e.preventDefault();
     if (!sel.isCollapsed && !deleteRangeClean(editEl)) document.execCommand('delete');
@@ -167,11 +181,13 @@ export const inputMethods = {
       document.execCommand('insertText', false, lines.join(' '));
       return true;
     }
+    // Leere Zielzeile: sie wird zur ersten kopierten Zeile, samt Art.
+    if (kinds && isEmptyMsgLine(line)) setMsgKind(line, kinds[0]);
     document.execCommand('insertText', false, lines[0]);
     let prev = todo ? todo.closest('li') : line;
     let last = null;
-    for (const text of lines.slice(1)) {
-      const row = todo ? createTodoItem() : createMsgLine(msgKind(line));
+    for (const [i, text] of lines.slice(1).entries()) {
+      const row = todo ? createTodoItem() : createMsgLine(kinds ? kinds[i + 1] : msgKind(line));
       const host = todo ? row.querySelector(TODO_TEXT_SEL) : row;
       host.replaceChildren(document.createTextNode(text));
       prev.insertAdjacentElement('afterend', row);

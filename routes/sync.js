@@ -72,6 +72,15 @@ function _coalesce(map, key, fn) {
 // ein. Frontend nutzt dieselbe Formel in public/js/book/tree.js:_syncPageStatsAfterSave.
 // Satzmetriken stehen nicht hier: sie kommen aus dem Stil-Index (computePageIndex
 // auf dem Prosatext), Wortformen aus dem Wortschatz-Scan (stampLexiconHistory).
+// Prosa-Wörter aus `repetition_data` (JSON-String aus lib/page-index.js); null,
+// wenn das Feld fehlt (Zeile vor metrics_version 15) oder kaputt ist.
+function _proseWords(raw) {
+  try {
+    const w = (typeof raw === 'string' ? JSON.parse(raw) : raw)?.words;
+    return Number.isFinite(w) ? w : null;
+  } catch { return null; }
+}
+
 function computeStats(html) {
   const text = htmlToText(html || '');
   const words = pageWordCount(html);
@@ -254,13 +263,15 @@ async function syncBook(bookId, ctx) {
   }
   const avgSentenceLen = sentenceCount > 0 ? Math.round((sentenceWords / sentenceCount) * 10) / 10 : null;
 
-  // Buch-Level-Lesbarkeit: gewichteter Durchschnitt über alle Seiten (nach Wortzahl).
+  // Buch-Level-Lesbarkeit: gewichteter Durchschnitt über alle Seiten, Gewicht =
+  // Prosa-Wörter (`repetition_data.words`, ohne Verlauf und Tabellen — der Text,
+  // auf dem LIX/Flesch gemessen sind; wie lib/stil-heatmap.js#proseWords).
   // Eine aus gesamten Totals neu berechnete Kennzahl wäre mathematisch korrekter,
   // der gewichtete Durchschnitt liegt aber praktisch sehr nah daran und spart Aggregat-Spalten.
   const wordsByPage = Object.fromEntries(statsItems.map(s => [s.page_id, s.words]));
   let lixSum = 0, fleschSum = 0, lixWords = 0, fleschWords = 0;
   for (const item of indexItems) {
-    const w = wordsByPage[item.page_id] || 0;
+    const w = _proseWords(item.index.repetition_data) ?? (wordsByPage[item.page_id] || 0);
     if (w <= 0) continue;
     if (typeof item.index.lix === 'number') { lixSum += item.index.lix * w; lixWords += w; }
     if (typeof item.index.flesch_de === 'number') { fleschSum += item.index.flesch_de * w; fleschWords += w; }

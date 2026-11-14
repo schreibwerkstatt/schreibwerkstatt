@@ -79,7 +79,9 @@ function _factText(r) {
 // Alle indexierbaren Entitäten eines Buches laden → { page:[{id,text}], ... }.
 // Seiten absatzerhaltend (htmlToTextForPrompt): der Chunker schneidet bevorzugt
 // an Absatzgrenzen. Gespeichert wird der Chunk trotzdem einzeilig — die Absätze
-// steuern nur, WO geschnitten wird.
+// steuern nur, WO geschnitten wird. Nachrichtenverläufe ohne Marken
+// (`msgMarks: false`): die Marke ist Anweisung ans Modell, kein Buchinhalt, und
+// zöge jeden Chunk mit Verlauf zum Begriff «Nachrichtenverlauf».
 async function _collectEntities(bookId, signal) {
   const { pages } = await loadOrderedBookContents(bookId);
   const loaded = await contentStore.loadPagesBatch(pages, null, {
@@ -91,7 +93,7 @@ async function _collectEntities(bookId, signal) {
     },
   });
   const pageItems = loaded
-    .map(pd => ({ id: pd.id, text: htmlToTextForPrompt(pd.html || '') }))
+    .map(pd => ({ id: pd.id, text: htmlToTextForPrompt(pd.html || '', { msgMarks: false }) }))
     .filter(x => x.text);
 
   const sceneRows = db.prepare('SELECT id, titel, kommentar FROM figure_scenes WHERE book_id = ?').all(bookId);

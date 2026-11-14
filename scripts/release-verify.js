@@ -9,7 +9,7 @@
 //      Dateien (.env, *.icc, DBs) fehlen dort wie im CI-Checkout.
 //   2. node_modules als Symlink auf den Arbeitsbaum (Lockfile muss passen —
 //      geprueft, sonst Abbruch).
-//   3. `test:ci` mit TEST_CI_SHARDS=3 und eigenen Ports (E2E_PORT,
+//   3. `test:ci` mit TEST_CI_SHARDS=6 und eigenen Ports (E2E_PORT,
 //      BOOT_SMOKE_PORT, TEST_CI_SHARD_BASE), damit ein gleichzeitiger Lauf
 //      im Arbeitsbaum weder Port noch Server teilt.
 //   4. Exit-Code von test:ci durchreichen. Gruen ⇒ Verzeichnis weg; rot ⇒
@@ -57,8 +57,10 @@ console.log(`release-verify: ${sha.slice(0, 10)} in ${dir}`);
 
 const env = {
   ...process.env,
-  TEST_CI_SHARDS: '3',
-  // Ports getrennt vom Arbeitsbaum: App-Shards 8828–8836 (8766 + 2·Shard), Harness 8865, Boot 33738.
+  // 6 statt der 3 aus CI: die App-Specs laufen je Shard mit `workers: 1` und sind
+  // der Engpass (3 Shards ≈ 11 min, 6 ≈ halb so lang); ~1,3 GB je Shard.
+  TEST_CI_SHARDS: process.env.TEST_CI_SHARDS || '6',
+  // Ports getrennt vom Arbeitsbaum: App-Shards 8828–8842 (8766 + 2·Shard), Harness 8865, Boot 33738.
   TEST_CI_SHARD_BASE: process.env.TEST_CI_SHARD_BASE || '30',
   E2E_PORT: process.env.E2E_PORT || '8865',
   BOOT_SMOKE_PORT: process.env.BOOT_SMOKE_PORT || '33738',

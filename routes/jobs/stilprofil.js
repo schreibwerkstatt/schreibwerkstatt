@@ -8,6 +8,7 @@ const {
   loadOrderedBookContents, loadPageContents, groupByChapter, buildSinglePassBookText,
   contentHttpError, chunkLimitsFor,
   startBookJob,
+  bookTextOpts,
 } = require('./shared');
 const { BATCH_SIZE } = require('./shared/loader');
 const { resolveProvider } = require('../../lib/ai');
@@ -56,7 +57,7 @@ async function runStilprofilJob(jobId, bookId, userEmail) {
         progress: Math.round((i / total) * 55),
         statusText: 'job.phase.readingPages',
         statusParams: { from: i + 1, to: Math.min(i + BATCH_SIZE, total), total },
-      });
+      }, null, bookTextOpts(bookId, userEmail));
     });
     if (!pageContents.length) { completeJob(jobId, { empty: true }); return; }
 

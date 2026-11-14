@@ -6,7 +6,7 @@ import { buildPageChatWeltLines } from './blocks-welt.js';
 import { buildEditStatusBlock } from './edit-status-block.js';
 import { _obj, _str } from './schema-utils.js';
 import { SYSTEM_CHAT, SYSTEM_BOOK_CHAT } from './core.js';
-import { PAGE_CHAT_IDEEN_RULES, PAGE_CHAT_NACHRICHTEN_HINWEIS, buildBookTitlesBlock } from './page-chat.js';
+import { PAGE_CHAT_IDEEN_RULES, pageChatNachrichtenHinweis, buildBookTitlesBlock } from './page-chat.js';
 import { CHAT_TOOLS, toolMentions } from './chat-tools/index.js';
 
 /**
@@ -275,7 +275,7 @@ export function buildChatSystemPrompt(pageName, pageText, figuren, review, syste
   ];
 
   page.push('=== ABSCHNITTSINHALT ===', pageText, '');
-  if (opts.hatNachrichten) page.push(PAGE_CHAT_NACHRICHTEN_HINWEIS, '');
+  if (opts.hatNachrichten) page.push(pageChatNachrichtenHinweis(opts.langCode), '');
   if (opts.editStatus) page.push(...buildEditStatusBlock(opts.editStatus));
   if (pageChangeNote) {
     page.push(

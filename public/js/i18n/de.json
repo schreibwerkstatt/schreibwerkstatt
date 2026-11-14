@@ -4391,7 +4391,7 @@
   "shortcuts.item.escape": "Offene Dialoge, Menüs und Picker schliessen",
   "shortcuts.item.bossScreen": "Chef-Taste: Bildschirm sofort schwärzen (Notebook- und Focus-Editor); beliebige Taste/Klick blendet wieder ein",
   "shortcuts.item.runCheck": "Lektorat starten (Notebook-Editor)",
-  "shortcuts.item.editToggle": "Abschnitt im Notebook-Editor bearbeiten (oder speichern, wenn bereits offen)",
+  "shortcuts.item.editToggle": "Abschnitt im Notebook-Editor bearbeiten: E in der Leseansicht; ⌘/Strg+E speichert zusätzlich, wenn bereits offen (in Chrome fangen manche Erweiterungen ⌘/Strg+E ab, dann E nehmen)",
   "shortcuts.item.saveEdit": "Abschnitt speichern (im Bearbeiten-Modus)",
   "shortcuts.item.bold": "Fett (im Bearbeiten- und Fokus-Modus)",
   "shortcuts.item.italic": "Kursiv (im Bearbeiten- und Fokus-Modus)",

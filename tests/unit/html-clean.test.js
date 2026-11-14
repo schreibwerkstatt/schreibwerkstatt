@@ -260,6 +260,17 @@ test('flattenDivBlocks: plain <div> mit Textinhalt → <p>', () => {
   );
 });
 
+test('flattenDivBlocks: inneres <div> im Verlauf/Gedicht wird ausgepackt', () => {
+  // Die parserfreien Lesewege (html-text.js, html-container.js) brauchen einen
+  // Verlauf ohne inneres </div>.
+  assert.equal(
+    flattenDivBlocks('<div class="msg-thread"><div><p class="msg-in">a</p></div><p class="msg-name">X</p><div>lose</div></div>'),
+    '<div class="msg-thread"><p class="msg-in">a</p><p class="msg-name">X</p><p>lose</p></div>',
+  );
+  assert.equal(flattenDivBlocks('<div class="poem"><div class="msg-thread"><p>v</p></div></div>'), '<div class="poem"><p>v</p></div>');
+  assert.equal(flattenDivBlocks('<div><div><p>z</p></div></div>'), '<div><div><p>z</p></div></div>');
+});
+
 test('flattenDivBlocks: id-Attribut bleibt erhalten', () => {
   assert.equal(
     flattenDivBlocks('<div id="bkmrk-x">Text</div>'),

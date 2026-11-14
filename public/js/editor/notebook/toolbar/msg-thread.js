@@ -16,12 +16,13 @@
 // Wrapper-Grenzen (docs/notebook-editor.md, Invarianten 17+18).
 // Markup ausschliesslich über die SSoT messages/msg-html.js.
 
-import { getEditEl, placeCaretIn, caretAtBlockStart, caretAtBlockEnd } from './_shared.js';
+import { getEditEl, placeCaretIn, caretAtBlockStart, caretAtBlockEnd, historyStep } from './_shared.js';
 import {
   closestMsgLine, msgKind, setMsgKind, toggleMsgSide, nextLineKind, createMsgLine,
   msgNameFromTyped, isEmptyMsgLine, MSG_THREAD_CLASS,
 } from '../../../messages/msg-html.js';
 import { dropEmptyInline } from '../split-html.js';
+import { msgUnwrapTargets } from './msg-convert.js';
 
 const BAR_GAP = 4;
 
@@ -147,13 +148,23 @@ export const msgThreadMethods = {
   },
 
   // Tab / Shift+Tab: Seite wechseln (Eingang ↔ Ausgang, siehe toggleMsgSide).
-  // Ausserhalb eines Verlaufs bleibt Tab beim Browser.
+  // Markierte Zeilen wechseln alle ihre Seite; Absender und Hinweise bleiben
+  // dabei stehen (nur die Caret-Zeile allein macht aus ihnen eine Nachricht).
+  // Eigener Undo-Schritt wie Enter. Ausserhalb eines Verlaufs bleibt Tab beim
+  // Browser.
   _kbMsgTab(e, app) {
     if (app.focusActive) return false;
     const hit = caretLine();
     if (!hit) return false;
     e.preventDefault();
-    setMsgKind(hit.line, toggleMsgSide(msgKind(hit.line)));
+    const picked = hit.range.collapsed ? [] : msgUnwrapTargets(hit.range, hit.editEl);
+    const lines = picked.length ? picked : [hit.line];
+    historyStep(app);
+    for (const line of lines) {
+      const kind = msgKind(line);
+      if (lines.length > 1 && kind !== 'in' && kind !== 'out') continue;
+      setMsgKind(line, toggleMsgSide(kind));
+    }
     app._markEditDirty?.();
     this._updateMsgBar();
     return true;
@@ -215,11 +226,18 @@ export const msgThreadMethods = {
 
   // Klick in der Leiste. Die Knöpfe tragen @mousedown.prevent: Fokus und Caret
   // bleiben im Editor, weitergeschrieben wird ohne neuen Klick.
+  // Markierte Zeilen bekommen alle die gewählte Art. Eigener Undo-Schritt.
   setMsgLineKind(kind) {
     const line = this._msgLine;
     if (!line?.isConnected) return;
-    setMsgKind(line, kind);
+    const app = window.__app;
+    const editEl = getEditEl();
+    const sel = document.getSelection();
+    const range = sel?.rangeCount ? sel.getRangeAt(0) : null;
+    const lines = range && !range.collapsed && editEl ? msgUnwrapTargets(range, editEl) : [];
+    historyStep(app);
+    for (const l of lines.length ? lines : [line]) setMsgKind(l, kind);
     this.msgBarKind = kind;
-    window.__app?._markEditDirty?.();
+    app?._markEditDirty?.();
   },
 };

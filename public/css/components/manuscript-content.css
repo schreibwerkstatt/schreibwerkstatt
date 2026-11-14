@@ -394,10 +394,12 @@
     font-weight: 600;
   }
   /* Absender auf der Seite seiner Nachricht (msg-html.js#msgNameSides): die
-     erste Nachricht danach, ein Hinweis dazwischen übersprungen. Nur der
+     erste Nachricht danach, Hinweise dazwischen übersprungen — CSS kann nicht
+     beliebig weit zählen, die Kette deckt bis zu drei Hinweise ab (gegated
+     gegen msgNameSides in tests/unit/msg-thread-drift.test.mjs). Nur der
      Bildschirm leitet das per :has() ab; EPUB und HTML-Export bekommen die
      Export-Klasse msg-name-out. */
-  :is(.page-content-view, .book-editor-page-body, .share-content) .msg-thread > p.msg-name:has(+ p.msg-out, + p.msg-meta + p.msg-out) {
+  :is(.page-content-view, .book-editor-page-body, .share-content) .msg-thread > p.msg-name:has(+ p.msg-out, + p.msg-meta + p.msg-out, + p.msg-meta + p.msg-meta + p.msg-out, + p.msg-meta + p.msg-meta + p.msg-meta + p.msg-out) {
     align-self: flex-end;
   }
   :is(.page-content-view, .book-editor-page-body, .share-content) .msg-thread > p.msg-meta {

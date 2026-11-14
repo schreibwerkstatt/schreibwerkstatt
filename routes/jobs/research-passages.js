@@ -14,7 +14,7 @@ const contentStore = require('../../lib/content-store');
 // Über das Modul-Objekt, damit Tests den Embedding-Zugriff ersetzen können.
 const retrieval = require('../../lib/research-retrieval');
 const { bestLivePassage } = require('../../lib/live-passage');
-const { htmlToTextForPrompt } = require('./shared');
+const { htmlToTextForPrompt, bookTextOpts } = require('./shared');
 
 /**
  * @param {number} bookId
@@ -32,7 +32,7 @@ async function semanticLivePassages(bookId, item, { limit, topK, maxChars, signa
     seen.add(h.entity_id);
     const page = await contentStore.loadPage(h.entity_id).catch(() => null);
     if (!page || page.book_id !== bookId) continue;
-    const live = bestLivePassage(htmlToTextForPrompt(page.html || ''), h.text, { maxChars });
+    const live = bestLivePassage(htmlToTextForPrompt(page.html || '', bookTextOpts(bookId)), h.text, { maxChars });
     if (!live || !live.text) continue;
     out.push({ page_id: h.entity_id, page_name: page.name || '', text: live.text });
     if (out.length >= limit) break;

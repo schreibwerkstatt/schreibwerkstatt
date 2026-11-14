@@ -12,6 +12,7 @@ const {
   groupByChapter, splitGroupsIntoChunks, pageSigSuffix, buildSinglePassBookText,
   chunkLimitsFor, tps, _modelName,
   startBookJob,
+  bookTextOpts,
 } = require('./shared');
 const motifsDb = require('../../db/motifs');
 const { getBookSettings } = require('../../db/schema');
@@ -56,7 +57,7 @@ async function runMotifBrainstormJob(jobId, bookId, userEmail, { force = false }
 
     updateJob(jobId, { statusText: 'job.phase.motivBrainstormCollect', progress: 8 });
     const { chMap, pages } = await loadOrderedBookContents(bookId);
-    const pageContents = await loadPageContents(pages, chMap, 1, null, signal());
+    const pageContents = await loadPageContents(pages, chMap, 1, null, signal(), bookTextOpts(bookId, userEmail));
     if (!pageContents.some(p => p.text)) throw i18nError('job.error.motivNoText');
 
     const { BUCH_KONTEXT } = await getBookPrompts(bookId, userEmail);

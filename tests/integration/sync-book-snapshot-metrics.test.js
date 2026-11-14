@@ -61,3 +61,20 @@ test('Teil-Ladung: Tages-Snapshot bleibt unverändert', async () => {
   assert.equal(res.missing_pages, 1);
   assert.deepEqual(today(), before);
 });
+
+test('Buch-LIX/Flesch gewichten nach Prosa-Wörtern (ohne Nachrichtenverlauf)', async () => {
+  const book = await contentStore.createBook({ name: 'Chat-Buch' }, { session: { user: { email: USER } } });
+  const chat = Array.from({ length: 40 }, (_, i) => `<p class="msg-${i % 2 ? 'out' : 'in'}">ok bis gleich dann wir sehen uns ${i}</p>`).join('');
+  await contentStore.createPage({ book_id: book.id, name: 'Prosa', html: '<p>Der Morgen war kalt. Sie ging hinaus und sah den Fluss.</p>' }, null);
+  await contentStore.createPage({ book_id: book.id, name: 'Chat',
+    html: `<p>Langwierige Untersuchungsergebnisse beschäftigten die Kommission ausserordentlich.</p><div class="msg-thread">${chat}</div>` }, null);
+  await syncBook(book.id, null);
+  const rows = db.prepare('SELECT words, lix, flesch_de, repetition_data FROM page_stats WHERE book_id = ?').all(book.id);
+  const prose = (r) => JSON.parse(r.repetition_data).words;
+  assert.ok(rows.some(r => prose(r) < r.words / 4), 'Chat-Seite: Prosa ist ein kleiner Teil');
+  const wavg = (field, w) => Math.round((rows.reduce((s, r) => s + r[field] * w(r), 0) / rows.reduce((s, r) => s + w(r), 0)) * 10) / 10;
+  const snap = db.prepare('SELECT avg_lix, avg_flesch_de FROM book_stats_history WHERE book_id = ? AND recorded_at = ?').get(book.id, localIsoDate());
+  assert.equal(snap.avg_lix, wavg('lix', prose));
+  assert.equal(snap.avg_flesch_de, wavg('flesch_de', prose));
+  assert.notEqual(snap.avg_lix, wavg('lix', (r) => r.words), 'Gesamtwort-Gewichtung ergäbe einen anderen Wert');
+});

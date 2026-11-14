@@ -190,10 +190,13 @@ function cleanPageTextForAi(text) {
 // Der Tag-Strip ist `stripTagsKeepPunctuation` (dort): Tags → Wortgrenze, aber
 // kein Leerzeichen an Satzzeichen — sonst sähe die KI hinter `</a>` einen
 // Leerraum, den der Editor nicht rendert, und meldete ihn als Grammatikfehler.
-// `msgRows`: Zeilenart jeder Verlaufszeile im Text, Marken in `langCode`
-// (Komplettanalyse, lib/html-text.js#markMsgThreads `rows`).
-function htmlToText(html, { msgRows = false, langCode = 'de' } = {}) {
-  return _decodeEntities(stripTagsKeepPunctuation(summarizeTableBlocks(markMsgThreads(stripDiagramBlocks(html), { rows: msgRows, langCode }))), HTML_NAMED_ENTITIES)
+// Nachrichtenverlauf-Optionen beider Varianten (lib/html-text.js#markMsgThreads):
+// `langCode` = Sprache der Marken, immer die Buchsprache des Jobs
+// (shared/index.js#bookTextOpts); `msgRows` = Zeilenart jeder Verlaufszeile im
+// Text (Komplettanalyse, komplett/job-shared.js#komplettTextOpts);
+// `msgMarks: false` = ohne Marken (Embedding-Index).
+function htmlToText(html, { msgRows = false, langCode = 'de', msgMarks = true } = {}) {
+  return _decodeEntities(stripTagsKeepPunctuation(summarizeTableBlocks(markMsgThreads(stripDiagramBlocks(html), { rows: msgRows, langCode, marks: msgMarks }))), HTML_NAMED_ENTITIES)
     .replace(/\s+/g, ' ').trim();
 }
 
@@ -210,10 +213,10 @@ function htmlToText(html, { msgRows = false, langCode = 'de' } = {}) {
 // Der Tag-Strip ist derselbe `stripTagsKeepPunctuation` wie in `htmlToText`: eine
 // Tag-Grenze ist Wortgrenze, aber kein Leerzeichen an einem Satzzeichen — ein
 // Link mit Punkt heisst im Prompt `Asianometry.`, nicht `Asianometry .`.
-// `langCode` waehlt die Sprache der Nachrichtenverlauf-Marken (lib/html-text.js).
-function htmlToTextForPrompt(html, { langCode = 'de' } = {}) {
+// Verlauf-Optionen `langCode`/`msgRows`/`msgMarks` wie bei `htmlToText`.
+function htmlToTextForPrompt(html, { langCode = 'de', msgRows = false, msgMarks = true } = {}) {
   return _decodeEntities(
-    stripTagsKeepPunctuation(summarizeTableBlocks(markMsgThreads(stripDiagramBlocks(html), { langCode }))
+    stripTagsKeepPunctuation(summarizeTableBlocks(markMsgThreads(stripDiagramBlocks(html), { langCode, rows: msgRows, marks: msgMarks }))
       .replace(/<\/(p|div|li|h[1-6]|blockquote|pre|ul|ol|figure|figcaption|table|tr|section|article)\s*>/gi, '\n\n')
       .replace(/<br\s*\/?>/gi, '\n')
       .replace(/<hr\s*\/?>/gi, '\n\n')), HTML_NAMED_ENTITIES)

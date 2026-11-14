@@ -15,6 +15,7 @@ const {
   jobs, runningJobs, createJob, enqueueJob, jobKey, findActiveJobId,
   jsonBody, normalizeGesamtnote, assertChapterAnalysis, sortEmpfehlungen,
   sigHash: _sigHash, buildChapterPagesSig, systemChars,
+  bookTextOpts,
 } = require('./shared');
 const { narrativeLabels } = require('./narrative-labels');
 const { loadReviewKomplettContext, loadReviewMotivContext, loadStrukturContext, loadWeltContext, werkstandFor, trailingUnwrittenChapters, loadOpenPlanBeats } = require('./review-context');
@@ -119,7 +120,7 @@ async function runReviewJob(jobId, bookId, bookName, userEmail) {
         statusText: 'job.phase.readingPages',
         statusParams: { from: i + 1, to: Math.min(i + BATCH_SIZE, total), total },
       });
-    }, jobAbortControllers.get(jobId)?.signal);
+    }, jobAbortControllers.get(jobId)?.signal, bookTextOpts(bookId, userEmail));
     // Nur Stummel (alle Abschnitte unter der Mindestlänge): nichts zu bewerten.
     // Ohne diesen Ausstieg bewertete das Modell einen leeren Buchinhalt.
     if (!pageContents.length) { completeJob(jobId, { empty: true }); return; }

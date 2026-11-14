@@ -220,6 +220,8 @@ test('htmlToPlainTextWithMsgRanges: Text zeichengleich mit htmlToPlainText', () 
     '<div class="msg-thread"><p>ohne Klasse</p></div>',
     '<p>Kein Verlauf, «Rede».</p>',
     '',
+    // Private-Use-Zeichen im Text (kodiert und roh) sind Text, keine Marken.
+    '<p>a&#xE001;b</p><div class="msg-thread"><p class="msg-in">x&#xE000;y \uE001 z</p></div>',
   ];
   for (const html of samples) {
     assert.equal(htmlToPlainTextWithMsgRanges(html).text, htmlToPlainText(html), html);
@@ -367,4 +369,29 @@ test('Wiederholung: Kontraktionen treffen die Stoppwortliste, auch mit typografi
   const words = top('She couldn’t sleep. She couldn’t eat. She couldn’t breathe. Silence, silence, silence.');
   assert.ok(!words.includes("couldn't") && !words.includes('couldn'), words.join(','));
   assert.ok(words.includes('silence'));
+});
+
+test('htmlToPlainTextWithMsgRanges: Private-Use-Entity verschiebt keine Bereiche', () => {
+  const html = '<p>Vor&#xE001;her.</p><div class="msg-thread"><p class="msg-in">ich &#xE000;bin da</p><p class="msg-out">gut</p></div>';
+  const { text, msgRanges } = htmlToPlainTextWithMsgRanges(html);
+  assert.equal(text, htmlToPlainText(html));
+  assert.deepEqual(msgRanges.map(([a, b]) => text.slice(a, b)), ['ich \uE000bin da', 'gut']);
+});
+
+test('htmlToPlainTextWithMsgRanges: Absender je Nachricht wie msgUtterances', () => {
+  const { msgThreadLines, msgUtterances } = require('../../lib/html-text');
+  const html = '<div class="msg-thread"><p class="msg-name">Lena</p><p class="msg-in">hi</p><p class="msg-out">yo</p>'
+    + '<p class="msg-name">Tom</p><p class="msg-out">ok</p><p>noch</p></div>';
+  const { msgSenders } = htmlToPlainTextWithMsgRanges(html);
+  assert.deepEqual(msgSenders, ['Lena', null, 'Tom', 'Lena']);
+  assert.deepEqual(msgSenders, msgUtterances(msgThreadLines(html)).map(u => u.sender));
+});
+
+test('Stil-Index: repetition_data.words zählt nur den Prosatext', () => {
+  const { computePageIndex } = require('../../lib/page-index');
+  const { stripMsgThreads } = require('../../lib/html-text');
+  const html = '<p>Sie wartete am Bahnhof.</p><div class="msg-thread"><p class="msg-in">bist du schon da oder nicht</p></div>';
+  const { text, msgRanges } = htmlToPlainTextWithMsgRanges(html);
+  const idx = computePageIndex(text, { msgRanges, proseText: htmlToPlainText(stripMsgThreads(html)) });
+  assert.equal(JSON.parse(idx.repetition_data).words, 4);
 });

@@ -17,6 +17,12 @@
 const { db } = require('./connection');
 const { NOW_ISO_SQL } = require('./now');
 const { computeAuthorProfile, authorProfileBasisSig } = require('../lib/author-profile');
+
+// Prosa-Woerter einer page_stats-Zeile (ohne Nachrichtenverlauf und Tabellen,
+// lib/page-index.js `repetition_data.words`); Zeilen vor metrics_version 15
+// fallen auf `words`. Nenner der Dichten und Gewicht von Satzlaenge/LIX/Flesch.
+const PROSE_WORDS_SQL = `COALESCE(CASE WHEN json_valid(ps.repetition_data)
+                             THEN json_extract(ps.repetition_data, '$.words') END, ps.words)`;
 // Prepared Statements sitzen auf migrierten Spalten — Migrationen zuerst.
 require('./migrations');
 
@@ -52,7 +58,7 @@ function _lexiconRows(ids) {
 // Begruendung steht in lib/author-profile.js#_bookMetrics.
 //
 // Die beiden Lesbarkeitsmasse sind pro Seite gerechnet und lassen sich nicht
-// summieren; sie werden mit der Wortzahl gewichtet. Die Gewichtssumme zaehlt nur
+// summieren; sie werden mit der Prosa-Wortzahl gewichtet. Die Gewichtssumme zaehlt nur
 // Seiten, die den Wert ueberhaupt haben — sonst zoege jede Seite ohne Messwert
 // den Durchschnitt gegen null.
 function _pageStatRows(ids) {
@@ -62,16 +68,20 @@ function _pageStatRows(ids) {
     SELECT ps.book_id,
            COUNT(*)                  AS pages,
            SUM(ps.words)             AS words,
+           -- Prosa-Woerter (ohne Verlauf/Tabellen, lib/page-index.js repetition_data.words):
+           -- Nenner der Dichten und der Satzlaenge; alte Zeilen fallen auf words.
+           SUM(${PROSE_WORDS_SQL}) AS prose_words,
            SUM(ps.chars)             AS chars,
            SUM(ps.sentences)         AS sentences,
            SUM(ps.dialog_chars)      AS dialog_chars,
            SUM(ps.adverb_count)      AS adverb_count,
            SUM(ps.passive_count)     AS passive_count,
            SUM(ps.filler_count)      AS filler_count,
-           SUM(ps.lix * ps.words)    AS lix_w,
-           SUM(CASE WHEN ps.lix IS NOT NULL THEN COALESCE(ps.words, 0) ELSE 0 END)       AS lix_wsum,
-           SUM(ps.flesch_de * ps.words) AS flesch_w,
-           SUM(CASE WHEN ps.flesch_de IS NOT NULL THEN COALESCE(ps.words, 0) ELSE 0 END) AS flesch_wsum
+           -- LIX/Flesch sind auf dem Prosatext gemessen: Gewicht = Prosa-Woerter.
+           SUM(ps.lix * ${PROSE_WORDS_SQL})       AS lix_w,
+           SUM(CASE WHEN ps.lix IS NOT NULL THEN COALESCE(${PROSE_WORDS_SQL}, 0) ELSE 0 END)       AS lix_wsum,
+           SUM(ps.flesch_de * ${PROSE_WORDS_SQL}) AS flesch_w,
+           SUM(CASE WHEN ps.flesch_de IS NOT NULL THEN COALESCE(${PROSE_WORDS_SQL}, 0) ELSE 0 END) AS flesch_wsum
       FROM page_stats ps
      WHERE ps.book_id IN (${ph})
      GROUP BY ps.book_id

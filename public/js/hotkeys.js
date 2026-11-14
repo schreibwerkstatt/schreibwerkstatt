@@ -18,7 +18,11 @@ import { tRaw } from './i18n.js';
 export const HOTKEYS = {
   palette:       { mod: true, key: 'K' },
   treeSearch:    { mod: true, key: 'P' },
-  edit:          { mod: true, key: 'E' },
+  // Leseansicht → Edit-Modus: die nackte Taste E ist das Hauptkürzel, ⌘/Strg+E
+  // die Alternative. Browser-Erweiterungen (Claude in Chrome u.a.) belegen
+  // ⌘/Strg+E über chrome.commands und bekommen den Chord vor der Seite — eine
+  // Taste ohne Modifier können sie gar nicht registrieren.
+  edit:          { key: 'E', also: [{ mod: true, key: 'E' }] },
   save:          { mod: true, key: 'S' },
   runCheck:      { ctrl: true, key: 'enter' },
   focusToggle:   { mod: true, shift: true, key: 'E' },
@@ -44,7 +48,8 @@ const NAMED_KEYS = {
   esc: 'shortcuts.key.esc',
 };
 
-// Token-Signatur eines Specs — dieselben Namen, die das Overlay in seinen
+// Token-Signatur eines Specs (ohne seine `also`-Kürzel — die prüft der
+// Drift-Test einzeln) — dieselben Namen, die das Overlay in seinen
 // `<kbd x-text="t('shortcuts.key.…')">` benutzt. Grundlage des Drift-Tests.
 export function hotkeyTokens(spec) {
   const out = [];
@@ -66,6 +71,11 @@ export function hotkeyTokens(spec) {
 export function hotkeyText(id, isMac) {
   const spec = HOTKEYS[id];
   if (!spec) return '';
+  // `also` = gleichwertige Alternativ-Kürzel, im Tooltip mit ` / ` angehängt.
+  return [spec, ...(spec.also || [])].map(s => specText(s, isMac)).join(' / ');
+}
+
+function specText(spec, isMac) {
   const key = NAMED_KEYS[spec.key] ? tRaw(NAMED_KEYS[spec.key]) : spec.key;
   if (isMac) {
     let mods = '';

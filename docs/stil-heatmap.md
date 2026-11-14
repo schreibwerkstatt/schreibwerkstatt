@@ -52,6 +52,18 @@ Seite neu.
 | Flesch | Amstad: 180 − ASL − 58,5·ASW | Reading Ease: 206,835 − 1,015·ASL − 84,6·ASW, englische Silbenzählung (stumme -e/-es/-ed) |
 | Pronomen | ich/mich/mein …, er, sie, wir … | I/me/my …, he, she/they, we … |
 
+**Raten pro 1000 Wörter** (Füllwörter, Passiv, Adverbien, Gewichtung der Wiederholungen) teilen
+durch die **Prosa-Wörter**, und Satzlänge, Satzlängen-P90, LIX und Flesch gewichten Seiten nach
+ihnen — dieselbe Textmenge, auf der gemessen wird: ohne Nachrichtenverläufe
+und Tabellen (`proseText` in [lib/page-index.js](../lib/page-index.js)#`computePageIndex`,
+gespeichert als `repetition_data.words`, Fallback auf `words` für Zeilen vor `METRICS_VERSION` 15;
+[lib/stil-heatmap.js](../lib/stil-heatmap.js)#`proseWords`). Die Spalte «Wörter» bleibt der
+Gesamtumfang. Das Autorenprofil (Satzlänge, Adverb- und Füllwortdichte, LIX, Flesch) und der
+Tages-Snapshot der Buchentwicklung (`avg_lix`/`avg_flesch_de` in [routes/sync.js](../routes/sync.js)) rechnen genauso.
+**Why:** Zähler aus der Prosa durch die Gesamtwortzahl geteilt drückte die Werte jedes
+Kapitels mit viel Chat oder Tabellen nach unten, und eine Seite mit viel Chat zählte in den
+Satzwerten mit einem Gewicht, das ihre Prosa nicht hat.
+
 `page_stats.flesch_de` und `book_stats_history.avg_flesch_de` tragen den Flesch-Wert **der
 Buchsprache**; der Spaltenname ist historisch. Beide Formeln haben dieselbe Richtung (höher =
 leichter) und ähnliche Bänder, die Heatmap färbt ohnehin relativ zum Buch. Buchübergreifende

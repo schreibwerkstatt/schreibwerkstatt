@@ -24,6 +24,7 @@ const {
   loadOrderedBookContents, loadPageContents,
   groupByChapter, splitGroupsIntoChunks, buildSinglePassBookText,
   chunkLimitsFor, tps, applyTierAiOverrides,
+  bookTextOpts,
 } = require('./shared');
 const { resolveProvider } = require('../../lib/ai');
 const {
@@ -177,7 +178,7 @@ async function runSourceDetectJob(jobId, bookId, userEmail, { chapterId = null }
       if (!scopePages.length) throw i18nError('job.error.sourceDetectNoChapterText');
     }
 
-    const pageContents = await loadPageContents(scopePages, chMap, 1, null, signal());
+    const pageContents = await loadPageContents(scopePages, chMap, 1, null, signal(), bookTextOpts(bookId, userEmail));
     if (!pageContents.some(p => p.text)) throw i18nError('job.error.sourceDetectNoText');
 
     // Bibliothek des Users: liefert die „nicht erneut melden"-Liste fuer den

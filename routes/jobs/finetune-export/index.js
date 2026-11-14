@@ -9,6 +9,7 @@ const {
   createJob, enqueueJob, findActiveJobId,
   jobAbortControllers, BATCH_SIZE,
   jsonBody,
+  bookTextOpts,
 } = require('../shared');
 const { buildExportFilename } = require('../../../lib/filenames');
 const { loadFinetuneData } = require('./data-loader');
@@ -60,7 +61,7 @@ async function runFinetuneExportJob(jobId, bookId, bookName, userEmail, opts) {
         statusText: 'job.phase.readingPages',
         statusParams: { from: i + 1, to: Math.min(i + BATCH_SIZE, total), total },
       });
-    }, jobAbortControllers.get(jobId)?.signal);
+    }, jobAbortControllers.get(jobId)?.signal, bookTextOpts(bookId, userEmail));
 
     updateJob(jobId, { progress: 45, statusText: 'finetune.phase.loadMetadata' });
 
@@ -429,7 +430,7 @@ finetuneExportRouter.get('/finetune-export/relation-check', async (req, res) => 
   if (!guardBook(req, res, bookId, 'editor')) return;
   const userEmail = sessionEmail(req);
   const { chMap, pages } = await loadOrderedBookContents(bookId).catch(e => { throw contentHttpError(e); });
-  const pageContents = await loadPageContents(pages, chMap, 30, null);
+  const pageContents = await loadPageContents(pages, chMap, 30, null, null, bookTextOpts(bookId, userEmail));
   const langIsEn = (getBookSettings(bookId, userEmail).language || 'de') === 'en';
   const ctx = { ...loadFinetuneData({ bookIdInt: bookId, userEmail, pageContents, langIsEn }), pageContents, relTypes: await relationTypes() };
   prepareFigureInfo(ctx);

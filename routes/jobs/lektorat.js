@@ -47,7 +47,7 @@ async function runCheckJob(jobId, pageId, bookId, userEmail) {
 
     const r = await checkOnePage(run, {
       jobId, tok, pageId, pages,
-      neighbourParas: makeNeighbourLoader(),
+      neighbourParas: makeNeighbourLoader({ langCode: run.langCode }),
       chapterNameOf: () => pageChapters([parseInt(pageId, 10)]).get(parseInt(pageId, 10))?.chapter_name || null,
       fromPct: 10, toPct: 97,
       onCacheHit: () => {
@@ -134,7 +134,7 @@ async function runBatchCheckJob(jobId, bookId, userEmail, chapterId = null, { sk
     const callsPerPage = (!run.local && splitEnabled()) ? objektivRuns() + 1 : 1;
     const concurrency = Math.max(1, Math.floor(rawConcurrency / callsPerPage));
     const tok = { in: 0, out: 0, ms: 0, inflight: new Map() };
-    const neighbourParas = makeNeighbourLoader();
+    const neighbourParas = makeNeighbourLoader({ langCode: run.langCode });
     // Nachbarn in Buchreihenfolge über Kapitelgrenzen; geprüft wird weiter `pages`.
     let orderedPages = null;
     if (!run.local) {
