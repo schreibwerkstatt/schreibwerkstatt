@@ -7,8 +7,8 @@ const { test, expect } = require('./_helpers/fixtures');
 
 test.describe('epub-export-card', () => {
   test.beforeEach(async ({ page }) => {
-    await page.request.post('http://localhost:8765/__mock/publication-reset');
-    await page.goto('http://localhost:8765/tests/fixtures/epub-export-harness.html', { waitUntil: 'domcontentloaded' });
+    await page.request.post('/__mock/publication-reset');
+    await page.goto('/tests/fixtures/epub-export-harness.html', { waitUntil: 'domcontentloaded' });
     await page.waitForFunction(() => window.__harnessReady === true);
   });
 
@@ -35,7 +35,7 @@ test.describe('epub-export-card', () => {
       exportBtn.click(),
     ]);
     expect(download.suggestedFilename()).toBe('book.epub');
-    const state = await page.request.get('http://localhost:8765/__mock/state').then(r => r.json());
+    const state = await page.request.get('/__mock/state').then(r => r.json());
     expect(state.lastPubPut).toBeNull();
   });
 });

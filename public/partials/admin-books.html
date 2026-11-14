@@ -3,14 +3,14 @@
   <div class="card-header">
     <span class="card-title" x-text="$app.t('admin.books.title')"></span>
     <div class="card-actions">
-      <button type="button" class="icon-btn icon-btn--ghost" @click="loadAll()" :disabled="loading" :data-tip="$app.t('common.refresh')" :aria-label="$app.t('common.refresh')"><svg class="icon" aria-hidden="true"><use href="/icons.svg#rotate-cw"/></svg></button>
+      <button type="button" class="icon-btn icon-btn--ghost" @click="adminBooksRefresh()" :disabled="adminBooksLoading" :data-tip="$app.t('common.refresh')" :aria-label="$app.t('common.refresh')"><svg class="icon" aria-hidden="true"><use href="/icons.svg#rotate-cw"/></svg></button>
     </div>
   </div>
 
-  <div x-show="loading" x-skeleton="4" x-cloak></div>
-  <p class="card-form-error" x-show="error" x-text="error"></p>
+  <div x-show="adminBooksLoading && !books.length" x-skeleton="4" x-cloak></div>
+  <div x-show="adminBooksError" class="error-msg" x-text="adminBooksError"></div>
 
-  <div class="card-form-grid" x-show="!loading">
+  <div class="card-form-grid" x-show="books.length || (adminBooksInitialized && !adminBooksLoading && !adminBooksError)">
 
     <section class="admin-pool-section">
       <h3 class="card-section-title" x-text="$app.t('admin.books.ownerlessHeading')"></h3>
@@ -36,7 +36,6 @@
             <th x-bind="sortTh('normseiten')" class="admin-pool-num" x-text="$app.t('admin.books.col.normseiten')"></th>
             <th x-bind="sortTh('bytes')" class="admin-pool-num" :data-tip="$app.t('admin.books.col.bytesTip')" x-text="$app.t('admin.books.col.bytes')"></th>
             <th x-text="$app.t('admin.books.col.assign')"></th>
-            <th></th>
           </tr>
         </thead>
         <tbody>
@@ -49,17 +48,12 @@
               <td class="admin-pool-num" x-text="b.page_count"></td>
               <td class="admin-pool-num" x-text="fmtChars(b.chars)"></td>
               <td class="admin-pool-num" x-text="fmtNormseiten(b.chars)"></td>
-              <td class="admin-pool-num" x-text="fmtBytes(b.bytes)"></td>
-              <td>
-                <div x-data="combobox($app.t('admin.books.selectUser'), $app.t('admin.books.selectUser'))"
-                     x-modelable="value" x-model="assignTarget[b.book_id]"
-                     x-effect="options = users.map(u => ({ value: u.email, label: u.email }))"></div>
-              </td>
+              <td class="admin-pool-num" x-text="adminFmtBytes(b.bytes)"></td>
               <td class="admin-pool-actions">
-                <button type="button"
-                        @click="assignOwner(b)"
-                        :disabled="busy || !(assignTarget[b.book_id])"
-                        x-text="$app.t('admin.books.assignBtn')"></button>
+                <button type="button" class="btn-compact"
+                        @click="openAssign($event, b)"
+                        :disabled="adminBooksBusy"
+                        x-text="$app.t('admin.books.assignOpenBtn')"></button>
               </td>
             </tr>
           </template>
@@ -105,7 +99,7 @@
               <td class="admin-pool-num" x-text="b.page_count"></td>
               <td class="admin-pool-num" x-text="fmtChars(b.chars)"></td>
               <td class="admin-pool-num" x-text="fmtNormseiten(b.chars)"></td>
-              <td class="admin-pool-num" x-text="fmtBytes(b.bytes)"></td>
+              <td class="admin-pool-num" x-text="adminFmtBytes(b.bytes)"></td>
             </tr>
           </template>
         </tbody>
@@ -113,4 +107,34 @@
       </div>
     </section>
   </div>
+
+  <!-- Owner zuweisen: EINE Instanz ausserhalb der Tabelle, am Knopf der Zeile
+       verankert (DESIGN.md „Picker-Popover"). -->
+  <template x-teleport="body">
+    <div class="picker-popover admin-books-assign-picker"
+         x-ref="assignPopover"
+         x-show="assignBookId !== null && !!assignBook()" x-cloak
+         :style="{ top: pickerPopoverPos.top + 'px', left: pickerPopoverPos.left + 'px' }"
+         @keydown.escape.window="assignBookId !== null && cancelAssign()"
+         role="dialog" :aria-label="$app.t('admin.books.col.assign')">
+      <div class="picker-popover__head">
+        <span class="picker-popover__title" x-text="$app.t('admin.books.col.assign')"></span>
+        <span class="picker-popover__subject" x-text="assignBook()?.name || ''"></span>
+      </div>
+
+      <div x-data="combobox({ placeholder: $app.t('admin.books.selectUser'), label: $app.t('admin.books.selectUser') })"
+           x-modelable="value" x-model="assignEmail"
+           x-effect="options = users.map(u => ({ value: u.email, label: u.email }))"></div>
+
+      <p class="picker-popover__hint" x-text="$app.t('admin.books.assignHint')"></p>
+
+      <div class="picker-popover__actions">
+        <button type="button" class="btn-compact primary" @click="applyAssign()"
+                :disabled="!assignEmail || adminBooksBusy"
+                x-text="$app.t('admin.books.assignBtn')"></button>
+        <button type="button" class="btn-compact" @click="cancelAssign()"
+                x-text="$app.t('common.cancel')"></button>
+      </div>
+    </div>
+  </template>
 </div>

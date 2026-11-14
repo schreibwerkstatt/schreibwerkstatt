@@ -10,7 +10,7 @@
   <div class="card-header">
     <span class="card-title" x-text="$app.t('admin.settings.title')"></span>
     <div class="card-actions">
-      <button type="button" class="icon-btn icon-btn--ghost" @click="adminSettingsLoad()" :disabled="adminSettingsLoading || adminSettingsSaving" :data-tip="$app.t('common.refresh')" :aria-label="$app.t('common.refresh')"><svg class="icon" aria-hidden="true"><use href="/icons.svg#rotate-cw"/></svg></button>
+      <button type="button" class="icon-btn icon-btn--ghost" @click="adminSettingsReload()" :disabled="adminSettingsLoading || adminSettingsSaving" :data-tip="$app.t('common.refresh')" :aria-label="$app.t('common.refresh')"><svg class="icon" aria-hidden="true"><use href="/icons.svg#rotate-cw"/></svg></button>
       <button type="button" @click="adminSettingsSave()" :disabled="adminSettingsLoading || adminSettingsSaving">
         <span x-show="adminSettingsSaving" class="spinner"></span>
         <span x-text="adminSettingsSaving ? $app.t('common.saving') : $app.t('common.save')"></span>
@@ -21,19 +21,17 @@
   <div x-show="adminSettingsLoading" x-skeleton="5" x-cloak></div>
   <div x-show="adminSettingsError" class="error-msg error-msg--banner" x-text="adminSettingsError"></div>
   <div x-show="adminSettingsSaved" class="success-msg success-msg--banner">
-    <span x-text="$app.t('admin.settings.saved', { count: adminSettingsSavedCount })"></span>
+    <span x-text="$app.tn('admin.settings.saved', adminSettingsSavedCount)"></span>
   </div>
 
-  <div x-show="!adminSettingsLoading && Object.keys(adminSettingsMap).length">
-    <!-- Tab-Leiste -->
-    <nav class="admin-settings-tabs" role="tablist">
-      <template x-for="t in ['auth','provider','smtp','jobs','cron','pdfa','analytics','languagetool','stt','tts','image','embed','geocode','websearch','api','advanced']" :key="t">
-        <button :aria-selected="adminSettingsTab === t" type="button" role="tab"
-                :class="['admin-settings-tab', adminSettingsTab === t ? 'is-active' : '']"
-                @click="adminSettingsSwitchTab(t)"
-                x-text="$app.t('admin.settings.tab.' + t)"></button>
+  <div x-show="!adminSettingsLoading && Object.keys(adminSettingsMap).length"
+       x-data="tabs(adminSettingsTabs)" x-modelable="value" x-model="adminSettingsTab">
+    <!-- Tab-Leiste: Reiterliste aus admin/admin-settings-tabs.js (SSoT) -->
+    <div class="tabs tabs--scrollable" x-bind="tablist">
+      <template x-for="t in tabs" :key="t">
+        <button class="tabs-btn" x-bind="tabBtn(t)" x-text="$app.t('admin.settings.tab.' + t)"></button>
       </template>
-    </nav>
+    </div>
 
     <!-- @include admin-settings-auth -->
 
@@ -68,13 +66,13 @@
     <!-- @include admin-settings-advanced -->
 
     <!-- Test-Result-Anzeige (pro Tab gescoped via kind→tab-Mapping) -->
-    <div class="admin-settings-test-result"
-         x-show="adminSettingsTestResult && ({ oauth: 'auth', provider: 'provider', smtp: 'smtp', languagetool: 'languagetool', stt: 'stt', tts: 'tts', image: 'image', embed: 'embed', rerank: 'embed', geocode: 'geocode', tiles: 'geocode', websearch: 'websearch' }[adminSettingsTestResult.kind] === adminSettingsTab)">
+    <div class="admin-settings-test-result" role="status"
+         x-show="adminSettingsTestVisible()">
       <strong x-text="$app.t('admin.settings.test.' + (adminSettingsTestResult?.ok ? 'ok' : 'fail'))"></strong>
       <span x-show="adminSettingsTestResult?.latency_ms" x-text="' · ' + adminSettingsTestResult?.latency_ms + ' ms'"></span>
       <span x-show="adminSettingsTestResult?.kind === 'websearch' && adminSettingsTestResult?.result_count != null" x-text="' · ' + $app.t('admin.settings.test.resultCount', { n: adminSettingsTestResult?.result_count })"></span>
       <span x-show="adminSettingsTestResult?.unresponsive?.length" x-text="' · ' + $app.t('admin.settings.test.unresponsive', { list: (adminSettingsTestResult?.unresponsive || []).join(', ') })"></span>
-      <span x-show="adminSettingsTestResult?.error" x-text="' · ' + adminSettingsTestResult?.error"></span>
+      <span x-show="adminSettingsTestResult?.error" x-text="' · ' + adminSettingsTestErrorText(adminSettingsTestResult)"></span>
     </div>
   </div>
 </div>

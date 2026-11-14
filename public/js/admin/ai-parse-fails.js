@@ -2,56 +2,51 @@
 // gespreaded. Root-Zugriffe via window.__app. Liest aus
 // /admin/parse-fails/{files,file} + DELETE.
 
-import { fmtDateTime, fetchJson, sendJson, fmtBytes } from '../utils.js';
+import { fetchJson, sendJson } from '../utils.js';
 import { tFetchError } from '../i18n.js';
+import { adminLoaderMethods, assignIfChanged } from './admin-loader.js';
+import { adminFormatMethods } from './admin-format.js';
 
 export const adminParseFailsMethods = {
-  // ── Lifecycle ────────────────────────────────────────────────────────────
-  async parseFailsEnter() {
-    if (this.parseFailsInitialized) return;
-    this.parseFailsInitialized = true;
-    await this._parseFailsLoadFiles();
-  },
+  // ── Lifecycle: parseFailsEnter / parseFailsRefresh / _parseFailsLoad ────
+  ...adminLoaderMethods('parseFails', {
+    request: () => fetchJson('/admin/parse-fails/files'),
+    apply(data, { silent }) {
+      assignIfChanged(this, 'parseFailsFiles', data.files || [], silent);
+      if (!silent) {
+        this.parseFailsContent = {};
+        this.parseFailsExpanded = {};
+      }
+    },
+  }),
 
   _parseFailsLeave() { /* nichts zu raeumen */ },
 
-  // ── Laden ────────────────────────────────────────────────────────────────
-  async _parseFailsLoadFiles() {
-    this.parseFailsLoading = true;
-    this.parseFailsError = '';
-    try {
-      const data = await fetchJson('/admin/parse-fails/files');
-      this.parseFailsFiles = data.files || [];
-      this.parseFailsContent = {};
-      this.parseFailsExpanded = {};
-    } catch (e) {
-      this.parseFailsError = tFetchError(e);
-    } finally {
-      this.parseFailsLoading = false;
-    }
-  },
-
-  parseFailsRefresh() {
-    this.parseFailsInitialized = false;
-    return this.parseFailsEnter();
-  },
-
   // ── Content anzeigen ─────────────────────────────────────────────────────
+  // Der Dump wird beim ersten Aufklappen geholt; solange er laedt, steht die
+  // Zeile in `parseFailsDetailLoading` (Knopf gesperrt, Doppelklick laedt nicht
+  // doppelt).
   async parseFailsToggle(name) {
+    if (this.parseFailsDetailLoading[name]) return;
     if (this.parseFailsExpanded[name]) {
       this.parseFailsExpanded = { ...this.parseFailsExpanded, [name]: false };
       return;
     }
     if (this.parseFailsContent[name] === undefined) {
+      this.parseFailsDetailLoading = { ...this.parseFailsDetailLoading, [name]: true };
       try {
         const data = await fetchJson('/admin/parse-fails/file?name=' + encodeURIComponent(name));
         const txt = data.truncated
           ? data.content + '\n\n[…' + window.__app.t('admin.parseFails.truncated') + ']'
           : data.content;
         this.parseFailsContent = { ...this.parseFailsContent, [name]: txt };
+        this.parseFailsError = '';
       } catch (e) {
         this.parseFailsError = tFetchError(e);
         return;
+      } finally {
+        const { [name]: _done, ...rest } = this.parseFailsDetailLoading;
+        this.parseFailsDetailLoading = rest;
       }
     }
     this.parseFailsExpanded = { ...this.parseFailsExpanded, [name]: true };
@@ -67,7 +62,7 @@ export const adminParseFailsMethods = {
     if (!ok) return;
     try {
       await sendJson('/admin/parse-fails/file?name=' + encodeURIComponent(name), 'DELETE');
-      await this._parseFailsLoadFiles();
+      this.parseFailsFiles = this.parseFailsFiles.filter(f => f.name !== name);
     } catch (e) {
       this.parseFailsError = tFetchError(e);
     }
@@ -82,18 +77,11 @@ export const adminParseFailsMethods = {
     if (!ok) return;
     try {
       await sendJson('/admin/parse-fails', 'DELETE');
-      await this._parseFailsLoadFiles();
+      await this._parseFailsLoad();
     } catch (e) {
       this.parseFailsError = tFetchError(e);
     }
   },
 
-  // ── Format ───────────────────────────────────────────────────────────────
-  parseFailsFmtTs(iso) {
-    return fmtDateTime(iso, Alpine.store('shell').uiLocale, { dateStyle: 'medium', timeStyle: 'medium' });
-  },
-
-  parseFailsFmtSize(bytes) {
-    return fmtBytes(Number(bytes) || 0, Alpine.store('shell').uiLocale);
-  },
+  ...adminFormatMethods,
 };

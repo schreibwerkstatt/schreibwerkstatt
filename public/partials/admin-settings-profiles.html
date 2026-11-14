@@ -1,7 +1,7 @@
       <!-- Sub-Tab „Profile": benannte Modell-Konfigurationen, im Benutzer-Tab
            einem User zuweisbar. Ein leeres Feld erbt den globalen Wert des
            jeweiligen Provider-Sub-Tabs (Aufloesung: lib/ai/profile.js#aiSetting). -->
-      <div x-show="adminSettingsProviderSubtab === 'profiles'" class="admin-settings-subsection">
+      <div x-bind="panel('profiles')" class="admin-settings-subsection">
         <p class="muted-msg muted-msg--sm" x-text="$app.t('admin.profiles.intro')"></p>
         <div x-data="settingField({ k: 'ai.user_api.enabled', type: 'toggle', label: 'admin.settings.label.userApiEnabled', help: 'admin.settings.help.userApiEnabled' })"></div>
 

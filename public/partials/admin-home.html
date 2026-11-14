@@ -1,94 +1,25 @@
 <!-- Admin-Landing: Tile-Grid mit Direkt-Einstiegen in die Admin-Karten.
      Erscheint nur für plain Admin ($store.session.currentUser.isAdmin && !$store.session.devMode), wenn
      keine andere Admin-/Profil-Karte offen ist. Sidebar + Buchwahl sind in
-     diesem Modus ausgeblendet — die App reduziert sich auf reine Verwaltung. -->
+     diesem Modus ausgeblendet — die App reduziert sich auf reine Verwaltung.
+     Kacheln, Reihenfolge und Texte kommen aus der Karten-Registry
+     (`admin`-Feld in EXCLUSIVE_CARDS, public/js/cards/feature-registry.js). -->
 <div class="card card--bookoverview book-overview"
-     x-show="isAdminOnly
-             && !showAdminUsersCard
-             && !showAdminSettingsCard
-             && !showAdminUsageCard
-             && !showAdminCategoriesCard
-             && !showAdminBooksCard
-             && !showAdminLogsCard
-             && !showAdminParseFailsCard
-             && !showAdminJsErrorsCard
-             && !showAdminDevicesCard
-             && !showAdminBackupCard
-             && !showUserSettingsCard"
+     x-show="isAdminOnly && !adminCardOpen && !showUserSettingsCard"
      x-cloak>
   <div class="card-header">
     <span class="card-title" x-text="t('admin.home.title')"></span>
   </div>
   <div class="overview-grid">
-    <button type="button"
-            class="overview-tile card--admin-users"
-            @click="toggleAdminUsersCard()">
-      <div class="overview-tile-label" x-text="t('admin.home.usersLabel')"></div>
-      <div class="overview-tile-value" x-text="t('admin.users.title')"></div>
-      <div class="card-hint" x-text="t('tile.adminUsers.desc')"></div>
-    </button>
-    <button type="button"
-            class="overview-tile card--admin-settings"
-            @click="toggleAdminSettingsCard()">
-      <div class="overview-tile-label" x-text="t('admin.home.settingsLabel')"></div>
-      <div class="overview-tile-value" x-text="t('admin.settings.title')"></div>
-      <div class="card-hint" x-text="t('tile.adminSettings.desc')"></div>
-    </button>
-    <button type="button"
-            class="overview-tile card--admin-usage"
-            @click="toggleAdminUsageCard()">
-      <div class="overview-tile-label" x-text="t('admin.home.usageLabel')"></div>
-      <div class="overview-tile-value" x-text="t('admin.usage.title')"></div>
-      <div class="card-hint" x-text="t('tile.adminUsage.desc')"></div>
-    </button>
-    <button type="button"
-            class="overview-tile card--admin-categories"
-            @click="toggleAdminCategoriesCard()">
-      <div class="overview-tile-label" x-text="t('admin.home.categoriesLabel')"></div>
-      <div class="overview-tile-value" x-text="t('admin.categories.title')"></div>
-      <div class="card-hint" x-text="t('tile.adminCategories.desc')"></div>
-    </button>
-    <button type="button"
-            class="overview-tile card--admin-books"
-            @click="toggleAdminBooksCard()">
-      <div class="overview-tile-label" x-text="t('admin.home.booksLabel')"></div>
-      <div class="overview-tile-value" x-text="t('admin.books.title')"></div>
-      <div class="card-hint" x-text="t('tile.adminBooks.desc')"></div>
-    </button>
-    <button type="button"
-            class="overview-tile card--admin-logs"
-            @click="toggleAdminLogsCard()">
-      <div class="overview-tile-label" x-text="t('admin.home.logsLabel')"></div>
-      <div class="overview-tile-value" x-text="t('admin.logs.title')"></div>
-      <div class="card-hint" x-text="t('tile.adminLogs.desc')"></div>
-    </button>
-    <button type="button"
-            class="overview-tile card--admin-parse-fails"
-            @click="toggleAdminParseFailsCard()">
-      <div class="overview-tile-label" x-text="t('admin.home.parseFailsLabel')"></div>
-      <div class="overview-tile-value" x-text="t('admin.parseFails.title')"></div>
-      <div class="card-hint" x-text="t('tile.adminParseFails.desc')"></div>
-    </button>
-    <button type="button"
-            class="overview-tile card--admin-js-errors"
-            @click="toggleAdminJsErrorsCard()">
-      <div class="overview-tile-label" x-text="t('admin.home.jsErrorsLabel')"></div>
-      <div class="overview-tile-value" x-text="t('admin.jsErrors.title')"></div>
-      <div class="card-hint" x-text="t('tile.adminJsErrors.desc')"></div>
-    </button>
-    <button type="button"
-            class="overview-tile card--admin-devices"
-            @click="toggleAdminDevicesCard()">
-      <div class="overview-tile-label" x-text="t('admin.home.devicesLabel')"></div>
-      <div class="overview-tile-value" x-text="t('admin.devices.title')"></div>
-      <div class="card-hint" x-text="t('tile.adminDevices.desc')"></div>
-    </button>
-    <button type="button"
-            class="overview-tile card--admin-backup"
-            @click="toggleAdminBackupCard()">
-      <div class="overview-tile-label" x-text="t('admin.home.backupLabel')"></div>
-      <div class="overview-tile-value" x-text="t('admin.backup.title')"></div>
-      <div class="card-hint" x-text="t('tile.adminBackup.desc')"></div>
-    </button>
+    <template x-for="c in adminHomeCards" :key="c.key">
+      <button type="button"
+              class="overview-tile"
+              :class="'card--' + c.partial"
+              @click="$app[c.toggle]()">
+        <div class="overview-tile-label" x-text="t(c.admin.label)"></div>
+        <div class="overview-tile-value" x-text="t(c.admin.title)"></div>
+        <div class="card-hint" x-text="t(c.admin.desc)"></div>
+      </button>
+    </template>
   </div>
 </div>

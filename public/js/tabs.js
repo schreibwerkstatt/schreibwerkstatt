@@ -36,6 +36,12 @@
 //   eigenes `x-show`; `tabBtn(key)` daneben spreaden.
 // - Bei Umschaltung wird `tab-change` dispatcht (Detail = neuer Key) für
 //   optionale Side-Effects.
+// - Tab und Panel verweisen per ID aufeinander (`aria-controls` am Tab,
+//   `aria-labelledby` am Panel). Die IDs bildet die Komponente selbst aus einem
+//   Instanz-Präfix — Panels müssen darum über `panel(key)` derselben Instanz laufen.
+
+let _tabsInstance = 0;
+const _idPart = (tab) => String(tab).replace(/[^a-zA-Z0-9_-]/g, '_');
 
 export function registerTabs() {
   if (typeof window === 'undefined' || !window.Alpine) return;
@@ -49,6 +55,7 @@ export function registerTabs() {
       // tabs[0] dient nur als Fallback ohne x-model.
       value: list[0] ?? '',
       _persistKey: opts.persistKey || null,
+      _idPrefix: `tabs${++_tabsInstance}`,
 
       init() {
         if (this._persistKey) {
@@ -101,6 +108,8 @@ export function registerTabs() {
         return {
           type: 'button',
           role: 'tab',
+          id: `${this._idPrefix}-tab-${_idPart(tab)}`,
+          'aria-controls': `${this._idPrefix}-panel-${_idPart(tab)}`,
           [':aria-selected']: () => this.value === tab,
           [':tabindex']: () => (this.value === tab ? 0 : -1),
           [':class']: () => ({ 'tabs-btn--active': this.value === tab }),
@@ -112,6 +121,8 @@ export function registerTabs() {
       panel(tab) {
         return {
           role: 'tabpanel',
+          id: `${this._idPrefix}-panel-${_idPart(tab)}`,
+          'aria-labelledby': `${this._idPrefix}-tab-${_idPart(tab)}`,
           ['x-show']: () => this.value === tab,
         };
       },

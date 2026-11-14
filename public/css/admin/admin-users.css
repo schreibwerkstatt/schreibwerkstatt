@@ -59,7 +59,7 @@
   padding: var(--space-xs) var(--space-sm);
 }
 
-.admin-users-actions button + button {
+.admin-users-actions > * + * {
   margin-left: var(--space-sm);
 }
 
@@ -118,31 +118,13 @@
 .badge--event-role-changed { background: var(--color-accent-bg); color: var(--color-accent-text); }
 .badge--event-deleted      { background: var(--color-tag-bg);    color: var(--color-tag-text); }
 
-/* Tab-Navigation + Requests-Tab */
-.admin-users-tabs {
-  display: flex;
-  gap: var(--space-sm);
-  border-bottom: 1px solid var(--color-border);
-  margin-bottom: var(--space-lg);
+/* Reiter-Panels: die Leiste ist `.tabs` (components/tabs.css, Alpine.data('tabs')),
+   das Panel bringt den Abstand zur Leiste selbst mit (DESIGN.md „Tabs"). */
+.admin-users-panel {
+  padding-top: var(--space-lg);
 }
 
-.admin-users-tabs button {
-  font: inherit;
-  background: transparent;
-  border: 0;
-  padding: var(--space-md) var(--space-lg);
-  cursor: pointer;
-  color: var(--color-muted);
-  border-bottom: 2px solid transparent;
-}
-
-.admin-users-tabs button:hover { color: var(--color-text); }
-
-.admin-users-tabs button.is-active {
-  color: var(--color-text);
-  border-bottom-color: var(--card-accent, var(--color-primary));
-}
-
+/* Requests-Tab */
 .admin-users-requests-filter {
   display: flex;
   gap: var(--space-md);
@@ -175,15 +157,6 @@
   .admin-users-invite-row {
     grid-template-columns: 1fr;
   }
-  .admin-users-tabs {
-    overflow-x: auto;
-    -webkit-overflow-scrolling: touch;
-    scrollbar-width: thin;
-  }
-  .admin-users-tabs button {
-    flex-shrink: 0;
-    padding: var(--space-sm) var(--space-md);
-  }
   .admin-users-requests-filter {
     flex-wrap: wrap;
     gap: var(--space-sm);
@@ -191,7 +164,7 @@
   .admin-users-actions {
     white-space: normal;
   }
-  .admin-users-actions button + button {
+  .admin-users-actions > * + * {
     margin-left: 0;
     margin-top: var(--space-2xs);
   }

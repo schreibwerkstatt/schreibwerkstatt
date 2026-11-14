@@ -1,5 +1,5 @@
     <!-- API-Tab: Bearer-Tokens fuer Prometheus/HA/Grafana-Scraper -->
-    <section x-show="adminSettingsTab === 'api'" class="admin-settings-section">
+    <section x-bind="panel('api')" class="admin-settings-section">
       <p class="muted-msg muted-msg--sm" x-text="$app.t('admin.settings.api.intro')"></p>
       <p class="muted-msg muted-msg--sm">
         <strong x-text="$app.t('admin.settings.api.endpointLabel') + ': '"></strong>
@@ -61,8 +61,8 @@
         <div x-show="!adminApiTokensLoading && adminApiTokensList.length === 0"
              class="muted-msg" x-text="$app.t('admin.settings.api.empty')"></div>
 
-        <table x-show="!adminApiTokensLoading && adminApiTokensList.length > 0"
-               class="admin-api-tokens-table"
+        <div class="table-scroll" x-show="!adminApiTokensLoading && adminApiTokensList.length > 0">
+        <table class="admin-api-tokens-table"
                x-data="sortableTable({
                  rows: () => adminApiTokensList,
                  defaultKey: 'created_at',
@@ -91,9 +91,9 @@
               <tr :class="t.revoked_at ? 'is-revoked' : ''">
                 <td x-text="t.display_name"></td>
                 <td><code x-text="t.scopes"></code></td>
-                <td x-text="t.created_at ? new Date(t.created_at).toLocaleDateString($store.shell.uiLocale, $app.tzOpts()) : '–'"></td>
-                <td x-text="t.last_used_at ? new Date(t.last_used_at).toLocaleString($store.shell.uiLocale, $app.tzOpts()) : '–'"></td>
-                <td x-text="t.expires_at ? new Date(t.expires_at).toLocaleDateString($store.shell.uiLocale, $app.tzOpts()) : '–'"></td>
+                <td x-text="adminFmtDay(t.created_at)"></td>
+                <td x-text="adminFmtDateTime(t.last_used_at)"></td>
+                <td x-text="adminFmtDay(t.expires_at)"></td>
                 <td>
                   <span class="badge"
                         :class="t.revoked_at ? 'badge-err' : (t.expires_at && t.expires_at < new Date().toISOString() ? 'badge-warn' : 'badge-ok')"
@@ -109,6 +109,7 @@
             </template>
           </tbody>
         </table>
+        </div>
       </div>
 
       <!-- Scrape-Config Snippets -->

@@ -3,7 +3,9 @@
   Alpine.data-Sub-Komponente — siehe public/js/cards/admin-backup-card.js.
   `showAdminBackupCard` + `toggleAdminBackupCard` im Root. Nur sichtbar bei
   $store.session.currentUser.role === 'admin'. Download = konsistenter gzip-SQLite-Snapshot
-  der ganzen Instanz. Restore = Upload → Validierung → Neustart (Boot-Swap).
+  der ganzen Instanz. Restore = Hochladen → Prüfen + Vormerken → Neustart (Boot-Swap).
+  Eine Vormerkung gilt für jeden nächsten Start — der Hinweis oben steht, solange
+  sie liegt, und bietet Verwerfen und Neustart an.
 -->
 <div class="card card--admin-backup" x-data="adminBackupCard" x-show="$app.showAdminBackupCard" x-cloak>
   <div class="card-header">
@@ -18,14 +20,33 @@
 
   <p class="muted-msg" x-text="$app.t('admin.backup.intro')"></p>
 
-  <div x-show="backupLoading" x-skeleton="3" x-cloak></div>
+  <div x-show="backupLoading && !backupInfoData" x-skeleton="3" x-cloak></div>
   <div x-show="backupError" class="error-msg" x-text="backupError"></div>
 
+  <!-- Vorgemerkter Restore (auch aus einer früheren Sitzung) -->
+  <div class="admin-backup-pending" role="status"
+       x-show="backupInfoData?.hasPending && !backupRestoreResult && !backupRestarting" x-cloak>
+    <p class="admin-backup-pending-title">
+      <svg class="icon" aria-hidden="true"><use href="/icons.svg#alert-triangle"/></svg>
+      <span x-text="$app.t('admin.backup.pendingTitle')"></span>
+    </p>
+    <p class="admin-backup-pending-text"
+       x-text="$app.t('admin.backup.pendingText', { size: adminFmtBytes(backupInfoData?.pending?.bytes), date: adminFmtDateTime(backupInfoData?.pending?.stagedAt) })"></p>
+    <div class="admin-backup-restore-row">
+      <button type="button" class="btn-compact danger" @click="backupConfirmRestart()"
+              :disabled="backupDiscarding"
+              x-text="$app.t('admin.backup.restoreConfirmBtn')"></button>
+      <button type="button" class="btn-compact" @click="backupDiscardPending()"
+              :disabled="backupDiscarding"
+              x-text="$app.t('admin.backup.discardBtn')"></button>
+    </div>
+  </div>
+
   <!-- Aktueller Stand -->
-  <dl class="admin-backup-meta" x-show="backupInfoData && !backupLoading">
+  <dl class="admin-backup-meta" x-show="backupInfoData">
     <div class="admin-backup-meta-row">
       <dt x-text="$app.t('admin.backup.dbSize')"></dt>
-      <dd x-text="backupFmtBytes(backupInfoData?.bytes)"></dd>
+      <dd x-text="adminFmtBytes(backupInfoData?.bytes)"></dd>
     </div>
     <div class="admin-backup-meta-row">
       <dt x-text="$app.t('admin.backup.schemaVersion')"></dt>
@@ -34,23 +55,25 @@
   </dl>
 
   <!-- Download -->
-  <section class="admin-backup-section" x-show="!backupLoading">
+  <section class="admin-backup-section" x-show="backupInfoData || backupError">
     <h3 class="card-section-title" x-text="$app.t('admin.backup.downloadTitle')"></h3>
     <p class="muted-msg muted-msg--sm" x-text="$app.t('admin.backup.downloadDesc')"></p>
     <button type="button" class="btn-compact primary" @click="backupDownload()" :disabled="backupDownloading"
             x-text="backupDownloading ? $app.t('admin.backup.downloading') : $app.t('admin.backup.downloadBtn')"></button>
+    <div x-show="backupDownloadError" class="error-msg" x-text="backupDownloadError"></div>
   </section>
 
   <!-- Restore (Danger-Zone) -->
-  <section class="danger-zone" x-show="!backupLoading">
+  <section class="danger-zone" x-show="backupInfoData || backupError">
     <div class="danger-zone-title" x-text="$app.t('admin.backup.restoreTitle')"></div>
     <p class="muted-msg muted-msg--sm" x-text="$app.t('admin.backup.restoreDesc')"></p>
     <p class="muted-msg muted-msg--sm" x-text="$app.t('admin.backup.restoreSecretWarn')"></p>
 
-    <!-- Datei-Auswahl + Validierung -->
+    <!-- Datei-Auswahl + Hochladen/Vormerken -->
     <div class="admin-backup-restore-row" x-show="!backupRestoreResult && !backupRestarting">
       <input type="file" x-ref="backupFileInput"
              accept=".gz,.sqlite,.db,application/gzip,application/octet-stream"
+             :aria-label="$app.t('admin.backup.fileLabel')"
              @change="backupPickFile($event)">
       <button type="button" class="btn-compact danger" @click="backupUploadRestore()"
               :disabled="!backupFile || backupRestoring"
@@ -59,15 +82,17 @@
 
     <div x-show="backupRestoreError" class="error-msg" x-text="backupRestoreError"></div>
 
-    <!-- Validiert → zweite Bestätigung (destruktiv + Neustart) -->
+    <!-- Vorgemerkt → Neustart (mit Rückfrage) oder Vormerkung verwerfen -->
     <div class="admin-backup-confirm" x-show="backupRestoreResult && !backupRestarting">
       <p class="admin-backup-confirm-ok"
-         x-text="$app.t('admin.backup.validated', { size: backupFmtBytes(backupRestoreResult?.bytes), version: backupRestoreResult?.schemaVersion })"></p>
-      <p class="muted-msg muted-msg--sm" x-text="$app.t('admin.backup.restartWarn')"></p>
+         x-text="$app.t('admin.backup.validated', { size: adminFmtBytes(backupRestoreResult?.bytes), version: backupRestoreResult?.schemaVersion })"></p>
+      <p class="muted-msg muted-msg--sm" x-text="$app.t('admin.backup.stagedHint')"></p>
       <div class="admin-backup-restore-row">
         <button type="button" class="btn-compact danger" @click="backupConfirmRestart()"
+                :disabled="backupDiscarding"
                 x-text="$app.t('admin.backup.restoreConfirmBtn')"></button>
-        <button type="button" class="btn-compact" @click="backupCancelRestore()"
+        <button type="button" class="btn-compact" @click="backupDiscardPending()"
+                :disabled="backupDiscarding"
                 x-text="$app.t('common.cancel')"></button>
       </div>
     </div>

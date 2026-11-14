@@ -18,10 +18,11 @@ import { join } from 'node:path';
 import { URL_TABS, CARD_REQUEST } from '../../public/js/cards/card-request.js';
 import { EXCLUSIVE_CARDS } from '../../public/js/cards/feature-registry.js';
 import { SHELF_TABS } from '../../public/js/cards/my-books-compute.js';
+import { ADMIN_SETTINGS_TABS } from '../../public/js/admin/admin-settings-tabs.js';
 
 // Karten, deren Reiter-Reihe aus einer JS-Konstante gerendert wird (x-for), nicht
 // aus einem Template-Literal: URL_TABS muss genau diese Konstante tragen.
-const TABS_FROM_JS = { myBooks: SHELF_TABS };
+const TABS_FROM_JS = { myBooks: SHELF_TABS, adminSettings: ADMIN_SETTINGS_TABS };
 
 const REPO_ROOT = new URL('../../', import.meta.url).pathname;
 const PARTIALS = join(REPO_ROOT, 'public', 'partials');

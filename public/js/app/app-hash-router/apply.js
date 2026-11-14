@@ -5,7 +5,7 @@
 // `_applyHash` setzt `_inHashApply` + `_applyingHash`, damit waehrend der
 // Anwendung getriggerte Watcher keinen Rueck-Schreibzyklus starten.
 import { EVT } from '../../events.js';
-import { EXCLUSIVE_CARDS } from '../../cards/feature-registry.js';
+import { ADMIN_CARDS, EXCLUSIVE_CARDS } from '../../cards/feature-registry.js';
 import { openCardWith, CARD_REQUEST, URL_TABS } from '../../cards/card-request.js';
 import { FIGUREN_TABS } from '../../graph/constants.js';
 
@@ -204,12 +204,9 @@ export const hashApplyMethods = {
       this._applyingHash = true;
       this._inHashApply = true;
       try {
-        const sub = parts[1] || 'users';
-        if (sub === 'users') {
-          await this._openCardOnUrlTab('adminUsers', parts[2]);
-        } else if (sub === 'settings') {
-          await this._openCardOnUrlTab('adminSettings', parts[2]);
-        } else if (sub === 'usage') {
+        // `#admin/<slug>[/<reiter>]` — Slug aus der Registry (`admin.slug`).
+        const card = ADMIN_CARDS.find(c => c.admin.slug === (parts[1] || 'users'));
+        if (card?.key === 'adminUsage') {
           // Tab VOR dem Oeffnen setzen: `adminUsageEnter` laedt beim Oeffnen den
           // aktuellen Tab — sonst holte es zuerst den alten Tab umsonst.
           const tab = parts[2];
@@ -217,20 +214,10 @@ export const hashApplyMethods = {
           if (tab && valid.includes(tab)) this.adminUsageTab = tab;
           else if (!tab) this.adminUsageTab = 'users';
           if (!this.showAdminUsageCard) await this.toggleAdminUsageCard();
-        } else if (sub === 'categories') {
-          if (!this.showAdminCategoriesCard) await this.toggleAdminCategoriesCard();
-        } else if (sub === 'books') {
-          if (!this.showAdminBooksCard) await this.toggleAdminBooksCard();
-        } else if (sub === 'logs') {
-          if (!this.showAdminLogsCard) await this.toggleAdminLogsCard();
-        } else if (sub === 'parse-fails') {
-          if (!this.showAdminParseFailsCard) await this.toggleAdminParseFailsCard();
-        } else if (sub === 'js-errors') {
-          if (!this.showAdminJsErrorsCard) await this.toggleAdminJsErrorsCard();
-        } else if (sub === 'devices') {
-          if (!this.showAdminDevicesCard) await this.toggleAdminDevicesCard();
-        } else if (sub === 'backup') {
-          if (!this.showAdminBackupCard) await this.toggleAdminBackupCard();
+        } else if (card && URL_TABS[card.key]) {
+          await this._openCardOnUrlTab(card.key, parts[2]);
+        } else if (card && !this[card.flag]) {
+          await this[card.toggle]();
         }
       } finally {
         this._applyingHash = false;

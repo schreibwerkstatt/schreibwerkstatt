@@ -2,7 +2,7 @@
 /* AdminUsageCard.
    Akzentfarbe per --card-accent (Mapping siehe public/css/card-accents.css). */
 
-.card--admin-usage > .tabs {
+.admin-usage-tabs {
   margin-bottom: var(--space-lg);
 }
 
@@ -75,6 +75,20 @@
 
 .admin-usage-filter .combobox-wrap--compact { min-width: 16rem; }
 
+/* User-Filter (Fragment admin-usage-user-filter.html): Feld + Chips darunter. */
+.admin-usage-filter-user {
+  display: flex;
+  flex-direction: column;
+}
+
+/* «50 von 812» + «Weitere laden» unter den paginierten Listen. */
+.admin-usage-more {
+  display: flex;
+  align-items: center;
+  gap: var(--space-md);
+  margin-top: var(--space-md);
+}
+
 .admin-usage-filter-chips {
   display: flex;
   flex-wrap: wrap;
@@ -115,7 +129,8 @@
 @media (max-width: 600px) {
   .admin-usage-filter input,
   .admin-usage-filter .combobox-wrap--compact { min-width: 0; width: 100%; }
-  .admin-usage-filter label { width: 100%; }
+  .admin-usage-filter label,
+  .admin-usage-filter-user { width: 100%; }
 }
 
 .admin-usage-row--overrun {

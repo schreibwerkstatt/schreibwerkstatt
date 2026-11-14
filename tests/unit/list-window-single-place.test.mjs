@@ -36,6 +36,7 @@ const CATALOG_LISTS = [
   'referenceSzenen()',
   'referenceEreignisse()',
   'referenceWeltfaktenItems()',
+  'jsErrorsList',          // Admin: JS-Fehler (bis 500 Zeilen mit Stack/User-Agent)
 ];
 
 // `datei:ausdruck` → Begründung. Nur Schleifen, die nie buchgross werden.

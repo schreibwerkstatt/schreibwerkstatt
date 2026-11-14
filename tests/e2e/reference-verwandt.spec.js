@@ -6,7 +6,7 @@ const { test, expect } = require('./_helpers/fixtures');
 // darum den laufend via `selectionchange` gepufferten Text nutzen, nicht die
 // Selection zum Klick-Zeitpunkt. Zusaetzlich: Basis-Wechsel setzt Ergebnisse
 // zurueck, und der Suchstart leert alte Treffer (nur Ladeindikator bleibt).
-const HARNESS_URL = 'http://localhost:8765/tests/fixtures/reference-verwandt-harness.html';
+const HARNESS_URL = '/tests/fixtures/reference-verwandt-harness.html';
 
 async function setup(page, semanticRequests) {
   await page.route('**/research*', (r) =>

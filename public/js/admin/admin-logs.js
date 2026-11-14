@@ -1,8 +1,13 @@
 // AdminLogsCard-Methods. Wird im adminLogsCard-Alpine-Scope gespreaded.
 // Root-Zugriffe via window.__app. Liest aus /admin/logs/{tail,search,files,
 // stream,download}.
+//
+// Zwei Ansichten: ohne Filter der Tail samt Live-Stream, mit Filter das
+// Suchergebnis (ohne Stream — der Server filtert nur die Suche). Massgeblich
+// ist der ANGEWENDETE Filter (`adminLogsApplied`), nicht der Stand der Felder:
+// Felder wenden sich nach kurzer Pause selbst an (`_adminLogsScheduleApply`).
 
-import { fetchJson } from '../utils.js';
+import { fetchJson, downloadChecked } from '../utils.js';
 import { tFetchError } from '../i18n.js';
 
 // Zeilen je Seite der Liste. Gerendert wird immer nur eine Seite — die Liste
@@ -14,33 +19,75 @@ const ADMIN_LOGS_MAX_ENTRIES = 2000;
 // laufende Tests mehrere Zeilen pro Sekunde ins selbe Log, eine Mutation je
 // SSE-Nachricht hielte den Renderer dauerbeschäftigt.
 const ADMIN_LOGS_FLUSH_MS = 500;
+// Pause nach der letzten Eingabe in einem Filterfeld, bis gesucht wird.
+const ADMIN_LOGS_APPLY_DEBOUNCE_MS = 400;
+
+const EMPTY_FILTER = Object.freeze({ level: '', scope: '', user: '', book: '', q: '' });
+const filterKey = (f) => JSON.stringify([f.level || '', f.scope || '', f.user || '', f.book ?? '', f.q || '']);
+const hasAny = (f) => !!(f.level || f.scope || f.user || f.book || f.q);
 
 export const adminLogsMethods = {
   // ── Lifecycle ──────────────────────────────────────────────────────────────
   async adminLogsEnter() {
     if (this.adminLogsInitialized) {
-      // Wiederöffnen: _adminLogsLeave hat den Stream gestoppt. Ohne Filter die
-      // Lücke seit dem Schliessen über den Tail füllen, dann live weiter.
-      if (this.adminLogsHasFilter()) return;
+      // Wiederöffnen: _adminLogsLeave hat den Stream gestoppt. Seite 1 und
+      // keine wartenden Live-Zeilen — die stammen aus der Zeit vor dem
+      // Schliessen und stuenden nach dem Tail doppelt in der Liste.
+      this.adminLogsPage = 0;
+      this.adminLogsPending = [];
+      this.adminLogsExpanded = {};
+      // Beim Schliessen noch nicht angewendete Feldaenderung jetzt anwenden.
+      if (filterKey(this.adminLogsFilter) !== filterKey(this.adminLogsApplied || EMPTY_FILTER)) {
+        await this.adminLogsApplyFilter();
+        return;
+      }
+      if (this.adminLogsFiltered()) return;
+      // Ohne Filter die Lücke seit dem Schliessen über den Tail füllen, dann live weiter.
       await this._adminLogsLoadTail();
-      if (this.adminLogsLiveTail) this._adminLogsStartStream();
+      this._adminLogsMaybeStartStream();
       return;
     }
     this.adminLogsInitialized = true;
     await this._adminLogsLoadTail();
     await this._adminLogsLoadFiles();
-    if (this.adminLogsLiveTail) this._adminLogsStartStream();
+    this._adminLogsMaybeStartStream();
+  },
+
+  // Stream erst nach dem Laden starten — und nur, wenn die Karte dann noch
+  // offen ist: wurde sie waehrend des Tail-Requests geschlossen, liefe der
+  // Stream sonst unsichtbar weiter (_adminLogsLeave kam schon vorher).
+  _adminLogsMaybeStartStream() {
+    if (!this.adminLogsLiveTail || this.adminLogsFiltered()) return;
+    if (!window.__app?.showAdminLogsCard) return;
+    this._adminLogsStartStream();
   },
 
   _adminLogsLeave() {
+    clearTimeout(this._adminLogsApplyTimer);
+    this._adminLogsApplyTimer = null;
     this._adminLogsStopStream();
   },
 
   // Stabiler Zeilen-Key: neue Live-Zeilen landen vorne, ein Index-Key würde
   // bei jeder Zeile alle gerenderten Zeilen neu aufbauen.
+  // Nebenbei: jeden gesehenen Scope fuer die Filter-Auswahl merken.
   _adminLogsTag(entries) {
     for (const e of entries) e._k = ++this._adminLogsSeq;
+    this._adminLogsNoteScopes(entries);
     return entries;
+  },
+
+  // Scope-Auswahl = Vereinigung aller je geladenen/gestreamten Scopes. Aus der
+  // aktuellen Liste abgeleitet, schrumpfte sie mit dem Filter auf den einen
+  // gefilterten Scope und liesse keinen Wechsel mehr zu.
+  _adminLogsNoteScopes(entries) {
+    if (!Array.isArray(this.adminLogsScopes)) return;
+    let added = null;
+    for (const e of entries) {
+      if (!e.scope || this.adminLogsScopes.includes(e.scope) || added?.includes(e.scope)) continue;
+      (added ||= []).push(e.scope);
+    }
+    if (added) this.adminLogsScopes = [...this.adminLogsScopes, ...added].sort();
   },
 
   // Kürzt die Liste auf ADMIN_LOGS_MAX_ENTRIES; der Nachlade-Cursor rückt auf
@@ -63,33 +110,72 @@ export const adminLogsMethods = {
 
   // ── Filter ─────────────────────────────────────────────────────────────────
   adminLogsResetFilters() {
-    this.adminLogsFilter = { level: '', scope: '', user: '', book: '', q: '' };
+    this.adminLogsFilter = { ...EMPTY_FILTER };
   },
 
+  /** Felder tragen einen Filter (ob schon angewendet oder nicht). */
   adminLogsHasFilter() {
-    const f = this.adminLogsFilter;
-    return !!(f.level || f.scope || f.user || f.book || f.q);
+    return hasAny(this.adminLogsFilter);
   },
 
+  /** Die Liste zeigt ein Suchergebnis (kein Tail, kein Live-Stream). */
+  adminLogsFiltered() {
+    return hasAny(this.adminLogsApplied || EMPTY_FILTER);
+  },
+
+  /** Live-Tail laeuft tatsaechlich (eingeschaltet und ungefiltert). */
+  adminLogsLiveOn() {
+    return !!this.adminLogsLiveTail && !this.adminLogsFiltered();
+  },
+
+  // Vom Watcher auf `adminLogsFilter` (admin-logs-card.js): nach einer kurzen
+  // Pause anwenden; ein unveraenderter Stand (Reset durch clearAndLive) loest
+  // nichts aus.
+  _adminLogsScheduleApply() {
+    clearTimeout(this._adminLogsApplyTimer);
+    this._adminLogsApplyTimer = setTimeout(() => {
+      this._adminLogsApplyTimer = null;
+      if (filterKey(this.adminLogsFilter) === filterKey(this.adminLogsApplied || EMPTY_FILTER)) return;
+      this.adminLogsApplyFilter();
+    }, ADMIN_LOGS_APPLY_DEBOUNCE_MS);
+  },
+
+  // Leerer Filter = zurueck zu Tail + Live (statt einer ungefilterten Suche
+  // ohne Stream).
   async adminLogsApplyFilter() {
+    clearTimeout(this._adminLogsApplyTimer);
+    this._adminLogsApplyTimer = null;
+    if (!this.adminLogsHasFilter()) return this.adminLogsClearAndLive();
     this._adminLogsStopStream();
     this._adminLogsResetList();
+    this.adminLogsApplied = { ...this.adminLogsFilter };
     await this._adminLogsSearch({ append: false });
   },
 
   async adminLogsClearAndLive() {
+    clearTimeout(this._adminLogsApplyTimer);
+    this._adminLogsApplyTimer = null;
+    this._adminLogsStopStream();
     this.adminLogsResetFilters();
+    this.adminLogsApplied = { ...EMPTY_FILTER };
     this._adminLogsResetList();
+    this.adminLogsRotatedHint = false;
+    this.adminLogsStreamError = false;
     await this._adminLogsLoadTail();
-    if (this.adminLogsLiveTail) this._adminLogsStartStream();
+    this._adminLogsMaybeStartStream();
   },
 
   // ── Tail / Search ──────────────────────────────────────────────────────────
+  // Jeder Listen-Request zieht eine Nummer; eine Antwort, die ein spaeterer
+  // Request (anderer Filter, Zuruecksetzen) ueberholt hat, wird verworfen.
   async _adminLogsLoadTail() {
+    const seq = ++this._adminLogsReqSeq;
     this.adminLogsLoading = true;
     this.adminLogsError = '';
     try {
       const data = await fetchJson('/admin/logs/tail?lines=500');
+      if (seq !== this._adminLogsReqSeq) return;
+      if (data.tz) this.adminLogsServerTz = data.tz;
       // Server liefert chronologisch (alt → neu). UI zeigt neueste oben.
       const entries = this._adminLogsTag((data.entries || []).reverse());
       this.adminLogsEntries = entries;
@@ -97,18 +183,19 @@ export const adminLogsMethods = {
       this.adminLogsOldestTs = oldest?.ts || null;
       this.adminLogsHasMore = entries.length >= 500;
     } catch (e) {
-      this.adminLogsError = tFetchError(e);
+      if (seq === this._adminLogsReqSeq) this.adminLogsError = tFetchError(e);
     } finally {
-      this.adminLogsLoading = false;
+      if (seq === this._adminLogsReqSeq) this.adminLogsLoading = false;
     }
   },
 
   async _adminLogsSearch({ append }) {
+    const seq = ++this._adminLogsReqSeq;
     this.adminLogsLoading = true;
     this.adminLogsError = '';
     try {
       const qs = new URLSearchParams();
-      const f = this.adminLogsFilter;
+      const f = this.adminLogsApplied || EMPTY_FILTER;
       if (f.level) qs.set('level', f.level);
       if (f.scope) qs.set('scope', f.scope);
       if (f.user)  qs.set('user',  f.user);
@@ -121,6 +208,7 @@ export const adminLogsMethods = {
         qs.set('skip', String(this.adminLogsEntries.filter(e => e.ts === ts).length));
       }
       const data = await fetchJson('/admin/logs/search?' + qs.toString());
+      if (seq !== this._adminLogsReqSeq) return;
       // Server liefert neueste zuerst (matched.push war reverse-iter).
       const next = this._adminLogsTag(data.entries || []);
       this.adminLogsEntries = append ? this.adminLogsEntries.concat(next) : next;
@@ -128,9 +216,9 @@ export const adminLogsMethods = {
       if (oldest) this.adminLogsOldestTs = oldest.ts;
       this.adminLogsHasMore = !!data.hasMore;
     } catch (e) {
-      this.adminLogsError = tFetchError(e);
+      if (seq === this._adminLogsReqSeq) this.adminLogsError = tFetchError(e);
     } finally {
-      this.adminLogsLoading = false;
+      if (seq === this._adminLogsReqSeq) this.adminLogsLoading = false;
     }
   },
 
@@ -185,15 +273,27 @@ export const adminLogsMethods = {
     } catch { /* noop */ }
   },
 
-  adminLogsDownload(file) {
-    const key = encodeURIComponent(file?.key || 'current');
-    window.location.href = `/admin/logs/download?file=${key}`;
+  // Per fetch statt Navigation: eine Fehlerantwort (rotierte Datei weg) steht
+  // dann in der Karte, statt die App durch eine JSON-Seite zu ersetzen.
+  async adminLogsDownload(file) {
+    const key = file?.key || 'current';
+    if (this.adminLogsDownloading) return;
+    this.adminLogsDownloading = key;
+    this.adminLogsError = '';
+    try {
+      await downloadChecked(`/admin/logs/download?file=${encodeURIComponent(key)}`, file?.path || 'schreibwerkstatt.log');
+    } catch (e) {
+      this.adminLogsError = tFetchError(e);
+      this._adminLogsLoadFiles();
+    } finally {
+      this.adminLogsDownloading = null;
+    }
   },
 
   // ── SSE-Stream ─────────────────────────────────────────────────────────────
   _adminLogsStartStream() {
     if (this.adminLogsEventSource) return;
-    if (this.adminLogsHasFilter()) return; // Live-Tail nur ohne Filter
+    if (this.adminLogsFiltered()) return; // Live-Tail nur ohne Filter
     try {
       const es = new EventSource('/admin/logs/stream', { withCredentials: true });
       this.adminLogsEventSource = es;
@@ -244,7 +344,9 @@ export const adminLogsMethods = {
     this._adminLogsCap();
   },
 
+  // Mit Filter gesperrt (Knopf disabled): der Stream liefert ungefiltert.
   adminLogsToggleLiveTail() {
+    if (this.adminLogsFiltered()) return;
     this.adminLogsLiveTail = !this.adminLogsLiveTail;
     if (this.adminLogsLiveTail) {
       this.adminLogsRotatedHint = false;
@@ -264,18 +366,17 @@ export const adminLogsMethods = {
 
   adminLogsFmtTs(ts) {
     if (!ts) return '';
-    // ts ist "YYYY-MM-DD HH:MM:SS" lokale-Server-Zeit aus winston-Formatter.
-    // Wir zeigen es 1:1 — Timezone-Anzeige im Header-Hinweis.
+    // ts ist "YYYY-MM-DD HH:MM:SS" in Server-Ortszeit (winston-Formatter).
+    // Wir zeigen es 1:1 — die Server-Zeitzone nennt der Hinweis unter der
+    // Filterleiste (`adminLogsServerTz` aus /admin/logs/tail).
     return ts;
   },
 
-  // Liefert eindeutige Liste vorhandener Scopes aus den geladenen Entries.
+  // Alle je gesehenen Scopes, der gerade gewaehlte immer dabei.
   adminLogsScopeOptions() {
-    const set = new Set();
-    for (const e of this.adminLogsEntries) {
-      if (e.scope) set.add(e.scope);
-    }
-    return [...set].sort().map(s => ({ value: s, label: s }));
+    const all = new Set(this.adminLogsScopes || []);
+    if (this.adminLogsFilter?.scope) all.add(this.adminLogsFilter.scope);
+    return [...all].sort().map(s => ({ value: s, label: s }));
   },
 };
 

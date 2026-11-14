@@ -1,6 +1,6 @@
 // Veraltet-Vergleich im Admin-Geräte-Tab deckt auch die Chrome-Erweiterung ab
 // (eigener Versionsstrang, eigene Referenz in `latestVersions.extension`).
-// Reine Modulfunktionen — Alpine wird nicht gebraucht (nur `devicesFmtTs`
+// Reine Modulfunktionen — Alpine wird nicht gebraucht (nur `adminFmtDateTime`
 // greift auf `Alpine.store` zu; die geprüften Methoden bleiben
 // plattformgetrieben rein).
 import test from 'node:test';

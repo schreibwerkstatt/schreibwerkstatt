@@ -104,6 +104,9 @@ export async function _toggleCardGeneric(entry, opts = {}) {
     return;
   }
   if (entry.requiresBook && !this.$store.nav.selectedBookId) return;
+  // Admin-Karten (`admin`-Feld der Registry) nur für globale Admins — deckt
+  // Deep-Links (#admin/…) und Palette; der Server prüft ohnehin (requireAdmin).
+  if (entry.admin && !this.$store.session.currentUser?.isAdmin) return;
   // Claude-only-Karten (Kontinuität/Erzählprofil) für Nicht-Claude gar nicht öffnen —
   // deckt Deep-Links (#kontinuitaet) + Palette-Klicks ab, falls sie durchrutschen.
   if (entry.requiresCloudModel && (this.$store.config?.effectiveProviderClass || 'cloud') !== 'cloud') return;

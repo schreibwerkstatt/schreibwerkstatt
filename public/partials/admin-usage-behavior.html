@@ -1,7 +1,8 @@
 <!-- Admin-Usage: Tab «Verhalten» (docs/usage-events.md). Methoden in
      public/js/admin/admin-usage-behavior.js, Daten aus GET /admin/usage/behavior.
      Keine Inhalte, keine Buchtitel. -->
-<div x-show="adminUsageTab === 'behavior'" class="admin-usage-pane" :aria-busy="adminUsageLoading">
+<div x-show="adminUsageTab === 'behavior'" class="admin-usage-pane" :aria-busy="adminUsageLoading"
+     id="admin-usage-pane-behavior" role="tabpanel" aria-labelledby="admin-usage-tab-behavior">
   <div x-show="adminUsageBehavior">
     <p class="muted-msg muted-msg--sm" x-text="$app.t('admin.usage.behavior.intro')"></p>
 
@@ -31,11 +32,13 @@
     <div class="admin-usage-charts">
       <figure>
         <figcaption x-text="$app.t('admin.usage.behavior.weekly')"></figcaption>
-        <div class="admin-usage-chart-canvas"><canvas x-ref="chartBehaviorWeekly"></canvas></div>
+        <div class="admin-usage-chart-canvas" x-show="adminUsageBehavior?.activity?.weekly?.length"><canvas x-ref="chartBehaviorWeekly" role="img" :aria-label="$app.t('admin.usage.behavior.weekly')"></canvas></div>
+        <p class="muted-msg muted-msg--sm" x-show="!adminUsageBehavior?.activity?.weekly?.length" x-text="$app.t('admin.usage.empty')"></p>
       </figure>
       <figure>
         <figcaption x-text="$app.t('admin.usage.behavior.hours')"></figcaption>
-        <div class="admin-usage-chart-canvas"><canvas x-ref="chartBehaviorHours"></canvas></div>
+        <div class="admin-usage-chart-canvas" x-show="(adminUsageBehavior?.hours || []).some(Boolean)"><canvas x-ref="chartBehaviorHours" role="img" :aria-label="$app.t('admin.usage.behavior.hours')"></canvas></div>
+        <p class="muted-msg muted-msg--sm" x-show="!(adminUsageBehavior?.hours || []).some(Boolean)" x-text="$app.t('admin.usage.empty')"></p>
       </figure>
     </div>
 
@@ -48,7 +51,7 @@
         <thead>
           <tr>
             <th x-bind="sortTh('chatLabel')" x-text="$app.t('admin.usage.behavior.col.chat')"></th>
-            <th x-bind="sortTh('kind')" x-text="$app.t('admin.usage.behavior.col.kind')"></th>
+            <th x-bind="sortTh('kindLabel')" x-text="$app.t('admin.usage.behavior.col.kind')"></th>
             <th x-bind="sortTh('applied')" x-text="$app.t('admin.usage.behavior.col.applied')"></th>
             <th x-bind="sortTh('discarded')" x-text="$app.t('admin.usage.behavior.col.discarded')"></th>
             <th x-bind="sortTh('undone')" x-text="$app.t('admin.usage.behavior.col.undone')"></th>
@@ -60,7 +63,7 @@
           <template x-for="p in sorted" :key="p.chat + ':' + p.kind">
             <tr>
               <td x-text="p.chatLabel"></td>
-              <td x-text="p.kind || '—'"></td>
+              <td x-text="p.kindLabel"></td>
               <td class="admin-usage-cell-num" x-text="adminUsageInt(p.applied)"></td>
               <td class="admin-usage-cell-num" x-text="adminUsageInt(p.discarded)"></td>
               <td class="admin-usage-cell-num" x-text="adminUsageInt(p.undone)"></td>

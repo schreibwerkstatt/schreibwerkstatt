@@ -14,6 +14,13 @@ export function registerAdminLogsCard() {
     adminLogsEntries: [],
     adminLogsFiles: [],
     adminLogsFilter: { level: '', scope: '', user: '', book: '', q: '' },
+    // Zuletzt angewendeter Filter — bestimmt Tail+Live vs. Suchergebnis.
+    adminLogsApplied: { level: '', scope: '', user: '', book: '', q: '' },
+    adminLogsScopes: [],
+    adminLogsServerTz: null,
+    adminLogsDownloading: null,
+    _adminLogsReqSeq: 0,
+    _adminLogsApplyTimer: null,
     adminLogsLiveTail: true,
     adminLogsEventSource: null,
     adminLogsStreamError: false,
@@ -30,6 +37,8 @@ export function registerAdminLogsCard() {
     _lifecycle: null,
 
     init() {
+      // Filterfelder wenden sich selbst an (entprellt, admin-logs.js).
+      this.$watch('adminLogsFilter', () => this._adminLogsScheduleApply());
       this._lifecycle = setupCardLifecycle(this, {
         showFlag: 'showAdminLogsCard',
         showNeedsBookId: false,
@@ -38,13 +47,17 @@ export function registerAdminLogsCard() {
         onViewReset: () => {
           this._adminLogsLeave();
           this._adminLogsResetList();
+          this._adminLogsReqSeq++;
+          this.adminLogsLoading = false;
           this.adminLogsError = '';
+          this.adminLogsScopes = [];
           this.adminLogsInitialized = false;
         },
       });
     },
 
     destroy() {
+      clearTimeout(this._adminLogsApplyTimer);
       this._adminLogsLeave();
       this._lifecycle?.destroy();
     },

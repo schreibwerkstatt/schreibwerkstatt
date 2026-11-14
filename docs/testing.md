@@ -4,6 +4,8 @@ Vier Suiten, sequenziell via `npm test`. Erstmaliges Setup: `npx playwright inst
 
 **Schneller lokal: `npm run test:ci`** ([scripts/test-ci.js](../scripts/test-ci.js)) fährt den CI-Job nach: Import-Gate, Prompt-Config, Boot-Smoke, Unit, Integration, dann E2E + App-Specs (nur Chromium, `TEST_CI_SHARDS` Shards, Default 6 — CI: 3) + Bündel-Smoke **gleichzeitig**. Eigener `SMOKE_SHARD`-Bereich ab `TEST_CI_SHARD_BASE` (Default 10 → Ports ab 8786), kollidiert also nicht mit `npm run test:smoke`. Kein Firefox — dafür bleibt `npm run test:smoke`.
 
+**Release-Schnappschuss: `npm run release:verify -- <commit>`** ([scripts/release-verify.js](../scripts/release-verify.js)) fährt `test:ci` (3 Shards wie CI) auf einem per `git archive` entpackten Commit unter `$TMPDIR` statt auf dem Arbeitsbaum — so testet `/release` im Hintergrund, während weitergearbeitet wird. Eigene Ports über `TEST_CI_SHARD_BASE`, `E2E_PORT` (Harness, Default 8765) und `BOOT_SMOKE_PORT` (Default 33737). Darum adressieren E2E-Harness-Specs den Testserver **relativ** (`page.goto('/tests/fixtures/…')`, `page.request.get('/__mock/…')`) über `baseURL`, nie mit festem `http://localhost:8765` — sonst träfe ein zweiter Lauf den Server des ersten.
+
 | Suite | Runner | Pfad | Befehl | Charakter |
 |-------|--------|------|--------|-----------|
 | Unit | `node --test` | [tests/unit/](../tests/unit/) | `npm run test:unit` | Parallelisiert (concurrency 4), kein Browser; DB-Tests je File auf eigener Wegwerf-SQLite |

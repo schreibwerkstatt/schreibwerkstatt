@@ -40,15 +40,14 @@ export function registerAdminUsageCard() {
     // Filter fuer Jobs/Chat-Drilldown — Array von Emails (Multi-Select).
     adminUsageFilterUsers: [],
 
-    // Jobs-Tab
+    // Jobs-Tab: Server-paginiert, «Weitere laden» haengt die naechste Seite an
+    // (adminUsageLoadMore); jeder Tab-Load beginnt wieder bei der ersten.
     adminUsageJobsList: [],
     adminUsageJobsTotal: 0,
-    adminUsageJobsOffset: 0,
 
-    // Chat-Tab
+    // Chat-Tab (paginiert wie Jobs)
     adminUsageChatList: [],
     adminUsageChatTotal: 0,
-    adminUsageChatOffset: 0,
     adminUsageChatFeedback: '',   // '' | 'down' | 'up' — Filter der Chat-Liste
     // Chat-Qualitaet je Chat-Art (partials/admin-usage-chat-quality.html)
     adminUsageChatQuality: [],
@@ -87,16 +86,13 @@ export function registerAdminUsageCard() {
       });
       this.$watch(() => this.adminUsageFrom, () => { if (window.__app.showAdminUsageCard) this.adminUsageLoadTab(); });
       this.$watch(() => this.adminUsageTo,   () => { if (window.__app.showAdminUsageCard) this.adminUsageLoadTab(); });
-      // Multi-Select-Filter: bei jeder Array-Veraenderung Pagination zuruecksetzen
-      // und (falls Jobs/Chat-Tab offen) neu laden. JSON-Stringify als Deps, weil
-      // Alpine $watch auf primitiver Gleichheit prueft, nicht auf Array-Inhalt.
+      // Filter: (falls Jobs/Chat-Tab offen) neu laden — der Load beginnt wieder
+      // bei der ersten Seite. JSON-Stringify als Deps, weil Alpine $watch auf
+      // primitiver Gleichheit prueft, nicht auf Array-Inhalt.
       this.$watch(() => this.adminUsageChatFeedback, () => {
-        this.adminUsageChatOffset = 0;
         if (this.adminUsageTab === 'chat') this.adminUsageLoadTab();
       });
       this.$watch(() => JSON.stringify(this.adminUsageFilterUsers), () => {
-        this.adminUsageJobsOffset = 0;
-        this.adminUsageChatOffset = 0;
         if (this.adminUsageTab === 'jobs' || this.adminUsageTab === 'chat') this.adminUsageLoadTab();
       });
       this._lifecycle = setupCardLifecycle(this, {

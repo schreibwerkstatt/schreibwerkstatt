@@ -8,14 +8,14 @@
   <div class="card-header">
     <span class="card-title" x-text="$app.t('admin.categories.title')"></span>
     <div class="card-actions">
-      <button type="button" class="icon-btn icon-btn--ghost" @click="loadAll()" :disabled="loading" :data-tip="$app.t('common.refresh')" :aria-label="$app.t('common.refresh')"><svg class="icon" aria-hidden="true"><use href="/icons.svg#rotate-cw"/></svg></button>
+      <button type="button" class="icon-btn icon-btn--ghost" @click="adminCategoriesRefresh()" :disabled="adminCategoriesLoading" :data-tip="$app.t('common.refresh')" :aria-label="$app.t('common.refresh')"><svg class="icon" aria-hidden="true"><use href="/icons.svg#rotate-cw"/></svg></button>
     </div>
   </div>
 
-  <div x-show="loading" x-skeleton="4" x-cloak></div>
-  <p class="card-form-error" x-show="error" x-text="error"></p>
+  <div x-show="adminCategoriesLoading && !categories.length" x-skeleton="4" x-cloak></div>
+  <div x-show="adminCategoriesError" class="error-msg" x-text="adminCategoriesError"></div>
 
-  <div class="card-form-grid" x-show="!loading">
+  <div class="card-form-grid" x-show="categories.length || (adminCategoriesInitialized && !adminCategoriesLoading)">
 
     <section class="admin-pool-section">
       <h3 class="card-section-title" x-text="$app.t('book.category')"></h3>
@@ -26,12 +26,12 @@
                x-model="newCategoryName"
                :placeholder="$app.t('admin.cat.namePlaceholder')"
                @keydown.enter="$enter($event, () => createCategory())"
-               :disabled="busy"
+               :disabled="adminCategoriesBusy"
                maxlength="120">
-        <button type="button" class="icon-btn icon-btn--ghost" @click="createCategory()" :disabled="busy || !newCategoryName.trim()" :data-tip="$app.t('common.new')" :aria-label="$app.t('common.new')"><svg class="icon" aria-hidden="true"><use href="/icons.svg#plus"/></svg></button>
+        <button type="button" class="icon-btn icon-btn--ghost" @click="createCategory()" :disabled="adminCategoriesBusy || !newCategoryName.trim()" :data-tip="$app.t('common.new')" :aria-label="$app.t('common.new')"><svg class="icon" aria-hidden="true"><use href="/icons.svg#plus"/></svg></button>
       </div>
 
-      <p class="muted-msg muted-msg--sm" x-show="categories.length === 0" x-text="$app.t('categories.empty')"></p>
+      <p class="muted-msg muted-msg--sm" x-show="categories.length === 0 && !adminCategoriesError" x-text="$app.t('categories.empty')"></p>
       <div class="table-scroll" x-show="categories.length">
       <table class="data-table admin-pool-table"
              x-data="sortableTable({
@@ -52,8 +52,8 @@
               <td x-text="cat.name"></td>
               <td><code class="muted-msg muted-msg--sm" x-text="cat.slug"></code></td>
               <td class="admin-pool-actions">
-                <button type="button" class="icon-btn icon-btn--ghost" @click="renameCategory(cat)" :data-tip="$app.t('admin.cat.rename')" :aria-label="$app.t('admin.cat.rename')"><svg class="icon" aria-hidden="true"><use href="/icons.svg#pencil"/></svg></button>
-                <button type="button" class="icon-btn icon-btn--ghost" @click="deleteCategory(cat)" :data-tip="$app.t('common.delete')" :aria-label="$app.t('common.delete')"><svg class="icon" aria-hidden="true"><use href="/icons.svg#trash"/></svg></button>
+                <button type="button" class="icon-btn icon-btn--ghost" @click="renameCategory(cat)" :disabled="adminCategoriesBusy" :data-tip="$app.t('admin.cat.rename')" :aria-label="$app.t('admin.cat.rename')"><svg class="icon" aria-hidden="true"><use href="/icons.svg#pencil"/></svg></button>
+                <button type="button" class="icon-btn icon-btn--ghost" @click="deleteCategory(cat)" :disabled="adminCategoriesBusy" :data-tip="$app.t('common.delete')" :aria-label="$app.t('common.delete')"><svg class="icon" aria-hidden="true"><use href="/icons.svg#trash"/></svg></button>
               </td>
             </tr>
           </template>

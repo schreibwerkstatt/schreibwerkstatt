@@ -1,6 +1,28 @@
 @layer components {
 /* Admin-Backup-Karte: kontoweites DB-Backup (Download) + Restore (Danger-Zone). */
 
+/* Vorgemerkter Restore: steht, solange auf dem Server eine Vormerkung liegt —
+   sie gilt fuer jeden naechsten Start. Warn-Toene (nicht Fehler): noch ist
+   nichts passiert, aber der naechste Neustart ersetzt die Datenbank. */
+.admin-backup-pending {
+  margin: var(--space-md) 0;
+  padding: var(--space-md);
+  border-radius: var(--radius-md);
+  background: var(--color-warn-bg);
+  color: var(--color-warn-text);
+}
+.admin-backup-pending-title {
+  display: flex;
+  align-items: center;
+  gap: var(--space-xs);
+  margin: 0 0 var(--space-2xs);
+  font-weight: var(--fw-semibold);
+}
+.admin-backup-pending-text {
+  margin: 0;
+  font-size: var(--font-size-sm);
+}
+
 .admin-backup-meta {
   display: flex;
   flex-wrap: wrap;

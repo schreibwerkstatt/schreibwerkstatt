@@ -5,6 +5,7 @@
 import { adminUsersMethods } from '../admin/admin-users.js';
 import { setupCardLifecycle } from './card-lifecycle.js';
 import { CARD_REQUEST } from './card-request.js';
+import { adminFormatMethods } from '../admin/admin-format.js';
 
 export function registerAdminUsersCard() {
   if (typeof window === 'undefined' || !window.Alpine) return;
@@ -20,6 +21,10 @@ export function registerAdminUsersCard() {
     adminUsersInviteResult: null,
     adminUsersAuditEmail: null,
     adminUsersAuditEvents: [],
+    adminUsersRowRev: 0,                     // ++ nach abgelehntem PUT → Zeilen-Comboboxen resyncen
+    // Re-Entry-Wachen (Sequenzzähler): nur die Antwort der jüngsten Anfrage gilt.
+    _adminUsersAuditSeq: 0,
+    _adminUsersRequestsSeq: 0,
     // Aktives Anmeldeverfahren (vom Server, nicht geraten): steuert, ob die
     // Passwort-Spalte ueberhaupt Sinn hat.
     adminUsersAuthMethod: 'google',
@@ -78,5 +83,6 @@ export function registerAdminUsersCard() {
     },
 
     ...adminUsersMethods,
+    ...adminFormatMethods,
   }));
 }

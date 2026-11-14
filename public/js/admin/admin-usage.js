@@ -5,8 +5,16 @@
 
 import { loadChart } from '../lazy-libs.js';
 import { barDataset, categoryAxis, chartOptions, chartPalette, seriesColor, valueAxis } from '../cards/chart-style.js';
-import { localIsoDate, localeTag, fmtDateTime, fetchJson, sendJson } from '../utils.js';
+import { localIsoDate, localeTag, fmtDateTime, formatIsoDay, fetchJson, sendJson } from '../utils.js';
 import { tFetchError } from '../i18n.js';
+import { featureByKey } from '../cards/feature-registry.js';
+
+// Seitengroesse der Server-paginierten Listen (Jobs, Chat-Antworten).
+const PAGE_SIZE = 50;
+
+// Chart.js, sobald einmal geladen (lazy-libs cached ohnehin) — damit
+// _adminUsageDrawChart synchron bleibt.
+let _chartLib = null;
 
 function _fmt(n, locale, opts) {
   if (n === null || n === undefined || !Number.isFinite(n)) return '—';
@@ -23,30 +31,62 @@ function _int(n, locale) {
 
 // Matrix-Memo ausserhalb des reaktiven Karten-States: ein Schreiben in den
 // Scope waehrend des Renderns wuerde die lesenden Effekte erneut anstossen.
-// Schluessel ist das rohe Breakdown-Array (neues Array = neuer Ladevorgang).
+// Schluessel ist das rohe Breakdown-Array (neues Array = neuer Ladevorgang);
+// gueltig nur fuer dieselbe UI-Sprache und dieselbe User-Liste (Labels).
 const _matrixMemo = new WeakMap();
 
-function _hhmm(seconds) {
-  if (!seconds || seconds < 60) return seconds ? '< 1 min' : '0 min';
-  const h = Math.floor(seconds / 3600);
-  const m = Math.floor((seconds % 3600) / 60);
-  if (h <= 0) return `${m} min`;
-  return `${h}h ${m}m`;
+// User-Zeile aus GET /admin/usage/users plus Entwurfs-Felder des Budget-Edits.
+function _userRow(u) {
+  return { ...u, _draftBudget: u.monthlyBudgetUsd ?? '', _draftMode: u.budgetMode || 'none', _saving: false, _saved: false };
 }
+
+// Vorschlagstypen der fuenf Chats tragen ihre Labels in den Namensraeumen der
+// jeweiligen Chat-Karte; der erste Treffer gewinnt.
+const PROPOSAL_KIND_KEYS = [
+  k => `chat.typ.${k}`, k => `plot.chat.type.${k}`, k => `ideenBoard.chat.type.${k}`,
+  k => `recherche.chat.change.type.research_${k}`, k => `recherche.kind.${k}`,
+];
 
 export const adminUsageMethods = {
   // ── Locale-Helper (Templates rufen so) ────────────────────────────────────
   adminUsageMoney(n) { return _money(n, this._adminUsageLocale()); },
   adminUsageInt(n)   { return _int(n,   this._adminUsageLocale()); },
-  adminUsageHhmm(seconds) { return _hhmm(seconds); },
+  adminUsageHhmm(seconds) {
+    const t = window.__app.t.bind(window.__app);
+    if (!seconds || seconds < 60) return t(seconds ? 'admin.usage.duration.underMinute' : 'admin.usage.duration.zero');
+    const h = Math.floor(seconds / 3600);
+    const m = Math.floor((seconds % 3600) / 60);
+    return h <= 0 ? t('admin.usage.duration.minutes', { m }) : t('admin.usage.duration.hoursMinutes', { h, m });
+  },
   _adminUsageLocale() {
     return localeTag(Alpine.store('shell').uiLocale);
   },
+  // Erster uebersetzte Key aus `keys`, sonst `fallback` (roher DB-Wert).
+  _adminUsageLabel(keys, fallback) {
+    const t = window.__app?.t;
+    for (const key of keys) {
+      const label = t?.call(window.__app, key);
+      if (label && label !== key) return label;
+    }
+    return fallback ?? '—';
+  },
   // Job-Typ-String (DB-Wert aus job_runs.type) → übersetztes Label. Fallback: roher Typ.
   _adminUsageTypeLabel(type) {
-    const key = `admin.usage.jobType.${type}`;
-    const label = window.__app?.t?.(key);
-    return (label && label !== key) ? label : type;
+    return this._adminUsageLabel([`admin.usage.jobType.${type}`], type);
+  },
+  // Chat-Art (chat_sessions.kind: page/book/research/plot/ideen).
+  adminUsageChatKindLabel(kind) {
+    return this._adminUsageLabel([`admin.usage.behavior.chat.${kind}`, `admin.usage.jobType.${kind}`], kind);
+  },
+  // Vorschlagstyp eines Chat-Vorschlags (usage_events chat.proposal `kind`).
+  adminUsageProposalKindLabel(kind) {
+    if (!kind) return '—';
+    return this._adminUsageLabel(PROPOSAL_KIND_KEYS.map(f => f(kind)), kind);
+  },
+  // Feature-Key der Karten-Registry (feature_usage.feature_key).
+  adminUsageFeatureLabel(key) {
+    const f = featureByKey(key);
+    return f?.labelKey ? this._adminUsageLabel([f.labelKey], key) : key;
   },
 
   // ── Lifecycle ──────────────────────────────────────────────────────────────
@@ -84,13 +124,7 @@ export const adminUsageMethods = {
     if (this.adminUsageUsersList.length) return;
     try {
       const data = await this._adminUsageFetch('/admin/usage/users');
-      this.adminUsageUsersList = (data.users || []).map(u => ({
-        ...u,
-        _draftBudget: u.monthlyBudgetUsd ?? '',
-        _draftMode: u.budgetMode || 'none',
-        _saving: false,
-        _savedAt: 0,
-      }));
+      this.adminUsageUsersList = (data.users || []).map(_userRow);
     } catch {}
   },
 
@@ -109,12 +143,13 @@ export const adminUsageMethods = {
   // beim Verlassen zerstoert und werden aus dem Stand neu gezeichnet.
   async adminUsageLoadTab(force = false) {
     const tab = this.adminUsageTab;
+    // Fehler gehoert zum zuletzt geladenen Tab — beim Wechsel nicht stehen lassen.
+    this.adminUsageError = '';
     if (!force && this._adminUsageKeys[tab] === this._adminUsageStateKey()) {
       if (tab === 'summary' && this.adminUsageSummary) this.$nextTick(() => this._adminUsageRenderCharts(this.adminUsageSummary));
       if (tab === 'behavior' && this.adminUsageBehavior) this.$nextTick(() => this._adminUsageRenderBehaviorCharts(this.adminUsageBehavior));
       return;
     }
-    this.adminUsageError = '';
     if (tab === 'users')    return this.adminUsageLoadUsers();
     if (tab === 'summary')  return this.adminUsageLoadSummary();
     if (tab === 'jobs')     return this.adminUsageLoadJobs();
@@ -135,8 +170,7 @@ export const adminUsageMethods = {
 
   // Alles, was das Ergebnis eines Tab-Loads bestimmt.
   _adminUsageStateKey() {
-    return JSON.stringify([this._adminUsageQuery(), this.adminUsageFilterUsers, this.adminUsageJobsOffset,
-      this.adminUsageChatOffset, this.adminUsageChatFeedback]);
+    return JSON.stringify([this._adminUsageQuery(), this.adminUsageFilterUsers, this.adminUsageChatFeedback]);
   },
 
   async _adminUsageFetch(path) {
@@ -180,13 +214,7 @@ export const adminUsageMethods = {
       this._adminUsageFetch('/admin/usage/breakdown'),
     ]), ([data, breakdown]) => {
       this.adminUsageBreakdown = (breakdown.rows || []).map(r => ({ ...r, email: r.email || '' }));
-      this.adminUsageUsersList = (data.users || []).map(u => ({
-        ...u,
-        _draftBudget: u.monthlyBudgetUsd ?? '',
-        _draftMode: u.budgetMode || 'none',
-        _saving: false,
-        _savedAt: 0,
-      }));
+      this.adminUsageUsersList = (data.users || []).map(_userRow);
     });
   },
 
@@ -230,8 +258,10 @@ export const adminUsageMethods = {
   adminUsageMatrix() {
     const src = this.adminUsageBreakdown;
     const raw = window.Alpine?.raw ? window.Alpine.raw(src) : src;
+    const locale = Alpine.store('shell').uiLocale;
+    const users = window.Alpine?.raw ? window.Alpine.raw(this.adminUsageUsersList) : this.adminUsageUsersList;
     const hit = _matrixMemo.get(raw);
-    if (hit) return hit;
+    if (hit && hit.locale === locale && hit.users === users) return hit.val;
     const TOP = 6;
     const byType = new Map();
     for (const r of src) {
@@ -254,7 +284,7 @@ export const adminUsageMethods = {
       byUser.set(r.email, row);
     }
     const val = { cols, rows: [...byUser.values()] };
-    _matrixMemo.set(raw, val);
+    _matrixMemo.set(raw, { locale, users, val });
     return val;
   },
 
@@ -268,47 +298,63 @@ export const adminUsageMethods = {
       row.monthlyBudgetUsd = j.user.monthly_budget_usd;
       row.budgetMode = j.user.budget_mode || 'none';
       row.overrun = !!(row.monthlyBudgetUsd && row.budgetMode !== 'none' && row.usd >= row.monthlyBudgetUsd);
-      row._savedAt = Date.now();
+      // «Gespeichert» zwei Sekunden lang, dann wieder «Speichern».
+      row._saved = true;
+      clearTimeout(row._savedTimer);
+      row._savedTimer = setTimeout(() => { row._saved = false; }, 2000);
     } catch (e) { this.adminUsageError = tFetchError(e); }
     finally { row._saving = false; }
   },
 
   // ── Tab: Jobs ──────────────────────────────────────────────────────────────
-  async adminUsageLoadJobs() {
-    this._adminUsageEnsureUsers();
+  // Query der paginierten Listen: User-Filter, Seite ab `offset`, beim Chat
+  // zusaetzlich der Bewertungs-Filter.
+  _adminUsageListPath(tab, offset) {
     const qs = new URLSearchParams();
     for (const email of (this.adminUsageFilterUsers || [])) {
       if (email) qs.append('user', email);
     }
-    qs.set('limit', '50');
-    qs.set('offset', String(this.adminUsageJobsOffset || 0));
-    await this._adminUsageRun('jobs', () => this._adminUsageFetch(`/admin/usage/jobs?${qs.toString()}`), (data) => {
+    qs.set('limit', String(PAGE_SIZE));
+    qs.set('offset', String(offset));
+    if (tab === 'chat' && this.adminUsageChatFeedback) qs.set('feedback', this.adminUsageChatFeedback);
+    return `/admin/usage/${tab}?${qs.toString()}`;
+  },
+
+  async adminUsageLoadJobs() {
+    this._adminUsageEnsureUsers();
+    await this._adminUsageRun('jobs', () => this._adminUsageFetch(this._adminUsageListPath('jobs', 0)), (data) => {
       this.adminUsageJobsList = data.rows || [];
       this.adminUsageJobsTotal = data.total || 0;
+    });
+  },
+
+  // «Weitere laden»: naechste Seite ab der Zahl geladener Zeilen anhaengen.
+  // Laeuft in derselben Sequenz wie der Tab-Load — ein neuerer Load (Filter,
+  // Zeitraum) verwirft die Antwort; der Knopf ist waehrend eines Loads gesperrt.
+  async adminUsageLoadMore(tab) {
+    const listKey = tab === 'jobs' ? 'adminUsageJobsList' : 'adminUsageChatList';
+    const totalKey = tab === 'jobs' ? 'adminUsageJobsTotal' : 'adminUsageChatTotal';
+    const offset = this[listKey].length;
+    await this._adminUsageRun(tab, () => this._adminUsageFetch(this._adminUsageListPath(tab, offset)), (data) => {
+      this[listKey] = [...this[listKey], ...(data.rows || [])];
+      this[totalKey] = data.total || 0;
     });
   },
 
   // ── Tab: Chat ──────────────────────────────────────────────────────────────
   async adminUsageLoadChat() {
     this._adminUsageEnsureUsers();
-    const qs = new URLSearchParams();
-    for (const email of (this.adminUsageFilterUsers || [])) {
-      if (email) qs.append('user', email);
-    }
-    qs.set('limit', '50');
-    qs.set('offset', String(this.adminUsageChatOffset || 0));
-    if (this.adminUsageChatFeedback) qs.set('feedback', this.adminUsageChatFeedback);
     // Chat-Qualitaet je Chat-Art (Zeitraum, ohne User-Filter) laeuft im selben
     // Load mit — eine Sequenz pro Tab, damit eine spaete Antwort nicht ueber
     // einen neueren Zeitraum schreibt.
     await this._adminUsageRun('chat', () => Promise.all([
-      this._adminUsageFetch(`/admin/usage/chat?${qs.toString()}`),
+      this._adminUsageFetch(this._adminUsageListPath('chat', 0)),
       this._adminUsageFetch('/admin/usage/chat-quality'),
     ]), ([data, quality]) => {
       this.adminUsageChatList = data.rows || [];
       this.adminUsageChatTotal = data.total || 0;
       this.adminUsageChatQuality = (quality.rows || []).map(r => ({
-        ...r, label: this._adminUsageTypeLabel(r.kind),
+        ...r, label: this.adminUsageChatKindLabel(r.kind),
       }));
     });
   },
@@ -392,6 +438,15 @@ export const adminUsageMethods = {
     return fmtDateTime(iso, Alpine.store('shell').uiLocale, { dateStyle: 'short', timeStyle: 'short' });
   },
 
+  // Datum ohne Uhrzeit. Reiner Kalendertag (YYYY-MM-DD) als Kalenderangabe in
+  // UTC (formatIsoDay), Zeitstempel in appTimezone.
+  adminUsageDate(iso) {
+    if (!iso) return '—';
+    const opts = { day: '2-digit', month: '2-digit', year: 'numeric' };
+    const locale = Alpine.store('shell').uiLocale;
+    return iso.length <= 10 ? (formatIsoDay(iso, locale, opts) || iso) : fmtDateTime(iso, locale, opts);
+  },
+
   // ── Tab: Summary (mit Charts) ──────────────────────────────────────────────
   async adminUsageLoadSummary() {
     await this._adminUsageRun('summary', () => this._adminUsageFetch('/admin/usage/summary'), (data) => {
@@ -410,38 +465,45 @@ export const adminUsageMethods = {
     this._adminUsageCharts = {};
   },
 
+  // Chart.js laden und pruefen, dass der Tab noch aktiv ist (vor und nach dem
+  // Lazy-Load). Charts auf einem via x-show versteckten Canvas zu
+  // instanziieren loest Chart.js' Resize-Crash aus ("Cannot read properties of
+  // null (reading 'ownerDocument')").
+  async _adminUsageChartReady(tab) {
+    if (this.adminUsageTab !== tab) return false;
+    try { _chartLib = await loadChart(); } catch { return false; }
+    return this.adminUsageTab === tab;
+  },
+
+  // Ein Chart der Karte (Summary + Verhalten): alten IMMER zuerst zerstoeren —
+  // auch wenn die neuen Daten leer sind, sonst bliebe der Stand des vorigen
+  // Zeitraums stehen. `config` null = leer (das Template zeigt dann den
+  // Leerzustand statt des Canvas). Nur auf sichtbarem Canvas zeichnen
+  // (offsetParent === null ⇒ display:none-Vorfahr). Immer animation:false:
+  // Chart.js' Animations-rAF-Loop haelt sonst eine Referenz auf den Chart; wird
+  // der beim Tab-Wechsel via destroy() (ctx=null) abgeraeumt, zeichnet ein noch
+  // eingereihter Frame auf den null-Context und zerschiesst den Render.
+  _adminUsageDrawChart(key, el, config) {
+    if (!this._adminUsageCharts) this._adminUsageCharts = {};
+    try { this._adminUsageCharts[key]?.destroy?.(); } catch {}
+    delete this._adminUsageCharts[key];
+    if (!config || !_chartLib || !el || el.offsetParent === null) return;
+    config.options = { ...(config.options || {}), animation: false };
+    this._adminUsageCharts[key] = new _chartLib(el.getContext('2d'), config);
+  },
+
   async _adminUsageRenderCharts(data) {
-    // Tab koennte waehrend des nextTick/await schon gewechselt haben. Charts auf
-    // einem via x-show versteckten Canvas zu instanziieren loest Chart.js'
-    // Resize-Crash aus ("Cannot read properties of null (reading 'ownerDocument')").
-    // Alle Charts laufen mit animation:false. Chart.js' Animations-rAF-Loop haelt
-    // sonst eine Referenz auf den Chart; wird der beim Tab-Wechsel via destroy()
-    // (ctx=null) abgeraeumt, zeichnet ein noch eingereihter Frame auf den null-Context
-    // ("Cannot read properties of null (reading 'save')") und zerschiesst den Render.
-    if (this.adminUsageTab !== 'summary') return;
-    let Chart;
-    try { Chart = await loadChart(); } catch { return; }
-    if (this.adminUsageTab !== 'summary') return;
+    if (!(await this._adminUsageChartReady('summary'))) return;
     const pal = chartPalette();
     const tag = localeTag(Alpine.store('shell').uiLocale);
     const usd = new Intl.NumberFormat(tag, { style: 'currency', currency: 'USD', maximumFractionDigits: 2 });
     const usdAxis = new Intl.NumberFormat(tag, { style: 'currency', currency: 'USD', maximumFractionDigits: 0 });
     const usdTip = ctx => ` ${usd.format(ctx.parsed?.x ?? ctx.parsed?.y ?? ctx.parsed ?? 0)}`;
-
-    const destroy = (key) => {
-      if (this._adminUsageCharts?.[key]) {
-        try { this._adminUsageCharts[key].destroy(); } catch {}
-      }
-    };
-    if (!this._adminUsageCharts) this._adminUsageCharts = {};
-
-    // Nur auf sichtbarem Canvas instanziieren (offsetParent === null ⇒ display:none-Vorfahr).
-    const visible = (el) => el && el.offsetParent !== null;
+    const num = v => Number(v?.toFixed?.(4) || v || 0);
 
     // Balken mit langen Labels (E-Mails, Job-Typen) liegend: Text bleibt lesbar.
     const barOptions = () => {
       const o = chartOptions(pal);
-      o.animation = false;
       o.indexAxis = 'y';
       o.interaction = { mode: 'nearest', axis: 'y', intersect: false };
       o.plugins.tooltip.callbacks = { label: usdTip };
@@ -451,40 +513,29 @@ export const adminUsageMethods = {
       };
       return o;
     };
+    const bar = (labels, values, color) => ({
+      type: 'bar',
+      data: { labels, datasets: [barDataset(pal, color, { label: 'USD', data: values })] },
+      options: barOptions(),
+    });
 
-    // Top-User-Bar
     const topUsers = (data.topUsers || []).slice(0, 10);
-    const elUsers = this.$refs?.chartUsers;
-    if (visible(elUsers) && topUsers.length) {
-      destroy('users');
-      this._adminUsageCharts.users = new Chart(elUsers.getContext('2d'), {
-        type: 'bar',
-        data: {
-          labels: topUsers.map(u => u.email),
-          datasets: [barDataset(pal, pal.primary, {
-            label: 'USD',
-            data: topUsers.map(u => Number(u.usd?.toFixed?.(4) || u.usd || 0)),
-          })],
-        },
-        options: barOptions(),
-      });
-    }
-    // Pro-Modell-Ring
+    this._adminUsageDrawChart('users', this.$refs?.chartUsers, topUsers.length
+      ? bar(topUsers.map(u => u.email), topUsers.map(u => num(u.usd)), pal.primary) : null);
+
     const byModel = data.byModel || [];
-    const elModel = this.$refs?.chartModel;
-    if (visible(elModel) && byModel.length) {
-      destroy('model');
+    let modelConfig = null;
+    if (byModel.length) {
       const o = chartOptions(pal, { legend: true, legendKind: 'items' });
-      o.animation = false;
       o.cutout = '68%';
       o.interaction = { mode: 'nearest', intersect: true };
       o.plugins.tooltip.callbacks = { label: usdTip };
-      this._adminUsageCharts.model = new Chart(elModel.getContext('2d'), {
+      modelConfig = {
         type: 'doughnut',
         data: {
           labels: byModel.map(m => m.model),
           datasets: [{
-            data: byModel.map(m => Number(m.usd?.toFixed?.(4) || m.usd || 0)),
+            data: byModel.map(m => num(m.usd)),
             backgroundColor: byModel.map((_, i) => seriesColor(i)),
             borderColor: pal.surface,
             borderWidth: 2,
@@ -493,25 +544,13 @@ export const adminUsageMethods = {
           }],
         },
         options: o,
-      });
+      };
     }
-    // Pro-Job-Typ-Bar
+    this._adminUsageDrawChart('model', this.$refs?.chartModel, modelConfig);
+
     const byType = data.byType || [];
-    const elType = this.$refs?.chartType;
-    if (visible(elType) && byType.length) {
-      destroy('type');
-      this._adminUsageCharts.type = new Chart(elType.getContext('2d'), {
-        type: 'bar',
-        data: {
-          labels: byType.map(t => this._adminUsageTypeLabel(t.type)),
-          datasets: [barDataset(pal, pal.accent, {
-            label: 'USD',
-            data: byType.map(t => Number(t.usd?.toFixed?.(4) || t.usd || 0)),
-          })],
-        },
-        options: barOptions(),
-      });
-    }
+    this._adminUsageDrawChart('type', this.$refs?.chartType, byType.length
+      ? bar(byType.map(t => this._adminUsageTypeLabel(t.type)), byType.map(t => num(t.usd)), pal.accent) : null);
   },
 
   // ── Tab: Features ──────────────────────────────────────────────────────────
@@ -531,19 +570,21 @@ export const adminUsageMethods = {
     });
   },
 
+  // Tagesverlauf einer Zeile (User x Buch). Laeuft ueber die Sequenz des
+  // Zeit-Tabs: ein neuerer Tab-Load oder eine andere Zeile verwirft die Antwort.
   async adminUsageLoadTimeSeries(row) {
+    if (!row.bookId) return;
     const key = `${row.email}:${row.bookId}`;
     if (this.adminUsageTimeSeriesKey === key) {
       this.adminUsageTimeSeriesKey = '';
       this.adminUsageTimeSeries = [];
       return;
     }
-    try {
-      const data = await this._adminUsageFetch(
-        `/admin/usage/time/${encodeURIComponent(row.email)}/${row.bookId}/series`
-      );
+    await this._adminUsageRun('time', () => this._adminUsageFetch(
+      `/admin/usage/time/${encodeURIComponent(row.email)}/${row.bookId}/series`
+    ), (data) => {
       this.adminUsageTimeSeries = data.series || [];
       this.adminUsageTimeSeriesKey = key;
-    } catch (e) { this.adminUsageError = tFetchError(e); }
+    });
   },
 };

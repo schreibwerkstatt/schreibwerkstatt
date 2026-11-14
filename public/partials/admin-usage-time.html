@@ -1,0 +1,81 @@
+<!-- Admin-Usage → Zeit-Tab -->
+<!--
+  Sub-Partial von admin-usage.html (Scope: adminUsageCard). Quelle:
+  GET /admin/usage/time; Tagesverlauf je User x Buch ueber
+  GET /admin/usage/time/:email/:bookId/series (nur Zeilen mit Buch).
+-->
+<div x-show="adminUsageTab === 'time'" class="admin-usage-pane" :aria-busy="adminUsageLoading"
+     id="admin-usage-pane-time" role="tabpanel" aria-labelledby="admin-usage-tab-time">
+  <div class="table-scroll" x-show="adminUsageTimeItems.length">
+  <table class="data-table"
+         x-data="sortableTable({
+           rows: () => adminUsageTimeItems,
+           defaultKey: 'totalSeconds',
+           defaultDir: 'desc',
+           persistKey: 'admin.usage.time',
+           types: { bookId: 'number', writingSeconds: 'number',
+                    lektoratSeconds: 'number', totalSeconds: 'number' },
+         })">
+    <thead>
+      <tr>
+        <th x-bind="sortTh('email')" x-text="$app.t('admin.users.email')"></th>
+        <th x-bind="sortTh('bookId')" x-text="$app.t('admin.usage.time.book')"></th>
+        <th x-bind="sortTh('writingSeconds')" x-text="$app.t('admin.usage.time.writing')"></th>
+        <th x-bind="sortTh('lektoratSeconds')" x-text="$app.t('admin.usage.time.lektorat')"></th>
+        <th x-bind="sortTh('totalSeconds')" x-text="$app.t('admin.usage.time.total')"></th>
+        <th></th>
+      </tr>
+    </thead>
+    <tbody>
+      <template x-for="r in sorted" :key="r.email + ':' + r.bookId">
+        <tr>
+          <td x-text="r.email"></td>
+          <td x-text="r.bookId ? ('#' + r.bookId) : '—'"></td>
+          <td x-text="adminUsageHhmm(r.writingSeconds)"></td>
+          <td x-text="adminUsageHhmm(r.lektoratSeconds)"></td>
+          <td x-text="adminUsageHhmm(r.totalSeconds)"></td>
+          <td>
+            <button type="button" x-show="r.bookId" @click="adminUsageLoadTimeSeries(r)"
+                    :aria-expanded="adminUsageTimeSeriesKey === (r.email + ':' + r.bookId)"
+                    x-text="adminUsageTimeSeriesKey === (r.email + ':' + r.bookId) ? $app.t('admin.usage.time.hideSeries') : $app.t('admin.usage.time.series')"></button>
+          </td>
+        </tr>
+      </template>
+    </tbody>
+  </table>
+  </div>
+  <div x-show="!adminUsageTimeItems.length && !adminUsageLoading" class="muted-msg" x-text="$app.t('admin.usage.empty')"></div>
+
+  <div class="admin-usage-series" x-show="adminUsageTimeSeries.length">
+    <div class="table-scroll">
+    <table class="data-table"
+           x-data="sortableTable({
+             rows: () => adminUsageTimeSeries,
+             defaultKey: 'date',
+             defaultDir: 'desc',
+             persistKey: 'admin.usage.timeSeries',
+             types: { date: 'string', writingSeconds: 'number',
+                      lektoratSeconds: 'number', totalSeconds: 'number' },
+           })">
+      <thead>
+        <tr>
+          <th x-bind="sortTh('date')" x-text="$app.t('admin.usage.time.date')"></th>
+          <th x-bind="sortTh('writingSeconds')" x-text="$app.t('admin.usage.time.writing')"></th>
+          <th x-bind="sortTh('lektoratSeconds')" x-text="$app.t('admin.usage.time.lektorat')"></th>
+          <th x-bind="sortTh('totalSeconds')" x-text="$app.t('admin.usage.time.total')"></th>
+        </tr>
+      </thead>
+      <tbody>
+        <template x-for="d in sorted" :key="d.date">
+          <tr>
+            <td x-text="adminUsageDate(d.date)"></td>
+            <td x-text="adminUsageHhmm(d.writingSeconds)"></td>
+            <td x-text="adminUsageHhmm(d.lektoratSeconds)"></td>
+            <td x-text="adminUsageHhmm(d.totalSeconds)"></td>
+          </tr>
+        </template>
+      </tbody>
+    </table>
+    </div>
+  </div>
+</div>

@@ -76,7 +76,7 @@ Browser → NGINX (HTTPS) → Express (Port 3737)
   /jobs/hubspot-*  → HubSpot-Sync-Jobs (import, push in den Draft-Buffer, reconcile; Push/Abgleich/Routen aus routes/jobs/sync/)
   /usage/*         → Feature-Usage-Tracking (Recency für Palette/Quick-Pills)
   /telemetry/*     → Block-Level-Merge-Counter (POST /telemetry/merge → merge_telemetry, exponiert via /metrics)
-  /admin/books, /admin/logs, /admin/registration-requests, /admin/settings, /admin/usage, /admin/users
+  /admin/backup, /admin/books, /admin/logs, /admin/registration-requests, /admin/settings, /admin/usage, /admin/users
   /public/*        → Unauthentifizierte Endpoints (Health, Marketing)
   /                → public/index.html (SPA)
 

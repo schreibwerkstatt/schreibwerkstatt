@@ -6,7 +6,7 @@ const { test, expect } = require('./_helpers/fixtures');
 // eine unlayered `.share-content p`-Regel schlüge jede Layer-Regel und gäbe
 // jeder Blase 1em Abstand plus Silbentrennung. Das Harness lädt dieselben
 // Stylesheets in derselben Reihenfolge wie public/share.html.
-const URL = 'http://localhost:8765/tests/fixtures/share-reader-harness.html';
+const URL = '/tests/fixtures/share-reader-harness.html';
 
 const THREAD = '<div class="msg-thread"><p class="msg-name">Lena</p><p class="msg-in">bist du schon da?</p>'
   + '<p class="msg-out">gleich, 5 min</p><p class="msg-meta">Dienstag, 14:32</p></div>'

@@ -39,12 +39,26 @@ export function dateTimeFormat(uiLocale, opts = {}) {
   return dtf;
 }
 
-// Zeitstempel (ISO-String, Date oder ms) als Datum + Uhrzeit in UI-Sprache und
-// App-Zeitzone. Leer → ''; unparsebar → Eingabe unverändert (statt
-// „Invalid Date"). Default `medium`/`short`; eigene Stile per `opts`.
+// DB-Zeitstempel → Date. Neue Zeilen tragen ISO mit Z (NOW_ISO_SQL); ältere
+// das SQLite-Format ohne Zone ("YYYY-MM-DD HH:MM:SS", UTC) — ohne
+// Normalisierung läse der Browser es als Lokalzeit. Date/ms gehen unverändert
+// durch. Kein Anhängen von 'Z' an fremde Strings: ein ISO-Wert mit Zone würde
+// dadurch zu „Invalid Date".
+const SQLITE_TS_RE = /^\d{4}-\d{2}-\d{2}[ T]\d{2}:\d{2}(:\d{2}(\.\d+)?)?$/;
+export function parseServerTs(value) {
+  if (value instanceof Date) return value;
+  if (typeof value === 'number') return new Date(value);
+  const s = String(value ?? '').trim();
+  if (SQLITE_TS_RE.test(s)) return new Date(s.replace(' ', 'T') + 'Z');
+  return new Date(s);
+}
+
+// Zeitstempel (ISO-String, SQLite-UTC-String, Date oder ms) als Datum + Uhrzeit
+// in UI-Sprache und App-Zeitzone. Leer → ''; unparsebar → Eingabe unverändert
+// (statt „Invalid Date"). Default `medium`/`short`; eigene Stile per `opts`.
 export function fmtDateTime(value, uiLocale, opts = { dateStyle: 'medium', timeStyle: 'short' }) {
   if (value == null || value === '') return '';
-  const d = value instanceof Date ? value : new Date(value);
+  const d = parseServerTs(value);
   if (Number.isNaN(d.getTime())) return String(value);
   return dateTimeFormat(uiLocale, opts).format(d);
 }

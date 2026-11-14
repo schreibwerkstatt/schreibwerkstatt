@@ -5,30 +5,16 @@
   Nur Metadaten (User, Art, Modell, Tokens, Kosten, anonyme Buch-ID, Bewertung) —
   nie Frage oder Antwort, Privacy-Boundary in routes/admin-usage.js.
   Filter „Bewertung": nur Antworten mit Daumen runter bzw. hoch (chat_messages.feedback).
+  Server-paginiert: «Weitere laden» haengt die naechste Seite an (adminUsageLoadMore).
 -->
 <div class="admin-usage-filter">
-  <label>
-    <span x-text="$app.t('admin.usage.filter.user')"></span>
-    <div x-data="combobox({ placeholder: $app.t('admin.usage.filter.allUsers'), multiple: true })"
-         x-modelable="value" x-model="adminUsageFilterUsers"
-         x-effect="options = adminUsageUserFilterOptions()"></div>
-  </label>
+  <!-- @include admin-usage-user-filter -->
   <label>
     <span x-text="$app.t('admin.usage.filter.feedback')"></span>
     <div x-data="combobox({ placeholder: $app.t('admin.usage.filter.allFeedback'), emptyLabel: $app.t('admin.usage.filter.allFeedback') })"
          x-modelable="value" x-model="adminUsageChatFeedback"
          x-effect="options = adminUsageFeedbackFilterOptions()"></div>
   </label>
-</div>
-<div class="admin-usage-filter-chips" x-show="adminUsageFilterUsers.length">
-  <template x-for="email in adminUsageFilterUsers" :key="email">
-    <span class="admin-usage-filter-chip">
-      <span x-text="email"></span>
-      <button type="button" class="admin-usage-filter-chip-remove"
-              :aria-label="$app.t('common.remove')"
-              @click="adminUsageRemoveFilterUser(email)"><svg class="icon" aria-hidden="true"><use href="/icons.svg#x"/></svg></button>
-    </span>
-  </template>
 </div>
 <div class="table-scroll" x-show="adminUsageChatList.length">
 <table class="data-table"
@@ -37,6 +23,7 @@
          defaultKey: 'createdAt',
          defaultDir: 'desc',
          persistKey: 'admin.usage.chat',
+         window: false,
          types: { feedback: 'number', tokensIn: 'number', tokensOut: 'number', cacheReadIn: 'number',
                   usd: 'number', bookId: 'number', createdAt: 'date' },
        })">
@@ -58,7 +45,7 @@
     <template x-for="r in sorted" :key="r.id">
       <tr>
         <td x-text="r.userEmail || '—'"></td>
-        <td x-text="r.sessionKind"></td>
+        <td x-text="adminUsageChatKindLabel(r.sessionKind)"></td>
         <td x-text="r.model || '—'"></td>
         <td x-text="adminUsageFeedbackLabel(r.feedback)"></td>
         <td x-text="adminUsageInt(r.tokensIn)"></td>
@@ -66,10 +53,16 @@
         <td x-text="adminUsageInt(r.cacheReadIn)"></td>
         <td x-text="adminUsageMoney(r.usd)"></td>
         <td x-text="r.bookId ? ('#' + r.bookId) : '—'"></td>
-        <td x-text="new Date(r.createdAt).toLocaleString($store.shell.uiLocale === 'en' ? 'en-US' : 'de-CH', { timeZone: $store.shell.appTimezone })"></td>
+        <td x-text="adminUsageDateTime(r.createdAt)"></td>
       </tr>
     </template>
   </tbody>
 </table>
 </div>
 <div x-show="!adminUsageChatList.length && !adminUsageLoading" class="muted-msg" x-text="$app.t('admin.usage.empty')"></div>
+<div class="admin-usage-more" x-show="adminUsageChatList.length">
+  <span class="muted-msg muted-msg--sm"
+        x-text="$app.tn('admin.usage.list.shown', adminUsageChatTotal, { shown: adminUsageInt(adminUsageChatList.length) })"></span>
+  <button type="button" x-show="adminUsageChatList.length < adminUsageChatTotal" :disabled="adminUsageLoading"
+          @click="adminUsageLoadMore('chat')" x-text="$app.t('admin.usage.list.loadMore')"></button>
+</div>

@@ -14,7 +14,7 @@ const { test, expect } = require('./_helpers/fixtures');
 // Erwartungen brechen.
 test.describe.configure({ mode: 'serial' });
 
-const BASE = 'http://localhost:8765';
+const BASE = ''; // relativ: baseURL aus playwright.config.js (E2E_PORT)
 
 test.describe('pdf-export-card', () => {
   test.beforeEach(async ({ page }) => {

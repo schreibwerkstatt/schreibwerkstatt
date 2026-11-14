@@ -1,0 +1,21 @@
+<!-- Admin-Usage: User-Filter (Mehrfachauswahl + entfernbare Chips) der Jobs-
+     und Chat-Liste. Fragment-Include (`<!-- @include admin-usage-user-filter -->`)
+     innerhalb einer `.admin-usage-filter`-Zeile, Scope adminUsageCard. -->
+<div class="admin-usage-filter-user">
+  <label>
+    <span x-text="$app.t('admin.usage.filter.user')"></span>
+    <div x-data="combobox({ placeholder: $app.t('admin.usage.filter.allUsers'), multiple: true })"
+         x-modelable="value" x-model="adminUsageFilterUsers"
+         x-effect="options = adminUsageUserFilterOptions()"></div>
+  </label>
+  <div class="admin-usage-filter-chips" x-show="adminUsageFilterUsers.length">
+    <template x-for="email in adminUsageFilterUsers" :key="email">
+      <span class="admin-usage-filter-chip">
+        <span x-text="email"></span>
+        <button type="button" class="admin-usage-filter-chip-remove"
+                :aria-label="$app.t('common.remove')"
+                @click="adminUsageRemoveFilterUser(email)"><svg class="icon" aria-hidden="true"><use href="/icons.svg#x"/></svg></button>
+      </span>
+    </template>
+  </div>
+</div>

@@ -1,6 +1,7 @@
 <!-- Fragment: Tab „Eingeladene Benutzer" der Admin-User-Karte. Scope:
      `adminUsersCard` (siehe admin-users.html). -->
-  <div class="card-form-grid" x-show="!adminUsersLoading && adminUsersTab === 'invites'">
+  <div class="admin-users-panel" x-bind="panel('invites')">
+  <div class="card-form-grid" x-show="!adminUsersLoading">
 
     <div class="admin-users-requests-filter">
       <button type="button" class="icon-btn icon-btn--ghost" @click="adminUsersInvitesLoad()" :disabled="adminUsersInvitesLoading" :data-tip="$app.t('common.refresh')" :aria-label="$app.t('common.refresh')"><svg class="icon" aria-hidden="true"><use href="/icons.svg#rotate-cw"/></svg></button>
@@ -50,21 +51,21 @@
             </td>
             <td><span class="badge" x-text="$app.t('admin.users.role.' + inv.global_role)"></span></td>
             <td>
-              <span class="muted-msg muted-msg--sm" x-text="inv.invited_at ? new Date(inv.invited_at).toLocaleString(($store.shell.uiLocale === 'en' ? 'en-US' : 'de-CH'), { timeZone: $store.shell.appTimezone }) : '—'"></span>
+              <span class="muted-msg muted-msg--sm" x-text="adminFmtDateTime(inv.invited_at)"></span>
             </td>
             <td>
               <span class="badge" :class="inv.expired ? 'badge--status-suspended' : ''"
-                    x-text="inv.expires_at ? new Date(inv.expires_at).toLocaleString(($store.shell.uiLocale === 'en' ? 'en-US' : 'de-CH'), { timeZone: $store.shell.appTimezone }) : '—'"></span>
+                    x-text="adminFmtDateTime(inv.expires_at)"></span>
             </td>
             <td>
               <span x-show="!inv.last_clicked_at" class="badge" x-text="$app.t('admin.users.invites.click.never')"></span>
               <span x-show="inv.last_clicked_at" class="badge badge--status-active"
-                    x-text="$app.t('admin.users.invites.click.clicked', { count: inv.click_count, at: new Date(inv.last_clicked_at).toLocaleString(($store.shell.uiLocale === 'en' ? 'en-US' : 'de-CH'), { timeZone: $store.shell.appTimezone }) })"></span>
+                    x-text="$app.t('admin.users.invites.click.clicked', { count: inv.click_count, at: adminFmtDateTime(inv.last_clicked_at) })"></span>
             </td>
             <td>
               <span x-show="!inv.last_reminder_at" class="muted-msg muted-msg--sm" x-text="$app.t('admin.users.invites.reminder.never')"></span>
               <span x-show="inv.last_reminder_at" class="muted-msg muted-msg--sm"
-                    x-text="$app.t('admin.users.invites.reminder.last', { count: inv.reminder_count, at: new Date(inv.last_reminder_at).toLocaleString(($store.shell.uiLocale === 'en' ? 'en-US' : 'de-CH'), { timeZone: $store.shell.appTimezone }) })"></span>
+                    x-text="$app.t('admin.users.invites.reminder.last', { count: inv.reminder_count, at: adminFmtDateTime(inv.last_reminder_at) })"></span>
             </td>
             <td class="admin-users-actions">
               <button x-data="copyButton({ text: () => inv.invite_url?.startsWith('http') ? inv.invite_url : location.origin + inv.invite_url, label: () => window.__app.t('admin.users.invites.copyUrl') })"></button>
@@ -83,4 +84,5 @@
 
     <p class="muted-msg" x-show="!adminUsersInvitesLoading && !adminUsersInvitesList.length"
        x-text="$app.t('admin.users.invites.empty')"></p>
+  </div>
   </div>

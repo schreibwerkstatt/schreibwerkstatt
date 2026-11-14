@@ -6,48 +6,21 @@
 // gegen das neueste Release der jeweiligen Plattform verglichen (macOS, Android,
 // Chrome-Erweiterung — drei eigene Repos, drei eigene Versionsstraenge).
 
-import { fmtDateTime, fetchJson } from '../utils.js';
-import { sameData } from '../utils/same-data.js';
-import { tFetchError } from '../i18n.js';
+import { fetchJson } from '../utils.js';
+import { adminLoaderMethods, assignIfChanged } from './admin-loader.js';
+import { adminFormatMethods } from './admin-format.js';
 
 export const adminDevicesMethods = {
-  // ── Lifecycle ────────────────────────────────────────────────────────────
-  async devicesEnter() {
-    if (this.devicesInitialized) return;
-    this.devicesInitialized = true;
-    await this._devicesLoad();
-  },
+  // ── Lifecycle: devicesEnter / devicesRefresh / _devicesLoad ──────────────
+  ...adminLoaderMethods('devices', {
+    request: () => fetchJson('/admin/devices'),
+    apply(data, { silent }) {
+      assignIfChanged(this, 'devicesList', data.devices || [], silent);
+      assignIfChanged(this, 'devicesLatestVersions', data.latestVersions || {}, silent);
+    },
+  }),
 
-  /** `silent`: Tab-Rueckkehr — keine Ladezeile ueber der Tabelle, gleiche
-   *  Daten werden verworfen, ein Fehler aendert nichts. */
-  async _devicesLoad({ silent = false } = {}) {
-    if (!silent) {
-      this.devicesLoading = true;
-      this.devicesError = '';
-    }
-    try {
-      const data = await fetchJson('/admin/devices');
-      const list = data.devices || [];
-      const latest = data.latestVersions || {};
-      if (!silent || !sameData(list, this.devicesList)) this.devicesList = list;
-      if (!silent || !sameData(latest, this.devicesLatestVersions)) this.devicesLatestVersions = latest;
-    } catch (e) {
-      if (!silent) this.devicesError = tFetchError(e);
-    } finally {
-      if (!silent) this.devicesLoading = false;
-    }
-  },
-
-  devicesRefresh() {
-    this.devicesInitialized = false;
-    return this.devicesEnter();
-  },
-
-  // ── Format ───────────────────────────────────────────────────────────────
-  devicesFmtTs(iso) {
-    if (!iso) return '—';
-    return fmtDateTime(iso, Alpine.store('shell').uiLocale);
-  },
+  ...adminFormatMethods,
 
   // Status-Label: widerrufen / abgelaufen / aktiv.
   devicesStatus(d) {

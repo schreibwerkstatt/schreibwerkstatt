@@ -87,7 +87,7 @@ const _stmtSetInviteFlag = db.prepare(`
 // Snapshot-Spalte) und kann NULL sein — bei Open-Signup, beim ENV-Admin und
 // wenn das einladende Konto inzwischen geloescht ist (account-delete anonymisiert
 // `app_users.invited_by`, siehe USER_REF_PLAN).
-const _stmtListUsers = db.prepare(`
+const _LIST_USERS_SELECT = `
   SELECT u.id, u.email, u.display_name, u.global_role, u.status, u.language,
          u.can_invite_users, u.first_seen_at, u.last_seen_at, u.created_at,
          u.invited_by, u.invited_at,
@@ -99,9 +99,11 @@ const _stmtListUsers = db.prepare(`
     FROM app_users u
     LEFT JOIN ai_profiles p ON p.id = u.ai_profile_id
     LEFT JOIN ai_profiles own ON own.owner_email = u.email
-    LEFT JOIN app_users inv ON inv.email = u.invited_by COLLATE NOCASE
-   ORDER BY u.created_at DESC, u.email
-`);
+    LEFT JOIN app_users inv ON inv.email = u.invited_by COLLATE NOCASE`;
+const _stmtListUsers = db.prepare(`${_LIST_USERS_SELECT}
+   ORDER BY u.created_at DESC, u.email`);
+const _stmtListUserRow = db.prepare(`${_LIST_USERS_SELECT}
+   WHERE u.email = ?`);
 
 // Admin weist einem User ein KI-Profil zu. NULL/'' loescht die Zuweisung (User
 // folgt dann dem globalen ai.provider samt globaler Parameter). Validierung der
@@ -224,6 +226,15 @@ function getUser(email) {
 
 function listUsers() {
   return _stmtListUsers.all();
+}
+
+// Eine Zeile in derselben Form wie listUsers() (inkl. JOIN-Feldern
+// invited_by_name / ai_profile_* / own_ai_provider) — fuer Antworten, die eine
+// einzelne Listenzeile ersetzen (PUT /admin/users/:email).
+function getUserListRow(email) {
+  const e = _normEmail(email);
+  if (!e) return null;
+  return _stmtListUserRow.get(e) || null;
 }
 
 const _stmtActiveAdminEmails = db.prepare(`
@@ -476,7 +487,7 @@ function ensureAdminFromEnv() {
 }
 
 module.exports = {
-  getUser, listUsers, getActiveAdminEmails, createUser, touchLogin,
+  getUser, listUsers, getUserListRow, getActiveAdminEmails, createUser, touchLogin,
   touchUserLastSeen, updateUserSettings, addUserActivity,
   setStatus, setGlobalRole, setCanInviteUsers, setBudget, softDeleteUser,
   setAiProfile, setOnboardingState, setChangelogSeen,

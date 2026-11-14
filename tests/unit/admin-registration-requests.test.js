@@ -130,3 +130,33 @@ test('GET ?status=denied liefert nur denied', async () => {
   assert.equal(r.status, 200);
   assert.ok(r.body.items.every(i => i.status === 'denied'));
 });
+
+// Approve/Deny warten die Mail ab: die Antwort traegt das echte Versand-Ergebnis
+// statt immer 'not-attempted' (das UI zeigte sonst stets «Mailer deaktiviert»).
+test('POST /:id/approve + /deny: Mail-Ergebnis wird abgewartet', async () => {
+  const mailer = require('../../lib/mailer');
+  const orig = mailer.send;
+  const sent = [];
+  mailer.send = async (opts) => {
+    await new Promise(r => setTimeout(r, 20));
+    sent.push(opts.template);
+    return { sent: true, latencyMs: 20 };
+  };
+  try {
+    const a = regRequests.createRequest({ email: 'mail-approve@example.com', displayName: 'MA' });
+    const d = regRequests.createRequest({ email: 'mail-deny@example.com', displayName: 'MD' });
+    let r = await _req('POST', `/admin/registration-requests/${a.id}/approve`, {
+      user: 'admin@example.com', role: 'admin', body: { role: 'user' },
+    });
+    assert.equal(r.status, 200, r.raw);
+    assert.equal(r.body.mail.sent, true);
+    r = await _req('POST', `/admin/registration-requests/${d.id}/deny`, {
+      user: 'admin@example.com', role: 'admin', body: { reason: 'nein' },
+    });
+    assert.equal(r.status, 200, r.raw);
+    assert.equal(r.body.mail.sent, true);
+    assert.deepEqual(sent, ['registration-approved', 'registration-denied']);
+  } finally {
+    mailer.send = orig;
+  }
+});

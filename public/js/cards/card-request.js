@@ -18,6 +18,7 @@
 
 import { EVT } from '../events.js';
 import { SHELF_TABS } from './my-books-compute.js';
+import { ADMIN_SETTINGS_TABS } from '../admin/admin-settings-tabs.js';
 
 // Bekannte Wünsche: Schlüssel → wer ihn abholt.
 export const CARD_REQUEST = Object.freeze({
@@ -65,7 +66,7 @@ export const URL_TABS = Object.freeze({
   adminUsers:    { request: CARD_REQUEST.ADMIN_USERS_TAB, default: 'users',
     tabs: ['users', 'invites', 'requests'] },
   adminSettings: { request: CARD_REQUEST.ADMIN_SETTINGS_TAB, default: 'auth',
-    tabs: ['auth', 'provider', 'smtp', 'jobs', 'cron', 'pdfa', 'analytics', 'languagetool', 'stt', 'tts', 'image', 'embed', 'geocode', 'websearch', 'api', 'advanced'] },
+    tabs: ADMIN_SETTINGS_TABS },
 });
 
 const _urlTabByRequest = new Map(Object.values(URL_TABS).map(t => [t.request, t]));

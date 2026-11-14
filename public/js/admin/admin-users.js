@@ -5,7 +5,27 @@
 import { fetchJson, sendJson } from '../utils.js';
 import { tFetchError, tRaw } from '../i18n.js';
 
+// Vom Server gelieferte Link-Pfade (`/invite/<token>`) → absolute URL. Ohne
+// app.public_url liefert der Server nur den Pfad; zum Kopieren braucht der
+// Admin die volle Adresse.
+function _absUrl(url) {
+  if (!url) return url;
+  return /^https?:\/\//i.test(url) ? url : `${location.origin}${url.startsWith('/') ? '' : '/'}${url}`;
+}
+
 export const adminUsersMethods = {
+  adminUsersIsSelf(u) {
+    const me = Alpine.store('session').currentUser?.email;
+    return !!me && !!u && String(u.email).toLowerCase() === String(me).toLowerCase();
+  },
+
+  // Audit-Event als Text; unbekannte Events (neuer Server, alter Client) roh.
+  adminUsersAuditLabel(ev) {
+    const key = `admin.users.auditEvent.${ev?.event}`;
+    const msg = window.__app.t(key);
+    return msg === key ? String(ev?.event ?? '') : msg;
+  },
+
   async adminUsersLoad() {
     if (this.adminUsersLoading) return;
     this.adminUsersLoading = true;
@@ -39,9 +59,7 @@ export const adminUsersMethods = {
     this.adminUsersInviteResult = null;
     try {
       const j = await sendJson('/admin/users/invite', 'POST', { email, role: this.adminUsersInviteRole || 'user' });
-      const url = j.inviteUrl
-        ? (j.inviteUrl.startsWith('http') ? j.inviteUrl : `${location.origin}${j.inviteUrl}`)
-        : `${location.origin}/invite/${j.invite.invite_token}`;
+      const url = _absUrl(j.inviteUrl || `/invite/${j.invite.invite_token}`);
       this.adminUsersInviteResult = {
         email: j.invite.email,
         token: j.invite.invite_token,
@@ -97,7 +115,7 @@ export const adminUsersMethods = {
   async adminUsersPasswordLink(u) {
     const j = await this._adminUsersPasswordCall(u.email, '/password-link', 'POST');
     if (!j) return;
-    const url = j.url && !j.url.startsWith('http') ? `${location.origin}${j.url}` : j.url;
+    const url = _absUrl(j.url);
     this.adminUsersPasswordResult = { email: u.email, url, expiresAt: j.expiresAt, mail: j.mail || null };
   },
 
@@ -147,8 +165,7 @@ export const adminUsersMethods = {
 
   async adminUsersInviteRevoke(inv) {
     if (!inv || this.adminUsersInvitesBusy) return;
-    const confirmMsg = window.__app?.t?.('admin.users.invites.confirmRevoke', { email: inv.email })
-      || `Einladung an ${inv.email} widerrufen?`;
+    const confirmMsg = window.__app.t('admin.users.invites.confirmRevoke', { email: inv.email });
     if (!await window.__app.appConfirm({ message: confirmMsg, danger: true })) return;
     this.adminUsersInvitesBusy = inv.id;
     this.adminUsersError = '';
@@ -162,20 +179,23 @@ export const adminUsersMethods = {
     }
   },
 
+  // Antwort ist eine vollständige Listenzeile (routes/admin-users.js#_adminUserRows)
+  // und ersetzt die Zeile. Bei Ablehnung zieht adminUsersRowRev die Comboboxen
+  // der Zeilen auf den unveränderten Wert zurück (ihr x-effect liest den Zähler).
   async adminUsersUpdate(user, patch) {
     this.adminUsersError = '';
     try {
       const j = await sendJson(`/admin/users/${encodeURIComponent(user.email)}`, 'PUT', patch);
       const idx = this.adminUsersList.findIndex(u => u.email === user.email);
-      if (idx >= 0) this.adminUsersList.splice(idx, 1, j.user);
+      if (idx >= 0 && j?.user) this.adminUsersList.splice(idx, 1, j.user);
     } catch (e) {
       this.adminUsersError = tFetchError(e);
+      this.adminUsersRowRev++;
     }
   },
 
   async adminUsersDelete(user) {
-    const me = Alpine.store('session').currentUser?.email;
-    if (user.email === me) { this.adminUsersError = tRaw('error.CANNOT_DELETE_SELF'); return; }
+    if (this.adminUsersIsSelf(user)) { this.adminUsersError = tRaw('error.CANNOT_DELETE_SELF'); return; }
     if (!await window.__app.appConfirm({ message: window.__app.t('admin.users.confirmDelete', { email: user.email }), danger: true })) return;
     this.adminUsersError = '';
     try {
@@ -186,7 +206,10 @@ export const adminUsersMethods = {
     }
   },
 
+  // Schneller Wechsel zwischen Usern: nur die Antwort der jüngsten Anfrage gilt
+  // (Sequenz-Wache), sonst landet der Verlauf des vorigen Users im Drawer.
   async adminUsersToggleAudit(user) {
+    const seq = ++this._adminUsersAuditSeq;
     if (this.adminUsersAuditEmail === user.email) {
       this.adminUsersAuditEmail = null;
       this.adminUsersAuditEvents = [];
@@ -196,26 +219,32 @@ export const adminUsersMethods = {
     this.adminUsersAuditEvents = [];
     try {
       const j = await fetchJson(`/admin/users/${encodeURIComponent(user.email)}/audit?limit=50`);
+      if (seq !== this._adminUsersAuditSeq) return;
       this.adminUsersAuditEvents = j.events || [];
     } catch (e) {
+      if (seq !== this._adminUsersAuditSeq) return;
       this.adminUsersError = tFetchError(e);
     }
   },
 
   // ─── Registration-Requests ─────────────────────────────────────────────
 
+  // Kein Abbruch bei laufender Anfrage: ein Filterwechsel während des Ladens
+  // muss neu laden. Die Sequenz-Wache verwirft die Antwort jeder überholten Anfrage.
   async adminUsersRequestsLoad() {
-    if (this.adminUsersRequestsLoading) return;
+    const seq = ++this._adminUsersRequestsSeq;
     this.adminUsersRequestsLoading = true;
     this.adminUsersError = '';
     try {
       const status = this.adminUsersRequestsStatus || 'pending';
       const data = await fetchJson(`/admin/registration-requests?status=${encodeURIComponent(status)}`);
+      if (seq !== this._adminUsersRequestsSeq) return;
       this.adminUsersRequestsList = data.items || [];
     } catch (e) {
+      if (seq !== this._adminUsersRequestsSeq) return;
       this.adminUsersError = tFetchError(e);
     } finally {
-      this.adminUsersRequestsLoading = false;
+      if (seq === this._adminUsersRequestsSeq) this.adminUsersRequestsLoading = false;
     }
   },
 
@@ -226,7 +255,7 @@ export const adminUsersMethods = {
     this.adminUsersRequestsResult = null;
     try {
       const j = await sendJson(`/admin/registration-requests/${req.id}/approve`, 'POST', { role });
-      this.adminUsersRequestsResult = { id: req.id, inviteUrl: j.inviteUrl, mail: j.mail };
+      this.adminUsersRequestsResult = { id: req.id, inviteUrl: _absUrl(j.inviteUrl), mail: j.mail };
       await this.adminUsersRequestsLoad();
       await this.adminUsersLoad();
     } catch (e) {

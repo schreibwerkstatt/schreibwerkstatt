@@ -1,10 +1,11 @@
 <!-- Fragment: Tab „Zugangs-Anfragen" der Admin-User-Karte. Scope:
      `adminUsersCard` (siehe admin-users.html). -->
-  <div class="card-form-grid" x-show="!adminUsersLoading && adminUsersTab === 'requests'">
+  <div class="admin-users-panel" x-bind="panel('requests')">
+  <div class="card-form-grid" x-show="!adminUsersLoading">
 
-    <div class="admin-users-requests-filter">
-      <span x-text="$app.t('admin.users.requests.statusFilter')"></span>
-      <div x-data="combobox($app.t('admin.users.requests.statusFilter'))"
+    <div class="admin-users-requests-filter" x-id="['reqStatus']">
+      <span :id="$id('reqStatus')" x-text="$app.t('admin.users.requests.statusFilter')"></span>
+      <div x-data="combobox($app.t('admin.users.requests.statusFilter'))" :aria-labelledby="$id('reqStatus')"
            x-modelable="value" x-model="adminUsersRequestsStatus"
            x-effect="options = [
              { value: 'pending',  label: $app.t('admin.users.requests.status.pending') },
@@ -69,7 +70,7 @@
                    x-text="$app.t('admin.users.requests.sourceNote') + ': ' + req.source_note"></div>
             </td>
             <td>
-              <span class="muted-msg muted-msg--sm" x-text="new Date(req.created_at + 'Z').toLocaleString(($store.shell.uiLocale === 'en' ? 'en-US' : 'de-CH'), { timeZone: $store.shell.appTimezone })"></span>
+              <span class="muted-msg muted-msg--sm" x-text="adminFmtDateTime(req.created_at)"></span>
               <span class="muted-msg muted-msg--sm" x-show="req.ip" x-text="' • ' + req.ip"></span>
             </td>
             <td>
@@ -91,7 +92,7 @@
               <template x-if="req.status !== 'pending'">
                 <span class="muted-msg muted-msg--sm">
                   <span x-show="req.reviewed_at"
-                        x-text="new Date(req.reviewed_at + 'Z').toLocaleString(($store.shell.uiLocale === 'en' ? 'en-US' : 'de-CH'), { timeZone: $store.shell.appTimezone }) + (req.reviewed_by ? ' · ' + req.reviewed_by : '')"></span>
+                        x-text="adminFmtDateTime(req.reviewed_at) + (req.reviewed_by ? ' · ' + req.reviewed_by : '')"></span>
                   <span x-show="req.review_reason" x-text="' · ' + req.review_reason"></span>
                 </span>
               </template>
@@ -104,4 +105,5 @@
 
     <p class="muted-msg" x-show="!adminUsersRequestsLoading && !adminUsersRequestsList.length"
        x-text="$app.t('admin.users.requests.empty')"></p>
+  </div>
   </div>

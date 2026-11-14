@@ -56,10 +56,14 @@ function _filterFromQuery(q) {
 
 // ── GET /admin/logs/tail?lines=500 ───────────────────────────────────────────
 // Letzte N Zeilen aus dem aktuellen File. Streaming, kein Full-File-Read im
-// Heap. Max lines=2000.
+// Heap. Max lines=2000. `tz` = Zeitzone des Servers: die Zeitstempel im Log
+// schreibt winston in Server-Ortszeit, die Karte nennt sie dazu.
+const SERVER_TZ = (() => {
+  try { return Intl.DateTimeFormat().resolvedOptions().timeZone || null; } catch { return null; }
+})();
 router.get('/tail', async (req, res) => {
   const lines = Math.min(2000, Math.max(1, parseInt(req.query.lines, 10) || 500));
-  if (!fs.existsSync(LOG_FILE)) return res.json({ entries: [] });
+  if (!fs.existsSync(LOG_FILE)) return res.json({ entries: [], tz: SERVER_TZ });
   // Reverse-Read bis genug Zeilen, dann re-parsen in chronologischer Reihenfolge.
   const buffer = [];
   for await (const line of readLinesReverse(LOG_FILE)) {
@@ -68,7 +72,7 @@ router.get('/tail', async (req, res) => {
   }
   buffer.reverse();
   const entries = [...parseLines(buffer)];
-  res.json({ entries: entries.slice(-lines) });
+  res.json({ entries: entries.slice(-lines), tz: SERVER_TZ });
 });
 
 // ── GET /admin/logs/search ───────────────────────────────────────────────────

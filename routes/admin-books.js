@@ -160,7 +160,10 @@ router.post('/:book_id/assign-owner', express.json({ limit: '4kb' }), (req, res)
       bookAccess.grantAccess(bookId, target, 'owner', performedBy);
     })();
     logger.info(`Admin assign-owner: book=${bookId} owner=${target} by ${performedBy}`);
-    res.json({ ok: true, book_id: bookId, owner_email: target });
+    // Zugriffszahl mitliefern: die Karte zieht nur diese Zeile nach, statt die
+    // ganze Liste samt Bytegroessen neu zu rechnen.
+    const aclCount = db.prepare('SELECT COUNT(*) AS n FROM book_access WHERE book_id = ?').get(bookId).n;
+    res.json({ ok: true, book_id: bookId, owner_email: target, acl_count: aclCount });
   } catch (e) {
     logger.error(`POST /admin/books/:id/assign-owner: ${e.message}`);
     res.status(500).json({ error_code: 'ASSIGN_FAILED' });

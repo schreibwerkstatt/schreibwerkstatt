@@ -1,5 +1,5 @@
     <!-- Embed-Tab: Semantische Suche (self-hosted OpenAI-kompatibler /v1/embeddings) -->
-    <section x-show="adminSettingsTab === 'embed'" class="admin-settings-section">
+    <section x-bind="panel('embed')" class="admin-settings-section">
       <p class="muted-msg muted-msg--sm" x-text="$app.t('admin.settings.embed.hint')"></p>
       <div x-data="settingField({ k: 'embed.enabled', type: 'toggle', base: 'embed.enabled' })"></div>
       <div x-data="settingField({ k: 'embed.host', type: 'url', base: 'embed.host', help: true })"></div>

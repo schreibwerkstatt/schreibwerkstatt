@@ -3,14 +3,15 @@
 // (`showAdminJsErrorsCard`) im Root.
 
 import { adminJsErrorsMethods } from '../admin/js-errors.js';
+import { adminLoaderState } from '../admin/admin-loader.js';
+import { listWindowState, listWindowMethods } from '../list-window.js';
 import { setupCardLifecycle } from './card-lifecycle.js';
 
 export function registerAdminJsErrorsCard() {
   if (typeof window === 'undefined' || !window.Alpine) return;
   window.Alpine.data('adminJsErrorsCard', () => ({
-    jsErrorsInitialized: false,
-    jsErrorsLoading: false,
-    jsErrorsError: '',
+    ...adminLoaderState('jsErrors'),
+    ...listWindowState(),
     jsErrorsList: [],
     jsErrorsExpanded: {},
     _lifecycle: null,
@@ -23,10 +24,10 @@ export function registerAdminJsErrorsCard() {
         onHide: () => this._jsErrorsLeave(),
         onViewReset: () => {
           this._jsErrorsLeave();
+          this._jsErrorsInvalidate();
           this.jsErrorsList = [];
           this.jsErrorsExpanded = {};
-          this.jsErrorsError = '';
-          this.jsErrorsInitialized = false;
+          Object.assign(this, listWindowState());
         },
       });
     },
@@ -36,6 +37,7 @@ export function registerAdminJsErrorsCard() {
       this._lifecycle?.destroy();
     },
 
+    ...listWindowMethods,
     ...adminJsErrorsMethods,
   }));
 }

@@ -1,5 +1,5 @@
     <!-- SMTP / Mailer-Tab -->
-    <section x-show="adminSettingsTab === 'smtp'" class="admin-settings-section">
+    <section x-bind="panel('smtp')" class="admin-settings-section">
       <p class="muted-msg muted-msg--sm" x-text="$app.t('admin.settings.smtp.hint')"></p>
       <p class="muted-msg muted-msg--sm">
         <span x-text="$app.t('admin.settings.smtp.appPasswordHint')"></span>

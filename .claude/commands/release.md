@@ -1,19 +1,21 @@
 ---
 description: Versionsnummer erhöhen + Git-Tag + GitHub-Release erstellen
 argument-hint: "[patch|minor|major|x.y.z]  (Default: patch)"
-allowed-tools: Bash(git:*), Bash(gh:*), Bash(npm run version:sync), Bash(npm run sw:manifest), Bash(npm run squash:regen), Bash(npm run test:unit), Bash(TEST_CI_SHARDS=3 npm run test:ci), Bash(npm run check:clients:*), Read, Write
+allowed-tools: Bash(git:*), Bash(gh:*), Bash(npm run version:sync), Bash(npm run sw:manifest), Bash(npm run squash:regen), Bash(npm run release:verify:*), Bash(npm run check:clients:*), Read, Write
 ---
 
 Du führst einen Release der App durch. SSoT der Version ist die Datei `VERSION` im Projektroot; `package.json#version` folgt via `npm run version:sync`. Zu **jeder** Version gehören Release-Notizen in `changelog/<version>.json` — die App zeigt sie den Usern unter **Hilfe → Neuigkeiten** ([changelog/README.md](../../changelog/README.md)).
 
 Bump-Argument: `$ARGUMENTS` (leer = `patch`).
 
-**Ein Release endet immer gepusht.** Commit, Tag, `git push` und GitHub-Release gehören zum Befehl — sie sind nicht optional und werden nicht zurückgestellt. Ein Lauf, der nur `VERSION` hochzählt und den Tree liegen lässt, ist ein fehlgeschlagener Lauf. **Es wird nicht nachgefragt** — weder für die Release-Notizen noch sonst. Der Lauf hält nur an, wenn ein Schritt fehlschlägt oder die Änderungslage nicht eindeutig ist (Schritt 9); andernfalls läuft er von Schritt 1 bis zum Abschlussbericht in einem Zug durch.
+**Ein Release endet immer gepusht.** Commit, Tag, `git push` und GitHub-Release gehören zum Befehl — sie sind nicht optional und werden nicht zurückgestellt. Ein Lauf, der nur `VERSION` hochzählt und den Tree liegen lässt, ist ein fehlgeschlagener Lauf. **Es wird nicht nachgefragt** — weder für die Release-Notizen noch sonst. Der Lauf hält nur an, wenn ein Schritt fehlschlägt oder die Änderungslage nicht eindeutig ist (Schritt 9).
+
+**Der Release blockiert die Weiterentwicklung nicht.** Er committet **zuerst** (nach wenigen Minuten) und testet danach genau diesen Commit als Schnappschuss ausserhalb des Arbeitsbaums ([scripts/release-verify.js](../../scripts/release-verify.js)), im Hintergrund. Ab dem Commit darf am Tree weitergearbeitet und weitercommittet werden — nichts davon gehört zum Release. Getaggt und gepusht wird erst, wenn der Schnappschuss grün ist, und zwar **genau der getestete Commit**, nicht `HEAD`. **Why:** `test:ci` dauert rund 20 Minuten; auf dem Arbeitsbaum gefahren, fror es den Tree ein — jede Änderung währenddessen landete ungetestet im `git add -A` oder liess den laufenden Testserver geänderte Dateien ausliefern.
 
 ## Vorprüfung
 
 1. `git status --porcelain` lesen. **Der gesamte Working Tree wird mit dem Release committet** — egal was drin liegt. Es darf nur kein laufender Merge/Rebase-Konflikt (ungemergte Pfade) vorliegen; falls doch: abbrechen und melden.
-2. Aktuelle Version aus `VERSION` lesen. **Abgleich mit dem letzten Tag** (`git describe --tags --abbrev=0`): steht `VERSION` bereits über dem letzten Tag, hat ein früherer Lauf abgebrochen, bevor er committen/taggen konnte. Dann **nicht erneut bumpen** — diesen Stand als `<neueVersion>` übernehmen, fehlende Release-Notizen nachschreiben und ab Schritt 10 normal weiterfahren.
+2. Aktuelle Version aus `VERSION` lesen. **Abgleich mit dem letzten Tag** (`git describe --tags --abbrev=0`): steht `VERSION` bereits über dem letzten Tag, hat ein früherer Lauf abgebrochen, bevor er taggen konnte — meist, weil der Schnappschuss rot war (Schritt 14) und inzwischen nachgebessert wurde. Dann **nicht erneut bumpen** — diesen Stand als `<neueVersion>` übernehmen, fehlende Release-Notizen nachschreiben bzw. um die Nachbesserung ergänzen, falls sie User-sichtbar ist, und ab Schritt 10 normal weiterfahren. Liegt der frühere `release: v<neueVersion>`-Commit schon in der History, heisst der neue Commit in Schritt 12 `release: v<neueVersion> (Nachbesserung)`; getaggt wird dann dieser.
 3. Neue Version berechnen:
    - `patch` → letzte Stelle +1 (1.2.3 → 1.2.4)
    - `minor` → mittlere +1, Patch auf 0 (1.2.3 → 1.3.0)
@@ -44,38 +46,49 @@ Das ist der Teil, den nur du machen kannst — der Rest ist Mechanik.
 
 9. Die geschriebenen Notizen **ohne Rückfrage** übernehmen und weiterfahren — sie werden im Abschlussbericht ohnehin gezeigt, und der User kann danach jederzeit korrigieren lassen. **Warten ist die Ausnahme, nicht die Regel:** nachgefragt wird nur, wenn (a) ein Schritt fehlschlägt, (b) der Commit-Log die Änderung nicht eindeutig hergibt — mehrere plausible Lesarten, unklar ob überhaupt User-sichtbar, oder Fremdarbeit im Tree, die du nicht zuordnen kannst. Dann die kompakte DE-Liste zeigen, bestätigen lassen und bei Korrekturwünschen die Datei anpassen und erneut zeigen. Im Normalfall läuft der Befehl ohne Halt durch.
 
-## Drift-Artefakte + Tests (vor dem Tag)
+## Drift-Artefakte (vor dem Commit)
 
-Schritt 11 committet den **gesamten** Tree — auch Fremdarbeit, die nicht durch die PostToolUse-Hooks dieser Session gelaufen ist. Darum vor dem Tag selbst regenerieren und prüfen, sonst geht ein Release mit rotem CI raus:
+Schritt 11 committet den **gesamten** Tree — auch Fremdarbeit, die nicht durch die PostToolUse-Hooks dieser Session gelaufen ist. Darum vor dem Commit selbst regenerieren und prüfen; das sind Sekunden, kein Testlauf:
 
 10a. `npm run sw:manifest` — Content-Hash `__SHELL_BUILD` in `public/sw-manifest.js` neu berechnen (gegated durch `sw-manifest-drift.test`).
 10b. Enthält der Tree eine neue Migration in `db/migrations.js`: `npm run squash:regen` (bei Recreate-Pattern `FORCE_LEGACY_MIGRATIONS=1 npm run squash:regen`) und [docs/erd.md](../../docs/erd.md)-Stand prüfen.
-10c. `npm run check:clients -- --base v<letzteVersion>` — Breaking-Change-Gate für die nativen Clients (macOS, Android). Der Deploy nach dem Release liefert das Editor-Bundle per OTA an beide aus, ohne App-Update ([docs/focus-editor-acceptance.md](../../docs/focus-editor-acceptance.md#native-clients)). **Exit ≠ 0 ⇒ abbrechen**, kein Tag, kein Push: Exit 1 = eine Kontaktstelle FEHLT (Client-Code greift auf etwas zu, das es nicht mehr gibt), Exit 2 = der Check lief nicht (z. B. `gh`/Netz) — auch das ist kein Grün. Die BERÜHRT-Liste (Kontaktstelle existiert, Datei seit dem letzten Release geändert) bricht nicht ab: an der genannten Client-Zeile lesen, ob die Semantik noch trägt, und die Liste im Abschlussbericht nennen. Trägt sie erkennbar nicht mehr ⇒ abbrechen wie bei FEHLT.
-10d. `TEST_CI_SHARDS=3 npm run test:ci` — dieselbe Aufteilung wie der Test-Job in CI ([scripts/test-ci.js](../../scripts/test-ci.js)): Import-Gate, Prompt-Config, Boot-Smoke, Unit, Integration, danach **gleichzeitig** E2E-Harness, die App-Specs in Chromium-Shards und der Bündel-Smoke. Nicht `npm test`: das fährt alles nacheinander, dazu Firefox, und schneidet die App-Specs in andere Shards als CI — ein Fehler, der nur an der lokalen Shard-Reihenfolge hängt, sagt über den Deploy nichts. **`TEST_CI_SHARDS=3` ist Pflicht:** ohne läuft `test:ci` in 6 Shards (schneller, aber andere Spec-Gruppen als CI); erst mit 3 Shards greifen dieselben `PWTEST_SHARD_WEIGHTS` wie in [deploy.yml](../../.github/workflows/deploy.yml), und jede Spec läuft hinter denselben Vorgängern. Unit deckt `sw-manifest-drift`, `squash-drift`, `erd-drift`, `loc-limits` **und `changelog`** ab; Letzteres läuft erst hier scharf, weil `VERSION` schon auf dem neuen Wert steht: fehlt `changelog/<neueVersion>.json` oder fehlt einem Eintrag `de`/`en`, ist der Lauf rot. E2E und App-Specs fangen, was Unit nicht sieht — ein Harness, das zu einer Code-Änderung nicht mehr passt, läuft in CI in Timeouts samt Retries, und das Job-Timeout bricht die Pipeline ab, bevor deployt wird. **Rot ⇒ abbrechen**, kein Tag, kein Push — Ursache klären statt Tests anpassen, Stand melden. `test:ci` nutzt eigene Ports ab 8786 (`TEST_CI_SHARD_BASE`); belegt eine andere Sitzung diese, mit einer anderen Basis erneut laufen lassen statt fremde Prozesse zu beenden.
+10c. `npm run check:clients -- --base v<letzteVersion>` — Breaking-Change-Gate für die nativen Clients (macOS, Android). Der Deploy nach dem Release liefert das Editor-Bundle per OTA an beide aus, ohne App-Update ([docs/focus-editor-acceptance.md](../../docs/focus-editor-acceptance.md#native-clients)). **Exit ≠ 0 ⇒ abbrechen**, kein Commit: Exit 1 = eine Kontaktstelle FEHLT (Client-Code greift auf etwas zu, das es nicht mehr gibt), Exit 2 = der Check lief nicht (z. B. `gh`/Netz) — auch das ist kein Grün. Die BERÜHRT-Liste (Kontaktstelle existiert, Datei seit dem letzten Release geändert) bricht nicht ab: an der genannten Client-Zeile lesen, ob die Semantik noch trägt, und die Liste im Abschlussbericht nennen. Trägt sie erkennbar nicht mehr ⇒ abbrechen wie bei FEHLT.
 
-## Durchführung
+## Commit
 
 11. **Gesamten** Working Tree stagen: `git add -A` (inkl. `VERSION`, `package.json` + `changelog/<neueVersion>.json`).
-12. Committen mit Message `release: v<neueVersion>`. Liegen ausser dem Versions-Bump noch andere Änderungen im Tree, eine kurze, sinnvolle Zusammenfassung dieser Änderungen als zweite Zeile (Body) ergänzen. `Co-Authored-By:`-Trailer mit dem **aktuell vorgegebenen Modellnamen** anhängen (steht in den Umgebungs-/Harness-Vorgaben — nicht aus älteren Commits kopieren, der Name wandert mit jeder Modellgeneration).
-13. Annotated Tag setzen: `git tag -a v<neueVersion> -m "v<neueVersion>"`.
-14. Pushen — **beides, in dieser Reihenfolge, und jeweils den Erfolg prüfen**:
-    - `git push origin HEAD` (schlägt er wegen fremder Commits fehl: `git pull --rebase origin main`, dann erneut pushen).
-    - `git push origin v<neueVersion>` — ein Tag reist **nicht** mit `git push` mit; ohne diesen zweiten Push kennt GitHub den Tag nicht und Schritt 15 legt ein Release auf einer Referenz an, die es dort nicht gibt.
-    - **Verifizieren statt annehmen:** `git ls-remote --tags origin v<neueVersion>` muss eine Zeile liefern und `git rev-parse v<neueVersion>^{commit}` denselben Commit wie `git rev-parse HEAD`. Leere Ausgabe oder Abweichung ⇒ stoppen und melden, kein `gh release create`.
-15. GitHub-Release erstellen — **Body sind die Release-Notizen aus Schritt 8**, nicht `--generate-notes` (das listet rohe Commit-Betreffs; die kuratierte Fassung ist die bessere und steht ohnehin schon da):
-    - Aus `changelog/<neueVersion>.json` eine Markdown-Notiz bauen: die `de`-Texte, gruppiert nach `kind` unter den Überschriften `### Neu` / `### Verbessert` / `### Behoben`, je ein `- `-Punkt.
+12. Committen mit Message `release: v<neueVersion>` (bzw. `… (Nachbesserung)`, Schritt 2). Liegen ausser dem Versions-Bump noch andere Änderungen im Tree, eine kurze, sinnvolle Zusammenfassung dieser Änderungen als zweite Zeile (Body) ergänzen. `Co-Authored-By:`-Trailer mit dem **aktuell vorgegebenen Modellnamen** anhängen (steht in den Umgebungs-/Harness-Vorgaben — nicht aus älteren Commits kopieren, der Name wandert mit jeder Modellgeneration). **SHA merken:** `git rev-parse HEAD` direkt nach dem Commit = `<releaseSha>`. Ab hier bezieht sich jeder Schritt auf `<releaseSha>`, nie auf `HEAD` — der Tree ist wieder frei, und die Auto-Commit-Automatik oder der User können jederzeit weitere Commits darauflegen.
+
+## Schnappschuss testen (im Hintergrund)
+
+13. `npm run release:verify -- <releaseSha>` mit **`run_in_background: true`** starten. Das Skript entpackt den Commit per `git archive` nach `$TMPDIR/schreibwerkstatt-release-<sha>` (kein Worktree, kein Branch), verlinkt `node_modules` und fährt `test:ci` mit `TEST_CI_SHARDS=3` — dieselbe Aufteilung wie der Test-Job in CI ([scripts/test-ci.js](../../scripts/test-ci.js), `PWTEST_SHARD_WEIGHTS` wie in [deploy.yml](../../.github/workflows/deploy.yml)) — auf eigenen Ports (App-Shards 8828–8836, Harness 8865, Boot 33738), damit ein gleichzeitiger Testlauf im Arbeitsbaum nichts teilt. Unit deckt `sw-manifest-drift`, `squash-drift`, `erd-drift`, `loc-limits` **und `changelog`** ab (fehlt `changelog/<neueVersion>.json` oder einem Eintrag `de`/`en` ⇒ rot); E2E und App-Specs fangen, was Unit nicht sieht.
+
+    Danach **den Turn mit einem Zwischenbericht beenden** — nicht pollen, nicht schlafen: alte → neue Version, die Release-Notizen (kompakte DE-Liste), `<releaseSha>`, Client-Gate-Ergebnis, und der Satz, dass der Tree frei ist und Tag/Push/GitHub-Release automatisch folgen, sobald der Schnappschuss grün ist. Die Harness weckt dich beim Ende des Laufs.
+
+14. Beim Ende des Laufs die letzte Zeile lesen (`release-verify: GRUEN|ROT`):
+    - **ROT ⇒ abbrechen**, kein Tag, kein Push. Ursache aus der Ausgabe klären (Schnappschuss-Pfad steht dort und bleibt liegen) statt Tests anpassen, und melden: der Release-Commit liegt lokal, ungepusht. Nach der Nachbesserung im Arbeitsbaum setzt der nächste `/release`-Aufruf über Schritt 2 auf. Ein Port-Konflikt (`EADDRINUSE`, belegt durch eine andere Sitzung) ist kein Rot des Codes: mit anderer Basis wiederholen (`TEST_CI_SHARD_BASE=40 E2E_PORT=8875 BOOT_SMOKE_PORT=33739 npm run release:verify -- <releaseSha>`), keine fremden Prozesse beenden.
+    - **GRÜN ⇒ weiter mit Schritt 15.**
+
+## Taggen und pushen
+
+15. Annotated Tag auf den getesteten Commit: `git tag -a v<neueVersion> <releaseSha> -m "v<neueVersion>"`.
+16. Pushen — **beides, in dieser Reihenfolge, und jeweils den Erfolg prüfen**:
+    - `git push origin <releaseSha>:refs/heads/main` — pusht genau den getesteten Stand; lokale Commits, die nach ihm entstanden sind, bleiben lokal und gehen mit dem nächsten Push bzw. Release raus. Wird der Push abgewiesen (origin/main hat Commits, die `<releaseSha>` nicht enthält): **nicht rebasen** — der rebasete Commit wäre ein anderer, ungetesteter Stand. Tag lokal löschen (`git tag -d v<neueVersion>`), stoppen und melden; der nächste `/release` integriert und testet neu.
+    - `git push origin v<neueVersion>` — ein Tag reist **nicht** mit dem Branch-Push mit; ohne diesen zweiten Push kennt GitHub den Tag nicht und Schritt 17 legt ein Release auf einer Referenz an, die es dort nicht gibt.
+    - **Verifizieren statt annehmen:** `git ls-remote --tags origin v<neueVersion>` muss eine Zeile liefern und `git rev-parse v<neueVersion>^{commit}` gleich `<releaseSha>` sein. Leere Ausgabe oder Abweichung ⇒ stoppen und melden, kein `gh release create`.
+17. GitHub-Release erstellen — **Body sind die Release-Notizen aus Schritt 8**, nicht `--generate-notes` (das listet rohe Commit-Betreffs; die kuratierte Fassung ist die bessere und steht ohnehin schon da):
+    - Aus `git show <releaseSha>:changelog/<neueVersion>.json` (nicht aus dem Arbeitsbaum — der kann sich seither geändert haben) eine Markdown-Notiz bauen: die `de`-Texte, gruppiert nach `kind` unter den Überschriften `### Neu` / `### Verbessert` / `### Behoben`, je ein `- `-Punkt.
     - In eine Temp-Datei schreiben und `gh release create v<neueVersion> --title "v<neueVersion>" --notes-file <datei>` aufrufen.
 
 ## Verifikation (Pflicht, nicht überspringen)
 
-16. Erst wenn das durchläuft, gilt der Release als erfolgt:
-    - `git status --porcelain` ist leer (nichts liegen geblieben).
-    - `git log origin/main -1 --oneline` zeigt den Release-Commit — der Push ist wirklich angekommen.
+18. Erst wenn das durchläuft, gilt der Release als erfolgt:
+    - `git fetch origin` und `git merge-base --is-ancestor <releaseSha> origin/main` (Exit 0) — der getestete Commit ist wirklich auf `main` angekommen. Ein nicht leerer `git status` ist hier **kein** Fehler: der Tree gehört seit Schritt 12 wieder der Weiterentwicklung.
     - `gh release view v<neueVersion> --json tagName,url` antwortet mit dem Tag und der URL.
-    Schlägt eines davon fehl: den fehlenden Schritt nachholen (nochmal pushen, Tag nachpushen, Release neu anlegen) und erneut prüfen. Nicht mit einem halb fertigen Release aufhören.
+    Schlägt eines davon fehl: den fehlenden Schritt nachholen (Tag nachpushen, Release neu anlegen) und erneut prüfen. Nicht mit einem halb fertigen Release aufhören.
 
 ## Abschluss
 
-Melde knapp: alte → neue Version, Anzahl Release-Notizen, Commit-Hash, Tag, die URL des erstellten GitHub-Releases und das Ergebnis des Client-Gates (Schritt 10c: Kontaktstellen je Client, BERÜHRT-Stellen falls vorhanden). Erwähne, dass die Notizen den Usern beim nächsten Laden unter **Hilfe → Neuigkeiten** erscheinen (mit Punkt am „?"-Knopf, bis sie gelesen sind).
+Melde knapp: alte → neue Version, Anzahl Release-Notizen, `<releaseSha>`, Tag, die URL des erstellten GitHub-Releases, die Dauer des Schnappschuss-Laufs und das Ergebnis des Client-Gates (Schritt 10c: Kontaktstellen je Client, BERÜHRT-Stellen falls vorhanden). Liegen lokal Commits nach `<releaseSha>`, die noch nicht gepusht sind, das mit Anzahl erwähnen. Erwähne, dass die Notizen den Usern beim nächsten Laden unter **Hilfe → Neuigkeiten** erscheinen (mit Punkt am „?"-Knopf, bis sie gelesen sind).
 
-Bei jedem Fehlschlag eines Schritts **stoppen** und den Stand berichten — mit der Angabe, was schon committet/gepusht/getaggt ist und was fehlt, damit der nächste Lauf dort aufsetzt. Kein `gh release create` ohne gepushten Tag, und kein „mache ich später" für Commit oder Push.
+Bei jedem Fehlschlag eines Schritts **stoppen** und den Stand berichten — mit der Angabe, was schon committet/gepusht/getaggt ist und was fehlt, damit der nächste Lauf dort aufsetzt. Kein `gh release create` ohne gepushten Tag, kein Tag auf einen ungetesteten Commit, und kein „mache ich später" für Push.

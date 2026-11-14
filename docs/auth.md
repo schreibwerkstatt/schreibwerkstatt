@@ -97,7 +97,9 @@ existiert und wer den Anstoss gibt.
 3. **Initialpasswort.** `POST /admin/users/:email/password` setzt ein Passwort mit
    `must_change=1`. Die nächste Anmeldung damit gelingt, **öffnet aber keine
    Sitzung**: der Server mintet ein einstündiges Token und antwortet
-   `{ ok: true, redirect: '/auth/password?token=…' }`.
+   `{ ok: true, redirect: '/auth/password?token=…' }`. Für das **eigene** Konto
+   des Admins gilt `must_change=0` (er kennt sein Passwort), und nur dort ist die
+   Route schon vor dem Wechsel auf `local` offen — siehe «Verfahren wechseln».
 
 **Why keine halb angemeldete Sitzung beim Initialpasswort:** die müsste ein
 globaler Guard danach wieder einfangen, und jede Route, die das vergisst, wäre
@@ -162,6 +164,15 @@ ohne Neustart. Was dabei zu bedenken ist:
 - **Konten bleiben, Anmeldewege nicht.** Nach dem Wechsel auf „Lokal" hat noch kein
   Konto ein Passwort — der Admin verteilt Setz-Links oder Initialpasswörter, bevor
   er den alten Weg abschaltet. Der ENV-Admin ist in diesem Fenster der Rückweg.
+- **Kein Wechsel, der den Admin aussperrt.** Das Speichern von `auth.method='local'`
+  (Sammel-`PUT /admin/settings` wie Einzel-`PUT`) lehnt der Server mit
+  `409 AUTH_LOCAL_OWN_PASSWORD_REQUIRED` ab, solange der handelnde Admin kein
+  lokales Passwort hat **und** kein ENV-Admin (`ADMIN_EMAIL` + `ADMIN_PASSWORD`)
+  eingerichtet ist. Die laufende Sitzung überlebte den Wechsel zwar, nach dem
+  Abmelden wäre aber niemand mehr drin, der Passwörter vergeben kann. Der
+  Auth-Reiter bietet dafür vorab das Feld «Eigenes Passwort» an
+  (`POST /admin/users/<eigene Adresse>/password` ist als einzige Passwort-Route
+  schon vor dem Wechsel offen).
 - **Google-Secrets bleiben gesetzt.** Das Admin-UI blendet die Felder des inaktiven
   Verfahrens nur aus; ein Zurückschalten verliert nichts.
 - **`user_credentials` bleibt beim Wechsel zurück zu einem IdP stehen.** Die Zeilen

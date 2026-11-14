@@ -8,7 +8,7 @@ const { test, expect } = require('./_helpers/fixtures');
 // dabei Zugehoeriges weg — Orte nur bei woertlicher Nennung, Szenen nur an
 // genau dieser Seite, Ereignisse nach dem Kapitel-NAMEN (verwechselt gleich-
 // benannte Kapitel). Ohne jeden Hinweis, dass da noch etwas ist.
-const HARNESS_URL = 'http://localhost:8765/tests/fixtures/reference-context-harness.html';
+const HARNESS_URL = '/tests/fixtures/reference-context-harness.html';
 
 // Recherche-Fundstuecke kommen per fetch — Verknuepfungen auf Seite 7 (offen),
 // Kapitel 3 (deren Kapitel), Seite 8 (Nachbarseite) und Kapitel 4 (fremd).

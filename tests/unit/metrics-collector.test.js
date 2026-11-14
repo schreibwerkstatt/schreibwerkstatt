@@ -51,6 +51,8 @@ function seed() {
               VALUES (?,?,?,?,?,?,?)`).run('a@x.test', 'Anna', 'active', 'user', 30, now, now);
   db.prepare(`INSERT INTO app_users (email, display_name, status, global_role, created_at)
               VALUES (?,?,?,?,?)`).run('b@x.test', 'Ben', 'suspended', 'user', now);
+  db.prepare(`INSERT INTO app_users (email, display_name, status, global_role, last_seen_at, created_at)
+              VALUES (?,?,?,?,?,?)`).run('admin@x.test', 'Admin', 'active', 'admin', now, now);
   db.prepare('INSERT INTO books (book_id, name, created_at, updated_at, owner_email) VALUES (?,?,?,?,?)')
     .run(1, 'Geheimer Titel', now, now, 'a@x.test');
   db.prepare('INSERT INTO pages (page_id, book_id, page_name) VALUES (?,?,?)').run(10, 1, 'S1');
@@ -103,6 +105,9 @@ test('JSON: Vertragsform, Werte und Datenschutzgrenze', () => {
   assert.strictEqual(sample(j, 'sw_user_chars_today', l => l.user === 'a@x.test'), 1200);
   assert.strictEqual(sample(j, 'sw_user_chars', l => l.user === 'a@x.test'), 7200);
   assert.strictEqual(sample(j, 'sw_user_books', l => l.user === 'b@x.test'), undefined, 'gesperrte User fehlen');
+  assert.strictEqual(sample(j, 'sw_user_books', l => l.user === 'admin@x.test'), undefined, 'Admins fehlen');
+  assert.strictEqual(sample(j, 'sw_users', l => l.status === 'active'), 1, 'Admins nicht gezaehlt');
+  assert.strictEqual(sample(j, 'sw_active_users_24h'), 1, 'Admin-Login zaehlt nicht als aktiv');
   assert.doesNotMatch(JSON.stringify(j), /Geheimer Titel/, 'keine Buchtitel');
 
   const plain = collectMetricsJson();

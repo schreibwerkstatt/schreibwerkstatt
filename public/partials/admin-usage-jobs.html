@@ -1,0 +1,63 @@
+<!-- Admin-Usage → Jobs-Tab -->
+<!--
+  Sub-Partial von admin-usage.html (Scope: adminUsageCard). Quelle:
+  GET /admin/usage/jobs, Server-paginiert: «Weitere laden» haengt die naechste
+  Seite an (adminUsageLoadMore), sortiert wird ueber die geladenen Zeilen.
+-->
+<div x-show="adminUsageTab === 'jobs'" class="admin-usage-pane" :aria-busy="adminUsageLoading"
+     id="admin-usage-pane-jobs" role="tabpanel" aria-labelledby="admin-usage-tab-jobs">
+  <div class="admin-usage-filter">
+    <!-- @include admin-usage-user-filter -->
+  </div>
+  <div class="table-scroll" x-show="adminUsageJobsList.length">
+  <table class="data-table"
+         x-data="sortableTable({
+           rows: () => adminUsageJobsList,
+           defaultKey: 'queuedAt',
+           defaultDir: 'desc',
+           persistKey: 'admin.usage.jobs',
+           window: false,
+           types: { tokensIn: 'number', tokensOut: 'number', cacheReadIn: 'number',
+                    cacheCreationIn: 'number', usd: 'number', bookId: 'number',
+                    queuedAt: 'date' },
+         })">
+    <thead>
+      <tr>
+        <th x-bind="sortTh('userEmail')" x-text="$app.t('admin.users.email')"></th>
+        <th x-bind="sortTh('type')" x-text="$app.t('admin.usage.job.type')"></th>
+        <th x-bind="sortTh('model')" x-text="$app.t('admin.usage.job.model')"></th>
+        <th x-bind="sortTh('tokensIn')" x-text="$app.t('admin.usage.column.tokensIn')"></th>
+        <th x-bind="sortTh('tokensOut')" x-text="$app.t('admin.usage.column.tokensOut')"></th>
+        <th x-bind="sortTh('cacheReadIn')" x-text="$app.t('admin.usage.column.cacheRead')"></th>
+        <th x-bind="sortTh('cacheCreationIn')" x-text="$app.t('admin.usage.column.cacheWrite')"></th>
+        <th x-bind="sortTh('usd')" x-text="$app.t('admin.usage.column.cost')"></th>
+        <th x-bind="sortTh('bookId')" x-text="$app.t('admin.usage.job.book')"></th>
+        <th x-bind="sortTh('queuedAt')" x-text="$app.t('admin.usage.job.queuedAt')"></th>
+      </tr>
+    </thead>
+    <tbody>
+      <template x-for="r in sorted" :key="r.id">
+        <tr>
+          <td x-text="r.userEmail || '—'"></td>
+          <td x-text="_adminUsageTypeLabel(r.type)"></td>
+          <td x-text="r.model || '—'"></td>
+          <td x-text="adminUsageInt(r.tokensIn)"></td>
+          <td x-text="adminUsageInt(r.tokensOut)"></td>
+          <td x-text="adminUsageInt(r.cacheReadIn)"></td>
+          <td x-text="adminUsageInt(r.cacheCreationIn)"></td>
+          <td x-text="adminUsageMoney(r.usd)"></td>
+          <td x-text="r.bookId ? ('#' + r.bookId) : '—'"></td>
+          <td x-text="adminUsageDateTime(r.queuedAt)"></td>
+        </tr>
+      </template>
+    </tbody>
+  </table>
+  </div>
+  <div x-show="!adminUsageJobsList.length && !adminUsageLoading" class="muted-msg" x-text="$app.t('admin.usage.empty')"></div>
+  <div class="admin-usage-more" x-show="adminUsageJobsList.length">
+    <span class="muted-msg muted-msg--sm"
+          x-text="$app.tn('admin.usage.list.shown', adminUsageJobsTotal, { shown: adminUsageInt(adminUsageJobsList.length) })"></span>
+    <button type="button" x-show="adminUsageJobsList.length < adminUsageJobsTotal" :disabled="adminUsageLoading"
+            @click="adminUsageLoadMore('jobs')" x-text="$app.t('admin.usage.list.loadMore')"></button>
+  </div>
+</div>

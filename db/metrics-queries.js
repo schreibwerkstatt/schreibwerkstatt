@@ -11,10 +11,13 @@ const _one = (sql) => { const st = db.prepare(sql); return (...a) => st.get(...a
 const _all = (sql) => { const st = db.prepare(sql); return (...a) => st.all(...a); };
 
 // ── User ────────────────────────────────────────────────────────────────────
-const usersByStatus     = _all('SELECT status, COUNT(*) AS n FROM app_users GROUP BY status');
-const usersSeenSince    = _one('SELECT COUNT(*) AS n FROM app_users WHERE last_seen_at >= ?');
+// Admins zaehlen nicht: sie pflegen die Instanz, schreiben aber nicht. Ihr
+// Login in die Admin-Konsole soll weder aktive User noch Pro-User-Werte erzeugen.
+const _NOT_ADMIN = "global_role <> 'admin'";
+const usersByStatus     = _all(`SELECT status, COUNT(*) AS n FROM app_users WHERE ${_NOT_ADMIN} GROUP BY status`);
+const usersSeenSince    = _one(`SELECT COUNT(*) AS n FROM app_users WHERE last_seen_at >= ? AND ${_NOT_ADMIN}`);
 const activeUsers       = _all(`SELECT email, display_name, last_seen_at, daily_goal_minutes
-                                  FROM app_users WHERE status = 'active' ORDER BY email`);
+                                  FROM app_users WHERE status = 'active' AND ${_NOT_ADMIN} ORDER BY email`);
 
 // ── Inhalt ──────────────────────────────────────────────────────────────────
 const countBooks        = _one('SELECT COUNT(*) AS n FROM books');

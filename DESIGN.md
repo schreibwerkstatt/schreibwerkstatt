@@ -546,9 +546,11 @@ mit `myCardOptions() { return this.cardData.map(...); }` am Karten-Scope.
 </div>
 ```
 - `x-modelable="value" x-model="ref"` koppelt den aktiven Tab ans Karten-Feld (bleibt SSoT für programmatisches Reset, z. B. `this.activeTab = 'layout'` auf `view:reset`). Default = Initialwert des Feldes.
+- Tab und Panel verweisen per ID aufeinander (`aria-controls` am Tab, `aria-labelledby` am Panel); die IDs bildet die Komponente je Instanz selbst — Panels darum immer über `panel(key)` derselben Instanz, nie als eigenes `x-show`.
+- Nebenwirkung eines Reiterwechsels (Nachladen) hängt die Karte an einen `$watch` auf ihr Feld, nicht an den Klick — so greift sie auch beim Permalink-/Palette-Sprung (Muster: `adminSettingsTab` → API-Tokens).
 - Config: positionales Array oder Object-Form `tabs({ tabs: [...], persistKey: 'xxx' })` (`persistKey` optional → aktiver Tab überlebt Reload via localStorage).
 - Bedingte Tabs: Button behält eigenes `x-show`; `tabBtn(key)` daneben spreaden (Beispiel: book-settings sync-Tab nur für Buchtyp `blog`).
-- Referenz: [public/partials/pdf-export.html](public/partials/pdf-export.html), [public/partials/epub-export.html](public/partials/epub-export.html), [public/partials/book-settings.html](public/partials/book-settings.html).
+- Referenz: [public/partials/pdf-export.html](public/partials/pdf-export.html), [public/partials/epub-export.html](public/partials/epub-export.html), [public/partials/book-settings.html](public/partials/book-settings.html), Admin-Einstellungen (Reiterliste aus [admin-settings-tabs.js](public/js/admin/admin-settings-tabs.js), Provider-Unterreiter) und Admin-Benutzer.
 
 **Modus-Toggles / Filter-Tabs** (2-3 Optionen, die nur eine Ansicht filtern statt echte Panels umzuschalten — Fehler-Heatmap, Graph-Modus, Severity-Filter) bleiben mit inline `:class`/`@click`, kein `role=tablist`:
 ```html
@@ -1212,7 +1214,7 @@ Pflicht-Pattern (Wrapper-Div leer lassen, nur Attribute setzen):
 
 **Regel:** Ein einzelnes Feld in einer **Admin-Settings-Karte** (Label + Control + optionaler Help-Text, gebunden an `adminSettingsForm[key]`/`adminSettingsMap[key]`) nutzt `Alpine.data('settingField')` aus [public/js/setting-field.js](public/js/setting-field.js). **Kein handgeschriebenes `<label><span x-text=…><input …><small …help></label>`** mehr pro Feld — die fünf Archetypen (Text/URL/E-Mail, Passwort/Secret mit Masked-Hint, Zahl via `numInput`, Auswahl via `combobox`, Boolean via `toggleSwitch`) waren über die Settings-Tabs vielfach dupliziert. Selbst-rendernde Komponente analog `combobox`/`toggleSwitch`: `init()` rendert die komplette `<label>`-Struktur und ruft `Alpine.initTree`; der interne `x-model` löst über die Alpine-Scope-Kette auf die `adminSettingsCard`-Form auf.
 
-**Use:** ausschliesslich die reinen Feld-Tabs der Admin-Settings. Sonderfälle mit eigener Logik (`provider` mit Subtabs + Budget-Widget, `api` mit Token-Verwaltung) bleiben von Hand. Wrapper-Div leer lassen, nur Attribute setzen:
+**Use:** die Felder aller Admin-Settings-Reiter (auch die Provider-Unterreiter). Sonderfälle mit eigener Logik (Budget-Widget, Token-Verwaltung im `api`-Reiter) bleiben von Hand. Wrapper-Div leer lassen, nur Attribute setzen:
 
 ```html
 <!-- i18n-Konvention: Label/Placeholder/Help via base + `.label`/`.placeholder`/`.help` -->
@@ -1235,7 +1237,9 @@ Pflicht-Pattern (Wrapper-Div leer lassen, nur Attribute setzen):
 
 Ein nicht erreichbarer Host ist kein Fehler: `POST /admin/settings/models` antwortet mit `200 { ok: false, error_code }`, das Feld zeigt den Hinweis unter dem Input und behält das Textfeld.
 
-**Config:** `k` (Pflicht, Setting-Key); `type` (`text` Default | `url` | `email` | `password` | `num` | `select` | `toggle`); `models` (Modell-Picker, siehe unten); `base` (i18n-Basis unter `admin.settings.` → Label `.label`, Placeholder `.placeholder`, Help `.help` nur bei `help: true`); `label`/`phKey`/`help` (volle i18n-Key-Overrides, wenn die Keys nicht der `.label`/`.placeholder`/`.help`-Konvention folgen); `ph` (Literal-Placeholder-String); `secret` (Masked-Placeholder + Masked-Hint; bei `type: 'password'` implizit); `num` (numInput-Config); `opts` (combobox-Options).
+**Zustandszeile + «Auf Standard zurücksetzen»:** jedes Feld rendert unter dem Control (ausserhalb des `<label>`, damit der Knopf dem Eingabefeld nicht die Beschriftung nimmt) eine kleine Zeile `.setting-field__meta`: «geändert» (gespeicherter Wert weicht vom Registry-Standard ab; Tooltip: wer/wann aus `updated_by`/`updated_at`), «ungespeichert» bzw. «wird auf Standard zurückgesetzt», dazu der Ghost-Knopf «Auf Standard zurücksetzen» (bei Secrets «Gespeicherten Wert löschen»). Ein Feld auf dem Standard zeigt nichts — der Normalfall bleibt still. Zustände und Aktionen liefert die Karte (`adminSettingsFieldState`/`adminSettingsCanReset`/`adminSettingsResetField`), gespeichert wird über das Sammel-`PUT /admin/settings` (`values` + `reset`). Ein leeres Zahlenfeld heisst «Standard», nicht 0.
+
+**Config:** `k` (Pflicht, Setting-Key); `type` (`text` Default | `url` | `email` | `password` | `num` | `select` | `toggle`); `models` (Modell-Picker, siehe unten); `base` (i18n-Basis unter `admin.settings.` → Label `.label`, Placeholder `.placeholder`, Help `.help` nur bei `help: true`); `label`/`phKey`/`help` (volle i18n-Key-Overrides, wenn die Keys nicht der `.label`/`.placeholder`/`.help`-Konvention folgen); `ph` (Literal-Placeholder-String); `secret` (Masked-Placeholder + Masked-Hint; bei `type: 'password'` implizit); `num` (numInput-Config); `opts` (combobox-Options; statt `label` ein i18n-Key als `labelKey`).
 
 **Klassen:** `.setting-field` ([public/css/admin/admin-settings.css](public/css/admin/admin-settings.css)) — Grid-Item der Sektion (`min-width: 0` hält die Shrink-Kette; internes Grid stapelt Toggle + Help). `.setting-field__model-row` legt Input + Lade-Button/Combobox in eine umbrechende Flex-Zeile. Label/Input/Small erben die bestehenden `.admin-settings-section`-Descendant-Styles.
 
@@ -2553,7 +2557,7 @@ cancelXyz()       { this.xyzId = null; this._releasePickerPopover(); }
 
 **CSS:** [components/picker-popover.css](public/css/components/picker-popover.css). Gegated: [picker-popover-single-place.test.mjs](tests/unit/picker-popover-single-place.test.mjs) — Markup-Rahmen, Ref-Paarung `_openPickerPopover` ↔ `x-ref`, Mechanik nur aus `picker-popover.js`, Optik nur aus `picker-popover.css`.
 
-**Konsumenten:** Recherche — Verknüpfen eines Fundstücks ([recherche-link-picker.html](public/partials/recherche-link-picker.html), aus Listenzeile — auch aufgeklappt — und Board-Karte). Ideen — Verknüpfen ([ideen-link-picker.html](public/partials/ideen-link-picker.html), Ideen-Karte + Ideen-Board), Verschieben ([ideen.html](public/partials/ideen.html)), Zuordnen ([ideen-board-add.html](public/partials/ideen-board-add.html)); die drei teilen sich `pickerPopoverPos`. Buchorganizer — Abschnitt in anderes Buch ([organizer-book-move.html](public/partials/organizer-book-move.html), Warnung als `__hint` statt Rückfrage-Dialog). Figur-Werkstatt — mit Katalogfigur verknüpfen ([werkstatt-link-picker.html](public/partials/werkstatt-link-picker.html), lädt nach dem Öffnen und misst über `_refinePickerPopover` neu).
+**Konsumenten:** Recherche — Verknüpfen eines Fundstücks ([recherche-link-picker.html](public/partials/recherche-link-picker.html), aus Listenzeile — auch aufgeklappt — und Board-Karte). Ideen — Verknüpfen ([ideen-link-picker.html](public/partials/ideen-link-picker.html), Ideen-Karte + Ideen-Board), Verschieben ([ideen.html](public/partials/ideen.html)), Zuordnen ([ideen-board-add.html](public/partials/ideen-board-add.html)); die drei teilen sich `pickerPopoverPos`. Buchorganizer — Abschnitt in anderes Buch ([organizer-book-move.html](public/partials/organizer-book-move.html), Warnung als `__hint` statt Rückfrage-Dialog). Figur-Werkstatt — mit Katalogfigur verknüpfen ([werkstatt-link-picker.html](public/partials/werkstatt-link-picker.html), lädt nach dem Öffnen und misst über `_refinePickerPopover` neu). Admin-Bücher — Owner eines Buchs ohne Owner zuweisen ([admin-books.html](public/partials/admin-books.html), Folge der Wahl als `__hint` statt Rückfrage-Dialog).
 
 ---
 

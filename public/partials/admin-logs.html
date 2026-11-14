@@ -8,11 +8,13 @@
   <div class="card-header">
     <span class="card-title" x-text="$app.t('admin.logs.title')"></span>
     <div class="card-actions">
-      <button :aria-pressed="adminLogsLiveTail" type="button"
+      <!-- Live-Tail gilt nur ohne Filter: gefiltert ist der Knopf gesperrt und aus. -->
+      <button :aria-pressed="adminLogsLiveOn() ? 'true' : 'false'" type="button"
               class="admin-logs-livetail"
-              :class="adminLogsLiveTail ? 'admin-logs-livetail--on' : ''"
+              :class="adminLogsLiveOn() ? 'admin-logs-livetail--on' : ''"
+              :disabled="adminLogsFiltered()"
               @click="adminLogsToggleLiveTail()"
-              :data-tip="$app.t('admin.logs.liveTail')">
+              :data-tip="adminLogsFiltered() ? $app.t('admin.logs.liveTailFiltered') : $app.t('admin.logs.liveTail')">
         <svg class="icon" aria-hidden="true"><use href="/icons.svg#radio"></use></svg>
         <span x-text="$app.t('admin.logs.liveTail')"></span>
       </button>
@@ -20,23 +22,27 @@
     </div>
   </div>
 
-  <!-- Filter-Toolbar -->
+  <!-- Filter-Toolbar: Felder wenden sich nach kurzer Pause selbst an
+       (admin-logs.js#_adminLogsScheduleApply). Comboboxen tragen ihren Namen
+       per aria-labelledby, die Textfelder sitzen im <label>. -->
   <div class="admin-logs-filter">
-    <label class="admin-logs-filter-label">
-      <span x-text="$app.t('admin.logs.filter.level')"></span>
+    <div class="admin-logs-filter-label" x-id="['fld']">
+      <span :id="$id('fld')" x-text="$app.t('admin.logs.filter.level')"></span>
       <div x-data="combobox({ placeholder: $app.t('admin.logs.filter.allLevels'), emptyLabel: $app.t('admin.logs.filter.allLevels') })"
+           :aria-labelledby="$id('fld')"
            x-modelable="value" x-model="adminLogsFilter.level"
            x-effect="options = adminLogsLevels"></div>
-    </label>
-    <label class="admin-logs-filter-label">
-      <span x-text="$app.t('admin.logs.filter.scope')"></span>
+    </div>
+    <div class="admin-logs-filter-label" x-id="['fld']">
+      <span :id="$id('fld')" x-text="$app.t('admin.logs.filter.scope')"></span>
       <div x-data="combobox({ placeholder: $app.t('admin.logs.filter.allScopes'), emptyLabel: $app.t('admin.logs.filter.allScopes') })"
+           :aria-labelledby="$id('fld')"
            x-modelable="value" x-model="adminLogsFilter.scope"
            x-effect="options = adminLogsScopeOptions()"></div>
-    </label>
+    </div>
     <label class="admin-logs-filter-label">
       <span x-text="$app.t('admin.logs.filter.user')"></span>
-      <input type="text" class="card-form-input" x-model.debounce.300ms="adminLogsFilter.user"
+      <input type="text" class="card-form-input" x-model="adminLogsFilter.user"
              :placeholder="$app.t('admin.logs.filter.userPh')">
     </label>
     <label class="admin-logs-filter-label">
@@ -49,14 +55,15 @@
     </label>
     <label class="admin-logs-filter-label admin-logs-filter-label--wide">
       <span x-text="$app.t('admin.logs.filter.search')"></span>
-      <input type="text" class="card-form-input" x-model.debounce.300ms="adminLogsFilter.q"
+      <input type="text" class="card-form-input" x-model="adminLogsFilter.q"
              :placeholder="$app.t('admin.logs.filter.searchPh')">
     </label>
-    <div class="admin-logs-filter-actions">
-      <button type="button" class="primary" @click="adminLogsApplyFilter()" :disabled="adminLogsLoading" x-text="$app.t('admin.logs.applyFilter')"></button>
-      <button type="button" @click="adminLogsClearAndLive()" :disabled="adminLogsLoading" x-show="adminLogsHasFilter()" x-text="$app.t('admin.logs.clearFilter')"></button>
+    <div class="admin-logs-filter-actions" x-show="adminLogsHasFilter() || adminLogsFiltered()">
+      <button type="button" @click="adminLogsClearAndLive()" :disabled="adminLogsLoading" x-text="$app.t('admin.logs.clearFilter')"></button>
     </div>
   </div>
+  <p class="muted-msg muted-msg--sm" x-show="adminLogsServerTz"
+     x-text="$app.t('admin.logs.serverTz', { tz: adminLogsServerTz })"></p>
 
   <div x-show="adminLogsError" class="error-msg card-section" x-text="adminLogsError"></div>
   <div x-show="adminLogsRotatedHint" class="muted-msg card-section" x-text="$app.t('admin.logs.rotated')"></div>
@@ -93,7 +100,8 @@
     </div>
   </div>
 
-  <div x-show="!adminLogsEntries.length && !adminLogsLoading" class="muted-msg" x-text="$app.t('admin.logs.empty')"></div>
+  <div x-show="adminLogsLoading && !adminLogsEntries.length" x-skeleton="6" x-cloak></div>
+  <p x-show="!adminLogsEntries.length && !adminLogsLoading && !adminLogsError" class="muted-msg muted-msg--sm" x-text="$app.t('admin.logs.empty')"></p>
 
   <!-- Footer: Seiten + Downloads -->
   <div class="admin-logs-footer">
@@ -110,7 +118,8 @@
     <div class="admin-logs-downloads" x-show="adminLogsFiles.length">
       <span class="muted-msg muted-msg--sm" x-text="$app.t('admin.logs.download')"></span>
       <template x-for="f in adminLogsFiles" :key="f.key">
-        <button type="button" class="admin-logs-download-btn" @click="adminLogsDownload(f)">
+        <button type="button" class="admin-logs-download-btn" @click="adminLogsDownload(f)"
+                :disabled="!!adminLogsDownloading" :aria-busy="adminLogsDownloading === f.key ? 'true' : 'false'">
           <svg class="icon" aria-hidden="true"><use href="/icons.svg#download"></use></svg>
           <span x-text="f.path"></span>
         </button>

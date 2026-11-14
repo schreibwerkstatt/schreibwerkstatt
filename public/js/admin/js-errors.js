@@ -1,38 +1,29 @@
 // AdminJsErrorsCard-Methods. Wird im adminJsErrorsCard-Alpine-Scope gespreaded.
 // Root-Zugriffe via window.__app. Liest aus /admin/js-errors/list + DELETE.
+// Die Liste traegt bis zu 500 Eintraege: sie rendert schrittweise
+// (listWindowed), Details (Stack, URL, User-Agent) haengen per x-if nur an
+// aufgeklappten Zeilen.
 
-import { fmtDateTime, fetchJson, sendJson } from '../utils.js';
+import { fetchJson, sendJson } from '../utils.js';
 import { tFetchError } from '../i18n.js';
+import { listWindowState } from '../list-window.js';
+import { adminLoaderMethods, assignIfChanged } from './admin-loader.js';
+import { adminFormatMethods } from './admin-format.js';
 
 export const adminJsErrorsMethods = {
-  // ── Lifecycle ────────────────────────────────────────────────────────────
-  async jsErrorsEnter() {
-    if (this.jsErrorsInitialized) return;
-    this.jsErrorsInitialized = true;
-    await this._jsErrorsLoad();
-  },
+  // ── Lifecycle: jsErrorsEnter / jsErrorsRefresh / _jsErrorsLoad ──────────
+  ...adminLoaderMethods('jsErrors', {
+    request: () => fetchJson('/admin/js-errors/list'),
+    apply(data, { silent }) {
+      assignIfChanged(this, 'jsErrorsList', data.errors || [], silent);
+      if (!silent) {
+        this.jsErrorsExpanded = {};
+        Object.assign(this, listWindowState());
+      }
+    },
+  }),
 
   _jsErrorsLeave() { /* nichts zu raeumen */ },
-
-  // ── Laden ────────────────────────────────────────────────────────────────
-  async _jsErrorsLoad() {
-    this.jsErrorsLoading = true;
-    this.jsErrorsError = '';
-    try {
-      const data = await fetchJson('/admin/js-errors/list');
-      this.jsErrorsList = data.errors || [];
-      this.jsErrorsExpanded = {};
-    } catch (e) {
-      this.jsErrorsError = tFetchError(e);
-    } finally {
-      this.jsErrorsLoading = false;
-    }
-  },
-
-  jsErrorsRefresh() {
-    this.jsErrorsInitialized = false;
-    return this.jsErrorsEnter();
-  },
 
   jsErrorsToggle(id) {
     this.jsErrorsExpanded = { ...this.jsErrorsExpanded, [id]: !this.jsErrorsExpanded[id] };
@@ -48,7 +39,7 @@ export const adminJsErrorsMethods = {
     if (!ok) return;
     try {
       await sendJson('/admin/js-errors/' + encodeURIComponent(id), 'DELETE');
-      await this._jsErrorsLoad();
+      this.jsErrorsList = this.jsErrorsList.filter(e => e.id !== id);
     } catch (e) {
       this.jsErrorsError = tFetchError(e);
     }
@@ -70,9 +61,7 @@ export const adminJsErrorsMethods = {
   },
 
   // ── Format ───────────────────────────────────────────────────────────────
-  jsErrorsFmtTs(iso) {
-    return fmtDateTime(iso, Alpine.store('shell').uiLocale, { dateStyle: 'medium', timeStyle: 'medium' });
-  },
+  ...adminFormatMethods,
 
   // Quelle kompakt: nur Dateiname + Zeile (voller Pfad steht im Detail).
   jsErrorsLoc(e) {

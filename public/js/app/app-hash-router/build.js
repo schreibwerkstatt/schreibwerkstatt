@@ -1,6 +1,7 @@
 // Teil von appHashRouterMethods (siehe Facade app-hash-router.js).
 import { exitFullscreenOnNavigation } from '../../fullscreen.js';
 import { URL_TABS } from '../../cards/card-request.js';
+import { ADMIN_CARDS } from '../../cards/feature-registry.js';
 // Schreib-Richtung: State → URL. Baut den Hash aus dem aktuellen State und
 // schreibt ihn per push/replace in die History.
 //
@@ -26,19 +27,10 @@ export const hashBuildMethods = {
     }
     // Folder-Import ist book-unabhaengig (new-book oder merge).
     if (this.showFolderImportCard) return '#import';
-    if (this.showAdminUsersCard) return '#admin/users' + this._urlTabSuffix('adminUsers');
-    if (this.showAdminSettingsCard) return '#admin/settings' + this._urlTabSuffix('adminSettings');
-    if (this.showAdminUsageCard) {
-      const tab = this.adminUsageTab;
-      return '#admin/usage' + (tab && tab !== 'users' ? '/' + tab : '');
-    }
-    if (this.showAdminCategoriesCard) return '#admin/categories';
-    if (this.showAdminBooksCard) return '#admin/books';
-    if (this.showAdminLogsCard) return '#admin/logs';
-    if (this.showAdminParseFailsCard) return '#admin/parse-fails';
-    if (this.showAdminJsErrorsCard) return '#admin/js-errors';
-    if (this.showAdminDevicesCard) return '#admin/devices';
-    if (this.showAdminBackupCard) return '#admin/backup';
+    // Admin-Karten: `#admin/<slug>` aus der Registry (`admin.slug`), Reiter
+    // per URL_TABS; die Auslastung haengt ihren Reiter selbst an.
+    const adminCard = ADMIN_CARDS.find(c => this[c.flag]);
+    if (adminCard) return '#admin/' + adminCard.admin.slug + this._adminHashSuffix(adminCard.key);
     if (!this.$store.nav.selectedBookId) return '';
     const parts = ['book', this.$store.nav.selectedBookId];
     if (this.showEditorCard && this.currentPage?.id) {
@@ -116,6 +108,14 @@ export const hashBuildMethods = {
     const spec = URL_TABS[cardKey];
     const tab = spec && this.$store.nav.cardTab[spec.request];
     return tab && tab !== spec.default && spec.tabs.includes(tab) ? [tab] : [];
+  },
+
+  _adminHashSuffix(cardKey) {
+    if (cardKey === 'adminUsage') {
+      const tab = this.adminUsageTab;
+      return tab && tab !== 'users' ? '/' + tab : '';
+    }
+    return URL_TABS[cardKey] ? this._urlTabSuffix(cardKey) : '';
   },
 
   _urlTabSuffix(cardKey) {

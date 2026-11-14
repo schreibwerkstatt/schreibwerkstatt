@@ -97,7 +97,7 @@ test('Verhalten mit Daten: Vorschlaege, Jobs, nie geoeffnete Funktionen, Kohorte
       friction: [{ key: 'conflict.merged', count: 2, users: 1 }, { key: 'discard.keep', count: 0, users: 0 }],
     };
   });
-  await expect(pane.locator('tr', { hasText: 'beat_update' })).toContainText('75 %');
+  await expect(pane.locator('tr', { hasText: /Beat ändern|Edit beat/ })).toContainText('75 %');
   await expect(pane.locator('tr', { hasText: /Plot-Werkstatt|Plot/ }).first()).toBeVisible();
   // Funktionen ohne Oeffnung stehen mit 0 in der Tabelle (gedimmt).
   await expect(pane.locator('tr.admin-usage-row--muted').first()).toBeVisible();
@@ -209,4 +209,93 @@ test('Chat-Tab: Bewertungs-Filter schickt feedback=down und zeigt die Bewertung'
   await req;
   await expect(pane.locator('table.data-table tbody tr').last()).toContainText('👎');
   await expect(pane.locator('table.data-table tbody tr').last()).toContainText('m-x');
+});
+
+test('Summary: leerer Zeitraum raeumt die Charts ab und zeigt den Leerzustand', async ({ page }) => {
+  await bootApp(page);
+  let empty = false;
+  await page.route(u => new URL(u).pathname === '/admin/usage/summary', route => route.fulfill({ json: empty
+    ? { totals: { usd: 0 }, topUsers: [], byModel: [], byType: [] }
+    : { totals: { usd: 3 }, topUsers: [{ email: 'anna@ex.com', usd: 2 }], byModel: [{ model: 'm-x', usd: 3 }],
+        byType: [{ type: 'check', usd: 3 }] } }));
+  const first = page.waitForResponse(r => new URL(r.url()).pathname === '/admin/usage/summary');
+  await page.evaluate(() => { location.hash = '#admin/usage/summary'; });
+  await first;
+  const pane = page.locator('#admin-usage-pane-summary');
+  await expect(pane.locator('canvas[role="img"]').first()).toBeVisible();
+  await expect.poll(() => page.evaluate(() =>
+    Object.keys(Alpine.$data(document.querySelector('.card--admin-usage'))._adminUsageCharts || {}).length)).toBe(3);
+
+  empty = true;
+  const second = page.waitForResponse(r => new URL(r.url()).pathname === '/admin/usage/summary');
+  await page.evaluate(() => { Alpine.$data(document.querySelector('.card--admin-usage')).adminUsageFrom = '2020-01-01'; });
+  await second;
+  await expect(pane.locator('canvas').first()).toBeHidden();
+  await expect(pane.locator('figure .muted-msg')).toHaveCount(3);
+  await expect(pane.locator('figure .muted-msg').first()).toBeVisible();
+  await expect.poll(() => page.evaluate(() =>
+    Object.keys(Alpine.$data(document.querySelector('.card--admin-usage'))._adminUsageCharts || {}).length)).toBe(0);
+});
+
+test('Jobs-Tab: «Weitere laden» haengt die naechste Seite an, Filter beginnt wieder vorn', async ({ page }) => {
+  await bootApp(page);
+  const offsets = [];
+  await page.route(u => new URL(u).pathname === '/admin/usage/jobs', route => {
+    const offset = Number(new URL(route.request().url()).searchParams.get('offset'));
+    offsets.push(offset);
+    const n = Math.min(50, 70 - offset);
+    const rows = Array.from({ length: n }, (_, i) => ({ id: offset + i + 1, userEmail: 'anna@ex.com', type: 'check',
+      model: 'm-x', tokensIn: 1, tokensOut: 1, cacheReadIn: 0, cacheCreationIn: 0, usd: 0.01, bookId: 1,
+      queuedAt: '2026-10-01T10:00:00.000Z' }));
+    return route.fulfill({ json: { rows, total: 70 } });
+  });
+  const first = page.waitForResponse(r => new URL(r.url()).pathname === '/admin/usage/jobs');
+  await page.evaluate(() => { location.hash = '#admin/usage/jobs'; });
+  await first;
+  const pane = page.locator('#admin-usage-pane-jobs');
+  await expect(pane.locator('tbody tr')).toHaveCount(50);
+  await expect(pane.locator('.admin-usage-more')).toContainText(/50 (von|of) 70/);
+  await pane.locator('.admin-usage-more button').click();
+  await expect(pane.locator('tbody tr')).toHaveCount(70);
+  await expect(pane.locator('.admin-usage-more')).toContainText(/70 (von|of) 70/);
+  await expect(pane.locator('.admin-usage-more button')).toBeHidden();
+  expect(offsets).toEqual([0, 50]);
+
+  // Zeitraum-/Filterwechsel laedt wieder ab der ersten Seite.
+  const again = page.waitForResponse(r => new URL(r.url()).pathname === '/admin/usage/jobs');
+  await page.locator('.admin-usage-range .toggle-switch__btn').click();
+  await again;
+  expect(offsets[2]).toBe(0);
+  await expect(pane.locator('tbody tr')).toHaveCount(50);
+});
+
+test('Users-Tab: «Gespeichert» verschwindet nach zwei Sekunden', async ({ page }) => {
+  await bootApp(page);
+  await page.route(u => new URL(u).pathname === '/admin/usage/users', route => route.fulfill({ json: {
+    users: [{ email: 'anna@ex.com', displayName: 'Anna', usd: 1, tokensIn: 1, tokensOut: 1, monthlyBudgetUsd: null, budgetMode: 'none' }],
+  } }));
+  await page.route(u => new URL(u).pathname === '/admin/usage/breakdown', route => route.fulfill({ json: { rows: [] } }));
+  await page.route(u => new URL(u).pathname.startsWith('/admin/users/'), route => route.fulfill({ json: {
+    user: { monthly_budget_usd: 5, budget_mode: 'soft' },
+  } }));
+  const pane = await openUsersTab(page);
+  const save = pane.locator('.admin-usage-actions button').first();
+  await expect(save).toHaveText(/^(Speichern|Save)$/);
+  await save.click();
+  await expect(save).toHaveText(/^(Gespeichert|Saved)$/);
+  await expect(save).toHaveText(/^(Speichern|Save)$/, { timeout: 4000 });
+});
+
+test('Tabs: Pfeiltaste wechselt den Tab, Panes sind per aria verknuepft', async ({ page }) => {
+  await bootApp(page);
+  await openUsersTab(page);
+  const tab = page.locator('#admin-usage-tab-users');
+  await expect(tab).toHaveAttribute('aria-controls', 'admin-usage-pane-users');
+  await expect(page.locator('#admin-usage-pane-users')).toHaveAttribute('role', 'tabpanel');
+  const jobsReq = page.waitForRequest(r => new URL(r.url()).pathname === '/admin/usage/jobs');
+  await tab.focus();
+  await page.keyboard.press('ArrowRight');
+  await jobsReq;
+  await expect(page.locator('#admin-usage-tab-jobs')).toHaveAttribute('aria-selected', 'true');
+  await expect(page.locator('#admin-usage-tab-jobs')).toBeFocused();
 });

@@ -11,10 +11,10 @@ test('Websuche-Tab: Felder, Optionen, Probe-Suche ohne URL', async ({ page }) =>
   const card = page.locator('[x-show="$app.showAdminSettingsCard"]').first();
   await expect(card).toBeVisible();
 
-  await card.locator('.admin-settings-tab', { hasText: /^(Websuche|Web search)$/ }).click();
+  await card.locator('.tabs-btn', { hasText: /^(Websuche|Web search)$/ }).click();
   // Direkt adressiert statt `:visible`: im Moment des Tab-Wechsels ist sonst noch
   // der vorherige Abschnitt sichtbar.
-  const section = card.locator(`section[x-show="adminSettingsTab === 'websearch'"]`);
+  const section = card.locator(`section[x-bind="panel('websearch')"]`);
   await expect(section).toBeVisible();
   await expect(section.locator('.setting-field')).toHaveCount(5);
 
@@ -30,5 +30,7 @@ test('Websuche-Tab: Felder, Optionen, Probe-Suche ohne URL', async ({ page }) =>
   await section.getByRole('button', { name: /Probe-Suche|Test search/ }).click();
   const result = card.locator('.admin-settings-test-result');
   await expect(result).toBeVisible();
-  await expect(result).toContainText('NO_URL');
+  // Fehler als Satz (admin.settings.test.error.NO_URL), nicht als roher Code.
+  await expect(result).toContainText(/Keine URL eingetragen|No URL entered/);
+  await expect(result).not.toContainText('NO_URL');
 });

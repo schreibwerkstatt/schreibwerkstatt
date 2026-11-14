@@ -44,6 +44,7 @@ Katalog: [lib/metrics/defs.js](../lib/metrics/defs.js) — eine Beschreibung je 
 ### User
 - `sw_users{status}` — Gauge, count pro `app_users.status` (`invited`/`active`/`suspended`/`deleted`).
 - `sw_active_users_24h`, `sw_active_users_7d` — Gauge, distincte User mit `last_seen_at` im Zeitfenster.
+- Admins (`global_role = 'admin'`) zählen in keiner User-Kennzahl mit und bekommen keine `sw_user_*`-Werte: ihr Login in die Admin-Konsole ist keine Nutzung.
 
 ### Content
 

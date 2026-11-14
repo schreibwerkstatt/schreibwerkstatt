@@ -16,25 +16,18 @@
   <div x-show="adminUsersLoading" x-skeleton="5" x-cloak></div>
   <div x-show="adminUsersError" class="error-msg" x-text="adminUsersError"></div>
 
-  <!-- Tab-Navigation Users / Invites / Requests -->
-  <nav class="admin-users-tabs" role="tablist">
-    <button :aria-selected="adminUsersTab === 'users'" type="button" role="tab"
-            :class="adminUsersTab === 'users' ? 'is-active' : ''"
-            @click="adminUsersTab = 'users'"
-            x-text="$app.t('admin.users.tab.users')"></button>
-    <button :aria-selected="adminUsersTab === 'invites'" type="button" role="tab"
-            :class="adminUsersTab === 'invites' ? 'is-active' : ''"
-            @click="adminUsersTab = 'invites'"
-            x-text="$app.t('admin.users.tab.invites')"></button>
-    <button :aria-selected="adminUsersTab === 'requests'" type="button" role="tab"
-            :class="adminUsersTab === 'requests' ? 'is-active' : ''"
-            @click="adminUsersTab = 'requests'"
-            x-text="$app.t('admin.users.tab.requests')"></button>
-  </nav>
+  <!-- Reiter Benutzer / Einladungen / Anfragen: tabs()-Instanz um Leiste und Panels -->
+  <div x-data="tabs(['users','invites','requests'])" x-modelable="value" x-model="adminUsersTab">
+    <div class="tabs tabs--scrollable" x-bind="tablist">
+      <template x-for="tab in tabs" :key="tab">
+        <button class="tabs-btn" x-bind="tabBtn(tab)" x-text="$app.t('admin.users.tab.' + tab)"></button>
+      </template>
+    </div>
 
   <!-- @include admin-users-tab-users -->
 
   <!-- @include admin-users-tab-invites -->
 
   <!-- @include admin-users-tab-requests -->
+  </div>
 </div>

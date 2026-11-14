@@ -37,12 +37,20 @@
 //   help    true → `admin.settings.<base>.help`; String → voller i18n-Key; sonst kein Help.
 //   secret  true → Masked-Placeholder + Masked-Hint (bei type 'password' implizit).
 //   num     numInput-Config (type 'num').
-//   opts    combobox-Options `[{ value, label }]` (type 'select').
+//   opts    combobox-Options `[{ value, label }]` (type 'select'); statt `label`
+//           ein i18n-Key als `labelKey` (übersetzt, folgt dem Sprachwechsel).
 //   models  Modell-Picker: Target-String (`'claude'`) oder `{ target, hostKey }`.
 //           `hostKey` ist der Form-Key des zugehoerigen Hosts — damit fragt der
 //           Picker den gerade eingetippten, noch nicht gespeicherten Host ab.
 //           Das Textfeld bleibt die Wahrheit; die Combobox schreibt nur hinein
 //           (Modelle, die der Host nicht meldet, bleiben tippbar).
+//
+// Jedes Feld trägt unter dem Control die Zustandszeile (`setting-field__meta`):
+// «geändert» (gespeicherter Wert weicht vom Standard ab, Tooltip: wer/wann),
+// «ungespeichert» bzw. «wird zurückgesetzt», dazu «Auf Standard zurücksetzen».
+// Die Zustände liefert die Karte (`adminSettingsFieldState`/`adminSettingsCanReset`/
+// `adminSettingsResetField` in admin/admin-settings.js) — hier nur das Markup,
+// einmal für alle Felder. Bei Secrets heisst «zurücksetzen» löschen.
 
 import { tRaw } from './i18n.js';
 
@@ -99,6 +107,12 @@ export function settingFieldData(cfg = {}) {
       if (this._help === true && this._base) return this._t(`admin.settings.${this._base}.help`);
       if (typeof this._help === 'string') return this._t(this._help);
       return '';
+    },
+
+    // Select-Optionen mit übersetzten `labelKey`-Einträgen. `_t` berührt die
+    // reaktive Locale, damit x-effect bei Sprachwechsel neu rechnet.
+    get selectOptions() {
+      return (this._opts || []).map(o => (o.labelKey ? { value: o.value, label: this._t(o.labelKey) } : o));
     },
 
     get modelOptions() {
@@ -179,6 +193,24 @@ export function settingFieldData(cfg = {}) {
       return `<code class="setting-field__key">${this._k}</code>`;
     },
 
+    // Zustandszeile + «Auf Standard zurücksetzen». Steht AUSSERHALB des
+    // `<label>`: ein Knopf darin wäre dessen erstes beschriftbares Element und
+    // nähme dem Eingabefeld die Beschriftung.
+    _metaRow() {
+      const k = `'${this._k}'`;
+      return [
+        `<div class="setting-field__meta" x-show="adminSettingsFieldState(${k}) || adminSettingsCanReset(${k})" x-cloak>`,
+        `  <span class="setting-field__state" x-show="adminSettingsFieldState(${k})"`,
+        `        :class="'setting-field__state--' + adminSettingsFieldState(${k})"`,
+        `        :data-tip="adminSettingsFieldTip(${k})"`,
+        `        x-text="$app.t('admin.settings.field.state.' + adminSettingsFieldState(${k}))"></span>`,
+        `  <button type="button" class="btn-compact btn-compact--ghost setting-field__reset" x-show="adminSettingsCanReset(${k})"`,
+        `          @click="adminSettingsResetField(${k})"`,
+        `          x-text="$app.t(adminSettingsMap[${k}]?.encrypted ? 'admin.settings.field.clear' : 'admin.settings.field.reset')"></button>`,
+        '</div>',
+      ].join('\n');
+    },
+
     _render() {
       const k = this._k;
       const mkey = `adminSettingsForm['${k}']`;
@@ -193,6 +225,7 @@ export function settingFieldData(cfg = {}) {
           `  ${this._keyMarker()}`,
           '</div>',
           help,
+          this._metaRow(),
         ].join('\n');
       }
 
@@ -202,11 +235,10 @@ export function settingFieldData(cfg = {}) {
         const numJson = JSON.stringify(this._num || {});
         control = `<input type="text" x-data='numInput(${numJson})' x-modelable="value" x-model="${mkey}">`;
       } else if (this._type === 'select') {
-        const optsJson = JSON.stringify(this._opts || []);
         control = [
           `<div x-data="combobox({ placeholder: labelText, compact: false })"`,
           `     x-modelable="value" x-model="${mkey}"`,
-          `     x-effect='options = ${optsJson}'></div>`,
+          '     x-effect="options = selectOptions"></div>',
         ].join('\n');
       } else {
         // text | url | email | password
@@ -252,6 +284,7 @@ export function settingFieldData(cfg = {}) {
         maskedSmall,
         help,
         '</label>',
+        this._metaRow(),
       ].filter(Boolean).join('\n');
     },
   };

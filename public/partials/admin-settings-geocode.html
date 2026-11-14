@@ -1,6 +1,6 @@
     <!-- Geocode-Tab: zwei Sub-Sektionen — Koordinaten-Ermittlung (Geocoding) +
          Karten-Kacheln (Tiles) der Orte-Karte. -->
-    <section x-show="adminSettingsTab === 'geocode'" class="admin-settings-section">
+    <section x-bind="panel('geocode')" class="admin-settings-section">
       <h4 class="admin-settings-subheading"><span x-text="$app.t('admin.settings.geocode.geocodingTitle')"></span></h4>
       <p class="muted-msg muted-msg--sm" x-text="$app.t('admin.settings.geocode.hint')"></p>
       <div x-data="settingField({ k: 'geocode.provider', type: 'select', base: 'geocode.provider', opts: [{ value: 'nominatim', label: 'Nominatim (OSM)' }, { value: 'photon', label: 'Photon (Komoot)' }] })"></div>

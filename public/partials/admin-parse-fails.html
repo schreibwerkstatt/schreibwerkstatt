@@ -20,29 +20,36 @@
 
   <div x-show="parseFailsError" class="error-msg" x-text="parseFailsError"></div>
 
+  <div x-show="parseFailsLoading && !parseFailsFiles.length" x-skeleton="4" x-cloak></div>
+
   <div class="parse-fails-list" x-show="parseFailsFiles.length">
     <template x-for="f in parseFailsFiles" :key="f.name">
       <div class="parse-fails-row">
         <div class="parse-fails-row-head">
-          <span class="parse-fails-ts" x-text="parseFailsFmtTs(f.mtime)"></span>
-          <span class="parse-fails-size" x-text="parseFailsFmtSize(f.size)"></span>
+          <span class="parse-fails-ts" x-text="adminFmtDateTimeSec(f.mtime)"></span>
+          <span class="parse-fails-size" x-text="adminFmtBytes(f.size)"></span>
           <span class="parse-fails-name truncate" x-text="f.name"></span>
           <button type="button" class="parse-fails-view"
                   @click="parseFailsToggle(f.name)"
+                  :disabled="!!parseFailsDetailLoading[f.name]"
+                  :aria-busy="parseFailsDetailLoading[f.name] ? 'true' : 'false'"
                   :aria-expanded="parseFailsExpanded[f.name] ? 'true' : 'false'">
             <svg class="icon" aria-hidden="true"><use href="/icons.svg#chevron-down"></use></svg>
-            <span x-text="parseFailsExpanded[f.name] ? $app.t('admin.parseFails.hide') : $app.t('admin.parseFails.view')"></span>
+            <span x-text="parseFailsDetailLoading[f.name] ? $app.t('admin.parseFails.loading') : (parseFailsExpanded[f.name] ? $app.t('admin.parseFails.hide') : $app.t('admin.parseFails.view'))"></span>
           </button>
           <button type="button" class="parse-fails-delete"
                   @click="parseFailsDelete(f.name)"
+                  :data-tip="$app.t('common.delete')"
                   :aria-label="$app.t('common.delete')">
             <svg class="icon" aria-hidden="true"><use href="/icons.svg#trash"></use></svg>
           </button>
         </div>
-        <pre class="parse-fails-content" x-show="parseFailsExpanded[f.name]" x-text="parseFailsContent[f.name] || ''"></pre>
+        <template x-if="parseFailsExpanded[f.name]">
+          <pre class="parse-fails-content" x-text="parseFailsContent[f.name] || ''"></pre>
+        </template>
       </div>
     </template>
   </div>
 
-  <div x-show="!parseFailsFiles.length && !parseFailsLoading" class="muted-msg" x-text="$app.t('admin.parseFails.empty')"></div>
+  <p x-show="!parseFailsFiles.length && !parseFailsLoading && !parseFailsError" class="muted-msg muted-msg--sm" x-text="$app.t('admin.parseFails.empty')"></p>
 </div>

@@ -4,7 +4,8 @@
   Anthropic abgerechneten Kosten (Cost-Report-API, lib/anthropic-billing.js)
   dem App-Ledger gegenueber. Tage sind UTC-Tage, wie die API sie schneidet.
 -->
-<div x-show="adminUsageTab === 'billing'" class="admin-usage-pane" :aria-busy="adminUsageLoading">
+<div x-show="adminUsageTab === 'billing'" class="admin-usage-pane" :aria-busy="adminUsageLoading"
+     id="admin-usage-pane-billing" role="tabpanel" aria-labelledby="admin-usage-tab-billing">
   <template x-if="adminUsageBilling && !adminUsageBilling.configured">
     <p class="muted-msg" x-text="$app.t('admin.usage.billing.notConfigured')"></p>
   </template>
@@ -78,6 +79,7 @@
         </tbody>
       </table>
       </div>
+      <p class="muted-msg muted-msg--sm" x-show="!adminUsageBilling.models.length" x-text="$app.t('admin.usage.empty')"></p>
 
       <h4 class="admin-usage-billing-subheading" x-text="$app.t('admin.usage.billing.byDay')"></h4>
       <div class="table-scroll" x-show="adminUsageBilling.days.length">
@@ -100,7 +102,7 @@
         <tbody>
           <template x-for="d in sorted" :key="d.day">
             <tr>
-              <td x-text="d.day"></td>
+              <td x-text="adminUsageDate(d.day)"></td>
               <td class="admin-usage-cell-num"
                   x-text="d.billedUsd === null ? $app.t('admin.usage.billing.notFetched') : adminUsageMoney(d.billedUsd)"></td>
               <td class="admin-usage-cell-num" x-text="adminUsageMoney(d.ledgerUsd)"></td>
@@ -111,6 +113,7 @@
         </tbody>
       </table>
       </div>
+      <p class="muted-msg muted-msg--sm" x-show="!adminUsageBilling.days.length" x-text="$app.t('admin.usage.empty')"></p>
 
       <template x-if="adminUsageBilling.workspaces.length > 1">
         <div>

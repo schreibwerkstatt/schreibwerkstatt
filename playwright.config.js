@@ -13,6 +13,11 @@
 // eines Snaps (CI, normales Terminal) ist die Variable nicht gesetzt → no-op.
 delete process.env.GIO_MODULE_DIR;
 
+// E2E_PORT: eigener Port fuer einen zweiten, gleichzeitigen Lauf (scripts/release-verify.js
+// testet einen Release-Schnappschuss neben dem Arbeitsbaum). Specs adressieren
+// den Harness relativ ueber baseURL, nie mit festem Host.
+const E2E_PORT = Number(process.env.E2E_PORT) || 8765;
+
 module.exports = {
   testDir: './tests/e2e',
   testMatch: '**/*.spec.js',
@@ -36,7 +41,7 @@ module.exports = {
   timeout: 90000,
   expect: { timeout: 10000 },
   use: {
-    baseURL: 'http://localhost:8765',
+    baseURL: `http://localhost:${E2E_PORT}`,
     viewport: { width: 1024, height: 768 },
     navigationTimeout: 45000,
     actionTimeout: 30000,
@@ -52,7 +57,7 @@ module.exports = {
   ],
   webServer: {
     command: 'node tests/server.js',
-    url: 'http://localhost:8765/tests/fixtures/focus-harness.html',
+    url: `http://localhost:${E2E_PORT}/tests/fixtures/focus-harness.html`,
     timeout: process.env.CI ? 30000 : 10000,
     reuseExistingServer: !process.env.CI,
   },

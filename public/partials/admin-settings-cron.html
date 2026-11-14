@@ -1,4 +1,4 @@
     <!-- Cron-Tab -->
-    <section x-show="adminSettingsTab === 'cron'" class="admin-settings-section">
+    <section x-bind="panel('cron')" class="admin-settings-section">
       <div x-data="settingField({ k: 'app.timezone', label: 'admin.settings.label.appTimezone', help: 'admin.settings.help.appTimezone' })"></div>
     </section>

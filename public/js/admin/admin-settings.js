@@ -3,6 +3,19 @@
 import { formatNum } from '../num-input.js';
 import { localeTag, fetchJson, sendJson } from '../utils.js';
 import { tFetchError } from '../i18n.js';
+import { ADMIN_SETTINGS_TABS, ADMIN_SETTINGS_TEST_TAB } from './admin-settings-tabs.js';
+import { adminFmtDateTime } from './admin-format.js';
+
+// Formularwert eines Felds → gewünschte Aktion beim Speichern.
+//   { op: 'none' }            nichts zu tun
+//   { op: 'set', value }      Wert schreiben
+//   { op: 'reset' }           auf Registry-Default zurück (DB-Zeile weg)
+// Leeres Zahlenfeld heisst «Standard» (nicht 0); leeres Secret heisst
+// «unverändert», ausser der Admin hat es ausdrücklich zum Löschen markiert.
+function _isNumKey(s) {
+  return typeof s.value === 'number' || typeof s.default === 'number';
+}
+function _same(a, b) { return JSON.stringify(a) === JSON.stringify(b); }
 
 export const adminSettingsMethods = {
   async adminSettingsLoad() {
@@ -16,12 +29,19 @@ export const adminSettingsMethods = {
         map[s.key] = s;
       }
       this.adminSettingsMap = map;
+      this.adminSettingsAuth = data.auth || { own_has_password: false, env_admin: false };
       // Form-State aus map kopieren — Form-Inputs schreiben in form, Save
       // diff't vs. map und sendet nur geaenderte Keys ans Backend.
       this.adminSettingsForm = this._adminSettingsBuildForm(map);
-      const cur = this.adminSettingsForm['ai.provider'];
-      if (cur === 'claude' || cur === 'ollama' || cur === 'openai-compat') {
-        this.adminSettingsProviderSubtab = cur;
+      this.adminSettingsPendingReset = {};
+      // Provider-Unterreiter nur beim ersten Laden auf den aktiven Provider
+      // stellen — ein Neu-Laden (auch nach dem Speichern) behält den Reiter.
+      if (!this.adminSettingsLoadedOnce) {
+        const cur = this.adminSettingsForm['ai.provider'];
+        if (cur === 'claude' || cur === 'ollama' || cur === 'openai-compat') {
+          this.adminSettingsProviderSubtab = cur;
+        }
+        this.adminSettingsLoadedOnce = true;
       }
     } catch (e) {
       this.adminSettingsError = tFetchError(e);
@@ -34,63 +54,169 @@ export const adminSettingsMethods = {
     const form = {};
     for (const key of Object.keys(map)) {
       const s = map[key];
-      // Encrypted: leerer String, dann user kann ueberschreiben; sonst
-      // Sentinel __unchanged__ beim Save.
+      // Encrypted: leerer String; leer gespeichert heisst „unverändert".
       form[key] = s.encrypted ? '' : (s.value ?? '');
     }
     return form;
   },
 
-  _adminSettingsCoerceValue(key, raw) {
+  // Gewünschte Aktion je Key (siehe _isNumKey/_same oben).
+  _adminSettingsIntent(key) {
     const s = this.adminSettingsMap[key];
-    if (!s) return raw;
+    if (!s) return { op: 'none' };
+    const raw = this.adminSettingsForm[key];
+    const pending = !!this.adminSettingsPendingReset[key];
     if (s.encrypted) {
-      // Leerer Input → __unchanged__-Sentinel; sonst Klartext-Wert
-      return raw === '' ? '__unchanged__' : raw;
+      if (raw !== '' && raw != null) return { op: 'set', value: raw };
+      return pending && !s.isDefault ? { op: 'reset' } : { op: 'none' };
     }
-    const def = s.value;
-    if (typeof def === 'boolean') return raw === 'true' || raw === true;
-    if (typeof def === 'number') {
+    let value;
+    if (_isNumKey(s)) {
+      if (raw === null || raw === undefined || raw === '') {
+        return s.isDefault ? { op: 'none' } : { op: 'reset' };
+      }
       const n = Number(raw);
-      return Number.isFinite(n) ? n : def;
+      if (!Number.isFinite(n)) return { op: 'none' };
+      value = n;
+    } else if (typeof s.value === 'boolean' || typeof s.default === 'boolean') {
+      value = raw === true || raw === 'true';
+    } else {
+      value = raw ?? '';
     }
-    return raw;
+    if (pending && _same(value, s.default ?? '')) return s.isDefault ? { op: 'none' } : { op: 'reset' };
+    return _same(value, s.value ?? '') ? { op: 'none' } : { op: 'set', value };
   },
 
+  adminSettingsIsDirty(key) {
+    return this._adminSettingsIntent(key).op !== 'none';
+  },
+
+  adminSettingsHasChanges() {
+    return Object.keys(this.adminSettingsMap || {}).some(k => this.adminSettingsIsDirty(k));
+  },
+
+  // true = weitermachen (nichts offen oder Verwerfen bestätigt).
+  async adminSettingsConfirmDiscard() {
+    if (!this.adminSettingsHasChanges()) return true;
+    const app = window.__app;
+    return !!(await app.appConfirm({
+      message: app.t('admin.settings.discardConfirm'),
+      confirmLabel: app.t('admin.settings.discard'),
+      danger: true,
+    }));
+  },
+
+  async adminSettingsReload() {
+    if (!(await this.adminSettingsConfirmDiscard())) return;
+    await this.adminSettingsLoad();
+  },
+
+  // Zustandszeile eines Felds (setting-field.js): 'reset' | 'unsaved' | 'changed' | ''.
+  adminSettingsFieldState(key) {
+    const s = this.adminSettingsMap?.[key];
+    if (!s) return '';
+    const op = this._adminSettingsIntent(key).op;
+    if (op === 'reset') return 'reset';
+    if (op === 'set') return 'unsaved';
+    return s.isDefault ? '' : 'changed';
+  },
+
+  adminSettingsFieldTip(key) {
+    const s = this.adminSettingsMap?.[key];
+    if (!s || s.isDefault || !s.updated_at) return null;
+    return window.__app.t('admin.settings.field.changedTip', {
+      by: s.updated_by || '—',
+      at: adminFmtDateTime(s.updated_at),
+    });
+  },
+
+  // «Auf Standard zurücksetzen» anbieten: gespeicherter Wert weicht vom Standard
+  // ab und ist noch nicht zum Zurücksetzen markiert — oder das Feld ist
+  // ungespeichert verändert (dann setzt der Knopf auf den Standard zurück).
+  adminSettingsCanReset(key) {
+    const s = this.adminSettingsMap?.[key];
+    if (!s) return false;
+    const op = this._adminSettingsIntent(key).op;
+    if (op === 'reset') return false;
+    if (s.encrypted) return !s.isDefault;
+    return !s.isDefault || op === 'set';
+  },
+
+  adminSettingsResetField(key) {
+    const s = this.adminSettingsMap?.[key];
+    if (!s) return;
+    this.adminSettingsPendingReset = { ...this.adminSettingsPendingReset, [key]: true };
+    this.adminSettingsForm[key] = s.encrypted ? '' : (s.default ?? '');
+  },
+
+  // Speichern = EIN Request (PUT /admin/settings): der Server prüft alle Werte,
+  // bevor er einen schreibt; ein Fehler nennt den Key und lässt nichts halb
+  // gespeichert zurück. Danach neu laden (Masken, Standard-Marker).
   async adminSettingsSave() {
     if (this.adminSettingsSaving) return;
     this.adminSettingsSaving = true;
     this.adminSettingsError = '';
     this.adminSettingsSaved = false;
-    const dirty = [];
-    for (const key of Object.keys(this.adminSettingsForm)) {
-      const s = this.adminSettingsMap[key];
-      if (!s) continue;
-      const raw = this.adminSettingsForm[key];
-      const coerced = this._adminSettingsCoerceValue(key, raw);
-      if (s.encrypted) {
-        if (coerced !== '__unchanged__') dirty.push({ key, value: coerced });
-      } else {
-        if (JSON.stringify(coerced) !== JSON.stringify(s.value)) dirty.push({ key, value: coerced });
-      }
+    const values = {};
+    const reset = [];
+    for (const key of Object.keys(this.adminSettingsMap)) {
+      const intent = this._adminSettingsIntent(key);
+      if (intent.op === 'set') values[key] = intent.value;
+      else if (intent.op === 'reset') reset.push(key);
     }
+    const count = Object.keys(values).length + reset.length;
     try {
-      for (const d of dirty) {
-        try {
-          await sendJson(`/admin/settings/${encodeURIComponent(d.key)}`, 'PUT', { value: d.value });
-        } catch (e) {
-          throw new Error(`${d.key}: ${tFetchError(e)}`);
-        }
-      }
-      this.adminSettingsSavedCount = dirty.length;
+      if (count) await sendJson('/admin/settings', 'PUT', { values, reset });
+      this.adminSettingsSavedCount = count;
       this.adminSettingsSaved = true;
       setTimeout(() => { this.adminSettingsSaved = false; }, 2500);
       await this.adminSettingsLoad();
     } catch (e) {
-      this.adminSettingsError = e.message;
+      this.adminSettingsError = tFetchError(e);
     } finally {
       this.adminSettingsSaving = false;
     }
+  },
+
+  // Wechsel auf lokale Anmeldung vorbereitet, eigenes Passwort fehlt, kein
+  // ENV-Notfallzugang: der Server würde das Speichern ablehnen.
+  adminSettingsNeedsOwnPassword() {
+    return this.adminSettingsForm['auth.method'] === 'local'
+      && this.adminSettingsMap['auth.method']?.value !== 'local'
+      && !this.adminSettingsAuth?.own_has_password
+      && !this.adminSettingsAuth?.env_admin;
+  },
+
+  async adminSettingsSetOwnPassword() {
+    const me = Alpine.store('session').currentUser?.email;
+    const password = this.adminSettingsOwnPassword;
+    if (!me || !password || this.adminSettingsOwnPasswordBusy) return;
+    this.adminSettingsOwnPasswordBusy = true;
+    this.adminSettingsError = '';
+    try {
+      await sendJson(`/admin/users/${encodeURIComponent(me)}/password`, 'POST', { password });
+      this.adminSettingsOwnPassword = '';
+      this.adminSettingsAuth = { ...this.adminSettingsAuth, own_has_password: true };
+    } catch (e) {
+      this.adminSettingsError = tFetchError(e);
+    } finally {
+      this.adminSettingsOwnPasswordBusy = false;
+    }
+  },
+
+  // Formularwerte des sichtbaren Provider-Unterreiters (auch ungespeichert)
+  // für den Verbindungstest. Secrets nur, wenn neu eingetippt — sonst nimmt
+  // der Server den gespeicherten Wert.
+  _adminSettingsProviderValues(provider) {
+    const out = {};
+    const prefix = `ai.${provider}.`;
+    for (const [key, raw] of Object.entries(this.adminSettingsForm)) {
+      if (!key.startsWith(prefix)) continue;
+      const s = this.adminSettingsMap[key];
+      if (s?.encrypted) { if (raw) out[key] = raw; continue; }
+      out[key] = raw;
+    }
+    return out;
   },
 
   async adminSettingsTest(kind) {
@@ -108,6 +234,12 @@ export const adminSettingsMethods = {
                : kind === 'websearch'    ? '/admin/settings/test-websearch'
                : null;
     if (!path) return;
+    let body;
+    if (kind === 'smtp') body = {};
+    if (kind === 'provider') {
+      const provider = this.adminSettingsProviderSubtab;
+      body = { provider, values: this._adminSettingsProviderValues(provider) };
+    }
     this.adminSettingsTestResult = { kind, running: true };
     try {
       // Bewusst roher fetch: die Test-Endpunkte liefern ihr Ergebnis
@@ -116,17 +248,44 @@ export const adminSettingsMethods = {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
         credentials: 'same-origin',
-        body: kind === 'smtp' ? JSON.stringify({}) : undefined,
+        body: body ? JSON.stringify(body) : undefined,
       });
       const j = await r.json();
       this.adminSettingsTestResult = { kind, ...j, running: false };
     } catch (e) {
-      this.adminSettingsTestResult = { kind, ok: false, error: tFetchError(e), running: false };
+      this.adminSettingsTestResult = { kind, ok: false, error: 'NETWORK', running: false };
     }
   },
 
+  adminSettingsTestVisible() {
+    const r = this.adminSettingsTestResult;
+    return !!r && ADMIN_SETTINGS_TEST_TAB[r.kind] === this.adminSettingsTab;
+  },
+
+  // Fehlercode einer Verbindungsprobe → Satz. Codes kommen aus den test-*-Routen
+  // (UPPER_SNAKE), dem Mailer (kebab-case) oder als HTTP_<status>.
+  adminSettingsTestErrorText(r) {
+    const t = window.__app.t.bind(window.__app);
+    const raw = String(r?.error || '');
+    if (!raw) return '';
+    const http = /^HTTP_(\d+)$/.exec(raw);
+    if (http) return t('admin.settings.test.error.HTTP', { status: http[1] });
+    const code = raw.toUpperCase().replace(/-/g, '_');
+    const key = `admin.settings.test.error.${code}`;
+    const msg = t(key, { missing: (r.missing || []).join(', ') });
+    return msg === key ? t('admin.settings.test.error.OTHER', { code: raw }) : msg;
+  },
+
+  // Einziger Setter des Reiters: Tab-Leiste (x-model der tabs()-Instanz),
+  // Permalink/Palette (tabRequest) und Tests gehen hierüber; der Nachlade-Effekt
+  // hängt zusätzlich am $watch in der Karte, damit kein Weg ihn umgeht.
   adminSettingsSwitchTab(tab) {
+    if (!ADMIN_SETTINGS_TABS.includes(tab)) return;
     this.adminSettingsTab = tab;
+    this._adminSettingsOnTab(tab);
+  },
+
+  _adminSettingsOnTab(tab) {
     if (tab === 'api' && !this.adminApiTokensLoaded) {
       this.adminApiTokensLoad();
     }
@@ -220,14 +379,6 @@ export const adminSettingsMethods = {
     }).length;
   },
 
-  adminSettingsIsDirty(key) {
-    const s = this.adminSettingsMap[key];
-    if (!s) return false;
-    const raw = this.adminSettingsForm[key];
-    const coerced = this._adminSettingsCoerceValue(key, raw);
-    if (s.encrypted) return coerced !== '__unchanged__';
-    return JSON.stringify(coerced) !== JSON.stringify(s.value);
-  },
 
   // Spiegelt die Budget-Ableitung aus lib/ai.js (getContextConfigFor) +
   // routes/jobs/shared/loader.js (chunkLimitsFor) im Frontend, damit der Admin

@@ -134,3 +134,12 @@ Tägliches Online-Backup der SQLite-DB via systemd-Timer (`schreibwerkstatt-back
 Konfig via `.env`: `BACKUP_DIR`, `BACKUP_RETENTION_DAYS`, `BACKUP_DB_FILE`. Script + Units: [deploy/backup.sh](deploy/backup.sh), [deploy/schreibwerkstatt-backup.service](deploy/schreibwerkstatt-backup.service), [deploy/schreibwerkstatt-backup.timer](deploy/schreibwerkstatt-backup.timer).
 
 Backup-Ordner offsite spiegeln (rsync nach NAS/S3) — sonst Single-Point-of-Failure.
+
+### Backup und Wiederherstellen in der Admin-Konsole
+
+Karte «Backup» ([admin-backup.html](../public/partials/admin-backup.html), Routen [routes/admin-backup.js](../routes/admin-backup.js), Logik [lib/db-backup.js](../lib/db-backup.js)):
+
+- **Herunterladen** ist zweistufig: `POST /admin/backup/snapshot` legt einen konsistenten `VACUUM INTO`-Snapshot neben der DB an und liefert ein Einmal-Token (10 min gültig, nur für denselben Admin); `GET /admin/backup/download?token=…` streamt ihn gzip-komprimiert und löscht die Datei. Ein Fehler beim Snapshot steht so als Meldung in der Karte. `GET /admin/backup/download` ohne Token erzeugt und streamt direkt (Skripte).
+- **Wiederherstellen** lädt die Datei hoch («Hochladen und vormerken», Body ist die Datei selbst), prüft sie (gzip oder rohes SQLite, `integrity_check`, `foreign_key_check`, Schema-Version nicht neuer als die laufende App) und legt sie als `<DB_FILE>.restore-pending` ab. Eingespielt wird sie beim **nächsten Start** des Prozesses ([db/apply-pending-restore.js](../db/apply-pending-restore.js), vorher Sicherheitskopie `<DB_FILE>.pre-restore-<Zeit>.sqlite`).
+- **Eine Vormerkung gilt für jeden nächsten Start, auch einen ungeplanten.** Solange sie liegt, meldet `GET /admin/backup/info` sie (`pending: { bytes, stagedAt }`) und die Karte zeigt einen Hinweis mit «Wiederherstellen & neu starten» und «Vormerkung verwerfen»; «Abbrechen» nach dem Hochladen verwirft ebenfalls. Verwerfen: `DELETE /admin/backup/pending`.
+- **Neustart** (`POST /admin/backup/restart`, nach Rückfrage) beendet den Prozess; systemd startet ihn neu. Die Karte erkennt den neuen Prozess an der gewechselten `bootId` aus `/info` — oder an einer Antwort ohne Sitzung (401), weil die wiederhergestellte DB die aktuelle Sitzung meist nicht kennt — und lädt dann neu. Nach drei Minuten ohne neuen Prozess meldet sie den Zeitüberschritt.

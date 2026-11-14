@@ -9,7 +9,7 @@
 // mitzieht, wenn der Admin die Instanz-Einstellung aendert.
 
 import { fetchJson, sendJson } from '../utils.js';
-import { tFetchError } from '../i18n.js';
+import { tFetchError, tRaw, tnRaw } from '../i18n.js';
 
 const EMPTY_PROFILE = {
   id: null, name: '', provider: 'openai-compat', model: '', host: '',
@@ -92,12 +92,11 @@ export const adminAiProfilesMethods = {
   },
 
   async adminProfilesDelete(profile) {
-    const t = window.__app?.t;
     // Zugewiesene User werden abgehaengt (FK SET NULL) und folgen danach wieder dem
     // globalen Provider. Das gehoert in die Rueckfrage, nicht in eine Ueberraschung.
     const msg = profile.user_count
-      ? t?.('admin.profiles.confirmDeleteUsers', { name: profile.name, n: profile.user_count })
-      : t?.('admin.profiles.confirmDelete', { name: profile.name });
+      ? tnRaw('admin.profiles.confirmDeleteUsers', profile.user_count, { name: profile.name })
+      : tRaw('admin.profiles.confirmDelete', { name: profile.name });
     if (!await window.__app.appConfirm({ message: msg, danger: true })) return;
     this.adminProfilesError = '';
     try {

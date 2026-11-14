@@ -1,12 +1,12 @@
     <!-- Auth-Tab -->
-    <section x-show="adminSettingsTab === 'auth'" class="admin-settings-section">
+    <section x-bind="panel('auth')" class="admin-settings-section">
       <div x-data="settingField({ k: 'app.public_url', type: 'url', label: 'admin.settings.label.appPublicUrl', ph: 'https://app.example.com' })"></div>
 
       <h4 class="admin-settings-subheading"><span x-text="$app.t('admin.settings.auth.methodTitle')"></span></h4>
       <p class="muted-msg muted-msg--sm" x-text="$app.t('admin.settings.auth.methodHint')"></p>
       <div x-data="settingField({ k: 'auth.method', type: 'select', label: 'admin.settings.label.authMethod', opts: [
              { value: 'google', label: 'Google' },
-             { value: 'local',  label: 'Lokal' },
+             { value: 'local',  labelKey: 'admin.settings.auth.methodLocal' },
            ] })"></div>
 
       <!-- Nur das gewaehlte Verfahren zeigt seine Felder: ein Google-Secret auf
@@ -21,6 +21,23 @@
       <template x-if="adminSettingsForm['auth.method'] === 'local'">
         <div>
           <p class="muted-msg muted-msg--sm" x-text="$app.t('admin.settings.auth.localHint')"></p>
+          <!-- Wechsel auf lokal ohne eigenes Passwort: nach dem Abmelden kaeme
+               der Admin nicht mehr hinein (Server blockt das Speichern). Hier
+               laesst sich das eigene Passwort vorab setzen. -->
+          <div class="admin-settings-own-password" x-show="adminSettingsNeedsOwnPassword()"
+               @keydown="$editKeys($event, { save: () => !adminSettingsOwnPasswordBusy && adminSettingsSetOwnPassword() })">
+            <p class="card-hint" x-text="$app.t('admin.settings.auth.ownPasswordHint')"></p>
+            <div class="admin-settings-own-password-row">
+              <input type="password" autocomplete="new-password" x-model="adminSettingsOwnPassword"
+                     :aria-label="$app.t('admin.settings.auth.ownPasswordLabel')"
+                     :placeholder="$app.t('admin.settings.auth.ownPasswordLabel')"
+                     :disabled="adminSettingsOwnPasswordBusy"
+                     @keydown.enter="$enter($event, () => !adminSettingsOwnPasswordBusy && adminSettingsSetOwnPassword())">
+              <button type="button" @click="adminSettingsSetOwnPassword()"
+                      :disabled="adminSettingsOwnPasswordBusy || !adminSettingsOwnPassword"
+                      x-text="$app.t('admin.settings.auth.ownPasswordSubmit')"></button>
+            </div>
+          </div>
           <div x-data="settingField({ k: 'auth.local.min_password_length', type: 'num', label: 'admin.settings.label.authLocalMinPasswordLength', num: { integer: true, min: 8, max: 128 }, help: 'admin.settings.help.authLocalMinPasswordLength' })"></div>
           <div x-data="settingField({ k: 'auth.local.token_ttl_hours', type: 'num', label: 'admin.settings.label.authLocalTokenTtl', num: { integer: true, min: 1, max: 720 }, help: 'admin.settings.help.authLocalTokenTtl' })"></div>
           <div x-data="settingField({ k: 'auth.local.allow_self_reset', type: 'toggle', label: 'admin.settings.label.authLocalAllowSelfReset', help: 'admin.settings.help.authLocalAllowSelfReset' })"></div>

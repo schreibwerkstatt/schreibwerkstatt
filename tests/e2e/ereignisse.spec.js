@@ -9,7 +9,7 @@
 const { test, expect } = require('./_helpers/fixtures');
 
 test.beforeEach(async ({ page }) => {
-  await page.goto('http://localhost:8765/tests/fixtures/ereignisse-harness.html', { waitUntil: 'domcontentloaded' });
+  await page.goto('/tests/fixtures/ereignisse-harness.html', { waitUntil: 'domcontentloaded' });
   await page.waitForFunction(() => window.__harnessReady === true);
 });
 

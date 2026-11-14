@@ -1,5 +1,5 @@
     <!-- Erweitert-Tab: globale, provider-uebergreifende Tuning-Parameter (Claude-spezifische liegen im Provider-Tab) -->
-    <section x-show="adminSettingsTab === 'advanced'" class="admin-settings-section">
+    <section x-bind="panel('advanced')" class="admin-settings-section">
       <p class="muted-msg" x-text="$app.t('admin.settings.advanced.disclaimer')"></p>
 
       <div class="admin-settings-subsection">

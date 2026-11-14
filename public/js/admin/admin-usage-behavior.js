@@ -5,20 +5,21 @@
 // Verweildauern (Karten, Werkzeuge am Abschnitt, Abschnitts-Besuche) und Reibung.
 // Privacy wie der Rest der Karte: keine Inhalte, keine Buchtitel.
 
-import { loadChart } from '../lazy-libs.js';
 import { barDataset, categoryAxis, chartOptions, chartPalette, valueAxis } from '../cards/chart-style.js';
 import { FEATURES } from '../cards/feature-registry.js';
-import { fmtDateTime } from '../utils.js';
 
 // Abgeleitete Zeilen ausserhalb des reaktiven Karten-States memoisieren
-// (Muster _matrixMemo in admin-usage.js): Schluessel ist das Report-Objekt.
+// (Muster _matrixMemo in admin-usage.js): Schluessel ist das Report-Objekt,
+// je Eintrag zusaetzlich die UI-Sprache — die Zeilen tragen uebersetzte Labels.
+// Das Lesen von uiLocale hier haengt den lesenden Effekt an den Sprachwechsel.
 const _memo = new WeakMap();
 function _derive(report, key, fn) {
   if (!report) return [];
+  const k = `${key}|${Alpine.store('shell').uiLocale}`;
   let m = _memo.get(report);
   if (!m) { m = {}; _memo.set(report, m); }
-  if (!(key in m)) m[key] = fn();
-  return m[key];
+  if (!(k in m)) m[k] = fn();
+  return m[k];
 }
 
 function _rate(part, whole) {
@@ -33,12 +34,7 @@ export const adminUsageBehaviorMethods = {
     if (this.adminUsageBehavior) this.$nextTick(() => this._adminUsageRenderBehaviorCharts(this.adminUsageBehavior));
   },
 
-  // Datum ohne Uhrzeit (Wochen, Kohorten). Prozent: adminUsagePct aus admin-usage.js.
-  adminUsageDate(iso) {
-    if (!iso) return '—';
-    const d = new Date(iso.length <= 10 ? iso + 'T12:00:00Z' : iso);
-    return fmtDateTime(d, Alpine.store('shell').uiLocale, { day: '2-digit', month: '2-digit', year: 'numeric' });
-  },
+  // Datum (adminUsageDate) und Prozent (adminUsagePct) kommen aus admin-usage.js.
 
   // Alle Karten der Registry, auch die ohne eine einzige Oeffnung im Zeitraum —
   // genau die Zeilen mit 0 beantworten «welche Funktionen nutzt niemand?».
@@ -81,6 +77,7 @@ export const adminUsageBehaviorMethods = {
     return _derive(b, 'proposals', () => (b.proposals || []).map(p => ({
       ...p,
       chatLabel: t(`admin.usage.behavior.chat.${p.chat}`),
+      kindLabel: this.adminUsageProposalKindLabel(p.kind),
       // Annahmequote: uebernommen gegen (uebernommen + verworfen). Offen gelassene
       // Vorschlaege kennt der Client nicht — die Quote misst nur Entscheidungen.
       acceptRate: _rate(p.applied, p.applied + p.discarded),
@@ -178,33 +175,22 @@ export const adminUsageBehaviorMethods = {
   },
 
   async _adminUsageRenderBehaviorCharts(data) {
-    // Gleiche Schutzregeln wie _adminUsageRenderCharts: nur auf sichtbarem
-    // Canvas, ohne Animation, Tab vor und nach dem Lazy-Load pruefen.
-    if (this.adminUsageTab !== 'behavior') return;
-    let Chart;
-    try { Chart = await loadChart(); } catch { return; }
-    if (this.adminUsageTab !== 'behavior') return;
+    // Gleiche Schutzregeln wie _adminUsageRenderCharts (admin-usage.js).
+    if (!(await this._adminUsageChartReady('behavior'))) return;
     const pal = chartPalette();
-    if (!this._adminUsageCharts) this._adminUsageCharts = {};
-    const visible = (el) => el && el.offsetParent !== null;
-    const draw = (key, el, labels, data, color) => {
-      if (!visible(el)) return;
-      try { this._adminUsageCharts[key]?.destroy(); } catch {}
+    const bar = (labels, values, color) => {
       const o = chartOptions(pal);
-      o.animation = false;
       o.scales = {
         x: categoryAxis(pal),
         y: valueAxis(pal, { beginAtZero: true, ticks: { precision: 0 } }),
       };
-      this._adminUsageCharts[key] = new Chart(el.getContext('2d'), {
-        type: 'bar',
-        data: { labels, datasets: [barDataset(pal, color, { data })] },
-        options: o,
-      });
+      return { type: 'bar', data: { labels, datasets: [barDataset(pal, color, { data: values })] }, options: o };
     };
     const weekly = data.activity?.weekly || [];
-    draw('behaviorWeekly', this.$refs?.chartBehaviorWeekly, weekly.map(w => this.adminUsageDate(w.week)), weekly.map(w => w.activeUsers), pal.primary);
+    this._adminUsageDrawChart('behaviorWeekly', this.$refs?.chartBehaviorWeekly, weekly.length
+      ? bar(weekly.map(w => this.adminUsageDate(w.week)), weekly.map(w => w.activeUsers), pal.primary) : null);
     const hours = data.hours || [];
-    if (hours.some(Boolean)) draw('behaviorHours', this.$refs?.chartBehaviorHours, hours.map((_, h) => String(h).padStart(2, '0')), hours, pal.accent);
+    this._adminUsageDrawChart('behaviorHours', this.$refs?.chartBehaviorHours, hours.some(Boolean)
+      ? bar(hours.map((_, h) => String(h).padStart(2, '0')), hours, pal.accent) : null);
   },
 };

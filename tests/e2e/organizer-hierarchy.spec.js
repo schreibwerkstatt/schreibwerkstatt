@@ -5,7 +5,7 @@ const { test, expect } = require('./_helpers/fixtures');
 // benutzt. Diese Spec faehrt das echte Partial inkl. Include-Auflösung gegen
 // die echte Alpine-Runtime — Slim-Kopien wie in anderen Harnesses wuerden genau
 // den kritischen Teil (Alias-Shadowing + Include-Expansion) nicht abdecken.
-const URL = 'http://localhost:8765/tests/fixtures/organizer-harness.html';
+const URL = '/tests/fixtures/organizer-harness.html';
 
 async function open(page) {
   await page.goto(URL, { waitUntil: 'domcontentloaded' });

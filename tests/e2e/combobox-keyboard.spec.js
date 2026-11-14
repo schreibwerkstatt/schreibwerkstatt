@@ -10,7 +10,7 @@ const { test, expect } = require('./_helpers/fixtures');
 // - Escape/Enter geben den Fokus an den Trigger zurueck statt an <body>.
 // - Tab aus dem Suchfeld schliesst die Liste.
 
-const URL = 'http://localhost:8765/tests/fixtures/book-create-harness.html';
+const URL = '/tests/fixtures/book-create-harness.html';
 
 async function openHarness(page) {
   await page.route('**/local/categories', (r) => r.fulfill({

@@ -6,7 +6,7 @@ const { test, expect } = require('./_helpers/fixtures');
 // share-reader.js gegen einen Fetch-Stub (Mock-Threads), prüft also Markup +
 // CSS-Bridge in einem Zug. Der Console-Guard (fixtures.js) macht den Test rot,
 // falls der Bootstrap (Optionen-Menü, Composer, Layout …) einen Fehler wirft.
-const URL = 'http://localhost:8765/tests/fixtures/share-reader-harness.html';
+const URL = '/tests/fixtures/share-reader-harness.html';
 
 // Share-Light-Palette (share.css :root): Surface #fff, Akzent #1d4b73.
 const SURFACE_LIGHT = 'rgb(255, 255, 255)';

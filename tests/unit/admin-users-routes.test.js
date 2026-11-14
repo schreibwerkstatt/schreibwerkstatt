@@ -256,3 +256,99 @@ test('DELETE /admin/users/invites/:id widerruft Invite', async () => {
   const after = appUsers.findInviteById(inv.id);
   assert.equal(appUsers.inviteStatus(after), 'revoked');
 });
+
+// ── Selbst-Aussperren + letzter Admin ────────────────────────────────────────
+
+test('PUT /admin/users/:email: eigene Rolle ändern → 400 CANNOT_CHANGE_OWN_ROLE, nichts geschrieben', async () => {
+  const r = await _request('PUT', '/admin/users/alice@example.com', {
+    user: 'alice@example.com', role: 'admin', body: { global_role: 'user' },
+  });
+  assert.equal(r.status, 400);
+  assert.equal(r.body.error_code, 'CANNOT_CHANGE_OWN_ROLE');
+  assert.equal(appUsers.getUser('alice@example.com').global_role, 'admin');
+});
+
+test('PUT /admin/users/:email: sich selbst sperren → 400 CANNOT_SUSPEND_SELF', async () => {
+  const r = await _request('PUT', '/admin/users/alice@example.com', {
+    user: 'alice@example.com', role: 'admin', body: { status: 'suspended' },
+  });
+  assert.equal(r.status, 400);
+  assert.equal(r.body.error_code, 'CANNOT_SUSPEND_SELF');
+  assert.equal(appUsers.getUser('alice@example.com').status, 'active');
+});
+
+test('PUT /admin/users/:email: status=deleted für sich selbst → 400 CANNOT_DELETE_SELF', async () => {
+  const r = await _request('PUT', '/admin/users/alice@example.com', {
+    user: 'alice@example.com', role: 'admin', body: { status: 'deleted' },
+  });
+  assert.equal(r.status, 400);
+  assert.equal(r.body.error_code, 'CANNOT_DELETE_SELF');
+  assert.equal(appUsers.getUser('alice@example.com').status, 'active');
+});
+
+// Über HTTP ist der Fall nur als Wettlauf erreichbar: requireAdmin laesst nur
+// aktive Admins durch, und das eigene Konto blocken die Selbst-Checks davor.
+// Darum die Entscheidungsfunktion direkt (Verteidigung in der Tiefe).
+test('_removesLastAdmin: nur der letzte aktive Admin ist geschützt', () => {
+  const removesLastAdmin = adminUsersRouter._removesLastAdmin;
+  const alice = appUsers.getUser('alice@example.com');
+  const admins = appUsers.getActiveAdminEmails();
+  if (admins.length === 1) {
+    assert.equal(removesLastAdmin(alice, { role: 'user' }), true);
+    assert.equal(removesLastAdmin(alice, { status: 'suspended' }), true);
+  }
+  assert.equal(removesLastAdmin(alice, {}), false);
+  assert.equal(removesLastAdmin(appUsers.getUser('carol@example.com'), { status: 'suspended' }), false);
+  appUsers.createUser({ email: 'dora@example.com', displayName: 'Dora', globalRole: 'admin' });
+  assert.equal(removesLastAdmin(alice, { role: 'user' }), false);
+  appUsers.setGlobalRole('dora@example.com', 'user');
+});
+
+test('PUT /admin/users/:email: abgelehntes Feld lässt keine halbe Änderung zurück', async () => {
+  const before = appUsers.getUser('carol@example.com');
+  const r = await _request('PUT', '/admin/users/carol@example.com', {
+    user: 'alice@example.com', role: 'admin',
+    body: { can_invite_users: true, ai_profile_id: 9999999 },
+  });
+  assert.equal(r.status, 404);
+  assert.equal(r.body.error_code, 'AI_PROFILE_NOT_FOUND');
+  assert.equal(appUsers.getUser('carol@example.com').can_invite_users, before.can_invite_users);
+});
+
+test('PUT /admin/users/:email liefert dieselbe Zeilenform wie GET /admin/users', async () => {
+  const creds = require('../../db/user-credentials');
+  creds.setPassword('carol@example.com', 'x'.repeat(60), { mustChange: 1, updatedBy: 'alice@example.com' });
+  db.prepare('UPDATE app_users SET invited_by = ? WHERE email = ?').run('alice@example.com', 'carol@example.com');
+  const list = await _request('GET', '/admin/users', { user: 'alice@example.com', role: 'admin' });
+  const fromList = list.body.users.find(u => u.email === 'carol@example.com');
+  const r = await _request('PUT', '/admin/users/carol@example.com', {
+    user: 'alice@example.com', role: 'admin', body: { can_invite_users: true },
+  });
+  assert.equal(r.status, 200, r.raw);
+  const row = r.body.user;
+  assert.deepEqual(Object.keys(row).sort(), Object.keys(fromList).sort());
+  assert.equal(row.has_password, true);
+  assert.equal(row.must_change_password, true);
+  assert.equal(row.invited_by_name, 'Alice');
+  assert.ok('own_ai_provider' in row);
+  assert.equal(row.can_invite_users, 1);
+  creds.deleteCredential('carol@example.com');
+});
+
+// Vor dem Wechsel auf lokale Anmeldung darf der Admin sein EIGENES Passwort
+// setzen (sonst sperrte ihn der Wechsel aus); fremde Konten erst bei 'local'.
+test('POST /admin/users/:email/password: eigenes Konto auch ohne auth.method=local', async () => {
+  const creds = require('../../db/user-credentials');
+  const own = await _request('POST', '/admin/users/alice@example.com/password', {
+    user: 'alice@example.com', role: 'admin', body: { password: 'ein-langes-passwort-123' },
+  });
+  assert.equal(own.status, 200, own.raw);
+  assert.equal(own.body.must_change, false);
+  assert.equal(creds.hasPassword('alice@example.com'), true);
+  const other = await _request('POST', '/admin/users/carol@example.com/password', {
+    user: 'alice@example.com', role: 'admin', body: { password: 'ein-langes-passwort-123' },
+  });
+  assert.equal(other.status, 409);
+  assert.equal(other.body.error_code, 'AUTH_METHOD_NOT_LOCAL');
+  creds.deleteCredential('alice@example.com');
+});

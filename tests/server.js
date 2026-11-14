@@ -14,7 +14,7 @@ const path = require('path');
 // fehlende Felder (marginsMm/bodyInsetMm/font[role] …) und wirft Alpine-Errors.
 const { defaultConfig, validateConfig } = require('../lib/pdf-export-defaults');
 
-const PORT = 8765;
+const PORT = Number(process.env.E2E_PORT) || 8765;
 const ROOT = path.resolve(__dirname, '..');
 const MIME = {
   '.html': 'text/html; charset=utf-8',

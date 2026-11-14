@@ -3,12 +3,16 @@
 //
 // Endpoints:
 //   GET   /admin/settings           — Liste aller Keys (encrypted maskiert)
+//                                    + `auth`-Zustand des anfragenden Admins
+//   PUT   /admin/settings           — Sammel-Speichern { values, reset }: erst
+//                                    alles pruefen, dann eine Transaktion
 //   GET   /admin/settings/:key      — Einzelwert (encrypted maskiert)
 //   PUT   /admin/settings/:key      — Update (Sentinel "__unchanged__" fuer
 //                                    encrypted ohne Re-Eingabe)
 //   DELETE /admin/settings/:key     — Reset auf Default
 //   POST  /admin/settings/models   — Modell-Liste eines konfigurierten Hosts
-//   POST  /admin/settings/test-provider — 1-Token-Probecall (Latenz + ok)
+//   POST  /admin/settings/test-provider — Probe des Providers { provider, values }
+//                                    mit den Formularwerten (auch ungespeichert)
 //   POST  /admin/settings/test-oauth    — Discovery-Doc-Fetch (Format-Check)
 //
 // Sicherheit: encrypted-Werte verlassen den Server nur als "__masked__" mit
@@ -22,13 +26,68 @@ const modelList = require('../lib/model-list');
 const searxng = require('../lib/websearch/searxng');
 const logger = require('../logger');
 const { sessionEmail } = require('../lib/acl');
+const { fetchWithTimeout } = require('../lib/http-util');
+const creds = require('../db/user-credentials');
 
 const router = express.Router();
 router.use(requireAdmin);
 
+// ENV-Notfallzugang (routes/auth/shell.js#/auth/admin-login) aktiv?
+function _envAdminEnabled() {
+  return !!(process.env.ADMIN_EMAIL && process.env.ADMIN_PASSWORD);
+}
+
+// Schutz gegen Selbst-Aussperren beim Wechsel auf `auth.method='local'`: die
+// laufende Sitzung bleibt zwar gueltig, aber nach dem Abmelden kommt nur noch
+// hinein, wer ein lokales Passwort hat. Ohne eigenes Passwort und ohne
+// ENV-Notfallzugang waere der Admin draussen — und mit ihm jeder, der ihm ein
+// Passwort setzen koennte. Liefert den error_code oder null.
+function _authMethodLockoutCode(nextMethod, actor) {
+  if (nextMethod !== 'local') return null;
+  if (appSettings.get('auth.method') === 'local') return null;
+  if (_envAdminEnabled()) return null;
+  if (actor && creds.hasPassword(String(actor).toLowerCase())) return null;
+  return 'AUTH_LOCAL_OWN_PASSWORD_REQUIRED';
+}
+
 router.get('/', (req, res) => {
   const items = appSettings.listForAdmin();
-  res.json({ settings: items });
+  const actor = sessionEmail(req);
+  res.json({
+    settings: items,
+    auth: {
+      own_has_password: !!actor && creds.hasPassword(String(actor).toLowerCase()),
+      env_admin: _envAdminEnabled(),
+    },
+  });
+});
+
+// PUT /admin/settings { values: { key: value }, reset: [key] } — Sammel-
+// Speichern der Einstellungskarte. Alle Werte werden VOR dem ersten Schreiben
+// geprueft; ein ungueltiger Wert nennt seinen Key und laesst nichts halb
+// gespeichert zurueck. `reset` setzt Keys auf den Registry-Default zurueck
+// (auch Secrets: so wird ein Schluessel geloescht).
+router.put('/', express.json(), (req, res) => {
+  const body = req.body || {};
+  const values = body.values && typeof body.values === 'object' && !Array.isArray(body.values) ? body.values : {};
+  const reset = Array.isArray(body.reset) ? body.reset.map(String) : [];
+  const updatedBy = sessionEmail(req);
+  if ('auth.method' in values) {
+    const code = _authMethodLockoutCode(values['auth.method'], updatedBy);
+    if (code) return res.status(409).json({ error_code: code, key: 'auth.method' });
+  }
+  try {
+    const r = appSettings.setMany(values, { reset, updatedBy });
+    logger.info(`app-settings: ${r.written.length} gesetzt, ${r.reset.length} zurueckgesetzt (${[...r.written, ...r.reset].join(', ')})`, { user: updatedBy });
+    res.json({ ok: true, written: r.written, reset: r.reset });
+  } catch (e) {
+    if (e.code === 'INVALID_VALUE' || e.code === 'UNKNOWN_KEY' || e.code === 'KEY_SET_AND_RESET') {
+      logger.warn(`app-settings batch rejected: ${e.key}: ${e.reason || e.code}`, { user: updatedBy });
+      return res.status(400).json({ error_code: e.code === 'INVALID_VALUE' ? 'INVALID_SETTING_VALUE' : e.code, key: e.key, params: { key: e.key } });
+    }
+    logger.error(`app-settings batch: ${e.message}`, { user: updatedBy });
+    res.status(500).json({ error_code: 'PUT_FAILED' });
+  }
 });
 
 router.get('/:key', (req, res) => {
@@ -44,6 +103,10 @@ router.put('/:key', express.json(), (req, res) => {
   if (!('value' in body)) return res.status(400).json({ error_code: 'VALUE_REQUIRED' });
   if (!appSettings.isKnownKey(key)) return res.status(400).json({ error_code: 'UNKNOWN_KEY', key });
   const updatedBy = sessionEmail(req);
+  if (key === 'auth.method') {
+    const code = _authMethodLockoutCode(body.value, updatedBy);
+    if (code) return res.status(409).json({ error_code: code, key });
+  }
   try {
     const stored = appSettings.set(key, body.value, { updatedBy });
     logger.info(`app-settings: ${key} updated`, { user: updatedBy });
@@ -64,48 +127,57 @@ router.delete('/:key', (req, res) => {
   res.json({ ok: true, key, value: appSettings.get(key) });
 });
 
-// POST /admin/settings/test-provider — 1-Token-Probecall.
-// Liest aktuellen Provider + Credentials aus app_settings, ruft einen
-// minimalen Completion-Call ab. Liefert latency_ms + ok-Flag.
+// POST /admin/settings/test-provider { provider, values } — Probe des Providers,
+// dessen Unter-Reiter der Admin gerade sieht, mit den Werten aus dem Formular
+// (auch ungespeichert). `values` traegt nur Keys dieses Providers
+// (`ai.<provider>.*`); ein unveraendertes Secret (`__unchanged__` bzw. leer)
+// kommt aus app_settings — Secrets verlassen den Server nie. Claude: 1-Token-
+// Completion; Ollama/OpenAI-kompatibel: Modell-Liste ueber lib/model-list.js
+// (derselbe Client wie die Modell-Combobox). Fehler als Code (`error`), den
+// das Frontend unter admin.settings.test.error.* uebersetzt.
+const TEST_PROVIDERS = ['claude', 'ollama', 'openai-compat'];
 router.post('/test-provider', express.json(), async (req, res) => {
-  const provider = appSettings.get('ai.provider');
+  const body = req.body || {};
+  const provider = TEST_PROVIDERS.includes(body.provider) ? body.provider : appSettings.get('ai.provider');
+  if (!TEST_PROVIDERS.includes(provider)) return res.json({ ok: false, error: 'UNKNOWN_PROVIDER', provider });
+  const formValues = body.values && typeof body.values === 'object' ? body.values : {};
+  const val = (key) => {
+    const v = Object.prototype.hasOwnProperty.call(formValues, key) && key.startsWith(`ai.${provider}.`)
+      ? formValues[key] : undefined;
+    if (appSettings.isEncryptedKey(key) && (v === undefined || v === '' || v === '__unchanged__')) return appSettings.get(key);
+    return v === undefined ? appSettings.get(key) : v;
+  };
   const t0 = Date.now();
   try {
     if (provider === 'claude') {
-      const key = appSettings.get('ai.claude.api_key');
-      if (!key) return res.json({ ok: false, error: 'NO_API_KEY' });
-      const model = appSettings.get('ai.claude.model');
-      const resp = await fetch('https://api.anthropic.com/v1/messages', {
+      const key = String(val('ai.claude.api_key') || '').trim();
+      if (!key) return res.json({ ok: false, error: 'NO_API_KEY', provider });
+      const model = String(val('ai.claude.model') || '').trim();
+      const resp = await fetchWithTimeout('https://api.anthropic.com/v1/messages', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
           'x-api-key': key,
           'anthropic-version': '2023-06-01',
         },
-        body: JSON.stringify({
-          model,
-          max_tokens: 1,
-          messages: [{ role: 'user', content: 'hi' }],
-        }),
-      });
+        body: JSON.stringify({ model, max_tokens: 1, messages: [{ role: 'user', content: 'hi' }] }),
+      }, 15000);
+      await resp.arrayBuffer().catch(() => {});
       const ok = resp.ok;
-      return res.json({ ok, status: resp.status, provider, model, latency_ms: Date.now() - t0 });
+      return res.json({ ok, status: resp.status, provider, model, latency_ms: Date.now() - t0, ...(ok ? {} : { error: `HTTP_${resp.status}` }) });
     }
-    if (provider === 'ollama') {
-      const host = String(appSettings.get('ai.ollama.host') || '').replace(/\/$/, '');
-      const r = await fetch(`${host}/api/tags`).catch(() => null);
-      return res.json({ ok: !!r?.ok, status: r?.status || 0, provider, latency_ms: Date.now() - t0 });
-    }
-    if (provider === 'openai-compat') {
-      const host = String(appSettings.get('ai.openai-compat.host') || '').replace(/\/$/, '');
-      const apiKey = String(appSettings.get('ai.openai-compat.api_key') || '').trim();
-      const headers = apiKey ? { Authorization: `Bearer ${apiKey}` } : undefined;
-      const r = await fetch(`${host}/v1/models`, { headers }).catch(() => null);
-      return res.json({ ok: !!r?.ok, status: r?.status || 0, provider, latency_ms: Date.now() - t0 });
-    }
-    return res.json({ ok: false, error: 'UNKNOWN_PROVIDER', provider });
+    const host = String(val(`ai.${provider}.host`) || '').trim();
+    if (!host) return res.json({ ok: false, error: 'NO_HOST', provider });
+    const r = await modelList.listModels(provider, {
+      host,
+      apiKey: provider === 'openai-compat' ? String(val('ai.openai-compat.api_key') || '').trim() : '',
+    });
+    return res.json({
+      ok: !!r.ok, status: r.status || 0, provider, latency_ms: Date.now() - t0,
+      ...(r.ok ? { model_count: r.models.length } : { error: r.error_code }),
+    });
   } catch (e) {
-    return res.json({ ok: false, error: e.message, latency_ms: Date.now() - t0 });
+    return res.json({ ok: false, provider, error: e.name === 'AbortError' ? 'TIMEOUT' : 'UNREACHABLE', detail: e.message, latency_ms: Date.now() - t0 });
   }
 });
 
@@ -121,7 +193,7 @@ router.post('/test-oauth', async (req, res) => {
     const j = await r.json();
     return res.json({ ok: !!j.authorization_endpoint, latency_ms: Date.now() - t0 });
   } catch (e) {
-    return res.json({ ok: false, error: e.message, latency_ms: Date.now() - t0 });
+    return res.json({ ok: false, error: 'UNREACHABLE', detail: e.message, latency_ms: Date.now() - t0 });
   }
 });
 
@@ -142,7 +214,7 @@ router.post('/test-languagetool', async (req, res) => {
     const count = Array.isArray(j) ? j.length : 0;
     return res.json({ ok: true, status: r.status, latency_ms: Date.now() - t0, language_count: count, enabled });
   } catch (e) {
-    return res.json({ ok: false, error: e.name === 'AbortError' ? 'TIMEOUT' : e.message, latency_ms: Date.now() - t0, enabled });
+    return res.json({ ok: false, error: e.name === 'AbortError' ? 'TIMEOUT' : 'UNREACHABLE', detail: e.message, latency_ms: Date.now() - t0, enabled });
   }
 });
 
@@ -162,7 +234,7 @@ router.post('/test-stt', async (req, res) => {
     clearTimeout(timer);
     return res.json({ ok: !!r.ok, status: r.status, latency_ms: Date.now() - t0, enabled });
   } catch (e) {
-    return res.json({ ok: false, error: e.name === 'AbortError' ? 'TIMEOUT' : e.message, latency_ms: Date.now() - t0, enabled });
+    return res.json({ ok: false, error: e.name === 'AbortError' ? 'TIMEOUT' : 'UNREACHABLE', detail: e.message, latency_ms: Date.now() - t0, enabled });
   }
 });
 
@@ -182,7 +254,7 @@ router.post('/test-tts', async (req, res) => {
     clearTimeout(timer);
     return res.json({ ok: !!r.ok, status: r.status, latency_ms: Date.now() - t0, enabled });
   } catch (e) {
-    return res.json({ ok: false, error: e.name === 'AbortError' ? 'TIMEOUT' : e.message, latency_ms: Date.now() - t0, enabled });
+    return res.json({ ok: false, error: e.name === 'AbortError' ? 'TIMEOUT' : 'UNREACHABLE', detail: e.message, latency_ms: Date.now() - t0, enabled });
   }
 });
 
@@ -202,7 +274,7 @@ router.post('/test-image', async (req, res) => {
     clearTimeout(timer);
     return res.json({ ok: !!r.ok, status: r.status, latency_ms: Date.now() - t0, enabled });
   } catch (e) {
-    return res.json({ ok: false, error: e.name === 'AbortError' ? 'TIMEOUT' : e.message, latency_ms: Date.now() - t0, enabled });
+    return res.json({ ok: false, error: e.name === 'AbortError' ? 'TIMEOUT' : 'UNREACHABLE', detail: e.message, latency_ms: Date.now() - t0, enabled });
   }
 });
 
@@ -223,7 +295,7 @@ router.post('/test-embed', async (req, res) => {
     const dim = vec ? vec.length : 0;
     return res.json({ ok: dim > 0, dim, configured_dim: cfgDim, dim_mismatch: dim > 0 && dim !== cfgDim, latency_ms: Date.now() - t0, enabled });
   } catch (e) {
-    return res.json({ ok: false, error: e.name === 'AbortError' ? 'TIMEOUT' : e.message, latency_ms: Date.now() - t0, enabled });
+    return res.json({ ok: false, error: e.name === 'AbortError' ? 'TIMEOUT' : 'UNREACHABLE', detail: e.message, latency_ms: Date.now() - t0, enabled });
   }
 });
 
@@ -244,7 +316,7 @@ router.post('/test-rerank', async (req, res) => {
     const ok = Array.isArray(order) && order.length > 0;
     return res.json({ ok, count: order.length, latency_ms: Date.now() - t0, enabled });
   } catch (e) {
-    return res.json({ ok: false, error: e.name === 'AbortError' ? 'TIMEOUT' : e.message, latency_ms: Date.now() - t0, enabled });
+    return res.json({ ok: false, error: e.name === 'AbortError' ? 'TIMEOUT' : 'UNREACHABLE', detail: e.message, latency_ms: Date.now() - t0, enabled });
   }
 });
 
@@ -279,7 +351,7 @@ router.post('/test-geocode', async (req, res) => {
       : (Array.isArray(j) ? j.length : 0);
     return res.json({ ok: count > 0, status: r.status, provider, result_count: count, latency_ms: Date.now() - t0 });
   } catch (e) {
-    return res.json({ ok: false, error: e.name === 'AbortError' ? 'TIMEOUT' : e.message, provider, latency_ms: Date.now() - t0 });
+    return res.json({ ok: false, error: e.name === 'AbortError' ? 'TIMEOUT' : 'UNREACHABLE', detail: e.message, provider, latency_ms: Date.now() - t0 });
   }
 });
 
@@ -295,7 +367,7 @@ router.post('/test-websearch', async (req, res) => {
     return res.json({ ok: results.length > 0, result_count: results.length, unresponsive, latency_ms: Date.now() - t0 });
   } catch (e) {
     const timeout = e.cause?.code === 'WEBSEARCH_TIMEOUT';
-    return res.json({ ok: false, error: timeout ? 'TIMEOUT' : e.message, latency_ms: Date.now() - t0 });
+    return res.json({ ok: false, error: timeout ? 'TIMEOUT' : 'UNREACHABLE', detail: e.message, latency_ms: Date.now() - t0 });
   }
 });
 
@@ -324,7 +396,7 @@ router.post('/test-tiles', async (req, res) => {
     if (!ctype.startsWith('image/')) return res.json({ ok: false, error: 'NOT_IMAGE', content_type: ctype, latency_ms });
     return res.json({ ok: true, status: r.status, content_type: ctype, latency_ms });
   } catch (e) {
-    return res.json({ ok: false, error: e.name === 'AbortError' ? 'TIMEOUT' : e.message, latency_ms: Date.now() - t0 });
+    return res.json({ ok: false, error: e.name === 'AbortError' ? 'TIMEOUT' : 'UNREACHABLE', detail: e.message, latency_ms: Date.now() - t0 });
   }
 });
 

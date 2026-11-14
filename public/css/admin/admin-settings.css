@@ -1,33 +1,12 @@
 @layer components {
 /* AdminSettingsCard. Akzent-Mapping in card-accents.css. */
 
-.admin-settings-tabs {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--space-sm);
-  border-bottom: 1px solid var(--color-border);
-  margin-bottom: var(--space-lg);
-}
-
-.admin-settings-tab {
-  background: transparent;
-  border: none;
-  border-bottom: 2px solid transparent;
-  padding: var(--space-md) var(--space-lg);
-  color: var(--color-muted);
-  font-size: var(--font-size-sm);
-  cursor: pointer;
-}
-
-.admin-settings-tab.is-active {
-  color: var(--color-text);
-  border-bottom-color: var(--card-accent);
-  font-weight: var(--fw-semibold);
-}
-
+/* Reiterleisten (Haupt-Reiter + Provider-Unterreiter) sind `.tabs`
+   (components/tabs.css, Alpine.data('tabs')); hier nur der Panel-Abstand. */
 .admin-settings-section {
   display: grid;
   gap: var(--space-lg);
+  padding-top: var(--space-lg);
 }
 
 .admin-settings-section label {
@@ -122,41 +101,59 @@
   white-space: nowrap;
 }
 
+/* Zustandszeile unter einem Feld (setting-field.js#_metaRow): «geändert» /
+   «ungespeichert» / «wird zurückgesetzt» + «Auf Standard zurücksetzen». Eine
+   Zeile, klein, nur sichtbar, wenn es etwas zu sagen gibt. */
+.setting-field__meta {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  flex-wrap: wrap;
+  font-size: var(--font-size-xs);
+  min-width: 0;
+}
+
+.setting-field__state {
+  color: var(--color-muted);
+}
+
+.setting-field__state--unsaved,
+.setting-field__state--reset {
+  color: var(--color-warn-text);
+  font-weight: var(--fw-medium);
+}
+
+/* Eigenes Passwort vor dem Wechsel auf lokale Anmeldung (Auth-Reiter). */
+.admin-settings-own-password {
+  display: grid;
+  gap: var(--space-sm);
+  min-width: 0;
+}
+
+.admin-settings-own-password-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  flex-wrap: wrap;
+  min-width: 0;
+}
+
+.admin-settings-own-password-row > input {
+  flex: 1 1 12rem;
+}
+
 .admin-settings-actions {
   margin-top: var(--space-md);
   display: flex;
   gap: var(--space-md);
 }
 
-.admin-settings-subtabs {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--space-xs);
-  margin-bottom: var(--space-md);
-}
-
-.admin-settings-subtab {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--space-sm);
-  background: var(--color-tag-bg);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-none);
-  padding: var(--space-sm) var(--space-md);
-  color: var(--color-tag-text);
-  font-size: var(--font-size-sm);
-  cursor: pointer;
-}
-
-.admin-settings-subtab.is-active {
-  color: var(--color-text);
-  border-color: var(--card-accent);
-  background: var(--color-accent-bg);
-  font-weight: var(--fw-semibold);
-}
-
-.admin-settings-subtab.is-default-provider {
-  border-color: var(--card-accent);
+/* Provider-Unterreiter: Wrapper der `tabs()`-Instanz reiht Leiste, Panels,
+   Budget-Vorschau und Aktionen im selben Rhythmus wie die Sektion. */
+.admin-settings-subtabs-wrap {
+  display: grid;
+  gap: var(--space-lg);
+  min-width: 0;
 }
 
 .admin-settings-subsection {
@@ -332,16 +329,6 @@
 }
 
 @media (max-width: 600px) {
-  .admin-settings-tabs {
-    overflow-x: auto;
-    flex-wrap: nowrap;
-    -webkit-overflow-scrolling: touch;
-    scrollbar-width: thin;
-  }
-  .admin-settings-tab {
-    flex-shrink: 0;
-    padding: var(--space-sm) var(--space-md);
-  }
   .admin-settings-subsection {
     padding: var(--space-md);
   }

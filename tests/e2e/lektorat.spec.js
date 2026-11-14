@@ -4,7 +4,7 @@ const HARNESS = '/tests/fixtures/lektorat-harness.html';
 
 async function loadHarness(page, scenario) {
   const url = scenario ? `${HARNESS}?scenario=${scenario}` : HARNESS;
-  await page.request.post('http://localhost:8765/__mock/reset');
+  await page.request.post('/__mock/reset');
   await page.goto(url, { waitUntil: 'domcontentloaded' });
   await page.waitForFunction(() => window.harnessReady === true);
 }
@@ -188,7 +188,7 @@ test.describe('Lektorat-Flow', () => {
     await page.evaluate(() => window.harness.saveCorrections());
     await waitUntil(page, 'h => h.saveApplying === null && h.appliedOriginals.length > 0', 5000);
 
-    const mock = await page.request.get('http://localhost:8765/__mock/state').then(r => r.json());
+    const mock = await page.request.get('/__mock/state').then(r => r.json());
     expect(mock.lastBsPut.html).toContain('lief zum Fluss');
     expect(mock.lastBsPut.html).toContain('scheint');
     expect(mock.lastBsPut.html).not.toContain('scheinet');
@@ -208,7 +208,7 @@ test.describe('Lektorat-Flow', () => {
     expect(ev.meta).toMatchObject({ selected: 2, applied: 2, skipped: 0 });
     expect(ev.meta.shown).toBeGreaterThanOrEqual(2);
 
-    const mock = await page.request.get('http://localhost:8765/__mock/state').then(r => r.json());
+    const mock = await page.request.get('/__mock/state').then(r => r.json());
     expect(mock.lastBsPut).not.toBeNull();
     expect(mock.lastBsPut.html).toContain('Wald');
     expect(mock.lastBsPut.html).toContain('scheint');

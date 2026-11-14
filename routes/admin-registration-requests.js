@@ -35,7 +35,7 @@ router.get('/', (req, res) => {
   res.json({ items });
 });
 
-router.post('/:id/approve', express.json(), (req, res) => {
+router.post('/:id/approve', express.json(), async (req, res) => {
   const id = Number(req.params.id);
   if (!Number.isFinite(id) || id <= 0) return res.status(400).json({ error_code: 'ID_INVALID' });
 
@@ -72,14 +72,14 @@ router.post('/:id/approve', express.json(), (req, res) => {
   const inviteUrl = buildInviteUrl(invite.invite_token);
   let mailResult = { sent: false, reason: 'not-attempted' };
   try {
-    // Approve-Mail synchron probieren, damit der Admin im UI sofort sieht,
-    // ob Mail rausging oder Invite-URL inline kopiert werden muss.
-    mailer.send({
+    // Approve-Mail abwarten, damit der Admin im UI sofort sieht, ob die Mail
+    // rausging oder die Invite-URL inline kopiert werden muss.
+    mailResult = await mailer.send({
       to: reqRow.email,
       template: 'registration-approved',
       locale: 'de',
       ctx: { inviteUrl, expiresAt: invite.expires_at },
-    }).then(r => { mailResult = r; }).catch(e => { mailResult = { sent: false, reason: 'error', error: e.message }; });
+    });
   } catch (e) {
     mailResult = { sent: false, reason: 'error', error: e.message };
   }
@@ -88,7 +88,7 @@ router.post('/:id/approve', express.json(), (req, res) => {
   res.json({ request: updated, invite, inviteUrl, mail: mailResult });
 });
 
-router.post('/:id/deny', express.json(), (req, res) => {
+router.post('/:id/deny', express.json(), async (req, res) => {
   const id = Number(req.params.id);
   if (!Number.isFinite(id) || id <= 0) return res.status(400).json({ error_code: 'ID_INVALID' });
   const reqRow = regRequests.getRequest(id);
@@ -102,12 +102,12 @@ router.post('/:id/deny', express.json(), (req, res) => {
 
   let mailResult = { sent: false, reason: 'not-attempted' };
   try {
-    mailer.send({
+    mailResult = await mailer.send({
       to: reqRow.email,
       template: 'registration-denied',
       locale: 'de',
       ctx: { reason: reason || '' },
-    }).then(r => { mailResult = r; }).catch(e => { mailResult = { sent: false, reason: 'error', error: e.message }; });
+    });
   } catch (e) {
     mailResult = { sent: false, reason: 'error', error: e.message };
   }

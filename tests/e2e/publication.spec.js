@@ -10,8 +10,8 @@ test.describe.configure({ mode: 'serial' });
 
 test.describe('publication-tab', () => {
   test.beforeEach(async ({ page }) => {
-    await page.request.post('http://localhost:8765/__mock/publication-reset');
-    await page.goto('http://localhost:8765/tests/fixtures/publication-harness.html', { waitUntil: 'domcontentloaded' });
+    await page.request.post('/__mock/publication-reset');
+    await page.goto('/tests/fixtures/publication-harness.html', { waitUntil: 'domcontentloaded' });
     await page.waitForFunction(() => window.__harnessReady === true);
   });
 
@@ -40,7 +40,7 @@ test.describe('publication-tab', () => {
     await page.locator('.card-actions button', { hasText: 'Speichern' }).click();
 
     await expect(async () => {
-      const state = await page.request.get('http://localhost:8765/__mock/state').then(r => r.json());
+      const state = await page.request.get('/__mock/state').then(r => r.json());
       expect(state.lastPubPut).toBeTruthy();
       expect(state.lastPubPut.isbn).toBe('978-3-16-148410-0');
       expect(state.lastPubPut.subtitle).toBe('Ein Untertitel');

@@ -6,7 +6,7 @@ const { test, expect } = require('./_helpers/fixtures');
 // + Kategorie am frisch angelegten Buch persistiert (createBook → /booksettings
 // → /books/:id/category). Backend-Endpunkte via page.route gemockt.
 
-const URL = 'http://localhost:8765/tests/fixtures/book-create-harness.html';
+const URL = '/tests/fixtures/book-create-harness.html';
 
 // Registriert alle vom Modal genutzten Endpunkte. `categories` steuert den Pool;
 // `calls` sammelt die beobachteten Requests zur Assertion.

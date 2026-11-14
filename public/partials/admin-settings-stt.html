@@ -1,5 +1,5 @@
     <!-- STT-Tab: Speech-to-Text-Diktat (Notebook-Editor) -->
-    <section x-show="adminSettingsTab === 'stt'" class="admin-settings-section">
+    <section x-bind="panel('stt')" class="admin-settings-section">
       <p class="muted-msg muted-msg--sm" x-text="$app.t('admin.settings.stt.hint')"></p>
       <div x-data="settingField({ k: 'stt.enabled', type: 'toggle', base: 'stt.enabled' })"></div>
       <div x-data="settingField({ k: 'stt.host', type: 'url', base: 'stt.host', help: true })"></div>

@@ -6,7 +6,7 @@
 // Ablauf (billig vor teuer, Abbruch beim ersten roten Gate):
 //   1. Import-Gate, Prompt-Config, Boot-Smoke
 //   2. Unit, Integration
-//   3. gleichzeitig: E2E-Harness (Port 8765), App-Specs Chromium in
+//   3. gleichzeitig: E2E-Harness (Port E2E_PORT, Default 8765), App-Specs Chromium in
 //      TEST_CI_SHARDS Shards (Default 6, CI faehrt 3 —
 //      lokal reicht der Speicher dafuer, ~1,3 GB je Shard; SMOKE_SHARD ab TEST_CI_SHARD_BASE
 //      → Ports 8786/8788/…) und der Buendel-Smoke (naechster Shard, eigenes Bündel unter

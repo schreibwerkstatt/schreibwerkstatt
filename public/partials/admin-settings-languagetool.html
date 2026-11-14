@@ -1,5 +1,5 @@
     <!-- LanguageTool-Tab: self-hosted Spellcheck-Server -->
-    <section x-show="adminSettingsTab === 'languagetool'" class="admin-settings-section">
+    <section x-bind="panel('languagetool')" class="admin-settings-section">
       <p class="muted-msg muted-msg--sm" x-text="$app.t('admin.settings.languagetool.hint')"></p>
       <div x-data="settingField({ k: 'languagetool.enabled', type: 'toggle', base: 'languagetool.enabled' })"></div>
       <div x-data="settingField({ k: 'languagetool.url', type: 'url', base: 'languagetool.url', help: true })"></div>

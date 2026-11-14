@@ -1,5 +1,5 @@
     <!-- Analytics-Tab: Plausible (self-hosted) -->
-    <section x-show="adminSettingsTab === 'analytics'" class="admin-settings-section">
+    <section x-bind="panel('analytics')" class="admin-settings-section">
       <div x-data="settingField({ k: 'analytics.plausible.enabled', type: 'toggle', label: 'admin.settings.analytics.enabledLabel' })"></div>
       <div x-data="settingField({ k: 'analytics.plausible.script_url', type: 'url', label: 'admin.settings.analytics.scriptUrlLabel', ph: 'https://analytics.example.com/js/pa-XXXX.js', help: 'admin.settings.analytics.scriptUrlHint' })"></div>
     </section>

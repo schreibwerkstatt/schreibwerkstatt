@@ -1,5 +1,5 @@
     <!-- Image-Tab: Bild-Generierung im Buch-Chat (self-hosted OpenAI-kompatibel) -->
-    <section x-show="adminSettingsTab === 'image'" class="admin-settings-section">
+    <section x-bind="panel('image')" class="admin-settings-section">
       <p class="muted-msg muted-msg--sm" x-text="$app.t('admin.settings.image.hint')"></p>
       <div x-data="settingField({ k: 'image.enabled', type: 'toggle', base: 'image.enabled' })"></div>
       <div x-data="settingField({ k: 'image.host', type: 'url', base: 'image.host', help: true })"></div>

@@ -1,5 +1,5 @@
     <!-- TTS-Tab: Text-to-Speech / Proof-Listening (Notebook-Editor) -->
-    <section x-show="adminSettingsTab === 'tts'" class="admin-settings-section">
+    <section x-bind="panel('tts')" class="admin-settings-section">
       <p class="muted-msg muted-msg--sm" x-text="$app.t('admin.settings.tts.hint')"></p>
       <div x-data="settingField({ k: 'tts.enabled', type: 'toggle', base: 'tts.enabled' })"></div>
       <div x-data="settingField({ k: 'tts.host', type: 'url', base: 'tts.host', help: true })"></div>

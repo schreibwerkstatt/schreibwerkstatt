@@ -3,7 +3,7 @@ const { test, expect } = require('./_helpers/fixtures');
 // Verifiziert das collapsible-Pattern gegen die echte Alpine-Runtime:
 // x-bind="trigger" (@click + :aria-expanded), x-bind="chevron" (:class open)
 // und x-bind="panel" (x-show) müssen als Direktiven-Spread greifen.
-const URL = 'http://localhost:8765/tests/fixtures/collapsible-harness.html';
+const URL = '/tests/fixtures/collapsible-harness.html';
 
 test('collapsible: default geschlossen, toggelt auf Klick', async ({ page }) => {
   await page.goto(URL, { waitUntil: 'domcontentloaded' });

@@ -5,7 +5,8 @@ const path = require('path');
 const fs = require('fs');
 const os = require('os');
 
-const PORT = 33737;
+// BOOT_SMOKE_PORT: eigener Port fuer einen gleichzeitigen zweiten Lauf (scripts/release-verify.js).
+const PORT = Number(process.env.BOOT_SMOKE_PORT) || 33737;
 const BOOT_TIMEOUT_MS = 15000;
 
 const tmpDb = path.join(os.tmpdir(), `lektorat-smoke-${process.pid}.db`);

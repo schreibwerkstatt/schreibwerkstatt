@@ -1,19 +1,19 @@
     <!-- Provider-Tab: Sub-Tabs pro Provider, aktiver markiert via Badge -->
-    <section x-show="adminSettingsTab === 'provider'" class="admin-settings-section">
+    <section x-bind="panel('provider')" class="admin-settings-section">
       <p class="muted-msg muted-msg--sm" x-text="$app.t('admin.settings.help.providerChoice')"></p>
 
-      <nav class="admin-settings-subtabs" role="tablist">
-        <template x-for="p in ['claude','ollama','openai-compat','profiles']" :key="p">
-          <button :aria-selected="adminSettingsProviderSubtab === p" type="button" role="tab"
-                  :class="['admin-settings-subtab', adminSettingsProviderSubtab === p ? 'is-active' : '', adminSettingsForm['ai.provider'] === p ? 'is-default-provider' : '']"
-                  @click="adminSettingsProviderSubtab = p">
+      <div class="admin-settings-subtabs-wrap"
+           x-data="tabs(['claude','ollama','openai-compat','profiles'])" x-modelable="value" x-model="adminSettingsProviderSubtab">
+      <div class="tabs tabs--scrollable" x-bind="tablist">
+        <template x-for="p in tabs" :key="p">
+          <button class="tabs-btn" x-bind="tabBtn(p)">
             <span x-text="$app.t('admin.settings.section.' + p)"></span>
             <span x-show="adminSettingsForm['ai.provider'] === p" class="admin-settings-active-badge" x-text="$app.t('admin.settings.provider.active')"></span>
           </button>
         </template>
-      </nav>
+      </div>
 
-      <div x-show="adminSettingsProviderSubtab === 'claude'" class="admin-settings-subsection">
+      <div x-bind="panel('claude')" class="admin-settings-subsection">
         <h4 class="admin-settings-subheading"><span x-text="$app.t('admin.settings.claude.standardTitle')"></span></h4>
         <div x-data="settingField({ k: 'ai.claude.api_key', type: 'password', label: 'admin.settings.label.apiKey' })"></div>
         <div x-data="settingField({ k: 'ai.claude.model', label: 'admin.settings.label.model', ph: 'claude-opus-5-5', help: 'admin.settings.help.claudeModel', models: 'claude' })"></div>
@@ -86,7 +86,7 @@
         </div>
       </div>
 
-      <div x-show="adminSettingsProviderSubtab === 'ollama'" class="admin-settings-subsection">
+      <div x-bind="panel('ollama')" class="admin-settings-subsection">
         <div x-data="settingField({ k: 'ai.ollama.host', type: 'url', label: 'admin.settings.label.host', ph: 'http://localhost:11434' })"></div>
         <div x-data="settingField({ k: 'ai.ollama.model', label: 'admin.settings.label.model', models: { target: 'ollama', hostKey: 'ai.ollama.host' } })"></div>
         <div x-data="settingField({ k: 'ai.ollama.temperature', type: 'num', label: 'admin.settings.label.temperature', num: { step: 0.01, decimals: 2, min: 0, max: 2 } })"></div>
@@ -97,7 +97,7 @@
         <div x-data="settingField({ k: 'ai.ollama.timeout_ms', type: 'num', label: 'admin.settings.label.aiTimeoutMs', num: { integer: true, min: 1000, max: 3600000 }, help: 'admin.settings.help.timeoutMsOllama' })"></div>
       </div>
 
-      <div x-show="adminSettingsProviderSubtab === 'openai-compat'" class="admin-settings-subsection">
+      <div x-bind="panel('openai-compat')" class="admin-settings-subsection">
         <div x-data="settingField({ k: 'ai.openai-compat.host', type: 'url', label: 'admin.settings.label.host', ph: 'http://localhost:8080' })"></div>
         <div x-data="settingField({ k: 'ai.openai-compat.model', label: 'admin.settings.label.model', models: { target: 'openai-compat', hostKey: 'ai.openai-compat.host' } })"></div>
         <div x-data="settingField({ k: 'ai.openai-compat.api_key', type: 'password', label: 'admin.settings.label.apiKey', help: 'admin.settings.help.openaiCompatApiKey' })"></div>
@@ -148,5 +148,6 @@
                 :disabled="adminSettingsForm['ai.provider'] === adminSettingsProviderSubtab"
                 x-text="$app.t('admin.settings.provider.makeActive')"></button>
         <button type="button" @click="adminSettingsTest('provider')" x-text="$app.t('admin.settings.test.connection')"></button>
+      </div>
       </div>
     </section>

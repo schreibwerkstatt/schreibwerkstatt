@@ -31,6 +31,7 @@ const { buildInviteUrl } = require('../lib/invite-url');
 const { requireAdmin } = require('../lib/admin-mw');
 const logger = require('../logger');
 const { sessionEmail } = require('../lib/acl');
+const { db } = require('../db/connection');
 
 // Cooldown zwischen Reminder-Mails. Schuetzt den Empfaenger vor Spam, falls
 // der Admin ungeduldig wird. Klick-Tracking gibt dem Admin sonst keinen
@@ -59,18 +60,35 @@ function _clientIp(req) {
   return req.ip || req.headers['x-forwarded-for']?.split(',')[0]?.trim() || null;
 }
 
-// Router-Mount: app.use('/admin/users', router) — Pfade hier sind relativ.
-router.get('/', (req, res) => {
-  // Passwort-Zustand in EINER Abfrage dazu (statt einer pro Zeile). `has_password`
-  // ist absichtlich ein Boolean und nicht der Hash — die Admin-Konsole braucht
-  // nur zu wissen, ob sich das Konto lokal anmelden kann.
+// Listenzeilen der Admin-Konsole: Kontozeile (appUsers.listUsers-Form, inkl.
+// invited_by_name / own_ai_provider) plus Passwort-Zustand. EINE Funktion fuer
+// GET-Liste und PUT-Antwort — die PUT-Antwort ersetzt die Zeile im Frontend,
+// ein fehlendes Feld liesse dort Badges umspringen. Passwort-Zustand in EINER
+// Abfrage (statt einer pro Zeile). `has_password` ist absichtlich ein Boolean
+// und nicht der Hash — die Konsole braucht nur zu wissen, ob sich das Konto
+// lokal anmelden kann.
+function _adminUserRows(rows) {
   const pw = new Map(creds.listEmailsWithPassword().map(r => [r.user_email, r]));
-  const users = appUsers.listUsers().map(u => ({
+  return rows.map(u => ({
     ...u,
     has_password: pw.has(u.email),
     must_change_password: pw.get(u.email)?.must_change === 1,
   }));
-  res.json({ users, auth_method: authProviders.activeProviderId() });
+}
+
+// Wuerde diese Aenderung den letzten aktiven Admin entfernen (Rolle weg oder
+// Status nicht mehr 'active')? Ohne aktiven Admin verwaltet niemand mehr die
+// Instanz; der ENV-Notfallzugang ist kein Ersatz, den die Konsole voraussetzen darf.
+function _removesLastAdmin(user, { role = user.global_role, status = user.status } = {}) {
+  const wasActiveAdmin = user.global_role === 'admin' && user.status === 'active';
+  if (!wasActiveAdmin) return false;
+  if (role === 'admin' && status === 'active') return false;
+  return appUsers.getActiveAdminEmails().length <= 1;
+}
+
+// Router-Mount: app.use('/admin/users', router) — Pfade hier sind relativ.
+router.get('/', (req, res) => {
+  res.json({ users: _adminUserRows(appUsers.listUsers()), auth_method: authProviders.activeProviderId() });
 });
 
 // Passwort-Routen gelten nur beim lokalen Verfahren. 409 statt 404, weil die
@@ -82,9 +100,14 @@ function _requireLocalAuth(req, res) {
 }
 
 // Zielkonto laden + Vorbedingungen pruefen. Antwortet selbst und liefert dann null.
-function _passwordTarget(req, res) {
-  if (!_requireLocalAuth(req, res)) return null;
+// `allowSelfBeforeLocal`: das eigene Konto darf schon VOR dem Wechsel auf die
+// lokale Anmeldung ein Passwort bekommen — der Wechsel selbst verlangt es
+// (routes/admin-settings.js#_authMethodLockoutCode), sonst sperrte er den
+// Admin nach dem Abmelden aus.
+function _passwordTarget(req, res, { allowSelfBeforeLocal = false } = {}) {
   const target = (req.params.email || '').toLowerCase();
+  const isSelf = target === String(sessionEmail(req) || '').toLowerCase();
+  if (!(allowSelfBeforeLocal && isSelf) && !_requireLocalAuth(req, res)) return null;
   const user = appUsers.getUser(target);
   if (!user) {
     res.status(404).json({ error_code: 'USER_NOT_FOUND' });
@@ -100,26 +123,29 @@ function _passwordTarget(req, res) {
 // Initialpasswort. `must_change=1`: die naechste Anmeldung fuehrt zwingend auf
 // die Setz-Seite, statt eine Sitzung zu eroeffnen — der Admin kennt das
 // Passwort, also darf es nicht das bleiben, mit dem der User arbeitet.
+// Das eigene Konto bekommt kein `must_change`: der Admin kennt sein eigenes
+// Passwort ohnehin, ein erzwungener Wechsel waere nur ein Umweg.
 router.post('/:email/password', express.json(), async (req, res) => {
-  const user = _passwordTarget(req, res);
+  const user = _passwordTarget(req, res, { allowSelfBeforeLocal: true });
   if (!user) return;
   const actor = sessionEmail(req);
+  const isSelf = user.email === String(actor || '').toLowerCase();
   const pw = (req.body || {}).password;
   const policyError = password.validatePassword(pw);
   if (policyError) {
     return res.status(400).json({ error_code: 'PASSWORD_WEAK', detail: policyError, min: password.minLength() });
   }
-  creds.setPassword(user.email, await password.hashPassword(pw), { mustChange: 1, updatedBy: actor });
+  creds.setPassword(user.email, await password.hashPassword(pw), { mustChange: isSelf ? 0 : 1, updatedBy: actor });
   // Offene Setz-/Reset-Links entwerten: sonst haengt neben dem frisch
   // vergebenen Passwort noch ein aelterer Link, der es wieder aushebelt.
   creds.revokeOpenTokens(user.email);
   appUsers.recordAuditEvent(user.email, 'password-set', {
     ip: _clientIp(req),
     userAgent: req.headers['user-agent'] || null,
-    meta: { by: actor, mustChange: true },
+    meta: { by: actor, mustChange: !isSelf },
   });
   logger.info(`Initialpasswort gesetzt fuer ${user.email}`, { user: actor });
-  res.json({ ok: true, must_change: true });
+  res.json({ ok: true, must_change: !isSelf });
 });
 
 // Setz-/Reset-Link ausstellen und mailen. Die URL kommt mit zurueck, damit der
@@ -263,6 +289,9 @@ router.delete('/invites/:id', (req, res) => {
   res.json({ ok: true });
 });
 
+// Erst ALLES pruefen (Werte, Selbst-Schutz, letzter Admin, KI-Profil), dann in
+// einer Transaktion schreiben — ein abgelehntes Feld laesst keinen halb
+// geaenderten Account zurueck.
 router.put('/:email', express.json(), (req, res) => {
   const target = (req.params.email || '').toLowerCase();
   if (!target) return res.status(400).json({ error_code: 'EMAIL_REQUIRED' });
@@ -273,77 +302,97 @@ router.put('/:email', express.json(), (req, res) => {
   const ip = _clientIp(req);
   const userAgent = req.headers['user-agent'] || null;
   const actor = sessionEmail(req);
+  const isSelf = target === String(actor || '').toLowerCase();
 
-  if (global_role !== undefined) {
-    if (global_role !== 'admin' && global_role !== 'user') {
-      return res.status(400).json({ error_code: 'ROLE_INVALID' });
-    }
-    if (global_role !== user.global_role) {
-      appUsers.setGlobalRole(target, global_role);
-      appUsers.recordAuditEvent(target, 'role-changed', { ip, userAgent, meta: { from: user.global_role, to: global_role, by: actor } });
-    }
+  if (global_role !== undefined && global_role !== 'admin' && global_role !== 'user') {
+    return res.status(400).json({ error_code: 'ROLE_INVALID' });
   }
-  if (status !== undefined) {
-    if (!['active', 'suspended', 'invited', 'deleted'].includes(status)) {
-      return res.status(400).json({ error_code: 'STATUS_INVALID' });
-    }
-    if (status !== user.status) {
-      appUsers.setStatus(target, status);
-      const event = status === 'suspended' ? 'suspended' : (status === 'active' ? 'reactivated' : status === 'deleted' ? 'deleted' : null);
-      if (event) appUsers.recordAuditEvent(target, event, { ip, userAgent, meta: { from: user.status, to: status, by: actor } });
-    }
+  if (status !== undefined && !['active', 'suspended', 'invited', 'deleted'].includes(status)) {
+    return res.status(400).json({ error_code: 'STATUS_INVALID' });
   }
-  if (can_invite_users !== undefined) {
-    appUsers.setCanInviteUsers(target, !!can_invite_users);
+  const roleChange = global_role !== undefined && global_role !== user.global_role;
+  const statusChange = status !== undefined && status !== user.status;
+  // Selbst-Aussperren: eigene Rolle, eigenes Sperren/Loeschen. Gilt auch fuer
+  // status:'deleted' ueber PUT — derselbe Schutz wie DELETE /:email.
+  if (isSelf && roleChange) return res.status(400).json({ error_code: 'CANNOT_CHANGE_OWN_ROLE' });
+  if (isSelf && statusChange && status === 'deleted') return res.status(400).json({ error_code: 'CANNOT_DELETE_SELF' });
+  if (isSelf && statusChange && status !== 'active') return res.status(400).json({ error_code: 'CANNOT_SUSPEND_SELF' });
+  if ((roleChange || statusChange) && _removesLastAdmin(user, {
+    role: roleChange ? global_role : user.global_role,
+    status: statusChange ? status : user.status,
+  })) {
+    return res.status(409).json({ error_code: 'LAST_ADMIN' });
   }
-  // Budget-Felder. Beide muessen zusammen kommen — Mode + USD bilden
-  // eine Einheit, sonst sind Defaults missverstaendlich.
-  if (monthly_budget_usd !== undefined || budget_mode !== undefined) {
-    const nextMode = budget_mode !== undefined ? budget_mode : (user.budget_mode || 'none');
-    const nextUsd = monthly_budget_usd === undefined ? user.monthly_budget_usd : monthly_budget_usd;
-    try {
-      appUsers.setBudget(target, { usd: nextUsd, mode: nextMode });
-      if (nextMode !== (user.budget_mode || 'none') || nextUsd !== user.monthly_budget_usd) {
-        appUsers.recordAuditEvent(target, 'budget-changed', {
-          ip, userAgent,
-          meta: { from: { mode: user.budget_mode || 'none', usd: user.monthly_budget_usd }, to: { mode: nextMode, usd: nextUsd }, by: actor },
-        });
-      }
-    } catch (e) {
-      logger.warn(`Budget ungueltig fuer ${target}: ${e.message}`);
-      return res.status(400).json({ error_code: 'BUDGET_INVALID' });
-    }
-  }
+
   // KI-Profil-Zuweisung. NULL/'' = User folgt dem globalen ai.provider samt globaler
   // Parameter. Validiert wird die Erreichbarkeit der Konfiguration, die dieses Profil
   // effektiv faehrt: ein Profil ohne eigenen Host/Key faellt auf die globalen Werte
   // zurueck — fehlen die auch, waere die Zuweisung eine Zusage, die kein Call einloest.
+  let nextProfile;
   if (ai_profile_id !== undefined) {
-    const next = (ai_profile_id === null || ai_profile_id === '') ? null : parseInt(ai_profile_id, 10);
-    if (next !== null && !Number.isInteger(next)) {
+    nextProfile = (ai_profile_id === null || ai_profile_id === '') ? null : parseInt(ai_profile_id, 10);
+    if (nextProfile !== null && !Number.isInteger(nextProfile)) {
       return res.status(400).json({ error_code: 'AI_PROFILE_INVALID' });
     }
-    if (next !== null) {
-      const prof = aiProfiles.getProfile(next);
+    if (nextProfile !== null) {
+      const prof = aiProfiles.getProfile(nextProfile);
       // Der eigene KI-Zugang eines Kontos ist nicht zuweisbar.
       if (!prof || prof.owner_email) return res.status(404).json({ error_code: 'AI_PROFILE_NOT_FOUND' });
       const missing = _profileConfigGap(prof);
       if (missing) return res.status(400).json({ error_code: 'AI_PROVIDER_NOT_CONFIGURED', detail: missing });
     }
-    if (next !== (user.ai_profile_id || null)) {
-      try { appUsers.setAiProfile(target, next); }
-      catch (e) {
-        logger.warn(`KI-Profil-Zuordnung ungueltig fuer ${target}: ${e.message}`);
-        return res.status(400).json({ error_code: 'AI_PROFILE_INVALID' });
-      }
-      appUsers.recordAuditEvent(target, 'ai-provider-changed', {
-        ip, userAgent,
-        meta: { from: user.ai_profile_id || null, to: next, by: actor },
-      });
-    }
   }
 
-  res.json({ user: appUsers.getUser(target) });
+  try {
+    db.transaction(() => {
+      if (roleChange) {
+        appUsers.setGlobalRole(target, global_role);
+        appUsers.recordAuditEvent(target, 'role-changed', { ip, userAgent, meta: { from: user.global_role, to: global_role, by: actor } });
+      }
+      if (statusChange) {
+        appUsers.setStatus(target, status);
+        const event = status === 'suspended' ? 'suspended' : (status === 'active' ? 'reactivated' : status === 'deleted' ? 'deleted' : null);
+        if (event) appUsers.recordAuditEvent(target, event, { ip, userAgent, meta: { from: user.status, to: status, by: actor } });
+      }
+      if (can_invite_users !== undefined) {
+        appUsers.setCanInviteUsers(target, !!can_invite_users);
+      }
+      // Budget-Felder. Beide muessen zusammen kommen — Mode + USD bilden
+      // eine Einheit, sonst sind Defaults missverstaendlich.
+      if (monthly_budget_usd !== undefined || budget_mode !== undefined) {
+        const nextMode = budget_mode !== undefined ? budget_mode : (user.budget_mode || 'none');
+        const nextUsd = monthly_budget_usd === undefined ? user.monthly_budget_usd : monthly_budget_usd;
+        try {
+          appUsers.setBudget(target, { usd: nextUsd, mode: nextMode });
+        } catch (e) {
+          logger.warn(`Budget ungueltig fuer ${target}: ${e.message}`);
+          throw Object.assign(new Error('BUDGET_INVALID'), { errorCode: 'BUDGET_INVALID' });
+        }
+        if (nextMode !== (user.budget_mode || 'none') || nextUsd !== user.monthly_budget_usd) {
+          appUsers.recordAuditEvent(target, 'budget-changed', {
+            ip, userAgent,
+            meta: { from: { mode: user.budget_mode || 'none', usd: user.monthly_budget_usd }, to: { mode: nextMode, usd: nextUsd }, by: actor },
+          });
+        }
+      }
+      if (nextProfile !== undefined && nextProfile !== (user.ai_profile_id || null)) {
+        try { appUsers.setAiProfile(target, nextProfile); }
+        catch (e) {
+          logger.warn(`KI-Profil-Zuordnung ungueltig fuer ${target}: ${e.message}`);
+          throw Object.assign(new Error('AI_PROFILE_INVALID'), { errorCode: 'AI_PROFILE_INVALID' });
+        }
+        appUsers.recordAuditEvent(target, 'ai-provider-changed', {
+          ip, userAgent,
+          meta: { from: user.ai_profile_id || null, to: nextProfile, by: actor },
+        });
+      }
+    })();
+  } catch (e) {
+    if (e.errorCode) return res.status(400).json({ error_code: e.errorCode });
+    throw e;
+  }
+
+  res.json({ user: _adminUserRows([appUsers.getUserListRow(target)])[0] });
 });
 
 router.delete('/:email', (req, res) => {
@@ -354,6 +403,9 @@ router.delete('/:email', (req, res) => {
   if (target === sessionEmail(req).toLowerCase()) {
     return res.status(400).json({ error_code: 'CANNOT_DELETE_SELF' });
   }
+  if (_removesLastAdmin(user, { status: 'deleted' })) {
+    return res.status(409).json({ error_code: 'LAST_ADMIN' });
+  }
   appUsers.softDeleteUser(target);
   appUsers.recordAuditEvent(target, 'deleted', {
     ip: _clientIp(req),
@@ -362,5 +414,8 @@ router.delete('/:email', (req, res) => {
   });
   res.json({ ok: true });
 });
+
+// Fuer den Unit-Test der Letzter-Admin-Regel (ueber HTTP nur als Wettlauf erreichbar).
+router._removesLastAdmin = _removesLastAdmin;
 
 module.exports = router;

@@ -1,7 +1,7 @@
     <!-- Websuche-Tab: Suchweg für Recherche-Chat + Weltfakten-Faktencheck.
          Claude hat eine eigene Achse (Anthropic oder SearXNG), alle anderen
          Provider können nur über SearXNG suchen. Logik: lib/websearch/. -->
-    <section x-show="adminSettingsTab === 'websearch'" class="admin-settings-section">
+    <section x-bind="panel('websearch')" class="admin-settings-section">
       <p class="muted-msg muted-msg--sm" x-text="$app.t('admin.settings.websearch.hint')"></p>
       <div x-data="settingField({ k: 'websearch.provider', type: 'select', base: 'websearch.provider', help: true, opts: [{ value: 'off', label: $app.t('admin.settings.websearch.provider.off') }, { value: 'searxng', label: 'SearXNG' }] })"></div>
       <div x-data="settingField({ k: 'websearch.claude', type: 'select', base: 'websearch.claude', help: true, opts: [{ value: 'anthropic', label: $app.t('admin.settings.websearch.claude.anthropic') }, { value: 'searxng', label: 'SearXNG' }] })"></div>

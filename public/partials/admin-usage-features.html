@@ -1,0 +1,68 @@
+<!-- Admin-Usage → Funktionen-Tab -->
+<!--
+  Sub-Partial von admin-usage.html (Scope: adminUsageCard). Quelle:
+  GET /admin/usage/features (feature_usage, Karten-Oeffnungen je User).
+  Feature-Keys stehen mit dem Label der Karten-Registry (adminUsageFeatureLabel).
+-->
+<div x-show="adminUsageTab === 'features'" class="admin-usage-pane" :aria-busy="adminUsageLoading"
+     id="admin-usage-pane-features" role="tabpanel" aria-labelledby="admin-usage-tab-features">
+  <h3 x-text="$app.t('admin.usage.feature.totals')"></h3>
+  <div class="table-scroll" x-show="adminUsageFeatureTotals.length">
+  <table class="data-table"
+         x-data="sortableTable({
+           rows: () => adminUsageFeatureTotals.map(t => ({ ...t, label: adminUsageFeatureLabel(t.featureKey) })),
+           defaultKey: 'count',
+           defaultDir: 'desc',
+           persistKey: 'admin.usage.feature.totals',
+           types: { count: 'number' },
+         })">
+    <thead>
+      <tr>
+        <th x-bind="sortTh('label')" x-text="$app.t('admin.usage.feature.key')"></th>
+        <th x-bind="sortTh('count')" x-text="$app.t('admin.usage.feature.count')"></th>
+      </tr>
+    </thead>
+    <tbody>
+      <template x-for="t in sorted" :key="t.featureKey">
+        <tr>
+          <td x-text="t.label"></td>
+          <td x-text="adminUsageInt(t.count)"></td>
+        </tr>
+      </template>
+    </tbody>
+  </table>
+  </div>
+  <div x-show="!adminUsageFeatureTotals.length && !adminUsageLoading" class="muted-msg muted-msg--sm" x-text="$app.t('admin.usage.empty')"></div>
+
+  <h3 class="admin-usage-h3--spaced" x-text="$app.t('admin.usage.feature.byUser')"></h3>
+  <div class="table-scroll" x-show="adminUsageFeatureItems.length">
+  <table class="data-table"
+         x-data="sortableTable({
+           rows: () => adminUsageFeatureItems.map(r => ({ ...r, label: adminUsageFeatureLabel(r.featureKey) })),
+           defaultKey: 'lastUsed',
+           defaultDir: 'desc',
+           persistKey: 'admin.usage.feature.byUser',
+           types: { count: 'number', lastUsed: 'date' },
+         })">
+    <thead>
+      <tr>
+        <th x-bind="sortTh('email')" x-text="$app.t('admin.users.email')"></th>
+        <th x-bind="sortTh('label')" x-text="$app.t('admin.usage.feature.key')"></th>
+        <th x-bind="sortTh('count')" x-text="$app.t('admin.usage.feature.count')"></th>
+        <th x-bind="sortTh('lastUsed')" x-text="$app.t('admin.usage.feature.lastUsed')"></th>
+      </tr>
+    </thead>
+    <tbody>
+      <template x-for="r in sorted" :key="r.email + ':' + r.featureKey">
+        <tr>
+          <td x-text="r.email"></td>
+          <td x-text="r.label"></td>
+          <td x-text="adminUsageInt(r.count)"></td>
+          <td x-text="adminUsageDateTime(r.lastUsed)"></td>
+        </tr>
+      </template>
+    </tbody>
+  </table>
+  </div>
+  <div x-show="!adminUsageFeatureItems.length && !adminUsageLoading" class="muted-msg muted-msg--sm" x-text="$app.t('admin.usage.empty')"></div>
+</div>

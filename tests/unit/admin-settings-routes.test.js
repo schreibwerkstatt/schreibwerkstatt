@@ -227,3 +227,121 @@ test('POST /admin/settings/test-websearch gegen Fake-SearXNG → Treffer + taube
     appSettings.set('websearch.searxng.url', '');
   }
 });
+
+// ── Sammel-Speichern PUT /admin/settings ────────────────────────────────────
+
+test('PUT /admin/settings: setzt mehrere Keys + setzt zurück (eine Transaktion)', async () => {
+  appSettings.set('ai.claude.retry_max', 7, { updatedBy: 'test' });
+  const r = await _req('PUT', '/admin/settings', {
+    user: 'alice@example.com', role: 'admin',
+    body: { values: { 'ai.claude.phase1_concurrency': 3, 'ai.claude.api_key': '__unchanged__' }, reset: ['ai.claude.retry_max'] },
+  });
+  assert.equal(r.status, 200, JSON.stringify(r.body));
+  assert.deepEqual(r.body.written, ['ai.claude.phase1_concurrency']);
+  assert.deepEqual(r.body.reset, ['ai.claude.retry_max']);
+  assert.equal(appSettings.get('ai.claude.phase1_concurrency'), 3);
+  assert.equal(appSettings.get('ai.claude.retry_max'), 3); // Default
+  assert.equal(appSettings.has('ai.claude.retry_max'), false);
+});
+
+test('PUT /admin/settings: ein ungültiger Wert → 400 mit Key, nichts geschrieben', async () => {
+  appSettings.set('ai.claude.retry_max', 5, { updatedBy: 'test' });
+  const before = appSettings.get('ai.claude.phase1_concurrency');
+  const r = await _req('PUT', '/admin/settings', {
+    user: 'alice@example.com', role: 'admin',
+    body: {
+      values: { 'ai.claude.phase1_concurrency': before + 1, 'app.page_revision_limit': -5 },
+      reset: ['ai.claude.retry_max'],
+    },
+  });
+  assert.equal(r.status, 400);
+  assert.equal(r.body.error_code, 'INVALID_SETTING_VALUE');
+  assert.equal(r.body.key, 'app.page_revision_limit');
+  assert.equal(appSettings.get('ai.claude.phase1_concurrency'), before);
+  assert.equal(appSettings.get('ai.claude.retry_max'), 5);
+});
+
+test('PUT /admin/settings: unbekannter Key → 400 UNKNOWN_KEY', async () => {
+  const r = await _req('PUT', '/admin/settings', {
+    user: 'alice@example.com', role: 'admin', body: { values: { 'nope.key': 1 } },
+  });
+  assert.equal(r.status, 400);
+  assert.equal(r.body.error_code, 'UNKNOWN_KEY');
+  assert.equal(r.body.key, 'nope.key');
+});
+
+test('PUT /admin/settings: Secret per reset löschen', async () => {
+  appSettings.set('ai.claude.api_key', 'sk-to-delete', { updatedBy: 'test' });
+  const r = await _req('PUT', '/admin/settings', {
+    user: 'alice@example.com', role: 'admin', body: { reset: ['ai.claude.api_key'] },
+  });
+  assert.equal(r.status, 200);
+  assert.equal(appSettings.has('ai.claude.api_key'), false);
+});
+
+test('GET /admin/settings: Default + Auth-Zustand des Admins', async () => {
+  const r = await _req('GET', '/admin/settings', { user: 'alice@example.com', role: 'admin' });
+  const retry = r.body.settings.find(s => s.key === 'ai.claude.retry_max');
+  assert.equal(retry.default, 3);
+  const key = r.body.settings.find(s => s.key === 'ai.claude.api_key');
+  assert.equal(key.default, null);
+  assert.equal(typeof r.body.auth.own_has_password, 'boolean');
+});
+
+test('auth.method=local ohne eigenes Passwort + ohne ENV-Admin → 409, mit Passwort erlaubt', async () => {
+  const creds = require('../../db/user-credentials');
+  appSettings.remove('auth.method');
+  delete process.env.ADMIN_PASSWORD;
+  let r = await _req('PUT', '/admin/settings', {
+    user: 'alice@example.com', role: 'admin', body: { values: { 'auth.method': 'local' } },
+  });
+  assert.equal(r.status, 409);
+  assert.equal(r.body.error_code, 'AUTH_LOCAL_OWN_PASSWORD_REQUIRED');
+  r = await _req('PUT', '/admin/settings/auth.method', {
+    user: 'alice@example.com', role: 'admin', body: { value: 'local' },
+  });
+  assert.equal(r.status, 409);
+  assert.equal(appSettings.get('auth.method'), 'google');
+  creds.setPassword('alice@example.com', 'x'.repeat(60), { mustChange: 0, updatedBy: 'alice@example.com' });
+  r = await _req('PUT', '/admin/settings', {
+    user: 'alice@example.com', role: 'admin', body: { values: { 'auth.method': 'local' } },
+  });
+  assert.equal(r.status, 200, JSON.stringify(r.body));
+  assert.equal(appSettings.get('auth.method'), 'local');
+  appSettings.remove('auth.method');
+  creds.deleteCredential('alice@example.com');
+});
+
+test('POST /admin/settings/test-provider: Formularwerte des Unterreiters statt gespeicherter', async () => {
+  // Gespeichert: ein Host, der nicht antwortet; im Formular: leer → NO_HOST,
+  // ohne dass der gespeicherte Host gefragt wird.
+  appSettings.set('ai.ollama.host', 'http://127.0.0.1:9', { updatedBy: 'test' });
+  let r = await _req('POST', '/admin/settings/test-provider', {
+    user: 'alice@example.com', role: 'admin',
+    body: { provider: 'ollama', values: { 'ai.ollama.host': '' } },
+  });
+  assert.equal(r.body.ok, false);
+  assert.equal(r.body.provider, 'ollama');
+  assert.equal(r.body.error, 'NO_HOST');
+  // Fake-Ollama über den Formularwert (ungespeichert).
+  const fake = http.createServer((req, res) => {
+    res.setHeader('content-type', 'application/json');
+    res.end(JSON.stringify({ models: [{ name: 'llama3' }] }));
+  }).listen(0);
+  try {
+    r = await _req('POST', '/admin/settings/test-provider', {
+      user: 'alice@example.com', role: 'admin',
+      body: { provider: 'ollama', values: { 'ai.ollama.host': `http://127.0.0.1:${fake.address().port}` } },
+    });
+    assert.equal(r.body.ok, true, JSON.stringify(r.body));
+    assert.equal(r.body.model_count, 1);
+  } finally {
+    fake.close();
+  }
+  // Claude ohne Schluessel (weder Formular noch gespeichert) → NO_API_KEY.
+  appSettings.remove('ai.claude.api_key');
+  r = await _req('POST', '/admin/settings/test-provider', {
+    user: 'alice@example.com', role: 'admin', body: { provider: 'claude', values: {} },
+  });
+  assert.equal(r.body.error, 'NO_API_KEY');
+});

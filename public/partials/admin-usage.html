@@ -14,16 +14,17 @@
     </div>
   </div>
 
-  <!-- Tab-Bar -->
-  <div class="tabs" role="tablist">
-    <template x-for="tab in ['users','jobs','chat','summary','features','time','behavior','billing']" :key="tab">
-      <button type="button" role="tab"
-              class="tabs-btn"
-              :class="adminUsageTab === tab ? 'tabs-btn--active' : ''"
-              :aria-selected="adminUsageTab === tab"
-              @click="adminUsageSelectTab(tab)"
-              x-text="$app.t('admin.usage.tab.' + tab)"></button>
-    </template>
+  <!-- Tab-Bar: tabs() liefert Rolle, Roving-Tabindex und Pfeil-Navigation;
+       die Panes (role=tabpanel) bleiben x-show auf adminUsageTab. -->
+  <div class="admin-usage-tabs" x-data="tabs(['users','jobs','chat','summary','features','time','behavior','billing'])"
+       x-modelable="value" x-model="adminUsageTab">
+    <div class="tabs tabs--scrollable" x-bind="tablist" :aria-label="$app.t('admin.usage.title')">
+      <template x-for="tab in tabs" :key="tab">
+        <button class="tabs-btn" x-bind="tabBtn(tab)"
+                :id="'admin-usage-tab-' + tab" :aria-controls="'admin-usage-pane-' + tab"
+                x-text="$app.t('admin.usage.tab.' + tab)"></button>
+      </template>
+    </div>
   </div>
 
   <!-- Datumsbereich -->
@@ -43,7 +44,8 @@
   <div x-show="adminUsageError" class="error-msg" x-text="adminUsageError"></div>
 
   <!-- ── Users-Tab ─────────────────────────────────────────────────────── -->
-  <div x-show="adminUsageTab === 'users'" class="admin-usage-pane" :aria-busy="adminUsageLoading">
+  <div x-show="adminUsageTab === 'users'" class="admin-usage-pane" :aria-busy="adminUsageLoading"
+       id="admin-usage-pane-users" role="tabpanel" aria-labelledby="admin-usage-tab-users">
     <div class="table-scroll" x-show="adminUsageUsersList.length">
     <table class="data-table"
            x-data="sortableTable({
@@ -89,7 +91,7 @@
             <td class="admin-usage-cell-shrink">
               <div class="admin-usage-actions">
                 <button type="button" @click="adminUsageSaveBudget(u)" :disabled="u._saving"
-                        x-text="u._saving ? $app.t('common.saving') : (u._savedAt && (Date.now() - u._savedAt < 2000) ? $app.t('common.saved') : $app.t('common.save'))"></button>
+                        x-text="u._saving ? $app.t('common.saving') : (u._saved ? $app.t('common.saved') : $app.t('common.save'))"></button>
                 <button type="button" @click="adminUsageDrillDownToJobs(u.email)"
                         x-text="$app.t('admin.usage.user.drillDown')"></button>
                 <button type="button" @click="adminUsageShowBreakdown(u.email)" :aria-pressed="adminUsageBreakdownUser === u.email"
@@ -105,79 +107,18 @@
     <div id="partial-admin-usage-breakdown"></div>
   </div>
 
-  <!-- ── Jobs-Tab ──────────────────────────────────────────────────────── -->
-  <div x-show="adminUsageTab === 'jobs'" class="admin-usage-pane" :aria-busy="adminUsageLoading">
-    <div class="admin-usage-filter">
-      <label>
-        <span x-text="$app.t('admin.usage.filter.user')"></span>
-        <div x-data="combobox({ placeholder: $app.t('admin.usage.filter.allUsers'), multiple: true })"
-             x-modelable="value" x-model="adminUsageFilterUsers"
-             x-effect="options = adminUsageUserFilterOptions()"></div>
-      </label>
-    </div>
-    <div class="admin-usage-filter-chips" x-show="adminUsageFilterUsers.length">
-      <template x-for="email in adminUsageFilterUsers" :key="email">
-        <span class="admin-usage-filter-chip">
-          <span x-text="email"></span>
-          <button type="button" class="admin-usage-filter-chip-remove"
-                  :aria-label="$app.t('common.remove')"
-                  @click="adminUsageRemoveFilterUser(email)"><svg class="icon" aria-hidden="true"><use href="/icons.svg#x"/></svg></button>
-        </span>
-      </template>
-    </div>
-    <div class="table-scroll" x-show="adminUsageJobsList.length">
-    <table class="data-table"
-           x-data="sortableTable({
-             rows: () => adminUsageJobsList,
-             defaultKey: 'queuedAt',
-             defaultDir: 'desc',
-             persistKey: 'admin.usage.jobs',
-             types: { tokensIn: 'number', tokensOut: 'number', cacheReadIn: 'number',
-                      cacheCreationIn: 'number', usd: 'number', bookId: 'number',
-                      queuedAt: 'date' },
-           })">
-      <thead>
-        <tr>
-          <th x-bind="sortTh('userEmail')" x-text="$app.t('admin.users.email')"></th>
-          <th x-bind="sortTh('type')" x-text="$app.t('admin.usage.job.type')"></th>
-          <th x-bind="sortTh('model')" x-text="$app.t('admin.usage.job.model')"></th>
-          <th x-bind="sortTh('tokensIn')" x-text="$app.t('admin.usage.column.tokensIn')"></th>
-          <th x-bind="sortTh('tokensOut')" x-text="$app.t('admin.usage.column.tokensOut')"></th>
-          <th x-bind="sortTh('cacheReadIn')" x-text="$app.t('admin.usage.column.cacheRead')"></th>
-          <th x-bind="sortTh('cacheCreationIn')" x-text="$app.t('admin.usage.column.cacheWrite')"></th>
-          <th x-bind="sortTh('usd')" x-text="$app.t('admin.usage.column.cost')"></th>
-          <th x-bind="sortTh('bookId')" x-text="$app.t('admin.usage.job.book')"></th>
-          <th x-bind="sortTh('queuedAt')" x-text="$app.t('admin.usage.job.queuedAt')"></th>
-        </tr>
-      </thead>
-      <tbody>
-        <template x-for="r in sorted" :key="r.id">
-          <tr>
-            <td x-text="r.userEmail || '—'"></td>
-            <td x-text="_adminUsageTypeLabel(r.type)"></td>
-            <td x-text="r.model || '—'"></td>
-            <td x-text="adminUsageInt(r.tokensIn)"></td>
-            <td x-text="adminUsageInt(r.tokensOut)"></td>
-            <td x-text="adminUsageInt(r.cacheReadIn)"></td>
-            <td x-text="adminUsageInt(r.cacheCreationIn)"></td>
-            <td x-text="adminUsageMoney(r.usd)"></td>
-            <td x-text="r.bookId ? ('#' + r.bookId) : '—'"></td>
-            <td x-text="new Date(r.queuedAt).toLocaleString($store.shell.uiLocale === 'en' ? 'en-US' : 'de-CH', { timeZone: $store.shell.appTimezone })"></td>
-          </tr>
-        </template>
-      </tbody>
-    </table>
-    </div>
-    <div x-show="!adminUsageJobsList.length && !adminUsageLoading" class="muted-msg" x-text="$app.t('admin.usage.empty')"></div>
-  </div>
+  <div id="partial-admin-usage-jobs"></div>
   <!-- ── Chat-Tab ──────────────────────────────────────────────────────── -->
-  <div x-show="adminUsageTab === 'chat'" class="admin-usage-pane" :aria-busy="adminUsageLoading">
+  <div x-show="adminUsageTab === 'chat'" class="admin-usage-pane" :aria-busy="adminUsageLoading"
+       id="admin-usage-pane-chat" role="tabpanel" aria-labelledby="admin-usage-tab-chat">
     <div id="partial-admin-usage-chat-quality"></div>
     <div id="partial-admin-usage-chat-list"></div>
   </div>
 
   <!-- ── Summary-Tab ───────────────────────────────────────────────────── -->
-  <div x-show="adminUsageTab === 'summary'" class="admin-usage-pane" :aria-busy="adminUsageLoading">
+  <div x-show="adminUsageTab === 'summary'" class="admin-usage-pane" :aria-busy="adminUsageLoading"
+       id="admin-usage-pane-summary" role="tabpanel" aria-labelledby="admin-usage-tab-summary">
+    <div x-show="!adminUsageSummary && !adminUsageLoading" class="muted-msg" x-text="$app.t('admin.usage.empty')"></div>
     <div class="admin-usage-totals" x-show="adminUsageSummary">
       <div class="admin-usage-kpi">
         <div class="admin-usage-kpi-label" x-text="$app.t('admin.usage.summary.total')"></div>
@@ -204,159 +145,30 @@
     <div class="admin-usage-charts" x-show="adminUsageSummary">
       <figure>
         <figcaption x-text="$app.t('admin.usage.summary.topUsers')"></figcaption>
-        <div class="admin-usage-chart-canvas">
-          <canvas x-ref="chartUsers"></canvas>
+        <div class="admin-usage-chart-canvas" x-show="adminUsageSummary?.topUsers?.length">
+          <canvas x-ref="chartUsers" role="img" :aria-label="$app.t('admin.usage.summary.topUsers')"></canvas>
         </div>
+        <p class="muted-msg muted-msg--sm" x-show="!adminUsageSummary?.topUsers?.length" x-text="$app.t('admin.usage.empty')"></p>
       </figure>
       <figure>
         <figcaption x-text="$app.t('admin.usage.summary.byModel')"></figcaption>
-        <div class="admin-usage-chart-canvas">
-          <canvas x-ref="chartModel"></canvas>
+        <div class="admin-usage-chart-canvas" x-show="adminUsageSummary?.byModel?.length">
+          <canvas x-ref="chartModel" role="img" :aria-label="$app.t('admin.usage.summary.byModel')"></canvas>
         </div>
+        <p class="muted-msg muted-msg--sm" x-show="!adminUsageSummary?.byModel?.length" x-text="$app.t('admin.usage.empty')"></p>
       </figure>
       <figure>
         <figcaption x-text="$app.t('admin.usage.summary.byType')"></figcaption>
-        <div class="admin-usage-chart-canvas">
-          <canvas x-ref="chartType"></canvas>
+        <div class="admin-usage-chart-canvas" x-show="adminUsageSummary?.byType?.length">
+          <canvas x-ref="chartType" role="img" :aria-label="$app.t('admin.usage.summary.byType')"></canvas>
         </div>
+        <p class="muted-msg muted-msg--sm" x-show="!adminUsageSummary?.byType?.length" x-text="$app.t('admin.usage.empty')"></p>
       </figure>
     </div>
   </div>
 
-  <!-- ── Features-Tab ──────────────────────────────────────────────────── -->
-  <div x-show="adminUsageTab === 'features'" class="admin-usage-pane" :aria-busy="adminUsageLoading">
-    <h3 x-text="$app.t('admin.usage.feature.totals')"></h3>
-    <div class="table-scroll" x-show="adminUsageFeatureTotals.length">
-    <table class="data-table"
-           x-data="sortableTable({
-             rows: () => adminUsageFeatureTotals,
-             defaultKey: 'count',
-             defaultDir: 'desc',
-             persistKey: 'admin.usage.feature.totals',
-             types: { count: 'number' },
-           })">
-      <thead>
-        <tr>
-          <th x-bind="sortTh('featureKey')" x-text="$app.t('admin.usage.feature.key')"></th>
-          <th x-bind="sortTh('count')" x-text="$app.t('admin.usage.feature.count')"></th>
-        </tr>
-      </thead>
-      <tbody>
-        <template x-for="t in sorted" :key="t.featureKey">
-          <tr>
-            <td x-text="t.featureKey"></td>
-            <td x-text="adminUsageInt(t.count)"></td>
-          </tr>
-        </template>
-      </tbody>
-    </table>
-    </div>
-
-    <h3 class="admin-usage-h3--spaced" x-text="$app.t('admin.usage.feature.byUser')"></h3>
-    <div class="table-scroll" x-show="adminUsageFeatureItems.length">
-    <table class="data-table"
-           x-data="sortableTable({
-             rows: () => adminUsageFeatureItems,
-             defaultKey: 'lastUsed',
-             defaultDir: 'desc',
-             persistKey: 'admin.usage.feature.byUser',
-             types: { count: 'number', lastUsed: 'date' },
-           })">
-      <thead>
-        <tr>
-          <th x-bind="sortTh('email')" x-text="$app.t('admin.users.email')"></th>
-          <th x-bind="sortTh('featureKey')" x-text="$app.t('admin.usage.feature.key')"></th>
-          <th x-bind="sortTh('count')" x-text="$app.t('admin.usage.feature.count')"></th>
-          <th x-bind="sortTh('lastUsed')" x-text="$app.t('admin.usage.feature.lastUsed')"></th>
-        </tr>
-      </thead>
-      <tbody>
-        <template x-for="r in sorted" :key="r.email + ':' + r.featureKey">
-          <tr>
-            <td x-text="r.email"></td>
-            <td x-text="r.featureKey"></td>
-            <td x-text="adminUsageInt(r.count)"></td>
-            <td x-text="r.lastUsed ? new Date(r.lastUsed).toLocaleString($store.shell.uiLocale === 'en' ? 'en-US' : 'de-CH', { timeZone: $store.shell.appTimezone }) : '—'"></td>
-          </tr>
-        </template>
-      </tbody>
-    </table>
-    </div>
-  </div>
-
-  <!-- ── Zeit-Tab ──────────────────────────────────────────────────────── -->
-  <div x-show="adminUsageTab === 'time'" class="admin-usage-pane" :aria-busy="adminUsageLoading">
-    <div class="table-scroll" x-show="adminUsageTimeItems.length">
-    <table class="data-table"
-           x-data="sortableTable({
-             rows: () => adminUsageTimeItems,
-             defaultKey: 'totalSeconds',
-             defaultDir: 'desc',
-             persistKey: 'admin.usage.time',
-             types: { bookId: 'number', writingSeconds: 'number',
-                      lektoratSeconds: 'number', totalSeconds: 'number' },
-           })">
-      <thead>
-        <tr>
-          <th x-bind="sortTh('email')" x-text="$app.t('admin.users.email')"></th>
-          <th x-bind="sortTh('bookId')" x-text="$app.t('admin.usage.time.book')"></th>
-          <th x-bind="sortTh('writingSeconds')" x-text="$app.t('admin.usage.time.writing')"></th>
-          <th x-bind="sortTh('lektoratSeconds')" x-text="$app.t('admin.usage.time.lektorat')"></th>
-          <th x-bind="sortTh('totalSeconds')" x-text="$app.t('admin.usage.time.total')"></th>
-          <th></th>
-        </tr>
-      </thead>
-      <tbody>
-        <template x-for="r in sorted" :key="r.email + ':' + r.bookId">
-          <tr>
-            <td x-text="r.email"></td>
-            <td x-text="r.bookId ? ('#' + r.bookId) : '—'"></td>
-            <td x-text="adminUsageHhmm(r.writingSeconds)"></td>
-            <td x-text="adminUsageHhmm(r.lektoratSeconds)"></td>
-            <td x-text="adminUsageHhmm(r.totalSeconds)"></td>
-            <td>
-              <button type="button" @click="adminUsageLoadTimeSeries(r)"
-                      x-text="adminUsageTimeSeriesKey === (r.email + ':' + r.bookId) ? $app.t('admin.usage.time.hideSeries') : $app.t('admin.usage.time.series')"></button>
-            </td>
-          </tr>
-        </template>
-      </tbody>
-    </table>
-    </div>
-
-    <div class="admin-usage-series" x-show="adminUsageTimeSeries.length">
-      <div class="table-scroll">
-      <table class="data-table"
-             x-data="sortableTable({
-               rows: () => adminUsageTimeSeries,
-               defaultKey: 'date',
-               defaultDir: 'desc',
-               persistKey: 'admin.usage.timeSeries',
-               types: { date: 'string', writingSeconds: 'number',
-                        lektoratSeconds: 'number', totalSeconds: 'number' },
-             })">
-        <thead>
-          <tr>
-            <th x-bind="sortTh('date')" x-text="$app.t('admin.usage.time.date')"></th>
-            <th x-bind="sortTh('writingSeconds')" x-text="$app.t('admin.usage.time.writing')"></th>
-            <th x-bind="sortTh('lektoratSeconds')" x-text="$app.t('admin.usage.time.lektorat')"></th>
-            <th x-bind="sortTh('totalSeconds')" x-text="$app.t('admin.usage.time.total')"></th>
-          </tr>
-        </thead>
-        <tbody>
-          <template x-for="d in sorted" :key="d.date">
-            <tr>
-              <td x-text="d.date"></td>
-              <td x-text="adminUsageHhmm(d.writingSeconds)"></td>
-              <td x-text="adminUsageHhmm(d.lektoratSeconds)"></td>
-              <td x-text="adminUsageHhmm(d.totalSeconds)"></td>
-            </tr>
-          </template>
-        </tbody>
-      </table>
-      </div>
-    </div>
-  </div>
+  <div id="partial-admin-usage-features"></div>
+  <div id="partial-admin-usage-time"></div>
   <div id="partial-admin-usage-behavior"></div>
   <div id="partial-admin-usage-billing"></div>
 </div>

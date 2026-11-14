@@ -26,7 +26,7 @@
     <span x-show="devicesLatestVersions.extension">Chrome <code x-text="devicesLatestVersions.extension"></code></span>
   </p>
 
-  <div x-show="devicesLoading" x-skeleton="4" x-cloak></div>
+  <div x-show="devicesLoading && !devicesList.length" x-skeleton="4" x-cloak></div>
   <div x-show="devicesError" class="error-msg" x-text="devicesError"></div>
 
   <div class="table-scroll" x-show="devicesList.length">
@@ -65,7 +65,7 @@
                     x-text="$app.t('admin.devices.outdated')"></span>
             </td>
             <td class="admin-pool-num" x-text="d.use_count ?? 0"></td>
-            <td x-text="devicesFmtTs(d.last_used_at)"></td>
+            <td x-text="adminFmtDateTime(d.last_used_at)"></td>
             <td><code class="muted-msg muted-msg--sm" x-text="d.last_used_ip || '—'"></code></td>
             <td x-text="devicesStatus(d)"></td>
           </tr>
@@ -74,5 +74,5 @@
     </table>
   </div>
 
-  <div x-show="!devicesList.length && !devicesLoading && !devicesError" class="muted-msg" x-text="$app.t('admin.devices.empty')"></div>
+  <p x-show="!devicesList.length && !devicesLoading && !devicesError" class="muted-msg muted-msg--sm" x-text="$app.t('admin.devices.empty')"></p>
 </div>

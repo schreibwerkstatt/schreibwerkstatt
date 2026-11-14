@@ -8,14 +8,9 @@ export function el(tag, cls, text) {
   return e;
 }
 
-// DB-Zeitstempel → Date. Ältere Zeilen tragen das SQLite-Format ohne Zone
-// ("YYYY-MM-DD HH:MM:SS", UTC) — ohne Normalisierung läse der Browser es als
-// Lokalzeit.
-export function parseTs(iso) {
-  const s = String(iso || '');
-  if (/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}(:\d{2}(\.\d+)?)?$/.test(s)) return new Date(s.replace(' ', 'T') + 'Z');
-  return new Date(s);
-}
+// DB-Zeitstempel → Date (SSoT: utils/date.js#parseServerTs).
+import { parseServerTs as parseTs } from '../utils/date.js';
+export { parseTs };
 
 // Locale der Seite (<html lang>, serverseitig aus Accept-Language), verfeinert um
 // die Region des Browsers, wenn die Sprache übereinstimmt (de + de-CH → de-CH).

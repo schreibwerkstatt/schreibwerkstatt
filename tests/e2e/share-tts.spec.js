@@ -6,7 +6,7 @@
 
 const { test, expect } = require('./_helpers/fixtures');
 
-const URL = 'http://localhost:8765/tests/fixtures/share-tts-harness.html';
+const URL = '/tests/fixtures/share-tts-harness.html';
 const dock = (page) => page.locator('.tts-dock');
 const btn = (page, label) => dock(page).locator(`button[aria-label="${label}"]`);
 

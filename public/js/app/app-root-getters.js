@@ -8,6 +8,7 @@
 // `Object.defineProperties`.
 
 import { aggregateLiveBookStats, charsToNormseiten } from '../utils.js';
+import { ADMIN_CARDS } from '../cards/feature-registry.js';
 
 // Sichtbarkeit einer Leistenkarte als Sicht auf `asideSlot` (app-state.js).
 // Lesend wie ein gewoehnliches Flag (Templates, `setupCardLifecycle({ showFlag })`,
@@ -33,6 +34,20 @@ export const asideFlagDescriptors = {
 };
 
 export const rootGetterDescriptors = {
+  // Admin-Startseite (admin-home.html): Kacheln aus der Karten-Registry
+  // (`admin`-Feld in EXCLUSIVE_CARDS), ausgeblendet, sobald eine Admin-Karte
+  // offen ist.
+  adminHomeCards: {
+    enumerable: true,
+    configurable: true,
+    get() { return ADMIN_CARDS; },
+  },
+  adminCardOpen: {
+    enumerable: true,
+    configurable: true,
+    get() { return ADMIN_CARDS.some(c => this[c.flag]); },
+  },
+
   ...asideFlagDescriptors,
 
   // Splits mit Leiste der Hauptebene (index.html, layout/aside-split.css).

@@ -1,5 +1,5 @@
     <!-- PDF/A-Tab -->
-    <section x-show="adminSettingsTab === 'pdfa'" class="admin-settings-section">
+    <section x-bind="panel('pdfa')" class="admin-settings-section">
       <div x-data="settingField({ k: 'pdfa.flavour', type: 'select', label: 'admin.settings.label.pdfaFlavour', opts: [{ value: '2b', label: '2b' }, { value: '3b', label: '3b' }] })"></div>
       <div x-data="settingField({ k: 'pdfa.disabled', type: 'toggle', label: 'admin.settings.label.pdfaDisabled' })"></div>
     </section>

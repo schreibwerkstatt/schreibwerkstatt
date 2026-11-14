@@ -20,11 +20,13 @@
 
   <div x-show="jsErrorsError" class="error-msg" x-text="jsErrorsError"></div>
 
+  <div x-show="jsErrorsLoading && !jsErrorsList.length" x-skeleton="4" x-cloak></div>
+
   <div class="js-errors-list" x-show="jsErrorsList.length">
-    <template x-for="e in jsErrorsList" :key="e.id">
+    <template x-for="e in listWindowed(jsErrorsList)" :key="e.id">
       <div class="js-errors-row">
         <div class="js-errors-row-head">
-          <span class="js-errors-ts" x-text="jsErrorsFmtTs(e.created_at)"></span>
+          <span class="js-errors-ts" x-text="adminFmtDateTimeSec(e.created_at)"></span>
           <span class="js-errors-kind" :class="'js-errors-kind--' + e.kind" x-text="e.kind"></span>
           <span class="js-errors-msg truncate" x-text="e.message"></span>
           <span class="js-errors-loc" x-text="jsErrorsLoc(e)"></span>
@@ -36,22 +38,29 @@
           </button>
           <button type="button" class="js-errors-delete"
                   @click="jsErrorsDelete(e.id)"
+                  :data-tip="$app.t('common.delete')"
                   :aria-label="$app.t('common.delete')">
             <svg class="icon" aria-hidden="true"><use href="/icons.svg#trash"></use></svg>
           </button>
         </div>
-        <div class="js-errors-detail" x-show="jsErrorsExpanded[e.id]">
-          <dl class="js-errors-meta">
-            <div x-show="e.user_email"><dt x-text="$app.t('admin.jsErrors.user')"></dt><dd x-text="e.user_email"></dd></div>
-            <div x-show="e.page_url"><dt x-text="$app.t('admin.jsErrors.pageUrl')"></dt><dd x-text="e.page_url"></dd></div>
-            <div x-show="e.source"><dt x-text="$app.t('admin.jsErrors.source')"></dt><dd x-text="e.source + (e.line ? ':' + e.line + (e.col ? ':' + e.col : '') : '')"></dd></div>
-            <div x-show="e.user_agent"><dt x-text="$app.t('admin.jsErrors.userAgent')"></dt><dd x-text="e.user_agent"></dd></div>
-          </dl>
-          <pre class="js-errors-stack" x-show="e.stack" x-text="e.stack || ''"></pre>
-        </div>
+        <template x-if="jsErrorsExpanded[e.id]">
+          <div class="js-errors-detail">
+            <dl class="js-errors-meta">
+              <div x-show="e.user_email"><dt x-text="$app.t('admin.jsErrors.user')"></dt><dd x-text="e.user_email"></dd></div>
+              <div x-show="e.page_url"><dt x-text="$app.t('admin.jsErrors.pageUrl')"></dt><dd x-text="e.page_url"></dd></div>
+              <div x-show="e.source"><dt x-text="$app.t('admin.jsErrors.source')"></dt><dd x-text="e.source + (e.line ? ':' + e.line + (e.col ? ':' + e.col : '') : '')"></dd></div>
+              <div x-show="e.user_agent"><dt x-text="$app.t('admin.jsErrors.userAgent')"></dt><dd x-text="e.user_agent"></dd></div>
+            </dl>
+            <pre class="js-errors-stack" x-show="e.stack" x-text="e.stack || ''"></pre>
+          </div>
+        </template>
       </div>
     </template>
+    <button type="button" class="btn-compact list-window-more"
+            x-show="listWindowRest(jsErrorsList) > 0" x-cloak
+            x-list-more="listWindowMore()" @click="listWindowMore()"
+            x-text="$app.t('common.showMore', { n: listWindowRest(jsErrorsList) })"></button>
   </div>
 
-  <div x-show="!jsErrorsList.length && !jsErrorsLoading" class="muted-msg" x-text="$app.t('admin.jsErrors.empty')"></div>
+  <p x-show="!jsErrorsList.length && !jsErrorsLoading && !jsErrorsError" class="muted-msg muted-msg--sm" x-text="$app.t('admin.jsErrors.empty')"></p>
 </div>

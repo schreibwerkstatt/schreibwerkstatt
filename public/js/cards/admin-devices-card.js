@@ -4,13 +4,12 @@
 
 import { adminDevicesMethods } from '../admin/admin-devices.js';
 import { setupCardLifecycle } from './card-lifecycle.js';
+import { adminLoaderState } from '../admin/admin-loader.js';
 
 export function registerAdminDevicesCard() {
   if (typeof window === 'undefined' || !window.Alpine) return;
   window.Alpine.data('adminDevicesCard', () => ({
-    devicesInitialized: false,
-    devicesLoading: false,
-    devicesError: '',
+    ...adminLoaderState('devices'),
     devicesList: [],
     devicesLatestVersions: {},
     _lifecycle: null,
@@ -25,10 +24,9 @@ export function registerAdminDevicesCard() {
         onCardRefresh: () => this.devicesRefresh(),
         wake: () => this._devicesLoad({ silent: true }),
         onViewReset: () => {
+          this._devicesInvalidate();
           this.devicesList = [];
-          this.devicesError = '';
           this.devicesLatestVersions = {};
-          this.devicesInitialized = false;
         },
       });
     },

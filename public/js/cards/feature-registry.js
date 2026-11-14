@@ -395,16 +395,26 @@ export const EXCLUSIVE_CARDS = [
   { key: 'myStats',        flag: 'showMyStatsCard',        toggle: 'toggleMyStatsCard',        onReclick: 'close', partial: 'my-stats' },
   { key: 'myBooks',        flag: 'showMyBooksCard',        toggle: 'toggleMyBooksCard',        onReclick: 'refresh', partial: 'my-books' },
   { key: 'autorenprofil',  flag: 'showAutorenprofilCard',  toggle: 'toggleAutorenprofilCard',  onReclick: 'refresh', partial: 'autorenprofil' },
-  { key: 'adminUsers',     flag: 'showAdminUsersCard',     toggle: 'toggleAdminUsersCard',     onReclick: 'close', partial: 'admin-users' },
-  { key: 'adminSettings',  flag: 'showAdminSettingsCard',  toggle: 'toggleAdminSettingsCard',  onReclick: 'close', partial: 'admin-settings' },
-  { key: 'adminUsage',     flag: 'showAdminUsageCard',     toggle: 'toggleAdminUsageCard',     onReclick: 'close', partial: 'admin-usage' },
-  { key: 'adminCategories',flag: 'showAdminCategoriesCard',toggle: 'toggleAdminCategoriesCard',onReclick: 'close', partial: 'admin-categories' },
-  { key: 'adminBooks',     flag: 'showAdminBooksCard',     toggle: 'toggleAdminBooksCard',     onReclick: 'close', partial: 'admin-books' },
-  { key: 'adminLogs',      flag: 'showAdminLogsCard',      toggle: 'toggleAdminLogsCard',      onReclick: 'close', partial: 'admin-logs' },
-  { key: 'adminParseFails',flag: 'showAdminParseFailsCard',toggle: 'toggleAdminParseFailsCard',onReclick: 'close', partial: 'admin-parse-fails' },
-  { key: 'adminJsErrors',  flag: 'showAdminJsErrorsCard',  toggle: 'toggleAdminJsErrorsCard',  onReclick: 'close', partial: 'admin-js-errors' },
-  { key: 'adminDevices',   flag: 'showAdminDevicesCard',   toggle: 'toggleAdminDevicesCard',   onReclick: 'refresh', partial: 'admin-devices' },
-  { key: 'adminBackup',    flag: 'showAdminBackupCard',    toggle: 'toggleAdminBackupCard',    onReclick: 'refresh', partial: 'admin-backup' },
+  { key: 'adminUsers',     flag: 'showAdminUsersCard',     toggle: 'toggleAdminUsersCard',     onReclick: 'close', partial: 'admin-users',
+    admin: { slug: 'users', label: 'admin.home.usersLabel', title: 'admin.users.title', desc: 'tile.adminUsers.desc' } },
+  { key: 'adminSettings',  flag: 'showAdminSettingsCard',  toggle: 'toggleAdminSettingsCard',  onReclick: 'close', partial: 'admin-settings',
+    admin: { slug: 'settings', label: 'admin.home.settingsLabel', title: 'admin.settings.title', desc: 'tile.adminSettings.desc' } },
+  { key: 'adminUsage',     flag: 'showAdminUsageCard',     toggle: 'toggleAdminUsageCard',     onReclick: 'close', partial: 'admin-usage',
+    admin: { slug: 'usage', label: 'admin.home.usageLabel', title: 'admin.usage.title', desc: 'tile.adminUsage.desc' } },
+  { key: 'adminCategories',flag: 'showAdminCategoriesCard',toggle: 'toggleAdminCategoriesCard',onReclick: 'close', partial: 'admin-categories',
+    admin: { slug: 'categories', label: 'admin.home.categoriesLabel', title: 'admin.categories.title', desc: 'tile.adminCategories.desc' } },
+  { key: 'adminBooks',     flag: 'showAdminBooksCard',     toggle: 'toggleAdminBooksCard',     onReclick: 'close', partial: 'admin-books',
+    admin: { slug: 'books', label: 'admin.home.booksLabel', title: 'admin.books.title', desc: 'tile.adminBooks.desc' } },
+  { key: 'adminLogs',      flag: 'showAdminLogsCard',      toggle: 'toggleAdminLogsCard',      onReclick: 'close', partial: 'admin-logs',
+    admin: { slug: 'logs', label: 'admin.home.logsLabel', title: 'admin.logs.title', desc: 'tile.adminLogs.desc' } },
+  { key: 'adminParseFails',flag: 'showAdminParseFailsCard',toggle: 'toggleAdminParseFailsCard',onReclick: 'close', partial: 'admin-parse-fails',
+    admin: { slug: 'parse-fails', label: 'admin.home.parseFailsLabel', title: 'admin.parseFails.title', desc: 'tile.adminParseFails.desc' } },
+  { key: 'adminJsErrors',  flag: 'showAdminJsErrorsCard',  toggle: 'toggleAdminJsErrorsCard',  onReclick: 'close', partial: 'admin-js-errors',
+    admin: { slug: 'js-errors', label: 'admin.home.jsErrorsLabel', title: 'admin.jsErrors.title', desc: 'tile.adminJsErrors.desc' } },
+  { key: 'adminDevices',   flag: 'showAdminDevicesCard',   toggle: 'toggleAdminDevicesCard',   onReclick: 'refresh', partial: 'admin-devices',
+    admin: { slug: 'devices', label: 'admin.home.devicesLabel', title: 'admin.devices.title', desc: 'tile.adminDevices.desc' } },
+  { key: 'adminBackup',    flag: 'showAdminBackupCard',    toggle: 'toggleAdminBackupCard',    onReclick: 'refresh', partial: 'admin-backup',
+    admin: { slug: 'backup', label: 'admin.home.backupLabel', title: 'admin.backup.title', desc: 'tile.adminBackup.desc' } },
   { key: 'finetuneExport', flag: 'showFinetuneExportCard', toggle: 'toggleFinetuneExportCard', onReclick: 'close', partial: 'finetune-export' },
   { key: 'snapshots',      flag: 'showSnapshotsCard',      toggle: 'toggleSnapshotsCard',      onReclick: 'refresh', requiresBook: true, partial: 'snapshots' },
   { key: 'export',         flag: 'showExportCard',         toggle: 'toggleExportCard',         onReclick: 'close', partial: 'export' },
@@ -419,6 +429,13 @@ export const EXCLUSIVE_CARDS = [
   { key: 'help',           flag: 'showHelpCard',           toggle: 'toggleHelpCard',           onReclick: 'close', partial: 'help' },
   { key: 'onboarding',     flag: 'showOnboardingCard',     toggle: 'toggleOnboardingCard',     onReclick: 'refresh', partial: 'onboarding' },
 ];
+
+// Admin-Karten: `admin` traegt Hash-Segment (`#admin/<slug>`) und die i18n-
+// Keys der Kachel auf der Admin-Startseite (admin-home.html). Startseite,
+// Hash-Router (app-hash-router/apply.js + build.js) und der Admin-Gate im
+// Karten-Toggle (_toggleCardGeneric) lesen ausschliesslich diese Liste — eine
+// neue Admin-Karte bekommt hier ihr `admin`-Feld, sonst nirgends etwas.
+export const ADMIN_CARDS = EXCLUSIVE_CARDS.filter(c => c.admin);
 
 // Gruppen in Anzeige-Reihenfolge (Palette-Sektionen, Hilfe-Katalog).
 // `analysis` = Statistik & Analyse: messende Buch-Auswertungen ohne KI-Urteil

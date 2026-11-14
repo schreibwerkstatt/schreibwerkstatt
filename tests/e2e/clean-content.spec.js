@@ -1,7 +1,7 @@
 const { test, expect } = require('./_helpers/fixtures');
 
 test('cleanContentArtefacts strips paste artefacts but keeps structure + img styles', async ({ page }) => {
-  await page.goto('http://localhost:8765/tests/fixtures/focus-harness.html', { waitUntil: 'domcontentloaded' });
+  await page.goto('/tests/fixtures/focus-harness.html', { waitUntil: 'domcontentloaded' });
   await page.addScriptTag({
     type: 'module',
     content: `import { cleanContentArtefacts } from '/public/js/utils.js';
@@ -36,7 +36,7 @@ test('cleanContentArtefacts strips paste artefacts but keeps structure + img sty
 });
 
 test('collapseEmptyBlocks reduces empty paragraph + br runs to one', async ({ page }) => {
-  await page.goto('http://localhost:8765/tests/fixtures/focus-harness.html', { waitUntil: 'domcontentloaded' });
+  await page.goto('/tests/fixtures/focus-harness.html', { waitUntil: 'domcontentloaded' });
   await page.addScriptTag({
     type: 'module',
     content: `import { collapseEmptyBlocks } from '/public/js/utils.js';

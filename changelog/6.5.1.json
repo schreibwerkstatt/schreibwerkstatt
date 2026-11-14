@@ -1,0 +1,36 @@
+{
+  "version": "6.5.1",
+  "date": "2026-11-14",
+  "entries": [
+    {
+      "kind": "neu",
+      "de": "Admin, System: jede Einstellung zeigt jetzt, ob sie vom Standard abweicht und wer sie zuletzt gesetzt hat. Du kannst sie einzeln auf den Standard zurücksetzen oder ungespeicherte Änderungen verwerfen.",
+      "en": "Admin, System: every setting now shows whether it differs from the default and who last changed it. You can reset each one to its default or discard unsaved changes."
+    },
+    {
+      "kind": "verbessert",
+      "de": "Admin, Backup: ein hochgeladenes Backup ist jetzt sichtbar vorgemerkt und lässt sich verwerfen, bevor ein Neustart es einspielt. Schlägt der Download fehl, siehst du eine Meldung statt einer kaputten Datei.",
+      "en": "Admin, Backup: an uploaded backup is now clearly marked as pending and can be discarded before a restart restores it. If a download fails, you see a message instead of a broken file."
+    },
+    {
+      "kind": "verbessert",
+      "de": "Admin, Benutzer: die eigene Rolle und das eigene Konto lassen sich nicht mehr versehentlich ändern oder sperren, und der letzte Admin bleibt immer erhalten. Der Verlauf nennt die Ereignisse jetzt in Klartext.",
+      "en": "Admin, Users: you can no longer accidentally change your own role or suspend your own account, and the last admin always stays. The history now names events in plain words."
+    },
+    {
+      "kind": "verbessert",
+      "de": "Admin, Logs: Filter greifen nach kurzer Tipp-Pause von selbst, ohne Knopf. Die Zeitangaben nennen die Zeitzone des Servers.",
+      "en": "Admin, Logs: filters apply on their own after a short typing pause, no button needed. Times now state the server's time zone."
+    },
+    {
+      "kind": "verbessert",
+      "de": "Admin, Nutzung: lange Listen laden mit «Weitere laden» nach, und Zeiten stehen als Stunden und Minuten.",
+      "en": "Admin, Usage: long lists load more with “Load more”, and times are shown in hours and minutes."
+    },
+    {
+      "kind": "verbessert",
+      "de": "Admin, System, Auth: die lokale Anmeldung lässt sich erst einschalten, wenn dein Konto ein Passwort hat — so sperrst du dich nicht aus. Verbindungstests nennen den Fehler verständlich.",
+      "en": "Admin, System, Auth: local sign-in can only be switched on once your account has a password, so you can't lock yourself out. Connection tests now explain errors clearly."
+    }
+  ]
+}
