@@ -1,4 +1,4 @@
-// Höhe des NOTEBOOK-Seitenkastens mit Bildern und Nachrichtenverläufen,
+// Höhe des NOTEBOOK-Seitenkastens mit Bildern, Nachrichtenverläufen, Tabellen und Dialog,
 // gegen die ECHTE App (Verlauf: Testfall am Dateiende).
 //
 // WARUM DIESE SCHICHT: die Invariante hängt an der CSS-Höhenkette
@@ -120,6 +120,58 @@ test('Nachrichtenverlauf: Leseansicht misst statt zu schätzen', async ({ page }
     expect(contentPx).toBeGreaterThan(vh * 0.2 + 100);
     expect(contentPx).toBeLessThan(vh * 0.8);
     await expect.poll(() => overflowPx(page, READ_SEL), { timeout: 5000 }).toBeLessThanOrEqual(0);
+  } finally {
+    await deletePage(page, pageId);
+  }
+});
+
+// Tabelle: wenige Wörter je Zelle, aber jede Zeile ist eine volle Bildschirm-
+// zeile mit Zellen-Padding hoch. Die Wortzahl-Schätzung sieht ~40 Wörter =
+// sechs Zeilen Prosa, die gerenderte Tabelle ist ein Mehrfaches davon hoch.
+const TABLE_ROWS = 12;
+const TABLE_HTML = '<p>Kurz.</p><table><thead><tr><th scope="col">Jahr</th><th scope="col">Ort</th><th scope="col">Wert</th></tr></thead><tbody>'
+  + Array.from({ length: TABLE_ROWS }, (_, i) => `<tr><td>${2000 + i}</td><td>Bern</td><td>${i}</td></tr>`).join('')
+  + '</tbody></table>';
+
+test('Tabelle: Leseansicht misst statt zu schätzen', async ({ page }) => {
+  await bootApp(page);
+  const bookId = await selectSeededBook(page);
+  const pageId = await openFreshPage(page, bookId, TABLE_HTML);
+  try {
+    await page.waitForSelector(`${READ_SEL} table`, { timeout: 15000 });
+    await expectMeasuredFit(page);
+  } finally {
+    await deletePage(page, pageId);
+  }
+});
+
+// Gleiche Prüfung für Verlauf-artige Inhalte: nicht vakuös (der Inhalt ragt
+// deutlich über den Mindestdeckel von 20 % Fensterhöhe und bleibt unter dem
+// Höchstdeckel von 80 %), dann steht er ohne innere Scrollbar im Kasten.
+async function expectMeasuredFit(page) {
+  const { contentPx, vh } = await page.evaluate((s) => ({
+    contentPx: document.querySelector(s).scrollHeight, vh: window.innerHeight,
+  }), READ_SEL);
+  expect(contentPx).toBeGreaterThan(vh * 0.2 + 100);
+  expect(contentPx).toBeLessThan(vh * 0.8);
+  await expect.poll(() => overflowPx(page, READ_SEL), { timeout: 5000 }).toBeLessThanOrEqual(0);
+}
+
+// Reine Prosa ohne jeden Sonderblock: kurze Dialogabsätze. Jeder Absatz
+// beginnt eine neue Zeile, die Schätzung (≈7 Wörter/Zeile) sieht aber nur
+// drei Wörter je Absatz — 16 Absätze schätzt sie auf sieben Zeilen. Gedeckt
+// nur, weil die Leseansicht jeden Abschnitt misst, nicht nur Sonderblöcke.
+const DIALOG_LINES = 16;
+const DIALOG_HTML = Array.from({ length: DIALOG_LINES }, (_, i) => `<p>«Ja», sagte ${i % 2 ? 'sie' : 'er'}.</p>`).join('');
+
+test('Kurze Dialogabsätze: Leseansicht misst statt zu schätzen', async ({ page }) => {
+  await bootApp(page);
+  const bookId = await selectSeededBook(page);
+  const pageId = await openFreshPage(page, bookId, DIALOG_HTML);
+  try {
+    await page.waitForFunction(({ s, n }) => document.querySelectorAll(`${s} p`).length === n,
+      { s: READ_SEL, n: DIALOG_LINES }, { timeout: 15000 });
+    await expectMeasuredFit(page);
   } finally {
     await deletePage(page, pageId);
   }

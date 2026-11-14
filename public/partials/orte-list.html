@@ -23,10 +23,12 @@
                 @click.stop="openMergePick($event, 'ort', o)"
                 :data-tip="$app.t('merge.rowTip')" x-text="$app.t('merge.rowAction')"></button>
         </template>
-        <template x-if="o.stale || o.manually_created">
+        <!-- Papierkorb nur auf verwaisten Zeilen (wie Figuren/Szenen): dort ist
+             Löschen die eigentliche Handlung. Selbst angelegte Orte löscht das ⋯-Menü. -->
+        <template x-if="o.stale">
         <button type="button" class="icon-btn danger entity-row-action"
                 @click.stop="$app.deleteOrt(o)"
-                :aria-label="$app.t('common.delete')" :data-tip="$app.t(o.stale ? 'entity.deleteStale' : 'orte.deleteManual')">
+                :aria-label="$app.t('common.delete')" :data-tip="$app.t('entity.deleteStale')">
           <svg class="icon" aria-hidden="true"><use href="/icons.svg#trash"/></svg>
         </button>
         </template>
@@ -40,17 +42,19 @@
             </template>
           </span>
         </template>
-        <button type="button" class="icon-btn icon-btn--ghost entity-row-action hover-reveal"
-                aria-haspopup="menu" :aria-expanded="isActionMenuOpen('ort:' + o.id)"
-                @click="ortOpenMenu($event, o)"
-                :data-tip="$app.t('common.moreActions')" :aria-label="$app.t('common.moreActions')">
-          <svg class="icon" aria-hidden="true"><use href="/icons.svg#more-horizontal"/></svg>
-        </button>
-        <button type="button" class="row-expand"
-                :aria-expanded="$store.catalogUi.selectedOrtId === o.id"
-                @click="ortToggleOpen(o)" :aria-label="$app.t('common.details')">
-          <span class="history-chevron" :class="{ open: $store.catalogUi.selectedOrtId === o.id }" aria-hidden="true"></span>
-        </button>
+        <span class="row-end">
+          <button type="button" class="icon-btn icon-btn--ghost hover-reveal"
+                  aria-haspopup="menu" :aria-expanded="isActionMenuOpen('ort:' + o.id)"
+                  @click="ortOpenMenu($event, o)"
+                  :data-tip="$app.t('common.moreActions')" :aria-label="$app.t('common.moreActions')">
+            <svg class="icon" aria-hidden="true"><use href="/icons.svg#more-horizontal"/></svg>
+          </button>
+          <button type="button" class="row-expand"
+                  :aria-expanded="$store.catalogUi.selectedOrtId === o.id"
+                  @click="ortToggleOpen(o)" :aria-label="$app.t('common.details')">
+            <span class="history-chevron" :class="{ open: $store.catalogUi.selectedOrtId === o.id }" aria-hidden="true"></span>
+          </button>
+        </span>
       </div>
       <div x-show="$store.catalogUi.selectedOrtId === o.id" class="entity-detail">
         <template x-if="isEditingOrt(o.id)">

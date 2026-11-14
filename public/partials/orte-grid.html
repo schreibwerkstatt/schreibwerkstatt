@@ -35,9 +35,9 @@
                     aria-haspopup="dialog" :aria-expanded="mergePick.kind === 'ort' && mergePick.sourceId === String(o.id)"
                     @click.stop="openMergePick($event, 'ort', o)"
                     :data-tip="$app.t('merge.rowTip')" x-text="$app.t('merge.rowAction')"></button>
-            <button type="button" x-show="o.stale || o.manually_created" class="icon-btn danger entity-row-action"
+            <button type="button" x-show="o.stale" class="icon-btn danger entity-row-action"
                     @click.stop="$app.deleteOrt(o)"
-                    :aria-label="$app.t('common.delete')" :data-tip="$app.t(o.stale ? 'entity.deleteStale' : 'orte.deleteManual')">
+                    :aria-label="$app.t('common.delete')" :data-tip="$app.t('entity.deleteStale')">
               <svg class="icon" aria-hidden="true"><use href="/icons.svg#trash"/></svg>
             </button>
           </td>

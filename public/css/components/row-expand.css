@@ -1,26 +1,60 @@
-/* Aufklapp-Knopf einer Listenzeile (DESIGN.md «Listen-Anriss + aufgeklappte
+/* Zeilen-Ende einer aufklappbaren Listenzeile (DESIGN.md «Zeilen-Ende»):
+   `.row-end` hält ⋯-Menü und Aufklapp-Chevron als EINE Gruppe am rechten Rand,
+   vertikal mittig zur Zeile. Reihenfolge fest: zuerst ⋯ (`.icon-btn--ghost`,
+   meist `.hover-reveal`), zuletzt `.row-expand`. Beide sind 28×28 mit 16px-Icon;
+   die Zeile selbst richtet ihre Kopf-Elemente mittig aus (`align-items: center`).
+
+   `.row-expand` ist der Aufklapp-Knopf (DESIGN.md «Listen-Anriss + aufgeklappte
    Zeile», «Werkstatt-Bedienvertrag»): der Titel öffnet das Bearbeiten, dieser
    Knopf klappt die Zeile nur zum Lesen auf — und ist dafür der Tastaturweg
    (`aria-expanded`). Inhalt ist der leere `.history-chevron`-Span (CSS-Mask),
-   darum kein `.icon-btn` (das verlangt ein Sprite-Icon).
-   Konsumenten: Figuren, Schauplätze, Welt-Fakten, Recherche. Die Karte setzt
-   höchstens die Position. */
+   darum kein `.icon-btn` (das verlangt ein Sprite-Icon). Gleiche Kachel wie der
+   ⋯-Knopf daneben, nur ohne Ruhe-Füllung: der Chevron ist Klapp-Marker, keine
+   Aktion. Hover wie `.icon-btn--ghost` (Füllung + Rahmen).
+
+   `.row-expand--marker` (ein `<span>`, kein Knopf): Zeilen, die selbst der
+   Klapp-Knopf sind (`role="button"`, Songs, Kontinuität) — gleiche Grösse und
+   Lage, ohne eigenen Hover.
+
+   Konsumenten: Figuren, Schauplätze, Szenen, Welt-Fakten, Recherche (Knopf);
+   Songs, Kontinuitäts-Befunde, Namens-Varianten (Marker). Optik ausschliesslich
+   hier; gegatet durch tests/unit/row-end-single-place.test.mjs. */
 @layer components {
+  .row-end {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-2xs);
+    margin-left: auto;
+    flex-shrink: 0;
+  }
   .row-expand {
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    min-width: 28px;
-    min-height: 24px;
+    flex-shrink: 0;
+    width: 28px;
+    height: 28px;
     padding: 0;
     background: none;
-    border: 0;
-    color: var(--color-muted);
+    border: var(--border-thin) solid transparent;
+    border-radius: var(--radius-none);
+    color: var(--color-text);
     cursor: pointer;
+    transition: background var(--transition-fast), border-color var(--transition-fast);
   }
-  .row-expand:hover { color: var(--color-text); }
+  .row-expand > .history-chevron {
+    width: var(--icon-size-action);
+    height: var(--icon-size-action);
+    color: inherit;
+    vertical-align: middle;
+  }
+  button.row-expand:hover {
+    background: var(--icon-ghost-fill-hover);
+    border-color: var(--color-border);
+  }
   .row-expand:focus-visible {
     outline: var(--focus-ring);
     outline-offset: var(--focus-ring-offset);
   }
+  .row-expand--marker { cursor: inherit; }
 }

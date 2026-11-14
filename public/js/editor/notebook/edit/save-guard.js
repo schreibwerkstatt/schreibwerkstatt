@@ -8,6 +8,7 @@ import { syncLiveBlockIds } from '../../shared/block-ids.js';
 import { classifySaveError, isRetryableSaveError } from '../save-errors.js';
 import { noteSaveOutage } from '../save-outage.js';
 import { getTabId } from '../../../tab-id.js';
+import { trackUsageEvent } from '../../../usage-event.js';
 
 // Läuft die Verwerfen-Rückfrage von cancelEdit? Solange speichert nichts im
 // Hintergrund: ein Autosave darunter schriebe genau den Stand auf den Server,
@@ -105,6 +106,11 @@ export const saveGuardMethods = {
   _noteSaveFailure(e, { offlineKey = 'edit.offlineSavedAt' } = {}) {
     const app = editorHost();
     const kind = classifySaveError(e);
+    // Nutzungs-Event nur beim ersten Fehler eines Ausfalls: die Retries
+    // desselben Ausfalls (alle paar Sekunden offline) zählen nicht neu.
+    if (!app.saveOffline || app.saveFailKind !== kind) {
+      trackUsageEvent('save.failed', { editor: app.focusActive ? 'focus' : 'notebook', reason: kind });
+    }
     app.saveOffline = true;
     app.saveFailKind = kind;
     noteSaveOutage(app.currentPage?.id, { kind, status: e?.status });

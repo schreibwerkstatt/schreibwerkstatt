@@ -37,18 +37,19 @@
                     @click="openItemMenu($event, 'list', item, 'status')" :disabled="busy"
                     :data-tip="statusTip(item)" :aria-label="$app.t('recherche.status.change', { status: statusLabel(itemStatus(item)) })"
                     x-text="statusLabel(itemStatus(item))"></button>
-            <div class="research-item-actions hover-reveal" x-data="{ menuCtx: 'list' }">
-              <button type="button" class="icon-btn" x-show="!(detailEditing && detailItemId === item.id)"
-                      @click="openDetail(item, { edit: true })" :disabled="busy" :data-tip="$app.t('recherche.edit')" :aria-label="$app.t('recherche.edit')"><svg class="icon" aria-hidden="true"><use href="/icons.svg#pencil"/></svg></button>
-              <!-- @include recherche-item-menu-trigger -->
-            </div>
-            <!-- Aufklappen zum Lesen: der tastaturerreichbare Weg (Listen-Anriss). -->
-            <button type="button" class="row-expand"
-                    @click="toggleDetail(item)" :aria-expanded="detailItemId === item.id"
-                    :data-tip="$app.t(detailItemId === item.id ? 'recherche.detail.close' : 'recherche.detail.open')"
-                    :aria-label="$app.t(detailItemId === item.id ? 'recherche.detail.close' : 'recherche.detail.open')">
-              <span class="history-chevron" :class="{ open: detailItemId === item.id }" aria-hidden="true"></span>
-            </button>
+            <!-- Zeilen-Ende (DESIGN.md «Zeilen-Ende»): ⋯ + Aufklapp-Knopf, der
+                 tastaturerreichbare Weg zum Lesen (Listen-Anriss). -->
+            <span class="row-end">
+              <span class="research-item-actions hover-reveal" x-data="{ menuCtx: 'list' }">
+                <!-- @include recherche-item-menu-trigger -->
+              </span>
+              <button type="button" class="row-expand"
+                      @click="toggleDetail(item)" :aria-expanded="detailItemId === item.id"
+                      :data-tip="$app.t(detailItemId === item.id ? 'recherche.detail.close' : 'recherche.detail.open')"
+                      :aria-label="$app.t(detailItemId === item.id ? 'recherche.detail.close' : 'recherche.detail.open')">
+                <span class="history-chevron" :class="{ open: detailItemId === item.id }" aria-hidden="true"></span>
+              </button>
+            </span>
           </div>
 
           <!-- Zugeklappt: Anriss. Klick darauf klappt auf. -->

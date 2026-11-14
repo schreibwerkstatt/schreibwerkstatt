@@ -155,6 +155,17 @@ export const actionMenuMethods = {
     for (const type of opts.closeOn || []) {
       window.addEventListener(type, () => this.closeActionMenu(), { signal });
     }
+    // Inhalt, der nach der ersten Messung nachrendert (x-for/x-show im Menue),
+    // aendert die Hoehe: dann neu verankern, sonst ragt ein unten geoeffnetes
+    // Menue ueber den Viewport, statt nach oben auszuweichen. Das Umsetzen
+    // aendert nur top/left, nie die Groesse — keine Rueckkopplung.
+    if (el && typeof ResizeObserver === 'function') {
+      const ro = new ResizeObserver(() => {
+        if (this.actionMenuKey === key) this._remeasureActionMenu();
+      });
+      ro.observe(el);
+      signal.addEventListener('abort', () => ro.disconnect(), { once: true });
+    }
 
     this.$nextTick(() => requestAnimationFrame(() => {
       if (this.actionMenuKey !== key) return;

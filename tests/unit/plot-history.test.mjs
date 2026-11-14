@@ -38,7 +38,7 @@ const beat = (id, actId, threadId, sortOrder) =>
 
 test('_pushUndo begrenzt auf 10 Records und wirft die ältesten weg', () => {
   const ctx = makeCtx();
-  for (let i = 0; i < 14; i++) ctx._pushUndo({ kind: 'beat-fields', id: i, before: {}, after: {} });
+  for (let i = 0; i < 14; i++) ctx._pushUndo({ kind: 'beat-fields', id: i, before: { v: 0 }, after: { v: 1 } });
   assert.equal(ctx._undoStack.length, 10);
   assert.equal(ctx._undoStack[0].id, 4);
   assert.equal(ctx._undoStack.at(-1).id, 13);
@@ -46,19 +46,19 @@ test('_pushUndo begrenzt auf 10 Records und wirft die ältesten weg', () => {
 
 test('neuer Record leert den Redo-Stack, Redo-Rückweg nicht', () => {
   const ctx = makeCtx();
-  ctx._redoStack = [{ kind: 'beat-fields', id: 1, before: {}, after: {} }];
-  ctx._pushUndo({ kind: 'beat-fields', id: 2, before: {}, after: {} });
+  ctx._redoStack = [{ kind: 'beat-fields', id: 1, before: { v: 0 }, after: { v: 1 } }];
+  ctx._pushUndo({ kind: 'beat-fields', id: 2, before: { v: 0 }, after: { v: 1 } });
   assert.equal(ctx._redoStack.length, 0);
 
-  ctx._redoStack = [{ kind: 'beat-fields', id: 3, before: {}, after: {} }];
-  ctx._pushUndo({ kind: 'beat-fields', id: 4, before: {}, after: {} }, { clearRedo: false });
+  ctx._redoStack = [{ kind: 'beat-fields', id: 3, before: { v: 0 }, after: { v: 1 } }];
+  ctx._pushUndo({ kind: 'beat-fields', id: 4, before: { v: 0 }, after: { v: 1 } }, { clearRedo: false });
   assert.equal(ctx._redoStack.length, 1);
 });
 
 test('während Undo/Redo wird nichts aufgezeichnet (kein rekursiver Stack)', () => {
   const ctx = makeCtx();
   ctx._inHistoryFlight = true;
-  ctx._pushUndo({ kind: 'beat-fields', id: 1, before: {}, after: {} });
+  ctx._pushUndo({ kind: 'beat-fields', id: 1, before: { v: 0 }, after: { v: 1 } });
   assert.equal(ctx._undoStack.length, 0);
 });
 
@@ -91,7 +91,7 @@ test('Undo/Redo-Zyklus schiebt den Record zwischen den Stacks', async () => {
 test('fehlgeschlagenes Undo legt den Record zurück', async () => {
   const ctx = makeCtx();
   ctx._applyInverse = async () => false;
-  ctx._pushUndo({ kind: 'beat-fields', id: 7, before: {}, after: {} });
+  ctx._pushUndo({ kind: 'beat-fields', id: 7, before: { v: 0 }, after: { v: 1 } });
   await ctx.historyUndo();
   assert.equal(ctx._undoStack.length, 1);
   assert.equal(ctx._redoStack.length, 0);
@@ -100,7 +100,7 @@ test('fehlgeschlagenes Undo legt den Record zurück', async () => {
 test('Undo eines create invalidiert den gesamten Redo-Stack', async () => {
   const ctx = makeCtx();
   ctx._applyInverse = async () => true;
-  ctx._pushUndo({ kind: 'beat-place', before: [], after: [] });
+  ctx._pushUndo({ kind: 'beat-place', before: [{ id: 1 }], after: [{ id: 2 }] });
   ctx._pushUndo({ kind: 'create-beat', id: 5 }, { clearRedo: false });
   await ctx.historyUndo();           // create-beat → löschen
   assert.equal(ctx._redoStack.length, 0, 'kein Redo nach create-Undo (neue ID beim Wiederanlegen)');
@@ -111,7 +111,7 @@ test('laufende Mutation (busy) blockiert Undo', async () => {
   const ctx = makeCtx();
   ctx.busy = true;
   ctx._applyInverse = async () => true;
-  ctx._pushUndo({ kind: 'beat-fields', id: 1, before: {}, after: {} });
+  ctx._pushUndo({ kind: 'beat-fields', id: 1, before: { v: 0 }, after: { v: 1 } });
   await ctx.historyUndo();
   assert.equal(ctx._undoStack.length, 1);
 });
@@ -233,4 +233,15 @@ test('jede schreibende Plot-Methode zeichnet auf oder leert die Historie', () =>
     }
   }
   assert.deepEqual(offenders, []);
+});
+
+test('Record ohne Wirkung (before = after, Schlüsselreihenfolge egal) wird nicht aufgezeichnet', () => {
+  const ctx = makeCtx();
+  ctx._redoStack = [{ kind: 'beat-fields', id: 1, before: { v: 0 }, after: { v: 1 } }];
+  ctx._pushUndo({ kind: 'beat-fields', id: 2, before: { a: 1, b: [1, 2] }, after: { b: [1, 2], a: 1 } });
+  ctx._pushUndo({ kind: 'reorder', before: { x: [3, 1] }, after: { x: [3, 1] } });
+  assert.equal(ctx._undoStack.length, 0);
+  assert.equal(ctx._redoStack.length, 1, 'Redo bleibt erhalten');
+  ctx._pushUndo({ kind: 'create-beat', id: 3 });
+  assert.equal(ctx._undoStack.length, 1, 'Records ohne before/after laufen durch');
 });

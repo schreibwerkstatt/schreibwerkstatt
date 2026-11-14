@@ -101,7 +101,7 @@ test('recherche: Liste zeigt Anriss, aufgeklappte Zeile zeigt Volltext und bleib
   expect(page.url()).toContain(`/recherche/${made.long}`);
 
   // ── Bearbeiten IN der Zeile: Verknuepfen bleibt erreichbar ────────────────
-  await longItem.getByRole('button', { name: 'Bearbeiten' }).click();
+  await longItem.locator('.research-item-title').click();
   await expect(detail_.locator('textarea.recherche-body-input')).toBeVisible();
   // Genau der Regressionsfall: im Bearbeiten-Modus war die Verknuepfen-Aktion
   // vorher weg, weil Anzeige- und Formular-Zweig sich ausgeschlossen haben.
@@ -170,7 +170,7 @@ test('recherche: Anlegen als Inline-Formular in der Karte', async ({ page }) => 
   await expect(detailBox.locator('.research-tag')).toHaveText(['Brief']);
 
   // Klick daneben committet ein offenes Bearbeiten (Inline-Edit-Regel).
-  await row.getByRole('button', { name: 'Bearbeiten' }).click();
+  await row.locator('.research-item-title').click();
   await detailBox.locator('input.recherche-title-input').fill('Inline-Fund neu');
   await page.locator('#recherche-card .card-title').click();
   await expect(detailBox.locator('.research-detail__bar')).toBeHidden();

@@ -150,13 +150,19 @@
                 <button type="button" class="entity-ref" x-entity-ref="{ type: 'seite', id: s.page_id, name: s.seite, kapitel: s.kapitel }"></button>
               </template>
             </span>
-            <button type="button" class="icon-btn icon-btn--ghost entity-row-action hover-reveal"
-                    aria-haspopup="menu" :aria-expanded="isActionMenuOpen('szene:' + s.id)"
-                    @click="szeneOpenMenu($event, s)"
-                    :data-tip="$app.t('common.moreActions')" :aria-label="$app.t('common.moreActions')">
-              <svg class="icon" aria-hidden="true"><use href="/icons.svg#more-horizontal"/></svg>
-            </button>
-            <span class="history-chevron" :class="{ open: $store.catalogUi.selectedSzeneId === s.id }" aria-hidden="true"></span>
+            <span class="row-end">
+              <button type="button" class="icon-btn icon-btn--ghost hover-reveal"
+                      aria-haspopup="menu" :aria-expanded="isActionMenuOpen('szene:' + s.id)"
+                      @click="szeneOpenMenu($event, s)"
+                      :data-tip="$app.t('common.moreActions')" :aria-label="$app.t('common.moreActions')">
+                <svg class="icon" aria-hidden="true"><use href="/icons.svg#more-horizontal"/></svg>
+              </button>
+              <button type="button" class="row-expand"
+                      :aria-expanded="$store.catalogUi.selectedSzeneId === s.id"
+                      @click="szeneToggleOpen(s)" :aria-label="$app.t('common.details')">
+                <span class="history-chevron" :class="{ open: $store.catalogUi.selectedSzeneId === s.id }" aria-hidden="true"></span>
+              </button>
+            </span>
           </div>
           <!-- x-if, nicht x-show: das Detail (Lektorat-Befunde, Figuren-/Ort-Chips)
                existiert nur für die aufgeklappte Zeile — versteckt mitgerendert trug

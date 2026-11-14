@@ -39,7 +39,7 @@
                 <span class="nameguard-canonical" x-text="cluster.canonical"></span>
                 <span class="nameguard-count" x-text="cluster.canonicalCount + '×'"></span>
                 <span class="nameguard-variant-summary truncate" x-text="cluster.variants.map(v => v.form).join(', ')"></span>
-                <span class="history-chevron" :class="{ open: selectedNameGuardKey === nameGuardKey(cluster) }" aria-hidden="true"></span>
+                <span class="row-end"><span class="row-expand row-expand--marker" aria-hidden="true"><span class="history-chevron" :class="{ open: selectedNameGuardKey === nameGuardKey(cluster) }"></span></span></span>
               </div>
               <div x-show="selectedNameGuardKey === nameGuardKey(cluster)" class="entity-detail" x-cloak>
                 <template x-for="v in cluster.variants" :key="v.form">

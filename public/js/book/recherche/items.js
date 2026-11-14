@@ -7,6 +7,20 @@ import { emptyDraft as _emptyDraft } from './shared.js';
 import { normalizeTags } from '../../tag-input.js';
 import { isRowBodyClick } from '../../row-click.js';
 
+// Bearbeiten-Entwurf aus einem Fundstück — Formular-Start UND Vergleichsbasis
+// für «nichts geändert» in saveEdit.
+function _draftFromItem(item) {
+  return {
+    kind: item.kind || 'note',
+    title: item.title || '',
+    body: item.body || '',
+    urls: (item.urls || []).map(u => ({ url: u.url || '', label: u.label || '' })),
+    source: item.source || '',
+    tags: [...(item.tags || [])],
+    fileName: '',
+  };
+}
+
 export const rechercheItemMethods = {
   // ── Anlegen (Inline-Formular, partials/recherche-create.html) ────────────
   // Anlegen und Bearbeiten fahren auf DEMSELBEN `draft` und teilen dieselben
@@ -253,15 +267,7 @@ export const rechercheItemMethods = {
     this._editOpening = true;
     setTimeout(() => { this._editOpening = false; }, 0);
     this.formError = '';
-    this.draft = {
-      kind: item.kind || 'note',
-      title: item.title || '',
-      body: item.body || '',
-      urls: (item.urls || []).map(u => ({ url: u.url || '', label: u.label || '' })),
-      source: item.source || '',
-      tags: [...(item.tags || [])],
-      fileName: '',
-    };
+    this.draft = _draftFromItem(item);
   },
   // Zurück in den Lesemodus — die Zeile bleibt offen (und damit der Permalink).
   cancelEdit() {
@@ -337,7 +343,14 @@ export const rechercheItemMethods = {
     this.busy = true;
     try {
       const before = (this.items || []).find(i => i.id === item.id) || item;
-      const row = await this._patchItem(item.id, this._draftBody(this.draft));
+      const body = this._draftBody(this.draft);
+      // Unverändert (Titel-Klick öffnet im Formular, Klick daneben schliesst):
+      // kein Request und kein Undo-Schritt — Öffnen ist keine Änderung.
+      if (JSON.stringify(body) === JSON.stringify(this._draftBody(_draftFromItem(before)))) {
+        this.cancelEdit();
+        return true;
+      }
+      const row = await this._patchItem(item.id, body);
       this._replaceItem(row);
       this._recordResearchEdit?.(before, row);
       // Nach dem Speichern zurück in den Lesemodus, die Zeile bleibt offen: der

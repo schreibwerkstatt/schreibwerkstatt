@@ -433,3 +433,16 @@ test('onlyArchivedHidden: nur ohne Filter und mit ausgeblendetem Archiv', () => 
   c.filterText = 'x';
   assert.equal(c.onlyArchivedHidden(), false);
 });
+
+test('saveEdit ohne Änderung: kein PATCH, kein Undo-Schritt, Formular zu', async () => {
+  const recorded = [];
+  const c = card({ draft: null, formError: '', _recordResearchEdit: (b, r) => recorded.push([b, r]) });
+  const item = { id: 7, kind: 'note', title: 'Titel', body: 'Text', urls: [{ url: 'https://x.ch', label: '' }], source: '', tags: ['a'], links: [] };
+  c.items = [item];
+  c.detailItemId = 7;
+  c.startEdit(item);
+  assert.equal(await c.saveEdit(item), true);
+  assert.equal(calls.filter(x => x.opts.method === 'PATCH').length, 0);
+  assert.equal(recorded.length, 0);
+  assert.equal(c.detailEditing, false);
+});

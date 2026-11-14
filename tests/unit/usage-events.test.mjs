@@ -153,6 +153,69 @@ test('behaviorReport: Revisionen — Viewer-Sitzungen, Wiederherstellen nach Alt
   assert.equal(sanitizeMeta('revision.restore', { ageBucket: 'decade' }), null);
 });
 
+test('behaviorReport: Verweildauer — Karten, Werkzeuge am Abschnitt, Abschnitts-Besuche', () => {
+  appUsers.createUser({ email: 'dw@ex.com', displayName: 'Dora' });
+  appUsers.createUser({ email: 'dw2@ex.com' });
+  const rec = (userEmail, event, meta) => recordUsageEvent({ userEmail, event, meta });
+  rec('dw@ex.com', 'card.open', { feature: 'stats' });
+  rec('dw@ex.com', 'card.close', { feature: 'stats', durationSec: 30 });
+  rec('dw@ex.com', 'card.close', { feature: 'stats', durationSec: 90 });
+  rec('dw@ex.com', 'panel.open', { panel: 'ideen', editor: 'notebook' });
+  rec('dw@ex.com', 'panel.close', { panel: 'ideen', editor: 'notebook', durationSec: 600 });
+  rec('dw2@ex.com', 'panel.open', { panel: 'ideen', editor: 'notebook' });
+  rec('dw@ex.com', 'panel.open', { panel: 'find', editor: 'book' });
+  rec('dw@ex.com', 'page.view', { pageId: 7, durationSec: 100, editSec: 60, changed: 'yes' });
+  rec('dw@ex.com', 'page.view', { pageId: 8, durationSec: 20, editSec: 0, changed: 'no' });
+  // editSec über der Dauer wird auf die Dauer gekappt.
+  rec('dw2@ex.com', 'page.view', { pageId: 9, durationSec: 10, editSec: 50, changed: 'no' });
+
+  const r = behaviorReport(RANGE);
+  const stats = r.features.find(f => f.feature === 'stats');
+  assert.deepEqual([stats.opens, stats.medianSec, stats.totalSec], [1, 60, 120]);
+  const ideen = r.panels.find(p => p.panel === 'ideen' && p.editor === 'notebook');
+  assert.deepEqual([ideen.opens, ideen.users, ideen.medianSec, ideen.totalSec], [2, 2, 600, 600]);
+  assert.equal(r.panels.find(p => p.panel === 'find').editor, 'book');
+  const dora = r.pageViews.perUser.find(u => u.email === 'dw@ex.com');
+  assert.deepEqual([dora.views, dora.pages, dora.readSec, dora.editSec, dora.changedShare], [2, 2, 60, 60, 0.5]);
+  assert.equal(dora.displayName, 'Dora');
+  assert.equal(dora.returnShare, 0, 'beide Abschnitte nur an einem Tag besucht');
+  const other = r.pageViews.perUser.find(u => u.email === 'dw2@ex.com');
+  assert.deepEqual([other.readSec, other.editSec], [0, 10]);
+
+  // Rückkehr: derselbe Abschnitt an zwei Tagen.
+  db.prepare(`UPDATE usage_events SET created_at = '2020-01-01T10:00:00.000Z' WHERE user_email = 'dw@ex.com' AND event = 'page.view' AND meta_json LIKE '%"pageId":8%'`).run();
+  rec('dw@ex.com', 'page.view', { pageId: 8, durationSec: 5, editSec: 0, changed: 'no' });
+  assert.equal(behaviorReport(RANGE).pageViews.perUser.find(u => u.email === 'dw@ex.com').returnShare, 0.5);
+
+  // Freitext und fremde Werte fallen weg; Seiten-ID nur als Zahl.
+  assert.equal(sanitizeMeta('page.view', { pageId: 'Kapitel 3', durationSec: 5 }).pageId, undefined);
+  assert.equal(sanitizeMeta('panel.open', { panel: 'irgendwas' }), null);
+});
+
+test('behaviorReport: Reibung — Konflikte, Save-Fehler, Outbox, Verwerfen-Rückfrage', () => {
+  appUsers.createUser({ email: 'fr@ex.com' });
+  const rec = (event, meta) => recordUsageEvent({ userEmail: 'fr@ex.com', event, meta });
+  const before = Object.fromEntries(behaviorReport(RANGE).friction.map(r => [r.key, r.count]));
+  rec('save.conflict', { outcome: 'merged', source: 'main' });
+  rec('save.conflict', { outcome: 'rejected', self: 'yes', source: 'focus' });
+  rec('save.failed', { editor: 'notebook', reason: 'network' });
+  rec('save.failed', { editor: 'book', reason: 'locked' });
+  rec('outbox.flush', { synced: 3, conflicts: 1, dropped: 0, stuck: 2 });
+  rec('discard.prompt', { editor: 'notebook', answer: 'keep' });
+  rec('discard.prompt', { editor: 'focus', answer: 'discard' });
+
+  const rows = behaviorReport(RANGE).friction;
+  const d = (key) => rows.find(x => x.key === key).count - (before[key] || 0);
+  assert.equal(d('conflict.merged'), 1);
+  assert.equal(d('conflict.rejected'), 1);
+  assert.equal(d('conflict.self'), 1);
+  assert.equal(d('saveFailed.network'), 1);
+  assert.equal(d('saveFailed.locked'), 1);
+  assert.equal(d('saveFailed.server'), 0, 'Nullzeile bleibt stehen');
+  assert.deepEqual([d('outbox.synced'), d('outbox.conflicts'), d('outbox.dropped'), d('outbox.stuck')], [3, 1, 0, 2]);
+  assert.deepEqual([d('discard.keep'), d('discard.discard')], [1, 1]);
+});
+
 test('Konto-Loeschung nimmt die Events mit', () => {
   appUsers.createUser({ email: 'gone@ex.com' });
   recordUsageEvent({ userEmail: 'gone@ex.com', event: 'auth.login', meta: { method: 'local' } });

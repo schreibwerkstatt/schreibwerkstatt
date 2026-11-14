@@ -34,6 +34,7 @@ import { mergeBlocks, mergedToHtml } from '../editor/shared/block-merge.js';
 import { contentRepo } from '../repo/content.js';
 import { EVT } from '../events.js';
 import { isNetworkError } from '../utils/net.js';
+import { trackUsageEvent } from '../usage-event.js';
 
 // Zählt die Flush-Ergebnisse ({pageId → 'ok'|'conflict'|'skip'}) für die
 // Rückmeldung. `reported` merkt sich bereits gemeldete Konflikt-Seiten und wird
@@ -182,6 +183,9 @@ export const appOutboxMethods = {
     if (typeof navigator !== 'undefined' && navigator.onLine === false) return;
     this._outboxFlushing = true;
     const results = new Map();
+    // Nutzungs-Event `outbox.flush`: was nach Offline-Arbeit ankam, abgewiesen
+    // wurde oder neu hängen blieb (Entwürfe, Struktur, Ideen zusammen).
+    const tally = { synced: 0, conflicts: 0, dropped: 0, stuck: 0 };
     let unreachable = false;
     try {
       // Strukturänderungen zuerst: ein offline angelegter Abschnitt braucht
@@ -195,6 +199,9 @@ export const appOutboxMethods = {
         st = { remaps: [], done: 0, dropped: 0, stuck: 0, offline: false, retry: true };
       }
       if (st.remaps.length) this._applyTempPageRemaps(st.remaps);
+      tally.synced += st.done || 0;
+      tally.dropped += st.dropped || 0;
+      tally.stuck += Math.max(0, (st.stuck || 0) - (this._outboxStuckReported || 0));
       this._reportStructureResult(st);
       // Baum frisch: Position der neuen Abschnitte und Namen kommen vom Server.
       if (st.done) this.loadPages?.({ fresh: true });
@@ -205,7 +212,7 @@ export const appOutboxMethods = {
       else {
         if (st.retry) unreachable = true;
         let ideen;
-        try { ideen = await this._flushIdeenInto(st.remaps); }
+        try { ideen = await this._flushIdeenInto(st.remaps, tally); }
         catch (e) { console.warn('[outbox] Ideen-Warteschlange nicht abspielbar', e); ideen = 'retry'; }
         if (ideen === 'offline') { unreachable = true; requestDraftSync(); }
         else {
@@ -219,7 +226,10 @@ export const appOutboxMethods = {
     }
     if (unreachable) this._scheduleOutboxRetry();
     else { clearTimeout(this._outboxRetryTimer); this._outboxRetryTimer = null; this._outboxRetryMs = 0; }
-    this._reportOutboxResults(results);
+    const drafts = this._reportOutboxResults(results);
+    tally.synced += drafts?.synced || 0;
+    tally.conflicts += drafts?.newConflicts || 0;
+    if (tally.synced || tally.conflicts || tally.dropped || tally.stuck) trackUsageEvent('outbox.flush', tally, null);
   },
 
   // Entwürfe nachsenden (nach der Struktur-Warteschlange). `onUnreachable`
@@ -255,9 +265,14 @@ export const appOutboxMethods = {
   // offline angelegten Abschnitt bekommt dessen echte ID — aus `remaps` oder,
   // in einem späteren Durchgang, aus structure-queue.js#resolveTempId).
   // Liefert 'offline' | 'retry' | null.
-  async _flushIdeenInto(remaps) {
+  async _flushIdeenInto(remaps, tally = null) {
     const realId = new Map((remaps || []).map((r) => [Number(r.tempId), r.page?.id]));
     const res = await flushIdeenQueue(undefined, realId);
+    if (tally) {
+      tally.synced += res.done || 0;
+      tally.dropped += res.dropped || 0;
+      tally.stuck += Math.max(0, (res.stuck || 0) - (this._outboxIdeenStuckReported || 0));
+    }
     if (res.done) this.setStatus?.(this.t('ideen.offline.synced', { n: res.done }), false, 5000);
     if (res.dropped) this.setStatus?.(this.t('ideen.offline.dropped', { n: res.dropped }), true, 10000);
     if (res.stuck > (this._outboxIdeenStuckReported || 0)) this.setStatus?.(this.t('ideen.offline.stuck', { n: res.stuck }), true, 10000);
@@ -400,7 +415,7 @@ export const appOutboxMethods = {
   _reportOutboxResults(results) {
     if (!this._outboxReportedConflicts) this._outboxReportedConflicts = new Set();
     const { synced, newConflicts } = summarizeOutboxResults(results, this._outboxReportedConflicts);
-    if (!synced && !newConflicts) return;
+    if (!synced && !newConflicts) return { synced, newConflicts };
     const parts = [];
     if (synced) parts.push(this.t('offline.syncDone', { n: synced }));
     if (newConflicts) parts.push(this.t('offline.syncConflicts', { n: newConflicts }));
@@ -410,6 +425,7 @@ export const appOutboxMethods = {
       jobType: 'outbox',
       bookId: null,
     });
+    return { synced, newConflicts };
   },
 
   // Ein Draft. Rückgabe: 'ok' | 'conflict' | 'offline' | 'skip' | 'empty'

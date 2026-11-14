@@ -176,7 +176,7 @@ test('Undo setzt busy während des Flights; Mutationen kehren dann früh zurück
     await new Promise(r => { release = r; });
     return true;
   };
-  ctx._pushUndo({ kind: 'beat-fields', id: 1, before: {}, after: {} });
+  ctx._pushUndo({ kind: 'beat-fields', id: 1, before: { v: 0 }, after: { v: 1 } });
   const p = ctx.historyUndo();
   assert.equal(busyDuring, true);
   await ctx.toggleBeatVerworfen(ctx.beats[0]);   // während des Flights

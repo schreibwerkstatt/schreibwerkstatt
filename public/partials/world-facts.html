@@ -119,7 +119,7 @@
                     <span x-show="f.widerlegt" class="badge badge-warn weltfakten-widerlegt"
                           :data-tip="$app.t('weltfakten.widerlegtTip')" x-text="$app.t('weltfakten.widerlegt')"></span>
                     <template x-if="wfFcFactId === f.id"><span class="spinner" aria-hidden="true"></span></template>
-                    <span class="weltfakten-row-actions">
+                    <span class="row-end">
                       <button type="button" class="icon-btn icon-btn--ghost hover-reveal"
                               aria-haspopup="menu" :aria-expanded="isActionMenuOpen('fakt:' + f.id)"
                               @click="wfOpenMenu($event, f)"

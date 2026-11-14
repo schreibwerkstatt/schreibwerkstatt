@@ -155,6 +155,25 @@ test('ohne base_html bleibt der 409 wie bisher', async () => {
   assert.equal(r.json.merge_conflicts, undefined);
 });
 
+// Nutzungs-Event `save.conflict` (docs/usage-events.md#reibung): stiller Merge
+// und abgewiesener Write zählen je einmal, mit Schreibweg und «eigener Stand».
+test('Konflikte landen als save.conflict in usage_events', async () => {
+  db.prepare('DELETE FROM usage_events').run();
+  const conflicts = () => db.prepare(`SELECT meta_json FROM usage_events WHERE event = 'save.conflict' ORDER BY rowid`)
+    .all().map(r => JSON.parse(r.meta_json));
+  await foreignWrite(BASE.replace('Eins.', 'Eins neu.'));
+  const merged = await api('PUT', `/content/pages/${PAGE}`, {
+    html: BASE.replace('Drei.', 'Drei neu.'), base_html: BASE, expected_updated_at: T0, source: 'focus',
+  });
+  assert.equal(merged.status, 200);
+  const rejected = await api('PUT', `/content/pages/${PAGE}`, { html: BASE, expected_updated_at: T0, source: 'main' });
+  assert.equal(rejected.status, 409);
+  assert.deepEqual(conflicts(), [
+    { outcome: 'merged', source: 'focus' },
+    { outcome: 'rejected', self: 'yes', source: 'main' },
+  ]);
+});
+
 test('verschachtelte Liste ist ein Block: Änderung im Unterpunkt mergt gegen Änderung daneben', async () => {
   await foreignWrite(BASE.replace('Eins.', 'Eins (Browser).'));
   const local = BASE.replace('<li>a1</li>', '<li>a1, ergänzt</li>');

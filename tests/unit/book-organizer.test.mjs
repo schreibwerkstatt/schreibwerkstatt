@@ -479,7 +479,7 @@ test('historyUndo eines create invalidiert den Redo-Stack', async () => {
   const card = makeSeededCard();
   card._applyInverse = async () => true;
   const snap = card._snapshotWorkstate();
-  card._pushUndo({ kind: 'reorder', before: snap, after: snap });
+  card._pushUndo({ kind: 'reorder', before: snap, after: { ...snap, moved: true } });
   // Frisch angelegtes Kapitel ist leer — nur dann ist der Create-Undo erlaubt.
   card.workTree.push({ id: 3, name: 'Neu', depth: 1, parent_id: null, pages: [], subchapters: [] });
   card._pushUndo({ kind: 'create-chapter', id: 3, name: 'Neu' }, { clearRedo: false });
@@ -509,7 +509,7 @@ test('fehlgeschlagenes Undo/Redo laesst den Stack unveraendert', async () => {
 test('waehrend eines Flights zeichnet _pushUndo nichts auf', () => {
   const card = makeCard();
   card._inHistoryFlight = true;
-  card._pushUndo({ kind: 'reorder', before: {}, after: {} });
+  card._pushUndo({ kind: 'reorder', before: { v: 0 }, after: { v: 1 } });
   assert.equal(card._undoStack.length, 0);
 });
 
@@ -522,7 +522,7 @@ test('Reorder-Undo mit veraltetem Snapshot leert die History statt einzuspielen'
   card._applyInverse = async () => { applied = true; return true; };
   const before = card._snapshotWorkstate();
   card._pushUndo({ kind: 'rename-chapter', id: 1, oldName: 'A', newName: 'Eins' });
-  card._pushUndo({ kind: 'reorder', before, after: card._snapshotWorkstate() });
+  card._pushUndo({ kind: 'reorder', before, after: { ...card._snapshotWorkstate(), moved: true } });
   // Remote-Anlage einer Seite → Workstate kennt eine ID mehr als der Snapshot.
   card.soloPages.push({ id: 999, name: 'Neu', chapter_id: 0 });
 
@@ -539,7 +539,7 @@ test('Reorder-Undo mit gleichem Bestand, anderer Reihenfolge ist nicht stale', a
   const before = card._snapshotWorkstate();
   card.workTree.reverse();
   card.workTree[0].pages.reverse();
-  card._pushUndo({ kind: 'reorder', before, after: card._snapshotWorkstate() });
+  card._pushUndo({ kind: 'reorder', before, after: { ...card._snapshotWorkstate(), moved: true } });
 
   await card.historyUndo();
   assert.equal(applied, true);
@@ -671,7 +671,7 @@ test('historyUndo wartet auf laufende Umbenennungen', async () => {
   const undone = [];
   card._applyInverse = async (rec) => { undone.push(rec.kind); return true; };
   const snap = card._snapshotWorkstate();
-  card._pushUndo({ kind: 'reorder', before: snap, after: snap });
+  card._pushUndo({ kind: 'reorder', before: snap, after: { ...snap, moved: true } });
   let finish;
   card._trackRename(new Promise(res => { finish = res; }).then(() => {
     card._recordRenamePage(901, 'S1', 'S1b');

@@ -1,0 +1,41 @@
+{
+  "version": "6.5.0",
+  "date": "2026-11-14",
+  "entries": [
+    {
+      "kind": "neu",
+      "de": "Admin, Reiter «Verhalten»: neue Auswertungen zeigen, wie lange Werkzeuge neben dem Text offen sind, wie Abschnitte besucht werden und wo beim Speichern Arbeit fast verloren ging.",
+      "en": "Admin, “Behaviour” tab: new reports show how long tools stay open next to the text, how sections are visited, and where work was nearly lost while saving."
+    },
+    {
+      "kind": "verbessert",
+      "de": "Figuren, Schauplätze, Szenen, Welt-Fakten, Recherche und Songs: das ⋯-Menü und der Aufklapp-Pfeil sehen in jeder Liste gleich aus und stehen mittig neben dem Titel.",
+      "en": "Characters, locations, scenes, world facts, research and songs: the ⋯ menu and the expand arrow now look the same in every list and sit centred next to the title."
+    },
+    {
+      "kind": "verbessert",
+      "de": "Schauplätze: einen selbst angelegten Ort löschst du jetzt über das ⋯-Menü. Der Papierkorb in der Zeile erscheint nur noch bei Orten, die nicht mehr im Text vorkommen.",
+      "en": "Locations: you now delete a place you created yourself from the ⋯ menu. The bin icon in the row only appears for places no longer found in the text."
+    },
+    {
+      "kind": "behoben",
+      "de": "Plot-Werkstatt, Recherche und andere Boards: Öffnen und ungeändert Schliessen eines Eintrags erzeugte einen leeren Rückgängig-Schritt. Rückgängig dreht jetzt nur echte Änderungen zurück.",
+      "en": "Plot workshop, research and other boards: opening an entry and closing it unchanged created an empty undo step. Undo now only reverts real changes."
+    },
+    {
+      "kind": "behoben",
+      "de": "Notebook-Editor, Leseansicht: Abschnitte mit Tabellen, Gedichten oder Code-Blöcken wurden in einem zu kleinen Kasten mit eigener Scrollleiste gezeigt. Der Kasten wächst jetzt mit dem Inhalt.",
+      "en": "Notebook editor, reading view: sections with tables, poems or code blocks were shown in a box that was too small, with its own scrollbar. The box now grows with the content."
+    },
+    {
+      "kind": "behoben",
+      "de": "Eingebettete Videos aus Blog-Büchern ragten über den Rand des Lesebereichs hinaus. Sie passen sich jetzt der Breite an.",
+      "en": "Embedded videos from blog books stuck out past the edge of the reading area. They now fit the available width."
+    },
+    {
+      "kind": "behoben",
+      "de": "Aktionsmenüs, die weit unten geöffnet wurden, ragten teils über den unteren Bildschirmrand. Sie weichen jetzt nach oben aus.",
+      "en": "Action menus opened near the bottom of the screen sometimes ran past the bottom edge. They now open upwards instead."
+    }
+  ]
+}

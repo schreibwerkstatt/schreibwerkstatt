@@ -59,14 +59,6 @@
 }
 .weltfakten-row--selected { background: var(--color-hover); }
 
-/* ⋯ + Chevron rechts oben in der Aussage-Zeile, ausserhalb des Umbruchs. */
-.weltfakten-row-actions {
-  display: inline-flex;
-  align-items: center;
-  margin-left: auto;
-  flex-shrink: 0;
-}
-
 /* Aufgeklapptes Detail: Prüfung, dann Aktionen, ggf. Pflegeformular. */
 .weltfakten-detail {
   display: flex;
@@ -118,10 +110,12 @@
 }
 
 /* Aussage + Marken + Chevron in einer Zeile. */
+/* Zeilen-Kopf: Aussage, Tags und Zeilen-Ende (`.row-end`) vertikal mittig
+   (DESIGN.md «Zeilen-Ende»). */
 .weltfakten-row-line {
   display: flex;
   flex-wrap: wrap;
-  align-items: baseline;
+  align-items: center;
   gap: var(--space-xs);
 }
 .weltfakten-row-line > .weltfakten-fakt { flex: 1 1 16em; }

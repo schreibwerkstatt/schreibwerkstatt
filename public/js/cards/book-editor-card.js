@@ -36,6 +36,7 @@ import { tErrorRaw } from '../i18n.js';
 import { isSaveShortcut } from '../utils.js';
 import { registerBusySource } from '../app/boot/update-policy.js';
 import { memoMethods } from './card-memo.js';
+import { setPanelOpen } from '../usage-sessions.js';
 
 // Re-Export für Tests/Konsumenten: die Facade ist der Einstieg.
 export { applySaveOutcome } from './book-editor/save.js';
@@ -135,6 +136,8 @@ export function registerBookEditorCard() {
 
     init() {
       this._autosave = createAutosaveTimers((pageId) => this._enqueueSave(pageId));
+      // Nutzungs-Event `panel.*` (usage-sessions.js): Suchleiste sichtbar.
+      this.$watch(() => !!(this.findOpen && window.__app?.showBookEditorCard), (on) => setPanelOpen('find', on, 'book'));
       this._savedFlash = createTimerBag();
 
       this._lifecycle = setupCardLifecycle(this, {

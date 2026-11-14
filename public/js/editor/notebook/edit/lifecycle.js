@@ -5,6 +5,7 @@ import { noteEditStartDuringOutage } from '../save-outage.js';
 import { claimSaveOwner, ownsSave } from '../save-owner.js';
 import { isDiscardAsking, setDiscardAsking } from './save-guard.js';
 import { localIsoDate } from '../../../utils.js';
+import { trackUsageEvent } from '../../../usage-event.js';
 
 // Wie oft ✓ (saveEdit) das während des PUT Getippte direkt nachspeichert,
 // bevor es dem Autosave überlassen bleibt (Dauer-Tippen über jeden PUT).
@@ -302,6 +303,7 @@ export const lifecycleMethods = {
       } finally {
         setDiscardAsking(false);
       }
+      trackUsageEvent('discard.prompt', { editor: app.focusActive ? 'focus' : 'notebook', answer: ok ? 'discard' : 'keep' });
       // «Nein»: ein währenddessen fälliger Autosave ist verfallen — neu planen.
       if (!ok) {
         if (app.editMode && app.editDirty) this._scheduleAutosave();

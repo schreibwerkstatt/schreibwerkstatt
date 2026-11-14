@@ -7,7 +7,9 @@
 // rufen `historyUndo()` / `historyRedo()` und sperren über `canUndo()`/`canRedo()`.
 //
 // Records sind Plain-Objekte `{ kind, … }` und tragen before UND after, damit
-// derselbe Record beide Richtungen bedient.
+// derselbe Record beide Richtungen bedient. Sind before und after gleich,
+// verwirft `_pushUndo` den Record (`isNoopRecord`) — die Karten brauchen dafür
+// keinen eigenen Vergleich.
 //
 // Pflicht-Methoden der Karte:
 //   _applyInverse(rec) → Promise<boolean>   Undo eines Records
@@ -38,6 +40,20 @@
 
 export const HISTORY_MAX = 10;
 
+// Reihenfolge-unabhängiger Vergleich für Plain-Daten (Snapshots aus JSON-Feldern).
+function stableJson(v) {
+  if (Array.isArray(v)) return `[${v.map(stableJson).join(',')}]`;
+  if (v && typeof v === 'object') {
+    return `{${Object.keys(v).sort().filter(k => v[k] !== undefined).map(k => `${JSON.stringify(k)}:${stableJson(v[k])}`).join(',')}}`;
+  }
+  return JSON.stringify(v ?? null);
+}
+
+/** Record ohne Wirkung: trägt before UND after, und beide sind gleich. Pure. */
+export function isNoopRecord(rec) {
+  return !!rec && 'before' in rec && 'after' in rec && stableJson(rec.before) === stableJson(rec.after);
+}
+
 export function boardHistoryState() {
   return {
     _undoStack: [],
@@ -56,6 +72,9 @@ export const boardHistoryMethods = {
 
   _pushUndo(record, { clearRedo = true } = {}) {
     if (this._inHistoryFlight || !record) return;
+    // Nichts geändert (Öffnen und ungeändert schliessen, Drop an dieselbe Stelle):
+    // kein Schritt — ein Undo, das nichts zurückdreht, und ein geleerter Redo-Stack.
+    if (isNoopRecord(record)) return;
     this._undoStack.push(record);
     while (this._undoStack.length > HISTORY_MAX) this._undoStack.shift();
     if (clearRedo) this._redoStack = [];

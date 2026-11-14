@@ -10,6 +10,8 @@ import { FEATURES, DEFAULT_RECENT_KEYS, featureByKey } from './cards/feature-reg
 import { fetchJson } from './utils.js';
 import { loadToken } from './cards/book-guard.js';
 import { EVT } from './events.js';
+import { trackUsageEvent } from './usage-event.js';
+import { visibleClock, visibleSecSince, setPanelOpen, closeAllPanels, setPageView, setPageEditing } from './usage-sessions.js';
 
 // Einmal-Quelle fuer den naechsten /usage/track-Call einer Karte. Die Palette
 // markiert vor dem Toggle; gezaehlt wird weiterhin nur vom Show-Flag-Watch,
@@ -20,22 +22,9 @@ export function markNextUsageSource(key, source) {
   _pendingUsageSource = { key, source };
 }
 
-// Nutzungs-Event an /usage/event (docs/usage-events.md). Nur Events mit
-// origin 'client' aus lib/usage-events.js; der Server schneidet `meta` auf die
-// kategorialen Felder des Katalogs zu — nie Text uebergeben. `keepalive`, damit
-// `editor.close` beim Schliessen des Tabs noch rausgeht. Best-Effort, wirft nie.
-export function trackUsageEvent(event, meta = null, bookId = undefined) {
-  try {
-    const book = bookId !== undefined ? bookId : (window.Alpine?.store('nav')?.selectedBookId || null);
-    fetch('/usage/event', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ event, meta, book_id: book }),
-      credentials: 'same-origin',
-      keepalive: true,
-    }).catch(() => {});
-  } catch (e) { /* Tracking ist Best-Effort, niemals UI blockieren. */ }
-}
+// Sender und Sitzungs-Buchhaltung liegen in eigenen Modulen (usage-event.js,
+// usage-sessions.js), damit Unterkarten sie ohne die Karten-Registry laden.
+export { trackUsageEvent };
 
 // Vorschlag aus einem der fuenf Chats uebernommen/verworfen/wieder geoeffnet/
 // rueckgaengig gemacht. `chat`: page|book|research|plot|ideen; `kind`: Vorschlagstyp
@@ -49,9 +38,11 @@ function _viewportClass() {
   return w < 640 ? 'mobile' : (w < 1024 ? 'tablet' : 'desktop');
 }
 
-// Laufende Editor-Sitzung (welcher der drei Editoren, seit wann). Modul-lokal:
-// rein transient, nichts rendert davon.
+// Laufende Editor-Sitzung (welcher der drei Editoren, seit wann) und offene
+// Karten (Feature-Key → Start auf der sichtbaren Uhr). Modul-lokal: rein
+// transient, nichts rendert davon.
 let _editorSession = null;
+const _openCards = new Map();
 
 export const featuresUsageMethods = {
   // Wird in init() aufgerufen, sobald Alpine $watch bereitsteht.
@@ -63,8 +54,14 @@ export const featuresUsageMethods = {
       const flag = f.flag;
       const key = f.key;
       // $watch liefert (newVal, oldVal) — false→true ist Öffnen.
+      // true→false schliesst die Sitzung mit sichtbarer Dauer (`card.close`).
       this.$watch(flag, (val, old) => {
-        if (val && !old) this._trackFeatureUsage(key);
+        if (val && !old) {
+          this._trackFeatureUsage(key);
+          _openCards.set(key, { since: visibleClock(), bookId: this.$store.nav?.selectedBookId || null });
+        } else if (!val && old) {
+          this._closeCardSession(key);
+        }
       });
     }
 
@@ -74,6 +71,68 @@ export const featuresUsageMethods = {
       locale: this.$store.shell?.uiLocale,
     }, null);
     this._setupEditorSessionTracking();
+    this._setupPageViewTracking();
+    this._setupPanelTracking();
+    // Tab zu / App in den Hintergrund (iOS beendet dort ohne weiteres Signal):
+    // offene Karten abschliessen. Nach Rückkehr aus dem bfcache neu beginnen.
+    window.addEventListener('pagehide', () => {
+      for (const key of [..._openCards.keys()]) this._closeCardSession(key);
+    });
+    window.addEventListener('pageshow', (e) => {
+      if (!e.persisted) return;
+      for (const f of FEATURES) {
+        if (this[f.flag] && !_openCards.has(f.key)) _openCards.set(f.key, { since: visibleClock(), bookId: this.$store.nav?.selectedBookId || null });
+      }
+    });
+  },
+
+  _closeCardSession(key) {
+    const cur = _openCards.get(key);
+    if (!cur) return;
+    _openCards.delete(key);
+    trackUsageEvent('card.close', { feature: key, durationSec: visibleSecSince(cur.since) }, cur.bookId);
+  },
+
+  // Abschnitts-Besuche (`page.view`, usage-sessions.js): offener Abschnitt der
+  // Einzelansicht (Lese-/Edit-/Fokusmodus). Der Bucheditor zeigt einen Strom
+  // statt eines Abschnitts — solange er offen ist, läuft kein Besuch.
+  _setupPageViewTracking() {
+    const current = () => (this.showBookEditorCard ? null : (this.currentPage?.id ?? null));
+    const sync = () => setPageView(current(), { bookId: this.$store.nav?.selectedBookId || null, editing: !!this.editMode });
+    this.$watch(current, sync);
+    this.$watch(() => !!this.editMode, (on) => setPageEditing(on));
+    window.addEventListener('pagehide', () => setPageView(null));
+    window.addEventListener('pageshow', (e) => { if (e.persisted) sync(); });
+    sync();
+  },
+
+  // Werkzeuge der Leiste neben dem Editor, Befundliste und Kommentarleiste
+  // (`panel.open`/`panel.close`). Suchen/Ersetzen und Revisionsansicht halten
+  // ihren Offen-Zustand in Unterkarten und melden selbst (setPanelOpen).
+  _rootPanels() {
+    // Sichtbarkeit, nicht Belegung: `asideSlot` bleibt stehen, während die
+    // Leiste mit ihrer Wirtskarte ausgeblendet ist (app-root-getters.js).
+    const open = [];
+    if (this.editorAsideOpen) open.push(this.asideSlot);
+    if (this.kapitelAsideOpen) open.push('ideen-chapter');
+    if (this.showEditorCard && this.checkDone) open.push('lektorat');
+    if (this.showEditorCard && this.pageCommentRailOpen) open.push('comments');
+    return open;
+  },
+
+  _setupPanelTracking() {
+    let prev = [];
+    const sync = () => {
+      const next = this._rootPanels();
+      const editor = this._activeEditor() === 'focus' ? 'focus' : (this.showBookEditorCard ? 'book' : 'notebook');
+      for (const p of prev) if (!next.includes(p)) setPanelOpen(p, false);
+      for (const p of next) setPanelOpen(p, true, editor);
+      prev = next;
+    };
+    this.$watch(() => this._rootPanels().join(','), sync);
+    window.addEventListener('pagehide', () => { closeAllPanels(); prev = []; });
+    window.addEventListener('pageshow', (e) => { if (e.persisted) sync(); });
+    sync();
   },
 
   // Welcher der drei Editoren gerade offen ist. Bucheditor vor Fokus vor Notebook:
@@ -93,13 +152,14 @@ export const featuresUsageMethods = {
   _setupEditorSessionTracking() {
     const switchTo = (next) => {
       if (_editorSession && _editorSession.editor !== next) {
-        const durationSec = Math.round((Date.now() - _editorSession.since) / 1000);
+        // Sichtbare Zeit (usage-sessions.js): ein Tab im Hintergrund zählt nicht.
+        const durationSec = visibleSecSince(_editorSession.since);
         trackUsageEvent('editor.close', { editor: _editorSession.editor, durationSec }, _editorSession.bookId);
         _editorSession = null;
       }
       if (next && !_editorSession) {
         const bookId = this.$store.nav?.selectedBookId || null;
-        _editorSession = { editor: next, since: Date.now(), bookId };
+        _editorSession = { editor: next, since: visibleClock(), bookId };
         trackUsageEvent('editor.open', { editor: next }, bookId);
       }
     };

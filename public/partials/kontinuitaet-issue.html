@@ -40,7 +40,7 @@
           x-text="$app.t('kontinuitaet.missing.badge')"></span>
     <span x-show="issue.resolved || issue.dismissed || issue.discarded" class="kontinuitaet-resolved-badge"
           x-text="$app.t(issue.discarded ? 'kontinuitaet.discarded' : (issue.dismissed ? 'kontinuitaet.dismissed' : 'kontinuitaet.resolved'))"></span>
-    <span class="history-chevron" :class="{ open: selectedKontinuitaetIssueKey === kontinuitaetIssueKey(issue, i) }" aria-hidden="true"></span>
+    <span class="row-end"><span class="row-expand row-expand--marker" aria-hidden="true"><span class="history-chevron" :class="{ open: selectedKontinuitaetIssueKey === kontinuitaetIssueKey(issue, i) }"></span></span></span>
   </div>
   <div x-show="selectedKontinuitaetIssueKey === kontinuitaetIssueKey(issue, i)" class="entity-detail" x-cloak>
     <p x-show="issue.beschreibung" x-text="issue.beschreibung" class="entity-detail-text"></p>

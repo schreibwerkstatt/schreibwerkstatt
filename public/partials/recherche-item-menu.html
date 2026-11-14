@@ -18,9 +18,9 @@
            dasselbe Menue, nur der Status-Abschnitt (board.js#openItemMenu). -->
       <div x-data="{ menuCtx: actionMenuTarget.ctx, statusOnly: actionMenuTarget.only === 'status' }">
         <div x-show="!statusOnly">
-        <!-- Bearbeiten: derselbe Weg wie der Stift der Listenzeile (Zeile
-             aufgeklappt im Bearbeiten-Modus) — auf der Board-Karte der einzige.
-             Steht das Fundstueck schon im Formular, entfaellt der Eintrag. -->
+        <!-- Bearbeiten: derselbe Weg wie der Titel der Listenzeile (Zeile
+             aufgeklappt im Bearbeiten-Modus). Steht das Fundstueck schon im
+             Formular, entfaellt der Eintrag. -->
         <template x-if="!(detailEditing && detailItemId === item.id)">
           <button type="button" class="context-menu-item context-menu-item--icon" role="menuitem" @click="openDetail(item, { edit: true })" :disabled="busy">
             <svg class="icon" aria-hidden="true"><use href="/icons.svg#pencil"/></svg>

@@ -3,6 +3,7 @@
 // submitConflictResolution und «Abschnitt teilen».
 import { editorHost, isEmptyManuscript, isNoChange, stripLektoratMarks } from './_shared.js';
 import { noteSaveRecovered } from '../save-outage.js';
+import { notePageSaved } from '../../../usage-sessions.js';
 
 export const saveSuccessMethods = {
   // Gemeinsame Nachbereitung nach jedem erfolgreichen Page-Save. Aufrufer:
@@ -48,6 +49,8 @@ export const saveSuccessMethods = {
     this._clearDraftIfSent(pageId ?? app.currentPage?.id, html);
     // Lief davor ein Save-Ausfall, jetzt als eine Zeile melden (save-outage.js).
     noteSaveRecovered(pageId ?? app.currentPage?.id);
+    // Abschnitts-Besuch (`page.view`) trägt «geändert».
+    notePageSaved(pageId ?? app.currentPage?.id);
     // Autosave-Zyklus schliessen: der Max-Timer läuft ab dem ERSTEN Dirty-Mark
     // und wird von `_scheduleAutosave` nur neu gesetzt, wenn er null ist. Ohne
     // Reset hier würde der 120-s-Cap der nächsten Tipp-Serie noch von der

@@ -201,17 +201,19 @@
               </template>
             </span>
           </template>
-          <button type="button" class="icon-btn icon-btn--ghost entity-row-action hover-reveal"
-                  aria-haspopup="menu" :aria-expanded="isActionMenuOpen('figur:' + f.id)"
-                  @click="figurOpenMenu($event, f)"
-                  :data-tip="$app.t('common.moreActions')" :aria-label="$app.t('common.moreActions')">
-            <svg class="icon" aria-hidden="true"><use href="/icons.svg#more-horizontal"/></svg>
-          </button>
-          <button type="button" class="row-expand"
-                  :aria-expanded="$store.catalogUi.selectedFigurId === f.id"
-                  @click="figurToggleOpen(f)" :aria-label="$app.t('common.details')">
-            <span class="history-chevron" :class="{ open: $store.catalogUi.selectedFigurId === f.id }" aria-hidden="true"></span>
-          </button>
+          <span class="row-end">
+            <button type="button" class="icon-btn icon-btn--ghost hover-reveal"
+                    aria-haspopup="menu" :aria-expanded="isActionMenuOpen('figur:' + f.id)"
+                    @click="figurOpenMenu($event, f)"
+                    :data-tip="$app.t('common.moreActions')" :aria-label="$app.t('common.moreActions')">
+              <svg class="icon" aria-hidden="true"><use href="/icons.svg#more-horizontal"/></svg>
+            </button>
+            <button type="button" class="row-expand"
+                    :aria-expanded="$store.catalogUi.selectedFigurId === f.id"
+                    @click="figurToggleOpen(f)" :aria-label="$app.t('common.details')">
+              <span class="history-chevron" :class="{ open: $store.catalogUi.selectedFigurId === f.id }" aria-hidden="true"></span>
+            </button>
+          </span>
         </div>
         <!-- @include figuren-detail -->
       </div>

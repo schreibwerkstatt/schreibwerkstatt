@@ -20,6 +20,8 @@ import { stripLektoratMarks } from '../../editor/shared/html-clean.js';
 import { isNoChange } from '../../editor/shared/save-pipeline.js';
 import { isOfflineError } from './blocks.js';
 import { isEmptyManuscript } from '../../editor/shared/empty-content.js';
+import { classifySaveError } from '../../editor/notebook/save-errors.js';
+import { trackUsageEvent } from '../../usage-event.js';
 
 // Wie lange der „gespeichert"-Status am Block/Outline-Punkt stehen bleibt.
 // Danach wird `savedAt` aktiv genullt — ein `Date.now()`-Vergleich im Template
@@ -178,6 +180,8 @@ export const bookEditorSaveMethods = {
       }
       this._autosave.schedule(block.pageId);
     } catch (e) {
+      // Nutzungs-Event nur beim ersten Fehler des Blocks, nicht je Retry.
+      if (!block.offline && !block.saveError) trackUsageEvent('save.failed', { editor: 'book', reason: isOfflineError(e) ? 'network' : classifySaveError(e) });
       if (isOfflineError(e) || e?.status >= 500 || e?.status === 429) {
         // Kein Netz bzw. Server vorübergehend weg: der Stand liegt als Entwurf,
         // der Online-Retry (drafts.js#_retryOfflineBlocks) speichert ihn nach —

@@ -199,6 +199,13 @@
     height: auto;
     border-radius: var(--mc-radius);
   }
+  /* Eingebettete Medien (WordPress-Embeds aus Blog-Büchern) tragen ihre Breite
+     als festes `width`-Attribut in Pixeln (typisch 640) und wachsen weder mit
+     der Lesebreite noch mit «Volle Breite» mit — gleiche Schutzregel wie bei
+     Bildern, sonst sprengt der Kasten den Lesekasten. */
+  :is(.page-content-view, .book-editor-page-body, .share-content) :is(iframe, video, embed, object) {
+    max-width: 100%;
+  }
   /* Eingefügte Manuskript-Bilder: zentrierte figure + optionale Bildunterschrift. */
   :is(.page-content-view, .book-editor-page-body, .share-content) figure {
     margin: 1em 0;

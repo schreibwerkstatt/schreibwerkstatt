@@ -25,6 +25,16 @@ const logger = require('../../logger');
 // nach einem Funkloch höchstens offen (Autosave alle paar Sekunden).
 const OWN_SAVE_IDS_MAX = 16;
 
+// Nutzungs-Event `save.conflict` (docs/usage-events.md#reibung): ein Save lief
+// gegen einen neueren Stand — still gemergt oder als 409 zurück. `self`: der
+// neuere Stand stammt vom selben Konto (zweites Gerät/Tab, verlorene Antwort).
+// `source` ist der Schreibweg des Clients (main/focus/book, native Clients).
+function _noteConflict(email, bookId, req, outcome, conflict) {
+  if (!email) return;
+  const self = outcome === 'rejected' ? (conflict?.serverEditorEmail === email ? 'yes' : 'no') : undefined;
+  recordUsageEvent({ userEmail: email, event: 'save.conflict', bookId, meta: { outcome, self, source: req.body?.source } });
+}
+
 // `no_change` ist ein internes Signal des Content-Stores (der eingeschickte
 // Body war identisch mit dem gespeicherten) — kein Vertragsfeld. Vor der
 // Antwort entfernen, damit es kein Client sieht.
@@ -157,6 +167,7 @@ function register(router) {
           try {
             const merge = await _mergeStaleWrite(pageId, req);
             if (merge.saved) {
+              _noteConflict(email, bookId, req, 'merged', merge.saved);
               logger.info(`PAGE_MERGE Seite ${pageId}: Geraet ${req.body?.device_id || '-'} erwartete ${_logStamp(req.body?.expected_updated_at)}, kollisionsfrei gemergt, neu ${merge.saved.updated_at || '-'}.`);
               res.json(_publicPayload(merge.saved));
               noteIdeenPageSave(pageId, bookId, email);
@@ -175,6 +186,7 @@ function register(router) {
         // Stempel gegen welchen Server-Stand lief (sonst nirgends erfasst).
         // Tab + Weg trennen zwei Tabs desselben Browsers bzw. Autosave, Retry
         // und Outbox — die Device-ID allein ist in allen Tabs gleich.
+        _noteConflict(email, bookId, req, 'rejected', conflict);
         logger.info(`PAGE_CONFLICT Seite ${pageId}: Geraet ${req.body?.device_id || '-'} Tab ${_logToken(req.body?.client_tab)} SW ${_logToken(req.body?.client_sw)} Weg ${_logToken(req.body?.save_reason)} erwartete ${_logStamp(req.body?.expected_updated_at)}, Server ${conflict.serverUpdatedAt} (Geraet ${conflict.serverEditorDevice || conflict.serverEditorEmail || '-'})${mergeConflicts ? `, Merge: ${mergeConflicts.length} Block-Kollision(en)` : ''}.`);
         return res.status(409).json({
           error_code: 'PAGE_CONFLICT',

@@ -1,5 +1,6 @@
 'use strict';
 // Nutzungs-Events (docs/usage-events.md): Schreibweg + Admin-Auswertung.
+// Facade des Ordners: Helfer in _shared.js, Verweildauer und Reibung in dwell.js.
 //
 // Geschrieben wird ausschliesslich ueber lib/usage-events#recordUsageEvent (Katalog-
 // Pruefung, Meta-Zuschnitt). Die Auswertung «Verhalten» liest zusaetzlich
@@ -8,9 +9,11 @@
 //
 // Privacy-Boundary wie db/admin-usage.js: keine Joins auf Buchnamen oder Inhalte.
 
-const { db } = require('./connection');
-const { NOW_ISO_SQL } = require('./now');
-const { localHour, isoAddDays } = require('../lib/local-date');
+const { db } = require('../connection');
+const { NOW_ISO_SQL } = require('../now');
+const { localHour, isoAddDays } = require('../../lib/local-date');
+const { _excluded, _events, _bump, _median, _weekStart } = require('./_shared');
+const { cardDwell, panels, pageViews, friction } = require('./dwell');
 
 const _stmtInsert = db.prepare(`
   INSERT INTO usage_events (user_email, book_id, event, source, meta_json, app_version, created_at)
@@ -22,40 +25,6 @@ function insertUsageEvent({ userEmail, bookId, event, source, meta, appVersion }
 }
 
 // ── Auswertung ──────────────────────────────────────────────────────────────
-
-const _stmtAdminEmails = db.prepare(`SELECT email FROM app_users WHERE global_role = 'admin'`);
-
-function _excluded(includeAdmins) {
-  return includeAdmins ? new Set() : new Set(_stmtAdminEmails.all().map(r => r.email));
-}
-
-function _events(names, fromIso, toIso) {
-  const ph = names.map(() => '?').join(',');
-  return db.prepare(`
-    SELECT user_email, book_id, event, source, meta_json, created_at
-      FROM usage_events
-     WHERE event IN (${ph}) AND created_at >= ? AND created_at < ?
-  `).all(...names, fromIso, toIso).map(r => ({ ...r, meta: r.meta_json ? JSON.parse(r.meta_json) : {} }));
-}
-
-function _bump(map, key, init) {
-  if (!map.has(key)) map.set(key, init());
-  return map.get(key);
-}
-
-function _median(arr) {
-  if (!arr.length) return null;
-  const s = arr.slice().sort((a, b) => a - b);
-  const m = Math.floor(s.length / 2);
-  return s.length % 2 ? s[m] : Math.round((s[m - 1] + s[m]) / 2);
-}
-
-// ISO-Montag der Woche eines YYYY-MM-DD-Datums.
-function _weekStart(date) {
-  const d = new Date(date + 'T00:00:00Z');
-  const dow = (d.getUTCDay() + 6) % 7;
-  return isoAddDays(date, -dow);
-}
 
 function _activity(fromDate, toDate, excluded) {
   const rows = db.prepare(`
@@ -78,7 +47,9 @@ function _activity(fromDate, toDate, excluded) {
   };
 }
 
-function _features(evts) {
+// Öffnungen je Karte (`card.open`) plus Verweildauer aus `card.close`
+// (dwell.js#cardDwell).
+function _features(evts, dwell = new Map()) {
   const acc = new Map();
   for (const e of evts) {
     const key = e.meta.feature;
@@ -90,7 +61,11 @@ function _features(evts) {
     const src = e.source || 'other';
     f.sources[src] = (f.sources[src] || 0) + 1;
   }
-  return [...acc.values()].map(f => ({ ...f, users: f.users.size }));
+  return [...acc.values()].map(f => ({
+    ...f, users: f.users.size,
+    medianSec: dwell.get(f.feature)?.medianSec ?? null,
+    totalSec: dwell.get(f.feature)?.totalSec ?? 0,
+  }));
 }
 
 function _jobs(evts) {
@@ -324,7 +299,7 @@ function behaviorReport({ fromIso, toIso, includeAdmins = false }) {
     sessions: sessions.length,
     logins: keep(_events(['auth.login'], fromIso, toIso)).length,
     booksCreated: keep(_events(['book.created'], fromIso, toIso)).length,
-    features: _features(keep(_events(['card.open'], fromIso, toIso))),
+    features: _features(keep(_events(['card.open'], fromIso, toIso)), cardDwell(keep(_events(['card.close'], fromIso, toIso)))),
     jobs: _jobs(jobEvents),
     proposals,
     // Chat-Runden mit und ohne Vorschlag: eine Runde ohne Vorschlag ist eine
@@ -338,6 +313,11 @@ function behaviorReport({ fromIso, toIso, includeAdmins = false }) {
     hours,
     tools: _tools(keep(_events(['dictation.start', 'tts.start', 'synonym.applied', 'xref.applied'], fromIso, toIso))),
     reading: _reading(excluded),
+    // Verweildauer und Reibung (dwell.js): Werkzeuge am Abschnitt,
+    // Abschnitts-Besuche je Person, Konflikte/Save-Fehler/Outbox/Verwerfen.
+    panels: panels(keep(_events(['panel.open', 'panel.close'], fromIso, toIso))),
+    pageViews: pageViews(keep(_events(['page.view'], fromIso, toIso))),
+    friction: friction(keep(_events(['save.conflict', 'save.failed', 'outbox.flush', 'discard.prompt'], fromIso, toIso))),
     cohorts: _cohorts(excluded),
   };
 }

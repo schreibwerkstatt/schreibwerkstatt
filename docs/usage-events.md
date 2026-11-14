@@ -8,9 +8,10 @@ Erstanbieter-Messung des Nutzungsverhaltens: welche Funktionen genutzt werden, o
 |---|---|
 | Tabelle | `usage_events` ([db/migrations/0349-usage-events.js](../db/migrations/0349-usage-events.js)), nur anhängend |
 | Katalog + einziger Schreibweg | [lib/usage-events.js](../lib/usage-events.js) — `USAGE_EVENTS`, `recordUsageEvent` |
-| Client-Weg | `POST /usage/event` ([routes/usage.js](../routes/usage.js)); Helfer `trackUsageEvent` / `trackChatProposal` in [public/js/features-usage.js](../public/js/features-usage.js) |
-| Auswertung | [db/usage-events.js](../db/usage-events.js)#`behaviorReport`, Route `GET /admin/usage/behavior` ([routes/admin-usage.js](../routes/admin-usage.js)) |
-| Admin-Tab | [admin-usage-behavior.js](../public/js/admin/admin-usage-behavior.js), Partials `admin-usage-behavior*.html` |
+| Client-Weg | `POST /usage/event` ([routes/usage.js](../routes/usage.js)); Sender `trackUsageEvent` in [public/js/usage-event.js](../public/js/usage-event.js) (re-exportiert von [features-usage.js](../public/js/features-usage.js), dort auch `trackChatProposal`) |
+| Verweildauern | [public/js/usage-sessions.js](../public/js/usage-sessions.js) (sichtbare Uhr, Werkzeuge, Abschnitts-Besuche); Karten und Editoren in [features-usage.js](../public/js/features-usage.js) |
+| Auswertung | [db/usage-events/](../db/usage-events/) — `index.js`#`behaviorReport`, Verweildauer und Reibung in `dwell.js`; Route `GET /admin/usage/behavior` ([routes/admin-usage.js](../routes/admin-usage.js)) |
+| Admin-Tab | [admin-usage-behavior.js](../public/js/admin/admin-usage-behavior.js), Partials `admin-usage-behavior*.html` (`-flow`: Werkzeuge, Abschnitts-Besuche, Reibung) |
 | Aufbewahrung | Setting `app.usage_events_retention_days` (Default 395, 0 = nie), täglicher Cleanup in [lib/cache-cleanup.js](../lib/cache-cleanup.js) |
 
 ## Regeln
@@ -31,7 +32,8 @@ Erstanbieter-Messung des Nutzungsverhaltens: welche Funktionen genutzt werden, o
 | `account.created` | server | `method` local/oidc, `via` invite/open-signup | Konto beim Annehmen der Einladung bzw. offener Registrierung |
 | `book.created` | server | `via` manual/book-import/manuscript-import/folder-import | `createOwnedBook`; ein danach gescheiterter Import lässt das Event mit `book_id` NULL stehen |
 | `card.open` | server | `feature`, Spalte `source` palette/tile/sidebar/shortcut | `POST /usage/track` (Karten-Öffnung) |
-| `editor.open` / `editor.close` | client | `editor` notebook/focus/book, `durationSec` | Watch auf die innerste offene Fläche: Bucheditor › Fokus › Notebook-Edit-Modus; `pagehide` schliesst ab |
+| `card.close` | client | `feature`, `durationSec` (sichtbar) | Show-Flag-Watch true→false je Karte der Feature-Registry; `pagehide` schliesst ab |
+| `editor.open` / `editor.close` | client | `editor` notebook/focus/book, `durationSec` (sichtbar) | Watch auf die innerste offene Fläche: Bucheditor › Fokus › Notebook-Edit-Modus; `pagehide` schliesst ab |
 | `dictation.start` / `tts.start` | client | — | Start der Aufnahme bzw. Wiedergabe (nicht je Audio-Segment) |
 | `synonym.applied` | client | `source` thesaurus/ai | Synonym aus dem Picker eingesetzt (SPA-Weg `editor/synonyme.js`; der Bundle-Controller der nativen Clients meldet nichts) |
 | `revision.view` | client | `diff` yes/no (Vergleich benutzt), `current` yes/no (gegen aktuellen Stand), `steps` (‹/›-Schritte) | eine Viewer-Sitzung der Abschnitts-Revisionen, gemeldet beim Schliessen ([page-revisions/viewer.js](../public/js/cards/page-revisions/viewer.js)); schliesst der Tab bei offenem Viewer, fehlt sie |
@@ -44,16 +46,34 @@ Erstanbieter-Messung des Nutzungsverhaltens: welche Funktionen genutzt werden, o
 | `job.queued` / `job.finished` | server | `type`, `status`, `durationSec` (ab Start), `proposals` (Vorschläge einer fertigen Chat-Runde) | `createJob`, `completeJob`, `failJob`, Abbruch in der Queue |
 | `chat.proposal` | client | `chat` page/book/research/plot/ideen, `action` applied/discarded/reopened/undone, `kind`, `count` | die fünf Chats; der Recherche-Chat kennt kein Verwerfen |
 | `lektorat.applied` | client | `shown`, `selected`, `applied`, `skipped` | Abschnitts-Lektorat «Übernehmen» in der Leseansicht (`saveCorrections`) |
+| `panel.open` / `panel.close` | client | `panel` chat/ideen/ideen-chapter/reference/lektorat/find/comments/revisions, `editor` notebook/focus/book, `durationSec` (sichtbar) | Leiste, Befundliste und Kommentarleiste per Watch an der Wurzel (`_rootPanels`, Sichtbarkeit statt `asideSlot`); Suchen/Ersetzen (Notebook und Bucheditor) per Watch in der Unterkarte, Revisionsansicht in `openViewer`/`closeViewer` |
+| `page.view` | client | `pageId`, `durationSec`, `editSec` (davon im Edit-Modus), `changed` yes/no (ein Save kam an) | Wechsel des offenen Abschnitts der Einzelansicht; Bucheditor offen = kein Besuch; unter 3 s fällt weg |
+| `save.conflict` | server | `outcome` merged/rejected, `self` yes/no (neuerer Stand vom selben Konto), `source` Schreibweg | `PUT /content/pages/:id` bei veraltetem Stand — auch die nativen Clients |
+| `save.failed` | client | `editor`, `reason` (`classifySaveError`) | erster Fehler eines Ausfalls im Notebook-/Fokus-Save (`_noteSaveFailure`) bzw. je Block im Bucheditor, nicht je Wiederholung |
+| `outbox.flush` | client | `synced`, `conflicts`, `dropped`, `stuck` | Durchgang der Offline-Outbox, nur wenn eine Zahl > 0; `stuck` zählt nur neu hängende |
+| `discard.prompt` | client | `editor`, `answer` keep/discard | Rückfrage «Ungespeicherte Änderungen verwerfen?» im Notebook-/Fokus-Editor |
 | `offline.pin` | client | `action` pin/unpin | Klick auf «Buch offline halten» in der Sidebar ([app-offline-books.js](../public/js/app/app-offline-books.js)) |
 | `offline.pin.result` | client | `result` done/partial/failed, `total`, `failed`, `status` (HTTP, 0 = Netz), `durationSec`, `persisted` yes/no | Ausgang des Erst-Syncs nach dem Anheften, gemeldet vom anheftenden Tab; Automatik und Nach-Syncs melden nichts. Schliesst der Tab vor dem Ende, fehlt das Ergebnis |
 
 **Datenschutzerklärung:** die Nutzungsdaten stehen unter «Erhobene Daten» (`privacy.sec2ItemE`) mit der Default-Frist von 13 Monaten. Wer die Frist oder die Art der Events ändert, zieht den Text dort nach.
+
+## Verweildauer
+
+Jede `durationSec` (Editor, Karte, Werkzeug, Abschnitt) misst **sichtbare** Zeit: die Uhr in `usage-sessions.js#visibleClock` steht, solange der Tab im Hintergrund liegt, und jede Sitzung ist auf 4 Stunden gedeckelt. **Why:** sonst zählt eine über Nacht offene Karte als zehn Stunden Nutzung. `pagehide` schliesst alle offenen Sitzungen ab, die Rückkehr aus dem bfcache beginnt neu. Die nativen Clients melden keine Verweildauer (Editor-Bundle, siehe Regeln).
+
+`page.view` trägt die `pageId` als Zahl, nie den Namen — die Auswertung zählt nur verschiedene Abschnitte und die Rückkehr an einem anderen Tag; wer wissen will, welcher Abschnitt es war, fragt die DB. Die Liste «Zuletzt» der Palette liest weiter `user_page_usage`.
+
+## Reibung
+
+Vier Events zeigen, wo Arbeit fast oder ganz verloren ging: Konflikte beim Speichern (Server, darum auch die nativen Clients), gescheiterte Saves, das Nachsenden der Offline-Outbox und die Verwerfen-Rückfrage. Bewusst **nicht** erfasst: jedes Abbrechen eines `appConfirm` (Rauschen ohne Aussage); abgebrochene Jobs stehen in `job.finished`, Skriptfehler in `js_errors`.
 
 ## Auswertung «Verhalten»
 
 Zeitraum, Admin-Schalter und Audit-Eintrag (`usage-viewed`) wie die übrigen Tabs. Neben den Events liest sie `user_activity` (aktive Sekunden je Person und Tag): aktive Personen je Woche und die **Kohorten** (aktive Tage in Woche 1 / Monat 1 nach der ersten Anmeldung, aktive Wochen, zuletzt aktiv) haben damit Historie vor dem ersten Event. Kohorten laufen über die ganze Historie, nicht über den Zeitraum.
 
 Die **Funktionstabelle** listet jede Karte der Feature-Registry, auch ohne Öffnung — die Nullzeilen beantworten «was nutzt niemand?». Die **Annahmequote** eines Chat-Vorschlags ist übernommen / (übernommen + verworfen); offen gelassene Vorschläge sieht der Client nicht, die Quote misst nur Entscheidungen.
+
+Die Funktionstabelle trägt dazu Median und Summe der Verweildauer (`card.close`). Dazu kommen drei Blöcke aus `dwell.js`: **Werkzeuge am Abschnitt** je Werkzeug und Editor, **Abschnitts-Besuche** je Person (Lese- und Schreibzeit, Anteil mit Änderung, Rückkehr) und **Reibung** als feste Kennzahl-Liste mit Nullzeilen.
 
 Zwei Auswertungen kommen aus **keinem** Event, sondern aus vorhandenen Daten:
 

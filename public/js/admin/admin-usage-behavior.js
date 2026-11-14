@@ -1,7 +1,8 @@
 // Tab «Verhalten» der Admin-Usage-Karte (docs/usage-events.md).
 // Wird im adminUsageCard-Scope gespreadet. Liest GET /admin/usage/behavior:
 // aktive User je Woche, Funktions-Nutzung (inkl. nie geoeffneter Karten),
-// KI-Ergebnisse (Jobs, Chat-Vorschlaege, Lektorat), Editor-Sitzungen, Kohorten.
+// KI-Ergebnisse (Jobs, Chat-Vorschlaege, Lektorat), Editor-Sitzungen, Kohorten,
+// Verweildauern (Karten, Werkzeuge am Abschnitt, Abschnitts-Besuche) und Reibung.
 // Privacy wie der Rest der Karte: keine Inhalte, keine Buchtitel.
 
 import { loadChart } from '../lazy-libs.js';
@@ -50,11 +51,13 @@ export const adminUsageBehaviorMethods = {
         const hit = byKey.get(f.key);
         byKey.delete(f.key);
         return { feature: f.key, label: t(f.labelKey), opens: hit?.opens || 0, users: hit?.users || 0, lastAt: hit?.lastAt || null,
-          palette: hit?.sources?.palette || 0, tile: hit?.sources?.tile || 0, sidebar: hit?.sources?.sidebar || 0 };
+          palette: hit?.sources?.palette || 0, tile: hit?.sources?.tile || 0, sidebar: hit?.sources?.sidebar || 0,
+          medianSec: hit?.medianSec ?? null, totalSec: hit?.totalSec || 0 };
       });
       // Keys, die es in der Registry nicht mehr gibt, bleiben sichtbar statt zu verschwinden.
       for (const f of byKey.values()) rows.push({ feature: f.feature, label: f.feature, opens: f.opens, users: f.users, lastAt: f.lastAt,
-        palette: f.sources?.palette || 0, tile: f.sources?.tile || 0, sidebar: f.sources?.sidebar || 0 });
+        palette: f.sources?.palette || 0, tile: f.sources?.tile || 0, sidebar: f.sources?.sidebar || 0,
+        medianSec: f.medianSec ?? null, totalSec: f.totalSec || 0 });
       return rows;
     });
   },
@@ -106,7 +109,7 @@ export const adminUsageBehaviorMethods = {
   },
 
   // Chat-Runden (ein Job je Runde), davon fertige mit und ohne Vorschlag
-  // (Server zaehlt beides, db/usage-events.js#_chatTurns).
+  // (Server zaehlt beides, db/usage-events/index.js#_chatTurns).
   adminUsageBehaviorChatTurns() {
     const b = this.adminUsageBehavior;
     const t = window.__app.t.bind(window.__app);
@@ -147,6 +150,31 @@ export const adminUsageBehaviorMethods = {
   // Leseaktivitaet je Person (kumuliert, nicht periodisch).
   adminUsageBehaviorReading() {
     return this.adminUsageBehavior?.reading?.perUser || [];
+  },
+
+  // Werkzeuge am Abschnitt je Editor (panel.open/panel.close).
+  adminUsageBehaviorPanels() {
+    const b = this.adminUsageBehavior;
+    const t = window.__app.t.bind(window.__app);
+    return _derive(b, 'panels', () => (b.panels || []).map(p => ({
+      ...p,
+      label: t(`admin.usage.behavior.panelName.${p.panel}`),
+      editorLabel: p.editor ? t(`admin.usage.behavior.editor.${p.editor}`) : '—',
+    })));
+  },
+
+  // Abschnitts-Besuche je Person (page.view), Lese- und Schreibzeit getrennt.
+  adminUsageBehaviorPageViews() {
+    return this.adminUsageBehavior?.pageViews?.perUser || [];
+  },
+
+  // Reibung: feste Kennzahlen in Server-Reihenfolge, auch bei 0.
+  adminUsageBehaviorFriction() {
+    const b = this.adminUsageBehavior;
+    const t = window.__app.t.bind(window.__app);
+    return _derive(b, 'friction', () => (b.friction || []).map(r => ({
+      ...r, label: t(`admin.usage.behavior.frictionRow.${r.key}`),
+    })));
   },
 
   async _adminUsageRenderBehaviorCharts(data) {

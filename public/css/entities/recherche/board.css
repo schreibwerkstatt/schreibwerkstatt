@@ -78,11 +78,13 @@ textarea.recherche-input { resize: vertical; min-height: 2.75rem; }
 .recherche-primary:hover:not(:disabled) { filter: brightness(1.08); }
 
 /* ── Liste + Items ──────────────────────────────────────────────────────── */
-/* Einspaltige Liste: ruhige, gut lesbare Schnipsel untereinander. */
+/* Einspaltige Liste im Zeilen-Look der Katalog-Listen (Figuren, Schauplätze,
+   Welt-Fakten, components entity-list.css): Akzent links, Trennlinie unten,
+   Hover tönt die Zeile — keine Einzelkästen mit Schatten. */
 .recherche-list {
   display: flex;
   flex-direction: column;
-  gap: var(--space-6);
+  gap: 0;
   transition: opacity var(--transition-fast);
 }
 /* Refetch bei Filter/Sort/Suche: Liste bleibt sichtbar, wird nur gedimmt und
@@ -93,23 +95,24 @@ textarea.recherche-input { resize: vertical; min-height: 2.75rem; }
 }
 
 .research-item {
-  border: 1px solid var(--color-border);
   border-left: 3px solid var(--card-accent);
+  border-bottom: 1px solid var(--color-border);
   border-radius: var(--radius-none);
-  background: var(--color-card-bg);
-  padding: var(--space-6) var(--space-sm);
-  transition: box-shadow var(--transition-fast), border-color var(--transition-fast);
+  padding: var(--space-sm);
 }
-.research-item:hover {
-  box-shadow: var(--shadow-sm);
-  border-color: var(--color-border-input);
-  border-left-color: var(--card-accent);
+@media (hover: hover) {
+  .research-item:not(.research-item--open):hover { background: var(--color-hover); }
 }
 .research-item--pinned { background: var(--color-bg); }
 .research-item--archived { opacity: var(--opacity-disabled); }
-/* Die aufgeklappte Zeile (recherche-item-detail.html) hebt sich ab und zeigt
-   ihre Aktionen (Stift, ⋯) ohne Hover — Auswahl-Delta zu components/hover-reveal.css. */
-.research-item--open { border-color: var(--card-accent); }
+/* Aufgeklappt (recherche-item-detail.html): der Kopf ist getönt wie die
+   ausgewählte Katalog-Zeile, das Detail darunter nicht; die Aktionen (⋯) stehen
+   ohne Hover — Auswahl-Delta zu components/hover-reveal.css. */
+.research-item--open .research-item-head {
+  background: var(--color-hover);
+  margin: calc(-1 * var(--space-sm)) calc(-1 * var(--space-sm)) 0;
+  padding: var(--space-sm);
+}
 .research-item--open .hover-reveal { opacity: 1; }
 
 /* Kurzes Hervorheben beim Springen aus dem Referenz-Slot zum Schnipsel. */
@@ -162,9 +165,6 @@ textarea.recherche-input { resize: vertical; min-height: 2.75rem; }
   font-size: inherit;
   text-align: left;
 }
-
-/* Chevron-Knopf am Zeilenende: klappt zum Lesen auf/zu (Tastaturweg des
-   Listen-Anrisses, DESIGN.md). Nackter Knopf um die .history-chevron-Rotation. */
 
 .research-item-actions {
   position: relative;

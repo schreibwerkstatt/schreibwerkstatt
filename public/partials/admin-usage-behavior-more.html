@@ -6,7 +6,7 @@
 <div class="table-scroll">
   <table class="data-table"
          x-data="sortableTable({ rows: () => adminUsageBehaviorFeatures(), defaultKey: 'opens', defaultDir: 'desc', persistKey: 'admin.usage.behavior.features',
-           types: { opens: 'number', users: 'number', palette: 'number', tile: 'number', sidebar: 'number', lastAt: 'date' } })">
+           types: { opens: 'number', users: 'number', palette: 'number', tile: 'number', sidebar: 'number', medianSec: 'number', totalSec: 'number', lastAt: 'date' } })">
     <thead>
       <tr>
         <th x-bind="sortTh('label')" x-text="$app.t('admin.usage.feature.key')"></th>
@@ -15,6 +15,8 @@
         <th x-bind="sortTh('palette')" x-text="$app.t('admin.usage.behavior.col.palette')"></th>
         <th x-bind="sortTh('tile')" x-text="$app.t('admin.usage.behavior.col.tile')"></th>
         <th x-bind="sortTh('sidebar')" x-text="$app.t('admin.usage.behavior.col.sidebar')"></th>
+        <th x-bind="sortTh('medianSec')" x-text="$app.t('admin.usage.behavior.col.medianDwell')"></th>
+        <th x-bind="sortTh('totalSec')" x-text="$app.t('admin.usage.behavior.col.totalTime')"></th>
         <th x-bind="sortTh('lastAt')" x-text="$app.t('admin.usage.feature.lastUsed')"></th>
       </tr>
     </thead>
@@ -27,6 +29,8 @@
           <td class="admin-usage-cell-num" x-text="adminUsageInt(f.palette)"></td>
           <td class="admin-usage-cell-num" x-text="adminUsageInt(f.tile)"></td>
           <td class="admin-usage-cell-num" x-text="adminUsageInt(f.sidebar)"></td>
+          <td class="admin-usage-cell-num" x-text="f.medianSec == null ? '—' : adminUsageHhmm(f.medianSec)"></td>
+          <td class="admin-usage-cell-num" x-text="f.totalSec ? adminUsageHhmm(f.totalSec) : '—'"></td>
           <td x-text="adminUsageDate(f.lastAt)"></td>
         </tr>
       </template>
@@ -83,6 +87,9 @@
   </table>
 </div>
 <div x-show="!adminUsageBehaviorEditors().length && !adminUsageBehaviorTools().length" class="muted-msg muted-msg--sm" x-text="$app.t('admin.usage.empty')"></div>
+
+<!-- Werkzeuge am Abschnitt, Abschnitts-Besuche, Reibung -->
+<div id="partial-admin-usage-behavior-flow"></div>
 
 <!-- Anlegen und Teilen: im Buch Entstandenes, geteilte Links, Kommentar-Aktionen -->
 <h3 class="admin-usage-h3--spaced" x-text="$app.t('admin.usage.behavior.creation')"></h3>

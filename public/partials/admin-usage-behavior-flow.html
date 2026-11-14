@@ -1,0 +1,101 @@
+<!-- Admin-Usage «Verhalten», dritter Teil: Werkzeuge am Abschnitt, Abschnitts-
+     Besuche, Reibung (docs/usage-events.md#verweildauer, #reibung). Eingebettet in
+     admin-usage-behavior-more.html (gleicher Scope). Dauern = sichtbare Zeit. -->
+
+<!-- Werkzeuge am Abschnitt: Leiste, Befundliste, Suchen, Kommentare, Revisionen -->
+<h3 class="admin-usage-h3--spaced" x-text="$app.t('admin.usage.behavior.panels')"></h3>
+<p class="muted-msg muted-msg--sm" x-text="$app.t('admin.usage.behavior.panelsHint')"></p>
+<div class="table-scroll" x-show="adminUsageBehaviorPanels().length">
+  <table class="data-table"
+         x-data="sortableTable({ rows: () => adminUsageBehaviorPanels(), defaultKey: 'opens', defaultDir: 'desc', persistKey: 'admin.usage.behavior.panels',
+           types: { opens: 'number', medianSec: 'number', totalSec: 'number', users: 'number' } })">
+    <thead>
+      <tr>
+        <th x-bind="sortTh('label')" x-text="$app.t('admin.usage.behavior.col.tool')"></th>
+        <th x-bind="sortTh('editorLabel')" x-text="$app.t('admin.usage.behavior.col.editor')"></th>
+        <th x-bind="sortTh('opens')" x-text="$app.t('admin.usage.behavior.col.opens')"></th>
+        <th x-bind="sortTh('medianSec')" x-text="$app.t('admin.usage.behavior.col.medianDwell')"></th>
+        <th x-bind="sortTh('totalSec')" x-text="$app.t('admin.usage.behavior.col.totalTime')"></th>
+        <th x-bind="sortTh('users')" x-text="$app.t('admin.usage.behavior.col.users')"></th>
+      </tr>
+    </thead>
+    <tbody>
+      <template x-for="p in sorted" :key="p.panel + ':' + p.editor">
+        <tr>
+          <td x-text="p.label"></td>
+          <td x-text="p.editorLabel"></td>
+          <td class="admin-usage-cell-num" x-text="adminUsageInt(p.opens)"></td>
+          <td class="admin-usage-cell-num" x-text="p.medianSec == null ? '—' : adminUsageHhmm(p.medianSec)"></td>
+          <td class="admin-usage-cell-num" x-text="p.totalSec ? adminUsageHhmm(p.totalSec) : '—'"></td>
+          <td class="admin-usage-cell-num" x-text="adminUsageInt(p.users)"></td>
+        </tr>
+      </template>
+    </tbody>
+  </table>
+</div>
+<div x-show="!adminUsageBehaviorPanels().length" class="muted-msg muted-msg--sm" x-text="$app.t('admin.usage.empty')"></div>
+
+<!-- Abschnitts-Besuche je Person: Lese- und Schreibzeit, Änderungen, Rückkehr -->
+<h3 class="admin-usage-h3--spaced" x-text="$app.t('admin.usage.behavior.pageViews')"></h3>
+<p class="muted-msg muted-msg--sm" x-text="$app.t('admin.usage.behavior.pageViewsHint')"></p>
+<div class="table-scroll" x-show="adminUsageBehaviorPageViews().length">
+  <table class="data-table"
+         x-data="sortableTable({ rows: () => adminUsageBehaviorPageViews(), defaultKey: 'views', defaultDir: 'desc', persistKey: 'admin.usage.behavior.pageViews',
+           types: { views: 'number', pages: 'number', readSec: 'number', editSec: 'number', changedShare: 'number', returnShare: 'number' } })">
+    <thead>
+      <tr>
+        <th x-bind="sortTh('email')" x-text="$app.t('admin.users.email')"></th>
+        <th x-bind="sortTh('views')" x-text="$app.t('admin.usage.behavior.col.views')"></th>
+        <th x-bind="sortTh('pages')" x-text="$app.t('admin.usage.behavior.col.sections')"></th>
+        <th x-bind="sortTh('readSec')" x-text="$app.t('admin.usage.behavior.col.readTime')"></th>
+        <th x-bind="sortTh('editSec')" x-text="$app.t('admin.usage.behavior.col.editTime')"></th>
+        <th x-bind="sortTh('changedShare')" x-text="$app.t('admin.usage.behavior.col.changedShare')"></th>
+        <th x-bind="sortTh('returnShare')" x-text="$app.t('admin.usage.behavior.col.returnShare')"></th>
+      </tr>
+    </thead>
+    <tbody>
+      <template x-for="u in sorted" :key="u.email">
+        <tr>
+          <td class="admin-usage-cell-email">
+            <div x-text="u.displayName || u.email"></div>
+            <div class="muted-msg muted-msg--sm" x-text="u.email"></div>
+          </td>
+          <td class="admin-usage-cell-num" x-text="adminUsageInt(u.views)"></td>
+          <td class="admin-usage-cell-num" x-text="adminUsageInt(u.pages)"></td>
+          <td class="admin-usage-cell-num" x-text="adminUsageHhmm(u.readSec)"></td>
+          <td class="admin-usage-cell-num" x-text="adminUsageHhmm(u.editSec)"></td>
+          <td class="admin-usage-cell-num" x-text="adminUsagePct(u.changedShare)"></td>
+          <td class="admin-usage-cell-num" x-text="adminUsagePct(u.returnShare)"></td>
+        </tr>
+      </template>
+    </tbody>
+  </table>
+</div>
+<div x-show="!adminUsageBehaviorPageViews().length" class="muted-msg muted-msg--sm" x-text="$app.t('admin.usage.empty')"></div>
+
+<!-- Reibung: Konflikte, gescheiterte Saves, Offline-Nachsenden, Verwerfen-Rückfrage.
+     Feste Kennzahl-Reihenfolge (Server), Nullzeilen bleiben stehen. -->
+<h3 class="admin-usage-h3--spaced" x-text="$app.t('admin.usage.behavior.friction')"></h3>
+<p class="muted-msg muted-msg--sm" x-text="$app.t('admin.usage.behavior.frictionHint')"></p>
+<div class="table-scroll">
+  <table class="data-table"
+         x-data="sortableTable({ rows: () => adminUsageBehaviorFriction(), defaultKey: null, persistKey: 'admin.usage.behavior.friction',
+           types: { count: 'number', users: 'number' } })">
+    <thead>
+      <tr>
+        <th x-bind="sortTh('label')" x-text="$app.t('admin.usage.behavior.col.action')"></th>
+        <th x-bind="sortTh('count')" x-text="$app.t('admin.usage.behavior.col.count')"></th>
+        <th x-bind="sortTh('users')" x-text="$app.t('admin.usage.behavior.col.users')"></th>
+      </tr>
+    </thead>
+    <tbody>
+      <template x-for="r in sorted" :key="r.key">
+        <tr :class="r.count ? '' : 'admin-usage-row--muted'">
+          <td x-text="r.label"></td>
+          <td class="admin-usage-cell-num" x-text="adminUsageInt(r.count)"></td>
+          <td class="admin-usage-cell-num" x-text="adminUsageInt(r.users)"></td>
+        </tr>
+      </template>
+    </tbody>
+  </table>
+</div>

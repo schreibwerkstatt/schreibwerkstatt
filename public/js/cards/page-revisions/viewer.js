@@ -24,6 +24,7 @@
 import { fetchJson } from '../../utils.js';
 import { tRaw } from '../../i18n.js';
 import { trackUsageEvent } from '../../features-usage.js';
+import { setPanelOpen } from '../../usage-sessions.js';
 import { contentRepo } from '../../repo/content.js';
 import { loadDiff } from '../../lazy-libs.js';
 import { renderSideBySide } from '../../page-revision-diff.js';
@@ -99,6 +100,7 @@ export const viewerMethods = {
     // immer mit 'content' starten.
     const mode = keepMode && this.viewerMode === 'diff' ? 'diff' : 'content';
     this.viewerOpen = true;
+    setPanelOpen('revisions', true);
     this.viewerRev = rev;
     this.viewerMode = mode;
     if (!keepMode) this.viewerCompare = 'prev';
@@ -194,6 +196,7 @@ export const viewerMethods = {
 
   closeViewer() {
     this._reportViewerUsage();
+    setPanelOpen('revisions', false);
     this._viewerSeq++;
     this.viewerOpen = false;
     this.viewerRev = null;

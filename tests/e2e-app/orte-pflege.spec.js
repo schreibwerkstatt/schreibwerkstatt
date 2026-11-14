@@ -73,7 +73,10 @@ test('schauplätze: anlegen, Unterort eingerückt, bearbeiten, Typ übersetzt, l
   await expect(detail.getByRole('button', { name: /Analyse-Werte übernehmen|Use analysis values/ })).toHaveCount(0);
 
   // 4) Löschen (selbst angelegt): Bestätigungsdialog, Kind fällt auf die Wurzel.
-  await stadtRow.locator('.entity-row-action.danger').click();
+  // Kein Papierkorb an der Zeile (nur verwaiste tragen einen): Weg ist das ⋯-Menü.
+  await expect(stadtRow.locator('.entity-row-action.danger')).toHaveCount(0);
+  await stadtRow.locator('button[aria-haspopup="menu"]').click({ force: true });
+  await page.locator('.context-menu[x-ref="actionMenu"]:visible').getByRole('menuitem', { name: /Löschen|Delete/ }).click();
   await page.locator('#app-confirm-dialog[open] .confirm-dialog-btn--danger').click();
   await expect(card.locator('.ort-list .entity-row', { hasText: stadtName })).toHaveCount(0);
   await expect(card.locator('.ort-list > div', { has: page.locator(`.entity-row[data-ortid="${ids.hotel}"]`) }))

@@ -8,6 +8,7 @@
 
 import { editorFindCardMethods } from '../editor/find.js';
 import { EVT } from '../events.js';
+import { setPanelOpen } from '../usage-sessions.js';
 
 export function registerEditorFindCard() {
   if (typeof window === 'undefined' || !window.Alpine) return;
@@ -54,12 +55,17 @@ export function registerEditorFindCard() {
       // mount akkumuliert).
       window.addEventListener(EVT.BOOK_CHANGED, () => this.closeFind?.(), { signal });
       window.addEventListener(EVT.VIEW_RESET,   () => this.closeFind?.(), { signal });
+
+      // Nutzungs-Event `panel.*` (usage-sessions.js): sichtbar ist der Finder
+      // nur im Edit-Modus — `findOpen` allein bleibt nach dem Verlassen stehen.
+      this.$watch(() => !!(this.findOpen && window.__app?.editMode), (on) => setPanelOpen('find', on, 'notebook'));
     },
 
     destroy() {
       if (this._findRecomputeTimer) { clearTimeout(this._findRecomputeTimer); this._findRecomputeTimer = null; }
       this._uninstallFindReflow?.();
       this._findAbort?.abort();
+      setPanelOpen('find', false);
     },
 
     ...editorFindCardMethods,

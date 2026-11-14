@@ -1534,9 +1534,12 @@ CSS: [editor/reference-slot.css](public/css/editor/reference-slot.css) (`.refere
   <button type="button" class="research-item-title text-link"
           @click="openItemForEdit(item)" x-text="item.title || kindLabel(item.kind)"></button>
   …
-  <button type="button" class="row-expand" @click="toggleDetail(item)" :aria-expanded="detailItemId === item.id" :aria-label="…">
-    <span class="history-chevron" :class="{ open: detailItemId === item.id }" aria-hidden="true"></span>
-  </button>
+  <span class="row-end">
+    <span class="research-item-actions hover-reveal"><!-- ⋯ --></span>
+    <button type="button" class="row-expand" @click="toggleDetail(item)" :aria-expanded="detailItemId === item.id" :aria-label="…">
+      <span class="history-chevron" :class="{ open: detailItemId === item.id }" aria-hidden="true"></span>
+    </button>
+  </span>
 </div>
 <template x-if="detailItemId !== item.id"><div class="research-item-preview …">…Anriss…</div></template>
 <template x-if="detailItemId === item.id"><!-- @include recherche-item-detail --></template>
@@ -1545,7 +1548,7 @@ CSS: [editor/reference-slot.css](public/css/editor/reference-slot.css) (`.refere
 **Klassen** [entities/recherche/board.css](public/css/entities/recherche/board.css) + [entities/recherche/detail.css](public/css/entities/recherche/detail.css):
 - `.research-item-text` — der Anriss: fester `-webkit-line-clamp` (3) + `overflow: hidden`; Inhalt über `itemBodyHtml` (Markdown escaped, Zitat wörtlich) — dieselbe Quelle wie die Status-Board-Karte und die aufgeklappte Zeile
 - `.research-item-body--clickable` — Kopf und Anriss klappen per Maus auf/zu, sind aber **kein** `.internal-link`: sie tragen Knöpfe und Links, die unter `role=button` für Screenreader verschwänden. Tastaturweg ist der Aufklapp-Knopf
-- `.row-expand` — der Aufklapp-Knopf (leerer `.history-chevron`-Span, `aria-expanded`), Optik ausschliesslich [components/row-expand.css](public/css/components/row-expand.css); die Karte setzt höchstens die Position (Katalog-Zeilen: [entities/entity-list.css](public/css/entities/entity-list.css))
+- `.row-expand` — der Aufklapp-Knopf (leerer `.history-chevron`-Span, `aria-expanded`), steht im [Zeilen-Ende](#zeilen-ende-row-end) `.row-end`
 - `.research-item-thumb` / `.research-item-image` — Vorschaubild, klein (`max-height: 6rem`), klappt auf
 - `.research-detail` — der aufgeklappte Teil ([recherche-item-detail.html](public/partials/recherche-item-detail.html)); `__links` oben: «Verknüpfen»/KI-Vorschlag (`__link-actions`), bestehende Verknüpfungen, Tags und Vorschläge — oben statt am Textende, damit sie bei langem Fund ohne Scrollen sichtbar sind
 - `.research-detail__text` — Lesesatz: `--font-size-reading`, `--lh-relaxed`
@@ -1563,6 +1566,40 @@ CSS: [editor/reference-slot.css](public/css/editor/reference-slot.css) (`.refere
 
 **Beispiele:** Katalog-Zeilen [figuren.html](public/partials/figuren.html), [orte-list.html](public/partials/orte-list.html), [world-facts.html](public/partials/world-facts.html); [recherche-item.html](public/partials/recherche-item.html) + [recherche-item-detail.html](public/partials/recherche-item-detail.html) + [recherche-create.html](public/partials/recherche-create.html) (geteilte Felder: [recherche-form-fields.html](public/partials/recherche-form-fields.html)), E2E: [tests/e2e-app/recherche-overview.spec.js](tests/e2e-app/recherche-overview.spec.js).
 
+
+---
+
+## Zeilen-Ende (`.row-end`)
+
+**Use:** jede aufklappbare Listenzeile mit Chevron am rechten Rand — Figuren, Schauplätze, Szenen, Welt-Fakten, Recherche (mit ⋯-Menü und Aufklapp-Knopf), Songs, Kontinuitäts-Befunde, Namens-Varianten (Zeile selbst ist der Klapp-Knopf, Chevron nur als Marker). Ziel: ⋯ und › sehen in jeder Karte gleich aus, sind gleich gross und liegen auf derselben Mittellinie wie Titel, Tags und Badges der Zeile.
+
+**Markup:**
+```html
+<div class="entity-row hover-reveal-host" …>   <!-- Kopf: align-items: center -->
+  …Titel, Tags, Badges…
+  <span class="row-end">
+    <button type="button" class="icon-btn icon-btn--ghost hover-reveal" aria-haspopup="menu" …>
+      <svg class="icon" aria-hidden="true"><use href="/icons.svg#more-horizontal"/></svg>
+    </button>
+    <button type="button" class="row-expand" :aria-expanded="…" @click="…ToggleOpen(x)" :aria-label="$app.t('common.details')">
+      <span class="history-chevron" :class="{ open: … }" aria-hidden="true"></span>
+    </button>
+  </span>
+</div>
+
+<!-- Zeile ist selbst der Klapp-Knopf (role="button"): Chevron als Marker -->
+<span class="row-end"><span class="row-expand row-expand--marker" aria-hidden="true"><span class="history-chevron" :class="{ open: … }"></span></span></span>
+```
+
+**CSS:** ausschliesslich [components/row-expand.css](public/css/components/row-expand.css).
+
+**Regeln:**
+- **⋯ und › nur im `.row-end`**, Reihenfolge fest: ⋯ zuerst, `.row-expand` als letztes Kind. Kein Chevron als nacktes Kind einer Zeile, keine karteneigene Positionierung (`position: absolute`, `top`-Korrekturen) — die Gruppe sitzt im Fluss mit `margin-left: auto`.
+- **Gleiche Kachel:** ⋯ ist immer `.icon-btn--ghost` (28×28, 16px-Icon, Ruhe-Füllung), `.row-expand` dieselben 28×28 mit 16px-Chevron in Textfarbe, ohne Ruhe-Füllung (Klapp-Marker, keine Aktion); Hover bei beiden Füllung + Rahmen.
+- **Vertikal mittig:** der Zeilenkopf, der das `.row-end` trägt, richtet mit `align-items: center` aus — nie `baseline` (ein Icon-Knopf ohne Text hat keine Grundlinie und rutscht dann nach oben).
+- **Kein Stift neben ⋯**, wo der Titel schon das Bearbeiten öffnet ([Werkstatt-Bedienvertrag](#werkstatt-bedienvertrag)); «Bearbeiten» steht als erster Menü-Eintrag.
+
+Gegatet durch [tests/unit/row-end-single-place.test.mjs](tests/unit/row-end-single-place.test.mjs).
 ---
 
 ## Status-Board (Kanban einer Listen-Karte)

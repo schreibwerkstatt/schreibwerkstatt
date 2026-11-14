@@ -83,7 +83,7 @@ test('Verhalten mit Daten: Vorschlaege, Jobs, nie geoeffnete Funktionen, Kohorte
     c.adminUsageBehavior = {
       activity: { activeUsers: 2, weekly: [{ week: '2026-10-26', activeUsers: 2, activeSeconds: 3600, activeDays: 3 }] },
       sessions: 5, logins: 2, booksCreated: 1,
-      features: [{ feature: 'plot', opens: 4, users: 1, lastAt: '2026-10-30T10:00:00.000Z', sources: { palette: 3, tile: 1 } }],
+      features: [{ feature: 'plot', opens: 4, users: 1, lastAt: '2026-10-30T10:00:00.000Z', sources: { palette: 3, tile: 1 }, medianSec: 125, totalSec: 600 }],
       jobs: [{ type: 'check', queued: 3, done: 2, error: 1, cancelled: 0, users: 1, medianSec: 40 }],
       proposals: [{ chat: 'plot', kind: 'beat_update', applied: 3, discarded: 1, reopened: 0, undone: 0, users: 1 }],
       lektorat: { runs: 1, users: 1, shown: 10, selected: 6, applied: 5, skipped: 1 },
@@ -91,6 +91,10 @@ test('Verhalten mit Daten: Vorschlaege, Jobs, nie geoeffnete Funktionen, Kohorte
       hours: Array.from({ length: 24 }, (_, h) => (h === 9 ? 2 : 0)),
       tools: [{ event: 'dictation.start', count: 4, users: 1 }],
       cohorts: [{ email: 'neu@test.dev', displayName: 'Neu', startDate: '2026-10-01', activeDays7: 3, activeDays30: 9, activeDaysTotal: 12, activeWeeks: 4, lastActive: '2026-10-30' }],
+      panels: [{ panel: 'ideen', editor: 'notebook', opens: 7, users: 1, medianSec: 300, totalSec: 2400 }],
+      pageViews: { total: { views: 9, pages: 4, readSec: 600, editSec: 1200 },
+        perUser: [{ email: 'leserin@test.dev', displayName: 'Leserin', views: 9, pages: 4, readSec: 600, editSec: 1200, changedShare: 0.5, returnShare: 0.25 }] },
+      friction: [{ key: 'conflict.merged', count: 2, users: 1 }, { key: 'discard.keep', count: 0, users: 0 }],
     };
   });
   await expect(pane.locator('tr', { hasText: 'beat_update' })).toContainText('75 %');
@@ -99,6 +103,11 @@ test('Verhalten mit Daten: Vorschlaege, Jobs, nie geoeffnete Funktionen, Kohorte
   await expect(pane.locator('tr.admin-usage-row--muted').first()).toBeVisible();
   await expect(pane.locator('tr', { hasText: 'neu@test.dev' })).toBeVisible();
   await expect(pane.locator('canvas').first()).toBeVisible();
+  // Dritter Teil (admin-usage-behavior-flow): Werkzeuge, Abschnitts-Besuche, Reibung.
+  await expect(pane.locator('tr', { hasText: /Ideen zum Abschnitt|Ideas for the section/ })).toContainText('7');
+  await expect(pane.locator('tr', { hasText: 'leserin@test.dev' })).toContainText('25 %');
+  await expect(pane.locator('tr', { hasText: /still zusammengeführt|merged silently/ })).toContainText('2');
+  await expect(pane.locator('tr.admin-usage-row--muted', { hasText: /behalten|kept/ })).toBeVisible();
 });
 
 test('Abrechnung mit Daten: KPIs, Modell- und Tagestabelle, Abweichung markiert', async ({ page }) => {
