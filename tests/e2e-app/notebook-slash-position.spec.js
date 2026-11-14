@@ -114,6 +114,21 @@ async function geometry(page) {
   });
 }
 
+// Diagnose für die Fehlermeldung: jeder scrollende Vorfahre des Triggers mit
+// Position und Grenze — zeigt, ob `scrollIntoView` an einer Scroll-Grenze hing.
+async function scrollState(page) {
+  return page.evaluate(() => {
+    const out = [];
+    for (let el = document.getElementById('slash-trigger')?.parentElement; el; el = el.parentElement) {
+      if (el.scrollHeight > el.clientHeight + 1) {
+        const id = el.id ? '#' + el.id : '.' + [...el.classList].slice(0, 2).join('.');
+        out.push(`${el.tagName.toLowerCase()}${id} top=${Math.round(el.scrollTop)}/${el.scrollHeight - el.clientHeight}`);
+      }
+    }
+    return out.join(' | ') || 'kein Scroll-Vorfahre';
+  });
+}
+
 function expectInsideViewport(g, label) {
   expect(g.shown, `${label}: Menü sichtbar`).toBe(true);
   expect(g.menu.height, `${label}: Menü hat Höhe`).toBeGreaterThan(0);
@@ -150,8 +165,12 @@ test.describe('Notebook-Slash-Menü — Mobile', () => {
     await scrollTriggerTo(page, 'start');
     await openSlash(page);
     g = await geometry(page);
-    expect(g.block.top, 'oben: Trigger wirklich an der oberen Kante')
-      .toBeLessThan(200);
+    // Vorbedingung semantisch statt als feste Pixelzahl: oberhalb des Blocks
+    // passt die volle Liste nicht hin. Wie nah `scrollIntoView` den Block an die
+    // Kante bringt, hängt von Scroll-Grenzen der Höhenkette ab und schwankt
+    // zwischen Runnern um einige Pixel — der Flip-Fall ist es trotzdem.
+    expect(g.block.top, `oben: oberhalb kein Platz für die Liste — ${await scrollState(page)}`)
+      .toBeLessThan(g.menu.height);
     expectInsideViewport(g, 'oben');
     expectAnchored(g, 'oben');
     expect(g.menu.top, 'oben: Menü liegt unter dem Block (Flip)')
