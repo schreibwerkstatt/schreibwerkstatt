@@ -85,6 +85,11 @@ test('Ctrl+Enter in der Fassungsansicht: wiederherstellen, kein Lektorat', async
   // Gegenprobe: Ansicht zu → Ctrl+Enter startet wieder das Lektorat.
   await page.evaluate(() => window.Alpine.$data(document.querySelector('.page-revisions-bar')).$refs.viewerDialog.close());
   await expect(page.locator('dialog.revision-viewer')).toBeHidden();
+  // `close()` blendet sofort aus, das `close`-Event (→ dismissViewer →
+  // viewerOpen=false) kommt erst einen Task später. Bis dahin fängt der
+  // Restore-Griff der Ansicht Ctrl+Enter noch ab.
+  await expect.poll(() => page.evaluate(() =>
+    window.Alpine.$data(document.querySelector('.page-revisions-bar')).viewerOpen)).toBe(false);
   await page.keyboard.press('Control+Enter');
   await expect.poll(() => page.evaluate(() => window.__ranCheck)).toBe(1);
   expect(await page.evaluate(() => window.__restored)).toBe(1);
