@@ -13,6 +13,9 @@ const { bootstrap } = require('./_helpers/setup');
 
 process.env.SESSION_SECRET = process.env.SESSION_SECRET || 'test-secret';
 const ADMIN = 'admin@test.dev';
+// Pro-User-Kennzahlen zählen nur Nicht-Admins (db/metrics-queries.js) — der
+// Admin stellt den Token aus, der Writer liefert die Pro-User-Werte.
+const WRITER = 'writer@test.dev';
 
 let ctx; let db; let server; let baseUrl; let apiTokens;
 
@@ -23,6 +26,8 @@ test.before(async () => {
   const NOW = new Date().toISOString();
   db.prepare(`INSERT INTO app_users (email, display_name, status, global_role, created_at)
               VALUES (?, 'Admin', 'active', 'admin', ?)`).run(ADMIN, NOW);
+  db.prepare(`INSERT INTO app_users (email, display_name, status, global_role, created_at)
+              VALUES (?, 'Writer', 'active', 'user', ?)`).run(WRITER, NOW);
 
   const app = express();
   app.use((req, _res, next) => {
@@ -85,6 +90,9 @@ test('include_users: Scope gesetzt, Audit geschrieben, Pro-User-Werte geliefert'
   const j = await (await get('/metrics.json', created.plain_token)).json();
   assert.equal(j.includes_users, true);
   const seen = j.metrics.find(m => m.name === 'sw_user_writing_seconds_today');
-  assert.ok(seen?.samples.some(s => s.labels.user === ADMIN));
-  assert.match(await (await get('/metrics', created.plain_token)).text(), /^sw_user_books\{user="admin@test.dev"/m);
+  assert.ok(seen?.samples.some(s => s.labels.user === WRITER));
+  assert.ok(!seen?.samples.some(s => s.labels.user === ADMIN), 'Admin darf keine Pro-User-Werte liefern');
+  const text = await (await get('/metrics', created.plain_token)).text();
+  assert.match(text, /^sw_user_books\{user="writer@test.dev"/m);
+  assert.doesNotMatch(text, /user="admin@test.dev"/);
 });
