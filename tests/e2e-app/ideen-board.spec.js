@@ -820,8 +820,12 @@ test('ideen-board: Text öffnet Bearbeiten, Menü löscht, Rückgängig holt zur
   await menu.getByRole('menuitem', { name: /In Arbeit/ }).click();
   await expect(card.locator('.ideen-board-cell--in_arbeit .idee-board-card', { hasText: 'Undo-Probe' })).toHaveCount(1);
   await card.locator('.card-title').click();
+  await expect(card.locator('.card-header').getByRole('button', { name: 'Rückgängig', exact: true })).toBeEnabled();
   await page.keyboard.press('Control+z');
   await expect(card.locator('.ideen-board-cell--offen .idee-board-card', { hasText: 'Undo-Probe' })).toHaveCount(1);
+  // Undo verschiebt optimistisch, der Request läuft noch; währenddessen verwirft
+  // der Kern (board-history.js) jeden weiteren Schritt. Erst wenn Redo wieder geht:
+  await expect(card.locator('.card-header').getByRole('button', { name: 'Wiederherstellen', exact: true })).toBeEnabled();
   await page.keyboard.press('Control+Shift+z');
   await expect(card.locator('.ideen-board-cell--in_arbeit .idee-board-card', { hasText: 'Undo-Probe' })).toHaveCount(1);
 
