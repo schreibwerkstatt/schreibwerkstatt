@@ -23,6 +23,16 @@
             "statusMessage": "Nur-main-Regel pruefen"
           }
         ]
+      },
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node scripts/hooks/release-guard.js",
+            "statusMessage": "Offenen Release schuetzen"
+          }
+        ]
       }
     ],
     "PostToolUse": [

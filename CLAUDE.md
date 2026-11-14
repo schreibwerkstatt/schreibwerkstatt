@@ -92,6 +92,7 @@ Diese Regeln setzt ein Hook ([.claude/settings.json](.claude/settings.json), [sc
 | Klapp-Panel (`x-bind="panel"`) ohne eigenes Box-Styling — Abstand/Layout ans Kind | [collapsible-panel-style.test.mjs](tests/unit/collapsible-panel-style.test.mjs) | [DESIGN.md](DESIGN.md#klappbarer-section-toggle-accordion) |
 | Editor-/Chat-/Kommentar-Mehrdeutigkeit im Prompt | `prompt-disambiguation.js` (injiziert Hinweis) | oben, „Bevor du anfängst" |
 | Nur auf `main` — kein Branch, kein Worktree, kein Subagent mit `isolation: "worktree"` | `main-only-guard.js` **blockt** | unten, „Arbeitsweise" |
+| Offener Release (`release:`-Commit vor `origin/main`, ohne `v*`-Tag) gehört `/release`: kein Push auf main, kein Rebase/Reset dahinter | `release-guard.js` **blockt** | [release.md](.claude/commands/release.md#offener-release) |
 
 Ein Hook warnt, er lehrt nicht: **die Alternative steht im Volltext**, und wer eine dieser Regeln ändern will, liest dort zuerst die Begründung.
 
