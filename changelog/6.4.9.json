@@ -1,0 +1,41 @@
+{
+  "version": "6.4.9",
+  "date": "2026-11-14",
+  "entries": [
+    {
+      "kind": "verbessert",
+      "de": "Notebook-Editor: Enter und Rücktaste reagieren in langen Abschnitten spürbar schneller. Auch mit offenen Lektorat-Befunden neben dem Text bleibt das Tippen flüssig.",
+      "en": "Notebook editor: Enter and Backspace respond noticeably faster in long sections. Typing stays smooth even with editing findings open next to the text."
+    },
+    {
+      "kind": "verbessert",
+      "de": "Notebook-Editor, Befund oder Chat-Vorschlag übernehmen: der Cursor bleibt an seiner Stelle und du kannst sofort weitertippen. Vorher sprang er an den Anfang des Abschnitts.",
+      "en": "Notebook editor, accepting a finding or chat suggestion: the cursor stays where it was and you can keep typing right away. Before, it jumped to the start of the section."
+    },
+    {
+      "kind": "verbessert",
+      "de": "Nachrichtenverlauf: Enter am Ende einer kursiven Nachricht schreibt die nächste Zeile ebenfalls kursiv.",
+      "en": "Message thread: pressing Enter at the end of an italic message keeps the next line italic too."
+    },
+    {
+      "kind": "behoben",
+      "de": "Notebook-Editor: ein Abschnitt, der nur ein Bild enthält, liess sich nicht speichern («Leerer Text»). Er speichert jetzt und zeigt das Bild in der Leseansicht.",
+      "en": "Notebook editor: a section containing only an image could not be saved (“Empty text”). It now saves and shows the image in reading view."
+    },
+    {
+      "kind": "behoben",
+      "de": "Notebook-Editor: nach «Alles markieren» und Tippen stand der neue Text ausserhalb jedes Absatzes, und eine leere Zeile blieb zurück.",
+      "en": "Notebook editor: after “Select all” and typing, the new text ended up outside any paragraph and an empty line was left behind."
+    },
+    {
+      "kind": "behoben",
+      "de": "Notebook-Editor: Text aus einem Zwischentitel in einen Absatz gezogen behielt die grosse Titelschrift.",
+      "en": "Notebook editor: text dragged from a heading into a paragraph kept the large heading font."
+    },
+    {
+      "kind": "behoben",
+      "de": "Notebook-Editor: Strg/Cmd+S während der Frage «Änderungen verwerfen?» speicherte den Text trotzdem, der danach verworfen sein sollte.",
+      "en": "Notebook editor: pressing Ctrl/Cmd+S while “Discard changes?” was open still saved the text you were about to discard."
+    }
+  ]
+}

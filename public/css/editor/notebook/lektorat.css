@@ -35,8 +35,13 @@
     margin: 0;
     border-radius: var(--radius-md);
   }
+  /* Eigener Stapelkontext: ohne ihn malt Chromium die scrollende Befundliste
+     bei jeder Taste im Editor daneben komplett neu (gemessen, 40 Befunde,
+     34K-Abschnitt, 4× gedrosselt: Paint 10 → 4 ms je Taste). Schneidet nichts
+     ab — der Scroll-Container tut das ohnehin. */
   .lektorat-split-findings {
     padding-right: var(--space-xs);
+    isolation: isolate;
   }
 }
 

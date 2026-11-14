@@ -19,6 +19,7 @@ import { conflictText } from '../../editor/shared/conflict-text.js';
 import { stripLektoratMarks } from '../../editor/shared/html-clean.js';
 import { isNoChange } from '../../editor/shared/save-pipeline.js';
 import { isOfflineError } from './blocks.js';
+import { isEmptyManuscript } from '../../editor/shared/empty-content.js';
 
 // Wie lange der „gespeichert"-Status am Block/Outline-Punkt stehen bleibt.
 // Danach wird `savedAt` aktiv genullt — ein `Date.now()`-Vergleich im Template
@@ -32,18 +33,9 @@ const SAVE_ALL_STUCK = new Set(['conflict', 'error', 'offline']);
 // schneller, als hier gemergt wird, übernimmt der nächste Autosave.
 const MAX_MERGE_ROUNDS = 3;
 
-// Elemente, die einen Abschnitt ohne Text trotzdem füllen: ein Abschnitt nur
-// mit Bild, Tabelle oder Trennlinie ist kein versehentlich geleerter Block.
-const NON_TEXT_CONTENT_SEL = 'img, table, hr, pre, figure, svg, video, audio, iframe, object, embed';
-
-// Leer-Block-Schutz (Invariante 7): weder Text noch Bild/Tabelle/Trenner. Pure
-// (DOMParser, kein Live-DOM) und darum unit-testbar.
-export function isEmptyManuscript(html) {
-  if (htmlToText(html).trim()) return false;
-  if (typeof DOMParser === 'undefined') return true;
-  const doc = new DOMParser().parseFromString(html || '', 'text/html');
-  return !doc.body?.querySelector(NON_TEXT_CONTENT_SEL);
-}
+// Leer-Block-Schutz (Invariante 7): editor/shared/empty-content.js, dieselbe
+// Definition wie im Notebook-Editor.
+export { isEmptyManuscript };
 
 // Konflikt-Wortlaut (Gerät vs. User): shared/conflict-text.js. Die drei
 // Auftritte hier (saveError-Hinweis, Statuszeile, Block-Banner) unterscheiden

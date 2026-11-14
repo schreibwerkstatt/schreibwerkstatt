@@ -233,7 +233,7 @@ function dispatchHistoryInput(el, inputType) {
 // `outerHTML`; reiner Leerraum zwischen Blöcken als eigener Eintrag). `html`
 // ist daraus abgeleitet. Zwei Gewinne:
 //   - Restore ersetzt nur die Blöcke, in denen sich Ausgangs- und Zielstand
-//     unterscheiden (restorePartial). Ein Undo ändert fast immer ein, zwei
+//     unterscheiden (swapChangedBlocks). Ein Undo ändert fast immer ein, zwei
 //     Absätze — ein komplettes Neu-Einhängen kostete auf einem 34K-Abschnitt
 //     Parse + Stil + Layout des ganzen Texts und riss alle Highlight-Ranges ab.
 //   - Unveränderte Blöcke teilen sich über alle Snapshots denselben String
@@ -275,15 +275,49 @@ function makeSnap(blocks, html, caretOffset) {
 // inert geparst und am Snapshot gemerkt.
 function blocksOf(snap, doc) {
   if (snap.blocks) return snap.blocks;
-  if (snap._parsed !== undefined) return snap._parsed;
-  let blocks = null;
+  if (snap._parsed === undefined) snap._parsed = htmlToBlocks(snap.html, doc);
+  return snap._parsed;
+}
+
+// Top-Level-Blöcke eines HTML-Strings (Form wie `serializeBlocks`) oder null.
+export function htmlToBlocks(html, doc) {
   try {
     const t = doc.createElement('template');
-    t.innerHTML = snap.html || '';
-    blocks = t.content ? serializeBlocks(t.content) : null;
-  } catch { blocks = null; }
-  snap._parsed = blocks;
-  return blocks;
+    t.innerHTML = html || '';
+    return t.content ? serializeBlocks(t.content) : null;
+  } catch { return null; }
+}
+
+// In `el` (Inhalt = Blöcke `a`) nur die von `b` abweichenden Blöcke tauschen;
+// die neuen laufen vorher losgelöst durch `mountHtml`. → { nodes, oldText,
+// after, before } oder null (dann komplett einhängen). Konsumenten: Restore
+// hier, Übernahmen im Notebook-Edit-Modus (notebook/edit/patch-html.js).
+export function swapChangedBlocks(el, a, b, mountHtml) {
+  const doc = el.ownerDocument;
+  if (!a || !b || !doc) return null;
+  const kids = el.childNodes;
+  // Live-DOM muss dem Ausgangsstand entsprechen, sonst trifft der Index nicht.
+  if (kids.length !== a.length) return null;
+  const { pre, suf } = commonAffix(a, b, (i, j) => sameContent(a[i], b[j]));
+  const insert = b.slice(pre, b.length - suf);
+  // Trennlinie als letzter Block: die Pipeline hängt dahinter einen
+  // Schreib-Absatz an (Caret-Slot) — das kann nur das komplette Einhängen.
+  if (suf === 0 && /^<hr[\s>]/i.test(b[b.length - 1] || '')) return null;
+  let nodes = [];
+  if (insert.length) {
+    const scratch = doc.createElement('div');
+    mountHtml(scratch, insert.join(''));
+    // Die Pipeline hat Blöcke ergänzt oder verschmolzen → nicht 1:1 tauschbar.
+    if (scratch.childNodes.length !== insert.length) return null;
+    nodes = Array.from(scratch.childNodes);
+  }
+  const removed = Array.prototype.slice.call(kids, pre, a.length - suf);
+  const after = kids[a.length - suf] ?? null;
+  const before = pre > 0 ? kids[pre - 1] : null;
+  const oldText = textOfNodes(removed);
+  for (const n of removed) n.remove();
+  for (const n of nodes) el.insertBefore(n, after);
+  return { nodes, oldText, after, before };
 }
 
 function sameSnapContent(a, b) {
@@ -397,41 +431,6 @@ export function createEditHistory({
     notify();
   }
 
-  // Nur die Blöcke austauschen, in denen sich `from` (= Live-DOM) und `snap`
-  // unterscheiden. Die neuen Blöcke laufen in einem losgelösten Container durch
-  // dieselbe `mountHtml`-Pipeline; erst wenn das glatt ging, wird das Live-DOM
-  // angefasst. null = nicht anwendbar → Aufrufer hängt komplett neu ein.
-  function restorePartial(el, from, snap) {
-    const doc = el.ownerDocument;
-    if (!from || !doc) return null;
-    const a = blocksOf(from, doc);
-    const b = blocksOf(snap, doc);
-    if (!a || !b) return null;
-    const kids = el.childNodes;
-    // Live-DOM muss dem Ausgangsstand entsprechen, sonst trifft der Index nicht.
-    if (kids.length !== a.length) return null;
-    const { pre, suf } = commonAffix(a, b, (i, j) => sameContent(a[i], b[j]));
-    const insert = b.slice(pre, b.length - suf);
-    // Trennlinie als letzter Block: die Pipeline hängt dahinter einen
-    // Schreib-Absatz an (Caret-Slot) — das kann nur das komplette Einhängen.
-    if (suf === 0 && /^<hr[\s>]/i.test(b[b.length - 1] || '')) return null;
-    let nodes = [];
-    if (insert.length) {
-      const scratch = doc.createElement('div');
-      mountHtml(scratch, insert.join(''));
-      // Die Pipeline hat Blöcke ergänzt oder verschmolzen → nicht 1:1 tauschbar.
-      if (scratch.childNodes.length !== insert.length) return null;
-      nodes = Array.from(scratch.childNodes);
-    }
-    const removed = Array.prototype.slice.call(kids, pre, a.length - suf);
-    const after = kids[a.length - suf] ?? null;
-    const before = pre > 0 ? kids[pre - 1] : null;
-    const oldText = textOfNodes(removed);
-    for (const n of removed) n.remove();
-    for (const n of nodes) el.insertBefore(n, after);
-    return { nodes, oldText, after, before };
-  }
-
   function restore(from, snap, inputType) {
     const el = getRoot();
     if (!el || !snap) return;
@@ -444,7 +443,10 @@ export function createEditHistory({
         else restoreCaretAtOffset(el, snap.caretOffset);
       };
       let part = null;
-      try { part = restorePartial(el, from, snap); } catch { part = null; }
+      // Nur die Blöcke tauschen, in denen sich `from` (= Live-DOM) und `snap`
+      // unterscheiden; null → komplett neu einhängen.
+      const doc0 = el.ownerDocument;
+      try { part = from && doc0 ? swapChangedBlocks(el, blocksOf(from, doc0), blocksOf(snap, doc0), mountHtml) : null; } catch { part = null; }
       if (part) {
         const doc = el.ownerDocument;
         const newText = textOfNodes(part.nodes);

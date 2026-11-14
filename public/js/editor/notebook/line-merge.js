@@ -125,6 +125,15 @@ export function deleteRangeClean(root) {
   const range = sel.getRangeAt(0);
   if (range.collapsed || !root.contains(range.startContainer) || !root.contains(range.endContainer)) return false;
   if (inAtomic(range.startContainer, root) || inAtomic(range.endContainer, root)) return false;
+  // Firefox legt Strg+A an die Wurzel selbst (root, 0)…(root, n): auf Anfang
+  // des ersten bzw. Ende des letzten Blocks ziehen, sonst findet `findBlock`
+  // keinen Randblock und der Default tippt als losen Text unter die Wurzel.
+  const first = range.startContainer === root ? root.childNodes[range.startOffset] : null;
+  if (first?.nodeType === 1) range.setStart(first, 0);
+  if (range.endContainer === root && range.endOffset > 0) {
+    const last = root.childNodes[range.endOffset - 1];
+    if (last?.nodeType === 1) range.setEnd(last, last.childNodes.length);
+  }
   const a = findBlock(range.startContainer, root);
   const b = findBlock(range.endContainer, root);
   if (!a || !b || a === b) return false;
@@ -172,6 +181,18 @@ export function deleteRangeClean(root) {
   mergeLines(receiver, source);
   if (sourceRow?.isConnected) sourceRow.remove();
   removeEmptyAncestors(after, root);
+  // War alles markiert (Strg+A), sind beide Randblöcke leer: der Empfänger
+  // braucht seinen Caret-Slot, und der Caret muss IN ihm stehen — vor einem
+  // kindlosen `<p>` setzt Chromium das nächste Zeichen als losen Text unter die
+  // Wurzel (Invariante 8, Caret-Slot).
+  if (receiver.isConnected && !(receiver.textContent || '').length && !receiver.querySelector('br, img')) {
+    receiver.replaceChildren(document.createElement('br'));
+    const r = document.createRange();
+    r.setStart(receiver, 0);
+    r.collapse(true);
+    sel.removeAllRanges();
+    sel.addRange(r);
+  }
   return true;
 }
 

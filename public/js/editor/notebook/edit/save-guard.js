@@ -14,6 +14,10 @@ import { getTabId } from '../../../tab-id.js';
 // den der User gerade verwerfen will — danach gäbe es nichts mehr zu verwerfen.
 let _discardAsking = false;
 export function setDiscardAsking(on) { _discardAsking = !!on; }
+// Auch der ausdrückliche Save (Cmd/Ctrl+S, ✓) wartet die Rückfrage ab: der
+// globale Tastengriff läuft unter dem Dialog weiter, und «Verwerfen» danach
+// liesse den eben gespeicherten Text auf dem Server stehen.
+export function isDiscardAsking() { return _discardAsking; }
 
 export const saveGuardMethods = {
   // Riegel für jeden Save, den der User nicht selbst ausgelöst hat (Autosave-

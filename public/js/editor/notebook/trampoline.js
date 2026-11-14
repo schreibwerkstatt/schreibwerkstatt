@@ -64,6 +64,7 @@ export const notebookTrampoline = {
   _onEditPaste(e) { card()?._onEditPaste(e); },
   _onEditCopy(e) { card()?._onEditCopy(e); },
   _onEditCut(e) { card()?._onEditCut(e); },
+  _onEditInput(e) { card()?._onEditInput(e); },
   _markEditDirty() { card()?._markEditDirty(); },
   // Eigener Undo-Schritt für Block-Umbauten aus der Toolbar (msg-convert.js).
   _historyPushNow() { card()?._historyPushNow(); },

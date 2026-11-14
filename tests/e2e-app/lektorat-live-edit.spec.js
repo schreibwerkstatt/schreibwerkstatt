@@ -408,11 +408,12 @@ test('Hover hebt nur hervor, Klick auf den Befundtext zeigt die Stelle; Caret au
     app.checkDone = true;
     app.startEdit();
   }, { html: filler + '<p>Ganz unten steht Ein Fhler.</p>', findings: [FINDINGS[0]] });
-  await expect.poll(() => hlSize(page, 'hard')).toBe(1);
-  const rangeTop = () => page.evaluate(() => {
-    const r = [...CSS.highlights.get('lektorat-live-hard')][0];
-    return Math.round(r.getBoundingClientRect().top);
-  });
+  // Die Stelle liegt weit unterhalb des sichtbaren Bands: markiert (registriert)
+  // ist sie erst, wenn sie in Sicht kommt (lektorat-live.js#_paintVisibleMarks).
+  await expect.poll(() => page.evaluate(() => window.__app.lektoratFindings[0].umgeschrieben === false || window.__app.lektoratFindings[0].umgeschrieben === undefined)).toBe(true);
+  await page.waitForTimeout(300);
+  expect(await hlSize(page, 'hard')).toBe(0);
+  const rangeTop = () => page.evaluate(() => Math.round(window.__app._getEditEl().lastElementChild.getBoundingClientRect().top));
   const row = page.locator('.lektorat-split-findings label.finding').first();
 
   // Maus direkt bewegen: Playwrights hover() scrollte die Zeile selbst in Sicht.
@@ -439,6 +440,8 @@ test('Hover hebt nur hervor, Klick auf den Befundtext zeigt die Stelle; Caret au
     return top >= 0 && top < page.viewportSize().height;
   }).toBe(true);
   expect(await page.evaluate(() => window.__app.selectedFindings[0])).toBe(true);
+  // In Sicht → jetzt markiert.
+  await expect.poll(() => hlSize(page, 'hard')).toBe(1);
 
   // Caret in die Stelle → aktiv; Caret in den ersten Absatz → erlischt.
   await page.evaluate(() => {

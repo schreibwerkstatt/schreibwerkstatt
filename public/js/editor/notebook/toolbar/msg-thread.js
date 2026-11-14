@@ -25,6 +25,27 @@ import { dropEmptyInline } from '../split-html.js';
 
 const BAR_GAP = 4;
 
+// Inline-Formate, die Enter am Zeilenende als Tippstil in die neue Zeile
+// mitnimmt (kursive Nachricht schreibt kursiv weiter), je mit ihrem Befehl.
+const CARRY_CMDS = { I: 'italic', EM: 'italic', B: 'bold', STRONG: 'bold', U: 'underline', S: 'strikeThrough' };
+
+// Befehle der Formathüllen zwischen Caret und Zeile, ohne Doppelte. Steht
+// der Caret hinter einem Element (`<p><i>du</i>|</p>`, z.B. nach Ende-Taste),
+// zählt dessen tiefstes letztes Kind — dort tippt der Default weiter.
+function formatCmdsAt(range, line) {
+  let node = range.startContainer;
+  if (node.nodeType === 1 && range.startOffset > 0) {
+    node = node.childNodes[range.startOffset - 1];
+    while (node?.lastChild) node = node.lastChild;
+  }
+  const cmds = [];
+  for (let n = node; n && n !== line; n = n.parentNode) {
+    const cmd = n.nodeType === 1 ? CARRY_CMDS[n.tagName] : null;
+    if (cmd && !cmds.includes(cmd)) cmds.push(cmd);
+  }
+  return cmds;
+}
+
 function caretLine() {
   const editEl = getEditEl();
   const sel = editEl ? document.getSelection() : null;
@@ -78,6 +99,11 @@ export const msgThreadMethods = {
     if (!range.collapsed) range.deleteContents();
     const name = this._typedMsgName(line, range, app);
     const atStart = caretAtBlockStart(range, line);
+    // Am Zeilenende geschnitten: die Formatierung am Caret (kursive Nachricht)
+    // schreibt in der neuen Zeile weiter, wie Enter im normalen Absatz. Als
+    // Tippstil des Browsers, nicht als leere Hülle — `<i><br></i>` hält den
+    // Caret in Chromium nicht, das erste Zeichen landete davor.
+    const carry = caretAtBlockEnd(range, line) ? formatCmdsAt(range, line) : [];
     const tailRange = document.createRange();
     tailRange.setStart(range.startContainer, range.startOffset);
     tailRange.setEnd(line, line.childNodes.length);
@@ -93,6 +119,7 @@ export const msgThreadMethods = {
     if (isEmptyMsgLine(line)) line.replaceChildren(document.createElement('br'));
     line.insertAdjacentElement('afterend', next);
     placeCaretIn(next);
+    if (isEmptyMsgLine(next)) carry.forEach((cmd) => document.execCommand(cmd, false, null));
     if (name) {
       // Eigener Undo-Schritt VOR der Umwandlung: Cmd+Z nimmt nur sie zurück,
       // «Name:» steht danach wieder als Nachricht da, die neue Zeile bleibt.

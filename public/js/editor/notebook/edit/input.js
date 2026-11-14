@@ -1,5 +1,5 @@
 // Teil von notebookEditMethods (siehe Facade edit.js).
-import { editorHost, handleEditorCopy, handleEditorCut, handleEditorPaste, mountEditorHtml, stripLektoratMarks } from './_shared.js';
+import { editorHost, handleEditorCopy, handleEditorCut, handleEditorPaste, stripLektoratMarks } from './_shared.js';
 import { countInHtml, replaceInHtmlRich, richSkipReason } from '../../../utils.js';
 import { normalizeQuotesInHtml } from '../../shared/quote-normalize/walk.js';
 import { deleteRangeClean } from '../line-merge.js';
@@ -11,6 +11,20 @@ import { markXrefsAtomic } from '../../../xrefs/xref-html.js';
 import { closestMsgLine, createMsgLine, msgKind } from '../../../messages/msg-html.js';
 import { TODO_TEXT_SEL, createTodoItem } from '../../shared/todo-html.js';
 import { ensureSlotAfter } from '../toolbar/_shared.js';
+import { patchEditorHtml } from './patch-html.js';
+import { captureBlockCaret, restoreBlockCaret } from '../../shared/block-caret.js';
+import { mapCaretOffset } from '../../shared/edit-history.js';
+
+// Blöcke, die ein Ablegen in einen Absatz/Titel hineinsetzen kann.
+const DROPPED_BLOCK_SEL = 'p, h1, h2, h3, h4, h5, h6, div';
+
+// Caret-Block zu einem `captureBlockCaret`-Ergebnis (gleiche Suche wie
+// `restoreBlockCaret`), oder null.
+function caretBlockOf(root, caret) {
+  let block = caret.bid ? [...root.children].find((c) => c.getAttribute('data-bid') === caret.bid) || null : root.firstElementChild;
+  for (let i = 0; i < caret.steps && block?.nextElementSibling; i++) block = block.nextElementSibling;
+  return block;
+}
 
 function placeCaretAtEnd(el) {
   const r = document.createRange();
@@ -34,8 +48,8 @@ export const inputMethods = {
   // `replaceInHtmlRich` → `richSkipReason` (Ersatz darf *kursiv*/**fett** und eine
   // Absatzteilung tragen). `quoteStyle` (optional, Stil des Buchs): danach die
   // Anführungszeichen ziehen wie der Server-Pfad (`_loadApplyAndSave`) — sonst
-  // blieben gerade `"` der KI im Text. Mount über `mountEditorHtml` (dieselbe
-  // Pipeline wie Undo-Restore und Merge-Spiegel). Notebook-only: im Fokusmodus
+  // blieben gerade `"` der KI im Text. Eingehängt blockweise über
+  // `_mountAcceptedHtml` (Caret, Scroll und Fokus bleiben). Notebook-only: im Fokusmodus
   // löst `_getEditEl` auf den Fokus-Container auf — dort wird nichts angefasst.
   // Liefert { ok: true } oder { ok: false, reason }.
   _applyTextReplacement(original, replacement, { quoteStyle = null } = {}) {
@@ -54,9 +68,7 @@ export const inputMethods = {
     // Vorher-Stand als eigenen Undo-Schritt einfrieren (offene Tipp-Serie
     // inklusive), sonst fasste der Debounce Tippen + Übernahme zusammen.
     this._historyPushNow?.();
-    const scrollTop = el.scrollTop;
-    mountEditorHtml(el, next);
-    el.scrollTop = scrollTop;
+    this._mountAcceptedHtml(el, html, next);
     this._markEditDirty();
     return { ok: true };
   },
@@ -82,15 +94,33 @@ export const inputMethods = {
     if (next === html) return { applied: [], skipped };
     if (quoteStyle) next = normalizeQuotesInHtml(next, quoteStyle);
     this._historyPushNow?.();
-    const scrollTop = el.scrollTop;
-    mountEditorHtml(el, next);
-    el.scrollTop = scrollTop;
+    this._mountAcceptedHtml(el, html, next);
     this._markEditDirty();
     // Übernahme sofort speichern, nicht erst nach der Autosave-Tipp-Pause.
     // Läuft schon ein Save, bleibt der eben geplante Autosave-Timer als Netz.
     if (!app.editSaving) this.quickSave('lektorat');
     const skippedSet = new Set(skipped.map(s => s.f));
     return { applied: fehler.filter(f => !skippedSet.has(f)), skipped };
+  },
+
+  // Übernommenen Stand einhängen (Abschnitts-Chat, Lektorat): nur die
+  // geänderten Blöcke tauschen (edit/patch-html.js), Scroll halten, und der
+  // Caret bleibt, wo er war — im selben Block, um die Längenänderung davor
+  // verschoben. Stand er im Editor, geht der Fokus dorthin zurück: nach dem
+  // Klick auf «Übernehmen» liegt er sonst auf dem Knopf, und Weitertippen
+  // bräuchte erst einen Klick in den Text.
+  _mountAcceptedHtml(el, oldHtml, nextHtml) {
+    const caret = captureBlockCaret(el);
+    const oldText = caret ? caretBlockOf(el, caret)?.textContent ?? null : null;
+    const scrollTop = el.scrollTop;
+    patchEditorHtml(el, oldHtml, nextHtml);
+    if (caret) {
+      el.focus({ preventScroll: true });
+      const block = caretBlockOf(el, caret);
+      if (block && oldText != null) caret.offset = mapCaretOffset(oldText, block.textContent || '', caret.offset);
+      restoreBlockCaret(el, caret);
+    }
+    el.scrollTop = scrollTop;
   },
 
   // Einfügen/Ausschneiden sind eigene Undo-Schritte: Vorher-Stand einfrieren
@@ -178,6 +208,40 @@ export const inputMethods = {
 
 
   _onEditCopy(e) { handleEditorCopy(e); },
+
+
+  // Ziehen und Ablegen im Editor (`insertFromDrop`) läuft über den Browser-
+  // Default: der verschiebt die Auswahl, bäckt dabei aber die berechneten Werte
+  // der Quelle als Inline-`style` ein und setzt aus einer Überschrift gezogenen
+  // Text als `<h2>` mitten in den Absatz. Danach hier aufräumen, nur in den
+  // Blöcken, die die abgelegte Auswahl berührt: `style` fällt, ein Block im
+  // Absatz/Titel wird zu seinem Inhalt. Notebook-only (Fokusmodus: Spec
+  // focus-editor.md, nicht angefasst).
+  _onEditInput(e) {
+    if (e?.inputType !== 'insertFromDrop' || editorHost()?.focusActive) return;
+    const editEl = this._getEditEl();
+    const sel = document.getSelection();
+    if (!editEl || !sel || sel.rangeCount === 0) return;
+    const range = sel.getRangeAt(0);
+    const top = (n) => {
+      let cur = n;
+      while (cur && cur.parentNode !== editEl) cur = cur.parentNode;
+      return cur;
+    };
+    const first = top(range.startContainer);
+    const last = top(range.endContainer);
+    if (!first || !last) return;
+    for (let b = first; b; b = b.nextSibling) {
+      if (b.nodeType === 1) {
+        b.removeAttribute('style');
+        b.querySelectorAll('[style]').forEach((el) => el.removeAttribute('style'));
+        if (/^(P|H[1-6])$/.test(b.tagName)) {
+          b.querySelectorAll(DROPPED_BLOCK_SEL).forEach((inner) => inner.replaceWith(...inner.childNodes));
+        }
+      }
+      if (b === last) break;
+    }
+  },
 
 
   // Notebook (nicht Fokusmodus): eine Auswahl über Blockgrenzen löscht der

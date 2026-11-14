@@ -1,9 +1,9 @@
 // Teil von notebookEditMethods (siehe Facade edit.js).
-import { clearDraft, clearNormalSnapshot, editorHost, findInHtml, getActiveEditorContainer, htmlToText, installEditCounter, isNoChange, isPageConflict, localeTag, mountEditorHtml, readConflictBody, readDraft, readEditorPrefs, savePage, stripLektoratMarks, tzOpts, writeDraft, writeNormalSnapshot } from './_shared.js';
+import { clearDraft, clearNormalSnapshot, editorHost, findInHtml, getActiveEditorContainer, htmlToText, installEditCounter, isEmptyManuscript, isNoChange, isPageConflict, localeTag, mountEditorHtml, readConflictBody, readDraft, readEditorPrefs, savePage, stripLektoratMarks, tzOpts, writeDraft, writeNormalSnapshot } from './_shared.js';
 import { isLiveEditedElsewhere, startLiveEdit, stopLiveEdit } from '../../live-edit.js';
 import { noteEditStartDuringOutage } from '../save-outage.js';
 import { claimSaveOwner, ownsSave } from '../save-owner.js';
-import { setDiscardAsking } from './save-guard.js';
+import { isDiscardAsking, setDiscardAsking } from './save-guard.js';
 import { localIsoDate } from '../../../utils.js';
 
 // Wie oft ✓ (saveEdit) das während des PUT Getippte direkt nachspeichert,
@@ -325,7 +325,7 @@ export const lifecycleMethods = {
     // hängt nach dem Teardown weiter im DOM (nur `display:none`) und trägt noch
     // den letzten Stand — ein Aufruf von aussen (z. B. der Konflikt-Banner)
     // würde sonst verworfenen Text zurückschreiben. Spiegelt den quickSave-Guard.
-    if (!app.editMode) return;
+    if (!app.editMode || isDiscardAsking()) return;
     // Offenes Konflikt-Modal entscheidet, welche Fassung gilt — ein Save daneben
     // liefe in denselben Merge und setzte die Auflösung zurück.
     if (app.conflictResolution) return;
@@ -350,11 +350,13 @@ export const lifecycleMethods = {
       return;
     }
 
-    const newText = htmlToText(newHtml).trim();
-    if (!newText) {
+    // Leer = weder Text noch Bild/Tabelle/Trenner (shared/empty-content.js) —
+    // ein Abschnitt nur mit Abbildung ist Inhalt.
+    if (isEmptyManuscript(newHtml)) {
       app.setStatus(app.t('edit.emptyTextAbort'), false, 5000);
       return;
     }
+    const newText = htmlToText(newHtml).trim();
 
     // Pflicht-Invariante #6: `editSaving` VOR dem ersten `await` setzen. Der
     // Kürzungs-Dialog und der Pre-Save-Conflict-Read sind Wartezeiten, in denen
@@ -461,6 +463,7 @@ export const lifecycleMethods = {
   async quickSave(reason = 'quick') {
     const app = editorHost();
     if (!app || !app.editMode || !app.currentPage || app.editSaving) return;
+    if (isDiscardAsking()) return;
     // Offenes Konflikt-Modal: es entscheidet. Ein stiller Save liefe in den
     // Merge, öffnete das Modal neu und setzte die Entscheidungen zurück
     // (Ctrl+S, Fokus-Exit, Abschnitts-Chat — die Timer-/Retry-Wege sperrt
@@ -483,8 +486,7 @@ export const lifecycleMethods = {
       this._clearSaveFailureState();
       return;
     }
-    const newText = htmlToText(newHtml).trim();
-    if (!newText) return;
+    if (isEmptyManuscript(newHtml)) return;
 
     // Immer zuerst lokal sichern, dann erst Netzwerkversuch. Schlägt die lokale
     // Sicherung fehl (localStorage voll), sichtbar machen — der Offline-Fall

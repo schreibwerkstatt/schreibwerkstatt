@@ -1,6 +1,8 @@
 // Teil von appViewMethods (siehe Facade app-view.js).
-import { EVT, _withCardTransition, clearDraft, endViewSwitch, startViewSwitch, contentRepo, decorateMentions, escHtml, fetchJson, getDeviceId, htmlToText, readDraft, setLastPageId } from './_shared.js';
+import { EVT, _withCardTransition, clearDraft, endViewSwitch, startViewSwitch, contentRepo, decorateMentions, escHtml, fetchJson, getDeviceId, readDraft, setLastPageId } from './_shared.js';
 import { lsSet, lsRemove } from '../../safe-storage.js';
+import { markLeadingEmptyParas } from '../../editor/notebook/read-view.js';
+import { isEmptyManuscript } from '../../editor/shared/empty-content.js';
 
 // Wie lange `selectPage` aus einer anderen Karte auf den Seiteninhalt wartet,
 // bevor es trotzdem umschaltet (dann mit Lade-Skelett). Kurz genug, dass der
@@ -175,7 +177,7 @@ export const pageMethods = {
   _applyPageData(p, pd) {
     const html = pd.html || '';
     this.originalHtml = html;
-    this.renderedPageHtml = decorateMentions(html);
+    this.renderedPageHtml = markLeadingEmptyParas(decorateMentions(html));
     this._updatePageViewHeight();
     // Listing-Cache kann stale sein (Page-Save aktualisiert ihn nicht).
     if (pd.updated_at) p.updated_at = pd.updated_at;
@@ -184,7 +186,7 @@ export const pageMethods = {
     p.last_editor_email = pd.last_editor_email || null;
     p.last_editor = pd.last_editor || null;
     p.updated_by_name = pd.updated_by_name || null;
-    this.currentPageEmpty = !htmlToText(html).trim();
+    this.currentPageEmpty = isEmptyManuscript(html);
     this.pageLastEditor = this._resolvePageLastEditor(pd.last_editor);
     this._refreshPendingDraft(p.id, html);
     return html;

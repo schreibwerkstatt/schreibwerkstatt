@@ -28,9 +28,10 @@ import {
 import { closestCiteEl, CITE_ATTR_SRC, CITE_ATTR_LOC, citeModeOf } from '../sources/cite-html.js';
 import { loadBookSources, invalidateSourceCache } from '../sources/source-cache.js';
 import { buildCitePopoverModel } from '../sources/cite-popover.js';
+import { NORMAL_SELECTOR } from '../editor/shared/active-editor.js';
 
 const RECOMPUTE_DEBOUNCE_MS = 400;
-const EDIT_SELECTOR = '#editor-card .page-content-view--editing';
+const EDIT_SELECTOR = NORMAL_SELECTOR;
 // Leseansicht derselben Karte. Der Edit-Container traegt zusaetzlich
 // `--editing`, darum wird der Klick-Pfad ueber `app.editMode` abgegrenzt.
 const VIEW_SELECTOR = '#editor-card .page-content-view';

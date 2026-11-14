@@ -1,7 +1,7 @@
 // Teil von notebookEditMethods (siehe Facade edit.js): Nachbereitung eines
 // erfolgreichen Page-Saves — geteilt von saveEdit, quickSave,
 // submitConflictResolution und «Abschnitt teilen».
-import { editorHost, htmlToText, isNoChange, stripLektoratMarks } from './_shared.js';
+import { editorHost, isEmptyManuscript, isNoChange, stripLektoratMarks } from './_shared.js';
 import { noteSaveRecovered } from '../save-outage.js';
 
 export const saveSuccessMethods = {
@@ -37,7 +37,7 @@ export const saveSuccessMethods = {
     if (saved?.updated_at && app.currentPage) app.currentPage.updated_at = saved.updated_at;
     app.originalHtml = serverHtml;
     this._ensureLiveBlockIds(serverHtml);
-    app.currentPageEmpty = !htmlToText(serverHtml).trim();
+    app.currentPageEmpty = isEmptyManuscript(serverHtml);
     this._filterFindingsAfterSave(serverHtml);
     app._flushLektoratLiveApplied?.(serverHtml);
     app._syncPageStatsAfterSave?.(app.currentPage, serverHtml);

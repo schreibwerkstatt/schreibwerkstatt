@@ -12,7 +12,7 @@ import { contentRepo } from '../repo/content.js';
 import { tRaw, findingErklaerungRaw, tFetchError } from '../i18n.js';
 import { _sanitizeFigur } from './figuren.js';
 import { isSelectedBook } from '../cards/book-guard.js';
-import { READ_VIEW_SEL, notebookReadView } from '../editor/notebook/read-view.js';
+import { READ_VIEW_SEL, notebookReadView, markLeadingEmptyParas } from '../editor/notebook/read-view.js';
 import { placeLektoratTip, hideLektoratTip, activeLektoratMark, setActiveLektoratMark, lektoratTipContains } from './lektorat-tip.js';
 
 // Pauschale Diagrammhöhe, solange nichts zu messen ist (mermaid rendert
@@ -294,9 +294,9 @@ export const pageViewMethods = {
     // Nur solange der Seiten-Chat offen ist.
     const chatProposals = this.showChatCard ? (this.$store.pageChat?.proposals || []) : [];
     if (allErrors.length > 0 || chatProposals.length > 0) {
-      this.renderedPageHtml = decorateMentions(buildHighlightedHtml(this.originalHtml, allErrors, allSelected, chatProposals));
+      this.renderedPageHtml = markLeadingEmptyParas(decorateMentions(buildHighlightedHtml(this.originalHtml, allErrors, allSelected, chatProposals)));
     } else {
-      this.renderedPageHtml = decorateMentions(this.originalHtml);
+      this.renderedPageHtml = markLeadingEmptyParas(decorateMentions(this.originalHtml));
     }
     this._updatePageViewHeight();
   },

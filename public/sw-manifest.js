@@ -5,7 +5,7 @@
 // __SHELL_BUILD: content hash over all listed assets → drives SHELL_CACHE.
 // __SHELL_MANIFEST: the coherent set precached atomically at SW install.
 // __VENDOR_SET: current vendor/ + fonts/ files — VENDOR_CACHE prune list.
-self.__SHELL_BUILD = "744b632e65a842c4";
+self.__SHELL_BUILD = "3bd75e83a62c6ac5";
 self.__SHELL_MANIFEST = [
   "/css/admin/admin-backup.css",
   "/css/admin/admin-home.css",
@@ -710,6 +710,7 @@ self.__SHELL_MANIFEST = [
   "/js/editor/notebook/edit/draft-reconcile.js",
   "/js/editor/notebook/edit/input.js",
   "/js/editor/notebook/edit/lifecycle.js",
+  "/js/editor/notebook/edit/patch-html.js",
   "/js/editor/notebook/edit/save-guard.js",
   "/js/editor/notebook/edit/save-success.js",
   "/js/editor/notebook/edit/split.js",
@@ -766,6 +767,7 @@ self.__SHELL_MANIFEST = [
   "/js/editor/shared/edit-counter.js",
   "/js/editor/shared/edit-history.js",
   "/js/editor/shared/editor-host.js",
+  "/js/editor/shared/empty-content.js",
   "/js/editor/shared/highlights.js",
   "/js/editor/shared/history-rebase.js",
   "/js/editor/shared/html-clean.js",

@@ -89,9 +89,43 @@ function _highlights() {
   return _hl;
 }
 
+// Fundstellen-Markierungen des letzten Laufs: [{ kind, range }]. Registriert
+// sind davon nur die im sichtbaren Band des Editors (± eine Bandhöhe): Chromium
+// malt bei JEDER Textänderung alle registrierten Highlight-Ranges neu (Paint,
+// PrePaint, Compositing) — 40 Markierungen kosteten auf einem 34K-Abschnitt
+// ~9 ms je Taste (4× gedrosselt), fünf ~1,5 ms. Ausserhalb des Bands sieht man
+// sie ohnehin nicht; beim Scrollen wird nachgeführt.
+let _marks = [];
+let _visRaf = 0;
+
+function _paintVisibleMarks() {
+  _visRaf = 0;
+  if (!_hl) return;
+  for (const k of [...KINDS, 'ambiguous']) _hl[k].clear();
+  if (!_observedEl || !_marks.length) return;
+  const box = _observedEl.getBoundingClientRect();
+  const top = Math.max(box.top, 0);
+  const bottom = Math.min(box.bottom, window.innerHeight);
+  const band = Math.max(bottom - top, window.innerHeight / 2);
+  const lo = top - band;
+  const hi = bottom + band;
+  for (const { kind, range } of _marks) {
+    let r;
+    try { r = range.getBoundingClientRect(); } catch { continue; }
+    if (r.bottom >= lo && r.top <= hi) _hl[kind].add(range);
+  }
+}
+
+function _scheduleVisibleMarks() {
+  if (!_visRaf) _visRaf = requestAnimationFrame(_paintVisibleMarks);
+}
+
 function _clearHighlights() {
+  if (_visRaf) cancelAnimationFrame(_visRaf);
+  _visRaf = 0;
   if (_hl) for (const k in _hl) _hl[k].clear();
   _ranges = [];
+  _marks = [];
 }
 
 function _stopLive() {
@@ -197,6 +231,10 @@ export const lektoratLiveMethods = {
       _observer.observe(el, { childList: true, subtree: true, characterData: true });
       _selAbort = new AbortController();
       document.addEventListener('selectionchange', _onSelectionChange, { signal: _selAbort.signal });
+      // Sichtbares Band nachführen: Editor scrollt selbst, die Seite auch.
+      el.addEventListener('scroll', _scheduleVisibleMarks, { passive: true, signal: _selAbort.signal });
+      window.addEventListener('scroll', _scheduleVisibleMarks, { passive: true, capture: true, signal: _selAbort.signal });
+      window.addEventListener('resize', _scheduleVisibleMarks, { passive: true, signal: _selAbort.signal });
     }
     this._relocateLektoratLive();
   },
@@ -288,10 +326,12 @@ export const lektoratLiveMethods = {
       if (!!f.mehrfach !== multi) f.mehrfach = multi;
       try {
         _ranges[i] = rangeOf(all[0]);
-        if (multi || f.mehrdeutig) for (const m of all) hl?.ambiguous.add(rangeOf(m));
-        else hl?.[findingKind(f.typ)].add(_ranges[i]);
+        if (!hl) continue;
+        if (multi || f.mehrdeutig) for (const m of all) _marks.push({ kind: 'ambiguous', range: rangeOf(m) });
+        else _marks.push({ kind: findingKind(f.typ), range: _ranges[i] });
       } catch { /* DOM hat sich bewegt — nächster Lauf */ }
     }
+    _paintVisibleMarks();
     this._paintLektoratLiveActive();
     // Redo einer ungebuchten Übernahme, deren Korrektur ein Save schon auf den
     // Server gebracht hat: der Text gleicht dem gespeicherten, ein weiterer Save

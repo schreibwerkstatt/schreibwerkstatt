@@ -15,6 +15,7 @@
 // ergibt je nach Layout «!» (US) oder «+» (DE/CH).
 
 import { openCardWith, CARD_REQUEST } from '../cards/card-request.js';
+import { NORMAL_SELECTOR } from './shared/active-editor.js';
 
 const SLOT_BY_CODE = { Digit1: 'chat', Digit2: 'ideen' };
 
@@ -145,7 +146,7 @@ export const asideHotkeyMethods = {
     if (event?.isComposing) return;
     event?.preventDefault?.();
     event?.stopPropagation?.();
-    const editEl = document.querySelector('.page-content-view--editing');
+    const editEl = document.querySelector(NORMAL_SELECTOR);
     // Erste noch gültige Stelle: ein gemerkter Rücksprung einer früheren Seite
     // ist abgehängt — dann die letzte Auswahl im aktuellen Text.
     const usable = (s) => s && s.range.startContainer.isConnected && _pageContentHost(s.range.startContainer);
