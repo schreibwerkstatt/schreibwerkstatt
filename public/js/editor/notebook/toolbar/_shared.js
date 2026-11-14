@@ -114,6 +114,18 @@ export function _applyLinkAtRange(range, url) {
 // und die Aufrufer würden ihn wie einen Block behandeln. Basis der find*-Familie
 // darunter; `closest` löst dabei auch Kind-Kombinatoren auf, sodass „li in einer
 // Todo-Liste" bzw. „p in einem Gedicht" ein Selektor statt einer Handschleife ist.
+// Eine Struktur- oder Toolbar-Aktion als eigener Undo-Schritt: den Vorher-
+// Stand jetzt einfrieren (offene Tipp-Serie inklusive), den Nachher-Stand nach
+// der synchronen DOM-Änderung (Microtask, nach dem laufenden Handler). Ohne den
+// zweiten Push hinge der Nachher-Stand am Tipp-Debounce, und was gleich danach
+// getippt wird, fiele mit der Aktion in einen Schritt. Im Fokusmodus nicht —
+// dort hängt die Historie an dessen `input`-Pfad.
+export function historyStep(app = window.__app) {
+  if (!app || app.focusActive) return;
+  app._historyPushNow?.();
+  queueMicrotask(() => app._historyPushNow?.());
+}
+
 export function findAncestor(node, root, selector) {
   const el = node && node.nodeType === 3 ? node.parentNode : node;
   const hit = el?.closest?.(selector);

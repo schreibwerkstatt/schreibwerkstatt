@@ -2,7 +2,7 @@
 // `this` = Sub-Komponente (editorToolbarCard), Root-Zugriffe via window.__app.
 // Im Fokus-Modus deaktiviert (Guards + `!$app.focusActive` im Template).
 
-import { getEditEl, WORD_RE, _normalizeLinkUrl, _applyLinkAtRange, caretRangeIn, findAnchor, applyInlineCommand } from './_shared.js';
+import { getEditEl, WORD_RE, _normalizeLinkUrl, _applyLinkAtRange, caretRangeIn, findAnchor, applyInlineCommand, historyStep } from './_shared.js';
 import { restoreEditorRange } from './caret-panel.js';
 import { isImeComposing } from '../../../utils/keys.js';
 import { msgConvertTargets, msgUnwrapTargets } from './msg-convert.js';
@@ -41,6 +41,7 @@ export const bubbleMethods = {
     editEl.focus();
     // Ohne Inline-`style` (CSS-kursives Zitat, fette Überschrift), siehe
     // toolbar/_shared.js#applyInlineCommand.
+    historyStep();
     if (!applyInlineCommand(editEl, command)) return;
     window.__app?._markEditDirty?.();
     this.$nextTick(() => this._updateBubble());

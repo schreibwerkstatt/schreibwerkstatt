@@ -10,19 +10,28 @@ import { sanitizePasteHtml } from '../../utils.js';
 import { stripLektoratMarks } from './html-clean.js';
 import { isCiteEl } from '../../sources/cite-html.js';
 import { isXrefEl } from '../../xrefs/xref-html.js';
+import { TODO_TEXT_SEL } from './todo-html.js';
 
 // Behandelt ein Paste-Event komplett: preventDefault, Sanitize, Insert.
 // Rückgabe: true wenn etwas eingefügt wurde, false bei leerem Clipboard.
 // Caller markiert anschliessend dirty (kann Block-spezifisch sein).
-export function handleEditorPaste(e) {
+// `opts.tables`: Tabellen im Clipboard als Tabellen einfügen (nur Notebook,
+// ausserhalb des Fokusmodus — dort ist Tabellen-Eingabe zu Hause). Sonst
+// werden sie zu Absätzen, eine Zeile je Absatz (sanitizePasteHtml).
+// Konsumenten: Notebook (edit/input.js, mit `tables` ausserhalb des
+// Fokusmodus) und Bucheditor (book-editor/activation.js, ohne).
+export function handleEditorPaste(e, { tables = false } = {}) {
   const cd = e.clipboardData;
   if (!cd) return false;
   e.preventDefault();
 
   const plain = cd.getData('text/plain') || '';
-  const html = cd.getData('text/html');
+  // Kopie aus dem Editor selbst (Notebook ausserhalb des Fokusmodus): die
+  // Struktur-Fassung mit Abbildung, Diagramm und Checkbox-Liste.
+  const own = tables ? cd.getData(EDITOR_CLIP_TYPE) : '';
+  const html = own || cd.getData('text/html');
   if (html) {
-    const cleaned = sanitizePasteHtml(html);
+    const cleaned = sanitizePasteHtml(html, { tables, structure: !!own });
     if (cleaned && /<[a-z]/i.test(cleaned)) {
       document.execCommand('insertHTML', false, cleaned);
       return true;
@@ -65,12 +74,18 @@ export function handleEditorPastePlain(e) {
 // ihres Originals), gerenderte Diagramm-Bilder (der Quelltext reist mit),
 // Checkboxen und jede `<span>`-Hülle, die weder Chip noch Querverweis ist
 // (Figuren-/Orts-Markierungen der Leseansicht).
-export function clipboardHtml(html) {
+//
+// `structure: true` ist die Fassung für den Editor selbst (eigener Clipboard-
+// Typ `EDITOR_CLIP_TYPE`): Checkboxen und das `.todo-text`-Span bleiben, damit
+// eine kopierte Checkbox-Liste als solche zurückkommt. Abbildungen und
+// Diagramm-Quelltext stehen in beiden Fassungen; fremde Apps sehen sie, der
+// Editor lässt sie nur aus der eigenen Fassung wieder herein.
+export function clipboardHtml(html, { structure = false } = {}) {
   if (!html) return '';
   const doc = new DOMParser().parseFromString(`<!doctype html><html><body><div>${stripLektoratMarks(html)}</div></body></html>`, 'text/html');
   const root = doc.body.firstElementChild;
   if (!root) return '';
-  root.querySelectorAll('svg, input, script, style').forEach((el) => el.remove());
+  root.querySelectorAll(structure ? 'svg, script, style' : 'svg, input, script, style').forEach((el) => el.remove());
   root.querySelectorAll('[style], [contenteditable], [data-bid]').forEach((el) => {
     el.removeAttribute('style');
     el.removeAttribute('contenteditable');
@@ -78,6 +93,7 @@ export function clipboardHtml(html) {
   });
   for (const span of Array.from(root.querySelectorAll('span'))) {
     if (isCiteEl(span) || isXrefEl(span)) continue;
+    if (structure && span.matches(TODO_TEXT_SEL)) continue;
     const parent = span.parentNode;
     while (span.firstChild) parent.insertBefore(span.firstChild, span);
     span.remove();
@@ -85,17 +101,25 @@ export function clipboardHtml(html) {
   return root.innerHTML;
 }
 
+// Clipboard-Typ der editor-internen Fassung. Fremde Apps lesen ihn nicht; ein
+// Einfügen im Notebook bevorzugt ihn vor `text/html`.
+export const EDITOR_CLIP_TYPE = 'text/x-schreibwerkstatt-html';
+
 // Text- und HTML-Fassung der aktuellen Auswahl ins Clipboard. Rückgabe: true,
 // wenn geschrieben wurde (preventDefault gesetzt).
+// Eine Auswahl ohne Text (nur ein Bild, eine Trennlinie) zählt mit — sonst
+// kopierte der Browser-Default sie mit Inline-Styles und Laufzeit-Attributen.
 function writeSelection(e, sel) {
   const text = sel.toString();
-  if (!text) return false;
-  e.preventDefault();
-  e.clipboardData.setData('text/plain', text);
   const box = document.createElement('div');
   box.appendChild(sel.getRangeAt(0).cloneContents());
+  if (!text && !box.querySelector('img, hr, table, pre')) return false;
+  e.preventDefault();
+  e.clipboardData.setData('text/plain', text);
   const html = clipboardHtml(box.innerHTML);
   if (html) e.clipboardData.setData('text/html', html);
+  const own = clipboardHtml(box.innerHTML, { structure: true });
+  if (own) e.clipboardData.setData(EDITOR_CLIP_TYPE, own);
   return true;
 }
 

@@ -1,0 +1,66 @@
+{
+  "version": "6.4.8",
+  "date": "2026-11-14",
+  "entries": [
+    {
+      "kind": "neu",
+      "de": "Tabellen-Dialog: Zeilen und Spalten fügst du über ⋯ am Kopf ein, verschiebst oder entfernst sie. Aus Excel, Numbers oder Google Sheets kopierte Zellen verteilen sich beim Einfügen über das Gitter.",
+      "en": "Table dialog: use ⋯ on a row or column header to insert, move or remove it. Cells copied from Excel, Numbers or Google Sheets spread across the grid when you paste them."
+    },
+    {
+      "kind": "neu",
+      "de": "Notebook-Editor: eine aus Excel, Sheets oder einer Webseite kopierte Tabelle kommt als echte Tabelle an. Mit Alt+Enter neben einer Tabelle öffnest du ihren Dialog.",
+      "en": "Notebook editor: a table copied from Excel, Sheets or a web page arrives as a real table. Press Alt+Enter next to a table to open its dialog."
+    },
+    {
+      "kind": "verbessert",
+      "de": "Tabellen im Manuskript: die Spaltenausrichtung aus dem Dialog wirkt jetzt auch am Bildschirm, die Beschriftung steht klein unter der Tabelle. Auf dem Handy scrollt eine breite Tabelle seitlich.",
+      "en": "Tables in the manuscript: the column alignment from the dialog now shows on screen too, and the caption sits small below the table. On a phone, a wide table scrolls sideways."
+    },
+    {
+      "kind": "verbessert",
+      "de": "Notebook-Editor: doppeltes Enter verlässt jetzt auch ein Zitat und einen Code-Block. Enter in der Bildunterschrift springt in den Absatz hinter dem Bild.",
+      "en": "Notebook editor: pressing Enter twice now also leaves a quote and a code block. Enter in an image caption jumps to the paragraph after the image."
+    },
+    {
+      "kind": "verbessert",
+      "de": "Notebook-Editor, Einfügen: kopierst du einen Bereich mit Bild, Diagramm oder Checkliste im Editor, kommt er vollständig zurück. Fett und Kursiv aus Google Docs bleiben erhalten, Aufzählungen aus Word werden echte Listen.",
+      "en": "Notebook editor, paste: copying a passage with an image, diagram or checklist inside the editor now brings it back complete. Bold and italic from Google Docs survive, and bullet lists from Word become real lists."
+    },
+    {
+      "kind": "verbessert",
+      "de": "Notebook-Editor: mehrere Zeilen in eine Checkliste oder einen Nachrichtenverlauf eingefügt ergeben je Zeile einen Eintrag. In der Bildunterschrift werden sie zu einer Zeile.",
+      "en": "Notebook editor: pasting several lines into a checklist or message thread creates one entry per line. In an image caption they become a single line."
+    },
+    {
+      "kind": "verbessert",
+      "de": "Notebook-Editor, Leiste oben: «Anführungszeichen normalisieren» und «Abschnitt hier teilen» sind jetzt direkte Knöpfe, auch auf dem Handy. Eine leere Bildunterschrift erscheint in der Leseansicht nicht mehr als Leerzeile.",
+      "en": "Notebook editor, top bar: “Normalise quotation marks” and “Split section here” are now direct buttons, on phones too. An empty image caption no longer shows as a blank line in reading view."
+    },
+    {
+      "kind": "verbessert",
+      "de": "Notebook-Editor: Rückgängig nimmt nach Enter in einer Checkliste oder nach dem Einfügen eines Blocks nur diesen Schritt zurück, nicht auch das danach Getippte.",
+      "en": "Notebook editor: after Enter in a checklist or after inserting a block, Undo now reverts only that step, not what you typed right afterwards."
+    },
+    {
+      "kind": "behoben",
+      "de": "Notebook-Editor: Backspace am Anfang einer eingerückten Listenzeile löschte manchmal das Bild oder die Trennlinie darüber. Eine Auswahl ab vor einer Checkbox löschte die Checkbox mit.",
+      "en": "Notebook editor: Backspace at the start of an indented list line sometimes deleted the image or divider above it. A selection starting before a checkbox deleted the checkbox too."
+    },
+    {
+      "kind": "behoben",
+      "de": "Notebook-Editor: Trennlinie, Tabelle oder Bild landeten mitunter in einer Liste, einem Zitat oder Nachrichtenverlauf oder ganz am Ende. Sie stehen jetzt direkt hinter dem Block, in dem der Cursor steht.",
+      "en": "Notebook editor: a divider, table or image sometimes ended up inside a list, quote or message thread, or at the very end. They now go directly after the block the cursor is in."
+    },
+    {
+      "kind": "behoben",
+      "de": "Notebook-Editor: wer einen ganzen Titel markierte und überschrieb, zog den Absatz darunter mit in den Titel. Überschrift und Absatz zusammenfügen hinterlässt keine abweichende Schrift mehr.",
+      "en": "Notebook editor: selecting a whole heading and typing over it pulled the paragraph below into the heading. Joining a heading and a paragraph no longer leaves stray font formatting."
+    },
+    {
+      "kind": "behoben",
+      "de": "Notebook-Editor: in einem importierten Zitat verschwand beim Enter auf einer leeren Zeile mitunter der Zitattext. Leerzeilen in Code-Blöcken bleiben nach dem Speichern erhalten.",
+      "en": "Notebook editor: in an imported quote, pressing Enter on an empty line could make the quote text disappear. Blank lines in code blocks now survive saving."
+    }
+  ]
+}

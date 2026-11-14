@@ -128,19 +128,27 @@ export const panelMethods = {
   /** Range am Caret — oder, wenn die Selektion inzwischen woanders liegt (Klick
    *  in die Seitenleiste), an der zuletzt im Editor gesehenen Stelle; ohne beides
    *  am Ende. Fokussiert den Editor und setzt die Selektion dorthin, damit
-   *  Pfade, die die Selektion lesen (Trennlinie), dieselbe Stelle treffen. */
+   *  Pfade, die die Selektion lesen (Trennlinie), dieselbe Stelle treffen.
+   *  Erst lesen, dann fokussieren: `focus()` auf ein contenteditable ohne
+   *  Selektion darin setzt den Caret an den Anfang, und die gemerkte Stelle
+   *  käme nie zum Zug. Eine gemerkte Range, deren Knoten inzwischen ersetzt
+   *  wurde (Undo, Remote-Update), kollabiert auf den Editor-Container selbst —
+   *  sie zählt nur, solange sie in einem Element darunter steht. */
   _editRangeForInsert(editEl) {
-    editEl.focus({ preventScroll: true });
     const live = caretRangeIn(editEl);
-    if (live) return live.cloneRange();
     const last = this._lastEditRange;
-    if (last?.startContainer?.isConnected && editEl.contains(last.startContainer)) {
+    const usable = (r) => r?.startContainer?.isConnected && r.startContainer !== editEl
+      && editEl.contains(r.startContainer);
+    const range = live ? live.cloneRange()
+      : usable(last) ? last.cloneRange()
+        : rangeAtEnd(editEl);
+    editEl.focus({ preventScroll: true });
+    if (range) {
       const sel = document.getSelection();
       sel?.removeAllRanges();
-      sel?.addRange(last);
-      return last.cloneRange();
+      sel?.addRange(range.cloneRange());
     }
-    return rangeAtEnd(editEl);
+    return range;
   },
 
   /** Einstieg der «Einfügen»-Gruppe der Seiten-Toolbar (Root-Scope →

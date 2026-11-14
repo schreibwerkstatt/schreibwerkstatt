@@ -5,8 +5,9 @@
      Schalter: Volle Breite, Steuerzeichen (CSS-Dekoration ¶/↵, editorPrefs),
      Titel-Kopf (nur publizistische Bücher, editorPrefs), Entitäten-Markierung
      (Buch-Setting book_settings.entities_enabled, PUT
-     /booksettings/:id/entities-enabled). Eigener Wrapper um menu(), siehe
-     `.page-editor-toolbar__more`. -->
+     /booksettings/:id/entities-enabled). Eigener Wrapper um menu(), damit
+     die unlayered `.menu-anchor { display: inline-flex }` keine Layout-Regel
+     der Leiste schlagen muss (icons.css-Unlayered-Falle). -->
 <span class="page-editor-toolbar__view">
  <span x-data="menu()">
   <button type="button" class="icon-btn" x-bind="trigger" :class="{ 'is-active': open }"

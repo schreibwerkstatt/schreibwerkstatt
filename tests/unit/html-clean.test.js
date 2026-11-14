@@ -435,3 +435,18 @@ test('stripEmptyInline: Hüllen mit Inhalt, Attribut oder Element-Kind bleiben',
 test('cleanPageHtml: leere Hülle fällt auch über die Pipeline', () => {
   assert.equal(cleanPageHtml('<p>read more<i></i>.</p>'), '<p>read more.</p>');
 });
+
+// ── Code-Block-Leerzeilen + leere Bildunterschrift ──────────────────────────
+// Gegenstück im Browser: public/js/utils/html.js (collapseEmptyBlocks,
+// cleanContentArtefacts) — beide Bereinigungen müssen dasselbe liefern.
+
+test('collapseEmptyBlocks: Leerzeile im Code-Block bleibt, im Absatz kollabiert sie', () => {
+  assert.equal(collapseEmptyBlocks('<pre>a<br><br>b</pre><p>x<br><br>y</p>'), '<pre>a<br><br>b</pre><p>x<br>y</p>');
+});
+
+test('cleanPageHtml: Bildunterschrift nur mit Caret-Platzhalter wird leer, mit Text bleibt sie', () => {
+  assert.equal(
+    cleanPageHtml('<figure><img src="a.png"><figcaption><br></figcaption></figure><figure><img src="b.png"><figcaption>A<br>B</figcaption></figure>'),
+    '<figure><img src="a.png"><figcaption></figcaption></figure><figure><img src="b.png"><figcaption>A<br>B</figcaption></figure>',
+  );
+});

@@ -20,12 +20,12 @@
 // stellen Tabellen nur dar.
 
 import { getEditEl } from '../../utils.js';
-import { replaceBlockOutsideList, ensureSlotAfter } from './_shared.js';
-import { htmlToElement, placeBlockNode } from './caret-panel.js';
 import {
-  buildTableHtml, tableModel, emptyTableModel,
-  TABLE_ALIGNS, TABLE_MAX_COLS, TABLE_MAX_ROWS,
-} from '../../../table/table-html.js';
+  replaceBlockOutsideList, ensureSlotAfter, caretRangeIn, topLevelBlock,
+  caretAtBlockStart, caretAtBlockEnd,
+} from './_shared.js';
+import { htmlToElement, placeBlockNode } from './caret-panel.js';
+import { buildTableHtml, tableModel, emptyTableModel, isTableEl } from '../../../table/table-html.js';
 
 // Startgroesse einer neuen Tabelle. Drei Spalten, weil zwei nach Liste aussehen
 // und vier auf dem Handy nicht mehr lesbar sind; zwei Datenzeilen, damit die
@@ -45,6 +45,7 @@ export const tableMethods = {
     this.tableLossyReasons = [];
     this._tableHeaderStash = null;
     this.tableModelState = emptyTableModel(NEW_COLS, NEW_ROWS);
+    this._tableResetIds();
     this._openTableDlg();
   },
 
@@ -73,6 +74,7 @@ export const tableMethods = {
     // kann sie nicht darstellen; wer hier uebernimmt, planiert sie. Das soll
     // eine Entscheidung sein, keine Ueberraschung.
     this.tableLossyReasons = m.lossyReasons || [];
+    this._tableResetIds();
     this._openTableDlg();
   },
 
@@ -81,7 +83,9 @@ export const tableMethods = {
     if (!dlg) return;
     this._beginDialog('table');
     if (!dlg.open) dlg.showModal();
-    queueMicrotask(() => this.$refs?.tableCaptionInput?.focus());
+    // Fokus in die erste Zelle: der Inhalt ist das, was man hier tippt; die
+    // Beschriftung ist optional und steht ein Tab davor.
+    this.tableFocusFirstCell();
   },
 
   closeTableDialog() {
@@ -97,115 +101,15 @@ export const tableMethods = {
     this.tableLossyReasons = [];
     this._tableHeaderStash = null;
     this.tableModelState = emptyTableModel(NEW_COLS, NEW_ROWS);
+    this._tableResetIds();
+    this.closeActionMenu?.();
     this._endDialog();
-  },
-
-  // ── Gitter-Struktur ───────────────────────────────────────────────────────
-
-  tableCols() {
-    return this.tableModelState?.align?.length || 0;
-  },
-
-  tableCanAddCol() { return this.tableCols() < TABLE_MAX_COLS; },
-  tableCanAddRow() { return (this.tableModelState?.rows?.length || 0) < TABLE_MAX_ROWS; },
-  tableCanRemoveCol() { return this.tableCols() > 1; },
-  tableCanRemoveRow() { return (this.tableModelState?.rows?.length || 0) > 1; },
-
-  _blankCell() {
-    return { html: '', text: '', align: null, rich: false };
-  },
-
-  tableAddCol() {
-    const m = this.tableModelState;
-    if (!m || !this.tableCanAddCol()) return;
-    m.align.push('left');
-    if (m.header) m.header.push(this._blankCell());
-    if (this._tableHeaderStash) this._tableHeaderStash.push(this._blankCell());
-    for (const r of m.rows) r.push(this._blankCell());
-  },
-
-  tableRemoveCol(i) {
-    const m = this.tableModelState;
-    if (!m || !this.tableCanRemoveCol()) return;
-    m.align.splice(i, 1);
-    if (m.header) m.header.splice(i, 1);
-    if (this._tableHeaderStash) this._tableHeaderStash.splice(i, 1);
-    for (const r of m.rows) r.splice(i, 1);
-  },
-
-  tableAddRow() {
-    const m = this.tableModelState;
-    if (!m || !this.tableCanAddRow()) return;
-    m.rows.push(Array.from({ length: this.tableCols() }, () => this._blankCell()));
-  },
-
-  tableRemoveRow(i) {
-    const m = this.tableModelState;
-    if (!m || !this.tableCanRemoveRow()) return;
-    m.rows.splice(i, 1);
-  },
-
-  /** Kopfzeile an-/abschalten. Beim Abschalten wandert sie NICHT in die Daten —
-   *  wer den Kopf entfernt, will ihn weg; ihn als Datenzeile weiterzuschleppen
-   *  waere eine Ueberraschung. Bis zum Schliessen des Dialogs liegt sie aber
-   *  im Stash: wer sie wieder einschaltet, bekommt seinen Inhalt zurueck.
-   *  Spalten-Operationen halten den Stash mit dem Gitter in Takt. */
-  tableToggleHeader() {
-    const m = this.tableModelState;
-    if (!m) return;
-    if (m.header) {
-      this._tableHeaderStash = m.header;
-      m.header = null;
-      return;
-    }
-    const stash = this._tableHeaderStash;
-    this._tableHeaderStash = null;
-    m.header = stash && stash.length === this.tableCols()
-      ? stash
-      : Array.from({ length: this.tableCols() }, () => this._blankCell());
-  },
-
-  tableHasHeader() {
-    return !!this.tableModelState?.header;
-  },
-
-  // ── Zellen + Ausrichtung ──────────────────────────────────────────────────
-
-  /** Zelltext setzen. `rich` faellt dabei auf false: wer den Text aendert,
-   *  ersetzt die Auszeichnung der Zelle (SSoT-Regel in table-html.js). Eine
-   *  unangetastete Zelle behaelt ihr `html`. */
-  tableSetCell(cell, value) {
-    if (!cell) return;
-    const next = String(value ?? '');
-    if (next === cell.text) return;
-    cell.text = next;
-    cell.rich = false;
-    cell.html = '';
-  },
-
-  tableSetAlign(i, align) {
-    const m = this.tableModelState;
-    if (!m || !TABLE_ALIGNS.includes(align)) return;
-    m.align[i] = align;
-  },
-
-  /** Traegt irgendeine Zelle Auszeichnung (Quellen-Chip, Querverweis, fett …),
-   *  die eine Textaenderung ersetzen wuerde? Steuert den Hinweis im Dialog. */
-  tableHasRichCells() {
-    const m = this.tableModelState;
-    if (!m) return false;
-    return [...(m.header || []), ...m.rows.flat()].some(c => c?.rich && c?.html);
   },
 
   /** Klartext-Gruende fuer die Verlust-Warnung. */
   tableLossyLabels() {
     const app = window.__app;
     return (this.tableLossyReasons || []).map(r => app?.t?.('editor.table.lossyReason.' + r) || r);
-  },
-
-  tableAlignOptions() {
-    const app = window.__app;
-    return TABLE_ALIGNS.map(a => ({ value: a, label: app?.t?.('editor.table.align.' + a) || a }));
   },
 
   /** Ist die Tabelle leer? Beschriftung allein zaehlt nicht — eine Beschriftung
@@ -224,6 +128,11 @@ export const tableMethods = {
    *  wieder durch diesen Dialog. */
   applyTable() {
     if (this.tableIsEmpty()) { this.closeTableDialog(); return; }
+    // Nichts geaendert: nichts schreiben. Neu gebaut wuerde eine importierte
+    // Tabelle planiert (verbundene Zellen, Zeilenkoepfe, Absaetze in Zellen —
+    // `tableLossyReasons`), nur weil jemand den Dialog per Klick geoeffnet
+    // und mit «Speichern» wieder geschlossen hat.
+    if (this.tableEditing && !this._dialogDirty('table')) { this.closeTableDialog(); return; }
 
     const editEl = getEditEl();
     if (!editEl) { this.closeTableDialog(); return; }
@@ -252,13 +161,47 @@ export const tableMethods = {
   },
 
   /** Tabelle loeschen (nur im Bearbeiten-Modus sichtbar). Der Block ist atomar,
-   *  ohne diesen Weg gaebe es keinen verlaesslichen. */
-  removeTable() {
+   *  ohne diesen Weg gaebe es keinen verlaesslichen. Mit Rueckfrage: eine
+   *  Datentabelle ist teurer als ein Diagramm oder Bild, und der Knopf steht
+   *  im selben Fuss wie «Speichern». Undo bleibt zusaetzlich. */
+  async removeTable() {
+    const app = window.__app;
+    const ok = await app?.appConfirm?.({
+      message: app.t('editor.table.removeConfirm'),
+      confirmLabel: app.t('editor.table.remove'),
+      danger: true,
+    });
+    if (!ok) return;
     const el = this._tableEditEl;
     if (el?.isConnected) {
       el.remove();
       window.__app?._markEditDirty?.();
     }
     this.closeTableDialog();
+  },
+
+  // ── Tastatur-Zugang ───────────────────────────────────────────────────────
+
+  /** Alt+Enter neben einer Tabelle oeffnet ihren Dialog. Die Tabelle ist
+   *  atomar und nimmt nie den Caret auf; ohne diesen Griff kaeme man nur per
+   *  Maus hinein. «Neben» heisst: Caret am Anfang des Absatzes direkt dahinter
+   *  oder am Ende des Absatzes direkt davor; ein leerer Absatz zwischen zwei
+   *  Tabellen meint die davor. Nur Notebook (Dispatcher prueft focusActive). */
+  _kbTableEdit(e) {
+    if (e.key !== 'Enter' || !e.altKey || e.shiftKey || e.ctrlKey || e.metaKey) return false;
+    const editEl = getEditEl();
+    const range = editEl ? caretRangeIn(editEl) : null;
+    if (!range?.collapsed) return false;
+    const block = topLevelBlock(range.startContainer, editEl);
+    if (!block || block === editEl || block.parentNode !== editEl) return false;
+    const prev = block.previousElementSibling;
+    const next = block.nextElementSibling;
+    let table = null;
+    if (isTableEl(prev) && caretAtBlockStart(range, block)) table = prev;
+    else if (isTableEl(next) && caretAtBlockEnd(range, block)) table = next;
+    if (!table) return false;
+    e.preventDefault();
+    this.openTableForEl(table);
+    return true;
   },
 };

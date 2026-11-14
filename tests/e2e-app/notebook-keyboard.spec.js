@@ -107,6 +107,32 @@ test.describe('Notebook — Tastatur', () => {
     expect(await readHtml(page)).toBe('<figure><img src="PX" alt=""><figcaption>L</figcaption></figure><blockquote><p>EinsZwei</p></blockquote>');
   });
 
+  test('Bildunterschrift: Enter verlässt die Abbildung statt eine zweite Legende anzulegen', async ({ page }) => {
+    await enterNotebookEdit(page);
+    // Leere Legende, leerer Absatz dahinter (wie nach dem Einfügen): Caret dorthin, nichts Neues.
+    await seed(page, `<figure><img src="${PX}" alt=""><figcaption><br></figcaption></figure><p><br></p>`, 'figcaption', 'start');
+    await page.keyboard.press('Enter');
+    await page.keyboard.type('Weiter');
+    expect(await readHtml(page)).toBe('<figure><img src="PX" alt=""><figcaption><br></figcaption></figure><p>Weiter</p>');
+    // Legende mit Text, danach Fliesstext: neuer Absatz dazwischen, Legende unverändert.
+    await seed(page, `<figure><img src="${PX}" alt=""><figcaption>Legende</figcaption></figure><p>Text</p>`, 'figcaption', 3);
+    await page.keyboard.press('Enter');
+    await page.keyboard.type('Neu');
+    expect(await readHtml(page)).toBe('<figure><img src="PX" alt=""><figcaption>Legende</figcaption></figure><p>Neu</p><p>Text</p>');
+  });
+
+  test('Zwischentitel: Enter am Anfang legt einen Absatz davor an, kein leerer Titel', async ({ page }) => {
+    await enterNotebookEdit(page);
+    await seed(page, '<h2>Titel</h2><p>x</p>', 'h2', 'start');
+    await page.keyboard.press('Enter');
+    await page.keyboard.type('Q');
+    expect(await readHtml(page)).toBe('<p><br></p><h2>QTitel</h2><p>x</p>');
+    // Mitten im Titel bleibt die Teilung (Default).
+    await seed(page, '<h2>Titel</h2><p>x</p>', 'h2', 2);
+    await page.keyboard.press('Enter');
+    expect(await readHtml(page)).toBe('<h2>Ti</h2><h2>tel</h2><p>x</p>');
+  });
+
   test('Checkbox-Zeile: Enter teilt am Caret, am Zeilenanfang neue Zeile darüber', async ({ page }) => {
     await enterNotebookEdit(page);
     const todo = '<ul class="todo"><li class="todo-item"><input type="checkbox"><span class="todo-text">Einkaufen</span></li></ul>';
@@ -125,6 +151,46 @@ test.describe('Notebook — Tastatur', () => {
     await seed(page, '<div class="poem"><p>Eins</p><p><br></p><p>Zwei</p></div>', '.poem p:nth-child(2)', 'start');
     await page.keyboard.press('Enter');
     expect(await readHtml(page)).toBe('<div class="poem"><p>Eins</p></div><p><br></p><div class="poem"><p>Zwei</p></div>');
+  });
+
+  test('Doppel-Enter am Ende verlässt jeden Wrapper-Block', async ({ page }) => {
+    await enterNotebookEdit(page);
+    const cases = [
+      ['<blockquote><p>Zitat</p></blockquote>', 'blockquote p', '<blockquote><p>Zitat</p></blockquote><p>X</p>'],
+      ['<blockquote data-src="1"><p>Zitat</p></blockquote>', 'blockquote p', '<blockquote data-src="1"><p>Zitat</p></blockquote><p>X</p>'],
+      ['<div class="poem"><p>Vers</p></div>', '.poem p', '<div class="poem"><p>Vers</p></div><p>X</p>'],
+      ['<ul><li>Punkt</li></ul>', 'li', '<ul><li>Punkt</li></ul><p>X</p>'],
+      ['<ol><li>Punkt</li></ol>', 'li', '<ol><li>Punkt</li></ol><p>X</p>'],
+      ['<ul class="todo"><li class="todo-item"><input type="checkbox"><span class="todo-text">A</span></li></ul>', '.todo-text',
+        '<ul class="todo"><li class="todo-item"><input type="checkbox"><span class="todo-text">A</span></li></ul><p>X</p>'],
+      ['<div class="msg-thread"><p class="msg-in">Hallo</p></div>', '.msg-in', '<div class="msg-thread"><p class="msg-in">Hallo</p></div><p>X</p>'],
+      ['<pre>code</pre>', 'pre', '<pre>code</pre><p>X</p>'],
+    ];
+    for (const [html, target, want] of cases) {
+      await seed(page, html, target, 'end');
+      await page.keyboard.press('Enter');
+      await page.keyboard.press('Enter');
+      await page.keyboard.type('X');
+      expect(await readHtml(page), html).toBe(want);
+    }
+  });
+
+  test('Zitat: Doppel-Enter in der Mitte teilt es, der Quellen-Zeiger reist mit', async ({ page }) => {
+    await enterNotebookEdit(page);
+    await seed(page, '<blockquote data-src="1"><p>Eins</p><p>Zwei</p></blockquote>', 'blockquote p', 'end');
+    await page.keyboard.press('Enter');
+    await page.keyboard.press('Enter');
+    await page.keyboard.type('X');
+    expect(await readHtml(page)).toBe('<blockquote data-src="1"><p>Eins</p></blockquote><p>X</p><blockquote data-src="1"><p>Zwei</p></blockquote>');
+  });
+
+  test('Code-Block: Leerzeile mitten im Code bleibt, Enter dort ist ein Umbruch', async ({ page }) => {
+    await enterNotebookEdit(page);
+    await seed(page, '<pre>a<br>b</pre>', 'pre', 1);
+    await page.keyboard.press('Enter');
+    await page.keyboard.press('Enter');
+    expect(await page.evaluate((s) => document.querySelector(s).querySelectorAll('pre').length, EDIT_SEL)).toBe(1);
+    expect(await readHtml(page)).not.toContain('<p>');
   });
 
   test('Auswahl über Absatz ↔ Zitat: löschen, überschreiben, ausschneiden ohne Inline-style', async ({ page }) => {

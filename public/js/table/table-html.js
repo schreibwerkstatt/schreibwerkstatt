@@ -45,6 +45,9 @@ import { escHtml } from '../utils/escape.js';
 
 export const TABLE_SEL = 'table';
 
+// Traeger der Spaltenausrichtung an der Zelle (siehe Kopf: ein Traeger).
+export const TABLE_ATTR_ALIGN = 'data-align';
+
 // Ausrichtungen, die eine Spalte tragen kann. `left` ist die Vorgabe und wird
 // nicht ins Markup geschrieben.
 export const TABLE_ALIGNS = ['left', 'center', 'right'];
@@ -115,7 +118,7 @@ function _inlineHtml(node) {
 function _cellModel(td) {
   const html = _inlineHtml(td);
   const text = _normText(td.textContent);
-  const align = String(td.getAttribute?.('data-align') || '').toLowerCase();
+  const align = String(td.getAttribute?.(TABLE_ATTR_ALIGN) || '').toLowerCase();
   return {
     html,
     text,
@@ -263,7 +266,8 @@ function _stripDanger(html) {
   return String(html || '')
     .replace(/<\s*\/?\s*script[^>]*>/gi, '')
     .replace(/\son[a-z]+\s*=\s*("[^"]*"|'[^']*'|[^\s>]+)/gi, '')
-    .replace(/(javascript|vbscript)\s*:/gi, '');
+    // Nur in Attributwerten: im Zelltext ist „javascript: Grundlagen" Inhalt.
+    .replace(/(=\s*["']?)\s*(?:javascript|vbscript)\s*:/gi, '$1');
 }
 
 /** Zellinhalt einer Modell-Zelle zu HTML.
@@ -280,7 +284,7 @@ function _cellHtml(cell) {
 
 function _alignAttr(align) {
   const a = String(align || '').toLowerCase();
-  return a && a !== 'left' && TABLE_ALIGNS.includes(a) ? ` data-align="${a}"` : '';
+  return a && a !== 'left' && TABLE_ALIGNS.includes(a) ? ` ${TABLE_ATTR_ALIGN}="${a}"` : '';
 }
 
 /** Markup fuer eine Tabelle. Einziger Erzeuger — kein Konsument baut das

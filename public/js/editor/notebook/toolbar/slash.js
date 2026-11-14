@@ -4,8 +4,8 @@
 
 import { getEditEl, placeCaretIn, replaceBlockOutsideList, ensureSlotAfter, SLASH_ITEMS, _formatStamp } from './_shared.js';
 import { createTodoList, TODO_ITEM_SEL, TODO_TEXT_SEL } from '../../shared/todo-html.js';
-import { promoteSubLists, isListEl } from '../line-merge.js';
-import { htmlToElement } from './caret-panel.js';
+import { promoteSubLists, isListEl, splitWrapperAtLine } from '../line-merge.js';
+import { htmlToElement, placeBlockNode } from './caret-panel.js';
 import { buildFigureHtml, FIGURE_CAPTION_SEL } from '../../../figure/figure-html.js';
 import { contentRepo } from '../../../repo/content.js';
 
@@ -29,6 +29,19 @@ function visibleBand() {
     height: vv ? vv.height : window.innerHeight,
     width: vv ? vv.width : window.innerWidth,
   };
+}
+
+// Setzt `replacement` an die Stelle von `block`. In einer Liste über
+// `replaceBlockOutsideList` (Invariante 19); eine Zeile in Zitat/Gedicht/
+// Verlauf teilt den Wrapper, `replacement` steht zwischen den Hälften
+// (line-merge.js#splitWrapperAtLine — die hintere Hülle behält `data-src`).
+function placeOutsideWrapper(editEl, block, replacement) {
+  const parent = block.parentNode;
+  if (parent === editEl || isListEl(parent) || block.tagName === 'LI') {
+    replaceBlockOutsideList(editEl, block, replacement);
+  } else {
+    splitWrapperAtLine(block, parent, { insert: replacement });
+  }
 }
 
 export const slashMethods = {
@@ -57,7 +70,7 @@ export const slashMethods = {
     const band = visibleBand();
     // Block komplett ausserhalb des sichtbaren Bandes → schliessen.
     if (rect.bottom < band.top || rect.top > band.top + band.height) {
-      this._closeSlash();
+      this._closeSlash({ literal: true, quiet: true });
       return;
     }
     const above = rect.top - band.top - SLASH_GAP;
@@ -216,11 +229,7 @@ export const slashMethods = {
     if (!editEl || !result?.url) return;
     const fig = htmlToElement(buildFigureHtml({ src: result.url }));
     if (!fig) return;
-    if (block && block.isConnected && block.parentNode && editEl.contains(block)) {
-      replaceBlockOutsideList(editEl, block, fig);
-    } else {
-      editEl.appendChild(fig);
-    }
+    placeBlockNode(editEl, fig, { replace: block });
     ensureSlotAfter(fig);
     const cap = fig.querySelector(FIGURE_CAPTION_SEL);
     if (cap) placeCaretIn(cap);
@@ -230,14 +239,25 @@ export const slashMethods = {
   // `literal`: im Umwandeln-Modus war der Schrägstrich vielleicht Text («/usr»,
   // «1/2»): Esc, Caret-Bewegung oder ein Filter ohne Treffer setzen dann
   // «/» + Getipptes an den Caret. Im leeren Block bleibt Schliessen Schliessen.
-  _closeSlash({ literal = false } = {}) {
+  // `quiet` (Block aus dem Bild gescrollt): den Text ohne `execCommand` an den
+  // Blockanfang setzen — der Browser scrollte sonst zum Caret zurück, weg von
+  // der Stelle, an die der User gerade gescrollt hat.
+  _closeSlash({ literal = false, quiet = false } = {}) {
     const text = literal && this._slashConvert ? '/' + (this.slashQuery || '') : '';
+    const block = this._slashBlock;
     this.slashShow = false;
     this.slashQuery = '';
     this._slashBlock = null;
     this._slashConvert = false;
     this._slashLabels = null;
     this._slashFilterCache = null;
+    if (quiet) {
+      if (text && block?.isConnected) {
+        block.insertBefore(document.createTextNode(text), block.firstChild);
+        window.__app?._markEditDirty?.();
+      }
+      return;
+    }
     getEditEl()?.focus();
     if (text) {
       document.execCommand('insertText', false, text);
@@ -332,7 +352,8 @@ export const slashMethods = {
     if (item.tag === 'hr') {
       replacement = document.createElement('hr');
       if (item.className) replacement.className = item.className;
-      replaceBlockOutsideList(editEl, block, replacement);
+      // Wie die Trennlinie aus der Seiten-Toolbar: hinter Zitat/Gedicht/Verlauf.
+      placeBlockNode(editEl, replacement, { replace: block });
       const next = document.createElement('p');
       next.appendChild(document.createElement('br'));
       replacement.insertAdjacentElement('afterend', next);
@@ -361,10 +382,12 @@ export const slashMethods = {
       replaceBlockOutsideList(editEl, block, replacement);
       caretTarget = p;
     } else {
-      // Einfacher Tag-Swap (p, h2, h3).
+      // Einfacher Tag-Swap (p, h2, h3). Eine Überschrift (oder ein Absatz) aus
+      // einer Zeile in Zitat/Gedicht/Verlauf steht danach ausserhalb davon —
+      // wie im Umwandeln-Modus.
       replacement = document.createElement(item.tag);
       replacement.innerHTML = '<br>';
-      replaceBlockOutsideList(editEl, block, replacement);
+      placeOutsideWrapper(editEl, block, replacement);
       caretTarget = replacement;
     }
 
@@ -419,26 +442,7 @@ export const slashMethods = {
     }
     target.replaceChildren(frag);
     if (!target.childNodes.length) target.appendChild(document.createElement('br'));
-    const parent = block.parentNode;
-    if (parent === editEl || isListEl(parent) || block.tagName === 'LI') {
-      replaceBlockOutsideList(editEl, block, replacement);
-    } else {
-      // Zeile in Zitat/Gedicht/Verlauf: der neue Block tritt an ihre Stelle
-      // HINTER den Wrapper-Teil davor; was nach ihr kam, bleibt als eigener
-      // Wrapper dahinter. Eine eigene Hülle statt `cloneNode`, damit keine
-      // Block-ID doppelt im Dokument steht.
-      const rest = [];
-      for (let n = block.nextElementSibling; n; n = n.nextElementSibling) rest.push(n);
-      block.remove();
-      parent.parentNode.insertBefore(replacement, parent.nextSibling);
-      if (rest.length) {
-        const tail = document.createElement(parent.localName);
-        if (parent.className) tail.className = parent.className;
-        rest.forEach((n) => tail.appendChild(n));
-        replacement.insertAdjacentElement('afterend', tail);
-      }
-      if (!parent.children.length) parent.remove();
-    }
+    placeOutsideWrapper(editEl, block, replacement);
     placeCaretIn(target);
   },
 };

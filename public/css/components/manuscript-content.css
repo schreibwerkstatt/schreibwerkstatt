@@ -163,6 +163,33 @@
     background: var(--mc-surface-alt);
     font-weight: 700;
   }
+  /* Spaltenausrichtung: `data-align` an der Zelle ist der einzige Träger
+     (table-html.js). Ohne diese Regel wirkte die Wahl im Gitter-Dialog nur im
+     Export. Nach der `text-align: left`-Grundregel, gleiche Spezifität. */
+  :is(.page-content-view, .book-editor-page-body, .share-content) :is(th, td)[data-align="center"] { text-align: center; }
+  :is(.page-content-view, .book-editor-page-body, .share-content) :is(th, td)[data-align="right"] { text-align: right; }
+  /* Beschriftung wie die Bildlegende (figcaption unten): klein, gedämpft,
+     kursiv, unter der Tabelle — die Vorgabe des PDF-Profils
+     (`table.captionPosition: 'below'`). */
+  :is(.page-content-view, .book-editor-page-body, .share-content) caption {
+    caption-side: bottom;
+    margin-top: var(--space-6, 6px);
+    font-size: var(--font-size-sm, 13px);
+    color: var(--mc-subtle);
+    font-style: italic;
+    text-align: center;
+  }
+  /* Schmal: eine breite Tabelle scrollt seitlich in sich, statt den Lesekasten
+     zu sprengen. `display: block` macht die Tabelle zum Scroll-Container (der
+     Inhalt läuft in einer anonymen Tabellenbox weiter); auf breiten Flächen
+     bleibt sie eine echte, volle Tabelle. */
+  @media (max-width: 640px) {
+    :is(.page-content-view, .book-editor-page-body, .share-content) table {
+      display: block;
+      max-width: 100%;
+      overflow-x: auto;
+    }
+  }
 
   /* --- Bilder. `max-width: 100%` ist die eigentliche Schutzregel: ohne sie
          rendert ein eingefügtes Manuskript-Bild in Originalbreite und sprengt
@@ -184,6 +211,18 @@
     color: var(--mc-subtle);
     font-style: italic;
     text-align: center;
+  }
+  /* Die Legende ist optional. Leer bleibt die `<figcaption>` als Schreibplatz
+     im Markup (figure-html.js#buildFigureHtml), ausserhalb des Notebook-Edit-
+     Modus wäre sie aber eine leere Zeile unter dem Bild. Gespeichert ist eine
+     leere Legende wirklich leer — den Caret-Platzhalter `<br>` streichen beide
+     Bereinigungen (utils/html.js#cleanContentArtefacts, lib/html-clean.js).
+     Nur `:empty`: `:has(> br:only-child)` träfe auch «Zeile 1<br>Zeile 2»
+     (`:only-child` zählt keine Textknoten). Der Bucheditor ist ein
+     Schreibmodus und bleibt aussen vor. */
+  :is(.page-content-view:not(.page-content-view--editing), .share-content)
+    figcaption:empty {
+    display: none;
   }
   /* --- Bildnachweis („Foto: …"). Eigene Zeile unter der Unterschrift und
          kleiner als sie: fachlich eine andere Angabe (siehe Modulkopf von

@@ -337,7 +337,7 @@ test('cleanPageHtml: Chip als einziger Inhalt eines Blocks kollabiert nicht', ()
 // App-E2E-Test abgedeckt (tests/e2e-app/notebook-cite.spec.js).
 
 test('Paste-Allowlist laesst SPAN nur als Beleg-Chip oder Querverweis zu', () => {
-  const src = readFileSync(resolve(ROOT, 'public', 'js', 'utils', 'html.js'), 'utf8');
+  const src = readFileSync(resolve(ROOT, 'public', 'js', 'utils', 'html', 'paste.js'), 'utf8');
   assert.ok(/PASTE_ALLOWED_TAGS[\s\S]*?'SPAN'/.test(src), 'SPAN muss in der Tag-Allowlist stehen');
   // Zwei Marker teilen sich das SPAN: der Beleg-Chip (data-src/-loc/-mode) und
   // der Querverweis (data-xref/-id/-fmt, public/js/xrefs/xref-html.js). Beide

@@ -204,3 +204,15 @@ test('Öffnen und Speichern ohne Änderung erzeugt keine Scheinänderung', async
   }));
   expect(state).toEqual({ dirty: false, badgeInEditor: false });
 });
+
+test('Leere Legende: im Edit-Modus Schreibplatz, in der Leseansicht keine Leerzeile', async ({ page }) => {
+  await boot(page);
+  await setFigureNumbering(page, false);
+  await openPageInEdit(page, 3);
+  await appendFigure(page, '<br>');
+  expect(await page.locator(`${EDIT_SEL} figcaption`).last().isVisible()).toBe(true);
+  await page.evaluate(async () => { await window.__app.saveEdit(); });
+  await page.waitForFunction(() => window.__app.editMode === false, null, { timeout: 15000 });
+  await page.waitForSelector(`${READ_SEL} figure`, { timeout: 15000 });
+  expect(await page.locator(`${READ_SEL} figure figcaption`).last().isVisible()).toBe(false);
+});

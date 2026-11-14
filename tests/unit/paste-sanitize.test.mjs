@@ -161,3 +161,76 @@ test('sanitizePasteHtml: <a> ohne href wird unwrapped (Text bleibt)', () => {
   assert.equal(out.toLowerCase().indexOf('<a'), -1);
   assert.ok(out.includes('kein-link'));
 });
+
+// ────────── Tabellen im Clipboard ──────────
+// Ohne Behandlung packte der Tag-Filter <table>/<tr>/<td> aus, und die
+// Zelltexte klebten ohne Trenner aneinander («JahrUmsatz2023…»).
+
+const SHEET = '<table style="width:300px"><tr><th style="font-weight:bold">Jahr</th>'
+  + '<th data-align="right">Umsatz</th></tr>'
+  + '<tr><td class="xl65" style="color:red">2023</td><td data-align="right"><b>1.2</b> Mio</td></tr></table>';
+
+test('sanitizePasteHtml: tables → normalisierte Tabelle über table-html.js', () => {
+  const out = sanitizePasteHtml(SHEET, { tables: true });
+  assert.match(out, /^<table><thead><tr><th scope="col">Jahr<\/th><th scope="col" data-align="right">Umsatz<\/th><\/tr><\/thead>/);
+  assert.match(out, /<td>2023<\/td><td data-align="right"><b>1\.2<\/b> Mio<\/td>/);
+  assert.doesNotMatch(out, /style=|class=/);
+});
+
+test('sanitizePasteHtml: ohne tables → eine Zeile je Absatz, Zellen mit « | »', () => {
+  const out = sanitizePasteHtml('<p>Vorher</p>' + SHEET, {});
+  assert.equal(out, '<p>Vorher</p><p>Jahr | Umsatz</p><p>2023 | 1.2 Mio</p>');
+  assert.doesNotMatch(out, /JahrUmsatz/);
+});
+
+test('sanitizePasteHtml: leere Tabelle fällt weg', () => {
+  assert.equal(sanitizePasteHtml('<table><tr><td> </td></tr></table><p>x</p>', { tables: true }), '<p>x</p>');
+});
+
+// ────────── Office-Markup ──────────
+
+test('sanitizePasteHtml: Google Docs — Hülle fällt, Span-Fett/-Kursiv werden strong/em', () => {
+  const out = sanitizePasteHtml('<b style="font-weight:normal;" id="docs-internal-guid-1"><p dir="ltr">'
+    + '<span style="font-weight:400">Normal </span><span style="font-weight:700">fett</span>'
+    + '<span style="font-style:italic">kursiv</span></p></b>');
+  assert.equal(out, '<p>Normal <strong>fett</strong><em>kursiv</em></p>');
+});
+
+test('sanitizePasteHtml: Word-Aufzählung wird echte Liste mit Ebenen, ohne Zeichen und Kommentare', () => {
+  const out = sanitizePasteHtml(
+    "<p class=MsoListParagraphCxSpFirst style='mso-list:l0 level1 lfo1'><!--[if !supportLists]-->"
+    + "<span style='mso-list:Ignore'>·<span>&nbsp;&nbsp;</span></span><!--[endif]-->Eins</p>"
+    + "<p class=MsoListParagraphCxSpMiddle style='mso-list:l0 level2 lfo1'><span style='mso-list:Ignore'>o<span>&nbsp;</span></span>Unter</p>"
+    + "<p class=MsoListParagraphCxSpLast style='mso-list:l0 level1 lfo1'><span style='mso-list:Ignore'>·<span>&nbsp;</span></span>Zwei</p>"
+    + '<p class=MsoNormal>Danach</p>');
+  assert.equal(out, '<ul><li>Eins<ul><li>Unter</li></ul></li><li>Zwei</li></ul><p>Danach</p>');
+});
+
+test('sanitizePasteHtml: nummerierte Word-Liste wird <ol>', () => {
+  const out = sanitizePasteHtml(
+    "<p class=MsoListParagraph style='mso-list:l0 level1 lfo1'><span style='mso-list:Ignore'>1.<span>&nbsp;</span></span>Eins</p>");
+  assert.equal(out, '<ol><li>Eins</li></ol>');
+});
+
+// ────────── editor-interne Kopie (structure) ──────────
+
+const OWN = '<figure><img src="/img/a.png" alt="x"><figcaption>Unter</figcaption><p class="figure-credit">Foto: K</p></figure>'
+  + '<pre class="mermaid">graph TD</pre>'
+  + '<ul class="todo"><li class="todo-item"><input type="checkbox" checked=""><span class="todo-text">T</span></li></ul>';
+
+test('sanitizePasteHtml: interne Kopie behält Abbildung, Diagramm und Checkbox-Liste', () => {
+  const norm = (h) => h.replace('checked=""', 'checked'); // linkedom serialisiert ohne Wert
+  assert.equal(norm(sanitizePasteHtml(OWN, { tables: true, structure: true })), norm(OWN));
+});
+
+test('sanitizePasteHtml: ohne structure fallen Bild, Diagramm-Klasse und Checkbox', () => {
+  const out = sanitizePasteHtml(OWN, { tables: true });
+  assert.ok(!/<img|<input|class="mermaid"|<figure/.test(out), out);
+});
+
+test('sanitizePasteHtml: interne Kopie — Bild nur mit Raster-data: oder eigener URL', () => {
+  const out = sanitizePasteHtml('<figure><img src="data:image/svg+xml;base64,AAA"><figcaption>c</figcaption></figure>', { structure: true });
+  assert.ok(!out.includes('<img'), out);
+  assert.ok(sanitizePasteHtml('<img src="data:image/png;base64,AAA">', { structure: true }).includes('<img'));
+  assert.ok(!sanitizePasteHtml('<img src="javascript:alert(1)">', { structure: true }).includes('<img'));
+});

@@ -70,7 +70,7 @@ test('Stylesheets (App, EPUB, HTML-Export) stylen alle Zeilenarten', () => {
 });
 
 test('Paste-Allowlist lässt Verlauf und Zeilenarten durch', () => {
-  const src = read('public/js/utils/html.js');
+  const src = read('public/js/utils/html/paste.js');
   assert.match(src, /MSG_THREAD_CLASS/);
   assert.match(src, /MSG_KIND_CLASS/);
 });

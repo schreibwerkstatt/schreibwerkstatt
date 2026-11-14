@@ -1,5 +1,6 @@
 // Teil von notebookEditMethods (siehe Facade edit.js).
-import { EVT, ZOOM_MAX, ZOOM_MIN, editorHost, findBlock, runQuoteNormalize, writeEditorPrefs } from './_shared.js';
+import { EVT, ZOOM_MAX, ZOOM_MIN, editorHost, runQuoteNormalize, writeEditorPrefs } from './_shared.js';
+import { blockInsertTarget, placeBlockNode } from '../toolbar/caret-panel.js';
 
 export const viewMethods = {
 
@@ -109,31 +110,23 @@ export const viewMethods = {
 
 
   // Trennlinie (<hr>) am Caret einfügen + Folge-Absatz für Weiterschreiben.
-  // Verhalten: leerer Block → ersetzen; sonst → nach Block einfügen.
+  // Ort wie bei Tabelle, Diagramm und Bild (caret-panel.js#blockInsertTarget/
+  // placeBlockNode): leerer Block → ersetzen, sonst hinter den Top-Level-Block;
+  // nie in eine Liste, einen Verlauf, ein Zitat oder eine Abbildung.
   // Trigger: Toolbar-Button + Cmd/Ctrl+Shift+H (siehe editor/toolbar.js).
   insertHorizontalRule() {
     const editEl = this._getEditEl();
     if (!editEl) return;
     editEl.focus();
     const sel = document.getSelection();
-    // Block-Lookup über shared/dom-block.js — gleiche Definition wie der
-    // Keydown-Dispatcher der Toolbar (vorher zwei Selektor-Kopien).
-    const block = (sel && sel.rangeCount)
-      ? findBlock(sel.getRangeAt(0).startContainer, editEl)
+    const caret = (sel && sel.rangeCount && editEl.contains(sel.getRangeAt(0).startContainer))
+      ? sel.getRangeAt(0)
       : null;
     const hr = document.createElement('hr');
     const next = document.createElement('p');
     next.appendChild(document.createElement('br'));
-    if (!block) {
-      editEl.appendChild(hr);
-      editEl.appendChild(next);
-    } else if ((block.textContent || '').trim() === '') {
-      block.parentNode.replaceChild(hr, block);
-      hr.insertAdjacentElement('afterend', next);
-    } else {
-      block.insertAdjacentElement('afterend', hr);
-      hr.insertAdjacentElement('afterend', next);
-    }
+    placeBlockNode(editEl, hr, blockInsertTarget(editEl, caret));
+    hr.insertAdjacentElement('afterend', next);
     const range = document.createRange();
     range.setStart(next, 0);
     range.collapse(true);

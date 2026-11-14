@@ -10,8 +10,8 @@
 // und der Standalone-Mount der nativen Clients nutzen diese Pfade nicht.
 
 import { findBlock } from '../shared/dom-block.js';
-import { mergeBlocksManually } from '../shared/block-edge.js';
-import { TODO_ITEM_SEL, TODO_TEXT_SEL } from '../shared/todo-html.js';
+import { mergeBlocksManually, deepestLastLine } from '../shared/block-edge.js';
+import { TODO_ITEM_SEL, TODO_TEXT_SEL, TODO_BOX_SEL } from '../shared/todo-html.js';
 
 export const isListEl = (n) => n?.nodeType === 1 && (n.tagName === 'UL' || n.tagName === 'OL');
 
@@ -35,20 +35,9 @@ export function promoteSubLists(li) {
   }
 }
 
-// Letzte sichtbare Zeile eines Blocks: bei einer Listenzeile mit Unterliste die
-// tiefste letzte Zeile darin — dorthin gehört angehängter Text, nicht hinter
-// die Unterliste.
-export function deepestLastLine(block) {
-  let cur = block;
-  let guard = 16;
-  while (guard-- > 0 && cur?.tagName === 'LI') {
-    const lists = directLists(cur);
-    const last = lists[lists.length - 1]?.lastElementChild;
-    if (!last) break;
-    cur = last;
-  }
-  return cur;
-}
+// Letzte sichtbare Zeile eines Blocks (Listenzeile mit Unterliste → tiefste
+// letzte Zeile darin): shared/block-edge.js, auch vom Fokus-Merge genutzt.
+export { deepestLastLine };
 
 // Zeile vor einer Listenzeile in Leserichtung (über Ebenen hinweg), sonst null.
 export function prevListLine(li) {
@@ -139,7 +128,33 @@ export function deleteRangeClean(root) {
   const a = findBlock(range.startContainer, root);
   const b = findBlock(range.endContainer, root);
   if (!a || !b || a === b) return false;
+  // Die Checkbox der Startzeile ist Struktur, nie Löschziel: beginnt die Auswahl
+  // vor ihr (Ziehen vom linken Rand, Shift+Pos1), beginnt sie dahinter.
+  const box = a.matches?.(TODO_ITEM_SEL) ? a.querySelector(TODO_BOX_SEL) : null;
+  const boxText = box ? a.querySelector(TODO_TEXT_SEL) : null;
+  if (boxText && range.isPointInRange(box, 0)) range.setStart(boxText, 0);
+  // Endet die Auswahl am Anfang des Folgeblocks (Dreifachklick, Shift+↓ vom
+  // Zeilenanfang), ist dieser nicht markiert: nur bis zur Grenze löschen, nichts
+  // hereinziehen.
+  const endProbe = document.createRange();
+  endProbe.selectNodeContents(b);
+  endProbe.setEnd(range.endContainer, range.endOffset);
+  const endsAtStart = !endProbe.toString().length && !endProbe.cloneContents().querySelector('br, img');
   range.deleteContents();
+  if (endsAtStart) {
+    const host = lineTextEl(a);
+    if (!a.isConnected || !host) return true;
+    // Leer gewordene Zeile: Caret-Platzhalter, und der Caret steht IN ihr —
+    // an einem leeren Textknoten schöbe Chromium ihn in den Folgeblock.
+    if (!(host.textContent || '').trim() && !host.querySelector('br, img')) {
+      host.replaceChildren(document.createElement('br'));
+      range.setStart(host, 0);
+    }
+    sel.removeAllRanges();
+    range.collapse(true);
+    sel.addRange(range);
+    return true;
+  }
   const receiver = lineTextEl(a);
   const source = lineTextEl(b);
   if (!a.isConnected || !b.isConnected || receiver === source) {
@@ -165,23 +180,32 @@ export function deleteRangeClean(root) {
 // beiden Hälften. Ist `line` die letzte Zeile, steht der Absatz einfach hinter
 // dem Block (= Block verlassen). `keepTail: false` (Fokusmodus): Absatz hinter
 // dem ganzen Block, die Folgezeilen bleiben drin. Liefert den neuen Absatz.
-export function splitWrapperAtLine(line, wrapper, { keepTail = true } = {}) {
-  const out = document.createElement('p');
-  out.appendChild(document.createElement('br'));
+// `insert`: statt des leeren Absatzes steht dieser Block zwischen den Hälften
+// (Slash-Menü: Überschrift aus einer Zitatzeile). Gezählt werden alle Knoten
+// hinter der Zeile, nicht nur Elemente — ein Zitat aus Import-Markup trägt
+// seinen Text auch ohne `<p>`.
+export function splitWrapperAtLine(line, wrapper, { keepTail = true, insert = null } = {}) {
+  const out = insert || document.createElement('p');
+  if (!insert) out.appendChild(document.createElement('br'));
   const rest = [];
   if (keepTail) {
-    for (let n = line.nextElementSibling; n; n = n.nextElementSibling) rest.push(n);
+    for (let n = line.nextSibling; n; n = n.nextSibling) rest.push(n);
   }
   line.remove();
   wrapper.parentNode.insertBefore(out, wrapper.nextSibling);
-  if (rest.length) {
+  if (rest.some((n) => n.nodeType === 1 || (n.textContent || '').trim())) {
     // Eigene Hülle statt `cloneNode`: die Block-ID (`data-bid`) darf nicht
     // doppelt im Dokument stehen.
+    // Übrige Attribute reisen mit (Quellen-Zeiger `data-src` am Blockzitat).
     const tail = document.createElement(wrapper.localName);
-    if (wrapper.className) tail.className = wrapper.className;
+    for (const a of wrapper.attributes) {
+      if (a.name !== 'data-bid' && a.name !== 'id') tail.setAttribute(a.name, a.value);
+    }
     rest.forEach((n) => tail.appendChild(n));
     out.insertAdjacentElement('afterend', tail);
+  } else {
+    rest.forEach((n) => n.remove());
   }
-  if (!wrapper.children.length) wrapper.remove();
+  if (!wrapper.children.length && !(wrapper.textContent || '').trim()) wrapper.remove();
   return out;
 }

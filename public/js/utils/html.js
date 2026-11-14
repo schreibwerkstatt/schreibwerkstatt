@@ -2,12 +2,6 @@
 // Inline-Style-/Leerblock-Cleanup. DOMParser-basiert (inert, keine
 // Resource-Loads). Idempotent aufrufbar.
 
-import { isCiteEl, CITE_ATTR_SRC, CITE_ATTR_LOC, CITE_ATTR_MODE } from '../sources/cite-html.js';
-import { isXrefEl, XREF_ATTR_KIND, XREF_ATTR_ID, XREF_ATTR_FMT } from '../xrefs/xref-html.js';
-import { MSG_THREAD_CLASS, MSG_THREAD_SEL, MSG_KIND_CLASS } from '../messages/msg-html.js';
-
-const MSG_LINE_CLASSES = new Set(Object.values(MSG_KIND_CLASS));
-
 // Sicherheitscheck vor dem Speichern: < 50 % wirkt unvollständig → Abbruch
 export const SAFETY_HTML_RATIO = 0.5;
 
@@ -103,131 +97,8 @@ export function stripFocusArtefacts(html) {
   return tmp.innerHTML;
 }
 
-// Whitelist erlaubter Tags beim Paste. Alles ausserhalb wird zu Text reduziert
-// (Tag-Hülle entfernt, Text-Inhalt bleibt). Tags spiegeln den Editor-Toolbar-
-// Output (Notebook/Focus/Bucheditor schreiben dasselbe Markup).
-const PASTE_ALLOWED_TAGS = new Set([
-  'P', 'BR', 'H1', 'H2', 'H3', 'H4', 'H5', 'H6',
-  'BLOCKQUOTE', 'UL', 'OL', 'LI', 'HR', 'PRE',
-  'STRONG', 'B', 'EM', 'I', 'U', 'S', 'STRIKE', 'CODE', 'MARK', 'SUB', 'SUP',
-  'A', 'DIV', 'SPAN',
-]);
-// Attribute, die pro Tag erhalten bleiben. Alles andere wird gestrippt
-// (insbesondere on*-Handler, style, id, class, data-*).
-const PASTE_ALLOWED_ATTRS = {
-  A: new Set(['href']),
-  DIV: new Set(['class']),  // nur .poem / .msg-thread (siehe Filter unten)
-  // Zeilenarten des Nachrichtenverlaufs (msg-in/-out/-name/-meta); jede andere
-  // Klasse filtert der Zweig unten wieder heraus.
-  P: new Set(['class']),
-  // SPAN ist ausschliesslich fuer den Quellen-Chip erlaubt, nicht als
-  // allgemeiner Inline-Container — Word-/Web-Pastes bestehen zur Haelfte aus
-  // <span>-Huellen. Der Filter unten unwrappt jeden Span, der kein gueltiger
-  // Chip ist. Der Chip selbst MUSS ueberleben: Kopiert man einen Satz mit
-  // Quellenangabe an eine andere Stelle, soll sie mitwandern statt zu reinem
-  // Text zu zerfallen (der Zeiger auf die Quelle waere sonst weg).
-  // Ebenso der Querverweis: kopiert man einen Satz mit „siehe Kapitel 3",
-  // muss der Zeiger mitwandern, sonst steht dort eine tote Zahl, die beim
-  // naechsten Umbau des Buchs nicht mehr mitnummeriert.
-  SPAN: new Set(['class', CITE_ATTR_SRC, CITE_ATTR_LOC, CITE_ATTR_MODE,
-                 XREF_ATTR_KIND, XREF_ATTR_ID, XREF_ATTR_FMT]),
-  // Belegtes Blockzitat: derselbe Grund wie beim Chip — verschiebt man ein
-  // Blockzitat, muss der Zeiger auf die Quelle mitwandern, sonst faellt es zum
-  // stilistischen Einzug ohne Beleg zurueck (und aus dem Zitat-Anteil heraus).
-  // `class` fuer .poem als <blockquote class="poem"> (siehe html-walker).
-  BLOCKQUOTE: new Set(['class', CITE_ATTR_SRC]),
-};
-
-/**
- * Sanitisiert Clipboard-HTML auf eine im Editor unterstützte Form. Wird vor
- * `document.execCommand('insertHTML', …)` aufgerufen. Parsing via DOMParser
- * statt innerHTML — Subtree hängt nie im Live-DOM, on*-Handler werden vor
- * Insert gestrippt.
- *
- * - Whitelist-Tags bleiben (Inhalt wandert mit), unbekannte Tags werden
- *   unwrapped (Text bleibt, Hülle weg).
- * - Skripte/Styles/Metadaten + ihre Subtrees fliegen komplett raus.
- * - `<div>` bleibt nur als `<div class="poem">` oder `<div class="msg-thread">`,
- *   sonst unwrapped; `<p>` behält nur Zeilenklassen des Nachrichtenverlaufs.
- * - Alle Attribute weg, ausser denen in `PASTE_ALLOWED_ATTRS`.
- * - Anschliessend durch `cleanContentArtefacts` für inline-style-Reste.
- */
-export function sanitizePasteHtml(html) {
-  if (!html) return '';
-  const doc = new DOMParser().parseFromString('<div id="r">' + html + '</div>', 'text/html');
-  const root = doc.getElementById('r');
-  if (!root) return '';
-
-  root.querySelectorAll('script, style, meta, link, title, iframe, object, embed, noscript')
-    .forEach(el => el.remove());
-
-  let guard = 32;
-  let changed = true;
-  while (changed && guard-- > 0) {
-    changed = false;
-    const all = Array.from(root.querySelectorAll('*'));
-    for (const el of all) {
-      const tag = el.tagName;
-      if (tag === 'DIV' && !_pasteDivClass(el)) {
-        _unwrap(el);
-        changed = true;
-        continue;
-      }
-      if (!PASTE_ALLOWED_TAGS.has(tag)) {
-        _unwrap(el);
-        changed = true;
-        continue;
-      }
-      const allowedAttrs = PASTE_ALLOWED_ATTRS[tag] || null;
-      for (const attr of Array.from(el.attributes)) {
-        if (!allowedAttrs || !allowedAttrs.has(attr.name)) el.removeAttribute(attr.name);
-      }
-      if (tag === 'DIV') el.setAttribute('class', _pasteDivClass(el));
-      if (tag === 'P') _keepMsgLineClass(el);
-      // Span nur als Quellen-Chip ODER Querverweis zulassen; alles andere verliert
-      // die Huelle. Muss NACH dem Attribut-Filter laufen — die Praedikate pruefen
-      // class+data-*, die vorher noch mit Fremdattributen vermischt sein koennten.
-      if (tag === 'SPAN' && !isCiteEl(el) && !isXrefEl(el)) {
-        _unwrap(el);
-        changed = true;
-        continue;
-      }
-      if (tag === 'A' && !el.getAttribute('href')) {
-        _unwrap(el);
-        changed = true;
-      }
-    }
-  }
-
-  return cleanContentArtefacts(root.innerHTML);
-}
-
-// Klasse, unter der ein eingefügter `<div>` überlebt — '' = auspacken.
-function _pasteDivClass(el) {
-  const cls = (el.getAttribute('class') || '').split(/\s+/);
-  if (cls.includes('poem')) return 'poem';
-  if (cls.includes(MSG_THREAD_CLASS)) return MSG_THREAD_CLASS;
-  return '';
-}
-
-// Am `<p>` nur die Zeilenart des Nachrichtenverlaufs stehen lassen (Word bringt
-// `MsoNormal` & Co. mit). Ausserhalb eines Verlaufs ist sie bedeutungslos und
-// fällt ebenfalls.
-function _keepMsgLineClass(el) {
-  const inThread = el.parentElement?.matches?.(MSG_THREAD_SEL);
-  const kind = inThread
-    ? (el.getAttribute('class') || '').split(/\s+/).find((c) => MSG_LINE_CLASSES.has(c))
-    : null;
-  if (kind) el.setAttribute('class', kind);
-  else el.removeAttribute('class');
-}
-
-function _unwrap(el) {
-  const parent = el.parentNode;
-  if (!parent) return;
-  while (el.firstChild) parent.insertBefore(el.firstChild, el);
-  parent.removeChild(el);
-}
+// Paste-Sanitizer: utils/html/paste.js.
+export { sanitizePasteHtml } from './html/paste.js';
 
 // Tags, auf denen `style` IMMER unerwünscht ist (Block-Styling kommt über
 // .poem/.callout/style.css; der Editor selbst setzt nie inline-style).
@@ -255,8 +126,16 @@ const EMPTY_INLINE_PROBE = /<(i|em|b|strong|u|s|mark|small|sub|sup)\b[^>]*>\s*<\
  *
  * Idempotent. Behält `style` auf img/table/td/col/figure/iframe.
  */
+// Eine Bildunterschrift, die nur den Caret-Platzhalter trägt, ist leer: so
+// gespeichert blendet `figcaption:empty` (manuscript-content.css) sie in
+// Leseansicht und Share-Reader aus. Im Editor bleibt das `<br>` als Schreibplatz
+// stehen — die Regel greift nur auf dem gesendeten/verglichenen HTML.
+// Server-Pendant: lib/html-clean.js#emptyBlankFigcaptions (gleiche Regel).
+const BLANK_FIGCAPTION_RE = /(<figcaption\b[^>]*>)\s*<br\s*\/?>\s*(<\/figcaption>)/gi;
+
 export function cleanContentArtefacts(html) {
   if (!html) return html;
+  html = html.replace(BLANK_FIGCAPTION_RE, '$1$2');
   if (!/\sstyle\s*=|<(span|meta|link|script|style|title)\b/i.test(html)
     && !EMPTY_INLINE_PROBE.test(html)) return html;
 
@@ -346,7 +225,9 @@ export function collapseEmptyBlocks(html) {
   }
 
   // Inline: aufeinanderfolgende `<br>` (auch durch Whitespace getrennt) → ein `<br>`.
+  // Nicht im Code-Block: dort ist eine Leerzeile (`a<br><br>b`) Inhalt.
   root.querySelectorAll('br').forEach(br => {
+    if (br.closest('pre')) return;
     let s = br.nextSibling;
     while (s) {
       const sn = s.nextSibling;

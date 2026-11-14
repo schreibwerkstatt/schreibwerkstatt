@@ -24,8 +24,10 @@
 //      zweite Liste dahinter stehen (bei `<ol>` mit fortgesetzter Nummerierung).
 //   3. Verschachtelte Listen werden bis zum Root aufgetrennt.
 //   4. Eine leer gewordene Listen-Hülle verschwindet.
-//   5. Nicht-Listen-Wrapper (`blockquote`, `div.poem`) bleiben unangetastet —
-//      dort ist ein Block IM Wrapper gewollt.
+//   5. Aus Zitat/Gedicht/Verlauf heraus: Überschrift, Absatz, Trennlinie und
+//      eingesetzte Blöcke (Tabelle, Diagramm, Bild) stehen danach ausserhalb
+//      (slash.js#placeOutsideWrapper, caret-panel.js#placeBlockNode); Listen,
+//      Checklisten und Zitate dürfen im Wrapper stehen.
 //   6. Kein Tastendruck/Transform erzeugt ein `style`-Attribut.
 
 const { test, expect } = require('../e2e/_helpers/fixtures');
@@ -163,11 +165,11 @@ test('Checkliste: der Absatz verlässt sie ohne Checkbox', async ({ page }) => {
   expect(out, 'keine Checkbox im Absatz').not.toMatch(/<p>[^<]*<input/);
 });
 
-test('Blockzitat bleibt unangetastet: die Überschrift bleibt darin', async ({ page }) => {
+test('Blockzitat: die Überschrift steht danach ausserhalb', async ({ page }) => {
   await enterNotebookEdit(page);
   await seed(page, '<p>A</p><blockquote><p>Zitat</p></blockquote><p>E</p>', 'blockquote > p');
   await newLineThenSlash(page, 'Überschrift 2');
-  expect(await topLevel(page), 'Struktur unverändert').toEqual(['p', 'blockquote', 'p']);
-  const inside = await page.evaluate((s) => !!document.querySelector(s).querySelector('blockquote > h2'), EDIT_SEL);
-  expect(inside, 'die <h2> steht im Blockzitat').toBe(true);
+  expect(await topLevel(page), 'Überschrift hinter dem Zitat').toEqual(['p', 'blockquote', 'h2', 'p']);
+  const inside = await page.evaluate((s) => !!document.querySelector(s).querySelector('blockquote h2'), EDIT_SEL);
+  expect(inside, 'keine <h2> im Blockzitat').toBe(false);
 });

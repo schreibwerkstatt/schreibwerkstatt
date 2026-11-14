@@ -39,6 +39,10 @@
   flex: 1;
   min-width: 0;
 }
+/* Beschriftung mit Auszeichnung — gleiche Andeutung wie eine Zelle. */
+.table-caption-input.is-rich {
+  background: var(--color-accent-soft);
+}
 
 /* --- Warnung bei verlustbehaftetem Quell-Markup (verbundene Zellen,
        Blockinhalt). Sie steht VOR dem Speichern, weil der Dialog diese Fälle
@@ -126,8 +130,10 @@
   gap: var(--space-2xs);
 }
 .table-align-btn {
-  min-width: 1.6rem;
-  padding: var(--space-2xs) var(--space-xs);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--space-2xs);
   border: var(--border-thin) solid var(--color-border);
   border-radius: var(--radius-none);
   background: var(--color-surface);
@@ -136,13 +142,27 @@
   line-height: var(--lh-tight);
   cursor: pointer;
 }
+.table-align-btn:focus-visible {
+  outline: var(--focus-ring);
+  outline-offset: var(--focus-ring-offset);
+}
+.table-align-btn .icon {
+  width: 0.95rem;
+  height: 0.95rem;
+}
 .table-align-btn.is-active {
   border-color: var(--color-primary);
   color: var(--color-primary);
   background: var(--color-accent-soft);
 }
-.table-grid-del {
+.table-grid-menu-btn {
   flex: none;
+}
+/* Zeilenkopf: Nummer links, ⋯ rechts. Das Flex sitzt am Inhalt, nicht an der
+   Zelle — eine `display: flex`-Zelle verlöre ihre Tabellen-Rolle. */
+.table-grid-rownum {
+  display: inline-block;
+  min-width: 1.4em;
 }
 
 /* Zellenfelder. Randlos, damit das Gitter die Zellgrenzen zeigt und nicht jedes

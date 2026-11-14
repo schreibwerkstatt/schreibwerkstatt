@@ -13,12 +13,45 @@ import { TODO_TEXT_SEL, TODO_LIST_SEL } from '../../shared/todo-html.js';
 import { mergeBlocksManually, caretEdge } from '../../shared/block-edge.js';
 import {
   isListEl, promoteSubLists, deepestLastLine, prevListLine, nextListLine, caretAtLineEnd,
-  mergeLines, deleteRangeClean,
+  mergeLines, deleteRangeClean, removeEmptyAncestors,
 } from '../line-merge.js';
 
 // Druckbares Zeichen, das eine Auswahl ersetzt. AltGr (Windows: Ctrl+Alt) und
-// Option (Mac) erzeugen Zeichen wie `@`, Cmd/Ctrl allein ist ein Kürzel.
-const isPrintable = (e) => e.key.length === 1 && !e.metaKey && (!e.ctrlKey || e.altKey);
+// Option (Mac) erzeugen Zeichen wie `@`, Cmd/Ctrl allein ist ein Kürzel. Alt
+// allein (Windows/Linux) ist ein Menü-Kürzel und erzeugt kein Zeichen — die
+// Auswahl bleibt dann stehen. Eine Tottaste (`^`, `´`, `¨` — auf CH-Tastaturen
+// Alltag) setzt das Zeichen erst mit der nächsten Taste zusammen, ersetzt die
+// Auswahl aber schon jetzt: also ebenfalls vorher selbst löschen.
+const IS_MAC = typeof navigator !== 'undefined' && /Mac|iPhone|iPad/.test(navigator.platform || '');
+const isPrintable = (e) => {
+  if (e.metaKey || (e.ctrlKey && !e.altKey)) return false;
+  if (e.key === 'Dead') return true;
+  if (e.key.length !== 1) return false;
+  return !e.altKey || e.ctrlKey || IS_MAC || !!e.getModifierState?.('AltGraph');
+};
+
+// Äusserste Liste zwischen einer Listenzeile und ihrem Top-Level-Block (der
+// Wrapper selbst, wenn er eine Liste ist). Checkbox-Listen haben eigene Handler.
+function outermostList(li, top) {
+  let list = null;
+  for (let n = li.parentNode; n && n !== top.parentNode; n = n.parentNode) {
+    if (isListEl(n)) list = n;
+    else if (n.tagName !== 'LI') break;
+  }
+  return list && !list.matches(TODO_LIST_SEL) ? list : null;
+}
+
+// Randzeile eines Wrappers in Leserichtung (Backspace: die letzte, Delete: die
+// erste), auch wenn dort eine Liste steht. null, wenn der Rand keine Liste ist
+// (dann gilt `wrapperInnerBlocks`).
+function wrapperEdgeLine(wrapper, back) {
+  if (wrapper.tagName === 'PRE' || isListEl(wrapper)) return null;
+  const kid = back ? wrapper.lastElementChild : wrapper.firstElementChild;
+  if (!isListEl(kid) || kid.matches(TODO_LIST_SEL)) return null;
+  const li = back ? kid.lastElementChild : kid.firstElementChild;
+  if (li?.tagName !== 'LI') return null;
+  return back ? deepestLastLine(li) : li;
+}
 
 export const keydownDeleteMethods = {
   // Auswahl über eine Blockgrenze hinweg (Absatz ↔ Zitat, Absatz ↔ Verlaufs-
@@ -39,6 +72,31 @@ export const keydownDeleteMethods = {
     if (del) e.preventDefault();
     app._markEditDirty?.();
     return true;
+  },
+
+  // Enter, Shift+Enter und der Datumsstempel über einer Auswahl: die Auswahl
+  // zuerst selbst löschen (über eine Blockgrenze per `deleteRangeClean`, sonst
+  // im Block), danach laufen die Enter-Handler bzw. der Stempel mit leerer
+  // Auswahl weiter. Der Browser-Default verschmölze die Randblöcke sonst mit
+  // eingebackenem Inline-`style`, und die Struktur-Handler (Legende, Zitat,
+  // Gedicht) prüfen nur den Anfang der Auswahl. Konsumiert die Taste nicht.
+  _kbCollapseForInsert(e, app) {
+    const enter = e.key === 'Enter' && !e.metaKey && !e.ctrlKey && !e.altKey;
+    const stamp = (e.metaKey || e.ctrlKey) && !e.altKey && e.code === 'Semicolon';
+    if (!enter && !stamp) return;
+    const sel = document.getSelection();
+    if (!sel || sel.rangeCount === 0 || sel.isCollapsed) return;
+    const editEl = getEditEl();
+    const range = sel.getRangeAt(0);
+    if (!editEl || !editEl.contains(range.startContainer) || !editEl.contains(range.endContainer)) return;
+    this._structStep(app);
+    if (!deleteRangeClean(editEl)) {
+      range.deleteContents();
+      range.collapse(true);
+      sel.removeAllRanges();
+      sel.addRange(range);
+    }
+    app._markEditDirty?.();
   },
 
   // Backspace/Delete-Sonderpfade: (a) per Klick markierte <hr> löschen; (b) einen
@@ -76,17 +134,19 @@ export const keydownDeleteMethods = {
       app._markEditDirty?.();
       return true;
     }
-    // Absatz-Grenze löschen (Merge zweier Absätze): enthält der Quell-Absatz
-    // weiche Umbrüche (<br>), zieht der Browser nur dessen ERSTE Zeile hoch und
-    // befördert den ersten <br> zu einer neuen Absatzgrenze — aus einem
-    // gelöschten Absatz werden so „automatisch" mehrere. Bei top-level Absätzen
-    // daher den Merge selbst übernehmen: gesamten Quell-Inhalt anhängen, weiche
-    // Umbrüche bleiben weich.
+    // Absatz-Grenze löschen (Merge zweier Absätze) in zwei Fällen selbst:
+    //   • der Quell-Absatz enthält weiche Umbrüche (<br>) — der Browser zöge nur
+    //     dessen ERSTE Zeile hoch und beförderte den ersten <br> zu einer neuen
+    //     Absatzgrenze, aus einem gelöschten Absatz würden so mehrere;
+    //   • Überschrift ↔ Absatz — der Browser bäckt die Schriftgrösse/-stärke
+    //     der Quelle als Inline-`style` in den Empfänger.
+    // Gesamten Quell-Inhalt anhängen, weiche Umbrüche bleiben weich.
     if (neighbour && block.parentNode === editEl
         && MERGE_BLOCK_TAGS.has(block.tagName)
         && MERGE_BLOCK_TAGS.has(neighbour.tagName)) {
       const source = back ? block : neighbour;
-      if (source.querySelector('br') && (source.textContent || '').trim()) {
+      const own = source.querySelector('br') || block.tagName !== neighbour.tagName;
+      if (own && (source.textContent || '').trim()) {
         e.preventDefault();
         this._structStep(app);
         this._mergeBlocksManually(back ? neighbour : block, source);
@@ -259,9 +319,8 @@ export const keydownDeleteMethods = {
     if (!block) return false;
     const top = topLevelBlock(block, editEl);
     if (top.matches?.(BOUNDARY_WRAPPER_SEL)) {
-      if (!app.focusActive && isListEl(top) && block.tagName === 'LI') {
-        return this._kbListLine(e, app, range, block, top);
-      }
+      const list = !app.focusActive && block.tagName === 'LI' ? outermostList(block, top) : null;
+      if (list) return this._kbListLine(e, app, range, block, list, list !== top);
       return this._kbBoundaryInside(e, app, range, block, top);
     }
     if (block === top && MERGE_BLOCK_TAGS.has(block.tagName)) {
@@ -276,7 +335,11 @@ export const keydownDeleteMethods = {
   // verschwindenden Zeile rücken an deren Stelle (line-merge.js#mergeLines).
   // Erste Zeile + Backspace verlässt die Liste, letzte Zeile + Delete zieht
   // den Folgeabsatz herein — wie bei den übrigen Wrappern.
-  _kbListLine(e, app, range, li, list) {
+  // `nested`: die Liste steckt in einem Wrapper (Liste im Zitat). Dann zieht
+  // Delete auf der letzten Zeile nur einen Absatz im selben Wrapper herein; am
+  // Rand des Wrappers bleibt es ein No-Op statt des Browser-Merges über die
+  // Wrapper-Grenze (Inline-`style`).
+  _kbListLine(e, app, range, li, list, nested = false) {
     if (e.key === 'Backspace') {
       if (!caretAtBlockStart(range, li)) return false;
       e.preventDefault();
@@ -290,7 +353,11 @@ export const keydownDeleteMethods = {
     if (!caretAtLineEnd(range, li)) return false;
     const next = nextListLine(li);
     const after = next ? null : list.nextElementSibling;
-    if (!next && (!after || !MERGE_BLOCK_TAGS.has(after.tagName))) return false;
+    if (!next && (!after || !MERGE_BLOCK_TAGS.has(after.tagName))) {
+      if (!nested) return false;
+      e.preventDefault();
+      return true;
+    }
     e.preventDefault();
     this._structStep(app);
     mergeLines(li, next || after);
@@ -357,18 +424,24 @@ export const keydownDeleteMethods = {
     const wrapper = back ? block.previousElementSibling : block.nextElementSibling;
     if (!wrapper?.matches?.(BOUNDARY_WRAPPER_SEL)) return false;
     const inner = wrapperInnerBlocks(wrapper);
-    if (!inner.length) return false;
+    // Notebook: eine Liste als erstes/letztes Kind des Wrappers (Liste im
+    // Zitat) ist dessen Randzeile — nicht der Absatz davor bzw. danach.
+    const edge = app.focusActive ? null : wrapperEdgeLine(wrapper, back);
+    if (!inner.length && !edge) return false;
     e.preventDefault();
     this._structStep(app);
     const merge = app.focusActive ? mergeBlocksManually : mergeLines;
     if (back) {
       const last = inner[inner.length - 1];
-      merge(app.focusActive ? last : deepestLastLine(last), block);
+      merge(edge || (app.focusActive ? last : deepestLastLine(last)), block);
     } else {
       // Die Quelle wird entfernt. Bei <pre> IST die Quelle der Wrapper, der
-      // damit schon weg ist — sonst den leer gewordenen entfernen.
-      merge(block, inner[0]);
-      if (wrapper.isConnected && !wrapperInnerBlocks(wrapper).length) wrapper.remove();
+      // damit schon weg ist — sonst leer gewordene Hüllen entfernen.
+      const source = edge || inner[0];
+      const holder = source.parentNode;
+      merge(block, source);
+      if (holder !== wrapper) removeEmptyAncestors(holder, wrapper);
+      if (wrapper.isConnected && !wrapper.children.length && !(wrapper.textContent || '').trim()) wrapper.remove();
     }
     app._markEditDirty?.();
     return true;

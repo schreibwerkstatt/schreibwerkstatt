@@ -279,8 +279,7 @@
    sonst jedes layered `display: none` (icons.css-Unlayered-Falle). */
 .page-editor-toolbar__insert { display: contents; }
 .page-editor-toolbar__insert-menu { display: none; }
-.page-editor-toolbar__view,
-.page-editor-toolbar__more { display: inline-flex; }
+.page-editor-toolbar__view { display: inline-flex; }
 /* Das «+»-Menü sitzt links in der Leiste: linksbündig aufklappen statt über
    den linken Kartenrand hinaus. */
 .page-editor-toolbar__insert-menu .context-menu--dropdown {

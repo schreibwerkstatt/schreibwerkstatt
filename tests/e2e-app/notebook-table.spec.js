@@ -19,6 +19,13 @@
 //   6. Klick auf eine gesetzte Tabelle oeffnet den Dialog zum Bearbeiten.
 //   7. Bearbeiten behaelt das `data-bid` — sonst laufen Querverweise ins Leere.
 //   8. Kopfzeile ab- und wieder einschalten bringt ihren Inhalt zurueck.
+//   9. Die Spaltenausrichtung ist in der Leseansicht sichtbar (CSS auf data-align).
+//  10. «Speichern» im Dialog ohne Aenderung schreibt nichts — eine importierte
+//      Tabelle mit verbundenen Zellen bleibt unplaniert.
+//  11. Gitter: Enter/Tab legen Zeilen an, Einfuegen aus einer Tabellen-
+//      kalkulation verteilt sich, das Kopf-Menue verschiebt und fuegt ein.
+//  12. Tabelle aus der Zwischenablage kommt als atomare Tabelle an, ohne style.
+//  13. Alt+Enter neben einer Tabelle oeffnet ihren Dialog; Entfernen fragt nach.
 //
 // Konventionen wie notebook-xref.spec.js: Inhalt wird ANGEHAENGT, und jeder Test
 // arbeitet auf einer eigenen Seite — die Smoke-DB lebt ueber den ganzen Lauf.
@@ -135,9 +142,14 @@ test('Uebernehmen schreibt Markup nach dem Vertrag und ueberlebt den Save', asyn
   expect(html).not.toContain('contenteditable');
   // Die Nummer ist ein Render-Artefakt — sie darf nicht mitgespeichert werden.
   expect(html).not.toMatch(/Tab\.\s*\d/);
+
+  // Leseansicht: die Ausrichtung wirkt (manuscript-content.css, data-align).
+  const align = await page.locator('#editor-card .page-content-view td[data-align="right"]').first()
+    .evaluate((el) => getComputedStyle(el).textAlign);
+  expect(align).toBe('right');
 });
 
-test('Oeffnen und Speichern ohne Aenderung laesst die Tabelle unberuehrt', async ({ page }) => {
+test('Abschnitt mit Tabelle oeffnen und speichern laesst sie unberuehrt', async ({ page }) => {
   await boot(page);
   await openPageInEdit(page, 1);
   const before = await serverHtml(page);
@@ -199,4 +211,178 @@ test('Kopfzeile ab- und wieder einschalten bringt ihren Inhalt zurueck', async (
   await toggle.click();
   await expect(cells).toHaveCount(9);
   await expect(cells.nth(0)).toHaveValue('Jahr');
+});
+
+// Tabelle direkt in den Live-Editor setzen (wie ein Import sie hinterlaesst)
+// und atomar machen, wie der Mount es tut.
+async function injectTable(page, html) {
+  await page.evaluate(({ sel, html }) => {
+    const edit = document.querySelector(sel);
+    const box = document.createElement('div');
+    box.innerHTML = html;
+    const t = box.firstElementChild;
+    t.setAttribute('contenteditable', 'false');
+    edit.appendChild(t);
+    const p = document.createElement('p');
+    p.innerHTML = 'danach';
+    edit.appendChild(p);
+  }, { sel: EDIT_SEL, html });
+}
+
+test('Speichern im Dialog ohne Aenderung planiert keine verbundenen Zellen', async ({ page }) => {
+  await boot(page);
+  await openPageInEdit(page, 2);
+  await injectTable(page, '<table><tbody><tr><td colspan="2">Gesamt</td></tr><tr><td>a</td><td>b</td></tr></tbody></table>');
+
+  await page.locator(`${EDIT_SEL} table`).last().click();
+  await page.waitForSelector(`${DLG_SEL}[open]`, { timeout: 5000 });
+  await expect(page.locator(`${DLG_SEL} .table-dialog-warn`)).toBeVisible();
+  await page.locator(`${DLG_SEL} .editor-dialog__actions button.primary`).click();
+  await page.waitForSelector(`${DLG_SEL}[open]`, { state: 'detached', timeout: 5000 });
+
+  await expect(page.locator(`${EDIT_SEL} table td[colspan="2"]`)).toHaveCount(1);
+});
+
+test('Gitter: Enter und Tab wandern und legen Zeilen an', async ({ page }) => {
+  await boot(page);
+  await openPageInEdit(page, 0);
+  await openTableDialog(page);
+  const cell = (r, c) => page.locator(`${DLG_SEL} [data-cell="${r}:${c}"]`);
+
+  // Fokus steht beim Oeffnen in der ersten Zelle (Kopf).
+  await expect(cell(-1, 0)).toBeFocused();
+  // Enter: gleiche Spalte, naechste Zeile; in der letzten Zeile neue Zeile.
+  await page.keyboard.press('Enter');
+  await expect(cell(0, 0)).toBeFocused();
+  await page.keyboard.press('Enter');
+  await page.keyboard.press('Enter');
+  await expect(cell(2, 0)).toBeFocused();
+  // Tab in der letzten Zelle: noch eine Zeile, Fokus in deren erste Zelle.
+  await cell(2, 2).focus();
+  await page.keyboard.press('Tab');
+  await expect(cell(3, 0)).toBeFocused();
+});
+
+// Gecko ignoriert das im `ClipboardEvent`-Konstruktor uebergebene
+// `DataTransfer` (Muster notebook-cite.spec.js) — Paste nur in Chromium.
+test('Gitter: Einfuegen aus einer Tabellenkalkulation verteilt sich', async ({ page, browserName }) => {
+  test.skip(browserName === 'firefox', 'ClipboardEvent traegt in Gecko kein synthetisches DataTransfer');
+  await boot(page);
+  await openPageInEdit(page, 0);
+  await openTableDialog(page);
+  const cell = (r, c) => page.locator(`${DLG_SEL} [data-cell="${r}:${c}"]`);
+
+  // Einfuegen ab Zelle (0,1): 2 Zeilen × 3 Spalten → eine Spalte kommt dazu.
+  await cell(0, 1).focus();
+  await page.evaluate((sel) => {
+    const el = document.querySelector(sel);
+    const dt = new DataTransfer();
+    dt.setData('text/plain', 'A\tB\t"C\nmit Umbruch"\r\nD\tE\tF\r\n');
+    el.dispatchEvent(new ClipboardEvent('paste', { clipboardData: dt, bubbles: true, cancelable: true }));
+  }, `${DLG_SEL} [data-cell="0:1"]`);
+  await expect(page.locator(`${DLG_SEL} .table-grid-colhead`)).toHaveCount(4);
+  await expect(cell(0, 1)).toHaveValue('A');
+  await expect(cell(0, 3)).toHaveValue('C mit Umbruch');
+  await expect(cell(1, 2)).toHaveValue('E');
+  await expect(page.locator(`${DLG_SEL} tbody tr:not(.table-grid-headrow)`)).toHaveCount(2);
+});
+
+test('Gitter: Aktionsmenue am Zeilenkopf verschiebt und fuegt ein', async ({ page }) => {
+  await boot(page);
+  await openPageInEdit(page, 0);
+  await openTableDialog(page);
+  const cell = (r, c) => page.locator(`${DLG_SEL} [data-cell="${r}:${c}"]`);
+  await cell(0, 0).fill('eins');
+  await cell(1, 0).fill('zwei');
+
+  const rowMenu = (r) => page.locator(`${DLG_SEL} tbody tr:not(.table-grid-headrow)`).nth(r)
+    .locator('.table-grid-menu-btn');
+  await rowMenu(0).click();
+  const menu = page.locator('.context-menu[role="menu"]:visible');
+  await expect(menu).toBeVisible();
+  await menu.locator('.context-menu-item').nth(3).click(); // nach unten
+  await expect(cell(0, 0)).toHaveValue('zwei');
+  await expect(cell(1, 0)).toHaveValue('eins');
+  // Das Feld folgt seiner Zeile (stabiler Schluessel), nicht dem Index.
+  await rowMenu(1).click();
+  await menu.locator('.context-menu-item').nth(0).click(); // darueber einfuegen
+  await expect(cell(1, 0)).toHaveValue('');
+  await expect(cell(2, 0)).toHaveValue('eins');
+  // Dialog bleibt offen (Esc/Klick im Menue gilt nur dem Menue).
+  await expect(page.locator(`${DLG_SEL}[open]`)).toHaveCount(1);
+});
+
+test('Tabelle aus der Zwischenablage kommt als atomare Tabelle an', async ({ page, browserName }) => {
+  test.skip(browserName === 'firefox', 'ClipboardEvent traegt in Gecko kein synthetisches DataTransfer');
+  await boot(page);
+  await openPageInEdit(page, 3);
+  await page.evaluate((sel) => {
+    const edit = document.querySelector(sel);
+    const p = document.createElement('p');
+    p.textContent = 'Vorher';
+    edit.appendChild(p);
+    edit.focus();
+    const r = document.createRange();
+    r.selectNodeContents(p);
+    r.collapse(false);
+    const s = getSelection();
+    s.removeAllRanges();
+    s.addRange(r);
+    const dt = new DataTransfer();
+    dt.setData('text/html', '<meta charset="utf-8"><style>td{color:red}</style>'
+      + '<table style="width:300px"><tr><th style="font-weight:bold">Jahr</th><th align="right">Umsatz</th></tr>'
+      + '<tr><td class="xl65" style="color:red">2023</td><td>1.2 Mio</td></tr></table>');
+    dt.setData('text/plain', 'Jahr\tUmsatz\n2023\t1.2 Mio');
+    edit.dispatchEvent(new ClipboardEvent('paste', { clipboardData: dt, bubbles: true, cancelable: true }));
+  }, EDIT_SEL);
+
+  const t = page.locator(`${EDIT_SEL} > table`).last();
+  await expect(t).toHaveCount(1);
+  await expect(t).toHaveAttribute('contenteditable', 'false');
+  const info = await t.evaluate((el) => ({
+    html: el.outerHTML,
+    inP: !!el.closest('p'),
+    next: el.nextElementSibling?.tagName || null,
+  }));
+  expect(info.inP).toBe(false);
+  expect(info.next).toBe('P');
+  expect(info.html).not.toContain('style=');
+  expect(info.html).toContain('<th scope="col">Jahr</th>');
+  expect(info.html).toContain('<td>2023</td>');
+  // Kein Textbrei aus aneinandergeklebten Zellen.
+  const text = await page.locator(EDIT_SEL).innerText();
+  expect(text).not.toContain('JahrUmsatz');
+});
+
+test('Alt+Enter neben einer Tabelle oeffnet den Dialog, Entfernen fragt nach', async ({ page }) => {
+  await boot(page);
+  await openPageInEdit(page, 2);
+  await injectTable(page, '<table><tbody><tr><td>x</td><td>y</td></tr></tbody></table>');
+  // Caret an den Anfang des Absatzes hinter der Tabelle.
+  await page.evaluate((sel) => {
+    const edit = document.querySelector(sel);
+    const p = edit.lastElementChild;
+    edit.focus();
+    const r = document.createRange();
+    r.setStart(p.firstChild, 0);
+    r.collapse(true);
+    const s = getSelection();
+    s.removeAllRanges();
+    s.addRange(r);
+  }, EDIT_SEL);
+  await page.keyboard.press('Alt+Enter');
+  await page.waitForSelector(`${DLG_SEL}[open]`, { timeout: 5000 });
+  await expect(page.locator(`${DLG_SEL} [data-cell="0:1"]`)).toHaveValue('y');
+
+  const asked = await page.evaluate(() => {
+    window.__asked = 0;
+    window.__app.appConfirm = async () => { window.__asked++; return false; };
+    return true;
+  });
+  expect(asked).toBe(true);
+  await page.locator(`${DLG_SEL} .editor-dialog__actions button.danger`).click();
+  await expect.poll(() => page.evaluate(() => window.__asked)).toBe(1);
+  // Abgelehnt: Dialog offen, Tabelle noch da.
+  await expect(page.locator(`${DLG_SEL}[open]`)).toHaveCount(1);
+  await expect(page.locator(`${EDIT_SEL} table`).last()).toContainText('y');
 });

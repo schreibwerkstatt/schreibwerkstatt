@@ -198,6 +198,8 @@
   vertical-align: top;
   font-weight: inherit;
 }
+.focus-editor__content :is(th, td)[data-align="center"] { text-align: center; }
+.focus-editor__content :is(th, td)[data-align="right"] { text-align: right; }
 .focus-editor__content caption {
   caption-side: top;
   text-align: start;

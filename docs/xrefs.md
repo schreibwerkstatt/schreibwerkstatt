@@ -40,7 +40,7 @@ Beide Tabellen bedienen nur die Oberfläche (Ziel-Picker `GET /xrefs/targets`, R
 
 ## Dieselben Schutzschichten wie beim Quellen-Chip
 
-- **Paste-Allowlist** ([utils/html.js](../public/js/utils/html.js)) — sonst zerfällt ein kopierter Satz zu einer toten Zahl.
+- **Paste-Allowlist** ([utils/html/paste.js](../public/js/utils/html/paste.js)) — sonst zerfällt ein kopierter Satz zu einer toten Zahl.
 - **LanguageTool**: `XREF_SKIP_SEL` als bewusste Kopie in [editor-spellcheck/mapping.js](../public/js/cards/editor-spellcheck/mapping.js), gegated durch [cite-guard-drift.test.mjs](../tests/unit/cite-guard-drift.test.mjs).
 - **`contenteditable` nie in der Persistenz.**
 - **TTS liest Querverweise bewusst MIT** — „siehe Kapitel 3" ist Teil des Satzes, anders als ein Klammerbeleg.

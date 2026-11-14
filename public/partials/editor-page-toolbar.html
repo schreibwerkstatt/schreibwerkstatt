@@ -6,10 +6,10 @@
      Gruppen (docs/notebook-editor.md „Seiten-Toolbar"):
        links   Undo/Redo · «Einfügen» (Bild, Tabelle, Diagramm, Beleg,
                Querverweis, Trennlinie — am Caret, Fragment
-               editor-page-toolbar-insert)
+               editor-page-toolbar-insert) · Anführungszeichen normalisieren ·
+               Abschnitt hier teilen
        rechts  «Ansicht»-Menü (Zoom, Breite, Steuerzeichen, Figuren-Markierung,
-               Titelkopf — Fragment editor-page-toolbar-view) · Vollbild ·
-               `⋯` (Abschnitt teilen, Anführungszeichen normalisieren)
+               Titelkopf — Fragment editor-page-toolbar-view) · Vollbild
      Menüs nur über das `menu()`-Primitiv (harte Regel „Aktionsmenü").
      `@mousedown.prevent` an allem, was am Caret wirkt: hält Fokus und Caret im
      contenteditable. -->
@@ -28,6 +28,29 @@
   </button>
   <span class="action-sep" aria-hidden="true"></span>
   <!-- @include editor-page-toolbar-insert -->
+  <span class="action-sep" aria-hidden="true"></span>
+  <!-- Anführungszeichen normalisieren: häufiger Handgriff, darum direkt in der
+       Leiste (auch auf Mobile). Rückmeldung («3 ersetzt») im Tooltip. -->
+  <button type="button" class="icon-btn"
+          :class="{ 'is-active': quotesNormalizedFlash }"
+          :data-tip="quotesNormalizedFlash
+            ? (quotesNormalizedFlash.count > 0
+                ? t('editor.toolbar.quotesDone', { count: quotesNormalizedFlash.count })
+                : t('editor.toolbar.quotesNone'))
+            : t('editor.toolbar.quotesTitle')"
+          :aria-label="t('editor.toolbar.quotesTitle')"
+          @mousedown.prevent
+          @click="normalizeQuotes()">
+    <svg class="icon" aria-hidden="true"><use href="/icons.svg#quote"/></svg>
+  </button>
+  <!-- Abschnitt am Caret teilen (edit/split.js). `@mousedown.prevent` hält
+       den Caret im contenteditable, sonst gäbe es keinen Schnittpunkt. -->
+  <button type="button" class="icon-btn"
+          :data-tip="t('editor.split.title')" :aria-label="t('editor.split.title')"
+          @mousedown.prevent
+          @click="splitSectionHere()">
+    <svg class="icon" aria-hidden="true"><use href="/icons.svg#scissors"/></svg>
+  </button>
 
   <span class="page-editor-toolbar__spacer" aria-hidden="true"></span>
 
@@ -40,40 +63,6 @@
     <svg class="icon" aria-hidden="true"><use :href="pageEditorFullscreen ? '/icons.svg#minimize-2' : '/icons.svg#maximize-2'"/></svg>
   </button>
 
-  <!-- Seltene Handgriffe am Abschnitt. Ein eigener Wrapper um menu(), damit die
-       unlayered `.menu-anchor { display: inline-flex }` keine Layout-Regel der
-       Leiste schlagen muss (siehe icons.css-Unlayered-Falle). -->
-  <span class="page-editor-toolbar__more">
-   <span x-data="menu()">
-    <button type="button" class="icon-btn" x-bind="trigger" :class="{ 'is-active': open }"
-            aria-haspopup="menu"
-            :data-tip="t('editor.btn.moreActions')" :aria-label="t('editor.btn.moreActions')">
-      <svg class="icon" aria-hidden="true"><use href="/icons.svg#more-horizontal"/></svg>
-    </button>
-    <div class="context-menu context-menu--dropdown" x-bind="panel" x-cloak>
-      <!-- Abschnitt am Caret teilen (edit/split.js). `@mousedown.prevent` hält
-           den Caret im contenteditable, sonst gäbe es keinen Schnittpunkt. -->
-      <button type="button" class="context-menu-item context-menu-item--icon" role="menuitem"
-              @mousedown.prevent
-              @click="splitSectionHere()">
-        <svg class="icon" aria-hidden="true"><use href="/icons.svg#scissors"/></svg>
-        <span x-text="t('editor.split.title')"></span>
-      </button>
-      <!-- Bleibt offen (`.stop`), damit die Rückmeldung («3 ersetzt») im
-           Eintrag sichtbar wird. -->
-      <button type="button" class="context-menu-item context-menu-item--icon" role="menuitem"
-              :class="{ 'context-menu-item--on': quotesNormalizedFlash }"
-              @click.stop="normalizeQuotes()">
-        <svg class="icon" aria-hidden="true"><use href="/icons.svg#quote"/></svg>
-        <span x-text="quotesNormalizedFlash
-          ? (quotesNormalizedFlash.count > 0
-              ? t('editor.toolbar.quotesDone', { count: quotesNormalizedFlash.count })
-              : t('editor.toolbar.quotesNone'))
-          : t('editor.toolbar.quotesTitle')"></span>
-      </button>
-    </div>
-   </span>
-  </span>
   <!-- STT-Diktat-Mic schwebt im Editorfeld unten rechts (siehe
        editor-body-edit.html), nicht hier in der Toolbar. -->
 </div>

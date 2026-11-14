@@ -18,6 +18,7 @@ import { closestDiagramEl } from '../diagram/mermaid-html.js';
 import { closestFigureEl } from '../figure/figure-html.js';
 import { invalidateXrefTargetCache } from '../editor/notebook/toolbar/xref.js';
 import { EVT } from '../events.js';
+import { actionMenuState } from '../action-menu.js';
 
 export function registerEditorToolbarCard() {
   if (typeof window === 'undefined' || !window.Alpine) return;
@@ -110,13 +111,20 @@ export function registerEditorToolbarCard() {
     // Speichern, wenn das Quell-Markup etwas trug, das der Dialog nicht
     // darstellen kann. `_tableHeaderStash` haelt eine abgeschaltete Kopfzeile
     // bis zum Schliessen, damit Wiedereinschalten ihren Inhalt zurueckbringt.
+    // `tableRowIds`/`tableColIds` sind die stabilen `x-for`-Schluessel des
+    // Gitters (table-grid.js), parallel zum Modell gefuehrt.
     tableModelState: null,
+    tableRowIds: [],
+    tableColIds: [],
     tableEditing: false,
     tableLossyReasons: [],
     _tableHeaderStash: null,
     _tableBlock: null,
     _tableAfter: null,
     _tableEditEl: null,
+    // Aktionsmenue an Zeilen-/Spaltenkopf des Tabellen-Gitters (action-menu.js);
+    // haengt sich im offenen Dialog selbst in dessen Top-Layer.
+    ...actionMenuState(),
     // Bild-Dialog (siehe editor/notebook/toolbar/image.js). `imageSrc` ist nur
     // die Vorschau-Quelle im Dialog, `imageAlt`/`imageCredit` die beiden
     // bearbeitbaren Felder, `_imageEl` die angeklickte `<figure>`. Eingefügt

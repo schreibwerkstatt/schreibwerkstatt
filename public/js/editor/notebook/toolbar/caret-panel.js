@@ -17,7 +17,8 @@
 
 import { findBlock, topLevelBlock } from '../../shared/dom-block.js';
 import { getEditEl, placeCaretAfter, placeCaretIn } from '../../utils.js';
-import { ensureSlotAfter, replaceBlockOutsideList } from './_shared.js';
+import { ensureSlotAfter, replaceBlockOutsideList, historyStep } from './_shared.js';
+import { MSG_THREAD_SEL } from '../../../messages/msg-html.js';
 import { isImeComposing } from '../../../utils/keys.js';
 
 export { placeCaretAfter };
@@ -99,28 +100,61 @@ export function placeCaretInSlotAfter(node) {
  * Wohin ein Block aus der Seiten-Toolbar kommt: ein leerer Caret-Block wird
  * ersetzt (wie beim Slash-Menü), sonst landet der Block HINTER dem
  * Top-Level-Block des Carets — nie mitten in einen Absatz oder in eine Liste.
- * Ohne Caret: ans Ende.
+ * Caret in einer Bildunterschrift: hinter die Abbildung. Ohne Caret: ans Ende.
  *
  * @returns {{replace: Element|null, after: Element|null}}
  */
+// Leerer Platzhalter-Block, den ein eingesetzter Block ersetzen darf.
+const isEmptySlot = (block) => !(block.textContent || '').trim()
+  && !block.querySelector('img, table, pre, hr, [contenteditable="false"]');
+
 export function blockInsertTarget(editEl, range) {
   const block = range ? findBlock(range.startContainer, editEl) : null;
-  if (!block) return { replace: null, after: null };
-  const empty = !(block.textContent || '').trim()
-    && !block.querySelector('img, table, pre, hr, [contenteditable="false"]');
-  if (empty) return { replace: block, after: null };
+  if (!block) {
+    // `figcaption` steht nicht in CARET_BLOCK_SEL — ohne diesen Zweig landete
+    // der Block am Ende des Abschnitts statt hinter der Abbildung.
+    const node = range?.startContainer;
+    const el = node?.nodeType === 1 ? node : node?.parentElement;
+    const fig = el?.closest?.('figure');
+    const top = fig && editEl.contains(fig) ? topLevelBlock(fig, editEl) : null;
+    return { replace: null, after: top && top !== editEl ? top : null };
+  }
+  if (isEmptySlot(block)) return { replace: block, after: null };
   const top = topLevelBlock(block, editEl);
   return { replace: null, after: top && top !== editEl ? top : null };
 }
 
+// Wrapper, in die kein eingesetzter Block gehört: ein leerer Caret-Absatz darin
+// wird nicht ersetzt, der Block steht HINTER dem Wrapper, die leere Zeile fällt
+// weg. Ein Verlauf trägt nur Zeilen (`MSG_LINE_SEL`), ein Gedicht nur Verse,
+// und eine Tabelle im Zitat wäre im Export ein eingerücktes Zitat.
+const INSERT_ESCAPE_SEL = `blockquote, div.poem, ${MSG_THREAD_SEL}`;
+
 /**
  * Block-Knoten nach `blockInsertTarget` einsetzen. `replace` läuft über
- * `replaceBlockOutsideList` (Invariante 19: nie in eine Liste), `after` hinter
- * den Top-Level-Block, sonst ans Ende.
+ * `replaceBlockOutsideList` (Invariante 19: nie in eine Liste) — liegt der
+ * leere Block in Zitat, Gedicht oder Verlauf, landet `node` hinter diesem
+ * Wrapper; ist er inzwischen nicht mehr leer, kommt `node` dahinter. `after`
+ * hinter den Top-Level-Block, sonst ans Ende.
  */
 export function placeBlockNode(editEl, node, { replace = null, after = null } = {}) {
+  historyStep();
+  // Das Ziel wurde vor Dialog bzw. Upload bestimmt. Hat der User inzwischen in
+  // den leeren Block getippt, wird er nicht samt Text ersetzt — der neue Block
+  // kommt dann dahinter.
+  if (replace?.isConnected && editEl.contains(replace) && !isEmptySlot(replace)) {
+    after = topLevelBlock(replace, editEl);
+    replace = null;
+  }
   if (replace && replace.isConnected && replace.parentNode && editEl.contains(replace)) {
-    replaceBlockOutsideList(editEl, replace, node);
+    const wrap = replace.parentElement?.closest(INSERT_ESCAPE_SEL);
+    if (wrap && editEl.contains(wrap) && wrap !== editEl) {
+      topLevelBlock(wrap, editEl).insertAdjacentElement('afterend', node);
+      replace.remove();
+      if (!wrap.children.length && !(wrap.textContent || '').trim()) wrap.remove();
+    } else {
+      replaceBlockOutsideList(editEl, replace, node);
+    }
   } else if (after && after.isConnected && after.parentNode === editEl) {
     after.insertAdjacentElement('afterend', node);
   } else {
@@ -183,6 +217,7 @@ export const NBSP = '\u00A0';
  * @returns {Node|null} der letzte eingefügte Knoten
  */
 export function insertHtmlAtRange(range, html, { after = '', replaceContents = false } = {}) {
+  historyStep();
   if (!range || !html) return null;
   const doc = range.startContainer?.ownerDocument || document;
   const { frag, lastNode } = htmlToFragment(html + after, doc);

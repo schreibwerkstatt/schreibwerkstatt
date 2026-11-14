@@ -46,12 +46,16 @@ export function topLevelBlock(block, root) {
 // direkt angrenzende <hr> per Backspace/Delete zu löschen — das void-Element
 // lässt sich nicht selektieren, deshalb gibt es sonst keinen Lösch-Pfad — und
 // um den Blockende-Fall beim weichen Umbruch zu erkennen (shared/soft-break.js).
+// Ein weicher Umbruch oder ein Inline-Bild vor dem Caret ist Inhalt, auch ohne
+// Text: in `<p><br>|Zeile</p>` löscht Backspace das `<br>`, statt den Absatz
+// an den vorigen zu hängen.
 export function caretAtBlockStart(range, block) {
   if (!range.collapsed) return false;
   const r = document.createRange();
   r.selectNodeContents(block);
   r.setEnd(range.startContainer, range.startOffset);
-  return r.toString().length === 0;
+  if (r.toString().length) return false;
+  return !r.cloneContents().querySelector('br, img');
 }
 export function caretAtBlockEnd(range, block) {
   if (!range.collapsed) return false;

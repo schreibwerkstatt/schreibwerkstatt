@@ -23,6 +23,9 @@
   <symbol id="check-check" viewBox="0 0 24 24"><path d="M18 6 7 17l-5-5"/><path d="m22 10-7.5 7.5L13 16"/></symbol>
   <symbol id="circle" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/></symbol>
   <symbol id="x"      viewBox="0 0 24 24"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></symbol>
+  <symbol id="align-left"   viewBox="0 0 24 24"><path d="M21 6H3"/><path d="M15 12H3"/><path d="M17 18H3"/></symbol>
+  <symbol id="align-center" viewBox="0 0 24 24"><path d="M21 6H3"/><path d="M17 12H7"/><path d="M19 18H5"/></symbol>
+  <symbol id="align-right"  viewBox="0 0 24 24"><path d="M21 6H3"/><path d="M21 12H9"/><path d="M21 18H7"/></symbol>
   <symbol id="plus"   viewBox="0 0 24 24"><path d="M5 12h14"/><path d="M12 5v14"/></symbol>
   <symbol id="minus"  viewBox="0 0 24 24"><path d="M5 12h14"/></symbol>
 

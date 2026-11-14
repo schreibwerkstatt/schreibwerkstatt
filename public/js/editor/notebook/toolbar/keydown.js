@@ -39,6 +39,12 @@ export const keydownMethods = {
       getEditEl()?.querySelectorAll('hr.hr-selected').forEach((h) => h.classList.remove('hr-selected'));
     }
 
+    // Auswahl vor Enter/Shift+Enter/Datumsstempel selbst löschen (toolbar/
+    // keydown-delete.js) — konsumiert nicht, die Kette läuft danach weiter.
+    if (!app.focusActive) this._kbCollapseForInsert(e, app);
+    // Alt+Enter neben einer Tabelle → Gitter-Dialog (toolbar/table.js).
+    // Vor allen Enter-Handlern, die sonst den Absatz teilen würden.
+    if (!app.focusActive && this._kbTableEdit(e)) return;
     if (this._kbSoftBreak(e, app)) return;
     if (this._kbTodoEnter(e, app)) return;
     if (this._kbPoemEnter(e, app)) return;
@@ -79,6 +85,10 @@ export const keydownMethods = {
     // Nachrichtenverlauf vor den generischen Grenzen: Zeilen-Merges innerhalb
     // des Verlaufs, Enter/Tab für Zeilenarten (toolbar/msg-thread.js).
     if (this._kbMsgThread(e, app)) return;
+    if (this._kbFigureEnter(e, app)) return;
+    if (this._kbQuoteEnter(e, app)) return;
+    if (this._kbPreEnter(e, app)) return;
+    if (this._kbHeadingStartEnter(e, app)) return;
     // Struktur-Grenzen: spezifisch vor generisch. `_kbTodoDelete` und
     // `_kbFigureCaption` schützen je ein Void-Element (Checkbox bzw. Bild),
     // `_kbBlockBoundary` deckt die übrigen formatierten Wrapper ab.
@@ -224,6 +234,17 @@ export const keydownMethods = {
       if (this._slashConvert && !this.slashItems().length) this._closeSlash({ literal: true });
       return true;
     }
+    // Kürzel (Einfügen, Ausschneiden, Fett …): Menü schliessen, das Kürzel
+    // wirkt normal. Sonst liefe es nativ in den Block, und die Wahl danach
+    // verwürfe das Ergebnis mit dem Trigger-Block.
+    if (e.ctrlKey || e.metaKey || e.altKey) {
+      if (MODIFIER_KEYS.has(e.key)) return true;
+      this._closeSlash({ literal: true });
+      return false;
+    }
+    // Übrige Tasten (Delete, Tab, …) verändern den Block nicht, solange das
+    // Menü offen ist.
+    e.preventDefault();
     return true;
   },
 

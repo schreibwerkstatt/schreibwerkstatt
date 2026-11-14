@@ -196,6 +196,10 @@ export const diagramMethods = {
     node.setAttribute('contenteditable', 'false');
 
     const edited = this._diagramEditEl;
+    // Block-ID mitnehmen wie in table.js#applyTable: ohne sie sähen Block-Merge
+    // und Konfliktauflösung «gelöscht + neu» statt «geändert».
+    const bid = edited?.getAttribute?.('data-bid');
+    if (bid) node.setAttribute('data-bid', bid);
     if (edited && edited.isConnected && edited.parentNode && editEl.contains(edited)) {
       replaceBlockOutsideList(editEl, edited, node);
     } else {

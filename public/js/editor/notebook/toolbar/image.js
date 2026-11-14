@@ -80,6 +80,7 @@ export const imageMethods = {
     if (!editEl || !result?.url) return;
     const fig = htmlToElement(buildFigureHtml({ src: result.url }));
     if (!fig) return;
+    // Getippt während des Uploads: placeBlockNode ersetzt dann nicht mehr.
     placeBlockNode(editEl, fig, target);
     ensureSlotAfter(fig);
     // Erster Handgriff nach dem Einfuegen ist die Legende (wie im Slash-Weg).

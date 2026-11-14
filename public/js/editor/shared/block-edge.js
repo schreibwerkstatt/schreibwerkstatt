@@ -43,9 +43,20 @@ export function caretEdge(e, root) {
   const top = topLevelBlock(block, root);
   let outer = true;
   for (let n = block; n !== top; n = n.parentNode) {
-    if (back ? n.previousElementSibling : n.nextElementSibling) { outer = false; break; }
+    if (hasSiblingContent(n, back)) { outer = false; break; }
   }
   return { block, top, back, outer };
+}
+
+// Steht vor (`back`) bzw. hinter `n` noch etwas im selben Elternelement? Ein
+// Textknoten zählt mit: in `<li>A<ul><li>|A1</li></ul></li>` hat die Unterliste
+// kein Element davor, aber «A» — der Caret steht nicht am Rand der Liste.
+function hasSiblingContent(n, back) {
+  for (let s = back ? n.previousSibling : n.nextSibling; s; s = back ? s.previousSibling : s.nextSibling) {
+    if (s.nodeType === 1) return true;
+    if (s.nodeType === 3 && s.data.trim()) return true;
+  }
+  return false;
 }
 
 // Zwei Geschwisterblöcke, die sich ohne Strukturverlust verschmelzen lassen.
@@ -119,6 +130,20 @@ export function protectNeighbour(e, root, { atomic = false, onChange } = {}) {
   return true;
 }
 
+// Letzte Zeile in Leserichtung: trägt eine Listenzeile Unterlisten, die tiefste
+// letzte Zeile darin — angehängter Text gehört dorthin, nicht hinter die
+// Unterliste (auch für notebook/line-merge.js).
+export function deepestLastLine(block) {
+  let cur = block;
+  for (let guard = 16; guard > 0 && cur?.tagName === 'LI'; guard--) {
+    const lists = Array.from(cur.children).filter((c) => c.tagName === 'UL' || c.tagName === 'OL');
+    const last = lists[lists.length - 1]?.lastElementChild;
+    if (!last) break;
+    cur = last;
+  }
+  return cur;
+}
+
 // Focus-Editor: Merge zweier Geschwisterblöcke selbst übernehmen — Top-Level-
 // Absätze ebenso wie Zeilen in Zitat, Gedicht und Liste. Der aktive Absatz
 // trägt eine eigene Spotlight-Farbe, Chromium bäckt diesen Unterschied beim
@@ -139,7 +164,7 @@ export function focusMerge(e, root, { skipSel = null, onChange } = {}) {
   const source = back ? block : neighbour;
   if (source.querySelector('ul, ol')) return false;
   e.preventDefault();
-  mergeBlocksManually(back ? neighbour : block, source);
+  mergeBlocksManually(back ? deepestLastLine(neighbour) : block, source);
   onChange?.();
   return true;
 }

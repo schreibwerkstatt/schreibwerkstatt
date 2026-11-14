@@ -203,6 +203,12 @@ test('buildTableHtml wirft aktive Inhalte aus durchgereichtem Zell-HTML', () => 
   assert.ok(!/<script/i.test(html));
 });
 
+test('buildTableHtml: javascript:-URL faellt nur im Attribut, im Zelltext bleibt sie Inhalt', () => {
+  const html = buildTableHtml({ rows: [[{ rich: true, html: '<a href="javascript:alert(1)">Kurs</a> <b>javascript: Grundlagen</b>' }]] });
+  assert.ok(!/href="javascript:/i.test(html));
+  assert.ok(html.includes('<b>javascript: Grundlagen</b>'));
+});
+
 // ── Round-Trip ──────────────────────────────────────────────────────────────
 
 test('Round-Trip Modell → HTML → Modell ist stabil', () => {

@@ -69,12 +69,24 @@ export function caretRangeIn(editEl) {
 // (Beleg-Picker aus der Seiten-Toolbar, Diktat-Start ohne Klick ins Feld):
 // lieber ans Ende anhängen als gar nichts tun — den Block danach zu verschieben
 // ist ein Handgriff, ihn erneut herauszusuchen nicht.
+// Ende heisst: im letzten Absatz bzw. in der letzten Überschrift, nicht hinter
+// ihnen — ein Chip oder Diktattext direkt im Container stünde ausserhalb jedes
+// Blocks. Endet der Inhalt mit etwas anderem (Liste, Tabelle, Abbildung), bleibt
+// es beim Container-Ende.
 export function rangeAtEnd(editEl) {
   if (!editEl) return null;
   const doc = editEl.ownerDocument || document;
   const range = doc.createRange();
-  range.selectNodeContents(editEl);
-  range.collapse(false);
+  const last = editEl.lastElementChild;
+  const tail = last && !last.nextSibling?.textContent?.trim() && /^(P|H[1-6])$/.test(last.tagName)
+    && last.getAttribute('contenteditable') !== 'false' ? last : null;
+  if (tail && tail.childNodes.length === 1 && tail.firstChild.nodeName === 'BR') {
+    range.setStart(tail, 0);
+  } else {
+    range.selectNodeContents(tail || editEl);
+    range.collapse(false);
+  }
+  range.collapse(true);
   return range;
 }
 

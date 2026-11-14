@@ -74,7 +74,7 @@ Quellenangaben dürfen von den Text-Prüfern nicht angefasst werden:
 - **TTS** — Sprechtext und Highlight teilen einen Offsetraum. Siehe [docs/tts.md](tts.md).
 - **Lektorat-Prompts** — `_buildBelegBlock` in [prompts/blocks.js](../public/js/prompts/blocks.js), eingehängt nur bei `hatBelege`; das Flag gehört in **beide** Pässe und in die Lektorat-Cache-Signatur.
 
-Dazu die **Paste-Allowlist** ([utils/html.js](../public/js/utils/html.js)): `SPAN` ist ausschliesslich als Chip erlaubt, alles andere wird unwrapped — sonst zerfällt ein kopierter Satz zu reinem Text und verliert den Zeiger.
+Dazu die **Paste-Allowlist** ([utils/html/paste.js](../public/js/utils/html/paste.js)): `SPAN` ist ausschliesslich als Chip erlaubt, alles andere wird unwrapped — sonst zerfällt ein kopierter Satz zu reinem Text und verliert den Zeiger.
 
 **Zwei bewusste Selektor-KOPIEN** (nicht konsolidieren): `TTS_SKIP_SEL` in [tts-segment.js](../public/js/tts-segment.js) — das Modul gehört zum schlanken Share-Reader-Modulgraph und darf keine App-Bundle-Kanten ziehen — und `CITE_SKIP_SEL` in [editor-spellcheck/mapping.js](../public/js/cards/editor-spellcheck/mapping.js). Beide gegen `CITE_SEL` gegated.
 
