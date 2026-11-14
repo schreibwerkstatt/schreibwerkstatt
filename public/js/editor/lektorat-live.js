@@ -60,6 +60,7 @@ let _ranges = [];
 let _timer = null;
 let _observer = null;
 let _observedEl = null;
+let _resizeObs = null;
 let _selAbort = null;
 let _applyBusy = false;
 // Im Editor übernommen, noch nicht gespeichert: [{ pageId, checkId, f, at }]
@@ -104,6 +105,9 @@ function _paintVisibleMarks() {
   for (const k of [...KINDS, 'ambiguous']) _hl[k].clear();
   if (!_observedEl || !_marks.length) return;
   const box = _observedEl.getBoundingClientRect();
+  // Noch ohne Layout (Edit-Modus gerade erst eingeblendet): jede Stelle läge
+  // bei 0 und gälte als sichtbar. Der ResizeObserver malt nach, sobald es steht.
+  if (!box.height) return;
   const top = Math.max(box.top, 0);
   const bottom = Math.min(box.bottom, window.innerHeight);
   const band = Math.max(bottom - top, window.innerHeight / 2);
@@ -133,6 +137,8 @@ function _stopLive() {
   _timer = null;
   _observer?.disconnect();
   _observer = null;
+  _resizeObs?.disconnect();
+  _resizeObs = null;
   _observedEl = null;
   _selAbort?.abort();
   _selAbort = null;
@@ -235,6 +241,9 @@ export const lektoratLiveMethods = {
       el.addEventListener('scroll', _scheduleVisibleMarks, { passive: true, signal: _selAbort.signal });
       window.addEventListener('scroll', _scheduleVisibleMarks, { passive: true, capture: true, signal: _selAbort.signal });
       window.addEventListener('resize', _scheduleVisibleMarks, { passive: true, signal: _selAbort.signal });
+      // …und wenn sich das Layout ohne Scroll verschiebt (Einblenden, Bilder).
+      _resizeObs = new ResizeObserver(_scheduleVisibleMarks);
+      _resizeObs.observe(el);
     }
     this._relocateLektoratLive();
   },
