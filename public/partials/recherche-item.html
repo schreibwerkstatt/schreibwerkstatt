@@ -9,25 +9,24 @@
      aufgeklappte Zeile und die Board-Karte sie wortgleich mitbenutzen. -->
     <template x-for="item in items" :key="item.id">
       <div class="research-item hover-reveal-host" :data-research-id="item.id"
-           @contextmenu="if (!busy) openItemMenu($event, 'list', item)" x-long-press :class="{ 'research-item--pinned': item.pinned, 'research-item--archived': item.archived, 'research-item--open': detailItemId === item.id, 'research-item--selected': bulkMode && isSelected(item.id) }">
+           @contextmenu="if (!busy) openItemMenu($event, 'list', item)" x-long-press :class="{ 'research-item--pinned': item.pinned, 'research-item--archived': item.archived, 'research-item--open': detailItemId === item.id, 'research-item--selected': isSelected(item.id) }">
         <div class="research-item-body">
-          <!-- Kopf: Klick klappt auf/zu. Die Flaeche ist Maus-Abkuerzung, kein
-               role=button: sie traegt Knoepfe und Links, die fuer Screenreader
-               sonst unsichtbar wuerden. Tastatur ueber den Titel-<button>. -->
+          <!-- Kopf: Klick klappt auf/zu (Lesen). Die Flaeche ist Maus-Abkuerzung,
+               kein role=button: sie traegt Knoepfe und Links, die fuer Screenreader
+               sonst unsichtbar wuerden. Tastatur: der Chevron-<button> klappt auf,
+               der Titel-<button> oeffnet das Bearbeiten. -->
           <div class="research-item-head research-item-body--clickable" @click="onItemBodyClick(item, $event)">
-            <!-- Mehrfachauswahl: Checkbox nur im Auswahl-Modus (bulk.js). Seltene
-                 Zeilenteile stehen auf x-if statt x-show: jede Zeile baut sie sonst
-                 versteckt mit (Knoten + Bindungen × Fundstücke beim Öffnen der Karte). -->
-            <template x-if="bulkMode">
-              <input type="checkbox" class="research-item-select"
-                     :checked="isSelected(item.id)" @change="toggleSelect(item.id)"
-                     :aria-label="$app.t('recherche.bulk.select', { title: item.title || kindLabel(item.kind) })">
-            </template>
+            <!-- Mehrfachauswahl: Haken immer da, die Leiste erscheint ab der
+                 ersten Markierung (bulk.js). -->
+            <input type="checkbox" class="research-item-select"
+                   :checked="isSelected(item.id)" @change="toggleSelect(item.id)"
+                   :aria-label="$app.t('recherche.bulk.select', { title: item.title || kindLabel(item.kind) })">
             <span class="research-kind-badge palette-badge" :class="'research-kind-badge--' + item.kind" x-text="kindLabel(item.kind)"></span>
-            <!-- Titel als Button: der tastaturerreichbare Weg zum Aufklappen. Ohne
-                 eigenen Titel steht die Typ-Bezeichnung da — sonst gaebe es kein Klickziel. -->
-            <button type="button" class="research-item-title text-link" :aria-expanded="detailItemId === item.id"
-                    @click="bulkMode ? toggleSelect(item.id) : toggleDetail(item)"
+            <!-- Titel als Button: oeffnet die Zeile aufgeklappt im Bearbeiten-
+                 Formular (items.js#openItemForEdit). Ohne eigenen Titel steht die
+                 Typ-Bezeichnung da — sonst gaebe es kein Klickziel. -->
+            <button type="button" class="research-item-title text-link"
+                    @click="openItemForEdit(item)" :disabled="busy"
                     x-text="item.title || kindLabel(item.kind)"></button>
             <!-- Einarbeitungs-Status: dieselbe Aussage wie die Spalte im
                  Status-Board, damit beide Ansichten nicht verschieden aussehen.
@@ -35,15 +34,21 @@
                  hat: der Klick oeffnet das Aktionsmenue nur mit dem Status-
                  Abschnitt (board.js#openItemMenu, only = 'status'). -->
             <button type="button" class="research-status-badge" :class="'research-status-badge--' + itemStatus(item)"
-                    @click="bulkMode ? toggleSelect(item.id) : openItemMenu($event, 'list', item, 'status')" :disabled="busy"
+                    @click="openItemMenu($event, 'list', item, 'status')" :disabled="busy"
                     :data-tip="statusTip(item)" :aria-label="$app.t('recherche.status.change', { status: statusLabel(itemStatus(item)) })"
                     x-text="statusLabel(itemStatus(item))"></button>
-            <div class="research-item-actions hover-reveal" x-show="!bulkMode" x-data="{ menuCtx: 'list' }">
+            <div class="research-item-actions hover-reveal" x-data="{ menuCtx: 'list' }">
               <button type="button" class="icon-btn" x-show="!(detailEditing && detailItemId === item.id)"
                       @click="openDetail(item, { edit: true })" :disabled="busy" :data-tip="$app.t('recherche.edit')" :aria-label="$app.t('recherche.edit')"><svg class="icon" aria-hidden="true"><use href="/icons.svg#pencil"/></svg></button>
               <!-- @include recherche-item-menu-trigger -->
             </div>
-            <span class="history-chevron" :class="{ open: detailItemId === item.id }" aria-hidden="true"></span>
+            <!-- Aufklappen zum Lesen: der tastaturerreichbare Weg (Listen-Anriss). -->
+            <button type="button" class="row-expand"
+                    @click="toggleDetail(item)" :aria-expanded="detailItemId === item.id"
+                    :data-tip="$app.t(detailItemId === item.id ? 'recherche.detail.close' : 'recherche.detail.open')"
+                    :aria-label="$app.t(detailItemId === item.id ? 'recherche.detail.close' : 'recherche.detail.open')">
+              <span class="history-chevron" :class="{ open: detailItemId === item.id }" aria-hidden="true"></span>
+            </button>
           </div>
 
           <!-- Zugeklappt: Anriss. Klick darauf klappt auf. -->
@@ -54,7 +59,7 @@
                    `src`-Binding hinter display:none laedt trotzdem und liefert bei
                    Fundstuecken ohne Bild einen 404. -->
               <template x-if="item.has_image">
-                <button type="button" class="research-item-thumb" @click="bulkMode ? toggleSelect(item.id) : openDetail(item)"
+                <button type="button" class="research-item-thumb" @click="openDetail(item)"
                         :data-tip="$app.t('recherche.detail.open')" :aria-label="$app.t('recherche.detail.open')">
                   <img class="research-item-image" :src="imageUrl(item)" :alt="item.title || ''" loading="lazy">
                 </button>
@@ -82,7 +87,7 @@
                    Sprung zur Stelle in der aufgeklappten Zeile (recherche-findings.html). -->
               <template x-if="itemFindings(item).length">
                 <button type="button" class="research-findings-chip"
-                        @click="bulkMode ? toggleSelect(item.id) : openDetail(item)"
+                        @click="openDetail(item)"
                         x-text="$app.t('recherche.crosscheck.chip', { n: itemFindings(item).length })"></button>
               </template>
 

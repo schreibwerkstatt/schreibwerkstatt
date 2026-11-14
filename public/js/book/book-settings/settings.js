@@ -4,6 +4,8 @@
 import { EVT, contentRepo, countryOptions, fetchJson, sendJson } from './_shared.js';
 import { DEFAULT_DAILY_GOAL_CHARS } from '../../utils.js';
 import { tFetchError } from '../../i18n.js';
+import { startPoll, runningJobStatus } from '../../cards/job-helpers.js';
+import { diffParts } from '../../diff/diff-parts.js';
 
 export const settingsMethods = {
   async loadBookSettings(bookId = this._selectedBookId()) {
@@ -41,6 +43,8 @@ export const settingsMethods = {
       this._applyCitationSettings(data);
       this._applyResearchSettings(data);
       this._applySchoolSettings(data);
+      this._stilprofilReattach(bookId);
+      this._loadStilprofilProposal(bookId);
     } catch (e) {
       // Ohne geladenen Stand bleibt `bookSettingsLoaded` false — saveBookSettings
       // schreibt dann nichts, statt das Formular des vorigen Buchs zu speichern.
@@ -146,39 +150,132 @@ export const settingsMethods = {
   },
 
 
-  // Stilprofil aus dem Buch destillieren (KI-Job). Ergebnis wird serverseitig in
-  // book_settings.stilprofil persistiert; bei job:finished (Handler in der Karte)
-  // wird nur das Stilprofil-Feld aus dem Job-Result übernommen — der Rest des
-  // Formulars (ggf. ungespeicherte Edits) bleibt unangetastet.
+  // Stilprofil aus dem Buch destillieren (KI-Job). Der Job fasst das Feld nicht
+  // an: sein Ergebnis erscheint als Vorschlagskarte unter dem Feld (Wort-Diff
+  // gegen den Feldinhalt) und liegt bis zur Entscheidung als offener Vorschlag
+  // am Server (/ai-proposals/stilprofil). «Übernehmen» setzt den Feldwert wie
+  // eine Handeingabe — der Pfad «settings» wird dirty, gespeichert wird über den
+  // Kopf-Knopf.
   async generateStilprofil() {
     const bookId = this._formBookId;
     if (!bookId || this.stilprofilGenerating) return;
     this.stilprofilGenerating = true;
     this.stilprofilError = '';
+    this.stilprofilSuggestion = null;
+    this.stilprofilProgress = 0;
+    this.stilprofilStatus = '';
     try {
       const data = await sendJson('/jobs/stilprofil', 'POST', { book_id: Number(bookId) });
       this.stilprofilJobId = data.jobId;
       window.dispatchEvent(new CustomEvent(EVT.JOB_ENQUEUED, { detail: { type: 'stilprofil', jobId: data.jobId } }));
+      this._stilprofilPoll(data.jobId, bookId);
     } catch (e) {
       this.stilprofilGenerating = false;
       this.stilprofilError = tFetchError(e);
     }
   },
 
-  // job:finished (Handler in der Karte). Das Profil ist serverseitig schon
-  // gespeichert: war der Pfad vorher unverändert, bleibt er es auch danach.
-  onStilprofilJobFinished(detail) {
-    if (!this._isFormBook(detail?.bookId)) return;
+  _stilprofilPoll(jobId, bookId) {
+    const app = window.__app;
+    startPoll(this, {
+      timerProp: '_stilprofilPollTimer',
+      jobId,
+      progressProp: 'stilprofilProgress',
+      onProgress: (job) => {
+        this.stilprofilStatus = runningJobStatus((k, p) => app.t(k, p),
+          job.statusText, job.tokensIn, job.tokensOut, job.maxTokensOut,
+          job.progress, job.tokensPerSec, job.statusParams);
+      },
+      onDone: (job) => this._stilprofilFinish(job, bookId),
+      onError: (job) => this._stilprofilFinish(job, bookId),
+      onNotFound: () => this._stilprofilIdle(),
+    });
+  },
+
+  // Laufender Lauf nach Reload/Kartenwechsel: Fortschritt wieder anhängen
+  // (aus der Job-Queue des Stores; ein schon beendeter Lauf kommt über
+  // job:finished → onStilprofilJobFinished).
+  _stilprofilReattach(bookId) {
+    if (this.stilprofilGenerating || this._stilprofilPollTimer) return;
+    const queued = window.Alpine?.store('jobs')?.jobQueueItems || [];
+    const job = queued.find(j => j.type === 'stilprofil' && String(j.bookId) === String(bookId));
+    if (!job) return;
+    this.stilprofilGenerating = true;
+    this.stilprofilJobId = job.id;
+    this.stilprofilProgress = job.progress || 0;
+    this._stilprofilPoll(job.id, bookId);
+  },
+
+  _stilprofilIdle() {
+    if (this._stilprofilPollTimer) { clearInterval(this._stilprofilPollTimer); this._stilprofilPollTimer = null; }
     this.stilprofilGenerating = false;
     this.stilprofilJobId = null;
-    const job = detail.job;
-    if (job?.status === 'done' && job.result?.stilprofil) {
-      const wasClean = !this._isDirty('settings');
-      this.bookSettingsStilprofil = job.result.stilprofil;
-      if (wasClean) this._markClean('settings');
-    } else if (job?.status === 'error') {
+    this.stilprofilProgress = 0;
+    this.stilprofilStatus = '';
+  },
+
+  _stilprofilFinish(job, bookId) {
+    if (!this._isFormBook(bookId)) return;
+    this._stilprofilIdle();
+    if (!job || job.status === 'cancelled') return;
+    if (job.status === 'error') {
       this.stilprofilError = window.__app.t('book.settings.stilprofil.genError');
+      return;
     }
+    this._setStilprofilSuggestion(job.result?.stilprofil);
+  },
+
+  _setStilprofilSuggestion(text) {
+    if (!text) return;
+    this.stilprofilSuggestion = { text, diff: diffParts(this.bookSettingsStilprofil || '', text) };
+  },
+
+  // Offener Vorschlag eines Laufs, dessen Ende die Karte nicht gesehen hat (App
+  // zu, Neustart). Ohne Editor-Rolle antwortet der Server 403 — dann gibt es
+  // eben keinen Vorschlag zu zeigen.
+  async _loadStilprofilProposal(bookId) {
+    if (this.stilprofilSuggestion || this.stilprofilGenerating) return;
+    try {
+      const open = await fetchJson(`/ai-proposals/stilprofil?book_id=${Number(bookId)}`);
+      if (!this._isFormBook(bookId) || this.stilprofilSuggestion) return;
+      this._setStilprofilSuggestion(open?.proposal?.payload?.stilprofil);
+    } catch { /* kein Vorschlag sichtbar */ }
+  },
+
+  // Übernehmen und Verwerfen erledigen beide den offenen Vorschlag am Server:
+  // übernommen steht der Text im Feld, verworfen soll er nicht wiederkommen.
+  _dropStilprofilProposal() {
+    const bookId = this._formBookId;
+    if (!bookId) return;
+    fetchJson(`/ai-proposals/stilprofil?book_id=${Number(bookId)}`, { method: 'DELETE' })
+      .catch((e) => { this.stilprofilError = tFetchError(e); });
+  },
+
+  async cancelStilprofil() {
+    const id = this.stilprofilJobId;
+    if (!id) return;
+    await window.__app.cancelJob(id);
+    this._stilprofilIdle();
+  },
+
+  applyStilprofilSuggestion() {
+    if (!this.stilprofilSuggestion) return;
+    this.bookSettingsStilprofil = this.stilprofilSuggestion.text;
+    this.stilprofilSuggestion = null;
+    this._dropStilprofilProposal();
+  },
+
+  discardStilprofilSuggestion() {
+    this.stilprofilSuggestion = null;
+    this._dropStilprofilProposal();
+  },
+
+  // job:finished (Handler in der Karte): fängt den Lauf ab, dessen Ende kein
+  // eigener Poller sah (Reload, anderer Tab).
+  onStilprofilJobFinished(detail) {
+    if (!this._isFormBook(detail?.bookId)) return;
+    if (this._stilprofilPollTimer) return; // der eigene Poller meldet selbst
+    this._stilprofilFinish(detail.job, detail.bookId);
   },
 
 

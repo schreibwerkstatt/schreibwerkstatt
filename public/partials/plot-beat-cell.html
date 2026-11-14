@@ -16,7 +16,8 @@
      je Karte; Filter leeren bei 333 Beats 700 statt 440 ms). -->
 <!-- Ansicht -->
 <template x-if="editingBeatId !== beat.id">
-  <div class="plot-beat-view">
+  <!-- Aktionsmenü (⋯ am Kopf, Rechtsklick, Long-Press): plot-actions-menu.html. -->
+  <div class="plot-beat-view hover-reveal-host" @contextmenu="openBeatMenu($event, beat)" x-long-press>
     <div class="plot-beat-head">
       <!-- Drag-Griff: einzige Greiffläche für SortableJS (handle '.plot-beat-grip').
            So bleibt die übrige Karte voll klickbar (Titel→Edit, Tags→Figur
@@ -29,7 +30,7 @@
         <svg class="icon" aria-hidden="true"><use href="/icons.svg#grip-vertical"/></svg>
       </span>
       <!-- Titel = Bearbeiten-Einstieg, darum ein echter Button (Tab + Enter). -->
-      <button type="button" class="plot-beat-title" @click="startEditBeat(beat)" x-text="beat.titel"></button>
+      <button type="button" class="plot-beat-title text-link" @click="startEditBeat(beat)" x-text="beat.titel"></button>
       <!-- Konsistenz-Warn-Badge: zeigt, dass der aktive Prüflauf diesen Beat beanstandet -->
       <template x-if="consistencyResult && beatKonflikte(beat).length">
         <button type="button" class="plot-beat-warn" :class="'plot-beat-warn--' + befundSeverityTone(beatTopSeverity(beat))"
@@ -70,6 +71,12 @@
         <span class="plot-beat-anchor plot-beat-timecheck" role="img" :class="beatTimeCheckClass(beat)"
               :data-tip="beatTimeCheckTip(beat)" :aria-label="beatTimeCheckTip(beat)"><svg class="icon" aria-hidden="true"><use href="/icons.svg#calendar"/></svg></span>
       </template>
+      <button type="button" class="icon-btn icon-btn--ghost plot-icon-btn plot-beat-menu-btn hover-reveal"
+              @click="openBeatMenu($event, beat)"
+              aria-haspopup="menu" :aria-expanded="isActionMenuOpen('beat:' + beat.id)"
+              :data-tip="$app.t('plot.beat.actions')" :aria-label="$app.t('plot.beat.actions')">
+        <svg class="icon" aria-hidden="true"><use href="/icons.svg#more-horizontal"/></svg>
+      </button>
     </div>
     <template x-if="beat.beschreibung">
       <p class="plot-beat-desc" x-text="beat.beschreibung"></p>

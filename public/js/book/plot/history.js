@@ -1,4 +1,7 @@
-// Undo/Redo für die Plot-Werkstatt — Pendant zu [public/js/book-organizer/history.js].
+// Undo/Redo-Records der Plot-Werkstatt. Stack, Deckel, Flight-Schutz, Epoche
+// und Fehler-Requeue trägt der Kern [cards/board-history.js] (`historyUndo`,
+// `historyRedo`, `canUndo`, `canRedo`); hier steht nur, was fachlich ist: wie
+// ein Record aufgezeichnet und in beide Richtungen angewendet wird.
 //
 // Record-Typen (jeder trägt before UND after, derselbe Record bedient beide
 // Richtungen):
@@ -11,47 +14,53 @@
 //   { kind: 'thread-fields', id, before: {...}, after: {...} }
 //   { kind: 'thread-order',  before: [threadIds], after: [threadIds] }
 //   { kind: 'create-beat' | 'create-act' | 'create-thread' | 'create-relation', id }
+//   { kind: 'delete-beat',   id, snapshot }  — Beat-Löschen (book/plot/beat-restore.js)
 //
-// Capacity: HISTORY_MAX pro Stack (FIFO-Drop bei Überlauf).
+// Sonderfall create: Undo löscht das frisch Erzeugte. Danach verwirft der Kern
+// den Redo-Stack — ein Redo müsste neu anlegen, der Server vergäbe eine NEUE ID,
+// und andere Records im Stack referenzieren die alte. Enthält der Akt/Strang
+// inzwischen Beats, fragt das Undo vorher nach (der Server kaskadiert bzw. löst
+// die Beats sonst still mit).
 //
-// Sonderfall create: Undo löscht das frisch Erzeugte. Danach wird der gesamte
-// Redo-Stack invalidiert — ein Redo müsste neu anlegen, der Server vergäbe eine
-// NEUE ID, und andere Records im Stack (Platzierungs-Snapshots, Feld-Records)
-// referenzieren die alte. Saubere Lösung: User legt es manuell neu an. Enthält
-// der Akt/Strang inzwischen Beats, fragt das Undo vorher nach (der Server
-// kaskadiert bzw. löst die Beats sonst still mit).
+// Sonderfall delete-beat: das Undo legt den Beat aus dem Snapshot neu an (Felder,
+// Platzierung, Beziehungen, Ideen-Verknüpfungen) und schreibt die neue ID per
+// `_remapHistory` in alle Records um; das Redo löscht ihn wieder.
 //
-// Löschen (Beat/Akt/Strang/Beziehung), Fork/Unfork und jeder Board-Reload rufen
-// `_clearHistory()`: Hard-Delete in SQLite ohne Content-Snapshot, Fork remappt
-// act_id über viele Beats, ein Reload kann fremde Änderungen mitbringen — in
-// allen drei Fällen wäre der Stack danach inkonsistent statt bloss unvollständig.
+// Akt-/Strang-Löschen, Beziehung-Löschen, Fork/Unfork und jeder Board-Reload
+// rufen `_clearHistory()`: ein Akt kaskadiert all seine Beats samt Kanten (ein
+// Snapshot müsste das halbe Board tragen und beim Wiederanlegen jede Beat-ID
+// umschreiben), Fork remappt act_id über viele Beats, ein Reload kann fremde
+// Änderungen mitbringen — in allen Fällen wäre der Stack danach inkonsistent
+// statt bloss unvollständig.
 //
 // Die `_h*`-Applier sprechen die Routen direkt an und spiegeln lokal, statt die
 // interaktiven Methoden (saveEditBeat, moveAct, …) aufzurufen: die zeichnen selbst
 // auf, ein Undo würde sich sonst rekursiv in den Stack schreiben.
 
 import { fetchJson } from '../../utils.js';
+import { boardHistoryMethods } from '../../cards/board-history.js';
 
-const HISTORY_MAX = 10;
 const JSON_HEADERS = { 'Content-Type': 'application/json' };
 
 export const historyMethods = {
-  _clearHistory() {
-    this._undoStack = [];
-    this._redoStack = [];
-    this._historyEpoch = (this._historyEpoch || 0) + 1;
-  },
+  ...boardHistoryMethods,
 
-  _pushUndo(record, { clearRedo = true } = {}) {
-    if (this._inHistoryFlight) return;
-    this._undoStack.push(record);
-    while (this._undoStack.length > HISTORY_MAX) this._undoStack.shift();
-    if (clearRedo) this._redoStack = [];
-  },
+  // ── Kern-Hooks ─────────────────────────────────────────────────────────────
 
-  _pushRedo(record) {
-    this._redoStack.push(record);
-    while (this._redoStack.length > HISTORY_MAX) this._redoStack.shift();
+  // Während ein Undo/Redo fliegt, steht `busy`: die Buttons sind gesperrt (kein
+  // Doppelklick-Doppel-Undo) und jede interaktive Mutation kehrt früh zurück —
+  // sonst landete ihr Record zwischen Pop und Gegen-Push.
+  _historyBusy() { return !!this.busy; },
+  _historySetBusy(flag) { this.busy = flag; },
+
+  // Offenes Beat-Edit-Panel verwerfen, bevor zurückgedreht wird. Sonst gewinnt der
+  // Draft: das Panel committet per `@click.outside`, und dieser Document-Listener
+  // feuert NACH dem Button-Klick (Bubble nach Target) — die Undo-Änderung würde
+  // unmittelbar danach von `commitEditBeat` überschrieben. Wer Undo drückt, will
+  // zurückdrehen, nicht speichern. Akt-/Strang-Umbenennen speichert dagegen im
+  // `blur` (feuert VOR dem Klick) und landet damit korrekt als eigener Record.
+  _historyBeforeApply() {
+    if (this.editingBeatId != null) this.cancelEditBeat();
   },
 
   // ── Aufzeichnen (von den Mutations-Methoden gerufen) ────────────────────────
@@ -122,85 +131,6 @@ export const historyMethods = {
 
   // ── Anwenden ───────────────────────────────────────────────────────────────
 
-  // Offenes Beat-Edit-Panel verwerfen, bevor zurückgedreht wird. Sonst gewinnt der
-  // Draft: das Panel committet per `@click.outside`, und dieser Document-Listener
-  // feuert NACH dem Button-Klick (Bubble nach Target) — die Undo-Änderung würde
-  // unmittelbar danach von `commitEditBeat` überschrieben. Wer Undo drückt, will
-  // zurückdrehen, nicht speichern. Akt-/Strang-Umbenennen speichert dagegen im
-  // `blur` (feuert VOR dem Klick) und landet damit korrekt als eigener Record.
-  _closeOpenBeatEdit() {
-    if (this.editingBeatId != null) this.cancelEditBeat();
-  },
-
-  // Der Gegen-Stack wird ERST NACH dem Flight beschrieben: `_pushUndo` schluckt
-  // Records, solange `_inHistoryFlight` steht (das ist der Schutz davor, dass eine
-  // wiederhergestellte Mutation sich selbst wieder aufzeichnet). Innerhalb des
-  // try-Blocks aufgezeichnet, fiele der Redo→Undo-Rückweg genau darauf herein —
-  // nach einem Redo wäre nichts mehr rückgängig zu machen.
-  // Während des Flights steht zusätzlich `busy`: die Buttons sind gesperrt (kein
-  // Doppelklick-Doppel-Undo) und jede interaktive Mutation kehrt früh zurück —
-  // sonst landete ihr Record zwischen Pop und Gegen-Push. Leert ein Applier die
-  // Historie (Fehler → loadBoard-Rollback), wird der Record nicht zurückgelegt:
-  // er gehörte zu einem Stack, den es nicht mehr gibt (`_historyEpoch`).
-  async plotHistoryUndo() {
-    if (this.busy || this._inHistoryFlight) return;
-    // Erst prüfen, dann schliessen: bei leerem Stack ginge sonst ein offener
-    // Beat-Entwurf verloren, ohne dass irgendetwas zurückgedreht wird.
-    if (!this._undoStack.length) return;
-    this._closeOpenBeatEdit();
-    const rec = this._undoStack.pop();
-    if (!rec) return;
-    const epoch = this._historyEpoch || 0;
-    this._inHistoryFlight = true;
-    this.busy = true;
-    let ok = false;
-    try {
-      ok = await this._applyInverse(rec);
-    } finally {
-      this._inHistoryFlight = false;
-      this.busy = false;
-    }
-    if ((this._historyEpoch || 0) !== epoch) return;
-    if (!ok) { this._requeueFailed(rec, this._undoStack); return; }
-    rec._failed = false;
-    // Nach dem Undo eines Create wäre jedes Redo eine Neuanlage mit neuer ID →
-    // Records, die die alte referenzieren, wären Nieten. Stack komplett fallen lassen.
-    if (rec.kind.startsWith('create-')) this._redoStack = [];
-    else this._pushRedo(rec);
-  },
-
-  async plotHistoryRedo() {
-    if (this.busy || this._inHistoryFlight) return;
-    if (!this._redoStack.length) return;
-    this._closeOpenBeatEdit();
-    const rec = this._redoStack.pop();
-    if (!rec) return;
-    const epoch = this._historyEpoch || 0;
-    this._inHistoryFlight = true;
-    this.busy = true;
-    let ok = false;
-    try {
-      ok = await this._applyForward(rec);
-    } finally {
-      this._inHistoryFlight = false;
-      this.busy = false;
-    }
-    if ((this._historyEpoch || 0) !== epoch) return;
-    if (!ok) { this._requeueFailed(rec, this._redoStack); return; }
-    rec._failed = false;
-    this._pushUndo(rec, { clearRedo: false });
-  },
-
-  // Gescheiterter Record: einmal zurücklegen (Netz-Wackler → nochmal
-  // versuchen), beim zweiten Fehlschlag die Historie verwerfen. Ein Record,
-  // dessen Ziel verschwunden ist (Beat in anderem Tab gelöscht → 404), scheitert
-  // sonst bei jedem Strg+Z erneut und versperrt alle älteren Schritte.
-  _requeueFailed(rec, stack) {
-    if (rec._failed) { this._clearHistory(); return; }
-    rec._failed = true;
-    stack.push(rec);
-  },
-
   async _applyInverse(rec) {
     if (rec.kind === 'beat-place')     return this._hApplyPlacements(rec.before);
     if (rec.kind === 'beat-fields')    return this._hPatchBeat(rec.id, rec.before);
@@ -213,12 +143,14 @@ export const historyMethods = {
     if (rec.kind === 'create-act')     return this._hUndoCreateAct(rec.id);
     if (rec.kind === 'create-thread')  return this._hUndoCreateThread(rec.id);
     if (rec.kind === 'create-relation') return this._hDeleteRelation(rec.id);
+    if (rec.kind === 'delete-beat')    return this._hRestoreBeat(rec);
     return false;
   },
 
   // create-* fehlt hier absichtlich: nach dem Undo eines Create ist der
   // Redo-Stack leer (neue ID beim Wiederanlegen), ein Redo kann nie anliegen.
   async _applyForward(rec) {
+    if (rec.kind === 'delete-beat')   return this._hRedeleteBeat(rec);
     if (rec.kind === 'beat-place')    return this._hApplyPlacements(rec.after);
     if (rec.kind === 'beat-fields')   return this._hPatchBeat(rec.id, rec.after);
     if (rec.kind === 'beat-fields-batch') return (await this._hPatchBeats(rec.items.map(i => ({ id: i.id, fields: i.after })))).length === rec.items.length;

@@ -18,7 +18,7 @@
   <p x-show="f.beschreibung" x-text="f.beschreibung" class="figur-beschreibung"></p>
   <div class="figur-detail-actions">
     <button type="button" class="btn-compact" x-show="$store.config.semanticSearchEnabled" @click.stop="$app.findSimilar('figure', f.id, f.name)" x-text="$app.t('search.semantic.similarEntity')"></button>
-    <button type="button" class="btn-compact" x-show="figurEditId !== f.id" @click.stop="startFigurEdit(f)">
+    <button type="button" class="btn-compact" x-show="figurEditId !== f.id" @click.stop="openFigurEdit(f)">
       <svg class="icon" aria-hidden="true"><use href="/icons.svg#pencil"/></svg>
       <span x-text="$app.t('figuren.edit.open')"></span>
     </button>

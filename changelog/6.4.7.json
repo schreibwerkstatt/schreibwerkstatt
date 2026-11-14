@@ -1,0 +1,51 @@
+{
+  "version": "6.4.7",
+  "date": "2026-11-14",
+  "entries": [
+    {
+      "kind": "neu",
+      "de": "Ideen-Board, Recherche und Motiv-Werkstatt: mit Cmd/Strg+Z oder den zwei Knöpfen im Kartenkopf machst du die letzten zehn Schritte rückgängig und wieder.",
+      "en": "Ideas board, research and motif workshop: use Cmd/Ctrl+Z or the two buttons in the card header to undo and redo your last ten steps."
+    },
+    {
+      "kind": "neu",
+      "de": "Figuren-Karte: Figuren, die nicht mehr im Text vorkommen, löschst du jetzt mit einem Knopf alle auf einmal aus dem Katalog.",
+      "en": "Characters card: you can now delete all characters that no longer appear in the text from the catalogue with a single button."
+    },
+    {
+      "kind": "verbessert",
+      "de": "Notebook-Editor: die Leiste oben hat eine Gruppe «Einfügen» für Bild, Tabelle, Diagramm, Beleg und Querverweis sowie ein Menü «Ansicht» mit Zoom. Eingefügt wird dort, wo der Cursor steht.",
+      "en": "Notebook editor: the top bar now has an “Insert” group for image, table, diagram, citation and cross-reference, plus a “View” menu with zoom. Items are inserted where the cursor is."
+    },
+    {
+      "kind": "verbessert",
+      "de": "Notebook-Editor: «/» am Anfang eines Absatzes mit Text wandelt ihn um, etwa in eine Überschrift oder ein Zitat. Enter mitten in einer Checkliste oder einem Gedicht teilt den Block mit einem Absatz dazwischen.",
+      "en": "Notebook editor: “/” at the start of a paragraph with text converts it, for example into a heading or a quote. Enter in the middle of a checklist or poem splits the block with a paragraph in between."
+    },
+    {
+      "kind": "verbessert",
+      "de": "Figuren, Schauplätze, Szenen, Ereignisse, Quellen, Ideen-Board und Plot: jeder Eintrag hat ein Aktionsmenü über ⋯, Rechtsklick oder langes Drücken. Dort findest du auch «Zusammenführen mit …».",
+      "en": "Characters, locations, scenes, events, sources, ideas board and plot: every entry has an action menu via ⋯, right-click or long press. That is also where you find “Merge with …”."
+    },
+    {
+      "kind": "verbessert",
+      "de": "KI-Vorschläge in Plot, Motiv-Werkstatt, Figur-Werkstatt, Recherche, Autorenprofil und Bucheinstellungen erscheinen als Karten, die du einzeln übernimmst oder verwirfst. Verworfenes lässt sich wieder anbieten.",
+      "en": "AI suggestions in plot, motif workshop, character workshop, research, author profile and book settings now appear as cards you accept or discard one by one. Discarded ones can be offered again."
+    },
+    {
+      "kind": "verbessert",
+      "de": "Ideen-Board: fügst du eine Liste ein, wird daraus eine Idee je Zeile. Der Notiztext öffnet sich in Raster und Liste per Klick zum Bearbeiten.",
+      "en": "Ideas board: pasting a list creates one idea per line. Clicking the note text opens it for editing in both grid and list view."
+    },
+    {
+      "kind": "verbessert",
+      "de": "Bucheinstellungen, Reiter «Reihe»: die Bände ordnest du jetzt per Ziehen um, die Pfeil-Knöpfe bleiben als Alternative.",
+      "en": "Book settings, “Series” tab: you can now reorder the volumes by dragging; the arrow buttons remain as an alternative."
+    },
+    {
+      "kind": "behoben",
+      "de": "Notebook-Editor: «Abbrechen» nennt jetzt den Stand, auf dem der Abschnitt bleibt. Ein Speicherkonflikt im Hintergrund öffnet kein Fenster mehr mitten im Tippen, sondern zeigt einen Hinweis.",
+      "en": "Notebook editor: “Cancel” now tells you which saved state the section stays at. A save conflict in the background no longer pops up a dialog while you type; a notice appears instead."
+    }
+  ]
+}

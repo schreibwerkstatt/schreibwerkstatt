@@ -189,13 +189,26 @@ function replaceTags(itemId, tags) {
  *
  *  Als Transaktion, damit ein Fundstueck nie ohne seine URLs existiert: die URL
  *  ist bei einem aus dem Browser erfassten Link die einzige Substanz. */
-const createItem = db.transaction(({ bookId, userEmail, kind, title, body, source, urls, tags }) => {
+const createItem = db.transaction(({ bookId, userEmail, kind, title, body, source, urls, tags, restore = null }) => {
   const k = RESEARCH_KINDS.has(kind) ? kind : 'note';
   const result = db.prepare(
     `INSERT INTO research_items (book_id, user_email, kind, title, body, source, created_at, updated_at)
-     VALUES (?, ?, ?, ?, ?, ?, ${NOW_ISO_SQL}, ${NOW_ISO_SQL})`
-  ).run(bookId, userEmail, k, title || null, body || null, source || null);
+     VALUES (?, ?, ?, ?, ?, ?, ${restore ? '?' : NOW_ISO_SQL}, ${NOW_ISO_SQL})`
+  ).run(...[bookId, userEmail, k, title || null, body || null, source || null,
+    ...(restore ? [restore.createdAt] : [])]);
   const id = result.lastInsertRowid;
+  if (restore) {
+    // Undo eines Löschens (lib/restore-fields.js): Stand aus dem Snapshot.
+    // `status_by` ist wer wiederherstellt — ein Name aus dem Client wäre eine
+    // frei wählbare Zuschreibung (nur, wenn das Konto existiert: FK auf app_users).
+    db.prepare(`UPDATE research_items
+                   SET status = COALESCE(?, status), status_at = ?,
+                       status_by = (SELECT email FROM app_users WHERE email = ? COLLATE NOCASE),
+                       pinned = ?, archived = ?
+                 WHERE id = ?`)
+      .run(restore.status, restore.statusAt, restore.status ? userEmail : null,
+        restore.pinned ? 1 : 0, restore.archived ? 1 : 0, id);
+  }
   replaceUrls(id, urls || []);
   replaceTags(id, tags || []);
   searchIndex.upsertResearch(id);

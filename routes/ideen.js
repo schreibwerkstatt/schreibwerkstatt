@@ -31,6 +31,7 @@ const ideenDb = require('../db/ideen');
 const ideenCheck = require('../db/ideen-check');
 const searchIndex = require('../lib/search');
 const { replayIdempotent, rememberIdempotent } = require('../lib/idempotency');
+const { parseRestoreFields } = require('../lib/restore-fields');
 const logger = require('../logger');
 
 const router = express.Router();
@@ -204,6 +205,18 @@ router.post('/', jsonBody, async (req, res) => {
   if (pageId && chapterId) return res.status(400).json({ error_code: 'INVALID_SCOPE' });
   if (!content)                 return res.status(400).json({ error_code: 'CONTENT_REQ' });
   if (content.length > MAX_LEN) return res.status(400).json({ error_code: 'CONTENT_TOO_LONG' });
+  // Undo eines Löschens: Stand aus dem Snapshot (Anlegedatum, Stufe, Rang).
+  // Die Stufe darf inzwischen abgeschaltet sein — die Idee stand schon dort.
+  const parsed = parseRestoreFields(req.body?.restore, { isStatus: isIdeeStatus });
+  if (parsed.error_code) return res.status(400).json({ error_code: parsed.error_code });
+  let restore = parsed.value;
+  if (restore) {
+    const so = req.body.restore.sort_order;
+    if (so !== undefined && so !== null && !(Number.isInteger(so) && so >= 0)) {
+      return res.status(400).json({ error_code: 'INVALID_RESTORE' });
+    }
+    restore = { ...restore, sortOrder: so || 0 };
+  }
   setContext({ book: bookId });
   if (!guardBook(req, res, bookId, 'editor')) return;
 
@@ -220,12 +233,13 @@ router.post('/', jsonBody, async (req, res) => {
   // Nachgespielt aus der Offline-Warteschlange (lib/idempotency.js): derselbe
   // Schlüssel legt nicht doppelt an.
   if (await replayIdempotent(req, res, 'POST /ideen', userEmail)) return;
-  const id = ideenDb.createIdee({ bookId, pageId, chapterId, userEmail, content });
+  const id = ideenDb.createIdee({ bookId, pageId, chapterId, userEmail, content, restore });
   const row = ideenDb.getIdee(id);
   searchIndex.upsertIdea(id);
-  logger.info(`[ideen] create id=${id} ${pageId ? 'page=' + pageId : chapterId ? 'chapter=' + chapterId : 'book=' + bookId}`);
+  logger.info(`[ideen] ${restore ? 'restore' : 'create'} id=${id} ${pageId ? 'page=' + pageId : chapterId ? 'chapter=' + chapterId : 'book=' + bookId}`);
   rememberIdempotent(req, 'POST /ideen', userEmail, row);
-  recordUsageEvent({ userEmail, event: 'content.created', bookId, meta: { kind: 'idea' } });
+  // Wiederherstellen ist kein neuer Inhalt.
+  if (!restore) recordUsageEvent({ userEmail, event: 'content.created', bookId, meta: { kind: 'idea' } });
   res.json(row);
 });
 

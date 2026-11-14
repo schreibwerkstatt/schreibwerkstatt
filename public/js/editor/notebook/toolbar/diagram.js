@@ -12,10 +12,11 @@
 // Der Dialog gehoert zum Karten-Scope (editorToolbarCard), also `x-ref` +
 // showModal() statt des `modal()`-Primitivs, und `@close` ist der EINZIGE
 // Aufraeumpunkt — ESC, Backdrop und Abbrechen laufen alle durch `dlg.close()`.
+// Caret merken/zurueck, Backdrop- und Esc-Rueckfrage: panel-methods.js.
 
 import { getEditEl } from '../../utils.js';
 import { replaceBlockOutsideList, ensureSlotAfter } from './_shared.js';
-import { htmlToElement } from './caret-panel.js';
+import { htmlToElement, placeBlockNode } from './caret-panel.js';
 import { buildDiagramHtml, diagramCode, DIAGRAM_MAX_CHARS } from '../../../diagram/mermaid-html.js';
 import { renderDiagramSvg } from '../../../diagram/mermaid-view.js';
 
@@ -27,18 +28,35 @@ const PREVIEW_DEBOUNCE_MS = 450;
 // Startvorlagen. Ein leeres Feld vor einer Diagrammsprache ist eine Sackgasse —
 // die vier decken ab, was in Sachbuch und Manuskript tatsaechlich vorkommt.
 // Bewusst kurz: sie sollen als Beispiel gelesen und ueberschrieben werden.
+// Das Geruest ist Mermaid-Syntax; jeder Beispieltext ist ein Platzhalter
+// `{name}`, der aus `editor.diagram.tplText.<key>.<name>` in der UI-Sprache
+// kommt — eine englische Oberflaeche bekommt kein deutsches Beispiel.
 export const DIAGRAM_TEMPLATES = [
-  { key: 'flow', code: 'flowchart TD\n  A[Ausgangslage] --> B{Entscheidung}\n  B -->|ja| C[Folge A]\n  B -->|nein| D[Folge B]' },
-  { key: 'sequence', code: 'sequenceDiagram\n  Anna->>Berta: Frage\n  Berta-->>Anna: Antwort' },
-  { key: 'timeline', code: 'timeline\n  title Ablauf\n  1904 : Erste Station\n  1912 : Zweite Station' },
-  { key: 'mindmap', code: 'mindmap\n  root((Thema))\n    Ast eins\n    Ast zwei' },
+  { key: 'flow', code: 'flowchart TD\n  A[{start}] --> B{{decision}}\n  B -->|{yes}| C[{outcomeA}]\n  B -->|{no}| D[{outcomeB}]' },
+  { key: 'sequence', code: 'sequenceDiagram\n  {personA}->>{personB}: {question}\n  {personB}-->>{personA}: {answer}' },
+  { key: 'timeline', code: 'timeline\n  title {title}\n  1904 : {first}\n  1912 : {second}' },
+  { key: 'mindmap', code: 'mindmap\n  root(({topic}))\n    {branchA}\n    {branchB}' },
 ];
+
+// Vorlage mit den Beispieltexten der UI-Sprache fuellen. `translate(key)` liefert
+// den Text; fehlt er, bleibt der Platzhaltername stehen (sichtbar statt leer).
+// Die Mermaid-Syntax `{…}` der Raute ist doppelt geschweift im Geruest und
+// wird hier zur einfachen Klammer.
+export function fillDiagramTemplate(tpl, translate) {
+  if (!tpl) return '';
+  return tpl.code.replace(/\{\{(\w+)\}\}|\{(\w+)\}/g, (_, rhomb, plain) => {
+    const name = rhomb || plain;
+    const txt = translate?.(`editor.diagram.tplText.${tpl.key}.${name}`) || name;
+    return rhomb ? `{${txt}}` : txt;
+  });
+}
 
 export const diagramMethods = {
   /** Einfuegen: `block` ist der (leere) Trigger-Block aus dem Slash-Menue, der
    *  beim Bestaetigen ersetzt wird. */
-  openDiagramDialog(block) {
+  openDiagramDialog(block, { after = null } = {}) {
     this._diagramBlock = block || null;
+    this._diagramAfter = after || null;
     this._diagramEditEl = null;
     this.diagramEditing = false;
     this.diagramSource = '';
@@ -50,6 +68,7 @@ export const diagramMethods = {
   openDiagramForEl(el) {
     if (!el) return;
     this._diagramBlock = null;
+    this._diagramAfter = null;
     this._diagramEditEl = el;
     this.diagramEditing = true;
     this.diagramSource = diagramCode(el);
@@ -61,6 +80,7 @@ export const diagramMethods = {
   _openDiagramDlg() {
     const dlg = this.$refs?.diagramDlg;
     if (!dlg) return;
+    this._beginDialog('diagram');
     if (!dlg.open) dlg.showModal();
     // Fokus in den Quelltext, nicht auf den ersten Button — der Nutzer will
     // tippen, nicht klicken.
@@ -78,6 +98,7 @@ export const diagramMethods = {
       this._diagramPreviewTimer = null;
     }
     this._diagramBlock = null;
+    this._diagramAfter = null;
     this._diagramEditEl = null;
     this.diagramEditing = false;
     this.diagramSource = '';
@@ -85,13 +106,17 @@ export const diagramMethods = {
     this.diagramPreviewing = false;
     const host = this.$refs?.diagramPreview;
     if (host) host.replaceChildren();
-    getEditEl()?.focus();
+    this._endDialog();
   },
 
   diagramApplyTemplate(key) {
     const tpl = DIAGRAM_TEMPLATES.find(t => t.key === key);
     if (!tpl) return;
-    this.diagramSource = tpl.code;
+    const app = window.__app;
+    this.diagramSource = fillDiagramTemplate(tpl, (k) => {
+      const v = app?.t?.(k);
+      return v && v !== k ? v : '';
+    });
     this._schedDiagramPreview(0);
     this.$refs?.diagramInput?.focus();
   },
@@ -170,13 +195,15 @@ export const diagramMethods = {
     if (!node) { this.closeDiagramDialog(); return; }
     node.setAttribute('contenteditable', 'false');
 
-    const target = this._diagramEditEl || this._diagramBlock;
-    if (target && target.isConnected && target.parentNode && editEl.contains(target)) {
-      replaceBlockOutsideList(editEl, target, node);
+    const edited = this._diagramEditEl;
+    if (edited && edited.isConnected && edited.parentNode && editEl.contains(edited)) {
+      replaceBlockOutsideList(editEl, edited, node);
     } else {
-      editEl.appendChild(node);
+      placeBlockNode(editEl, node, { replace: this._diagramBlock, after: this._diagramAfter });
     }
     ensureSlotAfter(node);
+    // Caret beim Schliessen in den Absatz dahinter (`_endDialog`).
+    this._dialogInserted = node;
     window.__app?._markEditDirty?.();
     this.closeDiagramDialog();
   },

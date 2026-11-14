@@ -1,0 +1,39 @@
+<!-- Aktionsmenü einer Szenenzeile (⋯, Rechtsklick, Long-Press): EINE teleportierte
+     Instanz je Karte (action-menu.js, DESIGN.md «Context-Menu»). Eingebunden als
+     String-Include in szenen.html ausserhalb der Zeilen-Schleife; Ziel =
+     figure_scenes.id, aufgelöst über szeneMenuSzene() (cards/szenen-card.js).
+     Szenen sind read-only — kein «Bearbeiten». «Zusammenführen mit …» öffnet den
+     geteilten Merge-Picker am Menü-Anker, für aktive und verwaiste Szenen. Löschen
+     nur für verwaiste (Server: NOT_STALE). -->
+<template x-teleport="body">
+  <div class="context-menu" x-ref="actionMenu" x-bind="actionMenuPanel()" x-cloak>
+    <template x-if="szeneMenuSzene()">
+      <div>
+        <button type="button" role="menuitem" class="context-menu-item context-menu-item--icon"
+                x-show="szeneMenuSzene().page_id != null"
+                @click="$app.gotoPageById(szeneMenuSzene().page_id, { snippet: szeneMenuSzene().titel })">
+          <svg class="icon" aria-hidden="true"><use href="/icons.svg#book-open"/></svg>
+          <span x-text="$app.t('common.showInText')"></span>
+        </button>
+        <button type="button" role="menuitem" class="context-menu-item context-menu-item--icon"
+                x-show="$store.config.semanticSearchEnabled"
+                @click="$app.findSimilar('scene', szeneMenuSzene().id, szeneMenuSzene().titel)">
+          <svg class="icon" aria-hidden="true"><use href="/icons.svg#search"/></svg>
+          <span x-text="$app.t('search.semantic.similarEntity')"></span>
+        </button>
+        <button type="button" role="menuitem" class="context-menu-item context-menu-item--icon"
+                @click="openMergePick(actionMenuAnchor(), 'szene', szeneMenuSzene())">
+          <svg class="icon" aria-hidden="true"><use href="/icons.svg#arrow-right-left"/></svg>
+          <span x-text="$app.t('merge.menuAction')"></span>
+        </button>
+        <div class="context-menu-sep" role="separator" x-show="szeneMenuSzene().stale"></div>
+        <button type="button" role="menuitem" class="context-menu-item context-menu-item--icon context-menu-item--danger"
+                x-show="szeneMenuSzene().stale"
+                @click="deleteStale(szeneMenuSzene())">
+          <svg class="icon" aria-hidden="true"><use href="/icons.svg#trash"/></svg>
+          <span x-text="$app.t('common.delete')"></span>
+        </button>
+      </div>
+    </template>
+  </div>
+</template>

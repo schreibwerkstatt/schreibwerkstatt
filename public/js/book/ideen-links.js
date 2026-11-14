@@ -86,6 +86,8 @@ export const ideenLinkMethods = {
         body: JSON.stringify({ target_kind: targetKind, target_id: parseInt(targetId, 10) }),
       });
       this._replaceIdee(row);
+      // Nur das Ideen-Board fuehrt eine Historie (ideen-board/history.js).
+      this._recordIdeeLink?.('add', idee.id, targetKind, targetId);
       this.cancelLinkPicker();
       this.errorMessage = '';
     } catch {
@@ -99,6 +101,7 @@ export const ideenLinkMethods = {
     this.busy = true;
     try {
       this._replaceIdee(await fetchJson(`/ideen/${idee.id}/links/${link.link_id}`, { method: 'DELETE' }));
+      this._recordIdeeLink?.('remove', idee.id, link.target_kind, link.target_id);
       this.errorMessage = '';
     } catch {
       this.errorMessage = window.__app.t('ideen.error.link');

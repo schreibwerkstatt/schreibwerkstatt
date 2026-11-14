@@ -1,0 +1,75 @@
+<!-- @include editor-page-toolbar-insert — «Einfügen»-Gruppe der Seiten-Toolbar
+     (Root-Scope). Desktop: Icon-Knöpfe in der Leiste; Mobile (≤600px): dieselben
+     Einträge hinter einem «+»-Menü, damit die Leiste bei 375px auf eine Zeile
+     passt. Beide rufen `editorInsert(kind)` → editorToolbarCard
+     (toolbar/panel-methods.js#insertFromPageToolbar): Bild, Tabelle und
+     Diagramm landen am Caret (leerer Absatz → ersetzt, sonst dahinter), Beleg und
+     Querverweis öffnen ihren Picker am Caret. `@mousedown.prevent` hält Fokus und
+     Caret im contenteditable. -->
+<span class="page-editor-toolbar__insert" role="group" :aria-label="t('editor.toolbar.insertGroup')">
+  <button type="button" class="icon-btn" @mousedown.prevent @click="editorInsert('image')"
+          :data-tip="t('editor.toolbar.imageTitle')" :aria-label="t('editor.toolbar.imageTitle')">
+    <svg class="icon" aria-hidden="true"><use href="/icons.svg#image"/></svg>
+  </button>
+  <button type="button" class="icon-btn" @mousedown.prevent @click="editorInsert('table')"
+          :data-tip="t('editor.toolbar.tableTitle')" :aria-label="t('editor.toolbar.tableTitle')">
+    <svg class="icon" aria-hidden="true"><use href="/icons.svg#table"/></svg>
+  </button>
+  <button type="button" class="icon-btn" @mousedown.prevent @click="editorInsert('diagram')"
+          :data-tip="t('editor.toolbar.diagramTitle')" :aria-label="t('editor.toolbar.diagramTitle')">
+    <svg class="icon" aria-hidden="true"><use href="/icons.svg#workflow"/></svg>
+  </button>
+  <button type="button" class="icon-btn" @mousedown.prevent @click="openCitePicker()"
+          :data-tip="t('editor.toolbar.citeTitle')" :aria-label="t('editor.toolbar.citeTitle')">
+    <svg class="icon" aria-hidden="true"><use href="/icons.svg#book-open"/></svg>
+  </button>
+  <button type="button" class="icon-btn" @mousedown.prevent @click="editorInsert('xref')"
+          :data-tip="t('editor.toolbar.xrefTitle')" :aria-label="t('editor.toolbar.xrefTitle')">
+    <svg class="icon" aria-hidden="true"><use href="/icons.svg#list-tree"/></svg>
+  </button>
+  <button type="button" class="icon-btn" @mousedown.prevent @click="editorInsert('hr')"
+          :data-tip="withHotkey(t('editor.toolbar.hrTitle'), 'hr')" :aria-label="t('editor.toolbar.hrTitle')">
+    <svg class="icon" aria-hidden="true"><use href="/icons.svg#separator-horizontal"/></svg>
+  </button>
+</span>
+<span class="page-editor-toolbar__insert-menu">
+ <span x-data="menu()">
+  <button type="button" class="icon-btn" x-bind="trigger" :class="{ 'is-active': open }"
+          aria-haspopup="menu" @mousedown.prevent
+          :data-tip="t('editor.toolbar.insertGroup')" :aria-label="t('editor.toolbar.insertGroup')">
+    <svg class="icon" aria-hidden="true"><use href="/icons.svg#plus"/></svg>
+  </button>
+  <div class="context-menu context-menu--dropdown" x-bind="panel" x-cloak>
+    <button type="button" class="context-menu-item context-menu-item--icon" role="menuitem"
+            @mousedown.prevent @click="editorInsert('image')">
+      <svg class="icon" aria-hidden="true"><use href="/icons.svg#image"/></svg>
+      <span x-text="t('editor.toolbar.imageTitle')"></span>
+    </button>
+    <button type="button" class="context-menu-item context-menu-item--icon" role="menuitem"
+            @mousedown.prevent @click="editorInsert('table')">
+      <svg class="icon" aria-hidden="true"><use href="/icons.svg#table"/></svg>
+      <span x-text="t('editor.toolbar.tableTitle')"></span>
+    </button>
+    <button type="button" class="context-menu-item context-menu-item--icon" role="menuitem"
+            @mousedown.prevent @click="editorInsert('diagram')">
+      <svg class="icon" aria-hidden="true"><use href="/icons.svg#workflow"/></svg>
+      <span x-text="t('editor.toolbar.diagramTitle')"></span>
+    </button>
+    <button type="button" class="context-menu-item context-menu-item--icon" role="menuitem"
+            @mousedown.prevent @click="openCitePicker()">
+      <svg class="icon" aria-hidden="true"><use href="/icons.svg#book-open"/></svg>
+      <span x-text="t('editor.toolbar.citeTitle')"></span>
+    </button>
+    <button type="button" class="context-menu-item context-menu-item--icon" role="menuitem"
+            @mousedown.prevent @click="editorInsert('xref')">
+      <svg class="icon" aria-hidden="true"><use href="/icons.svg#list-tree"/></svg>
+      <span x-text="t('editor.toolbar.xrefTitle')"></span>
+    </button>
+    <button type="button" class="context-menu-item context-menu-item--icon" role="menuitem"
+            @mousedown.prevent @click="editorInsert('hr')">
+      <svg class="icon" aria-hidden="true"><use href="/icons.svg#separator-horizontal"/></svg>
+      <span x-text="t('editor.toolbar.hrTitle')"></span>
+    </button>
+  </div>
+ </span>
+</span>

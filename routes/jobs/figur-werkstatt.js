@@ -355,9 +355,15 @@ function _loadWeltgesetze(bookId, userEmail, logger) {
 
 // ── Consistency-Job ─────────────────────────────────────────────────────────
 
+function _konfliktAktion(k, aktionEnum) {
+  const neu = typeof k.neu === 'string' ? k.neu.trim() : '';
+  const aktion = aktionEnum.includes(k.aktion) && k.aktion !== 'keine' && neu ? k.aktion : 'keine';
+  return { aktion, neu: aktion === 'keine' ? null : neu };
+}
+
 async function runConsistencyJob(jobId, draftId, userEmail) {
   const logger = makeJobLogger(jobId);
-  const { buildConsistencyPrompt, SCHEMA_CONSISTENCY } = await getPrompts(userEmail);
+  const { buildConsistencyPrompt, SCHEMA_CONSISTENCY, CONSISTENCY_AKTION_ENUM } = await getPrompts(userEmail);
 
   try {
     const draft = getDraftFigure(draftId);
@@ -404,6 +410,9 @@ async function runConsistencyJob(jobId, draftId, userEmail) {
         schwere: SEVERITY_ENUM.includes(k.schwere) ? k.schwere : SEVERITY_FALLBACK,
         problem: k.problem.trim(),
         vorschlag: typeof k.vorschlag === 'string' ? k.vorschlag.trim() : '',
+        // Übernehmbare Mindmap-Änderung: nur mit bekannter Aktion UND Text,
+        // sonst 'keine' (die Vorschlagskarte bietet dann kein Übernehmen an).
+        ..._konfliktAktion(k, CONSISTENCY_AKTION_ENUM),
       }));
 
     const fazit = result.fazit.trim();

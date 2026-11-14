@@ -1,8 +1,10 @@
 <!-- Auswahl-Leiste der Recherche-Liste (DESIGN.md „Auswahl-Leiste",
      Mechanik selection-bar.js, Aktionen book/recherche/bulk.js). Nur in der
-     Listen-Ansicht und nur im Auswahl-Modus. Jede Aktion wirkt auf alle
-     markierten, sichtbaren Fundstuecke (POST /research/bulk). -->
-<div class="selection-bar" x-show="bulkMode && viewMode === 'list'" x-cloak role="toolbar" :aria-label="$app.t('recherche.bulk.label')">
+     Listen-Ansicht; die Haken stehen in jeder Zeile, die Leiste erscheint ab
+     der ersten Markierung (wie in der Ideen-Liste), × hebt die Auswahl auf.
+     Jede Aktion wirkt auf alle markierten, sichtbaren Fundstuecke
+     (POST /research/bulk) und ist EIN Undo-Schritt. -->
+<div class="selection-bar" x-show="selectionCount() && viewMode === 'list'" x-cloak role="toolbar" :aria-label="$app.t('recherche.bulk.label')">
   <label class="selection-bar__all">
     <input type="checkbox" :checked="allVisibleSelected()" @change="toggleSelectAllVisible()"
            :aria-label="$app.t('selection.selectAll')">
@@ -29,6 +31,6 @@
     <button type="button" class="btn-compact" x-show="showArchived" @click="bulkApply('unarchive')" :disabled="busy || !selectionCount()" x-text="$app.t('recherche.bulk.unarchive')"></button>
     <button type="button" class="btn-compact danger" @click="bulkApply('delete')" :disabled="busy || !selectionCount()" x-text="$app.t('recherche.bulk.delete')"></button>
   </div>
-  <button type="button" class="icon-btn icon-btn--ghost selection-bar__close" @click="toggleBulkMode()"
-          :data-tip="$app.t('recherche.bulk.done')" :aria-label="$app.t('recherche.bulk.done')"><svg class="icon" aria-hidden="true"><use href="/icons.svg#x"/></svg></button>
+  <button type="button" class="icon-btn icon-btn--ghost selection-bar__close" @click="clearSelection()" :disabled="busy"
+          :data-tip="$app.t('selection.clear')" :aria-label="$app.t('selection.clear')"><svg class="icon" aria-hidden="true"><use href="/icons.svg#x"/></svg></button>
 </div>

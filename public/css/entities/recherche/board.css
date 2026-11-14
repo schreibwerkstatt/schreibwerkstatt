@@ -77,31 +77,6 @@ textarea.recherche-input { resize: vertical; min-height: 2.75rem; }
 }
 .recherche-primary:hover:not(:disabled) { filter: brightness(1.08); }
 
-/* ── Skeleton (Loading vor erstem Datensatz) ────────────────────────────── */
-/* Card-förmige Platzhalter passend zur .research-item-Optik. Shimmer kommt aus
-   .entity-skeleton-cell (entity-list.css), kein eigener Keyframe. */
-.recherche-skeleton {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-6);
-}
-.recherche-skeleton-card {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-sm);
-  border: 1px solid var(--color-border);
-  border-left: 3px solid var(--card-accent);
-  border-radius: var(--radius-none);
-  background: var(--color-card-bg);
-  padding: var(--space-6) var(--space-sm);
-  opacity: var(--opacity-disabled);
-}
-.recherche-skeleton-head { display: flex; align-items: center; gap: var(--space-xs); }
-.recherche-skeleton-badge { width: 3.5rem; height: 14px; flex-shrink: 0; }
-.recherche-skeleton-title { height: 14px; flex: 1; max-width: 40%; }
-.recherche-skeleton-line { height: 11px; width: 100%; }
-.recherche-skeleton-line--short { max-width: 65%; }
-
 /* ── Liste + Items ──────────────────────────────────────────────────────── */
 /* Einspaltige Liste: ruhige, gut lesbare Schnipsel untereinander. */
 .recherche-list {
@@ -187,6 +162,9 @@ textarea.recherche-input { resize: vertical; min-height: 2.75rem; }
   font-size: inherit;
   text-align: left;
 }
+
+/* Chevron-Knopf am Zeilenende: klappt zum Lesen auf/zu (Tastaturweg des
+   Listen-Anrisses, DESIGN.md). Nackter Knopf um die .history-chevron-Rotation. */
 
 .research-item-actions {
   position: relative;
@@ -345,14 +323,6 @@ textarea.recherche-input { resize: vertical; min-height: 2.75rem; }
 /* Kopfzeile (Titel + ×) ist .card-section-head; der Abstand kommt aus dem gap der Box. */
 .research-suggestions > .card-section-head { margin: 0; }
 .research-suggestions > .card-section-head > .card-section-title { margin: 0; }
-.research-suggestion {
-  display: flex;
-  align-items: center;
-  gap: var(--space-xs);
-  flex-wrap: wrap;
-}
-.research-suggestion-reason { font-size: var(--font-size-sm); color: var(--color-muted); }
-.research-suggestion .btn-compact { margin-left: auto; }
 
 /* ── Vollbild: Karte (samt Chat-Leiste) nimmt den Viewport; die Liste bleibt einspaltig,
      aber zentriert mit lesbarer Maximalbreite (distraktionsfreier Lesemodus,

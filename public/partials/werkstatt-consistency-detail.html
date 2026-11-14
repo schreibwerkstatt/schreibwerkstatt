@@ -1,0 +1,66 @@
+<!-- @expects r -->
+<!-- Konsistenz-Lauf aufgeklappt: Fazit, je Befund eine Vorschlagskarte
+     (DESIGN.md „Chat-Vorschlagskarte"). Trägt der Befund eine Mindmap-Änderung
+     (aktion umbenennen/ergaenzen + neu), setzt Übernehmen sie in der offenen
+     Mindmap um (ungespeichert, normaler Speicherweg); Verwerfen markiert. -->
+<div x-show="selectedRunId === r.id && consistencyResult" class="history-detail" x-cloak>
+  <p class="werkstatt-consistency-fazit" x-show="consistencyResult && consistencyResult.fazit" x-text="consistencyResult ? consistencyResult.fazit : ''"></p>
+  <div x-show="consistencyResult && consistencyResult.konflikte.length === 0" class="muted-msg muted-msg--sm" x-text="$app.t('werkstatt.consistency.noIssues')"></div>
+  <div class="chat-vorschlaege" x-show="consistencyResult && consistencyResult.konflikte.length > 0">
+    <template x-for="(k, idx) in consistencyResult ? consistencyResult.konflikte : []" :key="idx">
+      <div class="chat-vorschlag" :class="vorschlagClass('consistency', idx)">
+        <div class="chat-vorschlag-header">
+          <span class="chat-vorschlag-label">
+            <span class="severity-tag" :class="befundSeverityClass(k.schwere)" x-text="$app.t('werkstatt.severity.' + k.schwere)"></span>
+            <span x-text="vorschlagLabel('consistency', idx, k.feld)"></span>
+          </span>
+          <span class="chat-vorschlag-actions">
+            <button type="button" class="chat-vorschlag-btn"
+                    x-show="!vorschlagState('consistency', idx) && konfliktApplicable(k)"
+                    @click.stop="applyKonflikt(idx)" :disabled="busy"
+                    x-text="$app.t('chat.apply')"></button>
+            <button type="button" class="chat-vorschlag-btn chat-vorschlag-btn--ghost"
+                    x-show="vorschlagState('consistency', idx) !== 'applied'"
+                    @click.stop="discardVorschlag('consistency', idx)"
+                    x-text="vorschlagState('consistency', idx) === 'discarded' ? $app.t('chat.restore') : $app.t('chat.discard')"></button>
+          </span>
+        </div>
+        <div class="chat-vorschlag-text" x-text="k.problem"></div>
+        <div class="chat-vorschlag-diff" x-show="k.neu && k.aktion === 'umbenennen'">
+          <div class="chat-vorschlag-row">
+            <span class="chat-vorschlag-field" x-text="$app.t('werkstatt.consistency.field.knoten')"></span>
+            <span class="chat-vorschlag-change"><span class="chat-vorschlag-before" x-text="k.feld"></span><svg class="icon chat-vorschlag-arrow" aria-hidden="true"><use href="/icons.svg#arrow-right"/></svg><span class="chat-vorschlag-after" x-text="k.neu"></span></span>
+          </div>
+        </div>
+        <div class="chat-vorschlag-diff" x-show="k.neu && k.aktion === 'ergaenzen'">
+          <div class="chat-vorschlag-row">
+            <span class="chat-vorschlag-field" x-text="$app.t('werkstatt.consistency.field.neu')"></span>
+            <span x-text="k.neu"></span>
+          </div>
+        </div>
+        <div x-show="k.vorschlag" class="chat-vorschlag-begruendung" x-text="k.vorschlag"></div>
+        <div x-show="konfliktNote(k)" class="chat-vorschlag-note" x-text="konfliktNote(k)"></div>
+      </div>
+    </template>
+  </div>
+  <!-- Belegstellen: die Manuskript-Textstellen, gegen die geprüft wurde
+       (semantische Suche). Klick springt an die Seite. -->
+  <div class="werkstatt-belege" x-data="collapsible(false)"
+       x-show="consistencyResult && consistencyResult.textbelege && consistencyResult.textbelege.length" x-cloak>
+    <button type="button" class="collapsible-toggle" x-bind="trigger">
+      <span class="history-chevron" x-bind="chevron" aria-hidden="true"></span>
+      <span x-text="$app.t('werkstatt.consistency.belege', { count: consistencyResult && consistencyResult.textbelege ? consistencyResult.textbelege.length : 0 })"></span>
+    </button>
+    <div x-bind="panel" x-cloak>
+      <div class="werkstatt-belege-body">
+        <p class="entity-meta-label" x-text="$app.t('werkstatt.consistency.belegHint')"></p>
+        <template x-for="(b, bi) in (consistencyResult ? consistencyResult.textbelege : [])" :key="bi">
+          <div class="werkstatt-beleg">
+            <button type="button" class="entity-ref" x-entity-ref="{ type: 'seite', id: b.page_id }"></button>
+            <span class="werkstatt-beleg-snippet" x-text="b.snippet"></span>
+          </div>
+        </template>
+      </div>
+    </div>
+  </div>
+</div>

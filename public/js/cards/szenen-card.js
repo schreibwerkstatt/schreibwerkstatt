@@ -20,6 +20,8 @@ import { lsGet, lsSet } from '../safe-storage.js';
 import { plotBacklinkMethods } from '../book/plot-backlinks.js';
 import { listWindowState, listWindowMethods } from '../list-window.js';
 import { entityMergePickerState, entityMergePickerResetState, entityMergePickerMethods } from '../book/entity-merge-picker.js';
+import { actionMenuState, actionMenuMethods } from '../action-menu.js';
+import { isRowBodyClick } from '../row-click.js';
 
 export function registerSzenenCard() {
   if (typeof window === 'undefined' || !window.Alpine) return;
@@ -35,12 +37,31 @@ export function registerSzenenCard() {
     plotBacklinks: {},
     // Liste rendert schrittweise (list-window.js), wie Orte und Ereignisse.
     ...listWindowState(),
-    // «zusammenführen mit…» an Szenen, die nicht mehr im Text stehen.
+    // «Zusammenführen mit …» (Menü, Zeilen-Knopf verwaister Szenen): geteilter Merge-Picker.
     ...entityMergePickerState(),
+    // Aktionsmenü je Szenenzeile (action-menu.js); Ziel = figure_scenes.id.
+    ...actionMenuState(),
     ...memoMethods,
     ...plotBacklinkMethods,
     ...listWindowMethods,
     ...entityMergePickerMethods,
+    ...actionMenuMethods,
+
+    // Szenen sind read-only: Titel-Knopf, Chevron und übriger Zeilenkörper klappen
+    // auf/zu (DESIGN.md «Listen-Anriss»); der Zeilenkörper nur per Maus.
+    szeneToggleOpen(s) {
+      const ui = Alpine.store('catalogUi');
+      ui.selectedSzeneId = ui.selectedSzeneId === s.id ? null : s.id;
+    },
+    szeneRowBodyClick(s, ev) {
+      if (isRowBodyClick(ev)) this.szeneToggleOpen(s);
+    },
+    szeneOpenMenu(ev, s) {
+      this.openActionMenu(ev, 'szene:' + s.id, s.id);
+    },
+    szeneMenuSzene() {
+      return this._szenen.find(s => s.id === this.actionMenuTarget) || null;
+    },
 
     get _filters() { return Alpine.store('catalogUi').szenenFilters; },
     get _szenen() { return Alpine.store('catalog').szenen; },
@@ -209,6 +230,7 @@ export function registerSzenenCard() {
     },
 
     destroy() {
+      this.closeActionMenu();
       this._lifecycle?.destroy();
     },
   }));

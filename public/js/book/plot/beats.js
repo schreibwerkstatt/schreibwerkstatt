@@ -354,12 +354,15 @@ export const beatsMethods = {
       confirmLabel: app.t('common.delete'),
       danger: true,
     })) return;
+    if (this.busy || this._inHistoryFlight) return;
+    // Snapshot VOR dem Request: danach sind Kanten und Ideen-Links serverseitig weg.
+    const snapshot = this._beatDeleteSnapshot(beat);
     this.busy = true;
     try {
       await fetchJson(`/plot/beats/${beat.id}`, { method: 'DELETE' });
-      // Hard-Delete ohne Snapshot: der Beat ist weg, und Records im Stack, die ihn
-      // referenzieren (Platzierung, Felder), wären danach Nieten → Historie leeren.
-      this._clearHistory();
+      // Rückgängig machbar: Undo legt aus dem Snapshot neu an und schreibt die
+      // neue ID in alle Records um (book/plot/beat-restore.js).
+      this._recordDeleteBeat(beat, snapshot);
       this._pruneBeatsLocal([beat.id]);
       // Die Karte ist weg — ein offener Edit-Zustand darauf darf nicht zurückbleiben.
       if (this.editingBeatId === beat.id) this.cancelEditBeat();

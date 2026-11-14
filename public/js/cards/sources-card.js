@@ -21,6 +21,7 @@ import { sourcesExportMethods } from '../sources/export-panel.js';
 import { sourcesImportMethods } from '../sources/import-panel.js';
 import { sourcesPdfDraftMethods } from '../sources/pdf-draft.js';
 import { draftFromSource } from '../sources/fields.js';
+import { actionMenuState, actionMenuMethods } from '../action-menu.js';
 
 // Filterleiste pro Buch im localStorage (siehe public/js/filter-persist.js).
 // Bewusst NUR die Filterleiste: `srcPoolFilter` (Bibliotheks-Picker) und
@@ -33,6 +34,8 @@ const SRC_FILTER_SCOPES = [
 export function registerSourcesCard() {
   if (typeof window === 'undefined' || !window.Alpine) return;
   window.Alpine.data('sourcesCard', () => ({
+    // Aktionsmenü je Quellenzeile (action-menu.js); Ziel = sources.id.
+    ...actionMenuState(),
     sources: [],
     sourcesLoading: false,
     // Refetch bei bereits geladener Liste: die Tabelle bleibt stehen und wird nur
@@ -267,7 +270,17 @@ export function registerSourcesCard() {
       if (this._srcDetectPollTimer) { clearInterval(this._srcDetectPollTimer); this._srcDetectPollTimer = null; }
       if (this._srcPdfPollTimer) { clearInterval(this._srcPdfPollTimer); this._srcPdfPollTimer = null; }
       this._stopSourceIndexPoll();
+      this.closeActionMenu();
       this._lifecycle?.destroy();
+    },
+
+    // Im Formular dieser Quelle bleibt der native Rechtsklick (Textfelder).
+    srcOpenMenu(ev, s) {
+      if (this.srcEditingId === s.id) return;
+      this.openActionMenu(ev, 'src:' + s.id, s.id);
+    },
+    srcMenuSource() {
+      return this.sources.find(s => s.id === this.actionMenuTarget) || null;
     },
 
     ...sourcesMethods,
@@ -277,5 +290,6 @@ export function registerSourcesCard() {
     ...sourcesExportMethods,
     ...sourcesImportMethods,
     ...sourcesPdfDraftMethods,
+    ...actionMenuMethods,
   }));
 }

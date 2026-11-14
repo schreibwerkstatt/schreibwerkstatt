@@ -22,7 +22,9 @@
   <div x-show="twLoadError" class="card-status card-status--error" x-text="$app.t('headline.loadError')"></div>
   <div x-show="twError" class="card-status card-status--error" x-text="twError"></div>
 
-  <div x-show="!twRows().length && !twLoadError" class="muted-msg muted-msg--spaced"
+  <div x-show="twLoading && !twRows().length" x-skeleton="4" x-cloak></div>
+
+  <div x-show="!twLoading && !twRows().length && !twLoadError" class="muted-msg muted-msg--spaced"
        x-text="$app.t('headline.empty')"></div>
 
   <!-- Filter-Leiste: Freitext über die drei angezeigten Spalten + Kapitelwahl
@@ -85,7 +87,8 @@
             </button>
 
             <!-- Aufgeklappte Zeile: die vier Felder + Varianten -->
-            <div class="tw-detail" x-show="twOpenId === row.id" x-cloak>
+            <div class="tw-detail" x-show="twOpenId === row.id && twRowLoading" x-skeleton="3" x-cloak></div>
+            <div class="tw-detail" x-show="twOpenId === row.id && !twRowLoading" x-cloak>
               <template x-for="feld in twFields" :key="feld">
                 <div class="tw-field">
                   <div class="tw-field-head">
@@ -135,7 +138,7 @@
                   <!-- Varianten dieses Feldes -->
                   <ul class="tw-variants" x-show="twVariantsFor(feld).length">
                     <template x-for="v in twVariantsFor(feld)" :key="v.id">
-                      <li class="tw-variant hover-reveal-host">
+                      <li class="tw-variant hover-reveal-host" @contextmenu="twOpenVariantMenu($event, v)" x-long-press>
                         <span class="badge tw-variant-src" :class="'tw-variant-src--' + v.herkunft"
                               x-text="$app.t('headline.origin.' + v.herkunft)"></span>
                         <span class="tw-variant-text" x-text="v.text"></span>
@@ -143,10 +146,17 @@
                         <button type="button" class="btn-compact" @click="twPromote(v.id)"
                                 :data-tip="$app.t('headline.promoteTip')"
                                 x-text="$app.t('headline.promote')"></button>
-                        <button type="button" class="organizer-delete-btn hover-reveal" @click="twDeleteVariant(v.id)"
-                                :data-tip="$app.t('common.delete')" :aria-label="$app.t('common.delete')">
-                          <svg class="icon" aria-hidden="true"><use href="/icons.svg#trash"/></svg>
-                        </button>
+                        <span class="tw-variant-actions hover-reveal">
+                          <button type="button" class="icon-btn icon-btn--ghost" @click="twDeleteVariant(v.id)"
+                                  :data-tip="$app.t('common.delete')" :aria-label="$app.t('common.delete')">
+                            <svg class="icon" aria-hidden="true"><use href="/icons.svg#trash"/></svg>
+                          </button>
+                          <button type="button" class="icon-btn icon-btn--ghost" @click="twOpenVariantMenu($event, v)"
+                                  aria-haspopup="menu" :aria-expanded="isActionMenuOpen('variant:' + v.id)"
+                                  :data-tip="$app.t('editor.btn.moreActions')" :aria-label="$app.t('editor.btn.moreActions')">
+                            <svg class="icon" aria-hidden="true"><use href="/icons.svg#more-horizontal"/></svg>
+                          </button>
+                        </span>
                       </li>
                     </template>
                   </ul>
@@ -169,9 +179,15 @@
               <div class="tw-suggest">
                 <button type="button" @click="twSuggest(row.id)" :disabled="twRunning"
                         x-text="twRunning ? $app.t('headline.suggesting') : $app.t('headline.suggest')"></button>
-                <span class="muted-msg muted-msg--sm" x-show="twRunning" x-text="twStatus"></span>
-                <div class="progress-bar-wrap" x-show="twRunning">
-                  <div class="progress-bar" :style="{ '--progress': twProgress + '%' }"></div>
+                <!-- Laufender Job: geteilter Block .job-progress (DESIGN.md «Karten-Innenraum»). -->
+                <div class="job-progress" x-show="twRunning" x-cloak>
+                  <div class="progress-bar-wrap">
+                    <div class="progress-bar" :style="{ '--progress': twProgress + '%' }"></div>
+                  </div>
+                  <div class="job-progress-row">
+                    <div class="card-status" x-text="twStatus"></div>
+                    <button type="button" @click="twCancel()" x-text="$app.t('common.cancel')"></button>
+                  </div>
                 </div>
                 <span class="muted-msg muted-msg--sm" x-show="!twRunning && twLastRun"
                       x-text="twLastRun?.zuKurz
@@ -185,4 +201,21 @@
       </template>
     </tbody>
   </table>
+
+  <!-- Aktionsmenü einer Variante (⋯, Rechtsklick, Long-Press), action-menu.js -->
+  <template x-teleport="body">
+    <div class="context-menu" x-ref="actionMenu" x-bind="actionMenuPanel()" x-cloak>
+      <template x-if="twMenuVariant()"><div>
+        <button type="button" role="menuitem" class="context-menu-item context-menu-item--icon" @click="twPromote(twMenuVariant().id)">
+          <svg class="icon" aria-hidden="true"><use href="/icons.svg#check"/></svg>
+          <span x-text="$app.t('headline.promote')"></span>
+        </button>
+        <div class="context-menu-sep" role="separator"></div>
+        <button type="button" role="menuitem" class="context-menu-item context-menu-item--icon context-menu-item--danger" @click="twDeleteVariant(twMenuVariant().id)">
+          <svg class="icon" aria-hidden="true"><use href="/icons.svg#trash"/></svg>
+          <span x-text="$app.t('common.delete')"></span>
+        </button>
+      </div></template>
+    </div>
+  </template>
 </div>

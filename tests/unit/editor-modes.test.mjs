@@ -236,18 +236,20 @@ test('I8: enterFocusFromPageview ruft startEdit vor enterFocusMode', () => {
 // 409, Netzwerk). exitFocusMode darf editMode NICHT räumen, sonst landet der
 // User im View-Mode mit Draft im LocalStorage — Edit-Pipeline weg, kein Retry-
 // Trigger, kein sichtbarer Hinweis. Nur sauberer Exit (editDirty=false) räumt.
-test('I9: exitFocusMode setzt editMode=false nur bei !editDirty', () => {
+// Der saubere Exit baut die Session über `_teardownEditSession` ab (Invariante
+// #11): ein Teilabbau von Hand liesse Edit-Lock, Presence-Heartbeat und
+// Live-Edit-Marker der Seite weiterlaufen.
+test('I9: exitFocusMode beendet die Session nur bei !editDirty, über _teardownEditSession', () => {
   const src = read('public/js/editor/focus/card.js');
   const m = src.match(/async exitFocusMode\s*\(\)\s*\{[\s\S]*?\n  \},/);
   assert.ok(m, 'exitFocusMode gefunden');
   const body = m[0];
-  // Pattern: `if (app.editMode && !app.editDirty) { ... app.editMode = false ... }`
-  assert.match(body, /if\s*\(\s*app\.editMode\s*&&\s*!app\.editDirty\s*\)\s*\{[\s\S]*?app\.editMode\s*=\s*false/,
-    'exitFocusMode muss editMode=false in einen `!editDirty`-Guard kapseln');
-  // Negativ-Check: kein nackter `app.editMode = false` ausserhalb des Guards.
-  const matches = [...body.matchAll(/app\.editMode\s*=\s*false/g)];
-  assert.equal(matches.length, 1,
-    `nur EIN editMode=false-Setter erlaubt (gefunden: ${matches.length})`);
+  assert.match(body, /if\s*\(\s*app\.editMode\s*&&\s*!app\.editDirty\s*\)\s*\{\s*app\._teardownEditSession\?\.\(\)/,
+    'exitFocusMode muss den Teardown in einen `!editDirty`-Guard kapseln');
+  const calls = [...body.matchAll(/_teardownEditSession\?\.\(/g)];
+  assert.equal(calls.length, 1, `nur EIN Teardown-Aufruf erlaubt (gefunden: ${calls.length})`);
+  assert.doesNotMatch(body, /app\.editMode\s*=\s*false/,
+    'kein handgepflegter editMode=false-Setter — der Abbau lebt in _teardownEditSession');
 });
 
 // ── I10: Save-Owner — Focus ruft nie contentRepo.savePage direkt ─────────────

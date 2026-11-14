@@ -43,7 +43,7 @@ const TOGGLE_ALLOW = [
   ['plot-beat-edit.html', "'is-active': beat.verworfen"],
   ['plot-board-flat.html', "'is-active': act.archiviert"],
   ['plot-board-grid.html', "'is-active': act.archiviert"],
-  ['plot-thread-menu.html', "'context-menu-item--on': threadHasOwnActs"],
+  ['plot-actions-menu.html', "'context-menu-item--on': threadHasOwnActs"],
   ['reference.html', "'is-active': referenceScope === 'book'"],
   ['search.html', "'is-active': scopeMode === 'book'"],
   ['snapshots.html', "'snapshots-publish-btn--on': isPublished(s)"],

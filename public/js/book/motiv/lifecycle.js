@@ -77,6 +77,8 @@ export const lifecycleMethods = {
 
   resetMotiv() {
     this._destroyGraph();
+    // Buchwechsel/View-Reset: Records zeigen auf Objekte des alten Buchs.
+    this._clearHistory();
     this.themes = [];
     this.motifs = [];
     this.relations = [];

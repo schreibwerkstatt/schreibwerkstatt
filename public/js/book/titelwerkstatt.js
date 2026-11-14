@@ -40,6 +40,7 @@ export const titelwerkstattMethods = {
     const bookId = window.Alpine?.store('nav')?.selectedBookId;
     if (!bookId) return;
     this.twLoadError = false;
+    this.twLoading = true;
     try {
       const data = await fetchJson(`/headline/${bookId}`);
       if (!isSelectedBook(bookId)) return;
@@ -48,6 +49,8 @@ export const titelwerkstattMethods = {
       this._twRev++;
     } catch {
       if (isSelectedBook(bookId)) this.twLoadError = true;
+    } finally {
+      if (isSelectedBook(bookId)) this.twLoading = false;
     }
   },
 
@@ -181,13 +184,19 @@ export const titelwerkstattMethods = {
     this.twDraft = {};
     this.twVariants = {};
     this.twError = '';
+    // Ladeanzeige der aufgeklappten Zeile; ein schneller Wechsel auf eine
+    // andere Zeile verwirft die ältere Antwort.
+    this.twRowLoading = true;
     try {
       const data = await fetchJson(`/headline/page/${pageId}`);
+      if (this.twOpenId !== pageId) return;
       const h = data.headline || {};
       for (const f of HEADLINE_FIELDS) this.twDraft[f] = h[f] || '';
       this.twVariants = data.varianten || {};
     } catch {
-      this.twError = window.__app.t('headline.loadError');
+      if (this.twOpenId === pageId) this.twError = window.__app.t('headline.loadError');
+    } finally {
+      if (this.twOpenId === pageId) this.twRowLoading = false;
     }
   },
 
@@ -271,6 +280,9 @@ export const titelwerkstattMethods = {
   },
 
   async twDeleteVariant(variantId) {
+    const app = window.__app;
+    const ok = await app.appConfirm({ message: app.t('headline.confirmDeleteVariant'), danger: true });
+    if (!ok) return;
     try {
       const r = await sendJson(`/headline/variants/${variantId}`, 'DELETE');
       this.twVariants = r.varianten || this.twVariants;
@@ -279,13 +291,40 @@ export const titelwerkstattMethods = {
     }
   },
 
+  // Aktionsmenü einer Variante (action-menu.js): ⋯, Rechtsklick, Long-Press.
+  // Ziel = Varianten-ID, aufgelöst über twMenuVariant() (live).
+  twOpenVariantMenu(ev, v) {
+    if (v) this.openActionMenu(ev, `variant:${v.id}`, v.id);
+  },
+
+  twMenuVariant() {
+    const id = this.actionMenuTarget;
+    if (id == null) return null;
+    for (const list of Object.values(this.twVariants || {})) {
+      const hit = (list || []).find(v => v.id === id);
+      if (hit) return hit;
+    }
+    return null;
+  },
+
   // ── KI-Vorschläge ──────────────────────────────────────────────────────────
 
   _twIdle() {
     this.twRunning = false;
     this.twProgress = 0;
     this.twStatus = '';
+    this._twJobId = null;
     if (this._twPollTimer) { clearInterval(this._twPollTimer); this._twPollTimer = null; }
+  },
+
+  /** Laufenden Vorschlags-Job abbrechen: DELETE /jobs/:id, der Server bricht
+   *  den KI-Call ab (AbortError → Status cancelled). Bereits angelegte
+   *  Varianten bleiben — sie stehen erst nach dem Lauf in der Liste. */
+  async twCancel() {
+    const id = this._twJobId;
+    if (!id) return;
+    await window.__app.cancelJob(id);
+    this._twIdle();
   },
 
   /**
@@ -304,6 +343,7 @@ export const titelwerkstattMethods = {
         page_id: pageId, felder: this.twSuggestFields.slice(),
       });
       lsSet(LS_KEY(pageId), jobId);
+      this._twJobId = jobId;
       this._twPoll(jobId, pageId);
     } catch {
       this._twIdle();
@@ -338,6 +378,7 @@ export const titelwerkstattMethods = {
       },
       onError: (job) => {
         this._twIdle();
+        if (job.status === 'cancelled') return;
         this.twError = window.__app.t(job.error, job.errorParams);
       },
     });
@@ -346,6 +387,7 @@ export const titelwerkstattMethods = {
   /** Reconnect nach Reload (app-jobs-core.js#checkPendingJobs). */
   twReconnect(jobId, pageId) {
     this.twRunning = true;
+    this._twJobId = jobId;
     this.twStatus = window.__app.t('common.analysisRunning');
     this._twPoll(jobId, pageId);
   },

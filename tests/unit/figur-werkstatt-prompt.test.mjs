@@ -36,7 +36,8 @@ test('SCHEMA_CONSISTENCY: konflikte + fazit, schwere als Severity-Enum', async (
   assert.deepEqual(s.required.sort(), ['fazit', 'konflikte']);
 
   const k = s.properties.konflikte.items;
-  assert.deepEqual(k.required.sort(), ['feld', 'problem', 'schwere', 'vorschlag']);
+  assert.deepEqual(k.required.sort(), ['aktion', 'feld', 'neu', 'problem', 'schwere', 'vorschlag']);
+  assert.deepEqual(k.properties.aktion.enum, ['keine', 'umbenennen', 'ergaenzen']);
   assert.deepEqual(
     k.properties.schwere.enum,
     ['kritisch', 'stark', 'mittel', 'schwach', 'niedrig'],

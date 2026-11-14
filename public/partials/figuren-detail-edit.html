@@ -8,10 +8,13 @@
 
      Zwei x-if-Varianten pro Textfeld statt eines `:data-spellcheck`: der
      Spellcheck-Dispatcher greift Felder über einen statischen Attribut-Selektor
-     (Muster sources-form.html). -->
+     (Muster sources-form.html).
+     Inline-Edit: Klick daneben committet (commitFigurEdit), Cmd/Ctrl+S speichert,
+     Esc verwirft (public/CLAUDE.md «Edit-Formulare»). -->
 <template x-if="figurEditId === f.id">
   <section class="figur-group figur-edit"
-           @keydown="$editKeys($event, { save: () => saveFigurEdit(f), cancel: () => cancelFigurEdit() })">
+           @click.outside="commitFigurEdit(f, $event)"
+           @keydown="$editKeys($event, { save: () => !figurEditBusy && saveFigurEdit(f), cancel: () => cancelFigurEdit() })">
     <h4 class="figur-group-title" x-text="$app.t('figuren.edit.title')"></h4>
     <p class="card-hint" x-text="$app.t('figuren.edit.hint')"></p>
     <div class="card-form-grid">

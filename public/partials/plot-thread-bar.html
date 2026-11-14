@@ -11,12 +11,13 @@
   </template>
 
   <template x-if="addingThread">
-    <span class="plot-thread-add-form">
+    <span class="plot-thread-add-form"
+          @keydown="$editKeys($event, { save: () => addThread(), cancel: () => cancelAddThread() })">
       <input type="text" class="plot-thread-add-input" x-model="newThreadName"
              data-spellcheck="spelling" :placeholder="$app.t('plot.thread.namePlaceholder')"
-             @keydown.enter="$enter($event, () => addThread())" @keydown.escape="addingThread = false; newThreadName = ''">
+             @keydown.enter="$enter($event, () => addThread())">
       <button type="button" class="btn-compact" @click="addThread()" :disabled="busy" x-text="$app.t('plot.thread.add')"></button>
-      <button type="button" class="btn-compact btn-compact--ghost" @click="addingThread = false; newThreadName = ''" x-text="$app.t('common.cancel')"></button>
+      <button type="button" class="btn-compact btn-compact--ghost" @click="cancelAddThread()" x-text="$app.t('common.cancel')"></button>
     </span>
   </template>
   <button type="button" class="plot-thread-add-btn" x-show="!addingThread"

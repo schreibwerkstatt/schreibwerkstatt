@@ -23,6 +23,10 @@ export const ideenBoardInlineEdit = {
     if (!content) { this.errorMessage = window.__app.t('ideen.error.contentRequired'); return; }
     if (content.length > IDEE_MAX_LEN) { this.errorMessage = window.__app.t('ideen.error.contentTooLong'); return; }
     if (content === idee.content) { this.cancelEdit(); return; }
-    if (await this._patchIdee(idee, { content })) this.cancelEdit();
+    const before = this._findIdee(idee.id) || idee;
+    const row = await this._patchIdee(idee, { content });
+    if (!row) return;
+    this._recordIdeeFields(before, row, ['content']);
+    this.cancelEdit();
   },
 };

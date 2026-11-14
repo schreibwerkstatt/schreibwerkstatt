@@ -37,9 +37,16 @@ export function registerEditorToolbarCard() {
     _slashBlock: null,
     _slashLabels: null,
     _slashFilterCache: null,
+    // Gruppierte Sicht der gefilterten Slash-Treffer (panel-methods.js#slashGroups),
+    // gemerkt pro Treffer-Array.
+    _slashGroupsCache: null,
+    // Caret-verankerte Panels (Link, Beleg, Querverweis): `xX`/`xY` sind die
+    // fertige linke obere Ecke, `xMaxH` die Höhe, die im sichtbaren Band bleibt
+    // (Rechnung in editor/notebook/toolbar/panel-methods.js).
     linkShow: false,
     linkX: 0,
     linkY: 0,
+    linkMaxH: 360,
     linkUrl: '',
     linkCanRemove: false,
     _linkRange: null,
@@ -49,6 +56,7 @@ export function registerEditorToolbarCard() {
     citeShow: false,
     citeX: 0,
     citeY: 0,
+    citeMaxH: 360,
     citeQuery: '',
     citeLoc: '',
     // Zitat-Art des Panels: 'quote' | 'block' | 'paraphrase' (siehe
@@ -73,6 +81,7 @@ export function registerEditorToolbarCard() {
     xrefShow: false,
     xrefX: 0,
     xrefY: 0,
+    xrefMaxH: 360,
     xrefQuery: '',
     xrefFmt: 'label',
     xrefIdx: 0,
@@ -89,6 +98,7 @@ export function registerEditorToolbarCard() {
     diagramEditing: false,
     diagramPreviewing: false,
     _diagramBlock: null,
+    _diagramAfter: null,
     _diagramEditEl: null,
     _diagramPreviewTimer: null,
     _diagramPreviewRun: 0,
@@ -105,11 +115,12 @@ export function registerEditorToolbarCard() {
     tableLossyReasons: [],
     _tableHeaderStash: null,
     _tableBlock: null,
+    _tableAfter: null,
     _tableEditEl: null,
     // Bild-Dialog (siehe editor/notebook/toolbar/image.js). `imageSrc` ist nur
     // die Vorschau-Quelle im Dialog, `imageAlt`/`imageCredit` die beiden
-    // bearbeitbaren Felder, `_imageEl` die angeklickte `<figure>`. Einen
-    // Einfüge-Weg gibt es nicht — Abbildungen entstehen im Slash-Menü.
+    // bearbeitbaren Felder, `_imageEl` die angeklickte `<figure>`. Eingefügt
+    // werden Abbildungen über Slash-Menü und Seiten-Toolbar, nicht hier.
     // Zeilenleiste des Nachrichtenverlaufs (siehe editor/notebook/toolbar/
     // msg-thread.js). `msgBarKind` ist die Art der Caret-Zeile, `_msgLine` die
     // Zeile selbst — Ziel der Leistenknöpfe.
@@ -122,6 +133,16 @@ export function registerEditorToolbarCard() {
     imageAlt: '',
     imageCredit: '',
     _imageEl: null,
+    // Gemeinsam für die drei Block-Dialoge (panel-methods.js): Caret beim
+    // Öffnen, eingefügter Block (Caret danach dahinter), Ausgangsstand für die
+    // Verwerfen-Rückfrage, Backdrop-Mousedown.
+    _dialogRange: null,
+    _dialogInserted: null,
+    _dialogSnapshot: null,
+    _dialogBackdropDown: false,
+    // Letzte Caret-Range im Notebook-Editor — Einfügeort der Seiten-Toolbar,
+    // wenn die Selektion inzwischen ausserhalb liegt.
+    _lastEditRange: null,
     _toolbarAbort: null,
 
     init() {
@@ -132,6 +153,7 @@ export function registerEditorToolbarCard() {
       document.addEventListener('selectionchange', () => {
         this._updateBubble();
         this._updateMsgBar();
+        this._rememberEditRange();
       }, { signal });
       // Capture-Phase, damit auch Scroll-Events in internen Containern
       // (editor-preview-wrap) mitbekommen werden.
@@ -139,14 +161,29 @@ export function registerEditorToolbarCard() {
         if (this.bubbleShow) this._updateBubble();
         if (this.slashShow) this._updateSlashPosition();
         if (this.msgBarShow) this._updateMsgBar();
+        this._repositionCaretPanels();
       }, { capture: true, signal });
 
       // Mobile-Tastatur: sie schrumpft/verschiebt den visualViewport, ohne dass
-      // ein window-scroll/resize feuert — das Slash-Menü positioniert sich aber
-      // gegen dieses sichtbare Band und muss deshalb hier nachziehen.
-      const vvSync = () => { if (this.slashShow) this._updateSlashPosition(); };
+      // ein window-scroll/resize feuert — Slash-Menü und Caret-Panels
+      // positionieren sich gegen dieses sichtbare Band und ziehen hier nach.
+      const vvSync = () => {
+        if (this.slashShow) this._updateSlashPosition();
+        this._repositionCaretPanels();
+      };
       window.visualViewport?.addEventListener('resize', vvSync, { signal });
       window.visualViewport?.addEventListener('scroll', vvSync, { signal });
+
+      // Edit-Modus verlassen oder Abschnitt gewechselt: kein Panel und keine
+      // gesicherte Range überlebt in einen Editor, zu dem sie nicht gehört.
+      this.$watch('$app.editMode', (on) => { if (!on) this.closeAllEditorPanels(); });
+      this.$watch('$app.currentPage?.id', () => this.closeAllEditorPanels());
+
+      // Tab bei offenem Slash-Menü: der Fokus verlässt den Editor, das Menü
+      // gehört zum Caret — also zu. Kein preventDefault, Tab läuft weiter.
+      document.addEventListener('keydown', (e) => {
+        if (e.key === 'Tab' && this.slashShow) this._closeSlash();
+      }, { signal });
 
       // Filtern ändert die Menühöhe. Da das Menü mit seiner Oberkante gesetzt
       // wird, muss es nach jedem Query-Wechsel neu gemessen werden — sonst löst
@@ -157,13 +194,18 @@ export function registerEditorToolbarCard() {
 
       // Quellen-Picker: Trefferliste einmal pro Query neu berechnen statt bei
       // jedem Render dreimal im Template (x-for + zwei Leer-Zustände).
+      // Die Liste ändert die Panelhöhe → neu messen.
       this.$watch('citeQuery', () => {
-        if (this.citeShow) this._recomputeCiteHits();
+        if (!this.citeShow) return;
+        this._recomputeCiteHits();
+        this._schedCaretPanelPosition('cite', { opening: true });
       });
 
       // Querverweis-Picker: dieselbe Begründung wie beim Beleg-Picker.
       this.$watch('xrefQuery', () => {
-        if (this.xrefShow) this._recomputeXrefHits();
+        if (!this.xrefShow) return;
+        this._recomputeXrefHits();
+        this._schedCaretPanelPosition('xref', { opening: true });
       });
 
       // Quellenliste des Quellen-Pickers ist modulweit gecacht (ein Fetch pro
@@ -179,6 +221,9 @@ export function registerEditorToolbarCard() {
       // der Fokus-Modus). Der Einstieg über die Bubble-Toolbar setzt eine
       // Selektion voraus; dieser hier arbeitet am blossen Caret.
       window.addEventListener(EVT.EDITOR_CITE_OPEN, () => this.openCiteInput(), { signal });
+      // «Einfügen»-Gruppe der Seiten-Toolbar (Bild, Tabelle, Diagramm,
+      // Querverweis, Trennlinie) — derselbe Trampoline-Weg.
+      window.addEventListener(EVT.EDITOR_INSERT, (e) => this.insertFromPageToolbar(e?.detail?.kind), { signal });
       // O-Ton aus dem Referenz-Panel: der Markup-Weg liegt hier (cite.js ist
       // die SSoT fuer Quellen-Markup im Editor), der Ausloeser drueben.
       window.addEventListener(EVT.EDITOR_OTON_INSERT, (e) => {
@@ -323,6 +368,20 @@ export function registerEditorToolbarCard() {
 
     destroy() {
       this._toolbarAbort?.abort();
+    },
+
+    // Letzte Caret-Range im Notebook-Editor merken (Einfügeort der Seiten-
+    // Toolbar). Nur im Edit-Modus und nur, wenn die Selektion im Editor liegt.
+    _rememberEditRange() {
+      const app = window.__app;
+      if (!app?.editMode || app.focusActive) return;
+      const sel = document.getSelection();
+      if (!sel || sel.rangeCount === 0) return;
+      const range = sel.getRangeAt(0);
+      const node = range.startContainer;
+      const el = node?.nodeType === 1 ? node : node?.parentElement;
+      if (!el?.closest?.('.page-content-view--editing')) return;
+      this._lastEditRange = range.cloneRange();
     },
 
     ...toolbarCardMethods,

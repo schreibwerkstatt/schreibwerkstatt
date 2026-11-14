@@ -34,6 +34,8 @@ export function registerFigurWerkstattCard() {
     consistencyProgress: 0,
     consistencyStatus: '',
     consistencyResult: null,
+    // Vorschlagskarten (vorschlaege.js): Zustand je Lauf + Eintrag, Sitzung.
+    vorschlagStates: {},
     mindmapFullscreen: false,
     // Knoten-Menü der Mindmap (action-menu.js), Ziel = Knoten-ID.
     ...actionMenuState(),
@@ -75,7 +77,6 @@ export function registerFigurWerkstattCard() {
     anchorProgress: 0,
     anchorStatus: '',
     selectedRunId: null,
-    selectedKonfliktIdx: null,
     _runsLoadDraftId: null,
     // Mindmap-Dirty als Generationszähler (crud.js#_markMindmapDirty).
     _mindmapGen: 0,
@@ -176,27 +177,21 @@ export function registerFigurWerkstattCard() {
         },
         onViewReset: () => this.resetDrafts(),
         load: () => this.loadDrafts(),
-        onCardRefresh: async () => {
-          if (this.isDirty()) {
-            const ok = await window.__app.appConfirm({
-              message: window.__app.t('werkstatt.confirmReload'),
-              confirmLabel: window.__app.t('edit.discardEdit'),
-              danger: true,
-            });
-            if (!ok) return;
-          }
-          await this.loadDrafts();
-          // Wirklich verwerfen: Formular + Canvas aus dem frischen Server-Stand.
-          this._reloadSelectedDraft();
-        },
+        // Wirklich verwerfen: Formular + Canvas aus dem frischen Server-Stand.
+        onCardRefresh: () => this.discardDraftEdits({ reload: true }),
         extraListeners: [{
+          // Cmd+S ausserhalb des Formulars: die Mindmap hat eigene Tasten
+          // (Esc beendet dort die Knoten-Bearbeitung) und trägt darum kein
+          // $editKeys; ohne diesen Griff speicherte Cmd+S nach einer
+          // Mindmap-Änderung nicht. Im Formular stoppt $editKeys die
+          // Propagation, der Griff feuert dort nicht ein zweites Mal.
           type: 'keydown',
           handler: (e) => {
             if (!isSaveShortcut(e)) return;
             if (!window.__app?.showFigurWerkstattCard) return;
             if (!this.selectedDraftId) return;
             e.preventDefault();
-            this.saveDraft();
+            if (!this.busy) this.saveDraft();
           },
         }, {
           // Browser-Reload (F5/Cmd+R) und Tab-Close: native Prompt zeigen,

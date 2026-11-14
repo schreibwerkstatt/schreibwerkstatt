@@ -13,7 +13,9 @@
 //   - threads.js   — Strang-CRUD (Swimlanes)
 //   - beats.js     — Beat-CRUD (flach + grid-zellen) + Drop-Mechanik (_dropBeat)
 //   - dnd.js       — SortableJS-Anbindung (Init/Reattach/Revert → _dropBeat)
-//   - history.js   — Undo/Redo (max 10 Schritte) über alle reversiblen Mutationen
+//   - history.js   — Undo/Redo-Records (Kern cards/board-history.js) über alle reversiblen Mutationen
+//   - beat-restore.js — Beat-Löschen rückgängig: Snapshot, Neuanlage, ID-Remap
+//   - menu.js      — Aktionsmenü für Beat, Akt und Strang (action-menu.js)
 //   - ai.js        — KI-Jobs (Brainstorm/Consistency), Lauf-Historie, Fullscreen
 //   - time-check.js — Zeit-Messung (deterministisch, GET /plot/time-check)
 //   - zeit.js      — erzählte Zeit am Beat: verstanden als, Befund-Marker, Vorschläge aus dem Text
@@ -29,6 +31,8 @@ import { threadsMethods } from './plot/threads.js';
 import { beatsMethods } from './plot/beats.js';
 import { dndMethods } from './plot/dnd.js';
 import { historyMethods } from './plot/history.js';
+import { beatRestoreMethods } from './plot/beat-restore.js';
+import { plotMenuMethods } from './plot/menu.js';
 import { aiMethods } from './plot/ai.js';
 import { timeCheckMethods } from './plot/time-check.js';
 import { zeitMethods } from './plot/zeit.js';
@@ -45,6 +49,8 @@ export const plotMethods = {
   ...beatsMethods,
   ...dndMethods,
   ...historyMethods,
+  ...beatRestoreMethods,
+  ...plotMenuMethods,
   ...aiMethods,
   ...timeCheckMethods,
   ...zeitMethods,

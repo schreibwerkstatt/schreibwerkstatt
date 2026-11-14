@@ -27,6 +27,7 @@ const {
   textFieldError, flagFieldError, urlsInputError,
   FTS_PREFILTER_LIMIT, CLIENT_LIST_LIMIT, clampListLimit, toClientItem,
 } = require('../lib/research-validate');
+const { parseRestoreFields } = require('../lib/restore-fields');
 const logger = require('../logger');
 const { researchMediaRouter } = require('./research-media');
 const { interviewMediaRouter } = require('./interview');
@@ -307,10 +308,22 @@ router.post('/', jsonBody, (req, res) => {
     if (conflict) return res.status(409).json(conflict);
   }
 
+  // Undo eines Löschens: Stand aus dem Snapshot (Anlegedatum, Status, Anheften,
+  // Archiv) statt «heute angelegt».
+  const parsed = parseRestoreFields(b.restore, { isStatus: (v) => RESEARCH_STATUS_SET.has(v) });
+  if (parsed.error_code) return res.status(400).json({ error_code: parsed.error_code });
+  let restore = parsed.value;
+  if (restore) {
+    const r = b.restore;
+    const bad = flagFieldError('pinned', r.pinned ?? false) || flagFieldError('archived', r.archived ?? false);
+    if (bad) return res.status(400).json(bad);
+    restore = { ...restore, pinned: !!r.pinned, archived: !!r.archived };
+  }
+
   const id = createItem({
-    bookId, userEmail, kind, title, body, source, urls, tags: b.tags,
+    bookId, userEmail, kind, title, body, source, urls, tags: b.tags, restore,
   });
-  logger.info(`[research] create id=${id} kind=${kind}`);
+  logger.info(`[research] ${restore ? 'restore' : 'create'} id=${id} kind=${kind}`);
   res.json(emitItem(id));
 });
 

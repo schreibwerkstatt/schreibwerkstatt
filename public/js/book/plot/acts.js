@@ -5,13 +5,8 @@ import { fetchJson } from '../../utils.js';
 import { ACT_PALETTE } from './constants.js';
 
 export const actsMethods = {
-  toggleActColorPicker(actId) {
-    this.actColorPickerId = this.actColorPickerId === actId ? null : actId;
-  },
-
   async setActColor(act, key) {
     const app = window.__app;
-    this.actColorPickerId = null;
     const farbe = ACT_PALETTE.includes(key) ? key : null;
     if (farbe === (act.farbe || null)) return;
     // Kein Schreiben während Undo/Redo/anderer Mutation (Record-Verlust).
@@ -150,8 +145,9 @@ export const actsMethods = {
     this.busy = true;
     try {
       await fetchJson(`/plot/acts/${act.id}`, { method: 'DELETE' });
-      // Hard-Delete samt Beats des Akts → jeder Record im Stack kann ins Leere
-      // zeigen (siehe plot/history.js).
+      // Hard-Delete samt Beats des Akts: bewusst nicht rückgängig machbar — ein
+      // Snapshot trüge alle kaskadierten Beats samt Kanten und müsste jede ihrer
+      // IDs umschreiben (plot/history.js) → Historie leeren.
       this._clearHistory();
       const gone = this.beats.filter(b => b.act_id === act.id).map(b => b.id);
       this.acts = this.acts.filter(a => a.id !== act.id);
@@ -220,7 +216,8 @@ export const actsMethods = {
       this.$root?.querySelector(sel)?.focus();
     });
   },
-  cancelAddAct() { this.addingActScope = false; this.newActName = ''; },
+  // Schliesst beide Hinzufügen-Zeilen (flach: addingAct, Grid: addingActScope).
+  cancelAddAct() { this.addingAct = false; this.addingActScope = false; this.newActName = ''; },
 
   async addActScoped() {
     const app = window.__app;

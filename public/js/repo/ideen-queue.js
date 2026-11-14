@@ -101,11 +101,12 @@ const _nowIso = () => new Date().toISOString();
 // Antwortform wie POST /ideen, mit `pending: true`.
 function _syntheticRow(op) {
   const b = op.body;
+  const r = b.restore || null; // Undo eines Löschens: Stand aus dem Snapshot
   return {
     id: op.tempId, book_id: b.book_id, page_id: b.page_id ?? null, page_name: null,
     chapter_id: b.chapter_id ?? null, chapter_name: null, content: b.content,
-    status: b.status || 'offen', status_at: null, sort_order: 0,
-    created_at: op.createdAt, updated_at: op.createdAt, links: [], pending: true,
+    status: r?.status || b.status || 'offen', status_at: r?.status_at ?? null, sort_order: r?.sort_order || 0,
+    created_at: r?.created_at || op.createdAt, updated_at: op.createdAt, links: [], pending: true,
   };
 }
 

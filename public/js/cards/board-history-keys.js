@@ -1,6 +1,7 @@
 // Cmd/Ctrl+Z · Cmd/Ctrl+Shift+Z · Ctrl+Y für Karten mit eigener Aktions-
-// Historie (Buchorganizer, Plot-Board). EIN Listener-Muster statt zweier
-// handgeschriebener Kopien; die Griffe selbst kommen aus `matchHistoryCommand`
+// Historie (Buchorganizer, Plot-Board, Ideen-Board, Recherche-Board,
+// Motiv-Werkstatt). EIN
+// Listener-Muster statt handgeschriebener Kopien; die Griffe selbst kommen aus `matchHistoryCommand`
 // (editor/shared/shortcuts.js), derselben Quelle wie in den Editoren — so
 // zählt z.B. AltGr+Z (Ctrl+Alt) auch hier nicht als Undo.
 //

@@ -8,14 +8,15 @@
 //   { kind: 'create-page',    id, chapterId, name }
 //   { kind: 'delete-page',    pageId, name, chapterId, index }
 //
-// Capacity: HISTORY_MAX pro Stack (FIFO-Drop bei Überlauf).
+// Stack, Deckel, Flight-Schutz und Requeue: Kern [cards/board-history.js];
+// hier stehen nur die Records, ihre Applier und die Hooks.
 //
 // Sonderfall create: Undo löscht das frisch erstellte Kapitel/Seite. Nach
 // einem solchen Undo wird der gesamte Redo-Stack invalidiert — beim erneuten
 // Anlegen würde der Server eine NEUE ID vergeben, andere Records im Redo-Stack
 // referenzieren aber die alten IDs (z.B. Reorder-Snapshots). Saubere Lösung:
 // User legt das Kapitel manuell neu an. Hat die Seite inzwischen Inhalt bzw.
-// das Kapitel Seiten/Sub-Kapitel, verweigert der Undo (`_staleReason`): der
+// das Kapitel Seiten/Sub-Kapitel, verweigert der Undo (`_historyStaleReason`): der
 // Verlauf überlebt das Schliessen der Karte, und ein Strg+Z Stunden später
 // löschte sonst kommentarlos geschriebenen Text.
 //
@@ -28,14 +29,13 @@
 // Fremd-Änderungen (Sidebar-Kontextmenü, Collab-Feed, Catch-up) verändern den
 // Bestand an Kapiteln/Seiten, ohne durch diese History zu laufen. Ein Record,
 // der danach nicht mehr zum Bestand passt, wird vor dem Einspielen erkannt
-// (`_staleReason`) und leert die History — sonst schickte ein Reorder-Undo
+// (`_historyStaleReason`) und leert die History — sonst schickte ein Reorder-Undo
 // einen Tree mit fehlenden/toten IDs, der Server lehnte ihn ab
 // (MISSING_PAGE/-CHAPTER) und der Fehlerpfad lüde das ganze Buch neu.
 
 import { contentRepo } from '../repo/content.js';
 import { eachChapter } from './tree-walk.js';
-
-const HISTORY_MAX = 10;
+import { boardHistoryMethods } from '../cards/board-history.js';
 
 // Sortierter ID-Schlüssel eines Workstates ({ workTree, soloPages }) — gleich,
 // wenn beide Stände dieselben Kapitel und Seiten enthalten.
@@ -50,22 +50,7 @@ function _workstateIdKey({ workTree, soloPages }) {
 }
 
 export const historyMethods = {
-  _clearHistory() {
-    this._undoStack = [];
-    this._redoStack = [];
-  },
-
-  _pushUndo(record, { clearRedo = true } = {}) {
-    if (this._inHistoryFlight) return;
-    this._undoStack.push(record);
-    while (this._undoStack.length > HISTORY_MAX) this._undoStack.shift();
-    if (clearRedo) this._redoStack = [];
-  },
-
-  _pushRedo(record) {
-    this._redoStack.push(record);
-    while (this._redoStack.length > HISTORY_MAX) this._redoStack.shift();
-  },
+  ...boardHistoryMethods,
 
   _recordReorder(before) {
     const after = this._snapshotWorkstate();
@@ -94,74 +79,13 @@ export const historyMethods = {
     this._pushUndo({ kind: 'delete-page', pageId, name, chapterId, index });
   },
 
-  // Der Gegen-Stack wird ERST NACH dem Flight beschrieben: `_pushUndo` verwirft
-  // Records, solange `_inHistoryFlight` steht (das ist der Schutz davor, dass eine
-  // wiederhergestellte Mutation sich selbst wieder aufzeichnet). Innerhalb des
-  // try-Blocks aufgezeichnet, fiele der Redo→Undo-Rückweg genau darauf herein —
-  // nach einem Redo wäre nichts mehr rückgängig zu machen.
-  async historyUndo() {
-    if (this._renamesInFlight) await this._renamesInFlight;
-    if (this.organizerSaving || this._inHistoryFlight) return;
-    const rec = this._undoStack.pop();
-    if (!rec) return;
-    const stale = this._staleReason(rec, 'undo');
-    if (stale) { this._dropStaleHistory(stale); return; }
-    this._inHistoryFlight = true;
-    let ok = false;
-    try {
-      ok = await this._applyInverse(rec);
-    } finally {
-      this._inHistoryFlight = false;
-    }
-    if (!ok) { this._requeueFailed(rec, this._undoStack); return; }
-    rec._failed = false;
-    if (rec.kind === 'create-chapter' || rec.kind === 'create-page') {
-      // Redo-Pfad wäre ein Recreate mit neuer ID → bestehende Records mit
-      // alter ID werden inkonsistent. Komplett invalidieren.
-      this._redoStack = [];
-    } else {
-      this._pushRedo(rec);
-    }
-  },
-
-  async historyRedo() {
-    if (this._renamesInFlight) await this._renamesInFlight;
-    if (this.organizerSaving || this._inHistoryFlight) return;
-    const rec = this._redoStack.pop();
-    if (!rec) return;
-    const stale = this._staleReason(rec, 'redo');
-    if (stale) { this._dropStaleHistory(stale); return; }
-    this._inHistoryFlight = true;
-    let ok = false;
-    try {
-      ok = await this._applyForward(rec);
-    } finally {
-      this._inHistoryFlight = false;
-    }
-    if (!ok) { this._requeueFailed(rec, this._redoStack); return; }
-    rec._failed = false;
-    this._pushUndo(rec, { clearRedo: false });
-  },
-
-  // Gescheiterter Record: einmal zurücklegen (Netz-Wackler → nochmal
-  // versuchen), beim zweiten Fehlschlag die Historie verwerfen. Ein Record,
-  // dessen Ziel serverseitig verschwunden ist (Papierkorb-Eintrag anderswo
-  // wiederhergestellt → `trashEntryMissing`), scheitert sonst bei jedem Strg+Z
-  // erneut und versperrt alle älteren Schritte. Die Fehlermeldung hat
-  // `_runMutation` bereits gezeigt.
-  _requeueFailed(rec, stack) {
-    if (rec._failed) { this._clearHistory(); return; }
-    rec._failed = true;
-    stack.push(rec);
-  },
-
   // Passt der Record noch zum aktuellen Workstate? Liefert null oder die
   // Meldung `{ key, params }`, mit der die History verworfen wird.
   // Reorder: der einzuspielende Snapshot muss exakt dieselben Kapitel- und
   // Seiten-IDs enthalten (nur die Anordnung darf abweichen). Rename/Create: das
   // Ziel muss noch existieren. Create-Undo zusaetzlich: nur solange leer.
   // Delete-Redo: die (wiederhergestellte) Seite muss existieren.
-  _staleReason(rec, dir) {
+  _historyStaleReason(rec, dir) {
     const STALE = { key: 'bookOrganizer.historyStale' };
     if (rec.kind === 'reorder') {
       const snap = dir === 'undo' ? rec.before : rec.after;
@@ -192,10 +116,20 @@ export const historyMethods = {
     return null;
   },
 
-  _dropStaleHistory(reason = { key: 'bookOrganizer.historyStale' }) {
-    this._clearHistory();
+  // Hooks des Kerns (cards/board-history.js).
+  _historyOnDropped(reason = { key: 'bookOrganizer.historyStale' }) {
     const root = window.__app;
     root?.setStatus?.(root.t(reason.key, reason.params));
+  },
+
+  // Blur-Umbenennungen laufen asynchron; ein Undo davor drehte einen Stand
+  // zurück, dessen Rename-Record noch gar nicht im Stack liegt.
+  _historyBeforeStep() {
+    return this._renamesInFlight || null;
+  },
+
+  _historyBusy() {
+    return this.organizerSaving;
   },
 
   async _applyInverse(rec) {

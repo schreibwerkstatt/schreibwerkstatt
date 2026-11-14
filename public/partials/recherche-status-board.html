@@ -43,8 +43,10 @@
               </div>
             </div>
 
+            <!-- Titel oeffnet das Bearbeiten (wechselt in die Liste, Zeile
+                 aufgeklappt im Formular — items.js#openItemForEdit). -->
             <button type="button" class="research-item-title research-status-card-title text-link"
-                    @click="openDetail(item)"
+                    @click="openItemForEdit(item)"
                     x-text="item.title || kindLabel(item.kind)"></button>
 
             <!-- Kurzer Anriss: ein Fundstueck ohne Titel waere sonst nur seine

@@ -485,11 +485,18 @@ export const graphMethods = {
   openGraphMenu(ev, nodeId) {
     this.openActionMenu(ev, `motivgraph:${nodeId || 'canvas'}`, nodeId || null);
   },
+  // Dasselbe Menü am Baum-Eintrag im Seitenpanel (⋯, Rechtsklick, Long-Press):
+  // eigener Schlüssel `motivtree:` (anderer Anker), gleiches Ziel (Knoten-ID).
+  openTreeMenu(ev, kind, id) {
+    const node = nodeId(kind, id);
+    this.openActionMenu(ev, `motivtree:${node}`, node);
+  },
 
   // Knoten-Typ für den offenen Menü-Kontext: 'theme' | 'motif' | 'canvas' | 'other'.
   graphMenuKind() {
     // Dasselbe Aktionsmenü dient auch dem Beziehungstyp (Schlüssel `motivrel:`).
-    if (!String(this.actionMenuKey || '').startsWith('motivgraph:')) return 'none';
+    const key = String(this.actionMenuKey || '');
+    if (!key.startsWith('motivgraph:') && !key.startsWith('motivtree:')) return 'none';
     if (!this.actionMenuTarget) return 'canvas';
     const kind = parseNode(this.actionMenuTarget)?.kind;
     return (kind === 'theme' || kind === 'motif') ? kind : 'other';

@@ -194,7 +194,9 @@ Katalog eingereiht — Schritt `schulweg`, siehe «Komplettanalyse» unten;
 
 Der Job schreibt **ausschliesslich** `vorschlag_json` (Weg, Zitat, `page_id`,
 Begründung) und `klassenangaben_json`. Jede gefragte Figur bekommt den Stand ihres
-Laufs. Der Steckbrief zeigt den Vorschlag mit Beleg; **Übernehmen**
+Laufs. Der Steckbrief zeigt den Vorschlag mit Beleg als Vorschlagskarte
+(`.chat-vorschlag`, DESIGN.md „Chat-Vorschlagskarte“; ebenso die offenen
+Berufs-/Hobby-Stationen); **Übernehmen**
 (`POST …/schulwege/:fig_id/uebernehmen`) prüft ihn erneut gegen das aktuelle
 Schulsystem, fügt eine vorgeschlagene Repetition zu den bestehenden hinzu (die der
 neue Weg nicht durchläuft, fallen weg und werden als `repetitionen_entfernt`

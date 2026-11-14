@@ -20,11 +20,14 @@
         <th x-text="$app.t('szenen.col.figuren')"></th>
         <th x-text="$app.t('szenen.col.orte')"></th>
         <th x-text="$app.t('szenen.col.kommentar')"></th>
+        <th class="entity-grid-actions"></th>
       </tr>
     </thead>
     <tbody>
       <template x-for="row in sorted" :key="row.id">
-        <tr :class="{ 'entity-grid-row--stale': row.s.stale }">
+        <!-- Aktionsmenü wie in der Liste (szenen-menu.html): ⋯, Rechtsklick, Long-Press. -->
+        <tr class="hover-reveal-host" :class="{ 'entity-grid-row--stale': row.s.stale }"
+            @contextmenu="szeneOpenMenu($event, row.s)" x-long-press>
           <td>
             <span class="severity-tag"
                   :class="'severity-tag--' + wertungOf(row.s)"
@@ -59,6 +62,14 @@
             </span>
           </td>
           <td class="entity-grid-cell-text" x-text="row.s.kommentar"></td>
+          <td class="entity-grid-actions">
+            <button type="button" class="icon-btn icon-btn--ghost hover-reveal"
+                    aria-haspopup="menu" :aria-expanded="isActionMenuOpen('szene:' + row.s.id)"
+                    @click="szeneOpenMenu($event, row.s)"
+                    :data-tip="$app.t('common.moreActions')" :aria-label="$app.t('common.moreActions')">
+              <svg class="icon" aria-hidden="true"><use href="/icons.svg#more-horizontal"/></svg>
+            </button>
+          </td>
         </tr>
       </template>
     </tbody>

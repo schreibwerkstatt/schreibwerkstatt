@@ -75,7 +75,7 @@
                    spellcheck="false"
                    inputmode="email"
                    name="book-share-invite"
-                   @keydown.enter.prevent="submitShareInvite()">
+                   @keydown.enter="$enter($event, () => submitShareInvite())">
             <div class="book-share-role-combo"
                  x-data="combobox({ placeholder: $app.t('book.share.role.editor'), compact: false })"
                  :aria-label="$app.t('book.share.roleLabel')"

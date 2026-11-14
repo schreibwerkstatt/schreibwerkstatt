@@ -41,7 +41,7 @@ test('Orte: Suche über Figurennamen, erste Erwähnung als Kapitel-Verweis', asy
   await expect(card.locator('[data-ortid="ort_t1"]').first()).toBeVisible();
   await expect(card.locator('[data-ortid="ort_t2"]')).toHaveCount(0);
 
-  await card.locator('[data-ortid="ort_t1"]').first().click();
+  await card.locator('[data-ortid="ort_t1"]').first().locator('.row-expand').click();
   const label = await page.evaluate(() => window.__app.t('orte.firstMention'));
   const row = card.locator('.entity-meta-row').filter({ has: page.locator('.entity-meta-label', { hasText: label }) });
   await expect(row.locator('.entity-ref--kapitel')).toHaveCount(1);

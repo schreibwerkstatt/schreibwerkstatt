@@ -46,4 +46,12 @@
   max-width: 24rem;
   color: var(--color-muted);
 }
+
+/* Aktions-Spalte (DESIGN.md «Aktions-Spalte in Tabellen»): ⋯ öffnet dasselbe
+   Aktionsmenü wie die Listenzeile. */
+.entity-grid-actions {
+  width: 1%;
+  text-align: right;
+  white-space: nowrap;
+}
 }

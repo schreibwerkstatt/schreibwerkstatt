@@ -78,11 +78,11 @@ test('Undo/Redo-Zyklus schiebt den Record zwischen den Stacks', async () => {
   ctx._applyForward = async (rec) => { applied.push(['forward', rec.id]); return true; };
   ctx._pushUndo({ kind: 'beat-fields', id: 7, before: { titel: 'alt' }, after: { titel: 'neu' } });
 
-  await ctx.plotHistoryUndo();
+  await ctx.historyUndo();
   assert.equal(ctx._undoStack.length, 0);
   assert.equal(ctx._redoStack.length, 1);
 
-  await ctx.plotHistoryRedo();
+  await ctx.historyRedo();
   assert.equal(ctx._undoStack.length, 1);
   assert.equal(ctx._redoStack.length, 0);
   assert.deepEqual(applied, [['inverse', 7], ['forward', 7]]);
@@ -92,7 +92,7 @@ test('fehlgeschlagenes Undo legt den Record zurück', async () => {
   const ctx = makeCtx();
   ctx._applyInverse = async () => false;
   ctx._pushUndo({ kind: 'beat-fields', id: 7, before: {}, after: {} });
-  await ctx.plotHistoryUndo();
+  await ctx.historyUndo();
   assert.equal(ctx._undoStack.length, 1);
   assert.equal(ctx._redoStack.length, 0);
 });
@@ -102,7 +102,7 @@ test('Undo eines create invalidiert den gesamten Redo-Stack', async () => {
   ctx._applyInverse = async () => true;
   ctx._pushUndo({ kind: 'beat-place', before: [], after: [] });
   ctx._pushUndo({ kind: 'create-beat', id: 5 }, { clearRedo: false });
-  await ctx.plotHistoryUndo();           // create-beat → löschen
+  await ctx.historyUndo();           // create-beat → löschen
   assert.equal(ctx._redoStack.length, 0, 'kein Redo nach create-Undo (neue ID beim Wiederanlegen)');
   assert.equal(ctx._undoStack.length, 1, 'ältere Records bleiben undo-bar');
 });
@@ -112,7 +112,7 @@ test('laufende Mutation (busy) blockiert Undo', async () => {
   ctx.busy = true;
   ctx._applyInverse = async () => true;
   ctx._pushUndo({ kind: 'beat-fields', id: 1, before: {}, after: {} });
-  await ctx.plotHistoryUndo();
+  await ctx.historyUndo();
   assert.equal(ctx._undoStack.length, 1);
 });
 

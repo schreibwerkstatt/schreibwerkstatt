@@ -49,8 +49,8 @@ test('figurenkarte: Ich-Erzählstimme im Steckbrief, per Checkbox korrigierbar',
   await expect(card).toBeVisible();
   await page.evaluate((id) => window.__app.loadFiguren(id), bookId);
   const row = card.locator(`[data-figid="${FIG_ID}"]`);
-  await row.click();
-  await expect(row).toHaveAttribute('aria-expanded', 'true');
+  await row.locator('.row-expand').click();
+  await expect(row.locator('.row-expand')).toHaveAttribute('aria-expanded', 'true');
 
   const detail = card.locator('.figur-group').filter({ hasText: 'Ich-Erzählstimme' }).first();
   await expect(detail).toContainText('erzählt in der Ich-Form');

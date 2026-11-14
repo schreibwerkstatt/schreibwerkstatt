@@ -2,7 +2,10 @@
      eingefügten Abbildung. Lebt im Scope von editorToolbarCard (Methoden in
      public/js/editor/notebook/toolbar/image.js) — darum `x-ref` + showModal()
      statt des modal()-Primitivs, und `@close` ist der einzige Aufräumpunkt
-     (ESC, Backdrop und Abbrechen laufen alle durch dlg.close()).
+     (ESC, Backdrop und Abbrechen laufen alle durch dlg.close()). Backdrop
+     schliesst nur, wenn Druck UND Loslassen auf ihm lagen (eine im Dialog
+     begonnene Textauswahl darf nichts verwerfen); mit ungespeicherter Eingabe
+     fragen Backdrop und ESC erst nach (panel-methods.js#requestDialogClose).
 
      Die Bildunterschrift fehlt hier bewusst: sie ist Manuskripttext und wird
      direkt in der `<figcaption>` getippt (siehe Modulkopf von image.js).
@@ -10,7 +13,9 @@
      Beide Felder tragen `data-spellcheck="spelling"` — Prosatext, den sonst
      keine Schicht prüft (harte Regel „LanguageTool auf Prosatextfeldern"). -->
 <dialog class="editor-dialog image-dialog" x-ref="imageDlg" @close="onImageDialogClose()"
-        @click.self="closeImageDialog()">
+        @mousedown="onDialogBackdropDown($event)"
+        @click="onDialogBackdropClick($event, 'image')"
+        @cancel="onDialogCancel($event, 'image')">
   <div class="editor-dialog__inner">
     <div class="editor-dialog__head">
       <span class="editor-dialog__title" x-text="$app.t('editor.image.title')"></span>

@@ -93,6 +93,7 @@ function bootstrap() {
   const figurAlter = require('../../../routes/jobs/figur-alter');
   const motifConsistency = require('../../../routes/jobs/motif-consistency');
   const autorenprofil = require('../../../routes/jobs/autorenprofil');
+  const stilprofil = require('../../../routes/jobs/stilprofil');
   const shared = require('../../../routes/jobs/shared');
   const dbSchema = require('../../../db/schema');
 
@@ -115,7 +116,7 @@ function bootstrap() {
   // /dev/shm liegen und belegt RAM bis zum Reboot (wie tests/unit/_helpers/tmp-db.js).
   process.once('exit', cleanup);
 
-  return { mockAi, dbSeed, komplett, review, kapitel, rueckblick, lektorat, synonyme, sourceDetect, sourcePdfDraft, figurAlter, motifConsistency, autorenprofil, shared, dbSchema, dbFile, cleanup };
+  return { mockAi, dbSeed, komplett, review, kapitel, rueckblick, lektorat, synonyme, sourceDetect, sourcePdfDraft, figurAlter, motifConsistency, autorenprofil, stilprofil, shared, dbSchema, dbFile, cleanup };
 }
 
 const POLL_MS = 10;

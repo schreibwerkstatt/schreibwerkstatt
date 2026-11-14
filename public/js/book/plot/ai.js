@@ -75,7 +75,7 @@ export const aiMethods = {
     if (!this.brainstormResult) return;
     const v = this.brainstormResult.vorschlaege[idx];
     const actId = this.brainstormResult.actId;
-    if (!v || !actId || this.busy || this._inHistoryFlight) return;
+    if (!v || v._state || !actId || this.busy || this._inHistoryFlight) return;
     this.busy = true;
     try {
       const beat = await fetchJson('/plot/beats', {
@@ -85,14 +85,27 @@ export const aiMethods = {
       });
       this.beats = [...this.beats, beat];
       this._memos = {};
-      // Übernommener Vorschlag ist ein normaler Beat-Create → per Undo entfernbar
-      // (der Vorschlag selbst bleibt aus dem Panel raus, er steht in der Lauf-Historie).
+      // Übernommener Vorschlag ist ein normaler Beat-Create → per Undo entfernbar.
+      // Die Karte bleibt im Panel stehen (Zustand «übernommen»).
       this._recordCreate('beat', beat?.id);
-      this.brainstormResult.vorschlaege = this.brainstormResult.vorschlaege.filter((_, i) => i !== idx);
+      v._state = 'applied';
       this.errorMessage = '';
     } catch (e) {
       this.errorMessage = app.t('plot.error.save');
     } finally { this.busy = false; }
+  },
+
+  // Vorschlag verwerfen bzw. (discard=false) wieder anbieten. Rein lokal — der
+  // Lauf in der Historie bleibt unverändert und bietet beim Wiederöffnen alles an.
+  discardBrainstorm(idx, discard = true) {
+    const v = this.brainstormResult?.vorschlaege?.[idx];
+    if (!v || v._state === 'applied') return;
+    v._state = discard ? 'discarded' : null;
+  },
+
+  // Noch offene Vorschläge des Panels (Hinweis «alle erledigt» bei 0).
+  brainstormOpenCount() {
+    return (this.brainstormResult?.vorschlaege || []).filter(v => !v._state).length;
   },
 
   async cancelBrainstorm() {

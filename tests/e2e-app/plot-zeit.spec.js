@@ -102,7 +102,7 @@ test('plot: Durchsicht der Zeitvorschläge — Belege sichtbar, nur eindeutige v
     expect(await zeitOf(ids.b)).toBeNull();
 
     // Ein Undo-Schritt nimmt die Sammel-Übernahme zurück.
-    await page.evaluate(() => Alpine.$data(document.querySelector('.card--plot')).plotHistoryUndo());
+    await page.evaluate(() => Alpine.$data(document.querySelector('.card--plot')).historyUndo());
     await expect.poll(() => zeitOf(ids.a)).toBeNull();
   } finally {
     await page.unroute('**/plot/zeit-vorschlaege?*');

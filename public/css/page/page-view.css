@@ -240,13 +240,18 @@
   flex-direction: column;
   container-type: inline-size;
 }
+/* Seiten-Toolbar des Notebook-Editors (partials/editor-page-toolbar.html):
+   links Undo/Redo + «Einfügen», rechts «Ansicht»-Menü, Vollbild, `⋯`. Der
+   Spacer schiebt die rechte Gruppe an den Rand; eine Zeile auch bei 375px
+   (Mobile: «Einfügen» als Menü). */
 .page-editor-toolbar {
   display: flex;
-  justify-content: flex-end;
+  align-items: center;
   flex-wrap: wrap;
   gap: var(--space-xs);
   margin-top: var(--space-xs);
 }
+.page-editor-toolbar__spacer { flex: 1 1 auto; }
 /* Icon-only Buttons: quadratisch + Icon zentriert. Base-`.icon-btn`
    nutzt asymmetrisches Padding (3px/9px) ohne `justify-content`, was bei
    schmaleren Icons (z.B. radio/scan/quote) optisch rechtslastig wirkt. */
@@ -259,8 +264,8 @@
   min-width: 0;
   padding: 0;
 }
-/* Aktiver Zustand: gedrückte Toggle-Buttons (aria-pressed) UND der offene
-   Meatball-Trigger (menu()-`open` → `.is-active`). */
+/* Aktiver Zustand: gedrückte Toggle-Buttons (aria-pressed) UND offene
+   Menü-Trigger (menu()-`open` → `.is-active`). */
 .page-editor-toolbar .icon-btn[aria-pressed="true"],
 .page-editor-toolbar .icon-btn.is-active {
   background: var(--color-history-active-bg);
@@ -268,13 +273,23 @@
   color: var(--color-primary);
 }
 
-/* Sekundäre Editor-Aktionen: Desktop inline (`display: contents` → Buttons direkt
-   im Toolbar-Flex, Kebab verborgen); Mobile (<=600px) kehrt es um — nur der Kebab. */
-.page-editor-toolbar__expanded { display: contents; }
-.page-editor-toolbar__more { display: none; }
+/* «Einfügen»: Desktop als Knopfgruppe direkt im Toolbar-Flex (`display:
+   contents`), Mobile (<=600px) als «+»-Menü. Die Wrapper um menu() sind eigene
+   Elemente — die unlayered `.menu-anchor { display: inline-flex }` schlüge
+   sonst jedes layered `display: none` (icons.css-Unlayered-Falle). */
+.page-editor-toolbar__insert { display: contents; }
+.page-editor-toolbar__insert-menu { display: none; }
+.page-editor-toolbar__view,
+.page-editor-toolbar__more { display: inline-flex; }
+/* Das «+»-Menü sitzt links in der Leiste: linksbündig aufklappen statt über
+   den linken Kartenrand hinaus. */
+.page-editor-toolbar__insert-menu .context-menu--dropdown {
+  right: auto;
+  left: 0;
+}
 @media (max-width: 600px) {
-  .page-editor-toolbar__expanded { display: none; }
-  .page-editor-toolbar__more { display: inline-flex; }
+  .page-editor-toolbar__insert { display: none; }
+  .page-editor-toolbar__insert-menu { display: inline-flex; }
 }
 
 /* Overflow-"⋯"-Menü der Seiten-Action-Leiste: Positionierungs-Anker für das

@@ -9,6 +9,7 @@ import { attachFullscreenSync } from '../fullscreen.js';
 import { loadSortable } from '../lazy-libs.js';
 import { EVT } from '../events.js';
 import { bindBoardHistoryKeys } from './board-history-keys.js';
+import { boardHistoryState } from './board-history.js';
 import { getUserPref, setUserPref } from '../local-prefs.js';
 import { ideenBacklinkMethods } from '../book/ideen-backlinks.js';
 import { plotChatMethods, plotChatState } from '../chat/plot-chat.js';
@@ -106,12 +107,11 @@ export function registerPlotCard() {
     addingCell: null,
     newBeatTitel: '',
 
-    // Akt-Edit / -Add / -Farbe
+    // Akt-Edit / -Add (Farbe: colorPicker-Instanz je Akt-Kopf)
     editingActId: null,
     actDraft: '',
     addingAct: false,
     newActName: '',
-    actColorPickerId: null,
     // Grid-Add-Akt-Scope: false = nicht im Add-Modus, null = geteilter Akt,
     // <threadId> = strang-eigener Akt (Hybrid). Eigene Variable neben `addingAct`
     // (flaches Board), weil das Grid scoped hinzufügt.
@@ -122,8 +122,8 @@ export function registerPlotCard() {
     threadDraft: { name: '', farbe: null, figure_id: '', draft_figure_id: '', chapter_id: '' },
     addingThread: false,
     newThreadName: '',
-    threadColorPickerId: null,
-    // Lane-Aktionsmenü (action-menu.js), Ziel = Lane-ID.
+    // Aktionsmenü (action-menu.js) für Beat, Akt und Strang; Schlüssel
+    // `beat:<id>`, `act:<id>`, `thread:<laneId>` (book/plot/menu.js).
     ...actionMenuState(),
 
     // ID des Beats, dessen Anchor-Fundstellen-Popover offen ist (Single-Select).
@@ -154,14 +154,10 @@ export function registerPlotCard() {
     // beats.js#_dropBeat gelesen).
     _dragBeatId: null,
 
-    // Undo/Redo (max 10 Schritte, siehe book/plot/history.js). Gefüllt von den
-    // Mutations-Methoden, geleert von resetPlot/loadBoard und jedem Löschen.
-    _undoStack: [],
-    _redoStack: [],
-    _inHistoryFlight: false,
-    // Zähler je _clearHistory — ein Undo/Redo, dessen Applier die Historie
-    // geleert hat (loadBoard-Rollback), legt seinen Record nicht zurück.
-    _historyEpoch: 0,
+    // Undo/Redo (Kern cards/board-history.js, Records book/plot/history.js).
+    // Gefüllt von den Mutations-Methoden, geleert von resetPlot/loadBoard und
+    // vom Löschen eines Akts/Strangs.
+    ...boardHistoryState(),
 
     // KI: Brainstorm
     brainstormActId: null,
@@ -308,8 +304,8 @@ export function registerPlotCard() {
       bindBoardHistoryKeys({
         isVisible: () => !!window.__app?.showPlotCard,
         isBlocked: (e) => this.editingBeatId != null && !!e.target?.closest?.('.plot-beat-edit'),
-        onUndo: () => this.plotHistoryUndo(),
-        onRedo: () => this.plotHistoryRedo(),
+        onUndo: () => this.historyUndo(),
+        onRedo: () => this.historyRedo(),
         signal: this._lifecycle.signal,
       });
 

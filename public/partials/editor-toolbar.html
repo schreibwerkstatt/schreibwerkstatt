@@ -52,134 +52,18 @@
     </div>
   </template>
 
-  <!-- Querverweis-Picker: Ziel waehlen (Kapitel/Abbildung) + Anzeigeform.
-       Die Nummer in der Liste ist eine VORSCHAU — was im Export steht,
-       entscheidet der Ausgabeweg (siehe editor/notebook/toolbar/xref.js). -->
-  <template x-teleport="body">
-    <div x-show="xrefShow && $app.editMode && !$app.focusActive" x-cloak
-         class="edit-cite-panel edit-xref-panel"
-         role="dialog"
-         :aria-label="$app.t('editor.toolbar.xrefTitle')"
-         :style="{ left: xrefX + 'px', top: xrefY + 'px' }"
-         @click.outside="_closeXref()"
-         @keydown="_onXrefKeydown($event)"
-         @mousedown.stop>
-      <div class="edit-cite-row">
-        <input type="text" x-ref="xrefFilter"
-               x-model="xrefQuery"
-               :placeholder="$app.t('editor.toolbar.xrefFilterPlaceholder')"
-               :aria-label="$app.t('editor.toolbar.xrefFilterPlaceholder')"
-               class="edit-cite-input edit-cite-input--filter">
-      </div>
-      <!-- Anzeigeform: „Kapitel 3" / „3" / „Kapitel 3: Titel". -->
-      <div class="seg-toggle edit-cite-kind" role="group"
-           :aria-label="$app.t('editor.toolbar.xrefFmtLabel')">
-        <button :aria-pressed="xrefFmt === 'label'" type="button" :class="{ 'seg-toggle--active': xrefFmt === 'label' }"
-                @click="xrefFmt = 'label'"
-                :data-tip="$app.t('editor.toolbar.xrefFmtLabelTip')"
-                x-text="$app.t('editor.toolbar.xrefFmtLabelShort')"></button>
-        <button :aria-pressed="xrefFmt === 'number'" type="button" :class="{ 'seg-toggle--active': xrefFmt === 'number' }"
-                @click="xrefFmt = 'number'"
-                :data-tip="$app.t('editor.toolbar.xrefFmtNumberTip')"
-                x-text="$app.t('editor.toolbar.xrefFmtNumberShort')"></button>
-        <button :aria-pressed="xrefFmt === 'title'" type="button" :class="{ 'seg-toggle--active': xrefFmt === 'title' }"
-                @click="xrefFmt = 'title'"
-                :data-tip="$app.t('editor.toolbar.xrefFmtTitleTip')"
-                x-text="$app.t('editor.toolbar.xrefFmtTitleShort')"></button>
-      </div>
-      <div x-show="xrefLoading" x-skeleton="3" x-cloak></div>
-      <div class="edit-cite-hint" x-show="xrefError" x-text="$app.t('editor.toolbar.xrefLoadError')"></div>
-      <div class="edit-cite-hint" x-show="!xrefLoading && !xrefError && xrefHits.length === 0"
-           x-text="$app.t('editor.toolbar.xrefEmpty')"></div>
-      <ul class="edit-cite-list list-reset" role="listbox" x-show="xrefHits.length > 0">
-        <template x-for="(hit, i) in xrefHits" :key="hit.kind + ':' + hit.target">
-          <li role="option"
-              :aria-selected="i === xrefIdx"
-              class="edit-cite-item edit-xref-item truncate"
-              :class="{ 'is-active': i === xrefIdx }"
-              :data-depth="hit.depth"
-              @mouseenter="xrefIdx = i"
-              @click="_commitXref(hit)">
-            <span class="edit-xref-preview" x-text="xrefPreview(hit)"></span>
-            <span class="edit-xref-title" x-text="hit.title"></span>
-          </li>
-        </template>
-      </ul>
-    </div>
-  </template>
-
-  <!-- Quellen-Picker (Quellenverzeichnis): Quelle waehlen + Stellenangabe.
-       Zwei Zustaende: Einfuegen am Caret/an der Selektion und Bearbeiten eines
-       angeklickten Chips (`citeEditing` → anderer Titel + Entfernen-Button). -->
-  <template x-teleport="body">
-    <div x-show="citeShow && $app.editMode && !$app.focusActive" x-cloak
-         class="edit-cite-panel"
-         role="dialog"
-         :aria-label="citeEditing ? $app.t('editor.toolbar.citeEditTitle') : $app.t('editor.toolbar.citeTitle')"
-         :style="{ left: citeX + 'px', top: citeY + 'px' }"
-         @click.outside="_closeCite()"
-         @keydown="_onCiteKeydown($event)"
-         @mousedown.stop>
-      <div class="edit-cite-row">
-        <input type="text" x-ref="citeFilter"
-               x-model="citeQuery"
-               :placeholder="$app.t('editor.toolbar.citeFilterPlaceholder')"
-               :aria-label="$app.t('editor.toolbar.citeFilterPlaceholder')"
-               class="edit-cite-input edit-cite-input--filter">
-        <input type="text"
-               x-model="citeLoc"
-               :placeholder="$app.t('editor.toolbar.citeLocPlaceholder')"
-               :aria-label="$app.t('editor.toolbar.citeLocPlaceholder')"
-               class="edit-cite-input edit-cite-input--loc">
-      </div>
-      <!-- Zitat-Art: woertliches Kurzzitat / Blockzitat / Paraphrase („vgl.").
-           Blockzitat huellt den Absatz um und ist darum nur in umhuellbaren
-           Bloecken verfuegbar (citeBlockOk). -->
-      <div class="seg-toggle edit-cite-kind" role="group"
-           :aria-label="$app.t('editor.toolbar.citeKindLabel')">
-        <button :aria-pressed="citeKind === 'quote'" type="button" :class="{ 'seg-toggle--active': citeKind === 'quote' }"
-                @click="citeKind = 'quote'"
-                :data-tip="$app.t('editor.toolbar.citeKindQuoteTip')"
-                x-text="$app.t('editor.toolbar.citeKindQuote')"></button>
-        <button :aria-pressed="citeKind === 'block'" type="button" :class="{ 'seg-toggle--active': citeKind === 'block' }"
-                @click="citeKind = 'block'" :disabled="!citeBlockOk"
-                :data-tip="citeBlockOk ? $app.t('editor.toolbar.citeKindBlockTip') : $app.t('editor.toolbar.citeKindBlockUnavailable')"
-                x-text="$app.t('editor.toolbar.citeKindBlock')"></button>
-        <button :aria-pressed="citeKind === 'paraphrase'" type="button" :class="{ 'seg-toggle--active': citeKind === 'paraphrase' }"
-                @click="citeKind = 'paraphrase'"
-                :data-tip="$app.t('editor.toolbar.citeKindParaphraseTip')"
-                x-text="$app.t('editor.toolbar.citeKindParaphrase')"></button>
-      </div>
-      <div x-show="citeLoading" x-skeleton="3" x-cloak></div>
-      <div class="edit-cite-hint" x-show="citeError" x-text="$app.t('editor.toolbar.citeLoadError')"></div>
-      <div class="edit-cite-hint" x-show="!citeLoading && !citeError && citeHits.length === 0"
-           x-text="$app.t('editor.toolbar.citeEmpty')"></div>
-      <ul class="edit-cite-list list-reset" role="listbox" x-show="citeHits.length > 0">
-        <template x-for="(hit, i) in citeHits" :key="hit.id">
-          <li role="option"
-              :aria-selected="i === citeIdx"
-              class="edit-cite-item truncate"
-              :class="{ 'is-active': i === citeIdx }"
-              @mouseenter="citeIdx = i"
-              @click="_commitCite(hit.src)"
-              x-text="hit.label"></li>
-        </template>
-      </ul>
-      <!-- Beleg loeschen: nur beim Bearbeiten eines bestehenden Chips. -->
-      <button type="button" x-show="citeEditing"
-              class="edit-cite-remove"
-              @click="_removeCite()">
-        <svg class="icon" aria-hidden="true"><use href="/icons.svg#trash"/></svg>
-        <span x-text="$app.t('editor.toolbar.citeRemove')"></span>
-      </button>
-    </div>
-  </template>
+  <!-- Querverweis- und Beleg-Picker: eigenes Partial (Zeilen-Cap), teleportiert
+       sich selbst, gleicher Scope. -->
+  <div id="partial-editor-caret-panels"></div>
 
   <!-- Link-Input -->
   <template x-teleport="body">
     <div x-show="linkShow && $app.editMode && !$app.focusActive" x-cloak
          class="edit-link-bar"
-         :style="{ left: linkX + 'px', top: linkY + 'px' }"
+         x-ref="linkPanel"
+         role="dialog"
+         :aria-label="$app.t('editor.toolbar.linkTitle')"
+         :style="{ left: linkX + 'px', top: linkY + 'px', maxHeight: linkMaxH + 'px' }"
          @click.outside="_closeLink()"
          @mousedown.stop>
       <input type="text" x-ref="linkInput"
@@ -201,42 +85,47 @@
     </div>
   </template>
 
-  <!-- Slash-Menü (Block-Transforms) -->
+  <!-- Slash-Menü (Block-Transforms). Der Fokus bleibt im contenteditable —
+       darum trägt die Listbox kein aria-activedescendant (es erreichte den
+       Screenreader vom teleportierten Menü aus nicht); den aktiven Eintrag sagt
+       die Live-Region unten an. Gruppen sind role="group" mit Namen, die
+       sichtbare Überschrift ist nur Optik. -->
   <template x-teleport="body">
     <div x-show="slashShow && $app.editMode && !$app.focusActive" x-cloak
          class="edit-slash-menu"
          x-ref="slashMenu"
-         role="listbox"
-         :aria-label="$app.t('editor.slash.ariaLabel')"
-         :aria-activedescendant="slashShow ? ('edit-slash-opt-' + slashIdx) : null"
          :style="{ left: slashX + 'px', top: slashY + 'px', maxHeight: slashMaxH + 'px' }"
          @click.outside="_closeSlash()">
       <div class="edit-slash-hint" :class="{ 'edit-slash-hint--query': slashQuery }">
         <span x-show="!slashQuery" x-text="$app.t('editor.slash.hint')"></span>
         <span x-show="slashQuery" class="edit-slash-query"><span class="edit-slash-query-slash">/</span><span x-text="slashQuery"></span></span>
       </div>
-      <template x-for="(it, i) in slashItems()" :key="it.key">
-        <div class="edit-slash-row" role="presentation">
-          <div x-show="it.showGroup"
-               class="edit-slash-group" x-text="it.groupLabel"></div>
-          <button type="button"
-                  class="edit-slash-item"
-                  role="option"
-                  :id="'edit-slash-opt-' + i"
-                  :aria-selected="slashIdx === i"
-                  :class="it.modClass + (slashIdx === i ? ' edit-slash-item--active' : '')"
-                  @mousedown.prevent
-                  @click="_applySlashByKey(it.key)"
-                  @mouseenter="slashIdx = i">
-            <span class="edit-slash-label" x-text="it.label"></span>
-            <span x-show="it.preview" class="edit-slash-prev" x-text="it.preview"></span>
-          </button>
-        </div>
-      </template>
+      <div role="listbox" :aria-label="$app.t('editor.slash.ariaLabel')">
+        <template x-for="g in slashGroups()" :key="g.key">
+          <div class="edit-slash-row" role="group" :aria-label="g.label">
+            <div class="edit-slash-group" aria-hidden="true" x-text="g.label"></div>
+            <template x-for="it in g.items" :key="it.key">
+              <button type="button"
+                      class="edit-slash-item"
+                      role="option"
+                      :id="'edit-slash-opt-' + it.idx"
+                      :aria-selected="slashIdx === it.idx"
+                      :class="it.modClass + (slashIdx === it.idx ? ' edit-slash-item--active' : '')"
+                      @mousedown.prevent
+                      @click="_applySlashByKey(it.key)"
+                      @mouseenter="slashIdx = it.idx">
+                <span class="edit-slash-label" x-text="it.label"></span>
+                <span x-show="it.preview" class="edit-slash-prev" x-text="it.preview"></span>
+              </button>
+            </template>
+          </div>
+        </template>
+      </div>
       <div x-show="slashItems().length === 0" class="muted-msg muted-msg--sm edit-slash-empty"
            x-text="$app.t('editor.slash.noMatch')"></div>
     </div>
   </template>
+  <div class="edit-slash-live" aria-live="polite" aria-atomic="true" x-text="slashActiveLabel()"></div>
 
   <!-- Eigene Partials, weil diese Datei sonst über das 250-Zeilen-Limit läuft:
        Diagramm-Dialog (Quelltext + Vorschau), Tabellen-Dialog (Gitter +

@@ -1,9 +1,9 @@
-<!-- «zusammenführen mit…» einer Katalog-Zeile, die nicht mehr im Text steht
-     (Figuren · Schauplätze · Szenen): EIN Picker-Popover je Karte, am
-     Zeilen-Knopf verankert. Methods: public/js/book/entity-merge-picker.js
-     (gespreadet in figurenCard, orteCard, szenenCard), Merge-Kern
-     public/js/book/entity-merge.js. Eingebunden als String-Include
-     (app-ui.js#_resolveIncludes) ausserhalb der Zeilen-Schleife. -->
+<!-- «Zusammenführen mit …» einer Katalog-Zeile (Figuren · Schauplätze · Szenen;
+     aktive und verwaiste Einträge): EIN Picker-Popover je Karte, verankert am
+     Anker des Aktionsmenüs bzw. am Zeilen-Knopf verwaister Einträge. Methods:
+     public/js/book/entity-merge-picker.js (gespreadet in figurenCard, orteCard,
+     szenenCard), Merge-Kern public/js/book/entity-merge.js. Eingebunden als
+     String-Include (app-ui.js#_resolveIncludes) ausserhalb der Zeilen-Schleife. -->
 <template x-teleport="body">
   <div class="picker-popover entity-merge-popover"
        x-ref="mergePickPopover"

@@ -1,0 +1,130 @@
+<!-- Caret-verankerte Picker des Notebook-Editors: Querverweis und Beleg.
+     Eigenes Partial (Zeilen-Cap von editor-toolbar.html), gleicher Scope
+     editorToolbarCard. Beide nach <body> teleportiert; Position (Flip, Klemmen
+     ans sichtbare Band, max-height) rechnet toolbar/panel-methods.js — darum
+     das x-ref am Panel. Esc/↑/↓/Enter: caret-panel.js#onPickerKeydown. -->
+
+  <!-- Querverweis-Picker: Ziel waehlen (Kapitel/Abbildung) + Anzeigeform.
+       Die Nummer in der Liste ist eine VORSCHAU — was im Export steht,
+       entscheidet der Ausgabeweg (siehe editor/notebook/toolbar/xref.js). -->
+  <template x-teleport="body">
+    <div x-show="xrefShow && $app.editMode && !$app.focusActive" x-cloak
+         class="edit-cite-panel edit-xref-panel"
+         x-ref="xrefPanel"
+         role="dialog"
+         :aria-label="$app.t('editor.toolbar.xrefTitle')"
+         :style="{ left: xrefX + 'px', top: xrefY + 'px', maxHeight: xrefMaxH + 'px' }"
+         @click.outside="_closeXref()"
+         @keydown="_onXrefKeydown($event)"
+         @mousedown.stop>
+      <div class="edit-cite-row">
+        <input type="text" x-ref="xrefFilter"
+               x-model="xrefQuery"
+               :placeholder="$app.t('editor.toolbar.xrefFilterPlaceholder')"
+               :aria-label="$app.t('editor.toolbar.xrefFilterPlaceholder')"
+               class="edit-cite-input edit-cite-input--filter">
+      </div>
+      <!-- Anzeigeform: „Kapitel 3" / „3" / „Kapitel 3: Titel". -->
+      <div class="seg-toggle edit-cite-kind" role="group"
+           :aria-label="$app.t('editor.toolbar.xrefFmtLabel')">
+        <button :aria-pressed="xrefFmt === 'label'" type="button" :class="{ 'seg-toggle--active': xrefFmt === 'label' }"
+                @click="xrefFmt = 'label'"
+                :data-tip="$app.t('editor.toolbar.xrefFmtLabelTip')"
+                x-text="$app.t('editor.toolbar.xrefFmtLabelShort')"></button>
+        <button :aria-pressed="xrefFmt === 'number'" type="button" :class="{ 'seg-toggle--active': xrefFmt === 'number' }"
+                @click="xrefFmt = 'number'"
+                :data-tip="$app.t('editor.toolbar.xrefFmtNumberTip')"
+                x-text="$app.t('editor.toolbar.xrefFmtNumberShort')"></button>
+        <button :aria-pressed="xrefFmt === 'title'" type="button" :class="{ 'seg-toggle--active': xrefFmt === 'title' }"
+                @click="xrefFmt = 'title'"
+                :data-tip="$app.t('editor.toolbar.xrefFmtTitleTip')"
+                x-text="$app.t('editor.toolbar.xrefFmtTitleShort')"></button>
+      </div>
+      <div x-show="xrefLoading" x-skeleton="3" x-cloak></div>
+      <div class="edit-cite-hint" x-show="xrefError" x-text="$app.t('editor.toolbar.xrefLoadError')"></div>
+      <div class="edit-cite-hint" x-show="!xrefLoading && !xrefError && xrefHits.length === 0"
+           x-text="$app.t('editor.toolbar.xrefEmpty')"></div>
+      <ul class="edit-cite-list list-reset" role="listbox" x-show="xrefHits.length > 0">
+        <template x-for="(hit, i) in xrefHits" :key="hit.kind + ':' + hit.target">
+          <li role="option"
+              :aria-selected="i === xrefIdx"
+              class="edit-cite-item edit-xref-item truncate"
+              :class="{ 'is-active': i === xrefIdx }"
+              :data-depth="hit.depth"
+              @mouseenter="xrefIdx = i"
+              @click="_commitXref(hit)">
+            <span class="edit-xref-preview" x-text="xrefPreview(hit)"></span>
+            <span class="edit-xref-title" x-text="hit.title"></span>
+          </li>
+        </template>
+      </ul>
+    </div>
+  </template>
+
+  <!-- Quellen-Picker (Quellenverzeichnis): Quelle waehlen + Stellenangabe.
+       Zwei Zustaende: Einfuegen am Caret/an der Selektion und Bearbeiten eines
+       angeklickten Chips (`citeEditing` → anderer Titel + Entfernen-Button). -->
+  <template x-teleport="body">
+    <div x-show="citeShow && $app.editMode && !$app.focusActive" x-cloak
+         class="edit-cite-panel"
+         x-ref="citePanel"
+         role="dialog"
+         :aria-label="citeEditing ? $app.t('editor.toolbar.citeEditTitle') : $app.t('editor.toolbar.citeTitle')"
+         :style="{ left: citeX + 'px', top: citeY + 'px', maxHeight: citeMaxH + 'px' }"
+         @click.outside="_closeCite()"
+         @keydown="_onCiteKeydown($event)"
+         @mousedown.stop>
+      <div class="edit-cite-row">
+        <input type="text" x-ref="citeFilter"
+               x-model="citeQuery"
+               :placeholder="$app.t('editor.toolbar.citeFilterPlaceholder')"
+               :aria-label="$app.t('editor.toolbar.citeFilterPlaceholder')"
+               class="edit-cite-input edit-cite-input--filter">
+        <input type="text"
+               x-model="citeLoc"
+               :placeholder="$app.t('editor.toolbar.citeLocPlaceholder')"
+               :aria-label="$app.t('editor.toolbar.citeLocPlaceholder')"
+               class="edit-cite-input edit-cite-input--loc">
+      </div>
+      <!-- Zitat-Art: woertliches Kurzzitat / Blockzitat / Paraphrase („vgl.").
+           Blockzitat huellt den Absatz um und ist darum nur in umhuellbaren
+           Bloecken verfuegbar (citeBlockOk). -->
+      <div class="seg-toggle edit-cite-kind" role="group"
+           :aria-label="$app.t('editor.toolbar.citeKindLabel')">
+        <button :aria-pressed="citeKind === 'quote'" type="button" :class="{ 'seg-toggle--active': citeKind === 'quote' }"
+                @click="citeKind = 'quote'"
+                :data-tip="$app.t('editor.toolbar.citeKindQuoteTip')"
+                x-text="$app.t('editor.toolbar.citeKindQuote')"></button>
+        <button :aria-pressed="citeKind === 'block'" type="button" :class="{ 'seg-toggle--active': citeKind === 'block' }"
+                @click="citeKind = 'block'" :disabled="!citeBlockOk"
+                :data-tip="citeBlockOk ? $app.t('editor.toolbar.citeKindBlockTip') : $app.t('editor.toolbar.citeKindBlockUnavailable')"
+                x-text="$app.t('editor.toolbar.citeKindBlock')"></button>
+        <button :aria-pressed="citeKind === 'paraphrase'" type="button" :class="{ 'seg-toggle--active': citeKind === 'paraphrase' }"
+                @click="citeKind = 'paraphrase'"
+                :data-tip="$app.t('editor.toolbar.citeKindParaphraseTip')"
+                x-text="$app.t('editor.toolbar.citeKindParaphrase')"></button>
+      </div>
+      <div x-show="citeLoading" x-skeleton="3" x-cloak></div>
+      <div class="edit-cite-hint" x-show="citeError" x-text="$app.t('editor.toolbar.citeLoadError')"></div>
+      <div class="edit-cite-hint" x-show="!citeLoading && !citeError && citeHits.length === 0"
+           x-text="$app.t('editor.toolbar.citeEmpty')"></div>
+      <ul class="edit-cite-list list-reset" role="listbox" x-show="citeHits.length > 0">
+        <template x-for="(hit, i) in citeHits" :key="hit.id">
+          <li role="option"
+              :aria-selected="i === citeIdx"
+              class="edit-cite-item truncate"
+              :class="{ 'is-active': i === citeIdx }"
+              @mouseenter="citeIdx = i"
+              @click="_commitCite(hit.src)"
+              x-text="hit.label"></li>
+        </template>
+      </ul>
+      <!-- Beleg loeschen: nur beim Bearbeiten eines bestehenden Chips. -->
+      <button type="button" x-show="citeEditing"
+              class="edit-cite-remove"
+              @click="_removeCite()">
+        <svg class="icon" aria-hidden="true"><use href="/icons.svg#trash"/></svg>
+        <span x-text="$app.t('editor.toolbar.citeRemove')"></span>
+      </button>
+    </div>
+  </template>

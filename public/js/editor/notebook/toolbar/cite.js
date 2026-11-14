@@ -35,10 +35,11 @@
 // Nur Notebook: Focus-Editor und Bucheditor stellen Chips dar und zerstören
 // sie nicht, bringen aber keinen Einfügepfad mit.
 
-import { getEditEl, findBlock, caretRangeIn, rangeAtEnd } from './_shared.js';
+import { getEditEl, findBlock } from './_shared.js';
 import {
-  appendHtmlInto, capHits, cycleIdx, htmlToElement, insertHtmlAtRange, NBSP,
-  onPickerKeydown, panelAnchorFor, placeCaretAfter,
+  appendHtmlInto, blockInsertTarget, capHits, cycleIdx, htmlToElement, insertHtmlAtRange,
+  NBSP, onPickerKeydown, placeBlockNode, placeCaretAfter, placeCaretInSlotAfter,
+  restoreEditorRange,
 } from './caret-panel.js';
 import {
   buildCiteHtml, markCitesAtomic, closestQuoteBlock, setQuoteBlockSource,
@@ -71,16 +72,11 @@ export const citeMethods = {
     const editEl = getEditEl();
     if (!editEl) return;
     // Der Auslöser kann ein Button in der Seiten-Toolbar sein — dann liegt der
-    // Fokus dort und nicht im contenteditable. Erst fokussieren, dann die
-    // Selection lesen (Chromium stellt dabei die letzte Caret-Position wieder
-    // her); gleiche Reihenfolge wie `insertHorizontalRule`. Die Bubble-Toolbar
-    // verliert den Fokus nie (`@mousedown.prevent`), dort ist es ein No-Op.
-    editEl.focus();
-    // Kein Caret im Editor (Edit-Modus gerade betreten, noch nirgends
-    // hingeklickt): ans Ende des Inhalts ankern statt gar nichts zu tun.
-    const range = caretRangeIn(editEl) || rangeAtEnd(editEl);
-
-    this._citeRange = range.cloneRange();
+    // Fokus dort und nicht im contenteditable. `_editRangeForInsert`
+    // (panel-methods.js) fokussiert, liest den Caret, fällt auf die zuletzt im
+    // Editor gesehene Stelle zurück und ohne beides aufs Ende des Inhalts
+    // (Edit-Modus gerade betreten, noch nirgends hingeklickt).
+    this._citeRange = this._editRangeForInsert(editEl);
     this._citeEditEl = null;
     this.citeEditing = false;
     this._resetCiteFields();
@@ -91,9 +87,9 @@ export const citeMethods = {
       closestQuoteBlock(this._citeRange.startContainer, editEl)
       || (caretBlock && WRAPPABLE_TAGS.has(String(caretBlock.tagName || '').toUpperCase()))
     );
-    this._placeCitePanel(this._citeRange, editEl);
     this.bubbleShow = false;
     this.citeShow = true;
+    this._openCaretPanelAt('cite');
 
     await this._fillCiteSources();
     this._focusCiteFilter();
@@ -129,19 +125,12 @@ export const citeMethods = {
       bq || (chipBlock && WRAPPABLE_TAGS.has(String(chipBlock.tagName || '').toUpperCase()))
     );
 
-    this._placeCitePanel(range, editEl);
     this.bubbleShow = false;
     this.citeShow = true;
+    this._openCaretPanelAt('cite');
 
     await this._fillCiteSources();
     this._focusCiteFilter();
-  },
-
-  // Panel über der Range verankern (Geometrie in caret-panel.js).
-  _placeCitePanel(range, editEl) {
-    const { x, y } = panelAnchorFor(range, editEl);
-    this.citeX = x;
-    this.citeY = y;
   },
 
   // Eingabefelder/Auswahl in den Ausgangszustand. Die Zitat-Art wird bewusst
@@ -167,6 +156,8 @@ export const citeMethods = {
     } finally {
       this.citeLoading = false;
       this._recomputeCiteHits();
+      // Die Trefferliste ändert die Panelhöhe — neu messen.
+      if (this.citeShow) this._schedCaretPanelPosition('cite', { opening: true });
     }
   },
 
@@ -400,9 +391,10 @@ export const citeMethods = {
    * Die Stellenangabe ist die ZEITMARKE. Bei einem Gespräch ist sie das, was die
    * Seitenzahl bei einem Buch ist: sie führt zur Stelle in der Aufnahme zurück.
    *
-   * Einfügeort ist der zuletzt gesetzte Caret; ohne Caret hängt der O-Ton ans
-   * Ende des Editorfelds. Bewusst kein Abbruch in dem Fall — den Block danach zu
-   * verschieben ist ein Handgriff, ihn erneut herauszusuchen nicht.
+   * Einfügeort ist der zuletzt gesetzte Caret (leerer Absatz → ersetzt, sonst
+   * dahinter); ohne Caret hängt der O-Ton ans Ende des Editorfelds. Bewusst
+   * kein Abbruch in dem Fall — den Block danach zu verschieben ist ein
+   * Handgriff, ihn erneut herauszusuchen nicht.
    *
    * @returns {boolean} ob eingefügt wurde
    */
@@ -434,20 +426,26 @@ export const citeMethods = {
     // im Dokument, ein Caret zeigte auf einen abgehängten Knoten.
     appendHtmlInto(p, chipHtml);
 
-    editEl.focus();
-    const range = caretRangeIn(editEl);
-    const anchor = range ? findBlock(range.startContainer, editEl) : null;
-    if (anchor && anchor.parentNode) anchor.parentNode.insertBefore(bq, anchor.nextSibling);
-    else editEl.appendChild(bq);
+    // Einfügeort wie bei den Block-Einfügewegen der Seiten-Toolbar: ein leerer
+    // Caret-Absatz wird ersetzt, sonst hinter den Top-Level-Block des Carets —
+    // nie in eine Liste (Invariante 19). Ohne Caret die zuletzt gesehene Stelle.
+    const range = this._editRangeForInsert(editEl);
+    placeBlockNode(editEl, bq, blockInsertTarget(editEl, range));
 
     markCitesAtomic(editEl);
-    placeCaretAfter(bq);
+    // Weiterschreiben im Absatz HINTER dem Zitat, nicht im Zitat und nicht
+    // irgendwo dazwischen (caret-panel.js#placeCaretInSlotAfter).
+    placeCaretInSlotAfter(bq);
     // Ohne das greift der Autosave nicht — der Block wäre beim Verlassen weg.
     window.__app?._markEditDirty?.();
     return true;
   },
 
-  _closeCite() {
+  // Verworfen (Esc, Klick daneben) → Caret zurück an die gesicherte Stelle
+  // (caret-panel.js#restoreEditorRange). Nach Übernehmen/Entfernen steht er
+  // schon im Editor und bleibt dort. `restore: false`: closeAllEditorPanels.
+  _closeCite({ restore = true } = {}) {
+    const range = this._citeRange;
     this.citeShow = false;
     this.citeQuery = '';
     this.citeLoc = '';
@@ -459,6 +457,6 @@ export const citeMethods = {
     this.citeEditing = false;
     this._citeEditEl = null;
     this._citeRange = null;
-    getEditEl()?.focus();
+    if (restore) restoreEditorRange(range);
   },
 };

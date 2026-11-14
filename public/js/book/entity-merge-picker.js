@@ -1,15 +1,17 @@
-// «zusammenführen mit…» an einer Katalog-Zeile, die nicht mehr im Text steht
-// (Figuren · Schauplätze · Szenen). Der Knopf sitzt in der Zeile und öffnet ein
-// Picker-Popover (picker-popover.js) mit den aktiven Einträgen derselben Gattung;
-// Markup: partials/entity-merge-picker.html, einmal je Karte eingebunden.
-// Der Merge selbst läuft über den geteilten Client-Kern book/entity-merge.js.
+// «Zusammenführen mit …» an einer Katalog-Zeile (Figuren · Schauplätze · Szenen) —
+// der eine Weg in allen drei Karten, für aktive UND verwaiste Einträge. Geöffnet
+// aus dem Aktionsmenü der Zeile (am Menü-Anker) und als Abkürzung vom Zeilen-Knopf
+// verwaister Einträge; ein Picker-Popover (picker-popover.js) mit den aktiven
+// Einträgen derselben Gattung. Markup: partials/entity-merge-picker.html, einmal je
+// Karte eingebunden. Der Merge selbst läuft über den geteilten Client-Kern
+// book/entity-merge.js.
 //
 //   ...entityMergePickerState(),        // Karten-State (inkl. Picker-Position)
 //   ...entityMergePickerMethods,        // Karten-Methoden (inkl. Picker-Mechanik)
 //
-// Zielauswahl nur unter aktiven Einträgen: eine verwaiste Quelle in eine andere
-// verwaiste aufgehen zu lassen, verschöbe die Verknüpfungen nur von einem
-// Altlast-Eintrag zum nächsten.
+// Zielauswahl nur unter aktiven Einträgen: eine Quelle in eine verwaiste aufgehen
+// zu lassen, verschöbe die Verknüpfungen nur auf einen Altlast-Eintrag (Schauplätze
+// sperrt der Server zusätzlich, TARGET_STALE).
 
 import { pickerPopoverState, pickerPopoverMethods } from '../picker-popover.js';
 import {
@@ -59,6 +61,8 @@ export const entityMergePickerMethods = {
 
   entityMergeTargetOptions,
 
+  // `anchor` = Klick-Event am Zeilen-Knopf oder das Anker-Element des Aktionsmenüs
+  // (`actionMenuAnchor()` — der Menü-Eintrag verschwindet mit dem Menü).
   openMergePick(ev, kind, entry) {
     this.mergePick = { ...closedMergePick(), kind, sourceId: String(entry.id) };
     this._openPickerPopover(ev, 'mergePickPopover', () => this.cancelMergePick());

@@ -55,6 +55,8 @@ export const msgThreadMethods = {
     const { line, range } = hit;
     e.preventDefault();
     const thread = line.parentNode;
+    // Eigener Undo-Schritt (keydown-enter.js#_structStep).
+    this._structStep(app);
     if (range.collapsed && isEmptyMsgLine(line)) {
       const out = document.createElement('p');
       out.appendChild(document.createElement('br'));
@@ -75,9 +77,6 @@ export const msgThreadMethods = {
     }
     if (!range.collapsed) range.deleteContents();
     const name = this._typedMsgName(line, range, app);
-    // Eigener Undo-Schritt VOR dem Umbau: Cmd+Z nimmt nur die Umwandlung zurück,
-    // «Name:» steht danach wieder als Nachricht da, die neue Zeile bleibt.
-    if (name) app._historyPushNow?.();
     const atStart = caretAtBlockStart(range, line);
     const tailRange = document.createRange();
     tailRange.setStart(range.startContainer, range.startOffset);
@@ -95,6 +94,8 @@ export const msgThreadMethods = {
     line.insertAdjacentElement('afterend', next);
     placeCaretIn(next);
     if (name) {
+      // Eigener Undo-Schritt VOR der Umwandlung: Cmd+Z nimmt nur sie zurück,
+      // «Name:» steht danach wieder als Nachricht da, die neue Zeile bleibt.
       app._historyPushNow?.();
       line.replaceChildren(document.createTextNode(name));
       setMsgKind(line, 'name');
@@ -142,11 +143,13 @@ export const msgThreadMethods = {
       const prev = line.previousElementSibling;
       if (!prev || !caretAtBlockStart(range, line)) return false;
       e.preventDefault();
+      this._structStep(app);
       this._mergeBlocksManually(prev, line);
     } else {
       const next = line.nextElementSibling;
       if (!next || !caretAtBlockEnd(range, line)) return false;
       e.preventDefault();
+      this._structStep(app);
       this._mergeBlocksManually(line, next);
     }
     app._markEditDirty?.();

@@ -9,6 +9,9 @@
 //   D  Draft-Flush beim Seitenwechsel (`keepDraft`) und beim Verstecken des Tabs.
 //   G  Fehlerklassen (editor/notebook/save-errors.js).
 //   I  Outbox pusht keinen Draft ohne Basis-Stempel.
+//   E  Editor = Server-Stand räumt einen früher gescheiterten Save; Save-Pfade
+//      räumen nur den gesendeten Draft; Verwerfen-Rückfrage sperrt den Autosave;
+//      ein Netzfehler zählt nicht als Konflikt.
 //
 // Setup wie notebook-autosave.test.mjs: linkedom als DOM, window.__app als Host.
 
@@ -38,6 +41,7 @@ const { classifySaveError, isRetryableSaveError } = await import('../../public/j
 const { notebookEditMethods } = await import('../../public/js/editor/notebook/edit.js');
 const { writeDraft, readDraft } = await import('../../public/js/editor/draft-storage.js');
 const { appOutboxMethods } = await import('../../public/js/app/app-outbox.js');
+const { setDiscardAsking } = await import('../../public/js/editor/notebook/edit/save-guard.js');
 
 function editor(html) {
   const el = document.createElement('div');
@@ -282,4 +286,91 @@ test('Outbox: Draft ohne Basis-Stempel wird nicht gepusht', async () => {
   } finally {
     globalThis.fetch = prevFetch;
   }
+});
+
+// ── E: Fehlerzustand, Draft-Räumen, Verwerfen-Rückfrage ──────────────────────
+
+// linkedoms DOMParser legt Fragmente nicht in <body> (siehe
+// editor-shared-save.test.mjs) — der Dirty-Vergleich braucht hier den Stub.
+class FragmentDOMParser {
+  parseFromString(html) { return parseHTML(`<!doctype html><html><body>${html}</body></html>`).document; }
+}
+
+test('quickSave ohne Änderung räumt Offline-/Konflikt-Zustand und Retry', async () => {
+  store.clear();
+  const prevParser = globalThis.DOMParser;
+  globalThis.DOMParser = FragmentDOMParser;
+  const app = setApp({
+    canEdit: () => true, saveOffline: true, saveFailKind: 'conflict',
+    editConflict: { remoteUpdatedAt: 't9' }, originalHtml: '<p data-bid="aaaaaaaaaaaaaaaa">a</p>',
+  });
+  const ed = mountEditor('<p data-bid="aaaaaaaaaaaaaaaa">a&nbsp;</p>');
+  try {
+    await notebookEditMethods.quickSave.call({ ...notebookEditMethods });
+    assert.equal(app.editDirty, false);
+    assert.equal(app.saveOffline, false);
+    assert.equal(app.saveFailKind, null);
+    assert.equal(app.editConflict, null);
+  } finally {
+    ed.remove();
+    globalThis.DOMParser = prevParser;
+  }
+});
+
+test('_flushDraftSaveNow ohne Änderung räumt den Fehlerzustand, nicht unter offenem Modal', () => {
+  store.clear();
+  const app = setApp({ saveOffline: true, saveFailKind: 'network' });
+  const ed = mountEditor('<p data-bid="aaaaaaaaaaaaaaaa">a</p>');
+  try {
+    app.conflictResolution = { pageId: 5 };
+    notebookEditMethods._flushDraftSaveNow.call({ ...notebookEditMethods });
+    assert.equal(app.saveFailKind, 'network', 'Modal offen → bleibt');
+    app.conflictResolution = null;
+    notebookEditMethods._flushDraftSaveNow.call({ ...notebookEditMethods });
+    assert.equal(app.saveOffline, false);
+    assert.equal(app.saveFailKind, null);
+  } finally {
+    ed.remove();
+  }
+});
+
+test('_clearDraftIfSent: eigener Draft fällt, fremder abweichender bleibt', () => {
+  store.clear();
+  setApp();
+  writeDraft(11, '<p>gesendet plus mehr</p>', '<p>alt</p>', 't0');
+  assert.equal(notebookEditMethods._clearDraftIfSent(11, '<p>gesendet</p>'), true, 'eigener Tab → überholt');
+  assert.equal(readDraft(11), null);
+
+  writeDraft(11, '<p>anderer Tab</p>', '<p>alt</p>', 't0');
+  // Als Draft eines anderen Tabs markieren (localStorage-Ablage ohne IndexedDB).
+  const key = [...store.keys()].find((k) => JSON.parse(store.get(k) || 'null')?.html === '<p>anderer Tab</p>');
+  store.set(key, JSON.stringify({ ...JSON.parse(store.get(key)), tab: 'fremder-tab' }));
+  assert.equal(notebookEditMethods._clearDraftIfSent(11, '<p>gesendet</p>'), false);
+  assert.equal(readDraft(11)?.html, '<p>anderer Tab</p>');
+  assert.equal(notebookEditMethods._clearDraftIfSent(11, '<p>anderer Tab</p>'), true, 'gleicher Stand → geräumt');
+});
+
+test('_canBackgroundSave: Verwerfen-Rückfrage offen → kein Autosave', () => {
+  setApp();
+  let qs = 0;
+  const ctx = { ...notebookEditMethods, quickSave() { qs++; } };
+  setDiscardAsking(true);
+  try {
+    ctx._fireAutosave(5);
+    assert.equal(qs, 0);
+  } finally {
+    setDiscardAsking(false);
+  }
+  ctx._fireAutosave(5);
+  assert.equal(qs, 1);
+});
+
+test('_keepAsDraft({ conflict: false }) setzt keine Konflikt-Klasse', () => {
+  store.clear();
+  const app = setApp({ setStatus() {} });
+  notebookEditMethods._keepAsDraft({ pageId: 5, html: '<p>x</p>', statusKey: null, conflict: false });
+  assert.equal(app.saveOffline, true);
+  assert.equal(app.saveFailKind, null);
+  notebookEditMethods._keepAsDraft({ pageId: 5, html: '<p>x</p>', statusKey: null });
+  assert.equal(app.saveFailKind, 'conflict');
 });

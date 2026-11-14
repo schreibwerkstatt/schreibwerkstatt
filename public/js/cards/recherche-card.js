@@ -16,6 +16,8 @@ import { rechercheInterviewMethods, rechercheInterviewState } from '../book/rech
 import { lsGet, lsSet } from '../safe-storage.js';
 import { pickerPopoverState, pickerPopoverMethods } from '../picker-popover.js';
 import { actionMenuState, actionMenuMethods } from '../action-menu.js';
+import { boardHistoryState } from './board-history.js';
+import { bindBoardHistoryKeys } from './board-history-keys.js';
 
 // Filterleiste + Sortierung pro Buch im localStorage (siehe
 // public/js/filter-persist.js). `filterLinked` ist der aus Kategorie + Ziel
@@ -103,6 +105,9 @@ export function registerRechercheCard() {
 
     // Aktionsmenü eines Fundstücks (action-menu.js), Ziel = { ctx, id }.
     ...actionMenuState(),
+    // Undo/Redo für Liste und Status-Board (Kern board-history.js, Records
+    // book/recherche/history.js).
+    ...boardHistoryState(),
 
     // Native-Fullscreen-Status (gespiegelt vom fullscreenchange-Listener) —
     // mehr Platz fürs Karten-Board. Toggle in rechercheMethods.toggleRechercheFullscreen.
@@ -226,6 +231,16 @@ export function registerRechercheCard() {
         lsSet('recherche.viewMode', v === 'status' ? 'status' : 'list');
         if (v === 'status') this._closeDetailForBoard();
         this._ensureStatusBoard();
+      });
+
+      // Cmd/Ctrl+Z · Cmd/Ctrl+Shift+Z · Ctrl+Y (Guards in board-history-keys.js);
+      // gesperrt, solange der Fokus im offenen Bearbeiten- oder Anlegen-Formular steht.
+      bindBoardHistoryKeys({
+        isVisible: () => !!window.__app?.showRechercheCard,
+        isBlocked: (e) => (this.detailEditing || this.creating) && !!e.target?.closest?.('.research-detail, .recherche-create'),
+        onUndo: () => this.historyUndo(),
+        onRedo: () => this.historyRedo(),
+        signal: this._lifecycle.signal,
       });
 
       // Frage, die vor dem Mount der (lazy) Karte ankam, jetzt abholen.

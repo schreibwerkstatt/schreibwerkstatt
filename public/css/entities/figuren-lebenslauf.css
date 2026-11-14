@@ -160,7 +160,6 @@
 /* ── Schullaufbahn im Steckbrief (partials/figuren-detail-schulweg.html) ──── */
 /* Hier statt in figuren.css (nahe am 600er-Cap): die Schullaufbahn ist die
    Datenquelle der Klassenstufen in den Lebenslauf-Zellen. */
-.figur-schule-vorschlag { margin-top: var(--space-sm); }
 .figur-schule-beleg {
   display: flex;
   align-items: baseline;
@@ -192,9 +191,8 @@
 .figur-schule-angabe--stimmt .figur-schule-urteil { color: var(--color-ok-text); }
 .figur-schule-angabe--widerspruch .figur-schule-urteil { color: var(--color-warn-text); font-weight: 600; }
 /* ── Berufsweg und Hobbys im Steckbrief (partials/figuren-detail-stationen*.html) ── */
-/* Beleg und Vorschlags-Rahmen teilen sich die Schulweg-Klassen oben. */
+/* KI-Vorschläge stehen als .chat-vorschlag (components/chat-vorschlag.css). */
 .figur-station + .figur-station { margin-top: var(--space-xs); }
-.figur-station--vorschlag + .figur-station--vorschlag { margin-top: var(--space-sm); }
 .figur-station-head {
   display: flex;
   flex-wrap: wrap;

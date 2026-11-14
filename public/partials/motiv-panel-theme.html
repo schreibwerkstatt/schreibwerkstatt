@@ -35,24 +35,9 @@
       </div>
 
       <label class="motiv-field-label" x-text="$app.t('motiv.theme.color')"></label>
-      <div class="color-picker">
-        <button type="button" class="color-picker__swatch"
-                :style="{ '--col-accent': 'var(--palette-' + themeSwatchKey(selectedTheme()) + ')' }"
-                @click.stop="toggleThemeColorPicker(selectedTheme().id)"
-                :data-tip="$app.t('motiv.theme.color')" :aria-label="$app.t('motiv.theme.color')"></button>
-        <div class="color-picker__popover" x-show="themeColorPickerId === selectedThemeId" x-cloak
-             @click.outside="themeColorPickerId === selectedThemeId && (themeColorPickerId = null)">
-          <button :aria-pressed="!selectedTheme().farbe" type="button" class="color-picker__opt color-picker__opt--none"
-                  :class="{ 'color-picker__opt--on': !selectedTheme().farbe }"
-                  @click="setThemeColor(selectedTheme(), null)"
-                  :data-tip="$app.t('motiv.theme.colorAuto')" :aria-label="$app.t('motiv.theme.colorAuto')"></button>
-          <template x-for="key in themeColorKeys()" :key="key">
-            <button :aria-pressed="selectedTheme().farbe === key" type="button" class="color-picker__opt"
-                    :style="{ '--col-accent': 'var(--palette-' + key + ')' }"
-                    :class="{ 'color-picker__opt--on': selectedTheme().farbe === key }"
-                    @click="setThemeColor(selectedTheme(), key)" :aria-label="$app.t('plot.palette.' + key)" :data-tip="$app.t('plot.palette.' + key)"></button>
-          </template>
-        </div>
+      <div class="color-picker"
+           x-data="colorPicker({ value: () => selectedTheme()?.farbe, keys: () => themeColorKeys(), pick: (k) => setThemeColor(selectedTheme(), k), swatch: () => selectedTheme() && themeSwatchKey(selectedTheme()), tipKey: 'motiv.theme.color', noneKey: 'motiv.theme.colorAuto' })">
+        <!-- @include color-picker -->
       </div>
 
       <label class="motiv-field-label" x-text="$app.t('motiv.theme.beschreibung')"></label>
@@ -64,7 +49,8 @@
            anlegen-und-umbenennen). Danach loest der Motiv-Editor den Themen-Editor
            ab; ausstehende Themen-Edits committet selectMotif. -->
       <label class="motiv-field-label" x-text="$app.t('motiv.theme.addMotif')"></label>
-      <div class="motiv-theme-addmotif">
+      <div class="motiv-theme-addmotif"
+           @keydown="newThemeMotifName && $editKeys($event, { save: () => addMotifToTheme(), cancel: () => { newThemeMotifName = '' } })">
         <input type="text" class="motiv-inline-input" x-model="newThemeMotifName" data-spellcheck="spelling"
                :placeholder="$app.t('motiv.theme.addMotifHint')"
                @keydown.enter="$enter($event, () => addMotifToTheme())">

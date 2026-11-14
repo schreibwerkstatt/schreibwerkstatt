@@ -1,7 +1,10 @@
 'use strict';
 // POST /research/bulk — Mehrfachauswahl im Recherche-Board: eine Aktion auf
 // viele Fundstuecke in EINER Transaktion (Status setzen, Tag ergaenzen,
-// archivieren/zurueckholen, mit einer Stelle oder Entitaet verknuepfen, loeschen).
+// archivieren/zurueckholen, mit einer Stelle oder Entitaet verknuepfen bzw. die
+// Verknuepfung loesen, loeschen). `unlink` ist das Gegenstueck zu `link` — das
+// Rueckgaengig der Karte (public/js/book/recherche/history.js) loest damit eine
+// Verknuepfung ueber ihr Ziel, ohne die link_id je Fundstueck zu kennen.
 //
 // Body: { book_id, ids: [..], action, status?, tag?, target_kind?, target_id? }
 //
@@ -25,7 +28,7 @@ const router = express.Router();
 const jsonBody = express.json();
 
 const BULK_MAX = 500;
-const ACTIONS = new Set(['status', 'add_tag', 'archive', 'unarchive', 'link', 'delete']);
+const ACTIONS = new Set(['status', 'add_tag', 'archive', 'unarchive', 'link', 'unlink', 'delete']);
 
 function _bookItemIds(bookId, rawIds) {
   const ids = [...new Set((Array.isArray(rawIds) ? rawIds : []).map(toIntId).filter(Boolean))].slice(0, BULK_MAX);
@@ -47,7 +50,7 @@ router.post('/bulk', jsonBody, (req, res) => {
   if (action === 'status' && !RESEARCH_STATUS_SET.has(b.status)) return res.status(400).json({ error_code: 'INVALID_STATUS' });
   const tag = action === 'add_tag' ? normalizeTags([b.tag])[0] : null;
   if (action === 'add_tag' && !tag) return res.status(400).json({ error_code: 'INVALID_TAG' });
-  if (action === 'link' && (!linkTarget(b.target_kind) || !toIntId(b.target_id))) {
+  if ((action === 'link' || action === 'unlink') && (!linkTarget(b.target_kind) || !toIntId(b.target_id))) {
     return res.status(400).json({ error_code: 'INVALID_TARGET' });
   }
 
@@ -83,6 +86,11 @@ router.post('/bulk', jsonBody, (req, res) => {
         // scheitert es fuer alle: ganze Transaktion zurueck.
         if (linkError) throw new Error(linkError);
       }
+    } else if (action === 'unlink') {
+      // Spalte aus dem Deskriptor (feste Whitelist, nie aus dem Body).
+      const col = linkTarget(b.target_kind).col;
+      db.prepare(`DELETE FROM research_item_links WHERE target_kind = ? AND ${col} = ? AND item_id IN (${ph})`)
+        .run(b.target_kind, toIntId(b.target_id), ...ids);
     } else if (action === 'delete') {
       db.prepare(`DELETE FROM research_items WHERE id IN (${ph})`).run(...ids);
     }

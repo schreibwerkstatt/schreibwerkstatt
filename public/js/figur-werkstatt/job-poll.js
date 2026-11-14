@@ -36,7 +36,7 @@ export const JOB_KINDS = {
       fazit: job.result.fazit || '',
       textbelege: job.result.textbelege || [],
     }),
-    onDoneExtra: (self) => { self.selectedKonfliktIdx = null; },
+    onDoneExtra: null,
   },
   // Figuren-Verankerung: BUCHWEIT statt pro Draft — ein Lauf deckt alle Figuren
   // ab (kein callAI, ein Lauf pro Figur wäre eine Job-Flut). Darum `bookScoped`:

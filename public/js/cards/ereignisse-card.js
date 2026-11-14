@@ -22,6 +22,7 @@ import { ereignisEditMethods } from './ereignisse/edit.js';
 import { memoMethods } from './card-memo.js';
 import { activeFilterId, hasId, sameId } from '../chapter-filter.js';
 import { listWindowState, listWindowMethods } from '../list-window.js';
+import { actionMenuState, actionMenuMethods } from '../action-menu.js';
 import { figurAnzeigeName } from '../book/figur-name.js';
 
 export { hasEventYear, formatEventDateParts };
@@ -94,6 +95,9 @@ export function registerEreignisseCard() {
     eventEditMessage: '',
     // Liste rendert schrittweise (list-window.js): bei ~1000 Ereignissen sonst Sekunden Main-Thread.
     ...listWindowState(),
+    // Aktionsmenü je Ereignis (action-menu.js); Ziel = Index in filteredEreignisse()
+    // (der Figuren-Fallback eines unkonsolidierten Buchs trägt keine ID).
+    ...actionMenuState(),
 
     init() {
       this._lifecycle = setupCardLifecycle(this, {
@@ -154,6 +158,7 @@ export function registerEreignisseCard() {
     },
 
     destroy() {
+      this.closeActionMenu();
       this._bandRO?.disconnect();
       this._bandRO = null;
       this._lifecycle?.destroy();
@@ -163,6 +168,17 @@ export function registerEreignisseCard() {
     ...memoMethods,
     ...ereignisEditMethods,
     ...listWindowMethods,
+    ...actionMenuMethods,
+
+    // Im Formular bleibt der native Rechtsklick des Textfelds.
+    eventOpenMenu(domEvent, ev, i) {
+      if (ev.id != null && this.eventEditId === ev.id) return;
+      this.openActionMenu(domEvent, 'ev:' + (ev.id ?? 'i' + i), i);
+    },
+    eventMenuEvent() {
+      const i = this.actionMenuTarget;
+      return i == null ? null : (this.filteredEreignisse()[i] || null);
+    },
 
     // Figuren, die in mindestens einem Ereignis vorkommen (Filter-Optionen).
     ereignisseFigurOptionen() {

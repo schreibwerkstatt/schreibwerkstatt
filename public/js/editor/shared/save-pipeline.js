@@ -6,15 +6,27 @@
 // wird beschrieben, *was* gesendet wird, dort *wie* es übertragen wird
 // (Offline-Queue, Retry, Conflict-Handling).
 
-import { normalizeForCompare } from './html-clean.js';
+import { normalizeForCompare, serverEquivalentForm } from './html-clean.js';
 
 // Vergleicht zwei HTML-Strings nach Anwendung der Vergleichs-Normalform.
 // Liefert true, wenn die normalisierten Fassungen byte-identisch sind —
 // also keine semantische Änderung vorliegt. Bricht früh bei identischer
 // roher Form (häufiger Pfad: User öffnet Edit, klickt Save sofort).
+//
+// Zweite Stufe: was der Server-Cleaner beim Write noch ändert, ohne den Inhalt
+// zu ändern (Rand-NBSP, nackte URL → Link), gleicht `serverEquivalentForm` auf
+// beiden Seiten an — sonst gälte der Editor direkt nach einem Save als
+// geändert. Vorab ein billiger String-Vergleich ohne Leerraum und `<a>`-Tags:
+// weichen schon die ab, ist es eine echte Änderung, und der Pfad parst nichts.
+const COARSE_STRIP_RE = /<\/?a\b[^>]*>|&nbsp;|&#160;|[\s\u00a0]+/gi;
+
 export function isNoChange(currentHtml, originalHtml) {
   if (currentHtml === originalHtml) return true;
-  return currentHtml === normalizeForCompare(originalHtml || '');
+  const original = normalizeForCompare(originalHtml || '');
+  const current = currentHtml || '';
+  if (current === original) return true;
+  if (current.replace(COARSE_STRIP_RE, '') !== original.replace(COARSE_STRIP_RE, '')) return false;
+  return serverEquivalentForm(current) === serverEquivalentForm(original);
 }
 
 // Liefert den PUT-Body für /content/pages/:id. Inputs sind reine Strings/

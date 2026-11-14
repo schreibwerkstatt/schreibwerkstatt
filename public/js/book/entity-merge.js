@@ -1,14 +1,13 @@
 // Zwei Katalog-Einträge derselben Gattung zusammenführen (Figuren · Szenen ·
 // Schauplätze) — der eine Client-Weg für alle Stellen, die eine Quelle in ein Ziel
 // aufgehen lassen: die Danger-Zone der Bucheinstellungen (book-settings/merge.js)
-// und der Zeilen-Knopf «zusammenführen mit…» an Einträgen, die nicht mehr im Text
-// stehen (book/entity-merge-picker.js). Das Redundanz-Radar führt Figuren über
+// und «Zusammenführen mit …» der Katalog-Karten (book/entity-merge-picker.js, aus
+// dem Aktionsmenü jeder Zeile). Das Redundanz-Radar führt Figuren über
 // figur-merge.js zusammen (es kennt nur die Zeilen-ID, nicht die fig_id).
 //
 // Server: POST <url>/merge, Merge-Kern db/entity-merge.js. Die Quelle wird gelöscht,
 // ihre Verknüpfungen wandern aufs Ziel. Figuren und Schauplätze bekommen einen
-// dauerhaften Alias, Szenen nicht. Die Detailansicht der Schauplatz-Karte
-// (book/orte.js#mergeOrt) nutzt denselben Weg.
+// dauerhaften Alias, Szenen nicht.
 
 import { figurMergeMessage } from './figur-merge.js';
 import { sendJson } from '../utils/net.js';

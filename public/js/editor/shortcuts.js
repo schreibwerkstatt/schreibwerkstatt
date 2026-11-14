@@ -182,7 +182,7 @@ export const shortcutsMethods = {
   // Cmd/Ctrl+E → Notebook-Edit-Modus ein-/ausschalten (nur im Notebook, nicht im Focus)
   // Cmd/Ctrl+Shift+Leertaste → Diktat starten/abschliessen (nur Notebook-Edit)
   // Cmd/Ctrl+P → Seitenbaum-Filter
-  // Cmd/Ctrl+K → Command-Palette
+  // Cmd/Ctrl+K → Command-Palette (ausser mit Markierung im Notebook-Text: Link)
   // Greift auch in Inputs/Editor. preventDefault ist Pflicht — der Browser
   // hat eigene Belegungen für genau diese Chords: ⌘E = Suche mit dem
   // Standard-Suchanbieter, ⌘P = Drucken. Zwei Zweige sind bewusst NICHT
@@ -236,6 +236,10 @@ export const shortcutsMethods = {
       event.preventDefault();
       this.focusTreeSearch();
     } else if (key === 'k') {
+      // Mit Markierung im Notebook-Text hat der Editor-Dispatcher den Griff als
+      // «Link einfügen» schon verbraucht (notebook/toolbar/keydown.js#_kbLink,
+      // läuft am document vor diesem Window-Listener) — dann keine Palette.
+      if (event.defaultPrevented) return;
       event.preventDefault();
       window.dispatchEvent(new CustomEvent(EVT.PALETTE_OPEN));
     }

@@ -357,9 +357,19 @@ body.ideen-tree-drop-active .page-tree .tree-drop-target {
    die Zeilenhoehe — der Notiztext daneben steht in --font-size-xs. */
 .idee-board-grip { font-size: var(--font-size-xs); }
 
-.idee-board-text {
+/* Notiztext = Knopf, der das Bearbeiten öffnet (Raster + Liste); Link-Optik
+   über `.text-link`, hier nur der Knopf-Reset auf Fliesstext. */
+.idee-board-text,
+.ideen-list-text-body {
+  display: block;
+  width: 100%;
+  background: none;
+  border: 0;
+  padding: 0;
+  font: inherit;
   font-size: var(--font-size-xs);
   color: var(--color-text);
+  text-align: left;
   overflow-wrap: anywhere;
   white-space: pre-wrap;
 }
@@ -468,9 +478,10 @@ body.ideen-tree-drop-active .page-tree .tree-drop-target {
 .ideen-list .ideen-list-check { width: 2rem; }
 .ideen-list .ideen-list-place { white-space: nowrap; }
 .ideen-list .ideen-list-text { min-width: 16rem; overflow-wrap: anywhere; }
-/* pre-wrap nur am Text selbst: an der Zelle rendert es die Einrueckung des
-   Templates als Leerzeilen mit. */
-.ideen-list-text-body { white-space: pre-wrap; font-size: var(--font-size-xs); }
+/* pre-wrap nur am Text selbst (.ideen-list-text-body, oben mit .idee-board-text):
+   an der Zelle rendert es die Einrueckung des Templates als Leerzeilen mit. */
+/* ⋯-Knopf der Zeile ganz rechts, schmal. */
+.ideen-list .ideen-list-menu { width: 2rem; text-align: right; }
 .ideen-list-book { font-size: var(--font-size-xs); color: var(--color-muted); }
 .ideen-list .ideen-list-age { white-space: nowrap; font-size: var(--font-size-xs); color: var(--color-muted); }
 .ideen-list .ideen-list-age.idee-board-age--stale { color: var(--color-warn-text); }

@@ -1,4 +1,5 @@
-// Rechtsklick-/Long-Press-Menü auf Mindmap-Knoten: Brainstorm/Rename/AddChild/AddSibling/Delete.
+// Rechtsklick-/Long-Press-Menü auf Mindmap-Knoten: Brainstorm/Rename/AddChild/AddSibling/Delete,
+// und auf Einträgen der Figurenliste (⋯, Rechtsklick, Long-Press): Konsistenz-Check, Löschen.
 // Die Aktionen lesen das Ziel synchron vorne (das Menue schliesst nach dem Eintrag und leert es).
 
 export const contextMenuMethods = {
@@ -34,6 +35,31 @@ export const contextMenuMethods = {
   ctxDelete() {
     const id = this.actionMenuTarget;
     this._requestDeleteNode(id);
+  },
+
+  // Figurenliste: Ziel = Draft-ID, aufgelöst über menuDraft() (live).
+  openDraftMenu(ev, d) {
+    if (!d) return;
+    this.openActionMenu(ev, `draft:${d.id}`, d.id);
+  },
+
+  menuDraft() {
+    if (!this.actionMenuKey?.startsWith('draft:')) return null;
+    return this.drafts.find(d => d.id === this.actionMenuTarget) || null;
+  },
+
+  // Der Check läuft auf der ausgewählten Figur: erst wechseln (mit Auto-Save
+  // wie beim Klick in die Liste), dann starten.
+  async draftMenuConsistency() {
+    const id = this.actionMenuTarget;
+    if (!id) return;
+    if (this.selectedDraftId !== id) await this.selectDraft(id);
+    if (this.selectedDraftId === id) this.runConsistency();
+  },
+
+  draftMenuDelete() {
+    const id = this.actionMenuTarget;
+    if (id) this.requestDelete(id);
   },
 
   ctxBrainstorm() {

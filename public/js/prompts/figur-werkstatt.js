@@ -293,14 +293,22 @@ Schwere-Skala:
 
 Wenn alles stimmig ist, gib ein leeres "konflikte"-Array zurück und schreibe ein bestätigendes Fazit.
 
+Änderung ("aktion" + "neu", ein Vorschlag, den die Autorin per Klick in die Mindmap übernehmen kann):
+- "umbenennen": der Knoten, dessen Text WORTGLEICH in "feld" steht, bekommt den neuen Text "neu" (nur, wenn "feld" exakt ein Knotentext der Mindmap oben ist).
+- "ergaenzen": "neu" wird als neuer Unterknoten angelegt — unter dem Knoten, dessen Text wortgleich in "feld" steht, sonst unter der Figur selbst. Für fehlende Aspekte.
+- "keine": der Befund lässt sich nicht als einzelner Knotentext lösen (Umbau, Abwägung, Hinweis); "neu" ist dann null.
+"neu" ist knapp wie ein Mindmap-Knoten (Stichwort oder kurzer Satz), keine Begründung — die gehört in "vorschlag".
+
 Antworte mit diesem JSON-Schema:
 {
   "konflikte": [
-    { "feld": "Name des Mindmap-Knotens oder Aspekts", "schwere": "kritisch|stark|mittel|schwach|niedrig", "problem": "kurze Beschreibung des Konflikts", "vorschlag": "konkreter Lösungsvorschlag" }
+    { "feld": "Name des Mindmap-Knotens oder Aspekts", "schwere": "kritisch|stark|mittel|schwach|niedrig", "problem": "kurze Beschreibung des Konflikts", "vorschlag": "konkreter Lösungsvorschlag", "aktion": "keine|umbenennen|ergaenzen", "neu": "neuer Knotentext oder null" }
   ],
   "fazit": "1–3 Sätze Gesamteinschätzung"
 }`;
 }
+
+export const CONSISTENCY_AKTION_ENUM = ['keine', 'umbenennen', 'ergaenzen'];
 
 export const SCHEMA_CONSISTENCY = _obj({
   konflikte: {
@@ -310,6 +318,11 @@ export const SCHEMA_CONSISTENCY = _obj({
       schwere: { type: 'string', enum: SEVERITY_ENUM },
       problem: _str,
       vorschlag: _str,
+      // Übernehmbare Mindmap-Änderung (Vorschlagskarte der Werkstatt). Zum Knoten
+      // führt `feld` (wortgleicher Knotentext) — die Mindmap geht ohne IDs in den
+      // Prompt, siehe _mindmapText.
+      aktion: { type: 'string', enum: CONSISTENCY_AKTION_ENUM },
+      neu: { type: ['string', 'null'] },
     }),
   },
   fazit: _str,

@@ -50,11 +50,46 @@
       <button type="button" class="btn-compact" x-show="!apEditing"
               :disabled="apGenerating"
               @click="generateAutorenprofil()"
-              x-text="apGenerating ? $app.t('autorenprofil.generating')
-                                   : (apProfile ? $app.t('autorenprofil.regenerate') : $app.t('autorenprofil.generate'))"></button>
+              x-text="apProfile ? $app.t('autorenprofil.regenerate') : $app.t('autorenprofil.generate')"></button>
     </div>
 
     <p class="card-form-error" x-show="apGenError" x-cloak x-text="apGenError"></p>
+
+    <!-- Laufender KI-Lauf: Fortschritt + Abbrechen (wie die Figur-Werkstatt). -->
+    <div class="job-progress" x-show="apGenerating" x-cloak>
+      <div class="progress-bar-wrap" x-show="apGenProgress > 0">
+        <div class="progress-bar" :style="{ '--progress': apGenProgress + '%' }"></div>
+      </div>
+      <div class="job-progress-row">
+        <div class="card-status" x-html="apGenStatus || $app.t('autorenprofil.generating')"></div>
+        <button type="button" @click="cancelAutorenprofil()" x-text="$app.t('common.cancel')"></button>
+      </div>
+    </div>
+
+    <!-- KI-Ergebnis als Vorschlag (DESIGN.md „Chat-Vorschlagskarte"): Wort-Diff
+         gegen den geltenden Text, Übernehmen speichert, Verwerfen schliesst. -->
+    <template x-if="apSuggestion">
+      <div class="chat-vorschlaege chat-vorschlaege--wide">
+        <div class="chat-vorschlag">
+          <div class="chat-vorschlag-header">
+            <span class="chat-vorschlag-label" x-text="$app.t('autorenprofil.suggestion')"></span>
+            <span class="chat-vorschlag-actions">
+              <button type="button" class="chat-vorschlag-btn" :disabled="apSaving" @click="applyApSuggestion()"
+                      x-text="apSaving ? $app.t('common.saving') : $app.t('chat.apply')"></button>
+              <button type="button" class="chat-vorschlag-btn chat-vorschlag-btn--ghost" :disabled="apSaving"
+                      @click="discardApSuggestion()" x-text="$app.t('chat.discard')"></button>
+            </span>
+          </div>
+          <div class="chat-vorschlag-diff">
+            <div class="chat-vorschlag-row">
+              <span class="chat-vorschlag-field" x-text="$app.t('autorenprofil.suggestionField')"></span>
+              <span class="chat-word-diff"><template x-for="(part, pi) in apSuggestion.diff" :key="pi"><span :class="part.c" x-text="part.v"></span></template></span>
+            </div>
+          </div>
+          <div class="chat-vorschlag-note" x-show="apProfile?.edited" x-text="$app.t('autorenprofil.suggestionEditedNote')"></div>
+        </div>
+      </div>
+    </template>
 
     <p class="card-hint" x-show="!apProfile && !apGenerating" x-cloak
        x-text="$app.t('autorenprofil.profile.none')"></p>

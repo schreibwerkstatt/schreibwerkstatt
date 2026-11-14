@@ -3,7 +3,7 @@
 
 import { fetchJson } from '../../utils.js';
 import { sameData } from '../../utils/same-data.js';
-import { patchIdee, patchedIdeeRow, deleteIdee as removeIdee, overlayPendingIdeen } from '../../repo/ideen-queue.js';
+import { patchIdee, patchedIdeeRow, overlayPendingIdeen } from '../../repo/ideen-queue.js';
 import { loadSortable } from '../../lazy-libs.js';
 import {
   patchSortableOnce, revertSortable, boardSortableOpts, endBoardDrag,
@@ -38,7 +38,6 @@ export const ideenBoardActions = {
     return this._memo('columns', [this.stages, this.ideen], () => boardColumns(this.stages, this.ideen));
   },
   isStageActive(s) { return (this.stages || IDEE_STATUSES).includes(s); },
-  statusLabel(s) { return window.__app.t(`ideen.status.${s}`); },
   inactiveStageTip(s) { return window.__app.t('ideenBoard.stageInactive', { status: this.statusLabel(s) }); },
 
   // ── Stufen pro Buch ──────────────────────────────────────────────────────
@@ -73,8 +72,6 @@ export const ideenBoardActions = {
       this.busy = false;
     }
   },
-  ideeStatus(idee) { return ideeStatus(idee); },
-
   // Ein Pass ueber den Bestand fuer alle Bahnen und Spalten (Memo-Pattern:
   // das Template fragt das Board mehrfach pro Render — Bahnen, Karten, Zaehler).
   board() {
@@ -215,6 +212,9 @@ export const ideenBoardActions = {
       if (silent && sameData(ideen, this.ideen) && sameData(normalizeIdeeStages(data?.stages), this.stages)
           && (data?.auto_check !== false) === this.autoCheckOn) return;
       changed = true;
+      // Neuer Stand vom Server (fremde Änderung, Offline-Abgleich, Buchwechsel):
+      // die Records zeigten auf einen Bestand, den es so nicht mehr gibt.
+      this._clearHistory();
       this.ideen = ideen;
       this.stages = normalizeIdeeStages(data?.stages);
       this.autoCheckOn = data?.auto_check !== false;
@@ -252,6 +252,9 @@ export const ideenBoardActions = {
     this.linkPickerTargetId = '';
     this._releasePickerPopover();
     this.selectedIds = [];
+    this._clearHistory();
+    this._historyGroup = null;
+    this.closeActionMenu();
     // Filterfelder bleiben unangetastet: sie gehoeren dem Filter-Scope
     // (filter-persist.js) und werden im Lifecycle VOR dem Nachladen restauriert.
     // Wuerde der Reset sie mitnehmen, holte der Buchwechsel das ungefilterte
@@ -284,7 +287,23 @@ export const ideenBoardActions = {
   async setIdeeStatus(idee, status) {
     if (!idee || !this.isStageActive(status)) return;
     if (ideeStatus(idee) === status) return;
-    await this._patchIdee(idee, { status });
+    const before = this._findIdee(idee.id) || idee;
+    const cellBefore = this._cellIdsOf(before);
+    const row = await this._patchIdee(idee, { status });
+    this._recordIdeeFields(before, row, ['status'], { cellBefore });
+    return row;
+  },
+
+  // IDs der Zelle (Bahn × Stufe) einer Idee in ihrer manuellen Reihenfolge,
+  // ueber den GANZEN Bestand — auch was der Textfilter ausblendet.
+  _cellIdsOf(idee) {
+    if (!idee) return [];
+    const lane = this._laneKeyOf(idee);
+    const status = ideeStatus(idee);
+    return (this.ideen || [])
+      .filter(i => this._laneKeyOf(i) === lane && ideeStatus(i) === status)
+      .sort(compareIdeeManual)
+      .map(i => i.id);
   },
 
   // Optimistisch: die Idee steht sofort am Ziel, bei Fehler wieder am alten
@@ -365,26 +384,15 @@ export const ideenBoardActions = {
     });
   },
 
-  async deleteIdee(idee) {
-    const app = window.__app;
-    if (!await app.appConfirm({
-      message: app.t('ideen.confirmDelete'),
-      confirmLabel: app.t('common.delete'),
-      danger: true,
-    })) return;
-    this.busy = true;
-    try {
-      await removeIdee(idee);
-      this.ideen = this.ideen.filter(i => i.id !== idee.id);
-      this.errorMessage = '';
-      this._memos = {};
-      this._publishCounts();
-    } catch {
-      this.errorMessage = app.t('ideenBoard.error.delete');
-    } finally {
-      this.busy = false;
-    }
+  // Löschen: ideen-methods-shared.js#deleteIdee (geteilt mit der Ideen-Karte).
+  // Der Snapshot geht in die Historie: Undo legt die Idee neu an.
+  _afterIdeenRemoved(rows) {
+    this._memos = {};
+    this._publishCounts();
+    const snaps = (rows || []).map(r => ({ id: r.id, row: { ...r, links: [...(r.links || [])] } }));
+    if (snaps.length) this._recordIdee({ kind: 'delete-ideen', snaps });
   },
+  _ideenErrorKey(kind) { return `ideenBoard.error.${kind}`; },
 
   // ── Drag & Drop ──────────────────────────────────────────────────────────
   // Angebunden werden die Status-Zellen JEDER Bahn. Anders als im Recherche-
@@ -481,6 +489,16 @@ export const ideenBoardActions = {
     if (this.busy || !Number.isFinite(ideeId)) return;
     const idee = (this.ideen || []).find(i => i.id === ideeId);
     if (!idee) return;
+    // Ein Drop = ein Undo-Schritt (Stufe/Ort + Reihenfolge der Zielzelle).
+    this._beginHistoryGroup();
+    try {
+      await this._dropIdee(idee, { ideeId, target, domIds, sameCell, fromLane, toLane, manual, treeLane, evt });
+    } finally {
+      this._endHistoryGroup();
+    }
+  },
+
+  async _dropIdee(idee, { ideeId, target, domIds, sameCell, fromLane, toLane, manual, treeLane, evt }) {
     if (sameCell && treeLane) { await this._reanchorIdee(idee, treeLane); return; }
     if (fromLane !== toLane) {
       if (!this._canDropMove(fromLane, toLane, target, evt.item)) return;
@@ -502,12 +520,7 @@ export const ideenBoardActions = {
   async _saveCellOrder(ideeId, domIds) {
     const idee = (this.ideen || []).find(i => i.id === ideeId);
     if (!idee) return;
-    const lane = this._laneKeyOf(idee);
-    const status = ideeStatus(idee);
-    const cellIds = this.ideen
-      .filter(i => this._laneKeyOf(i) === lane && ideeStatus(i) === status)
-      .sort(compareIdeeManual)
-      .map(i => i.id);
+    const cellIds = this._cellIdsOf(idee);
     const ids = cellOrderAfterDrop(cellIds, domIds, ideeId);
     const prev = new Map(this.ideen.map(i => [i.id, i.sort_order || 0]));
     const rank = new Map(ids.map((id, i) => [id, i + 1]));
@@ -525,6 +538,7 @@ export const ideenBoardActions = {
         body: JSON.stringify({ book_id: Alpine.store('nav').selectedBookId, ids }),
       });
       this.errorMessage = '';
+      this._recordIdee({ kind: 'idee-order', before: cellIds.filter(id => ids.includes(id)), after: ids });
     } catch {
       apply(id => prev.get(id));
       this.errorMessage = window.__app.t('ideenBoard.error.save');

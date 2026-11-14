@@ -99,7 +99,9 @@ export const rechercheStatusMethods = {
     this._replaceItem({ ...prev, status });
     this.busy = true;
     try {
-      this._replaceItem(await this._patchItem(item.id, { status }));
+      const row = await this._patchItem(item.id, { status });
+      this._replaceItem(row);
+      this._recordResearchFields?.(prev, row, ['status']);
       this.errorMessage = '';
     } catch {
       this._replaceItem(prev);

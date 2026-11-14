@@ -55,29 +55,38 @@
       </button>
     </div>
 
-    <!-- Offene KI-Vorschläge: nur mit wörtlichem, geprüftem Beleg; übernimmt erst der Autor. -->
+    <!-- Offene KI-Vorschläge als Vorschlagskarte (DESIGN.md „Chat-Vorschlagskarte"):
+         nur mit wörtlichem, geprüftem Beleg; übernimmt erst der Autor. -->
     <template x-if="figurStationenVorschlaege(f, kind).length">
-      <div class="figur-schule-vorschlag">
+      <div>
         <p class="card-form-section-divider" x-text="$app.t('figuren.stationen.vorschlagTitel')"></p>
-        <template x-for="s in figurStationenVorschlaege(f, kind)" :key="s.id">
-          <div class="figur-station figur-station--vorschlag">
-            <div class="figur-station-head">
-              <span class="figur-station-titel" x-text="figurStationTitel(kind, s)"></span>
-              <span class="figur-station-meta" x-show="figurStationMeta(kind, s)" x-text="figurStationMeta(kind, s)"></span>
+        <div class="chat-vorschlaege chat-vorschlaege--wide">
+          <template x-for="s in figurStationenVorschlaege(f, kind)" :key="s.id">
+            <div class="chat-vorschlag">
+              <div class="chat-vorschlag-header">
+                <span class="chat-vorschlag-label" x-text="$app.t('figuren.stationen.add.' + kind)"></span>
+                <span class="chat-vorschlag-actions">
+                  <button type="button" class="chat-vorschlag-btn" :disabled="figurStationBusy" @click="acceptFigurStation(f, kind, s)" x-text="$app.t('figuren.schule.uebernehmen')"></button>
+                  <button type="button" class="chat-vorschlag-btn chat-vorschlag-btn--ghost" :disabled="figurStationBusy" @click="rejectFigurStation(f, kind, s)" x-text="$app.t('figuren.schule.verwerfen')"></button>
+                </span>
+              </div>
+              <div class="chat-vorschlag-diff">
+                <div class="chat-vorschlag-title" x-text="figurStationTitel(kind, s)"></div>
+                <div class="chat-vorschlag-meta" x-show="figurStationMeta(kind, s)" x-text="figurStationMeta(kind, s)"></div>
+                <div class="chat-vorschlag-row">
+                  <span class="chat-vorschlag-field" x-text="$app.t('figuren.schule.beleg')"></span>
+                  <span>
+                    <q class="chat-vorschlag-quote" x-text="s.zitat"></q>
+                    <template x-if="s.page_id">
+                      <button type="button" class="entity-ref" x-entity-ref="{ type: 'seite', id: s.page_id }"></button>
+                    </template>
+                  </span>
+                </div>
+              </div>
+              <div class="chat-vorschlag-begruendung" x-show="s.begruendung" x-text="s.begruendung"></div>
             </div>
-            <blockquote class="figur-schule-beleg">
-              <span x-text="'«' + s.zitat + '»'"></span>
-              <template x-if="s.page_id">
-                <button type="button" class="entity-ref" x-entity-ref="{ type: 'seite', id: s.page_id }"></button>
-              </template>
-            </blockquote>
-            <p class="card-hint card-hint--sm" x-show="s.begruendung" x-text="s.begruendung"></p>
-            <div class="figur-edit-actions">
-              <button type="button" class="primary" :disabled="figurStationBusy" @click="acceptFigurStation(f, kind, s)" x-text="$app.t('figuren.schule.uebernehmen')"></button>
-              <button type="button" :disabled="figurStationBusy" @click="rejectFigurStation(f, kind, s)" x-text="$app.t('figuren.schule.verwerfen')"></button>
-            </div>
-          </div>
-        </template>
+          </template>
+        </div>
       </div>
     </template>
 

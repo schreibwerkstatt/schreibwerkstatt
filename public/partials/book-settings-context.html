@@ -37,7 +37,7 @@
             <button type="button" class="btn-compact"
                     @click="generateStilprofil()"
                     :disabled="stilprofilGenerating"
-                    x-text="stilprofilGenerating ? $app.t('book.settings.stilprofil.generating') : $app.t('book.settings.stilprofil.generate')"></button>
+                    x-text="$app.t('book.settings.stilprofil.generate')"></button>
             <button type="button" class="btn-compact"
                     @click="adoptAuthorProfile()"
                     :disabled="stilprofilAdopting"
@@ -45,6 +45,38 @@
             <span class="card-form-hint" x-text="(bookSettingsStilprofil || '').length + ' / 6000'"></span>
           </div>
           <p class="card-form-error" x-show="stilprofilError" x-text="stilprofilError" x-cloak></p>
+          <!-- Laufender KI-Lauf: Fortschritt + Abbrechen. -->
+          <div class="job-progress" x-show="stilprofilGenerating" x-cloak>
+            <div class="progress-bar-wrap" x-show="stilprofilProgress > 0">
+              <div class="progress-bar" :style="{ '--progress': stilprofilProgress + '%' }"></div>
+            </div>
+            <div class="job-progress-row">
+              <div class="card-status" x-html="stilprofilStatus || $app.t('book.settings.stilprofil.generating')"></div>
+              <button type="button" @click="cancelStilprofil()" x-text="$app.t('common.cancel')"></button>
+            </div>
+          </div>
+          <!-- KI-Ergebnis als Vorschlag (DESIGN.md „Chat-Vorschlagskarte"): Übernehmen
+               setzt den Feldwert wie eine Handeingabe (ungespeichert), Verwerfen schliesst. -->
+          <template x-if="stilprofilSuggestion">
+            <div class="chat-vorschlaege chat-vorschlaege--wide">
+              <div class="chat-vorschlag">
+                <div class="chat-vorschlag-header">
+                  <span class="chat-vorschlag-label" x-text="$app.t('book.settings.stilprofil.suggestion')"></span>
+                  <span class="chat-vorschlag-actions">
+                    <button type="button" class="chat-vorschlag-btn" @click="applyStilprofilSuggestion()" x-text="$app.t('chat.apply')"></button>
+                    <button type="button" class="chat-vorschlag-btn chat-vorschlag-btn--ghost" @click="discardStilprofilSuggestion()" x-text="$app.t('chat.discard')"></button>
+                  </span>
+                </div>
+                <div class="chat-vorschlag-diff">
+                  <div class="chat-vorschlag-row">
+                    <span class="chat-vorschlag-field" x-text="$app.t('book.settings.stilprofil')"></span>
+                    <span class="chat-word-diff"><template x-for="(part, pi) in stilprofilSuggestion.diff" :key="pi"><span :class="part.c" x-text="part.v"></span></template></span>
+                  </div>
+                </div>
+                <div class="chat-vorschlag-note" x-text="$app.t('book.settings.stilprofil.suggestionNote')"></div>
+              </div>
+            </div>
+          </template>
         </div>
       </div>
 

@@ -272,3 +272,45 @@ test('removeAutoAddedParagraph: null/undefined → kein Throw', () => {
   removeAutoAddedParagraph(null);
   removeAutoAddedParagraph(undefined);
 });
+
+// ────────── isNoChange gegen die Server-Bereinigung ──────────
+// Der Server-Cleaner (lib/html-clean.js#cleanPageHtml) trimmt beim Write
+// Rand-Leerraum/NBSP je Block und macht aus nackten URLs Links. Die gespeicherte
+// Fassung ist danach `originalHtml`, der Live-Editor trägt noch die Roh-Form —
+// beide müssen als „keine Änderung" gelten (sonst Phantom-Draft nach F5,
+// Extra-PUT, falscher Konflikt). Geprüft gegen den echten Server-Cleaner.
+import { createRequire } from 'node:module';
+const { cleanPageHtml } = createRequire(import.meta.url)('../../lib/html-clean.js');
+
+test('isNoChange: Rand-NBSP, den der Server beim Save trimmt, ist keine Änderung', () => {
+  const live = '<p>Hallo Welt&nbsp;</p><p>&nbsp;Zweiter <b>Satz </b></p>';
+  const saved = cleanPageHtml(live);
+  assert.notEqual(saved, live, 'Server-Cleaner ändert die Roh-Form');
+  assert.equal(isNoChange(live, saved), true);
+});
+
+test('isNoChange: nackte URL, die der Server verlinkt, ist keine Änderung', () => {
+  const live = '<p>Siehe https://example.com/a?b=1&amp;c=2. Danach mehr.</p>';
+  const saved = cleanPageHtml(live);
+  assert.match(saved, /<a href=/, 'Server-Cleaner verlinkt die URL');
+  assert.equal(isNoChange(live, saved), true);
+});
+
+test('isNoChange: beides zusammen in einem Nachrichtenverlauf', () => {
+  const live = '<div class="msg-thread"><p class="msg-in">Link: https://x.org&nbsp;</p><p class="msg-out">ok </p></div>';
+  assert.equal(isNoChange(live, cleanPageHtml(live)), true);
+});
+
+test('isNoChange: echte Änderungen bleiben Änderungen', () => {
+  const saved = cleanPageHtml('<p>Hallo Welt https://example.com</p>');
+  assert.equal(isNoChange('<p>Hallo Welt! https://example.com</p>', saved), false);
+  assert.equal(isNoChange('<p>HalloWelt https://example.com</p>', saved), false);
+  assert.equal(isNoChange('<p>Hallo Welt <a href="https://other.org">https://example.com</a></p>', saved), false);
+  // Mittiges NBSP trimmt der Server nicht.
+  assert.equal(isNoChange('<p>Hallo&nbsp;&nbsp;Welt https://example.com</p>', cleanPageHtml('<p>Hallo Welt https://example.com</p>')), false);
+});
+
+test('isNoChange: URL in <pre> verlinkt der Server nicht — ein Link dort ist eine Änderung', () => {
+  const saved = cleanPageHtml('<pre>https://example.com</pre>');
+  assert.equal(isNoChange('<pre><a href="https://example.com">https://example.com</a></pre>', saved), false);
+});

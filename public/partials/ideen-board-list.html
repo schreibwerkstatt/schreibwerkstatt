@@ -41,11 +41,13 @@
         <th x-bind="sortTh('statusRank')" x-text="$app.t('ideenBoard.list.status')"></th>
         <th x-bind="sortTh('created')" x-text="$app.t('ideenBoard.list.created')"></th>
         <th x-bind="sortTh('statusAt')" x-text="$app.t('ideenBoard.list.statusAt')"></th>
+        <th class="ideen-list-menu" :aria-label="$app.t('ideen.actions')"></th>
       </tr>
     </thead>
     <tbody>
       <template x-for="r in sorted" :key="r.id">
-        <tr :class="{ 'is-selected': isSelected(r.id) }" :data-idee-row-id="r.id">
+        <tr :class="{ 'is-selected': isSelected(r.id) }" :data-idee-row-id="r.id"
+            @contextmenu="openIdeeMenu($event, 'list', r.idee)" x-long-press>
           <td class="ideen-list-check">
             <input type="checkbox" :checked="isSelected(r.id)" @change="toggleSelect(r.id)"
                    :aria-label="$app.t('ideenBoard.bulk.select')">
@@ -60,11 +62,32 @@
             <span class="ideen-list-book" x-show="r.idee.page_id == null && r.idee.chapter_id == null" x-text="r.place"></span>
           </td>
           <!-- Einelementiges x-for, damit das geteilte Chip-Fragment seine Idee
-               wie in Karte und Raster als `idee` findet. -->
+               wie in Karte und Raster als `idee` findet. Der Text ist der Knopf
+               zum Bearbeiten — derselbe Inline-Edit wie im Raster
+               (ideen-board/inline-edit.js). -->
           <td class="ideen-list-text">
             <template x-for="idee in [r.idee]" :key="r.id">
               <div>
-                <span class="ideen-list-text-body" x-text="idee.content"></span>
+                <template x-if="editingId !== idee.id">
+                  <button type="button" class="ideen-list-text-body text-link" @click="startEdit(idee)" :disabled="busy"
+                          x-text="idee.content"></button>
+                </template>
+                <template x-if="editingId === idee.id">
+                  <div class="idee-board-edit"
+                       @keydown="$editKeys($event, { save: () => commitEdit(idee), cancel: () => cancelEdit() })"
+                       @click.outside="commitEdit(idee)">
+                    <textarea class="ideen-input idee-edit-input" x-model="editingDraft" rows="2" :disabled="busy"
+                              data-spellcheck="spelling" :aria-label="$app.t('ideen.edit')"
+                              x-init="$nextTick(() => mountEditInput($el))" @input="autosizeEditInput($el)"
+                              @keydown.enter="$enter($event, () => commitEdit(idee), { multiline: true })"></textarea>
+                    <div class="idee-edit-foot">
+                      <div class="idee-edit-actions">
+                        <button type="button" class="btn-compact btn-compact--ghost" @click="cancelEdit()" :disabled="busy" x-text="$app.t('ideen.cancel')"></button>
+                        <button type="button" class="btn-compact primary" @click="saveEdit(idee)" :disabled="busy" x-text="$app.t('ideen.save')"></button>
+                      </div>
+                    </div>
+                  </div>
+                </template>
                 <!-- @include ideen-link-chips -->
               </div>
             </template>
@@ -76,6 +99,14 @@
               :data-tip="isStaleIdee(r.idee) ? staleTip() : null"
               x-text="ideeAgeLabel(r.idee)"></td>
           <td class="ideen-list-age" x-text="statusSinceLabel(r.idee)"></td>
+          <td class="ideen-list-menu">
+            <button type="button" class="icon-btn icon-btn--ghost"
+                    @click="openIdeeMenu($event, 'list', r.idee)" :disabled="busy || editingId === r.id"
+                    :aria-expanded="isActionMenuOpen('list:' + r.id)" aria-haspopup="menu"
+                    :data-tip="$app.t('ideen.actions')" :aria-label="$app.t('ideen.actions')">
+              <svg class="icon" aria-hidden="true"><use href="/icons.svg#more-horizontal"/></svg>
+            </button>
+          </td>
         </tr>
       </template>
     </tbody>

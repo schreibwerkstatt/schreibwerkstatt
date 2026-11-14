@@ -10,6 +10,7 @@
 
 import { findBlock, topLevelBlock, caretAtBlockStart, caretAtBlockEnd } from './dom-block.js';
 import { isTableEl } from '../../table/table-html.js';
+import { isDiagramEl } from '../../diagram/mermaid-html.js';
 
 // Absatz-artige Top-Level-Blöcke, deren Verschmelzung über eine Absatzgrenze
 // hinweg (Backspace am Anfang / Delete am Ende) wir bei weichen Umbrüchen
@@ -85,6 +86,10 @@ export function mergeBlocksManually(receiver, source) {
 //     Tabellen-Dialog (docs/tabellen.md). Der Default löscht sie im Focus-
 //     Editor mit einem Druck, im Notebook zieht er den Absatz-Text aus seinem
 //     `<p>`.
+//   • ein Diagramm (`pre.mermaid`), in beiden Modi, aus demselben Grund: der
+//     Quelltext-Block ist im Editor `contenteditable="false"`, der Default
+//     zöge Absatz-Text in den Quelltext bzw. dessen Code in den Absatz. Der
+//     Löschweg ist der Diagramm-Dialog (docs/diagramme.md).
 //   • mit `atomic: true` (SPA-Fokusmodus) zusätzlich `<figure>` und `<hr>`
 //     (ATOMIC_BLOCK_TAGS): das Bild steht dort nur als gedimmtes Symbol, die
 //     Trennlinie gar nicht sichtbar — ein Druck, der sie löscht, fiele nicht
@@ -98,7 +103,7 @@ export function protectNeighbour(e, root, { atomic = false, onChange } = {}) {
   if (!edge?.outer) return false;
   const { top, back } = edge;
   const n = back ? top.previousElementSibling : top.nextElementSibling;
-  if (!n || !(isTableEl(n) || (atomic && ATOMIC_BLOCK_TAGS.has(n.tagName)))) return false;
+  if (!n || !(isTableEl(n) || isDiagramEl(n) || (atomic && ATOMIC_BLOCK_TAGS.has(n.tagName)))) return false;
   e.preventDefault();
   const other = back ? top.nextElementSibling : top.previousElementSibling;
   const empty = !(top.textContent || '').trim() && !top.querySelector('img, input');

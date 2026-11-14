@@ -10,7 +10,7 @@
 // speichern. Der Notebook-Editor bearbeitet immer nur EINE Seite, darum ein
 // fester Key statt einer pageId — `_stopAutosave` läuft beim Seitenwechsel und
 // kennt die alte Seite dann schon nicht mehr.
-import { AUTOSAVE_KEY, DRAFT_DEBOUNCE_MS, clearDraft, createAutosaveTimers, createTimerBag, editorHost, isNoChange, stripLektoratMarks, writeDraft, writeNormalSnapshot } from './_shared.js';
+import { AUTOSAVE_KEY, DRAFT_DEBOUNCE_MS, createAutosaveTimers, createTimerBag, editorHost, isNoChange, stripLektoratMarks, writeDraft, writeNormalSnapshot } from './_shared.js';
 import { saveRetryDelay, wantsTimedRetry } from '../save-timing.js';
 
 // Lazy, weil dieses Modul keinen eigenen init-Hook hat und der Host beim ersten
@@ -55,9 +55,12 @@ export const autosaveMethods = {
     this._ensureLiveBlockIds();
     const html = stripLektoratMarks(el.innerHTML);
     if (isNoChange(html, app.originalHtml)) {
-      clearDraft(app.currentPage.id);
+      // Editor gleicht dem Server-Stand: Draft und ein früher gescheiterter
+      // Save sind erledigt (Indikator nicht auf «Offline»/«Konflikt» lassen).
+      this._clearDraftIfSent(app.currentPage.id, html);
       app.lastDraftSavedAt = null;
       app.draftPersistFailed = false;
+      this._clearSaveFailureState();
       return;
     }
     const ok = writeDraft(app.currentPage.id, html, app.originalHtml, app.currentPage.updated_at);

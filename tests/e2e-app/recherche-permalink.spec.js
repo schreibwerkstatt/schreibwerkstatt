@@ -31,7 +31,7 @@ test('recherche: Auf- und Zuklappen schreibt den Permalink und nimmt ihn zurück
   const bookId = await selectSeededBook(page);
   const [id] = await seed(page, bookId, ['Permalink-Notiz']);
   const card = await openBoard(page, bookId);
-  const title = card.locator(`.recherche-list [data-research-id="${id}"] .research-item-title`);
+  const title = card.locator(`.recherche-list [data-research-id="${id}"] .row-expand`);
 
   await title.click();
   await expect(page).toHaveURL(new RegExp(`#book/${bookId}/recherche/${id}$`));
@@ -46,7 +46,7 @@ test('recherche: Wechsel ins Status-Board klappt die Zeile zu und kürzt die URL
   const card = await openBoard(page, bookId);
   const row = card.locator(`.recherche-list [data-research-id="${id}"]`);
 
-  await row.locator('.research-item-title').click();
+  await row.locator('.row-expand').click();
   await expect(row.locator('.research-detail')).toBeVisible();
   await expect(page).toHaveURL(new RegExp(`/recherche/${id}$`));
 
@@ -75,7 +75,7 @@ test('recherche: Filter blendet die offene Zeile aus — URL verliert die ID', a
   const card = await openBoard(page, bookId);
   const row = card.locator(`.recherche-list [data-research-id="${id}"]`);
 
-  await row.locator('.research-item-title').click();
+  await row.locator('.row-expand').click();
   await expect(page).toHaveURL(new RegExp(`/recherche/${id}$`));
 
   await card.locator('.filter-search-input--wide').fill('Andere');

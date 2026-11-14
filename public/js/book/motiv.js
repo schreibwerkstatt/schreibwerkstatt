@@ -13,6 +13,7 @@ import { consistencyMethods } from './motiv/consistency.js';
 import { detailMethods } from './motiv/detail.js';
 import { outlineMethods } from './motiv/outline.js';
 import { panelResizeMethods } from './motiv/panel-resize.js';
+import { motivHistoryMethods } from './motiv/history.js';
 
 export const motivMethods = {
   ...lifecycleMethods,
@@ -26,4 +27,5 @@ export const motivMethods = {
   ...detailMethods,
   ...outlineMethods,
   ...panelResizeMethods,
+  ...motivHistoryMethods,
 };

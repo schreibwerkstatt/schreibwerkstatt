@@ -1,0 +1,122 @@
+<!-- Aktionsmenü der Plot-Werkstatt für Beat, Akt und Strang (⋯-Knopf,
+     Rechtsklick/Long-Press): ein einzelnes, aus dem Board heraus teleportiertes
+     .context-menu, Mechanik aus action-menu.js, Ziel { ctx, id } (book/plot/menu.js).
+     Beats, Akt-Köpfe und Lanes sitzen in einem overflow-x/will-change-
+     Scrollcontainer, in dem ein am Trigger verankertes Popover geclippt bzw.
+     eingesperrt würde. Ziel ist die Karten-Wurzel, NICHT <body> — sonst läge das
+     Menü im Native-Vollbild hinter dem ::backdrop (Begründung in
+     plot-anchor-popover.html). Reihenfolge je Kontext: Bearbeiten, fachliche
+     Aktionen, Trenner, Löschen. Fragment-Include aus plot.html (Kartenebene). -->
+<template x-teleport=".card--plot">
+  <div class="context-menu" x-ref="actionMenu" x-bind="actionMenuPanel()" x-cloak>
+    <!-- Beat -->
+    <template x-if="beatMenuBeat()">
+      <div>
+        <div class="context-menu-header" x-text="beatMenuBeat().titel"></div>
+        <button type="button" role="menuitem" class="context-menu-item context-menu-item--icon"
+                @click="startEditBeat(beatMenuBeat())">
+          <svg class="icon" aria-hidden="true"><use href="/icons.svg#pencil"/></svg>
+          <span x-text="$app.t('plot.menu.edit')"></span>
+        </button>
+        <button type="button" role="menuitem" class="context-menu-item context-menu-item--icon"
+                x-show="canMoveBeatStep(beatMenuBeat(), -1)" @click="moveBeatStep(beatMenuBeat(), -1)">
+          <svg class="icon" aria-hidden="true"><use href="/icons.svg#chevron-up"/></svg>
+          <span x-text="$app.t('plot.move.up')"></span>
+        </button>
+        <button type="button" role="menuitem" class="context-menu-item context-menu-item--icon"
+                x-show="canMoveBeatStep(beatMenuBeat(), 1)" @click="moveBeatStep(beatMenuBeat(), 1)">
+          <svg class="icon" aria-hidden="true"><use href="/icons.svg#chevron-down"/></svg>
+          <span x-text="$app.t('plot.move.down')"></span>
+        </button>
+        <button type="button" role="menuitem" class="context-menu-item context-menu-item--icon"
+                @click="toggleBeatVerworfen(beatMenuBeat())">
+          <svg class="icon" aria-hidden="true"><use :href="'/icons.svg#' + (beatMenuBeat().verworfen ? 'rotate-ccw' : 'minus')"/></svg>
+          <span x-text="beatMenuBeat().verworfen ? $app.t('plot.beat.restore') : $app.t('plot.beat.discard')"></span>
+        </button>
+        <div class="context-menu-sep" role="separator"></div>
+        <button type="button" role="menuitem" class="context-menu-item context-menu-item--icon context-menu-item--danger"
+                @click="deleteBeat(beatMenuBeat())">
+          <svg class="icon" aria-hidden="true"><use href="/icons.svg#trash"/></svg>
+          <span x-text="$app.t('plot.beat.delete')"></span>
+        </button>
+      </div>
+    </template>
+
+    <!-- Akt (Spalten-Kopf, flach und Grid) -->
+    <template x-if="actMenuAct()">
+      <div>
+        <div class="context-menu-header" x-text="actMenuAct().name"></div>
+        <button type="button" role="menuitem" class="context-menu-item context-menu-item--icon"
+                @click="startEditAct(actMenuAct())">
+          <svg class="icon" aria-hidden="true"><use href="/icons.svg#pencil"/></svg>
+          <span x-text="$app.t('plot.menu.edit')"></span>
+        </button>
+        <button type="button" role="menuitem" class="context-menu-item context-menu-item--icon"
+                @click="moveAct(actMenuAct(), -1)">
+          <svg class="icon" aria-hidden="true"><use href="/icons.svg#chevron-left"/></svg>
+          <span x-text="$app.t('plot.act.moveLeft')"></span>
+        </button>
+        <button type="button" role="menuitem" class="context-menu-item context-menu-item--icon"
+                @click="moveAct(actMenuAct(), 1)">
+          <svg class="icon" aria-hidden="true"><use href="/icons.svg#chevron-right"/></svg>
+          <span x-text="$app.t('plot.act.moveRight')"></span>
+        </button>
+        <button type="button" role="menuitem" class="context-menu-item context-menu-item--icon"
+                @click="toggleActCollapsed(actMenuAct().id)">
+          <svg class="icon" aria-hidden="true"><use :href="'/icons.svg#' + (isActCollapsed(actMenuAct().id) ? 'chevron-down' : 'chevron-right')"/></svg>
+          <span x-text="isActCollapsed(actMenuAct().id) ? $app.t('plot.act.expand') : $app.t('plot.act.collapse')"></span>
+        </button>
+        <button type="button" role="menuitem" class="context-menu-item context-menu-item--icon"
+                x-show="canBrainstormAct(actMenuAct())" @click="runBrainstorm(actMenuAct())">
+          <svg class="icon" aria-hidden="true"><use href="/icons.svg#zap"/></svg>
+          <span x-text="$app.t('plot.brainstorm.run')"></span>
+        </button>
+        <button type="button" role="menuitem" class="context-menu-item context-menu-item--icon"
+                @click="toggleActArchive(actMenuAct())">
+          <svg class="icon" aria-hidden="true"><use :href="'/icons.svg#' + (actMenuAct().archiviert ? 'rotate-ccw' : 'archive')"/></svg>
+          <span x-text="actMenuAct().archiviert ? $app.t('plot.act.unarchive') : $app.t('plot.act.archive')"></span>
+        </button>
+        <div class="context-menu-sep" role="separator"></div>
+        <button type="button" role="menuitem" class="context-menu-item context-menu-item--icon context-menu-item--danger"
+                @click="deleteAct(actMenuAct())">
+          <svg class="icon" aria-hidden="true"><use href="/icons.svg#trash"/></svg>
+          <span x-text="$app.t('plot.act.delete')"></span>
+        </button>
+      </div>
+    </template>
+
+    <!-- Strang (Lane-Kopf im Grid) -->
+    <template x-if="threadMenuLane()">
+      <div>
+        <div class="context-menu-header" x-text="threadMenuLane().thread.name"></div>
+        <button type="button" role="menuitem" class="context-menu-item context-menu-item--icon"
+                @click="startEditThread(threadMenuLane().thread)">
+          <svg class="icon" aria-hidden="true"><use href="/icons.svg#pencil"/></svg>
+          <span x-text="$app.t('plot.menu.edit')"></span>
+        </button>
+        <button type="button" role="menuitem" class="context-menu-item context-menu-item--icon"
+                @click="moveThread(threadMenuLane().thread, -1)">
+          <svg class="icon" aria-hidden="true"><use href="/icons.svg#chevron-up"/></svg>
+          <span x-text="$app.t('plot.thread.moveUp')"></span>
+        </button>
+        <button type="button" role="menuitem" class="context-menu-item context-menu-item--icon"
+                @click="moveThread(threadMenuLane().thread, 1)">
+          <svg class="icon" aria-hidden="true"><use href="/icons.svg#chevron-down"/></svg>
+          <span x-text="$app.t('plot.thread.moveDown')"></span>
+        </button>
+        <button type="button" role="menuitem" class="context-menu-item context-menu-item--icon"
+                :class="{ 'context-menu-item--on': threadHasOwnActs(threadMenuLane().id) }"
+                @click="threadHasOwnActs(threadMenuLane().id) ? unforkThreadActs(threadMenuLane().thread) : forkThreadActs(threadMenuLane().thread)">
+          <svg class="icon" aria-hidden="true"><use href="/icons.svg#git-fork"/></svg>
+          <span x-text="threadHasOwnActs(threadMenuLane().id) ? $app.t('plot.thread.sharedActs') : $app.t('plot.thread.ownActs')"></span>
+        </button>
+        <div class="context-menu-sep" role="separator"></div>
+        <button type="button" role="menuitem" class="context-menu-item context-menu-item--icon context-menu-item--danger"
+                @click="deleteThread(threadMenuLane().thread)">
+          <svg class="icon" aria-hidden="true"><use href="/icons.svg#trash"/></svg>
+          <span x-text="$app.t('plot.thread.delete')"></span>
+        </button>
+      </div>
+    </template>
+  </div>
+</template>

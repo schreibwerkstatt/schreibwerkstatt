@@ -25,15 +25,14 @@ test('recherche: Auswählen markiert, Tag ergänzen und Archivieren wirken auf g
   const row = (id) => page.locator(`.recherche-list [data-research-id="${id}"]`);
   await expect(row(made.a)).toBeVisible();
 
-  // Ohne Auswahl-Modus keine Checkboxen und keine Leiste.
-  await expect(row(made.a).locator('.research-item-select')).toBeHidden();
+  // Haken stehen immer, die Leiste erscheint erst ab der ersten Markierung.
+  await expect(row(made.a).locator('.research-item-select')).toBeVisible();
   await expect(page.locator('#recherche-card .selection-bar')).toBeHidden();
+  await expect(page.locator('#recherche-card .card-toolbar button', { hasText: 'Auswählen' })).toHaveCount(0);
 
-  await page.locator('#recherche-card .card-toolbar button', { hasText: 'Auswählen' }).click();
-  await expect(page.locator('#recherche-card .selection-bar')).toBeVisible();
   await row(made.a).locator('.research-item-select').check();
-  // Klick auf den Eintrag selbst markiert im Auswahl-Modus, statt ihn aufzuklappen.
-  await row(made.b).locator('.research-item-text, .research-item-head').first().click({ position: { x: 200, y: 5 } });
+  await expect(page.locator('#recherche-card .selection-bar')).toBeVisible();
+  await row(made.b).locator('.research-item-select').check();
   await expect(page.locator('#recherche-card .research-detail')).toHaveCount(0);
   await expect(page.locator('#recherche-card .selection-bar__all')).toContainText('2');
 
@@ -44,14 +43,19 @@ test('recherche: Auswählen markiert, Tag ergänzen und Archivieren wirken auf g
     return rows.map(r => r.id).sort((x, y) => x - y);
   }, { book: bookId })).toEqual([made.a, made.b].sort((x, y) => x - y));
 
-  // Nach der Aktion ist die Auswahl leer — erneut markieren und archivieren.
-  await expect(page.locator('#recherche-card .selection-bar__all')).toContainText('0');
+  // Nach der Aktion ist die Auswahl leer, die Leiste weg — erneut markieren und archivieren.
+  await expect(page.locator('#recherche-card .selection-bar')).toBeHidden();
   await row(made.a).locator('.research-item-select').check();
   await row(made.b).locator('.research-item-select').check();
   await page.locator('#recherche-card .selection-bar button', { hasText: 'Archivieren' }).click();
   await expect(row(made.a)).toHaveCount(0);
   await expect(row(made.b)).toHaveCount(0);
   await expect(row(made.c)).toBeVisible();
+
+  // Die Sammelaktion ist EIN Undo-Schritt: beide kommen zurueck.
+  await page.locator('#recherche-card .card-header [aria-label="Rückgängig"]').click();
+  await expect(row(made.a)).toBeVisible();
+  await expect(row(made.b)).toBeVisible();
 
   // Link-Pruefung und Abgleich stehen im Werkzeug-Menue der Toolbar.
   const tools = page.locator('#recherche-card .card-toolbar [aria-label="Werkzeuge fürs ganze Board"]');
@@ -62,7 +66,7 @@ test('recherche: Auswählen markiert, Tag ergänzen und Archivieren wirken auf g
   await page.keyboard.press('Escape');
 
   // Suche ohne Treffer: eigene Meldung mit «Filter zurücksetzen», kein
-  // Leerzustand des leeren Buchs; Umschalter und «Auswählen» bleiben stehen.
+  // Leerzustand des leeren Buchs; der Umschalter bleibt stehen.
   await page.locator('#recherche-card .filter-bar .filter-search-input').fill('zzzkeintreffer');
   const noMatch = page.locator('#recherche-card .recherche-no-match');
   await expect(noMatch).toBeVisible();

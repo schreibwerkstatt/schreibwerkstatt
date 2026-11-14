@@ -198,7 +198,7 @@ selectionchange / input / scroll / focus → _focusUpdateActive(…)
 4. Race-Check: wer in der Zwischenzeit `enter` gerufen hat → abbrechen, kein Cleanup.
 5. `_focusTeardown`: AbortController killt alle Listener auf einen Schlag, IO/MO disconnect, Timer clear, RAF cancel.
 6. `clearFocusSnapshot`, body-classes weg, `--focus-vh*` löschen, Restklassen + `::highlight(focus-sentence-dim)` defensiv aufräumen.
-7. Wenn `editMode && !editDirty` (sauberer Save): `_stopAutosave` → `_uninstallOnlineRetry` → `_editCounterCtx.teardown` → `editMode=false` + `editSaving=false` + `saveOffline=false`. **Reihenfolge Pflicht.** Synonym-Menü, Synonym-Picker, Figur-Lookup zu.
+7. Wenn `editMode && !editDirty` (sauberer Save): Session-Abbau über `_teardownEditSession()` des Notebooks ([notebook-editor.md](notebook-editor.md) → «`_teardownEditSession`», Reihenfolge = dortige Pflicht-Invariante #11) — gibt auch Edit-Lock, Presence-Heartbeat, Live-Edit-Marker, Reload-Snapshot, Undo-Verlauf und Konflikt-State frei und schliesst Synonym-Menü, Synonym-Picker, Figur-Lookup.
 8. Idempotent: `_syncPageStatsAfterSave` + `updatePageView` — garantiert dass Stats-Badges + View-HTML den aktuellen `originalHtml` reflektieren.
 9. `_focusState='idle'`.
 

@@ -12,7 +12,8 @@
 // obendrauf und bekommt genau diese Zahlen als Vorbefund.
 
 const express = require('express');
-const { getAuthorProfile, saveAuthorProfileText } = require('../db/author-profile');
+const { getAuthorProfile, saveAuthorProfileText, saveAuthorProfileRun } = require('../db/author-profile');
+const { deleteProposal } = require('../db/ai-proposals');
 const { sessionEmail } = require('../lib/acl');
 const logger = require('../logger');
 
@@ -48,19 +49,23 @@ router.get('/', (req, res) => {
 });
 
 /**
- * PUT /me/author-profile — den Profiltext von Hand aendern.
+ * PUT /me/author-profile — den Profiltext speichern. Zwei Formen:
  *
- * Setzt `edited = 1`. Ab da ist der Text der des Autors, und ein neuer KI-Lauf
- * antwortet `409 AUTHOR_PROFILE_EDITED`, statt ihn kommentarlos zu ersetzen —
- * derselbe Respekt vor der Handarbeit wie beim Buch-Stilprofil.
- *
- * Nur der Fliesstext. Die Deutungs-Listen (`konstanten`/`entwicklung`) gehoeren
- * zum Lauf und sind kein Formularfeld: eine von Hand editierte „Entwicklung"
- * waere eine Behauptung ohne Messung dahinter.
+ * - `{ profil_text }`: Handarbeit. Setzt `edited = 1` — die Karte weist den
+ *   Text danach als bearbeitet aus. Nur der Fliesstext: die Deutungs-Listen
+ *   (`konstanten`/`entwicklung`) gehoeren zum Lauf und sind kein Formularfeld,
+ *   eine von Hand editierte „Entwicklung" waere eine Behauptung ohne Messung.
+ * - `{ run: { profil_text, konstanten, entwicklung, basis, basis_sig } }`: ein
+ *   übernommener KI-Vorschlag (Job `autorenprofil` legt ihn nur als offenen
+ *   Vorschlag in `ai_proposals` ab). Setzt `edited = 0`, legt die Basis des
+ *   Laufs ab, gegen die der Text später als veraltet erkannt wird, und erledigt
+ *   den offenen Vorschlag.
  */
 router.put('/', jsonBody, (req, res) => {
   const email = sessionEmail(req);
   if (!email) return res.status(401).json({ error_code: 'NOT_LOGGED_IN' });
+  const run = req.body?.run;
+  if (run && typeof run === 'object') return _saveRun(email, run, res);
   const text = req.body?.profil_text;
   if (typeof text !== 'string') {
     return res.status(400).json({ error_code: 'PROFIL_TEXT_REQUIRED' });
@@ -76,5 +81,28 @@ router.put('/', jsonBody, (req, res) => {
     res.status(500).json({ error_code: 'DB_ERROR' });
   }
 });
+
+function _saveRun(email, run, res) {
+  const text = typeof run.profil_text === 'string' ? run.profil_text.trim() : '';
+  if (!text) return res.status(400).json({ error_code: 'PROFIL_TEXT_REQUIRED' });
+  if (text.length > AUTHOR_PROFILE_MAX) {
+    return res.status(400).json({ error_code: 'AUTHOR_PROFILE_TOO_LONG', max: AUTHOR_PROFILE_MAX });
+  }
+  const list = (v) => (Array.isArray(v) ? v.filter(x => x && typeof x === 'object') : []);
+  try {
+    saveAuthorProfileRun(email, {
+      profilText: text,
+      konstanten: list(run.konstanten),
+      entwicklung: list(run.entwicklung),
+      basis: list(run.basis),
+      basisSig: typeof run.basis_sig === 'string' ? run.basis_sig : null,
+    });
+    deleteProposal('autorenprofil', email, null);
+    res.json({ ok: true });
+  } catch (e) {
+    logger.error('[me/author-profile] Schreibfehler: ' + e.message, { user: email });
+    res.status(500).json({ error_code: 'DB_ERROR' });
+  }
+}
 
 module.exports = router;

@@ -50,7 +50,7 @@ test('steckbrief: Berufsstation anlegen, im Lebenslauf sehen, löschen', async (
   await expect(card).toBeVisible();
   const list = card.locator('.figur-list-section');
   await list.locator('.filter-search-input').fill(NAME);
-  await list.locator('[data-figid]', { hasText: NAME }).click();
+  await list.locator('[data-figid]', { hasText: NAME }).locator('.row-expand').click();
 
   const beruf = card.locator('.figur-stationen').filter({ has: page.locator('.figur-group-title', { hasText: 'Berufsweg' }) });
   await expect(beruf).toBeVisible();

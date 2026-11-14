@@ -1,6 +1,6 @@
 # Buchorganizer
 
-Karte zum Reordern/Verschieben/Umbenennen/Anlegen/Löschen von Kapiteln und Seiten. Direkter Storage-Zugriff via `contentRepo` (kein KI, keine Job-Queue). DnD via SortableJS (lazy). Undo/Redo bis 10 Aktionen.
+Karte zum Reordern/Verschieben/Umbenennen/Anlegen/Löschen von Kapiteln und Seiten. Direkter Storage-Zugriff via `contentRepo` (kein KI, keine Job-Queue). DnD via SortableJS (lazy). Undo/Redo bis 10 Aktionen. Erneuter Toggle bei offener Karte (Seitenbaum-Kopf, Palette) schliesst sie und zeigt die Buchübersicht (`onReclick: 'close'` → `closeCard`) — jede Aktion ist sofort gespeichert, beim Schliessen geht nichts verloren.
 
 Code: [public/js/cards/book-organizer-card.js](../public/js/cards/book-organizer-card.js) (Card-Definition) + [public/js/book-organizer.js](../public/js/book-organizer.js) (Facade) + [public/js/book-organizer/](../public/js/book-organizer/) (Slices).
 

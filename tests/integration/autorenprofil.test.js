@@ -3,8 +3,10 @@
 //
 // Der Job ist der einzige ohne Buchbezug. Geprueft wird genau das, was die
 // Unit-Tests nicht sehen koennen: dass er die BUCH-Stilprofile und die Messung
-// in den Prompt bekommt (und keinen Buchtext), dass er das Ergebnis unter dem
-// KONTO ablegt, und dass er eine Entwicklungs-Behauptung verwirft, die bei nur
+// in den Prompt bekommt (und keinen Buchtext), dass er den geltenden Text nicht
+// anfasst, sein Ergebnis aber als offenen Vorschlag ablegt (überlebt ein Ende,
+// das die Karte nicht sah), dass das übernommene Ergebnis unter dem KONTO landet
+// und Übernehmen/Verwerfen den offenen Vorschlag erledigen, und dass er eine Entwicklungs-Behauptung verwirft, die bei nur
 // einem Buch per Konstruktion unbelegt waere.
 
 const test = require('node:test');
@@ -64,8 +66,47 @@ test('Lauf verdichtet Stilprofile + Messung und legt das Ergebnis am Konto ab', 
   assert.match(call.prompt, /Erstling/);
   assert.match(call.prompt, /Satzlaenge/);
 
-  // Persistiert am Konto, nicht an einem Buch.
+  // Der Lauf fasst den geltenden Text NICHT an — sein Ergebnis ist ein Vorschlag
+  // mit der Basis des Laufs; erst «Übernehmen» (PUT /me/author-profile mit `run`)
+  // legt ihn am Konto ab. Bis dahin steht er als offener Vorschlag bereit.
   const { getAuthorProfileRow, getAuthorProfile } = require('../../db/author-profile');
+  const { getProposal } = require('../../db/ai-proposals');
+  assert.equal(getAuthorProfileRow(AUTOR), null);
+  const offen = getProposal('autorenprofil', AUTOR, null);
+  assert.equal(offen?.payload?.profilText, ANTWORT.autorenprofil, 'offener Vorschlag liegt bereit');
+  assert.equal(offen.payload.basisSig, job.result.basisSig);
+  assert.equal(job.result.profilText, ANTWORT.autorenprofil);
+  assert.ok(Array.isArray(job.result.basis) && job.result.basis.length === 2);
+  assert.equal(job.result.basisSig, getAuthorProfile(AUTOR).basisSig);
+
+  // Übernehmen über die Route: am Konto, nicht an einem Buch, als Lauf (edited = 0).
+  const express = require('express');
+  const app = express();
+  app.use((req, _res, next) => { req.session = { user: { email: AUTOR } }; next(); });
+  app.use('/me/author-profile', require('../../routes/author-profile'));
+  app.use('/ai-proposals', require('../../routes/ai-proposals'));
+  const server = await new Promise((resolve) => { const s = app.listen(0, () => resolve(s)); });
+  const base = () => `http://127.0.0.1:${server.address().port}`;
+  try {
+    const g = await (await fetch(`${base()}/ai-proposals/autorenprofil`)).json();
+    assert.equal(g.proposal?.payload?.profilText, ANTWORT.autorenprofil, 'GET liefert den offenen Vorschlag');
+    const r = await fetch(`${base()}/me/author-profile`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ run: {
+        profil_text: job.result.profilText, konstanten: job.result.konstanten,
+        entwicklung: job.result.entwicklung, basis: job.result.basis, basis_sig: job.result.basisSig,
+      } }),
+    });
+    assert.equal(r.status, 200);
+    assert.equal(getProposal('autorenprofil', AUTOR, null), null, 'Übernehmen erledigt den Vorschlag');
+
+    // Verwerfen: ein neuer offener Vorschlag verschwindet per DELETE.
+    require('../../db/ai-proposals').saveProposal('autorenprofil', AUTOR, null, { profilText: 'x' });
+    const d = await fetch(`${base()}/ai-proposals/autorenprofil`, { method: 'DELETE' });
+    assert.equal(d.status, 200);
+    assert.equal(getProposal('autorenprofil', AUTOR, null), null, 'Verwerfen erledigt den Vorschlag');
+  } finally { await new Promise((resolve) => server.close(resolve)); }
   const row = getAuthorProfileRow(AUTOR);
   assert.equal(row.profil_text, ANTWORT.autorenprofil);
   assert.equal(row.konstanten.length, 1);
@@ -89,7 +130,6 @@ test('Nur ein Buch: eine behauptete Entwicklung wird serverseitig verworfen', as
   // Prompt verlangt das leere Array — und der Server erzwingt es zusaetzlich.
   assert.match(ctx.mockAi.log[0].prompt, /LEERES Array/);
   assert.deepEqual(job.result.entwicklung, []);
-  assert.deepEqual(require('../../db/author-profile').getAuthorProfileRow(AUTOR).entwicklung, []);
   // Die Konstanten bleiben — sie brauchen keinen zweiten Vergleichspunkt.
   assert.equal(job.result.konstanten.length, 1);
 

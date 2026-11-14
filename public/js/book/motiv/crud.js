@@ -1,6 +1,7 @@
 // Motiv-Werkstatt — CRUD für Themen, Motive, Beziehungen und Soll-Verknüpfungen,
 // plus Auswahl + Fundstellen-Laden. Nach jeder Mutation lokalen State + Graph
-// aktualisieren (loadBoard) statt Teil-Patches — die Boards sind klein.
+// aktualisieren (loadBoard) statt Teil-Patches — die Boards sind klein. Jede
+// Mutation legt nach dem Server-OK einen Undo-Record ab (motiv/history.js).
 
 import { fetchJson, sendJson } from '../../utils.js';
 import { isSelectedBook } from '../../cards/book-guard.js';
@@ -21,8 +22,6 @@ export const crudMethods = {
   },
   // Escape im Themen-Editor: analog (verwerfen → sonst zurück zur Themen-Liste).
   async escThemeEdit() {
-    // Offener Farbwähler im Editor: Esc schliesst nur ihn.
-    if (this.themeColorPickerId != null) { this.themeColorPickerId = null; return; }
     if (this.themeDirty()) { this.cancelThemeEdit(); return; }
     await this.deselectTheme();
   },
@@ -43,6 +42,7 @@ export const crudMethods = {
     this.busy = true;
     try {
       const theme = await sendJson('/motifs/themes', 'POST', { book_id: this._bookId(), name });
+      this._pushUndo({ kind: 'create-theme', id: theme?.id });
       this.newThemeName = '';
       await this.loadBoard();
       await this.selectTheme(theme.id);
@@ -52,8 +52,11 @@ export const crudMethods = {
   },
   async deleteTheme(theme) {
     if (!await window.__app.appConfirm({ message: window.__app.t('motiv.theme.confirmDelete', { name: theme.name }), danger: true })) return;
+    // Snapshot VOR dem Request — Undo legt daraus neu an (motiv/history.js).
+    const snapshot = this._themeDeleteSnap(theme);
     try {
       await sendJson(`/motifs/themes/${theme.id}`, 'DELETE');
+      this._pushUndo({ kind: 'delete-theme', id: theme.id, snapshot });
       if (this.selectedThemeId === theme.id) { this.selectedThemeId = null; this._loadThemeBuffer(null); }
       // loadBoard räumt Thema-Auswahlen, die auf das gelöschte Thema zeigen.
       await this.loadBoard();
@@ -80,7 +83,9 @@ export const crudMethods = {
     if (!name) { this.errorMessage = window.__app.t('motiv.error.nameRequired'); return; }
     this.busy = true;
     try {
-      await sendJson(`/motifs/themes/${t.id}`, 'PATCH', { name, beschreibung: this.editThemeBeschreibung || '' });
+      const after = { name, beschreibung: this.editThemeBeschreibung || '' };
+      await sendJson(`/motifs/themes/${t.id}`, 'PATCH', after);
+      this._pushUndo({ kind: 'theme-fields', id: t.id, before: { name: t.name, beschreibung: t.beschreibung || '' }, after });
       await this.loadBoard();
       this._loadThemeBuffer(this.selectedTheme());
       this.errorMessage = '';
@@ -131,17 +136,18 @@ export const crudMethods = {
   themeSwatchKey(theme) {
     return theme.farbe || defaultThemeColorKey(this.themes.findIndex(t => t.id === theme.id));
   },
-  toggleThemeColorPicker(themeId) {
-    this.themeColorPickerId = this.themeColorPickerId === themeId ? null : themeId;
-  },
   // Thema-Farbe setzen (key aus der Palette oder null = Auto nach Index). Optimistisch
   // lokal spiegeln, damit Graph + Swatch ohne Reload umfärben; loadBoard bestätigt.
   async setThemeColor(theme, key) {
-    this.themeColorPickerId = null;
     const farbe = THEME_COLOR_KEYS.includes(key) ? key : null;
     if (farbe === (theme.farbe || null)) return;
+    const before = theme.farbe || null;
     theme.farbe = farbe;
-    try { await sendJson(`/motifs/themes/${theme.id}`, 'PATCH', { farbe }); await this.loadBoard(); }
+    try {
+      await sendJson(`/motifs/themes/${theme.id}`, 'PATCH', { farbe });
+      this._pushUndo({ kind: 'theme-fields', id: theme.id, before: { farbe: before }, after: { farbe } });
+      await this.loadBoard();
+    }
     catch (e) { this.errorMessage = window.__app.t('motiv.error.save'); }
   },
 
@@ -154,6 +160,7 @@ export const crudMethods = {
       const body = { book_id: this._bookId(), name };
       if (this.newMotifThemeId) body.theme_id = Number(this.newMotifThemeId);
       const m = await sendJson('/motifs', 'POST', body);
+      this._pushUndo({ kind: 'create-motif', id: m?.id });
       this.newMotifName = '';
       await this.loadBoard();
       await this.selectMotif(m.id);
@@ -173,6 +180,7 @@ export const crudMethods = {
     this.busy = true;
     try {
       const m = await sendJson('/motifs', 'POST', { book_id: this._bookId(), name, theme_id: theme.id });
+      this._pushUndo({ kind: 'create-motif', id: m?.id });
       this.newThemeMotifName = '';
       await this.loadBoard();
       await this.selectMotif(m.id);
@@ -188,6 +196,7 @@ export const crudMethods = {
       const body = { book_id: this._bookId(), name: window.__app.t('motiv.motif.newName') };
       if (themeId) body.theme_id = Number(themeId);
       const m = await sendJson('/motifs', 'POST', body);
+      this._pushUndo({ kind: 'create-motif', id: m?.id });
       await this.loadBoard();
       await this.selectMotif(m.id);
       this.$nextTick(() => { const el = this.$root?.querySelector('.motiv-name-input'); if (el) { el.focus(); el.select(); } });
@@ -200,6 +209,7 @@ export const crudMethods = {
     this.busy = true;
     try {
       const theme = await sendJson('/motifs/themes', 'POST', { book_id: this._bookId(), name: window.__app.t('motiv.theme.newName') });
+      this._pushUndo({ kind: 'create-theme', id: theme?.id });
       await this.loadBoard();
       await this.selectTheme(theme.id);
       this._focusThemeNameInput();
@@ -264,27 +274,36 @@ export const crudMethods = {
     // nachgeladen, die seither unverändert sind. Wer während des Requests weiter-
     // tippt, behält seine Eingabe (sie ist danach wieder „ungespeichert").
     const sent = this._motifBufferSnapshot();
+    // Undo-Record: vorher/nachher je geänderter Achse (motiv/history.js).
+    const rec = { kind: 'motif-edit', id: m.id, before: {}, after: {} };
     this.busy = true;
     try {
       if (coreDirty) {
-        await sendJson(`/motifs/${m.id}`, 'PATCH', {
+        const core = {
           name,
           theme_id: this.editThemeId ? Number(this.editThemeId) : null,
           beschreibung: this.editBeschreibung || '',
           trigger_terms: triggers,
-        });
+        };
+        await sendJson(`/motifs/${m.id}`, 'PATCH', core);
+        rec.before.core = this._motifCoreSnap(m);
+        rec.after.core = { ...core, trigger_terms: [...triggers] };
         // Neue Trigger wirken erst nach einem Scan — die Fundstellen bieten ihn an.
         if (triggersChanged) this.triggerRescanMotifId = m.id;
       }
       if (linksDirty) {
-        await sendJson(`/motifs/${m.id}/links`, 'PUT', {
+        const links = {
           figures: this.editFigures.map(f => f.figId),
           draftFigures: this.editDraftFigures.map(f => f.id),
           beats: this.editBeats.map(b => b.id),
           chapters: this.editChapters.map(c => c.id),
           pages: this.editPages.map(p => p.id),
-        });
+        };
+        await sendJson(`/motifs/${m.id}/links`, 'PUT', links);
+        rec.before.links = this._motifLinkSnap(m);
+        rec.after.links = links;
       }
+      this._pushUndo(rec);
       await this.loadBoard();
       // Inzwischen ein anderes Motiv gewählt (Buchwechsel, Reset): dessen Puffer
       // gehören nicht diesem Save.
@@ -328,8 +347,10 @@ export const crudMethods = {
   },
   async deleteMotif(motif) {
     if (!await window.__app.appConfirm({ message: window.__app.t('motiv.motif.confirmDelete', { name: motif.name }), danger: true })) return;
+    const snapshot = this._motifDeleteSnap(motif);
     try {
       await sendJson(`/motifs/${motif.id}`, 'DELETE');
+      this._pushUndo({ kind: 'delete-motif', id: motif.id, snapshot });
       if (this.selectedMotifId === motif.id) { this.selectedMotifId = null; this.occurrences = []; }
       await this.loadBoard();
     } catch (e) { this.errorMessage = window.__app.t('motiv.error.save'); }
@@ -355,7 +376,8 @@ export const crudMethods = {
     if (!from || !to || from === to || !typ || this._relationAdding) return;
     this._relationAdding = true;
     try {
-      await sendJson('/motifs/relations', 'POST', { from_motif_id: from, to_motif_id: to, typ });
+      const rel = await sendJson('/motifs/relations', 'POST', { from_motif_id: from, to_motif_id: to, typ });
+      this._pushUndo({ kind: 'create-relation', id: rel?.id });
       this.newRelationTargetId = '';
       this.newRelationTyp = '';
       await this.loadBoard();
@@ -365,7 +387,12 @@ export const crudMethods = {
     } finally { this._relationAdding = false; }
   },
   async deleteRelation(rel) {
-    try { await sendJson(`/motifs/relations/${rel.id}`, 'DELETE'); await this.loadBoard(); }
+    const snapshot = { from: rel.from_motif_id, to: rel.to_motif_id, typ: rel.typ };
+    try {
+      await sendJson(`/motifs/relations/${rel.id}`, 'DELETE');
+      this._pushUndo({ kind: 'delete-relation', id: rel.id, snapshot });
+      await this.loadBoard();
+    }
     catch (e) { this.errorMessage = window.__app.t('motiv.error.save'); }
   },
   // Beziehungen, die das gewählte Motiv berühren (mit Richtungs-/Partner-Label).

@@ -43,6 +43,7 @@ import { figurenRelCheckState, figurenRelCheckMethods } from '../book/figuren-re
 import { figurenSchulwegMethods } from '../book/figuren-schulweg.js';
 import { figurenStationenMethods } from '../book/figuren-stationen.js';
 import { listWindowState, listWindowMethods } from '../list-window.js';
+import { actionMenuState, actionMenuMethods } from '../action-menu.js';
 
 // Felder, die die Listensuche trifft. Der Typ zählt mit seinem angezeigten
 // Label (`typLabel`), nicht dem Persistenz-Key — gesucht wird, was man liest.
@@ -157,6 +158,10 @@ export function registerFigurenCard() {
     figurEditError: '',
     ...entityMergePickerState(),
     figurPflegeMessage: '',
+    // Sammel-Löschen der verwaisten Figuren läuft (sperrt den Knopf).
+    figurStaleDeleting: false,
+    // Aktionsmenü je Figurenzeile (action-menu.js); Ziel = fig_id.
+    ...actionMenuState(),
     // Schullaufbahn (book/figuren-schulweg.js): `figurSchulData` = { schulsystem,
     // wege, geburten, handlungsjahr } aus GET /figures/:id/schulwege; null = nicht
     // geladen. Bearbeiten wie die Katalog-Pflege (eine Figur zur Zeit), dazu der
@@ -398,6 +403,7 @@ export function registerFigurenCard() {
       this._figurenEdges = null;
       this._figurenHash = null;
       this._graphTheme = null;
+      this.closeActionMenu();
     },
 
     // Memo-Helper (cards/card-memo.js); Reset über this._memos = {} (load-Pfad / book:changed).
@@ -486,5 +492,6 @@ export function registerFigurenCard() {
     ...figurenSchulwegMethods,
     ...figurenStationenMethods,
     ...listWindowMethods,
+    ...actionMenuMethods,
   }));
 }

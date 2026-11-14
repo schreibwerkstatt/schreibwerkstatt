@@ -181,7 +181,10 @@ test('onPickerKeydown: behandelt Esc/Pfeile/Enter und laesst alles andere durch'
     onMove: (d) => seen.push(`move${d}`),
     onEnter: () => seen.push('enter'),
   };
-  const ev = (key) => { let prevented = false; return { key, preventDefault: () => { prevented = true; }, get prevented() { return prevented; } }; };
+  const ev = (key, extra = {}) => {
+    let prevented = false;
+    return { key, target: { tagName: 'INPUT' }, ...extra, preventDefault: () => { prevented = true; }, get prevented() { return prevented; } };
+  };
 
   for (const [key, expect] of [['Escape', 'close'], ['ArrowDown', 'move1'], ['ArrowUp', 'move-1'], ['Enter', 'enter']]) {
     const e = ev(key);
@@ -194,4 +197,25 @@ test('onPickerKeydown: behandelt Esc/Pfeile/Enter und laesst alles andere durch'
   const plain = ev('a');
   assert.equal(onPickerKeydown(plain, handlers), false);
   assert.equal(plain.prevented, false);
+
+  // Enter auf einem Knopf im Panel drückt den Knopf, statt den Treffer einzufügen.
+  const onButton = ev('Enter', { target: { tagName: 'BUTTON' } });
+  seen.length = 0;
+  assert.equal(onPickerKeydown(onButton, handlers), false);
+  assert.equal(onButton.prevented, false);
+  assert.deepEqual(seen, []);
+  // Esc schliesst auch vom Knopf aus.
+  assert.equal(onPickerKeydown(ev('Escape', { target: { tagName: 'BUTTON' } }), handlers), true);
+
+  // IME-Komposition: Enter bestätigt die Zeichenwahl, Esc bricht sie ab — beides
+  // gehört dem Feld (Safari meldet die Komposition nur als keyCode 229).
+  seen.length = 0;
+  for (const extra of [{ isComposing: true }, { keyCode: 229 }]) {
+    for (const key of ['Enter', 'Escape']) {
+      const e = ev(key, extra);
+      assert.equal(onPickerKeydown(e, handlers), false, `${key} während IME`);
+      assert.equal(e.prevented, false);
+    }
+  }
+  assert.deepEqual(seen, []);
 });

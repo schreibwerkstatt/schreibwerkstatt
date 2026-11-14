@@ -98,7 +98,8 @@
       </thead>
       <tbody>
         <template x-for="s in sorted" :key="s.id">
-          <tr class="hover-reveal-host" :data-source-id="s.id" :class="{ 'sources-row--archived': s.archived, 'sources-row--active': srcEditingId === s.id }">
+          <tr class="hover-reveal-host" :data-source-id="s.id" :class="{ 'sources-row--archived': s.archived, 'sources-row--active': srcEditingId === s.id }"
+              @contextmenu="srcOpenMenu($event, s)" x-long-press>
             <td class="sources-cell-author" x-text="s._author || '—'"></td>
             <!-- Titel/Container/Archiv-Badge stapeln in einem inneren Wrapper,
                  nicht per display:flex auf der <td>: eine Flex-<td> ist keine
@@ -107,7 +108,8 @@
                  Zelle klebt unabhaengig von der Zeilenhoehe oben. -->
             <td class="sources-cell-title">
               <span class="sources-title-stack">
-                <span class="sources-title internal-link text-link" @click="startEditSource(s)" x-text="s.title || $app.t('sources.untitled')"></span>
+                <button type="button" class="sources-title text-link" @click="startEditSource(s)"
+                        :data-tip="$app.t('sources.edit')" x-text="s.title || $app.t('sources.untitled')"></button>
                 <span class="sources-container" x-show="s.container_title" x-text="s.container_title"></span>
                 <!-- O-Ton: Rolle der sprechenden Person + Autorisierungsstand.
                      Das Warn-Badge greift nur, wenn der O-Ton auch wirklich im
@@ -152,6 +154,9 @@
                         :data-tip="$app.t('sources.remove')" :aria-label="$app.t('sources.remove')"><svg class="icon" aria-hidden="true"><use href="/icons.svg#unlink"/></svg></button>
                 <button type="button" class="icon-btn icon-btn--ghost" x-show="srcIsOwner(s)" @click="deleteSource(s)" :disabled="sourcesBusy"
                         :data-tip="$app.t('sources.deleteFromLibrary')" :aria-label="$app.t('sources.deleteFromLibrary')"><svg class="icon" aria-hidden="true"><use href="/icons.svg#trash"/></svg></button>
+                <button type="button" class="icon-btn icon-btn--ghost" aria-haspopup="menu"
+                        :aria-expanded="isActionMenuOpen('src:' + s.id)" @click="srcOpenMenu($event, s)"
+                        :data-tip="$app.t('common.moreActions')" :aria-label="$app.t('common.moreActions')"><svg class="icon" aria-hidden="true"><use href="/icons.svg#more-horizontal"/></svg></button>
               </span>
             </td>
           </tr>
@@ -159,6 +164,8 @@
       </tbody>
     </table>
   </div>
+
+  <!-- @include sources-menu -->
 
   <!-- Fundstellen der aufgeklappten Quelle. Bewusst unter der Tabelle statt als
        aufklappende Tabellenzeile: eine zweite <tr> pro x-for-Iteration braeuchte

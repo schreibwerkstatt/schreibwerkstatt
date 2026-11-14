@@ -42,18 +42,22 @@ export const ideenBoardAdd = {
 
     this.busy = true;
     let done = 0;
+    const createdIds = [];
     try {
       for (const content of lines) {
         const body = { book_id: bookId, content };
         if (kind !== 'book') body[kind === 'chapter' ? 'chapter_id' : 'page_id'] = anchorId;
         const row = await createIdee(body);
         this.ideen = [row, ...this.ideen];
+        createdIds.push(row.id);
         done++;
       }
       this.errorMessage = '';
     } catch {
       this.errorMessage = app.t('ideenBoard.error.save');
     } finally {
+      // Ein Undo-Schritt fuer die ganze eingefuegte Liste.
+      if (createdIds.length) this._recordIdee({ kind: 'create-ideen', ids: createdIds });
       this.newContent = lines.slice(done).join('\n');
       this._memos = {};
       this._publishCounts();

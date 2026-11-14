@@ -13,6 +13,9 @@ import { contentRepo, editorHost, isNoChange, isPageConflict, stripLektoratMarks
 import { splitEditorAt } from '../split-html.js';
 import { claimSaveOwner, ownsSave } from '../save-owner.js';
 
+const BID_ATTR_RE = /\sdata-bid="[^"]*"/gi;
+const withoutBlockIds = (html) => (html || '').replace(BID_ATTR_RE, '');
+
 export const splitMethods = {
   // `block`: Schnitt vor diesem Block (Slash-Menü, der leere Trigger-Absatz).
   // Ohne `block` gilt der Caret der aktuellen Selection (Toolbar-Knopf).
@@ -41,6 +44,10 @@ export const splitMethods = {
       }
     }
     if (!container) { app.setStatus(t('editor.split.noCaret'), false, 5000); return; }
+    // Block-IDs vor Schnitt und Schnappschuss bereinigen, wie es der quickSave
+    // unten ohnehin tut: setzte erst er die fehlenden `data-bid`, wiche der
+    // Editor vom Schnappschuss ab und die Teilung meldete «geändert».
+    this._ensureLiveBlockIds();
     const parts = splitEditorAt(el, container, offset);
     if (parts.error) {
       app.setStatus(t(parts.error === 'edge' ? 'editor.split.edge' : 'editor.split.noCaret'), false, 5000);
@@ -68,7 +75,9 @@ export const splitMethods = {
         app.setStatus(t('editor.split.saveFirst'), false, 6000);
         return;
       }
-      if (!isNoChange(stripLektoratMarks(el.innerHTML), snapshot)) {
+      // Ohne `data-bid` verglichen: der Save überträgt die Block-IDs der
+      // Server-Antwort per Attribut ins Live-DOM — das ist keine Änderung.
+      if (!isNoChange(withoutBlockIds(stripLektoratMarks(el.innerHTML)), withoutBlockIds(snapshot))) {
         app.setStatus(t('editor.split.changed'), false, 6000);
         return;
       }

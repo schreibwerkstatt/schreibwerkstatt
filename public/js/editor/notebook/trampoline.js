@@ -18,7 +18,8 @@ export const notebookTrampoline = {
   startEdit() { card()?.startEdit(); },
   cancelEdit() { return card()?.cancelEdit(); },
   saveEdit() { return card()?.saveEdit(); },
-  quickSave() { return card()?.quickSave(); },
+  // `reason` (autosave, retry, lektorat …) geht ins PAGE_SAVE-/PAGE_CONFLICT-Log.
+  quickSave(reason) { return card()?.quickSave(reason); },
   insertHorizontalRule() { card()?.insertHorizontalRule(); },
   togglePageEditorFullscreen() { card()?.togglePageEditorFullscreen(); },
   togglePageEditorFitWidth() { card()?.togglePageEditorFitWidth(); },
@@ -36,6 +37,10 @@ export const notebookTrampoline = {
   // `editorToolbarCard`, die keinen Selbst-Ref auslegt — darum per Event
   // (Muster: editor/focus/trampoline.js).
   openCitePicker() { window.dispatchEvent(new CustomEvent(EVT.EDITOR_CITE_OPEN)); },
+  // «Einfügen»-Gruppe der Seiten-Toolbar (Bild, Tabelle, Diagramm, Querverweis,
+  // Trennlinie) am Caret — gleicher Event-Weg wie der Beleg-Picker
+  // (toolbar/panel-methods.js#insertFromPageToolbar).
+  editorInsert(kind) { window.dispatchEvent(new CustomEvent(EVT.EDITOR_INSERT, { detail: { kind } })); },
   notebookUndo() { card()?.notebookUndo(); },
   notebookRedo() { card()?.notebookRedo(); },
   notebookCanUndo() { return !!card()?.notebookCanUndo(); },

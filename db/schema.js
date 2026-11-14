@@ -92,7 +92,6 @@ module.exports = {
   saveBookSettings:        bookSettings.saveBookSettings,
   setBookEntitiesEnabled:  bookSettings.setBookEntitiesEnabled,
   setBookIsFinished:       bookSettings.setBookIsFinished,
-  setBookStilprofil:       bookSettings.setBookStilprofil,
   setBookTextsorte:        bookSettings.setBookTextsorte,
   setBookCitationSettings: bookSettings.setBookCitationSettings,
   setBookXrefSettings:     bookSettings.setBookXrefSettings,

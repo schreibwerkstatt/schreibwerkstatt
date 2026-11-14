@@ -83,40 +83,54 @@
 
   <!-- Fakten nach Kategorie gruppiert -->
   <div x-show="fakten.length > 0" class="weltfakten-groups">
+    <!-- Gruppe = klappbare Sektion (collapsible); der Klappzustand liegt je Kategorie
+         in wfOpenGroups (x-modelable). Bei aktivem Filter öffnet wfGroupForced die
+         Gruppe, damit Treffer sichtbar sind; bei gewählter Kategorie fehlt der Kopf. -->
     <template x-for="g in wfGrouped" :key="g.kategorie">
-      <div class="weltfakten-group">
-        <button type="button" class="collapsible-toggle weltfakten-group-head"
-                x-show="!wfFilters.kategorie"
-                @click="wfToggleGroup(g.kategorie)"
-                :aria-expanded="wfGroupOpen(g.kategorie)"
-                :aria-controls="'wf-group-' + g.kategorie">
-          <span class="history-chevron" :class="{ open: wfGroupOpen(g.kategorie) }" aria-hidden="true"></span>
+      <div class="weltfakten-group" x-data="collapsible(true)" x-modelable="open" x-model="wfOpenGroups[g.kategorie]"
+           x-effect="if (wfGroupForced()) open = true">
+        <button type="button" class="collapsible-toggle weltfakten-group-head" x-bind="trigger"
+                x-show="!wfFilters.kategorie">
+          <span class="history-chevron" x-bind="chevron" aria-hidden="true"></span>
           <span class="tag entity-typ-tag weltfakten-kat-tag truncate">
             <svg class="icon" aria-hidden="true"><use :href="'/icons.svg#' + wfKatIcon(g.kategorie)"/></svg>
             <span x-text="wfKatLabel(g.kategorie)"></span>
           </span>
           <span class="weltfakten-group-count" x-text="g.fakten.length"></span>
         </button>
-        <div x-show="wfGroupOpen(g.kategorie)" x-cloak :id="'wf-group-' + g.kategorie" class="entity-list entity-list--accented">
+        <div x-bind="panel" x-cloak>
+        <div class="entity-list entity-list--accented">
           <template x-for="f in listWindowed(g.fakten, g.kategorie)" :key="f.id">
             <div class="weltfakten-item">
-              <!-- Zeile = Aufklapp-Schalter wie bei Szenen/Figuren; Aktionen im Detail.
-                   Rechtsklick/Long-Press öffnet dieselben Aktionen als Menü. -->
-              <div class="weltfakten-row internal-link"
+              <!-- Zeile (DESIGN.md «Listen-Anriss»): die Aussage ist der Titel-Knopf und
+                   öffnet das Bearbeiten; Chevron-Knopf und übriger Zeilenkörper klappen
+                   das Detail auf/zu. ⋯, Rechtsklick und Long-Press öffnen das Menü. -->
+              <div class="weltfakten-row hover-reveal-host"
                    :class="{ 'weltfakten-row--nosubj': !f.subjekt, 'weltfakten-row--selected': wfOpenId === f.id }"
-                   :aria-expanded="wfOpenId === f.id"
-                   @click="wfToggleOpen(f)"
+                   @click="wfRowBodyClick(f, $event)"
                    @contextmenu="wfOpenMenu($event, f)" x-long-press>
                 <span x-show="f.subjekt" class="weltfakten-subjekt" x-text="f.subjekt"></span>
                 <div class="weltfakten-row-body">
                   <div class="weltfakten-row-line">
-                    <span class="weltfakten-fakt" x-text="f.fakt"></span>
+                    <button type="button" class="weltfakten-fakt text-link" @click.stop="wfOpenEdit(f)"
+                            :data-tip="$app.t('weltfakten.edit.editTitle')" x-text="f.fakt"></button>
                     <span x-show="f.manuell" class="tag weltfakten-manual-tag"
                           :data-tip="$app.t('weltfakten.manualHint')" x-text="$app.t('weltfakten.manual')"></span>
                     <span x-show="f.widerlegt" class="badge badge-warn weltfakten-widerlegt"
                           :data-tip="$app.t('weltfakten.widerlegtTip')" x-text="$app.t('weltfakten.widerlegt')"></span>
                     <template x-if="wfFcFactId === f.id"><span class="spinner" aria-hidden="true"></span></template>
-                    <span class="history-chevron weltfakten-row-chevron" :class="{ open: wfOpenId === f.id }" aria-hidden="true"></span>
+                    <span class="weltfakten-row-actions">
+                      <button type="button" class="icon-btn icon-btn--ghost hover-reveal"
+                              aria-haspopup="menu" :aria-expanded="isActionMenuOpen('fakt:' + f.id)"
+                              @click="wfOpenMenu($event, f)"
+                              :data-tip="$app.t('common.moreActions')" :aria-label="$app.t('common.moreActions')">
+                        <svg class="icon" aria-hidden="true"><use href="/icons.svg#more-horizontal"/></svg>
+                      </button>
+                      <button type="button" class="row-expand" :aria-expanded="wfOpenId === f.id"
+                              @click="wfToggleOpen(f)" :aria-label="$app.t('common.details')">
+                        <span class="history-chevron" :class="{ open: wfOpenId === f.id }" aria-hidden="true"></span>
+                      </button>
+                    </span>
                   </div>
                   <div class="entity-refs weltfakten-row-meta" x-show="f.chapter_refs?.length || f.seite">
                     <template x-for="k in (f.chapter_refs || [])" :key="k.chapter_id">
@@ -136,8 +150,10 @@
                   x-list-more="listWindowMore(g.kategorie)" @click="listWindowMore(g.kategorie)"
                   x-text="$app.t('common.showMore', { n: listWindowRest(g.fakten, g.kategorie) })"></button>
         </div>
+        </div>
       </div>
     </template>
+    <p class="muted-msg muted-msg--sm" x-show="wfFiltered.length === 0" x-text="$app.t('common.noMatch')"></p>
   </div>
 
   <!-- Aktionsmenü eines Fakts (⋯, Rechtsklick, Long-Press): eine Instanz je Karte. -->
@@ -146,15 +162,16 @@
       <template x-if="wfMenuFakt()">
         <div>
           <button type="button" role="menuitem" class="context-menu-item context-menu-item--icon"
+                  :disabled="wfEdit.mode === 'new'"
+                  @click="wfOpenEdit(wfMenuFakt())">
+            <svg class="icon" aria-hidden="true"><use href="/icons.svg#pencil"/></svg>
+            <span x-text="$app.t('common.edit')"></span>
+          </button>
+          <button type="button" role="menuitem" class="context-menu-item context-menu-item--icon"
                   x-show="wfCanRecheck(wfMenuFakt())" :disabled="wfFcRunning"
                   @click="wfFactcheckRun(wfMenuFakt().id)">
             <svg class="icon" aria-hidden="true"><use href="/icons.svg#rotate-cw"/></svg>
             <span x-text="$app.t('weltfakten.factcheck.recheck')"></span>
-          </button>
-          <button type="button" role="menuitem" class="context-menu-item context-menu-item--icon"
-                  @click="wfStartEdit(wfMenuFakt())">
-            <svg class="icon" aria-hidden="true"><use href="/icons.svg#pencil"/></svg>
-            <span x-text="$app.t('weltfakten.edit.editTitle')"></span>
           </button>
           <div class="context-menu-sep" role="separator"></div>
           <button type="button" role="menuitem" class="context-menu-item context-menu-item--icon context-menu-item--danger"

@@ -55,17 +55,23 @@ test('Welt-Fakten: anlegen, als gepflegt markiert, ändern, löschen', async ({ 
   await expect(row).toBeVisible();
   await expect(row.locator('.weltfakten-manual-tag')).toBeVisible();
 
-  // Klick auf die Zeile klappt das Detail mit den Aktionen auf; Rechtsklick öffnet sie als Menü.
+  // Der Chevron klappt das Detail mit den Aktionen auf; Klick auf die Aussage öffnet
+  // direkt das Bearbeiten, ein Klick daneben speichert (Inline-Edit). Rechtsklick
+  // öffnet die Aktionen als Menü.
   const menu = page.locator('.context-menu[x-ref="actionMenu"]:visible');
-  await row.locator('.weltfakten-fakt').click();
+  await row.locator('.row-expand').click();
   const detail = card.locator('.weltfakten-detail');
   await expect(detail).toBeVisible();
-  await detail.getByRole('button', { name: 'Fakt bearbeiten' }).click();
+  await expect(detail.getByRole('button', { name: 'Fakt bearbeiten' })).toBeVisible();
+  await row.locator('.weltfakten-fakt').click();
+  const panelEdit = card.locator('.weltfakten-detail .weltfakten-edit-panel');
+  await expect(panelEdit).toBeVisible();
   const edited = `${fakt} und ein Dach`;
-  await card.locator('.weltfakten-edit-panel textarea').fill(edited);
-  await card.locator('.weltfakten-edit-panel').getByRole('button', { name: 'Speichern' }).click();
+  await panelEdit.locator('textarea').fill(edited);
+  await card.locator('.card-title').click();
   const rowEdited = card.locator('.weltfakten-row', { hasText: edited });
   await expect(rowEdited).toBeVisible();
+  await expect(card.locator('.weltfakten-edit-panel')).toHaveCount(0);
 
   await rowEdited.locator('.weltfakten-fakt').click({ button: 'right' });
   await menu.getByRole('menuitem', { name: 'Löschen' }).click();
@@ -104,7 +110,7 @@ test('Welt-Fakten: Kapitel-Bezug im Formular wird manueller Bezug am Fakt', asyn
   expect(f.chapter_refs[0].manual).toBe(true);
   expect(kapitelName).toContain(f.chapter_refs[0].chapter_name);
 
-  await row.locator('.weltfakten-fakt').click();
+  await row.locator('.row-expand').click();
   await card.locator('.weltfakten-detail').getByRole('button', { name: 'Löschen' }).click();
   await page.locator('#app-confirm-dialog').getByRole('button', { name: 'Löschen' }).click();
   await expect(row).toHaveCount(0);

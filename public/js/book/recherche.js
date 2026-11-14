@@ -14,6 +14,8 @@ import { rechercheMediaMethods } from './recherche/media.js';
 import { rechercheStatusMethods } from './recherche/status.js';
 import { rechercheBulkMethods } from './recherche/bulk.js';
 import { rechercheCrosscheckMethods } from './recherche/crosscheck.js';
+import { rechercheHistoryMethods } from './recherche/history.js';
+import { boardHistoryMethods } from '../cards/board-history.js';
 
 export { rechercheBulkState } from './recherche/bulk.js';
 export { rechercheCrosscheckState } from './recherche/crosscheck.js';
@@ -26,4 +28,7 @@ export const rechercheMethods = {
   ...rechercheStatusMethods,
   ...rechercheBulkMethods,
   ...rechercheCrosscheckMethods,
+  // Undo/Redo: Kern cards/board-history.js, Records recherche/history.js.
+  ...boardHistoryMethods,
+  ...rechercheHistoryMethods,
 };

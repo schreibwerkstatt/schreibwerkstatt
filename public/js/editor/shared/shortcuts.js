@@ -14,6 +14,8 @@
 // preventDefault'en, siehe notebook/toolbar/keydown.js#_kbUndoRedo und
 // focus/listeners.js.
 
+import { applyInlineCommand } from './inline-format.js';
+
 const COMMAND_KEY = {
   bold: 'b',
   italic: 'i',
@@ -37,7 +39,8 @@ export function matchInlineCommand(event, allowedCommands) {
 }
 
 // Hängt einen Keydown-Listener an `container`, der bei passendem Shortcut
-// `document.execCommand(cmd, false, null)` ausführt und das Event
+// den Befehl über `applyInlineCommand` (shared/inline-format.js: execCommand,
+// danach kein Inline-`style` im Text) ausführt und das Event
 // preventDefault'et. Liefert die Teardown-Funktion zurück; optional über
 // `signal` an einen AbortController gehängt — beide Wege funktionieren parallel.
 //
@@ -58,8 +61,9 @@ export function bindInlineFormattingShortcuts(container, { allowedCommands, sign
     // mal als execCommand laufen lässt und die gerade gesetzte Formatierung
     // wieder togglet.
     event.stopPropagation();
-    try { document.execCommand(cmd, false, null); } catch {}
-    if (typeof onCommand === 'function') {
+    let changed = true;
+    try { changed = applyInlineCommand(container, cmd); } catch {}
+    if (changed && typeof onCommand === 'function') {
       try { onCommand(cmd); } catch {}
     }
   };

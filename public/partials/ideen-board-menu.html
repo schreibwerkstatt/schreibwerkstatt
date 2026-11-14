@@ -1,0 +1,50 @@
+<!-- Aktionsmenü einer Idee (Fragment, string-seitiger @include aus
+     ideen-board.html; Scope = ideenBoardCard, Logik ideen-board/menu.js):
+     EINE teleportierte Instanz für Rasterkarte und Listenzeile, geöffnet per
+     ⋯-Knopf, Rechtsklick und Long-Press (action-menu.js). Teleport nach
+     <body>: Raster und Liste scrollen bzw. klippen; im Vollbild hängt
+     action-menu.js das Menü zur Anzeigezeit in den sichtbaren Host. Picker, die
+     aus dem Menü öffnen (Verschieben, Verknüpfen), verankern an
+     `actionMenuAnchor()`. -->
+<template x-teleport="body">
+  <div class="context-menu" x-ref="actionMenu" x-bind="actionMenuPanel()" x-cloak>
+    <template x-for="idee in menuIdeen()" :key="actionMenuKey">
+      <div>
+        <button type="button" role="menuitem" class="context-menu-item context-menu-item--icon"
+                @click="startEdit(idee)" :disabled="busy">
+          <svg class="icon" aria-hidden="true"><use href="/icons.svg#pencil"/></svg>
+          <span x-text="$app.t('ideen.edit')"></span>
+        </button>
+        <div class="context-menu-sep" role="separator"></div>
+        <!-- Stufen: jede aktive ausser der aktuellen — derselbe Schreibpfad wie
+             Drag und Stufen-Knöpfe (setIdeeStatus). -->
+        <template x-for="target in statuses()" :key="target">
+          <button type="button" role="menuitem" class="context-menu-item context-menu-item--icon"
+                  x-show="ideeStatus(idee) !== target && isStageActive(target)"
+                  @click="setIdeeStatus(idee, target)" :disabled="busy">
+            <svg class="icon" aria-hidden="true"><use :href="menuStatusIcon(target)"/></svg>
+            <span x-text="$app.t('ideen.setStatus', { status: statusLabel(target) })"></span>
+          </button>
+        </template>
+        <div class="context-menu-sep" role="separator"></div>
+        <!-- Verschieben/Zuordnen nur, solange die Idee offen ist (IDEE_CLOSED). -->
+        <button type="button" role="menuitem" class="context-menu-item context-menu-item--icon"
+                x-show="canMove(idee)" @click="startAssign(actionMenuAnchor(), idee)" :disabled="busy">
+          <svg class="icon" aria-hidden="true"><use href="/icons.svg#move-horizontal"/></svg>
+          <span x-text="moveTip(idee)"></span>
+        </button>
+        <button type="button" role="menuitem" class="context-menu-item context-menu-item--icon"
+                @click="openLinkPicker(actionMenuAnchor(), idee)" :disabled="busy">
+          <svg class="icon" aria-hidden="true"><use href="/icons.svg#external-link"/></svg>
+          <span x-text="$app.t('ideen.link.add')"></span>
+        </button>
+        <div class="context-menu-sep" role="separator"></div>
+        <button type="button" role="menuitem" class="context-menu-item context-menu-item--icon context-menu-item--danger"
+                @click="deleteIdee(idee)" :disabled="busy">
+          <svg class="icon" aria-hidden="true"><use href="/icons.svg#trash"/></svg>
+          <span x-text="$app.t('ideen.delete')"></span>
+        </button>
+      </div>
+    </template>
+  </div>
+</template>

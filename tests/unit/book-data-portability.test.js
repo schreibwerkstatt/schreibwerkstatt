@@ -68,6 +68,7 @@ const NICHT_IM_BUNDLE = {
   book_lexicon: 'cache', chapter_lexicon: 'cache', page_stats: 'cache', xref_anchors: 'cache',
   xref_links: 'cache', source_citations: 'cache', figure_idiolect: 'cache',
   idee_check_hints: 'cache', idee_check_baselines: 'cache',
+  ai_proposals: 'cache', // offener KI-Vorschlag (Stilprofil), per Lauf neu erzeugbar
 
   ai_cost_ledger: 'protokoll', usage_events: 'protokoll', job_runs: 'protokoll', lektorat_time: 'protokoll',
   stt_time: 'protokoll', user_page_usage: 'protokoll', page_deletions: 'protokoll',

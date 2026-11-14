@@ -105,21 +105,25 @@
               x-text="$app.t('szenen.deleteAllStale')"></button>
     </div>
     <!-- Kompakte Szenen-Liste -->
+    <p class="muted-msg muted-msg--sm" x-show="szenenFiltered.length === 0" x-text="$app.t('common.noMatch')"></p>
     <template x-if="viewMode === 'list'">
     <div class="entity-list entity-list--accented">
       <template x-for="s in listWindowed(szenenFiltered)" :key="s.id">
         <div>
-          <div class="entity-row internal-link"
+          <!-- Zeile (DESIGN.md «Listen-Anriss»): Titel-Knopf klappt auf (read-only),
+               übriger Zeilenkörper per Maus; ⋯, Rechtsklick, Long-Press → szenen-menu.html. -->
+          <div class="entity-row hover-reveal-host"
                :data-szeneid="s.id"
-               :aria-expanded="$store.catalogUi.selectedSzeneId === s.id"
                :class="{ 'entity-row--selected': $store.catalogUi.selectedSzeneId === s.id, 'entity-row--stale': s.stale }"
-               @click="$store.catalogUi.selectedSzeneId = $store.catalogUi.selectedSzeneId === s.id ? null : s.id">
+               @click="szeneRowBodyClick(s, $event)"
+               @contextmenu="szeneOpenMenu($event, s)" x-long-press>
             <span class="severity-tag"
                   :class="'severity-tag--' + wertungOf(s)"
                   x-text="$app.t('szenen.rating.' + wertungOf(s))"></span>
             <!-- Titel + Anriss des Kommentars (Begründung/Verbesserungshinweis); voll im Detail. -->
             <span class="entity-row-main">
-              <span class="entity-row-title" x-text="s.titel"></span>
+              <span class="entity-row-title"><button type="button" class="entity-row-title-btn text-link" @click.stop="szeneToggleOpen(s)"
+                      :aria-expanded="$store.catalogUi.selectedSzeneId === s.id" x-text="s.titel"></button></span>
               <span class="szenen-row-snippet truncate" x-show="s.kommentar && $store.catalogUi.selectedSzeneId !== s.id" x-text="s.kommentar"></span>
             </span>
             <span x-show="s.stale" class="tag tag--stale" :data-tip="$app.t('szenen.staleHint')" x-text="$app.t('szenen.staleBadge')"></span>
@@ -146,6 +150,12 @@
                 <button type="button" class="entity-ref" x-entity-ref="{ type: 'seite', id: s.page_id, name: s.seite, kapitel: s.kapitel }"></button>
               </template>
             </span>
+            <button type="button" class="icon-btn icon-btn--ghost entity-row-action hover-reveal"
+                    aria-haspopup="menu" :aria-expanded="isActionMenuOpen('szene:' + s.id)"
+                    @click="szeneOpenMenu($event, s)"
+                    :data-tip="$app.t('common.moreActions')" :aria-label="$app.t('common.moreActions')">
+              <svg class="icon" aria-hidden="true"><use href="/icons.svg#more-horizontal"/></svg>
+            </button>
             <span class="history-chevron" :class="{ open: $store.catalogUi.selectedSzeneId === s.id }" aria-hidden="true"></span>
           </div>
           <!-- x-if, nicht x-show: das Detail (Lektorat-Befunde, Figuren-/Ort-Chips)
@@ -212,4 +222,5 @@
     <!-- @include szenen-grid -->
   </div>
   <!-- @include entity-merge-picker -->
+  <!-- @include szenen-menu -->
 </div>

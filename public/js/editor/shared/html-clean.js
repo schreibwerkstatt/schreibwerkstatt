@@ -138,3 +138,60 @@ export function normalizeForCompare(html) {
   normalizeEditorBlocks(wrap);
   return stripLektoratMarks(wrap.innerHTML);
 }
+
+
+// Vergleichsform für das, was der Server-Cleaner beim Write zusätzlich ändert,
+// ohne dass sich der Inhalt ändert (lib/html-clean.js#cleanPageHtml):
+//  - `stripBlockEdgeNbsp`: Rand-Leerraum inkl. NBSP im ersten/letzten
+//    Text-Node jedes Blocks fällt weg,
+//  - `linkifyBareUrls`: eine nackte URL wird `<a href="URL">URL</a>`.
+// Nur für den Vergleich, nie für die Persistenz: statt hier nachzulinken,
+// packt die Form solche Auto-Links auf BEIDEN Seiten aus (ausserhalb von
+// `pre`/`code`, wo auch der Server nicht linkt) — ein so getippter Link wird
+// beim Speichern ohnehin wieder einer. Ohne diese Stufe gälte der Editor direkt
+// nach einem Save als geändert, sobald ein Absatz auf ein Leerzeichen endet
+// oder eine URL trägt (Phantom-Draft nach F5, Extra-PUT, falscher Konflikt).
+// Selektor und Rand-Suche spiegeln den Server (`_EDGE_TRIM_BLOCKS`,
+// `_edgeTextNodeIn`), iterativ wie dort.
+const EDGE_TRIM_BLOCKS = 'p,h1,h2,h3,h4,h5,h6,li,blockquote,pre,div,td,th,dd,dt,figcaption';
+
+function edgeTextNodeIn(el, first) {
+  const down = first ? 'firstChild' : 'lastChild';
+  const side = first ? 'nextSibling' : 'previousSibling';
+  let n = el[down];
+  while (n) {
+    if (n.nodeType === 3) return n;
+    if (n.nodeType === 1 && n[down]) { n = n[down]; continue; }
+    while (n && n !== el && !n[side]) n = n.parentNode;
+    if (!n || n === el) return null;
+    n = n[side];
+  }
+  return null;
+}
+
+function isInsidePreOrCode(node) {
+  for (let p = node.parentNode; p && p.nodeType === 1; p = p.parentNode) {
+    if (p.tagName === 'PRE' || p.tagName === 'CODE') return true;
+  }
+  return false;
+}
+
+export function serverEquivalentForm(html) {
+  if (!html) return '';
+  const wrap = parseFragment(html);
+  if (!wrap) return '';
+  for (const a of Array.from(wrap.querySelectorAll('a'))) {
+    if (a.attributes.length !== 1 || !a.hasAttribute('href')) continue;
+    if (a.getAttribute('href') !== a.textContent || a.firstElementChild) continue;
+    if (isInsidePreOrCode(a)) continue;
+    a.replaceWith(...a.childNodes);
+  }
+  wrap.normalize();
+  for (const el of wrap.querySelectorAll(EDGE_TRIM_BLOCKS)) {
+    const last = edgeTextNodeIn(el, false);
+    if (last) last.textContent = last.textContent.replace(/[\s ]+$/u, '');
+    const first = edgeTextNodeIn(el, true);
+    if (first) first.textContent = first.textContent.replace(/^[\s ]+/u, '');
+  }
+  return wrap.innerHTML;
+}

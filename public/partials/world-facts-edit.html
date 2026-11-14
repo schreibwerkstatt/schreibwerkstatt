@@ -1,7 +1,11 @@
 <!-- Pflegeformular eines Welt-Fakts (anlegen + bearbeiten). Fragment-Include in
      world-facts.html — lebt im Scope von `worldFactsCard`, State `wfEdit`.
-     Gespeicherte Fakten sind «gepflegt»: die nächste Komplettanalyse lässt sie stehen. -->
-<div class="card-edit-panel weltfakten-edit-panel" @keydown="$editKeys($event, { save: () => wfSaveEdit(), cancel: () => wfCancelEdit() })">
+     Gespeicherte Fakten sind «gepflegt»: die nächste Komplettanalyse lässt sie stehen.
+     Bearbeiten ist Inline-Edit: Klick daneben committet (wfCommitEdit); die
+     Neuanlage über der Liste speichert nur per Knopf/Cmd+S. -->
+<div class="card-edit-panel weltfakten-edit-panel"
+     @click.outside="wfEdit.mode === 'edit' && wfCommitEdit($event)"
+     @keydown="$editKeys($event, { save: () => wfSaveEdit(), cancel: () => wfCancelEdit() })">
   <div class="card-section-head">
     <span class="card-section-title"
           x-text="$app.t(wfEdit.mode === 'new' ? 'weltfakten.edit.newTitle' : 'weltfakten.edit.editTitle')"></span>

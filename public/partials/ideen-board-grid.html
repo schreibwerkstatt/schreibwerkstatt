@@ -106,7 +106,8 @@
               <template x-for="idee in (lane.collapsed ? [] : lane.columns[st])" :key="idee.id">
                 <div class="idee-board-card hover-reveal-host"
                      :class="'idee-board-card--' + st + (editingId === idee.id ? ' idee-board-card--editing' : '')"
-                     :data-idee-card-id="idee.id">
+                     :data-idee-card-id="idee.id"
+                     @contextmenu="openIdeeMenu($event, 'board', idee)" x-long-press>
                   <!-- Kartenaktionen schweben oben rechts und erscheinen erst auf
                        Zuwendung: in der Zeile der Stufen-Knoepfe nehmen sie so viel
                        Breite, dass deren drei Wortmarken dreizeilig umbrechen. -->
@@ -131,6 +132,14 @@
                             :data-tip="$app.t('ideen.delete')" :aria-label="$app.t('ideen.delete')">
                       <svg class="icon" aria-hidden="true"><use href="/icons.svg#trash"/></svg>
                     </button>
+                    <!-- Aktionsmenü (ideen-board-menu.html): alle Aktionen, auch per
+                         Rechtsklick/Long-Press auf die Karte. -->
+                    <button type="button" class="icon-btn icon-btn--ghost"
+                            @click.stop="openIdeeMenu($event, 'board', idee)" :disabled="busy"
+                            :aria-expanded="isActionMenuOpen('board:' + idee.id)" aria-haspopup="menu"
+                            :data-tip="$app.t('ideen.actions')" :aria-label="$app.t('ideen.actions')">
+                      <svg class="icon" aria-hidden="true"><use href="/icons.svg#more-horizontal"/></svg>
+                    </button>
                   </div>
                   <!-- Griff neben dem Text statt in einer eigenen Kopfzeile: er ist
                        das Einzige, was auf der Karte dauerhaft sichtbar waere, und
@@ -142,8 +151,11 @@
                       <svg class="icon" aria-hidden="true"><use href="/icons.svg#grip-vertical"/></svg>
                     </span>
                     <div class="idee-board-card-main">
+                      <!-- Text = Knopf, der das Bearbeiten öffnet (Stift oben bleibt
+                           als Abkürzung). -->
                       <template x-if="editingId !== idee.id">
-                        <div class="idee-board-text" x-text="idee.content"></div>
+                        <button type="button" class="idee-board-text text-link" @click="startEdit(idee)" :disabled="busy"
+                                x-text="idee.content"></button>
                       </template>
                       <!-- Alter nur an offenen Pendenzen: dort ist es eine Frage
                            („liegt das schon lange?"), an erledigten Geschichte. -->

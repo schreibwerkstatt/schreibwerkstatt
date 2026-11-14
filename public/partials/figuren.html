@@ -153,22 +153,27 @@
           x-effect="options = ['name', 'typ', 'haeufigkeit'].map(k => ({ value: k, label: $app.t('figuren.sort.' + k) }))"></div>
       <span class="filter-count" x-text="filteredFiguren().length + ' / ' + $store.catalog.figuren.length"></span>
     </div>
-    <p class="muted-msg muted-msg--sm" x-show="filteredFiguren().length === 0" x-text="$app.t('figuren.noMatch')"></p>
+    <!-- Verwaiste Figuren: Hinweis + Sammel-Löschen (Einzel-Löschen an der Zeile) -->
+    <div x-show="figurStaleCount() > 0" class="stale-cleanup-row">
+      <span class="card-hint" :data-tip="$app.t('figuren.staleHint')" x-text="$app.tn('figuren.staleSummary', figurStaleCount())"></span>
+      <button type="button" class="btn-compact danger" :disabled="figurStaleDeleting" @click="deleteAllStaleFiguren()"
+              x-text="$app.t('figuren.deleteAllStale')"></button>
+    </div>
+    <p class="muted-msg muted-msg--sm" x-show="filteredFiguren().length === 0" x-text="$app.t('common.noMatch')"></p>
 
     <div class="entity-list entity-list--accented">
     <template x-for="f in listWindowed(filteredFiguren())" :key="f.id">
       <div>
-        <!-- Zeile = Aufklapp-Schalter. Kein <button>, weil sie selbst Buttons
-             (Löschen, Kapitel-Referenz) enthält; darum role/tabindex/aria-expanded
-             und Enter/Space nur auf der Zeile selbst (.self), nicht aus den Kindern. -->
-        <div class="entity-row" :class="{ 'entity-row--stale': f.stale, 'entity-row--selected': $store.catalogUi.selectedFigurId === f.id }" :data-figid="f.id"
-             role="button" tabindex="0"
-             :aria-expanded="$store.catalogUi.selectedFigurId === f.id"
-             @click="$store.catalogUi.selectedFigurId = $store.catalogUi.selectedFigurId === f.id ? null : f.id;"
-             @keydown.enter.self.prevent="$store.catalogUi.selectedFigurId = $store.catalogUi.selectedFigurId === f.id ? null : f.id;"
-             @keydown.space.self.prevent="$store.catalogUi.selectedFigurId = $store.catalogUi.selectedFigurId === f.id ? null : f.id;">
+        <!-- Zeile (DESIGN.md «Listen-Anriss»): Titel-Knopf öffnet das Bearbeiten,
+             Chevron-Knopf und übriger Zeilenkörper klappen auf/zu (Maus-Komfort,
+             kein .internal-link — die Zeile trägt eigene Knöpfe). ⋯, Rechtsklick
+             und Long-Press öffnen das Aktionsmenü (figuren-menu.html). -->
+        <div class="entity-row hover-reveal-host" :class="{ 'entity-row--stale': f.stale, 'entity-row--selected': $store.catalogUi.selectedFigurId === f.id }" :data-figid="f.id"
+             @click="figurRowBodyClick(f, $event)"
+             @contextmenu="figurOpenMenu($event, f)" x-long-press>
           <span class="figur-typ-dot" :class="'figur-typ-dot--' + (f.typ || 'unknown')"></span>
-          <span class="entity-row-title" x-text="f.name"></span>
+          <span class="entity-row-title"><button type="button" class="entity-row-title-btn text-link" @click.stop="openFigurEdit(f)"
+                  :data-tip="$app.t('figuren.edit.open')" x-text="f.name"></button></span>
           <span x-show="f.stale" class="tag tag--stale" :data-tip="$app.t('figuren.staleHint')" x-text="$app.t('figuren.staleBadge')"></span>
           <span x-show="f.manually_edited" class="tag tag--curated" :data-tip="$app.t('figuren.curatedHint')" x-text="$app.t('figuren.curatedBadge')"></span>
           <template x-if="f.stale">
@@ -196,7 +201,17 @@
               </template>
             </span>
           </template>
-          <span class="history-chevron" :class="{ open: $store.catalogUi.selectedFigurId === f.id }" aria-hidden="true"></span>
+          <button type="button" class="icon-btn icon-btn--ghost entity-row-action hover-reveal"
+                  aria-haspopup="menu" :aria-expanded="isActionMenuOpen('figur:' + f.id)"
+                  @click="figurOpenMenu($event, f)"
+                  :data-tip="$app.t('common.moreActions')" :aria-label="$app.t('common.moreActions')">
+            <svg class="icon" aria-hidden="true"><use href="/icons.svg#more-horizontal"/></svg>
+          </button>
+          <button type="button" class="row-expand"
+                  :aria-expanded="$store.catalogUi.selectedFigurId === f.id"
+                  @click="figurToggleOpen(f)" :aria-label="$app.t('common.details')">
+            <span class="history-chevron" :class="{ open: $store.catalogUi.selectedFigurId === f.id }" aria-hidden="true"></span>
+          </button>
         </div>
         <!-- @include figuren-detail -->
       </div>
@@ -207,6 +222,7 @@
             x-text="$app.t('common.showMore', { n: listWindowRest(filteredFiguren()) })"></button>
     </div>
     <!-- @include entity-merge-picker -->
+    <!-- @include figuren-menu -->
   </div>
 
 </div>

@@ -28,14 +28,6 @@
   gap: var(--space-sm);
   margin-top: var(--space-md);
 }
-.ort-merge {
-  display: inline-flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: var(--space-xs);
-  margin-left: auto;
-}
-
 /* Präsenz-Streifen: eine Zelle pro Kapitel, Intensität = Szenen dort */
 .ort-presence { margin-top: var(--space-sm); }
 .ort-presence-cells {
@@ -71,7 +63,6 @@
 }
 
 @media (max-width: 700px) {
-  .ort-merge { margin-left: 0; width: 100%; }
   .ort-presence-cell { width: 13px; height: 13px; }
   .ort-list-item--child > .entity-row {
     padding-left: calc(var(--space-sm) - var(--space-3) + var(--ort-depth, 0) * var(--space-sm));

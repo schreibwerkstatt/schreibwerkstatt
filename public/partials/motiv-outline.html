@@ -42,13 +42,17 @@
         <th class="motiv-outline-num" x-bind="sortTh('links')" x-text="$app.t('motiv.outline.col.links')"></th>
         <th class="motiv-outline-num" x-bind="sortTh('rels')" x-text="$app.t('motiv.outline.col.rels')"></th>
         <th class="motiv-outline-num" x-bind="sortTh('checks')" x-text="$app.t('motiv.outline.col.checks')"></th>
+        <th class="motiv-outline-actions"></th>
       </tr></thead>
       <template x-for="it in outlineItems(sorted)" :key="it.key">
         <tbody :class="it.kind === 'group' ? 'motiv-outline-groupbody' : 'motiv-outline-motifbody'">
           <!-- Themen-Kopfzeile -->
           <template x-if="it.kind === 'group'">
-            <tr class="motiv-outline-group" :class="{ 'is-open': it.g.theme && selectedThemeId === it.g.theme.id }">
-              <th colspan="9" scope="rowgroup">
+            <!-- Aktionsmenü wie im Baum (motiv-graph-menu.html): ⋯, Rechtsklick, Long-Press;
+                 die Gruppe «ohne Thema» hat kein Menü. -->
+            <tr class="motiv-outline-group hover-reveal-host" :class="{ 'is-open': it.g.theme && selectedThemeId === it.g.theme.id }"
+                @contextmenu="it.g.theme && openTreeMenu($event, 'theme', it.g.theme.id)" x-long-press>
+              <th colspan="10" scope="rowgroup">
                 <span class="motiv-outline-group-head">
                   <span class="motiv-outline-swatch" x-show="it.g.theme"
                         :style="it.g.theme ? { '--col-accent': 'var(--palette-' + themeSwatchKey(it.g.theme) + ')' } : {}"></span>
@@ -67,6 +71,12 @@
                           :data-tip="$app.t('motiv.graph.menu.addMotif')" :aria-label="$app.t('motiv.graph.menu.addMotif')">
                     <svg class="icon" aria-hidden="true"><use href="/icons.svg#plus"/></svg>
                   </button>
+                  <button type="button" class="icon-btn icon-btn--ghost hover-reveal" x-show="it.g.theme"
+                          @click="openTreeMenu($event, 'theme', it.g.theme.id)"
+                          aria-haspopup="menu" :aria-expanded="!!it.g.theme && isActionMenuOpen('motivtree:t' + it.g.theme.id)"
+                          :data-tip="$app.t('motiv.menu.actions')" :aria-label="$app.t('motiv.menu.actions')">
+                    <svg class="icon" aria-hidden="true"><use href="/icons.svg#more-horizontal"/></svg>
+                  </button>
                 </span>
               </th>
             </tr>
@@ -74,7 +84,7 @@
           <!-- Themen-Editor unter der Kopfzeile -->
           <template x-if="it.kind === 'group' && it.g.theme && selectedThemeId === it.g.theme.id">
             <tr class="motiv-outline-detailrow" @click.outside="onOutlineThemeOutside($event, it.g.theme.id)">
-              <td colspan="9">
+              <td colspan="10">
                 <div class="motiv-outline-detail" x-data="{ detailHost: 'outline' }">
                   <!-- @include motiv-panel-theme -->
                 </div>
@@ -83,7 +93,8 @@
           </template>
           <!-- Motiv-Zeile -->
           <template x-if="it.kind === 'motif'">
-            <tr class="motiv-outline-row" :class="{ 'is-open': selectedMotifId === it.m.id }">
+            <tr class="motiv-outline-row hover-reveal-host" :class="{ 'is-open': selectedMotifId === it.m.id }"
+                @contextmenu="openTreeMenu($event, 'motif', it.m.id)" x-long-press>
               <td class="motiv-outline-num motiv-outline-muted" x-text="(it.r.pos % 100000) + 1"></td>
               <td class="motiv-outline-namecell"><div class="motiv-outline-namewrap">
                 <button type="button" class="motiv-outline-name" :class="{ 'motiv-outline-name--ghost': isGhost(it.m) }"
@@ -114,12 +125,19 @@
                 <span x-show="it.r.checks > 0" class="badge-warn" x-text="it.r.checks"></span>
                 <span x-show="!it.r.checks" class="motiv-outline-muted">—</span>
               </td>
+              <td class="motiv-outline-actions">
+                <button type="button" class="icon-btn icon-btn--ghost hover-reveal" @click="openTreeMenu($event, 'motif', it.m.id)"
+                        aria-haspopup="menu" :aria-expanded="isActionMenuOpen('motivtree:m' + it.m.id)"
+                        :data-tip="$app.t('motiv.menu.actions')" :aria-label="$app.t('motiv.menu.actions')">
+                  <svg class="icon" aria-hidden="true"><use href="/icons.svg#more-horizontal"/></svg>
+                </button>
+              </td>
             </tr>
           </template>
           <!-- Aufgeklappt: Detail-Editor (geteiltes Fragment) -->
           <template x-if="it.kind === 'motif' && selectedMotifId === it.m.id">
             <tr class="motiv-outline-detailrow" @click.outside="onOutlineMotifOutside($event, it.m.id)">
-              <td colspan="9">
+              <td colspan="10">
                 <div class="motiv-outline-detail" x-data="{ detailHost: 'outline' }">
                   <!-- @include motiv-detail -->
                 </div>

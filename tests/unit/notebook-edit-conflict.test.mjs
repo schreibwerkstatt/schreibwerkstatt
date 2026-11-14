@@ -602,7 +602,9 @@ test('quickSave: 409 gegen eigenen verspäteten Save → lokaler Stand auf Serve
   assert.equal(puts[1].expected_updated_at, '2026-02-02T00:00:00Z');
 });
 
-test('quickSave: 409 gegen fremden Stand im selben Block → weiterhin Auflösung', async () => {
+// Hintergrund-Save (Pflicht-Invariante #9): eine echte Block-Kollision setzt nur
+// Banner + Draft, das Auflösungs-Modal öffnet erst ✓ bzw. der Banner-Knopf.
+test('quickSave: 409 gegen fremden Stand im selben Block → Banner + Draft, kein Modal', async () => {
   const app = setSwitchApp();
   app.currentPage.id = 82;
   app.originalHtml = '<p data-bid="a">Anfang</p><p data-bid="b">Mitte</p>';
@@ -611,7 +613,8 @@ test('quickSave: 409 gegen fremden Stand im selben Block → weiterhin Auflösun
   const ctx = mergeCtx(el);
   let opened = 0;
   ctx._openConflictResolution = () => { opened++; };
-  ctx._keepAsDraft = () => {};
+  const kept = [];
+  ctx._keepAsDraft = (args) => { kept.push(args); };
   let reads = 0;
   mockLoadPage(async () => (++reads === 1
     ? { updated_at: '2026-01-01T00:00:00Z' }
@@ -619,8 +622,85 @@ test('quickSave: 409 gegen fremden Stand im selben Block → weiterhin Auflösun
   let puts = 0;
   contentRepo.savePage = async () => { puts++; throw conflict409(); };
   await ctx.quickSave();
-  assert.equal(opened, 1);
+  assert.equal(opened, 0, 'kein Modal aus dem Hintergrund-Save');
   assert.equal(puts, 1);
+  assert.equal(kept.length, 1, 'lokale Fassung als Draft gesichert');
+  assert.equal(kept[0].banner?.remoteUpdatedAt, '2026-02-02T00:00:00Z', 'Konflikt-Banner gesetzt');
+});
+
+test('Pre-Check mit Block-Kollision: quickSave nur Banner, saveEdit öffnet das Modal', async () => {
+  const app = setSwitchApp();
+  app.currentPage.id = 84;
+  app.originalHtml = '<p data-bid="a">Anfang</p><p data-bid="b">Mitte</p>';
+  const el = document.createElement('div');
+  el.innerHTML = '<p data-bid="a">Anfang</p><p data-bid="b">Mitte lokal</p>';
+  const ctx = mergeCtx(el);
+  let opened = 0;
+  ctx._openConflictResolution = () => { opened++; };
+  const kept = [];
+  ctx._keepAsDraft = (args) => { kept.push(args); };
+  mockLoadPage(async () => ({
+    updated_at: '2026-02-02T00:00:00Z',
+    html: '<p data-bid="a">Anfang</p><p data-bid="b">Mitte fremd</p>',
+  }));
+  let puts = 0;
+  contentRepo.savePage = async () => { puts++; return { updated_at: '2026-03-03T00:00:00Z' }; };
+  await ctx.quickSave();
+  assert.equal(opened, 0, 'quickSave öffnet kein Modal');
+  assert.equal(puts, 0);
+  assert.equal(kept.at(-1)?.banner?.remoteUpdatedAt, '2026-02-02T00:00:00Z');
+  await ctx.saveEdit();
+  assert.equal(opened, 1, 'saveEdit (✓ / Banner-Knopf) öffnet das Modal');
+  assert.equal(puts, 0);
+});
+
+// ✓ = speichern und schliessen: was während des PUT getippt wurde, speichert
+// saveEdit gleich nach und schliesst erst dann.
+test('saveEdit: während des PUT getippt → nachspeichern, dann schliessen', async () => {
+  const app = setSwitchApp();
+  app.currentPage.id = 85;
+  app.originalHtml = '<p data-bid="a">Anfang</p>';
+  const el = document.createElement('div');
+  el.innerHTML = '<p data-bid="a">Anfang eins</p>';
+  const ctx = mergeCtx(el);
+  let teardowns = 0;
+  ctx._teardownEditSession = () => { teardowns++; app.editMode = false; };
+  mockLoadPage(async () => ({ updated_at: app.currentPage.updated_at }));
+  const puts = [];
+  contentRepo.savePage = async (id, payload) => {
+    puts.push(payload.html);
+    if (puts.length === 1) el.innerHTML = '<p data-bid="a">Anfang eins zwei</p>';
+    return { updated_at: `2026-0${puts.length + 1}-01T00:00:00Z`, html: payload.html };
+  };
+  await ctx.saveEdit();
+  assert.deepEqual(puts, ['<p data-bid="a">Anfang eins</p>', '<p data-bid="a">Anfang eins zwei</p>']);
+  assert.equal(teardowns, 1, 'nach dem Nachspeichern geschlossen');
+  assert.equal(app.editSaving, false);
+});
+
+test('saveEdit: Nachspeichern scheitert → Editor bleibt offen', async () => {
+  const app = setSwitchApp();
+  app.currentPage.id = 86;
+  app.originalHtml = '<p data-bid="a">Anfang</p>';
+  const el = document.createElement('div');
+  el.innerHTML = '<p data-bid="a">Anfang eins</p>';
+  const ctx = mergeCtx(el);
+  let teardowns = 0;
+  ctx._teardownEditSession = () => { teardowns++; app.editMode = false; };
+  ctx._noteSaveFailure = () => 'fehler';
+  ctx._keepAsDraft = () => {};
+  mockLoadPage(async () => ({ updated_at: app.currentPage.updated_at }));
+  let puts = 0;
+  contentRepo.savePage = async (id, payload) => {
+    puts++;
+    if (puts === 1) { el.innerHTML = '<p data-bid="a">Anfang eins zwei</p>'; return { updated_at: '2026-02-01T00:00:00Z', html: payload.html }; }
+    const e = new Error('offline'); e.status = 0; throw e;
+  };
+  await ctx.saveEdit();
+  assert.equal(puts, 2);
+  assert.equal(teardowns, 0);
+  assert.equal(app.editMode, true);
+  assert.equal(app.editDirty, true);
 });
 
 test('_reconcileDraftWithServer: Server-Stand = eigener Zwischenstand → Draft ohne Konflikt', () => {

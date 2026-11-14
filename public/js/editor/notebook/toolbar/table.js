@@ -13,13 +13,15 @@
 // Der Dialog gehoert zum Karten-Scope (editorToolbarCard), also `x-ref` +
 // showModal() statt des `modal()`-Primitivs, und `@close` ist der EINZIGE
 // Aufraeumpunkt — ESC, Backdrop und Abbrechen laufen alle durch `dlg.close()`.
+// Caret merken/zurueck, Backdrop- und Esc-Rueckfrage: panel-methods.js
+// (`_beginDialog`/`_endDialog`, `requestDialogClose`).
 //
 // EINGABE IST NOTEBOOK-ONLY (wie beim Diagramm). Focus-Editor und Bucheditor
 // stellen Tabellen nur dar.
 
 import { getEditEl } from '../../utils.js';
 import { replaceBlockOutsideList, ensureSlotAfter } from './_shared.js';
-import { htmlToElement } from './caret-panel.js';
+import { htmlToElement, placeBlockNode } from './caret-panel.js';
 import {
   buildTableHtml, tableModel, emptyTableModel,
   TABLE_ALIGNS, TABLE_MAX_COLS, TABLE_MAX_ROWS,
@@ -33,9 +35,11 @@ const NEW_ROWS = 2;
 
 export const tableMethods = {
   /** Einfuegen: `block` ist der (leere) Trigger-Block aus dem Slash-Menue, der
-   *  beim Bestaetigen ersetzt wird. */
-  openTableDialog(block) {
+   *  beim Bestaetigen ersetzt wird; `after` der Top-Level-Block, hinter dem die
+   *  Tabelle landet (Seiten-Toolbar am Caret in einem nicht leeren Absatz). */
+  openTableDialog(block, { after = null } = {}) {
     this._tableBlock = block || null;
+    this._tableAfter = after || null;
     this._tableEditEl = null;
     this.tableEditing = false;
     this.tableLossyReasons = [];
@@ -48,6 +52,7 @@ export const tableMethods = {
   openTableForEl(el) {
     if (!el) return;
     this._tableBlock = null;
+    this._tableAfter = null;
     this._tableEditEl = el;
     this.tableEditing = true;
     this._tableHeaderStash = null;
@@ -74,6 +79,7 @@ export const tableMethods = {
   _openTableDlg() {
     const dlg = this.$refs?.tableDlg;
     if (!dlg) return;
+    this._beginDialog('table');
     if (!dlg.open) dlg.showModal();
     queueMicrotask(() => this.$refs?.tableCaptionInput?.focus());
   },
@@ -85,12 +91,13 @@ export const tableMethods = {
   /** Einziger Aufraeumpunkt (siehe Modulkopf). */
   onTableDialogClose() {
     this._tableBlock = null;
+    this._tableAfter = null;
     this._tableEditEl = null;
     this.tableEditing = false;
     this.tableLossyReasons = [];
     this._tableHeaderStash = null;
     this.tableModelState = emptyTableModel(NEW_COLS, NEW_ROWS);
-    getEditEl()?.focus();
+    this._endDialog();
   },
 
   // ── Gitter-Struktur ───────────────────────────────────────────────────────
@@ -231,13 +238,15 @@ export const tableMethods = {
     const bid = this._tableEditEl?.getAttribute?.('data-bid');
     if (bid) node.setAttribute('data-bid', bid);
 
-    const target = this._tableEditEl || this._tableBlock;
-    if (target && target.isConnected && target.parentNode && editEl.contains(target)) {
-      replaceBlockOutsideList(editEl, target, node);
+    const edited = this._tableEditEl;
+    if (edited && edited.isConnected && edited.parentNode && editEl.contains(edited)) {
+      replaceBlockOutsideList(editEl, edited, node);
     } else {
-      editEl.appendChild(node);
+      placeBlockNode(editEl, node, { replace: this._tableBlock, after: this._tableAfter });
     }
     ensureSlotAfter(node);
+    // Caret beim Schliessen in den Absatz dahinter (`_endDialog`).
+    this._dialogInserted = node;
     window.__app?._markEditDirty?.();
     this.closeTableDialog();
   },

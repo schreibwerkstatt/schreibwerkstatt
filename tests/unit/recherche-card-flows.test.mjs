@@ -95,7 +95,7 @@ test('scrape: abgelehnte Rückfrage schickt nichts weiter', async () => {
   assert.equal(calls.length, 1);
 });
 
-test('addLink liefert true/false; acceptSuggestion filtert nur bei Erfolg', async () => {
+test('addLink liefert true/false; acceptSuggestion markiert nur bei Erfolg als übernommen', async () => {
   const c = card();
   const item = { id: 5 };
   const sugg = { target_kind: 'figure', target_id: 9 };
@@ -103,10 +103,22 @@ test('addLink liefert true/false; acceptSuggestion filtert nur bei Erfolg', asyn
   c.suggestions = { 5: [sugg] };
   responder = () => ({ status: 500, body: {} });
   await c.acceptSuggestion(item, sugg);
-  assert.equal(c.suggestions[5].length, 1, 'Fehlschlag: Vorschlag bleibt stehen');
+  assert.equal(c.suggestions[5][0]._state, undefined, 'Fehlschlag: Vorschlag bleibt offen');
   responder = () => ({ body: { id: 5, links: [] } });
   await c.acceptSuggestion(item, sugg);
-  assert.equal(c.suggestions[5].length, 0);
+  assert.equal(c.suggestions[5].length, 1, 'Vorschlagskarte bleibt stehen');
+  assert.equal(c.suggestions[5][0]._state, 'applied');
+});
+
+test('discardSuggestion verwirft und stellt wieder her', () => {
+  const c = card();
+  const item = { id: 5 };
+  const sugg = { target_kind: 'figure', target_id: 9 };
+  c.suggestions = { 5: [sugg] };
+  c.discardSuggestion(item, c.suggestions[5][0]);
+  assert.equal(c.suggestions[5][0]._state, 'discarded');
+  c.discardSuggestion(item, c.suggestions[5][0]);
+  assert.equal(c.suggestions[5][0]._state, null);
 });
 
 test('KI-Vorschläge: parallel je Fundstück, Sperre je Fundstück, Reset stoppt alle Poller', async () => {
@@ -130,7 +142,7 @@ test('resetRecherche setzt Lauf-, Dialog- und Auswahl-State zurück', () => {
   const c = card();
   Object.assign(c, {
     busy: true, detailEditing: true, linkPickerItemId: 3, linkCheckRunning: true, linkCheckStatus: 'x',
-    crosscheckRunning: true, crosscheckItemId: 4, crosscheckStatus: 'y', bulkMode: true, selectedIds: [1, 2],
+    crosscheckRunning: true, crosscheckItemId: 4, crosscheckStatus: 'y', selectedIds: [1, 2],
     _linkCheckTimer: setInterval(() => {}, 1e6), _crosscheckTimer: setInterval(() => {}, 1e6),
   });
   c.resetRecherche();
@@ -142,7 +154,6 @@ test('resetRecherche setzt Lauf-, Dialog- und Auswahl-State zurück', () => {
   assert.equal(c.crosscheckRunning, false);
   assert.equal(c.crosscheckItemId, null);
   assert.equal(c.crosscheckStatus, '');
-  assert.equal(c.bulkMode, false);
   assert.deepEqual(c.selectedIds, []);
   assert.equal(c._linkCheckTimer, null);
   assert.equal(c._crosscheckTimer, null);

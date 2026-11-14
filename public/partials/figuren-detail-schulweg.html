@@ -89,22 +89,32 @@
       </div>
     </template>
 
-    <!-- Offener KI-Vorschlag: nur mit wörtlichem, geprüftem Beleg; übernimmt erst der Autor. -->
+    <!-- Offener KI-Vorschlag als Vorschlagskarte (DESIGN.md „Chat-Vorschlagskarte"):
+         nur mit wörtlichem, geprüftem Beleg; übernimmt erst der Autor. -->
     <template x-if="figurSchulweg(f)?.vorschlag">
-      <div class="figur-schule-vorschlag">
-        <p class="card-form-section-divider" x-text="$app.t('figuren.schule.vorschlagTitel')"></p>
-        <p class="figur-detail-row" x-text="figurSchulVorschlagWeg(f)"></p>
-        <p class="card-hint card-hint--sm" x-show="figurSchulVorschlagDetails(f)" x-text="figurSchulVorschlagDetails(f)"></p>
-        <blockquote class="figur-schule-beleg">
-          <span x-text="'«' + figurSchulweg(f).vorschlag.zitat + '»'"></span>
-          <template x-if="figurSchulweg(f).vorschlag.page_id">
-            <button type="button" class="entity-ref" x-entity-ref="{ type: 'seite', id: figurSchulweg(f).vorschlag.page_id }"></button>
-          </template>
-        </blockquote>
-        <p class="card-hint card-hint--sm" x-show="figurSchulweg(f).vorschlag.begruendung" x-text="figurSchulweg(f).vorschlag.begruendung"></p>
-        <div class="figur-edit-actions">
-          <button type="button" class="primary" :disabled="figurSchulBusy" @click="acceptFigurSchulVorschlag(f)" x-text="$app.t('figuren.schule.uebernehmen')"></button>
-          <button type="button" :disabled="figurSchulBusy" @click="rejectFigurSchulVorschlag(f)" x-text="$app.t('figuren.schule.verwerfen')"></button>
+      <div class="chat-vorschlaege chat-vorschlaege--wide">
+        <div class="chat-vorschlag">
+          <div class="chat-vorschlag-header">
+            <span class="chat-vorschlag-label" x-text="$app.t('figuren.schule.vorschlagTitel')"></span>
+            <span class="chat-vorschlag-actions">
+              <button type="button" class="chat-vorschlag-btn" :disabled="figurSchulBusy" @click="acceptFigurSchulVorschlag(f)" x-text="$app.t('figuren.schule.uebernehmen')"></button>
+              <button type="button" class="chat-vorschlag-btn chat-vorschlag-btn--ghost" :disabled="figurSchulBusy" @click="rejectFigurSchulVorschlag(f)" x-text="$app.t('figuren.schule.verwerfen')"></button>
+            </span>
+          </div>
+          <div class="chat-vorschlag-diff">
+            <div class="chat-vorschlag-title" x-text="figurSchulVorschlagWeg(f)"></div>
+            <div class="chat-vorschlag-meta" x-show="figurSchulVorschlagDetails(f)" x-text="figurSchulVorschlagDetails(f)"></div>
+            <div class="chat-vorschlag-row">
+              <span class="chat-vorschlag-field" x-text="$app.t('figuren.schule.beleg')"></span>
+              <span>
+                <q class="chat-vorschlag-quote" x-text="figurSchulweg(f).vorschlag.zitat"></q>
+                <template x-if="figurSchulweg(f).vorschlag.page_id">
+                  <button type="button" class="entity-ref" x-entity-ref="{ type: 'seite', id: figurSchulweg(f).vorschlag.page_id }"></button>
+                </template>
+              </span>
+            </div>
+          </div>
+          <div class="chat-vorschlag-begruendung" x-show="figurSchulweg(f).vorschlag.begruendung" x-text="figurSchulweg(f).vorschlag.begruendung"></div>
         </div>
       </div>
     </template>

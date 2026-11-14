@@ -9,7 +9,7 @@
 //   - `loadOrte` (Root-Spread; von komplett-Job, Szenen-Trigger
 //     und _reloadVisibleBookCards genutzt)
 //   - `patchOrtCoords` (Koordinaten-Patch für Geo-Edits) und die Pflege-Calls
-//     `createOrt`/`updateOrt`/`mergeOrt`/`deleteOrt` (book/orte.js)
+//     `createOrt`/`updateOrt`/`deleteOrt` (book/orte.js)
 import { setupCardLifecycle } from './card-lifecycle.js';
 import { memoMethods } from './card-memo.js';
 import { activeFilterId, sameId } from '../chapter-filter.js';
@@ -22,6 +22,7 @@ import { plotBacklinkMethods } from '../book/plot-backlinks.js';
 import { listWindowState, listWindowMethods } from '../list-window.js';
 import { entityMergePickerState, entityMergePickerResetState, entityMergePickerMethods } from '../book/entity-merge-picker.js';
 import { compareText } from '../i18n.js';
+import { actionMenuState, actionMenuMethods } from '../action-menu.js';
 import { EVT } from '../events.js';
 
 export function registerOrteCard() {
@@ -78,9 +79,10 @@ export function registerOrteCard() {
     // Pflege-Formular (book/orte-edit.js): { mode: null|'new'|'edit', id, draft, busy, error }.
     ortEdit: closedOrtEdit(),
     plotBacklinks: {},        // loc_id → Beats der Plot-Werkstatt (Detail „Im Plot“), non-fatal
-    ortMergeTarget: '',       // Ziel-loc_id der «Zusammenführen mit …»-Auswahl im Detail (aktive Orte)
-    // «zusammenführen mit…» an verwaisten Orten: geteilter Zeilen-Picker.
+    // «Zusammenführen mit …» (Menü, Zeilen-Knopf verwaister Orte): geteilter Merge-Picker.
     ...entityMergePickerState(),
+    // Aktionsmenü je Schauplatz-Zeile (action-menu.js); Ziel = loc_id.
+    ...actionMenuState(),
 
     init() {
       this.$watch('viewMode', (v) => {
@@ -109,7 +111,7 @@ export function registerOrteCard() {
         name: 'orte',
         showFlag: 'showOrteCard',
         timerKeys: ['_ortePollTimer', '_geocodeJobTimer', '_orteMapStatusTimer'],
-        resetState: { plotBacklinks: {}, orteProgress: 0, orteStatus: '', orteError: '', staleDeleting: false, orteRealEnabled: false, geocodingId: null, geocodingAll: false, geoHistoryBusy: false, highlightOrtId: null, orteMapStatus: '', ortMergeTarget: '', ...entityMergePickerResetState(), ...listWindowState() },
+        resetState: { plotBacklinks: {}, orteProgress: 0, orteStatus: '', orteError: '', staleDeleting: false, orteRealEnabled: false, geocodingId: null, geocodingAll: false, geoHistoryBusy: false, highlightOrtId: null, orteMapStatus: '', ...entityMergePickerResetState(), ...listWindowState() },
         load: (root) => { this.loadPlotBacklinks('location'); return root.loadOrte(Alpine.store('nav').selectedBookId); },
         onShow: async (root) => {
           const tasks = [root.loadOrte(Alpine.store('nav').selectedBookId), this.loadOrteReal(), this.loadPlotBacklinks('location')];
@@ -126,6 +128,7 @@ export function registerOrteCard() {
     },
 
     destroy() {
+      this.closeActionMenu();
       this._teardownMap();
       this._lifecycle?.destroy();
     },
@@ -262,5 +265,6 @@ export function registerOrteCard() {
     ...plotBacklinkMethods,
     ...listWindowMethods,
     ...entityMergePickerMethods,
+    ...actionMenuMethods,
   }));
 }

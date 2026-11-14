@@ -54,7 +54,7 @@ test('schauplätze: anlegen, Unterort eingerückt, bearbeiten, Typ übersetzt, l
   await expect(hotelItem.locator('.entity-typ-tag')).toHaveText(/^(Gebäude|Building)$/);
 
   // 3) Detail öffnen: Elternort als Referenz, dann bearbeiten.
-  await hotelItem.locator('.entity-row').click();
+  await hotelItem.locator('.row-expand').click();
   const detail = hotelItem.locator('.entity-detail');
   await expect(detail.locator('.entity-ref').first()).toBeVisible();
   await detail.getByRole('button', { name: /Bearbeiten|Edit/ }).click();

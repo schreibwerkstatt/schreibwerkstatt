@@ -12,6 +12,7 @@
 import { SUBTYP_ICON } from './subtyp.js';
 import { sendJson } from '../../utils.js';
 import { tFetchError } from '../../i18n.js';
+import { isFloatingLayerClick } from '../../row-click.js';
 
 const _t = (key, params) => window.__app?.t?.(key, params) ?? key;
 
@@ -63,6 +64,20 @@ export const ereignisEditMethods = {
     this.eventEditMessage = '';
   },
 
+  // Titel-/Text-Klick und Stift (DESIGN.md «Listen-Anriss»): ein offenes Formular
+  // eines anderen Ereignisses wird vorher gespeichert, nie still verworfen.
+  async openEventEdit(ev) {
+    if (ev?.id == null || this.eventEditId === ev.id) return;
+    if (this.eventEditId != null) {
+      const openId = this.eventEditId;
+      const prev = (Alpine.store('catalog').globalZeitstrahl || []).find(e => e.id === openId);
+      if (prev) await this.commitEventEdit(prev);
+      else this.cancelEventEdit();
+      if (this.eventEditId === openId) return;
+    }
+    this.startEventEdit(ev);
+  },
+
   cancelEventEdit() {
     this.eventEditId = null;
     this.eventEditDraft = {};
@@ -72,10 +87,12 @@ export const ereignisEditMethods = {
   // Klick daneben (Inline-Edit, public/CLAUDE.md «Edit-Formulare»): nur wenn noch
   // dasselbe Ereignis offen ist und kein Request läuft; ein leerer Pflichttext
   // verwirft den Entwurf statt einen Fehler zu zeigen.
-  commitEventEdit(ev) {
+  // Klicks in schwebende Ebenen (Rechtschreib-Popover, Dialog, Menü) zählen nicht.
+  async commitEventEdit(ev, domEvent) {
+    if (domEvent && isFloatingLayerClick(domEvent)) return;
     if (this.eventEditId !== ev?.id || this.eventEditBusy) return;
     if (!_norm(this.eventEditDraft?.ereignis)) { this.cancelEventEdit(); return; }
-    this.saveEventEdit(ev);
+    await this.saveEventEdit(ev);
   },
 
   async saveEventEdit(ev) {

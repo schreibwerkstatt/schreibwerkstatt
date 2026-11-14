@@ -1,0 +1,31 @@
+<!-- Plot-Werkstatt: Brainstorm-Vorschläge eines Akts bzw. einer Zelle als
+     Vorschlagskarten (DESIGN.md „Chat-Vorschlagskarte", Optik ausschliesslich
+     components/chat-vorschlag.css). Fragment-Include aus plot-board-flat.html und
+     plot-board-grid.html, liest nur den Karten-State (brainstormResult). Je
+     Vorschlag Übernehmen (legt den Beat an, Undo-Record create-beat) und
+     Verwerfen (wieder herstellbar); der Zustand steht am Vorschlag (`_state`,
+     book/plot/ai.js), die Karte bleibt sichtbar. -->
+<div class="chat-vorschlaege">
+  <template x-for="(v, idx) in (brainstormResult ? brainstormResult.vorschlaege : [])" :key="idx">
+    <div class="chat-vorschlag"
+         :class="{ 'chat-vorschlag--applied': v._state === 'applied', 'chat-vorschlag--discarded': v._state === 'discarded' }">
+      <div class="chat-vorschlag-header">
+        <span class="chat-vorschlag-label"
+              x-text="v._state === 'applied' ? $app.t('plot.brainstorm.applied') : v._state === 'discarded' ? $app.t('plot.brainstorm.discarded') : $app.t('plot.brainstorm.newBeat')"></span>
+        <span class="chat-vorschlag-actions">
+          <button type="button" class="chat-vorschlag-btn" x-show="!v._state"
+                  @click="applyBrainstorm(idx)" :disabled="busy" x-text="$app.t('plot.brainstorm.apply')"></button>
+          <button type="button" class="chat-vorschlag-btn chat-vorschlag-btn--ghost" x-show="v._state !== 'applied'"
+                  @click="discardBrainstorm(idx, v._state !== 'discarded')"
+                  x-text="v._state === 'discarded' ? $app.t('plot.brainstorm.restore') : $app.t('plot.brainstorm.discard')"></button>
+        </span>
+      </div>
+      <div class="chat-vorschlag-diff">
+        <div class="chat-vorschlag-title" x-text="v.label"></div>
+      </div>
+      <div class="chat-vorschlag-begruendung" x-show="v.begruendung" x-text="v.begruendung"></div>
+    </div>
+  </template>
+</div>
+<p class="muted-msg muted-msg--sm"
+   x-show="brainstormResult && !brainstormOpenCount()" x-text="$app.t('plot.brainstorm.allApplied')"></p>

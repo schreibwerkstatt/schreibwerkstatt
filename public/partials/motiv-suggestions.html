@@ -1,0 +1,49 @@
+<!-- Motiv-Werkstatt: KI-Vorschläge (Brainstorm) als Vorschlagskarten (DESIGN.md
+     „Chat-Vorschlagskarte", Optik ausschliesslich components/chat-vorschlag.css).
+     Nested via <div id="partial-motiv-suggestions"> (motivCard-Scope), unten beim
+     Verlauf, damit sie den Graphen nicht überdecken. Frischer Lauf wie
+     wieder-geöffneter Lauf füllen dasselbe Panel. Je Vorschlag Übernehmen (legt
+     Thema/Motiv an, Undo-Record create-*, nie im Text) und Verwerfen (wieder
+     anbietbar); der Zustand steht am Vorschlag (`_state`, book/motiv/brainstorm.js). -->
+<div class="motiv-suggestions" x-show="suggestions.length" x-cloak>
+  <div class="card-section-head">
+    <h4 class="motiv-panel-heading" x-text="$app.t('motiv.brainstorm.title')"></h4>
+    <button type="button" class="icon-btn icon-btn--ghost" @click="_clearSuggestionPanel()"
+            :data-tip="$app.t('motiv.brainstorm.closePanel')" :aria-label="$app.t('motiv.brainstorm.closePanel')">
+      <svg class="icon" aria-hidden="true"><use href="/icons.svg#x"/></svg>
+    </button>
+  </div>
+  <div class="chat-vorschlaege">
+    <template x-for="(s, i) in suggestions" :key="i">
+      <div class="chat-vorschlag"
+           :class="{ 'chat-vorschlag--applied': s._state === 'applied', 'chat-vorschlag--discarded': s._state === 'discarded' }">
+        <div class="chat-vorschlag-header">
+          <span class="chat-vorschlag-label"
+                x-text="s._state === 'applied' ? $app.t('motiv.brainstorm.applied') : s._state === 'discarded' ? $app.t('motiv.brainstorm.discarded') : $app.t('motiv.brainstorm.typ.' + s.typ)"></span>
+          <span class="chat-vorschlag-actions">
+            <button type="button" class="chat-vorschlag-btn" x-show="!s._state" :disabled="s.adopting"
+                    @click="adoptSuggestion(s)" x-text="$app.t('motiv.brainstorm.adopt')"></button>
+            <button type="button" class="chat-vorschlag-btn chat-vorschlag-btn--ghost" x-show="s._state !== 'applied'"
+                    @click="dismissSuggestion(s, s._state !== 'discarded')"
+                    x-text="s._state === 'discarded' ? $app.t('motiv.brainstorm.restore') : $app.t('motiv.brainstorm.discard')"></button>
+          </span>
+        </div>
+        <div class="chat-vorschlag-diff">
+          <div class="chat-vorschlag-title" x-text="s.name"></div>
+          <div class="chat-vorschlag-text" x-show="s.beschreibung" x-text="s.beschreibung"></div>
+          <div class="chat-vorschlag-row" x-show="s.trigger_terms && s.trigger_terms.length">
+            <span class="chat-vorschlag-field" x-text="$app.t('motiv.brainstorm.triggers')"></span>
+            <span x-text="(s.trigger_terms || []).join(', ')"></span>
+          </div>
+          <!-- Thema beim Übernehmen wählen (nur offene Motiv-Vorschläge). -->
+          <div class="chat-vorschlag-row" x-show="!s._state && s.typ === 'motiv' && themes.length">
+            <span class="chat-vorschlag-field" x-text="$app.t('motiv.brainstorm.theme')"></span>
+            <div class="motiv-sugg-theme" x-data="combobox({ placeholder: $app.t('motiv.motif.themeOptional'), emptyLabel: $app.t('motiv.noTheme'), label: $app.t('motiv.brainstorm.theme') })"
+                 x-modelable="value" x-model="s.themeIdDraft" x-effect="options = themeOptions()"></div>
+          </div>
+        </div>
+      </div>
+    </template>
+  </div>
+  <p class="muted-msg muted-msg--sm" x-show="!suggestionOpenCount()" x-text="$app.t('motiv.brainstorm.allDone')"></p>
+</div>

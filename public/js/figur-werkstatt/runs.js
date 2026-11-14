@@ -74,7 +74,6 @@ export const runsMethods = {
           fazit: run.result.fazit || '',
           textbelege: run.result.textbelege || [],
         };
-        this.selectedKonfliktIdx = null;
         this.brainstormResult = null;
       }
       this.selectedRunId = run.id;

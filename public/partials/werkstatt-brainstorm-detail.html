@@ -1,0 +1,31 @@
+<!-- @expects r -->
+<!-- Brainstorm-Lauf aufgeklappt: Vorschlagskarten je neuem Unterknoten
+     (DESIGN.md „Chat-Vorschlagskarte"), Übernehmen legt den Knoten in der
+     Mindmap an (ungespeichert), Verwerfen markiert den Eintrag. -->
+<div x-show="selectedRunId === r.id && brainstormResult" class="history-detail" x-cloak>
+  <div class="chat-vorschlaege">
+    <template x-for="(v, idx) in brainstormResult ? brainstormResult.vorschlaege : []" :key="idx">
+      <div class="chat-vorschlag" :class="vorschlagClass('brainstorm', idx)">
+        <div class="chat-vorschlag-header">
+          <span class="chat-vorschlag-label" x-text="vorschlagLabel('brainstorm', idx, $app.t('werkstatt.brainstorm.newNode'))"></span>
+          <span class="chat-vorschlag-actions">
+            <button type="button" class="chat-vorschlag-btn"
+                    x-show="!vorschlagState('brainstorm', idx)"
+                    @click.stop="applyBrainstormVorschlag(idx)"
+                    :disabled="busy"
+                    x-text="$app.t('werkstatt.brainstorm.apply')"></button>
+            <button type="button" class="chat-vorschlag-btn chat-vorschlag-btn--ghost"
+                    x-show="vorschlagState('brainstorm', idx) !== 'applied'"
+                    @click.stop="discardVorschlag('brainstorm', idx)"
+                    x-text="vorschlagState('brainstorm', idx) === 'discarded' ? $app.t('chat.restore') : $app.t('chat.discard')"></button>
+          </span>
+        </div>
+        <div class="chat-vorschlag-diff">
+          <div class="chat-vorschlag-title" x-text="v.label"></div>
+        </div>
+        <div x-show="v.begruendung" class="chat-vorschlag-begruendung" x-text="v.begruendung"></div>
+      </div>
+    </template>
+    <div x-show="brainstormResult && brainstormResult.vorschlaege.length === 0" class="muted-msg muted-msg--sm" x-text="$app.t('werkstatt.brainstorm.none')"></div>
+  </div>
+</div>

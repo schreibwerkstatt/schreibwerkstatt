@@ -141,7 +141,6 @@ export const lifecycleMethods = {
     this.editingThreadId = null;
     this.addingThread = false;
     this.newThreadName = '';
-    this.threadColorPickerId = null;
     this.closeActionMenu();
     this.beatOccPopoverBeatId = null;
     this._detachOccPopoverListeners?.();
@@ -170,7 +169,6 @@ export const lifecycleMethods = {
     // Defaults setzt. Ein Reset hier gewänne gegen den restaurierten Stand.
     this.tensionFocusFigur = '';
     this.verworfenOpen = {};
-    this.actColorPickerId = null;
     this.errorMessage = '';
     this.busy = false;
   },

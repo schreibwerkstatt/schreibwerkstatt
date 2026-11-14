@@ -1,0 +1,43 @@
+<!-- Aktionsmenü einer Figurenzeile (⋯, Rechtsklick, Long-Press): EINE teleportierte
+     Instanz je Karte (action-menu.js, DESIGN.md «Context-Menu»). Eingebunden als
+     String-Include in figuren.html ausserhalb der Zeilen-Schleife; Ziel = fig_id,
+     aufgelöst über figurMenuFigur() (book/figuren-pflege.js). «Zusammenführen mit …»
+     öffnet den geteilten Merge-Picker (entity-merge-picker.html) am Menü-Anker —
+     für aktive und verwaiste Figuren. Löschen nur für verwaiste (Server: NOT_STALE). -->
+<template x-teleport="body">
+  <div class="context-menu" x-ref="actionMenu" x-bind="actionMenuPanel()" x-cloak>
+    <template x-if="figurMenuFigur()">
+      <div>
+        <button type="button" role="menuitem" class="context-menu-item context-menu-item--icon"
+                @click="openFigurEdit(figurMenuFigur())">
+          <svg class="icon" aria-hidden="true"><use href="/icons.svg#pencil"/></svg>
+          <span x-text="$app.t('common.edit')"></span>
+        </button>
+        <button type="button" role="menuitem" class="context-menu-item context-menu-item--icon"
+                x-show="figurMenuFigur().erste_erwaehnung_page_id"
+                @click="$app.gotoPageById(figurMenuFigur().erste_erwaehnung_page_id, { snippet: figurMenuFigur().name })">
+          <svg class="icon" aria-hidden="true"><use href="/icons.svg#book-open"/></svg>
+          <span x-text="$app.t('common.showInText')"></span>
+        </button>
+        <button type="button" role="menuitem" class="context-menu-item context-menu-item--icon"
+                x-show="$store.config.semanticSearchEnabled"
+                @click="$app.findSimilar('figure', figurMenuFigur().id, figurMenuFigur().name)">
+          <svg class="icon" aria-hidden="true"><use href="/icons.svg#search"/></svg>
+          <span x-text="$app.t('search.semantic.similarEntity')"></span>
+        </button>
+        <button type="button" role="menuitem" class="context-menu-item context-menu-item--icon"
+                @click="openMergePick(actionMenuAnchor(), 'figur', figurMenuFigur())">
+          <svg class="icon" aria-hidden="true"><use href="/icons.svg#arrow-right-left"/></svg>
+          <span x-text="$app.t('merge.menuAction')"></span>
+        </button>
+        <div class="context-menu-sep" role="separator" x-show="figurMenuFigur().stale"></div>
+        <button type="button" role="menuitem" class="context-menu-item context-menu-item--icon context-menu-item--danger"
+                x-show="figurMenuFigur().stale"
+                @click="$app.deleteStaleFigur(figurMenuFigur())">
+          <svg class="icon" aria-hidden="true"><use href="/icons.svg#trash"/></svg>
+          <span x-text="$app.t('common.delete')"></span>
+        </button>
+      </div>
+    </template>
+  </div>
+</template>

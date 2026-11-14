@@ -11,7 +11,8 @@
 //   const owner = claimSaveOwner();
 //   try { … } finally { if (ownsSave(owner)) app.editSaving = false; }
 //
-// Gilt für saveEdit, quickSave und «Abschnitt hier teilen» (edit/split.js).
+// Gilt für saveEdit, quickSave, submitConflictResolution und «Abschnitt hier
+// teilen» (edit/split.js).
 
 let _owner = null;
 

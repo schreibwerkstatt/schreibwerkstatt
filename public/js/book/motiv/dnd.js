@@ -81,12 +81,14 @@ export const dndMethods = {
     // Optimistisch (sortable-dnd.js#revertSortable): sofort umsortiert, bei
     // Fehler zurueck auf Reihenfolge und Positionen von vorher.
     const prev = this.themes;
+    const prevOrder = this._themeOrder();
     const prevPos = new Map(prev.map(t => [t.id, t.position]));
     reordered.forEach((t, i) => { t.position = i; });
     this.themes = reordered;
     this._memos = {};
     try {
       await sendJson('/motifs/themes/order', 'PUT', { book_id: this.$store.nav.selectedBookId, order: ids });
+      this._pushUndo({ kind: 'theme-order', before: prevOrder, after: ids });
     } catch (e) {
       prev.forEach(t => { t.position = prevPos.get(t.id); });
       this.themes = prev;
@@ -138,6 +140,7 @@ export const dndMethods = {
     // Optimistisch: Modell sofort angleichen, damit der Baum nicht zurückspringt;
     // bei Fehler zurück auf den Stand von vorher.
     const prev = this.motifs;
+    const rec = { kind: 'motif-move', id: m.id, beforeTheme: m.theme_id || null, afterTheme: target, beforeOrder: this._motifOrder(), afterOrder: order };
     const pos = new Map(order.map((id, i) => [id, i]));
     this.motifs = this.motifs.map(x => ({
       ...x, position: pos.get(x.id) ?? x.position, ...(x.id === m.id ? { theme_id: target } : {}),
@@ -147,6 +150,7 @@ export const dndMethods = {
     try {
       if (themeChanged) await sendJson(`/motifs/${m.id}`, 'PATCH', { theme_id: target });
       await sendJson('/motifs/order', 'PUT', { book_id: bookId, order });
+      this._pushUndo(rec);
     } catch (e) {
       this.errorMessage = window.__app.t('motiv.error.save');
       // Schlug erst die Reihenfolge fehl, steht das Thema schon auf dem

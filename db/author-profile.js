@@ -126,9 +126,9 @@ function getAuthorProfileRow(userEmail) {
 }
 
 /**
- * Ergebnis eines KI-Laufs ablegen. Setzt `edited` zurueck auf 0 — der Text
- * stammt jetzt wieder vom Modell. Ob ein von Hand geaenderter Text ueberschrieben
- * werden DARF, entscheidet der Aufrufer vor diesem Call, nicht diese Funktion.
+ * Übernommenes Ergebnis eines KI-Laufs ablegen (PUT /me/author-profile mit
+ * `run`). Setzt `edited` zurueck auf 0 — der Text stammt jetzt wieder vom Modell;
+ * die Entscheidung dafuer hat der Autor per «Übernehmen» getroffen.
  */
 function saveAuthorProfileRun(userEmail, { profilText, konstanten, entwicklung, basis, basisSig }) {
   db.prepare(`
@@ -153,9 +153,10 @@ function saveAuthorProfileRun(userEmail, { profilText, konstanten, entwicklung, 
 }
 
 /**
- * Vom Autor editierter Text. Setzt `edited = 1` — ab hier ist der Text seiner,
- * und ein neuer Lauf fragt, bevor er ihn ersetzt. Die Deutungs-Listen bleiben
- * unberuehrt: sie gehoeren zum Lauf, nicht zum Fliesstext.
+ * Vom Autor editierter Text. Setzt `edited = 1` — ab hier ist der Text seiner;
+ * ein neuer Lauf ersetzt ihn nicht, sondern zeigt seinen Vorschlag als Wort-Diff
+ * daneben. Die Deutungs-Listen bleiben unberuehrt: sie gehoeren zum Lauf, nicht
+ * zum Fliesstext.
  */
 function saveAuthorProfileText(userEmail, text) {
   db.prepare(`

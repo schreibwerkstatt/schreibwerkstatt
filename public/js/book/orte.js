@@ -4,7 +4,6 @@
 import { fetchJson, sendJson } from '../utils.js';
 import { loadToken } from '../cards/book-guard.js';
 import { assignCatalogList } from '../cards/catalog-store.js';
-import { confirmEntityMerge, postEntityMerge, reloadCatalogsAfterMerge } from './entity-merge.js';
 
 // Server-`error_code` der Pflege-Routen → i18n-Key; Unbekanntes fällt auf den
 // generischen Speicherfehler.
@@ -47,21 +46,6 @@ export const orteMethods = {
     const bookId = this.$store.nav.selectedBookId;
     await _send('PATCH', `/locations/${bookId}/${encodeURIComponent(locId)}`, fields);
     await this.loadOrte(bookId);
-  },
-
-  // Quelle in Ziel verschmelzen (Kapitel, Figuren, Szenen, Plot-Beats, Recherche-
-  // Links und Unterorte wandern mit, der Quellname wird Alias des Ziels). Geteilter
-  // Client-Weg book/entity-merge.js; die Kataloge laden danach neu (Szenen-ort_ids).
-  async mergeOrt(sourceId, targetId) {
-    const bookId = this.$store.nav.selectedBookId;
-    const src = this.$store.catalog.orte.find(o => o.id === sourceId);
-    const tgt = this.$store.catalog.orte.find(o => o.id === targetId);
-    if (!src || !tgt) return false;
-    if (!await confirmEntityMerge(src.name, tgt.name)) return false;
-    await postEntityMerge('ort', bookId, sourceId, targetId);
-    await reloadCatalogsAfterMerge(bookId);
-    this.$store.catalogUi.selectedOrtId = targetId;
-    return true;
   },
 
   // «Analyse-Werte übernehmen»: Schutz aller Felder aufheben, bekannte Analysewerte

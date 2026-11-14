@@ -9,6 +9,7 @@ Token-Referenz (Farben, Radien, Spacing, Schriftgrössen): [public/css/tokens.cs
 **Grundlagen**
 - [Doku-Template](#doku-template-pflicht-für-neue-sections) — Pflicht-Aufbau pro Section
 - [Ein Muster, ein Ort](#ein-muster-ein-ort) — **Prinzip**: geteilte Interaktion = ein Kern (JS) + eine Optik (CSS), Karten liefern nur Daten, Geometrie, Farbe; gegated
+- [Werkstatt-Bedienvertrag](#werkstatt-bedienvertrag) — dieselbe Absicht, derselbe Weg: Bearbeiten, Aktionsmenü, Löschen, Rückgängig, Zusammenführen, Auswahl, KI-Vorschlag; gegated
 - [Token-Pflicht](#token-pflicht-keine-ad-hoc-werte) — Schatten, Padding, Spacing, Transition, Opacity, Z-Index
 - [Motion-Patterns](#motion-patterns) — cardFadeIn, `@starting-style`-Eintritt, View Transition beim Kartenwechsel, Hover-Mechaniken
 - [Alpine-Plugins](#alpine-plugins-inventar) — was geladen ist (`x-anchor`/`x-trap`/`x-collapse`/`x-resize`), was mit Absicht nicht
@@ -154,6 +155,27 @@ Pflicht-Reihenfolge: **Use → Markup → Klassen → Regeln → Beispiele**. We
 - **Die Gates selbst driften nicht:** [single-place-registry.test.mjs](tests/unit/single-place-registry.test.mjs) verlangt, dass jeder `*-single-place`-Test in einer Kontextdatei (CLAUDE.md, DESIGN.md, docs/) verlinkt ist, und dass jeder dort verlinkte Test existiert.
 
 **Beispiele:** [Board-Drag](#board-drag-karten-zwischen-zellen-ziehen), [Drag-Griff](#drag-griff-sortierbare-kartezeile), [Picker-Popover](#picker-popover-picker-popover), [Auswahl-Leiste](#auswahl-leiste-selection-bar), [Ansichts-Menü](#ansichts-menü-filterleiste), [Leerzustand](#leerzustand), [Chat-Vorschlagskarte](#chat-vorschlagskarte-chat-vorschlag). Vollständige Liste: Tabelle „Mechanisch durchgesetzt" in [CLAUDE.md](CLAUDE.md).
+
+## Werkstatt-Bedienvertrag
+
+**Use:** jede Karte, deren Einträge der User anlegt, bearbeitet, ordnet oder löscht — Boards (Plot, Ideen, Recherche, Motiv), Kataloge (Figuren, Orte, Szenen, Ereignisse, Weltfakten, Quellen) und Formular-Werkstätten (Figur-, Titel-Werkstatt, Autorenprofil). «Ein Muster, ein Ort» vereinheitlicht die Bausteine; dieser Vertrag vereinheitlicht die **Absicht**: wer in einer Werkstatt gelernt hat, wie man bearbeitet, löscht oder einen KI-Vorschlag übernimmt, kann es in jeder anderen.
+
+| Absicht | Weg | Abkürzungen (erlaubt, nie der einzige Weg) |
+|---|---|---|
+| **Bearbeiten öffnen** | Klick auf den Titel/Namen des Eintrags (`<button class="… text-link">`) öffnet das Bearbeiten; bei Zeilen mit Aufklappen öffnet er die Zeile direkt im Formular, Aufklappen ohne Bearbeiten über den Chevron-Knopf bzw. den übrigen Zeilenkörper | Stift-Icon, Doppelklick |
+| **Aktionen am Eintrag** | [Aktionsmenü](#aktionsmenü-teleportiert--rechtsklick-long-press): ⋯-Knopf, Rechtsklick, Long-Press — Reihenfolge «Bearbeiten», Fachaktionen, Trenner, «Löschen» | sichtbare oder [Hover-Reveal](#hover-reveal-item-aktionen-auf-zuwendung)-Icons für die häufigste Aktion |
+| **Speichern / Verwerfen** | Formular mit Knopf: [Edit-Tastatur](public/CLAUDE.md) (`$editKeys`: Cmd/Ctrl+S, Esc); Inline-Edit committet zusätzlich beim Klick daneben | Enter im einzeiligen Namensfeld |
+| **Löschen** | im Aktionsmenü, mit `appConfirm({ danger: true })` — auf Boards mit Historie stattdessen rückgängig machbar | Hover-Icon |
+| **Rückgängig** | Boards mit Historie (Plot, Organizer, Ideen, Recherche, Motiv): Knöpfe im Kartenkopf + Cmd/Ctrl+Z, Umschalt+Cmd/Ctrl+Z; Kern [board-history.js](public/js/cards/board-history.js), Tasten [board-history-keys.js](public/js/cards/board-history-keys.js). Löschen ist ein Record mit Snapshot (Undo legt neu an, `_remapHistory` schreibt die neue ID um), es leert die Historie nicht | — |
+| **Zusammenführen** | Menüeintrag «Zusammenführen mit …» → Merge-Picker, für aktive wie veraltete Einträge | — |
+| **Mehrfachauswahl** | Kontrollkästchen dauerhaft sichtbar, [Auswahl-Leiste](#auswahl-leiste-selection-bar) erscheint ab der ersten Markierung — kein Auswahl-Modus-Knopf | — |
+| **KI-Lauf verfolgen** | `.job-progress`: Balken, Status, «Abbrechen»; ein abgebrochener Lauf zeigt keinen Fehler | — |
+| **KI-Ergebnis übernehmen** | [Vorschlagskarte](#chat-vorschlagskarte-chat-vorschlag) mit Übernehmen **und** Verwerfen je Eintrag; ein KI-Lauf überschreibt nie selbst ein Feld. Ausnahme ist ein Fachmodell, das Varianten sammelt (Titel-Werkstatt) | — |
+
+**Regeln:**
+- **Ausnahmen mit Grund:** read-only Kataloge (Szenen, Songs) haben kein Bearbeiten — dort klappt der Titel auf. Autosave-Formulare ohne Knopf (Titel-Werkstatt, Umbenennen im Organizer) speichern beim Verlassen des Felds.
+- **Neue Werkstatt:** erfüllt jede Zeile der Tabelle oder begründet die Abweichung im Partial-Kommentar.
+- Gegated: [werkstatt-bedienvertrag.test.mjs](tests/unit/werkstatt-bedienvertrag.test.mjs) (Aktionsmenü je Werkstatt-Eintrag, keine Vorschlags-Eigenoptik, kein Auswahl-Modus-Knopf, Historien-Konsumenten über den Kern).
 
 ## Token-Pflicht (keine ad-hoc-Werte)
 
@@ -350,6 +372,7 @@ Dieselbe Mechanik gilt fuer Bausteine, die kein `.card-section` sind, aber aufei
 | `.card-status` | Lade-/Leer-/Fehlerzeile | `--error` |
 | `.muted-msg` | gedämpfte Zustandsmeldung | `--sm`, `--block`, `--spaced` |
 | `.progress-bar-wrap` + `.progress-bar` | Job-Fortschritt | — |
+| `.job-progress` + `.job-progress-row` | laufender KI-Job einer Werkstatt: Balken, darunter Status (`.card-status`) und Text-Knopf «Abbrechen» — Figur-Werkstatt, Bogen, Titel-Werkstatt, Autorenprofil, Stilprofil | — |
 | `.filter-bar` | Listenfilter (siehe [Filter-Bar](#filter-bar-listenfilter)) | `--inline` |
 | `.card-edit-panel` | gerahmter Anlegen-/Bearbeiten-Block über einer Katalog-Liste (Akzentleiste links) — Schauplätze, Quellen, Weltfakten | — |
 
@@ -1503,15 +1526,17 @@ CSS: [editor/reference-slot.css](public/css/editor/reference-slot.css) (`.refere
 
 ## Listen-Anriss + aufgeklappte Zeile
 
-**Use:** Einträge mit Freitext **beliebiger** Länge in einer Übersichtsliste (Recherche-Fundstück, erfasste Webseite, Zitat-Volltext). Zugeklappt zeigt die Zeile einen Anriss; ein Klick klappt sie auf, und Volltext, grosses Bild, Anhänge und das Bearbeiten stehen in der Zeile selbst — dasselbe Muster wie Figuren und Schauplätze, **kein** Dialog. Offen ist höchstens eine Zeile.
+**Use:** Einträge einer Übersichtsliste, die aufgeklappt mehr zeigen (Recherche-Fundstück mit Freitext beliebiger Länge, Figur, Schauplatz, Welt-Fakt). Zugeklappt zeigt die Zeile einen Anriss; aufgeklappt stehen Volltext, grosses Bild, Anhänge und das Bearbeiten in der Zeile selbst, **kein** Dialog. Offen ist höchstens eine Zeile. Der Titel öffnet die Zeile direkt im Bearbeiten ([Werkstatt-Bedienvertrag](#werkstatt-bedienvertrag)); zum Lesen klappt der Aufklapp-Knopf `.row-expand` bzw. der übrige Zeilenkörper auf.
 
 **Markup** (Liste, [recherche-item.html](public/partials/recherche-item.html)):
 ```html
 <div class="research-item-head research-item-body--clickable" @click="onItemBodyClick(item, $event)">
-  <button type="button" class="research-item-title text-link" :aria-expanded="detailItemId === item.id"
-          @click="bulkMode ? toggleSelect(item.id) : toggleDetail(item)" x-text="item.title || kindLabel(item.kind)"></button>
+  <button type="button" class="research-item-title text-link"
+          @click="openItemForEdit(item)" x-text="item.title || kindLabel(item.kind)"></button>
   …
-  <span class="history-chevron" :class="{ open: detailItemId === item.id }" aria-hidden="true"></span>
+  <button type="button" class="row-expand" @click="toggleDetail(item)" :aria-expanded="detailItemId === item.id" :aria-label="…">
+    <span class="history-chevron" :class="{ open: detailItemId === item.id }" aria-hidden="true"></span>
+  </button>
 </div>
 <template x-if="detailItemId !== item.id"><div class="research-item-preview …">…Anriss…</div></template>
 <template x-if="detailItemId === item.id"><!-- @include recherche-item-detail --></template>
@@ -1519,7 +1544,8 @@ CSS: [editor/reference-slot.css](public/css/editor/reference-slot.css) (`.refere
 
 **Klassen** [entities/recherche/board.css](public/css/entities/recherche/board.css) + [entities/recherche/detail.css](public/css/entities/recherche/detail.css):
 - `.research-item-text` — der Anriss: fester `-webkit-line-clamp` (3) + `overflow: hidden`; Inhalt über `itemBodyHtml` (Markdown escaped, Zitat wörtlich) — dieselbe Quelle wie die Status-Board-Karte und die aufgeklappte Zeile
-- `.research-item-body--clickable` — Kopf und Anriss klappen per Maus auf/zu, sind aber **kein** `.internal-link`: sie tragen Knöpfe und Links, die unter `role=button` für Screenreader verschwänden. Tastaturweg ist der Titel-`<button>` (mit `aria-expanded`)
+- `.research-item-body--clickable` — Kopf und Anriss klappen per Maus auf/zu, sind aber **kein** `.internal-link`: sie tragen Knöpfe und Links, die unter `role=button` für Screenreader verschwänden. Tastaturweg ist der Aufklapp-Knopf
+- `.row-expand` — der Aufklapp-Knopf (leerer `.history-chevron`-Span, `aria-expanded`), Optik ausschliesslich [components/row-expand.css](public/css/components/row-expand.css); die Karte setzt höchstens die Position (Katalog-Zeilen: [entities/entity-list.css](public/css/entities/entity-list.css))
 - `.research-item-thumb` / `.research-item-image` — Vorschaubild, klein (`max-height: 6rem`), klappt auf
 - `.research-detail` — der aufgeklappte Teil ([recherche-item-detail.html](public/partials/recherche-item-detail.html)); `__links` oben: «Verknüpfen»/KI-Vorschlag (`__link-actions`), bestehende Verknüpfungen, Tags und Vorschläge — oben statt am Textende, damit sie bei langem Fund ohne Scrollen sichtbar sind
 - `.research-detail__text` — Lesesatz: `--font-size-reading`, `--lh-relaxed`
@@ -1528,14 +1554,14 @@ CSS: [editor/reference-slot.css](public/css/editor/reference-slot.css) (`.refere
 **Regeln:**
 - **Der Cap ist eine feste CSS-Zahl, kein gemessener Toggle.** „Mehr anzeigen" ist das Aufklappen der Zeile; die Zeilen-Messung (`scrollHeight > clientHeight`, rAF, `resize`-Listener) entfällt komplett.
 - **Volltext braucht Lesetypografie, nicht bloss mehr Platz:** Lesegrösse (`--font-size-reading`) und ruhige Zeilenhöhe (`--lh-relaxed`).
-- **Der tastaturerreichbare Weg zum Aufklappen ist ein `<button>`** (der Titel). Der Klick auf Kopf oder Anriss ist nur Maus-Komfort und liegt in einer Allowlist-Prüfung (`onItemBodyClick`), die interaktive Kinder und aktive Textselektion ausnimmt. Der aufgeklappte Teil selbst klappt per Klick **nicht** zu — dort wird gelesen und markiert.
+- **Der tastaturerreichbare Weg zum Aufklappen ist ein `<button>`** (`.row-expand`), der zum Bearbeiten der Titel. Der Klick auf Kopf oder Anriss ist nur Maus-Komfort und prüft ausschliesslich [row-click.js](public/js/row-click.js)#`isRowBodyClick` (nimmt interaktive Kinder und aktive Textselektion aus); der `@click.outside`-Commit eines Zeilen-Formulars ignoriert Klicks in schwebende Ebenen über `isFloatingLayerClick` (LanguageTool-Popover, Picker, Menü, Dialog). Der aufgeklappte Teil selbst klappt per Klick **nicht** zu — dort wird gelesen und markiert.
 - **Lesen und Bearbeiten teilen die aufgeklappte Zeile, verdrängen sich aber nicht gegenseitig:** ein Modus-Flag (`detailEditing`) tauscht nur die Textfelder. Verknüpfungen, Tags und Anhänge bleiben in beiden Modi bedienbar — zwei exklusive `x-if`-Zweige (Anzeigen ODER Formular) nehmen dem User genau die Funktionen weg, die er beim Redigieren braucht.
 - **Bearbeiten ist Inline-Edit** (public/CLAUDE.md «Edit-Formulare»): `$editKeys` mit Speichern + Verwerfen am Formular, `@click.outside` committet (`commitEdit`), und der Wechsel auf eine andere Zeile speichert das offene Formular zuerst (`openDetail`) — nie still verwerfen. Eine Zeile im Bearbeiten-Modus klappt per Kopf-Klick nicht zu.
 - **Eine Ansicht ohne Zeilen (Status-Board) klappt in der Liste auf:** `openDetail` schaltet `viewMode` auf die Liste, wie ein Sprung in die Orte-Karte.
 - **Anlegen ist ein Inline-Formular über der Liste** (`.recherche-create`, Rahmen wie das Quellen-Formular, zwischen Toolbar und Liste, sichtbar über `creating`). Die Felder kommen aus EINEM Fragment (`recherche-form-fields.html`) mit EINEM Draft (`draft`); `startCreate` und `openDetail` schliessen sich gegenseitig, und gefüllt wird der Draft **nur** von den Öffnern (`startCreate`/`startEdit`).
 - Kein `<details>`/`<summary>`: das Aufklappen ist Single-Select über `detailItemId` (wie `selectedOrtId`), keine eigenständige klappbare Section.
 
-**Beispiele:** [recherche-item.html](public/partials/recherche-item.html) + [recherche-item-detail.html](public/partials/recherche-item-detail.html) + [recherche-create.html](public/partials/recherche-create.html) (geteilte Felder: [recherche-form-fields.html](public/partials/recherche-form-fields.html)), E2E: [tests/e2e-app/recherche-overview.spec.js](tests/e2e-app/recherche-overview.spec.js).
+**Beispiele:** Katalog-Zeilen [figuren.html](public/partials/figuren.html), [orte-list.html](public/partials/orte-list.html), [world-facts.html](public/partials/world-facts.html); [recherche-item.html](public/partials/recherche-item.html) + [recherche-item-detail.html](public/partials/recherche-item-detail.html) + [recherche-create.html](public/partials/recherche-create.html) (geteilte Felder: [recherche-form-fields.html](public/partials/recherche-form-fields.html)), E2E: [tests/e2e-app/recherche-overview.spec.js](tests/e2e-app/recherche-overview.spec.js).
 
 ---
 
@@ -2032,7 +2058,7 @@ CSS: [public/css/components/confirm-dialog.css](public/css/components/confirm-di
 
 **Nie natives `confirm()`/`alert()`/`prompt()`:** es reisst Chrome auf macOS aus dem Vollbild-Space, blockiert den Event-Loop und sieht anders aus als jede andere Rückfrage. Einzige Ausnahme ist der Share-Reader (eigene SSR-Seite ohne Alpine und ohne diesen Dialog). Gegated: [tests/unit/app-confirm-single-place.test.mjs](tests/unit/app-confirm-single-place.test.mjs).
 
-**Unsaved-Changes-Pattern (Reuse, nicht parallel erfinden):** der einheitliche Discard-Dialog läuft über `appConfirm({ message, confirmLabel: t('edit.discardEdit'), danger: true })`. Beispiele: [editor/edit.js#cancelEdit](public/js/editor/edit.js), [figur-werkstatt-card.js#onCardRefresh](public/js/cards/figur-werkstatt-card.js). Pro Feature einen i18n-Key für die Frage (z. B. `edit.cancelConfirm`, `app.switchPageConfirm`, `werkstatt.confirmReload`); der Confirm-Button-Text bleibt der gemeinsame `edit.discardEdit` („Verwerfen" / „Discard").
+**Unsaved-Changes-Pattern (Reuse, nicht parallel erfinden):** der einheitliche Discard-Dialog läuft über `appConfirm({ message, confirmLabel: t('edit.discardEdit'), danger: true })`. Beispiele: [editor/edit.js#cancelEdit](public/js/editor/edit.js), [figur-werkstatt/crud.js#discardDraftEdits](public/js/figur-werkstatt/crud.js) (Esc im Formular und Karten-Refresh). Pro Feature einen i18n-Key für die Frage (z. B. `edit.cancelConfirm`, `app.switchPageConfirm`, `werkstatt.confirmReload`); der Confirm-Button-Text bleibt der gemeinsame `edit.discardEdit` („Verwerfen" / „Discard").
 
 ---
 
@@ -2427,7 +2453,7 @@ menuOpenIdee() { return this.ideen.find(i => i.id === this.actionMenuTarget) || 
 - **Picker aus dem Menü** verankern an `actionMenuAnchor()` (Knopf bzw. Zeile) — der Eintrag verschwindet mit dem Menü.
 - **Ziel als ID bzw. `{ ctx, id }`**, aufgelöst über eine Methode (`menuOpenIdee()`, `threadMenuLane()`, `itemMenuItems()`); ein Menü für mehrere Kontexte derselben Karte (Recherche: Listenzeile, Board-Karte) unterscheidet über den Schlüssel `ctx:id`.
 - Das Element mit `@contextmenu` filtert selbst, wann kein Menü kommt (`if (!busy && editingId !== idee.id) …`) — im Bearbeiten-Modus bleibt der native Rechtsklick des Textfelds.
-- Konsumenten: Seitenbaum ([tree-context-menu.js](public/js/book/tree-context-menu.js), im Root), Ideen-Karte, Recherche ([recherche-item-menu.html](public/partials/recherche-item-menu.html)), Plot-Strang, Motiv-Graph, Figur-Mindmap.
+- Konsumenten: Seitenbaum ([tree-context-menu.js](public/js/book/tree-context-menu.js), im Root), Ideen-Karte, Ideen-Board (Raster + Liste, [ideen-board-menu.html](public/partials/ideen-board-menu.html)), Recherche ([recherche-item-menu.html](public/partials/recherche-item-menu.html)), Plot-Werkstatt (Beat, Akt, Strang: [plot-actions-menu.html](public/partials/plot-actions-menu.html)), Motiv-Werkstatt (Graph + Baum), Figur-Mindmap, Titel-Werkstatt-Varianten, die Kataloge Figuren, Schauplätze, Szenen, Ereignisse, Welt-Fakten, Quellen (`<karte>-menu.html`). Reihenfolge der Einträge: [Werkstatt-Bedienvertrag](#werkstatt-bedienvertrag).
 
 ### Regeln
 - Neues **Aktions**-Menü erfindet kein eigenes Popover-CSS, keine eigene Item-/Sep-Klasse und keine eigene Öffnen/Schliessen-Mechanik. Fehlt ein Icon im Sprite, erst [public/icons.svg](public/icons.svg) ergänzen (Lucide).
@@ -2496,7 +2522,7 @@ cancelXyz()       { this.xyzId = null; this._releasePickerPopover(); }
 
 ## Chat-Vorschlagskarte (`.chat-vorschlag`)
 
-**Use:** jeder Vorschlag, den ein Chat zum einzelnen Übernehmen/Verwerfen anbietet — Abschnitts-Chat (Textersetzung), Ideen-Vorschläge aus Abschnitts-, Buch- und Recherche-Chat, Plot-Chat, Ideen-Chat, Recherche-Chat (neue Fundstücke und Änderungen an bestehenden).
+**Use:** jeder KI-Vorschlag zum einzelnen Übernehmen/Verwerfen — aus einem Chat (Abschnitts-Chat-Textersetzung, Ideen-Vorschläge aus Abschnitts-, Buch- und Recherche-Chat, Plot-, Ideen-, Recherche-Chat) **und** aus einem Werkstatt-Lauf (Plot-Brainstorm, Motiv-Vorschläge, Figur-Werkstatt-Brainstorm und -Konsistenz, Berufs-/Hobby-Stationen, Autorenprofil, Stilprofil). Ein Werkstatt-Lauf überschreibt kein Feld selbst; eine Text-Neufassung zeigt den Wort-Diff alt → neu ([Werkstatt-Bedienvertrag](#werkstatt-bedienvertrag)).
 
 **Optik:** ausschliesslich [components/chat-vorschlag.css](public/css/components/chat-vorschlag.css). Die Karte liefert nur Daten; Feature-CSS trägt höchstens Teile, die es nirgends sonst gibt (Merge-Liste, URL-Spalte, Ziel-Kopf).
 
@@ -2557,15 +2583,14 @@ cancelXyz()       { this.xyzId = null; this._releasePickerPopover(); }
 
 **Regeln:**
 - **Gezählt und geschrieben wird nur, was sichtbar ist** (`selectedVisibleIds`) — ein Filterwechsel darf keine unsichtbare Auswahl mitschleppen, die dann mitgelöscht würde.
-- **Einstieg je Karte, Leiste überall gleich.** Öffnet ein Klick auf die Zeile sonst etwas (Dialog), schaltet ein Knopf «Auswählen» in der Toolbar einen Modus ein und die Leiste steht, solange er an ist (× beendet ihn). Hat die Zeile keine Klick-Aktion (Tabelle), stehen die Haken immer und die Leiste erscheint ab der ersten Markierung (× hebt die Auswahl auf).
-- **Der Einstiegs-Knopf ändert seine Beschriftung nicht** — nur `is-active`/`aria-pressed`. Ein längeres «Auswahl beenden» verschiebt die eingebettete Filterleiste daneben und lässt sie umbrechen; beendet wird über das × der Leiste.
+- **Ein Einstieg überall:** die Haken stehen immer an der Zeile, die Leiste erscheint ab der ersten Markierung, × hebt die Auswahl auf. Kein Auswahl-Modus-Knopf in der Toolbar — der Haken ist ein eigenes Klickziel neben Titel und Zeilenkörper.
 - **Aktionen bleiben stehen**, auch ohne Markierung (`:disabled` bzw. `is-disabled`) — sonst springt die Leiste beim ersten Haken.
 - **Nur Compact-Controls** in `__actions`; ein Textfeld ist `input.filter-search-input` (teilt die Compact-Regel der Filterleiste) — ein nacktes `<input>` käme in Formular-Grösse.
 - Zähltext über `tn('selection.count', n)`; „Alle sichtbaren auswählen"/„Auswahl aufheben" aus `selection.*`, nicht je Karte.
 
 **CSS:** [components/selection-bar.css](public/css/components/selection-bar.css), Compact-Textfeld in [card-form/card-blocks.css](public/css/components/card-form/card-blocks.css) (`.selection-bar .filter-search-input`). Klebt beim Rollen oben (`position: sticky`); unter 600px rutschen die Aktionen in eine eigene Zeile. Gegated: [selection-bar-single-place.test.mjs](tests/unit/selection-bar-single-place.test.mjs).
 
-**Konsumenten:** Recherche-Liste (Modus, [recherche-bulk-bar.html](public/partials/recherche-bulk-bar.html), Aktionen [recherche/bulk.js](public/js/book/recherche/bulk.js)), Ideen-Board-Liste (Haken immer, [ideen-board-list.html](public/partials/ideen-board-list.html), Aktionen [ideen-board/list.js](public/js/book/ideen-board/list.js)).
+**Konsumenten:** Recherche-Liste ([recherche-bulk-bar.html](public/partials/recherche-bulk-bar.html), Aktionen [recherche/bulk.js](public/js/book/recherche/bulk.js)), Ideen-Board-Liste ([ideen-board-list.html](public/partials/ideen-board-list.html), Aktionen [ideen-board/list.js](public/js/book/ideen-board/list.js)).
 
 ---
 
@@ -3501,7 +3526,7 @@ Struktur: 8 thematische Subfolder unter [public/css/](public/css/) + Root-Solit�
 | [components/job-queue.css](public/css/components/job-queue.css) | `.job-queue-bar` / `-pill*` / `-cancel-btn` / `-toggle-btn` — feste Job-Leiste unten; schreibt ihre Höhe als `--job-queue-h` auf `<html>` (Grundlage von `--sticky-bottom`). |
 | [components/status-msg.css](public/css/components/status-msg.css) | `.success-msg` / `.error-msg` (+ `--banner`-Variante mit Fläche) — app-weite Status-Meldungen aus den Status-Tokens. **Eindeutiger Besitzer für zwei generische Klassennamen**, die vorher in `admin/admin-settings.css`, `chat.css` und `page/page-list.css` verteilt lagen; die Darstellung hing dadurch an der Ladereihenfolge unbeteiligter Dateien. Konsumenten: Admin-Einstellungen, API-/Geräte-Token, Chat- und Lektorat-Statusstrings. |
 | [components/floating-dock.css](public/css/components/floating-dock.css) | `.dock` / `.dock-btn` (+ `--sub`) / `.dock-status` — schwebender Werkzeug-Dock am Rand der Lesefläche (runde Icon-Taste + Status-Pille mit Punkt-Indikator). Geteilte SSoT für **drei** Konsumenten: `.stt-dock` (Diktat, sticky rechts), `.tts-dock` im Notebook (Vorlesen, sticky links) und `.tts-dock` im Share-Reader (fixed links). Neutrale `--dock-*`-Variablen mit Fallback auf die SPA-Tokens → die zwei SPA-Docks brauchen kein Mapping, der Reader mappt sie in `share/tts.css` auf `--share-*`. Verankerung, Zustandsfarben und Puls-Animationen bleiben beim Konsumenten. |
-| [components/color-picker.css](public/css/components/color-picker.css) | `.color-picker` / `__swatch` / `__popover` / `__opt` (+ `--on`, `--none`) — Farbwähler-Popover für Ordnungsfarben. Geteilt zwischen Motiv-Werkstatt (Themen) und Plot-Werkstatt (Akte, Handlungsstränge). Die Farbe liefert der Konsument per `--col-accent`; das Modul kennt keine Palette, nur die Form. |
+| [components/color-picker.css](public/css/components/color-picker.css) | `.color-picker` / `__swatch` / `__popover` / `__opt` (+ `--on`, `--none`) — Farbwähler-Popover für Ordnungsfarben. Geteilt zwischen Motiv-Werkstatt (Themen) und Plot-Werkstatt (Akte, Handlungsstränge). Markup nur über das Fragment `<!-- @include color-picker -->` ([color-picker.html](public/partials/color-picker.html)), Mechanik nur `Alpine.data('colorPicker')` ([color-picker.js](public/js/color-picker.js)) — keine Swatch-Kopie je Karte. Die Farbe liefert der Konsument per `--col-accent`; das Modul kennt keine Palette, nur die Form. |
 | [components/relation-conflicts.css](public/css/components/relation-conflicts.css) | `.relcheck-list` / `.relcheck-item` / `.relcheck-head` / `.relcheck-snippet` — Konfliktliste der Beziehungsprüfung (Fragment [relation-conflicts-list.html](public/partials/relation-conflicts-list.html)). Konsumenten: Fine-Tuning-Export (Prüfung vor dem Export) und Figuren-Karte (Hinweis über der Liste). |
 | [components/picker-popover.css](public/css/components/picker-popover.css) | `.picker-popover` / `__head` / `__title` / `__subject` / `__actions` — am Trigger verankertes Auswahl-Popover an einem Element (Kopf nennt das Element, darunter Felder, unten Aktionen). Mechanik in [picker-popover.js](public/js/picker-popover.js), Breite über `--picker-popover-w`. Siehe „Picker-Popover". |
 | [components/selection-bar.css](public/css/components/selection-bar.css) | `.selection-bar` / `__all` / `__count` / `__actions` / `__close` — Sammelaktionen für markierte Zeilen einer Liste/Tabelle, klebt oben. Mechanik in [selection-bar.js](public/js/selection-bar.js). Siehe „Auswahl-Leiste". |

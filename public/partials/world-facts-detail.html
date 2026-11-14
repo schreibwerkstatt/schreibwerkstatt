@@ -18,7 +18,7 @@
         <svg class="icon" aria-hidden="true"><use href="/icons.svg#rotate-cw"/></svg>
         <span x-text="$app.t('weltfakten.factcheck.recheck')"></span>
       </button>
-      <button type="button" class="btn-compact" :disabled="wfEdit.mode !== null" @click="wfStartEdit(f)">
+      <button type="button" class="btn-compact" :disabled="wfEdit.mode !== null" @click.stop="wfOpenEdit(f)">
         <svg class="icon" aria-hidden="true"><use href="/icons.svg#pencil"/></svg>
         <span x-text="$app.t('weltfakten.edit.editTitle')"></span>
       </button>

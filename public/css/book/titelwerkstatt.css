@@ -199,6 +199,8 @@
   font-size: var(--size-compact-font-size);
   color: var(--color-muted);
 }
+/* Löschen + ⋯ (Aktionsmenü) als Hover-Reveal-Gruppe am Zeilenende. */
+.tw-variant-actions { display: flex; gap: var(--space-2xs); }
 .tw-variant-add {
   display: flex;
   gap: var(--space-2xs);

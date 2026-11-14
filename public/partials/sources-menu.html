@@ -1,0 +1,45 @@
+<!-- Aktionsmenü einer Quellenzeile (⋯, Rechtsklick, Long-Press): EINE teleportierte
+     Instanz je Karte (action-menu.js, DESIGN.md «Context-Menu»). Eingebunden als
+     String-Include in sources.html ausserhalb der Tabelle; Ziel = sources.id,
+     aufgelöst über srcMenuSource() (cards/sources-card.js). Dieselben Aktionen wie
+     die Hover-Knöpfe der Zeile: Bearbeiten/Archivieren/Löschen nur für den Besitzer
+     (Bibliothek), «Aus der Arbeit entfernen» für jeden Editor. -->
+<template x-teleport="body">
+  <div class="context-menu" x-ref="actionMenu" x-bind="actionMenuPanel()" x-cloak>
+    <template x-if="srcMenuSource()">
+      <div>
+        <button type="button" role="menuitem" class="context-menu-item context-menu-item--icon"
+                x-show="srcIsOwner(srcMenuSource())"
+                @click="startEditSource(srcMenuSource())">
+          <svg class="icon" aria-hidden="true"><use href="/icons.svg#pencil"/></svg>
+          <span x-text="$app.t('common.edit')"></span>
+        </button>
+        <button type="button" role="menuitem" class="context-menu-item context-menu-item--icon"
+                x-show="srcMenuSource().cite_count > 0"
+                @click="openSourceCitations(srcMenuSource())">
+          <svg class="icon" aria-hidden="true"><use href="/icons.svg#quote"/></svg>
+          <span x-text="$app.t('sources.menu.citations')"></span>
+        </button>
+        <button type="button" role="menuitem" class="context-menu-item context-menu-item--icon"
+                x-show="srcIsOwner(srcMenuSource())" :disabled="sourcesBusy"
+                @click="toggleSourceArchived(srcMenuSource())">
+          <svg class="icon" aria-hidden="true"><use href="/icons.svg#archive"/></svg>
+          <span x-text="srcMenuSource().archived ? $app.t('sources.unarchive') : $app.t('sources.archive')"></span>
+        </button>
+        <button type="button" role="menuitem" class="context-menu-item context-menu-item--icon"
+                :disabled="sourcesBusy"
+                @click="unlinkSourceFromBook(srcMenuSource())">
+          <svg class="icon" aria-hidden="true"><use href="/icons.svg#unlink"/></svg>
+          <span x-text="$app.t('sources.remove')"></span>
+        </button>
+        <div class="context-menu-sep" role="separator" x-show="srcIsOwner(srcMenuSource())"></div>
+        <button type="button" role="menuitem" class="context-menu-item context-menu-item--icon context-menu-item--danger"
+                x-show="srcIsOwner(srcMenuSource())" :disabled="sourcesBusy"
+                @click="deleteSource(srcMenuSource())">
+          <svg class="icon" aria-hidden="true"><use href="/icons.svg#trash"/></svg>
+          <span x-text="$app.t('sources.deleteFromLibrary')"></span>
+        </button>
+      </div>
+    </template>
+  </div>
+</template>

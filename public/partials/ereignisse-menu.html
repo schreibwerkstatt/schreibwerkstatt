@@ -1,0 +1,32 @@
+<!-- Aktionsmenü eines Ereignisses (⋯, Rechtsklick, Long-Press): EINE teleportierte
+     Instanz je Karte (action-menu.js, DESIGN.md «Context-Menu»). Eingebunden als
+     String-Include in ereignisse.html ausserhalb der Zeilen-Schleife; Ziel = Index in
+     filteredEreignisse(), aufgelöst über eventMenuEvent() (cards/ereignisse-card.js).
+     Ereignisse lassen sich nicht löschen (die Komplettanalyse konsolidiert sie) —
+     darum kein Löschen-Eintrag. -->
+<template x-teleport="body">
+  <div class="context-menu" x-ref="actionMenu" x-bind="actionMenuPanel()" x-cloak>
+    <template x-if="eventMenuEvent()">
+      <div>
+        <button type="button" role="menuitem" class="context-menu-item context-menu-item--icon"
+                x-show="eventMenuEvent().id != null"
+                @click="openEventEdit(eventMenuEvent())">
+          <svg class="icon" aria-hidden="true"><use href="/icons.svg#pencil"/></svg>
+          <span x-text="$app.t('common.edit')"></span>
+        </button>
+        <button type="button" role="menuitem" class="context-menu-item context-menu-item--icon"
+                x-show="eventHasTarget(eventMenuEvent())"
+                @click="openEventText(eventMenuEvent())">
+          <svg class="icon" aria-hidden="true"><use href="/icons.svg#book-open"/></svg>
+          <span x-text="$app.t('common.showInText')"></span>
+        </button>
+        <button type="button" role="menuitem" class="context-menu-item context-menu-item--icon"
+                x-show="eventHasYear(eventMenuEvent())"
+                @click="selectTimelineEvent(actionMenuTarget)">
+          <svg class="icon" aria-hidden="true"><use href="/icons.svg#calendar"/></svg>
+          <span x-text="$app.t('events.showOnTimeline')"></span>
+        </button>
+      </div>
+    </template>
+  </div>
+</template>

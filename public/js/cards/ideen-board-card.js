@@ -17,6 +17,9 @@ import { attachFullscreenSync, toggleWrapFullscreen } from '../fullscreen.js';
 import { ideenBoardMethods } from '../book/ideen-board.js';
 import { pickerPopoverState } from '../picker-popover.js';
 import { selectionState } from '../selection-bar.js';
+import { actionMenuState } from '../action-menu.js';
+import { boardHistoryState } from './board-history.js';
+import { bindBoardHistoryKeys } from './board-history-keys.js';
 import { buildLaneOrder, laneKeySet } from '../book/ideen-board/model.js';
 import { LANE_BOOK, IDEE_STATUSES, ideeLaneKey } from '../book/ideen-shared.js';
 import { ideenChatMethods, ideenChatState } from '../chat/ideen-chat.js';
@@ -97,6 +100,13 @@ export function registerIdeenBoardCard() {
     ...pickerPopoverState(),
     // Mehrfachauswahl der Liste (Idee-IDs); nicht persistiert.
     ...selectionState(),
+    // Aktionsmenü einer Idee in Raster UND Liste (action-menu.js), Ziel = { ctx, id }.
+    ...actionMenuState(),
+    // Undo/Redo (Kern board-history.js, Records ideen-board/history.js).
+    ...boardHistoryState(),
+    // Sammelt die Einzelschritte eines Drops/einer Sammelaktion zu EINEM Record
+    // (null = keine Gruppe offen).
+    _historyGroup: null,
 
     loading: false,
     busy: false,
@@ -133,6 +143,16 @@ export function registerIdeenBoardCard() {
         extraListeners: [
           { type: EVT.IDEEN_QUEUE_CHANGED, handler: (e) => { if (e.detail?.flushed && window.__app?.showIdeenBoardCard) this.loadBoard(); } },
         ],
+      });
+
+      // Cmd/Ctrl+Z · Cmd/Ctrl+Shift+Z · Ctrl+Y (Guards in board-history-keys.js);
+      // gesperrt, solange der Fokus im offenen Inline-Edit steht.
+      bindBoardHistoryKeys({
+        isVisible: () => !!window.__app?.showIdeenBoardCard,
+        isBlocked: (e) => this.editingId != null && !!e.target?.closest?.('.idee-board-edit'),
+        onUndo: () => this.historyUndo(),
+        onRedo: () => this.historyRedo(),
+        signal: this._lifecycle.signal,
       });
 
       // Native Fullscreen-API: Status spiegeln (Toggle-Button + Esc-Exit).
@@ -199,6 +219,7 @@ export function registerIdeenBoardCard() {
       this._lifecycle?.destroy();
       this._destroyBoardSortables();
       this._releasePickerPopover();
+      this.closeActionMenu();
     },
 
     // Ganze Karte ins Native-Vollbild. Was sonst nach <body> haengt (Drag-

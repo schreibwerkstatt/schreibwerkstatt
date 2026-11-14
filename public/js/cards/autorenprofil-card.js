@@ -14,6 +14,8 @@ import { EVT } from '../events.js';
 import { setupCardLifecycle } from './card-lifecycle.js';
 import { tFetchError } from '../i18n.js';
 import { formatNumber, fetchJson, sendJson } from '../utils.js';
+import { startPoll, runningJobStatus } from './job-helpers.js';
+import { diffParts } from '../diff/diff-parts.js';
 
 export function registerAutorenprofilCard() {
   if (typeof window === 'undefined' || !window.Alpine) return;
@@ -25,6 +27,13 @@ export function registerAutorenprofilCard() {
     apGenerating: false,
     apJobId: null,
     apGenError: '',
+    apGenProgress: 0,
+    apGenStatus: '',
+    _apPollTimer: null,
+    // KI-Ergebnis als Vorschlag (Vorschlagskarte mit Wort-Diff): der Lauf legt
+    // ihn als offenen Vorschlag ab (GET /ai-proposals/autorenprofil), erst
+    // «Übernehmen» speichert ({ text, konstanten, entwicklung, basis, basisSig, diff }).
+    apSuggestion: null,
     // Bearbeiten: der Entwurf lebt lokal, bis gespeichert wird — sonst schreibt
     // ein Reload waehrend des Tippens den Text unter dem Cursor um.
     apEditing: false,
@@ -34,25 +43,22 @@ export function registerAutorenprofilCard() {
     _lifecycle: null,
 
     init() {
-      // Der Lauf persistiert serverseitig — nach dem Job wird neu geladen statt
-      // das Job-Result in den State zu kopieren. So ist die Karte auch dann
-      // richtig, wenn der Lauf in einem anderen Tab lief.
+      // Das Ergebnis des Laufs wird zum Vorschlag. Der eigene Poller liefert
+      // Fortschritt und Ergebnis; JOB_FINISHED fängt den Lauf ab, der ohne Poller
+      // endete (Reload, anderer Tab); einen Lauf, der bei geschlossener App
+      // endete, holt loadAutorenprofil aus den offenen Vorschlägen.
       this._onApJobFinished = (ev) => {
         if (ev?.detail?.type !== 'autorenprofil') return;
-        this.apGenerating = false;
-        this.apJobId = null;
-        if (ev.detail.job?.status === 'error') {
-          this.apGenError = window.__app.t('autorenprofil.genError');
-        } else {
-          this.loadAutorenprofil();
-        }
+        if (this._apPollTimer) return; // der eigene Poller meldet selbst
+        this._apFinish(ev.detail.job);
       };
       this._lifecycle = setupCardLifecycle(this, {
         name: 'autorenprofil',
         showFlag: 'showAutorenprofilCard',
         showNeedsBookId: false,
         refreshNeedsBookId: false,
-        onShow: () => this.loadAutorenprofil(),
+        timerKeys: ['_apPollTimer'],
+        onShow: () => { this._apReattach(); return this.loadAutorenprofil(); },
         // Reklick, Aufwachen, Reconnect: still neu laden (Skeleton nur beim ersten Mal).
         onCardRefresh: () => this.loadAutorenprofil(),
         extraListeners: [{ type: EVT.JOB_FINISHED, handler: this._onApJobFinished }],
@@ -73,8 +79,13 @@ export function registerAutorenprofilCard() {
       if (!background) this.apLoading = true;
       this.apError = '';
       try {
-        this.apData = await fetchJson('/me/author-profile');
+        const [data, open] = await Promise.all([
+          fetchJson('/me/author-profile'),
+          fetchJson('/ai-proposals/autorenprofil').catch(() => null),
+        ]);
+        this.apData = data;
         this._apMemos = {};
+        if (!this.apSuggestion && open?.proposal?.payload) this._apSetSuggestion(open.proposal.payload);
       } catch (e) {
         if (!background) {
           this.apError = window.__app.t('autorenprofil.loadError');
@@ -205,31 +216,128 @@ export function registerAutorenprofilCard() {
     get apProfileStale() { return !!this.apData?.profileStale; },
 
     /**
-     * KI-Lauf starten. `force` ueberschreibt einen von Hand editierten Text —
-     * der Server verlangt das Flag (409), die Karte fragt vorher.
+     * KI-Lauf starten. Er schreibt nichts: das Ergebnis erscheint als
+     * Vorschlag mit Wort-Diff gegen den geltenden Text, «Übernehmen» speichert.
+     * Ein von Hand editierter Text braucht darum keine Rückfrage mehr.
      */
-    async generateAutorenprofil(force = false) {
+    async generateAutorenprofil() {
       if (this.apGenerating) return;
       this.apGenerating = true;
       this.apGenError = '';
+      this.apGenProgress = 0;
+      this.apGenStatus = '';
+      this.apSuggestion = null;
       try {
-        const data = await sendJson('/jobs/autorenprofil', 'POST', force ? { force: true } : {});
+        const data = await sendJson('/jobs/autorenprofil', 'POST', {});
         this.apJobId = data.jobId;
         window.dispatchEvent(new CustomEvent(EVT.JOB_ENQUEUED, {
           detail: { type: 'autorenprofil', jobId: data.jobId },
         }));
+        this._apPoll(data.jobId);
       } catch (e) {
         this.apGenerating = false;
-        if (e.status === 409 && e.code === 'AUTHOR_PROFILE_EDITED') {
-          const ok = await window.__app.appConfirm({
-            message: window.__app.t('autorenprofil.overwriteConfirm'),
-            confirmLabel: window.__app.t('autorenprofil.overwriteConfirmYes'),
-            danger: true,
-          });
-          if (ok) await this.generateAutorenprofil(true);
-          return;
-        }
         this.apGenError = tFetchError(e);
+      }
+    },
+
+    _apPoll(jobId) {
+      const app = window.__app;
+      startPoll(this, {
+        timerProp: '_apPollTimer',
+        jobId,
+        progressProp: 'apGenProgress',
+        onProgress: (job) => {
+          this.apGenStatus = runningJobStatus((k, p) => app.t(k, p),
+            job.statusText, job.tokensIn, job.tokensOut, job.maxTokensOut,
+            job.progress, job.tokensPerSec, job.statusParams);
+        },
+        onDone: (job) => this._apFinish(job),
+        onError: (job) => this._apFinish(job),
+        onNotFound: () => this._apIdle(),
+      });
+    },
+
+    // Laufender Lauf nach Reload/Kartenwechsel: Fortschritt wieder anhängen.
+    _apReattach() {
+      if (this.apGenerating || this._apPollTimer) return;
+      const queued = window.Alpine?.store('jobs')?.jobQueueItems || [];
+      const job = queued.find(j => j.type === 'autorenprofil');
+      if (!job) return;
+      this.apGenerating = true;
+      this.apJobId = job.id;
+      this.apGenProgress = job.progress || 0;
+      this._apPoll(job.id);
+    },
+
+    _apIdle() {
+      if (this._apPollTimer) { clearInterval(this._apPollTimer); this._apPollTimer = null; }
+      this.apGenerating = false;
+      this.apJobId = null;
+      this.apGenProgress = 0;
+      this.apGenStatus = '';
+    },
+
+    _apFinish(job) {
+      this._apIdle();
+      if (!job || job.status === 'cancelled') return;
+      if (job.status === 'error') {
+        this.apGenError = window.__app.t('autorenprofil.genError');
+        return;
+      }
+      this._apSetSuggestion(job.result || {});
+    },
+
+    // Vorschlagskarte aus einem Lauf-Ergebnis (Job oder offener Vorschlag).
+    _apSetSuggestion(r) {
+      if (!r.profilText) return; // leerer Lauf (kein gemessenes Buch)
+      const before = this.apProfile?.profil_text || '';
+      this.apSuggestion = {
+        text: r.profilText,
+        konstanten: r.konstanten || [],
+        entwicklung: r.entwicklung || [],
+        basis: r.basis || [],
+        basisSig: r.basisSig || null,
+        diff: diffParts(before, r.profilText),
+      };
+    },
+
+    async cancelAutorenprofil() {
+      const id = this.apJobId;
+      if (!id) return;
+      await window.__app.cancelJob(id);
+      this._apIdle();
+    },
+
+    // Verwerfen erledigt auch den offenen Vorschlag am Server — sonst stünde er
+    // beim nächsten Öffnen wieder da.
+    async discardApSuggestion() {
+      this.apSuggestion = null;
+      try { await fetchJson('/ai-proposals/autorenprofil', { method: 'DELETE' }); }
+      catch (e) { this.apGenError = tFetchError(e); }
+    },
+
+    /** Vorschlag übernehmen: der normale Speicherweg der Karte (PUT
+     *  /me/author-profile), als Lauf-Ergebnis samt Deutungs-Listen — nicht als
+     *  Handarbeit (`edited` bleibt 0). */
+    async applyApSuggestion() {
+      const sug = this.apSuggestion;
+      if (!sug || this.apSaving) return;
+      this.apSaving = true;
+      this.apGenError = '';
+      try {
+        await sendJson('/me/author-profile', 'PUT', {
+          run: {
+            profil_text: sug.text, konstanten: sug.konstanten, entwicklung: sug.entwicklung,
+            basis: sug.basis, basis_sig: sug.basisSig,
+          },
+        });
+        this.apSuggestion = null;
+        this.apEditing = false;
+        await this.loadAutorenprofil();
+      } catch (e) {
+        this.apGenError = tFetchError(e);
+      } finally {
+        this.apSaving = false;
       }
     },
 

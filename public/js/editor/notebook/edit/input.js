@@ -2,6 +2,7 @@
 import { editorHost, handleEditorCopy, handleEditorCut, handleEditorPaste, mountEditorHtml, stripLektoratMarks } from './_shared.js';
 import { countInHtml, replaceInHtmlRich, richSkipReason } from '../../../utils.js';
 import { normalizeQuotesInHtml } from '../../shared/quote-normalize/walk.js';
+import { deleteRangeClean } from '../line-merge.js';
 
 export const inputMethods = {
 
@@ -87,9 +88,13 @@ export const inputMethods = {
   _onEditCopy(e) { handleEditorCopy(e); },
 
 
+  // Notebook (nicht Fokusmodus): eine Auswahl über Blockgrenzen löscht der
+  // Editor selbst (line-merge.js#deleteRangeClean) — `execCommand('delete')`
+  // bäckt dort Inline-`style` ein.
   _onEditCut(e) {
     this._historyPushNow?.();
-    if (handleEditorCut(e)) { this._markEditDirty(); this._historyPushNow?.(); }
+    const deleteSelection = editorHost()?.focusActive ? null : () => deleteRangeClean(this._getEditEl());
+    if (handleEditorCut(e, { deleteSelection })) { this._markEditDirty(); this._historyPushNow?.(); }
   },
 
 

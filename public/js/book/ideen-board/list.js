@@ -129,8 +129,14 @@ export const ideenBoardList = {
     if (!this.isStageActive(status)) return;
     const todo = this.selectedIdeen().filter(i => ideeStatus(i) !== status);
     let failed = 0;
-    for (const idee of todo) {
-      if (!await this._patchIdee(idee, { status })) failed++;
+    // EIN Undo-Schritt fuer die ganze Sammelaktion.
+    this._beginHistoryGroup();
+    try {
+      for (const idee of todo) {
+        if (!await this.setIdeeStatus(idee, status)) failed++;
+      }
+    } finally {
+      this._endHistoryGroup();
     }
     this._afterBulk(failed);
   },
@@ -146,17 +152,19 @@ export const ideenBoardList = {
     })) return;
     this.busy = true;
     let failed = 0;
+    const removed = [];
     try {
       for (const idee of todo) {
         try {
           await removeIdee(idee);
           this.ideen = this.ideen.filter(i => i.id !== idee.id);
+          removed.push(idee);
         } catch { failed++; }
       }
     } finally {
       this.busy = false;
-      this._memos = {};
-      this._publishCounts();
+      // Zaehler, Memo und EIN Undo-Schritt fuer alle Geloeschten.
+      this._afterIdeenRemoved(removed);
     }
     this._afterBulk(failed);
   },
@@ -189,6 +197,9 @@ export const ideenBoardList = {
       this.ideen = this.ideen.filter(i => !removed.has(i.id));
       this._replaceIdee(r.idee);
       this._publishCounts();
+      // Zusammenfuehren hat keinen Gegenweg (die Quellen sind weg, ihre
+      // Verknuepfungen am Ziel) — die Historie davor gilt nicht mehr.
+      this._clearHistory();
       this.errorMessage = '';
       this.clearSelection();
     } catch (e) {

@@ -88,7 +88,7 @@ test('Undo/Redo: Akt anlegen, umbenennen, Bogen anlegen — serverseitig zurück
   // Span durch ein Input, die Spalte enthaelt den Namen dann nicht mehr als Text —
   // ein hasText-Filter loest danach ins Leere auf. Das Board hat hier genau eine Spalte.
   const column = page.locator(`${BOARD} .plot-column`).first();
-  await column.locator('.plot-column-title').dblclick(); // Doppelklick = umbenennen
+  await column.locator('.plot-column-title').click(); // Klick auf den Namen = umbenennen
   const titleInput = column.locator('.plot-column-title-input');
   await titleInput.fill(ACT_RENAMED);
   await titleInput.press('Enter');
@@ -127,4 +127,69 @@ test('Undo/Redo: Akt anlegen, umbenennen, Bogen anlegen — serverseitig zurück
   await expect(undoBtn(page)).toBeDisabled();
 
   expect(guard.unmatched().map((f) => `[${f.channel}] ${f.text}`)).toEqual([]);
+});
+
+// Beat-Löschen leert die Historie nicht mehr: Undo legt den Beat aus dem
+// Snapshot neu an (Felder + Platz), Redo löscht ihn wieder (book/plot/beat-restore.js).
+test('Undo/Redo: Beat löschen und wiederherstellen — serverseitig', async ({ page }) => {
+  const guard = attachConsoleGuard(page);
+  await bootApp(page);
+  await selectSeededBook(page);
+  await removeLeftoverActs(page);
+  await openPlot(page);
+  await addAct(page, ACT_NAME);
+  try {
+    const r = await page.evaluate(async () => {
+      const card = window.Alpine.$data(document.querySelector('.card--plot'));
+      const bookId = window.Alpine.store('nav').selectedBookId;
+      const act = card.acts.find(a => a.name === 'Undo-Test-Akt');
+      card.newBeatTitel = 'Lösch-Beat';
+      await card._createBeatInline({ actId: act.id, threadId: null, keepAdding: false, cancel() {}, refocus() {}, close() {} });
+      const beat = card.beats.find(b => b.titel === 'Lösch-Beat');
+      window.__app.appConfirm = async () => true;
+      await card.deleteBeat(beat);
+      const serverTitles = async () => ((await (await fetch(`/plot?book_id=${bookId}`)).json()).beats || []).map(b => b.titel);
+      const afterDelete = (await serverTitles()).includes('Lösch-Beat');
+      await card.historyUndo();
+      const afterUndo = (await serverTitles()).includes('Lösch-Beat');
+      const restored = card.beats.find(b => b.titel === 'Lösch-Beat');
+      await card.historyRedo();
+      const afterRedo = (await serverTitles()).includes('Lösch-Beat');
+      return { afterDelete, afterUndo, sameAct: restored?.act_id === act.id, afterRedo };
+    });
+    expect(r).toEqual({ afterDelete: false, afterUndo: true, sameAct: true, afterRedo: false });
+  } finally {
+    await removeLeftoverActs(page);
+  }
+  guard.assertClean('Plot Beat-Löschen Undo');
+});
+
+// Farbwähler (color-picker.html + colorPicker): Swatch öffnet, Wahl schreibt die
+// Akt-Farbe, Esc schliesst nur das Popover.
+test('Farbwähler: Akt-Farbe per Swatch setzen', async ({ page }) => {
+  const guard = attachConsoleGuard(page);
+  await bootApp(page);
+  await selectSeededBook(page);
+  await removeLeftoverActs(page);
+  await openPlot(page);
+  await addAct(page, ACT_NAME);
+  try {
+    const col = page.locator(`${BOARD} .plot-column`, { has: page.locator('.plot-column-title', { hasText: ACT_NAME }) });
+    await col.locator('.color-picker__swatch').click();
+    const pop = col.locator('.color-picker__popover');
+    await expect(pop).toBeVisible();
+    await page.keyboard.press('Escape');
+    await expect(pop).toBeHidden();
+    await col.locator('.color-picker__swatch').click();
+    await pop.locator('.color-picker__opt:not(.color-picker__opt--none)').first().click();
+    await expect(pop).toBeHidden();
+    await expect.poll(() => page.evaluate(async () => {
+      const bookId = window.Alpine.store('nav').selectedBookId;
+      const { acts } = await (await fetch(`/plot?book_id=${bookId}`)).json();
+      return acts.find(a => a.name === 'Undo-Test-Akt')?.farbe || null;
+    })).not.toBeNull();
+  } finally {
+    await removeLeftoverActs(page);
+  }
+  guard.assertClean('Plot Farbwähler');
 });

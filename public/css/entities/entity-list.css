@@ -99,6 +99,35 @@
   right: var(--space-sm);
   top: calc(var(--space-sm) + 3px);
 }
+/* Editierbare Katalog-Zeile (Figuren, Schauplätze, Szenen, Welt-Fakten — DESIGN.md
+   «Listen-Anriss»): der Titel ist ein Knopf (öffnet das Bearbeiten bzw. klappt bei
+   read-only-Einträgen auf), der Chevron ein eigener Knopf fürs Aufklappen, der
+   übrige Zeilenkörper klappt per Maus (`isRowBodyClick`, row-click.js). */
+.entity-row-title-btn {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-weight: inherit;
+  background: none;
+  border: 0;
+  padding: 0;
+  font-family: inherit;
+  font-size: inherit;
+  color: inherit;
+  text-align: left;
+}
+/* Chevron-Knopf: nur die Fläche um den `.history-chevron` (CSS-Mask-Icon). */
+.entity-row:has(> .row-expand) {
+  padding-right: calc(var(--space-sm) + var(--space-xl));
+}
+.entity-row > .row-expand {
+  position: absolute;
+  right: calc(var(--space-sm) - var(--space-3));
+  top: calc(var(--space-sm) - var(--space-3));
+}
+@media (hover: hover) {
+  .entity-row--selected .hover-reveal { opacity: 1; }
+}
 .entity-row-meta {
   font-size: var(--font-size-mini);
   color: var(--color-muted);

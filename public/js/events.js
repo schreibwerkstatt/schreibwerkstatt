@@ -101,6 +101,8 @@ export const EVT = {
   // Seiten-Toolbar (Root-Scope). Event statt Card-Ref-Forwarder, weil die
   // Toolbar-Karte — anders als `editorNotebookCard` — keinen Selbst-Ref auslegt.
   EDITOR_CITE_OPEN: 'editor:cite:open',         // kein detail
+  // «Einfügen»-Gruppe der Seiten-Toolbar → editorToolbarCard (gleicher Grund).
+  EDITOR_INSERT: 'editor:insert',               // detail: { kind: 'image'|'table'|'diagram'|'xref'|'hr' }
   // O-Ton aus einem Interview-Transkript als belegtes Blockzitat einsetzen.
   // detail: { source, text, loc, ack } — `ack` ist ein Objekt, in das der
   // Listener SYNCHRON `{ ok: true|false }` schreibt. dispatchEvent laeuft

@@ -24,27 +24,15 @@
             <template x-for="act in row.acts" :key="act.id">
               <div class="plot-swim-acthead"
                    :class="{ 'plot-swim-acthead--archiviert': !!act.archiviert, 'plot-swim-acthead--collapsed': isActCollapsed(act.id) }"
-                   :style="{ '--col-accent': actAccent(act) }">
-                <div class="color-picker" x-show="editingActId !== act.id">
-                  <button type="button" class="color-picker__swatch"
-                          @click.stop="toggleActColorPicker(act.id)"
-                          :data-tip="$app.t('plot.act.color')" :aria-label="$app.t('plot.act.color')"></button>
-                  <div class="color-picker__popover" x-show="actColorPickerId === act.id" x-cloak
-                       @click.outside="actColorPickerId === act.id && (actColorPickerId = null)">
-                    <button :aria-pressed="!act.farbe" type="button" class="color-picker__opt color-picker__opt--none"
-                            :class="{ 'color-picker__opt--on': !act.farbe }"
-                            @click="setActColor(act, null)"
-                            :data-tip="$app.t('plot.act.colorNone')" :aria-label="$app.t('plot.act.colorNone')"></button>
-                    <template x-for="key in actPalette()" :key="key">
-                      <button :aria-pressed="act.farbe === key" type="button" class="color-picker__opt"
-                              :style="{ '--col-accent': 'var(--palette-' + key + ')' }"
-                              :class="{ 'color-picker__opt--on': act.farbe === key }"
-                              @click="setActColor(act, key)" :aria-label="$app.t('plot.palette.' + key)" :data-tip="$app.t('plot.palette.' + key)"></button>
-                    </template>
-                  </div>
+                   :style="{ '--col-accent': actAccent(act) }"
+                   @contextmenu="openActMenu($event, act)" x-long-press>
+                <div class="color-picker" x-show="editingActId !== act.id"
+                     x-data="colorPicker({ value: () => act.farbe, keys: () => actPalette(), pick: (k) => setActColor(act, k), tipKey: 'plot.act.color', noneKey: 'plot.act.colorNone' })">
+                  <!-- @include color-picker -->
                 </div>
                 <template x-if="editingActId !== act.id">
-                  <span class="board-col-title plot-column-title" @dblclick="startEditAct(act)" x-text="act.name"></span>
+                  <button type="button" class="board-col-title plot-column-title text-link" @click="startEditAct(act)"
+                          :data-tip="$app.t('plot.act.rename')" x-text="act.name"></button>
                 </template>
                 <span class="badge badge-neutral" x-show="act.archiviert" x-cloak
                       x-text="$app.t('plot.act.archivedBadge')"></span>
@@ -83,6 +71,11 @@
                   <button type="button" class="icon-btn icon-btn--ghost plot-icon-btn plot-icon-btn--danger" @click="deleteAct(act)" :data-tip="$app.t('plot.act.delete')" :aria-label="$app.t('plot.act.delete')">
                     <svg class="icon" aria-hidden="true"><use href="/icons.svg#trash"/></svg>
                   </button>
+                  <button type="button" class="icon-btn icon-btn--ghost plot-icon-btn" @click="openActMenu($event, act)"
+                          aria-haspopup="menu" :aria-expanded="isActionMenuOpen('act:' + act.id)"
+                          :data-tip="$app.t('plot.act.actions')" :aria-label="$app.t('plot.act.actions')">
+                    <svg class="icon" aria-hidden="true"><use href="/icons.svg#more-horizontal"/></svg>
+                  </button>
                 </div>
               </div>
             </template>
@@ -98,10 +91,11 @@
                 </button>
               </template>
               <template x-if="addingActScope === (row.thread ? row.thread.id : null)">
-                <div class="plot-add-act-form">
+                <div class="plot-add-act-form"
+                     @keydown="$editKeys($event, { save: () => addActScoped(), cancel: () => cancelAddAct() })">
                   <input type="text" class="plot-new-act-input" x-model="newActName"
                          data-spellcheck="spelling" :placeholder="$app.t('plot.act.namePlaceholder')"
-                         @keydown.enter="$enter($event, () => addActScoped())" @keydown.escape="cancelAddAct()">
+                         @keydown.enter="$enter($event, () => addActScoped())">
                   <div class="plot-add-act-actions">
                     <button type="button" class="btn-compact" @click="addActScoped()" :disabled="busy" x-text="$app.t('plot.act.add')"></button>
                     <button type="button" class="btn-compact btn-compact--ghost" @click="cancelAddAct()" x-text="$app.t('common.cancel')"></button>
@@ -128,26 +122,13 @@
               <!-- Strang-Lane: Ansicht -->
               <template x-if="row.lane.thread && editingThreadId !== row.lane.id">
                 <div class="plot-swim-lane-view" @contextmenu="openThreadMenu($event, row.lane.id)" x-long-press>
-                  <div class="color-picker">
-                    <button type="button" class="color-picker__swatch"
-                            @click.stop="toggleThreadColorPicker(row.lane.id)"
-                            :data-tip="$app.t('plot.thread.color')" :aria-label="$app.t('plot.thread.color')"></button>
-                    <div class="color-picker__popover" x-show="threadColorPickerId === row.lane.id" x-cloak
-                         @click.outside="threadColorPickerId === row.lane.id && (threadColorPickerId = null)">
-                      <button :aria-pressed="!row.lane.thread.farbe" type="button" class="color-picker__opt color-picker__opt--none"
-                              :class="{ 'color-picker__opt--on': !row.lane.thread.farbe }"
-                              @click="setThreadColor(row.lane.thread, null)"
-                              :data-tip="$app.t('plot.act.colorNone')" :aria-label="$app.t('plot.act.colorNone')"></button>
-                      <template x-for="key in actPalette()" :key="key">
-                        <button :aria-pressed="row.lane.thread.farbe === key" type="button" class="color-picker__opt"
-                                :style="{ '--col-accent': 'var(--palette-' + key + ')' }"
-                                :class="{ 'color-picker__opt--on': row.lane.thread.farbe === key }"
-                                @click="setThreadColor(row.lane.thread, key)" :aria-label="$app.t('plot.palette.' + key)" :data-tip="$app.t('plot.palette.' + key)"></button>
-                      </template>
-                    </div>
+                  <div class="color-picker"
+                       x-data="colorPicker({ value: () => row.lane.thread.farbe, keys: () => actPalette(), pick: (k) => setThreadColor(row.lane.thread, k), tipKey: 'plot.thread.color', noneKey: 'plot.act.colorNone' })">
+                    <!-- @include color-picker -->
                   </div>
                   <div class="plot-swim-lane-text">
-                    <span class="plot-swim-lane-name" @dblclick="startEditThread(row.lane.thread)" x-text="row.lane.thread.name"></span>
+                    <button type="button" class="plot-swim-lane-name text-link" @click="startEditThread(row.lane.thread)"
+                            :data-tip="$app.t('plot.thread.rename')" x-text="row.lane.thread.name"></button>
                     <span class="entity-refs" x-show="row.lane.thread.fig_id || row.lane.thread.draft_figure_id || row.lane.thread.chapter_id">
                       <button type="button" class="entity-ref" x-show="row.lane.thread.fig_id || row.lane.thread.draft_figure_id"
                               x-entity-ref="{ type: row.lane.thread.fig_id ? 'figur' : 'werkstatt', id: row.lane.thread.fig_id || row.lane.thread.draft_figure_id, label: row.lane.thread.fig_id ? undefined : draftFigurenById.get(row.lane.thread.draft_figure_id)?.name }"></button>
@@ -259,16 +240,7 @@
                       <svg class="icon" aria-hidden="true"><use href="/icons.svg#x"/></svg>
                     </button>
                   </div>
-                  <template x-for="(v, idx) in (brainstormResult ? brainstormResult.vorschlaege : [])" :key="idx">
-                    <div class="plot-vorschlag">
-                      <div class="plot-vorschlag-body">
-                        <span class="plot-vorschlag-label" x-text="v.label"></span>
-                        <span class="plot-vorschlag-begruendung" x-show="v.begruendung" x-text="v.begruendung"></span>
-                      </div>
-                      <button type="button" class="btn-compact" @click="applyBrainstorm(idx)" :disabled="busy" x-text="$app.t('plot.brainstorm.apply')"></button>
-                    </div>
-                  </template>
-                  <div x-show="brainstormResult && !brainstormResult.vorschlaege.length" class="card-status" x-text="$app.t('plot.brainstorm.allApplied')"></div>
+                  <!-- @include plot-brainstorm-vorschlaege -->
                 </div>
               </div>
             </template>

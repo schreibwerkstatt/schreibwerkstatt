@@ -16,7 +16,7 @@
               <div class="series-inline">
                 <input type="text" id="series-new-name" class="card-form-input" maxlength="200"
                        data-spellcheck="spelling"
-                       x-model="seriesNewName" @keydown.enter.prevent="createSeries()">
+                       x-model="seriesNewName" @keydown.enter="$enter($event, () => createSeries())">
                 <button type="button" @click="createSeries()" :disabled="seriesBusy || !seriesNewName.trim()"
                         x-text="$app.t('series.create')"></button>
               </div>
@@ -42,7 +42,7 @@
               <div class="series-inline">
                 <input type="text" id="series-name" class="card-form-input" maxlength="200"
                        data-spellcheck="spelling"
-                       x-model="seriesNameDraft" @keydown.enter.prevent="renameSeries()">
+                       x-model="seriesNameDraft" @keydown.enter="$enter($event, () => renameSeries())">
                 <button type="button" @click="renameSeries()"
                         :disabled="seriesBusy || !seriesNameDraft.trim() || seriesNameDraft.trim() === seriesData.name"
                         x-text="$app.t('series.rename')"></button>
@@ -50,9 +50,15 @@
             </div>
             <div class="card-form-row">
               <span class="card-form-label" id="series-volumes-label" x-text="$app.t('series.volumes')"></span>
-              <ol class="series-members list-reset" aria-labelledby="series-volumes-label">
+              <ol class="series-members list-reset" aria-labelledby="series-volumes-label"
+                  x-init="initSeriesSortable($el)">
                 <template x-for="(m, i) in seriesData.members" :key="m.book_id">
-                  <li class="series-member" :class="{ 'series-member--current': m.position === seriesData.position }">
+                  <li class="series-member drag-grip-host" :data-book-id="m.book_id"
+                      :class="{ 'series-member--current': m.position === seriesData.position }">
+                    <span class="drag-grip series-member-grip" role="img"
+                          :data-tip="$app.t('series.dragHint')" :aria-label="$app.t('series.dragHint')">
+                      <svg class="icon" aria-hidden="true"><use href="/icons.svg#grip-vertical"/></svg>
+                    </span>
                     <span class="series-member-pos" x-text="m.position"></span>
                     <span class="series-member-name" x-text="m.name"></span>
                     <button type="button" class="icon-btn" @click="moveSeriesMember(i, -1)"

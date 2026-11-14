@@ -8,6 +8,7 @@ import { CARET_BLOCK_SEL, findBlock, topLevelBlock, caretAtBlockStart, caretAtBl
 import { brLeftOfCaret } from '../../shared/soft-break.js';
 import { TODO_ITEM_SEL, TODO_LIST_CLASS } from '../../shared/todo-html.js';
 import { MSG_THREAD_CLASS, MSG_THREAD_SEL, MSG_KIND_CLASS } from '../../../messages/msg-html.js';
+import { DIAGRAM_CLASS } from '../../../diagram/mermaid-html.js';
 
 export { getEditEl, placeCaretIn, WORD_RE };
 // Caret-Range im Edit-Feld + Ende-Anker leben in editor/utils.js (auch vom
@@ -31,6 +32,7 @@ export { brLeftOfCaret as _brLeftOfCaret };
 // formatierten Datums-/Zeit-Stempel.
 // `split: true` teilt den Abschnitt am (leeren) Trigger-Block in zwei
 // Abschnitte (edit/split.js#splitSectionHere).
+// `xref: true` oeffnet den Querverweis-Picker am Caret (toolbar/xref.js).
 // `diagram: true` oeffnet den Diagramm-Dialog (Quelltext + Live-Vorschau) und
 // setzt danach einen `<pre class="mermaid">`. Bewusst kein Tag-Swap wie die
 // uebrigen Bloecke: Diagramm-Code ist mehrzeilig, und Enter in einem `<pre>`
@@ -51,6 +53,7 @@ export const SLASH_ITEMS = [
   { key: 'bild',       upload: 'image',        group: 'insert' },
   { key: 'diagramm',   diagram: true,          group: 'insert' },
   { key: 'tabelle',    table: true,            group: 'insert' },
+  { key: 'querverweis', xref: true,            group: 'insert' },
   { key: 'heute',      insertText: 'date',     group: 'insert' },
   { key: 'jetzt',      insertText: 'datetime', group: 'insert' },
   { key: 'zeit',       insertText: 'time',     group: 'insert' },
@@ -137,9 +140,12 @@ export { MERGE_BLOCK_TAGS, ATOMIC_BLOCK_TAGS } from '../../shared/block-edge.js'
 // Muss mit den Wrapper-erzeugenden Einträgen aus SLASH_ITEMS synchron bleiben —
 // ein neuer Wrapper-Blocktyp im Slash-Menü, der hier fehlt, verliert lautlos
 // seine Grenz-Behandlung. Gegated durch tests/unit/notebook-toolbar.test.mjs.
-// `pre` und `ol` stehen vorsorglich drin, obwohl (noch) kein Slash-Item sie
-// erzeugt — sie entstehen über Paste/Import.
-export const BOUNDARY_WRAPPER_SEL = `blockquote, div.poem, ${MSG_THREAD_SEL}, pre, ul:not(.${TODO_LIST_CLASS}), ol`;
+// `pre` steht vorsorglich drin, obwohl kein Slash-Item einen Code-Block
+// erzeugt — er entsteht über Paste/Import. Ein Diagramm (`pre.mermaid`) ist
+// ausgenommen: es ist im Editor `contenteditable="false"`, also nie
+// Merge-Partner, sondern geschützter Nachbar wie die Tabelle
+// (shared/block-edge.js#protectNeighbour).
+export const BOUNDARY_WRAPPER_SEL = `blockquote, div.poem, ${MSG_THREAD_SEL}, pre:not(.${DIAGRAM_CLASS}), ul:not(.${TODO_LIST_CLASS}), ol`;
 
 // Die text-tragenden Kind-Blöcke eines Wrapper-Blocks, in Dokumentordnung.
 // `<pre>` trägt seinen Text direkt und ist damit sein eigener einziger
@@ -226,3 +232,7 @@ export function ensureSlotAfter(node) {
   node.insertAdjacentElement('afterend', p);
   return p;
 }
+
+// Fett/Kursiv ohne Inline-`style`: SSoT in shared/inline-format.js (auch der
+// Fokusmodus bindet sie, shared/shortcuts.js) — hier für bubble.js re-exportiert.
+export { applyInlineCommand } from '../../shared/inline-format.js';

@@ -12,7 +12,8 @@
 // Sidebar-Plakette.
 
 import { fetchJson, autosizeTextarea, mountAutosizeTextarea } from '../utils.js';
-import { createIdee, patchIdee, deleteIdee as removeIdee, overlayPendingIdeen } from '../repo/ideen-queue.js';
+import { createIdee, patchIdee, overlayPendingIdeen } from '../repo/ideen-queue.js';
+import { ideenSharedMethods } from './ideen-methods-shared.js';
 import { IDEE_STATUSES, ideeStatus, isOpenIdee, normalizeIdeeStages, compareIdeeManual, IDEE_MAX_LEN, ideenPlace } from './ideen-shared.js';
 import { isTempId as isTempPageId, resolveTempId } from '../repo/structure-queue.js';
 import { loadToken, isSelectedBook } from '../cards/book-guard.js';
@@ -44,6 +45,9 @@ const BOARD_HINT_PLACES = 3;
 export const BOARD_HINT_KEY = 'ideen.boardOverview';
 
 export const ideenMethods = {
+  // statusLabel, ideeStatus, deleteIdee — geteilt mit dem Ideen-Board.
+  ...ideenSharedMethods,
+
   // ── Lifecycle ────────────────────────────────────────────────────────────
   async loadIdeen() {
     const app = window.__app;
@@ -271,8 +275,6 @@ export const ideenMethods = {
   // Nur die AKTIVEN Stufen des Buches stehen als Ziel im Menue; das Badge zeigt
   // weiter den echten Status, auch wenn dessen Stufe abgeschaltet ist.
   statuses() { return this.stages || IDEE_STATUSES; },
-  statusLabel(s) { return window.__app.t(`ideen.status.${s}`); },
-  ideeStatus(idee) { return ideeStatus(idee); },
   isOpenIdee(idee) { return isOpenIdee(idee); },
 
   // ── Move ─────────────────────────────────────────────────────────────────
@@ -327,25 +329,9 @@ export const ideenMethods = {
     }
   },
 
-  async deleteIdee(idee) {
-    const app = window.__app;
-    if (!await app.appConfirm({
-      message: app.t('ideen.confirmDelete'),
-      confirmLabel: app.t('common.delete'),
-      danger: true,
-    })) return;
-    this.busy = true;
-    try {
-      await removeIdee(idee);
-      this.ideen = this.ideen.filter(i => i.id !== idee.id);
-      this.errorMessage = '';
-      this._publishIdeenCount();
-    } catch (e) {
-      this.errorMessage = app.t('ideen.error.delete');
-    } finally {
-      this.busy = false;
-    }
-  },
+  // Löschen: ideen-methods-shared.js#deleteIdee (geteilt mit dem Ideen-Board).
+  _afterIdeenRemoved() { this._publishIdeenCount(); },
+  _ideenErrorKey(kind) { return `ideen.error.${kind}`; },
 
   // ── Helpers ──────────────────────────────────────────────────────────────
   // Knopf-Plakette = alle offenen Ideen der Karte (beim Einabschnitts-Kapitel

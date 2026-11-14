@@ -2,12 +2,17 @@
      Lebt im Scope von editorToolbarCard (Methoden in
      public/js/editor/notebook/toolbar/diagram.js) — darum `x-ref` + showModal()
      statt des modal()-Primitivs, und `@close` ist der einzige Aufräumpunkt
-     (ESC, Backdrop und Abbrechen laufen alle durch dlg.close()).
+     (ESC, Backdrop und Abbrechen laufen alle durch dlg.close()). Backdrop
+     schliesst nur, wenn Druck UND Loslassen auf ihm lagen (eine im Dialog
+     begonnene Textauswahl darf nichts verwerfen); mit ungespeicherter Eingabe
+     fragen Backdrop und ESC erst nach (panel-methods.js#requestDialogClose).
 
      Der Vorschau-Knoten wird von JS befüllt (mermaid-SVG), nicht per x-html —
      er steht deshalb bewusst leer im Markup. -->
 <dialog class="editor-dialog diagram-dialog" x-ref="diagramDlg" @close="onDiagramDialogClose()"
-        @click.self="closeDiagramDialog()">
+        @mousedown="onDialogBackdropDown($event)"
+        @click="onDialogBackdropClick($event, 'diagram')"
+        @cancel="onDialogCancel($event, 'diagram')">
   <div class="editor-dialog__inner">
     <div class="editor-dialog__head">
       <span class="editor-dialog__title"

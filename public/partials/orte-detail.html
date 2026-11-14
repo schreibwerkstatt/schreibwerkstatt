@@ -89,7 +89,7 @@
 </div>
 
 <div class="ort-detail-actions">
-  <button type="button" class="btn-compact" @click.stop="startOrtEdit(o)" :disabled="ortEdit.mode !== null">
+  <button type="button" class="btn-compact" @click.stop="openOrtEdit(o)" :disabled="ortEdit.mode !== null">
     <svg class="icon" aria-hidden="true"><use href="/icons.svg#pencil"/></svg>
     <span x-text="$app.t('orte.edit.action')"></span>
   </button>
@@ -97,14 +97,4 @@
           @click.stop="restoreOrtAnalysis(o)" :data-tip="$app.t('orte.restore.tip')"
           x-text="$app.t('orte.restore.action')"></button>
   <button type="button" class="btn-compact" x-show="$store.config.semanticSearchEnabled" @click.stop="$app.findSimilar('location', o.id, o.name)" x-text="$app.t('search.semantic.similarEntity')"></button>
-  <!-- Verwaiste Orte führt der Zeilen-Knopf «zusammenführen mit…» zusammen
-       (entity-merge-picker); hier nur aktive. -->
-  <span class="ort-merge" x-show="!o.stale">
-    <div x-data="combobox({ placeholder: $app.t('orte.merge.placeholder') })"
-         x-modelable="value" x-model="ortMergeTarget"
-         x-effect="options = ortMergeOptions(o)"></div>
-    <button type="button" class="btn-compact" :disabled="!ortMergeTarget"
-            @click.stop="mergeOrtInto(o)" :data-tip="$app.t('orte.merge.tip')"
-            x-text="$app.t('orte.merge.action')"></button>
-  </span>
 </div>

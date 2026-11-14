@@ -42,12 +42,16 @@ export const rechercheLinkMethods = {
   async addLink(itemId, targetKind, targetId) {
     const app = window.__app;
     if (!targetKind || !targetId) return false;
+    const tid = parseInt(targetId, 10);
+    const had = ((this.items || []).find(i => i.id === itemId)?.links || [])
+      .some(l => l.target_kind === targetKind && Number(l.target_id) === tid);
     try {
       const row = await fetchJson(`/research/${itemId}/links`, {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ target_kind: targetKind, target_id: parseInt(targetId, 10) }),
       });
       this._replaceItem(row);
+      if (!had) this._recordResearch?.({ kind: 'item-link', id: itemId, op: 'add', target_kind: targetKind, target_id: tid });
       this.cancelLinkPicker();
       if (targetKind === 'page') this._refreshRechercheCounts('page');
       if (targetKind === 'chapter') this._refreshRechercheCounts('chapter');
@@ -85,6 +89,7 @@ export const rechercheLinkMethods = {
     try {
       const row = await fetchJson(`/research/${item.id}/links/${link.link_id}`, { method: 'DELETE' });
       this._replaceItem(row);
+      this._recordResearch?.({ kind: 'item-link', id: item.id, op: 'remove', target_kind: link.target_kind, target_id: link.target_id });
       if (link.target_kind === 'page') this._refreshRechercheCounts('page');
       if (link.target_kind === 'chapter') this._refreshRechercheCounts('chapter');
     } catch { this.errorMessage = window.__app.t('recherche.error.link'); }
@@ -147,11 +152,18 @@ export const rechercheLinkMethods = {
     }
   },
 
+  // Vorschläge bleiben nach der Entscheidung stehen (übernommen / verworfen),
+  // wie jede Vorschlagskarte — die Liste springt nicht unter dem Zeiger weg.
   async acceptSuggestion(item, sugg) {
     if (!await this.addLink(item.id, sugg.target_kind, sugg.target_id)) return;
-    const list = (this.suggestions[item.id] || []).filter(
-      s => !(s.target_kind === sugg.target_kind && s.target_id === sugg.target_id)
-    );
+    this._setSuggestionState(item, sugg, 'applied');
+  },
+  discardSuggestion(item, sugg) {
+    this._setSuggestionState(item, sugg, sugg._state === 'discarded' ? null : 'discarded');
+  },
+  _setSuggestionState(item, sugg, state) {
+    const list = (this.suggestions[item.id] || []).map(s =>
+      (s.target_kind === sugg.target_kind && s.target_id === sugg.target_id) ? { ...s, _state: state } : s);
     this.suggestions = { ...this.suggestions, [item.id]: list };
   },
   dismissSuggestions(item) {

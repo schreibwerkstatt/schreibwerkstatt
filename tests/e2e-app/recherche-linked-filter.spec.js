@@ -55,7 +55,6 @@ test('recherche: Status in der Mehrfachauswahl wirkt mit der ersten Wahl', async
   const card = page.locator('#recherche-card');
   const row = card.locator(`.recherche-list [data-research-id="${id}"]`);
   await expect(row).toBeVisible();
-  await card.locator('.card-toolbar button', { hasText: 'Auswählen' }).click();
   await row.locator('.research-item-select').check();
 
   const bar = page.locator('#recherche-card .selection-bar');

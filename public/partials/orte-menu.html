@@ -1,0 +1,51 @@
+<!-- Aktionsmenü einer Schauplatz-Zeile (⋯, Rechtsklick, Long-Press): EINE teleportierte
+     Instanz je Karte (action-menu.js, DESIGN.md «Context-Menu»). Eingebunden als
+     String-Include in orte.html ausserhalb der Zeilen-Schleife; Ziel = loc_id,
+     aufgelöst über ortMenuOrt() (book/orte-edit.js). «Zusammenführen mit …» öffnet
+     den geteilten Merge-Picker am Menü-Anker — für aktive und verwaiste Orte; ein
+     verwaistes Ziel bietet er nicht an (Server: TARGET_STALE). Löschen nur für
+     verwaiste und selbst angelegte Orte (Server: NOT_DELETABLE). -->
+<template x-teleport="body">
+  <div class="context-menu" x-ref="actionMenu" x-bind="actionMenuPanel()" x-cloak>
+    <template x-if="ortMenuOrt()">
+      <div>
+        <button type="button" role="menuitem" class="context-menu-item context-menu-item--icon"
+                :disabled="ortEdit.mode === 'new'"
+                @click="openOrtEdit(ortMenuOrt())">
+          <svg class="icon" aria-hidden="true"><use href="/icons.svg#pencil"/></svg>
+          <span x-text="$app.t('common.edit')"></span>
+        </button>
+        <button type="button" role="menuitem" class="context-menu-item context-menu-item--icon"
+                x-show="ortMenuOrt().erste_erwaehnung_page_id"
+                @click="$app.gotoPageById(ortMenuOrt().erste_erwaehnung_page_id, { snippet: ortMenuOrt().name })">
+          <svg class="icon" aria-hidden="true"><use href="/icons.svg#book-open"/></svg>
+          <span x-text="$app.t('common.showInText')"></span>
+        </button>
+        <button type="button" role="menuitem" class="context-menu-item context-menu-item--icon"
+                x-show="$store.config.semanticSearchEnabled"
+                @click="$app.findSimilar('location', ortMenuOrt().id, ortMenuOrt().name)">
+          <svg class="icon" aria-hidden="true"><use href="/icons.svg#search"/></svg>
+          <span x-text="$app.t('search.semantic.similarEntity')"></span>
+        </button>
+        <button type="button" role="menuitem" class="context-menu-item context-menu-item--icon"
+                x-show="ortMenuOrt().manual_fields?.length > 0 && ortMenuOrt().analysis_known"
+                @click="restoreOrtAnalysis(ortMenuOrt())">
+          <svg class="icon" aria-hidden="true"><use href="/icons.svg#rotate-ccw"/></svg>
+          <span x-text="$app.t('orte.restore.action')"></span>
+        </button>
+        <button type="button" role="menuitem" class="context-menu-item context-menu-item--icon"
+                @click="openMergePick(actionMenuAnchor(), 'ort', ortMenuOrt())">
+          <svg class="icon" aria-hidden="true"><use href="/icons.svg#arrow-right-left"/></svg>
+          <span x-text="$app.t('merge.menuAction')"></span>
+        </button>
+        <div class="context-menu-sep" role="separator" x-show="ortMenuOrt().stale || ortMenuOrt().manually_created"></div>
+        <button type="button" role="menuitem" class="context-menu-item context-menu-item--icon context-menu-item--danger"
+                x-show="ortMenuOrt().stale || ortMenuOrt().manually_created"
+                @click="$app.deleteOrt(ortMenuOrt())">
+          <svg class="icon" aria-hidden="true"><use href="/icons.svg#trash"/></svg>
+          <span x-text="$app.t('common.delete')"></span>
+        </button>
+      </div>
+    </template>
+  </div>
+</template>

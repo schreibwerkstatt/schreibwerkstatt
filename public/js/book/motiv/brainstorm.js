@@ -54,11 +54,21 @@ export const brainstormMethods = {
     this.selectedBrainstormRunId = null;
   },
 
-  dismissSuggestion(s) {
-    this.suggestions = this.suggestions.filter(x => x !== s);
+  // Vorschlag verwerfen bzw. (discard=false) wieder anbieten — die Karte bleibt
+  // im Panel stehen (Zustand am Vorschlag, `_state`). Rein lokal: der Lauf in der
+  // Historie bietet beim Wiederöffnen wieder alles an.
+  dismissSuggestion(s, discard = true) {
+    if (!s || s._state === 'applied') return;
+    s._state = discard ? 'discarded' : null;
   },
 
-  // Vorschlag übernehmen → Theme bzw. Motiv anlegen, dann aus der Liste nehmen.
+  // Noch offene Vorschläge (Hinweis «alle erledigt» bei 0).
+  suggestionOpenCount() {
+    return (this.suggestions || []).filter(s => !s._state).length;
+  },
+
+  // Vorschlag übernehmen → Theme bzw. Motiv anlegen (Undo-Record create-*), die
+  // Karte bleibt als «übernommen» stehen.
   // Motiv-Vorschläge dürfen beim Übernehmen einem Thema zugeordnet werden
   // (s.themeIdDraft aus der Combobox in der Vorschlagskarte).
   // Doppelklick-Schutz je Vorschlag: der Server kennt keine Namens-Eindeutigkeit,
@@ -66,17 +76,19 @@ export const brainstormMethods = {
   // selbst (die Karte bindet :disabled daran).
   async adoptSuggestion(s) {
     const bookId = this.$store.nav.selectedBookId;
-    if (!s || s.adopting || !bookId) return;
+    if (!s || s.adopting || s._state || !bookId || this._inHistoryFlight) return;
     s.adopting = true;
     try {
       if (s.typ === 'thema') {
-        await sendJson('/motifs/themes', 'POST', { book_id: bookId, name: s.name, beschreibung: s.beschreibung });
+        const theme = await sendJson('/motifs/themes', 'POST', { book_id: bookId, name: s.name, beschreibung: s.beschreibung });
+        this._pushUndo({ kind: 'create-theme', id: theme?.id });
       } else {
         const body = { book_id: bookId, name: s.name, beschreibung: s.beschreibung, trigger_terms: s.trigger_terms || [] };
         if (s.themeIdDraft) body.theme_id = Number(s.themeIdDraft);
-        await sendJson('/motifs', 'POST', body);
+        const m = await sendJson('/motifs', 'POST', body);
+        this._pushUndo({ kind: 'create-motif', id: m?.id });
       }
-      this.dismissSuggestion(s);
+      s._state = 'applied';
       await this.loadBoard();
     } catch (e) { this.errorMessage = window.__app.t('motiv.error.save'); }
     finally { s.adopting = false; }

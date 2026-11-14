@@ -149,17 +149,9 @@ const _updateBookIsFinished = db.prepare(`
     is_finished=excluded.is_finished,
     updated_at=excluded.updated_at
 `);
-const _updateBookStilprofil = db.prepare(`
-  INSERT INTO book_settings (book_id, stilprofil, updated_at)
-  VALUES (?, ?, ?)
-  ON CONFLICT(book_id) DO UPDATE SET
-    stilprofil=excluded.stilprofil,
-    updated_at=excluded.updated_at
-`);
 // Vorbelegung aus dem Autorenprofil: schreibt NUR, solange das Buch noch kein
-// eigenes Stilprofil hat. Der WHERE-Zusatz am DO UPDATE ist der ganze
-// Unterschied zu `_updateBookStilprofil` — ohne ihn wuerde eine Vererbung die
-// Handarbeit am Buch ueberschreiben, und genau das darf sie nie.
+// eigenes Stilprofil hat (WHERE-Zusatz am DO UPDATE) — sonst wuerde eine
+// Vererbung die Handarbeit am Buch ueberschreiben, und genau das darf sie nie.
 const _seedBookStilprofil = db.prepare(`
   INSERT INTO book_settings (book_id, stilprofil, updated_at)
   VALUES (?, ?, ?)
@@ -169,7 +161,7 @@ const _seedBookStilprofil = db.prepare(`
   WHERE book_settings.stilprofil IS NULL OR TRIM(book_settings.stilprofil) = ''
 `);
 // Quellenverzeichnis-Einstellungen als eigener Schreibpfad (Muster
-// entities_enabled/stilprofil) statt als weitere MAIN_FIELDS: der Quellen-Tab
+// entities_enabled) statt als weitere MAIN_FIELDS: der Quellen-Tab
 // speichert unabhaengig vom Haupt-Formular.
 const _updateBookCitationSettings = db.prepare(`
   INSERT INTO book_settings (book_id, citation_style, bibliography_enabled, bibliography_title, bibliography_scope, bibliography_in_blog, citation_notes, updated_at)
@@ -479,17 +471,6 @@ function setBookIsFinished(bookId, isFinished) {
   );
 }
 
-/** Quick-Update nur fuer stilprofil — der Stilprofil-Extraktions-Job persistiert
- *  sein Ergebnis, ohne die uebrigen Settings (die er nicht geladen hat) zu beruehren. */
-function setBookStilprofil(bookId, stilprofil) {
-  ensureBookSettingsRow(bookId);
-  _updateBookStilprofil.run(
-    parseInt(bookId),
-    stilprofil || null,
-    new Date().toISOString()
-  );
-}
-
 /**
  * Stilprofil eines Buchs aus dem Autorenprofil vorbelegen.
  *
@@ -517,7 +498,6 @@ module.exports = {
   saveBookSettings,
   setBookEntitiesEnabled,
   setBookIsFinished,
-  setBookStilprofil,
   setBookTextsorte,
   setBookBuchtyp,
   setBookCitationSettings,

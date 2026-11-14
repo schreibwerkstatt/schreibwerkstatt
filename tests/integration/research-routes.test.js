@@ -735,6 +735,13 @@ test('POST /bulk: Status, Tag, Archiv, Verknüpfung, Löschen — nur Fundstück
   assert.equal(r.json.count, 2);
   assert.equal(db.prepare("SELECT COUNT(*) n FROM research_item_links WHERE target_kind = 'page' AND page_id = ?").get(ids.pageId).n, 2);
 
+  // unlink: Gegenstück zu link (Rückgängig der Karte) — löst nur diese Kante.
+  r = await api('POST', '/research/bulk', { book_id: 4402, ids: [a.id], action: 'unlink', target_kind: 'page', target_id: ids.pageId });
+  assert.equal(r.status, 200);
+  assert.equal(db.prepare("SELECT COUNT(*) n FROM research_item_links WHERE target_kind = 'page' AND page_id = ?").get(ids.pageId).n, 1);
+  assert.equal(db.prepare("SELECT COUNT(*) n FROM research_item_links WHERE item_id = ?").get(b.id).n, 1, 'b bleibt verknüpft');
+  assert.equal((await api('POST', '/research/bulk', { book_id: 4402, ids: [a.id], action: 'unlink', target_kind: 'nope', target_id: 1 })).status, 400);
+
   // Ziel aus fremdem Buch → ganze Aktion zurück, nichts verknüpft.
   const other = db.prepare('SELECT page_id FROM pages WHERE book_id = 4403').get().page_id;
   r = await api('POST', '/research/bulk', { book_id: 4402, ids: [a.id, b.id], action: 'link', target_kind: 'page', target_id: other });

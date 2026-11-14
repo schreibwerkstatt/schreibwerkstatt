@@ -1,7 +1,9 @@
-// Mehrfachauswahl der Recherche-Liste: Auswahl-Modus und EINE Aktion auf alle
-// Markierten (POST /research/bulk, routes/research-bulk.js); Markieren und
-// Zaehlen kommen aus selection-bar.js. Nur in der Listen-Ansicht — im
-// Status-Board ist das Ziehen schon die Sammel-Geste.
+// Mehrfachauswahl der Recherche-Liste: EINE Aktion auf alle Markierten
+// (POST /research/bulk, routes/research-bulk.js); Markieren und Zaehlen kommen
+// aus selection-bar.js. Die Haken stehen in jeder Listenzeile, die Leiste
+// erscheint ab der ersten Markierung (wie in der Ideen-Liste). Nur in der
+// Listen-Ansicht — im Status-Board ist das Ziehen schon die Sammel-Geste.
+// Jede Sammelaktion ist EIN Undo-Schritt (recherche/history.js).
 
 import { fetchJson } from '../../utils.js';
 import { STATUSES } from './shared.js';
@@ -9,7 +11,6 @@ import { selectionState, selectionMethods } from '../../selection-bar.js';
 
 export function rechercheBulkState() {
   return {
-    bulkMode: false,
     ...selectionState(),
     bulkStatus: '',
     bulkTag: '',
@@ -24,21 +25,8 @@ export const rechercheBulkMethods = {
   // schon gefiltert): ein Filterwechsel darf keine unsichtbare Auswahl
   // mitschleppen, die dann still mitgeloescht wird.
   selectionVisibleIds() { return this.items.map(i => i.id); },
-  // Beim Einstieg ein offenes Bearbeiten speichern und die Zeile zuklappen:
-  // im Auswahl-Modus markiert ein Klick, eine offene Zeile daneben ist nur im Weg.
-  async toggleBulkMode() {
-    if (!this.bulkMode && this.detailItemId != null) {
-      if (this.detailEditing) {
-        const prev = (this.items || []).find(i => i.id === this.detailItemId);
-        if (prev && !(await this.commitEdit(prev))) return;
-      }
-      this.closeDetail();
-    }
-    this.bulkMode = !this.bulkMode;
-    if (!this.bulkMode) this.bulkClear();
-  },
   bulkClear() {
-    Object.assign(this, rechercheBulkState(), { bulkMode: this.bulkMode });
+    Object.assign(this, rechercheBulkState());
   },
   bulkStatusOptions() { return STATUSES.map(s => ({ value: s, label: this.statusLabel(s) })); },
 
@@ -51,6 +39,8 @@ export const rechercheBulkMethods = {
       message: app.tn('recherche.bulk.confirmDelete', ids.length),
       confirmLabel: app.t('common.delete'), danger: true,
     })) return;
+    // Stand VOR dem Request — das Undo dreht genau diese Fundstuecke zurueck.
+    const rec = this._researchBulkRecord?.(action, ids, extra);
     this.busy = true;
     try {
       const r = await fetchJson('/research/bulk', {
@@ -58,6 +48,7 @@ export const rechercheBulkMethods = {
         body: JSON.stringify({ book_id: bookId, ids, action, ...extra }),
       });
       this.errorMessage = '';
+      if (rec) this._recordResearch?.(rec);
       if (action === 'delete' && ids.includes(this.detailItemId)) this.closeDetail();
       this.selectedIds = [];
       this.bulkStatus = '';

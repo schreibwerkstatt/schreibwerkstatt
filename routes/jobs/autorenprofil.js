@@ -14,7 +14,8 @@
 const express = require('express');
 const contentStore = require('../../lib/content-store');
 const { getBookSettings } = require('../../db/schema');
-const { getAuthorProfile, saveAuthorProfileRun } = require('../../db/author-profile');
+const { getAuthorProfile } = require('../../db/author-profile');
+const { saveProposal } = require('../../db/ai-proposals');
 const { renderAuthorProfileMeasurement } = require('../../lib/author-profile');
 const {
   makeJobLogger, updateJob, completeJob, failJob, i18nError,
@@ -106,16 +107,20 @@ async function runAutorenprofilJob(jobId, userEmail) {
       ? result.entwicklung : [];
     const konstanten = Array.isArray(result.konstanten) ? result.konstanten : [];
 
-    saveAuthorProfileRun(userEmail, {
-      profilText,
-      konstanten,
-      entwicklung,
+    // Den geltenden Text nicht anfassen: das Ergebnis ist ein Vorschlag, den die
+    // Karte mit Wort-Diff gegen den geltenden Text zeigt. Erst «Übernehmen»
+    // speichert (PUT /me/author-profile mit `run`) — samt der Basis DIESES Laufs,
+    // damit ein inzwischen veränderter Messstand als veraltet erkannt wird.
+    // Abgelegt wird er als offener Vorschlag (db/ai-proposals.js), damit er einen
+    // Lauf überlebt, dessen Ende die Karte nicht gesehen hat.
+    const vorschlag = {
+      profilText, konstanten, entwicklung,
       basis: measurement.books.map(b => ({ book_id: b.book_id, tokens: b.tokens })),
       basisSig: measurement.basisSig,
-    });
-
+    };
+    saveProposal('autorenprofil', userEmail, null, vorschlag);
     completeJob(jobId, {
-      profilText, konstanten, entwicklung,
+      ...vorschlag,
       buecher: measurement.counts.measured,
       tokensIn: tok.in, tokensOut: tok.out,
     }, tps(tok), `Autorenprofil erstellt (${profilText.length} Zeichen, ${measurement.counts.measured} Buecher)`);
@@ -133,8 +138,8 @@ async function runAutorenprofilJob(jobId, userEmail) {
  * db/author-profile.js). Wer angemeldet ist, darf ueber sein eigenes Werk ein
  * Profil rechnen lassen.
  *
- * `force` ueberschreibt einen von Hand editierten Text. Ohne das Flag antwortet
- * die Route `409` statt die Arbeit des Autors stillschweigend zu ersetzen.
+ * Auch bei einem von Hand editierten Text keine Sperre: der Lauf ersetzt nichts,
+ * sein Ergebnis ist ein Vorschlag, über den der Autor entscheidet.
  */
 autorenprofilRouter.post('/autorenprofil', jsonBody, (req, res) => {
   const userEmail = sessionEmail(req);
@@ -143,9 +148,6 @@ autorenprofilRouter.post('/autorenprofil', jsonBody, (req, res) => {
   const current = getAuthorProfile(userEmail);
   if (!current.counts.measured) {
     return res.status(400).json({ error_code: 'AUTHOR_PROFILE_NO_BOOKS' });
-  }
-  if (current.profile?.edited && !req.body?.force) {
-    return res.status(409).json({ error_code: 'AUTHOR_PROFILE_EDITED' });
   }
 
   const existing = findActiveJobId('autorenprofil', userEmail, userEmail);

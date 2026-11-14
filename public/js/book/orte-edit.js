@@ -1,13 +1,15 @@
 // Pflege-Formular der Schauplatz-Karte: anlegen, Stammdaten korrigieren, Elternort
-// setzen, mit einem anderen Ort zusammenführen. In Alpine.data('orteCard')
+// setzen; dazu Zeilen-Mechanik (Titel öffnet das Bearbeiten, Chevron/Zeilenkörper
+// klappen auf) und Aktionsmenü. Zusammenführen läuft über den geteilten Merge-Picker
+// (entity-merge-picker.js) aus dem Menü. In Alpine.data('orteCard')
 // gespreadet; die Server-Calls liegen am Root (book/orte.js), hier nur Formular-
 // State und Optionslisten. Geschickt werden nur geänderte Felder; der Server schützt
 // genau diese (`manual_fields`) — die nächste Komplettanalyse überschreibt sie nicht.
 
 import { ORT_TYPEN, ortTypLabel } from './ort-typen.js';
 import { countryOptions } from '../country-codes.js';
-import { compareText, tFetchError } from '../i18n.js';
-import { entityMergeTargetOptions } from './entity-merge-picker.js';
+import { compareText } from '../i18n.js';
+import { isRowBodyClick, isFloatingLayerClick } from '../row-click.js';
 
 const EMPTY_DRAFT = { name: '', typ: '', beschreibung: '', stimmung: '', land: '', parent: '' };
 
@@ -59,6 +61,56 @@ export const orteEditMethods = {
     this.$nextTick(() => this.$refs.ortEditName?.focus());
   },
 
+  // Titel-Klick (DESIGN.md «Listen-Anriss»): Zeile aufklappen und direkt ins
+  // Bearbeiten. Ein offenes Formular eines anderen Orts wird vorher gespeichert.
+  async openOrtEdit(o) {
+    if (this.isEditingOrt(o.id)) return;
+    if (!await this._commitOtherOrtEdit(o)) return;
+    if (this.ortEdit.mode === 'new') return;
+    Alpine.store('catalogUi').selectedOrtId = o.id;
+    this.startOrtEdit(o);
+  },
+
+  async ortToggleOpen(o) {
+    if (this.isEditingOrt(o.id)) return;
+    if (!await this._commitOtherOrtEdit(o)) return;
+    const ui = Alpine.store('catalogUi');
+    ui.selectedOrtId = ui.selectedOrtId === o.id ? null : o.id;
+  },
+
+  ortRowBodyClick(o, ev) {
+    if (isRowBodyClick(ev)) this.ortToggleOpen(o);
+  },
+
+  // false = Speichern gescheitert, das offene Formular bleibt stehen.
+  async _commitOtherOrtEdit(o) {
+    const ed = this.ortEdit;
+    if (ed.mode !== 'edit' || ed.id === o.id) return true;
+    await this.commitOrtEdit();
+    return this.ortEdit.mode !== 'edit';
+  },
+
+  // Klick daneben (Inline-Edit, public/CLAUDE.md «Edit-Formulare») — nur im
+  // Bearbeiten einer Zeile, nicht bei der Neuanlage: kein Request läuft, leerer
+  // Name verwirft. Klicks in schwebende Ebenen (Rechtschreib-Popover, Dialog,
+  // Menü) zählen nicht.
+  async commitOrtEdit(ev) {
+    if (ev && isFloatingLayerClick(ev)) return;
+    const ed = this.ortEdit;
+    if (ed.mode !== 'edit' || ed.busy) return;
+    if (!ed.draft.name.trim()) { this.cancelOrtEdit(); return; }
+    await this.saveOrtEdit();
+  },
+
+  // Aktionsmenü einer Schauplatz-Zeile (action-menu.js); Ziel = loc_id.
+  ortOpenMenu(ev, o) {
+    if (this.isEditingOrt(o.id)) return;
+    this.openActionMenu(ev, 'ort:' + o.id, o.id);
+  },
+  ortMenuOrt() {
+    return Alpine.store('catalog').orte.find(o => o.id === this.actionMenuTarget) || null;
+  },
+
   startOrtEdit(o) {
     const draft = {
       name: o.name || '', typ: o.typ || '', beschreibung: o.beschreibung || '',
@@ -103,11 +155,6 @@ export const orteEditMethods = {
     }
   },
 
-  // Ziele: nur aktive Orte (ein verwaistes Ziel sperrt auch der Server, TARGET_STALE).
-  ortMergeOptions(o) {
-    return entityMergeTargetOptions('ort', o.id, Alpine.store('catalog'));
-  },
-
   // Geschützte Felder als lesbare Liste fürs Detail («Name, Beschreibung»).
   ortManualFieldsLabel(o) {
     return (o.manual_fields || []).map(f => window.__app.t('orte.col.' + f)).join(', ');
@@ -119,19 +166,6 @@ export const orteEditMethods = {
     } catch (e) {
       console.error('[restoreOrtAnalysis]', e);
       await window.__app.appAlert({ message: window.__app.ortEditErrorText(e) });
-    }
-  },
-
-  // Aktueller Ort (Quelle) geht im gewählten Ziel auf.
-  async mergeOrtInto(o) {
-    const target = this.ortMergeTarget;
-    if (!target) return;
-    try {
-      if (await window.__app.mergeOrt(o.id, target)) this.ortMergeTarget = '';
-    } catch (e) {
-      console.error('[mergeOrtInto]', e);
-      // Server-Meldung (z.B. TARGET_STALE), Netzfehler usw.
-      await window.__app.appAlert({ message: tFetchError(e) });
     }
   },
 };

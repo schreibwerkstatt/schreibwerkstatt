@@ -29,11 +29,13 @@ const CSS_DIR = join(REPO_ROOT, 'public', 'css');
 const CORE = 'public/js/sortable-dnd.js';
 const BOARD_CSS = 'public/css/components/board-dnd.css';
 
-// Sortierer ohne Karten-Board: Buchorganizer (Kapitel-/Abschnittsbaum) und
-// Motiv-Baum. Sie sortieren verschachtelte Listen, keine Zellen.
+// Sortierer ohne Karten-Board: Buchorganizer (Kapitel-/Abschnittsbaum),
+// Motiv-Baum und die Bände einer Buchreihe. Sie sortieren (verschachtelte)
+// Listen, keine Zellen.
 const TREE_SORTABLES = new Set([
   'public/js/book-organizer/dnd.js',
   'public/js/book/motiv/dnd.js',
+  'public/js/book/book-settings/series.js',
 ]);
 
 // Sortable-Container je Board: der Selektor, mit dem das Board seine Zellen

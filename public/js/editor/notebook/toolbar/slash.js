@@ -3,7 +3,8 @@
 // hinter dem Focus-Hard-Stop).
 
 import { getEditEl, placeCaretIn, replaceBlockOutsideList, ensureSlotAfter, SLASH_ITEMS, _formatStamp } from './_shared.js';
-import { createTodoList } from '../../shared/todo-html.js';
+import { createTodoList, TODO_ITEM_SEL, TODO_TEXT_SEL } from '../../shared/todo-html.js';
+import { promoteSubLists, isListEl } from '../line-merge.js';
 import { htmlToElement } from './caret-panel.js';
 import { buildFigureHtml, FIGURE_CAPTION_SEL } from '../../../figure/figure-html.js';
 import { contentRepo } from '../../../repo/content.js';
@@ -101,7 +102,10 @@ export const slashMethods = {
     // beim Öffnen aufgelöst (Label, Gruppen-Label, Modifier-Klasse, Stempel).
     // Das Template liest dann nur noch Properties – keine `t()`-/Funktions-
     // Aufrufe pro Eintrag und Render, die beim Tippen reaktiv neu liefen.
-    return SLASH_ITEMS.map(it => ({
+    // Am Anfang eines Blocks mit Text (`_slashConvert`) nur die Blocktypen:
+    // Einfügen, Umbruch und Teilen setzen einen leeren Trigger-Block voraus.
+    const items = this._slashConvert ? SLASH_ITEMS.filter(it => it.group === 'block') : SLASH_ITEMS;
+    return items.map(it => ({
       key: it.key,
       group: it.group,
       groupLabel: app?.t('editor.slash.group.' + it.group) || it.group,
@@ -139,8 +143,11 @@ export const slashMethods = {
     return r;
   },
 
-  _openSlashAt(block) {
+  // `convert`: Trigger am Anfang eines Blocks mit Text — die Wahl wandelt diesen
+  // Block samt Inhalt um (`_convertSlashBlock`), statt einen leeren zu ersetzen.
+  _openSlashAt(block, { convert = false } = {}) {
     this._slashBlock = block;
+    this._slashConvert = convert;
     this.slashIdx = 0;
     this.slashQuery = '';
     // Labels einmalig in der aktuellen Sprache auflösen; Filter-Cache leeren.
@@ -220,13 +227,22 @@ export const slashMethods = {
     window.__app?._markEditDirty?.();
   },
 
-  _closeSlash() {
+  // `literal`: im Umwandeln-Modus war der Schrägstrich vielleicht Text («/usr»,
+  // «1/2»): Esc, Caret-Bewegung oder ein Filter ohne Treffer setzen dann
+  // «/» + Getipptes an den Caret. Im leeren Block bleibt Schliessen Schliessen.
+  _closeSlash({ literal = false } = {}) {
+    const text = literal && this._slashConvert ? '/' + (this.slashQuery || '') : '';
     this.slashShow = false;
     this.slashQuery = '';
     this._slashBlock = null;
+    this._slashConvert = false;
     this._slashLabels = null;
     this._slashFilterCache = null;
     getEditEl()?.focus();
+    if (text) {
+      document.execCommand('insertText', false, text);
+      window.__app?._markEditDirty?.();
+    }
   },
 
   _applySlashByKey(key) {
@@ -238,6 +254,24 @@ export const slashMethods = {
     const editEl = getEditEl();
     const block = this._slashBlock;
     if (!editEl || !block || !block.parentNode) { this._closeSlash(); return; }
+    // Jede Wahl ist ein eigener Undo-Schritt (Vorher-Stand einfrieren).
+    window.__app?._historyPushNow?.();
+
+    if (this._slashConvert) {
+      this._convertSlashBlock(editEl, block, item);
+      window.__app?._markEditDirty?.();
+      this._closeSlash();
+      return;
+    }
+
+    // Querverweis: Picker am Caret (im leeren Trigger-Block). Erst schliessen —
+    // das gibt den Fokus an den Editor zurück, an dessen Caret der Picker
+    // einfügt.
+    if (item.xref) {
+      this._closeSlash();
+      this.openXrefInput?.();
+      return;
+    }
 
     // Bild: oeffnet den Datei-Dialog. Async → Block vor dem Schliessen sichern,
     // Menue sofort schliessen (der Dialog uebernimmt).
@@ -337,5 +371,74 @@ export const slashMethods = {
     placeCaretIn(caretTarget);
     window.__app?._markEditDirty?.();
     this._closeSlash();
+  },
+  // Umwandeln-Modus: `block` (mit Text) wird zum gewählten Blocktyp, sein
+  // Inline-Inhalt wandert mit, der Caret steht danach am Anfang. Quelle des
+  // Inhalts ist in der Checkbox-Zeile das `.todo-text` (die Checkbox ist
+  // Struktur), in einer Listenzeile der Text ohne Unterlisten (die rücken an
+  // ihre Stelle). Eingesetzt wird wie beim leeren Block — in einer Liste über
+  // `replaceBlockOutsideList` (Invariante 19), in Zitat/Gedicht/Verlauf als
+  // eigener Block, der den Wrapper an dieser Zeile teilt. Markup der
+  // Checkbox-Liste und des Verlaufs nur aus ihren SSoT-Modulen.
+  _convertSlashBlock(editEl, block, item) {
+    // Schon von dieser Art (Zeile im Zitat → Zitat, Listenzeile → Liste): nichts
+    // umbauen, sonst entstünden zwei gleiche Blöcke direkt nacheinander.
+    const parent0 = block.parentNode;
+    const isTodo = block.matches?.(TODO_ITEM_SEL);
+    if (item.todoList ? isTodo
+      : item.list ? (!isTodo && parent0?.tagName === item.tag.toUpperCase())
+      : item.wrapP ? (parent0?.tagName === item.tag.toUpperCase()
+          && (!item.className || parent0.classList.contains(item.className)))
+      : (parent0 === editEl && block.tagName === item.tag.toUpperCase())) {
+      placeCaretIn(block.matches?.(TODO_ITEM_SEL) ? (block.querySelector(TODO_TEXT_SEL) || block) : block);
+      return;
+    }
+    if (block.tagName === 'LI') promoteSubLists(block);
+    const source = block.matches?.(TODO_ITEM_SEL) ? (block.querySelector(TODO_TEXT_SEL) || block) : block;
+    const frag = document.createDocumentFragment();
+    while (source.firstChild) frag.appendChild(source.firstChild);
+    let replacement;
+    let target;
+    if (item.todoList) {
+      const todo = createTodoList();
+      replacement = todo.list;
+      target = todo.text;
+    } else if (item.list) {
+      replacement = document.createElement(item.tag);
+      target = document.createElement('li');
+      replacement.appendChild(target);
+    } else if (item.wrapP) {
+      replacement = document.createElement(item.tag);
+      if (item.className) replacement.className = item.className;
+      target = document.createElement('p');
+      if (item.innerClass) target.className = item.innerClass;
+      replacement.appendChild(target);
+    } else {
+      replacement = document.createElement(item.tag);
+      target = replacement;
+    }
+    target.replaceChildren(frag);
+    if (!target.childNodes.length) target.appendChild(document.createElement('br'));
+    const parent = block.parentNode;
+    if (parent === editEl || isListEl(parent) || block.tagName === 'LI') {
+      replaceBlockOutsideList(editEl, block, replacement);
+    } else {
+      // Zeile in Zitat/Gedicht/Verlauf: der neue Block tritt an ihre Stelle
+      // HINTER den Wrapper-Teil davor; was nach ihr kam, bleibt als eigener
+      // Wrapper dahinter. Eine eigene Hülle statt `cloneNode`, damit keine
+      // Block-ID doppelt im Dokument steht.
+      const rest = [];
+      for (let n = block.nextElementSibling; n; n = n.nextElementSibling) rest.push(n);
+      block.remove();
+      parent.parentNode.insertBefore(replacement, parent.nextSibling);
+      if (rest.length) {
+        const tail = document.createElement(parent.localName);
+        if (parent.className) tail.className = parent.className;
+        rest.forEach((n) => tail.appendChild(n));
+        replacement.insertAdjacentElement('afterend', tail);
+      }
+      if (!parent.children.length) parent.remove();
+    }
+    placeCaretIn(target);
   },
 };

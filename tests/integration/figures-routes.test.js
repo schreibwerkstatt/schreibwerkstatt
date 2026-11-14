@@ -3,7 +3,8 @@
 //   * PUT /figures/:book_id baut die Namens→ID-Maps über den Content-Store —
 //     erste_erwaehnung_page_id und Beleg-IDs überleben den GET→PUT-Round-Trip.
 //   * PATCH /figures/:book_id/:fig_id pflegt eine Figur (manually_edited), ACL editor.
-//   * POST /figures/:book_id/merge per Zeilen-ID (Redundanz-Radar) inkl. Alias.
+//   * POST /figures/:book_id/merge per Zeilen-ID (Redundanz-Radar) inkl. Alias, und per
+//     fig_id für zwei AKTIVE Figuren (Aktionsmenü der Figurenkarte) samt Beziehungen/Szenen.
 
 const test = require('node:test');
 const assert = require('node:assert/strict');
@@ -146,4 +147,40 @@ test('GET /figures/chapter meldet den Rückfall auf die ganze Besetzung (fallbac
   const some = await call('GET', `/figures/chapter/${BOOK}/${CH}`);
   assert.equal(some.body.fallback, false);
   assert.deepEqual(some.body.figuren.map(f => f.id), ['fig_1']);
+});
+
+test('Merge zweier AKTIVER Figuren per fig_id (Katalog-Menü): Beziehungen, Szenen, Alias', async () => {
+  const { saveFigurenToDb } = require('../../db/figures');
+  const idMaps = { chNameToId: { 'Kapitel 1': CH }, pageNameToIdByChapter: { [CH]: { Anfang: PAGE } } };
+  // Zwei aktive Figuren, die sich gegenseitig kennen, plus eine Dritte, die beide kennt.
+  saveFigurenToDb(BOOK, [
+    { id: 'fig_m1', name: 'Marta Lind', kurzname: 'Marta',
+      beziehungen: [{ figur_id: 'fig_m2', typ: 'freund' }, { figur_id: 'fig_m3', typ: 'kollege' }] },
+    { id: 'fig_m2', name: 'Martha Lind', beziehungen: [{ figur_id: 'fig_m3', typ: 'kollege' }] },
+    { id: 'fig_m3', name: 'Otto Hahn' },
+  ], ME, idMaps, { reconcile: true, onMissing: 'stale' });
+  const row = (fig) => db.prepare('SELECT id, stale FROM figures WHERE book_id = ? AND fig_id = ?').get(BOOK, fig);
+  const src = row('fig_m1'); const tgt = row('fig_m2'); const third = row('fig_m3');
+  assert.equal(src.stale, 0, 'Quelle ist aktiv');
+  assert.equal(tgt.stale, 0, 'Ziel ist aktiv');
+  // Szene mit der Quelle: der Bezug muss aufs Ziel wandern.
+  const scene = db.prepare(`INSERT INTO figure_scenes (book_id, user_email, titel, chapter_id, page_id, stale)
+                            VALUES (?, ?, 'Treffen', ?, ?, 0)`).run(BOOK, ME, CH, PAGE).lastInsertRowid;
+  db.prepare('INSERT INTO scene_figures (scene_id, figure_id) VALUES (?, ?)').run(scene, src.id);
+
+  // Viewer darf nicht zusammenführen.
+  assert.equal((await call('POST', `/figures/${BOOK}/merge`, { source: 'fig_m1', target: 'fig_m2' }, VIEWER)).status, 403);
+
+  const r = await call('POST', `/figures/${BOOK}/merge`, { source: 'fig_m1', target: 'fig_m2' });
+  assert.equal(r.status, 200);
+  assert.ok(r.body.aliasesAdded.includes('Marta Lind'));
+  assert.equal(db.prepare('SELECT COUNT(*) n FROM figures WHERE id = ?').get(src.id).n, 0, 'Quelle gelöscht');
+
+  const rels = db.prepare('SELECT from_fig_id, to_fig_id FROM figure_relations WHERE book_id = ? AND (from_fig_id = ? OR to_fig_id = ?)')
+    .all(BOOK, tgt.id, tgt.id);
+  assert.ok(!rels.some(x => x.from_fig_id === x.to_fig_id), 'kein Selbstbezug');
+  assert.equal(rels.filter(x => (x.from_fig_id === tgt.id && x.to_fig_id === third.id)).length, 1, 'Dublette zum Dritten fällt weg');
+  assert.equal(db.prepare('SELECT COUNT(*) n FROM scene_figures WHERE scene_id = ? AND figure_id = ?').get(scene, tgt.id).n, 1,
+    'Szenen-Bezug hängt am Ziel');
+  assert.equal(db.prepare('SELECT stale FROM figures WHERE id = ?').get(tgt.id).stale, 0, 'Ziel bleibt aktiv');
 });

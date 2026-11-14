@@ -25,6 +25,14 @@
       <span class="card-title" x-text="$app.t('ideenBoard.title')"></span>
       <div class="card-subline" x-text="$app.t('ideenBoard.subline')"></div>
     </div>
+    <!-- Undo/Redo (max 10 Schritte; Kern cards/board-history.js, Records
+         book/ideen-board/history.js) -->
+    <button type="button" class="icon-btn icon-btn--ghost" @click="historyUndo()"
+            :disabled="!_undoStack.length || busy"
+            :data-tip="$app.withHotkey($app.t('ideenBoard.history.undoTip'), 'undo')" :aria-label="$app.t('ideenBoard.history.undo')"><svg class="icon" aria-hidden="true"><use href="/icons.svg#undo"/></svg></button>
+    <button type="button" class="icon-btn icon-btn--ghost" @click="historyRedo()"
+            :disabled="!_redoStack.length || busy"
+            :data-tip="$app.withHotkey($app.t('ideenBoard.history.redoTip'), 'redo')" :aria-label="$app.t('ideenBoard.history.redo')"><svg class="icon" aria-hidden="true"><use href="/icons.svg#redo"/></svg></button>
     <!-- Ideen-Chat-Karte (chat/ideen-chat.js): Vorschläge an die Ideen, einzeln übernehmen -->
     <button type="button" class="icon-btn icon-btn--ghost" :class="{ 'is-active': ideenChatOpen }" :aria-pressed="ideenChatOpen" @click="toggleIdeenChat()" :aria-label="$app.t('ideenBoard.chat.toggle')" :data-tip="$app.t('ideenBoard.chat.toggle')"><svg class="icon" aria-hidden="true"><use href="/icons.svg#message-square"/></svg></button>
     <button type="button" class="icon-btn icon-btn--ghost" :class="{ 'is-active': ideenBoardFullscreen }" :aria-pressed="ideenBoardFullscreen" @click="toggleIdeenBoardFullscreen()" :aria-label="ideenBoardFullscreen ? $app.t('ideenBoard.fullscreenExit.tip') : $app.t('ideenBoard.fullscreen.tip')" :data-tip="ideenBoardFullscreen ? $app.t('ideenBoard.fullscreenExit.tip') : $app.t('ideenBoard.fullscreen.tip')"><svg class="icon" aria-hidden="true"><use :href="ideenBoardFullscreen ? '/icons.svg#minimize-2' : '/icons.svg#maximize-2'"/></svg></button>
@@ -41,6 +49,19 @@
     </div>
   </template>
 
+  <!-- Ansicht-Umschalter (Raster / Liste): zwei Blicke auf DENSELBEN Bestand,
+       Filterleiste und Zaehler gelten fuer beide — darum steht er darueber und
+       nicht in der Filterleiste (DESIGN.md „Status-Board", wie die Recherche). -->
+  <div x-show="!loading && totalCount() > 0" class="tabs entity-view-toggle" role="tablist" :aria-label="$app.t('ideenBoard.view.label')">
+    <template x-for="m in ['board','list']" :key="m">
+      <button type="button" role="tab" class="tabs-btn"
+              :class="{ 'tabs-btn--active': view === m }"
+              :aria-selected="view === m"
+              @click="setView(m)"
+              x-text="$app.t('ideenBoard.view.' + m)"></button>
+    </template>
+  </div>
+
   <!-- @include ideen-board-toolbar -->
 
   <!-- @include ideen-board-add -->
@@ -48,13 +69,20 @@
   <!-- @include ideen-link-picker -->
 
   <div x-show="loading" x-skeleton="5" x-cloak></div>
-  <div x-show="!loading && totalCount() === 0 && lanes().length === 0" class="muted-msg" x-text="$app.t('ideenBoard.empty')"></div>
+  <!-- Ganz leeres Board: Einstieg erklaeren (das Anlegen-Feld steht darueber).
+       Filter ohne Treffer ist dagegen nur eine Zeile (unten). -->
+  <div x-show="!loading && totalCount() === 0 && lanes().length === 0" class="card-empty" x-cloak>
+    <p class="card-empty-text" x-text="$app.t('ideenBoard.empty')"></p>
+    <p class="card-empty-hint" x-text="$app.t('ideenBoard.emptyHint')"></p>
+  </div>
   <div x-show="!loading && totalCount() > 0 && (isListView() ? listRows().length === 0 : lanes().length === 0)" class="muted-msg"
        x-text="$app.t('ideenBoard.emptyFiltered')"></div>
 
   <!-- @include ideen-board-grid -->
 
   <!-- @include ideen-board-list -->
+
+  <!-- @include ideen-board-menu -->
 </div><!-- /.card--ideenboard -->
 
 <!-- @include ideen-chat -->

@@ -121,17 +121,36 @@
   gap: var(--space-2xs);
 }
 
+/* Abschnittszeile bricht intrinsisch um: der Titel behält eine Mindestbreite,
+   reicht der Platz nicht (Blog-Buch: Sync-Badge, Push und drei Comboboxen),
+   rutscht die Aktionsgruppe geschlossen in eine zweite Reihe, rechtsbündig.
+   Bewusst ohne Container-Query: `container-type` über den Zeilen-Comboboxen
+   verschöbe deren verankerte Dropdowns (public/css/CLAUDE.md). */
 .organizer-page {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   --drag-grip-host-gap: var(--space-6);
   gap: var(--drag-grip-host-gap);
+  row-gap: var(--space-xs);
   padding: var(--space-xs) var(--space-6);
   border-radius: var(--radius-none);
   background: transparent;
   transition: background-color var(--transition-base);
 }
 .organizer-page:hover { background: var(--color-hover); }
+.organizer-page > .organizer-name {
+  flex: 1 1 160px;
+}
+.organizer-page-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: var(--space-6);
+  margin-left: auto;
+  min-width: 0;
+}
+
 
 .organizer-delete-btn {
   display: inline-flex;
@@ -225,9 +244,14 @@
   align-items: center;
   flex-shrink: 0;
 }
-.organizer-move-combo {
-  min-width: 110px;
-  flex-shrink: 0;
+/* Zeilen-Comboboxen geben nach (Wert kürzt per .truncate), damit die
+   Aktionsgruppe auch in der zweiten Reihe einzeilig bleibt. Basis 0, weil
+   Flex mit der Basis rechnet; max-content deckelt auf die natürliche Breite. */
+.organizer-move-combo,
+.organizer-redaktion-combo {
+  flex: 1 1 0;
+  min-width: 0;
+  max-width: max-content;
 }
 /* Kompakt halten wie die übrigen --compact-Comboboxen (12px), nur die Höhe an
    die Seitentitel-Input-Höhe angleichen (Row-Alignment). */
@@ -288,7 +312,9 @@
   .organizer-chapter-header .organizer-name--chapter {
     flex-basis: calc(100% - 60px);
   }
-  .organizer-chapter-meta:first-of-type {
+  /* Erste Kopf-Plakette beginnt die zweite Reihe links; nur die Aktionen
+     schieben per `auto` nach rechts. */
+  .organizer-chapter-header .organizer-chapter-meta {
     margin-left: 0;
   }
   .organizer-chapter-actions {
@@ -321,9 +347,6 @@
      reservieren. Auf Mobile shrink-to-content. */
   .organizer-jump {
     flex: 0 0 auto;
-  }
-  .organizer-page .organizer-delete-btn {
-    margin-left: auto;
   }
 }
 
@@ -373,10 +396,6 @@
    für journalistische Bücher, Manuskript für alle anderen) teilen die Skala je
    Rang. Farben der Plakette (`.badge--redaktion-*`, `--stale`):
    components/edit-status-badge.css; hier nur Combobox und Fluss. */
-.organizer-redaktion-combo {
-  min-width: 118px;
-  flex-shrink: 0;
-}
 .organizer-redaktion-combo .combobox-trigger {
   box-sizing: border-box;
   height: 28px;

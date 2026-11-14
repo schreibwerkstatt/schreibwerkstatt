@@ -118,6 +118,7 @@ export const detailMethods = {
     if (!rel || !typ || rel.typ === typ) return;
     try {
       await sendJson(`/motifs/relations/${rel.id}`, 'PATCH', { typ });
+      this._pushUndo({ kind: 'relation-typ', id: rel.id, before: rel.typ, after: typ });
       await this.loadBoard();
     } catch (e) {
       this.errorMessage = window.__app.t(e?.status === 409 ? 'motiv.relations.exists' : 'motiv.error.save');

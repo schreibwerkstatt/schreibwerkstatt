@@ -395,11 +395,44 @@ neben dem Editor innerhalb jeder Stufe (`compareIdeeManual` in
 Die ursprüngliche Position hat keine Richtung; der Reset-Knopf erscheint nur,
 solange die Spalte sortiert ist.
 Der tastaturerreichbare Weg sind die Stufen-Knöpfe auf der Karte — **derselbe
-Schreibpfad** (`setIdeeStatus`), drei Oberflächen (Board-Drag, Board-Knöpfe,
-Menü der Ideen-Karte).
+Schreibpfad** (`setIdeeStatus`), vier Oberflächen (Board-Drag, Board-Knöpfe,
+Aktionsmenü des Boards, Menü der Ideen-Karte).
 
-**Zwei Ansichten, ein Filter.** Umschalter „Raster" / „Liste" in der
-Filterleiste (`view` im Filter-Scope `ideenBoard`). Die Liste
+**Bearbeiten und Aktionsmenü.** Der Notiztext einer Karte (Raster) bzw. Zeile
+(Liste) ist ein Knopf, der den Inline-Edit öffnet ([inline-edit.js](../public/js/book/ideen-board/inline-edit.js):
+`$editKeys`, Enter/Cmd+S speichern, Esc verwirft, Klick daneben speichert) — in
+Raster und Liste derselbe Vertrag. Jede Karte und jede Listenzeile hat dazu das
+Aktionsmenü ([ideen-board-menu.html](../public/partials/ideen-board-menu.html),
+[ideen-board/menu.js](../public/js/book/ideen-board/menu.js), Mechanik
+`action-menu.js`): ⋯-Knopf, Rechtsklick und Long-Press, eine teleportierte
+Instanz, Ziel `board:<id>` bzw. `list:<id>`. Reihenfolge: Bearbeiten, Stufen,
+Verschieben/Zuordnen (nur offen), Verknüpfen, Löschen. Die Hover-Knöpfe der
+Rasterkarte bleiben als Abkürzung. Löschen ist eine Definition für Board und
+Ideen-Karte ([ideen-methods-shared.js](../public/js/book/ideen-methods-shared.js)#`deleteIdee`,
+Hooks `_afterIdeenRemoved`/`_ideenErrorKey`).
+
+**Rückgängig.** Cmd/Ctrl+Z bzw. Cmd/Ctrl+Shift+Z (und die zwei Knöpfe im
+Kartenkopf), höchstens zehn Schritte — Kern [cards/board-history.js](../public/js/cards/board-history.js),
+Records [ideen-board/history.js](../public/js/book/ideen-board/history.js).
+Aufgezeichnet werden Anlegen (auch eine eingefügte Liste als **ein** Schritt;
+Undo löscht, kein Redo), Text, Stufe, Ort (Picker, Drag, Inhaltsverzeichnis),
+Reihenfolge in der Zelle, Verknüpfen/Lösen und Löschen (Snapshot: Undo legt die
+Idee neu an — Text, Ort, Verknüpfungen und über `restore` im `POST /ideen` auch
+Anlegedatum, Stufe samt Zeitpunkt und Rang in der Zelle, geprüft in
+[lib/restore-fields.js](../lib/restore-fields.js) (ISO, nicht in der Zukunft,
+Stufen-Zeitpunkt nicht vor dem Anlegen; eine inzwischen abgeschaltete Stufe ist
+erlaubt, die Idee stand schon dort); die neue ID wird in die übrigen Records
+geschrieben). Ein Drop
+(Stufe + Reihenfolge) und jede Sammelaktion der Liste sind **ein** Schritt; nach
+einem Stufenwechsel stellt das Undo auch den alten Platz in der Quellzelle her.
+Zusammenführen hat keinen Rückweg und verwirft die Historie, ebenso jedes
+Neuladen mit geändertem Stand (Offline-Abgleich, Bahn verloren, Buchwechsel).
+Gesperrt, solange der Fokus im offenen Inline-Edit steht oder ein Request läuft.
+
+**Zwei Ansichten, ein Filter.** Umschalter „Raster" / „Liste" als
+`.tabs.entity-view-toggle` **über** der Filterleiste — wie das Status-Board der
+Recherche (DESIGN.md „Status-Board"): Filter und Zähler gelten für beide
+(`view` im Filter-Scope `ideenBoard`). Die Liste
 ([ideen-board-list.html](../public/partials/ideen-board-list.html),
 [ideen-board/list.js](../public/js/book/ideen-board/list.js)) zeigt denselben
 Bestand nach **demselben** Prädikat (`makeIdeeFilter`) flach als `sortableTable`:
@@ -416,7 +449,7 @@ Geschichte, kein Versäumnis.
 **Mehrfachauswahl nur in der Liste.** Haken je Zeile, „alle sichtbaren" im Kopf,
 darüber ab der ersten Markierung die Auswahl-Leiste (DESIGN.md „Auswahl-Leiste");
 Sammelaktionen setzen die Stufe (nur aktive) oder löschen. Jede Idee läuft
-einzeln über denselben Schreibpfad wie Knopf und Drag (`_patchIdee` /
+einzeln über denselben Schreibpfad wie Knopf und Drag (`setIdeeStatus` → `_patchIdee` /
 `repo/ideen-queue.js`), damit Offline-Warteschlange und Stufen-Prüfung je Idee
 greifen; Gescheitertes bleibt ausgewählt. Die Auswahl folgt dem Filter — eine
 Sammelaktion trifft nie, was gerade ausgeblendet ist. Im Raster gibt es keinen

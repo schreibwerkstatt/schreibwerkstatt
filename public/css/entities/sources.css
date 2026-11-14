@@ -64,7 +64,17 @@
   flex-direction: column;
   gap: var(--space-6);
 }
-.sources-title { font-weight: var(--fw-semibold); }
+/* Titel-Knopf (öffnet das Bearbeiten) liest sich wie Text, Link-Optik aus `.text-link`. */
+.sources-title {
+  font-weight: var(--fw-semibold);
+  background: none;
+  border: 0;
+  padding: 0;
+  color: inherit;
+  font-family: inherit;
+  font-size: inherit;
+  text-align: left;
+}
 .sources-container {
   font-size: var(--font-size-mini);
   color: var(--color-muted);

@@ -1,6 +1,6 @@
 # schreibwerkstatt
 
-Schreiben, Lektorat und Buchanalyse mit KI. Inhalte (Bücher/Kapitel/Seiten) liegen lokal in SQLite und werden ausschliesslich über die Content-Store-Facade ([lib/content-store/](lib/content-store/)) gelesen und geschrieben. Deployment (LXC + systemd) und Env-Variablen: siehe [README.md](README.md).
+Schreiben, Lektorat und Buchanalyse mit KI. Inhalte (Bücher/Kapitel/Seiten) liegen lokal in SQLite und werden ausschliesslich über die Content-Store-Facade ([lib/content-store/](lib/content-store/)) gelesen und geschrieben. Deployment (LXC + systemd) und Env-Variablen: siehe [docs/deployment.md](docs/deployment.md).
 
 **Lokal starten:** `npm install && npm start` (Port 3737). Tests: `npm test` (Playwright, erstmalig `npx playwright install chromium`).
 
@@ -63,6 +63,7 @@ Diese Regeln setzt ein Hook ([.claude/settings.json](.claude/settings.json), [sc
 | Neue Buch-Tabelle reist im `.swbook` mit (Standard: Zeile in `WERK_TABLES`) oder steht mit Kategorie auf der Ausnahmeliste; Fassung = Text, Einstellungen, Publikation | [book-data-portability.test.js](tests/unit/book-data-portability.test.js) | [docs/book-migration.md](docs/book-migration.md#neue-buchdaten) |
 | Buchthema an genau einem Ort (`OWNERS`-Liste) — nie zusätzlich in `books`, einem Export-Profil oder einer zweiten Tabelle | [book-meta-single-place.test.js](tests/unit/book-meta-single-place.test.js) | oben, „Immer gültig" |
 | SortableJS-Griff nur als `.drag-grip` (Icon, Beschriftung, Optik an einem Ort) | [drag-grip-single-place.test.mjs](tests/unit/drag-grip-single-place.test.mjs) | [public/CLAUDE.md](public/CLAUDE.md) |
+| Werkstatt-Bedienvertrag: jeder Eintrag mit Aktionsmenü, KI-Vorschläge nur als `.chat-vorschlag`, kein Auswahl-Modus, Undo nur über `board-history.js` | [werkstatt-bedienvertrag.test.mjs](tests/unit/werkstatt-bedienvertrag.test.mjs) | [DESIGN.md](DESIGN.md#werkstatt-bedienvertrag) |
 | Geteiltes UI-Muster: ein Kern + eine Optik, Karten liefern nur Daten/Geometrie/Farbe; jeder `*-single-place`-Gate in einer Kontextdatei verlinkt | [single-place-registry.test.mjs](tests/unit/single-place-registry.test.mjs) | [DESIGN.md](DESIGN.md#ein-muster-ein-ort) |
 | Karten zwischen Board-Zellen ziehen nur über `boardSortableOpts` + `.board-dnd-zone` (Mechanik, Optik an einem Ort), kein natives HTML5-Drag | [board-dnd-single-place.test.mjs](tests/unit/board-dnd-single-place.test.mjs) | [DESIGN.md](DESIGN.md#board-drag-karten-zwischen-zellen-ziehen) |
 | Drag-Drop optimistisch: Modell vor dem ersten `await` am Ziel, bei Fehler zurück | [dnd-optimistic-drop.test.mjs](tests/unit/dnd-optimistic-drop.test.mjs) | [DESIGN.md](DESIGN.md#board-drag-karten-zwischen-zellen-ziehen) |
@@ -165,7 +166,7 @@ Zusätzlich: **eine Regel steht an genau einem Ort.** Wandert sie in eine versch
 
 - **Jobs:** `try/catch` → `failJob(id, err)` setzt Status auf `'error'` oder `'cancelled'` (bei `AbortError`). Fehler werden in `job.error` gespeichert und geloggt.
 - **API-Routen:** Fehlende Parameter → `400 JSON`, unauthentifiziert → `401 JSON`.
-- **JSON-Parsing:** Mehrstufiger Fallback in `lib/ai.js` (siehe KI-Provider).
+- **JSON-Parsing:** Mehrstufiger Fallback in `lib/ai.js` ([docs/ai-providers.md](docs/ai-providers.md)).
 - **DB-Fehler:** Geloggt, blockieren nicht den Request.
 
 ### Logging

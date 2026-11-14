@@ -67,8 +67,13 @@ export const ideenBoardMove = {
       body = { [kind === 'chapter' ? 'chapter_id' : 'page_id']: anchorId };
     }
     if (status && status !== ideeStatus(idee) && this.isStageActive(status)) body.status = status;
+    const before = this._findIdee(idee.id) || idee;
     const row = await this._patchIdee(idee, body);
-    if (row) await this._ensureBoardSortables();
+    if (row) {
+      this._recordIdeeFields(before, row, body.status ? ['page_id', 'chapter_id', 'status'] : ['page_id', 'chapter_id'],
+        body.status ? { cellBefore: this._cellIdsOf(before) } : {});
+      await this._ensureBoardSortables();
+    }
     return row;
   },
 

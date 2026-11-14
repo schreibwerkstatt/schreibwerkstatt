@@ -5,6 +5,7 @@ import { fetchJson, escHtml } from '../../utils.js';
 import { isSelectedBook } from '../../cards/book-guard.js';
 import { emptyDraft as _emptyDraft } from './shared.js';
 import { normalizeTags } from '../../tag-input.js';
+import { isRowBodyClick } from '../../row-click.js';
 
 export const rechercheItemMethods = {
   // ── Anlegen (Inline-Formular, partials/recherche-create.html) ────────────
@@ -113,6 +114,8 @@ export const rechercheItemMethods = {
       // nicht in die Liste des neuen (der Reset hat das Anlegen schon geschlossen).
       if (!isSelectedBook(bookId)) return;
       this.items = [row, ...this.items];
+      // Undo = loeschen (recherche/history.js), auch wenn der Anhang danach scheitert.
+      this._recordResearch?.({ kind: 'create-item', id: row.id });
       // Datei nachladen (image/* → Bild, application/pdf → Dokument); uploadXxx
       // ersetzt das eben eingefügte Item per id und setzt kind serverseitig.
       let uploaded = true;
@@ -217,8 +220,17 @@ export const rechercheItemMethods = {
       }
     });
   },
-  // Kopf-/Titel-Klick: auf- bzw. zuklappen. Eine Zeile im Bearbeiten-Modus
-  // klappt nicht per Klick zu — raus geht es über Speichern/Abbrechen.
+  // Titel-Klick: die Zeile aufgeklappt UND im Bearbeiten-Formular öffnen. Steht
+  // genau dieses Fundstück schon im Formular, nichts tun — ein zweiter Klick
+  // füllte sonst den Entwurf neu und verwürfe die Eingaben.
+  openItemForEdit(item) {
+    if (!item || (this.detailEditing && this.detailItemId === item.id)) return;
+    return this.openDetail(item, { edit: true });
+  },
+
+  // Chevron, Kopf-Rest und Anriss: auf- bzw. zuklappen (Lesen). Eine Zeile im
+  // Bearbeiten-Modus klappt nicht per Klick zu — raus geht es über
+  // Speichern/Abbrechen.
   toggleDetail(item) {
     if (this.detailItemId !== item.id) return this.openDetail(item);
     if (!this.detailEditing) this.closeDetail();
@@ -316,14 +328,7 @@ export const rechercheItemMethods = {
   // dem Verknüpfen-Picker (inkl. Combobox-Dropdown, dessen Optionen <li> sind
   // und sonst durchblubbern würden), die ihre eigene Aktion behalten.
   onItemBodyClick(item, ev) {
-    if (this.busy) return;
-    if (ev.target.closest('a, button, input, label, .research-tag, .entity-ref, .combobox-wrap')) return;
-    // Im Auswahl-Modus markiert ein Klick, statt aufzuklappen.
-    if (this.bulkMode) { this.toggleSelect(item.id); return; }
-    // Textselektion nicht abwürgen: hat der User Text markiert (Drag löst am
-    // Ende ebenfalls ein click aus), nicht auf-/zuklappen.
-    const sel = window.getSelection();
-    if (sel && !sel.isCollapsed && sel.toString().trim()) return;
+    if (this.busy || !isRowBodyClick(ev)) return;
     this.toggleDetail(item);
   },
 
@@ -331,7 +336,10 @@ export const rechercheItemMethods = {
     if (this.busy) return false;
     this.busy = true;
     try {
-      this._replaceItem(await this._patchItem(item.id, this._draftBody(this.draft)));
+      const before = (this.items || []).find(i => i.id === item.id) || item;
+      const row = await this._patchItem(item.id, this._draftBody(this.draft));
+      this._replaceItem(row);
+      this._recordResearchEdit?.(before, row);
       // Nach dem Speichern zurück in den Lesemodus, die Zeile bleibt offen: der
       // User will sehen, was er geschrieben hat.
       this.detailEditing = false;
@@ -377,7 +385,9 @@ export const rechercheItemMethods = {
   // jeweils `pinned DESC` vorneweg) — eine Kopie davon im Client driftete.
   async togglePin(item) {
     try {
-      this._replaceItem(await this._patchItem(item.id, { pinned: !item.pinned }));
+      const row = await this._patchItem(item.id, { pinned: !item.pinned });
+      this._replaceItem(row);
+      this._recordResearchFields?.(item, row, ['pinned']);
       await this.loadRecherche();
     } catch { this.errorMessage = window.__app.t('recherche.error.save'); }
   },
@@ -390,7 +400,8 @@ export const rechercheItemMethods = {
       item = (this.items || []).find(i => i.id === item.id) || item;
     }
     try {
-      await this._patchItem(item.id, { archived: !item.archived });
+      const row = await this._patchItem(item.id, { archived: !item.archived });
+      this._recordResearchFields?.(item, row, ['archived']);
       // Bei aktivem „nur aktive"-Filter verschwindet das Item aus der Liste.
       // Dann gilt auch die aufgeklappte Zeile nicht mehr (detailItemId zeigte ins Leere).
       if (!this.showArchived) {
@@ -412,6 +423,8 @@ export const rechercheItemMethods = {
     })) return;
     try {
       await fetchJson(`/research/${item.id}`, { method: 'DELETE' });
+      // Snapshot fuer Undo (ohne Anhang) bzw. Historie verwerfen (recherche/history.js).
+      this._recordResearchDeleted?.([item]);
       this.items = this.items.filter(i => i.id !== item.id);
       if (this.detailItemId === item.id) this.closeDetail();
       this._loadTags();

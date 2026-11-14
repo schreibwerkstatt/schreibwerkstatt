@@ -10,6 +10,8 @@ import { observeThemeChange } from '../graph-kit.js';
 import { ideenBacklinkMethods } from '../book/ideen-backlinks.js';
 import { actionMenuState, actionMenuMethods } from '../action-menu.js';
 import { EVT } from '../events.js';
+import { boardHistoryState } from './board-history.js';
+import { bindBoardHistoryKeys } from './board-history-keys.js';
 
 export function registerMotivCard() {
   if (typeof window === 'undefined' || !window.Alpine) return;
@@ -103,10 +105,11 @@ export function registerMotivCard() {
     layerFigures: false,
     layerBeats: false,
     layerChapters: false,
-    // Graph-Kontextmenü (Rechtsklick): Ziel = Knoten-ID, null = leere Fläche
+    // Aktionsmenü (action-menu.js): Graph-Knoten, leere Fläche, Baum-Einträge
+    // (Thema/Motiv), Beziehungstyp — Ziel { ctx, id } bzw. Knoten-ID.
     ...actionMenuState(),
-    // Offener Thema-Farbwähler (Themen-Liste im Panel), null = keiner
-    themeColorPickerId: null,
+    // Undo/Redo (Kern cards/board-history.js, Records book/motiv/history.js).
+    ...boardHistoryState(),
     // Eingabe-Drafts
     newThemeName: '',
     newMotifName: '',
@@ -226,6 +229,15 @@ export function registerMotivCard() {
         onCardRefresh: () => this.loadBoard(),
         wake: () => this.loadBoard({ silent: true }),
         extraListeners: [{ type: EVT.MOTIV_SELECT, handler: onSelectMotif }],
+      });
+
+      // Cmd/Ctrl+Z · Cmd/Ctrl+Shift+Z · Ctrl+Y — Guards (Karte sichtbar, kein
+      // Eingabefeld, kein offener Dialog) in board-history-keys.js.
+      bindBoardHistoryKeys({
+        isVisible: () => !!window.__app?.showMotivCard,
+        onUndo: () => this.historyUndo(),
+        onRedo: () => this.historyRedo(),
+        signal: this._lifecycle.signal,
       });
 
       this.motivDetailTab = this._readDetailTab();

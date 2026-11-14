@@ -1,10 +1,11 @@
 // Beat-Karte: wo die Aktionen liegen und was die Karte NICHT überdecken darf.
 //
-// Die Schnellaktionen (Verwerfen/Löschen) liegen im Beat-Edit, nicht als
-// Hover-Overlay auf der Karte: als Overlay lagen sie genau auf den Badges der
-// Kopfzeile (Textstellen-Chip, Konflikt-Warnung) — der Klick aufs Chip traf dann
-// das Löschen-Icon. Gegen die echte App, weil die Mechanik am vollen CSS hängt
-// (components/hover-reveal.css + plot/board.css).
+// Die Aktionen liegen im Aktionsmenü (⋯ am Ende der Kopfzeile, Rechtsklick,
+// Long-Press — plot-actions-menu.html) und im Beat-Edit, nie als Hover-Overlay
+// auf der Karte: als Overlay lagen sie genau auf den Badges der Kopfzeile
+// (Textstellen-Chip, Konflikt-Warnung) — der Klick aufs Chip traf dann das
+// Löschen-Icon. Der ⋯-Knopf steht darum im Fluss der Zeile. Gegen die echte App,
+// weil die Mechanik am vollen CSS hängt (components/hover-reveal.css + plot/board.css).
 const { test, expect } = require('../e2e/_helpers/fixtures');
 
 // Akt + Beat anlegen; der Akt fällt am Ende wieder weg (seine Beats per CASCADE).
@@ -31,7 +32,7 @@ async function openPlotCard(page, beatId) {
   return card;
 }
 
-test('plot: Die Beat-Karte in der Ansicht trägt keine Aktions-Buttons', async ({ page }) => {
+test('plot: Die Beat-Karte trägt nur den ⋯-Knopf, das Menü bietet Bearbeiten zuerst und Löschen zuletzt', async ({ page }) => {
   await page.goto('/');
   await page.waitForFunction(() => window.__app && window.Alpine.store('nav').selectedBookId);
   const ids = await seedBeat(page, 'Aktionen-Beat');
@@ -40,10 +41,23 @@ test('plot: Die Beat-Karte in der Ansicht trägt keine Aktions-Buttons', async (
   // Beats per CASCADE), sonst schiebt er spätere Board-Specs (plot-dnd) aus dem Bild.
   try {
     const card = await openPlotCard(page, ids.beatId);
-    // Kein Overlay, das den Textstellen-Chip oder den Konflikt-Badge verdecken
-    // könnte — die Aktionen liegen im Edit.
+    // Kein Overlay: genau ein Icon-Knopf in der Ansicht, der Menü-Trigger.
     await expect(card.locator('.plot-beat-actions')).toHaveCount(0);
-    await expect(card.locator('.plot-beat-view .icon-btn')).toHaveCount(0);
+    await expect(card.locator('.plot-beat-view .icon-btn')).toHaveCount(1);
+    const trigger = card.locator('.plot-beat-menu-btn');
+    await card.hover();
+    await trigger.click();
+    const menu = page.locator('.card--plot .context-menu[x-ref="actionMenu"]');
+    await expect(menu).toBeVisible();
+    const items = menu.locator('.context-menu-item:visible');
+    await expect(items.first()).toContainText(/Bearbeiten|Edit/);
+    await expect(items.last()).toHaveClass(/context-menu-item--danger/);
+    // «Bearbeiten» öffnet den Beat-Edit.
+    await items.first().click();
+    await expect(card.locator('.plot-beat-edit')).toBeVisible();
+    // Im Bearbeiten-Modus kein Menü (nativer Rechtsklick des Textfelds).
+    await card.locator('.plot-beat-edit-titel').click({ button: 'right' });
+    await expect(menu).toBeHidden();
   } finally {
     await page.evaluate((id) => fetch(`/plot/acts/${id}`, { method: 'DELETE' }), ids.actId);
   }

@@ -293,7 +293,18 @@ function listBoardIdeen(bookId, userEmail) {
 
 // ── Schreibpfade ────────────────────────────────────────────────────────────
 
-function createIdee({ bookId, pageId, chapterId, userEmail, content }) {
+function createIdee({ bookId, pageId, chapterId, userEmail, content, restore = null }) {
+  if (restore) {
+    // Undo eines Löschens (lib/restore-fields.js): Anlege-/Status-Zeitpunkt und
+    // Rang aus dem Snapshot, sonst käme die Idee als «heute angelegt» zurück.
+    const res = db.prepare(`
+      INSERT INTO ideen (book_id, page_id, chapter_id, user_email, content,
+                         status, status_at, sort_order, created_at, updated_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ${NOW_ISO_SQL})
+    `).run(bookId, pageId || null, chapterId || null, userEmail, content,
+      restore.status || 'offen', restore.statusAt, restore.sortOrder || 0, restore.createdAt);
+    return res.lastInsertRowid;
+  }
   const res = db.prepare(`
     INSERT INTO ideen (book_id, page_id, chapter_id, user_email, content,
                        status, created_at, updated_at)

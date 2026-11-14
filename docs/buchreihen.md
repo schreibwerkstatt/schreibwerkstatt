@@ -23,6 +23,8 @@ Leiten sich aus den Bänden ab ([routes/book-series.js](../routes/book-series.js
 | Beitreten, umbenennen, umordnen | `owner` des aktuellen Buchs **und jedes Bands** der Reihe — die Reihe bestimmt Titel und Bandnummer im EPUB jedes Bands |
 | Aus Vorband übernehmen | `editor` auf dem aktuellen Buch, `viewer` auf dem Vorband; Quelle muss ein Band derselben Reihe mit kleinerer Nummer sein |
 
+**Umordnen** im Tab «Reihe»: am `.drag-grip` ziehen (SortableJS, [series.js](../public/js/book/book-settings/series.js)#`initSeriesSortable`) oder die Pfeil-Knöpfe als Tastatur-Alternative. Beide gehen über `_saveSeriesOrder`: Reihenfolge und Bandnummern sofort im Formular, `PUT /book-series/:id/order`, bei Fehler zurück auf den Stand davor.
+
 ## EPUB
 
 Die Reihe ist der **einzige Ort** für Reihentitel und Bandnummer; `book_publication` führt sie nicht. `getMeta` ([db/book-publication.js](../db/book-publication.js)) legt sie per `seriesMetaForBook` als `series`/`series_index` über die Publikations-Metadaten — so lesen EPUB-Export, Fassungs-Capture und Versand sie ohne Sonderweg, und der Tab Publikation zeigt sie nur an (Bearbeiten im Tab «Reihe»). Ein Export aus einer Fassung behält deren eingefrorenen Stand. Bandnummern sind ganze Zahlen (die Position); gebrochene Nummern wie «1.5» gibt es nicht.

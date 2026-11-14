@@ -20,7 +20,7 @@ const CARDS = [
     card: '#plot-split',                         // Vollbild-Element: Split (Karte + Plot-Chat)
     popovers: [
       '.plot-occ-popover',                      // Anchor-Fundstellen (plot-anchor-popover.html)
-      '.context-menu[x-ref="actionMenu"]',      // Strang-Aktionen (plot-thread-menu.html)
+      '.context-menu[x-ref="actionMenu"]',      // Strang-Aktionen (plot-actions-menu.html)
     ],
   },
   {

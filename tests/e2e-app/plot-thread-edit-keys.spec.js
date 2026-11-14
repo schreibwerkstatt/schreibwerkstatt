@@ -31,7 +31,7 @@ test('plot: Strang-Edit — Esc verwirft, Ctrl+S und Klick daneben speichern', a
     await expect(laneName).toBeVisible();
     const input = page.locator('.card--plot .plot-swim-lane-edit .plot-thread-name-input');
     const openEdit = async () => {
-      await page.locator('.card--plot .plot-swim-lane-name', { hasText: /Tasten-Strang/ }).dblclick();
+      await page.locator('.card--plot .plot-swim-lane-name', { hasText: /Tasten-Strang/ }).click();
       await input.click();
     };
 

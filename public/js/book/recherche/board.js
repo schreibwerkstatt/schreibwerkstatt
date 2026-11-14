@@ -168,6 +168,8 @@ export const rechercheBoardMethods = {
     this.linkCheckRunning = false;
     this.linkCheckStatus = '';
     Object.assign(this, rechercheCrosscheckState(), rechercheBulkState());
+    // Neues Buch / Ansicht zurückgesetzt: die Records zeigten auf den alten Bestand.
+    this._clearHistory?.();
   },
 
   // Ist die Liste für das gewählte Buch geladen und kein Refetch unterwegs?

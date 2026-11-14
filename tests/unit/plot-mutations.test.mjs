@@ -8,6 +8,7 @@
 //   - moveAct / _hApplyActOrder rollen bei PUT-Fehler den Snapshot zurück
 //   - Spannungsbogen: „ohne Strang" als eigene Serie
 //   - relTargetTitle: Ziel-Titel live aus dem Board
+//   - Beat-Löschen ist rückgängig machbar: Neuanlage aus dem Snapshot, ID-Remap, Redo löscht wieder
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { mergeBeatRow, beatFieldsEqual } from '../../public/js/book/plot/constants.js';
@@ -17,6 +18,7 @@ import { boardMethods } from '../../public/js/book/plot/derived/board.js';
 import { tensionMethods } from '../../public/js/book/plot/derived/tension.js';
 import { beatsMethods } from '../../public/js/book/plot/beats.js';
 import { actsMethods } from '../../public/js/book/plot/acts.js';
+import { beatRestoreMethods } from '../../public/js/book/plot/beat-restore.js';
 
 // Browser-Globals, die die Methoden direkt ansprechen.
 const nav = { selectedBookId: 1, plotBeatId: null };
@@ -43,6 +45,7 @@ function makeCtx(extra = {}) {
   nav.plotBeatId = null;
   return {
     ...lifecycleMethods, ...boardMethods, ...tensionMethods, ...historyMethods, ...beatsMethods, ...actsMethods,
+    ...beatRestoreMethods,
     acts: [], threads: [], beats: [], relations: [],
     busy: false, errorMessage: '', _memos: {},
     _undoStack: [], _redoStack: [], _inHistoryFlight: false, _historyEpoch: 0,
@@ -174,11 +177,11 @@ test('Undo setzt busy während des Flights; Mutationen kehren dann früh zurück
     return true;
   };
   ctx._pushUndo({ kind: 'beat-fields', id: 1, before: {}, after: {} });
-  const p = ctx.plotHistoryUndo();
+  const p = ctx.historyUndo();
   assert.equal(busyDuring, true);
   await ctx.toggleBeatVerworfen(ctx.beats[0]);   // während des Flights
   assert.equal(fetchLog.length, 0, 'kein PATCH während Undo');
-  await ctx.plotHistoryUndo();                   // Doppelklick
+  await ctx.historyUndo();                   // Doppelklick
   release();
   await p;
   assert.equal(ctx.busy, false);
@@ -190,7 +193,7 @@ test('leert ein Applier die Historie (loadBoard-Rollback), wird der Record nicht
   const ctx = makeCtx();
   ctx._applyInverse = async () => { ctx._clearHistory(); return false; };
   ctx._pushUndo({ kind: 'beat-place', before: [], after: [] });
-  await ctx.plotHistoryUndo();
+  await ctx.historyUndo();
   assert.equal(ctx._undoStack.length, 0);
   assert.equal(ctx._redoStack.length, 0);
 });
@@ -245,4 +248,49 @@ test('relTargetTitle liest den Ziel-Titel live aus dem Board, Snapshot nur als F
   assert.equal(ctx.relTargetTitle({ to_beat_id: 2, to_titel: 'Alt' }), 'Umbenannt');
   assert.equal(ctx.relTargetTitle({ to_beat_id: 99, to_titel: 'Snapshot' }), 'Snapshot');
   assert.equal(ctx.relTargetTitle(null), '');
+});
+
+test('Beat löschen → Undo legt aus dem Snapshot neu an und schreibt die neue ID um; Redo löscht wieder', async () => {
+  const b1 = { ...fullBeat(1, 'A'), verworfen: 0, fig_ids: ['f1'], sort_order: 0 };
+  const b2 = { ...fullBeat(2, 'B'), sort_order: 1 };
+  const ctx = makeCtx({
+    beats: [b1, b2],
+    relations: [{ id: 5, from_beat_id: 2, to_beat_id: 1, typ: 'setup' }],
+    ideasFor: (id) => (id === 1 ? [{ idea_id: 77 }] : []),
+    _persistCells: async () => true,
+  });
+  window.__app.appConfirm = async () => true;
+  ctx._pushUndo({ kind: 'beat-fields', id: 1, before: { titel: 'X' }, after: { titel: 'A' } });
+
+  await ctx.deleteBeat(b1);
+  assert.equal(ctx.beats.length, 1);
+  assert.equal(ctx._undoStack.at(-1).kind, 'delete-beat');
+  assert.equal(ctx._undoStack.length, 2, 'Löschen leert die Historie nicht');
+
+  fetchLog = [];
+  fetchQueue = [
+    { ok: true, body: { ...fullBeat(99, 'A'), fig_ids: ['f1'], sort_order: 2 } },     // POST /plot/beats
+    { ok: true, body: { id: 50, from_beat_id: 2, to_beat_id: 99, typ: 'setup' } },  // POST relation
+    { ok: true, body: {} },                                                         // POST idea link
+  ];
+  await ctx.historyUndo();
+  const post = fetchLog.find(f => f.url === '/plot/beats');
+  assert.equal(post.method, 'POST');
+  assert.equal(post.body.titel, 'A');
+  assert.deepEqual(post.body.figure_ids, ['f1']);
+  assert.equal(post.body.act_id, 1);
+  assert.ok(fetchLog.some(f => f.url === '/plot/beat-relations' && f.body.to_beat_id === 99));
+  assert.ok(fetchLog.some(f => f.url === '/ideen/77/links' && f.body.target_id === 99));
+  assert.deepEqual(ctx.beats.map(b => b.id).sort(), [2, 99]);
+  assert.equal(ctx.beats.find(b => b.id === 99).sort_order, 0, 'alte Position wiederhergestellt');
+  assert.equal(ctx._undoStack[0].id, 99, 'älterer Record zeigt auf die neue ID');
+  assert.equal(ctx._redoStack.at(-1).id, 99);
+
+  fetchLog = [];
+  await ctx.historyRedo();
+  assert.equal(fetchLog[0].method, 'DELETE');
+  assert.equal(fetchLog[0].url, '/plot/beats/99');
+  assert.deepEqual(ctx.beats.map(b => b.id), [2]);
+  assert.equal(ctx._undoStack.at(-1).kind, 'delete-beat');
+  delete window.__app.appConfirm;
 });

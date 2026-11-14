@@ -1,0 +1,404 @@
+// editorToolbarCard: Backspace/Delete an Blockgrenzen und über Auswahlen (aus
+// dem Keydown-Dispatcher toolbar/keydown.js). Warum der Editor das selbst macht:
+// Chromium bäckt beim nativen Merge über eine Blockgrenze die berechneten
+// CSS-Werte als Inline-`style` ein (docs/notebook-editor.md, „Löschen an
+// Blockgrenzen"). `this` = Sub-Komponente (editorToolbarCard).
+//
+// `_kbTodoDelete`, `_kbFigureCaption` und `_kbBlockBoundary` laufen auch im
+// Fokusmodus der SPA (Ausnahme am Focus-Hard-Stop); die listenfesten Merges
+// (`mergeLines`) und `_kbRangeDelete` nur im Notebook.
+
+import { getEditEl, placeCaretIn, findTodoLi, findFigcaption, findBlock, topLevelBlock, caretAtBlockStart, caretAtBlockEnd, MERGE_BLOCK_TAGS, ATOMIC_BLOCK_TAGS, BOUNDARY_WRAPPER_SEL, wrapperInnerBlocks } from './_shared.js';
+import { TODO_TEXT_SEL, TODO_LIST_SEL } from '../../shared/todo-html.js';
+import { mergeBlocksManually, caretEdge } from '../../shared/block-edge.js';
+import {
+  isListEl, promoteSubLists, deepestLastLine, prevListLine, nextListLine, caretAtLineEnd,
+  mergeLines, deleteRangeClean,
+} from '../line-merge.js';
+
+// Druckbares Zeichen, das eine Auswahl ersetzt. AltGr (Windows: Ctrl+Alt) und
+// Option (Mac) erzeugen Zeichen wie `@`, Cmd/Ctrl allein ist ein Kürzel.
+const isPrintable = (e) => e.key.length === 1 && !e.metaKey && (!e.ctrlKey || e.altKey);
+
+export const keydownDeleteMethods = {
+  // Auswahl über eine Blockgrenze hinweg (Absatz ↔ Zitat, Absatz ↔ Verlaufs-
+  // zeile, Listenzeilen) mit Backspace/Delete löschen oder mit einem Zeichen
+  // überschreiben: selbst löschen und die Randblöcke zusammenführen
+  // (line-merge.js#deleteRangeClean). Beim Überschreiben fügt danach der
+  // Browser-Default das Zeichen am Caret ein — innerhalb eines Blocks ohne
+  // Merge, also ohne Inline-`style`. Innerhalb eines Blocks: Default.
+  _kbRangeDelete(e, app) {
+    const del = e.key === 'Backspace' || e.key === 'Delete';
+    if (!del && !isPrintable(e)) return false;
+    const sel = document.getSelection();
+    if (!sel || sel.rangeCount === 0 || sel.isCollapsed) return false;
+    const editEl = getEditEl();
+    if (!editEl) return false;
+    this._structStep(app);
+    if (!deleteRangeClean(editEl)) return false;
+    if (del) e.preventDefault();
+    app._markEditDirty?.();
+    return true;
+  },
+
+  // Backspace/Delete-Sonderpfade: (a) per Klick markierte <hr> löschen; (b) einen
+  // direkt angrenzenden atomaren Block (<hr>, <figure>) löschen — beide nehmen
+  // keinen Caret auf, es gäbe sonst keinen Lösch-Pfad; (c) Absatz-Merge über
+  // weiche Umbrüche hinweg selbst übernehmen (Browser zieht sonst nur die erste
+  // Zeile hoch und macht aus dem Rest neue Absätze). Gibt false zurück, wenn
+  // keiner dieser Fälle greift → normaler Browser-Default.
+  _kbDeleteBlock(e, app) {
+    if (e.key !== 'Backspace' && e.key !== 'Delete') return false;
+    const editEl = getEditEl();
+    // Per Klick markierte <hr> direkt entfernen (siehe editor-toolbar-card.js).
+    const selectedHr = editEl?.querySelector('hr.hr-selected');
+    if (selectedHr) {
+      e.preventDefault();
+      this._structStep(app);
+      selectedHr.remove();
+      app._markEditDirty?.();
+      return true;
+    }
+    // Ein atomarer Block ist Direktkind von editEl; der Caret-Block kann tiefer
+    // liegen (z.B. <li> in einer Liste). Nachbar daher auf der Ebene des
+    // umschliessenden Top-Level-Childs suchen — aber nur, wenn der Caret auch
+    // an dessen Rand steht (`outer`: erste Zeile bei Backspace, letzte bei
+    // Delete). Aus Zeile 2 eines Zitats heraus ist das Bild darüber kein
+    // Nachbar, dort verschmilzt Backspace die Zeilen.
+    const edge = editEl ? caretEdge(e, editEl) : null;
+    if (!edge?.outer) return false;
+    const { block, top, back } = edge;
+    const neighbour = back ? top.previousElementSibling : top.nextElementSibling;
+    if (neighbour && ATOMIC_BLOCK_TAGS.has(neighbour.tagName)) {
+      e.preventDefault();
+      this._structStep(app);
+      neighbour.remove();
+      app._markEditDirty?.();
+      return true;
+    }
+    // Absatz-Grenze löschen (Merge zweier Absätze): enthält der Quell-Absatz
+    // weiche Umbrüche (<br>), zieht der Browser nur dessen ERSTE Zeile hoch und
+    // befördert den ersten <br> zu einer neuen Absatzgrenze — aus einem
+    // gelöschten Absatz werden so „automatisch" mehrere. Bei top-level Absätzen
+    // daher den Merge selbst übernehmen: gesamten Quell-Inhalt anhängen, weiche
+    // Umbrüche bleiben weich.
+    if (neighbour && block.parentNode === editEl
+        && MERGE_BLOCK_TAGS.has(block.tagName)
+        && MERGE_BLOCK_TAGS.has(neighbour.tagName)) {
+      const source = back ? block : neighbour;
+      if (source.querySelector('br') && (source.textContent || '').trim()) {
+        e.preventDefault();
+        this._structStep(app);
+        this._mergeBlocksManually(back ? neighbour : block, source);
+        app._markEditDirty?.();
+        return true;
+      }
+    }
+    return false;
+  },
+
+  // Backspace/Delete in einer Checkbox-Liste (`ul.todo`). Der Browser-Default
+  // behandelt die `<input>`-Checkbox wie ein Textzeichen: der erste Tastendruck
+  // frisst sie, erst der nächste räumt die Zeile auf — dazwischen steht ein
+  // `li.todo-item` ohne Checkbox. Am Listenanfang tut er dagegen gar nichts
+  // (die Liste ist per Backspace nicht verlassbar), und über die Listengrenze
+  // hinweg zieht er den Folgeabsatz samt Inline-`style`-Attribut in das
+  // `.todo-text`-Span. Diese vier Fälle daher selbst übernehmen — die Checkbox
+  // ist Struktur, nie Löschziel, und ein Tastendruck bewirkt genau einen
+  // Schritt. Nicht-collapsed Selektionen übernimmt im Notebook `_kbRangeDelete`.
+  _kbTodoDelete(e, app) {
+    if (e.key !== 'Backspace' && e.key !== 'Delete') return false;
+    const editEl = getEditEl();
+    const sel = editEl ? document.getSelection() : null;
+    if (!sel || sel.rangeCount === 0) return false;
+    const range = sel.getRangeAt(0);
+    if (!range.collapsed || !editEl.contains(range.startContainer)) return false;
+    const li = findTodoLi(range.startContainer, editEl);
+    return li
+      ? this._kbTodoDeleteInside(e, app, range, li, editEl)
+      : this._kbTodoDeleteAdjacent(e, app, range, editEl);
+  },
+
+  // Caret sitzt IN einer Checkbox-Zeile. Backspace am Zeilenanfang: mit der
+  // Zeile darüber verschmelzen bzw. — in der ersten Zeile — die Liste in einen
+  // Absatz davor verlassen. Delete am Zeilenende: die Zeile darunter hochziehen
+  // (deren Checkbox verschwindet mit ihr, die eigene bleibt samt Häkchen) bzw.
+  // in der letzten Zeile den Folgeabsatz hochziehen. Mitten im Text: Default.
+  _kbTodoDeleteInside(e, app, range, li, editEl) {
+    const span = li.querySelector(TODO_TEXT_SEL);
+    if (!span) return false; // fremdes Markup — nicht anfassen
+    if (e.key === 'Backspace') {
+      if (!caretAtBlockStart(range, span)) return false;
+      e.preventDefault();
+      this._structStep(app);
+      const prevSpan = li.previousElementSibling?.querySelector(TODO_TEXT_SEL);
+      if (prevSpan) {
+        this._mergeBlocksManually(prevSpan, span);
+        li.remove();
+      } else {
+        // Erste Zeile → raus aus der Liste. Inhalt kommt aus dem `.todo-text`,
+        // nicht aus der `li` — sonst wanderte die Checkbox in den Absatz.
+        this._blockToParagraph(li, li.parentNode, span);
+      }
+      app._markEditDirty?.();
+      return true;
+    }
+    if (!caretAtBlockEnd(range, span)) return false;
+    e.preventDefault();
+    const next = li.nextElementSibling;
+    const nextSpan = next?.querySelector(TODO_TEXT_SEL);
+    // Letzte Zeile: nur absatz-artige Folgeblöcke hochziehen. Steht dahinter
+    // etwas anderes (Liste, Gedicht, <hr>) bzw. nichts, bleibt es ein No-Op —
+    // besser als der Default, der fremdes Markup ins Span schiebt.
+    const after = nextSpan ? null : topLevelBlock(li, editEl).nextElementSibling;
+    if (!nextSpan && (!after || !MERGE_BLOCK_TAGS.has(after.tagName))) return true;
+    this._structStep(app);
+    if (nextSpan) {
+      this._mergeBlocksManually(span, nextSpan);
+      next.remove();
+    } else {
+      this._mergeBlocksManually(span, after);
+    }
+    app._markEditDirty?.();
+    return true;
+  },
+
+  // Caret in einem Absatz, der an eine Checkbox-Liste GRENZT — beide
+  // Richtungen, denn der Default ist in beiden falsch: nach der Liste schiebt er
+  // den Absatz mit einem Inline-`style` ins Span und lässt ihn als Block
+  // verschwinden; vor der Liste frisst er die Checkbox der ersten Zeile.
+  //   • Backspace am Anfang des Absatzes NACH der Liste → an die letzte Zeile
+  //     anhängen (Gegenstück zu Delete am Ende der letzten Zeile).
+  //   • Delete am Ende des Absatzes VOR der Liste → Inhalt der ersten Zeile in
+  //     den Absatz ziehen. Die Checkbox fällt dabei weg, weil ein Absatz keine
+  //     hat — dieselbe Semantik wie beim Verlassen der Liste per Backspace.
+  _kbTodoDeleteAdjacent(e, app, range, editEl) {
+    const block = findBlock(range.startContainer, editEl);
+    if (!block || block.parentNode !== editEl || !MERGE_BLOCK_TAGS.has(block.tagName)) return false;
+    const back = e.key === 'Backspace';
+    if (!(back ? caretAtBlockStart(range, block) : caretAtBlockEnd(range, block))) return false;
+    const ul = back ? block.previousElementSibling : block.nextElementSibling;
+    if (!ul?.matches?.(TODO_LIST_SEL)) return false;
+    const li = back ? ul.lastElementChild : ul.firstElementChild;
+    const span = li?.querySelector(TODO_TEXT_SEL);
+    if (!span) return false;
+    e.preventDefault();
+    this._structStep(app);
+    if (back) {
+      this._mergeBlocksManually(span, block);
+    } else {
+      this._mergeBlocksManually(block, span);
+      li.remove();
+      if (!ul.querySelector('li')) ul.remove();
+    }
+    app._markEditDirty?.();
+    return true;
+  },
+
+  // Backspace/Delete in der `<figcaption>` eines Bildes. `<figure>` ist der
+  // zweite Fall nach `ul.todo`, in dem ein Void-Element (`<img>`) direkt neben
+  // dem Text steht — und der Default behandelt es genauso als Zeichen: bei
+  // leerer Legende löscht Druck #1 die Legende, #2 das BILD (zurück bleibt ein
+  // `<figure>` mit Rahmen ohne Inhalt), erst #3 räumt auf. Mit Text in der
+  // Legende macht er aus der `<figcaption>` ein `<span style="…">` und steckt
+  // danach dauerhaft fest. Beides ersetzt:
+  //   • leere Legende + Backspace → ganzes `<figure>` weg (ein Druck), leerer
+  //     Absatz an seiner Stelle. Das Bild ist der Inhalt, den man loswerden will.
+  //   • Legende mit Text + Backspace am Anfang → No-Op. Links steht das Bild,
+  //     kein Zeichen; erst den Legendentext löschen, dann greift der Fall oben.
+  //     Verlustfrei und ohne Feststecken.
+  //   • Delete am Ende der Legende → No-Op statt den Folgeblock hereinzuziehen.
+  // Das Bild selbst löscht man von aussen: `_kbDeleteBlock` behandelt ein
+  // angrenzendes `<figure>` wie eine `<hr>` (ATOMIC_BLOCK_TAGS).
+  _kbFigureCaption(e, app) {
+    if (e.key !== 'Backspace' && e.key !== 'Delete') return false;
+    const editEl = getEditEl();
+    const sel = editEl ? document.getSelection() : null;
+    if (!sel || sel.rangeCount === 0) return false;
+    const range = sel.getRangeAt(0);
+    if (!range.collapsed || !editEl.contains(range.startContainer)) return false;
+    const cap = findFigcaption(range.startContainer, editEl);
+    if (!cap) return false;
+    if (e.key === 'Delete') {
+      if (!caretAtBlockEnd(range, cap)) return false;
+      e.preventDefault();
+      return true;
+    }
+    if (!caretAtBlockStart(range, cap)) return false;
+    const fig = cap.closest('figure');
+    if (!fig || !editEl.contains(fig)) return false;
+    e.preventDefault();
+    // Erst den Legendentext löschen. Im Focus-Editor nie das Bild: dort steht
+    // es nur als gedimmtes Symbol, sein Verlust fiele nicht auf.
+    if ((cap.textContent || '').trim() || app.focusActive) return true;
+    this._structStep(app);
+    const p = document.createElement('p');
+    p.appendChild(document.createElement('br'));
+    fig.parentNode.replaceChild(p, fig);
+    placeCaretIn(p);
+    app._markEditDirty?.();
+    return true;
+  },
+
+  // Grenzen formatierter Wrapper-Blöcke (`blockquote`, `div.poem`, `pre`,
+  // `ul`/`ol`) — siehe BOUNDARY_WRAPPER_SEL für das Warum: der Default bäckt
+  // beim Merge über so eine Grenze die berechneten CSS-Werte als Inline-`style`
+  // ein und lässt den Wrapper teils ganz verschwinden. Vier symmetrische Fälle,
+  // je nachdem ob der Caret innerhalb des Wrappers oder im Nachbarabsatz sitzt.
+  // Merges INNERHALB eines Wrappers (Zeile 2 auf Zeile 1) macht das Notebook
+  // ebenfalls selbst: Chromium (ab 158) bäckt auch dort Inline-`style` ein. Im
+  // Focus-Editor übernimmt diesen Fall `_kbFocusMerge`.
+  _kbBlockBoundary(e, app) {
+    if (e.key !== 'Backspace' && e.key !== 'Delete') return false;
+    const editEl = getEditEl();
+    const sel = editEl ? document.getSelection() : null;
+    if (!sel || sel.rangeCount === 0) return false;
+    const range = sel.getRangeAt(0);
+    if (!range.collapsed || !editEl.contains(range.startContainer)) return false;
+    const block = findBlock(range.startContainer, editEl);
+    if (!block) return false;
+    const top = topLevelBlock(block, editEl);
+    if (top.matches?.(BOUNDARY_WRAPPER_SEL)) {
+      if (!app.focusActive && isListEl(top) && block.tagName === 'LI') {
+        return this._kbListLine(e, app, range, block, top);
+      }
+      return this._kbBoundaryInside(e, app, range, block, top);
+    }
+    if (block === top && MERGE_BLOCK_TAGS.has(block.tagName)) {
+      return this._kbBoundaryOutside(e, app, range, block);
+    }
+    return false;
+  },
+
+  // Notebook: Caret in einer Zeile einer Aufzählung (beliebige Tiefe). Merges
+  // laufen in Leserichtung über die Ebenen hinweg — angehängt wird an die
+  // tiefste letzte Zeile darüber, nie hinter eine Unterliste; Unterlisten der
+  // verschwindenden Zeile rücken an deren Stelle (line-merge.js#mergeLines).
+  // Erste Zeile + Backspace verlässt die Liste, letzte Zeile + Delete zieht
+  // den Folgeabsatz herein — wie bei den übrigen Wrappern.
+  _kbListLine(e, app, range, li, list) {
+    if (e.key === 'Backspace') {
+      if (!caretAtBlockStart(range, li)) return false;
+      e.preventDefault();
+      this._structStep(app);
+      const prev = prevListLine(li);
+      if (prev) mergeLines(prev, li);
+      else this._blockToParagraph(li, list);
+      app._markEditDirty?.();
+      return true;
+    }
+    if (!caretAtLineEnd(range, li)) return false;
+    const next = nextListLine(li);
+    const after = next ? null : list.nextElementSibling;
+    if (!next && (!after || !MERGE_BLOCK_TAGS.has(after.tagName))) return false;
+    e.preventDefault();
+    this._structStep(app);
+    mergeLines(li, next || after);
+    app._markEditDirty?.();
+    return true;
+  },
+
+  // Caret INNERHALB des Wrappers. Am Anfang des ersten Kind-Blocks verlässt
+  // Backspace den Wrapper (Inhalt wird zum Absatz davor) — dieselbe Regel wie
+  // in der Checkbox-Liste. Am Ende des letzten Kind-Blocks zieht Delete den
+  // Folgeabsatz herein. Dazwischen (nur Notebook) zwei Kind-Blöcke von Hand
+  // zusammenführen.
+  _kbBoundaryInside(e, app, range, block, wrapper) {
+    const inner = wrapperInnerBlocks(wrapper);
+    const idx = inner.indexOf(block);
+    if (idx === -1) return false;
+    if (!app.focusActive && this._kbMergeInsideWrapper(e, app, range, block, inner, idx)) return true;
+    if (e.key === 'Backspace') {
+      if (idx > 0 || !caretAtBlockStart(range, block)) return false;
+      e.preventDefault();
+      this._structStep(app);
+      this._blockToParagraph(block, wrapper);
+      app._markEditDirty?.();
+      return true;
+    }
+    if (idx < inner.length - 1 || !caretAtBlockEnd(range, block)) return false;
+    // Nichts bzw. kein absatz-artiger Block dahinter: durchfallen lassen. Einen
+    // atomaren Nachbarn (<hr>, <figure>) hat `_kbDeleteBlock` bereits erledigt.
+    const after = wrapper.nextElementSibling;
+    if (!after || !MERGE_BLOCK_TAGS.has(after.tagName)) return false;
+    e.preventDefault();
+    this._structStep(app);
+    this._mergeBlocksManually(block, after);
+    app._markEditDirty?.();
+    return true;
+  },
+
+  // Zeile auf Zeile innerhalb desselben Wrappers: Backspace am Anfang eines
+  // nicht-ersten bzw. Delete am Ende eines nicht-letzten Kind-Blocks.
+  _kbMergeInsideWrapper(e, app, range, block, inner, idx) {
+    if (e.key === 'Backspace') {
+      if (idx === 0 || !caretAtBlockStart(range, block)) return false;
+      e.preventDefault();
+      this._structStep(app);
+      this._mergeBlocksManually(inner[idx - 1], block);
+    } else {
+      if (idx === inner.length - 1 || !caretAtBlockEnd(range, block)) return false;
+      e.preventDefault();
+      this._structStep(app);
+      this._mergeBlocksManually(block, inner[idx + 1]);
+    }
+    app._markEditDirty?.();
+    return true;
+  },
+
+  // Caret in einem Top-Level-Absatz, der an einen Wrapper grenzt: Inhalt an
+  // dessen letzten Kind-Block anhängen (Backspace) bzw. dessen ersten
+  // Kind-Block hereinziehen (Delete). Gegenstücke zu `_kbBoundaryInside`. Im
+  // Notebook listenfest: angehängt wird an die tiefste letzte Zeile, und
+  // Unterlisten einer hereingezogenen Zeile bleiben in der Liste.
+  _kbBoundaryOutside(e, app, range, block) {
+    const back = e.key === 'Backspace';
+    if (!(back ? caretAtBlockStart(range, block) : caretAtBlockEnd(range, block))) return false;
+    const wrapper = back ? block.previousElementSibling : block.nextElementSibling;
+    if (!wrapper?.matches?.(BOUNDARY_WRAPPER_SEL)) return false;
+    const inner = wrapperInnerBlocks(wrapper);
+    if (!inner.length) return false;
+    e.preventDefault();
+    this._structStep(app);
+    const merge = app.focusActive ? mergeBlocksManually : mergeLines;
+    if (back) {
+      const last = inner[inner.length - 1];
+      merge(app.focusActive ? last : deepestLastLine(last), block);
+    } else {
+      // Die Quelle wird entfernt. Bei <pre> IST die Quelle der Wrapper, der
+      // damit schon weg ist — sonst den leer gewordenen entfernen.
+      merge(block, inner[0]);
+      if (wrapper.isConnected && !wrapperInnerBlocks(wrapper).length) wrapper.remove();
+    }
+    app._markEditDirty?.();
+    return true;
+  },
+
+  // Block aus seinem Wrapper lösen: der Inhalt wandert in einen `<p>` VOR dem
+  // Wrapper, der Block verschwindet, ein leer gewordener Wrapper ebenfalls. Ist
+  // der Block selbst der Wrapper (`<pre>`), wird er an seiner Stelle durch den
+  // Absatz ersetzt. `contentEl` trennt „welcher Knoten wird entfernt" von
+  // „woraus kommt der Inhalt" — in der Checkbox-Liste ist das die `<li>` bzw.
+  // ihr `.todo-text`, damit die Checkbox nicht mitwandert. Unterlisten einer
+  // Listenzeile rücken vorher an ihre Stelle (ein `<p>` trägt keine Liste).
+  // Caret an den Absatz-Anfang, also dorthin, wo er vor dem Backspace stand.
+  _blockToParagraph(block, wrapper, contentEl = block) {
+    if (block.tagName === 'LI') promoteSubLists(block);
+    const p = document.createElement('p');
+    while (contentEl?.firstChild) p.appendChild(contentEl.firstChild);
+    if (!p.childNodes.length) p.appendChild(document.createElement('br'));
+    if (block === wrapper) {
+      wrapper.parentNode.replaceChild(p, wrapper);
+    } else {
+      wrapper.parentNode.insertBefore(p, wrapper);
+      block.remove();
+      if (!wrapperInnerBlocks(wrapper).length) wrapper.remove();
+    }
+    placeCaretIn(p);
+  },
+
+  // Verschmilzt `source` ans Ende von `receiver` (shared/block-edge.js).
+  _mergeBlocksManually(receiver, source) {
+    mergeBlocksManually(receiver, source);
+  },
+};

@@ -7,6 +7,13 @@ import { clearDraft, editorHost, isNoChange, localeTag, readDraft, tzOpts, write
 import { syncLiveBlockIds } from '../../shared/block-ids.js';
 import { classifySaveError, isRetryableSaveError } from '../save-errors.js';
 import { noteSaveOutage } from '../save-outage.js';
+import { getTabId } from '../../../tab-id.js';
+
+// Läuft die Verwerfen-Rückfrage von cancelEdit? Solange speichert nichts im
+// Hintergrund: ein Autosave darunter schriebe genau den Stand auf den Server,
+// den der User gerade verwerfen will — danach gäbe es nichts mehr zu verwerfen.
+let _discardAsking = false;
+export function setDiscardAsking(on) { _discardAsking = !!on; }
 
 export const saveGuardMethods = {
   // Riegel für jeden Save, den der User nicht selbst ausgelöst hat (Autosave-
@@ -17,10 +24,12 @@ export const saveGuardMethods = {
   //    neu und setzte die getroffenen Entscheidungen zurück,
   //  - auf einer anderen Seite als der, für die er geplant wurde (`pageId`),
   //  - nach einem Fehler, den Wiederholen nicht behebt (423/403/404/4xx) — nur
-  //    der ausdrückliche Save versucht es dann erneut.
+  //    der ausdrückliche Save versucht es dann erneut,
+  //  - solange die Verwerfen-Rückfrage (cancelEdit) offen ist.
   _canBackgroundSave(pageId = null) {
     const app = editorHost();
     if (!app?.editMode || app.editSaving || app.conflictResolution || !app.currentPage) return false;
+    if (_discardAsking) return false;
     if (pageId != null && app.currentPage.id !== pageId) return false;
     return isRetryableSaveError(app.saveFailKind);
   },
@@ -33,6 +42,36 @@ export const saveGuardMethods = {
     const app = editorHost();
     if (!app?.editMode) return 0;
     return syncLiveBlockIds(this._getEditEl(), referenceHtml ?? app.originalHtml);
+  },
+
+
+  // Draft nach einem Save (bzw. wenn der Editor dem Server-Stand gleicht)
+  // räumen — aber nur den gesendeten Stand (Pendant zu draft-storage.js#
+  // clearDraftIfSame für Save-Pfade, die HTML statt `savedAt` kennen). Ein
+  // Draft, den ein anderer Tab mit abweichendem Inhalt geschrieben hat, bleibt
+  // liegen; ein eigener ist im Live-Editor enthalten und damit überholt.
+  // Liefert true, wenn geräumt wurde.
+  _clearDraftIfSent(pageId, html) {
+    if (pageId == null) return false;
+    const draft = readDraft(pageId);
+    if (draft?.html && draft.tab && draft.tab !== getTabId() && !isNoChange(draft.html, html)) return false;
+    clearDraft(pageId);
+    return true;
+  },
+
+
+  // Editor gleicht dem Server-Stand: ein vorher gescheiterter Save (Offline,
+  // Fehlerklasse, Konflikt-Banner, geplanter Retry) ist gegenstandslos — sonst
+  // bliebe der Save-Indikator auf «Offline»/«Konflikt» stehen. Nicht während
+  // ein Save läuft (der entscheidet selbst) und nicht unter offenem
+  // Auflösungs-Modal (das gehört der Entscheidung des Users).
+  _clearSaveFailureState() {
+    const app = editorHost();
+    if (!app || app.editSaving || app.conflictResolution) return;
+    app.saveOffline = false;
+    app.saveFailKind = null;
+    app.editConflict = null;
+    this._clearSaveRetry();
   },
 
 

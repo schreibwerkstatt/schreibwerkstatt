@@ -3,16 +3,17 @@
      motiv-tree.html, im Scope einer Gruppe `g`). Eigener Sortable-Container je
      Gruppe; `data-group` = Thema-ID bzw. leer für «Ohne Thema» (dnd.js liest ihn
      als Drop-Ziel). Zeile: Griff, Name (öffnet den Editor), Geist-Marker,
-     Mini-Verlauf über die Kapitel, Fundstellen-Zahl. -->
+     Mini-Verlauf über die Kapitel, Fundstellen-Zahl, ⋯ (Aktionsmenü). -->
 <div class="motiv-tree-motifs" :data-group="g.theme ? g.theme.id : ''" x-init="_initMotifSortable($el)">
   <template x-for="m in g.motifs" :key="m.id">
-    <div class="motiv-tree-motif" :data-motif-id="m.id"
-         @mouseenter="hoverTreeMotif(m.id)" @mouseleave="hoverTreeMotif(null)">
+    <div class="motiv-tree-motif hover-reveal-host" :data-motif-id="m.id"
+         @mouseenter="hoverTreeMotif(m.id)" @mouseleave="hoverTreeMotif(null)"
+         @contextmenu="openTreeMenu($event, 'motif', m.id)" x-long-press>
       <span class="drag-grip motiv-motif-grip" role="img" x-show="motivTreeDraggable()"
             :data-tip="$app.t('motiv.motif.dragHint')" :aria-label="$app.t('motiv.motif.dragHint')">
         <svg class="icon" aria-hidden="true"><use href="/icons.svg#grip-vertical"/></svg>
       </span>
-      <button type="button" class="motiv-tree-name truncate" :class="{ 'motiv-tree-name--ghost': isGhost(m) }"
+      <button type="button" class="motiv-tree-name truncate text-link" :class="{ 'motiv-tree-name--ghost': isGhost(m) }"
               @click="selectMotif(m.id)" @focus="hoverTreeMotif(m.id)" @blur="hoverTreeMotif(null)"
               :data-tip="isGhost(m) ? $app.t('motiv.tip.ghost') : null">
         <span x-text="m.name"></span>
@@ -24,6 +25,11 @@
       </span>
       <span class="motiv-tree-count" x-text="m.occurrenceCount || 0"
             :data-tip="$app.tn('motiv.tip.occurrences', m.occurrenceCount || 0)"></span>
+      <button type="button" class="icon-btn icon-btn--ghost hover-reveal" @click="openTreeMenu($event, 'motif', m.id)"
+              aria-haspopup="menu" :aria-expanded="isActionMenuOpen('motivtree:m' + m.id)"
+              :data-tip="$app.t('motiv.menu.actions')" :aria-label="$app.t('motiv.menu.actions')">
+        <svg class="icon" aria-hidden="true"><use href="/icons.svg#more-horizontal"/></svg>
+      </button>
     </div>
   </template>
 </div>

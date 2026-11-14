@@ -26,7 +26,9 @@ export const HOTKEYS = {
   bold:          { mod: true, key: 'B' },
   italic:        { mod: true, key: 'I' },
   hr:            { mod: true, shift: true, key: 'H' },
-  link:          { mod: true, shift: true, key: 'K' },
+  // Bubble-Link-Knopf: die Bubble steht nur über einer Markierung, und dort ist
+  // Cmd/Ctrl+K «Link» (sonst Palette). Cmd/Ctrl+Shift+K steht im Overlay.
+  link:          { mod: true, key: 'K' },
   synonym:       { mod: true, shift: true, key: 'S' },
   pageChat:      { mod: true, shift: true, key: '1' },
   undo:          { mod: true, key: 'Z' },

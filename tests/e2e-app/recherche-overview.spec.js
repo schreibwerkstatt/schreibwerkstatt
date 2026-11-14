@@ -60,10 +60,10 @@ test('recherche: Liste zeigt Anriss, aufgeklappte Zeile zeigt Volltext und bleib
 
   // ── Aufgeklappte Zeile: Volltext, lesbar gesetzt — kein Dialog ───────────
   const detail_ = longItem.locator('.research-detail');
-  await longItem.locator('.research-item-title').click();
+  await longItem.locator('.row-expand').click();
   await expect(detail_).toBeVisible();
   await expect(page.locator('dialog[open]')).toHaveCount(0);
-  await expect(longItem.locator('.research-item-title')).toHaveAttribute('aria-expanded', 'true');
+  await expect(longItem.locator('.row-expand')).toHaveAttribute('aria-expanded', 'true');
   // Der Anriss weicht dem Volltext.
   await expect(teaser).toHaveCount(0);
   const detailText = detail_.locator('.research-detail__text');
@@ -115,7 +115,7 @@ test('recherche: Liste zeigt Anriss, aufgeklappte Zeile zeigt Volltext und bleib
   await detail_.locator('textarea.recherche-body-input').press('Escape');
   await expect(detailText).toBeVisible();
   // Ein Kopf-Klick klappt im Bearbeiten-Modus nicht zu — im Lesemodus schon.
-  await longItem.locator('.research-item-title').click();
+  await longItem.locator('.row-expand').click();
   await expect(detail_).toHaveCount(0);
   await expect(teaser).toBeVisible();
   // Zuklappen raeumt den Permalink. Auf den Hash WARTEN, nicht sofort lesen.
@@ -157,11 +157,10 @@ test('recherche: Anlegen als Inline-Formular in der Karte', async ({ page }) => 
   const row = page.locator('.research-item', { hasText: 'Inline-Fund' }).first();
   await expect(row).toBeVisible();
 
-  // Bearbeiten: dasselbe Formular in der aufgeklappten Zeile, mit den Werten des
-  // Funds und derselben Aktionszeile (Speichern zuerst).
+  // Bearbeiten: der Titel oeffnet die Zeile aufgeklappt im Formular, mit den
+  // Werten des Funds und derselben Aktionszeile (Speichern zuerst).
   await row.locator('.research-item-title').click();
   const detailBox = row.locator('.research-detail');
-  await row.getByRole('button', { name: 'Bearbeiten' }).click();
   await expect(detailBox.locator('input.recherche-title-input')).toHaveValue('Inline-Fund');
   await expect(detailBox.locator('.tag-input-chip')).toHaveText(['Archiv', 'Brief']);
   await expect(detailBox.locator('.research-detail__bar button').first()).toHaveClass(/\bprimary\b/);
@@ -176,7 +175,7 @@ test('recherche: Anlegen als Inline-Formular in der Karte', async ({ page }) => 
   await page.locator('#recherche-card .card-title').click();
   await expect(detailBox.locator('.research-detail__bar')).toBeHidden();
   await expect(row.locator('.research-item-title')).toHaveText('Inline-Fund neu');
-  await row.locator('.research-item-title').click();
+  await row.locator('.row-expand').click();
   await expect(detailBox).toHaveCount(0);
 
   // Esc verwirft ein offenes Anlegen-Formular.
@@ -221,7 +220,7 @@ test('recherche: Markdown im Beschreibungstext wird gerendert, Zitat bleibt Wort
   await expect(quoteTeaser).toHaveText('Er sagte: **nie** wieder.');
 
   const mdRow = page.locator(`[data-research-id="${made.md}"]`);
-  await mdRow.locator('.research-item-title').click();
+  await mdRow.locator('.row-expand').click();
   await expect(mdRow.locator('.research-detail__text li')).toHaveCount(2);
   await expect(mdRow.locator('.research-detail__text strong')).toHaveText('Fall-Eckdaten');
 

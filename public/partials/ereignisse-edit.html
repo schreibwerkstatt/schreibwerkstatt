@@ -12,7 +12,7 @@
      (Muster figuren-detail-edit.html). -->
 <template x-if="eventEditId != null && eventEditId === ev.id">
   <div class="gz-content gz-edit"
-       @click.outside="commitEventEdit(ev)"
+       @click.outside="commitEventEdit(ev, $event)"
        @keydown="$editKeys($event, { save: () => !eventEditBusy && saveEventEdit(ev), cancel: () => cancelEventEdit() })">
     <p class="card-hint" x-text="$app.t('events.edit.hint')"></p>
     <div class="card-form-grid">

@@ -1,6 +1,6 @@
 # ERD — schreibwerkstatt
 
-Stand: Schema-Version 363, 198 Tabellen (ohne `sqlite_*`/`schema_version`/FTS5-Shadow-Tables; inkl. FTS5-Virtual `search_index`/`search_trigram`/`chat_messages_fts` + `search_meta`).
+Stand: Schema-Version 364, 199 Tabellen (ohne `sqlite_*`/`schema_version`/FTS5-Shadow-Tables; inkl. FTS5-Virtual `search_index`/`search_trigram`/`chat_messages_fts` + `search_meta`).
 
 Quelle: Squashed-Schema-Snapshot in [db/squashed-schema.js](../db/squashed-schema.js) (regeneriert via `node tools/dump-schema.js`) + [db/migrations.js](../db/migrations.js). Drift gegen die Legacy-Migration-Kette ist durch [tests/unit/squash-drift.test.mjs](../tests/unit/squash-drift.test.mjs) gegated. Mermaid-Diagramme — in VSCode mit „Markdown Preview Mermaid Support" (oder GitHub) direkt sichtbar.
 
@@ -78,6 +78,7 @@ erDiagram
   books ||--o{ book_access           : has
   books ||--o{ book_shelf            : "shelved by"
   books ||--o{ komplett_scope        : "run scope"
+  books ||--o{ ai_proposals          : "open style suggestion"
   books ||--o{ book_share_invites    : has
   books ||--o{ page_locks            : locks
   books ||--o{ writing_time          : has
@@ -220,6 +221,7 @@ erDiagram
   app_users ||--o{ book_shelf        : "pins/archives"
   app_users ||--o{ komplett_scope    : "chooses run scope"
   app_users ||--|| author_profile    : "own style profile"
+  app_users ||--o{ ai_proposals      : "open AI suggestion"
   app_users ||--o{ page_locks        : holds
   app_users ||--o{ research_items    : "sets status (status_by)"
   app_users ||--o{ page_presence     : pings
@@ -2139,9 +2141,17 @@ erDiagram
     TEXT    entwicklung "JSON [{aspekt, richtung, beleg}] — was sich verschiebt"
     TEXT    basis_json  "welche Buecher gingen ein (Nachweis des Stands)"
     TEXT    basis_sig   "Signatur der Basis; abweichend ⇒ Text ist veraltet"
-    INTEGER edited      "0|1 — vom Autor angefasst; ein neuer Lauf fragt dann nach"
+    INTEGER edited      "0|1 — vom Autor angefasst; ein Lauf ersetzt ihn nie ohne «Übernehmen»"
     TEXT    created_at
     TEXT    updated_at
+  }
+  ai_proposals {
+    INTEGER id           PK "AUTOINCREMENT"
+    TEXT    kind         "autorenprofil | stilprofil — CHECK: autorenprofil ohne, stilprofil mit book_id"
+    TEXT    user_email   FK "app_users(email) CASCADE — wer den Lauf gestartet hat"
+    INTEGER book_id      FK "books(book_id) CASCADE, NULL = kontobezogen (Autorenprofil)"
+    TEXT    payload_json "Job-Ergebnis bis «Übernehmen»/«Verwerfen»; UNIQUE (kind, user_email, IFNULL(book_id,0))"
+    TEXT    created_at
   }
   book_share_invites {
     INTEGER id            PK "AUTOINCREMENT"

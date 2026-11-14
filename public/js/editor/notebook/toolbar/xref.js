@@ -1,8 +1,11 @@
-// Querverweis einfügen (Notebook-Editor). Inline am Caret, nicht als Block —
-// darum bewusst KEIN Slash-Menü-Eintrag: das Slash-Menü triggert auf einem
-// leeren Block und *ersetzt* ihn (siehe slash.js), ein Querverweis gehört aber
-// mitten in den fertigen Satz. Vorbild ist deshalb der Beleg-Picker in cite.js:
-// Range sichern → kleines Panel → an der gesicherten Range einfügen.
+// Querverweis einfügen (Notebook-Editor). Inline am Caret, nicht als Block.
+// Vorbild ist der Beleg-Picker in cite.js: Range sichern → kleines Panel → an
+// der gesicherten Range einfügen.
+//
+// DREI EINSTIEGE: Bubble-Toolbar (markierte Stelle wird ersetzt), «Einfügen»-
+// Gruppe der Seiten-Toolbar (am Caret, über panel-methods.js#
+// insertFromPageToolbar) und das Slash-Item `querverweis` (Tastatur). Ein
+// kollabierter Caret fügt ein, eine Selektion wird ersetzt.
 //
 // Der eingefügte Verweis trägt seine Nummer als Text (Cache) und
 // `data-xref`/`data-xref-id` als Wahrheit — Markup-SSoT ist
@@ -17,8 +20,8 @@
 // Nur Notebook: Focus-Editor und Bucheditor stellen Verweise dar und zerstören
 // sie nicht, bringen aber keinen Einfügepfad mit.
 
-import { getEditEl, caretRangeIn } from './_shared.js';
-import { capHits, cycleIdx, insertHtmlAtRange, onPickerKeydown, panelAnchorFor } from './caret-panel.js';
+import { getEditEl } from './_shared.js';
+import { capHits, cycleIdx, insertHtmlAtRange, onPickerKeydown, restoreEditorRange } from './caret-panel.js';
 import { buildXrefHtml, markXrefsAtomic } from '../../../xrefs/xref-html.js';
 import { formatXref } from '../../../xrefs/xref-format.js';
 // Ziel-Liste und Vorschau-Nummern teilt sich der Picker mit den
@@ -40,17 +43,9 @@ export const xrefMethods = {
     if (!app?.editMode || app.focusActive) return;
     const editEl = getEditEl();
     if (!editEl) return;
-    // Ohne Caret im Edit-Feld kein Verweis: anders als beim Beleg (der auch aus
-    // der Seiten-Toolbar kommt und dann ans Ende ankert) hat dieser Picker nur
-    // Einstiege AUS dem Text heraus.
-    const range = caretRangeIn(editEl);
-    if (!range) return;
-
-    this._xrefRange = range.cloneRange();
-
-    const { x, y } = panelAnchorFor(this._xrefRange, editEl);
-    this.xrefX = x;
-    this.xrefY = y;
+    // Caret, sonst die zuletzt im Editor gesehene Stelle, sonst das Ende des
+    // Inhalts (panel-methods.js#_editRangeForInsert) — wie beim Beleg.
+    this._xrefRange = this._editRangeForInsert(editEl);
 
     this.xrefQuery = '';
     this.xrefIdx = 0;
@@ -58,6 +53,7 @@ export const xrefMethods = {
     this.xrefError = false;
     this.bubbleShow = false;
     this.xrefShow = true;
+    this._openCaretPanelAt('xref');
 
     const bookId = window.Alpine?.store('nav')?.selectedBookId;
     if (!bookId) { this.xrefTargets = []; this.xrefHits = []; return; }
@@ -100,6 +96,7 @@ export const xrefMethods = {
     } finally {
       this.xrefLoading = false;
       this._recomputeXrefHits();
+      if (this.xrefShow) this._schedCaretPanelPosition('xref', { opening: true });
     }
     this.$nextTick(() => {
       const inp = this.$refs?.xrefFilter;
@@ -168,9 +165,10 @@ export const xrefMethods = {
 
     // `replaceContents`: eine markierte Stelle WIRD hier ersetzt — der Verweis
     // tritt an ihre Stelle im Satz (anders als der Beleg, der sie nachweist).
-    // Trennzeichen ist ein gewöhnliches Leerzeichen, weil der Verweis Fliesstext
-    // ist; Caret dahinter besorgt der Helfer.
-    insertHtmlAtRange(range, html, { after: ' ', replaceContents: true });
+    // Am kollabierten Caret wird nur eingefügt. Trennzeichen ist ein
+    // gewöhnliches Leerzeichen, weil der Verweis Fliesstext ist; Caret dahinter
+    // besorgt der Helfer.
+    insertHtmlAtRange(range, html, { after: ' ', replaceContents: !range.collapsed });
 
     // Der frisch eingefügte Verweis ist noch nicht atomar (markXrefsAtomic läuft
     // sonst nur beim Mount). Direkt nachziehen, sonst tippt der User in den
@@ -182,13 +180,16 @@ export const xrefMethods = {
     this._closeXref();
   },
 
-  _closeXref() {
+  // Verworfen → Caret zurück an die gesicherte Stelle; nach dem Einfügen steht
+  // er schon hinter dem Verweis. `restore: false`: closeAllEditorPanels.
+  _closeXref({ restore = true } = {}) {
+    const range = this._xrefRange;
     this.xrefShow = false;
     this.xrefQuery = '';
     this.xrefIdx = 0;
     this.xrefHits = [];
     this.xrefError = false;
     this._xrefRange = null;
-    getEditEl()?.focus();
+    if (restore) restoreEditorRange(range);
   },
 };

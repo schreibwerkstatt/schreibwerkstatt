@@ -101,24 +101,9 @@
 
 .motiv-progress { padding: var(--space-2xs) 0 var(--space-xs); }
 
-/* ── KI-Vorschläge (Brainstorm) ───────────────────────────────────────── */
+/* ── KI-Vorschläge (Brainstorm): Karten = .chat-vorschlag
+   (components/chat-vorschlag.css), hier nur der Panel-Abstand. ── */
 .motiv-suggestions { padding: var(--space-xs) 0; }
-.motiv-suggestion-list { display: flex; flex-direction: column; gap: var(--space-2xs); }
-.motiv-suggestion {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: var(--space-sm);
-  padding: var(--space-xs);
-  border: 1px solid var(--color-border);
-  border-left: 3px solid var(--card-accent);
-  border-radius: var(--radius-none);
-  background: var(--color-card-bg);
-}
-.motiv-sugg-body { display: flex; flex-direction: column; gap: var(--space-2xs); min-width: 0; }
-.motiv-sugg-name { font-size: var(--font-size-sm); font-weight: var(--fw-semibold); color: var(--color-text); }
-.motiv-sugg-triggers { font-size: var(--font-size-micro); color: var(--color-muted); font-style: italic; }
-.motiv-sugg-actions { display: flex; align-items: center; gap: var(--space-2xs); flex-shrink: 0; }
 
 /* ── Zwei-Spalten-Layout ──────────────────────────────────────────────── */
 .motiv-layout {

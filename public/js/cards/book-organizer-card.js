@@ -25,6 +25,7 @@ import { bookOrganizerMethods } from '../book-organizer.js';
 import { MAX_CHAPTER_DEPTH } from '../book-organizer/constants.js';
 import { EVT } from '../events.js';
 import { bindBoardHistoryKeys } from './board-history-keys.js';
+import { boardHistoryState } from './board-history.js';
 import { pickerPopoverState, pickerPopoverMethods } from '../picker-popover.js';
 
 // Buch-skopierter State — SSoT fuer Initial-Wert, `book:changed` und
@@ -47,9 +48,7 @@ const freshState = () => ({
   // Kette des Buchs geladen ist — bis dahin rendert die Zeile keine Spalte.
   redaktionEnabled: false,
   redaktionSaving: {},   // { [page_id]: true } waehrend des PUT
-  _undoStack: [],
-  _redoStack: [],
-  _inHistoryFlight: false,
+  ...boardHistoryState(),
   _renamesInFlight: null, // Promise laufender Umbenennungen (crud.js#_trackRename)
   _memos: {},        // Cache für chapterLengthDist (siehe view.js#_memo)
 });

@@ -356,9 +356,21 @@
 }
 
 
-/* Bearbeiten: Stift am Zeilenende der Datumszeile, Formular an Stelle des Inhalts. */
-.gz-edit-btn {
+/* Stift + ⋯ am Zeilenende der Datumszeile (Hover-Reveal), Formular an Stelle des Inhalts. */
+.gz-item-actions {
+  display: inline-flex;
+  align-items: center;
   margin-left: auto;
+}
+/* Der Ereignistext ist der Titel-Knopf (öffnet das Bearbeiten) und liest sich wie Text. */
+button.gz-ereignis {
+  display: block;
+  background: none;
+  border: 0;
+  padding: 0;
+  color: inherit;
+  font-family: inherit;
+  text-align: left;
 }
 
 .gz-edit-actions {

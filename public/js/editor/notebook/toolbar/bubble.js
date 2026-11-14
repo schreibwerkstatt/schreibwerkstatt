@@ -2,8 +2,9 @@
 // `this` = Sub-Komponente (editorToolbarCard), Root-Zugriffe via window.__app.
 // Im Fokus-Modus deaktiviert (Guards + `!$app.focusActive` im Template).
 
-import { getEditEl, WORD_RE, _normalizeLinkUrl, _applyLinkAtRange, caretRangeIn, findAnchor } from './_shared.js';
-import { panelAnchorFor } from './caret-panel.js';
+import { getEditEl, WORD_RE, _normalizeLinkUrl, _applyLinkAtRange, caretRangeIn, findAnchor, applyInlineCommand } from './_shared.js';
+import { restoreEditorRange } from './caret-panel.js';
+import { isImeComposing } from '../../../utils/keys.js';
 import { msgConvertTargets, msgUnwrapTargets } from './msg-convert.js';
 
 export const bubbleMethods = {
@@ -38,7 +39,9 @@ export const bubbleMethods = {
     const editEl = getEditEl();
     if (!editEl) return;
     editEl.focus();
-    document.execCommand(command, false);
+    // Ohne Inline-`style` (CSS-kursives Zitat, fette Überschrift), siehe
+    // toolbar/_shared.js#applyInlineCommand.
+    if (!applyInlineCommand(editEl, command)) return;
     window.__app?._markEditDirty?.();
     this.$nextTick(() => this._updateBubble());
   },
@@ -77,12 +80,11 @@ export const bubbleMethods = {
       this.linkCanRemove = false;
     }
 
-    const { x, y } = panelAnchorFor(this._linkRange, editEl);
-    this.linkX = x;
-    this.linkY = y;
-
     this.bubbleShow = false;
     this.linkShow = true;
+    // Position gegen das sichtbare Band (panel-methods.js): Flip, Klemmen,
+    // Nachziehen bei Scroll/Tastatur.
+    this._openCaretPanelAt('link');
     this.$nextTick(() => {
       const inp = this.$refs?.linkInput;
       if (inp) { inp.focus(); inp.select(); }
@@ -125,18 +127,25 @@ export const bubbleMethods = {
     this._closeLink();
   },
 
-  _closeLink() {
+  // Schliessen. Verworfen (Esc, Klick daneben) → Caret zurück an die beim
+  // Öffnen gesicherte Stelle (caret-panel.js#restoreEditorRange); nach
+  // Übernehmen/Entfernen steht der Caret schon im Editor und bleibt dort.
+  // `restore: false` (closeAllEditorPanels): Edit-Modus vorbei, nichts fokussieren.
+  _closeLink({ restore = true } = {}) {
+    const range = this._linkRange;
     this.linkShow = false;
     this.linkUrl = '';
     this.linkCanRemove = false;
     this._linkRange = null;
-    getEditEl()?.focus();
+    if (restore) restoreEditorRange(range);
   },
 
   // Bewusst NICHT `onPickerKeydown` aus caret-panel.js: die Link-Bar hat keine
   // Trefferliste, sondern ein freies URL-Feld. Der Picker-Vertrag fängt ↑/↓ ab
   // und nähme dem User damit die Cursor-Navigation in der eigenen Eingabe.
+  // Während einer IME-Komposition gehören Enter/Esc der Zeichenwahl.
   _onLinkKeydown(e) {
+    if (isImeComposing(e)) return;
     if (e.key === 'Enter') { e.preventDefault(); this._commitLink(); return; }
     if (e.key === 'Escape') { e.preventDefault(); this._closeLink(); return; }
   },

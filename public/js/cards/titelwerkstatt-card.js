@@ -9,6 +9,7 @@ import { titelwerkstattMethods } from '../book/titelwerkstatt.js';
 import { setupCardLifecycle } from './card-lifecycle.js';
 import { HEADLINE_FIELDS } from '../headline/channels.js';
 import { EVT } from '../events.js';
+import { actionMenuState, actionMenuMethods } from '../action-menu.js';
 
 // Filterleiste pro Buch im localStorage (siehe public/js/filter-persist.js).
 // Die beiden Felder stehen weiterhin in `freshState()` (Regel „State explizit
@@ -22,6 +23,8 @@ const TW_FILTER_SCOPES = [
 // dieselben Objekt-Referenzen weiterreichen.
 const freshState = () => ({
   twEnabled: false,
+  twLoading: false,      // Übersicht lädt (Skeleton)
+  twRowLoading: false,   // aufgeklappte Zeile lädt Felder + Varianten
   twPages: {},           // { [page_id]: { dachzeile, titel, lead, teaser, … } }
   twOpenId: null,        // aufgeklappte Zeile
   twFilterSuche: '',     // Freitext über Beitragsname/Dachzeile/Titel
@@ -52,6 +55,10 @@ export function registerTitelwerkstattCard() {
   window.Alpine.data('titelwerkstattCard', () => ({
     ...freshState(),
     _twPollTimer: null,
+    // Laufender Vorschlags-Job (Abbrechen).
+    _twJobId: null,
+    // Aktionsmenü der Varianten (action-menu.js), Ziel = Varianten-ID.
+    ...actionMenuState(),
     _lifecycle: null,
 
     init() {
@@ -83,10 +90,12 @@ export function registerTitelwerkstattCard() {
     },
 
     destroy() {
+      this.closeActionMenu();
       if (this._twPollTimer) { clearInterval(this._twPollTimer); this._twPollTimer = null; }
       this._lifecycle?.destroy();
     },
 
+    ...actionMenuMethods,
     ...titelwerkstattMethods,
   }));
 }

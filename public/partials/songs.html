@@ -55,6 +55,7 @@
 
   <!-- Songliste -->
   <div x-show="$store.catalog.songs.length > 0" class="entity-list entity-list--accented song-list">
+    <p class="muted-msg muted-msg--sm" x-show="songsFiltered.length === 0" x-text="$app.t('common.noMatch')"></p>
     <template x-for="s in listWindowed(songsFiltered)" :key="s.id">
       <div>
         <div class="entity-row internal-link" :data-song-id="s.id" @click="$store.catalogUi.selectedSongId = $store.catalogUi.selectedSongId === s.id ? null : s.id">

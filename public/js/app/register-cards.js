@@ -101,6 +101,7 @@ import { registerSortableTable } from '../sortable-table.js';
 import { registerCatalogFilter } from '../catalog-filter.js';
 import { registerEntityPicker } from '../cards/entity-picker.js';
 import { registerCollapsible } from '../collapsible.js';
+import { registerColorPicker } from '../color-picker.js';
 import { registerTabs } from '../tabs.js';
 import { registerToggleSwitch } from '../toggle-switch.js';
 import { registerSettingField } from '../setting-field.js';
@@ -253,6 +254,7 @@ export function registerAllCards() {
   registerCatalogFilter();
   registerEntityPicker();
   registerCollapsible();
+  registerColorPicker();
   registerTabs();
   registerToggleSwitch();
   registerSettingField();

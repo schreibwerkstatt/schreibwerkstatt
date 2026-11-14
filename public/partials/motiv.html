@@ -17,9 +17,15 @@
     </div>
     <div class="card-header-aside">
       <div class="card-actions card-actions--grouped">
+        <!-- Undo/Redo (Kern cards/board-history.js, Records book/motiv/history.js) -->
+        <button type="button" class="icon-btn icon-btn--ghost" @click="historyUndo()" :disabled="!canUndo()"
+                :data-tip="$app.withHotkey($app.t('motiv.history.undoTip'), 'undo')" :aria-label="$app.t('motiv.history.undo')"><svg class="icon" aria-hidden="true"><use href="/icons.svg#undo"/></svg></button>
+        <button type="button" class="icon-btn icon-btn--ghost" @click="historyRedo()" :disabled="!canRedo()"
+                :data-tip="$app.withHotkey($app.t('motiv.history.redoTip'), 'redo')" :aria-label="$app.t('motiv.history.redo')"><svg class="icon" aria-hidden="true"><use href="/icons.svg#redo"/></svg></button>
+        <span class="action-sep" aria-hidden="true"></span>
         <!-- Buendel 1: die KI-/Index-Laeufe (Brainstorm, frischer Brainstorm,
              Motiverkennung). Buendel 2: Ansichts-Steuerung des Graphen.
-             Buendel 3: Vollbild. Getrennt durch `.action-sep` — eine flache
+             Buendel 3: Vollbild. Davor Undo/Redo. Getrennt durch `.action-sep` — eine flache
              Sechserreihe liest sich als eine Aktionsart. -->
         <button type="button" class="icon-btn icon-btn--ghost"
                 @click="runBrainstorm()" :disabled="brainstorming"
@@ -53,7 +59,7 @@
         <span class="action-group" x-show="motivView === 'graph'">
           <button type="button" class="icon-btn icon-btn--ghost" @click="resetLayout()"
                   :data-tip="$app.t('motiv.graph.resetLayout')" :aria-label="$app.t('motiv.graph.resetLayout')">
-            <svg class="icon" aria-hidden="true"><use href="/icons.svg#undo"/></svg>
+            <svg class="icon" aria-hidden="true"><use href="/icons.svg#rotate-ccw"/></svg>
           </button>
         </span>
         <span class="action-sep" aria-hidden="true"></span>
@@ -98,12 +104,12 @@
 
   <!-- Anlege-Leiste: Thema und Motiv anlegen (beide Formen in EINER Zeile). -->
   <div class="motiv-toolbar">
-    <div class="motiv-toolbar-group">
+    <div class="motiv-toolbar-group" @keydown="$editKeys($event, { save: () => addTheme(), cancel: () => { newThemeName = '' } })">
       <input type="text" class="motiv-add-input" x-model="newThemeName" data-spellcheck="spelling"
              :placeholder="$app.t('motiv.theme.namePlaceholder')" @keydown.enter="$enter($event, () => addTheme())">
       <button type="button" class="btn-compact" @click="addTheme()" :disabled="busy || !newThemeName.trim()" x-text="$app.t('motiv.theme.add')"></button>
     </div>
-    <div class="motiv-toolbar-group">
+    <div class="motiv-toolbar-group" @keydown="$editKeys($event, { save: () => addMotif(), cancel: () => { newMotifName = '' } })">
       <input type="text" class="motiv-add-input" x-model="newMotifName" data-spellcheck="spelling"
              :placeholder="$app.t('motiv.motif.namePlaceholder')" @keydown.enter="$enter($event, () => addMotif())">
       <div class="motiv-theme-select" x-data="combobox($app.t('motiv.motif.themeOptional'), $app.t('motiv.noTheme'))"
@@ -210,40 +216,8 @@
   </div>
 
   <!-- KI-Vorschläge (Brainstorm): unten beim Verlauf, damit sie den Graphen nicht
-       überdecken. Frischer Lauf wie wieder-geöffneter Lauf füllen dasselbe Panel;
-       übernehmen legt Thema/Motiv an, nie im Text. -->
-  <div class="motiv-suggestions" x-show="suggestions.length" x-cloak>
-    <div class="card-section-head">
-      <h4 class="motiv-panel-heading" x-text="$app.t('motiv.brainstorm.title')"></h4>
-      <button type="button" class="icon-btn icon-btn--ghost" @click="_clearSuggestionPanel()"
-              :data-tip="$app.t('motiv.brainstorm.closePanel')" :aria-label="$app.t('motiv.brainstorm.closePanel')">
-        <svg class="icon" aria-hidden="true"><use href="/icons.svg#x"/></svg>
-      </button>
-    </div>
-    <div class="motiv-suggestion-list">
-      <template x-for="(s, i) in suggestions" :key="i">
-        <div class="motiv-suggestion">
-          <div class="motiv-sugg-body">
-            <span class="badge-source" x-text="$app.t('motiv.brainstorm.typ.' + s.typ)"></span>
-            <span class="motiv-sugg-name" x-text="s.name"></span>
-            <span class="card-hint card-hint--sm" x-text="s.beschreibung" x-show="s.beschreibung"></span>
-            <span class="motiv-sugg-triggers" x-show="s.trigger_terms && s.trigger_terms.length"
-                  x-text="(s.trigger_terms || []).join(', ')"></span>
-          </div>
-          <div class="motiv-sugg-actions">
-            <div class="motiv-sugg-theme" x-show="s.typ === 'motiv' && themes.length"
-                 x-data="combobox($app.t('motiv.motif.themeOptional'), $app.t('motiv.noTheme'))"
-                 x-modelable="value" x-model="s.themeIdDraft" x-effect="options = themeOptions()"></div>
-            <button type="button" class="btn-compact" :disabled="s.adopting" @click="adoptSuggestion(s)" x-text="$app.t('motiv.brainstorm.adopt')"></button>
-            <button type="button" class="icon-btn icon-btn--ghost" @click="dismissSuggestion(s)"
-                    :data-tip="$app.t('motiv.brainstorm.dismiss')" :aria-label="$app.t('motiv.brainstorm.dismiss')">
-              <svg class="icon" aria-hidden="true"><use href="/icons.svg#x"/></svg>
-            </button>
-          </div>
-        </div>
-      </template>
-    </div>
-  </div>
+       überdecken (nested Partial — HTML-Partial-LOC-Limit). -->
+  <div id="partial-motiv-suggestions"></div>
 
   <!-- @include motiv-graph-menu -->
 </div>

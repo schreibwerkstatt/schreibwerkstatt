@@ -26,7 +26,7 @@
 
     <p class="card-hint" x-text="$app.t('werkstatt.arc.hint')"></p>
 
-    <div x-show="anchorLoading" x-cloak class="werkstatt-job-status">
+    <div x-show="anchorLoading" x-cloak class="job-progress">
       <div x-show="anchorProgress > 0" class="progress-bar-wrap">
         <div class="progress-bar" :style="{ '--progress': anchorProgress + '%' }"></div>
       </div>

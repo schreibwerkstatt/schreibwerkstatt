@@ -247,17 +247,12 @@ export const focusCardMethods = {
       clearAllFocusMarks();
 
       // Nichts Ungespeichertes → zurück in die Ansicht (Save im Fokus impliziert
-      // Ende der Edit-Session; unsaubere Exits behalten den Edit-Modus).
+      // Ende der Edit-Session; unsaubere Exits behalten den Edit-Modus). Der
+      // Abbau läuft über die Session-SSoT des Notebooks (Invariante #11): sie
+      // gibt auch Edit-Lock, Presence-Heartbeat, Live-Edit-Marker, Reload-
+      // Snapshot, Undo-Verlauf und Konflikt-State frei.
       if (app.editMode && !app.editDirty) {
-        app._stopAutosave?.();
-        app._uninstallOnlineRetry?.();
-        app.editMode = false;
-        app.editSaving = false;
-        app.saveOffline = false;
-        app.lastDraftSavedAt = null;
-        app.closeSynonymMenu?.();
-        app.closeSynonymPicker?.();
-        app.closeFigurLookup?.();
+        app._teardownEditSession?.();
       } else if (app.editMode) {
         // Unsauberer Exit (Save fehlgeschlagen, editDirty bleibt) — User landet
         // wieder im Normal-Editor. Counter neu am Normal-Container installieren,

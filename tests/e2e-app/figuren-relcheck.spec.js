@@ -76,7 +76,7 @@ test('figuren-relcheck: zwei Väter → Hinweis, Liste, markierte Kante; nach Ko
   // Figuren-Detail: die Kante zum Bruder trägt die Regel als Badge.
   const list = card.locator('.figur-list-section');
   await list.locator('.filter-search-input').fill(KIND);
-  await list.locator('[data-figid]', { hasText: KIND }).click();
+  await list.locator('[data-figid]', { hasText: KIND }).locator('.row-expand').click();
   const edge = card.locator('.figur-beziehung-item').filter({ has: page.locator('.entity-ref', { hasText: BRUDER }) });
   await expect(edge.locator('.tok-badge', { hasText: 'Mehr als ein Vater oder eine Mutter' })).toBeVisible();
 
@@ -105,7 +105,7 @@ test('figuren-relcheck: verrutschte Kante umhängen, gemeldete Kante entfernen (
   await expect(card).toBeVisible();
   const list = card.locator('.figur-list-section');
   await list.locator('.filter-search-input').fill(KIND);
-  await list.locator('[data-figid]', { hasText: KIND }).click();
+  await list.locator('[data-figid]', { hasText: KIND }).locator('.row-expand').click();
 
   const edgeTo = (name) => card.locator('.figur-beziehung-item').filter({ has: page.locator('.entity-ref', { hasText: name }) });
   const retarget = edgeTo(VATER).locator('.figur-bz-actions button', { hasText: BRUDER });

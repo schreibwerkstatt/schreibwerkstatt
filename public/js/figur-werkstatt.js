@@ -6,7 +6,8 @@
 //   - jobs.js        — KI-Brainstorm + Konsistenz-Check (Job-Polling)
 //   - runs.js        — KI-Lauf-Historie (persistierte Brainstorm/Consistency-Runs)
 //   - bogen.js       — Bogen im Buch (Ist-Index + Messung, Kern x Kapitel)
-//   - context-menu.js — Rechtsklick-Menü auf Mindmap-Knoten
+//   - vorschlaege.js — Vorschlagskarten (Brainstorm, Konsistenz): Übernehmen/Verwerfen
+//   - context-menu.js — Rechtsklick-Menü auf Mindmap-Knoten + Figurenliste
 //   - history.js     — Rückgängig/Wiederholen + geschütztes Löschen von Knoten
 //   - mindmap-view.js — Einpassen, Zoom, Auf-/Zuklappen, Touch-Pan, Knoten-Markierung
 //   - mindmap-editor.js — mitwachsende Knoten-Bearbeitung (an der jsMind-Instanz)
@@ -18,6 +19,7 @@ import { jobsMethods } from './figur-werkstatt/jobs.js';
 import { runsMethods } from './figur-werkstatt/runs.js';
 import { bogenMethods } from './figur-werkstatt/bogen.js';
 import { memoMethods } from './cards/card-memo.js';
+import { vorschlaegeMethods } from './figur-werkstatt/vorschlaege.js';
 import { contextMenuMethods } from './figur-werkstatt/context-menu.js';
 import { historyMethods } from './figur-werkstatt/history.js';
 import { mindmapViewMethods } from './figur-werkstatt/mindmap-view.js';
@@ -32,6 +34,7 @@ export const figurWerkstattMethods = {
   // Genau EIN Memo-Helper pro Modul (CLAUDE.md „Memo-Pattern"); Speicher
   // `_memos` lebt pro Karten-Instanz und wird in resetDrafts/loadArc geleert.
   ...memoMethods,
+  ...vorschlaegeMethods,
   ...contextMenuMethods,
   ...historyMethods,
   ...mindmapViewMethods,

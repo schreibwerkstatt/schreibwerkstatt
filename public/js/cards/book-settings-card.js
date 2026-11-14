@@ -58,6 +58,11 @@ export function registerBookSettingsCard() {
     stilprofilJobId: null,
     stilprofilError: '',
     stilprofilAdopting: false,
+    stilprofilProgress: 0,
+    stilprofilStatus: '',
+    // KI-Ergebnis als Vorschlag unter dem Feld ({ text, diff }), nie direkt ins Feld.
+    stilprofilSuggestion: null,
+    _stilprofilPollTimer: null,
     bookSettingsErzaehlperspektive: '',
     bookSettingsErzaehlzeit: '',
     bookSettingsIsFinished: false,
@@ -157,6 +162,8 @@ export function registerBookSettingsCard() {
     seriesBookId: null,
     seriesLoading: false,
     seriesBusy: false,
+    // SortableJS der Bände (series.js#initSeriesSortable).
+    _seriesSortable: null,
     seriesData: null,
     seriesJoinable: [],
     seriesPrequels: [],
@@ -215,6 +222,7 @@ export function registerBookSettingsCard() {
     init() {
       this._lifecycle = setupCardLifecycle(this, {
         showFlag: 'showBookSettingsCard',
+        timerKeys: ['_stilprofilPollTimer'],
         load: () => this._loadAll(),
         // Ungespeichertes nach dem Schliessen bzw. vor dem Reset des alten
         // Buchs: speichern oder verwerfen (save-paths.js#_settleUnsaved).
@@ -234,6 +242,9 @@ export function registerBookSettingsCard() {
           bookSettingsStilprofil: '',
           stilprofilGenerating: false,
           stilprofilJobId: null,
+          stilprofilProgress: 0,
+          stilprofilStatus: '',
+          stilprofilSuggestion: null,
           bookHistoryResetMessage: '',
           bookHistoryResetError: '',
           bookDeleteError: '',

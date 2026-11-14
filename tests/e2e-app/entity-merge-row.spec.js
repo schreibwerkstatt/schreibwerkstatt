@@ -54,7 +54,7 @@ test('figuren: stale-Zeile → Picker → Ziel → Merge, Quelle weg', async ({ 
   await markStale(page, 'figuren', ids.src);
 
   const row = card.locator(`[data-figid="${ids.src}"]`);
-  const mergeBtn = row.locator('.entity-row-action:not(.danger)');
+  const mergeBtn = row.locator('.entity-row-action.btn-compact');
   await mergeBtn.click();
   await expect(mergeBtn).toHaveAttribute('aria-expanded', 'true');
   const popover = page.locator('.picker-popover:visible');
@@ -77,7 +77,7 @@ test('figuren: stale-Zeile → Picker → Ziel → Merge, Quelle weg', async ({ 
   expect(names).toContain(TGT);
 });
 
-test('schauplätze: stale-Zeile → Picker → Merge; Detail-Merge nur an aktiven Orten', async ({ page }) => {
+test('schauplätze: stale-Zeile → Picker → Merge', async ({ page }) => {
   await bootApp(page);
   const bookId = await selectSeededBook(page);
   const SRC = `Zeilen-Ort Quelle ${RUN}`;
@@ -95,12 +95,7 @@ test('schauplätze: stale-Zeile → Picker → Merge; Detail-Merge nur an aktive
   await expect(row).toBeVisible();
   await markStale(page, 'orte', ids.src);
 
-  // Aufklappen: das Detail bietet bei einer verwaisten Zeile keinen zweiten Merge-Weg.
-  await row.locator('.entity-row-title').click();
-  await expect(row).toHaveAttribute('aria-expanded', 'true');
-  await expect(card.locator('.entity-detail .ort-merge')).toBeHidden();
-
-  await row.locator('.entity-row-action:not(.danger)').click();
+  await row.locator('.entity-row-action.btn-compact').click();
   await pickTarget(page, TGT);
   await page.locator('.picker-popover:visible .picker-popover__actions .danger').click();
   await page.locator('#app-confirm-dialog[open] .confirm-dialog-btn--danger').click();
@@ -135,7 +130,7 @@ test('szenen: stale-Zeile → Picker zeigt aktive Szenen mit Kapitel, POST träg
   });
 
   const row = card.locator('.entity-row[data-szeneid="9101"]');
-  await row.locator('.entity-row-action:not(.danger)').click();
+  await row.locator('.entity-row-action.btn-compact').click();
   const popover = page.locator('.picker-popover:visible');
   await popover.locator('.combobox-trigger').click();
   // Nur die aktive Szene, mit Kapitel im Label; verwaiste nicht.

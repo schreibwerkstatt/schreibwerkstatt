@@ -1,11 +1,13 @@
 // Bausteine der caret-verankerten Panels des Notebook-Editors: Link-Bar
-// (bubble.js), Beleg-Picker (cite.js), Querverweis-Picker (xref.js) und
-// Diagramm-Dialog (diagram.js).
+// (bubble.js), Beleg-Picker (cite.js), Querverweis-Picker (xref.js) und der
+// Block-Dialoge (table.js, diagram.js, image.js).
 //
-// Die vier folgen derselben Choreografie — Range beim Öffnen sichern, Panel über
+// Alle folgen derselben Choreografie — Range beim Öffnen sichern, Panel über
 // der Range verankern, beim Übernehmen an genau dieser Range einfügen, Caret
-// dahinter setzen, schliessen und den Editor wieder fokussieren. Ausgeschrieben
-// wurde davon jeder Schritt mehrfach; hier steht er einmal.
+// dahinter setzen, schliessen und den Editor wieder fokussieren; beim Verwerfen
+// den Caret dorthin zurück, wo er vor dem Öffnen stand. Ausgeschrieben wurde
+// davon jeder Schritt mehrfach; hier steht er einmal. Die Positionierung am
+// sichtbaren Band (Methoden mit `this`) liegt in panel-methods.js.
 //
 // Nur Notebook: Focus-Editor und Bucheditor stellen die erzeugten Marker dar,
 // bringen aber keinen Einfügepfad mit (harte Regel „Editor-Spezifikation").
@@ -13,23 +15,117 @@
 // Was hier NICHT hingehört: was gesucht, formatiert und eingefügt wird. Das ist
 // je Panel genuin verschieden und bleibt in cite.js/xref.js/bubble.js.
 
-import { findBlock } from '../../shared/dom-block.js';
-import { placeCaretAfter } from '../../utils.js';
+import { findBlock, topLevelBlock } from '../../shared/dom-block.js';
+import { getEditEl, placeCaretAfter, placeCaretIn } from '../../utils.js';
+import { ensureSlotAfter, replaceBlockOutsideList } from './_shared.js';
+import { isImeComposing } from '../../../utils/keys.js';
 
 export { placeCaretAfter };
 
-// ── Panel-Position ────────────────────────────────────────────────────────
+// ── Panel-Anker ───────────────────────────────────────────────────────────
 
-// Ankerpunkt (Viewport-Koordinaten) für ein Panel über `range`. Eine kollabierte
-// Range hat kein Rechteck — dann auf den umgebenden Block ausweichen, sonst
-// klebte das Panel in der linken oberen Ecke.
-export function panelAnchorFor(range, editEl) {
+// Anker-Rechteck (Viewport-Koordinaten) für ein Panel an `range`. Eine
+// kollabierte Range hat oft kein Rechteck (leerer Absatz, Caret vor einem
+// atomaren Chip) — dann auf den umgebenden Block ausweichen, sonst klebte das
+// Panel in der linken oberen Ecke. Die Range ist live: nach Scroll oder
+// Umbruch liefert derselbe Aufruf die neue Lage (Nachziehen in panel-methods.js).
+export function panelAnchorRect(range, editEl) {
   let rect = range.getBoundingClientRect();
   if (rect.width === 0 && rect.height === 0) {
     const block = findBlock(range.startContainer, editEl) || editEl;
     rect = block.getBoundingClientRect();
   }
-  return { x: rect.left + rect.width / 2, y: rect.top };
+  return rect;
+}
+
+// ── Caret zurück ──────────────────────────────────────────────────────────
+
+/**
+ * Editor fokussieren und die beim Öffnen gesicherte Range zurücksetzen.
+ *
+ * Ohne den zweiten Schritt setzt `editEl.focus()` den Caret an den Anfang des
+ * Abschnitts: beim Öffnen hat das Panel-Eingabefeld (bzw. der Dialog) den Fokus
+ * und damit die Selektion übernommen, der Editor weiss nicht mehr, wo der User
+ * stand. Gilt für jedes Verwerfen (Esc, Klick daneben, ×/Abbrechen).
+ *
+ * Ohne `force` bleibt eine Selektion, die der User inzwischen selbst in den
+ * Editor gesetzt hat, unangetastet — der Klick daneben, der das Panel schliesst,
+ * IST dann die neue Caret-Position. Die Block-Dialoge geben `force`: das native
+ * `<dialog>` gibt den Fokus beim Schliessen an den Editor zurück, ohne die
+ * Selektion mitzunehmen.
+ *
+ * @param {Range|null|undefined} range
+ * @param {{force?: boolean}} [opts]
+ */
+export function restoreEditorRange(range, { force = false } = {}) {
+  const editEl = getEditEl();
+  if (!editEl) return;
+  const active = editEl.ownerDocument?.activeElement;
+  const userMovedIn = !force && active && (active === editEl || editEl.contains(active));
+  if (userMovedIn) return;
+  editEl.focus({ preventScroll: true });
+  const node = range?.startContainer;
+  if (!node || !node.isConnected || !editEl.contains(node)) return;
+  const sel = editEl.ownerDocument.getSelection?.();
+  if (!sel) return;
+  sel.removeAllRanges();
+  sel.addRange(range);
+}
+
+/**
+ * Caret in den Absatz HINTER einem eingefügten atomaren Block (Tabelle,
+ * Diagramm, Abbildung, O-Ton). Der Block selbst nimmt keinen Caret an; steht
+ * dahinter nichts oder etwas, das keinen Caret trägt, entsteht ein leerer
+ * Absatz (`ensureSlotAfter`) — dort schreibt der User weiter.
+ */
+export function placeCaretInSlotAfter(node) {
+  if (!node?.isConnected) return;
+  let slot = ensureSlotAfter(node) || node.nextElementSibling;
+  const writable = slot && /^(P|H[1-6])$/.test(slot.tagName)
+    && slot.getAttribute('contenteditable') !== 'false';
+  if (!writable) {
+    const p = node.ownerDocument.createElement('p');
+    p.appendChild(node.ownerDocument.createElement('br'));
+    node.insertAdjacentElement('afterend', p);
+    slot = p;
+  }
+  getEditEl()?.focus({ preventScroll: true });
+  placeCaretIn(slot);
+}
+
+// ── Block am Caret einsetzen (Seiten-Toolbar) ─────────────────────────────
+
+/**
+ * Wohin ein Block aus der Seiten-Toolbar kommt: ein leerer Caret-Block wird
+ * ersetzt (wie beim Slash-Menü), sonst landet der Block HINTER dem
+ * Top-Level-Block des Carets — nie mitten in einen Absatz oder in eine Liste.
+ * Ohne Caret: ans Ende.
+ *
+ * @returns {{replace: Element|null, after: Element|null}}
+ */
+export function blockInsertTarget(editEl, range) {
+  const block = range ? findBlock(range.startContainer, editEl) : null;
+  if (!block) return { replace: null, after: null };
+  const empty = !(block.textContent || '').trim()
+    && !block.querySelector('img, table, pre, hr, [contenteditable="false"]');
+  if (empty) return { replace: block, after: null };
+  const top = topLevelBlock(block, editEl);
+  return { replace: null, after: top && top !== editEl ? top : null };
+}
+
+/**
+ * Block-Knoten nach `blockInsertTarget` einsetzen. `replace` läuft über
+ * `replaceBlockOutsideList` (Invariante 19: nie in eine Liste), `after` hinter
+ * den Top-Level-Block, sonst ans Ende.
+ */
+export function placeBlockNode(editEl, node, { replace = null, after = null } = {}) {
+  if (replace && replace.isConnected && replace.parentNode && editEl.contains(replace)) {
+    replaceBlockOutsideList(editEl, replace, node);
+  } else if (after && after.isConnected && after.parentNode === editEl) {
+    after.insertAdjacentElement('afterend', node);
+  } else {
+    editEl.appendChild(node);
+  }
 }
 
 // ── HTML einfügen ─────────────────────────────────────────────────────────
@@ -134,15 +230,27 @@ export function capHits(list, max) {
 
 /**
  * Tastatur-Vertrag aller Picker: Escape schliesst, ↑/↓ bewegen die Auswahl,
- * Enter übernimmt den markierten Treffer. Jeder Zweig ruft `preventDefault` —
- * die Panels liegen über einem contenteditable, wo die Browser-Defaults
- * (Scroll, Zeilenumbruch) den Text verändern würden.
+ * Enter übernimmt den markierten Treffer. Jeder behandelte Zweig ruft
+ * `preventDefault` — die Panels liegen über einem contenteditable, wo die
+ * Browser-Defaults (Scroll, Zeilenumbruch) den Text verändern würden, und das
+ * Vollbild des Editors (editor-notebook.html) verlässt Esc nur, wenn kein Layer
+ * es verbraucht hat.
+ *
+ * Zwei Ausnahmen:
+ *   • Während einer IME-Komposition gehört jede Taste der Zeichenwahl (Enter
+ *     bestätigt sie, Esc bricht sie ab) — nichts wird behandelt.
+ *   • ↑/↓/Enter wirken nur in einem Textfeld des Panels (Filter, Stellenangabe).
+ *     Steht der Fokus auf einem Knopf (Zitat-Art, Anzeigeform, Entfernen), drückt
+ *     Enter diesen Knopf, statt den markierten Treffer einzufügen.
  *
  * @returns {boolean} ob das Event behandelt wurde
  */
 export function onPickerKeydown(e, { onClose, onMove, onEnter }) {
+  if (isImeComposing(e)) return false;
+  if (e.key === 'Escape') { e.preventDefault(); onClose?.(); return true; }
+  const inField = e.target?.tagName === 'INPUT';
+  if (!inField) return false;
   switch (e.key) {
-    case 'Escape':    e.preventDefault(); onClose?.(); return true;
     case 'ArrowDown': e.preventDefault(); onMove?.(1); return true;
     case 'ArrowUp':   e.preventDefault(); onMove?.(-1); return true;
     case 'Enter':     e.preventDefault(); onEnter?.(); return true;

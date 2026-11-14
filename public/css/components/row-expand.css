@@ -1,0 +1,26 @@
+/* Aufklapp-Knopf einer Listenzeile (DESIGN.md «Listen-Anriss + aufgeklappte
+   Zeile», «Werkstatt-Bedienvertrag»): der Titel öffnet das Bearbeiten, dieser
+   Knopf klappt die Zeile nur zum Lesen auf — und ist dafür der Tastaturweg
+   (`aria-expanded`). Inhalt ist der leere `.history-chevron`-Span (CSS-Mask),
+   darum kein `.icon-btn` (das verlangt ein Sprite-Icon).
+   Konsumenten: Figuren, Schauplätze, Welt-Fakten, Recherche. Die Karte setzt
+   höchstens die Position. */
+@layer components {
+  .row-expand {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 28px;
+    min-height: 24px;
+    padding: 0;
+    background: none;
+    border: 0;
+    color: var(--color-muted);
+    cursor: pointer;
+  }
+  .row-expand:hover { color: var(--color-text); }
+  .row-expand:focus-visible {
+    outline: var(--focus-ring);
+    outline-offset: var(--focus-ring-offset);
+  }
+}

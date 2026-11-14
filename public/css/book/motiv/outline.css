@@ -44,10 +44,8 @@
   text-align: left;
   cursor: pointer;
 }
-.motiv-tree-name:hover { border-color: var(--color-border); background: var(--color-bg); }
 .motiv-tree-name--theme { font-weight: var(--fw-semibold); }
 .motiv-tree-name--loose { cursor: default; color: var(--color-muted); font-style: italic; }
-.motiv-tree-name--loose:hover { border-color: transparent; background: none; }
 /* Geist (geplant, im Text nicht gefunden): gedämpft + gestrichelt, wie der
    Umriss-Knoten in der Konstellation. */
 .motiv-tree-name--ghost,
@@ -181,6 +179,8 @@
 .motiv-outline-num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
 .motiv-outline-table thead th.motiv-outline-num { text-align: right; }
 .motiv-outline-muted { color: var(--color-muted); }
+/* Aktions-Spalte (DESIGN.md «Aktions-Spalte in Tabellen»): ⋯ öffnet das Baum-Menü. */
+.motiv-outline-actions { width: 1%; text-align: right; white-space: nowrap; }
 
 /* Themen-Kopfzeile: getönt, Farbtupfer des Themas vorn. */
 .motiv-outline-group th {

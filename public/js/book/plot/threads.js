@@ -5,6 +5,8 @@ import { fetchJson } from '../../utils.js';
 import { ACT_PALETTE } from './constants.js';
 
 export const threadsMethods = {
+  cancelAddThread() { this.addingThread = false; this.newThreadName = ''; },
+
   async addThread() {
     const app = window.__app;
     const name = (this.newThreadName || '').trim();
@@ -30,7 +32,6 @@ export const threadsMethods = {
 
   startEditThread(thread) {
     this.editingThreadId = thread.id;
-    this.threadColorPickerId = null;
     this.threadDraft = {
       name: thread.name || '',
       farbe: thread.farbe || null,
@@ -95,28 +96,8 @@ export const threadsMethods = {
     } finally { this.busy = false; }
   },
 
-  toggleThreadColorPicker(threadId) {
-    this.threadColorPickerId = this.threadColorPickerId === threadId ? null : threadId;
-  },
-
-  // Lane-Aktionsmenü (⋯-Knopf, Rechtsklick/Long-Press auf den Lane-Kopf):
-  // einzelnes, nach .card--plot teleportiertes .context-menu, Mechanik aus
-  // action-menu.js — die Lane sitzt in einem overflow-x/will-change-Scroll-
-  // container, in dem ein am Trigger verankertes Popover geclippt würde.
-  openThreadMenu(ev, laneId) {
-    this.openActionMenu(ev, `thread:${laneId}`, laneId);
-  },
-
-  // Die offene Lane (für das teleportierte Menü außerhalb der gridRows-Schleife).
-  threadMenuLane() {
-    if (this.actionMenuTarget == null) return null;
-    return (this.threadLanes() || []).find(l => l.id === this.actionMenuTarget) || null;
-  },
-
-
   async setThreadColor(thread, key) {
     const app = window.__app;
-    this.threadColorPickerId = null;
     const farbe = ACT_PALETTE.includes(key) ? key : null;
     if (farbe === (thread.farbe || null)) return;
     // Kein Schreiben während Undo/Redo/anderer Mutation (Record-Verlust).
@@ -152,10 +133,12 @@ export const threadsMethods = {
     this.busy = true;
     try {
       await fetchJson(`/plot/threads/${thread.id}`, { method: 'DELETE' });
-      // Löschen ist nicht reversibel (siehe plot/history.js) → Historie leeren.
+      // Bewusst nicht rückgängig machbar (Begründung in plot/history.js): ein
+      // Snapshot müsste Bindungen, die Strang-Zuordnung jedes Beats und ggf. die
+      // eigene Aktstruktur tragen und all ihre IDs neu vergeben → Historie leeren.
       this._clearHistory();
       if (this.editingThreadId === thread.id) this.editingThreadId = null;
-      if (this.actionMenuTarget === thread.id) this.closeActionMenu();
+      if (this.isActionMenuOpen(`thread:${thread.id}`)) this.closeActionMenu();
       if (hadOwnActs) {
         await this.loadBoard();
       } else {

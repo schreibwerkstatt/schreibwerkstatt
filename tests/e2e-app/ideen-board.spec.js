@@ -394,7 +394,7 @@ test('ideen-board: verankerte Idee per Drag ins Buch und in ein anderes Kapitel'
   const dragTo = async (lane) => {
     const target = boardCard.locator(`[data-idee-lane="${lane}"][data-idee-status-cell="offen"]`);
     await expect(target).toBeVisible();
-    await dragGripTo(page, await card.locator('.idee-board-grip').boundingBox(), target, 16);
+    await dragGripTo(page, card.locator('.idee-board-grip'), target, 16);
     await expect(target.locator(`[data-idee-card-id="${made.ideeId}"]`)).toHaveCount(1, { timeout: 10000 });
     await page.waitForTimeout(400);
   };
@@ -610,7 +610,13 @@ test('ideen-board: manuell sortieren per Drag in der Spalte, gespeichert', async
 // Das Ziel wird erst NACH dem Drag-Start gemessen: dann blaehen sich die leeren
 // Zellen zur Drop-Zone auf (body.board-dnd-active), und alles darunter rueckt —
 // ein vorher gemessener Punkt laege in der Bahn darueber.
-async function dragGripTo(page, grip, target, dy = 24) {
+// `gripLoc` ist ein Locator: gemessen wird erst, nachdem das Raster oben im
+// Fenster steht — ein Ziel nah an der Unterkante des Rasters loeste sonst das
+// Auto-Scroll von SortableJS aus, und der Drop landete neben der Zelle.
+async function dragGripTo(page, gripLoc, target, dy = 24) {
+  await page.locator('#ideen-board-card .ideen-board').evaluate(el => el.scrollIntoView({ block: 'start' }));
+  await page.waitForTimeout(100);
+  const grip = await gripLoc.boundingBox();
   await page.mouse.move(grip.x + grip.width / 2, grip.y + grip.height / 2);
   await page.mouse.down();
   await page.mouse.move(grip.x + grip.width / 2 + 8, grip.y + grip.height / 2 + 14, { steps: 4 });
@@ -649,8 +655,7 @@ test('ideen-board: Buch-Idee per Drag einem Abschnitt bzw. Kapitel zuordnen', as
 
   // ── Board: in die Abschnitts-Bahn, Spalte „in Arbeit" ──────────────────
   const target = card.locator(`[data-idee-lane="page:${made.pageId}"][data-idee-status-cell="in_arbeit"]`);
-  let grip = await card.locator(`[data-idee-card-id="${made.toLane}"] .idee-board-grip`).boundingBox();
-  await dragGripTo(page, grip, target);
+  await dragGripTo(page, card.locator(`[data-idee-card-id="${made.toLane}"] .idee-board-grip`), target);
   await expect(target.locator(`[data-idee-card-id="${made.toLane}"]`)).toHaveCount(1, { timeout: 10000 });
   expect(await anchorOf(made.toLane)).toEqual({ page_id: made.pageId, chapter_id: null, status: 'in_arbeit' });
 
@@ -658,7 +663,7 @@ test('ideen-board: Buch-Idee per Drag einem Abschnitt bzw. Kapitel zuordnen', as
   await page.waitForTimeout(400);
   const treeItem = page.locator(`.page-tree [data-tree-key="c${made.chapterId}"]`);
   await expect(treeItem).toBeVisible();
-  grip = await card.locator(`[data-idee-card-id="${made.toTree}"] .idee-board-grip`).boundingBox();
+  const grip = await card.locator(`[data-idee-card-id="${made.toTree}"] .idee-board-grip`).boundingBox();
   const drop = await treeItem.boundingBox();
   await page.mouse.move(grip.x + grip.width / 2, grip.y + grip.height / 2);
   await page.mouse.down();
@@ -698,7 +703,7 @@ test('ideen-board: Liste zeigt Ort und Alter, Sammelaktion setzt die Stufe', asy
   await page.evaluate((id) => { location.hash = `#book/${id}/ideen`; }, bookId);
   const card = page.locator('#ideen-board-card');
   await expect(card).toBeVisible();
-  await card.getByRole('button', { name: 'Liste', exact: true }).click();
+  await card.getByRole('tab', { name: 'Liste', exact: true }).click();
 
   const table = card.locator('table.ideen-list');
   await expect(table).toBeVisible();
@@ -720,7 +725,7 @@ test('ideen-board: Liste zeigt Ort und Alter, Sammelaktion setzt die Stufe', asy
   await expect(rows).toHaveCount(0);
   await expect(card.locator('.selection-bar')).toBeHidden();
 
-  await card.getByRole('button', { name: 'Raster', exact: true }).click();
+  await card.getByRole('tab', { name: 'Raster', exact: true }).click();
   await expect(table).toBeHidden();
   await page.evaluate((ids) => Promise.all(ids.map(i => fetch(`/ideen/${i}`, { method: 'DELETE' }))), ids);
 });
@@ -782,4 +787,69 @@ test('ideen-board: Edit-Tastatur — Esc verwirft, Ctrl+S und Klick daneben spei
   await expect.poll(serverContent).toBe('Tastatur-Probe C');
 
   await page.evaluate((id) => fetch(`/ideen/${id}`, { method: 'DELETE' }), ideeId);
+});
+
+// Text = Knopf zum Bearbeiten, Aktionsmenü an Karte und Listenzeile, und
+// Rückgängig: Stufenwechsel per Strg+Z, Löschen per Knopf im Kartenkopf (die
+// Idee kommt mit neuer ID zurück, ihre Stufe und ihr Anlegedatum bleiben).
+test('ideen-board: Text öffnet Bearbeiten, Menü löscht, Rückgängig holt zurück', async ({ page }) => {
+  await bootApp(page);
+  const bookId = await selectSeededBook(page);
+  await page.evaluate((id) => { location.hash = `#book/${id}/ideen`; }, bookId);
+  const card = page.locator('#ideen-board-card');
+  await expect(card).toBeVisible();
+
+  await card.locator('.ideen-board-add-input').fill('Undo-Probe');
+  await card.locator('.ideen-board-add-input').press('Enter');
+  await expect(card.locator('.idee-board-card', { hasText: 'Undo-Probe' })).toHaveCount(1);
+  const undoId = await card.locator('.idee-board-card', { hasText: 'Undo-Probe' }).getAttribute('data-idee-card-id');
+  // Ueber die ID: im Bearbeiten-Modus steht der Text im Feld, hasText faende die Karte nicht.
+  const ideeCard = card.locator(`[data-idee-card-id="${undoId}"]`);
+
+  // Klick auf den Text öffnet den Inline-Edit; Esc verwirft.
+  // Links in den Text klicken: oben rechts schweben beim Ueberfahren die Aktionen.
+  await ideeCard.locator('.idee-board-text').click({ position: { x: 4, y: 4 } });
+  await expect(ideeCard.locator('.idee-board-edit-input')).toBeFocused();
+  await page.keyboard.press('Escape');
+  await expect(ideeCard.locator('.idee-board-edit-input')).toHaveCount(0);
+
+  // Stufe über das Aktionsmenü (Rechtsklick), dann Strg+Z.
+  await ideeCard.locator('.idee-board-text').click({ button: 'right', position: { x: 4, y: 4 } });
+  const menu = page.locator('.context-menu:visible');
+  await expect(menu.getByRole('menuitem').first()).toHaveText('Bearbeiten');
+  await menu.getByRole('menuitem', { name: /In Arbeit/ }).click();
+  await expect(card.locator('.ideen-board-cell--in_arbeit .idee-board-card', { hasText: 'Undo-Probe' })).toHaveCount(1);
+  await card.locator('.card-title').click();
+  await page.keyboard.press('Control+z');
+  await expect(card.locator('.ideen-board-cell--offen .idee-board-card', { hasText: 'Undo-Probe' })).toHaveCount(1);
+  await page.keyboard.press('Control+Shift+z');
+  await expect(card.locator('.ideen-board-cell--in_arbeit .idee-board-card', { hasText: 'Undo-Probe' })).toHaveCount(1);
+
+  // Löschen über das Menü (letzter Eintrag), Rückfrage bestätigen, dann Rückgängig-Knopf.
+  const ideeStamp = (id) => page.evaluate((x) => {
+    const c = window.Alpine.$data(document.querySelector('#ideen-board-card'));
+    const i = (c.ideen || []).find((r) => String(r.id) === String(x));
+    return i ? { created_at: i.created_at, status_at: i.status_at } : null;
+  }, id);
+  const before = await ideeStamp(undoId);
+  expect(before?.created_at).toBeTruthy();
+  const deletedAt = new Date().toISOString();
+  const moved = card.locator('.idee-board-card', { hasText: 'Undo-Probe' });
+  await moved.hover();
+  await moved.getByRole('button', { name: 'Aktionen' }).click();
+  await menu.getByRole('menuitem').last().click();
+  await page.locator('dialog[open] button', { hasText: 'Löschen' }).click();
+  await expect(card.locator('.idee-board-card', { hasText: 'Undo-Probe' })).toHaveCount(0);
+  await card.locator('.card-header').getByRole('button', { name: 'Rückgängig' }).click();
+  await expect(card.locator('.ideen-board-cell--in_arbeit .idee-board-card', { hasText: 'Undo-Probe' })).toHaveCount(1);
+
+  // Anlegedatum und Stufen-Zeitpunkt kommen aus dem Snapshot, nicht «jetzt».
+  const id = await card.locator('.idee-board-card', { hasText: 'Undo-Probe' }).getAttribute('data-idee-card-id');
+  expect(id).not.toBe(undoId);
+  const after = await ideeStamp(id);
+  expect(after.created_at).toBe(before.created_at);
+  expect(after.status_at < deletedAt, 'Stufen-Zeitpunkt aus dem Snapshot, nicht «jetzt»').toBe(true);
+
+  // Aufräumen (die Suite teilt eine DB).
+  await page.evaluate((x) => fetch(`/ideen/${x}`, { method: 'DELETE' }), id);
 });

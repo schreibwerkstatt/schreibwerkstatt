@@ -130,6 +130,9 @@ Prompt [prompts/headline.js](../public/js/prompts/headline.js), Rolle
   Prompt, sonst liefert der zweite Lauf dieselben naheliegenden Formulierungen.
 - Vorschläge landen als Varianten (`herkunft='ki'`), **übernommen wird von
   Hand**. Ein Titel ist eine redaktionelle Entscheidung.
+- Der Lauf zeigt Fortschritt und lässt sich **abbrechen** (`twCancel` →
+  `DELETE /jobs/:id`, der KI-Call endet per `AbortError` als `cancelled`, ohne
+  Fehlermeldung in der Karte).
 
 ### Der Kopf am Beitrag — SSoT [lib/headline-render.js](../lib/headline-render.js)
 
@@ -285,7 +288,15 @@ Methoden [book/titelwerkstatt.js](../public/js/book/titelwerkstatt.js), Partial
 aller Beiträge (`sortableTable`), aufgeklappte Zeile mit den vier Feldern,
 Kanal-Linealen und Varianten. Gespeichert wird beim **Verlassen des Feldes**, nicht
 bei jedem Anschlag — sonst bewegte sich `pages.updated_at` im Sekundentakt, woran
-unter anderem die Stale-Erkennung des Redaktions-Status hängt.
+unter anderem die Stale-Erkennung des Redaktions-Status hängt. Tabelle und
+aufgeklappte Zeile zeigen beim Laden ein Skeleton (`twLoading`/`twRowLoading`).
+
+**Varianten-Zeile:** «Übernehmen» steht sichtbar; Löschen (`icon-btn--ghost`) und
+⋯ liegen als Hover-Reveal-Gruppe am Zeilenende. ⋯, Rechtsklick und Long-Press
+öffnen dasselbe Aktionsmenü (`actionMenuState`/`actionMenuMethods`, Ziel =
+Varianten-ID, `twMenuVariant()`): «Übernehmen», Trenner, «Löschen». Löschen fragt
+immer über `appConfirm` (danger) — eine Variante ist ein Kandidat, den jemand
+formuliert hat.
 
 **Filter-Leiste** (Standard-`.filter-bar`): Freitext über die drei angezeigten
 Spalten (Beitragsname, Dachzeile, Titel — Lead und Teaser bewusst nicht, sonst

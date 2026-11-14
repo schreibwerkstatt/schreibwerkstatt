@@ -5,10 +5,14 @@
      braucht. Lebt unsichtbar als display-contents-Anker am Anfang des Notebook-Partials. -->
 <div x-data="editorNotebookCard" class="display-contents"></div>
 
+<!-- Esc verlässt das Vollbild nur, wenn kein Layer es verbraucht hat: Slash-
+     Menü, Link-Bar und Picker rufen preventDefault, ein offener Dialog oder ein
+     Menü (Fokus darin) behält Esc für sich. -->
 <div class="card card--page" id="editor-card"
      x-show="showEditorCard" x-cloak
      :class="{ 'editor-card--fullscreen': pageEditorFullscreen && editMode }"
-     @keydown.escape.window="!focusActive && pageEditorFullscreen && togglePageEditorFullscreen()">
+     @keydown.escape.window="!focusActive && pageEditorFullscreen && !$event.defaultPrevented
+       && !$event.target?.closest?.('dialog[open], .context-menu') && togglePageEditorFullscreen()">
   <!-- Sticky-Region im Vollbild: Header + Save-Progress + Lektorat-Status +
        Save-Bestätigung bleiben oben sichtbar, auch wenn die Karte gescrollt
        wird. Wrapper umschliesst alles, was beim Speichern Feedback liefert. -->

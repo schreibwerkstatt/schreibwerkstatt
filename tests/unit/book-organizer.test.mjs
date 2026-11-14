@@ -548,10 +548,10 @@ test('Reorder-Undo mit gleichem Bestand, anderer Reihenfolge ist nicht stale', a
 
 test('Rename-/Create-Record auf verschwundenes Ziel ist stale', () => {
   const card = makeSeededCard();
-  assert.equal(card._staleReason({ kind: 'rename-page', id: 901 }, 'undo'), null);
-  assert.equal(card._staleReason({ kind: 'rename-page', id: 4711 }, 'undo')?.key, 'bookOrganizer.historyStale');
-  assert.equal(card._staleReason({ kind: 'rename-chapter', id: 11 }, 'redo'), null);
-  assert.equal(card._staleReason({ kind: 'create-chapter', id: 4711 }, 'undo')?.key, 'bookOrganizer.historyStale');
+  assert.equal(card._historyStaleReason({ kind: 'rename-page', id: 901 }, 'undo'), null);
+  assert.equal(card._historyStaleReason({ kind: 'rename-page', id: 4711 }, 'undo')?.key, 'bookOrganizer.historyStale');
+  assert.equal(card._historyStaleReason({ kind: 'rename-chapter', id: 11 }, 'redo'), null);
+  assert.equal(card._historyStaleReason({ kind: 'create-chapter', id: 4711 }, 'undo')?.key, 'bookOrganizer.historyStale');
 });
 
 // Der Verlauf ueberlebt das Schliessen der Karte. Ein Create-Undo Stunden
@@ -559,14 +559,14 @@ test('Rename-/Create-Record auf verschwundenes Ziel ist stale', () => {
 test('Create-Undo verweigert, sobald die Seite Inhalt bzw. das Kapitel Seiten hat', async () => {
   const card = makeSeededCard();
   rootStub.tokEsts = { 902: { chars: 0 } };
-  assert.equal(card._staleReason({ kind: 'create-page', id: 902 }, 'undo'), null, 'leere Seite: Undo erlaubt');
+  assert.equal(card._historyStaleReason({ kind: 'create-page', id: 902 }, 'undo'), null, 'leere Seite: Undo erlaubt');
   rootStub.tokEsts = { 902: { chars: 1200 } };
-  const r = card._staleReason({ kind: 'create-page', id: 902 }, 'undo');
+  const r = card._historyStaleReason({ kind: 'create-page', id: 902 }, 'undo');
   assert.equal(r?.key, 'bookOrganizer.historyHasContent');
   assert.deepEqual(r.params, { name: 'S2' });
-  assert.equal(card._staleReason({ kind: 'create-chapter', id: 2 }, 'undo')?.key,
+  assert.equal(card._historyStaleReason({ kind: 'create-chapter', id: 2 }, 'undo')?.key,
     'bookOrganizer.historyHasContent', 'Kapitel mit Seiten');
-  assert.equal(card._staleReason({ kind: 'create-chapter', id: 1 }, 'undo')?.key,
+  assert.equal(card._historyStaleReason({ kind: 'create-chapter', id: 1 }, 'undo')?.key,
     'bookOrganizer.historyHasContent', 'Kapitel mit Sub-Kapitel');
 
   let deleted = false;
@@ -581,11 +581,11 @@ test('Create-Undo verweigert, sobald die Seite Inhalt bzw. das Kapitel Seiten ha
 test('Delete-Record: Undo nur solange die Seite fehlt, Redo nur solange sie da ist', () => {
   const card = makeSeededCard();
   const rec = { kind: 'delete-page', pageId: 4711, name: 'Weg', chapterId: 1, index: 0 };
-  assert.equal(card._staleReason(rec, 'undo'), null);
-  assert.equal(card._staleReason(rec, 'redo')?.key, 'bookOrganizer.historyStale');
+  assert.equal(card._historyStaleReason(rec, 'undo'), null);
+  assert.equal(card._historyStaleReason(rec, 'redo')?.key, 'bookOrganizer.historyStale');
   const back = { ...rec, pageId: 901 };
-  assert.equal(card._staleReason(back, 'undo')?.key, 'bookOrganizer.historyStale');
-  assert.equal(card._staleReason(back, 'redo'), null);
+  assert.equal(card._historyStaleReason(back, 'undo')?.key, 'bookOrganizer.historyStale');
+  assert.equal(card._historyStaleReason(back, 'redo'), null);
 });
 
 // Snapshot traegt die Namen von damals. Eine Umbenennung anderswo darf ein
@@ -753,9 +753,9 @@ test('Ein-Abschnitt-Kapitel starten zugeklappt, Mehr-Abschnitt-Kapitel nach Schw
 test('Create-Chapter-Record mit Erst-Abschnitt: Undo erlaubt, solange der Abschnitt leer ist', async () => {
   const card = makeSeededCard();
   rootStub.tokEsts = { 920: { chars: 0 } };
-  assert.equal(card._staleReason({ kind: 'create-chapter', id: 2, pageId: 920 }, 'undo'), null);
+  assert.equal(card._historyStaleReason({ kind: 'create-chapter', id: 2, pageId: 920 }, 'undo'), null);
   rootStub.tokEsts = { 920: { chars: 40 } };
-  assert.equal(card._staleReason({ kind: 'create-chapter', id: 2, pageId: 920 }, 'undo')?.key,
+  assert.equal(card._historyStaleReason({ kind: 'create-chapter', id: 2, pageId: 920 }, 'undo')?.key,
     'bookOrganizer.historyHasContent');
   rootStub.tokEsts = {};
 

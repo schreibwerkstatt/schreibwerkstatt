@@ -40,12 +40,27 @@
   <template x-if="itemSuggestions(item) && itemSuggestions(item).length === 0">
     <div class="muted-msg muted-msg--sm" x-text="$app.t('recherche.suggest.none')"></div>
   </template>
-  <template x-for="(sg, i) in (itemSuggestions(item) || [])" :key="sg.target_kind + ':' + sg.target_id">
-    <div class="research-suggestion">
-      <button type="button" class="entity-ref"
-              x-entity-ref="{ type: sg.target_kind, id: sg.ref_id ?? sg.target_id, label: sg.label }"></button>
-      <span class="research-suggestion-reason" x-show="sg.grund" x-text="sg.grund"></span>
-      <button type="button" class="btn-compact" @click="acceptSuggestion(item, sg)" x-text="$app.t('recherche.suggest.accept')"></button>
-    </div>
-  </template>
+  <!-- Vorschlagskarte (DESIGN.md «Chat-Vorschlagskarte», «Werkstatt-Bedienvertrag»):
+       Übernehmen verknüpft, Verwerfen blendet aus (wiederherstellbar). -->
+  <div class="chat-vorschlaege">
+    <template x-for="(sg, i) in (itemSuggestions(item) || [])" :key="sg.target_kind + ':' + sg.target_id">
+      <div class="chat-vorschlag" :class="{ 'chat-vorschlag--applied': sg._state === 'applied', 'chat-vorschlag--discarded': sg._state === 'discarded' }">
+        <div class="chat-vorschlag-header">
+          <span class="chat-vorschlag-label" x-text="$app.t(sg._state === 'applied' ? 'recherche.suggest.applied' : 'recherche.suggest.label')"></span>
+          <span class="chat-vorschlag-actions">
+            <button type="button" class="chat-vorschlag-btn" x-show="!sg._state" :disabled="busy"
+                    @click="acceptSuggestion(item, sg)" x-text="$app.t('recherche.suggest.accept')"></button>
+            <button type="button" class="chat-vorschlag-btn chat-vorschlag-btn--ghost" x-show="sg._state !== 'applied'"
+                    @click="discardSuggestion(item, sg)"
+                    x-text="$app.t(sg._state === 'discarded' ? 'recherche.suggest.restore' : 'recherche.suggest.discard')"></button>
+          </span>
+        </div>
+        <div class="chat-vorschlag-diff">
+          <div class="chat-vorschlag-title"><button type="button" class="entity-ref"
+               x-entity-ref="{ type: sg.target_kind, id: sg.ref_id ?? sg.target_id, label: sg.label }"></button></div>
+        </div>
+        <div class="chat-vorschlag-begruendung" x-show="sg.grund" x-text="sg.grund"></div>
+      </div>
+    </template>
+  </div>
 </div>

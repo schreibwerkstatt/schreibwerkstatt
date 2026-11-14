@@ -8,30 +8,34 @@
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { readdirSync, readFileSync } from 'node:fs';
-import { join } from 'node:path';
+import { readdirSync, readFileSync, statSync } from 'node:fs';
+import { join, relative } from 'node:path';
 import { handleEnterKey } from '../../public/js/utils/keys.js';
 
 const REPO_ROOT = new URL('../../', import.meta.url).pathname;
-const PARTIALS = join(REPO_ROOT, 'public', 'partials');
-const FILES = [
-  'public/index.html',
-  ...readdirSync(PARTIALS).filter(f => f.endsWith('.html')).map(f => `public/partials/${f}`),
-];
 
-// [Datei, Begruendung] — ganze Datei ausgenommen.
-const ALLOW_FILES = [
-  ['public/partials/book-settings-series.html', 'wird parallel umgebaut'],
-  ['public/partials/book-settings-share.html', 'wird parallel umgebaut'],
-];
+// Alle Templates: index.html + jedes Partial, auch in Unterordnern.
+// Bewusst KEINE Ausnahmeliste ganzer Dateien: eine Datei-Ausnahme («wird
+// parallel umgebaut») liess genau die rohen Enter-Handler durch, die sie
+// decken sollte — und blieb stehen, als der Umbau kam. Ein Feld, das Enter
+// wirklich anders braucht, nimmt `$enter` mit einer eigenen Aktion.
+function walkHtml(dir, out = []) {
+  for (const entry of readdirSync(dir)) {
+    const full = join(dir, entry);
+    if (statSync(full).isDirectory()) walkHtml(full, out);
+    else if (entry.endsWith('.html')) out.push(relative(REPO_ROOT, full));
+  }
+  return out;
+}
+const FILES = ['public/index.html', ...walkHtml(join(REPO_ROOT, 'public', 'partials'))];
 
 const FIELD_RE = /<(input|textarea)\b((?:[^>"']|"[^"]*"|'[^']*')*)>/g;
-const ENTER_RE = /(?:@|x-on:)keydown\.enter((?:\.[\w-]+)*)="([^"]*)"/g;
+// keydown/keyup/keypress: auch ein Enter auf keyup sendet mitten in der Komposition.
+const ENTER_RE = /(?:@|x-on:)key(?:down|up|press)\.enter((?:\.[\w-]+)*)="([^"]*)"/g;
 
 export function findOffenders(files, read) {
   const out = [];
   for (const file of files) {
-    if (ALLOW_FILES.some(([f]) => f === file)) continue;
     const src = read(file);
     for (const m of src.matchAll(FIELD_RE)) {
       for (const e of m[2].matchAll(ENTER_RE)) {
@@ -56,7 +60,6 @@ test('Enter an Textfeldern nur ueber $enter (IME-Guard)', () => {
 test('kein handgeschriebener IME-Guard in Templates', () => {
   const hits = [];
   for (const file of FILES) {
-    if (ALLOW_FILES.some(([f]) => f === file)) continue;
     read(file).split('\n').forEach((l, i) => {
       if (/\$event\.isComposing|\$event\.keyCode\s*!==?\s*229/.test(l)) hits.push(`${file}:${i + 1}`);
     });
@@ -92,7 +95,8 @@ test('Selbsttest: Detektor schlaegt an', () => {
     'b.html': '<input @keydown.enter.prevent="$enter($event, () => save())">',
     'c.html': '<textarea @keydown.enter="$enter($event, () => send(), { multiline: true })"></textarea>',
     'd.html': '<div @keydown.enter.prevent="open()"></div>',
+    'e.html': '<input type="text"\n       x-model="x" @keyup.enter="save()">',
   };
   assert.deepEqual(findOffenders(Object.keys(fake), f => fake[f]),
-    ['a.html:1 ohne $enter', 'b.html:1 .prevent neben $enter']);
+    ['a.html:1 ohne $enter', 'b.html:1 .prevent neben $enter', 'e.html:1 ohne $enter']);
 });

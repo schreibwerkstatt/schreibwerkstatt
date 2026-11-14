@@ -3,7 +3,10 @@
    Abschnitts-Chat (chat-vorschlaege.html), Ideen-Vorschläge aus Abschnitts-,
    Buch- und Recherche-Chat (chat-idee-vorschlaege.html), Plot-Chat
    (plot-chat.html), Ideen-Chat (ideen-chat.html), Recherche-Chat (neue
-   Fundstücke in recherche-chat.html, Änderungen in recherche-chat-changes.html). Feature-CSS liefert nur Innenteile, die es
+   Fundstücke in recherche-chat.html, Änderungen in recherche-chat-changes.html),
+   ausserhalb der Chats die KI-Vorschläge der Werkstätten: Plot-Brainstorm
+   (plot-brainstorm-vorschlaege.html), Motiv-Brainstorm (motiv-suggestions.html).
+   Feature-CSS liefert nur Innenteile, die es
    nirgends sonst gibt (Merge-Liste, URL-Zeilen, Ziel-Kopf).
 
    Markup-Vokabular im Karteninneren:

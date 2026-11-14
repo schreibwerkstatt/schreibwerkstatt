@@ -1,0 +1,19 @@
+<!-- Farbwähler (Swatch + Palette-Popover): Innenleben von
+     div.color-picker mit x-data colorPicker(…) — Mechanik public/js/color-picker.js,
+     Optik components/color-picker.css. Einziger Ort dieses Markups; die
+     Einbettungsstelle liefert nur die Konfiguration im x-data. -->
+<button type="button" class="color-picker__swatch" :style="swatchStyle()"
+        @click.stop="toggle()" @keydown.escape="onEsc($event)"
+        aria-haspopup="true" :aria-expanded="open ? 'true' : 'false'"
+        :data-tip="tip()" :aria-label="tip()"></button>
+<div class="color-picker__popover" x-show="open" x-cloak
+     @click.outside="close()" @keydown.escape="onEsc($event)">
+  <button type="button" class="color-picker__opt color-picker__opt--none" :aria-pressed="!value()"
+          :class="{ 'color-picker__opt--on': !value() }"
+          @click="choose(null)" :data-tip="noneLabel()" :aria-label="noneLabel()"></button>
+  <template x-for="key in keys()" :key="key">
+    <button type="button" class="color-picker__opt" :aria-pressed="value() === key"
+            :style="optStyle(key)" :class="{ 'color-picker__opt--on': value() === key }"
+            @click="choose(key)" :aria-label="optLabel(key)" :data-tip="optLabel(key)"></button>
+  </template>
+</div>

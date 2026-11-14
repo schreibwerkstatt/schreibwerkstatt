@@ -47,13 +47,20 @@
 
       <div class="werkstatt-list" role="list">
         <template x-for="d in drafts" :key="d.id">
-          <div class="werkstatt-list-entry" role="listitem">
+          <div class="werkstatt-list-entry hover-reveal-host" role="listitem"
+               @contextmenu="openDraftMenu($event, d)" x-long-press>
             <button :aria-pressed="d.id === selectedDraftId" type="button"
                     class="werkstatt-list-item"
                     :class="{ 'werkstatt-list-item--selected': d.id === selectedDraftId }"
                     @click="selectDraft(d.id)">
               <span class="werkstatt-list-name" x-text="d.name"></span>
               <span class="werkstatt-list-archetype" x-show="d.archetype" x-text="archetypeLabel(d.archetype)"></span>
+            </button>
+            <button type="button" class="icon-btn icon-btn--ghost hover-reveal"
+                    @click="openDraftMenu($event, d)"
+                    aria-haspopup="menu" :aria-expanded="isActionMenuOpen('draft:' + d.id)"
+                    :data-tip="$app.t('editor.btn.moreActions')" :aria-label="$app.t('editor.btn.moreActions')">
+              <svg class="icon" aria-hidden="true"><use href="/icons.svg#more-horizontal"/></svg>
             </button>
           </div>
         </template>
@@ -95,6 +102,7 @@
           <div x-data="{ ideaOwnerId: null }" x-effect="ideaOwnerId = selectedDraftId"><!-- @include ideen-backlinks --></div>
         </div>
         <div class="card-actions">
+          <span class="save-indicator" x-show="isDirty()" x-cloak x-text="$app.t('werkstatt.unsaved')"></span>
           <button type="button" class="icon-btn icon-btn--ghost icon-btn--success"
                   :disabled="busy || !editName.trim()" @click="saveDraft()"
                   :data-tip="$app.t('werkstatt.action.save')" :aria-label="$app.t('werkstatt.action.save')">
@@ -150,8 +158,11 @@
 
       <!-- @include werkstatt-link-picker -->
 
-      <!-- Form: Name + Archetyp + Notizen -->
-      <div class="card-form-grid">
+      <!-- Form: Name + Archetyp + Notizen. Cmd+S speichert, Esc verwirft
+           (nach Rückfrage, wenn ungespeichert) — die Mindmap hat eigene Tasten
+           und liegt darum ausserhalb; Cmd+S dort fängt der Karten-Listener. -->
+      <div class="card-form-grid"
+           @keydown="$editKeys($event, { save: () => !busy && editName.trim() && saveDraft(), cancel: () => discardDraftEdits() })">
         <div class="card-form-row">
           <label class="card-form-label" :for="'werkstatt-name-' + selectedDraftId" x-text="$app.t('werkstatt.field.name')"></label>
           <div class="form-stack">
@@ -240,7 +251,20 @@
         </div>
 
         <!-- Knoten-Menü (Rechtsklick / Long-Press), Mechanik aus action-menu.js -->
+        <!-- Eine Instanz für Mindmap-Knoten (mindmap:<id>) und Figurenliste (draft:<id>). -->
         <div class="context-menu werkstatt-context-menu" x-ref="actionMenu" x-bind="actionMenuPanel()" x-cloak>
+          <template x-if="menuDraft()"><div>
+            <button type="button" role="menuitem" class="context-menu-item context-menu-item--icon" @click="draftMenuConsistency()" :disabled="busy || consistencyLoading">
+              <svg class="icon" aria-hidden="true"><use href="/icons.svg#spell-check"/></svg>
+              <span x-text="$app.t('werkstatt.action.consistency')"></span>
+            </button>
+            <div class="context-menu-sep" role="separator"></div>
+            <button type="button" role="menuitem" class="context-menu-item context-menu-item--icon context-menu-item--danger" @click="draftMenuDelete()" :disabled="busy">
+              <svg class="icon" aria-hidden="true"><use href="/icons.svg#trash"/></svg>
+              <span x-text="$app.t('werkstatt.action.delete')"></span>
+            </button>
+          </div></template>
+          <template x-if="actionMenuKey && actionMenuKey.startsWith('mindmap:')"><div>
           <button type="button" role="menuitem" class="context-menu-item context-menu-item--icon" @click="ctxBrainstorm()" :disabled="busy || brainstormLoading">
             <svg class="icon" aria-hidden="true"><use href="/icons.svg#lightbulb"/></svg>
             <span x-text="$app.t('werkstatt.action.brainstorm')"></span>
@@ -263,6 +287,7 @@
             <svg class="icon" aria-hidden="true"><use href="/icons.svg#trash"/></svg>
             <span x-text="$app.t('werkstatt.context.delete')"></span>
           </button>
+          </div></template>
         </div>
       </section>
 
@@ -274,22 +299,22 @@
       <div id="partial-werkstatt-bogen" x-show="arcVisible()" x-cloak></div>
 
       <!-- Brainstorm-Status während KI-Job -->
-      <section x-show="brainstormLoading" x-cloak class="werkstatt-job-status">
+      <section x-show="brainstormLoading" x-cloak class="job-progress">
         <div x-show="brainstormProgress > 0" class="progress-bar-wrap">
           <div class="progress-bar" :style="{ '--progress': brainstormProgress + '%' }"></div>
         </div>
-        <div class="werkstatt-job-status-row">
+        <div class="job-progress-row">
           <div class="card-status" x-html="brainstormStatus"></div>
           <button type="button" @click="cancelBrainstorm()" x-text="$app.t('common.cancel')"></button>
         </div>
       </section>
 
       <!-- Consistency-Status während KI-Job -->
-      <section x-show="consistencyLoading" x-cloak class="werkstatt-job-status">
+      <section x-show="consistencyLoading" x-cloak class="job-progress">
         <div x-show="consistencyProgress > 0" class="progress-bar-wrap">
           <div class="progress-bar" :style="{ '--progress': consistencyProgress + '%' }"></div>
         </div>
-        <div class="werkstatt-job-status-row">
+        <div class="job-progress-row">
           <div class="card-status" x-html="consistencyStatus"></div>
           <button type="button" @click="cancelConsistency()" x-text="$app.t('common.cancel')"></button>
         </div>
@@ -302,25 +327,7 @@
         <template x-for="r in runs.brainstorm" :key="r.id">
           <div>
             <!-- @include werkstatt-run-row -->
-            <div x-show="selectedRunId === r.id && brainstormResult" class="history-detail" x-cloak>
-              <div class="chat-vorschlaege">
-                <template x-for="(v, idx) in brainstormResult ? brainstormResult.vorschlaege : []" :key="idx">
-                  <div class="chat-vorschlag">
-                    <div class="chat-vorschlag-header">
-                      <span class="chat-vorschlag-label" x-text="$app.t('chat.suggestion')"></span>
-                      <button type="button"
-                              class="chat-vorschlag-btn"
-                              @click.stop="applyBrainstormVorschlag(idx)"
-                              :disabled="busy"
-                              x-text="$app.t('werkstatt.brainstorm.apply')"></button>
-                    </div>
-                    <div class="chat-vorschlag-title" x-text="v.label"></div>
-                    <div x-show="v.begruendung" class="chat-vorschlag-begruendung" x-text="v.begruendung"></div>
-                  </div>
-                </template>
-                <div x-show="brainstormResult && brainstormResult.vorschlaege.length === 0" class="card-status" x-text="$app.t('werkstatt.brainstorm.allApplied')"></div>
-              </div>
-            </div>
+            <!-- @include werkstatt-brainstorm-detail -->
           </div>
         </template>
       </div>
@@ -330,50 +337,7 @@
         <template x-for="r in runs.consistency" :key="r.id">
           <div>
             <!-- @include werkstatt-run-row -->
-            <div x-show="selectedRunId === r.id && consistencyResult" class="history-detail" x-cloak>
-              <p class="werkstatt-consistency-fazit" x-show="consistencyResult && consistencyResult.fazit" x-text="consistencyResult ? consistencyResult.fazit : ''"></p>
-              <div x-show="consistencyResult && consistencyResult.konflikte.length === 0" class="card-status" x-text="$app.t('werkstatt.consistency.noIssues')"></div>
-              <div class="entity-list entity-list--accented" x-show="consistencyResult && consistencyResult.konflikte.length > 0">
-                <template x-for="(k, idx) in consistencyResult ? consistencyResult.konflikte : []" :key="idx">
-                  <div>
-                    <div class="entity-row internal-link" :class="{ 'entity-row--selected': selectedKonfliktIdx === idx }"
-                         @click.stop="selectedKonfliktIdx = selectedKonfliktIdx === idx ? null : idx">
-                      <span class="severity-tag" :class="befundSeverityClass(k.schwere)" x-text="$app.t('werkstatt.severity.' + k.schwere)"></span>
-                      <span class="entity-row-title" x-text="k.feld"></span>
-                      <span class="entity-row-meta truncate" x-text="k.problem"></span>
-                      <span class="history-chevron" :class="{ open: selectedKonfliktIdx === idx }" aria-hidden="true"></span>
-                    </div>
-                    <div x-show="selectedKonfliktIdx === idx" class="entity-detail" x-cloak>
-                      <p class="entity-detail-text" x-text="k.problem"></p>
-                      <div x-show="k.vorschlag" class="entity-meta-row">
-                        <span class="entity-meta-label" x-text="$app.t('werkstatt.consistency.vorschlag')"></span>
-                        <span class="entity-meta-value" x-text="k.vorschlag"></span>
-                      </div>
-                    </div>
-                  </div>
-                </template>
-              </div>
-              <!-- Belegstellen: die Manuskript-Textstellen, gegen die geprüft wurde
-                   (semantische Suche). Klick springt an die Seite. -->
-              <div class="werkstatt-belege" x-data="collapsible(false)"
-                   x-show="consistencyResult && consistencyResult.textbelege && consistencyResult.textbelege.length" x-cloak>
-                <button type="button" class="collapsible-toggle" x-bind="trigger">
-                  <span class="history-chevron" x-bind="chevron" aria-hidden="true"></span>
-                  <span x-text="$app.t('werkstatt.consistency.belege', { count: consistencyResult && consistencyResult.textbelege ? consistencyResult.textbelege.length : 0 })"></span>
-                </button>
-                <div x-bind="panel" x-cloak>
-                  <div class="werkstatt-belege-body">
-                    <p class="entity-meta-label" x-text="$app.t('werkstatt.consistency.belegHint')"></p>
-                    <template x-for="(b, bi) in (consistencyResult ? consistencyResult.textbelege : [])" :key="bi">
-                      <div class="werkstatt-beleg">
-                        <button type="button" class="entity-ref" x-entity-ref="{ type: 'seite', id: b.page_id }"></button>
-                        <span class="werkstatt-beleg-snippet" x-text="b.snippet"></span>
-                      </div>
-                    </template>
-                  </div>
-                </div>
-              </div>
-            </div>
+            <!-- @include werkstatt-consistency-detail -->
           </div>
         </template>
       </div>

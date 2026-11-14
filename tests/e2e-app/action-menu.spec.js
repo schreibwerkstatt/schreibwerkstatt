@@ -70,7 +70,8 @@ test('ideen-karte: Rechtsklick zeigt dasselbe Menue wie der ⋯-Knopf, Esc gibt 
   // das Menue trotzdem: `:disabled` flippt noch im selben Klick.
   await trigger.click();
   await expect(menu).toHaveCount(1);
-  await menu.locator('.context-menu-item:visible').first().click();
+  // Eintrag 0 ist «Bearbeiten» (DESIGN.md «Werkstatt-Bedienvertrag»), danach die Stufen.
+  await menu.locator('.context-menu-item:visible').nth(1).click();
   await expect(menu).toHaveCount(0);
   await expect(item.locator('.idee-status-badge')).not.toHaveClass(/idee-status-badge--offen/);
 });

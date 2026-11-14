@@ -92,6 +92,6 @@ test('figurenliste: Einstiegsreiter, nur dort sichtbar, breite Suche, Graph-Klic
   await expect.poll(() => cardData(page, 'c.figurenGraphModus')).toBe('liste');
   await expect(list).toBeVisible();
   const row = list.locator(`[data-figid="${bId}"]`);
-  await expect(row).toHaveAttribute('aria-expanded', 'true');
+  await expect(row.locator('.row-expand')).toHaveAttribute('aria-expanded', 'true');
   await expect(row).toBeInViewport();
 });

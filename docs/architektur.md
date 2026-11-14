@@ -58,6 +58,7 @@ Browser → NGINX (HTTPS) → Express (Port 3737)
   /admin/ai-profiles → KI-Profile (benannte Modell-Konfigurationen, User-Zuweisung via app_users.ai_profile_id)
   /me/books        → Buecherregal: Kennzahlen je Buch (GET) + persoenliches Anheften/Archivieren (PUT), eigener Router [routes/mybooks.js](../routes/mybooks.js)
   /me/author-profile → Autorenprofil: stilistische Kennzahlen der EIGENEN Buecher nebeneinander, in Werk-Reihenfolge (read-time aus `book_lexicon` + `page_stats`, kein KI-Call, kein eigener Index), eigener Router [routes/author-profile.js](../routes/author-profile.js)
+  /ai-proposals → offene KI-Vorschläge (Autorenprofil, Buch-Stilprofil) lesen + verwerfen, bis der Autor entscheidet; geschrieben nur vom Job, eigener Router [routes/ai-proposals.js](../routes/ai-proposals.js)
   /me/account      → DELETE: Konto-Selbstloeschung (App-Store-Guideline 5.1.1(v)), siehe harte Regel unten
   /sync/*          → Buchstatistik-Sync (manuell + Cron)
   /export/*        → Buch-Export (PDF/HTML/Markdown/Plaintext/EPUB via App-eigenen Builder)

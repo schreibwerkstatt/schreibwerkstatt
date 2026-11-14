@@ -148,6 +148,14 @@
       <div class="context-menu" x-ref="actionMenu" x-bind="actionMenuPanel()" x-cloak>
         <template x-if="menuOpenIdee()">
           <div>
+            <!-- «Bearbeiten» zuerst (DESIGN.md «Werkstatt-Bedienvertrag»). -->
+            <button type="button" role="menuitem" class="context-menu-item context-menu-item--icon"
+                    @click="startEditIdee(menuOpenIdee())"
+                    :disabled="busy">
+              <svg class="icon" aria-hidden="true"><use href="/icons.svg#pencil"/></svg>
+              <span x-text="$app.t('ideen.edit')"></span>
+            </button>
+            <div class="context-menu-sep" role="separator"></div>
             <!-- Stufen-Leiter: jede Stufe ausser der aktuellen als Ziel. Der
                  einzige Schreibpfad der Achse (setIdeeStatus) — dieselbe
                  Methode, die im Board der Drag aufruft. -->
@@ -166,12 +174,6 @@
                     :disabled="busy">
               <svg class="icon" aria-hidden="true"><use href="/icons.svg#external-link"/></svg>
               <span x-text="$app.t('ideen.link.add')"></span>
-            </button>
-            <button type="button" role="menuitem" class="context-menu-item context-menu-item--icon"
-                    @click="startEditIdee(menuOpenIdee())"
-                    :disabled="busy">
-              <svg class="icon" aria-hidden="true"><use href="/icons.svg#pencil"/></svg>
-              <span x-text="$app.t('ideen.edit')"></span>
             </button>
             <!-- Verschieben nur, solange die Idee offen ist: eine abgeschlossene
                  Idee ist die Spur einer Entscheidung an DIESER Stelle (der

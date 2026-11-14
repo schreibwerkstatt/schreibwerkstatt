@@ -460,3 +460,61 @@ test('Motiv-Werkstatt: Baum — Motiv per Drag in ein anderes Thema verschieben'
 
   guard.assertClean('Motiv-Werkstatt Baum-Drag');
 });
+
+// Undo/Redo (book/motiv/history.js über cards/board-history.js): Anlegen,
+// Feldänderung, Beziehung und Löschen samt Wiederanlage — serverseitig geprüft.
+test('Motiv-Werkstatt: Undo/Redo — Umbenennen, Löschen mit Wiederanlage, Anlegen', async ({ page }) => {
+  const guard = attachConsoleGuard(page);
+  await bootApp(page);
+  await selectSeededBook(page);
+  await page.evaluate(() => window.__app.toggleMotivCard());
+  await page.waitForFunction(() => {
+    const el = document.querySelector('.card--motiv');
+    const c = el && window.Alpine.$data(el);
+    return c && !c.loading;
+  }, null, { timeout: 15000 });
+
+  const r = await page.evaluate(async () => {
+    const card = window.Alpine.$data(document.querySelector('.card--motiv'));
+    const names = () => card.motifs.map(m => m.name);
+    card._clearHistory();
+    card.newMotifName = 'Undo-Motiv A';
+    await card.addMotif();
+    const aId = card.selectedMotifId;
+    card.newMotifName = 'Undo-Motiv B';
+    await card.addMotif();
+    const bId = card.selectedMotifId;
+    await card.selectMotif(aId);
+    card.newRelationTargetId = String(bId);
+    card.newRelationTyp = 'kontrastiert';
+    await card.addRelation();
+    await card.selectMotif(aId);
+    card.editName = 'Undo-Motiv A2';
+    await card.saveMotifEdit();
+    const renamed = names().includes('Undo-Motiv A2');
+
+    // Umbenennen zurück + wieder vor.
+    await card.historyUndo();
+    const undoneRename = names().includes('Undo-Motiv A') && !names().includes('Undo-Motiv A2');
+    await card.historyRedo();
+    const redoneRename = names().includes('Undo-Motiv A2');
+
+    // Löschen ist rückgängig machbar: neue ID, Beziehung kommt mit.
+    window.__app.appConfirm = async () => true;
+    await card.deleteMotif(card.motifById(aId));
+    const gone = !names().includes('Undo-Motiv A2');
+    await card.historyUndo();
+    const back = card.motifs.find(m => m.name === 'Undo-Motiv A2');
+    const relBack = !!back && card.relations.some(x => x.from_motif_id === back.id && x.to_motif_id === bId);
+    // Ein älterer Record (Umbenennen) zeigt jetzt auf die neue ID.
+    const remapped = card._undoStack.some(x => x.kind === 'motif-edit' && x.id === back?.id);
+    await card.historyRedo();
+    const goneAgain = !names().includes('Undo-Motiv A2');
+    return { renamed, undoneRename, redoneRename, gone, back: !!back, relBack, remapped, goneAgain };
+  });
+  expect(r).toEqual({ renamed: true, undoneRename: true, redoneRename: true, gone: true, back: true, relBack: true, remapped: true, goneAgain: true });
+
+  // Knöpfe im Kartenkopf spiegeln den Stack.
+  await expect(page.locator('.card--motiv .card-actions button[aria-label="Rückgängig"], .card--motiv .card-actions button[aria-label="Undo"]').first()).toBeEnabled();
+  guard.assertClean('Motiv-Werkstatt Undo/Redo');
+});

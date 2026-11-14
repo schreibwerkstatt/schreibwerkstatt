@@ -18,6 +18,7 @@ import { startPoll } from './job-helpers.js';
 import { isSelectedBook, loadToken } from './book-guard.js';
 import { listWindowState, listWindowMethods } from '../list-window.js';
 import { actionMenuState, actionMenuMethods } from '../action-menu.js';
+import { isRowBodyClick, isFloatingLayerClick } from '../row-click.js';
 
 // Harte Kategorie-Gruppierung — SSoT für Reihenfolge + Icon je Key. Spiegelt die
 // Whitelist FAKT_KATEGORIE_WL (db/schema.js) und das Prompt-Enum
@@ -130,14 +131,44 @@ export function registerWorldFactsCard() {
 
     // Im Pflegeformular bleibt der native Rechtsklick (Textfeld), kein Menü.
     wfOpenMenu(ev, f) {
-      if (this.wfEdit.mode !== null) return;
+      if (this.wfEdit.mode === 'edit' && this.wfEdit.id === f.id) return;
       this.openActionMenu(ev, 'fakt:' + f.id, f.id);
     },
-    // Klick auf die Zeile klappt das Detail auf/zu; ein offenes Pflegeformular
-    // eines anderen Fakts bleibt dabei unangetastet (Zuklappen nur ohne Edit).
-    wfToggleOpen(f) {
+    // Zeile (DESIGN.md «Listen-Anriss»): Chevron und übriger Zeilenkörper klappen
+    // das Detail auf/zu, die Aussage (Titel-Knopf) öffnet das Bearbeiten. Eine
+    // Zeile im Bearbeiten klappt nicht zu; ein offenes Formular eines anderen
+    // Fakts wird vorher gespeichert, nie still verworfen.
+    async wfToggleOpen(f) {
       if (this.wfEdit.mode === 'edit' && this.wfEdit.id === f.id) return;
+      if (!await this._wfCommitOther(f)) return;
       this.wfOpenId = this.wfOpenId === f.id ? null : f.id;
+    },
+    wfRowBodyClick(f, ev) {
+      if (isRowBodyClick(ev)) this.wfToggleOpen(f);
+    },
+    async wfOpenEdit(f) {
+      if (this.wfEdit.mode === 'new') return;
+      if (this.wfEdit.mode === 'edit' && this.wfEdit.id === f.id) return;
+      if (!await this._wfCommitOther(f)) return;
+      this.wfStartEdit(f);
+    },
+    // false = Speichern gescheitert, das offene Formular bleibt stehen.
+    async _wfCommitOther(f) {
+      if (this.wfEdit.mode !== 'edit' || this.wfEdit.id === f.id) return true;
+      const openId = this.wfEdit.id;
+      await this.wfCommitEdit();
+      return !(this.wfEdit.mode === 'edit' && this.wfEdit.id === openId);
+    },
+    // Klick daneben (Inline-Edit, public/CLAUDE.md «Edit-Formulare») — nur beim
+    // Bearbeiten, nicht bei der Neuanlage: kein Request läuft, leere Aussage
+    // verwirft. Klicks in schwebende Ebenen (Rechtschreib-Popover, Dialog, Menü)
+    // zählen nicht.
+    async wfCommitEdit(ev) {
+      if (ev && isFloatingLayerClick(ev)) return;
+      const e = this.wfEdit;
+      if (e.mode !== 'edit' || e.busy) return;
+      if (!e.draft.fakt.trim()) { this.wfCancelEdit(); return; }
+      await this.wfSaveEdit();
     },
     wfMenuFakt() {
       return this.fakten.find(f => f.id === this.actionMenuTarget) || null;
@@ -206,15 +237,11 @@ export function registerWorldFactsCard() {
       return this._wfIndex.counts[_normKat(key)] || 0;
     },
 
-    wfToggleGroup(key) {
-      this.wfOpenGroups[key] = !this.wfOpenGroups[key];
-    },
-    // Gruppe sichtbar, wenn explizit aufgeklappt — oder zwangsoffen: bei aktiver
-    // Suche/Kapitel-Filter (Treffer müssen sichtbar sein) und bei aktivem
-    // Kategorie-Tab (Gruppen-Kopf ist dort ausgeblendet, Liste zeigt direkt).
-    wfGroupOpen(key) {
-      if (this.wfFilters.kategorie || this._wfKapitelFilter() || this.wfFilters.widerlegt || this.wfFilters.suche.trim()) return true;
-      return !!this.wfOpenGroups[key];
+    // Gruppen klappen über collapsible() (Zustand in wfOpenGroups, x-modelable).
+    // Zwangsoffen bei aktiver Suche/Kapitel-/Widerlegt-Filter (Treffer müssen
+    // sichtbar sein) und bei gewähltem Kategorie-Tab (Gruppen-Kopf ist dort aus).
+    wfGroupForced() {
+      return !!(this.wfFilters.kategorie || this._wfKapitelFilter() || this.wfFilters.widerlegt || this.wfFilters.suche.trim());
     },
 
     // Kapitel der Fakten als Filter-Optionen (ID + Label, Buchreihenfolge).

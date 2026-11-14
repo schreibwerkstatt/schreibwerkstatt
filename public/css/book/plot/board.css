@@ -51,9 +51,16 @@
      Restbreite → bleibt lesbar auf einer Zeile), die Icons rutschen auf eine
      eigene Zeile darunter — analog zur Strang-Lane / zum Grid-Akt-Kopf. */
   .plot-column-header .plot-column-actions { flex: 1 0 100%; }
-  /* Grundform aus components/board-column.css (.board-col-title); hier nur
-     der Doppelklick-zum-Umbenennen-Hinweis. */
-  .plot-column-title { cursor: text; }
+  /* Grundform aus components/board-column.css (.board-col-title). Der Titel ist
+     ein <button class="text-link"> (Klick = Umbenennen): hier nur der Knopf-
+     Reset, Hover-Unterstreichung aus `.text-link`. Gleicher Reset für den
+     Strang-Namen in der Lane (.plot-swim-lane-name, swimlane.css). */
+  .plot-column-title {
+    padding: 0; border: 0; border-radius: 0; background: none;
+    font-family: inherit; line-height: inherit; text-align: left;
+    min-width: 0;
+  }
+  .plot-column-title:active { transform: none; }
   .plot-column-title-input {
     flex: 1 1 auto;
     font-weight: var(--fw-semibold);
@@ -176,18 +183,18 @@
      (Klon im Plot-Akzent). */
 
   /* Kopfzeile der Beat-Karte: Griff + Titel + Status-Badges (Textstellen-Chip,
-     Konflikt-Warnung, Drift, Zeitbefund). Die Schnellaktionen (Verwerfen/
-     Löschen) stehen NICHT hier, sondern im Beat-Edit (plot-beat-edit.html):
-     als Hover-Overlay lagen sie über genau diesen Badges und verdeckten deren
-     Klick — in der Kopfzeile konkurrierten sie wiederum mit dem Beat-Titel. */
+     Konflikt-Warnung, Drift, Zeitbefund) + ⋯-Knopf des Aktionsmenüs am Ende.
+     Der Knopf steht im Fluss der Zeile (Hover-Reveal, belegt seinen Platz) und
+     verdeckt darum keinen Badge; die Aktionen selbst liegen im Menü und im
+     Beat-Edit (plot-beat-edit.html). */
   .plot-beat-head {
     display: flex;
     align-items: flex-start;
     --drag-grip-host-gap: var(--space-xs);
     gap: var(--drag-grip-host-gap);
   }
-  /* Titel = <button> (Bearbeiten-Einstieg): globale Button-Optik zurücknehmen,
-     Fokus-Ring bleibt der Browser-Default. */
+  /* Titel = <button class="text-link"> (Bearbeiten-Einstieg): globale
+     Button-Optik zurücknehmen; Hover-Unterstreichung kommt aus `.text-link`. */
   .plot-beat-title {
     font: inherit;
     font-size: var(--font-size-sm);
@@ -198,8 +205,8 @@
     flex: 1 1 auto;
     overflow-wrap: anywhere;
   }
-  .plot-beat-title:hover { background: none; text-decoration: underline; }
   .plot-beat-title:active { transform: none; }
+  .plot-beat-menu-btn { flex: 0 0 auto; }
   .plot-beat--verworfen .plot-beat-title { text-decoration: line-through; }
 
   /* Konsistenz-Warn-Badge am Beat — sichtbar, solange ein Prüflauf angezeigt wird

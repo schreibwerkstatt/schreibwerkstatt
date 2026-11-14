@@ -319,9 +319,10 @@
   gap: var(--space-xs);
 }
 .series-member {
+  --drag-grip-host-gap: var(--space-sm);
   display: flex;
   align-items: center;
-  gap: var(--space-sm);
+  gap: var(--drag-grip-host-gap);
 }
 .series-member--current .series-member-name { font-weight: var(--fw-semibold); }
 .series-member-pos {

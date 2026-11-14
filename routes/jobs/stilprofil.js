@@ -1,6 +1,5 @@
 'use strict';
 const express = require('express');
-const { setBookStilprofil } = require('../../db/schema');
 const {
   makeJobLogger, updateJob, completeJob, failJob, i18nError,
   aiCall, getPrompts, getBookPrompts,
@@ -12,6 +11,7 @@ const {
 } = require('./shared');
 const { BATCH_SIZE } = require('./shared/loader');
 const { resolveProvider } = require('../../lib/ai');
+const { saveProposal } = require('../../db/ai-proposals');
 
 const stilprofilRouter = express.Router();
 
@@ -79,7 +79,12 @@ async function runStilprofilJob(jobId, bookId, userEmail) {
     const stilprofil = (result?.stilprofil || '').trim();
     if (!stilprofil) throw i18nError('job.error.stilprofilMissing');
 
-    setBookStilprofil(bookId, stilprofil);
+    // `book_settings.stilprofil` nicht anfassen: das Ergebnis ist ein Vorschlag,
+    // den die Bucheinstellungen unter dem Feld zeigen. «Übernehmen» setzt den
+    // Feldwert wie eine Handeingabe, gespeichert wird über den normalen
+    // Speichern-Knopf. Abgelegt als offener Vorschlag (db/ai-proposals.js), damit
+    // er einen Lauf überlebt, dessen Ende die Karte nicht gesehen hat.
+    saveProposal('stilprofil', userEmail, bookId, { stilprofil });
     completeJob(jobId, { stilprofil, tokensIn: tok.in, tokensOut: tok.out },
       tps(tok), `Stilprofil erstellt (${stilprofil.length} Zeichen)`);
   } catch (e) {

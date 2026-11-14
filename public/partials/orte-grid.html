@@ -21,11 +21,13 @@
         <th x-text="$app.t('orte.col.erste')"></th>
         <th x-text="$app.t('orte.col.figuren')"></th>
         <th x-text="$app.t('orte.col.beschreibung')"></th>
+        <th class="entity-grid-actions"></th>
       </tr>
     </thead>
     <tbody>
       <template x-for="o in sorted" :key="o.id">
-        <tr>
+        <!-- Aktionsmenü wie in der Liste (orte-menu.html): ⋯, Rechtsklick, Long-Press. -->
+        <tr class="hover-reveal-host" @contextmenu="ortOpenMenu($event, o)" x-long-press>
           <td><span class="tag entity-typ-tag truncate" x-text="o.typLabelText"></span></td>
           <td class="entity-grid-cell-title">
             <span x-text="o.name"></span>
@@ -69,6 +71,14 @@
             </span>
           </td>
           <td class="entity-grid-cell-text" x-text="o.beschreibung"></td>
+          <td class="entity-grid-actions">
+            <button type="button" class="icon-btn icon-btn--ghost hover-reveal"
+                    aria-haspopup="menu" :aria-expanded="isActionMenuOpen('ort:' + o.id)"
+                    @click="ortOpenMenu($event, o)"
+                    :data-tip="$app.t('common.moreActions')" :aria-label="$app.t('common.moreActions')">
+              <svg class="icon" aria-hidden="true"><use href="/icons.svg#more-horizontal"/></svg>
+            </button>
+          </td>
         </tr>
       </template>
     </tbody>

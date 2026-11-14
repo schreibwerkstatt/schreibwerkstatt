@@ -379,6 +379,7 @@ export {
   buildConsistencyPrompt,
   SCHEMA_BRAINSTORM,
   SCHEMA_CONSISTENCY,
+  CONSISTENCY_AKTION_ENUM,
   WERKSTATT_SEVERITY_ENUM,
 } from './prompts/figur-werkstatt.js';
 

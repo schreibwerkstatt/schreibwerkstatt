@@ -1,14 +1,18 @@
-<!-- Page-Editor-Toolbar (Zoom/FitWidth/Fullscreen/HR). Lebt im sticky
+<!-- Page-Editor-Toolbar des Notebook-Editors. Lebt im sticky
      `.editor-card__topbar` (via Placeholder in editor-notebook.html), damit sie
      über die Sticky-Region permanent sichtbar bleibt — auch beim Scrollen tief
-     in die Seite (Vollbild). Undo/Redo/Fullscreen bleiben immer inline. Die
-     sekundären Controls (HR/Anführungszeichen/Zoom/FitWidth/Steuerzeichen/
-     Entities) stehen auf Desktop direkt als Icon-Buttons in der Leiste
-     (`.page-editor-toolbar__expanded`); erst auf Mobile klappen sie ins
-     Meatball-`⋯`-Menü (`.page-editor-toolbar__more`, gleiches .context-menu-
-     Vokabular + menu()-Primitiv, siehe DESIGN.md „Dropdown-/Aktions-Menü").
-     Beide Präsentationen teilen dieselben Handler; per Media-Query ist immer nur
-     eine sichtbar. Menü-Toggles nutzen @click.stop, damit das Menü offen bleibt. -->
+     in die Seite (Vollbild). Root-Scope.
+
+     Gruppen (docs/notebook-editor.md „Seiten-Toolbar"):
+       links   Undo/Redo · «Einfügen» (Bild, Tabelle, Diagramm, Beleg,
+               Querverweis, Trennlinie — am Caret, Fragment
+               editor-page-toolbar-insert)
+       rechts  «Ansicht»-Menü (Zoom, Breite, Steuerzeichen, Figuren-Markierung,
+               Titelkopf — Fragment editor-page-toolbar-view) · Vollbild ·
+               `⋯` (Abschnitt teilen, Anführungszeichen normalisieren)
+     Menüs nur über das `menu()`-Primitiv (harte Regel „Aktionsmenü").
+     `@mousedown.prevent` an allem, was am Caret wirkt: hält Fokus und Caret im
+     contenteditable. -->
 <div class="page-editor-toolbar" x-show="editMode && !focusActive" x-cloak>
   <button type="button" class="icon-btn"
           :disabled="!notebookCanUndo()"
@@ -23,6 +27,11 @@
     <svg class="icon" aria-hidden="true"><use href="/icons.svg#redo"/></svg>
   </button>
   <span class="action-sep" aria-hidden="true"></span>
+  <!-- @include editor-page-toolbar-insert -->
+
+  <span class="page-editor-toolbar__spacer" aria-hidden="true"></span>
+
+  <!-- @include editor-page-toolbar-view -->
   <button type="button" class="icon-btn"
           :aria-pressed="pageEditorFullscreen"
           :data-tip="pageEditorFullscreen ? t('graph.fullscreenClose') : t('graph.fullscreen')"
@@ -31,106 +40,9 @@
     <svg class="icon" aria-hidden="true"><use :href="pageEditorFullscreen ? '/icons.svg#minimize-2' : '/icons.svg#maximize-2'"/></svg>
   </button>
 
-  <!-- Desktop: sekundäre Aktionen inline. `display: contents` → die Buttons +
-       Separatoren liegen direkt im Toolbar-Flex. Auf Mobile ausgeblendet. -->
-  <span class="page-editor-toolbar__expanded">
-    <span class="action-sep" aria-hidden="true"></span>
-    <button type="button" class="icon-btn"
-            :data-tip="withHotkey(t('editor.toolbar.hrTitle'), 'hr')" :aria-label="t('editor.toolbar.hrTitle')"
-            @click="insertHorizontalRule()">
-      <svg class="icon" aria-hidden="true"><use href="/icons.svg#separator-horizontal"/></svg>
-    </button>
-    <!-- Quelle einfügen (Quellenverzeichnis). Zweiter Einstieg neben der
-         Bubble-Toolbar, und der einzige, der ohne markierten Text funktioniert —
-         ein Beleg gehört mitten in den laufenden Satz. `@mousedown.prevent` hält
-         den Fokus (und damit den Caret) im contenteditable. -->
-    <button type="button" class="icon-btn"
-            :data-tip="t('editor.toolbar.citeTitle')" :aria-label="t('editor.toolbar.citeTitle')"
-            @mousedown.prevent
-            @click="openCitePicker()">
-      <svg class="icon" aria-hidden="true"><use href="/icons.svg#book-open"/></svg>
-    </button>
-    <button type="button" class="icon-btn"
-            :class="{ 'is-active': quotesNormalizedFlash }"
-            :data-tip="quotesNormalizedFlash
-              ? (quotesNormalizedFlash.count > 0
-                  ? t('editor.toolbar.quotesDone', { count: quotesNormalizedFlash.count })
-                  : t('editor.toolbar.quotesNone'))
-              : t('editor.toolbar.quotesTitle')"
-            :aria-label="t('editor.toolbar.quotesTitle')"
-            @click="normalizeQuotes()">
-      <svg class="icon" aria-hidden="true"><use href="/icons.svg#quote"/></svg>
-    </button>
-    <!-- Abschnitt am Caret teilen (edit/split.js). `@mousedown.prevent` hält
-         den Caret im contenteditable, sonst gäbe es keinen Schnittpunkt. -->
-    <button type="button" class="icon-btn"
-            :data-tip="t('editor.split.title')" :aria-label="t('editor.split.title')"
-            @mousedown.prevent
-            @click="splitSectionHere()">
-      <svg class="icon" aria-hidden="true"><use href="/icons.svg#scissors"/></svg>
-    </button>
-    <span class="action-sep" aria-hidden="true"></span>
-    <button type="button" class="icon-btn"
-            :data-tip="t('graph.zoomOut')" :aria-label="t('graph.zoomOut')"
-            @click="pageEditorZoomOut()">
-      <svg class="icon" aria-hidden="true"><use href="/icons.svg#minus"/></svg>
-    </button>
-    <button type="button" class="icon-btn"
-            :data-tip="t('graph.zoomIn')" :aria-label="t('graph.zoomIn')"
-            @click="pageEditorZoomIn()">
-      <svg class="icon" aria-hidden="true"><use href="/icons.svg#plus"/></svg>
-    </button>
-    <button type="button" class="icon-btn"
-            :data-tip="t('graph.reset')" :aria-label="t('graph.reset')"
-            @click="pageEditorZoomReset()">
-      <svg class="icon" aria-hidden="true"><use href="/icons.svg#scan"/></svg>
-    </button>
-    <button type="button" class="icon-btn"
-            :aria-pressed="pageEditorFitWidth"
-            :data-tip="pageEditorFitWidth ? t('editor.fitWidthOff') : t('editor.fitWidth')"
-            :aria-label="pageEditorFitWidth ? t('editor.fitWidthOff') : t('editor.fitWidth')"
-            @click="togglePageEditorFitWidth()">
-      <svg class="icon" aria-hidden="true"><use href="/icons.svg#move-horizontal"/></svg>
-    </button>
-    <!-- Steuerzeichen-Anzeige (Absatzmarken ¶ + Soft-Break ↵). Reine
-         CSS-Pseudo-Element-Dekoration auf dem contenteditable — kein Markup im
-         gespeicherten HTML. State pageEditorShowMarks (in editorPrefs). -->
-    <button type="button" class="icon-btn"
-            :aria-pressed="pageEditorShowMarks"
-            :data-tip="pageEditorShowMarks ? t('editor.toolbar.marksOff') : t('editor.toolbar.marksOn')"
-            :aria-label="pageEditorShowMarks ? t('editor.toolbar.marksOff') : t('editor.toolbar.marksOn')"
-            @click="togglePageEditorShowMarks()">
-      <svg class="icon" aria-hidden="true"><use href="/icons.svg#pilcrow"/></svg>
-    </button>
-    <!-- Titel-Kopf des Beitrags ein-/ausblenden. Nur publizistische Buecher —
-         in einem Roman gibt es keine Dachzeile. Reine ANZEIGE-Wahl fuer Lese-
-         und Bearbeitungsmodus (State pageEditorShowHead, in editorPrefs):
-         aendert weder die gespeicherten Felder noch Share-Reader oder Export. -->
-    <button type="button" class="icon-btn" x-show="isJournalistischesBuch()"
-            :aria-pressed="pageEditorShowHead"
-            :data-tip="pageEditorShowHead ? t('headline.head.off') : t('headline.head.on')"
-            :aria-label="pageEditorShowHead ? t('headline.head.off') : t('headline.head.on')"
-            @click="togglePageEditorShowHead()">
-      <svg class="icon" aria-hidden="true"><use href="/icons.svg#heading"/></svg>
-    </button>
-    <span class="action-sep" aria-hidden="true"></span>
-    <!-- Entity-Linking-Toggle (Figuren/Orte-Highlights + Szenen/Ereignisse-Panel). Aendert nur die
-         Buch-Setting (book_settings.entities_enabled, PUT /booksettings/:id/entities-enabled, Event
-         book:settings:updated); der Auf/Zu-Zustand der Klappschiene (entityPanelOpen) bleibt User-Wahl. -->
-    <button type="button" class="icon-btn"
-            :aria-pressed="entitiesEnabledForCurrentBook"
-            :data-tip="entitiesEnabledForCurrentBook ? t('entities.toggle.off') : t('entities.toggle.on')"
-            :aria-label="entitiesEnabledForCurrentBook ? t('entities.toggle.off') : t('entities.toggle.on')"
-            @click="toggleEntitiesEnabledForCurrentBook()">
-      <svg class="icon" aria-hidden="true"><use href="/icons.svg#radio"/></svg>
-    </button>
-  </span>
-
-  <!-- Mobile: dieselben sekundären Aktionen im Meatball-Menü. Auf Desktop
-       ausgeblendet. Der Sichtbarkeits-Wrapper (`__more`) ist bewusst ein eigenes
-       Element um das `menu()`-Primitiv — sonst kollidiert das display:none mit
-       der von menu()#init gesetzten (unlayered) `.menu-anchor { display: inline-flex }`,
-       die layered Regeln immer schlägt (siehe icons.css-Unlayered-Falle). -->
+  <!-- Seltene Handgriffe am Abschnitt. Ein eigener Wrapper um menu(), damit die
+       unlayered `.menu-anchor { display: inline-flex }` keine Layout-Regel der
+       Leiste schlagen muss (siehe icons.css-Unlayered-Falle). -->
   <span class="page-editor-toolbar__more">
    <span x-data="menu()">
     <button type="button" class="icon-btn" x-bind="trigger" :class="{ 'is-active': open }"
@@ -139,16 +51,16 @@
       <svg class="icon" aria-hidden="true"><use href="/icons.svg#more-horizontal"/></svg>
     </button>
     <div class="context-menu context-menu--dropdown" x-bind="panel" x-cloak>
+      <!-- Abschnitt am Caret teilen (edit/split.js). `@mousedown.prevent` hält
+           den Caret im contenteditable, sonst gäbe es keinen Schnittpunkt. -->
       <button type="button" class="context-menu-item context-menu-item--icon" role="menuitem"
-              @click="insertHorizontalRule()">
-        <svg class="icon" aria-hidden="true"><use href="/icons.svg#separator-horizontal"/></svg>
-        <span x-text="t('editor.toolbar.hrTitle')"></span>
+              @mousedown.prevent
+              @click="splitSectionHere()">
+        <svg class="icon" aria-hidden="true"><use href="/icons.svg#scissors"/></svg>
+        <span x-text="t('editor.split.title')"></span>
       </button>
-      <button type="button" class="context-menu-item context-menu-item--icon" role="menuitem"
-              @click="openCitePicker()">
-        <svg class="icon" aria-hidden="true"><use href="/icons.svg#book-open"/></svg>
-        <span x-text="t('editor.toolbar.citeTitle')"></span>
-      </button>
+      <!-- Bleibt offen (`.stop`), damit die Rückmeldung («3 ersetzt») im
+           Eintrag sichtbar wird. -->
       <button type="button" class="context-menu-item context-menu-item--icon" role="menuitem"
               :class="{ 'context-menu-item--on': quotesNormalizedFlash }"
               @click.stop="normalizeQuotes()">
@@ -158,62 +70,6 @@
               ? t('editor.toolbar.quotesDone', { count: quotesNormalizedFlash.count })
               : t('editor.toolbar.quotesNone'))
           : t('editor.toolbar.quotesTitle')"></span>
-      </button>
-      <button type="button" class="context-menu-item context-menu-item--icon" role="menuitem"
-              @mousedown.prevent
-              @click="splitSectionHere()">
-        <svg class="icon" aria-hidden="true"><use href="/icons.svg#scissors"/></svg>
-        <span x-text="t('editor.split.title')"></span>
-      </button>
-      <div class="context-menu-sep" role="separator"></div>
-      <button type="button" class="context-menu-item context-menu-item--icon" role="menuitem"
-              @click.stop="pageEditorZoomOut()">
-        <svg class="icon" aria-hidden="true"><use href="/icons.svg#minus"/></svg>
-        <span x-text="t('graph.zoomOut')"></span>
-      </button>
-      <button type="button" class="context-menu-item context-menu-item--icon" role="menuitem"
-              @click.stop="pageEditorZoomIn()">
-        <svg class="icon" aria-hidden="true"><use href="/icons.svg#plus"/></svg>
-        <span x-text="t('graph.zoomIn')"></span>
-      </button>
-      <button type="button" class="context-menu-item context-menu-item--icon" role="menuitem"
-              @click.stop="pageEditorZoomReset()">
-        <svg class="icon" aria-hidden="true"><use href="/icons.svg#scan"/></svg>
-        <span x-text="t('graph.reset')"></span>
-      </button>
-      <button :aria-checked="pageEditorFitWidth" type="button" class="context-menu-item context-menu-item--icon" role="menuitemcheckbox"
-              :class="{ 'context-menu-item--on': pageEditorFitWidth }"
-              @click.stop="togglePageEditorFitWidth()">
-        <svg class="icon" aria-hidden="true"><use href="/icons.svg#move-horizontal"/></svg>
-        <span x-text="pageEditorFitWidth ? t('editor.fitWidthOff') : t('editor.fitWidth')"></span>
-      </button>
-      <!-- Steuerzeichen-Anzeige (Absatzmarken ¶ + Soft-Break ↵). Reine
-           CSS-Pseudo-Element-Dekoration auf dem contenteditable — kein Markup im
-           gespeicherten HTML. State pageEditorShowMarks (in editorPrefs). -->
-      <button :aria-checked="pageEditorShowMarks" type="button" class="context-menu-item context-menu-item--icon" role="menuitemcheckbox"
-              :class="{ 'context-menu-item--on': pageEditorShowMarks }"
-              @click.stop="togglePageEditorShowMarks()">
-        <svg class="icon" aria-hidden="true"><use href="/icons.svg#pilcrow"/></svg>
-        <span x-text="pageEditorShowMarks ? t('editor.toolbar.marksOff') : t('editor.toolbar.marksOn')"></span>
-      </button>
-      <!-- Titel-Kopf ein-/ausblenden. Nur publizistische Buecher; reine
-           Anzeige-Wahl (siehe Inline-Zwilling oben). -->
-      <button :aria-checked="pageEditorShowHead" type="button" class="context-menu-item context-menu-item--icon" role="menuitemcheckbox"
-              x-show="isJournalistischesBuch()"
-              :class="{ 'context-menu-item--on': pageEditorShowHead }"
-              @click.stop="togglePageEditorShowHead()">
-        <svg class="icon" aria-hidden="true"><use href="/icons.svg#heading"/></svg>
-        <span x-text="pageEditorShowHead ? t('headline.head.off') : t('headline.head.on')"></span>
-      </button>
-      <div class="context-menu-sep" role="separator"></div>
-      <!-- Entity-Linking-Toggle (Figuren/Orte-Highlights + Szenen/Ereignisse-Panel). Aendert nur die
-           Buch-Setting (book_settings.entities_enabled, PUT /booksettings/:id/entities-enabled, Event
-           book:settings:updated); der Auf/Zu-Zustand der Klappschiene (entityPanelOpen) bleibt User-Wahl. -->
-      <button :aria-checked="entitiesEnabledForCurrentBook" type="button" class="context-menu-item context-menu-item--icon" role="menuitemcheckbox"
-              :class="{ 'context-menu-item--on': entitiesEnabledForCurrentBook }"
-              @click.stop="toggleEntitiesEnabledForCurrentBook()">
-        <svg class="icon" aria-hidden="true"><use href="/icons.svg#radio"/></svg>
-        <span x-text="entitiesEnabledForCurrentBook ? t('entities.toggle.off') : t('entities.toggle.on')"></span>
       </button>
     </div>
    </span>

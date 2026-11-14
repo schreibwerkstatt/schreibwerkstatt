@@ -2,14 +2,19 @@
      Spaltenausrichtung. Lebt im Scope von editorToolbarCard (Methoden in
      public/js/editor/notebook/toolbar/table.js) — darum `x-ref` + showModal()
      statt des modal()-Primitivs, und `@close` ist der einzige Aufräumpunkt
-     (ESC, Backdrop und Abbrechen laufen alle durch dlg.close()).
+     (ESC, Backdrop und Abbrechen laufen alle durch dlg.close()). Backdrop
+     schliesst nur, wenn Druck UND Loslassen auf ihm lagen (eine im Dialog
+     begonnene Textauswahl darf nichts verwerfen); mit ungespeicherter Eingabe
+     fragen Backdrop und ESC erst nach (panel-methods.js#requestDialogClose).
 
      Die Zellenfelder tragen `data-spellcheck="spelling"`: im Manuskript ist die
      Tabelle atomar und aus dem LanguageTool-Stream geschnitten, geprüft wird
      hier — wo man den Fehler auch beheben kann (harte Regel „LanguageTool auf
      Prosatextfeldern Pflicht"). -->
 <dialog class="editor-dialog table-dialog" x-ref="tableDlg" @close="onTableDialogClose()"
-        @click.self="closeTableDialog()">
+        @mousedown="onDialogBackdropDown($event)"
+        @click="onDialogBackdropClick($event, 'table')"
+        @cancel="onDialogCancel($event, 'table')">
   <div class="editor-dialog__inner">
     <div class="editor-dialog__head">
       <span class="editor-dialog__title"

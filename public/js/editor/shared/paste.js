@@ -1,29 +1,15 @@
 // Geteilter Paste-/Copy-/Cut-Handler für alle drei Editoren (Notebook, Focus,
-// Bucheditor). Behält nur Whitelist-Tags via sanitizePasteHtml; ohne Tag-
-// Inhalt fällt auf Plain-Text zurück. Copy/Cut schreiben ausschliesslich
-// text/plain — fremde Apps (Outlook, Word) bekommen keine Inline-Styles,
-// Lektorat-Marks oder Custom-Klassen ins Clipboard.
+// Bucheditor) und die Notebook-Leseansicht (Copy). Paste behält nur Whitelist-
+// Tags via sanitizePasteHtml; ohne Tag-Inhalt fällt es auf Plain-Text zurück.
+// Copy/Cut schreiben text/plain UND eine bereinigte text/html-Fassung
+// (`clipboardHtml`): Einfügen im Editor behält damit Auszeichnung, Links,
+// Quellen-Chips und Querverweise, fremde Apps bekommen weder Inline-Styles noch
+// Lektorat-Marks, Editor-UI oder Laufzeit-Attribute.
 
 import { sanitizePasteHtml } from '../../utils.js';
-
-// Heuristik: Plain-Text mit ≥3 Zeilen, die zu ≥60% wie `key: value` /
-// `key = value` aussehen → Konfigurations-/Code-Paste. Wrap in <pre>, damit
-// User die Block-Struktur nicht manuell wiederherstellen muss (sonst wird jede
-// Zeile zu einem <p> mit Erstzeilen-Einzug).
-const _KV_LINE = /^\s*[A-Za-z_][\w.-]*\s*[:=]\s*\S/;
-
-function _looksLikeConfigBlock(text) {
-  if (!text || !text.includes('\n')) return false;
-  const lines = text.split(/\n/);
-  const nonEmpty = lines.filter(l => l.trim().length > 0);
-  if (nonEmpty.length < 3) return false;
-  const kvCount = nonEmpty.filter(l => _KV_LINE.test(l)).length;
-  return kvCount >= 3 && (kvCount / nonEmpty.length) >= 0.6;
-}
-
-function _escapeHtml(s) {
-  return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-}
+import { stripLektoratMarks } from './html-clean.js';
+import { isCiteEl } from '../../sources/cite-html.js';
+import { isXrefEl } from '../../xrefs/xref-html.js';
 
 // Behandelt ein Paste-Event komplett: preventDefault, Sanitize, Insert.
 // Rückgabe: true wenn etwas eingefügt wurde, false bei leerem Clipboard.
@@ -34,11 +20,6 @@ export function handleEditorPaste(e) {
   e.preventDefault();
 
   const plain = cd.getData('text/plain') || '';
-  if (_looksLikeConfigBlock(plain)) {
-    document.execCommand('insertHTML', false, `<pre>${_escapeHtml(plain)}</pre>`);
-    return true;
-  }
-
   const html = cd.getData('text/html');
   if (html) {
     const cleaned = sanitizePasteHtml(html);
@@ -60,10 +41,10 @@ export function handleEditorPaste(e) {
   return false;
 }
 
-// Paste als reiner Text — keine Formatierung, kein Whitelist-HTML, keine
-// Konfig-Block-Heuristik. Nur text/plain wird via insertText eingefügt. Für
-// den Focus-Standalone-Editor (ablenkungsfreier Schreibmodus, auch der
-// eingebettete macOS-Client): fremdes Markup hat hier nichts zu suchen.
+// Paste als reiner Text — keine Formatierung, kein Whitelist-HTML. Nur
+// text/plain wird via insertText eingefügt. Für den Focus-Standalone-Editor
+// (ablenkungsfreier Schreibmodus, auch der eingebettete macOS-Client): fremdes
+// Markup hat hier nichts zu suchen.
 // Rückgabe: true wenn etwas eingefügt wurde, false bei leerem Clipboard.
 export function handleEditorPastePlain(e) {
   const cd = e.clipboardData;
@@ -75,28 +56,68 @@ export function handleEditorPastePlain(e) {
   return true;
 }
 
-// Copy nur als text/plain. Rückgabe: true wenn Override aktiv wurde,
-// false wenn keine Selektion (Browser-Default greift dann nicht, weil
-// es nichts zu kopieren gibt).
-export function handleEditorCopy(e) {
-  const sel = window.getSelection();
-  if (!sel || sel.isCollapsed) return false;
+// Bereinigte HTML-Fassung eines kopierten Ausschnitts. Erhalten bleiben Blöcke,
+// Inline-Auszeichnung, Links sowie Quellen-Chips und Querverweise in ihrem
+// SSoT-Markup (Klasse + data-Zeiger) — `sanitizePasteHtml` lässt genau die beim
+// Einfügen wieder durch. Weg sind: Lektorat-/Chat-Marks, LanguageTool-UI,
+// Vorschau-Nummern, Fokus-Markierungen (`stripLektoratMarks`), jedes `style`,
+// `contenteditable` und `data-bid` (eine eingefügte Kopie bekäme sonst die ID
+// ihres Originals), gerenderte Diagramm-Bilder (der Quelltext reist mit),
+// Checkboxen und jede `<span>`-Hülle, die weder Chip noch Querverweis ist
+// (Figuren-/Orts-Markierungen der Leseansicht).
+export function clipboardHtml(html) {
+  if (!html) return '';
+  const doc = new DOMParser().parseFromString(`<!doctype html><html><body><div>${stripLektoratMarks(html)}</div></body></html>`, 'text/html');
+  const root = doc.body.firstElementChild;
+  if (!root) return '';
+  root.querySelectorAll('svg, input, script, style').forEach((el) => el.remove());
+  root.querySelectorAll('[style], [contenteditable], [data-bid]').forEach((el) => {
+    el.removeAttribute('style');
+    el.removeAttribute('contenteditable');
+    el.removeAttribute('data-bid');
+  });
+  for (const span of Array.from(root.querySelectorAll('span'))) {
+    if (isCiteEl(span) || isXrefEl(span)) continue;
+    const parent = span.parentNode;
+    while (span.firstChild) parent.insertBefore(span.firstChild, span);
+    span.remove();
+  }
+  return root.innerHTML;
+}
+
+// Text- und HTML-Fassung der aktuellen Auswahl ins Clipboard. Rückgabe: true,
+// wenn geschrieben wurde (preventDefault gesetzt).
+function writeSelection(e, sel) {
   const text = sel.toString();
   if (!text) return false;
   e.preventDefault();
   e.clipboardData.setData('text/plain', text);
+  const box = document.createElement('div');
+  box.appendChild(sel.getRangeAt(0).cloneContents());
+  const html = clipboardHtml(box.innerHTML);
+  if (html) e.clipboardData.setData('text/html', html);
   return true;
 }
 
-// Cut: text/plain ins Clipboard + Selektion löschen. Caller markiert
-// anschliessend dirty.
-export function handleEditorCut(e) {
+// Copy: text/plain + bereinigtes text/html. Rückgabe: true wenn Override aktiv
+// wurde, false wenn keine Selektion (Browser-Default greift dann nicht, weil
+// es nichts zu kopieren gibt).
+export function handleEditorCopy(e) {
   const sel = window.getSelection();
-  if (!sel || sel.isCollapsed) return false;
-  const text = sel.toString();
-  if (!text) return false;
-  e.preventDefault();
-  e.clipboardData.setData('text/plain', text);
-  document.execCommand('delete');
+  if (!sel || sel.isCollapsed || !sel.rangeCount) return false;
+  return writeSelection(e, sel);
+}
+
+// Cut: wie Copy, dann die Selektion löschen. `deleteSelection` (optional) löscht
+// selbst und liefert true, wenn es übernommen hat — das Notebook reicht hier
+// seinen blockgrenzen-festen Löschweg herein (notebook/line-merge.js), weil
+// `execCommand('delete')` über eine Blockgrenze Inline-`style` einbäckt. Ohne
+// ihn bzw. bei false: `execCommand('delete')`. Caller markiert anschliessend
+// dirty.
+export function handleEditorCut(e, { deleteSelection = null } = {}) {
+  const sel = window.getSelection();
+  if (!sel || sel.isCollapsed || !sel.rangeCount) return false;
+  if (!writeSelection(e, sel)) return false;
+  if (!(deleteSelection && deleteSelection())) document.execCommand('delete');
   return true;
 }

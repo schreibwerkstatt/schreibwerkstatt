@@ -25,12 +25,21 @@ const HEAD = '#editor-card .page-head';
 // contenteditable des Bearbeitungsmodus — und das steht im DOM zuerst.
 const READ_SHEET = '#editor-card .page-view-wrap .page-content-view';
 
-// Der Ein-/Aus-Knopf trägt den Zustand im aria-label (wie seine Geschwister in
-// der Toolbar): sichtbarer Kopf → „ausblenden", verborgener → „einblenden".
-// Aus den Locale-Dateien gelesen statt hier kopiert.
+// Der Ein-/Aus-Schalter steht im «Ansicht»-Menü der Edit-Toolbar und trägt
+// den Zustand in seiner Beschriftung (wie seine Geschwister dort): sichtbarer
+// Kopf → „ausblenden", verborgener → „einblenden". Aus den Locale-Dateien
+// gelesen statt hier kopiert.
 const DE = require(process.cwd() + '/public/js/i18n/de.json');
 const TIP_OFF = DE['headline.head.off'];
 const TIP_ON = DE['headline.head.on'];
+const VIEW_MENU = '.page-editor-toolbar__view';
+
+// Eintrag im «Ansicht»-Menü — öffnet das Menü, falls es zu ist.
+async function viewItem(page, label) {
+  const trigger = page.locator(`${VIEW_MENU} button[aria-haspopup="menu"]`);
+  if ((await trigger.getAttribute('aria-expanded')) !== 'true') await trigger.click();
+  return page.locator(`${VIEW_MENU} [role="menuitemcheckbox"]`, { hasText: label });
+}
 
 async function setBuchtyp(page, buchtyp) {
   await page.evaluate(async (bt) => {
@@ -206,7 +215,7 @@ test.describe('Notebook: Titel-Kopf des Beitrags', () => {
     // weiterhin für beide Modi — genau das prüft dieser Test, nur eben in der
     // Richtung, die es noch gibt: im Editor schalten, im Lesemodus nachsehen.
     await startEdit(page);
-    await page.locator(`.page-editor-toolbar button[aria-label="${TIP_OFF}"]`).first().click();
+    await (await viewItem(page, TIP_OFF)).click();
     await expect(page.locator(HEAD)).toBeHidden();
 
     // … und der Zustand überlebt den Rückweg in die Leseansicht.
@@ -216,11 +225,11 @@ test.describe('Notebook: Titel-Kopf des Beitrags', () => {
     // Der Knopf holt ihn zurück — MIT Inhalt. Die Anzeige-Wahl darf nie die
     // Lade-Bedingung gewesen sein.
     await startEdit(page);
-    await page.locator(`.page-editor-toolbar button[aria-label="${TIP_ON}"]`).first().click();
+    await (await viewItem(page, TIP_ON)).click();
     await expect(page.locator(`${HEAD} #page-head-titel`)).toHaveValue('Ein Satz zu viel');
 
     // Wieder aus, und über den Reload hinweg aus (editorPrefs).
-    await page.locator(`.page-editor-toolbar button[aria-label="${TIP_OFF}"]`).first().click();
+    await (await viewItem(page, TIP_OFF)).click();
     await expect(page.locator(HEAD)).toBeHidden();
     await reboot(page);
     await selectSeededBook(page);
@@ -231,7 +240,7 @@ test.describe('Notebook: Titel-Kopf des Beitrags', () => {
     // Gegenprobe zum Reload: die Wahl liegt in den Editor-Prefs, nicht am
     // Beitrag, und lässt sich von dort wieder umlegen.
     await startEdit(page);
-    await page.locator(`.page-editor-toolbar button[aria-label="${TIP_ON}"]`).first().click();
+    await (await viewItem(page, TIP_ON)).click();
     await stopEdit(page);
     await expect(page.locator(`${HEAD} .page-head__title`)).toBeVisible();
   });
@@ -304,8 +313,10 @@ test.describe('Notebook: Titel-Kopf des Beitrags', () => {
     await setBuchtyp(page, 'roman');
     await openPage(page, 0);
     await startEdit(page);
-    await expect(page.locator(`.page-editor-toolbar button[aria-label="${TIP_OFF}"]`)).toBeHidden();
-    await expect(page.locator(`.page-editor-toolbar button[aria-label="${TIP_ON}"]`)).toBeHidden();
+    // Menü offen, damit «verborgen» am Eintrag liegt und nicht am zugeklappten Menü.
+    await expect(await viewItem(page, TIP_OFF)).toBeHidden();
+    await expect(await viewItem(page, TIP_ON)).toBeHidden();
+    await expect(page.locator(`${VIEW_MENU} [role="menuitemcheckbox"]`).first()).toBeVisible();
   });
 
   test('das Zeichen-Lineal färbt, sperrt aber nicht', async ({ page }) => {

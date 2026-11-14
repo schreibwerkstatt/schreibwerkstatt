@@ -40,8 +40,10 @@ export const jobsMethods = {
     }
   },
 
+  // Übernehmen markiert den Eintrag (Vorschlagskarte --applied), statt ihn aus
+  // der Liste zu nehmen; Verwerfen über vorschlaege.js#discardVorschlag.
   applyBrainstormVorschlag(idx) {
-    if (!this.brainstormResult) return;
+    if (!this.brainstormResult || this.vorschlagState('brainstorm', idx)) return;
     const v = this.brainstormResult.vorschlaege[idx];
     if (!v || !this._jm) return;
     const parentId = this.brainstormResult.knotenId;
@@ -55,7 +57,7 @@ export const jobsMethods = {
     this._revealNode(parentId);
     const ok = this._mutateMindmap(jm => jm.add_node(parentId, _newNodeId(), v.label));
     if (ok) {
-      this.brainstormResult.vorschlaege = this.brainstormResult.vorschlaege.filter((_, i) => i !== idx);
+      this._setVorschlagState('brainstorm', idx, 'applied');
     } else {
       this.errorMessage = window.__app.t('werkstatt.error.applyFailed');
     }
@@ -71,7 +73,6 @@ export const jobsMethods = {
     }
     this.consistencyStatus = '';
     this.consistencyResult = null;
-    this.selectedKonfliktIdx = null;
     this._consistencyJobDraftId = sel.id;
     try {
       const resp = await fetchJson('/jobs/werkstatt-consistency', {

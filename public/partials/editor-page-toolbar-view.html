@@ -1,0 +1,61 @@
+<!-- @include editor-page-toolbar-view — «Ansicht»-Menü der Seiten-Toolbar
+     (Root-Scope). Reine Anzeige-Wahl: nichts davon ändert den gespeicherten
+     Text. Zoom-Einträge und Schalter lassen das Menü offen (`.stop`), damit
+     sich die Wirkung im Menü ablesen und weiterschalten lässt.
+     Schalter: Volle Breite, Steuerzeichen (CSS-Dekoration ¶/↵, editorPrefs),
+     Titel-Kopf (nur publizistische Bücher, editorPrefs), Entitäten-Markierung
+     (Buch-Setting book_settings.entities_enabled, PUT
+     /booksettings/:id/entities-enabled). Eigener Wrapper um menu(), siehe
+     `.page-editor-toolbar__more`. -->
+<span class="page-editor-toolbar__view">
+ <span x-data="menu()">
+  <button type="button" class="icon-btn" x-bind="trigger" :class="{ 'is-active': open }"
+          aria-haspopup="menu"
+          :data-tip="t('editor.toolbar.viewMenu')" :aria-label="t('editor.toolbar.viewMenu')">
+    <svg class="icon" aria-hidden="true"><use href="/icons.svg#eye"/></svg>
+  </button>
+  <div class="context-menu context-menu--dropdown" x-bind="panel" x-cloak>
+    <button type="button" class="context-menu-item context-menu-item--icon" role="menuitem"
+            @click.stop="pageEditorZoomOut()">
+      <svg class="icon" aria-hidden="true"><use href="/icons.svg#minus"/></svg>
+      <span x-text="t('editor.view.zoomOut')"></span>
+    </button>
+    <button type="button" class="context-menu-item context-menu-item--icon" role="menuitem"
+            @click.stop="pageEditorZoomIn()">
+      <svg class="icon" aria-hidden="true"><use href="/icons.svg#plus"/></svg>
+      <span x-text="t('editor.view.zoomIn')"></span>
+    </button>
+    <button type="button" class="context-menu-item context-menu-item--icon" role="menuitem"
+            @click.stop="pageEditorZoomReset()">
+      <svg class="icon" aria-hidden="true"><use href="/icons.svg#scan"/></svg>
+      <span x-text="t('editor.view.zoomReset')"></span>
+    </button>
+    <div class="context-menu-sep" role="separator"></div>
+    <button :aria-checked="pageEditorFitWidth" type="button" class="context-menu-item context-menu-item--icon" role="menuitemcheckbox"
+            :class="{ 'context-menu-item--on': pageEditorFitWidth }"
+            @click.stop="togglePageEditorFitWidth()">
+      <svg class="icon" aria-hidden="true"><use href="/icons.svg#move-horizontal"/></svg>
+      <span x-text="pageEditorFitWidth ? t('editor.fitWidthOff') : t('editor.fitWidth')"></span>
+    </button>
+    <button :aria-checked="pageEditorShowMarks" type="button" class="context-menu-item context-menu-item--icon" role="menuitemcheckbox"
+            :class="{ 'context-menu-item--on': pageEditorShowMarks }"
+            @click.stop="togglePageEditorShowMarks()">
+      <svg class="icon" aria-hidden="true"><use href="/icons.svg#pilcrow"/></svg>
+      <span x-text="pageEditorShowMarks ? t('editor.toolbar.marksOff') : t('editor.toolbar.marksOn')"></span>
+    </button>
+    <button :aria-checked="entitiesEnabledForCurrentBook" type="button" class="context-menu-item context-menu-item--icon" role="menuitemcheckbox"
+            :class="{ 'context-menu-item--on': entitiesEnabledForCurrentBook }"
+            @click.stop="toggleEntitiesEnabledForCurrentBook()">
+      <svg class="icon" aria-hidden="true"><use href="/icons.svg#radio"/></svg>
+      <span x-text="entitiesEnabledForCurrentBook ? t('entities.toggle.off') : t('entities.toggle.on')"></span>
+    </button>
+    <button :aria-checked="pageEditorShowHead" type="button" class="context-menu-item context-menu-item--icon" role="menuitemcheckbox"
+            x-show="isJournalistischesBuch()"
+            :class="{ 'context-menu-item--on': pageEditorShowHead }"
+            @click.stop="togglePageEditorShowHead()">
+      <svg class="icon" aria-hidden="true"><use href="/icons.svg#heading"/></svg>
+      <span x-text="pageEditorShowHead ? t('headline.head.off') : t('headline.head.on')"></span>
+    </button>
+  </div>
+ </span>
+</span>

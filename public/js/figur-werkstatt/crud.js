@@ -158,7 +158,6 @@ export const crudMethods = {
     this.plotUsage = null;
     this.motifUsage = null;
     this.selectedRunId = null;
-    this.selectedKonfliktIdx = null;
     this.runsLoading = false;
     this.importablesLoading = false;
     this.loading = false;
@@ -202,7 +201,6 @@ export const crudMethods = {
     this.consistencyResult = null;
     this.selectedKnotenId = null;
     this.selectedRunId = null;
-    this.selectedKonfliktIdx = null;
     this._markMindmapClean();
     this.loadRuns?.();
     this.loadPlotUsage?.();
@@ -447,16 +445,35 @@ export const crudMethods = {
     return false;
   },
 
-  async requestDelete() {
-    const sel = this.selectedDraft();
-    if (!sel) return;
+  // Ohne Argument die ausgewählte Figur (Kopfmenü), sonst die aus der Liste.
+  async requestDelete(id = this.selectedDraftId) {
+    if (!id || !this.drafts.some(d => d.id === id)) return;
     const app = window.__app;
     const ok = await app.appConfirm({
       message: app.t('werkstatt.confirmDelete'),
       danger: true,
     });
     if (!ok) return;
-    await this._doDelete(sel.id);
+    await this._doDelete(id);
+  },
+
+  // Esc im Formular (ohne Änderungen nichts zu tun) und card:refresh (lädt
+  // immer neu): ungespeicherte Änderungen an Formular und Mindmap nach
+  // Rückfrage verwerfen und die Figur aus dem Server-Stand neu aufbauen.
+  async discardDraftEdits({ reload = false } = {}) {
+    if (!this.isDirty()) {
+      if (!reload) return;
+    } else {
+      const app = window.__app;
+      const ok = await app.appConfirm({
+        message: app.t('werkstatt.confirmReload'),
+        confirmLabel: app.t('edit.discardEdit'),
+        danger: true,
+      });
+      if (!ok) return;
+    }
+    await this.loadDrafts();
+    this._reloadSelectedDraft();
   },
 
   async _doDelete(id) {
@@ -478,7 +495,6 @@ export const crudMethods = {
         this.plotUsage = null;
         this.motifUsage = null;
         this.selectedRunId = null;
-        this.selectedKonfliktIdx = null;
         if (this.drafts.length > 0) this.selectDraft(this.drafts[0].id);
       }
     } catch (e) {
