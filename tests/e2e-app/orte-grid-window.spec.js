@@ -40,7 +40,10 @@ test('schauplatz-grid: Fenster, Sortierung über alle Zeilen, nachladen', async 
   const firstName = grid.locator('tbody tr').first().locator('.entity-grid-cell-title > span:first-child');
   await expect(firstName).toHaveText(`Ort ${String(N - 1).padStart(3, '0')}`);
 
-  await more.click();
+  // Ohne Scrollen klicken: Playwrights click() scrollt den Knopf ins Bild, dort
+  // lädt observeListMore (list-window.js) schon selbst nach und blendet den Fuss
+  // aus — der Klick wartete dann auf einen versteckten Knopf (Race, CI-rot).
+  await more.evaluate((b) => b.click());
   await expect(rows).toHaveCount(N);
   await expect(card.locator('.list-window-more:visible')).toHaveCount(0);
 });
