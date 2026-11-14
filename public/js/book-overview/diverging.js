@@ -1,6 +1,6 @@
 // Geteilte Mechanik der drei Kapitel-Balken-Tiles der Buch-Übersicht
 // (Verteilung, Lektorat-Findings, Lektoratszeit). Alle drei zeigen dasselbe
-// Layout: Track-Mitte = Median über alle Kapitel, Balken wachsen nach rechts
+// Layout: Track-Mitte = Median über die Kapitel, Balken wachsen nach rechts
 // (über Median) oder links (darunter), Länge = |deltaPct| relativ zum grössten
 // Ausschlag. Nur die Kennzahl unterscheidet sich (Zeichen / Findings / Sekunden).
 //
@@ -36,6 +36,10 @@ export function median(values, { round = false } = {}) {
  * @param {boolean} [opts.extremesNeedTwo=false]  Extrem-Marker (isMax/isMin)
  *   erst ab zwei Zeilen setzen. Bei Tiles mit Wertungs-Semantik (Findings,
  *   Lektoratszeit) wäre „schlechtestes Kapitel" bei genau einem Kapitel absurd.
+ * @param {boolean} [opts.skipZero=false]  Zeilen mit Wert 0 aus Median,
+ *   Schwelle und Extrem-Markern nehmen (leere Kapitel). Sie bleiben in der
+ *   Liste, ohne Balken und ohne Prozentangabe — ein leeres Kapitel ist kein
+ *   Datenpunkt der Verteilung, es zöge den Median sonst nach unten.
  * @returns {Array<object>} `items` + { median, showMedian, deltaPct,
  *   showDelta, barWidthPct, barLeftPct, isAbove, isMax, isMin }.
  *
@@ -49,22 +53,25 @@ export function divergingRows(items, {
   minForMedian = 0,
   roundMedian = false,
   extremesNeedTwo = false,
+  skipZero = false,
   half = HALF_TRACK_PCT,
 } = {}) {
   const rows = items || [];
   if (rows.length === 0) return [];
 
   const values = rows.map(valueOf);
-  const showMedian = rows.length >= minForMedian;
-  const med = showMedian ? median(values, { round: roundMedian }) : 0;
+  const counts = values.map(v => !skipZero || v !== 0);
+  const counted = values.filter((_, i) => counts[i]);
+  const showMedian = counted.length > 0 && counted.length >= minForMedian;
+  const med = showMedian ? median(counted, { round: roundMedian }) : 0;
 
-  const max = Math.max(...values);
-  const min = Math.min(...values);
+  const max = counted.length ? Math.max(...counted) : 0;
+  const min = counted.length ? Math.min(...counted) : 0;
   const spread = max !== min;
-  const extremesOk = !extremesNeedTwo || (rows.length >= 2 && spread);
+  const extremesOk = !extremesNeedTwo || (counted.length >= 2 && spread);
 
   const zeroMedian = showMedian && med === 0;
-  const deltas = values.map(v => (med > 0 ? Math.round(((v - med) / med) * 100) : 0));
+  const deltas = values.map((v, i) => (counts[i] && med > 0 ? Math.round(((v - med) / med) * 100) : 0));
   const maxAbsDelta = Math.max(1, ...deltas.map(Math.abs));
   const maxPos = Math.max(0, max);
 
@@ -72,19 +79,20 @@ export function divergingRows(items, {
     const v = values[i];
     const deltaPct = deltas[i];
     let halfPct = 0;
-    if (zeroMedian) halfPct = maxPos > 0 && v > 0 ? (v / maxPos) * half : 0;
+    if (!counts[i]) halfPct = 0;
+    else if (zeroMedian) halfPct = maxPos > 0 && v > 0 ? (v / maxPos) * half : 0;
     else if (showMedian) halfPct = (Math.abs(deltaPct) / maxAbsDelta) * half;
     return {
       ...item,
       median: med,
       showMedian,
       deltaPct,
-      showDelta: showMedian && !zeroMedian,
+      showDelta: counts[i] && showMedian && !zeroMedian,
       barWidthPct: halfPct,
       barLeftPct: zeroMedian || deltaPct >= 0 ? 50 : 50 - halfPct,
       isAbove: zeroMedian ? v > 0 : deltaPct > 0,
-      isMax: extremesOk && max > 0 && v === max,
-      isMin: extremesOk && spread && v === min,
+      isMax: counts[i] && extremesOk && max > 0 && v === max,
+      isMin: counts[i] && extremesOk && spread && v === min,
     };
   });
 }

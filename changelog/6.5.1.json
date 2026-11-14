@@ -31,6 +31,16 @@
       "kind": "verbessert",
       "de": "Admin, System, Auth: die lokale Anmeldung lässt sich erst einschalten, wenn dein Konto ein Passwort hat — so sperrst du dich nicht aus. Verbindungstests nennen den Fehler verständlich.",
       "en": "Admin, System, Auth: local sign-in can only be switched on once your account has a password, so you can't lock yourself out. Connection tests now explain errors clearly."
+    },
+    {
+      "kind": "verbessert",
+      "de": "Buch-Übersicht, Kapitel-Länge vs. Median: leere Kapitel ziehen den Median nicht mehr nach unten. Sie bleiben in der Liste, aber ohne Balken und Prozentangabe.",
+      "en": "Book overview, chapter length vs. median: empty chapters no longer drag the median down. They stay in the list, but without a bar or percentage."
+    },
+    {
+      "kind": "verbessert",
+      "de": "Abschnitt bearbeiten: fährst du über die Zähler für Zeichen, Wörter und Tokens, siehst du die genaue Zahl statt des gerundeten Werts.",
+      "en": "Editing a section: hover over the character, word and token counters to see the exact number instead of the rounded value."
     }
   ]
 }

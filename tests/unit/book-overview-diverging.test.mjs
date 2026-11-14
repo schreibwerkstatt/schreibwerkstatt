@@ -106,3 +106,20 @@ test('divergingRows: Median > 0 → showDelta gesetzt', () => {
   const out = divergingRows(rows(50, 100, 200), { valueOf });
   assert.ok(out.every(r => r.showDelta));
 });
+
+test('divergingRows: skipZero nimmt leere Zeilen aus Median und Extremen', () => {
+  const out = divergingRows(rows(0, 100, 0, 200, 300), { valueOf, skipZero: true, extremesNeedTwo: true });
+  assert.equal(out[0].median, 200, 'Median nur über 100/200/300');
+  assert.deepEqual(out.map(r => r.deltaPct), [0, -50, 0, 0, 50]);
+  assert.deepEqual(out.map(r => r.showDelta), [false, true, false, true, true]);
+  assert.equal(out[0].barWidthPct, 0);
+  assert.equal(out[2].barWidthPct, 0);
+  assert.deepEqual(out.map(r => r.isMin), [false, true, false, false, false]);
+  assert.deepEqual(out.map(r => r.isMax), [false, false, false, false, true]);
+});
+
+test('divergingRows: skipZero bei lauter leeren Zeilen → kein Median', () => {
+  const out = divergingRows(rows(0, 0), { valueOf, skipZero: true });
+  assert.equal(out[0].showMedian, false);
+  assert.ok(out.every(r => r.barWidthPct === 0 && !r.isMax && !r.isMin));
+});
