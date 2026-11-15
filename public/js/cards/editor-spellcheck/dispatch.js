@@ -160,11 +160,8 @@ export function setupSpellcheckDispatch(app) {
     if (current) _evaluate();
     _refreshAllForms();
   });
-  // Seitenwechsel: persistente Form-Felder (z.B. Seitentitel auf der Pageview)
-  // werden via :value rebindet — kein input-Event, also kein Auto-Recheck. Ein
-  // Frame Verzoegerung, damit der :value-Bind angewandt ist, bevor refresh()
-  // den neuen Wert liest.
-  app.$watch('currentPage?.id',     () => { requestAnimationFrame(_refreshAllForms); });
+  // Abschnittswechsel bei bestehenden Form-Feldern (Titel im Notebook-Editor)
+  // braucht keinen Watcher: der Form-Controller faengt den value-Setter ab.
 
   // Initial-Eval (falls bereits ein Editor offen ist beim Boot).
   _evaluate();

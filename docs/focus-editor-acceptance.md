@@ -2,7 +2,7 @@
 
 Pflicht bei **jeder** Änderung an `public/js/editor/focus/`, `public/js/editor/shared/`
 (Konsument Focus), `public/css/editor/focus/` oder `public/partials/editor-focus.html`
-— siehe harte Regel „Focus-Editor ist stabilisiert" in [CLAUDE.md](../CLAUDE.md).
+— siehe [stabilisiert.md](stabilisiert.md).
 
 **Geklickt, nicht gelesen.** Die Liste existiert, weil Code-Lesen und grüne Tests
 beides schon gleichzeitig richtig waren, während der Editor sich falsch anfühlte:
@@ -108,7 +108,7 @@ Undo über das native Menü statt `keydown`. Eine Änderung, die eine dieser SPA
 ## Danach
 
 ```
-npm run test:focus     # Harness-Suite + App-Suite (echtes CSS)
+npm run test:focus     # Sonderprüfung: Unit + Harness (Chromium, WebKit) + App-Suite (echtes CSS)
 ```
 
 Grün ist die **Untergrenze**, nicht der Beweis: die App-Suite (`focus-editor-app.spec.js`

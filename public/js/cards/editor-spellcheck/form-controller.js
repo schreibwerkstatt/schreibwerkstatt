@@ -448,17 +448,47 @@ export function createFormFieldSpellcheck({
 
   function _onInput() { _scheduleCheck(); }
 
+  // Programmatische Wertaenderungen (Alpine `x-model`/`:value` nach Reset,
+  // Eintrags- oder Abschnittswechsel bei bestehendem Feld) feuern kein
+  // input-Event. Damit kein Badge mit dem Befund des alten Textes stehen
+  // bleibt, faengt der Controller den `value`-Setter der Instanz ab und
+  // prueft danach neu — fuer jedes Feld, ohne Watcher je Karte. Tippen geht
+  // nicht ueber den Setter, dafuer bleibt der input-Listener.
+  function _hookValueSetter() {
+    const proto = Object.getPrototypeOf(el);
+    const desc = Object.getOwnPropertyDescriptor(proto, 'value')
+      || Object.getOwnPropertyDescriptor(isTextarea ? HTMLTextAreaElement.prototype : HTMLInputElement.prototype, 'value');
+    if (!desc || !desc.set || Object.prototype.hasOwnProperty.call(el, 'value')) return;
+    Object.defineProperty(el, 'value', {
+      configurable: true,
+      enumerable: desc.enumerable,
+      get() { return desc.get.call(this); },
+      set(v) {
+        desc.set.call(this, v);
+        if (attached && (desc.get.call(this) || '') !== lastValueSnapshot) refresh();
+      },
+    });
+  }
+
+  function _unhookValueSetter() {
+    if (Object.prototype.hasOwnProperty.call(el, 'value')) {
+      try { delete el.value; } catch {}
+    }
+  }
+
   function attach() {
     if (attached) return;
     attached = true;
     _ensureBadge();
     el.addEventListener('input', _onInput);
+    _hookValueSetter();
     _runCheck();
   }
 
   function detach() {
     if (!attached) return;
     attached = false;
+    _unhookValueSetter();
     if (debounceTimer) { clearTimeout(debounceTimer); debounceTimer = null; }
     if (abortCtrl) { abortCtrl.abort(); abortCtrl = null; }
     el.removeEventListener('input', _onInput);
@@ -469,10 +499,9 @@ export function createFormFieldSpellcheck({
   }
 
   function refresh() {
-    // Externe Wertaenderung (z.B. Seitenwechsel rebindet das Titel-Feld via
-    // :value, ohne input-Event): das Badge zeigt sonst weiter den Match-Count
-    // der vorherigen Seite. Stale-State sofort verwerfen, damit der Indikator
-    // nicht haengen bleibt — danach debounced neu pruefen.
+    // Externe Wertaenderung (value-Setter, siehe _hookValueSetter, oder
+    // Buchwechsel aus dem Dispatcher): Stale-State sofort verwerfen, damit
+    // der Indikator nicht haengen bleibt — danach debounced neu pruefen.
     if (attached && (el.value || '') !== lastValueSnapshot) {
       matches = [];
       ignored.clear();

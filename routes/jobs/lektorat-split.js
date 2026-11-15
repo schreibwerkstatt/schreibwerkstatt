@@ -7,6 +7,7 @@
 
 const { aiCall, i18nError, updateJob, _modelName } = require('./shared');
 const appSettings = require('../../lib/app-settings');
+const logger = require('../../logger');
 const { setContext } = require('../../lib/log-context');
 const { _claudeUsesAdaptiveThinking } = require('../../lib/ai');
 const { mergePasses } = require('../../lib/lektorat-consolidate');
@@ -122,10 +123,20 @@ async function lektoratAnalyze({
   const status = trackPasses ? _statusLine(jobId, total) : null;
   if (status) tok.onThinking = status.onThinking;
 
+  // Logging (nur Diagnose, ändert nichts am Lauf): Plan des Abschnitts, Name je
+  // Call für die Logzeile aus aiCall (shared/call-log.js), im Buch-Lektorat mit dem
+  // Abschnitt davor, weil dort viele Abschnitte in einem Job laufen.
+  const pfx = callLimit && promptOpts?.pageName ? `«${String(promptOpts.pageName).slice(0, 30)}» ` : '';
+  const at = pfx ? ` ${pfx.trim()}` : '';
+  const planArt = !split ? 'ein Pass (kein Split)'
+    : chunks ? `${chunks.length} Stücke à ${chunks.map(c => c.text.length).join('/')} Z.` : 'am Stück (Objektiv + Stil)';
+  logger.info(`Lektorat-Plan${at}:${text.length} Z., ${planArt}, Cache-Blöcke ${cacheBlocks ? 'ja' : 'nein'}, ${total} Calls${callLimit ? ', Buch-Lektorat' : ''}.`);
+
   if (!split) {
     const prompt = buildLektoratPrompt(text, promptOpts);
-    const result = await aiCall(jobId, tok, prompt, system, fromPct, toPct, 5000, 0.2, lektoratMaxTokens(text.length), undefined, kombiSchema);
+    const result = await aiCall(jobId, tok, prompt, system, fromPct, toPct, 5000, 0.2, lektoratMaxTokens(text.length), undefined, kombiSchema, undefined, null, `${pfx}kombi`);
     if (!Array.isArray(result?.fehler)) throw i18nError('job.error.fehlerArrayMissing');
+    logger.info(`Lektorat-Befunde${at}: ${result.fehler.length} (ein Pass).`);
     return result;
   }
 
@@ -179,10 +190,12 @@ async function lektoratAnalyze({
   // Typen weg, die der Objektiv-Pass liefert.
   const stilPromptFor = (passText, promptOpts, ohneBewertung) =>
     buildStilLektoratPrompt(passText, { ...promptOpts, ohneBewertung });
-  const runObjektiv = (prompt, passLen, onStart = null) =>
-    limited(() => aiCall(jobId, tok, prompt, system, null, null, 4000, 0.2, lektoratMaxTokens(passLen), undefined, objektivSchema, undefined, onStart)).then(tick);
-  const runStil = (prompt, passLen, stilSchema, onStart = null) =>
-    limited(() => aiCall(jobId, tok, prompt, system, null, null, 5000, 0.2, lektoratMaxTokens(passLen), undefined, stilSchema, undefined, onStart)).then(tick);
+  const runObjektiv = (prompt, passLen, onStart = null, label = 'objektiv') =>
+    limited(() => aiCall(jobId, tok, prompt, system, null, null, 4000, 0.2, lektoratMaxTokens(passLen), undefined, objektivSchema, undefined, onStart, `${pfx}${label}`)).then(tick);
+  const runStil = (prompt, passLen, stilSchema, onStart = null, label = 'stil') =>
+    limited(() => aiCall(jobId, tok, prompt, system, null, null, 5000, 0.2, lektoratMaxTokens(passLen), undefined, stilSchema, undefined, onStart, `${pfx}${label}`)).then(tick);
+  // Befundzahl je Pass vor dem Zusammenführen und danach (Merge entfernt Doppelungen).
+  const logBefunde = (passes, merged) => logger.info(`Lektorat-Befunde${at}: ${passes.map(([n, l]) => `${n} ${l}`).join(', ')} → ${merged} nach Zusammenführung.`);
   const checkStil = (stil) => {
     if (!Array.isArray(stil?.fehler)) throw i18nError('job.error.fehlerArrayMissing');
     return stil;
@@ -199,6 +212,7 @@ async function lektoratAnalyze({
     ]);
     checkStil(stil);
     const fehler = mergePasses([objFehler(obj), stil.fehler], text);
+    logBefunde([['objektiv', objFehler(obj).length], ['stil', stil.fehler.length]], fehler.length);
     return { fehler, szenen: stil.szenen, stilanalyse: stil.stilanalyse, fazit: stil.fazit };
   }
 
@@ -209,7 +223,7 @@ async function lektoratAnalyze({
   const { effectiveStylisticCap } = require('./lektorat-filter');
   const bewertungSchema = buildBewertungLektoratSchema();
   const bewertungPromise = limited(() => aiCall(jobId, tok, buildBewertungLektoratPrompt(text, promptOpts), system,
-    null, null, 3000, 0.2, lektoratMaxTokens(text.length), undefined, bewertungSchema)).then(tick);
+    null, null, 3000, 0.2, lektoratMaxTokens(text.length), undefined, bewertungSchema, undefined, null, `${pfx}bewertung`)).then(tick);
   bewertungPromise.catch(() => {});
   const last = chunks.length - 1;
   const chunkOpts = chunks.map((c, i) => {
@@ -237,13 +251,23 @@ async function lektoratAnalyze({
   const prep = (list) => (cache ? sharedHeadBlocks(list) : list);
   const objPrompts = prep(chunks.map((c, i) => objektivPromptFor(c.text, chunkOpts[i])));
   const stilPrompts = prep(chunks.map((c, i) => stilPromptFor(c.text, chunkOpts[i], true)));
+  // Gemeinsamer Kopf je Pass: Länge des Cache-Blocks oder warum es keinen gibt.
+  const headInfo = (list) => (Array.isArray(list[0]) ? `${list[0][0].text.length} Z. Cache-Block` : (cache ? 'kein Block (Kopf unter Mindestlänge)' : 'kein Cache'));
+  logger.info(`Lektorat-Stückköpfe${at}:objektiv ${headInfo(objPrompts)}, stil ${headInfo(stilPrompts)}; Start ${cache ? 'gestaffelt' : 'parallel'}.`);
+  const t0 = Date.now();
+  const onRelease = (pass) => () => logger.info(`Lektorat-Staffelung ${pfx}${pass}: Stück 1 streamt nach ${((Date.now() - t0) / 1000).toFixed(1)}s, Stücke 2–${chunks.length} starten.`);
   const launch = cache ? staggered : (ls) => ls.map(l => l(null));
-  const objPromises = launch(chunks.map((c, i) => (onStart) => runObjektiv(objPrompts[i], c.text.length, onStart)));
-  const stilPromises = launch(chunks.map((c, i) => (onStart) => runStil(stilPrompts[i], c.text.length, stilSchema, onStart)));
+  const n = chunks.length;
+  const objPromises = launch(chunks.map((c, i) => (onStart) => runObjektiv(objPrompts[i], c.text.length, onStart, `objektiv ${i + 1}/${n}`)), onRelease('objektiv'));
+  const stilPromises = launch(chunks.map((c, i) => (onStart) => runStil(stilPrompts[i], c.text.length, stilSchema, onStart, `stil ${i + 1}/${n}`)), onRelease('stil'));
   const [objs, stils] = await Promise.all([Promise.all(objPromises), Promise.all(stilPromises)]);
   stils.forEach(checkStil);
   const bewertung = await bewertungPromise;
   const fehler = mergePasses(chunks.flatMap((c, i) => [objFehler(objs[i]), stils[i].fehler]), text);
+  logBefunde([
+    ['objektiv', objs.reduce((s, o) => s + objFehler(o).length, 0)],
+    ['stil', stils.reduce((s, st) => s + st.fehler.length, 0)],
+  ], fehler.length);
   return { fehler, szenen: bewertung?.szenen, stilanalyse: bewertung?.stilanalyse, fazit: bewertung?.fazit };
 }
 
@@ -274,10 +298,12 @@ function sharedHeadBlocks(prompts) {
 // sofort, die übrigen, sobald er streamt (onStart) oder fertig ist. Scheitert der
 // erste vor dem Start, starten die übrigen nie — Promise.all des Aufrufers
 // verwirft dann ohnehin.
-function staggered(launchers) {
+// `onRelease` (optional, nur Logging) feuert einmal, wenn das Tor aufgeht.
+function staggered(launchers, onRelease = null) {
   if (launchers.length < 2) return launchers.map(l => l(null));
   let release;
   const gate = new Promise((r) => { release = r; });
+  if (onRelease) gate.then(() => { try { onRelease(); } catch { /* nur Logging */ } });
   const first = launchers[0](() => release());
   first.then(() => release(), () => {});
   return [first, ...launchers.slice(1).map(l => gate.then(() => l(null)))];

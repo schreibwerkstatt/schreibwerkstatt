@@ -248,3 +248,72 @@ test('Split: Top-Level-Seite (ohne Kapitel) landet direkt dahinter auf Buchebene
   const top = tree.filter(n => n.type === 'page').map(n => n.id);
   assert.equal(top.indexOf(r.json.tail.id), top.indexOf(PAGE_B) + 1);
 });
+
+test('Split: Fundstellen, Belege und erste Erwaehnung mit Stelle im Schwanz ziehen mit; Stand + Textsorte kopiert', async () => {
+  for (const t of ['page_figure_mentions', 'page_editorial_status', 'page_textsorte', 'motif_occurrences',
+    'motifs', 'figure_age_belege', 'figures']) db.prepare(`DELETE FROM ${t}`).run();
+  const body = '<p data-bid="bbbb0001">Anna trank Kaffee am Fenster und schwieg lange.</p>'
+    + '<p data-bid="bbbb0002">Bruno kam spaet nach Hause, Anna wartete schon im Flur.</p>';
+  db.prepare('UPDATE pages SET body_html = ? WHERE page_id = ?').run(body, PAGE);
+  const insFig = db.prepare(`INSERT INTO figures (book_id, user_email, fig_id, name, updated_at, erste_erwaehnung_page_id)
+                             VALUES (?, ?, ?, ?, ?, ?)`);
+  const anna = insFig.run(BOOK, ME, 'f1', 'Anna', NOW, PAGE).lastInsertRowid;
+  const bruno = insFig.run(BOOK, ME, 'f2', 'Bruno', NOW, PAGE).lastInsertRowid;
+  const motif = db.prepare('INSERT INTO motifs (book_id, user_email, name) VALUES (?, ?, ?)').run(BOOK, ME, 'Warten').lastInsertRowid;
+  const insOcc = db.prepare(`INSERT INTO motif_occurrences (motif_id, book_id, kind, page_id, score, snippet, source)
+                             VALUES (?, ?, 'page', ?, 0.5, ?, 'semantic')`);
+  const occHead = insOcc.run(motif, BOOK, PAGE, 'Anna trank Kaffee am Fenster und schwieg lange.').lastInsertRowid;
+  const occTail = insOcc.run(motif, BOOK, PAGE, 'Bruno kam spaet nach Hause, Anna wartete schon im Flur.').lastInsertRowid;
+  const occGone = insOcc.run(motif, BOOK, PAGE, 'Dieser Satz steht laengst nicht mehr im Text.').lastInsertRowid;
+  const beleg = db.prepare(`INSERT INTO figure_age_belege (figure_id, book_id, art, wert, zitat, page_id)
+                            VALUES (?, ?, 'alter', 40, ?, ?)`).run(bruno, BOOK, 'Bruno kam spaet nach Hause', PAGE).lastInsertRowid;
+  db.prepare(`INSERT INTO page_editorial_status (page_id, book_id, status, content_updated_at, updated_by, updated_at)
+              VALUES (?, ?, 'final', ?, ?, ?)`).run(PAGE, BOOK, NOW, ME, NOW);
+  db.prepare('INSERT INTO page_textsorte (page_id, book_id, textsorte) VALUES (?, ?, ?)').run(PAGE, BOOK, 'reportage');
+
+  const r = await api('POST', `/content/pages/${PAGE}/split`, {
+    head_html: '<p data-bid="bbbb0001">Anna trank Kaffee am Fenster und schwieg lange.</p>',
+    tail_html: '<p data-bid="bbbb0002">Bruno kam spaet nach Hause, Anna wartete schon im Flur.</p>',
+    new_name: 'Bruno kommt', expected_updated_at: NOW,
+  });
+  assert.equal(r.status, 200, JSON.stringify(r.json));
+  const tailId = r.json.tail.id;
+
+  const occPage = (id) => db.prepare('SELECT page_id FROM motif_occurrences WHERE id = ?').get(id).page_id;
+  assert.equal(occPage(occHead), PAGE, 'Fundstelle im Kopf bleibt');
+  assert.equal(occPage(occTail), tailId, 'Fundstelle im Schwanz zieht mit');
+  assert.equal(occPage(occGone), PAGE, 'nicht auffindbarer Beleg bleibt, wo er war');
+  assert.equal(db.prepare('SELECT page_id FROM figure_age_belege WHERE id = ?').get(beleg).page_id, tailId);
+
+  const first = (id) => db.prepare('SELECT erste_erwaehnung_page_id AS p FROM figures WHERE id = ?').get(id).p;
+  assert.equal(first(anna), PAGE, 'Name auch im Kopf → erste Erwaehnung bleibt');
+  assert.equal(first(bruno), tailId, 'Name nur im Schwanz → erste Erwaehnung zieht mit');
+
+  const mentions = (pid) => db.prepare('SELECT figure_id FROM page_figure_mentions WHERE page_id = ? ORDER BY figure_id')
+    .all(pid).map(x => x.figure_id);
+  assert.deepEqual(mentions(PAGE), [anna]);
+  assert.deepEqual(mentions(tailId), [anna, bruno].sort((a, b) => a - b));
+
+  const st = (pid) => db.prepare(`SELECT s.status, s.content_updated_at, p.updated_at FROM page_editorial_status s
+                                  JOIN pages p USING(page_id) WHERE s.page_id = ?`).get(pid);
+  for (const pid of [PAGE, tailId]) {
+    const s = st(pid);
+    assert.equal(s.status, 'final');
+    assert.equal(s.content_updated_at, s.updated_at, `Stand von ${pid} bleibt aktuell`);
+  }
+  assert.equal(db.prepare('SELECT textsorte FROM page_textsorte WHERE page_id = ?').get(tailId)?.textsorte, 'reportage');
+});
+
+test('Split: ein vor dem Teilen veralteter Bearbeitungsstand bleibt auf beiden Haelften veraltet', async () => {
+  db.prepare('DELETE FROM page_editorial_status').run();
+  db.prepare(`INSERT INTO page_editorial_status (page_id, book_id, status, content_updated_at, updated_by, updated_at)
+              VALUES (?, ?, 'final', '2025-06-01T00:00:00.000Z', ?, ?)`).run(PAGE, BOOK, ME, NOW);
+  const r = await api('POST', `/content/pages/${PAGE}/split`, {
+    head_html: HEAD, tail_html: TAIL, new_name: 'Teil 2', expected_updated_at: NOW,
+  });
+  assert.equal(r.status, 200, JSON.stringify(r.json));
+  for (const pid of [PAGE, r.json.tail.id]) {
+    const s = db.prepare('SELECT content_updated_at FROM page_editorial_status WHERE page_id = ?').get(pid);
+    assert.equal(s.content_updated_at, '2025-06-01T00:00:00.000Z');
+  }
+});

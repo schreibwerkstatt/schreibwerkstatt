@@ -6,6 +6,7 @@ import { claimSaveOwner, ownsSave } from '../save-owner.js';
 import { isDiscardAsking, setDiscardAsking } from './save-guard.js';
 import { localIsoDate } from '../../../utils.js';
 import { trackUsageEvent } from '../../../usage-event.js';
+import { placeCaretAtEditorEnd, whenEditorVisible } from './caret-end.js';
 
 // Wie oft ✓ (saveEdit) das während des PUT Getippte direkt nachspeichert,
 // bevor es dem Autosave überlassen bleibt (Dauer-Tippen über jeden PUT).
@@ -219,7 +220,11 @@ export const lifecycleMethods = {
       // i18n-Registry nicht selbst lesen.
       el.style.setProperty('--figcaption-ph', JSON.stringify(app.t('editor.image.captionPlaceholder')));
     }
-    setTimeout(() => this._getEditEl()?.focus(), 0);
+    // Caret ans Ende des letzten Blocks und dorthin scrollen — wer den Edit-
+    // Modus öffnet, schreibt meist am Ende weiter (wie der Fokusmodus, aber
+    // ohne Auto-Slot: kein neuer leerer Absatz). Im Fokusmodus setzt dessen
+    // Install den Caret selbst.
+    whenEditorVisible(() => this._getEditEl(), () => app.editMode && !app.focusActive, placeCaretAtEditorEnd);
 
     this._startAutosave();
     this._installOnlineRetry();

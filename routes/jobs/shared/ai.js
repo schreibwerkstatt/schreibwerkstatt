@@ -12,6 +12,7 @@ const { jobAbortControllers } = require('./state');
 const { updateJob, i18nError, fmtTok } = require('./jobs');
 const { createThinkPhase } = require('./think-phase');
 const { checkSharedPrefixCache } = require('./cache-break');
+const { beginCallLog, markCallStarted, endCallLog, failCallLog, withCallLabel } = require('./call-log');
 
 // Transient-Klassifikator: Claude-Streams droppen gelegentlich mid-flight als
 // 'terminated' (Undici-Socket-Reset) oder werden vom Hard-Timeout (`AI_TIMEOUT`)
@@ -42,7 +43,9 @@ function _isTransientAiError(e) {
 async function retryOnTransientAi(fn, { tries = 2, log = null, label = '' } = {}) {
   let lastErr;
   for (let attempt = 1; attempt <= tries; attempt++) {
-    try { return await fn(); }
+    // Label für die Logzeile je KI-Call (./call-log.js), Wiederholung erkennbar.
+    const callLabel = label ? (attempt > 1 ? `${label} (Versuch ${attempt})` : label) : null;
+    try { return await withCallLabel(callLabel, fn); }
     catch (e) {
       if (e.name === 'AbortError') throw e;
       if (!_isTransientAiError(e) || attempt === tries) throw e;
@@ -353,13 +356,16 @@ function formatCostByPhase(summary) {
 //   (Claude: message_start = die Antwort streamt). Ab dann ist ein Cache-Eintrag dieses
 //   Calls lesbar — der Lektorat-Split schickt die übrigen Stücke erst danach los.
 // prompt: String oder (nur Claude) Content-Block-Array mit cache_control.
-async function aiCall(jobId, tok, prompt, system, fromPct, toPct, expectedChars = 3000, outputRatio = 0.2, maxTokens = null, provider = undefined, jsonSchema = null, tier = undefined, onStart = null) {
+// label: optionaler Name des Calls für die Logzeile je Call (./call-log.js), z.B.
+// «objektiv 3/7»; ohne Label nennt die Zeile das Tier-Label und die Job-Phase.
+async function aiCall(jobId, tok, prompt, system, fromPct, toPct, expectedChars = 3000, outputRatio = 0.2, maxTokens = null, provider = undefined, jsonSchema = null, tier = undefined, onStart = null, label = null) {
   let dynExpectedChars = expectedChars;
   let calibrated = false;
   // Eindeutige ID für diesen Call – wird in tok.inflight eingetragen wenn vorhanden
   // (tok.inflight ist ein Map, der nur vom komplett-analyse-Job gesetzt wird, damit
   // bei parallelen Kapitel-Calls die Live-Anzeige alle in-flight-Tokens summiert.)
   const callId = Symbol();
+  const callLog = beginCallLog(jobId, { label, tierLabel: normalizeTier(tier).label, prompt, system });
   // Throttle: updateJob höchstens alle PROGRESS_THROTTLE_MS. Bei parallelen Streams
   // (Komplettanalyse) feuert onProgress sonst hunderte Mal/s pro Call und belastet
   // den Event-Loop, sodass andere Clients Requests verzögert bedient werden.
@@ -402,6 +408,7 @@ async function aiCall(jobId, tok, prompt, system, fromPct, toPct, expectedChars 
     if (thinking) setThinking(true);
     else if (think.active && chars > 0) setThinking(false);
     lastChars = chars;
+    if (tokIn > 0) markCallStarted(callLog);
     if (onStart && tokIn > 0) { const fn = onStart; onStart = null; fn(); }
     if (!calibrated && tokIn > 0) {
       dynExpectedChars = Math.max(expectedChars, Math.round(tokIn * 4 * outputRatio));
@@ -458,6 +465,9 @@ async function aiCall(jobId, tok, prompt, system, fromPct, toPct, expectedChars 
   let aiRes;
   try {
     aiRes = await callAI(prompt, system, onProgress, maxTokensOverride, signal, effProvider, jsonSchema, tier);
+  } catch (err) {
+    failCallLog(callLog, err, effProvider);
+    throw err;
   } finally {
     setThinking(false);
     // Auch auf dem Fehlerpfad räumen: ein geworfener Call (Abbruch, Timeout,
@@ -466,6 +476,7 @@ async function aiCall(jobId, tok, prompt, system, fromPct, toPct, expectedChars 
     // zählte die toten Tokens weiter mit (retryOnTransientAi, settledAll).
     tok.inflight?.delete(callId);
   }
+  endCallLog(callLog, aiRes, effProvider);
   const { text, truncated, stopReason, tokensIn, tokensOut, cacheReadIn = 0, cacheCreationIn = 0, cacheCreation1hIn = 0, genDurationMs } = aiRes;
   tok.in += tokensIn;
   tok.out += tokensOut;

@@ -448,15 +448,21 @@ textarea[data-spellcheck="spelling"]:not(.card-title--input, .page-head__input) 
 }
 .lt-field-wrap--textarea > .lt-badge--form:active { transform: scale(0.98); }
 
-/* Quiet: weniger visuelles Rauschen wenn nichts zu zeigen. Wird vom JS gesetzt
- * fuer idle/clean/disabled. Hover/Fokus aufs Feld macht Badge wieder voll
- * sichtbar (Container-Hover via .lt-field-wrap). */
+/* Quiet: nichts zu zeigen (idle/clean/disabled, vom JS gesetzt) → Badge nur
+ * waehrend der Bearbeitung des Feldes. Persistente Felder (Abschnittstitel
+ * im Notebook-Editor, Organizer-Zeilen) behalten den Controller ueber
+ * Abschnittswechsel; ein ruhiger Haken an jedem Titel waere reines Rauschen.
+ * Ein Badge mit Treffern bleibt immer sichtbar. */
 .lt-badge--form.lt-badge--quiet {
-  opacity: var(--opacity-hint);
+  opacity: 0;
+  pointer-events: none;
 }
-.lt-field-wrap:hover > .lt-badge--form,
 .lt-field-wrap:focus-within > .lt-badge--form,
 .lt-badge--form:focus-visible {
+  opacity: 0.95;
+  pointer-events: auto;
+}
+.lt-field-wrap:hover > .lt-badge--form:not(.lt-badge--quiet) {
   opacity: 0.95;
 }
 

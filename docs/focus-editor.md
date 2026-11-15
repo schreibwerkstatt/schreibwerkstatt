@@ -315,9 +315,9 @@ Beim Enter ohne gemerkte Schreibstelle springt der Caret an Buchende. `jumpToTra
 | [tests/e2e/focus-reveal-scroll.spec.js](../tests/e2e/focus-reveal-scroll.spec.js) | Ein browser-eigener Scroll zwischen Tastendruck und Recenter-Frame verwirft den Typewriter-Tick nicht (Ablauf von Hand nachgestellt, läuft in jeder Engine). Mutationsgeprüft: ohne die Übernahme-Regel in `_focusUpdateActive` → rot; ohne den nachgestellten Scroll grün auch ohne Regel. |
 | [tests/e2e/focus-softbreak.webkit.spec.js](../tests/e2e/focus-softbreak.webkit.spec.js) | **Eigenes WebKit-Projekt**: Shift+Enter mitten im Text bleibt ein `<br>` im selben Absatz (Invariante 11c). Mutationsgeprüft: alter `insertHTML`-Zweig → rot. |
 
-**Pflicht:** Bei jeder Änderung im Focus-Editor `npm test` laufen lassen (schnelle Runde: `npm run test:focus` = Harness-Suite + beide App-Specs). Schlägt etwas fehl, Ursache klären, nicht Tests anpassen.
+**Pflicht:** Bei jeder Änderung im Focus-Editor die Sonderprüfung `npm run test:focus` (jede Test-Datei des Moduls: Unit, Harness Chromium + WebKit, App-Suite Chromium + Firefox). Schlägt etwas fehl, Ursache klären, nicht Tests anpassen.
 
-**Pflicht davor:** [focus-editor-acceptance.md](focus-editor-acceptance.md) in der laufenden App durchklicken (11 Handgriffe + 1 Zusatz, ~2 min). Der Editor ist ein stabilisiertes Modul — Anlass, Commit-Disziplin und Verifikationsreihenfolge regelt die harte Regel „Focus-Editor ist stabilisiert" in [CLAUDE.md](../CLAUDE.md).
+**Pflicht davor:** [focus-editor-acceptance.md](focus-editor-acceptance.md) in der laufenden App durchklicken (11 Handgriffe + 1 Zusatz, ~2 min). Der Editor ist ein stabilisiertes Modul — Anlass, Commit-Disziplin und Verifikationsreihenfolge regelt [stabilisiert.md](stabilisiert.md).
 
 Was die Automatisierung von der Klickliste abdeckt (Stand: gegen die echte App nachgemessen, Chromium + Firefox):
 
@@ -336,7 +336,7 @@ Was bleibt, ist das **Schreibgefühl**: Zucken oder Flattern, das nur bei echtem
 
 ## Bewusst nicht aufgeräumt
 
-Damit die Entscheidung nicht jede Session neu diskutiert wird — diese Punkte sind bekannt und bleiben, weil die harte Regel „Focus-Editor ist stabilisiert" Änderungen ohne beobachtbares Verhalten ausschliesst und jeder Umbau hier Regressionsrisiko ohne Gegenwert bedeutet:
+Damit die Entscheidung nicht jede Session neu diskutiert wird — diese Punkte sind bekannt und bleiben, weil die Regel der stabilisierten Module ([stabilisiert.md](stabilisiert.md)) Änderungen ohne beobachtbares Verhalten ausschliesst und jeder Umbau hier Regressionsrisiko ohne Gegenwert bedeutet:
 
 - Toter Re-Export `isEmptyParagraph` in [dom-blocks.js](../public/js/editor/focus/dom-blocks.js) (Quelle ist `shared/auto-slot.js`).
 - `overlapsBand` und `SENTENCE_HL` sind exportiert, aber nur modul-intern genutzt.

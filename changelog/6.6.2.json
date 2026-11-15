@@ -1,0 +1,21 @@
+{
+  "version": "6.6.2",
+  "date": "2026-11-15",
+  "entries": [
+    {
+      "kind": "verbessert",
+      "de": "Abschnitt bearbeiten: Der Cursor steht beim Öffnen am Ende des Textes, und die Ansicht springt dorthin. So schreibst du direkt weiter, wo du aufgehört hast.",
+      "en": "Editing a section: the cursor now starts at the end of the text, and the view scrolls there. You can pick up right where you left off."
+    },
+    {
+      "kind": "verbessert",
+      "de": "Abschnitt teilen: Fundstellen, Belege und erste Erwähnungen, die jetzt im neuen Abschnitt stehen, wandern mit. Bearbeitungsstand und Textsorte übernimmt der neue Abschnitt vom alten.",
+      "en": "Splitting a section: references, evidence and first mentions that now sit in the new section move along with it. The new section takes over the editing status and text type of the original."
+    },
+    {
+      "kind": "behoben",
+      "de": "Rechtschreibprüfung an Titelfeldern: Nach einem Wechsel des Abschnitts blieb manchmal die Trefferzahl des vorherigen Titels stehen. Ohne Treffer zeigt das Feld jetzt keinen Haken mehr, solange du nicht darin schreibst.",
+      "en": "Spell check on title fields: after switching sections, the match count of the previous title sometimes stayed visible. Without matches, the field no longer shows a check mark unless you are typing in it."
+    }
+  ]
+}
