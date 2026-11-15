@@ -379,3 +379,65 @@ test('overview7DayCharDelta: Snapshot-Lücke → letzter Snapshot vor dem Sticht
   ]);
   assert.equal(ctx.overview7DayCharDelta(), 0);
 });
+
+// ── Importe zählen nicht als geschrieben (imported_chars, lib/import-baseline.js)
+
+test('Import: Tagesbilanz, 7-Tage-Summe und Sparkline rechnen den Import heraus', () => {
+  // Vor drei Tagen 50'000 Zeichen importiert (Baseline: der Tag davor trägt den
+  // Import bereits, der Zähler springt am Import-Tag), sonst täglich +500.
+  const stats = [
+    { recorded_at: isoDaysAgo(5), chars: 1000, imported_chars: 0 },
+    { recorded_at: isoDaysAgo(4), chars: 1500, imported_chars: 0 },
+    { recorded_at: isoDaysAgo(3), chars: 52000, imported_chars: 50000 },
+    { recorded_at: isoDaysAgo(2), chars: 52500, imported_chars: 50000 },
+    { recorded_at: isoDaysAgo(1), chars: 53000, imported_chars: 50000 },
+  ];
+  const ctx = makeCtx(stats);
+  const byIso = new Map(ctx.overviewLast7Days().map(d => [d.iso, d.delta]));
+  assert.equal(byIso.get(isoDaysAgo(3)), 500, 'Import-Tag: nur das Geschriebene');
+  assert.equal(ctx.overview7DayCharDelta(), 2000, '4 × 500 im Fenster, ohne Import');
+  assert.equal(ctx.overviewSparkline().deltaAbs, 2000);
+});
+
+test('7-Tage-Balken: Nulllinie am Boden ohne Minus-Tag, sonst anteilig darüber', () => {
+  const plus = makeCtx([
+    { recorded_at: isoDaysAgo(2), chars: 1000 },
+    { recorded_at: isoDaysAgo(1), chars: 1600 },
+  ]).overviewLast7Bars();
+  assert.equal(plus.zeroPct, 0);
+  assert.equal(plus.hasNeg, false);
+  const max = plus.days.find(d => d.delta === 600);
+  assert.equal(max.height, 100);
+  assert.equal(max.bottom, 0);
+
+  const mixed = makeCtx([
+    { recorded_at: isoDaysAgo(3), chars: 1000 },
+    { recorded_at: isoDaysAgo(2), chars: 1300 }, // +300
+    { recorded_at: isoDaysAgo(1), chars: 1200 }, // −100
+  ]).overviewLast7Bars();
+  assert.equal(mixed.hasNeg, true);
+  assert.equal(mixed.zeroPct, 25, 'Minus-Anteil 100 / (300 + 100)');
+  const up = mixed.days.find(d => d.delta === 300);
+  const down = mixed.days.find(d => d.delta === -100);
+  assert.deepEqual([up.bottom, up.height], [25, 75]);
+  assert.deepEqual([down.bottom, down.height], [0, 25], 'Minus wächst von der Nulllinie nach unten');
+});
+
+test('Sparkline: Kalenderachse und Live-Punkt von heute', () => {
+  const stats = [
+    { recorded_at: isoDaysAgo(10), chars: 1000 },
+    { recorded_at: isoDaysAgo(9), chars: 1100 },
+    // Lücke: acht Tage ohne Snapshot
+    { recorded_at: isoDaysAgo(1), chars: 1900 },
+  ];
+  const ctx = makeCtx(stats, { 1: { chars: 2000 } });
+  const sl = ctx.overviewSparkline();
+  assert.equal(sl.points.length, 4, 'Live-Stand als letzter Punkt');
+  assert.equal(sl.points[3].iso, localIsoDate());
+  assert.equal(sl.deltaAbs, 1000);
+  // Spalten decken die Breite lückenlos ab; die Lücke bekommt Platz.
+  const total = sl.points.reduce((a, p) => a + p.colWidth, 0);
+  assert.ok(Math.abs(total - 100) < 1e-9, `Spalten summieren sich auf ${total}`);
+  const xOf = p => p.colLeft + (p.tickPct / 100) * p.colWidth;
+  assert.ok(xOf(sl.points[2]) > 85, `Snapshot von gestern liegt rechts (Kalender), nicht bei 2/3: ${xOf(sl.points[2])}`);
+});

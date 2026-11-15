@@ -59,23 +59,33 @@
   height: 56px;
   display: block;
 }
-/* Hover-Overlay: eine Spalte pro Datenpunkt, transparent, gleichmässig verteilt
-   über die gesamte Sparkline-Fläche. Pointer-Events nur auf den Spalten —
-   Klick auf die Karte (Open Stats) bubblet weiter. */
+/* Endpunkt-Marker: HTML statt SVG-Kreis, damit die gedehnte Sparkline ihn
+   nicht zur Ellipse zieht. Position (Prozent) aus overviewSparkline(). */
+.overview-sparkline-end {
+  position: absolute;
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  transform: translate(-50%, -50%);
+  pointer-events: none;
+}
+/* Hover-Overlay: eine Spalte pro Datenpunkt, transparent, an der Kalender-
+   Position des Punkts (left/width aus overviewSparkline). Pointer-Events nur
+   auf den Spalten — Klick auf die Karte (Open Stats) bubblet weiter. */
 .overview-sparkline-hover {
   position: absolute;
   inset: 0;
-  display: flex;
   pointer-events: none;
 }
 .overview-sparkline-hover-col {
-  position: relative;
-  flex: 1 1 0;
+  position: absolute;
+  top: 0;
+  bottom: 0;
   min-width: 0;
   pointer-events: auto;
   cursor: pointer;
 }
-/* Vertikale gestrichelte Linie an der Spalten-Mitte beim Hover/Focus —
+/* Vertikale gestrichelte Linie am Datenpunkt beim Hover/Focus —
    zeigt, welcher Datenpunkt im Tooltip gemeint ist. */
 .overview-sparkline-tick {
   position: absolute;
@@ -116,22 +126,34 @@
   gap: var(--space-xs);
   min-width: 0;
 }
+/* Balken absolut ab der Nulllinie (`--bar7-zero`, Prozent von unten): Plus
+   wächst nach oben, Minus nach unten. Geometrie: book-overview/stats.js#overviewLast7Bars. */
 .overview-bar7-track {
+  position: relative;
   width: 100%;
   height: 48px;
-  display: flex;
-  align-items: flex-end;
   background: transparent;
 }
+/* Nulllinie nur, wenn ein Tag im Minus ist — sonst ist der Boden die Null. */
+.overview-bar7-track--signed::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: var(--bar7-zero, 0%);
+  border-top: 1px solid var(--color-border);
+}
 .overview-bar7-fill {
+  position: absolute;
+  left: 0;
   width: 100%;
   min-height: 2px;
   background: var(--color-border);
   border-radius: var(--radius-none) var(--radius-none) 0 0;
-  transition: height 0.18s ease;
+  transition: height 0.18s ease, bottom 0.18s ease;
 }
 .overview-bar7-fill--pos { background: var(--color-success); }
-.overview-bar7-fill--neg { background: var(--color-err-text); }
+.overview-bar7-fill--neg { background: var(--color-err-text); border-radius: 0 0 var(--radius-none) var(--radius-none); }
 .overview-bar7-label {
   font-size: var(--font-size-micro);
   color: var(--color-muted);

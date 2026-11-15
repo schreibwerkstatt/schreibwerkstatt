@@ -3,7 +3,8 @@
 // (frei von Alpine/DOM) → unit-testbar (tests/unit/deadline-projection.test.mjs).
 // Quelle ist der book_stats_history-Snapshot-Verlauf (overviewStats) plus der
 // Live-Zeichenstand aus tokEsts. Schnitt = Zeichen-Zuwachs der letzten 30 Tage
-// geteilt durch die tatsaechliche Snapshot-Spanne, ohne Struktur-Spruenge.
+// geteilt durch die tatsaechliche Snapshot-Spanne, ohne Importe (imported_chars)
+// und ohne Struktur-Spruenge.
 import { localIsoDate } from '../utils.js';
 import { isoAddDays, isoDaysBetween } from '../utils/iso-day.js';
 
@@ -57,8 +58,13 @@ export function computeDeadlineProjection(stats, liveChars, { targetChars, deadl
   let pace = 0; // Zeichen/Tag
   let jumpsExcluded = 0;
   if (baseIso != null) {
-    const points = dated.slice(baseIdx).map(s => ({ iso: s.recorded_at, chars: Number(s.chars) || 0 }));
-    points.push({ iso: isoToday, chars: current });
+    // Geschriebener Stand je Snapshot (Import-Zuwachs abgezogen, today-ring.js#
+    // writtenChars); der Live-Stand erbt den Import-Zähler des jüngsten Snapshots.
+    const points = dated.slice(baseIdx).map(s => ({
+      iso: s.recorded_at, chars: (Number(s.chars) || 0) - (Number(s.imported_chars) || 0),
+    }));
+    const lastImported = Number(dated[dated.length - 1].imported_chars) || 0;
+    points.push({ iso: isoToday, chars: current - lastImported });
     let gained = 0;
     for (let i = 1; i < points.length; i++) {
       const delta = points[i].chars - points[i - 1].chars;

@@ -8,6 +8,7 @@
 //    Besitz über die Session, nur kind='ideen' sowie die Ideen-Vorschläge aus
 //    Abschnitts- (kind='page') und Buch-Chat (kind='book') — ein Plot-Vorschlag
 //    ist über diese Route nicht erreichbar (geteilte Fabrik routes/chat-proposal-status.js).
+//  - POST /ideen/chat-proposal/beleg-check: Ideen- und Abschnitts-Chat (idee_update mit Beleg).
 //  - PATCH /ideen/:id greift nicht für /chat-proposal (Mount-Reihenfolge).
 
 const test = require('node:test');
@@ -223,6 +224,17 @@ test('POST /ideen/chat-proposal/beleg-check: Beleg gegen den aktuellen Abschnitt
   assert.equal((await call('POST', '/ideen/chat-proposal/beleg-check', { message_id: plotMsgId, index: 0 })).status, 404);
   assert.equal((await call('POST', '/ideen/chat-proposal/beleg-check', { message_id: m, index: 5 })).status, 404);
   assert.equal((await call('POST', '/ideen/chat-proposal/beleg-check', { message_id: m })).status, 400);
+  // Abschnitts-Chat trägt idee_update mit Beleg ebenso (lib/chat-idee-proposals.js#normalizeChatIdeeUpdates);
+  // Buch-Chat schlägt keine Änderungen vor.
+  db.prepare('UPDATE pages SET body_html = ? WHERE page_id = ?').run('<p>Sie las <em>Der Prozess</em>, dann schlief sie.</p>', PAGE_B);
+  const upd = [{ type: 'idee_update', idee_id: 1, fields: { status: 'erledigt' }, beleg: { text: 'Der Prozess, dann schlief sie', page_id: PAGE_B } }];
+  const pageSid = db.prepare(
+    "INSERT INTO chat_sessions (book_id, page_id, kind, user_email, created_at, last_message_at) VALUES (?, ?, 'page', ?, ?, ?)"
+  ).run(BOOK, PAGE_B, OWNER, NOW, NOW).lastInsertRowid;
+  const pm = mkMsgWith(pageSid, upd);
+  assert.deepEqual((await call('POST', '/ideen/chat-proposal/beleg-check', { message_id: pm, index: 0 })).json, { checked: true, found: true });
+  const bm = mkMsgWith(mkSessionOf('book'), upd);
+  assert.equal((await call('POST', '/ideen/chat-proposal/beleg-check', { message_id: bm, index: 0 })).status, 404);
 });
 
 test('PATCH /ideen/:id: Anker lösen (page_id = chapter_id = null) macht die Idee zur Buch-Idee', async () => {

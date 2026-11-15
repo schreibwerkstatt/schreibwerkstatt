@@ -37,16 +37,18 @@ test('buildPresenceMatrix: Zeilen folgen der Kapitel-Reihenfolge, Zellen den Spa
   assert.equal(out.rows[1].cells[0].name, 'Yara');
 });
 
-test('buildPresenceMatrix: Skalierung global über alle Zellen, Minimum 8 %', () => {
+test('buildPresenceMatrix: Skalierung global über alle Zellen, Wurzel, Minimum 8 %', () => {
   const out = buildPresenceMatrix([
-    cand('gross', 'Gross', [[1, 40], [2, 20]]),
+    cand('gross', 'Gross', [[1, 400], [2, 100]]),
+    cand('mittel', 'Mittel', [[1, 4], [2, 4]]),
     cand('klein', 'Klein', [[1, 1], [2, 1]]),
   ], CHAPTERS);
 
   const byName = (row, name) => row.cells.find(c => c.name === name);
   assert.equal(byName(out.rows[0], 'Gross').pct, 100, 'globales Maximum → 100 %');
-  assert.equal(byName(out.rows[1], 'Gross').pct, 50, '20/40');
-  assert.equal(byName(out.rows[0], 'Klein').pct, 8, '1/40 wäre 3 % → Floor 8 %');
+  assert.equal(byName(out.rows[1], 'Gross').pct, 50, '√(100/400)');
+  assert.equal(byName(out.rows[0], 'Mittel').pct, 10, '√(4/400) — linear wären es 1 %');
+  assert.equal(byName(out.rows[0], 'Klein').pct, 8, '√(1/400) = 5 % → Floor 8 %');
 });
 
 test('buildPresenceMatrix: leere Zelle bleibt bei 0 %', () => {

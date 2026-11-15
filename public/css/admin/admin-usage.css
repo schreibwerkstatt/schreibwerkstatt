@@ -223,7 +223,9 @@
 
 .admin-usage-chart-canvas {
   position: relative;
-  height: 240px;
+  /* Liegende Balken setzen --chart-rows (setChartRows): je Balken eine Zeile,
+     mindestens die Grundhoehe — viele Job-Typen laufen sonst ineinander. */
+  height: max(240px, calc(var(--chart-rows, 0) * 1.6rem));
 }
 
 .admin-usage-series {
@@ -247,7 +249,7 @@
   .admin-usage-range input[type="date"] { width: 100%; }
   .admin-usage-kpi { padding: var(--space-md); }
   .admin-usage-charts figure { padding: var(--space-md); }
-  .admin-usage-chart-canvas { height: 200px; }
+  .admin-usage-chart-canvas { height: max(200px, calc(var(--chart-rows, 0) * 1.6rem)); }
   .admin-usage-totals { gap: var(--space-md); }
   .admin-usage-actions { flex-wrap: wrap; }
   .admin-usage-actions button { width: 100%; }

@@ -7,6 +7,8 @@
 
 import { barDataset, categoryAxis, chartOptions, chartPalette, valueAxis } from '../cards/chart-style.js';
 import { FEATURES } from '../cards/feature-registry.js';
+import { formatIsoDay } from '../utils.js';
+import { _adminUsagePreloadChart } from './admin-usage-charts.js';
 
 // Abgeleitete Zeilen ausserhalb des reaktiven Karten-States memoisieren
 // (Muster _matrixMemo in admin-usage.js): Schluessel ist das Report-Objekt,
@@ -27,7 +29,9 @@ function _rate(part, whole) {
 }
 
 export const adminUsageBehaviorMethods = {
+  // Chart.js parallel zum Fetch laden — wie adminUsageLoadSummary.
   async adminUsageLoadBehavior() {
+    _adminUsagePreloadChart();
     await this._adminUsageRun('behavior', () => this._adminUsageFetch('/admin/usage/behavior'), (data) => {
       this.adminUsageBehavior = data;
     });
@@ -175,22 +179,35 @@ export const adminUsageBehaviorMethods = {
   },
 
   async _adminUsageRenderBehaviorCharts(data) {
-    // Gleiche Schutzregeln wie _adminUsageRenderCharts (admin-usage.js).
-    if (!(await this._adminUsageChartReady('behavior'))) return;
     const pal = chartPalette();
-    const bar = (labels, values, color) => {
+    const t = window.__app.t.bind(window.__app);
+    const locale = Alpine.store('shell').uiLocale;
+    // Stehende Balken; `title` liefert die Tooltip-Ueberschrift zum Index,
+    // `series` den Namen der Reihe vor dem Wert.
+    const bar = (labels, values, color, series, title) => {
       const o = chartOptions(pal);
+      o.plugins.tooltip.callbacks = { title: items => title(items[0]?.dataIndex ?? 0) };
       o.scales = {
         x: categoryAxis(pal),
         y: valueAxis(pal, { beginAtZero: true, ticks: { precision: 0 } }),
       };
-      return { type: 'bar', data: { labels, datasets: [barDataset(pal, color, { data: values })] }, options: o };
+      return { type: 'bar', data: { labels, datasets: [barDataset(pal, color, { label: series, data: values })] }, options: o };
     };
     const weekly = data.activity?.weekly || [];
-    this._adminUsageDrawChart('behaviorWeekly', this.$refs?.chartBehaviorWeekly, weekly.length
-      ? bar(weekly.map(w => this.adminUsageDate(w.week)), weekly.map(w => w.activeUsers), pal.primary) : null);
     const hours = data.hours || [];
-    this._adminUsageDrawChart('behaviorHours', this.$refs?.chartBehaviorHours, hours.some(Boolean)
-      ? bar(hours.map((_, h) => String(h).padStart(2, '0')), hours, pal.accent) : null);
+    const hh = h => String(h % 24).padStart(2, '0');
+    const r = this.$refs || {};
+    await this._adminUsageDrawCharts('behavior', [
+      // Achse: Wochenbeginn kurz (dd.mm.), Tooltip: volles Datum.
+      { key: 'behaviorWeekly', el: r.chartBehaviorWeekly, config: weekly.length
+        ? bar(weekly.map(w => formatIsoDay(w.week, locale, { day: '2-digit', month: '2-digit' }) || w.week),
+          weekly.map(w => w.activeUsers), pal.primary, t('admin.usage.behavior.weeklySeries'),
+          i => t('admin.usage.behavior.weekOf', { date: this.adminUsageDate(weekly[i]?.week) }))
+        : null },
+      { key: 'behaviorHours', el: r.chartBehaviorHours, config: hours.some(Boolean)
+        ? bar(hours.map((_, h) => hh(h)), hours, pal.accent, t('admin.usage.behavior.hoursSeries'),
+          i => t('admin.usage.behavior.hourRange', { from: hh(i), to: hh(i + 1) }))
+        : null },
+    ]);
   },
 };

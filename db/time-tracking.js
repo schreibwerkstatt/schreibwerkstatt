@@ -193,6 +193,17 @@ function readSummary(kind, { userEmail, bookId }) {
     daily,
   };
   for (const c of extras) out[`total_${c}`] = row?.[`total_${c}`] || 0;
+  // Schreibzeit ALLER User je Tag (nur Summen, keine Einzelwerte): Nenner des
+  // Schreibtempos, dessen Zähler der buchweite Snapshot-Zuwachs ist
+  // (public/js/book/bookstats-avg.js#tempoRows). Mit der eigenen Zeit allein
+  // käme bei Co-Autoren deren Text als eigenes Tempo dazu.
+  if (kind === 'writing') {
+    out.book_daily = db.prepare(`
+      SELECT date, SUM(seconds) AS seconds FROM ${spec.table}
+      WHERE book_id = ? AND ${active}
+      GROUP BY date ORDER BY date ASC
+    `).all(bookId);
+  }
   if (spec.perPage) {
     out.per_page = _perPage(spec, userEmail, bookId);
     out.per_chapter = _perChapter(spec, userEmail, bookId);

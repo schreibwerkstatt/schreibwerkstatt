@@ -298,7 +298,7 @@ function listFigureIdiolect(bookId, viewerEmail, ownerEmail) {
 // Tagesverlauf (book_stats_history) mit den längenrobusten Kennzahlen des
 // aktuellen Scans stempeln. Zwei Aufrufer: der Sync (schreibt die Tageszeile und
 // übernimmt den Stand des letzten Scans) und der Scan selbst (überschreibt mit dem
-// frischen Stand, falls die Tageszeile schon existiert). Ohne Tageszeile tut der
+// frischen Stand der jüngsten Tageszeile, `stampLexiconLatest`). Ohne Tageszeile tut der
 // Aufruf nichts — die Zeile gehört dem Sync.
 //
 // MATTR nur mit vollem Fenster: ein kurzes Buch liefert dort die einfache TTR, und
@@ -315,6 +315,14 @@ const _stmtStampHistory = db.prepare(`
 `);
 function stampLexiconHistory(bookId, date, mattrWindow) {
   return _stmtStampHistory.run({ book_id: bookId, date, window: mattrWindow }).changes;
+}
+
+// Jüngste Tageszeile des Buchs — der Scan läuft hinter dem Nachtlauf, der den
+// VORTAG schreibt; „heute" gibt es dann noch nicht.
+const _stmtLatestHistoryDay = db.prepare('SELECT MAX(recorded_at) AS day FROM book_stats_history WHERE book_id = ?');
+function stampLexiconLatest(bookId, mattrWindow) {
+  const day = _stmtLatestHistoryDay.get(bookId)?.day;
+  return day ? stampLexiconHistory(bookId, day, mattrWindow) : 0;
 }
 
 // Sprache, mit der das Buch gescannt wird: die Buch-Einstellung, ohne eigene Zeile
@@ -475,6 +483,6 @@ function listScanScopes() {
 
 module.exports = {
   replaceBookLexicon, getBookLexicon, listLexiconTerms, listLexiconHapax, listLexiconNgrams,
-  listChapterLexicon, listFigureIdiolect, stampLexiconHistory,
+  listChapterLexicon, listFigureIdiolect, stampLexiconHistory, stampLexiconLatest,
   getLexiconSignature, bookLanguage, loadReferenceCorpus, referenceFingerprint, loadPeerStats, listScanScopes,
 };

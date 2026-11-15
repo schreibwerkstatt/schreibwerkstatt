@@ -37,7 +37,7 @@ const charsByOwner      = _all(`SELECT b.owner_email AS email, COALESCE(SUM(ps.c
                                  WHERE b.owner_email IS NOT NULL GROUP BY b.owner_email`);
 
 // Netto-Woerter (delta) und -Zeichen (chars_delta) heute je Buch: aktueller Stand minus letzter Tages-Snapshot vor
-// heute (book_stats_history, lokales Datum, Lauf um 23:00). Buecher ohne
+// heute (book_stats_history, lokales Datum, Nachtlauf 00:05, Stand am Tagesende). Buecher ohne
 // Snapshot (heute neu/importiert) fehlen bewusst — sonst zaehlte ein Import
 // als geschriebener Text.
 const _wordsTodayByBook = db.prepare(`

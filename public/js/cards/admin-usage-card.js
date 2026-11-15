@@ -4,6 +4,7 @@
 
 import { adminUsageMethods } from '../admin/admin-usage.js';
 import { adminUsageBehaviorMethods } from '../admin/admin-usage-behavior.js';
+import { adminUsageChartMethods } from '../admin/admin-usage-charts.js';
 import { setupCardLifecycle } from './card-lifecycle.js';
 
 export function registerAdminUsageCard() {
@@ -119,5 +120,6 @@ export function registerAdminUsageCard() {
 
     ...adminUsageMethods,
     ...adminUsageBehaviorMethods,
+    ...adminUsageChartMethods,
   }));
 }

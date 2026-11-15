@@ -46,9 +46,11 @@ export function bucketByRoot(entries, resolveRoot) {
  * Top-Spalten sonst fluten und die wiederkehrenden verdrängen — sie füllen nur
  * die Spalten auf, die nach den wiederkehrenden noch frei sind.
  *
- * Skalierung: ein globales Maximum über alle Zellen. Spalten-Normierung wurde
- * verworfen, weil Entitäten oft nur in einem Kapitel auftauchen → 100 % selbst
- * bei Wert 1, wodurch sparse Zellen fälschlich „voll" wirkten.
+ * Skalierung: ein globales Maximum über alle Zellen, Füllung ∝ √(Wert/Max).
+ * Spalten-Normierung wurde verworfen, weil Entitäten oft nur in einem Kapitel
+ * auftauchen → 100 % selbst bei Wert 1, wodurch sparse Zellen fälschlich „voll"
+ * wirkten. Die Wurzel dämpft die Dominanz einer Hauptfigur: linear drückte ihr
+ * Maximum alle übrigen Zellen auf die Mindestfüllung.
  *
  * @param {Array<{id, name, byRootId: Map<number, number>, total: number}>} candidates
  * @param {Array<{id, name}>} chapters  Wurzel-Kapitel in Lese-Reihenfolge.
@@ -84,7 +86,7 @@ export function buildPresenceMatrix(candidates, chapters, { maxCols = PRESENCE_M
           id: c.id,
           name: c.name,
           value: v,
-          pct: v > 0 ? Math.max(MIN_VISIBLE_PCT, Math.round((v / globalMax) * 100)) : 0,
+          pct: v > 0 ? Math.max(MIN_VISIBLE_PCT, Math.round(Math.sqrt(v / globalMax) * 100)) : 0,
         };
       }),
     })),

@@ -2,7 +2,7 @@
 // Die Auswahl (welche Hunks, wie viel Verlauf) trifft der Job über
 // routes/jobs/chat/page-chat-context.js — hier steht nur der Wortlaut.
 
-import { _obj, _str } from './schema-utils.js';
+import { _obj, _str, _num, _nullableEnum } from './schema-utils.js';
 
 const CLIP = 160;
 
@@ -17,6 +17,16 @@ export const SCHEMA_CHAT = _obj({
   ideen: {
     type: 'array',
     items: _obj({ inhalt: _str, begruendung: _str, ort: { type: 'string', enum: ['abschnitt', 'kapitel'] } }),
+  },
+  // Änderungen an den offenen Ideen im Prompt; leerer Text / null = «nicht angegeben»
+  // (Normalisierung lib/chat-idee-proposals.js#normalizeChatIdeeUpdates).
+  ideen_aenderungen: {
+    type: 'array',
+    items: _obj({
+      idee_id: _num, inhalt: _str,
+      status: _nullableEnum(['offen', 'in_arbeit', 'erledigt', 'verworfen']),
+      beleg: _str, begruendung: _str,
+    }),
   },
 });
 
@@ -46,6 +56,47 @@ export const PAGE_CHAT_IDEEN_RULES = [
   '- inhalt ist ein knapper, eigenständig verständlicher Stichpunkt (keine Prosa, kein Bezug auf diesen Chat), z.B. «Augenfarbe von Lena: hier grün, in Kapitel 2 blau — vereinheitlichen».',
   '- Keine Idee für etwas, das ein Eintrag in vorschlaege schon behebt, und keine, die inhaltlich schon bei den offenen Ideen des Autors steht. Höchstens 3. Sonst ein leeres Array.',
 ];
+
+// Block OFFENE IDEEN im seiten-stabilen Prompt-Teil (Block 2): offene Ideen des
+// Abschnitts + des umliegenden Kapitels (routes/jobs/shared/queries.js#getOpenIdeen)
+// mit [#id] — Ziel von `ideen_aenderungen`. Leer ohne Ideen.
+export function pageChatIdeenLines(ideen) {
+  if (!Array.isArray(ideen) || ideen.length === 0) return [];
+  const lines = ['=== OFFENE IDEEN (Notizen des Autors für diesen Abschnitt + das umliegende Kapitel) ==='];
+  for (const i of ideen) {
+    const datum = i.created_at ? ` (${i.created_at.slice(0, 10)})` : '';
+    const tag = i.scope === 'chapter' ? '[Kapitel] ' : '[Abschnitt] ';
+    const id = i.id != null ? `[#${i.id}] ` : '';
+    const stufe = i.status && i.status !== 'offen' ? ` — Stufe: ${i.status}` : '';
+    lines.push(`- ${id}${tag}${i.content}${datum}${stufe}`);
+  }
+  lines.push(
+    '',
+    'Hinweis: Diese Ideen sind Notizen des Autors zu möglichen Fortsetzungen, Szenen oder inhaltlichen Ankern. [Kapitel]-Notizen gelten fürs ganze Kapitel, [Abschnitt]-Notizen nur für diesen Abschnitt. Greife sie auf, hinterfrage oder ergänze sie konversationell — wandle sie aber nicht eigenmächtig in vorschlaege-Einträge um, solange der Autor nicht danach fragt. Ist eine davon im Abschnitt eingelöst, schlage sie über ideen_aenderungen als erledigt vor (Regeln unten).',
+    '',
+  );
+  return lines;
+}
+
+// Regeln zum Feld `ideen_aenderungen`: Änderungen an den OFFENEN IDEEN, die der
+// Chat im Prompt mit [#id] sieht. Nur wenn es solche Ideen gibt. «erledigt» nur
+// mit einem wörtlichen Beleg aus diesem Abschnitt — der Server prüft ihn
+// (lib/chat-idee-proposals.js#normalizeChatIdeeUpdates), ein nicht gefundener
+// Beleg lässt den Vorschlag fallen. `stages` = im Buch aktive Stufen.
+export function pageChatIdeenAenderungRules(stages, { hatIdeen = true } = {}) {
+  if (!hatIdeen) return ['- ideen_aenderungen ist ein leeres Array (es gibt keine offenen Ideen).'];
+  const list = (Array.isArray(stages) && stages.length ? stages : ['offen', 'erledigt']).join(', ');
+  return [
+    'IDEEN-ÄNDERUNGEN:',
+    '- ideen_aenderungen ändert bestehende OFFENE IDEEN (idee_id = die Zahl aus [#id]); der Autor übernimmt jede einzeln. Je Idee höchstens ein Eintrag, höchstens 5. Sonst ein leeres Array.',
+    `- status: neue Stufe oder null (unverändert). Erlaubt: ${list}.`,
+    '- «erledigt» schlägst du von dir aus vor, sobald der aktuelle Abschnittsinhalt die Pendenz vollständig einlöst — auch eine [Kapitel]-Idee, wenn die Einlösung in diesem Abschnitt steht. Dann ist beleg Pflicht: eine kurze, zusammenhängende Textstelle WÖRTLICH aus dem Abschnittsinhalt oben (mindestens drei Wörter, höchstens zwei Auslassungen «…»), die die Einlösung zeigt. Ohne passende Stelle kein «erledigt» — nur teilweise eingelöst ist nicht erledigt; sag es dann in antwort.',
+    '- «verworfen» nur, wenn der Autor sagt, dass er die Idee fallen lässt oder sie sich erübrigt hat. «in_arbeit»/«offen» nur auf seinen Wunsch.',
+    '- inhalt: neuer Wortlaut der Idee, nur wenn der Autor darum bittet oder die Pendenz im Gespräch präzisiert (knapper Stichpunkt wie bei ideen). Sonst leerer Text.',
+    '- beleg sonst leer. begruendung: kurz, warum.',
+    '- Eine neue Pendenz gehört in ideen, eine Änderung an einer bestehenden hierher — nie beides für denselben Punkt.',
+  ];
+}
 
 // Abschnittstitel des Buchs in Lesereihenfolge (Block 1, buch-stabil): das
 // Modell leitet bei Titelfragen das Muster der übrigen Titel ab (Satzanfang,

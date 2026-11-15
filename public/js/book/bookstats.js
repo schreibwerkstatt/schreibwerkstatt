@@ -2,7 +2,8 @@
 // Methoden werden in Alpine.data('bookStatsCard') gespreadet; Root-Zugriffe via window.__app.
 
 import {
-  charsToNormseiten, escHtml, fetchJson, formatIsoDay, formatNumber, localeTag, localIsoDaysAgo, resolveDailyGoal, tzOpts,
+  charsToNormseiten, escHtml, fetchJson, formatIsoDay, formatNumber, isoAddDays, localeTag,
+  localIsoDate, localIsoDaysAgo, resolveDailyGoal, tzOpts,
 } from '../utils.js';
 import { loadChart } from '../lazy-libs.js';
 import { createChartHolder } from '../cards/chart-holder.js';
@@ -11,58 +12,17 @@ import {
   crosshairPlugin, lineDataset, refLineDataset, timeSeriesOptions, withAlpha,
 } from '../cards/chart-style.js';
 import {
-  bucketFor, bucketSeries, computeAvgSummary, fillCalendar, metricKind, rollingSeries,
-  rollingWindowForRange, tempoRows, trendSeries,
+  bucketFor, bucketSeries, computeAvgSummary, metricKind, rollingSeries,
+  rollingWindowForRange, selectWindow, sumByBucket, tempoRows, trendSeries,
 } from './bookstats-avg.js';
 import { statusDistribution } from '../redaktion/status.js';
 import { isSelectedBook } from '../cards/book-guard.js';
 import { tFetchError } from '../i18n.js';
-
-
-// Chart-Labels kommen zur Render-Zeit über t() (siehe _metricLabel()), damit sie
-// bei Sprachwechsel live nachgezogen werden.
-const METRIC_KEYS = {
-  chars:              'bookstats.metric.chars',
-  normseiten:         'bookstats.metric.normseiten',
-  words:              'bookstats.metric.words',
-  page_count:         'bookstats.metric.pages',
-  tok:                'bookstats.metric.tok',
-  unique_words:       'bookstats.metric.unique',
-  delta_chars:        'bookstats.metric.deltaChars',
-  delta_words:        'bookstats.metric.delta',
-  avg_sentence_len:   'bookstats.metric.avgSentence',
-  pages_per_chapter:  'bookstats.metric.pagesPerChapter',
-  avg_lix:            'bookstats.metric.lix',
-  avg_flesch_de:      'bookstats.metric.flesch',
-  mattr:              'bookstats.metric.mattr',
-  mtld:               'bookstats.metric.mtld',
-  lex_density:        'bookstats.metric.lexDensity',
-  hapax_ratio:        'bookstats.metric.hapaxRatio',
-  writing_minutes:    'bookstats.metric.writingMinutes',
-  writing_cumulative: 'bookstats.metric.writingCumulative',
-  lektorat_minutes:    'bookstats.metric.lektoratMinutes',
-  lektorat_cumulative: 'bookstats.metric.lektoratCumulative',
-  stt_minutes:         'bookstats.metric.sttMinutes',
-  stt_cumulative:      'bookstats.metric.sttCumulative',
-  stt_chars:           'bookstats.metric.sttChars',
-  status_done:         'bookstats.metric.statusDone',
-  status_set:          'bookstats.metric.statusSet',
-  chars_per_hour:      'bookstats.metric.charsPerHour',
-};
-
-// Wortschatz-Kennzahlen aus dem nächtlichen Scan (book_stats_history, Migration
-// 308). Längenrobust — anders als `unique_words`, das vor allem die Buchlänge misst.
-const LEXICON_METRICS  = new Set(['mattr', 'mtld', 'lex_density', 'hapax_ratio']);
-const PERCENT_METRICS  = new Set(['lex_density', 'hapax_ratio']);
-const WRITING_METRICS  = new Set(['writing_minutes',  'writing_cumulative']);
-const LEKTORAT_METRICS = new Set(['lektorat_minutes', 'lektorat_cumulative']);
-const STT_METRICS      = new Set(['stt_minutes', 'stt_cumulative', 'stt_chars']);
-// Schreibtempo: Snapshot-Zuwachs ÷ Schreibzeit desselben Tags (bookstats-avg.js#tempoRows).
-const TEMPO_METRICS    = new Set(['chars_per_hour']);
-// Bearbeitungsstand (docs/bearbeitungsstand.md): eigene Zeitachse aus
-// page_editorial_status_events, nur Tage mit Stufenwechsel.
-const STATUS_METRICS   = new Set(['status_done', 'status_set']);
-const CUMULATIVE_METRICS = new Set(['writing_cumulative', 'lektorat_cumulative', 'stt_cumulative']);
+import {
+  CARRY_FORWARD_METRICS, CUMULATIVE_METRICS, IMPORT_SOURCE, LEKTORAT_METRICS, LEXICON_METRICS, LIVE_TODAY_METRICS,
+  METRIC_GROUPS, METRIC_KEYS, PERCENT_METRICS, STATUS_METRICS, STT_METRICS, TEMPO_METRICS, WRITING_METRICS,
+  _metricSeries, statusRows,
+} from './bookstats-metrics.js';
 
 // Ausserhalb von Alpine gespeichert, damit die Chart.js-Instanz nicht durch
 // Alpines Reaktivitäts-Proxy beschädigt wird.
@@ -80,17 +40,6 @@ export function _disconnectThemeObserver() { _stats.disconnect(); }
 
 export function _destroyStatsChart() { _stats.destroy(); }
 
-// Verlauf des Bearbeitungsstands → Zeilen der Kurve: `done` = Abschnitte auf der
-// letzten Stufe der Kette, `set` = Abschnitte mit irgendeiner Stufe.
-export function statusRows(history) {
-  const chain = history?.stufen || [];
-  const last = chain[chain.length - 1];
-  return (history?.daily || []).map(d => ({
-    recorded_at: d.date,
-    done: last ? (d[last] || 0) : 0,
-    set: chain.reduce((a, s) => a + (d[s] || 0), 0),
-  }));
-}
 
 // Badge-Texte der Ø-Zeile. Bestandsgrössen zeigen den Ø-ZUWACHS (mit Vorzeichen),
 // Tagesmengen die Ø-Menge pro Kalendertag plus Σ und Ø je aktivem Tag,
@@ -117,30 +66,6 @@ function _avgBadges(s, metricLabel, fmtAvg, bucket) {
   return { label, metricLabel, badges };
 }
 
-// Tagesreihe der gewählten Metrik aus den Rohzeilen. Δ-Werte entstehen hier,
-// VOR dem Zeitraum-Filter — sonst fehlte der erste sichtbare Tag.
-function _metricSeries(metric, rows) {
-  const num = v => Number(v) || 0;
-  switch (metric) {
-    case 'delta_words': return rows.map((r, i) => (i === 0 ? null : num(r.words) - num(rows[i - 1].words)));
-    case 'delta_chars': return rows.map((r, i) => (i === 0 ? null : num(r.chars) - num(rows[i - 1].chars)));
-    case 'normseiten': return rows.map(r => charsToNormseiten(r.chars));
-    case 'pages_per_chapter': return rows.map(r => (r.chapter_count > 0 ? Math.round((r.page_count / r.chapter_count) * 10) / 10 : null));
-    case 'writing_minutes': case 'lektorat_minutes': case 'stt_minutes': return rows.map(r => Math.round(r.seconds / 60));
-    case 'writing_cumulative': case 'lektorat_cumulative': case 'stt_cumulative': {
-      let sum = 0;
-      return rows.map(r => { sum += r.seconds; return Math.round(sum / 360) / 10; });
-    }
-    case 'stt_chars': return rows.map(r => num(r.chars));
-    case 'status_done': return rows.map(r => r.done);
-    case 'status_set': return rows.map(r => r.set);
-    case 'chars_per_hour': return rows.map(r => r.cph);
-    default:
-      // Anteile (0..1) als Prozent — dieselbe Darstellung wie in der Wortschatz-Karte.
-      if (PERCENT_METRICS.has(metric)) return rows.map(r => (r[metric] == null ? null : Math.round(r[metric] * 1000) / 10));
-      return rows.map(r => r[metric] ?? null);
-  }
-}
 
 // Achsen- und Tooltip-Beschriftung eines Eimers.
 function _bucketLabels(b, bucket, uiLocale, spansYears) {
@@ -216,7 +141,11 @@ export const bookstatsMethods = {
     const cov = this.bookStatsCoverage;
     const status = this.bookStatsStatusBadge();
     push('quality', [
-      cov && { text: t('bookstats.coverage', { pct: cov.pct ?? 0, checked: cov.checked_pages ?? 0, total: cov.total_pages ?? 0 }) },
+      cov && { text: t('bookstats.coverage', {
+        pct: Math.min(100, cov.pct ?? 0),
+        checked: Math.min(cov.checked_pages ?? 0, cov.total_pages ?? 0),
+        total: cov.total_pages ?? 0,
+      }) },
       status && { text: status },
       last?.avg_sentence_len != null && { text: t('bookstats.avgSentenceBadge', { n: n1(last.avg_sentence_len) }) },
       last?.chapter_count > 0 && { text: t('bookstats.pagesPerChapterBadge', { n: n1(last.page_count / last.chapter_count) }) },
@@ -239,7 +168,7 @@ export const bookstatsMethods = {
 
   // Ø Zeichen pro Schreibstunde über den ganzen Verlauf (Σ Zeichen / Σ Stunden).
   _bookStatsTempoSummary() {
-    const rows = tempoRows(this.bookStatsData, this.writingTimeData?.daily);
+    const rows = tempoRows(this.bookStatsData, this._bookWritingDaily());
     let chars = 0, hours = 0;
     for (const r of rows) if (r.cph != null) { chars += r.cph * r.hours; hours += r.hours; }
     return hours > 0 ? chars / hours : null;
@@ -271,7 +200,9 @@ export const bookstatsMethods = {
     this.statusHistoryData = statusRes.status === 'fulfilled' ? statusRes.value : null;
     const last = rows[rows.length - 1];
     const prev = rows[rows.length - 2];
-    this.bookStatsDelta = (last && prev) ? last.words - prev.words : null;
+    // Netto: ein Import zwischen den beiden Snapshots ist kein Zuwachs.
+    const writtenWords = r => (Number(r.words) || 0) - (Number(r.imported_words) || 0);
+    this.bookStatsDelta = (last && prev) ? writtenWords(last) - writtenWords(prev) : null;
 
     if (failed.length && !rows.length && !this.writingTimeData?.daily?.length) {
       this.bookStatsSyncStatus = window.__app.t('bookstats.loadError');
@@ -324,13 +255,46 @@ export const bookstatsMethods = {
     }
   },
 
+  // Schreibzeit ALLER User je Tag — Nenner des Tempos, dessen Zähler der
+  // buchweite Zuwachs ist (db/time-tracking.js#readSummary `book_daily`).
+  // Fallback auf die eigene Zeit, solange ein älterer Server das Feld nicht liefert.
+  _bookWritingDaily() {
+    return this.writingTimeData?.book_daily || this.writingTimeData?.daily;
+  },
+
+  // Irgendeine Quelle hat Daten → Umschalter + Chart; sonst der Leerzustand der Karte.
+  bookStatsHasAnyData() {
+    return this.bookStatsData.length > 0
+      || [this.writingTimeData, this.lektoratTimeData, this.sttTimeData, this.statusHistoryData]
+        .some(d => d?.daily?.length > 0);
+  },
+
+  // Metrik-Auswahl: gruppiert, nur Metriken mit Daten. Die gewählte bleibt
+  // immer drin (ihr Leerhinweis erklärt dann, warum der Chart leer ist).
+  bookStatsMetricOptions() {
+    const t = (k) => window.__app.t(k);
+    const out = [];
+    for (const [group, metrics] of METRIC_GROUPS) {
+      const groupLabel = t('bookstats.group.' + group);
+      for (const m of metrics) {
+        if (m !== this.bookStatsMetric && !this._bookStatsHasData(m)) continue;
+        out.push({ value: m, label: t(METRIC_KEYS[m]), group: groupLabel });
+      }
+    }
+    return out;
+  },
+
+  _bookStatsHasData(metric) {
+    return _metricSeries(metric, this._bookStatsRows(metric)).some(v => v != null && Number.isFinite(v));
+  },
+
   // Rohzeilen der gewählten Metrik: jede Quelle hat ihre eigene Zeitachse.
   _bookStatsRows(metric) {
     if (WRITING_METRICS.has(metric))  return (this.writingTimeData?.daily  || []).map(d => ({ recorded_at: d.date, seconds: d.seconds }));
     if (LEKTORAT_METRICS.has(metric)) return (this.lektoratTimeData?.daily || []).map(d => ({ recorded_at: d.date, seconds: d.seconds }));
     if (STT_METRICS.has(metric))      return (this.sttTimeData?.daily      || []).map(d => ({ recorded_at: d.date, seconds: d.seconds, chars: d.chars }));
     if (STATUS_METRICS.has(metric))   return statusRows(this.statusHistoryData);
-    if (TEMPO_METRICS.has(metric))    return tempoRows(this.bookStatsData, this.writingTimeData?.daily);
+    if (TEMPO_METRICS.has(metric))    return tempoRows(this.bookStatsData, this._bookWritingDaily());
     return this.bookStatsData;
   },
 
@@ -359,31 +323,45 @@ export const bookstatsMethods = {
     const metric = this.bookStatsMetric;
     const kind = metricKind(metric);
     const isStatus = STATUS_METRICS.has(metric);
-    let rows = this._bookStatsRows(metric);
-    let data = _metricSeries(metric, rows);
-    let weights = TEMPO_METRICS.has(metric) ? rows.map(r => r.hours) : null;
-
-    // Zeitraum-Filter (App-TZ-Datum wie die recorded_at-Buckets des Servers).
-    if (this.bookStatsRange > 0) {
-      const cutoffStr = localIsoDaysAgo(this.bookStatsRange);
-      const keep = rows.map(r => r.recorded_at >= cutoffStr);
-      rows = rows.filter((_, i) => keep[i]);
-      data = data.filter((_, i) => keep[i]);
-      if (weights) weights = weights.filter((_, i) => keep[i]);
+    const rows = this._bookStatsRows(metric);
+    const data = _metricSeries(metric, rows);
+    const extra = {};
+    if (TEMPO_METRICS.has(metric)) extra.weights = { values: rows.map(r => r.hours), carry: false };
+    // Import je Tag (Differenz des kumulativen Zählers) für Ø-Abzug und Marker.
+    const imp = IMPORT_SOURCE[metric];
+    if (imp) {
+      const cum = rows.map(r => (Number(r[imp.col]) || 0) * imp.scale);
+      extra.importCum = { values: cum, carry: true };
+      extra.importDay = { values: cum.map((v, i) => (i === 0 ? 0 : Math.max(0, v - cum[i - 1]))), carry: false };
     }
 
-    // X-Achse startet am ersten echten Messpunkt der gewählten Metrik.
-    const firstIdx = data.findIndex(v => v != null);
-    if (firstIdx === -1) { this.bookStatsAvg = null; return; }
-    rows = rows.slice(firstIdx); data = data.slice(firstIdx);
-    if (weights) weights = weights.slice(firstIdx);
+    // Zeitraum: Stichtag + Achsen-Ende (App-TZ-Datum wie die recorded_at-Buckets
+    // des Servers). Snapshot-Metriken enden spätestens gestern (Nachtlauf).
+    const today = localIsoDate();
+    const lastRow = rows[rows.length - 1]?.recorded_at;
+    const end = LIVE_TODAY_METRICS.has(metric) ? today
+      : (lastRow && lastRow > isoAddDays(today, -1) ? lastRow : isoAddDays(today, -1));
+    const win = selectWindow({
+      dates: rows.map(r => r.recorded_at),
+      values: data,
+      kind,
+      // „7 Tage" = heute und die sechs Tage davor — genau sieben Plätze.
+      cutoff: this.bookStatsRange > 0 ? localIsoDaysAgo(this.bookStatsRange - 1) : null,
+      end,
+      carryForward: CARRY_FORWARD_METRICS.has(metric),
+      extra,
+    });
+    if (!win) { this.bookStatsAvg = null; this.bookStatsMetricEmpty = true; return; }
+    this.bookStatsMetricEmpty = false;
 
-    // Kalender: jeder Tag ein Platz auf der Achse (Tagesmengen mit 0 gefüllt).
-    const cal = fillCalendar(rows.map(r => r.recorded_at), data, kind, weights);
-    const summary = computeAvgSummary({ kind, dates: cal.dates, values: cal.values, weights: cal.weights });
+    const cal = { dates: win.dates, values: win.values, weights: win.cols.weights || null };
+    const summary = computeAvgSummary({
+      kind, dates: cal.dates, values: cal.values, weights: cal.weights, offsets: win.cols.importCum || null,
+    });
     const bucket = bucketFor(this.bookStatsRange, cal.dates.length);
     const buckets = bucketSeries(cal.dates, cal.values, kind, bucket, cal.weights);
     const series = buckets.map(b => b.value);
+    const importsPerBucket = win.cols.importDay ? sumByBucket(cal.dates, win.cols.importDay, bucket) : null;
 
     const uiLocale = Alpine.store('shell').uiLocale;
     const spansYears = cal.dates[0].slice(0, 4) !== cal.dates[cal.dates.length - 1].slice(0, 4);
@@ -397,7 +375,8 @@ export const bookstatsMethods = {
     // MATTR bewegt sich in der dritten Nachkommastelle — mit einer Stelle wäre die
     // Kurve eine Treppe aus zwei Werten.
     const digits = metric === 'mattr' ? 3 : 1;
-    const fmt = v => formatNumber(isDecimal ? v : Math.round(v), uiLocale, isDecimal ? digits : 0);
+    const unit = PERCENT_METRICS.has(metric) ? ' %' : '';
+    const fmt = v => formatNumber(isDecimal ? v : Math.round(v), uiLocale, isDecimal ? digits : 0) + unit;
     const signed = v => (isDelta && v > 0 ? '+' : '') + fmt(v);
     const compact = compactTick(tag, signed);
     const tick = v => (v === null ? '' : (isDelta && v > 0 ? '+' : '') + compact(v).replace(/^\+/, ''));
@@ -405,7 +384,7 @@ export const bookstatsMethods = {
     // Durchschnitte sind Mittelwerte, keine Messpunkte: eine Nachkommastelle
     // auch dort, wo die Kurve selbst ganzzahlig tickt (0,4 Seiten/Tag ist eine
     // Aussage, gerundete "0" ist keine).
-    const fmtAvg = (v) => (isDecimal ? fmt(v) : formatNumber(v, uiLocale, Math.abs(v) < 10 ? 1 : 0));
+    const fmtAvg = (v) => (isDecimal ? fmt(v) : formatNumber(v, uiLocale, Math.abs(v) < 10 ? 1 : 0) + unit);
 
     const pal = chartPalette();
     const { primary, muted, accent } = pal;
@@ -425,6 +404,28 @@ export const bookstatsMethods = {
       ? barDataset(pal, series.map(v => (v != null && v < 0 ? muted : primary)), { label: metricLabel, data: series, order: 1 })
       : lineDataset(pal, primary, { label: metricLabel, data: series, area: true, sparse: series.filter(v => v != null).length <= 14, spanGaps: true, order: 1 });
     const datasets = [main];
+
+    // Import-Tage markieren: ein Dreieck am Eimer, Tooltip mit dem Umfang des
+    // Imports. Δ-Werte und Ø-Zuwachs rechnen ihn bereits heraus.
+    if (importsPerBucket?.some(v => v > 0)) {
+      const markerAt = importsPerBucket.map((v, i) => (v > 0 ? (series[i] ?? 0) : null));
+      datasets.push({
+        type: 'line',
+        label: window.__app.t('bookstats.importMarker'),
+        data: markerAt,
+        showLine: false,
+        pointStyle: 'triangle',
+        pointRadius: 6,
+        pointHoverRadius: 7,
+        pointBackgroundColor: accent,
+        pointBorderColor: pal.surface,
+        pointBorderWidth: 1,
+        borderColor: accent,
+        backgroundColor: accent,
+        order: 0,
+        swImports: importsPerBucket,
+      });
+    }
 
     if (summary && this.bookStatsShowAvg) {
       if (kind === 'stock') {
@@ -467,10 +468,18 @@ export const bookstatsMethods = {
     _ensureThemeObserver(this);
 
     const options = timeSeriesOptions(pal, { legend: datasets.length > 1 });
-    options.plugins.tooltip.filter = item => !item.dataset.swNoTooltip;
+    options.plugins.tooltip.filter = item => !item.dataset.swNoTooltip && item.parsed.y != null;
     options.plugins.tooltip.callbacks = {
       title: items => (items.length ? labelsOf[items[0].dataIndex].tip : ''),
-      label: ctx => (ctx.parsed.y == null ? '' : ` ${ctx.dataset.label}: ${signed(ctx.parsed.y)}`),
+      label: (ctx) => {
+        if (ctx.parsed.y == null) return '';
+        const ds = ctx.dataset;
+        if (ds.swImports) {
+          return ' ' + window.__app.t('bookstats.importTip', { n: fmtAvg(ds.swImports[ctx.dataIndex]) });
+        }
+        // Bezugslinien (gleitender Ø, Ziel) sind Mittelwerte: mit Nachkommastelle.
+        return ` ${ds.label}: ${ds === main ? signed(ctx.parsed.y) : fmtAvg(ctx.parsed.y)}`;
+      },
     };
     Object.assign(options.scales.y, {
       // Bestände starten nicht bei null — sonst klebt die Kurve als flacher

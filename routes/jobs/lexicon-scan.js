@@ -26,7 +26,6 @@ const { analyzeBook, buildNameStopwords, LEXICON_VERSION, MATTR_WINDOW } = requi
 const {
   tokenizeNamesForStopwords, findDialogRanges, buildFigureNamePatterns,
 } = require('../../lib/page-index');
-const { localIsoDate } = require('../../lib/local-date');
 const { db } = require('../../db/schema');
 const logger = require('../../logger');
 
@@ -180,9 +179,9 @@ async function runLexiconScanJob(jobId, bookId, userEmail, opts = {}) {
     result.stats.input_sig = inputSig;
     result.stats.freq_json = _buildFreqJson(result.freq);
     lexiconDb.replaceBookLexicon(bookId, result);
-    // Tageszeile des Verlaufs auf den frischen Stand ziehen (nur wenn der Sync sie
-    // heute schon geschrieben hat — siehe db/lexicon.js#stampLexiconHistory).
-    lexiconDb.stampLexiconHistory(bookId, localIsoDate(), MATTR_WINDOW);
+    // Jüngste Tageszeile des Verlaufs auf den frischen Stand ziehen — nach dem
+    // Nachtlauf ist das der Vortag (db/lexicon.js#stampLexiconLatest).
+    lexiconDb.stampLexiconLatest(bookId, MATTR_WINDOW);
 
     const s = result.stats;
     const byKind = { freq: 0, key: 0, hapax: 0 };

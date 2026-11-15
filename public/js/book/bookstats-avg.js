@@ -77,12 +77,14 @@ function firstLastIdx(values) {
 }
 
 /**
- * Kennzahlen des sichtbaren Ausschnitts.
+ * Kennzahlen des sichtbaren Ausschnitts. `offsets` (optional, wie `values`
+ * ausgerichtet): kumulativer Import-Zuwachs, den der Ø-Zuwachs einer
+ * Bestandsgrösse abzieht.
  * @returns {null|{kind:string, spanDays:number, activeDays:number, perDay:number,
  *   perWeek:number, perMonth:number, level:number, total:number, delta:number,
  *   mean:number, from:string, to:string}}
  */
-export function computeAvgSummary({ metric, kind, dates, values, weights = null }) {
+export function computeAvgSummary({ metric, kind, dates, values, weights = null, offsets = null }) {
   const k = kind || metricKind(metric);
   const [firstIdx, lastIdx] = firstLastIdx(values);
   if (firstIdx === -1) return null;
@@ -116,7 +118,10 @@ export function computeAvgSummary({ metric, kind, dates, values, weights = null 
   let perDay;
   let delta = null;
   if (k === 'stock') {
-    delta = values[lastIdx] - values[firstIdx];
+    // `offsets`: kumulativer Import-Zuwachs je Tag (imported_chars …). Der
+    // Ø-Zuwachs zählt, was geschrieben wurde — ein Import ist kein Zuwachs.
+    const off = (i) => (offsets ? Number(offsets[i]) || 0 : 0);
+    delta = (values[lastIdx] - off(lastIdx)) - (values[firstIdx] - off(firstIdx));
     perDay = (dLast === dFirst) ? 0 : delta / elapsedDays;
   } else if (k === 'flow') {
     perDay = total / spanDays;
@@ -192,17 +197,18 @@ export function trendSeries(dates, values) {
 }
 
 /**
- * Jeden Kalendertag zwischen erstem und letztem Datum anlegen. Tagesmengen
+ * Jeden Kalendertag zwischen erstem und letztem Datum anlegen (bzw. zwischen
+ * `from` und `to`, wenn gesetzt — Tage ausserhalb fallen weg). Tagesmengen
  * (`flow`) bekommen an fehlenden Tagen 0 — kein Eintrag heisst nichts getan;
  * Bestände und Verhältniszahlen bleiben leer (nicht gemessen). `weights` wird
  * mitgeführt (fehlende Tage: 0).
  */
-export function fillCalendar(dates, values, kind, weights = null) {
-  if (!dates.length) return { dates: [], values: [], weights: weights ? [] : null };
+export function fillCalendar(dates, values, kind, weights = null, { from = null, to = null } = {}) {
+  if (!dates.length && !(from && to)) return { dates: [], values: [], weights: weights ? [] : null };
   const byDay = new Map();
   dates.forEach((d, i) => byDay.set(dayNumber(d), i));
-  const first = dayNumber(dates[0]);
-  const last = dayNumber(dates[dates.length - 1]);
+  const first = from ? dayNumber(from) : dayNumber(dates[0]);
+  const last = to ? dayNumber(to) : dayNumber(dates[dates.length - 1]);
   const out = { dates: [], values: [], weights: weights ? [] : null };
   for (let n = first; n <= last; n++) {
     const i = byDay.get(n);
@@ -211,6 +217,85 @@ export function fillCalendar(dates, values, kind, weights = null) {
     if (weights) out.weights.push(i != null ? (Number(weights[i]) || 0) : 0);
   }
   return out;
+}
+
+/**
+ * Sichtbarer Ausschnitt einer Rohreihe als lückenloser Kalender.
+ *
+ * - `cutoff` (ISO, optional): erster Tag des gewählten Zeitraums.
+ * - `end` (ISO): letzter Tag der Achse — heute bzw. der jüngste Tag, für den
+ *   die Quelle schon einen Wert haben kann.
+ * - flow: Achse von `cutoff` (sonst erster Wert) bis `end`, Tage ohne Eintrag
+ *   sind Null-Tage. Ein „7 Tage"-Fenster mit einem einzigen Schreibtag zeigt
+ *   damit sieben Plätze und teilt den Ø durch sieben, nicht durch eins.
+ * - stock: der letzte Wert VOR `cutoff` wird am Stichtag als Anker gesetzt —
+ *   ein Bestand, der im Zeitraum nur selten wechselt (Bearbeitungsstand,
+ *   kumulierte Zeit), ist sonst leer, obwohl er bekannt ist. Mit
+ *   `carryForward` läuft er ausserdem bis `end` weiter (seltene Quellen; ein
+ *   täglicher Snapshot endet am jüngsten Snapshot).
+ * - rate: nur die Werte im Zeitraum.
+ * `extra` (optional): weitere, an `dates` ausgerichtete Spalten `{ values, carry }`.
+ * `carry`-Spalten sind Stände (kumulativer Import-Zähler): Anker und
+ * aufgefüllte Tage übernehmen den letzten bekannten Wert. Sonst sind es
+ * Tagesmengen (Gewichte, Import je Tag): Anker und aufgefüllte Tage bekommen 0.
+ *
+ * @returns {null|{dates:string[], values:Array<number|null>, cols:object}}
+ *   `null`, wenn im Zeitraum kein einziger Messwert liegt.
+ */
+export function selectWindow({ dates, values, kind, cutoff = null, end = null, carryForward = false, extra = {} }) {
+  const names = Object.keys(extra);
+  const keep = dates.map(d => !cutoff || String(d).slice(0, 10) >= cutoff);
+  let ds = dates.filter((_, i) => keep[i]).map(d => String(d).slice(0, 10));
+  let vs = values.filter((_, i) => keep[i]);
+  const cs = Object.fromEntries(names.map(n => [n, extra[n].values.filter((_, i) => keep[i])]));
+
+  if (!vs.some(v => v != null && Number.isFinite(v))) {
+    // Ein Bestand ohne Wechsel im Zeitraum ist trotzdem bekannt: nur der Anker.
+    if (!(kind === 'stock' && cutoff)) return null;
+  }
+
+  if (kind === 'stock' && cutoff) {
+    let anchor = -1;
+    for (let i = 0; i < dates.length; i++) {
+      if (!keep[i] && values[i] != null && Number.isFinite(values[i])) anchor = i;
+    }
+    if (anchor >= 0 && ds[0] !== cutoff) {
+      ds = [cutoff, ...ds];
+      vs = [values[anchor], ...vs];
+      // Anker = Stand, kein Ereignis: Zähl-Spalten (Gewichte, Import je Tag) 0.
+      for (const n of names) cs[n] = [extra[n].carry ? extra[n].values[anchor] : 0, ...cs[n]];
+    }
+    if (!vs.some(v => v != null && Number.isFinite(v))) return null;
+  }
+
+  // Führende Lücken weg: die Achse beginnt am ersten echten Wert (flow: am Stichtag).
+  const first = vs.findIndex(v => v != null && Number.isFinite(v));
+  if (first > 0) {
+    ds = ds.slice(first); vs = vs.slice(first);
+    for (const n of names) cs[n] = cs[n].slice(first);
+  }
+
+  if (kind === 'stock' && carryForward && end && ds.length && ds[ds.length - 1] < end) {
+    ds = [...ds, end];
+    vs = [...vs, vs[vs.length - 1]];
+    for (const n of names) cs[n] = [...cs[n], extra[n].carry ? cs[n][cs[n].length - 1] : 0];
+  }
+
+  const from = kind === 'flow' ? (cutoff || ds[0]) : ds[0];
+  const to = kind === 'flow' && end && end > ds[ds.length - 1] ? end : ds[ds.length - 1];
+  const cal = fillCalendar(ds, vs, kind, null, { from, to });
+  const idx = new Map(ds.map((d, i) => [d, i]));
+  const cols = {};
+  for (const n of names) {
+    const carry = extra[n].carry;
+    let lastVal = carry ? (cs[n].find(v => v != null) ?? 0) : 0;
+    cols[n] = cal.dates.map(d => {
+      const i = idx.get(d);
+      if (i != null) { lastVal = Number(cs[n][i]) || 0; return lastVal; }
+      return carry ? lastVal : 0;
+    });
+  }
+  return { dates: cal.dates, values: cal.values, cols };
 }
 
 // Verdichtung: kurze Zeiträume tageweise, „1 J" wochenweise, „Alles" je nach
@@ -272,6 +357,18 @@ export function bucketSeries(dates, values, kind, bucket, weights = null) {
     }
     return { start: b.start, end: b.end, days: b.days, value };
   });
+}
+
+/** Summe einer an den Kalender ausgerichteten Tages-Spalte je Eimer (Import je Tag …). */
+export function sumByBucket(dates, daily, bucket) {
+  const out = [];
+  let cur = null;
+  dates.forEach((d, i) => {
+    const key = bucketStart(d, bucket);
+    if (!cur || cur.start !== key) { cur = { start: key, sum: 0 }; out.push(cur); }
+    cur.sum += Number(daily[i]) || 0;
+  });
+  return out.map(b => b.sum);
 }
 
 // Schreibtempo zählt nur Tage mit mindestens so viel Schreibzeit: zwei Minuten

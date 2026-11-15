@@ -26,9 +26,11 @@ const { annotateVorschlagMatches, titelCollisions } = require('./page-chat-verif
 const { preContextPassages, retrievalQuery } = require('./book-chat-retrieval');
 const embed = require('../../../lib/embed');
 const appSettings = require('../../../lib/app-settings');
-const { normalizeChatIdeeProposals } = require('../../../lib/chat-idee-proposals');
+const { normalizeChatIdeeProposals, normalizeChatIdeeUpdates } = require('../../../lib/chat-idee-proposals');
+const { pageQuoteHaystack } = require('../ideen-chat-tools');
+const { quoteFoundIn } = require('../../../lib/quote-verify');
 const { getPageStatus, statusChain } = require('../../../db/redaktion');
-const { getBookSettings } = require('../../../db/book-settings');
+const { getBookSettings, getBookIdeenStages } = require('../../../db/book-settings');
 const { isJournalisticBook } = require('../../../lib/buchtyp');
 const { formatProposalNote, formatIdeenNote, stripHistoryNote } = require('../../../lib/chat-history-note');
 
@@ -145,6 +147,7 @@ async function runChatJob(jobId, sessionId, userMsgId, message, userEmail) {
     const figuren = getFiguren(session.book_id, userEmail, pageChapterId);
     const review  = getLatestReview(session.book_id, userEmail);
     const ideen    = getOpenIdeen(session.page_id, userEmail);
+    const ideenStages = ideen.length ? getBookIdeenStages(session.book_id) : [];
     const lektorat = getLatestPageCheck(session.page_id, userEmail);
     // Welt-Fakten + Sprechweise zu diesem Abschnitt (gleiche Auswahl wie das Lektorat).
     const { welt: weltfakten, soziolekte } = selectPageWorldFacts({
@@ -198,7 +201,7 @@ async function runChatJob(jobId, sessionId, userMsgId, message, userEmail) {
     const editStatus = stand && chain.includes(stand.status) ? { status: stand.status, stale: stand.stale, chain } : null;
     const systemPrompt = buildChatSystemPrompt(session.page_name || '–', promptText, figuren, review,
       chatSysPrompt, pageChangeNote, ideen, lektorat, { figurenMaxChars: figurenBlockChars(aiCfg), editStatus, hatNachrichten: hasMsgThread(pd.html), langCode: textOpts.langCode,
-        bookTitles, currentPageId: session.page_id, weltfakten, soziolekte });
+        bookTitles, currentPageId: session.page_id, weltfakten, soziolekte, ideenStages });
 
     // Buch-Kontext: pro Frage andere Bytes → NICHT im System-Prompt (er bräche den
     // Präfix hinter Block 2, der ganze Verlauf würde jede Runde neu bezahlt), sondern
@@ -272,7 +275,7 @@ async function runChatJob(jobId, sessionId, userMsgId, message, userEmail) {
     if (truncated) throw i18nError('job.error.aiTruncated', { max: aiCfg.maxTokensOut, tokIn: tokensIn, tokOut: tokensOut, total: tokensIn + tokensOut });
 
     const parsed = _parseChatResponse(text, aiRes, logger);
-    const { titel_varianten: titelVarianten, ideen: rawIdeen, fallback, lostVorschlaege } = parsed;
+    const { titel_varianten: titelVarianten, ideen: rawIdeen, ideen_aenderungen: rawIdeenAenderungen = [], fallback, lostVorschlaege } = parsed;
     // Echo des Verlaufs-Anhangs entfernen: die Vorschläge und Ideen stehen in der
     // Liste unter der Antwort, nicht in ihr (lib/chat-history-note.js). Bleibt
     // danach nichts übrig, ist die Antwort leer: der Marker, kein leerer Ballon.
@@ -283,7 +286,17 @@ async function runChatJob(jobId, sessionId, userMsgId, message, userEmail) {
     // Ideen-Vorschläge: Anker = dieser Abschnitt (eine page_id des Modells darf
     // auf einen anderen Abschnitt desselben Buchs zeigen). Nichts wird angelegt —
     // der User erfasst jeden einzeln (POST /ideen).
-    const ideenProposals = normalizeChatIdeeProposals(rawIdeen, { bookId: session.book_id, defaultPageId: session.page_id });
+    const ideenCreates = normalizeChatIdeeProposals(rawIdeen, { bookId: session.book_id, defaultPageId: session.page_id });
+    // Änderungen an den offenen Ideen im Prompt: «erledigt» nur mit einem Beleg,
+    // der im Abschnitt steht — Heuhaufen = derselbe Text, gegen den die Übernahme
+    // erneut prüft (ideen-chat-tools.js#pageQuoteHaystack / belegInPage).
+    const haystack = rawIdeenAenderungen.length ? pageQuoteHaystack(pd.html) : '';
+    const { proposals: ideenUpdates, dropped: updatesDropped } = normalizeChatIdeeUpdates(rawIdeenAenderungen, {
+      ideen, stages: ideenStages, pageId: session.page_id, pageName: pd.name || null, chapterId: pageChapterId,
+      belegOk: (t) => quoteFoundIn(t, haystack, { strict: true }),
+    });
+    if (updatesDropped) logger.info(`${updatesDropped} Ideen-Änderung(en) verworfen (unbekannte Idee, keine Änderung oder «erledigt» ohne gefundenen Beleg).`);
+    const ideenProposals = [...ideenCreates, ...ideenUpdates];
     // Fundstellen-Prüfung gegen den Text, den das Modell gesehen hat: „Stelle nie
     // gefunden" ist eine andere Aussage als „inzwischen veraltet" (UI).
     await annotateVorschlagMatches(vorschlaege, pageText);
@@ -332,7 +345,7 @@ async function runChatJob(jobId, sessionId, userMsgId, message, userEmail) {
       proposals: vorschlaege.length + ideenProposals.length,
       // Titel folgt asynchron (unten); das Frontend holt ihn mit der Historie nach.
       titlePending: !session.title,
-    }, chatTps, `«${session.page_name || '-'}» session=${sessionId}, ${vorschlaege.length} Vorschläge, ${ideenProposals.length} Ideen`);
+    }, chatTps, `«${session.page_name || '-'}» session=${sessionId}, ${vorschlaege.length} Vorschläge, ${ideenCreates.length} Ideen, ${ideenUpdates.length} Ideen-Änderungen`);
     // Titel NACH completeJob: ein zweiter KI-Call vor dem Job-Ende hielt die
     // fertige Antwort um seine ganze Laufzeit zurück. Non-fatal, persistiert selbst.
     void generateSessionTitle({ session, userMessage: message, assistantAnswer: antwort, provider, logger });

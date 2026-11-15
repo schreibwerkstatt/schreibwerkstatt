@@ -299,3 +299,72 @@ test('Tabs: Pfeiltaste wechselt den Tab, Panes sind per aria verknuepft', async 
   await expect(page.locator('#admin-usage-tab-jobs')).toHaveAttribute('aria-selected', 'true');
   await expect(page.locator('#admin-usage-tab-jobs')).toBeFocused();
 });
+
+// Admin ohne Buecher oeffnet #admin/usage/summary direkt. Alpine blendet x-show
+// erst im naechsten Frame ein; ist Chart.js schon da, lief das Zeichnen davor,
+// fand die Canvas auf display:none und liess die Kaesten leer.
+test('Summary per Deep-Link (Admin ohne Buecher): Charts sind gezeichnet', async ({ page }) => {
+  await page.route(u => new URL(u).pathname === '/content/books', route => route.fulfill({ json: [] }));
+  await page.route(u => new URL(u).pathname === '/admin/usage/summary', async route => {
+    await new Promise(r => setTimeout(r, 300));
+    await route.fulfill({ json: { totals: { usd: 3 }, topUsers: [{ email: 'anna@ex.com', usd: 2 }],
+      byModel: [{ model: 'm-x', usd: 3 }], byType: [{ type: 'check', usd: 3 }] } });
+  });
+  // Chart.js liegt vorab im Dokument (wie aus dem Cache): loadChart() loest sofort auf.
+  await page.addInitScript({ path: require('path').join(__dirname, '../../public/vendor/chart-4.6.1.umd.min.js') });
+  const res = page.waitForResponse(r => new URL(r.url()).pathname === '/admin/usage/summary');
+  await page.goto('/#admin/usage/summary', { waitUntil: 'domcontentloaded' });
+  await res;
+  const pane = page.locator('#admin-usage-pane-summary');
+  await expect(pane.locator('canvas[role="img"]').first()).toBeVisible();
+  await expect.poll(() => page.evaluate(() =>
+    Object.keys(Alpine.$data(document.querySelector('.card--admin-usage'))._adminUsageCharts || {}).length)).toBe(3);
+});
+
+// Hintergrund-Tab: dort feuert kein requestAnimationFrame, also blendet Alpine
+// das Pane nicht ein. Das Zeichnen muss warten, bis der Tab sichtbar wird —
+// nicht nach dem Frame-Deckel still nichts zeichnen. Simuliert: document.hidden
+// und rAF-Callbacks werden bis zum «Vorholen» zurueckgehalten.
+test('Summary im Hintergrund-Tab: Charts erscheinen beim Vorholen', async ({ page }) => {
+  await page.addInitScript(() => {
+    let hidden = true;
+    const queue = [];
+    Object.defineProperty(document, 'hidden', { configurable: true, get: () => hidden });
+    const raf = window.requestAnimationFrame.bind(window);
+    window.requestAnimationFrame = cb => { if (!hidden) return raf(cb); queue.push(cb); return 0; };
+    window.__reveal = () => {
+      hidden = false;
+      for (const cb of queue.splice(0)) raf(cb);
+      document.dispatchEvent(new Event('visibilitychange'));
+    };
+  });
+  await page.route(u => new URL(u).pathname === '/content/books', route => route.fulfill({ json: [] }));
+  await page.route(u => new URL(u).pathname === '/admin/usage/summary', route => route.fulfill({ json: {
+    totals: { usd: 3 }, topUsers: [{ email: 'anna@ex.com', usd: 2 }],
+    byModel: [{ model: 'm-x', usd: 3 }], byType: [{ type: 'check', usd: 3 }] } }));
+  await page.addInitScript({ path: require('path').join(__dirname, '../../public/vendor/chart-4.6.1.umd.min.js') });
+  const res = page.waitForResponse(r => new URL(r.url()).pathname === '/admin/usage/summary');
+  await page.goto('/#admin/usage/summary', { waitUntil: 'domcontentloaded' });
+  await res;
+  // Laenger als der Frame-Deckel (20 × 100 ms Ersatztimer) im Hintergrund.
+  await page.waitForTimeout(2500);
+  await page.evaluate(() => window.__reveal());
+  await expect.poll(() => page.evaluate(() =>
+    Object.keys(Alpine.$data(document.querySelector('.card--admin-usage'))._adminUsageCharts || {}).length)).toBe(3);
+});
+
+// Viele Job-Typen: der liegende Balken-Chart waechst je Balken, statt 30
+// Beschriftungen in die Grundhoehe zu quetschen.
+test('Summary: Job-Typ-Chart waechst mit der Zahl der Typen', async ({ page }) => {
+  await page.route(u => new URL(u).pathname === '/content/books', route => route.fulfill({ json: [] }));
+  const byType = Array.from({ length: 30 }, (_, i) => ({ type: 'typ-' + i, usd: 30 - i }));
+  await page.route(u => new URL(u).pathname === '/admin/usage/summary', route => route.fulfill({ json: {
+    totals: { usd: 3 }, topUsers: [{ email: 'anna@ex.com', usd: 2 }], byModel: [{ model: 'm-x', usd: 3 }], byType } }));
+  await page.goto('/#admin/usage/summary', { waitUntil: 'domcontentloaded' });
+  const wrap = page.locator('#admin-usage-pane-summary .admin-usage-chart-canvas').filter({ has: page.locator('canvas[x-ref="chartType"]') });
+  await expect(wrap).toBeVisible();
+  const usersH = (await page.locator('#admin-usage-pane-summary .admin-usage-chart-canvas').first().boundingBox()).height;
+  await expect.poll(async () => (await wrap.boundingBox()).height).toBeGreaterThan(usersH * 2);
+  await expect.poll(() => page.evaluate(() =>
+    Object.keys(Alpine.$data(document.querySelector('.card--admin-usage'))._adminUsageCharts || {}).length)).toBe(3);
+});

@@ -86,6 +86,7 @@ export const EVT = {
   // Ideen-Board hat die aktiven Stufen des Buches umgeschaltet; die Ideen-Karte
   // zieht ihr Status-Menue nach (book_settings.ideen_stages).
   IDEEN_STAGES_CHANGED: 'ideen:stages-changed', // detail: { bookId, stages }
+  IDEEN_CHANGED: 'ideen:changed',               // detail: { bookId } (Idee aus einem Chat-Vorschlag angelegt/geändert, chat/chat-idee-proposals.js)
 
   // ── Semantische Suche ────────────────────────────────────────────────────
   SEARCH_SIMILAR: 'search:similar',             // detail: { kind, id, label }

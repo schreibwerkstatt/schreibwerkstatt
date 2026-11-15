@@ -81,9 +81,9 @@ test('overviewChapterFindings: heat.matrix-rows auf Root gemerged', () => {
   const ctx = makeCtx(tree);
   ctx.overviewHeat = {
     chapters: [
-      { chapter_id: 1, chapter_name: 'Root A', words: 300, pages_total: 2, pages_checked: 2 },
-      { chapter_id: 2, chapter_name: 'Sub A1', words: 100, pages_total: 2, pages_checked: 1 },
-      { chapter_id: 4, chapter_name: 'Sub A2a', words: 20, pages_total: 1, pages_checked: 1 },
+      { chapter_id: 1, chapter_name: 'Root A', words: 300, words_checked: 300, pages_total: 2, pages_checked: 2 },
+      { chapter_id: 2, chapter_name: 'Sub A1', words: 100, words_checked: 60, pages_total: 2, pages_checked: 1 },
+      { chapter_id: 4, chapter_name: 'Sub A2a', words: 20, words_checked: 20, pages_total: 1, pages_checked: 1 },
       { chapter_id: 5, chapter_name: 'Root B', words: 400, pages_total: 1, pages_checked: 0 },
     ],
     matrix: {
@@ -101,6 +101,9 @@ test('overviewChapterFindings: heat.matrix-rows auf Root gemerged', () => {
   assert.equal(a.words, 300 + 100 + 20);
   assert.equal(a.pages_total, 2 + 2 + 1);
   assert.equal(a.pages_checked, 2 + 1 + 1);
+  // Dichte nur über die geprüften Wörter: 11 Befunde / 380 Wörter.
+  assert.equal(a.words_checked, 300 + 60 + 20);
+  assert.equal(a.per1k, Math.round((11 / 380) * 1000 * 10) / 10);
   // Ungeprüfte Kapitel (pages_checked = 0) fallen aus dem Output.
   assert.equal(b, undefined, 'ungeprüfte Kapitel werden gefiltert');
   assert.equal(out.length, 1);
@@ -415,8 +418,8 @@ test('Findings: Zeile mit unbekannter ID fällt nicht per Namen in ein Kapitel',
   const ctx = makeCtx(makeTree());
   ctx.overviewHeat = {
     chapters: [
-      { chapter_id: 1, chapter_name: 'Root A', pages_checked: 1, pages_total: 1, words: 100 },
-      { chapter_id: 9999, chapter_name: 'Root B', pages_checked: 1, pages_total: 1, words: 100 },
+      { chapter_id: 1, chapter_name: 'Root A', pages_checked: 1, pages_total: 1, words: 100, words_checked: 100 },
+      { chapter_id: 9999, chapter_name: 'Root B', pages_checked: 1, pages_total: 1, words: 100, words_checked: 100 },
     ],
     matrix: { 1: { stil: { count: 2 } }, 9999: { stil: { count: 5 } } },
   };

@@ -92,6 +92,8 @@ export function registerIdeenCard() {
           // Offline vorgemerkte Ideen sind auf dem Server: neu laden, damit die
           // temporären IDs den echten weichen (repo/ideen-queue.js).
           { type: EVT.IDEEN_QUEUE_CHANGED, handler: (e) => { if (e.detail?.flushed && window.__app.showIdeenCard) this.loadIdeen(); } },
+          // Idee aus einem Chat-Vorschlag angelegt oder geändert (Abschnitts-/Buch-/Recherche-Chat).
+          { type: EVT.IDEEN_CHANGED, handler: () => { if (window.__app.showIdeenCard) this.loadIdeen(); } },
         ],
       });
 

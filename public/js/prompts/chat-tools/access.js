@@ -72,7 +72,10 @@ export const CHAT_TOOL_ACCESS = {
   list_redundancies:        { book: S, ideen: F },
   list_revisions:           { book: F },
   get_book_settings:        { book: F },
-  search_chat_history:      { book: F },
+  // Plot-/Ideen-Chat: Rückbezüge («was hatten wir zu dem Strang entschieden?»).
+  // Recherche-Chat auch im Slim-Satz: was ein früheres Gespräch schon gefunden
+  // hat, kostet keine zweite Web-Suche.
+  search_chat_history:      { book: F, plot: F, ideen: F, research: S },
   // Planung und Material
   // Plot-Chat: der Job hält es zurück, solange das Board ungekürzt im Vorspann steht.
   get_plot_board:           { book: F, plot: S, ideen: S },

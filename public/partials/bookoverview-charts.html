@@ -94,13 +94,20 @@
           </linearGradient>
         </defs>
         <path :d="overviewSparkline().area" :fill="'url(#' + $id('sl-grad') + ')'" stroke="none"></path>
-        <path :d="overviewSparkline().d" fill="none" :stroke="overviewSparkline().color" stroke-width="1.5" stroke-linejoin="round" stroke-linecap="round"></path>
-        <circle :cx="overviewSparkline().endX" :cy="overviewSparkline().endY" r="2.2" :fill="overviewSparkline().color"></circle>
+        <!-- vector-effect: das SVG wird per preserveAspectRatio="none" auf die
+             Kachelbreite gedehnt, der Strich bleibt trotzdem 1,5 px. -->
+        <path :d="overviewSparkline().d" fill="none" :stroke="overviewSparkline().color" stroke-width="1.5" stroke-linejoin="round" stroke-linecap="round" vector-effect="non-scaling-stroke"></path>
       </svg>
+      <!-- Endpunkt ausserhalb des gedehnten SVG: bliebe sonst eine Ellipse. -->
+      <span class="overview-sparkline-end" aria-hidden="true"
+            :style="{ left: (overviewSparkline().endX / overviewSparkline().w * 100) + '%', top: (overviewSparkline().endY / overviewSparkline().h * 100) + '%', background: overviewSparkline().color }"></span>
+      <!-- Hover-Spalten liegen an den Punkten (Kalenderachse): je bis zur Mitte
+           zum Nachbarpunkt, die Markierung genau am Punkt. -->
       <div class="overview-sparkline-hover" aria-hidden="true">
         <template x-for="(p, i) in overviewSparkline().points" :key="(p.iso || '') + ':' + i">
-          <div class="overview-sparkline-hover-col" :data-tip="p.label">
-            <span class="overview-sparkline-tick" aria-hidden="true"></span>
+          <div class="overview-sparkline-hover-col" :data-tip="p.label"
+               :style="{ left: p.colLeft + '%', width: p.colWidth + '%' }">
+            <span class="overview-sparkline-tick" aria-hidden="true" :style="{ left: p.tickPct + '%' }"></span>
           </div>
         </template>
       </div>
@@ -120,13 +127,16 @@
        @click="_openLengthStats(7, 'delta_chars')"
        :aria-label="$app.t('overview.last7Days') + ': ' + (overview7DayCharDelta() >= 0 ? '+' : '') + _fmtNum(overview7DayCharDelta()) + ' ' + $app.t('bookstats.unit.z')">
     <div class="overview-tile-label" x-text="$app.t('overview.last7Days')"></div>
+    <!-- Nulllinie: am Boden, solange kein Tag im Minus ist; sonst so weit oben,
+         dass Minus-Balken nach unten Platz haben (overviewLast7Bars). -->
     <div class="overview-bars7">
-      <template x-for="d in overviewLast7Days()" :key="d.iso">
+      <template x-for="d in overviewLast7Bars().days" :key="d.iso">
         <div class="overview-bar7-col" :data-tip="d.label + ': ' + (d.delta >= 0 ? '+' : '') + _fmtNum(d.delta)">
-          <div class="overview-bar7-track">
+          <div class="overview-bar7-track" :class="{ 'overview-bar7-track--signed': overviewLast7Bars().hasNeg }"
+               :style="{ '--bar7-zero': overviewLast7Bars().zeroPct + '%' }">
             <div class="overview-bar7-fill"
                  :class="d.delta > 0 ? 'overview-bar7-fill--pos' : d.delta < 0 ? 'overview-bar7-fill--neg' : ''"
-                 :style="{ height: Math.round(Math.abs(d.delta) / overviewLast7Max() * 100) + '%' }"></div>
+                 :style="{ bottom: d.bottom + '%', height: d.height + '%' }"></div>
           </div>
           <span class="overview-bar7-label" x-text="d.label"></span>
         </div>

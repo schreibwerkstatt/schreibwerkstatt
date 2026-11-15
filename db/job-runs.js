@@ -64,7 +64,7 @@ function endJobRun(jobId, status, tokensIn, tokensOut, cacheReadIn, cacheCreatio
  *  `keepJobIds`: Jobs, die dieser Prozess gerade ausführt oder in der Queue hält —
  *  sie hängen nicht und bleiben unangetastet. Beim Boot leer (das letzte
  *  Server-Leben ist vorbei, jede offene Zeile ist tot); der Nacht-Cron übergibt die
- *  In-Memory-Jobs, sonst stünde eine über 23:00 laufende Komplettanalyse bis zu
+ *  In-Memory-Jobs, sonst stünde eine über den 00:05-Nachtlauf laufende Komplettanalyse bis zu
  *  ihrem Ende als «gestorben» da. Gibt die Anzahl bereinigter Einträge zurück. */
 function cleanupStuckJobRuns({ keepJobIds = [] } = {}) {
   const keep = [...new Set(keepJobIds)].filter(Boolean);

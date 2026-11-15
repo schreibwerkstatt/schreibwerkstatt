@@ -91,20 +91,36 @@ test('Buchentwicklung: Ø-Zeile und Ø-Overlays rendern mit echten Reihen', asyn
   expect(sets.map(s => s.label)).toEqual(['Zeichen', 'Ø-Entwicklung']);
   expect(sets[1].points).toBe(11);
 
-  // Tagesmenge: Ø/Tag, Ø/Woche, Ø/Monat, Σ — dazu Ø-Linie + gleitender Ø.
+  // Tagesmenge: Ø/Tag, Ø/Woche, Ø/Monat, Σ, Ø je aktivem Tag — dazu Ø-Linie +
+  // gleitender Ø. Das Fenster ist der ganze Zeitraum (30 Kalendertage), nicht
+  // nur die Tage mit Daten: 10 × 1000 Zeichen / 30 Tage.
   await renderWith(page, 'delta_chars', 30);
-  await expect(badges).toHaveCount(4);
-  await expect(badges.nth(0)).toHaveText(/1[’'.,]?000\s*\/\s*Tag/);
+  await expect(badges).toHaveCount(5);
+  await expect(badges.nth(0)).toHaveText(/333\s*\/\s*Tag/);
+  await expect(badges.nth(4)).toHaveText(/1[’'.,]?000.*\(10\)/);
   sets = await chartInfo(page);
   // Seed-Buch ohne eigenes Tagesziel → Default eine Normseite/Tag als Ziel-Linie.
   expect(sets.map(s => s.label)).toEqual(['Δ Zeichen/T', 'Ø Zeitraum', 'Gleitender Ø (7 T)', 'Tagesziel']);
 
-  // Kalenderachse: zwei fehlende Snapshot-Tage bleiben als Tage auf der Achse
-  // (Δ dort 0) statt zusammengeschoben zu werden — 10 Kalendertage ab dem
-  // ersten Δ (der erste Snapshot hat keinen Vortag), ohne Auffüllen wären es 8.
+  // Kalenderachse: der Zeitraum ist ein Kalender — 30 Plätze, auch wenn zwei
+  // Snapshot-Tage fehlen und die Reihe erst vor zehn Tagen beginnt.
   const gappy = seedRows().filter((_, i) => i !== 4 && i !== 5);
   await renderWith(page, 'delta_chars', 30, { rows: gappy });
+  expect(await chartLabels(page)).toBe(30);
+  // „Alles": ab dem ersten Δ bis heute — zehn Tage.
+  await renderWith(page, 'delta_chars', 0, { rows: gappy });
   expect(await chartLabels(page)).toBe(10);
+
+  // Import: der Zuwachs am Import-Tag zählt nicht als geschrieben, der Tag
+  // bekommt einen Marker.
+  const imported = seedRows().map((r, i) => ({ ...r, chars: r.chars + (i >= 6 ? 50000 : 0), imported_chars: i >= 6 ? 50000 : 0 }));
+  await renderWith(page, 'delta_chars', 0, { rows: imported });
+  const importInfo = await page.evaluate(() => {
+    const chart = window.Chart.getChart(document.getElementById('book-stats-chart'));
+    return { labels: chart.data.datasets.map(d => d.label), max: Math.max(...chart.data.datasets[0].data.filter(v => v != null)) };
+  });
+  expect(importInfo.labels).toContain('Import');
+  expect(importInfo.max).toBe(1000);
   await renderWith(page, 'delta_chars', 30);
 
   // Kennzahlen in drei beschrifteten Gruppen (Umfang · Qualität · Aufwand).
@@ -128,7 +144,23 @@ test('Buchentwicklung: Ø-Zeile und Ø-Overlays rendern mit echten Reihen', asyn
   await expect(badges).toHaveCount(1);
   await expect(badges.nth(0)).toHaveText(/14[.,]5/);
 
+  // Seltener Bestand (Bearbeitungsstand): kein Wechsel in den letzten 7 Tagen,
+  // der Stand ist trotzdem bekannt und läuft bis heute.
+  const oldDay = new Date(Date.now() - 40 * 86400000).toISOString().slice(0, 10);
+  await page.evaluate((day) => {
+    const c = window.Alpine.$data(document.querySelector('.card--bookstats'));
+    c.statusHistoryData = { stufen: ['entwurf', 'final'], daily: [{ date: day, entwurf: 2, final: 3 }] };
+  }, oldDay);
+  await renderWith(page, 'status_set', 7);
+  expect(await chartLabels(page)).toBe(7);
+  await expect(card.getByText('Für diese Metrik gibt es')).toBeHidden();
+
+  // Metrik ohne Werte (MATTR, nie gescannt): Leerhinweis statt leerem Chart.
+  await renderWith(page, 'mattr', 0);
+  await expect(card.getByText('Für diese Metrik gibt es')).toBeVisible();
+
   // Toggle aus: die Overlays verschwinden, die Kennzahlen bleiben.
+  await renderWith(page, 'avg_sentence_len', 0);
   await card.locator('.book-stats-controls .btn-group button', { hasText: 'Ø' }).click();
   await expect.poll(async () => (await chartInfo(page)).length).toBe(1);
   await expect(badges).toHaveCount(1);

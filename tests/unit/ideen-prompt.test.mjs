@@ -43,3 +43,22 @@ test('Seiten-Chat-Job übergibt offene Ideen + letztes Lektorat an den Builder',
   assert.match(src, /getLatestPageCheck\(session\.page_id, userEmail\)/);
   assert.match(src, /buildChatSystemPrompt\([\s\S]*?pageChangeNote, ideen, lektorat,/);
 });
+
+test('Ideen-Section: Ideen tragen [#id] + Stufe, die Änderungs-Regeln nennen die aktiven Stufen', () => {
+  const ideen = [
+    { scope: 'page', id: 41, status: 'offen', content: 'Brief einbauen.', created_at: '2026-04-25T10:00:00.000Z' },
+    { scope: 'chapter', id: 42, status: 'in_arbeit', content: 'Zeitlinie prüfen.', created_at: '2026-04-25T11:00:00.000Z' },
+  ];
+  const out = joinBlocks(buildChatSystemPrompt('Seite A', 'Inhalt.', [], null, null, null, ideen, null, { ideenStages: ['offen', 'erledigt', 'verworfen'] }));
+  assert.ok(out.includes('- [#41] [Abschnitt] Brief einbauen.'));
+  assert.ok(out.includes('[#42] [Kapitel] Zeitlinie prüfen. (2026-04-25) — Stufe: in_arbeit'));
+  assert.ok(out.includes('IDEEN-ÄNDERUNGEN:'));
+  assert.ok(out.includes('Erlaubt: offen, erledigt, verworfen.'));
+  assert.match(out, /Dann ist beleg Pflicht/);
+});
+
+test('Ideen-Section: ohne Ideen keine Änderungs-Regeln, nur der Leer-Hinweis', () => {
+  const out = joinBlocks(buildChatSystemPrompt('Seite A', 'Inhalt.', [], null));
+  assert.ok(!out.includes('IDEEN-ÄNDERUNGEN:'));
+  assert.ok(out.includes('ideen_aenderungen ist ein leeres Array'));
+});

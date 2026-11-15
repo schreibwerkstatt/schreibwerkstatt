@@ -1,5 +1,7 @@
 // Ideen-Vorschläge im Abschnitts-, Buch- und Recherche-Chat (context_info.proposals
-// einer Assistant-Nachricht, Typ `idee_create`, Format: lib/chat-idee-proposals.js).
+// einer Assistant-Nachricht, Typ `idee_create`, Format: lib/chat-idee-proposals.js;
+// nur Abschnitts-Chat zusätzlich `idee_update` — Text/Stufe einer offenen Idee,
+// «erledigt» mit geprüftem Beleg, normalizeChatIdeeUpdates).
 // Gespreadet in chatMethods (chat.js), bookChatMethods (book-chat.js) und
 // researchChatMethods (research-chat.js) — `this` ist die jeweilige Chat-Karte;
 // das Fragment chat-idee-vorschlaege.html ruft nur die Methoden hier.
@@ -11,27 +13,50 @@
 // Transient am Vorschlagsobjekt: _draft, _editing, _busy, _error und
 // _written/_appliedId (Idee angelegt, Status noch nicht — proposal-status.js#applyProposalOnce).
 
-import { sendJson } from '../utils.js';
+import { sendJson, fetchJson } from '../utils.js';
 import { tFetchError } from '../i18n.js';
-import { persistProposalStatus, applyProposalOnce } from './proposal-status.js';
+import { persistProposalStatus, applyProposalOnce, proposalApplyError } from './proposal-status.js';
 import { trackChatProposal } from '../features-usage.js';
+import { ideeUpdateRows } from './ideen-chat-proposals.js';
+import { IDEE_OPEN_STATUSES } from '../book/ideen-shared.js';
+import { EVT } from '../events.js';
 
 // Sidebar-Plakette + Zähler des offenen Abschnitts bzw. Kapitels nachziehen
-// (eine neue Idee ist offen). Gleiche Maps wie book/ideen.js#_setTreeIdeenCount.
-function _bumpIdeenCount({ page_id: pageId, chapter_id: chapterId }) {
+// (+1: neue Idee ist offen, −1: eine offene ist abgeschlossen). Gleiche Maps wie
+// book/ideen.js#_setTreeIdeenCount.
+function _bumpIdeenCount({ page_id: pageId, chapter_id: chapterId }, delta = 1) {
   const isPage = pageId != null;
   const id = isPage ? pageId : chapterId;
+  if (id == null) return;
   const mapKey = isPage ? 'ideenCounts' : 'chapterIdeenCounts';
   const badges = window.Alpine?.store('badges');
   if (badges) {
     const next = { ...(badges[mapKey] || {}) };
-    next[id] = (next[id] || 0) + 1;
+    const n = Math.max(0, (next[id] || 0) + delta);
+    if (n > 0) next[id] = n; else delete next[id];
     badges[mapKey] = next;
   }
   const app = window.__app;
   if (!app) return;
-  if (isPage && app.currentPage?.id === id) app.currentPageIdeenOpenCount = (app.currentPageIdeenOpenCount || 0) + 1;
-  if (!isPage && app.ideenChapterId === id) app.currentChapterIdeenOpenCount = (app.currentChapterIdeenOpenCount || 0) + 1;
+  const bump = (v) => Math.max(0, (v || 0) + delta);
+  if (isPage && app.currentPage?.id === id) app.currentPageIdeenOpenCount = bump(app.currentPageIdeenOpenCount);
+  if (!isPage && app.ideenChapterId === id) app.currentChapterIdeenOpenCount = bump(app.currentChapterIdeenOpenCount);
+}
+
+// Ideen-Karte (falls offen) lädt neu — der Vorschlag hat am Server geschrieben.
+function _ideenChanged() {
+  const bookId = parseInt(window.Alpine?.store('nav')?.selectedBookId, 10) || null;
+  window.dispatchEvent(new CustomEvent(EVT.IDEEN_CHANGED, { detail: { bookId } }));
+}
+
+// Aktueller Stand der Idee eines idee_update (über die Liste ihres Ankers, gleiche
+// Route wie die Ideen-Karte) — null = gibt es nicht mehr. Ohne Anker im Vorschlag:
+// undefined (nicht prüfbar, die PATCH-Route entscheidet).
+async function _currentIdee(p) {
+  const s = p.scope;
+  if (!s?.id || (s.kind !== 'page' && s.kind !== 'chapter')) return undefined;
+  const list = await fetchJson(`/ideen?${s.kind === 'page' ? 'page_id' : 'chapter_id'}=${encodeURIComponent(s.id)}`);
+  return (Array.isArray(list) ? list : []).find(i => i.id === p.idee_id) || null;
 }
 
 // Alle Wirte spreaden dieselben Methoden; welcher Chat es ist, sagt die
@@ -52,8 +77,11 @@ export const chatIdeeProposalMethods = {
   chatIdeeProposals(msg) {
     const list = msg?.role === 'assistant' ? msg.context_info?.proposals : null;
     if (!Array.isArray(list)) return [];
-    return list.map((p, idx) => ({ p, idx })).filter(e => e.p?.type === 'idee_create');
+    return list.map((p, idx) => ({ p, idx })).filter(e => e.p?.type === 'idee_create' || e.p?.type === 'idee_update');
   },
+
+  /** Feld-Zeilen eines idee_update (vorher → nachher, Text als Wort-Diff). */
+  chatIdeeUpdateRows(p) { return ideeUpdateRows(p); },
 
   chatIdeeState(p) {
     if (p?.applied_at) return 'applied';
@@ -86,6 +114,7 @@ export const chatIdeeProposalMethods = {
       // Der Server legt sie ggf. an einen anderen Anker (Einabschnitts-Kapitel →
       // Abschnitt, lib/idee-anchor.js) — gezählt wird, wo sie wirklich hängt.
       _bumpIdeenCount(row?.page_id != null || row?.chapter_id != null ? row : p.fields);
+      _ideenChanged();
       // Erfasster Text ersetzt den Vorschlag in der Anzeige (lokal; der Server
       // hält nur den Status fest, die Idee selbst steht in `ideen`).
       p.fields = { ...p.fields, content };
@@ -101,6 +130,57 @@ export const chatIdeeProposalMethods = {
       trackChatProposal(_chatKind(this, msg), 'applied', p.type);
     }
     p._busy = false;
+  },
+
+  // Änderung an einer bestehenden Idee übernehmen (nur Abschnitts-Chat): erst den
+  // Beleg eines «erledigt» gegen den AKTUELLEN Abschnitt prüfen und den Stand der
+  // Idee nachlesen (gelöscht → Hinweis, seither geändert → Rückfrage), dann über
+  // dieselbe Route wie die Ideen-Karte (PATCH /ideen/:id) schreiben.
+  async applyChatIdeeUpdate(msg, idx) {
+    const p = msg?.context_info?.proposals?.[idx];
+    const app = window.__app;
+    if (!p || p.type !== 'idee_update' || p._busy || !msg.id) return;
+    p._busy = true;
+    p._error = '';
+    try {
+      if (!p._written) {
+        if (p.beleg?.text) {
+          const r = await sendJson('/ideen/chat-proposal/beleg-check', 'POST', { message_id: msg.id, index: idx });
+          p._belegMissing = r?.checked === true && r.found === false;
+          if (p._belegMissing && !(await app.appConfirm({
+            message: app.t('ideenBoard.chat.belegGoneConfirm', { status: app.t('ideen.status.' + (p.fields?.status || 'erledigt')) }),
+          }))) return;
+        }
+        const cur = await _currentIdee(p);
+        if (cur === null) { p._error = app.t('ideenBoard.chat.block.ideeGone'); return; }
+        const b = p.before || {};
+        const stale = cur && Object.keys(b).some(k => (cur[k] ?? null) !== (b[k] ?? null));
+        if (stale && !(await app.appConfirm({ message: app.t('chat.ideeStaleConfirm') }))) return;
+      }
+      let row = null;
+      const r = await applyProposalOnce('/ideen/chat-proposal', msg, idx, async () => {
+        const f = p.fields || {};
+        const body = {};
+        for (const k of ['content', 'status']) if (k in f) body[k] = f[k];
+        row = await sendJson(`/ideen/${p.idee_id}`, 'PATCH', body);
+        return p.idee_id;
+      });
+      if (row) {
+        // Offene Idee abgeschlossen bzw. wieder geöffnet: Plaketten nachziehen.
+        const wasOpen = IDEE_OPEN_STATUSES.includes(p.before?.status ?? 'offen');
+        const isOpen = IDEE_OPEN_STATUSES.includes(row.status);
+        if (wasOpen !== isOpen) _bumpIdeenCount(row, isOpen ? 1 : -1);
+        _ideenChanged();
+      }
+      if (r.ok) { if (!r.already) trackChatProposal(_chatKind(this, msg), 'applied', p.type); return; }
+      const err = proposalApplyError(r, { applyKey: 'ideenBoard.chat.applyError', statusKey: 'chat.ideeUpdateStatusError' });
+      if (err) p._error = err;
+    } catch (e) {
+      console.error('[applyChatIdeeUpdate]', e);
+      p._error = tFetchError(e);
+    } finally {
+      p._busy = false;
+    }
   },
 
   async toggleDiscardChatIdee(msg, idx) {

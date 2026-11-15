@@ -3,7 +3,7 @@
 // `window.__app`. Privacy: Admin sieht USD/Tokens + book_id (anonym), keine
 // Buchtitel.
 
-import { loadChart } from '../lazy-libs.js';
+import { _adminUsagePreloadChart, setChartRows } from './admin-usage-charts.js';
 import { barDataset, categoryAxis, chartOptions, chartPalette, seriesColor, valueAxis } from '../cards/chart-style.js';
 import { localIsoDate, localeTag, fmtDateTime, formatIsoDay, fetchJson, sendJson } from '../utils.js';
 import { tFetchError } from '../i18n.js';
@@ -11,10 +11,6 @@ import { featureByKey } from '../cards/feature-registry.js';
 
 // Seitengroesse der Server-paginierten Listen (Jobs, Chat-Antworten).
 const PAGE_SIZE = 50;
-
-// Chart.js, sobald einmal geladen (lazy-libs cached ohnehin) — damit
-// _adminUsageDrawChart synchron bleibt.
-let _chartLib = null;
 
 function _fmt(n, locale, opts) {
   if (n === null || n === undefined || !Number.isFinite(n)) return '—';
@@ -448,60 +444,28 @@ export const adminUsageMethods = {
   },
 
   // ── Tab: Summary (mit Charts) ──────────────────────────────────────────────
+  // Chart.js laedt parallel zum Fetch, nicht erst danach — sonst stehen KPIs
+  // und leere Chart-Kaesten da, bis die Lib nachgeladen ist.
   async adminUsageLoadSummary() {
+    _adminUsagePreloadChart();
+    // Zeichnen nur aus dem Load, dessen Daten uebernommen wurden — ein
+    // ueberholter Load zeichnet nicht noch einmal.
     await this._adminUsageRun('summary', () => this._adminUsageFetch('/admin/usage/summary'), (data) => {
       this.adminUsageSummary = data;
+      this.$nextTick(() => this._adminUsageRenderCharts(data));
     });
-    if (this.adminUsageSummary) {
-      this.$nextTick(() => this._adminUsageRenderCharts(this.adminUsageSummary));
-    }
-  },
-
-  _adminUsageDestroyCharts() {
-    if (!this._adminUsageCharts) return;
-    for (const k of Object.keys(this._adminUsageCharts)) {
-      try { this._adminUsageCharts[k]?.destroy?.(); } catch {}
-    }
-    this._adminUsageCharts = {};
-  },
-
-  // Chart.js laden und pruefen, dass der Tab noch aktiv ist (vor und nach dem
-  // Lazy-Load). Charts auf einem via x-show versteckten Canvas zu
-  // instanziieren loest Chart.js' Resize-Crash aus ("Cannot read properties of
-  // null (reading 'ownerDocument')").
-  async _adminUsageChartReady(tab) {
-    if (this.adminUsageTab !== tab) return false;
-    try { _chartLib = await loadChart(); } catch { return false; }
-    return this.adminUsageTab === tab;
-  },
-
-  // Ein Chart der Karte (Summary + Verhalten): alten IMMER zuerst zerstoeren —
-  // auch wenn die neuen Daten leer sind, sonst bliebe der Stand des vorigen
-  // Zeitraums stehen. `config` null = leer (das Template zeigt dann den
-  // Leerzustand statt des Canvas). Nur auf sichtbarem Canvas zeichnen
-  // (offsetParent === null ⇒ display:none-Vorfahr). Immer animation:false:
-  // Chart.js' Animations-rAF-Loop haelt sonst eine Referenz auf den Chart; wird
-  // der beim Tab-Wechsel via destroy() (ctx=null) abgeraeumt, zeichnet ein noch
-  // eingereihter Frame auf den null-Context und zerschiesst den Render.
-  _adminUsageDrawChart(key, el, config) {
-    if (!this._adminUsageCharts) this._adminUsageCharts = {};
-    try { this._adminUsageCharts[key]?.destroy?.(); } catch {}
-    delete this._adminUsageCharts[key];
-    if (!config || !_chartLib || !el || el.offsetParent === null) return;
-    config.options = { ...(config.options || {}), animation: false };
-    this._adminUsageCharts[key] = new _chartLib(el.getContext('2d'), config);
   },
 
   async _adminUsageRenderCharts(data) {
-    if (!(await this._adminUsageChartReady('summary'))) return;
     const pal = chartPalette();
     const tag = localeTag(Alpine.store('shell').uiLocale);
     const usd = new Intl.NumberFormat(tag, { style: 'currency', currency: 'USD', maximumFractionDigits: 2 });
     const usdAxis = new Intl.NumberFormat(tag, { style: 'currency', currency: 'USD', maximumFractionDigits: 0 });
-    const usdTip = ctx => ` ${usd.format(ctx.parsed?.x ?? ctx.parsed?.y ?? ctx.parsed ?? 0)}`;
+    const usdTip = ctx => ` ${usd.format(ctx.parsed?.x ?? 0)}`;
     const num = v => Number(v?.toFixed?.(4) || v || 0);
 
-    // Balken mit langen Labels (E-Mails, Job-Typen) liegend: Text bleibt lesbar.
+    // Alle drei liegend: lange Labels (E-Mails, Modelle, Job-Typen) bleiben
+    // lesbar, und die Hoehe waechst mit der Zahl der Balken (setChartRows).
     const barOptions = () => {
       const o = chartOptions(pal);
       o.indexAxis = 'y';
@@ -513,44 +477,23 @@ export const adminUsageMethods = {
       };
       return o;
     };
-    const bar = (labels, values, color) => ({
-      type: 'bar',
-      data: { labels, datasets: [barDataset(pal, color, { label: 'USD', data: values })] },
-      options: barOptions(),
-    });
+    const bar = (el, rows, label, value, color) => {
+      setChartRows(el, rows.length);
+      return rows.length ? {
+        type: 'bar',
+        data: { labels: rows.map(label), datasets: [barDataset(pal, color, { label: 'USD', data: rows.map(r => num(value(r))) })] },
+        options: barOptions(),
+      } : null;
+    };
 
-    const topUsers = (data.topUsers || []).slice(0, 10);
-    this._adminUsageDrawChart('users', this.$refs?.chartUsers, topUsers.length
-      ? bar(topUsers.map(u => u.email), topUsers.map(u => num(u.usd)), pal.primary) : null);
-
+    const r = this.$refs || {};
     const byModel = data.byModel || [];
-    let modelConfig = null;
-    if (byModel.length) {
-      const o = chartOptions(pal, { legend: true, legendKind: 'items' });
-      o.cutout = '68%';
-      o.interaction = { mode: 'nearest', intersect: true };
-      o.plugins.tooltip.callbacks = { label: usdTip };
-      modelConfig = {
-        type: 'doughnut',
-        data: {
-          labels: byModel.map(m => m.model),
-          datasets: [{
-            data: byModel.map(m => num(m.usd)),
-            backgroundColor: byModel.map((_, i) => seriesColor(i)),
-            borderColor: pal.surface,
-            borderWidth: 2,
-            borderRadius: 3,
-            hoverOffset: 4,
-          }],
-        },
-        options: o,
-      };
-    }
-    this._adminUsageDrawChart('model', this.$refs?.chartModel, modelConfig);
-
-    const byType = data.byType || [];
-    this._adminUsageDrawChart('type', this.$refs?.chartType, byType.length
-      ? bar(byType.map(t => this._adminUsageTypeLabel(t.type)), byType.map(t => num(t.usd)), pal.accent) : null);
+    await this._adminUsageDrawCharts('summary', [
+      { key: 'users', el: r.chartUsers, config: bar(r.chartUsers, (data.topUsers || []).slice(0, 10), u => u.email, u => u.usd, pal.primary) },
+      // Je Modell eine eigene, stabile Serienfarbe (Reihenfolge = Kosten absteigend).
+      { key: 'model', el: r.chartModel, config: bar(r.chartModel, byModel, m => m.model, m => m.usd, byModel.map((_, i) => seriesColor(i))) },
+      { key: 'type',  el: r.chartType,  config: bar(r.chartType, data.byType || [], t => this._adminUsageTypeLabel(t.type), t => t.usd, pal.accent) },
+    ]);
   },
 
   // ── Tab: Features ──────────────────────────────────────────────────────────

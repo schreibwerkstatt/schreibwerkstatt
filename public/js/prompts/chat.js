@@ -6,7 +6,7 @@ import { buildPageChatWeltLines } from './blocks-welt.js';
 import { buildEditStatusBlock } from './edit-status-block.js';
 import { _obj, _str } from './schema-utils.js';
 import { SYSTEM_CHAT, SYSTEM_BOOK_CHAT } from './core.js';
-import { PAGE_CHAT_IDEEN_RULES, pageChatNachrichtenHinweis, buildBookTitlesBlock } from './page-chat.js';
+import { PAGE_CHAT_IDEEN_RULES, pageChatIdeenLines, pageChatIdeenAenderungRules, pageChatNachrichtenHinweis, buildBookTitlesBlock } from './page-chat.js';
 import { CHAT_TOOLS, toolMentions } from './chat-tools/index.js';
 
 /**
@@ -229,6 +229,9 @@ export function buildWeltfaktenBlock(welt, opts = {}) {
  *                                      `scope: 'page'|'chapter'`. KI darf sie
  *                                      aufgreifen/diskutieren, aber nicht
  *                                      eigenmächtig in Vorschläge umwandeln.
+ *                                      Mit `id`/`status` als [#id] gelistet —
+ *                                      Ziel von `ideen_aenderungen`
+ *                                      (opts.ideenStages = aktive Stufen).
  * @param {Object|null} lektorat        Letztes Lektorat dieser Seite aus page_checks
  *                                      ({ checked_at, fehler, szenen, stilanalyse, fazit }).
  *                                      Kann gegenüber pageText veraltet sein.
@@ -287,17 +290,8 @@ export function buildChatSystemPrompt(pageName, pageText, figuren, review, syste
     );
   }
 
-  if (Array.isArray(ideen) && ideen.length > 0) {
-    page.push('=== OFFENE IDEEN (Notizen des Autors für diesen Abschnitt + das umliegende Kapitel) ===');
-    for (const i of ideen) {
-      const datum = i.created_at ? ` (${i.created_at.slice(0, 10)})` : '';
-      const tag = i.scope === 'chapter' ? '[Kapitel] ' : '[Abschnitt] ';
-      page.push(`- ${tag}${i.content}${datum}`);
-    }
-    page.push('');
-    page.push('Hinweis: Diese Ideen sind Notizen des Autors zu möglichen Fortsetzungen, Szenen oder inhaltlichen Ankern. [Kapitel]-Notizen gelten fürs ganze Kapitel, [Abschnitt]-Notizen nur für diesen Abschnitt. Greife sie auf, hinterfrage oder ergänze sie konversationell — wandle sie aber nicht eigenmächtig in vorschlaege-Einträge um, solange der Autor nicht danach fragt.');
-    page.push('');
-  }
+  const hatIdeen = Array.isArray(ideen) && ideen.length > 0;
+  page.push(...pageChatIdeenLines(ideen));
 
   page.push(...buildPageChatWeltLines(opts.weltfakten, opts.soziolekte));
   const lekSzenen = Array.isArray(lektorat?.szenen) ? lektorat.szenen : [];
@@ -328,11 +322,12 @@ export function buildChatSystemPrompt(pageName, pageText, figuren, review, syste
     '    }',
     '  ],',
     '  "titel_varianten": ["Titelvariante"],',
-    '  "ideen": [{ "inhalt": "Pendenz als knapper Stichpunkt", "begruendung": "kurz: was du bemerkt hast", "ort": "abschnitt" }]',
+    '  "ideen": [{ "inhalt": "Pendenz als knapper Stichpunkt", "begruendung": "kurz: was du bemerkt hast", "ort": "abschnitt" }],',
+    '  "ideen_aenderungen": [{ "idee_id": 12, "inhalt": "", "status": "erledigt", "beleg": "wörtliche Textstelle aus dem Abschnitt", "begruendung": "kurz: warum" }]',
     '}',
     '',
     'VORSCHLÄGE-REGELN:',
-    '- Vorschläge und Ideen stehen in den Feldern vorschlaege/ideen. Wiederhole sie nicht im Antworttext: kein Vorschlags- oder Ideen-Block, keine Statusliste in antwort — die App zeigt deine Vorschläge unter der Antwort an.',
+    '- Vorschläge und Ideen stehen in den Feldern vorschlaege/ideen/ideen_aenderungen. Wiederhole sie nicht im Antworttext: kein Vorschlags- oder Ideen-Block, keine Statusliste in antwort — die App zeigt deine Vorschläge unter der Antwort an.',
     '- Wenn du stilistische, inhaltliche oder sprachliche Schwächen erkennst oder der Autor nach Verbesserungen fragt: liefere mindestens einen konkreten Vorschlag mit original und ersatz.',
     '- original muss zeichengenau mit dem Abschnittstext übereinstimmen und darin genau einmal vorkommen (sonst etwas mehr Kontext mitnehmen).',
     '- original liegt innerhalb EINES Absatzes (Absätze sind im Abschnittsinhalt durch Leerzeilen getrennt): über eine Absatzgrenze hinweg lässt sich nichts ersetzen — betrifft eine Änderung mehrere Absätze, liefere je Absatz einen eigenen Vorschlag.',
@@ -345,6 +340,8 @@ export function buildChatSystemPrompt(pageName, pageText, figuren, review, syste
     '- titel_varianten nur, wenn der Autor nach einem Titel, einer Überschrift oder Headline fragt: dann 3 bis 5 kurze, unterschiedliche Varianten (nur der Titel, ohne Anführungszeichen oder Nummerierung). Sonst ein leeres Array.',
     '',
     ...PAGE_CHAT_IDEEN_RULES,
+    '',
+    ...pageChatIdeenAenderungRules(hatIdeen ? opts.ideenStages : null, { hatIdeen }),
     ...(_isLocal ? [] : ['', JSON_ONLY]),
   );
 

@@ -7,15 +7,15 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import {
   CLASSIFIED_METRICS, bucketFor, bucketSeries, bucketStart, computeAvgSummary, fillCalendar,
-  metricKind, rollingSeries, rollingWindowForRange, tempoRows, trendSeries,
+  metricKind, rollingSeries, rollingWindowForRange, selectWindow, sumByBucket, tempoRows, trendSeries,
 } from '../../public/js/book/bookstats-avg.js';
 
 const near = (actual, expected, msg) =>
   assert.ok(Math.abs(actual - expected) < 1e-9, `${msg}: ${actual} != ${expected}`);
 
 test('jede Chart-Metrik ist einer Art zugeordnet (Drift-Guard)', () => {
-  const src = readFileSync(new URL('../../public/js/book/bookstats.js', import.meta.url), 'utf8');
-  const block = src.slice(src.indexOf('const METRIC_KEYS = {'), src.indexOf('};', src.indexOf('const METRIC_KEYS = {')));
+  const src = readFileSync(new URL('../../public/js/book/bookstats-metrics.js', import.meta.url), 'utf8');
+  const block = src.slice(src.indexOf('export const METRIC_KEYS = {'), src.indexOf('};', src.indexOf('export const METRIC_KEYS = {')));
   const keys = [...block.matchAll(/^\s{2}(\w+):/gm)].map(m => m[1]);
   assert.ok(keys.length >= 19, `METRIC_KEYS nicht gefunden (${keys.length})`);
   for (const k of keys) {
@@ -189,4 +189,89 @@ test('Schreibtempo: Σ Zeichen / Σ Stunden, ohne Import und ohne Kurz-Tage', ()
 test('gewogener Ø: lange Tage zaehlen mehr als kurze', () => {
   const s = computeAvgSummary({ kind: 'rate', dates: ['2026-10-01', '2026-10-02'], values: [1000, 4000], weights: [3, 1] });
   near(s.perDay, 1750, 'Σ(v·w)/Σw');
+});
+
+test('Zeitraum: Tagesmenge füllt das ganze Fenster, Ø teilt durch alle Tage', () => {
+  // „7 Tage" mit einem einzigen Schreibtag: sieben Plätze, Ø = Menge / 7.
+  const win = selectWindow({
+    dates: ['2026-08-01', '2026-10-05'], values: [99, 70], kind: 'flow',
+    cutoff: '2026-10-01', end: '2026-10-07',
+  });
+  assert.deepEqual(win.dates, ['2026-10-01', '2026-10-02', '2026-10-03', '2026-10-04', '2026-10-05', '2026-10-06', '2026-10-07']);
+  assert.deepEqual(win.values, [0, 0, 0, 0, 70, 0, 0]);
+  const s = computeAvgSummary({ kind: 'flow', dates: win.dates, values: win.values });
+  near(s.perDay, 10, 'Ø/Tag über sieben Tage');
+});
+
+test('Zeitraum: Tagesmenge ohne Wert im Fenster → null (Leerhinweis)', () => {
+  assert.equal(selectWindow({ dates: ['2026-08-01'], values: [5], kind: 'flow', cutoff: '2026-10-01', end: '2026-10-07' }), null);
+});
+
+test('Zeitraum: Bestand nimmt den letzten Stand vor dem Stichtag als Anker', () => {
+  const win = selectWindow({
+    dates: ['2026-08-01', '2026-10-03'], values: [10, 12], kind: 'stock',
+    cutoff: '2026-10-01', end: '2026-10-05', carryForward: true,
+  });
+  assert.deepEqual(win.dates, ['2026-10-01', '2026-10-02', '2026-10-03', '2026-10-04', '2026-10-05']);
+  assert.deepEqual(win.values, [10, null, 12, null, 12], 'Anker am Stichtag, fortgeschrieben bis heute');
+});
+
+test('Zeitraum: Bestand ohne Wechsel im Fenster ist trotzdem bekannt', () => {
+  const win = selectWindow({
+    dates: ['2026-08-01'], values: [7], kind: 'stock', cutoff: '2026-10-01', end: '2026-10-03', carryForward: true,
+  });
+  assert.deepEqual(win.values, [7, null, 7]);
+});
+
+test('Zeitraum: täglicher Snapshot läuft nicht über den jüngsten Snapshot hinaus', () => {
+  const win = selectWindow({
+    dates: ['2026-10-01', '2026-10-02'], values: [1, 2], kind: 'stock', cutoff: null, end: '2026-10-09',
+  });
+  assert.deepEqual(win.dates, ['2026-10-01', '2026-10-02']);
+});
+
+test('Zeitraum: Zusatz-Spalten — Stände tragen weiter, Tagesmengen nicht', () => {
+  const win = selectWindow({
+    dates: ['2026-09-01', '2026-10-02', '2026-10-04'], values: [100, 200, 260], kind: 'stock',
+    cutoff: '2026-10-01', end: '2026-10-04',
+    extra: {
+      cum: { values: [0, 80, 80], carry: true },
+      day: { values: [0, 80, 0], carry: false },
+    },
+  });
+  assert.deepEqual(win.dates, ['2026-10-01', '2026-10-02', '2026-10-03', '2026-10-04']);
+  assert.deepEqual(win.cols.cum, [0, 80, 80, 80]);
+  assert.deepEqual(win.cols.day, [0, 80, 0, 0], 'Anker ist kein Import-Ereignis');
+});
+
+test('Ø-Zuwachs einer Bestandsgrösse zählt keinen Import', () => {
+  // +160 in vier Tagen, davon 80 importiert → 80 geschrieben = 20/Tag.
+  const s = computeAvgSummary({
+    kind: 'stock', dates: ['2026-10-01', '2026-10-05'], values: [100, 260], offsets: [0, 80],
+  });
+  near(s.perDay, 20, 'Ø-Zuwachs ohne Import');
+});
+
+test('sumByBucket summiert Tageswerte je Woche', () => {
+  const dates = ['2026-09-27', '2026-09-28', '2026-09-29']; // So, Mo, Di
+  assert.deepEqual(sumByBucket(dates, [5, 1, 2], 'week'), [5, 3]);
+});
+
+test('Metrik-Auswahl: jede Metrik steht in genau einer Gruppe', async () => {
+  globalThis.window ??= { __app: { uiLocale: 'de' } };
+  const { METRIC_GROUPS, METRIC_KEYS } = await import('../../public/js/book/bookstats-metrics.js');
+  const grouped = METRIC_GROUPS.flatMap(([, ms]) => ms);
+  assert.deepEqual([...grouped].sort(), Object.keys(METRIC_KEYS).sort());
+  assert.equal(new Set(grouped).size, grouped.length);
+});
+
+test('Δ-Reihen sind netto: Import-Zuwachs zählt nicht als geschrieben', async () => {
+  globalThis.window ??= { __app: { uiLocale: 'de' } };
+  const { _metricSeries } = await import('../../public/js/book/bookstats-metrics.js');
+  const rows = [
+    { chars: 1000, words: 150, imported_chars: 0, imported_words: 0 },
+    { chars: 61000, words: 9150, imported_chars: 59000, imported_words: 8800 },
+  ];
+  assert.deepEqual(_metricSeries('delta_chars', rows), [null, 1000]);
+  assert.deepEqual(_metricSeries('delta_words', rows), [null, 200]);
 });

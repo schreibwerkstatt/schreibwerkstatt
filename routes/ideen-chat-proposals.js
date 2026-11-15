@@ -5,8 +5,9 @@
 //     (Ideen-Chat) sowie `page`/`book` (Abschnitts- und Buch-Chat, deren
 //     idee_create-Vorschläge: lib/chat-idee-proposals.js).
 //   POST  /ideen/chat-proposal/beleg-check  Steht der Beleg eines «erledigt»-
-//     Vorschlags (Ideen-Chat) noch im AKTUELLEN Abschnittstext? Das Frontend
-//     fragt vor dem Übernehmen (public/js/chat/ideen-chat-proposals.js); geprüft
+//     Vorschlags (Ideen- und Abschnitts-Chat) noch im AKTUELLEN Abschnittstext? Das
+//     Frontend fragt vor dem Übernehmen (public/js/chat/ideen-chat-proposals.js,
+//     chat-idee-proposals.js); geprüft
 //     mit derselben Normalisierung wie beim Vorschlagen
 //     (routes/jobs/ideen-chat-tools.js#belegInPage). Kein KI-Call.
 // Deep-Doc: docs/ideen-chat.md
@@ -29,6 +30,8 @@ function ideenAppliedExists(p, { bookId, userEmail }) {
   return !!row && row.book_id === bookId;
 }
 
+const BELEG_KINDS = new Set(['ideen', 'page']);
+
 const router = express.Router();
 // Recherche-Sessions tragen in `proposals` auch Fundstücke (POST /research/chat-proposal) —
 // über diese Route nur ihre Ideen.
@@ -47,7 +50,8 @@ router.post('/chat-proposal/beleg-check', express.json(), async (req, res) => {
     "SELECT session_id, context_info FROM chat_messages WHERE id = ? AND role = 'assistant'"
   ).get(messageId);
   const session = msg ? getOwnedSession(msg.session_id, userEmail) : null;
-  if (!session || session.kind !== 'ideen') return res.status(404).json({ error_code: 'PROPOSAL_NOT_FOUND' });
+  // Belege tragen die idee_update des Ideen-Chats und des Abschnitts-Chats.
+  if (!session || !BELEG_KINDS.has(session.kind)) return res.status(404).json({ error_code: 'PROPOSAL_NOT_FOUND' });
   setContext({ book: session.book_id });
   if (!guardBook(req, res, session.book_id, 'editor')) return;
   let ci;

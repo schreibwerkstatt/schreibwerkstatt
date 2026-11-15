@@ -1,8 +1,15 @@
 // Geteilte Mechanik der drei Kapitel-Balken-Tiles der Buch-Übersicht
 // (Verteilung, Lektorat-Findings, Lektoratszeit). Alle drei zeigen dasselbe
 // Layout: Track-Mitte = Median über die Kapitel, Balken wachsen nach rechts
-// (über Median) oder links (darunter), Länge = |deltaPct| relativ zum grössten
-// Ausschlag. Nur die Kennzahl unterscheidet sich (Zeichen / Findings / Sekunden).
+// (über Median) oder links (darunter). Nur die Kennzahl unterscheidet sich
+// (Zeichen / Befunde je 1000 Wörter / Sekunden).
+//
+// Balkenlänge auf LOG-Skala: |log2(Wert / Median)| relativ zum grössten
+// Ausschlag. Prozent-Abweichungen sind asymmetrisch — nach unten höchstens
+// −100 %, nach oben unbegrenzt —, linear gezeichnet schrumpfte ein Kapitel mit
+// halber Medianlänge neben einem Ausreisser zum Stummel. Log-skaliert sind
+// „halb so viel" und „doppelt so viel" gleich weit von der Mitte. Die
+// Beschriftung bleibt die Prozent-Abweichung (`deltaPct`).
 //
 // Pure Funktionen (Alpine-/DOM-frei) → direkt unit-testbar, siehe
 // tests/unit/book-overview-diverging.test.mjs.
@@ -72,7 +79,11 @@ export function divergingRows(items, {
 
   const zeroMedian = showMedian && med === 0;
   const deltas = values.map((v, i) => (counts[i] && med > 0 ? Math.round(((v - med) / med) * 100) : 0));
-  const maxAbsDelta = Math.max(1, ...deltas.map(Math.abs));
+  // Log-Verhältnis zum Median. Ein Wert 0 (bei Median > 0) liegt log-skaliert
+  // unendlich weit links — er bekommt den grössten endlichen Ausschlag.
+  const logs = values.map((v, i) => (counts[i] && med > 0 && v > 0 ? Math.log2(v / med) : 0));
+  const scaleLog = Math.max(0, ...logs.map(Math.abs)) || 1;
+  const logOf = (v, i) => (counts[i] && med > 0 && v <= 0 ? -scaleLog : logs[i]);
   const maxPos = Math.max(0, max);
 
   return rows.map((item, i) => {
@@ -81,7 +92,7 @@ export function divergingRows(items, {
     let halfPct = 0;
     if (!counts[i]) halfPct = 0;
     else if (zeroMedian) halfPct = maxPos > 0 && v > 0 ? (v / maxPos) * half : 0;
-    else if (showMedian) halfPct = (Math.abs(deltaPct) / maxAbsDelta) * half;
+    else if (showMedian) halfPct = (Math.abs(logOf(v, i)) / scaleLog) * half;
     return {
       ...item,
       median: med,

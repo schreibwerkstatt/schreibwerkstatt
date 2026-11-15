@@ -15,9 +15,9 @@
 // so zeigt das Label genau den Kalendertag des Strings, egal in welcher Zone
 // Browser und App stehen.
 import { localIsoDate, completeLiveBookStats, resolveDailyGoal } from '../utils.js';
-import { computeTodayRing, makeDayDelta } from '../today-ring.js';
+import { computeTodayRing, makeDayDelta, writtenChars } from '../today-ring.js';
 import { buildStreakGrid } from '../streak-grid.js';
-import { isoAddDays, isoLastDays } from '../utils/iso-day.js';
+import { isoAddDays, isoDaysBetween, isoLastDays } from '../utils/iso-day.js';
 
 export const statsMethods = {
   // Heutiger Kalendertag (appTimezone). `overviewToday` ist das reaktive Feld
@@ -120,11 +120,26 @@ export const statsMethods = {
     });
   },
 
-  // Skalierungs-Maximum für 7-Tage-Bars (abs, mind. 1 um Division-by-zero zu vermeiden).
-  overviewLast7Max() {
+  // Geometrie der 7-Tage-Balken: eine Nulllinie, Plus wächst nach oben, Minus
+  // nach unten. Ohne Minus-Tag liegt die Nulllinie am Boden (volle Höhe für
+  // Plus); sonst rückt sie im Verhältnis von grösstem Minus zu grösstem Plus nach
+  // oben. Je Tag: `bottom`/`height` in Prozent der Spur.
+  overviewLast7Bars() {
     const days = this.overviewLast7Days();
-    return this._memo('last7Max', [days], () =>
-      Math.max(1, ...days.map(d => Math.abs(d.delta))));
+    return this._memo('last7Bars', [days], () => {
+      const maxPos = Math.max(0, ...days.map(d => d.delta));
+      const maxNeg = Math.max(0, ...days.map(d => -d.delta));
+      const span = Math.max(1, maxPos + maxNeg);
+      const zeroPct = (maxNeg / span) * 100;
+      return {
+        zeroPct,
+        hasNeg: maxNeg > 0,
+        days: days.map(d => {
+          const h = (Math.abs(d.delta) / span) * 100;
+          return { ...d, height: h, bottom: d.delta < 0 ? zeroPct - h : zeroPct };
+        }),
+      };
+    });
   },
 
   overview7DayCharDelta() {
@@ -149,46 +164,61 @@ export const statsMethods = {
         if (a[i].recorded_at <= cutoff) { earlier = a[i]; break; }
       }
       if (!earlier) earlier = a[0];
-      return latestChars - (Number(earlier.chars) || 0);
+      // Import-Zuwachs im Fenster zählt nicht als geschrieben (today-ring.js#writtenChars).
+      const imported = (Number(latestSnapshot.imported_chars) || 0) - (Number(earlier.imported_chars) || 0);
+      return latestChars - (Number(earlier.chars) || 0) - imported;
     });
   },
 
   // Sparkline-Daten + Polygon-Fläche darunter (Gradient-Fill).
   // Liefert { d, area, color, deltaPct, deltaAbs, endX, endY, w, h, points } oder { d:null, ... } bei <2 Punkten.
+  // X-Achse = Kalender (Snapshot-Lücken bleiben Lücken, statt die Kurve zu
+  // stauchen); letzter Punkt = vollständiger Live-Stand von heute, derselbe, den
+  // Hero und 7-Tage-Kachel zeigen.
+  // `deltaAbs`/`deltaPct` = GESCHRIEBENER Zuwachs: Import-Zuwachs im Fenster zählt
+  // nicht (today-ring.js#writtenChars); die Kurve selbst zeigt den echten Umfang.
   // `deltaPct` ist null, wenn der Verlauf bei 0 Zeichen beginnt — Prozent von
   // nichts ist keine Zahl; die Kachel zeigt dann den absoluten Zuwachs.
-  // `points`: pro Datenpunkt { chars, iso, label } für Hover-Overlay mit Datum + exaktem Wert.
+  // `points`: pro Datenpunkt { chars, iso, label, colLeft, colWidth } — die
+  // Hover-Spalte reicht je zur Hälfte bis zu den Nachbarpunkten (Prozent der Breite).
   overviewSparkline() {
     const stats = this.overviewStats || [];
-    return this._memo('sparkline', [stats, this._uiLocale(), this._todayIso()], () => {
+    const tokEsts = window.__app?.tokEsts || {};
+    const pages = Alpine.store('nav').pages || [];
+    return this._memo('sparkline', [stats, tokEsts, pages, this._uiLocale(), this._todayIso()], () => {
       const W = 240, H = 48, PAD = 3;
-      // Fenster nach KALENDERTAGEN, nicht nach Snapshot-Anzahl: das Label
-      // verspricht „30 Tage", und Snapshot-Lücken (Cron ausgefallen, Import)
-      // dehnten `slice(-30)` sonst über Monate. Der letzte Snapshot VOR dem
-      // Fenster bleibt als Anker drin — er ist der Stand am Fensteranfang.
-      const cutoff = isoAddDays(this._todayIso(), -30);
+      const today = this._todayIso();
+      // Fenster nach KALENDERTAGEN. Der letzte Snapshot VOR dem Fenster bleibt als
+      // Anker drin — er ist der Stand am Fensteranfang.
+      const cutoff = isoAddDays(today, -30);
       let start = stats.findIndex(s => (s.recorded_at || '') >= cutoff);
       if (start < 0) start = stats.length;
-      const slice = stats.slice(Math.max(0, start - 1));
-      const data = slice.map(s => Number(s.chars) || 0);
-      if (data.length < 2) return { d: null, area: null, color: 'currentColor', deltaPct: 0, deltaAbs: 0, endX: 0, endY: 0, w: W, h: H, points: [] };
+      const slice = stats.slice(Math.max(0, start - 1)).filter(s => s.recorded_at)
+        .map(s => ({ iso: s.recorded_at, chars: Number(s.chars) || 0, imported: Number(s.imported_chars) || 0 }));
+      const live = this._liveTotals();
+      if (live && slice.length) {
+        const last = slice[slice.length - 1];
+        if (last.iso === today) last.chars = live.chars;
+        else slice.push({ iso: today, chars: live.chars, imported: last.imported });
+      }
+      const empty = { d: null, area: null, color: 'currentColor', deltaPct: 0, deltaAbs: 0, endX: 0, endY: 0, w: W, h: H, points: [] };
+      if (slice.length < 2) return empty;
+      const data = slice.map(p => p.chars);
       const min = Math.min(...data);
       const max = Math.max(...data);
       const span = Math.max(1, max - min);
-      const stepX = (W - 2 * PAD) / (data.length - 1);
-      const pts = data.map((v, i) => {
-        const x = PAD + i * stepX;
-        const y = H - PAD - ((v - min) / span) * (H - 2 * PAD);
-        return [x, y];
-      });
+      const firstIso = slice[0].iso;
+      const days = Math.max(1, isoDaysBetween(firstIso, slice[slice.length - 1].iso));
+      const xOf = (iso) => PAD + (isoDaysBetween(firstIso, iso) / days) * (W - 2 * PAD);
+      const pts = slice.map(p => [xOf(p.iso), H - PAD - ((p.chars - min) / span) * (H - 2 * PAD)]);
       const d = pts.map((p, i) => (i === 0 ? 'M' : 'L') + p[0].toFixed(1) + ',' + p[1].toFixed(1)).join(' ');
       const area = d
         + ` L ${pts[pts.length - 1][0].toFixed(1)},${(H - PAD).toFixed(1)}`
         + ` L ${pts[0][0].toFixed(1)},${(H - PAD).toFixed(1)} Z`;
-      const first = data[0];
-      const last = data[data.length - 1];
-      const deltaAbs = last - first;
-      const deltaPct = first > 0 ? Math.round((deltaAbs / first) * 100) : null;
+      const first = slice[0];
+      const lastP = slice[slice.length - 1];
+      const deltaAbs = (lastP.chars - lastP.imported) - (first.chars - first.imported);
+      const deltaPct = first.chars > 0 ? Math.round((deltaAbs / first.chars) * 100) : null;
       // Farbe nach dem Vorzeichen des Zuwachses, nicht der gerundeten Prozente:
       // ein Plus von 0,4 % ist trotzdem ein Plus.
       const color = deltaAbs > 0 ? 'var(--color-success)'
@@ -198,15 +228,19 @@ export const statsMethods = {
       const endY = pts[pts.length - 1][1];
       const numFmt = this._numFmt();
       const unit = window.__app?.t?.('bookstats.unit.z') || 'Z';
-      const points = slice.map((s, i) => {
-        const iso = s.recorded_at;
-        let label;
-        if (iso) {
-          label = this._isoDayLabel(iso) + ': ' + numFmt.format(data[i]) + ' ' + unit;
-        } else {
-          label = numFmt.format(data[i]) + ' ' + unit;
-        }
-        return { chars: data[i], iso, label };
+      const pct = (x) => (x / W) * 100;
+      const points = slice.map((p, i) => {
+        const left = i === 0 ? 0 : (pts[i - 1][0] + pts[i][0]) / 2;
+        const right = i === pts.length - 1 ? W : (pts[i][0] + pts[i + 1][0]) / 2;
+        return {
+          chars: p.chars,
+          iso: p.iso,
+          label: this._isoDayLabel(p.iso) + ': ' + numFmt.format(p.chars) + ' ' + unit,
+          colLeft: pct(left),
+          colWidth: pct(right - left),
+          // Markierung genau am Punkt, relativ zur eigenen Spalte.
+          tickPct: right > left ? ((pts[i][0] - left) / (right - left)) * 100 : 50,
+        };
       });
       return { d, area, color, deltaPct, deltaAbs, endX, endY, w: W, h: H, points };
     });

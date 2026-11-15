@@ -9,7 +9,9 @@ const { birthCandidates, resolveBirth } = require('../../../lib/figure-birth');
  * Offene Ideen einer Seite + des umliegenden Kapitels (user-spezifisch).
  * Werden im Seiten-Chat als Kontext eingespielt. Kapitel-Ideen sind oft
  * relevanter fuer Folgeseiten als rein seitenspezifische Notizen — daher
- * mit-eingespielt. `scope` ('page'|'chapter') unterscheidet im Prompt-Output.
+ * mit-eingespielt. `scope` ('page'|'chapter') unterscheidet im Prompt-Output;
+ * `id` + `status` tragen die Änderungs-Vorschläge des Chats (`ideen_aenderungen`,
+ * lib/chat-idee-proposals.js#normalizeChatIdeeUpdates).
  *
  * „Offen" heisst `offen` ODER `in_arbeit` (lib/ideen-status.js#openStatusSql) —
  * `erledigt` und `verworfen` fallen beide raus. Eine verworfene Idee als Absicht
@@ -19,11 +21,11 @@ const { birthCandidates, resolveBirth } = require('../../../lib/figure-birth');
 function getOpenIdeen(pageId, userEmail) {
   if (!pageId || !userEmail) return [];
   return db.prepare(`
-    SELECT 'page' AS scope, i.content, i.created_at
+    SELECT 'page' AS scope, i.id, i.content, i.status, i.created_at
     FROM ideen i
     WHERE i.page_id = ? AND i.user_email = ? AND ${openStatusSql('i')}
     UNION ALL
-    SELECT 'chapter' AS scope, i.content, i.created_at
+    SELECT 'chapter' AS scope, i.id, i.content, i.status, i.created_at
     FROM ideen i
     JOIN pages p ON p.chapter_id = i.chapter_id
     WHERE p.page_id = ? AND i.user_email = ? AND ${openStatusSql('i')}

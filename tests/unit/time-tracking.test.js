@@ -123,3 +123,16 @@ test('fremdes Buch/fremder User sieht nichts', () => {
   const otherBook = tt.readSummary('writing', { userEmail: EMAIL, bookId: 999999 });
   assert.equal(otherBook.total_seconds, 0);
 });
+
+test('writing: book_daily summiert die Schreibzeit aller User je Tag (Tempo-Nenner)', () => {
+  const CO = 'co@test.dev';
+  db.prepare('INSERT OR IGNORE INTO app_users (email, display_name) VALUES (?, ?)').run(CO, 'Co');
+  tt.recordHeartbeat('writing', { userEmail: CO, bookId: BOOK, date: '2026-08-11', hour: 9, seconds: 120 });
+  tt.recordHeartbeat('writing', { userEmail: EMAIL, bookId: BOOK, date: '2026-08-11', hour: 9, seconds: 60 });
+  const s = tt.readSummary('writing', { userEmail: EMAIL, bookId: BOOK });
+  const own = Object.fromEntries(s.daily.map(d => [d.date, d.seconds]));
+  const all = Object.fromEntries(s.book_daily.map(d => [d.date, d.seconds]));
+  assert.equal(own['2026-08-11'], 60, 'daily bleibt die eigene Zeit');
+  assert.equal(all['2026-08-11'], 180, 'book_daily: eigene + fremde');
+  assert.ok(!('book_daily' in tt.readSummary('lektorat', { userEmail: EMAIL, bookId: BOOK })));
+});

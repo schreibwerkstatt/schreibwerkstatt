@@ -2,8 +2,10 @@
 <!--
   Fragment (per String-Include in chat.html, in der Nachrichten-Schleife von
   Abschnitts- UND Buch-Chat, und in recherche-chat.html; Scope: `msg`): Ideen-Vorschläge einer Antwort —
-  ein bemerkter Widerspruch/Fehler als Idee (Pendenz) an einem Abschnitt oder Kapitel.
-  Methoden: chat/chat-idee-proposals.js. Erfassen/Verwerfen nur mit
+  ein bemerkter Widerspruch/Fehler als Idee (Pendenz) an einem Abschnitt oder Kapitel
+  (idee_create), im Abschnitts-Chat dazu Änderungen an offenen Ideen (idee_update:
+  Stufe/Text vorher → nachher, «erledigt» mit geprüftem Beleg).
+  Methoden: chat/chat-idee-proposals.js. Erfassen/Übernehmen/Verwerfen nur mit
   Schreibrecht ($app.canEdit()) — POST /ideen verlangt editor.
   Alle KI-Felder per x-text — kein x-html.
 -->
@@ -14,14 +16,14 @@
         :class="{ 'chat-vorschlag--applied': chatIdeeState(e.p) === 'applied', 'chat-vorschlag--discarded': chatIdeeState(e.p) === 'discarded' }">
         <div class="chat-vorschlag-header">
           <span class="chat-vorschlag-label"
-            x-text="chatIdeeState(e.p) === 'applied' ? $app.t('chat.ideeCaptured') : chatIdeeState(e.p) === 'discarded' ? $app.t('chat.discarded') : $app.t('chat.ideeSuggestion')"></span>
+            x-text="chatIdeeState(e.p) === 'applied' ? $app.t(e.p.type === 'idee_update' ? 'chat.ideeUpdated' : 'chat.ideeCaptured') : chatIdeeState(e.p) === 'discarded' ? $app.t('chat.discarded') : $app.t(e.p.type === 'idee_update' ? 'chat.ideeUpdateSuggestion' : 'chat.ideeSuggestion')"></span>
           <span class="chat-vorschlag-actions" x-show="$app.canEdit() && chatIdeeState(e.p) !== 'applied'">
             <button type="button" class="chat-vorschlag-btn" x-show="chatIdeeState(e.p) === 'open'"
-              @click="captureChatIdee(msg, e.idx)" :disabled="!!e.p._busy">
+              @click="e.p.type === 'idee_update' ? applyChatIdeeUpdate(msg, e.idx) : captureChatIdee(msg, e.idx)" :disabled="!!e.p._busy">
               <span x-show="e.p._busy" class="spinner"></span>
-              <span x-text="$app.t('chat.ideeCapture')"></span>
+              <span x-text="$app.t(e.p.type === 'idee_update' ? 'chat.apply' : 'chat.ideeCapture')"></span>
             </button>
-            <button type="button" class="chat-vorschlag-btn chat-vorschlag-btn--ghost" x-show="chatIdeeState(e.p) === 'open'"
+            <button type="button" class="chat-vorschlag-btn chat-vorschlag-btn--ghost" x-show="chatIdeeState(e.p) === 'open' && e.p.type !== 'idee_update'"
               @click="editChatIdee(e.p)" :disabled="!!e.p._busy"
               x-text="e.p._editing ? $app.t('chat.ideeEditDone') : $app.t('ideen.edit')"></button>
             <button type="button" class="chat-vorschlag-btn chat-vorschlag-btn--ghost"
@@ -29,18 +31,42 @@
               x-text="chatIdeeState(e.p) === 'discarded' ? $app.t('chat.restore') : $app.t('chat.discard')"></button>
           </span>
         </div>
-        <template x-if="e.p._editing">
+        <!-- Änderung an einer bestehenden Idee: Feld für Feld vorher → nachher, dazu der geprüfte Beleg -->
+        <template x-if="e.p.type === 'idee_update'">
+          <div class="chat-vorschlag-diff">
+            <div class="chat-vorschlag-title" x-text="e.p.labels?.idee"></div>
+            <template x-for="row in chatIdeeUpdateRows(e.p)" :key="row.key">
+              <div class="chat-vorschlag-row">
+                <span class="chat-vorschlag-field" x-text="$app.t('ideenBoard.chat.field.' + row.key)"></span>
+                <template x-if="row.diff">
+                  <span class="chat-word-diff"><template x-for="(part, di) in row.diff" :key="di"><span :class="part.c" x-text="part.v"></span></template></span>
+                </template>
+                <template x-if="!row.diff">
+                  <span class="chat-vorschlag-change"><span class="chat-vorschlag-before" x-text="$app.t('ideen.status.' + row.before)"></span><svg class="icon chat-vorschlag-arrow" aria-hidden="true"><use href="/icons.svg#arrow-right"/></svg><span class="chat-vorschlag-after" x-text="$app.t('ideen.status.' + row.after)"></span></span>
+                </template>
+              </div>
+            </template>
+            <div x-show="e.p.beleg?.text" class="chat-vorschlag-row">
+              <span class="chat-vorschlag-field" x-text="$app.t('ideenBoard.chat.field.beleg')" :data-tip="$app.t('ideenBoard.chat.belegChecked')"></span>
+              <q class="chat-vorschlag-quote" x-text="e.p.beleg?.text"></q>
+            </div>
+            <div x-show="e.p.beleg?.text && e.p._belegMissing" class="chat-vorschlag-note" x-text="$app.t('ideenBoard.chat.belegMissing')"></div>
+          </div>
+        </template>
+        <template x-if="e.p.type !== 'idee_update' && e.p._editing">
           <textarea class="card-form-textarea chat-idee-edit" rows="3" data-spellcheck="spelling"
             x-model="e.p._draft" :aria-label="$app.t('chat.ideeEditLabel')"></textarea>
         </template>
-        <div x-show="!e.p._editing" class="chat-vorschlag-text chat-idee-text" x-text="e.p._draft ?? e.p.fields.content"></div>
-        <div class="chat-vorschlag-meta chat-idee-anchor">
-          <span x-text="$app.t(e.p.fields.chapter_id != null ? 'chat.ideeAtChapter' : 'chat.ideeAt')"></span>
-          <button type="button" class="entity-ref"
-            x-entity-ref="e.p.fields.chapter_id != null
-              ? { type: 'kapitel', id: e.p.fields.chapter_id, label: e.p.labels?.anchor || undefined }
-              : { type: 'seite', id: e.p.fields.page_id, label: e.p.labels?.anchor || undefined }"></button>
-        </div>
+        <div x-show="e.p.type !== 'idee_update' && !e.p._editing" class="chat-vorschlag-text chat-idee-text" x-text="e.p._draft ?? e.p.fields.content"></div>
+        <template x-if="e.p.type !== 'idee_update'">
+          <div class="chat-vorschlag-meta chat-idee-anchor">
+            <span x-text="$app.t(e.p.fields.chapter_id != null ? 'chat.ideeAtChapter' : 'chat.ideeAt')"></span>
+            <button type="button" class="entity-ref"
+              x-entity-ref="e.p.fields.chapter_id != null
+                ? { type: 'kapitel', id: e.p.fields.chapter_id, label: e.p.labels?.anchor || undefined }
+                : { type: 'seite', id: e.p.fields.page_id, label: e.p.labels?.anchor || undefined }"></button>
+          </div>
+        </template>
         <div x-show="e.p.begruendung" class="chat-vorschlag-begruendung" x-text="e.p.begruendung"></div>
         <div x-show="e.p._error" class="chat-vorschlag-error" x-text="e.p._error"></div>
       </div>

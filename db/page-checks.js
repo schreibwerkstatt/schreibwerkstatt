@@ -33,15 +33,21 @@ function listPageChecks(pageId, email, limit = 20) {
 }
 
 const _stmtCoverageTotal = db.prepare('SELECT COUNT(*) AS total FROM page_stats WHERE book_id = ?');
-const _stmtCoverageChecked = db.prepare(
-  'SELECT COUNT(DISTINCT page_id) AS checked FROM page_checks WHERE book_id = ?'
-);
+// Nur Abschnitte, die das Buch noch hat (page_stats) — Prüfungen gelöschter
+// oder in ein anderes Buch verschobener Abschnitte zählen sonst weiter mit.
+const _stmtCoverageChecked = db.prepare(`
+  SELECT COUNT(DISTINCT pc.page_id) AS checked
+    FROM page_checks pc
+    JOIN page_stats ps ON ps.page_id = pc.page_id AND ps.book_id = pc.book_id
+   WHERE pc.book_id = ?
+`);
 
 /** Lektorat-Abdeckung eines Buchs, Cross-User: geprüfte / gesamte Abschnitte. */
 function lektoratCoverage(bookId) {
   const { total } = _stmtCoverageTotal.get(bookId);
   const { checked } = _stmtCoverageChecked.get(bookId);
-  const pct = total > 0 ? Math.round((checked / total) * 100) : 0;
+  // Abgerundet: 199 von 200 sind 99 %, nicht 100 % — der volle Ring heisst „alles geprüft".
+  const pct = total > 0 ? Math.floor((checked / total) * 100) : 0;
   return { checked_pages: checked, total_pages: total, pct };
 }
 

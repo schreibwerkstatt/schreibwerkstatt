@@ -16,19 +16,16 @@ const { catchUpCutoff } = require('../../lib/startup');
 
 const TZ = 'Europe/Zurich';
 
-test('vor 23 Uhr lokal → gestern (lokal)', () => {
+test('nach dem 00:05-Lauf → gestern (lokal)', () => {
   // 2026-07-10 20:30 UTC = 22:30 CEST
   assert.equal(catchUpCutoff(new Date('2026-07-10T20:30:00Z'), TZ), '2026-07-09');
+  // 2026-07-09 22:06 UTC = 2026-07-10 00:06 CEST
+  assert.equal(catchUpCutoff(new Date('2026-07-09T22:06:00Z'), TZ), '2026-07-09');
 });
 
-test('ab 23 Uhr lokal → heute (lokal), obwohl UTC noch 21 Uhr ist', () => {
-  // 2026-07-10 21:15 UTC = 23:15 CEST
-  assert.equal(catchUpCutoff(new Date('2026-07-10T21:15:00Z'), TZ), '2026-07-10');
-});
-
-test('nach lokaler Mitternacht, UTC noch am Vortag → lokales Gestern', () => {
-  // 2026-07-10 22:30 UTC = 2026-07-11 00:30 CEST → letzter Lauf war 2026-07-10
-  assert.equal(catchUpCutoff(new Date('2026-07-10T22:30:00Z'), TZ), '2026-07-10');
+test('vor dem 00:05-Lauf → vorgestern (lokal), obwohl UTC noch am Vortag ist', () => {
+  // 2026-07-09 22:03 UTC = 2026-07-10 00:03 CEST → letzter fälliger Lauf schrieb 2026-07-08
+  assert.equal(catchUpCutoff(new Date('2026-07-09T22:03:00Z'), TZ), '2026-07-08');
 });
 
 test('Monatswechsel und Jahreswechsel', () => {

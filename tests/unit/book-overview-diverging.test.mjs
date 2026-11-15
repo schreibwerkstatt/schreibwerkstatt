@@ -1,6 +1,5 @@
 // Tests für den geteilten Diverging-Bar-Kern der Kapitel-Tiles
-// (Verteilung / Lektorat-Findings / Lektoratszeit). Vorher lag Median +
-// Balken-Geometrie dreimal parallel in kapitel.js.
+// (Verteilung / Lektorat-Befunde / Lektoratszeit).
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { divergingRows, median, HALF_TRACK_PCT } from '../../public/js/book-overview/diverging.js';
@@ -34,11 +33,27 @@ test('divergingRows: deltaPct gegen Median, Balken um die Track-Mitte', () => {
   assert.equal(out[2].barWidthPct, HALF_TRACK_PCT);
   assert.equal(out[2].barLeftPct, 50, 'über Median → wächst nach rechts');
 
-  // Halber Ausschlag → halbe Länge, links der Mitte angesetzt.
-  assert.equal(out[0].barWidthPct, HALF_TRACK_PCT / 2);
-  assert.equal(out[0].barLeftPct, 50 - HALF_TRACK_PCT / 2);
+  // Log-Skala: halb so viel ist so weit weg wie doppelt so viel — volle
+  // Länge, links der Mitte angesetzt.
+  assert.equal(out[0].barWidthPct, HALF_TRACK_PCT);
+  assert.equal(out[0].barLeftPct, 50 - HALF_TRACK_PCT);
 
   assert.deepEqual(out.map(r => r.isAbove), [false, false, true]);
+});
+
+test('divergingRows: Log-Skala — ein Ausreisser staucht die Unterseite nicht', () => {
+  // Median 100; 25 ist ein Viertel (log2 = −2), 800 das Achtfache (log2 = 3).
+  const out = divergingRows(rows(25, 100, 100, 100, 800), { valueOf });
+  assert.equal(out[4].barWidthPct, HALF_TRACK_PCT);
+  assert.ok(Math.abs(out[0].barWidthPct - HALF_TRACK_PCT * 2 / 3) < 1e-9, 'Viertel = 2/3 des Achtfachen');
+  assert.equal(out[0].deltaPct, -75, 'Beschriftung bleibt Prozent');
+});
+
+test('divergingRows: Wert 0 bei Median > 0 → grösster Ausschlag nach links', () => {
+  const out = divergingRows(rows(0, 100, 100, 200), { valueOf });
+  assert.equal(out[0].barWidthPct, HALF_TRACK_PCT);
+  assert.equal(out[0].barLeftPct, 50 - HALF_TRACK_PCT);
+  assert.equal(out[3].barWidthPct, HALF_TRACK_PCT);
 });
 
 test('divergingRows: Extrem-Marker auf höchstem/niedrigstem Wert', () => {

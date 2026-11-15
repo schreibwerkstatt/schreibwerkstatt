@@ -177,7 +177,11 @@ async function syncPagesCache(bookId, ctx) {
   logger.info(`pages-Cache Buch ${bookId}: ${pages.length} Seiten, ${toFetch.length} Vorschau(en) nachgeladen.`);
 }
 
-async function syncBook(bookId, ctx) {
+// `day`: Kalendertag des Snapshots. Default heute (manueller Sync, Import,
+// Fassungs-Restore); der Nachtlauf kurz nach Mitternacht schreibt den eben
+// beendeten Vortag (lib/cron.js), damit der Tagesstand das Schreiben bis
+// Mitternacht enthält.
+async function syncBook(bookId, ctx, { day = null } = {}) {
   const [pages, book, chapters] = await Promise.all([
     contentStore.listPages(bookId, ctx),
     contentStore.loadBook(bookId, ctx),
@@ -344,7 +348,7 @@ async function syncBook(bookId, ctx) {
   // Lokales Datum statt UTC: book_stats_history.recorded_at muss zur lokalen
   // User-Wahrnehmung passen. Frontend-Streak/Heute-Ring iteriert ebenfalls
   // lokal — beide Seiten in derselben TZ (process.env.TZ, default Europe/Zurich).
-  const today = localIsoDate();
+  const today = day || localIsoDate();
   // imported_*: kumulativer Import-Zuwachs (lib/import-baseline.js) — eine neue
   // Tageszeile erbt ihn vom juengsten Vorgaenger, ein Re-Sync laesst ihn stehen.
   db.prepare(`
@@ -376,7 +380,7 @@ async function syncBook(bookId, ctx) {
   return { page_count: pages.length, words: bookWords, chars: bookChars, tok: bookTok, chapter_count: chapterCount, avg_sentence_len: avgSentenceLen, avg_lix: avgLix, avg_flesch_de: avgFleschDe, snapshot: true };
 }
 
-async function _syncAllBooksInner() {
+async function _syncAllBooksInner(day) {
   const books = (await contentStore.listBooks(null))
     .map(b => ({ book_id: b.id }))
     .sort((a, b) => a.book_id - b.book_id);
@@ -387,17 +391,17 @@ async function _syncAllBooksInner() {
   logger.info(`Sync: ${books.length} Buch/Buecher.`);
   for (const { book_id: bookId } of books) {
     await runWithContext({ ...getContext(), book: bookId }, async () => {
-      try { await syncBook(bookId, null); }
+      try { await syncBook(bookId, null, { day }); }
       catch (e) { logger.error(`Sync Buch ${bookId} fehlgeschlagen: ${_errDetail(e)}`); }
     });
   }
 }
 
-async function syncAllBooks() {
+async function syncAllBooks({ day = null } = {}) {
   const t0 = Date.now();
-  logger.info('Sync gestartet.');
+  logger.info(`Sync gestartet${day ? ` (Snapshot-Tag ${day})` : ''}.`);
   try {
-    await _syncAllBooksInner();
+    await _syncAllBooksInner(day);
   } finally {
     const s = Math.round((Date.now() - t0) / 1000);
     const dur = s < 60 ? `${s}s` : `${Math.floor(s / 60)}m ${s % 60}s`;

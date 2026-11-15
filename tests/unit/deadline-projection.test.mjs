@@ -179,3 +179,15 @@ test('computeDeadlineProjection: todayIso hat Vorrang vor todayLocal', () => {
   const r = computeDeadlineProjection(stats, 40000, { targetChars: 100000, todayIso: '2026-06-21', todayLocal: TODAY });
   assert.equal(r.historyDays, 31);
 });
+
+test('computeDeadlineProjection: ein kleiner Import zählt nicht zum Schnitt', () => {
+  // 10'000 importierte Zeichen (unter der Sprung-Schwelle) + 15'000 geschrieben.
+  const stats = [
+    { recorded_at: '2026-05-21', chars: 10000, imported_chars: 0 },
+    { recorded_at: '2026-06-01', chars: 20000, imported_chars: 10000 },
+    { recorded_at: ISO_TODAY,    chars: 35000, imported_chars: 10000 },
+  ];
+  const r = computeDeadlineProjection(stats, 0, { targetChars: 100000, todayLocal: TODAY });
+  assert.equal(r.currentChars, 35000, 'Stand bleibt der echte Umfang');
+  assert.equal(r.pace, 500, '15000 geschrieben / 30 Tage');
+});

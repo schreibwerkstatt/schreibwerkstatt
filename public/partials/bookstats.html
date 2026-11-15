@@ -28,37 +28,10 @@
   <div x-show="bookStatsSyncStatus" class="card-status" x-html="bookStatsSyncStatus"></div>
 
   <!-- Metrik- & Zeitraum-Umschalter -->
-  <div x-show="bookStatsData.length > 0 || (writingTimeData?.daily?.length > 0) || (lektoratTimeData?.daily?.length > 0) || (sttTimeData?.daily?.length > 0) || (statusHistoryData?.daily?.length > 0)" class="book-stats-controls">
+  <div x-show="bookStatsHasAnyData()" class="book-stats-controls">
     <div x-data="combobox($app.t('bookstats.metric'))"
          x-modelable="value" x-model="bookStatsMetric"
-         x-effect="options = [
-           {value:'chars',               label: $app.t('bookstats.metric.chars')},
-           {value:'normseiten',          label: $app.t('bookstats.metric.normseiten')},
-           {value:'words',               label: $app.t('bookstats.metric.words')},
-           {value:'page_count',          label: $app.t('bookstats.metric.pages')},
-           {value:'tok',                 label: $app.t('bookstats.metric.tok')},
-           {value:'unique_words',        label: $app.t('bookstats.metric.unique')},
-           {value:'delta_chars',         label: $app.t('bookstats.metric.deltaChars')},
-           {value:'delta_words',         label: $app.t('bookstats.metric.delta')},
-           {value:'avg_sentence_len',    label: $app.t('bookstats.metric.avgSentence')},
-           {value:'pages_per_chapter',   label: $app.t('bookstats.metric.pagesPerChapter')},
-           {value:'avg_lix',             label: $app.t('bookstats.metric.lix')},
-           {value:'avg_flesch_de',       label: $app.t('bookstats.metric.flesch')},
-           {value:'mattr',               label: $app.t('bookstats.metric.mattr')},
-           {value:'mtld',                label: $app.t('bookstats.metric.mtld')},
-           {value:'lex_density',         label: $app.t('bookstats.metric.lexDensity')},
-           {value:'hapax_ratio',         label: $app.t('bookstats.metric.hapaxRatio')},
-           {value:'writing_minutes',     label: $app.t('bookstats.metric.writingMinutes')},
-           {value:'writing_cumulative',  label: $app.t('bookstats.metric.writingCumulative')},
-           {value:'chars_per_hour',      label: $app.t('bookstats.metric.charsPerHour')},
-           {value:'lektorat_minutes',    label: $app.t('bookstats.metric.lektoratMinutes')},
-           {value:'lektorat_cumulative', label: $app.t('bookstats.metric.lektoratCumulative')},
-           {value:'stt_minutes',         label: $app.t('bookstats.metric.sttMinutes')},
-           {value:'stt_cumulative',      label: $app.t('bookstats.metric.sttCumulative')},
-           {value:'stt_chars',           label: $app.t('bookstats.metric.sttChars')},
-           {value:'status_done',         label: $app.t('bookstats.metric.statusDone')},
-           {value:'status_set',          label: $app.t('bookstats.metric.statusSet')}
-         ]"
+         x-effect="options = bookStatsMetricOptions()"
          @combobox-change="$nextTick(() => renderStatsChart())"
          >
     </div>
@@ -85,9 +58,12 @@
   </div>
 
   <!-- Diagramm -->
-  <div x-show="bookStatsData.length > 0 || (writingTimeData?.daily?.length > 0) || (lektoratTimeData?.daily?.length > 0) || (sttTimeData?.daily?.length > 0) || (statusHistoryData?.daily?.length > 0)" class="book-stats-chart-wrap">
+  <div x-show="bookStatsHasAnyData()" class="book-stats-chart-wrap">
     <canvas id="book-stats-chart" role="img" :aria-label="$app.t('bookstats.chartFallback')"><span x-text="$app.t('bookstats.chartFallback')"></span></canvas>
   </div>
+  <!-- Gewählte Metrik ohne Wert im Zeitraum (z.B. Wortschatz noch nie gescannt):
+       der Chart bleibt leer, der Satz sagt warum. -->
+  <div x-show="bookStatsMetricEmpty && bookStatsHasAnyData()" x-cloak class="muted-msg" x-text="$app.t('bookstats.metricEmpty')"></div>
 
   <!-- Kennzahlen in drei Gruppen: Umfang · Qualität · Aufwand -->
   <div x-show="bookStatsBadgeGroups().length" class="book-stats-current">
@@ -104,5 +80,5 @@
   </div>
 
   <!-- Leer-Zustand -->
-  <div x-show="!bookStatsData.length && !(writingTimeData?.daily?.length > 0) && !(lektoratTimeData?.daily?.length > 0) && !(sttTimeData?.daily?.length > 0) && !(statusHistoryData?.daily?.length > 0) && !bookStatsLoading" class="muted-msg muted-msg--spaced" x-text="$app.t('bookstats.emptyState')"></div>
+  <div x-show="!bookStatsHasAnyData() && !bookStatsLoading" class="muted-msg muted-msg--spaced" x-text="$app.t('bookstats.emptyState')"></div>
 </div>

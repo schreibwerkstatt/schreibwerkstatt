@@ -82,10 +82,17 @@ function cumOnOrBefore(sortedIsos, cumByIso, iso) {
   return val;
 }
 
+// Geschriebener Stand eines Snapshots: Zeichen minus kumulativer Import-Zuwachs
+// (`imported_chars`, lib/import-baseline.js). Die Differenz zweier solcher Werte
+// ist, was zwischen den Snapshots GESCHRIEBEN wurde — ein Import ist es nicht.
+export function writtenChars(row) {
+  return (Number(row?.chars) || 0) - (Number(row?.imported_chars) || 0);
+}
+
 function buildCumMap(stats) {
   const cumByIso = new Map();
   for (const r of (Array.isArray(stats) ? stats : [])) {
-    if (r?.recorded_at) cumByIso.set(r.recorded_at, Number(r.chars) || 0);
+    if (r?.recorded_at) cumByIso.set(r.recorded_at, writtenChars(r));
   }
   return { cumByIso, sortedIsos: [...cumByIso.keys()].sort() };
 }
@@ -97,6 +104,8 @@ function buildCumMap(stats) {
  * ist bewusst von `0` („gemessen, nichts geschrieben") unterschieden: die
  * Streak-Heatmap zeichnet das eine als leere Zelle und das andere als Nulltag,
  * und die Zell-Tooltips sagen Verschiedenes.
+ *
+ * Importe zählen nicht: vergangene Tage rechnen auf `writtenChars`.
  *
  * Der Wert ist VORZEICHENBEHAFTET — ein Loesch-Edit ergibt ein negatives Delta.
  * Oberflaechen mit Ziel-Semantik (Donut, Fortschrittsbalken) klemmen selbst auf
@@ -117,6 +126,8 @@ export function makeDayDelta({ stats = [], tokEsts = {}, todayIso = localIsoDate
     // Mit Vorzeichen: ein Loesch-Tag ist auch HEUTE schon ein negativer Tag,
     // sonst zeigte der Heute-Balken 0, waehrend die 7-Tage-Summe das Minus
     // (Live-Σ gegen Snapshot) schon enthaelt.
+    // Ein Import von heute steckt schon im Vortags-Snapshot (Baseline,
+    // lib/import-baseline.js) — Live-Σ minus Vortag ist darum bereits netto.
     if (iso === todayIso && todayDelta != null) return todayDelta;
     const cur = cumOnOrBefore(sortedIsos, cumByIso, iso);
     if (cur == null) return null;

@@ -16,8 +16,10 @@ import { divergingRows } from './diverging.js';
 const CHAPTER_BAR_KINDS = {
   findings: {
     compute: 'overviewChapterFindings',
-    median: (ctx, row) => ctx._fmtNum(row.median) + ' ' + window.__app.t('overview.unit.findings'),
-    value: (ctx, row) => ctx._fmtNum(row.count) + ' ' + window.__app.t('overview.unit.findings'),
+    median: (ctx, row) => ctx._fmtPer1k(row.median) + ' ' + window.__app.t('overview.unit.per1k'),
+    value: (ctx, row) => ctx._fmtPer1k(row.per1k) + ' ' + window.__app.t('overview.unit.per1k'),
+    // Absolute Zahl als Nebeninfo am Wert.
+    tip: (ctx, row) => ctx._fmtNum(row.count) + ' ' + window.__app.t('overview.unit.findings'),
   },
   lektoratTime: {
     compute: 'overviewChapterLektoratTime',
@@ -54,6 +56,16 @@ export const kapitelMethods = {
   overviewChapterBarValue(kind, row) {
     const cfg = CHAPTER_BAR_KINDS[kind];
     return cfg ? cfg.value(this, row) : '';
+  },
+
+  overviewChapterBarTip(kind, row) {
+    const cfg = CHAPTER_BAR_KINDS[kind];
+    return cfg?.tip ? cfg.tip(this, row) : null;
+  },
+
+  // Befund-Dichte mit einer Nachkommastelle (0,4 /1k W ist eine Aussage).
+  _fmtPer1k(v) {
+    return this._numFmt({ minimumFractionDigits: 1, maximumFractionDigits: 1 }).format(Number(v) || 0);
   },
 
   // Buckets über alle Wurzel-Kapitel in Lese-Reihenfolge anlegen. `seed` liefert
@@ -126,12 +138,14 @@ export const kapitelMethods = {
     return divergingRows(out, { valueOf: c => c.chars, extremesNeedTwo: true, skipZero: true });
   },
 
-  // Lektorat-Findings pro Top-Level-Kapitel: aus overviewHeat.matrix (mode=open).
-  // Median, Diverging-Bar und Sort basieren auf der absoluten Anzahl Findings —
-  // direkt ablesbar, ohne mentalen Umweg über Findings/1k Wörter. per1k bleibt
-  // als sekundärer Wert in der Zeilen-Meta erhalten. Ungeprüfte Kapitel
-  // (pages_checked = 0) erscheinen nicht: ohne Prüfung ist „0 Findings" keine
-  // Aussage über die Textqualität und würde den Median nach unten ziehen.
+  // Lektorat-Befunde pro Top-Level-Kapitel: aus overviewHeat.matrix (mode=open).
+  // Median, Diverging-Bar und Sort basieren auf der DICHTE (Befunde je 1000
+  // geprüfte Wörter) — die absolute Zahl wächst mit der Kapitellänge, das
+  // längste Kapitel wäre sonst fast immer „das schlechteste". Die absolute Zahl
+  // bleibt Nebeninfo (Tooltip). Nenner sind nur die GEPRÜFTEN Wörter
+  // (`words_checked`), sonst verdünnte ein halb geprüftes Kapitel seine Dichte.
+  // Ungeprüfte Kapitel (pages_checked = 0) erscheinen nicht: ohne Prüfung ist
+  // „0 Befunde" keine Aussage über die Textqualität.
   overviewChapterFindings() {
     const heat = this.overviewHeat;
     if (!heat || !Array.isArray(heat.chapters) || !heat.matrix) return [];
@@ -142,7 +156,7 @@ export const kapitelMethods = {
   _computeChapterFindings(heat) {
     const { rootOf } = this._chapterRollup();
     const out = this._chapterBuckets(
-      () => ({ count: 0, words: 0, pages_total: 0, pages_checked: 0 }),
+      () => ({ count: 0, words: 0, words_checked: 0, pages_total: 0, pages_checked: 0 }),
       (buckets) => {
         for (const ch of heat.chapters) {
           // Die Matrix ist per chapter_id geschlüsselt — ohne ID keine Zählung.
@@ -156,20 +170,20 @@ export const kapitelMethods = {
           for (const t of Object.values(typen)) count += Number(t.count) || 0;
           b.count += count;
           b.words += Number(ch.words) || 0;
+          b.words_checked += Number(ch.words_checked) || 0;
           b.pages_total += Number(ch.pages_total) || 0;
           b.pages_checked += Number(ch.pages_checked) || 0;
         }
       },
     )
-      .filter(b => b.pages_checked > 0)
-      .map(b => ({ ...b, per1k: b.words > 0 ? Math.round((b.count / b.words) * 1000 * 10) / 10 : 0 }));
+      .filter(b => b.pages_checked > 0 && b.words_checked > 0)
+      .map(b => ({ ...b, per1k: Math.round((b.count / b.words_checked) * 1000 * 10) / 10 }));
 
     return divergingRows(out, {
-      valueOf: c => c.count,
+      valueOf: c => c.per1k,
       minForMedian: 3,
-      roundMedian: true,
       extremesNeedTwo: true,
-    }).sort((a, b) => b.count - a.count);
+    }).sort((a, b) => b.per1k - a.per1k || b.count - a.count);
   },
 
   // Lektoratszeit pro Top-Level-Kapitel. /history/lektorat-time/:book_id liefert

@@ -1,0 +1,41 @@
+{
+  "version": "6.5.4",
+  "date": "2026-11-15",
+  "entries": [
+    {
+      "kind": "neu",
+      "de": "Abschnitts-Chat: er kann jetzt auch offene Ideen des Abschnitts ändern – Text oder Stufe anpassen oder als erledigt markieren. Erledigt schlägt er nur mit einer Textstelle als Beleg vor, du übernimmst jeden Vorschlag einzeln.",
+      "en": "Section chat: it can now also change the section's open ideas – adjust the text or stage, or mark them as done. It only suggests «done» with a text passage as proof, and you accept each suggestion individually."
+    },
+    {
+      "kind": "verbessert",
+      "de": "Buchentwicklung: der Durchschnitt rechnet über den ganzen gewählten Zeitraum, und eine Metrik ohne Daten zeigt einen Hinweis statt eines leeren Diagramms. Importierter Text ist markiert und zählt nicht als geschrieben.",
+      "en": "Book development: the average covers the whole selected period, and a metric without data shows a note instead of an empty chart. Imported text is marked and doesn't count as written."
+    },
+    {
+      "kind": "verbessert",
+      "de": "Buchentwicklung, Zeichen pro Schreibstunde: bei mehreren Autorinnen und Autoren zählt die Schreibzeit aller, damit fremder Text dein Tempo nicht aufbläht.",
+      "en": "Book development, characters per writing hour: with several authors, everyone's writing time now counts, so other people's text no longer inflates your pace."
+    },
+    {
+      "kind": "verbessert",
+      "de": "Buchübersicht, Kapitel-Vergleich: Lektorats-Befunde werden je 1000 Wörter verglichen, damit lange Kapitel nicht automatisch am schlechtesten dastehen. Kurze und lange Kapitel weichen optisch gleich weit vom Mittel ab.",
+      "en": "Book overview, chapter comparison: copy-editing findings are compared per 1000 words, so long chapters no longer automatically look worst. Short and long chapters now deviate equally far from the middle."
+    },
+    {
+      "kind": "verbessert",
+      "de": "Buchübersicht, Präsenz-Raster: Nebenfiguren und seltene Einträge bleiben neben einer dominanten Hauptfigur sichtbar.",
+      "en": "Book overview, presence grid: minor characters and rare entries stay visible next to a dominant main character."
+    },
+    {
+      "kind": "verbessert",
+      "de": "Der Tagesstand in den Statistiken zeigt jetzt den Stand am Ende des Tages, nicht den vom späten Abend.",
+      "en": "The daily figures in the statistics now show the state at the end of the day, not the one from late evening."
+    },
+    {
+      "kind": "behoben",
+      "de": "Lektorats-Ring: gelöschte oder verschobene Abschnitte zählen nicht mehr mit, und der Ring wird erst voll, wenn wirklich alles geprüft ist.",
+      "en": "Copy-editing ring: deleted or moved sections no longer count, and the ring only fills up once everything is really checked."
+    }
+  ]
+}

@@ -83,3 +83,21 @@ test('cross-user coverage: COUNT(DISTINCT page_id) über alle User', () => {
   ).get(2001);
   assert.equal(checked, 2);
 });
+
+test('lektoratCoverage: zählt nur Abschnitte, die das Buch noch hat; rundet ab', () => {
+  const { lektoratCoverage } = require('../../db/page-checks');
+  // page_stats = die Abschnitte des Buchs. Seite 3002 ist weg (keine page_stats),
+  // ihre Prüfung zählt nicht mehr — vorher stand „2/1 geprüft" bzw. 100 %.
+  db.prepare('INSERT INTO page_stats (page_id, book_id, tok, words, chars) VALUES (?, ?, 0, 0, 0)').run(3001, 2001);
+  let cov = lektoratCoverage(2001);
+  assert.deepEqual([cov.checked_pages, cov.total_pages, cov.pct], [1, 1, 100]);
+
+  // 1 von 3 → 33 %, nie aufgerundet auf einen vollen Ring.
+  const now = new Date().toISOString();
+  for (const id of [3003, 3004]) {
+    db.prepare('INSERT INTO pages (page_id, book_id, page_name, updated_at) VALUES (?, ?, ?, ?)').run(id, 2001, 'S' + id, now);
+    db.prepare('INSERT INTO page_stats (page_id, book_id, tok, words, chars) VALUES (?, ?, 0, 0, 0)').run(id, 2001);
+  }
+  cov = lektoratCoverage(2001);
+  assert.deepEqual([cov.checked_pages, cov.total_pages, cov.pct], [1, 3, 33]);
+});

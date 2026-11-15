@@ -133,6 +133,7 @@ function _parseChatResponseRaw(text) {
       titel_varianten: _sanitizeTitelVarianten(r.parsed.titel_varianten),
       // Roh — Anker-Prüfung + Normalisierung im Job (lib/chat-idee-proposals.js).
       ideen: Array.isArray(r.parsed.ideen) ? r.parsed.ideen : [],
+      ideen_aenderungen: Array.isArray(r.parsed.ideen_aenderungen) ? r.parsed.ideen_aenderungen : [],
       fallback: false,
       lostVorschlaege: false,
     };
@@ -148,6 +149,7 @@ function _parseChatResponseRaw(text) {
       vorschlaege: _sanitizeVorschlaege(r.parsed.vorschlaege),
       titel_varianten: _sanitizeTitelVarianten(r.parsed.titel_varianten),
       ideen: Array.isArray(r.parsed.ideen) ? r.parsed.ideen : [],
+      ideen_aenderungen: Array.isArray(r.parsed.ideen_aenderungen) ? r.parsed.ideen_aenderungen : [],
       fallback: false,
       lostVorschlaege: false,
     };

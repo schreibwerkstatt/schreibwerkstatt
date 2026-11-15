@@ -110,7 +110,7 @@ function register(router) {
              bsh.page_count, bsh.words, bsh.chars, bsh.tok, bsh.unique_words,
              bsh.chapter_count, bsh.avg_sentence_len, bsh.avg_lix, bsh.avg_flesch_de,
              bsh.mattr, bsh.mtld, bsh.lex_density, bsh.hapax_ratio,
-             bsh.imported_chars
+             bsh.imported_chars, bsh.imported_words
       FROM book_stats_history bsh
       WHERE bsh.book_id = ?
       ORDER BY bsh.recorded_at ASC

@@ -51,8 +51,8 @@ function mockPayloads(chapterIds) {
     },
     heat: {
       chapters: [
-        { chapter_id: c1, chapter_name: 'A', words: 400, pages_total: 3, pages_checked: 3 },
-        { chapter_id: c2, chapter_name: 'B', words: 200, pages_total: 2, pages_checked: 2 },
+        { chapter_id: c1, chapter_name: 'A', words: 400, words_checked: 400, pages_total: 3, pages_checked: 3 },
+        { chapter_id: c2, chapter_name: 'B', words: 200, words_checked: 200, pages_total: 2, pages_checked: 2 },
       ],
       matrix: {
         [c1]: { stil: { count: 7 }, grammatik: { count: 2 } },

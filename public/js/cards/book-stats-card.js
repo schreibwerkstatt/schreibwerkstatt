@@ -25,6 +25,8 @@ export function registerBookStatsCard() {
     bookStatsAvg: null,
     bookStatsCoverage: null,
     bookStatsDelta: null,
+    // Gewählte Metrik hat im Zeitraum keinen Wert → Leerhinweis statt leerem Chart.
+    bookStatsMetricEmpty: false,
     writingTimeData: null,
     lektoratTimeData: null,
     sttTimeData: null,
@@ -65,6 +67,7 @@ export function registerBookStatsCard() {
           bookStatsAvg: null,
           bookStatsCoverage: null,
           bookStatsDelta: null,
+          bookStatsMetricEmpty: false,
           writingTimeData: null,
           lektoratTimeData: null,
           sttTimeData: null,
@@ -76,6 +79,7 @@ export function registerBookStatsCard() {
           ctx.bookStatsAvg = null;
           ctx.bookStatsCoverage = null;
           ctx.bookStatsDelta = null;
+          ctx.bookStatsMetricEmpty = false;
           ctx.writingTimeData = null;
           ctx.lektoratTimeData = null;
           ctx.sttTimeData = null;

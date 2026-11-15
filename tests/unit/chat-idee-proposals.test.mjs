@@ -6,6 +6,10 @@
 //  - Format = idee_create des Ideen-Chats (geteilter Status-Router),
 //  - Deckel, Dubletten, leere Texte.
 // Dazu: der Parser reicht `ideen` durch, der Verlauf nennt den Status.
+// Änderungen an offenen Ideen (normalizeChatIdeeUpdates, nur Abschnitts-Chat):
+//  - nur Ideen aus der Prompt-Liste, je Idee einmal, Deckel,
+//  - Stufe nur aktiv + anders, «erledigt» nur mit gefundenem Beleg,
+//  - Format = idee_update des Ideen-Chats + scope (Anker der Idee).
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
@@ -18,7 +22,7 @@ useTmpDb('chat-idee-proposals');
 
 const schema = require('../../db/schema');
 const { db } = require('../../db/connection');
-const { normalizeChatIdeeProposals, MAX_CHAT_IDEE_PROPOSALS } = require('../../lib/chat-idee-proposals');
+const { normalizeChatIdeeProposals, normalizeChatIdeeUpdates, MAX_CHAT_IDEE_PROPOSALS, MAX_CHAT_IDEE_UPDATES } = require('../../lib/chat-idee-proposals');
 const { _parseChatResponse } = require('../../routes/jobs/chat/shared');
 const { researchIdeeProposals } = require('../../routes/jobs/research-chat-helpers');
 
@@ -186,4 +190,78 @@ test('Verlauf nennt den Status früherer Ideen-Vorschläge', () => {
   assert.match(txt, /2\. \[verworfen\] Weg/);
   assert.match(txt, /3\. \[offen\] Offen/);
   assert.equal(formatIdeenNote(undefined), '');
+});
+
+const IDEEN = [
+  { id: 1, scope: 'page', content: 'Brief einbauen', status: 'offen' },
+  { id: 2, scope: 'chapter', content: 'Zeitlinie prüfen', status: 'in_arbeit' },
+];
+const UPD_OPTS = {
+  ideen: IDEEN, stages: ['offen', 'in_arbeit', 'erledigt'], pageId: P1, pageName: 'Der Brief', chapterId: CH1,
+  belegOk: (t) => t === 'Sie las den Brief zweimal.',
+};
+
+test('Ideen-Änderung: «erledigt» mit gefundenem Beleg → idee_update samt Beleg und Anker', () => {
+  const { proposals, dropped } = normalizeChatIdeeUpdates([
+    { idee_id: 1, inhalt: '', status: 'erledigt', beleg: 'Sie las den Brief zweimal.', begruendung: 'Brief steht jetzt drin' },
+  ], UPD_OPTS);
+  assert.equal(dropped, 0);
+  assert.deepEqual(proposals, [{
+    type: 'idee_update', idee_id: 1,
+    fields: { status: 'erledigt' }, before: { status: 'offen' },
+    beleg: { text: 'Sie las den Brief zweimal.', page_id: P1 },
+    begruendung: 'Brief steht jetzt drin',
+    scope: { kind: 'page', id: P1 },
+    labels: { idee: 'Brief einbauen', beleg_page: 'Der Brief' },
+  }]);
+});
+
+test('Ideen-Änderung: «erledigt» ohne oder mit nicht gefundenem Beleg fällt weg', () => {
+  const { proposals, dropped } = normalizeChatIdeeUpdates([
+    { idee_id: 1, status: 'erledigt', beleg: '' },
+    { idee_id: 2, status: 'erledigt', beleg: 'Steht nirgends.' },
+  ], UPD_OPTS);
+  assert.deepEqual(proposals, []);
+  assert.equal(dropped, 2);
+});
+
+test('Ideen-Änderung: Text ändern an Kapitel-Idee, Beleg an anderer Stufe nur wenn gefunden', () => {
+  const { proposals } = normalizeChatIdeeUpdates([
+    { idee_id: 2, inhalt: 'Zeitlinie Kapitel 1–3 prüfen', status: null, beleg: 'erfunden' },
+  ], UPD_OPTS);
+  assert.equal(proposals.length, 1);
+  assert.deepEqual(proposals[0].fields, { content: 'Zeitlinie Kapitel 1–3 prüfen' });
+  assert.deepEqual(proposals[0].before, { content: 'Zeitlinie prüfen' });
+  assert.deepEqual(proposals[0].scope, { kind: 'chapter', id: CH1 });
+  assert.equal(proposals[0].beleg, undefined);
+});
+
+test('Ideen-Änderung: fremde Idee, abgeschaltete/gleiche Stufe, Dublette, No-Op, Deckel', () => {
+  const { proposals, dropped } = normalizeChatIdeeUpdates([
+    { idee_id: 99, status: 'in_arbeit' },               // nicht im Prompt
+    { idee_id: 1, status: 'verworfen' },                // im Buch abgeschaltet
+    { idee_id: 2, status: 'in_arbeit', inhalt: 'Zeitlinie prüfen' }, // keine Änderung
+    { idee_id: 1, status: 'in_arbeit' },
+    { idee_id: 1, status: 'offen', inhalt: 'Anders' },  // zweiter Vorschlag zu #1
+  ], UPD_OPTS);
+  assert.deepEqual(proposals.map(p => [p.idee_id, p.fields]), [[1, { status: 'in_arbeit' }]]);
+  assert.equal(dropped, 4);
+  const many = Array.from({ length: 8 }, (_, i) => ({ id: 100 + i, scope: 'page', content: `I${i}`, status: 'offen' }));
+  const capped = normalizeChatIdeeUpdates(many.map(i => ({ idee_id: i.id, status: 'in_arbeit' })), { ...UPD_OPTS, ideen: many });
+  assert.equal(capped.proposals.length, MAX_CHAT_IDEE_UPDATES);
+  assert.deepEqual(normalizeChatIdeeUpdates('x', UPD_OPTS), { proposals: [], dropped: 0 });
+});
+
+test('Parser reicht `ideen_aenderungen` roh durch', () => {
+  const ok = _parseChatResponse(JSON.stringify({ antwort: 'A', vorschlaege: [], titel_varianten: [], ideen: [], ideen_aenderungen: [{ idee_id: 1 }] }));
+  assert.deepEqual(ok.ideen_aenderungen, [{ idee_id: 1 }]);
+});
+
+test('Verlauf nennt Ideen-Änderungen mit Status', () => {
+  const txt = formatIdeenNote([
+    { type: 'idee_update', idee_id: 7, fields: { status: 'erledigt' }, applied_at: NOW },
+    { type: 'idee_update', idee_id: 8, fields: { content: 'Neu' }, status: 'discarded' },
+  ]);
+  assert.match(txt, /1\. \[übernommen\] Änderung an Idee #7: Stufe → erledigt/);
+  assert.match(txt, /2\. \[verworfen\] Änderung an Idee #8: Text → Neu/);
 });

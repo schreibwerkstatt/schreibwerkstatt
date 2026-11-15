@@ -5,7 +5,7 @@
 // __SHELL_BUILD: content hash over all listed assets → drives SHELL_CACHE.
 // __SHELL_MANIFEST: the coherent set precached atomically at SW install.
 // __VENDOR_SET: current vendor/ + fonts/ files — VENDOR_CACHE prune list.
-self.__SHELL_BUILD = "df2fcd7654a441a4";
+self.__SHELL_BUILD = "21cb9ae98352a0cc";
 self.__SHELL_MANIFEST = [
   "/css/admin/admin-backup.css",
   "/css/admin/admin-home.css",
@@ -212,6 +212,7 @@ self.__SHELL_MANIFEST = [
   "/js/admin/admin-settings-tabs.js",
   "/js/admin/admin-settings.js",
   "/js/admin/admin-usage-behavior.js",
+  "/js/admin/admin-usage-charts.js",
   "/js/admin/admin-usage.js",
   "/js/admin/admin-users.js",
   "/js/admin/ai-parse-fails.js",
@@ -314,6 +315,7 @@ self.__SHELL_MANIFEST = [
   "/js/book/book-settings/settings.js",
   "/js/book/book-settings/sync-shared.js",
   "/js/book/bookstats-avg.js",
+  "/js/book/bookstats-metrics.js",
   "/js/book/bookstats.js",
   "/js/book/buchlandkarte.js",
   "/js/book/buchlandkarte/axes.js",

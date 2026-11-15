@@ -294,7 +294,7 @@ Autor sieht nichts passieren.
 MATTR nur mit vollem Fenster — der Sprung von TTR zu MATTR sähe im Verlauf sonst wie
 eine Stiländerung aus. Die Buchstatistik bietet die vier Werte als Kurven an.
 
-**Cron:** hinter `syncAllBooks()` im 23:00-Block, **nicht** in der
+**Cron:** hinter `syncAllBooks()` im nächtlichen 00:05-Block, **nicht** in der
 `reindexAllBooks`-Kette — der Scan liest reinen Seitentext, keine Vektoren.
 
 **Laufzeit** (gemessen, 900 Seiten / 2,6 Mio Zeichen HTML / 607k Token): ~1,4 s,

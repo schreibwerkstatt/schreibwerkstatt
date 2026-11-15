@@ -230,6 +230,62 @@ test('Seiten-Chat: Ideen-Vorschlag bearbeiten und als Idee am Abschnitt erfassen
   }
 });
 
+test('Seiten-Chat: «erledigt» mit Beleg übernehmen setzt die Stufe der Idee', async ({ page }) => {
+  await bootApp(page);
+  await selectSeededBook(page);
+  const pageId = await createPage(page);
+  try {
+    await page.waitForFunction(() => window.__app.showEditorCard && (window.__app.originalHtml || '').includes('bellt laut'));
+    const ideeId = await page.evaluate(async (pid) => {
+      const r = await fetch('/ideen', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ book_id: window.Alpine.store('nav').selectedBookId, page_id: pid, content: 'Hund bellen lassen' }),
+      });
+      const row = await r.json();
+      const b = window.Alpine.store('badges');
+      b.ideenCounts = { ...(b.ideenCounts || {}), [pid]: 1 };
+      return row.id;
+    }, pageId);
+    const patches = await mockChatTurn(page, pageId, () => ({
+      proposals: [{
+        type: 'idee_update', idee_id: ideeId,
+        fields: { status: 'erledigt' }, before: { status: 'offen' },
+        beleg: { text: 'Der Hund bellt laut im Hof.', page_id: pageId },
+        begruendung: 'Steht jetzt im Text', scope: { kind: 'page', id: pageId },
+        labels: { idee: 'Hund bellen lassen', beleg_page: 'E2E Seiten-Chat' },
+      }],
+    }));
+    // Die gemockte Nachricht gibt es serverseitig nicht — Beleg-Prüfung abfangen.
+    let belegChecked = false;
+    await page.route('**/ideen/chat-proposal/beleg-check', (route) => {
+      belegChecked = true;
+      return route.fulfill({ json: { checked: true, found: true } });
+    });
+    await openChatAndSend(page);
+
+    const card = page.locator('#chat-card .chat-idee-vorschlaege .chat-vorschlag');
+    await expect(card).toHaveCount(1);
+    await expect(card.locator('.chat-vorschlag-title')).toHaveText('Hund bellen lassen');
+    await expect(card.locator('.chat-vorschlag-after')).toHaveText(/Erledigt|Done/);
+    await expect(card.locator('.chat-vorschlag-quote')).toHaveText('Der Hund bellt laut im Hof.');
+    // Kein «Bearbeiten» an einer Änderung — nur Übernehmen / Verwerfen.
+    await expect(card.getByRole('button', { name: /Bearbeiten|Edit/ })).toHaveCount(0);
+
+    await card.getByRole('button', { name: /Übernehmen|Apply/ }).click();
+    await expect(card).toHaveClass(/chat-vorschlag--applied/);
+    await expect(card.locator('.chat-vorschlag-label')).toHaveText(/Idee geändert|Idea updated/);
+    expect(belegChecked).toBe(true);
+    const ideen = await page.evaluate(async (pid) => (await (await fetch('/ideen?page_id=' + pid)).json()), pageId);
+    expect(ideen.find(i => i.id === ideeId)?.status).toBe('erledigt');
+    const applied = patches.find(p => /\/ideen\/chat-proposal$/.test(p.url) && p.body?.action === 'applied');
+    expect(applied?.body).toMatchObject({ message_id: 900002, index: 0, applied_id: ideeId });
+    // Offene Idee abgeschlossen → Plakette weg.
+    expect(await page.evaluate((pid) => window.Alpine.store('badges').ideenCounts[pid], pageId)).toBeUndefined();
+  } finally {
+    await deletePage(page, pageId);
+  }
+});
+
 test('Seiten-Chat: Ideen-Vorschlag am Kapitel erfassen', async ({ page }) => {
   await bootApp(page);
   await selectSeededBook(page);

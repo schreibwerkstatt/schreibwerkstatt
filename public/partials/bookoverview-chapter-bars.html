@@ -4,10 +4,10 @@
      bookoverview-chapter-quality.html zweimal eingesetzt.
 
      Erwartet im umgebenden x-data nur zwei Strings:
-       kind      → 'findings' | 'lektoratTime'
+       kind      → 'findings' (Befunde je 1000 geprüfte Wörter) | 'lektoratTime'
        labelKey  → i18n-Key der Tile-Überschrift
      Daten + Beschriftung liefern die Dispatcher der Karte
-     (js/book-overview/kapitel.js): overviewChapterBars / -BarMedian / -BarValue.
+     (js/book-overview/kapitel.js): overviewChapterBars / -BarMedian / -BarValue / -BarTip.
 
      Farb-Semantik ist hier invertiert: über dem Median = schlechter (rot).
      Die Verteilungs-Tile nutzt dasselbe Bar-Layout mit neutraler Semantik
@@ -39,7 +39,7 @@
               x-show="ch.showDelta"
               :class="ch.deltaPct > 0 ? 'overview-trend-pct--down' : ch.deltaPct < 0 ? 'overview-trend-pct--up' : ''"
               x-text="(ch.deltaPct >= 0 ? '+' : '') + ch.deltaPct + '%'"></span>
-        <span class="overview-chapter-count" x-text="overviewChapterBarValue(kind, ch)"></span>
+        <span class="overview-chapter-count" :data-tip="overviewChapterBarTip(kind, ch)" x-text="overviewChapterBarValue(kind, ch)"></span>
       </span>
     </li>
   </template>

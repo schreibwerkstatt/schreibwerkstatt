@@ -57,7 +57,7 @@ Katalog: [lib/metrics/defs.js](../lib/metrics/defs.js) — eine Beschreibung je 
 
 - `sw_writing_seconds_today`, `sw_lektorat_seconds_today` — Gauge, `SUM(seconds)` aus `writing_time` / `lektorat_time` für `date = localIsoDate(new Date())` ([lib/local-date.js](../lib/local-date.js)).
 - `sw_stt_seconds_today`, `sw_stt_chars_today` — Gauge, `SUM(seconds)` / `SUM(chars)` aus `stt_time` (Diktat-Nutzung) für `date = localIsoDate(new Date())`.
-- `sw_words_today` — Netto-Wörter heute: aktuelle `SUM(page_stats.words)` je Buch minus dessen letzter `book_stats_history`-Snapshot vor heute (Tageslauf 23:00 lokal). Gelöschter Text zählt negativ; Bücher ohne Snapshot (heute neu oder importiert) fehlen bewusst, sonst zählte ein Import als geschrieben.
+- `sw_words_today` — Netto-Wörter heute: aktuelle `SUM(page_stats.words)` je Buch minus dessen letzter `book_stats_history`-Snapshot vor heute (Nachtlauf 00:05 lokal, schreibt den Stand am Ende des Vortags). Gelöschter Text zählt negativ; Bücher ohne Snapshot (heute neu oder importiert) fehlen bewusst, sonst zählte ein Import als geschrieben.
 - `sw_chars_today` — Netto-Zeichen heute, Rechnung wie `sw_words_today`.
 
 Netto heute (`sw_words_today`, `sw_chars_today` und die Pro-User-Pendants) hat `state_class: total` mit `reset: day`, nicht `measurement`: HA summiert dann die Änderungen, und die Tages-*Änderung* einer Statistik ist das Netto des Tages (auch negativ). Als Messwert bliebe nur das Tagesmaximum — wer abends streicht, stünde mit dem Höchststand im Verlauf.
