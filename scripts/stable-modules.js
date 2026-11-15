@@ -74,12 +74,31 @@ function toRel(p) {
 let _allFiles = null;
 function allFiles() {
   if (!_allFiles) {
-    const out = execFileSync('git', ['ls-files', '-co', '--exclude-standard'], {
-      cwd: ROOT, encoding: 'utf8', maxBuffer: 64 * 1024 * 1024,
-    });
-    _allFiles = out.split('\n').filter(Boolean).filter((f) => fs.existsSync(path.join(ROOT, f)));
+    let list;
+    try {
+      const out = execFileSync('git', ['ls-files', '-co', '--exclude-standard'], {
+        cwd: ROOT, encoding: 'utf8', maxBuffer: 64 * 1024 * 1024, stdio: ['ignore', 'pipe', 'ignore'],
+      });
+      list = out.split('\n').filter(Boolean);
+    } catch {
+      // Kein Git-Repo (Release-Schnappschuss aus `git archive`): Baum selbst
+      // ablaufen — der Schnappschuss enthaelt ohnehin nur committete Dateien.
+      list = _walkTree();
+    }
+    _allFiles = list.filter((f) => fs.existsSync(path.join(ROOT, f)));
   }
   return _allFiles;
+}
+
+const WALK_SKIP = new Set(['node_modules', '.git', 'test-results', 'playwright-report']);
+function _walkTree(dir = '', out = []) {
+  for (const ent of fs.readdirSync(path.join(ROOT, dir), { withFileTypes: true })) {
+    if (WALK_SKIP.has(ent.name)) continue;
+    const rel = dir ? `${dir}/${ent.name}` : ent.name;
+    if (ent.isDirectory()) _walkTree(rel, out);
+    else if (ent.isFile()) out.push(rel);
+  }
+  return out;
 }
 
 function read(rel) {
