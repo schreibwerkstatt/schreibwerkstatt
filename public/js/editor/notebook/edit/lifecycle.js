@@ -223,8 +223,10 @@ export const lifecycleMethods = {
     // Caret ans Ende des letzten Blocks und dorthin scrollen — wer den Edit-
     // Modus öffnet, schreibt meist am Ende weiter (wie der Fokusmodus, aber
     // ohne Auto-Slot: kein neuer leerer Absatz). Im Fokusmodus setzt dessen
-    // Install den Caret selbst.
-    whenEditorVisible(() => this._getEditEl(), () => app.editMode && !app.focusActive, placeCaretAtEditorEnd);
+    // Install den Caret selbst. Mit offener Lektorat-Befundliste (checkDone)
+    // kein Sprung: dort arbeitet man die Befunde ab, der Caret bleibt am Anfang.
+    if (app.checkDone) setTimeout(() => this._getEditEl()?.focus(), 0);
+    else whenEditorVisible(() => this._getEditEl(), () => app.editMode && !app.focusActive, placeCaretAtEditorEnd);
 
     this._startAutosave();
     this._installOnlineRetry();

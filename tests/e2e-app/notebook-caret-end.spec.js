@@ -8,7 +8,7 @@ const { bootApp, selectSeededBook } = require('./_helpers/app');
 const EDIT_SEL = '#editor-card .page-content-view--editing';
 let freshPageId = null;
 
-async function openFresh(page, html) {
+async function openFresh(page, html, { lektorat = false } = {}) {
   await bootApp(page);
   const bookId = await selectSeededBook(page);
   freshPageId = await page.evaluate(async ({ bid, html }) => {
@@ -20,7 +20,11 @@ async function openFresh(page, html) {
   }, { bid: bookId, html });
   await page.waitForFunction(() => window.__app.showEditorCard === true, null, { timeout: 15000 });
   await page.evaluate(() => window.scrollTo(0, 0));
-  await page.evaluate(() => window.__app.startEdit());
+  await page.evaluate((lek) => {
+    // Offene Lektorat-Befundliste: checkDone ist das Flag, an dem sie hängt.
+    if (lek) window.__app.checkDone = true;
+    window.__app.startEdit();
+  }, lektorat);
   await page.waitForSelector(EDIT_SEL, { timeout: 15000 });
   await page.waitForTimeout(300);
 }
@@ -60,4 +64,21 @@ test('Liste als letzter Block: Caret in der letzten Zeile', async ({ page }) => 
   await page.keyboard.type('X');
   const lastLi = await page.evaluate((sel) => document.querySelector(sel).querySelector('ul li:last-child').textContent, EDIT_SEL);
   expect(lastLi).toBe('zweiX');
+});
+
+test('Offene Lektorat-Befundliste: kein Sprung ans Ende, Ansicht bleibt oben', async ({ page }) => {
+  const paras = Array.from({ length: 60 }, (_, i) => `<p>Absatz ${i + 1} mit etwas Text.</p>`).join('');
+  await openFresh(page, paras + '<p>Letzter Satz.</p>', { lektorat: true });
+  const state = await page.evaluate((sel) => {
+    const ed = document.querySelector(sel);
+    const r = ed.lastElementChild.getBoundingClientRect();
+    const sel2 = document.getSelection();
+    return {
+      lastInView: r.top >= 0 && r.bottom <= window.innerHeight,
+      caretInLast: !!sel2.rangeCount && ed.lastElementChild.contains(sel2.getRangeAt(0).startContainer),
+    };
+  }, EDIT_SEL);
+  expect(state.lastInView).toBe(false);
+  expect(state.caretInLast).toBe(false);
+  await page.evaluate(() => { window.__app.checkDone = false; });
 });
