@@ -113,8 +113,20 @@ router.post('/check', express.json({ limit: '600kb' }), async (req, res) => {
   // Client weg (neuer Check nach Weitertippen, Seitenwechsel) -> LT-Anfragen
   // abbrechen, statt Antworten zu berechnen, die niemand mehr liest.
   let clientGone = false;
-  res.on('close', () => { if (!res.writableEnded) { clientGone = true; ctrl.abort(); } });
   const t0 = Date.now();
+  res.on('close', () => {
+    if (res.writableEnded) return;
+    clientGone = true;
+    ctrl.abort();
+    // Verbindung ohne Antwort zu: normal beim Weitertippen (Client bricht ab),
+    // auffällig, wenn der Proxy gleichzeitig 502 meldet — dann sagen
+    // socketError/readableAborted, welche Seite geschlossen hat.
+    const sock = req.socket;
+    log.info(`Verbindung ohne Antwort geschlossen nach ${Date.now() - t0}ms `
+      + `(Segmente=${segments.length} offen=${missing.length} `
+      + `readableAborted=${req.readableAborted} socketDestroyed=${!!sock?.destroyed} `
+      + `socketError=${sock?.errored?.code || sock?.errored?.message || '-'})`);
+  });
   let languageMeta = null;
   let chunkCount = 0;
 

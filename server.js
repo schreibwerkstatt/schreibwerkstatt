@@ -562,6 +562,8 @@ const server = app.listen(PORT, '0.0.0.0', () => {
   require('./lib/startup').runStartupTasks({ localDevMode: LOCAL_DEV_MODE });
 });
 
+require('./lib/http-client-error').install(server);
+
 // ── Graceful Shutdown ────────────────────────────────────────────────────────
 // SIGTERM/SIGINT, Ablauf und Exit-Codes: lib/shutdown.js.
 require('./lib/shutdown').install({ server, db });
