@@ -372,7 +372,9 @@ AUSDRÜCKLICH KEIN MANGEL und NICHT zu melden: Nominalstil und Substantivierunge
 AUSDRÜCKLICH KEIN MANGEL und NICHT zu melden: fehlende Szenen, fehlende Figurenarbeit, abstraktes Benennen statt szenischem Zeigen, Wahrnehmungsverben, sachlicher Ton, Fachterminologie, wo sie präzisiert.${objektivHinweis}${bewertenSatz}`;
 }
 
-export function _buildFachSeverityBlock(stilistischeTypen, mechanischeTypen, stylisticCap = 10) {
+// Die Zahl der Obergrenze setzt der Aufrufer als eigene Zeile hinter den Regel-Korpus
+// (prompts/lektorat.js, `capBlock`).
+export function _buildFachSeverityBlock(stilistischeTypen, mechanischeTypen) {
   // Der erläuternde Nachsatz zu Rechtschreibung/Grammatik/Zeichensetzung darf NUR
   // stehen, wenn diese Typen im Lauf überhaupt gemeldet werden dürfen. Im Stil-Pass
   // des Claude-Splits sind sie verboten – die Aufforderung «werden IMMER und
@@ -387,7 +389,7 @@ SCHWERE-SCHWELLE (Anti-Pedanterie, Pflicht-Filter vor dem Aufnehmen ins «fehler
 - Selbsttest pro Eintrag: «Würde ein Gutachter diese Stelle in einem Gutachten anstreichen?» Wenn die Antwort «vielleicht», «Geschmacksache» oder «nur am Rand» wäre → weglassen.
 - VERWORFEN-Kandidaten: minimal alternative Synonyme ohne Gewinn an Präzision, Mikro-Stilpräferenzen, fachlich etablierte Wendungen, ein einzelnes angemessenes «möglicherweise», Formulierungen, die eine Fachkonvention der Disziplin erfüllen.
 - MECHANISCHE FEHLER UND FORM-/BELEG-BEFUNDE unterliegen der Schwere-Schwelle UND der Mengen-Obergrenze NICHT – sie werden IMMER und VOLLSTÄNDIG gemeldet, egal wie viele es sind: ${mechanischeTypen.join(', ')}.${mechDetail} Das sind objektive Mängel, keine Geschmacksfragen – nie als «vielleicht» abtun, nie wegen einer Obergrenze streichen.
-- Die Schwere-Schwelle und die Mengen-Obergrenze gelten NUR für subjektiv-stilistische Findings (${stilistischeTypen.join(', ')}). Dort gilt: lieber 5 starke, präzise Findings als 25 schwache. Bleiben nach dem Selbsttest mehr als ${stylisticCap} solcher Einträge übrig, hart priorisieren: nur die schwersten ${stylisticCap} behalten. Die Obergrenze ist kein Soll – weniger Einträge sind richtig, wenn der Text weniger hergibt.
+- Die Schwere-Schwelle und die Mengen-Obergrenze gelten NUR für subjektiv-stilistische Findings (${stilistischeTypen.join(', ')}). Dort gilt: lieber 5 starke, präzise Findings als 25 schwache. Bleiben nach dem Selbsttest mehr solcher Einträge übrig, als die MENGEN-OBERGRENZE (steht direkt vor dem Text) erlaubt, hart priorisieren: nur die schwersten behalten. Die Obergrenze ist kein Soll – weniger Einträge sind richtig, wenn der Text weniger hergibt.
 `;
 }
 

@@ -1,0 +1,26 @@
+{
+  "version": "6.6.0",
+  "date": "2026-11-15",
+  "entries": [
+    {
+      "kind": "verbessert",
+      "de": "Recherche-Chat: Die Web-Suche sortiert unpassende Treffer jetzt vorab aus, bevor sie in die Antwort einfliessen. Das gilt für die neueren Claude-Modelle.",
+      "en": "Research chat: web search now filters out unsuitable results before they go into the answer. This applies to the newer Claude models."
+    },
+    {
+      "kind": "verbessert",
+      "de": "Komplettanalyse, Lektorat und die Chats kosten mit Claude weniger: Teile, die sich zwischen den Anfragen nicht ändern, werden besser wiederverwendet.",
+      "en": "Full analysis, copy-editing and the chats cost less with Claude: parts that don't change between requests are reused more effectively."
+    },
+    {
+      "kind": "behoben",
+      "de": "Motiv-Werkstatt auf dem Handy: Graph und Seitenleiste ragten über den rechten Bildschirmrand hinaus. Sie passen jetzt in die Breite.",
+      "en": "Motif workshop on phones: the graph and side panel stuck out past the right edge of the screen. They now fit the width."
+    },
+    {
+      "kind": "behoben",
+      "de": "Meine Statistik auf dem Handy: Die beiden Datumsfelder der eigenen Zeitspanne waren breiter als der Bildschirm. Sie teilen sich jetzt die Zeile.",
+      "en": "My statistics on phones: the two date fields of a custom time range were wider than the screen. They now share the row."
+    }
+  ]
+}

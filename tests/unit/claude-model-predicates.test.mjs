@@ -177,3 +177,40 @@ test('Kontextfenster/Output-Cap: aus dem Modell abgeleitet, Setting > 0 gewinnt'
     assert.equal(cfg._resolveClaudeMaxOut(), 32000);
   } finally { teardown(); }
 });
+
+// Web-Suche mit dynamischer Filterung (Opus 4.6+, Sonnet 4.6+, Fable/Mythos — nicht
+// Haiku) und tool_removal (Opus 4.8+, Fable/Mythos, Sonnet/Haiku 5.5+ — NICHT Sonnet 5).
+// Ein Modell ausserhalb der Liste bekäme sonst einen 400 statt der alten Variante.
+test('Modell-Prädikate: dynamische Web-Suche und tool_removal', () => {
+  const { cfg, logCtx, teardown } = _bootstrap();
+  try {
+    const rows = [
+      // model                       dynSearch  removal
+      ['claude-sonnet-4-5',          false,     false],
+      ['claude-sonnet-4-6',          true,      false],
+      ['claude-opus-4-6',            true,      false],
+      ['claude-opus-4-7',            true,      false],
+      ['claude-opus-4-8',            true,      true],
+      ['claude-opus-5',              true,      true],
+      ['claude-opus-5-5',            true,      true],
+      ['claude-sonnet-5',            true,      false],
+      ['claude-sonnet-5-5',          true,      true],
+      ['claude-haiku-4-5',           false,     false],
+      ['claude-haiku-5-5',           false,     true],
+      ['claude-fable-5-2',           true,      true],
+      ['claude-mythos-5-1',          true,      true],
+    ];
+    for (const [m, dyn, rem] of rows) {
+      assert.equal(cfg._claudeSupportsDynamicWebSearch(m), dyn, `${m} dynSearch`);
+      assert.equal(cfg._claudeSupportsToolRemoval(m), rem, `${m} removal`);
+    }
+    // Fähigkeitsfrage am effektiven Modell (Job-Bag), nur für Claude.
+    logCtx.runWithContext({ job: 'check' }, () => {
+      logCtx.setContext({ aiJob: { provider: 'claude', model: 'claude-opus-5-5' } });
+      assert.equal(cfg.providerSupportsToolRemoval('claude'), true);
+      assert.equal(cfg.providerSupportsToolRemoval('openai-compat'), false);
+      logCtx.setContext({ aiJob: { provider: 'claude', model: 'claude-sonnet-5' } });
+      assert.equal(cfg.providerSupportsToolRemoval('claude'), false);
+    });
+  } finally { teardown(); }
+});

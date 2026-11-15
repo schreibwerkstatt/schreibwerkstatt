@@ -76,7 +76,8 @@ function _statusLine(jobId, total) {
 // Split + langer Abschnitt (lib/lektorat-chunks.js#chunkingApplies): Objektiv- und
 // Stil-Pass je Stück, der Stil-Pass dort ohne szenen/stilanalyse/fazit; die kommen
 // aus einem Bewertungs-Pass über den ganzen Abschnitt. Alle Befunde gehen in einen
-// Merge über den ganzen Text.
+// Merge über den ganzen Text. `cacheBlocks` (nur Claude, siehe sharedHeadBlocks):
+// in Stücken teilen die Prompts eines Passes einen gecachten Kopf und starten gestaffelt.
 // Ausgabe-Deckel je Teil-Call (Tokens, inkl. Denken): ohne Wert gälte das Modell-
 // maximum (128K), und ein Ausreisser in Schleife kostete ein Vielfaches eines
 // normalen Laufs (beobachtet: 82K Output auf 63K Input). Ein normaler Pass liegt bei
@@ -91,6 +92,7 @@ function lektoratMaxTokens(textLen) {
 
 async function lektoratAnalyze({
   jobId, tok, text, local, prompts, system, promptOpts, fromPct, toPct, buchtyp = null, callLimit = null,
+  cacheBlocks = false,
 }) {
   const {
     buildLektoratPrompt,
@@ -147,11 +149,9 @@ async function lektoratAnalyze({
     buchtyp, textsorte, hasFiguren: (promptOpts.figuren || []).length > 0,
   });
 
-  // Objektiv- und Stil-Pass über EINEN Text (ganzer Abschnitt oder Stück).
-  // Rückgabe: { obj: Objektiv-Befunde, stil: Stil-Pass-Ergebnis }.
-  async function passes(passText, promptOpts, { ohneBewertung = false } = {}) {
-    const maxTokens = lektoratMaxTokens(passText.length);
-    const objektivOpts = {
+  // Prompts der beiden Pässe über EINEN Text (ganzer Abschnitt oder Stück).
+  function objektivPromptFor(passText, promptOpts) {
+    return buildObjektivLektoratPrompt(passText, {
       figuren: promptOpts.figuren, figurenBeziehungen: promptOpts.figurenBeziehungen,
       orte: promptOpts.orte, pageName: promptOpts.pageName, chapterName: promptOpts.chapterName,
       // Quellennachweis-Schutz gilt in BEIDEN Pässen: der Objektiv-Pass prüft
@@ -160,6 +160,8 @@ async function lektoratAnalyze({
       hatBelege: promptOpts.hatBelege,
       // Benutzer-Wörterbuch: der Objektiv-Pass ist der, der Rechtschreibung prüft.
       woerterbuch: promptOpts.woerterbuch,
+      // Korrektur-Sprache der Locale (ss statt ß, British spelling).
+      korrekturRegeln: promptOpts.korrekturRegeln,
       // Chat-Schreibweise im Nachrichtenverlauf: vor allem hier, wo Satzzeichen geprüft werden.
       hatNachrichten: promptOpts.hatNachrichten,
       langCode: promptOpts.langCode,
@@ -171,23 +173,32 @@ async function lektoratAnalyze({
       // nur rechtschreibung + grammatik, kein Dialogformat/Figurenkonsistenz).
       buchtyp,
       textsorte,
-    };
-    const objektivPrompt = buildObjektivLektoratPrompt(passText, objektivOpts);
-    const objPromise = limited(() => aiCall(jobId, tok, objektivPrompt, system, null, null, 4000, 0.2, maxTokens, undefined, objektivSchema)).then(tick);
-
-    // Stil-Pass parallel – eigener User-Prompt, eigenes Schema: das Enum lässt
-    // die objektiven Typen weg, die der Objektiv-Pass liefert.
-    const stilSchema = buildLektoratSchema({ buchtyp, textsorte, stilOnly: true, ohneBewertung });
-    const stilPrompt = buildStilLektoratPrompt(passText, { ...promptOpts, ohneBewertung });
-    const stilPromise = limited(() => aiCall(jobId, tok, stilPrompt, system, null, null, 5000, 0.2, maxTokens, undefined, stilSchema)).then(tick);
-    const [obj, stil] = await Promise.all([objPromise, stilPromise]);
-    if (!Array.isArray(stil?.fehler)) throw i18nError('job.error.fehlerArrayMissing');
-    return { obj: Array.isArray(obj?.fehler) ? obj.fehler : [], stil };
+    });
   }
+  // Stil-Pass: eigener User-Prompt, eigenes Schema — das Enum lässt die objektiven
+  // Typen weg, die der Objektiv-Pass liefert.
+  const stilPromptFor = (passText, promptOpts, ohneBewertung) =>
+    buildStilLektoratPrompt(passText, { ...promptOpts, ohneBewertung });
+  const runObjektiv = (prompt, passLen, onStart = null) =>
+    limited(() => aiCall(jobId, tok, prompt, system, null, null, 4000, 0.2, lektoratMaxTokens(passLen), undefined, objektivSchema, undefined, onStart)).then(tick);
+  const runStil = (prompt, passLen, stilSchema, onStart = null) =>
+    limited(() => aiCall(jobId, tok, prompt, system, null, null, 5000, 0.2, lektoratMaxTokens(passLen), undefined, stilSchema, undefined, onStart)).then(tick);
+  const checkStil = (stil) => {
+    if (!Array.isArray(stil?.fehler)) throw i18nError('job.error.fehlerArrayMissing');
+    return stil;
+  };
+  const objFehler = (obj) => (Array.isArray(obj?.fehler) ? obj.fehler : []);
 
   if (!chunks) {
-    const { obj, stil } = await passes(text, promptOpts);
-    const fehler = mergePasses([obj, stil.fehler], text);
+    // Am Stück: Objektiv- und Stil-Pass parallel. Kein gemeinsamer Prompt-Kopf
+    // (verschiedene Prompts und Schemas), darum auch kein Staffeln.
+    const stilSchema = buildLektoratSchema({ buchtyp, textsorte, stilOnly: true });
+    const [obj, stil] = await Promise.all([
+      runObjektiv(objektivPromptFor(text, promptOpts), text.length),
+      runStil(stilPromptFor(text, promptOpts, false), text.length, stilSchema),
+    ]);
+    checkStil(stil);
+    const fehler = mergePasses([objFehler(obj), stil.fehler], text);
     return { fehler, szenen: stil.szenen, stilanalyse: stil.stilanalyse, fazit: stil.fazit };
   }
 
@@ -201,9 +212,9 @@ async function lektoratAnalyze({
     null, null, 3000, 0.2, lektoratMaxTokens(text.length), undefined, bewertungSchema)).then(tick);
   bewertungPromise.catch(() => {});
   const last = chunks.length - 1;
-  const perChunk = await Promise.all(chunks.map((c, i) => {
+  const chunkOpts = chunks.map((c, i) => {
     const { before, after } = chunkContext(text, c);
-    return passes(c.text, {
+    return {
       ...promptOpts,
       stylisticCap: effectiveStylisticCap(c.text.length),
       previousExcerpt: i === 0 ? promptOpts.previousExcerpt : before,
@@ -213,11 +224,63 @@ async function lektoratAnalyze({
       schreibfront: i === last ? promptOpts.schreibfront : false,
       stueckDavor: i > 0,
       stueckDanach: i < last,
-    }, { ohneBewertung: true });
-  }));
+    };
+  });
+  const stilSchema = buildLektoratSchema({ buchtyp, textsorte, stilOnly: true, ohneBewertung: true });
+  // Prompt-Caching (nur Claude): die Stück-Prompts eines Passes sind bis kurz vor
+  // dem Text identisch (Aufgabe + Regel-Korpus, mehrere tausend Tokens). Der
+  // gemeinsame Kopf wird ein eigener Cache-Block, und je Pass startet erst EIN
+  // Stück; die übrigen folgen, sobald dessen Antwort streamt — vorher ist der
+  // Cache-Eintrag nicht lesbar, und parallel abgeschickte Calls zahlen alle den
+  // vollen Input-Preis. Der System-Prompt (gleiches Schema je Pass) liest dabei mit.
+  const cache = cacheBlocks;
+  const prep = (list) => (cache ? sharedHeadBlocks(list) : list);
+  const objPrompts = prep(chunks.map((c, i) => objektivPromptFor(c.text, chunkOpts[i])));
+  const stilPrompts = prep(chunks.map((c, i) => stilPromptFor(c.text, chunkOpts[i], true)));
+  const launch = cache ? staggered : (ls) => ls.map(l => l(null));
+  const objPromises = launch(chunks.map((c, i) => (onStart) => runObjektiv(objPrompts[i], c.text.length, onStart)));
+  const stilPromises = launch(chunks.map((c, i) => (onStart) => runStil(stilPrompts[i], c.text.length, stilSchema, onStart)));
+  const [objs, stils] = await Promise.all([Promise.all(objPromises), Promise.all(stilPromises)]);
+  stils.forEach(checkStil);
   const bewertung = await bewertungPromise;
-  const fehler = mergePasses(perChunk.flatMap(r => [r.obj, r.stil.fehler]), text);
+  const fehler = mergePasses(chunks.flatMap((c, i) => [objFehler(objs[i]), stils[i].fehler]), text);
   return { fehler, szenen: bewertung?.szenen, stilanalyse: bewertung?.stilanalyse, fazit: bewertung?.fazit };
 }
 
-module.exports = { lektoratAnalyze, lektoratMaxTokens, splitEnabled, applyLektoratAiOverrides };
+// Gemeinsamer Kopf der Stück-Prompts eines Passes als Cache-Block. Länge = längstes
+// gemeinsames Präfix aller Prompts, zurückgeschnitten auf das letzte Zeilenende —
+// was je Stück variiert (Schreibstelle, Lesekontext, Text), liegt dahinter und
+// bleibt ungecacht. Unter MIN_SHARED_HEAD_CHARS lohnt der Block nicht (das Minimum
+// für einen Cache-Eintrag liegt je nach Modell bei 512–4096 Tokens); dann bleiben
+// die Prompts Strings. Die Blöcke aneinandergehängt ergeben exakt den Prompt.
+const MIN_SHARED_HEAD_CHARS = 2000;
+function sharedHeadBlocks(prompts) {
+  if (prompts.length < 2) return prompts;
+  const first = prompts[0];
+  let n = first.length;
+  for (const p of prompts) {
+    const max = Math.min(n, p.length);
+    let i = 0;
+    while (i < max && p.charCodeAt(i) === first.charCodeAt(i)) i++;
+    n = i;
+  }
+  const cut = first.lastIndexOf('\n', n - 1) + 1;
+  if (cut < MIN_SHARED_HEAD_CHARS) return prompts;
+  const head = { type: 'text', text: first.slice(0, cut), cache_control: { type: 'ephemeral' } };
+  return prompts.map(p => [head, { type: 'text', text: p.slice(cut) }]);
+}
+
+// Gestaffelter Start: launchers[i](onStart) startet einen Call. Der erste läuft
+// sofort, die übrigen, sobald er streamt (onStart) oder fertig ist. Scheitert der
+// erste vor dem Start, starten die übrigen nie — Promise.all des Aufrufers
+// verwirft dann ohnehin.
+function staggered(launchers) {
+  if (launchers.length < 2) return launchers.map(l => l(null));
+  let release;
+  const gate = new Promise((r) => { release = r; });
+  const first = launchers[0](() => release());
+  first.then(() => release(), () => {});
+  return [first, ...launchers.slice(1).map(l => gate.then(() => l(null)))];
+}
+
+module.exports = { lektoratAnalyze, lektoratMaxTokens, splitEnabled, applyLektoratAiOverrides, sharedHeadBlocks, staggered };

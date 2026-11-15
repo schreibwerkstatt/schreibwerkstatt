@@ -8,10 +8,11 @@ const { db } = require('../../../db/schema');
 const {
   makeJobLogger, updateJob, completeJob, failJob, contentHttpError,
   getPrompts, getBookPrompts,
-  loadOrderedBookContents, loadPageContents, groupByChapter, buildSinglePassBookText, cleanPageTextForAi,
+  loadOrderedBookContents, loadPageContents,
   chunkLimitsFor, BATCH_SIZE, jobAbortControllers, tps, summarizeCostByPhase,
 } = require('../shared');
 const { makeKomplettCall } = require('./call');
+const { prepareBookText } = require('./book-text');
 const appSettings = require('../../../lib/app-settings');
 const { setContext } = require('../../../lib/log-context');
 const { makePhaseTimer } = require('./utils');
@@ -61,20 +62,8 @@ async function runErzaehlprofilJob(jobId, bookId, bookName, userEmail, provider 
       });
     }, jobAbortControllers.get(jobId)?.signal, komplettTextOpts(bookId, email));
 
-    // Buchtext-Preprocessing nur Cloud-Klasse (identisch zu job-komplett/-kontinuitaet).
-    if (providerClass(effectiveProvider) === 'cloud') {
-      let savedChars = 0;
-      for (const p of pageContents) {
-        const before = p.text.length;
-        p.text = cleanPageTextForAi(p.text);
-        savedChars += before - p.text.length;
-      }
-      if (savedChars > 0) log.info(`Buchtext-Preprocessing ${savedChars} Zeichen entfernt.`);
-    }
-
-    const totalChars = pageContents.reduce((s, p) => s + p.text.length, 0);
-    const { groupOrder, groups } = groupByChapter(pageContents);
-    const fullBookText = buildSinglePassBookText(groups, groupOrder);
+    // Buchtext-Aufbereitung: SSoT ./book-text.js (byte-identisch zur Komplettanalyse → Cache-Read).
+    const { totalChars, groupOrder, groups, fullBookText } = prepareBookText(pageContents, { cloud: providerClass(effectiveProvider) === 'cloud', log });
     pt.mark('Laden');
 
     // Teil-Degradierungen der Phase (übersprungene Kapitel, Autoren-Befund) → Job-Result.

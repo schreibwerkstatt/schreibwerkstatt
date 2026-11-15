@@ -22,9 +22,9 @@
 //     Die Werkzeugliste bleibt über alle Runden dieselbe: sie steht vorn im
 //       Prompt-Cache (ein Wechsel schreibt den ganzen Präfix neu), und Thinking-Blöcke
 //       sind an den unveränderten Gesprächsanfang gebunden. Einzige Ausnahme ist der
-//       Synthese-Turn: er bekommt keine serverseitigen Werkzeuge (Anthropic-
-//       `web_search`) — sonst sucht die API dort weiter, und der Web-Such-Deckel hielte
-//       nicht. Der Cache-Fehlschlag dieses einen Calls ist der Preis dafür.
+//       Synthese-Turn: er darf keine serverseitigen Werkzeuge (Anthropic-`web_search`)
+//       mehr nutzen — sonst hielte der Web-Such-Deckel nicht. Wie, entscheidet
+//       helpers.js#synthesisToolPlan (tool_removal oder verkürzte Liste).
 //     Was `tools` enthält, ist der angebotene Satz: ein tool_use mit einem anderen
 //       Namen wird nicht ausgeführt (./run-tools.js), in jedem Chat gleich.
 //     stopBeforeRound({ iter, webSearches }) → stopReason-String oder null (opt-in):
@@ -107,8 +107,8 @@ const {
 } = require('./history');
 const { stripHistoryNote } = require('../../../lib/chat-history-note');
 const {
-  _defaultModelFor, _estimateTokens, _fitMessagesToBudget, _synthesisError, applyChatEffort, isServerTool,
-  _synthesisRequestMessages,
+  _defaultModelFor, _estimateTokens, _fitMessagesToBudget, _synthesisError, applyChatEffort,
+  _synthesisRequestMessages, synthesisToolPlan, appendBeforeRemoval,
 } = require('./helpers');
 const { makeToolRunner, capLogInput } = require('./run-tools');
 const { READ_ONLY_TOOLS } = require('../chat-tools');
@@ -265,7 +265,7 @@ function makeAgenticChatJob(config) {
       // Für die Abschluss-Logzeile: nicht ausgeführte / nicht angebotene / gescheiterte Aufrufe.
       const counters = { skipped: 0, notOffered: 0, failed: 0 };
       // Synthese ohne serverseitige Werkzeuge (siehe Kopfkommentar).
-      const synthTools = tools.filter(t => !isServerTool(t));
+      const { synthTools, removalMessage } = synthesisToolPlan(tools, !!ai.providerSupportsToolRemoval?.(provider));
       let pendingNote = null;
       // Live-Stand für den Werkzeug-Verlauf während des Laufs (GET /jobs/:id → liveTools).
       const publishLive = () => updateJob(jobId, { liveTools: liveTools(toolLog), liveRounds: rounds.slice(-LIVE_MAX_ROUNDS) });
@@ -440,8 +440,9 @@ function makeAgenticChatJob(config) {
         updateJob(jobId, { statusText: 'job.phase.agentSynthesize', progress: 92 });
         const budgetStop = stopReason === 'input_cap' || stopReason === 'context_budget';
         const instruction = budgetStop ? (prep.inputCapInstruction ?? forceFinalInstruction) : forceFinalInstruction;
-        // Präfix-Änderung gegenüber den Runden: Server-Werkzeuge weg oder Ergebnisse
-        // gekürzt → die Synthese schickt keine Denkblöcke mit (helpers.js).
+        // Präfix-Änderung gegenüber den Runden: Server-Werkzeuge aus der Liste genommen
+        // oder Ergebnisse gekürzt → die Synthese schickt keine Denkblöcke mit
+        // (helpers.js). Ein tool_removal hängt hinten an und ändert den Präfix nicht.
         let prefixEdited = synthTools.length !== tools.length;
         const fitToBudget = (msgs) => {
           const fit = _fitMessagesToBudget(msgs, estimate, tokenBudget, aiCfg.charsPerToken);
@@ -449,7 +450,7 @@ function makeAgenticChatJob(config) {
           if (fit.trimmed) logger.warn(`Synthese-Turn: Werkzeug-Ergebnisse aufs Kontext-Budget gekürzt (${fit.rounds} Runde(n)${fit.webDropped ? `, ${fit.webDropped} Websuche(n) ohne Trefferliste` : ''}).`);
           return fit.messages;
         };
-        messages = fitToBudget([...messages, { role: 'user', content: instruction }]);
+        messages = fitToBudget(appendBeforeRemoval(messages, { role: 'user', content: instruction }, removalMessage));
         const synthCall = async () => {
           try {
             const req = _synthesisRequestMessages(messages, { edited: prefixEdited });
@@ -487,8 +488,8 @@ function makeAgenticChatJob(config) {
             ] });
           } else {
             // Pausierter Turn: nicht fortsetzen (das hiesse weitersuchen), sondern die
-            // Anweisung erneut stellen.
-            messages.push({ role: 'user', content: [{ type: 'text', text: instruction }] });
+            // Anweisung erneut stellen. Ein tool_removal bleibt dabei die letzte Nachricht.
+            messages = appendBeforeRemoval(messages, { role: 'user', content: [{ type: 'text', text: instruction }] }, removalMessage);
           }
           messages = fitToBudget(messages);
           result = await synthCall();

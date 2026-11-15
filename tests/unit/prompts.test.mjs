@@ -131,6 +131,23 @@ test('getLocalePromptsForBook: zeitlinieReal=true injiziert REALE ZEITLINIE in K
   assert.match(out.SYSTEM_KOMPLETT_EXTRAKTION, /datum_year/, 'Block soll konkrete Jahreszahlen-Verankerung fordern');
 });
 
+test('getLocalePromptsForBook: Lektorat + Chats sehen Zeitlinie/Hauptland als Fakt, ohne Extraktions-Feldanweisung', async () => {
+  const m = await freshPrompts('claude');
+  const out = m.getLocalePromptsForBook('de-CH', null, 'Spielt in Olten.', false, 'ch', null, true);
+  for (const key of ['SYSTEM_LEKTORAT', 'SYSTEM_CHAT', 'SYSTEM_BOOK_CHAT']) {
+    assert.match(out[key], /REALE ZEITLINIE/, key);
+    assert.match(out[key], /HAUPT-SCHAUPLATZLAND: Schweiz/, key);
+    assert.match(out[key], /Spielt in Olten\./, `${key}: Angaben des Autors`);
+    assert.doesNotMatch(out[key], /datum_year|story_tag|«land»-Feld/, `${key}: keine Feld-Anweisung`);
+  }
+  // Die Extraktion behält die Feld-Anweisungen.
+  assert.match(out.SYSTEM_KOMPLETT_EXTRAKTION_BLOCKS.map(b => b.text).join('\n'), /«land»-Feld/);
+  // Lektorat: Buchkontext im zweiten (5-min-)Block, der stabile Kern davor im 1h-Block.
+  const [core, ctx] = out.SYSTEM_LEKTORAT_BLOCKS;
+  assert.equal(core.ttl, '1h');
+  assert.ok(!core.text.includes('Spielt in Olten') && ctx.text.includes('Spielt in Olten'));
+});
+
 test('getLocalePromptsForBook: zeitlinieReal=false/omitted → kein REALE-ZEITLINIE-Block', async () => {
   const m = await freshPrompts('claude');
   assert.doesNotMatch(m.getLocalePromptsForBook('de-CH', null, '', false, null, null, false).SYSTEM_KOMPLETT_EXTRAKTION, /REALE ZEITLINIE/);

@@ -15,15 +15,16 @@ const { activeFigureSql } = require('../../../db/figures');
 const {
   makeJobLogger, updateJob, completeJob, failJob, i18nError, i18nErrText, contentHttpError,
   getPrompts, getBookPrompts, toSystemBlocks,
-  loadOrderedBookContents, loadPageContents, groupByChapter, buildSinglePassBookText, cleanPageTextForAi,
+  loadOrderedBookContents, loadPageContents,
   chunkLimitsFor, BATCH_SIZE, jobAbortControllers,
   tps, retryOnTransientAi, summarizeCostByPhase,
 } = require('../shared');
 const { makeKomplettCall } = require('./call');
+const { prepareBookText, bookSystemBlock } = require('./book-text');
 const appSettings = require('../../../lib/app-settings');
 const { providerClass, resolveProvider } = require('../../../lib/ai');
 const { setContext } = require('../../../lib/log-context');
-const { makePhaseTimer, buildBookSystemBlockText } = require('./utils');
+const { makePhaseTimer } = require('./utils');
 const { saveKontinuitaetResult } = require('./remap');
 const { komplettMaxTokens } = require('./phases');
 const {
@@ -90,19 +91,8 @@ async function runKontinuitaetJob(jobId, bookId, bookName, userEmail, provider =
       });
     }, jobAbortControllers.get(jobId)?.signal, komplettTextOpts(bookId, email));
 
-    // Buchtext-Preprocessing nur Cloud-Klasse (siehe runKomplettAnalyseJob).
-    if (providerClass(effectiveProvider) === 'cloud') {
-      let savedChars = 0;
-      for (const p of pageContents) {
-        const before = p.text.length;
-        p.text = cleanPageTextForAi(p.text);
-        savedChars += before - p.text.length;
-      }
-      if (savedChars > 0) log.info(`Buchtext-Preprocessing ${savedChars} Zeichen entfernt.`);
-    }
-
-    const totalChars = pageContents.reduce((s, p) => s + p.text.length, 0);
-    const { groupOrder, groups } = groupByChapter(pageContents);
+    // Buchtext-Aufbereitung: SSoT ./book-text.js (byte-identisch zur Komplettanalyse → Cache-Read).
+    const { totalChars, groupOrder, groups, fullBookText } = prepareBookText(pageContents, { cloud: providerClass(effectiveProvider) === 'cloud', log });
     // Checkpoint nur gegen DENSELBEN Buchstand fortsetzen: `nextGi`/`failedGis` sind
     // Indizes in groupOrder — nach umgestellten, neuen oder bearbeiteten Kapiteln zeigten
     // sie auf andere Kapitel, und die gesammelten Fakten wären veraltet.
@@ -126,11 +116,9 @@ async function runKontinuitaetJob(jobId, bookId, bookName, userEmail, provider =
       // P1/P3b der Komplettanalyse und zum Erzählprofil (geteilter 1h-Präfix, kein Schema):
       // nach einer Komplettanalyse liest dieser Call das Buch aus dem Cache, statt es neu
       // zu schreiben (pruef-jobs.js reiht ihn darum hinter das Erzählprofil).
-      const bookText = buildSinglePassBookText(groups, groupOrder);
-      const bookSystemBlock = { text: buildBookSystemBlockText(bookName, pageContents.length, bookText), ttl: '1h', sharedPrefix: true };
       result = await retryOnTransientAi(() => call(jobId, tok,
         prompts.buildKontinuitaetSinglePassPrompt(bookName, null, figurenKompakt, orteKompakt, narrativeLabels(getBookSettings(bookIdInt, email)), anachronismus),
-        [bookSystemBlock, ...toSystemBlocks(sys.SYSTEM_KONTINUITAET_BLOCKS)], 60, 95, undefined, 0.2, komplettMaxTokens(effectiveProvider), prompts.SCHEMA_KONTINUITAET_PROBLEME,
+        [bookSystemBlock(bookName, pageContents.length, fullBookText), ...toSystemBlocks(sys.SYSTEM_KONTINUITAET_BLOCKS)], 60, 95, undefined, 0.2, komplettMaxTokens(effectiveProvider), prompts.SCHEMA_KONTINUITAET_PROBLEME,
         costTier(COST_LABEL.kontinuitaet),
       ), { log, label: 'Kontinuität Single-Pass' });
       pt.mark('Single-Pass Check');

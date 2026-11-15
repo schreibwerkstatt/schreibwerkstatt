@@ -41,7 +41,7 @@ const blockStart = (index, content_block) => ({ type: 'content_block_start', ind
 const delta = (index, d) => ({ type: 'content_block_delta', index, delta: d });
 const blockStop = (index) => ({ type: 'content_block_stop', index });
 
-async function run(events, { model = 'claude-opus-5-5', onProgress = null } = {}) {
+async function run(events, { model = 'claude-opus-5-5', onProgress = null, messages = PROMPT, system = 'sys', tools = TOOLS } = {}) {
   let req = null;
   globalThis.fetch = async (_url, opts) => {
     req = { body: JSON.parse(opts.body), beta: opts.headers['anthropic-beta'] };
@@ -49,7 +49,7 @@ async function run(events, { model = 'claude-opus-5-5', onProgress = null } = {}
   };
   try {
     const result = await runWithContext({ aiJob: { provider: 'claude', model } },
-      () => _callClaudeWithTools(PROMPT, 'sys', TOOLS, onProgress, null, null));
+      () => _callClaudeWithTools(messages, system, tools, onProgress, null, null));
     return { req, result };
   } finally {
     globalThis.fetch = realFetch;
@@ -161,6 +161,55 @@ test('Request: API lehnt den Fallback ab (400) → einmal ohne, danach bis zum N
     globalThis.fetch = realFetch;
     _resetFallbackRejected();
   }
+});
+
+// ── Prompt-Cache im Werkzeug-Pfad ─────────────────────────────────────────────
+const SYS_1H = [{ text: 'stabil', ttl: '1h' }];
+const WEB = { type: 'web_search_20250305', name: 'web_search', max_uses: 3 };
+const marks = (req) => [
+  ...req.body.tools.filter(t => t.cache_control).map(t => `tool:${t.name}:${t.cache_control.ttl || '5m'}`),
+  ...(req.body.system || []).filter(b => b.cache_control).map(b => `system:${b.cache_control.ttl || '5m'}`),
+  ...req.body.messages.flatMap((m, i) => (Array.isArray(m.content) ? m.content : [])
+    .filter(b => b.cache_control).map(() => `msg${i}:${m.role}`)),
+];
+
+test('Cache: 1h-System → 1h-Breakpoint aufs letzte eigene Werkzeug, nie aufs Server-Werkzeug', async () => {
+  const { req } = await run(END, { system: SYS_1H, tools: [...TOOLS, WEB] });
+  assert.deepEqual(marks(req), ['tool:final_answer:1h', 'system:1h', 'msg0:user']);
+});
+
+test('Cache: 5-min-System → kein Werkzeug-Breakpoint', async () => {
+  const { req } = await run(END);
+  assert.deepEqual(marks(req), ['system:5m', 'msg0:user']);
+});
+
+test('Cache: Werkzeug-Breakpoint zählt gegen die vier — Verlaufsmarke und letzte Nachricht bleiben', async () => {
+  const messages = [
+    { role: 'user', content: 'alt' }, { role: 'assistant', content: 'a', cacheBreakpoint: true },
+    { role: 'user', content: 'neu' },
+  ];
+  const { req } = await run(END, { system: SYS_1H, messages });
+  assert.deepEqual(marks(req), ['tool:final_answer:1h', 'system:1h', 'msg1:assistant', 'msg2:user']);
+  assert.ok(marks(req).length <= 4);
+});
+
+test('Cache: system-Nachricht (tool_removal) trägt keinen Breakpoint und bringt ihre Beta mit', async () => {
+  const removal = { role: 'system', content: [{ type: 'tool_removal', tool: { type: 'tool_reference', name: 'web_search' } }] };
+  const { req } = await run(END, { system: SYS_1H, tools: [...TOOLS, WEB], messages: [...PROMPT, removal] });
+  assert.deepEqual(marks(req), ['tool:final_answer:1h', 'system:1h', 'msg0:user']);
+  assert.deepEqual(req.body.messages.at(-1), removal);
+  assert.match(req.beta, /mid-conversation-tool-changes-2026-07-01/);
+  const { req: plain } = await run(END);
+  assert.doesNotMatch(plain.beta, /mid-conversation-tool-changes/);
+  assert.doesNotMatch(plain.beta, /prompt-caching-2024/);
+});
+
+test('Web-Suche: dynamische Filterung auf Opus 5.5, alte Variante auf älteren Modellen', async () => {
+  const { req } = await run(END, { tools: [...TOOLS, WEB] });
+  assert.equal(req.body.tools.find(t => t.name === 'web_search').type, 'web_search_20260209');
+  assert.equal(req.body.tools.find(t => t.name === 'web_search').max_uses, 3);
+  const { req: old } = await run(END, { model: 'claude-sonnet-4-5', tools: [...TOOLS, WEB] });
+  assert.equal(old.body.tools.find(t => t.name === 'web_search').type, 'web_search_20250305');
 });
 
 test('progressNote: letzte Zeile, Markdown-Präfixe weg, gedeckelt', () => {

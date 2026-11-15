@@ -132,7 +132,16 @@ test('summarizeCostByPhase: teuerster Bucket zuerst, USD auf Cent gerundet', () 
     assert.match(line, /extract 21c/);
     assert.match(line, /\$12\.40/);
     assert.match(line, /claude-sonnet-5/);
+    // Cache-Verkehr je Bucket (Write/Read), damit ein Präfix-Bruch in der Log-Zeile auffällt.
+    assert.match(line, /extract 21c [^|]*cache w300\/r4\.0K/);
+    assert.doesNotMatch(line, /Brüche/);
     assert.equal(jobsAi.formatCostByPhase(null), '');
+
+    const broken = jobsAi.formatCostByPhase(jobsAi.summarizeCostByPhase({ byPhase: {
+      extractGap: { calls: 7, tokensIn: 0, tokensOut: 1, cacheReadIn: 0, cacheCreationIn: 0, cacheBreaks: 2, usd: 1, ms: 0, models: [] },
+    } }));
+    assert.match(broken, /extractGap 7c [^|]*!2 Brüche/);
+    assert.doesNotMatch(broken, /cache w/, 'ohne Cache-Verkehr keine Cache-Angabe');
   } finally { teardown(); }
 });
 

@@ -661,6 +661,55 @@ test('Synthese ohne serverseitige Werkzeuge; Runden davor mit vollem Satz', asyn
   assert.deepEqual(calls[1].tools, ALL);
 });
 
+// Modell kann tool_removal: Liste bleibt gleich (Cache-Präfix), eine system-Nachricht
+// hinter der Anweisung zieht die Server-Werkzeuge zurück, Denkblöcke bleiben.
+async function withToolRemoval(fn) {
+  const orig = ai.providerSupportsToolRemoval;
+  ai.providerSupportsToolRemoval = () => true;
+  try { return await fn(); } finally { ai.providerSupportsToolRemoval = orig; }
+}
+const REMOVAL = { role: 'system', content: [{ type: 'tool_removal', tool: { type: 'tool_reference', name: 'web_search' } }] };
+
+test('Synthese mit tool_removal: gleiche Werkzeugliste, Removal als letzte Nachricht, Denkblöcke bleiben', () => withToolRemoval(async () => {
+  const server = { type: 'web_search_20250305', name: 'web_search', max_uses: 3 };
+  const think = { type: 'thinking', thinking: 'ich überlege', signature: 'sig' };
+  const calls = mockCalls([
+    res({ stopReason: 'tool_use', rawContentBlocks: [think, { type: 'tool_use', id: 'r1', name: 'lookup', input: {} }], toolUses: [tu('lookup', {}, 'r1')] }),
+    res({ stopReason: 'tool_use', toolUses: [tu('final_answer', { antwort: 'fertig' })] }),
+  ]);
+  const out = await runJob(makeJob({ prep: { tools: [...TOOLS, server], maxToolIter: 1 } }), newSession());
+  assert.equal(out.content, 'fertig');
+  assert.deepEqual(calls[1].tools, [...ALL, 'web_search'], 'Liste unverändert');
+  const sent = calls[1].messages;
+  assert.deepEqual(sent.at(-1), REMOVAL);
+  assert.equal(sent.at(-2).content, 'FORCE');
+  const asst = sent.find(m => m.role === 'assistant');
+  assert.deepEqual(asst.content.map(b => b.type), ['thinking', 'tool_use'], 'Präfix unverändert → Denkblock bleibt');
+}));
+
+test('Synthese mit tool_removal nach pause_turn: Removal bleibt letzte Nachricht', () => withToolRemoval(async () => {
+  const server = { type: 'web_search_20250305', name: 'web_search', max_uses: 3 };
+  const calls = mockCalls([
+    res({ stopReason: 'tool_use', toolUses: [tu('lookup')] }),
+    res({ stopReason: 'pause_turn', text: 'Ich suche noch …' }),
+    res({ stopReason: 'tool_use', toolUses: [tu('final_answer', { antwort: 'fertig' })] }),
+  ]);
+  await runJob(makeJob({ prep: { tools: [...TOOLS, server], maxToolIter: 1 } }), newSession());
+  const sent = calls[2].messages;
+  assert.deepEqual(sent.at(-1), REMOVAL);
+  assert.equal(sent.at(-2).content[0].text, 'FORCE');
+  assert.equal(sent.filter(m => m.role === 'system').length, 1);
+}));
+
+test('Synthese ohne Server-Werkzeug: kein tool_removal, auch wenn das Modell es kann', () => withToolRemoval(async () => {
+  const calls = mockCalls([
+    res({ stopReason: 'tool_use', toolUses: [tu('lookup')] }),
+    res({ stopReason: 'tool_use', toolUses: [tu('final_answer', { antwort: 'fertig' })] }),
+  ]);
+  await runJob(makeJob({ prep: { maxToolIter: 1 } }), newSession());
+  assert.ok(!calls[1].messages.some(m => m.role === 'system'));
+}));
+
 test('Synthese endet mit pause_turn: Zwischenstand ist keine Antwort, zweiter Versuch, sonst Hinweis', async () => {
   const calls = mockCalls([
     res({ stopReason: 'tool_use', toolUses: [tu('lookup')] }),
@@ -764,6 +813,20 @@ test('Synthese nach pause_turn + Web-Deckel: offener server_tool_use und leerer 
   assert.equal(asst.length, 1);
   assert.deepEqual(asst[0].content.map(b => b.type), ['server_tool_use', 'web_search_tool_result'], 'gepaarte Suche bleibt, offene und Denkblock fallen weg');
   assert.equal(asst[0].content[0].id, 'p1');
+});
+
+test('_synthesisRequestMessages: Paar der dynamisch filternden Suche (code_execution) bleibt stehen', () => {
+  const { _synthesisRequestMessages } = require('../../routes/jobs/agentic-chat/helpers');
+  const asst = { role: 'assistant', content: [
+    { type: 'server_tool_use', id: 'c1', name: 'code_execution', input: {} },
+    { type: 'server_tool_use', id: 'w1', name: 'web_search', input: { query: 'q' } },
+    { type: 'web_search_tool_result', tool_use_id: 'w1', content: [] },
+    { type: 'code_execution_tool_result', tool_use_id: 'c1', content: { type: 'encrypted_code_execution_result' } },
+    { type: 'server_tool_use', id: 'w2', name: 'web_search', input: { query: 'offen' } },
+  ] };
+  const out = _synthesisRequestMessages([{ role: 'user', content: 'a' }, asst, { role: 'user', content: 'FORCE' }]);
+  assert.equal(out.removedOpen, 1);
+  assert.deepEqual(out.messages[1].content.map(b => b.id || b.tool_use_id), ['c1', 'w1', 'w1', 'c1']);
 });
 
 test('_synthesisRequestMessages: leerer Turn fällt weg, Rollen bleiben im Wechsel, Eingabe unverändert', () => {

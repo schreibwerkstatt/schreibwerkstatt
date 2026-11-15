@@ -518,3 +518,54 @@ test('Motiv-Werkstatt: Undo/Redo — Umbenennen, Löschen mit Wiederanlage, Anle
   await expect(page.locator('.card--motiv .card-actions button[aria-label="Rückgängig"], .card--motiv .card-actions button[aria-label="Undo"]').first()).toBeEnabled();
   guard.assertClean('Motiv-Werkstatt Undo/Redo');
 });
+
+// Motiv-Werkstatt mobil: Graph und Seitenpanel (gestapelt) bleiben in der
+// Kartenbreite. Ein nacktes `1fr` als Grid-Spalte hat min-content als Minimum —
+// das breiteste Kind (Baum-Zeile, vis-Canvas) zog die Spalte über den Viewport.
+// Hängt an der echten CSS-Kette, darum e2e-app statt Fixture.
+
+
+test('Motiv-Werkstatt 390px: Graph + Panel ohne horizontalen Überlauf', async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto('/', { waitUntil: 'domcontentloaded' });
+  await page.waitForFunction(() => window.__app && window.Alpine.store('nav').books?.length > 0, null, { timeout: 30000 });
+  const id = await page.evaluate(() => window.Alpine.store('nav').books[0].id);
+  await page.evaluate((bid) => { location.hash = '#book/' + bid + '/motiv'; }, id);
+  await page.waitForFunction(() => {
+    const el = document.querySelector('.card--motiv');
+    const c = el && window.Alpine.$data(el);
+    return c && !c.loading;
+  }, null, { timeout: 20000 });
+
+  await page.evaluate(async () => {
+    const c = window.Alpine.$data(document.querySelector('.card--motiv'));
+    c.newThemeName = 'Mobil-Thema mit einem ziemlich langen Namen'; await c.addTheme();
+    c.newMotifName = 'Mobil-Motiv mit sehr langem Namen ohne jeden Umbruch'; await c.addMotif();
+    c.selectedMotifId = null;
+  });
+
+  const measure = () => page.evaluate(() => {
+    const vw = document.documentElement.clientWidth;
+    const card = document.querySelector('.card--motiv').getBoundingClientRect();
+    const r = (sel) => document.querySelector(sel).getBoundingClientRect().right;
+    return {
+      vw, cardRight: card.right,
+      graph: r('#motiv-graph'), panel: r('.motiv-panel'),
+      scrollW: document.documentElement.scrollWidth,
+    };
+  });
+
+  for (const select of [false, true]) {
+    if (select) {
+      await page.evaluate(async () => {
+        const c = window.Alpine.$data(document.querySelector('.card--motiv'));
+        await c.selectMotif(c.motifs[c.motifs.length - 1].id);
+      });
+    }
+    await page.waitForTimeout(300);
+    const m = await measure();
+    expect(m.graph, `Graph rechts innerhalb der Karte (select=${select})`).toBeLessThanOrEqual(m.cardRight + 0.5);
+    expect(m.panel, `Panel rechts innerhalb der Karte (select=${select})`).toBeLessThanOrEqual(m.cardRight + 0.5);
+    expect(m.scrollW, `kein Seiten-H-Scroll (select=${select})`).toBeLessThanOrEqual(m.vw);
+  }
+});

@@ -8,7 +8,7 @@
 // Dazu Ideen-Vorschläge (final_answer.ideen, nur mit Schreibkontext) im Format von
 // Abschnitts- und Buch-Chat (lib/chat-idee-proposals.js, PATCH /ideen/chat-proposal).
 //
-// Prompt-Cache: der System-Prompt ist über die Turns stabil. Was je Frage wechselt
+// Prompt-Cache: der System-Prompt (ein 1h-Block) ist über die Turns stabil. Was je Frage wechselt
 // (Archiv-Stand, frühere Vorschläge, Schreibkontext), steht als `userPreamble` vor
 // der Frage, und `cacheHistory` setzt den Breakpoint ans Ende des Verlaufs.
 //
@@ -147,10 +147,16 @@ const runResearchChatJob = makeAgenticChatJob({
       logger.warn(`Schreibkontext nicht geladen: ${e.message}`);
     }
     // System-Prompt ohne Volatiles (itemCount null → Zahl steht im Archiv-Stand).
-    const systemPrompt = buildResearchChatAgentSystemPrompt(
-      session.book_name || '', null, maxToolIter, figures, locations, researchProfile,
-      { maxWebSearches, bookContext, webSearchMode: mode, toolNames },
-    );
+    // Ein Block mit 1h-TTL wie in Buch-, Plot- und Ideen-Chat: zwischen zwei Fragen
+    // liegen meist mehr als fünf Minuten, mit der 5-min-Voreinstellung schrieb jede
+    // Folgefrage Werkzeuge + System neu.
+    const systemPrompt = [{
+      text: buildResearchChatAgentSystemPrompt(
+        session.book_name || '', null, maxToolIter, figures, locations, researchProfile,
+        { maxWebSearches, bookContext, webSearchMode: mode, toolNames },
+      ),
+      ttl: '1h',
+    }];
     // Pro Frage wechselnder Kontext vor die Frage, wie im Buch-Chat.
     const turnBlocks = [proposalMemory, writingContext].map(b => String(b || '').trim()).filter(Boolean);
     const userPreamble = turnBlocks.length ? `${turnBlocks.join('\n\n')}\n\n=== FRAGE ===` : null;

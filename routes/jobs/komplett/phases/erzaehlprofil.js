@@ -13,7 +13,7 @@
 const { saveChapterNarrativeProfiles, getBookSettings } = require('../../../../db/schema');
 const { getNarrativeReport, saveAutorenBefund, deleteAutorenBefund } = require('../../../../db/narrative-report');
 const { updateJob, toSystemBlocks, retryOnTransientAi, settledAll, i18nError, i18nErrText } = require('../../shared');
-const { buildBookSystemBlockText } = require('../utils');
+const { bookSystemBlock: buildBookBlock } = require('../book-text');
 const { komplettMaxTokens } = require('./tokens');
 const { COST_LABEL, costTier } = require('../cost-labels');
 const { providerClass } = require('../../../../lib/ai');
@@ -42,7 +42,7 @@ async function runErzaehlprofil(ctx, opts = {}) {
     // Ein Call über das ganze Buch → Array pro Kapitel. Buchtext im gecachten
     // System-Block, byte-identisch zu P1/P3b der Komplettanalyse und zur Kontinuität
     // (geteilter 1h-Präfix, kein Schema) → Cache-Read statt Neuübertragung.
-    const bookSystemBlock = { text: buildBookSystemBlockText(bookName, pageContents.length, fullBookText), ttl: '1h', sharedPrefix: true };
+    const bookSystemBlock = buildBookBlock(bookName, pageContents.length, fullBookText);
     const res = await retryOnTransientAi(() => call(jobId, tok,
       prompts.buildErzaehlprofilSinglePassPrompt(bookName, null),
       [bookSystemBlock, ...toSystemBlocks(sys.SYSTEM_KOMPLETT_EXTRAKTION_BLOCKS, '1h')],

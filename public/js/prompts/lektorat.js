@@ -304,14 +304,21 @@ ${spanRegeln(typen)}
   const mechDetail = (objektivSet.has('rechtschreibung') || objektivSet.has('grammatik'))
     ? ' Dazu zählen Rechtschreibung, Grammatik (Kongruenz, Kasus, Rektion, Verbformen, Modus) und ZEICHENSETZUNG/INTERPUNKTION (fehlende oder falsch gesetzte Kommas, Satzschlusszeichen, Apostroph, Gedankenstrich).'
     : ' Rechtschreibung, Grammatik und Zeichensetzung/Interpunktion prüft ein SEPARATER Pass – sie gehören NICHT in diese Antwort, auch nicht unter einem anderen Typ.';
-  const severityBlock = _isLocal ? '' : (fach ? _buildFachSeverityBlock(stilistischAktiv, objektivAktiv, stylisticCap) : `
+  const severityBlock = _isLocal ? '' : (fach ? _buildFachSeverityBlock(stilistischAktiv, objektivAktiv) : `
 SCHWERE-SCHWELLE (Anti-Pedanterie, Pflicht-Filter vor dem Aufnehmen ins «fehler»-Array):
 - Melde NUR Schwächen, die einem ernsthaften Leser spürbar ins Auge fallen oder das Lese-Erlebnis nachweislich beeinträchtigen.
 - Selbsttest pro Eintrag: «Würde ein professioneller Lektor diese Stelle in einem bezahlten Lektorat anstreichen?» Wenn die Antwort «vielleicht», «Geschmacksache» oder «nur am Rand» wäre → weglassen.
 - VERWORFEN-Kandidaten: minimal alternative Synonyme ohne klaren Gewinn, Mikro-Stilpräferenzen, ein einzelnes «sehr» / «ein bisschen» wenn der Satz sonst rund läuft, vollkommen idiomatische Wendungen, regional übliche Formulierungen, ironisch oder bewusst eingesetzte «Schwächen».
 - MECHANISCHE FEHLER UND KONSISTENZ-BEFUNDE unterliegen der Schwere-Schwelle UND der Mengen-Obergrenze NICHT – sie werden IMMER und VOLLSTÄNDIG gemeldet, egal wie viele es sind: ${objektivAktiv.join(', ')}.${mechDetail} Das sind objektive Fehler, keine Geschmacksfragen – nie als «vielleicht» / «Geschmacksache» / «nur am Rand» abtun, nie wegen einer Obergrenze streichen.
-- Die Schwere-Schwelle und die Mengen-Obergrenze gelten NUR für subjektive/stilistische Findings (${stilistischAktiv.join(', ')}). Dort gilt: lieber 5 starke, präzise Findings als 25 schwache. Wenn nach dem Selbsttest mehr als ${stylisticCap} solcher stilistischen Einträge übrig bleiben, hart priorisieren: nur die schwersten ${stylisticCap} behalten, restliche weglassen. Die Obergrenze ist kein Soll – weniger Einträge sind richtig, wenn der Text weniger hergibt. Die oben genannten objektiven Befunde zählen NICHT gegen dieses Limit und werden nie gestrichen.
+- Die Schwere-Schwelle und die Mengen-Obergrenze gelten NUR für subjektive/stilistische Findings (${stilistischAktiv.join(', ')}). Dort gilt: lieber 5 starke, präzise Findings als 25 schwache. Bleiben nach dem Selbsttest mehr solcher stilistischen Einträge übrig, als die MENGEN-OBERGRENZE (steht direkt vor dem Text) erlaubt, hart priorisieren: nur die schwersten behalten, restliche weglassen. Die Obergrenze ist kein Soll – weniger Einträge sind richtig, wenn der Text weniger hergibt. Die oben genannten objektiven Befunde zählen NICHT gegen dieses Limit und werden nie gestrichen.
 `);
+  // Die Zahl der Obergrenze steht NICHT im Schwere-Block, sondern hinter dem
+  // Regel-Korpus: sie hängt an der Textlänge (in Stücken je Stück), und alles vor
+  // ihr ist der gecachte gemeinsame Kopf aller Stück-Prompts
+  // (routes/jobs/lektorat-split.js#sharedHeadBlocks).
+  const capBlock = severityBlock ? `
+MENGEN-OBERGRENZE (subjektive/stilistische Findings, siehe SCHWERE-SCHWELLE): höchstens ${stylisticCap}. Bleiben mehr als ${stylisticCap} solcher stilistischen Einträge übrig, nur die schwersten ${stylisticCap} behalten. Objektive Befunde zählen nicht gegen diese Zahl.
+` : '';
 
   // Selbstkontroll-Pass: Sortierung + Schluss-Review. Hat bei Claude messbaren
   // Effekt; bei lokalen Modellen erhöht es Halluzinationsrisiko und wird
@@ -469,7 +476,7 @@ ${journal ? _buildJournalStilBlock(typen) : fach ? _buildFachStilBlock(typen) : 
 ${fach ? _buildFachWiederholungBlock(stopwords) : _buildWiederholungBlock(stopwords)}
 ${aktiv('schwaches_verb') ? _buildSchwacheVerbenBlock() : ''}
 ${_buildFuellwortBlock()}
-${spezialBlocks}${figurenBlock}${beziehungenBlock}${orteBlock}${weltBlock}${motivBlock}${belegBlock}${woerterbuchBlock}${nachrichtenBlock}${nachbarBlock}${schreibfrontBlock}
+${spezialBlocks}${figurenBlock}${beziehungenBlock}${orteBlock}${weltBlock}${motivBlock}${belegBlock}${woerterbuchBlock}${nachrichtenBlock}${capBlock}${nachbarBlock}${schreibfrontBlock}
 ${selbstkontrollBlock}
 <originaltext label="${textLabel.replace(/:\s*$/, '')}">
 ${text}

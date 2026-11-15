@@ -135,7 +135,9 @@ let _defaultLocale = 'de-CH';
  *  bleiben davon unberührt – dort soll die Kritik nicht durch Autorenstil-Imitation
  *  abgemildert werden.
  */
-function _buildLocalePrompts(localeConfig, globalErklaerungRule, buchKontext = '', autorenstilRule = '', localChatAddon = '', bookContextStr = '', stilprofil = '') {
+// `leseContextStr`: Buchkontext ohne Extraktions-Feldanweisungen (siehe _bookContextParts),
+// für Lektorat + Chats; ohne Angabe gleich `bookContextStr`.
+function _buildLocalePrompts(localeConfig, globalErklaerungRule, buchKontext = '', autorenstilRule = '', localChatAddon = '', bookContextStr = '', stilprofil = '', leseContextStr = bookContextStr) {
   const rules = localeConfig.baseRules || '';
   const rulesWithAutorenstil = autorenstilRule ? `${rules}\n\n${autorenstilRule}` : rules;
   const sp    = localeConfig.systemPrompts || {};
@@ -197,7 +199,7 @@ function _buildLocalePrompts(localeConfig, globalErklaerungRule, buchKontext = '
   const stilReference = stp
     ? `ETABLIERTES STILPROFIL DES AUTORS (Massstab für Stimmen-Treue: Passagen, die deutlich von diesem Stil abweichen oder generisch/fremd klingen, im Urteil benennen):\n${stp}`
     : '';
-  const lektoratCtx = [bookContextStr, stilImitate].filter(Boolean).join('\n\n');
+  const lektoratCtx = [leseContextStr, stilImitate].filter(Boolean).join('\n\n');
   const reviewCtx   = [bookContextStr, stilReference].filter(Boolean).join('\n\n');
   // Wie _aug, aber mit explizitem Kontext-String (statt dem geteilten bookContextStr).
   const _augCtx = (core, ctx) => ctx ? `${core}\n\n${ctx}` : core;
@@ -232,7 +234,7 @@ function _buildLocalePrompts(localeConfig, globalErklaerungRule, buchKontext = '
     // im Core eingebaut (buildSystemSynonym) — kein zusätzlicher Cache-Split nötig.
     SYSTEM_SYNONYM:              buildSystemSynonym(sp.synonym    || '', localeConfig.korrekturRegeln || '', buchKontext, stilImitate),
     // Chat-Prompts bleiben String (chat-builder konkateniert weitere Sektionen).
-    // lektoratCtx (= bookContextStr + Stilprofil-Imitate) wird hier inline
+    // lektoratCtx (= leseContextStr + Stilprofil-Imitate) wird hier inline
     // gemerged — kein Multi-Block-Split, weil der Builder darauf String erwartet.
     SYSTEM_CHAT:                 _augCtx(buildSystemNoJson(sp.chat        || '', rulesWithAutorenstil), lektoratCtx) + chatAddonSuffix,
     SYSTEM_BOOK_CHAT:            _augCtx(buildSystemNoJson(sp.buchchat    || '', rules), lektoratCtx) + chatAddonSuffix,
@@ -386,7 +388,12 @@ export function configureLocales(cfg) {
 // reale Zeitlinie, optional „Werk abgeschlossen"). Geteilt von
 // getLocalePromptsForBook und getResearchPromptContext — eine Quelle für den
 // Wortlaut der VORRANGIGEN ANGABEN.
-function _bookContextParts(localeKey, buchtyp, kontext, isFinished, hauptland, zeitlinieReal) {
+// `extraktion`: Hauptland und reale Zeitlinie tragen Feld-Anweisungen («land»-Feld,
+// datum_year/story_tag), die nur Extraktions-Prompts mit diesen Feldern betreffen.
+// Prompts ohne solche Felder (Lektorat, Abschnitts- und Buch-Chat) bekommen dieselben
+// Fakten ohne Feld-Anweisung — sonst steht im Lektorat «verankere Lebensereignisse mit
+// datum_year», was dort nichts bedeutet.
+function _bookContextParts(localeKey, buchtyp, kontext, isFinished, hauptland, zeitlinieReal, { extraktion = true } = {}) {
   // Buchspezifische Sektion separat sammeln — KEIN Inline-Merge in baseRules mehr.
   // _buildLocalePrompts splittet sie via _toCacheBlocks in einen eigenen Cache-Block,
   // damit der stabile SYSTEM-Core (Persona + Regeln + Schema) buchübergreifend
@@ -404,9 +411,13 @@ function _bookContextParts(localeKey, buchtyp, kontext, isFinished, hauptland, z
   if (landCode) {
     let landName = landCode.toUpperCase();
     try { landName = new Intl.DisplayNames([langCode], { type: 'region' }).of(landCode.toUpperCase()) || landName; } catch { /* Intl-Fallback: Code */ }
-    bookCtxParts.push(`HAUPT-SCHAUPLATZLAND: ${landName} (${landCode}). Sofern der Text keinen anderen Schauplatz-Ort belegt, sind Schauplätze in diesem Land verortet; nutze diesen Code als Default für das «land»-Feld von Orten.`);
+    bookCtxParts.push(extraktion
+      ? `HAUPT-SCHAUPLATZLAND: ${landName} (${landCode}). Sofern der Text keinen anderen Schauplatz-Ort belegt, sind Schauplätze in diesem Land verortet; nutze diesen Code als Default für das «land»-Feld von Orten.`
+      : `HAUPT-SCHAUPLATZLAND: ${landName}. Sofern der Text keinen anderen Schauplatz-Ort belegt, sind Schauplätze in diesem Land verortet.`);
   }
-  if (zeitlinieReal) {
+  if (zeitlinieReal && !extraktion) {
+    bookCtxParts.push('REALE ZEITLINIE: Dieses Buch spielt auf einem realen, kalendarischen Zeitstrahl (echte Jahreszahlen, keine rein erfundene Story-Zeit).');
+  } else if (zeitlinieReal) {
     bookCtxParts.push(`REALE ZEITLINIE: Dieses Buch spielt auf einem realen, kalendarischen Zeitstrahl (echte Jahreszahlen, keine rein erfundene Story-Zeit). Verankere Lebensereignisse deshalb so konkret wie möglich mit echten Jahreszahlen (datum_year) und nutze die Jahres-Inferenz aus dem Kontext (verankerte Jahreszahlen, Lebensspannen, Epoche) besonders konsequent statt dich auf relative Angaben zu beschränken. story_tag (relative Story-Tage) nur, wenn der Text keinerlei kalendarischen Anhaltspunkt bietet.`);
   }
   if (isFinished) {
@@ -432,12 +443,13 @@ export function getLocalePromptsForBook(localeKey, buchtyp, buchKontext, isFinis
   const langCode  = (localeKey || _defaultLocale).split('-')[0];
   const bookCtxParts = _bookContextParts(localeKey, buchtyp, kontext, isFinished, hauptland, zeitlinieReal);
   const bookContextStr = bookCtxParts.join('\n\n');
+  const leseContextStr = _bookContextParts(localeKey, buchtyp, kontext, isFinished, hauptland, zeitlinieReal, { extraktion: false }).join('\n\n');
 
   // buchKontext als soziogramm-Kontext weitergeben (figurenBasisRules / SYSTEM_KOMPLETT_EXTRAKTION).
   // autorenstilRule wird nur an Lektorat/Chat angehängt (siehe _buildLocalePrompts).
   const autorenstil = _autorenstilByLocale.get(localeKey) || _autorenstilByLocale.get(_defaultLocale) || '';
   const localChatAddon = _localChatAddonByLocale.get(localeKey) || _localChatAddonByLocale.get(_defaultLocale) || '';
-  return _buildLocalePrompts(rawLocale, _erklaerungRule, kontext, autorenstil, localChatAddon, bookContextStr, (stilprofil || '').trim());
+  return _buildLocalePrompts(rawLocale, _erklaerungRule, kontext, autorenstil, localChatAddon, bookContextStr, (stilprofil || '').trim(), leseContextStr);
 }
 
 /**

@@ -5,7 +5,8 @@
 // DB-Schreibzugriff), non-critical. Läuft auf dem Extraktions-Tier.
 const appSettings = require('../../../../lib/app-settings');
 const { updateJob, toSystemBlocks, retryOnTransientAi, settledAll } = require('../../shared');
-const { sampleChapters, coverageSampleSize, computeCoverageScore, buildBookSystemBlockText } = require('../utils');
+const { sampleChapters, coverageSampleSize, computeCoverageScore } = require('../utils');
+const { bookSystemBlock } = require('../book-text');
 const { komplettMaxTokens } = require('./tokens');
 
 // Gibt `{ score, erkannt, fehlend, missingFiguren, missingOrte, sampledChapters }` oder null.
@@ -24,7 +25,7 @@ async function runCoverageAudit(ctx, figurenNames, orteNames, { singlePass = fal
   const cap = komplettMaxTokens(ctx.effectiveProvider);
   const useBookBlock = singlePass && !!ctx.fullBookText;
   const system = useBookBlock
-    ? [{ text: buildBookSystemBlockText(bookName, ctx.pageContents.length, ctx.fullBookText), ttl: '1h', sharedPrefix: true },
+    ? [bookSystemBlock(bookName, ctx.pageContents.length, ctx.fullBookText),
       ...toSystemBlocks(sys.SYSTEM_KOMPLETT_FIGUREN_STAMM_BLOCKS, '1h')]
     : toSystemBlocks(sys.SYSTEM_KOMPLETT_EXTRAKTION_BLOCKS);
   const results = await settledAll(samples.map(s => () => retryOnTransientAi(() => call(jobId, tok,

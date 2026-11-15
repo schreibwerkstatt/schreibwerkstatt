@@ -6,7 +6,7 @@ import { buildPageChatWeltLines } from './blocks-welt.js';
 import { buildEditStatusBlock } from './edit-status-block.js';
 import { _obj, _str } from './schema-utils.js';
 import { SYSTEM_CHAT, SYSTEM_BOOK_CHAT } from './core.js';
-import { PAGE_CHAT_IDEEN_RULES, pageChatIdeenLines, pageChatIdeenAenderungRules, pageChatNachrichtenHinweis, buildBookTitlesBlock } from './page-chat.js';
+import { PAGE_CHAT_IDEEN_RULES, pageChatIdeenLines, pageChatIdeenAenderungRules, pageChatNachrichtenHinweis, buildBookTitlesBlock, buildCurrentTitleLine } from './page-chat.js';
 import { CHAT_TOOLS, toolMentions } from './chat-tools/index.js';
 
 /**
@@ -242,11 +242,14 @@ export function buildWeltfaktenBlock(welt, opts = {}) {
  */
 // Rückgabe: Array von System-Cache-Blöcken (für callAIChat → Claude separate
 // cache_control-Blöcke; lokale Provider flatten sie auf einen String).
-//   Block 1 (ttl '1h'): buch-stabiler Anteil (System + Figuren + Review) — ändert
-//     sich weder über die Turns derselben Seite noch beim Seitenwechsel innerhalb
-//     des Buchs. Der grosse SYSTEM_CHAT + die Figuren-JSON werden so über alle
-//     Seiten-Chats eines Buchs aus dem Cache gelesen.
-//   Block 2 (ttl '1h'): seiten-spezifischer Anteil (Seitenname/-inhalt + Ideen +
+//   Block 1 (ttl '1h'): kapitel-stabiler Anteil (System + Figuren des Kapitels +
+//     Review + Titelliste ohne Markierung) — ändert sich weder über die Turns derselben
+//     Seite noch beim Wechsel zu einem anderen Abschnitt desselben Kapitels. Der grosse
+//     SYSTEM_CHAT + die Figuren-JSON werden so über diese Seiten-Chats aus dem Cache
+//     gelesen. Nichts Abschnitts-Spezifisches hier hinein (auch keine Markierung des
+//     aktuellen Abschnitts) — das gehört in Block 2.
+//   Block 2 (ttl '1h'): seiten-spezifischer Anteil (Seitenname, Stellung in der
+//     Titelliste, Seiteninhalt + Ideen +
 //     Lektorat + JSON-Format-Trailer) — stabil über die Turns einer Seiten-Session,
 //     invalidiert beim Seitenwechsel oder wenn der Autor die Seite editiert. 1h statt
 //     5 min, weil zwischen zwei Fragen oft mehr als fünf Minuten liegen (Lesen,
@@ -269,11 +272,15 @@ export function buildChatSystemPrompt(pageName, pageText, figuren, review, syste
     }, null, 2));
   }
 
-  const titlesBlock = buildBookTitlesBlock(opts.bookTitles, opts.currentPageId ?? null);
+  // Ohne Markierung des aktuellen Abschnitts: Block 1 bleibt für alle Abschnitte
+  // gleich (Cache über Seitenwechsel); die Stellung steht in Block 2.
+  const titlesBlock = buildBookTitlesBlock(opts.bookTitles);
   if (titlesBlock) stable.push('', titlesBlock);
 
+  const titleLine = buildCurrentTitleLine(opts.bookTitles, opts.currentPageId ?? null);
   const page = [
     `Aktueller Abschnitt: «${pageName}»`,
+    ...(titleLine ? [titleLine] : []),
     '',
   ];
 

@@ -11,6 +11,7 @@ const { stripDiagramBlocks, stripTagsKeepPunctuation, summarizeTableBlocks, mark
 const { jobAbortControllers } = require('./state');
 const { updateJob, i18nError, fmtTok } = require('./jobs');
 const { createThinkPhase } = require('./think-phase');
+const { checkSharedPrefixCache } = require('./cache-break');
 
 // Transient-Klassifikator: Claude-Streams droppen gelegentlich mid-flight als
 // 'terminated' (Undici-Socket-Reset) oder werden vom Hard-Timeout (`AI_TIMEOUT`)
@@ -309,6 +310,7 @@ function summarizeCostByPhase(tok) {
       phase, calls: e.calls,
       tokensIn: e.tokensIn, tokensOut: e.tokensOut,
       cacheReadIn: e.cacheReadIn, cacheCreationIn: e.cacheCreationIn,
+      cacheBreaks: e.cacheBreaks || 0,
       usd: Math.round(e.usd * 100) / 100,
       seconds: Math.round(e.ms / 1000),
       models: e.models.slice(),
@@ -318,11 +320,18 @@ function summarizeCostByPhase(tok) {
   return { phases, totalUsd };
 }
 
-/** Einzeiler für das Job-Log: `extract 21 calls 512k↓ $12.40 (claude-sonnet-5) | …`. */
+/** Einzeiler für das Job-Log: `extract 21c 512K↓ cache w511K/r0 $12.40 (claude-sonnet-5) | …`.
+ *  `cache w…/r…` (Prompt-Cache geschrieben/gelesen) steht nur bei Buckets mit Cache-Verkehr;
+ *  ein Write weit über der Buchgrösse oder `!N Brüche` heisst: der geteilte Präfix trug nicht. */
 function formatCostByPhase(summary) {
   if (!summary) return '';
   return summary.phases
-    .map(p => `${p.phase} ${p.calls}c ${fmtTok(p.tokensOut)}↓ $${p.usd.toFixed(2)}${p.models.length ? ` (${p.models.join('+')})` : ''}`)
+    .map(p => {
+      const cache = (p.cacheCreationIn || p.cacheReadIn)
+        ? ` cache w${fmtTok(p.cacheCreationIn || 0)}/r${fmtTok(p.cacheReadIn || 0)}` : '';
+      const breaks = p.cacheBreaks ? ` !${p.cacheBreaks} Brüche` : '';
+      return `${p.phase} ${p.calls}c ${fmtTok(p.tokensOut)}↓${cache}${breaks} $${p.usd.toFixed(2)}${p.models.length ? ` (${p.models.join('+')})` : ''}`;
+    })
     .join(' | ');
 }
 
@@ -336,7 +345,11 @@ function formatCostByPhase(summary) {
 // tier: Per-Call-Claude-Tier — nackter Modellname ODER `{ model, effort, label }`
 //   (normalizeTier in lib/ai/shared.js). `label` klassifiziert den Call für die
 //   Kosten-Aufschlüsselung in `tok.byPhase` → job.result.costByPhase.
-async function aiCall(jobId, tok, prompt, system, fromPct, toPct, expectedChars = 3000, outputRatio = 0.2, maxTokens = null, provider = undefined, jsonSchema = null, tier = undefined) {
+// onStart: optionaler Hook, feuert einmal, sobald der Provider die Input-Tokens meldet
+//   (Claude: message_start = die Antwort streamt). Ab dann ist ein Cache-Eintrag dieses
+//   Calls lesbar — der Lektorat-Split schickt die übrigen Stücke erst danach los.
+// prompt: String oder (nur Claude) Content-Block-Array mit cache_control.
+async function aiCall(jobId, tok, prompt, system, fromPct, toPct, expectedChars = 3000, outputRatio = 0.2, maxTokens = null, provider = undefined, jsonSchema = null, tier = undefined, onStart = null) {
   let dynExpectedChars = expectedChars;
   let calibrated = false;
   // Eindeutige ID für diesen Call – wird in tok.inflight eingetragen wenn vorhanden
@@ -385,6 +398,7 @@ async function aiCall(jobId, tok, prompt, system, fromPct, toPct, expectedChars 
     if (thinking) setThinking(true);
     else if (think.active && chars > 0) setThinking(false);
     lastChars = chars;
+    if (onStart && tokIn > 0) { const fn = onStart; onStart = null; fn(); }
     if (!calibrated && tokIn > 0) {
       dynExpectedChars = Math.max(expectedChars, Math.round(tokIn * 4 * outputRatio));
       calibrated = true;
@@ -458,6 +472,11 @@ async function aiCall(jobId, tok, prompt, system, fromPct, toPct, expectedChars 
   _recordCallCost(tok, tier, effProvider, {
     tokensIn, tokensOut, cacheReadIn, cacheCreationIn, cacheCreation1hIn, genDurationMs,
   });
+  if (checkSharedPrefixCache(tok, system, { cacheReadIn, cacheCreationIn })) {
+    const label = normalizeTier(tier).label || 'other';
+    if (tok.byPhase?.[label]) tok.byPhase[label].cacheBreaks = (tok.byPhase[label].cacheBreaks || 0) + 1;
+    logger.warn(`Cache-Bruch im geteilten 1h-Präfix (${label}): ${fmtTok(cacheCreationIn)} neu geschrieben, ${fmtTok(cacheReadIn)} gelesen — derselbe Block lief in diesem Job schon.`);
+  }
   const liveTps = tok.ms > 0 ? tok.out / (tok.ms / 1000) : null;
   const finalUpdates = {
     tokensIn: tok.in, tokensOut: tok.out,

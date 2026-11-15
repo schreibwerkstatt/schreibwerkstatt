@@ -31,12 +31,18 @@ export function buildObjektivLektoratPrompt(text, {
   hatBelege = false,
   hatNachrichten = false,
   woerterbuch = [],
+  // Sprache der Korrekturvorschläge (de-CH: ss statt ß, en-GB: British spelling) —
+  // gilt gerade hier, wo Rechtschreibung korrigiert wird.
+  korrekturRegeln = '',
   langCode = 'de',
   locale = null,
   buchtyp = null,
   textsorte = null,
   // Werk nicht abgeschlossen, hinter dem Abschnitt folgt kein Text (siehe
   // prompts/lektorat-nachbar.js): der letzte Satz kann mitten im Schreiben enden.
+  // Steht im Prompt hinter dem Regel-Korpus: in Stücken trägt nur das letzte Stück
+  // die Schreibstelle, und alles davor ist der gecachte Kopf aller Stücke
+  // (routes/jobs/lektorat-split.js#sharedHeadBlocks).
   schreibfront = false,
 } = {}) {
   const en = langCode === 'en';
@@ -162,7 +168,7 @@ SELBSTKONTROLLE (vor dem Antworten):
   return `<aufgabe>
 ${aufgabe}
 </aufgabe>
-${metaBlock}${schreibfrontBlock}${puritaetBlock}
+${metaBlock}${puritaetBlock}${korrekturRegeln ? `\n${korrekturRegeln}\n` : ''}
 ${dedupBlock}
 <output_format>
 ${schemaBlock}
@@ -171,7 +177,7 @@ ${_buildRechtschreibungBlock(langCode)}
 ${_buildGrammatikBlock(langCode)}
 ${hatKonjunktiv ? _buildKonjunktivBlock(profil, langCode) : ''}
 ${hatDialogformat ? _buildDialogformatBlock(langCode, { schlank: !erzaehlend, locale }) : ''}
-${figurenkonsistenzBlock}${figurenBlock}${beziehungenBlock}${orteBlock}${belegBlock}${woerterbuchBlock}${nachrichtenBlock}
+${figurenkonsistenzBlock}${figurenBlock}${beziehungenBlock}${orteBlock}${belegBlock}${woerterbuchBlock}${nachrichtenBlock}${schreibfrontBlock}
 ${selbstkontroll}
 <originaltext label="${en ? 'Original text' : 'Originaltext'}">
 ${text}

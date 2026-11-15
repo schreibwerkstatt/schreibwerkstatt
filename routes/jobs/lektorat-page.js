@@ -333,6 +333,8 @@ async function checkOnePage(run, {
       jobId, tok, text, local, prompts: run.prompts, system: run.system,
       buchtyp: bookSettings?.buchtyp || null,
       fromPct, toPct, callLimit,
+      // Prompt-Caching ist eine Fähigkeit der Anthropic-API, keine der Provider-Klasse.
+      cacheBlocks: run.effectiveProvider === 'claude',
       promptOpts: {
         stopwords: run.stopwords,
         erklaerungRule: run.erklaerungRule,

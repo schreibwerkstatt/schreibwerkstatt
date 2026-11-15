@@ -19,13 +19,14 @@ const bookAccess = require('../../../db/book-access');
 const {
   makeJobLogger, updateJob, completeJob, failJob, i18nError, i18nErrText, contentHttpError,
   getPrompts, getBookPrompts,
-  loadOrderedBookContents, idMapsFromContents, loadPageContents, groupByChapter, buildSinglePassBookText, cleanPageTextForAi,
+  loadOrderedBookContents, idMapsFromContents, loadPageContents,
   BATCH_SIZE, jobAbortControllers,
   fmtTok, tps,
   createJob, enqueueJob, findActiveJobId,
   summarizeCostByPhase, formatCostByPhase,
 } = require('../shared');
 const { makeKomplettCall } = require('./call');
+const { prepareBookText } = require('./book-text');
 const { providerClass, maxParallelCalls, resolveProvider } = require('../../../lib/ai');
 const contentStore = require('../../../lib/content-store');
 const appSettings = require('../../../lib/app-settings');
@@ -163,25 +164,10 @@ async function runKomplettAnalyseJob(jobId, bookId, bookName, userEmail, provide
     // Kapitel-Umbenennung invalidiert den Multi-Pass-Delta-Cache über den Kapitelnamen
     // im Chunk-pages_sig (phases.js) — keine separate Invalidierungs-Funktion mehr nötig.
 
-    // Buchtext-Preprocessing (claude-only): unbekannte HTML-Entities (&nbsp;,
-    // &mdash;, …), Zero-Width-Zeichen, Soft Hyphen, NBSP, doppelte Spaces raus.
-    // Wirkt auf pageContents → schlägt automatisch in fullBookText UND
-    // Multi-Pass-Chunks durch (beide werden aus pageContents gebaut).
-    // P1 und P8 nutzen identischen Buchtext → 1h-Cache-Read in P8 bleibt intakt.
-    if (isCloudModel) {
-      let savedChars = 0;
-      for (const p of pageContents) {
-        const before = p.text.length;
-        p.text = cleanPageTextForAi(p.text);
-        savedChars += before - p.text.length;
-      }
-      if (savedChars > 0) log.info(`Buchtext-Preprocessing ${savedChars} Zeichen entfernt (Entities/Whitespace/ZWS).`);
-    }
-
-    const totalChars = pageContents.reduce((s, p) => s + p.text.length, 0);
-    const { groupOrder, groups } = groupByChapter(pageContents);
-    // Einmal bauen, wiederverwenden (Phase 1 Single-Pass, Phase 3b, P8 Kontinuität)
-    const fullBookText = buildSinglePassBookText(groups, groupOrder);
+    // Buchtext-Aufbereitung + Gruppierung: SSoT ./book-text.js (geteilt mit Kontinuität und
+    // Erzählprofil, damit alle denselben 1h-Buchblock senden). Mutiert pageContents, wirkt
+    // also auch auf die Multi-Pass-Chunks. fullBookText: Phase 1 Single-Pass, P3b, Coverage.
+    const { totalChars, groupOrder, groups, fullBookText } = prepareBookText(pageContents, { cloud: isCloudModel, log });
     // Single/Multi-Pass-Signal für die Frontend-Phasenanzeige: Im Single-Pass wird
     // Phase 3b übersprungen, die UI blendet den entsprechenden Eintrag aus. Kennzahl ist die
     // EXTRAKTIONS-Schwelle (sie bestimmt chapterFiguren.length > 1 → ob P2/P3/P3b laufen),

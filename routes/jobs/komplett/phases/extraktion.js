@@ -11,9 +11,8 @@ const { SP_TRUNC_CP_TYPE, chooseExtractChunks, tooDenseChunkLimit } = require('.
 const {
   i18nError, i18nErrText, settledAll, retryOnTransientAi, splitGroupsIntoChunks, updateJob, toSystemBlocks,
 } = require('../../shared');
-const {
-  buildBookSystemBlockText, buildBookPagesSig,
-} = require('../utils');
+const { buildBookPagesSig } = require('../utils');
+const { bookSystemBlock: buildBookBlock } = require('../book-text');
 const { mergeBeziehungenIntoFiguren, _normalizeName } = require('../figuren-merge');
 const appSettings = require('../../../../lib/app-settings');
 const { getContextConfigFor, providerClass } = require('../../../../lib/ai');
@@ -336,7 +335,7 @@ async function extractSinglePassSplit(ctx, { claudeExtractCap }) {
 
   // Fakten als eigener Call (C): volle Modell-Aufmerksamkeit auf dichte Faktenerfassung
   // statt im 4-Array-Orte-Pass um Output-Budget zu konkurrieren.
-  const bookSystemBlock = { text: buildBookSystemBlockText(bookName, pageContents.length, fullBookText), ttl: '1h', sharedPrefix: true };
+  const bookSystemBlock = buildBookBlock(bookName, pageContents.length, fullBookText);
   const [stammRes, orteRes, faktenRes] = await settledAll([
     () => retryOnTransientAi(() => call(jobId, tok,
       prompts.buildExtraktionFigurenStammPrompt('Gesamtbuch', bookName, pageContents.length, null, ctx.katalogBlock),

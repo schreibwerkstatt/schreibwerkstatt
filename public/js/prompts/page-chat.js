@@ -102,20 +102,22 @@ export function pageChatIdeenAenderungRules(stages, { hatIdeen = true } = {}) {
 // Modell leitet bei Titelfragen das Muster der übrigen Titel ab (Satzanfang,
 // Form, Länge, Ton) und meidet Doppelungen. Über dem Deckel fallen zuerst die
 // Kapitelpfade weg, danach wird ausgewiesen gekürzt.
+// Der Block ist für alle Abschnitte eines Buchs byte-gleich — den aktuellen
+// Abschnitt markiert er bewusst NICHT, sonst wäre Block 1 je Abschnitt ein anderer
+// Cache-Präfix und ein Seitenwechsel schriebe ihn ganz neu. Wo der aktuelle
+// Abschnitt steht, sagt buildCurrentTitleLine im seiten-spezifischen Block 2.
 const TITLES_MAX_CHARS = 6000;
 
 /**
  * @param {Array<{id:number, name:string, chapter?:string}>} titles  Lesereihenfolge
- * @param {number|null} currentPageId
  * @returns {string} Block oder '' (weniger als zwei Abschnitte)
  */
-export function buildBookTitlesBlock(titles, currentPageId, { maxChars = TITLES_MAX_CHARS } = {}) {
-  const list = (Array.isArray(titles) ? titles : []).filter(t => t && String(t.name || '').trim());
+export function buildBookTitlesBlock(titles, { maxChars = TITLES_MAX_CHARS } = {}) {
+  const list = _titleList(titles);
   if (list.length < 2) return '';
   const line = (t, withChapter) => {
-    const mark = t.id === currentPageId ? ' ← dieser Abschnitt' : '';
     const ch = withChapter && t.chapter ? `[${_clip(t.chapter, 60)}] ` : '';
-    return `- ${ch}${_clip(t.name, 120)}${mark}`;
+    return `- ${ch}${_clip(t.name, 120)}`;
   };
   let lines = list.map(t => line(t, true));
   if (lines.join('\n').length > maxChars) lines = list.map(t => line(t, false));
@@ -128,6 +130,27 @@ export function buildBookTitlesBlock(titles, currentPageId, { maxChars = TITLES_
     '',
     'Hinweis Titel: Fragt der Autor nach einem Titel, einer Überschrift oder Headline, erkenne zuerst das Muster der bestehenden Titel (gemeinsamer Satzanfang oder Satzbau, Länge, Ton, Sprache) und halte dich daran, sofern der Autor nichts anderes verlangt. Jede Variante zeigt konkret, worum es in DIESEM Abschnitt geht, statt allgemein zu bleiben, und verrät die Pointe nicht. Schlage keinen Titel vor, der einem anderen Abschnittstitel gleicht oder ihm sehr ähnelt; weise auf solche Doppelungen unter den bestehenden Titeln hin, wenn sie den aktuellen Abschnitt betreffen.',
   ].join('\n');
+}
+
+/**
+ * Stellung des aktuellen Abschnitts in der Titelliste (Block 2): Nummer, Kapitel und
+ * Nachbarn — eindeutig auch bei gleichnamigen Abschnitten.
+ * @returns {string} Zeile oder '' (keine Titelliste / Abschnitt nicht darin)
+ */
+export function buildCurrentTitleLine(titles, currentPageId) {
+  const list = _titleList(titles);
+  if (list.length < 2) return '';
+  const i = list.findIndex(t => t.id === currentPageId);
+  if (i < 0) return '';
+  const t = list[i];
+  const ch = t.chapter ? `, Kapitel ${_clip(t.chapter, 60)}` : '';
+  const prev = i > 0 ? `nach «${_clip(list[i - 1].name, 120)}»` : 'erster Abschnitt';
+  const next = i < list.length - 1 ? `vor «${_clip(list[i + 1].name, 120)}»` : 'letzter Abschnitt';
+  return `Stellung in der Titelliste: Nr. ${i + 1} von ${list.length}${ch}; ${prev}, ${next}.`;
+}
+
+function _titleList(titles) {
+  return (Array.isArray(titles) ? titles : []).filter(t => t && String(t.name || '').trim());
 }
 
 /** Normalform für den Titel-Vergleich: Kleinschrift, ohne Satzzeichen/Anführungszeichen. */

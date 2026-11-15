@@ -90,10 +90,12 @@ function _fitMessagesToBudget(messages, estimate, budgetTokens, charsPerToken) {
 
 // Request-Form des Synthese-Turns. Die gespeicherte Historie bleibt unangetastet;
 // nur was an die API geht, wird angepasst:
-// - Ein `server_tool_use` ohne zugehöriges `web_search_tool_result` im selben Turn
-//   (pause_turn, danach Web-Deckel) fällt weg: das Server-Werkzeug setzt in der
-//   Synthese nicht fort, ein offener Aufruf wäre ein ungültiger Verlauf.
-// - Weicht der Präfix vom Original ab (Server-Werkzeuge entfernt, Ergebnisse
+// - Ein `server_tool_use` ohne zugehöriges Ergebnis (`web_search_tool_result`,
+//   `code_execution_tool_result` der dynamisch filternden Suche, allgemein ein
+//   `*_tool_result` mit dieser `tool_use_id`) im selben Turn (pause_turn, danach
+//   Web-Deckel) fällt weg: das Server-Werkzeug setzt in der Synthese nicht fort, ein
+//   offener Aufruf wäre ein ungültiger Verlauf.
+// - Weicht der Präfix vom Original ab (Server-Werkzeuge aus der Liste entfernt, Ergebnisse
 //   gekürzt, offener Aufruf entfernt), fallen ALLE thinking/redacted_thinking-
 //   Blöcke weg. Die API bindet jeden zurückgespielten Denkblock an den byte-
 //   gleichen Präfix (System, Werkzeuge, alle Nachrichten davor); ein geänderter
@@ -111,7 +113,9 @@ function _synthesisRequestMessages(messages, { edited = false } = {}) {
   let removedOpen = 0;
   const step1 = messages.map((m) => {
     if (m?.role !== 'assistant' || !Array.isArray(m.content)) return m;
-    const answered = new Set(m.content.filter(b => b?.type === 'web_search_tool_result').map(b => b.tool_use_id));
+    const answered = new Set(m.content
+      .filter(b => typeof b?.type === 'string' && b.type.endsWith('_tool_result') && b.tool_use_id)
+      .map(b => b.tool_use_id));
     const content = m.content.filter((b) => {
       if (b?.type === 'server_tool_use' && !answered.has(b.id)) { removedOpen++; return false; }
       return true;
@@ -174,6 +178,29 @@ function isServerTool(t) {
   return !!t && typeof t.type === 'string' && t.type !== 'custom';
 }
 
+// Werkzeuge des Synthese-Turns: serverseitige (Anthropic-`web_search`) darf er nicht
+// mehr nutzen, sonst sucht die API weiter und der Web-Such-Deckel hielte nicht.
+// `canRemove` (lib/ai#providerSupportsToolRemoval): die Liste bleibt gleich — sie steht
+// vorn im Cache-Präfix, und Denkblöcke sind an sie gebunden — und eine
+// `role: 'system'`-Nachricht mit `tool_removal`-Blöcken zieht die Server-Werkzeuge
+// zurück. Sonst die verkürzte Liste (ein Cache-Fehlschlag, Denkblöcke fallen weg).
+function synthesisToolPlan(tools, canRemove) {
+  const server = tools.filter(isServerTool);
+  if (!server.length) return { synthTools: tools, removalMessage: null };
+  if (!canRemove) return { synthTools: tools.filter(t => !isServerTool(t)), removalMessage: null };
+  return {
+    synthTools: tools,
+    removalMessage: { role: 'system', content: server.map(t => ({ type: 'tool_removal', tool: { type: 'tool_reference', name: t.name } })) },
+  };
+}
+
+// Nachricht anhängen, ein tool_removal bleibt dahinter: die API verlangt es als letzte
+// Nachricht oder unmittelbar vor einer Assistant-Antwort.
+function appendBeforeRemoval(messages, msg, removalMessage) {
+  if (!removalMessage) return [...messages, msg];
+  return [...messages.filter(m => m !== removalMessage), msg, removalMessage];
+}
+
 // Effort eines agentischen Chats (`ai.claude.effort.<chat>`) in den Job-Bag legen.
 // Nur Claude; ein schon gesetzter Claude-Bag (Buch-Chat-Overrides: Modell, Fenster)
 // bleibt erhalten und bekommt nur das Effort-Feld dazu.
@@ -188,5 +215,5 @@ function applyChatEffort(provider, settingKey) {
 
 module.exports = {
   _defaultModelFor, _estimateTokens, _fitMessagesToBudget, _synthesisError, _skipped, applyChatEffort, isServerTool,
-  _synthesisRequestMessages,
+  _synthesisRequestMessages, synthesisToolPlan, appendBeforeRemoval,
 };

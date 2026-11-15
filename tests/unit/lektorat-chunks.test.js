@@ -28,9 +28,17 @@ const shared = require('../../routes/jobs/shared');
 const calls = [];
 let active = 0;
 let maxActive = 0;
-shared.aiCall = async (jobId, tok, prompt, system, fromPct, toPct, est, temp, maxTokens, _x, schema) => {
+const events = [];
+shared.aiCall = async (jobId, tok, rawPrompt, system, fromPct, toPct, est, temp, maxTokens, _x, schema, _tier, onStart) => {
   active++; maxActive = Math.max(maxActive, active);
-  calls.push({ prompt, schema });
+  // Claude-Cache-Form: Content-Blöcke, aneinandergehängt = der Prompt.
+  const prompt = Array.isArray(rawPrompt) ? rawPrompt.map(b => b.text).join('') : rawPrompt;
+  const id = calls.length;
+  calls.push({ prompt, rawPrompt, schema });
+  events.push(['launch', id]);
+  await new Promise(r => setTimeout(r, 2));
+  events.push(['start', id]);
+  onStart?.();
   await new Promise(r => setTimeout(r, 5));
   active--;
   const props = schema?.properties || {};
@@ -151,4 +159,87 @@ test('lektoratAnalyze unter der Schwelle: unverändert zwei Calls, Bewertung aus
   assert.equal(calls.length, 2);
   assert.ok(calls.some(c => c.schema.properties.szenen), 'Stil-Pass trägt die Bewertung');
   assert.ok(Array.isArray(result.fehler));
+});
+
+test('lektoratAnalyze in Stücken mit Claude-Cache: gemeinsamer Kopf je Pass, gestaffelter Start', async () => {
+  const p = await prompts();
+  appSettings.set('ai.lektorat_split', true);
+  appSettings.set('ai.lektorat_chunk_chars', 10000);
+  const text = longText(30);
+  const chunks = chunkText(text);
+  calls.length = 0; events.length = 0;
+  await lektoratAnalyze({
+    jobId: null, tok: {}, text, local: false, prompts: p, system: 'SYS', buchtyp: 'roman',
+    fromPct: null, toPct: null, cacheBlocks: true,
+    promptOpts: { langCode: 'de', locale: 'de-CH', figuren: [], orte: [], previousExcerpt: 'VORSEITE', nextExcerpt: 'NACHSEITE', schreibfront: true },
+  });
+  assert.equal(calls.length, chunks.length * 2 + 1);
+  const passes = {
+    objektiv: calls.filter(c => c.schema.properties.fehler && !/Bewerte|STILISTISCHE/.test(c.prompt)),
+    stil: calls.filter(c => c.schema.properties.fehler && /Bewerte|STILISTISCHE/.test(c.prompt)),
+  };
+  for (const [name, list] of Object.entries(passes)) {
+    assert.equal(list.length, chunks.length, name);
+    const heads = list.map(c => c.rawPrompt[0]);
+    for (const c of list) {
+      assert.ok(Array.isArray(c.rawPrompt) && c.rawPrompt.length === 2, `${name}: Kopf + Rest`);
+      assert.deepEqual(c.rawPrompt[0].cache_control, { type: 'ephemeral' });
+      assert.equal(c.rawPrompt[1].cache_control, undefined, `${name}: Rest ohne Breakpoint`);
+    }
+    assert.ok(heads.every(h => h.text === heads[0].text), `${name}: Kopf in allen Stücken byte-gleich`);
+    assert.ok(heads[0].text.length > 5000, `${name}: Kopf trägt den Regel-Korpus (${heads[0].text.length})`);
+    assert.ok(!heads[0].text.includes('SCHREIBSTELLE') && !heads[0].text.includes('VORSEITE'), `${name}: Variables bleibt ausserhalb`);
+    // Gestaffelt: erst ein Stück, die übrigen erst nach dessen Stream-Start.
+    const ids = list.map(c => calls.indexOf(c));
+    const firstStart = events.findIndex(([k, id]) => k === 'start' && id === ids[0]);
+    for (const id of ids.slice(1)) {
+      assert.ok(events.findIndex(([k, i]) => k === 'launch' && i === id) > firstStart, `${name}: Stück ${id} vor dem Erst-Start gestartet`);
+    }
+  }
+  // Schreibstelle steht im Objektiv-Pass nur im letzten Stück, hinter dem Kopf.
+  assert.equal(passes.objektiv.filter(c => c.prompt.includes('SCHREIBSTELLE')).length, 1);
+  // Bewertung: ein einzelner Call, bleibt String.
+  assert.equal(typeof calls.find(c => !c.schema.properties.fehler).rawPrompt, 'string');
+});
+
+test('sharedHeadBlocks: Präfix bis Zeilenende, zu kurz oder einzeln bleibt String', () => {
+  const { sharedHeadBlocks } = require('../../routes/jobs/lektorat-split');
+  const head = 'Regel\n'.repeat(500);
+  const out = sharedHeadBlocks([head + 'Alpha beta', head + 'Alpaka']);
+  assert.equal(out[0][0].text, head, 'Schnitt am letzten Zeilenende, nicht mitten im gemeinsamen «Alp»');
+  assert.equal(out[0].map(b => b.text).join(''), head + 'Alpha beta');
+  assert.equal(out[1][1].text, 'Alpaka');
+  assert.deepEqual(sharedHeadBlocks(['kurz\na', 'kurz\nb']), ['kurz\na', 'kurz\nb']);
+  assert.deepEqual(sharedHeadBlocks([head + 'x']), [head + 'x']);
+});
+
+test('staggered: scheitert der erste vor dem Start, starten die übrigen nie', async () => {
+  const { staggered } = require('../../routes/jobs/lektorat-split');
+  let launched = 0;
+  const ps = staggered([
+    async () => { throw new Error('kaputt'); },
+    async () => { launched++; },
+  ]);
+  await assert.rejects(Promise.all(ps), /kaputt/);
+  await new Promise(r => setTimeout(r, 5));
+  assert.equal(launched, 0);
+});
+
+test('Stück mit Riesenabsatz (eigene Stil-Obergrenze) bricht den gemeinsamen Kopf nicht', async () => {
+  const p = await prompts();
+  appSettings.set('ai.lektorat_split', true);
+  appSettings.set('ai.lektorat_chunk_chars', 10000);
+  const giant = 'Riese beginnt hier. ' + 'Ein langer Satz ohne Absatz. '.repeat(500).trim();
+  const text = [longText(8), giant, longText(8).replace(/Absatz(\d+)/g, 'Teil$1')].join('\n\n');
+  calls.length = 0; events.length = 0;
+  await lektoratAnalyze({
+    jobId: null, tok: {}, text, local: false, prompts: p, system: 'SYS', buchtyp: 'roman',
+    fromPct: null, toPct: null, cacheBlocks: true,
+    promptOpts: { langCode: 'de', locale: 'de-CH', figuren: [], orte: [] },
+  });
+  const stil = calls.filter(c => c.schema.properties.fehler && /STILISTISCHE/.test(c.prompt));
+  const caps = new Set(stil.map(c => /MENGEN-OBERGRENZE[^:]*: höchstens (\d+)/.exec(c.prompt)[1]));
+  assert.ok(caps.size > 1, `Obergrenzen verschieden: ${[...caps]}`);
+  assert.ok(stil.every(c => Array.isArray(c.rawPrompt) && c.rawPrompt[0].text === stil[0].rawPrompt[0].text));
+  assert.ok(stil[0].rawPrompt[0].text.length > 20000, `Kopf trägt den Regel-Korpus (${stil[0].rawPrompt[0].text.length})`);
 });

@@ -319,7 +319,10 @@
 
 /* ── Mobile: gestapelt ────────────────────────────────────────────────── */
 @media (max-width: 959.98px) {
-  .motiv-layout { grid-template-columns: 1fr; }
+  /* minmax(0, …) statt nacktem `1fr`: dessen Minimum ist min-content, und das
+     breiteste Kind (Baum-Zeilen, vis-Canvas) zoege die Spalte sonst über den
+     Viewport hinaus — Graph und Panel stünden rechts über. */
+  .motiv-layout { grid-template-columns: minmax(0, 1fr); }
   .motiv-panel-handle { display: none; }
   .motiv-graph-container { height: clamp(300px, 60vh, 480px); }
   /* Gestapelt scrollt die SEITE, nicht das Panel — ein eigener Scrollport waere

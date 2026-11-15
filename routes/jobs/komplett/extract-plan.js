@@ -16,12 +16,13 @@ const { runWithContext, setContext } = require('../../../lib/log-context');
 const { providerClass, resolveProvider } = require('../../../lib/ai');
 const {
   chunkLimitsFor, resolveExtractSinglePassLimit, splitGroupsIntoChunks, pageSigSuffix,
-  getPrompts, getBookPrompts, groupByChapter, cleanPageTextForAi,
+  getPrompts, getBookPrompts,
 } = require('../shared');
 const { loadCheckpoint, loadChapterExtractCache, getBookSettings, countExtractCacheForVersion } = require('../../../db/schema');
 const { komplettMaxTokens } = require('./phases/tokens');
 const { extractCacheBase } = require('./signatures');
 const { buildBookPagesSig, bookSettingsSigPart } = require('./utils');
+const { prepareBookText } = require('./book-text');
 const { COST_LABEL } = require('./cost-labels');
 const { _komplettAiOverrides } = require('./job-shared');
 
@@ -159,11 +160,9 @@ async function forecastExtractCache(bookId, userEmail, contents) {
   const email = userEmail || null;
   return withKomplettContext(bookIdInt, email, async (effectiveProvider) => {
     const isCloudModel = providerClass(effectiveProvider) === 'cloud';
-    const pageContents = isCloudModel
-      ? contents.map(p => ({ ...p, text: cleanPageTextForAi(p.text) }))
-      : contents;
-    const totalChars = pageContents.reduce((s, p) => s + p.text.length, 0);
-    const { groupOrder, groups } = groupByChapter(pageContents);
+    // Dieselbe Aufbereitung wie der Job (book-text.js), auf Kopien: die Prognose verändert nichts.
+    const pageContents = contents.map(p => ({ ...p }));
+    const { totalChars, groupOrder, groups } = prepareBookText(pageContents, { cloud: isCloudModel });
     const limits = resolveExtractLimits(effectiveProvider);
     const flags = resolveExtractFlags(isCloudModel);
     const extractTier = buildExtractTier(effectiveProvider);

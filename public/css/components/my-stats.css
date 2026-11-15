@@ -391,7 +391,11 @@
    Breakpoint + gleiche (0,2,0)-Spezifität wie die Desktop-Compact-Regel oben,
    damit sie diese auf Mobile überstimmt (sonst bliebe 12px → iOS-Zoom). */
 @media (max-width: 768px) {
-  .mystats-range-custom .mystats-date-input { font-size: var(--font-size-reading); }
+  /* Zwei Datumsfelder in Lese-Schriftgrad sind zusammen breiter als ein Handy:
+     die Zeile nimmt die volle Breite, die Felder teilen sie sich und dürfen
+     unter ihre Eigenbreite schrumpfen; der Zurücksetzen-Knopf bricht um. */
+  .mystats-range-custom { flex: 1 1 100%; flex-wrap: wrap; min-width: 0; }
+  .mystats-range-custom .mystats-date-input { font-size: var(--font-size-reading); flex: 1 1 0; min-width: 0; }
 }
 
 @media (max-width: 600px) {

@@ -3,7 +3,8 @@
 const { addFigurenBeziehungen, saveZeitstrahlEvents } = require('../../../../db/schema');
 const { listFigureEventsForTimeline } = require('../../../../db/zeitstrahl');
 const { i18nError, i18nErrText, updateJob, toSystemBlocks } = require('../../shared');
-const { buildBookSystemBlockText, consolidationFitsCap } = require('../utils');
+const { consolidationFitsCap } = require('../utils');
+const { bookSystemBlock: buildBookBlock } = require('../book-text');
 const { komplettMaxTokens } = require('./tokens');
 const { providerClass, getContextConfigFor } = require('../../../../lib/ai');
 const appSettings = require('../../../../lib/app-settings');
@@ -34,7 +35,7 @@ async function runPhase3b(ctx, figuren) {
   // schreibt ihn, Erzählprofil und Kontinuität lesen ihn (gleiches Tier, kein Schema). Billiger als ein
   // ungecachter Auszug und vollständiger.
   if (providerClass(effectiveProvider) === 'cloud' && fullBookText && fullBookText.length <= singlePassLimit) {
-    const bookSystemBlock = { text: buildBookSystemBlockText(bookName, pageContents.length, fullBookText), ttl: '1h', sharedPrefix: true };
+    const bookSystemBlock = buildBookBlock(bookName, pageContents.length, fullBookText);
     log.info(`Phase 3b – ganzes Buch (${fullBookText.length} Zeichen) als gecachter Buchblock.`);
     return _runPhase3bCall(ctx, figuren, null, [bookSystemBlock, ...toSystemBlocks(sys.SYSTEM_FIGUREN_BLOCKS, '1h')]);
   }

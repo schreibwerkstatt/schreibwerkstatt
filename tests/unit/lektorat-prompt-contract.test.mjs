@@ -382,6 +382,16 @@ test('Stil-Obergrenze im Prompt folgt stylisticCap (narrativ + Fach, Kombi + Sti
   const fach = prompts.buildLektoratPrompt(SAMPLE, { langCode: 'de', buchtyp: 'sachbuch', stylisticCap: 7 });
   assert.match(fach, /nur die schwersten 7 behalten/);
   assert.match(prompts.buildLektoratPrompt(SAMPLE, { langCode: 'de' }), /nur die schwersten 10 behalten/);
+  // Die Zahl steht hinter dem Regel-Korpus: zwei Stück-Prompts mit verschiedener
+  // Obergrenze teilen den ganzen Kopf bis dorthin (Prompt-Caching der Stücke).
+  for (const buchtyp of ['roman', 'sachbuch']) {
+    const a = prompts.buildStilLektoratPrompt(SAMPLE, { langCode: 'de', buchtyp, stylisticCap: 10 });
+    const b = prompts.buildStilLektoratPrompt(SAMPLE, { langCode: 'de', buchtyp, stylisticCap: 14 });
+    const cut = a.indexOf('\nMENGEN-OBERGRENZE');
+    assert.ok(cut > a.indexOf('SCHWERE-SCHWELLE') && cut > a.indexOf('</output_format>'), buchtyp);
+    assert.equal(a.slice(0, cut), b.slice(0, cut), `${buchtyp}: Kopf unabhängig von der Obergrenze`);
+    assert.doesNotMatch(a.slice(0, cut), /\b10\b.*behalten/, `${buchtyp}: keine Zahl im Kopf`);
+  }
 });
 
 // Welt-Fakten (Typen «weltfakt»/«soziolekt»): Kontext und Regeln nur, wenn Fakten
@@ -409,4 +419,15 @@ test('Welt-Fakten: Kontext + Regeln nur mit Fakten, nie lokal', () => {
   prompts.configurePrompts(cfg, 'claude');
   const sach = prompts.buildLektoratPrompt(SAMPLE, { langCode: 'de', buchtyp: 'sachbuch', weltfakten: [{ subjekt: 'Fluss', fakt: 'x' }] });
   assert.ok(!sach.includes('Welt-Fakt'));
+});
+
+// Der Objektiv-Pass korrigiert Rechtschreibung — die Korrektur-Sprache der Locale
+// (de-CH ss, en-GB British spelling) muss dort stehen, nicht nur im Stil-Pass.
+test('Objektiv-Pass trägt die Korrektur-Sprache der Locale', () => {
+  prompts.configurePrompts(cfg, 'claude');
+  const regel = 'KORREKTUR-SPRACHE: nur British spelling.';
+  const p = prompts.buildObjektivLektoratPrompt(SAMPLE, { langCode: 'en', korrekturRegeln: regel });
+  assert.ok(p.includes(regel));
+  assert.ok(p.indexOf(regel) < p.indexOf('<originaltext'));
+  assert.ok(!prompts.buildObjektivLektoratPrompt(SAMPLE, { langCode: 'en' }).includes('KORREKTUR-SPRACHE'));
 });
