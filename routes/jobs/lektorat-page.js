@@ -54,6 +54,16 @@ const _prevPageCheckStmt = db.prepare(`
    ORDER BY checked_at DESC, id DESC
    LIMIT 1
 `);
+// Frühere Läufe eines History-Eintrags mit Übernahmen (für «früher abgelehnt»):
+// alle entschiedenen Checks derselben Seite und desselben Users vor dem gegebenen.
+const _decidedPrevChecksStmt = db.prepare(`
+  SELECT errors_json, applied_errors_json FROM page_checks
+   WHERE page_id = ? AND user_email IS ? AND id != ?
+     AND checked_at < (SELECT checked_at FROM page_checks WHERE id = ?)
+     AND applied_errors_json IS NOT NULL AND applied_errors_json != '[]'
+   ORDER BY checked_at DESC, id DESC
+   LIMIT 50
+`);
 const _insertPageCheckStmt = db.prepare(`INSERT INTO page_checks
   (page_id, book_id, chapter_id, checked_at, error_count, errors_json, szenen_json, stilanalyse, fazit, model, user_email, words)
   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`);
@@ -407,14 +417,14 @@ async function progressSincePrevious(pageId, userEmail, r) {
   return lektoratProgress(prev, r.fehler, r.text, normalizeMatchText);
 }
 
-// Befunde dieses Laufs, die der Autor im Vorlauf bewusst stehen liess
-// (lib/lektorat-progress.js#markPreviouslyRejected) — gleiche Normalform.
+// Befunde dieses Laufs an Stellen, die der Autor in einem früheren Lauf bewusst
+// stehen liess (lib/lektorat-progress.js#markPreviouslyRejected) — gleiche Normalform.
 async function markRejectedSincePrevious(pageId, userEmail, r) {
   const id = Number(r.checkId);
   if (!id) return r.fehler;
-  const prev = _prevPageCheckStmt.get(parseInt(pageId, 10), userEmail || null, id, id);
+  const prevRuns = _decidedPrevChecksStmt.all(parseInt(pageId, 10), userEmail || null, id, id);
   const { normalizeMatchText } = await textMatch();
-  return markPreviouslyRejected(prev, r.fehler, r.text, normalizeMatchText);
+  return markPreviouslyRejected(prevRuns, r.fehler, r.text, normalizeMatchText);
 }
 
 module.exports = { prepareLektoratRun, makeNeighbourLoader, loadLektoratPageList, checkOnePage, progressSincePrevious, markRejectedSincePrevious, markAmbiguous, dropUnlocatable };

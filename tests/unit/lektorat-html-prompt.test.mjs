@@ -172,3 +172,27 @@ test('Tag-Grenzen-Regeln: Server und Fundstellen-View identisch', () => {
   assert.equal(textMatch.BLOCK_TAG.source, TAG_GAP_CLASSES.blockTag.source);
   assert.equal(textMatch.BLOCK_TAG.flags, TAG_GAP_CLASSES.blockTag.flags);
 });
+
+test('htmlToTextForPrompt: Tag-Grenze neben Leerraum erzeugt kein zus\u00E4tzliches Leerzeichen', () => {
+  // Prod (Seite 1005697): `Geil.</i><b>&#160;</b>Ich` rendert ein einziges
+  // gesch\u00FCtztes Leerzeichen, erschien dem Modell aber als \u00ABGeil. \u00A0 Ich\u00BB \u2014
+  // ein Doppel-Leerzeichen-Befund, den es im Text nicht gibt.
+  const geil = htmlToTextForPrompt('<p><i>Geil.</i><b>&#160;</b>Ich stehe auf.</p>');
+  assert.ok(geil.includes('Geil.\u00A0Ich'), JSON.stringify(geil));
+  // Prod (Seite 1005704): `<i>ganz anderes</i>&#160;ausl\u00F6st`.
+  const anders = htmlToTextForPrompt('<p>etwas <i>ganz anderes</i>&#160;ausl\u00F6st.</p>');
+  assert.ok(anders.includes('anderes\u00A0ausl\u00F6st'), JSON.stringify(anders));
+  assert.ok(htmlToTextForPrompt('<p>Hallo <b>Welt</b> und</p>').includes('Hallo Welt und'));
+});
+
+test('htmlToTextForPrompt: echtes Doppel-Leerzeichen bleibt sichtbar', () => {
+  // Prod (Seite 1005707): `ein&#160; Geruch` rendert zwei Leerzeichen \u2014 ein
+  // \u00FCbernehmbarer Befund (6 von 11 solcher Befunde auf Prod \u00FCbernommen).
+  const out = htmlToTextForPrompt('<p>h\u00E4ngt ein&#160; Geruch im Zimmer.</p>');
+  assert.ok(out.includes('ein\u00A0 Geruch'), JSON.stringify(out));
+});
+
+test('htmlToTextForPrompt: einzelnes geschütztes Leerzeichen bleibt', () => {
+  const out = htmlToTextForPrompt('<p>z.&#160;B. hier</p>');
+  assert.ok(out.includes('z.\u00A0B.'));
+});

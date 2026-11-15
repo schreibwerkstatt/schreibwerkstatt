@@ -221,6 +221,10 @@ function htmlToTextForPrompt(html, { langCode = 'de', msgRows = false, msgMarks 
       .replace(/<\/(p|div|li|h[1-6]|blockquote|pre|ul|ol|figure|figcaption|table|tr|section|article)\s*>/gi, '\n\n')
       .replace(/<br\s*\/?>/gi, '\n')
       .replace(/<hr\s*\/?>/gi, '\n\n')), HTML_NAMED_ENTITIES)
+    // Nur Läufe echter Spaces zusammenfassen: geschütztes Leerzeichen plus Space ist
+    // ein gerendertes Doppel-Leerzeichen und bleibt für das Modell sichtbar (ein
+    // übernehmbarer Befund). Tag-Grenzen neben Leerraum fügen keinen hinzu
+    // (lib/html-text.js#stripTagsKeepPunctuation). Beispiel: «Geil.\u00A0 Ich»
     .replace(/ {2,}/g, ' ')
     .replace(/\n{3,}/g, '\n\n')
     .replace(/^[ \t]+/gm, '')

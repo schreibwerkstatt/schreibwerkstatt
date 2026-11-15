@@ -78,6 +78,20 @@ test('validateLektoratFehler strippt Legacy-Feld `kontext` (PROMPTS_VERSION 16: 
   assert.equal(out[0].korrektur, 'bar');
 });
 
+test('validateLektoratFehler behält Befunde, die nur Leerraum ändern', () => {
+  // Absatz-Umbruch beim Sprecherwechsel und echtes Doppel-Leerzeichen sind
+  // übernehmbare Befunde: auf Prod übernahm der Autor 13 von 20 solcher Befunde,
+  // die Umbrüche stehen heute als eigene <p> im Text. Nur 1:1-gleiche (nach trim) fallen.
+  const input = [
+    { typ: 'dialogformat', original: 'fragte sie ihn. «Ja, ich komme»', korrektur: 'fragte sie ihn.\n\n«Ja, ich komme»', erklaerung: 'Sprecherwechsel braucht einen neuen Absatz.' },
+    { typ: 'grammatik', original: 'Er  war nervös', korrektur: 'Er war nervös', erklaerung: 'Doppeltes Leerzeichen.' },
+    { typ: 'rechtschreibung', original: 'anderes \u00A0auslöst', korrektur: 'anderes auslöst', erklaerung: 'Leerzeichen.' },
+    { typ: 'grammatik', original: 'ein Geruch', korrektur: ' ein Geruch ', erklaerung: 'Gleich bis auf Rand-Leerzeichen.' },
+  ];
+  const out = validateLektoratFehler(input, 'de-CH', new Set([...NARRATIV, 'dialogformat']));
+  assert.deepEqual(out.map(f => f.typ), ['dialogformat', 'grammatik', 'rechtschreibung']);
+});
+
 test('validateLektoratFehler verwirft Selbst-Widerruf-Einträge (DE + EN)', () => {
   const input = [
     // Echter Fehler – bleibt.

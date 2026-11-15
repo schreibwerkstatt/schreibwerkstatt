@@ -87,8 +87,26 @@ test('markPreviouslyRejected: nicht übernommen + Stelle unverändert → abgele
     F('stil', 'nach Hause', 'heim'),
   ], text);
   assert.equal(out[0].abgelehnt, true);
-  assert.equal('abgelehnt' in out[1], false, 'anderer Typ zählt nicht');
+  assert.equal(out[1].abgelehnt, true, 'gleiche Stelle, anderer Typ: derselbe Autorenentscheid');
   assert.equal('abgelehnt' in out[2], false, 'neu gemeldet');
+});
+
+test('markPreviouslyRejected: alle entschiedenen Läufe zählen, nicht nur der Vorlauf', () => {
+  const text = 'Er ging schnell nach Hause. Sie lachte laut.';
+  const aelter = prevRow([F('stil', 'ging schnell', 'eilte'), F('grammatik', 'Hause', 'Haus')], [F('grammatik', 'Hause', 'Haus')]);
+  const vorlauf = prevRow([F('stil', 'lachte laut', 'lachte')]);   // ohne Übernahme: nicht entschieden
+  const out = markPreviouslyRejected([vorlauf, aelter], [
+    F('satzbau', 'ging schnell', 'rannte'),
+    F('stil', 'lachte laut', 'kicherte'),
+  ], text);
+  assert.equal(out[0].abgelehnt, true, 'im älteren Lauf stehen gelassen');
+  assert.equal('abgelehnt' in out[1], false, 'Vorlauf ohne Übernahme entscheidet nichts');
+});
+
+test('markPreviouslyRejected: umgeschriebene Stelle ist nicht mehr abgelehnt', () => {
+  const prev = prevRow([F('stil', 'ging schnell', 'eilte'), F('grammatik', 'Hause', 'Haus')], [F('grammatik', 'Hause', 'Haus')]);
+  const out = markPreviouslyRejected([prev], [F('stil', 'ging schnell', 'eilte')], 'Er ging rasch heim.');
+  assert.equal('abgelehnt' in out[0], false);
 });
 
 test('markPreviouslyRejected: ohne Übernahme im Vorlauf ist nichts entschieden', () => {

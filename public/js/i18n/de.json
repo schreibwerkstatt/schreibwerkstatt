@@ -3940,7 +3940,7 @@
   "editor.findings.rewritten": "umgeschrieben",
   "editor.findings.rewrittenTip": "Die Stelle steht so nicht mehr im Text, du hast sie selbst geändert. Ob der Befund damit erledigt ist, zeigt der nächste Lektorat-Lauf.",
   "editor.findings.rejected": "früher abgelehnt",
-  "editor.findings.rejectedTip": "Diesen Befund hast du beim letzten Lektorat dieser Stelle nicht übernommen. Darum ist er nicht vorausgewählt.",
+  "editor.findings.rejectedTip": "Diese Stelle hast du in einem früheren Lektorat nicht geändert, obwohl du andere Befunde übernommen hast.",
   "editor.findings.appliedHistoryTitle": "Eingearbeitete Korrekturen ({n})",
   "editor.findings.editKorrektur": "anpassen",
   "editor.findings.addKorrektur": "Eigener Vorschlag",

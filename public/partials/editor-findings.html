@@ -86,7 +86,7 @@
           <span x-show="f.erledigt && !$app.appliedOriginals.includes(f.original)" class="tag" x-text="$app.t('editor.findings.resolvedByOther')" :data-tip="$app.t('editor.findings.resolvedByOtherTip')"></span>
           <span x-show="!_findingDone(f) && $app.findingInMsgThread(f)" class="tag" x-text="$app.t('editor.findings.inMsgThread')" :data-tip="$app.t('editor.findings.inMsgThreadTip')"></span>
           <span x-show="!_findingDone(f) && (f.mehrdeutig || $app.findingAmbiguousNow(f))" class="tag" x-text="$app.t('editor.findings.ambiguous')" :data-tip="$app.t($app.editMode ? 'editor.findings.ambiguousEditTip' : 'editor.findings.ambiguousTip')"></span>
-          <span x-show="!_findingDone(f) && f.abgelehnt" class="tag" x-text="$app.t('editor.findings.rejected')" :data-tip="$app.t('editor.findings.rejectedTip')"></span>
+          <span x-show="!_findingDone(f) && $app.findingRejectedBefore(f)" class="tag" x-text="$app.t('editor.findings.rejected')" :data-tip="$app.t('editor.findings.rejectedTip')"></span>
           <span class="finding-content">
             <!-- Edit-Modus: Klick zeigt die Stelle im Editor (statt das Häkchen umzuschalten);
                  Hover hebt sie nur hervor (editor/lektorat-live.js#lektoratLiveReveal). -->

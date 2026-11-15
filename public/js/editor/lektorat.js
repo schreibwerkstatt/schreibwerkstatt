@@ -54,10 +54,18 @@ export const lektoratMethods = {
   },
 
   // Mehrdeutige Fundstelle (`mehrdeutig`, Server: lektorat-page.js#markAmbiguous):
-  // «Übernehmen» überspringt sie (findingAmbiguousNow) — nicht vorauswählen. Ebenso ein Befund, den der Autor im Vorlauf stehen liess
-  // (`abgelehnt`, lib/lektorat-progress.js#markPreviouslyRejected).
+  // «Übernehmen» überspringt sie (findingAmbiguousNow) — nicht vorauswählen.
+  // «Früher abgelehnt» hält einen harten Befund NICHT zurück: auf Prod übernahm der
+  // Autor so markierte harte Befunde zu 85 %.
   findingPreselected(f) {
-    return isHardFinding(f.typ) && !f.mehrdeutig && !f.abgelehnt && !this.findingInMsgThread(f) && this.findingSelectable(f);
+    return isHardFinding(f.typ) && !f.mehrdeutig && !this.findingInMsgThread(f) && this.findingSelectable(f);
+  },
+
+  // Stelle in einem früheren Lauf stehen gelassen (`abgelehnt`,
+  // lib/lektorat-progress.js#markPreviouslyRejected). Als Hinweis nur an weichen
+  // und redaktionellen Befunden — dort ist «stehen lassen» ein Autorenentscheid.
+  findingRejectedBefore(f) {
+    return !!f?.abgelehnt && !isHardFinding(f.typ);
   },
 
   // Auswählbar ist ein Befund, der etwas ändern würde und noch nicht übernommen

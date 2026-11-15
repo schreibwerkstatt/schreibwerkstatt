@@ -460,7 +460,8 @@ test('Hover hebt nur hervor, Klick auf den Befundtext zeigt die Stelle; Caret au
 
 test('Strg+Z per Anker: Korrektur steht auch anderswo; Übernommenes anspringbar, ohne Zusatz-Tags', async ({ page }) => {
   await openPage(page);
-  const finding = { typ: 'grammatik', original: 'das er kommt', korrektur: 'dass er kommt', erklaerung: 'x', abgelehnt: true };
+  // Weicher Befund: «früher abgelehnt» zeigt sich nur an weichen/redaktionellen Befunden.
+  const finding = { typ: 'stil', original: 'das er kommt', korrektur: 'dass er kommt', erklaerung: 'x', abgelehnt: true };
   await page.evaluate(({ html, findings }) => {
     const app = window.__app;
     app.originalHtml = html;
@@ -470,7 +471,7 @@ test('Strg+Z per Anker: Korrektur steht auch anderswo; Übernommenes anspringbar
     app.checkDone = true;
     app.startEdit();
   }, { html: '<p>Ich weiss, dass er kommt.</p><p>Sie meint, das er kommt.</p>', findings: [finding] });
-  await expect.poll(() => hlSize(page, 'hard')).toBe(1);
+  await expect.poll(() => hlSize(page, 'soft')).toBe(1);
   const row = page.locator('.lektorat-split-findings label.finding').first();
   const rejTag = row.locator('> .tag').filter({ hasText: await page.evaluate(() => window.__app.t('editor.findings.rejected')) });
   await expect(rejTag).toBeVisible();
@@ -482,7 +483,7 @@ test('Strg+Z per Anker: Korrektur steht auch anderswo; Übernommenes anspringbar
   // Erledigt: Zusatz-Tag weg, nicht markiert, aber per Hover/Klick auffindbar —
   // an der eingesetzten Korrektur, nicht an der gleichlautenden im ersten Absatz.
   await expect(rejTag).toBeHidden();
-  expect(await hlSize(page, 'hard')).toBe(0);
+  expect(await hlSize(page, 'soft')).toBe(0);
   await page.evaluate(() => window.__app.lektoratLiveFocus(0));
   await expect.poll(() => hlSize(page, 'active')).toBe(1);
   const activeText = () => page.evaluate(() => {
@@ -497,6 +498,6 @@ test('Strg+Z per Anker: Korrektur steht auch anderswo; Übernommenes anspringbar
   await page.keyboard.press('ControlOrMeta+z');
   await expect.poll(() => editText(page)).toContain('meint, das er kommt');
   await expect(row).not.toHaveClass(/finding--applied/);
-  await expect.poll(() => hlSize(page, 'hard')).toBe(1);
+  await expect.poll(() => hlSize(page, 'soft')).toBe(1);
   await expect(rejTag).toBeVisible();
 });

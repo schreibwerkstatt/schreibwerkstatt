@@ -1,0 +1,16 @@
+{
+  "version": "6.6.1",
+  "date": "2026-11-15",
+  "entries": [
+    {
+      "kind": "verbessert",
+      "de": "Lektorat: Das Tag «früher abgelehnt» merkt sich jetzt Stellen aus allen früheren Lektoraten, nicht nur aus dem letzten. Es erscheint nur noch an Stil- und Hinweis-Befunden; echte Fehler bleiben vorausgewählt.",
+      "en": "Copy-editing: the “rejected before” tag now remembers passages from all earlier checks, not just the last one. It only appears on style and advisory findings; real errors stay preselected."
+    },
+    {
+      "kind": "behoben",
+      "de": "Lektorat: Doppelte Leerzeichen neben einem geschützten Leerzeichen wurden nicht gemeldet, und an Formatierungswechseln tauchten manchmal Leerzeichen auf, die es im Text gar nicht gab. Beides stimmt jetzt.",
+      "en": "Copy-editing: double spaces next to a non-breaking space were not reported, and formatting changes sometimes showed spaces that weren't in the text. Both are now correct."
+    }
+  ]
+}

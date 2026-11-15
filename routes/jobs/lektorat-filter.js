@@ -155,7 +155,9 @@ function validateLektoratFehler(fehler, locale, validTypen) {
     // damit alte Cache-Rows und vereinzelte AI-Antworten kein totes Feld mitschleppen.
     .map(f => { const { kontext, ...rest } = f; return { ...rest, typ: rest.typ?.toLowerCase?.() }; })
     .filter(f => validTypen.has(f.typ))
-    // Vorschlag == Original (1:1, nach trim) ist kein Fehler – für alle Typen skippen
+    // Vorschlag == Original (1:1, nach trim) ist kein Fehler – für alle Typen skippen.
+    // Bewusst nicht Whitespace-normalisiert: Absatz-Umbruch beim Sprecherwechsel
+    // (Leerzeichen → \n\n) und echtes Doppel-Leerzeichen sind übernehmbare Befunde.
     .filter(f => !f.korrektur || f.korrektur.trim() !== f.original?.trim())
     // stil braucht zusätzlich eine nicht-leere Korrektur
     .filter(f => f.typ !== 'stil' || !!f.korrektur?.trim())

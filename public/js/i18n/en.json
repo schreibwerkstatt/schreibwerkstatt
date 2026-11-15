@@ -3940,7 +3940,7 @@
   "editor.findings.rewritten": "rewritten",
   "editor.findings.rewrittenTip": "This passage no longer reads like this, you changed it yourself. The next review run shows whether the finding is resolved.",
   "editor.findings.rejected": "rejected before",
-  "editor.findings.rejectedTip": "You did not apply this finding in the last check of this passage, so it is not preselected.",
+  "editor.findings.rejectedTip": "You left this passage unchanged in an earlier check, although you applied other findings.",
   "editor.findings.appliedHistoryTitle": "Applied corrections ({n})",
   "editor.findings.editKorrektur": "edit",
   "editor.findings.addKorrektur": "Your suggestion",
