@@ -127,6 +127,8 @@ echo 'LOG_DIR=/var/log/schreibwerkstatt' >> /opt/schreibwerkstatt/.env
 systemctl restart schreibwerkstatt
 ```
 
+Ein volles Access-Log führt die App nicht (das hat der Reverse-Proxy). [lib/request-log.js](lib/request-log.js) schreibt nur auffällige Antworten: `METHODE /pfad → status (ms) [reqId]` — 5xx und Requests ab 5 s als WARN, 4xx ausser 401/404 als INFO, ohne Query-String, ohne Event-Streams. Die `reqId` ist der `X-Request-Id`-Header der Antwort. Verbindungsfehler, die Node vor jedem Handler abfängt, protokolliert [lib/http-client-error.js](lib/http-client-error.js) als `HTTP clientError <code>`. Ein 502 im Proxy-Log ohne passende Zeile hier heisst: die App war nicht erreichbar (Neustart) oder hat die Verbindung ohne Antwort geschlossen.
+
 ## Backup
 
 Tägliches Online-Backup der SQLite-DB via systemd-Timer (`schreibwerkstatt-backup.timer`, Default 03:00). `sqlite3 .backup` (lock-frei, WAL-konsistent), gzip-komprimiert, Retention nach `mtime`. Pre-Deploy zusätzlicher Snapshot.

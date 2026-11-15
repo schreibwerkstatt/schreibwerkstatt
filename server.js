@@ -196,6 +196,8 @@ app.use((req, res, next) => {
     user: req.session?.user?.email || null,
   }, () => next());
 });
+// Auffällige Antworten (5xx, 4xx ausser 401/404, langsam) ins App-Log.
+app.use(require('./lib/request-log').requestLog);
 
 // ── Auth-Routen (öffentlich) ──────────────────────────────────────────────────
 app.use(authRouter);
