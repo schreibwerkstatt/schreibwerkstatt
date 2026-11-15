@@ -111,7 +111,7 @@ router.post('/bulk', jsonBody, (req, res) => {
       catch (e) { logger.warn(`[research] Suchindex nach Bulk delete id=${id}: ${e.message}`); }
     }
   }
-  logger.info(`[research] bulk ${action} count=${ids.length}${skipped ? ` skipped=${skipped}` : ''}`);
+  logger.info(`[research] bulk ${action}${action === 'status' ? `=${b.status}` : ''} count=${ids.length} ids=${ids.join(',')}${skipped ? ` skipped=${skipped}` : ''}`);
   res.json({ ok: true, count: ids.length - skipped, ...(action === 'add_tag' ? { skipped } : {}) });
 });
 

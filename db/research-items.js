@@ -18,6 +18,7 @@ const { normalizeUrls, normalizeTags, RESEARCH_KINDS, normalizeTitleForMatch, TI
 const { normalizeUrl } = require('../lib/url-normalize');
 const { MAX_TEXT_CHARS } = require('../lib/pdf-extract');
 const searchIndex = require('../lib/search');
+const logger = require('../logger');
 const { findingsByItem, chapterPlace } = require('./research-findings');
 const { activeFigureSql } = require('./figures/active');
 
@@ -167,12 +168,19 @@ function replaceUrls(itemId, urls) {
 function setItemsStatus(ids, status, userEmail) {
   if (!ids.length) return 0;
   const ph = ids.map(() => '?').join(',');
-  return db.prepare(
+  // Einziger Schreibweg des Status (Einzel-Edit, Sammelaktion, Recherche-Chat) —
+  // darum wird der Wechsel hier geloggt, je Fundstück mit Ausgangsstufe.
+  const before = db.prepare(`SELECT id, status FROM research_items WHERE id IN (${ph})`).all(...ids);
+  const changes = db.prepare(
     `UPDATE research_items
         SET status = ?, status_at = ${NOW_ISO_SQL}, updated_at = ${NOW_ISO_SQL},
             status_by = (SELECT email FROM app_users WHERE email = ? COLLATE NOCASE)
       WHERE id IN (${ph})`
   ).run(status, userEmail || null, ...ids).changes;
+  for (const r of before) {
+    if (r.status !== status) logger.info(`[research] status id=${r.id} ${r.status}→${status}`);
+  }
+  return changes;
 }
 
 function replaceTags(itemId, tags) {

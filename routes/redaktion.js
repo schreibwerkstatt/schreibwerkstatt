@@ -21,6 +21,7 @@ const { resolveChapterBookId } = require('../lib/content-ownership');
 const { toIntId } = require('../lib/validate');
 const contentStore = require('../lib/content-store');
 const { bookParamHandler } = require('../lib/log-context');
+const logger = require('../logger');
 
 const router = express.Router();
 const jsonBody = express.json();
@@ -94,6 +95,7 @@ router.put('/page/:page_id', jsonBody, (req, res) => {
     userEmail: sessionEmail(req),
     chain,
   });
+  logger.info(`[redaktion] stufe page=${pageId} → ${status ?? '-'}`);
   res.json({
     ok: true, page_id: pageId, entry: row, counts: statusCounts(bookId, chain),
     bedenken: _releaseBedenken(journalistic, status, () => bedenkenForPage(bookId, pageId)),
@@ -115,6 +117,7 @@ router.put('/chapter/:chapter_id', jsonBody, async (req, res) => {
   const outline = await contentStore.bookOutline(bookId);
   const pageIds = contentStore.chapterPages(outline, chapterId).map(n => n.id);
   const entries = setPagesStatus(pageIds, bookId, { status, userEmail: sessionEmail(req), chain });
+  logger.info(`[redaktion] stufe chapter=${chapterId} → ${status ?? '-'} (${pageIds.length} Abschnitte)`);
   res.json({
     ok: true, chapter_id: chapterId, entries, counts: statusCounts(bookId, chain),
     bedenken: _releaseBedenken(journalistic, status, () => bedenkenForPages(bookId, pageIds)),

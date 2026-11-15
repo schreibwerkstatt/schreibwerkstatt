@@ -265,6 +265,7 @@ router.patch('/:id', jsonBody, (req, res) => {
     // In eine abgeschaltete Stufe wird nicht gewechselt. Wer schon dort steht,
     // darf bleiben (No-op) und herauswechseln — sonst saesse die Idee fest.
     if (req.body.status !== existing.status && !getBookIdeenStages(existing.book_id).includes(req.body.status)) {
+      logger.warn(`[ideen] status abgelehnt id=${id} ${existing.status}→${req.body.status} (IDEE_STATUS_INACTIVE)`);
       return res.status(400).json({ error_code: 'IDEE_STATUS_INACTIVE' });
     }
     fields.status = req.body.status;
@@ -287,6 +288,7 @@ router.patch('/:id', jsonBody, (req, res) => {
     // gestanden.
     const finalStatus = fields.status ?? existing.status;
     if (!IDEE_OPEN_STATUSES.includes(existing.status) || !IDEE_OPEN_STATUSES.includes(finalStatus)) {
+      logger.warn(`[ideen] move abgelehnt id=${id} status=${existing.status}→${finalStatus} (IDEE_CLOSED)`);
       return res.status(400).json({ error_code: 'IDEE_CLOSED' });
     }
     if (!toBook) {
@@ -309,6 +311,9 @@ router.patch('/:id', jsonBody, (req, res) => {
   }
   const row = ideenDb.getIdee(id);
   searchIndex.upsertIdea(id);
+  if (fields.status && fields.status !== existing.status) {
+    logger.info(`[ideen] status id=${id} ${existing.status}→${fields.status}`);
+  }
   if (movedTo) logger.info(`[ideen] move id=${id} from=${movedFrom} to=${movedTo}`);
   res.json(row);
 });
@@ -382,6 +387,7 @@ router.delete('/:id', (req, res) => {
   if (!existing) return;
   ideenDb.deleteIdee(existing.id, existing.userEmail);
   searchIndex.remove('idea', existing.id);
+  logger.info(`[ideen] delete id=${existing.id} status=${existing.status}`);
   res.json({ ok: true });
 });
 

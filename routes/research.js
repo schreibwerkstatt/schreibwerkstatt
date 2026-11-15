@@ -383,6 +383,10 @@ router.patch('/:id', jsonBody, (req, res) => {
   // Tags, Status, Art und Schalter stehen nicht im Volltext-Index — nur Text-
   // felder und URLs ziehen ihn nach.
   if (reindex) searchIndex.upsertResearch(id);
+  // Status loggt setItemsStatus; die zwei Schalter daneben hier.
+  for (const flag of ['archived', 'pinned']) {
+    if (typeof b[flag] !== 'undefined') logger.info(`[research] ${flag}=${b[flag] ? 1 : 0} id=${id}`);
+  }
   res.json(emitItem(id));
 });
 

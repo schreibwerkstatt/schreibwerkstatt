@@ -400,6 +400,7 @@ function register(router) {
     try {
       const ok = shareLinks.setCommentResolved(id, ownerEmail, resolved);
       if (!ok) return res.status(404).json({ error_code: 'NOT_FOUND' });
+      logger.info(`[share/comment] ${resolved ? 'resolve' : 'reopen'} id=${id} durch=owner`);
       recordUsageEvent({ userEmail: ownerEmail, event: 'comment.action', bookId, meta: { action: 'resolve' } });
       res.json({ ok: true, resolved });
     } catch (e) {

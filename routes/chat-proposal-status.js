@@ -39,6 +39,7 @@ const { toIntId } = require('../lib/validate');
 const { guardBook, sessionEmail } = require('../lib/acl');
 const { getOwnedSession } = require('../db/chat-sessions');
 const { setContext } = require('../lib/log-context');
+const logger = require('../logger');
 
 const ACTIONS = new Set(['applied', 'discarded', 'reopen', 'claim', 'unclaim']);
 
@@ -115,6 +116,9 @@ function makeChatProposalStatusRouter({ kinds, appliedExists = null, accepts = n
       db.prepare('UPDATE chat_messages SET context_info = ? WHERE id = ?').run(JSON.stringify(ci), messageId);
       body = { proposal: next };
     })();
+    const tag = `msg=${messageId} index=${index} kind=${session.kind}`;
+    if (status === 200) logger.info(`[chat-proposal] ${action} ${tag}${body?.proposal?.applied_id ? ` applied_id=${body.proposal.applied_id}` : ''}`);
+    else logger.warn(`[chat-proposal] ${action} abgelehnt ${tag} (${body?.error_code})`);
     res.status(status).json(body);
   });
 

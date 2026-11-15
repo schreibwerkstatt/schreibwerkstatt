@@ -241,6 +241,9 @@ router.patch('/acts/:id', jsonBody, (req, res) => {
     ? _parseFlag(req.body.archiviert)
     : (act.archiviert ? 1 : 0);
   if (archiviert === undefined) return res.status(400).json({ error_code: 'INVALID_FLAG' });
+  if (archiviert !== (act.archiviert ? 1 : 0)) {
+    logger.info(`[plot] act ${archiviert ? 'archiviert' : 'reaktiviert'} id=${id}`);
+  }
   res.json(plotDb.updateAct(id, { name, farbe, archiviert }));
 });
 
@@ -476,7 +479,14 @@ router.patch('/beats/:id', jsonBody, (req, res) => {
       && typeof motifIds === 'undefined' && typeof locationIds === 'undefined') {
     return res.status(400).json({ error_code: 'NO_FIELDS' });
   }
-  res.json(_withAnchor(plotDb.updateBeat(id, fields, figureIds, draftFigureIds, motifIds, locationIds)));
+  const updated = plotDb.updateBeat(id, fields, figureIds, draftFigureIds, motifIds, locationIds);
+  if (fields.status && fields.status !== beat.status) {
+    logger.info(`[plot] beat status id=${id} ${beat.status}→${fields.status}`);
+  }
+  if (typeof fields.verworfen !== 'undefined' && fields.verworfen !== beat.verworfen) {
+    logger.info(`[plot] beat ${fields.verworfen ? 'verworfen' : 'reaktiviert'} id=${id}`);
+  }
+  res.json(_withAnchor(updated));
 });
 
 router.delete('/beats/:id', (req, res) => {
