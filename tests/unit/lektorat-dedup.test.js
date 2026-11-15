@@ -264,14 +264,37 @@ test('_runSig: Stil-Obergrenze und Split-Konfiguration aendern die Signatur', ()
   assert.deepEqual(_runSig(false), { sc: 10, sp: '1/2' });
   assert.deepEqual(_runSig(true), { sc: 10, sp: 0 }, 'lokal splittet nie');
   appSettings.set('ai.lektorat_stylistic_cap', 5);
-  appSettings.set('ai.lektorat_objective_runs', 3);
-  assert.deepEqual(_runSig(false), { sc: 5, sp: '3/2' });
+  assert.deepEqual(_runSig(false), { sc: 5, sp: '1/2' });
   appSettings.set('ai.lektorat_split', false);
   assert.deepEqual(_runSig(false), { sc: 5, sp: 0 });
   // `sc` ist die wirksame Obergrenze: kurze Abschnitte behalten ihre Signatur,
   // lange bekommen eine eigene.
-  assert.deepEqual(_runSig(false, 8000), { sc: 5, sp: 0 });
-  assert.deepEqual(_runSig(false, 40000), { sc: 20, sp: 0 });
+  assert.deepEqual(_runSig(false, 'x'.repeat(8000)), { sc: 5, sp: 0 });
+  assert.deepEqual(_runSig(false, 'x'.repeat(40000)), { sc: 20, sp: 0 });
+});
+
+// In Stücken (lib/lektorat-chunks.js): `ck` kommt nur bei zerlegten Abschnitten
+// dazu, und `sc` ist die Summe der Stück-Obergrenzen — der Backstop darf nicht
+// unter das fallen, was die Stück-Prompts zusammen erlauben.
+test('_runSig/stylisticCapForText: zerlegte Abschnitte tragen ck und die Summen-Obergrenze', () => {
+  const appSettings = require('../../lib/app-settings');
+  const { stylisticCapForText } = require('../../routes/jobs/lektorat-filter');
+  appSettings.set('ai.lektorat_split', true);
+  appSettings.set('ai.lektorat_stylistic_cap', 10);
+  appSettings.set('ai.lektorat_chunk_chars', 10000);
+  const para = 'Ein Satz, der einen Absatz füllt. '.repeat(30).trim();   // ~1000 Zeichen
+  const long = Array.from({ length: 30 }, () => para).join('\n\n');      // ~30K, 4–5 Stücke
+  const short = Array.from({ length: 5 }, () => para).join('\n\n');
+  assert.deepEqual(_runSig(false, short), { sc: 10, sp: '1/2' }, 'unter der Schwelle: keine Stücke, Signatur wie bisher');
+  const sig = _runSig(false, long);
+  assert.equal(sig.ck, '10000/7000');
+  const { chunkText } = require('../../lib/lektorat-chunks');
+  assert.equal(sig.sc, chunkText(long).length * 10, 'jedes Stück unter 10K bringt den Reglerwert mit');
+  assert.ok(sig.sc > effectiveStylisticCap(long.length));
+  assert.equal(stylisticCapForText(long, { local: true }), effectiveStylisticCap(long.length), 'lokal nie in Stücken');
+  assert.equal(_runSig(true, long).ck, undefined);
+  appSettings.set('ai.lektorat_chunk_chars', 0);
+  assert.equal(_runSig(false, long).ck, undefined, '0 = nie zerlegen');
 });
 
 test('validateLektoratFehler de-CH: ss→ß fällt weg, ß→ss bleibt als echte Korrektur', () => {

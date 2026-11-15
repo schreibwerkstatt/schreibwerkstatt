@@ -28,7 +28,6 @@ import {
   _buildFachAufgabe,
   _buildFachSeverityBlock,
   _buildFachSelbstkontrollBlock,
-  _buildFachAbschnittRegelnBlock,
   _buildKonjunktivBlock,
   _buildZuschreibungBlock,
   _buildWertungBlock,
@@ -67,56 +66,7 @@ import {
 import { textsorteLabel } from './textsorten.js';
 import { _buildNachbarBlocks } from './lektorat-nachbar.js';
 import { STOPWORDS, ERKLAERUNG_RULE, KORREKTUR_REGELN } from './core.js';
-
-// Titelform aller Einheiten: Stichwort statt Inhaltssatz, damit Listen und Übersichten
-// einheitlich lesen (gleiche Vorgabe wie die Szenen der Komplettanalyse).
-const TITEL_FORM = 'als Stichwort-Phrase, kein ganzer Satz, kein Schlusspunkt, höchstens 60 Zeichen';
-
-// ── Das «szenen»-Feld, je Bewertungseinheit ───────────────────────────────────
-// EIN SSoT für Schema-Felder UND Regelblock. Vorher standen beides als zwei
-// getrennte `fach ? … : …`-Ternaries nebeneinander – Schema und Regeln konnten
-// also auseinanderlaufen (das Schema hätte «Argumentationsschritt» versprochen,
-// während die Regeln noch von Szenen sprachen).
-// Why das eine SSoT und nicht drei Blöcke: das Feld ist ein Persistenzformat
-// (`page_checks.szenen_json` → drei Spalten titel/wertung/kommentar). Ob der
-// Inhalt eine Szene, ein Argumentationsschritt oder ein Tagebucheintrag ist,
-// ändert die Form nicht – nur die Frage, die `wertung` beantworten soll. Die
-// Fach-Regeltexte bleiben in blocks-fach.js (sie hängen am Profil, nicht an der
-// Einheit); dieses Feld entscheidet nur, WELCHE Einheit in einem Lauf gilt.
-const SZENEN_FELD = {
-  szene: {
-    nomen: 'Szenen',
-    titel: `"Knapper Szenentitel ${TITEL_FORM} (z.B. «Blutschwur im Wald»)"`,
-    kommentar: '"1-2 Sätze: was funktioniert, was fehlt (Spannung, Tempo, Figurenentwicklung). KEINE konkreten Fehler aus dem «fehler»-Array wiederholen (keine Wortwahl-, Stil-, Grammatik-, Wiederholungs-, Füllwort-Hinweise zu Einzelstellen). Nur szenen-übergreifende Beobachtungen (Spannungsbogen, Tempo, Konflikt, Figurenentwicklung, Schauplatzwirkung)."',
-    regeln: () => `
-Szenen-Regeln:
-- Eine Szene ist ein abgegrenzter Handlungsabschnitt mit eigenem Anfang und Ende
-- Wenn der Abschnitt keine erkennbaren Szenen enthält (z.B. rein beschreibender Text, Exposition): «szenen» als leeres Array zurückgeben
-- wertung: «stark» = funktioniert gut, «mittel» = verbesserungswürdig, «schwach» = klare Schwächen`,
-  },
-  teilschritt: {
-    nomen: 'Teilabschnitte',
-    titel: `"Kurze Bezeichnung des Argumentations-/Darstellungsschritts ${TITEL_FORM}"`,
-    kommentar: '"1-2 Sätze: trägt der Schritt, ist er nachvollziehbar belegt, schliesst er an den vorigen an. KEINE konkreten Fehler aus dem «fehler»-Array wiederholen (keine Wortwahl-, Stil-, Grammatik-, Wiederholungs-, Hedging-Hinweise zu Einzelstellen). Nur schritt-übergreifende Beobachtungen (Argumentationsführung, Beleglage, Aufbau, Anschluss)."',
-    regeln: (profil) => _buildFachAbschnittRegelnBlock(profil),
-  },
-  eintrag: {
-    nomen: 'Einträge',
-    titel: `"Kurze Bezeichnung des Eintrags – Datum oder Thema, ${TITEL_FORM}"`,
-    kommentar: '"1-2 Sätze: trägt die Stimme des Eintrags, wie weit der Eintrag über die Notiz hinausgeht, was er bewusst auslässt. KEINE konkreten Fehler aus dem «fehler»-Array wiederholen (keine Wortwahl-, Stil-, Grammatik-, Wiederholungs-, Füllwort-Hinweise zu Einzelstellen). Nur eintrag-übergreifende Beobachtungen (Stimme, Dichte, Verhältnis von Alltagsnotiz und Reflexion)."',
-    // Der Tagebucheintrag hat keine Handlung, die über ihn hinausgetragen werden
-    // muss. Zu fragen ist nicht Spannung, sondern Dichte – und die genretypische
-    // Kürze ist KEIN Mangel: ohne diesen Satz bewertete das Modell «bleibt
-    // Notizstenografie ohne Verdichtung» als «mittel» und schlug Szenenfutter vor.
-    regeln: () => `
-Eintrag-Regeln (Feld «szenen»):
-- Ein Eintrag ist hier ein datierter, überschriebener oder thematisch abgeschlossener Tagebucheintrag – KEINE Szene, kein Handlungsabschnitt mit Spannungsbogen, der über den Eintrag hinausgetragen werden müsste.
-- Enthält der Abschnitt keinen abgrenzbaren Eintrag (z.B. ein lose notiertes Sammeldatum): «szenen» als leeres Array zurückgeben.
-- wertung: «stark» = die Stimme trägt den Eintrag, «mittel» = Eintrag bleibt Notiz, ohne eine eigene Stimme zu entwickeln, «schwach» = der Eintrag sagt nichts Eigenes.
-- kommentar: 1-2 Sätze zu Stimme, Dichte und Verhältnis von Beobachtung und Reflexion. KEINE Einzelstellen-Kritik aus dem «fehler»-Array wiederholen.
-- Fragmentarische Notizen, Stichworte, Auslassungen, abrupte Registerwechsel und Einträge ohne Reflexion sind genretypisch und KEIN Mangel dieses Feldes. Bewertet wird nur, ob der Eintrag als Eintrag trägt – NICHT, wie viel ein Roman aus ihm gemacht hätte.`,
-  },
-};
+import { SZENEN_FELD, stilanalyseFeld, fazitFeld, bewertungSchemaFelder } from './lektorat-bewertung.js';
 
 function _buildLektoratPromptBody(text, textLabel, {
   stopwords = STOPWORDS,
@@ -158,6 +108,11 @@ function _buildLektoratPromptBody(text, textLabel, {
   // Volle Locale der Buchsprache (z.B. 'en-GB'): wählt die Anführungszeichen-Norm.
   locale = null,
   mode = 'full',
+  // Stück eines langen Abschnitts (routes/jobs/lektorat-split.js): der Stil-Pass
+  // liefert nur Befunde, die Bewertung kommt aus dem eigenen Pass über den ganzen
+  // Abschnitt (lektorat-bewertung.js). `stueckDavor`/`stueckDanach`: der Auszug
+  // stammt aus demselben Abschnitt, nicht aus dem Nachbarabschnitt.
+  ohneBewertung = false, stueckDavor = false, stueckDanach = false,
 } = {}) {
   // Stil-Modus (Claude-Split): objektive/mechanische Typen werden in einem
   // separaten Objektiv-Pass geprüft (buildObjektivLektoratPrompt) und hier
@@ -175,6 +130,7 @@ function _buildLektoratPromptBody(text, textLabel, {
   // Journalistisch: die Textsorte schneidet zusaetzlich (kein `wertung` im
   // Kommentar) und benennt sich in den Regelbloecken selbst.
   const journal = profil === 'journalistisch';
+  const bewertung = !(stilOnly && ohneBewertung);
   const typen = lektoratTypen(buchtyp, { local: _isLocal, stilOnly, textsorte });
   const aktiv = (t) => typen.includes(t);
   const metaParts = [];
@@ -261,7 +217,7 @@ function _buildLektoratPromptBody(text, textLabel, {
   const nachrichtenBlock = hatNachrichten ? `\n${_buildNachrichtenBlock(langCode)}\n` : '';
 
   const { nachbarBlock, schreibfrontBlock } = _buildNachbarBlocks({
-    previousExcerpt, nextExcerpt, previousChapter, nextChapter, schreibfront,
+    previousExcerpt, nextExcerpt, previousChapter, nextChapter, schreibfront, stueckDavor, stueckDanach,
     fach, eintrag: einheit === EINHEIT_EINTRAG, local: _isLocal,
   });
 
@@ -360,7 +316,7 @@ SCHWERE-SCHWELLE (Anti-Pedanterie, Pflicht-Filter vor dem Aufnehmen ins «fehler
   // Selbstkontroll-Pass: Sortierung + Schluss-Review. Hat bei Claude messbaren
   // Effekt; bei lokalen Modellen erhöht es Halluzinationsrisiko und wird
   // weggelassen.
-  const selbstkontrollBlock = _isLocal ? '' : (fach ? _buildFachSelbstkontrollBlock(objektivAktiv, profil) : `
+  const selbstkontrollBlock = _isLocal ? '' : (fach ? _buildFachSelbstkontrollBlock(objektivAktiv, profil, { bewertung }) : `
 SELBSTKONTROLL-PASS (Pflicht vor dem Antworten):
 Bevor du die JSON-Antwort ausgibst, gehe deine gesammelten Findings einmal durch und prüfe:
 1. SCHWERE: Hat jeder stilistische Eintrag den Selbsttest «professioneller Lektor anstreichen?» bestanden? Wenn nein → streichen. AUSNAHME: ${objektivAktiv.join(', ')} bestehen diesen Test immer und werden NIE gestrichen – auch nicht, um unter eine Mengen-Obergrenze zu kommen.
@@ -369,8 +325,8 @@ Bevor du die JSON-Antwort ausgibst, gehe deine gesammelten Findings einmal durch
 4. ZEICHENGENAUIGKEIT: Liesse sich «original» mit einem String-Find im Originaltext genau einmal finden? Wenn nein → korrigieren oder streichen.
 5. SPAN-TYP-KONSISTENZ: Sind «original» und «korrektur» beide gleichlange Spans (beide Phrase ODER beide Satz)? Wenn nein → korrigieren.
 6. ERKLÄRUNGS-FILTER: Enthält «erklaerung» «kein Fehler» / «vertretbar» / «möglicherweise» / «akzeptabel» / «im Schweizer Kontext»? Wenn ja → Eintrag streichen.
-7. SORTIERUNG: Sortiere das «fehler»-Array AUFSTEIGEND nach Textposition (erstes Auftreten von «original» im Originaltext – früh im Text zuerst, spät im Text zuletzt).
-8. ZUSAMMENFASSUNGS-DISJUNKTION: Lies «stilanalyse», «fazit» und jedes «szenen[].kommentar» einzeln. Wenn ein Satz dort einen Mangel beschreibt, der textuell oder thematisch bereits durch einen Eintrag im «fehler»-Array abgedeckt ist (auch in Aggregat-Form wie «viele Wiederholungen», «passivlastig», «schwache Verben», «zu viele Füllwörter», «häufige Stilbrüche», «Show-vs-Tell-Probleme») → diesen Satz löschen oder durch eine inhaltlich nicht überlappende Beobachtung ersetzen. Selbsttest: Wäre der Satz überflüssig, wenn der Leser das «fehler»-Array bereits gesehen hat? Wenn ja → raus. Die drei Summary-Felder dürfen keine konkreten Findings paraphrasieren und keine Findings-Gruppen charakterisieren.
+7. SORTIERUNG: Sortiere das «fehler»-Array AUFSTEIGEND nach Textposition (erstes Auftreten von «original» im Originaltext – früh im Text zuerst, spät im Text zuletzt).${bewertung ? `
+8. ZUSAMMENFASSUNGS-DISJUNKTION: Lies «stilanalyse», «fazit» und jedes «szenen[].kommentar» einzeln. Wenn ein Satz dort einen Mangel beschreibt, der textuell oder thematisch bereits durch einen Eintrag im «fehler»-Array abgedeckt ist (auch in Aggregat-Form wie «viele Wiederholungen», «passivlastig», «schwache Verben», «zu viele Füllwörter», «häufige Stilbrüche», «Show-vs-Tell-Probleme») → diesen Satz löschen oder durch eine inhaltlich nicht überlappende Beobachtung ersetzen. Selbsttest: Wäre der Satz überflüssig, wenn der Leser das «fehler»-Array bereits gesehen hat? Wenn ja → raus. Die drei Summary-Felder dürfen keine konkreten Findings paraphrasieren und keine Findings-Gruppen charakterisieren.` : ''}
 `);
 
   // Few-Shot: ein GUTES + ein VERWORFENES Beispiel. Das Erklärung-Filter-
@@ -447,7 +403,7 @@ ${journal
   // Lokal: szenen/stilanalyse/fazit werden aus Schema und Prompt gestrichen. Kleine Modelle
   // halluzinieren diese Felder oft generisch und das Generieren kostet spürbar Output-Tokens.
   const szenen = SZENEN_FELD[einheit];
-  const schemaBlock = _isLocal
+  const schemaBlock = (_isLocal || !bewertung)
     ? `Antworte mit diesem JSON-Schema:
 {
   "fehler": [
@@ -476,22 +432,19 @@ ${journal
       "kommentar": ${szenen.kommentar}
     }
   ],
-  "stilanalyse": ${fach
-    ? '"4-5 Sätze Sprachanalyse – KEINE konkreten Fehler erwähnen, die bereits im «fehler»-Array stehen, und KEINE Aggregat-Hinweise auf bereits gemeldete Muster («häufige Wiederholungen», «viel Hedging», «oft unbelegt» o.Ä.). Fokus ausschliesslich auf übergreifende Beobachtungen, die NICHT als Einzelfehler erfasst sind: Klarheit über mehrere Absätze, Argumentationsführung, Begriffsschärfe, Informationsdichte, Lesbarkeit für die Fachleserschaft. Erzählerische Mittel NICHT einfordern."'
-    : '"4-5 Sätze Stilanalyse – KEINE konkreten Fehler erwähnen, die bereits im «fehler»-Array stehen (weder Rechtschreibung, Grammatik, Stil, Wiederholungen, Füllwörter, schwache Verben, Show-vs-Tell, Passiv, Perspektive, Tempus noch andere Typen). KEINE Aggregat-Hinweise auf bereits gemeldete Muster («häufige Wiederholungen», «viele Füllwörter», «passivlastig», «schwache Verben dominieren» o.Ä.) – diese Muster sind durch die Einzel-Findings abgedeckt. Fokus ausschliesslich auf übergreifende Beobachtungen, die NICHT als Einzelfehler erfasst sind: Rhythmus über mehrere Absätze, Bildsprache, Erzählhaltung, Atmosphäre, Wirkung beim Leser."'},
-  "fazit": ${fach
-    ? '"ein Satz Gesamtfazit zur sprachlichen und argumentativen Qualität – KEINE Fehler aus dem «fehler»-Array wiederholen, zusammenfassen oder als Gruppe charakterisieren. Nur Gesamtwirkung, nicht das Findings-Resultat paraphrasieren."'
-    : '"ein Satz Gesamtfazit zur literarischen Qualität – KEINE Fehler aus dem «fehler»-Array wiederholen, zusammenfassen oder als Gruppe charakterisieren («viele Stilbrüche», «zahlreiche Wiederholungen» o.Ä.). Nur Gesamtwirkung, nicht das Findings-Resultat paraphrasieren."'}
+  "stilanalyse": ${stilanalyseFeld(fach)},
+  "fazit": ${fazitFeld(fach)}
 }`;
 
-  const szenenRegelnBlock = _isLocal ? '' : szenen.regeln(profil);
+  const szenenRegelnBlock = (_isLocal || !bewertung) ? '' : szenen.regeln(profil);
 
+  const bewertenSatz = bewertung ? ` Bewerte ausserdem die ${szenen.nomen} des Abschnitts.` : '';
   const aufgabeSatz = _isLocal
     ? 'Analysiere den Text vollständig von Anfang bis Ende – nicht nur lokale Passagen oder die letzten Sätze – auf Rechtschreibfehler, Grammatikfehler, Zeichensetzungs-/Interpunktionsfehler (insbesondere Kommasetzung), stilistische Auffälligkeiten und auffällige Wortwiederholungen. Prüfe Grammatik und Zeichensetzung Satz für Satz und gründlich.'
     : (fach
-      ? _buildFachAufgabe(profil, stilOnly)
+      ? _buildFachAufgabe(profil, stilOnly, { bewerten: bewertung })
       : (stilOnly
-      ? `Analysiere den Text vollständig von Anfang bis Ende – nicht nur lokale Passagen oder die letzten Sätze – auf STILISTISCHE Schwächen: holprigen Satzbau, Wortwiederholungen, schwache Verben, Füll- und Filterwörter, Klischees, KI-Geruch, Show-statt-Tell, vermeidbares Passiv, Pleonasmen sowie Tempus- und Perspektivbrüche und Schauplatz-Konsistenz (Zuständigkeit und Details siehe Regelblöcke unten). WICHTIG: Objektive/mechanische Fehler – Rechtschreibung, Grammatik, Zeichensetzung/Interpunktion, Dialogformat-Typografie sowie Namens-/Figuren-Konsistenz und Anreden – werden in einem SEPARATEN Pass geprüft und dürfen hier NICHT gemeldet werden. Bewerte ausserdem die ${szenen.nomen} des Abschnitts.`
+      ? `Analysiere den Text vollständig von Anfang bis Ende – nicht nur lokale Passagen oder die letzten Sätze – auf STILISTISCHE Schwächen: holprigen Satzbau, Wortwiederholungen, schwache Verben, Füll- und Filterwörter, Klischees, KI-Geruch, Show-statt-Tell, vermeidbares Passiv, Pleonasmen sowie Tempus- und Perspektivbrüche und Schauplatz-Konsistenz (Zuständigkeit und Details siehe Regelblöcke unten). WICHTIG: Objektive/mechanische Fehler – Rechtschreibung, Grammatik, Zeichensetzung/Interpunktion, Dialogformat-Typografie sowie Namens-/Figuren-Konsistenz und Anreden – werden in einem SEPARATEN Pass geprüft und dürfen hier NICHT gemeldet werden.${bewertenSatz}`
       : `Analysiere den Text vollständig von Anfang bis Ende – nicht nur lokale Passagen oder die letzten Sätze – auf Rechtschreibfehler, Grammatikfehler, Zeichensetzungs-/Interpunktionsfehler (insbesondere Kommasetzung), Tempus- und Perspektivbrüche, holprigen Satzbau, stilistische Auffälligkeiten und auffällige Wortwiederholungen – ebenso auf schwache Verben, Füll- und Filterwörter, Klischees, KI-Geruch, Show-statt-Tell, vermeidbares Passiv, Dialogformat-Typografie und Konsistenz von Figuren und Schauplätzen (Zuständigkeit und Details der einzelnen Typen siehe Regelblöcke unten). Prüfe Grammatik, Zeichensetzung und Erzähltempus Satz für Satz und gründlich – das sind objektive Fehler, die nicht übersehen werden dürfen. Bewerte ausserdem die ${szenen.nomen} des Abschnitts.`));
 
   // XML-Wrapper für die strukturell trennbaren Sektionen — hilft Claude beim
@@ -558,24 +511,13 @@ function _fehlerField(typen) {
  * Schema für den kombinierten bzw. den Stil-Pass. Lokale Provider erhalten ein
  * reduziertes Schema ohne szenen/stilanalyse/fazit (kleine Modelle halluzinieren
  * diese Felder generisch und das Generieren kostet spürbar Output-Tokens).
- * @param {{buchtyp?: string|null, stilOnly?: boolean, textsorte?: string|null}} opts
+ * @param {{buchtyp?: string|null, stilOnly?: boolean, textsorte?: string|null, ohneBewertung?: boolean}} opts
  */
-export function buildLektoratSchema({ buchtyp = null, stilOnly = false, textsorte = null } = {}) {
+export function buildLektoratSchema({ buchtyp = null, stilOnly = false, textsorte = null, ohneBewertung = false } = {}) {
   const fehlerField = _fehlerField(lektoratTypen(buchtyp, { local: _isLocal, stilOnly: stilOnly && !_isLocal, textsorte }));
-  if (_isLocal) return _obj({ fehler: fehlerField });
-  return _obj({
-    fehler: fehlerField,
-    szenen: {
-      type: 'array',
-      items: _obj({
-        titel: _str,
-        wertung: { type: 'string', enum: ['stark', 'mittel', 'schwach'] },
-        kommentar: _str,
-      }),
-    },
-    stilanalyse: _str,
-    fazit: _str,
-  });
+  // Ohne Bewertung (Stil-Pass eines Stücks) bzw. lokal: nur die Befunde.
+  if (_isLocal || (stilOnly && ohneBewertung)) return _obj({ fehler: fehlerField });
+  return _obj({ fehler: fehlerField, ...bewertungSchemaFelder() });
 }
 
 // Default-Schema (narratives Profil, voller Pass). Hängt am _isLocal-Flag und wird

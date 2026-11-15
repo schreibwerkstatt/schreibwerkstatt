@@ -353,21 +353,23 @@ Tempus-Regeln (typ: «tempuswechsel»):
 // namentlich auf; hier die Fach-Pendants. `wissenschaft` unterscheidet sich von
 // `sachlich` in der Beleg- und Terminologie-Strenge, darum zwei Aufgabensätze.
 
-export function _buildFachAufgabe(profil, stilOnly) {
+export function _buildFachAufgabe(profil, stilOnly, { bewerten = true } = {}) {
+  // Stil-Pass eines Stücks (ohne Bewertungsfelder): der Schluss-Satz entfällt.
+  const bewertenSatz = bewerten ? ' Bewerte ausserdem die Teilabschnitte des Abschnitts.' : '';
   const objektivHinweis = stilOnly
     ? ' WICHTIG: Rechtschreibung, Grammatik und Zeichensetzung/Interpunktion werden in einem SEPARATEN Pass geprüft und dürfen hier NICHT gemeldet werden.'
     : '';
   const gemeinsam = 'Analysiere den Text vollständig von Anfang bis Ende – nicht nur lokale Passagen oder die letzten Sätze.';
   if (profil === 'journalistisch') {
     return `${gemeinsam} Der Text ist ein JOURNALISTISCHER BEITRAG und wird nach den Massstäben redaktioneller Prosa geprüft, nicht nach denen literarischen Erzählens und nicht nach denen wissenschaftlicher Prosa.${stilOnly ? '' : ' Prüfe Rechtschreibung, Grammatik und Zeichensetzung/Interpunktion (insbesondere Kommasetzung) Satz für Satz und gründlich – das sind objektive Fehler.'} Prüfe ausserdem: den Modus der indirekten Rede, die Zuschreibung fremder Aussagen, die Trennung von Nachricht und Meinung, unübersetzte Amts- und PR-Sprache, Klarheit und Satzbau, Wortwiederholungen, schwache Verben, Füllwörter, abgegriffene Nachrichtenfloskeln, KI-Geruch, vermeidbares Passiv, wechselnde Terminologie, Pleonasmen und Tempus-Konsistenz (Zuständigkeit und Details der einzelnen Typen siehe Regelblöcke unten).
-AUSDRÜCKLICH KEIN MANGEL und NICHT zu melden: kurze Hauptsätze, Alltagssprache, die wörtliche Wiederholung eines Eigennamens, dichte Zahlen- und Namensnennung, sachlich-nüchterner Ton, fehlende Szenen, fehlende Figurenarbeit, fehlende Bildsprache. Wörtliche Zitate sind unantastbar – siehe ZITAT-TREUE.${objektivHinweis} Bewerte ausserdem die Teilabschnitte des Abschnitts.`;
+AUSDRÜCKLICH KEIN MANGEL und NICHT zu melden: kurze Hauptsätze, Alltagssprache, die wörtliche Wiederholung eines Eigennamens, dichte Zahlen- und Namensnennung, sachlich-nüchterner Ton, fehlende Szenen, fehlende Figurenarbeit, fehlende Bildsprache. Wörtliche Zitate sind unantastbar – siehe ZITAT-TREUE.${objektivHinweis}${bewertenSatz}`;
   }
   if (profil === 'wissenschaft') {
     return `${gemeinsam} Der Text ist Teil einer WISSENSCHAFTLICHEN ARBEIT und wird nach den Maßstäben wissenschaftlicher Prosa geprüft, nicht nach denen literarischen Erzählens.${stilOnly ? '' : ' Prüfe Rechtschreibung, Grammatik und Zeichensetzung/Interpunktion (insbesondere Kommasetzung) Satz für Satz und gründlich – das sind objektive Fehler.'} Prüfe ausserdem: unbelegte Behauptungen, Begriffsdisziplin, konsistente Autorenreferenz, Tempus-Konvention der Abschnitte, gestapeltes Hedging, Satzbau, Wortwiederholungen ausserhalb der Fachterminologie, Füllwörter, Pleonasmen und sonstige sprachliche Schwächen (Zuständigkeit und Details der einzelnen Typen siehe Regelblöcke unten).
-AUSDRÜCKLICH KEIN MANGEL und NICHT zu melden: Nominalstil und Substantivierungen, sachlich-distanzierter Ton, Passivkonstruktionen, Fachterminologie und Fremdwörter, unpersönliche Formulierung, wiederholte Fachbegriffe, fehlende Szenen, fehlende Bildsprache, fehlende Figuren- oder Spannungsarbeit. Erzählerische Stilmittel sind hier nicht das Ziel; verlange sie nicht und rechne ihr Fehlen nicht als Schwäche.${objektivHinweis} Bewerte ausserdem die Teilabschnitte des Abschnitts.`;
+AUSDRÜCKLICH KEIN MANGEL und NICHT zu melden: Nominalstil und Substantivierungen, sachlich-distanzierter Ton, Passivkonstruktionen, Fachterminologie und Fremdwörter, unpersönliche Formulierung, wiederholte Fachbegriffe, fehlende Szenen, fehlende Bildsprache, fehlende Figuren- oder Spannungsarbeit. Erzählerische Stilmittel sind hier nicht das Ziel; verlange sie nicht und rechne ihr Fehlen nicht als Schwäche.${objektivHinweis}${bewertenSatz}`;
   }
   return `${gemeinsam} Der Text ist SACHTEXT (Sachbuch, Essay oder Blog) und wird nach den Maßstäben argumentierender Prosa geprüft, nicht nach denen literarischen Erzählens.${stilOnly ? '' : ' Prüfe Rechtschreibung, Grammatik und Zeichensetzung/Interpunktion (insbesondere Kommasetzung) Satz für Satz und gründlich – das sind objektive Fehler.'} Prüfe ausserdem: Klarheit und Satzbau, Wortwiederholungen ausserhalb der Fachbegriffe, schwache Verben, Füllwörter, abgegriffene Phrasen, KI-Geruch, vermeidbares Passiv, gestapelte Absicherungsfloskeln, wechselnde Terminologie für dieselbe Sache, Pleonasmen und Tempus-Konsistenz (Zuständigkeit und Details der einzelnen Typen siehe Regelblöcke unten).
-AUSDRÜCKLICH KEIN MANGEL und NICHT zu melden: fehlende Szenen, fehlende Figurenarbeit, abstraktes Benennen statt szenischem Zeigen, Wahrnehmungsverben, sachlicher Ton, Fachterminologie, wo sie präzisiert.${objektivHinweis} Bewerte ausserdem die Teilabschnitte des Abschnitts.`;
+AUSDRÜCKLICH KEIN MANGEL und NICHT zu melden: fehlende Szenen, fehlende Figurenarbeit, abstraktes Benennen statt szenischem Zeigen, Wahrnehmungsverben, sachlicher Ton, Fachterminologie, wo sie präzisiert.${objektivHinweis}${bewertenSatz}`;
 }
 
 export function _buildFachSeverityBlock(stilistischeTypen, mechanischeTypen, stylisticCap = 10) {
@@ -389,7 +391,7 @@ SCHWERE-SCHWELLE (Anti-Pedanterie, Pflicht-Filter vor dem Aufnehmen ins «fehler
 `;
 }
 
-export function _buildFachSelbstkontrollBlock(mechanischeTypen, profil = 'wissenschaft') {
+export function _buildFachSelbstkontrollBlock(mechanischeTypen, profil = 'wissenschaft', { bewertung = true } = {}) {
   // Schritt 1 + 2 unterscheiden sich pro Profil: der Massstab ist im
   // journalistischen Text die Schlussredaktion, nicht das Gutachten — und die
   // Genre-Freigabe ist dort fast das Gegenteil (Nominalstil ist hier ein
@@ -417,8 +419,8 @@ Bevor du die JSON-Antwort ausgibst, gehe deine gesammelten Findings einmal durch
 6. ZEICHENGENAUIGKEIT: Liesse sich «original» mit einem String-Find im Originaltext genau einmal finden? Wenn nein → korrigieren oder streichen.
 7. SPAN-TYP-KONSISTENZ: Sind «original» und «korrektur» beide gleichlange Spans (beide Phrase ODER beide Satz)? Wenn nein → korrigieren.
 8. ERKLÄRUNGS-FILTER: Enthält «erklaerung» «kein Fehler» / «vertretbar» / «möglicherweise» / «akzeptabel»? Wenn ja → Eintrag streichen.
-9. SORTIERUNG: Sortiere das «fehler»-Array AUFSTEIGEND nach Textposition (erstes Auftreten von «original» im Originaltext).
-10. ZUSAMMENFASSUNGS-DISJUNKTION: Lies «stilanalyse», «fazit» und jedes «szenen[].kommentar» einzeln. Beschreibt ein Satz dort einen Mangel, der bereits durch einen Eintrag im «fehler»-Array abgedeckt ist (auch in Aggregat-Form wie «viele Wiederholungen», «häufig unbelegt», «zu viel Hedging») → diesen Satz löschen oder durch eine nicht überlappende Beobachtung ersetzen.
+9. SORTIERUNG: Sortiere das «fehler»-Array AUFSTEIGEND nach Textposition (erstes Auftreten von «original» im Originaltext).${bewertung ? `
+10. ZUSAMMENFASSUNGS-DISJUNKTION: Lies «stilanalyse», «fazit» und jedes «szenen[].kommentar» einzeln. Beschreibt ein Satz dort einen Mangel, der bereits durch einen Eintrag im «fehler»-Array abgedeckt ist (auch in Aggregat-Form wie «viele Wiederholungen», «häufig unbelegt», «zu viel Hedging») → diesen Satz löschen oder durch eine nicht überlappende Beobachtung ersetzen.` : ''}
 `;
 }
 

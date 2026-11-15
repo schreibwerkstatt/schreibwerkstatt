@@ -190,12 +190,13 @@ function _validTypen(run, textsorte) {
 // Buchkontext. `neighbourParas` aus makeNeighbourLoader(). `chapterNameOf`
 // liefert den Kapitelnamen zu einer chapter_id. `fromPct`/`toPct` nur beim
 // Seiten-Lektorat (feiner Fortschritt über die Teil-Calls); der Batch steuert den
-// Balken über den Seitenzähler.
+// Balken über den Seitenzähler. `callLimit` (nur Batch): Semaphore über alle
+// KI-Calls des Laufs, siehe lektoratAnalyze.
 // Rückgabe: { empty: true } oder { pd, html, fehler, szenen, stilanalyse, fazit,
 //   checkId, historyDedup, cached }.
 async function checkOnePage(run, {
   jobId, tok, pageId, pages = null, neighbourParas = null, chapterNameOf = () => null,
-  fromPct = null, toPct = null, onCacheHit = null,
+  fromPct = null, toPct = null, onCacheHit = null, callLimit = null,
 }) {
   const { bookId, userEmail, local, bookSettings, locale, langCode } = run;
   const pd = await contentStore.loadPage(pageId).catch(e => { throw contentHttpError(e); });
@@ -303,7 +304,7 @@ async function checkOnePage(run, {
     // Nur gesetzt, wenn Fakten anliegen: Seiten ohne Welt-Bezug behalten ihren Cache.
     ...(weltfakten.length ? { wf: weltfakten } : {}),
     ...(soziolekte.length ? { sz: soziolekte } : {}),
-    ..._runSig(local, text.length),
+    ..._runSig(local, text),
   }) : null;
   // Nachbearbeitung für frische und gecachte Ergebnisse, plus Wörterbuch-Backstop
   // (greift auch für Wörter jenseits von MAX_PROMPT_WORDS, die der Prompt nicht sah).
@@ -312,7 +313,7 @@ async function checkOnePage(run, {
   const finalize = (fehler) => {
     const located = dropUnlocatable(
       mergeRegelBefunde(
-        dropDictionaryFindings(finalizeFehler(ohneRegelBefunde(fehler), locale, validTypen, neighbour), woerterbuch),
+        dropDictionaryFindings(finalizeFehler(ohneRegelBefunde(fehler), locale, validTypen, neighbour, { local }), woerterbuch),
         regelBefunde, text),
       text, countInText);
     unlocatable = located.dropped;
@@ -331,7 +332,7 @@ async function checkOnePage(run, {
     result = await lektoratAnalyze({
       jobId, tok, text, local, prompts: run.prompts, system: run.system,
       buchtyp: bookSettings?.buchtyp || null,
-      fromPct, toPct,
+      fromPct, toPct, callLimit,
       promptOpts: {
         stopwords: run.stopwords,
         erklaerungRule: run.erklaerungRule,

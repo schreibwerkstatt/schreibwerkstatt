@@ -170,6 +170,12 @@ export {
   buildObjektivLektoratSchema,
 } from './prompts/lektorat-objektiv.js';
 
+// Bewertungs-Pass (szenen/stilanalyse/fazit) für Abschnitte, die in Stücken geprüft werden.
+export {
+  buildBewertungLektoratPrompt,
+  buildBewertungLektoratSchema,
+} from './prompts/lektorat-bewertung.js';
+
 // Fehlertyp-Profile pro Buchtyp – SSoT auch für die Server-Seite (Validierung des
 // AI-Outputs in routes/jobs/lektorat-page.js).
 export {

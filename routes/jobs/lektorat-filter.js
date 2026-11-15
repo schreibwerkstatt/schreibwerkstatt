@@ -5,7 +5,8 @@
 
 const appSettings = require('../../lib/app-settings');
 const { dropNeighbourFindings } = require('./lektorat-context');
-const { splitEnabled, objektivRuns, consensusThreshold } = require('./lektorat-split');
+const { splitEnabled } = require('./lektorat-split');
+const { chunkingApplies, chunkText, chunkThreshold, CHUNK_TARGET_CHARS } = require('../../lib/lektorat-chunks');
 
 // Erklärungs-Phrasen, mit denen das Modell einen Eintrag selbst widerruft.
 // Sprach-agnostisches letztes Sicherheitsnetz: Lokale Modelle (Ollama/Llama)
@@ -117,14 +118,33 @@ function effectiveStylisticCap(textLen, base = stylisticCap()) {
   return Math.max(base, Math.min(scaled, max));
 }
 
+// Obergrenze für einen ganzen Abschnitt: am Stück die längenabhängige Zahl, in
+// Stücken (lib/lektorat-chunks.js) die Summe der Obergrenzen der Stücke — jedes
+// Stück-Prompt nennt seine eigene, der Backstop darf sie zusammen nicht unterbieten.
+// `local` wie im Lauf: lokale Provider zerlegen nie.
+function stylisticCapForText(text, { local = false } = {}) {
+  const t = String(text || '');
+  if (!chunkingApplies(t.length, { local, split: splitEnabled() })) return effectiveStylisticCap(t.length);
+  return chunkText(t).reduce((n, c) => n + effectiveStylisticCap(c.text.length), 0);
+}
+
 // Lauf-Parameter, die den Output formen, aber in keinem Prompt-String stecken: die
-// Stil-Obergrenze und die Pass-Aufteilung (Split an/aus, Zahl der Objektiv-Läufe,
-// Konsens-Schwelle). Gehören in die Cache-Signatur, sonst liefert der Cache nach
+// Stil-Obergrenze und die Pass-Aufteilung (Split an/aus, Stücke). Gehören in die Cache-Signatur, sonst liefert der Cache nach
 // einer Umstellung das Ergebnis der alten Konfiguration. `sc` ist die wirksame
 // Obergrenze dieses Abschnitts: kurze Abschnitte behalten so ihre Cache-Zeilen.
-function _runSig(local, textLen = 0) {
+// `ck` (Schwelle/Stückgrösse) nur, wenn der Abschnitt in Stücken geprüft wird —
+// Abschnitte unter der Schwelle behalten ihre Cache-Zeilen.
+function _runSig(local, text = '') {
   const split = !local && splitEnabled();
-  return { sc: effectiveStylisticCap(textLen), sp: split ? `${objektivRuns()}/${consensusThreshold()}` : 0 };
+  const t = String(text || '');
+  const chunked = chunkingApplies(t.length, { local, split });
+  return {
+    sc: stylisticCapForText(t, { local }),
+    // Split an: fester Wert '1/2' — so steht er in allen bestehenden Cache-Zeilen
+    // (ein Objektiv-Pass, Format «Läufe/Schwelle»); ein anderer Wert entwertete sie.
+    sp: split ? '1/2' : 0,
+    ...(chunked ? { ck: `${chunkThreshold()}/${CHUNK_TARGET_CHARS}` } : {}),
+  };
 }
 
 function validateLektoratFehler(fehler, locale, validTypen) {
@@ -161,18 +181,19 @@ function validateLektoratFehler(fehler, locale, validTypen) {
 // Typ werden verworfen. Greift auch auf dem Cache-Pfad: eine Buchtyp-Umstellung
 // soll narrativ geprägte Alt-Findings nicht durchlassen.
 // `neighbour` = { text, excerpts } der Seite und ihrer Kontext-Auszüge; `text` ist
-// der Prompt-Text und bestimmt die wirksame Stil-Obergrenze (effectiveStylisticCap).
-function finalizeFehler(fehler, locale, validTypen, neighbour = null) {
+// der Prompt-Text und bestimmt die wirksame Stil-Obergrenze (stylisticCapForText);
+// `local` wie im Lauf (lokal wird nie in Stücken geprüft).
+function finalizeFehler(fehler, locale, validTypen, neighbour = null, { local = false } = {}) {
   const valid = validateLektoratFehler(fehler, locale, validTypen);
   const own = neighbour ? dropNeighbourFindings(valid, neighbour.text, neighbour.excerpts) : valid;
   const text = neighbour?.text ?? null;
-  const cap = effectiveStylisticCap(text ? text.length : 0);
+  const cap = stylisticCapForText(text, { local });
   return capStylisticFehler(dedupFehler(own), cap, text);
 }
 
 module.exports = {
   NON_ERROR_RE, STYLISTIC_TYPEN,
   STYLISTIC_CAP_UNIT_CHARS,
-  dedupFehler, capStylisticFehler, stylisticCap, effectiveStylisticCap, _runSig,
+  dedupFehler, capStylisticFehler, stylisticCap, effectiveStylisticCap, stylisticCapForText, _runSig,
   validateLektoratFehler, finalizeFehler,
 };

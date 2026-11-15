@@ -3,7 +3,7 @@
 // jede Seite über denselben Kern (lektorat-page.js#checkOnePage) — Kontext,
 // Cache-Signatur, Prompt und History-Eintrag sind dadurch identisch. Die
 // Nachbearbeitung der Findings liegt in lektorat-filter.js, die KI-Pässe
-// (Split/Konsens) in lektorat-split.js. Doku: docs/lektorat.md.
+// (Split, Stücke) in lektorat-split.js. Doku: docs/lektorat.md.
 const express = require('express');
 const {
   makeJobLogger, updateJob, completeJob, failJob, contentHttpError,
@@ -22,7 +22,9 @@ const { isJournalisticBook } = require('../../lib/buchtyp');
 const { getBookSettings } = require('../../db/book-settings');
 const { listChaptersForBook, pageChapters } = require('../../db/content-names');
 const appSettings = require('../../lib/app-settings');
-const { objektivRuns, splitEnabled } = require('./lektorat-split');
+const { splitEnabled } = require('./lektorat-split');
+const { makeSemaphore } = require('../../lib/ai/shared');
+const { chunkingApplies } = require('../../lib/lektorat-chunks');
 const { prepareLektoratRun, makeNeighbourLoader, loadLektoratPageList, checkOnePage, progressSincePrevious, markRejectedSincePrevious } = require('./lektorat-page');
 
 const lektoratRouter = express.Router();
@@ -77,8 +79,10 @@ async function runCheckJob(jobId, pageId, bookId, userEmail) {
       checkId: r.checkId,
       progress,
       // Länge des geprüften Texts: ab LONG_SECTION_CHARS (editor/lektorat.js)
-      // rät die Karte, den Abschnitt zu teilen.
+      // rät die Karte, den Abschnitt zu teilen — nur, wenn er am Stück geprüft
+      // wurde (`chunked`, lib/lektorat-chunks.js).
       textChars: r.text.length,
+      chunked: chunkingApplies(r.text.length, { local: run.local, split: splitEnabled() }),
       tokensIn: tok.in,
       tokensOut: tok.out,
     }, tps(tok), `«${pd.name}» page=${pageId}, chap=${pd.chapter_id || '-'}, ${r.fehler.length} Beanstandungen${r.historyDedup ? ' (dedup)' : ''}`);
@@ -124,15 +128,19 @@ async function runBatchCheckJob(jobId, bookId, userEmail, chapterId = null, { sk
 
     // Cloud-Provider verträgt parallele Calls; lokale Provider (Ollama/llama.cpp) sind
     // bereits via Mutex in lib/ai.js serialisiert – Pool=1 verhindert pile-up im aiCall.
-    // Split-Modus (Cloud): jede Seite fächert in K Objektiv-Läufe + 1 Stil-Lauf auf.
+    // Split-Modus (Cloud): jede Seite fächert in einen Objektiv- und einen Stil-Call auf.
     // `ai.lektorat_batch_concurrency` deckelt die gleichzeitigen CALLS, nicht die Seiten –
     // der Seiten-Pool ist der Quotient daraus (Rate-Limit-Schutz). Der Default (4) ist
     // bewusst so gewählt, dass er mit dem Split-Default noch zwei Seiten parallel zulässt;
     // wer den Regler auf die Zahl der Calls pro Seite herunterdreht, bekommt bewusst
     // einen seriellen Batch.
     const rawConcurrency = run.local ? 1 : (parseInt(appSettings.get('ai.lektorat_batch_concurrency'), 10) || 4);
-    const callsPerPage = (!run.local && splitEnabled()) ? objektivRuns() + 1 : 1;
+    const callsPerPage = (!run.local && splitEnabled()) ? 2 : 1;
     const concurrency = Math.max(1, Math.floor(rawConcurrency / callsPerPage));
+    // Ein langer Abschnitt in Stücken (lib/lektorat-chunks.js) feuert ein Vielfaches
+    // von callsPerPage — die Semaphore hält die Calls des ganzen Laufs trotzdem
+    // unter dem Regler.
+    const callLimit = makeSemaphore(() => rawConcurrency);
     const tok = { in: 0, out: 0, ms: 0, inflight: new Map() };
     const neighbourParas = makeNeighbourLoader({ langCode: run.langCode });
     // Nachbarn in Buchreihenfolge über Kapitelgrenzen; geprüft wird weiter `pages`.
@@ -160,7 +168,7 @@ async function runBatchCheckJob(jobId, bookId, userEmail, chapterId = null, { sk
         // Bei Pool>1 sind feinere Pct-Ranges pro Item nicht sinnvoll (mehrere
         // Calls schreiben gleichzeitig den Job-Progress) — darum ohne fromPct/toPct.
         const r = await checkOnePage(run, {
-          jobId, tok, pageId: p.id, pages: orderedPages, neighbourParas, chapterNameOf,
+          jobId, tok, pageId: p.id, pages: orderedPages, neighbourParas, chapterNameOf, callLimit,
           onCacheHit: () => logger.info(`${tag} – Cache-HIT`),
         });
         if (r.empty) { skippedEmpty++; tick(p); return; }

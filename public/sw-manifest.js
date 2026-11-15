@@ -5,7 +5,7 @@
 // __SHELL_BUILD: content hash over all listed assets → drives SHELL_CACHE.
 // __SHELL_MANIFEST: the coherent set precached atomically at SW install.
 // __VENDOR_SET: current vendor/ + fonts/ files — VENDOR_CACHE prune list.
-self.__SHELL_BUILD = "21cb9ae98352a0cc";
+self.__SHELL_BUILD = "bd66f6588f2d14c7";
 self.__SHELL_MANIFEST = [
   "/css/admin/admin-backup.css",
   "/css/admin/admin-home.css",
@@ -907,6 +907,7 @@ self.__SHELL_MANIFEST = [
   "/js/prompts/komplett/schema-strings.js",
   "/js/prompts/komplett/schemas.js",
   "/js/prompts/kontinuitaet-recheck.js",
+  "/js/prompts/lektorat-bewertung.js",
   "/js/prompts/lektorat-nachbar.js",
   "/js/prompts/lektorat-objektiv.js",
   "/js/prompts/lektorat-typen.js",

@@ -11,6 +11,9 @@
  *   einem ANDEREN Kapitel stammt ('' = Name unbekannt); null = gleiches Kapitel
  * @param {string|null} o.nextChapter      dito für den nächsten Auszug
  * @param {boolean} o.schreibfront  Werk nicht abgeschlossen, danach folgt kein Text
+ * @param {boolean} o.stueckDavor   der vorherige Auszug ist Text DESSELBEN Abschnitts
+ *   (Prüfung in Stücken, routes/jobs/lektorat-split.js), kein Nachbarabschnitt
+ * @param {boolean} o.stueckDanach  dito für den nächsten Auszug
  * @param {boolean} o.fach     Fach-Profil (Gedankengang statt Szene)
  * @param {boolean} o.eintrag  Bewertungseinheit Tagebucheintrag
  * @param {boolean} o.local    lokaler Provider
@@ -19,6 +22,7 @@
 export function _buildNachbarBlocks({
   previousExcerpt = null, nextExcerpt = null, previousChapter = null, nextChapter = null,
   schreibfront = false, fach = false, eintrag = false, local = false,
+  stueckDavor = false, stueckDanach = false,
 } = {}) {
   // Nachbarseiten-Auszüge: reiner Lesekontext für Übergänge und die Stil-/
   // Szenenbewertung – lokal gedroppt (kleine Modelle prüfen solche Fragmente
@@ -31,18 +35,28 @@ export function _buildNachbarBlocks({
     : eintrag
     ? 'z.B. ob ein Datum oder ein Thema abgerissen ist. Ein Eintrag, der mitten im Satz abbricht, ist ein Befund – ein Eintrag, der ohne Überleitung zum nächsten weitergeht, nicht: das ist im Tagebuch der Normalfall.'
     : 'z.B. ob eine Szene im nächsten Abschnitt weitergeht oder ein scheinbar abrupter Schluss bewusst offen bleibt. Eine Szene, die erkennbar fortgesetzt wird, nicht als unvollständig oder abgebrochen bewerten.';
-  const prevLabel = previousChapter != null
+  const prevLabel = stueckDavor
+    ? 'Text unmittelbar davor im selben Abschnitt (separat geprüft)'
+    : previousChapter != null
     ? `Letzter Absatz des vorherigen Kapitels${previousChapter ? ` «${previousChapter}»` : ''} (Kapitelwechsel)`
     : 'Letzter Absatz des vorherigen Abschnitts';
-  const nextLabel = nextChapter != null
+  const nextLabel = stueckDanach
+    ? 'Text unmittelbar danach im selben Abschnitt (separat geprüft)'
+    : nextChapter != null
     ? `Erster Absatz des nächsten Kapitels${nextChapter ? ` «${nextChapter}»` : ''} (Kapitelwechsel)`
     : 'Erster Absatz des nächsten Abschnitts';
   const kapitelwechsel = (previousChapter != null || nextChapter != null)
     ? 'Ein mit «Kapitelwechsel» bezeichneter Auszug stammt aus einem anderen Kapitel: ein Schnitt in Ort, Zeit oder Perspektive ist an dieser Grenze normal und kein Bruch.\n'
     : '';
+  // Stück eines langen Abschnitts: geprüft wird nur ein Teil, der Rest läuft in
+  // eigenen Pässen. Ein Stück endet an einer Absatzgrenze, nicht am Szenenende.
+  const stueck = stueckDavor || stueckDanach;
+  const stueckHinweis = stueck
+    ? 'Der <originaltext> ist ein Stück eines längeren Abschnitts; seine Grenzen sind Absatzgrenzen, keine Szenen- oder Gedankengrenzen. Ein Anfang oder Ende mitten im Geschehen ist darum KEIN Befund.\n'
+    : '';
   const nachbarBlock = (local || (!previousExcerpt && !nextExcerpt)) ? '' : `
 <nachbarkontext>
-Die folgenden Auszüge gehören NICHT zum geprüften Abschnitt. Sie zeigen nur, wie der Text ${[previousExcerpt && 'davor endet', nextExcerpt && 'danach weitergeht'].filter(Boolean).join(' und ')} – als Lesekontext für Übergänge (Tempus, Perspektive, Pronomen, Anschluss) und für «stilanalyse»${fach ? '' : '/«szenen»'}: ${fortsetzung}
+${stueckHinweis}Die folgenden Auszüge gehören NICHT zum geprüften ${stueck ? 'Stück' : 'Abschnitt'}. Sie zeigen nur, wie der Text ${[previousExcerpt && 'davor endet', nextExcerpt && 'danach weitergeht'].filter(Boolean).join(' und ')} – als Lesekontext für Übergänge (Tempus, Perspektive, Pronomen, Anschluss) und für «stilanalyse»${fach ? '' : '/«szenen»'}: ${fortsetzung}
 PFLICHT: Nichts aus diesen Auszügen bewerten oder in «fehler» aufnehmen – jedes «original» stammt ausschliesslich aus <originaltext>. Den Inhalt der Auszüge in «stilanalyse»/«fazit» nicht nacherzählen.
 ${kapitelwechsel}${previousExcerpt ? `<vorherige_seite label="${prevLabel}">\n${previousExcerpt}\n</vorherige_seite>\n` : ''}${nextExcerpt ? `<naechste_seite label="${nextLabel}">\n${nextExcerpt}\n</naechste_seite>\n` : ''}</nachbarkontext>
 `;

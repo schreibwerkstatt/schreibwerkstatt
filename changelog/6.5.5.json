@@ -1,0 +1,11 @@
+{
+  "version": "6.5.5",
+  "date": "2026-11-15",
+  "entries": [
+    {
+      "kind": "verbessert",
+      "de": "Lektorat: lange Abschnitte werden jetzt in Teilen gründlich geprüft statt in einem Zug. Dadurch findet es auch spät im Text Komma-, Strich- und Stilfehler, die bisher durchgerutscht sind.",
+      "en": "Copy-editing: long sections are now checked thoroughly piece by piece instead of in one go. It now also finds comma, dash and style errors late in the text that used to slip through."
+    }
+  ]
+}

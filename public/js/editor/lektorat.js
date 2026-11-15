@@ -41,7 +41,8 @@ function _ambiguousIn(html, original) {
 }
 
 // Ab dieser Länge des geprüften Texts (Zeichen) rät das Ergebnis, den Abschnitt
-// zu teilen (routes/jobs/lektorat.js liefert `textChars`).
+// zu teilen (routes/jobs/lektorat.js liefert `textChars`) — ausser er wurde
+// ohnehin in Stücken geprüft (`chunked`).
 const LONG_SECTION_CHARS = 20000;
 
 export const lektoratMethods = {
@@ -428,9 +429,9 @@ export const lektoratMethods = {
             total: fehler.length,
           }))}</div>`;
         }
-        // Langer Abschnitt: ein Lauf prüft ihn als Ganzes, die Befunde streuen
-        // dort von Lauf zu Lauf stärker und dauern länger. Rat, ihn zu teilen.
-        if (r.textChars > LONG_SECTION_CHARS) {
+        // Langer Abschnitt, am Stück geprüft (ohne Prüfung in Stücken, z.B. lokal):
+        // die Befunde streuen dort von Lauf zu Lauf stärker. Rat, ihn zu teilen.
+        if (r.textChars > LONG_SECTION_CHARS && !r.chunked) {
           out += `<div class="analysis-notice">${escHtml(this.t('lektorat.longSection', {
             chars: formatNumber(r.textChars, this.$store.shell.uiLocale, 0),
           }))}</div>`;
