@@ -75,7 +75,11 @@ du davon hast? Nein ⇒ umschreiben, nicht ergaenzen. Ist ein Eintrag zu lang
 geworden, steckt darin fast immer Technik, nicht Inhalt.
 
 Interne Refactorings, Testarbeit und Doku-Pflege gehoeren gar nicht hinein — sie
-aendern fuer den Leser nichts.
+aendern fuer den Leser nichts. Jede Verhaltensaenderung im laufenden Programm
+dagegen bekommt einen Eintrag, auch wenn sie nicht an der Oberflaeche sichtbar ist
+(Fehlerprotokoll, Stabilitaet, Leistung, Sicherheit) — beschrieben mit dem, was
+sie dem User bringt. Die Pauschal-Zeile «Wartung und interne Verbesserungen»
+nur, wenn seit dem letzten Release wirklich nichts davon dazukam.
 
 ## Regeln
 

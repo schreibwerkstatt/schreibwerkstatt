@@ -1,0 +1,16 @@
+{
+  "version": "6.6.4",
+  "date": "2026-11-16",
+  "entries": [
+    {
+      "kind": "verbessert",
+      "de": "Wenn die Rechtschreibprüfung keine Antwort liefert oder eine Verbindung abbricht, hält die App das jetzt fest. So lassen sich solche Aussetzer schneller finden und beheben.",
+      "en": "When the spell check returns no answer or a connection drops, the app now records it. This makes such glitches quicker to track down and fix."
+    },
+    {
+      "kind": "verbessert",
+      "de": "Fehlermeldungen und ungewöhnlich langsame Antworten der App werden jetzt mitprotokolliert. Probleme, die du meldest, lassen sich damit leichter nachvollziehen.",
+      "en": "Error responses and unusually slow replies are now logged. Problems you report are easier to trace as a result."
+    }
+  ]
+}

@@ -2,8 +2,8 @@
 'use strict';
 // PreToolUse-Hook (Bash): ein Release gehört zwischen Commit und Tag dem
 // /release-Befehl. «Offen» ist ein `release: vX.Y.Z`-Commit, der lokal vor
-// origin/main liegt und noch in keinem Versions-Tag `v*` steckt — sein
-// Schnappschuss wird gerade getestet ([.claude/commands/release.md]). Solange
+// origin/main liegt und noch in keinem Versions-Tag `v*` steckt — zwischen
+// Commit und Tag des Release-Laufs ([.claude/commands/release.md]). Solange
 // einer offen ist, blockt der Hook in DIESEM Repo:
 //   • git push auf main — enthält der Push den Release-Commit, ginge er vor
 //     dem grünen Test raus; enthält er ihn nicht, überholt ein Fremd-Commit den
