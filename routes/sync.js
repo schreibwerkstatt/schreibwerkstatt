@@ -154,7 +154,8 @@ async function syncPagesCache(bookId, ctx) {
   if (bookMeta) upsertBook(bookMeta);
   _upsertPagesCache(bookId, pages, chapters);
 
-  // Vorschautexte nur für Seiten ohne gecachten Preview laden (neue Seiten oder nach Migration)
+  // Vorschautexte nur für Seiten ohne gecachten Preview laden (neue Seiten, nach
+  // einem Body-Save — savePage setzt preview_text auf NULL — oder nach Migration).
   // listPages liefert preview_text mit — kein zweiter Lesepfad auf `pages`.
   const toFetch = pages.filter(p => p.preview_text == null);
   if (toFetch.length) {
@@ -167,7 +168,9 @@ async function syncPagesCache(bookId, ctx) {
       for (const pd of loaded) {
         try {
           const text = htmlToText(pd.html || '').trim();
-          items.push({ page_id: pd.id, preview_text: text ? text.slice(0, PREVIEW_CHARS) : null });
+          // Leerer Abschnitt → '' (nicht NULL): NULL heisst «noch nicht berechnet»
+          // und würde bei jedem Cache-Lauf erneut geladen.
+          items.push({ page_id: pd.id, preview_text: text.slice(0, PREVIEW_CHARS) });
         } catch { /* einzelne Seite überspringen */ }
       }
       contentStore.setPagePreviews(items);
@@ -247,7 +250,7 @@ async function syncBook(bookId, ctx, { day = null } = {}) {
       catch (e) { logger.warn(`Sync Buch ${bookId}: Seite ${pd.id} übersprungen: ${e.message}`); continue; }
       const { preview, fullText, styleText, msgRanges, proseText, ...statsItem } = value;
       statsItems.push(statsItem);
-      previewItems.push({ page_id: value.page_id, preview_text: preview || null });
+      previewItems.push({ page_id: value.page_id, preview_text: preview || '' });
       totalWords += value.words;
       totalChars += value.chars;
       totalTok += value.tok;
@@ -539,4 +542,4 @@ router.post('/book/:book_id', async (req, res) => {
   }
 });
 
-module.exports = { router, syncAllBooks, syncBook };
+module.exports = { router, syncAllBooks, syncBook, syncPagesCache };

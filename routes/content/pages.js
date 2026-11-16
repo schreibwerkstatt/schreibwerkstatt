@@ -150,13 +150,20 @@ function register(router) {
         const line = `PAGE_SAVE Seite ${pageId}: Geraet ${req.body?.device_id || '-'} Tab ${_logToken(req.body?.client_tab)} SW ${_logToken(req.body?.client_sw)} Weg ${_logToken(req.body?.save_reason)} erwartete ${_logStamp(req.body?.expected_updated_at)}, neu ${saved?.updated_at || '-'}${_saveSuffix(saved)}.`;
         if (_isNotableSave(saved, req.body)) logger.info(line);
         else logger.debug(line);
+      } else {
+        // Umbenennen/Verschieben ohne Body: keine Revision, kein PAGE_SAVE —
+        // ohne diese Zeile ist ein updated_at-Sprung ohne Text-Änderung im Log
+        // nicht zu erklären.
+        const fields = ['name', 'chapter_id', 'position'].filter(k => req.body?.[k] !== undefined);
+        logger.info(`PAGE_META Seite ${pageId}: ${fields.join(',') || '-'} geändert, neu ${saved?.updated_at || '-'}.`);
       }
       // `no_change` ist ein internes Signal (unveraenderter Stand), kein
       // Vertragsfeld — nicht ausliefern.
       res.json(_publicPayload(saved));
       // Auto-Erledigt-Check der Ideen: entprellt, misst selbst, ob die Änderung
       // gross genug ist (routes/jobs/ideen-auto-check.js). Wirft nie.
-      if (!saved?.no_change) noteIdeenPageSave(pageId, bookId, email);
+      // Nur ein Text-Write zählt: Umbenennen/Verschieben ändert den Text nicht.
+      if (!saved?.no_change && typeof req.body?.html === 'string') noteIdeenPageSave(pageId, bookId, email);
     }
     catch (e) {
       if (e.code === 'EMPTY_BODY') return res.status(400).json({ error_code: 'EMPTY_BODY' });

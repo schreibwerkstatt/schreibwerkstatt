@@ -63,3 +63,21 @@ test('routes/sync.js schreibt preview_text nur ueber die Facade', async () => {
   assert.doesNotMatch(src, /UPDATE\s+pages\s+SET\s+preview_text/i);
   assert.match(src, /contentStore\.setPagePreviews\(/);
 });
+
+test('savePage mit Body verwirft den Vorschau-Cache, Umbenennen nicht', async () => {
+  const d = await contentStore.createPage({ book_id: 9701, name: 'D', html: '<p>vier</p>' });
+  contentStore.setPagePreviews([{ page_id: d.id, preview_text: 'vier' }]);
+  await contentStore.savePage(d.id, { name: 'D2' }, null);
+  assert.equal(row(d.id).preview_text, 'vier');
+  await contentStore.savePage(d.id, { html: '<p>fünf</p>' }, null);
+  assert.equal(row(d.id).preview_text, null);
+});
+
+test('No-op-Save behaelt den Vorschau-Cache', async () => {
+  const e = await contentStore.createPage({ book_id: 9701, name: 'E', html: '<p>sechs</p>' });
+  const html = (await contentStore.loadPage(e.id)).html;
+  contentStore.setPagePreviews([{ page_id: e.id, preview_text: 'sechs' }]);
+  const saved = await contentStore.savePage(e.id, { html }, null);
+  assert.equal(saved.no_change, true);
+  assert.equal(row(e.id).preview_text, 'sechs');
+});

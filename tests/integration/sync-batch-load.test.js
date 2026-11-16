@@ -50,3 +50,25 @@ test('syncBook: Stats + Vorschau fuer alle Seiten, ohne Einzel-loadPage', async 
   const previews = db.prepare('SELECT preview_text FROM pages WHERE book_id = ?').all(bookId);
   assert.ok(previews.every(r => r.preview_text && r.preview_text.startsWith('Satz ')));
 });
+
+test('leerer Abschnitt: Vorschau "" statt NULL, kein Nachladen bei jedem Cache-Lauf', async () => {
+  const { syncPagesCache } = require('../../routes/sync');
+  const empty = await contentStore.createPage({ book_id: bookId, name: 'Leer', html: '<p></p>' }, null);
+  await syncBook(bookId, null);
+  const pv = () => db.prepare('SELECT preview_text FROM pages WHERE page_id = ?').get(empty.id).preview_text;
+  assert.equal(pv(), '');
+
+  db.prepare('UPDATE pages SET preview_text = NULL WHERE page_id = ?').run(empty.id);
+  const orig = contentStore.loadPagesBatch;
+  const loaded = [];
+  contentStore.loadPagesBatch = async (ids, ...a) => { loaded.push(...ids); return orig(ids, ...a); };
+  try {
+    await syncPagesCache(bookId, null);
+    assert.equal(pv(), '');
+    loaded.length = 0;
+    await syncPagesCache(bookId, null);
+    assert.deepEqual(loaded, [], 'zweiter Lauf laedt nichts nach');
+  } finally {
+    contentStore.loadPagesBatch = orig;
+  }
+});

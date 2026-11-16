@@ -658,9 +658,10 @@ Pendenzen, die **direkt an diesem Abschnitt** hängen, gegen seinen neuen Text
 ([routes/jobs/ideen-auto-check.js](../routes/jobs/ideen-auto-check.js), Prompt
 [prompts/ideen-auto-check.js](../public/js/prompts/ideen-auto-check.js)).
 
-* **Auslöser** ist `PUT /content/pages/:id` (auch der gemergte Konflikt-Write) —
-  der Speicherweg aller drei Editoren und der nativen Clients; kein Editor-Code
-  ist beteiligt. `noteIdeenPageSave` entprellt je (Abschnitt, User) um
+* **Auslöser** ist ein Text-Write über `PUT /content/pages/:id` (auch der
+  gemergte Konflikt-Write) — der Speicherweg aller drei Editoren und der nativen
+  Clients; kein Editor-Code ist beteiligt. Ein PUT ohne `html` (Umbenennen,
+  Verschieben) zählt nicht. `noteIdeenPageSave` entprellt je (Abschnitt, User) um
   `DEBOUNCE_MS` (15 min) und tut nichts, wenn der Schalter aus ist oder keine
   offene Abschnitts-Idee existiert.
 * **«Grösser»** misst `changedWordCount` (Wort-Multimenge) gegen den Ausgangsstand
