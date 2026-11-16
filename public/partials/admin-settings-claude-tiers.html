@@ -1,0 +1,45 @@
+        <!-- Modellstufen (nur Claude): Konfiguration je Stufe + Zuordnung Job → Stufe.
+             Katalog: lib/ai/job-tiers.js, Auflösung: routes/jobs/shared/model-tier.js.
+             «Stark» ist das Modell oben samt den globalen Limits unter «Erweitert». -->
+        <h4 class="admin-settings-subheading"><span x-text="$app.t('admin.settings.claude.tiersTitle')"></span></h4>
+        <small class="muted-msg muted-msg--sm" x-text="$app.t('admin.settings.claude.tiersIntro')"></small>
+        <template x-for="tier in ['max', 'standard', 'light']" :key="tier">
+          <div x-data="collapsible()" class="admin-settings-advanced">
+            <button type="button" class="collapsible-toggle" x-bind="trigger">
+              <span class="history-chevron" x-bind="chevron" aria-hidden="true"></span>
+              <span x-text="$app.t('admin.settings.jobTier.tier.' + tier)"></span>
+              <span class="admin-settings-active-badge" x-text="adminTierModelLabel(tier)"></span>
+            </button>
+            <div x-bind="panel" x-cloak>
+              <div x-data="settingField({ k: 'ai.claude.model.tier.' + tier, label: 'admin.settings.label.tierModel', help: 'admin.settings.help.tierModel', models: 'claude' })"></div>
+              <div x-data="settingField({ k: 'ai.claude.context_window.tier.' + tier, type: 'num', label: 'admin.settings.label.contextWindow', num: { integer: true, min: 0, max: 2000000 }, help: 'admin.settings.help.tierContextWindow' })"></div>
+              <div x-data="settingField({ k: 'ai.claude.max_tokens_out.tier.' + tier, type: 'num', label: 'admin.settings.label.maxTokensOut', num: { integer: true, min: 0, max: 200000 }, help: 'admin.settings.help.tierMaxTokensOut' })"></div>
+              <div x-data="settingField({ k: 'ai.claude.timeout_ms.tier.' + tier, type: 'num', label: 'admin.settings.label.aiTimeoutMs', num: { integer: true, min: 0, max: 3600000 }, help: 'admin.settings.help.tierTimeoutMs' })"></div>
+            </div>
+          </div>
+        </template>
+
+        <div x-data="collapsible()" class="admin-settings-advanced">
+          <button type="button" class="collapsible-toggle" x-bind="trigger">
+            <span class="history-chevron" x-bind="chevron" aria-hidden="true"></span>
+            <span x-text="$app.t('admin.settings.claude.jobTiersTitle')"></span>
+            <span class="admin-settings-active-badge" x-show="adminJobTierChangedCount() > 0"
+                  x-text="$app.t('admin.settings.claude.overridesActive', { n: adminJobTierChangedCount() })"></span>
+          </button>
+          <div x-bind="panel" x-cloak>
+            <small class="muted-msg muted-msg--sm" x-text="$app.t('admin.settings.claude.jobTiersIntro')"></small>
+            <template x-for="g in adminJobTierGroups()" :key="g.group">
+              <div>
+                <h4 class="admin-settings-subheading"><span x-text="$app.t('admin.settings.jobTier.group.' + g.group)"></span></h4>
+                <template x-for="j in g.jobs" :key="j.type">
+                  <div x-data="settingField({ k: 'ai.claude.tier.job.' + j.type, type: 'select', label: j.labelKey, opts: [
+                    { value: 'max', labelKey: 'admin.settings.jobTier.tier.max' },
+                    { value: 'strong', labelKey: 'admin.settings.jobTier.tier.strong' },
+                    { value: 'standard', labelKey: 'admin.settings.jobTier.tier.standard' },
+                    { value: 'light', labelKey: 'admin.settings.jobTier.tier.light' },
+                  ] })"></div>
+                </template>
+              </div>
+            </template>
+          </div>
+        </div>

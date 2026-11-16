@@ -6,6 +6,7 @@
 const { db, getBookSettings } = require('../../../db/schema');
 const { activeFigureSql } = require('../../../db/figures/active');
 const appSettings = require('../../../lib/app-settings');
+const { getContext } = require('../../../lib/log-context');
 const { providerClass } = require('../../../lib/ai');
 const { updateJob, settledAll, jobAbortControllers, i18nError, i18nErrText, bookTextOpts } = require('../shared');
 const { _stelleQuote, _refToString } = require('./utils');
@@ -445,59 +446,71 @@ async function resolveRemapOrtNames(ctx, { chapterSzenen, orte, ortNameToId, ort
 }
 
 // ── Per-Job-Overrides für die Komplettanalyse-Familie ─────────────────────────
-// Modell, Kontextfenster, Output-Cap und Hard-Timeout dürfen für die Analyse eigenständig
-// vom globalen `ai.<provider>.*` abweichen (z.B. Opus 4.8 mit 128K Output + längerem
-// Timeout für die gründlichere Extraktion, während global Sonnet 4.6 / 64K / 10min fürs
-// Lektorat läuft). Leer/0 = folgt global. Als provider-skopierter Bag über den ALS-Context
-// an lib/ai gereicht (config.js#jobOverride) → greift für alle Calls dieses Jobs, ohne
-// globale Calls zu beeinflussen.
+// Claude: Modell, Kontextfenster und Output-Cap kommen aus der Modellstufe des Jobs
+// (routes/jobs/shared/model-tier.js, gebunden beim Job-Start; Default «stark» =
+// globale Werte). Dazu kommen hier der Effort (`ai.claude.effort.komplett`) und der
+// Hard-Timeout (`ai.claude.timeout_ms.komplett`), die an der Pipeline hängen, nicht
+// am Modell.
+// openai-compat: eigener Satz `ai.openai-compat.{model,context_window,max_tokens_out,
+// timeout_ms}.komplett` (leer/0 = folgt global) — ein gehostetes Frontier-Modell hat
+// dieselbe Trennung zwischen Alltags- und Analyse-Konfiguration, und die Analyse fuhr
+// dort sonst zwangsläufig mit dem Lektorat-Fenster.
+// Gemischt in den bestehenden Bag (lib/ai/config.js#jobOverride liest ihn für alle
+// Calls dieses Jobs, ohne globale Calls zu beeinflussen).
 //
-// GILT FÜR JEDEN PROVIDER, nicht nur Claude: ein gehostetes Frontier-Modell über
-// openai-compat hat dieselbe Trennung zwischen Alltags- und Analyse-Konfiguration, und
-// die Analyse fuhr dort sonst zwangsläufig mit dem Lektorat-Fenster. `effort` ist der
-// einzige claude-exklusive Teil (Anthropic-Parameter) — für andere Provider existiert
-// der Key nicht und der Wert bleibt leer.
-//
-// Per-Call-Timeout-Default für die Komplettanalyse, wenn ein eigenes Komplett-Profil
-// (Modell/Kontext/Output) gesetzt ist, aber kein expliziter timeout_ms.komplett: 30 Min.
-// Begründung: (a) die globalen 10 Min sind für Single-Pass-Calls über ein ganzes Buch
-// zu knapp; (b) 30 Min < 1h-Prompt-Cache-TTL — aufeinanderfolgende Claude-Calls (P1…P8,
-// alle auf demselben gecachten 1h-Buchtext-Block) stossen den Cache so stets vor Ablauf
-// neu an.
+// Per-Call-Timeout-Default, wenn die Analyse auf eigenem Modell läuft (Claude: Stufe
+// ≠ stark; openai-compat: Komplett-Satz gesetzt), aber kein expliziter
+// timeout_ms.komplett: 30 Min. Begründung: (a) die globalen 10 Min sind für
+// Single-Pass-Calls über ein ganzes Buch zu knapp; (b) 30 Min < 1h-Prompt-Cache-TTL —
+// aufeinanderfolgende Claude-Calls (P1…P8, alle auf demselben gecachten 1h-Buchtext-
+// Block) stossen den Cache so stets vor Ablauf neu an.
 const KOMPLETT_DEFAULT_TIMEOUT_MS = 1800000; // 30 min
 
-// Provider mit eigenem Komplett-Override-Satz. Ollama fehlt bewusst: dort ist das
-// Modell an das lokal geladene Gewicht gebunden, ein zweites Analyse-Modell danebenzu-
-// stellen hiesse VRAM-Tausch mitten im Job.
+// Provider mit eigenem Komplett-Override. Ollama fehlt bewusst: dort ist das Modell an
+// das lokal geladene Gewicht gebunden, ein zweites Analyse-Modell danebenzustellen
+// hiesse VRAM-Tausch mitten im Job.
 const KOMPLETT_OVERRIDE_PROVIDERS = new Set(['claude', 'openai-compat']);
 
-function _komplettAiOverrides(effectiveProvider) {
+// Liefert `{ aiJob: <gemischter Bag> }` zum Setzen per setContext, oder null.
+// `jobType`: Stufe, die ausserhalb der Queue nachgebunden wird (Prognose); im Job
+// ist sie schon gebunden und der Aufruf idempotent.
+function _komplettAiOverrides(effectiveProvider, jobType = null) {
   const p = effectiveProvider;
   if (!KOMPLETT_OVERRIDE_PROVIDERS.has(p)) return null;
-  const model = String(appSettings.get(`ai.${p}.model.komplett`) || '').trim();
-  const contextWindow = parseInt(appSettings.get(`ai.${p}.context_window.komplett`), 10) || 0;
-  const maxTokensOut = parseInt(appSettings.get(`ai.${p}.max_tokens_out.komplett`), 10) || 0;
-  const timeoutMs = parseInt(appSettings.get(`ai.${p}.timeout_ms.komplett`), 10) || 0;
-  const effort = p === 'claude'
-    ? String(appSettings.get('ai.claude.effort.komplett') || '').trim().toLowerCase()
-    : '';
-  const bag = { provider: p };
-  if (model) bag.model = model;
-  if (contextWindow > 0) bag.contextWindow = contextWindow;
-  if (maxTokensOut > 0) bag.maxTokensOut = maxTokensOut;
-  // Effort greift für ALLE Claude-Calls des Jobs (P1–P8 + Kontinuität); ungültige Werte
-  // mappt _resolveClaudeEffort still auf null. Auf Nicht-Effort-Modellen (Sonnet 4.5/Haiku)
-  // klemmt _claudeOutputConfigParams selbst (kein 400).
-  if (effort) bag.effort = effort;
-  // Eigenes Komplett-Profil aktiv? Dann den Timeout-Default greifen lassen (nie unter den
-  // expliziten globalen Wert senken). Ohne Profil bleibt es beim globalen Timeout.
-  const hasKomplettProfile = !!(model || contextWindow > 0 || maxTokensOut > 0);
-  if (timeoutMs > 0) {
-    bag.timeoutMs = timeoutMs;
-  } else if (hasKomplettProfile) {
-    const globalTimeoutMs = parseInt(appSettings.get(`ai.${p}.timeout_ms`), 10) || 600000;
-    bag.timeoutMs = Math.max(KOMPLETT_DEFAULT_TIMEOUT_MS, globalTimeoutMs);
+  const fields = {};
+  let ownModel = false;
+  if (p === 'claude') {
+    const { bindJobTier } = require('../shared/model-tier');
+    bindJobTier(jobType || getContext().job || 'komplett-analyse', p);
+    const cur = getContext().aiJob;
+    ownModel = !!(cur && cur.provider === 'claude' && cur.model);
+    // Effort greift für ALLE Claude-Calls des Jobs (P1–P8 + Kontinuität); ungültige Werte
+    // mappt _resolveClaudeEffort still auf null. Auf Nicht-Effort-Modellen (Sonnet 4.5/Haiku)
+    // klemmt _claudeOutputConfigParams selbst (kein 400).
+    const effort = String(appSettings.get('ai.claude.effort.komplett') || '').trim().toLowerCase();
+    if (effort) fields.effort = effort;
+  } else {
+    const model = String(appSettings.get(`ai.${p}.model.komplett`) || '').trim();
+    const contextWindow = parseInt(appSettings.get(`ai.${p}.context_window.komplett`), 10) || 0;
+    const maxTokensOut = parseInt(appSettings.get(`ai.${p}.max_tokens_out.komplett`), 10) || 0;
+    if (model) fields.model = model;
+    if (contextWindow > 0) fields.contextWindow = contextWindow;
+    if (maxTokensOut > 0) fields.maxTokensOut = maxTokensOut;
+    ownModel = !!(model || contextWindow > 0 || maxTokensOut > 0);
   }
+  const timeoutMs = parseInt(appSettings.get(`ai.${p}.timeout_ms.komplett`), 10) || 0;
+  if (timeoutMs > 0) {
+    fields.timeoutMs = timeoutMs;
+  } else if (ownModel) {
+    // Nie unter einen expliziten Stufen- bzw. globalen Wert senken.
+    const cur = getContext().aiJob;
+    const tierTimeout = cur && cur.provider === p ? Number(cur.timeoutMs) || 0 : 0;
+    const globalTimeoutMs = parseInt(appSettings.get(`ai.${p}.timeout_ms`), 10) || 600000;
+    fields.timeoutMs = Math.max(KOMPLETT_DEFAULT_TIMEOUT_MS, tierTimeout || globalTimeoutMs);
+  }
+  const cur = getContext().aiJob;
+  const base = cur && cur.provider === p ? cur : { provider: p };
+  const bag = { ...base, ...fields };
   // Nur `provider` im Bag = nichts überschrieben → gar keinen Bag setzen.
   return Object.keys(bag).length > 1 ? { aiJob: bag } : null;
 }

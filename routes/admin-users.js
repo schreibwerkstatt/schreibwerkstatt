@@ -67,10 +67,14 @@ function _clientIp(req) {
 // Abfrage (statt einer pro Zeile). `has_password` ist absichtlich ein Boolean
 // und nicht der Hash — die Konsole braucht nur zu wissen, ob sich das Konto
 // lokal anmelden kann.
+// `own_ai_active`: der eigene KI-Zugang greift nur, solange der Admin das Feature
+// offen hat (`ai.user_api.enabled`); zu ist er bloss gespeichert.
 function _adminUserRows(rows) {
   const pw = new Map(creds.listEmailsWithPassword().map(r => [r.user_email, r]));
+  const ownEnabled = appSettings.get('ai.user_api.enabled') === true;
   return rows.map(u => ({
     ...u,
+    own_ai_active: !!u.own_ai_provider && ownEnabled,
     has_password: pw.has(u.email),
     must_change_password: pw.get(u.email)?.must_change === 1,
   }));

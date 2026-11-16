@@ -21,6 +21,8 @@ const appSettings = require('../lib/app-settings');
 const { sessionEmail } = require('../lib/acl');
 const { contextSafetyMargin } = require('../lib/ai');
 const { assertPublicUrl } = require('../lib/ssrf-guard');
+const { ownUsageByType } = require('../db/cost-ledger');
+const { localMonthStartIso, localMonthPeriod } = require('../lib/local-date');
 const logger = require('../logger');
 
 const router = express.Router();
@@ -96,16 +98,18 @@ async function _validate(body, prev) {
     return { error_code: 'AI_ACCESS_WINDOW_INVALID' };
   }
 
+  // Claude-Zugang = nur der Key; Modell und Fenster kommen von der Instanz.
+  const claude = provider === 'claude';
   return {
     data: {
       provider,
-      model: model || null,
+      model: claude ? null : (model || null),
       host,
       api_key: keepKey ? '__unchanged__' : (apiKey || null),
       // Claude ist immer Klasse 'cloud'; bei OpenAI-kompatibel waehlt der User.
       cloud: provider === 'openai-compat' ? body.cloud === true : null,
-      context_window: ctx.value,
-      max_tokens_out: out.value,
+      context_window: claude ? null : ctx.value,
+      max_tokens_out: claude ? null : out.value,
     },
   };
 }
@@ -133,6 +137,34 @@ router.put('/', jsonBody, async (req, res) => {
   });
   logger.info(`Eigener KI-Zugang gespeichert (${saved.provider}${saved.model ? ' ' + saved.model : ''}).`);
   res.json({ enabled: true, access: _view(saved) });
+});
+
+// Kosten ueber den eigenen Key: laufender und voriger Monat (App-Zeitzone), je
+// Quelle x Typ. USD aus dem Ledger (lib/pricing.js, zur Call-Zeit eingefroren) —
+// eine Schaetzung; verbindlich ist die Rechnung des Anbieters. Auch bei
+// zugedrehtem Feature lesbar: es sind die eigenen Daten des Users.
+function _monthUsage(email, fromIso, toIso, period) {
+  const rows = ownUsageByType(email, fromIso, toIso).map(r => ({
+    source: r.source, type: r.type || 'unknown', provider: r.provider,
+    calls: r.calls, usd: r.usd || 0, tokensIn: r.tokens_in || 0, tokensOut: r.tokens_out || 0,
+  }));
+  const sum = (k) => rows.reduce((a, r) => a + r[k], 0);
+  return { period, usd: sum('usd'), calls: sum('calls'), tokensIn: sum('tokensIn'), tokensOut: sum('tokensOut'), rows };
+}
+
+router.get('/usage', (req, res) => {
+  const email = sessionEmail(req);
+  const now = new Date();
+  const thisStart = localMonthStartIso(now);
+  // Ein Tag vor dem Monatsersten liegt sicher im Vormonat (auch ueber DST).
+  const prevAnchor = new Date(Date.parse(thisStart) - 24 * 3600 * 1000);
+  const prevStart = localMonthStartIso(prevAnchor);
+  res.json({
+    months: [
+      _monthUsage(email, thisStart, now.toISOString(), localMonthPeriod(now)),
+      _monthUsage(email, prevStart, thisStart, localMonthPeriod(prevAnchor)),
+    ],
+  });
 });
 
 // Entfernen ist auch bei zugedrehtem Feature erlaubt: der User soll seinen Key

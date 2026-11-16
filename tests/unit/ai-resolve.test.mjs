@@ -135,11 +135,11 @@ test('_modelName folgt dem Profil (Cache-Schluessel trennt Modelle)', () => {
   } finally { ctx.teardown(); }
 });
 
-test('getContextConfigFor: claude liefert 200k Default, ollama 32k', () => {
+test('getContextConfigFor: claude liefert das Fenster des Default-Modells (Sonnet 5.5: 1M), ollama 32k', () => {
   const ctx = _bootstrap();
   try {
     const c = ctx.ai.getContextConfigFor('claude');
-    assert.equal(c.contextWindow, 200000);
+    assert.equal(c.contextWindow, 1000000);
     const o = ctx.ai.getContextConfigFor('ollama');
     assert.equal(o.contextWindow, 32000);
     assert.ok(o.inputBudgetTokens > 0);

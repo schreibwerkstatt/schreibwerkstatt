@@ -10,7 +10,7 @@ const {
   getPrompts, getBookPrompts,
   htmlToText, htmlToTextForPrompt, jobAbortControllers,
   getFiguren, getLatestReview, getLatestPageCheck, getOpenIdeen, buildChatMessageHistory,
-  bookTextOpts,
+  bookTextOpts, bindJobTier,
 } = require('../shared');
 const contentStore = require('../../../lib/content-store');
 const { listWorldFacts } = require('../../../db/schema');
@@ -97,6 +97,9 @@ async function runChatJob(jobId, sessionId, userMsgId, message, userEmail) {
     buildPageChatBookContext, normalizeTitle,
   } = await getPrompts(userEmail);
   const effectiveProvider = resolveProvider({ userEmail });
+  // Modellstufe vor dem Fenster: getContextConfigFor liest Fenster und Output-Cap
+  // des Bag-Modells (shared/model-tier.js, idempotent zur Bindung in der Queue).
+  bindJobTier('chat', effectiveProvider, logger);
   const aiCfg = getContextConfigFor(effectiveProvider);
   // Denk-Tiefe (nur Claude): ohne Setting gälte der Modell-Default, und ein
   // Modellwechsel änderte still Dauer und Kosten jeder Antwort.

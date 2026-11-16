@@ -86,6 +86,8 @@ const jobRunsEndedSince   = _all(`SELECT type, status, COUNT(*) AS n FROM job_ru
                                    WHERE ended_at >= ? GROUP BY type, status`);
 
 // ── Kosten-Ledger (usd zur Call-Zeit eingefroren) ───────────────────────────
+// Nur Calls ueber den Key der Instanz (billed_to='instance'): /metrics meldet,
+// was der Betreiber bezahlt — eigene KI-Zugaenge der User laufen auf deren Konten.
 const ledgerByModel = _all(`
   SELECT provider, model,
          COALESCE(SUM(tokens_in),0)         AS t_in,
@@ -93,14 +95,14 @@ const ledgerByModel = _all(`
          COALESCE(SUM(cache_read_in),0)     AS c_r,
          COALESCE(SUM(cache_creation_in),0) AS c_w,
          COALESCE(SUM(usd),0)               AS usd
-    FROM ai_cost_ledger GROUP BY provider, model`);
-const ledgerUsdSince    = _one('SELECT COALESCE(SUM(usd),0) AS n FROM ai_cost_ledger WHERE ts >= ?');
+    FROM ai_cost_ledger WHERE billed_to = 'instance' GROUP BY provider, model`);
+const ledgerUsdSince    = _one("SELECT COALESCE(SUM(usd),0) AS n FROM ai_cost_ledger WHERE billed_to = 'instance' AND ts >= ?");
 const ledgerUsdByType   = _all(`SELECT source, type, COALESCE(SUM(usd),0) AS n
-                                  FROM ai_cost_ledger GROUP BY source, type`);
+                                  FROM ai_cost_ledger WHERE billed_to = 'instance' GROUP BY source, type`);
 const ledgerUsdByUser   = _all(`SELECT user_email AS email, COALESCE(SUM(usd),0) AS n
-                                  FROM ai_cost_ledger WHERE user_email IS NOT NULL GROUP BY user_email`);
+                                  FROM ai_cost_ledger WHERE billed_to = 'instance' AND user_email IS NOT NULL GROUP BY user_email`);
 const ledgerUsdByUserSince = _all(`SELECT user_email AS email, COALESCE(SUM(usd),0) AS n
-                                     FROM ai_cost_ledger WHERE user_email IS NOT NULL AND ts >= ?
+                                     FROM ai_cost_ledger WHERE billed_to = 'instance' AND user_email IS NOT NULL AND ts >= ?
                                     GROUP BY user_email`);
 
 // ── Betrieb ─────────────────────────────────────────────────────────────────

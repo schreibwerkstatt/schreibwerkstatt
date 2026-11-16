@@ -53,6 +53,16 @@ function bootstrap() {
   // Buchgrösse zu SINGLE_PASS_LIMIT/PER_CHUNK_LIMIT.
   upsert.run('ai.claude.context_window', JSON.stringify(60000));
   upsert.run('ai.claude.max_tokens_out', JSON.stringify(4000));
+  // Dasselbe Budget für die übrigen Modellstufen: ihr Fenster kommt sonst aus dem
+  // Stufen-Modell (1M), und Jobs auf «standard»/«leicht» liefen nie Multi-Pass.
+  for (const tier of ['max', 'standard', 'light']) {
+    upsert.run(`ai.claude.context_window.tier.${tier}`, JSON.stringify(60000));
+    upsert.run(`ai.claude.max_tokens_out.tier.${tier}`, JSON.stringify(4000));
+  }
+  // Modell fest, weil die Zeichen/Token-Rate am Modell hängt (Gen 5: 2.1 statt 3) und
+  // die Kapitelgrössen der Tests auf 3 Zeichen/Token gerechnet sind — ein neuer
+  // Registry-Default soll keine Chunk-Grenzen verschieben.
+  upsert.run('ai.claude.model', JSON.stringify('claude-sonnet-4-6'));
   upsert.run('ai.provider', JSON.stringify('claude'));
   upsert.run('jobs.max_concurrent', JSON.stringify(1));
   // Claude-Split abschalten: ein kombinierter Lektorat-Call pro Seite statt

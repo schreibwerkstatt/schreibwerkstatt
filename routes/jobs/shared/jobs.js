@@ -145,10 +145,32 @@ function findActiveJobId(type, entityId, userEmail) {
   return null;
 }
 
-// Job-Typen, die den selbst gehosteten Embedding-Endpunkt nutzen (embed.*) statt
-// einen Chat-Provider. Provider-Marke im Job-Record und Kosten-Ledger.
+// job_runs.provider/model ist die Grundlage von Job-Statistik, Admin-Nutzung und
+// /metrics — es muss zeigen, was der Lauf TATSÄCHLICH benutzt, nicht das Chat-Modell
+// der Instanz. Drei Klassen:
+//  - EMBED_JOB_TYPES: laufen auf dem Embedding-Modell (embed.*), kein Chat-Call — die
+//    Index-Läufe (/v1/embeddings) und die Konsumenten der Vektoren (Redundanz-Radar,
+//    Buchlandkarte, Motiv-/Beat-/Figuren-Anker). Die hybriden Anker/Scans fallen ohne
+//    Embedding-Backend auf rein lexikalisch zurück und ziehen dann per setJobModel NULL nach.
+//  - STT_JOB_TYPES: Whisper-Transkription (stt.*) → provider 'stt', model = stt.model.
+//  - NO_AI_JOB_TYPES: gar kein Modell (Wortschatz, Exporte, Importe, Blog-Syncs,
+//    Link-Prüfung) → provider/model NULL (UI zeigt «—»).
+//  - alle übrigen: Chat-Provider des Users samt Modellstufe (Zeile in JOB_TIER_CATALOG).
+// Jeder Job-Typ steht in genau einer Klasse — Regel: routes/jobs/CLAUDE.md, Gate:
+// tests/unit/job-model-class.test.js.
 const EMBED_PROVIDER = 'embed';
-const EMBED_JOB_TYPES = new Set(['embed-index', 'source-embed-index', 'chat-embed-index']);
+const EMBED_JOB_TYPES = new Set([
+  'embed-index', 'source-embed-index', 'chat-embed-index',
+  'redundancy', 'book-map', 'motif-scan', 'beat-anchor', 'figur-anchor',
+]);
+const STT_PROVIDER = 'stt';
+const STT_JOB_TYPES = new Set(['interview-transcribe']);
+const NO_AI_JOB_TYPES = new Set([
+  'lexicon-scan', 'research-link-check',
+  'pdf-export', 'epub-export', 'docx-export', 'manuscript-import', 'book-import',
+  'blog-import', 'blog-pull', 'blog-push', 'blog-reconcile', 'blog-repull',
+  'hubspot-import', 'hubspot-push', 'hubspot-reconcile',
+]);
 
 function createJob(type, bookId, userEmail, label, labelParams = null, dedupId = null) {
   const id = randomUUID();
@@ -160,7 +182,13 @@ function createJob(type, bookId, userEmail, label, labelParams = null, dedupId =
   // bei bge-m3). Der Endpunkt ist self-hosted; costUsd gibt für provider != 'claude'
   // ohnehin 0 zurück.
   let provider, model;
-  if (EMBED_JOB_TYPES.has(type)) {
+  if (NO_AI_JOB_TYPES.has(type)) {
+    provider = null;
+    model = null;
+  } else if (STT_JOB_TYPES.has(type)) {
+    provider = STT_PROVIDER;
+    model = String(appSettings.get('stt.model') || '').trim() || null;
+  } else if (EMBED_JOB_TYPES.has(type)) {
     provider = EMBED_PROVIDER;
     model = embed.getConfig().model;
   } else {
@@ -169,19 +197,13 @@ function createJob(type, bookId, userEmail, label, labelParams = null, dedupId =
     // der Kostenrechnung. Ohne Aufloesung verbucht ein Profil-Lauf unter fremdem Tarif.
     provider = resolveProvider({ userEmail: userEmail || null });
     model = _modelName(provider);
-    // Einzelne Job-Familien fahren ein eigenes Modell (Per-Job-Override in den App-Settings,
-    // gespiegelt von _komplettAiOverrides, _bookChatAiOverrides bzw.
-    // applyLektoratAiOverrides). Dann muss
-    // job_runs.model das TATSÄCHLICH genutzte Modell spiegeln, nicht das globale — sonst
-    // verbucht das Kosten-Tracking z.B. einen Opus-Lauf zum Sonnet-Default-Tarif.
-    // Buch-Chat- und Lektorat-Override sind claude-only, der Komplett-Override nicht.
-    let overrideKey = null;
-    if (type === 'komplett-analyse' || type === 'kontinuitaet') overrideKey = `ai.${provider}.model.komplett`;
-    else if (type === 'book-chat' && provider === 'claude') overrideKey = 'ai.claude.model.bookchat';
-    else if ((type === 'check' || type === 'batch-check') && provider === 'claude') overrideKey = 'ai.claude.model.lektorat';
-    else if (type === 'finetune-export' && provider === 'claude') overrideKey = 'ai.claude.model.finetune';
-    if (overrideKey) {
-      const overrideModel = String(appSettings.get(overrideKey) || '').trim();
+    // Claude: Modell der Stufe des Jobs (shared/model-tier.js) — job_runs.model muss das
+    // TATSÄCHLICH genutzte Modell spiegeln, sonst verbucht das Kosten-Tracking z.B. einen
+    // Haiku-Lauf zum Opus-Tarif. openai-compat: eigener Komplett-Override.
+    if (provider === 'claude') {
+      model = require('./model-tier').tierModel(type, provider, { userEmail: userEmail || null });
+    } else if (provider === 'openai-compat' && (type === 'komplett-analyse' || type === 'kontinuitaet')) {
+      const overrideModel = String(appSettings.get('ai.openai-compat.model.komplett') || '').trim();
       if (overrideModel) model = overrideModel;
     }
   }
@@ -266,7 +288,7 @@ function completeJob(id, result, tokensPerSec = null, detail = null) {
     : '';
   const detailSeg = detail ? `${detail}, ` : '';
   logger.info(
-    `Fertig (${_jobDurationFmt(job.startedAt)}, ${detailSeg}${fmtTok(job.tokensIn)}↑ ${fmtTok(job.tokensOut)}↓${cacheSeg}, ${job.provider}/${job.model})`,
+    `Fertig (${_jobDurationFmt(job.startedAt)}, ${detailSeg}${fmtTok(job.tokensIn)}↑ ${fmtTok(job.tokensOut)}↓${cacheSeg}${job.provider ? `, ${job.provider}/${job.model}` : ''})`,
     _jobLogCtx(job),
   );
   runningJobs.delete(jobDedupKey(job));
@@ -454,6 +476,6 @@ module.exports = {
   i18nError, i18nErrText, contentHttpError, emptyScopeError,
   findActiveJobId,
   createJob, updateJob, setJobModel, completeJob, failJob, cancelJob, isJobActive, throwIfCancelled,
-  EMBED_PROVIDER, EMBED_JOB_TYPES,
+  EMBED_PROVIDER, EMBED_JOB_TYPES, STT_PROVIDER, STT_JOB_TYPES, NO_AI_JOB_TYPES,
   JOB_TYPE_LABELS, STATS_EXCLUDED_TYPES,
 };

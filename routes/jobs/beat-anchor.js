@@ -14,7 +14,7 @@ const express = require('express');
 const {
   makeJobLogger, updateJob, completeJob, failJob,
   createJob, enqueueJob, findActiveJobId, jsonBody, jobAbortControllers,
-  startBookJob, i18nError,
+  startBookJob, i18nError, setJobModel, EMBED_PROVIDER,
 } = require('./shared');
 const plotDb = require('../../db/plot');
 const appSettings = require('../../lib/app-settings');
@@ -125,6 +125,7 @@ async function runBeatAnchorJob(jobId, bookId, userEmail) {
     };
 
     const useSemantic = embed.isEnabled();
+    setJobModel(jobId, useSemantic ? EMBED_PROVIDER : null, useSemantic ? embed.getConfig().model : null);
     if (useSemantic && !retrieval.indexReady(bookId)) {
       // Backend da, Index aber noch nicht vollständig (Erstindex, Modellwechsel):
       // die Suche fände nichts, ein Full-Replace mit [] hiesse „nicht im Text" →

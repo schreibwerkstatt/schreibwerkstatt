@@ -56,8 +56,9 @@ async function generateSessionTitle({ session, userMessage, assistantAnswer, pro
     // unten, der fertige Chat-Turn bleibt unberührt (kein failJob).
     const timeout = AbortSignal.timeout(TITLE_TIMEOUT_MS);
     const callSignal = signal ? AbortSignal.any([signal, timeout]) : timeout;
-    // Stufe «leicht» nur für diesen Einzeiler, als Call-Tier: die Chat-Antwort im
-    // selben Job bleibt auf ihrem Modell (shared/model-tier.js#JOB_TIERS).
+    // Eigene Stufe nur für diesen Einzeiler (`chat-title`, Default «leicht»), als
+    // Call-Tier: die Chat-Antwort im selben Job bleibt auf ihrem Modell
+    // (lib/ai/job-tiers.js).
     const titleModel = tierModel('chat-title', provider);
     const tier = provider === 'claude' && titleModel ? titleModel : undefined;
     const res = await ai.callAI(convo, systemPrompt, null, 120, callSignal, provider, SCHEMA_CHAT_TITLE, tier);

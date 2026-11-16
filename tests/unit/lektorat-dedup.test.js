@@ -311,6 +311,28 @@ test('_runSig/stylisticCapForText: zerlegte Abschnitte tragen ck und die Summen-
   assert.equal(_runSig(false, long).ck, undefined, '0 = nie zerlegen');
 });
 
+// Andere Provider der Cloud-Klasse (openai-compat mit `cloud`): kein Split, lange
+// Abschnitte trotzdem in Stücken. Die Signatur muss das tragen, sonst liefert der
+// Cache nach der Umstellung das Split-Ergebnis; die Obergrenze ist die Stück-Summe.
+test('_runSig/stylisticCapForText: openai-compat ohne Split, aber mit Stücken', () => {
+  const appSettings = require('../../lib/app-settings');
+  const { stylisticCapForText } = require('../../routes/jobs/lektorat-filter');
+  const { chunkText } = require('../../lib/lektorat-chunks');
+  appSettings.set('ai.lektorat_split', true);
+  appSettings.set('ai.lektorat_stylistic_cap', 10);
+  appSettings.set('ai.lektorat_chunk_chars', 10000);
+  const para = 'Ein Satz, der einen Absatz füllt. '.repeat(30).trim();
+  const long = Array.from({ length: 30 }, () => para).join('\n\n');
+  const short = Array.from({ length: 5 }, () => para).join('\n\n');
+  assert.deepEqual(_runSig(false, short, 'openai-compat'), { sc: 10, sp: 0 }, 'kein Split');
+  const sig = _runSig(false, long, 'openai-compat');
+  assert.equal(sig.sp, 0);
+  assert.equal(sig.ck, '10000/7000');
+  assert.equal(sig.sc, chunkText(long).length * 10);
+  assert.equal(stylisticCapForText(long, { local: false, provider: 'openai-compat' }), sig.sc);
+  assert.deepEqual(_runSig(false, short), { sc: 10, sp: '1/2' }, 'Claude unverändert');
+});
+
 test('validateLektoratFehler de-CH: ss→ß fällt weg, ß→ss bleibt als echte Korrektur', () => {
   const out = validateLektoratFehler([
     { typ: 'rechtschreibung', original: 'Strasse', korrektur: 'Straße', erklaerung: 'x' },

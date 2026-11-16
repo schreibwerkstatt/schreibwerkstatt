@@ -1,0 +1,56 @@
+{
+  "version": "6.6.5",
+  "date": "2026-11-16",
+  "entries": [
+    {
+      "kind": "neu",
+      "de": "Unter Admin → Einstellungen → Provider → Claude legst du jetzt für jede KI-Funktion fest, auf welcher Modellstufe sie läuft – von «Leicht» bis «Maximal». Jede Stufe hat ihr eigenes Modell.",
+      "en": "Under Admin → Settings → Provider → Claude you now choose which model tier each AI feature runs on, from “Light” to “Maximum”. Each tier has its own model."
+    },
+    {
+      "kind": "neu",
+      "de": "Im Profil unter «Eigener KI-Zugang» siehst du jetzt, was über deinen eigenen Schlüssel gelaufen ist. Admins sehen diese Kosten in der Nutzung getrennt von den Kosten der Instanz.",
+      "en": "Under “Own AI access” in your profile you now see what ran on your own key. Admins see these costs in Usage separately from the instance's costs."
+    },
+    {
+      "kind": "neu",
+      "de": "Beim Anlegen eines KI-Profils kannst du eine erprobte Vorlage wählen, die die Felder für dich ausfüllt.",
+      "en": "When creating an AI profile you can pick a proven template that fills in the fields for you."
+    },
+    {
+      "kind": "verbessert",
+      "de": "Mit eigenem Claude-Schlüssel nutzt du jetzt dieselben Modelle und Einstellungen wie alle anderen – nur die Kosten laufen über deinen Schlüssel.",
+      "en": "With your own Claude key you now use the same models and settings as everyone else – only the costs go to your key."
+    },
+    {
+      "kind": "verbessert",
+      "de": "Der Buch-Chat antwortet schneller.",
+      "en": "The book chat answers faster."
+    },
+    {
+      "kind": "verbessert",
+      "de": "Das Lektorat prüft lange Abschnitte auch mit anderen Cloud-Modellen als Claude in Stücken und lässt sich dort mit einem Denkbudget feiner steuern.",
+      "en": "Proofreading now checks long sections in pieces with cloud models other than Claude too, and a thinking budget lets you tune it there."
+    },
+    {
+      "kind": "verbessert",
+      "de": "Die Suche nimmt deine Änderungen erst nach 15 Minuten Ruhe neu auf. Während du schreibst, läuft so weniger im Hintergrund.",
+      "en": "Search now picks up your changes after 15 minutes of quiet. Less runs in the background while you write."
+    },
+    {
+      "kind": "verbessert",
+      "de": "Ideen an einem Abschnitt werden nach dem Schreiben verlässlich auf «erledigt» geprüft – auch wenn die App zwischendurch neu gestartet wurde.",
+      "en": "Ideas attached to a section are now reliably checked for “done” after you write – even if the app restarted in between."
+    },
+    {
+      "kind": "behoben",
+      "de": "Abschnitte ohne Text liessen die Vorschau bei jedem Laden neu holen. Das passiert nicht mehr.",
+      "en": "Empty sections made the preview reload every time you opened the book. That no longer happens."
+    },
+    {
+      "kind": "behoben",
+      "de": "In der Job-Statistik und der Admin-Nutzung stand bei Funktionen ohne KI-Sprachmodell fälschlich ein Claude-Modell. Jetzt steht dort das richtige Modell oder «—».",
+      "en": "Job statistics and admin usage wrongly listed a Claude model for features that use no AI language model. They now show the right model or “—”."
+    }
+  ]
+}

@@ -47,16 +47,18 @@
                   </div>
                 </div>
   
-                <div x-id="['fld']" class="card-form-row">
+                <p class="muted-msg muted-msg--sm" x-show="aiAccessForm.provider === 'claude'"
+                   x-text="$app.t('profile.aiAccess.claudeHint')"></p>
+
+                <div x-id="['fld']" class="card-form-row" x-show="aiAccessForm.provider === 'openai-compat'">
                   <label :for="$id('fld')" class="card-form-label" x-text="$app.t('profile.aiAccess.model')"></label>
                   <div class="card-form-field">
                     <input :id="$id('fld')" type="text" class="card-form-input" x-model="aiAccessForm.model" autocomplete="off"
-                           :placeholder="aiAccessForm.provider === 'claude' ? $app.t('profile.aiAccess.instanceModel') : 'gpt-4.1'">
-                    <p class="card-form-field-note"
-                       x-text="aiAccessForm.provider === 'claude' ? $app.t('profile.aiAccess.modelHintClaude') : $app.t('profile.aiAccess.modelHintOpenai')"></p>
+                           placeholder="gpt-4.1">
+                    <p class="card-form-field-note" x-text="$app.t('profile.aiAccess.modelHintOpenai')"></p>
                   </div>
                 </div>
-  
+
                 <div x-id="['fld']" class="card-form-row">
                   <label :for="$id('fld')" class="card-form-label" x-text="$app.t('profile.aiAccess.apiKey')"></label>
                   <div class="card-form-field">
@@ -77,7 +79,7 @@
                   </div>
                 </div>
   
-                <div x-id="['fld']" class="card-form-row">
+                <div x-id="['fld']" class="card-form-row" x-show="aiAccessForm.provider === 'openai-compat'">
                   <label :for="$id('fld')" class="card-form-label" x-text="$app.t('profile.aiAccess.contextWindow')"></label>
                   <div class="card-form-field">
                     <input :id="$id('fld')" type="text" class="card-form-input" x-data="numInput({ integer: true, min: 2048, max: 2000000 })"
@@ -86,7 +88,7 @@
                   </div>
                 </div>
   
-                <div x-id="['fld']" class="card-form-row">
+                <div x-id="['fld']" class="card-form-row" x-show="aiAccessForm.provider === 'openai-compat'">
                   <label :for="$id('fld')" class="card-form-label" x-text="$app.t('profile.aiAccess.maxTokensOut')"></label>
                   <div class="card-form-field">
                     <input :id="$id('fld')" type="text" class="card-form-input" x-data="numInput({ integer: true, min: 512, max: 200000 })"
@@ -110,6 +112,30 @@
                             x-text="$app.t('profile.aiAccess.remove')"></button>
                   </div>
                 </div>
+              </div>
+            </template>
+
+            <!-- Kosten ueber den eigenen Key (GET /me/ai-access/usage) -->
+            <template x-if="aiAccessUsage && aiAccessUsage.length">
+              <div class="ai-access-usage">
+                <div class="card-section-title" x-text="$app.t('profile.aiAccess.usage.title')"></div>
+                <template x-for="m in aiAccessUsage" :key="m.period">
+                  <div class="ai-access-usage-month">
+                    <div class="ai-access-usage-head">
+                      <span x-text="aiAccessUsageMonth(m.period)"></span>
+                      <span x-text="m.calls ? $app.tn('profile.aiAccess.usage.total', m.calls, { usd: aiAccessUsageMoney(m.usd) }) : $app.t('profile.aiAccess.usage.none')"></span>
+                    </div>
+                    <ul class="ai-access-usage-list" x-show="m.rows.length">
+                      <template x-for="r in m.rows" :key="r.source + ':' + r.type + ':' + r.provider">
+                        <li>
+                          <span x-text="aiAccessUsageType(r.type)"></span>
+                          <span class="muted-msg muted-msg--sm" x-text="$app.tn('profile.aiAccess.usage.total', r.calls, { usd: aiAccessUsageMoney(r.usd) })"></span>
+                        </li>
+                      </template>
+                    </ul>
+                  </div>
+                </template>
+                <p class="muted-msg muted-msg--sm" x-text="$app.t('profile.aiAccess.usage.hint')"></p>
               </div>
             </template>
           </div>

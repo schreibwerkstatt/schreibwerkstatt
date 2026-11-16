@@ -22,7 +22,7 @@ const { isJournalisticBook } = require('../../lib/buchtyp');
 const { getBookSettings } = require('../../db/book-settings');
 const { listChaptersForBook, pageChapters } = require('../../db/content-names');
 const appSettings = require('../../lib/app-settings');
-const { splitEnabled } = require('./lektorat-split');
+const { splitApplies } = require('./lektorat-split');
 const { makeSemaphore } = require('../../lib/ai/shared');
 const { chunkingApplies } = require('../../lib/lektorat-chunks');
 const { prepareLektoratRun, makeNeighbourLoader, loadLektoratPageList, checkOnePage, progressSincePrevious, markRejectedSincePrevious } = require('./lektorat-page');
@@ -82,7 +82,7 @@ async function runCheckJob(jobId, pageId, bookId, userEmail) {
       // rät die Karte, den Abschnitt zu teilen — nur, wenn er am Stück geprüft
       // wurde (`chunked`, lib/lektorat-chunks.js).
       textChars: r.text.length,
-      chunked: chunkingApplies(r.text.length, { local: run.local, split: splitEnabled() }),
+      chunked: chunkingApplies(r.text.length, { local: run.local, split: splitApplies(run.local, run.effectiveProvider), provider: run.effectiveProvider }),
       tokensIn: tok.in,
       tokensOut: tok.out,
     }, tps(tok), `«${pd.name}» page=${pageId}, chap=${pd.chapter_id || '-'}, ${r.fehler.length} Beanstandungen${r.historyDedup ? ' (dedup)' : ''}`);
@@ -128,14 +128,14 @@ async function runBatchCheckJob(jobId, bookId, userEmail, chapterId = null, { sk
 
     // Cloud-Provider verträgt parallele Calls; lokale Provider (Ollama/llama.cpp) sind
     // bereits via Mutex in lib/ai.js serialisiert – Pool=1 verhindert pile-up im aiCall.
-    // Split-Modus (Cloud): jede Seite fächert in einen Objektiv- und einen Stil-Call auf.
+    // Split-Modus (Claude): jede Seite fächert in einen Objektiv- und einen Stil-Call auf.
     // `ai.lektorat_batch_concurrency` deckelt die gleichzeitigen CALLS, nicht die Seiten –
     // der Seiten-Pool ist der Quotient daraus (Rate-Limit-Schutz). Der Default (4) ist
     // bewusst so gewählt, dass er mit dem Split-Default noch zwei Seiten parallel zulässt;
     // wer den Regler auf die Zahl der Calls pro Seite herunterdreht, bekommt bewusst
     // einen seriellen Batch.
     const rawConcurrency = run.local ? 1 : (parseInt(appSettings.get('ai.lektorat_batch_concurrency'), 10) || 4);
-    const callsPerPage = (!run.local && splitEnabled()) ? 2 : 1;
+    const callsPerPage = splitApplies(run.local, run.effectiveProvider) ? 2 : 1;
     const concurrency = Math.max(1, Math.floor(rawConcurrency / callsPerPage));
     // Ein langer Abschnitt in Stücken (lib/lektorat-chunks.js) feuert ein Vielfaches
     // von callsPerPage — die Semaphore hält die Calls des ganzen Laufs trotzdem

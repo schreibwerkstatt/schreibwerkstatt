@@ -1,87 +1,107 @@
 'use strict';
-// Modellstufen der Claude-Jobs: «stark» (globales `ai.claude.model`), «standard»
-// (`ai.claude.model.tier.standard`) und «leicht» (`ai.claude.model.tier.light`).
-// Welcher Job auf welcher Stufe läuft, steht ausschliesslich in JOB_TIERS; ein Job,
-// der dort fehlt, läuft stark. Eine Per-Job-Einstellung (`ai.claude.model.synonym`,
-// `.finetune`) schlägt die Stufe — sie bleibt die Ausnahme für einen einzelnen Job.
+// Modellstufen der Claude-Jobs. Jeder Claude-Job läuft auf einer von vier Stufen
+// (lib/ai/job-tiers.js: max, strong, standard, light); welche, stellt der Admin pro
+// Job ein (`ai.claude.tier.job.<typ>`, Default aus JOB_TIER_CATALOG). Ein Job, der
+// im Katalog fehlt, läuft stark.
 //
-// Lektorat, die fünf Chats und die ganze Komplettanalyse-Familie (inkl. Extraktion)
-// stehen bewusst NICHT hier: sie bleiben auf dem starken Modell bzw. ihren eigenen
-// Override-Familien (`.lektorat`, `.bookchat`, `.komplett*`).
+// «stark» ist das Instanz-Modell mit den globalen Werten (`ai.claude.model`,
+// `.context_window`, `.max_tokens_out`, `.timeout_ms`) — dafür braucht es keinen
+// Job-Bag. Die übrigen Stufen tragen Modell, Fenster, Output-Cap und Timeout und
+// werden als Job-Bag gebunden: einmal beim Job-Start in der Queue (queue.js), damit
+// JEDER Claude-Job seiner Stufe folgt, ohne dass das Job-Modul daran denken muss.
+// Job-Module legen danach ihren Effort per bindJobOverride dazu (mischen, nie ersetzen).
 //
-// Nur Claude, und nie bei eigenem KI-Zugang (dort zählt das Modell des Users, wie bei
-// jedem Instanz-Override). Das zurückgegebene Modell gehört in die cacheVersion des
-// Jobs, sonst träfe ein Haiku-Lauf die Opus-Ergebnisse und umgekehrt.
+// Nur Claude, und nie bei eigenem Endpunkt (dort zählt das Modell des Users, wie bei
+// jedem Instanz-Override); ein eigener Claude-Zugang tauscht nur den Key. Das Modell
+// gehört in die cacheVersion des Jobs — `_modelName` liest es aus dem Bag.
 
 const appSettings = require('../../../lib/app-settings');
-const { usesOwnAccess } = require('../../../lib/ai/profile');
-const { setContext } = require('../../../lib/log-context');
+const { aiSetting, usesOwnEndpoint } = require('../../../lib/ai/profile');
+const {
+  bindJobOverride, contextSafetyMargin, _claudeModelContext, _claudeModelMaxOut,
+} = require('../../../lib/ai/config');
+const { TIERS, JOB_TIER_CATALOG } = require('../../../lib/ai/job-tiers');
+const { getContext } = require('../../../lib/log-context');
 const { _modelName } = require('./model');
-const { setJobModel } = require('./jobs');
+const logger = require('../../../logger');
 
-const JOB_TIERS = Object.freeze({
-  // Leicht: kurze, mechanische Calls mit nachgelagerter Prüfung (Belegpflicht,
-  // Geocoder, Katalog-Abgleich) — Tempo und Preis zählen mehr als Tiefe.
-  'synonym':             'light',
-  'geocode-resolve':     'light',
-  'stationen-vorschlag': 'light',
-  'schulweg-vorschlag':  'light',
-  'research-link':       'light',
-  'ideen-auto-check':    'light',
-  'finetune-export':     'light',
-  'figuren-naehe':       'light',
-  'source-pdf-draft':    'light',
-  'folder-import':       'light',
-  // Kein Job-Typ, sondern ein Einzel-Call im Chat-Job (routes/jobs/chat-title.js):
-  // der Titel-Einzeiler läuft per Call-Tier, die Chat-Antwort selbst bleibt stark.
-  'chat-title':          'light',
-  // Standard: Zusammenfassen, Herausziehen und Abgleichen über viele Abschnitte,
-  // aber kein literarisches Urteil über das ganze Buch.
-  'rueckblick':          'standard',
-  'figur-alter':         'standard',
-  'research-crosscheck': 'standard',
-  'source-detect':       'standard',
-  'struktur-check':      'standard',
-  'book-map-label':      'standard',
-});
-
-const TIER_KEYS = Object.freeze({
-  standard: 'ai.claude.model.tier.standard',
-  light:    'ai.claude.model.tier.light',
-});
+const DEFAULT_TIERS = Object.freeze(Object.fromEntries(JOB_TIER_CATALOG.map(j => [j.type, j.tier])));
 
 function jobTier(jobType) {
-  return JOB_TIERS[jobType] || 'strong';
+  if (!Object.prototype.hasOwnProperty.call(DEFAULT_TIERS, jobType)) return 'strong';
+  const v = appSettings.get(`ai.claude.tier.job.${jobType}`);
+  return TIERS.includes(v) ? v : DEFAULT_TIERS[jobType];
 }
 
-// Modell eines Job-Typs ohne Nebenwirkung. `jobKey` = Kurzname der Per-Job-
-// Einstellung (`ai.claude.model.<jobKey>`), falls der Job eine hat.
-function tierModel(jobType, effectiveProvider, { jobKey } = {}) {
-  const base = _modelName(effectiveProvider);
-  if (effectiveProvider !== 'claude' || usesOwnAccess()) return base;
-  const perJob = jobKey ? String(appSettings.get(`ai.claude.model.${jobKey}`) || '').trim() : '';
-  if (perJob) return perJob;
-  const key = TIER_KEYS[jobTier(jobType)];
-  const tiered = key ? String(appSettings.get(key) || '').trim() : '';
-  return tiered || base;
+// Modell der Stufe «stark»: Profil > Instanz (`ai.claude.model`). Bewusst nicht
+// `_modelName`, das im Job den Bag einer anderen Stufe läse.
+function _strongModel(opts) {
+  return aiSetting('claude', 'model', opts) || 'claude-sonnet-5-5';
 }
 
-// Bindet das Stufen-Modell als Job-Bag (setContext ersetzt `aiJob` ganz — `extra`
-// trägt darum weitere Bag-Felder wie `effort` mit) und zieht das Modell in
-// job_runs nach, damit das Kosten-Ledger das tatsächlich laufende Modell bucht.
-// MUSS vor `chunkLimitsFor` laufen: die Chunk-Grenzen lesen Fenster und Output-Cap
-// des Bag-Modells. Rückgabe: das effektiv laufende Modell.
-function applyTierAiOverrides(jobId, jobType, effectiveProvider, logger, { jobKey, extra } = {}) {
-  const model = tierModel(jobType, effectiveProvider, { jobKey });
-  if (effectiveProvider !== 'claude') return model;
-  const bag = { provider: 'claude', ...(extra || {}) };
-  if (model !== _modelName(effectiveProvider)) bag.model = model;
-  if (Object.keys(bag).length > 1) {
-    setContext({ aiJob: bag });
-    logger?.info(`Modellstufe ${jobTier(jobType)}: ${JSON.stringify(bag)}.`);
+// Konfiguration einer Stufe als Bag-Felder, oder null = läuft wie «stark» (Stufe
+// «stark» selbst oder eine Stufe ohne Modell). Fenster und Output ohne eigenen Wert
+// kommen aus dem Modell der Stufe, nicht vom globalen Wert — der beschreibt das
+// starke Modell. Der Output wird aufs Modell-Limit geklemmt (sonst HTTP 400).
+function tierSpec(tier) {
+  if (tier === 'strong' || !TIERS.includes(tier)) return null;
+  const model = String(appSettings.get(`ai.claude.model.tier.${tier}`) || '').trim();
+  if (!model) return null;
+  const num = (field) => parseInt(appSettings.get(`ai.claude.${field}.tier.${tier}`), 10) || 0;
+  const modelMaxOut = _claudeModelMaxOut(model);
+  const contextWindow = num('context_window') || _claudeModelContext(model);
+  const maxTokensOut = Math.min(num('max_tokens_out') || modelMaxOut, modelMaxOut);
+  if (maxTokensOut + contextSafetyMargin(contextWindow) >= contextWindow) {
+    logger.warn(`Modellstufe ${tier}: max_tokens_out=${maxTokensOut} lässt im Fenster ${contextWindow} keinen Platz fürs Input.`);
   }
-  if (jobId) setJobModel(jobId, effectiveProvider, model);
+  const spec = { model, contextWindow, maxTokensOut };
+  const timeoutMs = num('timeout_ms');
+  if (timeoutMs) spec.timeoutMs = timeoutMs;
+  return spec;
+}
+
+// Bag-Felder der Stufe eines Jobs für einen Provider, oder null (kein Claude, eigener
+// Endpunkt, Stufe läuft wie «stark»). `opts` ({ userEmail }) ausserhalb des Job-Kontexts.
+function jobTierSpec(jobType, provider, opts) {
+  if (provider !== 'claude' || usesOwnEndpoint(opts)) return null;
+  return tierSpec(jobTier(jobType));
+}
+
+// Modell eines Job-Typs bzw. Einzel-Calls ohne Nebenwirkung (Job-Anlage für
+// job_runs.model, Per-Call-Modell von Extraktion und Chat-Titel).
+function tierModel(jobType, provider, opts) {
+  if (provider !== 'claude') return _modelName(provider, opts);
+  if (usesOwnEndpoint(opts)) return _strongModel(opts);
+  return tierSpec(jobTier(jobType))?.model || _strongModel(opts);
+}
+
+// Stufe des Jobs als Bag binden, gemischt in einen schon gebundenen Bag (der gewinnt:
+// er ist entweder dieselbe Stufe oder eine spätere Job-Einstellung). Ruft die Queue
+// beim Start jedes Jobs; ausserhalb der Queue (Prognose der Komplettanalyse) ruft es
+// der Aufrufer selbst. Rückgabe: true, wenn ein Bag gebunden wurde.
+function bindJobTier(jobType, provider, log = null) {
+  const spec = jobTierSpec(jobType, provider);
+  if (!spec) return false;
+  const cur = getContext().aiJob;
+  const own = cur && cur.provider === 'claude' ? cur : {};
+  const missing = Object.fromEntries(Object.entries(spec).filter(([k]) => own[k] == null || own[k] === ''));
+  const bag = bindJobOverride('claude', missing);
+  log?.info(`Modellstufe ${jobTier(jobType)}: ${JSON.stringify(bag)}.`);
+  return true;
+}
+
+// Für Job-Module: Stufe sicherstellen (idempotent zur Bindung in der Queue), optional
+// weitere Bag-Felder dazulegen (`extra`, z.B. Effort) und das laufende Modell liefern —
+// für cacheVersion und Log. Bei fremden Providern bleibt der Bag unberührt.
+function applyTierAiOverrides(_jobId, jobType, provider, log, { extra } = {}) {
+  if (provider !== 'claude') return _modelName(provider);
+  bindJobTier(jobType, provider);
+  if (extra && Object.keys(extra).length) bindJobOverride('claude', extra);
+  const model = _modelName(provider);
+  log?.info(`Modellstufe ${jobTier(jobType)}: ${model}.`);
   return model;
 }
 
-module.exports = { JOB_TIERS, TIER_KEYS, jobTier, tierModel, applyTierAiOverrides };
+module.exports = {
+  DEFAULT_TIERS, jobTier, tierSpec, jobTierSpec, tierModel, bindJobTier, applyTierAiOverrides,
+};

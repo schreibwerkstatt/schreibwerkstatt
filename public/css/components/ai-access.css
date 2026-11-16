@@ -20,4 +20,30 @@
   flex: 1 1 260px;
   margin: 0;
 }
+
+/* Kosten ueber den eigenen Key: je Monat Kopfzeile + Liste je Funktion. */
+.ai-access-usage {
+  display: grid;
+  gap: var(--space-sm);
+  margin-top: var(--space-md);
+}
+
+.ai-access-usage-head,
+.ai-access-usage-list li {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--space-sm);
+}
+
+.ai-access-usage-head {
+  font-weight: 600;
+}
+
+.ai-access-usage-list {
+  list-style: none;
+  margin: var(--space-xs) 0 0;
+  padding: 0;
+  display: grid;
+  gap: var(--space-2xs);
+}
 }

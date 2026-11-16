@@ -10,6 +10,7 @@
 
 import { fetchJson, sendJson } from '../utils.js';
 import { tFetchError, tRaw, tnRaw } from '../i18n.js';
+import { AI_PROFILE_TEMPLATES, aiProfileTemplate } from './ai-profile-templates.js';
 
 const EMPTY_PROFILE = {
   id: null, name: '', provider: 'openai-compat', model: '', host: '',
@@ -63,7 +64,29 @@ export const adminAiProfilesMethods = {
 
   adminProfilesCreate() {
     this.adminProfilesForm = this.adminProfilesNew();
+    this.adminProfilesTemplateId = '';
     this.adminProfilesEditing = true;
+  },
+
+  // Vorlage beim Anlegen (ai-profile-templates.js): setzt das Formular neu auf die
+  // Vorlage — Host und API-Key bleiben leer (= Instanz-Einstellung). «Keine Vorlage»
+  // leert wieder. Beim Bearbeiten nicht angeboten: ein bestehendes Profil
+  // ueberschriebe sonst unbemerkt seine Felder.
+  adminProfilesTemplateOptions() {
+    const t = window.__app?.t?.bind(window.__app) || tRaw;
+    return [
+      { value: '', label: t('admin.profiles.template.none') },
+      ...AI_PROFILE_TEMPLATES.map(tpl => ({ value: tpl.id, label: t(tpl.label) })),
+    ];
+  },
+
+  adminProfilesApplyTemplate(id) {
+    if (this.adminProfilesForm?.id) return;
+    const tpl = aiProfileTemplate(id);
+    const t = window.__app?.t?.bind(window.__app) || tRaw;
+    this.adminProfilesForm = tpl
+      ? { ...EMPTY_PROFILE, ...tpl.form, name: t(tpl.label), notes: t(tpl.notes) }
+      : this.adminProfilesNew();
   },
 
   adminProfilesCancel() {

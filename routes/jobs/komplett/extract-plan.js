@@ -16,7 +16,7 @@ const { runWithContext, setContext } = require('../../../lib/log-context');
 const { providerClass, resolveProvider } = require('../../../lib/ai');
 const {
   chunkLimitsFor, resolveExtractSinglePassLimit, splitGroupsIntoChunks, pageSigSuffix,
-  getPrompts, getBookPrompts,
+  getPrompts, getBookPrompts, tierModel, _modelName,
 } = require('../shared');
 const { loadCheckpoint, loadChapterExtractCache, getBookSettings, countExtractCacheForVersion } = require('../../../db/schema');
 const { komplettMaxTokens } = require('./phases/tokens');
@@ -32,11 +32,15 @@ const { _komplettAiOverrides } = require('./job-shared');
 // Gilt, solange das Buch nicht deutlich kleiner geworden ist (Toleranz 10 %).
 const SP_TRUNC_CP_TYPE = 'komplett-singlepass-truncated';
 
-/** Tier der Extraktions-Calls (nur Claude: eigenes Modell + Denk-Tiefe). */
+/** Tier der Extraktions-Calls (nur Claude: eigenes Modell + Denk-Tiefe). Das Modell
+ *  kommt aus der Stufe von `komplett-extract` (shared/model-tier.js) und wird nur als
+ *  Per-Call-Modell gesetzt, wenn es vom Job-Modell abweicht — sonst bleibt der Call beim
+ *  Job-Bag (gleiches Modell, gleiche cacheVersion). Muss im Job-Kontext laufen. */
 function buildExtractTier(effectiveProvider) {
   if (effectiveProvider !== 'claude') return { label: COST_LABEL.extract };
+  const extractModel = tierModel('komplett-extract', effectiveProvider);
   return {
-    model: String(appSettings.get('ai.claude.model.komplett.extract') || '').trim() || undefined,
+    model: extractModel !== _modelName(effectiveProvider) ? extractModel : undefined,
     effort: String(appSettings.get('ai.claude.effort.komplett.extract') || '').trim().toLowerCase() || undefined,
     label: COST_LABEL.extract,
   };
@@ -138,12 +142,12 @@ function chunkPagesSig(chunk, settingsSig, chunkCacheVersion) {
     + `||${settingsSig}||ch:${chunk.name || ''}||${chunkCacheVersion || ''}`;
 }
 
-/** Läuft `fn` im Kontext eines Komplett-Jobs dieses Users (Profil, Komplett-Overrides) —
+/** Läuft `fn` im Kontext eines Komplett-Jobs dieses Users (Profil, Modellstufe, Komplett-Overrides) —
  *  für Aufrufer ausserhalb der Queue. */
 function withKomplettContext(bookId, userEmail, fn) {
   return runWithContext({ job: 'komplett-analyse', user: userEmail || null, book: bookId }, async () => {
     const effectiveProvider = resolveProvider({ userEmail });
-    const overrides = _komplettAiOverrides(effectiveProvider);
+    const overrides = _komplettAiOverrides(effectiveProvider, 'komplett-analyse');
     if (overrides) setContext(overrides);
     return fn(effectiveProvider);
   });

@@ -2,7 +2,7 @@
 // Alpine.data('userSettingsCard') gespreadet. Server: routes/me-ai-access.js —
 // der API-Key kommt nie zurueck, nur `has_api_key`.
 
-import { fetchJson, sendJson } from './utils.js';
+import { fetchJson, sendJson, numberFormat, localeTag, tzOpts } from './utils.js';
 import { tFetchError } from './i18n.js';
 
 // Protokollwert: „gespeicherten Key behalten" (wie bei den Admin-KI-Profilen).
@@ -36,6 +36,8 @@ export const aiAccessState = () => ({
   aiAccessBusy: false,
   aiAccessError: '',
   aiAccessSaved: false,
+  // Kosten ueber den eigenen Key (GET /me/ai-access/usage): laufender + voriger Monat.
+  aiAccessUsage: null,
 });
 
 export const aiAccessMethods = {
@@ -51,11 +53,39 @@ export const aiAccessMethods = {
     this.aiAccessSaved = false;
     try {
       this._aiAccessApply(await fetchJson('/me/ai-access'));
+      if (this.aiAccessStored) await this.loadAiAccessUsage();
     } catch {
       this.aiAccessEnabled = false;
       this.aiAccessStored = false;
       this.aiAccess = null;
     }
+  },
+
+  async loadAiAccessUsage() {
+    try {
+      this.aiAccessUsage = (await fetchJson('/me/ai-access/usage')).months || [];
+    } catch {
+      this.aiAccessUsage = null;
+    }
+  },
+
+  // Monat (YYYY-MM) als „November 2026". Mitte des Monats: kein Zeitzonen-Kippen.
+  aiAccessUsageMonth(period) {
+    const [y, m] = String(period || '').split('-').map(Number);
+    if (!y || !m) return period || '';
+    return new Date(Date.UTC(y, m - 1, 15, 12))
+      .toLocaleDateString(localeTag(this.$store.shell?.uiLocale), tzOpts({ month: 'long', year: 'numeric' }));
+  },
+
+  aiAccessUsageMoney(usd) {
+    return numberFormat(this.$store.shell?.uiLocale, { style: 'currency', currency: 'USD', minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(usd || 0);
+  },
+
+  // Job-Typ bzw. Chat-Art → Label; dieselben Keys wie die Admin-Auswertung.
+  aiAccessUsageType(type) {
+    const key = `admin.usage.jobType.${type}`;
+    const label = window.__app.t(key);
+    return label && label !== key ? label : type;
   },
 
   // Liegt fuer DIESEN Provider ein Key? Ein Provider-Wechsel verlangt einen neuen.

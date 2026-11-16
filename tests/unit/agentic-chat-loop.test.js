@@ -650,7 +650,15 @@ test('abgeschnittene Werkzeug-Runde: Aufrufe verfallen, Synthese statt Job-Fehle
   assert.ok(!calls[2].messages.some(m => m.role === 'assistant' && JSON.stringify(m.content).includes('"hal"')), 'abgeschnittener Turn bleibt draussen');
 });
 
-test('Synthese ohne serverseitige Werkzeuge; Runden davor mit vollem Satz', async () => {
+// Modell kann kein tool_removal: Synthese mit verkürzter Liste. Explizit gestubbt,
+// damit der Test nicht am Default-Modell hängt.
+async function withoutToolRemoval(fn) {
+  const orig = ai.providerSupportsToolRemoval;
+  ai.providerSupportsToolRemoval = () => false;
+  try { return await fn(); } finally { ai.providerSupportsToolRemoval = orig; }
+}
+
+test('Synthese ohne serverseitige Werkzeuge; Runden davor mit vollem Satz', () => withoutToolRemoval(async () => {
   const server = { type: 'web_search_20250305', name: 'web_search', max_uses: 3 };
   const calls = mockCalls([
     res({ stopReason: 'tool_use', toolUses: [tu('lookup')] }),
@@ -659,7 +667,7 @@ test('Synthese ohne serverseitige Werkzeuge; Runden davor mit vollem Satz', asyn
   await runJob(makeJob({ prep: { tools: [...TOOLS, server], maxToolIter: 1 } }), newSession());
   assert.deepEqual(calls[0].tools, [...ALL, 'web_search']);
   assert.deepEqual(calls[1].tools, ALL);
-});
+}));
 
 // Modell kann tool_removal: Liste bleibt gleich (Cache-Präfix), eine system-Nachricht
 // hinter der Anweisung zieht die Server-Werkzeuge zurück, Denkblöcke bleiben.
@@ -769,7 +777,7 @@ test('_fitMessagesToBudget: ältere Runden und Websuchen werden mitgekürzt, Paa
   assert.equal(ok.messages, msgs);
 });
 
-test('Synthese mit geändertem Präfix (Server-Werkzeug weg): Denkblöcke nur aus dem Request entfernt', async () => {
+test('Synthese mit geändertem Präfix (Server-Werkzeug weg): Denkblöcke nur aus dem Request entfernt', () => withoutToolRemoval(async () => {
   const server = { type: 'web_search_20250305', name: 'web_search', max_uses: 3 };
   const think = { type: 'thinking', thinking: 'ich überlege', signature: 'sig' };
   const calls = mockCalls([
@@ -782,7 +790,7 @@ test('Synthese mit geändertem Präfix (Server-Werkzeug weg): Denkblöcke nur au
   assert.ok(!JSON.stringify(sent).includes('"thinking"'), 'kein Denkblock im Synthese-Request');
   const asst = sent.find(m => m.role === 'assistant');
   assert.deepEqual(asst.content.map(b => b.type), ['tool_use'], 'Turn bleibt mit seinem tool_use stehen');
-});
+}));
 
 test('Synthese ohne Präfix-Änderung: Denkblöcke bleiben im Request', async () => {
   const think = { type: 'thinking', thinking: 'ich überlege', signature: 'sig' };

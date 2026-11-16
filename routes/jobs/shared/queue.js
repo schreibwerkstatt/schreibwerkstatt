@@ -68,6 +68,10 @@ function _startJob({ jobId, fn }, job, slot) {
   const ctx = { job: job.type, user: job.userEmail || null, book: job.bookId, jobId };
   runWithContext(ctx, () => {
     try { startJobRun(jobId); } catch (e) { logger.error(`startJobRun: ${e.message}`); }
+    // Modellstufe des Jobs (nur Claude) als Job-Bag — hier einmal für jeden Job, damit
+    // kein Job-Modul die Zuordnung Job → Stufe vergessen kann (shared/model-tier.js).
+    try { require('./model-tier').bindJobTier(job.type, job.provider, logger); }
+    catch (e) { logger.error(`Modellstufe: ${e.message}`); }
     // Job-Module loggen Start mit eigenem Detail (Pages-Count, Buchname etc.).
     // jobId steht via ALS-Ctx im Tag — kein zentrales Generik-Start nötig.
     // Promise.resolve().then(fn): auch ein synchroner Throw landet im catch,

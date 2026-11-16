@@ -68,7 +68,7 @@ export function registerConfigStore() {
     apiProvider: 'claude',
     effectiveProvider: 'claude',
     effectiveProviderClass: 'cloud',
-    claudeModel: 'claude-sonnet-4-6',
+    claudeModel: 'claude-sonnet-5-5',
     claudeMaxTokens: 64000,
     ollamaModel: 'llama3.2',
     openaiCompatModel: 'llama3.2',

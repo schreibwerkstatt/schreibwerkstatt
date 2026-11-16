@@ -42,7 +42,7 @@ queued → running → done | error | cancelled
 
 1. **Route-Handler** (`routes/jobs/<type>.js`) als Express-Router.
 2. **Dedup-Check** mit `findActiveJobId(type, entityId, userEmail)` — NICHT `runningJobs.get(...) && jobs.has(...)`, das matcht auch fertige Jobs in der 2-h-Cleanup-Phase.
-3. **`createJob(type, bookId, userEmail, label, labelParams?, dedupId?)`** liefert `jobId` und reserviert den Dedup-Slot (`runningJobs.set(jobKey, jobId)`).
+3. **`createJob(type, bookId, userEmail, label, labelParams?, dedupId?)`** liefert `jobId` und reserviert den Dedup-Slot (`runningJobs.set(jobKey, jobId)`). `provider`/`model` setzt er aus der Modell-Klasse des Typs — Pflicht für jeden Job, auch ohne KI: [routes/jobs/CLAUDE.md](../routes/jobs/CLAUDE.md#modell-klasse-was-der-job-protokolliert).
 4. **`enqueueJob(jobId, async () => runMyJob(jobId, …))`** stellt in die FIFO-Queue. Worker setzt `status='running'` + `startedAt` automatisch.
 5. **Im Job-Body**:
    - `updateJob(id, { statusText: 'job.phase.foo', statusParams: {...}, progress: N })` für Phasen-Updates. `statusText` als i18n-Key (siehe [docs/i18n.md](i18n.md)).

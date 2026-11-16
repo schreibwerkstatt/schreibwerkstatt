@@ -60,6 +60,7 @@ Diese Regeln setzt ein Hook ([.claude/settings.json](.claude/settings.json), [sc
 | Client-Fläche (REST + Bundle) nur über den Vertrag ändern — additiv, Server vor Clients, `api`/`editorApi` + CHANGELOG | [client-contract.test.js](tests/integration/client-contract.test.js) + [editor-surface.test.js](tests/unit/editor-surface.test.js) + CI-Schritt «Client-Kompatibilität»; `drift-reminders.js` | [contract/README.md](contract/README.md) |
 | Unit-Tests vor dem Commit | `stop-run-unit-tests.js` (Turn-Ende) | unten, „Tests" |
 | Chat-Werkzeug: eine Definition + ein Handler + eine Zugriffszeile, Querverweise nur bedingt, Budget-Ratsche | [chat-tools-contract.test.mjs](tests/unit/chat-tools-contract.test.mjs) | [routes/jobs/chat-tools/CLAUDE.md](routes/jobs/chat-tools/CLAUDE.md) |
+| Jeder Job-Typ in genau einer Modell-Klasse (Chat-Stufe, Embedding, STT, ohne Modell) — bestimmt, was `job_runs` protokolliert | [job-model-class.test.js](tests/unit/job-model-class.test.js) | [routes/jobs/CLAUDE.md](routes/jobs/CLAUDE.md#modell-klasse-was-der-job-protokolliert) |
 | Kapitel/Abschnitte in Filtern + KI-Namensauflösung nur per ID (`kapitelId`/`seiteId`, `chapterNameMap`) | [chapter-filter-ids.test.mjs](tests/unit/chapter-filter-ids.test.mjs) | [docs/chapter-hierarchy.md](docs/chapter-hierarchy.md#kapitel-und-abschnitte-per-id-nie-per-name) |
 | Neue Buch-Tabelle reist im `.swbook` mit (Standard: Zeile in `WERK_TABLES`) oder steht mit Kategorie auf der Ausnahmeliste; Fassung = Text, Einstellungen, Publikation | [book-data-portability.test.js](tests/unit/book-data-portability.test.js) | [docs/book-migration.md](docs/book-migration.md#neue-buchdaten) |
 | Buchthema an genau einem Ort (`OWNERS`-Liste) — nie zusätzlich in `books`, einem Export-Profil oder einer zweiten Tabelle | [book-meta-single-place.test.js](tests/unit/book-meta-single-place.test.js) | oben, „Immer gültig" |
@@ -144,6 +145,10 @@ Die drei Sync-Proxy-Ausnahmen zur Job-Queue-Regel sind LanguageTool, STT und TTS
 ### Nur auf main
 
 Entwickelt und committet wird ausschliesslich auf `main`. Keine Feature-/Fix-Branches, keine Worktrees, Subagents **ohne** `isolation: "worktree"` starten — jeder so isolierte Agent hinterlässt einen `worktree-agent-*`-Branch, auch wenn seine Arbeit längst auf `main` liegt.
+
+### Commits nur auf Auftrag
+
+Committet wird nur, wenn der User es ausdrücklich verlangt — nicht am Ende eines Auftrags, nicht weil Tests grün sind, und nicht, weil eine Regel von «vor dem Commit» oder «im selben Commit» spricht (das beschreibt, *was* in einen Commit gehört, nicht *dass* einer fällig ist). Die Frage nach dem Commit steht **allein** und nie mit einer anderen gebündelt («Soll ich X angehen und committen?»): ein «ja» darauf gilt sonst für beides. Committet wird dann nur die eigene Arbeit (`git commit -- <pfade>`), nie der ganze Tree. Einzige Ausnahme ist `/release`, der laut [release.md](.claude/commands/release.md) den gesamten Tree ohne Rückfrage committet und pusht. **Why:** mehrere Sitzungen teilen einen Checkout; ein ungefragter Commit nimmt fremde, halbfertige Arbeit mit oder lässt einen Commit wie die Arbeit der eigenen Sitzung aussehen.
 
 ### Feature-Pläne
 

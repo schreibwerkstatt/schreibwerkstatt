@@ -11,6 +11,7 @@
 //   startLabel, errLabel,                  // Log-Beschriftung ('Agent' / 'Recherche-Chat')
 //   callProvider,                          // 7. Arg von callAIWithTools (undefined = ALS/global, 'claude' = erzwungen)
 //   resolveProvider(userEmail, logger),    // effektiver Provider-String; darf setContext-Overrides setzen
+//   jobType,                               // Job-Typ des Chats ('book-chat' …) — wählt die Modellstufe (shared/model-tier.js)
 //   effortSettingKey?,                     // App-Setting mit dem Claude-Effort dieses Chats (helpers.js#applyChatEffort)
 //   validate({ userEmail }),               // optional, läuft im try → wirft via i18nError (z.B. Claude-only-Guard)
 //   loadSession(sessionId, userEmail),     // Session-Row (inkl. book_name) oder null
@@ -98,7 +99,7 @@ const { getContextConfigFor } = ai;
 const { costUsd } = require('../../../lib/pricing');
 const {
   makeJobLogger, updateJob, completeJob, failJob, i18nError,
-  jobAbortControllers,
+  jobAbortControllers, bindJobTier,
 } = require('../shared');
 const { recordChatLedgerForMessage, recordChatLedgerEntry } = require('../../../db/cost-ledger');
 const { generateSessionTitle } = require('../chat-title');
@@ -118,6 +119,7 @@ function makeAgenticChatJob(config) {
   return async function runAgenticChatJob(jobId, sessionId, userMsgId, message, userEmail) {
     const logger = makeJobLogger(jobId);
     const provider = config.resolveProvider(userEmail, logger);
+    bindJobTier(config.jobType, provider, logger);
     const effort = applyChatEffort(provider, config.effortSettingKey);
     const aiCfg = getContextConfigFor(provider);
     const state = {

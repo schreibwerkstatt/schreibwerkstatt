@@ -4,8 +4,8 @@
 // Effort-Feld 'high': das Seiten-Lektorat denkt dann pro Pass Zehntausende Tokens
 // stumm, der Stream liefert minutenlang nur Pings, und der Job steht sichtbar bei
 // 10 %. `applyLektoratAiOverrides` bindet deshalb `ai.claude.effort.lektorat` — aber nur
-// dort; Sonnet 4.6 (kein Thinking) bleibt unberuehrt. Dieselbe Funktion routet
-// `ai.claude.model.lektorat`; der Effort richtet sich nach DIESEM Modell. Der Denk-Block selbst wird
+// dort; Sonnet 4.6 (kein Thinking) bleibt unberuehrt. Das Modell kommt aus der
+// Modellstufe des Lektorat-Jobs; der Effort richtet sich nach DIESEM Modell. Der Denk-Block selbst wird
 // ueber `tok.onThinking` gemeldet, damit die Statuszeile ihn anzeigen kann.
 
 import { test } from 'node:test';
@@ -79,32 +79,43 @@ test('applyLektoratAiOverrides: leerer Effort-Wert = kein Effort-Feld', () => {
   } finally { teardown(); }
 });
 
-// Das Lektorat-Modell schlaegt das globale — und der Effort richtet sich nach dem
-// Lektorat-Modell, nicht nach dem globalen: global Sonnet 4.6 (denkt nicht) +
-// Lektorat Opus 5.5 (denkt) muss den Effort senden.
-test('applyLektoratAiOverrides: ai.claude.model.lektorat routet Modell + Effort', () => {
+// Die Stufe des Lektorats schlaegt das globale Modell — und der Effort richtet sich
+// nach dem Stufen-Modell, nicht nach dem globalen: global Sonnet 4.6 (denkt nicht) +
+// Lektorat auf «maximal» mit Opus 5.5 (denkt) muss den Effort senden.
+test('applyLektoratAiOverrides: Stufe des Lektorats routet Modell + Effort', () => {
   const { split, cfg, appSettings, logCtx, teardown } = _bootstrap();
   try {
     _globalModel(appSettings, 'claude-sonnet-4-6');
-    appSettings.set('ai.claude.model.lektorat', 'claude-opus-5-5', { updatedBy: 'test' });
+    appSettings.set('ai.claude.model.tier.max', 'claude-opus-5-5', { updatedBy: 'test' });
+    appSettings.set('ai.claude.tier.job.check', 'max', { updatedBy: 'test' });
     logCtx.runWithContext({ job: 'check' }, () => {
       assert.deepEqual(split.applyLektoratAiOverrides('claude', quietLogger), { model: 'claude-opus-5-5', cacheSuffix: ':e=medium' });
-      assert.deepEqual(logCtx.getContext().aiJob, { provider: 'claude', model: 'claude-opus-5-5', effort: 'medium' });
+      const bag = logCtx.getContext().aiJob;
+      assert.equal(bag.model, 'claude-opus-5-5');
+      assert.equal(bag.effort, 'medium');
       assert.equal(cfg._resolveClaudeModel(), 'claude-opus-5-5');
     });
     // Ausserhalb des Job-Kontexts bleibt das globale Modell unberuehrt.
     assert.equal(cfg._resolveClaudeModel(), 'claude-sonnet-4-6');
+    // Der Batch-Lauf hat seine eigene Stufe (hier stark): kein Stufen-Bag, kein Effort.
+    logCtx.runWithContext({ job: 'batch-check' }, () => {
+      assert.deepEqual(split.applyLektoratAiOverrides('claude', quietLogger), { model: 'claude-sonnet-4-6', cacheSuffix: '' });
+      assert.equal(logCtx.getContext().aiJob, undefined);
+    });
   } finally { teardown(); }
 });
 
-test('applyLektoratAiOverrides: Lektorat-Modell ohne Denken setzt nur das Modell', () => {
+test('applyLektoratAiOverrides: Stufen-Modell ohne Denken setzt nur das Modell', () => {
   const { split, appSettings, logCtx, teardown } = _bootstrap();
   try {
     _globalModel(appSettings, 'claude-sonnet-5');
-    appSettings.set('ai.claude.model.lektorat', 'claude-sonnet-4-6', { updatedBy: 'test' });
+    appSettings.set('ai.claude.model.tier.max', 'claude-sonnet-4-6', { updatedBy: 'test' });
+    appSettings.set('ai.claude.tier.job.check', 'max', { updatedBy: 'test' });
     logCtx.runWithContext({ job: 'check' }, () => {
       assert.deepEqual(split.applyLektoratAiOverrides('claude', quietLogger), { model: 'claude-sonnet-4-6', cacheSuffix: '' });
-      assert.deepEqual(logCtx.getContext().aiJob, { provider: 'claude', model: 'claude-sonnet-4-6' });
+      const bag = logCtx.getContext().aiJob;
+      assert.equal(bag.model, 'claude-sonnet-4-6');
+      assert.equal(bag.effort, undefined);
     });
   } finally { teardown(); }
 });

@@ -212,6 +212,42 @@ test('Web-Suche: dynamische Filterung auf Opus 5.5, alte Variante auf älteren M
   assert.equal(old.body.tools.find(t => t.name === 'web_search').type, 'web_search_20250305');
 });
 
+// Dynamische Filterung: die Suchen laufen IN der Code-Ausführung. Ihre Blöcke tragen
+// `caller` (Verweis auf die Code-Ausführung), und die Suchanfrage kommt komplett im
+// content_block_start statt per input_json_delta. Beides muss in der nächsten Runde
+// byte-gleich zurück — ohne `caller` antwortet die API mit 400 «code_execution tool use
+// … without a corresponding code_execution_tool_result», ohne Suchanfrage
+// mit invalid_tool_input. Eine Code-Ausführung darf am Rundenende offen sein: die API
+// setzt sie in der Folgeantwort fort (Blockfolge aufgezeichnet gegen die echte API).
+test('Web-Suche: verschachtelte Suche behält caller und Suchanfrage, offene Code-Ausführung bleibt', async () => {
+  const caller = { type: 'code_execution_20260120', tool_id: 'srv_code' };
+  const search = { type: 'server_tool_use', id: 'srv_ws', name: 'web_search', input: { query: 'Eherecht 1988' }, caller };
+  const hits = { type: 'web_search_tool_result', tool_use_id: 'srv_ws', content: [{ type: 'web_search_result', url: 'https://x' }], caller };
+  const codeResult = { type: 'code_execution_tool_result', tool_use_id: 'srv_code', content: { type: 'encrypted_code_execution_result', encrypted_stdout: 'e' } };
+  const { result } = await run([
+    start(),
+    blockStart(0, { type: 'server_tool_use', id: 'srv_code', name: 'code_execution', input: {} }),
+    delta(0, { type: 'input_json_delta', partial_json: '{"code":"x"}' }),
+    blockStop(0),
+    blockStart(1, search), blockStop(1),
+    blockStart(2, hits), blockStop(2),
+    blockStart(3, codeResult), blockStop(3),
+    blockStart(4, { type: 'server_tool_use', id: 'srv_open', name: 'code_execution', input: {} }), blockStop(4),
+    blockStart(5, { type: 'tool_use', id: 't1', name: 'lookup' }),
+    delta(5, { type: 'input_json_delta', partial_json: '{}' }),
+    blockStop(5),
+    stop('tool_use'),
+  ]);
+  const raw = result.rawContentBlocks;
+  assert.deepEqual(raw[0], { type: 'server_tool_use', id: 'srv_code', name: 'code_execution', input: { code: 'x' } });
+  assert.deepEqual(raw[1], search, 'caller und Suchanfrage aus dem content_block_start bleiben');
+  assert.deepEqual(raw[2], hits, 'caller am Suchergebnis bleibt');
+  assert.deepEqual(raw[3], codeResult);
+  assert.deepEqual(raw[4], { type: 'server_tool_use', id: 'srv_open', name: 'code_execution', input: {} },
+    'offene Code-Ausführung geht mit zurück, die API setzt sie fort');
+  assert.deepEqual(result.toolUses.map(t => t.id), ['t1']);
+});
+
 test('progressNote: letzte Zeile, Markdown-Präfixe weg, gedeckelt', () => {
   assert.equal(progressNote('- erster Punkt\n## Nächster Schritt'), 'Nächster Schritt');
   assert.equal(progressNote(''), '');

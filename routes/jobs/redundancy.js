@@ -17,7 +17,7 @@
 const express = require('express');
 const {
   makeJobLogger, updateJob, completeJob, failJob, i18nError, jsonBody, jobAbortControllers,
-  startBookJob, createJob, enqueueJob, findActiveJobId,
+  startBookJob, createJob, enqueueJob, findActiveJobId, setJobModel, EMBED_PROVIDER,
 } = require('./shared');
 const logger = require('../../logger');
 const embed = require('../../lib/embed');
@@ -74,6 +74,7 @@ async function runRedundancyJob(jobId, bookId, opts, userEmail) {
     if (!embed.isEnabled()) throw i18nError('job.error.embedDisabled');
     if (!retrieval.indexReady(bookId)) throw i18nError('job.error.redundancyNoIndex');
     const { model } = embed.getConfig();
+    setJobModel(jobId, EMBED_PROVIDER, model);
 
     updateJob(jobId, { statusText: 'job.phase.redundancyLoad', progress: 5 });
     const contentSig = await _contentSig(bookId, userEmail);

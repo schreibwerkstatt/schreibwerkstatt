@@ -6,7 +6,7 @@ const {
   loadSynonymCache, saveSynonymCache,
 } = require('../../db/schema');
 const {
-  makeJobLogger, updateJob, setJobModel, completeJob, failJob, i18nError,
+  makeJobLogger, updateJob, completeJob, failJob, i18nError,
   aiCall, getPrompts, getBookPrompts,
   tps, tierModel, applyTierAiOverrides,
   jobs, runningJobs, createJob, enqueueJob, jobKey, findActiveJobId,
@@ -33,14 +33,14 @@ function _synonymKeyHash(wort, satz, bookSettings, cacheVersion) {
   return crypto.createHash('sha1').update(raw).digest('hex');
 }
 
-// Modell + Effort der Synonymsuche als EIN Job-Bag (setContext ersetzt `aiJob` ganz).
-// Nur Claude. Das Modell kommt aus der Stufe «leicht» bzw. `ai.claude.model.synonym`
-// (shared/model-tier.js), `ai.claude.effort.synonym` (Default 'low') verhindert, dass
-// ein denkendes Modell fuer eine Wortliste lange stumm nachdenkt. Effort nur bei
-// adaptivem Denken — aeltere Modelle kuerzten sonst die sichtbare Antwort.
+// Modell + Effort der Synonymsuche. Nur Claude. Das Modell kommt aus der Stufe des
+// Jobs `synonym` (Default «leicht», shared/model-tier.js), `ai.claude.effort.synonym`
+// (Default 'low') verhindert, dass ein denkendes Modell fuer eine Wortliste lange stumm
+// nachdenkt. Effort nur bei adaptivem Denken — aeltere Modelle kuerzten sonst die
+// sichtbare Antwort.
 // Rueckgabe: das effektiv laufende Modell + `:e=<effort>` fuer die cacheVersion.
 function applySynonymAiOverrides(effectiveProvider, logger) {
-  const model = tierModel('synonym', effectiveProvider, { jobKey: 'synonym' });
+  const model = tierModel('synonym', effectiveProvider);
   if (effectiveProvider !== 'claude') return { model, cacheSuffix: '' };
   let cacheSuffix = '';
   const extra = {};
@@ -48,7 +48,7 @@ function applySynonymAiOverrides(effectiveProvider, logger) {
     const effort = String(appSettings.get('ai.claude.effort.synonym') || '').trim().toLowerCase();
     if (effort) { extra.effort = effort; cacheSuffix = `:e=${effort}`; }
   }
-  applyTierAiOverrides(null, 'synonym', effectiveProvider, logger, { jobKey: 'synonym', extra });
+  applyTierAiOverrides(null, 'synonym', effectiveProvider, logger, { extra });
   return { model, cacheSuffix };
 }
 
@@ -63,9 +63,6 @@ async function runSynonymJob(jobId, wort, satz, bookId, userEmail, pageId) {
   const promptSatz = prepareSynonymSatz(wort, satz);
   const effectiveProvider = resolveProvider({ userEmail });
   const { model, cacheSuffix } = applySynonymAiOverrides(effectiveProvider, logger);
-  // createJob trägt das globale Modell ein; das Kosten-Ledger entsteht in endJobRun
-  // aus job_runs, also das tatsächlich laufende Modell vor dem Laufende nachziehen.
-  setJobModel(jobId, effectiveProvider, model);
   const cacheVersion = `${model}${cacheSuffix}:${PROMPTS_VERSION || ''}:syn${SYNONYM_PROMPT_REV}`;
   const keyHash = _synonymKeyHash(wort, promptSatz, bookSettings, cacheVersion);
   try {

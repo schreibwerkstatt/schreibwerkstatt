@@ -20,7 +20,7 @@ const {
 } = require('../../../db/schema');
 const {
   makeJobLogger, updateJob, completeJob, failJob, i18nError, i18nErrText,
-  getPrompts,
+  getPrompts, _modelName,
   jobAbortControllers, settledAll, tps,
   recordCallCost, summarizeCostByPhase, formatCostByPhase,
 } = require('../shared');
@@ -43,7 +43,8 @@ const retrieval = require('../../../lib/semantic-retrieval');
 function _factcheckModelName(provider) {
   if (provider === 'ollama') return appSettings.get('ai.ollama.model') || 'llama3.2';
   if (provider === 'openai-compat') return appSettings.get('ai.openai-compat.model') || 'llama3.2';
-  return appSettings.get('ai.claude.model.komplett') || appSettings.get('ai.claude.model') || 'claude-sonnet-4-6';
+  // Claude: Modell der Stufe des laufenden Jobs (Job-Bag), sonst das Instanz-Modell.
+  return _modelName('claude');
 }
 
 // Anthropics serverseitiges Web-Such-Tool (dieselbe Version wie im Recherche-Chat).

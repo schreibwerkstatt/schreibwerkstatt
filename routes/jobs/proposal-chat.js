@@ -51,6 +51,7 @@ const { makeAgenticChatJob, buildAgenticHistory, stripTrailingEmptyJson } = requ
 const { classicRefusalAnswer } = require('./chat/shared');
 const {
   makeJobLogger, updateJob, completeJob, failJob, i18nError, getPrompts, jobAbortControllers,
+  bindJobTier,
 } = require('./shared');
 const { recordChatLedgerForMessage } = require('../../db/cost-ledger');
 const { generateSessionTitle } = require('./chat-title');
@@ -85,6 +86,8 @@ const _msgChars = (msgs) => msgs.reduce((n, m) => n + (typeof m.content === 'str
 
 function makeProposalChatJob(cfg) {
   const { kind, label } = cfg;
+  // Job-Typ wie in routes/jobs/chat.js (POST /jobs/<kind>-chat) — wählt die Modellstufe.
+  const jobType = `${kind}-chat`;
   // ctx des laufenden agentischen Jobs je Logger (pro Job eine Instanz): parseFinal
   // bekommt vom Loop nur (finalText, logger), braucht aber die gesammelten Vorschläge.
   const ctxByLogger = new WeakMap();
@@ -133,6 +136,7 @@ function makeProposalChatJob(cfg) {
   async function runClassic(jobId, sessionId, userMsgId, message, userEmail) {
     const logger = makeJobLogger(jobId);
     const provider = resolveProvider({ userEmail });
+    bindJobTier(jobType, provider, logger);
     const aiCfg = getContextConfigFor(provider);
     try {
       updateJob(jobId, { statusText: 'job.phase.preparing', progress: 5 });
@@ -238,6 +242,7 @@ function makeProposalChatJob(cfg) {
     errLabel: label,
     callProvider: undefined,
     resolveProvider: (userEmail) => resolveProvider({ userEmail }),
+    jobType,
     effortSettingKey: cfg.effortSettingKey,
 
     loadSession: (sessionId, userEmail) => getSessionWithBookName(parseInt(sessionId), userEmail, kind),

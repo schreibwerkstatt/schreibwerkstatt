@@ -112,8 +112,9 @@ async function runKomplettAnalyseJob(jobId, bookId, bookName, userEmail, provide
   }
   // Tiered Routing (nur Claude): die mechanischen Extraktions-Calls laufen auf einem
   // EIGENEN Tier — anderes Modell UND andere Denk-Tiefe — als die Konsolidierung und das
-  // Kontinuitäts-Urteil (die folgen dem job-weiten ALS-Modell/-Effort =
-  // ai.claude.model.komplett + ai.claude.effort.komplett).
+  // Kontinuitäts-Urteil (die folgen dem job-weiten ALS-Modell/-Effort = Stufe von
+  // `komplett-analyse` + ai.claude.effort.komplett; Extraktion = Stufe von
+  // `komplett-extract` + ai.claude.effort.komplett.extract).
   //
   // Warum ein Tier-Objekt und kein setContext: Extraktions- und Konsolidierungs-Calls
   // laufen über `settledAll` parallel; ein ALS-Patch würde den Nachbar-Call mittreffen.

@@ -111,8 +111,9 @@ async function main() {
   const models = args.models && args.models.length
     ? args.models
     : [...new Set([
-        appSettings.get('ai.claude.model') || 'claude-sonnet-4-6',
-        appSettings.get('ai.claude.model.komplett'),
+        appSettings.get('ai.claude.model') || 'claude-sonnet-5-5',
+        appSettings.get('ai.claude.model.tier.max'),
+        appSettings.get('ai.claude.model.tier.standard'),
       ].filter(Boolean))];
 
   console.log(`\n  Kalibrierung chars/token · Probe ${SAMPLE_CHARS} vs. ${SAMPLE_CHARS * 2} Zeichen`);

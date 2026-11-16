@@ -107,3 +107,49 @@ test('Thinking im Werkzeug-Modus: letzte Denkzeile als note, Denkspur geht als r
     assert.equal(assistant.tool_calls[0].function.name, 'web_search');
   } finally { ctx.teardown(); ep.close(); }
 });
+
+// Denkbudget pro Aufruf (Job-Bag `reasoningBudget`, gesetzt vom Lektorat aus
+// `ai.openai-compat.reasoning_budget.lektorat`). Ein LiteLLM-Alias trägt sein eigenes
+// extra_body (Budget + enable_thinking); das extra_body des Clients ersetzt es GANZ —
+// darum gehen beide Felder mit, sonst denkt das Modell gar nicht.
+import { createRequire } from 'node:module';
+const req = createRequire(import.meta.url);
+
+test('Thinking + Budget im Job-Bag: reasoning_budget_tokens und enable_thinking, Reserve wächst mit', async () => {
+  const ep = await fakeEndpoint((body, res) => sse(res, JSON_ANSWER));
+  const ctx = bootstrap(ep.url, {
+    'ai.openai-compat.think': true, 'ai.openai-compat.think_budget': 4000, 'ai.openai-compat.max_tokens_out': 16000,
+  });
+  try {
+    const { runWithContext } = req('../../lib/log-context');
+    const { bindJobOverride } = req('../../lib/ai/config');
+    await runWithContext({}, async () => {
+      bindJobOverride('openai-compat', { reasoningBudget: 8000 });
+      await ctx.ai.callAI('Frage', SYSTEM, null, 2000, null, 'openai-compat');
+    });
+    const b = ep.state.last;
+    assert.equal(b.reasoning_budget_tokens, 8000);
+    assert.deepEqual(b.chat_template_kwargs, { enable_thinking: true });
+    assert.equal(b.max_tokens, 10000, 'Reserve = Budget, nicht die kleinere think_budget');
+    // Ohne Budget im Bag: unverändert kein Feld (Alias-Default, echtes OpenAI bleibt nutzbar).
+    await ctx.ai.callAI('Frage', SYSTEM, null, 2000, null, 'openai-compat');
+    assert.equal('reasoning_budget_tokens' in ep.state.last, false);
+    assert.equal('chat_template_kwargs' in ep.state.last, false);
+    assert.equal(ep.state.last.max_tokens, 6000);
+  } finally { ctx.teardown(); ep.close(); }
+});
+
+test('Budget im Job-Bag ohne Thinking: wird nicht gesendet, enable_thinking bleibt false', async () => {
+  const ep = await fakeEndpoint((body, res) => sse(res, JSON_ANSWER.slice(1)));
+  const ctx = bootstrap(ep.url, {});
+  try {
+    const { runWithContext } = req('../../lib/log-context');
+    const { bindJobOverride } = req('../../lib/ai/config');
+    await runWithContext({}, async () => {
+      bindJobOverride('openai-compat', { reasoningBudget: 8000 });
+      await ctx.ai.callAI('Frage', SYSTEM, null, 2000, null, 'openai-compat');
+    });
+    assert.equal('reasoning_budget_tokens' in ep.state.last, false);
+    assert.deepEqual(ep.state.last.chat_template_kwargs, { enable_thinking: false });
+  } finally { ctx.teardown(); ep.close(); }
+});

@@ -26,6 +26,12 @@
 // aber in chat_messages — darum schliesst recordJobLedger die Typen 'chat'/
 // 'book-chat' aus. Spiegelt lib/usage-sources#excludeChatSourcedSql.
 //
+// billed_to ('instance' | 'own', Mig 365): wer den Call bezahlt. 'own' = eigener
+// KI-Zugang des Kontos (lib/ai/profile.js). Jobs uebernehmen den Wert, den
+// job_runs beim Start festgehalten hat; Chat-Zeilen bestimmen ihn beim Buchen
+// (ein Chat-Lauf ist kurz). Alles, was die Kosten der INSTANZ meint (Budget-Gate,
+// /metrics, Anthropic-Abgleich, Admin-Summen), liest nur 'instance'.
+//
 // source_ref ('job:<job_id>' | 'chatmsg:<id>' | 'chatjob:<…>') ist ein opaker Trace-/Idempotenz-
 // Schluessel mit UNIQUE-Constraint — INSERT OR IGNORE macht beide Recorder
 // re-entry-sicher. Bewusst KEIN Integer-FK: muss den Prune der Quellzeile
@@ -41,12 +47,25 @@ const logger = require('../logger');
 
 const _chatSourced = new Set(CHAT_SOURCED_JOB_TYPES);
 
+// Bezahlt der eigene Zugang diesen Call? Nur wenn der aktive Zugang des Kontos
+// sein eigener ist UND der Call ueber dessen Provider lief — Embeddings & Co.
+// laufen auf Diensten der Instanz, auch bei eigenem Key. Lazy require: lib/ai
+// zieht db-Module nach.
+function billedTo(userEmail, provider) {
+  if (!userEmail || !provider) return 'instance';
+  try {
+    const { activeProfile } = require('../lib/ai/profile');
+    const prof = activeProfile({ userEmail });
+    return prof?.owner_email && prof.provider === provider ? 'own' : 'instance';
+  } catch { return 'instance'; }
+}
+
 const _ins = db.prepare(`
   INSERT OR IGNORE INTO ai_cost_ledger
     (ts, user_email, source, type, book_id, provider, model,
-     tokens_in, tokens_out, cache_read_in, cache_creation_in, cache_creation_1h_in, web_searches, usd, source_ref)
+     tokens_in, tokens_out, cache_read_in, cache_creation_in, cache_creation_1h_in, web_searches, usd, source_ref, billed_to)
   VALUES (@ts, @user_email, @source, @type, @book_id, @provider, @model,
-          @tokens_in, @tokens_out, @cache_read_in, @cache_creation_in, @cache_creation_1h_in, @web_searches, @usd, @source_ref)
+          @tokens_in, @tokens_out, @cache_read_in, @cache_creation_in, @cache_creation_1h_in, @web_searches, @usd, @source_ref, @billed_to)
 `);
 
 function _record(row) {
@@ -72,12 +91,13 @@ function _record(row) {
       webSearches: row.web_searches,
     }),
     source_ref: row.source_ref,
+    billed_to: row.billed_to || billedTo(row.user_email, row.provider),
   });
 }
 
 const _selJobRun = db.prepare(`
   SELECT job_id, ended_at, user_email, type, book_id, provider, model,
-         tokens_in, tokens_out, cache_read_in, cache_creation_in, cache_creation_1h_in, web_searches
+         tokens_in, tokens_out, cache_read_in, cache_creation_in, cache_creation_1h_in, web_searches, billed_to
     FROM job_runs WHERE job_id = ?
 `);
 
@@ -111,6 +131,10 @@ function recordJobLedger(jobId) {
       cache_creation_1h_in: r.cache_creation_1h_in,
       web_searches: r.web_searches,
       source_ref: `job:${jobId}`,
+      // Festgehalten beim Start; ein Lauf ohne KI-Call oder auf einem Dienst der
+      // Instanz (Embeddings: provider 'embed') bezahlt nichts ueber den eigenen Key.
+      billed_to: usedAi && r.billed_to === 'own' && (r.provider === 'claude' || r.provider === 'openai-compat')
+        ? 'own' : 'instance',
     });
   } catch (e) {
     logger.error(`[cost-ledger] recordJobLedger(${jobId}) fehlgeschlagen: ${e.message}`);
@@ -190,27 +214,31 @@ function recordChatLedgerEntry({
 
 // Rohe Ledger-Zeilen in [fromIso, toIso). Optionale Filter user/provider/source.
 // usd ist pro Zeile eingefroren — Aggregatoren summieren, statt neu zu rechnen.
-function queryRange({ fromIso, toIso, userEmail, provider, source } = {}) {
+// billedTo: 'instance' | 'own' | undefined (= beide).
+function queryRange({ fromIso, toIso, userEmail, provider, source, billedTo: billed } = {}) {
   const where = ['ts >= @from', 'ts < @to'];
+  if (billed)    where.push('billed_to = @billed');
   if (userEmail) where.push('user_email = @userEmail');
   if (provider)  where.push('provider = @provider');
   if (source)    where.push('source = @source');
   return db.prepare(`
     SELECT ts, user_email, source, type, book_id, provider, model,
-           tokens_in, tokens_out, cache_read_in, cache_creation_in, cache_creation_1h_in, web_searches, usd
+           tokens_in, tokens_out, cache_read_in, cache_creation_in, cache_creation_1h_in, web_searches, usd, billed_to
       FROM ai_cost_ledger
      WHERE ${where.join(' AND ')}
   `).all({
-    from: fromIso, to: toIso,
+    from: fromIso, to: toIso, billed: billed || null,
     userEmail: userEmail || null, provider: provider || null, source: source || null,
   });
 }
 
 const _sumUsdSince = db.prepare(
-  `SELECT COALESCE(SUM(usd), 0) AS usd FROM ai_cost_ledger WHERE user_email = ? AND ts >= ?`
+  `SELECT COALESCE(SUM(usd), 0) AS usd FROM ai_cost_ledger WHERE user_email = ? AND ts >= ? AND billed_to = 'instance'`
 );
 
-// Eingefrorene USD-Summe eines Users seit sinceIso — treibt das Budget-Gate.
+// Eingefrorene USD-Summe eines Users seit sinceIso — treibt das Budget-Gate. Nur
+// Kosten der Instanz: was der User ueber seinen eigenen Key bezahlt hat, zaehlt
+// nicht gegen sein Budget, auch nicht nach dem Wechsel zurueck auf die Instanz.
 function sumUsdSince(email, sinceIso) {
   if (!email) return 0;
   return _sumUsdSince.get(email, sinceIso).usd || 0;
@@ -219,19 +247,38 @@ function sumUsdSince(email, sinceIso) {
 const _claudeByDayModel = db.prepare(`
   SELECT substr(ts, 1, 10) AS day, model, SUM(usd) AS usd
     FROM ai_cost_ledger
-   WHERE provider = 'claude' AND ts >= ? AND ts < ?
+   WHERE provider = 'claude' AND billed_to = 'instance' AND ts >= ? AND ts < ?
    GROUP BY day, model
 `);
 
 // Claude-Kosten je UTC-Tag x Modell, fuer den Abgleich mit der Anthropic-
 // Rechnung (lib/anthropic-billing.js). Bewusst OHNE den Admin-Ausschluss der
-// Usage-Summaries: Anthropic stellt auch die Calls der Admins in Rechnung.
+// Usage-Summaries: Anthropic stellt auch die Calls der Admins in Rechnung —
+// aber nur ueber den Key der Instanz, eigene Zugaenge laufen auf fremden Konten.
 // ts ist ISO mit Z, substr(1,10) ist damit der UTC-Tag — wie die API-Buckets.
 function claudeByDayModel(fromDay, toDay) {
   return _claudeByDayModel.all(fromDay, toDay);
 }
 
+// Eigene-Key-Kosten eines Users in [fromIso, toIso), je source+type — fuer die
+// Uebersicht im Profil (routes/me-ai-access.js). Anzeige, kein Gate.
+const _ownByType = db.prepare(`
+  SELECT source, type, provider, COUNT(*) AS calls, SUM(usd) AS usd,
+         SUM(tokens_in + cache_read_in + cache_creation_in + cache_creation_1h_in) AS tokens_in,
+         SUM(tokens_out) AS tokens_out
+    FROM ai_cost_ledger
+   WHERE billed_to = 'own' AND user_email = ? AND ts >= ? AND ts < ?
+   GROUP BY source, type, provider
+   ORDER BY usd DESC, calls DESC
+`);
+function ownUsageByType(email, fromIso, toIso) {
+  if (!email) return [];
+  return _ownByType.all(email, fromIso, toIso);
+}
+
 module.exports = {
+  ownUsageByType,
+  billedTo,
   recordChatLedgerEntry,
   recordJobLedger,
   recordChatLedgerForMessage,

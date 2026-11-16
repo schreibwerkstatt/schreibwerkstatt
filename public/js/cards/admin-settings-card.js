@@ -21,6 +21,7 @@ export function registerAdminSettingsCard() {
     adminSettingsTab: 'auth',
     adminSettingsTabs: ADMIN_SETTINGS_TABS,
     adminSettingsProviderSubtab: 'claude',
+    adminJobTiers: { groups: [], jobs: [] },  // Zuordnung Job → Modellstufe (lib/ai/job-tiers.js)
     adminSettingsLoadedOnce: false,          // Provider-Unterreiter nur beim ersten Laden setzen
     adminSettingsPendingReset: {},           // key → true: beim Speichern auf Standard zurück
     adminSettingsAuth: { own_has_password: false, env_admin: false },
@@ -35,6 +36,8 @@ export function registerAdminSettingsCard() {
     adminProfilesEditing: false,
     adminProfilesSaving: false,
     adminProfilesForm: {},
+    // Gewählte Vorlage beim Anlegen (ai-profile-templates.js); '' = keine.
+    adminProfilesTemplateId: '',
 
     // ── API-Tokens (Tab `api`) — Prometheus/HA/Grafana-Scraper ──────────────
     adminApiTokensList: [],

@@ -17,7 +17,7 @@ const _stmtInsJobRun = db.prepare(
    VALUES (?, ?, ?, ?, ?, ?, ?, 'queued', ${NOW_ISO_SQL})`
 );
 const _stmtStartJobRun = db.prepare(
-  `UPDATE job_runs SET status = 'running', started_at = ${NOW_ISO_SQL} WHERE job_id = ?`
+  `UPDATE job_runs SET status = 'running', started_at = ${NOW_ISO_SQL}, billed_to = ? WHERE job_id = ?`
 );
 const _stmtEndJobRun = db.prepare(
   `UPDATE job_runs SET status = ?, ended_at = ${NOW_ISO_SQL}, tokens_in = ?, tokens_out = ?, cache_read_in = ?, cache_creation_in = ?, cache_creation_1h_in = ?, tokens_per_sec = ?, error = ?, error_params = ?, web_searches = ? WHERE job_id = ?`
@@ -35,12 +35,16 @@ function insertJobRun(job) {
     job.provider || null, job.model || null,
   );
 }
+// Laeuft im ALS-Kontext des Jobs (queue.js#_startJob): `billed_to` haelt fest, ob
+// der Lauf ueber den eigenen KI-Zugang des Users geht — derselbe Moment, in dem
+// der Job seinen Provider aufloest. recordJobLedger uebernimmt den Wert.
 function startJobRun(jobId) {
-  _stmtStartJobRun.run(jobId);
+  let billed = 'instance';
+  try { if (require('../lib/ai/profile').usesOwnAccess()) billed = 'own'; } catch { /* Instanz */ }
+  _stmtStartJobRun.run(billed, jobId);
 }
 // Provider/Modell nachtragen, wenn der Job-Lauf die echte Konfiguration gelesen hat
-// (Embedding-Jobs: `embed.model` statt des globalen Chat-Modells; Synonymsuche:
-// `ai.claude.model.synonym`). Das Ledger wird in
+// (Embedding-Jobs: `embed.model` statt des globalen Chat-Modells). Das Ledger wird in
 // endJobRun aus dieser Zeile geschrieben, der Write muss also vor dem Laufende liegen.
 function updateJobRunModel(jobId, provider, model) {
   db.prepare('UPDATE job_runs SET provider = ?, model = ? WHERE job_id = ?').run(provider || null, model || null, jobId);

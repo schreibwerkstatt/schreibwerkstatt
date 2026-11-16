@@ -12,13 +12,14 @@ const {
   getPrompts, getBookPrompts,
   htmlToText, jobAbortControllers,
   getFiguren, getLatestReview,
-  bookTextOpts,
+  bookTextOpts, bindJobTier,
 } = require('../shared');
 const contentStore = require('../../../lib/content-store');
 const { generateSessionTitle } = require('../chat-title');
 const embed = require('../../../lib/embed');
 const { selectPassagesSemantic, retrievalQuery } = require('./book-chat-retrieval');
 const { setContext } = require('../../../lib/log-context');
+const { bindJobOverride } = require('../../../lib/ai/config');
 const appSettings = require('../../../lib/app-settings');
 const { recordChatLedgerForMessage, recordChatLedgerEntry } = require('../../../db/cost-ledger');
 const { getSessionWithBookName } = require('../../../db/chat-sessions');
@@ -50,54 +51,51 @@ function _scorePageRelevance(query, text, stopwords = _BOOK_CHAT_STOPWORDS) {
   return score;
 }
 
-// Per-Job-Override für den Buch-Chat (klassisch + agentisch), analog zur
-// Komplettanalyse (_komplettAiOverrides in routes/jobs/komplett/job-shared.js): Keys
-// `ai.<provider>.{model,context_window,max_tokens_out,timeout_ms}.bookchat`, leer/0 =
-// folgt dem globalen Wert. Erlaubt bei Claude z.B. Opus für den Tool-Loop, während
-// global Sonnet läuft. Kein eigener Timeout-Default (anders als komplett) – der
-// Buch-Chat macht pro Call nur eine Tool-Use-Runde, der globale 10-Min-Timeout reicht.
-//
-// Warum auch openai-compat: der agentische Pfad läuft dort ebenfalls (Function-Calling),
-// und er braucht das umgekehrte Zuschnitt-Verhältnis wie die Analyse — VIEL Input
-// (Werkzeugkatalog + Erst-Kontext + wachsende Tool-Results, jede Iteration ungecacht)
-// und wenig Output. Ein für die Komplettanalyse gesetzter Output-Cap frisst sonst das
-// Input-Budget des Chats auf, weil beide aus demselben Kontextfenster kommen.
-const _BOOKCHAT_OVERRIDE_PROVIDERS = new Set(['claude', 'openai-compat']);
+// Per-Job-Override für den Buch-Chat (klassisch + agentisch).
+//   Claude: Modell, Fenster, Output-Cap und Timeout kommen aus der Stufe des Jobs
+//     `book-chat` (shared/model-tier.js, gebunden beim Job-Start); hier kommt nur der
+//     Effort dazu (`ai.claude.effort.bookchat`).
+//   openai-compat: eigener Satz `ai.openai-compat.{model,context_window,max_tokens_out,
+//     timeout_ms}.bookchat`, leer/0 = folgt dem globalen Wert. Der agentische Pfad läuft
+//     dort ebenfalls (Function-Calling) und braucht das umgekehrte Zuschnitt-Verhältnis
+//     wie die Analyse — VIEL Input (Werkzeugkatalog + Erst-Kontext + wachsende
+//     Tool-Results, jede Iteration ungecacht) und wenig Output. Ein für die
+//     Komplettanalyse gesetzter Output-Cap frässe sonst das Input-Budget des Chats auf.
+// Rückgabe: die Bag-Felder, die dieser Override setzt, oder null.
 function _bookChatAiOverrides(effectiveProvider) {
-  if (!_BOOKCHAT_OVERRIDE_PROVIDERS.has(effectiveProvider)) return null;
   const p = effectiveProvider;
+  if (p === 'claude') {
+    // effort (output_config): low|medium|high|xhigh|max. Leer = Modell-Default (Opus 5.5:
+    // medium, sonst high). lib/ai.js klemmt Tier-Mismatch automatisch auf high. Die drei
+    // übrigen agentischen Chats setzen ihren Effort über `effortSettingKey` im Loop
+    // (agentic-chat/helpers.js#applyChatEffort).
+    const effort = String(appSettings.get('ai.claude.effort.bookchat') || '').trim();
+    return effort ? { effort } : null;
+  }
+  if (p !== 'openai-compat') return null;
   const model = String(appSettings.get(`ai.${p}.model.bookchat`) || '').trim();
   const contextWindow = parseInt(appSettings.get(`ai.${p}.context_window.bookchat`), 10) || 0;
   const maxTokensOut = parseInt(appSettings.get(`ai.${p}.max_tokens_out.bookchat`), 10) || 0;
   const timeoutMs = parseInt(appSettings.get(`ai.${p}.timeout_ms.bookchat`), 10) || 0;
-  const bag = { provider: p };
-  if (model) bag.model = model;
-  if (contextWindow > 0) bag.contextWindow = contextWindow;
-  if (maxTokensOut > 0) bag.maxTokensOut = maxTokensOut;
-  if (timeoutMs > 0) bag.timeoutMs = timeoutMs;
-  // effort (output_config) für Opus 4.5+/Sonnet 4.6: low|medium|high|xhigh|max. Leer =
-  // Modell-Default (Opus 5.5: medium, sonst high). lib/ai.js klemmt Tier-Mismatch
-  // (max→Opus-only, xhigh→Opus-4.7+) automatisch auf high. Claude-API-Eigenheit —
-  // kein openai-compat-Pendant. Die drei übrigen agentischen Chats setzen ihren
-  // Effort über `effortSettingKey` im Loop (agentic-chat/helpers.js#applyChatEffort).
-  if (p === 'claude') {
-    const effort = String(appSettings.get('ai.claude.effort.bookchat') || '').trim();
-    if (effort) bag.effort = effort;
-  }
-  return Object.keys(bag).length > 1 ? { aiJob: bag } : null;
+  const fields = {};
+  if (model) fields.model = model;
+  if (contextWindow > 0) fields.contextWindow = contextWindow;
+  if (maxTokensOut > 0) fields.maxTokensOut = maxTokensOut;
+  if (timeoutMs > 0) fields.timeoutMs = timeoutMs;
+  return Object.keys(fields).length ? fields : null;
 }
 
-// Override via ALS-Context binden (greift für alle Calls dieses Jobs gegen DIESEN
-// Provider, ohne globale Calls zu beeinflussen — der `provider` im Bag ist Teil des
-// Vertrags). MUSS vor getContextConfigFor() laufen, damit das aiCfg (Token-Budget,
-// Tool-Result-Cap) das Buch-Chat-Kontextfenster/Output-Cap reflektiert.
+// Override in den Job-Bag mischen (greift für alle Calls dieses Jobs gegen DIESEN
+// Provider — der `provider` im Bag ist Teil des Vertrags). Stellt vorher die Stufe
+// sicher (idempotent zur Queue). MUSS vor getContextConfigFor() laufen, damit das aiCfg
+// (Token-Budget, Tool-Result-Cap) Fenster und Output-Cap des Chat-Modells reflektiert.
 function _applyBookChatAiOverrides(effectiveProvider, logger) {
-  const overrides = _bookChatAiOverrides(effectiveProvider);
-  if (overrides) {
-    setContext(overrides);
-    logger.info(`Buch-Chat-Override (${effectiveProvider}): ${JSON.stringify(overrides.aiJob)}.`);
-  }
-  return overrides;
+  bindJobTier('book-chat', effectiveProvider);
+  const fields = _bookChatAiOverrides(effectiveProvider);
+  if (!fields) return null;
+  const bag = bindJobOverride(effectiveProvider, fields);
+  logger.info(`Buch-Chat-Override (${effectiveProvider}): ${JSON.stringify(bag)}.`);
+  return bag;
 }
 
 // ── Budget des klassischen Pfads ─────────────────────────────────────────────

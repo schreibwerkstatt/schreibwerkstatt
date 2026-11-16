@@ -1,6 +1,6 @@
 # ERD — schreibwerkstatt
 
-Stand: Schema-Version 364, 199 Tabellen (ohne `sqlite_*`/`schema_version`/FTS5-Shadow-Tables; inkl. FTS5-Virtual `search_index`/`search_trigram`/`chat_messages_fts` + `search_meta`).
+Stand: Schema-Version 366, 199 Tabellen (ohne `sqlite_*`/`schema_version`/FTS5-Shadow-Tables; inkl. FTS5-Virtual `search_index`/`search_trigram`/`chat_messages_fts` + `search_meta`).
 
 Quelle: Squashed-Schema-Snapshot in [db/squashed-schema.js](../db/squashed-schema.js) (regeneriert via `node tools/dump-schema.js`) + [db/migrations.js](../db/migrations.js). Drift gegen die Legacy-Migration-Kette ist durch [tests/unit/squash-drift.test.mjs](../tests/unit/squash-drift.test.mjs) gegated. Mermaid-Diagramme — in VSCode mit „Markdown Preview Mermaid Support" (oder GitHub) direkt sichtbar.
 
@@ -1851,6 +1851,7 @@ erDiagram
     TEXT    error
     TEXT    error_params  "JSON, i18n-Params zum error-Key"
     INTEGER web_searches  "Anthropic-Web-Suchen des Laufs (Faktencheck) → Ledger"
+    TEXT    billed_to     "instance|own — beim Start festgehalten (eigener KI-Zugang) → Ledger"
   }
   ai_cost_ledger {
     INTEGER id          PK
@@ -1869,6 +1870,7 @@ erDiagram
     INTEGER web_searches "Anzahl Anthropic-Web-Suchen (Server-Tool-Kostenposten, ~$10/1k)"
     REAL    usd         "eingefroren zur Call-Zeit (inkl. Web-Such-Kosten)"
     TEXT    source_ref  "UNIQUE: job:<job_id> | chatmsg:<id>"
+    TEXT    billed_to   "instance|own — own = eigener KI-Zugang; Budget, /metrics, Anthropic-Abgleich zählen nur instance"
   }
   anthropic_cost_daily {
     INTEGER id             PK

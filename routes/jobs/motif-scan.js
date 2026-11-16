@@ -14,7 +14,7 @@ const express = require('express');
 const {
   makeJobLogger, updateJob, completeJob, failJob,
   createJob, enqueueJob, findActiveJobId, jsonBody, jobAbortControllers,
-  startBookJob, i18nError,
+  startBookJob, i18nError, setJobModel, EMBED_PROVIDER,
 } = require('./shared');
 const motifsDb = require('../../db/motifs');
 const embed = require('../../lib/embed');
@@ -132,6 +132,7 @@ async function runMotifScanJob(jobId, bookId, userEmail, onlyMotifId = null) {
     };
 
     const useSemantic = embed.isEnabled();
+    setJobModel(jobId, useSemantic ? EMBED_PROVIDER : null, useSemantic ? embed.getConfig().model : null);
     if (useSemantic && !retrieval.indexReady(bookId)) {
       // Backend da, Index aber unvollständig (Erstindex läuft, Modellwechsel):
       // ein Full-Replace nur mit Trigger-Treffern räumte alle semantischen

@@ -160,6 +160,7 @@ const runBookChatJobAgent = makeAgenticChatJob({
     _applyBookChatAiOverrides(effectiveProvider, logger);
     return effectiveProvider;
   },
+  jobType: 'book-chat',
 
   loadSession: (sessionId, userEmail) => getSessionWithBookName(parseInt(sessionId), userEmail),
 

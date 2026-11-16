@@ -135,44 +135,40 @@ test('findActiveJobId: kein Job → null (kein Crash)', () => {
 // Damit das Kosten-Tracking einen Opus-Lauf nicht zum Sonnet-Tarif verbucht,
 // muss job_runs.model das TATSAECHLICH genutzte Modell spiegeln (komplett +
 // book-chat fahren eigene Claude-Modelle), nicht das globale.
-test('createJob: Modell-Recording (global vs. komplett vs. book-chat)', () => {
+test('createJob: Modell-Recording folgt der Modellstufe des Jobs', () => {
   const appSettings = require('../../lib/app-settings');
   appSettings.set('ai.provider', 'claude');
   appSettings.set('ai.claude.model', 'claude-sonnet-4-6');
-  appSettings.set('ai.claude.model.komplett', 'claude-opus-4-8');
-  appSettings.set('ai.claude.model.bookchat', 'claude-opus-4-8');
+  appSettings.set('ai.claude.model.tier.max', 'claude-opus-4-8');
   const modelOf = (jobId) => shared.jobs.get(jobId).model;
   const persistedModelOf = (jobId) =>
     db.prepare('SELECT model FROM job_runs WHERE job_id = ?').get(jobId)?.model;
 
-  // Lektorat folgt dem globalen Modell (Sonnet).
+  // Vorbelegt stark: Lektorat und Komplettanalyse fahren das globale Modell.
   const checkId = shared.createJob('check', 'mb1', 'u@x', null);
   assert.equal(modelOf(checkId), 'claude-sonnet-4-6');
   assert.equal(persistedModelOf(checkId), 'claude-sonnet-4-6');
+  assert.equal(modelOf(shared.createJob('komplett-analyse', 'mb2', 'u@x', null)), 'claude-sonnet-4-6');
 
-  // Komplettanalyse + Kontinuität fahren den Komplett-Override (Opus).
-  const komplettId = shared.createJob('komplett-analyse', 'mb2', 'u@x', null);
+  // Umgehängt auf «maximal»: job_runs bucht das Modell der Stufe.
+  appSettings.set('ai.claude.tier.job.komplett-analyse', 'max');
+  appSettings.set('ai.claude.tier.job.batch-check', 'max');
+  const komplettId = shared.createJob('komplett-analyse', 'mb3', 'u@x', null);
   assert.equal(modelOf(komplettId), 'claude-opus-4-8');
   assert.equal(persistedModelOf(komplettId), 'claude-opus-4-8');
-  const kontId = shared.createJob('kontinuitaet', 'mb3', 'u@x', null);
-  assert.equal(modelOf(kontId), 'claude-opus-4-8');
+  assert.equal(modelOf(shared.createJob('batch-check', 'mb1c', 'u@x', null)), 'claude-opus-4-8');
+  // Nur der umgehängte Job: Kontinuität bleibt stark.
+  assert.equal(modelOf(shared.createJob('kontinuitaet', 'mb4', 'u@x', null)), 'claude-sonnet-4-6');
 
-  // Mit Lektorat-Override fahren Seiten- und Batch-Lektorat dieses Modell.
-  appSettings.set('ai.claude.model.lektorat', 'claude-opus-5-5');
-  const checkOvId = shared.createJob('check', 'mb1b', 'u@x', null);
-  assert.equal(persistedModelOf(checkOvId), 'claude-opus-5-5');
-  assert.equal(modelOf(shared.createJob('batch-check', 'mb1c', 'u@x', null)), 'claude-opus-5-5');
-  appSettings.set('ai.claude.model.lektorat', '');
+  // Vorbelegt standard/leicht.
+  assert.equal(modelOf(shared.createJob('book-chat', 'mb5', 'u@x', null)), 'claude-sonnet-5-5');
+  assert.equal(modelOf(shared.createJob('synonym', 'mb6', 'u@x', null)), 'claude-haiku-5-5');
 
-  // Buch-Chat fährt den Bookchat-Override (Opus).
-  const bookChatId = shared.createJob('book-chat', 'mb4', 'u@x', null);
-  assert.equal(modelOf(bookChatId), 'claude-opus-4-8');
-  assert.equal(persistedModelOf(bookChatId), 'claude-opus-4-8');
-
-  // Leerer Override → Fallback auf globales Modell.
-  appSettings.set('ai.claude.model.komplett', '');
-  const komplettNoOverride = shared.createJob('komplett-analyse', 'mb5', 'u@x', null);
-  assert.equal(modelOf(komplettNoOverride), 'claude-sonnet-4-6');
+  // Stufe ohne Modell läuft stark.
+  appSettings.set('ai.claude.model.tier.max', '');
+  assert.equal(modelOf(shared.createJob('komplett-analyse', 'mb7', 'u@x', null)), 'claude-sonnet-4-6');
+  appSettings.set('ai.claude.tier.job.komplett-analyse', 'strong');
+  appSettings.set('ai.claude.tier.job.batch-check', 'strong');
 });
 
 // ── createJob: Embedding-Typen tragen provider 'embed', nicht den Chat-Provider
@@ -186,21 +182,41 @@ test('createJob: Embedding-Typen buchen provider=embed + embed.model', () => {
   appSettings.set('embed.model', 'bge-m3');
   const rowOf = (jobId) => db.prepare('SELECT provider, model FROM job_runs WHERE job_id = ?').get(jobId);
 
-  for (const type of ['embed-index', 'source-embed-index', 'chat-embed-index']) {
+  for (const type of shared.EMBED_JOB_TYPES) {
     const id = shared.createJob(type, 'me1', null, null);
     assert.equal(shared.jobs.get(id).provider, 'embed', `${type}: provider im Job-Record`);
     assert.equal(shared.jobs.get(id).model, 'bge-m3', `${type}: Modell im Job-Record`);
     assert.deepEqual(rowOf(id), { provider: 'embed', model: 'bge-m3' }, `${type}: job_runs-Zeile`);
   }
 
-  // Ein anderes Embedding-Modell schlägt durch — es bleibt beim Chat-Override-Schutz
-  // (der darf einem Embedding-Lauf nichts vorschreiben).
+  // Ein anderes Embedding-Modell schlägt durch — eine Modellstufe des Chat-Providers
+  // darf einem Embedding-Lauf nichts vorschreiben.
   appSettings.set('embed.model', 'nomic-embed-text');
-  appSettings.set('ai.claude.model.komplett', 'claude-opus-4-8');
+  appSettings.set('ai.claude.model.tier.light', 'claude-haiku-4-5');
   const id2 = shared.createJob('embed-index', 'me2', null, null);
   assert.deepEqual(rowOf(id2), { provider: 'embed', model: 'nomic-embed-text' });
   appSettings.set('embed.model', 'bge-m3');
-  appSettings.set('ai.claude.model.komplett', '');
+  appSettings.set('ai.claude.model.tier.light', 'claude-haiku-5-5');
+});
+
+// Jobs ganz ohne Modell (Wortschatz, Exporte, Syncs …) führen weder Chat- noch
+// Embedding-Modell — die Job-Statistik zeigt «—» statt des Instanz-Modells.
+test('createJob: Jobs ohne KI-Call buchen provider/model NULL', () => {
+  const appSettings = require('../../lib/app-settings');
+  appSettings.set('ai.provider', 'claude');
+  appSettings.set('ai.claude.model', 'claude-opus-5-5');
+  for (const type of ['lexicon-scan', 'pdf-export', 'blog-push', 'research-link-check']) {
+    const id = shared.createJob(type, 'na1', null, null, null, type);
+    assert.equal(shared.jobs.get(id).provider, null, `${type}: provider`);
+    assert.deepEqual(
+      { ...db.prepare('SELECT provider, model FROM job_runs WHERE job_id = ?').get(id) },
+      { provider: null, model: null }, `${type}: job_runs-Zeile`);
+  }
+  // Die Klassen schliessen einander aus; ein Vektor-Konsument ist nie «ohne KI».
+  for (const t of shared.EMBED_JOB_TYPES) assert.ok(!shared.NO_AI_JOB_TYPES.has(t), t);
+  for (const t of ['redundancy', 'book-map', 'motif-scan', 'beat-anchor', 'figur-anchor']) {
+    assert.ok(shared.EMBED_JOB_TYPES.has(t), `${t} in EMBED_JOB_TYPES`);
+  }
 });
 
 test('setJobModel: Lauf-Start zieht das tatsächlich benutzte Modell nach', () => {

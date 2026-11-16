@@ -84,7 +84,7 @@ router.get('/config', (req, res) => {
   const _pOpts = sessionUser ? { userEmail: sessionUser.email } : { userEmail: null };
   res.json({
     claudeMaxTokens: MAX_TOKENS_OUT,
-    claudeModel: aiSetting('claude', 'model', _pOpts) || 'claude-sonnet-4-6',
+    claudeModel: aiSetting('claude', 'model', _pOpts) || 'claude-sonnet-5-5',
     apiProvider: appSettings.get('ai.provider') || 'claude',
     effectiveProvider,
     effectiveProviderClass: effectiveClass,

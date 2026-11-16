@@ -63,6 +63,16 @@
                   @keydown="$editKeys($event, { save: () => !adminProfilesSaving && adminProfilesForm.name && adminProfilesSave(), cancel: () => adminProfilesCancel() })">
           <legend x-text="adminProfilesForm.id ? $app.t('admin.profiles.editTitle') : $app.t('admin.profiles.createTitle')"></legend>
 
+          <!-- Vorlage nur beim Anlegen: füllt das Formular (ai-profile-templates.js) -->
+          <label class="card-form-row" x-show="!adminProfilesForm.id">
+            <span class="card-form-label" x-text="$app.t('admin.profiles.field.template')"></span>
+            <div x-data="combobox($app.t('admin.profiles.field.template'))"
+                 x-modelable="value" x-model="adminProfilesTemplateId"
+                 x-effect="options = adminProfilesTemplateOptions()"
+                 @combobox-change="adminProfilesApplyTemplate($event.detail)"></div>
+            <span class="card-form-hint" x-text="$app.t('admin.profiles.templateHelp')"></span>
+          </label>
+
           <label class="card-form-row">
             <span class="card-form-label" x-text="$app.t('admin.profiles.field.name')"></span>
             <input type="text" x-model="adminProfilesForm.name" data-spellcheck="spelling"

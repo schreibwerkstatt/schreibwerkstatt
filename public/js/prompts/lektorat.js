@@ -109,7 +109,7 @@ function _buildLektoratPromptBody(text, textLabel, {
   locale = null,
   mode = 'full',
   // Stück eines langen Abschnitts (routes/jobs/lektorat-split.js): der Stil-Pass
-  // liefert nur Befunde, die Bewertung kommt aus dem eigenen Pass über den ganzen
+  // bzw. der Kombi-Call je Stück liefert nur Befunde, die Bewertung kommt aus dem eigenen Pass über den ganzen
   // Abschnitt (lektorat-bewertung.js). `stueckDavor`/`stueckDanach`: der Auszug
   // stammt aus demselben Abschnitt, nicht aus dem Nachbarabschnitt.
   ohneBewertung = false, stueckDavor = false, stueckDanach = false,
@@ -130,7 +130,9 @@ function _buildLektoratPromptBody(text, textLabel, {
   // Journalistisch: die Textsorte schneidet zusaetzlich (kein `wertung` im
   // Kommentar) und benennt sich in den Regelbloecken selbst.
   const journal = profil === 'journalistisch';
-  const bewertung = !(stilOnly && ohneBewertung);
+  // Ohne Bewertung: Stück eines langen Abschnitts — im Split der Stil-Pass, sonst der
+  // Kombi-Call je Stück (andere Provider der Cloud-Klasse, lektorat-split.js).
+  const bewertung = !ohneBewertung;
   const typen = lektoratTypen(buchtyp, { local: _isLocal, stilOnly, textsorte });
   const aktiv = (t) => typen.includes(t);
   const metaParts = [];
@@ -452,7 +454,7 @@ ${journal
       ? _buildFachAufgabe(profil, stilOnly, { bewerten: bewertung })
       : (stilOnly
       ? `Analysiere den Text vollständig von Anfang bis Ende – nicht nur lokale Passagen oder die letzten Sätze – auf STILISTISCHE Schwächen: holprigen Satzbau, Wortwiederholungen, schwache Verben, Füll- und Filterwörter, Klischees, KI-Geruch, Show-statt-Tell, vermeidbares Passiv, Pleonasmen sowie Tempus- und Perspektivbrüche und Schauplatz-Konsistenz (Zuständigkeit und Details siehe Regelblöcke unten). WICHTIG: Objektive/mechanische Fehler – Rechtschreibung, Grammatik, Zeichensetzung/Interpunktion, Dialogformat-Typografie sowie Namens-/Figuren-Konsistenz und Anreden – werden in einem SEPARATEN Pass geprüft und dürfen hier NICHT gemeldet werden.${bewertenSatz}`
-      : `Analysiere den Text vollständig von Anfang bis Ende – nicht nur lokale Passagen oder die letzten Sätze – auf Rechtschreibfehler, Grammatikfehler, Zeichensetzungs-/Interpunktionsfehler (insbesondere Kommasetzung), Tempus- und Perspektivbrüche, holprigen Satzbau, stilistische Auffälligkeiten und auffällige Wortwiederholungen – ebenso auf schwache Verben, Füll- und Filterwörter, Klischees, KI-Geruch, Show-statt-Tell, vermeidbares Passiv, Dialogformat-Typografie und Konsistenz von Figuren und Schauplätzen (Zuständigkeit und Details der einzelnen Typen siehe Regelblöcke unten). Prüfe Grammatik, Zeichensetzung und Erzähltempus Satz für Satz und gründlich – das sind objektive Fehler, die nicht übersehen werden dürfen. Bewerte ausserdem die ${szenen.nomen} des Abschnitts.`));
+      : `Analysiere den Text vollständig von Anfang bis Ende – nicht nur lokale Passagen oder die letzten Sätze – auf Rechtschreibfehler, Grammatikfehler, Zeichensetzungs-/Interpunktionsfehler (insbesondere Kommasetzung), Tempus- und Perspektivbrüche, holprigen Satzbau, stilistische Auffälligkeiten und auffällige Wortwiederholungen – ebenso auf schwache Verben, Füll- und Filterwörter, Klischees, KI-Geruch, Show-statt-Tell, vermeidbares Passiv, Dialogformat-Typografie und Konsistenz von Figuren und Schauplätzen (Zuständigkeit und Details der einzelnen Typen siehe Regelblöcke unten). Prüfe Grammatik, Zeichensetzung und Erzähltempus Satz für Satz und gründlich – das sind objektive Fehler, die nicht übersehen werden dürfen.${bewertenSatz}`));
 
   // XML-Wrapper für die strukturell trennbaren Sektionen — hilft Claude beim
   // Parsen von Aufgabe, Schema, Beispielen und Originaltext als distinkte
@@ -522,8 +524,8 @@ function _fehlerField(typen) {
  */
 export function buildLektoratSchema({ buchtyp = null, stilOnly = false, textsorte = null, ohneBewertung = false } = {}) {
   const fehlerField = _fehlerField(lektoratTypen(buchtyp, { local: _isLocal, stilOnly: stilOnly && !_isLocal, textsorte }));
-  // Ohne Bewertung (Stil-Pass eines Stücks) bzw. lokal: nur die Befunde.
-  if (_isLocal || (stilOnly && ohneBewertung)) return _obj({ fehler: fehlerField });
+  // Ohne Bewertung (Stück eines langen Abschnitts) bzw. lokal: nur die Befunde.
+  if (_isLocal || ohneBewertung) return _obj({ fehler: fehlerField });
   return _obj({ fehler: fehlerField, ...bewertungSchemaFelder() });
 }
 

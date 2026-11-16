@@ -2,7 +2,7 @@
 //
 // Die KI-Synonymsuche ist ein interaktiver Kurz-Call im Kontextmenue. Auf einem
 // denkenden globalen Modell (Opus 5.5) wartet der User sonst ~8 s auf eine Wortliste.
-// `applySynonymAiOverrides` routet die Stufe «leicht» bzw. `ai.claude.model.synonym` und
+// `applySynonymAiOverrides` routet die Stufe des Jobs `synonym` (Default «leicht») und
 // bindet `ai.claude.effort.synonym` (Default 'low') — Effort nur, wenn das so gewaehlte
 // Modell adaptiv denkt. Modell und Effort gehen in die cacheVersion.
 
@@ -35,13 +35,16 @@ function _bootstrap() {
 
 const quietLogger = { info() {}, warn() {}, error() {} };
 
-test('applySynonymAiOverrides: ohne Synonym-Modell folgt es der Stufe «leicht», Effort low', () => {
+// Bag-Felder ohne die abgeleiteten Fenster-Werte der Stufe.
+const _core = (bag) => bag && Object.fromEntries(Object.entries(bag).filter(([k]) => ['provider', 'model', 'effort'].includes(k)));
+
+test('applySynonymAiOverrides: Default-Stufe «leicht», Effort low', () => {
   const { syn, cfg, appSettings, logCtx, teardown } = _bootstrap();
   try {
     appSettings.set('ai.claude.model', 'claude-opus-5-5', { updatedBy: 'test' });
     logCtx.runWithContext({ job: 'synonym' }, () => {
       assert.deepEqual(syn.applySynonymAiOverrides('claude', quietLogger), { model: 'claude-haiku-5-5', cacheSuffix: ':e=low' });
-      assert.deepEqual(logCtx.getContext().aiJob, { provider: 'claude', effort: 'low', model: 'claude-haiku-5-5' });
+      assert.deepEqual(_core(logCtx.getContext().aiJob), { provider: 'claude', effort: 'low', model: 'claude-haiku-5-5' });
       assert.deepEqual(cfg._claudeOutputConfigParams('claude-haiku-5-5'), { output_config: { effort: 'low' } });
     });
   } finally { teardown(); }
@@ -59,14 +62,14 @@ test('applySynonymAiOverrides: leere Stufe «leicht» folgt dem globalen Modell'
   } finally { teardown(); }
 });
 
-test('applySynonymAiOverrides: ai.claude.model.synonym routet das Modell nur im Job-Kontext', () => {
+test('applySynonymAiOverrides: umgehängte Stufe routet das Modell nur im Job-Kontext', () => {
   const { syn, cfg, appSettings, logCtx, teardown } = _bootstrap();
   try {
     appSettings.set('ai.claude.model', 'claude-opus-5-5', { updatedBy: 'test' });
-    appSettings.set('ai.claude.model.synonym', 'claude-sonnet-5-5', { updatedBy: 'test' });
+    appSettings.set('ai.claude.tier.job.synonym', 'standard', { updatedBy: 'test' });
     logCtx.runWithContext({ job: 'synonym' }, () => {
       assert.deepEqual(syn.applySynonymAiOverrides('claude', quietLogger), { model: 'claude-sonnet-5-5', cacheSuffix: ':e=low' });
-      assert.deepEqual(logCtx.getContext().aiJob, { provider: 'claude', effort: 'low', model: 'claude-sonnet-5-5' });
+      assert.deepEqual(_core(logCtx.getContext().aiJob), { provider: 'claude', effort: 'low', model: 'claude-sonnet-5-5' });
       assert.equal(cfg._resolveClaudeModel(), 'claude-sonnet-5-5');
     });
     assert.equal(cfg._resolveClaudeModel(), 'claude-opus-5-5');
@@ -77,10 +80,10 @@ test('applySynonymAiOverrides: Modell ohne Denken setzt keinen Effort, fremder P
   const { syn, appSettings, logCtx, teardown } = _bootstrap();
   try {
     appSettings.set('ai.claude.model', 'claude-opus-5-5', { updatedBy: 'test' });
-    appSettings.set('ai.claude.model.synonym', 'claude-sonnet-4-6', { updatedBy: 'test' });
+    appSettings.set('ai.claude.model.tier.light', 'claude-sonnet-4-6', { updatedBy: 'test' });
     logCtx.runWithContext({ job: 'synonym' }, () => {
       assert.deepEqual(syn.applySynonymAiOverrides('claude', quietLogger), { model: 'claude-sonnet-4-6', cacheSuffix: '' });
-      assert.deepEqual(logCtx.getContext().aiJob, { provider: 'claude', model: 'claude-sonnet-4-6' });
+      assert.deepEqual(_core(logCtx.getContext().aiJob), { provider: 'claude', model: 'claude-sonnet-4-6' });
     });
     logCtx.runWithContext({ job: 'synonym' }, () => {
       assert.equal(syn.applySynonymAiOverrides('openai-compat', quietLogger).cacheSuffix, '');

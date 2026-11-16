@@ -335,6 +335,24 @@ test('PUT /admin/users/:email liefert dieselbe Zeilenform wie GET /admin/users',
   creds.deleteCredential('carol@example.com');
 });
 
+test('GET /admin/users: eigener KI-Zugang aktiv nur bei offenem Feature', async () => {
+  const aiProfiles = require('../../db/ai-profiles');
+  const appSettings = require('../../lib/app-settings');
+  aiProfiles.saveOwnProfile('carol@example.com', { provider: 'claude' });
+  const row = async () => (await _request('GET', '/admin/users', { user: 'alice@example.com', role: 'admin' }))
+    .body.users.find(u => u.email === 'carol@example.com');
+  appSettings.set('ai.user_api.enabled', true);
+  let r = await row();
+  assert.equal(r.own_ai_provider, 'claude');
+  assert.equal(r.own_ai_active, true);
+  appSettings.set('ai.user_api.enabled', false);
+  r = await row();
+  assert.equal(r.own_ai_provider, 'claude');
+  assert.equal(r.own_ai_active, false);
+  aiProfiles.deleteOwnProfile('carol@example.com');
+  assert.equal((await row()).own_ai_active, false);
+});
+
 // Vor dem Wechsel auf lokale Anmeldung darf der Admin sein EIGENES Passwort
 // setzen (sonst sperrte ihn der Wechsel aus); fremde Konten erst bei 'local'.
 test('POST /admin/users/:email/password: eigenes Konto auch ohne auth.method=local', async () => {

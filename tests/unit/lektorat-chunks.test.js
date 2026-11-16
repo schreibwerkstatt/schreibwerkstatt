@@ -243,3 +243,103 @@ test('Stück mit Riesenabsatz (eigene Stil-Obergrenze) bricht den gemeinsamen Ko
   assert.ok(stil.every(c => Array.isArray(c.rawPrompt) && c.rawPrompt[0].text === stil[0].rawPrompt[0].text));
   assert.ok(stil[0].rawPrompt[0].text.length > 20000, `Kopf trägt den Regel-Korpus (${stil[0].rawPrompt[0].text.length})`);
 });
+
+// ── Andere Provider der Cloud-Klasse (openai-compat mit `cloud`) ─────────────────
+// Der Objektiv/Stil-Split ist Claude vorbehalten: er lebt von Prompt-Caching und
+// parallelen Calls. Ein lokaler Endpunkt der Cloud-Klasse (Qwen über LocalAI, seriell)
+// zahlte sonst 11 Calls je 34K-Abschnitt (gemessen 600 s). Dort prüft der volle
+// Kombi-Prompt, lange Abschnitte trotzdem in Stücken, dazu EIN Bewertungs-Pass.
+
+test('chunkingApplies: ohne Split nur für Claude am Stück, andere Provider in Stücken', () => {
+  appSettings.set('ai.lektorat_chunk_chars', 10000);
+  assert.equal(chunkingApplies(12000, { split: false, provider: 'openai-compat' }), true);
+  assert.equal(chunkingApplies(9000, { split: false, provider: 'openai-compat' }), false);
+  assert.equal(chunkingApplies(12000, { split: false, provider: 'openai-compat', local: true }), false, 'lokal nie');
+  assert.equal(chunkingApplies(12000, { split: false, provider: 'claude' }), false, 'Claude ohne Split bleibt am Stück');
+});
+
+test('splitApplies: Split nur für Claude, nie lokal', () => {
+  const { splitApplies } = require('../../routes/jobs/lektorat-split');
+  appSettings.set('ai.lektorat_split', true);
+  assert.equal(splitApplies(false, 'claude'), true);
+  assert.equal(splitApplies(false, 'openai-compat'), false);
+  assert.equal(splitApplies(true, 'claude'), false);
+  appSettings.set('ai.lektorat_split', false);
+  assert.equal(splitApplies(false, 'claude'), false);
+  appSettings.set('ai.lektorat_split', true);
+});
+
+test('lektoratAnalyze openai-compat (Cloud-Klasse), langer Abschnitt: Kombi je Stück + ein Bewertungs-Pass', async () => {
+  const p = await prompts();
+  appSettings.set('ai.lektorat_split', true);
+  appSettings.set('ai.lektorat_chunk_chars', 10000);
+  const text = longText(30);
+  const chunks = chunkText(text);
+  calls.length = 0;
+  const result = await lektoratAnalyze({
+    jobId: null, tok: {}, text, local: false, provider: 'openai-compat', prompts: p, system: 'SYS', buchtyp: 'roman',
+    fromPct: null, toPct: null,
+    promptOpts: { langCode: 'de', locale: 'de-CH', figuren: [], orte: [], previousExcerpt: 'VORSEITE', nextExcerpt: 'NACHSEITE', schreibfront: true },
+  });
+  assert.equal(calls.length, chunks.length + 1, 'je Stück ein Kombi-Call, dazu die Bewertung');
+  const bewertung = calls.filter(c => !c.schema.properties.fehler);
+  assert.equal(bewertung.length, 1);
+  assert.ok(bewertung[0].prompt.includes(text), 'Bewertung sieht den ganzen Abschnitt');
+  const kombi = calls.filter(c => c.schema.properties.fehler);
+  for (const c of kombi) {
+    assert.ok(!/STILISTISCHE Schwächen/.test(c.prompt), 'kein Stil-Pass: voller Kombi-Prompt');
+    assert.ok(/Rechtschreibfehler, Grammatikfehler/.test(c.prompt), 'Kombi prüft auch die objektiven Typen');
+    assert.equal(c.schema.properties.szenen, undefined, 'Stück ohne szenen');
+    assert.equal(c.schema.properties.fazit, undefined, 'Stück ohne fazit');
+    assert.ok(!c.prompt.includes('Bewerte ausserdem'), 'Stück bewertet nicht');
+    assert.ok(!c.prompt.includes('"szenen": ['), 'Stück-Schema im Prompt ohne szenen');
+    assert.equal(typeof c.rawPrompt, 'string', 'kein Claude-Cache-Block');
+  }
+  const first = kombi.find(c => c.prompt.includes('Absatz0 beginnt'));
+  assert.ok(first.prompt.includes('VORSEITE') && first.prompt.includes('im selben Abschnitt'));
+  assert.equal(kombi.filter(c => c.prompt.includes('SCHREIBSTELLE')).length, 1, 'Schreibstelle nur im letzten Stück');
+  assert.deepEqual(result.szenen, [{ titel: 'Ganz', wertung: 'stark', kommentar: 'k' }]);
+  assert.equal(result.fazit, 'F');
+  assert.equal(result.fehler.length, chunks.length);
+});
+
+test('lektoratAnalyze openai-compat (Cloud-Klasse), kurzer Abschnitt: ein Kombi-Call mit Bewertung', async () => {
+  const p = await prompts();
+  appSettings.set('ai.lektorat_split', true);
+  appSettings.set('ai.lektorat_chunk_chars', 10000);
+  calls.length = 0;
+  await lektoratAnalyze({
+    jobId: null, tok: {}, text: longText(5), local: false, provider: 'openai-compat', prompts: p, system: 'SYS', buchtyp: 'roman',
+    fromPct: null, toPct: null, promptOpts: { langCode: 'de', locale: 'de-CH', figuren: [], orte: [] },
+  });
+  assert.equal(calls.length, 1);
+  assert.ok(calls[0].schema.properties.szenen, 'Kombi trägt die Bewertung');
+  assert.ok(calls[0].prompt.includes('Bewerte ausserdem'));
+});
+
+test('applyLektoratAiOverrides openai-compat: Denkbudget des Lektorats in den Job-Bag, nur mit Thinking', async () => {
+  const { applyLektoratAiOverrides } = require('../../routes/jobs/lektorat-split');
+  const { runWithContext, getContext } = require('../../lib/log-context');
+  const quiet = { info() {} };
+  appSettings.set('ai.openai-compat.think', true);
+  appSettings.set('ai.openai-compat.reasoning_budget.lektorat', 4000);
+  await runWithContext({}, async () => {
+    const r = applyLektoratAiOverrides('openai-compat', quiet);
+    assert.equal(getContext().aiJob?.reasoningBudget, 4000);
+    assert.match(r.cacheSuffix, /:rb=4000$/, 'Budget formt den Output → Cache-Version');
+  });
+  appSettings.set('ai.openai-compat.reasoning_budget.lektorat', 0);
+  await runWithContext({}, async () => {
+    const r = applyLektoratAiOverrides('openai-compat', quiet);
+    assert.equal(getContext().aiJob?.reasoningBudget, undefined, '0 = Alias-Default');
+    assert.equal(r.cacheSuffix, '');
+  });
+  appSettings.set('ai.openai-compat.reasoning_budget.lektorat', 4000);
+  appSettings.set('ai.openai-compat.think', false);
+  await runWithContext({}, async () => {
+    const r = applyLektoratAiOverrides('openai-compat', quiet);
+    assert.equal(getContext().aiJob?.reasoningBudget, undefined, 'ohne Thinking kein Budget');
+    assert.equal(r.cacheSuffix, '');
+  });
+  appSettings.set('ai.openai-compat.reasoning_budget.lektorat', 0);
+});

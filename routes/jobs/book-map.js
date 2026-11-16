@@ -31,7 +31,7 @@ const crypto = require('crypto');
 const express = require('express');
 const {
   makeJobLogger, updateJob, completeJob, failJob, i18nError, jsonBody, jobAbortControllers,
-  startBookJob,
+  startBookJob, setJobModel, EMBED_PROVIDER,
 } = require('./shared');
 const embed = require('../../lib/embed');
 const contentStore = require('../../lib/content-store');
@@ -157,6 +157,7 @@ async function runBookMapJob(jobId, bookId, userEmail, opts = { granularity: 'pa
   try {
     if (!embed.isEnabled()) throw i18nError('job.error.embedDisabled');
     const { model } = embed.getConfig();
+    setJobModel(jobId, EMBED_PROVIDER, model);
     const signal = jobAbortControllers.get(jobId)?.signal;
     const abortIfCancelled = () => {
       if (jobAbortControllers.get(jobId)?.signal?.aborted) {

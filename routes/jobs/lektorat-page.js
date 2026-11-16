@@ -314,7 +314,7 @@ async function checkOnePage(run, {
     // Nur gesetzt, wenn Fakten anliegen: Seiten ohne Welt-Bezug behalten ihren Cache.
     ...(weltfakten.length ? { wf: weltfakten } : {}),
     ...(soziolekte.length ? { sz: soziolekte } : {}),
-    ..._runSig(local, text),
+    ..._runSig(local, text, run.effectiveProvider),
   }) : null;
   // Nachbearbeitung für frische und gecachte Ergebnisse, plus Wörterbuch-Backstop
   // (greift auch für Wörter jenseits von MAX_PROMPT_WORDS, die der Prompt nicht sah).
@@ -323,7 +323,7 @@ async function checkOnePage(run, {
   const finalize = (fehler) => {
     const located = dropUnlocatable(
       mergeRegelBefunde(
-        dropDictionaryFindings(finalizeFehler(ohneRegelBefunde(fehler), locale, validTypen, neighbour, { local }), woerterbuch),
+        dropDictionaryFindings(finalizeFehler(ohneRegelBefunde(fehler), locale, validTypen, neighbour, { local, provider: run.effectiveProvider }), woerterbuch),
         regelBefunde, text),
       text, countInText);
     unlocatable = located.dropped;
@@ -345,6 +345,8 @@ async function checkOnePage(run, {
       fromPct, toPct, callLimit,
       // Prompt-Caching ist eine Fähigkeit der Anthropic-API, keine der Provider-Klasse.
       cacheBlocks: run.effectiveProvider === 'claude',
+      // Der Split ebenso (splitApplies): andere Provider der Cloud-Klasse fahren Kombi.
+      provider: run.effectiveProvider,
       promptOpts: {
         stopwords: run.stopwords,
         erklaerungRule: run.erklaerungRule,

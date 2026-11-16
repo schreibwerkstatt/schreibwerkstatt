@@ -30,6 +30,7 @@ export const adminSettingsMethods = {
       }
       this.adminSettingsMap = map;
       this.adminSettingsAuth = data.auth || { own_has_password: false, env_admin: false };
+      this.adminJobTiers = data.jobTiers || { groups: [], jobs: [] };
       // Form-State aus map kopieren — Form-Inputs schreiben in form, Save
       // diff't vs. map und sendet nur geaenderte Keys ans Backend.
       this.adminSettingsForm = this._adminSettingsBuildForm(map);
@@ -361,24 +362,39 @@ export const adminSettingsMethods = {
   },
 
   // Wie viele Claude-Werte im eingeklappten „Erweitert"-Bereich weichen vom
-  // Standard ab (Per-Job-Modell, explizites Limit/Timeout)? Der Zähler steht am
-  // Toggle, damit eine aktive Abweichung nicht hinter dem Einklappen verschwindet.
+  // Standard ab (explizites Limit/Timeout)? Der Zähler steht am Toggle, damit eine
+  // aktive Abweichung nicht hinter dem Einklappen verschwindet.
   adminClaudeOverrideCount() {
-    const keys = [
-      'ai.claude.model.lektorat', 'ai.claude.model.komplett', 'ai.claude.model.komplett.extract',
-      'ai.claude.model.bookchat', 'ai.claude.model.synonym', 'ai.claude.model.finetune', 'ai.claude.context_window', 'ai.claude.max_tokens_out',
-      'ai.claude.context_window.komplett', 'ai.claude.max_tokens_out.komplett', 'ai.claude.timeout_ms.komplett',
-      'ai.claude.context_window.bookchat', 'ai.claude.max_tokens_out.bookchat', 'ai.claude.timeout_ms.bookchat',
-    ];
-    // Ein mitgelieferter Default (z.B. Haiku für den Fine-Tuning-Export) ist
-    // keine Abweichung des Admins — gezählt wird erst ein gesetzter Wert.
-    return keys.filter(k => {
-      const v = this.adminSettingsForm?.[k];
-      if (this.adminSettingsMap?.[k]?.isDefault && !this.adminSettingsIsDirty(k)) return false;
-      return typeof v === 'string' ? v.trim() !== '' : Number(v) > 0;
-    }).length;
+    const keys = ['ai.claude.context_window', 'ai.claude.max_tokens_out', 'ai.claude.timeout_ms.komplett'];
+    return keys.filter(k => this._adminSettingDeviates(k)).length;
   },
 
+  // Gespeicherter oder getippter Wert weicht vom Registry-Default ab.
+  _adminSettingDeviates(k) {
+    const v = this.adminSettingsForm?.[k];
+    if (this.adminSettingsMap?.[k]?.isDefault && !this.adminSettingsIsDirty(k)) return false;
+    return typeof v === 'string' ? v.trim() !== '' : Number(v) > 0;
+  },
+
+  // Zuordnung Job → Modellstufe, gruppiert in Katalog-Reihenfolge.
+  adminJobTierGroups() {
+    const { groups = [], jobs = [] } = this.adminJobTiers || {};
+    return groups
+      .map(group => ({ group, jobs: jobs.filter(j => j.group === group) }))
+      .filter(g => g.jobs.length);
+  },
+
+  // Wie viele Jobs laufen auf einer anderen Stufe als vorbelegt (Badge am Toggle)?
+  adminJobTierChangedCount() {
+    return (this.adminJobTiers?.jobs || [])
+      .filter(j => (this.adminSettingsForm?.[`ai.claude.tier.job.${j.type}`] || j.tier) !== j.tier).length;
+  },
+
+  // Kopfzeile einer Stufe: Modell oder «wie stark».
+  adminTierModelLabel(tier) {
+    const m = String(this.adminSettingsForm?.[`ai.claude.model.tier.${tier}`] || '').trim();
+    return m || window.__app.t('admin.settings.claude.tierFollowsStrong');
+  },
 
   // Spiegelt die Budget-Ableitung aus lib/ai.js (getContextConfigFor) +
   // routes/jobs/shared/loader.js (chunkLimitsFor) im Frontend, damit der Admin

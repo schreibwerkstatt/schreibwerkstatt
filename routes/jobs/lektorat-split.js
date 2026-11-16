@@ -3,13 +3,16 @@
 // Stil-Pass, konsolidiert zu einer dublettenfreien fehler-Liste; lange Abschnitte
 // in Stücken (lib/lektorat-chunks.js). Ausgelagert aus lektorat.js, damit der
 // Job-Router schlank bleibt. Admin-Regler: ob überhaupt gesplittet wird
-// (ai.lektorat_split). Lokale Provider splitten nie (ein kombinierter Single-Call).
+// (ai.lektorat_split). Nur Claude splittet (splitApplies); lokale Provider fahren
+// einen kombinierten Single-Call, andere Provider der Cloud-Klasse den vollen
+// Kombi-Prompt, lange Abschnitte in Stücken.
 
-const { aiCall, i18nError, updateJob, _modelName } = require('./shared');
+const { aiCall, i18nError, updateJob, _modelName, bindJobTier } = require('./shared');
 const appSettings = require('../../lib/app-settings');
 const logger = require('../../logger');
-const { setContext } = require('../../lib/log-context');
 const { _claudeUsesAdaptiveThinking } = require('../../lib/ai');
+const { bindJobOverride, openaiCompatThink } = require('../../lib/ai/config');
+const { getContext } = require('../../lib/log-context');
 const { mergePasses } = require('../../lib/lektorat-consolidate');
 const { chunkingApplies, chunkText, chunkContext } = require('../../lib/lektorat-chunks');
 
@@ -19,11 +22,19 @@ function splitEnabled() {
   return appSettings.get('ai.lektorat_split') === true;
 }
 
-// Modell + Effort des Lektorats als EIN Job-Bag binden (setContext ersetzt `aiJob`
-// ganz — zwei getrennte Setzer wuerden sich gegenseitig ueberschreiben). Nur Claude.
-//   `ai.claude.model.lektorat` — eigenes Modell fuers Seiten- und Batch-Lektorat,
-//     leer = folgt `ai.claude.model`. Erlaubt ein denkendes Modell (Opus/Sonnet 5)
-//     fuers Lektorat, waehrend die uebrigen Jobs beim globalen Modell bleiben.
+// Fährt DIESER Lauf den Split? Nur Claude: zwei Pässe je Text lohnen sich dort, weil
+// sie parallel laufen und sich (in Stücken) einen gecachten Regel-Kopf teilen —
+// beides Fähigkeiten der Anthropic-API. Ein anderer Provider der Cloud-Klasse
+// (openai-compat mit `cloud`, z.B. Qwen über LocalAI, seriell, ohne Prompt-Cache)
+// zahlte doppelt: ein 34K-Abschnitt brauchte im Split 11 Calls / 600 s gegen
+// 6 Calls im Kombi in Stücken. SSoT für Lauf, Cache-Signatur und Batch-Pool.
+function splitApplies(local, provider = 'claude') {
+  return !local && provider === 'claude' && splitEnabled();
+}
+
+// Modell + Effort des Lektorats. Nur Claude.
+//   Modell — die Stufe des Jobs (`check`/`batch-check`, routes/jobs/shared/model-tier.js),
+//     gebunden beim Job-Start; Default «stark» = `ai.claude.model`.
 //   `ai.claude.effort.lektorat` — nur auf Modellen mit adaptivem Denken. Dort waehlt
 //     die API ohne Feld den Modell-Default (meist 'high'), und das Modell denkt pro Pass Zehntausende Tokens
 //     stumm (Minuten ohne Stream-Text, Output-Kosten ein Vielfaches). Sonnet 4.6 und
@@ -31,23 +42,36 @@ function splitEnabled() {
 // Rueckgabe: { model, cacheSuffix }. `model` ist das effektiv laufende Modell (fuer
 // cacheVersion und page_checks.model), `cacheSuffix` = `:e=<effort>`
 // oder '' — Caches ohne Effort (Sonnet 4.6) behalten so ihre bisherige Version.
+// Die Stufe bindet die Queue; ausserhalb (Eval-Skript) holt das der Aufruf hier nach —
+// für den Job-Typ des Kontexts, sonst `check`.
 function applyLektoratAiOverrides(effectiveProvider, logger) {
-  const baseModel = _modelName(effectiveProvider);
-  if (effectiveProvider !== 'claude') return { model: baseModel, cacheSuffix: '' };
-  const override = String(appSettings.get('ai.claude.model.lektorat') || '').trim();
-  const model = override || baseModel;
-  const bag = { provider: 'claude' };
-  if (override) bag.model = override;
+  if (effectiveProvider === 'openai-compat') return _openaiCompatLektoratOverrides(logger);
+  if (effectiveProvider !== 'claude') return { model: _modelName(effectiveProvider), cacheSuffix: '' };
+  bindJobTier(getContext().job || 'check', effectiveProvider);
+  const model = _modelName(effectiveProvider);
   let cacheSuffix = '';
   if (_claudeUsesAdaptiveThinking(model)) {
     const effort = String(appSettings.get('ai.claude.effort.lektorat') || '').trim().toLowerCase();
-    if (effort) { bag.effort = effort; cacheSuffix = `:e=${effort}`; }
+    if (effort) {
+      bindJobOverride('claude', { effort });
+      cacheSuffix = `:e=${effort}`;
+    }
   }
-  if (Object.keys(bag).length > 1) {
-    setContext({ aiJob: bag });
-    logger.info(`Lektorat-Override: ${JSON.stringify(bag)}.`);
-  }
+  logger.info(`Lektorat-Modell: ${model}${cacheSuffix ? ` (effort ${cacheSuffix.slice(3)})` : ''}.`);
   return { model, cacheSuffix };
+}
+
+// openai-compat mit Thinking: Denkbudget des Lektorats pro Aufruf
+// (`ai.openai-compat.reasoning_budget.lektorat`, 0 = Alias-/Server-Default). Das Modell
+// schöpft jedes Budget aus, darum formt es Laufzeit UND Befunde — `:rb=<n>` in der
+// Cache-Version, damit eine Umstellung nicht das Ergebnis des alten Budgets liefert.
+function _openaiCompatLektoratOverrides(logger) {
+  const model = _modelName('openai-compat');
+  const budget = openaiCompatThink() ? Math.max(0, parseInt(appSettings.get('ai.openai-compat.reasoning_budget.lektorat'), 10) || 0) : 0;
+  if (!budget) return { model, cacheSuffix: '' };
+  bindJobOverride('openai-compat', { reasoningBudget: budget });
+  logger.info(`Lektorat-Modell: ${model} (Denkbudget ${budget}).`);
+  return { model, cacheSuffix: `:rb=${budget}` };
 }
 
 // Statuszeile des Einzel-Lektorats. „KI denkt nach …", solange mindestens ein
@@ -93,7 +117,7 @@ function lektoratMaxTokens(textLen) {
 
 async function lektoratAnalyze({
   jobId, tok, text, local, prompts, system, promptOpts, fromPct, toPct, buchtyp = null, callLimit = null,
-  cacheBlocks = false,
+  cacheBlocks = false, provider = 'claude',
 }) {
   const {
     buildLektoratPrompt,
@@ -101,7 +125,7 @@ async function lektoratAnalyze({
     buildLektoratSchema, buildObjektivLektoratSchema,
     buildBewertungLektoratPrompt, buildBewertungLektoratSchema,
   } = prompts;
-  const split = local ? false : splitEnabled();
+  const split = splitApplies(local, provider);
   // Textsorte schneidet das Typ-Set im journalistischen Profil zusaetzlich zu
   // (kein `wertung` im Kommentar). Sie steht in promptOpts, damit sie ueber
   // dieselbe Struktur fliesst wie die uebrigen Prompt-Argumente — Schema und
@@ -111,15 +135,16 @@ async function lektoratAnalyze({
   // sonst bietet die Grammar Typen an, die der Prompt verbietet.
   const kombiSchema = buildLektoratSchema({ buchtyp, textsorte });
   // Lange Abschnitte in Stücken (lib/lektorat-chunks.js): je Stück Objektiv + Stil
-  // ohne Bewertung, dazu EIN Bewertungs-Pass über den ganzen Abschnitt.
-  const chunks = split && chunkingApplies(text.length, { local, split }) ? chunkText(text) : null;
+  // (Split) bzw. ein Kombi-Call (andere Provider der Cloud-Klasse), jeweils ohne
+  // Bewertung, dazu EIN Bewertungs-Pass über den ganzen Abschnitt.
+  const chunks = chunkingApplies(text.length, { local, split, provider }) ? chunkText(text) : null;
   // Batch: `callLimit` deckelt die gleichzeitigen Calls über alle Seiten des Laufs
   // (ai.lektorat_batch_concurrency) — ein Abschnitt in Stücken feuert sonst ein
   // Vielfaches der Calls, mit denen der Seiten-Pool rechnet.
   const limited = (fn) => (callLimit ? callLimit(fn) : fn());
 
   const trackPasses = fromPct != null && toPct != null;
-  const total = !split ? 1 : chunks ? chunks.length * 2 + 1 : 2;
+  const total = !split ? (chunks ? chunks.length + 1 : 1) : chunks ? chunks.length * 2 + 1 : 2;
   const status = trackPasses ? _statusLine(jobId, total) : null;
   if (status) tok.onThinking = status.onThinking;
 
@@ -128,11 +153,12 @@ async function lektoratAnalyze({
   // Abschnitt davor, weil dort viele Abschnitte in einem Job laufen.
   const pfx = callLimit && promptOpts?.pageName ? `«${String(promptOpts.pageName).slice(0, 30)}» ` : '';
   const at = pfx ? ` ${pfx.trim()}` : '';
-  const planArt = !split ? 'ein Pass (kein Split)'
-    : chunks ? `${chunks.length} Stücke à ${chunks.map(c => c.text.length).join('/')} Z.` : 'am Stück (Objektiv + Stil)';
+  const stueckArt = chunks ? `${chunks.length} Stücke à ${chunks.map(c => c.text.length).join('/')} Z.` : '';
+  const planArt = !split ? (chunks ? `Kombi, ${stueckArt}` : 'ein Pass (kein Split)')
+    : chunks ? stueckArt : 'am Stück (Objektiv + Stil)';
   logger.info(`Lektorat-Plan${at}:${text.length} Z., ${planArt}, Cache-Blöcke ${cacheBlocks ? 'ja' : 'nein'}, ${total} Calls${callLimit ? ', Buch-Lektorat' : ''}.`);
 
-  if (!split) {
+  if (!split && !chunks) {
     const prompt = buildLektoratPrompt(text, promptOpts);
     const result = await aiCall(jobId, tok, prompt, system, fromPct, toPct, 5000, 0.2, lektoratMaxTokens(text.length), undefined, kombiSchema, undefined, null, `${pfx}kombi`);
     if (!Array.isArray(result?.fehler)) throw i18nError('job.error.fehlerArrayMissing');
@@ -240,6 +266,21 @@ async function lektoratAnalyze({
       stueckDanach: i < last,
     };
   });
+  if (!split) {
+    // Kombi in Stücken (Provider der Cloud-Klasse ausser Claude): je Stück der volle
+    // Kombi-Prompt ohne Bewertung. Ohne Prompt-Cache kein gemeinsamer Kopf und kein
+    // Staffeln; die Calls laufen so parallel, wie der Provider-Gate es zulässt.
+    const kombiStueckSchema = buildLektoratSchema({ buchtyp, textsorte, ohneBewertung: true });
+    const n = chunks.length;
+    const parts = await Promise.all(chunks.map((c, i) => limited(() => aiCall(jobId, tok,
+      buildLektoratPrompt(c.text, { ...chunkOpts[i], ohneBewertung: true }), system, null, null, 5000, 0.2,
+      lektoratMaxTokens(c.text.length), undefined, kombiStueckSchema, undefined, null, `${pfx}kombi ${i + 1}/${n}`)).then(tick)));
+    parts.forEach(checkStil);
+    const bewertung = await bewertungPromise;
+    const fehler = mergePasses(parts.map(r => r.fehler), text);
+    logBefunde([['kombi', parts.reduce((s, r) => s + r.fehler.length, 0)]], fehler.length);
+    return { fehler, szenen: bewertung?.szenen, stilanalyse: bewertung?.stilanalyse, fazit: bewertung?.fazit };
+  }
   const stilSchema = buildLektoratSchema({ buchtyp, textsorte, stilOnly: true, ohneBewertung: true });
   // Prompt-Caching (nur Claude): die Stück-Prompts eines Passes sind bis kurz vor
   // dem Text identisch (Aufgabe + Regel-Korpus, mehrere tausend Tokens). Der
@@ -309,4 +350,4 @@ function staggered(launchers, onRelease = null) {
   return [first, ...launchers.slice(1).map(l => gate.then(() => l(null)))];
 }
 
-module.exports = { lektoratAnalyze, lektoratMaxTokens, splitEnabled, applyLektoratAiOverrides, sharedHeadBlocks, staggered };
+module.exports = { lektoratAnalyze, lektoratMaxTokens, splitEnabled, splitApplies, applyLektoratAiOverrides, sharedHeadBlocks, staggered };

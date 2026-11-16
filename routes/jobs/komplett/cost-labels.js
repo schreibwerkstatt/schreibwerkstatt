@@ -22,7 +22,7 @@
 const COST_LABEL = Object.freeze({
   // Phase 1, Basis: Chunk-Extraktion (Multi-Pass) bzw. der Single-Pass-Split
   // A1/B/C plus die Entitäten-Pässe E (Lebensereignisse) und A2 (Beziehungen).
-  // Hebel: ai.claude.model.komplett.extract + ai.claude.effort.komplett.extract.
+  // Hebel: Stufe von `komplett-extract` (ai.claude.tier.job.komplett-extract) + ai.claude.effort.komplett.extract.
   extract: 'extract',
   // Phase 1, Nachziehen: Completeness-/Gap-Pässe (Single- und Multi-Pass) sowie
   // der Szenen-Backfill. Hebel: ai.komplett.completeness_passes bzw.

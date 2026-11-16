@@ -4,7 +4,8 @@
 // nicht ausgeführte Werkzeug-Ergebnisse, Effort pro Chat.
 
 const appSettings = require('../../../lib/app-settings');
-const { getContext, setContext } = require('../../../lib/log-context');
+const { getContext } = require('../../../lib/log-context');
+const { bindJobOverride } = require('../../../lib/ai/config');
 const { i18nError } = require('../shared');
 
 // Provider-gerechter Model-Fallback, falls kein callAIWithTools-Result ein Model
@@ -13,9 +14,12 @@ const { i18nError } = require('../shared');
 // compat lief — Cost-Ledger (recordChatLedgerForMessage) liest provider+model direkt
 // aus der chat_messages-Zeile.
 function _defaultModelFor(provider) {
+  // Modell des Job-Bags (Modellstufe bzw. openai-compat-Override), sonst das globale.
+  const bag = getContext()?.aiJob;
+  if (bag?.provider === provider && bag.model) return bag.model;
   if (provider === 'ollama')        return appSettings.get('ai.ollama.model') || 'llama3.2';
   if (provider === 'openai-compat') return appSettings.get('ai.openai-compat.model') || 'llama3.2';
-  return appSettings.get('ai.claude.model') || 'claude-sonnet-4-6';
+  return appSettings.get('ai.claude.model') || 'claude-sonnet-5-5';
 }
 
 // Grobe Input-Schätzung eines Calls über die serialisierte Request-Form (System +
@@ -202,14 +206,13 @@ function appendBeforeRemoval(messages, msg, removalMessage) {
 }
 
 // Effort eines agentischen Chats (`ai.claude.effort.<chat>`) in den Job-Bag legen.
-// Nur Claude; ein schon gesetzter Claude-Bag (Buch-Chat-Overrides: Modell, Fenster)
-// bleibt erhalten und bekommt nur das Effort-Feld dazu.
+// Nur Claude; der gebundene Claude-Bag (Modellstufe: Modell, Fenster) bleibt erhalten
+// und bekommt nur das Effort-Feld dazu.
 function applyChatEffort(provider, settingKey) {
   if (provider !== 'claude' || !settingKey) return null;
   const effort = String(appSettings.get(settingKey) || '').trim();
   if (!effort) return null;
-  const cur = getContext()?.aiJob;
-  setContext({ aiJob: cur && cur.provider === 'claude' ? { ...cur, effort } : { provider: 'claude', effort } });
+  bindJobOverride('claude', { effort });
   return effort;
 }
 

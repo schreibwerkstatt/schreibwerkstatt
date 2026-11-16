@@ -16,7 +16,7 @@ const express = require('express');
 const {
   makeJobLogger, updateJob, completeJob, failJob,
   createJob, enqueueJob, findActiveJobId, jsonBody, jobAbortControllers,
-  startBookJob, i18nError,
+  startBookJob, i18nError, setJobModel, EMBED_PROVIDER,
 } = require('./shared');
 const draftDb = require('../../db/draft-figures');
 const occDb = require('../../db/draft-figure-occurrences');
@@ -131,6 +131,7 @@ async function runFigurAnchorJob(jobId, bookId, userEmail) {
       // für den Bogen als „verankert" (db/draft-figure-occurrences.js#figurAnchorState).
       throw i18nError('job.error.figurAnchorNoSemantic');
     }
+    setJobModel(jobId, EMBED_PROVIDER, embed.getConfig().model);
     if (!retrieval.indexReady(bookId)) {
       // Backend da, aber noch kein vollständiger Index-Lauf unter dem aktiven
       // Modell (Erstindex läuft, Modellwechsel): die Suche fände nichts, und ein

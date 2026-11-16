@@ -61,6 +61,10 @@ module.exports = {
   updateJob: jobsMod.updateJob,
   setJobModel: jobsMod.setJobModel,
   EMBED_PROVIDER: jobsMod.EMBED_PROVIDER,
+  EMBED_JOB_TYPES: jobsMod.EMBED_JOB_TYPES,
+  STT_PROVIDER: jobsMod.STT_PROVIDER,
+  STT_JOB_TYPES: jobsMod.STT_JOB_TYPES,
+  NO_AI_JOB_TYPES: jobsMod.NO_AI_JOB_TYPES,
   tps: jobsMod.tps,
   completeJob: jobsMod.completeJob,
   failJob: jobsMod.failJob,
@@ -85,6 +89,7 @@ module.exports = {
   applyReviewAiOverrides: model.applyReviewAiOverrides,
   applyTierAiOverrides: modelTier.applyTierAiOverrides,
   tierModel: modelTier.tierModel,
+  bindJobTier: modelTier.bindJobTier,
   settledAll: ai.settledAll,
   retryOnTransientAi: ai.retryOnTransientAi,
 

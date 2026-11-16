@@ -68,6 +68,7 @@ const runResearchChatJob = makeAgenticChatJob({
   // das Gate (validate); das Frontend blendet das Panel nach demselben Gate aus.
   callProvider: undefined,
   resolveProvider: (userEmail) => resolveProvider({ userEmail }),
+  jobType: 'research-chat',
   effortSettingKey: 'ai.claude.effort.researchchat',
   // Dieselbe Prüfung blockt schon POST /jobs/research-chat (vor dem Speichern der
   // Frage); hier nochmals, weil Setting/Provider zwischen POST und Queue-Start

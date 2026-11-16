@@ -5,7 +5,7 @@
 
 const appSettings = require('../../lib/app-settings');
 const { dropNeighbourFindings } = require('./lektorat-context');
-const { splitEnabled } = require('./lektorat-split');
+const { splitApplies } = require('./lektorat-split');
 const { chunkingApplies, chunkText, chunkThreshold, CHUNK_TARGET_CHARS } = require('../../lib/lektorat-chunks');
 
 // Erklärungs-Phrasen, mit denen das Modell einen Eintrag selbst widerruft.
@@ -121,10 +121,10 @@ function effectiveStylisticCap(textLen, base = stylisticCap()) {
 // Obergrenze für einen ganzen Abschnitt: am Stück die längenabhängige Zahl, in
 // Stücken (lib/lektorat-chunks.js) die Summe der Obergrenzen der Stücke — jedes
 // Stück-Prompt nennt seine eigene, der Backstop darf sie zusammen nicht unterbieten.
-// `local` wie im Lauf: lokale Provider zerlegen nie.
-function stylisticCapForText(text, { local = false } = {}) {
+// `local`/`provider` wie im Lauf: lokale Provider zerlegen nie, Claude nur im Split.
+function stylisticCapForText(text, { local = false, provider = 'claude' } = {}) {
   const t = String(text || '');
-  if (!chunkingApplies(t.length, { local, split: splitEnabled() })) return effectiveStylisticCap(t.length);
+  if (!chunkingApplies(t.length, { local, split: splitApplies(local, provider), provider })) return effectiveStylisticCap(t.length);
   return chunkText(t).reduce((n, c) => n + effectiveStylisticCap(c.text.length), 0);
 }
 
@@ -134,12 +134,12 @@ function stylisticCapForText(text, { local = false } = {}) {
 // Obergrenze dieses Abschnitts: kurze Abschnitte behalten so ihre Cache-Zeilen.
 // `ck` (Schwelle/Stückgrösse) nur, wenn der Abschnitt in Stücken geprüft wird —
 // Abschnitte unter der Schwelle behalten ihre Cache-Zeilen.
-function _runSig(local, text = '') {
-  const split = !local && splitEnabled();
+function _runSig(local, text = '', provider = 'claude') {
+  const split = splitApplies(local, provider);
   const t = String(text || '');
-  const chunked = chunkingApplies(t.length, { local, split });
+  const chunked = chunkingApplies(t.length, { local, split, provider });
   return {
-    sc: stylisticCapForText(t, { local }),
+    sc: stylisticCapForText(t, { local, provider }),
     // Split an: fester Wert '1/2' — so steht er in allen bestehenden Cache-Zeilen
     // (ein Objektiv-Pass, Format «Läufe/Schwelle»); ein anderer Wert entwertete sie.
     sp: split ? '1/2' : 0,
@@ -184,12 +184,12 @@ function validateLektoratFehler(fehler, locale, validTypen) {
 // soll narrativ geprägte Alt-Findings nicht durchlassen.
 // `neighbour` = { text, excerpts } der Seite und ihrer Kontext-Auszüge; `text` ist
 // der Prompt-Text und bestimmt die wirksame Stil-Obergrenze (stylisticCapForText);
-// `local` wie im Lauf (lokal wird nie in Stücken geprüft).
-function finalizeFehler(fehler, locale, validTypen, neighbour = null, { local = false } = {}) {
+// `local`/`provider` wie im Lauf (lokal wird nie in Stücken geprüft, Claude nur im Split).
+function finalizeFehler(fehler, locale, validTypen, neighbour = null, { local = false, provider = 'claude' } = {}) {
   const valid = validateLektoratFehler(fehler, locale, validTypen);
   const own = neighbour ? dropNeighbourFindings(valid, neighbour.text, neighbour.excerpts) : valid;
   const text = neighbour?.text ?? null;
-  const cap = stylisticCapForText(text, { local });
+  const cap = stylisticCapForText(text, { local, provider });
   return capStylisticFehler(dedupFehler(own), cap, text);
 }
 

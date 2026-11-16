@@ -350,10 +350,10 @@ test('Synonym-Cache: identischer Lookup → 0 AI-Calls', async () => {
   assert.equal(ctx.mockAi.log.length, 1, '2. Lookup = Cache-HIT');
 });
 
-test('Synonym-Job: ai.claude.model.synonym landet in job_runs (Kosten-Ledger)', async () => {
+test('Synonym-Job: Modell der Stufe landet in job_runs (Kosten-Ledger)', async () => {
   const appSettings = require('../../lib/app-settings');
   appSettings.set('ai.claude.model', 'claude-opus-5-5', { updatedBy: 'test' });
-  appSettings.set('ai.claude.model.synonym', 'claude-sonnet-5-5', { updatedBy: 'test' });
+  appSettings.set('ai.claude.tier.job.synonym', 'standard', { updatedBy: 'test' });
   try {
     ctx.mockAi.on(
       (e) => e.schemaKeys.includes('synonyme'),
@@ -368,7 +368,7 @@ test('Synonym-Job: ai.claude.model.synonym landet in job_runs (Kosten-Ledger)', 
     const row = ctx.dbSchema.db.prepare('SELECT model FROM job_runs WHERE job_id = ?').get(jobId);
     assert.equal(row.model, 'claude-sonnet-5-5');
   } finally {
-    appSettings.set('ai.claude.model.synonym', '', { updatedBy: 'test' });
+    appSettings.set('ai.claude.tier.job.synonym', 'light', { updatedBy: 'test' });
   }
 });
 

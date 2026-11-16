@@ -1,8 +1,9 @@
 'use strict';
 // Eigener KI-Zugang im Profil (routes/me-ai-access.js + lib/ai/profile.js):
 // Admin-Schalter, Validierung inkl. SSRF-Guard, Vorrang vor Zuweisung und
-// globalem Provider, kein Rueckfall auf Host/Key der Instanz, Job-Overrides der
-// Instanz greifen nicht.
+// globalem Provider, kein Rueckfall auf Host/Key der Instanz. Claude-Zugang =
+// nur eigener Key, Modell-Einstellungen von der Instanz; eigener Endpunkt =
+// Job-Overrides der Instanz greifen nicht.
 
 const test = require('node:test');
 const assert = require('node:assert/strict');
@@ -97,11 +98,18 @@ test('Claude-Zugang: gewinnt ueber globalen Provider und Zuweisung, Key kommt ni
   // Admin-Liste kennt den eigenen Zugang nicht.
   assert.ok(aiProfiles.listProfiles().every(p => !p.owner_email));
 
-  // '__unchanged__' behaelt den Key beim selben Provider.
-  const keep = await req('PUT', { provider: 'claude', api_key: '__unchanged__', model: 'claude-opus-5-5' });
+  // '__unchanged__' behaelt den Key beim selben Provider. Modell/Fenster eines
+  // Claude-Zugangs werden nicht gespeichert: sie kommen von der Instanz.
+  appSettings.set('ai.claude.model', 'claude-sonnet-5-5');
+  const keep = await req('PUT', { provider: 'claude', api_key: '__unchanged__', model: 'claude-opus-5-5', context_window: 50000 });
   assert.equal(keep.status, 200);
+  assert.equal(keep.body.access.model, null);
+  assert.equal(keep.body.access.context_window, null);
   assert.equal(aiApiKey('claude', { userEmail: U }), 'sk-ant-own');
-  assert.equal(aiSetting('claude', 'model', { userEmail: U }), 'claude-opus-5-5');
+  assert.equal(aiSetting('claude', 'model', { userEmail: U }), 'claude-sonnet-5-5');
+  // Auch ein Altbestand mit Modell in der Zeile folgt der Instanz.
+  aiProfiles.updateProfile(aiProfiles.getOwnProfile(U).id, { model: 'claude-haiku-4-5' });
+  assert.equal(aiSetting('claude', 'model', { userEmail: U }), 'claude-sonnet-5-5');
 
   // Feature zugedreht → zurueck auf die Zuweisung, Zugang bleibt liegen.
   appSettings.set('ai.user_api.enabled', false);
@@ -133,15 +141,27 @@ test('OpenAI-kompatibel: kein Rueckfall auf Instanz-Key oder -Host', async () =>
   assert.equal(aiSetting('openai-compat', 'host', { userEmail: U }), null);
 });
 
-test('Job-Overrides der Instanz greifen beim eigenen Zugang nicht (ausser Timeout)', async () => {
+test('Eigener Claude-Zugang: Job-Overrides und Tier der Instanz gelten wie ohne eigenen Key', async () => {
   appSettings.set('ai.user_api.enabled', true);
   await req('PUT', { provider: 'claude', api_key: 'sk-ant-own' });
-  const bag = { provider: 'claude', model: 'claude-opus-4-8', contextWindow: 1000000, timeoutMs: 1234 };
+  const bag = { provider: 'claude', model: 'claude-opus-4-8', contextWindow: 1000000, effort: 'high', timeoutMs: 1234 };
   runWithContext({ user: U, aiJob: bag }, () => {
-    assert.equal(jobOverride('claude', 'model'), undefined);
-    assert.equal(jobOverride('claude', 'contextWindow'), undefined);
+    assert.equal(jobOverride('claude', 'model'), 'claude-opus-4-8');
+    assert.equal(jobOverride('claude', 'contextWindow'), 1000000);
+    assert.equal(jobOverride('claude', 'effort'), 'high');
     assert.equal(jobOverride('claude', 'timeoutMs'), 1234);
-    assert.notEqual(ai._resolveClaudeModel('claude-haiku-tier'), 'claude-haiku-tier');
+    assert.equal(ai._resolveClaudeModel('claude-haiku-tier'), 'claude-haiku-tier');
+  });
+});
+
+test('Eigener OpenAI-kompatibler Endpunkt: Job-Overrides der Instanz greifen nicht (ausser Timeout)', async () => {
+  appSettings.set('ai.user_api.enabled', true);
+  await req('PUT', { provider: 'openai-compat', host: 'https://api.example.test', model: 'gpt-x', api_key: 'k', cloud: true });
+  const bag = { provider: 'openai-compat', model: 'qwen-instanz', contextWindow: 262000, timeoutMs: 1234 };
+  runWithContext({ user: U, aiJob: bag }, () => {
+    assert.equal(jobOverride('openai-compat', 'model'), undefined);
+    assert.equal(jobOverride('openai-compat', 'contextWindow'), undefined);
+    assert.equal(jobOverride('openai-compat', 'timeoutMs'), 1234);
   });
 });
 

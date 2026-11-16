@@ -86,7 +86,7 @@
                    ]"
                    @combobox-change="if ($event.detail !== (u.ai_profile_id ? String(u.ai_profile_id) : '')) adminUsersUpdate(u, { ai_profile_id: $event.detail ? Number($event.detail) : null })"></div>
               <small class="muted-msg muted-msg--sm" x-show="u.own_ai_provider" x-cloak
-                     x-text="$app.t('admin.users.ownAiAccess', { provider: u.own_ai_provider })"></small>
+                     x-text="$app.t(u.own_ai_active ? 'admin.users.ownAiAccess' : 'admin.users.ownAiAccessInactive', { provider: $app.t('profile.aiAccess.provider.' + u.own_ai_provider) })"></small>
             </td>
             <td>
               <span class="badge" :class="'badge--status-' + u.status" x-text="$app.t('admin.users.status.' + u.status)"></span>

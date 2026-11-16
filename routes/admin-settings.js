@@ -28,6 +28,7 @@ const logger = require('../logger');
 const { sessionEmail } = require('../lib/acl');
 const { fetchWithTimeout } = require('../lib/http-util');
 const creds = require('../db/user-credentials');
+const { JOB_TIER_GROUPS, JOB_TIER_CATALOG } = require('../lib/ai/job-tiers');
 
 const router = express.Router();
 router.use(requireAdmin);
@@ -50,11 +51,28 @@ function _authMethodLockoutCode(nextMethod, actor) {
   return 'AUTH_LOCAL_OWN_PASSWORD_REQUIRED';
 }
 
+// Zuordnung Job → Modellstufe fürs Admin-UI: Katalog (lib/ai/job-tiers.js) mit dem
+// Label-Key der Job-Statistik (JOB_TYPE_LABELS) bzw. einem eigenen für die zwei
+// Einzel-Calls und den Kontinuitäts-Job, die dort nicht als Typ erscheinen.
+const JOB_TIER_EXTRA_LABELS = {
+  'komplett-extract': 'admin.settings.jobTier.job.komplettExtract',
+  'kontinuitaet':     'admin.settings.jobTier.job.kontinuitaet',
+  'chat-title':       'admin.settings.jobTier.job.chatTitle',
+};
+function _jobTierCatalog() {
+  const { JOB_TYPE_LABELS } = require('./jobs/shared/jobs');
+  return JOB_TIER_CATALOG.map(j => ({
+    type: j.type, group: j.group, tier: j.tier,
+    labelKey: JOB_TIER_EXTRA_LABELS[j.type] || JOB_TYPE_LABELS[j.type] || j.type,
+  }));
+}
+
 router.get('/', (req, res) => {
   const items = appSettings.listForAdmin();
   const actor = sessionEmail(req);
   res.json({
     settings: items,
+    jobTiers: { groups: JOB_TIER_GROUPS, jobs: _jobTierCatalog() },
     auth: {
       own_has_password: !!actor && creds.hasPassword(String(actor).toLowerCase()),
       env_admin: _envAdminEnabled(),

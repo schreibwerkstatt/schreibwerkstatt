@@ -68,9 +68,12 @@ function _aggregateByUser({ fromIso, toIso, includeAdmins }) {
     const prev = acc.get(email) || {
       email, usd: 0, tokensIn: 0, tokensOut: 0,
       cacheReadIn: 0, cacheCreationIn: 0,
-      jobCalls: 0, chatCalls: 0,
+      jobCalls: 0, chatCalls: 0, ownUsd: 0,
     };
-    prev.usd += row.usd || 0;
+    // Eigener KI-Zugang: zahlt der User selbst — eigene Summe, nicht in `usd`
+    // (Budget-Vergleich, Kosten der Instanz). Tokens/Calls zaehlen beide.
+    if (row.billed_to === 'own') prev.ownUsd += row.usd || 0;
+    else prev.usd += row.usd || 0;
     prev.tokensIn        += row.tokens_in || 0;
     prev.tokensOut       += row.tokens_out || 0;
     prev.cacheReadIn     += row.cache_read_in || 0;
@@ -95,7 +98,7 @@ function listUsersWithUsage({ from, to, includeAdmins = false } = {}) {
      ORDER BY email
   `).all();
   return users.map(u => {
-    const a = agg.get(u.email) || { usd: 0, tokensIn: 0, tokensOut: 0, cacheReadIn: 0, cacheCreationIn: 0, jobCalls: 0, chatCalls: 0 };
+    const a = agg.get(u.email) || { usd: 0, ownUsd: 0, tokensIn: 0, tokensOut: 0, cacheReadIn: 0, cacheCreationIn: 0, jobCalls: 0, chatCalls: 0 };
     return {
       email: u.email,
       displayName: u.display_name,
@@ -105,6 +108,7 @@ function listUsersWithUsage({ from, to, includeAdmins = false } = {}) {
       budgetMode: u.budget_mode || 'none',
       lastSeenAt: u.last_seen_at,
       usd: a.usd,
+      ownUsd: a.ownUsd,
       tokensIn: a.tokensIn,
       tokensOut: a.tokensOut,
       cacheReadIn: a.cacheReadIn,
@@ -248,8 +252,11 @@ function getChatMessages({ emails, email, from, to, limit = 50, offset = 0, incl
 function monthlyTotals({ from, to, includeAdmins = false } = {}) {
   const { fromIso, toIso } = _resolveRange({ from, to });
   const admins = _excludedEmails(includeAdmins);
-  const rows = costLedger.queryRange({ fromIso, toIso })
+  const all = costLedger.queryRange({ fromIso, toIso })
     .filter(r => r.user_email && !admins.has(r.user_email));
+  // Kosten der Instanz; was ueber eigene KI-Zugaenge lief, nur als Summe daneben.
+  const rows = all.filter(r => r.billed_to !== 'own');
+  const ownUsd = all.reduce((s, r) => s + (r.billed_to === 'own' ? (r.usd || 0) : 0), 0);
 
   let totalUsd = 0, totalIn = 0, totalOut = 0, totalCacheR = 0, totalCacheW = 0;
   let chatCount = 0;
@@ -298,6 +305,7 @@ function monthlyTotals({ from, to, includeAdmins = false } = {}) {
       usd: totalUsd, tokensIn: totalIn, tokensOut: totalOut,
       cacheReadIn: totalCacheR, cacheCreationIn: totalCacheW,
       jobCalls, chatCalls: chatCount,
+      ownUsd,
     },
     topUsers, byModel: byModelArr, byType: byTypeArr,
   };
@@ -309,12 +317,13 @@ function monthlyTotals({ from, to, includeAdmins = false } = {}) {
 // Kosten eines Users verursachen. `type` ist bei Jobs der Job-Typ, bei Chat die
 // Session-Art (page|book|research). Calls ohne User (system-seitig
 // ausgeloest) laufen mit email=null mit, damit die Summe der Aufschluesselung
-// der Summe des Ledgers entspricht.
+// der Summe des Ledgers entspricht. Nur Kosten der Instanz — eigene KI-Zugaenge
+// stehen in der User-Liste als `ownUsd`.
 function userJobBreakdown({ from, to, includeAdmins = false } = {}) {
   const { fromIso, toIso } = _resolveRange({ from, to });
   const excluded = _excludedEmails(includeAdmins);
   const acc = new Map();
-  for (const r of costLedger.queryRange({ fromIso, toIso })) {
+  for (const r of costLedger.queryRange({ fromIso, toIso, billedTo: 'instance' })) {
     const email = r.user_email || null;
     if (email && excluded.has(email)) continue;
     const type = r.type || 'unknown';

@@ -73,7 +73,11 @@
               <div x-text="u.displayName || u.email"></div>
               <div class="muted-msg muted-msg--sm" x-text="u.email"></div>
             </td>
-            <td class="admin-usage-cell-num" x-text="adminUsageMoney(u.usd)"></td>
+            <td class="admin-usage-cell-num">
+              <div x-text="adminUsageMoney(u.usd)"></div>
+              <div class="muted-msg muted-msg--sm" x-show="u.ownUsd > 0"
+                   x-text="$app.t('admin.usage.ownKeyCost', { usd: adminUsageMoney(u.ownUsd) })"></div>
+            </td>
             <td class="admin-usage-cell-num" x-text="adminUsageInt(u.tokensIn)"></td>
             <td class="admin-usage-cell-num" x-text="adminUsageInt(u.tokensOut)"></td>
             <td class="admin-usage-cell-shrink">
@@ -123,6 +127,10 @@
       <div class="admin-usage-kpi">
         <div class="admin-usage-kpi-label" x-text="$app.t('admin.usage.summary.total')"></div>
         <div class="admin-usage-kpi-value" x-text="adminUsageMoney(adminUsageSummary?.totals?.usd)"></div>
+      </div>
+      <div class="admin-usage-kpi" x-show="adminUsageSummary?.totals?.ownUsd > 0">
+        <div class="admin-usage-kpi-label" x-text="$app.t('admin.usage.summary.ownKey')"></div>
+        <div class="admin-usage-kpi-value" x-text="adminUsageMoney(adminUsageSummary?.totals?.ownUsd)"></div>
       </div>
       <div class="admin-usage-kpi">
         <div class="admin-usage-kpi-label" x-text="$app.t('admin.usage.column.tokensIn')"></div>

@@ -1,7 +1,6 @@
 'use strict';
 const { aiSetting } = require('../../../lib/ai/profile');
-const { _claudeUsesAdaptiveThinking } = require('../../../lib/ai/config');
-const { setContext } = require('../../../lib/log-context');
+const { _claudeUsesAdaptiveThinking, jobOverride, bindJobOverride } = require('../../../lib/ai/config');
 const appSettings = require('../../../lib/app-settings');
 
 // Modellname des effektiven Providers. Geht ueber das Profil-Overlay, NICHT direkt
@@ -12,10 +11,15 @@ const appSettings = require('../../../lib/app-settings');
 // sie ja nicht. Ergebnis waere ein Treffer aus einem anderen Modell.
 // `opts` ({ userEmail }) nur ausserhalb eines Job-/Request-Kontexts nötig; sonst
 // liest aiSetting den User aus dem ALS-Context.
+// Claude: im Job das Modell der Stufe (Job-Bag, gebunden beim Job-Start), sonst das
+// Instanz-/Profil-Modell — dasselbe, was lib/ai/config.js#_resolveClaudeModel schickt.
+// So trennt die cacheVersion jedes Jobs die Stufen, auch wenn der Admin einen Job
+// umhängt. Die übrigen Provider lesen den Bag hier nicht: ihr Komplett-Override
+// landete sonst in Cache-Versionen, die bisher ohne ihn gerechnet wurden.
 function _modelName(prov, opts) {
   if (prov === 'ollama') return aiSetting('ollama', 'model', opts) || 'llama3.2';
   if (prov === 'openai-compat') return aiSetting('openai-compat', 'model', opts) || 'llama3.2';
-  return aiSetting('claude', 'model', opts) || 'claude-sonnet-4-6';
+  return jobOverride('claude', 'model') || aiSetting('claude', 'model', opts) || 'claude-sonnet-5-5';
 }
 
 // Effort-Setting eines Jobs (`ai.claude.effort.<x>`) als Job-Bag binden.
@@ -29,7 +33,7 @@ function applyEffortSetting(settingKey, effectiveProvider, logger, label) {
   if (!_claudeUsesAdaptiveThinking(_modelName(effectiveProvider))) return '';
   const effort = String(appSettings.get(settingKey) || '').trim().toLowerCase();
   if (!effort) return '';
-  setContext({ aiJob: { provider: 'claude', effort } });
+  bindJobOverride('claude', { effort });
   logger?.info(`${label}-Effort: ${effort}.`);
   return `:e=${effort}`;
 }
