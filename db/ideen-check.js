@@ -45,6 +45,20 @@ function setBaseline(pageId, userEmail, text) {
   `).run(pageId, userEmail, String(text || ''));
 }
 
+/** (Abschnitt, User), deren Abschnitt seit dem letzten Check geändert wurde und
+ *  noch offene Abschnitts-Ideen trägt — Kandidaten, deren entprellter Check ein
+ *  Neustart verworfen haben kann. Ohne Ausgangsstand kein Kandidat (der nächste
+ *  Save legt ihn an). Ob die Änderung «grösser» ist, misst der Aufrufer. */
+function listChecksDueSinceBaseline() {
+  return db.prepare(`
+    SELECT DISTINCT b.page_id, b.user_email, i.book_id
+      FROM idee_check_baselines b
+      JOIN pages p ON p.page_id = b.page_id
+      JOIN ideen i ON i.page_id = b.page_id AND i.user_email = b.user_email AND ${openStatusSql('i')}
+     WHERE p.updated_at > b.checked_at
+  `).all();
+}
+
 /** Hinweis setzen (ersetzt einen älteren derselben Idee). Nur für eigene Ideen. */
 function setHint(ideeId, userEmail, { pageId, beleg, begruendung = null }) {
   const own = db.prepare('SELECT 1 FROM ideen WHERE id = ? AND user_email = ?').get(ideeId, userEmail);
@@ -77,6 +91,6 @@ function setAutoCheck(userEmail, on) {
 }
 
 module.exports = {
-  listOpenPageIdeen, hasOpenPageIdeen, getBaseline, setBaseline,
+  listOpenPageIdeen, hasOpenPageIdeen, getBaseline, setBaseline, listChecksDueSinceBaseline,
   setHint, clearHint, isAutoCheckEnabled, setAutoCheck,
 };

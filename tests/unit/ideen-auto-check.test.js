@@ -174,3 +174,28 @@ test('updateIdee: neuer Ort verwirft den Hinweis, gleicher Ort und Textänderung
   ideenDb.updateIdee(id, USER, { page_id: PAGE2, chapter_id: null });
   assert.equal(hintOf(id), null, 'neuer Ort verwirft ihn');
 });
+
+test('Neustart: geänderter Abschnitt mit offener Idee bekommt seinen Check neu gestellt', () => {
+  const { resumeIdeenAutoChecks, _pendingCheckKeys } = require('../../routes/jobs/ideen-auto-check');
+  const P_DUE = 8330191, P_SAME = 8330192, P_CLOSED = 8330193;
+  for (const id of [P_DUE, P_SAME, P_CLOSED]) {
+    db.prepare(`INSERT INTO pages (page_id, book_id, page_name, body_html, updated_at) VALUES (?, ?, 'R', '<p>x</p>', ?)`).run(id, BOOK, NOW);
+    ideenCheck.setBaseline(id, USER, 'x');
+  }
+  ideenDb.createIdee({ bookId: BOOK, pageId: P_DUE, userEmail: USER, content: 'offen, geändert' });
+  ideenDb.createIdee({ bookId: BOOK, pageId: P_SAME, userEmail: USER, content: 'offen, unverändert' });
+  const zu = ideenDb.createIdee({ bookId: BOOK, pageId: P_CLOSED, userEmail: USER, content: 'zu, geändert' });
+  ideenDb.updateIdee(zu, USER, { status: 'erledigt' });
+  // Geändert NACH dem Ausgangsstand (setBaseline stempelt «jetzt»).
+  const later = '2999-01-01T00:00:00.000Z';
+  db.prepare('UPDATE pages SET updated_at = ? WHERE page_id IN (?, ?)').run(later, P_DUE, P_CLOSED);
+
+  const due = ideenCheck.listChecksDueSinceBaseline().filter(r => [P_DUE, P_SAME, P_CLOSED].includes(r.page_id));
+  assert.deepEqual(due, [{ page_id: P_DUE, user_email: USER, book_id: BOOK }]);
+
+  resumeIdeenAutoChecks();
+  const keys = _pendingCheckKeys();
+  assert.ok(keys.includes(`${P_DUE}:${USER}`));
+  assert.ok(!keys.includes(`${P_SAME}:${USER}`));
+  assert.ok(!keys.includes(`${P_CLOSED}:${USER}`));
+});

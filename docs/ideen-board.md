@@ -667,8 +667,11 @@ Pendenzen, die **direkt an diesem Abschnitt** hängen, gegen seinen neuen Text
 * **«Grösser»** misst `changedWordCount` (Wort-Multimenge) gegen den Ausgangsstand
   in `idee_check_baselines`: ab `MIN_CHANGED_WORDS` (40) läuft der Job über die
   Queue. Ohne Ausgangsstand wird der aktuelle Text zum Ausgangsstand, ohne Lauf;
-  nach jedem erfolgreichen Lauf rückt er nach. Der Timer lebt im Prozess — ein
-  Neustart verwirft einen wartenden Check, der nächste Save stösst neu an.
+  nach jedem erfolgreichen Lauf rückt er nach. Der Timer lebt im Prozess; beim
+  Serverstart stellt `resumeIdeenAutoChecks` ihn für jeden Abschnitt mit offener
+  Abschnitts-Idee neu, dessen `updated_at` jünger ist als `checked_at` seines
+  Ausgangsstands — ein Deploy kurz nach einer grossen Änderung (etwa einer
+  Lektorat-Übernahme) verliert den Check so nicht.
 * **Ergebnis ist ein Hinweis, kein Schreiben.** Das Modell nennt eingelöste
   Pendenzen mit wörtlichem Zitat; das Zitat wird gegen denselben Text geprüft,
   den das Modell las (`pageQuoteHaystack`, wie im Ideen-Chat). Nur Verifiziertes

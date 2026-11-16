@@ -2,8 +2,10 @@
 // Automatischer Erledigt-Check der Ideen (docs/ideen-board.md, «Erledigt-Check
 // nach dem Speichern»).
 //
-// Auslöser: jedes Speichern eines Abschnitts (PUT /content/pages/:id — der Weg
-// ALLER drei Editoren und der nativen Clients; kein Editor-Code ist beteiligt).
+// Auslöser: jeder Text-Write eines Abschnitts (PUT /content/pages/:id mit html —
+// der Weg ALLER drei Editoren und der nativen Clients; kein Editor-Code ist
+// beteiligt), dazu beim Serverstart resumeIdeenAutoChecks für Abschnitte, die
+// seit dem letzten Check geändert wurden (der Timer überlebt keinen Neustart).
 // noteIdeenPageSave entprellt je (Abschnitt, User): erst nach DEBOUNCE_MS ohne
 // weiteres Speichern wird gemessen, ob sich der Text seit dem letzten Check
 // grösser geändert hat (MIN_CHANGED_WORDS, Wort-Multimenge gegen den Ausgangs-
@@ -95,6 +97,25 @@ async function _afterQuiet(pageId, bookId, userEmail) {
   enqueueIdeenAutoCheck(pageId, bookId, userEmail);
 }
 
+/**
+ * Beim Serverstart: die Entprell-Timer leben nur im Prozess, ein Neustart
+ * innerhalb von DEBOUNCE_MS nach einer Änderung verwarf den Check still. Stellt
+ * ihn für jeden Abschnitt neu, der seit dem letzten Check geändert wurde; ob die
+ * Änderung gross genug ist, misst _afterQuiet wie nach einem Save. Wirft nie.
+ * @returns {number} Anzahl gestellter Checks
+ */
+function resumeIdeenAutoChecks() {
+  try {
+    const due = ideenCheck.listChecksDueSinceBaseline();
+    for (const r of due) noteIdeenPageSave(r.page_id, r.book_id, r.user_email);
+    if (due.length) logger.info(`[ideen-auto-check] Startup: ${due.length} Check(s) nach Neustart neu gestellt (Seiten ${due.map(r => r.page_id).join(',')}).`);
+    return due.length;
+  } catch (e) {
+    logger.warn(`[ideen-auto-check] Startup-Nachholen fehlgeschlagen: ${e.message}`);
+    return 0;
+  }
+}
+
 function enqueueIdeenAutoCheck(pageId, bookId, userEmail) {
   const dedup = String(pageId);
   const existing = findActiveJobId('ideen-auto-check', dedup, userEmail);
@@ -167,6 +188,6 @@ router.post('/ideen-auto-check', jsonBody, (req, res) => {
 module.exports = {
   ideenAutoCheckRouter: router,
   noteIdeenPageSave, enqueueIdeenAutoCheck, runIdeenAutoCheckJob, changedWordCount,
-  _afterQuiet,
+  resumeIdeenAutoChecks, _afterQuiet, _pendingCheckKeys: () => [..._timers.keys()],
   DEBOUNCE_MS, MIN_CHANGED_WORDS,
 };
