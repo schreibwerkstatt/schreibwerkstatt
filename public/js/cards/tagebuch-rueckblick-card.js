@@ -9,10 +9,48 @@
 // onDone gespeichert und im Partial via x-for/x-text gerendert (auto-escaped).
 
 import { tagebuchRueckblickMethods } from '../book/tagebuch-rueckblick.js';
+import { rueckblickVerlaufMethods } from '../book/rueckblick-verlauf.js';
 import { createCardJobFeature } from './job-feature-card.js';
 import { setupCardLifecycle } from './card-lifecycle.js';
 import { runningJobStatus } from './job-helpers.js';
 import { EVT } from '../events.js';
+
+// Massgeblich ist der Zeitraum DES LAUFS (job.result.zeitraum), nicht der
+// gerade gewählte: nach einem Reconnect (Karte neu geöffnet → Default-
+// Zeitraum) oder einem Zeitraum-Wechsel während des Laufs stünde das
+// Ergebnis sonst unter dem falschen Monat, mit falschem Permalink.
+export async function rueckblickOnDone(job) {
+  const zeitraum = job.result?.zeitraum || this.rueckblickZeitraum;
+  if (job.result?.empty) {
+    this._applyRueckblickZeitraum(zeitraum);
+    await this.$nextTick(); // Zeitraum-Watcher zuerst, sonst räumt er den Leerzustand
+    this.rueckblickResult = null;
+    this.rueckblickEmpty = true;
+    this.rueckblickStatus = '';
+    return;
+  }
+  const result = job.result?.rueckblick || null;
+  this.rueckblickEmpty = false;
+  this.rueckblickStatus = '';
+  this.rbVerlauf = null;
+  // History + Coverage wurden serverseitig fortgeschrieben → neu laden, dann
+  // den neu entstandenen (oder bestehenden) Eintrag des Zeitraums öffnen —
+  // openRueckblickHistory setzt Auswahl vor Zeitraum, der Zeitraum-Watcher
+  // öffnet darum nichts Älteres darüber.
+  await Promise.all([this.loadRueckblickHistory(), this.loadRueckblickCoverage()]);
+  const fresh = (this.rueckblickHistory || []).find(en => en.zeitraum === zeitraum);
+  if (fresh) {
+    if (result) this._rbResults[fresh.id] = result;
+    await this.openRueckblickHistory(fresh);
+  } else {
+    this.selectedRueckblickId = null;
+    this.clearBeleg();
+    this.rueckblickZeitraum = zeitraum;
+    await this.$nextTick(); // Zeitraum-Watcher zuerst, sonst räumt er das Ergebnis
+    this.rueckblickResult = result;
+  }
+  if (this.rbHistoryView === 'verlauf') this.loadRueckblickVerlauf();
+}
 
 export function registerTagebuchRueckblickCard() {
   if (typeof window === 'undefined' || !window.Alpine) return;
@@ -31,7 +69,13 @@ export function registerTagebuchRueckblickCard() {
     rbHistorySearch: '',
     rbSearchIds: [],
     rbHistoryView: 'cal',
-    rbBeleg: { key: null, label: '', belege: [] },
+    rbBeleg: { key: null, label: '', belege: [], aliase: [] },
+    // Aufgeklappte Einzelnennungen je Facette ({ personen: true, … }).
+    rbFacetMore: {},
+    // Verlauf über die Monate (Ansicht «Verlauf», lazy beim ersten Öffnen).
+    rbVerlauf: null,
+    rbVerlaufFacet: 'personen',
+    rbVerlaufSearch: '',
     // Geladene Ergebnisse je History-id (die Liste trägt nur Metadaten).
     _rbResults: {},
     _rueckblickPollTimer: null,
@@ -89,7 +133,11 @@ export function registerTagebuchRueckblickCard() {
           rbSearchIds: [],
           rbHistoryView: 'cal',
           _rbResults: {},
-          rbBeleg: { key: null, label: '', belege: [] },
+          rbBeleg: { key: null, label: '', belege: [], aliase: [] },
+          rbFacetMore: {},
+          rbVerlauf: null,
+          rbVerlaufFacet: 'personen',
+          rbVerlaufSearch: '',
         },
         extraListeners: [
           { type: EVT.JOB_RECONNECT, handler: onJobReconnect },
@@ -125,6 +173,11 @@ export function registerTagebuchRueckblickCard() {
         this.selectedRueckblickId = null;
         this.clearBeleg();
       });
+      // Verlauf lädt beim ersten Öffnen der Ansicht (und nach jedem neuen Lauf,
+      // der rbVerlauf auf null setzt).
+      this.$watch('rbHistoryView', (v) => {
+        if (v === 'verlauf' && !this.rbVerlauf) this.loadRueckblickVerlauf();
+      });
       // Inhaltssuche der History: serverseitig, entprellt.
       this.$watch('rbHistorySearch', (q) => {
         clearTimeout(this._rbSearchTimer);
@@ -136,6 +189,7 @@ export function registerTagebuchRueckblickCard() {
     destroy() { this._lifecycle?.destroy(); },
 
     ...tagebuchRueckblickMethods,
+    ...rueckblickVerlaufMethods,
 
     ...createCardJobFeature({
       name: 'rueckblick',
@@ -172,29 +226,7 @@ export function registerTagebuchRueckblickCard() {
           zeitraum: this.rueckblickZeitraum,
         };
       },
-      async onDone(job) {
-        if (job.result?.empty) {
-          this.rueckblickResult = null;
-          this.rueckblickEmpty = true;
-          this.rueckblickStatus = '';
-          return;
-        }
-        const result = job.result?.rueckblick || null;
-        this.rueckblickResult = result;
-        this.rueckblickEmpty = false;
-        this.rueckblickStatus = '';
-        this.selectedRueckblickId = null;
-        this.rbBeleg = { key: null, label: '', belege: [] };
-        // History + Coverage wurden serverseitig fortgeschrieben → neu laden, dann
-        // den neu entstandenen (oder bestehenden) Eintrag des Zeitraums auswählen,
-        // damit Permalink und Meta-Zeile stimmen.
-        await Promise.all([this.loadRueckblickHistory(), this.loadRueckblickCoverage()]);
-        const fresh = (this.rueckblickHistory || []).find(en => en.zeitraum === this.rueckblickZeitraum);
-        if (fresh) {
-          if (result) this._rbResults[fresh.id] = result;
-          this.selectedRueckblickId = fresh.id;
-        }
-      },
+      onDone: rueckblickOnDone,
       async onOpen() {
         const nav = window.Alpine.store('nav');
         // Permalink (#…/rueckblick/<entryId>) gewinnt vor allem anderen.

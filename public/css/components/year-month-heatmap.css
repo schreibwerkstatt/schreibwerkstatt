@@ -101,6 +101,13 @@
   border-radius: var(--radius-none);
 }
 
+/* Rückblick vorhanden, aber Einträge seither geändert: gestrichelter Rahmen +
+   Marker in Warnfarbe — die Form trägt den Unterschied, nicht nur der Farbton
+   (der Karten-Akzent kann der Warnfarbe nahe liegen). */
+.ymheat-cell--stale { border-color: var(--color-warn-text); border-style: dashed; }
+.ymheat-cell--stale::after { background: var(--color-warn-text); }
+.ymheat-year--stale { text-decoration: underline dotted var(--color-warn-text); }
+
 /* Aktueller Monat: dezenter Innen-Ring — Orientierung „wo bin ich jetzt". */
 .ymheat-cell--current { box-shadow: inset 0 0 0 1.5px var(--color-text); }
 

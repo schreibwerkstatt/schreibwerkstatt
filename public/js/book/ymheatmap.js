@@ -35,8 +35,10 @@ export function currentMonthKey() {
 // #buildRueckblickCoverage). Beide Konsumenten — Overview-Heatmap und Kalender
 // der Rückblick-Karte — rechnen hier, damit sie dieselben Monate gleich zählen
 // und färben. `selectedId` markiert den in der Karte geöffneten Rückblick.
-//   → { years: [{ year, yearKey, hasEntries, hasRueckblick, entryId,
+//   → { years: [{ year, yearKey, hasEntries, hasRueckblick, stale, entryId,
 //                 yearCreatedAt, selected, months: [12 Zellen] }], maxEntries }
+// `stale` (Zelle/Jahr): Rückblick vorhanden, aber Einträge seither geändert —
+// berechnet der Server (rueckblickStale), hier nur durchgereicht.
 export function buildYmHeatRows(coverage, { selectedId = null } = {}) {
   const empty = { years: [], maxEntries: 0 };
   if (!coverage || coverage.minYear == null || coverage.maxYear == null) return empty;
@@ -63,6 +65,7 @@ export function buildYmHeatRows(coverage, { selectedId = null } = {}) {
         hasEntries: entries > 0,
         isCurrent: key === todayKey,
         hasRueckblick: !!rb,
+        stale: !!rb?.stale,
         entryId: rb?.id ?? null,
         createdAt: rb?.created_at || null,
         selected: isSel(rb),
@@ -73,6 +76,7 @@ export function buildYmHeatRows(coverage, { selectedId = null } = {}) {
       yearKey,
       hasEntries: (years[yearKey]?.entries || 0) > 0 || cells.some(c => c.hasEntries),
       hasRueckblick: !!yRb,
+      stale: !!yRb?.stale,
       entryId: yRb?.id ?? null,
       yearCreatedAt: yRb?.created_at || null,
       selected: isSel(yRb),

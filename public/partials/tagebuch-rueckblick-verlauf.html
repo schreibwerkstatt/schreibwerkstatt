@@ -1,0 +1,45 @@
+<!-- Verlauf über die Monate (Fragment der Rückblick-Übersicht): Personen, Orte
+     oder Themen × Monate mit Rückblick, Zelle = Belegtage. Daten und Stufen aus
+     rueckblick-verlauf.js; Klick öffnet den Monat mit den Belegen. -->
+<div class="rb-verlauf" x-show="rbHistoryView === 'verlauf' && rbHasVerlauf()" x-cloak>
+  <div class="filter-bar">
+    <div class="tabs">
+      <template x-for="f in ['personen', 'orte', 'themen']" :key="f">
+        <button type="button" class="tabs-btn" :class="{ 'tabs-btn--active': rbVerlaufFacet === f }"
+                :aria-pressed="rbVerlaufFacet === f" @click="rbVerlaufFacet = f"
+                x-text="$app.t('rueckblick.verlauf.facet.' + f)"></button>
+      </template>
+    </div>
+    <span class="filter-search-wrap rb-history-search-wrap">
+      <input type="text" class="filter-search-input" x-model="rbVerlaufSearch"
+             :placeholder="$app.t('rueckblick.verlauf.search')" :aria-label="$app.t('rueckblick.verlauf.search')">
+      <button type="button" class="search-clear--icon" x-show="rbVerlaufSearch" @click="rbVerlaufSearch=''"
+              :aria-label="$app.t('search.clear')" :data-tip="$app.t('search.clear')">
+        <svg class="icon" aria-hidden="true"><use href="/icons.svg#x"/></svg>
+      </button>
+    </span>
+  </div>
+  <p class="card-hint" x-text="$app.t('rueckblick.verlauf.hint')"></p>
+  <div class="rb-verlauf-scroll" x-show="rbVerlaufRows().rows.length">
+    <div class="rb-verlauf-grid" :style="{ '--rb-verlauf-cols': rbVerlaufRows().months.length }">
+      <div class="rb-verlauf-row rb-verlauf-row--head">
+        <span class="rb-verlauf-name"></span>
+        <template x-for="m in rbVerlaufRows().months" :key="m.zeitraum">
+          <span class="rb-verlauf-month" x-text="rbVerlaufMonthLabel(m.zeitraum)"></span>
+        </template>
+      </div>
+      <template x-for="row in rbVerlaufRows().rows" :key="row.name">
+        <div class="rb-verlauf-row">
+          <span class="rb-verlauf-name truncate" x-text="row.name" :data-tip="row.aliase.length ? $app.t('rueckblick.aliase', { names: row.aliase.join(', ') }) : null"></span>
+          <template x-for="cell in row.cells" :key="cell.zeitraum">
+            <button type="button" class="ymheat-cell" :class="'ymheat-cell--lvl' + cell.level"
+                    :disabled="!cell.n || rueckblickLoading" @click="openVerlaufCell(row, cell)"
+                    :data-tip="rbVerlaufCellTip(row, cell)" :aria-label="rbVerlaufCellTip(row, cell)"></button>
+          </template>
+        </div>
+      </template>
+    </div>
+  </div>
+  <p class="muted-msg muted-msg--sm" x-show="rbVerlauf && !rbVerlaufRows().rows.length" x-text="$app.t('rueckblick.verlauf.noMatch')"></p>
+  <p class="card-hint" x-show="rbVerlaufRows().more" x-text="rbVerlaufMoreLabel(rbVerlaufRows().more)"></p>
+</div>

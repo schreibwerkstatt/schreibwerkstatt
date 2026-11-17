@@ -12,7 +12,8 @@ const { toIntId } = require('../../lib/validate');
 const { guardBook, sessionEmail } = require('../../lib/acl');
 const { buildRueckblickCoverage } = require('../jobs/rueckblick-dates');
 const { listPageNamesForBook } = require('../../db/content-names');
-const { latestRueckblickPerZeitraum } = require('../../db/rueckblick');
+const { latestRueckblickPerZeitraum, latestMonthRueckblickResults } = require('../../db/rueckblick');
+const { buildRueckblickVerlauf } = require('../jobs/rueckblick-facets');
 const { resolveProvider } = require('../../lib/ai');
 const { _modelName } = require('../jobs/shared/model');
 const logger = require('../../logger');
@@ -100,6 +101,13 @@ function register(router) {
   // Inhalt (folgt der Praxis von /fehler-heatmap, /style-stats). Kein KI-Call.
   router.get('/rueckblick-coverage/:book_id', (req, res) => {
     res.json(rueckblickCoverage(req.bookId, sessionEmail(req)));
+  });
+
+  // Verlauf über die Monate: Personen, Orte und Themen der jüngsten Monats-
+  // Rückblicke, zusammengeführt über Namen + Aliase, mit Belegzahl je Monat.
+  // Liest nur gespeicherte Rückblicke des Users, kein KI-Call.
+  router.get('/rueckblick-verlauf/:book_id', (req, res) => {
+    res.json(buildRueckblickVerlauf(latestMonthRueckblickResults(req.bookId, sessionEmail(req))));
   });
 
   // Kapitel-Reviews: gruppiert als { [chapter_id]: [entries] }, je Kapitel die

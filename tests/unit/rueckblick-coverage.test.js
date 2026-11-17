@@ -37,8 +37,8 @@ test('buildRueckblickCoverage: Jahres- vs. Monats-Rückblick-Match', () => {
     { zeitraum: '2024', id: 9, created_at: 'Y' },
   ];
   const cov = buildRueckblickCoverage(pages, rbRows);
-  assert.deepEqual(cov.months['2024-03'].rueckblick, { id: 7, created_at: 'X' });
-  assert.deepEqual(cov.years['2024'].rueckblick, { id: 9, created_at: 'Y' });
+  assert.deepEqual(cov.months['2024-03'].rueckblick, { id: 7, created_at: 'X', stale: false });
+  assert.deepEqual(cov.years['2024'].rueckblick, { id: 9, created_at: 'Y', stale: false });
 });
 
 test('buildRueckblickCoverage: verwaister Rückblick erweitert die Jahr-Range', () => {
@@ -48,7 +48,7 @@ test('buildRueckblickCoverage: verwaister Rückblick erweitert die Jahr-Range', 
   assert.equal(cov.minYear, 2020);
   assert.equal(cov.maxYear, 2024);
   assert.equal(cov.months['2020-06'].entries, 0);
-  assert.deepEqual(cov.months['2020-06'].rueckblick, { id: 1, created_at: 'Z' });
+  assert.deepEqual(cov.months['2020-06'].rueckblick, { id: 1, created_at: 'Z', stale: false }, 'verwaist ist nicht veraltet');
 });
 
 test('buildRueckblickCoverage: leer', () => {
@@ -90,7 +90,7 @@ test('verifyRueckblickBelege: unbekannte Daten fallen, haeufigkeit = verbliebene
   const { result, dropped } = verifyRueckblickBelege(r, ['2024-03-04', '2024-03-12']);
   assert.deepEqual(result.themen, [{ label: 'Arbeit', haeufigkeit: 1, belege: ['2024-03-04'] }]);
   assert.deepEqual(result.personen, []);
-  assert.deepEqual(result.orte, [{ name: 'Zürich', haeufigkeit: 1, belege: ['2024-03-12'] }]);
+  assert.deepEqual(result.orte, [{ name: 'Zürich', aliase: [], haeufigkeit: 1, belege: ['2024-03-12'] }]);
   assert.deepEqual(result.bemerkenswerteTage.map(t => t.datum), ['2024-03-04', '2024-03-12'], 'chronologisch, ohne Dubletten/Erfundenes');
   assert.equal(result.zusammenfassung, 'Text');
   assert.ok(dropped >= 5);
@@ -102,4 +102,83 @@ test('verifyRueckblickBelege: idempotent', () => {
   const twice = verifyRueckblickBelege(once, dates);
   assert.deepEqual(twice.result, once);
   assert.equal(twice.dropped, 0);
+});
+
+test('buildRueckblickCoverage: stale = Eintrag nach dem letzten Stand geändert oder Anzahl abweichend', () => {
+  const pages = [
+    { page_id: 1, page_name: '2024-03-01', updated_at: '2024-04-05T00:00:00Z' },
+    { page_id: 2, page_name: '2024-03-02', updated_at: '2024-03-02T00:00:00Z' },
+  ];
+  const at = (row) => buildRueckblickCoverage(pages, [{ zeitraum: '2024-03', id: 1, ...row }]).months['2024-03'].rueckblick.stale;
+  assert.equal(at({ created_at: '2024-04-01T00:00:00Z', entry_count: 2 }), true, 'Eintrag nach Erstellung bearbeitet');
+  assert.equal(at({ created_at: '2024-04-01T00:00:00Z', checked_at: '2024-04-06T00:00:00Z', entry_count: 2 }), false,
+    'ein späterer Lauf hat den Rückblick als unverändert bestätigt');
+  assert.equal(at({ created_at: '2024-04-10T00:00:00Z', entry_count: 3 }), true, 'Eintrag gelöscht');
+  assert.equal(at({ created_at: '2024-04-10T00:00:00Z', entry_count: 2 }), false);
+  assert.equal(at({ created_at: '2024-04-10T00:00:00Z', entry_count: null }), false, 'Altzeile ohne Snapshot');
+});
+
+test('verifyRueckblickBelege: Klammer-Zusatz und Schrägstrich → Name + Aliase, Varianten verschmelzen', () => {
+  const r = {
+    themen: [],
+    personen: [
+      { name: 'Charlotte (Charlotti)', belege: ['2024-03-04'] },
+      { name: 'Olivia', aliase: ['Oli'], belege: ['2024-03-12'] },
+      { name: 'Oli', belege: ['2024-03-04'] },
+    ],
+    orte: [{ name: 'Basel / Basel-Stadt', belege: ['2024-03-12'] }],
+    zusammenfassung: 'x',
+  };
+  const { result } = verifyRueckblickBelege(r, ['2024-03-04', '2024-03-12']);
+  assert.deepEqual(result.personen.map(p => [p.name, p.aliase, p.belege]), [
+    ['Olivia', ['Oli'], ['2024-03-04', '2024-03-12']],
+    ['Charlotte', [], ['2024-03-04']],
+  ]);
+  assert.equal(result.personen[1].zusatz, 'Charlotti', 'Zusatz bleibt Anzeige, wird nicht gesucht');
+  assert.deepEqual(result.orte.map(o => [o.name, o.aliase]), [['Basel', ['Basel-Stadt']]]);
+});
+
+test('verifyRueckblickBelege: Textsuche ergänzt Personen-/Orts-Belege (Vereinigung), Themen nicht', () => {
+  const entries = [
+    { datum: '2024-03-01', text: 'Mit Anna im Café.' },
+    { datum: '2024-03-02', text: 'Annas Geburtstag, danach Bern.' },
+    { datum: '2024-03-03', text: 'Allein, ganz frank und frei.' },
+    { datum: '2024-03-04', text: 'Sie rief an.' },
+  ];
+  const r = {
+    themen: [{ label: 'Anna', belege: ['2024-03-01'] }],
+    personen: [
+      { name: 'Anna', aliase: [], belege: ['2024-03-04'] }, // Modell: Pronomen-Tag bleibt
+      { name: 'Frank', aliase: [], belege: ['2024-03-02'] },
+    ],
+    orte: [{ name: 'Bern', aliase: [], belege: [] }],
+    zusammenfassung: 'x',
+  };
+  const { result } = verifyRueckblickBelege(r, entries);
+  const by = Object.fromEntries(result.personen.map(p => [p.name, p.belege]));
+  assert.deepEqual(by.Anna, ['2024-03-01', '2024-03-02', '2024-03-04'], 'Genitiv-s trifft, Modell-Beleg bleibt');
+  assert.deepEqual(by.Frank, ['2024-03-02'], 'kleingeschriebenes «frank» trifft den Namen nicht');
+  assert.deepEqual(result.orte[0].belege, ['2024-03-02'], 'Ort ohne Modell-Beleg über die Textsuche');
+  assert.equal(result.orte[0].haeufigkeit, 1);
+  assert.deepEqual(result.themen[0].belege, ['2024-03-01'], 'Themen: keine Textsuche');
+});
+
+test('verifyRueckblickBelege: Themen gedeckelt auf THEMEN_MAX (häufigste bleiben)', () => {
+  const { THEMEN_MAX } = require('../../routes/jobs/rueckblick-facets');
+  const themen = Array.from({ length: THEMEN_MAX + 3 }, (_, i) => ({
+    label: `T${i}`, belege: i < 3 ? ['2024-03-01', '2024-03-02'] : ['2024-03-01'],
+  }));
+  const { result } = verifyRueckblickBelege({ themen, zusammenfassung: 'x' }, ['2024-03-01', '2024-03-02']);
+  assert.equal(result.themen.length, THEMEN_MAX);
+  assert.deepEqual(result.themen.slice(0, 3).map(t => t.label), ['T0', 'T1', 'T2']);
+});
+
+test('verifyRueckblickBelege: idempotent auch mit Textsuche und Aliasen', () => {
+  const entries = [{ datum: '2024-03-01', text: 'Anna und Oli in Basel.' }, { datum: '2024-03-02', text: 'Olivia schreibt.' }];
+  const r = { personen: [{ name: 'Olivia (Freundin)', aliase: ['Oli'], belege: ['2024-03-02'] }], orte: [{ name: 'Basel', belege: [] }], zusammenfassung: 'x' };
+  const once = verifyRueckblickBelege(r, entries).result;
+  const twice = verifyRueckblickBelege(once, entries);
+  assert.deepEqual(twice.result, once);
+  assert.equal(twice.dropped, 0);
+  assert.deepEqual(once.personen[0].belege, ['2024-03-01', '2024-03-02']);
 });

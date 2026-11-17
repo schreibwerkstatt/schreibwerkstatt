@@ -28,7 +28,7 @@
               <div class="ymheat-row">
                 <button type="button"
                         class="ymheat-year"
-                        :class="{ 'ymheat-year--has': row.hasRueckblick }"
+                        :class="{ 'ymheat-year--has': row.hasRueckblick, 'ymheat-year--stale': row.stale }"
                         @click="$app.openRueckblickFor(String(row.year))"
                         :data-tip="row.hasRueckblick
                           ? $app.t('overview.rueckblickHeatmap.tooltip.hasRueckblick', { date: rueckblickCreatedLabel(row.yearCreatedAt) })
@@ -40,7 +40,7 @@
                 <template x-for="cell in row.months" :key="cell.key">
                   <button type="button"
                           class="ymheat-cell"
-                          :class="'ymheat-cell--lvl' + cell.level + (cell.hasRueckblick ? ' ymheat-cell--has' : '') + (cell.isCurrent ? ' ymheat-cell--current' : '')"
+                          :class="'ymheat-cell--lvl' + cell.level + (cell.hasRueckblick ? ' ymheat-cell--has' : '') + (cell.stale ? ' ymheat-cell--stale' : '') + (cell.isCurrent ? ' ymheat-cell--current' : '')"
                           :aria-current="cell.isCurrent ? 'date' : null"
                           @click="$app.openRueckblickFor(cell.key)"
                           :data-tip="rueckblickCellTip(cell)" :aria-label="rueckblickCellTip(cell)"></button>
@@ -59,6 +59,8 @@
           <span class="ymheat-cell ymheat-cell--lvl4"></span>
           <span class="ymheat-cell ymheat-cell--has ymheat-cell--lvl0"></span>
           <span class="ymheat-legend-label" x-text="$app.t('overview.rueckblickHeatmap.legendMarker')"></span>
+          <span class="ymheat-cell ymheat-cell--has ymheat-cell--stale ymheat-cell--lvl0"></span>
+          <span class="ymheat-legend-label" x-text="$app.t('rueckblick.cal.legendStale')"></span>
           <span class="ymheat-cell ymheat-cell--current ymheat-cell--lvl0"></span>
           <span class="ymheat-legend-label" x-text="$app.t('overview.rueckblickHeatmap.legendCurrent')"></span>
         </div>

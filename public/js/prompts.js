@@ -375,7 +375,6 @@ export {
 export {
   buildRueckblickPrompt,
   buildRueckblickReducePrompt,
-  mergeRueckblickFacets,
   SCHEMA_RUECKBLICK,
   SCHEMA_RUECKBLICK_SYNTH,
 } from './prompts/tagebuch.js';

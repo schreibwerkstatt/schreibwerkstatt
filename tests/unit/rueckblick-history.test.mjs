@@ -15,6 +15,7 @@ globalThis.window = {
     uiLocale: 'de',
     selectPage: (p) => { selected = p; },
     t: (k, p) => (p ? `${k} ${JSON.stringify(p)}` : k),
+    tn: (k, n) => `${k}:${n}`,
     figurenById: new Map([['fig_1', { id: 'fig_1', name: 'Anna Muster', kurzname: 'Anna' }]]),
     orteById: new Map([['loc_1', { id: 'loc_1', name: 'Zürich' }]]),
   },
@@ -37,6 +38,7 @@ function ctx(overrides = {}) {
     selectedRueckblickId: null,
     rueckblickResult: null,
     rbBeleg: { key: null, label: '', belege: [] },
+    rbFacetMore: {},
     ...overrides,
   });
 }
@@ -50,7 +52,7 @@ const HISTORY = [
 const COVERAGE = {
   months: {
     '2023-12': { entries: 1, newest: Date.parse('2023-12-31T00:00:00Z'), rueckblick: null },
-    '2024-03': { entries: 2, newest: Date.parse('2024-03-20T00:00:00Z'), rueckblick: { id: 1, created_at: '2024-04-01T00:00:00Z' } },
+    '2024-03': { entries: 2, newest: Date.parse('2024-03-20T00:00:00Z'), rueckblick: { id: 1, created_at: '2024-04-01T00:00:00Z', stale: false } },
     '2024-05': { entries: 1, newest: Date.parse('2024-05-02T00:00:00Z'), rueckblick: null },
   },
   years: {
@@ -80,11 +82,32 @@ test('filteredRueckblickHistory: Inhalt über Server-Treffer, Zeitraum lokal (ro
   assert.equal(c.filteredRueckblickHistory().length, 0);
 });
 
-test('availableZeitraeume/defaultZeitraum: aus der Coverage, Monate vor Jahren, neueste zuerst', () => {
+test('availableZeitraeume/defaultZeitraum: aus der Coverage, nur die Körnung des Zeitraums, neueste zuerst', () => {
   const c = ctx({ rbCoverage: COVERAGE });
-  assert.deepEqual(c.availableZeitraeume().map(o => o.value), ['2024-05', '2024-03', '2023-12', '2024', '2023']);
+  assert.equal(c.rbGrain(), 'month');
+  assert.deepEqual(c.availableZeitraeume().map(o => o.value), ['2024-05', '2024-03', '2023-12']);
   assert.equal(c.defaultZeitraum(), '2024-05');
+  c.rueckblickZeitraum = '2024';
+  assert.equal(c.rbGrain(), 'year');
+  assert.deepEqual(c.availableZeitraeume().map(o => o.value), ['2024', '2023']);
   assert.deepEqual(ctx().availableZeitraeume(), []);
+});
+
+test('setRbGrain: Monat → sein Jahr, Jahr → jüngster Monat darin; gesperrt während eines Laufs', () => {
+  const applied = [];
+  const c = ctx({ rbCoverage: COVERAGE, rueckblickZeitraum: '2024-03' });
+  c._applyRueckblickZeitraum = (z) => { applied.push(z); c.rueckblickZeitraum = z; };
+  c.setRbGrain('year');
+  assert.equal(c.rueckblickZeitraum, '2024');
+  c.setRbGrain('month');
+  assert.equal(c.rueckblickZeitraum, '2024-05');
+  c.rueckblickZeitraum = '2023';
+  c.setRbGrain('month');
+  assert.equal(c.rueckblickZeitraum, '2023-12');
+  c.rueckblickLoading = true;
+  c.setRbGrain('year');
+  assert.equal(c.rueckblickZeitraum, '2023-12');
+  assert.deepEqual(applied, ['2024', '2024-05', '2023-12']);
 });
 
 test('rbNeighbor: gleiche Körnung, Rand = null', () => {
@@ -108,11 +131,8 @@ test('rueckblickFreshness: none / current / changed / model / orphan', () => {
   c.rueckblickZeitraum = '2024-03';
   assert.equal(c.rueckblickFreshness().state, 'current');
   assert.equal(c.rueckblickUpToDate(), true);
-  // Seite nach der Generierung bearbeitet
-  c.rbCoverage = { ...COVERAGE, months: { ...COVERAGE.months, '2024-03': { ...COVERAGE.months['2024-03'], newest: Date.parse('2024-04-02T00:00:00Z') } } };
-  assert.equal(c.rueckblickFreshness().state, 'changed');
-  // Eintrag gelöscht (Anzahl ≠ Snapshot)
-  c.rbCoverage = { ...COVERAGE, months: { ...COVERAGE.months, '2024-03': { ...COVERAGE.months['2024-03'], entries: 1 } } };
+  // Server meldet den Rückblick als veraltet (rueckblickStale)
+  c.rbCoverage = { ...COVERAGE, months: { ...COVERAGE.months, '2024-03': { ...COVERAGE.months['2024-03'], rueckblick: { id: 1, created_at: '2024-04-01T00:00:00Z', stale: true } } } };
   assert.equal(c.rueckblickFreshness().state, 'changed');
   // älteres Modell
   c.rbCoverage = COVERAGE;
@@ -215,4 +235,88 @@ test('belegLabel: ISO-Datum → lokalisierter Tag, ungültig → roh', () => {
   assert.match(label, /2024/);
   assert.match(label, /03|März|Mär/);
   assert.equal(c.belegLabel('foo'), 'foo');
+});
+
+test('rbFacet: Personen/Orte mit nur einem Beleg hinter «weitere», Themen vollständig', () => {
+  const c = ctx({ rueckblickResult: {
+    themen: [{ label: 'A', haeufigkeit: 1 }, { label: 'B', haeufigkeit: 1 }],
+    personen: [{ name: 'Anna', haeufigkeit: 4 }, { name: 'Bernd', haeufigkeit: 1 }, { name: 'Cora', haeufigkeit: 1 }],
+    orte: [{ name: 'Olten', haeufigkeit: 1 }],
+  } });
+  assert.equal(c.rbFacet('themen').main.length, 2);
+  assert.deepEqual(c.rbFacet('personen').main.map(p => p.name), ['Anna']);
+  assert.deepEqual(c.rbFacet('personen').rest.map(p => p.name), ['Bernd', 'Cora']);
+  assert.deepEqual(c.rbFacet('orte').main.map(o => o.name), ['Olten'], 'nur Einzelnennungen → nichts einklappen');
+  assert.deepEqual(c.rbFacetVisible('personen').map(p => p.name), ['Anna']);
+  c.toggleRbFacetMore('personen');
+  assert.deepEqual(c.rbFacetVisible('personen').map(p => p.name), ['Anna', 'Bernd', 'Cora']);
+  assert.equal(c.rbFacetMoreLabel('personen'), 'rueckblick.facetMore:2');
+});
+
+test('groupedRueckblickHistory: je Zeitraum der jüngste Lauf, ältere darunter', () => {
+  const c = ctx({ rueckblickHistory: [
+    { id: 5, zeitraum: '2024-03', created_at: '2024-05-01T00:00:00Z' },
+    { id: 4, zeitraum: '2023', created_at: '2024-04-02T00:00:00Z' },
+    { id: 1, zeitraum: '2024-03', created_at: '2024-04-01T00:00:00Z' },
+  ] });
+  const g = c.groupedRueckblickHistory();
+  assert.deepEqual(g.map(x => [x.zeitraum, x.latest.id, x.older.map(o => o.id)]), [['2024-03', 5, [1]], ['2023', 4, []]]);
+});
+
+test('rbBelegRef/rbBelegAliase: Aliase und alter Klammer-Zusatz lösen die Figur auf', () => {
+  const c = ctx();
+  c.toggleBeleg('personen:Annie', 'Annie', [], ['Anna']);
+  assert.deepEqual(c.rbBelegRef(), { type: 'figur', id: 'fig_1' }, 'über den Alias');
+  assert.match(c.rbBelegAliase(), /rueckblick.aliase/);
+  c.toggleBeleg('personen:Anna (Schwester)', 'Anna (Schwester)', []);
+  assert.deepEqual(c.rbBelegRef(), { type: 'figur', id: 'fig_1' }, 'Altergebnis mit Klammer');
+  assert.equal(c.rbBelegAliase(), '');
+});
+
+test('rbTimelineHits/Ticks: Belegtage getrennt von den übrigen Eintragstagen', () => {
+  const c = ctx({ rbCoverage: COVERAGE, rueckblickZeitraum: '2024-03' });
+  c.rbBeleg = { key: 'themen:x', label: 'x', belege: ['2024-03-20'] };
+  assert.deepEqual(c.rbTimelineHits().map(t => t.datum), ['2024-03-20']);
+  assert.deepEqual(c.rbTimelineTicks().map(t => t.datum), ['2024-03-04']);
+});
+
+test('belegLabelShort: ohne Jahr (Monat: Wochentag + Tag, Jahr: Tag + Monat)', () => {
+  const c = ctx({ rueckblickZeitraum: '2024-03' });
+  assert.doesNotMatch(c.belegLabelShort('2024-03-04'), /2024/);
+  assert.match(c.belegLabelShort('2024-03-04'), /4/);
+  c.rueckblickZeitraum = '2024';
+  assert.match(c.belegLabelShort('2024-03-04'), /Mär|Mar/);
+  assert.equal(c.belegLabelShort('foo'), 'foo');
+});
+
+test('openCalendarCell: während eines Laufs gesperrt', () => {
+  const applied = [];
+  const c = ctx({ rueckblickLoading: true });
+  c._applyRueckblickZeitraum = (z) => applied.push(z);
+  c.openCalendarCell({ key: '2024-03', hasEntries: true });
+  assert.deepEqual(applied, []);
+  c.rueckblickLoading = false;
+  c.openCalendarCell({ key: '2024-03', hasEntries: true });
+  assert.deepEqual(applied, ['2024-03']);
+});
+
+test('computeVerlaufRows: Filter über Name + Aliase, Stufe nach Anteil am Monat, Zeilendeckel', async () => {
+  const { computeVerlaufRows } = await import('../../public/js/book/rueckblick-verlauf.js');
+  const verlauf = {
+    months: [{ zeitraum: '2024-01', entries: 10 }, { zeitraum: '2024-02', entries: 2 }],
+    personen: [
+      { name: 'Olivia', aliase: ['Oli'], perMonth: { '2024-01': 5, '2024-02': 1 }, total: 6, months: 2 },
+      { name: 'Bernd', aliase: [], perMonth: { '2024-02': 2 }, total: 2, months: 1 },
+    ],
+  };
+  const all = computeVerlaufRows(verlauf, 'personen');
+  assert.equal(all.rows.length, 2);
+  assert.deepEqual(all.rows[0].cells.map(c => c.n), [5, 1]);
+  assert.equal(all.rows[1].cells[0].level, 0, 'keine Nennung → Stufe 0');
+  assert.ok(all.rows[1].cells[1].level >= all.rows[0].cells[1].level, 'Bernd: 2 von 2 Einträgen wiegt mehr als 1 von 2');
+  assert.deepEqual(computeVerlaufRows(verlauf, 'personen', 'oli').rows.map(r => r.name), ['Olivia'], 'Alias trifft');
+  const capped = computeVerlaufRows(verlauf, 'personen', '', 1);
+  assert.equal(capped.rows.length, 1);
+  assert.equal(capped.more, 1);
+  assert.deepEqual(computeVerlaufRows(null, 'personen').rows, []);
 });

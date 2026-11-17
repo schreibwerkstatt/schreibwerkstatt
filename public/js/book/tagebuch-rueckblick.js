@@ -52,16 +52,39 @@ export const tagebuchRueckblickMethods = {
     return window.__app.tn('rueckblick.entries', n);
   },
 
-  // Zeiträume mit Einträgen für die Combobox: Monate (feinkörniger) zuerst,
-  // dann Jahre, jeweils neueste zuerst. Format: [{ value, label }].
-  availableZeitraeume() {
+  // Zeiträume mit Einträgen einer Körnung ('month' | 'year'), neueste zuerst.
+  // Format: [{ value, label }].
+  _zeitraumOptions(grain) {
     const cov = this.rbCoverage;
-    return this._memo('zeitraeume', [cov, Alpine.store('shell').uiLocale], () => {
+    return this._memo('zeitraeume:' + grain, [cov, Alpine.store('shell').uiLocale], () => {
       if (!cov) return [];
-      const withEntries = (obj) => Object.keys(obj || {}).filter(k => obj[k]?.entries > 0).sort().reverse();
-      return [...withEntries(cov.months), ...withEntries(cov.years)]
+      const obj = grain === 'year' ? cov.years : cov.months;
+      return Object.keys(obj || {}).filter(k => obj[k]?.entries > 0).sort().reverse()
         .map(v => ({ value: v, label: this.zeitraumLabel(v) }));
     });
+  },
+
+  // Optionen der Zeitraum-Combobox: nur die Körnung des gewählten Zeitraums —
+  // Monat oder Jahr wählt der Umschalter daneben.
+  availableZeitraeume() {
+    return this._zeitraumOptions(this.rbGrain());
+  },
+
+  // Körnung des gewählten Zeitraums (ohne Auswahl: Monat).
+  rbGrain(z = this.rueckblickZeitraum) {
+    return YEAR_RE.test(String(z || '')) ? 'year' : 'month';
+  },
+
+  // Umschalter Monat ↔ Jahr: Monat → sein Jahr; Jahr → jüngster Monat dieses
+  // Jahres mit Einträgen. Fehlt das Gegenstück, der jüngste Zeitraum der Körnung.
+  setRbGrain(grain) {
+    if (this.rueckblickLoading || grain === this.rbGrain()) return;
+    const z = String(this.rueckblickZeitraum || '');
+    const opts = this._zeitraumOptions(grain).map(o => o.value);
+    const target = grain === 'year'
+      ? (opts.includes(z.slice(0, 4)) ? z.slice(0, 4) : opts[0])
+      : (opts.find(v => v.startsWith(z + '-')) || opts[0]);
+    if (target) this._applyRueckblickZeitraum(target);
   },
 
   // 'YYYY' → '2024'; 'YYYY-MM' → lokalisierter Monat + Jahr (TZ-aware).
@@ -80,9 +103,7 @@ export const tagebuchRueckblickMethods = {
 
   // Default = jüngster Monat mit Einträgen (oder leer, wenn keine datierten).
   defaultZeitraum() {
-    const opts = this.availableZeitraeume();
-    const firstMonth = opts.find(o => MONTH_RE.test(o.value));
-    return firstMonth ? firstMonth.value : (opts[0]?.value || '');
+    return this._zeitraumOptions('month')[0]?.value || this._zeitraumOptions('year')[0]?.value || '';
   },
 
   // Vorheriger/nächster Zeitraum derselben Körnung (Monat ↔ Monat, Jahr ↔ Jahr)
@@ -106,8 +127,8 @@ export const tagebuchRueckblickMethods = {
   // Bezogen auf den jüngsten Rückblick des gewählten Zeitraums:
   //  'none'    noch keiner erstellt
   //  'orphan'  Zeitraum hat keine datierten Einträge mehr
-  //  'changed' Einträge seither bearbeitet/ergänzt (updated_at jünger) oder
-  //            gelöscht (Anzahl ≠ entry_count-Snapshot)
+  //  'changed' Einträge seither bearbeitet/ergänzt oder gelöscht — rechnet der
+  //            Server in der Coverage (`rueckblick.stale`, rueckblickStale)
   //  'model'   Einträge unverändert, aber mit einem anderen Modell erstellt
   //  'current' nichts davon — ein neuer Lauf liefert aus dem Server-Cache
   //            dasselbe Ergebnis
@@ -118,9 +139,7 @@ export const tagebuchRueckblickMethods = {
     if (!entry) return { state: 'none' };
     const b = this._bucket(z);
     if (!b || !b.entries) return { state: 'orphan' };
-    const genMs = Date.parse(entry.created_at) || 0;
-    if ((b.newest && genMs && b.newest > genMs)
-      || (entry.entry_count != null && entry.entry_count !== b.entries)) return { state: 'changed' };
+    if (b.rueckblick?.stale) return { state: 'changed' };
     if (entry.model && this.rbCurrentModel && entry.model !== this.rbCurrentModel) {
       return { state: 'model', model: entry.model, current: this.rbCurrentModel };
     }
@@ -188,16 +207,50 @@ export const tagebuchRueckblickMethods = {
       () => [...arr].sort((a, b) => (b.haeufigkeit || 0) - (a.haeufigkeit || 0)));
   },
 
+  // Facette für die Anzeige: Personen/Orte mit nur einem Beleg stehen hinter
+  // «+N weitere» (rest), solange es Mehrfachnennungen gibt. Themen sind
+  // serverseitig gedeckelt und bleiben vollständig.
+  rbFacet(key) {
+    const items = this._sortedFacet(key);
+    return this._memo('facetSplit:' + key, [items], () => {
+      if (key === 'themen') return { main: items, rest: [] };
+      const main = items.filter(it => (it.haeufigkeit || 0) > 1);
+      if (!main.length) return { main: items, rest: [] };
+      return { main, rest: items.filter(it => (it.haeufigkeit || 0) <= 1) };
+    });
+  },
+
+  // Sichtbare Chips: Mehrfachnennungen, aufgeklappt auch die Einzelnennungen.
+  rbFacetVisible(key) {
+    const f = this.rbFacet(key);
+    const open = !!this.rbFacetMore[key];
+    return this._memo('facetVisible:' + key, [f, open], () => (open ? [...f.main, ...f.rest] : f.main));
+  },
+
+  rbFacetMoreLabel(key) {
+    return window.__app.tn('rueckblick.facetMore', this.rbFacet(key).rest.length);
+  },
+
+  toggleRbFacetMore(key) {
+    this.rbFacetMore = { ...this.rbFacetMore, [key]: !this.rbFacetMore[key] };
+  },
+
   // ── Belege des aktiven Stichworts ──────────────────────────────────────────
   // Inline-Leiste unter den Facetten statt Popover. Erneuter Klick schliesst.
-  toggleBeleg(key, label, belege) {
+  toggleBeleg(key, label, belege, aliase = []) {
     if (this.rbBeleg.key === key) { this.clearBeleg(); return; }
     const days = [...new Set((belege || []).map(d => String(d).slice(0, 10)).filter(Boolean))].sort();
-    this.rbBeleg = { key, label: label || '', belege: days };
+    this.rbBeleg = { key, label: label || '', belege: days, aliase: Array.isArray(aliase) ? aliase : [] };
   },
 
   clearBeleg() {
-    this.rbBeleg = { key: null, label: '', belege: [] };
+    this.rbBeleg = { key: null, label: '', belege: [], aliase: [] };
+  },
+
+  // «auch: X, Y» unter dem aktiven Stichwort (Schreibvarianten aus dem Text).
+  rbBelegAliase() {
+    const a = this.rbBeleg.aliase || [];
+    return a.length ? window.__app.t('rueckblick.aliase', { names: a.join(', ') }) : '';
   },
 
   gotoBelegTag(datum) {
@@ -212,14 +265,18 @@ export const tagebuchRueckblickMethods = {
     const kind = String(this.rbBeleg.key || '').split(':')[0];
     const type = kind === 'personen' ? 'figur' : (kind === 'orte' ? 'ort' : null);
     if (!type) return null;
-    const id = this._resolveEntityId(type, this.rbBeleg.label);
-    return id == null ? null : { type, id };
+    for (const name of [this.rbBeleg.label, ...(this.rbBeleg.aliase || [])]) {
+      const id = this._resolveEntityId(type, name);
+      if (id != null) return { type, id };
+    }
+    return null;
   },
 
   _resolveEntityId(type, name) {
     const app = window.__app;
     const map = type === 'figur' ? app?.figurenById : app?.orteById;
-    const lc = String(name || '').trim().toLowerCase();
+    // Ältere Ergebnisse tragen den Zusatz noch im Namen («Name (Rolle)»).
+    const lc = String(name || '').replace(/\s*\([^()]*\)\s*$/, '').trim().toLowerCase();
     if (!map?.values || !lc) return null;
     for (const o of map.values()) {
       if ([o?.name, o?.kurzname].some(n => n && String(n).trim().toLowerCase() === lc)) return o.id;
@@ -241,6 +298,16 @@ export const tagebuchRueckblickMethods = {
       return [...new Set([...days, ...belege.filter(d => d.startsWith(prefix))])].sort()
         .map(d => ({ datum: d, pos: this._posInSpan(d, span), beleg: hit.has(d) }));
     });
+  },
+
+  // Belegtage auf der Zeitleiste sind Sprungziele, die übrigen Striche Kulisse.
+  rbTimelineHits() {
+    const all = this.rbTimeline();
+    return this._memo('timelineHits', [all], () => all.filter(t => t.beleg));
+  },
+  rbTimelineTicks() {
+    const all = this.rbTimeline();
+    return this._memo('timelineTicks', [all], () => all.filter(t => !t.beleg));
   },
 
   // Beschriftung der beiden Enden der Zeitleiste.
@@ -284,6 +351,20 @@ export const tagebuchRueckblickMethods = {
     try {
       return d.toLocaleDateString(localeTag(Alpine.store('shell').uiLocale),
         tzOpts({ weekday: 'short', day: '2-digit', month: '2-digit', year: 'numeric', timeZone: 'UTC' }));
+    } catch { return String(datum); }
+  },
+
+  // Kurzform für die Beleg-Chips: im Monat Wochentag + Tag, im Jahr Tag + Monat —
+  // das Jahr steht schon im Zeitraum.
+  belegLabelShort(datum) {
+    const m = DAY_RE.exec(String(datum || ''));
+    if (!m) return String(datum || '');
+    const d = new Date(Date.UTC(parseInt(m[1], 10), parseInt(m[2], 10) - 1, parseInt(m[3], 10), 12));
+    const opts = YEAR_RE.test(this.rueckblickZeitraum)
+      ? { day: 'numeric', month: 'short', timeZone: 'UTC' }
+      : { weekday: 'short', day: 'numeric', timeZone: 'UTC' };
+    try {
+      return d.toLocaleDateString(localeTag(Alpine.store('shell').uiLocale), tzOpts(opts));
     } catch { return String(datum); }
   },
 
@@ -352,6 +433,24 @@ export const tagebuchRueckblickMethods = {
     });
   },
 
+  // Liste: eine Zeile je Zeitraum (jüngster Lauf), ältere Läufe darunter
+  // einklappbar. Reihenfolge = jüngster Lauf zuerst.
+  groupedRueckblickHistory() {
+    const list = this.filteredRueckblickHistory();
+    return this._memo('histGroups', [list], () => {
+      const groups = new Map();
+      for (const e of list) {
+        const g = groups.get(e.zeitraum);
+        if (g) g.older.push(e); else groups.set(e.zeitraum, { zeitraum: e.zeitraum, latest: e, older: [] });
+      }
+      return [...groups.values()];
+    });
+  },
+
+  rbOlderRunsLabel(n) {
+    return window.__app.tn('rueckblick.olderRuns', n);
+  },
+
   async searchRueckblicke(q) {
     const bookId = Alpine.store('nav').selectedBookId;
     const needle = String(q || '').trim();
@@ -385,6 +484,7 @@ export const tagebuchRueckblickMethods = {
     this.selectedRueckblickId = entry.id;
     this.rueckblickZeitraum = entry.zeitraum || this.rueckblickZeitraum;
     this.rueckblickEmpty = false;
+    this.rbFacetMore = {};
     this.clearBeleg();
     const known = entry.result_json || this._rbResults[entry.id];
     if (known) { this.rueckblickResult = known; return; }
@@ -452,12 +552,15 @@ export const tagebuchRueckblickMethods = {
   },
 
   // Zelle/Jahr anklicken: Zeitraum wählen; vorhandener Rückblick öffnet sich
-  // (_applyRueckblickZeitraum), sonst erscheint der Erstellen-Aufruf.
+  // (_applyRueckblickZeitraum), sonst erscheint der Erstellen-Aufruf. Während
+  // eines Laufs gesperrt — das Ergebnis gehört dem Zeitraum des Laufs.
   openCalendarCell(cell) {
+    if (this.rueckblickLoading) return;
     if (cell && (cell.hasRueckblick || cell.hasEntries)) this._applyRueckblickZeitraum(cell.key);
   },
 
   openCalendarYear(row) {
+    if (this.rueckblickLoading) return;
     if (row && (row.hasRueckblick || row.hasEntries)) this._applyRueckblickZeitraum(row.yearKey);
   },
 
@@ -471,7 +574,10 @@ export const tagebuchRueckblickMethods = {
   _rbCalTip(period, node, n) {
     const app = window.__app;
     const count = n ? ` · ${this.rbCountLabel(n)}` : '';
-    if (node.hasRueckblick) return `${period}${count}: ${app.t('rueckblick.cal.tipHas', { date: this.rueckblickEntryDate(node.createdAt || node.yearCreatedAt) })}`;
+    if (node.hasRueckblick) {
+      const tip = `${period}${count}: ${app.t('rueckblick.cal.tipHas', { date: this.rueckblickEntryDate(node.createdAt || node.yearCreatedAt) })}`;
+      return node.stale ? `${tip} · ${app.t('rueckblick.cal.legendStale')}` : tip;
+    }
     if (node.hasEntries) return `${period}${count}: ${app.t('rueckblick.cal.tipGenerate')}`;
     return `${period}: ${app.t('rueckblick.cal.tipEmpty')}`;
   },

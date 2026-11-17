@@ -70,10 +70,12 @@ const _latestRueckblickJson = db.prepare(
    WHERE book_id = ? AND user_email = ? AND zeitraum = ?
    ORDER BY created_at DESC, id DESC LIMIT 1`
 );
-// Aktualisiert den entry_count-Snapshot der jüngsten Zeile eines Zeitraums, ohne
-// eine neue History-Zeile zu erzeugen (identisches Ergebnis nach Lösch-Vorgang).
-const _touchRueckblickEntryCount = db.prepare(
-  `UPDATE tagebuch_rueckblicke SET entry_count = ?
+// Bestätigt den jüngsten Rückblick eines Zeitraums als unverändert, ohne eine
+// neue History-Zeile zu erzeugen (Cache-Treffer oder wortgleiches Ergebnis):
+// entry_count-Snapshot nachführen und checked_at setzen — die Aktualität der
+// Coverage misst Eintragsänderungen gegen max(created_at, checked_at).
+const _touchRueckblick = db.prepare(
+  `UPDATE tagebuch_rueckblicke SET entry_count = ?, checked_at = ${NOW_ISO_SQL}
    WHERE id = (SELECT id FROM tagebuch_rueckblicke
                WHERE book_id = ? AND user_email = ? AND zeitraum = ?
                ORDER BY created_at DESC, id DESC LIMIT 1)`
@@ -90,8 +92,8 @@ function insertRueckblick(bookId, userEmail, zeitraum, result, model = null, ent
   ).lastInsertRowid;
 }
 
-function touchRueckblickEntryCount(bookId, userEmail, zeitraum, entryCount) {
-  return _touchRueckblickEntryCount.run(
+function touchRueckblick(bookId, userEmail, zeitraum, entryCount) {
+  return _touchRueckblick.run(
     entryCount == null ? null : parseInt(entryCount),
     parseInt(bookId), userEmail || '', zeitraum,
   ).changes;
@@ -129,8 +131,8 @@ function _haystack(r) {
   return [
     r.zusammenfassung || '',
     ...(r.themen || []).map(t => t?.label),
-    ...(r.personen || []).map(p => p?.name),
-    ...(r.orte || []).map(o => o?.name),
+    ...(r.personen || []).flatMap(p => [p?.name, ...(p?.aliase || [])]),
+    ...(r.orte || []).flatMap(o => [o?.name, ...(o?.aliase || [])]),
     ...(r.bemerkenswerteTage || []).map(t => t?.begruendung),
   ].filter(Boolean).join(' ').toLowerCase();
 }
@@ -149,28 +151,40 @@ function deleteRueckblick(id, userEmail) {
 }
 
 // Jüngster Rückblick je Zeitraum (user-spezifisch — tagebuch_rueckblicke ist
-// persönlich). Grundlage der Rückblick-Heatmap der Buch-Übersicht.
-const _latestPerZeitraum = db.prepare(`
+// persönlich). Grundlage der Coverage (Kalender, Aktualität, Overview-Heatmap).
+const _RANKED = `
   WITH ranked AS (
-    SELECT id, zeitraum, created_at,
+    SELECT id, zeitraum, created_at, checked_at, entry_count, result_json,
            ROW_NUMBER() OVER (PARTITION BY zeitraum ORDER BY created_at DESC, id DESC) AS rn
     FROM tagebuch_rueckblicke
     WHERE book_id = ? AND user_email = ?
-  )
-  SELECT id, zeitraum, created_at FROM ranked WHERE rn = 1
-`);
+  )`;
+const _latestPerZeitraum = db.prepare(
+  `${_RANKED} SELECT id, zeitraum, created_at, checked_at, entry_count FROM ranked WHERE rn = 1`
+);
+// Dasselbe samt Ergebnis, nur Monate — Quelle des Verlaufs über die Monate.
+const _latestMonthResults = db.prepare(
+  `${_RANKED} SELECT id, zeitraum, entry_count, result_json FROM ranked
+   WHERE rn = 1 AND length(zeitraum) = 7`
+);
 
 function latestRueckblickPerZeitraum(bookId, userEmail) {
   return _latestPerZeitraum.all(bookId, userEmail);
 }
 
+function latestMonthRueckblickResults(bookId, userEmail) {
+  return _latestMonthResults.all(parseInt(bookId), userEmail || '')
+    .map(row => ({ id: row.id, zeitraum: row.zeitraum, entry_count: row.entry_count, result: _parseResult(row) }));
+}
+
 module.exports = {
   latestRueckblickPerZeitraum,
+  latestMonthRueckblickResults,
   loadRueckblickCache,
   saveRueckblickCache,
   deleteRueckblickCache,
   insertRueckblick,
-  touchRueckblickEntryCount,
+  touchRueckblick,
   latestRueckblickJson,
   listRueckblicke,
   getRueckblick,

@@ -1,0 +1,13 @@
+<!-- @expects entry -->
+<!-- Eine Zeile der Rückblick-Liste (jüngster bzw. älterer Lauf eines Zeitraums). -->
+<div class="history-item hover-reveal-host internal-link" :class="{ 'history-item--active': selectedRueckblickId === entry.id }"
+     @click="openRueckblickHistory(entry)">
+  <span class="rb-history-zeitraum" x-text="zeitraumLabel(entry.zeitraum)"></span>
+  <span class="history-date" x-text="rueckblickEntryDate(entry.created_at)"></span>
+  <span class="history-date" x-show="entry.entry_count" x-text="rbCountLabel(entry.entry_count)"></span>
+  <span class="tag" x-show="entry.model" x-text="entry.model"></span>
+  <button type="button" class="history-item-delete hover-reveal" @click.stop="deleteRueckblickHistory(entry.id)"
+          :data-tip="$app.t('common.deleteEntry')" :aria-label="$app.t('common.deleteEntry')">
+    <svg class="icon" aria-hidden="true"><use href="/icons.svg#trash"/></svg>
+  </button>
+</div>

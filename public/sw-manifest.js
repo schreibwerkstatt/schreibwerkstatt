@@ -5,7 +5,7 @@
 // __SHELL_BUILD: content hash over all listed assets → drives SHELL_CACHE.
 // __SHELL_MANIFEST: the coherent set precached atomically at SW install.
 // __VENDOR_SET: current vendor/ + fonts/ files — VENDOR_CACHE prune list.
-self.__SHELL_BUILD = "d5f2eb9f2ef548e2";
+self.__SHELL_BUILD = "1097aac872343916";
 self.__SHELL_MANIFEST = [
   "/css/admin/admin-backup.css",
   "/css/admin/admin-home.css",
@@ -434,6 +434,7 @@ self.__SHELL_MANIFEST = [
   "/js/book/recherche/status.js",
   "/js/book/redundanz.js",
   "/js/book/review.js",
+  "/js/book/rueckblick-verlauf.js",
   "/js/book/school-path.js",
   "/js/book/songs.js",
   "/js/book/stil-heatmap.js",
@@ -1365,6 +1366,10 @@ self.__SHELL_MANIFEST = [
   "/partials/szenen-menu.html",
   "/partials/szenen-uebersicht.html",
   "/partials/szenen.html",
+  "/partials/tagebuch-rueckblick-history-row.html",
+  "/partials/tagebuch-rueckblick-overview.html",
+  "/partials/tagebuch-rueckblick-result.html",
+  "/partials/tagebuch-rueckblick-verlauf.html",
   "/partials/tagebuch-rueckblick.html",
   "/partials/titelwerkstatt.html",
   "/partials/user-settings-ai-access.html",

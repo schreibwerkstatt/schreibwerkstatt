@@ -20,7 +20,7 @@ function _same(a, b) { return JSON.stringify(a) === JSON.stringify(b); }
 // Effort-Felder des Claude-Reiters (eingeklappter Bereich «Reasoning-Effort»).
 const ADMIN_EFFORT_KEYS = Object.freeze([
   'ai.claude.effort.lektorat', 'ai.claude.effort.komplett', 'ai.claude.effort.review',
-  'ai.claude.effort.plot', 'ai.claude.effort.synonym', 'ai.claude.effort.bookchat',
+  'ai.claude.effort.plot', 'ai.claude.effort.synonym', 'ai.claude.effort.rueckblick', 'ai.claude.effort.bookchat',
   'ai.claude.effort.pagechat', 'ai.claude.effort.researchchat', 'ai.claude.effort.plotchat',
   'ai.claude.effort.ideenchat',
 ]);

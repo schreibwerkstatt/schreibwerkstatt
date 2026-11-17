@@ -27,14 +27,14 @@ function rueckblickResponse(summary = 'Ein ruhiger Monat.') {
 }
 
 // Diary-Seiten: page_name = 'YYYY-MM-DD'. Ein Kapitel pro Jahr genügt.
-function seedDiary(bookId, dates, { charsPerEntry = 60 } = {}) {
+function seedDiary(bookId, dates, { charsPerEntry = 60, updatedAt = '2024-12-31T10:00:00Z', bodies = {} } = {}) {
   const chapters = [{ id: bookId * 10, book_id: bookId, name: '2024' }];
   const pages = [];
   const pageBodies = {};
   dates.forEach((d, i) => {
     const pid = bookId * 100 + i;
-    pages.push({ id: pid, book_id: bookId, chapter_id: bookId * 10, name: d, updated_at: '2024-12-31T10:00:00Z' });
-    pageBodies[pid] = '<p>' + `Heute war ein Tag. `.repeat(charsPerEntry) + '</p>';
+    pages.push({ id: pid, book_id: bookId, chapter_id: bookId * 10, name: d, updated_at: updatedAt });
+    pageBodies[pid] = bodies[d] || ('<p>' + `Heute war ein Tag. `.repeat(charsPerEntry) + '</p>');
   });
   ctx.dbSeed.setBook({ chapters, pages, pageBodies });
 }
@@ -293,4 +293,76 @@ test('Belegprüfung: Daten ausserhalb der Einträge fallen, haeufigkeit aus den 
     'SELECT result_json FROM tagebuch_rueckblicke WHERE book_id = ? AND user_email = ?'
   ).get(BOOK_ID, 'tester@test.dev');
   assert.deepEqual(JSON.parse(hist.result_json).themen, r.themen);
+});
+
+function runRb(bookId, zeitraum, tag) {
+  const jobId = ctx.shared.createJob('rueckblick', bookId, 'tester@test.dev', 'job.label.rueckblick', { zeitraum }, `${bookId}:${zeitraum}_${tag}`);
+  ctx.shared.enqueueJob(jobId, () => ctx.rueckblick.runRueckblickJob(jobId, bookId, 'tester@test.dev', zeitraum));
+  return waitForJob(ctx.shared, jobId, { timeoutMs: 8000 });
+}
+
+test('Speichern ohne Textänderung: Cache-HIT trotz neuem updated_at, Rückblick als unverändert bestätigt', async () => {
+  const BOOK_ID = 711;
+  seedDiary(BOOK_ID, ['2024-11-01', '2024-11-08']);
+  ctx.mockAi.on((e) => e.schemaKeys.includes('zusammenfassung'), rueckblickResponse());
+  const first = await runRb(BOOK_ID, '2024-11', 'a');
+  assert.equal(first.status, 'done');
+  const row = () => ctx.dbSchema.db.prepare(
+    'SELECT checked_at FROM tagebuch_rueckblicke WHERE book_id = ? AND zeitraum = ?').get(BOOK_ID, '2024-11');
+  assert.equal(row().checked_at, null, 'frisch erstellt: noch nie bestätigt');
+
+  seedDiary(BOOK_ID, ['2024-11-01', '2024-11-08'], { updatedAt: '2025-01-05T10:00:00Z' });
+  const second = await runRb(BOOK_ID, '2024-11', 'b');
+  assert.equal(second.status, 'done');
+  assert.equal(second.result.fromCache, true, 'Inhalts-Hash statt updated_at → kein neuer KI-Call');
+  assert.equal(ctx.mockAi.log.length, 1);
+  assert.ok(row().checked_at, 'checked_at gesetzt → Aktualität springt zurück auf aktuell');
+});
+
+test('Textsuche im Job: Personen-Belege um Nennungen im Text ergänzt', async () => {
+  const BOOK_ID = 712;
+  seedDiary(BOOK_ID, ['2024-06-01', '2024-06-02', '2024-06-03'], { bodies: {
+    '2024-06-01': '<p>Mit Anna am See.</p>',
+    '2024-06-02': '<p>Annas Brief kam.</p>',
+    '2024-06-03': '<p>Allein zu Hause.</p>',
+  } });
+  ctx.mockAi.on((e) => e.schemaKeys.includes('zusammenfassung'), {
+    themen: [], orte: [], bemerkenswerteTage: [], zusammenfassung: 'Juni.',
+    personen: [{ name: 'Anna (Schwester)', aliase: [], belege: ['2024-06-01'] }],
+  });
+  const job = await runRb(BOOK_ID, '2024-06', 'a');
+  assert.equal(job.status, 'done', job.error || '');
+  const anna = job.result.rueckblick.personen[0];
+  assert.equal(anna.name, 'Anna', 'Klammer-Zusatz aus dem Namen');
+  assert.deepEqual(anna.belege, ['2024-06-01', '2024-06-02']);
+  assert.equal(anna.haeufigkeit, 2);
+});
+
+test('Jahresrückblick übernimmt die Monats-Teilergebnisse: nur der Synthese-Call', async () => {
+  const BOOK_ID = 713;
+  seedDiary(BOOK_ID, ['2024-01-10', '2024-01-20', '2024-02-10']);
+  const calls = [];
+  // Der Antwort-Handler sieht nur Prompt/System — der Synthese-Prompt trägt die
+  // bereits zusammengeführten Facetten.
+  ctx.mockAi.on((e) => e.schemaKeys.includes('zusammenfassung'), ({ prompt }) => {
+    const synth = prompt.includes('<verdichtete_facetten');
+    calls.push(synth ? 'synth' : 'voll');
+    if (synth) return { bemerkenswerteTage: [], zusammenfassung: 'Jahr.' };
+    const tag = /### (\d{4}-\d{2}-\d{2})/.exec(prompt)[1];
+    return { ...rueckblickResponse('Monat.'), themen: [{ label: 'Arbeit', belege: [tag] }] };
+  });
+  for (const m of ['2024-01', '2024-02']) assert.equal((await runRb(BOOK_ID, m, 'm')).status, 'done');
+  assert.deepEqual(calls, ['voll', 'voll']);
+
+  const year = await runRb(BOOK_ID, '2024', 'y');
+  assert.equal(year.status, 'done', year.error || '');
+  assert.deepEqual(calls, ['voll', 'voll', 'synth'], 'beide Monate aus dem Cache → nur die Synthese');
+  assert.equal(year.result.rueckblick.zusammenfassung, 'Jahr.');
+  assert.ok(year.result.rueckblick.themen.length > 0, 'Facetten aus den Monaten zusammengeführt');
+
+  // Ein Monat ändert sich → sein Teilergebnis gilt nicht mehr: Single-Pass über das Jahr.
+  seedDiary(BOOK_ID, ['2024-01-10', '2024-01-20', '2024-02-10'], { bodies: { '2024-02-10': '<p>Ganz neu.</p>' } });
+  const year2 = await runRb(BOOK_ID, '2024', 'y2');
+  assert.equal(year2.status, 'done');
+  assert.deepEqual(calls.slice(3), ['voll'], 'nicht alle Monate aktuell → normaler Weg');
 });

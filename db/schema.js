@@ -130,7 +130,7 @@ module.exports = {
   saveRueckblickCache:   rueckblick.saveRueckblickCache,
   deleteRueckblickCache: rueckblick.deleteRueckblickCache,
   insertRueckblick:          rueckblick.insertRueckblick,
-  touchRueckblickEntryCount: rueckblick.touchRueckblickEntryCount,
+  touchRueckblick:           rueckblick.touchRueckblick,
   latestRueckblickJson:      rueckblick.latestRueckblickJson,
   listRueckblicke:           rueckblick.listRueckblicke,
   getRueckblick:             rueckblick.getRueckblick,

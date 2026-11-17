@@ -17,6 +17,10 @@
        Themen/Tage/Zusammenfassung/Belege nach dem Partial (data-test-Hooks). -->
   <div id="root" class="card card--tagebuchRueckblick" x-data="tagebuchRueckblickCard" x-show="$app.showTagebuchRueckblickCard">
     <div class="card-actions rb-actions">
+      <template x-for="g in ['month', 'year']" :key="g">
+        <button type="button" :data-test="'grain-' + g" :aria-pressed="rbGrain() === g"
+                :disabled="rueckblickLoading || !_zeitraumOptions(g).length" @click="setRbGrain(g)" x-text="g"></button>
+      </template>
       <select data-test="zeitraum" x-model="rueckblickZeitraum">
         <option value="">—</option>
         <template x-for="opt in availableZeitraeume()" :key="opt.value">
@@ -50,8 +54,12 @@
         <!-- Belegtage des aktiven Stichworts (inline) -->
         <div class="rb-belege-strip" data-test="belege-strip" x-show="rbBeleg.key">
           <div class="rb-timeline" data-test="timeline">
-            <template x-for="tk in rbTimeline()" :key="tk.datum">
-              <span class="rb-timeline-tick" :class="{ 'rb-timeline-tick--hit': tk.beleg }" :style="{ '--pos': tk.pos + '%' }"></span>
+            <template x-for="tk in rbTimelineTicks()" :key="tk.datum">
+              <span class="rb-timeline-tick" aria-hidden="true" :style="{ '--pos': tk.pos + '%' }"></span>
+            </template>
+            <template x-for="tk in rbTimelineHits()" :key="tk.datum">
+              <button type="button" class="rb-timeline-tick rb-timeline-tick--hit" :data-test="'tick-' + tk.datum"
+                      :style="{ '--pos': tk.pos + '%' }" @click="gotoBelegTag(tk.datum)" :aria-label="belegLabel(tk.datum)"></button>
             </template>
           </div>
           <span class="rb-belege-strip-label" x-text="rbBeleg.label"></span>

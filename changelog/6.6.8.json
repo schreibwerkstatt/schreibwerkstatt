@@ -1,0 +1,51 @@
+{
+  "version": "6.6.8",
+  "date": "2026-11-17",
+  "entries": [
+    {
+      "kind": "neu",
+      "de": "Rückblick-Karte, Ansicht «Verlauf»: Personen, Orte und Themen über alle Monate mit Rückblick. Ein Klick auf einen Monat öffnet ihn mit den passenden Einträgen.",
+      "en": "Retrospective card, “Over time” view: people, places and topics across all months with a retrospective. Clicking a month opens it with the matching entries."
+    },
+    {
+      "kind": "verbessert",
+      "de": "Rückblick-Karte: Mit dem Umschalter «Monat | Jahr» wählst du die Ebene, die Auswahlliste zeigt nur noch diese. Der Kalender ist auch da, bevor du den ersten Rückblick erstellt hast.",
+      "en": "Retrospective card: the “Month | Year” switch picks the level, and the list only shows that one. The calendar is there even before you create your first retrospective."
+    },
+    {
+      "kind": "verbessert",
+      "de": "Rückblick: Verschiedene Schreibweisen derselben Person erscheinen als ein Eintrag, und die Zahl der Einträge zu einer Person oder einem Ort ist vollständiger. Einzelne Nennungen stehen hinter «+N weitere».",
+      "en": "Retrospective: different spellings of the same person show up as one entry, and the number of entries for a person or place is more complete. Single mentions sit behind “+N more”."
+    },
+    {
+      "kind": "verbessert",
+      "de": "Rückblick: Jeder Rückblick nennt höchstens acht Themen. Fortgesetzte Themen behalten ihren Namen von Monat zu Monat.",
+      "en": "Retrospective: each retrospective names at most eight topics. Ongoing topics keep their name from month to month."
+    },
+    {
+      "kind": "verbessert",
+      "de": "Rückblick: Ein Jahresrückblick ist deutlich schneller fertig, wenn die Monate dazu schon einen Rückblick haben. Ein Rückblick entsteht generell etwas schneller.",
+      "en": "Retrospective: a yearly retrospective finishes much faster when its months already have retrospectives. Retrospectives are generally a bit faster to create."
+    },
+    {
+      "kind": "verbessert",
+      "de": "Rückblick-Karte: Veraltete Rückblicke sind im Kalender und in der Buch-Übersicht gestrichelt markiert. Erstellst du ohne Änderung neu, ist der Hinweis sofort weg.",
+      "en": "Retrospective card: outdated retrospectives get a dashed outline in the calendar and the book overview. Recreating without changes clears the hint right away."
+    },
+    {
+      "kind": "verbessert",
+      "de": "Rückblick-Karte, Liste: Pro Monat oder Jahr steht eine Zeile, frühere Rückblicke desselben Zeitraums sind eingeklappt. Die Striche auf der Zeitleiste springen direkt zum Eintrag.",
+      "en": "Retrospective card, list: one row per month or year, with earlier retrospectives of the same period collapsed. The marks on the timeline jump straight to the entry."
+    },
+    {
+      "kind": "behoben",
+      "de": "Rückblick: Ein fertiger Rückblick erschien manchmal unter dem falschen Monat, wenn du die Karte während der Erstellung geschlossen oder einen anderen Monat gewählt hattest.",
+      "en": "Retrospective: a finished retrospective sometimes showed up under the wrong month if you closed the card or picked another month while it was being created."
+    },
+    {
+      "kind": "behoben",
+      "de": "Rückblick: Nach dem Speichern eines Eintrags ohne Textänderung galt der Rückblick dauerhaft als veraltet. Der Hinweis auf ein anderes Modell ist jetzt keine Warnung mehr.",
+      "en": "Retrospective: after saving an entry without changing its text, the retrospective stayed marked as outdated for good. The note about a different model is no longer a warning."
+    }
+  ]
+}

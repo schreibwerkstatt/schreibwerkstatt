@@ -3,12 +3,14 @@
 // Zeitraums (Monat 'YYYY-MM' oder Jahr 'YYYY'). Liest nur, schreibt NIE in den
 // Buchtext (App-Philosophie). Single-Pass über alle Einträge; Map-Reduce über
 // Monate, wenn der Zeitraum das Input-Budget sprengt. Endergebnis-Cache pro
-// (Buch, User, Zeitraum, Provider). Vorlage: routes/jobs/review.js.
+// (Buch, User, Zeitraum, Provider), dazu je Monat ein Teilergebnis
+// (`<YYYY-MM>#part`), das ein Jahresrückblick statt eines neuen Map-Calls
+// übernimmt. Vorlage: routes/jobs/review.js.
 const express = require('express');
 const {
   db,
   loadRueckblickCache, saveRueckblickCache, insertRueckblick, latestRueckblickJson,
-  touchRueckblickEntryCount,
+  touchRueckblick,
 } = require('../../db/schema');
 const {
   makeJobLogger, updateJob, completeJob, failJob, i18nError, contentHttpError,
@@ -20,6 +22,8 @@ const {
   startBookJob,
   bookTextOpts,
 } = require('./shared');
+const { applyEffortSetting } = require('./shared/model');
+const { mergeRueckblickFacets } = require('./rueckblick-facets');
 const {
   parseZeitraum: _parseZeitraum, entryDate: _entryDate, matchesZeitraum: _matchesZeitraum,
   previousZeitraum: _previousZeitraum, verifyRueckblickBelege,
@@ -30,6 +34,20 @@ const { sessionEmail } = require('../../lib/acl');
 const { isTagebuchBook } = require('../../lib/buchtyp');
 
 const rueckblickRouter = express.Router();
+
+// Inhalts-Signatur der Einträge: id + Hash des Texts. Bewusst nicht updated_at —
+// ein Speichern ohne Textänderung soll keinen neuen KI-Call auslösen.
+function _contentSig(entries) {
+  return entries
+    .map(e => `${e.id}:${crypto.createHash('sha1').update(e.text || '').digest('hex').slice(0, 16)}`)
+    .sort().join('|');
+}
+
+// Cache-Schlüssel des Monats-Teilergebnisses (gleiche Tabelle, eigener Zeitraum-
+// Schlüssel). Ohne Vor-Rückblick in der Signatur: ein Teilergebnis gilt, solange
+// Einträge, Modell und Prompt gleich sind.
+const _partKey = (monthKey) => `${monthKey}#part`;
+const _partSig = (entries, cacheVersion) => `${_contentSig(entries)}||part||${cacheVersion}`;
 
 // Teilt die (nach Datum sortierten) Einträge in Map-Gruppen für den Reduce-Pass.
 // Deckt ein Jahres-Zeitraum mehrere Monate ab, ist jede Gruppe ein Monat. Fällt
@@ -71,7 +89,7 @@ async function runRueckblickJob(jobId, bookId, userEmail, zeitraum) {
     if (!z) throw i18nError('job.error.rueckblickEmpty');
     const prompts = await getPrompts(userEmail);
     const {
-      buildRueckblickPrompt, buildRueckblickReducePrompt, mergeRueckblickFacets,
+      buildRueckblickPrompt, buildRueckblickReducePrompt,
       SCHEMA_RUECKBLICK, SCHEMA_RUECKBLICK_SYNTH, PROMPTS_VERSION,
     } = prompts;
     const { SYSTEM_RUECKBLICK_BLOCKS: SYSTEM_RUECKBLICK } = await getBookPrompts(bookId, userEmail);
@@ -80,8 +98,9 @@ async function runRueckblickJob(jobId, bookId, userEmail, zeitraum) {
     const effectiveProvider = resolveProvider({ userEmail });
     // Stufe «standard» (shared/model-tier.js) — vor chunkLimitsFor, die liest das Bag-Modell.
     const model = applyTierAiOverrides(jobId, 'rueckblick', effectiveProvider, logger);
+    const effortSig = applyEffortSetting('ai.claude.effort.rueckblick', effectiveProvider, logger, 'Rückblick');
     const { singlePass: SINGLE_PASS_LIMIT, perChunk: PER_CHUNK_LIMIT } = chunkLimitsFor(effectiveProvider);
-    const cacheVersion = `${model}:${PROMPTS_VERSION || ''}`;
+    const cacheVersion = `${model}${effortSig}:${PROMPTS_VERSION || ''}`;
 
     // Optionaler Entitäts-Kontext (verbessert Personen-/Orts-Verknüpfung, kein Muss).
     // Pro Entität Name + kompakte Info (Rolle/Beruf/Alias bzw. Typ/Land) — hilft
@@ -146,7 +165,7 @@ async function runRueckblickJob(jobId, bookId, userEmail, zeitraum) {
 
     // vorblickSig fliesst in den Cache-Key: wird der Vor-Zeitraum neu generiert,
     // ändert sich dieser Rückblick (Entwicklungs-Kontext) → Cache-Miss erzwingen.
-    const pagesSig = entries.map(e => `${e.id}:${e.updated_at || ''}`).sort().join('|') + `||${zeitraum}||${cacheVersion}||${vorblickSig}`;
+    const pagesSig = `${_contentSig(entries)}||${zeitraum}||${cacheVersion}||${vorblickSig}`;
     let r = loadRueckblickCache(bookIdInt, email, zeitraum, pagesSig, effectiveProvider);
     const fromCache = !!r;
 
@@ -155,23 +174,31 @@ async function runRueckblickJob(jobId, bookId, userEmail, zeitraum) {
       updateJob(jobId, { progress: 97, statusText: 'job.phase.checkpointLoaded' });
     } else {
       const totalChars = entries.reduce((s, e) => s + e.text.length, 0);
+      // Jahresrückblick: liegen für ALLE Monate gültige Teilergebnisse vor, genügt
+      // der Synthese-Call — auch wenn der Text in einen Single-Pass passte.
+      const groups = _chunkGroups(entries, z, PER_CHUNK_LIMIT);
+      const byMonth = z.month == null && groups.length > 1 && groups.every(g => /^\d{4}-\d{2}$/.test(g.label));
+      const cachedParts = byMonth
+        ? groups.map(g => loadRueckblickCache(bookIdInt, email, _partKey(g.label), _partSig(g.entries, cacheVersion), effectiveProvider))
+        : [];
+      const allCached = byMonth && cachedParts.every(Boolean);
 
-      if (totalChars <= SINGLE_PASS_LIMIT) {
+      if (totalChars <= SINGLE_PASS_LIMIT && !allCached) {
         updateJob(jobId, { progress: 55, statusText: 'job.phase.rueckblickConsolidating' });
         r = await aiCall(jobId, tok,
           buildRueckblickPrompt(entries, { zeitraum, figuren, orte, vorblick }),
           SYSTEM_RUECKBLICK, 55, 97, 3000, 0.25, null, effectiveProvider, SCHEMA_RUECKBLICK,
         );
       } else {
-        // Über Budget → Map-Reduce. Bevorzugt an Monatsgrenzen (Jahres-Zeitraum);
-        // bei einem einzelnen überlangen Monat greift Größen-Chunking, damit der
-        // Call nie das Input-Budget sprengt (byMonth.size == 1 → kein Monats-Split).
-        const groups = _chunkGroups(entries, z, PER_CHUNK_LIMIT);
-        logger.info(`Rückblick «${zeitraum}»: ${totalChars} Zeichen > Budget → Map-Reduce über ${groups.length} Gruppe(n).`);
+        // Über Budget (oder alle Monate vorhanden) → Map-Reduce. Bevorzugt an
+        // Monatsgrenzen (Jahres-Zeitraum); bei einem einzelnen überlangen Monat
+        // greift Größen-Chunking, damit der Call nie das Input-Budget sprengt.
+        logger.info(`Rückblick «${zeitraum}»: ${totalChars} Zeichen → Map-Reduce über ${groups.length} Gruppe(n)${byMonth ? `, ${cachedParts.filter(Boolean).length} Monat(e) aus dem Cache` : ''}.`);
         const partResults = [];
         for (let gi = 0; gi < groups.length; gi++) {
           if (jobAbortControllers.get(jobId)?.signal?.aborted) throw new DOMException('Aborted', 'AbortError');
           const g = groups[gi];
+          if (cachedParts[gi]) { partResults.push({ ...cachedParts[gi], monat: g.label }); continue; }
           const fromPct = 55 + Math.round((gi / groups.length) * 30);
           const toPct = 55 + Math.round(((gi + 1) / groups.length) * 30);
           updateJob(jobId, {
@@ -184,7 +211,9 @@ async function runRueckblickJob(jobId, bookId, userEmail, zeitraum) {
             buildRueckblickPrompt(g.entries, { zeitraum: g.label, figuren, orte }),
             SYSTEM_RUECKBLICK, fromPct, toPct, 2000, 0.25, null, effectiveProvider, SCHEMA_RUECKBLICK,
           );
-          partResults.push({ ...mr, monat: g.label });
+          const part = verifyRueckblickBelege(mr, g.entries).result;
+          if (byMonth) saveRueckblickCache(bookIdInt, email, _partKey(g.label), _partSig(g.entries, cacheVersion), part, effectiveProvider);
+          partResults.push({ ...part, monat: g.label });
         }
         updateJob(jobId, { progress: 88, statusText: 'job.phase.rueckblickConsolidating' });
         // Facetten deterministisch mergen (kein KI-Zählen), Synthese-Call liefert
@@ -208,21 +237,28 @@ async function runRueckblickJob(jobId, bookId, userEmail, zeitraum) {
 
     // Belege gegen die vorgelegten Eintragsdaten prüfen — auch bei Cache-HIT,
     // damit ältere, ungeprüft gecachte Ergebnisse nachgezogen werden.
-    const verified = verifyRueckblickBelege(r, entries.map(e => e.datum));
+    const verified = verifyRueckblickBelege(r, entries);
     if (verified.dropped) logger.info(`Rückblick «${zeitraum}»: ${verified.dropped} unbelegte Angabe(n) verworfen.`);
+    const changedByCheck = JSON.stringify(verified.result) !== JSON.stringify(r);
     r = verified.result;
-    if (!fromCache || verified.dropped) saveRueckblickCache(bookIdInt, email, zeitraum, pagesSig, r, effectiveProvider);
+    if (!fromCache || changedByCheck) saveRueckblickCache(bookIdInt, email, zeitraum, pagesSig, r, effectiveProvider);
+    // Monats-Ergebnis zugleich als Teilergebnis für einen späteren Jahresrückblick.
+    if (z.month != null) {
+      const partSig = _partSig(entries, cacheVersion);
+      if (!loadRueckblickCache(bookIdInt, email, _partKey(zeitraum), partSig, effectiveProvider)) {
+        saveRueckblickCache(bookIdInt, email, _partKey(zeitraum), partSig, r, effectiveProvider);
+      }
+    }
 
     // History-Zeile nur bei inhaltlich neuem Ergebnis → re-öffenbar. Identische
     // Re-Runs / Cache-HITs (gleicher Zeitraum, gleiches result_json) erzeugen
-    // keine Duplikat-Zeile — aktualisieren aber den entry_count-Snapshot der
-    // jüngsten Zeile, damit die Client-Neugenerierungs-Sperre nach einem reinen
-    // Lösch-Vorgang (Zusammenfassung unverändert, Eintrag aber weg) wieder greift
-    // statt dauerhaft „nicht aktuell" anzuzeigen.
+    // keine Duplikat-Zeile — sie bestätigen die jüngste Zeile als aktuell
+    // (entry_count-Snapshot + checked_at), sonst bliebe der Aktualitäts-Hinweis
+    // nach einem Speichern ohne Textänderung dauerhaft auf «veraltet».
     if (JSON.stringify(r) !== latestRueckblickJson(bookIdInt, email, zeitraum)) {
       insertRueckblick(bookIdInt, email, zeitraum, r, model, entries.length);
     } else {
-      touchRueckblickEntryCount(bookIdInt, email, zeitraum, entries.length);
+      touchRueckblick(bookIdInt, email, zeitraum, entries.length);
     }
 
     completeJob(jobId, { rueckblick: r, zeitraum, entryCount: entries.length, fromCache, tokensIn: tok.in, tokensOut: tok.out },

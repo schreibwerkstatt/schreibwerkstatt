@@ -159,6 +159,7 @@ export const diaryMethods = {
     const rbPart = cell.hasRueckblick
       ? app.t('overview.rueckblickHeatmap.tooltip.hasRueckblick', { date: this.rueckblickCreatedLabel(cell.createdAt) })
       : app.t('overview.rueckblickHeatmap.tooltip.noRueckblick');
-    return `${period}: ${entriesPart} · ${rbPart}`;
+    const stalePart = cell.stale ? ` · ${app.t('rueckblick.cal.legendStale')}` : '';
+    return `${period}: ${entriesPart} · ${rbPart}${stalePart}`;
   },
 };

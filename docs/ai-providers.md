@@ -384,6 +384,7 @@ Präzedenz: **per-Call-Tier > Job-Bag > Profil > Instanz-Setting.**
 | `applyTierAiOverrides` ([shared/model-tier.js](../routes/jobs/shared/model-tier.js)) | `claude` | Stufe sicherstellen (idempotent zur Queue) + optionale Bag-Felder (`extra`), Rückgabe = laufendes Modell |
 | `applySynonymAiOverrides` ([synonyme.js](../routes/jobs/synonyme.js)) | `claude` | `ai.claude.effort.synonym` (Default `low`, nur wenn das Modell der Synonym-Stufe adaptiv denkt). Modell + Effort fliessen in die Synonym-cacheVersion |
 | `applyReviewAiOverrides` → `applyEffortSetting` ([shared/model.js](../routes/jobs/shared/model.js)) | `claude` | `ai.claude.effort.review` (Default `high`, nur wenn das Modell adaptiv denkt) für Buch- und Kapitelbewertung. Ohne Feld gälte der Modell-Default, und der wechselt mit dem Modell (Opus 5.5: `medium`). Der Effort fliesst in die Review-cacheVersion |
+| `applyEffortSetting` in [rueckblick.js](../routes/jobs/rueckblick.js) | `claude` | `ai.claude.effort.rueckblick` (Default `medium`, nur wenn das Modell der Stufe adaptiv denkt) für den Tagebuch-Rückblick — Verdichten braucht wenig Denk-Tiefe. Fliesst in die Rückblick-cacheVersion |
 | `applyEffortSetting` in [plot.js](../routes/jobs/plot.js) | `claude` | `ai.claude.effort.plot` (Default `medium` = Modell-Default von Opus 5.5, nur wenn das Modell adaptiv denkt) für Plot-Konsistenzcheck und -Brainstorm. Explizit gesetzt, damit ein Modellwechsel die Denk-Tiefe nicht verschiebt |
 
 Ollama hat bewusst keinen Override-Satz: dort ist das Modell an das geladene Gewicht gebunden.

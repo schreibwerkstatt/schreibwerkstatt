@@ -13,18 +13,17 @@ test.beforeEach(async ({ page }) => {
   await page.waitForFunction(() => window.__harnessReady === true);
 });
 
-test('Zeitraum-Optionen nur aus datierten Einträgen (Monate + Jahre)', async ({ page }) => {
-  const values = await page.locator('[data-test="zeitraum"] option').evaluateAll(
+test('Zeitraum-Optionen nur aus datierten Einträgen, je Körnung (Monat | Jahr)', async ({ page }) => {
+  const values = () => page.locator('[data-test="zeitraum"] option').evaluateAll(
     opts => opts.map(o => o.value).filter(Boolean),
   );
-  // Monate: 2024-04, 2024-03, 2023-12 ; Jahre: 2024, 2023. 'Über mich' ignoriert.
-  expect(values).toContain('2024-03');
-  expect(values).toContain('2024-04');
-  expect(values).toContain('2023-12');
-  expect(values).toContain('2024');
-  expect(values).toContain('2023');
-  // Kein Eintrag für die nicht-datierte Seite.
-  expect(values.some(v => v.includes('Über'))).toBe(false);
+  // Monate: 2024-04, 2024-03, 2023-12. 'Über mich' ignoriert, Jahre nur im Jahr-Modus.
+  expect(await values()).toEqual(['2024-04', '2024-03', '2023-12']);
+  await page.locator('[data-test="grain-year"]').click();
+  await expect(page.locator('[data-test="zeitraum"]')).toHaveValue('2024');
+  expect(await values()).toEqual(['2024', '2023']);
+  await page.locator('[data-test="grain-month"]').click();
+  await expect(page.locator('[data-test="zeitraum"]')).toHaveValue('2024-04');
 });
 
 test('Default-Zeitraum ist gesetzt (jüngster Monat), vorhandener Rückblick lädt lazy', async ({ page }) => {
@@ -54,6 +53,9 @@ test('Belege-Zeitleiste markiert die Belegtage im Zeitraum', async ({ page }) =>
   await page.locator('[data-test="theme-Arbeit"]').click();
   await expect(page.locator('[data-test="timeline"] .rb-timeline-tick')).toHaveCount(2);
   await expect(page.locator('[data-test="timeline"] .rb-timeline-tick--hit')).toHaveCount(1);
+  // Belegtag auf der Zeitleiste ist ein Sprungziel.
+  await page.locator('[data-test="tick-2024-03-15"]').click();
+  expect(await page.evaluate(() => window.__selectedTag)).toBe('2024-03-15');
 });
 
 test('Tag ohne Abschnitt ist nicht anklickbar', async ({ page }) => {

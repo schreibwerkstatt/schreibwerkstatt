@@ -2,7 +2,9 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-import { buildRueckblickPrompt, buildRueckblickReducePrompt, mergeRueckblickFacets, SCHEMA_RUECKBLICK, SCHEMA_RUECKBLICK_SYNTH } from '../../public/js/prompts/tagebuch.js';
+import { buildRueckblickPrompt, buildRueckblickReducePrompt, SCHEMA_RUECKBLICK, SCHEMA_RUECKBLICK_SYNTH } from '../../public/js/prompts/tagebuch.js';
+import { createRequire } from 'node:module';
+const { mergeRueckblickFacets } = createRequire(import.meta.url)('../../routes/jobs/rueckblick-facets.js');
 import { configurePrompts } from '../../public/js/prompts.js';
 import { readFileSync } from 'node:fs';
 
@@ -38,8 +40,11 @@ test('buildRueckblickPrompt: optionaler Figuren-/Orts-Kontext (Namen + Info)', (
     orte: [{ name: 'Zürich', info: 'Stadt, Schweiz' }],
   });
   assert.match(withCtx, /Bekannte Figuren/);
-  assert.match(withCtx, /- Anna \(Protagonistin, auch: Annie\)/);
-  assert.match(withCtx, /- Zürich \(Stadt, Schweiz\)/);
+  // Info nach Gedankenstrich, nie in Klammern — das Modell übernahm sonst
+  // das Muster «Name (Info)» in seine Namen.
+  assert.match(withCtx, /- Anna — Protagonistin, auch: Annie/);
+  assert.match(withCtx, /- Zürich — Stadt, Schweiz/);
+  assert.doesNotMatch(withCtx, /Anna \(/);
   const noCtx = buildRueckblickPrompt(ENTRIES, { zeitraum: '2024-03' });
   assert.doesNotMatch(noCtx, /Bekannte Figuren/);
 });
@@ -85,7 +90,7 @@ test('buildRueckblickReducePrompt: verdichtete Facetten + Synthese-Auftrag', () 
     { monat: '2024-01', themen: [{ label: 'Arbeit', haeufigkeit: 2, belege: ['2024-01-03', '2024-01-10'] }], personen: [], orte: [], bemerkenswerteTage: [], zusammenfassung: 'Januar.' },
     { monat: '2024-02', themen: [], personen: [{ name: 'Anna', haeufigkeit: 1, belege: ['2024-02-01'] }], orte: [], bemerkenswerteTage: [], zusammenfassung: 'Februar.' },
   ];
-  const p = buildRueckblickReducePrompt(monthResults, { zeitraum: '2024' });
+  const p = buildRueckblickReducePrompt(monthResults, { zeitraum: '2024', merged: mergeRueckblickFacets(monthResults) });
   // Monats-Labels als Teil-Header (ohne "Monat "-Präfix im neuen Format).
   assert.match(p, /## 2024-01/);
   assert.match(p, /## 2024-02/);
@@ -107,7 +112,8 @@ test('SCHEMA_RUECKBLICK: Struktur + Pflichtfelder', () => {
     assert.ok(SCHEMA_RUECKBLICK.required.includes(k), `${k} nicht required`);
   }
   assert.equal(SCHEMA_RUECKBLICK.properties.themen.type, 'array');
-  assert.equal(SCHEMA_RUECKBLICK.properties.themen.items.properties.haeufigkeit.type, 'number');
+  // haeufigkeit zählt der Server — nicht Teil des Modell-Outputs.
+  assert.equal(SCHEMA_RUECKBLICK.properties.themen.items.properties.haeufigkeit, undefined);
   assert.equal(SCHEMA_RUECKBLICK.properties.zusammenfassung.type, 'string');
 });
 
@@ -118,14 +124,26 @@ test('SCHEMA_RUECKBLICK: Personen + Orte tragen Datums-Belege', () => {
     assert.equal(item.properties.belege.type, 'array');
     assert.equal(item.properties.belege.items.type, 'string');
     assert.ok(item.required.includes('belege'), `${k}: belege nicht required`);
+    assert.equal(item.properties.aliase.type, 'array', `${k}: aliase fehlt`);
+    assert.ok(item.required.includes('aliase'), `${k}: aliase nicht required`);
+    assert.equal(item.properties.haeufigkeit, undefined);
   }
+});
+
+test('buildRueckblickPrompt: Themen-Deckel, Namen ohne Klammer, Varianten in aliase', () => {
+  const p = buildRueckblickPrompt(ENTRIES, { zeitraum: '2024-03' });
+  assert.match(p, /Höchstens 8 Themen/);
+  assert.match(p, /übernimm dessen Label wörtlich/);
+  assert.match(p, /ohne Klammerzusatz/);
+  assert.match(p, /gehören in "aliase"/);
+  assert.doesNotMatch(p, /haeufigkeit/);
 });
 
 test('buildRueckblickPrompt: Personen/Orte-Belege im Output-Schema + Constraint', () => {
   const p = buildRueckblickPrompt(ENTRIES, { zeitraum: '2024-03' });
   // Output-Beispiel enthält belege bei personen/orte.
-  assert.match(p, /"personen":[^\]]*"belege"/);
-  assert.match(p, /"orte":[^\]]*"belege"/);
+  assert.match(p, /"personen": \[ \{[^}]*"aliase"[^}]*"belege"/);
+  assert.match(p, /"orte": +\[ \{[^}]*"aliase"[^}]*"belege"/);
   // Constraint deckt Personen/Orte explizit ab.
   assert.match(p, /jede Person, jeder Ort/);
 });
@@ -134,21 +152,4 @@ test('SCHEMA_RUECKBLICK_SYNTH: nur Tage + Zusammenfassung', () => {
   assert.equal(SCHEMA_RUECKBLICK_SYNTH.type, 'object');
   assert.deepEqual(Object.keys(SCHEMA_RUECKBLICK_SYNTH.properties).sort(), ['bemerkenswerteTage', 'zusammenfassung']);
   assert.ok(!SCHEMA_RUECKBLICK_SYNTH.properties.themen, 'Facetten dürfen nicht Teil des Synth-Schemas sein');
-});
-
-test('mergeRueckblickFacets: Belege-Union + haeufigkeit = eindeutige Belegtage', () => {
-  const parts = [
-    { monat: '2024-01', themen: [{ label: 'Arbeit', haeufigkeit: 1, belege: ['2024-01-03'] }], personen: [{ name: 'Anna', haeufigkeit: 1, belege: ['2024-01-05'] }], orte: [] },
-    { monat: '2024-02', themen: [{ label: 'arbeit', haeufigkeit: 1, belege: ['2024-01-03', '2024-02-08'] }], personen: [{ name: 'Anna', haeufigkeit: 1, belege: ['2024-02-09'] }], orte: [] },
-  ];
-  const m = mergeRueckblickFacets(parts);
-  // 'Arbeit' + 'arbeit' verschmelzen (case-insensitiv); Belege dedupliziert + vereinigt.
-  assert.equal(m.themen.length, 1);
-  assert.equal(m.themen[0].label, 'Arbeit');
-  assert.deepEqual(m.themen[0].belege, ['2024-01-03', '2024-02-08']);
-  assert.equal(m.themen[0].haeufigkeit, 2);
-  // Anna über zwei Monate → zwei eindeutige Belegtage.
-  assert.equal(m.personen.length, 1);
-  assert.equal(m.personen[0].haeufigkeit, 2);
-  assert.deepEqual(m.orte, []);
 });

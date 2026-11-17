@@ -139,3 +139,34 @@ test('GET /history/rueckblick-coverage: days + newest je Bucket', async () => {
   assert.equal(r.json.months['2024-03'].rueckblick.id,
     db.prepare('SELECT id FROM tagebuch_rueckblicke WHERE user_email = ? AND zeitraum = ?').get(ME, '2024-03').id);
 });
+
+test('GET /history/rueckblick-coverage: stale nach Eintragsänderung, checked_at bestätigt', async () => {
+  // Jüngster eigener 2024-03-Lauf: 2026-01-25 > newest (2024-03-21) → aktuell.
+  let r = await api('GET', `/history/rueckblick-coverage/${BOOK}`);
+  assert.equal(r.json.months['2024-03'].rueckblick.stale, false);
+  db.prepare('UPDATE pages SET updated_at = ? WHERE page_id = ?').run('2026-02-01T00:00:00.000Z', 93011);
+  r = await api('GET', `/history/rueckblick-coverage/${BOOK}`);
+  assert.equal(r.json.months['2024-03'].rueckblick.stale, true, 'Eintrag nach dem Rückblick bearbeitet');
+  db.prepare('UPDATE tagebuch_rueckblicke SET checked_at = ? WHERE user_email = ? AND zeitraum = ?')
+    .run('2026-02-02T00:00:00.000Z', ME, '2024-03');
+  r = await api('GET', `/history/rueckblick-coverage/${BOOK}`);
+  assert.equal(r.json.months['2024-03'].rueckblick.stale, false, 'späterer Lauf hat bestätigt');
+});
+
+test('GET /history/rueckblick-verlauf: Monate des Users, Personen über Aliase zusammengeführt', async () => {
+  db.prepare('DELETE FROM tagebuch_rueckblicke').run();
+  const ins = db.prepare(`INSERT INTO tagebuch_rueckblicke (book_id, user_email, zeitraum, result_json, model, entry_count, created_at)
+                          VALUES (?, ?, ?, ?, 'm', ?, ?)`);
+  ins.run(BOOK, ME, '2024-01', result('Jan.', { personen: [{ name: 'Olivia', aliase: ['Oli'], belege: ['2024-01-02'] }] }), 4, NOW);
+  ins.run(BOOK, ME, '2024-02', result('Feb alt.', { personen: [{ name: 'X', belege: ['2024-02-01'] }] }), 3, '2025-01-01T00:00:00.000Z');
+  ins.run(BOOK, ME, '2024-02', result('Feb.', { personen: [{ name: 'Oli', belege: ['2024-02-01', '2024-02-05'] }] }), 3, NOW);
+  ins.run(BOOK, ME, '2024', result('Jahr.', { personen: [{ name: 'Y', belege: ['2024-01-02'] }] }), 7, NOW);
+  ins.run(BOOK, OTHER, '2024-03', result('Fremd.', { personen: [{ name: 'Z', belege: ['2024-03-01'] }] }), 2, NOW);
+  const r = await api('GET', `/history/rueckblick-verlauf/${BOOK}`);
+  assert.equal(r.status, 200);
+  assert.deepEqual(r.json.months.map(m => m.zeitraum), ['2024-01', '2024-02'], 'nur eigene Monate, kein Jahr');
+  assert.deepEqual(r.json.personen.map(p => [p.name, p.perMonth]), [['Oli', { '2024-01': 1, '2024-02': 2 }]],
+    'jüngster Lauf je Monat, Oli = Olivia, Name aus dem jüngsten Monat');
+  assert.equal(r.json.themen[0].name, 'Garten');
+  assert.equal(r.json.themen[0].months, 2);
+});

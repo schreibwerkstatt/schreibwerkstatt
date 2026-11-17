@@ -8,6 +8,11 @@
   min-width: 12rem;
 }
 
+.card--tagebuchRueckblick .rb-actions {
+  align-items: center;
+  gap: var(--space-sm);
+}
+
 /* ── Zeitraum-Leiste ─────────────────────────────────────────────────────── */
 .card--tagebuchRueckblick .rb-period {
   display: flex;
@@ -242,8 +247,42 @@
 .card--tagebuchRueckblick .rb-timeline-tick--hit {
   height: 100%;
   width: 3px;
+  padding: 0;
+  border: none;
   background: var(--card-accent);
   opacity: 1;
+  cursor: pointer;
+}
+
+/* Klickfläche breiter als der Strich, ohne die Optik zu ändern. */
+.card--tagebuchRueckblick .rb-timeline-tick--hit::before {
+  content: "";
+  position: absolute;
+  inset: 0 calc(-1 * var(--space-2xs));
+}
+
+.card--tagebuchRueckblick .rb-timeline-tick--hit:hover:not(:disabled) {
+  width: 5px;
+}
+
+.card--tagebuchRueckblick .rb-timeline-tick--hit:focus-visible {
+  outline: var(--focus-ring);
+  outline-offset: var(--focus-ring-offset);
+}
+
+.card--tagebuchRueckblick .rb-timeline-tick--hit:disabled {
+  cursor: default;
+  opacity: var(--opacity-muted);
+}
+
+/* «+N weitere» hinter den Mehrfachnennungen einer Facette. */
+.card--tagebuchRueckblick .rb-facet-more {
+  padding: 0;
+  border: none;
+  background: none;
+  color: var(--color-muted);
+  font: inherit;
+  font-size: var(--font-size-sm);
 }
 
 .card--tagebuchRueckblick .rb-timeline-edges {
@@ -280,6 +319,66 @@
   width: 100%;
 }
 
+/* Liste: je Zeitraum eine Gruppe, ältere Läufe eingerückt darunter. */
+.card--tagebuchRueckblick .rb-history-older-toggle {
+  margin-left: var(--space-md);
+  font-size: var(--font-size-xs);
+}
+
+.card--tagebuchRueckblick .rb-history-older {
+  padding-left: var(--space-lg);
+}
+
+/* Verlauf: Namen × Monate, Zellen aus dem Jahr×Monat-Pattern (.ymheat-cell). */
+.card--tagebuchRueckblick .rb-verlauf {
+  --ymheat-accent: var(--card-accent);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-sm);
+}
+
+.card--tagebuchRueckblick .rb-verlauf-scroll {
+  max-height: 70vh;
+  overflow: auto;
+}
+
+.card--tagebuchRueckblick .rb-verlauf-grid {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  width: max-content;
+  min-width: 100%;
+}
+
+.card--tagebuchRueckblick .rb-verlauf-row {
+  display: grid;
+  grid-template-columns: 10rem repeat(var(--rb-verlauf-cols), 1.75rem);
+  gap: var(--space-3);
+  align-items: center;
+}
+
+.card--tagebuchRueckblick .rb-verlauf-row--head {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  background: var(--color-surface);
+}
+
+.card--tagebuchRueckblick .rb-verlauf-name {
+  position: sticky;
+  left: 0;
+  background: var(--color-surface);
+  font-size: var(--font-size-sm);
+}
+
+.card--tagebuchRueckblick .rb-verlauf-month {
+  color: var(--color-muted);
+  font-size: var(--font-size-xs);
+  writing-mode: vertical-rl;
+  rotate: 180deg;
+  justify-self: center;
+}
+
 /* Kalender nutzt das geteilte Jahr×Monat-Pattern (.ymheat-*, components/
    year-month-heatmap.css); hier nur der Karten-Hue. Höhe steuert das
    Partial via --ymheat-max. */
@@ -308,6 +407,9 @@
      die Breite nehmen. */
   .card--tagebuchRueckblick .rb-zeitraum {
     min-width: 9rem;
+  }
+  .card--tagebuchRueckblick .rb-verlauf-row {
+    grid-template-columns: 6.5rem repeat(var(--rb-verlauf-cols), 1.5rem);
   }
 }
 }
