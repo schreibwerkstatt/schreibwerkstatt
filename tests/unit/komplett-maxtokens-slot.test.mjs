@@ -1,7 +1,7 @@
 // komplettMaxTokens gehört in den maxTokens-Slot von aiCall/call
 // (… fromPct, toPct, expectedChars, outputRatio, maxTokens, …), nicht in
 // expectedChars: dort reserviert der Call sonst das Provider-Ceiling, und der
-// VRAM-Deckel ai.komplett.extract_max_tokens greift bei lokalen Providern nicht.
+// VRAM-Deckel ai.<provider>.komplett.extract_max_tokens greift bei lokalen Providern nicht.
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';

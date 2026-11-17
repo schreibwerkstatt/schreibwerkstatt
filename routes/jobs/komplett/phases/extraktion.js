@@ -567,7 +567,7 @@ async function runPhase1(ctx) {
   const { extractLimit } = plan;
 
   // Output-Cap für lokale Extraktions-Calls (Single-Pass-lokal + Multi-Pass Split A/B):
-  // ai.komplett.extract_max_tokens, gedeckelt aufs Provider-Ceiling (komplettMaxTokens).
+  // ai.<provider>.komplett.extract_max_tokens, gedeckelt aufs Provider-Ceiling (komplettMaxTokens).
   // KEIN Eskalations-Retry: lokale Modelle, die hier trunkieren, tun das wegen
   // Wiederholungsschleifen — ein höherer Cap generiert nur länger, bevor er ebenso
   // reisst (verdoppelt die Wartezeit). Gegen die Schleifen wirkt repeat_penalty

@@ -97,7 +97,7 @@
     <template x-if="$store.session.offlineCapable">
       <div>
         <p class="card-form-section-divider" x-text="$app.t('profile.offlineSection')"></p>
-        <div class="card-form-row">
+        <div class="card-form-row card-form-row--full">
           <div class="card-form-field">
             <div x-data="toggleSwitch({ label: () => $app.t('profile.offlineAuto') })"
                  x-modelable="value" x-model="$store.session.offlineAuto.enabled"

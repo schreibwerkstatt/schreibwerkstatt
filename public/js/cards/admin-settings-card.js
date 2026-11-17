@@ -18,10 +18,10 @@ export function registerAdminSettingsCard() {
     adminSettingsSaved: false,
     adminSettingsSavedCount: 0,
     adminSettingsError: '',
-    adminSettingsTab: 'auth',
+    adminSettingsTab: 'general',
     adminSettingsTabs: ADMIN_SETTINGS_TABS,
     adminSettingsProviderSubtab: 'claude',
-    adminJobTiers: { groups: [], jobs: [] },  // Zuordnung Job → Modellstufe (lib/ai/job-tiers.js)
+    adminJobTiers: { tiers: [], groups: [], jobs: [] },  // Stufen + Zuordnung Job → Modellstufe (lib/ai/job-tiers.js)
     adminSettingsLoadedOnce: false,          // Provider-Unterreiter nur beim ersten Laden setzen
     adminSettingsPendingReset: {},           // key → true: beim Speichern auf Standard zurück
     adminSettingsAuth: { own_has_password: false, env_admin: false },

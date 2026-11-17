@@ -1,7 +1,8 @@
-// Claude-Tab der Admin-Settings gegen die ECHTE App: oben Standard-Felder und die
-// Modellstufen (je Stufe eingeklappt, Kopfzeile nennt das Modell), darunter die
-// eingeklappte Zuordnung Job → Stufe (aus lib/ai/job-tiers.js, vom Server geliefert)
-// und der eingeklappte „Erweitert"-Bereich. Die Zähler an den Toggles dürfen eine
+// Claude-Tab der Admin-Settings gegen die ECHTE App: oben API-Key + Modell, direkt
+// darunter die vier Modellstufen (je Stufe eingeklappt, Kopfzeile nennt Modell und
+// Job-Zahl), die eingeklappte Zuordnung Job → Stufe (eine Zeile je Job mit
+// Segment-Umschalter, Katalog aus lib/ai/job-tiers.js), der eingeklappte Effort- und
+// der „Erweitert"-Bereich. Die Zähler an den Toggles dürfen eine
 // aktive Abweichung nicht hinter dem Einklappen verstecken — das hängt am echten
 // Alpine-Baum (collapsible + adminSettingsForm).
 
@@ -31,19 +32,23 @@ test('Claude-Tab: Stufen und Zuordnung eingeklappt, Zähler zeigen Abweichungen'
   const card = await openClaudeTab(page);
   const panel = card.locator('[x-bind="panel(\'claude\')"]');
   const toggles = panel.locator('.admin-settings-advanced > .collapsible-toggle');
+  const jobRow = (type) => panel.locator(`.admin-tier-row[data-key="ai.claude.tier.job.${type}"]`);
 
   await expect(fieldOf(card, 'ai.claude.model')).toBeVisible();
-  await expect(fieldOf(card, 'ai.claude.effort.lektorat')).toBeVisible();
+  await expect(fieldOf(card, 'ai.claude.effort.lektorat')).toBeHidden();
   await expect(fieldOf(card, 'ai.claude.model.tier.standard')).toBeHidden();
-  await expect(fieldOf(card, 'ai.claude.tier.job.check')).toBeHidden();
+  await expect(jobRow('check')).toBeHidden();
   await expect(fieldOf(card, 'ai.claude.context_window')).toBeHidden();
 
-  // Drei Stufen (maximal, standard, leicht) + Zuordnung + Erweitert.
-  await expect(toggles).toHaveCount(5);
+  // Vier Stufen (maximal, stark, standard, leicht) + Zuordnung + Effort + Erweitert,
+  // Stufen direkt unter dem Modell, vor den Effort-Feldern.
+  await expect(toggles).toHaveCount(7);
   const maxToggle = toggles.nth(0);
   await expect(maxToggle).toContainText(/wie Stark|like Strong/);
-  await expect(toggles.nth(1)).toContainText('claude-sonnet-5-5');
-  await setForm(page, { 'ai.claude.model.tier.max': 'claude-fable-5-1' });
+  await expect(maxToggle).toContainText(/0 Jobs|0 jobs/);
+  await expect(toggles.nth(2)).toContainText('claude-sonnet-5-5');
+  await setForm(page, { 'ai.claude.model': 'claude-opus-5-5', 'ai.claude.model.tier.max': 'claude-fable-5-1' });
+  await expect(toggles.nth(1)).toContainText('claude-opus-5-5');
   await expect(maxToggle).toContainText('claude-fable-5-1');
   await maxToggle.click();
   for (const key of ['ai.claude.model.tier.max', 'ai.claude.context_window.tier.max',
@@ -51,20 +56,41 @@ test('Claude-Tab: Stufen und Zuordnung eingeklappt, Zähler zeigen Abweichungen'
     await expect(fieldOf(card, key)).toBeVisible();
   }
 
-  // Zuordnung: ein Feld je Katalog-Job, Zähler zählt Abweichungen von der Vorbelegung.
-  const jobToggle = toggles.nth(3);
+  // Zuordnung: eine Zeile je Katalog-Job mit Segment-Umschalter; Zähler zählt
+  // Abweichungen von der Vorbelegung, die Stufen-Kopfzeile die Jobs der Stufe.
+  const jobToggle = toggles.nth(4);
   const jobBadge = jobToggle.locator('.admin-settings-active-badge');
   await expect(jobBadge).toBeHidden();
-  await setForm(page, { 'ai.claude.tier.job.komplett-analyse': 'max', 'ai.claude.tier.job.synonym': 'strong' });
-  await expect(jobBadge).toContainText('2');
+  await setForm(page, { 'ai.claude.tier.job.komplett-analyse': 'max' });
+  await expect(jobBadge).toContainText('1');
+  await expect(maxToggle).toContainText(/1 Job|1 job/);
   await jobToggle.click();
-  for (const key of ['ai.claude.tier.job.check', 'ai.claude.tier.job.komplett-extract',
-    'ai.claude.tier.job.book-chat', 'ai.claude.tier.job.chat-title']) {
-    await expect(fieldOf(card, key)).toBeVisible();
+  for (const type of ['check', 'komplett-extract', 'book-chat', 'chat-title']) {
+    await expect(jobRow(type)).toBeVisible();
+    await expect(jobRow(type).locator('.seg-toggle button')).toHaveCount(4);
   }
+  const syn = jobRow('synonym');
+  await expect(syn).not.toHaveClass(/is-changed/);
+  await expect(syn.locator('.seg-toggle--active')).toHaveText(/Leicht|Light/);
+  await syn.locator('.seg-toggle button').nth(1).click();
+  await expect(syn.locator('.seg-toggle--active')).toHaveText(/Stark|Strong/);
+  await expect(syn).toHaveClass(/is-changed/);
+  await expect(syn.locator('.admin-tier-row-default')).toContainText(/Leicht|Light/);
+  await expect(jobBadge).toContainText('2');
+  expect(await page.evaluate(() => window.Alpine.$data(document.querySelector('[x-data="adminSettingsCard"]'))
+    .adminSettingsForm['ai.claude.tier.job.synonym'])).toBe('strong');
+
+  // Effort: eingeklappt, Zähler nennt Felder mit eigenem Wert.
+  const effToggle = toggles.nth(5);
+  const effBadge = effToggle.locator('.admin-settings-active-badge');
+  await expect(effBadge).toBeHidden();
+  await setForm(page, { 'ai.claude.effort.lektorat': 'high' });
+  await expect(effBadge).toContainText('1');
+  await effToggle.click();
+  await expect(fieldOf(card, 'ai.claude.effort.lektorat')).toBeVisible();
 
   // Erweitert: Limits der Stufe «stark» + Komplett-Timeout zählen.
-  const advToggle = toggles.nth(4);
+  const advToggle = toggles.nth(6);
   const advBadge = advToggle.locator('.admin-settings-active-badge');
   await expect(advBadge).toBeHidden();
   await setForm(page, { 'ai.claude.context_window': 1000000, 'ai.claude.timeout_ms.komplett': 2400000 });

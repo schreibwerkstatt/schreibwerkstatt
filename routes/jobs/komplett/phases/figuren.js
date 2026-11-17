@@ -156,7 +156,7 @@ async function runPhase2(ctx, chapterFiguren, chapterAssignments, chapterSzenen)
       figResult = await batched(`erwarteter Output ~${fit.estOut} Tokens über ${Math.round(KONSOL_SINGLE_RESERVE * 100)} % des Caps ${fit.cap}`);
     } else if (!fit.fits) {
       figResult = degrade(`erwarteter Output ~${fit.estOut} Tokens über dem Cap ${fit.cap}, Truncation wäre sicher; `
-        + 'Abhilfe: ai.komplett.extract_max_tokens erhöhen oder das Buch in mehr Kapitel gliedern');
+        + 'Abhilfe: ai.<provider>.komplett.extract_max_tokens erhöhen oder das Buch in mehr Kapitel gliedern');
     } else {
       try {
         figResult = await call(jobId, tok,

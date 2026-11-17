@@ -24,6 +24,7 @@ Gilt zusaetzlich zur Root-[CLAUDE.md](../../../CLAUDE.md).
   - `komplett.js` — Komplettanalyse-Pipeline (Extraktion, Soziogramm, Orte, Kontinuität, Zeitstrahl) + alle dynamischen Schemas
   - `chat.js` — Abschnitts-Chat + Buch-Chat (klassisch + Agentic)
   - `chat-tools/` — gemeinsamer Werkzeug-Katalog der agentischen Chats (Definitionen, Zugriffstabelle, Mentions); Regeln in [routes/jobs/chat-tools/CLAUDE.md](../../../routes/jobs/chat-tools/CLAUDE.md)
+  - `weltfakten-block.js` — gebudgeteter Welt-Fakten-Block des agentischen Buch-Chats (re-exportiert über `chat.js`)
   - `book-chat-output.js` — `final_answer` + Aussenwelt-Regel des Buch-Chats
   - `chat-pre-context.js` — Erst-Kontext-/Textpassagen-Bausteine (Passagen-Kopfzeile, Index-Status-Hinweis), geteilt von Buch-, Plot- und Ideen-Chat
   - `book-outline.js` — Gliederungs-Block des klassischen Buch-Chats (Kapitel/Unterkapitel/Abschnitte in Lesereihenfolge)

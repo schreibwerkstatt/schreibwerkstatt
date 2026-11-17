@@ -41,6 +41,15 @@ test('Agent-System-Prompt: Kosten-Leiter steht im stabilen Block', () => {
   assert.match(stable.text, /search_similar/);
 });
 
+test('Agent-System-Prompt: genannte Szene ausserhalb des Startkontexts erst suchen', () => {
+  const [stable] = buildBookChatAgentSystemPrompt('Buch', null, null, null, 12, {});
+  assert.match(stable.text, /Stufe 1 reicht NICHT/);
+  assert.match(stable.text, /suchst du sie zuerst \(search_passages oder search_similar\)/);
+  // Ohne Suchwerkzeug kein Verweis auf eines (toolMentions-Regel).
+  const [noSearch] = buildBookChatAgentSystemPrompt('Buch', null, null, null, 12, { toolNames: ['get_pages', 'final_answer'] });
+  assert.doesNotMatch(noSearch.text, /Stufe 1 reicht NICHT/);
+});
+
 test('Erst-Kontext-Block: Passagen mit entity_id als Sprungziel', () => {
   const text = buildBookChatPreContext(PASSAGES);
   assert.match(text, /entity_id 7/);

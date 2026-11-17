@@ -102,7 +102,7 @@ async function runPhase3(ctx, chapterOrte, figurenKompakt, isSinglePass, figName
         // sicher und ihr Ausgang derselbe regelbasierte Merge — dann ohne Umweg dorthin.
         log.warn(`Orte-Konsolidierung übersprungen – erwarteter Output ~${fit.estOut} Tokens über dem `
           + `Cap ${fit.cap} (Truncation wäre sicher). Fallback auf kapitel-extrahierte Orte. `
-          + 'Abhilfe: ai.komplett.extract_max_tokens erhöhen.');
+          + 'Abhilfe: ai.<provider>.komplett.extract_max_tokens erhöhen.');
         ctx.warnings?.push({ key: 'job.warn.orteKonsolidierungDegraded' });
         orteResultRaw = null;
       } else {
@@ -250,7 +250,7 @@ async function runPhase3Songs(ctx, chapterSongs, figurenKompakt, isSinglePass, f
         // Truncation sicher und ihr Ausgang derselbe regelbasierte Merge — ohne Umweg dorthin.
         log.warn(`Songs-Konsolidierung übersprungen – erwarteter Output ~${fit.estOut} Tokens über dem `
           + `Cap ${fit.cap} (Truncation wäre sicher). Fallback auf kapitel-extrahierte Songs. `
-          + 'Abhilfe: ai.komplett.extract_max_tokens erhöhen.');
+          + 'Abhilfe: ai.<provider>.komplett.extract_max_tokens erhöhen.');
         ctx.warnings?.push({ key: 'job.warn.songsKonsolidierungDegraded' });
       } else {
         try {
@@ -341,7 +341,7 @@ async function runPhase3OrteCall(ctx, chapterOrte, figurenKompaktForPrompt) {
   if (!fit.fits) {
     log.warn(`Orte-Konsolidierung übersprungen – erwarteter Output ~${fit.estOut} Tokens über dem `
       + `Cap ${fit.cap} (Truncation wäre sicher). Fallback auf kapitel-extrahierte Orte. `
-      + 'Abhilfe: ai.komplett.extract_max_tokens erhöhen.');
+      + 'Abhilfe: ai.<provider>.komplett.extract_max_tokens erhöhen.');
     ctx.warnings?.push({ key: 'job.warn.orteKonsolidierungDegraded' });
     return null;
   }

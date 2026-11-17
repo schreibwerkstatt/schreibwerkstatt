@@ -4,7 +4,7 @@
 // `admin.settings.tab.<key>` in beiden Locales und eine `<section>` im Partial.
 
 export const ADMIN_SETTINGS_TABS = Object.freeze([
-  'auth', 'provider', 'smtp', 'jobs', 'cron', 'pdfa', 'analytics', 'languagetool',
+  'general', 'auth', 'provider', 'smtp', 'jobs', 'cron', 'pdfa', 'analytics', 'languagetool',
   'stt', 'tts', 'image', 'embed', 'geocode', 'websearch', 'api', 'advanced',
 ]);
 

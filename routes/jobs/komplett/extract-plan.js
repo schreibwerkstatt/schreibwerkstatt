@@ -49,7 +49,7 @@ function buildExtractTier(effectiveProvider) {
 // Per-Provider-Skalierung aus dessen `ai.<p>.context_window` (lib/ai.js#getContextConfigFor).
 // Bei Claude 200K-Kontext ≈ 420K Zeichen Single-Pass – reicht für fast alle Bücher.
 // Gegen das EIGENE Output-Cap dieser Pipeline gerechnet, nicht gegen das provider-weite:
-// `komplettMaxTokens` (Cloud: das Provider-Ceiling, lokal `ai.komplett.extract_max_tokens`)
+// `komplettMaxTokens` (Cloud: das Provider-Ceiling, lokal `ai.<provider>.komplett.extract_max_tokens`)
 // ist das Output-Cap der Pipeline. Es wirkt nur, wenn ein Call es im `maxTokens`-Slot
 // übergibt (9. Argument von `call`, Muster phases/extraktion.js) — im `expectedChars`-Slot
 // ist es bloss eine Fortschritts-Schätzung, und aiCall reserviert dann das Provider-Ceiling.

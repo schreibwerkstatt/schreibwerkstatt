@@ -1,0 +1,31 @@
+{
+  "version": "6.6.6",
+  "date": "2026-11-17",
+  "entries": [
+    {
+      "kind": "verbessert",
+      "de": "Fragst du den Buch-Chat nach einer Szene oder Stelle im Buch, sucht er sie jetzt zuerst im Text, statt zu raten oder zu sagen, er kenne sie nicht.",
+      "en": "When you ask the book chat about a scene or passage in your book, it now looks it up in the text first instead of guessing or saying it doesn't know it."
+    },
+    {
+      "kind": "verbessert",
+      "de": "Admin → Einstellungen hat einen neuen Reiter «Allgemein» für Name, Adresse und Sichtbarkeit der Instanz. «Erweitert» ist jetzt nach Themen gegliedert.",
+      "en": "Admin → Settings has a new “General” tab for the instance's name, address and visibility. “Advanced” is now grouped by topic."
+    },
+    {
+      "kind": "verbessert",
+      "de": "Chat-Temperatur und Output-Limit der Komplettanalyse stellst du jetzt je Provider ein, direkt im Reiter von Ollama bzw. dem OpenAI-kompatiblen Endpunkt. Bisherige Werte bleiben erhalten.",
+      "en": "Chat temperature and the full-analysis output limit are now set per provider, right in the Ollama or OpenAI-compatible tab. Your existing values are kept."
+    },
+    {
+      "kind": "verbessert",
+      "de": "Im Reiter Provider → Claude siehst du bei jeder Modellstufe, wie viele Funktionen darauf laufen. Die Einstellungen zum Reasoning-Effort sind eingeklappt.",
+      "en": "In Provider → Claude each model tier now shows how many features run on it. The reasoning effort settings are collapsed."
+    },
+    {
+      "kind": "behoben",
+      "de": "Die Kostenübersicht rechnet neue Claude-Modelle mit den richtigen Preisen und Sonnet 5.5 nicht mehr zu teuer.",
+      "en": "The cost overview now prices new Claude models correctly and no longer overstates Sonnet 5.5."
+    }
+  ]
+}

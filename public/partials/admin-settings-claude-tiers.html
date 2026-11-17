@@ -3,22 +3,33 @@
              «Stark» ist das Modell oben samt den globalen Limits unter «Erweitert». -->
         <h4 class="admin-settings-subheading"><span x-text="$app.t('admin.settings.claude.tiersTitle')"></span></h4>
         <small class="muted-msg muted-msg--sm" x-text="$app.t('admin.settings.claude.tiersIntro')"></small>
-        <template x-for="tier in ['max', 'standard', 'light']" :key="tier">
-          <div x-data="collapsible()" class="admin-settings-advanced">
+        <template x-for="tier in adminTierList()" :key="tier">
+          <div x-data="collapsible()" class="admin-settings-advanced admin-tier">
             <button type="button" class="collapsible-toggle" x-bind="trigger">
               <span class="history-chevron" x-bind="chevron" aria-hidden="true"></span>
-              <span x-text="$app.t('admin.settings.jobTier.tier.' + tier)"></span>
+              <span class="admin-tier-name" x-text="$app.t('admin.settings.jobTier.tier.' + tier)"></span>
               <span class="admin-settings-active-badge" x-text="adminTierModelLabel(tier)"></span>
+              <span class="admin-tier-count" x-text="$app.tn('admin.settings.claude.tierJobCount', adminTierJobCount(tier))"></span>
             </button>
             <div x-bind="panel" x-cloak>
-              <div x-data="settingField({ k: 'ai.claude.model.tier.' + tier, label: 'admin.settings.label.tierModel', help: 'admin.settings.help.tierModel', models: 'claude' })"></div>
-              <div x-data="settingField({ k: 'ai.claude.context_window.tier.' + tier, type: 'num', label: 'admin.settings.label.contextWindow', num: { integer: true, min: 0, max: 2000000 }, help: 'admin.settings.help.tierContextWindow' })"></div>
-              <div x-data="settingField({ k: 'ai.claude.max_tokens_out.tier.' + tier, type: 'num', label: 'admin.settings.label.maxTokensOut', num: { integer: true, min: 0, max: 200000 }, help: 'admin.settings.help.tierMaxTokensOut' })"></div>
-              <div x-data="settingField({ k: 'ai.claude.timeout_ms.tier.' + tier, type: 'num', label: 'admin.settings.label.aiTimeoutMs', num: { integer: true, min: 0, max: 3600000 }, help: 'admin.settings.help.tierTimeoutMs' })"></div>
+              <template x-if="tier === 'strong'">
+                <small class="muted-msg muted-msg--sm" x-text="$app.t('admin.settings.claude.tierStrongNote')"></small>
+              </template>
+              <template x-if="tier !== 'strong'">
+                <div class="admin-settings-fold-body">
+                  <div x-data="settingField({ k: 'ai.claude.model.tier.' + tier, label: 'admin.settings.label.tierModel', help: 'admin.settings.help.tierModel', models: 'claude' })"></div>
+                  <div x-data="settingField({ k: 'ai.claude.context_window.tier.' + tier, type: 'num', label: 'admin.settings.label.contextWindow', num: { integer: true, min: 0, max: 2000000 }, help: 'admin.settings.help.tierContextWindow' })"></div>
+                  <div x-data="settingField({ k: 'ai.claude.max_tokens_out.tier.' + tier, type: 'num', label: 'admin.settings.label.maxTokensOut', num: { integer: true, min: 0, max: 200000 }, help: 'admin.settings.help.tierMaxTokensOut' })"></div>
+                  <div x-data="settingField({ k: 'ai.claude.timeout_ms.tier.' + tier, type: 'num', label: 'admin.settings.label.aiTimeoutMs', num: { integer: true, min: 0, max: 3600000 }, help: 'admin.settings.help.tierTimeoutMs' })"></div>
+                </div>
+              </template>
             </div>
           </div>
         </template>
 
+        <!-- Zuordnung: eine Zeile je Job, Stufe per Segment-Umschalter (schreibt direkt
+             in adminSettingsForm, gespeichert wie jedes Feld). Abweichung von der
+             Vorbelegung ist markiert und nennt den Ausgangswert. -->
         <div x-data="collapsible()" class="admin-settings-advanced">
           <button type="button" class="collapsible-toggle" x-bind="trigger">
             <span class="history-chevron" x-bind="chevron" aria-hidden="true"></span>
@@ -29,15 +40,27 @@
           <div x-bind="panel" x-cloak>
             <small class="muted-msg muted-msg--sm" x-text="$app.t('admin.settings.claude.jobTiersIntro')"></small>
             <template x-for="g in adminJobTierGroups()" :key="g.group">
-              <div>
+              <div class="admin-tier-group">
                 <h4 class="admin-settings-subheading"><span x-text="$app.t('admin.settings.jobTier.group.' + g.group)"></span></h4>
                 <template x-for="j in g.jobs" :key="j.type">
-                  <div x-data="settingField({ k: 'ai.claude.tier.job.' + j.type, type: 'select', label: j.labelKey, opts: [
-                    { value: 'max', labelKey: 'admin.settings.jobTier.tier.max' },
-                    { value: 'strong', labelKey: 'admin.settings.jobTier.tier.strong' },
-                    { value: 'standard', labelKey: 'admin.settings.jobTier.tier.standard' },
-                    { value: 'light', labelKey: 'admin.settings.jobTier.tier.light' },
-                  ] })"></div>
+                  <div class="admin-tier-row" :class="{ 'is-changed': adminJobTierValue(j) !== j.tier }"
+                       :data-key="'ai.claude.tier.job.' + j.type">
+                    <span class="admin-tier-row-label">
+                      <span x-text="$app.t(j.labelKey)"></span>
+                      <small class="admin-tier-row-default" x-show="adminJobTierValue(j) !== j.tier"
+                             x-text="$app.t('admin.settings.jobTier.presetWas', { tier: $app.t('admin.settings.jobTier.tier.' + j.tier) })"></small>
+                    </span>
+                    <div class="seg-toggle" role="radiogroup" :aria-label="$app.t(j.labelKey)">
+                      <template x-for="tier in adminTierList()" :key="tier">
+                        <button type="button" role="radio"
+                                :aria-checked="adminJobTierValue(j) === tier ? 'true' : 'false'"
+                                :class="{ 'seg-toggle--active': adminJobTierValue(j) === tier }"
+                                :data-tip="adminTierModelLabel(tier)"
+                                @click="adminSettingsForm['ai.claude.tier.job.' + j.type] = tier"
+                                x-text="$app.t('admin.settings.jobTier.tier.' + tier)"></button>
+                      </template>
+                    </div>
+                  </div>
                 </template>
               </div>
             </template>

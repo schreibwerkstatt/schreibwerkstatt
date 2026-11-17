@@ -69,7 +69,7 @@ test('chunkLimitsFor: Cloud-Klasse verhaltensneutral (komplettMaxTokens = Ceilin
   try {
     ctx.appSettings.set('ai.claude.context_window', 200000, 'test');
     ctx.appSettings.set('ai.claude.max_tokens_out', 64000, 'test');
-    ctx.appSettings.set('ai.komplett.extract_max_tokens', 16000, 'test');
+    ctx.appSettings.set('ai.openai-compat.komplett.extract_max_tokens', 16000, 'test');
     // Genau der Aufruf aus job-komplett.js: das Cap der Cloud-Klasse IST das Ceiling,
     // die Chunk-Grenze darf sich also nicht bewegen.
     const cap = ctx.tokens.komplettMaxTokens('claude');

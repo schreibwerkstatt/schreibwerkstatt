@@ -1,7 +1,5 @@
     <!-- Auth-Tab -->
     <section x-bind="panel('auth')" class="admin-settings-section">
-      <div x-data="settingField({ k: 'app.public_url', type: 'url', label: 'admin.settings.label.appPublicUrl', ph: 'https://app.example.com' })"></div>
-
       <h4 class="admin-settings-subheading"><span x-text="$app.t('admin.settings.auth.methodTitle')"></span></h4>
       <p class="muted-msg muted-msg--sm" x-text="$app.t('admin.settings.auth.methodHint')"></p>
       <div x-data="settingField({ k: 'auth.method', type: 'select', label: 'admin.settings.label.authMethod', opts: [
@@ -53,6 +51,8 @@
       <div x-data="settingField({ k: 'auth.register.rate_limit_window_min', type: 'num', label: 'admin.settings.label.authRegisterRateLimitWindow', num: { integer: true, min: 1, max: 1440 } })"></div>
       <div x-data="settingField({ k: 'auth.admin_login.max_fails', type: 'num', label: 'admin.settings.label.authAdminLoginMaxFails', num: { integer: true, min: 1, max: 1000 } })"></div>
       <div x-data="settingField({ k: 'auth.admin_login.window_min', type: 'num', label: 'admin.settings.label.authAdminLoginWindow', num: { integer: true, min: 1, max: 1440 } })"></div>
+      <div x-data="settingField({ k: 'share.comment.rate_limit_max', type: 'num', label: 'admin.settings.label.shareCommentRateLimitMax', num: { integer: true, min: 1, max: 1000 }, help: 'admin.settings.help.shareCommentRateLimit' })"></div>
+      <div x-data="settingField({ k: 'share.comment.rate_limit_window_min', type: 'num', label: 'admin.settings.label.shareCommentRateLimitWindow', num: { integer: true, min: 1, max: 1440 } })"></div>
 
       <h4 class="admin-settings-subheading"><span x-text="$app.t('admin.settings.auth.captchaTitle')"></span></h4>
       <p class="muted-msg muted-msg--sm" x-text="$app.t('admin.settings.auth.captchaHint')"></p>

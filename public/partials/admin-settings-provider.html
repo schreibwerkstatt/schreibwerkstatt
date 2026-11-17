@@ -17,19 +17,35 @@
         <h4 class="admin-settings-subheading"><span x-text="$app.t('admin.settings.claude.standardTitle')"></span></h4>
         <div x-data="settingField({ k: 'ai.claude.api_key', type: 'password', label: 'admin.settings.label.apiKey' })"></div>
         <div x-data="settingField({ k: 'ai.claude.model', label: 'admin.settings.label.model', ph: 'claude-opus-5-5', help: 'admin.settings.help.claudeModel', models: 'claude' })"></div>
-        <div x-data="settingField({ k: 'ai.claude.effort.lektorat', label: 'admin.settings.label.aiClaudeEffortLektorat', ph: 'medium', help: 'admin.settings.help.lektoratEffort' })"></div>
-        <div x-data="settingField({ k: 'ai.claude.effort.komplett', label: 'admin.settings.label.aiClaudeEffortKomplett', ph: 'high', help: 'admin.settings.help.komplettEffort' })"></div>
-        <div x-data="settingField({ k: 'ai.claude.effort.review', label: 'admin.settings.label.aiClaudeEffortReview', ph: 'high', help: 'admin.settings.help.reviewEffort' })"></div>
-        <div x-data="settingField({ k: 'ai.claude.effort.plot', label: 'admin.settings.label.aiClaudeEffortPlot', ph: 'medium', help: 'admin.settings.help.plotEffort' })"></div>
-        <div x-data="settingField({ k: 'ai.claude.effort.synonym', label: 'admin.settings.label.aiClaudeEffortSynonym', ph: 'low', help: 'admin.settings.help.synonymEffort' })"></div>
-        <div x-data="settingField({ k: 'ai.claude.effort.bookchat', label: 'admin.settings.label.aiClaudeEffortBookchat', ph: 'medium', help: 'admin.settings.help.chatEffort' })"></div>
-        <div x-data="settingField({ k: 'ai.claude.effort.pagechat', label: 'admin.settings.label.aiClaudeEffortPagechat', ph: 'medium', help: 'admin.settings.help.pageChatEffort' })"></div>
-        <div x-data="settingField({ k: 'ai.claude.effort.researchchat', label: 'admin.settings.label.aiClaudeEffortResearchchat', ph: 'medium', help: 'admin.settings.help.chatEffort' })"></div>
-        <div x-data="settingField({ k: 'ai.claude.effort.plotchat', label: 'admin.settings.label.aiClaudeEffortPlotchat', ph: 'medium', help: 'admin.settings.help.chatEffort' })"></div>
-        <div x-data="settingField({ k: 'ai.claude.effort.ideenchat', label: 'admin.settings.label.aiClaudeEffortIdeenchat', ph: 'medium', help: 'admin.settings.help.chatEffort' })"></div>
         <div x-data="settingField({ k: 'ai.claude.refusal_fallback', type: 'toggle', label: 'admin.settings.label.aiClaudeRefusalFallback', help: 'admin.settings.help.refusalFallback' })"></div>
+        <div x-data="settingField({ k: 'ai.lektorat_split', type: 'toggle', label: 'admin.settings.label.lektoratSplit', help: 'admin.settings.help.lektoratSplit' })"></div>
 
         <!-- @include admin-settings-claude-tiers -->
+
+        <!-- Reasoning-Effort je Bereich: eingeklappt, Zähler nennt Felder mit eigenem Wert. -->
+        <div x-data="collapsible()" class="admin-settings-advanced">
+          <button type="button" class="collapsible-toggle" x-bind="trigger">
+            <span class="history-chevron" x-bind="chevron" aria-hidden="true"></span>
+            <span x-text="$app.t('admin.settings.claude.effortTitle')"></span>
+            <span class="admin-settings-active-badge" x-show="adminClaudeEffortChangedCount() > 0"
+                  x-text="$app.t('admin.settings.claude.overridesActive', { n: adminClaudeEffortChangedCount() })"></span>
+          </button>
+          <div x-bind="panel" x-cloak>
+            <div class="admin-settings-fold-body">
+              <small class="muted-msg muted-msg--sm" x-text="$app.t('admin.settings.claude.effortIntro')"></small>
+              <div x-data="settingField({ k: 'ai.claude.effort.lektorat', label: 'admin.settings.label.aiClaudeEffortLektorat', ph: 'medium', help: 'admin.settings.help.lektoratEffort' })"></div>
+              <div x-data="settingField({ k: 'ai.claude.effort.komplett', label: 'admin.settings.label.aiClaudeEffortKomplett', ph: 'high', help: 'admin.settings.help.komplettEffort' })"></div>
+              <div x-data="settingField({ k: 'ai.claude.effort.review', label: 'admin.settings.label.aiClaudeEffortReview', ph: 'high', help: 'admin.settings.help.reviewEffort' })"></div>
+              <div x-data="settingField({ k: 'ai.claude.effort.plot', label: 'admin.settings.label.aiClaudeEffortPlot', ph: 'medium', help: 'admin.settings.help.plotEffort' })"></div>
+              <div x-data="settingField({ k: 'ai.claude.effort.synonym', label: 'admin.settings.label.aiClaudeEffortSynonym', ph: 'low', help: 'admin.settings.help.synonymEffort' })"></div>
+              <div x-data="settingField({ k: 'ai.claude.effort.bookchat', label: 'admin.settings.label.aiClaudeEffortBookchat', ph: 'medium', help: 'admin.settings.help.chatEffort' })"></div>
+              <div x-data="settingField({ k: 'ai.claude.effort.pagechat', label: 'admin.settings.label.aiClaudeEffortPagechat', ph: 'medium', help: 'admin.settings.help.pageChatEffort' })"></div>
+              <div x-data="settingField({ k: 'ai.claude.effort.researchchat', label: 'admin.settings.label.aiClaudeEffortResearchchat', ph: 'medium', help: 'admin.settings.help.chatEffort' })"></div>
+              <div x-data="settingField({ k: 'ai.claude.effort.plotchat', label: 'admin.settings.label.aiClaudeEffortPlotchat', ph: 'medium', help: 'admin.settings.help.chatEffort' })"></div>
+              <div x-data="settingField({ k: 'ai.claude.effort.ideenchat', label: 'admin.settings.label.aiClaudeEffortIdeenchat', ph: 'medium', help: 'admin.settings.help.chatEffort' })"></div>
+            </div>
+          </div>
+        </div>
 
         <h4 class="admin-settings-subheading"><span x-text="$app.t('admin.settings.claude.billingTitle')"></span></h4>
         <small class="muted-msg muted-msg--sm" x-text="$app.t('admin.settings.claude.billingIntro')"></small>
@@ -78,8 +94,10 @@
         <div x-data="settingField({ k: 'ai.ollama.host', type: 'url', label: 'admin.settings.label.host', ph: 'http://localhost:11434' })"></div>
         <div x-data="settingField({ k: 'ai.ollama.model', label: 'admin.settings.label.model', models: { target: 'ollama', hostKey: 'ai.ollama.host' } })"></div>
         <div x-data="settingField({ k: 'ai.ollama.temperature', type: 'num', label: 'admin.settings.label.temperature', num: { step: 0.01, decimals: 2, min: 0, max: 2 } })"></div>
+        <div x-data="settingField({ k: 'ai.ollama.chat_temperature', type: 'num', label: 'admin.settings.label.aiChatTemperature', num: { step: 0.01, decimals: 2, min: 0, max: 2 }, help: 'admin.settings.help.chatTemperature' })"></div>
         <div x-data="settingField({ k: 'ai.ollama.context_window', type: 'num', label: 'admin.settings.label.contextWindow', num: { integer: true, min: 2048, max: 2000000 }, help: 'admin.settings.help.contextWindow' })"></div>
         <div x-data="settingField({ k: 'ai.ollama.max_tokens_out', type: 'num', label: 'admin.settings.label.maxTokensOut', num: { integer: true, min: 512, max: 200000 }, help: 'admin.settings.help.maxTokensOut' })"></div>
+        <div x-data="settingField({ k: 'ai.ollama.komplett.extract_max_tokens', type: 'num', label: 'admin.settings.label.komplettExtractMaxTokens', num: { integer: true, min: 1024, max: 200000 }, help: 'admin.settings.help.komplettExtractMaxTokensOllama' })"></div>
         <div x-data="settingField({ k: 'ai.ollama.repeat_penalty', type: 'num', label: 'admin.settings.label.repeatPenalty', num: { step: 0.05, decimals: 2, min: 1, max: 2 }, help: 'admin.settings.help.repeatPenalty' })"></div>
         <div x-data="settingField({ k: 'ai.ollama.think', type: 'toggle', label: 'admin.settings.label.aiThink', help: 'admin.settings.help.think' })"></div>
         <div x-data="settingField({ k: 'ai.ollama.timeout_ms', type: 'num', label: 'admin.settings.label.aiTimeoutMs', num: { integer: true, min: 1000, max: 3600000 }, help: 'admin.settings.help.timeoutMsOllama' })"></div>
@@ -90,6 +108,7 @@
         <div x-data="settingField({ k: 'ai.openai-compat.model', label: 'admin.settings.label.model', models: { target: 'openai-compat', hostKey: 'ai.openai-compat.host' } })"></div>
         <div x-data="settingField({ k: 'ai.openai-compat.api_key', type: 'password', label: 'admin.settings.label.apiKey', help: 'admin.settings.help.openaiCompatApiKey' })"></div>
         <div x-data="settingField({ k: 'ai.openai-compat.temperature', type: 'num', label: 'admin.settings.label.temperature', num: { step: 0.01, decimals: 2, min: 0, max: 2 } })"></div>
+        <div x-data="settingField({ k: 'ai.openai-compat.chat_temperature', type: 'num', label: 'admin.settings.label.aiChatTemperature', num: { step: 0.01, decimals: 2, min: 0, max: 2 }, help: 'admin.settings.help.chatTemperature' })"></div>
         <div x-data="settingField({ k: 'ai.openai-compat.context_window', type: 'num', label: 'admin.settings.label.contextWindow', num: { integer: true, min: 2048, max: 2000000 }, help: 'admin.settings.help.contextWindow' })"></div>
         <div x-data="settingField({ k: 'ai.openai-compat.max_tokens_out', type: 'num', label: 'admin.settings.label.maxTokensOut', num: { integer: true, min: 512, max: 200000 }, help: 'admin.settings.help.maxTokensOut' })"></div>
         <div x-data="settingField({ k: 'ai.openai-compat.repeat_penalty', type: 'num', label: 'admin.settings.label.repeatPenalty', num: { step: 0.05, decimals: 2, min: 1, max: 2 }, help: 'admin.settings.help.repeatPenalty' })"></div>
@@ -115,6 +134,7 @@
         <div x-data="settingField({ k: 'ai.openai-compat.model.komplett', label: 'admin.settings.label.aiModelKomplett', help: 'admin.settings.help.komplettModelOpenaiCompat', models: { target: 'openai-compat', hostKey: 'ai.openai-compat.host' } })"></div>
         <div x-data="settingField({ k: 'ai.openai-compat.context_window.komplett', type: 'num', label: 'admin.settings.label.aiContextWindowKomplett', num: { integer: true, min: 0, max: 2000000 }, help: 'admin.settings.help.komplettContextWindowOpenaiCompat' })"></div>
         <div x-data="settingField({ k: 'ai.openai-compat.max_tokens_out.komplett', type: 'num', label: 'admin.settings.label.aiMaxTokensOutKomplett', num: { integer: true, min: 0, max: 200000 }, help: 'admin.settings.help.komplettMaxTokensOutOpenaiCompat' })"></div>
+        <div x-data="settingField({ k: 'ai.openai-compat.komplett.extract_max_tokens', type: 'num', label: 'admin.settings.label.komplettExtractMaxTokens', num: { integer: true, min: 1024, max: 200000 }, help: 'admin.settings.help.komplettExtractMaxTokensOpenaiCompat' })"></div>
         <div x-data="settingField({ k: 'ai.openai-compat.timeout_ms.komplett', type: 'num', label: 'admin.settings.label.aiTimeoutMsKomplett', num: { integer: true, min: 0, max: 3600000 }, help: 'admin.settings.help.komplettTimeoutMsOpenaiCompat' })"></div>
       </div>
 

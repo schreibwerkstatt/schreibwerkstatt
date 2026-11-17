@@ -51,6 +51,7 @@ Alle KI-Konfig liegt in der `app_settings`-Tabelle. Admin-PUT via `/admin/settin
 | `ai.ollama.host` | `http://localhost:11434` | `OLLAMA_HOST` | |
 | `ai.ollama.model` | `llama3.2` | `OLLAMA_MODEL` | |
 | `ai.ollama.temperature` | 0.7 | `OLLAMA_TEMPERATURE` | Default `0.2` für Lock-Logik |
+| `ai.ollama.chat_temperature` | 0.7 (nur Anzeige) | – | Chat-Temperatur, siehe „Chat-Temperatur“ |
 | `ai.ollama.context_window` | 32 000 | – | Per-Provider-Override |
 | `ai.ollama.max_tokens_out` | 16 000 | – | |
 | `ai.ollama.think` | `false` | – | Reasoning an/aus (top-level `think`-Flag); aus spart Output-Token |
@@ -59,10 +60,11 @@ Alle KI-Konfig liegt in der `app_settings`-Tabelle. Admin-PUT via `/admin/settin
 | `ai.openai-compat.model` | `llama3.2` | `OPENAI_COMPAT_MODEL` | |
 | `ai.openai-compat.api_key` | – | `OPENAI_COMPAT_API_KEY` | Optionaler Bearer-Token (encrypted); leer = kein `Authorization`-Header |
 | `ai.openai-compat.temperature` | 0.7 | `OPENAI_COMPAT_TEMPERATURE` | Default `0.1` für Lock-Logik |
+| `ai.openai-compat.chat_temperature` | 0.7 (nur Anzeige) | – | Chat-Temperatur, siehe „Chat-Temperatur“ |
 | `ai.openai-compat.context_window` | 32 000 | – | |
 | `ai.openai-compat.max_tokens_out` | 16 000 | – | |
 | `ai.openai-compat.think` | `false` | – | Reasoning an/aus; aus sendet `chat_template_kwargs.enable_thinking=false`, an sendet nichts (Modell-Default; nötig für echtes OpenAI) und schaltet aufs Thinking-Sampling (siehe „Reasoning/Thinking") |
-| `ai.openai-compat.think_temperature` | 0.6 | – | Temperatur bei `think=true`; ersetzt dann `temperature` und `ai.chat_temperature` |
+| `ai.openai-compat.think_temperature` | 0.6 | – | Temperatur bei `think=true`; ersetzt dann `temperature` und `ai.openai-compat.chat_temperature` |
 | `ai.openai-compat.think_budget` | 8192 | – | Denk-Reserve: bei `think=true` auf jeden Call mit eigenem Output-Deckel addiert (gedeckelt durch `max_tokens_out`) |
 | `ai.openai-compat.reasoning_budget.lektorat` | 0 | – | Denkbudget, das das Lektorat bei `think=true` pro Aufruf schickt (`reasoning_budget_tokens` + `enable_thinking`); 0 = Alias-/Server-Default (siehe „Reasoning/Thinking“) |
 | `ai.openai-compat.cloud` | `false` | – | Provider-Klasse (siehe unten): `true` = gehostetes Frontier-Modell (z.B. Kimi/Moonshot, OpenAI) → volle Cloud-Prompts, Lektorat-Split, parallele Calls. Pro Profil überschreibbar |
@@ -72,7 +74,6 @@ Alle KI-Konfig liegt in der `app_settings`-Tabelle. Admin-PUT via `/admin/settin
 | `ai.openai-compat.retry_max` | 3 | – | Retry-Versuche bei 408/429/5xx mit Exponential-Backoff |
 | `ai.openai-compat.{model,context_window,max_tokens_out,timeout_ms}.komplett` | leer / 0 | – | Per-Job-Overrides der Komplettanalyse (leer/0 = folgt global), siehe „Per-Job-Konfiguration“ |
 | `ai.chars_per_token` | provider-default (3 Claude / 4 lokal) | – | Tokenizer-Heuristik (Boot-frozen). Gesetzt gilt der Wert fuer **alle** Provider — leer lassen, wenn Claude und ein lokales Modell nebeneinander laufen |
-| `ai.chat_temperature` | – | – | Override nur für Abschnitts-/Buch-Chat |
 
 | Provider | Streaming | Tool-Use | Caching |
 |----------|-----------|----------|---------|
@@ -453,4 +454,4 @@ Der eigene Zugang schlägt die Admin-Zuweisung. **Kosten:** das Ledger (`ai_cost
 
 ## Chat-Temperatur
 
-`ai.chat_temperature` (app_settings) überschreibt Provider-Defaults nur für Abschnitts-Chat und Buch-Chat. Andere Job-Typen (Review, Lektorat, Komplett) bleiben deterministisch (Provider-Defaults: Ollama 0.2, Llama 0.1).
+`ai.ollama.chat_temperature` bzw. `ai.openai-compat.chat_temperature` (Admin → Provider-Panel, unter «Temperatur») überschreibt die Temperatur des Providers für Abschnitts- und Buch-Chat sowie den klassischen Weg von Plot- und Ideen-Chat ([lib/ai/config.js](../lib/ai/config.js)#`chatTemperature`). Wirksam nur mit gespeicherter DB-Zeile; der Registry-Default 0.7 ist Anzeige-Wert. Claude hat keinen solchen Key — Temperatur ist dort nicht einstellbar. Im Thinking-Modus von openai-compat gilt stattdessen `think_temperature`. Andere Job-Typen (Review, Lektorat, Komplett) bleiben deterministisch (Provider-Defaults: Ollama 0.2, openai-compat 0.1).

@@ -30,7 +30,7 @@ const BATCH_SIZE = 15;
 // `ai.<p>.max_tokens_out` (= cfg.inputBudgetChars, bisheriges Verhalten). Ein Job, der seine
 // Calls TIEFER deckelt, MUSS sein eigenes Cap einsetzen — sonst chunkt er gegen ein
 // Input-Budget, das seine Calls nie reservieren, und zerlegt das Buch feiner als nötig.
-// Konkret die Komplettanalyse: sie deckelt jeden Call auf `ai.komplett.extract_max_tokens`
+// Konkret die Komplettanalyse: sie deckelt jeden Call auf `ai.<provider>.komplett.extract_max_tokens`
 // (phases/tokens.js#komplettMaxTokens), und genau dieser Wert landet als `maxTokensOut` im
 // Preflight (routes/jobs/shared/ai.js#aiCall) — Chunk-Grenze und Preflight müssen dieselbe
 // Rechnung machen. Für die Cloud-Klasse sind beide Werte identisch (komplettMaxTokens

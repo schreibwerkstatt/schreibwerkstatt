@@ -164,13 +164,13 @@ test('VALIDATORS: int-Range rejectet Floats', () => {
 
 test('VALIDATORS: number-Range akzeptiert Floats im Bereich', () => {
   settings.set('ai.claude.api_key', 'sk-keep', { updatedBy: 'tester@x' }); // unrelated state
-  settings.set('ai.chat_temperature', 0.5, { updatedBy: 'tester@x' });
-  assert.equal(settings.get('ai.chat_temperature'), 0.5);
+  settings.set('ai.ollama.chat_temperature', 0.5, { updatedBy: 'tester@x' });
+  assert.equal(settings.get('ai.ollama.chat_temperature'), 0.5);
 });
 
 test('VALIDATORS: number-Range rejectet ausserhalb', () => {
   assert.throws(
-    () => settings.set('ai.chat_temperature', 5, { updatedBy: 'tester@x' }),
+    () => settings.set('ai.ollama.chat_temperature', 5, { updatedBy: 'tester@x' }),
     err => err.code === 'INVALID_VALUE',
   );
 });

@@ -354,4 +354,47 @@
   align-items: center;
   gap: var(--space-xs);
 }
+
+/* Inhalt eines eingeklappten Bereichs (Panel bleibt ungestylt, Layout am Kind). */
+.admin-settings-fold-body {
+  display: grid;
+  gap: var(--space-lg);
+}
+
+/* Modellstufe: Kopfzeile nennt Stufe, Modell und Zahl der Jobs. */
+.admin-tier .admin-tier-name { min-width: 6em; text-align: start; }
+.admin-tier .admin-tier-count {
+  color: var(--color-muted);
+  font-size: var(--font-size-xs);
+}
+
+/* Zuordnung Job → Stufe: eine Zeile je Job, Stufe per Segment-Umschalter.
+   Eine von der Vorbelegung abweichende Zeile trägt die Akzentkante links. */
+.admin-tier-group {
+  display: grid;
+  gap: var(--space-2xs);
+  margin-top: var(--space-md);
+}
+.admin-tier-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: var(--space-xs) var(--space-md);
+  padding: var(--space-2xs) var(--space-sm);
+  border-left: 3px solid transparent;
+}
+.admin-tier-row:hover { background: var(--color-tag-bg); }
+.admin-tier-row.is-changed { border-left-color: var(--color-accent); }
+.admin-tier-row-label {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-sm);
+  min-width: 0;
+  font-size: var(--font-size-sm);
+}
+.admin-tier-row-default {
+  color: var(--color-muted);
+  font-size: var(--font-size-xs);
+}
 }

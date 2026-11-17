@@ -19,6 +19,8 @@ test('Einstellungen: Feldzustand, Sammel-Speichern, Zurücksetzen auf Standard',
   await page.evaluate(async () => { await window.__app.toggleAdminSettingsCard(); });
   const card = page.locator('[x-show="$app.showAdminSettingsCard"]').first();
   await expect(card).toBeVisible();
+  // Das Feld steht im Reiter «Anmeldung» — der Start-Reiter ist «Allgemein».
+  await cardData(page, () => { window.Alpine.$data(document.querySelector('[x-data="adminSettingsCard"]')).adminSettingsTab = 'auth'; });
   const field = card.locator('.setting-field').filter({ hasText: KEY }).first();
   await expect(field).toBeVisible();
   const state = field.locator('.setting-field__state');

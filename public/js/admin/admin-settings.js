@@ -17,6 +17,14 @@ function _isNumKey(s) {
 }
 function _same(a, b) { return JSON.stringify(a) === JSON.stringify(b); }
 
+// Effort-Felder des Claude-Reiters (eingeklappter Bereich «Reasoning-Effort»).
+const ADMIN_EFFORT_KEYS = Object.freeze([
+  'ai.claude.effort.lektorat', 'ai.claude.effort.komplett', 'ai.claude.effort.review',
+  'ai.claude.effort.plot', 'ai.claude.effort.synonym', 'ai.claude.effort.bookchat',
+  'ai.claude.effort.pagechat', 'ai.claude.effort.researchchat', 'ai.claude.effort.plotchat',
+  'ai.claude.effort.ideenchat',
+]);
+
 export const adminSettingsMethods = {
   async adminSettingsLoad() {
     if (this.adminSettingsLoading) return;
@@ -30,7 +38,7 @@ export const adminSettingsMethods = {
       }
       this.adminSettingsMap = map;
       this.adminSettingsAuth = data.auth || { own_has_password: false, env_admin: false };
-      this.adminJobTiers = data.jobTiers || { groups: [], jobs: [] };
+      this.adminJobTiers = data.jobTiers || { tiers: [], groups: [], jobs: [] };
       // Form-State aus map kopieren — Form-Inputs schreiben in form, Save
       // diff't vs. map und sendet nur geaenderte Keys ans Backend.
       this.adminSettingsForm = this._adminSettingsBuildForm(map);
@@ -384,16 +392,42 @@ export const adminSettingsMethods = {
       .filter(g => g.jobs.length);
   },
 
-  // Wie viele Jobs laufen auf einer anderen Stufe als vorbelegt (Badge am Toggle)?
-  adminJobTierChangedCount() {
-    return (this.adminJobTiers?.jobs || [])
-      .filter(j => (this.adminSettingsForm?.[`ai.claude.tier.job.${j.type}`] || j.tier) !== j.tier).length;
+  // Stufen in Rangfolge (lib/ai/job-tiers.js#TIERS, vom Server geliefert).
+  adminTierList() {
+    return this.adminJobTiers?.tiers || [];
   },
 
-  // Kopfzeile einer Stufe: Modell oder «wie stark».
+  // Stufe eines Jobs: getippter/gespeicherter Wert, sonst Vorbelegung.
+  adminJobTierValue(j) {
+    const v = this.adminSettingsForm?.[`ai.claude.tier.job.${j.type}`];
+    return this.adminTierList().includes(v) ? v : j.tier;
+  },
+
+  // Wie viele Jobs laufen auf einer anderen Stufe als vorbelegt (Badge am Toggle)?
+  adminJobTierChangedCount() {
+    return (this.adminJobTiers?.jobs || []).filter(j => this.adminJobTierValue(j) !== j.tier).length;
+  },
+
+  // Wie viele Jobs laufen auf dieser Stufe (Kopfzeile der Stufe)?
+  adminTierJobCount(tier) {
+    return (this.adminJobTiers?.jobs || []).filter(j => this.adminJobTierValue(j) === tier).length;
+  },
+
+  // Kopfzeile einer Stufe: Modell oder «wie stark». «Stark» ist das Instanz-Modell.
   adminTierModelLabel(tier) {
+    if (tier === 'strong') {
+      return String(this.adminSettingsForm?.['ai.claude.model'] || '').trim() || 'claude-sonnet-5-5';
+    }
     const m = String(this.adminSettingsForm?.[`ai.claude.model.tier.${tier}`] || '').trim();
     return m || window.__app.t('admin.settings.claude.tierFollowsStrong');
+  },
+
+  // Effort-Felder mit eigenem Wert (Badge am eingeklappten Effort-Bereich).
+  adminClaudeEffortChangedCount() {
+    return ADMIN_EFFORT_KEYS.filter((k) => {
+      const v = String(this.adminSettingsForm?.[k] ?? '').trim();
+      return v !== '' && v !== String(this.adminSettingsMap?.[k]?.default ?? '');
+    }).length;
   },
 
   // Spiegelt die Budget-Ableitung aus lib/ai.js (getContextConfigFor) +
@@ -408,14 +442,14 @@ export const adminSettingsMethods = {
     let out = Number(this.adminSettingsForm[`ai.${p}.max_tokens_out`]);
     if (!Number.isFinite(out) || out <= 0) out = p === 'claude' ? 64000 : 16000;
     // Die Komplettanalyse deckelt ihre Calls bei der Klasse 'local' auf
-    // ai.komplett.extract_max_tokens; die Klasse 'cloud' behält das Provider-Ceiling
+    // ai.<provider>.komplett.extract_max_tokens; die Klasse 'cloud' behält das Provider-Ceiling
     // (spiegelt phases/tokens.js#komplettMaxTokens, Klassen-Entscheid analog
     // lib/ai/config.js#providerClass: openai-compat nur mit gesetztem `.cloud`).
     // Weil die Vorschau genau diese Pässe beschreibt, muss sie mit demselben Cap rechnen
     // wie chunkLimitsFor — sonst zeigt sie kleinere Chunks, als der Job tatsächlich bildet.
     const isCloudClass = p === 'claude'
       || (p === 'openai-compat' && this.adminSettingsForm['ai.openai-compat.cloud'] === true);
-    const komplettOut = Number(this.adminSettingsForm['ai.komplett.extract_max_tokens']);
+    const komplettOut = Number(this.adminSettingsForm[`ai.${p}.komplett.extract_max_tokens`]);
     if (!isCloudClass && Number.isFinite(komplettOut) && komplettOut > 0) out = Math.min(out, komplettOut);
     const cptRaw = Number(this.adminSettingsForm['ai.chars_per_token']);
     const charsPerToken = Number.isFinite(cptRaw) && cptRaw > 0 ? cptRaw : (p === 'claude' ? 3 : 4);

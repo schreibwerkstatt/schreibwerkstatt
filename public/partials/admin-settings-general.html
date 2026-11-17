@@ -1,0 +1,6 @@
+    <!-- Allgemein-Tab: Identität der Instanz (Name, öffentliche Adresse, Sichtbarkeit für Suchmaschinen) -->
+    <section x-bind="panel('general')" class="admin-settings-section">
+      <div x-data="settingField({ k: 'app.name', label: 'admin.settings.label.appName', ph: 'Schreibwerkstatt', help: 'admin.settings.help.appName' })"></div>
+      <div x-data="settingField({ k: 'app.public_url', type: 'url', label: 'admin.settings.label.appPublicUrl', ph: 'https://app.example.com' })"></div>
+      <div x-data="settingField({ k: 'seo.indexable', type: 'toggle', label: 'admin.settings.label.seoIndexable', help: 'admin.settings.help.seoIndexable' })"></div>
+    </section>

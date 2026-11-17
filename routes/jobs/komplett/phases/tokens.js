@@ -11,13 +11,13 @@ const { getContextConfigFor, providerClass } = require('../../../../lib/ai');
  * einen Teil des Caps verbrauchen → theoretisch erreicht das JSON das Ceiling doch
  * (stop_reason max_tokens → truncated). In der Praxis liegt Extraktions-JSON (≈20–40K Tokens)
  * weit unter dem 128K-Opus-Cap, der Fall ist also selten — aber NICHT strukturell ausgeschlossen.
- * Lokale Provider knapper auf das konfigurierte ai.komplett.extract_max_tokens (VRAM/Latenz),
- * gedeckelt aufs jeweilige Ceiling. aiCall deckelt selbst nochmal aufs Provider-Ceiling.
+ * Lokale Provider knapper auf ihr konfiguriertes ai.<provider>.komplett.extract_max_tokens
+ * (VRAM/Latenz), gedeckelt aufs jeweilige Ceiling. aiCall deckelt selbst nochmal aufs Provider-Ceiling.
  */
 function komplettMaxTokens(provider) {
   const ceiling = getContextConfigFor(provider).maxTokensOut;
   if (providerClass(provider) === 'cloud') return ceiling;
-  const base = Math.max(1024, parseInt(appSettings.get('ai.komplett.extract_max_tokens'), 10) || 16000);
+  const base = Math.max(1024, parseInt(appSettings.get(`ai.${provider}.komplett.extract_max_tokens`), 10) || 16000);
   return Math.min(base, ceiling);
 }
 
