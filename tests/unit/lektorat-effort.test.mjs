@@ -11,14 +11,14 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { createRequire } from 'node:module';
-import { mkdtempSync, rmSync } from 'node:fs';
-import { tmpdir } from 'node:os';
+import { rmSync } from 'node:fs';
 import { join } from 'node:path';
+import { makeTmpDir } from './_helpers/tmp-dir.js';
 
 const require_ = createRequire(import.meta.url);
 
 function _bootstrap() {
-  const dir = mkdtempSync(join(tmpdir(), 'lektorat-effort-'));
+  const dir = makeTmpDir('lektorat-effort-');
   process.env.DB_PATH = join(dir, 'test.db');
   process.env.SESSION_SECRET = process.env.SESSION_SECRET || 'test';
   for (const key of Object.keys(require_.cache)) {

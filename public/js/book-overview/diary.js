@@ -6,7 +6,7 @@
 //
 // Compute-Bodies sind als pure `_computeXxx` extrahiert (Alpine-frei testbar);
 // die memoizierten Wrapper nutzen den gemeinsamen `this._memo` aus load.js.
-import { buildYmHeatRows } from '../book/ymheatmap.js';
+import { buildYmHeatRows, ymHeatCellClass } from '../book/ymheatmap.js';
 import { isoAddDays as _addDays, isoDaysBetween as _dayDiff, isoWeekday } from '../utils/iso-day.js';
 import { diaryDayKey } from '../book/diary-date.js';
 function _prevMonthKey(monthKey) {
@@ -151,10 +151,25 @@ export const diaryMethods = {
     } catch { return ''; }
   },
 
-  // Tooltip einer Heatmap-Monatszelle: Zeitraum, Eintragszahl, Rückblick-Status.
+  // Klassen einer Heatmap-Zelle — dieselben Marker wie der Kalender der
+  // Rückblick-Karte (components/year-month-heatmap.css), ohne Auswahl.
+  rueckblickCellClass(cell) {
+    return ymHeatCellClass(cell);
+  },
+
+  // «18 von 203 Monaten mit Rückblick»
+  rueckblickSummary() {
+    const h = this.overviewRueckblickHeatmap();
+    return window.__app.t('rueckblick.cal.summary', { done: h.monthsWithRueckblick, total: h.monthsWithEntries });
+  },
+
+  // Tooltip einer Heatmap-Zelle (Monat oder Jahres-Spalte): Zeitraum,
+  // Eintragszahl, Rückblick-Status.
   rueckblickCellTip(cell) {
     const app = window.__app;
-    const period = `${this.rueckblickMonthLabels()[cell.monthIdx - 1]} ${cell.key.slice(0, 4)}`;
+    const period = cell.isYear
+      ? `${app.t('rueckblick.grain.year')} ${cell.key}`
+      : `${this.rueckblickMonthLabels()[cell.monthIdx - 1]} ${cell.key.slice(0, 4)}`;
     const entriesPart = window.__app.tn('overview.rueckblickHeatmap.tooltip.entries', cell.entries);
     const rbPart = cell.hasRueckblick
       ? app.t('overview.rueckblickHeatmap.tooltip.hasRueckblick', { date: this.rueckblickCreatedLabel(cell.createdAt) })

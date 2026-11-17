@@ -4,14 +4,14 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { createRequire } from 'node:module';
-import { mkdtempSync, rmSync } from 'node:fs';
-import { tmpdir } from 'node:os';
+import { rmSync } from 'node:fs';
 import { join } from 'node:path';
+import { makeTmpDir } from './_helpers/tmp-dir.js';
 
 const require_ = createRequire(import.meta.url);
 
 function _isolatedDb() {
-  const dir = mkdtempSync(join(tmpdir(), 'dev-seed-test-'));
+  const dir = makeTmpDir('dev-seed-test-');
   const dbFile = join(dir, 'test.db');
   process.env.DB_PATH = dbFile;
   process.env.SESSION_SECRET = process.env.SESSION_SECRET || 'dev-seed-test-secret';

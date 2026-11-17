@@ -2036,7 +2036,7 @@ Nur einmal verwendet — nicht neu erfinden für andere Kontexte (Karten haben e
 
 ### Split mit Leiste (`.aside-split`)
 
-**Use:** Hauptinhalt links, schmalere klebende Spalte rechts, ab 1280 px. Fünf Konsumenten: Editor | Seiten-Chat/Ideen/Referenz und Kapitelbewertung | Kapitel-Ideen (Hauptebene, [index.html](public/index.html)), Board | Chat in Plot-Werkstatt, Ideen-Board und Recherche.
+**Use:** Hauptinhalt links, schmalere klebende Spalte rechts, ab 1280 px. Sechs Konsumenten: Editor | Seiten-Chat/Ideen/Referenz und Kapitelbewertung | Kapitel-Ideen (Hauptebene, [index.html](public/index.html)), Board | Chat in Plot-Werkstatt, Ideen-Board und Recherche, Zeitraum | Kalender im Tagebuch-Rückblick ([tagebuch-rueckblick.html](public/partials/tagebuch-rueckblick.html)).
 
 ```html
 <div class="aside-split main-aside-split aside-split--aside-first plot-split fullscreen-shell"
@@ -2317,16 +2317,19 @@ Muster. Gegated: [filter-search-single-place.test.mjs](tests/unit/filter-search-
 
 ## Jahr×Monat-Heatmap
 
-**Use:** Jahre als Zeilen × 12 Monate als Spalten, Zell-Intensität nach einer Monats-Kennzahl (z. B. Tagebuch-Eintragszahl). Kalender-artige Aktivitäts-Landkarte über mehrere Jahre. Zwei Konsumenten: **Rückblick-Karte** (History-Kalender, interaktiv) und **Buch-Übersicht** (Rückblick-Abdeckungs-Tile).
+**Use:** Jahre als Zeilen × 12 Monate + Jahres-Spalte, Dichte nach einer Monats-Kennzahl (Tagebuch-Eintragszahl) und darüber ein Status je Zeitraum (Rückblick vorhanden/veraltet). Zwei Konsumenten: **Rückblick-Karte** (Kalender der Leiste, interaktiv) und **Buch-Übersicht** (Rückblick-Abdeckungs-Tile); die Verlauf-Matrix der Rückblick-Karte nutzt nur die Stufen-Zellen.
+
+**Zwei Aussagen, zwei Farbsysteme:** Dichte in einer neutralen Stufenfarbe (`--ymheat-level`, Default Textfarbe → Grau; Level 0 = hohle Zelle), der Status als volle Akzentfläche mit Häkchen (`--has`) bzw. «!» und gestricheltem Warnrahmen (`--stale`). Der Status schlägt die Stufe. **Why:** liegen Dichte und Status in derselben Farbe, verschwindet der Status auf dichten Zellen; im Darkmode liegen aufgehellter Karten-Akzent, Warnfarbe und eine dichte Akzent-Stufe zudem so nah, dass nur die Form (Fläche, Häkchen, «!», Strichelung) trennt.
 
 **Klassen** [public/css/components/year-month-heatmap.css](public/css/components/year-month-heatmap.css) (`@layer components`):
 - `.ymheat` — Wrapper, `container-type: inline-size` (self-containing → `@container`-Breakpoints greifen in jedem Slot). Akzent über `--ymheat-accent` (Default `var(--color-accent)`; Konsument setzt ggf. die Karten-Hue). Höhe via `--ymheat-max` (Default `320px`).
 - `.ymheat-scroll` / `.ymheat-grid` / `.ymheat-row` / `.ymheat-row--head` (sticky Monats-Kopf) / `.ymheat-corner` / `.ymheat-month-label`
-- `.ymheat-year` (+ `--has` / `--active` / `:disabled`) — Jahres-Label links, klickbar.
-- `.ymheat-cell` — Monatszelle. `--lvl0..4` (Dichte, `color-mix(--ymheat-accent, --color-bg)`-Stufen), `--has` (eckiger Rückblick-Marker), `--stale` (Marker in Warnfarbe: Rückblick vorhanden, Einträge seither geändert — `stale` aus der Coverage; Jahr: `.ymheat-year--stale`), `--current` (Innen-Ring = aktueller Monat, TZ-aware), `--active` (Auswahl-Outline), `:disabled` (dimmt leere Zellen — nur der interaktive Konsument setzt es).
+- `.ymheat-summary` — Zählzeile über dem Raster («18 von 203 Monaten mit Rückblick», `monthsWithRueckblick`/`monthsWithEntries` aus `buildYmHeatRows`).
+- `.ymheat-year` (+ `--active`) — Jahres-Label links, reiner Text; gewählt wird das Jahr über seine Zelle.
+- `.ymheat-cell` — Zelle (Monat, mit `--year` die Jahres-Spalte; Kopf `.ymheat-month-label--year`). `--lvl0..4` (Dichte, neutrale Stufen), `--has` (Akzentfläche + Häkchen), `--stale` (dazu «!» + gestrichelter Warnrahmen — `stale` aus der Coverage), `--current` (Strich unter der Zelle = aktueller Monat, TZ-aware), `--active` (Auswahl-Ring rundum), `:disabled` (leere Zellen — nur der interaktive Konsument setzt es). Klassen ausschliesslich über `ymHeatCellClass(cell, activeKey?)`.
 - `.ymheat-legend` / `.ymheat-legend-label` — Skala + Marker-Legende (kleine `.ymheat-cell`-Swatches).
 
-**Math:** [public/js/book/ymheatmap.js](public/js/book/ymheatmap.js) — `buildYmHeatRows(coverage)` baut die Zeilen aus der serverseitigen Rückblick-Coverage (`GET /history/rueckblick-coverage`); darunter `quartileLevelFor(counts)` (Quartil-Bucketing der positiven Monatswerte → Level 0..4, analog `overviewStreakHeatmap`) + `currentMonthKey()` (aktueller Monat `YYYY-MM`, TZ-aware). Beide Konsumenten (`rueckblickCalendar` in [tagebuch-rueckblick.js](public/js/book/tagebuch-rueckblick.js), `_computeRueckblickHeatmap` in [book-overview/diary.js](public/js/book-overview/diary.js)) rufen `buildYmHeatRows` auf derselben Coverage — sie zählen und färben darum identisch. Test: [tests/unit/ymheatmap.test.mjs](tests/unit/ymheatmap.test.mjs), [tests/unit/rueckblick-heatmap.test.mjs](tests/unit/rueckblick-heatmap.test.mjs).
+**Math:** [public/js/book/ymheatmap.js](public/js/book/ymheatmap.js) — `buildYmHeatRows(coverage)` baut die Zeilen aus der serverseitigen Rückblick-Coverage (`GET /history/rueckblick-coverage`), je Zeile 12 Monate + `yearCell` in derselben Form; darunter `quartileLevelFor(counts)` (Quartil-Bucketing der positiven Monatswerte → Level 0..4, analog `overviewStreakHeatmap`) + `currentMonthKey()` (aktueller Monat `YYYY-MM`, TZ-aware). Beide Konsumenten (`rueckblickCalendar` in [rueckblick-calendar.js](public/js/book/rueckblick-calendar.js), `_computeRueckblickHeatmap` in [book-overview/diary.js](public/js/book-overview/diary.js)) rufen `buildYmHeatRows` auf derselben Coverage — sie zählen und färben darum identisch. Test: [tests/unit/ymheatmap.test.mjs](tests/unit/ymheatmap.test.mjs), [tests/unit/rueckblick-heatmap.test.mjs](tests/unit/rueckblick-heatmap.test.mjs).
 
 **A11y:** Jede Zell- und Jahres-`<button>` trägt neben `:data-tip` ein `:aria-label` mit derselben beschreibenden Zeichenkette — sonst haben die textlosen Monatszellen keinen zugänglichen Namen.
 
@@ -2672,6 +2675,8 @@ cancelXyz()       { this.xyzId = null; this._releasePickerPopover(); }
 ```
 
 CSS: `.history-item*` + `.history-chevron` in [public/css/components/primitives.css](public/css/components/primitives.css), `.history-detail` in [public/css/page/tree-history.css](public/css/page/tree-history.css). `.history-detail` hat einen gestrichelten Top-Border, der visuell anschliesst. Chevron + State (`open`) wiederverwenden — nicht neu definieren.
+
+**Löschen-Symbol** (`.history-item-delete`, letztes Kind der Zeile): sitzt in jeder Zeile am selben Ort — rechts aussen, vertikal mittig, ausserhalb des Inhaltsflusses; die Zeile reserviert seinen Platz als Innenabstand. Umbrechender Inhalt nimmt es nicht mit, und es löst keinen Überlauf aus. Unter 600 px scrollt die Zeile seitlich statt umzubrechen; das Symbol klebt dann rechts (`position: sticky`) und deckt den darunter laufenden Inhalt. Eine Karte, deren Zeile in einer schmalen Spalte einzeilig bleiben soll, setzt `flex-wrap: nowrap` und lässt eine Nebenangabe schrumpfen (`min-width: 0` + Ellipse, voller Text im Tooltip) — Muster: Liste der Rückblick-Karte ([tagebuch-rueckblick-history-row.html](public/partials/tagebuch-rueckblick-history-row.html)).
 
 ---
 

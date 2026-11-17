@@ -1,24 +1,21 @@
-  <!-- Übersicht (Fragment der Rückblick-Karte): Kalender aus der Coverage — auch
-       ohne gespeicherten Rückblick der Einstieg —, Liste der Läufe (je Zeitraum
-       gruppiert) und Verlauf über die Monate (rueckblick-verlauf.js). -->
-  <section class="rb-overview" x-show="!hasRueckblickResult() && rueckblickCalendar().years.length" x-cloak>
+  <!-- Navigation (Leiste der Rückblick-Karte): Kalender aus der Coverage —
+       Monate und Jahr als Zellen, Rückblick = Akzentfläche mit Häkchen — und
+       die Liste der Läufe (je Zeitraum gruppiert). Ein Klick wählt den
+       Zeitraum; was er zeigt, entscheidet der Hauptbereich. -->
+  <div class="card card--tagebuchRueckblick rb-nav aside-split-aside" x-show="rbHasCalendar()" x-cloak>
     <div class="card-section-head">
-      <h3 class="card-section-title" x-text="$app.t('rueckblick.history')"></h3>
       <div class="tabs rb-history-tabs">
         <button :aria-pressed="rbHistoryView === 'cal'" type="button" class="tabs-btn" :class="{ 'tabs-btn--active': rbHistoryView === 'cal' }"
                 @click="rbHistoryView = 'cal'" x-text="$app.t('rueckblick.viewCalendar')"></button>
         <button :aria-pressed="rbHistoryView === 'list'" type="button" class="tabs-btn" :class="{ 'tabs-btn--active': rbHistoryView === 'list' }"
                 :disabled="!rueckblickHistory.length"
                 @click="rbHistoryView = 'list'" x-text="$app.t('rueckblick.viewList')"></button>
-        <button :aria-pressed="rbHistoryView === 'verlauf'" type="button" class="tabs-btn" :class="{ 'tabs-btn--active': rbHistoryView === 'verlauf' }"
-                :disabled="!rbHasVerlauf()" :data-tip="rbHasVerlauf() ? null : $app.t('rueckblick.verlauf.empty')"
-                @click="rbHistoryView = 'verlauf'" x-text="$app.t('rueckblick.viewVerlauf')"></button>
       </div>
     </div>
 
-    <!-- Kalender (Jahr×Monat aus der Coverage, components/year-month-heatmap.css) -->
-    <div class="ymheat rb-ymheat" x-show="rbHistoryView === 'cal' || !rueckblickHistory.length"
-         :style="{ '--ymheat-max': rueckblickCalendar().years.length > 6 ? '70vh' : 'none' }">
+    <!-- Kalender (Jahr×Monat + Jahres-Spalte, components/year-month-heatmap.css) -->
+    <div class="ymheat rb-ymheat aside-split-scroll" x-show="rbHistoryView === 'cal' || !rueckblickHistory.length">
+      <p class="ymheat-summary" x-text="rbCalSummary()"></p>
       <div class="ymheat-scroll">
         <div class="ymheat-grid">
           <div class="ymheat-row ymheat-row--head">
@@ -26,17 +23,15 @@
             <template x-for="(mLabel, mi) in rbMonthLabels()" :key="mi">
               <span class="ymheat-month-label truncate" x-text="mLabel"></span>
             </template>
+            <span class="ymheat-month-label ymheat-month-label--year" x-text="$app.t('rueckblick.grain.year')"></span>
           </div>
           <template x-for="row in rueckblickCalendar().years" :key="row.year">
             <div class="ymheat-row">
-              <button :aria-current="row.yearKey === rueckblickZeitraum ? 'true' : null" type="button" class="ymheat-year"
-                      :class="{ 'ymheat-year--has': row.hasRueckblick, 'ymheat-year--stale': row.stale, 'ymheat-year--active': row.yearKey === rueckblickZeitraum }"
-                      :disabled="rueckblickLoading || (!row.hasRueckblick && !row.hasEntries)"
-                      @click="openCalendarYear(row)" :data-tip="rbCalYearTip(row)" :aria-label="rbCalYearTip(row)"
-                      x-text="row.year"></button>
-              <template x-for="cell in row.months" :key="cell.key">
-                <button :aria-current="cell.key === rueckblickZeitraum ? 'true' : null" type="button" class="ymheat-cell"
-                        :class="'ymheat-cell--lvl' + cell.level + (cell.hasRueckblick ? ' ymheat-cell--has' : '') + (cell.stale ? ' ymheat-cell--stale' : '') + (cell.isCurrent ? ' ymheat-cell--current' : '') + (cell.key === rueckblickZeitraum ? ' ymheat-cell--active' : '')"
+              <span class="ymheat-year" :class="{ 'ymheat-year--active': String(rueckblickZeitraum).startsWith(row.yearKey) }"
+                    x-text="row.year"></span>
+              <template x-for="cell in [...row.months, row.yearCell]" :key="cell.key">
+                <button type="button" class="ymheat-cell" :aria-current="cell.key === rueckblickZeitraum ? 'true' : null"
+                        :class="rbCalCellClass(cell)"
                         :disabled="rueckblickLoading || (!cell.hasRueckblick && !cell.hasEntries)"
                         @click="openCalendarCell(cell)" :data-tip="rbCalCellTip(cell)" :aria-label="rbCalCellTip(cell)"></button>
               </template>
@@ -45,24 +40,27 @@
         </div>
       </div>
       <div class="ymheat-legend">
-        <span class="ymheat-legend-label" x-text="$app.t('rueckblick.cal.legendDensity')"></span>
+        <span class="ymheat-cell ymheat-cell--has"></span>
+        <span class="ymheat-legend-label" x-text="$app.t('rueckblick.cal.legendHas')"></span>
+        <span class="ymheat-cell ymheat-cell--has ymheat-cell--stale"></span>
+        <span class="ymheat-legend-label" x-text="$app.t('rueckblick.cal.legendStale')"></span>
+        <span class="ymheat-cell ymheat-cell--current ymheat-cell--lvl0"></span>
+        <span class="ymheat-legend-label" x-text="$app.t('rueckblick.cal.legendCurrent')"></span>
+      </div>
+      <div class="ymheat-legend">
         <span class="ymheat-cell ymheat-cell--lvl0"></span>
+        <span class="ymheat-legend-label" x-text="$app.t('rueckblick.cal.legendNone')"></span>
         <span class="ymheat-cell ymheat-cell--lvl1"></span>
         <span class="ymheat-cell ymheat-cell--lvl2"></span>
         <span class="ymheat-cell ymheat-cell--lvl3"></span>
         <span class="ymheat-cell ymheat-cell--lvl4"></span>
-        <span class="ymheat-cell ymheat-cell--has ymheat-cell--lvl0"></span>
-        <span x-text="$app.t('rueckblick.cal.legendHas')"></span>
-        <span class="ymheat-cell ymheat-cell--has ymheat-cell--stale ymheat-cell--lvl0"></span>
-        <span x-text="$app.t('rueckblick.cal.legendStale')"></span>
-        <span class="ymheat-cell ymheat-cell--current ymheat-cell--lvl0"></span>
-        <span x-text="$app.t('rueckblick.cal.legendCurrent')"></span>
+        <span class="ymheat-legend-label" x-text="$app.t('rueckblick.cal.legendDensity')"></span>
       </div>
     </div>
 
     <!-- Liste: eine Zeile je Zeitraum (jüngster Lauf), ältere Läufe einklappbar;
          Suche über Zeitraum + Inhalt -->
-    <div x-show="rbHistoryView === 'list' && rueckblickHistory.length" x-cloak>
+    <div class="aside-split-scroll rb-history-list" x-show="rbHistoryView === 'list' && rueckblickHistory.length" x-cloak>
       <div class="filter-bar" x-show="rueckblickHistory.length > 2">
         <span class="filter-search-wrap rb-history-search-wrap">
           <input type="text" class="filter-search-input" x-model="rbHistorySearch"
@@ -91,10 +89,7 @@
           </div>
         </div>
       </template>
-      <p class="muted-msg" x-show="rbHistorySearch && !filteredRueckblickHistory().length" x-cloak
+      <p class="muted-msg muted-msg--sm" x-show="rbHistorySearch && !filteredRueckblickHistory().length" x-cloak
          x-text="$app.t('rueckblick.historyNoMatch')"></p>
     </div>
-
-    <!-- @include tagebuch-rueckblick-verlauf -->
-  </section>
-
+  </div>

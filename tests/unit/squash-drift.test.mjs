@@ -7,16 +7,16 @@
 import { test } from 'node:test';
 import { strict as assert } from 'node:assert';
 import { execFileSync } from 'node:child_process';
-import { mkdtempSync, rmSync } from 'node:fs';
-import { tmpdir } from 'node:os';
+import { rmSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { makeTmpDir } from './_helpers/tmp-dir.js';
 
 const ROOT = resolve(fileURLToPath(import.meta.url), '..', '..', '..');
 const DUMPER = join(ROOT, 'tools', 'dump-schema.js');
 
 function dumpWith(env) {
-  const tmp = mkdtempSync(join(tmpdir(), 'squash-drift-'));
+  const tmp = makeTmpDir('squash-drift-');
   try {
     return execFileSync('node', [DUMPER], {
       env: { ...process.env, ...env, DB_PATH: join(tmp, 'fresh.db'), LOG_LEVEL: 'error' },
@@ -43,7 +43,7 @@ test('SQUASHED_SCHEMA produces FK-clean fresh install at SQUASHED_VERSION', asyn
   const Database = (await import('better-sqlite3')).default;
   const { SQUASHED_SCHEMA, SQUASHED_VERSION } = await import('../../db/squashed-schema.js');
 
-  const tmp = mkdtempSync(join(tmpdir(), 'squash-fk-'));
+  const tmp = makeTmpDir('squash-fk-');
   const dbFile = join(tmp, 'fresh.db');
   const db = new Database(dbFile);
   try {

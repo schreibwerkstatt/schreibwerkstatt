@@ -1,8 +1,8 @@
 // E2E-Smoke der Tagebuch-Rückblick-Karte.
 //
 // Mountet `tagebuchRueckblickCard` mit Mock-__app + gestubbtem fetch (Coverage,
-// History-Metadaten, Lazy-Entry, Suche) gegen ein Minimal-Root. Prüft: Zeitraum-
-// Optionen aus der Coverage, Default-Zeitraum, Render des Struktur-Ergebnisses,
+// History-Metadaten, Lazy-Entry, Suche) gegen ein Minimal-Root. Prüft: Kalender
+// (Marker, Jahres-Spalte, Zustand des Hauptbereichs), Default-Zeitraum, Render des Struktur-Ergebnisses,
 // Tag-Navigation (selectPage), Belege-Zeitleiste, Aktualität ohne Sperre, Leerzustand. Job-Lauf wird nicht durchgespielt (fetch ist gestubbt); das
 // Struktur-Ergebnis wird über Alpine.$data gesetzt (simuliert onDone).
 
@@ -13,17 +13,28 @@ test.beforeEach(async ({ page }) => {
   await page.waitForFunction(() => window.__harnessReady === true);
 });
 
-test('Zeitraum-Optionen nur aus datierten Einträgen, je Körnung (Monat | Jahr)', async ({ page }) => {
-  const values = () => page.locator('[data-test="zeitraum"] option').evaluateAll(
-    opts => opts.map(o => o.value).filter(Boolean),
-  );
-  // Monate: 2024-04, 2024-03, 2023-12. 'Über mich' ignoriert, Jahre nur im Jahr-Modus.
-  expect(await values()).toEqual(['2024-04', '2024-03', '2023-12']);
-  await page.locator('[data-test="grain-year"]').click();
+test('Kalender: Monat ohne Rückblick zeigt den Erstellen-Aufruf, Jahres-Spalte wählt das Jahr', async ({ page }) => {
+  // Zählung über die Monate mit Einträgen (3), davon zwei mit Rückblick.
+  await expect(page.locator('[data-test="cal-summary"]')).toHaveText('rueckblick.cal.summary {"done":2,"total":3}');
+  // Monate mit Rückblick tragen den Marker, leere Monate sind gesperrt.
+  await expect(page.locator('[data-test="cal-2024-03"]')).toHaveClass(/ymheat-cell--has/);
+  await expect(page.locator('[data-test="cal-2023-12"]')).not.toHaveClass(/ymheat-cell--has/);
+  await expect(page.locator('[data-test="cal-2024-07"]')).toBeDisabled();
+  // Monat mit Einträgen, ohne Rückblick → Zustand «create», kein Ergebnis.
+  await page.locator('[data-test="cal-2023-12"]').click();
+  await expect(page.locator('[data-test="zeitraum"]')).toHaveValue('2023-12');
+  await expect(page.locator('[data-test="state"]')).toHaveText('create');
+  await expect(page.locator('[data-test="cal-2023-12"]')).toHaveClass(/ymheat-cell--active/);
+  // Monat mit Rückblick → Ergebnis öffnet sich.
+  await page.locator('[data-test="cal-2024-03"]').click();
+  await expect(page.locator('[data-test="summary"]')).toContainText('März-Rückblick.');
+  await expect(page.locator('[data-test="state"]')).toHaveText('result');
+  // Jahres-Spalte: Jahr als Zeitraum, Nachbar-Optionen in Jahres-Körnung.
+  await page.locator('[data-test="cal-2024"]').click();
   await expect(page.locator('[data-test="zeitraum"]')).toHaveValue('2024');
-  expect(await values()).toEqual(['2024', '2023']);
-  await page.locator('[data-test="grain-month"]').click();
-  await expect(page.locator('[data-test="zeitraum"]')).toHaveValue('2024-04');
+  await expect(page.locator('[data-test="state"]')).toHaveText('create');
+  expect(await page.locator('[data-test="zeitraum"] option').evaluateAll(
+    opts => opts.map(o => o.value).filter(Boolean))).toEqual(['2024', '2023']);
 });
 
 test('Default-Zeitraum ist gesetzt (jüngster Monat), vorhandener Rückblick lädt lazy', async ({ page }) => {

@@ -5,6 +5,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { createRequire } from 'module';
+import { makeTmpDir } from './_helpers/tmp-dir.js';
 
 const require = createRequire(import.meta.url);
 const { readLinesReverse, listRotatedFiles } = require('../../lib/log-reverse-read');
@@ -53,7 +54,7 @@ test('missing file yields nothing', async () => {
 });
 
 test('listRotatedFiles returns base + rotations in order', () => {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'lrr-rot-'));
+  const dir = makeTmpDir('lrr-rot-');
   try {
     const base = path.join(dir, 'app.log');
     fs.writeFileSync(base, 'x');

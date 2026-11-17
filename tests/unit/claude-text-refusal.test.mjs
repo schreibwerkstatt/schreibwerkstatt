@@ -11,12 +11,10 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { createRequire } from 'node:module';
-import { mkdtempSync } from 'node:fs';
-import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { useTmpDb } from './_helpers/tmp-db.js';
 
 const require = createRequire(import.meta.url);
-process.env.DB_PATH = join(mkdtempSync(join(tmpdir(), 'claude-text-')), 'test.db');
+useTmpDb('claude-text');
 process.env.SESSION_SECRET = process.env.SESSION_SECRET || 'test';
 require('../../db/migrations');
 const appSettings = require('../../lib/app-settings');

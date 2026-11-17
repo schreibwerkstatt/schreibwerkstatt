@@ -12,15 +12,12 @@
   </style>
 </head>
 <body>
-  <!-- Slim-Variante des Partials. Combobox durch <select> ersetzt (wie das
-       Ereignisse-Harness die catalogFilter-Combobox umgeht). Render-Block für
-       Themen/Tage/Zusammenfassung/Belege nach dem Partial (data-test-Hooks). -->
+  <!-- Slim-Variante des Partials. Zeitraum-Auswahl über Kalenderzellen
+       (Monate + Jahres-Spalte, wie die Leiste der Karte) plus ein <select> nur
+       zum Ablesen des Zeitraums. Render-Block für Themen/Tage/Zusammenfassung/
+       Belege nach dem Partial (data-test-Hooks). -->
   <div id="root" class="card card--tagebuchRueckblick" x-data="tagebuchRueckblickCard" x-show="$app.showTagebuchRueckblickCard">
     <div class="card-actions rb-actions">
-      <template x-for="g in ['month', 'year']" :key="g">
-        <button type="button" :data-test="'grain-' + g" :aria-pressed="rbGrain() === g"
-                :disabled="rueckblickLoading || !_zeitraumOptions(g).length" @click="setRbGrain(g)" x-text="g"></button>
-      </template>
       <select data-test="zeitraum" x-model="rueckblickZeitraum">
         <option value="">—</option>
         <template x-for="opt in availableZeitraeume()" :key="opt.value">
@@ -31,6 +28,21 @@
         <span x-text="rbLatestEntry() ? 'rerun' : 'run'"></span>
       </button>
     </div>
+
+    <div class="ymheat" data-test="calendar">
+      <p class="ymheat-summary" data-test="cal-summary" x-text="rbCalSummary()"></p>
+      <template x-for="row in rueckblickCalendar().years" :key="row.year">
+        <div class="ymheat-row">
+          <span class="ymheat-year" x-text="row.year"></span>
+          <template x-for="cell in [...row.months, row.yearCell]" :key="cell.key">
+            <button type="button" class="ymheat-cell" :data-test="'cal-' + cell.key" :class="rbCalCellClass(cell)"
+                    :disabled="rueckblickLoading || (!cell.hasRueckblick && !cell.hasEntries)"
+                    @click="openCalendarCell(cell)"></button>
+          </template>
+        </div>
+      </template>
+    </div>
+    <p data-test="state" x-text="rbPeriodState()"></p>
 
     <p data-test="fresh" x-text="rueckblickFreshness().state"></p>
     <div class="rb-empty" data-test="empty" x-show="rueckblickEmpty">leer</div>

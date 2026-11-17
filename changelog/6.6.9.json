@@ -1,0 +1,21 @@
+{
+  "version": "6.6.9",
+  "date": "2026-11-17",
+  "entries": [
+    {
+      "kind": "verbessert",
+      "de": "Rückblick-Karte: Kalender und Liste stehen jetzt als Leiste neben dem Rückblick. Ein Klick auf einen Monat oder ein Jahr zeigt dessen Rückblick, oder dort direkt den Knopf «Rückblick erstellen».",
+      "en": "Retrospective card: the calendar and list now sit in a side panel next to the retrospective. Clicking a month or year shows its retrospective, or the “Create retrospective” button right there."
+    },
+    {
+      "kind": "verbessert",
+      "de": "Rückblick-Kalender (Karte und Buch-Übersicht): Monate mit Rückblick tragen ein Häkchen, veraltete ein «!». Eine Zeile oben zählt, wie viele Monate schon einen Rückblick haben.",
+      "en": "Retrospective calendar (card and book overview): months with a retrospective show a check mark, outdated ones a “!”. A line on top counts how many months already have one."
+    },
+    {
+      "kind": "verbessert",
+      "de": "Rückblick-Karte, Liste: Das Löschen-Symbol steht in jeder Zeile am selben Ort rechts, auch bei schmalem Fenster.",
+      "en": "Retrospective card, list: the delete icon sits in the same spot on the right of every row, even in a narrow window."
+    }
+  ]
+}

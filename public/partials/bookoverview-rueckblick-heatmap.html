@@ -1,5 +1,6 @@
-<!-- Rückblick-Heatmap: Jahr×Monat-Raster, Zell-Intensität nach Eintragszahl
-     (Level 0..4), Marker auf Monaten/Jahren mit vorhandenem KI-Rückblick.
+<!-- Rückblick-Heatmap: Jahr×Monat-Raster + Jahres-Spalte. Dichte in Grau
+     (Level 0..4), Monate/Jahre mit KI-Rückblick als Akzentfläche mit Häkchen
+     (components/year-month-heatmap.css, Klassen aus ymheatmap.js#ymHeatCellClass).
      Klick auf eine Zelle öffnet die Rückblick-Karte mit vorausgewähltem
      Zeitraum (kein Auto-Run). Nur bei buchtyp 'tagebuch'. Rendering via
      x-text / :data-tip — keine x-html-Sinks. Siehe diary.js. -->
@@ -15,7 +16,8 @@
     </template>
 
     <template x-if="overviewRueckblickHeatmap().years.length">
-      <div class="ymheat">
+      <div class="ymheat overview-rb-heatmap">
+        <p class="ymheat-summary" x-text="rueckblickSummary()"></p>
         <div class="ymheat-scroll">
           <div class="ymheat-grid">
             <div class="ymheat-row ymheat-row--head">
@@ -23,24 +25,15 @@
               <template x-for="(mLabel, mi) in rueckblickMonthLabels()" :key="mi">
                 <span class="ymheat-month-label truncate" x-text="mLabel"></span>
               </template>
+              <span class="ymheat-month-label ymheat-month-label--year" x-text="$app.t('rueckblick.grain.year')"></span>
             </div>
             <template x-for="row in overviewRueckblickHeatmap().years" :key="row.year">
               <div class="ymheat-row">
-                <button type="button"
-                        class="ymheat-year"
-                        :class="{ 'ymheat-year--has': row.hasRueckblick, 'ymheat-year--stale': row.stale }"
-                        @click="$app.openRueckblickFor(String(row.year))"
-                        :data-tip="row.hasRueckblick
-                          ? $app.t('overview.rueckblickHeatmap.tooltip.hasRueckblick', { date: rueckblickCreatedLabel(row.yearCreatedAt) })
-                          : $app.t('overview.rueckblickHeatmap.tooltip.noRueckblick')"
-                        :aria-label="String(row.year) + ' – ' + (row.hasRueckblick
-                          ? $app.t('overview.rueckblickHeatmap.tooltip.hasRueckblick', { date: rueckblickCreatedLabel(row.yearCreatedAt) })
-                          : $app.t('overview.rueckblickHeatmap.tooltip.noRueckblick'))"
-                        x-text="row.year"></button>
-                <template x-for="cell in row.months" :key="cell.key">
+                <span class="ymheat-year" x-text="row.year"></span>
+                <template x-for="cell in [...row.months, row.yearCell]" :key="cell.key">
                   <button type="button"
                           class="ymheat-cell"
-                          :class="'ymheat-cell--lvl' + cell.level + (cell.hasRueckblick ? ' ymheat-cell--has' : '') + (cell.stale ? ' ymheat-cell--stale' : '') + (cell.isCurrent ? ' ymheat-cell--current' : '')"
+                          :class="rueckblickCellClass(cell)"
                           :aria-current="cell.isCurrent ? 'date' : null"
                           @click="$app.openRueckblickFor(cell.key)"
                           :data-tip="rueckblickCellTip(cell)" :aria-label="rueckblickCellTip(cell)"></button>
@@ -51,16 +44,17 @@
         </div>
 
         <div class="ymheat-legend">
-          <span class="ymheat-legend-label" x-text="$app.t('overview.rueckblickHeatmap.legend')"></span>
+          <span class="ymheat-cell ymheat-cell--has"></span>
+          <span class="ymheat-legend-label" x-text="$app.t('overview.rueckblickHeatmap.legendMarker')"></span>
+          <span class="ymheat-cell ymheat-cell--has ymheat-cell--stale"></span>
+          <span class="ymheat-legend-label" x-text="$app.t('rueckblick.cal.legendStale')"></span>
           <span class="ymheat-cell ymheat-cell--lvl0"></span>
+          <span class="ymheat-legend-label" x-text="$app.t('rueckblick.cal.legendNone')"></span>
           <span class="ymheat-cell ymheat-cell--lvl1"></span>
           <span class="ymheat-cell ymheat-cell--lvl2"></span>
           <span class="ymheat-cell ymheat-cell--lvl3"></span>
           <span class="ymheat-cell ymheat-cell--lvl4"></span>
-          <span class="ymheat-cell ymheat-cell--has ymheat-cell--lvl0"></span>
-          <span class="ymheat-legend-label" x-text="$app.t('overview.rueckblickHeatmap.legendMarker')"></span>
-          <span class="ymheat-cell ymheat-cell--has ymheat-cell--stale ymheat-cell--lvl0"></span>
-          <span class="ymheat-legend-label" x-text="$app.t('rueckblick.cal.legendStale')"></span>
+          <span class="ymheat-legend-label" x-text="$app.t('overview.rueckblickHeatmap.legend')"></span>
           <span class="ymheat-cell ymheat-cell--current ymheat-cell--lvl0"></span>
           <span class="ymheat-legend-label" x-text="$app.t('overview.rueckblickHeatmap.legendCurrent')"></span>
         </div>

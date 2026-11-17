@@ -10,16 +10,16 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { createRequire } from 'node:module';
-import { mkdtempSync, rmSync } from 'node:fs';
-import { tmpdir } from 'node:os';
+import { rmSync } from 'node:fs';
 import { join } from 'node:path';
+import { makeTmpDir } from './_helpers/tmp-dir.js';
 
 const require_ = createRequire(import.meta.url);
 
 // Wie _bootstrap, setzt aber `ai.provider` VOR dem Laden von lib/ai/config: die
 // Provider-Defaults der Zeichen/Token-Rate werden beim Modul-Load eingefroren.
 function _bootstrapWithProvider(provider) {
-  const dir = mkdtempSync(join(tmpdir(), 'claude-pred-'));
+  const dir = makeTmpDir('claude-pred-');
   process.env.DB_PATH = join(dir, 'test.db');
   process.env.SESSION_SECRET = process.env.SESSION_SECRET || 'test';
   for (const key of Object.keys(require_.cache)) {
@@ -36,7 +36,7 @@ function _bootstrapWithProvider(provider) {
 }
 
 function _bootstrap() {
-  const dir = mkdtempSync(join(tmpdir(), 'claude-pred-'));
+  const dir = makeTmpDir('claude-pred-');
   process.env.DB_PATH = join(dir, 'test.db');
   process.env.SESSION_SECRET = process.env.SESSION_SECRET || 'test';
   for (const key of Object.keys(require_.cache)) {

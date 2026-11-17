@@ -6,17 +6,17 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
-const os = require('node:os');
 const path = require('node:path');
 const http = require('node:http');
 const express = require('express');
 const { loadBundle, sourceHash, bundleShell, bundleAssets, bundleSwManifest, BUILD_FILE, SW_MANIFEST_FILE } = require('../../lib/bundle');
 const { renderManifest } = require('../../scripts/sw-manifest');
+const { makeTmpDir } = require('./_helpers/tmp-dir');
 
 const silent = { info() {}, warn() {} };
 
 function fixture(dist = 'dist') {
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'bundle-test-'));
+  const root = makeTmpDir('bundle-test-');
   fs.mkdirSync(path.join(root, 'src'));
   fs.writeFileSync(path.join(root, 'src/a.js'), 'export const a = 1;\n');
   fs.writeFileSync(path.join(root, 'src/b.css'), 'body{}\n');
@@ -40,7 +40,7 @@ test('gültiges Bündel wird geladen, relativer Pfad gegen root aufgelöst', () 
 });
 
 test('ohne build.json kein Bündel-Modus', () => {
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'bundle-test-'));
+  const root = makeTmpDir('bundle-test-');
   assert.equal(loadBundle({ root, dir: 'dist', logger: silent }), null);
 });
 
@@ -122,7 +122,7 @@ test('Bündel unter einem Punkt-Verzeichnis: Shell und SW-Manifest liefern 200',
 // Module/Stylesheets raus, Bündel-Dateien rein (ohne Sourcemaps), der Rest des
 // Shell-Satzes bleibt — und der Build-Hash folgt der Bündel-index.html.
 test('SW-Manifest des Bündels: eingebaute Einzeldateien raus, Bündel rein', () => {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'bundle-sw-'));
+  const dir = makeTmpDir('bundle-sw-');
   fs.writeFileSync(path.join(dir, 'index.html'), '<html>a</html>');
   fs.writeFileSync(path.join(dir, 'app-X.js'), 'x');
   fs.writeFileSync(path.join(dir, 'app-X.css'), 'y');

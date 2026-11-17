@@ -8,10 +8,10 @@ globalThis.window = { __app: { uiLocale: 'de' } };
 const { bookOverviewMethods: M } = await import('../../public/js/book-overview.js');
 
 test('_computeRueckblickHeatmap: leere/ungültige Coverage → leeres Ergebnis', () => {
-  assert.deepEqual(M._computeRueckblickHeatmap(null), { years: [], maxEntries: 0 });
+  assert.deepEqual(M._computeRueckblickHeatmap(null), { years: [], maxEntries: 0, monthsWithEntries: 0, monthsWithRueckblick: 0 });
   assert.deepEqual(
     M._computeRueckblickHeatmap({ months: {}, years: {}, minYear: null, maxYear: null }),
-    { years: [], maxEntries: 0 });
+    { years: [], maxEntries: 0, monthsWithEntries: 0, monthsWithRueckblick: 0 });
 });
 
 test('_computeRueckblickHeatmap: Jahr-Range absteigend, je 12 Monate', () => {
@@ -66,4 +66,33 @@ test('_computeRueckblickHeatmap: verwaister Rückblick (Level 0, aber Marker)', 
   const june = M._computeRueckblickHeatmap(cov).years[0].months.find(c => c.key === '2020-06');
   assert.equal(june.level, 0);
   assert.equal(june.hasRueckblick, true);
+});
+
+test('_computeRueckblickHeatmap: Jahr als 13. Zelle in Monats-Form + Zählung', () => {
+  const cov = {
+    months: {
+      '2024-03': { entries: 4, rueckblick: { id: 7, created_at: '2024-04-01T00:00:00Z', stale: true } },
+      '2024-05': { entries: 2, rueckblick: null },
+      '2023-01': { entries: 9, rueckblick: null },
+    },
+    years: {
+      '2024': { entries: 6, rueckblick: { id: 9, created_at: '2025-01-01T00:00:00Z' } },
+      '2023': { entries: 9, rueckblick: null },
+    },
+    minYear: 2023, maxYear: 2024,
+  };
+  const r = M._computeRueckblickHeatmap(cov);
+  assert.equal(r.monthsWithEntries, 3);
+  assert.equal(r.monthsWithRueckblick, 1);
+  const y24 = r.years[0].yearCell;
+  assert.equal(y24.key, '2024');
+  assert.equal(y24.isYear, true);
+  assert.equal(y24.entries, 6);
+  assert.equal(y24.hasRueckblick, true);
+  assert.equal(y24.entryId, 9);
+  assert.ok(y24.level > 0);
+  const y23 = r.years[1].yearCell;
+  assert.equal(y23.hasRueckblick, false);
+  assert.equal(y23.hasEntries, true);
+  assert.equal(r.years[0].months.find(c => c.key === '2024-03').stale, true);
 });

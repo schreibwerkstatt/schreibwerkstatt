@@ -56,9 +56,9 @@ test('fehlendes gs-Binary → non-fatal, available:false (binary-missing)', asyn
 
 // ── SAFER-Modus ─────────────────────────────────────────────────────────────
 import fs from 'node:fs';
-import os from 'node:os';
 import path from 'node:path';
 import { execFileSync } from 'node:child_process';
+import { makeTmpDir } from './_helpers/tmp-dir.js';
 
 function withEnv(vars, fn) {
   const prev = {};
@@ -70,7 +70,7 @@ function withEnv(vars, fn) {
 
 test('gs laeuft mit -dSAFER + --permit-file-read=<ICC>, nie mit -dNOSAFER', async () => {
   // Fake-gs: protokolliert seine Argumente und schreibt eine Ausgabedatei.
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'pdfx-fake-'));
+  const dir = makeTmpDir('pdfx-fake-');
   const log = path.join(dir, 'args.txt');
   const bin = path.join(dir, 'gs');
   fs.writeFileSync(bin, `#!/bin/sh\nprintf '%s\\n' "$@" > '${log}'\nfor a in "$@"; do case "$a" in -sOutputFile=*) printf '%%PDF-fake' > "\${a#-sOutputFile=}";; esac; done\n`);

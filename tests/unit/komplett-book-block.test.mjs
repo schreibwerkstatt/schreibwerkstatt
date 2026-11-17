@@ -10,16 +10,16 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { createRequire } from 'node:module';
-import { mkdtempSync, rmSync, readFileSync, readdirSync, statSync } from 'node:fs';
-import { tmpdir } from 'node:os';
+import { rmSync, readFileSync, readdirSync, statSync } from 'node:fs';
 import { join, relative } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { makeTmpDir } from './_helpers/tmp-dir.js';
 
 const require_ = createRequire(import.meta.url);
 const ROOT = fileURLToPath(new URL('../../', import.meta.url));
 
 function _bootstrap() {
-  const dir = mkdtempSync(join(tmpdir(), 'book-block-'));
+  const dir = makeTmpDir('book-block-');
   process.env.DB_PATH = join(dir, 'test.db');
   process.env.SESSION_SECRET = process.env.SESSION_SECRET || 'test';
   for (const key of Object.keys(require_.cache)) {

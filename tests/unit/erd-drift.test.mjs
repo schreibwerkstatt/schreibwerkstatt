@@ -6,10 +6,10 @@
 
 import { test } from 'node:test';
 import { strict as assert } from 'node:assert';
-import { readFileSync, mkdtempSync, rmSync } from 'node:fs';
-import { tmpdir } from 'node:os';
+import { readFileSync, rmSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { makeTmpDir } from './_helpers/tmp-dir.js';
 
 const ROOT = resolve(fileURLToPath(import.meta.url), '..', '..', '..');
 const ERD = join(ROOT, 'docs', 'erd.md');
@@ -56,7 +56,7 @@ test('docs/erd.md stand-line + Mermaid-Bloecke matchen Squashed-Schema', async (
   const Database = (await import('better-sqlite3')).default;
   const { SQUASHED_SCHEMA, SQUASHED_VERSION } = await import('../../db/squashed-schema.js');
 
-  const tmp = mkdtempSync(join(tmpdir(), 'erd-drift-'));
+  const tmp = makeTmpDir('erd-drift-');
   const dbFile = join(tmp, 'fresh.db');
   const db = new Database(dbFile);
   try {

@@ -13,8 +13,8 @@ import { createRequire } from 'node:module';
 import { execFileSync, execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import fs from 'node:fs';
-import os from 'node:os';
 import path from 'node:path';
+import { makeTmpDir } from './_helpers/tmp-dir.js';
 
 const require = createRequire(import.meta.url);
 const ROOT = new URL('../../', import.meta.url).pathname;
@@ -288,7 +288,7 @@ test('Eval: compare_models.py bewertet wie lib/eval/score.js', { skip: !hasPytho
     [{ category: 'newChapter', mustContain: ['Hans'], style: { noEszett: true, noRepeat: true, noMeta: true, tense: 'past' } }, 'Hans ging ins Erdgeschoß.'],
     [{ category: 'why', mustContainAny: [['Gewalt']], maxOverlapWithProfile: { text: 'eins zwei drei vier fünf sechs sieben acht neun', max: 0.6 } }, 'eins zwei drei vier fünf sechs sieben acht neun Gewalt'],
   ];
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'ft-score-'));
+  const dir = makeTmpDir('ft-score-');
   const file = path.join(dir, 'rows.json');
   fs.writeFileSync(file, JSON.stringify(rows));
   const py = `import json,sys,importlib.util\nspec=importlib.util.spec_from_file_location('cm',sys.argv[1]);m=importlib.util.module_from_spec(spec);spec.loader.exec_module(m)\nprint(json.dumps([m.score_rules(a,r)[1] for r,a in json.load(open(sys.argv[2]))]))`;
@@ -314,7 +314,7 @@ test('eval-judge: Richter über OpenAI-kompatiblen Endpunkt, gedeckelt auf das R
   });
   await new Promise(r => server.listen(0, '127.0.0.1', r));
   const port = server.address().port;
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'ft-judge-'));
+  const dir = makeTmpDir('ft-judge-');
   const evalRows = [
     { category: 'unknown', holdout: 'phrasing', judge: 'ablehnen', mustContainAny: [REFUSAL_MARKERS.de], mustNotContain: ['Hauptfigur'], messages: [{ role: 'system', content: 'S' }, { role: 'user', content: 'Wer ist Aurelia?' }] },
     { category: 'figure', holdout: false, judge: 'Porträt', mustContainAny: [['Renate'], ['Gisela']], minAny: 2, messages: [{ role: 'system', content: 'S' }, { role: 'user', content: 'Wer ist Stefan?' }] },

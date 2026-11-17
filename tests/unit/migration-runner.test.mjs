@@ -5,11 +5,11 @@
 // Lauf: `node --test tests/unit/migration-runner.test.mjs`
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import os from 'os';
 import path from 'path';
 import fs from 'fs';
 import { createRequire } from 'module';
 import { useTmpDb } from './_helpers/tmp-db.js';
+import { makeTmpDir } from './_helpers/tmp-dir.js';
 
 const require = createRequire(import.meta.url);
 useTmpDb('migration-runner-test');
@@ -19,7 +19,7 @@ const { loadFileMigrations, runFileMigrations } = require('../../db/migration-ru
 const Database = require('better-sqlite3');
 
 function tmpDir(files) {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'mig-files-'));
+  const dir = makeTmpDir('mig-files-');
   for (const [name, src] of Object.entries(files)) fs.writeFileSync(path.join(dir, name), src);
   return dir;
 }

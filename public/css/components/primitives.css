@@ -89,9 +89,39 @@
   color: var(--color-subtle);
   cursor: pointer;
   flex-shrink: 0;
-  margin-left: auto;
 }
 /* Ein-/Ausblenden: `.hover-reveal` an der Zeile (components/hover-reveal.css). */
+
+/* Löschen-Symbol: in jeder Zeile am selben Ort — rechts aussen, mittig — und
+   ausserhalb des Inhaltsflusses. Die Zeile reserviert seinen Platz als
+   Innenabstand; umbrechender Inhalt nimmt es nicht mit, und es löst keinen
+   Überlauf aus, der ohne Symbol nicht da wäre. */
+.history-item:has(> .history-item-delete) {
+  position: relative;
+  padding-right: calc(var(--space-md) + var(--space-xl));
+}
+.history-item > .history-item-delete {
+  position: absolute;
+  right: var(--space-xs);
+  top: 50%;
+  translate: 0 -50%;
+}
+/* Mobil scrollt die Zeile (oben): das Symbol klebt rechts statt mitzuwandern
+   und deckt den darunter laufenden Inhalt mit der Zeilenfläche. */
+@media (max-width: 600px) {
+  .history-item:has(> .history-item-delete) { padding-right: var(--space-md); }
+  .history-item > .history-item-delete {
+    position: sticky;
+    right: 0;
+    top: auto;
+    translate: none;
+    margin-left: auto;
+    background: var(--color-surface);
+  }
+  .history-item--active > .history-item-delete {
+    background: linear-gradient(var(--color-history-active-bg), var(--color-history-active-bg)), var(--color-surface);
+  }
+}
 .history-item-delete:hover { color: var(--color-err-text); }
 
 @media (max-width: 480px) {

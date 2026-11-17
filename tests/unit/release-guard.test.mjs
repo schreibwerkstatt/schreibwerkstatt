@@ -6,9 +6,9 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
 import fs from 'node:fs';
-import os from 'node:os';
 import path from 'node:path';
 import { createRequire } from 'node:module';
+import { makeTmpDir } from './_helpers/tmp-dir.js';
 
 const require = createRequire(import.meta.url);
 const { decide, pushesMain } = require('../../scripts/hooks/release-guard.js');
@@ -31,7 +31,7 @@ function commit(dir, file, msg) {
 
 /** origin/main = base; lokal: release-Commit + ein Fix darauf. */
 function setup() {
-  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'release-guard-'));
+  const tmp = makeTmpDir('release-guard-');
   const origin = path.join(tmp, 'origin.git');
   const repo = path.join(tmp, 'repo');
   sh(tmp, 'init', '-q', '--bare', '-b', 'main', origin);

@@ -1,7 +1,7 @@
-<!-- Verlauf über die Monate (Fragment der Rückblick-Übersicht): Personen, Orte
+<!-- Verlauf über die Monate (zweite Ansicht des Hauptbereichs der Rückblick-Karte): Personen, Orte
      oder Themen × Monate mit Rückblick, Zelle = Belegtage. Daten und Stufen aus
      rueckblick-verlauf.js; Klick öffnet den Monat mit den Belegen. -->
-<div class="rb-verlauf" x-show="rbHistoryView === 'verlauf' && rbHasVerlauf()" x-cloak>
+<div class="rb-verlauf" x-show="rbMainView === 'verlauf' && rbHasVerlauf()" x-cloak>
   <div class="filter-bar">
     <div class="tabs">
       <template x-for="f in ['personen', 'orte', 'themen']" :key="f">

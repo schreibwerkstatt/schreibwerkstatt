@@ -39,3 +39,13 @@ test('quartileLevelFor: nullwerte werden ignoriert (nur positive zählen)', () =
 test('currentMonthKey: liefert YYYY-MM', () => {
   assert.match(currentMonthKey(), /^\d{4}-\d{2}$/);
 });
+
+test('ymHeatCellClass: Stufe, Jahres-Spalte, Rückblick, veraltet, Auswahl', async () => {
+  const { ymHeatCellClass } = await import('../../public/js/book/ymheatmap.js');
+  const base = { key: '2024-03', level: 2, hasRueckblick: false, stale: false, isCurrent: false };
+  assert.equal(ymHeatCellClass(base), 'ymheat-cell--lvl2');
+  assert.equal(ymHeatCellClass({ ...base, hasRueckblick: true, stale: true }, '2024-03'),
+    'ymheat-cell--lvl2 ymheat-cell--has ymheat-cell--stale ymheat-cell--active');
+  assert.equal(ymHeatCellClass({ ...base, key: '2024', isYear: true }, '2024-03'),
+    'ymheat-cell--lvl2 ymheat-cell--year');
+});

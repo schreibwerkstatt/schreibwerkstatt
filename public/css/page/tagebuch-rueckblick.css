@@ -1,17 +1,10 @@
 @layer components {
-/* Tagebuch-Rückblick-Karte. Akzent via var(--card-accent) (.card--tagebuchRueckblick
-   → card-accents.css). Aufbau: Zeitraum-Leiste (‹ Zeitraum ›, Meta, Aktionen) über
-   zwei Zuständen — Rückblick (Lesetext, Tage, Facetten) oder Übersicht
-   (Kalender/Liste). Mobile-Breakpoint im selben File. */
-
-.card--tagebuchRueckblick .rb-zeitraum {
-  min-width: 12rem;
-}
-
-.card--tagebuchRueckblick .rb-actions {
-  align-items: center;
-  gap: var(--space-sm);
-}
+/* Tagebuch-Rückblick: Split mit Leiste (layout/aside-split.css) aus zwei
+   Karten mit Klasse .card--tagebuchRueckblick (Akzent via card-accents.css).
+   Hauptkarte: Zeitraum-Leiste (‹ Zeitraum ›, Meta, Aktionen) über dem Zustand
+   des Zeitraums — Rückblick (Lesetext, Tage, Facetten), Erstellen-Aufruf oder
+   leer — bzw. dem Verlauf. Leiste (.rb-nav): Kalender | Liste.
+   Mobile-Breakpoint im selben File. */
 
 /* ── Zeitraum-Leiste ─────────────────────────────────────────────────────── */
 .card--tagebuchRueckblick .rb-period {
@@ -61,7 +54,8 @@
   padding-left: var(--space-xl);
 }
 
-.card--tagebuchRueckblick .rb-empty {
+.card--tagebuchRueckblick .rb-empty,
+.card--tagebuchRueckblick .rb-state {
   margin-top: var(--space-md);
 }
 
@@ -298,16 +292,56 @@
   gap: var(--space-2xs) var(--space-md);
 }
 
-/* ── Übersicht ───────────────────────────────────────────────────────────── */
-.card--tagebuchRueckblick .rb-overview,
-.card--tagebuchRueckblick .rb-history-empty {
-  margin-top: var(--space-lg);
+/* ── Leiste: Kalender | Liste ────────────────────────────────────────────── */
+.card--tagebuchRueckblick.rb-nav .card-section-head {
+  margin-bottom: var(--card-gap-tight);
 }
 
 .card--tagebuchRueckblick .rb-history-zeitraum {
+  min-width: 8.5em;
   font-size: var(--font-size-sm);
   font-weight: var(--fw-semibold);
   color: var(--card-accent);
+}
+
+.card--tagebuchRueckblick .rb-history-count {
+  min-width: 6.5em;
+  font-size: var(--font-size-sm);
+  color: var(--color-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+/* Liste in der Leiste: einzeilig; feste Spalten, das Modell nimmt den Rest
+   und kürzt sich. Unter 600 px gilt der allgemeine Verlauf (Zeile scrollt).
+   Query-Container ist die Liste selbst (kein Popover darin). */
+.card--tagebuchRueckblick .rb-history-list {
+  container-type: inline-size;
+}
+
+.card--tagebuchRueckblick .rb-history-row {
+  flex-wrap: nowrap;
+}
+
+.card--tagebuchRueckblick .rb-history-row .history-date {
+  flex: 0 0 auto;
+  min-width: 6em;
+  font-variant-numeric: tabular-nums;
+}
+
+.card--tagebuchRueckblick .rb-history-row .rb-history-model {
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Zu schmal für vier Spalten: das Modell entfällt statt auf «c…» zu
+   schrumpfen (es steht im Tooltip am Datum). */
+@container (max-width: 420px) {
+  .card--tagebuchRueckblick .rb-history-row .rb-history-model {
+    display: none;
+  }
 }
 
 .card--tagebuchRueckblick .rb-history-search-wrap {
@@ -331,7 +365,7 @@
 
 /* Verlauf: Namen × Monate, Zellen aus dem Jahr×Monat-Pattern (.ymheat-cell). */
 .card--tagebuchRueckblick .rb-verlauf {
-  --ymheat-accent: var(--card-accent);
+  --ymheat-level: var(--card-accent);
   display: flex;
   flex-direction: column;
   gap: var(--space-sm);
@@ -380,11 +414,11 @@
 }
 
 /* Kalender nutzt das geteilte Jahr×Monat-Pattern (.ymheat-*, components/
-   year-month-heatmap.css); hier nur der Karten-Hue. Höhe steuert das
-   Partial via --ymheat-max. */
+   year-month-heatmap.css); hier nur der Karten-Hue. Kein eigener Höhen-
+   Deckel: in der Leiste scrollt .aside-split-scroll. */
 .card--tagebuchRueckblick .rb-ymheat {
   --ymheat-accent: var(--card-accent);
-  max-width: 44rem;
+  --ymheat-max: none;
 }
 
 @media (max-width: 720px) {
@@ -402,11 +436,6 @@
   }
   .card--tagebuchRueckblick .rb-history-search-wrap {
     max-width: none;
-  }
-  /* Kopfzeile bleibt mobil einzeilig — die Combobox darf dem Titel nicht
-     die Breite nehmen. */
-  .card--tagebuchRueckblick .rb-zeitraum {
-    min-width: 9rem;
   }
   .card--tagebuchRueckblick .rb-verlauf-row {
     grid-template-columns: 6.5rem repeat(var(--rb-verlauf-cols), 1.5rem);

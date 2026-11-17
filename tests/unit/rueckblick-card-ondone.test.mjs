@@ -24,7 +24,7 @@ function card(overrides = {}) {
   return Object.assign(Object.create(tagebuchRueckblickMethods), {
     _memos: {}, _rbResults: {}, rbFacetMore: {},
     rbBeleg: { key: null, label: '', belege: [] },
-    rueckblickHistory: [], rbCoverage: null, rbHistoryView: 'cal', rbVerlauf: {},
+    rueckblickHistory: [], rbCoverage: null, rbMainView: 'period', rbVerlauf: {},
     rueckblickZeitraum: '', rueckblickResult: null, selectedRueckblickId: null,
     rueckblickEmpty: false, rueckblickStatus: '',
     $nextTick: () => Promise.resolve(),
@@ -52,8 +52,10 @@ test('onDone: leerer Lauf setzt den Leerzustand am Zeitraum des Laufs', async ()
   assert.equal(c.rueckblickEmpty, true);
 });
 
-test('onDone: offener Verlauf lädt neu', async () => {
-  const c = card({ rbHistoryView: 'verlauf' });
+test('onDone: offener Verlauf → Hauptbereich zeigt das neue Ergebnis, Verlauf lädt beim nächsten Öffnen', async () => {
+  const c = card({ rbMainView: 'verlauf' });
   await rueckblickOnDone.call(c, { result: { zeitraum: '2024-03', rueckblick: RESULT } });
-  assert.equal(c.verlaufLoaded, true);
+  assert.equal(c.rbMainView, 'period');
+  assert.deepEqual(c.rueckblickResult, RESULT);
+  assert.equal(c.rbVerlauf, null, 'Verlauf verworfen — der rbMainView-Watcher lädt ihn beim Zurückschalten');
 });

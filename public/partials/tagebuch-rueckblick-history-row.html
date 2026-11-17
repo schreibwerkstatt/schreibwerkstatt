@@ -1,11 +1,16 @@
 <!-- @expects entry -->
-<!-- Eine Zeile der Rückblick-Liste (jüngster bzw. älterer Lauf eines Zeitraums). -->
-<div class="history-item hover-reveal-host internal-link" :class="{ 'history-item--active': selectedRueckblickId === entry.id }"
-     @click="openRueckblickHistory(entry)">
+<!-- Eine Zeile der Rückblick-Liste (jüngster bzw. älterer Lauf eines Zeitraums),
+     einzeilig: Zeitraum, Datum und Einträge mit fester Breite (bündige Spalten),
+     das Modell nimmt den Rest und kürzt sich; ist die Liste zu schmal, entfällt
+     es (Container-Query, Modell + Uhrzeit dann im Tooltip am Datum). Löschen sitzt
+     wie in jedem Verlauf rechts aussen (.history-item-delete, primitives.css). -->
+<div class="history-item rb-history-row hover-reveal-host internal-link" :class="{ 'history-item--active': selectedRueckblickId === entry.id }"
+     @click="pickRueckblickEntry(entry)">
   <span class="rb-history-zeitraum" x-text="zeitraumLabel(entry.zeitraum)"></span>
-  <span class="history-date" x-text="rueckblickEntryDate(entry.created_at)"></span>
-  <span class="history-date" x-show="entry.entry_count" x-text="rbCountLabel(entry.entry_count)"></span>
-  <span class="tag" x-show="entry.model" x-text="entry.model"></span>
+  <span class="history-date" x-text="rueckblickEntryDay(entry.created_at)"
+        :data-tip="rueckblickEntryDate(entry.created_at) + (entry.model ? ' · ' + entry.model : '')"></span>
+  <span class="rb-history-count" x-text="entry.entry_count ? rbCountLabel(entry.entry_count) : ''"></span>
+  <span class="tag rb-history-model" x-show="entry.model" x-text="entry.model" :data-tip="entry.model"></span>
   <button type="button" class="history-item-delete hover-reveal" @click.stop="deleteRueckblickHistory(entry.id)"
           :data-tip="$app.t('common.deleteEntry')" :aria-label="$app.t('common.deleteEntry')">
     <svg class="icon" aria-hidden="true"><use href="/icons.svg#trash"/></svg>

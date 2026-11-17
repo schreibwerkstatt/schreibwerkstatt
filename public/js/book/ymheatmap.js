@@ -30,25 +30,56 @@ export function currentMonthKey() {
   return localIsoDate().slice(0, 7);
 }
 
+// CSS-Klassen einer Zelle aus buildYmHeatRows (Monat oder Jahres-Spalte) —
+// beide Konsumenten färben über dieselbe Regel. `activeKey`: gewählter
+// Zeitraum des interaktiven Konsumenten (Auswahl-Ring), sonst weglassen.
+export function ymHeatCellClass(cell, activeKey = null) {
+  return 'ymheat-cell--lvl' + cell.level
+    + (cell.isYear ? ' ymheat-cell--year' : '')
+    + (cell.hasRueckblick ? ' ymheat-cell--has' : '')
+    + (cell.stale ? ' ymheat-cell--stale' : '')
+    + (cell.isCurrent ? ' ymheat-cell--current' : '')
+    + (activeKey != null && cell.key === activeKey ? ' ymheat-cell--active' : '');
+}
+
 // Jahr×Monat-Zeilen aus der serverseitigen Rückblick-Coverage
 // (GET /history/rueckblick-coverage, routes/jobs/rueckblick-dates.js
 // #buildRueckblickCoverage). Beide Konsumenten — Overview-Heatmap und Kalender
 // der Rückblick-Karte — rechnen hier, damit sie dieselben Monate gleich zählen
 // und färben. `selectedId` markiert den in der Karte geöffneten Rückblick.
 //   → { years: [{ year, yearKey, hasEntries, hasRueckblick, stale, entryId,
-//                 yearCreatedAt, selected, months: [12 Zellen] }], maxEntries }
+//                 yearCreatedAt, selected, months: [12 Zellen], yearCell }],
+//       maxEntries, monthsWithEntries, monthsWithRueckblick }
+// `yearCell` ist der Jahres-Zeitraum als 13. Zelle in derselben Form wie die
+// Monate (Stufe nach Quartil über die Jahre) — das Jahr wird im Kalender wie
+// ein Monat gewählt, nicht über einen eigenen Umschalter.
 // `stale` (Zelle/Jahr): Rückblick vorhanden, aber Einträge seither geändert —
 // berechnet der Server (rueckblickStale), hier nur durchgereicht.
 export function buildYmHeatRows(coverage, { selectedId = null } = {}) {
-  const empty = { years: [], maxEntries: 0 };
+  const empty = { years: [], maxEntries: 0, monthsWithEntries: 0, monthsWithRueckblick: 0 };
   if (!coverage || coverage.minYear == null || coverage.maxYear == null) return empty;
   const months = coverage.months || {};
   const years = coverage.years || {};
   const counts = Object.values(months).map(m => m?.entries || 0).filter(n => n > 0);
   const levelFor = quartileLevelFor(counts);
+  const yearLevelFor = quartileLevelFor(Object.values(years).map(y => y?.entries || 0));
   const todayKey = currentMonthKey();
   const isSel = (rb) => !!(rb && selectedId != null && String(rb.id) === String(selectedId));
+  const cellFor = (key, entries, rb, level, extra) => ({
+    key,
+    entries,
+    level,
+    hasEntries: entries > 0,
+    hasRueckblick: !!rb,
+    stale: !!rb?.stale,
+    entryId: rb?.id ?? null,
+    createdAt: rb?.created_at || null,
+    selected: isSel(rb),
+    ...extra,
+  });
   const rows = [];
+  let monthsWithEntries = 0;
+  let monthsWithRueckblick = 0;
   for (let y = coverage.maxYear; y >= coverage.minYear; y--) {
     const yearKey = String(y);
     const yRb = years[yearKey]?.rueckblick || null;
@@ -57,31 +88,30 @@ export function buildYmHeatRows(coverage, { selectedId = null } = {}) {
       const key = `${yearKey}-${String(mi).padStart(2, '0')}`;
       const entries = months[key]?.entries || 0;
       const rb = months[key]?.rueckblick || null;
-      cells.push({
-        key,
-        monthIdx: mi,
-        entries,
-        level: levelFor(entries),
-        hasEntries: entries > 0,
-        isCurrent: key === todayKey,
-        hasRueckblick: !!rb,
-        stale: !!rb?.stale,
-        entryId: rb?.id ?? null,
-        createdAt: rb?.created_at || null,
-        selected: isSel(rb),
-      });
+      if (entries > 0) monthsWithEntries++;
+      if (rb) monthsWithRueckblick++;
+      cells.push(cellFor(key, entries, rb, levelFor(entries), { monthIdx: mi, isCurrent: key === todayKey }));
     }
+    const yEntries = years[yearKey]?.entries || cells.reduce((n, c) => n + c.entries, 0);
+    const yearCell = cellFor(yearKey, yEntries, yRb, yearLevelFor(yEntries),
+      { isYear: true, isCurrent: false });
     rows.push({
       year: y,
       yearKey,
-      hasEntries: (years[yearKey]?.entries || 0) > 0 || cells.some(c => c.hasEntries),
-      hasRueckblick: !!yRb,
-      stale: !!yRb?.stale,
-      entryId: yRb?.id ?? null,
-      yearCreatedAt: yRb?.created_at || null,
-      selected: isSel(yRb),
+      hasEntries: yearCell.hasEntries,
+      hasRueckblick: yearCell.hasRueckblick,
+      stale: yearCell.stale,
+      entryId: yearCell.entryId,
+      yearCreatedAt: yearCell.createdAt,
+      selected: yearCell.selected,
       months: cells,
+      yearCell,
     });
   }
-  return { years: rows, maxEntries: counts.length ? Math.max(...counts) : 0 };
+  return {
+    years: rows,
+    maxEntries: counts.length ? Math.max(...counts) : 0,
+    monthsWithEntries,
+    monthsWithRueckblick,
+  };
 }

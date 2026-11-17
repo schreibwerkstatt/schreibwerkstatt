@@ -10,6 +10,7 @@
 
 import { tagebuchRueckblickMethods } from '../book/tagebuch-rueckblick.js';
 import { rueckblickVerlaufMethods } from '../book/rueckblick-verlauf.js';
+import { rueckblickCalendarMethods } from '../book/rueckblick-calendar.js';
 import { createCardJobFeature } from './job-feature-card.js';
 import { setupCardLifecycle } from './card-lifecycle.js';
 import { runningJobStatus } from './job-helpers.js';
@@ -32,7 +33,10 @@ export async function rueckblickOnDone(job) {
   const result = job.result?.rueckblick || null;
   this.rueckblickEmpty = false;
   this.rueckblickStatus = '';
+  // Das Ergebnis erscheint im Hauptbereich; der Verlauf lädt beim nächsten
+  // Öffnen neu (rbMainView-Watcher).
   this.rbVerlauf = null;
+  this.rbMainView = 'period';
   // History + Coverage wurden serverseitig fortgeschrieben → neu laden, dann
   // den neu entstandenen (oder bestehenden) Eintrag des Zeitraums öffnen —
   // openRueckblickHistory setzt Auswahl vor Zeitraum, der Zeitraum-Watcher
@@ -49,7 +53,6 @@ export async function rueckblickOnDone(job) {
     await this.$nextTick(); // Zeitraum-Watcher zuerst, sonst räumt er das Ergebnis
     this.rueckblickResult = result;
   }
-  if (this.rbHistoryView === 'verlauf') this.loadRueckblickVerlauf();
 }
 
 export function registerTagebuchRueckblickCard() {
@@ -68,7 +71,9 @@ export function registerTagebuchRueckblickCard() {
     selectedRueckblickId: null,
     rbHistorySearch: '',
     rbSearchIds: [],
+    // Leiste: Kalender | Liste. Hauptbereich: Zeitraum | Verlauf.
     rbHistoryView: 'cal',
+    rbMainView: 'period',
     rbBeleg: { key: null, label: '', belege: [], aliase: [] },
     // Aufgeklappte Einzelnennungen je Facette ({ personen: true, … }).
     rbFacetMore: {},
@@ -132,6 +137,7 @@ export function registerTagebuchRueckblickCard() {
           rbHistorySearch: '',
           rbSearchIds: [],
           rbHistoryView: 'cal',
+          rbMainView: 'period',
           _rbResults: {},
           rbBeleg: { key: null, label: '', belege: [], aliase: [] },
           rbFacetMore: {},
@@ -158,7 +164,7 @@ export function registerTagebuchRueckblickCard() {
         if (id && String(id) !== String(this.selectedRueckblickId)) this._openRueckblickEntryById(id);
         else if (!id && this.selectedRueckblickId) this.closeRueckblick();
       });
-      // Zeitraum-Wechsel (Combobox): vorhandenen Rückblick des Zeitraums anzeigen
+      // Zeitraum-Wechsel (Kalender, Liste, ‹ ›, Permalink): vorhandenen Rückblick des Zeitraums anzeigen
       // (kein Auto-Run), sonst den Erstellen-Aufruf. Ist bereits ein Eintrag
       // desselben Zeitraums offen (z. B. per History-Klick auf einen älteren
       // Lauf), nicht auf den jüngsten umschalten.
@@ -175,7 +181,7 @@ export function registerTagebuchRueckblickCard() {
       });
       // Verlauf lädt beim ersten Öffnen der Ansicht (und nach jedem neuen Lauf,
       // der rbVerlauf auf null setzt).
-      this.$watch('rbHistoryView', (v) => {
+      this.$watch('rbMainView', (v) => {
         if (v === 'verlauf' && !this.rbVerlauf) this.loadRueckblickVerlauf();
       });
       // Inhaltssuche der History: serverseitig, entprellt.
@@ -189,6 +195,7 @@ export function registerTagebuchRueckblickCard() {
     destroy() { this._lifecycle?.destroy(); },
 
     ...tagebuchRueckblickMethods,
+    ...rueckblickCalendarMethods,
     ...rueckblickVerlaufMethods,
 
     ...createCardJobFeature({

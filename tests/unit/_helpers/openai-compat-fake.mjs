@@ -4,9 +4,9 @@
 
 import { createRequire } from 'node:module';
 import { createServer } from 'node:http';
-import { mkdtempSync, rmSync } from 'node:fs';
-import { tmpdir } from 'node:os';
+import { rmSync } from 'node:fs';
 import { join } from 'node:path';
+import { makeTmpDir } from './tmp-dir.js';
 
 const require_ = createRequire(import.meta.url);
 
@@ -35,7 +35,7 @@ export function sse(res, events) {
 
 /** Frische DB + Settings mit dem Fake-Host; `settings` setzt weitere App-Settings. */
 export function bootstrap(host, settings = {}) {
-  const dir = mkdtempSync(join(tmpdir(), 'oai-fake-'));
+  const dir = makeTmpDir('oai-fake-');
   process.env.DB_PATH = join(dir, 'test.db');
   process.env.SESSION_SECRET = process.env.SESSION_SECRET || 'test';
   for (const key of Object.keys(require_.cache)) {

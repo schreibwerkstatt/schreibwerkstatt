@@ -1,12 +1,21 @@
 @layer components {
-/* Jahr×Monat-Heatmap: wiederverwendbares Raster (Jahre als Zeilen, 12 Monate als
-   Spalten). Zell-Intensität (Level 0..4) via Quartil-Bucketing über die
-   Monats-Eintragszahlen (siehe book/ymheatmap.js#quartileLevelFor). Akzent über
-   --ymheat-accent (Default var(--color-accent); Konsument setzt ggf. die
-   Karten-Hue). Self-containing (container-type: inline-size) → die @container-
-   Breakpoints greifen in jedem Layout-Slot (Overview-Tile wie Vollkarte).
+/* Jahr×Monat-Heatmap: wiederverwendbares Raster (Jahre als Zeilen, 12 Monate +
+   die Jahres-Zelle als Spalten). Zwei Aussagen, zwei Farbsysteme:
+   - Dichte (Level 0..4, Quartil über die Eintragszahlen, book/ymheatmap.js#
+     quartileLevelFor) in einer neutralen Stufenfarbe (--ymheat-level, Default
+     Textfarbe → Grau). Level 0 = nichts da: hohle Zelle.
+   - «Rückblick vorhanden» (--has) als volle Akzentfläche mit Häkchen; «veraltet»
+     (--stale) dieselbe Fläche mit «!» und gestricheltem Warnrahmen.
+   Die Form trägt den Unterschied, nicht nur der Farbton: im Darkmode liegen
+   aufgehellter Karten-Akzent, Warnfarbe und die dichteste Stufe sonst zu nah.
+   Akzent über --ymheat-accent (Default var(--color-accent); Konsument setzt die
+   Karten-Hue); --ymheat-surface = Hintergrund des Wirts für den klebenden
+   Monatskopf (Default --color-surface, Overview-Tile: --color-bg). Self-containing (container-type: inline-size) → die @container-
+   Breakpoints greifen in jedem Layout-Slot (Overview-Tile wie Leiste).
    Konsumenten: Rückblick-Karte (interaktiv: leere Zellen disabled, Auswahl-Ring)
-   + Buch-Übersicht (Navigation). Siehe DESIGN.md „Jahr×Monat-Heatmap". */
+   + Buch-Übersicht (Navigation); die Verlauf-Matrix der Rückblick-Karte nutzt
+   nur die Stufen (mit --ymheat-level = Karten-Akzent). Siehe DESIGN.md
+   „Jahr×Monat-Heatmap". */
 
 .ymheat {
   --ymheat-accent: var(--color-accent);
@@ -17,9 +26,15 @@
   gap: var(--space-sm);
 }
 
-/* Vertikal scrollbar bei vielen Jahren, horizontal bei engen Slots. Höhe via
-   --ymheat-max überschreibbar (Default 320px; die Rückblick-Karte deckelt
-   höhenabhängig von der Jahresanzahl, sonst 'none' = voll ausgewachsen). */
+/* «18 von 203 Monaten mit Rückblick» über dem Raster. */
+.ymheat-summary {
+  margin: 0;
+  font-size: var(--font-size-xs);
+  color: var(--color-muted);
+}
+
+/* Scroll-Container um das Grid: bei vielen Jahren kein Endlos-Strecken.
+   --ymheat-max überschreibbar (Default 320px; 'none' = voll ausgewachsen). */
 .ymheat-scroll {
   max-height: var(--ymheat-max, 320px);
   overflow: auto;
@@ -30,16 +45,17 @@
   gap: var(--space-3);
   min-width: 320px;
 }
+/* Jahr | 12 Monate | Abstand | Jahres-Zelle */
 .ymheat-row {
   display: grid;
-  grid-template-columns: var(--ymheat-year-col) repeat(12, 1fr);
+  grid-template-columns: var(--ymheat-year-col) repeat(12, 1fr) var(--space-xs) 1fr;
   gap: var(--space-3);
   align-items: center;
 }
 .ymheat-row--head {
   position: sticky;
   top: 0;
-  background: var(--color-bg);
+  background: var(--ymheat-surface, var(--color-surface));
   z-index: var(--z-base);
   padding-bottom: var(--space-2xs);
 }
@@ -51,6 +67,16 @@
   letter-spacing: var(--tracking-caps);
   text-align: center;
 }
+/* Jahres-Spalte: letzte Rasterspalte, hinter dem Abstand. Das Kopf-Label
+   darf über die schmale Spalte hinausragen statt abgeschnitten zu werden. */
+.ymheat-month-label--year,
+.ymheat-cell--year { grid-column: -2; }
+.ymheat-month-label--year {
+  text-transform: none;
+  letter-spacing: 0;
+  overflow: visible;
+  white-space: nowrap;
+}
 
 .ymheat-year {
   font-size: var(--font-size-xs);
@@ -58,15 +84,9 @@
   color: var(--color-muted);
   text-align: right;
   padding: 0 var(--space-6) 0 0;
-  background: none;
-  border: none;
-  cursor: pointer;
   white-space: nowrap;
 }
-.ymheat-year:hover:not(:disabled) { color: var(--color-text); text-decoration: underline; }
-.ymheat-year--has { color: var(--color-text); font-weight: var(--fw-semibold); }
-.ymheat-year--active { color: var(--ymheat-accent); }
-.ymheat-year:disabled { cursor: default; opacity: var(--opacity-muted); }
+.ymheat-year--active { color: var(--color-text); font-weight: var(--fw-semibold); }
 
 .ymheat-cell {
   position: relative;
@@ -74,44 +94,58 @@
   min-width: 12px;
   aspect-ratio: 1 / 1;
   border-radius: var(--radius-none);
-  background: var(--color-tag-bg);
-  border: var(--border-thin) solid transparent;
+  background: transparent;
+  border: 1px solid var(--color-border);
   padding: 0;
   cursor: pointer;
   transition: filter var(--transition-base);
 }
-.ymheat-cell:disabled { cursor: default; opacity: var(--opacity-muted); }
-.ymheat-cell:hover:not(:disabled) { filter: brightness(1.12); }
-.ymheat-cell--lvl0 { background: var(--color-tag-bg); }
-.ymheat-cell--lvl1 { background: color-mix(in srgb, var(--ymheat-accent) 22%, var(--color-bg)); }
-.ymheat-cell--lvl2 { background: color-mix(in srgb, var(--ymheat-accent) 45%, var(--color-bg)); }
-.ymheat-cell--lvl3 { background: color-mix(in srgb, var(--ymheat-accent) 68%, var(--color-bg)); }
-.ymheat-cell--lvl4 { background: var(--ymheat-accent); }
+.ymheat-cell:disabled { cursor: default; }
+.ymheat-cell:hover:not(:disabled) { filter: brightness(1.15); }
+.ymheat-cell:focus-visible { outline: var(--focus-ring); outline-offset: var(--focus-ring-offset); }
 
-/* „Rückblick vorhanden"-Marker: eckiger Eckpunkt oben rechts. */
-.ymheat-cell--has { border-color: var(--ymheat-accent); }
+/* Dichte: hohl (0) → vier Stufen der neutralen Stufenfarbe. Doppelklasse,
+   damit das globale `button:hover` (buttons-badges.css) die Fläche nicht
+   übermalt — die Zelle hellt beim Hover über `filter` auf. */
+.ymheat-cell.ymheat-cell--lvl0 { background: transparent; }
+.ymheat-cell.ymheat-cell--lvl1 { background: color-mix(in srgb, var(--ymheat-level, var(--color-text)) 12%, var(--color-bg)); border-color: transparent; }
+.ymheat-cell.ymheat-cell--lvl2 { background: color-mix(in srgb, var(--ymheat-level, var(--color-text)) 22%, var(--color-bg)); border-color: transparent; }
+.ymheat-cell.ymheat-cell--lvl3 { background: color-mix(in srgb, var(--ymheat-level, var(--color-text)) 34%, var(--color-bg)); border-color: transparent; }
+.ymheat-cell.ymheat-cell--lvl4 { background: color-mix(in srgb, var(--ymheat-level, var(--color-text)) 48%, var(--color-bg)); border-color: transparent; }
+
+/* Rückblick vorhanden: volle Akzentfläche + Häkchen — steht nach den Stufen
+   und schlägt sie, egal wie dicht der Monat ist. */
+.ymheat-cell.ymheat-cell--has { background: var(--ymheat-accent); border-color: var(--ymheat-accent); }
 .ymheat-cell--has::after {
   content: "";
   position: absolute;
-  top: 1px;
-  right: 1px;
-  width: 4px;
-  height: 4px;
-  background: var(--ymheat-accent);
-  border-radius: var(--radius-none);
+  inset: 18%;
+  background-color: var(--color-on-accent-fill);
+  -webkit-mask: var(--icon-check) center / contain no-repeat;
+          mask: var(--icon-check) center / contain no-repeat;
 }
 
-/* Rückblick vorhanden, aber Einträge seither geändert: gestrichelter Rahmen +
-   Marker in Warnfarbe — die Form trägt den Unterschied, nicht nur der Farbton
-   (der Karten-Akzent kann der Warnfarbe nahe liegen). */
-.ymheat-cell--stale { border-color: var(--color-warn-text); border-style: dashed; }
-.ymheat-cell--stale::after { background: var(--color-warn-text); }
-.ymheat-year--stale { text-decoration: underline dotted var(--color-warn-text); }
+/* Veraltet (Einträge seither geändert): «!» statt Häkchen, gestrichelter
+   Warnrahmen. */
+.ymheat-cell--stale { border: 2px dashed var(--color-warn-text); }
+.ymheat-cell--stale::after {
+  -webkit-mask: none;
+          mask: none;
+  background: none;
+  content: "!";
+  inset: 0;
+  display: grid;
+  place-items: center;
+  font-size: var(--font-size-xs);
+  font-weight: var(--fw-bold);
+  line-height: 1;
+  color: var(--color-on-accent-fill);
+}
 
-/* Aktueller Monat: dezenter Innen-Ring — Orientierung „wo bin ich jetzt". */
-.ymheat-cell--current { box-shadow: inset 0 0 0 1.5px var(--color-text); }
+/* Aktueller Monat: Strich unter der Zelle — Orientierung, nicht Auswahl. */
+.ymheat-cell--current { box-shadow: 0 3px 0 -1px var(--color-text); }
 
-/* Aktive Auswahl (interaktiver Konsument): neutraler Outline-Ring. */
+/* Aktive Auswahl (interaktiver Konsument): Ring rundum. */
 .ymheat-cell--active { outline: 2px solid var(--color-text); outline-offset: 2px; }
 
 .ymheat-legend {
@@ -124,9 +158,9 @@
 }
 .ymheat-legend-label { margin-right: var(--space-6); }
 .ymheat-legend .ymheat-cell {
-  width: 11px;
-  min-width: 11px;
-  height: 11px;
+  width: 13px;
+  min-width: 13px;
+  height: 13px;
   aspect-ratio: auto;
   flex-shrink: 0;
   cursor: default;

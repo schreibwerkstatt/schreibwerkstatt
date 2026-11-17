@@ -6,10 +6,10 @@
 const { test } = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
-const os = require('node:os');
 const path = require('node:path');
+const { makeTmpDir } = require('./_helpers/tmp-dir');
 
-const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'admin-logs-'));
+const dir = makeTmpDir('admin-logs-');
 process.env.LOG_DIR = dir;
 
 // requireAdmin braucht DB + Session — fuer den Cursor-Test irrelevant.

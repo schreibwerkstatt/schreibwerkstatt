@@ -1,5 +1,6 @@
 // Fachmodul Tagebuch-Rückblick: Zeitraum-Auswahl, Aktualität, Navigation zu
-// einem Tag, Facetten + Belege-Zeitleiste, History (lazy) und Kalender. Root-
+// einem Tag, Facetten + Belege-Zeitleiste und History (lazy). Kalender und
+// Zustand des Hauptbereichs: rueckblick-calendar.js. Root-
 // Zugriffe via window.__app. Job-Polling + run/onVisible kommen aus
 // createCardJobFeature (siehe tagebuch-rueckblick-card.js). KI-Felder werden im
 // Template via x-text (auto-escaped) gerendert — kein x-html-Sink.
@@ -10,7 +11,6 @@
 // aus der der Job seine Einträge filtert. Die Karte parst keine Seitennamen.
 
 import { fetchJson, localeTag, tzOpts, fmtDateTime } from '../utils.js';
-import { buildYmHeatRows } from './ymheatmap.js';
 import { isSelectedBook } from '../cards/book-guard.js';
 import { memoMethods } from '../cards/card-memo.js';
 
@@ -64,8 +64,8 @@ export const tagebuchRueckblickMethods = {
     });
   },
 
-  // Optionen der Zeitraum-Combobox: nur die Körnung des gewählten Zeitraums —
-  // Monat oder Jahr wählt der Umschalter daneben.
+  // Zeiträume der Körnung des gewählten Zeitraums (Nachbar-Navigation ‹ ›):
+  // Monat ↔ Monat, Jahr ↔ Jahr. Das Jahr wählt die Jahres-Spalte des Kalenders.
   availableZeitraeume() {
     return this._zeitraumOptions(this.rbGrain());
   },
@@ -73,18 +73,6 @@ export const tagebuchRueckblickMethods = {
   // Körnung des gewählten Zeitraums (ohne Auswahl: Monat).
   rbGrain(z = this.rueckblickZeitraum) {
     return YEAR_RE.test(String(z || '')) ? 'year' : 'month';
-  },
-
-  // Umschalter Monat ↔ Jahr: Monat → sein Jahr; Jahr → jüngster Monat dieses
-  // Jahres mit Einträgen. Fehlt das Gegenstück, der jüngste Zeitraum der Körnung.
-  setRbGrain(grain) {
-    if (this.rueckblickLoading || grain === this.rbGrain()) return;
-    const z = String(this.rueckblickZeitraum || '');
-    const opts = this._zeitraumOptions(grain).map(o => o.value);
-    const target = grain === 'year'
-      ? (opts.includes(z.slice(0, 4)) ? z.slice(0, 4) : opts[0])
-      : (opts.find(v => v.startsWith(z + '-')) || opts[0]);
-    if (target) this._applyRueckblickZeitraum(target);
   },
 
   // 'YYYY' → '2024'; 'YYYY-MM' → lokalisierter Monat + Jahr (TZ-aware).
@@ -129,7 +117,8 @@ export const tagebuchRueckblickMethods = {
   //  'orphan'  Zeitraum hat keine datierten Einträge mehr
   //  'changed' Einträge seither bearbeitet/ergänzt oder gelöscht — rechnet der
   //            Server in der Coverage (`rueckblick.stale`, rueckblickStale)
-  //  'model'   Einträge unverändert, aber mit einem anderen Modell erstellt
+  //  'model'   Einträge unverändert, aber mit einem anderen Modell erstellt —
+  //            nur als Tooltip an der Meta-Zeile, die das Modell schon nennt
   //  'current' nichts davon — ein neuer Lauf liefert aus dem Server-Cache
   //            dasselbe Ergebnis
   // Nur Hinweis, keine Sperre: Neu-Erstellen bleibt immer möglich.
@@ -154,7 +143,6 @@ export const tagebuchRueckblickMethods = {
     const f = this.rueckblickFreshness();
     const app = window.__app;
     if (f.state === 'changed') return app.t('rueckblick.fresh.changed');
-    if (f.state === 'model') return app.t('rueckblick.fresh.model', { model: f.model, current: f.current });
     if (f.state === 'orphan') return app.t('rueckblick.fresh.orphan');
     if (f.state === 'current') return app.t('rueckblick.upToDate');
     return '';
@@ -468,6 +456,7 @@ export const tagebuchRueckblickMethods = {
   // Zeitraum setzen und einen vorhandenen Rückblick zeigen — nie auto-generieren.
   _applyRueckblickZeitraum(zeitraum) {
     if (!zeitraum) return;
+    this.rbMainView = 'period';
     this.selectedRueckblickId = null;
     this.rueckblickResult = null;
     this.rueckblickEmpty = false;
@@ -481,6 +470,7 @@ export const tagebuchRueckblickMethods = {
   // Eintrag selbst (Job-Ergebnis), dem Karten-Cache oder per Fetch.
   async openRueckblickHistory(entry) {
     if (!entry) return;
+    this.rbMainView = 'period';
     this.selectedRueckblickId = entry.id;
     this.rueckblickZeitraum = entry.zeitraum || this.rueckblickZeitraum;
     this.rueckblickEmpty = false;
@@ -527,6 +517,12 @@ export const tagebuchRueckblickMethods = {
       { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' });
   },
 
+  // Nur der Tag (Zeile der Liste; die Uhrzeit steht im Tooltip).
+  rueckblickEntryDay(iso) {
+    if (!iso) return '';
+    return fmtDateTime(iso, Alpine.store('shell').uiLocale, { day: '2-digit', month: '2-digit', year: 'numeric' });
+  },
+
   // Angezeigten Rückblick schliessen → zurück zur Übersicht desselben Zeitraums.
   // Ändert den Zeitraum NICHT, damit der $watch nichts erneut öffnet.
   closeRueckblick() {
@@ -534,51 +530,5 @@ export const tagebuchRueckblickMethods = {
     this.rueckblickEmpty = false;
     this.selectedRueckblickId = null;
     this.clearBeleg();
-  },
-
-  // ── Kalender (Jahr×Monat aus der Coverage) ─────────────────────────────────
-  rueckblickCalendar() {
-    return this._memo('rbCal', [this.rbCoverage], () => buildYmHeatRows(this.rbCoverage));
-  },
-
-  rbMonthLabels() {
-    const locale = localeTag(Alpine.store('shell').uiLocale);
-    return this._memo('rbMonthLabels', [locale], () => {
-      const fmt = new Intl.DateTimeFormat(locale, tzOpts({ month: 'short', timeZone: 'UTC' }));
-      const out = [];
-      for (let m = 0; m < 12; m++) out.push(fmt.format(new Date(Date.UTC(2024, m, 15, 12))));
-      return out;
-    });
-  },
-
-  // Zelle/Jahr anklicken: Zeitraum wählen; vorhandener Rückblick öffnet sich
-  // (_applyRueckblickZeitraum), sonst erscheint der Erstellen-Aufruf. Während
-  // eines Laufs gesperrt — das Ergebnis gehört dem Zeitraum des Laufs.
-  openCalendarCell(cell) {
-    if (this.rueckblickLoading) return;
-    if (cell && (cell.hasRueckblick || cell.hasEntries)) this._applyRueckblickZeitraum(cell.key);
-  },
-
-  openCalendarYear(row) {
-    if (this.rueckblickLoading) return;
-    if (row && (row.hasRueckblick || row.hasEntries)) this._applyRueckblickZeitraum(row.yearKey);
-  },
-
-  rbCalCellTip(cell) {
-    const period = `${this.rbMonthLabels()[cell.monthIdx - 1]} ${cell.key.slice(0, 4)}`;
-    return this._rbCalTip(period, cell, cell.entries);
-  },
-  rbCalYearTip(row) {
-    return this._rbCalTip(String(row.year), row, this._bucket(row.yearKey)?.entries || 0);
-  },
-  _rbCalTip(period, node, n) {
-    const app = window.__app;
-    const count = n ? ` · ${this.rbCountLabel(n)}` : '';
-    if (node.hasRueckblick) {
-      const tip = `${period}${count}: ${app.t('rueckblick.cal.tipHas', { date: this.rueckblickEntryDate(node.createdAt || node.yearCreatedAt) })}`;
-      return node.stale ? `${tip} · ${app.t('rueckblick.cal.legendStale')}` : tip;
-    }
-    if (node.hasEntries) return `${period}${count}: ${app.t('rueckblick.cal.tipGenerate')}`;
-    return `${period}: ${app.t('rueckblick.cal.tipEmpty')}`;
   },
 };

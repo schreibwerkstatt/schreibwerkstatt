@@ -1,6 +1,7 @@
 // Unit: Tagebuch-Rückblick Frontend-Methoden — History-Filter, Aktualität,
 // Nachbar-Zeiträume, sortierte Facetten, Belege + Zeitleiste, Entitäts-Auflösung
-// (book/tagebuch-rueckblick.js). Pure genug für node:test mit minimalem window.
+// (book/tagebuch-rueckblick.js), Kalender + Zustand des Hauptbereichs
+// (book/rueckblick-calendar.js). Pure genug für node:test mit minimalem window.
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
@@ -22,7 +23,9 @@ globalThis.window = {
   innerWidth: 1000,
 };
 
-const { tagebuchRueckblickMethods: M } = await import('../../public/js/book/tagebuch-rueckblick.js');
+const { tagebuchRueckblickMethods } = await import('../../public/js/book/tagebuch-rueckblick.js');
+const { rueckblickCalendarMethods } = await import('../../public/js/book/rueckblick-calendar.js');
+const M = { ...tagebuchRueckblickMethods, ...rueckblickCalendarMethods };
 
 function ctx(overrides = {}) {
   return Object.assign(Object.create(M), {
@@ -37,6 +40,9 @@ function ctx(overrides = {}) {
     rueckblickLoading: false,
     selectedRueckblickId: null,
     rueckblickResult: null,
+    rueckblickEmpty: false,
+    rbHistoryLoaded: true,
+    rbMainView: 'period',
     rbBeleg: { key: null, label: '', belege: [] },
     rbFacetMore: {},
     ...overrides,
@@ -93,23 +99,6 @@ test('availableZeitraeume/defaultZeitraum: aus der Coverage, nur die Körnung de
   assert.deepEqual(ctx().availableZeitraeume(), []);
 });
 
-test('setRbGrain: Monat → sein Jahr, Jahr → jüngster Monat darin; gesperrt während eines Laufs', () => {
-  const applied = [];
-  const c = ctx({ rbCoverage: COVERAGE, rueckblickZeitraum: '2024-03' });
-  c._applyRueckblickZeitraum = (z) => { applied.push(z); c.rueckblickZeitraum = z; };
-  c.setRbGrain('year');
-  assert.equal(c.rueckblickZeitraum, '2024');
-  c.setRbGrain('month');
-  assert.equal(c.rueckblickZeitraum, '2024-05');
-  c.rueckblickZeitraum = '2023';
-  c.setRbGrain('month');
-  assert.equal(c.rueckblickZeitraum, '2023-12');
-  c.rueckblickLoading = true;
-  c.setRbGrain('year');
-  assert.equal(c.rueckblickZeitraum, '2023-12');
-  assert.deepEqual(applied, ['2024', '2024-05', '2023-12']);
-});
-
 test('rbNeighbor: gleiche Körnung, Rand = null', () => {
   const c = ctx({ rbCoverage: COVERAGE, rueckblickZeitraum: '2024-03' });
   assert.equal(c.rbNeighbor(-1), '2023-12');
@@ -140,6 +129,8 @@ test('rueckblickFreshness: none / current / changed / model / orphan', () => {
   const f = c.rueckblickFreshness();
   assert.equal(f.state, 'model');
   assert.equal(f.model, 'claude-sonnet-4-6');
+  // Modellwechsel nur als Tooltip an der Meta-Zeile, kein eigener Hinweis.
+  assert.equal(c.rbFreshnessHint(), '');
   // Einträge des Zeitraums verschwunden
   c.rueckblickHistory = [...HISTORY, { id: 3, zeitraum: '2020-06', created_at: '2021-01-01T00:00:00Z' }];
   c.rueckblickZeitraum = '2020-06';
@@ -298,6 +289,67 @@ test('openCalendarCell: während eines Laufs gesperrt', () => {
   c.rueckblickLoading = false;
   c.openCalendarCell({ key: '2024-03', hasEntries: true });
   assert.deepEqual(applied, ['2024-03']);
+});
+
+test('openCalendarCell: Jahres-Zelle wählt das Jahr, leere Zelle nichts', () => {
+  const applied = [];
+  const c = ctx();
+  c._applyRueckblickZeitraum = (z) => applied.push(z);
+  c.openCalendarCell({ key: '2023', isYear: true, hasRueckblick: true, hasEntries: true });
+  c.openCalendarCell({ key: '2022-01', hasEntries: false, hasRueckblick: false });
+  assert.deepEqual(applied, ['2023']);
+});
+
+test('rbPeriodState: Rückblick, erstellen, vorhanden-geschlossen, leer, ohne Datierung', () => {
+  const c = ctx({ rbCoverage: COVERAGE, rueckblickHistory: HISTORY });
+  // Monat mit Einträgen, ohne Rückblick → Erstellen-Aufruf im Hauptbereich
+  c.rueckblickZeitraum = '2024-05';
+  assert.equal(c.rbPeriodState(), 'create');
+  // Rückblick vorhanden, aber nicht geöffnet (Permalink-Zurück)
+  c.rueckblickZeitraum = '2024-03';
+  assert.equal(c.rbPeriodState(), 'hidden');
+  // … wird gerade geladen → nichts (kein Aufblitzen des Leerzustands)
+  c.selectedRueckblickId = 1;
+  assert.equal(c.rbPeriodState(), '');
+  c.rueckblickResult = { zusammenfassung: 'Text.' };
+  assert.equal(c.rbPeriodState(), 'result');
+  // Zeitraum ohne Einträge
+  c.rueckblickResult = null;
+  c.selectedRueckblickId = null;
+  c.rueckblickZeitraum = '2022-07';
+  assert.equal(c.rbPeriodState(), 'empty');
+  // Lauf aktiv → Hauptbereich zeigt nur Fortschritt
+  c.rueckblickZeitraum = '2024-05';
+  c.rueckblickLoading = true;
+  assert.equal(c.rbPeriodState(), '');
+  c.rueckblickLoading = false;
+  // History noch nicht geladen → kein «erstellen», das gleich wieder kippt
+  c.rbHistoryLoaded = false;
+  assert.equal(c.rbPeriodState(), '');
+  c.rbHistoryLoaded = true;
+  // Buch ohne datierte Einträge
+  c.rbCoverage = { months: {}, years: {}, days: {}, minYear: null, maxYear: null };
+  assert.equal(c.rbPeriodState(), 'noDated');
+  assert.equal(c.rbHasCalendar(), false);
+});
+
+test('rbCalSummary + rbCalCellClass: Zählung über die Monate, Auswahl-Ring am Zeitraum', () => {
+  const c = ctx({ rbCoverage: COVERAGE, rueckblickZeitraum: '2023' });
+  assert.equal(c.rbCalSummary(), 'rueckblick.cal.summary {"done":1,"total":3}');
+  const row23 = c.rueckblickCalendar().years.find(r => r.year === 2023);
+  assert.match(c.rbCalCellClass(row23.yearCell), /ymheat-cell--year ymheat-cell--has ymheat-cell--active/);
+  assert.doesNotMatch(c.rbCalCellClass(row23.months[11]), /--active/);
+});
+
+test('_applyRueckblickZeitraum / openRueckblickHistory: Hauptbereich zurück auf den Zeitraum', () => {
+  const c = ctx({ rbCoverage: COVERAGE, rueckblickHistory: HISTORY, rbMainView: 'verlauf' });
+  c.clearBeleg = () => {};
+  c._applyRueckblickZeitraum('2024-05');
+  assert.equal(c.rbMainView, 'period');
+  c.rbMainView = 'verlauf';
+  c._rbResults[1] = { zusammenfassung: 'x' };
+  c.openRueckblickHistory(HISTORY[0]);
+  assert.equal(c.rbMainView, 'period');
 });
 
 test('computeVerlaufRows: Filter über Name + Aliase, Stufe nach Anteil am Monat, Zeilendeckel', async () => {

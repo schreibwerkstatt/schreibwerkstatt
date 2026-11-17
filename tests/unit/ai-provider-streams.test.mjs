@@ -13,12 +13,10 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { createRequire } from 'node:module';
 import { createServer } from 'node:http';
-import { mkdtempSync } from 'node:fs';
-import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { useTmpDb } from './_helpers/tmp-db.js';
 
 const require = createRequire(import.meta.url);
-process.env.DB_PATH = join(mkdtempSync(join(tmpdir(), 'ai-streams-')), 'test.db');
+useTmpDb('ai-streams');
 process.env.SESSION_SECRET = process.env.SESSION_SECRET || 'test';
 require('../../db/migrations');
 const appSettings = require('../../lib/app-settings');

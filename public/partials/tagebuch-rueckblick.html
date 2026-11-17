@@ -2,37 +2,41 @@
 <!--
   Alpine.data-Sub-Komponente — siehe public/js/cards/tagebuch-rueckblick-card.js.
   `showTagebuchRueckblickCard` bleibt am Root (Hash-Router + Exklusivität).
-  Zwei Zustände unter derselben Zeitraum-Leiste: Übersicht (Kalender, Liste,
-  Verlauf — Fragment tagebuch-rueckblick-overview) und Rückblick (Lesetext, Tage,
-  Facetten — Fragment tagebuch-rueckblick-result).
+
+  Split mit Leiste (layout/aside-split.css): links der gewählte Zeitraum, rechts
+  die Navigation (Kalender | Liste, Fragment tagebuch-rueckblick-overview). Beide
+  Karten teilen den Scope — darum trägt der Split x-data und Sichtbarkeit.
+  Schmal steht die Navigation über dem Zeitraum (`--aside-first`).
+
+  Ein Klick in Kalender oder Liste wählt immer nur den Zeitraum; was der
+  Hauptbereich dann zeigt, hängt am Zustand des Zeitraums (rbPeriodState):
+  Rückblick, «noch keiner — erstellen», «vorhanden — anzeigen» oder leer.
+  Der Verlauf über die Monate ist eine zweite Ansicht des Hauptbereichs.
   KI-Felder via x-text (auto-escaped) — kein x-html-Sink ausser dem Job-Status.
 -->
-<div class="card card--tagebuchRueckblick" x-data="tagebuchRueckblickCard" x-show="$app.showTagebuchRueckblickCard" x-cloak>
+<div class="aside-split aside-split--aside-first rb-split" id="tagebuch-rueckblick-split"
+     x-data="tagebuchRueckblickCard" x-show="$app.showTagebuchRueckblickCard" x-cloak
+     x-aside-resize :class="{ 'aside-split--on': rbHasCalendar() }">
+<div class="card card--tagebuchRueckblick" id="tagebuch-rueckblick-card">
   <div class="card-header">
     <div class="card-header-titlebar">
       <span class="card-eyebrow" x-text="$app.selectedBookName"></span>
       <span class="card-title" x-text="$app.t('rueckblick.title')"></span>
     </div>
-    <div class="card-actions rb-actions">
-      <!-- Körnung: Monat oder Jahr; die Combobox listet nur die gewählte. -->
-      <div class="tabs rb-grain" x-show="rbCoverage" x-cloak>
-        <template x-for="g in ['month', 'year']" :key="g">
-          <button type="button" class="tabs-btn" :class="{ 'tabs-btn--active': rbGrain() === g }"
-                  :aria-pressed="rbGrain() === g"
-                  :disabled="rueckblickLoading || !_zeitraumOptions(g).length"
-                  @click="setRbGrain(g)" x-text="$app.t('rueckblick.grain.' + g)"></button>
-        </template>
-      </div>
-      <div class="rb-zeitraum">
-        <div x-data="combobox({ placeholder: $app.t('rueckblick.zeitraum'), compact: false })"
-             x-modelable="value" x-model="rueckblickZeitraum"
-             x-effect="options = availableZeitraeume()"></div>
+    <div class="card-actions">
+      <div class="tabs" x-show="rbHasVerlauf()" x-cloak>
+        <button type="button" class="tabs-btn" :class="{ 'tabs-btn--active': rbMainView === 'period' }"
+                :aria-pressed="rbMainView === 'period'" @click="rbMainView = 'period'"
+                x-text="$app.t('rueckblick.viewPeriod')"></button>
+        <button type="button" class="tabs-btn" :class="{ 'tabs-btn--active': rbMainView === 'verlauf' }"
+                :aria-pressed="rbMainView === 'verlauf'" @click="rbMainView = 'verlauf'"
+                x-text="$app.t('rueckblick.viewVerlauf')"></button>
       </div>
     </div>
   </div>
 
   <!-- Zeitraum-Leiste: ‹ Zeitraum ›, Kennzahlen, Aktionen, Aktualität -->
-  <div class="rb-period" x-show="rueckblickZeitraum" x-cloak>
+  <div class="rb-period" x-show="rbMainView === 'period' && rueckblickZeitraum" x-cloak>
     <div class="rb-period-row">
       <div class="rb-period-nav">
         <button type="button" class="icon-btn icon-btn--ghost" @click="gotoNeighbor(-1)"
@@ -47,26 +51,19 @@
           <svg class="icon" aria-hidden="true"><use href="/icons.svg#chevron-right"/></svg>
         </button>
       </div>
-      <div class="rb-period-actions">
+      <!-- Neu erstellen nur, wo es schon einen Rückblick gibt; der erste Lauf
+           startet aus dem Leerzustand darunter. Gewichtung folgt der Aktualität. -->
+      <div class="rb-period-actions" x-show="rbLatestEntry() || rueckblickLoading">
         <button type="button" class="btn-compact"
-                x-show="!hasRueckblickResult() && !rueckblickLoading && rbLatestEntry()" x-cloak
-                @click="openRueckblickHistory(rbLatestEntry())" x-text="$app.t('rueckblick.show')"></button>
-        <!-- Gewichtung folgt der Aktualität: Erstellen ist Haupt-CTA ohne Rückblick,
-             Nebenaktion bei aktuellem, normaler Knopf bei veraltetem. -->
-        <button type="button" class="btn-compact"
-                :class="{ primary: !rbLatestEntry(), 'btn-compact--ghost': rueckblickUpToDate() }"
+                :class="{ 'btn-compact--ghost': rueckblickUpToDate() }"
                 @click="runTagebuchRueckblick()" :disabled="!canRunRueckblick()">
           <span x-show="rueckblickLoading" class="spinner"></span>
-          <span x-text="rbLatestEntry() ? $app.t('rueckblick.rerun') : $app.t('rueckblick.start')"></span>
-        </button>
-        <button type="button" class="icon-btn icon-btn--ghost" x-show="hasRueckblickResult()" x-cloak
-                @click="closeRueckblick()"
-                :data-tip="$app.t('rueckblick.backToOverview')" :aria-label="$app.t('rueckblick.backToOverview')">
-          <svg class="icon" aria-hidden="true"><use href="/icons.svg#x"/></svg>
+          <span x-text="$app.t('rueckblick.rerun')"></span>
         </button>
       </div>
     </div>
     <p class="card-hint rb-period-meta" x-show="hasRueckblickResult() ? rbViewedMeta() : rbEntryCount()"
+       :data-tip="rueckblickFreshness().state === 'model' ? $app.t('rueckblick.fresh.model', { model: rueckblickFreshness().model, current: rueckblickFreshness().current }) : null"
        x-text="hasRueckblickResult() ? rbViewedMeta() : rbCountLabel(rbEntryCount())"></p>
     <p class="card-hint rb-fresh" x-show="!rueckblickLoading && rbFreshnessHint()" x-cloak
        :class="{ 'card-hint--warn': rueckblickFreshness().state === 'changed' }"
@@ -78,17 +75,38 @@
   </div>
   <div class="card-status" x-html="rueckblickStatus"></div>
 
-  <!-- Leerzustand: keine datierten Einträge im Zeitraum -->
-  <p class="muted-msg rb-empty" x-cloak
-     x-show="rueckblickEmpty || (rbCoverage && rueckblickZeitraum && !rbEntryCount() && !rbLatestEntry())"
-     x-text="$app.t('rueckblick.empty')"></p>
+  <div class="rb-main" x-show="rbMainView === 'period'">
+    <!-- Noch kein Rückblick: der Erstellen-Aufruf steht dort, wo der Rückblick
+         erscheinen wird. -->
+    <div class="card-empty rb-state" x-show="rbPeriodState() === 'create'" x-cloak>
+      <p class="card-empty-text" x-text="$app.t('rueckblick.create.title', { period: zeitraumLabel(rueckblickZeitraum) })"></p>
+      <p class="card-empty-hint" x-text="$app.t('rueckblick.create.hint')"></p>
+      <button type="button" class="primary card-empty-cta"
+              @click="runTagebuchRueckblick()" :disabled="!canRunRueckblick()">
+        <span x-text="$app.t('rueckblick.start')"></span>
+      </button>
+    </div>
 
-  <!-- @include tagebuch-rueckblick-result -->
+    <!-- Rückblick vorhanden, aber geschlossen (Browser-Zurück aus dem Permalink) -->
+    <div class="card-empty rb-state" x-show="rbPeriodState() === 'hidden'" x-cloak>
+      <p class="card-empty-text" x-text="$app.t('rueckblick.hidden.title', { period: zeitraumLabel(rueckblickZeitraum), date: rueckblickEntryDate(rbLatestEntry()?.created_at) })"></p>
+      <button type="button" class="primary card-empty-cta"
+              @click="openRueckblickHistory(rbLatestEntry())">
+        <span x-text="$app.t('rueckblick.show')"></span>
+      </button>
+    </div>
 
-  <!-- @include tagebuch-rueckblick-overview -->
+    <!-- Leerzustand: keine datierten Einträge im Zeitraum bzw. im Buch -->
+    <p class="muted-msg rb-empty" x-show="rbPeriodState() === 'empty'" x-cloak
+       x-text="$app.t('rueckblick.empty')"></p>
+    <p class="muted-msg rb-empty" x-show="rbPeriodState() === 'noDated'" x-cloak
+       x-text="$app.t('rueckblick.noDated')"></p>
 
-  <!-- Hinweis, solange noch kein Rückblick gespeichert wurde -->
-  <p class="muted-msg muted-msg--sm rb-history-empty" x-cloak
-     x-show="rbHistoryLoaded && !rueckblickHistory.length && !rueckblickLoading && !hasRueckblickResult()"
-     x-text="$app.t('rueckblick.historyEmpty')"></p>
+    <!-- @include tagebuch-rueckblick-result -->
+  </div>
+
+  <!-- @include tagebuch-rueckblick-verlauf -->
+</div>
+
+<!-- @include tagebuch-rueckblick-overview -->
 </div>

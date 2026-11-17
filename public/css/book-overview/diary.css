@@ -4,6 +4,10 @@
    (var(--color-accent)); keine neue Hue. Mobile via Container-Query (Tiles
    leben im variablen Grid-Slot). Siehe public/js/book-overview/diary.js. */
 
+/* Rückblick-Abdeckung (components/year-month-heatmap.css): klebender
+   Monatskopf auf dem Tile-Hintergrund. */
+.overview-rb-heatmap { --ymheat-surface: var(--color-bg); }
+
 /* ── Lücken & Konsistenz ───────────────────────────────────────────────────── */
 .overview-consistency-grid {
   display: grid;
