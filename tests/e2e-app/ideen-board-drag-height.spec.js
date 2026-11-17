@@ -72,19 +72,27 @@ test('ideen-board: Drag in eine leere Stufe — Spalten gleich breit, Bahnhoehe 
     // schon in ihr.
     await page.mouse.move(g.x + g.width / 2 + 8, g.y + g.height / 2, { steps: 4 });
     // Ziel erst nach dem Drag-Start messen: dann sind die Drop-Zonen aufgezogen.
+    // Der Start ist asynchron (SortableJS-Fallback) — auf die Body-Klasse
+    // warten, sonst misst der Test das Raster noch ohne Drop-Zonen und landet
+    // daneben.
+    await expect(page.locator('body.board-dnd-active')).toHaveCount(1);
+    await page.evaluate(() => new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r))));
     // Direkt hinspringen, ohne Zwischenpunkte: ein interpolierter Weg streift
     // fremde Bahnen, SortableJS setzt den Platzhalter dorthin, und das Raster
-    // verschiebt sich unter dem gemessenen Ziel.
-    const t = await target.boundingBox();
-    await page.mouse.move(t.x + t.width / 2, t.y + 24);
-    // Im Ziel braucht SortableJS noch ein paar Bewegungen, bis der Platzhalter
-    // dorthin wechselt.
-    for (let i = 1; i <= 5; i++) {
-      await page.mouse.move(t.x + t.width / 2 + i, t.y + 24 + 4 * i);
-      await page.waitForTimeout(50);
-    }
-    // Platzhalter steckt in der leeren Zielzelle.
-    await expect(target.locator(`[data-idee-card-id="${ideeId}"]`)).toHaveCount(1);
+    // verschiebt sich unter dem gemessenen Ziel. Im Ziel braucht SortableJS
+    // noch ein paar Bewegungen, bis der Platzhalter dorthin wechselt; trifft
+    // die erste Runde nicht, Ziel neu messen und nachfahren.
+    let t;
+    await expect(async () => {
+      t = await target.boundingBox();
+      await page.mouse.move(t.x + t.width / 2, t.y + 24);
+      for (let i = 1; i <= 5; i++) {
+        await page.mouse.move(t.x + t.width / 2 + i, t.y + 24 + 4 * i);
+        await page.waitForTimeout(50);
+      }
+      // Platzhalter steckt in der leeren Zielzelle.
+      await expect(target.locator(`[data-idee-card-id="${ideeId}"]`)).toHaveCount(1, { timeout: 500 });
+    }).toPass({ timeout: 10_000 });
     const mid = await laneH();
     const widthsMid = await widths();
     await page.keyboard.press('Escape');
