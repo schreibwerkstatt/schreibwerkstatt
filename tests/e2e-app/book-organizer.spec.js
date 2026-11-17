@@ -22,7 +22,18 @@ async function openOrganizer(page, { expand = true } = {}) {
   await page.evaluate(() => window.__app.toggleBookOrganizerCard());
   await expect(page.locator('.card--organizer')).toBeVisible();
   if (!expand) return;
-  await page.evaluate(() => window.Alpine.$data(document.querySelector('.card--organizer')).expandAll());
+  // Erst aufklappen, wenn der Neuaufbau beim Öffnen durch ist: onShow wartet auf
+  // das Nachladen von Sortable und baut danach den Baum samt Aufklapp-Zustand
+  // neu (_snapshotFromNav → _recomputeInitialOpenState). Ein expandAll() davor
+  // wird überschrieben — in CI (langsameres Nachladen) fehlten dann die Zeilen
+  // zugeklappter Kapitel. Darum wiederholen, bis jedes Kapitel offen ist.
+  await expect.poll(() => page.evaluate(() => {
+    const ctx = window.Alpine.$data(document.querySelector('.card--organizer'));
+    if (!ctx.workTree?.length) return false;
+    ctx.expandAll();
+    const walk = (list) => list.flatMap((c) => [c, ...walk(c.subchapters || [])]);
+    return walk(ctx.workTree).every((c) => ctx.chapterOpen[c.id]);
+  }), { message: 'Organizer aufgebaut und alle Kapitel offen' }).toBe(true);
   await page.waitForFunction(() =>
     document.querySelectorAll('.card--organizer .organizer-page').length > 0);
 }
@@ -304,8 +315,11 @@ test('Zeilen-Combobox montiert erst beim Klick und verschiebt die Seite', async 
   const guard = attachConsoleGuard(page);
   await bootApp(page);
   const bookId = await selectSeededBook(page);
-  const a = await seedChapter(page, bookId, 'Lazy-Quelle', ['L1']);
-  const b = await seedChapter(page, bookId, 'Lazy-Ziel', []);
+  // Eindeutige Namen: bricht ein Versuch vor dem Aufräumen ab, fände der Retry
+  // sonst zwei «Lazy-Ziel» in der Liste.
+  const tag = Date.now().toString(36);
+  const a = await seedChapter(page, bookId, `Lazy-Quelle-${tag}`, ['L1']);
+  const b = await seedChapter(page, bookId, `Lazy-Ziel-${tag}`, []);
   await openOrganizer(page);
 
   const realCombos = page.locator('.card--organizer .organizer-page .combobox-dropdown');
@@ -325,7 +339,7 @@ test('Zeilen-Combobox montiert erst beim Klick und verschiebt die Seite', async 
   await expect(page.locator(`.card--organizer [data-row-combo="${key}"]`)).toBeFocused();
 
   await page.locator(`.card--organizer [data-row-combo="${key}"]`).click();
-  await page.locator('.card--organizer .organizer-page .combobox-option', { hasText: 'Lazy-Ziel' }).click();
+  await page.locator('.card--organizer .organizer-page .combobox-option', { hasText: `Lazy-Ziel-${tag}` }).click();
   await expect.poll(() => page.evaluate((id) =>
     window.Alpine.store('nav').pages.find((p) => p.id === id)?.chapter_id, a.pageIds[0])).toBe(b.chapterId);
   await expect(realCombos).toHaveCount(0);
