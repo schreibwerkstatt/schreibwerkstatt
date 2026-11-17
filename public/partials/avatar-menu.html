@@ -116,7 +116,7 @@
     <button type="button" class="avatar-menu-version" role="menuitem"
             x-show="$store.shell.appVersion" x-cloak
             :data-tip="t('changelog.current', { version: $store.shell.appVersion })"
-            @click="showAvatarMenu = false; $store.shell.helpTabRequest = 'changelog'; if (!showHelpCard) toggleHelpCard()"
+            @click="showAvatarMenu = false; openHelpTab('changelog')"
             x-text="'v' + $store.shell.appVersion"></button>
   </div>
 </div>

@@ -1,6 +1,6 @@
     <div class="card-form-grid" x-bind="panel('context')" x-cloak>
 
-    <section class="book-settings-section">
+    <section class="settings-section">
       <h3 class="card-section-title" x-text="$app.t('book.settings.section.context')"></h3>
 
       <div class="card-form-row card-form-row--top">
@@ -179,7 +179,7 @@
     <!-- Recherche-Profil: steuert AUSSCHLIESSLICH den Recherche-Chat
          (docs/recherche-chat.md). Eigener Schreibpfad /booksettings/:id/research;
          der Header-Speichern-Knopf schreibt ihn mit. -->
-    <section class="book-settings-section" x-show="$store.config.researchChatEnabled" x-cloak>
+    <section class="settings-section" x-show="$store.config.researchChatEnabled" x-cloak>
       <h3 class="card-section-title" x-text="$app.t('book.settings.section.research')"></h3>
       <p class="card-hint" x-text="$app.t('book.settings.research.hint')"></p>
 

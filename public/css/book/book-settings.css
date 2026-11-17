@@ -1,48 +1,4 @@
 @layer components {
-/* ── Tab-Reihe + Panels ───────────────────────────────────────────────────
-   Tab-Leiste vom Karten-Header und vom Tab-Inhalt absetzen; das Panel
-   leicht einrücken, sodass der Inhalt schmaler als die Tab-Reihe darüber
-   sitzt (visuelle Hierarchie: Tabs rahmen den Inhalt). Eigene Modifier-Klasse
-   `.card--book-settings`: `.card--settings` (Akzentfarbe) traegt auch die
-   Profil-Karte, die weder Tabs noch diese Einrueckung hat. */
-.card--book-settings .tabs {
-  margin-top: var(--space-sm);
-  margin-bottom: var(--space-xl);
-}
-.card--book-settings .card-form-grid {
-  padding-inline: var(--space-20);
-}
-@media (max-width: 600px) {
-  .card--book-settings .card-form-grid {
-    padding-inline: var(--space-sm);
-  }
-}
-
-/* ── Thematische Sub-Sections in der BuchSettings-Card ────────────────────
-   Lockert das Formular auf: jede logische Gruppe (Sprache, Erzählweise,
-   Kategorisierung, Kontext, Sharing, Job-Stats) sitzt in einer eigenen
-   Section mit subtilem Top-Trennstrich und kleinem Caps-Title. */
-.book-settings-section {
-  margin-top: var(--space-2xl);
-  padding-top: var(--space-20);
-  border-top: var(--border-thin) solid var(--color-border);
-}
-/* Nur die erste Section direkt im Reiter-Panel verliert die Linie. Sections in
-   einem Wrapper (Exposé-Ergebnis im x-if) behalten sie — dort folgt die erste
-   auf die Eckdaten-Section davor. */
-.card-form-grid > .book-settings-section:first-of-type {
-  margin-top: 0;
-  padding-top: 0;
-  border-top: none;
-}
-/* Erscheinung aus `.card-section-title` (card-blocks.css). Abweichung: die
-   Abschnitte der Bucheinstellungen sind durch Trennlinien getrennte Bloecke,
-   ihr Titel bekommt darum den Abschnitts- statt des engen Abstands. */
-.book-settings-section > .card-section-title { margin-bottom: var(--card-gap-section); }
-/* Hinweise im Abschnittsfluss bringen keinen Abstand mit (DESIGN.md, Regel 1):
-   den setzt der Nachbar — nach dem Titel traegt der schon seinen eigenen. */
-.book-settings-section .card-hint + *,
-.book-settings-section :not(.card-section-title, .card-form-row) + .card-hint { margin-top: var(--card-gap-tight); }
 /* Sharing-Section innerhalb der BookSettings-Card. */
 .book-share-list {
   display: flex;

@@ -1,11 +1,10 @@
 @layer components {
-/* Eigener KI-Zugang (User-Settings → Abschnitt „Eigener KI-Zugang").
-   Body wie bei den Geraete-Tokens: eigenes Raster unter dem Klapp-Toggle. */
+/* Eigener KI-Zugang (Profil-Reiter «KI-Zugang»).
+   Body wie bei den Geraete-Tokens: eigenes Raster unter dem Gruppen-Titel. */
 
 .ai-access-body {
   display: grid;
   gap: var(--space-sm);
-  margin-top: var(--space-sm);
 }
 
 .ai-access-disabled,

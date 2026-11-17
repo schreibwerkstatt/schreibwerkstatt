@@ -39,7 +39,7 @@ function makeCtx({ hash = '', books = [{ id: 42 }, { id: 99 }] } = {}) {
   // Nav-State lebt in Alpine.store('nav') (kein Root-Proxy mehr). Im Test
   // spiegelt ein internes nav-Objekt unter $store.nav; Getter/Setter-Aliasse
   // halten die bestehenden c.selectedBookId-Mutationen am Leben.
-  const nav = { selectedBookId: null, books, pages: [], tree: [], werkstattDraftId: null, plotBeatId: null, rueckblickEntryId: null };
+  const nav = { selectedBookId: null, books, pages: [], tree: [], werkstattDraftId: null, plotBeatId: null, rueckblickEntryId: null, cardTab: {} };
   // selectedXxxId leben in Alpine.store('catalogUi'). Getter/Setter-Aliasse
   // halten die bestehenden c.selectedFigurId-Mutationen am Leben.
   const catalogUi = { figurenTab: 'liste', selectedFigurId: null, selectedOrtId: null, selectedSongId: null, selectedSzeneId: null };
@@ -121,6 +121,15 @@ test('_computeHash: kein selectedBookId → leerer Hash', () => {
 test('_computeHash: nur Profil-Card → #profil', () => {
   const c = makeCtx();
   c.showUserSettingsCard = true;
+  assert.equal(c._computeHash(), '#profil');
+});
+
+test('_computeHash: Profil-Reiter → #profil/<reiter>, Grund-Reiter ohne Suffix', () => {
+  const c = makeCtx();
+  c.showUserSettingsCard = true;
+  c.$store.nav.cardTab.userSettingsTab = 'devices';
+  assert.equal(c._computeHash(), '#profil/devices');
+  c.$store.nav.cardTab.userSettingsTab = 'general';
   assert.equal(c._computeHash(), '#profil');
 });
 

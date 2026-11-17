@@ -32,14 +32,16 @@ test('Eigener KI-Zugang: Schalter, Host-Guard, Speichern ohne Key-Echo, Entferne
   await setEnabled(page, false);
   await bootApp(page);
   let card = await openProfile(page);
-  const section = card.locator('.card-form-row--ai-access');
-  await expect(section).toHaveCount(0);
+  const tab = card.locator('.tabs-btn', { hasText: 'KI-Zugang' });
+  await expect(tab).toBeHidden();
 
   await setEnabled(page, true);
   await page.evaluate(() => window.__app.toggleUserSettingsCard());
   card = await openProfile(page);
-  await expect(section).toBeVisible();
-  await section.locator('.collapsible-toggle').click();
+  await expect(tab).toBeVisible();
+  await tab.click();
+  const section = card.locator('[role="tabpanel"]').filter({ has: page.locator('.ai-access-body') });
+  await expect(section.locator('.ai-access-body')).toBeVisible();
 
   // OpenAI-kompatibel auf einen internen Host → Server lehnt ab, Meldung lokalisiert.
   await section.getByRole('radio', { name: /OpenAI/ }).click();

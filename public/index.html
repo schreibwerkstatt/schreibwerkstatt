@@ -71,6 +71,7 @@
   <link rel="stylesheet" href="css/components/confirm-dialog.css">
   <link rel="stylesheet" href="css/components/offline-rescue.css">
   <link rel="stylesheet" href="css/components/danger-zone.css">
+  <link rel="stylesheet" href="css/components/settings-tabs.css">
   <link rel="stylesheet" href="css/components/job-toast.css">
   <link rel="stylesheet" href="css/components/user-chip.css">
   <link rel="stylesheet" href="css/components/feature-tiles.css">
@@ -619,7 +620,7 @@
               :data-tip="t('welcome.demoTip')"
               x-text="demoBookBusy ? t('onboarding.demo.busy') : t('welcome.demoCta')"></button>
     </div>
-    <button type="button" class="welcome-help-link" @click="openHelpFeatures()" x-text="t('welcome.helpLink')"></button>
+    <button type="button" class="welcome-help-link" @click="openHelpTab('features')" x-text="t('welcome.helpLink')"></button>
   </div>
 </div>
 

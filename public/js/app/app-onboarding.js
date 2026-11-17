@@ -5,6 +5,7 @@
 // und die zwei Banner-Aktionen. Persistiert wird das Wegklicken serverseitig
 // (app_users.onboarding_state.welcomeDismissed) via PATCH /me/onboarding.
 import { sendJson } from '../utils.js';
+import { openCardWith, CARD_REQUEST } from '../cards/card-request.js';
 
 export const appOnboardingMethods = {
   // Beim Bootstrap aufgerufen (app-init): Banner nur zeigen, solange der User
@@ -64,11 +65,11 @@ export const appOnboardingMethods = {
     }
   },
 
-  // Welcome-Link «Wie funktioniert …» → Hilfe auf dem Funktionsüberblick,
-  // unabhängig vom Ungelesen-Stand der Neuigkeiten.
-  openHelpFeatures() {
-    this.$store.shell.helpTabRequest = 'features';
-    if (!this.showHelpCard) this.toggleHelpCard();
+  // Hilfe auf einem bestimmten Reiter öffnen ('features' | 'changelog'),
+  // unabhängig vom Ungelesen-Stand der Neuigkeiten: Welcome-Link «Wie
+  // funktioniert …», Versionszeile im Avatar-Menü, Palette.
+  openHelpTab(tab) {
+    return openCardWith(CARD_REQUEST.HELP_TAB, tab, () => (this.showHelpCard ? null : this.toggleHelpCard()));
   },
 
   // Welcome-Karte: Beispielbuch anlegen; Fehler als Status-Toast (die Karte

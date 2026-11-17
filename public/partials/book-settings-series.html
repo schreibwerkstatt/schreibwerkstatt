@@ -5,7 +5,7 @@
 
       <div x-show="seriesLoading" x-skeleton="3" x-cloak></div>
 
-      <section class="book-settings-section" x-show="!seriesLoading">
+      <section class="settings-section" x-show="!seriesLoading">
         <h3 class="card-section-title" x-text="$app.t('series.title')"></h3>
         <p class="card-hint" x-text="$app.t('series.intro')"></p>
 
@@ -86,7 +86,7 @@
         <p class="card-form-error" x-show="seriesError" x-text="seriesError"></p>
       </section>
 
-      <section class="book-settings-section" x-show="!seriesLoading && seriesPrequels.length" x-cloak>
+      <section class="settings-section" x-show="!seriesLoading && seriesPrequels.length" x-cloak>
         <h3 class="card-section-title" x-text="$app.t('series.carry.title')"></h3>
         <p class="card-hint" x-text="$app.t('series.carry.intro')"></p>
         <div class="card-form-row">

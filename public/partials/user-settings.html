@@ -1,15 +1,28 @@
-<!-- Benutzer-Einstellungen -->
+<!-- Benutzer-Einstellungen («Profil & Einstellungen») -->
 <!--
   Alpine.data-Sub-Komponente — siehe public/js/cards/user-settings-card.js.
-  `showUserSettingsCard` + `toggleUserSettingsCard` im Root, fachlicher State
-  (Profil, Default-Präferenzen, Reset-Zone) in dieser Komponente.
+  `showUserSettingsCard` + `toggleUserSettingsCard` im Root, fachlicher State in
+  dieser Komponente. Reiter nach dem Muster der Bucheinstellungen; jedes Panel
+  ist ein Fragment-Include im Scope dieser Karte (ohne eigenes x-data). Reiter-
+  Liste = URL_TABS.userSettings (card-request.js), Palette-Sprung je Reiter in
+  feature-registry.js.
 -->
-<div class="card card--settings" x-data="userSettingsCard" x-show="$app.showUserSettingsCard" x-cloak
-     @keydown="$editKeys($event, { save: () => !(userSettingsSaving || userSettingsLoading) && saveUserSettings() })">
+<div class="card card--settings card--settings-tabs" x-data="userSettingsCard" x-show="$app.showUserSettingsCard" x-cloak
+     @keydown="$editKeys($event, { save: () => !userSettingsSaveDisabled() && saveUserSettings() })">
   <div class="card-header">
-    <span class="card-title" x-text="$app.t('profile.title')"></span>
+    <!-- Eyebrow wie in den Bucheinstellungen (dort der Buchname): hält die
+         Kopfhöhe fest, ob der Speichern-Knopf steht oder nicht. -->
+    <div class="card-header-titlebar">
+      <span class="card-eyebrow" x-text="userSettingsProfile?.name || userSettingsProfile?.email || ' '"></span>
+      <span class="card-title" x-text="$app.t('profile.title')"></span>
+    </div>
     <div class="card-actions">
-      <button type="button" data-label-ok @click="saveUserSettings()" :disabled="userSettingsSaving || userSettingsLoading">
+      <span class="card-form-saved" x-show="userSettingsSaved && !userSettingsError" x-cloak x-transition.opacity.duration.250ms x-text="$app.t('common.settingsSaved')"></span>
+      <span class="card-form-error" x-show="userSettingsError" x-text="userSettingsError"></span>
+      <!-- Nur auf «Allgemein» (einziger Formular-Reiter) — oder solange dort
+           Ungespeichertes liegt, damit es von jedem Reiter aus erreichbar bleibt. -->
+      <button type="button" data-label-ok @click="saveUserSettings()" :disabled="userSettingsSaveDisabled()"
+              x-show="userSettingsTab === 'general' || userSettingsDirty()">
         <span x-show="userSettingsSaving" class="spinner"></span>
         <span x-text="userSettingsSaving ? $app.t('common.saving') : $app.t('common.save')"></span>
       </button>
@@ -18,206 +31,34 @@
 
   <div x-show="userSettingsLoading" x-skeleton="5" x-cloak></div>
 
-  <div x-show="!userSettingsLoading" class="card-form-grid">
+  <div x-show="!userSettingsLoading"
+       x-data="tabs(['general','devices','ai','dict','danger'])"
+       x-modelable="value" x-model="userSettingsTab">
 
-    <div class="card-form-row">
-      <span class="card-form-label" x-text="$app.t('profile.account')"></span>
-      <div class="user-settings-profile">
-        <div><strong x-text="userSettingsProfile?.name || '—'"></strong></div>
-        <div class="muted-msg muted-msg--sm" x-text="userSettingsProfile?.email || ''"></div>
-      </div>
+    <div class="tabs tabs--scrollable" x-bind="tablist">
+      <button class="tabs-btn" x-bind="tabBtn('general')"
+              x-text="$app.t('profile.tab.general')"></button>
+      <button class="tabs-btn" x-bind="tabBtn('devices')"
+              x-text="$app.t('profile.tab.devices')"></button>
+      <button class="tabs-btn" x-bind="tabBtn('ai')"
+              x-show="aiAccessEnabled || aiAccessStored" x-cloak
+              x-text="$app.t('profile.tab.ai')"></button>
+      <button class="tabs-btn" x-bind="tabBtn('dict')"
+              x-show="$store.config.languagetoolEnabled" x-cloak
+              x-text="$app.t('profile.tab.dict')"></button>
+      <button class="tabs-btn" x-bind="tabBtn('danger')"
+              x-text="$app.t('profile.tab.danger')"></button>
     </div>
 
-    <div x-id="['fld']" class="card-form-row">
-      <label :id="$id('fld')" class="card-form-label" x-text="$app.t('profile.uiLanguage')"></label>
-      <div class="card-form-field">
-        <div :aria-labelledby="$id('fld')" x-data="radioGroup()"
-             x-effect="value = $store.shell.uiLocale; options = userSettingsUiLangOptions()"
-             @radio-change="$app.changeLocale($event.detail)"></div>
-        <p class="card-form-field-note" x-text="$app.t('profile.uiLanguageHint')"></p>
-      </div>
-    </div>
-
-    <p class="card-form-section-divider card-form-section-divider--note" x-text="$app.t('profile.newBooksHint')"></p>
-
-    <div x-id="['fld']" class="card-form-row">
-      <label :id="$id('fld')" class="card-form-label" x-text="$app.t('profile.defaultLanguage')"></label>
-      <div :aria-labelledby="$id('fld')" x-data="radioGroup()" x-modelable="value" x-model="userSettingsDefaultLanguage"
-           x-effect="options = userSettingsDefaultLangOptions()"
-           @radio-change="userSettingsDefaultRegion = ($event.detail === 'de' ? 'CH' : ($event.detail === 'en' ? 'US' : '')); userSettingsDefaultBuchtyp = ''"></div>
-    </div>
-
-    <div x-id="['fld']" class="card-form-row" x-show="userSettingsDefaultLanguage">
-      <label :id="$id('fld')" class="card-form-label" x-text="$app.t('profile.defaultRegion')"></label>
-      <div :aria-labelledby="$id('fld')" x-data="radioGroup()" x-modelable="value" x-model="userSettingsDefaultRegion"
-           x-effect="options = (userSettingsDefaultLanguage === 'de'
-             ? [{ value: 'CH', label: $app.t('region.de.CH') }, { value: 'DE', label: $app.t('region.de.DE') }]
-             : userSettingsDefaultLanguage === 'en'
-             ? [{ value: 'US', label: $app.t('region.en.US') }, { value: 'GB', label: $app.t('region.en.GB') }]
-             : [])"></div>
-    </div>
-
-    <div x-id="['fld']" class="card-form-row" x-show="userSettingsDefaultLanguage">
-      <label :id="$id('fld')" class="card-form-label" x-text="$app.t('profile.defaultBuchtyp')"></label>
-      <div :aria-labelledby="$id('fld')" x-data="combobox($app.t('profile.defaultBuchtyp'), $app.t('common.notSet'))"
-           x-modelable="value" x-model="userSettingsDefaultBuchtyp"
-           x-effect="options = userSettingsBuchtypOptions()"
-></div>
-    </div>
-
-    <p class="card-form-section-divider" x-text="$app.t('profile.editorSection')"></p>
-
-    <div x-id="['fld']" class="card-form-row">
-      <label :id="$id('fld')" class="card-form-label" x-text="$app.t('profile.focusGranularity')"></label>
-      <div class="card-form-field">
-        <div :aria-labelledby="$id('fld')" x-data="combobox($app.t('profile.focusGranularity'))"
-             x-modelable="value" x-model="userSettingsFocusGranularity"
-             x-effect="options = userSettingsFocusOptions()"
-></div>
-        <p class="card-form-field-note" x-text="$app.t('profile.focusGranularityHint')"></p>
-      </div>
-    </div>
-
-    <p class="card-form-section-divider" x-text="$app.t('profile.writingSection')"></p>
-
-    <div x-id="['fld']" class="card-form-row">
-      <label :for="$id('fld')" class="card-form-label" x-text="$app.t('profile.dailyGoal')"></label>
-      <div class="card-form-field">
-        <div class="card-form-goal-edit">
-          <input :id="$id('fld')" type="text" class="card-form-goal-input"
-                 x-data="numInput({ integer: true, min: 0, max: 1440 })"
-                 x-modelable="value" x-model="userSettingsDailyGoal"
-                 :aria-label="$app.t('profile.dailyGoal')">
-          <span class="card-form-goal-unit" x-text="$app.t('mystats.goal.minutesLabel')"></span>
-        </div>
-        <p class="card-form-field-note" x-text="$app.t('profile.dailyGoalHint')"></p>
-      </div>
-    </div>
-
-    <template x-if="$store.session.offlineCapable">
-      <div>
-        <p class="card-form-section-divider" x-text="$app.t('profile.offlineSection')"></p>
-        <div class="card-form-row card-form-row--full">
-          <div class="card-form-field">
-            <div x-data="toggleSwitch({ label: () => $app.t('profile.offlineAuto') })"
-                 x-modelable="value" x-model="$store.session.offlineAuto.enabled"
-                 @toggle-change="$app.setOfflineAutoEnabled($event.detail)"></div>
-            <p class="card-form-field-note" x-text="$app.t('profile.offlineAutoHint')"></p>
-            <p class="card-form-field-note" x-text="$app.t($store.session.storagePersisted ? 'profile.storagePersisted' : 'profile.storageNotPersisted')"></p>
-          </div>
-        </div>
-      </div>
-    </template>
-
-    <p class="card-form-saved" x-show="userSettingsSaved" x-cloak x-transition.opacity.duration.250ms x-text="$app.t('profile.savedMsg')"></p>
-    <p class="card-form-error" x-show="userSettingsError" x-text="userSettingsError"></p>
-
-    <template x-if="$store.config.languagetoolEnabled">
-      <div class="card-form-row card-form-row--dict" data-settings-section="dict" x-data="collapsible()">
-        <button type="button" class="collapsible-toggle" x-bind="trigger">
-          <span class="history-chevron" x-bind="chevron" aria-hidden="true"></span>
-          <span x-text="$app.t('spellcheck.dict.title')"></span>
-          <span class="lt-dict-count" x-text="dictEntries.length"></span>
-        </button>
-        <div x-bind="panel" x-cloak>
-          <div class="lt-dict-body">
-            <template x-if="!dictEntries.length">
-              <p class="muted-msg muted-msg--sm" x-text="$app.t('spellcheck.dict.empty')"></p>
-            </template>
-            <template x-if="dictEntries.length">
-              <div class="filter-bar lt-dict-search">
-                <span class="filter-search-wrap">
-                  <input type="text" class="filter-search-input filter-search-input--wide"
-                         x-model="dictFilter"
-                         :placeholder="$app.t('spellcheck.dict.searchPlaceholder')"
-                         :aria-label="$app.t('spellcheck.dict.searchPlaceholder')">
-                  <button type="button" class="search-clear--icon" x-show="dictFilter" @click="dictFilter=''"
-                          :aria-label="$app.t('search.clear')" :data-tip="$app.t('search.clear')"><svg class="icon" aria-hidden="true"><use href="/icons.svg#x"/></svg></button>
-                </span>
-              </div>
-            </template>
-            <div class="lt-dict-list" x-show="dictEntries.length">
-              <template x-for="e in dictEntriesFiltered" :key="e.word + '|' + e.book_id + '|' + e.lang">
-                <div class="lt-dict-row">
-                  <span class="lt-dict-word" x-text="e.word"></span>
-                  <span class="lt-dict-scope muted-msg muted-msg--sm">
-                    <span x-text="ltScopeLabel(e.book_id)"></span>
-                    <span>: </span>
-                    <span x-text="e.lang === '*' ? $app.t('spellcheck.dict.scope_lang_any') : e.lang"></span>
-                  </span>
-                  <button type="button" class="lt-dict-remove" @click="removeDictEntry(e)" x-text="$app.t('spellcheck.dict.remove')"></button>
-                </div>
-              </template>
-              <template x-if="dictEntries.length && !dictEntriesFiltered.length">
-                <p class="muted-msg muted-msg--sm" x-text="$app.t('spellcheck.dict.noMatch')"></p>
-              </template>
-            </div>
-          </div>
-        </div>
-      </div>
-    </template>
-
-    <template x-if="$store.config.languagetoolEnabled">
-      <div class="card-form-row card-form-row--dict" data-settings-section="ltRules" x-data="collapsible()">
-        <button type="button" class="collapsible-toggle" x-bind="trigger">
-          <span class="history-chevron" x-bind="chevron" aria-hidden="true"></span>
-          <span x-text="$app.t('spellcheck.rules.title')"></span>
-          <span class="lt-dict-count" x-text="ltRuleEntries.length"></span>
-        </button>
-        <div x-bind="panel" x-cloak>
-          <div class="lt-dict-body">
-            <p class="muted-msg muted-msg--sm" x-show="!ltRuleEntries.length" x-text="$app.t('spellcheck.rules.empty')"></p>
-            <div class="lt-dict-list" x-show="ltRuleEntries.length">
-              <template x-for="e in ltRuleEntries" :key="e.rule_id + '|' + e.book_id">
-                <div class="lt-dict-row">
-                  <span class="lt-dict-word" x-text="e.rule_label || e.rule_id" :data-tip="e.rule_id"></span>
-                  <span class="lt-dict-scope muted-msg muted-msg--sm" x-text="ltScopeLabel(e.book_id)"></span>
-                  <button type="button" class="lt-dict-remove" @click="removeLtRule(e)" x-text="$app.t('spellcheck.rules.enable')"></button>
-                </div>
-              </template>
-            </div>
-          </div>
-        </div>
-      </div>
-    </template>
-
-    <!-- @include user-settings-ai-access -->
+    <!-- @include user-settings-general -->
 
     <!-- @include user-settings-devices -->
 
-    <!-- @include user-settings-clients -->
+    <!-- @include user-settings-ai-access -->
 
-    <!--
-      Konto loeschen (App-Store-Guideline 5.1.1(v)). Gleicher Endpunkt wie im
-      nativen macOS-Client: DELETE /me/account. Der Client verlinkt auf #profil,
-      wenn der Server die Route nicht kennt — dieser Block ist das Ziel.
-    -->
-    <div class="card-form-row card-form-row--full">
-      <div class="danger-zone">
-        <div class="danger-zone-title">
-          <svg class="icon" aria-hidden="true"><use href="/icons.svg#alert-triangle"/></svg>
-          <span x-text="$app.t('profile.deleteAccount.title')"></span>
-        </div>
-        <div class="danger-zone-row">
-          <div class="danger-zone-text" x-text="$app.t('profile.deleteAccount.text')"></div>
-          <div class="danger-zone-actions">
-            <button type="button" class="danger-zone-btn"
-                    @click="deleteAccount()" :disabled="accountDeleting">
-              <span x-show="accountDeleting" class="spinner"></span>
-              <span x-text="accountDeleting ? $app.t('common.deleting') : $app.t('profile.deleteAccount.button')"></span>
-            </button>
-          </div>
-        </div>
-        <p class="card-form-error" x-show="accountDeleteError" x-text="accountDeleteError"></p>
-      </div>
-    </div>
+    <!-- @include user-settings-dict -->
 
-    <div class="card-form-row card-form-row--full">
-      <p class="muted-msg muted-msg--sm">
-        <a href="https://github.com/schreibwerkstatt/schreibwerkstatt"
-           target="_blank" rel="noopener noreferrer"
-           x-text="$app.t('landing.githubLabel')"></a>
-      </p>
-    </div>
+    <!-- @include user-settings-danger -->
+
   </div>
 </div>

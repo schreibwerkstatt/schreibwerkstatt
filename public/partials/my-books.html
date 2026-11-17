@@ -7,7 +7,11 @@
      editor) — kein zweiter Fertig-Schalter. -->
 <div class="card card--mybooks" x-data="myBooksCard" x-show="$app.showMyBooksCard" x-cloak>
   <div class="card-header">
-    <span class="card-title" x-text="$app.t('mybooks.title')"></span>
+    <!-- Eyebrow wie in «Profil & Einstellungen»: der angemeldete User. -->
+    <div class="card-header-titlebar">
+      <span class="card-eyebrow" x-text="$store.session.currentUser?.name || $store.session.currentUser?.email || ' '"></span>
+      <span class="card-title" x-text="$app.t('mybooks.title')"></span>
+    </div>
     <button type="button" class="btn-card-close" @click="$app.toggleMyBooksCard()"
             :aria-label="$app.t('common.close')" :data-tip="$app.t('common.close')">
       <svg class="icon" aria-hidden="true"><use href="/icons.svg#x"/></svg>

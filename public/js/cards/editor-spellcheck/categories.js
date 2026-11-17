@@ -66,6 +66,14 @@ export function isSpellingMatch(m) {
   return (m.rule?.id || '').includes('SPELL') || (m.rule?.category?.id || '') === 'TYPOS';
 }
 
+// Ist die Regel die Rechtschreibpruefung selbst (Woerterbuch-Abgleich von
+// LanguageTool: GERMAN_SPELLER_RULE, SWISS_GERMAN_SPELLER_RULE,
+// MORFOLOGIK_RULE_EN_US, HUNSPELL_…)? Ausgeschaltet markiert sie gar kein
+// falsch geschriebenes Wort mehr — der Woerterbuch-Reiter warnt dann.
+export function isSpellerRuleId(ruleId) {
+  return /SPELLER|MORFOLOGIK|HUNSPELL/.test(ruleId || '');
+}
+
 /**
  * Die drei Highlight-Toepfe einer Controller-Instanz. `CSS.highlights` ist
  * global; pro Instanz wird ein frischer `Highlight` registriert und beim detach

@@ -20,6 +20,7 @@ const CASES = [
   { name: 'Meine Bücher',        view: '#meine-buecher',           tab: 'fertig',    def: 'aktiv',      sel: '.card--mybooks',        field: 'myBooksTab' },
   { name: 'Admin-Nutzer',        view: '#admin/users',             tab: 'invites',   def: 'users',      sel: '.card--admin-users',    field: 'adminUsersTab' },
   { name: 'Admin-Einstellungen', view: '#admin/settings',          tab: 'smtp',      def: 'auth',       sel: '.card--admin-settings', field: 'adminSettingsTab' },
+  { name: 'Hilfe',               view: '#hilfe',                   tab: 'changelog', def: 'features',   sel: '.card--help',           field: 'helpTab' },
 ];
 
 const tabOf = (page, sel, field) => page.evaluate(

@@ -3,11 +3,28 @@
    Akzent kommt aus card-accents.css (var(--card-accent)), nicht von hier. */
 @layer components {
 
+/* Feste Spaltenbreiten: Kennzahl, Median und Richtung fix, die Buchspalten
+   teilen sich den Rest gleich — sonst haengt die Breite daran, welches Buch den
+   laengeren Namen hat. `--ap-books` (am <table> gebunden) haelt eine Mindest-
+   breite je Buch, darunter scrollt `.table-scroll` seitlich. */
 .ap-table {
+  --ap-metric-w: 11rem;
+  --ap-book-min: 6.5rem;
+  --ap-median-w: 0rem;
+  --ap-trend-w: 0rem;
   width: 100%;
-  border-collapse: collapse;
+  table-layout: fixed;
+  border-collapse: separate;
+  border-spacing: 0;
   font-size: var(--font-size-sm);
 }
+/* Selektor MIT `.table-scroll >`: utilities.css setzt dort `min-width: 100%`
+   mit hoeherer Spezifitaet (gleiche Falle wie figuren-lebenslauf.css). */
+.table-scroll > .ap-table {
+  min-width: max(100%, calc(var(--ap-metric-w) + var(--ap-books, 1) * var(--ap-book-min) + var(--ap-median-w) + var(--ap-trend-w)));
+}
+.ap-table--median { --ap-median-w: 5.5rem; }
+.ap-table--trend  { --ap-trend-w: 8.5rem; }
 
 .ap-table th {
   text-align: left;
@@ -21,27 +38,53 @@
 .ap-table td {
   padding: var(--space-xs) var(--space-md) var(--space-xs) 0;
   border-bottom: var(--border-thin) solid var(--color-border);
-  vertical-align: top;
+  vertical-align: baseline;
   font-variant-numeric: tabular-nums;
 }
 
-/* Die Kennzahl-Spalte bleibt fix, die Buch-Spalten teilen sich den Rest — sonst
-   haengt die Spaltenbreite daran, welches Buch den laengeren Namen hat. */
-.ap-metric-th, .ap-metric-td { width: 11rem; }
-.ap-book-th { width: auto; }
+.ap-trend-th, .ap-trend-td { width: var(--ap-trend-w); }
 
-.ap-metric-td {
+/* Zeilenkopf auf der Grundlinie der Werte — nicht unten wie die Spaltenkoepfe. */
+.ap-table .ap-metric-td {
+  vertical-align: baseline;
+  padding-top: var(--space-xs);
+  padding-bottom: var(--space-xs);
   font-weight: var(--fw-regular);
   color: var(--color-text);
 }
 
-/* Buchkopf: Name ueber Umfang. Beide als Block — Flex gehoert nie auf die Zelle
-   selbst, sonst ist sie kein `table-cell` mehr und die Spalte verrutscht gegen
-   ihren Kopf (gleiche Falle wie in figuren-lebenslauf.css). */
+/* Kennzahl-Spalte klebt beim seitlichen Scrollen (mobil), sonst weiss man ab
+   dem dritten Buch nicht mehr, welche Zeile welche Kennzahl ist. */
+.ap-metric-th, .ap-metric-td {
+  width: var(--ap-metric-w);
+  position: sticky;
+  left: 0;
+  z-index: 1;
+  background: var(--color-card-bg);
+}
+
+/* Erklaerung der Kennzahl: Tooltip am Rechner, per Klick aufklappbar ueberall. */
+.ap-metric-label {
+  text-decoration: underline dotted var(--color-subtle);
+  text-underline-offset: 3px;
+}
+.ap-metric-tip {
+  display: block;
+  margin-top: var(--space-2xs);
+  font-size: var(--font-size-xs);
+  color: var(--color-muted);
+  line-height: 1.4;
+}
+
+/* Buchkopf: Name ueber Umfang · Jahr. Beide als Block — Flex gehoert nie auf die
+   Zelle selbst, sonst ist sie kein `table-cell` mehr und die Spalte verrutscht
+   gegen ihren Kopf (gleiche Falle wie in figuren-lebenslauf.css). */
 .ap-book-name {
   display: block;
   color: var(--color-text);
   font-weight: var(--fw-medium);
+  overflow-wrap: break-word;
+  hyphens: auto;
 }
 
 .ap-book-meta {
@@ -50,7 +93,8 @@
   color: var(--color-muted);
 }
 
-/* Gruppen-Trennzeile (Satzbau / Wortschatz / Lesbarkeit). */
+/* Gruppen-Trennzeile (Satzbau / Wortschatz / Lesbarkeit). Das Label klebt mit
+   der Kennzahl-Spalte, die Zelle selbst spannt die ganze Zeile. */
 .ap-group-row th {
   padding-top: var(--space-md);
   color: var(--card-accent);
@@ -60,36 +104,90 @@
   text-transform: uppercase;
   border-bottom: var(--border-thin) solid var(--color-border);
 }
+.ap-group-label { position: sticky; left: 0; }
 
-.ap-value { display: block; }
+/* Wert und auffaellige Abweichung auf einer Zeile. */
+.ap-value { white-space: nowrap; }
 
-/* Abstand zum Median. Bewusst zurueckhaltend und ohne Ampelfarbe: die Abweichung
-   ist eine Messung, keine Note. */
+/* Abstand zum Median, nur ab der Schwelle (sonst im Tooltip). Bewusst
+   zurueckhaltend und ohne Ampelfarbe: die Abweichung ist eine Messung, keine Note. */
 .ap-dev {
-  display: block;
+  margin-left: var(--space-2xs);
   font-size: var(--font-size-xs);
   color: var(--color-muted);
+  white-space: nowrap;
 }
 
+/* Median und Richtung sind abgeleitet — eine Linie trennt sie von den Buchwerten. */
+.ap-median-th, .ap-median-td {
+  width: var(--ap-median-w);
+  padding-left: var(--space-sm);
+  border-left: var(--border-thin) solid var(--color-border);
+}
 .ap-median-td { color: var(--color-muted); }
 
-/* Richtung ueber die Werk-Reihenfolge. Die Klassen sagen rauf/runter, nicht
-   gut/schlecht — darum kein Gruen/Rot, sondern nur Gewicht und Akzent. */
+/* Richtung ueber die Werk-Reihenfolge: Verlaufslinie + Pfeil + Prozent. Die
+   Klassen sagen rauf/runter, nicht gut/schlecht — darum kein Gruen/Rot. */
 .ap-trend-td { font-variant-numeric: tabular-nums; }
+.ap-trend-cell {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-xs);
+  white-space: nowrap;
+}
+.ap-spark {
+  width: 3rem;
+  height: 1rem;
+  flex: none;
+  color: var(--color-subtle);
+}
+.ap-spark polyline {
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.5;
+  stroke-linejoin: round;
+  stroke-linecap: round;
+  vector-effect: non-scaling-stroke;
+}
 .ap-trend--up, .ap-trend--down { color: var(--card-accent); font-weight: var(--fw-medium); }
+.ap-trend--up .ap-spark, .ap-trend--down .ap-spark { color: var(--card-accent); }
 .ap-trend--flat { color: var(--color-muted); }
 
+/* Verknuepfung Befund → Zeile: beim Ueberfahren des Befunds oder nach dem Sprung. */
+.ap-metric-row.is-linked > :is(th, td) {
+  background: color-mix(in srgb, var(--card-accent) 10%, var(--color-card-bg));
+}
+
 @media (max-width: 700px) {
-  .ap-metric-th, .ap-metric-td { width: 8rem; }
-  .ap-table { font-size: var(--font-size-xs); }
+  .ap-table { --ap-metric-w: 8rem; --ap-book-min: 7rem; font-size: var(--font-size-xs); }
+  .ap-table--trend { --ap-trend-w: 7.5rem; }
 }
 
 /* ── Deutung (KI-Lauf) ──────────────────────────────────────────────────────
    Steht ueber der Messtabelle: die Aussage zuerst, der Beleg darunter. */
 .ap-profile-text {
-  margin: 0 0 var(--space-sm);
+  margin: 0 0 var(--space-md);
+  padding-left: var(--space-md);
+  border-left: var(--border-thick) solid var(--card-accent);
   white-space: pre-wrap;
   line-height: var(--lh-relaxed);
+}
+/* Veraltet: der Text gilt weiter, tritt aber zurueck, bis neu gedeutet ist. */
+.ap-profile-text--stale {
+  color: var(--color-muted);
+  border-left-color: var(--color-border);
+}
+
+.ap-profile-titlebar {
+  display: inline-flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--space-xs);
+}
+.ap-profile-head-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-xs);
 }
 
 .ap-profile-actions {
@@ -99,8 +197,6 @@
   margin-bottom: var(--space-sm);
 }
 
-.ap-profile-meta { font-size: var(--font-size-xs); color: var(--color-muted); }
-
 .ap-profile-textarea {
   width: 100%;
   margin-bottom: var(--space-sm);
@@ -109,6 +205,16 @@
   line-height: var(--lh-relaxed);
   resize: vertical;
 }
+
+/* Basis-Statuszeile: «aus 3 von 4 Büchern» + Aufklapper der ausgelassenen. */
+.ap-basis-row {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: var(--space-sm);
+}
+.ap-basis-skipped { padding: var(--space-2xs) 0 0 var(--space-md); }
+.ap-basis > * + * { margin-top: var(--space-xs); }
 
 /* Konstanten + Entwicklung: je Zeile Aspekt, ggf. Richtung, dann Beleg. Der
    Beleg steht immer dabei — ohne ihn waere die Zeile eine Behauptung. */

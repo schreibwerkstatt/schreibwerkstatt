@@ -4,7 +4,7 @@
          Karte, der Klappentext IST bookPublication.description. -->
     <div class="card-form-grid" x-bind="panel('expose')" x-cloak>
 
-      <section class="book-settings-section">
+      <section class="settings-section">
         <h3 class="card-section-title" x-text="$app.t('expose.title')"></h3>
         <p class="card-hint" x-text="exposeProfilActive() === 'sachlich' ? $app.t('expose.introSachbuch') : $app.t('expose.introRoman')"></p>
         <div class="expose-actions">
@@ -15,7 +15,7 @@
         <p class="card-form-error" x-show="exposeError" x-text="exposeError"></p>
       </section>
 
-      <section class="book-settings-section">
+      <section class="settings-section">
         <h3 class="card-section-title" x-text="$app.t('expose.facts.title')"></h3>
         <p class="card-hint">
           <span x-text="$app.t('expose.facts.hint')"></span>
@@ -49,7 +49,7 @@
 
       <template x-if="exposeDraft">
         <div class="expose-result">
-          <section class="book-settings-section">
+          <section class="settings-section">
             <ul class="expose-warnings" x-show="(exposeRun?.warnungen || []).length">
               <template x-for="w in (exposeRun?.warnungen || [])" :key="w.key">
                 <li x-text="exposeWarnText(w)"></li>
@@ -123,7 +123,7 @@
             </template>
           </section>
 
-          <section class="book-settings-section">
+          <section class="settings-section">
             <h3 class="card-section-title" x-text="$app.t('expose.klappentext.title')"></h3>
             <div class="card-form-row">
               <label class="card-form-label" for="expose-klappentext-vorschlag" x-text="$app.t('expose.klappentext.vorschlag')"></label>
@@ -140,7 +140,7 @@
             </div>
           </section>
 
-          <section class="book-settings-section">
+          <section class="settings-section">
             <h3 class="card-section-title" x-text="$app.t('publication.authorBio')"></h3>
             <p class="expose-pre" x-show="bookPublication.author_bio" x-text="bookPublication.author_bio"></p>
             <p class="muted-msg muted-msg--sm" x-show="!bookPublication.author_bio" x-text="$app.t('expose.noBio')"></p>
@@ -149,7 +149,7 @@
         </div>
       </template>
 
-      <section class="book-settings-section" x-show="exposeHistory.length > 1">
+      <section class="settings-section" x-show="exposeHistory.length > 1">
         <h3 class="card-section-title" x-text="$app.t('expose.history.title')"></h3>
         <ul class="expose-history list-reset">
           <template x-for="h in exposeHistory" :key="h.id">

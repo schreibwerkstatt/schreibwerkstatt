@@ -162,7 +162,7 @@ function _buildLocalePrompts(localeConfig, globalErklaerungRule, buchKontext = '
   // Aussage ueber den Autor. Wie beim Stilprofil ohne Buch-Kontext-Block — der
   // Lauf ist werk-, nicht buch-bezogen, und die VORRANGIGEN ANGABEN eines
   // einzelnen Buchs haetten hier nichts zu suchen.
-  const SYS_AUTORENPROFIL_CORE    = buildSystem(sp.autorenprofil     || 'Du bist ein literarischer Stilanalytiker. Du verdichtest die Stilprofile mehrerer Buecher desselben Autors zu seiner wiedererkennbaren Handschrift – rein deskriptiv, ohne zu werten, ohne Vergleiche mit anderen Autoren und ohne etwas zu behaupten, das die Vorlagen nicht hergeben.', rules);
+  const SYS_AUTORENPROFIL_CORE    = buildSystem(sp.autorenprofil     || 'Du bist ein literarischer Stilanalytiker. Du verdichtest die Stilprofile mehrerer Bücher desselben Autors zu seiner wiedererkennbaren Handschrift – rein deskriptiv, ohne zu werten, ohne Vergleiche mit anderen Autoren und ohne etwas zu behaupten, das die Vorlagen nicht hergeben.', rules);
   // Struktur-Check journalistischer Beitraege: prueft die FORM der Textsorte,
   // nicht die Sprache. Bewusst ohne Buch-Kontext-Block — der Soll-Katalog kommt
   // aus der Textsorte (prompts/textsorten.js), nicht aus den Buch-Angaben.

@@ -58,8 +58,8 @@ test('requiresConfig: Karten und Aktionen fehlen ohne den Dienst', () => {
   const cards = (ctx) => visiblePaletteFeatures(ctx).map(f => f.key);
   assert.ok(!cards(off).includes('buchlandkarte'));
   assert.ok(cards(on).includes('buchlandkarte'));
-  assert.ok(!actionKeys(off).includes('action.userSettings.aiAccess'));
-  assert.ok(actionKeys(on).includes('action.userSettings.aiAccess'));
+  assert.ok(!actionKeys(off).includes('action.userSettings.ai'));
+  assert.ok(actionKeys(on).includes('action.userSettings.ai'));
   // Ohne Buch-Rolle (Home-Screen) greift das Gate genauso.
   assert.ok(!cards({ ...off, bookRole: null }).includes('buchlandkarte'));
 });

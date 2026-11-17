@@ -1,0 +1,49 @@
+@layer components {
+/* Einstellungs-Karte mit Reitern: Bucheinstellungen und «Profil &
+   Einstellungen». Eine Optik für beide — Karten tragen nur `.card--settings-tabs`
+   und gliedern jeden Reiter in `.settings-section`-Abschnitte. Muster:
+   DESIGN.md «Einstellungs-Reiter». */
+
+/* ── Tab-Reihe + Panels ───────────────────────────────────────────────────
+   Tab-Leiste vom Karten-Header und vom Tab-Inhalt absetzen; das Panel
+   leicht einrücken, sodass der Inhalt schmaler als die Tab-Reihe darüber
+   sitzt (visuelle Hierarchie: Tabs rahmen den Inhalt). */
+.card--settings-tabs .tabs {
+  margin-top: var(--space-sm);
+  margin-bottom: var(--space-xl);
+}
+.card--settings-tabs .card-form-grid {
+  padding-inline: var(--space-20);
+}
+@media (max-width: 600px) {
+  .card--settings-tabs .card-form-grid {
+    padding-inline: var(--space-sm);
+  }
+}
+
+/* ── Thematische Abschnitte eines Reiters ─────────────────────────────────
+   Jede logische Gruppe sitzt in einer eigenen Section mit subtilem
+   Top-Trennstrich und kleinem Caps-Title (.card-section-title). */
+.settings-section {
+  margin-top: var(--space-2xl);
+  padding-top: var(--space-20);
+  border-top: var(--border-thin) solid var(--color-border);
+}
+/* Nur die erste Section direkt im Reiter-Panel verliert die Linie. Sections in
+   einem Wrapper (Exposé-Ergebnis im x-if) behalten sie — dort folgt die erste
+   auf die Section davor. */
+.card-form-grid > .settings-section:first-of-type {
+  margin-top: 0;
+  padding-top: 0;
+  border-top: none;
+}
+/* Erscheinung aus `.card-section-title` (card-blocks.css). Abweichung: die
+   Abschnitte sind durch Trennlinien getrennte Bloecke, ihr Titel bekommt darum
+   den Abschnitts- statt des engen Abstands. */
+.settings-section > .card-section-title { margin-bottom: var(--card-gap-section); }
+/* Hinweise im Abschnittsfluss bringen keinen Abstand mit (DESIGN.md, Regel 1):
+   den setzt der Nachbar — nach dem Titel traegt der schon seinen eigenen. */
+.settings-section .card-hint + *,
+.settings-section :not(.card-section-title, .card-form-row) + .card-hint { margin-top: var(--card-gap-tight); }
+
+}

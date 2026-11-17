@@ -55,6 +55,7 @@ router.delete('/', express.json({ limit: '4kb' }), (req, res) => {
   const lang = typeof body.lang === 'string' && body.lang.trim() ? body.lang.trim() : '*';
   if (bookId && !guardBook(req, res, bookId, 'viewer')) return;
   const changes = dict.remove(userEmail, { word, bookId, lang });
+  logger.child({ job: 'lt-dict', user: userEmail, book: bookId || '-' }).info(`remove "${word}" lang=${lang} removed=${changes}`);
   res.json({ ok: true, removed: changes });
 });
 

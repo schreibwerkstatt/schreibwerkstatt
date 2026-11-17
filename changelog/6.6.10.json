@@ -1,0 +1,66 @@
+{
+  "version": "6.6.10",
+  "date": "2026-11-17",
+  "entries": [
+    {
+      "kind": "neu",
+      "de": "Profil & Einstellungen hat jetzt Reiter wie die Bucheinstellungen: Allgemein, Geräte, KI-Zugang, Wörterbuch und Gefahrenzone. Über die Befehlspalette springst du direkt zu jedem Reiter.",
+      "en": "Profile & settings now has tabs like the book settings: General, Devices, AI access, Dictionary and Danger zone. The command palette jumps straight to each tab."
+    },
+    {
+      "kind": "verbessert",
+      "de": "Profil & Einstellungen, Reiter «Allgemein»: Speichern ist nur aktiv, wenn du etwas geändert hast. Schliesst du die Karte mit offenen Änderungen, fragt die App, ob sie speichern oder verwerfen soll.",
+      "en": "Profile & settings, “General” tab: Save is only active once you change something. If you close the card with unsaved changes, the app asks whether to save or discard them."
+    },
+    {
+      "kind": "verbessert",
+      "de": "Rechtschreib-Hinweis im Editor: Betrifft er die Rechtschreibprüfung selbst, heisst der Knopf jetzt «Rechtschreibprüfung ausschalten». So schaltest du nicht aus Versehen alle Tippfehler-Markierungen ab.",
+      "en": "Spelling hint in the editor: if it belongs to the spell check itself, the button now reads “Turn off spell check”. That way you don't switch off all typo markings by accident."
+    },
+    {
+      "kind": "verbessert",
+      "de": "Reiter «Wörterbuch»: Jedes Wort und jede ausgeschaltete Regel zeigt, wann du sie hinzugefügt hast. Bei Regeln steht dabei, was nicht mehr markiert wird, mit Warnung bei der Rechtschreibprüfung.",
+      "en": "“Dictionary” tab: every word and every switched-off rule shows when you added it. Rules also say what is no longer marked, with a warning for the spell check itself."
+    },
+    {
+      "kind": "verbessert",
+      "de": "Admin-Reiter «Verhalten»: Bei übernommenen Synonymen siehst du jetzt, an welcher Stelle der Liste sie standen und welches Modell die KI-Vorschläge lieferte.",
+      "en": "Admin “Behaviour” tab: for applied synonyms you now see their position in the list and which model supplied the AI suggestions."
+    },
+    {
+      "kind": "verbessert",
+      "de": "Autorenprofil-Karte: Jede Kennzahl zeigt eine kleine Verlaufslinie und einen Pfeil, ob sie über deine Bücher steigt oder sinkt. Auffällige Abstände zum Median stehen direkt neben dem Wert, und jedes Buch trägt sein Jahr.",
+      "en": "Author profile card: each metric shows a small trend line and an arrow for whether it rises or falls across your books. Notable distances from the median sit right next to the value, and each book shows its year."
+    },
+    {
+      "kind": "verbessert",
+      "de": "Autorenprofil-Karte, Deutung: Ein Klick auf eine Aussage springt zur passenden Zeile der Tabelle. Aussagen, die den gemessenen Zahlen widersprechen, erscheinen nicht mehr, und der Text kommt mit echten Umlauten.",
+      "en": "Author profile card, interpretation: clicking a statement jumps to the matching table row. Statements that contradict the measured numbers no longer appear, and the text uses proper umlauts."
+    },
+    {
+      "kind": "verbessert",
+      "de": "Autorenprofil-Karte: Nicht enthaltene Bücher stehen jetzt hinter einem Aufklapper. Haben zwei Bücher genau dieselben Messwerte, weist die Karte darauf hin.",
+      "en": "Author profile card: books left out now sit behind an expander. If two books have exactly the same measurements, the card points it out."
+    },
+    {
+      "kind": "verbessert",
+      "de": "Hilfe: Die Reiter «Funktionen» und «Neuigkeiten» haben jetzt eigene Links, die du teilen oder als Lesezeichen speichern kannst.",
+      "en": "Help: the “Features” and “What’s new” tabs now have their own links you can share or bookmark."
+    },
+    {
+      "kind": "verbessert",
+      "de": "Entfernst du ein Wort aus dem Wörterbuch oder schaltest eine Regel wieder ein, wird das festgehalten. Fehler lassen sich so schneller finden und beheben.",
+      "en": "Removing a word from the dictionary or switching a rule back on is now recorded. That makes problems quicker to find and fix."
+    },
+    {
+      "kind": "behoben",
+      "de": "Notebook-Editor: Beim Öffnen der Hilfe blieb die Editor-Fläche manchmal leer daneben stehen, statt sich zu schliessen.",
+      "en": "Notebook editor: when opening the help, the editor area sometimes stayed visible and empty next to it instead of closing."
+    },
+    {
+      "kind": "behoben",
+      "de": "Tooltips blitzten nach einem Mausklick kurz auf, etwa beim Öffnen eines Dialogs. Sie erscheinen jetzt nur noch beim Darüberfahren oder beim Bedienen mit der Tastatur.",
+      "en": "Tooltips briefly flashed after a mouse click, for example when a dialog opened. They now only appear on hover or when using the keyboard."
+    }
+  ]
+}

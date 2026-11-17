@@ -103,7 +103,7 @@ export const hashApplyMethods = {
       this._applyingHash = true;
       this._inHashApply = true;
       try {
-        if (!this.showUserSettingsCard) await this.toggleUserSettingsCard();
+        await this._openCardOnUrlTab('userSettings', parts[1]);
       } finally {
         this._applyingHash = false;
         this._inHashApply = false;
@@ -152,7 +152,7 @@ export const hashApplyMethods = {
       this._applyingHash = true;
       this._inHashApply = true;
       try {
-        if (!this.showHelpCard) await this.toggleHelpCard();
+        await this._openCardOnUrlTab('help', parts[1]);
       } finally {
         this._applyingHash = false;
         this._inHashApply = false;

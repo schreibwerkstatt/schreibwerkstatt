@@ -13,9 +13,18 @@
 import { EVT } from '../events.js';
 import { setupCardLifecycle } from './card-lifecycle.js';
 import { tFetchError } from '../i18n.js';
-import { formatNumber, fetchJson, sendJson } from '../utils.js';
+import { formatNumber, fetchJson, sendJson, fmtDateTime } from '../utils.js';
 import { startPoll, runningJobStatus } from './job-helpers.js';
 import { diffParts } from '../diff/diff-parts.js';
+import { scrollToWhenReady } from '../utils/scroll-when-ready.js';
+
+// Ab diesem Abstand zum Median (in Prozent) steht die Abweichung neben dem Wert;
+// darunter nur im Tooltip — sonst trägt jede Zelle ein «±0%» als Rauschen.
+const AP_DEV_NOTABLE = 10;
+// Unter diesem Betrag gilt eine Richtung als «gleich» (lib/author-profile.js#FLAT_PCT).
+const AP_FLAT_PCT = 1;
+// Verlaufslinie: viewBox 48×16, 2 px Rand, Mindestspanne 10 % des Mittels.
+const SPARK = { w: 48, h: 16, pad: 2, minSpan: 0.1 };
 
 export function registerAutorenprofilCard() {
   if (typeof window === 'undefined' || !window.Alpine) return;
@@ -39,6 +48,12 @@ export function registerAutorenprofilCard() {
     apEditing: false,
     apEditText: '',
     apSaving: false,
+    // Verknüpfung Befund ↔ Tabellenzeile (Hover und Sprung) und die per Klick
+    // aufgeklappte Erklärung einer Kennzahl (Touch kennt keinen Tooltip).
+    apHoverMetric: null,
+    apFlashMetric: null,
+    apOpenTip: null,
+    _apFlashTimer: null,
     _apMemos: {},
     _lifecycle: null,
 
@@ -57,7 +72,7 @@ export function registerAutorenprofilCard() {
         showFlag: 'showAutorenprofilCard',
         showNeedsBookId: false,
         refreshNeedsBookId: false,
-        timerKeys: ['_apPollTimer'],
+        timerKeys: ['_apPollTimer', '_apFlashTimer'],
         onShow: () => { this._apReattach(); return this.loadAutorenprofil(); },
         // Reklick, Aufwachen, Reconnect: still neu laden (Skeleton nur beim ersten Mal).
         onCardRefresh: () => this.loadAutorenprofil(),
@@ -109,6 +124,16 @@ export function registerAutorenprofilCard() {
       return (ids || []).map(id => this.apBookName(id)).join(', ');
     },
 
+    /** Buchkopf-Zeile: Umfang und Anlagejahr — das Jahr macht die Werk-Reihenfolge lesbar. */
+    apBookMeta(b) {
+      const t = window.__app.t;
+      const n = this.apNum(b.tokens, 0);
+      const year = b.created_at
+        ? fmtDateTime(b.created_at, Alpine.store('shell').uiLocale, { year: 'numeric' })
+        : '';
+      return year ? t('autorenprofil.bookMeta', { n, year }) : t('autorenprofil.tokens', { n });
+    },
+
     // ── Formatierung ─────────────────────────────────────────────────────────
     // `null` wird zu „–", nicht zu „0": null heisst „nicht messbar", nicht
     // „gemessen, Ergebnis null". Gleiche Regel wie in der Wortschatz-Karte.
@@ -134,6 +159,18 @@ export function registerAutorenprofilCard() {
       return (v > 0 ? '+' : '') + this.apNum(v, 0) + '%';
     },
 
+    /** Abweichung auffällig genug, um neben dem Wert zu stehen. */
+    apDeviationNotable(book, key) {
+      const d = book?.deviation?.[key];
+      return d != null && Number.isFinite(Number(d)) && Math.abs(Number(d)) >= AP_DEV_NOTABLE;
+    },
+
+    /** Tooltip der Wertzelle: die Abweichung immer, auch unter der Schwelle. */
+    apDeviationTip(book, key) {
+      const dev = this.apDeviation(book, key);
+      return dev ? window.__app.t('autorenprofil.devTip', { dev }) : null;
+    },
+
     /** Richtung ueber die Werk-Reihenfolge — nur ab drei gemessenen Buechern. */
     apTrend(metric) {
       const tr = metric?.trend;
@@ -141,6 +178,36 @@ export function registerAutorenprofilCard() {
       const v = Number(tr.pct);
       if (Math.abs(v) < 1) return '±0%';
       return (v > 0 ? '+' : '') + this.apNum(v, 0) + '%';
+    },
+
+    /** Pfeil zur Richtung: steigt, sinkt, gleich. Eine Richtung, keine Note. */
+    apTrendArrow(metric) {
+      const pct = metric?.trend?.pct;
+      if (pct == null || !Number.isFinite(Number(pct))) return '';
+      const v = Number(pct);
+      if (Math.abs(v) < AP_FLAT_PCT) return '→';
+      return v > 0 ? '↗' : '↘';
+    },
+
+    /** Verlaufslinie einer Kennzahl über die Bücher des Abschnitts (polyline-Punkte). */
+    apSparkPoints(section, metric) {
+      const vals = this.apSectionBooks(section)
+        .map(b => b.metrics?.[metric.key])
+        .filter(v => v != null && Number.isFinite(Number(v)))
+        .map(Number);
+      if (vals.length < 2) return '';
+      const min = Math.min(...vals), max = Math.max(...vals);
+      const mean = vals.reduce((a, v) => a + v, 0) / vals.length;
+      // Mindestspanne: ein Unterschied unter SPARK.minSpan des Mittels bleibt
+      // nahezu flach — reines Min-Max-Skalieren bliese 0.459 → 0.4591 zum Knick auf.
+      const span = Math.max(max - min, Math.abs(mean) * SPARK.minSpan) || 1;
+      const mid = (min + max) / 2;
+      const { w, h, pad } = SPARK;
+      const step = (w - 2 * pad) / (vals.length - 1);
+      return vals.map((v, i) => {
+        const y = h / 2 - ((v - mid) / span) * (h - 2 * pad);
+        return `${(pad + i * step).toFixed(1)},${y.toFixed(1)}`;
+      }).join(' ');
     },
 
     apTrendClass(metric) {
@@ -197,9 +264,24 @@ export function registerAutorenprofilCard() {
     get apBooks() { return this.apData?.books || []; },
     get apCounts() { return this.apData?.counts || { total: 0, measured: 0 }; },
     get apSkipped() { return this.apData?.skipped || { excluded: [], unscanned: [], tooShort: [] }; },
-    get apHasSkipped() {
+    get apSkippedCount() {
       const s = this.apSkipped;
-      return (s.excluded?.length || 0) + (s.unscanned?.length || 0) + (s.tooShort?.length || 0) > 0;
+      return (s.excluded?.length || 0) + (s.unscanned?.length || 0) + (s.tooShort?.length || 0);
+    },
+    /** Gemessene Bücher mit identischer Messung (gleiche Wortzahl, alle Kennzahlen
+     *  gleich) — praktisch derselbe Text, auch wenn die `content_sig` abweicht
+     *  (andere Abschnittsnamen, Reihenfolge). Sie zählen im Median mehrfach und
+     *  werden benannt statt still mitgerechnet. Je Gruppe die Buch-IDs. */
+    get apDuplicates() {
+      return this._apMemo('duplicates', [this.apData], () => {
+        const groups = new Map();
+        for (const b of this.apBooks) {
+          const sig = JSON.stringify([b.tokens, b.language, b.metrics]);
+          if (!groups.has(sig)) groups.set(sig, []);
+          groups.get(sig).push(b.book_id);
+        }
+        return [...groups.values()].filter(ids => ids.length > 1);
+      });
     },
     /** Nichts gemessen — nicht dasselbe wie „Fehler" und nicht dasselbe wie „kein Stil". */
     get apIsEmpty() {
@@ -208,6 +290,20 @@ export function registerAutorenprofilCard() {
     /** Genau ein Buch: Werte ja, Vergleich nein. Wird ausgewiesen statt kaschiert. */
     get apSingleBook() {
       return !!this.apData && this.apCounts.measured === 1;
+    },
+    // ── Befund ↔ Tabellenzeile ───────────────────────────────────────────────
+    /** Ein Befund ist verknüpft, wenn seine Kennzahl in einer Tabelle steht. */
+    apFindingLinked(f) {
+      const key = f?.kennzahl;
+      return !!key && this.apSections.some(sec => (sec.metrics || []).some(m => m.key === key));
+    },
+
+    /** Zur Tabellenzeile der Kennzahl scrollen und sie kurz hervorheben. */
+    apJumpToMetric(key) {
+      scrollToWhenReady(() => document.querySelector(`.card--autorenprofil tr[data-ap-metric="${CSS.escape(key)}"]`));
+      this.apFlashMetric = key;
+      if (this._apFlashTimer) clearTimeout(this._apFlashTimer);
+      this._apFlashTimer = setTimeout(() => { this.apFlashMetric = null; this._apFlashTimer = null; }, 1600);
     },
 
     // ── Deutung ──────────────────────────────────────────────────────────────

@@ -101,3 +101,30 @@ for (const c of LIST_CARDS) {
     await expect(card.locator('.card-empty:visible')).toHaveCount(1);
   });
 }
+
+// Schnelle Ladevorgänge (localhost, Cache) sollen kein Skelett aufblitzen
+// lassen: die Platzhalter blenden erst nach ~150 ms ein. Der Platz steht ab
+// dem ersten Frame (kein Layout-Sprung), nur unsichtbar.
+test('Skelett: erst nach kurzer Ladezeit sichtbar, Platz von Anfang an', async ({ page }) => {
+  await bootApp(page);
+  const r = await page.evaluate(async () => {
+    const host = document.createElement('div');
+    host.innerHTML = '<div x-data x-skeleton="3"></div><div class="overview-grid" x-data><div x-skeleton.tiles="2"></div></div>';
+    document.getElementById('main-content').prepend(host);
+    window.Alpine.initTree(host);
+    const row = host.querySelector('.entity-skeleton-row');
+    const tile = host.querySelector('.skeleton-tile');
+    const op = (el) => Number(getComputedStyle(el).opacity);
+    await new Promise(res => requestAnimationFrame(() => res()));
+    const early = { row: op(row), tile: op(tile), h: row.getBoundingClientRect().height };
+    await new Promise(res => setTimeout(res, 500));
+    const late = { row: op(row), tile: op(tile) };
+    host.remove();
+    return { early, late };
+  });
+  expect(r.early.row).toBe(0);
+  expect(r.early.tile).toBe(0);
+  expect(r.early.h).toBeGreaterThan(0);
+  expect(r.late.row).toBeGreaterThan(0);
+  expect(r.late.tile).toBeGreaterThan(0);
+});

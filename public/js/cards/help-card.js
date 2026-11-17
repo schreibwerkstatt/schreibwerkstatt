@@ -10,9 +10,9 @@
 //                    geholt, nicht beim Mount der Karte.
 //
 // Buch-unabhaengig (wie Suche/Meine-Statistik), `showHelpCard` +
-// `toggleHelpCard` leben im Root (generiert aus EXCLUSIVE_CARDS). Darum auch
-// kein `setupCardLifecycle`: der Helper ist fuer Buch-skopierte Karten
-// (book:changed/view:reset/card:refresh) — hier gibt es nichts zu resetten.
+// `toggleHelpCard` leben im Root (generiert aus EXCLUSIVE_CARDS).
+// `setupCardLifecycle` nur fuer den Reiter-Wunsch: Reiter mit Permalink
+// (`#hilfe`, `#hilfe/changelog`, URL_TABS.help in card-request.js).
 //
 // Neu-Punkt: `$store.shell.changelogLatest > changelogSeen` (beides aus
 // /config) traegt den Achtungs-Punkt am Hilfe-Knopf im Header. Das Oeffnen des
@@ -23,6 +23,8 @@ import { formatIsoDay } from '../utils.js';
 import { featureByKey, REQUIRED_CONFIG_FLAGS, configFlags } from './feature-registry.js';
 import { buildHelpSections } from './help-catalog.js';
 import { memoMethods } from './card-memo.js';
+import { setupCardLifecycle } from './card-lifecycle.js';
+import { CARD_REQUEST } from './card-request.js';
 
 /** Semver-Vergleich; ein leerer/ungueltiger Stand gilt als „aelter als alles".
  *  Spiegel von routes/changelog.js#_cmp — die Frage „gibt es Neues?" wird auf
@@ -64,28 +66,29 @@ export function registerHelpCard() {
     // in der der User die Notizen zum ersten Mal liest — sonst verschwindet sie
     // im selben Tick, in dem er sie sieht.
     _changelogSeenAtOpen: '',
+    _lifecycle: null,
 
     init() {
       this._changelogSeenAtOpen = window.Alpine.store('shell')?.changelogSeen || '';
       // Wer einen Neu-Punkt sieht und auf „?" klickt, meint die Neuigkeiten —
       // nicht den Funktionsueberblick, den er schon kennt.
       if (hasUnreadChangelog(window.Alpine.store('shell'))) this.helpTab = 'changelog';
-      // Expliziter Reiter-Wunsch (z.B. Versionszeile im Avatar-Menü) schlägt
-      // die Heuristik; der Watcher deckt die bereits offene Karte ab.
-      this._consumeHelpTabRequest();
-      this.$watch('$store.shell.helpTabRequest', () => this._consumeHelpTabRequest());
       // Mount und Reiter-Wahl liegen im selben Tick; das Laden haengt darum am
       // Watcher statt an einem zweiten Aufruf hier.
       this.$watch('helpTab', (v) => { if (v === 'changelog') this.onChangelogTab(); });
+      // Expliziter Reiter-Wunsch (URL `#hilfe/changelog`, Versionszeile im
+      // Avatar-Menü, Palette) schlägt die Heuristik; `current` spiegelt den
+      // Reiter in die URL, damit ein Reload auf den Neuigkeiten bleibt.
+      this._lifecycle = setupCardLifecycle(this, {
+        showFlag: 'showHelpCard',
+        showNeedsBookId: false,
+        tabRequest: { key: CARD_REQUEST.HELP_TAB, apply: (tab) => { this.helpTab = tab; }, current: () => this.helpTab },
+      });
       if (this.helpTab === 'changelog') this.onChangelogTab();
     },
 
-    _consumeHelpTabRequest() {
-      const shell = window.Alpine.store('shell');
-      const tab = shell?.helpTabRequest;
-      if (!tab) return;
-      shell.helpTabRequest = '';
-      this.helpTab = tab;
+    destroy() {
+      this._lifecycle?.destroy();
     },
 
     /** Kontext wie in der Palette: Buch, Rolle, Buchtyp, Modell-Klasse. */

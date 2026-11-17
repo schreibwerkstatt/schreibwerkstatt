@@ -16,7 +16,7 @@
 //     sonst bis zum naechsten Client-Release „spellcheck.popover.close" im Button.
 //     Die Uebersetzung traegt darum nur aria-label/Tooltip.
 
-import { badgeClassFor, extractMatchedWord, isSpellingMatch } from './categories.js';
+import { badgeClassFor, extractMatchedWord, isSpellerRuleId, isSpellingMatch } from './categories.js';
 import { resolvePopoverHost, positionPopover } from './position.js';
 
 const MAX_REPLACEMENTS = 5;
@@ -154,10 +154,15 @@ export function createPopover({ editorKind, i18n, getScrollEl, addWord, getLang,
         () => addWord({ word, bookId: 0, lang: getLang() }), onDictAdded));
     }
 
-    // Regel abschalten: mit Buch nur fuer dieses Buch, sonst ueberall.
+    // Regel abschalten: mit Buch nur fuer dieses Buch, sonst ueberall. Ist die
+    // Regel die Rechtschreibpruefung selbst, sagt der Knopf das — ein Klick
+    // schaltet sonst unbemerkt jede Tippfehler-Markierung ab. Kennt der Host
+    // den Speller-Key noch nicht (Client mit eigener i18n), gilt der normale.
     const ruleId = m.rule?.id;
+    const scope = bookId ? '_book' : '';
     const ruleText = ruleId && disableRule && onRuleDisabled
-      ? optText(bookId ? 'spellcheck.popover.disable_rule_book' : 'spellcheck.popover.disable_rule')
+      ? ((isSpellerRuleId(ruleId) && optText('spellcheck.popover.disable_speller' + scope))
+        || optText('spellcheck.popover.disable_rule' + scope))
       : null;
     if (ruleText) {
       footer.appendChild(actionButton('lt-popover__rule', ruleText,

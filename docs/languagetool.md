@@ -66,7 +66,7 @@ Admin-UI: [public/partials/admin-settings.html](../public/partials/admin-setting
 
 ### Abgeschaltete Regeln [routes/languagetool.js](../routes/languagetool.js) `/rules` + [db/languagetool-rules.js](../db/languagetool-rules.js)
 
-`GET/POST/DELETE /languagetool/rules` mit `{ ruleId, bookId?, label? }`. `book_id` NULL = in allen Büchern aus, sonst nur in diesem Buch (`guardBook` viewer). `label` ist die LT-Regelbeschreibung für die Liste im Profil (`#profil` → „Ausgeschaltete Regeln", dort wieder einschaltbar). Gefiltert wird im Proxy, **nicht** über LTs `disabledRules`-Parameter — sonst hinge der geteilte Absatz-Cache an der Regelmenge eines Users.
+`GET/POST/DELETE /languagetool/rules` mit `{ ruleId, bookId?, label? }`. `book_id` NULL = in allen Büchern aus, sonst nur in diesem Buch (`guardBook` viewer). `label` ist die LT-Regelbeschreibung für die Liste im Profil (Reiter «Wörterbuch», `#profil/dict` → „Ausgeschaltete Regeln", dort wieder einschaltbar). Gefiltert wird im Proxy, **nicht** über LTs `disabledRules`-Parameter — sonst hinge der geteilte Absatz-Cache an der Regelmenge eines Users.
 
 ### Dictionary [routes/dictionary.js](../routes/dictionary.js) + [db/user-dictionary.js](../db/user-dictionary.js)
 

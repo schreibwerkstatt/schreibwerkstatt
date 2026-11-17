@@ -1,6 +1,6 @@
 // Command-Palette als Sprungbrett auf Reiter und Abschnitte, gegen die ECHTE
 // App: Bucheinstellungs-Reiter, PDF-Export-Reiter (Experten-Reiter schaltet den
-// Modus), Abschnitt der Benutzereinstellungen (klappt auf) und «Was ist neu».
+// Modus), Reiter von «Profil & Einstellungen» und «Was ist neu».
 // Die Karten holen den Wunsch über cards/card-request.js ab — kalt (Karte erst
 // durch den Sprung gemountet) und warm (Karte schon offen) sind zwei Wege.
 const { test, expect } = require('../e2e/_helpers/fixtures');
@@ -35,11 +35,14 @@ test('Palette springt auf Reiter und Abschnitte', async ({ page }) => {
     return d ? `${d.activeTab}/${d.uiMode}` : null;
   })).toBe('cover/expert');
 
-  // Benutzereinstellungen: Abschnitt klappt auf.
+  // Profil & Einstellungen: kalt auf «Geräte», warm auf «Gefahrenzone».
   await runPalette(page, 'Profil: Geräte');
-  const devices = page.locator('[data-settings-section="devices"] .collapsible-toggle');
-  await expect(devices).toHaveAttribute('aria-expanded', 'true');
-  await expect(devices).toBeInViewport();
+  const profile = page.locator('[x-data="userSettingsCard"]');
+  await expect(profile.locator('.tabs-btn', { hasText: 'Geräte' })).toHaveAttribute('aria-selected', 'true');
+  await expect(page).toHaveURL(/#profil\/devices$/);
+  await runPalette(page, 'Profil: Gefahrenzone');
+  await expect(profile.locator('.tabs-btn', { hasText: 'Gefahrenzone' })).toHaveAttribute('aria-selected', 'true');
+  await expect(profile.locator('.danger-zone-btn')).toBeVisible();
 
   // Hilfe auf den Neuigkeiten.
   await runPalette(page, 'Was ist neu');

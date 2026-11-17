@@ -37,7 +37,8 @@ export const CARD_REQUEST = Object.freeze({
   MY_BOOKS_TAB:      'myBooksTab',        // cards/my-books-card.js (myBooksTab)
   ADMIN_USERS_TAB:   'adminUsersTab',     // cards/admin-users-card.js (adminUsersTab)
   ADMIN_SETTINGS_TAB: 'adminSettingsTab', // cards/admin-settings-card.js (adminSettingsTab)
-  USER_SETTINGS_SECTION: 'userSettingsSection', // cards/user-settings-card.js (data-settings-section)
+  USER_SETTINGS_TAB: 'userSettingsTab',  // cards/user-settings-card.js (userSettingsTab)
+  HELP_TAB:          'helpTab',          // cards/help-card.js (helpTab)
 });
 
 // Reiter mit Permalink: Karten-Key (EXCLUSIVE_CARDS) → Reiter-Wunsch, Grund-
@@ -67,6 +68,10 @@ export const URL_TABS = Object.freeze({
     tabs: ['users', 'invites', 'requests'] },
   adminSettings: { request: CARD_REQUEST.ADMIN_SETTINGS_TAB, default: 'auth',
     tabs: ADMIN_SETTINGS_TABS },
+  userSettings:  { request: CARD_REQUEST.USER_SETTINGS_TAB, default: 'general',
+    tabs: ['general', 'devices', 'ai', 'dict', 'danger'] },
+  help:          { request: CARD_REQUEST.HELP_TAB, default: 'features',
+    tabs: ['features', 'changelog'] },
 });
 
 const _urlTabByRequest = new Map(Object.values(URL_TABS).map(t => [t.request, t]));

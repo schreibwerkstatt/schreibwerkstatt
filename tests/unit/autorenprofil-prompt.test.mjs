@@ -20,7 +20,7 @@ const base = { messung: 'Satzlaenge: A 10.1 | B 10.4', profile: [{ titel: 'A', s
 test('Prompt verbietet Vergleiche mit anderen Autoren', () => {
   const p = buildAutorenprofilPrompt({ ...base, buecher: 3 });
   assert.match(p, /KEINE anderen Autoren/);
-  assert.match(p, /ausschliesslich gegen die eigenen Buecher/);
+  assert.match(p, /ausschliesslich gegen die eigenen Bücher/);
 });
 
 test('Prompt verbietet Wertung und verlangt Belege', () => {
@@ -45,7 +45,7 @@ test('Ein einziges Buch: der Entwicklungs-Teil faellt weg statt leer behauptet z
 
 test('Ohne Buch-Stilprofil wird das gesagt, nicht stillschweigend ausgelassen', () => {
   const p = buildAutorenprofilPrompt({ messung: 'x', profile: [], buecher: 2 });
-  assert.match(p, /Fuer keines der Buecher liegt ein Stilprofil vor/);
+  assert.match(p, /Für keines der Bücher liegt ein Stilprofil vor/);
 });
 
 test('Schema fuehrt genau die drei Felder, alle required', () => {
@@ -75,11 +75,30 @@ test('Mehrsprachig ohne gleichsprachiges Paar: Entwicklung leer, mit Begründung
 
 test('Mehrsprachig mit gleichsprachigem Paar: Entwicklung nur innerhalb einer Sprache', () => {
   const p = buildAutorenprofilPrompt({ ...base, buecher: 3, mehrsprachig: true, entwicklungMoeglich: true });
-  assert.match(p, /ausschliesslich zwischen Buechern DERSELBEN Sprache/);
+  assert.match(p, /ausschliesslich zwischen Büchern DERSELBEN Sprache/);
   assert.doesNotMatch(p, /LEERES Array/);
 });
 
 test('Sprachnamen decken jede Messsprache ab', async () => {
   const { AUTORENPROFIL_LANGUAGE_LABELS } = await import('../../public/js/prompts/autorenprofil.js');
   for (const lang of ['de', 'en']) assert.ok(AUTORENPROFIL_LANGUAGE_LABELS[lang], lang);
+});
+
+test('Befunde tragen kennzahl (beide Listen) und tendenz (Entwicklung) als Enum mit null', () => {
+  const keys = Object.keys(AUTORENPROFIL_METRIC_LABELS);
+  const k = SCHEMA_AUTORENPROFIL.properties.konstanten.items;
+  const e = SCHEMA_AUTORENPROFIL.properties.entwicklung.items;
+  assert.ok(k.required.includes('kennzahl'));
+  assert.ok(e.required.includes('kennzahl') && e.required.includes('tendenz'));
+  assert.deepEqual(k.properties.kennzahl.enum, [...keys, null]);
+  assert.deepEqual(e.properties.tendenz.enum, ['steigt', 'sinkt', null]);
+  // Der Prompt nennt jeden Schlüssel, sonst rät das Modell einen.
+  const p = buildAutorenprofilPrompt({ ...base, buecher: 3 });
+  for (const key of keys) assert.match(p, new RegExp(`\\b${key} = `));
+});
+
+test('Prompt verlangt echte Umlaute und schreibt sie selbst (sonst kopiert das Modell «Saetze»)', () => {
+  const p = buildAutorenprofilPrompt({ ...base, buecher: 3 });
+  assert.match(p, /echten Umlauten/);
+  assert.doesNotMatch(p, /Saetze|ueber|Buecher|Woerter/);
 });

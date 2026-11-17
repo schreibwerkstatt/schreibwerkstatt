@@ -18,27 +18,33 @@
 //   • KEINE Wertung. Die Messwerte sind Zahlen, keine Noten; „zu viele
 //     Adverbien" ist eine Aussage, die dieser Lauf nicht treffen soll.
 
-import { _obj, _str } from './schema-utils.js';
+import { _obj, _str, _nullableEnum } from './schema-utils.js';
 
 // Lesbare Kennzahl-Namen FUER DEN PROMPT. Bewusst hier und nicht in der
 // i18n: das sind keine UI-Strings, sondern Prompt-Wortlaut — sie folgen der
 // Sprache des Prompts, nicht der des Betrachters. Schluessel = die Metrik-Keys
 // aus lib/author-profile.js#AUTHOR_PROFILE_METRICS.
 export const AUTORENPROFIL_METRIC_LABELS = {
-  satzlaenge: 'Satzlaenge (Woerter je Satz)',
+  satzlaenge: 'Satzlänge (Wörter je Satz)',
   dialogAnteil: 'Dialoganteil',
   adverbDichte: 'Adverbdichte',
   passivQuote: 'Passivquote',
-  fuellwortDichte: 'Fuellwortdichte',
+  fuellwortDichte: 'Füllwortdichte',
   mattr: 'Wortvielfalt MATTR',
   mtld: 'Wortvielfalt MTLD',
-  hapaxRatio: 'Anteil Einmalwoerter',
+  hapaxRatio: 'Anteil Einmalwörter',
   yuleK: 'Wiederholungsmass Yule K',
   heapsBeta: 'Wortschatz-Zuwachs Heaps beta',
   lexDichte: 'Lexikalische Dichte',
   lix: 'Lesbarkeit LIX',
   fleschDe: 'Lesbarkeit Flesch',
 };
+
+// Erlaubte Werte für `kennzahl` eines Befunds. Der Server prüft eine
+// Entwicklung mit Kennzahl + Tendenz gegen die Messung
+// (lib/author-profile.js#checkProfileFindings), die Karte verknüpft den Befund
+// mit seiner Tabellenzeile.
+const KENNZAHL_KEYS = Object.keys(AUTORENPROFIL_METRIC_LABELS);
 
 // Sprachnamen FUER DEN PROMPT (gleiche Begruendung wie die Kennzahl-Namen).
 // Schluessel = Messsprache aus lib/style-lang.js#styleLanguage.
@@ -60,7 +66,7 @@ export const AUTORENPROFIL_LANGUAGE_LABELS = {
 export function buildAutorenprofilPrompt({ messung, profile, buecher, mehrsprachig = false, entwicklungMoeglich }) {
   const profilBlock = (profile || []).length
     ? profile.map((p, i) => `--- Buch ${i + 1}: ${p.titel} ---\n${p.stilprofil}`).join('\n\n')
-    : '(Fuer keines der Buecher liegt ein Stilprofil vor.)';
+    : '(Für keines der Bücher liegt ein Stilprofil vor.)';
 
   const entwicklungOk = entwicklungMoeglich ?? buecher >= 2;
   // Ohne Vergleichsbasis faellt der Entwicklungs-Teil WEG statt leer behauptet zu
@@ -70,45 +76,49 @@ export function buildAutorenprofilPrompt({ messung, profile, buecher, mehrsprach
   // Sprachunterschied, und der Server verwirft Entwicklung ohne gleichsprachiges Paar.
   let entwicklungsAuftrag;
   if (!entwicklungOk && mehrsprachig) {
-    entwicklungsAuftrag = `- "entwicklung": LEERES Array. Die Buecher sind in verschiedenen Sprachen geschrieben, und in keiner Sprache liegen zwei Buecher vor. Ein Unterschied zwischen ihnen waere ein Sprachunterschied, keine Entwicklung. Erfinde keine.`;
+    entwicklungsAuftrag = `- "entwicklung": LEERES Array. Die Bücher sind in verschiedenen Sprachen geschrieben, und in keiner Sprache liegen zwei Bücher vor. Ein Unterschied zwischen ihnen wäre ein Sprachunterschied, keine Entwicklung. Erfinde keine.`;
   } else if (!entwicklungOk) {
-    entwicklungsAuftrag = `- "entwicklung": LEERES Array. Es liegt nur ein Buch vor — es gibt keine Entwicklung, die belegbar waere. Erfinde keine.`;
+    entwicklungsAuftrag = `- "entwicklung": LEERES Array. Es liegt nur ein Buch vor — es gibt keine Entwicklung, die belegbar wäre. Erfinde keine.`;
   } else if (mehrsprachig) {
-    entwicklungsAuftrag = `- "entwicklung": was sich ueber die Werk-Reihenfolge VERSCHOBEN hat, ausschliesslich zwischen Buechern DERSELBEN Sprache. Vergleiche nie ein Buch mit einem Buch in anderer Sprache. Jede Angabe braucht einen Beleg aus den Zahlen dieser Sprache oder den Buch-Stilprofilen. Nenne die Richtung sachlich ("knapper", "dialogreicher"), nicht als Fortschritt oder Rueckschritt.`;
+    entwicklungsAuftrag = `- "entwicklung": was sich über die Werk-Reihenfolge VERSCHOBEN hat, ausschliesslich zwischen Büchern DERSELBEN Sprache. Vergleiche nie ein Buch mit einem Buch in anderer Sprache. Jede Angabe braucht einen Beleg aus den Zahlen dieser Sprache oder den Buch-Stilprofilen. Nenne die Richtung sachlich ("knapper", "dialogreicher"), nicht als Fortschritt oder Rückschritt.`;
   } else {
-    entwicklungsAuftrag = `- "entwicklung": was sich ueber die Werk-Reihenfolge VERSCHOBEN hat. Jede Angabe braucht einen Beleg aus den Zahlen oder den Buch-Stilprofilen. Nenne die Richtung sachlich ("knapper", "dialogreicher"), nicht als Fortschritt oder Rueckschritt.`;
+    entwicklungsAuftrag = `- "entwicklung": was sich über die Werk-Reihenfolge VERSCHOBEN hat. Jede Angabe braucht einen Beleg aus den Zahlen oder den Buch-Stilprofilen. Nenne die Richtung sachlich ("knapper", "dialogreicher"), nicht als Fortschritt oder Rückschritt.`;
   }
 
   const konstantenAuftrag = mehrsprachig
-    ? `- "konstanten": was ueber ALLE Buecher hinweg gleich bleibt — der eigentliche Kern der Handschrift, auch ueber die Sprachgrenze. Sprachuebergreifend stuetzt du dich nur auf die Buch-Stilprofile und den Dialoganteil; die uebrigen Zahlen sind zwischen den Sprachen nicht vergleichbar. Jede Angabe mit knappem Beleg.`
-    : `- "konstanten": was ueber ALLE Buecher hinweg gleich bleibt — der eigentliche Kern der Handschrift. Jede Angabe mit knappem Beleg.`;
+    ? `- "konstanten": was über ALLE Bücher hinweg gleich bleibt — der eigentliche Kern der Handschrift, auch über die Sprachgrenze. Sprachübergreifend stützt du dich nur auf die Buch-Stilprofile und den Dialoganteil; die übrigen Zahlen sind zwischen den Sprachen nicht vergleichbar. Jede Angabe mit knappem Beleg.`
+    : `- "konstanten": was über ALLE Bücher hinweg gleich bleibt — der eigentliche Kern der Handschrift. Jede Angabe mit knappem Beleg.`;
 
-  return `Du bekommst die Stilprofile mehrerer Buecher EINES Autors sowie gemessene Kennzahlen ueber diese Buecher. Verdichte beides zu einem Autorenprofil.
+  return `Du bekommst die Stilprofile mehrerer Bücher EINES Autors sowie gemessene Kennzahlen über diese Bücher. Verdichte beides zu einem Autorenprofil.
 
 HARTE REGELN:
-- Nenne KEINE anderen Autoren, keine literarischen Schulen, Epochen oder Vergleichsgroessen. Die Einordnung erfolgt ausschliesslich gegen die eigenen Buecher dieses Autors. Ein Vergleich nach aussen waere nicht belegbar.
+- Nenne KEINE anderen Autoren, keine literarischen Schulen, Epochen oder Vergleichsgrössen. Die Einordnung erfolgt ausschliesslich gegen die eigenen Bücher dieses Autors. Ein Vergleich nach aussen wäre nicht belegbar.
 - WERTE NICHT. Kein "gut", "schwach", "zu viel", "sollte". Die Messwerte sind Beschreibungen, keine Noten.
 - Behaupte nichts, was weder in den Stilprofilen noch in den Zahlen steht. Wo die Quellen schweigen, schweige auch.
-- Die Zahlen sind ein VORBEFUND: verwende sie, wiederhole sie nicht. "Die Satzlaenge betraegt 10,2" ist keine Erkenntnis — "die Saetze bleiben ueber alle Buecher kurz, und der Dialoganteil waechst" ist eine.
+- Die Zahlen sind ein VORBEFUND: verwende sie, wiederhole sie nicht. "Die Satzlänge beträgt 10,2" ist keine Erkenntnis — "die Sätze bleiben über alle Bücher kurz, und der Dialoganteil wächst" ist eine.
+
+Schreibe in korrekter Rechtschreibung mit echten Umlauten (ä, ö, ü), nie als ae/oe/ue umschrieben.
 
 Liefere:
-- "autorenprofil": zusammenhaengender Text (Richtwert 150-250 Woerter), der die wiedererkennbare Handschrift dieses Autors beschreibt. Kurze Stichwort-Ueberschriften erlaubt, KEINE Markdown-Tabellen.
+- "autorenprofil": zusammenhängender Text (Richtwert 150-250 Wörter), der die wiedererkennbare Handschrift dieses Autors beschreibt. Kurze Stichwort-Überschriften erlaubt, KEINE Markdown-Tabellen.
 ${konstantenAuftrag}
 ${entwicklungsAuftrag}
+- "kennzahl" (in "konstanten" und "entwicklung"): stützt sich ein Befund auf genau eine der gemessenen Kennzahlen, deren Schlüssel aus dieser Liste: ${KENNZAHL_KEYS.map(k => `${k} = ${AUTORENPROFIL_METRIC_LABELS[k]}`).join('; ')}. Sonst null (etwa wenn der Befund aus den Stilprofilen folgt).
+- "tendenz" (nur in "entwicklung"): "steigt" oder "sinkt" — wie sich der gemessene Wert der genannten Kennzahl über die Werk-Reihenfolge bewegt, abzulesen an den Zahlen und der angegebenen Richtung. Ohne Kennzahl null. Prüfe die Zahlen: ein Wert, der von 155 auf 159 geht, steigt.
 
 Antworte mit diesem JSON-Schema:
 {
   "autorenprofil": "Fliesstext",
-  "konstanten":  [{ "aspekt": "kurz benannt", "beleg": "woraus das folgt" }],
-  "entwicklung": [{ "aspekt": "kurz benannt", "richtung": "wohin es sich bewegt", "beleg": "woraus das folgt" }]
+  "konstanten":  [{ "aspekt": "kurz benannt", "beleg": "woraus das folgt", "kennzahl": "Schlüssel oder null" }],
+  "entwicklung": [{ "aspekt": "kurz benannt", "richtung": "wohin es sich bewegt", "beleg": "woraus das folgt", "kennzahl": "Schlüssel oder null", "tendenz": "steigt | sinkt | null" }]
 }
 
-GEMESSENE KENNZAHLEN (${buecher} Buecher, in Werk-Reihenfolge):
+GEMESSENE KENNZAHLEN (${buecher} Bücher, in Werk-Reihenfolge):
 """
 ${messung}
 """
 
-STILPROFILE DER EINZELNEN BUECHER:
+STILPROFILE DER EINZELNEN BÜCHER:
 """
 ${profilBlock}
 """`;
@@ -118,10 +128,13 @@ export const SCHEMA_AUTORENPROFIL = _obj({
   autorenprofil: _str,
   konstanten: {
     type: 'array',
-    items: _obj({ aspekt: _str, beleg: _str }),
+    items: _obj({ aspekt: _str, beleg: _str, kennzahl: _nullableEnum(KENNZAHL_KEYS) }),
   },
   entwicklung: {
     type: 'array',
-    items: _obj({ aspekt: _str, richtung: _str, beleg: _str }),
+    items: _obj({
+      aspekt: _str, richtung: _str, beleg: _str,
+      kennzahl: _nullableEnum(KENNZAHL_KEYS), tendenz: _nullableEnum(['steigt', 'sinkt']),
+    }),
   },
 });

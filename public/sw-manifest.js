@@ -5,7 +5,7 @@
 // __SHELL_BUILD: content hash over all listed assets → drives SHELL_CACHE.
 // __SHELL_MANIFEST: the coherent set precached atomically at SW install.
 // __VENDOR_SET: current vendor/ + fonts/ files — VENDOR_CACHE prune list.
-self.__SHELL_BUILD = "8ac9b5735bf5525b";
+self.__SHELL_BUILD = "af11402490458702";
 self.__SHELL_MANIFEST = [
   "/css/admin/admin-backup.css",
   "/css/admin/admin-home.css",
@@ -112,6 +112,7 @@ self.__SHELL_MANIFEST = [
   "/css/components/row-expand.css",
   "/css/components/seg-toggle.css",
   "/css/components/selection-bar.css",
+  "/css/components/settings-tabs.css",
   "/css/components/share-links.css",
   "/css/components/snapshot-reader.css",
   "/css/components/snapshots.css",
@@ -1375,7 +1376,10 @@ self.__SHELL_MANIFEST = [
   "/partials/titelwerkstatt.html",
   "/partials/user-settings-ai-access.html",
   "/partials/user-settings-clients.html",
+  "/partials/user-settings-danger.html",
   "/partials/user-settings-devices.html",
+  "/partials/user-settings-dict.html",
+  "/partials/user-settings-general.html",
   "/partials/user-settings.html",
   "/partials/view-menu.html",
   "/partials/werkstatt-bogen.html",

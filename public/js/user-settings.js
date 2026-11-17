@@ -21,6 +21,7 @@ export const userSettingsMethods = {
       this.userSettingsDefaultBuchtyp   = data.default_buchtyp   || '';
       this.userSettingsFocusGranularity = data.focus_granularity || 'paragraph';
       this.userSettingsDailyGoal        = data.daily_goal_minutes || 0;
+      this._markGeneralClean();
     } catch (e) {
       console.error('[user-settings] Laden fehlgeschlagen:', e);
     } finally {
@@ -47,6 +48,7 @@ export const userSettingsMethods = {
       Alpine.store('shell').defaultBookLanguage = this.userSettingsDefaultLanguage || '';
       configureLocaleRegion(region);
       document.documentElement.setAttribute('lang', localeTag(Alpine.store('shell').uiLocale));
+      this._markGeneralClean();
       this.userSettingsSaved = true;
       if (this._savedAtTimer) clearTimeout(this._savedAtTimer);
       this._savedAtTimer = setTimeout(() => { this.userSettingsSaved = false; this._savedAtTimer = null; }, 2500);
@@ -55,6 +57,51 @@ export const userSettingsMethods = {
     } finally {
       this.userSettingsSaving = false;
     }
+  },
+
+  // ── Ungespeichertes im Reiter «Allgemein» ─────────────────────────────────
+  // Gleiches Verhalten wie die Bucheinstellungen (book-settings/save-paths.js):
+  // Speichern-Knopf nur auf dem Formular-Reiter oder solange etwas offen ist,
+  // aktiv nur mit Änderung; beim Schliessen der Karte Rückfrage speichern/
+  // verwerfen. Verwerfen markiert nur sauber — onShow lädt beim nächsten
+  // Öffnen ohnehin neu vom Server.
+  _generalSnapshot() {
+    return JSON.stringify([
+      this.userSettingsDefaultLanguage || '', this.userSettingsDefaultRegion || '',
+      this.userSettingsDefaultBuchtyp || '', this.userSettingsFocusGranularity || 'paragraph',
+      Math.round(Number(this.userSettingsDailyGoal) || 0),
+    ]);
+  },
+
+  _markGeneralClean() { this._generalBaseline = this._generalSnapshot(); },
+
+  userSettingsDirty() {
+    return this._generalBaseline != null && this._generalSnapshot() !== this._generalBaseline;
+  },
+
+  userSettingsSaveDisabled() {
+    return this.userSettingsSaving || this.userSettingsLoading || !this.userSettingsDirty();
+  },
+
+  async _settleUnsavedGeneral() {
+    if (this._settling) return this._settling;
+    if (!this.userSettingsDirty()) return;
+    const app = window.__app;
+    this._settling = (async () => {
+      const save = await app.appConfirm({
+        message: app.t('profile.unsaved.message'),
+        confirmLabel: app.t('common.save'),
+        cancelLabel: app.t('profile.unsaved.discard'),
+      });
+      if (save) {
+        await this.saveUserSettings();
+        if (this.userSettingsError) {
+          app.setStatus(app.t('profile.unsaved.saveFailed', { msg: this.userSettingsError }), false, 8000);
+        }
+      }
+      this._markGeneralClean();
+    })().finally(() => { this._settling = null; });
+    return this._settling;
   },
 
   /** Buchtyp-Liste abhängig von der gewählten Default-Sprache (fallback: de). */

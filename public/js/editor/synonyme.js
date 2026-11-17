@@ -226,6 +226,7 @@ export const synonymCardMethods = {
     this.synonymKiLoading = true;
     this.synonymKiError = '';
     this.synonymKiList = [];
+    this._synonymKiModel = null;
     this.showSynonymPicker = true;
     this._syncOpenFlag();
     this._attachSynonymScroll();
@@ -296,6 +297,7 @@ export const synonymCardMethods = {
         this.synonymKiLoading = false;
         this._synonymJobId = null;
         this.synonymKiList = Array.isArray(job.result?.synonyme) ? job.result.synonyme : [];
+        this._synonymKiModel = typeof job.result?.model === 'string' ? job.result.model : null;
         this.$nextTick(() => this._positionSynonymUI());
       },
     });
@@ -315,7 +317,14 @@ export const synonymCardMethods = {
       // Block; Begründung im Header von shared/apply-replacement.js).
       if (!applySpellcheckReplacement(range, text)) { this.closeSynonymPicker(); return; }
       app?._markEditDirty?.();
-      trackUsageEvent('synonym.applied', { source: this.synonymKiList?.includes(entry) ? 'ai' : 'thesaurus' });
+      const kiIdx = this.synonymKiList?.indexOf(entry) ?? -1;
+      const fromKi = kiIdx >= 0;
+      const idx = fromKi ? kiIdx : (this.synonymThesList?.indexOf(entry) ?? -1);
+      trackUsageEvent('synonym.applied', {
+        source: fromKi ? 'ai' : 'thesaurus',
+        ...(idx >= 0 ? { rank: idx + 1 } : {}),
+        ...(fromKi && this._synonymKiModel ? { model: this._synonymKiModel } : {}),
+      });
     } catch (e) {
       console.error('[applySynonym]', e);
     }

@@ -2,7 +2,7 @@
          PDF- und EPUB-Export. Plus EPUB-Export-Trigger. -->
     <div class="card-form-grid" x-bind="panel('publication')" x-cloak>
 
-      <section class="book-settings-section">
+      <section class="settings-section">
         <h3 class="card-section-title" x-text="$app.t('publication.section.images')"></h3>
 
         <div class="card-form-row">
@@ -54,7 +54,7 @@
         </div>
       </section>
 
-      <section class="book-settings-section">
+      <section class="settings-section">
         <h3 class="card-section-title" x-text="$app.t('publication.section.metadata')"></h3>
 
         <div class="card-form-row">
@@ -115,7 +115,7 @@
         </div>
       </section>
 
-      <section class="book-settings-section">
+      <section class="settings-section">
         <h3 class="card-section-title" x-text="$app.t('publication.section.matter')"></h3>
         <p class="card-hint" x-text="$app.t('publication.matterHint')"></p>
         <div class="pub-repeater">
@@ -146,7 +146,7 @@
         </div>
       </section>
 
-      <section class="book-settings-section">
+      <section class="settings-section">
         <h3 class="card-section-title" x-text="$app.t('publication.section.trade')"></h3>
         <p class="card-hint" x-text="$app.t('publication.tradeHint')"></p>
         <div class="card-form-row">
@@ -180,7 +180,7 @@
         </div>
       </section>
 
-      <section class="book-settings-section" x-show="bookSettingsHasBookExport()" x-cloak>
+      <section class="settings-section" x-show="bookSettingsHasBookExport()" x-cloak>
         <h3 class="card-section-title" x-text="$app.t('publication.section.export')"></h3>
         <p class="card-hint" x-text="$app.t('publication.exportToolsHint')"></p>
         <div class="card-actions">

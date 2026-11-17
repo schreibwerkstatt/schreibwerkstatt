@@ -100,5 +100,19 @@ test('mit Uebersetzung und Buch: Buch-/Global-Woerterbuch und Regel abschalten',
   await expect(page.locator('.lt-popover__dict')).toHaveText([
     'T:spellcheck.popover.add_to_dict_book', 'T:spellcheck.popover.add_to_dict_global',
   ]);
+  // GERMAN_SPELLER_RULE ist die Rechtschreibpruefung selbst: der Knopf nennt
+  // das, statt nach einer einzelnen Regel zu klingen.
+  await expect(page.locator('.lt-popover__rule')).toHaveText('T:spellcheck.popover.disable_speller_book');
+});
+
+test('Grammatik-Befund: Regel-Knopf bleibt «Regel ausschalten»', async ({ page }) => {
+  await open(page, '&i18n=1');
+  await expect.poll(() => page.evaluate(() => CSS.highlights.get('lt-grammar')?.size || 0)).toBe(1);
+  const pt = await page.evaluate(() => {
+    const r = CSS.highlights.get('lt-grammar').values().next().value.getBoundingClientRect();
+    return { x: r.left + r.width / 2, y: r.top + r.height / 2 };
+  });
+  await page.mouse.click(pt.x, pt.y);
+  await page.waitForSelector('.lt-popover');
   await expect(page.locator('.lt-popover__rule')).toHaveText('T:spellcheck.popover.disable_rule_book');
 });

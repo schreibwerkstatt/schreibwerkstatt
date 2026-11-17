@@ -19,6 +19,7 @@ const { useTmpDb } = require('./_helpers/tmp-db');
 const tmp = useTmpDb('author-profile');
 
 const { computeAuthorProfile, authorProfileBasisSig, renderAuthorProfileMeasurement,
+        measuredDirections, checkProfileFindings,
         AUTHOR_PROFILE_THRESHOLDS: T } = require('../../lib/author-profile');
 const { db } = require('../../db/connection');
 // Migrationen vor jedem Domaenen-Modul — sonst fehlen deren Prepared Statements
@@ -222,11 +223,56 @@ test('Prompt-Messung: mehrsprachig je Sprache getrennt, mit Hinweis auf die Verg
   assert.match(txt, /Sprachen: Englisch: Erstling, Drittes; Deutsch: Zweitwerk\./);
   assert.match(txt, /nur innerhalb einer Sprache vergleichbar/);
   assert.match(txt, /== Englisch ==/);
-  assert.match(txt, /== Ueber alle Sprachen ==/);
+  assert.match(txt, /== Über alle Sprachen ==/);
   // Im deutschen Abschnitt steht kein englisches Buch.
   const de = txt.split('== Deutsch ==')[1].split('==')[0];
   assert.match(de, /Satzlaenge: Zweitwerk/);
   assert.ok(!/Erstling/.test(de));
+});
+
+// ── Deutung gegen die Messung ──────────────────────────────────────────────────
+// Ein Entwicklungs-Befund, der eine Kennzahl nennt, darf der Tabelle darunter
+// nicht widersprechen («Rückgang von 155 auf 159»). Der Server verwirft ihn.
+
+test('Richtung: drei Bücher → Werkhälften, zwei Bücher → erstes gegen letztes', () => {
+  const drei = computeAuthorProfile(mk([{ mtld: 100 }, { mtld: 120 }, { mtld: 150 }]));
+  assert.deepEqual(measuredDirections(drei, 'mtld'), [1]);
+  assert.deepEqual(measuredDirections(drei, 'yuleK'), [0], 'gleiche Werte → gleich');
+  const zwei = computeAuthorProfile(mk([{ mtld: 150 }, { mtld: 100 }]));
+  assert.deepEqual(measuredDirections(zwei, 'mtld'), [-1]);
+  const eins = computeAuthorProfile(mk([{ mtld: 150 }]));
+  assert.deepEqual(measuredDirections(eins, 'mtld'), [], 'ein Buch hat keine Richtung');
+});
+
+test('Befund-Prüfung: widersprüchliche Richtung fällt, passende und freie bleiben', () => {
+  const r = computeAuthorProfile(mk([{ mtld: 100 }, { mtld: 120 }, { mtld: 150 }]));
+  const out = checkProfileFindings(r, {
+    konstanten: [{ aspekt: 'Wiederholung', beleg: 'x', kennzahl: 'yuleK' }, { aspekt: 'y', beleg: 'z', kennzahl: 'erfunden' }],
+    entwicklung: [
+      { aspekt: 'MTLD', richtung: 'knapper', beleg: 'Rückgang', kennzahl: 'mtld', tendenz: 'sinkt' },
+      { aspekt: 'MTLD', richtung: 'vielfältiger', beleg: 'Anstieg', kennzahl: 'mtld', tendenz: 'steigt' },
+      { aspekt: 'Yule', richtung: 'mehr', beleg: 'x', kennzahl: 'yuleK', tendenz: 'steigt' },
+      { aspekt: 'Ton', richtung: 'ironischer', beleg: 'Stilprofile', kennzahl: null, tendenz: null },
+      { aspekt: 'Frei', richtung: 'x', beleg: 'y', kennzahl: 'mtld', tendenz: 'quer' },
+    ],
+  });
+  assert.deepEqual(out.entwicklung.map(e => e.beleg), ['Anstieg', 'Stilprofile', 'y']);
+  assert.deepEqual(out.dropped.map(e => e.beleg), ['Rückgang', 'x'], 'gleich gemessen widerspricht «steigt»');
+  assert.equal(out.entwicklung[2].tendenz, null, 'unbekannte Tendenz → null, ungeprüft');
+  assert.deepEqual(out.konstanten.map(k => k.kennzahl), ['yuleK', null], 'unbekannter Key → null');
+});
+
+test('Befund-Prüfung mehrsprachig: Richtung nur innerhalb einer Sprache', () => {
+  const r = computeAuthorProfile(mk([
+    { language: 'de', mtld: 100, dialog_chars: 600 }, { language: 'en', mtld: 300, dialog_chars: 3000 },
+    { language: 'de', mtld: 80, dialog_chars: 600 },
+  ]));
+  assert.deepEqual(measuredDirections(r, 'mtld'), [-1], 'nur der deutsche Abschnitt ist vergleichbar');
+  assert.deepEqual(measuredDirections(r, 'dialogAnteil'), [], 'sprachübergreifend keine Entwicklung');
+  const out = checkProfileFindings(r, { entwicklung: [
+    { aspekt: 'Dialog', richtung: 'mehr', beleg: 'x', kennzahl: 'dialogAnteil', tendenz: 'steigt' },
+  ] });
+  assert.equal(out.entwicklung.length, 0);
 });
 
 // ── DB-Schicht: die Aggregation im SQL ─────────────────────────────────────────

@@ -101,22 +101,17 @@ textarea:disabled,
 .card-form-row--top {
   align-items: flex-start;
 }
-/* Klappbare Voll-Breite-Sections im Form-Grid (Wörterbuch, Geräte-Tokens):
-   brechen aus dem 170px/1fr-Raster aus. Sonst wird der .collapsible-toggle in
-   die schmale Label-Spalte gequetscht (Uppercase-Titel bricht um) und der Body
-   sitzt versetzt rechts daneben. Block + Top-Divider = eigenständige Section,
-   Toggle linksbündig als Header, Body fliesst darunter. */
-.card-form-row--dict,
-.card-form-row--devices,
-.card-form-row--ai-access {
+/* Klappbare Voll-Breite-Zeilen im Form-Grid (App-Downloads im Profil-Reiter
+   «Geräte»): brechen aus dem 170px/1fr-Raster aus. Sonst wird der
+   .collapsible-toggle in die schmale Label-Spalte gequetscht (Uppercase-Titel
+   bricht um) und der Body sitzt versetzt rechts daneben. Den Gruppen-Titel
+   liefert der .card-form-section-divider darüber. */
+.card-form-row--devices {
   display: block;
-  border-top: var(--border-thin) solid var(--color-border);
-  padding-top: var(--space-10);
 }
 /* Labelloser Voll-Breite-Inhalt im Form-Grid (Danger-Zone, Fusszeilen-Notiz):
    ein einziges Kind ohne .card-form-label landet sonst in der 170px-Spalte und
-   laeuft ueber deren Rand hinaus. Kein Border-Top wie bei --dict/--devices —
-   diese Bloecke bringen ihre eigene Absetzung mit. */
+   laeuft ueber deren Rand hinaus. */
 .card-form-row--full {
   display: block;
 }

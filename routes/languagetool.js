@@ -257,7 +257,9 @@ router.delete('/rules', express.json({ limit: '4kb' }), (req, res) => {
   const { ruleId, bookId } = _ruleBody(req);
   if (!ruleId) return res.status(400).json({ error_code: 'INVALID_RULE', params: { max: RULE_ID_MAX } });
   if (bookId && !guardBook(req, res, bookId, 'viewer')) return;
-  res.json({ ok: true, removed: ltRules.remove(userEmail, { ruleId, bookId }) });
+  const removed = ltRules.remove(userEmail, { ruleId, bookId });
+  logger.child({ job: 'lt-rules', user: userEmail, book: bookId || '-' }).info(`enable rule ${ruleId} removed=${removed}`);
+  res.json({ ok: true, removed });
 });
 
 module.exports = router;

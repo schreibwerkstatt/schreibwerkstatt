@@ -13,7 +13,7 @@ test('schulsystem: Vorlage waehlen, Jahre editieren, speichern', async ({ page }
   await expect(card).toBeVisible();
   await card.locator('.tabs-btn', { hasText: 'Schule' }).click();
 
-  const section = card.locator('.book-settings-section', { hasText: 'Schulsystem' });
+  const section = card.locator('.settings-section', { hasText: 'Schulsystem' });
   await expect(section).toBeVisible();
   // Aus: nur der Schalter, keine Felder.
   await expect(section.locator('.combobox-trigger')).toHaveCount(0);
@@ -67,7 +67,7 @@ test('schulsystem: Ausschalten wirft keine Bindungsfehler', async ({ page }) => 
   await page.evaluate(() => window.__app.toggleBookSettingsCard());
   const card = page.locator('.card--settings');
   await card.locator('.tabs-btn', { hasText: 'Schule' }).click();
-  const section = card.locator('.book-settings-section', { hasText: 'Schulsystem' });
+  const section = card.locator('.settings-section', { hasText: 'Schulsystem' });
   await section.locator('#bs-schule-aktiv').check();
   await expect(section.locator('.card-form-label', { hasText: 'Kindergarten' })).toBeVisible();
   await section.locator('#bs-schule-aktiv').uncheck();

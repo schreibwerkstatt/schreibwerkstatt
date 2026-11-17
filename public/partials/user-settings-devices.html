@@ -1,18 +1,12 @@
-<!-- Geraete-Token-Abschnitt der Benutzer-Einstellungen (native Clients + Browser-
-     Erweiterung). Fragment von user-settings.html — laeuft im Scope von
-     `x-data="userSettingsCard"`, hat also KEIN eigenes x-data und ist allein nicht
-     mountbar. Eingebunden per `<!-- @include user-settings-devices -->`, wie die
-     Tab-Panels des PDF-Exports: reines Text-Splicing vor dem innerHTML-Set, also
-     ohne zusaetzlichen Wrapper-DIV, der die `.card-form-row`-Kette der Karte
-     aufbrechen wuerde. Rechteumfang/Scopes: docs/clients.md. -->
-    <!-- Device-Tokens (native Clients, z.B. Mac-Focus-Writer) -->
-    <div class="card-form-row card-form-row--devices" data-settings-section="devices" x-data="collapsible()">
-      <button type="button" class="collapsible-toggle" x-bind="trigger">
-        <span class="history-chevron" x-bind="chevron" aria-hidden="true"></span>
-        <span x-text="$app.t('profile.devices.title')"></span>
-        <span class="lt-dict-count" x-text="deviceTokensList.filter(t => !t.revoked_at).length"></span>
-      </button>
-      <div x-bind="panel" x-cloak>
+<!-- Reiter «Geräte» von «Profil & Einstellungen»: Geräte-Tokens (native Clients
+     + Browser-Erweiterung) und darunter die App-Downloads. Fragment von
+     user-settings.html im Scope von `userSettingsCard` — KEIN eigenes x-data,
+     reines Text-Splicing per Fragment-Include. Rechteumfang/Scopes:
+     docs/clients.md. -->
+    <div class="card-form-grid" x-bind="panel('devices')" x-cloak>
+
+      <section class="settings-section">
+        <h3 class="card-section-title" x-text="$app.t('profile.devices.title')"></h3>
         <div class="device-tokens-body">
           <p class="muted-msg muted-msg--sm" x-text="$app.t('profile.devices.intro')"></p>
   
@@ -77,5 +71,7 @@
             </template>
           </div>
         </div>
-      </div>
+      </section>
+
+      <!-- @include user-settings-clients -->
     </div>

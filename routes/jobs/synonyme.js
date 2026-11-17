@@ -72,7 +72,7 @@ async function runSynonymJob(jobId, wort, satz, bookId, userEmail, pageId) {
     const cached = loadSynonymCache(userEmail, keyHash, effectiveProvider);
     if (cached) {
       logger.info(`«${wort}»${pageTag} – Cache-HIT, spart Synonym-Call.`);
-      completeJob(jobId, { synonyme: cached, tokensIn: 0, tokensOut: 0, cached: true },
+      completeJob(jobId, { synonyme: cached, model, tokensIn: 0, tokensOut: 0, cached: true },
         null, `«${wort}» Cache-HIT ${cached.length} Vorschläge`);
       return;
     }
@@ -102,7 +102,7 @@ async function runSynonymJob(jobId, wort, satz, bookId, userEmail, pageId) {
     // 90 Tage (cache-cleanup TTL) für genau dieses Wort in diesem Satz.
     if (synonyme.length > 0) saveSynonymCache(userEmail, keyHash, synonyme, effectiveProvider);
 
-    completeJob(jobId, { synonyme, tokensIn: tok.in, tokensOut: tok.out },
+    completeJob(jobId, { synonyme, model, tokensIn: tok.in, tokensOut: tok.out },
       tps(tok), `«${wort}» ${synonyme.length} Vorschläge`);
   } catch (e) {
     if (e.name !== 'AbortError') logger.error(`Fehler «${wort}»${pageTag}: ${e.message}`, { stack: e.stack });

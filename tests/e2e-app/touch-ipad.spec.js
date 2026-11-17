@@ -125,9 +125,16 @@ test('iPad: kein haengender Tooltip nach Tap auf einen Knopf mit data-tip', asyn
   // Gegenprobe: per Tastatur-Fokus erscheint er weiterhin.
   await page.evaluate(() => document.getElementById('tip-probe').blur());
   await page.waitForTimeout(900);
-  const onFocus = await page.evaluate(() => {
-    document.getElementById('tip-probe').focus();
-    return !!document.querySelector('.tip-layer.tip-visible');
+  // Echter Tab-Druck: Tooltips bei Fokus nur für Tastatur-Fokus (:focus-visible).
+  await page.evaluate(() => {
+    const b = document.getElementById('tip-probe');
+    const before = document.createElement('button');
+    before.id = 'tip-probe-before'; before.type = 'button';
+    b.before(before);
+    before.focus();
   });
+  await page.keyboard.press('Tab');
+  const onFocus = await page.evaluate(() => document.activeElement?.id === 'tip-probe'
+    && !!document.querySelector('.tip-layer.tip-visible'));
   expect(onFocus, 'Tooltip bei Tastatur-Fokus').toBe(true);
 });

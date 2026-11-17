@@ -64,7 +64,7 @@ test('Lauf verdichtet Stilprofile + Messung und legt das Ergebnis am Konto ab', 
   assert.match(call.prompt, /Kurze Saetze, wenig Dialog\./);
   assert.match(call.prompt, /Kurze Saetze, viel Dialog\./);
   assert.match(call.prompt, /Erstling/);
-  assert.match(call.prompt, /Satzlaenge/);
+  assert.match(call.prompt, /Satzlänge/);
 
   // Der Lauf fasst den geltenden Text NICHT an — sein Ergebnis ist ein Vorschlag
   // mit der Basis des Laufs; erst «Übernehmen» (PUT /me/author-profile mit `run`)
@@ -149,7 +149,7 @@ test('Zwei Sprachen, je ein Buch: Entwicklung verworfen, Messung je Sprache im P
 
   const prompt = ctx.mockAi.log[0].prompt;
   assert.match(prompt, /Sprachen: (Deutsch: Erstling; Englisch: Zweitwerk|Englisch: Zweitwerk; Deutsch: Erstling)\./);
-  assert.match(prompt, /== Ueber alle Sprachen ==/);
+  assert.match(prompt, /== Über alle Sprachen ==/);
   assert.match(prompt, /Sprachunterschied, keine Entwicklung/);
   // Ein deutsches und ein englisches Buch sind kein Vergleichspaar: der Server verwirft.
   assert.deepEqual(job.result.entwicklung, []);
@@ -157,6 +157,22 @@ test('Zwei Sprachen, je ein Buch: Entwicklung verworfen, Messung je Sprache im P
 
   db.prepare("UPDATE book_settings SET language = 'de' WHERE book_id = ?").run(7002);
 });
+test('Entwicklung, die der gemessenen Richtung widerspricht, wird verworfen', async () => {
+  // Beide Bücher haben dieselbe MTLD (150) — «sinkt» widerspricht der Tabelle.
+  ctx.mockAi.on(() => true, {
+    ...ANTWORT,
+    entwicklung: [
+      { aspekt: 'MTLD', richtung: 'knapper', beleg: 'Rückgang', kennzahl: 'mtld', tendenz: 'sinkt' },
+      { aspekt: 'Dialog', richtung: 'nimmt zu', beleg: 'Stilprofile beider Bücher', kennzahl: null, tendenz: null },
+    ],
+  });
+  const jobId = ctx.shared.createJob('autorenprofil', 0, AUTOR, 'job.label.autorenprofil', {}, AUTOR);
+  ctx.shared.enqueueJob(jobId, () => ctx.autorenprofil.runAutorenprofilJob(jobId, AUTOR));
+  const job = await waitForJob(ctx.shared, jobId);
+  assert.equal(job.status, 'done', job.error || '');
+  assert.deepEqual(job.result.entwicklung.map(e => e.aspekt), ['Dialog']);
+});
+
 test('Leere KI-Antwort wird zum Fehler, nicht zu einem leeren Profil', async () => {
   ctx.mockAi.on(() => true, { autorenprofil: '   ', konstanten: [], entwicklung: [] });
   const jobId = ctx.shared.createJob('autorenprofil', 0, AUTOR, 'job.label.autorenprofil', {}, AUTOR);

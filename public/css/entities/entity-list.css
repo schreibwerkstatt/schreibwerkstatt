@@ -223,6 +223,17 @@
    `.overview-grid` und übernehmen Rahmen/Abstand von `.overview-tile`. */
 .skeleton-tiles { display: contents; }
 .skeleton-tile { opacity: var(--opacity-disabled); }
+
+/* Verzögert einblenden: ein schneller Ladevorgang (lokal, Cache) ist fertig,
+   bevor das Skelett erscheint, statt es für ein, zwei Frames aufblitzen zu
+   lassen. Der Platz steht ab dem ersten Frame (nur Deckkraft, kein Layout-
+   Sprung); `backwards` hält `from` während der Verzögerung, danach gilt die
+   eigene Deckkraft der Zeile/Kachel. Reduced-Motion kürzt nur die Dauer. */
+.entity-skeleton-row,
+.skeleton-tile {
+  animation: skeleton-appear 120ms ease-out 150ms backwards;
+}
+@keyframes skeleton-appear { from { opacity: 0; } }
 .skeleton-tile__label { width: 40%; }
 .skeleton-tile__value { width: 55%; height: 22px; }
 .skeleton-tile__line  { width: 80%; }

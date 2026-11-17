@@ -284,7 +284,8 @@
   to { transform: rotate(360deg); }
 }
 
-/* Custom-Dictionary-Liste in User-Settings. Klappbar via .collapsible-toggle. */
+/* Wörterbuch-Reiter im Profil (eigene Wörter, ausgeschaltete Regeln); `.lt-dict-count`
+   ist zugleich das Versions-Kästchen der App-Downloads im Reiter «Geräte». */
 .lt-dict-count {
   display: inline-block;
   min-width: 1.5em;
@@ -331,6 +332,27 @@
 
 .lt-dict-word {
   font-family: var(--font-mono, monospace);
+}
+
+/* Erste Spalte: Wort/Regel, darunter Bedeutung (nur Regeln) und Datum. */
+.lt-dict-main {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  min-width: 0;
+}
+
+.lt-dict-meaning {
+  font-size: var(--font-size-mini);
+}
+
+/* Ausgeschaltete Rechtschreibregel: ganze Prüfung aus, darum hervorgehoben. */
+.lt-dict-row--warn {
+  border-color: var(--color-err-border);
+}
+
+.lt-dict-row--warn .lt-dict-meaning {
+  color: var(--color-err-text);
 }
 
 .lt-dict-remove {

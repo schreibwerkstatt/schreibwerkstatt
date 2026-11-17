@@ -35,7 +35,7 @@ Erstanbieter-Messung des Nutzungsverhaltens: welche Funktionen genutzt werden, o
 | `card.close` | client | `feature`, `durationSec` (sichtbar) | Show-Flag-Watch true→false je Karte der Feature-Registry; `pagehide` schliesst ab |
 | `editor.open` / `editor.close` | client | `editor` notebook/focus/book, `durationSec` (sichtbar) | Watch auf die innerste offene Fläche: Bucheditor › Fokus › Notebook-Edit-Modus; `pagehide` schliesst ab |
 | `dictation.start` / `tts.start` | client | — | Start der Aufnahme bzw. Wiedergabe (nicht je Audio-Segment) |
-| `synonym.applied` | client | `source` thesaurus/ai | Synonym aus dem Picker eingesetzt (SPA-Weg `editor/synonyme.js`; der Bundle-Controller der nativen Clients meldet nichts) |
+| `synonym.applied` | client | `source` thesaurus/ai, `rank` Listenplatz (1-basiert), `model` Modell der KI-Liste (nur `ai`) | Synonym aus dem Picker eingesetzt (SPA-Weg `editor/synonyme.js`; der Bundle-Controller der nativen Clients meldet nichts) |
 | `revision.view` | client | `diff` yes/no (Vergleich benutzt), `current` yes/no (gegen aktuellen Stand), `steps` (‹/›-Schritte) | eine Viewer-Sitzung der Abschnitts-Revisionen, gemeldet beim Schliessen ([page-revisions/viewer.js](../public/js/cards/page-revisions/viewer.js)); schliesst der Tab bei offenem Viewer, fehlt sie |
 | `revision.restore` | server | `ageBucket` hour/day/week/older (Alter der Ziel-Revision) | Restore-Route, auch «Stand davor» und die nativen Clients |
 | `revision.pin` | server | `action` pin/unpin/rename, `named` yes/no | PATCH-Route; `rename` = Name einer schon angehefteten Revision geändert |

@@ -1,0 +1,69 @@
+<!-- Reiter «Wörterbuch» von «Profil & Einstellungen»: eigene Wörter und
+     ausgeschaltete LanguageTool-Regeln. Fragment von user-settings.html im Scope
+     von `userSettingsCard`; der Reiter erscheint nur mit LanguageTool. Server:
+     routes/languagetool.js (/dictionary, /languagetool/rules). -->
+    <div class="card-form-grid" x-bind="panel('dict')" x-cloak>
+
+      <section class="settings-section">
+        <h3 class="card-section-title" x-text="$app.t('spellcheck.dict.title')"></h3>
+        <div class="lt-dict-body">
+          <template x-if="!dictEntries.length">
+            <p class="muted-msg muted-msg--sm" x-text="$app.t('spellcheck.dict.empty')"></p>
+          </template>
+          <template x-if="dictEntries.length">
+            <div class="filter-bar lt-dict-search">
+              <span class="filter-search-wrap">
+                <input type="text" class="filter-search-input filter-search-input--wide"
+                       x-model="dictFilter"
+                       :placeholder="$app.t('spellcheck.dict.searchPlaceholder')"
+                       :aria-label="$app.t('spellcheck.dict.searchPlaceholder')">
+                <button type="button" class="search-clear--icon" x-show="dictFilter" @click="dictFilter=''"
+                        :aria-label="$app.t('search.clear')" :data-tip="$app.t('search.clear')"><svg class="icon" aria-hidden="true"><use href="/icons.svg#x"/></svg></button>
+              </span>
+            </div>
+          </template>
+          <div class="lt-dict-list" x-show="dictEntries.length">
+            <template x-for="e in dictEntriesFiltered" :key="e.word + '|' + e.book_id + '|' + e.lang">
+              <div class="lt-dict-row">
+                <span class="lt-dict-main">
+                  <span class="lt-dict-word" x-text="e.word"></span>
+                  <span class="lt-dict-date muted-msg muted-msg--sm" x-show="e.created_at"
+                        x-text="$app.t('spellcheck.dict.addedAt', { date: ltEntryDate(e.created_at) })"></span>
+                </span>
+                <span class="lt-dict-scope muted-msg muted-msg--sm">
+                  <span x-text="ltScopeLabel(e.book_id)"></span>
+                  <span>: </span>
+                  <span x-text="e.lang === '*' ? $app.t('spellcheck.dict.scope_lang_any') : e.lang"></span>
+                </span>
+                <button type="button" class="lt-dict-remove" @click="removeDictEntry(e)" x-text="$app.t('spellcheck.dict.remove')"></button>
+              </div>
+            </template>
+            <template x-if="dictEntries.length && !dictEntriesFiltered.length">
+              <p class="muted-msg muted-msg--sm" x-text="$app.t('spellcheck.dict.noMatch')"></p>
+            </template>
+          </div>
+        </div>
+      </section>
+
+      <section class="settings-section">
+        <h3 class="card-section-title" x-text="$app.t('spellcheck.rules.title')"></h3>
+        <p class="card-hint" x-text="$app.t('spellcheck.rules.lead')"></p>
+        <div class="lt-dict-body">
+          <p class="muted-msg muted-msg--sm" x-show="!ltRuleEntries.length" x-text="$app.t('spellcheck.rules.empty')"></p>
+          <div class="lt-dict-list" x-show="ltRuleEntries.length">
+            <template x-for="e in ltRuleEntries" :key="e.rule_id + '|' + e.book_id">
+              <div class="lt-dict-row" :class="ltIsSpellerRule(e.rule_id) && 'lt-dict-row--warn'">
+                <span class="lt-dict-main">
+                  <span class="lt-dict-word" x-text="e.rule_label || e.rule_id" :data-tip="e.rule_id"></span>
+                  <span class="lt-dict-meaning" x-text="ltRuleMeaning(e)"></span>
+                  <span class="lt-dict-date muted-msg muted-msg--sm" x-show="e.created_at"
+                        x-text="$app.t('spellcheck.rules.disabledAt', { date: ltEntryDate(e.created_at), id: e.rule_id })"></span>
+                </span>
+                <span class="lt-dict-scope muted-msg muted-msg--sm" x-text="ltScopeLabel(e.book_id)"></span>
+                <button type="button" class="lt-dict-remove" @click="removeLtRule(e)" x-text="$app.t('spellcheck.rules.enable')"></button>
+              </div>
+            </template>
+          </div>
+        </div>
+      </section>
+    </div>

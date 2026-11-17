@@ -16,7 +16,7 @@ const contentStore = require('../../lib/content-store');
 const { getBookSettings } = require('../../db/schema');
 const { getAuthorProfile } = require('../../db/author-profile');
 const { saveProposal } = require('../../db/ai-proposals');
-const { renderAuthorProfileMeasurement } = require('../../lib/author-profile');
+const { renderAuthorProfileMeasurement, checkProfileFindings } = require('../../lib/author-profile');
 const {
   makeJobLogger, updateJob, completeJob, failJob, i18nError,
   aiCall, getPrompts,
@@ -103,9 +103,17 @@ async function runAutorenprofilJob(jobId, userEmail) {
     // Sprachunterschied (je Sprache ein Buch). Der Prompt verbietet es, der Server
     // erzwingt es — dieselbe Arbeitsteilung wie bei der Belegzitat-Verifikation der
     // Buchbewertung.
-    const entwicklung = measurement.developmentAvailable && Array.isArray(result.entwicklung)
-      ? result.entwicklung : [];
-    const konstanten = Array.isArray(result.konstanten) ? result.konstanten : [];
+    // Danach jede Entwicklung, die eine Kennzahl nennt, gegen deren gemessene
+    // Richtung prüfen: «Rückgang von 155 auf 159» widerspräche der Tabelle, die
+    // der Autor direkt darunter sieht (lib/author-profile.js#checkProfileFindings).
+    const checked = checkProfileFindings(measurement, {
+      konstanten: result.konstanten,
+      entwicklung: measurement.developmentAvailable ? result.entwicklung : [],
+    });
+    const { konstanten, entwicklung } = checked;
+    for (const d of checked.dropped) {
+      log.warn(`Entwicklung verworfen: «${d.aspekt}» behauptet ${d.tendenz} fuer ${d.kennzahl}, gemessen anders`);
+    }
 
     // Den geltenden Text nicht anfassen: das Ergebnis ist ein Vorschlag, den die
     // Karte mit Wort-Diff gegen den geltenden Text zeigt. Erst «Übernehmen»

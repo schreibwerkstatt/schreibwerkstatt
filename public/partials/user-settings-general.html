@@ -1,0 +1,115 @@
+<!-- Reiter «Allgemein» von «Profil & Einstellungen»: Konto, Oberfläche + Editor,
+     Schreibziel, Vorgaben für neue Bücher, Offline. Fragment von
+     user-settings.html im Scope von `userSettingsCard`. Einziger Reiter mit
+     Formular — der Speichern-Knopf im Kartenkopf gilt nur hier. Gliederung:
+     DESIGN.md «Einstellungs-Reiter». -->
+    <div class="card-form-grid" x-bind="panel('general')" x-cloak>
+
+      <section class="settings-section">
+        <h3 class="card-section-title" x-text="$app.t('profile.account')"></h3>
+
+        <div class="card-form-row">
+          <span class="card-form-label" x-text="$app.t('profile.name')"></span>
+          <strong class="user-settings-profile" x-text="userSettingsProfile?.name || '—'"></strong>
+        </div>
+
+        <div class="card-form-row">
+          <span class="card-form-label" x-text="$app.t('profile.email')"></span>
+          <span class="user-settings-profile" x-text="userSettingsProfile?.email || '—'"></span>
+        </div>
+      </section>
+
+      <section class="settings-section">
+        <h3 class="card-section-title" x-text="$app.t('profile.editorSection')"></h3>
+
+        <div x-id="['fld']" class="card-form-row">
+          <label :id="$id('fld')" class="card-form-label" x-text="$app.t('profile.uiLanguage')"></label>
+          <div class="card-form-field">
+            <div :aria-labelledby="$id('fld')" x-data="radioGroup()"
+                 x-effect="value = $store.shell.uiLocale; options = userSettingsUiLangOptions()"
+                 @radio-change="$app.changeLocale($event.detail)"></div>
+            <p class="card-form-field-note" x-text="$app.t('profile.uiLanguageHint')"></p>
+          </div>
+        </div>
+
+        <div x-id="['fld']" class="card-form-row">
+          <label :id="$id('fld')" class="card-form-label" x-text="$app.t('profile.focusGranularity')"></label>
+          <div class="card-form-field">
+            <div :aria-labelledby="$id('fld')" x-data="combobox($app.t('profile.focusGranularity'))"
+                 x-modelable="value" x-model="userSettingsFocusGranularity"
+                 x-effect="options = userSettingsFocusOptions()"></div>
+            <p class="card-form-field-note" x-text="$app.t('profile.focusGranularityHint')"></p>
+          </div>
+        </div>
+      </section>
+
+      <section class="settings-section">
+        <h3 class="card-section-title" x-text="$app.t('profile.writingSection')"></h3>
+
+        <div x-id="['fld']" class="card-form-row">
+          <label :for="$id('fld')" class="card-form-label" x-text="$app.t('profile.dailyGoal')"></label>
+          <div class="card-form-field">
+            <div class="card-form-goal-edit">
+              <input :id="$id('fld')" type="text" class="card-form-goal-input"
+                     x-data="numInput({ integer: true, min: 0, max: 1440 })"
+                     x-modelable="value" x-model="userSettingsDailyGoal"
+                     :aria-label="$app.t('profile.dailyGoal')">
+              <span class="card-form-goal-unit" x-text="$app.t('mystats.goal.minutesLabel')"></span>
+            </div>
+            <p class="card-form-field-note" x-text="$app.t('profile.dailyGoalHint')"></p>
+          </div>
+        </div>
+      </section>
+
+      <section class="settings-section">
+        <h3 class="card-section-title" x-text="$app.t('profile.newBooksSection')"></h3>
+        <p class="card-hint" x-text="$app.t('profile.newBooksHint')"></p>
+
+        <div x-id="['fld']" class="card-form-row">
+          <label :id="$id('fld')" class="card-form-label" x-text="$app.t('profile.defaultLanguage')"></label>
+          <div :aria-labelledby="$id('fld')" x-data="radioGroup()" x-modelable="value" x-model="userSettingsDefaultLanguage"
+               x-effect="options = userSettingsDefaultLangOptions()"
+               @radio-change="userSettingsDefaultRegion = ($event.detail === 'de' ? 'CH' : ($event.detail === 'en' ? 'US' : '')); userSettingsDefaultBuchtyp = ''"></div>
+        </div>
+
+        <div x-id="['fld']" class="card-form-row" x-show="userSettingsDefaultLanguage">
+          <label :id="$id('fld')" class="card-form-label" x-text="$app.t('profile.defaultRegion')"></label>
+          <div :aria-labelledby="$id('fld')" x-data="radioGroup()" x-modelable="value" x-model="userSettingsDefaultRegion"
+               x-effect="options = (userSettingsDefaultLanguage === 'de'
+                 ? [{ value: 'CH', label: $app.t('region.de.CH') }, { value: 'DE', label: $app.t('region.de.DE') }]
+                 : userSettingsDefaultLanguage === 'en'
+                 ? [{ value: 'US', label: $app.t('region.en.US') }, { value: 'GB', label: $app.t('region.en.GB') }]
+                 : [])"></div>
+        </div>
+
+        <div x-id="['fld']" class="card-form-row" x-show="userSettingsDefaultLanguage">
+          <label :id="$id('fld')" class="card-form-label" x-text="$app.t('profile.defaultBuchtyp')"></label>
+          <div :aria-labelledby="$id('fld')" x-data="combobox($app.t('profile.defaultBuchtyp'), $app.t('common.notSet'))"
+               x-modelable="value" x-model="userSettingsDefaultBuchtyp"
+               x-effect="options = userSettingsBuchtypOptions()"></div>
+        </div>
+      </section>
+
+      <template x-if="$store.session.offlineCapable">
+        <section class="settings-section">
+          <h3 class="card-section-title" x-text="$app.t('profile.offlineSection')"></h3>
+          <div class="card-form-row card-form-row--full">
+            <div class="card-form-field">
+              <div x-data="toggleSwitch({ label: () => $app.t('profile.offlineAuto') })"
+                   x-modelable="value" x-model="$store.session.offlineAuto.enabled"
+                   @toggle-change="$app.setOfflineAutoEnabled($event.detail)"></div>
+              <p class="card-form-field-note" x-text="$app.t('profile.offlineAutoHint')"></p>
+              <p class="card-form-field-note" x-text="$app.t($store.session.storagePersisted ? 'profile.storagePersisted' : 'profile.storageNotPersisted')"></p>
+            </div>
+          </div>
+        </section>
+      </template>
+
+      <section class="settings-section">
+        <p class="muted-msg muted-msg--sm">
+          <a href="https://github.com/schreibwerkstatt/schreibwerkstatt"
+             target="_blank" rel="noopener noreferrer"
+             x-text="$app.t('landing.githubLabel')"></a>
+        </p>
+      </section>
+    </div>

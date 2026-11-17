@@ -143,8 +143,16 @@ import { mountInTopLayer } from './fullscreen.js';
     if (next && findTip(next) === currentTarget) return;
     hide();
   });
+  // Fokus zeigt den Tooltip nur, wenn er von der Tastatur kommt
+  // (`:focus-visible`). Programmatischer Fokus nach einem Mausklick — etwa
+  // `showModal()`, das den ersten Knopf im Dialog fokussiert — liess ihn sonst
+  // für einen Frame aufblitzen, bis die nächste Maus-Grenze ihn wegräumte.
+  const keyboardFocus = (el) => {
+    try { return el.matches(':focus-visible'); } catch { return true; }
+  };
   document.addEventListener('focusin', (e) => {
     if (fromTouch()) return;
+    if (!keyboardFocus(e.target)) return;
     const t = findTip(e.target);
     if (t) show(t);
   });

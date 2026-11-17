@@ -19,6 +19,24 @@
 // zu diesem Zustand passt. Gilt für jedes `x-show` der App, mit und ohne
 // `x-transition`/`x-collapse` (die rufen dieselben Rückrufe).
 //
+// Zweites Loch, gleiche Wirkung: das Ausblenden eines Vorfahren wartet auf das
+// seiner Nachfahren. Blendet ein Kind mit Transition im selben Zug aus wie ein
+// Vorfahr, hängt Alpine es an dessen `_x_hideChildren`, und der Vorfahr blendet
+// erst aus, wenn `Promise.all` über alle Hide-Promises erfüllt ist. Zwei Wege,
+// auf denen das nie geschieht:
+//  - `x-collapse` reicht den Fertig-Rückruf nicht weiter (sein `out()` ignoriert
+//    sein `after`-Argument und blendet sich selbst aus): das Hide-Promise eines
+//    zuklappenden Panels bleibt für immer offen.
+//  - Eine abgebrochene Leave-Transition (das Kind wird wieder eingeblendet)
+//    lehnt ihr Hide-Promise mit `isFromCancelledTransition` ab.
+// So stand der Notebook-Editor (Klapp-Panel der Revisionsliste darin) leer
+// neben der Hilfe. Der Wrapper erfüllt das Promise eines `x-collapse`-Panels
+// darum sofort mit «nichts tun» — es klappt sich selbst zu, und der Vorfahr
+// wartet nicht auf die Animation (sonst stünde die Karte so lange sichtbar
+// neben der nächsten). Bei `x-transition` bleibt Alpines Warten (der Vorfahr
+// blendet nach der Leave-Animation des Kinds aus); ein Abbruch wird dort zu
+// «für dieses Element nichts tun».
+//
 // Nicht abgedeckt (und hier nicht abdeckbar): ein Flag-Wechsel, den Alpines
 // Scheduler gar nicht erst an x-show weiterreicht — dafür der Scheduler-Patch im
 // Vendor-Alpine, docs/architektur.md#alpine-scheduler-patch.
@@ -39,9 +57,33 @@ export function installXShowGuard(proto = globalThis.Element?.prototype) {
     el[WANT] = want;
     const onShow = () => { if (el[WANT] === true) show(); };
     const onHide = () => { if (el[WANT] === false) hide(); };
-    return orig.call(this, el, value, onShow, onHide);
+    const ret = orig.call(this, el, value, onShow, onHide);
+    if (!want) settleHidePromise(el);
+    return ret;
   };
   guarded.__xShowGuard = true;
   proto._x_toggleAndCascadeWithTransitions = guarded;
   return true;
+}
+
+// `_x_hidePromise` setzt Alpine synchron im Toggle; gelesen wird es erst im
+// Microtask/Frame danach — der Austausch hier kommt also rechtzeitig.
+// `x-collapse` erkennt man an einem `_x_transition` ohne `enter`/`leave`
+// (das von `x-transition` trägt beide).
+const NOOP = () => {};
+function settleHidePromise(el) {
+  const p = el._x_hidePromise;
+  if (!p || typeof p.then !== 'function') return;
+  const t = el._x_transition;
+  if (t && !t.enter && !t.leave) {
+    // Das ersetzte Promise lehnt bei einem Abbruch noch ab — ohne Abnehmer
+    // wäre das eine unbehandelte Ablehnung.
+    p.catch(NOOP);
+    el._x_hidePromise = Promise.resolve(NOOP);
+    return;
+  }
+  el._x_hidePromise = p.catch((e) => {
+    if (e && e.isFromCancelledTransition) return NOOP;
+    throw e;
+  });
 }

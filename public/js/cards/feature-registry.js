@@ -280,29 +280,25 @@ export const ACTIONS = [
     aliases: ['pdf','export', ...aliases],
     run: () => _openCardWith('PDF_EXPORT_TAB', tab, 'showPdfExportCard', 'togglePdfExportCard'),
   })),
-  // Direktsprung auf einen Abschnitt der Benutzereinstellungen: klappt ihn auf
-  // und scrollt hin (user-settings-card.js#_applySectionRequest). Der Karten-
-  // Scroll entfällt, sonst liefen zwei Animationen gegeneinander.
-  // `requiresConfig`: nur, wenn der Dienst dahinter läuft.
+  // Direktsprung auf einen Reiter von «Profil & Einstellungen». `ai`/`dict`
+  // nur, wenn der Dienst dahinter läuft (Reiter-Knopf im Partial gatet gleich:
+  // user-settings-card.js#_tabAvailable).
   ...[
-    ['aiAccess', ['ki','ai','api','api-key','schlüssel','key','claude','openai','zugang'], { requiresConfig: 'userAiAccessEnabled' }],
-    ['devices',  ['geräte','devices','token','mac','client']],
-    ['clients',  ['app','apps','macos','android','erweiterung','extension','chrome','download']],
-    ['dict',     ['wörterbuch','dictionary','rechtschreibung','spellcheck','languagetool'], { requiresConfig: 'languagetoolEnabled' }],
-    ['ltRules',  ['regeln','rules','rechtschreibung','spellcheck','languagetool','ausgeschaltet'], { requiresConfig: 'languagetoolEnabled' }],
-  ].map(([section, aliases, extra]) => ({
-    key: 'action.userSettings.' + section, kind: 'action', group: 'app',
-    labelKey: 'palette.action.userSettingsSection.' + section, descKey: 'palette.action.userSettingsSection.desc',
+    ['general', ['allgemein','general','sprache','language','oberfläche','buchtyp','fokus','focus','schreibziel','goal','offline']],
+    ['devices', ['geräte','devices','token','mac','macos','client','app','apps','android','erweiterung','extension','chrome','download']],
+    ['ai',      ['ki','ai','api','api-key','schlüssel','key','claude','openai','zugang','kosten'], { requiresConfig: 'userAiAccessEnabled' }],
+    ['dict',    ['wörterbuch','dictionary','rechtschreibung','spellcheck','languagetool','regeln','rules','ausgeschaltet'], { requiresConfig: 'languagetoolEnabled' }],
+    ['danger',  ['gefahrenzone','konto','account','löschen','loeschen','delete','danger']],
+  ].map(([tab, aliases, extra]) => ({
+    key: 'action.userSettings.' + tab, kind: 'action', group: 'app',
+    labelKey: 'palette.action.userSettingsTab.' + tab, descKey: 'palette.action.userSettingsTab.desc',
     searchOnly: true, ...extra,
     aliases: ['profil','profile','einstellungen','settings', ...aliases],
-    run: () => _openCardWith('USER_SETTINGS_SECTION', section, 'showUserSettingsCard', 'toggleUserSettingsCard', { skipCardScroll: true }),
+    run: () => _openCardWith('USER_SETTINGS_TAB', tab, 'showUserSettingsCard', 'toggleUserSettingsCard'),
   })),
   { key: 'action.changelog',      kind: 'action', group: 'app', labelKey: 'palette.action.changelog', descKey: 'palette.action.changelog.desc',
     aliases: ['changelog','neu','neuigkeiten','news','what\'s new','version','release','updates'],
-    run: (root) => {
-      root.$store.shell.helpTabRequest = 'changelog';
-      if (!root.showHelpCard) root.toggleHelpCard();
-    } },
+    run: () => _openCardWith('HELP_TAB', 'changelog', 'showHelpCard', 'toggleHelpCard') },
   { key: 'action.closeAll',       kind: 'action', group: 'app', labelKey: 'palette.action.closeAll',  descKey: 'palette.action.closeAll.desc',
     aliases: ['esc','dismiss','reset','schliessen'],
     run: (root) => { root._closeOtherMainCards(null); root._maybeOpenBookOverview({ restoreLastPage: false }); } },

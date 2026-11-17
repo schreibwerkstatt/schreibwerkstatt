@@ -26,6 +26,7 @@ export function registerEditorSynonymeCard() {
     synonymThesError: '',
     synonymThesDisabled: false,
     synonymKiList: [],
+    _synonymKiModel: null,
     synonymKiLoading: false,
     synonymKiError: '',
     _synonymRange: null,

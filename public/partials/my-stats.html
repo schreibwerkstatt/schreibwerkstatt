@@ -7,7 +7,11 @@
      var(--color-accent), wie in der Buch-Übersicht. -->
 <div class="card card--mystats" x-data="myStatsCard" x-show="$app.showMyStatsCard" x-cloak>
   <div class="card-header">
-    <span class="card-title" x-text="$app.t('mystats.title')"></span>
+    <!-- Eyebrow wie in «Profil & Einstellungen»: der angemeldete User. -->
+    <div class="card-header-titlebar">
+      <span class="card-eyebrow" x-text="$store.session.currentUser?.name || $store.session.currentUser?.email || ' '"></span>
+      <span class="card-title" x-text="$app.t('mystats.title')"></span>
+    </div>
   </div>
 
   <p class="card-hint card-section" x-text="$app.t('mystats.allBooksNote')"></p>

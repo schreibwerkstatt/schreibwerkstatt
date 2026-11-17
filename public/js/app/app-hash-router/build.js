@@ -12,11 +12,11 @@ import { ADMIN_CARDS } from '../../cards/feature-registry.js';
 //   zu EINEM History-Eintrag.
 export const hashBuildMethods = {
   _computeHash() {
-    if (this.showUserSettingsCard) return '#profil';
+    if (this.showUserSettingsCard) return '#profil' + this._urlTabSuffix('userSettings');
     if (this.showMyStatsCard) return '#meine-statistik';
     if (this.showMyBooksCard) return '#meine-buecher' + this._urlTabSuffix('myBooks');
     if (this.showAutorenprofilCard) return '#autorenprofil';
-    if (this.showHelpCard) return '#hilfe';
+    if (this.showHelpCard) return '#hilfe' + this._urlTabSuffix('help');
     if (this.showOnboardingCard) return '#erste-schritte';
     // Volltextsuche: buch-skopiert (#book/:id/suche) wenn ein Buch gewählt ist
     // und der effektive Scope 'book' ist; sonst buchübergreifend (#search).
