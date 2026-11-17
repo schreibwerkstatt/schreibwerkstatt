@@ -18,6 +18,12 @@ const MAX_TITLE_LEN = 80;
 // Deckel hielte ein hängender Endpunkt den Ollama-Mutex/openai-compat-Semaphor
 // beliebig lange und blockierte damit alle folgenden KI-Calls.
 const TITLE_TIMEOUT_MS = 60_000;
+// Output-Deckel des Titel-Calls. Der Titel selbst braucht ~30 Tokens, aber
+// max_tokens deckt auch das Denken: die modernen Claude-Modelle (auch Haiku 5.5
+// auf der Stufe «leicht») laufen mit adaptivem Thinking, lokale Reasoning-Modelle
+// denken ebenso. Bei längeren Gesprächen denkt das Modell vor dem Einzeiler und
+// läuft sonst ins Limit, bevor der Titel kommt (truncated → kein Titel).
+const TITLE_MAX_TOKENS = 1024;
 
 /**
  * @param {object}  args
@@ -61,7 +67,7 @@ async function generateSessionTitle({ session, userMessage, assistantAnswer, pro
     // (lib/ai/job-tiers.js).
     const titleModel = tierModel('chat-title', provider);
     const tier = provider === 'claude' && titleModel ? titleModel : undefined;
-    const res = await ai.callAI(convo, systemPrompt, null, 120, callSignal, provider, SCHEMA_CHAT_TITLE, tier);
+    const res = await ai.callAI(convo, systemPrompt, null, TITLE_MAX_TOKENS, callSignal, provider, SCHEMA_CHAT_TITLE, tier);
     _recordTitleCost(session, provider, res);
     const { text, truncated } = res;
     if (truncated) throw new Error('Titel-Antwort truncated');
@@ -118,4 +124,4 @@ function _recordTitleCost(session, provider, res) {
   });
 }
 
-module.exports = { generateSessionTitle, TITLE_TIMEOUT_MS, _firstTurn };
+module.exports = { generateSessionTitle, TITLE_TIMEOUT_MS, TITLE_MAX_TOKENS, _firstTurn };

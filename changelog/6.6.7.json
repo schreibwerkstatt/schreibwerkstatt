@@ -1,0 +1,16 @@
+{
+  "version": "6.6.7",
+  "date": "2026-11-17",
+  "entries": [
+    {
+      "kind": "behoben",
+      "de": "Chats bekommen im Verlauf wieder zuverlässig einen kurzen Titel. Bisher blieb bei etwa jedem vierten Gespräch nur die erste Frage als Überschrift stehen.",
+      "en": "Chats reliably get a short title in the history again. Previously about one in four conversations only showed its first question as the heading."
+    },
+    {
+      "kind": "verbessert",
+      "de": "Lädst du die Seite neu oder schliesst den Tab, während noch etwas lädt, landet das nicht mehr als Warnung im Fehlerprotokoll. Echte Probleme fallen so schneller auf.",
+      "en": "Reloading or closing the tab while something is still loading no longer shows up as a warning in the error log. Real problems stand out faster."
+    }
+  ]
+}
