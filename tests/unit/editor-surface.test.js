@@ -23,10 +23,7 @@ const dts = fs.readFileSync(path.join(ROOT, 'contract', 'editor-api.d.ts'), 'utf
 
 // Interna mit `_`, die ein Client heute noch anfasst. Jede Zeile ist eine
 // Schuld beim Client, nicht hier: die Liste darf nur schrumpfen.
-const INTERNAL_IN_USE = new Set([
-  // macOS: Fallback in applyGranularity für Bundles ohne `setGranularity`.
-  '_focusUpdateActive',
-]);
+const INTERNAL_IN_USE = new Set([]);
 
 let b;
 test.before(async () => { b = await loadBundle(); });

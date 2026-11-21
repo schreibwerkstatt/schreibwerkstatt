@@ -33,6 +33,7 @@ import { savePage, isPageConflict } from '../editor/shared/page-api.js';
 import { mergeBlocks, mergedToHtml } from '../editor/shared/block-merge.js';
 import { contentRepo } from '../repo/content.js';
 import { EVT } from '../events.js';
+import { isOffline, onReconnect } from './boot/reachability.js';
 import { isNetworkError } from '../utils/net.js';
 import { trackUsageEvent } from '../usage-event.js';
 
@@ -83,7 +84,7 @@ export const appOutboxMethods = {
   // die Reconnect-Trigger an und stellt den Pending-Zähler initial.
   _installOutbox(signal) {
     const flush = () => this._flushOutbox();
-    window.addEventListener('online', flush, { signal });
+    onReconnect(flush, { signal });
     window.addEventListener('focus', flush, { signal });
     document.addEventListener('visibilitychange', () => {
       if (document.visibilityState === 'visible') this._flushOutbox();
@@ -154,7 +155,7 @@ export const appOutboxMethods = {
     return outboxWouldStrand({
       drafts,
       queued: pendingStructureCount() + (this._pendingIdeenCount || 0),
-      unreachable: navigator.onLine === false || this._outboxRetryMs > 0,
+      unreachable: isOffline() || this._outboxRetryMs > 0,
       backgroundSync: hasBackgroundSync(),
     });
   },

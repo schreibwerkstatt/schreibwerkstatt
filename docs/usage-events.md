@@ -53,7 +53,11 @@ Erstanbieter-Messung des Nutzungsverhaltens: welche Funktionen genutzt werden, o
 | `outbox.flush` | client | `synced`, `conflicts`, `dropped`, `stuck` | Durchgang der Offline-Outbox, nur wenn eine Zahl > 0; `stuck` zählt nur neu hängende |
 | `discard.prompt` | client | `editor`, `answer` keep/discard | Rückfrage «Ungespeicherte Änderungen verwerfen?» im Notebook-/Fokus-Editor |
 | `offline.pin` | client | `action` pin/unpin | Klick auf «Buch offline halten» in der Sidebar ([app-offline-books.js](../public/js/app/app-offline-books.js)) |
-| `offline.pin.result` | client | `result` done/partial/failed, `total`, `failed`, `status` (HTTP, 0 = Netz), `durationSec`, `persisted` yes/no | Ausgang des Erst-Syncs nach dem Anheften, gemeldet vom anheftenden Tab; Automatik und Nach-Syncs melden nichts. Schliesst der Tab vor dem Ende, fehlt das Ergebnis |
+| `offline.pin.result` | client | `result` done/partial/failed, `total`, `failed`, `status` (HTTP, 0 = Netz), `durationSec`, `persisted` yes/no | Ausgang des Erst-Syncs nach dem Anheften, gemeldet vom anheftenden Tab. Jeder Sync (auch dieser) steht zusätzlich als `offline.sync`. Schliesst der Tab vor dem Ende, fehlt das Ergebnis |
+| `offline.sync` | client | `trigger` pin/open/boot/online/auto-on/drift, `kind` pinned/auto, `result` done/partial/failed, `total`, `fetched` (geladene Abschnitte), `failed`, `status`, `durationSec`, `persisted` | Ausgang **jedes** Syncs einer Offline-Kopie, auch Automatik und Nach-Syncs. Der SW gibt jedem Sync eine `syncId`; gemeldet wird einmal je Gerät, auch bei mehreren Tabs (Anspruch in localStorage). Ohne offenen Tab fehlt das Ergebnis |
+| `offline.remove` | client | `reason` unpin/auto-rotated/auto-off/save-data/denied | Buch fällt aus der Ablage des Geräts: gelöst, von einem neueren Buch aus der Automatik verdrängt (auch: in anderem Tab gelöst), Automatik aus, Datensparmodus, 403/404 |
+| `offline.auto` | client | `action` on/off | Schalter «zuletzt geöffnete Bücher offline» in den Benutzer-Einstellungen |
+| `offline.held` | client | `kind` pinned/auto, `total`, `failed`, `ageHours` (Alter des letzten Syncs), `persisted` | Bestand: einmal am Tag je Gerät und Buch, das offline liegt. **Der Server kennt die Offline-Absicht sonst nicht** — sie steht nur im localStorage —, darum ist das die Quelle für «was liegt gerade wo offline» |
 
 **Datenschutzerklärung:** die Nutzungsdaten stehen unter «Erhobene Daten» (`privacy.sec2ItemE`) mit der Default-Frist von 13 Monaten. Wer die Frist oder die Art der Events ändert, zieht den Text dort nach.
 

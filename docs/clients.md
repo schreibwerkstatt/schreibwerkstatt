@@ -83,6 +83,8 @@ Beide Clients sind Web-Schalen ohne Alpine um denselben Editor-Kern, den sie **z
     - **Handle-API `undo()` / `redo()` / `canUndo()` / `canRedo()`** — der Weg für ein natives Menü. Auf macOS erreicht `Cmd+Z` die WebView **nie**: „Bearbeiten ▸ Widerrufen" verbraucht das Kürzel, bevor ein `keydown` ankommt. Wer das Menü nicht darauf verdrahtet, bekommt den WebKit-Undo-Manager zurück — und der führt eine ganze Tippstrecke als EINEN Schritt (Messung in Invariante 19). Kommt die Taste doch in der WebView an (Android, Web), fängt der Editor sie selbst ab.
     - **`inputType`-Vertrag:** ein Restore feuert `InputEvent('input', { inputType: 'historyUndo' | 'historyRedo' })`. Daran hängt die Boot-Glue ihren Umfang-Hinweis, das Dirty-Flag, den Auto-Save, die Live-Statistik und die Rechtschreib-Neuprüfung. `inputType` ist deshalb Teil des Vertrags, nicht Kosmetik.
   Die Historie ist **pro Seite** und wird nur von `setPage`/`destroy` zurückgesetzt (`replaceContent` trägt den eingespielten Server-Stand als einen Schritt ein) — bewusst **nicht** beim Speichern: im Fokusmodus wird ununterbrochen weitergeschrieben und alle 1,5 s automatisch gespeichert.
+- **Save-Stand und Caret über das Handle, nicht über Interna.** `onSaved(cb)` meldet nach jedem Save-Lauf `{ dirty, pageId }`, auch wenn der Editor den Save überspringt, weil der Inhalt dem gesicherten Stand gleicht (Tippen + wieder Löschen) — dort ruft er `savePage` nie, ein Dirty-Flag der Schale bliebe sonst stehen. `revealCaret({ threshold? })` zieht die Caret-Zeile mit der Typewriter-Geometrie auf den Anker (Öffnen, Layout setzt sich noch) und markiert den Scroll als eigenen. Beides ersetzt ein Überschreiben von `host.quickSave` und den Direkt-Import von `focus/typewriter.js`; Vertrag: [contract/editor-api.d.ts](../contract/editor-api.d.ts).
+- **Trennlinie über das Handle.** `insertHr()` fügt `<hr>` hinter dem Caret-Block samt Folge-Absatz ein, als ein Undo-Schritt; das Bundle-CSS zeigt die Linie selbst. Eine Schale mit eigener Trennlinien-Logik (Android `host.html`) prüft `typeof handle.insertHr === 'function'` und lässt dann eigene DOM-Mutation und eigenes `<hr>`-CSS weg.
 - **Beide Clients ziehen dasselbe ZIP** (macOS `EditorBundleStore`, Android `BundleManager` → `ensureBundle` beim Öffnen des Editors). JS und CSS kommen darin **atomar** aus einem Stand — ein Skew zwischen neuem Editor-JS und altem Editor-CSS ist ausgeschlossen. Folge: Editor-Änderungen erreichen beide Clients erst nach einem **Server-Deploy** (neuer ETag), nicht nach einem App-Update.
 
 ## Sync & Presence (beide Clients)
@@ -101,6 +103,24 @@ Offline-First: der Client hält einen lokalen SQLite-Spiegel und synchronisiert 
 - **Push nur in der SPA:** der Browser hält zusätzlich `GET /events/stream?book_id=…&device_id=…` offen ([routes/events/book-channel.js](../routes/events/book-channel.js)). Der Buch-Kanal schickt **Anstösse, keine Daten** (`book: { changed, presence }`); der Browser holt danach dieselben Routen wie oben, Self-Filter, Geräte-Label und ACL bleiben also dort. Quelle für `changed` sind ausschliesslich die Schreibpfade der Content-Store-Facade, für `presence` [db/book-presence.js](../db/book-presence.js)/[db/page-presence.js](../db/page-presence.js) bei Zustandswechsel (neu, zurück nach Stale-Lücke, Seitenwechsel, Abmelden), nie pro Heartbeat. Das Echo des eigenen Geräts filtert der Kanal mit derselben Regel wie `/changes`. Die Rolle wird beim Connect **und** vor jedem Versand nachgeschlagen; ist sie weg, kommt `book: { gone: true }`, der Kanal meldet sich ab, und der nächste Geräte-Ping des Browsers läuft in die gewohnte 403. Der Stream-Heartbeat (25 s) hält `book_presence` und die frischen `page_presence`-Rows des Geräts am Leben (`touch`/`touchDevice`, legt nichts an, belebt nichts Stales) — der Browser pingt bei offenem Stream darum nur noch bei Seitenwechsel/Edit-Eintritt plus einem Sicherheits-Tick ([app-collab-stream.js](../public/js/app/app-collab-stream.js)`#STREAM_SAFETY_MS`). **Native Clients halten keinen Stream** und pingen weiter wie bisher; ihre Pings und Pushes erreichen offene Browser trotzdem sofort, weil sie durch dieselben db-Module bzw. die Facade laufen.
 
 > **Das Collab-Signal ist ein Komfort-Kanal, keine Wahrheitsquelle.** Ohne offenen Event-Stream (Proxy, Reconnect-Lücke) läuft der 5s-Poll auf `/changes` im Browser erst, wenn der **40s**-Buch-Device-Ping eine zweite Partei gemeldet hat (`_selfBookDeviceCount > 1` bzw. geteiltes Buch, [app-collab.js](../public/js/app/app-collab.js#L135)) — ein Push eines Zweitgeräts wird also bis zu einer Ping-Periode später sichtbar, und gar nicht, wenn das Gerät offline schrieb und beim Reconnect nur pusht, ohne das Buch zu pingen. Folge für den Server-Konsumenten: **jeder Pfad, dessen Resultat an einem Seiten-Snapshot hängt** (Lektorat-Findings mit Positionen, Chat-`vorschlaege.original`), muss den aktuellen `updated_at` **selbst** nachfragen statt der browserlokalen `currentPage.updated_at` zu glauben. Siehe harte Regel „Job-Ergebnisse mit `updatedAt`-Staleness-Check" in [CLAUDE.md](../CLAUDE.md).
+
+## Ideen (Android)
+
+Android legt Ideen (Pendenzen) an einem Abschnitt, einem Kapitel oder am Buch an und bearbeitet sie — über dieselben Routen wie das Ideen-Board der Web-App ([routes/ideen.js](../routes/ideen.js), Modell und Stufen: [docs/ideen-board.md](ideen-board.md)). Im Vertrag seit `api 7`; Schemas, Fehlercodes und Fixtures in [contract/](../contract/README.md).
+
+| Route | Zweck |
+|---|---|
+| `GET /ideen/board?book_id=…` | alle eigenen Ideen des Buchs, jede Stufe, plus `statuses`/`stages` |
+| `POST /ideen` | anlegen; `page_id` **oder** `chapter_id` **oder** keiner (Buch-Idee), `content` 1–4000 Zeichen |
+| `PATCH /ideen/:id` | `content`, `status`, Anker-Umzug — einzeln oder zusammen |
+| `DELETE /ideen/:id` | endgültig löschen |
+
+- **Privat je Konto.** Eine Idee gehört ihrem Autor, auch auf einem geteilten Buch; jede Lesung filtert nach dem Konto des Tokens. Eine fremde Id antwortet wie eine fehlende (`404 IDEE_NOT_FOUND`), damit der Unterschied nichts verrät.
+- **Scope:** die Routen stehen auf keiner Allowlist; ein `device`-Token (`content:write`) erreicht sie, ein `capture`-Token nicht (`403 DEVICE_SCOPE_FORBIDDEN`). Buchrolle mindestens `editor`. Gegated in [tests/integration/client-contract.test.js](../tests/integration/client-contract.test.js) mit einem Token, das nur `content:write` trägt.
+- **Offline nachspielen:** `POST /ideen` liest `Idempotency-Key` wie `POST /content/pages` ([lib/idempotency.js](../lib/idempotency.js)) — derselbe Schlüssel liefert 24 h lang die erste Idee mit `Idempotent-Replayed: true`. Ein nachgespieltes `DELETE`, das `404 IDEE_NOT_FOUND` bekommt, ist erledigt.
+- **Stufen:** `offen → in_arbeit → erledigt`, daneben `verworfen` (eine Stufe, kein Löschen). `stages` sagt, welche das Buch anbietet; ein Wechsel in eine abgeschaltete Stufe → `400 IDEE_STATUS_INACTIVE`, wer schon dort steht, darf bleiben und herauswechseln.
+- **Anker-Umzug** nur, solange die Idee offen ist und bleibt: eine erledigte oder verworfene Idee und ein Umzug mit gleichzeitigem Abschluss → `400 IDEE_CLOSED`. Ein Kapitel mit genau einem Abschnitt gilt als dieser Abschnitt ([lib/idee-anchor.js](../lib/idee-anchor.js)) — die Antwort trägt dann `page_id`, nicht das gesendete `chapter_id`. Darum den Anker immer aus der Antwort übernehmen.
+- **`check_hint`** ist der Hinweis des Auto-Erledigt-Checks («diese Stelle erledigt die Pendenz vermutlich»); er fällt mit jedem Stufenwechsel weg. Verwerfen ohne Stufenwechsel (`DELETE /ideen/:id/check-hint`), Verknüpfen, Zusammenführen und Umsortieren sind Web-Wege und nicht Teil des Vertrags.
 
 ## Release-Discovery (Download-Hinweis im Profil + Landing)
 
@@ -166,6 +186,7 @@ Content-Type: application/json
 | Save-Kennung (`save_id`/`own_save_ids`, verlorene Antwort) | ✅ (`564d0e2`) | ✅ (`65408bb`) | — (kein Manuskript-Write) |
 | Block-Merge bei fremdem `409` | ✅ (`merge3`; ohne WebView-Merge Server-Merge per `base_html`) | ✅ Server-Merge (`base_html`) | — |
 | Vertrags-Fixtures in den Decoding-Tests (`contract/`) | ✅ | ✅ | — |
+| Ideen anlegen/bearbeiten (`/ideen`) | — | im Vertrag (`api 7`), Client folgt | — (`capture` gesperrt) |
 
 Was beide nativen Clients gemeinsam tragen — Auth, Sync, Presence, Release-Discovery, Editor-Bundle — ist symmetrisch abgedeckt.
 

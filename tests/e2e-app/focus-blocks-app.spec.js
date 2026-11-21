@@ -293,6 +293,24 @@ test.describe('Focus — Bild und Trennlinie', () => {
     });
   }
 
+  // Die Trennlinie ist im Focus-Editor sichtbar und unterscheidet sich wie in
+  // Notebook, Bucheditor und Share-Reader (manuscript-content.css) vom
+  // Seitenumbruch und der Leerseite — sonst setzt der Autor sie blind.
+  test('Trennlinie, Seitenumbruch und Leerseite sind sichtbar und unterscheidbar', async ({ page }) => {
+    await open(page, 'focus',
+      '<p>A</p><hr><p>B</p><hr class="pagebreak"><p>C</p><hr class="blankpage"><p>D</p>');
+    const lines = await page.evaluate((FO) => [...document.querySelectorAll(`${FO} > hr`)].map((hr) => {
+      const cs = getComputedStyle(hr);
+      return { width: parseFloat(cs.borderTopWidth), style: cs.borderTopStyle, w: hr.getBoundingClientRect().width };
+    }), FO);
+    expect(lines).toHaveLength(3);
+    for (const l of lines) {
+      expect(l.width).toBeGreaterThan(0);
+      expect(l.w).toBeGreaterThan(0);
+    }
+    expect(lines.map((l) => l.style)).toEqual(['solid', 'dashed', 'double']);
+  });
+
   test('Backspace in der leeren Legende lässt das Bild stehen', async ({ page }) => {
     const html = '<p>Vorher</p><figure><img src="/icons.svg" alt="Bild"><figcaption><br></figcaption></figure><p>Nachher</p>';
     await open(page, 'focus', html);

@@ -1,0 +1,56 @@
+{
+  "operation": "GET /ideen/board",
+  "request": {
+    "method": "GET",
+    "path": "/ideen/board?book_id=7001"
+  },
+  "status": 200,
+  "response": {
+    "statuses": [
+      "offen",
+      "in_arbeit",
+      "erledigt",
+      "verworfen"
+    ],
+    "stages": [
+      "offen",
+      "in_arbeit",
+      "erledigt",
+      "verworfen"
+    ],
+    "ideen": [
+      {
+        "id": 7401,
+        "book_id": 7001,
+        "page_id": 70001,
+        "page_name": "Anfang",
+        "chapter_id": null,
+        "chapter_name": null,
+        "lane_chapter_id": 7101,
+        "lane_chapter_name": "Teil eins",
+        "content": "Hier fehlt noch der Leuchtturm.",
+        "status": "in_arbeit",
+        "status_at": "2026-01-01T00:00:00.000Z",
+        "sort_order": 0,
+        "created_at": "2026-01-01T00:00:00.000Z",
+        "updated_at": "2026-01-01T00:00:00.000Z",
+        "check_hint": {
+          "beleg": "Im Unterkapitel.",
+          "page_id": 70002,
+          "page_name": "Mitte, umbenannt",
+          "begruendung": "Der Leuchtturm wird im Unterkapitel eingeführt.",
+          "at": "2026-01-01T00:00:00.000Z"
+        },
+        "links": [
+          {
+            "link_id": 1,
+            "target_kind": "motif",
+            "target_id": 7301,
+            "label": "Leuchtturm"
+          }
+        ]
+      }
+    ],
+    "auto_check": true
+  }
+}

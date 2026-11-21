@@ -12,6 +12,7 @@
 // kennt die alte Seite dann schon nicht mehr.
 import { AUTOSAVE_KEY, DRAFT_DEBOUNCE_MS, createAutosaveTimers, createTimerBag, editorHost, isNoChange, stripLektoratMarks, writeDraft, writeNormalSnapshot } from './_shared.js';
 import { saveRetryDelay, wantsTimedRetry } from '../save-timing.js';
+import { onReconnect } from '../../../app/boot/reachability.js';
 
 // Lazy, weil dieses Modul keinen eigenen init-Hook hat und der Host beim ersten
 // Tastendruck sicher steht.
@@ -172,7 +173,8 @@ export const autosaveMethods = {
     };
     app._onlineHandler = retry;
     app._onlineVisHandler = () => { if (document.visibilityState === 'visible') retry(); };
-    window.addEventListener('online', app._onlineHandler);
+    // Browser-`online` ODER Server wieder erreichbar (boot/reachability.js).
+    app._reconnectOff = onReconnect(app._onlineHandler);
     window.addEventListener('focus', app._onlineHandler);
     document.addEventListener('visibilitychange', app._onlineVisHandler);
     // Draft sofort sichern, wenn der Tab verschwindet (Tab-/Fensterwechsel,
@@ -190,7 +192,8 @@ export const autosaveMethods = {
   _uninstallOnlineRetry() {
     const app = editorHost();
     if (!app || !app._onlineHandler) return;
-    window.removeEventListener('online', app._onlineHandler);
+    app._reconnectOff?.();
+    app._reconnectOff = null;
     window.removeEventListener('focus', app._onlineHandler);
     if (app._onlineVisHandler) {
       document.removeEventListener('visibilitychange', app._onlineVisHandler);

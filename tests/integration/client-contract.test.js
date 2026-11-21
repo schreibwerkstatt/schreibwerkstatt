@@ -204,6 +204,51 @@ test('Fälle laufen in Reihenfolge gegen den Vertrag', async (t) => {
   }
 });
 
+// Die Ideen-Routen stehen auf keiner Allowlist von lib/device-scopes.js — ein
+// Device-Token erreicht sie allein über `content:write`. Geprüft mit einem Token,
+// das NUR diesen Scope trägt (ohne `content:read`), durch die echte Kette
+// (Auth-Guard → Scope-Gate → Router → guardBook/Besitz); die Gegenprobe zeigt,
+// dass ein Erfassungs-Token (`capture:write` + `content:read`) an keiner vorbeikommt.
+test('Ideen: content:write allein erreicht alle vier Routen, capture-Token keine', async () => {
+  const call = (token, method, p, body) => fetch(`${baseUrl}${p}`, {
+    method,
+    headers: { Authorization: `Bearer ${token}`, ...(body ? { 'Content-Type': 'application/json' } : {}) },
+    body: body ? JSON.stringify(body) : undefined,
+  });
+  // Nach den Fällen angelegt, damit das Fixture `device-tokens` unberührt bleibt.
+  const w = require('../../db/device-tokens').createDeviceToken({
+    userEmail: C.ME, deviceName: 'Vertrags-Android', platform: 'android', scopes: 'content:write',
+  }).plain_token;
+
+  const created = await call(w, 'POST', '/ideen', { book_id: C.BOOK, content: 'Nur mit content:write.' });
+  assert.equal(created.status, 200, `POST /ideen: ${await created.clone().text()}`);
+  const id = (await created.json()).id;
+
+  const board = await call(w, 'GET', `/ideen/board?book_id=${C.BOOK}`);
+  assert.equal(board.status, 200, 'GET /ideen/board');
+  assert.ok((await board.json()).ideen.some((i) => i.id === id), 'Board zeigt die eben angelegte Idee');
+
+  const patched = await call(w, 'PATCH', `/ideen/${id}`, { status: 'erledigt' });
+  assert.equal(patched.status, 200, 'PATCH /ideen/{id}');
+  assert.equal((await patched.json()).status, 'erledigt');
+
+  const capture = [
+    ['GET', `/ideen/board?book_id=${C.BOOK}`],
+    ['POST', '/ideen', { book_id: C.BOOK, content: 'Aus fremdem Tab.' }],
+    ['PATCH', `/ideen/${id}`, { content: 'Aus fremdem Tab.' }],
+    ['DELETE', `/ideen/${id}`],
+  ];
+  for (const [m, p, b] of capture) {
+    const r = await call(tokens.captureToken, m, p, b);
+    assert.equal(r.status, 403, `capture-Token ${m} ${p}`);
+    assert.equal((await r.json()).error_code, 'DEVICE_SCOPE_FORBIDDEN');
+  }
+
+  const deleted = await call(w, 'DELETE', `/ideen/${id}`);
+  assert.equal(deleted.status, 200, 'DELETE /ideen/{id}');
+  assert.deepEqual(await deleted.json(), { ok: true });
+});
+
 test('keine verwaisten Fixtures', () => {
   const names = new Set(CASES.map((c) => `${c.name}.json`));
   const orphans = fs.existsSync(FIXTURES) ? fs.readdirSync(FIXTURES).filter((f) => f.endsWith('.json') && !names.has(f)) : [];

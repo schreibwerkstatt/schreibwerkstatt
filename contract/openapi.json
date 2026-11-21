@@ -2,9 +2,9 @@
   "openapi": "3.1.0",
   "info": {
     "title": "Schreibwerkstatt — Client-Vertrag (macOS, Android)",
-    "version": "api 6 · editorApi 1",
+    "version": "api 7 · editorApi 1",
     "description": "Die REST-Fläche, die die nativen Clients nutzen. Regeln, Versionen und Ablauf: contract/README.md. Antworten dürfen Felder tragen, die hier nicht stehen — ein Client ignoriert sie.",
-    "x-api": 6,
+    "x-api": 7,
     "x-editor-api": 1
   },
   "components": {
@@ -1131,6 +1131,283 @@
           "kind",
           "urls"
         ]
+      },
+      "IdeeStatus": {
+        "enum": [
+          "offen",
+          "in_arbeit",
+          "erledigt",
+          "verworfen"
+        ],
+        "description": "Bearbeitungsstufe (lib/ideen-status.js). Reihenfolge = Spaltenfolge im Board. `verworfen` ist eine Stufe, kein Löschen. Unbekannter Wert → wie `offen` behandeln."
+      },
+      "IdeeCheckHint": {
+        "type": "object",
+        "properties": {
+          "beleg": {
+            "type": "string",
+            "description": "Textstelle, die die Pendenz nach Ansicht des Auto-Erledigt-Checks erledigt."
+          },
+          "page_id": {
+            "type": "integer",
+            "description": "Abschnitt, in dem der Beleg steht."
+          },
+          "page_name": {
+            "type": "string",
+            "description": "Name dieses Abschnitts (leer, falls unbekannt)."
+          },
+          "begruendung": {
+            "type": "string",
+            "description": "Begründung des Checks; leer, wenn keine."
+          },
+          "at": {
+            "type": "string",
+            "description": "Zeitpunkt des Hinweises.",
+            "format": "date-time"
+          }
+        },
+        "required": [
+          "beleg",
+          "page_id",
+          "page_name",
+          "begruendung",
+          "at"
+        ]
+      },
+      "IdeeLink": {
+        "type": "object",
+        "properties": {
+          "link_id": {
+            "type": "integer",
+            "description": "Id der Verknüpfung (zum Lösen)."
+          },
+          "target_kind": {
+            "enum": [
+              "research",
+              "beat",
+              "thread",
+              "motif",
+              "draft"
+            ],
+            "description": "Ziel-Katalog: Recherche-Fundstück, Plot-Beat, Handlungsstrang, Motiv, Werkstatt-Figur. Unbekannter Wert → Link ignorieren."
+          },
+          "target_id": {
+            "type": "integer"
+          },
+          "label": {
+            "type": "string",
+            "description": "Name des Ziels zur Lesezeit; leer, wenn keiner."
+          }
+        },
+        "required": [
+          "link_id",
+          "target_kind",
+          "target_id",
+          "label"
+        ]
+      },
+      "Idee": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "integer"
+          },
+          "book_id": {
+            "type": "integer"
+          },
+          "page_id": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "description": "Abschnitts-Anker; null bei Kapitel- oder Buch-Idee."
+          },
+          "page_name": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "chapter_id": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "description": "Kapitel-Anker; null bei Abschnitts- oder Buch-Idee."
+          },
+          "chapter_name": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "lane_chapter_id": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "description": "Kapitel, unter dem die Idee im Board steht: das Kapitel selbst bzw. das Kapitel ihres Abschnitts; null bei Buch-Idee oder Abschnitt ohne Kapitel."
+          },
+          "lane_chapter_name": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "content": {
+            "type": "string",
+            "maxLength": 4000
+          },
+          "status": {
+            "$ref": "#/components/schemas/IdeeStatus"
+          },
+          "status_at": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Zeitpunkt des letzten Stufenwechsels; null, solange die Idee in ihrer Anfangsstufe steht.",
+            "format": "date-time"
+          },
+          "sort_order": {
+            "type": "integer",
+            "description": "Manuelle Reihenfolge innerhalb einer Board-Zelle (0 = ungeordnet, dann neueste zuerst)."
+          },
+          "created_at": {
+            "type": "string",
+            "description": "Server-Zeitstempel, ISO-8601 UTC mit Millisekunden (`…T…:…:….sssZ`). Unverändert zurückschicken.",
+            "format": "date-time"
+          },
+          "updated_at": {
+            "type": "string",
+            "description": "Server-Zeitstempel, ISO-8601 UTC mit Millisekunden (`…T…:…:….sssZ`). Unverändert zurückschicken.",
+            "format": "date-time"
+          },
+          "check_hint": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/IdeeCheckHint"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Hinweis des Auto-Erledigt-Checks; null, wenn keiner vorliegt. Fällt mit jedem Stufenwechsel weg."
+          },
+          "links": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/IdeeLink"
+            },
+            "description": "Verknüpfungen in Katalog-Reihenfolge; leer, wenn keine."
+          }
+        },
+        "required": [
+          "id",
+          "book_id",
+          "page_id",
+          "chapter_id",
+          "content",
+          "status",
+          "created_at",
+          "updated_at",
+          "check_hint",
+          "links"
+        ]
+      },
+      "IdeenBoard": {
+        "type": "object",
+        "properties": {
+          "statuses": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/IdeeStatus"
+            },
+            "description": "Alle Stufen in Spaltenfolge."
+          },
+          "stages": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/IdeeStatus"
+            },
+            "description": "Im Buch aktive Stufen (immer mit `offen` und `erledigt`). In eine inaktive Stufe lässt sich nicht wechseln; wer schon dort steht, bleibt sichtbar."
+          },
+          "ideen": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Idee"
+            },
+            "description": "Alle eigenen Ideen des Buchs, jede Stufe, neueste zuerst. Ungefiltert — Filter macht der Client."
+          },
+          "auto_check": {
+            "type": "boolean",
+            "description": "Persönlicher Schalter des Auto-Erledigt-Checks."
+          }
+        },
+        "required": [
+          "statuses",
+          "stages",
+          "ideen"
+        ]
+      },
+      "IdeeCreateRequest": {
+        "type": "object",
+        "properties": {
+          "book_id": {
+            "type": "integer"
+          },
+          "page_id": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "description": "Abschnitts-Anker. Höchstens einer von `page_id`/`chapter_id`; keiner = Buch-Idee."
+          },
+          "chapter_id": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "description": "Kapitel-Anker. Ein Kapitel mit genau einem Abschnitt wird zu diesem Abschnitt."
+          },
+          "content": {
+            "type": "string",
+            "description": "Getrimmt 1–4000 Zeichen.",
+            "maxLength": 4000
+          }
+        },
+        "required": [
+          "book_id",
+          "content"
+        ]
+      },
+      "IdeeUpdateRequest": {
+        "type": "object",
+        "properties": {
+          "content": {
+            "type": "string",
+            "description": "Getrimmt 1–4000 Zeichen.",
+            "maxLength": 4000
+          },
+          "status": {
+            "$ref": "#/components/schemas/IdeeStatus"
+          },
+          "page_id": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "description": "Umzug an diesen Abschnitt (leert `chapter_id`)."
+          },
+          "chapter_id": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "description": "Umzug an dieses Kapitel (leert `page_id`). `page_id: null` UND `chapter_id: null` zusammen = zurück zur Buch-Idee."
+          }
+        },
+        "description": "Alle Felder optional, mindestens eines. Umzug nur, solange die Idee offen ist und bleibt (`offen`/`in_arbeit`)."
       },
       "JobCreated": {
         "type": "object",
@@ -2596,6 +2873,285 @@
           },
           "409": {
             "description": "Trägt `existing_id`; übersteuerbar mit `allow_duplicate: true`. error_code: DUPLICATE_URL",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/ideen/board": {
+      "get": {
+        "x-clients": [
+          "android"
+        ],
+        "summary": "Ideen-Board eines Buchs: alle eigenen Ideen, Stufen",
+        "parameters": [
+          {
+            "name": "book_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IdeenBoard"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "error_code: INVALID_ID",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Token fehlt, unbekannt, widerrufen oder abgelaufen; Konto gesperrt/gelöscht. error_code: NOT_LOGGED_IN",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Scope oder Buchrolle reicht nicht. error_code: DEVICE_SCOPE_FORBIDDEN | NO_BOOK_ACCESS | INSUFFICIENT_ROLE",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/ideen": {
+      "post": {
+        "x-clients": [
+          "android"
+        ],
+        "summary": "Idee anlegen (an Abschnitt, Kapitel oder Buch)",
+        "description": "Optionaler Header `Idempotency-Key` (8–100 Zeichen `[A-Za-z0-9_-]`): derselbe Schlüssel desselben Kontos liefert 24 h lang die erste Antwort noch einmal (Header `Idempotent-Replayed: true`) statt erneut anzulegen — für ein Nachspielen nach verlorener Antwort.",
+        "parameters": [
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/IdeeCreateRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Idee"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "`INVALID_SCOPE`: `page_id` und `chapter_id` zugleich. `CONTENT_TOO_LONG`: über 4000 Zeichen nach dem Trimmen. `BOOK_MISMATCH`: Anker gehört nicht zum Buch. error_code: BOOKID_REQ | INVALID_SCOPE | CONTENT_REQ | CONTENT_TOO_LONG | BOOK_MISMATCH",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Token fehlt, unbekannt, widerrufen oder abgelaufen; Konto gesperrt/gelöscht. error_code: NOT_LOGGED_IN",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Scope oder Buchrolle reicht nicht. error_code: DEVICE_SCOPE_FORBIDDEN | NO_BOOK_ACCESS | INSUFFICIENT_ROLE",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/ideen/{id}": {
+      "patch": {
+        "x-clients": [
+          "android"
+        ],
+        "summary": "Idee ändern: Text, Stufe, Anker-Umzug",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/IdeeUpdateRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Idee"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "`IDEE_STATUS_INACTIVE`: Stufe im Buch abgeschaltet (`stages`). `IDEE_CLOSED`: Umzug einer erledigten/verworfenen Idee oder Umzug und Abschluss im selben Request. `NO_FIELDS`: kein auswertbares Feld. error_code: INVALID_ID | CONTENT_REQ | CONTENT_TOO_LONG | INVALID_STATUS | IDEE_STATUS_INACTIVE | INVALID_SCOPE | INVALID_PAGE_ID | INVALID_CHAPTER_ID | IDEE_CLOSED | BOOK_MISMATCH | NO_FIELDS",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Token fehlt, unbekannt, widerrufen oder abgelaufen; Konto gesperrt/gelöscht. error_code: NOT_LOGGED_IN",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Scope oder Buchrolle reicht nicht. error_code: DEVICE_SCOPE_FORBIDDEN | NO_BOOK_ACCESS | INSUFFICIENT_ROLE",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Gibt es nicht oder gehört einem anderen Konto. error_code: IDEE_NOT_FOUND",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "x-clients": [
+          "android"
+        ],
+        "summary": "Idee löschen (endgültig; «verworfen» ist die Stufe dafür)",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Ok"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "error_code: INVALID_ID",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Token fehlt, unbekannt, widerrufen oder abgelaufen; Konto gesperrt/gelöscht. error_code: NOT_LOGGED_IN",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Scope oder Buchrolle reicht nicht. error_code: DEVICE_SCOPE_FORBIDDEN | NO_BOOK_ACCESS | INSUFFICIENT_ROLE",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Gibt es nicht (mehr) oder gehört einem anderen Konto — bei einer Wiederholung als erledigt werten. error_code: IDEE_NOT_FOUND",
             "content": {
               "application/json": {
                 "schema": {

@@ -1,6 +1,6 @@
 {
   "name": "schreibwerkstatt",
-  "version": "6.6.10",
+  "version": "6.7.0",
   "description": "Schreibwerkstatt — Schreiben, Lektorat und Buchanalyse mit KI",
   "license": "AGPL-3.0-or-later",
   "main": "server.js",
@@ -24,6 +24,7 @@
     "test:lektorat": "node scripts/test-stable.js lektorat",
     "test:komplett": "node scripts/test-stable.js komplett",
     "test:focus": "node scripts/test-stable.js focus",
+    "test:offline": "node scripts/test-stable.js offline",
     "stable:status": "node scripts/test-stable.js --status",
     "check:clients": "node scripts/check-clients-compat.js",
     "contract:build": "node scripts/contract-build.js",

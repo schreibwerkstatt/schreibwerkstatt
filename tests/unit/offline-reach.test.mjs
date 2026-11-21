@@ -176,12 +176,15 @@ test('Nutzungs-Events: Anheften und Ausgang des Erst-Syncs, nur einmal', async (
     root._onOfflineBookMessage({ type: 'offline-book-synced', bookId: 7, at: 'x', total: 66, failed: 2 });
     root._onOfflineBookMessage({ type: 'offline-book-synced', bookId: 7, at: 'y', total: 66, failed: 0 });
     await root.toggleBookOffline(7);
-    assert.deepEqual(sent.map((e) => [e.event, e.book_id]),
-      [['offline.pin', 7], ['offline.pin.result', 7], ['offline.pin', 7]], 'Nach-Sync meldet nichts');
-    assert.equal(sent[0].meta.action, 'pin');
-    assert.equal(sent[2].meta.action, 'unpin');
-    assert.deepEqual({ ...sent[1].meta, durationSec: 0 },
+    const pins = sent.filter((e) => e.event.startsWith('offline.pin'));
+    assert.deepEqual(pins.map((e) => [e.event, e.book_id]),
+      [['offline.pin', 7], ['offline.pin.result', 7], ['offline.pin', 7]], 'Nach-Sync meldet kein zweites pin.result');
+    assert.equal(pins[0].meta.action, 'pin');
+    assert.equal(pins[2].meta.action, 'unpin');
+    assert.deepEqual({ ...pins[1].meta, durationSec: 0 },
       { result: 'partial', total: 66, failed: 2, durationSec: 0, persisted: 'yes' });
+    const removed = sent.find((e) => e.event === 'offline.remove');
+    assert.deepEqual([removed.book_id, removed.meta.reason], [7, 'unpin']);
   } finally { globalThis.fetch = prevFetch; }
 });
 
@@ -198,6 +201,72 @@ test('Nutzungs-Events: abgebrochener Erst-Sync meldet failed mit Status', async 
     assert.equal(sent[1].meta.result, 'failed');
     assert.equal(sent[1].meta.status, 0);
   } finally { globalThis.fetch = prevFetch; }
+});
+
+// Fetch-Attrappe für die Nutzungs-Events: sammelt die Bodies.
+async function withSent(fn) {
+  const sent = [];
+  const prevFetch = globalThis.fetch;
+  globalThis.fetch = async (url, init) => { sent.push(JSON.parse(init.body)); return {}; };
+  try { await fn(sent); } finally { globalThis.fetch = prevFetch; }
+}
+
+test('Nutzungs-Events: jeder Sync einmal je Gerät, auch bei zwei Tabs', async () => {
+  store.clear();
+  await withSent(async (sent) => {
+    const a = fakeRoot({ auto: { enabled: true, bookIds: ['4'] } }).root;
+    const b = fakeRoot({ auto: { enabled: true, bookIds: ['4'] } }).root;
+    const msg = { type: 'offline-book-synced', bookId: 4, at: 'x', total: 30, failed: 0, fetched: 3, syncId: '4:1', trigger: 'boot', durationSec: 2 };
+    a._onOfflineBookMessage(msg);
+    b._onOfflineBookMessage(msg);
+    a._onOfflineBookMessage({ type: 'offline-book-failed', bookId: 4, status: 0, syncId: '4:2', trigger: 'online', durationSec: 1 });
+    const syncs = sent.filter((e) => e.event === 'offline.sync');
+    assert.equal(syncs.length, 2, 'derselbe Sync aus zwei Tabs nur einmal');
+    assert.deepEqual([syncs[0].book_id, syncs[0].meta], [4, {
+      trigger: 'boot', kind: 'auto', result: 'done', total: 30, fetched: 3, failed: 0, durationSec: 2, persisted: 'no',
+    }]);
+    assert.deepEqual([syncs[1].meta.result, syncs[1].meta.status, syncs[1].meta.trigger], ['failed', 0, 'online']);
+  });
+});
+
+test('Sync-Anstoss trägt den Anlass an den SW', () => {
+  store.clear();
+  const { root, posted } = fakeRoot({ pinned: ['2'] });
+  root._syncOfflineBooks('online');
+  root._noteBookOpenedForOffline(9);
+  const syncs = posted.filter((m) => m.type === 'offline-book-sync').map((m) => [m.bookId, m.trigger]);
+  assert.deepEqual(syncs, [['2', 'online'], ['9', 'open']]);
+});
+
+test('Nutzungs-Events: Räumen mit Grund, Bestand einmal am Tag, Automatik-Schalter', async () => {
+  store.clear();
+  await withSent(async (sent) => {
+    const { root } = fakeRoot({
+      pinned: ['1'], auto: { enabled: true, bookIds: ['3', '2'] },
+      held: { 1: { at: new Date().toISOString(), total: 10 }, 2: { at: 'a', total: 5 }, 9: { at: 'b', total: 1 } },
+    });
+    root._reconcileOfflineBooks();
+    root._reconcileOfflineBooks();
+    const removes = sent.filter((e) => e.event === 'offline.remove').map((e) => [e.book_id, e.meta.reason]);
+    assert.deepEqual(removes, [[9, 'auto-rotated']]);
+    const held = sent.filter((e) => e.event === 'offline.held');
+    assert.deepEqual(held.map((e) => [e.book_id, e.meta.kind]), [[1, 'pinned'], [2, 'auto']], 'einmal je Buch und Tag');
+    assert.equal(held[0].meta.ageHours, 0);
+
+    root.setOfflineAutoEnabled(false);
+    root.setOfflineAutoEnabled(false);
+    assert.deepEqual(sent.filter((e) => e.event === 'offline.auto').map((e) => e.meta.action), ['off'], 'nur bei Wechsel');
+    assert.deepEqual(sent.filter((e) => e.event === 'offline.remove').map((e) => [e.book_id, e.meta.reason]),
+      [[9, 'auto-rotated'], [2, 'auto-off']]);
+  });
+});
+
+test('claimUsageReport: einmal, alte Ansprüche verfallen', () => {
+  store.clear();
+  assert.equal(books.claimUsageReport('k', 1000), true);
+  assert.equal(books.claimUsageReport('k', 2000), false);
+  assert.equal(books.claimUsageReport('other', 1000 + 4 * 86400000), true);
+  assert.equal(books.claimUsageReport('k', 1000 + 4 * 86400000), true, 'nach drei Tagen verfallen');
 });
 
 test('netRequiredRule: Job-Start, Diktat, Vorlesen, LT, Suche — sonst nichts', () => {

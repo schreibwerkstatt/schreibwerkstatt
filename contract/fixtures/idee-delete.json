@@ -1,0 +1,11 @@
+{
+  "operation": "DELETE /ideen/{id}",
+  "request": {
+    "method": "DELETE",
+    "path": "/ideen/7402"
+  },
+  "status": 200,
+  "response": {
+    "ok": true
+  }
+}

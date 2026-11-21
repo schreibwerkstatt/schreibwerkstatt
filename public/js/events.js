@@ -184,6 +184,9 @@ export const EVT = {
   // Ohne Verbindung wurde eine ausdrückliche Server-Aktion (KI-Job, Diktat,
   // Vorlesen) abgewiesen (app/boot/net-required.js) → einmal Toast.
   NET_REQUIRED: 'net:required',                 // kein detail
+  // Server wurde als unerreichbar erkannt bzw. antwortet wieder
+  // (app/boot/reachability.js). Browser-`online`/`offline` kommen daneben.
+  REACHABILITY: 'net:reachability',             // detail: { unreachable }
   APP_UPDATE_AVAILABLE: 'app:update-available', // kein detail
   FILE_DROP: 'file-drop',                       // detail: { files }
   // Die installierte Web-App wurde mit einer Datei geöffnet (Manifest-

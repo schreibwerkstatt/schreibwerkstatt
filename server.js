@@ -297,8 +297,10 @@ const PUBLIC_ASSETS = new Set([
   // SW selbst. Faellt die Session aus, kaeme sonst Login-HTML zurueck und die
   // SW-Auswertung scheiterte an nosniff.
   '/sw-manifest.js',
-  // Weitere importScripts des SW („Buch offline halten", Background Sync der
-  // Entwürfe, Werkstatt-Daten offline) — gleicher Grund.
+  // Weitere importScripts des SW (Netz-Fetch mit Erreichbarkeits-Meldung,
+  // „Buch offline halten", Background Sync der Entwürfe, Werkstatt-Daten
+  // offline) — gleicher Grund.
+  '/sw-net.js',
   '/sw-offline.js',
   '/sw-drafts.js',
   '/sw-domain.js',
@@ -412,6 +414,15 @@ app.use(require('./lib/public-asset-path').makePublicAssetGate({
 // ungueltige Tokens enden in 401 JSON ohne Redirect. Volle Pfade im Router,
 // darum Mount an der Wurzel.
 app.use(require('./routes/metrics'));
+
+// ── Erreichbarkeits-Test (vor Auth-Guard) ────────────────────────────────────
+// public/js/app/boot/reachability.js fragt hier, solange der Server als
+// unerreichbar gilt. Ohne Login, ohne DB. Der feste Inhalt trennt die echte
+// Antwort von einem Captive Portal, das jede URL mit seiner Seite beantwortet.
+app.get('/ping', (req, res) => {
+  res.set('Cache-Control', 'no-store');
+  res.json({ app: 'schreibwerkstatt' });
+});
 
 // ── Auth-Guard ────────────────────────────────────────────────────────────────
 // Session oder Device-Token; ohne Anmeldung bekommt nur eine Browser-Navigation

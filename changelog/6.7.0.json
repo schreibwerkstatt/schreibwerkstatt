@@ -1,0 +1,31 @@
+{
+  "version": "6.7.0",
+  "date": "2026-11-21",
+  "entries": [
+    {
+      "kind": "verbessert",
+      "de": "Schlechte Verbindung: Hängt die App im Hotspot, im Zug oder hinter einem WLAN-Anmeldeportal, erkennt sie das jetzt nach wenigen Sekunden und wechselt in den Offline-Betrieb. Klicks warten nicht mehr lange, und sobald der Server wieder antwortet, läuft alles normal weiter.",
+      "en": "Poor connection: if the app is stuck on a hotspot, on a train or behind a Wi-Fi login page, it now notices within seconds and switches to offline mode. Clicks no longer hang, and as soon as the server responds again everything carries on as usual."
+    },
+    {
+      "kind": "verbessert",
+      "de": "Focus-Editor: Seitenumbruch und Leerseite sind jetzt als gestrichelte bzw. doppelte Linie zu sehen, wie im Notebook-Editor. So unterscheidest du sie beim Schreiben von einer gewöhnlichen Trennlinie.",
+      "en": "Focus editor: page breaks and blank pages now show as a dashed or double line, as in the notebook editor. That way you can tell them apart from an ordinary divider while writing."
+    },
+    {
+      "kind": "verbessert",
+      "de": "Admin-Reiter «Verhalten»: Du siehst jetzt, wie oft Bücher offline abgeglichen werden, ob das klappt und welche Bücher auf den Geräten offline liegen. Probleme mit «Buch offline halten» lassen sich so schneller finden und beheben.",
+      "en": "Admin “Behaviour” tab: you now see how often books are synced for offline use, whether it works, and which books are kept offline on devices. Problems with “Keep book offline” are quicker to find and fix."
+    },
+    {
+      "kind": "verbessert",
+      "de": "Scheitert das Speichern, hält die App jetzt fest, ob sie den Verbindungsausfall erkannt hatte. Probleme beim Speichern unterwegs lassen sich so schneller finden und beheben.",
+      "en": "When saving fails, the app now records whether it had noticed the connection drop. That makes saving problems on the go quicker to find and fix."
+    },
+    {
+      "kind": "behoben",
+      "de": "Mac-App: Schriebst du weiter, während gerade gespeichert wurde, galt der Abschnitt manchmal schon als gespeichert. Jetzt bleibt er als ungespeichert markiert, bis auch die neue Eingabe gesichert ist.",
+      "en": "Mac app: if you kept typing while a save was running, the section sometimes already counted as saved. It now stays marked as unsaved until the new input is saved too."
+    }
+  ]
+}

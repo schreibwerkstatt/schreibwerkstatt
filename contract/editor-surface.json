@@ -167,16 +167,7 @@
       ]
     },
     "members": {
-      "_focusUpdateActive": [
-        "mac"
-      ],
-      "controller": [
-        "mac"
-      ],
       "editDirty": [
-        "mac"
-      ],
-      "focusGranularity": [
         "mac"
       ],
       "host": [
@@ -224,21 +215,6 @@
         "mac"
       ],
       "focus-mode": [
-        "mac"
-      ],
-      "focus-mode--": [
-        "mac"
-      ],
-      "focus-mode--paragraph": [
-        "mac"
-      ],
-      "focus-mode--sentence": [
-        "mac"
-      ],
-      "focus-mode--typewriter-only": [
-        "mac"
-      ],
-      "focus-mode--window-3": [
         "mac"
       ],
       "is-active": [

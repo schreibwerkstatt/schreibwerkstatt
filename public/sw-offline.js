@@ -30,7 +30,7 @@
 //     läge ein fremdes Buch auf dem Gerät. Die ABSICHT („dieses Buch offline")
 //     hält der Client pro Konto (app/offline-books.js) und stösst den Sync danach
 //     neu an.
-//   - Nachrichten (`handleMessage`): 'offline-book-sync' {bookId},
+//   - Nachrichten (`handleMessage`): 'offline-book-sync' {bookId, trigger},
 //     'offline-book-remove' {bookId}, 'offline-book-status'. Fortschritt geht
 //     als 'offline-book-progress' / 'offline-book-synced' an alle Tabs.
 //
@@ -181,9 +181,20 @@
   const aborted = new Set(); // bookIds, deren Sync ein removeBook beendet
   const lastAuto = new Map(); // bookId → Zeitpunkt des letzten Auto-Syncs
 
-  function syncBook(bookId) {
+  // `trigger` = Anlass (pin/open/boot/online/auto-on/drift), nur fürs
+  // Nutzungs-Event; ein laufender Sync behält den Anlass seines Starts.
+  // `syncId` macht das Ergebnis über Tabs hinweg eindeutig (gemeldet wird es
+  // einmal, app-offline-books.js#_reportOfflineSync).
+  let syncSeq = 0;
+  function syncBook(bookId, trigger) {
     const id = String(bookId);
     if (running.has(id)) return running.get(id);
+    const startedAt = Date.now();
+    const run = {
+      syncId: `${id}:${startedAt}:${++syncSeq}`,
+      trigger: typeof trigger === 'string' ? trigger : null,
+      durationSec: () => Math.round((Date.now() - startedAt) / 1000),
+    };
     const p = (async () => {
       const cache = await caches.open(CACHE);
       const prev = (await readMeta(cache)).books[id] || { pages: {} };
@@ -272,13 +283,19 @@
             if (!imageUsedBy(meta, img)) await c.delete(imageKey(img));
           }
         });
-        await post({ type: 'offline-book-synced', bookId: Number(id), at: entry.at, total: entry.total, failed });
+        await post({
+          type: 'offline-book-synced', bookId: Number(id), at: entry.at, total: entry.total, failed,
+          fetched: todo.length - failed, syncId: run.syncId, trigger: run.trigger, durationSec: run.durationSec(),
+        });
         return entry;
       } catch (e) {
         if (aborted.has(id)) return null;
         // 403/404: Buch weg oder Zugriff entzogen — der Client hebt die
         // Anheftung auf. Sonst (Netz) bleibt der alte Stand stehen.
-        await post({ type: 'offline-book-failed', bookId: Number(id), status: e?.status || 0 });
+        await post({
+          type: 'offline-book-failed', bookId: Number(id), status: e?.status || 0,
+          syncId: run.syncId, trigger: run.trigger, durationSec: run.durationSec(),
+        });
         return null;
       } finally {
         running.delete(id);
@@ -370,7 +387,7 @@
       if (running.has(id) || Date.now() - (lastAuto.get(id) || 0) < AUTO_SYNC_GAP_MS) return;
       if (!(await treeDrifted(id, await forCheck.json()))) return;
       lastAuto.set(id, Date.now());
-      await syncBook(id);
+      await syncBook(id, 'drift');
     } catch {}
   }
 
@@ -439,7 +456,7 @@
   function handleMessage(event) {
     const d = event.data || {};
     if (d.type === 'offline-book-sync' && d.bookId != null) {
-      event.waitUntil(syncBook(d.bookId));
+      event.waitUntil(syncBook(d.bookId, d.trigger));
       return true;
     }
     if (d.type === 'offline-book-remove' && d.bookId != null) {

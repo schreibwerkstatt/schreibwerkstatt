@@ -50,6 +50,7 @@
 import { fetchJson } from '../utils.js';
 import { CARET_BLOCK_SEL } from '../editor/shared/dom-block.js';
 import { EVT } from '../events.js';
+import { isOffline } from '../app/boot/reachability.js';
 import { tErrorRaw, tRaw } from '../i18n.js';
 import { setupCardLifecycle } from './card-lifecycle.js';
 import { isSelectedBook, loadToken } from './book-guard.js';
@@ -255,7 +256,7 @@ export function registerReferenceCard() {
       if ((list || []).length || this._refCatalogTried[key]) return;
       const bookId = Alpine.store('nav').selectedBookId;
       await load();
-      if (this._staleBook(bookId) || navigator.onLine === false) return;
+      if (this._staleBook(bookId) || isOffline()) return;
       this._refCatalogTried = { ...this._refCatalogTried, [key]: true };
     },
 

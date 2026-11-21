@@ -14,6 +14,7 @@ const SAVE_1 = '1b9d6bcd-bbfd-4b2d-9b5d-ab8dfbbd4bed';
 const SAVE_2 = '6ec0bd7f-11c0-43da-975e-2a8ad9ebae0b';
 const SAVE_3 = 'a3bb189e-8bf9-3888-9912-ace4e6543002';
 const DEVICE = '9f8e7d6c-5b4a-4c3d-8e2f-1a0b9c8d7e6f';
+const IDEE_KEY = 'op-3f1c9e2a-idee-create';
 
 const p = (id) => `/content/pages/${id}`;
 const edit = (html, from, to) => html.replace(from, to);
@@ -76,6 +77,27 @@ const CASES = [
     body: () => ({ book_id: C.BOOK, kind: 'link', title: 'Geteilter Link', body: 'Aus der Android-App geteilt.',
       urls: [{ url: 'https://example.org/artikel', label: '' }], tags: [] }) },
   { name: 'research-list', op: 'GET /research', path: `/research?book_id=${C.BOOK}&sort=updated`, status: 200 },
+
+  // ── Ideen (Android) ────────────────────────────────────────────────────────
+  { name: 'ideen-board', op: 'GET /ideen/board', path: `/ideen/board?book_id=${C.BOOK}`, status: 200 },
+  { name: 'idee-create', op: 'POST /ideen', method: 'POST', path: '/ideen', status: 200,
+    headers: { 'Idempotency-Key': IDEE_KEY },
+    body: () => ({ book_id: C.BOOK, page_id: C.PAGE_MAIN, content: 'Szene am Hafen ergänzen.' }),
+    after: (b, st, res) => { st.ideeId = b.id; if (res.headers.get('idempotent-replayed')) throw new Error('Erstes Anlegen als Replay markiert'); } },
+  { name: 'idee-create-replay', op: 'POST /ideen', method: 'POST', path: '/ideen', status: 200,
+    headers: { 'Idempotency-Key': IDEE_KEY },
+    body: () => ({ book_id: C.BOOK, page_id: C.PAGE_MAIN, content: 'Szene am Hafen ergänzen.' }),
+    after: (b, st, res) => {
+      if (res.headers.get('idempotent-replayed') !== 'true') throw new Error('Header Idempotent-Replayed fehlt');
+      if (b.id !== st.ideeId) throw new Error(`Replay legte neu an: ${b.id} statt ${st.ideeId}`);
+    } },
+  { name: 'idee-content-too-long', op: 'POST /ideen', method: 'POST', path: '/ideen', status: 400,
+    body: () => ({ book_id: C.BOOK, content: 'x'.repeat(4001) }) },
+  { name: 'idee-update', op: 'PATCH /ideen/{id}', method: 'PATCH', path: (st) => `/ideen/${st.ideeId}`, status: 200,
+    body: () => ({ content: 'Szene am Hafen ergänzen, nachts.', status: 'in_arbeit', chapter_id: C.CH_PART }) },
+  { name: 'idee-delete', op: 'DELETE /ideen/{id}', method: 'DELETE', path: (st) => `/ideen/${st.ideeId}`, status: 200 },
+  { name: 'idee-not-found', op: 'DELETE /ideen/{id}', method: 'DELETE', path: (st) => `/ideen/${st.ideeId}`, status: 404 },
+
   { name: 'dictionary-add', op: 'POST /dictionary', method: 'POST', path: '/dictionary', status: 200,
     body: () => ({ word: 'Schreibwerkstatt', bookId: 0, lang: '*' }) },
   { name: 'writing-time', op: 'POST /history/writing-time', method: 'POST', path: '/history/writing-time', status: 200,

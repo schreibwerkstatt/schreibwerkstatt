@@ -1,12 +1,13 @@
 # Stabilisierte Module
 
-Drei Funktionen tragen die tägliche Arbeit der aktiven Nutzer und brechen **still**: der **Focus-Editor** (das Werkzeug, mit dem geschrieben wird — eine Regression ist ein falsches Schreibgefühl, kein Absturz), das **Lektorat** (weniger Funde, falsche Anker, Übernahme an der falschen Stelle) und die **Komplettanalyse** (ein Katalog mit fehlenden Nebenfiguren, eine falsch gebundene Beziehung, ein Cache-Bruch, der den nächsten Lauf zum zweistelligen Dollar-Volllauf macht). Weder Tests noch User sehen solche Fehler sofort. Deshalb gilt für alle drei **dieselbe** konservative Regel.
+Vier Funktionen tragen die tägliche Arbeit der aktiven Nutzer und brechen **still**: der **Focus-Editor** (das Werkzeug, mit dem geschrieben wird — eine Regression ist ein falsches Schreibgefühl, kein Absturz), das **Lektorat** (weniger Funde, falsche Anker, Übernahme an der falschen Stelle) die **Komplettanalyse** (ein Katalog mit fehlenden Nebenfiguren, eine falsch gebundene Beziehung, ein Cache-Bruch, der den nächsten Lauf zum zweistelligen Dollar-Volllauf macht) und **Service Worker + Offline** (eine Outbox, die einen Save verwirft, eine SW-Generation, die altes JS mit neuem Partial mischt, ein Kaltstart ohne Netz, der leer bleibt — der Text ist dann weg oder die App startet nicht, und gemerkt wird es erst unterwegs). Weder Tests noch User sehen solche Fehler sofort. Deshalb gilt für alle vier **dieselbe** konservative Regel.
 
 | Modul | Umfang | Sonderprüfung | Modul-Zusatz |
 |---|---|---|---|
 | Focus-Editor | `focus` in [scripts/stable-modules.js](../scripts/stable-modules.js) | `npm run test:focus` | [public/js/editor/CLAUDE.md](../public/js/editor/CLAUDE.md) |
 | Lektorat | `lektorat` | `npm run test:lektorat` | [lektorat.md](lektorat.md#stabilisiert) |
 | Komplettanalyse | `komplett` | `npm run test:komplett` | [komplett.md](komplett.md#stabilisiert) |
+| Service Worker + Offline | `offline` | `npm run test:offline` | [caching.md](caching.md#stabilisiert) |
 
 **Umfang** = Code-Pfade, die über das Verhalten des Moduls entscheiden, **plus die Tests**: Testdateien mit dem Modulnamen, jede Testdatei, die die Moduldoku verlinkt, und explizite Zusätze. Welche Dateien das konkret sind: `node scripts/test-stable.js --list <modul>`. Ein Test zählt mit, weil ein gelockerter Assert dieselbe Verhaltensänderung ist wie ein geänderter Filter.
 

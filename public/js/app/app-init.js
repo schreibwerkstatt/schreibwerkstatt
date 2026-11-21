@@ -11,6 +11,7 @@ import { setupSpellcheckDispatch } from '../cards/editor-spellcheck/dispatch.js'
 import { FILTER_SCOPES } from './app-view.js';
 import { EVT } from '../events.js';
 import { reconcileSessionCaches } from './boot/session-change.js';
+import { isOffline, onConnectivityChange } from './boot/reachability.js';
 import { installContentUpdatedBridge } from './boot/content-updated.js';
 import { setDraftOwner, whenDraftsReady } from '../editor/draft-storage.js';
 import { setIdeenQueueOwner } from '../repo/ideen-queue.js';
@@ -69,15 +70,14 @@ export const appInitMethods = {
       if (this.$store.shell.themePref === 'auto') this._applyTheme();
     }, { signal });
     window.addEventListener(EVT.SESSION_EXPIRED, () => { this.$store.session.sessionExpired = true; }, { signal });
-    // Browser-Offline-Zustand an den Session-Store koppeln → speist den
+    // Offline-Zustand (Browser offline ODER Server unerreichbar,
+    // boot/reachability.js) an den Session-Store koppeln → speist den
     // Offline-Banner (index.html, gegated gegen sessionExpired/serverOffline).
-    // Rein informativ: navigator.onLine liefert zwar False-Positives (VPN-/
-    // Interface-Flap), gated aber keinen Save-Pfad — der `online`-Event holt
-    // den Banner zuverlaessig zurueck. Initialwert sofort setzen, damit ein
-    // Boot ohne Netz den Banner nicht erst beim naechsten Toggle zeigt.
-    this.$store.session.isOffline = (navigator.onLine === false);
-    window.addEventListener('offline', () => { this.$store.session.isOffline = true; }, { signal });
-    window.addEventListener('online', () => { this.$store.session.isOffline = false; }, { signal });
+    // Rein informativ: gated keinen Save-Pfad. Initialwert sofort setzen,
+    // damit ein Boot ohne Netz den Banner nicht erst beim naechsten Wechsel zeigt.
+    const syncOffline = () => { this.$store.session.isOffline = isOffline(); };
+    syncOffline();
+    onConnectivityChange(syncOffline, { signal });
     // Reconnect-Outbox: flusht ALLE offline gesicherten Notebook-Drafts (nicht
     // nur die offene Seite) beim Wiederverbinden + speist den Pending-Zähler.
     this._installOutbox(signal);

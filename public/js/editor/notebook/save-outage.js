@@ -10,6 +10,8 @@
 //
 // sessionStorage, weil genau der Reload mitten im Ausfall der Fall ist, den die
 // Meldung erklären soll; pro Tab, weil der Ausfall einer Edit-Session gehört.
+import { isServerUnreachable } from '../../app/boot/reachability.js';
+
 const KEY_PREFIX = 'notebook_save_outage:';
 // Ein Datensatz, dessen letzter Fehlversuch so lange her ist, gehört nicht mehr
 // zum jetzt gelungenen Save — er wird verworfen statt gemeldet.
@@ -35,11 +37,18 @@ function online() {
   return typeof navigator === 'undefined' ? null : navigator.onLine !== false;
 }
 
+// Galt der Server bei diesem Fehlversuch als unerreichbar
+// (app/boot/reachability.js)? Zeigt, ob die Erkennung den Ausfall sah.
+function serverDown() {
+  return isServerUnreachable();
+}
+
 // Gescheiterter Save (Netz/Server/Konflikt …). `kind` aus save-errors.js bzw.
 // 'conflict'; `status` der HTTP-Status, falls es eine Antwort gab.
 export function noteSaveOutage(pageId, { kind, status = null, reason = null } = {}, now = Date.now()) {
   if (pageId == null || !kind) return;
   const rec = read(pageId) || { since: now, count: 0, kinds: {}, reloads: 0, onlineAtStart: online() };
+  if (serverDown()) rec.unreachableSeen = true;
   rec.count++;
   rec.kinds[kind] = (rec.kinds[kind] || 0) + 1;
   rec.last = now;
@@ -69,6 +78,7 @@ export function formatOutage(pageId, rec, now = Date.now()) {
     `letzter ${rec.lastKind}${rec.lastStatus != null ? ' ' + rec.lastStatus : ''}${rec.lastReason ? ' via ' + rec.lastReason : ''}`,
     `online=${rec.onlineAtStart}/${rec.onlineAtLast}`,
   ];
+  if (rec.unreachableSeen) parts.push('erkannt=unerreichbar');
   if (rec.reloads) parts.push(`Reloads=${rec.reloads}`);
   return parts.join(' · ');
 }

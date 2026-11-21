@@ -88,7 +88,7 @@ CSS-Variablen, Highlight-Namen und Manifest-Felder.
 
 **Hervorhebung.** Beide Clients docken an die Fokus-Hervorhebung an: macOS koppelt seinen Dimm-Regler über
 `--focus-dim-opacity` und die Farbe von `::highlight(focus-sentence-dim)`, schaltet die Stufen über
-`setGranularity` (Fallback: `focus-mode--*`-Klassen + `controller._focusUpdateActive`); Android ersetzt
+`setGranularity`; Android ersetzt
 `host.typewriterAnchor` durch einen Getter, der der Tastatur folgt. Dass das nicht nur benannt ist, sondern
 **wirkt**, prüft der Vertragstest [tests/e2e/_helpers/focus-client-contract.js](../tests/e2e/_helpers/focus-client-contract.js)
 in Chromium und in WebKit, der Engine des macOS-Clients (`focus-client-contract{,.webkit}.spec.js`, beide Teil von

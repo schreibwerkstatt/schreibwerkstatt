@@ -20,6 +20,8 @@ const PAGE_SUB = 70002;
 const PAGE_TOP = 70003;
 const PAGE_GONE = 70004;
 const PAGE_LOCKED = 70005;
+const MOTIF = 7301;
+const IDEE_SEED = 7401;
 const T0 = '2026-01-01T00:00:00.000Z';
 
 const MAIN_HTML = '<p data-bid="c0000000000000a1">Erster Absatz.</p>'
@@ -36,6 +38,7 @@ function buildApp() {
   app.use('/history', require('../../../routes/history'));
   app.use('/jobs', require('../../../routes/jobs').router);
   app.use('/research', require('../../../routes/research'));
+  app.use('/ideen', require('../../../routes/ideen'));
   app.use('/booksettings', require('../../../routes/booksettings'));
   app.use('/me', require('../../../routes/usersettings'));
   app.use('/export', require('../../../routes/export'));
@@ -67,10 +70,22 @@ function seed(db) {
   const { TOKEN_KINDS } = require('../../../lib/device-scopes');
   const device = tokens.createDeviceToken({ userEmail: ME, deviceName: 'Vertrags-Mac', platform: 'macos', scopes: TOKEN_KINDS.device });
   const capture = tokens.createDeviceToken({ userEmail: ME, deviceName: 'Vertrags-Erweiterung', platform: 'chrome', scopes: TOKEN_KINDS.capture });
+
+  // Eine Idee mit Erledigt-Hinweis und Verknüpfung, damit das Board-Fixture
+  // `check_hint` und `links` gefüllt zeigt.
+  db.prepare(`INSERT INTO motifs (id, book_id, user_email, name, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)`)
+    .run(MOTIF, BOOK, ME, 'Leuchtturm', T0, T0);
+  db.prepare(`INSERT INTO ideen (id, book_id, page_id, chapter_id, user_email, content, status, status_at, created_at, updated_at)
+              VALUES (?, ?, ?, NULL, ?, ?, 'in_arbeit', ?, ?, ?)`)
+    .run(IDEE_SEED, BOOK, PAGE_MAIN, ME, 'Hier fehlt noch der Leuchtturm.', T0, T0, T0);
+  db.prepare(`INSERT INTO idee_check_hints (idee_id, page_id, beleg, begruendung, created_at) VALUES (?, ?, ?, ?, ?)`)
+    .run(IDEE_SEED, PAGE_SUB, 'Im Unterkapitel.', 'Der Leuchtturm wird im Unterkapitel eingeführt.', T0);
+  db.prepare(`INSERT INTO idea_links (idea_id, target_kind, motif_id, created_at) VALUES (?, 'motif', ?, ?)`)
+    .run(IDEE_SEED, MOTIF, T0);
   return { deviceToken: device.plain_token, captureToken: capture.plain_token };
 }
 
 module.exports = {
   buildApp, seed,
-  ME, OTHER, BOOK, CH_PART, CH_SUB, PAGE_MAIN, PAGE_SUB, PAGE_TOP, PAGE_GONE, PAGE_LOCKED, T0, MAIN_HTML,
+  ME, OTHER, BOOK, CH_PART, CH_SUB, PAGE_MAIN, PAGE_SUB, PAGE_TOP, PAGE_GONE, PAGE_LOCKED, MOTIF, IDEE_SEED, T0, MAIN_HTML,
 };

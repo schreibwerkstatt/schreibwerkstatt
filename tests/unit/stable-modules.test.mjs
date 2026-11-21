@@ -55,3 +55,12 @@ test('Kerndateien liegen im richtigen Modul', () => {
   assert.ok(moduleOf('routes/jobs/lektorat-filter.js').includes('lektorat'));
   assert.deepEqual(moduleOf('public/js/cards/plot-card.js'), []);
 });
+
+test('Offline-Umfang: SW-Dateien ja, generiertes Manifest nein', () => {
+  const { code } = listModuleFiles('offline');
+  for (const f of ['public/sw.js', 'public/sw-net.js', 'public/js/app/app-outbox.js', 'public/js/app/boot/sw-register.js']) {
+    assert.ok(code.includes(f), f);
+  }
+  assert.ok(!code.includes('public/sw-manifest.js'), 'sw-manifest.js ist generiert — sonst wechselt der Stempel mit jedem Asset');
+  assert.deepEqual(moduleOf('public/js/app/boot/internal-links.js'), []);
+});

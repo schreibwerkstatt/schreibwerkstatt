@@ -2,6 +2,7 @@ import { fmtTok, fetchJson } from '../utils.js';
 import { startPoll as _startPollFn, runningJobStatus as _runningJobStatusFn } from '../cards/job-helpers.js';
 import { EXCLUSIVE_CARDS } from '../cards/feature-registry.js';
 import { EVT } from '../events.js';
+import { noteServerOk, onReconnect } from './boot/reachability.js';
 import { startEventStream, jobStreamOpen, onJobQueueStream } from '../event-stream.js';
 import { lsGet, lsRemove } from '../safe-storage.js';
 import { openCardWith, CARD_REQUEST } from '../cards/card-request.js';
@@ -292,12 +293,16 @@ export const appJobsCoreMethods = {
     // Wakeup: Tab kommt aus Background. Counter resetten, sofort frisch pollen
     // (löscht den Banner, falls er fälschlich angezeigt wurde) und Polling
     // wieder starten, falls es nach 5 Fehlern eingestellt war.
-    document.addEventListener('visibilitychange', () => {
-      if (document.hidden) return;
+    const resume = () => {
       this._jobQueueFailures = 0;
       if (!this.$store.jobs._jobQueueTimer) this.$store.jobs._jobQueueTimer = setInterval(tick, 5000);
       poll();
+    };
+    document.addEventListener('visibilitychange', () => {
+      if (document.hidden) return;
+      resume();
     }, { signal });
+    onReconnect(resume, { signal });
     // Sofort-Refresh: Feature-Module dispatchen `job:enqueued` nach POST,
     // damit der Footer den frischen Job nicht erst nach bis zu 5s sieht.
     window.addEventListener(EVT.JOB_ENQUEUED, () => poll(), { signal });
@@ -314,7 +319,8 @@ export const appJobsCoreMethods = {
     this._detectFinishedJobs(items);
     this.$store.jobs.jobQueueItems = items;
     this._jobQueueFailures = 0;
-    if (this.$store.session.serverOffline) this.$store.session.serverOffline = false;
+    // Poll und Stream laufen am SW vorbei, ihre Antwort kam sicher vom Server.
+    noteServerOk();
   },
 
   async _pollJobQueue() {
@@ -325,10 +331,10 @@ export const appJobsCoreMethods = {
       this._applyJobQueue(items);
     } catch (e) {
       // Ein Setzer schlägt fehl, wenn der Server down ist oder die Session
-      // abgelaufen ist – kein Grund für dauerndes Poll-Spam. Nach 2 Fehlern
-      // in Folge den serverOffline-Banner zeigen, damit der User weiss warum
-      // Aktionen gerade fehlschlagen. Nach 5 Fehlern Polling aussetzen; der
-      // Banner bleibt, Reload-Button lädt neu.
+      // abgelaufen ist – kein Grund für dauerndes Poll-Spam. Den Offline-
+      // Zustand meldet der Netzfehler selbst (fetch-guard → reachability.js).
+      // Nach 5 Fehlern Polling aussetzen; Sichtbarkeit oder Rückkehr der
+      // Verbindung (onReconnect in _startJobQueuePoll) startet es neu.
       console.error('[jobQueuePoll]', e);
       // Hintergrund-Tab: Browser friert nach einigen Minuten Connections ein,
       // erste Fetches beim Wakeup schlagen fehl. Solche Fails dürfen weder
@@ -336,9 +342,6 @@ export const appJobsCoreMethods = {
       // sobald der User zum Tab zurückkehrt.
       if (document.hidden) return;
       this._jobQueueFailures = (this._jobQueueFailures || 0) + 1;
-      if (this._jobQueueFailures >= 2 && !this.$store.session.serverOffline && !this.$store.session.sessionExpired) {
-        this.$store.session.serverOffline = true;
-      }
       if (this._jobQueueFailures >= 5 && this.$store.jobs._jobQueueTimer) {
         clearInterval(this.$store.jobs._jobQueueTimer);
         this.$store.jobs._jobQueueTimer = null;

@@ -143,6 +143,24 @@ test('Sync legt Buchliste, Buch, Baum und jeden Abschnitt ab (auch verschachtelt
   const done = posted.find((m) => m.type === 'offline-book-synced');
   assert.equal(done.bookId, 5);
   assert.equal(done.total, 4);
+  assert.equal(done.fetched, 4);
+  assert.match(done.syncId, /^5:\d+:\d+$/);
+  assert.equal(done.trigger, null, 'ohne Anlass kein Trigger');
+  assert.equal(typeof done.durationSec, 'number');
+});
+
+test('Sync meldet Anlass und nur die geladenen Abschnitte', async () => {
+  const caches = makeCaches();
+  const pages = [{ id: 10, updated_at: 'a' }, { id: 11, updated_at: 'a' }];
+  const posted = [];
+  const server = serverFor(pages);
+  const ctx = load({ caches, server, posted });
+  await ctx.__swOffline._syncBook(5, 'pin');
+  Object.assign(server, serverFor([{ id: 10, updated_at: 'a' }, { id: 11, updated_at: 'b' }]));
+  await ctx.__swOffline._syncBook(5, 'boot');
+  const done = posted.filter((m) => m.type === 'offline-book-synced');
+  assert.deepEqual(done.map((m) => [m.trigger, m.fetched]), [['pin', 2], ['boot', 1]]);
+  assert.notEqual(done[0].syncId, done[1].syncId);
 });
 
 test('Zweiter Sync lädt nur Geändertes und räumt Verschwundenes', async () => {
@@ -230,6 +248,7 @@ test('Baum mit 403 meldet offline-book-failed samt Status', async () => {
   await ctx.__swOffline._syncBook(5);
   const failed = posted.find((m) => m.type === 'offline-book-failed');
   assert.equal(failed.status, 403);
+  assert.match(failed.syncId, /^5:\d+:\d+$/);
 });
 
 test('Entfernen räumt die Abschnitte des Buchs', async () => {

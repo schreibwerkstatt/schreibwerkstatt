@@ -13,8 +13,9 @@
 
 // Build-Konstanten (self.__SHELL_BUILD/__SHELL_MANIFEST), „Buch offline halten"
 // (sw-offline.js), Entwürfe per Background Sync (sw-drafts.js), Werkstatt-Daten
-// offline (sw-domain.js). Persistiert mit der Registrierung; updateViaCache:'none'.
-importScripts('/sw-manifest.js', '/sw-offline.js', '/sw-drafts.js', '/sw-domain.js');
+// offline (sw-domain.js), Erreichbarkeit (sw-net.js). Persistiert mit der Registrierung; updateViaCache:'none'.
+importScripts('/sw-manifest.js', '/sw-net.js', '/sw-offline.js', '/sw-drafts.js', '/sw-domain.js');
+const netFetch = self.__swNet ? self.__swNet.fetch : (req) => fetch(req);
 const OFFLINE = self.__swOffline || null;
 const DOMAIN = self.__swDomain || null;
 const SHELL_BUILD = self.__SHELL_BUILD || 'dev';
@@ -584,7 +585,7 @@ async function _handleSwr(req, cacheName, { cacheKey = null, content = true, eve
   const url = new URL(req.url);
   if (url.searchParams.has('__fresh')) {
     try {
-      const net = await fetch(req);
+      const net = await netFetch(req);
       // Den CACHE-EINTRAG trotzdem nachziehen. Der Marker heisst „beantworte
       // MICH nicht aus dem Cache" — nicht „lass die Offline-Kopie auf dem Stand
       // des allerersten Loads stehen". Ohne das frieren genau die Buecher ein,
@@ -638,7 +639,7 @@ async function _handleSwr(req, cacheName, { cacheKey = null, content = true, eve
   const cachedClone = (worthDiffing && !cachedEtag) ? cached.clone() : null;
   // Klone ziehen, bevor `res` an den Aufrufer geht; abgelegt wird danach.
   let stored = Promise.resolve();
-  const netPromise = fetch(req).then((res) => {
+  const netPromise = netFetch(req).then((res) => {
     if (_cacheable(res)) {
       const forCache = res.clone();
       const forOffline = content ? res.clone() : null;
@@ -692,7 +693,7 @@ function isLiveContent(url) { return CONTENT_LIVE_REGEX.test(url.pathname); }
 async function _handleNetworkFirst(req, cacheName) {
   const cache = await caches.open(cacheName);
   try {
-    const net = await fetch(req);
+    const net = await netFetch(req);
     if (_cacheable(net)) {
       await cache.put(req, net.clone());
       await _evictContentCache(cache);

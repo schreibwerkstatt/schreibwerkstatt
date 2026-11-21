@@ -4,7 +4,7 @@ KI-Prüfung einer Seite (Abschnitts-Lektorat, Job `check`) oder aller Seiten ein
 
 ## Stabilisiert
 
-Das Lektorat ist ein stabilisiertes Modul — Regel, Umfang und Sonderprüfung `npm run test:lektorat` für alle drei stabilisierten Module: [stabilisiert.md](stabilisiert.md). Umfang hier: Prompts samt Regelblöcken, Job-Pipeline, Filter, Merge, Chunks, Befund-UI, Anker, Übernahme, Heatmap **und die zugehörigen Tests** (`lektorat` in [scripts/stable-modules.js](../scripts/stable-modules.js)).
+Das Lektorat ist ein stabilisiertes Modul — Regel, Umfang und Sonderprüfung `npm run test:lektorat` für alle stabilisierten Module: [stabilisiert.md](stabilisiert.md). Umfang hier: Prompts samt Regelblöcken, Job-Pipeline, Filter, Merge, Chunks, Befund-UI, Anker, Übernahme, Heatmap **und die zugehörigen Tests** (`lektorat` in [scripts/stable-modules.js](../scripts/stable-modules.js)).
 
 - **Belegquellen für den Prod-Beleg:** `page_checks` (Befunde je Lauf), `ai_cost_ledger` + `job_runs` (Typ `check`/`batch-check`), `schreibwerkstatt.log`.
 - **Prompt-Änderungen messen, nicht schätzen:** Wortlaut-Änderungen am Lektorat-Prompt nur mit Vorher/Nachher aus `npm run eval:lektorat` ([eval/lektorat/README.md](../eval/lektorat/README.md)) — echte Calls auf dem Prod-Key, Läufe über ~$5 vorher mit dem User abklären.

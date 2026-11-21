@@ -2,6 +2,32 @@
 
 Neueste oben. Je Abschnitt: was sich geändert hat, und was ein Client tun **muss** (Bruch, Frist) bzw. tun **darf** (neues Feld, neuer Weg). Regeln: [README.md](README.md).
 
+## api 7 · editorApi 1
+
+Ideen (Pendenzen), nur additiv — vier bestehende Routen der Web-App neu im Vertrag, für Android:
+
+- **`GET /ideen/board?book_id=…` → `IdeenBoard`:** alle eigenen Ideen des Buchs in jeder Stufe (neueste zuerst, ungefiltert), dazu `statuses` (alle Stufen in Spaltenfolge), `stages` (im Buch aktive Stufen) und `auto_check`. Ideen sind privat: auch auf einem geteilten Buch kommen nur die eigenen.
+- **`POST /ideen` → `Idee`:** Anker `page_id` **oder** `chapter_id` **oder** keiner (Buch-Idee); `content` getrimmt 1–4000 Zeichen, darüber `400 CONTENT_TOO_LONG`. Ein Kapitel mit genau einem Abschnitt wird zu diesem Abschnitt. Optionaler Header `Idempotency-Key` wie bei `POST /content/pages`: derselbe Schlüssel liefert 24 h lang dieselbe Idee mit `Idempotent-Replayed: true`, statt eine zweite anzulegen.
+- **`PATCH /ideen/{id}` → `Idee`:** `content`, `status` und Anker-Umzug (`page_id` bzw. `chapter_id`, der andere wird geleert; beide `null` = zurück zur Buch-Idee), einzeln oder zusammen. In eine im Buch abgeschaltete Stufe → `400 IDEE_STATUS_INACTIVE`; Umzug einer erledigten/verworfenen Idee → `400 IDEE_CLOSED`.
+- **`DELETE /ideen/{id}` → `{ ok: true }`.** Eine fremde oder schon gelöschte Idee → `404 IDEE_NOT_FOUND` (auch bei `PATCH`).
+- **`Idee`** trägt die Namen des Ankers (`page_name`, `chapter_name`), die Board-Bahn (`lane_chapter_id`/`lane_chapter_name`), `check_hint` (Hinweis des Auto-Erledigt-Checks oder `null`) und `links` (Verknüpfungen zu Recherche, Beat, Strang, Motiv, Werkstatt-Figur).
+
+Ein `device`-Token (`content:write`) erreicht alle vier Routen; ein `capture`-Token bekommt `403 DEVICE_SCOPE_FORBIDDEN`.
+
+**Clients dürfen:** Ideen anzeigen, anlegen, bearbeiten und löschen. Beim Anlegen einen `Idempotency-Key` je Operation erzeugen und bei jeder Wiederholung mitschicken; ein `404 IDEE_NOT_FOUND` auf ein nachgespieltes `DELETE` als erledigt werten. Unbekannte `status`-Werte wie `offen` und unbekannte `target_kind` als ignorierbar behandeln. Stufen nur aus `stages` anbieten. Feature-Check `clientContract.api >= 7` (die Routen selbst gibt es auch auf älteren Servern).
+
+Bundle, nur additiv:
+
+- **`handle.onSaved(cb)` → Abmelde-Funktion:** `cb({ dirty, pageId })` nach jedem Save-Lauf (Autosave, `save()`, Escape, `destroy()`), auch wenn der Editor den Save überspringt, weil der Inhalt dem gesicherten Stand gleicht. Ein fehlgeschlagener Save meldet nichts.
+- **`handle.revealCaret({ threshold? })` → gefahrene px:** zieht die Caret-Zeile auf den Typewriter-Anker, mit derselben Geometrie wie beim Tippen; der Scroll gilt der Engine als eigener.
+- **`handle.insertHr()`:** fügt `<hr>` hinter dem Block des Carets ein (ohne Caret im Editor: ans Ende), dahinter einen Folge-Absatz `<p><br></p>` mit dem Caret darin; feuert `input` und ist ein Undo-Schritt.
+- **`<hr>` sichtbar im Bundle-CSS:** Linie über die volle Schreibbreite in der Rahmenfarbe des Themes (Hell und Dunkel), `hr.pagebreak` gestrichelt, `hr.blankpage` doppelt — wie in Notebook, Bucheditor und Share-Reader. Bisher war die Linie unsichtbar (`border: none; height: 0`).
+- **`host.editDirty`** bleibt `true`, wenn während eines laufenden `savePage` weitergetippt wurde (bisher fiel es mit dem Ende dieses Saves auf `false`, obwohl die neue Eingabe erst mit dem nächsten Autosave rausging).
+
+Fläche (`editor-surface.json`) bereinigt: `controller`, `_focusUpdateActive`, `focusGranularity` und die `focus-mode--*`-Stufenklassen fallen weg. Sie nutzte nur noch Mac 3.23 (der neueste gepushte Release-Tag); im Einsatz ist laut Admin-Tab «Geräte» nur Mac 3.29, und der setzt die Stufen ausschliesslich über `setGranularity`.
+
+**Clients dürfen:** `host.quickSave` nicht mehr überschreiben, sondern `onSaved` abonnieren und `dirty` direkt melden (der eigene Eingabe-Zähler entfällt). Statt `js/editor/focus/typewriter.js` zu importieren (`getCaretRect`, `typewriterScroll`), `revealCaret()` aufrufen. Beides per `typeof handle.onSaved === 'function'` bzw. `typeof handle.revealCaret === 'function'` prüfen und sonst beim bisherigen Weg bleiben. Ist `typeof handle.insertHr === 'function'`, die Trennlinie über das Handle einfügen statt per eigener DOM-Mutation und eigenes `<hr>`-CSS (auch `!important`-Overrides) weglassen — dasselbe Bundle bringt die sichtbare Linie mit; sonst beim eigenen Weg bleiben.
+
 ## api 6 · editorApi 1
 
 Recherche-Board, strengere Eingangsprüfung:

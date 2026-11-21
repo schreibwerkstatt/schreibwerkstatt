@@ -149,10 +149,22 @@
   min-width: 0;
 }
 
+/* Trenner wie in Notebook, Bucheditor und Share-Reader (manuscript-content.css):
+   gewöhnliche Linie, `hr.pagebreak` gestrichelt, `hr.blankpage` doppelt — der
+   Autor muss sie beim Schreiben unterscheiden, sie steuern den PDF-Umbruch. */
 .focus-editor__content hr {
   border: none;
+  border-top: 1px solid var(--color-border);
   margin: 0.8em 0;
   height: 0;
+}
+.focus-editor__content hr.pagebreak {
+  border-top: 2px dashed var(--color-accent);
+  margin: 1.6em 0;
+}
+.focus-editor__content hr.blankpage {
+  border-top: 3px double var(--color-accent);
+  margin: 1.6em 0;
 }
 
 /* Inline-Formatierungen aus importiertem HTML (text-align, Farbe, Hintergrund via

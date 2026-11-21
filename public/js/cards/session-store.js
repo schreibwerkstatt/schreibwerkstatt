@@ -15,8 +15,10 @@
 //   sessionExpired — true nach einem 401 (globaler fetch-Wrapper → `session-expired`).
 //                  Blendet den Session-Banner ein; kein Auto-Redirect, damit der
 //                  User ungespeicherte Inhalte retten kann.
-//   serverOffline  — true wenn der Server nicht erreichbar ist (Health-/Fetch-Fail).
-//   isOffline      — true wenn der Browser offline ist (navigator.onLine === false).
+//   serverOffline  — true wenn /config beim Start nicht lud (App leer, Banner
+//                    mit Neu-laden-Knopf).
+//   isOffline      — true wenn der Browser offline ist ODER der Server als
+//                    unerreichbar gilt (app/boot/reachability.js#isOffline).
 //   pendingSyncCount — Anzahl Seiten mit lokal gesichertem, noch nicht
 //                  synchronisiertem Entwurf (Reconnect-Outbox, app-outbox.js).
 //                  Speist den Offline-Banner. Die aktuell offene Edit-Seite ist

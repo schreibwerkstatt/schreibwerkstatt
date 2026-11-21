@@ -8,6 +8,7 @@ import {
 } from './update-policy.js';
 import { createBusyLock, activateIfNobodyBusy, otherTabBusy } from './busy-lock.js';
 import { tRaw } from '../../i18n.js';
+import { isOffline, onReconnect } from './reachability.js';
 
 // Registrierung an DOMContentLoaded, NICHT an `load`. Das `load`-Event feuert
 // erst, wenn jedes Subresource durch ist — auf einer noch unkontrollierten
@@ -118,7 +119,7 @@ export function registerServiceWorker() {
       // SWR-Cache und meldet dann den alten Stand — einmal frisch nachfragen.
       if (navigator.serviceWorker.controller) markProtocolPending();
       const healSkew = () => {
-        if (!shouldHealSkew({ skewed, reloaded, busy: isBusy(window.__app), online: navigator.onLine })) return;
+        if (!shouldHealSkew({ skewed, reloaded, busy: isBusy(window.__app), online: !isOffline() })) return;
         reloaded = true;
         location.reload();
       };
@@ -144,11 +145,11 @@ export function registerServiceWorker() {
         // Seite dagegen funktioniert. Stattdessen Banner; der Reload kommt beim
         // nächsten Online-Wechsel — und auch dann erst, wenn nicht mehr
         // editiert wird (nicht blind reloaden, während getippt wird).
-        if (!navigator.onLine) {
+        if (isOffline()) {
           if (app) app.$store.shell.updateAvailable = true;
           skewed = true;
           markProtocolPending();
-          window.addEventListener('online', healSkew, { once: true });
+          onReconnect(healSkew, { once: true });
           return;
         }
         location.reload();
@@ -175,7 +176,7 @@ export function registerServiceWorker() {
           controlled: !!navigator.serviceWorker.controller,
           skewed,
           inflight: buildInflight,
-          online: navigator.onLine,
+          online: !isOffline(),
           sinceLastMs: Date.now() - buildCheckedAt,
         })) return;
         const loaded = window.__SHELL_BUILD;
@@ -221,9 +222,9 @@ export function registerServiceWorker() {
           if (app) app.$store.shell.updateAvailable = true;
           return;
         }
-        if (!navigator.onLine) {
+        if (isOffline()) {
           if (app) app.$store.shell.updateAvailable = true;
-          window.addEventListener('online', () => location.reload(), { once: true });
+          onReconnect(() => location.reload(), { once: true });
           return;
         }
         // Wartet schon ein neuer SW, hilft ein blosser Reload nicht: der alte SW
@@ -325,7 +326,7 @@ export function registerServiceWorker() {
       const requireUpdate = () => {
         const app = window.__app;
         if (app) app.$store.shell.updateRequired = true;
-        if (shouldForceUpdate({ dirty: hasUnsavedWork(app), online: navigator.onLine })) applyUpdate();
+        if (shouldForceUpdate({ dirty: hasUnsavedWork(app), online: !isOffline() })) applyUpdate();
       };
       window.__requireUpdate = requireUpdate;
 
@@ -338,7 +339,7 @@ export function registerServiceWorker() {
         if (!shouldCheckProtocol({
           pending: protocolPending,
           inflight: protocolInflight,
-          online: navigator.onLine,
+          online: !isOffline(),
           wake,
           sinceLastMs: Date.now() - protocolCheckedAt,
         })) return;
@@ -364,7 +365,7 @@ export function registerServiceWorker() {
           hidden: document.hidden,
           idleMs: Date.now() - lastInput,
           busy: isBusy(app),
-          online: navigator.onLine,
+          online: !isOffline(),
           staleBoot,
         })) activateWaiting();
       };
@@ -398,7 +399,7 @@ export function registerServiceWorker() {
       // geöffnet), sperrt busy-lock.js die Aktivierung — dann Banner.
       if (reg.waiting && navigator.serviceWorker.controller) {
         const waiting = reg.waiting;
-        const tryBoot = !isBusy(window.__app) && navigator.onLine
+        const tryBoot = !isBusy(window.__app) && !isOffline()
           ? activateWaiting() : Promise.resolve(false);
         tryBoot.then((done) => { if (!done) notify(waiting); });
       }

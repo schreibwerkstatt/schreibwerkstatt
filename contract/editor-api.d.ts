@@ -71,6 +71,43 @@ export interface FocusHandle {
   replaceContent?(html: string): boolean;
   /** Granularität live umschalten (Klassentausch + Overlay-Neuberechnung). */
   setGranularity(g: FocusGranularity): void;
+  /**
+   * Ende jedes Save-Laufs abonnieren — Autosave, `save()`, Escape, `destroy()`,
+   * auch wenn der Inhalt dem gesicherten Stand gleicht und darum kein
+   * `savePage` rausging (Tippen + wieder Löschen). `dirty` ist der Zustand
+   * danach: `true`, wenn während des Saves weitergetippt wurde (der Folge-
+   * Autosave meldet erneut). Ein fehlgeschlagener Save meldet nichts; der
+   * Neuversuch meldet. Ein werfender Callback stört weder den Save noch andere
+   * Abonnenten. Rückgabe: Abmelde-Funktion.
+   *
+   * Seit editorApi 1 additiv: per `typeof handle.onSaved === 'function'` prüfen.
+   */
+  onSaved?(cb: (e: SavedEvent) => void): () => void;
+  /**
+   * Caret-Zeile auf den Typewriter-Anker ziehen — dieselbe Geometrie wie beim
+   * Tippen (Anker aus `host.typewriterAnchor` bzw. 0.5). Leerer Absatz ohne
+   * Text-Rect → Rect seines Blocks. Der Scroll gilt der Engine als eigener,
+   * nicht als Lese-Scrollen. `threshold` in px (Default 0 = exakt): darunter
+   * bleibt die Zeile stehen — für wiederholtes Nachziehen, solange sich das
+   * Layout noch setzt. Rückgabe: gefahrene Strecke in px; 0 = nichts bewegt
+   * (schon auf dem Anker, Scroll-Anschlag, kein Caret im Editor).
+   *
+   * Seit editorApi 1 additiv: per `typeof handle.revealCaret === 'function'`
+   * prüfen.
+   */
+  revealCaret?(opts?: { threshold?: number }): number;
+  /**
+   * Trennlinie einfügen: `<hr>` hinter dem obersten Block des Carets (ohne
+   * Caret im Editor: ans Ende), dahinter ein Folge-Absatz `<p><br></p>` mit dem
+   * Caret darin. Feuert `input` (dirty, Autosave) und ist ein Schritt in der
+   * Undo-Historie (eine offene Tipp-Strecke davor bleibt ein eigener Schritt).
+   * Die Linie zeigt das Bundle-CSS selbst, über die volle Schreibbreite in
+   * Hell und Dunkel.
+   *
+   * Seit editorApi 1 additiv: per `typeof handle.insertHr === 'function'`
+   * prüfen.
+   */
+  insertHr?(): void;
   /** Sofort speichern (vor Fenster-Schliessen, Seitenwechsel). */
   save(): Promise<void>;
   /** Speichern, Listener abräumen, Host lösen. */
@@ -91,13 +128,21 @@ export interface FocusHandle {
   controller: Record<string, unknown>;
 }
 
+/** Argument von `onSaved`. */
+export interface SavedEvent {
+  /** Ungespeichertes liegt vor (wie `host.editDirty` nach dem Lauf). */
+  dirty: boolean;
+  /** Offener Abschnitt; `null` ohne Abschnitt. */
+  pageId: number | string | null;
+}
+
 export interface FocusHostReadable {
   /** true, solange Ungespeichertes vorliegt. */
   readonly editDirty: boolean;
   readonly focusGranularity: FocusGranularity;
   /** Schreibbar per `Object.defineProperty` (Android: Getter auf den nativen Wert). */
   typewriterAnchor: number | undefined;
-  /** Serialisierter Save des aktuellen DOM-Stands. */
+  /** Serialisierter Save des aktuellen DOM-Stands. Wer das Ende eines Saves erfahren will: `onSaved`, nicht diese Methode überschreiben. */
   quickSave(): Promise<void>;
 }
 

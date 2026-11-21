@@ -1,6 +1,7 @@
 // Teil von appViewMethods (siehe Facade app-view.js).
 import { EVT, EXCLUSIVE_CARDS, FILTER_SCOPES, getDeviceId, computeTodayRing, computeWeekBars, computeWritingStreak, fetchJson, fetchJsonRetry, resetFilterScopes, restoreFilterScopes } from './_shared.js';
 import { setLastBookId } from '../../local-prefs.js';
+import { onReconnect } from '../boot/reachability.js';
 import { localeTag, resolveDailyGoal } from '../../utils.js';
 
 // In-Flight-Handle von `loadDailyProgress`. Modul-Scope statt Store: ein
@@ -286,14 +287,15 @@ export const bookscopeMethods = {
   _scheduleWakeRetry() {
     if (this._wakeRetryArmed) return;
     this._wakeRetryArmed = true;
+    let unbind = null;
     const fire = () => {
       if (!this._wakeRetryArmed) return;
       this._wakeRetryArmed = false;
-      window.removeEventListener('online', fire);
+      unbind?.();
       if (this._wakeRetryTimer) { clearTimeout(this._wakeRetryTimer); this._wakeRetryTimer = null; }
       this._refreshAfterWake();
     };
-    window.addEventListener('online', fire, { once: true });
+    unbind = onReconnect(fire, { once: true });
     this._wakeRetryTimer = setTimeout(fire, 8000);
   },
 

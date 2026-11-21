@@ -10,7 +10,8 @@ import { formatRelativeShort } from '../utils.js';
 import { startPoll } from './job-helpers.js';
 import { tRaw, tErrorRaw } from '../i18n.js';
 import { searchOfflineBook } from '../shared/offline-search.js';
-import { isBrowserOffline, isOfflineRejection } from '../app/boot/net-required.js';
+import { isOfflineRejection } from '../app/boot/net-required.js';
+import { isOffline } from '../app/boot/reachability.js';
 import { activateSearchHit } from './search-hit.js';
 import { EVT } from '../events.js';
 
@@ -248,7 +249,7 @@ export function registerSearchCard() {
 
       const params = this._ftsParams(query);
 
-      if (isBrowserOffline()) return this._runOfflineSearch(query, seq);
+      if (isOffline()) return this._runOfflineSearch(query, seq);
       this.offlineInfo = null;
       try {
         const r = await fetch('/search?' + params.toString(), {

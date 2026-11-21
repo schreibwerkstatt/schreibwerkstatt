@@ -36,7 +36,7 @@ import { markTablesAtomic } from '../../table/table-html.js';
 import { captureCaretAnchor, restoreCaretAnchor } from './caret-anchor.js';
 import { findBlockFromNode } from './dom-blocks.js';
 import { applyBlockMarks } from './recenter.js';
-import { getCaretRect } from './typewriter.js';
+import { getCaretRect, typewriterScroll } from './typewriter.js';
 import { POINTER_GRACE_MS } from './constants.js';
 import { ensureTrailingParagraph } from '../shared/auto-slot.js';
 
@@ -73,6 +73,10 @@ async function saveOnce(host, bridge) {
   // Seite (`setPage`), gehört das Ergebnis nicht mehr zum offenen Stand.
   const page = host.currentPage;
   if (!page) return;
+  // Eingaben-Stand beim Auslesen des DOM: kommt während `savePage` eine
+  // Eingabe dazu, ist der gesendete Stand schon wieder überholt, und das
+  // Dirty-Flag muss stehen bleiben, bis der Folge-Save auch sie sichert.
+  const seq = host._inputSeq;
   const content = document.querySelector('.focus-editor.is-active .focus-editor__content');
   // stripLektoratMarks wie im Notebook-Editor (saveEdit): transiente
   // Fokus-Markup (`focus-paragraph-active`, leerer Auto-Trailing-<p>) raus,
@@ -99,7 +103,7 @@ async function saveOnce(host, bridge) {
     // eingespielt hat: der ist dann die Baseline, nicht der gesendete.
     if (host.currentPage?.id === page.id && host._contentGen === gen) {
       host.originalHtml = html;
-      host.editDirty = false;
+      if (host._inputSeq === seq) host.editDirty = false;
     }
   } finally {
     host.editSaving = false;
@@ -114,6 +118,21 @@ function caretTop(container) {
   const anchor = document.getSelection()?.anchorNode;
   const el = anchor?.nodeType === 1 ? anchor : anchor?.parentElement;
   return el && container.contains(el) ? el.getBoundingClientRect().top : null;
+}
+
+// Rect der Caret-Zeile für `revealCaret`; leerer Absatz ohne Text-Rect (der
+// Schreib-Slot am Seitenende) → Rect des Elements, in dem der Caret steht. Steht
+// er direkt im Container, zählt das Kind an seinem Offset — nie der Container
+// selbst, dessen Mitte keine Schreibzeile ist.
+function caretLineRect(container) {
+  const r = getCaretRect(container);
+  if (r) return r;
+  const sel = document.getSelection();
+  const anchor = sel?.anchorNode;
+  if (!anchor || !container.contains(anchor)) return null;
+  let el = anchor.nodeType === 1 ? anchor : anchor.parentElement;
+  if (el === container) el = container.children[Math.min(sel.anchorOffset, container.children.length - 1)] || null;
+  return el ? el.getBoundingClientRect() : null;
 }
 
 function caretToStart(el) {
@@ -133,6 +152,14 @@ function makeHost(bridge, scheduleSave) {
   // Vormerkung eines Folgelaufs.
   let inflight = null;
   let again = false;
+  // `onSaved`-Abonnenten (siehe Handle).
+  const savedListeners = new Set();
+  const notifySaved = (host) => {
+    const evt = { dirty: !!host.editDirty, pageId: host.currentPage ? host.currentPage.id : null };
+    for (const cb of [...savedListeners]) {
+      try { cb(evt); } catch (err) { console.error('[focus:standalone:onSaved]', err); }
+    }
+  };
   return {
     // Lesefelder
     editMode: true,
@@ -153,6 +180,9 @@ function makeHost(bridge, scheduleSave) {
     // durch `replaceContent` (siehe saveOnce).
     _lastSentHtml: null,
     _contentGen: 0,
+    // Zähler der Eingaben (siehe saveOnce).
+    _inputSeq: 0,
+    _savedListeners: savedListeners,
     _figurLookupOpen: false,
     _synonymMenuOpen: false,
     _synonymPickerOpen: false,
@@ -163,13 +193,18 @@ function makeHost(bridge, scheduleSave) {
     focusCountWordsDelta: '',
     focusCountCharsDelta: '',
     // Schreibmarkierung → debounced Save über die Bridge.
-    _markEditDirty() { this.editDirty = true; scheduleSave(); },
+    _markEditDirty() { this._inputSeq++; this.editDirty = true; scheduleSave(); },
     // Saves laufen strikt nacheinander. Autosave-Timer, Escape, `save()` und
     // `destroy()` können sich überlappen; parallel abgesetzt entschiede die
     // Bridge über die Reihenfolge, und ein später fertig werdender älterer
     // Stand überschriebe den neueren. Ein Aufruf während eines laufenden Saves
     // merkt nur einen Folgelauf vor und bekommt dasselbe Promise — es löst
     // erst auf, wenn auch der Folgelauf (mit dem dann aktuellen DOM) durch ist.
+    //
+    // Nach einem erfolgreichen Lauf — auch einem, den isNoChange übersprungen
+    // hat — bekommen die `onSaved`-Abonnenten den Dirty-Zustand. Erst nach dem
+    // Freigeben von `inflight`: ein Abonnent, der selbst speichert, startet so
+    // einen eigenen Lauf, statt still an den gerade endenden angehängt zu werden.
     quickSave() {
       if (inflight) { again = true; return inflight; }
       inflight = (async () => {
@@ -178,6 +213,7 @@ function makeHost(bridge, scheduleSave) {
         } finally {
           inflight = null;
         }
+        notifySaved(this);
       })();
       return inflight;
     },
@@ -200,7 +236,8 @@ function makeHost(bridge, scheduleSave) {
 
 // Mountet den Standalone-Focus-Editor. Liefert ein Handle:
 //   { host, controller, save(), setPage(), replaceContent(), setGranularity(),
-//     destroy(), undo(), redo(), canUndo(), canRedo() }
+//     destroy(), undo(), redo(), canUndo(), canRedo(), onSaved(), revealCaret(),
+//     insertHr() }
 //
 // Undo/Redo liegt zusaetzlich programmatisch am Handle, weil im macOS-Client
 // Cmd+Z NIE in der WebView ankommt: das AppKit-Menue „Bearbeiten ▸ Widerrufen"
@@ -478,6 +515,54 @@ export async function mountStandaloneFocus({ mount, bridge, autosaveMs = DEFAULT
       const gran = normGranularity(g);
       host.focusGranularity = gran;
       try { controller.applyFocusGranularity(gran, mount); } catch (_) {}
+    },
+    // Abonniert das Ende jedes Save-Laufs (Autosave, `save()`, Escape,
+    // `destroy()`), auch wenn isNoChange den Save übersprungen hat: `cb({ dirty,
+    // pageId })` mit dem Dirty-Zustand danach — `true`, wenn während des Saves
+    // weitergetippt wurde. Ein fehlgeschlagener Save meldet nichts (der Stand
+    // bleibt dirty, der Neuversuch meldet). Rückgabe: Abmelde-Funktion.
+    onSaved(cb) {
+      if (typeof cb !== 'function') throw new TypeError('onSaved: Funktion erwartet');
+      host._savedListeners.add(cb);
+      return () => { host._savedListeners.delete(cb); };
+    },
+    // Caret-Zeile auf den Typewriter-Anker ziehen — dieselbe Geometrie, mit der
+    // die Engine beim Tippen scrollt (`typewriterScroll`, Anker aus
+    // `host.typewriterAnchor`). Der Scroll ist als eigener markiert, die Engine
+    // hält ihn also nicht für Lese-Scrollen. `threshold` (Default 0 = exakt):
+    // darunter bleibt die Zeile stehen — für wiederholtes Nachziehen, solange
+    // sich das Layout noch setzt. Rückgabe: gefahrene Strecke in px (0 = nichts
+    // bewegt: schon auf dem Anker, Scroll-Anschlag, kein Caret im Editor oder
+    // Engine nicht aktiv).
+    revealCaret({ threshold = 0 } = {}) {
+      const ctx = controller._focusState === 'active' ? controller._focusListeners : null;
+      if (!ctx) return 0;
+      const rect = caretLineRect(content);
+      if (!rect) return 0;
+      return typewriterScroll(content, rect, ctx, threshold, host.typewriterAnchor);
+    },
+    // Trennlinie für die Toolbar einer fremden Schale: `<hr>` hinter dem
+    // Top-Level-Block des Carets (ohne Caret im Editor: ans Ende), dahinter ein
+    // Folge-Absatz `<p><br></p>` mit dem Caret darin. Feuert `input` (dirty,
+    // Autosave, Absatz-Markierung) und ist EIN Undo-Schritt: eine offene
+    // Tipp-Strecke wird vorher abgeschlossen, der Einfüge-Stand danach sofort
+    // eingelöst statt in den Debounce der nächsten Eingabe zu fallen.
+    insertHr() {
+      history.pushNow();
+      const sel = document.getSelection();
+      const anchor = sel?.rangeCount ? sel.anchorNode : null;
+      let block = anchor && content.contains(anchor) && anchor !== content
+        ? (anchor.nodeType === 1 ? anchor : anchor.parentElement) : null;
+      while (block && block.parentElement !== content) block = block.parentElement;
+      const hr = document.createElement('hr');
+      const p = document.createElement('p');
+      p.appendChild(document.createElement('br'));
+      if (block) block.after(hr, p);
+      else content.append(hr, p);
+      try { content.focus({ preventScroll: true }); } catch { content.focus(); }
+      caretToStart(p);
+      changed();
+      history.pushNow();
     },
     // Sofort speichern (z.B. vor Fenster-Schliessen / Seitenwechsel).
     async save() {

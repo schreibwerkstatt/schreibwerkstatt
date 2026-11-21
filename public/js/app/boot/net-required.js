@@ -10,12 +10,16 @@
 // und für ausdrückliche Aktionen (Job starten, Diktat, Vorlesen) meldet die
 // App einmal, warum (EVT.NET_REQUIRED → Toast, app-offline-books.js).
 //
-// Gate ist ausschliesslich `navigator.onLine === false`. Der Wert kann falsch
-// „online" sagen (dann läuft der Request wie bisher ins Netz) und selten falsch
-// „offline" (VPN-/Interface-Flap) — dann zeigt auch das Offline-Banner es an.
+// Zwei Lagen (reachability.js):
+//   - Browser offline (`navigator.onLine === false`): sofort abweisen.
+//   - Server als unerreichbar erkannt: das kann ein Fehlalarm sein. Für eine
+//     ausdrückliche Aktion darum erst kurz testen (`probeServer`, ≤ 3 s);
+//     antwortet er, läuft die Aktion normal. Automatische Requests (LT beim
+//     Tippen, Such-Debounce) werden ohne Test abgewiesen.
 // Save-Pfade laufen bewusst NICHT hierüber: dort entscheidet der Versuch selbst
 // (editor/notebook/edit/lifecycle.js).
 import { EVT } from '../../events.js';
+import { isServerUnreachable, probeServer } from './reachability.js';
 
 // method: '*' = jede Methode. `announce`: der User hat ausdrücklich etwas
 // ausgelöst → einmal melden. Automatische Requests (LanguageTool beim Tippen,
@@ -63,13 +67,22 @@ export function isOfflineRejection(e) {
   return !!e?.offline;
 }
 
-// Vor dem eigentlichen fetch: wirft, wenn der Request ohne Netz sinnlos ist.
-export function guardNetRequired(input, init) {
-  if (!isBrowserOffline()) return;
-  const rule = netRequiredRule(input, init);
-  if (!rule) return;
+function _reject(rule) {
   if (rule.announce && typeof window !== 'undefined') {
     window.dispatchEvent(new CustomEvent(EVT.NET_REQUIRED));
   }
   throw offlineError();
+}
+
+// Vor dem eigentlichen fetch. Browser offline: wirft synchron. Server als
+// unerreichbar erkannt: automatische Requests werfen synchron, ausdrückliche
+// Aktionen bekommen ein Promise (Test), das auflöst (weiter) oder wirft.
+// Sonst `undefined`.
+export function guardNetRequired(input, init) {
+  const browser = isBrowserOffline();
+  if (!browser && !isServerUnreachable()) return undefined;
+  const rule = netRequiredRule(input, init);
+  if (!rule) return undefined;
+  if (browser || !rule.announce) _reject(rule);
+  return probeServer().then((ok) => { if (!ok) _reject(rule); });
 }

@@ -95,7 +95,8 @@
   // `event`: der Ablage-Write läuft per waitUntil neben der Auslieferung — die
   // Antwort (beim Bucheditor ein ganzes Buch) streamt sofort an den Aufrufer.
   async function respond(req, event) {
-    const netP = fetch(req);
+    // sw-net.js meldet den Tabs das Ergebnis (Erreichbarkeit); ohne ihn plain.
+    const netP = self.__swNet ? self.__swNet.fetch(req) : fetch(req);
     let net;
     try {
       net = await Promise.race([

@@ -187,6 +187,54 @@ module.exports = {
       },
     },
   },
+  '/ideen/board': {
+    get: {
+      'x-clients': ANDROID,
+      summary: 'Ideen-Board eines Buchs: alle eigenen Ideen, Stufen',
+      parameters: [query('book_id', int())],
+      responses: { 200: json(ref('IdeenBoard')), 400: error('INVALID_ID'), ...AUTH },
+    },
+  },
+  '/ideen': {
+    post: {
+      'x-clients': ANDROID,
+      summary: 'Idee anlegen (an Abschnitt, Kapitel oder Buch)',
+      description: 'Optionaler Header `Idempotency-Key` (8–100 Zeichen `[A-Za-z0-9_-]`): derselbe Schlüssel desselben Kontos liefert 24 h lang die erste Antwort noch einmal (Header `Idempotent-Replayed: true`) statt erneut anzulegen — für ein Nachspielen nach verlorener Antwort.',
+      parameters: [{ name: 'Idempotency-Key', in: 'header', required: false, schema: str() }],
+      requestBody: body('IdeeCreateRequest'),
+      responses: {
+        200: json(ref('Idee')),
+        400: error(['BOOKID_REQ', 'INVALID_SCOPE', 'CONTENT_REQ', 'CONTENT_TOO_LONG', 'BOOK_MISMATCH'], '`INVALID_SCOPE`: `page_id` und `chapter_id` zugleich. `CONTENT_TOO_LONG`: über 4000 Zeichen nach dem Trimmen. `BOOK_MISMATCH`: Anker gehört nicht zum Buch.'),
+        ...AUTH,
+      },
+    },
+  },
+  '/ideen/{id}': {
+    patch: {
+      'x-clients': ANDROID,
+      summary: 'Idee ändern: Text, Stufe, Anker-Umzug',
+      parameters: [pathParam('id')],
+      requestBody: body('IdeeUpdateRequest'),
+      responses: {
+        200: json(ref('Idee')),
+        400: error(['INVALID_ID', 'CONTENT_REQ', 'CONTENT_TOO_LONG', 'INVALID_STATUS', 'IDEE_STATUS_INACTIVE', 'INVALID_SCOPE', 'INVALID_PAGE_ID', 'INVALID_CHAPTER_ID', 'IDEE_CLOSED', 'BOOK_MISMATCH', 'NO_FIELDS'],
+          '`IDEE_STATUS_INACTIVE`: Stufe im Buch abgeschaltet (`stages`). `IDEE_CLOSED`: Umzug einer erledigten/verworfenen Idee oder Umzug und Abschluss im selben Request. `NO_FIELDS`: kein auswertbares Feld.'),
+        404: error('IDEE_NOT_FOUND', 'Gibt es nicht oder gehört einem anderen Konto.'),
+        ...AUTH,
+      },
+    },
+    delete: {
+      'x-clients': ANDROID,
+      summary: 'Idee löschen (endgültig; «verworfen» ist die Stufe dafür)',
+      parameters: [pathParam('id')],
+      responses: {
+        200: json(ref('Ok')),
+        400: error('INVALID_ID'),
+        404: error('IDEE_NOT_FOUND', 'Gibt es nicht (mehr) oder gehört einem anderen Konto — bei einer Wiederholung als erledigt werten.'),
+        ...AUTH,
+      },
+    },
+  },
   '/dictionary': {
     post: {
       'x-clients': BOTH,

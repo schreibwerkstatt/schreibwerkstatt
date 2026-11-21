@@ -33,7 +33,9 @@
 import { lsGetJSON, lsSetJSON } from '../safe-storage.js';
 import { tzOpts, localeTag } from '../utils.js';
 import { EVT } from '../events.js';
+import { isOffline, onConnectivityChange, onReconnect } from './boot/reachability.js';
 import { trackUsageEvent } from '../features-usage.js';
+import { localIsoDate } from '../utils/date.js';
 
 // Wartezeit nach dem Boot, bevor der Hintergrund-Sync startet: der Boot
 // selbst (Baum, Plaketten, offene Seite) hat Vorrang vor dem Vorladen.
@@ -99,6 +101,29 @@ export function staleOfflineBooks(held, desired) {
   return Object.keys(held || {}).filter((id) => !want.has(String(id)));
 }
 
+// Nutzungs-Events, die mehrere Tabs desselben Geräts gleichzeitig sähen
+// (SW-Nachrichten gehen an alle Tabs, der Abgleich läuft in jedem): wer den
+// Schlüssel zuerst in localStorage einträgt, meldet. Einträge verfallen nach
+// drei Tagen. Ohne localStorage meldet jeder Tab — lieber doppelt als nie.
+const USAGE_CLAIMS_KEY = 'offline_usage_reported';
+const USAGE_CLAIM_TTL_MS = 3 * 24 * 3600 * 1000;
+
+export function claimUsageReport(key, now = Date.now()) {
+  const raw = lsGetJSON(USAGE_CLAIMS_KEY, {});
+  const map = raw && typeof raw === 'object' && !Array.isArray(raw) ? raw : {};
+  if (map[key]) return false;
+  const next = {};
+  for (const [k, ts] of Object.entries(map)) if (now - ts < USAGE_CLAIM_TTL_MS) next[k] = ts;
+  next[key] = now;
+  lsSetJSON(USAGE_CLAIMS_KEY, next);
+  return true;
+}
+
+// Sync im SW anstossen; `trigger` reist nur fürs Nutzungs-Event mit.
+function postSync(ctrl, bookId, trigger) {
+  try { ctrl.postMessage({ type: 'offline-book-sync', bookId: String(bookId), trigger }); } catch {}
+}
+
 function saveDataOn() {
   try { return !!navigator.connection?.saveData; } catch { return false; }
 }
@@ -124,14 +149,14 @@ export const appOfflineBooksMethods = {
     // Ohne Verbindung abgewiesene Server-Aktion (app/boot/net-required.js):
     // einmal sagen, warum — nicht bei jedem Klick derselbe Toast.
     window.addEventListener(EVT.NET_REQUIRED, () => this._announceNetRequired(), { signal });
-    // Klasse am Dokument für die gedimmten Server-Aktionen (layout-base.css).
-    const markOffline = () => document.documentElement.classList.toggle('is-offline', navigator.onLine === false);
-    window.addEventListener('online', markOffline, { signal });
-    window.addEventListener('offline', markOffline, { signal });
+    // Klasse am Dokument für die gedimmten Server-Aktionen (layout-base.css):
+    // Browser offline oder Server unerreichbar (boot/reachability.js).
+    const markOffline = () => document.documentElement.classList.toggle('is-offline', isOffline());
+    onConnectivityChange(markOffline, { signal });
     markOffline();
     if (typeof navigator === 'undefined' || !navigator.serviceWorker) return;
     navigator.serviceWorker.addEventListener('message', (e) => this._onOfflineBookMessage(e.data), { signal });
-    window.addEventListener('online', () => this._syncOfflineBooks(), { signal });
+    onReconnect(() => this._syncOfflineBooks('online'), { signal });
     navigator.serviceWorker.addEventListener('controllerchange', () => this._refreshOfflineCapable(), { signal });
     // Automatik: jedes geöffnete Buch wird das neue „zuletzt geöffnete".
     this.$watch(() => this.$store.nav.selectedBookId, (id) => this._noteBookOpenedForOffline(id));
@@ -146,7 +171,7 @@ export const appOfflineBooksMethods = {
       // Der Boot-Sync (_initOfflineBooksForUser) fand eventuell noch keinen
       // Worker vor — jetzt nachholen.
       if (!wasCapable && this._offlineUserReady && this._desiredOfflineBooks().length) {
-        setTimeout(() => this._syncOfflineBooks(), OFFLINE_SYNC_BOOT_DELAY_MS);
+        setTimeout(() => this._syncOfflineBooks('boot'), OFFLINE_SYNC_BOOT_DELAY_MS);
       }
     }, () => {});
   },
@@ -178,7 +203,7 @@ export const appOfflineBooksMethods = {
     if (open != null) this._noteBookOpenedForOffline(open, { sync: false });
     this._reconcileOfflineBooks();
     if (this._desiredOfflineBooks().length) {
-      setTimeout(() => this._syncOfflineBooks(), OFFLINE_SYNC_BOOT_DELAY_MS);
+      setTimeout(() => this._syncOfflineBooks('boot'), OFFLINE_SYNC_BOOT_DELAY_MS);
     }
   },
 
@@ -187,16 +212,14 @@ export const appOfflineBooksMethods = {
     return desiredOfflineBooks(s.offlinePinned, saveDataOn() ? { enabled: false } : s.offlineAuto);
   },
 
-  _syncOfflineBooks() {
+  _syncOfflineBooks(trigger = 'boot') {
     const ctrl = swController();
-    if (!ctrl || navigator.onLine === false) return;
+    if (!ctrl || isOffline()) return;
     // Offline aufgeschobenes Räumen (Buchwechsel, Automatik aus) nachholen.
     this._reconcileOfflineBooks();
     this._refreshOfflineIntent();
     const ids = this._desiredOfflineBooks();
-    for (const bookId of ids) {
-      try { ctrl.postMessage({ type: 'offline-book-sync', bookId }); } catch {}
-    }
+    for (const bookId of ids) postSync(ctrl, bookId, trigger);
     if (ids.length) this._requestPersistentStorage();
   },
 
@@ -226,8 +249,8 @@ export const appOfflineBooksMethods = {
     this._reconcileOfflineBooks();
     if (!sync || s.offlinePinned.includes(id)) return;
     const ctrl = swController();
-    if (!ctrl || navigator.onLine === false) return;
-    try { ctrl.postMessage({ type: 'offline-book-sync', bookId: id }); } catch {}
+    if (!ctrl || isOffline()) return;
+    postSync(ctrl, id, 'open');
     this._requestPersistentStorage();
   },
 
@@ -235,15 +258,14 @@ export const appOfflineBooksMethods = {
   setOfflineAutoEnabled(enabled) {
     const s = this.$store.session;
     this._refreshOfflineIntent();
+    if (s.offlineAuto.enabled !== !!enabled) trackUsageEvent('offline.auto', { action: enabled ? 'on' : 'off' }, null);
     s.offlineAuto = { ...s.offlineAuto, enabled: !!enabled };
     writeOfflineAuto(s.currentUser?.email, s.offlineAuto);
     if (enabled) {
       const ids = s.offlineAuto.bookIds;
       const ctrl = swController();
-      if (ids.length && ctrl && navigator.onLine !== false && !saveDataOn()) {
-        for (const id of ids) {
-          try { ctrl.postMessage({ type: 'offline-book-sync', bookId: id }); } catch {}
-        }
+      if (ids.length && ctrl && !isOffline() && !saveDataOn()) {
+        for (const id of ids) postSync(ctrl, id, 'auto-on');
         this._requestPersistentStorage();
       }
     } else {
@@ -260,15 +282,73 @@ export const appOfflineBooksMethods = {
   // sich offline nicht laden, das vorige war danach auch nicht mehr da.
   _reconcileOfflineBooks() {
     if (!this._offlineUserReady || !this._offlineStatusKnown) return;
-    if (navigator.onLine === false) return;
+    if (isOffline()) return;
     const ctrl = swController();
     if (!ctrl) return;
     this._refreshOfflineIntent();
     for (const id of staleOfflineBooks(this.$store.session.offlineBooks, this._desiredOfflineBooks())) {
+      this._reportOfflineRemove(id, this._offlineRemoveReason(id));
       try { ctrl.postMessage({ type: 'offline-book-remove', bookId: id }); } catch {}
       const { [id]: _, ...rest } = this.$store.session.offlineBooks;
       this.$store.session.offlineBooks = rest;
     }
+    this._reportOfflineHeld();
+  },
+
+  // Warum der Abgleich ein Buch räumt: noch in der Automatik-Liste heisst
+  // Automatik aus bzw. Datensparmodus; sonst ist es aus der Liste gefallen
+  // (ein neueres Buch geöffnet oder in einem anderen Tab gelöst).
+  _offlineRemoveReason(id) {
+    if (!this.$store.session.offlineAuto.bookIds.includes(String(id))) return 'auto-rotated';
+    return saveDataOn() ? 'save-data' : 'auto-off';
+  },
+
+  // `offline.remove`: ein Buch fällt aus der Offline-Ablage dieses Geräts.
+  // Einmal je abgelegtem Stand, auch wenn mehrere Tabs räumen.
+  _reportOfflineRemove(id, reason) {
+    const at = this.$store.session.offlineBooks?.[String(id)]?.at || '';
+    if (!claimUsageReport(`remove:${this.$store.session.currentUser?.email}:${id}:${at}`)) return;
+    trackUsageEvent('offline.remove', { reason }, Number(id));
+  },
+
+  // `offline.held`: Bestand je Gerät, einmal am Tag je Buch — daraus liest
+  // die Auswertung, was gerade offline liegt (die Absicht steht nur im
+  // localStorage, der Server sieht sie sonst nie).
+  _reportOfflineHeld(now = Date.now()) {
+    const s = this.$store.session;
+    const email = s.currentUser?.email;
+    if (!email) return;
+    const day = localIsoDate(new Date(now));
+    for (const [id, info] of Object.entries(s.offlineBooks || {})) {
+      if (!info?.at || !claimUsageReport(`held:${email}:${id}:${day}`, now)) continue;
+      const atMs = Date.parse(info.at);
+      trackUsageEvent('offline.held', {
+        kind: s.offlinePinned.includes(String(id)) ? 'pinned' : 'auto',
+        total: info.total,
+        failed: info.failed || 0,
+        ageHours: Number.isFinite(atMs) ? Math.max(0, Math.round((now - atMs) / 3600000)) : undefined,
+        persisted: s.storagePersisted ? 'yes' : 'no',
+      }, Number(id));
+    }
+  },
+
+  // `offline.sync`: Ausgang jedes Syncs (auch Automatik, Boot, Nach-Sync).
+  // Die SW-Nachricht geht an alle Tabs; die `syncId` sorgt für eine Meldung.
+  _reportOfflineSync(id, msg) {
+    if (!msg.syncId || !claimUsageReport(`sync:${msg.syncId}`)) return;
+    const s = this.$store.session;
+    const failedRun = msg.type === 'offline-book-failed';
+    trackUsageEvent('offline.sync', {
+      trigger: msg.trigger || undefined,
+      kind: s.offlinePinned.includes(String(id)) ? 'pinned' : 'auto',
+      result: failedRun ? 'failed' : (msg.failed ? 'partial' : 'done'),
+      total: msg.total,
+      fetched: msg.fetched,
+      failed: failedRun ? undefined : (msg.failed || 0),
+      status: failedRun ? (msg.status || 0) : undefined,
+      durationSec: msg.durationSec,
+      persisted: s.storagePersisted ? 'yes' : 'no',
+    }, Number(id));
   },
 
   _onOfflineBookMessage(msg) {
@@ -286,16 +366,19 @@ export const appOfflineBooksMethods = {
       const { [id]: _, ...rest } = s.offlineProgress;
       s.offlineProgress = rest;
       s.offlineBooks = { ...s.offlineBooks, [id]: { at: msg.at, total: msg.total, failed: msg.failed || 0 } };
+      this._reportOfflineSync(id, msg);
       this._reportOfflinePinResult(id, { result: msg.failed ? 'partial' : 'done', total: msg.total, failed: msg.failed || 0 });
     } else if (msg.type === 'offline-book-failed' && id) {
       const { [id]: _, ...rest } = s.offlineProgress;
       s.offlineProgress = rest;
+      this._reportOfflineSync(id, msg);
       this._reportOfflinePinResult(id, { result: 'failed', status: msg.status || 0 });
       // Buch weg oder Zugriff entzogen: Anheftung aufheben. Bei einem
       // Netzfehler (status 0) bleibt sie — der nächste Sync versucht es erneut.
       if (msg.status === 403 || msg.status === 404) {
-        if (this.isBookOffline(id)) this._unpinOfflineBook(id);
+        if (this.isBookOffline(id)) this._unpinOfflineBook(id, 'denied');
         else if (s.offlineAuto.bookIds.includes(id)) {
+          this._reportOfflineRemove(id, 'denied');
           s.offlineAuto = { ...s.offlineAuto, bookIds: s.offlineAuto.bookIds.filter((x) => x !== id) };
           writeOfflineAuto(s.currentUser?.email, s.offlineAuto);
           try { swController()?.postMessage({ type: 'offline-book-remove', bookId: id }); } catch {}
@@ -345,11 +428,12 @@ export const appOfflineBooksMethods = {
     this.$store.session.offlineProgress = {
       ...this.$store.session.offlineProgress, [String(bookId)]: { done: 0, total: 0 },
     };
-    try { swController()?.postMessage({ type: 'offline-book-sync', bookId: String(bookId) }); } catch {}
+    const ctrl = swController();
+    if (ctrl) postSync(ctrl, bookId, 'pin');
     await this._requestPersistentStorage();
   },
 
-  _unpinOfflineBook(bookId) {
+  _unpinOfflineBook(bookId, reason = 'unpin') {
     const id = String(bookId);
     const email = this.$store.session.currentUser?.email;
     const next = this.$store.session.offlinePinned.filter((x) => x !== id);
@@ -357,6 +441,7 @@ export const appOfflineBooksMethods = {
     this.$store.session.offlinePinned = next;
     // Das zuletzt geöffnete Buch bleibt über die Automatik liegen.
     if (this._desiredOfflineBooks().includes(id)) return;
+    if (this.$store.session.offlineBooks[id]) this._reportOfflineRemove(id, reason);
     const { [id]: _, ...books } = this.$store.session.offlineBooks;
     this.$store.session.offlineBooks = books;
     try { swController()?.postMessage({ type: 'offline-book-remove', bookId: id }); } catch {}

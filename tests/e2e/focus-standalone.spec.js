@@ -407,3 +407,215 @@ test('replaceContent während savePage: der gesendete Stand überschreibt origin
   expect(r.original).toContain('NEU');
   expect(r.dirty).toBe(false);
 });
+
+// ── Dirty-Zustand nach dem Save, onSaved, revealCaret ───────────────────────
+
+// Der nächste savePage hängt, bis der Test `window.__release()` ruft; spätere
+// laufen durch.
+async function holdNextSave(page) {
+  await page.evaluate(() => {
+    const orig = window.__bridge.savePage;
+    window.__bridge.savePage = (p) => new Promise((res) => {
+      window.__bridge.savePage = orig;
+      window.__release = () => res(orig(p));
+    });
+  });
+}
+
+// Gibt den hängenden Save frei und liest direkt nach seinem Ende — bevor der
+// Autosave der Eingabe während des Saves (150 ms) einen Folgelauf startet.
+function releaseAndRead(page) {
+  return page.evaluate(async () => {
+    window.__release();
+    await window.__saving;
+    return { dirty: window.__standalone.host.editDirty, events: window.__events };
+  });
+}
+
+test('Eingabe während savePage: editDirty bleibt true, bis auch sie gesichert ist', async ({ page }) => {
+  await loadBidPage(page);
+  await holdNextSave(page);
+  await caretAt(page, 'b5', 3);
+  await page.keyboard.type('A');
+  await page.evaluate(() => { window.__saving = window.__standalone.save(); });
+  await page.waitForFunction(() => typeof window.__release === 'function');
+  await page.keyboard.type('B');                       // tippt in den laufenden Save
+  expect((await releaseAndRead(page)).dirty).toBe(true);
+});
+
+test('onSaved meldet nach jedem Save-Durchlauf den Dirty-Zustand, auch beim übersprungenen Save', async ({ page }) => {
+  await loadBidPage(page);
+  await page.evaluate(() => {
+    window.__events = [];
+    window.__off = window.__standalone.onSaved((e) => window.__events.push(e));
+  });
+  await caretAt(page, 'b5', 3);
+  await page.keyboard.type('X');
+  await page.waitForFunction(() => window.__events.length === 1);
+  expect(await page.evaluate(() => window.__events[0])).toEqual({ dirty: false, pageId: 42 });
+
+  // Tippen und wieder löschen → isNoChange überspringt den Save, onSaved feuert trotzdem.
+  await page.evaluate(() => { window.__saveLog.length = 0; });
+  await page.keyboard.type('Y');
+  await page.keyboard.press('Backspace');
+  await page.waitForFunction(() => window.__events.length === 2);
+  expect(await page.evaluate(() => window.__events[1])).toEqual({ dirty: false, pageId: 42 });
+  expect(await page.evaluate(() => window.__saveLog.length)).toBe(0);
+
+  // Abgemeldet → kein weiterer Aufruf.
+  await page.evaluate(() => window.__off());
+  await page.keyboard.type('Z');
+  await page.waitForFunction(() => window.__saveLog.length === 1);
+  await page.waitForTimeout(100);
+  expect(await page.evaluate(() => window.__events.length)).toBe(2);
+});
+
+test('onSaved meldet dirty: true, wenn während savePage weitergetippt wurde', async ({ page }) => {
+  await loadBidPage(page);
+  await page.evaluate(() => {
+    window.__events = [];
+    window.__standalone.onSaved((e) => window.__events.push(e));
+  });
+  await holdNextSave(page);
+  await caretAt(page, 'b5', 3);
+  await page.keyboard.type('A');
+  await page.evaluate(() => { window.__saving = window.__standalone.save(); });
+  await page.waitForFunction(() => typeof window.__release === 'function');
+  await page.keyboard.type('B');
+  expect((await releaseAndRead(page)).events).toEqual([{ dirty: true, pageId: 42 }]);
+});
+
+test('onSaved: ein werfender Callback bricht den Save nicht', async ({ page, consoleGuard }) => {
+  consoleGuard.ignore(/\[focus:standalone:onSaved\]/);
+  await loadBidPage(page);
+  await page.evaluate(() => {
+    window.__events = [];
+    window.__standalone.onSaved(() => { throw new Error('kaputt'); });
+    window.__standalone.onSaved((e) => window.__events.push(e));
+  });
+  await caretAt(page, 'b5', 3);
+  await page.keyboard.type('X');
+  await page.evaluate(() => window.__standalone.save());
+  expect(await page.evaluate(() => window.__events.length)).toBe(1);
+  expect(await page.evaluate(() => window.__standalone.host.editDirty)).toBe(false);
+});
+
+test('revealCaret zieht die Caret-Zeile auf den Typewriter-Anker, als eigener Scroll markiert', async ({ page }) => {
+  await loadBidPage(page);
+  await page.waitForTimeout(300);                     // Eintritts-Scroll abwarten
+  // Caret per Klick in eine Zeile weit über der Schreiblinie (Klick recentert nicht).
+  await page.evaluate(() => {
+    document.querySelector('[data-bid="b5"]').scrollIntoView({ block: 'start' });
+    document.querySelector('.focus-editor__content')
+      .dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, pointerType: 'mouse' }));
+  });
+  await caretAt(page, 'b5', 10);
+  await page.waitForTimeout(300);
+  const lineCenter = () => page.evaluate(() => {
+    const r = window.getSelection().getRangeAt(0).getClientRects()[0];
+    return r.top + r.height / 2;
+  });
+  const anchor = await page.evaluate(() => window.innerHeight * 0.5);
+  expect(Math.abs((await lineCenter()) - anchor)).toBeGreaterThan(50);
+  const activeBlock = () => page.evaluate(() =>
+    document.querySelector('.focus-paragraph-active')?.dataset.bid);
+  const activeBefore = await activeBlock();
+
+  // Im selben Tick lesen: die Marke verbraucht erst das (asynchrone) scroll-Event.
+  const r = await page.evaluate(() => {
+    const moved = window.__standalone.revealCaret();
+    const mark = window.__standalone.controller._focusListeners.progScroll;
+    return { moved, marked: !!mark && mark.top === mark.box.scrollTop };
+  });
+  expect(r.moved).not.toBe(0);
+  // Als eigener Scroll markiert — sonst hielte onScroll ihn für Lese-Scrollen.
+  expect(r.marked).toBe(true);
+  expect(Math.abs((await lineCenter()) - anchor)).toBeLessThan(3);
+  // Kein Lese-Scroll: die Markierung bleibt, wo sie vorher stand.
+  await page.waitForTimeout(300);
+  expect(await activeBlock()).toBe(activeBefore);
+  // Steht die Zeile schon auf dem Anker, ist der zweite Aufruf ein No-op.
+  expect(await page.evaluate(() => window.__standalone.revealCaret())).toBe(0);
+});
+
+test('revealCaret im leeren Schluss-Absatz nimmt das Block-Rect', async ({ page }) => {
+  await loadBidPage(page);                            // Caret steht im leeren Auto-Slot
+  await page.waitForTimeout(300);
+  await page.evaluate(() => {
+    document.querySelector('.focus-editor__content').scrollTop = 0;
+  });
+  await page.waitForTimeout(100);
+  const moved = await page.evaluate(() => window.__standalone.revealCaret());
+  expect(moved).not.toBe(0);
+  const center = await page.evaluate(() => {
+    const r = document.querySelector('.focus-editor__content').lastElementChild.getBoundingClientRect();
+    return r.top + r.height / 2;
+  });
+  const max = await page.evaluate(() => {
+    const c = document.querySelector('.focus-editor__content');
+    return c.scrollTop >= c.scrollHeight - c.clientHeight - 1;
+  });
+  // Auf dem Anker — oder, falls der Puffer nicht reicht, am Scroll-Ende.
+  expect(Math.abs(center - await page.evaluate(() => window.innerHeight * 0.5)) < 3 || max).toBe(true);
+});
+
+// ── insertHr: Trennlinie über das Handle ────────────────────────────────────
+test('insertHr: Linie hinter dem Caret-Block, Folge-Absatz mit Caret, dirty + Autosave', async ({ page }) => {
+  await loadBidPage(page);
+  await caretAt(page, 'b5', 3);
+  await page.evaluate(() => { window.__inputs = 0;
+    document.querySelector('.focus-editor__content').addEventListener('input', () => window.__inputs++); });
+  await page.evaluate(() => window.__standalone.insertHr());
+  const st = await page.evaluate(() => {
+    const b5 = document.querySelector('[data-bid="b5"]');
+    const hr = b5.nextElementSibling;
+    const p = hr && hr.nextElementSibling;
+    const n = window.getSelection().anchorNode;
+    return { hr: hr && hr.tagName, pHtml: p && p.innerHTML, pTag: p && p.tagName,
+      next: p && p.nextElementSibling && p.nextElementSibling.dataset.bid,
+      caretInP: !!p && (n === p || p.contains(n)), inputs: window.__inputs,
+      dirty: window.__standalone.host.editDirty };
+  });
+  expect(st).toEqual({ hr: 'HR', pTag: 'P', pHtml: '<br>', next: 'b6', caretInP: true, inputs: 1, dirty: true });
+  await page.waitForFunction(() => window.__saveLog.some((s) => /<hr/.test(s.html)), null, { timeout: 3000 });
+  // Linie über die volle Schreibbreite sichtbar.
+  const line = await page.evaluate(() => {
+    const hr = document.querySelector('.focus-editor__content hr');
+    const cs = getComputedStyle(hr);
+    return { w: parseFloat(cs.borderTopWidth), style: cs.borderTopStyle,
+      width: hr.getBoundingClientRect().width,
+      content: document.querySelector('.focus-editor__content p').getBoundingClientRect().width };
+  });
+  expect(line.w).toBeGreaterThan(0);
+  expect(line.style).toBe('solid');
+  expect(Math.abs(line.width - line.content)).toBeLessThan(2);
+});
+
+test('insertHr ist ein Undo-Schritt, auch direkt nach Tippen', async ({ page }) => {
+  await loadBidPage(page);
+  await caretAt(page, 'b2', 5);
+  await page.keyboard.type('XY');
+  await page.evaluate(() => window.__standalone.insertHr());
+  expect(await page.evaluate(() => document.querySelectorAll('.focus-editor__content hr').length)).toBe(1);
+  await page.evaluate(() => window.__standalone.undo());
+  const after = await page.evaluate(() => {
+    const c = document.querySelector('.focus-editor__content');
+    return { hr: c.querySelectorAll('hr').length, typed: c.querySelector('[data-bid="b2"]').textContent.includes('XY') };
+  });
+  // Ein Undo nimmt nur die Linie samt Folge-Absatz, nicht das Getippte davor.
+  expect(after).toEqual({ hr: 0, typed: true });
+  await page.evaluate(() => window.__standalone.redo());
+  expect(await page.evaluate(() => document.querySelectorAll('.focus-editor__content hr').length)).toBe(1);
+});
+
+test('insertHr ohne Caret im Editor hängt am Ende an', async ({ page }) => {
+  await loadBidPage(page);
+  await page.evaluate(() => { window.getSelection().removeAllRanges(); document.activeElement?.blur(); });
+  await page.evaluate(() => window.__standalone.insertHr());
+  const tail = await page.evaluate(() => {
+    const c = document.querySelector('.focus-editor__content');
+    return [...c.children].slice(-3).map((e) => e.tagName + (e.dataset.bid ? ':' + e.dataset.bid : ''));
+  });
+  expect(tail.includes('HR')).toBe(true);
+  expect(tail[tail.length - 1]).toBe('P');
+});

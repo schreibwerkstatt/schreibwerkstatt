@@ -64,6 +64,43 @@ const MODULES = {
     testExplicit: [],
     appEngines: 'chromium',
   },
+  offline: {
+    title: 'Service Worker + Offline',
+    docs: ['docs/caching.md'],
+    // Dateinamen mit sw-/offline/outbox: SW-Registrierung, Offline-Buecher,
+    // Rettung, Outbox, Offline-Suche, deren CSS.
+    codeName: /^sw-|offline|outbox|reachability/i,
+    codeExplicit: [
+      // Service Worker (liegen direkt unter public/, ausserhalb von CODE_ROOTS).
+      // public/sw-manifest.js fehlt bewusst: generiert, aendert sich mit jedem Asset.
+      'public/sw.js',
+      'public/sw-net.js',
+      'public/sw-offline.js',
+      'public/sw-drafts.js',
+      'public/sw-domain.js',
+      'scripts/sw-manifest.js',                 // entscheidet den Precache-Satz
+      // Boot: Generationswechsel, Netz-/Erreichbarkeitslage, Sitzungswechsel
+      'public/js/app/boot/fetch-guard.js',
+      'public/js/app/boot/net-required.js',
+      'public/js/app/boot/update-policy.js',
+      'public/js/app/boot/busy-lock.js',
+      'public/js/app/boot/session-change.js',
+      'public/js/app/boot/content-updated.js',
+      // Lokale Kopien und Warteschlangen, die offline die einzige Kopie sind
+      'public/js/repo/content.js',
+      'public/js/repo/structure-queue.js',
+      'public/js/repo/ideen-queue.js',
+      'public/js/repo/save-ids.js',
+      'public/js/shared/idb-store.js',
+      'public/js/editor/draft-idb.js',
+      'public/js/editor/draft-storage.js',
+      'public/js/editor/notebook/save-outage.js',
+    ],
+    testName: /offline|outbox|^sw-|reachability|structure-queue|ideen-queue|save-ids|idb-store|draft-idb|draft-storage|save-outage/i,
+    testExplicit: [],
+    // notebook-offline-retry laeuft in der normalen App-Suite auch in Gecko.
+    appEngines: 'chromium,firefox',
+  },
 };
 
 function toRel(p) {

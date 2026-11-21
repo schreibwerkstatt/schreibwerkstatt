@@ -19,6 +19,7 @@
 import { readDraft, writeDraft, clearDraft, draftsLoaded, moveDraftToBackup } from '../../editor/draft-storage.js';
 import { fetchBookContents } from './blocks.js';
 import { EVT } from '../../events.js';
+import { onReconnect } from '../../app/boot/reachability.js';
 import { setLiveEditPages, isLiveEditedElsewhere, isLiveEditedHere } from '../../editor/live-edit.js';
 import { stripLektoratMarks } from '../../editor/shared/html-clean.js';
 import { isNoChange } from '../../editor/shared/save-pipeline.js';
@@ -48,7 +49,7 @@ export const bookEditorDraftMethods = {
     this.$watch(() => this._heldPageIds().join(','), () => {
       setLiveEditPages(HOLDER, this._heldPageIds());
     });
-    window.addEventListener('online', () => this._retryOfflineBlocks(), { signal });
+    onReconnect(() => this._retryOfflineBlocks(), { signal });
     // Server war weg, ohne dass der Browser offline meldete: kein `online`-Event.
     window.addEventListener('focus', () => this._retryOfflineBlocks(), { signal });
     // Schliessen/Neuladen: ausstehende Entwürfe sofort schreiben.

@@ -159,6 +159,62 @@ module.exports = {
     urls: arr(ref('ResearchUrl')),
   }, ['id', 'kind', 'urls']),
 
+  // Ideen (Pendenzen) — Zeile aus db/ideen.js#SELECT_ROW + attachLinks. Eine
+  // Idee hängt an höchstens einem Anker: Abschnitt (`page_id`), Kapitel
+  // (`chapter_id`) oder keinem (Buch-Idee). Ideen sind privat: jeder sieht nur
+  // die eigenen, auch auf einem geteilten Buch.
+  IdeeStatus: {
+    enum: ['offen', 'in_arbeit', 'erledigt', 'verworfen'],
+    description: 'Bearbeitungsstufe (lib/ideen-status.js). Reihenfolge = Spaltenfolge im Board. `verworfen` ist eine Stufe, kein Löschen. Unbekannter Wert → wie `offen` behandeln.',
+  },
+  IdeeCheckHint: obj({
+    beleg: str('Textstelle, die die Pendenz nach Ansicht des Auto-Erledigt-Checks erledigt.'),
+    page_id: int('Abschnitt, in dem der Beleg steht.'),
+    page_name: str('Name dieses Abschnitts (leer, falls unbekannt).'),
+    begruendung: str('Begründung des Checks; leer, wenn keine.'),
+    at: ts('Zeitpunkt des Hinweises.'),
+  }, ['beleg', 'page_id', 'page_name', 'begruendung', 'at']),
+  IdeeLink: obj({
+    link_id: int('Id der Verknüpfung (zum Lösen).'),
+    target_kind: { enum: ['research', 'beat', 'thread', 'motif', 'draft'], description: 'Ziel-Katalog: Recherche-Fundstück, Plot-Beat, Handlungsstrang, Motiv, Werkstatt-Figur. Unbekannter Wert → Link ignorieren.' },
+    target_id: int(),
+    label: str('Name des Ziels zur Lesezeit; leer, wenn keiner.'),
+  }, ['link_id', 'target_kind', 'target_id', 'label']),
+  Idee: obj({
+    id: int(), book_id: int(),
+    page_id: nul(int('Abschnitts-Anker; null bei Kapitel- oder Buch-Idee.')),
+    page_name: nul(str()),
+    chapter_id: nul(int('Kapitel-Anker; null bei Abschnitts- oder Buch-Idee.')),
+    chapter_name: nul(str()),
+    lane_chapter_id: nul(int('Kapitel, unter dem die Idee im Board steht: das Kapitel selbst bzw. das Kapitel ihres Abschnitts; null bei Buch-Idee oder Abschnitt ohne Kapitel.')),
+    lane_chapter_name: nul(str()),
+    content: str(undefined, { maxLength: 4000 }),
+    status: ref('IdeeStatus'),
+    status_at: nul(ts('Zeitpunkt des letzten Stufenwechsels; null, solange die Idee in ihrer Anfangsstufe steht.')),
+    sort_order: int('Manuelle Reihenfolge innerhalb einer Board-Zelle (0 = ungeordnet, dann neueste zuerst).'),
+    created_at: ts(), updated_at: ts(),
+    check_hint: { ...nul(ref('IdeeCheckHint')), description: 'Hinweis des Auto-Erledigt-Checks; null, wenn keiner vorliegt. Fällt mit jedem Stufenwechsel weg.' },
+    links: arr(ref('IdeeLink'), 'Verknüpfungen in Katalog-Reihenfolge; leer, wenn keine.'),
+  }, ['id', 'book_id', 'page_id', 'chapter_id', 'content', 'status', 'created_at', 'updated_at', 'check_hint', 'links']),
+  IdeenBoard: obj({
+    statuses: arr(ref('IdeeStatus'), 'Alle Stufen in Spaltenfolge.'),
+    stages: arr(ref('IdeeStatus'), 'Im Buch aktive Stufen (immer mit `offen` und `erledigt`). In eine inaktive Stufe lässt sich nicht wechseln; wer schon dort steht, bleibt sichtbar.'),
+    ideen: arr(ref('Idee'), 'Alle eigenen Ideen des Buchs, jede Stufe, neueste zuerst. Ungefiltert — Filter macht der Client.'),
+    auto_check: bool('Persönlicher Schalter des Auto-Erledigt-Checks.'),
+  }, ['statuses', 'stages', 'ideen']),
+  IdeeCreateRequest: obj({
+    book_id: int(),
+    page_id: nul(int('Abschnitts-Anker. Höchstens einer von `page_id`/`chapter_id`; keiner = Buch-Idee.')),
+    chapter_id: nul(int('Kapitel-Anker. Ein Kapitel mit genau einem Abschnitt wird zu diesem Abschnitt.')),
+    content: str('Getrimmt 1–4000 Zeichen.', { maxLength: 4000 }),
+  }, ['book_id', 'content']),
+  IdeeUpdateRequest: obj({
+    content: str('Getrimmt 1–4000 Zeichen.', { maxLength: 4000 }),
+    status: ref('IdeeStatus'),
+    page_id: nul(int('Umzug an diesen Abschnitt (leert `chapter_id`).')),
+    chapter_id: nul(int('Umzug an dieses Kapitel (leert `page_id`). `page_id: null` UND `chapter_id: null` zusammen = zurück zur Buch-Idee.')),
+  }, [], { description: 'Alle Felder optional, mindestens eines. Umzug nur, solange die Idee offen ist und bleibt (`offen`/`in_arbeit`).' }),
+
   JobCreated: obj({
     jobId: volatile(str('Id zum Pollen über `GET /jobs/{job_id}`.')),
     existing: bool('Ein Lauf für dasselbe Ziel war schon offen — wird gleich gepollt.'),

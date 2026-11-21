@@ -1,0 +1,11 @@
+{
+  "operation": "DELETE /ideen/{id}",
+  "request": {
+    "method": "DELETE",
+    "path": "/ideen/7402"
+  },
+  "status": 404,
+  "response": {
+    "error_code": "IDEE_NOT_FOUND"
+  }
+}
