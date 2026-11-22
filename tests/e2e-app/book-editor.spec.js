@@ -269,3 +269,36 @@ test('Kommentar-Leiste mit leerem Filter bleibt neben dem Stream', async ({ page
   expect(pos.rail.left, 'Leiste rechts neben dem Stream').toBeGreaterThanOrEqual(pos.stream.right - 1);
   expect(pos.rail.top, 'nicht unter dem Manuskript').toBeLessThan(pos.stream.bottom);
 });
+
+// Enges Editor-Pane: drei Spalten (Outline | Stream | Leiste) liessen dem Text
+// nur ~200px. Erst weicht die Outline, holt der User sie zurück, rückt die Leiste
+// unter den Stream — der Text bleibt in jedem Modus lesbar breit und liegt nie
+// unter der Leiste.
+test('Kommentar-Leiste im engen Pane: Outline weicht, zurückgeholt rückt die Leiste unter den Text', async ({ page }) => {
+  await page.setViewportSize({ width: 1200, height: 900 });
+  await openBookEditor(page);
+  const open = () => page.evaluate(() => {
+    const d = window.Alpine.$data(document.querySelector('.card--bookeditor'));
+    d.outlineOpen = true;
+    d.commentTotalCount = 1;           // Leiste hat Threads (ungefiltert)
+    d.commentRailVisible = false;
+    d.toggleCommentRail();
+  });
+  const geo = () => page.evaluate(() => {
+    const c = document.querySelector('.card--bookeditor');
+    const r = (s) => { const e = c.querySelector(s); return e && e.offsetParent ? e.getBoundingClientRect() : null; };
+    return { mode: window.Alpine.$data(c).commentPaneMode, stream: r('.book-editor-stream'), rail: r('.book-editor-comments'), outline: r('.book-editor-outline') };
+  });
+  await open();
+  await expect.poll(async () => (await geo()).mode).toBe('no-outline');
+  let g = await geo();
+  expect(g.outline, 'Outline weicht').toBeNull();
+  expect(g.stream.width, 'Textspalte lesbar breit').toBeGreaterThanOrEqual(480);
+  expect(g.rail.left, 'Leiste rechts neben dem Stream').toBeGreaterThanOrEqual(g.stream.right - 1);
+
+  await card(page).locator('.card-actions button:has(use[href="/icons.svg#list"])').click();
+  await expect.poll(async () => (await geo()).mode).toBe('flat');
+  g = await geo();
+  expect(g.outline, 'Outline wieder da').not.toBeNull();
+  expect(g.rail.top, 'Leiste unter dem Stream').toBeGreaterThanOrEqual(g.stream.bottom - 1);
+});

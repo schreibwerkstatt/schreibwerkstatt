@@ -13,7 +13,7 @@
   <meta property="og:type" content="website">
   <meta property="og:title" content="{{title}}">
   <meta property="og:description" content="{{metaDescription}}">
-  <meta property="og:image" content="{{ogImage}}">
+  {{headMetaHtml}}
   {{#if canonical}}<meta property="og:url" content="{{canonical}}">{{/if}}
   <meta name="twitter:card" content="summary_large_image">
   <link rel="icon" href="/schreibwerkstatt_icon.svg">
@@ -21,14 +21,13 @@
   <link rel="stylesheet" href="/css/tokens.css">
   <link rel="stylesheet" href="/css/landing.css">
   <link rel="stylesheet" href="/css/landing-sections.css">
-  <!-- .muted-msg (Leerzustand der Ergebnislisten) — Optik an einem Ort. -->
-  <link rel="stylesheet" href="/css/components/card-form/card-blocks.css">
+  <link rel="stylesheet" href="/css/landing-features.css">
   <script type="application/ld+json">{{ldJson}}</script>
-  <script defer src="/js/plausible-init.js?surface=werkzeug"></script>
-  <script type="module" src="/js/public-tools/wortwiederholungen-page.js"></script>
+  <script defer src="/js/plausible-init.js?surface=funktionen"></script>
 </head>
 <body>
-  <main class="public-shell public-shell--wide">
+  <main class="public-shell public-shell--wide public-landing">
+    {{#if langHint}}<p class="public-lang-hint" lang="{{langSwitchLang}}"><a class="public-inline-link" href="{{langSwitchUrl}}" hreflang="{{langSwitchLang}}">{{langHintText}}</a></p>{{/if}}
     <header class="public-header public-hero">
       <a href="/"><img class="public-brand" src="/schreibwerkstatt_icon.svg" alt="{{appName}}" width="56" height="56"></a>
       <p class="public-hero-brand">{{appName}}</p>
@@ -36,17 +35,11 @@
       <p class="public-sub">{{intro}}</p>
     </header>
 
-    <form class="public-tool-form" id="tool-form">
-      <label for="tool-input">{{inputLabel}}</label>
-      <textarea class="public-tool-input" id="tool-input" placeholder="{{placeholder}}" spellcheck="false"></textarea>
-      <div class="public-tool-form-row">
-        <p class="public-tool-method">{{privacy}} {{method}}</p>
-        <button class="public-btn public-btn--primary" type="submit">{{submit}}</button>
-      </div>
-      <p class="public-msg public-msg--err" id="tool-msg" role="alert" hidden></p>
-    </form>
+    <nav class="public-ftoc" aria-label="{{tocLabel}}">
+      <ul>{{tocHtml}}</ul>
+    </nav>
 
-    <div id="tool-result" aria-live="polite"></div>
+    {{groupsHtml}}
 
     <section class="public-cta">
       <h2>{{ctaTitle}}</h2>
@@ -61,10 +54,12 @@
       <span>{{footer}}</span>
       <nav class="public-footer-links">
         <a class="public-footer-link" href="/">{{backToLanding}}</a>
+        <a class="public-footer-link" href="/lektorat">{{lektoratLink}}</a>
+        <a class="public-footer-link" href="/testleser">{{testleserLink}}</a>
         <a class="public-footer-link" href="/datenschutz">{{privacyLabel}}</a>
+        <a class="public-footer-link" href="{{langSwitchUrl}}" hreflang="{{langSwitchLang}}" lang="{{langSwitchLang}}">{{langSwitchLabel}}</a>
       </nav>
     </footer>
   </main>
-  <script type="application/json" id="tool-config">{{configJson}}</script>
 </body>
 </html>

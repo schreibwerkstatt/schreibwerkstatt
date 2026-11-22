@@ -32,8 +32,9 @@ const rail = createCommentRail({
     comments: 'bookComments', threads: 'commentThreads', selectedRootId: 'commentSelectedRootId',
     railVisible: 'commentRailVisible', replyDrafts: 'commentReplyDrafts', savingReply: 'commentSavingReply',
     savingResolve: 'commentSavingResolve', loadingBookId: '_loadingBookId', recomputeRaf: '_recomputeRaf',
-    pendingGotoBid: '_pendingGotoBid', generalThreads: 'commentGeneralThreads',
+    pendingGotoToken: '_pendingGotoToken', generalThreads: 'commentGeneralThreads',
     filterStatus: 'commentFilterStatus', filterReviewer: 'commentFilterReviewer',
+    totalCount: 'commentTotalCount', openCount: 'commentOpenCount',
   },
   // Allgemeine (nicht-verankerte) Kommentare gehören in diese Seitenleiste, wenn der
   // Link ein Page-Share genau der offenen Seite ist — Buch-/Kapitel-Share-Allgemeines
@@ -53,6 +54,18 @@ const rail = createCommentRail({
   // Nach jedem Thread-Set: Root-Flag spiegeln (Grid-Split + Badge).
   afterRecompute: (ctx) => { ctx._mirrorFlag(); },
   scrollToRange: (range, ctx) => ctx._scrollRangeIntoView(range),
+  // Klick im Text → Leiste: die Leiste ist ab 1100px ein eigener Scroll-Container
+  // (max-height + overflow). Nur sie scrollen, nicht das Fenster — der User steht
+  // schon an der Textstelle. Gestapelt (schmal) scrollt sie nicht → nichts tun.
+  scrollRailToThread: (rootId) => {
+    requestAnimationFrame(() => {
+      const rail = document.querySelector('aside.comment-rail:not(.book-editor-comments)');
+      const el = rail?.querySelector(`.comment-rail__thread[data-root-id="${CSS.escape(String(rootId))}"]`);
+      if (!rail || !el || rail.scrollHeight <= rail.clientHeight + 1) return;
+      const top = el.getBoundingClientRect().top - rail.getBoundingClientRect().top + rail.scrollTop;
+      rail.scrollTo({ top: Math.max(0, top - 8), behavior: 'smooth' });
+    });
+  },
 });
 
 export const editorCommentsRailMethods = {
@@ -77,10 +90,14 @@ export const editorCommentsRailMethods = {
     this._railAbort = new AbortController();
     // Buchwechsel: State leeren + Kommentare des neuen Buchs laden.
     this.$watch(() => Alpine.store('nav').selectedBookId, (id) => this._onBookChange(id));
-    // Seitenwechsel: Leiste einklappen (Toggle ist pro Seite — sonst „folgt" der
-    // offene Zustand auf die nächste Seite, die zufällig Kommentare hat) + neu
-    // auflösen. Edit↔Read / frisch gerendertes Seiten-HTML nur neu auflösen.
-    this.$watch(() => window.__app?.currentPage?.id, () => { this.commentRailVisible = false; this.scheduleRecompute(); });
+    // Seitenwechsel: Leiste einklappen und Triage-Filter zurücksetzen (beides ist
+    // pro Seite — sonst „folgt" der Zustand unsichtbar auf die nächste Seite) +
+    // neu auflösen. Edit↔Read / frisch gerendertes Seiten-HTML nur neu auflösen.
+    this.$watch(() => window.__app?.currentPage?.id, () => {
+      this.commentRailVisible = false;
+      this._railResetFilter();
+      this.scheduleRecompute();
+    });
     this.$watch(() => window.__app?.editMode, () => this.scheduleRecompute());
     this.$watch(() => window.__app?.checkDone, () => this.scheduleRecompute());
     this.$watch(() => window.__app?.renderedPageHtml, () => this.scheduleRecompute());
@@ -88,13 +105,18 @@ export const editorCommentsRailMethods = {
     // Toggle-Button in den Seiten-Actions (Root-Scope) steuert die Sichtbarkeit
     // per Window-Event (Trampolin, da der Button nicht im Karten-Scope liegt).
     window.addEventListener(EVT.COMMENTS_RAIL_TOGGLE, () => this.toggleRail(), { signal: this._railAbort.signal });
-    // Klick ausserhalb des offenen Threads (Seitentext, Chrome) schliesst ihn wieder.
-    document.addEventListener('click', (e) => this._railDeselectOutside(e), { signal: this._railAbort.signal });
-    // Sprung aus der „Geteilte Links"-Karte (Seiten-Share): Leiste öffnen + Thread
-    // zu diesem data-bid selektieren (Pendant zum Bucheditor-Sprung).
+    // Klick auf eine markierte Stelle im Seitentext wählt ihren Thread (Pendant
+    // zum Bucheditor); jeder andere Klick ausserhalb des offenen Threads schliesst ihn.
+    document.addEventListener('click', (e) => {
+      this.onTextCommentClick(e);
+      this._railDeselectOutside(e);
+    }, { signal: this._railAbort.signal });
+    // Sprung aus der „Geteilte Links"-Karte (Seiten-Share): Leiste öffnen + ersten
+    // offenen Thread dieses Links selektieren (Pendant zum Bucheditor-Sprung).
     window.addEventListener(EVT.COMMENTS_RAIL_GOTO, (e) => {
       this.commentRailVisible = true;
-      this._pendingGotoBid = e.detail?.bid || null;
+      this._railResetFilter();
+      this._pendingGotoToken = e.detail?.token || null;
       this.scheduleRecompute();
     }, { signal: this._railAbort.signal });
     // Initial laden, falls schon ein Buch offen ist.
@@ -107,7 +129,7 @@ export const editorCommentsRailMethods = {
     this._railCancelSchedule();
     this._railClearHL();
     const app = window.__app;
-    if (app) { app.pageCommentRailOpen = false; app.pageCommentCount = 0; }
+    if (app) { app.pageCommentRailOpen = false; app.pageCommentCount = 0; app.pageCommentTotal = 0; }
   },
 
   async _onBookChange(bookId) {
@@ -120,7 +142,10 @@ export const editorCommentsRailMethods = {
     this.commentGeneralThreads = [];
     this.commentSelectedRootId = null;
     this.commentRailVisible = false;
-    this._pendingGotoBid = null;
+    this.commentTotalCount = 0;
+    this.commentOpenCount = 0;
+    this._railResetFilter();
+    this._pendingGotoToken = null;
     this._railClearHL();
     this._mirrorFlag();
     if (!bookId) return;
@@ -144,6 +169,27 @@ export const editorCommentsRailMethods = {
     scrollWindowToRange(range, 140);
   },
 
+  // Klick im Seitentext: liegt er auf einer markierten Kommentarstelle, deren
+  // Thread wählen und die Leiste hinscrollen. Nur bei sichtbarer Leiste (sonst
+  // gibt es keine Markierungen) und nur innerhalb der Leseansicht.
+  onTextCommentClick(ev) {
+    if (!this.commentRailVisible || !this.commentThreads.length) return;
+    const view = readView();
+    if (!view || !view.contains(ev.target)) return;
+    const rootId = this._railHitTest(ev.clientX, ev.clientY);
+    if (rootId != null && rootId !== this.commentSelectedRootId) this._railSelectFromText(rootId);
+  },
+
+  // Ausblend-Verlauf an der Unterkante der Leiste, solange darunter noch Karten
+  // liegen (eigener Scroll-Container ab 1100px). Aufruf aus @scroll, aus x-resize
+  // der Kartenliste und nach jedem Spiegeln (Leiste auf/zu, Seitenwechsel).
+  updateRailScrollHint(el) {
+    const rail = el || document.querySelector('aside.comment-rail:not(.book-editor-comments)');
+    if (!rail) return;
+    const more = rail.scrollHeight - rail.clientHeight - rail.scrollTop > 4;
+    rail.classList.toggle('has-more-below', more);
+  },
+
   collapseRail() { this.commentRailVisible = false; this._railClearHL(); this._mirrorFlag(); },
   toggleRail() {
     this.commentRailVisible = !this.commentRailVisible;
@@ -160,10 +206,14 @@ export const editorCommentsRailMethods = {
   _mirrorFlag() {
     const app = window.__app;
     if (!app) return;
-    // Verankerte + allgemeine (Page-Share dieser Seite) Threads zählen.
-    const onPage = !app.editMode && !app.checkDone
-      ? this.commentThreads.length + (this.commentGeneralThreads?.length || 0) : 0;
-    app.pageCommentCount = onPage;
-    app.pageCommentRailOpen = !!(this.commentRailVisible && onPage);
+    // Ungefiltert zählen (verankerte + allgemeine des Page-Shares dieser Seite):
+    // Knopf sichtbar, sobald die Seite Threads hat; Badge = offene. Ein Filter ohne
+    // Treffer nimmt so weder den Knopf noch die Rasterspalte weg.
+    const reading = !app.editMode && !app.checkDone;
+    const total = reading ? (this.commentTotalCount || 0) : 0;
+    app.pageCommentTotal = total;
+    app.pageCommentCount = reading ? (this.commentOpenCount || 0) : 0;
+    app.pageCommentRailOpen = !!(this.commentRailVisible && total);
+    requestAnimationFrame(() => this.updateRailScrollHint());
   },
 };

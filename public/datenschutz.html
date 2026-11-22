@@ -11,6 +11,7 @@
   <link rel="alternate" hreflang="en" href="{{altEn}}">
   <link rel="alternate" hreflang="x-default" href="{{altDe}}">{{/if}}
   <link rel="icon" href="/schreibwerkstatt_icon.svg">
+  {{headMetaHtml}}
   <script src="/js/theme-init.js"></script>
   <link rel="stylesheet" href="/css/tokens.css">
   <link rel="stylesheet" href="/css/landing.css">
@@ -18,6 +19,7 @@
 </head>
 <body>
   <main class="public-shell">
+    {{#if langHint}}<p class="public-lang-hint" lang="{{langSwitchLang}}"><a class="public-inline-link" href="{{langSwitchUrl}}" hreflang="{{langSwitchLang}}">{{langHintText}}</a></p>{{/if}}
     <header class="public-header">
       <h1>{{appName}}</h1>
       <p class="public-sub">{{pageTitle}}</p>
@@ -94,6 +96,7 @@
 
     <footer class="public-footer">
       <a class="public-footer-link" href="/">{{backToLanding}}</a>
+      <a class="public-footer-link" href="{{langSwitchUrl}}" hreflang="{{langSwitchLang}}" lang="{{langSwitchLang}}">{{langSwitchLabel}}</a>
     </footer>
   </main>
 </body>

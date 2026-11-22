@@ -89,6 +89,29 @@
     background: color-mix(in srgb, var(--color-warn-text) 55%, transparent);
   }
 
+  /* Flach-Modus (Pane zu schmal für eine dritte Spalte, Platz-Modus 'flat' aus
+     editor/book-editor-comments.js#paneMode): die Leiste steht als Liste unter dem
+     Stream in dessen Spalte (letzte Rasterspalte), ohne vertikale Verankerung —
+     das JS überspringt dann das Layout. */
+  .book-editor-layout--comments-flat .book-editor-comments.comment-rail {
+    grid-column: -2 / -1;
+    margin-block-start: var(--space-md);
+    border-block-start: 1px solid var(--color-border);
+    padding-block-start: var(--space-md);
+  }
+  .book-editor-layout--comments-flat .book-editor-comments__layer {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-sm);
+    min-height: 0;
+  }
+  .book-editor-layout--comments-flat .book-editor-comments__layer > .comment-rail__thread {
+    position: static;
+    visibility: visible;
+    inset-inline: auto;
+  }
+  .book-editor-layout--comments-flat .book-editor-comment-marker { display: none; }
+
   /* Allgemeine (nicht-verankerte) Kommentare: zentrierter Block UNTER dem
      gesamten Layout (Sibling von .book-editor-layout, KEIN Grid-Item — sonst
      kollidiert die neue Grid-Zeile mit der langen, sticky Outline-Spalte).
@@ -294,6 +317,12 @@
     display: flex;
     flex-direction: column;
     padding: var(--space-lg) clamp(var(--space-18), 4vw, 40px);
+    /* Breite aus der Spalte, nicht aus dem Inhalt: mit `margin-inline: auto`
+       allein schrumpfte der Stream auf seine Inhaltsbreite — und eine übersprungene
+       Zeile (`content-visibility: auto`, book-editor-render.css) meldet ihre zuletzt
+       gerenderte Breite. Ging die Kommentar-Leiste auf, behielt der Stream so die
+       alte Breite und lief unter die Leiste. */
+    width: 100%;
     max-width: 72ch;
     margin-inline: auto;
     background: var(--color-book-editor-bg);
@@ -606,28 +635,8 @@
   .book-editor-layout,
   .book-editor-layout--comments,
   .book-editor-layout--comments.book-editor-layout--no-outline { grid-template-columns: minmax(0, 1fr); gap: var(--space-md); }
-  /* Flach-Modus: Spalte stapelt sich unter dem Stream, eigener Scroll-Kontext
-     existiert nicht mehr → vertikale Verankerung deaktivieren, Karten/Marker in
-     normalen Fluss zurück. JS überspringt das Layout (matchMedia, FLAT_BELOW). */
-  .book-editor-comments.comment-rail {
-    position: static;
-    max-height: none;
-    margin-block-start: var(--space-md);
-    border-block-start: 1px solid var(--color-border);
-    padding-block-start: var(--space-md);
-  }
-  .book-editor-comments__layer {
-    display: flex;
-    flex-direction: column;
-    gap: var(--space-sm);
-    min-height: 0;
-  }
-  .book-editor-comments__layer > .comment-rail__thread {
-    position: static;
-    visibility: visible;
-    inset-inline: auto;
-  }
-  .book-editor-comment-marker { display: none; }
+  /* Die Kommentar-Leiste ist hier immer im Flach-Modus (paneMode → 'flat',
+     Regeln oben bei .book-editor-layout--comments-flat). */
   .book-editor-outline {
     position: static;
     max-height: 200px;

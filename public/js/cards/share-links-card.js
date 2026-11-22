@@ -344,8 +344,8 @@ export function registerShareLinksCard() {
       app.refreshShareCommentCounts?.();
       if (link.kind === 'chapter' || link.kind === 'book') {
         if (!app.showBookEditorCard) await app.toggleBookEditorCard?.();
-        // Ohne bid: Leiste nur öffnen (kein Sprung zu einer bestimmten Stelle).
-        window.dispatchEvent(new CustomEvent(EVT.BOOK_EDITOR_GOTO_COMMENT));
+        // Leiste öffnen + ersten offenen verankerten Thread dieses Links anspringen.
+        window.dispatchEvent(new CustomEvent(EVT.BOOK_EDITOR_GOTO_COMMENT, { detail: { token: link.token } }));
         return;
       }
       // Seiten-Share: zur Seite navigieren, dann die Notebook-Leiste öffnen.
@@ -357,7 +357,7 @@ export function registerShareLinksCard() {
       // currentPage-Watcher) zuerst läuft und das Öffnen gewinnt.
       await app.gotoPageById(pageId);
       setTimeout(() => {
-        window.dispatchEvent(new CustomEvent(EVT.COMMENTS_RAIL_GOTO));
+        window.dispatchEvent(new CustomEvent(EVT.COMMENTS_RAIL_GOTO, { detail: { token: link.token } }));
       }, 0);
     },
 

@@ -508,3 +508,13 @@ html, body {
   .public-feature { padding: var(--space-md); }
   .public-header h1 { font-size: var(--font-size-2xl); }
 }
+
+/* Sprach-Hinweis oben auf den indexierbaren Seiten: erscheint, wenn der
+   Browser Englisch will, die URL aber die deutsche Standardfassung ist
+   (lib/public-render.js#langSwitchVars). */
+.public-lang-hint {
+  margin: 0;
+  font-size: var(--font-size-sm);
+  text-align: center;
+  color: var(--color-muted);
+}

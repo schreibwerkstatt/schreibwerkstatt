@@ -130,3 +130,90 @@ test('Reply/Resolve/Delete: Fehler landet sichtbar in der Statuszeile', async ()
   ]);
   assert.equal(ctx.drafts[1], 'Hallo', 'Entwurf bleibt nach Fehler stehen');
 });
+
+// ── Zähler, Filter, Sprung ───────────────────────────────────────────────────
+// Echter DOM (linkedom) für locateRange/rangeFromOffsets.
+const { parseHTML } = await import('linkedom');
+
+function railWithDom(html, extraKeys = {}) {
+  const { document: doc, NodeFilter: NF } = parseHTML(`<html><body><div id="v">${html}</div></body></html>`);
+  // linkedom hat kein vollständiges Range — Geometrie braucht der Test nicht.
+  doc.createRange = () => ({ setStart() {}, setEnd() {}, isPointInRange: () => false });
+  globalThis.document = doc;
+  globalThis.NodeFilter = NF || { SHOW_TEXT: 4 };
+  globalThis.CSS = globalThis.CSS || { escape: (s) => String(s) };
+  globalThis.Highlight = globalThis.Highlight || class {};
+  const view = doc.getElementById('v');
+  const selected = [];
+  const rail = createCommentRail({
+    scopeEl: () => view,
+    hlAll: 'a', hlActive: 'b',
+    keys: {
+      comments: 'comments', threads: 'threads', selectedRootId: 'sel', railVisible: 'visible',
+      replyDrafts: 'drafts', savingReply: 'savingReply', savingResolve: 'savingResolve',
+      loadingBookId: 'loadingBookId', recomputeRaf: 'raf', generalThreads: 'general',
+      filterStatus: 'fStatus', filterReviewer: 'fReviewer', totalCount: 'total', openCount: 'open',
+      pendingGotoToken: 'gotoToken', ...extraKeys,
+    },
+    generalFilter: () => true,
+    idle: () => false,
+    shouldWait: () => false,
+    scrollToRange: () => {},
+  });
+  const ctx = {
+    comments: [], threads: [], general: [], sel: null, visible: true, drafts: {},
+    savingReply: null, savingResolve: null, loadingBookId: null, raf: null,
+    fStatus: 'all', fReviewer: '', total: 0, open: 0, gotoToken: null, ...rail,
+  };
+  const origSelect = ctx._railSelect;
+  ctx._railSelect = function (id) { selected.push(id); return origSelect.call(this, id); };
+  return { ctx, selected };
+}
+
+const DOM = '<p data-bid="b1">Erster Absatz mit Anna.</p><p data-bid="b2">Zweiter Absatz mit Beat.</p>';
+const ROWS = [
+  { id: 1, share_token: 'L1', anchor_bid: 'b2', anchor_quote: 'Beat', reader_name: 'Carla', created_at: '2026-01-01' },
+  { id: 2, share_token: 'L1', anchor_bid: 'b1', anchor_quote: 'Anna', reader_name: 'Carla', created_at: '2026-01-02', resolved_at: '2026-01-03' },
+  { id: 3, share_token: 'L2', anchor_bid: 'b1', anchor_quote: 'Erster', reader_name: 'Dora', created_at: '2026-01-04' },
+  { id: 4, share_token: 'L2', reader_name: 'Dora', body: 'allgemein', created_at: '2026-01-05' },
+];
+
+test('Zähler ungefiltert: ein Filter ohne Treffer lässt total/open stehen', () => {
+  const { ctx } = railWithDom(DOM);
+  ctx.comments = ROWS;
+  ctx._railRecompute();
+  assert.equal(ctx.total, 4);
+  assert.equal(ctx.open, 3, 'erledigte zählen nicht als offen');
+  ctx._railSetFilter({ status: 'resolved', reviewer: 'Dora' });
+  assert.equal(ctx.threads.length + ctx.general.length, 0, 'Filter trifft nichts');
+  assert.equal(ctx.total, 4);
+  assert.equal(ctx.open, 3);
+});
+
+test('_railResetFilter setzt Status und Reviewer zurück', () => {
+  const { ctx } = railWithDom(DOM);
+  ctx.fStatus = 'open'; ctx.fReviewer = 'Dora';
+  ctx._railResetFilter();
+  assert.equal(ctx.fStatus, 'all');
+  assert.equal(ctx.fReviewer, '');
+});
+
+test('Sprung per Link-Token: erster OFFENER verankerter Thread des Links in Dokument-Reihenfolge', () => {
+  const { ctx, selected } = railWithDom(DOM);
+  ctx.comments = ROWS;
+  ctx.gotoToken = 'L1';
+  ctx._railRecompute();
+  // L1: id 2 (b1, erledigt) liegt vor id 1 (b2, offen) → offen gewinnt.
+  assert.deepEqual(selected, [1]);
+  assert.equal(ctx.sel, 1);
+  assert.equal(ctx.gotoToken, null, 'Sprung wird nur einmal ausgeführt');
+});
+
+test('Sprung per Link-Token ohne passenden Thread wählt nichts', () => {
+  const { ctx, selected } = railWithDom(DOM);
+  ctx.comments = ROWS;
+  ctx.gotoToken = 'L-unbekannt';
+  ctx._railRecompute();
+  assert.deepEqual(selected, []);
+  assert.equal(ctx.sel, null);
+});

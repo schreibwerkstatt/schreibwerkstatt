@@ -1,6 +1,6 @@
 {
   "name": "schreibwerkstatt",
-  "version": "6.8.0",
+  "version": "6.8.1",
   "description": "Schreibwerkstatt — Schreiben, Lektorat und Buchanalyse mit KI",
   "license": "AGPL-3.0-or-later",
   "main": "server.js",
@@ -34,7 +34,8 @@
     "squash:regen": "node tools/regen-squashed.js",
     "calibrate:tokens": "node scripts/calibrate-chars-per-token.js",
     "eval:lektorat": "node scripts/eval-lektorat.js",
-    "shots:landing": "node scripts/landing-shots.js"
+    "shots:landing": "node scripts/landing-shots.js",
+    "shots:og": "node scripts/landing-shots/og-image.js"
   },
   "devDependencies": {
     "@playwright/test": "^1.65.0",

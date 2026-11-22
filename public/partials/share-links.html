@@ -109,7 +109,7 @@
                     x-show="link.mine !== false"
                     @click="showCommentsForLink(link)"
                     :data-tip="$app.t('share.comments.show')">
-              <span x-text="$app.t('share.comments.countLabel', { count: link.comment_count || 0 })"></span>
+              <span x-text="$app.tn('share.comments.countLabel', link.comment_count || 0)"></span>
               <span x-show="link.unread_count > 0" class="share-row__unread"
                     x-text="$app.t('share.unread.badge', { count: link.unread_count })"></span>
             </button>

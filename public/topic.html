@@ -13,7 +13,7 @@
   <meta property="og:type" content="article">
   <meta property="og:title" content="{{title}}">
   <meta property="og:description" content="{{metaDescription}}">
-  <meta property="og:image" content="{{ogImage}}">
+  {{headMetaHtml}}
   {{#if canonical}}<meta property="og:url" content="{{canonical}}">{{/if}}
   <meta name="twitter:card" content="summary_large_image">
   <link rel="icon" href="/schreibwerkstatt_icon.svg">
@@ -26,6 +26,7 @@
 </head>
 <body>
   <main class="public-shell public-shell--wide">
+    {{#if langHint}}<p class="public-lang-hint" lang="{{langSwitchLang}}"><a class="public-inline-link" href="{{langSwitchUrl}}" hreflang="{{langSwitchLang}}">{{langHintText}}</a></p>{{/if}}
     <header class="public-header public-hero">
       <a href="/"><img class="public-brand" src="/schreibwerkstatt_icon.svg" alt="{{appName}}" width="56" height="56"></a>
       <p class="public-hero-brand">{{appName}}</p>
@@ -64,6 +65,7 @@
       <nav class="public-footer-links">
         <a class="public-footer-link" href="/">{{backToLanding}}</a>
         <a class="public-footer-link" href="/datenschutz">{{privacyLabel}}</a>
+        <a class="public-footer-link" href="{{langSwitchUrl}}" hreflang="{{langSwitchLang}}" lang="{{langSwitchLang}}">{{langSwitchLabel}}</a>
       </nav>
     </footer>
   </main>

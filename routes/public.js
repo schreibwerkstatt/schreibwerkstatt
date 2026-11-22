@@ -39,6 +39,7 @@ const { tServer } = require('../lib/i18n-server');
 const {
   render: _render, escHtml: _escHtml, toInlineJson, bodyLang: _bodyLang, publicUrl: _publicUrl,
   seoIndexable: _seoIndexable, demoUrl, appName: _appName, seoLinks, langUrl, LANGS,
+  pageLang, langSwitchVars, setPublicPageHeaders, headMetaHtml, ogImageUrl,
 } = require('../lib/public-render');
 const { PUBLIC_PAGE_PATHS } = require('./public-pages');
 
@@ -84,9 +85,9 @@ function _landingLd({ appName, description, url, lang }) {
 const LANDING_TEXT_KEYS = [
   'heroTitle', 'heroText', 'demoLabel', 'demoNote', 'loginPrompt', 'statusText',
   'principleTitle', 'principleText', 'loginLabel', 'registerLabel', 'footer', 'githubLabel',
-  'featuresTitle', 'featLinkLektorat', 'featLinkTool', 'featLinkTestleser',
+  'featuresTitle', 'featLinkLektorat', 'featLinkTestleser',
   'feat1Title', 'feat1Desc', 'feat2Title', 'feat2Desc', 'feat3Title', 'feat3Desc',
-  'toolTitle', 'toolText', 'toolCta', 'moreTitle',
+  'moreTitle', 'allFeaturesLink',
   'more1Title', 'more1Desc', 'more2Title', 'more2Desc', 'more3Title', 'more3Desc',
   'more4Title', 'more4Desc', 'more5Title', 'more5Desc', 'more6Title', 'more6Desc',
   'trustTitle', 'trust1Title', 'trust1Text', 'trust2Title', 'trust2Text',
@@ -98,7 +99,7 @@ const LANDING_TEXT_KEYS = [
 ];
 
 function _renderLanding(req, res) {
-  const lang = _bodyLang(req);
+  const lang = pageLang(req);
   const source = _requestSource(req);
   const t = (key) => tServer(key, lang);
   const appName = _appName();
@@ -106,16 +107,17 @@ function _renderLanding(req, res) {
   const demo = demoUrl();
   const metaDescription = t('landing.metaDescription');
   const texts = Object.fromEntries(LANDING_TEXT_KEYS.map(k => [k, t(`landing.${k}`)]));
-  res.set('Cache-Control', 'no-store');
-  res.set('Vary', 'Accept-Language');
+  const title = `${appName}: ${texts.heroTitle.replace(/\.$/, '')}`;
+  setPublicPageHeaders(res);
   res.type('html').send(_render('landing.html', {
     ...texts,
     lang,
     noindex:       !seo.canonical,
     ...seo,
-    title:         `${appName}: ${texts.heroTitle.replace(/\.$/, '')}`,
+    ...langSwitchVars(req, '/', lang),
+    title,
     metaDescription,
-    ogImage:       `${_publicUrl()}/img/landing/lektorat.webp`,
+    headMetaHtml:  headMetaHtml({ lang, ogImage: ogImageUrl('landing', lang), ogAlt: title }),
     ldJson:        _landingLd({ appName, description: metaDescription, url: seo.canonical, lang }),
     appName,
     demoUrl:       demo,
@@ -161,21 +163,25 @@ function _renderRegister(req, res) {
 
 // Öffentliche Datenschutzerklärung. Statisches Template mit i18n-Substitution,
 // kein Session-Zwang — verlinkt u.a. aus dem nativen macOS-Client und für die
-// Apple-App-Store-Einreichung erreichbar. Sprache via Accept-Language.
-function _renderPrivacy(req, res) {
-  const lang = _bodyLang(req);
+// Apple-App-Store-Einreichung erreichbar. Sprache: /datenschutz aus der URL, Alias /privacy via Accept-Language.
+function _renderPrivacy(req, res, { alias = false } = {}) {
+  // /datenschutz ist indexiert: Sprache allein aus der URL. /privacy ist ein
+  // nicht indexierter Alias (macOS-Client, App-Store-Einreichung) und folgt
+  // weiter dem Browser.
+  const lang = alias ? _bodyLang(req) : pageLang(req);
   const t = (key) => tServer(key, lang);
   const appName = _appName();
   const analyticsEnabled = !!appSettings.get('analytics.plausible.enabled');
   // /privacy ist ein Alias derselben Seite — beide zeigen auf /datenschutz,
   // sonst konkurrieren zwei URLs mit identischem Inhalt um dieselbe Position.
   const seo = seoLinks('/datenschutz', lang);
-  res.set('Cache-Control', 'no-store');
-  res.set('Vary', 'Accept-Language');
+  setPublicPageHeaders(res);
   res.type('html').send(_render('datenschutz.html', {
     lang,
     noindex:       !seo.canonical,
     ...seo,
+    ...langSwitchVars(req, '/datenschutz', lang),
+    headMetaHtml:  headMetaHtml({ lang }),
     metaDescription: t('privacy.metaDescription'),
     appName,
     analyticsEnabled,
@@ -250,8 +256,8 @@ router.get('/sitemap.xml', (req, res) => {
 
 router.get('/landing', _renderLanding);
 router.get('/register', _renderRegister);
-router.get('/datenschutz', _renderPrivacy);
-router.get('/privacy', _renderPrivacy); // englischer Alias — eine Seite, Sprache via _bodyLang
+router.get('/datenschutz', (req, res) => _renderPrivacy(req, res));
+router.get('/privacy', (req, res) => _renderPrivacy(req, res, { alias: true })); // englischer Alias — eine Seite, Sprache via _bodyLang
 
 // ALTCHA-Challenge fuer Register- + Admin-Login-Widget (kein Auth-Zwang, vor
 // dem Guard gemountet). Liefert eine frische signierte Challenge; 503 wenn

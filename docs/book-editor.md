@@ -6,7 +6,7 @@ Code: [public/js/cards/book-editor-card.js](../public/js/cards/book-editor-card.
 
 Trigger: Karten-Toggle aus Palette/Quick-Pills/Seitenbaum-Kopf (`showBookEditorCard`, Feature-Key `bookEditor` in [feature-registry.js](../public/js/cards/feature-registry.js)). Erneuter Toggle bei offener Karte schliesst sie (`onReclick: 'close'` → `closeCard`: Dirty-Blöcke sichert `onHide`, danach Buchübersicht). Cmd/Ctrl+F im sichtbaren Bucheditor öffnet die Find-Leiste **innerhalb** der Karte (Routing via `book-editor:open-find`-Event aus `editor-find-card`).
 
-**Kommentar-Leiste:** Der Bucheditor zeigt verankerte Share-Link-Leser-Kommentare des ganzen Buchs als rechte Margin-Rail (dritte Layout-Spalte, `.book-editor-layout--comments`). Methoden in [public/js/editor/book-editor-comments.js](../public/js/editor/book-editor-comments.js) (in `bookEditorCard` gespreadet), Detail-Doku in [share-link.md](share-link.md#kommentar-leiste-im-bucheditor). Owner springt aus der „Geteilte Links"-Karte für Buch-/Kapitel-Shares hierher (`book-editor:goto-comment`).
+**Kommentar-Leiste:** Der Bucheditor zeigt verankerte Share-Link-Leser-Kommentare des ganzen Buchs als rechte Margin-Rail (dritte Layout-Spalte, `.book-editor-layout--comments`); ist das Editor-Pane dafür zu schmal, weicht erst die Outline, dann rückt die Leiste unter den Stream (`commentPaneMode`). Methoden in [public/js/editor/book-editor-comments.js](../public/js/editor/book-editor-comments.js) (in `bookEditorCard` gespreadet), Detail-Doku in [share-link.md](share-link.md#kommentar-leiste-im-bucheditor). Owner springt aus der „Geteilte Links"-Karte für Buch-/Kapitel-Shares hierher (`book-editor:goto-comment`).
 
 ## Abgrenzung gegen Notebook-Editor und Focus-Editor
 

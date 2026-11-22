@@ -19,9 +19,9 @@
     <div class="card-header-aside">
       <div class="card-actions">
         <!-- @include book-editor-history -->
-        <button :aria-expanded="outlineOpen" type="button" class="icon-btn icon-btn--ghost" @click="outlineOpen = !outlineOpen"
-                :class="{ 'is-active': outlineOpen }"
-                :data-tip="$app.t('bookEditor.btn.outlineTitle')"
+        <button :aria-expanded="outlineShown()" type="button" class="icon-btn icon-btn--ghost" @click="onOutlineButton()"
+                :class="{ 'is-active': outlineShown() }"
+                :data-tip="outlineOpen && !outlineShown() ? $app.t('bookEditor.btn.outlineSuppressedTitle') : $app.t('bookEditor.btn.outlineTitle')"
                 :aria-label="$app.t('bookEditor.btn.outline')">
           <svg class="icon" aria-hidden="true"><use href="/icons.svg#list"/></svg>
         </button>
@@ -30,15 +30,15 @@
                 :aria-label="$app.t('bookEditor.btn.find')">
           <svg class="icon" aria-hidden="true"><use href="/icons.svg#search"/></svg>
         </button>
-        <span class="icon-btn-badge-wrap" x-show="(commentThreads.length + commentGeneralThreads.length) > 0" x-cloak>
+        <span class="icon-btn-badge-wrap" x-show="commentTotalCount > 0" x-cloak>
           <button type="button" class="icon-btn icon-btn--ghost" @click="toggleCommentRail()"
                   :class="{ 'is-active': commentRailVisible }"
                   :aria-pressed="commentRailVisible"
                   :data-tip="$app.t('share.rail.toggle')" :aria-label="$app.t('share.rail.toggle')">
             <svg class="icon" aria-hidden="true"><use href="/icons.svg#users"/></svg>
           </button>
-          <span class="icon-btn-badge" x-text="commentThreads.length + commentGeneralThreads.length"
-                :data-tip="$app.t('share.openCommentsTitle', { n: commentThreads.length + commentGeneralThreads.length })"></span>
+          <span class="icon-btn-badge" x-show="commentOpenCount > 0" x-text="commentOpenCount"
+                :data-tip="$app.tn('share.openCommentsTitle', commentOpenCount)"></span>
         </span>
         <span class="icon-btn-badge-wrap">
           <button type="button" class="icon-btn icon-btn--ghost icon-btn--success" @click="saveAllDirty()"
@@ -65,12 +65,13 @@
   <div x-show="loadError" class="card-status book-editor-load-error" x-text="loadError"></div>
 
   <div class="book-editor-layout"
-       :class="{ 'book-editor-layout--no-outline': !outlineOpen,
-                 'book-editor-layout--comments': commentRailShown() }"
+       :class="{ 'book-editor-layout--no-outline': !outlineShown(),
+                 'book-editor-layout--comments': commentRailShown() && commentPaneMode !== 'flat',
+                 'book-editor-layout--comments-flat': commentRailShown() && commentPaneMode === 'flat' }"
        x-show="!loading && blocks.length > 0">
 
     <!-- Outline / Inhaltsverzeichnis -->
-    <aside class="book-editor-outline" x-show="outlineOpen" x-cloak>
+    <aside class="book-editor-outline" x-show="outlineShown()" x-cloak>
       <div class="book-editor-outline-title" x-text="$app.t('bookEditor.outline.title')"></div>
       <nav class="book-editor-outline-nav" :aria-label="$app.t('bookEditor.outline.title')">
         <!-- Kapitel-Knoten und Solo-Bucket tragen dieselbe `pages`-Liste
@@ -194,6 +195,16 @@
     <aside class="comment-rail book-editor-comments"
            x-show="commentRailShown()" x-cloak
            :aria-label="$app.t('share.rail.title')">
+
+      <!-- Kopf wie in der Notebook-Leiste: Anzahl sichtbarer Threads + Schliessen. -->
+      <div class="comment-rail__head">
+        <span class="comment-rail__title" x-text="$app.tn('share.comments.countLabel', commentThreads.length + commentGeneralThreads.length)"></span>
+        <button type="button" class="icon-btn icon-btn--ghost"
+                @click="toggleCommentRail()"
+                :data-tip="$app.t('share.rail.collapse')" :aria-label="$app.t('share.rail.collapse')">
+          <svg class="icon" aria-hidden="true"><use href="/icons.svg#x"/></svg>
+        </button>
+      </div>
 
       <!-- Triage-Filter (#5): Status-Segment, Reviewer-Filter, Leer-Hinweis — geteilt mit der
            anderen Owner-Leiste (editor-comments.html). -->

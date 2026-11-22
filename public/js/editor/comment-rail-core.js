@@ -16,7 +16,7 @@
 import { fetchJson, sendJson, escHtml } from '../utils.js';
 import { loadDiff } from '../lazy-libs.js';
 import { renderInline } from '../page-revision-diff.js';
-import { locateRange, resolveCurrentQuote, caretPosFromPoint, anchorFromRow } from '../share-anchor.js';
+import { locateRange, resolveCurrentQuote, caretPosFromPoint, anchorFromRow, quoteWindow } from '../share-anchor.js';
 import { groupThreads } from './comment-threads.js';
 import { avatarInitials } from '../avatar.js';
 import { compareText } from '../i18n.js';
@@ -38,7 +38,11 @@ function wrapP(text) {
 //   keys                   → Mapping abstrakter Felder auf die Karten-State-Namen:
 //     { comments, threads, selectedRootId, railVisible, replyDrafts,
 //       savingReply, savingResolve, loadingBookId, recomputeRaf,
-//       pendingGotoBid?, generalThreads? }
+//       pendingGotoToken?, generalThreads?, filterStatus?, filterReviewer?,
+//       totalCount?, openCount? }
+//     totalCount/openCount: Threads dieser Ansicht OHNE Triage-Filter (alle bzw.
+//     nicht erledigte) — treiben Knopf-Sichtbarkeit und Badge, damit ein Filter
+//     ohne Treffer den Zugang zur Leiste nicht wegnimmt.
 //   generalFilter(root, app) → optional. Liefert true ⇒ dieser nicht-verankerte
 //     (allgemeine) Kommentar gehört in diese Leiste. Nur ausgewertet, wenn
 //     keys.generalThreads gesetzt ist; ohne Filter werden allgemeine Kommentare
@@ -140,6 +144,8 @@ export function createCommentRail(cfg) {
       if (cfg.idle?.(app) || !this[K.comments]?.length || !view) {
         this[K.threads] = [];
         if (K.generalThreads) this[K.generalThreads] = [];
+        if (K.totalCount) this[K.totalCount] = 0;
+        if (K.openCount) this[K.openCount] = 0;
         this[K.selectedRootId] = null;
         clearHL();
         cfg.afterRecompute?.(this);
@@ -172,7 +178,12 @@ export function createCommentRail(cfg) {
         // nicht auf dieser Seite / nicht im Stream. resolveCurrentQuote trennt beides.
         const res = resolveCurrentQuote(view, anchorOf(root));
         if (res.status !== 'changed') continue;
-        onView.push({ root, replies: g.replies, changed: true, currentText: res.currentText, _diffHtml: undefined, _sort: sortKey(bi) });
+        // Diff gegen den Ausschnitt, der dem Zitat heute entspricht (auf
+        // Wortgrenzen, mit „…") — gesucht im ganzen Block, weil die Offsets des
+        // Ankers sich auf den Block beziehen, nicht auf res.currentText.
+        let blockText = res.currentText;
+        try { blockText = view.querySelector(`[data-bid="${CSS.escape(String(root.anchor_bid))}"]`)?.textContent ?? blockText; } catch {}
+        onView.push({ root, replies: g.replies, changed: true, currentText: quoteWindow(blockText, anchorOf(root)), _diffHtml: undefined, _sort: sortKey(bi) });
         // kein Highlight (Stelle nicht mehr lokalisierbar)
       }
       onView.sort((a, b) => a._sort - b._sort);
@@ -188,6 +199,13 @@ export function createCommentRail(cfg) {
         return true;
       };
       const onViewF = unfiltered ? onView : onView.filter(t => passes(t.root));
+      // Ungefilterte Zähler (Knopf + Badge): verankerte + allgemeine dieser Ansicht.
+      const generalAll = K.generalThreads ? general : [];
+      if (K.totalCount) this[K.totalCount] = onView.length + generalAll.length;
+      if (K.openCount) {
+        this[K.openCount] = onView.filter(t => !t.root.resolved_at).length
+          + generalAll.filter(t => !t.root.resolved_at).length;
+      }
       this[K.threads] = onViewF;
       // Allgemeine zuletzt zugefügt zuerst (neueste oben) — analog zur alten Karte.
       let generalF = general;
@@ -211,12 +229,14 @@ export function createCommentRail(cfg) {
       cfg.afterRecompute?.(this);
       this._railComputeDiffs();
 
-      // Sprung aus der Owner-Karte: Thread zu diesem data-bid öffnen.
-      if (K.pendingGotoBid && this[K.pendingGotoBid]) {
-        const bid = this[K.pendingGotoBid];
-        this[K.pendingGotoBid] = null;
-        const t = onViewF.find(x => String(x.root.anchor_bid) === String(bid));
-        if (t) this._railSelect(t.root.id);
+      // Sprung aus der „Geteilte Links"-Karte: ersten offenen verankerten Thread
+      // dieses Links (Dokument-Reihenfolge) öffnen, sonst den ersten überhaupt.
+      if (K.pendingGotoToken && this[K.pendingGotoToken]) {
+        const token = this[K.pendingGotoToken];
+        this[K.pendingGotoToken] = null;
+        const ofLink = onViewF.filter(x => x.root.share_token === token);
+        const t = ofLink.find(x => !x.root.resolved_at) || ofLink[0];
+        if (t && this[K.selectedRootId] !== t.root.id) this._railSelect(t.root.id);
       }
     },
 
@@ -317,6 +337,13 @@ export function createCommentRail(cfg) {
       if (K.filterStatus && status !== undefined) this[K.filterStatus] = status;
       if (K.filterReviewer && reviewer !== undefined) this[K.filterReviewer] = reviewer;
       this._railRecompute();
+    },
+
+    // Triage-Filter auf „alle" zurück (ohne Recompute — der Aufrufer löst ohnehin
+    // neu auf, z. B. beim Seitenwechsel).
+    _railResetFilter() {
+      if (K.filterStatus) this[K.filterStatus] = 'all';
+      if (K.filterReviewer) this[K.filterReviewer] = '';
     },
 
     // Avatar-Daten für die Meta-Zeile (Google-Docs-Optik): Label + Initialen-Pip

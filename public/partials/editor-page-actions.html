@@ -68,11 +68,11 @@
               <span class="icon-btn-badge" x-show="currentPageChatSessionCount > 0" x-text="currentPageChatSessionCount" :data-tip="t('editor.btn.chatCountTitle', { n: currentPageChatSessionCount })"></span>
             </span>
             <button :aria-pressed="showReferenceCard" type="button" class="icon-btn icon-btn--ghost" @click="toggleReferenceCard()" :class="{ 'is-active': showReferenceCard }" :data-tip="t('editor.btn.referenceTitle')" :aria-label="t('editor.btn.reference')"><svg class="icon" aria-hidden="true"><use href="/icons.svg#book-open"/></svg></button>
-            <span class="icon-btn-badge-wrap" x-show="pageCommentCount > 0">
+            <span class="icon-btn-badge-wrap" x-show="pageCommentTotal > 0">
               <button type="button" class="icon-btn icon-btn--ghost" @click="window.dispatchEvent(new CustomEvent('comments-rail:toggle'))" :class="{ 'is-active': pageCommentRailOpen }" :data-tip="t('share.rail.toggle')" :aria-label="t('share.rail.toggle')" :aria-pressed="pageCommentRailOpen">
                 <svg class="icon" aria-hidden="true"><use href="/icons.svg#users"/></svg>
               </button>
-              <span class="icon-btn-badge" x-text="pageCommentCount" :data-tip="t('share.openCommentsTitle', { n: pageCommentCount })"></span>
+              <span class="icon-btn-badge" x-show="pageCommentCount > 0" x-text="pageCommentCount" :data-tip="tn('share.openCommentsTitle', pageCommentCount)"></span>
             </span>
             <span class="action-overflow" x-data="menu()">
               <span class="icon-btn-badge-wrap">

@@ -43,9 +43,12 @@
 </div>
 
 <!-- Antworten (meine sind abgesetzt). -->
+<!-- Klick auf eine Antwort wählt den Thread (ohne Umschalten: eine offene
+     Auswahl bleibt offen), damit die ganze Karte das Klickziel ist. -->
 <template x-for="r in thread.replies" :key="r.id">
-  <div class="comment-rail__comment comment-rail__comment--reply"
-       :class="{ 'comment-rail__comment--author': r.author_email }">
+  <div class="comment-rail__comment comment-rail__comment--reply internal-link"
+       :class="{ 'comment-rail__comment--author': r.author_email }"
+       @click="commentSelectedRootId !== thread.root.id && selectCommentThread(thread.root.id)">
     <div class="comment-rail__meta">
       <span class="comment-rail__avatar" aria-hidden="true"
             :style="`--avatar-hue: ${commentAvatar(r).hue}`"
@@ -53,7 +56,7 @@
       <span class="comment-rail__author" x-text="commentAvatar(r).label"></span>
       <span class="comment-rail__time" x-text="$app.formatRelativeShort(r.created_at)"></span>
       <button type="button" class="icon-btn icon-btn--ghost comment-rail__del comment-rail__reply-del hover-reveal"
-              @click="deleteBookComment(r)"
+              @click.stop="deleteBookComment(r)"
               :data-tip="$app.t('common.delete')" :aria-label="$app.t('common.delete')">
         <svg class="icon" aria-hidden="true"><use href="/icons.svg#trash"/></svg>
       </button>

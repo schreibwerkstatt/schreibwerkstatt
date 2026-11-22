@@ -17,16 +17,52 @@ import { scrollWindowToRange } from '../share-anchor.js';
 function streamEl() { return document.querySelector('.book-editor-stream'); }
 function layerEl() { return document.querySelector('.book-editor-comments__layer'); }
 
-// Unter diesem Viewport die Leiste flach (statische Liste) rendern — die
-// dritte Spalte stapelt sich dann unter den Stream (siehe book-editor.css).
-const FLAT_BELOW = '(max-width: 800px)';
+function layoutEl() { return document.querySelector('.card--bookeditor .book-editor-layout'); }
+
+// Unter diesem Viewport stapelt das ganze Layout einspaltig (book-editor.css,
+// Mobile-Block) — die Leiste ist dann immer flach.
+const MOBILE_BELOW = '(max-width: 800px)';
+// Schmalste Textspalte, die neben der Leiste noch lesbar ist (px). Darunter weicht
+// erst das Inhaltsverzeichnis, dann rückt die Leiste flach unter den Stream.
+const STREAM_MIN = 480;
+
+// Spaltenbreiten wie in book-editor.css (grid-template-columns von
+// .book-editor-layout--comments, normal bzw. :fullscreen). Gemessen wird nicht,
+// weil die Spalten im gesuchten Modus noch gar nicht existieren.
+function columnWidths() {
+  const vw = window.innerWidth || 0;
+  const fs = !!document.fullscreenElement?.classList?.contains('card--bookeditor');
+  return fs
+    ? { outline: 360, rail: Math.min(460, Math.max(320, vw * 0.26)) }
+    : { outline: 280, rail: Math.min(340, Math.max(280, vw * 0.22)) };
+}
+
+// Platz-Modus der Kommentar-Leiste im Editor-Pane (die Pane-Breite zählt, nicht
+// der Viewport): 'full' = Outline | Stream | Leiste, 'no-outline' = Outline weicht
+// (solange die Leiste offen ist), 'flat' = Leiste als Liste unter dem Stream.
+// Hat der User die Outline trotz Platzmangel wieder eingeblendet
+// (_outlineForced), rückt stattdessen die Leiste unter den Text.
+function paneMode(ctx) {
+  if (!ctx.commentRailShown()) return 'full';
+  if (window.matchMedia?.(MOBILE_BELOW).matches) return 'flat';
+  const el = layoutEl();
+  if (!el) return ctx.commentPaneMode || 'full';
+  const W = el.clientWidth;
+  const gap = parseFloat(getComputedStyle(el).columnGap) || 0;
+  const { outline, rail } = columnWidths();
+  if (rail + gap + STREAM_MIN > W) return 'flat';
+  if (!ctx.outlineOpen || outline + rail + 2 * gap + STREAM_MIN <= W) return 'full';
+  return ctx._outlineForced ? 'flat' : 'no-outline';
+}
 
 // Vertikale Verankerung (Google-Docs-Modell) aus dem geteilten Kern, Scope =
 // ganzer Stream. State-Felder sind in bookEditorCard deklariert.
 const layout = createCommentLayout({
   scopeEl: streamEl,
   layerEl,
-  flatBelow: FLAT_BELOW,
+  // Platz-Modus vor jedem Layout-Pass nachführen (Resize, Stream-Reflow, Toggle).
+  beforeLayout: (ctx) => ctx._updateCommentPaneMode(),
+  isFlat: (ctx) => ctx.commentPaneMode === 'flat',
   keys: { threads: 'commentThreads', selectedRootId: 'commentSelectedRootId', railVisible: 'commentRailVisible', stackHeight: 'commentStackHeight' },
 });
 
@@ -38,9 +74,10 @@ const rail = createCommentRail({
     comments: 'bookComments', threads: 'commentThreads', selectedRootId: 'commentSelectedRootId',
     railVisible: 'commentRailVisible', replyDrafts: 'commentReplyDrafts', savingReply: 'commentSavingReply',
     savingResolve: 'commentSavingResolve', loadingBookId: '_commentLoadingBookId',
-    recomputeRaf: '_commentRecomputeRaf', pendingGotoBid: '_pendingGotoBid',
+    recomputeRaf: '_commentRecomputeRaf', pendingGotoToken: '_pendingGotoToken',
     generalThreads: 'commentGeneralThreads',
     filterStatus: 'commentFilterStatus', filterReviewer: 'commentFilterReviewer',
+    totalCount: 'commentTotalCount', openCount: 'commentOpenCount',
   },
   // Bucheditor = ganzes Buch: alle allgemeinen (nicht-verankerten) Kommentare jedes
   // Link-Scopes (Buch/Kapitel/Seite) gehören in diese Leiste.
@@ -84,21 +121,54 @@ export const bookEditorCommentsMethods = {
   toggleCommentResolve(comment) { return this._railResolve(comment); },
   deleteBookComment(comment) { return this._railDelete(comment); },
 
-  // Steht die Leiste? EINE Bedingung für die Leiste selbst und die dritte
-  // Rasterspalte: ein Filter ohne Treffer zeigt die Leiste weiter (Filterknöpfe,
-  // Leer-Hinweis) — ohne eigene Spalte rutschte sie in eine neue Rasterzeile
-  // unter das ganze Manuskript.
+  // Steht die Leiste? EINE Bedingung für die Leiste selbst und ihre Rasterspalte:
+  // sobald das Buch Threads hat (ungefiltert) — ein Filter ohne Treffer zeigt die
+  // Leiste weiter (Filterknöpfe, Leer-Hinweis); ohne eigene Spalte rutschte sie in
+  // eine neue Rasterzeile unter das ganze Manuskript.
   commentRailShown() {
     return this.commentRailVisible
-      && !!(this.commentThreads.length || this.commentFilterStatus !== 'all' || this.commentFilterReviewer);
+      && !!(this.commentTotalCount || this.commentFilterStatus !== 'all' || this.commentFilterReviewer);
+  },
+
+  // Platz-Modus neu bestimmen; nur bei Wechsel schreiben (reaktiver State).
+  _updateCommentPaneMode() {
+    const mode = paneMode(this);
+    if (mode !== this.commentPaneMode) this.commentPaneMode = mode;
+  },
+
+  // Outline wirklich sichtbar? Die Präferenz `outlineOpen` bleibt unangetastet;
+  // im Modus 'no-outline' weicht die Outline nur, solange die Leiste offen ist.
+  outlineShown() {
+    return this.outlineOpen && !(this.commentRailShown() && this.commentPaneMode === 'no-outline');
+  },
+
+  // Outline-Knopf: weicht die Outline gerade der Leiste, holt ein Klick sie zurück
+  // und schickt die Leiste unter den Text; sonst normales Umschalten.
+  onOutlineButton() {
+    if (this.outlineOpen && !this.outlineShown()) {
+      this._outlineForced = true;
+    } else {
+      this.outlineOpen = !this.outlineOpen;
+      this._outlineForced = false;
+    }
+    this._updateCommentPaneMode();
+    this._scheduleCommentLayout();
   },
 
   toggleCommentRail() {
     this.commentRailVisible = !this.commentRailVisible;
     // Highlights folgen der Sichtbarkeit: einblenden = neu lokalisieren+markieren,
     // ausblenden = Anker-Markierung im Stream entfernen.
-    if (this.commentRailVisible) this._recomputeCommentThreads();
-    else this._railClearHL();
+    if (this.commentRailVisible) {
+      this._recomputeCommentThreads();
+      // Modus sofort setzen, nicht erst im Layout-Pass — sonst steht für einen
+      // Frame das zu enge Dreispalten-Raster.
+      this._updateCommentPaneMode();
+    } else {
+      this._railClearHL();
+      this._outlineForced = false;
+      this.commentPaneMode = 'full';
+    }
   },
 
   // Klick in den Manuskript-Stream: liegt der Klick auf einer markierten

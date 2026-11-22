@@ -13,10 +13,11 @@ export function avatarHue(seed) {
   return Math.abs(h) % 360;
 }
 
-// Bis zu zwei Initialen aus einem Anzeigenamen (getrennt an Whitespace/._@-).
-// Leer → '?'.
+// Bis zu zwei Initialen aus einem Anzeigenamen. Getrennt wird an allem, was
+// weder Buchstabe noch Ziffer ist (Whitespace, ._@-, Klammern …) — sonst wird aus
+// «Dev (lokal)» das Kürzel «D(». Ohne Buchstabe/Ziffer → '?'.
 export function avatarInitials(label) {
-  const tokens = String(label == null ? '' : label).split(/[\s._@-]+/).filter(Boolean);
+  const tokens = String(label == null ? '' : label).split(/[^\p{L}\p{N}]+/u).filter(Boolean);
   if (!tokens.length) return '?';
   return ((tokens[0][0] || '') + (tokens.length > 1 ? (tokens[1][0] || '') : '')).toUpperCase().slice(0, 2);
 }

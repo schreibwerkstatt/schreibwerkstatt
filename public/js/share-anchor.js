@@ -144,8 +144,16 @@ export function locateApprox(rootEl, anchor) {
   let block;
   try { block = rootEl.querySelector(`[data-bid="${CSS.escape(anchor.bid)}"]`); } catch { block = null; }
   if (!block) return null;
-  const txt = block.textContent || '';
-  const q = anchor.quote || '';
+  const span = approxSpan(block.textContent || '', anchor);
+  if (!span) return null;
+  const range = rangeFromOffsets(block, span.start, span.end);
+  return range ? { range, approx: true } : null;
+}
+
+// Offset-Kern von locateApprox, pure (Text statt DOM): ungefähre Spanne
+// { start, end } des geänderten Quotes in `txt` oder null.
+function approxSpan(txt, anchor) {
+  const q = anchor?.quote || '';
   if (!q || !txt) return null;
 
   const s = Number.isInteger(anchor.start) ? anchor.start : 0;
@@ -168,9 +176,30 @@ export function locateApprox(rootEl, anchor) {
   start = Math.max(0, start);
   end = Math.min(txt.length, end);
   if (end <= start) return null;
+  return { start, end };
+}
 
-  const range = rangeFromOffsets(block, start, end);
-  return range ? { range, approx: true } : null;
+// Ausschnitt des aktuellen Block-Texts, der dem geänderten Quote entspricht —
+// Gegenstück für den „Stelle geändert"-Diff (damals → jetzt). Ohne Fenster
+// verglich der Diff ein kurzes Zitat mit dem ganzen Absatz und bestand fast nur
+// aus Einfügungen. Erst die ungefähre Spanne (approxSpan), sonst ein Fenster
+// um die alten Offsets in Quote-Länge; beides auf Wortgrenzen erweitert. Am
+// Rand abgeschnittener Text bekommt „…". Pure — unit-testbar ohne DOM.
+export function quoteWindow(txt, anchor) {
+  const text = String(txt || '');
+  const q = anchor?.quote || '';
+  if (!text) return '';
+  if (!q || text.length <= q.length + 40) return text;
+  let span = approxSpan(text, anchor);
+  if (!span) {
+    const s = Number.isInteger(anchor.start) ? Math.min(anchor.start, text.length) : 0;
+    span = { start: s, end: Math.min(text.length, s + q.length) };
+  }
+  let { start, end } = span;
+  while (start > 0 && !/\s/.test(text[start - 1])) start--;
+  while (end < text.length && !/\s/.test(text[end])) end++;
+  const slice = text.slice(start, end).trim();
+  return (start > 0 ? '… ' : '') + slice + (end < text.length ? ' …' : '');
 }
 
 // Anker-Objekt aus einer Kommentar-Zeile der API (`anchor_*`-Spalten).

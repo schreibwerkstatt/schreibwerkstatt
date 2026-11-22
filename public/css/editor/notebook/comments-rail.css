@@ -49,6 +49,12 @@
     border-radius: 0;
     background: transparent;
   }
+  /* Weitere Karten unterhalb des sichtbaren Ausschnitts: Unterkante ausblenden,
+     damit die eigene Scroll-Spalte als scrollbar erkennbar ist. Klasse setzt
+     editor/comments-rail.js#updateRailScrollHint (Scroll + nach jedem Recompute). */
+  .comments-split .comment-rail.has-more-below {
+    mask-image: linear-gradient(to bottom, #000 calc(100% - var(--space-xl)), transparent);
+  }
 
   /* Allgemeine Bande: ganze Grid-Zeile unter dem Paar, zentriert auf Lesebreite
      der Seite → sitzt mittig unter dem Text. */

@@ -148,8 +148,8 @@ export const EVT = {
 
   // ── Bucheditor / Kommentar-Rail ──────────────────────────────────────────
   BOOK_EDITOR_OPEN_FIND: 'book-editor:open-find',     // kein detail
-  BOOK_EDITOR_GOTO_COMMENT: 'book-editor:goto-comment', // detail: { commentId }
-  COMMENTS_RAIL_GOTO: 'comments-rail:goto',     // detail: { commentId }
+  BOOK_EDITOR_GOTO_COMMENT: 'book-editor:goto-comment', // detail: { token } — Share-Link, dessen ersten offenen Thread öffnen
+  COMMENTS_RAIL_GOTO: 'comments-rail:goto',     // detail: { token } — Share-Link, dessen ersten offenen Thread öffnen
   COMMENTS_RAIL_TOGGLE: 'comments-rail:toggle', // kein detail
 
   // ── Cross-Card Selektion / Filter ────────────────────────────────────────

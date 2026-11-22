@@ -61,7 +61,8 @@ test('GET /landing -> HTML mit Login/Register-Buttons', async () => {
   assert.match(r.headers['content-type'] || '', /html/);
   assert.match(r.raw, /href="\/login"/);
   assert.match(r.raw, /href="\/register"/);
-  assert.equal(r.headers['cache-control'], 'no-store');
+  // Kein no-store: das nähme die Seite aus dem Back/Forward-Cache.
+  assert.equal(r.headers['cache-control'], 'private, no-cache');
 });
 
 test('GET /landing ohne Demo-Adresse: Register ist der Hauptknopf, kein Demo-Hinweis', async () => {

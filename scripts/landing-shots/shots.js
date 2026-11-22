@@ -9,8 +9,9 @@
 // Die KI-Läufe (Lektorat, Chat, Bewertung) laufen als echte Jobs durch die
 // Queue — die Antwort liefert der Stub aus scripts/landing-shots/mock-ai.js.
 //
-// Aufgenommen werden die Bilder, die die öffentlichen Seiten zeigen (Landing-
-// Kacheln, Themenseiten) plus `schreiben` fürs README.
+// Aufgenommen werden die Bilder, die die öffentlichen Seiten zeigen: Landing-
+// Kacheln, Themenseiten und je Bereich eines für die Funktionsübersicht
+// /funktionen (FEATURE_GROUPS in routes/public-features.js).
 //
 // Format: WebP, 460 CSS px breit (2× gerendert) im Verhältnis 3:2. Jede Aufnahme
 // ist ein AUSSCHNITT — der Ausschnitt, auf dem die Funktion erkennbar ist. Die
@@ -189,7 +190,110 @@ async function captureAll({ base, seed, outDir }) {
   await page.waitForTimeout(1500);
   shots.push(await _shot(page, outDir, 'ueberblick', '.card--stil table', { rect: { x: 0, y: -8 } }));
 
-  // ── 4. Testleser: geteilter Abschnitt (ohne Session) ───────────────────────
+  // ── 4. Sparrings-Chat: Textersetzung am Abschnitt ──────────────────────────
+  // Der Abschnitts-Chat steht neben dem Editor — die Stil-Karte davor hat die
+  // Abschnittsansicht geschlossen, also den Abschnitt erneut öffnen.
+  await page.evaluate(async () => {
+    window.__app._closeOtherMainCards?.(null);
+    await window.__app.selectPage(window.Alpine.store('nav').pages[0]);
+  });
+  await page.waitForTimeout(1500);
+  await page.evaluate(async () => {
+    await window.__app.toggleChatCard();
+    await window.__app.loadChatSessions?.();
+  });
+  await page.waitForSelector('.card--chat', { state: 'visible', timeout: 20000 });
+  await page.waitForTimeout(1200);
+  await page.evaluate(() => {
+    const card = window.Alpine.$data(document.querySelector('.card--chat'));
+    card.chatInput = 'Trägt der erste Satz?';
+    return card.sendChatMessage();
+  });
+  await _waitRoot(page, () => {
+    const card = document.querySelector('.card--chat');
+    if (!card) return false;
+    const d = window.Alpine.$data(card);
+    return (d.chatMessages || []).some(m => m.role === 'assistant');
+  });
+  await page.waitForTimeout(1500);
+  // Der Verlauf scrollt von selbst ans Ende (die neueste Nachricht). Sichtbar
+  // sind damit die Textersetzungs-Vorschläge mit «Übernehmen» / «Verwerfen» —
+  // das Versprechen der Kachel. Aufgenommen wird der Vorschlags-Block selbst,
+  // nicht die Karte: die Pixelzahl ändert sich sonst mit jedem Text.
+  // Die Chat-Leiste (.aside-split) ist bei 1360 px Viewport rund 410 px breit —
+  // schmaler als der Ausschnitt. Für diese Aufnahme über die Nutzerbreite der
+  // Leisten (--aside-w-user, schlägt --aside-w) auf 520 px verbreitern, damit
+  // der Ausschnitt ganz in der Karte liegt (kein Streifen Editor am Rand).
+  await page.addStyleTag({ content: 'html { --aside-w-user: 520px; }' });
+  await page.waitForTimeout(600);
+  shots.push(await _shot(page, outDir, 'chat', '.chat-vorschlaege', { rect: { x: -12, y: 32 } }));
+
+  // ── 5. Buchanalyse: Figuren ───────────────────────────────────────────────
+  await page.evaluate(async () => {
+    window.__app._closeOtherMainCards?.(null);
+    await window.__app.toggleFiguresCard();
+  });
+  await page.waitForSelector('.card--figuren', { state: 'visible', timeout: 20000 });
+  await page.waitForTimeout(2000);
+  // Die Hauptfigur aufklappen und den Block «Charakter» zeigen (Motivation,
+  // Konflikt, Hintergrund, Entwicklungsbogen) — das, was die Analyse aus dem
+  // Text herausliest. Die Liste auf Kachelbreite begrenzen, damit die Zeilen
+  // im Ausschnitt umbrechen statt abgeschnitten zu werden. Der Graph taugt
+  // nicht: das Beispielbuch hat fünf Figuren und kaum Kanten.
+  await page.addStyleTag({ content: '.card--figuren .entity-list { max-width: 480px; }' });
+  await page.locator('.card--figuren .entity-row').first().click();
+  await page.waitForSelector('.card--figuren .figur-detail', { state: 'visible', timeout: 20000 });
+  await page.waitForTimeout(1500);
+  shots.push(await _shot(page, outDir, 'buchanalyse', '.card--figuren .figur-detail .figur-group-title:has-text("Charakter")', { rect: { x: -10, y: -10 } }));
+
+  // ── 6. Bewertung: Buch-Review ─────────────────────────────────────────────
+  await page.evaluate(async () => {
+    window.__app._closeOtherMainCards?.(null);
+    await window.__app.toggleBookReviewCard();
+  });
+  await page.waitForSelector('.card--review', { state: 'visible', timeout: 20000 });
+  await page.waitForTimeout(1200);
+  await page.evaluate(async () => {
+    const card = window.Alpine.$data(document.querySelector('.card--review'));
+    await card.runBookReview();
+  });
+  await _waitRoot(page, () => {
+    const card = document.querySelector('.card--review');
+    if (!card) return false;
+    const d = window.Alpine.$data(card);
+    return !!(d.bookReviewOut || '').includes('bewertung-header');
+  });
+  await page.waitForTimeout(1200);
+  shots.push(await _shot(page, outDir, 'bewertung', '.card--review', { rect: { x: 0, y: 0 } }));
+
+  // ── 7. Plot-Werkstatt: Beat-Board ─────────────────────────────────────────
+  await page.evaluate(async () => {
+    window.__app._closeOtherMainCards?.(null);
+    await window.__app.togglePlotCard();
+  });
+  await page.waitForSelector('.card--plot', { state: 'visible', timeout: 20000 });
+  await page.waitForTimeout(2000);
+  shots.push(await _shot(page, outDir, 'plot', '.card--plot', { rect: { x: 10, y: 380 } }));
+
+  // ── 8. Recherche: Wissensboard ────────────────────────────────────────────
+  await page.evaluate(async () => {
+    window.__app._closeOtherMainCards?.(null);
+    await window.__app.toggleRechercheCard();
+  });
+  await page.waitForSelector('.card--recherche', { state: 'visible', timeout: 20000 });
+  await page.waitForTimeout(2000);
+  shots.push(await _shot(page, outDir, 'recherche', '.card--recherche', { rect: { x: 0, y: 150 } }));
+
+  // ── 9. Export ─────────────────────────────────────────────────────────────
+  await page.evaluate(async () => {
+    window.__app._closeOtherMainCards?.(null);
+    await window.__app.toggleExportCard();
+  });
+  await page.waitForSelector('.card--export', { state: 'visible', timeout: 20000 });
+  await page.waitForTimeout(1500);
+  shots.push(await _shot(page, outDir, 'export', '.card--export', { rect: { x: 0, y: 0 } }));
+
+  // ── 10. Testleser: geteilter Abschnitt (ohne Session) ───────────────────────
   const shareToken = seed.shareTokens?.page;
   if (!shareToken) throw new Error('Shot testleser: seed.shareTokens.page fehlt — der Seed hat keinen geteilten Abschnitt angelegt');
   {

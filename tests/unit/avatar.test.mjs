@@ -48,6 +48,13 @@ test('avatarInitials: bis zu zwei Initialen, getrennt an Whitespace/._@-', () =>
   assert.equal(avatarInitials('erika-mustermann'), 'EM');
 });
 
+test('avatarInitials: Klammern und Satzzeichen trennen, landen nie im Kürzel', () => {
+  assert.equal(avatarInitials('Dev (lokal)'), 'DL');
+  assert.equal(avatarInitials('«Leserin»'), 'L');
+  assert.equal(avatarInitials('Zoë Müller'), 'ZM');
+  assert.equal(avatarInitials('(—)'), '?');
+});
+
 test('avatarInitials: leer/ungültig → ?', () => {
   assert.equal(avatarInitials(''), '?');
   assert.equal(avatarInitials(null), '?');

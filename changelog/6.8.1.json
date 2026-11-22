@@ -1,0 +1,51 @@
+{
+  "version": "6.8.1",
+  "date": "2026-11-22",
+  "entries": [
+    {
+      "kind": "neu",
+      "de": "Startseite: Die neue Seite «Funktionen» zeigt alles, was die Schreibwerkstatt kann, nach Bereichen geordnet und mit Bildern. Du erreichst sie von der Startseite aus.",
+      "en": "Home page: the new “Features” page shows everything Schreibwerkstatt can do, grouped by area and with screenshots. You can reach it from the home page."
+    },
+    {
+      "kind": "verbessert",
+      "de": "Startseite und öffentliche Seiten: Jede Seite hat einen Link zur anderen Sprache. Beim Teilen in Messengern und sozialen Netzwerken erscheint jetzt ein passendes Vorschaubild.",
+      "en": "Home page and public pages: every page links to the other language. When shared in messengers and social networks, they now show a matching preview image."
+    },
+    {
+      "kind": "verbessert",
+      "de": "Kommentar-Leiste im Bucheditor: Wird der Platz zu knapp, blendet sich erst die Gliederung aus. Holst du sie zurück, rückt die Leiste unter den Text, damit er lesbar breit bleibt.",
+      "en": "Comment sidebar in the book editor: when space runs short, the outline hides first. If you bring it back, the sidebar moves below the text so it stays comfortably wide."
+    },
+    {
+      "kind": "verbessert",
+      "de": "Kommentar-Leiste: Die Zahl am Kommentar-Knopf zeigt jetzt nur noch offene Kommentare. Der Knopf bleibt auch sichtbar, wenn alle erledigt sind oder dein Filter nichts trifft.",
+      "en": "Comment sidebar: the number on the comments button now only counts open comments. The button stays visible even when all are resolved or your filter matches nothing."
+    },
+    {
+      "kind": "verbessert",
+      "de": "Kommentar-Leiste: Ein Klick auf eine markierte Textstelle springt zum passenden Kommentar, und auch ein Klick auf eine Antwort wählt den Thread aus. Im Abschnitt scrollt die Leiste neben dem Text eigenständig.",
+      "en": "Comment sidebar: clicking a highlighted passage jumps to its comment, and clicking a reply also selects the thread. In a section, the sidebar now scrolls on its own next to the text."
+    },
+    {
+      "kind": "verbessert",
+      "de": "Lese-Links: Der Sprung zu den Kommentaren eines Links öffnet jetzt direkt dessen ersten offenen Kommentar. Hat sich eine kommentierte Stelle geändert, zeigt der Vergleich nur noch den betroffenen Ausschnitt.",
+      "en": "Reading links: jumping to a link’s comments now opens its first open comment directly. If a commented passage has changed, the comparison now only shows the affected excerpt."
+    },
+    {
+      "kind": "verbessert",
+      "de": "Die App lädt schneller, weil die Schriften jetzt deutlich kleiner sind. Griechische und kyrillische Zeichen werden nur noch geladen, wenn ein Text sie enthält.",
+      "en": "The app loads faster because its fonts are now much smaller. Greek and Cyrillic characters are only loaded when a text contains them."
+    },
+    {
+      "kind": "behoben",
+      "de": "Avatare: Bei Namen mit Klammern oder Sonderzeichen erschienen im Kreis falsche Kürzel wie «D(». Jetzt stehen dort die richtigen Initialen.",
+      "en": "Avatars: names with brackets or special characters showed wrong initials like “D(”. They now show the correct initials."
+    },
+    {
+      "kind": "verbessert",
+      "de": "Das Werkzeug «Wortwiederholungen prüfen» ist nicht mehr als eigene öffentliche Seite verfügbar. In der App prüft das Lektorat Wiederholungen weiterhin.",
+      "en": "The “Check word repetitions” tool is no longer available as a separate public page. Inside the app, the editing check still finds repetitions."
+    }
+  ]
+}

@@ -12,7 +12,56 @@
 @import url('./tokens/motion.css');
 @import url('./tokens/scale.css');
 
-/* === Self-hosted Fonts === */
+/* === Self-hosted Fonts ===
+   Je Schnitt zwei Dateien, aufgeteilt per unicode-range — der Browser lädt eine
+   Datei erst, wenn ein gerendertes Zeichen in ihre Range fällt:
+   - <name>-latin.var.woff2: alles ausser Griechisch/Kyrillisch (Latin, Latin-Ext,
+     Satzzeichen, Pfeile, Mathe, Symbole). Deckt praktisch jeden Text ab.
+   - <name>.var.woff2: die vollen Originaldateien, hier nur für Griechisch/Kyrillisch.
+   Die Ranges sind disjunkt: ein Zeichen ausserhalb beider (Emoji …) fällt direkt auf
+   die nächste Schrift im Stack, statt die volle Datei zu ziehen.
+   Erzeugt mit fonttools (alle Variations-Achsen bleiben):
+     pyftsubset <name>.var.woff2 --flavor=woff2 --output-file=<name>-latin.var.woff2 \
+       --unicodes="<Latin-Range unten, ohne Leerzeichen>" \
+       --layout-features+=cv11,dlig,onum,lnum,tnum,pnum,ss01,case,frac,sups,subs,ordn
+   Wer eine Range ändert, erzeugt die Subsets neu — Range und Datei müssen übereinstimmen.
+   Die Landing lädt die zwei aufrechten Latin-Dateien per preload vor. */
+@font-face {
+  font-family: 'Inter';
+  src: url('../fonts/Inter-latin.var.woff2') format('woff2-variations'),
+       url('../fonts/Inter-latin.var.woff2') format('woff2');
+  font-weight: 100 900;
+  font-style: normal;
+  font-display: swap;
+  unicode-range: U+0000-036F, U+1D00-1EFF, U+2000-2C7F, U+2E00-2E7F, U+A700-A7FF, U+FB00-FB4F, U+FE00-FE0F, U+FEFF, U+FFFD, U+1F100-1F1FF, U+1F800-1F8FF;
+}
+@font-face {
+  font-family: 'Inter';
+  src: url('../fonts/Inter-Italic-latin.var.woff2') format('woff2-variations'),
+       url('../fonts/Inter-Italic-latin.var.woff2') format('woff2');
+  font-weight: 100 900;
+  font-style: italic;
+  font-display: swap;
+  unicode-range: U+0000-036F, U+1D00-1EFF, U+2000-2C7F, U+2E00-2E7F, U+A700-A7FF, U+FB00-FB4F, U+FE00-FE0F, U+FEFF, U+FFFD, U+1F100-1F1FF, U+1F800-1F8FF;
+}
+@font-face {
+  font-family: 'Source Serif 4';
+  src: url('../fonts/SourceSerif4-latin.var.woff2') format('woff2-variations'),
+       url('../fonts/SourceSerif4-latin.var.woff2') format('woff2');
+  font-weight: 200 900;
+  font-style: normal;
+  font-display: swap;
+  unicode-range: U+0000-036F, U+1D00-1EFF, U+2000-2C7F, U+2E00-2E7F, U+A700-A7FF, U+FB00-FB4F, U+FE00-FE0F, U+FEFF, U+FFFD, U+1F100-1F1FF, U+1F800-1F8FF;
+}
+@font-face {
+  font-family: 'Source Serif 4';
+  src: url('../fonts/SourceSerif4-Italic-latin.var.woff2') format('woff2-variations'),
+       url('../fonts/SourceSerif4-Italic-latin.var.woff2') format('woff2');
+  font-weight: 200 900;
+  font-style: italic;
+  font-display: swap;
+  unicode-range: U+0000-036F, U+1D00-1EFF, U+2000-2C7F, U+2E00-2E7F, U+A700-A7FF, U+FB00-FB4F, U+FE00-FE0F, U+FEFF, U+FFFD, U+1F100-1F1FF, U+1F800-1F8FF;
+}
 @font-face {
   font-family: 'Inter';
   src: url('../fonts/Inter.var.woff2') format('woff2-variations'),
@@ -20,6 +69,7 @@
   font-weight: 100 900;
   font-style: normal;
   font-display: swap;
+  unicode-range: U+0370-03FF, U+0400-052F, U+1C80-1C8F, U+1F00-1FFF, U+2DE0-2DFF, U+A640-A69F;
 }
 @font-face {
   font-family: 'Inter';
@@ -28,6 +78,7 @@
   font-weight: 100 900;
   font-style: italic;
   font-display: swap;
+  unicode-range: U+0370-03FF, U+0400-052F, U+1C80-1C8F, U+1F00-1FFF, U+2DE0-2DFF, U+A640-A69F;
 }
 @font-face {
   font-family: 'Source Serif 4';
@@ -36,6 +87,7 @@
   font-weight: 200 900;
   font-style: normal;
   font-display: swap;
+  unicode-range: U+0370-03FF, U+0400-052F, U+1C80-1C8F, U+1F00-1FFF, U+2DE0-2DFF, U+A640-A69F;
 }
 @font-face {
   font-family: 'Source Serif 4';
@@ -44,4 +96,5 @@
   font-weight: 200 900;
   font-style: italic;
   font-display: swap;
+  unicode-range: U+0370-03FF, U+0400-052F, U+1C80-1C8F, U+1F00-1FFF, U+2DE0-2DFF, U+A640-A69F;
 }

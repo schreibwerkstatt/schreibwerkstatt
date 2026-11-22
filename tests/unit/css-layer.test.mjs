@@ -24,6 +24,7 @@ const UNLAYERED = [
   'css/entities/figur-werkstatt.css', // jsMind-Teil ueberschreibt vendor/jsmind-*.css (unlayered); Karten-Regeln liegen im Layer
   'css/landing.css',      // Standalone-Seiten (Landing/Register/Datenschutz) ohne SPA-Komponenten
   'css/landing-sections.css', // Abschnitte derselben Standalone-Seiten (Landing, Themenseiten, Werkzeug)
+  'css/landing-features.css', // Funktionsuebersicht /funktionen, Standalone wie landing.css
 ];
 
 function walk(dir, out = []) {

@@ -12,13 +12,17 @@
 
   <!-- Verankerte Threads: stapeln normal in der rechten Spalte (das Blatt scrollt
        als eigener Container, daher keine vertikale Verankerung wie im Bucheditor).
-       Auswahl scrollt das Blatt zur Stelle. Verhalten: editor/comments-rail.js. -->
+       Auswahl scrollt das Blatt zur Stelle, Klick auf eine markierte Stelle die
+       Leiste zum Thread. Sichtbar, sobald die Seite Threads hat (ungefiltert) —
+       auch wenn nur allgemeine da sind oder der Filter nichts trifft: die Leiste
+       trägt die Filter für beide. Verhalten: editor/comments-rail.js. -->
   <aside class="comment-rail"
-         x-show="commentRailVisible && (commentThreads.length || commentFilterStatus !== 'all' || commentFilterReviewer) && !$app.editMode && !$app.checkDone"
+         x-show="commentRailVisible && commentTotalCount > 0 && !$app.editMode && !$app.checkDone"
          x-cloak
+         @scroll.passive="updateRailScrollHint($el)"
          :aria-label="$app.t('share.rail.title')">
     <div class="comment-rail__head">
-      <span class="comment-rail__title" x-text="$app.t('share.comments.countLabel', { count: commentThreads.length + commentGeneralThreads.length })"></span>
+      <span class="comment-rail__title" x-text="$app.tn('share.comments.countLabel', commentThreads.length + commentGeneralThreads.length)"></span>
       <button type="button" class="icon-btn icon-btn--ghost"
               @click="collapseRail()"
               :data-tip="$app.t('share.rail.collapse')" :aria-label="$app.t('share.rail.collapse')">
@@ -30,7 +34,9 @@
          anderen Owner-Leiste (book-editor.html). -->
     <!-- @include comment-rail-filters -->
 
-    <div class="comment-rail__layer">
+    <!-- Wächst die Kartenliste (Render, nachgeladener Diff, Antwort-Box), den
+         Ausblend-Verlauf der Scroll-Spalte neu prüfen. -->
+    <div class="comment-rail__layer" x-resize="updateRailScrollHint($el.closest('aside'))">
       <template x-for="thread in commentThreads" :key="thread.root.id">
         <div class="comment-rail__thread hover-reveal-host"
              :data-root-id="thread.root.id"

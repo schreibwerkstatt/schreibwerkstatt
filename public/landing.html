@@ -13,12 +13,23 @@
   <meta property="og:type" content="website">
   <meta property="og:title" content="{{title}}">
   <meta property="og:description" content="{{metaDescription}}">
-  <meta property="og:image" content="{{ogImage}}">
+  {{headMetaHtml}}
   {{#if canonical}}<meta property="og:url" content="{{canonical}}">{{/if}}
   <meta name="twitter:card" content="summary_large_image">
   <link rel="icon" href="/schreibwerkstatt_icon.svg">
   <!-- Theme vor dem ersten Paint (folgt der System-Einstellung bzw. der in der App gewählten). -->
   <script src="/js/theme-init.js"></script>
+  <!-- Schriften früh holen: sonst entdeckt der Browser sie erst nach CSS + Layout.
+       Nur die aufrechten Latin-Subsets (Fliesstext + Überschriften), crossorigin ist
+       bei Font-Preloads Pflicht, auch same-origin. -->
+  <link rel="preload" href="/fonts/Inter-latin.var.woff2" as="font" type="font/woff2" crossorigin>
+  <link rel="preload" href="/fonts/SourceSerif4-latin.var.woff2" as="font" type="font/woff2" crossorigin>
+  <!-- tokens.css holt seine Module per @import erst nach eigenem Download — parallel vorladen. -->
+  <link rel="preload" href="/css/tokens/colors.css" as="style">
+  <link rel="preload" href="/css/tokens/typography.css" as="style">
+  <link rel="preload" href="/css/tokens/spacing.css" as="style">
+  <link rel="preload" href="/css/tokens/motion.css" as="style">
+  <link rel="preload" href="/css/tokens/scale.css" as="style">
   <link rel="stylesheet" href="/css/tokens.css">
   <!-- .icon-Klasse fuer die Sprite-Icons der Client-Kacheln (Lucide, /icons.svg).
        Beides pre-auth erreichbar: /css/-Prefix + /icons.svg in server.js. -->
@@ -30,6 +41,7 @@
 </head>
 <body>
   <main class="public-shell public-shell--wide public-landing">
+    {{#if langHint}}<p class="public-lang-hint" lang="{{langSwitchLang}}"><a class="public-inline-link" href="{{langSwitchUrl}}" hreflang="{{langSwitchLang}}">{{langHintText}}</a></p>{{/if}}
     <div class="public-hero-block">
       <header class="public-header public-hero">
         <img class="public-brand" src="/schreibwerkstatt_icon.svg" alt="" width="72" height="72">
@@ -84,16 +96,11 @@
       </ul>
       <nav class="public-topic-links">
         <a class="public-inline-link" href="/lektorat">{{featLinkLektorat}}</a>
-        <a class="public-inline-link" href="/wortwiederholungen">{{featLinkTool}}</a>
         <a class="public-inline-link" href="/testleser">{{featLinkTestleser}}</a>
+        <a class="public-inline-link" href="/funktionen">{{allFeaturesLink}}</a>
       </nav>
     </section>
 
-    <section class="public-tool-teaser">
-      <h2 class="public-tool-teaser-title">{{toolTitle}}</h2>
-      <p>{{toolText}}</p>
-      <a class="public-btn" href="/wortwiederholungen">{{toolCta}}</a>
-    </section>
 
     <section class="public-features" aria-label="{{moreTitle}}">
       <h2 class="public-features-title public-heading">{{moreTitle}}</h2>
@@ -105,6 +112,7 @@
         <li><h3>{{more5Title}}</h3><p>{{more5Desc}}</p></li>
         <li><h3>{{more6Title}}</h3><p>{{more6Desc}}</p></li>
       </ul>
+      <p class="public-topic-links"><a class="public-btn" href="/funktionen">{{allFeaturesLink}}</a></p>
     </section>
 
     <section class="public-features" aria-label="{{trustTitle}}">
@@ -159,9 +167,10 @@
       <nav class="public-footer-links">
         <a class="public-footer-link" href="/lektorat">{{featLinkLektorat}}</a>
         <a class="public-footer-link" href="/testleser">{{featLinkTestleser}}</a>
-        <a class="public-footer-link" href="/wortwiederholungen">{{featLinkTool}}</a>
+        <a class="public-footer-link" href="/funktionen">{{allFeaturesLink}}</a>
         <a class="public-footer-link" href="{{githubUrl}}" target="_blank" rel="noopener noreferrer">{{githubLabel}}</a>
         <a class="public-footer-link" href="/datenschutz">{{privacyLabel}}</a>
+        <a class="public-footer-link" href="{{langSwitchUrl}}" hreflang="{{langSwitchLang}}" lang="{{langSwitchLang}}">{{langSwitchLabel}}</a>
       </nav>
     </footer>
   </main>

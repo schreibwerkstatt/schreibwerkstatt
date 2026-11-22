@@ -5,7 +5,7 @@
 // __SHELL_BUILD: content hash over all listed assets → drives SHELL_CACHE.
 // __SHELL_MANIFEST: the coherent set precached atomically at SW install.
 // __VENDOR_SET: current vendor/ + fonts/ files — VENDOR_CACHE prune list.
-self.__SHELL_BUILD = "095be86ce8984ae6";
+self.__SHELL_BUILD = "d6cebab54cf351d3";
 self.__SHELL_MANIFEST = [
   "/css/admin/admin-backup.css",
   "/css/admin/admin-home.css",
@@ -168,6 +168,7 @@ self.__SHELL_MANIFEST = [
   "/css/entities/sources.css",
   "/css/entities/szenen.css",
   "/css/entities/world-facts.css",
+  "/css/landing-features.css",
   "/css/landing-sections.css",
   "/css/landing.css",
   "/css/layout/aside-split.css",
@@ -944,8 +945,6 @@ self.__SHELL_MANIFEST = [
   "/js/prompts/tagebuch.js",
   "/js/prompts/textsorten.js",
   "/js/prompts/weltfakten-block.js",
-  "/js/public-tools/wortwiederholungen-page.js",
-  "/js/public-tools/wortwiederholungen.js",
   "/js/radio-group.js",
   "/js/redaktion/bedenken.js",
   "/js/redaktion/status.js",
@@ -1406,10 +1405,14 @@ self.__SHELL_MANIFEST = [
   "/partials/wortschatz.html",
 ];
 self.__VENDOR_SET = [
+  "/fonts/Inter-Italic-latin.var.woff2",
   "/fonts/Inter-Italic.var.woff2",
+  "/fonts/Inter-latin.var.woff2",
   "/fonts/Inter.var.woff2",
   "/fonts/OFL.txt",
+  "/fonts/SourceSerif4-Italic-latin.var.woff2",
   "/fonts/SourceSerif4-Italic.var.woff2",
+  "/fonts/SourceSerif4-latin.var.woff2",
   "/fonts/SourceSerif4.var.woff2",
   "/vendor/LICENSES/alpine-LICENSE.txt",
   "/vendor/LICENSES/alpine-anchor-LICENSE.txt",

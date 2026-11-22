@@ -1,7 +1,7 @@
-// Geteilte vertikale Verankerung der Kommentar-Karten (Google-Docs-Modell) für
-// die zwei SPA-Kommentar-Leisten: Bucheditor (Scope = ganzer Stream) und
-// Notebook-Leseansicht (Scope = einzelne Seite). Beide schweben jede verankerte
-// Karte auf der Höhe ihrer Textstelle und scrollen mit dem Text im SELBEN
+// Vertikale Verankerung der Kommentar-Karten (Google-Docs-Modell) für die
+// Bucheditor-Leiste (Scope = ganzer Stream; die Notebook-Leseansicht stapelt ihre
+// Karten, weil ihr Blatt ein eigener Scroll-Container ist). Jede verankerte Karte
+// schwebt auf der Höhe ihrer Textstelle und scrollt mit dem Text im SELBEN
 // Scroll-Container (Fenster) mit — der Abstand „Textstelle → Layer-Oberkante" ist
 // dadurch scroll-invariant und wird nur bei Layout-Änderungen (Render, Resize,
 // Edit, Auswahl) gemessen, nicht pro Scroll.
@@ -12,8 +12,7 @@
 //
 // `createCommentLayout(cfg)` liefert ein Methoden-Bündel (`_initCommentLayout`,
 // `_scheduleCommentLayout`, `_layoutCommentCards`, …), das die Editor-Karten
-// spreaden. Die Methodennamen sind bewusst editor-unabhängig — beide Editoren
-// rufen sie gleich auf. Geometrie NIE im reaktiven State halten (Range-Objekte
+// spreaden. Die Methodennamen sind bewusst editor-unabhängig. Geometrie NIE im reaktiven State halten (Range-Objekte
 // brechen als Alpine-Proxy); nur die numerischen `_anchorY`/`_railTop` landen
 // reaktiv auf den Thread-Objekten.
 
@@ -26,7 +25,8 @@ const CARD_GAP = 10;
 // cfg:
 //   scopeEl()  → Element mit den data-bid-Blöcken (Stream bzw. Read-View)
 //   layerEl()  → Positionierungs-Ebene (hält die absolut platzierten Karten)
-//   flatBelow  → Media-Query-String; darunter Flach-Modus (statische Liste, kein Anchoring)
+//   isFlat(ctx)      → true ⇒ Flach-Modus (statische Liste, kein Anchoring)
+//   beforeLayout(ctx) → optional, vor jedem Layout-Pass (z. B. Platz-Modus nachführen)
 //   keys       → { threads, selectedRootId, railVisible, stackHeight }
 export function createCommentLayout(cfg) {
   const K = cfg.keys;
@@ -81,8 +81,9 @@ export function createCommentLayout(cfg) {
 
     _layoutCommentCards() {
       if (!this[K.railVisible]) return;
-      // Flach-Modus (Mobile): Karten stapeln statisch, keine Verankerung.
-      if (typeof window !== 'undefined' && window.matchMedia?.(cfg.flatBelow).matches) {
+      cfg.beforeLayout?.(this);
+      // Flach-Modus (schmales Pane/Mobile): Karten stapeln statisch, keine Verankerung.
+      if (cfg.isFlat?.(this)) {
         this[K.stackHeight] = 0;
         for (const t of this[K.threads]) { t._anchorY = null; t._railTop = null; }
         return;

@@ -24,11 +24,14 @@ export function registerEditorCommentsCard() {
     // Triage-Filter (#5): 'all' | 'open' | 'resolved' + Reviewer-Name ('' = alle).
     commentFilterStatus: 'all',
     commentFilterReviewer: '',
+    // Threads dieser Seite ohne Filter: alle bzw. nicht erledigte (Knopf + Badge).
+    commentTotalCount: 0,
+    commentOpenCount: 0,
     // transiente Helfer (kein reaktiver State):
     _railAbort: null,
     _recomputeRaf: null,
     _loadingBookId: null,
-    _pendingGotoBid: null,
+    _pendingGotoToken: null,
 
     ...editorCommentsRailMethods,
   }));

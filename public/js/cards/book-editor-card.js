@@ -89,8 +89,16 @@ const sessionState = () => ({
   // Triage-Filter: 'all' | 'open' | 'resolved' + Reviewer-Name ('' = alle).
   commentFilterStatus: 'all',
   commentFilterReviewer: '',
-  commentStackHeight: 0,   // Höhe des verankerten Karten-Stapels (px), treibt --comments-stack-height
-  _pendingGotoBid: null,
+  // Threads des Buchs ohne Filter: alle bzw. nicht erledigte (Knopf + Badge).
+  commentTotalCount: 0,
+  commentOpenCount: 0,
+  commentStackHeight: 0,
+  // Platz-Modus der Leiste im Pane: 'full' | 'no-outline' | 'flat'
+  // (editor/book-editor-comments.js#paneMode). _outlineForced: User hat die
+  // gewichene Outline zurückgeholt → Leiste flach statt Outline weg.
+  commentPaneMode: 'full',
+  _outlineForced: false,   // Höhe des verankerten Karten-Stapels (px), treibt --comments-stack-height
+  _pendingGotoToken: null,
   heads: {},   // page_id → { dachzeile, titel, lead } (book-editor/head.js)
 
   _memos: {},
@@ -191,7 +199,8 @@ export function registerBookEditorCard() {
       // kommentierten Stelle im Stream + Thread in der Leiste öffnen.
       window.addEventListener(EVT.BOOK_EDITOR_GOTO_COMMENT, (e) => {
         this.commentRailVisible = true;
-        this._pendingGotoBid = e.detail?.bid || null;
+        this._railResetFilter();
+        this._pendingGotoToken = e.detail?.token || null;
         if (this.blocks.length) this._scheduleCommentRecompute();
       }, { signal: this._lifecycle.signal });
 
