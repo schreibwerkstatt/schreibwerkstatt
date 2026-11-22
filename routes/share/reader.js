@@ -3,7 +3,6 @@
 // Self-Service (Kommentar abgeben/bearbeiten/löschen/erledigen, Namen ändern,
 // Threads-JSON). Ohne Session — Mount in server.js VOR dem Auth-Guard.
 
-const express = require('express');
 const shareLinks = require('../../db/share-links');
 const rateLimit = require('../../lib/share-ratelimit');
 const { setContext } = require('../../lib/log-context');
@@ -15,6 +14,7 @@ const H = require('../../lib/share-helpers');
 const tts = require('../../lib/tts-synth');
 const { getBookLocale } = require('../../db/schema');
 const { renderGeneralCommentsHtml } = require('../../lib/share-comments-ssr');
+const { buildPromo } = require('../../lib/share-promo');
 
 const {
   commentBody, TEMPLATE_OK, articleStyleClass,
@@ -23,7 +23,9 @@ const {
   serializeCommentForReader, escHtml, detectLang, isExpired,
   fillTemplate, paragraphifyIntro, backfillScopeBlockIds, loadContentForLink, chapterShareIds,
   buildTocBlock, renderGone, htmlToPlainLength, renderContentDiagrams, editStatusText,
+  isPreviewBot,
 } = H;
+const { sessionEmail } = require('../../lib/acl');
 
 // Lesezeit-Schaetzung: durchschnittliche stille Lesegeschwindigkeit ~1100
 // Zeichen/Min (≈200 WpM Prosa). Zeichen ist die primaere Umfangs-Kennzahl.
@@ -60,7 +62,9 @@ function register(router) {
     res.setHeader('Content-Type', safe || FALLBACK_MIME);
     res.setHeader('X-Content-Type-Options', 'nosniff');
     res.setHeader('Content-Security-Policy', "default-src 'none'; sandbox");
-    res.setHeader('Cache-Control', 'public, max-age=3600');
+    // private: kein geteilter Cache (Proxy/CDN) darf das Bild halten — nach dem
+    // Widerruf des Links waere es dort sonst bis zum Ablauf weiter abrufbar.
+    res.setHeader('Cache-Control', 'private, max-age=3600');
     res.setHeader('Content-Length', row.image.length);
     res.end(row.image);
   });
@@ -76,6 +80,15 @@ function register(router) {
     if (gone) {
       logger.warn(`[share/reader] 410 ${gone} token=${token.slice(0, 8)} book=${link.book_id}`);
       return renderGone(req, res, gone);
+    }
+    // Drossel: jeder Aufruf rendert den ganzen geteilten Inhalt (Buch-Share =
+    // ganzes Buch). Grosszuegig fuer Leser, eng genug gegen eine Schleife.
+    const viewIpHash = rateLimit.hashIp(req.ip || req.connection?.remoteAddress || '');
+    const viewRl = rateLimit.checkView(token, viewIpHash);
+    if (!viewRl.allowed) {
+      logger.warn(`[share/reader] rate-limit token=${token.slice(0, 8)} ipHash=${viewIpHash}`);
+      res.setHeader('Retry-After', String(viewRl.retryAfterSec));
+      return res.status(429).type('text').send('Too many requests');
     }
     // Legacy-/Import-Seiten ohne data-bid einmalig nachziehen, damit verankerte
     // Kommentare (Selektions-Button + schwebende Leiste) funktionieren — auch fuer
@@ -164,7 +177,7 @@ function register(router) {
       'comment_submitted', 'comment_rate_limited', 'form_empty', 'form_error', 'comments_empty',
       'options_label', 'theme_label', 'theme_auto', 'theme_light', 'theme_dark',
       'delete', 'delete_confirm', 'mark_done', 'reopen', 'delete_has_replies',
-      'email_optional_hint', 'email_notice_on', 'name_modal_email',
+      'email_optional_hint', 'email_notice_on', 'name_modal_email', 'email_invalid', 'link_gone',
       'edit', 'edit_save', 'edited_badge', 'new_reply_badge',
       'tts_listen', 'tts_listen_hint', 'tts_pause', 'tts_resume', 'tts_skip', 'tts_prev', 'tts_stop',
       'tts_rate', 'tts_reading', 'tts_paused', 'tts_loading', 'tts_error',
@@ -188,14 +201,20 @@ function register(router) {
     // Besucher/Lesedauer). ip_hash gehasht wie bei Kommentaren. viewId geht an den
     // Reader, damit er die Verweildauer per Beacon nachtragen kann. DB-Fehler
     // duerfen die Leseansicht nie blockieren.
+    // Nicht gezaehlt: Link-Vorschauen/Crawler (holen die Seite, sobald der Link
+    // gepostet wird) und der Ersteller selbst, wenn er im selben Browser
+    // angemeldet seinen Link prueft. Ohne viewId senden dwell/read-depth nichts.
     let viewId = null;
-    try {
-      const ip = req.ip || req.connection?.remoteAddress || '';
-      viewId = shareLinks.recordShareView(token, rateLimit.hashIp(ip));
-    } catch (e) { logger.warn(`[share/view] record fehlgeschlagen: ${e.message}`); }
+    const selfView = !!link.owner_email && sessionEmail(req) === link.owner_email;
+    if (!selfView && !isPreviewBot(req)) {
+      try {
+        viewId = shareLinks.recordShareView(token, viewIpHash);
+      } catch (e) { logger.warn(`[share/view] record fehlgeschlagen: ${e.message}`); }
+    }
 
+    const promo = buildPromo(link, lang); // App-Hinweis, pro Link abschaltbar (lib/share-promo.js)
     const configJson = JSON.stringify({
-      token, lang, viewId, i18n: readerI18n, tts: ttsCfg,
+      token, lang, viewId, i18n: readerI18n, tts: ttsCfg, promo: promo.config,
       readDepth: { chapters: readDepthChapters },
     }).replace(/</g, '\\u003c');
 
@@ -230,8 +249,7 @@ function register(router) {
       anchored_comments_html: '',
       general_comments_html: generalCommentsHtml,
       form_block: formBlock,
-      app_name: 'Schreibwerkstatt',
-      app_url: escHtml((appSettings.get('app.public_url') || '').replace(/\/$/, '') || '/'),
+      footer_app: promo.footerHtml,
       // Datenschutz-Link im Footer: sonst sieht der anonyme Leser nirgends, was
       // beim Lesen erfasst wird (Verweildauer, Lesetiefe, Reichweitenmessung).
       privacy_url: escHtml(((appSettings.get('app.public_url') || '').replace(/\/$/, '')) + '/datenschutz'),
@@ -242,101 +260,6 @@ function register(router) {
 
     res.set('Cache-Control', 'no-store');
     res.status(200).type('html').send(html);
-  });
-
-  // ── Public: Verweildauer eines Aufrufs nachtragen (Beacon) ─────────────────
-  // Der Reader schickt beim Verlassen der Seite (pagehide/visibilitychange) die
-  // sichtbar verbrachte Zeit via navigator.sendBeacon. Write-once pro view_id,
-  // geclampt auf einen sinnvollen Maximalwert (Bot-/Manipulationsschutz fuer die
-  // Owner-Statistik). Antwortet immer 204 — Beacons ignorieren den Body.
-  const MAX_DWELL_MS = 6 * 60 * 60 * 1000; // 6 h
-  router.post('/:token/view-duration', express.json({ limit: '1kb' }), (req, res) => {
-    const token = String(req.params.token || '');
-    if (!TOKEN_RE.test(token)) return res.sendStatus(204);
-    const viewId = parseInt(req.body?.viewId, 10);
-    const durationMs = Math.round(Number(req.body?.durationMs));
-    if (!Number.isInteger(viewId) || viewId <= 0) return res.sendStatus(204);
-    if (!Number.isFinite(durationMs) || durationMs < 0) return res.sendStatus(204);
-    const clamped = Math.min(durationMs, MAX_DWELL_MS);
-    try { shareLinks.setViewDuration(viewId, token, clamped); } catch { /* non-fatal */ }
-    res.sendStatus(204);
-  });
-
-  // ── Public: Lesetiefe eines Aufrufs nachtragen (Beacon) ────────────────────
-  // Gesamt-Scrolltiefe (0-100 %) + optional pro Kapitel die erreichte Tiefe. Wie
-  // die Verweildauer per sendBeacon beim Wechsel in den Hintergrund; MAX-Merge in
-  // der DB, view_id token-gebunden. Antwortet immer 204.
-  router.post('/:token/read-depth', express.json({ limit: '8kb' }), (req, res) => {
-    const token = String(req.params.token || '');
-    if (!TOKEN_RE.test(token)) return res.sendStatus(204);
-    const viewId = parseInt(req.body?.viewId, 10);
-    if (!Number.isInteger(viewId) || viewId <= 0) return res.sendStatus(204);
-
-    const rawMax = Math.round(Number(req.body?.maxScrollPct));
-    if (Number.isFinite(rawMax) && rawMax >= 0) {
-      const pct = Math.min(100, rawMax);
-      try { shareLinks.setViewMaxScroll(viewId, token, pct); } catch { /* non-fatal */ }
-    }
-
-    // Pro-Kapitel-Tiefe (max. 500 Eintraege defensiv). chapterId + pct clamped in DB.
-    const chapters = Array.isArray(req.body?.chapters) ? req.body.chapters.slice(0, 500) : [];
-    if (chapters.length) {
-      const sections = chapters
-        .map(c => ({ chapterId: parseInt(c?.chapterId, 10), pct: Number(c?.pct) }))
-        .filter(c => Number.isInteger(c.chapterId) && c.chapterId > 0 && Number.isFinite(c.pct));
-      if (sections.length) {
-        try { shareLinks.recordSectionDepths(viewId, token, sections); } catch { /* non-fatal */ }
-      }
-    }
-    res.sendStatus(204);
-  });
-
-  // ── Public: Gesamt-Fazit abgeben (Sternewertung + optionaler Freitext) ──────
-  // Einmal pro Leser (reader_token, UPSERT). Erneutes Absenden aktualisiert das
-  // eigene Fazit. reader_token ist Pflicht (sonst kein Upsert-Key → Spam-Schutz).
-  router.post('/:token/feedback', express.json({ limit: '8kb' }), (req, res) => {
-    const token = String(req.params.token || '');
-    if (!TOKEN_RE.test(token)) return res.status(404).json({ error_code: 'NOT_FOUND' });
-    const link = shareLinks.getShareLinkByToken(token);
-    if (!link || isExpired(link)) return res.status(404).json({ error_code: 'GONE' });
-
-    const readerToken = String(req.body?.reader_token || '');
-    if (!READER_TOKEN_RE.test(readerToken)) return res.status(400).json({ error_code: 'NO_READER_TOKEN' });
-    const rating = parseInt(req.body?.rating, 10);
-    if (!Number.isInteger(rating) || rating < 1 || rating > 5) return res.status(400).json({ error_code: 'BAD_RATING' });
-
-    let body = req.body?.body != null ? String(req.body.body).trim() : null;
-    if (body && body.length > BODY_MAX) return res.status(400).json({ error_code: 'TOO_LONG' });
-    if (!body) body = null;
-    let readerName = req.body?.reader_name != null ? String(req.body.reader_name).trim().slice(0, READER_NAME_MAX) : null;
-    if (!readerName) readerName = null;
-
-    // reader_token waehlt der Client — ohne Drossel waere jeder neue Token ein
-    // neuer UPSERT-Schluessel. Eigene Buckets (Praefix), Limit wie Kommentare.
-    const ipHash = rateLimit.hashIp(req.ip || req.connection?.remoteAddress || '');
-    const rl = rateLimit.check(`feedback:${token}`, ipHash);
-    if (!rl.allowed) {
-      res.setHeader('Retry-After', String(rl.retryAfterSec));
-      return res.status(429).json({ error_code: 'RATE_LIMITED', retry_after: rl.retryAfterSec });
-    }
-    try {
-      shareLinks.upsertFeedback(token, { readerToken, readerName, rating, body, ipHash });
-    } catch (e) {
-      logger.warn(`[share/feedback] upsert fehlgeschlagen: ${e.message}`);
-      return res.status(500).json({ error_code: 'ERR' });
-    }
-    res.json({ ok: true });
-  });
-
-  // ── Public: eigenes Fazit dieses Lesers (Prefill) ──────────────────────────
-  router.get('/:token/feedback/mine', (req, res) => {
-    const token = String(req.params.token || '');
-    if (!TOKEN_RE.test(token)) return res.status(404).json({ error_code: 'NOT_FOUND' });
-    const readerToken = String(req.query?.rt || '');
-    if (!READER_TOKEN_RE.test(readerToken)) return res.set('Cache-Control', 'no-store').json({ feedback: null });
-    let feedback = null;
-    try { feedback = shareLinks.getFeedbackByReader(token, readerToken) || null; } catch { /* non-fatal */ }
-    res.set('Cache-Control', 'no-store').json({ feedback });
   });
 
   // ── Public: Kommentar abgeben ──────────────────────────────────────────────
@@ -576,9 +499,13 @@ function register(router) {
     try {
       const own = shareLinks.getReaderComment(id, token, rtRaw);
       if (!own) return res.status(404).json({ error_code: 'NOT_FOUND' });
-      if (shareLinks.commentHasReplies(id)) return res.status(409).json({ error_code: 'HAS_REPLIES' });
+      // „Keine Antworten" prueft das DELETE selbst (atomar): eine Autor-Antwort,
+      // die zwischen Pruefung und Loeschen ankommt, riss sonst per CASCADE mit.
       const ok = shareLinks.deleteReaderComment(id, token, rtRaw);
-      if (!ok) return res.status(404).json({ error_code: 'NOT_FOUND' });
+      if (!ok) {
+        if (shareLinks.commentHasReplies(id)) return res.status(409).json({ error_code: 'HAS_REPLIES' });
+        return res.status(404).json({ error_code: 'NOT_FOUND' });
+      }
       logger.info(`[share/comment DELETE] token=${token.slice(0, 8)} book=${link.book_id} id=${id}`);
       res.json({ ok: true });
     } catch (e) {

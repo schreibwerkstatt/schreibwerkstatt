@@ -67,8 +67,8 @@ test('share-reader: Dark-Mode flippt die Karten-Surface über die Brücke', asyn
   expect(bg).toBe(SURFACE_DARK);
 });
 
-// Namens-Modal öffnet beim ersten Besuch automatisch und läge über allem —
-// für die Interaktions-Tests als „weggeklickt" vormerken.
+// „Anonym bleiben" für die Session vormerken: das Namens-Modal fragt sonst vor
+// dem ersten Beitrag nach dem Namen.
 async function gotoDismissed(page) {
   await page.addInitScript(() => { try { sessionStorage.setItem('sw_share_name_dismissed', '1'); } catch {} });
   await page.goto(URL, { waitUntil: 'domcontentloaded' });
@@ -149,4 +149,160 @@ test('share-reader: Mobile — Tipp auf die Markierung öffnet den Thread als Sh
 
   await page.keyboard.press('Escape');
   await expect(page.locator('#share-sheet')).toHaveCount(0);
+});
+
+// ── Identität: Namensabfrage erst beim ersten Beitrag ─────────────────────────
+
+const commentPosts = (page) => page.evaluate(() => window.__calls.filter(c => c.method === 'POST' && c.url.endsWith('/comment')));
+
+async function openReply(page) {
+  const thread = page.locator('.share-comments__list .comment-rail__thread');
+  await expect(thread).toHaveCount(1);
+  await thread.locator('.share-thread__reply-toggle').click();
+  const ta = thread.locator('.comment-rail__textarea');
+  await ta.fill('Meine Antwort');
+  return { thread, ta };
+}
+
+test('share-reader: kein Namens-Dialog beim Laden, erst beim ersten Absenden', async ({ page }) => {
+  await page.goto(URL, { waitUntil: 'domcontentloaded' });
+  await expect(page.locator('.share-comments__list .comment-rail__thread')).toHaveCount(1);
+  await expect(page.locator('#share-name-modal')).toHaveCount(0);
+
+  const { thread } = await openReply(page);
+  await thread.locator('.comment-rail__reply button[type="submit"]').click();
+  const modal = page.locator('#share-name-modal');
+  await expect(modal).toBeVisible();
+  expect(await commentPosts(page)).toHaveLength(0);
+
+  // „Anonym bleiben" → Beitrag geht anonym raus, beim nächsten Mal keine Frage.
+  await modal.locator('.share-composer__cancel').click();
+  await expect(modal).toHaveCount(0);
+  await expect.poll(async () => (await commentPosts(page)).length).toBe(1);
+  expect((await commentPosts(page))[0].body.reader_name).toBe('');
+});
+
+test('share-reader: Esc im Namens-Dialog bricht das Absenden ab, der Text bleibt', async ({ page }) => {
+  await page.goto(URL, { waitUntil: 'domcontentloaded' });
+  const { thread, ta } = await openReply(page);
+  await thread.locator('.comment-rail__reply button[type="submit"]').click();
+  await expect(page.locator('#share-name-modal')).toBeVisible();
+  await page.keyboard.press('Escape');
+  await expect(page.locator('#share-name-modal')).toHaveCount(0);
+  await expect(ta).toHaveValue('Meine Antwort');
+  expect(await commentPosts(page)).toHaveLength(0);
+});
+
+test('share-reader: ungültige Mail wird im Dialog abgewiesen, nicht gespeichert', async ({ page }) => {
+  await page.goto(URL, { waitUntil: 'domcontentloaded' });
+  const { thread } = await openReply(page);
+  await thread.locator('.comment-rail__reply button[type="submit"]').click();
+  const modal = page.locator('#share-name-modal');
+  const [nameInput, emailInput] = [modal.locator('input').nth(0), modal.locator('input[type="email"]')];
+  await nameInput.fill('Max');
+  await emailInput.fill('max@firma');
+  await modal.locator('.share-composer__submit').click();
+  await expect(modal.locator('.share-name-modal__error')).toBeVisible();
+  await expect(modal).toBeVisible();
+  expect(await page.evaluate(() => localStorage.getItem('sw_share_reader_email'))).toBeNull();
+  expect(await commentPosts(page)).toHaveLength(0);
+
+  await emailInput.fill('max@firma.ch');
+  await modal.locator('.share-composer__submit').click();
+  await expect(modal).toHaveCount(0);
+  await expect.poll(async () => (await commentPosts(page)).length).toBe(1);
+  const sent = (await commentPosts(page))[0].body;
+  expect(sent.reader_name).toBe('Max');
+  expect(sent.reader_email).toBe('max@firma.ch');
+});
+
+test('share-reader: früher gespeicherte ungültige Mail blockiert keine Beiträge', async ({ page }) => {
+  await page.addInitScript(() => {
+    localStorage.setItem('sw_share_reader_name', 'Max');
+    localStorage.setItem('sw_share_reader_email', 'max@firma');
+  });
+  await page.goto(URL, { waitUntil: 'domcontentloaded' });
+  const { thread } = await openReply(page);
+  await thread.locator('.comment-rail__reply button[type="submit"]').click();
+  await expect.poll(async () => (await commentPosts(page)).length).toBe(1);
+  expect((await commentPosts(page))[0].body.reader_email).toBe('');
+});
+
+test('share-reader: widerrufener Link beim Senden bekommt einen eigenen Text statt «Fehler»', async ({ page }) => {
+  await page.addInitScript(() => {
+    sessionStorage.setItem('sw_share_name_dismissed', '1');
+    window.__postResponse = { status: 410, body: { error_code: 'GONE' } };
+  });
+  await page.goto(URL, { waitUntil: 'domcontentloaded' });
+  const { thread } = await openReply(page);
+  await thread.locator('.comment-rail__reply button[type="submit"]').click();
+  // Harness hat leere i18n → t() liefert den Key.
+  await expect(thread.locator('.comment-rail__reply .share-comments__status')).toHaveText('link_gone');
+});
+
+// ── Karten: Avatar, „Neue Antwort", widerrufener Link, Composer-Entwurf ──────
+
+test('share-reader: Avatar eigener Beiträge aus dem Namen, ohne „(Du)"-Zusatz', async ({ page }) => {
+  await page.addInitScript(() => {
+    window.__mockThreads = { comments: [
+      { id: 7, parent_id: null, body: 'Meins', created_at: '2026-06-20T10:00:00Z', name: 'Max',
+        mine: true, is_author: false, resolved: false, anchor: null },
+    ] };
+  });
+  await page.goto(URL, { waitUntil: 'domcontentloaded' });
+  const card = page.locator('.share-general__list .comment-rail__thread');
+  await expect(card).toHaveCount(1);
+  await expect(card.locator('.comment-rail__author')).toContainText('Max (');
+  await expect(card.locator('.comment-rail__avatar')).toHaveText('M');
+});
+
+test('share-reader: erster Besuch zeigt kein „Neue Antwort", spätere neue Antwort schon', async ({ page }) => {
+  await page.goto(URL, { waitUntil: 'domcontentloaded' });
+  await expect(page.locator('.share-comments__list .comment-rail__thread')).toHaveCount(1);
+  await expect(page.locator('.share-thread__unread')).toHaveCount(0);
+  expect(await page.evaluate(() => JSON.parse(localStorage.getItem('sw_share_seen_TESTTOKEN')))).toEqual(expect.arrayContaining([1, 2, 3]));
+
+  // Zweiter Besuch: eine neue Autor-Antwort ist dazugekommen.
+  await page.addInitScript(() => {
+    window.__mockThreads = { comments: [
+      { id: 1, parent_id: null, body: 'Toller Absatz, gefällt mir.', created_at: '2026-06-20T10:00:00Z', name: 'Lena Muster',
+        mine: false, is_author: false, resolved: false, anchor: { bid: 'b1', quote: 'anchored passage', start: 0, end: 0 } },
+      { id: 2, parent_id: 1, body: 'Danke für den Hinweis!', created_at: '2026-06-20T11:00:00Z', name: null,
+        mine: false, is_author: true, resolved: false },
+      { id: 9, parent_id: 1, body: 'Noch ein Nachtrag.', created_at: '2026-06-22T11:00:00Z', name: null,
+        mine: false, is_author: true, resolved: false },
+    ] };
+  });
+  await page.reload({ waitUntil: 'domcontentloaded' });
+  await expect(page.locator('.share-comments__list .share-thread__unread')).toHaveCount(1);
+});
+
+test('share-reader: widerrufener Link → Hinweis, kein Kommentieren mehr', async ({ page }) => {
+  await page.addInitScript(() => { window.__threadsStatus = 410; });
+  await page.goto(URL, { waitUntil: 'domcontentloaded' });
+  await expect(page.locator('.share-gone-banner')).toBeVisible();
+  await expect(page.locator('body')).toHaveClass(/share-link-gone/);
+});
+
+test('share-reader: Composer behält den Entwurf beim Schliessen', async ({ page }) => {
+  await gotoDismissed(page);
+  await expect(page.locator('.share-comments__list .comment-rail__thread')).toHaveCount(1);
+  const select = () => page.evaluate(() => {
+    const tn = document.querySelector('[data-bid="b1"]').firstChild;
+    const i = tn.textContent.indexOf('im Text');
+    const r = document.createRange();
+    r.setStart(tn, i); r.setEnd(tn, i + 'im Text'.length);
+    const sel = window.getSelection();
+    sel.removeAllRanges(); sel.addRange(r);
+  });
+  await select();
+  await page.locator('.share-sel-btn').click();
+  const ta = page.locator('#share-composer textarea');
+  await ta.fill('Halber Gedanke');
+  await page.keyboard.press('Escape');
+  await expect(page.locator('#share-composer')).toHaveCount(0);
+
+  await select();
+  await page.locator('.share-sel-btn').click();
+  await expect(page.locator('#share-composer textarea')).toHaveValue('Halber Gedanke');
 });

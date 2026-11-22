@@ -1,5 +1,6 @@
 // Root-Methoden fuer das Onboarding: First-Login-Willkommens-Banner, Beispielbuch-
-// Import und Hilfe-Einstieg (beide von der Welcome-Karte genutzt). Die
+// Import, Manuskript-Import und Hilfe-Einstieg (von der Welcome-Karte genutzt)
+// sowie der Sprung ins erste Lektorat (Etappe «lektorat» der Checkliste). Die
 // eigentliche „Erste Schritte"-Karte lebt in cards/onboarding-card.js; hier nur
 // der buch-unabhaengige Banner-State am Root (onboardingWelcome) + sein Loader
 // und die zwei Banner-Aktionen. Persistiert wird das Wegklicken serverseitig
@@ -70,6 +71,33 @@ export const appOnboardingMethods = {
   // funktioniert …», Versionszeile im Avatar-Menü, Palette.
   openHelpTab(tab) {
     return openCardWith(CARD_REQUEST.HELP_TAB, tab, () => (this.showHelpCard ? null : this.toggleHelpCard()));
+  },
+
+  // Welcome-Karte: Import-Karte auf «Manuskript» öffnen. Ohne Buch steht sie
+  // im Modus «neues Buch» (folder-import-card.js#onShow); der Job navigiert
+  // nach dem Import selbst ins angelegte Buch.
+  openManuscriptImport() {
+    return openCardWith(CARD_REQUEST.IMPORT_KIND_TAB, 'manuscript',
+      () => (this.showFolderImportCard ? null : this.toggleFolderImportCard()));
+  },
+
+  // «Erste Schritte», Etappe «Ersten Abschnitt lektorieren»: einen Abschnitt
+  // mit Text öffnen (den offenen, sonst den ersten mit Text in Buch-Reihenfolge)
+  // und dort das Lektorat starten. Startet nur, wenn der Abschnitt wirklich
+  // geladen, nicht leer und das Lektorat erlaubt ist; sonst bleibt der
+  // Abschnitt offen und der User sieht den Lektorat-Knopf selbst. Ohne
+  // Abschnitte geht es in die Buch-Übersicht (dort entsteht der erste).
+  async startFirstLektorat() {
+    const pages = this.$store.nav.pages || [];
+    const hasText = (p) => (this.tokEsts?.[p.id]?.chars || 0) > 0;
+    const cur = this.currentPage && pages.find(p => p.id === this.currentPage.id);
+    const target = (cur && hasText(cur) ? cur : null) || pages.find(hasText) || cur || pages[0];
+    if (!target) { this.toggleBookOverviewCard?.(); return; }
+    await this.selectPage(target);
+    if (this.currentPage?.id !== target.id || this.currentPageEmpty) return;
+    if (this.editMode || this.focusActive || this.checkLoading) return;
+    if (this.canReview?.() === false) return;
+    await this.runCheck?.();
   },
 
   // Welcome-Karte: Beispielbuch anlegen; Fehler als Status-Toast (die Karte

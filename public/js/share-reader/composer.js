@@ -8,6 +8,7 @@
 
 import { charOffset } from '../share-anchor.js';
 import { el, makeModal, submitOnModEnter } from './dom.js';
+import { errorText } from './api.js';
 
 // deps:
 //   t            → i18n-Lookup
@@ -15,7 +16,9 @@ import { el, makeModal, submitOnModEnter } from './dom.js';
 //   postComment  → (payload) => Promise (POST /comment)
 //   onPosted     → () => Promise (Threads neu laden)
 //   savedName    → () => string|undefined (globaler Identitäts-Name)
-export function setupComposer({ t, article, postComment, onPosted, savedName }) {
+//   ensureIdentity → () => Promise<boolean> (fragt vor dem ersten Beitrag nach
+//                  dem Namen; false = Leser hat abgebrochen)
+export function setupComposer({ t, article, postComment, onPosted, savedName, ensureIdentity }) {
   // {bid, start, end, quote} aus der aktuellen Selektion oder null.
   function anchorFromSelection() {
     const sel = window.getSelection();
@@ -72,8 +75,15 @@ export function setupComposer({ t, article, postComment, onPosted, savedName }) 
   });
 
   let release = null;
+  // Entwurf: Esc, Abbrechen oder Klick daneben verwerfen den getippten Text
+  // nicht — derselbe Anker (bzw. die allgemeine Anmerkung) bekommt ihn beim
+  // nächsten Öffnen zurück. Erfolgreiches Senden löscht ihn.
+  let draft = null;     // { key, text }
+  let current = null;   // { key, ta } des offenen Composers
+  const draftKey = (anchor) => (anchor ? `${anchor.bid}:${anchor.start}:${anchor.end}` : 'general');
   function openComposer(anchor) {
     closeComposer();
+    const key = draftKey(anchor);
     const overlay = el('div', 'share-composer');
     overlay.id = 'share-composer';
     const card = el('div', 'share-composer__card');
@@ -90,6 +100,8 @@ export function setupComposer({ t, article, postComment, onPosted, savedName }) 
     ta.maxLength = 4000;
     ta.placeholder = t('comment_form_body');
     ta.setAttribute('aria-label', t('comment_form_body'));
+    if (draft && draft.key === key) ta.value = draft.text;
+    current = { key, ta };
     const actions = el('div', 'share-composer__actions');
     const submit = el('button', 'share-composer__submit', t('send'));
     submit.type = 'button';
@@ -114,22 +126,30 @@ export function setupComposer({ t, article, postComment, onPosted, savedName }) 
       const body = (ta.value || '').trim();
       if (!body) { status.textContent = t('form_empty'); return; }
       submit.disabled = true;
+      if (ensureIdentity && !(await ensureIdentity())) { submit.disabled = false; ta.focus(); return; }
       // Name kommt global aus dem Identitäts-Chip (oben rechts) — kein Feld hier.
       const payload = { body, reader_name: savedName() };
       if (anchor) { payload.anchor_bid = anchor.bid; payload.anchor_quote = anchor.quote; payload.anchor_start = anchor.start; payload.anchor_end = anchor.end; }
       try {
         await postComment(payload);
+        draft = null;
+        current = null;
         closeComposer();
         await onPosted();
         // Bewusst KEIN Scroll auf den neuen Kommentar — der Leser bleibt an der
         // markierten Stelle stehen.
       } catch (e) {
-        status.textContent = e.status === 429 ? t('comment_rate_limited') : t('form_error');
+        status.textContent = errorText(e, t);
         submit.disabled = false;
       }
     });
   }
   function closeComposer() {
+    if (current) {
+      const text = current.ta.value || '';
+      draft = text.trim() ? { key: current.key, text } : (draft && draft.key === current.key ? null : draft);
+      current = null;
+    }
     const ex = document.getElementById('share-composer');
     if (ex) ex.remove();
     if (release) { release(); release = null; }

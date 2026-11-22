@@ -47,6 +47,12 @@
     </template>
 
     <div class="share-create__row">
+      <div x-data="toggleSwitch({ label: () => $app.t('share.create.promo') })"
+           x-modelable="value" x-model="createShowPromo"></div>
+      <span class="share-create__hint" x-text="$app.t('share.create.promoHint')"></span>
+    </div>
+
+    <div class="share-create__row">
       <label class="share-create__label" x-text="$app.t('share.intro.label')"></label>
       <textarea x-model="createIntro" rows="3"
                 :placeholder="$app.t('share.intro.placeholder')"
@@ -182,6 +188,8 @@
               <div x-data="toggleSwitch({ label: () => $app.t('share.create.toc') })"
                    x-modelable="value" x-model="editShowToc"></div>
             </template>
+            <div x-data="toggleSwitch({ label: () => $app.t('share.create.promo') })"
+                 x-modelable="value" x-model="editShowPromo"></div>
             <div class="share-row__edit-actions">
               <button type="button" class="primary" @click="saveEdit(link.token)" :disabled="savingEdit">
                 <span x-text="$app.t('common.save')"></span>

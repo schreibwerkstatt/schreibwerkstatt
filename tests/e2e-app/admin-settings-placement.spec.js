@@ -7,7 +7,7 @@ const { test, expect } = require('../e2e/_helpers/fixtures');
 const { bootApp } = require('./_helpers/app');
 
 const PLACEMENT = {
-  general: ['app.name', 'app.public_url', 'seo.indexable'],
+  general: ['app.name', 'app.public_url', 'seo.indexable', 'landing.demo_url'],
   auth: ['share.comment.rate_limit_max', 'share.comment.rate_limit_window_min'],
   api: ['macclient.github_token'],
   advanced: [
@@ -56,6 +56,6 @@ test('Admin-Settings: Einstellungen stehen im Reiter ihres Themas', async ({ pag
   // Labels sind übersetzt (kein roher Key) im neuen Reiter.
   await card.locator('.tabs-btn', { hasText: /^(Allgemein|General)$/ }).click();
   const labels = await card.locator(`section[x-bind="panel('general')"] .setting-field`).allInnerTexts();
-  expect(labels.length).toBe(3);
+  expect(labels.length).toBe(4);
   for (const txt of labels) expect(txt).not.toMatch(/admin\.settings\./);
 });

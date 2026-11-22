@@ -1,19 +1,19 @@
 // „Erste Schritte" — Onboarding-Fortschritts-Checkliste. Buch-unabhaengige Karte
 // (wie help), fuer jeden Auth-User sichtbar. Zeigt echten Fortschritt entlang des
-// Kern-Pfads (Buch → Text → KI-Analyse → Teilen), abgeleitet serverseitig aus dem
+// Kern-Pfads (Buch → Text → Lektorat → Teilen), abgeleitet serverseitig aus dem
 // tatsaechlichen State (GET /me/onboarding) — kein Klick-Zaehler. Bietet zusaetzlich
 // den One-Click-Import eines gemeinfreien Beispielbuchs.
 import { setupCardLifecycle } from './card-lifecycle.js';
 import { EVT } from '../events.js';
 
 // Reihenfolge = Anzeige-Reihenfolge. `action` steuert die CTA des offenen Schritts.
-const STEP_KEYS = ['book', 'page', 'analysis', 'share'];
+const STEP_KEYS = ['book', 'page', 'lektorat', 'share'];
 
 export function registerOnboardingCard() {
   if (typeof window === 'undefined' || !window.Alpine) return;
   window.Alpine.data('onboardingCard', () => ({
     stepKeys: STEP_KEYS,
-    steps: { book: false, page: false, analysis: false, share: false },
+    steps: { book: false, page: false, lektorat: false, share: false },
     loading: false,
     demoBusy: false,
     error: '',
@@ -68,7 +68,7 @@ export function registerOnboardingCard() {
     stepTitle(key) { return window.__app?.t?.(`onboarding.step.${key}.title`) || key; },
     stepDesc(key) { return window.__app?.t?.(`onboarding.step.${key}.desc`) || ''; },
     // Ohne gewähltes Buch führt jeder CTA zu «Buch anlegen» (doStep) — dann
-    // trägt er auch dessen Beschriftung statt «Analyse starten» o. ä.
+    // trägt er auch dessen Beschriftung statt «Abschnitt lektorieren» o. ä.
     stepCta(key) {
       const app = window.__app;
       const target = (key !== 'book' && !window.Alpine?.store('nav')?.selectedBookId) ? 'book' : key;
@@ -83,7 +83,7 @@ export function registerOnboardingCard() {
       const hasBook = !!app.$store?.nav?.selectedBookId;
       if (key === 'book' || !hasBook) { app.openCreateBook?.(); return; }
       if (key === 'page') { app.toggleBookOverviewCard?.(); return; }
-      if (key === 'analysis') { app.alleAktualisieren?.(); return; }
+      if (key === 'lektorat') { app.startFirstLektorat?.(); return; }
       if (key === 'share') { app.toggleShareLinksCard?.(); return; }
     },
 

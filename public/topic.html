@@ -1,0 +1,71 @@
+<!doctype html>
+<html lang="{{lang}}">
+<head>
+  <meta charset="utf-8">
+  <title>{{title}}</title>
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="description" content="{{metaDescription}}">
+  {{#if noindex}}<meta name="robots" content="noindex, nofollow">{{/if}}
+  {{#if canonical}}<link rel="canonical" href="{{canonical}}">
+  <link rel="alternate" hreflang="de" href="{{altDe}}">
+  <link rel="alternate" hreflang="en" href="{{altEn}}">
+  <link rel="alternate" hreflang="x-default" href="{{altDe}}">{{/if}}
+  <meta property="og:type" content="article">
+  <meta property="og:title" content="{{title}}">
+  <meta property="og:description" content="{{metaDescription}}">
+  <meta property="og:image" content="{{ogImage}}">
+  {{#if canonical}}<meta property="og:url" content="{{canonical}}">{{/if}}
+  <meta name="twitter:card" content="summary_large_image">
+  <link rel="icon" href="/schreibwerkstatt_icon.svg">
+  <script src="/js/theme-init.js"></script>
+  <link rel="stylesheet" href="/css/tokens.css">
+  <link rel="stylesheet" href="/css/landing.css">
+  <link rel="stylesheet" href="/css/landing-sections.css">
+  <script type="application/ld+json">{{ldJson}}</script>
+  <script defer src="/js/plausible-init.js?surface=thema"></script>
+</head>
+<body>
+  <main class="public-shell public-shell--wide">
+    <header class="public-header public-hero">
+      <a href="/"><img class="public-brand" src="/schreibwerkstatt_icon.svg" alt="{{appName}}" width="56" height="56"></a>
+      <p class="public-hero-brand">{{appName}}</p>
+      <h1 class="public-hero-title">{{h1}}</h1>
+      <p class="public-sub">{{intro}}</p>
+    </header>
+
+    <img class="public-topic-shot" src="{{img}}" alt="" width="920" height="614" decoding="async">
+
+    <article class="public-prose">
+      <section class="public-prose-section">
+        <h2>{{s1Title}}</h2>
+        <p>{{s1Text}}</p>
+      </section>
+      <section class="public-prose-section">
+        <h2>{{s2Title}}</h2>
+        <p>{{s2Text}}</p>
+      </section>
+      <section class="public-prose-section">
+        <h2>{{s3Title}}</h2>
+        <p>{{s3Text}}</p>
+      </section>
+    </article>
+
+    <section class="public-cta">
+      <h2>{{ctaTitle}}</h2>
+      <p>{{ctaText}}</p>
+      <div class="public-actions public-actions--inline">
+        {{#if demoUrl}}<a class="public-btn public-btn--primary" href="{{demoUrl}}">{{demoLabel}}</a>{{/if}}
+        <a class="public-btn" href="/register">{{registerLabel}}</a>
+      </div>
+    </section>
+
+    <footer class="public-footer">
+      <span>{{footer}}</span>
+      <nav class="public-footer-links">
+        <a class="public-footer-link" href="/">{{backToLanding}}</a>
+        <a class="public-footer-link" href="/datenschutz">{{privacyLabel}}</a>
+      </nav>
+    </footer>
+  </main>
+</body>
+</html>

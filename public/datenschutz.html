@@ -4,9 +4,14 @@
   <meta charset="utf-8">
   <title>{{pageTitle}} – {{appName}}</title>
   <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="description" content="{{metaDescription}}">
   {{#if noindex}}<meta name="robots" content="noindex, nofollow">{{/if}}
-  {{#if canonical}}<link rel="canonical" href="{{canonical}}">{{/if}}
+  {{#if canonical}}<link rel="canonical" href="{{canonical}}">
+  <link rel="alternate" hreflang="de" href="{{altDe}}">
+  <link rel="alternate" hreflang="en" href="{{altEn}}">
+  <link rel="alternate" hreflang="x-default" href="{{altDe}}">{{/if}}
   <link rel="icon" href="/schreibwerkstatt_icon.svg">
+  <script src="/js/theme-init.js"></script>
   <link rel="stylesheet" href="/css/tokens.css">
   <link rel="stylesheet" href="/css/landing.css">
   <script defer src="/js/plausible-init.js?surface=datenschutz"></script>

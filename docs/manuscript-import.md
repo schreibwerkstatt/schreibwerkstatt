@@ -73,7 +73,7 @@ Parser sind dieselben wie dort ([lib/import-parsers/dispatch.js](../lib/import-p
 
 ## Frontend
 
-Import-Karte [public/js/cards/folder-import-card.js](../public/js/cards/folder-import-card.js) (`importKind: 'manuscript'`) + Fragment [public/partials/folder-import-manuscript.html](../public/partials/folder-import-manuscript.html), string-seitig via `<!-- @include -->` in [folder-import.html](../public/partials/folder-import.html) eingehängt. Zuordnung als Combobox pro Ebene (`h1`–`h3` offen, `h4`–`h6` im `collapsible`-Zusatz). Jede Änderung an Zuordnung, Schalter oder Datei verwirft die Vorschau — eine Vorschau zu einer anderen Einstellung wäre eine Lüge. Hash-Permalink `#import`.
+Import-Karte [public/js/cards/folder-import-card.js](../public/js/cards/folder-import-card.js) (`importKind: 'manuscript'`) + Fragment [public/partials/folder-import-manuscript.html](../public/partials/folder-import-manuscript.html), string-seitig via `<!-- @include -->` in [folder-import.html](../public/partials/folder-import.html) eingehängt. Zuordnung als Combobox pro Ebene (`h1`–`h3` offen, `h4`–`h6` im `collapsible`-Zusatz). Jede Änderung an Zuordnung, Schalter oder Datei verwirft die Vorschau — eine Vorschau zu einer anderen Einstellung wäre eine Lüge. Hash-Permalink `#import`. Einstieg für Konten ohne Buch: «Manuskript importieren» auf der Welcome-Karte ([app-onboarding.js](../public/js/app/app-onboarding.js)#`openManuscriptImport`) öffnet die Karte über den Wunsch `CARD_REQUEST.IMPORT_KIND_TAB` direkt auf dieser Import-Art, Modus «neues Buch».
 
 ## Tests
 

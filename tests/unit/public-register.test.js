@@ -19,6 +19,7 @@ require('../../db/migrations');
 const { db } = require('../../db/connection');
 const regRequests = require('../../db/registration-requests');
 const rateLimit = require('../../lib/register-ratelimit');
+const appSettings = require('../../lib/app-settings');
 
 const express = require('express');
 const publicRouter = require('../../routes/public');
@@ -61,6 +62,25 @@ test('GET /landing -> HTML mit Login/Register-Buttons', async () => {
   assert.match(r.raw, /href="\/login"/);
   assert.match(r.raw, /href="\/register"/);
   assert.equal(r.headers['cache-control'], 'no-store');
+});
+
+test('GET /landing ohne Demo-Adresse: Register ist der Hauptknopf, kein Demo-Hinweis', async () => {
+  appSettings.set('landing.demo_url', '', { updatedBy: 'test' });
+  const r = await _req('GET', '/landing');
+  assert.match(r.raw, /class="public-btn public-btn--primary" href="\/register"/);
+  assert.doesNotMatch(r.raw, /public-hero-note">[^<]*Demo/, 'ohne Demo kein Demo-Hinweis');
+});
+
+test('GET /landing mit Demo-Adresse: Demo-Knopf vorn, Hinweis auf das gemeinsame Konto', async () => {
+  appSettings.set('landing.demo_url', 'https://demo.example.test/login', { updatedBy: 'test' });
+  try {
+    const r = await _req('GET', '/landing', { headers: { 'accept-language': 'de' } });
+    assert.match(r.raw, /class="public-btn public-btn--primary" href="https:\/\/demo\.example\.test\/login"/);
+    assert.match(r.raw, /class="public-btn" href="\/register"/);
+    assert.match(r.raw, /gemeinsames Konto/);
+  } finally {
+    appSettings.set('landing.demo_url', '', { updatedBy: 'test' });
+  }
 });
 
 test('GET /register -> HTML mit Formular', async () => {

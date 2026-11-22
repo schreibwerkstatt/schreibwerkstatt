@@ -22,7 +22,7 @@ test('registerOnboardingCard registriert eine Factory', () => {
 
 test('Default: alle Schritte offen, 0/4, nichts erledigt', () => {
   const c = factory();
-  assert.deepEqual(c.stepKeys, ['book', 'page', 'analysis', 'share']);
+  assert.deepEqual(c.stepKeys, ['book', 'page', 'lektorat', 'share']);
   assert.equal(c.doneCount(), 0);
   assert.equal(c.totalCount(), 4);
   assert.equal(c.allDone(), false);
@@ -31,7 +31,7 @@ test('Default: alle Schritte offen, 0/4, nichts erledigt', () => {
 
 test('Teil-Fortschritt: 2/4 → 50 %, nicht allDone', () => {
   const c = factory();
-  c.steps = { book: true, page: true, analysis: false, share: false };
+  c.steps = { book: true, page: true, lektorat: false, share: false };
   assert.equal(c.doneCount(), 2);
   assert.equal(c.progressPct(), 50);
   assert.equal(c.allDone(), false);
@@ -39,7 +39,7 @@ test('Teil-Fortschritt: 2/4 → 50 %, nicht allDone', () => {
 
 test('Alle Schritte erledigt → allDone + 100 %', () => {
   const c = factory();
-  c.steps = { book: true, page: true, analysis: true, share: true };
+  c.steps = { book: true, page: true, lektorat: true, share: true };
   assert.equal(c.doneCount(), 4);
   assert.equal(c.progressPct(), 100);
   assert.equal(c.allDone(), true);
@@ -53,10 +53,10 @@ test('doStep ohne gewaehltes Buch faellt fuer alle Schritte auf openCreateBook',
     $store: { nav: { selectedBookId: null } },
     openCreateBook: () => calls.push('create'),
     toggleBookOverviewCard: () => calls.push('overview'),
-    alleAktualisieren: () => calls.push('komplett'),
+    startFirstLektorat: () => calls.push('lektorat'),
     toggleShareLinksCard: () => calls.push('share'),
   };
-  for (const k of ['book', 'page', 'analysis', 'share']) c.doStep(k);
+  for (const k of ['book', 'page', 'lektorat', 'share']) c.doStep(k);
   assert.deepEqual(calls, ['create', 'create', 'create', 'create']);
 });
 
@@ -68,12 +68,12 @@ test('doStep mit Buch routet je Schritt in die passende Funktion', () => {
     $store: { nav: { selectedBookId: 42 } },
     openCreateBook: () => calls.push('create'),
     toggleBookOverviewCard: () => calls.push('overview'),
-    alleAktualisieren: () => calls.push('komplett'),
+    startFirstLektorat: () => calls.push('lektorat'),
     toggleShareLinksCard: () => calls.push('share'),
   };
   c.doStep('book');
   c.doStep('page');
-  c.doStep('analysis');
+  c.doStep('lektorat');
   c.doStep('share');
-  assert.deepEqual(calls, ['create', 'overview', 'komplett', 'share']);
+  assert.deepEqual(calls, ['create', 'overview', 'lektorat', 'share']);
 });

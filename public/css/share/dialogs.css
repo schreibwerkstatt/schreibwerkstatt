@@ -172,6 +172,16 @@
   line-height: 1.4;
   color: var(--share-muted);
 }
+
+.share-name-modal__error {
+  margin: 0;
+  font-family: var(--share-font-ui);
+  font-size: 12px;
+  line-height: 1.4;
+  color: var(--share-danger);
+}
+
+.share-name-modal__error[hidden] { display: none; }
 /* „Benachrichtigung aktiv"-Pille am Identitäts-Chip, wenn eine Mail hinterlegt ist (#1). */
 .share-identity-bar__bell {
   font-size: 11px;

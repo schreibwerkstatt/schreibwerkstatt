@@ -5,7 +5,7 @@
 // __SHELL_BUILD: content hash over all listed assets → drives SHELL_CACHE.
 // __SHELL_MANIFEST: the coherent set precached atomically at SW install.
 // __VENDOR_SET: current vendor/ + fonts/ files — VENDOR_CACHE prune list.
-self.__SHELL_BUILD = "2eb5b8a96472eb4c";
+self.__SHELL_BUILD = "095be86ce8984ae6";
 self.__SHELL_MANIFEST = [
   "/css/admin/admin-backup.css",
   "/css/admin/admin-home.css",
@@ -168,6 +168,7 @@ self.__SHELL_MANIFEST = [
   "/css/entities/sources.css",
   "/css/entities/szenen.css",
   "/css/entities/world-facts.css",
+  "/css/landing-sections.css",
   "/css/landing.css",
   "/css/layout/aside-split.css",
   "/css/layout/base.css",
@@ -943,6 +944,8 @@ self.__SHELL_MANIFEST = [
   "/js/prompts/tagebuch.js",
   "/js/prompts/textsorten.js",
   "/js/prompts/weltfakten-block.js",
+  "/js/public-tools/wortwiederholungen-page.js",
+  "/js/public-tools/wortwiederholungen.js",
   "/js/radio-group.js",
   "/js/redaktion/bedenken.js",
   "/js/redaktion/status.js",
@@ -971,6 +974,7 @@ self.__SHELL_MANIFEST = [
   "/js/share-reader/menu.js",
   "/js/share-reader/mermaid-theme.js",
   "/js/share-reader/progress.js",
+  "/js/share-reader/promo.js",
   "/js/share-reader/read-depth.js",
   "/js/share-reader/reading-prefs.js",
   "/js/share-reader/resume.js",

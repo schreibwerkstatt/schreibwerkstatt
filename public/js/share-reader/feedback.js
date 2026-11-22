@@ -3,12 +3,12 @@
 // einmal pro Leser (reader_token, serverseitig UPSERT). Eigenständiges Modul
 // (kein Alpine), liest #share-config selbst — analog dwell.js. Am Ende der
 // Leseansicht (#share-feedback). Prefill aus dem eigenen bereits abgegebenen
-// Fazit. Teilt den reader_token/-Namen mit der Kommentar-Identität (gleiche
-// localStorage-Keys wie share-reader/identity.js). JS-enhanced (kein SSR-Fallback)
-// — sekundäres Feature; die Kommentar-Form funktioniert weiterhin ohne JS.
+// Fazit. Teilt reader_token, Namen und die Namensabfrage vor dem ersten Beitrag
+// mit der Kommentar-Identität (share-reader/identity.js, eine Modul-Instanz).
+// JS-enhanced (kein SSR-Fallback) — sekundäres Feature; die Kommentar-Form
+// funktioniert weiterhin ohne JS.
 
-const RT_KEY = 'sw_share_reader_token';
-const NAME_KEY = 'sw_share_reader_name';
+import { readerToken, savedName, ensureIdentity } from './identity.js';
 
 (function () {
   const host = document.getElementById('share-feedback');
@@ -22,15 +22,7 @@ const NAME_KEY = 'sw_share_reader_name';
   const I18N = CFG.i18n || {};
   const t = (k) => I18N[k] || k;
 
-  // reader_token teilen mit der Kommentar-Identität; falls noch keiner existiert,
-  // hier erzeugen (gleicher Key → identity.js liest denselben Wert).
-  let RT = '';
-  try { RT = localStorage.getItem(RT_KEY) || ''; } catch {}
-  if (!RT) {
-    RT = 'r' + Math.random().toString(36).slice(2) + Date.now().toString(36);
-    try { localStorage.setItem(RT_KEY, RT); } catch {}
-  }
-  const savedName = () => { try { return localStorage.getItem(NAME_KEY) || ''; } catch { return ''; } };
+  const RT = readerToken();
 
   host.hidden = false;
 
@@ -94,6 +86,7 @@ const NAME_KEY = 'sw_share_reader_name';
       if (!current) return;
       submit.disabled = true;
       status.textContent = '';
+      if (!(await ensureIdentity())) { submit.disabled = false; return; }
       try {
         const res = await fetch(`/share/${encodeURIComponent(TOKEN)}/feedback`, {
           method: 'POST',

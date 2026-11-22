@@ -42,7 +42,7 @@ let tmpRoot;
 
 test.before(async () => {
   tmpRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'sw-public-assets-'));
-  const webp = fs.readFileSync(path.join(ROOT, 'public', 'img', 'landing', 'chat.webp'));
+  const webp = fs.readFileSync(path.join(ROOT, 'public', 'img', 'landing', 'lektorat.webp'));
   fs.mkdirSync(path.join(tmpRoot, 'img', 'landing'), { recursive: true });
   fs.mkdirSync(path.join(tmpRoot, 'css'), { recursive: true });
   fs.writeFileSync(path.join(tmpRoot, 'img', 'landing', 'chat.webp'), webp);

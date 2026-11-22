@@ -215,14 +215,8 @@ html, body {
   line-height: 1.55;
 }
 
-.public-feature--bookeditor   { --card-accent: var(--card-accent-bookeditor); }
 .public-feature--stil         { --card-accent: var(--card-accent-stil); }
 .public-feature--figuren      { --card-accent: var(--card-accent-figuren); }
-.public-feature--chat         { --card-accent: var(--card-accent-chat); }
-.public-feature--review       { --card-accent: var(--card-accent-review); }
-.public-feature--pdfexport    { --card-accent: var(--card-accent-pdfexport); }
-.public-feature--plot         { --card-accent: var(--card-accent-plot); }
-.public-feature--recherche    { --card-accent: var(--card-accent-recherche); }
 .public-feature--blog         { --card-accent: var(--card-accent-blog); }
 
 /* Apps + Erweiterung: dasselbe Raster wie die Funktionen, aber ohne Akzent —

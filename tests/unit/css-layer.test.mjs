@@ -23,6 +23,7 @@ const UNLAYERED = [
   'css/entities/orte-map.css', // Leaflet-CSS haengt zur Laufzeit unlayered dahinter
   'css/entities/figur-werkstatt.css', // jsMind-Teil ueberschreibt vendor/jsmind-*.css (unlayered); Karten-Regeln liegen im Layer
   'css/landing.css',      // Standalone-Seiten (Landing/Register/Datenschutz) ohne SPA-Komponenten
+  'css/landing-sections.css', // Abschnitte derselben Standalone-Seiten (Landing, Themenseiten, Werkzeug)
 ];
 
 function walk(dir, out = []) {

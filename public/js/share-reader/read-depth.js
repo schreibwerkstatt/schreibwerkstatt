@@ -10,8 +10,29 @@
 // (maxBottomY). Daraus leitet sich zum Sendezeitpunkt sowohl der Gesamtanteil als
 // auch die pro-Kapitel-Tiefe ab (Kapitelgrenzen = aufeinanderfolgende Kapitel-
 // Überschriften). Element-Offsets werden erst beim Senden gemessen (Live-Inhalt).
+//
+// Bezug ist der ARTIKEL (#share-article), nicht die Seite: darunter stehen
+// allgemeine Kommentare, Fazit, Footer und mobil die ganze Kommentarliste. Am
+// Dokument gemessen erreichte niemand 100 %, der den Text zu Ende gelesen hat,
+// und das letzte Kapitel endete erst am Footer.
 
-(function () {
+/** Anteil (0-100) eines Bereichs [start, stop), den die Viewport-Unterkante
+ *  `bottomY` erreicht hat. Pure, Node-testbar. */
+export function spanDepthPct(bottomY, start, stop) {
+  const span = Math.max(1, stop - start);
+  return Math.round(Math.min(1, Math.max(0, (bottomY - start) / span)) * 100);
+}
+
+/** Tiefe je Kapitel: `tops` = [{ id, top }] in Lesereihenfolge, `end` = Ende des
+ *  Artikels. Ein Kapitel reicht bis zum nächsten Anker, das letzte bis `end`. */
+export function chapterDepths(bottomY, tops, end) {
+  return tops.map((c, i) => ({
+    chapterId: c.id,
+    pct: spanDepthPct(bottomY, c.top, i + 1 < tops.length ? tops[i + 1].top : end),
+  }));
+}
+
+if (typeof document !== 'undefined') (function () {
   const cfgEl = document.getElementById('share-config');
   if (!cfgEl) return;
   let CFG;
@@ -32,8 +53,15 @@
   window.addEventListener('scroll', track, { passive: true });
   window.addEventListener('resize', track);
 
-  function docHeight() {
-    return Math.max(1, document.documentElement.scrollHeight || 0);
+  // Artikel-Grenzen im Dokument; ohne Artikel das ganze Dokument.
+  function articleSpan() {
+    const art = document.getElementById('share-article');
+    if (art) {
+      const r = art.getBoundingClientRect();
+      const top = (window.scrollY || 0) + r.top;
+      return { top, bottom: top + r.height };
+    }
+    return { top: 0, bottom: Math.max(1, document.documentElement.scrollHeight || 0) };
   }
   function anchorTop(anchor) {
     const el = document.getElementById(anchor);
@@ -44,24 +72,16 @@
   function computeChapterDepths() {
     if (!CHAPTERS.length) return [];
     // Kapitelgrenzen: Oberkante dieses Kapitels bis Oberkante des nächsten
-    // (letztes Kapitel bis Dokumentende). Tops in Dokument-Koordinaten.
+    // (letztes Kapitel bis Artikelende). Tops in Dokument-Koordinaten.
     const tops = CHAPTERS.map(c => ({ id: c.id, top: anchorTop(c.anchor) }))
       .filter(c => c.top != null && Number.isInteger(c.id) && c.id > 0);
-    const out = [];
-    const end = docHeight();
-    for (let i = 0; i < tops.length; i++) {
-      const start = tops[i].top;
-      const stop = i + 1 < tops.length ? tops[i + 1].top : end;
-      const span = Math.max(1, stop - start);
-      const pct = Math.round(Math.min(1, Math.max(0, (maxBottomY - start) / span)) * 100);
-      out.push({ chapterId: tops[i].id, pct });
-    }
-    return out;
+    return chapterDepths(maxBottomY, tops, articleSpan().bottom);
   }
 
   function send() {
     track();
-    const maxScrollPct = Math.min(100, Math.round((maxBottomY / docHeight()) * 100));
+    const { top, bottom } = articleSpan();
+    const maxScrollPct = spanDepthPct(maxBottomY, top, bottom);
     if (maxScrollPct <= 0) return;
     const payload = JSON.stringify({ viewId: VIEW_ID, maxScrollPct, chapters: computeChapterDepths() });
     const url = `/share/${encodeURIComponent(TOKEN)}/read-depth`;

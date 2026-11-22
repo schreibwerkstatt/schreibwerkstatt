@@ -67,7 +67,7 @@
   </section>
 
   <footer class="share-footer">
-    <a class="share-footer__link" href="{{app_url}}" target="_blank" rel="noopener noreferrer">{{app_name}}</a>
+    {{footer_app}}
     ·
     <a class="share-footer__link" href="{{privacy_url}}" target="_blank" rel="noopener noreferrer">{{t_privacy}}</a>
   </footer>
@@ -88,6 +88,8 @@
   <script src="/js/share-reader/reading-prefs.js" type="module"></script>
   <!-- Nach-oben-Button: eigenstaendig, liest #share-config selbst. -->
   <script src="/js/share-reader/back-to-top.js" type="module"></script>
+  <!-- App-Hinweis nach dem ersten Kommentar (einmalig, nur bei show_promo). -->
+  <script src="/js/share-reader/promo.js" type="module"></script>
   <!-- Gesamt-Fazit (Sternewertung + Freitext): eigenstaendig, liest #share-config. -->
   <script src="/js/share-reader/feedback.js" type="module"></script>
   <!-- Diagramme (pre.mermaid) rendern: eigenstaendig, laedt die mermaid-Lib nur

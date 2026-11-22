@@ -33,6 +33,7 @@ router.use((req, res, next) => {
 
 require('./share/tts').register(router);
 require('./share/reader').register(router);
+require('./share/reader-stats').register(router);
 require('./share/api').register(router);
 
 module.exports = router;

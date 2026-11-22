@@ -11,9 +11,11 @@
 import { resolveCurrentQuote } from '../share-anchor.js';
 import { avatarHue, avatarInitials } from '../avatar.js';
 import { el, timeEl, submitOnModEnter } from './dom.js';
+import { errorText } from './api.js';
 
 // deps:
 //   t, article, api, savedName
+//   ensureIdentity()         → Promise<boolean>, vor dem ersten Beitrag (Name)
 //   reload()                 → Threads neu laden + rendern
 //   setActive(id)            → Thread auswählen (Highlight + Pin)
 //   scrollToAnchor(id)       → zur Textstelle springen
@@ -23,6 +25,7 @@ import { el, timeEl, submitOnModEnter } from './dom.js';
 export function createThreadRenderer(deps) {
   const { t, article, api, savedName, reload, setActive, scrollToAnchor,
     isAnchorLocated, unseenReplies, markThreadSeen, onResize } = deps;
+  const ensureIdentity = deps.ensureIdentity || (() => Promise.resolve(true));
   const openReplies = new Set();
   const drafts = new Map();
 
@@ -35,10 +38,13 @@ export function createThreadRenderer(deps) {
   // Avatar-Daten aus den geteilten pure Primitiven (public/js/avatar.js, SSoT mit
   // der SPA-Leiste). Leser haben keine Email → Seed/Initialen aus dem Anzeigenamen;
   // der Autor bekommt einen festen Seed (gleich im SSR, lib/share-comments-ssr.js).
+  // Initialen aus dem Namen, nicht aus der Anzeige-Zeile: die trägt bei eigenen
+  // Beiträgen den Zusatz „(Du)", und der würde sonst zum zweiten Buchstaben.
   function renderMeta(c) {
     const meta = el('div', 'comment-rail__meta');
     const label = authorName(c);
-    const avatar = el('span', 'comment-rail__avatar', avatarInitials(label));
+    const initialsOf = c.is_author ? t('author_badge') : (c.name || t('anon'));
+    const avatar = el('span', 'comment-rail__avatar', avatarInitials(initialsOf));
     avatar.setAttribute('aria-hidden', 'true');
     avatar.style.setProperty('--avatar-hue', avatarHue(c.is_author ? 'author' : (c.name || 'anon')));
     meta.appendChild(avatar);
@@ -113,6 +119,7 @@ export function createThreadRenderer(deps) {
       const body = (ta.value || '').trim();
       if (!body) { status.textContent = t('form_empty'); return; }
       btn.disabled = true;
+      if (!(await ensureIdentity())) { btn.disabled = false; ta.focus(); return; }
       try {
         await api.postComment({ parent_id: root.id, body, reader_name: savedName() });
         openReplies.delete(root.id);
@@ -120,7 +127,7 @@ export function createThreadRenderer(deps) {
         ta.value = '';
         await reload();
       } catch (e) {
-        status.textContent = e.status === 429 ? t('comment_rate_limited') : t('form_error');
+        status.textContent = errorText(e, t);
         btn.disabled = false;
       }
     });
@@ -153,7 +160,7 @@ export function createThreadRenderer(deps) {
       if (!val) { status.textContent = t('form_empty'); return; }
       save.disabled = true;
       try { await api.editOwnComment(c.id, val); await reload(); }
-      catch { status.textContent = t('form_error'); save.disabled = false; }
+      catch (e) { status.textContent = errorText(e, t); save.disabled = false; }
     };
     save.addEventListener('click', doSave);
     submitOnModEnter(ta, doSave);
@@ -172,7 +179,7 @@ export function createThreadRenderer(deps) {
       toggle.addEventListener('click', async () => {
         toggle.disabled = true;
         try { await api.resolveOwnComment(c.id, !c.resolved); await reload(); }
-        catch { status.textContent = t('form_error'); toggle.disabled = false; }
+        catch (e) { status.textContent = errorText(e, t); toggle.disabled = false; }
       });
       actions.appendChild(toggle);
     }
@@ -192,7 +199,7 @@ export function createThreadRenderer(deps) {
         del.disabled = true;
         try { await api.deleteOwnComment(c.id); await reload(); }
         catch (e) {
-          status.textContent = e.message === 'HAS_REPLIES' ? t('delete_has_replies') : t('form_error');
+          status.textContent = errorText(e, t);
           del.disabled = false;
         }
       });

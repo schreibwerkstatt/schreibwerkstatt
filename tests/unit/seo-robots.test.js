@@ -35,6 +35,7 @@ const appSettings = require('../../lib/app-settings');
 const express = require('express');
 const app = express();
 app.use(require('../../routes/public'));
+app.use(require('../../routes/public-pages'));
 app.use('/share', require('../../routes/share'));
 
 const server = app.listen(0);
@@ -130,4 +131,81 @@ test('ohne app.public_url bleibt die Instanz unindexiert — es gibt keine kanon
   const landing = await _get('/landing');
   assert.match(landing.body, /<meta name="robots" content="noindex, nofollow">/);
   assert.doesNotMatch(landing.body, /rel="canonical"/);
+});
+
+test('Themenseiten und Werkzeug sind indexierbar, kanonisch und stehen in der Sitemap', async () => {
+  _setIndexable(true, 'https://app.example.test');
+  for (const urlPath of ['/lektorat', '/testleser', '/wortwiederholungen']) {
+    const res = await _get(urlPath);
+    assert.equal(res.status, 200, urlPath);
+    assert.doesNotMatch(res.body, /noindex/, `${urlPath} darf kein noindex tragen`);
+    assert.match(res.body, new RegExp(`<link rel="canonical" href="https://app\\.example\\.test${urlPath}">`));
+    assert.match(res.body, /<meta name="description" content="[^"]{60,}">/, `${urlPath} braucht eine Meta-Description`);
+  }
+  const sitemap = await _get('/sitemap.xml');
+  for (const urlPath of ['/', '/lektorat', '/testleser', '/wortwiederholungen', '/datenschutz']) {
+    assert.match(sitemap.body, new RegExp(`<loc>https://app\\.example\\.test${urlPath}</loc>`), urlPath);
+  }
+});
+
+test('Themenseiten folgen seo.indexable=false', async () => {
+  _setIndexable(false);
+  for (const urlPath of ['/lektorat', '/testleser', '/wortwiederholungen']) {
+    const res = await _get(urlPath);
+    assert.match(res.body, /<meta name="robots" content="noindex, nofollow">/, `${urlPath} braucht noindex`);
+  }
+});
+
+test('Landing trägt Meta-Description, OG-Bild und SoftwareApplication-Strukturdaten', async () => {
+  _setIndexable(true, 'https://app.example.test');
+  const res = await _get('/landing');
+  assert.match(res.body, /<meta name="description" content="[^"]{60,}">/);
+  assert.match(res.body, /<meta property="og:image" content="https:\/\/app\.example\.test\/img\/landing\/lektorat\.webp">/);
+  const ld = /<script type="application\/ld\+json">([^<]+)<\/script>/.exec(res.body);
+  assert.ok(ld, 'ld+json fehlt');
+  const data = JSON.parse(ld[1])['@graph'].find(n => n['@type'] === 'SoftwareApplication');
+  assert.ok(data, 'SoftwareApplication fehlt');
+  assert.equal(data.offers.price, '0');
+});
+
+test('jede Sprachfassung hat eine eigene URL mit hreflang-Gruppe (Googlebot schickt kein Accept-Language)', async () => {
+  _setIndexable(true, 'https://app.example.test');
+  const en = await _get('/lektorat?lang=en');
+  assert.match(en.body, /<html lang="en">/);
+  assert.match(en.body, /<link rel="canonical" href="https:\/\/app\.example\.test\/lektorat\?lang=en">/);
+  for (const [hl, href] of [['de', '/lektorat'], ['en', '/lektorat?lang=en'], ['x-default', '/lektorat']]) {
+    const re = new RegExp(`<link rel="alternate" hreflang="${hl}" href="https://app\\.example\\.test${href.replace('?', '\\?')}">`);
+    assert.match(en.body, re, hl);
+  }
+  const de = await _get('/datenschutz?lang=de');
+  assert.match(de.body, /<html lang="de">/);
+  assert.match(de.body, /<link rel="canonical" href="https:\/\/app\.example\.test\/datenschutz">/);
+  assert.match(de.body, /<meta name="description" content="[^"]{60,}">/);
+});
+
+test('Sitemap listet beide Sprachfassungen mit vollständigen hreflang-Alternativen', async () => {
+  _setIndexable(true, 'https://app.example.test');
+  const res = await _get('/sitemap.xml');
+  assert.match(res.body, /xmlns:xhtml="http:\/\/www\.w3\.org\/1999\/xhtml"/);
+  const blocks = res.body.match(/<url>[\s\S]*?<\/url>/g);
+  assert.equal(blocks.length, 10, '5 Seiten × 2 Sprachen');
+  for (const b of blocks) {
+    assert.equal((b.match(/<xhtml:link /g) || []).length, 3, b);
+  }
+  assert.match(res.body, /<loc>https:\/\/app\.example\.test\/wortwiederholungen\?lang=en<\/loc>/);
+});
+
+test('Strukturdaten: WebSite auf der Landing, Brotkrumen auf Themen- und Werkzeugseite', async () => {
+  _setIndexable(true, 'https://app.example.test');
+  const ldOf = (body) => JSON.parse(/<script type="application\/ld\+json">([^<]+)<\/script>/.exec(body)[1]);
+  const landing = ldOf((await _get('/landing')).body);
+  const site = landing['@graph'].find(n => n['@type'] === 'WebSite');
+  assert.equal(site.url, 'https://app.example.test/');
+  for (const urlPath of ['/lektorat', '/wortwiederholungen']) {
+    const ld = ldOf((await _get(urlPath)).body);
+    const nodes = ld['@graph'] || [ld];
+    const crumbs = nodes.find(n => n['@type'] === 'BreadcrumbList');
+    assert.ok(crumbs, urlPath);
+    assert.equal(crumbs.itemListElement[1].item, `https://app.example.test${urlPath}`);
+  }
 });

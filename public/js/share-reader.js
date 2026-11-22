@@ -19,11 +19,11 @@ import { locateRange, locateApprox, caretPosFromPoint, scrollWindowToRange } fro
 import { groupThreads } from './editor/comment-threads.js';
 import { bindScrollFade } from './scroll-fade.js';
 import { el, parseTs, submitOnModEnter } from './share-reader/dom.js';
-import { createApi } from './share-reader/api.js';
+import { createApi, errorText } from './share-reader/api.js';
 import { createThreadRenderer } from './share-reader/thread-render.js';
 import { createThreadSheet } from './share-reader/sheet.js';
 import {
-  readerToken, savedName, savedEmail, markNameDismissed, closeNameModal, setupIdentity,
+  readerToken, savedName, savedEmail, closeNameModal, setupIdentity, ensureIdentity,
 } from './share-reader/identity.js';
 import { createOptionsMenu } from './share-reader/menu.js';
 import { setupThemeSwitcher } from './share-reader/theme.js';
@@ -87,6 +87,10 @@ import { setupWakeLock } from './share-reader/wakelock.js';
     try { return new Set(JSON.parse(localStorage.getItem(SEEN_KEY) || '[]')); } catch { return new Set(); }
   }
   let seen = loadSeen();
+  // Erster Besuch dieses Links in diesem Browser: alles, was schon dasteht, ist
+  // für diesen Leser nicht „neu". Ohne das trüge jeder beantwortete Thread beim
+  // ersten Öffnen das Badge „Neue Antwort".
+  let seenInitialized = (() => { try { return localStorage.getItem(SEEN_KEY) !== null; } catch { return false; } })();
   function saveSeen() { try { localStorage.setItem(SEEN_KEY, JSON.stringify([...seen].slice(-1000))); } catch {} }
   // Ungelesene fremde Antworten eines Threads (Autor- oder andere Leser-Beiträge,
   // die dieser Browser noch nicht gesehen hat). Eigene Beiträge zählen nie.
@@ -123,25 +127,51 @@ import { setupWakeLock } from './share-reader/wakelock.js';
   // Leichtgewichtige Signatur über die Threads — erkennt neue/aufgelöste
   // Kommentare und Antworten, ohne bei jedem Poll-Tick neu zu rendern (sonst
   // Scroll-Reset + verlorene halb getippte Antwort).
+  // edited_at fängt Bearbeitungen gleicher Länge, name einen Namenswechsel
+  // eines anderen Lesers.
   function commentsSig(arr) {
-    return arr.map(c => `${c.id}:${c.parent_id || 0}:${c.resolved ? 1 : 0}:${(c.body || '').length}`).join('|');
+    return arr.map(c => `${c.id}:${c.parent_id || 0}:${c.resolved ? 1 : 0}:${c.edited_at || ''}:${c.name || ''}:${(c.body || '').length}`).join('|');
   }
   let lastSig = null;
   // Poll (alle 10 s) und Reload nach eigenem Post laufen parallel: nur die
   // jüngste Anfrage darf übernehmen, sonst verdrängt eine spät ankommende
   // ältere Liste den eben geschriebenen Kommentar bis zum nächsten Poll.
   let fetchSeq = 0;
+  let linkGone = false;
   async function fetchThreads() {
+    if (linkGone) return;
     const seq = ++fetchSeq;
     try {
       const next = await api.fetchThreads();
       if (seq !== fetchSeq || !next) return;
+      if (next.gone) { markLinkGone(); return; }
+      if (!seenInitialized) {
+        for (const c of next) seen.add(c.id);
+        saveSeen();
+        seenInitialized = true;
+      }
       const sig = commentsSig(next);
       comments = next;
       if (sig === lastSig) return; // keine Änderung → kein Reflow
       lastSig = sig;
       render();
     } catch {}
+  }
+
+  // Link seither widerrufen/abgelaufen/gelöscht: Pollen einstellen, Hinweis
+  // zeigen, Kommentier-Bedienelemente ausblenden (body-Klasse, CSS). Gelesen
+  // werden kann der geladene Text weiter.
+  function markLinkGone() {
+    if (linkGone) return;
+    linkGone = true;
+    clearInterval(pollTimer);
+    composer.closeComposer();
+    sheet.close();
+    document.body.classList.add('share-link-gone');
+    const banner = el('p', 'share-gone-banner', t('link_gone'));
+    banner.setAttribute('role', 'status');
+    const host = document.getElementById('share-content') || article;
+    if (host) host.prepend(banner);
   }
 
   // Identitäts-Änderung (Name + optionale Mail) am Chip auf die bisherigen eigenen
@@ -198,7 +228,7 @@ import { setupWakeLock } from './share-reader/wakelock.js';
   // Gruppierung kommt aus dem geteilten pure Kern (editor/comment-threads.js,
   // SSoT mit der Owner-Leiste) — Roots + chronologisch sortierte Antworten.
   const { renderThread: renderThreadCard } = createThreadRenderer({
-    t, article, api, savedName,
+    t, article, api, savedName, ensureIdentity,
     reload: fetchThreads,
     setActive: (id) => setActive(id),
     scrollToAnchor: (id) => scrollToAnchor(id),
@@ -213,7 +243,9 @@ import { setupWakeLock } from './share-reader/wakelock.js';
   // Lesestelle (statt ans Ende der Liste zu scrollen).
   const sheet = createThreadSheet({
     t, renderThread,
-    onClose: () => { if (activeId != null) { activeId = null; renderHighlights(); clearSelected(); } },
+    // Neu rendern: Sheet und Liste teilen offene Antwort-Boxen + Entwürfe, die
+    // Listen-Karte soll den Stand aus dem Sheet zeigen.
+    onClose: () => { activeId = null; render(); },
   });
   const isFlat = () => !!(window.matchMedia && window.matchMedia(FLAT_BELOW).matches);
 
@@ -328,12 +360,14 @@ import { setupWakeLock } from './share-reader/wakelock.js';
 
   // ── Selektions-Button + Composer-Overlay (Widget) ────────────────────────────
   const composer = setupComposer({
-    t, article, postComment: api.postComment, savedName,
+    t, article, postComment: api.postComment, savedName, ensureIdentity,
     onPosted: fetchThreads,
   });
+  // Esc schliesst die oberste Ebene: liegt der Namens-Dialog über dem Composer
+  // (Abfrage vor dem Senden), nur ihn — der Beitrag bleibt im Formular.
   document.addEventListener('keydown', (e) => {
     if (e.key !== 'Escape') return;
-    if (document.getElementById('share-name-modal')) { markNameDismissed(); closeNameModal(); }
+    if (document.getElementById('share-name-modal')) { closeNameModal(false); return; }
     composer.closeComposer();
     sheet.close();
   });
@@ -356,14 +390,14 @@ import { setupWakeLock } from './share-reader/wakelock.js';
       const body = (form.elements['body'].value || '').trim();
       const hp = (form.elements['_hp'].value || '').trim();
       if (!body) { status.textContent = form.dataset.emptyMsg; submit.disabled = false; return; }
+      if (!(await ensureIdentity())) { submit.disabled = false; form.elements['body'].focus(); return; }
       try {
         await api.postComment({ body, reader_name: savedName(), _hp: hp });
         form.elements['body'].value = '';
         status.textContent = form.dataset.successMsg;
         await fetchThreads();
       } catch (err) {
-        status.textContent = err.status === 429 ? form.dataset.rateMsg
-          : form.dataset.errorMsg + (err.message ? ' (' + err.message + ')' : '');
+        status.textContent = errorText(err, t);
       } finally {
         submit.disabled = false;
       }
@@ -394,7 +428,7 @@ import { setupWakeLock } from './share-reader/wakelock.js';
     }
     return false;
   }
-  setInterval(() => {
+  const pollTimer = setInterval(() => {
     if (document.hidden || readerBusy()) return;
     fetchThreads();
   }, POLL_MS);

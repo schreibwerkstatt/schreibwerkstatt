@@ -1,0 +1,46 @@
+{
+  "version": "6.8.0",
+  "date": "2026-11-22",
+  "entries": [
+    {
+      "kind": "neu",
+      "de": "Startseite: Neue Besucher sehen jetzt klarer, was die Schreibwerkstatt tut, mit häufigen Fragen, Angaben zum Datenschutz und einem Demo-Knopf. Dazu gibt es eigene Seiten zu Lektorat und Testlesern.",
+      "en": "Home page: new visitors now see more clearly what Schreibwerkstatt does, with FAQs, privacy details and a demo button. There are also dedicated pages on editing and beta readers."
+    },
+    {
+      "kind": "neu",
+      "de": "Wortwiederholungen prüfen: ein kostenloses Werkzeug ohne Konto zeigt nahe Wiederholungen, sehr lange Sätze und gehäufte Satzanfänge. Dein Text bleibt dabei im Browser.",
+      "en": "Check word repetitions: a free tool, no account needed, shows close repetitions, very long sentences and repeated sentence openings. Your text stays in the browser."
+    },
+    {
+      "kind": "neu",
+      "de": "Lese-Link: In der Leseansicht steht unten ein dezenter Hinweis, womit das Manuskript geschrieben wird. Beim Erstellen oder Bearbeiten des Links kannst du ihn ausschalten.",
+      "en": "Reading link: the reading view now shows a subtle note at the bottom saying which app the manuscript is written with. You can switch it off when creating or editing the link."
+    },
+    {
+      "kind": "verbessert",
+      "de": "Erste Schritte: Du kannst dein Manuskript jetzt direkt von der Willkommens-Karte importieren. Die neue Etappe «Ersten Abschnitt lektorieren» öffnet einen Abschnitt und startet das Lektorat für dich.",
+      "en": "Getting started: you can now import your manuscript straight from the welcome card. The new step “Edit your first section” opens a section and starts the editing check for you."
+    },
+    {
+      "kind": "verbessert",
+      "de": "Lese-Link: Leser werden erst nach ihrem Namen gefragt, wenn sie den ersten Kommentar abschicken. Ein angefangener Kommentar geht beim Schliessen nicht mehr verloren.",
+      "en": "Reading link: readers are only asked for their name when they send their first comment. A half-written comment is no longer lost when the box is closed."
+    },
+    {
+      "kind": "verbessert",
+      "de": "Lese-Link, Statistik: Lesezeit und Lesetiefe sind jetzt genauer. Ein vergessener offener Tab, Link-Vorschauen und deine eigenen Aufrufe zählen nicht mehr mit.",
+      "en": "Reading link, statistics: reading time and reading depth are now more accurate. A forgotten open tab, link previews and your own visits no longer count."
+    },
+    {
+      "kind": "verbessert",
+      "de": "Lese-Link: Die Leseansicht ist besser gegen Missbrauch geschützt. Widerrufene Links zeigen den Lesern jetzt einen klaren Hinweis statt einer Fehlermeldung.",
+      "en": "Reading link: the reading view is better protected against misuse. Revoked links now show readers a clear notice instead of an error."
+    },
+    {
+      "kind": "behoben",
+      "de": "Lese-Link: Beim ersten Öffnen trug jeder schon beantwortete Kommentar das Zeichen «Neue Antwort». Jetzt erscheint es nur bei Antworten, die seit deinem letzten Besuch dazukamen.",
+      "en": "Reading link: on first opening, every comment that already had a reply was marked “New reply”. It now only appears for replies added since your last visit."
+    }
+  ]
+}

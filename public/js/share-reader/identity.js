@@ -1,10 +1,11 @@
 'use strict';
 // Reader-Identität (persistent pro Browser) + Namens-Chip/Modal. Standalone.
 // Der Name wird nicht pro Formular abgefragt, sondern einmal zentral gesetzt:
-// beim ersten Laden öffnet ein Modal („Dein Name"), danach steht „Als <Name> ·
-// Ändern" im Optionen-Menü (⋯). Composer, Reply-Form und SSR-Form kommentieren
-// mit dem hier gesetzten Namen (sonst anonym). „Überspringen"/Outside-Click
-// merkt sich den Verzicht für die Session (sessionStorage).
+// beim ersten Absenden eines Beitrags (`ensureIdentity()`, Composer, Antwort,
+// allgemeine Form, Fazit) öffnet ein Modal („Dein Name"), danach steht „Als
+// <Name> · Ändern" im Optionen-Menü (⋯). Reine Leser sehen den Dialog nie.
+// „Anonym bleiben" merkt sich den Verzicht für die Session (sessionStorage) und
+// sendet anonym; Esc/Klick daneben bricht das Absenden ab.
 
 import { el, makeModal } from './dom.js';
 
@@ -12,6 +13,12 @@ const RT_KEY = 'sw_share_reader_token';
 const NAME_KEY = 'sw_share_reader_name';
 const EMAIL_KEY = 'sw_share_reader_email';
 const DISMISS_KEY = 'sw_share_name_dismissed';
+// Dieselbe Regel wie der Server (lib/share-helpers.js#READER_EMAIL_RE): eine
+// Adresse, die er ablehnt, darf hier nicht gespeichert werden — sie ginge mit
+// jedem Beitrag mit und jeder Beitrag scheiterte an INVALID_EMAIL.
+export const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+export const EMAIL_MAX = 200;
+export function isValidEmail(e) { return !e || (e.length <= EMAIL_MAX && EMAIL_RE.test(e)); }
 
 export function readerToken() {
   let v = '';
@@ -27,16 +34,37 @@ export function readerToken() {
 export function savedName() { try { return localStorage.getItem(NAME_KEY) || ''; } catch { return ''; } }
 export function rememberName(n) { try { if (n) localStorage.setItem(NAME_KEY, n); } catch {} }
 export function forgetName() { try { localStorage.removeItem(NAME_KEY); } catch {} }
-export function savedEmail() { try { return localStorage.getItem(EMAIL_KEY) || ''; } catch { return ''; } }
+// Eine früher gespeicherte, ungültige Adresse gilt als nicht gesetzt — sonst
+// blockierte sie jeden Beitrag bis zur Korrektur.
+export function savedEmail() {
+  let v = '';
+  try { v = localStorage.getItem(EMAIL_KEY) || ''; } catch { return ''; }
+  return isValidEmail(v) ? v : '';
+}
 export function rememberEmail(e) { try { if (e) localStorage.setItem(EMAIL_KEY, e); } catch {} }
 export function forgetEmail() { try { localStorage.removeItem(EMAIL_KEY); } catch {} }
 export function nameDismissed() { try { return sessionStorage.getItem(DISMISS_KEY) === '1'; } catch { return false; } }
 export function markNameDismissed() { try { sessionStorage.setItem(DISMISS_KEY, '1'); } catch {} }
 let releaseModal = null;
-export function closeNameModal() {
+let pendingResolve = null; // offenes ensureIdentity(): true = absenden, false = abbrechen
+let openModal = null;      // von setupIdentity gesetzt
+export function closeNameModal(proceed = false) {
   const ex = document.getElementById('share-name-modal');
   if (ex) ex.remove();
   if (releaseModal) { releaseModal(); releaseModal = null; }
+  if (pendingResolve) { const r = pendingResolve; pendingResolve = null; r(!!proceed); }
+}
+
+// Vor dem ersten Beitrag einmal nach dem Namen fragen. Resolved `true`, wenn
+// abgesendet werden soll (Name gesetzt, schon vorhanden, oder „Anonym bleiben"),
+// `false`, wenn der Leser den Dialog ohne Wahl schliesst (Esc, Klick daneben).
+export function ensureIdentity() {
+  if (savedName() || nameDismissed() || !openModal) return Promise.resolve(true);
+  if (pendingResolve) closeNameModal(false);
+  return new Promise((resolve) => {
+    openModal();
+    pendingResolve = resolve;
+  });
 }
 
 // Identitäts-Chip (in den Optionen-Menü-Cluster via menuSection) + Identitäts-
@@ -83,8 +111,11 @@ export function setupIdentity({ t, menuSection, onIdentityChange }) {
     emailInput.maxLength = 200;
     emailInput.placeholder = t('name_modal_email');
     emailInput.setAttribute('aria-label', t('name_modal_email'));
-    emailInput.value = savedEmail();
+    try { emailInput.value = localStorage.getItem(EMAIL_KEY) || ''; } catch { emailInput.value = ''; }
     const emailHint = el('p', 'share-name-modal__hint', t('email_optional_hint'));
+    const emailError = el('p', 'share-name-modal__error');
+    emailError.setAttribute('role', 'alert');
+    emailError.hidden = true;
     const actions = el('div', 'share-composer__actions');
     const save = el('button', 'share-composer__submit', t('name_modal_save'));
     save.type = 'button';
@@ -94,6 +125,7 @@ export function setupIdentity({ t, menuSection, onIdentityChange }) {
     actions.appendChild(skip);
     card.appendChild(input);
     card.appendChild(emailInput);
+    card.appendChild(emailError);
     card.appendChild(emailHint);
     card.appendChild(actions);
     overlay.appendChild(card);
@@ -104,26 +136,37 @@ export function setupIdentity({ t, menuSection, onIdentityChange }) {
     function commit() {
       const n = (input.value || '').trim();
       const e = (emailInput.value || '').trim();
+      if (!isValidEmail(e)) {
+        emailError.textContent = t('email_invalid');
+        emailError.hidden = false;
+        emailInput.setAttribute('aria-invalid', 'true');
+        emailInput.focus();
+        return;
+      }
       const prevN = savedName();
       const prevE = savedEmail();
       if (n) rememberName(n); else forgetName();
       if (e) rememberEmail(e); else forgetEmail();
       markNameDismissed();
       renderChip();
-      closeNameModal();
+      closeNameModal(true);
       // Bisherige eigene Kommentare auf Name + Mail nachziehen (Server matcht über
       // reader_token), dann Threads neu laden.
       if ((n !== prevN || e !== prevE) && typeof onIdentityChange === 'function') onIdentityChange(n, e);
     }
     save.addEventListener('click', commit);
-    input.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); emailInput.focus(); } });
-    emailInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); commit(); } });
-    skip.addEventListener('click', () => { markNameDismissed(); closeNameModal(); });
-    overlay.addEventListener('mousedown', (e) => { if (e.target === overlay) { markNameDismissed(); closeNameModal(); } });
+    // Enter während einer IME-Komposition bestätigt die Zeichenwahl, nicht das Feld.
+    const isEnter = (e) => e.key === 'Enter' && !e.isComposing && e.keyCode !== 229;
+    input.addEventListener('keydown', (e) => { if (isEnter(e)) { e.preventDefault(); emailInput.focus(); } });
+    emailInput.addEventListener('keydown', (e) => { if (isEnter(e)) { e.preventDefault(); commit(); } });
+    emailInput.addEventListener('input', () => { emailError.hidden = true; emailInput.removeAttribute('aria-invalid'); });
+    // „Anonym bleiben": Verzicht für die Session merken, ein wartender Beitrag
+    // geht anonym raus. Klick daneben schliesst nur (ein wartender Beitrag bleibt
+    // ungesendet im Formular).
+    skip.addEventListener('click', () => { markNameDismissed(); closeNameModal(true); });
+    overlay.addEventListener('mousedown', (e) => { if (e.target === overlay) closeNameModal(false); });
   }
 
+  openModal = openNameModal;
   renderChip();
-  // Auto-Öffnen beim ersten Laden, solange kein Name gesetzt und nicht in
-  // dieser Session weggeklickt.
-  if (!savedName() && !nameDismissed()) openNameModal();
 }

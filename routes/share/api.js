@@ -184,7 +184,7 @@ function register(router) {
 
   router.post('/api/links', requireSession, jsonBody, async (req, res) => {
     const ownerEmail = sessionEmail(req);
-    const { kind, page_id, chapter_id, book_id, intro, expires_at, show_toc } = req.body || {};
+    const { kind, page_id, chapter_id, book_id, intro, expires_at, show_toc, show_promo } = req.body || {};
     if (kind !== 'page' && kind !== 'chapter' && kind !== 'book') return res.status(400).json({ error_code: 'INVALID_KIND' });
     if (kind === 'page' && !Number.isInteger(parseInt(page_id, 10))) return res.status(400).json({ error_code: 'PAGE_ID_REQUIRED' });
     if (kind === 'chapter' && !Number.isInteger(parseInt(chapter_id, 10))) return res.status(400).json({ error_code: 'CHAPTER_ID_REQUIRED' });
@@ -227,6 +227,8 @@ function register(router) {
         intro: intro ? String(intro).slice(0, INTRO_MAX) : null,
         expiresAt: expires_at || null,
         showToc: !!show_toc,
+        // App-Hinweis im Reader: Standard an, nur explizites false schaltet ab.
+        showPromo: show_promo !== false && show_promo !== 0,
       });
 
       // data-bid auf den Scope-Seiten nachziehen (Detail-Begruendung am Helper).
@@ -261,6 +263,9 @@ function register(router) {
     }
     if ('show_toc' in (req.body || {})) {
       patch.showToc = !!req.body.show_toc;
+    }
+    if ('show_promo' in (req.body || {})) {
+      patch.showPromo = !!req.body.show_promo;
     }
     try {
       shareLinks.updateShareLink(token, ownerEmail, patch);

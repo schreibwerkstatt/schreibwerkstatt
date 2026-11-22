@@ -4,108 +4,122 @@
   <meta charset="utf-8">
   <title>{{title}}</title>
   <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="description" content="{{metaDescription}}">
   {{#if noindex}}<meta name="robots" content="noindex, nofollow">{{/if}}
-  {{#if canonical}}<link rel="canonical" href="{{canonical}}">{{/if}}
+  {{#if canonical}}<link rel="canonical" href="{{canonical}}">
+  <link rel="alternate" hreflang="de" href="{{altDe}}">
+  <link rel="alternate" hreflang="en" href="{{altEn}}">
+  <link rel="alternate" hreflang="x-default" href="{{altDe}}">{{/if}}
+  <meta property="og:type" content="website">
+  <meta property="og:title" content="{{title}}">
+  <meta property="og:description" content="{{metaDescription}}">
+  <meta property="og:image" content="{{ogImage}}">
+  {{#if canonical}}<meta property="og:url" content="{{canonical}}">{{/if}}
+  <meta name="twitter:card" content="summary_large_image">
   <link rel="icon" href="/schreibwerkstatt_icon.svg">
+  <!-- Theme vor dem ersten Paint (folgt der System-Einstellung bzw. der in der App gewählten). -->
+  <script src="/js/theme-init.js"></script>
   <link rel="stylesheet" href="/css/tokens.css">
   <!-- .icon-Klasse fuer die Sprite-Icons der Client-Kacheln (Lucide, /icons.svg).
        Beides pre-auth erreichbar: /css/-Prefix + /icons.svg in server.js. -->
   <link rel="stylesheet" href="/css/components/icons.css">
   <link rel="stylesheet" href="/css/landing.css">
+  <link rel="stylesheet" href="/css/landing-sections.css">
+  <script type="application/ld+json">{{ldJson}}</script>
   <script defer src="/js/plausible-init.js?surface=landing"></script>
 </head>
 <body>
-  <main class="public-shell public-shell--wide">
-    <header class="public-header">
-      <img class="public-brand" src="/schreibwerkstatt_icon.svg" alt="" width="72" height="72">
-      <h1>{{appName}}</h1>
-      <p class="public-sub">{{subtitle}}</p>
-    </header>
+  <main class="public-shell public-shell--wide public-landing">
+    <div class="public-hero-block">
+      <header class="public-header public-hero">
+        <img class="public-brand" src="/schreibwerkstatt_icon.svg" alt="" width="72" height="72">
+        <p class="public-hero-brand">{{appName}}</p>
+        <h1 class="public-hero-title">{{heroTitle}}</h1>
+        <p class="public-sub">{{heroText}}</p>
+      </header>
+
+      <div class="public-actions public-actions--inline">
+        {{#if demoUrl}}<a class="public-btn public-btn--primary" href="{{demoUrl}}">{{demoLabel}}</a>
+        <a class="public-btn" href="/register{{registerQuery}}">{{registerLabel}}</a>{{/if}}
+        {{#if noDemo}}<a class="public-btn public-btn--primary" href="/register{{registerQuery}}">{{registerLabel}}</a>{{/if}}
+      </div>
+      <div class="public-hero-notes">
+        {{#if demoUrl}}<p class="public-hero-note">{{demoNote}}</p>{{/if}}
+        <p class="public-hero-note">{{statusText}} · {{loginPrompt}} <a class="public-inline-link" href="/login">{{loginLabel}}</a></p>
+      </div>
+    </div>
 
     <section class="public-principle">
       <h2 class="public-principle-title">{{principleTitle}}</h2>
       <p class="public-principle-text">{{principleText}}</p>
     </section>
 
-    <section class="public-actions public-actions--inline">
-      <a class="public-btn public-btn--primary" href="/login">{{loginLabel}}</a>
-      <a class="public-btn" href="/register{{registerQuery}}">{{registerLabel}}</a>
-    </section>
-
     <section class="public-features" aria-label="{{featuresTitle}}">
-      <h2 class="public-features-title">{{featuresTitle}}</h2>
+      <h2 class="public-features-title public-heading">{{featuresTitle}}</h2>
       <!-- Kachelbilder sind illustrativ: der Titel daneben (h3) sagt, was sie
            zeigen. alt="" haelt sie aus dem Screenreader, sonst laese er jeden
            Kacheltitel zweimal vor. -->
       <ul class="public-feature-grid">
-        <li class="public-feature public-feature--bookeditor">
-          <img class="public-feature-shot" src="/img/landing/schreiben.webp" alt="" width="920" height="614" loading="lazy" decoding="async">
+        <li class="public-feature public-feature--stil">
+          <img class="public-feature-shot" src="/img/landing/lektorat.webp" alt="" width="920" height="614" loading="lazy" decoding="async">
           <div class="public-feature-text">
             <h3>{{feat1Title}}</h3>
             <p>{{feat1Desc}}</p>
           </div>
         </li>
-        <li class="public-feature public-feature--stil">
-          <img class="public-feature-shot" src="/img/landing/lektorat.webp" alt="" width="920" height="614" loading="lazy" decoding="async">
+        <li class="public-feature public-feature--figuren">
+          <img class="public-feature-shot" src="/img/landing/ueberblick.webp" alt="" width="920" height="614" loading="lazy" decoding="async">
           <div class="public-feature-text">
             <h3>{{feat2Title}}</h3>
             <p>{{feat2Desc}}</p>
           </div>
         </li>
-        <li class="public-feature public-feature--figuren">
-          <img class="public-feature-shot" src="/img/landing/buchanalyse.webp" alt="" width="920" height="614" loading="lazy" decoding="async">
+        <li class="public-feature public-feature--blog public-feature--wide">
+          <img class="public-feature-shot" src="/img/landing/testleser.webp" alt="" width="920" height="614" loading="lazy" decoding="async">
           <div class="public-feature-text">
             <h3>{{feat3Title}}</h3>
             <p>{{feat3Desc}}</p>
           </div>
         </li>
-        <li class="public-feature public-feature--chat">
-          <img class="public-feature-shot" src="/img/landing/chat.webp" alt="" width="920" height="614" loading="lazy" decoding="async">
-          <div class="public-feature-text">
-            <h3>{{feat4Title}}</h3>
-            <p>{{feat4Desc}}</p>
-          </div>
-        </li>
-        <li class="public-feature public-feature--review">
-          <img class="public-feature-shot" src="/img/landing/bewertung.webp" alt="" width="920" height="614" loading="lazy" decoding="async">
-          <div class="public-feature-text">
-            <h3>{{feat5Title}}</h3>
-            <p>{{feat5Desc}}</p>
-          </div>
-        </li>
-        <li class="public-feature public-feature--pdfexport">
-          <img class="public-feature-shot" src="/img/landing/export.webp" alt="" width="920" height="614" loading="lazy" decoding="async">
-          <div class="public-feature-text">
-            <h3>{{feat6Title}}</h3>
-            <p>{{feat6Desc}}</p>
-          </div>
-        </li>
-        <li class="public-feature public-feature--plot">
-          <img class="public-feature-shot" src="/img/landing/plot.webp" alt="" width="920" height="614" loading="lazy" decoding="async">
-          <div class="public-feature-text">
-            <h3>{{feat7Title}}</h3>
-            <p>{{feat7Desc}}</p>
-          </div>
-        </li>
-        <li class="public-feature public-feature--recherche">
-          <img class="public-feature-shot" src="/img/landing/recherche.webp" alt="" width="920" height="614" loading="lazy" decoding="async">
-          <div class="public-feature-text">
-            <h3>{{feat8Title}}</h3>
-            <p>{{feat8Desc}}</p>
-          </div>
-        </li>
-        <li class="public-feature public-feature--blog public-feature--wide">
-          <img class="public-feature-shot" src="/img/landing/testleser.webp" alt="" width="920" height="614" loading="lazy" decoding="async">
-          <div class="public-feature-text">
-            <h3>{{feat9Title}}</h3>
-            <p>{{feat9Desc}}</p>
-          </div>
-        </li>
+      </ul>
+      <nav class="public-topic-links">
+        <a class="public-inline-link" href="/lektorat">{{featLinkLektorat}}</a>
+        <a class="public-inline-link" href="/wortwiederholungen">{{featLinkTool}}</a>
+        <a class="public-inline-link" href="/testleser">{{featLinkTestleser}}</a>
+      </nav>
+    </section>
+
+    <section class="public-tool-teaser">
+      <h2 class="public-tool-teaser-title">{{toolTitle}}</h2>
+      <p>{{toolText}}</p>
+      <a class="public-btn" href="/wortwiederholungen">{{toolCta}}</a>
+    </section>
+
+    <section class="public-features" aria-label="{{moreTitle}}">
+      <h2 class="public-features-title public-heading">{{moreTitle}}</h2>
+      <ul class="public-more-grid">
+        <li><h3>{{more1Title}}</h3><p>{{more1Desc}}</p></li>
+        <li><h3>{{more2Title}}</h3><p>{{more2Desc}}</p></li>
+        <li><h3>{{more3Title}}</h3><p>{{more3Desc}}</p></li>
+        <li><h3>{{more4Title}}</h3><p>{{more4Desc}}</p></li>
+        <li><h3>{{more5Title}}</h3><p>{{more5Desc}}</p></li>
+        <li><h3>{{more6Title}}</h3><p>{{more6Desc}}</p></li>
       </ul>
     </section>
 
+    <section class="public-features" aria-label="{{trustTitle}}">
+      <h2 class="public-features-title public-heading">{{trustTitle}}</h2>
+      <ul class="public-more-grid public-more-grid--trust">
+        <li><h3>{{trust1Title}}</h3><p>{{trust1Text}}</p></li>
+        <li><h3>{{trust2Title}}</h3><p>{{trust2Text}}</p></li>
+        <li><h3>{{trust3Title}}</h3><p>{{trust3Text}}</p></li>
+        <li><h3>{{trust4Title}}</h3><p>{{trust4Text}}</p></li>
+      </ul>
+      <p class="public-topic-links"><a class="public-inline-link" href="/datenschutz">{{privacyMore}}</a></p>
+    </section>
+
     <section class="public-features" aria-label="{{clientsTitle}}">
-      <h2 class="public-features-title">{{clientsTitle}}</h2>
+      <h2 class="public-features-title public-heading">{{clientsTitle}}</h2>
       <ul class="public-client-grid">
         <li class="public-client">
           <svg class="icon public-client-icon" aria-hidden="true"><use href="/icons.svg#laptop-minimal"/></svg>
@@ -128,9 +142,24 @@
       </ul>
     </section>
 
+    <section class="public-features public-faq" aria-label="{{faqTitle}}">
+      <h2 class="public-features-title public-heading">{{faqTitle}}</h2>
+      <div class="public-faq-grid">
+        <div class="public-faq-item"><h3>{{faq1Q}}</h3><p>{{faq1A}}</p></div>
+        <div class="public-faq-item"><h3>{{faq2Q}}</h3><p>{{faq2A}}</p></div>
+        <div class="public-faq-item"><h3>{{faq3Q}}</h3><p>{{faq3A}}</p></div>
+        <div class="public-faq-item"><h3>{{faq4Q}}</h3><p>{{faq4A}}</p></div>
+        <div class="public-faq-item"><h3>{{faq5Q}}</h3><p>{{faq5A}}</p></div>
+        <div class="public-faq-item"><h3>{{faq6Q}}</h3><p>{{faq6A}}</p></div>
+      </div>
+    </section>
+
     <footer class="public-footer">
       <span>{{footer}}</span>
       <nav class="public-footer-links">
+        <a class="public-footer-link" href="/lektorat">{{featLinkLektorat}}</a>
+        <a class="public-footer-link" href="/testleser">{{featLinkTestleser}}</a>
+        <a class="public-footer-link" href="/wortwiederholungen">{{featLinkTool}}</a>
         <a class="public-footer-link" href="{{githubUrl}}" target="_blank" rel="noopener noreferrer">{{githubLabel}}</a>
         <a class="public-footer-link" href="/datenschutz">{{privacyLabel}}</a>
       </nav>

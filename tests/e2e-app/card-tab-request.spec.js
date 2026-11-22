@@ -87,3 +87,24 @@ for (const c of [
     expect(result.final).toBe(c.to);
   });
 }
+
+// Import-Karte: «Manuskript importieren» der Welcome-Karte
+// (app-onboarding.js#openManuscriptImport) wählt die Import-Art vor — auch
+// wenn die Karte zuletzt auf einer anderen Art stand.
+test('import: Art-Wunsch «manuscript» greift beim Einblenden', async ({ page }) => {
+  await bootApp(page);
+  const result = await page.evaluate(async () => {
+    const app = window.__app;
+    if (!app.showFolderImportCard) await app.toggleFolderImportCard();
+    const el = document.querySelector('#folder-import-card');
+    if (!el) throw new Error('Import-Karte fehlt');
+    const ctx = window.Alpine.$data(el);
+    ctx.importKind = 'swbook';
+    await app.toggleFolderImportCard();
+    if (app.showFolderImportCard) throw new Error('Karte nicht geschlossen');
+    await app.openManuscriptImport();
+    await window.Alpine.nextTick();
+    return { open: app.showFolderImportCard, kind: ctx.importKind };
+  });
+  expect(result).toEqual({ open: true, kind: 'manuscript' });
+});

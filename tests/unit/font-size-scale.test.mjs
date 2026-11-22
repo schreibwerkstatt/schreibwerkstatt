@@ -23,7 +23,7 @@ const rel = (p) => relative(join(REPO_ROOT, 'public'), p).split('\\').join('/');
 //   tokens/          definiert die Skala.
 //   share/*          eigenes Token-Set ohne Typo-Tokens (pre-auth Reader).
 //   landing.css      eigenstaendige Marketing-Seite ausserhalb der App-Shell.
-const EXCLUDED = ['css/tokens/', 'css/share/', 'css/share.css', 'css/landing.css'];
+const EXCLUDED = ['css/tokens/', 'css/share/', 'css/share.css', 'css/landing.css', 'css/landing-sections.css'];
 
 // Bestehende Ueberschreiter: Zahl = aktueller Stand (Ratsche, nur runter).
 const ALLOW = {

@@ -11,6 +11,7 @@ import { setupCardLifecycle } from './card-lifecycle.js';
 import { startPoll, runningJobStatus } from './job-helpers.js';
 import { fmtDateTime } from '../utils.js';
 import { EVT } from '../events.js';
+import { CARD_REQUEST } from './card-request.js';
 
 export function registerFolderImportCard() {
   if (typeof window === 'undefined' || !window.Alpine) return;
@@ -55,6 +56,17 @@ export function registerFolderImportCard() {
           }
         },
         onViewReset: () => this.reset(),
+        // Import-Art vorwählen (Welcome-Karte «Manuskript importieren»,
+        // app-onboarding.js#openManuscriptImport). Ein laufender Import behält
+        // seine Art; ein Wechsel verwirft die gewählte Datei (sie passt nicht).
+        tabRequest: {
+          key: CARD_REQUEST.IMPORT_KIND_TAB,
+          apply: (kind) => {
+            if (this.busy || kind === this.importKind) return;
+            this.reset();
+            this.importKind = kind;
+          },
+        },
       });
       // Mit der installierten App geöffnete .swbook (app/boot/file-launch.js):
       // sofort übernehmen, falls sie vor dieser Karte da war, sonst per Event.

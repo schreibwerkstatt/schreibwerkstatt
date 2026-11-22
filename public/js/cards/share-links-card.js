@@ -28,6 +28,7 @@ export function registerShareLinksCard() {
     createIntro: '',
     createExpiresAt: '',
     createShowToc: false,
+    createShowPromo: true,
     creating: false,
     createError: '',
     // Edit-State
@@ -35,6 +36,7 @@ export function registerShareLinksCard() {
     editIntro: '',
     editExpiresAt: '',
     editShowToc: false,
+    editShowPromo: true,
     savingEdit: false,
     // Copy-Feedback
     copiedToken: null,
@@ -234,6 +236,7 @@ export function registerShareLinksCard() {
         intro: this.createIntro || null,
         expires_at: this.createExpiresAt || null,
         show_toc: this.createKind !== 'page' && this.createShowToc,
+        show_promo: this.createShowPromo,
       };
       if (this.createKind === 'page') {
         body.page_id = parseInt(this.createPageId, 10);
@@ -252,6 +255,7 @@ export function registerShareLinksCard() {
         this.createIntro = '';
         this.createExpiresAt = '';
         this.createShowToc = false;
+        this.createShowPromo = true;
         window.__app.refreshShareLinkCounts();
         copyText(this.linkUrl(j.token));
         this.copiedToken = j.token;
@@ -296,6 +300,7 @@ export function registerShareLinksCard() {
       this.editIntro = link.intro || '';
       this.editExpiresAt = link.expires_at ? link.expires_at.slice(0, 16) : '';
       this.editShowToc = !!link.show_toc;
+      this.editShowPromo = link.show_promo !== 0;
     },
 
     cancelEdit() {
@@ -303,6 +308,7 @@ export function registerShareLinksCard() {
       this.editIntro = '';
       this.editExpiresAt = '';
       this.editShowToc = false;
+      this.editShowPromo = true;
     },
 
     async saveEdit(token) {
@@ -313,6 +319,7 @@ export function registerShareLinksCard() {
           intro: this.editIntro || null,
           expires_at: this.editExpiresAt || null,
           show_toc: this.editShowToc,
+          show_promo: this.editShowPromo,
         });
         await this.loadLinks();
         this.cancelEdit();

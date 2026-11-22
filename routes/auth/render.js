@@ -33,6 +33,7 @@ function renderPublicShell({ lang, title, mainHtml, scripts = '' }) {
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <meta name="robots" content="noindex, nofollow">
 <link rel="icon" href="/schreibwerkstatt_icon.svg">
+<script src="/js/theme-init.js"></script>
 <link rel="stylesheet" href="/css/tokens.css">
 <link rel="stylesheet" href="/css/landing.css">
 <script defer src="/js/plausible-init.js"></script>

@@ -66,7 +66,9 @@ function register(router) {
         if (err.status >= 500 || err.status === 408) {
           logger.warn(`[share/tts] ${err.code} token=${token.slice(0, 8)} book=${link.book_id} status=${err.status}`);
         }
-        const body = { error: err.code };
+        // error_code wie bei allen anderen Antworten dieser Route; `error` bleibt
+        // fuer bestehende Leser des Felds.
+        const body = { error_code: String(err.code || 'tts_error').toUpperCase(), error: err.code };
         if (err.max) body.max = err.max;
         return res.status(err.status).json(body);
       }

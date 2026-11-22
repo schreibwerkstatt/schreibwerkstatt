@@ -279,3 +279,23 @@ body.share-page {
 .share-intro__body p { margin: 0 0 8px; }
 .share-intro__body p:last-child { margin: 0; }
 
+
+/* Link seither widerrufen/abgelaufen (share-reader.js#markLinkGone): Hinweis
+   über dem Text, Kommentier-Bedienelemente aus. Der geladene Text bleibt lesbar. */
+.share-gone-banner {
+  margin: 0 0 20px;
+  padding: 10px 14px;
+  border: 1px solid var(--share-border);
+  border-left: 3px solid var(--share-danger);
+  border-radius: var(--share-radius);
+  background: var(--share-surface);
+  color: var(--share-text);
+  font-family: var(--share-font-ui);
+  font-size: 14px;
+  line-height: 1.45;
+}
+.share-link-gone .share-sel-btn,
+.share-link-gone .share-comments__form,
+.share-link-gone .comment-rail__foot,
+.share-link-gone .share-thread__actions,
+.share-link-gone .share-feedback { display: none; }

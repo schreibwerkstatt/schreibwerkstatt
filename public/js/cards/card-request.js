@@ -39,6 +39,7 @@ export const CARD_REQUEST = Object.freeze({
   ADMIN_SETTINGS_TAB: 'adminSettingsTab', // cards/admin-settings-card.js (adminSettingsTab)
   USER_SETTINGS_TAB: 'userSettingsTab',  // cards/user-settings-card.js (userSettingsTab)
   HELP_TAB:          'helpTab',          // cards/help-card.js (helpTab)
+  IMPORT_KIND_TAB:   'importKindTab',    // cards/folder-import-card.js (importKind)
 });
 
 // Reiter mit Permalink: Karten-Key (EXCLUSIVE_CARDS) → Reiter-Wunsch, Grund-

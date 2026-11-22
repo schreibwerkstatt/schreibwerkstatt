@@ -420,6 +420,50 @@
 }
 .share-footer__link:hover { color: var(--share-muted); }
 
+/* App-Hinweis nach dem ersten Kommentar (share-reader/promo.js): dezente
+   Karte unten rechts, schliessbar per ×. Mobil volle Breite mit Rand. */
+.share-promo {
+  position: fixed;
+  right: 20px;
+  bottom: 20px;
+  z-index: 40;
+  width: min(340px, calc(100vw - 32px));
+  box-sizing: border-box;
+  padding: 12px 14px;
+  background: var(--share-surface);
+  color: var(--share-text);
+  border: 1px solid var(--share-border);
+  border-radius: var(--share-radius);
+  box-shadow: var(--share-shadow-md);
+  font-family: var(--share-font-ui);
+  font-size: 14px;
+  line-height: 1.45;
+}
+.share-promo__head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 8px;
+}
+.share-promo__title { margin: 0; font-weight: 600; }
+.share-promo__body { margin: 4px 0 0; color: var(--share-muted); }
+.share-promo__link { color: var(--share-accent); font-weight: 600; text-decoration: none; white-space: nowrap; }
+.share-promo__link:hover { text-decoration: underline; }
+.share-promo__close {
+  padding: 0 4px;
+  background: transparent;
+  color: var(--share-muted);
+  border: none;
+  font: inherit;
+  font-size: 18px;
+  line-height: 1;
+  cursor: pointer;
+}
+.share-promo__close:hover { color: var(--share-text); }
+@media (max-width: 600px) {
+  .share-promo { right: 16px; left: 16px; bottom: 16px; width: auto; }
+}
+
 .share-page--gone .share-main {
   text-align: center;
   padding: 80px 24px;

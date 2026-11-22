@@ -9,6 +9,9 @@
 // Die KI-Läufe (Lektorat, Chat, Bewertung) laufen als echte Jobs durch die
 // Queue — die Antwort liefert der Stub aus scripts/landing-shots/mock-ai.js.
 //
+// Aufgenommen werden die Bilder, die die öffentlichen Seiten zeigen (Landing-
+// Kacheln, Themenseiten) plus `schreiben` fürs README.
+//
 // Format: WebP, 460 CSS px breit (2× gerendert) im Verhältnis 3:2. Jede Aufnahme
 // ist ein AUSSCHNITT — der Ausschnitt, auf dem die Funktion erkennbar ist. Die
 // Landing-Page legt die Bilder in einen Rahmen mit demselben Verhältnis, damit
@@ -40,6 +43,13 @@ const CAPTURE_CSS = `
   .card--export .card-hint,
   .card--export .book-export-scope,
   .card--export .book-export-migration { max-width: 420px; }
+  /* Stil-Heatmap: nur Kapitel, Passiv, Ø Satzlänge, Wiederholungen —
+     die volle Tabelle ist mehr als doppelt so breit wie die Kachel. Gezählt
+     wird mit dem <template> der Spalten-Schleife als drittem Kind. */
+  .card--stil table :is(th, td):is(:nth-child(2), :nth-child(4), :nth-child(6), :nth-child(8), :nth-child(9), :nth-child(n+11)) { display: none; }
+  .card--stil table { width: auto; }
+  /* Headless-Linux setzt Inter sonst mit sichtbaren Lücken in Wörtern. */
+  body { text-rendering: geometricPrecision; }
 `;
 
 /**
@@ -59,6 +69,13 @@ async function _shot(page, outDir, name, target, { rect = { x: 0, y: 0 } } = {})
   const el = page.locator(target).first();
   if (!(await el.count())) throw new Error(`Shot ${name}: Ziel ${target} nicht gefunden`);
   await el.scrollIntoViewIfNeeded();
+  // Erst aufnehmen, wenn die Schriften geladen und Ein-/Ausblend-Animationen
+  // durch sind — sonst landet Fallback-Schrift oder ein halb transparenter
+  // Zustand im Bild.
+  await page.evaluate(async () => {
+    await document.fonts.ready;
+    await Promise.all(document.getAnimations().map(a => a.finished.catch(() => {})));
+  });
   // Rahmen-Element suchen und den Ausschnitt relativ zu ihm ausdrücken. Relativ
   // statt absolut: das Scrollen beim Aufnehmen verschiebt beide gleich.
   const frame = await el.evaluate((node, { rx, ry, w, h }) => {
@@ -155,96 +172,24 @@ async function captureAll({ base, seed, outDir }) {
   await page.waitForTimeout(1500);
   await page.evaluate(() => window.__app.runCheck());
   await _waitRoot(page, () => window.__app.checkDone === true && (window.__app.lektoratFindings || []).length > 0);
+  // Die Befunde angehakt zeigen: abgewählte stehen abgeblendet (0.55) da und
+  // sähen im Bild wie deaktiviert aus. Stilbefunde starten abgewählt.
+  await page.evaluate(() => window.__app.selectAllFindings(true));
   await page.waitForTimeout(1200);
   shots.push(await _shot(page, outDir, 'lektorat', '.lektorat-split-findings', { rect: { x: 0, y: 0 } }));
 
-  // ── 3. Sparrings-Chat: Textersetzung am Abschnitt ──────────────────────────
+  // ── 3. Manuskript im Blick: Stil-Heatmap je Kapitel ──────────────────────
+  // Regelbasiert (kein KI-Lauf): Satzlänge, Füllwörter, Passiv, Wiederholungen
+  // je Kapitel als Farbtabelle — das Bild zur Kachel «Manuskript im Blick».
   await page.evaluate(async () => {
-    await window.__app.toggleChatCard();
-    await window.__app.loadChatSessions?.();
+    window.__app._closeOtherMainCards?.(null);
+    await window.__app.toggleStilCard();
   });
-  await page.waitForSelector('.card--chat', { state: 'visible', timeout: 20000 });
-  await page.waitForTimeout(1200);
-  await page.evaluate(() => {
-    const card = window.Alpine.$data(document.querySelector('.card--chat'));
-    card.chatInput = 'Trägt der erste Satz?';
-    return card.sendChatMessage();
-  });
-  await _waitRoot(page, () => {
-    const card = document.querySelector('.card--chat');
-    if (!card) return false;
-    const d = window.Alpine.$data(card);
-    return (d.chatMessages || []).some(m => m.role === 'assistant');
-  });
+  await page.waitForSelector('.card--stil table', { state: 'visible', timeout: 20000 });
   await page.waitForTimeout(1500);
-  // Der Verlauf scrollt von selbst ans Ende (die neueste Nachricht). Sichtbar
-  // sind damit die Textersetzungs-Vorschläge mit «Übernehmen» / «Verwerfen» —
-  // das Versprechen der Kachel. Aufgenommen wird der Vorschlags-Block selbst,
-  // nicht die Karte: die Pixelzahl ändert sich sonst mit jedem Text.
-  // Die Chat-Spalte ist neben dem Editor 420 px breit — schmaler als der
-  // Ausschnitt. Für diese Aufnahme auf 500 px verbreitern, damit der
-  // Ausschnitt ganz in der Karte liegt (kein Streifen Editor am Rand).
-  await page.addStyleTag({ content: '.editor-chat-split { grid-template-columns: minmax(0, 1fr) 500px; }' });
-  await page.waitForTimeout(600);
-  shots.push(await _shot(page, outDir, 'chat', '.chat-vorschlaege', { rect: { x: -12, y: 32 } }));
+  shots.push(await _shot(page, outDir, 'ueberblick', '.card--stil table', { rect: { x: 0, y: -8 } }));
 
-  // ── 4. Buchanalyse: Figuren ───────────────────────────────────────────────
-  await page.evaluate(async () => {
-    window.__app._closeOtherMainCards?.(null);
-    await window.__app.toggleFiguresCard();
-  });
-  await page.waitForSelector('.card--figuren', { state: 'visible', timeout: 20000 });
-  await page.waitForTimeout(2000);
-  shots.push(await _shot(page, outDir, 'buchanalyse', '.card--figuren', { rect: { x: 300, y: 300 } }));
-
-  // ── 5. Bewertung: Buch-Review ─────────────────────────────────────────────
-  await page.evaluate(async () => {
-    window.__app._closeOtherMainCards?.(null);
-    await window.__app.toggleBookReviewCard();
-  });
-  await page.waitForSelector('.card--review', { state: 'visible', timeout: 20000 });
-  await page.waitForTimeout(1200);
-  await page.evaluate(async () => {
-    const card = window.Alpine.$data(document.querySelector('.card--review'));
-    await card.runBookReview();
-  });
-  await _waitRoot(page, () => {
-    const card = document.querySelector('.card--review');
-    if (!card) return false;
-    const d = window.Alpine.$data(card);
-    return !!(d.bookReviewOut || '').includes('bewertung-header');
-  });
-  await page.waitForTimeout(1200);
-  shots.push(await _shot(page, outDir, 'bewertung', '.card--review', { rect: { x: 0, y: 0 } }));
-
-  // ── 6. Plot-Werkstatt: Beat-Board ─────────────────────────────────────────
-  await page.evaluate(async () => {
-    window.__app._closeOtherMainCards?.(null);
-    await window.__app.togglePlotCard();
-  });
-  await page.waitForSelector('.card--plot', { state: 'visible', timeout: 20000 });
-  await page.waitForTimeout(2000);
-  shots.push(await _shot(page, outDir, 'plot', '.card--plot', { rect: { x: 10, y: 380 } }));
-
-  // ── 7. Recherche: Wissensboard ────────────────────────────────────────────
-  await page.evaluate(async () => {
-    window.__app._closeOtherMainCards?.(null);
-    await window.__app.toggleRechercheCard();
-  });
-  await page.waitForSelector('.card--recherche', { state: 'visible', timeout: 20000 });
-  await page.waitForTimeout(2000);
-  shots.push(await _shot(page, outDir, 'recherche', '.card--recherche', { rect: { x: 0, y: 150 } }));
-
-  // ── 8. Export ─────────────────────────────────────────────────────────────
-  await page.evaluate(async () => {
-    window.__app._closeOtherMainCards?.(null);
-    await window.__app.toggleExportCard();
-  });
-  await page.waitForSelector('.card--export', { state: 'visible', timeout: 20000 });
-  await page.waitForTimeout(1500);
-  shots.push(await _shot(page, outDir, 'export', '.card--export', { rect: { x: 0, y: 0 } }));
-
-  // ── 9. Testleser: geteilter Abschnitt (ohne Session) ───────────────────────
+  // ── 4. Testleser: geteilter Abschnitt (ohne Session) ───────────────────────
   const shareToken = seed.shareTokens?.page;
   if (!shareToken) throw new Error('Shot testleser: seed.shareTokens.page fehlt — der Seed hat keinen geteilten Abschnitt angelegt');
   {
@@ -271,7 +216,11 @@ async function captureAll({ base, seed, outDir }) {
     // Die Leiste ist höchstens 440 px breit, schmaler als der Ausschnitt: der
     // Rahmen ist dann der Seitenrand rechts daneben (leer), die Karte bleibt
     // links bündig und ganz im Bild.
-    shots.push(await _shot(reader, outDir, 'testleser', '.share-comments', { rect: { x: 0, y: 186 } }));
+    // Die «Antworten»-Knöpfe sind Bedienung, nicht Inhalt: ausgeblendet passen
+    // beide Threads ganz ins Bild, statt dass der zweite mitten im Satz endet.
+    await reader.addStyleTag({ content: '*:has(> .share-thread__reply-toggle) { display: none !important; }' });
+    await reader.waitForTimeout(800);
+    shots.push(await _shot(reader, outDir, 'testleser', '.share-comments__list > :first-child', { rect: { x: -12, y: -12 } }));
     await reader.close();
     await readerCtx.close();
   }

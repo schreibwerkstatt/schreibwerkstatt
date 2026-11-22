@@ -6,6 +6,7 @@ const deviceTokens = require('../db/device-tokens');
 const { TOKEN_KINDS, DEFAULT_KIND, scopesForKind } = require('../lib/device-scopes');
 const { db } = require('../db/schema');
 const { listBookIdsForUser } = require('../db/book-access');
+const { userHasPageCheck } = require('../db/page-checks');
 const { visibleUserDirectory } = require('../db/user-directory');
 const { setContext } = require('../lib/log-context');
 const logger = require('../logger');
@@ -180,20 +181,18 @@ function parseOnboardingState(user) {
   return { welcomeDismissed: !!s.welcomeDismissed, completed: !!s.completed, hints };
 }
 
-// Abgeleiteter Fortschritt: Buch angelegt → Text geschrieben → KI-Analyse
-// gelaufen → geteilt. Alle Quellen sind Aggregat-/ACL-/Nicht-Content-Tabellen
-// (book_access, page_stats, figures, locations, share_links) — kein direkter
-// Zugriff auf pages/chapters/books (Content-Store-Regel).
+// Abgeleiteter Fortschritt: Buch angelegt → Text geschrieben → erster
+// Abschnitt lektoriert → geteilt (Schlüssel = onboarding-card.js#STEP_KEYS).
+// Alle Quellen sind Aggregat-/ACL-/Nicht-Content-Tabellen (book_access, page_stats,
+// page_checks, share_links) — kein direkter Zugriff auf pages/chapters/books
+// (Content-Store-Regel).
 function onboardingSteps(email) {
   const owned = listBookIdsForUser(email).filter(r => r.role === 'owner').map(r => r.book_id);
-  const steps = { book: owned.length > 0, page: false, analysis: false, share: false };
+  const steps = { book: owned.length > 0, page: false, lektorat: userHasPageCheck(email), share: false };
   if (owned.length) {
     const ph = owned.map(() => '?').join(',');
     const pg = db.prepare(`SELECT COUNT(*) AS c FROM page_stats WHERE book_id IN (${ph}) AND chars > 0`).get(...owned);
     steps.page = (pg?.c || 0) > 0;
-    const fig = db.prepare(`SELECT COUNT(*) AS c FROM figures WHERE book_id IN (${ph})`).get(...owned);
-    const loc = db.prepare(`SELECT COUNT(*) AS c FROM locations WHERE book_id IN (${ph})`).get(...owned);
-    steps.analysis = ((fig?.c || 0) + (loc?.c || 0)) > 0;
   }
   const sh = db.prepare('SELECT COUNT(*) AS c FROM share_links WHERE owner_email = ? AND revoked_at IS NULL').get(email);
   steps.share = (sh?.c || 0) > 0;

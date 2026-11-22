@@ -51,4 +51,15 @@ function lektoratCoverage(bookId) {
   return { checked_pages: checked, total_pages: total, pct };
 }
 
-module.exports = { getOwnedCheck, listPageChecks, lektoratCoverage };
+const _stmtUserHasCheck = db.prepare('SELECT 1 FROM page_checks WHERE user_email = ? LIMIT 1');
+
+/** Hat der User je einen Lektorat-Lauf abgeschlossen (Abschnitts- oder Buch-
+ *  Lektorat, auch Cache-Treffer)? Quelle der Onboarding-Etappe «Ersten
+ *  Abschnitt lektorieren» (routes/usersettings.js#onboardingSteps): eine Zeile
+ *  entsteht erst, wenn `checkOnePage` fertig ist — ein abgebrochener Lauf zählt nicht. */
+function userHasPageCheck(email) {
+  if (!email) return false;
+  return !!_stmtUserHasCheck.get(email);
+}
+
+module.exports = { getOwnedCheck, listPageChecks, lektoratCoverage, userHasPageCheck };

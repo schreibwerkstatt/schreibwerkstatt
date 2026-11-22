@@ -207,6 +207,9 @@ app.use(authRouter);
 // und LOCAL_DEV_MODE laufen ueber `next()` weiter — Guard + staticServe
 // liefern dann die SPA-Shell.
 app.use(require('./routes/public'));
+// Themenseiten (/lektorat, /testleser) und das Werkzeug /wortwiederholungen —
+// oeffentliche, indexierbare Inhaltsseiten fuer Erstbesucher.
+app.use(require('./routes/public-pages'));
 
 // /share/:token Reader-View + POST /share/:token/comment sind oeffentlich.
 // Owner-API-Routen /share/api/* sind hingegen auth-pflichtig — die Auth-
@@ -223,7 +226,7 @@ app.use('/share', shareRouter);
 // wird als Property mitgeschickt. Der Umweg ueber die Query ist Pflicht, nicht
 // Geschmack: die CSP fuehrt kein 'unsafe-inline' fuer script-src, ein Inline-
 // Snippet auf der Seite koennte die Werte also gar nicht setzen.
-const ANALYTICS_SURFACES = new Set(['app', 'landing', 'register', 'datenschutz', 'share', 'share-abgelaufen']);
+const ANALYTICS_SURFACES = new Set(['app', 'landing', 'register', 'datenschutz', 'share', 'share-abgelaufen', 'thema', 'werkzeug']);
 const ANALYTICS_SHARE_KINDS = new Set(['page', 'chapter', 'book']);
 
 app.get('/js/plausible-init.js', (req, res) => {

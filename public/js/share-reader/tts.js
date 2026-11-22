@@ -115,6 +115,8 @@ export function setupTts({ token, article, t, locale, pause }) {
     const { playing, paused } = st;
     mainBtn.setAttribute('aria-pressed', playing && !paused ? 'true' : 'false');
     mainBtn.classList.toggle('is-reading', playing && !paused);
+    // Signal für dwell.js: Zuhören ohne Eingabe ist Lesezeit, kein Leerlauf.
+    document.documentElement.toggleAttribute('data-share-tts-reading', playing && !paused);
     const mainLabel = !playing ? t('tts_listen') : (paused ? t('tts_resume') : t('tts_pause'));
     setIcon(mainBtn, !playing ? 'headphones' : (paused ? 'play' : 'pause'));
     mainBtn.setAttribute('data-tip', !playing ? t('tts_listen_hint') : mainLabel);

@@ -68,3 +68,25 @@ test('ungültiger Key → 400, nichts gespeichert', async () => {
   const g = await call('GET', null, B);
   assert.deepEqual(g.body.state.hints, []);
 });
+
+// Etappe «Ersten Abschnitt lektorieren»: erledigt, sobald der User einen
+// Lektorat-Lauf abgeschlossen hat (Zeile in page_checks mit seiner E-Mail) —
+// Lauf eines anderen Users zählt nicht, Figuren/Schauplätze (Komplettanalyse)
+// ebenso wenig.
+test('Schritt lektorat folgt page_checks des Users, nicht fremden Läufen', async () => {
+  const { db } = require('../../db/connection');
+  let r = await call('GET', null, B);
+  assert.equal(r.body.steps.lektorat, false);
+  assert.equal('analysis' in r.body.steps, false);
+  const now = new Date().toISOString();
+  db.prepare('INSERT INTO books (book_id, name, created_at, updated_at, owner_email) VALUES (?, ?, ?, ?, ?)')
+    .run(7101, 'Onboarding-Buch', now, now, A);
+  db.prepare('INSERT INTO pages (page_id, book_id, page_name, updated_at) VALUES (?, ?, ?, ?)')
+    .run(7201, 7101, 'Abschnitt 1', now);
+  db.prepare(`INSERT INTO page_checks (page_id, book_id, checked_at, error_count, errors_json, user_email)
+              VALUES (?, ?, ?, 0, '[]', ?)`).run(7201, 7101, now, A);
+  r = await call('GET', null, B);
+  assert.equal(r.body.steps.lektorat, false, 'Lauf eines anderen Users zählt nicht');
+  r = await call('GET', null, A);
+  assert.equal(r.body.steps.lektorat, true);
+});

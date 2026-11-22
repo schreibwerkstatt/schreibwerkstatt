@@ -8,7 +8,8 @@
 // kommen aus einem Stub (scripts/landing-shots/mock-ai.js) — ohne API-Key gibt
 // es sonst keine Befunde, keine Bewertung und keinen Chat.
 //
-// Danach fährt Playwright die neun Kachel-Flächen an und legt je ein WebP ab (920 × 614, 3:2).
+// Danach fährt Playwright die Flächen der Landing-Kacheln an (plus `schreiben`
+// fürs README) und legt je ein WebP ab (920 × 614, 3:2).
 // Das Skript ist der Reproduzierbarkeits-Beleg: `npm run shots:landing`
 // erzeugt die Bilder, die auf der Landing-Page liegen.
 //

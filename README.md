@@ -1,6 +1,8 @@
 # schreibwerkstatt.app
 
-Schreiben, Lektorat und Buchanalyse mit KI. Eigenständiger Node.js-Service, Multi-User mit Rollen-ACL pro Buch. Inhalte (Bücher/Kapitel/Abschnitte) liegen lokal in SQLite — keine externe Storage-Abhängigkeit.
+Schreiben, Lektorat und Buchanalyse mit KI. Eigenständiger Node.js-Service, Multi-User mit Rollen-ACL pro Buch. Inhalte (Bücher/Kapitel/Abschnitte) liegen lokal in SQLite — keine externe Storage-Abhängigkeit. KI über Claude (Anthropic), lokal über Ollama oder jeden OpenAI-kompatiblen Endpunkt.
+
+![Schreiben im Notebook-Editor](public/img/landing/schreiben.webp)
 
 ## Gehostete Version
 
@@ -8,7 +10,26 @@ Wer nicht selbst hosten will, kann die betriebene Instanz unter **[schreibwerkst
 
 Das übrige README beschreibt das **Selbst-Hosting** und die Architektur — für die gehostete Version ist davon nichts nötig.
 
+## Apps, Erweiterung und Integrationen
+
+Apps und Erweiterung verbinden sich per Geräte-Token mit deinem Konto, gehostet oder selbst betrieben. Die Home-Assistant-Integration braucht einen API-Token, den nur ein Admin ausstellt — sie ist für die eigene Instanz gedacht.
+
+| Projekt | Wofür | Bezug |
+|---|---|---|
+| [focuseditor](https://github.com/schreibwerkstatt/focuseditor) | macOS-App für den Fokus-Editor, offline-fähig | [Mac App Store](https://apps.apple.com/app/id6797073919?mt=12) |
+| [mobile](https://github.com/schreibwerkstatt/mobile) | Android-App zum Schreiben und Diktieren, offline-fähig | [APK unter Releases](https://github.com/schreibwerkstatt/mobile/releases/latest) (nicht im Play Store) |
+| [browser-extension](https://github.com/schreibwerkstatt/browser-extension) | Chrome-Erweiterung: Webseiten als Recherche-Fundstück oder Quelle erfassen | [Chrome Web Store](https://chromewebstore.google.com/detail/kbekgjommnbkibdpdpdiaokcpnpiopdo) |
+| [homeassistant](https://github.com/schreibwerkstatt/homeassistant) | Home-Assistant-Integration: Server-, Schreib- und KI-Kostenmetriken als Sensoren | HACS / Home-Assistant-Marketplace |
+
+Geräte-Tokens für die Apps und die Erweiterung erzeugst du unter **Profil & Einstellungen → Geräte**, den API-Token für Home Assistant als Admin unter **Admin → Settings → API / Metrics**. Schnittstelle und Versionsvertrag: [docs/clients.md](docs/clients.md), [contract/](contract/README.md).
+
 ## Features
+
+<p>
+  <img src="public/img/landing/lektorat.webp" alt="Lektorat mit Befunden am Text" width="32%">
+  <img src="public/img/landing/ueberblick.webp" alt="Stil-Heatmap je Kapitel" width="32%">
+  <img src="public/img/landing/testleser.webp" alt="Testleser-Kommentare am Text" width="32%">
+</p>
 
 ### Schreiben & Editor
 - **Bearbeitungsmodus** (Notebook-Editor) – Abschnitte direkt bearbeiten. Auto-Save (Idle 60 s / Max 120 s), lokaler Draft (localStorage), Offline-Modus mit Retry, Block-Level-Merge bei parallelen Edits mit Konflikt-Auflösung.
@@ -79,12 +100,34 @@ Das übrige README beschreibt das **Selbst-Hosting** und die Architektur — fü
 
 ### Integrationen & Monitoring
 - **Blog-Sync (WordPress) & HubSpot-Sync** – Synchronisation für Bücher vom Typ `blog`. [docs/blog-sync.md](docs/blog-sync.md), [docs/hubspot-sync.md](docs/hubspot-sync.md).
-- **Browser-Erweiterung (Chrome)** – Webseiten als Recherche-Fundstück/Quelle erfassen (`/capture`). [docs/clients.md](docs/clients.md).
-- **Metrics-API** – Prometheus-Format (`GET /metrics`), Dashboards für Home Assistant und Grafana. [docs/metrics-api.md](docs/metrics-api.md), [docs/homeassistant/](docs/homeassistant/).
+- **Browser-Erweiterung (Chrome)** – Webseiten als Recherche-Fundstück/Quelle erfassen (`/capture`). [Chrome Web Store](https://chromewebstore.google.com/detail/kbekgjommnbkibdpdpdiaokcpnpiopdo), Quellcode [browser-extension](https://github.com/schreibwerkstatt/browser-extension), Schnittstelle [docs/clients.md](docs/clients.md).
+- **Metrics-API** – Prometheus-Format (`GET /metrics`) und `/metrics.json`, Dashboards für Home Assistant und Grafana. Home-Assistant-Integration: [homeassistant](https://github.com/schreibwerkstatt/homeassistant); API und Grafana: [docs/metrics-api.md](docs/metrics-api.md), [docs/homeassistant/](docs/homeassistant/).
 
 ---
 
+## KI-Provider
+
+Drei Provider, ein Vertrag ([docs/ai-providers.md](docs/ai-providers.md)):
+
+- **Claude** (Anthropic, Default) – API-Key in der Admin-Konsole; Prompt-Caching für buchweite Analysen.
+- **Ollama** – lokal, ohne Cloud und ohne API-Kosten.
+- **OpenAI-kompatibel** – jeder Endpunkt mit OpenAI-API (z.B. LiteLLM, LocalAI, vLLM).
+
+Der Admin wählt den Provider global und kann einzelnen Usern **KI-Profile** (Provider, Modell, Kontextfenster, eigener Schlüssel) zuweisen; gibt der Admin es frei, hinterlegen User einen eigenen KI-Zugang mit eigenem Schlüssel. Wie gut kleine lokale Modelle die buchweiten Analysen tragen, hängt stark vom Modell und vom Kontextfenster ab.
+
 ## Selbst-Hosting & Deployment
+
+Voraussetzung: Node.js 24–26 (empfohlen 26).
+
+```bash
+git clone https://github.com/schreibwerkstatt/schreibwerkstatt.git
+cd schreibwerkstatt
+cp .env.example .env   # SESSION_SECRET (32+ Hex) ist Pflicht, dazu ein Login-Weg (Admin-Bootstrap oder Google OAuth)
+npm ci --omit=dev
+node server.js         # http://localhost:3737
+```
+
+KI-Provider, Anmeldung und alle optionalen Dienste stellt danach die Admin-Konsole ein, ohne Neustart.
 
 Ausführliche Anleitungen für den Betrieb, Reverse-Proxies, Backups und Testinstanzen:
 
@@ -104,6 +147,13 @@ Unter `/admin` für User mit `global_role = 'admin'`:
 `LOCAL_DEV_MODE=true` in `.env` überspringt die Anmeldung und legt eine Dev-Session an (`dev@local`).
 
 > Niemals in Produktion – Auth-Guard wird komplett deaktiviert.
+
+```bash
+npm install && npm start   # Port 3737
+npm test                   # Import-Gate → Unit → Integration → E2E → Smoke (Playwright; einmalig: npx playwright install chromium)
+```
+
+Welche Suite wann läuft: [docs/testing.md](docs/testing.md). Sicherheitslücken bitte nicht als Issue melden, sondern wie in [SECURITY.md](SECURITY.md) beschrieben.
 
 ## Vertiefende Dokumentation
 

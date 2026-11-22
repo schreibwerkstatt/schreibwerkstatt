@@ -48,9 +48,12 @@
   <!-- Fetch-Stub VOR dem Modul (klassisches Inline-Script läuft beim Parsen,
        das type=module ist deferred): liefert Mock-Threads für den /threads-Call,
        quittiert alles andere mit ok. So bootet share-reader.js ohne echtes
-       Backend. -->
+       Backend. Tests können per addInitScript vorbelegen: __mockThreads,
+       __threadsStatus (z.B. 410), __postResponse ({ status, body }); jeder
+       Call landet in __calls ({ url, method, body }). -->
   <script>
-    window.__mockThreads = {
+    window.__calls = [];
+    window.__mockThreads = window.__mockThreads || {
       comments: [
         // Verankerter Root (b1 ist im Artikel vorhanden) + Autor-Antwort.
         { id: 1, parent_id: null, body: 'Toller Absatz, gefällt mir.',
@@ -66,11 +69,23 @@
           mine: false, is_author: false, resolved: false, anchor: null },
       ],
     };
-    window.fetch = (url) => {
+    window.fetch = (url, opts) => {
       const u = String(url);
-      const body = u.includes('/threads') ? JSON.stringify(window.__mockThreads) : '{"ok":true}';
+      const method = (opts && opts.method) || 'GET';
+      let sent = null;
+      try { sent = opts && opts.body ? JSON.parse(opts.body) : null; } catch { sent = null; }
+      window.__calls.push({ url: u, method, body: sent });
+      let status = 200;
+      let body = '{"ok":true}';
+      if (u.includes('/threads')) {
+        status = window.__threadsStatus || 200;
+        body = status === 200 ? JSON.stringify(window.__mockThreads) : '{"error_code":"GONE"}';
+      } else if (method === 'POST' && u.endsWith('/comment') && window.__postResponse) {
+        status = window.__postResponse.status;
+        body = JSON.stringify(window.__postResponse.body || {});
+      }
       return Promise.resolve(new Response(body, {
-        status: 200, headers: { 'Content-Type': 'application/json' },
+        status, headers: { 'Content-Type': 'application/json' },
       }));
     };
   </script>

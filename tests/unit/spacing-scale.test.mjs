@@ -41,6 +41,7 @@ const EXCLUDED = [
   'css/page/page-revision-viewer.css',
   'css/page/page-view.css',
   'css/landing.css',
+  'css/landing-sections.css',
 ];
 
 // Bestehende Ueberschreiter: Zahl = aktueller Stand (Ratsche, nur runter).

@@ -163,6 +163,9 @@ export const EVT = {
   RECHERCHE_FOCUS_ITEM: 'recherche:focus-item',           // detail: { itemId }
   BOOK_STATS_SELECT: 'book-stats:select',                 // detail: { metric, range }
   SHARE_PREFILL: 'share:prefill',                         // detail: { scope, id }
+  // Share-Reader (öffentliche Leseansicht, document): Leser-Kommentar erfolgreich
+  // gepostet (share-reader/api.js) → share-reader/promo.js.
+  SHARE_COMMENT_POSTED: 'share:comment-posted',           // kein detail
 
   // ── Export-Presets ───────────────────────────────────────────────────────
   EXPORT_PRESET: 'export:preset',               // detail: { preset } (PDF)

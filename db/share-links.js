@@ -14,7 +14,7 @@ function newToken() {
   return crypto.randomBytes(16).toString('base64url');
 }
 
-function createShareLink({ kind, pageId = null, chapterId = null, bookId, ownerEmail, intro = null, expiresAt = null, showToc = false }) {
+function createShareLink({ kind, pageId = null, chapterId = null, bookId, ownerEmail, intro = null, expiresAt = null, showToc = false, showPromo = true }) {
   if (kind !== 'page' && kind !== 'chapter' && kind !== 'book') throw new Error('invalid kind');
   if (kind === 'page' && !pageId) throw new Error('page_id required');
   if (kind === 'chapter' && !chapterId) throw new Error('chapter_id required');
@@ -22,14 +22,14 @@ function createShareLink({ kind, pageId = null, chapterId = null, bookId, ownerE
   // TOC nur bei Buch-/Kapitel-Shares sinnvoll (eine Seite hat keins).
   const toc = kind !== 'page' && showToc ? 1 : 0;
   const stmt = db.prepare(`
-    INSERT INTO share_links (token, kind, page_id, chapter_id, book_id, owner_email, intro, expires_at, show_toc, created_at)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ${NOW_ISO_SQL})
+    INSERT INTO share_links (token, kind, page_id, chapter_id, book_id, owner_email, intro, expires_at, show_toc, show_promo, created_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ${NOW_ISO_SQL})
   `);
   for (let i = 0; i < 3; i++) {
     const token = newToken();
     try {
       stmt.run(token, kind, kind === 'page' ? pageId : null, kind === 'chapter' ? chapterId : null,
-               bookId, ownerEmail, intro, expiresAt, toc);
+               bookId, ownerEmail, intro, expiresAt, toc, showPromo ? 1 : 0);
       return getShareLinkByToken(token);
     } catch (e) {
       if (!/UNIQUE/i.test(e.message)) throw e;
@@ -152,12 +152,13 @@ function revokeSharesByOwnerOnBook(ownerEmail, bookId) {
   return r.changes;
 }
 
-function updateShareLink(token, ownerEmail, { intro, expiresAt, showToc }) {
+function updateShareLink(token, ownerEmail, { intro, expiresAt, showToc, showPromo }) {
   const sets = [];
   const params = [];
   if (intro !== undefined) { sets.push('intro = ?'); params.push(intro); }
   if (expiresAt !== undefined) { sets.push('expires_at = ?'); params.push(expiresAt); }
   if (showToc !== undefined) { sets.push('show_toc = ?'); params.push(showToc ? 1 : 0); }
+  if (showPromo !== undefined) { sets.push('show_promo = ?'); params.push(showPromo ? 1 : 0); }
   if (!sets.length) return false;
   params.push(token, ownerEmail);
   const r = db.prepare(`UPDATE share_links SET ${sets.join(', ')} WHERE token = ? AND owner_email = ?`).run(...params);
@@ -422,12 +423,15 @@ function commentHasReplies(commentId) {
 
 // Leser löscht einen eigenen Kommentar. Match über reader_token (kein Auth) +
 // author_email IS NULL, damit nie ein Owner-/Fremd-Beitrag getroffen wird. Die
-// „keine Antworten"-Vorbedingung prüft die Route (commentHasReplies) — Owner-
-// Antworten dürfen nicht still per CASCADE mitgelöscht werden.
+// „keine Antworten"-Vorbedingung steht im selben Statement (atomar) — Owner-
+// Antworten dürfen nicht still per CASCADE mitgelöscht werden, auch nicht, wenn
+// eine zwischen Prüfung und Löschen ankommt. `false` = nicht gefunden, nicht
+// meiner ODER hat Antworten (die Route unterscheidet per commentHasReplies).
 function deleteReaderComment(commentId, token, readerToken) {
   const r = db.prepare(`
     DELETE FROM share_comments
     WHERE id = ? AND share_token = ? AND reader_token = ? AND author_email IS NULL
+      AND NOT EXISTS (SELECT 1 FROM share_comments r WHERE r.parent_id = share_comments.id)
   `).run(commentId, token, readerToken);
   return r.changes > 0;
 }

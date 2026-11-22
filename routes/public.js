@@ -9,20 +9,21 @@
 //   GET  /datenschutz    — öffentliche Datenschutzerklärung (kein Session-Zwang)
 //   GET  /privacy        — englischer Alias auf dieselbe Seite (Sprache via Accept-Language)
 //   GET  /robots.txt     — Crawler-Regeln (dynamisch, siehe `seo.indexable`)
-//   GET  /sitemap.xml    — die zwei indexierbaren Seiten (nur mit `app.public_url`)
+//   GET  /sitemap.xml    — die indexierbaren Seiten (nur mit `app.public_url`)
 //
-// SEO: indexierbar sind ausschliesslich Landing und Datenschutz. Register- und
+// SEO: indexierbar sind ausschliesslich Landing, Datenschutz und die
+// Inhaltsseiten aus routes/public-pages.js (Themenseiten + Werkzeug). Register- und
 // Login-Seite tragen ihr `noindex` fest im Markup (Funnel-Schritte, kein Inhalt),
 // geteilte Inhalte zusaetzlich einen X-Robots-Tag-Header (routes/share.js).
 // Die Instanz als Ganzes laesst sich ueber `seo.indexable` aus dem Index nehmen.
+// Sprachfassungen: `?lang=en` (Deutsch ohne Parameter) mit hreflang-Gruppe im
+// <head> und in der Sitemap — Helfer `seoLinks`/`langUrl` in lib/public-render.js.
 //
 // Anti-User-Enumeration: POST /register liefert IMMER 202 mit derselben
 // Erfolgsmeldung, egal ob Email schon existiert, bereits pending ist oder
 // neu angelegt wurde. Doppel-Anfragen werden via Partial-UNIQUE-Index
 // vom DB-Layer abgefangen — Caller schluckt die SQLITE_CONSTRAINT-Exception.
 
-const path = require('path');
-const fs = require('fs');
 const express = require('express');
 const logger = require('../logger');
 const appSettings = require('../lib/app-settings');
@@ -35,51 +36,13 @@ const altcha = require('../lib/altcha');
 const extensionRelease = require('../lib/extension-release');
 const macclientRelease = require('../lib/macclient-release');
 const { tServer } = require('../lib/i18n-server');
+const {
+  render: _render, escHtml: _escHtml, toInlineJson, bodyLang: _bodyLang, publicUrl: _publicUrl,
+  seoIndexable: _seoIndexable, demoUrl, appName: _appName, seoLinks, langUrl, LANGS,
+} = require('../lib/public-render');
+const { PUBLIC_PAGE_PATHS } = require('./public-pages');
 
 const router = express.Router();
-
-const PUBLIC_DIR = path.join(__dirname, '..', 'public');
-const _templateCache = new Map();
-function _loadTemplate(name) {
-  if (process.env.NODE_ENV !== 'production' || !_templateCache.has(name)) {
-    _templateCache.set(name, fs.readFileSync(path.join(PUBLIC_DIR, name), 'utf8'));
-  }
-  return _templateCache.get(name);
-}
-
-// Mini-Template-Substitution: {{key}} → vars[key]. Werte werden HTML-escaped,
-// ausser sie enden auf "Json" (dann roher JSON-Stream fuer Inline-Skript).
-// Konditionale Bloecke: {{#if flag}}…{{/if}} bleiben nur, wenn vars[flag] truthy ist.
-const _escHtml = (s) => String(s ?? '')
-  .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
-  .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
-
-function _render(name, vars) {
-  const tpl = _loadTemplate(name)
-    .replace(/\{\{#if (\w+)\}\}([\s\S]*?)\{\{\/if\}\}/g, (_, flag, body) => (vars[flag] ? body : ''));
-  return tpl.replace(/\{\{(\w+)\}\}/g, (_, key) => {
-    const raw = vars[key];
-    if (raw === undefined || raw === null) return '';
-    if (key.endsWith('Json')) return String(raw); // bereits JSON.stringify
-    return _escHtml(raw);
-  });
-}
-
-function _bodyLang(req) {
-  const accept = String(req.headers['accept-language'] || '').toLowerCase();
-  return accept.startsWith('en') ? 'en' : 'de';
-}
-
-// Darf diese Instanz indexiert werden? Zusaetzlich zum Admin-Flag zaehlt eine
-// gesetzte oeffentliche Basis-URL: ohne sie gibt es keine kanonische Adresse,
-// unter der eine Indexierung ueberhaupt sinnvoll waere.
-function _seoIndexable() {
-  return !!appSettings.get('seo.indexable') && !!_publicUrl();
-}
-
-function _publicUrl() {
-  return String(appSettings.get('app.public_url') || '').replace(/\/$/, '');
-}
 
 function _clientIp(req) {
   // Nur req.ip (aufgeloest via `trust proxy`-Hop). Client-supplied X-Forwarded-For
@@ -92,51 +55,77 @@ function _requestSource(req) {
   return deriveSource({ query: req.query, referer: req.headers.referer || null, ownHost: req.get('host') });
 }
 
+// Strukturdaten fuer Suchmaschinen: was die Seite anbietet (SoftwareApplication
+// mit Preis 0 waehrend der Beta). Kein FAQPage-Markup — Google zeigt das seit
+// 2023 nur noch fuer Behoerden-/Gesundheitsseiten an.
+// Dazu WebSite: daraus nimmt Google den Website-Namen, der im Suchergebnis
+// ueber dem Titel steht (sonst raet Google aus Domain und Titel).
+function _landingLd({ appName, description, url, lang }) {
+  return toInlineJson({
+    '@context': 'https://schema.org',
+    '@graph': [
+      {
+        '@type': 'SoftwareApplication',
+        name: appName,
+        description,
+        applicationCategory: 'BusinessApplication',
+        operatingSystem: 'Web, macOS, Android',
+        inLanguage: lang,
+        offers: { '@type': 'Offer', price: '0', priceCurrency: 'CHF' },
+        ...(url ? { url } : {}),
+      },
+      ...(url ? [{ '@type': 'WebSite', name: appName, url: `${_publicUrl()}/`, inLanguage: lang }] : []),
+    ],
+  });
+}
+
+// Schluessel der Landing-Texte, die 1:1 als gleichnamige Template-Variable
+// (ohne `landing.`-Praefix) ins Template gehen.
+const LANDING_TEXT_KEYS = [
+  'heroTitle', 'heroText', 'demoLabel', 'demoNote', 'loginPrompt', 'statusText',
+  'principleTitle', 'principleText', 'loginLabel', 'registerLabel', 'footer', 'githubLabel',
+  'featuresTitle', 'featLinkLektorat', 'featLinkTool', 'featLinkTestleser',
+  'feat1Title', 'feat1Desc', 'feat2Title', 'feat2Desc', 'feat3Title', 'feat3Desc',
+  'toolTitle', 'toolText', 'toolCta', 'moreTitle',
+  'more1Title', 'more1Desc', 'more2Title', 'more2Desc', 'more3Title', 'more3Desc',
+  'more4Title', 'more4Desc', 'more5Title', 'more5Desc', 'more6Title', 'more6Desc',
+  'trustTitle', 'trust1Title', 'trust1Text', 'trust2Title', 'trust2Text',
+  'trust3Title', 'trust3Text', 'trust4Title', 'trust4Text', 'privacyMore',
+  'faqTitle', 'faq1Q', 'faq1A', 'faq2Q', 'faq2A', 'faq3Q', 'faq3A',
+  'faq4Q', 'faq4A', 'faq5Q', 'faq5A', 'faq6Q', 'faq6A',
+  'macTitle', 'macDesc', 'macLinkLabel', 'androidTitle', 'androidDesc', 'androidLinkLabel',
+  'extensionTitle', 'extensionDesc', 'extensionLinkLabel', 'clientsTitle',
+];
+
 function _renderLanding(req, res) {
   const lang = _bodyLang(req);
   const source = _requestSource(req);
   const t = (key) => tServer(key, lang);
-  const appName = appSettings.get('app.name') || 'Schreibwerkstatt';
+  const appName = _appName();
+  const seo = seoLinks('/', lang);
+  const demo = demoUrl();
+  const metaDescription = t('landing.metaDescription');
+  const texts = Object.fromEntries(LANDING_TEXT_KEYS.map(k => [k, t(`landing.${k}`)]));
   res.set('Cache-Control', 'no-store');
+  res.set('Vary', 'Accept-Language');
   res.type('html').send(_render('landing.html', {
+    ...texts,
     lang,
-    noindex:       !_seoIndexable(),
-    canonical:     _seoIndexable() ? `${_publicUrl()}/` : '',
-    title:         appName,
+    noindex:       !seo.canonical,
+    ...seo,
+    title:         `${appName}: ${texts.heroTitle.replace(/\.$/, '')}`,
+    metaDescription,
+    ogImage:       `${_publicUrl()}/img/landing/lektorat.webp`,
+    ldJson:        _landingLd({ appName, description: metaDescription, url: seo.canonical, lang }),
     appName,
-    subtitle:      t('landing.subtitle'),
-    principleTitle: t('landing.principleTitle'),
-    principleText: t('landing.principleText'),
-    loginLabel:    t('landing.loginLabel'),
-    registerLabel: t('landing.registerLabel'),
+    demoUrl:       demo,
+    noDemo:        !demo,
     registerQuery: source ? `?src=${encodeURIComponent(source)}` : '',
-    footer:        t('landing.footer'),
     githubUrl:     'https://github.com/schreibwerkstatt/schreibwerkstatt',
-    githubLabel:   t('landing.githubLabel'),
     privacyLabel:  t('privacy.footerLink'),
-    featuresTitle: t('landing.featuresTitle'),
-    feat1Title:    t('landing.feat1Title'), feat1Desc: t('landing.feat1Desc'),
-    feat2Title:    t('landing.feat2Title'), feat2Desc: t('landing.feat2Desc'),
-    feat3Title:    t('landing.feat3Title'), feat3Desc: t('landing.feat3Desc'),
-    feat4Title:    t('landing.feat4Title'), feat4Desc: t('landing.feat4Desc'),
-    feat5Title:    t('landing.feat5Title'), feat5Desc: t('landing.feat5Desc'),
-    feat6Title:    t('landing.feat6Title'), feat6Desc: t('landing.feat6Desc'),
-    feat7Title:    t('landing.feat7Title'), feat7Desc: t('landing.feat7Desc'),
-    feat8Title:    t('landing.feat8Title'), feat8Desc: t('landing.feat8Desc'),
-    feat9Title:    t('landing.feat9Title'), feat9Desc: t('landing.feat9Desc'),
-    macTitle:      t('landing.macTitle'),
-    macDesc:       t('landing.macDesc'),
-    macLinkLabel:  t('landing.macLinkLabel'),
     macUrl:        macclientRelease.MAC_APP_STORE_URL,
-    androidTitle:     t('landing.androidTitle'),
-    androidDesc:      t('landing.androidDesc'),
-    androidLinkLabel: t('landing.androidLinkLabel'),
-    androidUrl:       'https://github.com/schreibwerkstatt/mobile/releases/latest',
-    extensionTitle:     t('landing.extensionTitle'),
-    extensionDesc:      t('landing.extensionDesc'),
-    extensionLinkLabel: t('landing.extensionLinkLabel'),
-    clientsTitle:       t('landing.clientsTitle'),
-    extensionUrl:       extensionRelease.CHROME_STORE_URL,
+    androidUrl:    'https://github.com/schreibwerkstatt/mobile/releases/latest',
+    extensionUrl:  extensionRelease.CHROME_STORE_URL,
   }));
 }
 
@@ -176,15 +165,18 @@ function _renderRegister(req, res) {
 function _renderPrivacy(req, res) {
   const lang = _bodyLang(req);
   const t = (key) => tServer(key, lang);
-  const appName = appSettings.get('app.name') || 'Schreibwerkstatt';
+  const appName = _appName();
   const analyticsEnabled = !!appSettings.get('analytics.plausible.enabled');
+  // /privacy ist ein Alias derselben Seite — beide zeigen auf /datenschutz,
+  // sonst konkurrieren zwei URLs mit identischem Inhalt um dieselbe Position.
+  const seo = seoLinks('/datenschutz', lang);
   res.set('Cache-Control', 'no-store');
+  res.set('Vary', 'Accept-Language');
   res.type('html').send(_render('datenschutz.html', {
     lang,
-    noindex:       !_seoIndexable(),
-    // /privacy ist ein Alias derselben Seite — beide zeigen auf /datenschutz,
-    // sonst konkurrieren zwei URLs mit identischem Inhalt um dieselbe Position.
-    canonical:     _seoIndexable() ? `${_publicUrl()}/datenschutz` : '',
+    noindex:       !seo.canonical,
+    ...seo,
+    metaDescription: t('privacy.metaDescription'),
     appName,
     analyticsEnabled,
     pageTitle:     t('privacy.title'),
@@ -233,17 +225,26 @@ router.get('/robots.txt', (req, res) => {
   );
 });
 
-// sitemap.xml — nur die beiden Seiten, die ueberhaupt indexiert werden sollen.
+// sitemap.xml — nur die Seiten, die ueberhaupt indexiert werden sollen.
 // /privacy fehlt absichtlich (Alias von /datenschutz, siehe canonical dort).
 router.get('/sitemap.xml', (req, res) => {
   if (!_seoIndexable()) return res.status(404).type('text/plain').send('Not found');
-  const base = _publicUrl();
-  const urls = ['/', '/datenschutz']
-    .map(p => `  <url><loc>${_escHtml(base + p)}</loc></url>`)
-    .join('\n');
+  // Jede Sprachfassung als eigene <url>, jede mit allen Alternativen
+  // (hreflang-Vorgabe: die Gruppe muss von jedem Mitglied aus vollstaendig sein).
+  // Kein lastmod/priority/changefreq: Google ignoriert die beiden letzten, und
+  // ein lastmod ohne echte Aenderungsquelle waere geraten.
+  const pages = ['/', ...PUBLIC_PAGE_PATHS, '/datenschutz'];
+  const urls = pages.flatMap(p => {
+    const alts = [...LANGS.map(l => [l, langUrl(p, l)]), ['x-default', langUrl(p, 'de')]]
+      .map(([hl, href]) => `    <xhtml:link rel="alternate" hreflang="${hl}" href="${_escHtml(href)}"/>`)
+      .join('\n');
+    return LANGS.map(l => `  <url>\n    <loc>${_escHtml(langUrl(p, l))}</loc>\n${alts}\n  </url>`);
+  }).join('\n');
   res.set('Cache-Control', 'public, max-age=3600');
   res.type('application/xml').send(
-    `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n${urls}\n</urlset>\n`
+    '<?xml version="1.0" encoding="UTF-8"?>\n'
+    + '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9" xmlns:xhtml="http://www.w3.org/1999/xhtml">\n'
+    + `${urls}\n</urlset>\n`
   );
 });
 

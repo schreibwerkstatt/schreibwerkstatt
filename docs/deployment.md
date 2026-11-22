@@ -18,6 +18,8 @@ npm ci --omit=dev
 node server.js         # Port 3737
 ```
 
+**`SHARE_IP_SALT` setzen (empfohlen).** Die öffentliche Share-Leseansicht speichert keine IP-Adressen, sondern einen gesalzenen Hash ([lib/share-ratelimit.js](../lib/share-ratelimit.js)#`hashIp`). Er ist die Basis für «eindeutige Besucher», das Zusammenfassen von Reloads (`share_views`) und das Ratenlimit. Fehlt der Wert, würfelt jeder Prozessstart einen neuen Salt — nach jedem Deploy zählt derselbe Leser als neuer Besucher. Einmal zufällig setzen (`node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"`) und danach nicht mehr ändern; ein Wechsel trennt alle bisherigen Hashes von den neuen.
+
 KI-Provider, Google-OAuth, App-URL, Modell-Limits, Mailer, Cron, veraPDF/EPUBCheck sowie die optionalen self-hosted Dienste (LanguageTool, Whisper-Diktat) konfiguriert die **Admin-Konsole** (Tabelle `app_settings`, kein Restart nötig).
 
 Produktiv: systemd-Service via [deploy/schreibwerkstatt.service](deploy/schreibwerkstatt.service), Erst-Install `bash deploy/install.sh`, CD `bash deploy/deploy.sh`.
