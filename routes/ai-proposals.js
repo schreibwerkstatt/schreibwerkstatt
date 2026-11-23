@@ -17,6 +17,7 @@ const { toIntId } = require('../lib/validate');
 const { guardBook, sessionEmail } = require('../lib/acl');
 const { setContext } = require('../lib/log-context');
 const { getProposal, deleteProposal } = require('../db/ai-proposals');
+const logger = require('../logger');
 
 const router = express.Router();
 
@@ -48,7 +49,8 @@ router.get('/:kind', (req, res) => {
 router.delete('/:kind', (req, res) => {
   const s = _scope(req, res);
   if (!s) return;
-  deleteProposal(s.kind, s.email, s.bookId);
+  const n = deleteProposal(s.kind, s.email, s.bookId);
+  logger.info(`KI-Vorschlag verworfen: ${s.kind} (${n} Eintrag/Einträge).`);
   res.json({ ok: true });
 });
 

@@ -1,0 +1,53 @@
+{
+  "operation": "POST /research",
+  "request": {
+    "method": "POST",
+    "path": "/research",
+    "headers": {
+      "Idempotency-Key": "op-7b2d4e61-research-create"
+    },
+    "body": {
+      "book_id": 7001,
+      "kind": "link",
+      "title": "Zweites Zitat",
+      "allow_duplicate": true,
+      "urls": [
+        {
+          "url": "https://example.org/artikel",
+          "label": ""
+        }
+      ],
+      "tags": [
+        "offline"
+      ]
+    }
+  },
+  "status": 200,
+  "response": {
+    "id": 2,
+    "book_id": 7001,
+    "kind": "link",
+    "title": "Zweites Zitat",
+    "body": null,
+    "source": null,
+    "pinned": 0,
+    "archived": 0,
+    "status": "offen",
+    "created_at": "2026-01-02T00:00:00.000Z",
+    "updated_at": "2026-01-02T00:00:00.000Z",
+    "tags": [
+      "offline"
+    ],
+    "urls": [
+      {
+        "url_id": 2,
+        "url": "https://example.org/artikel",
+        "label": ""
+      }
+    ],
+    "links": [],
+    "has_image": false,
+    "has_doc": false,
+    "doc_name": null
+  }
+}

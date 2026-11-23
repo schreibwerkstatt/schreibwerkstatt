@@ -72,3 +72,26 @@ test('leerer Abschnitt: Vorschau "" statt NULL, kein Nachladen bei jedem Cache-L
     contentStore.loadPagesBatch = orig;
   }
 });
+
+test('pages-Cache-Log: Anlass in der Zeile, Anhängen an laufenden Abgleich eigene Zeile', async () => {
+  const { requestPagesCache, pagesCacheSource } = require('../../routes/sync');
+  const logger = require('../../logger');
+  assert.equal(pagesCacheSource(undefined), 'ohne');
+  assert.equal(pagesCacheSource(''), 'ohne');
+  assert.equal(pagesCacheSource('wake'), 'wake');
+  assert.equal(pagesCacheSource('manual'), 'manual');
+  assert.equal(pagesCacheSource('x]\nINJECT'), 'unbekannt');
+
+  const lines = [];
+  const orig = logger.info;
+  logger.info = (msg, ...a) => { if (String(msg).startsWith('pages-Cache')) lines.push(String(msg)); return orig.call(logger, msg, ...a); };
+  try {
+    // Zwei Tabs wachen gleichzeitig auf: ein Abgleich, zwei Anlässe im Log.
+    await Promise.all([requestPagesCache(bookId, 'wake'), requestPagesCache(bookId, 'bookSwitch')]);
+  } finally {
+    logger.info = orig;
+  }
+  assert.equal(lines.length, 2, lines.join('\n'));
+  assert.match(lines[0], new RegExp(`^pages-Cache Buch ${bookId} \\[anlass=bookSwitch\\]: an laufenden Abgleich angehängt\\.$`));
+  assert.match(lines[1], new RegExp(`^pages-Cache Buch ${bookId} \\[anlass=wake\\]: \\d+ Seiten, 0 Vorschau\\(en\\) nachgeladen \\(\\d+ ms\\)\\.$`));
+});

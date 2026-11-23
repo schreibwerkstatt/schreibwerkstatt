@@ -30,7 +30,7 @@ Erstanbieter-Messung des Nutzungsverhaltens: welche Funktionen genutzt werden, o
 | `session.start` | client | `surface` browser/pwa, `viewport`, `locale` | einmal je App-Start (`setupFeatureUsageWatchers`) |
 | `auth.login` | server | `method` | Passwort-/Admin-/Demo-Login, Passwort setzen, OIDC |
 | `account.created` | server | `method` local/oidc, `via` invite/open-signup | Konto beim Annehmen der Einladung bzw. offener Registrierung |
-| `book.created` | server | `via` manual/book-import/manuscript-import/folder-import | `createOwnedBook`; ein danach gescheiterter Import lässt das Event mit `book_id` NULL stehen |
+| `book.created` | server | `via` manual/book-import/manuscript-import/folder-import/demo-seed (Beispielbuch des Demo-Zugangs) | `createOwnedBook`; ein danach gescheiterter Import lässt das Event mit `book_id` NULL stehen |
 | `card.open` | server | `feature`, Spalte `source` palette/tile/sidebar/shortcut | `POST /usage/track` (Karten-Öffnung) |
 | `card.close` | client | `feature`, `durationSec` (sichtbar) | Show-Flag-Watch true→false je Karte der Feature-Registry; `pagehide` schliesst ab |
 | `editor.open` / `editor.close` | client | `editor` notebook/focus/book, `durationSec` (sichtbar) | Watch auf die innerste offene Fläche: Bucheditor › Fokus › Notebook-Edit-Modus; `pagehide` schliesst ab |

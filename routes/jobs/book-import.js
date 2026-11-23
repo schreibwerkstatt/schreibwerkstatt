@@ -21,6 +21,7 @@ const { openCappedZip } = require('../../lib/zip-limits');
 const { ImportBufferStore, contentHash } = require('../../lib/import-buffers');
 const { sessionEmail } = require('../../lib/acl');
 const { seedImportBaseline } = require('../../lib/import-baseline');
+const logger = require('../../logger');
 
 const router = express.Router();
 
@@ -52,18 +53,39 @@ async function _readJsonEntry(zip, name) {
   catch { throw i18nError('job.error.badManifest'); }
 }
 
-async function runBookImportJob(jobId, { userEmail, zipLimits = SWBOOK_ZIP_LIMITS }) {
-  const log = makeJobLogger(jobId);
+/**
+ * Kern des `.swbook`-Imports: entpackt, validiert, legt ein NEUES Buch fuer
+ * `userEmail` an, schreibt Kapitel + Abschnitte und spielt die Extra-Bloecke
+ * ein. Geteilt vom Import-Job (unten) und vom Demo-Seed (lib/demo-book.js),
+ * damit es genau einen Weg gibt, ein Bundle einzuspielen.
+ *
+ * Scheitert der Import, bevor der Inhalt steht, wird das Buch zurueckgenommen
+ * und der Fehler weitergeworfen. Fehler sind i18n-Keys (`job.error.*`).
+ *
+ * @param {Buffer} buffer  das .swbook-ZIP
+ * @param {string} userEmail  kuenftiger Owner
+ * @param {object} [opts]
+ * @param {object} [opts.log]  Logger (Default: Winston-Root)
+ * @param {(progress:number, statusText:string, statusParams?:object) => void} [opts.onProgress]
+ * @param {() => void} [opts.checkCancelled]  wirft, wenn abgebrochen werden soll
+ * @param {string} [opts.name]  Buchname statt des Namens im Bundle
+ * @param {string} [opts.description]  Beschreibung statt der im Bundle
+ * @param {'book-import'|'demo-seed'} [opts.via]  Weg fuer das Nutzungs-Event
+ * @returns {Promise<{ bookId:number, bookName:string, pagesCreated:number,
+ *   chaptersCreated:number, cappedChapters:number, extras:object|null,
+ *   failed:number, pagesInBundle:number }>}
+ */
+async function importSwbookBuffer(buffer, userEmail, {
+  zipLimits = SWBOOK_ZIP_LIMITS, log = logger, onProgress = () => {}, checkCancelled = () => {},
+  name = null, description: descriptionOverride = null, via = 'book-import',
+} = {}) {
   const ctx = { session: { user: { email: userEmail } } };
   let createdBookId = null;   // Rueckbau, solange der Inhalt nicht steht
   try {
-    const entry = importBuffers.get(jobId);
-    if (!entry) throw i18nError('job.error.importBufferMissing');
+    onProgress(5, 'job.book-import.unpacking');
+    const zip = await openCappedZip(buffer, zipLimits);
 
-    updateJob(jobId, { progress: 5, statusText: 'job.book-import.unpacking' });
-    const zip = await openCappedZip(entry.buffer, zipLimits);
-
-    updateJob(jobId, { progress: 10, statusText: 'job.book-import.validating' });
+    onProgress(10, 'job.book-import.validating');
     const manifest = await _readJsonEntry(zip, 'manifest.json');
     if (!manifest) throw i18nError('job.error.badManifest');
     try { validateManifest(manifest); }
@@ -76,16 +98,17 @@ async function runBookImportJob(jobId, { userEmail, zipLimits = SWBOOK_ZIP_LIMIT
     catch { throw i18nError('job.error.swbookEmpty'); }
 
     // Gleiche Namensregel wie die Buch-Karte (lib/book-create.js).
-    const bookName = String(bookJson.book.name || '').trim();
+    const bookName = String(name ?? bookJson.book.name ?? '').trim();
     if (bookNameError(bookName)) throw i18nError('job.error.bookNameInvalid', { max: BOOK_NAME_MAX });
-    const description = typeof bookJson.book.description === 'string' ? bookJson.book.description : '';
+    const description = typeof descriptionOverride === 'string' ? descriptionOverride
+      : typeof bookJson.book.description === 'string' ? bookJson.book.description : '';
 
     const { ops, cappedChapters } = planFromNodes(bookJson.tree);
     if (cappedChapters) log.warn(`book-import: ${cappedChapters} Kapitel jenseits Tiefe 3 gekappt`);
 
-    // Buch + Owner-Grant als Einheit; scheitert der Grant, bricht der Job ab.
-    updateJob(jobId, { progress: 20, statusText: 'job.book-import.creatingBook' });
-    const created = await createOwnedBook({ name: bookName, description }, userEmail, ctx, { via: 'book-import' });
+    // Buch + Owner-Grant als Einheit; scheitert der Grant, bricht der Import ab.
+    onProgress(20, 'job.book-import.creatingBook');
+    const created = await createOwnedBook({ name: bookName, description }, userEmail, ctx, { via });
     const bookId = created.id;
     createdBookId = bookId;
     setContext({ book: bookId });
@@ -101,10 +124,10 @@ async function runBookImportJob(jobId, { userEmail, zipLimits = SWBOOK_ZIP_LIMIT
     // neuen IDs. srcId -> neue ID fuellt die Remap-Maps fuer die Extra-Bloecke.
     // Quellen des Werk-Blocks VOR den Abschnitten: `data-src` im Text zeigt dann
     // beim Anlegen schon auf die Quellen in der Bibliothek des Importierenden.
-    const includesEarly = normalizeIncludes(manifest.includes);
+    const includes = normalizeIncludes(manifest.includes);
     let werkData = null;
     let sourceIdMap = new Map();
-    if (includesEarly.werk) {
+    if (includes.werk) {
       try {
         werkData = await _readJsonEntry(zip, 'werk.json');
         sourceIdMap = restoreSources(werkData?.sources, userEmail);
@@ -116,13 +139,9 @@ async function runBookImportJob(jobId, { userEmail, zipLimits = SWBOOK_ZIP_LIMIT
       replace: true,
       sourceIdMap,
       onProgress: (done, total) => {
-        throwIfCancelled(jobId);
+        checkCancelled();
         if (done % 10 !== 0 && done !== total) return;
-        updateJob(jobId, {
-          progress: 25 + Math.round(65 * (done / total)),
-          statusText: 'job.book-import.creatingPages',
-          statusParams: { current: done, total },
-        });
+        onProgress(25 + Math.round(65 * (done / total)), 'job.book-import.creatingPages', { current: done, total });
       },
     });
     const pageIdMap = applied.pageIdBySrc;       // srcPageId    -> neue page_id
@@ -143,10 +162,9 @@ async function runBookImportJob(jobId, { userEmail, zipLimits = SWBOOK_ZIP_LIMIT
 
     // Optionale Extra-Bloecke (Komplettanalyse / Lektorat / Chats) wiederherstellen.
     // Non-fatal: scheitert das, bleibt das Buch mit Inhalt erhalten.
-    const includes = normalizeIncludes(manifest.includes);
     let extrasResult = null;
     if (Object.values(includes).some(Boolean)) {
-      updateJob(jobId, { progress: 92, statusText: 'job.book-import.restoringExtras' });
+      onProgress(92, 'job.book-import.restoringExtras');
       const extras = {};
       try {
         if (includes.analysis) extras.analysis = await _readJsonEntry(zip, 'analysis.json');
@@ -166,13 +184,30 @@ async function runBookImportJob(jobId, { userEmail, zipLimits = SWBOOK_ZIP_LIMIT
 
     // `failed`/`pagesInBundle` und ein gescheiterter Extra-Block gehen ins
     // Ergebnis, damit die Karte einen Teilimport als solchen zeigt.
-    completeJob(jobId, {
+    return {
       bookId, bookName, pagesCreated, chaptersCreated, cappedChapters, extras: extrasResult,
       failed: applied.failed || 0, pagesInBundle,
+    };
+  } catch (e) {
+    if (createdBookId) await discardImportedBook(createdBookId, userEmail);
+    throw e;
+  }
+}
+
+async function runBookImportJob(jobId, { userEmail, zipLimits = SWBOOK_ZIP_LIMITS }) {
+  const log = makeJobLogger(jobId);
+  try {
+    const entry = importBuffers.get(jobId);
+    if (!entry) throw i18nError('job.error.importBufferMissing');
+    const result = await importSwbookBuffer(entry.buffer, userEmail, {
+      zipLimits, log,
+      onProgress: (progress, statusText, statusParams) =>
+        updateJob(jobId, { progress, statusText, ...(statusParams ? { statusParams } : {}) }),
+      checkCancelled: () => throwIfCancelled(jobId),
     });
+    completeJob(jobId, result);
   } catch (e) {
     if (e?.name !== 'AbortError') log.error(`book-import job ${jobId}: ${e.message}`, { stack: e.stack });
-    if (createdBookId) await discardImportedBook(createdBookId, userEmail);
     failJob(jobId, e);
   } finally {
     importBuffers.delete(jobId);
@@ -211,4 +246,4 @@ router.post('/book-import', rawZipBody, async (req, res) => {
   res.status(202).json({ jobId });
 });
 
-module.exports = { bookImportRouter: router, runBookImportJob, importBuffers, SWBOOK_ZIP_LIMITS };
+module.exports = { bookImportRouter: router, runBookImportJob, importSwbookBuffer, importBuffers, SWBOOK_ZIP_LIMITS };

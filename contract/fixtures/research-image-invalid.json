@@ -1,0 +1,15 @@
+{
+  "operation": "POST /research/{id}/image",
+  "request": {
+    "method": "POST",
+    "path": "/research/1/image",
+    "binary": {
+      "content_type": "image/png",
+      "bytes": 9
+    }
+  },
+  "status": 400,
+  "response": {
+    "error_code": "IMAGE_INVALID"
+  }
+}

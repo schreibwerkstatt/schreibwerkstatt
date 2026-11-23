@@ -113,6 +113,12 @@ async function send(c) {
     sent.body = c.body(st);
     bodyText = JSON.stringify(sent.body);
     all['Content-Type'] = 'application/json';
+  } else if (c.binary) {
+    // Upload-Wege (Bild): Rohbytes. Im Fixture steht nur Typ + Länge.
+    const { type, data } = c.binary(st);
+    sent.binary = { content_type: type, bytes: data.length };
+    bodyText = data;
+    all['Content-Type'] = type;
   }
   for (let i = 0; ; i++) {
     const res = await fetch(`${baseUrl}${p}`, { method: sent.method, headers: all, body: bodyText });
@@ -136,7 +142,36 @@ async function readBody(c, res, op) {
   return res.json();
 }
 
+// POST /research/{id}/scrape liest den Link serverseitig (lib/url-scrape.js →
+// globalThis.fetch). Der Vertragstest geht nicht ins Netz: Requests an
+// SCRAPE_HOST beantwortet dieser Stub, alles andere (die Requests des Tests an
+// den eigenen Server) läuft durch. `/leer` liefert eine Seite ohne Text.
+const SCRAPE_HOST = 'https://example.org';
+const SCRAPE_PAGE = `<!doctype html><html lang="de"><head>
+  <meta property="og:title" content="Die Prozessakten von 1892">
+  <meta property="og:site_name" content="Beispielzeitung">
+</head><body><article>
+  <p>Im Keller lagen sie über hundert Jahre, und niemand hatte je hineingesehen.</p>
+  <p>${'Ein zweiter Absatz, lang genug für die Substanz-Schwelle des Kandidaten. '.repeat(4)}</p>
+</article></body></html>`;
+let restoreFetch = null;
+function installScrapeStub() {
+  const orig = globalThis.fetch;
+  globalThis.fetch = async (url, opts) => {
+    const u = String(url);
+    if (!u.startsWith(SCRAPE_HOST)) return orig(url, opts);
+    const html = u.endsWith('/leer') ? '<!doctype html><html><head></head><body></body></html>' : SCRAPE_PAGE;
+    const h = new Map([['content-type', 'text/html; charset=utf-8']]);
+    return { ok: true, status: 200, headers: { get: (k) => h.get(k.toLowerCase()) ?? null },
+      arrayBuffer: async () => Buffer.from(html, 'utf8') };
+  };
+  return () => { globalThis.fetch = orig; };
+}
+
 test.before(async () => {
+  // Wie die übrigen Scrape-Tests: keine DNS-Auflösung des Stub-Hosts.
+  process.env.SSRF_SKIP_DNS_CHECK = '1';
+  restoreFetch = installScrapeStub();
   ctx = bootstrap();
   C = require('./_helpers/contract-app');
   ({ CASES } = require('./_helpers/contract-cases'));
@@ -152,6 +187,8 @@ test.before(async () => {
   if (UPDATE) fs.mkdirSync(FIXTURES, { recursive: true });
 });
 test.after(() => {
+  if (restoreFetch) restoreFetch();
+  delete process.env.SSRF_SKIP_DNS_CHECK;
   if (server) server.close();
   ctx.cleanup();
 });

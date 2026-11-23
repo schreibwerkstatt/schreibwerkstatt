@@ -16,6 +16,7 @@ const { validateEventPatch, patchZeitstrahlEvent } = require('../../db/zeitstrah
 const { eventModel } = require('../../lib/esm-bridge');
 const { toIntId } = require('../../lib/validate');
 const express = require('express');
+const logger = require('../../logger');
 
 // Lese-Reihenfolge: globaler Ordinalwert je Kapitel/Seite aus dem book_order-Tree
 // (Depth-First). Brücke, um zu einer Event-Referenz (chapter_id/page_id) die
@@ -178,6 +179,9 @@ function register(router) {
     const { eventGroupKey } = await eventModel();
     const r = patchZeitstrahlEvent(req.bookId, sessionEmail(req), eventId, fields, eventGroupKey);
     if (!r) return res.status(404).json({ error_code: 'NOT_FOUND' });
+    logger.info(r.changed.length
+      ? `Zeitstrahl-Ereignis bearbeitet: event=${eventId}, Felder ${r.changed.join(',')}.`
+      : `Zeitstrahl-Ereignis gespeichert ohne Änderung: event=${eventId}.`);
     res.json({ ok: true, changed: r.changed });
   });
 }

@@ -71,6 +71,7 @@ router.post('/:book_id/ignore', jsonBody, (req, res) => {
   const variant = typeof req.body?.variant === 'string' ? req.body.variant : '';
   if (!variant.trim()) return res.status(400).json({ error_code: 'VARIANT_REQUIRED' });
   nameGuardDb.add(req.bookId, userEmail, { canonical, variant });
+  logger.info(`Namens-Variante ignoriert: Variante ${variant.trim().length} Zeichen, Stamm ${canonical.trim().length} Zeichen.`);
   res.json({ ok: true });
 });
 
@@ -78,7 +79,8 @@ router.post('/:book_id/unignore', jsonBody, (req, res) => {
   const userEmail = sessionEmail(req);
   const variant = typeof req.body?.variant === 'string' ? req.body.variant : '';
   if (!variant.trim()) return res.status(400).json({ error_code: 'VARIANT_REQUIRED' });
-  nameGuardDb.remove(req.bookId, userEmail, variant);
+  const n = nameGuardDb.remove(req.bookId, userEmail, variant);
+  logger.info(`Namens-Variante wieder geprüft: ${n} Eintrag/Einträge entfernt (Variante ${variant.trim().length} Zeichen).`);
   res.json({ ok: true });
 });
 

@@ -75,6 +75,7 @@ router.put('/', jsonBody, (req, res) => {
   }
   try {
     saveAuthorProfileText(email, text);
+    logger.info(`Autorenprofil von Hand gespeichert: ${text.length} Zeichen.`);
     res.json({ ok: true });
   } catch (e) {
     logger.error('[me/author-profile] Schreibfehler: ' + e.message, { user: email });
@@ -98,6 +99,7 @@ function _saveRun(email, run, res) {
       basisSig: typeof run.basis_sig === 'string' ? run.basis_sig : null,
     });
     deleteProposal('autorenprofil', email, null);
+    logger.info(`Autorenprofil aus KI-Vorschlag übernommen: ${text.length} Zeichen, ${list(run.konstanten).length} Konstanten, ${list(run.entwicklung).length} Entwicklungen.`);
     res.json({ ok: true });
   } catch (e) {
     logger.error('[me/author-profile] Schreibfehler: ' + e.message, { user: email });

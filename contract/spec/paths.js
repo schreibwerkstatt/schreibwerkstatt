@@ -166,10 +166,20 @@ module.exports = {
   '/research': {
     get: {
       'x-clients': ANDROID,
-      summary: 'Recherche-Board eines Buchs (reduzierte Form für Device-Token)',
-      parameters: [query('book_id', int()), query('kind', str()), query('sort', str()), query('q', str()), query('limit', int())],
+      summary: 'Recherche-Board eines Buchs (Device-Token: reduzierte Form, mit `view=board` die volle)',
+      description: 'Ohne `view` die reduzierte Form `ResearchClientItem` (Bestandsblick der Browser-Erweiterung). `view=board` liefert die volle Form `ResearchItem` wie die Web-App — nur mit `content:write`-Token, sonst `403 DEVICE_SCOPE_FORBIDDEN`. `limit` Default 50, Maximum 200. Seitenweise per `offset`: weiterladen, bis eine Seite kürzer als `limit` ist. Ohne `archived=1` nur nicht archivierte Fundstücke.',
+      parameters: [
+        query('book_id', int()), query('kind', str()), query('sort', str()), query('q', str()),
+        query('tag', str()), query('archived', int(), '`1` = archivierte mitliefern.'),
+        query('view', { enum: ['board'] }, '`board` = volle Item-Form (nur `content:write`).'),
+        query('limit', int(undefined, { maximum: 200 })),
+        query('offset', int(), 'Überspringt so viele Treffer derselben Sortierung (seitenweises Laden).'),
+      ],
       responses: {
-        200: json({ type: 'array', items: ref('ResearchClientItem') }),
+        200: json({ anyOf: [
+          { type: 'array', items: ref('ResearchItem') },
+          { type: 'array', items: ref('ResearchClientItem') },
+        ] }, 'Mit `view=board`: `ResearchItem[]`, sonst `ResearchClientItem[]`.'),
         400: error('INVALID_ID'),
         503: error('SEARCH_FAILED', 'Nur mit `q`: die Volltextsuche ist gescheitert (keine ungefilterte Liste).'),
         ...AUTH,
@@ -178,11 +188,46 @@ module.exports = {
     post: {
       'x-clients': ANDROID,
       summary: 'Fundstück anlegen (geteilter Link)',
+      description: 'Optionaler Header `Idempotency-Key` (8–100 Zeichen `[A-Za-z0-9_-]`): derselbe Schlüssel desselben Kontos liefert 24 h lang die erste Antwort noch einmal (Header `Idempotent-Replayed: true`) statt erneut anzulegen — auch vor der Dubletten-Prüfung, eine Wiederholung bekommt also kein `409` auf sich selbst.',
+      parameters: [{ name: 'Idempotency-Key', in: 'header', required: false, schema: str() }],
       requestBody: body('ResearchCreateRequest'),
       responses: {
         200: json(ref('ResearchItem')),
         400: error(['BOOKID_REQ', 'EMPTY', 'INVALID_URL', 'INVALID_FIELD'], '`INVALID_URL`: eine URL ist nicht http(s) oder länger als 2000 Zeichen (`params.max`). `INVALID_FIELD`: `title`/`body`/`source` ist weder String noch null (`params.field`).'),
         409: error('DUPLICATE_URL', 'Trägt `existing_id`; übersteuerbar mit `allow_duplicate: true`.'),
+        ...AUTH,
+      },
+    },
+  },
+  '/research/{id}/image': {
+    post: {
+      'x-clients': ANDROID,
+      summary: 'Bild an ein Fundstück hängen (ersetzt ein vorhandenes)',
+      description: 'Body = Bildbytes, `Content-Type: image/*`, bis 12 MB. Der Server normalisiert (sharp). Ein `note`/`link`-Fundstück wird dabei zu `kind: image`.',
+      parameters: [pathParam('id')],
+      requestBody: { required: true, content: { 'image/*': { schema: { type: 'string', format: 'binary' } } } },
+      responses: {
+        200: json(ref('ResearchItem')),
+        400: error(['INVALID_ID', 'NO_IMAGE', 'IMAGE_INVALID'], '`NO_IMAGE`: leerer Body oder kein `image/*`. `IMAGE_INVALID`: Bild nicht lesbar.'),
+        404: error('ITEM_NOT_FOUND'),
+        ...AUTH,
+      },
+    },
+  },
+  '/research/{id}/scrape': {
+    post: {
+      'x-clients': ANDROID,
+      summary: 'Link eines Fundstücks serverseitig lesen und Titel/Text/Herkunft übernehmen',
+      description: 'Nicht-destruktiv per Default: gefüllt wird nur, was leer ist (`skipped` nennt den Rest). Kein KI-Aufruf. Nur `content:write`.',
+      parameters: [pathParam('id')],
+      requestBody: body('ResearchScrapeRequest'),
+      responses: {
+        200: json(ref('ResearchScrapeResponse')),
+        400: error(['INVALID_ID', 'NO_URL', 'INVALID_URL', 'SCRAPE_BLOCKED', 'SCRAPE_NOT_HTML']),
+        404: error('ITEM_NOT_FOUND'),
+        422: error('SCRAPE_EMPTY', 'Seite erreicht, aber ohne Text (setzt ihren Inhalt erst im Browser zusammen).'),
+        502: error(['SCRAPE_HTTP_ERROR', 'SCRAPE_TOO_LARGE', 'SCRAPE_UNAVAILABLE', 'SCRAPE_FAILED']),
+        504: error('SCRAPE_TIMEOUT'),
         ...AUTH,
       },
     },

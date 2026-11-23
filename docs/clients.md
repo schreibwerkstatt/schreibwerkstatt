@@ -122,6 +122,21 @@ Android legt Ideen (Pendenzen) an einem Abschnitt, einem Kapitel oder am Buch an
 - **Anker-Umzug** nur, solange die Idee offen ist und bleibt: eine erledigte oder verworfene Idee und ein Umzug mit gleichzeitigem Abschluss → `400 IDEE_CLOSED`. Ein Kapitel mit genau einem Abschnitt gilt als dieser Abschnitt ([lib/idee-anchor.js](../lib/idee-anchor.js)) — die Antwort trägt dann `page_id`, nicht das gesendete `chapter_id`. Darum den Anker immer aus der Antwort übernehmen.
 - **`check_hint`** ist der Hinweis des Auto-Erledigt-Checks («diese Stelle erledigt die Pendenz vermutlich»); er fällt mit jedem Stufenwechsel weg. Verwerfen ohne Stufenwechsel (`DELETE /ideen/:id/check-hint`), Verknüpfen, Zusammenführen und Umsortieren sind Web-Wege und nicht Teil des Vertrags.
 
+## Recherche-Board (Android)
+
+Android zeigt das Recherche-Board eines Buchs, erfasst geteilte Links und hängt Bilder an — über dieselben Routen wie die Web-App ([routes/research.js](../routes/research.js), Modell: [docs/recherche-board.md](recherche-board.md)). Board-Form, Seitenweise-Laden und Idempotenz im Vertrag seit `api 8`; Schemas, Fehlercodes und Fixtures in [contract/](../contract/README.md), Fehlercodes ausserdem in der Tabelle unten.
+
+| Route | Zweck |
+|---|---|
+| `GET /research?book_id=…&view=board&limit=…&offset=…` | Board in voller Item-Form (`body`, `status`, `tags`, `links`, `has_image`/`has_doc`/`doc_name`), seitenweise |
+| `POST /research` | Fundstück anlegen, optional `allow_duplicate: true` gegen `409 DUPLICATE_URL` |
+| `POST /research/:id/image` | Bild anhängen (`image/*`-Body) |
+| `POST /research/:id/scrape` | Link serverseitig lesen, Leeres füllen |
+
+- **Scope:** `view=board` und `scrape` nur mit `device`-Token (`content:write`); ein `capture`-Token bekommt `403 DEVICE_SCOPE_FORBIDDEN`. Ohne `view` liefert `GET /research` jedem Token die reduzierte Form (unten, Abschnitt Browser-Erweiterung).
+- **Vollständig laden:** `limit` bis 200, mit `offset` weiter, bis eine Seite kürzer als `limit` ist; per `id` deduplizieren, falls sich das Board zwischen zwei Seiten ändert.
+- **Offline nachspielen:** `POST /research` liest `Idempotency-Key` wie `POST /ideen` ([lib/idempotency.js](../lib/idempotency.js)). Der Schlüssel greift vor der Dubletten-Prüfung — die Wiederholung einer Link-Erfassung bekommt dasselbe Fundstück, kein `409` auf sich selbst.
+
 ## Release-Discovery (Download-Hinweis im Profil + Landing)
 
 Das Profil (`/me`) und die Landing-Page zeigen Logged-in-Usern bzw. Besucher:innen Installationsweg + Version der nativen Apps und der Chrome-Erweiterung. Alle Routen sind dünne Proxies mit In-Memory-Cache; **die Versionsquelle folgt dem Auslieferungsweg** — Store-App aus dem Store, Direkt-Download aus dem GitHub-Release:
@@ -213,7 +228,9 @@ Serverseitig braucht sie nichts Eigenes außer dem Scope, einem Sammel-Endpunkt 
   - **Nicht-destruktiv per Default:** gefüllt wird nur, was leer ist; alles Übrige nennt `skipped` und bleibt stehen. `overwrite: true` ersetzt — die SPA fragt davor nach. `filled`/`skipped` tragen Feldnamen (`title`, `body`, `source`, `url_label`), `truncated` sagt, dass der Text an `BODY_MAX` gekappt wurde.
   - `url_id` wählt **gezielt** einen der Links (gleiche Regel wie `POST /sources/from-research`); ohne Angabe gilt der erste. Die `url_id` bleibt beim Benennen **stabil** — der Weg ist ein gezieltes `UPDATE`, kein Neuschreiben der Link-Liste.
   - **Reduzierte Ausgabeform für Device-Token-Requests** (`toClientItem` in [lib/research-validate.js](../lib/research-validate.js)): `id, kind, title, source, created_at, updated_at, body_snippet, urls[{url,label}]`. Der volle `body` geht **nicht** mit — er trägt bis zu `BODY_MAX` (20 000) Zeichen Seitentext, den die Erweiterung selbst hochgeladen hat, und würde sich bei jeder Dublettenprüfung zurückschicken; `body_snippet` ist der auf 200 Zeichen normalisierte Anriss. `urls` bleibt drin, weil die Frage ohne sie nicht beantwortbar wäre. Board-Zubehör (`tags`, `links`, `doc_*`, `pinned`, `archived`) fällt weg. **Die SPA-Antwort ist unverändert** — die Verzweigung hängt allein an `session.user.via === 'device_token'`.
-  - **`limit`**: Default 50 für Device-Token-Requests, Maximum 200; ein unbrauchbarer Wert (0, negativ, Text) fällt auf den Default zurück statt 400 zu werfen. Ohne Token-Kontext (SPA) gilt weiterhin **kein** Limit, sofern keines mitgeschickt wird.
+  - **`view=board`** — volle Item-Form wie die SPA (`body`, `pinned`, `archived`, `status`, `tags`, `links`, `has_image`, `has_doc`, `doc_name`), für die Board-Ansicht der Android-App. **Nur mit `content:write`** (`device`-Token); ein `capture`- oder Nur-Lese-Token bekommt `403 DEVICE_SCOPE_FORBIDDEN` von der Route. Explizit per Parameter, nicht am Token-Umfang abgeleitet: ausgelieferte Clients mit `device`-Token dekodieren die reduzierte Form und behalten sie.
+  - **`limit`**: Default 50 für Device-Token-Requests (beide Formen), Maximum 200; ein unbrauchbarer Wert (0, negativ, Text) fällt auf den Default zurück statt 400 zu werfen. Ohne Token-Kontext (SPA) gilt weiterhin **kein** Limit, sofern keines mitgeschickt wird.
+  - **`offset`**: seitenweises Laden in jeder Sortierung (Offset statt Keyset, weil Titel-, Art- und Verknüpfungs-Sortierung keinen stabilen Spalten-Cursor haben). Weiterladen, bis eine Seite kürzer als `limit` ist; unbrauchbarer Wert → 0. Ändert sich das Board zwischen zwei Seiten, kann ein Fund doppelt oder gar nicht erscheinen — der Client dedupliziert per `id`.
   - **`q` deckelt vorher bei `FTS_PREFILTER_LIMIT` = 500**: die Suche läuft als FTS5-Vorfilter über den Index und holt höchstens 500 Treffer, die erst danach gefiltert, sortiert und auf `limit` gekürzt werden. Bei sehr breiten Queries in sehr grossen Büchern liegen Funde jenseits davon ausserhalb der Antwort — **der Client soll die Grenze spiegeln** und breite Queries als „unvollständig" kennzeichnen statt als „nicht vorhanden".
   - **`kind`** filtert über `LIST_FILTER_KINDS` (`note, link, quote, fact, image, document`); ein unbekannter Wert wird ignoriert, nicht abgewiesen.
   - Fehler: `400 INVALID_ID` (fehlendes/ungültiges `book_id`), `403 DEVICE_SCOPE_FORBIDDEN` (Scope fehlt — das Gate greift **vor** der Route, es wird nichts geladen), `403 NO_BOOK_ACCESS` (kein Zugriff aufs Buch), `403 INSUFFICIENT_ROLE` (nur `viewer`, `detail: { actual, required }`), `401 NOT_LOGGED_IN` (Token ungültig/widerrufen/abgelaufen).

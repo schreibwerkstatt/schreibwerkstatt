@@ -2,6 +2,19 @@
 
 Neueste oben. Je Abschnitt: was sich geändert hat, und was ein Client tun **muss** (Bruch, Frist) bzw. tun **darf** (neues Feld, neuer Weg). Regeln: [README.md](README.md).
 
+## api 8 · editorApi 1
+
+Recherche-Board für Android, nur additiv:
+
+- **`GET /research?view=board` → `ResearchItem[]`:** die volle Item-Form wie in der Web-App — `body`, `pinned`, `archived`, `status`, `tags`, `links`, `has_image`, `has_doc`, `doc_name`. Nur mit `content:write`-Token (`device`); ein `capture`- oder Nur-Lese-Token bekommt `403 DEVICE_SCOPE_FORBIDDEN`. Ohne `view` bleibt die Antwort für jedes Token die reduzierte `ResearchClientItem`-Form.
+- **`GET /research?offset=n`:** seitenweises Laden in jeder Sortierung, für beide Formen. `limit` bleibt Default 50, Maximum 200. Weiterladen, bis eine Seite kürzer als `limit` ist. Archivierte kommen nur mit `archived=1`.
+- **`POST /research` liest `Idempotency-Key`** wie `POST /ideen` und `POST /content/pages`: derselbe Schlüssel liefert 24 h lang dasselbe Fundstück mit `Idempotent-Replayed: true`. Die Prüfung läuft vor der Dubletten-Prüfung — eine Wiederholung bekommt kein `409 DUPLICATE_URL` auf das eigene Fundstück.
+- **`ResearchItem`** nennt jetzt `status` (`offen | in_arbeit | eingearbeitet | verworfen`) und `links` (`target_kind`, `target_id`, `label`); der Server lieferte beides schon.
+- **`ResearchCreateRequest.allow_duplicate`** steht jetzt im Schema (gab es schon, siehe `docs/clients.md`).
+- **`POST /research/{id}/image`** und **`POST /research/{id}/scrape`** sind im Vertrag (`x-clients: android`), mit Fixtures für Erfolg, `400 IMAGE_INVALID` und `422 SCRAPE_EMPTY`; dazu ein Fixture für `409 DUPLICATE_URL`.
+
+**Clients dürfen:** das Board mit `view=board` laden und per `offset` vollständig nachladen, statt mit der reduzierten Form und 50 Treffern auszukommen. Feature-Check `clientContract.api >= 8`; ein älterer Server ignoriert `view` und `offset` und liefert die reduzierte erste Seite. Beim Anlegen einen `Idempotency-Key` je vorgemerkter Erfassung erzeugen und bei jeder Wiederholung mitschicken. Unbekannte `status`- und `target_kind`-Werte ignorieren.
+
 ## api 7 · editorApi 1
 
 Ideen (Pendenzen), nur additiv — vier bestehende Routen der Web-App neu im Vertrag, für Android:

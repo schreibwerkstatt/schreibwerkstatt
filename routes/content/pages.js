@@ -13,7 +13,7 @@ const bookAccess = require('../../db/book-access');
 const { toIntId } = require('../../lib/validate');
 const { resolveChapterBookId } = require('../../lib/content-ownership');
 const { guardBook, sessionEmail } = require('../../lib/acl');
-const { jsonBody, NAME_MAX, REVALIDATE_CACHE_CONTROL, _validDeviceId, _logToken, _logStamp, _isNotableSave, _saveSuffix, _deviceTokenLabel, _guardPage, _fail, _sendSanitizeFailed } = require('./shared');
+const { jsonBody, NAME_MAX, REVALIDATE_CACHE_CONTROL, _validDeviceId, _logToken, _logStamp, _saveSuffix, _deviceTokenLabel, _guardPage, _fail, _sendSanitizeFailed } = require('./shared');
 const { htmlToPlainText } = require('../../lib/html-text');
 const { stripActiveContent } = require('../../lib/html-clean');
 const { mergeAgainstServer } = require('../../lib/page-merge');
@@ -143,13 +143,10 @@ function register(router) {
       // `SW` (controlled/uncontrolled): ein Tab ohne SW-Kontrolle liest und
       // schreibt am Content-Cache vorbei — Spur, wenn ein anderer Tab danach
       // eine veraltete Ansicht zeigt.
-      // Level: `info` nur fuer die Besonderheiten (Wiederholung, eigener
-      // Vorgaenger-Save, Retry/Outbox, No-op-Save), sonst `debug` — Routine-
-      // Saves duennen das Prod-Log sonst mit einer Zeile pro Autosave aus.
+      // Jeder Save auf `info`, auch Routine-Autosaves — sonst ist nicht rekonstruierbar,
+      // wann welcher Abschnitt wie geschrieben wurde (Prod: ~40, Spitze ~120 Saves/Tag).
       if (typeof req.body?.html === 'string') {
-        const line = `PAGE_SAVE Seite ${pageId}: Geraet ${req.body?.device_id || '-'} Tab ${_logToken(req.body?.client_tab)} SW ${_logToken(req.body?.client_sw)} Weg ${_logToken(req.body?.save_reason)} erwartete ${_logStamp(req.body?.expected_updated_at)}, neu ${saved?.updated_at || '-'}${_saveSuffix(saved)}.`;
-        if (_isNotableSave(saved, req.body)) logger.info(line);
-        else logger.debug(line);
+        logger.info(`PAGE_SAVE Seite ${pageId}: Geraet ${req.body?.device_id || '-'} Tab ${_logToken(req.body?.client_tab)} SW ${_logToken(req.body?.client_sw)} Weg ${_logToken(req.body?.save_reason)} erwartete ${_logStamp(req.body?.expected_updated_at)}, neu ${saved?.updated_at || '-'}${_saveSuffix(saved)}.`);
       } else {
         // Umbenennen/Verschieben ohne Body: keine Revision, kein PAGE_SAVE —
         // ohne diese Zeile ist ein updated_at-Sprung ohne Text-Änderung im Log
@@ -334,6 +331,7 @@ function register(router) {
         { html: rev.body_html, source: 'restore', summary: `restored from #${revId}` },
         req,
       );
+      logger.info(`Revision wiederhergestellt: Seite ${pageId} aus Revision #${revId} vom ${rev.created_at} (${rev.source}), neu ${saved?.updated_at || '-'}.`);
       recordUsageEvent({ event: 'revision.restore', userEmail: email, bookId, meta: { ageBucket: _revisionAgeBucket(rev.created_at) } });
       res.json({ ok: true, page: _publicPayload(saved), restored_from: revId });
     } catch (e) {
@@ -372,6 +370,7 @@ function register(router) {
     try {
       const updated = pageRevisions.setPin(revId, { pinned: req.body.pinned, label });
       const action = !req.body.pinned ? 'unpin' : (rev.pinned ? 'rename' : 'pin');
+      logger.info(`Revision ${{ pin: 'angeheftet', unpin: 'gelöst', rename: 'umbenannt' }[action]}: Seite ${pageId} Revision #${revId}${updated?.label ? ` «${updated.label}»` : ''}.`);
       recordUsageEvent({ event: 'revision.pin', userEmail: sessionEmail(req), bookId, meta: { action, named: updated?.label ? 'yes' : 'no' } });
       const { body_html: _omit, ...meta } = updated;
       res.json({ revision: meta });
@@ -408,6 +407,7 @@ function register(router) {
         html: req.body?.html,
       }, req);
       rememberIdempotent(req, 'POST /content/pages', email, created);
+      logger.info(`Abschnitt angelegt: Seite ${created.id} «${created.name}» in ${chapterIdRaw ? `Kapitel ${chapterIdRaw}` : 'ohne Kapitel'}${typeof req.body?.html === 'string' && req.body.html ? ` (${req.body.html.length} Zeichen HTML)` : ''}.`);
       recordUsageEvent({ userEmail: email, event: 'content.created', bookId: effBookId, meta: { kind: 'page' } });
       res.json(created);
     } catch (e) {
@@ -442,6 +442,7 @@ function register(router) {
     });
     try {
       const result = await contentStore.movePage(pageId, { targetBookId, targetChapterId }, req);
+      logger.info(`Abschnitt in anderes Buch verschoben: Seite ${pageId} Buch ${sourceBookId}→${targetBookId}${targetChapterId ? ` Kapitel ${targetChapterId}` : ' ohne Kapitel'}.`);
       res.json(result);
     } catch (e) {
       if (e.code === 'SAME_BOOK') return res.status(400).json({ error_code: 'SAME_BOOK' });
@@ -516,7 +517,8 @@ function register(router) {
     const email = sessionEmail(req);
     const deviceId = _validDeviceId(req.query?.device_id) ? req.query.device_id : null;
     try {
-      await contentStore.deletePage(pageId, req, { deletedBy: email, deviceId });
+      const out = await contentStore.deletePage(pageId, req, { deletedBy: email, deviceId });
+      logger.info(`Abschnitt gelöscht: Seite ${pageId} «${out?.pageName || ''}» → Papierkorb (Geraet ${deviceId || '-'}).`);
       res.json({ ok: true });
     } catch (e) { _fail(res, e, 'DELETE /content/pages/:id'); }
   });

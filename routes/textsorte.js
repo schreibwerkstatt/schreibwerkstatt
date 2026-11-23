@@ -20,6 +20,7 @@ const {
 } = require('../db/textsorte');
 const { pageBookGuard, journalisticBookSettings } = require('../lib/page-guard');
 const { bookParamHandler } = require('../lib/log-context');
+const logger = require('../logger');
 
 const router = express.Router();
 const jsonBody = express.json();
@@ -52,6 +53,9 @@ router.put('/page/:page_id', jsonBody, (req, res) => {
     return res.status(400).json({ error_code: 'INVALID_VALUE', params: { field: 'textsorte' } });
   }
   setPageTextsorte(g.pageId, g.bookId, value);
+  logger.info(value === null
+    ? `Textsorte-Override entfernt: page=${g.pageId}.`
+    : `Textsorte gesetzt: page=${g.pageId} textsorte=${value}.`);
   res.json({ ok: true, page_id: g.pageId, textsorte: value });
 });
 

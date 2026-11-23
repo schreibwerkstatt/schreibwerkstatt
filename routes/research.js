@@ -17,6 +17,8 @@ const {
 } = require('../db/research-items');
 const { toIntId } = require('../lib/validate');
 const { guardBook, sessionEmail } = require('../lib/acl');
+const { scopeMode } = require('../lib/device-scopes');
+const { replayIdempotent, rememberIdempotent } = require('../lib/idempotency');
 const { bookScope, scopedItem } = require('./research-acl');
 const contentStore = require('../lib/content-store');
 const { NOW_ISO_SQL } = require('../db/now');
@@ -25,7 +27,7 @@ const {
   RESEARCH_KINDS, LIST_FILTER_KINDS, RESEARCH_STATUS_SET,
   TITLE_MAX, BODY_MAX, SOURCE_MAX, TAG_MAX, cleanStr,
   textFieldError, flagFieldError, urlsInputError,
-  FTS_PREFILTER_LIMIT, CLIENT_LIST_LIMIT, clampListLimit, toClientItem,
+  FTS_PREFILTER_LIMIT, CLIENT_LIST_LIMIT, clampListLimit, clampListOffset, toClientItem,
 } = require('../lib/research-validate');
 const { parseRestoreFields } = require('../lib/restore-fields');
 const logger = require('../logger');
@@ -83,7 +85,7 @@ const PATCH_FIELDS = [
 ];
 
 // ── Liste + Filter ─────────────────────────────────────────────────────────
-// GET /research?book_id=&kind=&tag=&linked=figure:42&q=&limit=
+// GET /research?book_id=&kind=&tag=&linked=figure:42&q=&limit=&offset=&view=
 //
 // Zwei Konsumenten, EIN Lesepfad — die Filter sind fuer beide dieselben, nur die
 // Ausgabeform unterscheidet sich:
@@ -94,14 +96,30 @@ const PATCH_FIELDS = [
 //                          bis zu 20 000 Zeichen Seitentext, den die Browser-
 //                          Erweiterung selbst hochgeladen hat; sie fragt hier
 //                          „kenne ich diese Seite schon", nicht nach dem Inhalt.
+//   Device-Token + view=board
+//                          volle Item-Form wie die SPA (die Android-App zeigt das
+//                          ganze Board), Limit wie oben, seitenweise per `offset`.
+//                          Nur fuer Token mit `content:write`; ein capture- oder
+//                          Nur-Lese-Token bekommt 403 DEVICE_SCOPE_FORBIDDEN — es
+//                          ist das Token, das in fremden Browser-Tabs lebt.
+//                          Explizit per Parameter statt am Token-Umfang
+//                          abgeleitet: ausgelieferte Clients mit content:write-
+//                          Token dekodieren die reduzierte Form und behalten sie.
 router.get('/', (req, res) => {
   const bookId = bookScope(req, res);
   if (!bookId) return;
 
   // Geraete-Token → Client-Form. Die ACL darueber ist dieselbe: `editor` auf dem
   // Buch, gleich ob Session oder Token (das Token loest auf den echten User auf).
-  const asClient = req.session?.user?.via === 'device_token';
-  const limit = clampListLimit(req.query.limit, asClient ? CLIENT_LIST_LIMIT : null);
+  const viaToken = req.session?.user?.via === 'device_token';
+  const boardView = viaToken && String(req.query.view || '') === 'board';
+  if (boardView && scopeMode(req.session.user.scopes) !== 'full') {
+    logger.warn(`[research] view=board ohne content:write verweigert (token=${req.session.user.tokenId || '?'})`);
+    return res.status(403).json({ error_code: 'DEVICE_SCOPE_FORBIDDEN' });
+  }
+  const asClient = viaToken && !boardView;
+  const limit = clampListLimit(req.query.limit, viaToken ? CLIENT_LIST_LIMIT : null);
+  const offset = clampListOffset(req.query.offset);
 
   const where = ['ri.book_id = ?'];
   const vals = [bookId];
@@ -173,7 +191,9 @@ router.get('/', (req, res) => {
     orderBy = 'ri.pinned DESC, (link_rank IS NULL), link_rank, ri.updated_at DESC';
   }
 
-  const limitVals = limit ? [limit] : [];
+  // OFFSET verlangt in SQLite ein LIMIT; ohne Limit (SPA) steht -1 = unbegrenzt.
+  const pageSql = limit || offset ? `\n      LIMIT ?${offset ? ' OFFSET ?' : ''}` : '';
+  const pageVals = limit || offset ? [limit || -1, ...(offset ? [offset] : [])] : [];
   const rows = db.prepare(
     `SELECT ri.id, ri.book_id, ri.user_email, ri.kind, ri.title, ri.body,
             ri.source, ri.image_mime, ri.doc_mime, ri.doc_name, ri.doc_pages, ri.doc_chars,
@@ -181,8 +201,8 @@ router.get('/', (req, res) => {
             ${STATUS_SELECT_SQL}${selectExtra}
        FROM research_items ri
       WHERE ${where.join(' AND ')}
-      ORDER BY ${orderBy}${limit ? '\n      LIMIT ?' : ''}`
-  ).all(...selectVals, ...vals, ...limitVals);
+      ORDER BY ${orderBy}${pageSql}`
+  ).all(...selectVals, ...vals, ...pageVals);
   for (const r of rows) delete r.link_rank;
   // attachRelations laeuft auch fuer die Client-Form: sie braucht die `urls`.
   const items = attachRelations(rows);
@@ -278,7 +298,7 @@ router.get('/chapter-counts', (req, res) => {
 // `BOOKID_REQ` statt `INVALID_ID` — der Vertrag ist in docs/clients.md fixiert.
 // Die 401 kommt aus dem Buch-Guard (`NOT_LOGGED_IN`), es gibt keine zweite
 // Login-Pruefung davor.
-router.post('/', jsonBody, (req, res) => {
+router.post('/', jsonBody, async (req, res) => {
   const bookId = toIntId(req.body?.book_id);
   if (!bookId) return res.status(400).json({ error_code: 'BOOKID_REQ' });
   if (!guardBook(req, res, bookId, 'editor')) return;
@@ -298,6 +318,11 @@ router.post('/', jsonBody, (req, res) => {
   const urls = Array.isArray(b.urls) ? b.urls : [];
   const hasUrl = urls.some(u => cleanStr(typeof u === 'string' ? u : u?.url, Infinity));
   if (!title && !body && !hasUrl) return res.status(400).json({ error_code: 'EMPTY' });
+
+  // Nachgespielt aus einer Offline-Warteschlange (lib/idempotency.js): derselbe
+  // Schlüssel liefert das erste Fundstück noch einmal. VOR der Dubletten-Prüfung
+  // — sonst bekäme die Wiederholung eines Link-Fundstücks 409 auf sich selbst.
+  if (await replayIdempotent(req, res, 'POST /research', userEmail)) return;
 
   // Dublette: eine der URLs liegt schon an einem (nicht archivierten) Fundstück
   // dieses Buchs → 409 mit der bestehenden Id. Bewusst übersteuerbar
@@ -324,7 +349,9 @@ router.post('/', jsonBody, (req, res) => {
     bookId, userEmail, kind, title, body, source, urls, tags: b.tags, restore,
   });
   logger.info(`[research] ${restore ? 'restore' : 'create'} id=${id} kind=${kind}`);
-  res.json(emitItem(id));
+  const item = emitItem(id);
+  rememberIdempotent(req, 'POST /research', userEmail, item);
+  res.json(item);
 });
 
 // ── Aktualisieren (Felder + pinned + archived + Tags optional einzeln) ──────

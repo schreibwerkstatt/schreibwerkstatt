@@ -1,0 +1,12 @@
+{
+  "operation": "POST /research/{id}/scrape",
+  "request": {
+    "method": "POST",
+    "path": "/research/3/scrape",
+    "body": {}
+  },
+  "status": 422,
+  "response": {
+    "error_code": "SCRAPE_EMPTY"
+  }
+}

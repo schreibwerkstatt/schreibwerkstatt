@@ -144,14 +144,31 @@ module.exports = {
     book_id: int(), kind: { enum: ['note', 'link', 'quote', 'fact', 'image'], description: 'Unbekannt → still `note`.' },
     title: nul(str()), body: nul(str()), source: nul(str()),
     urls: arr(ref('ResearchUrl')), tags: arr(str()),
+    allow_duplicate: bool('`true` übersteuert `409 DUPLICATE_URL`: zwei Zitate aus derselben Seite sind zwei Fundstücke.'),
   }, ['book_id']),
+  ResearchLink: obj({
+    link_id: int(), target_kind: str('chapter | page | figure | location | scene | beat | … — unbekannter Wert → Link ignorieren.'),
+    target_id: int(), label: str(),
+  }, ['target_kind', 'target_id']),
   ResearchItem: obj({
     id: int(), book_id: int(), kind: str(), title: nul(str()), body: nul(str()), source: nul(str()),
     pinned: int('0/1 (SQLite), kein JSON-Boolean.'), archived: int('0/1.'),
+    status: str('Einarbeitungs-Stufe: offen | in_arbeit | eingearbeitet | verworfen. Unbekannter Wert → wie `offen` behandeln.'),
     created_at: ts(), updated_at: ts(),
-    tags: arr(str()), urls: arr(ref('ResearchUrl')),
-    has_image: bool(), has_doc: bool(), doc_name: nul(str()),
+    tags: arr(str()), urls: arr(ref('ResearchUrl')), links: arr(ref('ResearchLink')),
+    has_image: bool('Bild abrufbar über `GET /research/{id}/image`.'), has_doc: bool(), doc_name: nul(str()),
   }, ['id', 'book_id', 'kind', 'urls']),
+  ResearchScrapeRequest: obj({
+    url_id: int('Welcher Link des Fundstücks gelesen wird; ohne Angabe der erste.'),
+    overwrite: bool('`true` ersetzt auch gefüllte Felder; sonst wird nur Leeres gefüllt.'),
+  }),
+  ResearchScrapeResponse: obj({
+    item: ref('ResearchItem'),
+    filled: arr(str(), 'Übernommene Felder: title | body | source | url_label.'),
+    skipped: arr(str(), 'Gefüllte Felder, die stehen blieben (ohne `overwrite`).'),
+    truncated: bool('Text an 20 000 Zeichen gekappt.'),
+    final_url: str('URL nach Redirects.'),
+  }, ['item', 'filled', 'skipped', 'truncated']),
   ResearchClientItem: obj({
     id: int(), kind: str(), title: nul(str()), source: nul(str()),
     created_at: ts(), updated_at: ts(),

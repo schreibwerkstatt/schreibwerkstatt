@@ -134,6 +134,9 @@ router.put('/:book_id', jsonBody, (req, res) => {
       pinned:   b.pinned   === undefined ? undefined : !!b.pinned,
       archived: b.archived === undefined ? undefined : !!b.archived,
     });
+    logger.info(`Regal-Zustand gesetzt: book=${bookId}`
+      + (b.pinned === undefined ? '' : ` angeheftet=${!!b.pinned}`)
+      + (b.archived === undefined ? '' : ` archiviert=${!!b.archived}`) + '.');
     res.json({ ok: true, ...next });
   } catch (e) {
     logger.error(`[me/books] Regal-Write fehlgeschlagen (book=${bookId}): ${e.message}`);

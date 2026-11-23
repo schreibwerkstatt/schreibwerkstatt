@@ -2,9 +2,9 @@
   "openapi": "3.1.0",
   "info": {
     "title": "Schreibwerkstatt — Client-Vertrag (macOS, Android)",
-    "version": "api 7 · editorApi 1",
+    "version": "api 8 · editorApi 1",
     "description": "Die REST-Fläche, die die nativen Clients nutzen. Regeln, Versionen und Ablauf: contract/README.md. Antworten dürfen Felder tragen, die hier nicht stehen — ein Client ignoriert sie.",
-    "x-api": 7,
+    "x-api": 8,
     "x-editor-api": 1
   },
   "components": {
@@ -995,10 +995,36 @@
             "items": {
               "type": "string"
             }
+          },
+          "allow_duplicate": {
+            "type": "boolean",
+            "description": "`true` übersteuert `409 DUPLICATE_URL`: zwei Zitate aus derselben Seite sind zwei Fundstücke."
           }
         },
         "required": [
           "book_id"
+        ]
+      },
+      "ResearchLink": {
+        "type": "object",
+        "properties": {
+          "link_id": {
+            "type": "integer"
+          },
+          "target_kind": {
+            "type": "string",
+            "description": "chapter | page | figure | location | scene | beat | … — unbekannter Wert → Link ignorieren."
+          },
+          "target_id": {
+            "type": "integer"
+          },
+          "label": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "target_kind",
+          "target_id"
         ]
       },
       "ResearchItem": {
@@ -1039,6 +1065,10 @@
             "type": "integer",
             "description": "0/1."
           },
+          "status": {
+            "type": "string",
+            "description": "Einarbeitungs-Stufe: offen | in_arbeit | eingearbeitet | verworfen. Unbekannter Wert → wie `offen` behandeln."
+          },
           "created_at": {
             "type": "string",
             "description": "Server-Zeitstempel, ISO-8601 UTC mit Millisekunden (`…T…:…:….sssZ`). Unverändert zurückschicken.",
@@ -1061,8 +1091,15 @@
               "$ref": "#/components/schemas/ResearchUrl"
             }
           },
+          "links": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ResearchLink"
+            }
+          },
           "has_image": {
-            "type": "boolean"
+            "type": "boolean",
+            "description": "Bild abrufbar über `GET /research/{id}/image`."
           },
           "has_doc": {
             "type": "boolean"
@@ -1079,6 +1116,55 @@
           "book_id",
           "kind",
           "urls"
+        ]
+      },
+      "ResearchScrapeRequest": {
+        "type": "object",
+        "properties": {
+          "url_id": {
+            "type": "integer",
+            "description": "Welcher Link des Fundstücks gelesen wird; ohne Angabe der erste."
+          },
+          "overwrite": {
+            "type": "boolean",
+            "description": "`true` ersetzt auch gefüllte Felder; sonst wird nur Leeres gefüllt."
+          }
+        }
+      },
+      "ResearchScrapeResponse": {
+        "type": "object",
+        "properties": {
+          "item": {
+            "$ref": "#/components/schemas/ResearchItem"
+          },
+          "filled": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Übernommene Felder: title | body | source | url_label."
+          },
+          "skipped": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Gefüllte Felder, die stehen blieben (ohne `overwrite`)."
+          },
+          "truncated": {
+            "type": "boolean",
+            "description": "Text an 20 000 Zeichen gekappt."
+          },
+          "final_url": {
+            "type": "string",
+            "description": "URL nach Redirects."
+          }
+        },
+        "required": [
+          "item",
+          "filled",
+          "skipped",
+          "truncated"
         ]
       },
       "ResearchClientItem": {
@@ -2716,7 +2802,8 @@
         "x-clients": [
           "android"
         ],
-        "summary": "Recherche-Board eines Buchs (reduzierte Form für Device-Token)",
+        "summary": "Recherche-Board eines Buchs (Device-Token: reduzierte Form, mit `view=board` die volle)",
+        "description": "Ohne `view` die reduzierte Form `ResearchClientItem` (Bestandsblick der Browser-Erweiterung). `view=board` liefert die volle Form `ResearchItem` wie die Web-App — nur mit `content:write`-Token, sonst `403 DEVICE_SCOPE_FORBIDDEN`. `limit` Default 50, Maximum 200. Seitenweise per `offset`: weiterladen, bis eine Seite kürzer als `limit` ist. Ohne `archived=1` nur nicht archivierte Fundstücke.",
         "parameters": [
           {
             "name": "book_id",
@@ -2751,24 +2838,72 @@
             }
           },
           {
-            "name": "limit",
+            "name": "tag",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "archived",
             "in": "query",
             "required": false,
             "schema": {
               "type": "integer"
+            },
+            "description": "`1` = archivierte mitliefern."
+          },
+          {
+            "name": "view",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "enum": [
+                "board"
+              ]
+            },
+            "description": "`board` = volle Item-Form (nur `content:write`)."
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 200
             }
+          },
+          {
+            "name": "offset",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer"
+            },
+            "description": "Überspringt so viele Treffer derselben Sortierung (seitenweises Laden)."
           }
         ],
         "responses": {
           "200": {
-            "description": "",
+            "description": "Mit `view=board`: `ResearchItem[]`, sonst `ResearchClientItem[]`.",
             "content": {
               "application/json": {
                 "schema": {
-                  "type": "array",
-                  "items": {
-                    "$ref": "#/components/schemas/ResearchClientItem"
-                  }
+                  "anyOf": [
+                    {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/ResearchItem"
+                      }
+                    },
+                    {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/ResearchClientItem"
+                      }
+                    }
+                  ]
                 }
               }
             }
@@ -2820,6 +2955,17 @@
           "android"
         ],
         "summary": "Fundstück anlegen (geteilter Link)",
+        "description": "Optionaler Header `Idempotency-Key` (8–100 Zeichen `[A-Za-z0-9_-]`): derselbe Schlüssel desselben Kontos liefert 24 h lang die erste Antwort noch einmal (Header `Idempotent-Replayed: true`) statt erneut anzulegen — auch vor der Dubletten-Prüfung, eine Wiederholung bekommt also kein `409` auf sich selbst.",
+        "parameters": [
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
         "requestBody": {
           "required": true,
           "content": {
@@ -2873,6 +3019,199 @@
           },
           "409": {
             "description": "Trägt `existing_id`; übersteuerbar mit `allow_duplicate: true`. error_code: DUPLICATE_URL",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/research/{id}/image": {
+      "post": {
+        "x-clients": [
+          "android"
+        ],
+        "summary": "Bild an ein Fundstück hängen (ersetzt ein vorhandenes)",
+        "description": "Body = Bildbytes, `Content-Type: image/*`, bis 12 MB. Der Server normalisiert (sharp). Ein `note`/`link`-Fundstück wird dabei zu `kind: image`.",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "image/*": {
+              "schema": {
+                "type": "string",
+                "format": "binary"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResearchItem"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "`NO_IMAGE`: leerer Body oder kein `image/*`. `IMAGE_INVALID`: Bild nicht lesbar. error_code: INVALID_ID | NO_IMAGE | IMAGE_INVALID",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Token fehlt, unbekannt, widerrufen oder abgelaufen; Konto gesperrt/gelöscht. error_code: NOT_LOGGED_IN",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Scope oder Buchrolle reicht nicht. error_code: DEVICE_SCOPE_FORBIDDEN | NO_BOOK_ACCESS | INSUFFICIENT_ROLE",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "error_code: ITEM_NOT_FOUND",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/research/{id}/scrape": {
+      "post": {
+        "x-clients": [
+          "android"
+        ],
+        "summary": "Link eines Fundstücks serverseitig lesen und Titel/Text/Herkunft übernehmen",
+        "description": "Nicht-destruktiv per Default: gefüllt wird nur, was leer ist (`skipped` nennt den Rest). Kein KI-Aufruf. Nur `content:write`.",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ResearchScrapeRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResearchScrapeResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "error_code: INVALID_ID | NO_URL | INVALID_URL | SCRAPE_BLOCKED | SCRAPE_NOT_HTML",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Token fehlt, unbekannt, widerrufen oder abgelaufen; Konto gesperrt/gelöscht. error_code: NOT_LOGGED_IN",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Scope oder Buchrolle reicht nicht. error_code: DEVICE_SCOPE_FORBIDDEN | NO_BOOK_ACCESS | INSUFFICIENT_ROLE",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "error_code: ITEM_NOT_FOUND",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Seite erreicht, aber ohne Text (setzt ihren Inhalt erst im Browser zusammen). error_code: SCRAPE_EMPTY",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "error_code: SCRAPE_HTTP_ERROR | SCRAPE_TOO_LARGE | SCRAPE_UNAVAILABLE | SCRAPE_FAILED",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "504": {
+            "description": "error_code: SCRAPE_TIMEOUT",
             "content": {
               "application/json": {
                 "schema": {

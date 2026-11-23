@@ -8,6 +8,7 @@ const { resolveChapterBookId } = require('../../lib/content-ownership');
 const bookOrder = require('../../db/book-order');
 const { jsonBody, _guardChapter, _fail } = require('./shared');
 const { recordUsageEvent } = require('../../lib/usage-events');
+const logger = require('../../logger');
 
 function register(router) {
   // GET /content/chapters/:chapter_id — Kapitel-Detail.
@@ -50,6 +51,8 @@ function register(router) {
         parent_chapter_id: parentChapterId,
         after_chapter_id: afterChapterId,
       }, req);
+      const where = afterChapterId != null ? `hinter Kapitel ${afterChapterId}` : (parentChapterId != null ? `unter Kapitel ${parentChapterId}` : 'oberste Ebene');
+      logger.info(`Kapitel angelegt: Kapitel ${created.id} «${created.name}» (${where}).`);
       recordUsageEvent({ userEmail: sessionEmail(req), event: 'content.created', bookId, meta: { kind: 'chapter' } });
       res.json(created);
     } catch (e) { _fail(res, e, 'POST /content/chapters'); }
@@ -66,7 +69,15 @@ function register(router) {
       return res.status(400).json({ error_code: 'EMPTY_BODY' });
     }
     if (_guardChapter(req, res, chapterId, 'editor') == null) return;
-    try { res.json(await contentStore.updateChapter(chapterId, req.body || {}, req)); }
+    try {
+      const before = await contentStore.loadChapter(chapterId, req).catch(() => null);
+      const saved = await contentStore.updateChapter(chapterId, req.body || {}, req);
+      const changes = [];
+      if (hasName && before?.name !== saved?.name) changes.push(`Name «${before?.name ?? '?'}»→«${saved?.name}»`);
+      if (hasExcluded) changes.push(`ausgeschlossen=${req.body.excluded}`);
+      logger.info(`Kapitel geändert: Kapitel ${chapterId}: ${changes.join(', ') || 'keine Änderung'}.`);
+      res.json(saved);
+    }
     catch (e) { _fail(res, e, 'PUT /content/chapters/:id'); }
   });
 
@@ -80,7 +91,9 @@ function register(router) {
     if (!chapterId) return res.status(400).json({ error_code: 'INVALID_CHAPTER_ID' });
     if (_guardChapter(req, res, chapterId, 'editor') == null) return;
     try {
+      const before = await contentStore.loadChapter(chapterId, req).catch(() => null);
       await contentStore.deleteChapter(chapterId, req);
+      logger.info(`Kapitel gelöscht: Kapitel ${chapterId} «${before?.name ?? '?'}» (Inhalt rückt nach oben, kein Papierkorb).`);
       res.json({ ok: true });
     } catch (e) { _fail(res, e, 'DELETE /content/chapters/:id'); }
   });

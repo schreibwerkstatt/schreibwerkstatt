@@ -1,0 +1,25 @@
+{
+  "operation": "POST /research",
+  "request": {
+    "method": "POST",
+    "path": "/research",
+    "body": {
+      "book_id": 7001,
+      "kind": "link",
+      "urls": [
+        {
+          "url": "https://www.example.org/artikel/",
+          "label": ""
+        }
+      ]
+    }
+  },
+  "status": 409,
+  "response": {
+    "error_code": "DUPLICATE_URL",
+    "params": {
+      "existing_id": 1,
+      "title": "Geteilter Link"
+    }
+  }
+}

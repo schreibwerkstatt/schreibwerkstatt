@@ -18,6 +18,7 @@ const { aclParamGuard, sessionEmail } = require('../lib/acl');
 const { getBookSettings } = require('../db/schema');
 const { isBlogBook, requireBlogTypeRoute } = require('../lib/buchtyp');
 const contentStore = require('../lib/content-store');
+const logger = require('../logger');
 
 const jsonBody = express.json();
 
@@ -69,7 +70,9 @@ function mountSyncRoutes(router, provider, opts = {}) {
   });
 
   router.delete('/:book_id', aclParamGuard('editor'), (req, res) => {
-    res.json({ ok: provider.db.deleteConnection(req.bookId) });
+    const ok = provider.db.deleteConnection(req.bookId);
+    if (ok) logger.info(`Sync-Verbindung gelöscht (${P}).`);
+    res.json({ ok });
   });
 
   router.get('/:book_id/links', aclParamGuard('viewer'), async (req, res) => {
@@ -129,6 +132,7 @@ function mountSyncRoutes(router, provider, opts = {}) {
     } catch (e) {
       return sendRemoteError(res, e, P);
     }
+    logger.info(`Sync-Konflikt gelöst (${P}): page=${pageId} zugunsten ${resolve === 'app' ? 'App' : 'Remote'}${renamedTo ? `, umbenannt (${renamedTo.length} Zeichen)` : ''}.`);
     res.json({ ok: true, resolve, ...(renamedTo ? { name: renamedTo } : {}) });
   });
 }

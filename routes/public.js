@@ -162,8 +162,8 @@ function _renderRegister(req, res) {
 }
 
 // Öffentliche Datenschutzerklärung. Statisches Template mit i18n-Substitution,
-// kein Session-Zwang — verlinkt u.a. aus dem nativen macOS-Client und für die
-// Apple-App-Store-Einreichung erreichbar. Sprache: /datenschutz aus der URL, Alias /privacy via Accept-Language.
+// kein Session-Zwang — verlinkt u.a. aus den nativen Clients (macOS, Android) und für die
+// App-Store-/Play-Console-Einreichung erreichbar (Lösch-Weg: Anker #loeschung). Sprache: /datenschutz aus der URL, Alias /privacy via Accept-Language.
 function _renderPrivacy(req, res, { alias = false } = {}) {
   // /datenschutz ist indexiert: Sprache allein aus der URL. /privacy ist ein
   // nicht indexierter Alias (macOS-Client, App-Store-Einreichung) und folgt
@@ -198,6 +198,10 @@ function _renderPrivacy(req, res, { alias = false } = {}) {
     secAiTitle:    t('privacy.secAiTitle'), secAiBody: t('privacy.secAiBody'),
     sec5Title:     t('privacy.sec5Title'),  sec5Body:  t('privacy.sec5Body'),
     sec6Title:     t('privacy.sec6Title'),  sec6Body:  t('privacy.sec6Body'),
+    sec6AndroidIntro: t('privacy.sec6AndroidIntro'),
+    sec6AndroidItemA: t('privacy.sec6AndroidItemA'), sec6AndroidItemB: t('privacy.sec6AndroidItemB'),
+    sec6AndroidItemC: t('privacy.sec6AndroidItemC'), sec6AndroidItemD: t('privacy.sec6AndroidItemD'),
+    sec6AndroidItemE: t('privacy.sec6AndroidItemE'), sec6AndroidItemF: t('privacy.sec6AndroidItemF'),
     sec7Title:     t('privacy.sec7Title'),  sec7Body:  t('privacy.sec7Body'),
     sec8Title:     t('privacy.sec8Title'),
     sec8Body:      analyticsEnabled ? t('privacy.sec8BodyAnalytics') : t('privacy.sec8Body'),

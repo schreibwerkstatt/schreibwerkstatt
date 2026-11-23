@@ -15,6 +15,7 @@ const contentStore = require('../lib/content-store');
 const { buchtypLabel } = require('../lib/buchtyp');
 const { slugify } = require('../lib/slug');
 const { buildExposeDocx } = require('../lib/expose-docx');
+const logger = require('../logger');
 
 const router = express.Router();
 router.param('book_id', aclParamGuard('editor'));
@@ -68,6 +69,9 @@ router.patch('/:book_id/:id', express.json({ limit: '1mb' }), (req, res) => {
   const edited = normalizeEdited(req.body?.edited, run);
   if (edited === undefined) return res.status(400).json({ error_code: 'INVALID_VALUE', params: { field: 'edited' } });
   exposeDb.setExposeEdited(req.bookId, email, id, edited);
+  logger.info(edited === null
+    ? `Exposé-Autorfassung verworfen: expose=${id} (zurück zur KI-Fassung).`
+    : `Exposé-Autorfassung gespeichert: expose=${id}, ${JSON.stringify(edited).length} Zeichen.`);
   res.json(exposeDb.getExpose(req.bookId, email, id));
 });
 
@@ -110,6 +114,7 @@ router.delete('/:book_id/:id', (req, res) => {
   if (!id || !exposeDb.deleteExpose(req.bookId, sessionEmail(req), id)) {
     return res.status(404).json({ error_code: 'EXPOSE_NOT_FOUND' });
   }
+  logger.info(`Exposé-Lauf gelöscht: expose=${id}.`);
   res.json({ ok: true });
 });
 

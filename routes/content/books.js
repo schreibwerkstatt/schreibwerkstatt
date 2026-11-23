@@ -21,6 +21,7 @@ const { localIsoDaysAgo } = require('../../lib/local-date');
 const { createOwnedBook, bookNameError, BOOK_NAME_MAX } = require('../../lib/book-create');
 const { listBookListMeta } = require('../../db/book-list-meta');
 const { emitBookChange } = require('../../lib/book-events');
+const { describeOrderChange } = require('../../lib/order-diff');
 const logger = require('../../logger');
 const { jsonBody, _validDeviceId, _fail, REVALIDATE_CACHE_CONTROL } = require('./shared');
 
@@ -225,14 +226,18 @@ function register(router) {
     }
     const expected = typeof req.body?.expected_updated_at === 'string' ? req.body.expected_updated_at : null;
     try {
+      const prevTree = bookOrder.getOrder(req.bookId)?.tree || null;
       const saved = bookOrder.putOrder(req.bookId, tree, sessionEmail(req), { expectedUpdatedAt: expected });
+      logger.info(`Reihenfolge gespeichert: ${describeOrderChange(prevTree, saved?.tree)}.`);
       emitBookChange(req.bookId, sessionEmail(req), _validDeviceId(req.body?.device_id) ? req.body.device_id : null);
       res.json(saved);
     } catch (e) {
       if (e instanceof bookOrder.OrderConflictError) {
+        logger.info(`Reihenfolge abgelehnt (ORDER_CONFLICT): erwartet ${expected || '-'}, Server ${e.updatedAt || '-'}.`);
         return res.status(409).json({ error_code: 'ORDER_CONFLICT', updated_at: e.updatedAt });
       }
       if (e instanceof bookOrder.TreeValidationError) {
+        logger.warn(`Reihenfolge abgelehnt (INVALID_TREE): ${e.code}${e.detail != null ? ` ${e.detail}` : ''}.`);
         return res.status(400).json({ error_code: 'INVALID_TREE', reason: e.code, detail: e.detail });
       }
       _fail(res, e, 'PUT /content/books/:id/order');
@@ -326,14 +331,24 @@ function register(router) {
       if (trimmed.length > BOOK_NAME_MAX) return res.status(400).json({ error_code: 'NAME_TOO_LONG', params: { max: BOOK_NAME_MAX } });
       body.name = trimmed;
     }
-    try { res.json(await contentStore.updateBook(req.bookId, body, req)); }
+    try {
+      const before = await contentStore.loadBook(req.bookId, req).catch(() => null);
+      const saved = await contentStore.updateBook(req.bookId, body, req);
+      const changes = [];
+      if (hasName && before?.name !== saved?.name) changes.push(`Name «${before?.name ?? '?'}»→«${saved?.name}»`);
+      if (hasDesc) changes.push(`Beschreibung ${(before?.description || '').length}→${(saved?.description || '').length} Zeichen`);
+      logger.info(`Buch geändert: ${changes.join(', ') || 'keine Änderung'}.`);
+      res.json(saved);
+    }
     catch (e) { _fail(res, e, 'PUT /content/books/:id'); }
   });
 
   // DELETE /content/books/:book_id — Buch loeschen. minRole owner.
   router.delete('/books/:book_id', aclParamGuard('owner'), async (req, res) => {
     try {
+      const before = await contentStore.loadBook(req.bookId, req).catch(() => null);
       await contentStore.deleteBook(req.bookId, req);
+      logger.warn(`Buch gelöscht: Buch ${req.bookId} «${before?.name ?? '?'}» durch ${sessionEmail(req)}.`);
       res.json({ ok: true });
     } catch (e) { _fail(res, e, 'DELETE /content/books/:id'); }
   });

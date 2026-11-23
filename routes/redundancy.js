@@ -4,6 +4,8 @@ const { aclParamGuard, sessionEmail } = require('../lib/acl');
 const redundancyDb = require('../db/redundancy');
 const embed = require('../lib/embed');
 const { isRunStale } = require('../lib/redundancy-staleness');
+const { toIntId } = require('../lib/validate');
+const logger = require('../logger');
 
 // Redundanz-Radar (docs/redundanz.md): letztes Ergebnis lesen + Paare
 // ignorieren. Gerechnet wird ausschliesslich im Job (routes/jobs/redundancy.js);
@@ -32,20 +34,24 @@ router.post('/:book_id/dismissals', express.json(), (req, res) => {
   if (!redundancyDb.addDismissal(req.bookId, email, kind, a_id, b_id)) {
     return res.status(400).json({ error_code: 'INVALID_PAIR' });
   }
+  // kind ist nach addDismissal validiert ('page'|'figure').
+  logger.info(`Redundanz-Paar ignoriert: ${kind} ${toIntId(a_id)}/${toIntId(b_id)}.`);
   res.json({ ok: true, dismissedCount: redundancyDb.countDismissals(req.bookId, email) });
 });
 
 // Ein Paar wieder anzeigen.
 router.delete('/:book_id/dismissals/:kind/:a_id/:b_id', (req, res) => {
   const email = sessionEmail(req);
-  redundancyDb.removeDismissal(req.bookId, email, req.params.kind, req.params.a_id, req.params.b_id);
+  const n = redundancyDb.removeDismissal(req.bookId, email, req.params.kind, req.params.a_id, req.params.b_id);
+  if (n) logger.info(`Redundanz-Paar wieder angezeigt: ${req.params.kind} ${toIntId(req.params.a_id)}/${toIntId(req.params.b_id)}.`);
   res.json({ ok: true, dismissedCount: redundancyDb.countDismissals(req.bookId, email) });
 });
 
 // Alle ignorierten Paare des Buchs wieder anzeigen.
 router.delete('/:book_id/dismissals', (req, res) => {
   const email = sessionEmail(req);
-  redundancyDb.clearDismissals(req.bookId, email);
+  const n = redundancyDb.clearDismissals(req.bookId, email);
+  logger.info(`Redundanz: alle ignorierten Paare wieder angezeigt (${n}).`);
   res.json({ ok: true, dismissedCount: 0 });
 });
 

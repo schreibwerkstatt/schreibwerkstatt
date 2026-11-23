@@ -145,7 +145,20 @@ function _loadSlice(slice, ctx) {
   return contentStore.loadPagesBatch(slice, ctx, { onError: () => null });
 }
 
-async function syncPagesCache(bookId, ctx) {
+// Anlass eines pages-Cache-Abgleichs fürs Log. Der Client schickt ihn als
+// `?source=` (public/js/book/tree/load.js#loadPages); nur bekannte Werte landen
+// wörtlich im Log, alles andere als `unbekannt` — der Query-Parameter ist
+// User-Eingabe. `manual` = Neu-laden-Knopf der Sidebar (public/partials/sidebar.html).
+// Ohne Parameter (Kaltstart, Organizer, Karte ohne Baum) `ohne`.
+const PAGES_CACHE_SOURCES = new Set(['manual', 'bookSwitch', 'wake', 'job', 'login']);
+
+function pagesCacheSource(raw) {
+  if (raw == null || raw === '') return 'ohne';
+  return PAGES_CACHE_SOURCES.has(raw) ? raw : 'unbekannt';
+}
+
+async function syncPagesCache(bookId, ctx, { source = 'ohne' } = {}) {
+  const t0 = Date.now();
   const [pages, chapters, bookMeta] = await Promise.all([
     contentStore.listPages(bookId, ctx),
     contentStore.listChapters(bookId, ctx),
@@ -177,7 +190,19 @@ async function syncPagesCache(bookId, ctx) {
     }
   }
 
-  logger.info(`pages-Cache Buch ${bookId}: ${pages.length} Seiten, ${toFetch.length} Vorschau(en) nachgeladen.`);
+  logger.info(`pages-Cache Buch ${bookId} [anlass=${source}]: ${pages.length} Seiten, ${toFetch.length} Vorschau(en) nachgeladen (${Date.now() - t0} ms).`);
+}
+
+// Einstieg der Route: coalesct über Tabs/schnelle Buchwechsel — fire-and-forget
+// Aufrufer teilen sich einen laufenden Abgleich statt ihn zu vervielfachen. Wer
+// sich anhängt, bekommt eine eigene Logzeile mit seinem Anlass; sonst wäre der
+// zweite Tab im Log unsichtbar.
+function requestPagesCache(bookId, rawSource) {
+  const source = pagesCacheSource(rawSource);
+  if (_inflightPagesCache.has(bookId)) {
+    logger.info(`pages-Cache Buch ${bookId} [anlass=${source}]: an laufenden Abgleich angehängt.`);
+  }
+  return _coalesce(_inflightPagesCache, bookId, () => syncPagesCache(bookId, null, { source }));
 }
 
 // `day`: Kalendertag des Snapshots. Default heute (manueller Sync, Import,
@@ -416,15 +441,8 @@ async function syncAllBooks({ day = null } = {}) {
 router.post('/pages/:book_id', async (req, res) => {
   const bookId = toIntId(req.params.book_id);
   if (!bookId) return res.status(400).json({ error_code: 'INVALID_BOOK_ID' });
-  if (req.query.source === 'manual') {
-    logger.info(`«Seiten laden» geklickt (book=${bookId})`);
-  } else if (req.query.source === 'bookSwitch') {
-    logger.info(`Buch gewechselt (book=${bookId})`);
-  }
   try {
-    // Über mehrere Tabs/schnelle Buchwechsel coalescen — fire-and-forget Aufrufer
-    // teilen sich einen laufenden Cache-Update statt ihn zu vervielfachen.
-    await _coalesce(_inflightPagesCache, bookId, () => syncPagesCache(bookId, null));
+    await requestPagesCache(bookId, req.query.source);
     res.json({ ok: true });
   } catch (e) {
     logger.error('pages-Cache Sync Fehler: ' + _errDetail(e));
@@ -542,4 +560,4 @@ router.post('/book/:book_id', async (req, res) => {
   }
 });
 
-module.exports = { router, syncAllBooks, syncBook, syncPagesCache };
+module.exports = { router, syncAllBooks, syncBook, syncPagesCache, requestPagesCache, pagesCacheSource };

@@ -15,6 +15,9 @@ const SAVE_2 = '6ec0bd7f-11c0-43da-975e-2a8ad9ebae0b';
 const SAVE_3 = 'a3bb189e-8bf9-3888-9912-ace4e6543002';
 const DEVICE = '9f8e7d6c-5b4a-4c3d-8e2f-1a0b9c8d7e6f';
 const IDEE_KEY = 'op-3f1c9e2a-idee-create';
+const RESEARCH_KEY = 'op-7b2d4e61-research-create';
+// 1×1-PNG für den Bild-Upload.
+const PNG_1PX = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==', 'base64');
 
 const p = (id) => `/content/pages/${id}`;
 const edit = (html, from, to) => html.replace(from, to);
@@ -75,8 +78,38 @@ const CASES = [
   // ── Nebenwege ──────────────────────────────────────────────────────────────
   { name: 'research-create', op: 'POST /research', method: 'POST', path: '/research', status: 200,
     body: () => ({ book_id: C.BOOK, kind: 'link', title: 'Geteilter Link', body: 'Aus der Android-App geteilt.',
-      urls: [{ url: 'https://example.org/artikel', label: '' }], tags: [] }) },
+      urls: [{ url: 'https://example.org/artikel', label: '' }], tags: [] }),
+    after: (b, st) => { st.researchId = b.id; } },
   { name: 'research-list', op: 'GET /research', path: `/research?book_id=${C.BOOK}&sort=updated`, status: 200 },
+  { name: 'research-duplicate', op: 'POST /research', method: 'POST', path: '/research', status: 409,
+    body: () => ({ book_id: C.BOOK, kind: 'link', urls: [{ url: 'https://www.example.org/artikel/', label: '' }] }) },
+  { name: 'research-create-keyed', op: 'POST /research', method: 'POST', path: '/research', status: 200,
+    headers: { 'Idempotency-Key': RESEARCH_KEY },
+    body: () => ({ book_id: C.BOOK, kind: 'link', title: 'Zweites Zitat', allow_duplicate: true,
+      urls: [{ url: 'https://example.org/artikel', label: '' }], tags: ['offline'] }),
+    after: (b, st, res) => { st.researchKeyedId = b.id; if (res.headers.get('idempotent-replayed')) throw new Error('Erstes Anlegen als Replay markiert'); } },
+  { name: 'research-create-replay', op: 'POST /research', method: 'POST', path: '/research', status: 200,
+    headers: { 'Idempotency-Key': RESEARCH_KEY },
+    body: () => ({ book_id: C.BOOK, kind: 'link', title: 'Zweites Zitat', allow_duplicate: true,
+      urls: [{ url: 'https://example.org/artikel', label: '' }], tags: ['offline'] }),
+    after: (b, st, res) => {
+      if (res.headers.get('idempotent-replayed') !== 'true') throw new Error('Header Idempotent-Replayed fehlt');
+      if (b.id !== st.researchKeyedId) throw new Error(`Replay legte neu an: ${b.id} statt ${st.researchKeyedId}`);
+    } },
+  { name: 'research-image', op: 'POST /research/{id}/image', method: 'POST', path: (st) => `/research/${st.researchId}/image`, status: 200,
+    binary: () => ({ type: 'image/png', data: PNG_1PX }) },
+  { name: 'research-image-invalid', op: 'POST /research/{id}/image', method: 'POST', path: (st) => `/research/${st.researchId}/image`, status: 400,
+    binary: () => ({ type: 'image/png', data: Buffer.from('kein Bild') }) },
+  { name: 'research-scrape', op: 'POST /research/{id}/scrape', method: 'POST', path: (st) => `/research/${st.researchId}/scrape`, status: 200,
+    body: () => ({}) },
+  { name: 'research-create-leer', op: 'POST /research', method: 'POST', path: '/research', status: 200,
+    body: () => ({ book_id: C.BOOK, kind: 'link', urls: [{ url: 'https://example.org/leer', label: '' }] }),
+    after: (b, st) => { st.researchLeerId = b.id; } },
+  { name: 'research-scrape-empty', op: 'POST /research/{id}/scrape', method: 'POST', path: (st) => `/research/${st.researchLeerId}/scrape`, status: 422,
+    body: () => ({}) },
+  { name: 'research-board', op: 'GET /research', path: `/research?book_id=${C.BOOK}&sort=title&view=board&limit=2&offset=1`, status: 200,
+    after: (b) => { if (b.length !== 2 || !('body' in b[0]) || !('status' in b[0])) throw new Error('Board-Form/Seite falsch'); } },
+  { name: 'research-board-forbidden', op: 'GET /research', path: `/research?book_id=${C.BOOK}&view=board`, status: 403, token: 'capture' },
 
   // ── Ideen (Android) ────────────────────────────────────────────────────────
   { name: 'ideen-board', op: 'GET /ideen/board', path: `/ideen/board?book_id=${C.BOOK}`, status: 200 },

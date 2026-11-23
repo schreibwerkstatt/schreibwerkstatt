@@ -19,7 +19,7 @@ Verhalten ([lib/demo-user.js](lib/lib/demo-user.js), Route `POST /auth/demo-logi
 
 - **Rolle ist immer `user`**, kein Invite-Recht. Wird die Row von Hand auf `admin` gehoben, drückt sie der nächste Demo-Login zurück — der Zugang ist öffentlich bekannt.
 - **Gleiche Härtung wie der Admin-Login** (geteilte Factory: Rate-Limit pro IP, ALTCHA, timing-safe Vergleich, Audit-Event mit `method: 'demo'`) und **derselbe IP-Bucket** — Brute-Force gegen den einen Pfad deckelt auch den anderen.
-- **Beispielbuch wird bei jedem Login geseedet** (idempotent über den Buchnamen, gemeinfreie Prosa, kein KI-Call). Ein Reviewer landet nie in einer leeren App, auch wenn der vorige alles gelöscht hat.
+- **Beispielbuch wird bei jedem Login geseedet** (idempotent über den Buchnamen, gemeinfreie Prosa, kein KI-Call). Ein Reviewer landet nie in einer leeren App, auch wenn der vorige alles gelöscht hat. Anders als im Onboarding kommt das Buch hier **mit fertigen Daten**: Komplettanalyse (Figuren, Orte, Szenen, Zeitstrahl, Beziehungen), Recherche-Fundstücke, Ideen und die Recherche-/Ideen-Chat-Verläufe, aus denen sie stammen. Quelle ist das Fixture [assets/demo/beispiel-verwandlung.swbook](../assets/demo/beispiel-verwandlung.swbook), eingespielt über den Kern des Buch-Imports ([lib/demo-book.js](../lib/demo-book.js)#`createDemoBookWithData`). **Why:** ein Prüfer soll die Werkstätten gefüllt sehen, ohne auf dem knappen Demo-Budget erst eine Analyse zu starten. Fehlt das Fixture oder scheitert der Import, fällt der Seed auf das Buch ohne Daten zurück. Gegated: [tests/integration/demo-bundle-seed.test.js](../tests/integration/demo-bundle-seed.test.js).
 - **Dazu ein zweites Buch „Fremdes Buch"**, das einem erfundenen `example.org`-Konto gehört und auf dem der Demo-User nur `viewer` ist ([lib/demo-book.js](lib/lib/demo-book.js)#`createForeignDemoBook`, idempotent über die Besitz-Row). **Why:** die Store-Prüfung der Browser-Erweiterung soll sehen, dass ein fehlendes Recht *benannt* wird — auf diesem Buch antwortet der Server `403 INSUFFICIENT_ROLE` mit `detail: { actual: 'viewer', required: 'editor' }` statt stumm zu scheitern. Die Besitzer-Adresse muss auf `example.org` liegen: `GET /content/books` gibt `owner_email` heraus und der Prüfer sieht die Antwort. Details in [docs/clients.md](docs/clients.md).
 - **Status-Gate greift:** `suspended`/`deleted` im Admin-Tab → `403 USER_NOT_ACTIVE`. So lässt sich der Zugang ohne ENV-Änderung stilllegen.
 - **`DEMO_EMAIL === ADMIN_EMAIL` deaktiviert den Demo-Pfad** (sonst streiten sich beide Routen um die Rolle derselben Row).
@@ -97,6 +97,17 @@ bash deploy/demo-reset.sh status    # Snapshot-Alter, Marker, Service- und Timer
 `capture` nutzt `sqlite3 .backup` (lock-frei, WAL-konsistent) und schwenkt die Datei atomar ein. `reset` löscht `-wal`/`-shm` mit — bleiben sie liegen, mischt SQLite die alten Transaktionen über die frisch eingesetzte DB und der Reset ist teilweise wieder aufgehoben. Nach jeder bewussten Verbesserung des Demo-Inhalts erneut `capture` aufrufen, sonst fällt die Nacht den Fortschritt wieder ab.
 
 `reset` verlangt **zwei** Bedingungen, sonst bricht es ab: die Marker-Datei `.demo-instance` neben der Live-DB **und** ein gesetztes `DEMO_EMAIL` in der `.env`. **Why:** das Script überschreibt eine Datenbank; ein versehentlicher Aufruf gegen `/opt/schreibwerkstatt` wäre der teuerste mögliche Fehler, und je einzelnes Kriterium wäre zu leicht erfüllt (der Marker kann mitkopiert werden, `DEMO_EMAIL` steht auch in einer Entwickler-`.env`). Fehlt der Golden-Snapshot, bricht es **vor** dem `systemctl stop` ab — sonst stünde die Demo still.
+
+### Demo-Fixture neu erzeugen
+
+Das Fixture ist ein gewöhnlicher `.swbook`-Export. Neu erzeugen, wenn sich der Beispieltext ändert oder die Analyse sichtbar veraltet:
+
+1. Frische Instanz mit eigener DB starten: `DB_PATH=<scratch>/demo.db LOG_DIR=<scratch> PORT=3791 LOCAL_DEV_MODE=true node server.js`. KI-Zugang über die `ai.*`-Settings (lokales Modell genügt, der Text ist kurz).
+2. `POST /me/onboarding/demo-book` legt das Beispielbuch an; darauf die Komplettanalyse (`POST /jobs/komplett-analyse`), einen Recherche-Chat und einen Ideen-Chat laufen lassen und die Vorschläge übernehmen, die bleiben sollen.
+3. Exportieren mit `GET /book-migration/<id>?analysis=1&chats=1&research=1&werk=1` und als `assets/demo/beispiel-verwandlung.swbook` ablegen. Vorher in den entpackten JSONs nach internen Hostnamen und echten Adressen suchen: `dev@local` ist unkritisch (der Import schreibt den Importierenden ein).
+4. `node --test tests/integration/demo-bundle-seed.test.js`.
+
+**Auf der Demo-LXC greift ein neues Fixture erst nach einem neuen Golden-Snapshot.** Der Seed erkennt das Buch am Namen, und der Snapshot trägt das alte Buch, also spielt der nächtliche Reset es jeden Tag wieder ein. Nach dem Deploy deshalb einmal: als Demo-User anmelden, «Beispiel: Die Verwandlung» löschen, ab- und wieder anmelden (der Seed spielt das Fixture ein), dann `bash deploy/demo-reset.sh capture`.
 
 ## CD: Demo-Instanz automatisch aktuell halten
 

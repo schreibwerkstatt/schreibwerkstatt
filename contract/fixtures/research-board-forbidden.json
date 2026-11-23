@@ -1,0 +1,11 @@
+{
+  "operation": "GET /research",
+  "request": {
+    "method": "GET",
+    "path": "/research?book_id=7001&view=board"
+  },
+  "status": 403,
+  "response": {
+    "error_code": "DEVICE_SCOPE_FORBIDDEN"
+  }
+}

@@ -22,6 +22,7 @@ const { guardBook, sessionEmail } = require('../../lib/acl');
 const { resolvePageBookId } = require('../../lib/content-ownership');
 const timeTracking = require('../../db/time-tracking');
 const { jsonBody } = require('./shared');
+const logger = require('../../logger');
 
 const ROUTES = [
   {
@@ -93,6 +94,10 @@ function _post(spec, req, res) {
     seconds,
     extra,
   });
+  const extraLog = (spec.extraFields || []).map(f => ` ${f}=+${added[f] ?? 0}`).join('');
+  // debug, nicht info: der Heartbeat kommt alle ~30 s (Prod-Spitze ~450 Zeilen/Tag);
+  // die Sekunden stehen ohnehin in writing_time/lektorat_time/stt_time.
+  logger.debug(`Zeit verbucht (${spec.kind}): +${added.seconds ?? 0} s${extraLog}${scopeId ? ` page=${scopeId}` : ''}.`);
   res.json(spec.reply(added));
 }
 

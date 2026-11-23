@@ -1,0 +1,26 @@
+{
+  "version": "6.8.2",
+  "date": "2026-11-23",
+  "entries": [
+    {
+      "kind": "neu",
+      "de": "Demo-Zugang: Das Beispielbuch «Die Verwandlung» kommt jetzt mit fertiger Analyse, Recherche-Fundstücken und Ideen. Figuren, Orte, Zeitstrahl und Boards sind sofort gefüllt, ohne dass du erst eine Analyse startest.",
+      "en": "Demo access: the sample book “The Metamorphosis” now comes with a finished analysis, research items and ideas. Characters, places, timeline and boards are filled right away, without starting an analysis first."
+    },
+    {
+      "kind": "verbessert",
+      "de": "Recherche-Board in der Android-App: Die App kann jetzt das ganze Board mit allen Angaben laden. Geteilte Links landen auch bei wackliger Verbindung nur einmal im Board.",
+      "en": "Research board in the Android app: the app can now load the whole board with all details. Shared links end up on the board only once, even on a shaky connection."
+    },
+    {
+      "kind": "verbessert",
+      "de": "Datenschutzerklärung: Sie beschreibt jetzt auch die Android-App, etwa Mikrofon beim Diktat, Teilen-Menü und lokale Speicherung. Der Abschnitt zur Löschung deiner Daten ist direkt verlinkbar.",
+      "en": "Privacy policy: it now also covers the Android app, such as the microphone for dictation, the share menu and local storage. The section on deleting your data can be linked directly."
+    },
+    {
+      "kind": "verbessert",
+      "de": "Änderungen an Büchern, Kapiteln, Abschnitten, Reihenfolge und Publikationsdaten werden jetzt lückenlos protokolliert. Geht beim Speichern etwas schief, lässt sich der Fehler schneller finden und beheben.",
+      "en": "Changes to books, chapters, sections, order and publication details are now logged completely. If something goes wrong while saving, the problem can be found and fixed faster."
+    }
+  ]
+}
