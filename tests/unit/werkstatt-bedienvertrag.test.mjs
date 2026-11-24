@@ -60,6 +60,7 @@ const ALLOW = {
   'plot-konflikt-vorschlag': 'Empfehlungstext eines Konsistenz-Befunds, nichts zu übernehmen',
   'motiv-suggestions': 'nur Abstand des Containers um die .chat-vorschlaege',
   'research-suggestions': 'Rahmen des wegklickbaren Vorschlags-Panels; die Eintraege darin sind .chat-vorschlag',
+  'comment-suggestion': 'Aenderungsvorschlag eines menschlichen Reviewers im Share-Link (kein KI-Ergebnis); dieselbe Optik auch im Share-Reader, der chat-vorschlag.css nicht laedt',
 };
 
 test('KI-Vorschlaege ohne Eigenoptik', () => {

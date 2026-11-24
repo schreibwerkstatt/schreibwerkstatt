@@ -42,6 +42,7 @@
 /* Hero: der Markenname klein ueber der Aussage — die h1 traegt, was die App
    tut (Suchmaschinen und Erstbesucher lesen die h1, nicht das Logo). */
 .public-hero-brand {
+  display: block;
   margin: 0 0 var(--space-xs);
   font-size: var(--font-size-sm);
   font-weight: var(--fw-medium);
@@ -49,6 +50,17 @@
   text-transform: uppercase;
   color: var(--color-muted);
 }
+
+/* Logo + Markenname (lib/public-render.js#publicHeaderHtml): auf Unterseiten
+   der Link zur Startseite, ohne Link-Optik. */
+.public-brand-link {
+  display: block;
+  width: fit-content;
+  margin: 0 auto;
+  color: inherit;
+  text-decoration: none;
+}
+a.public-brand-link:hover .public-hero-brand { color: var(--color-text); }
 
 .public-header .public-hero-title {
   max-width: 26ch;
@@ -98,11 +110,18 @@
   padding: 0;
   display: grid;
   grid-template-columns: repeat(3, 1fr);
-  gap: var(--space-md) var(--space-lg);
+  gap: var(--space-xl) var(--space-lg);
 }
 
 .public-more-grid--trust {
   grid-template-columns: repeat(2, 1fr);
+}
+
+/* Feine Akzentlinie links je Eintrag: gibt dem reinen Textraster einen
+   Anker fürs Auge, ohne Bildsprache (Icons wirkten beliebig). */
+.public-more-grid li {
+  border-left: 2px solid color-mix(in srgb, var(--color-accent) 55%, transparent);
+  padding-left: var(--space-md);
 }
 
 .public-more-grid h3 {
@@ -136,29 +155,28 @@
   line-height: 1.6;
 }
 
-/* Themenseiten: Screenshot, drei Abschnitte, CTA-Kasten. */
-.public-topic-shot {
-  display: block;
-  width: 100%;
-  max-width: 920px;
-  height: auto;
-  margin: 0 auto;
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-md);
-}
-
+/* Abschluss der Themenseiten und /funktionen: Kasten mit Akzentlinie wie
+   das Prinzip der Landing, damit der Aufruf nicht im Fliesstext untergeht. */
 .public-cta {
   display: flex;
   flex-direction: column;
   align-items: center;
   gap: var(--space-sm);
   text-align: center;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-top: 3px solid var(--color-accent);
+  border-radius: var(--radius-md);
+  padding: var(--space-xl) var(--space-lg);
 }
+
+.public-cta .public-actions { margin-top: var(--space-xs); }
 
 .public-cta h2 {
   margin: 0;
   font-family: var(--font-serif);
-  font-size: var(--font-size-lg);
+  font-size: var(--font-size-xl);
+  font-weight: var(--fw-semibold);
 }
 
 .public-cta p {
@@ -173,4 +191,64 @@
   .public-more-grid--trust,
   .public-faq-grid { grid-template-columns: 1fr; }
   .public-landing { gap: var(--space-2xl); }
+}
+
+/* Datenschutz: so breit wie die übrigen öffentlichen Seiten, links das
+   Inhaltsverzeichnis (klebt beim Scrollen), rechts der Text in lesbarer
+   Zeilenlänge. Unter 860 px steht das Verzeichnis über dem Text. */
+.public-legal {
+  display: grid;
+  grid-template-columns: 220px minmax(0, 1fr);
+  gap: var(--space-xl);
+  align-items: start;
+}
+
+.public-legal-toc {
+  position: sticky;
+  top: var(--space-lg);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-xs);
+  font-size: var(--font-size-sm);
+}
+
+.public-legal-toc-title {
+  margin: 0;
+  font-size: var(--font-size-xs);
+  font-weight: var(--fw-semibold);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--color-muted);
+}
+
+.public-legal-toc ol {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-xs);
+  border-left: 2px solid var(--color-border);
+}
+
+.public-legal-toc li { padding-left: var(--space-sm); line-height: 1.4; }
+
+.public-legal-toc .public-inline-link {
+  color: var(--color-muted);
+  text-decoration: none;
+}
+.public-legal-toc .public-inline-link:hover { color: var(--color-text); text-decoration: underline; }
+
+.public-legal-text { padding: var(--space-xl) var(--space-2xl); }
+.public-legal-text .public-prose-section { scroll-margin-top: var(--space-lg); }
+.public-legal-text .public-prose-section h2 {
+  font-family: var(--font-serif);
+  font-size: var(--font-size-lg);
+  font-weight: var(--fw-semibold);
+}
+
+@media (max-width: 860px) {
+  .public-legal { grid-template-columns: 1fr; }
+  .public-legal-toc { position: static; }
+  .public-legal-text { padding: var(--space-lg); }
 }

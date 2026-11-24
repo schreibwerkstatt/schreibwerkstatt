@@ -254,3 +254,28 @@ test('Handler nennen andere Werkzeuge nur über toolHint/offeredList', () => {
   }
   assert.deepEqual(offenders, [], 'Werkzeugname im Ergebnistext ohne toolHint/offeredList');
 });
+
+test('Buch-Chat ohne Schreibrecht: final_answer ohne `ideen` (Feld und Satz)', () => {
+  const [fa] = P.bookChatOutputTools({ ideen: false });
+  assert.equal('ideen' in fa.input_schema.properties, false);
+  assert.doesNotMatch(fa.description, /`ideen`/);
+  const [full] = P.bookChatOutputTools();
+  assert.equal('ideen' in full.input_schema.properties, true, 'Standard unverändert');
+  assert.equal(P.BOOK_CHAT_OUTPUT_TOOLS, P.bookChatOutputTools());
+});
+
+test('Zwischenstand-Regel: alle vier agentischen Prompts (Cloud), keiner lokal, klassisch nie', async () => {
+  const state = await import('../../public/js/prompts/state.js');
+  const has = (txt) => txt.includes('ZWISCHENSTAND:');
+  const all = () => P.CHAT_KINDS.map(chat => promptsFor(chat, undefined)[0]);
+  assert.equal(state._isLocal, false);
+  assert.deepEqual(all().map(has), P.CHAT_KINDS.map(() => true));
+  assert.ok(!has(textOf(P.buildPlotChatSystemPrompt('B', { mode: 'classic' }))), 'klassischer Pfad: keine Werkzeug-Runden');
+  assert.ok(!has(textOf(P.buildIdeenChatSystemPrompt('B', { mode: 'classic' }))));
+  state._setIsLocal(true);
+  try {
+    assert.deepEqual(all().map(has), P.CHAT_KINDS.map(() => false));
+  } finally {
+    state._setIsLocal(false);
+  }
+});

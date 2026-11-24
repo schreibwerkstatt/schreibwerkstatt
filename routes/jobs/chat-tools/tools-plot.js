@@ -7,7 +7,7 @@
 const { listActs, listThreads, listBeats, listBeatRelations } = require('../../../db/plot');
 const { listDraftFigures } = require('../../../db/draft-figures');
 const { listFigureNamesForUser } = require('../../../db/book-chat/figures');
-const { _truncateResult } = require('./shared');
+const { _truncateResult, clip, groupBy, invalidEnum } = require('./shared');
 
 const BEAT_DESC_PREVIEW = 600;
 // status = binäre Realisierungsachse (Idee ↔ eingearbeitet); verworfen ist ein
@@ -36,24 +36,23 @@ function tool_get_plot_board(input, ctx) {
   const acts = listActs(ctx.bookId, userEmail);
   if (!acts.length) {
     return {
-      acts: [],
       total_acts: 0,
       total_beats: 0,
       hint: 'Keine Plot-Werkstatt vorhanden. Der User plant die Handlung als Beat-Board (Akte → Beats) ueber die Plot-Karte (tile.plot). Leeres Board ≠ Buch ohne Handlung — es heisst nur, dass der User keine separate Plot-Planung angelegt hat.',
+      acts: [],
     };
   }
 
-  const statusFilter = BEAT_STATUS.includes(input?.status) ? input.status : null;
+  const badStatus = invalidEnum('status', input?.status, BEAT_STATUS);
+  if (badStatus) return badStatus;
+  const statusFilter = input?.status || null;
   const actFilter = Number.isInteger(input?.act_id) ? input.act_id : null;
 
   const allBeats = listBeats(ctx.bookId, userEmail);
   // Ausgehende Beat-Kanten (Setup/Payoff, Kausalität) je Quell-Beat — die Ziel-ID
   // bleibt mit, damit das Modell den Payoff auch in einem gefilterten Snapshot findet.
-  const relsByBeat = new Map();
-  for (const r of listBeatRelations(ctx.bookId, userEmail)) {
-    if (!relsByBeat.has(r.from_beat_id)) relsByBeat.set(r.from_beat_id, []);
-    relsByBeat.get(r.from_beat_id).push({ typ: r.typ, zu_beat_id: r.to_beat_id, zu: r.to_titel });
-  }
+  const relsByBeat = groupBy(listBeatRelations(ctx.bookId, userEmail), r => r.from_beat_id,
+    r => ({ typ: r.typ, zu_beat_id: r.to_beat_id, zu: r.to_titel }));
   const figNames = _figureNameMap(ctx.bookId, userEmail);
   const draftNames = _draftFigureNameMap(ctx.bookId, userEmail);
 
@@ -99,9 +98,7 @@ function tool_get_plot_board(input, ctx) {
     beatsByAct.get(b.act_id).push({
       id: b.id,
       titel: b.titel,
-      beschreibung: b.beschreibung && b.beschreibung.length > BEAT_DESC_PREVIEW
-        ? b.beschreibung.slice(0, BEAT_DESC_PREVIEW) + '…'
-        : (b.beschreibung || null),
+      beschreibung: b.beschreibung ? clip(b.beschreibung, BEAT_DESC_PREVIEW) : null,
       status: b.status,
       ...(b.verworfen ? { verworfen: true } : {}),
       ...(b.intensitaet != null ? { intensitaet: b.intensitaet } : {}),
@@ -134,16 +131,18 @@ function tool_get_plot_board(input, ctx) {
       };
     });
 
+  // Summen und Legenden vor den Listen: die strukturierte Kürzung halbiert die
+  // Listen, die Zusammenfassung bleibt stehen.
   return _truncateResult({
-    acts: actList,
     total_acts: acts.length,
     total_beats: allBeats.length,
-    ...(threadList.length ? { threads: threadList } : {}),
     status_counts: statusCounts,
     ...(statusFilter ? { status_filter: statusFilter } : {}),
     status_legende: 'status = geplant (Idee, noch nicht geschrieben) oder im_buch (im Manuskript umgesetzt). verworfen ist ein separates Flag (true = ausgemustert, soll nicht mehr ins Buch) — unabhaengig vom status.',
     felder_legende: 'Optionale Beat-Felder: intensitaet = geplante Spannung 1–5 (Spannungsbogen); zeit = WANN der Beat in der erzählten Welt spielt (Freitext); orte = Schauplätze; motive = verknüpfte Motive der Motiv-Werkstatt; beziehungen = ausgehende Kanten zu anderen Beats (typ bereitet-vor/zahlt-ein = Setup/Payoff, fuehrt-zu/motiviert/blockiert/spiegelt = Kausalität; zu_beat_id = Ziel-Beat).',
     ...(threadList.length ? { strang_hinweis: 'threads = parallele Erzähllinien (Swimlanes), oft je Hauptfigur, optional mit gebundenem Kapitel. Jeder Beat trägt sein thread-Feld (Strang-Name oder null = ohne Strang). Beats erben die Hauptfigur (geerbte_figur) und — ohne eigenes Kapitel — das Kapitel (geerbtes_kapitel) ihres Strangs implizit. Akte ohne eigener_akt_von_strang sind GETEILT (gelten für alle Stränge); ein Akt mit eigener_akt_von_strang gehört nur diesem Strang (Hybrid — dieser Strang plant mit einer eigenen Aktstruktur).' } : {}),
+    ...(threadList.length ? { threads: threadList } : {}),
+    acts: actList,
   });
 }
 

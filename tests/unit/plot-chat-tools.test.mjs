@@ -566,3 +566,50 @@ test('klassischer Pfad: mitgeschickte Standardwerte (verworfen:false, eigene Zel
   const r = await executePlotChatTool('propose_beat', { beat_id: beatA.id, act_id: act2.id, titel: 'X', begruendung: 'b' }, mkCtx());
   assert.match(r.error, /propose_beat_move/);
 });
+
+test('klassischer Pfad: verworfen:false neben einer Umbenennung holt einen verworfenen Beat NICHT zurück', async () => {
+  const { collectClassicProposals } = require('../../routes/jobs/plot-chat');
+  const gone = plot.createBeat(BOOK, act2.id, USER, { titel: 'Ausgemustert', verworfen: 1 });
+  const ctx = mkCtx();
+  const { proposals } = await collectClassicProposals([
+    { werkzeug: 'propose_beat', beat_id: gone.id, titel: 'Ausgemustert (neu)', verworfen: false, begruendung: 'b' },
+  ], ctx, null);
+  assert.equal(proposals.length, 1);
+  assert.deepEqual(proposals[0].fields, { titel: 'Ausgemustert (neu)' }, 'verworfen gilt als nicht angegeben');
+  // Ein reines «wieder aufnehmen» bleibt möglich.
+  const ctx2 = mkCtx();
+  const r2 = await collectClassicProposals([
+    { werkzeug: 'propose_beat', beat_id: gone.id, verworfen: false, begruendung: 'zurück' },
+  ], ctx2, null);
+  assert.deepEqual(r2.proposals[0].fields, { verworfen: 0 });
+  // Agentisch bleibt false eine ausdrückliche Angabe.
+  const ctx3 = mkCtx();
+  await executePlotChatTool('propose_beat', { beat_id: gone.id, titel: 'Zurück und neu', verworfen: false, begruendung: 'b' }, ctx3);
+  assert.equal(ctx3.proposals[0].fields.verworfen, 0);
+});
+
+test('figurenOutline: viele Figuren gedeckelt, Rest gezählt', () => {
+  const figures = Array.from({ length: 600 }, (_, i) => ({ fig_id: `fig_${i}`, name: `Figur Nummer ${i}`, kurzname: null }));
+  const text = figurenOutline({ figures, drafts: [] }, { budgetChars: 5000 });
+  assert.ok(text.length <= 5200, `gekürzt auf ${text.length}`);
+  assert.match(text, /weitere/);
+});
+
+test('splitOutlineBudget: Board und Figurenliste bleiben zusammen im Budget', () => {
+  const { splitOutlineBudget } = require('../../routes/jobs/proposal-chat-shared');
+  const figures = Array.from({ length: 600 }, (_, i) => ({ fig_id: `fig_${i}`, name: `Figur Nummer ${i}`, kurzname: null }));
+  const big = 'x'.repeat(20000);
+  const { first, second } = splitOutlineBudget(10000,
+    (b) => figurenOutline({ figures, drafts: [] }, { budgetChars: b }),
+    (b) => big.slice(0, b));
+  assert.ok(second.length <= 5000, `Nebenblock höchstens die Hälfte (${second.length})`);
+  assert.ok(first.length + second.length < 10000, `zusammen im Budget (${first.length + second.length})`);
+  // Kleiner Nebenblock: der Hauptblock bekommt fast alles.
+  const small = splitOutlineBudget(10000, () => 'kurz', (b) => big.slice(0, b));
+  assert.ok(small.first.length > 9000);
+  // Ohne Budget: beide ungekürzt.
+  const inf = splitOutlineBudget(Infinity, (b) => String(b), (b) => String(b));
+  assert.deepEqual(inf, { first: 'Infinity', second: 'Infinity' });
+  // Budget unter der Reserve: nur die Restzeile, ohne Leerzeile davor.
+  assert.match(figurenOutline({ figures, drafts: [] }, { budgetChars: 50 }), /^\(\+ 600 weitere/);
+});

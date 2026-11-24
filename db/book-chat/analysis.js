@@ -28,13 +28,12 @@ function getLatestBookReview(bookId, userEmail) {
 }
 
 /** Jüngste Kapitelbewertung je Kapitel, optional auf `chapterIds` begrenzt
- *  (leere/fehlende Liste = alle Kapitel). */
+ *  (leere/fehlende Liste = alle Kapitel). `stale` = 1, wenn ein Abschnitt im
+ *  Teilbaum des Kapitels nach der Bewertung editiert wurde — die Bewertung
+ *  (routes/jobs/kapitel.js) liest das Kapitel samt Unterkapiteln. */
 function listLatestChapterReviews(bookId, userEmail, chapterIds) {
   let sql = `
-    SELECT cr.chapter_id, c.chapter_name, c.position AS chapter_position, cr.reviewed_at, cr.review_json, cr.model,
-           (SELECT MAX(datetime(p.updated_at)) FROM pages p
-              WHERE p.chapter_id = cr.chapter_id AND p.book_id = cr.book_id)
-             > datetime(cr.reviewed_at) AS stale
+    SELECT cr.chapter_id, c.chapter_name, c.position AS chapter_position, cr.reviewed_at, cr.review_json, cr.model
     FROM chapter_reviews cr
     JOIN chapters c ON c.chapter_id = cr.chapter_id AND c.book_id = cr.book_id
     WHERE cr.book_id = ? AND cr.user_email IS ?
@@ -50,7 +49,16 @@ function listLatestChapterReviews(bookId, userEmail, chapterIds) {
     sql += ` AND cr.chapter_id IN (${chapterIds.map(() => '?').join(',')})`;
     params.push(...chapterIds);
   }
-  return db.prepare(sql).all(...params);
+  const rows = db.prepare(sql).all(...params);
+  for (const r of rows) {
+    const f = chapterSubtreeFilter('chapter_id', r.chapter_id);
+    const st = db.prepare(`
+      SELECT MAX(datetime(updated_at)) > datetime(?) AS stale
+      FROM pages WHERE book_id = ? AND ${f.sql}
+    `).get(r.reviewed_at, bookId, ...f.params);
+    r.stale = st?.stale === 1 ? 1 : 0;
+  }
+  return rows;
 }
 
 // ── Lektorat (jüngster page_check je Seite) ─────────────────────────────────

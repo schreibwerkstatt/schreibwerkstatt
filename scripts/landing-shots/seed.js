@@ -348,6 +348,10 @@ async function seedShares(bookId) {
       intro: s.intro ?? null,
     });
     tokenByKey.set(s.key, link.token);
+    // Aufrufe: `views` insgesamt, rund zwei Drittel davon eindeutige Besucher
+    // (gleicher ip_hash innerhalb des Dedupe-Fensters zählt nur den Gesamtzähler).
+    const unique = Math.max(1, Math.round((s.views || 0) * 0.65));
+    for (let i = 0; i < (s.views || 0); i++) shareLinks.recordShareView(link.token, `landing-shot-${i % unique}`);
   }
 
   let count = 0;

@@ -7,7 +7,9 @@
 //   requireBook(bookId, userEmail) · resolveConn(bookId) · client(conn, signal)
 //   db.{getLinkByPage, deleteLink, setConflictState, setLockedParts?}
 //   linkStamp(link) · remoteStamp(remote) · remoteId(link)
-//   fetchRemote(client, link, 'precheck'|'reconcile') · isGone(remote) · lossyParts(remote)
+//   fetchRemote(client, link, 'precheck'|'reconcile') · isGone(remote)
+//   lossyParts(remote, { pageId, bookId, html }) → string[] (darf async sein;
+//     `html` = aktueller Abschnitt, damit HubSpot fehlende Bilder erkennt)
 //   preparePush({ conn, client, bookId, signal, logger }) → state (u.a. resolveImage)
 //   render({ appHtml, bib, hl, state }) → Post-Body
 //   create({ client, conn, state, title, body, teaser, slug }) → Remote
@@ -29,7 +31,7 @@
 //        404 / Papierkorb       → Link weg, P_REMOTE_GONE (Badge „neu"; der
 //                                 naechste Push legt bewusst neu an — nie still)
 //        drueben juenger        → Konflikt setzen, P_CONFLICT
-//        nicht uebernehmbar     → P_UNSUPPORTED_BLOCKS (nur WordPress)
+//        nicht uebernehmbar     → P_UNSUPPORTED_BLOCKS
 //   3. Quellen (Einheit = Seite), Titel-Werkstatt, Media-Pass, Create/Update —
 //      ein Fehler hier trifft nur diesen Abschnitt, nie den ganzen Job
 //   4. Link schreiben, SOFORT nach dem Remote-Write: ohne Link legte der
@@ -83,7 +85,7 @@ function errorKey(provider, code, fallback) {
  *  ueberspringen). Wirft nicht fuer Remote-Fehler — die landen im Ergebnis.
  *  `seen.stamp` bekommt den Remote-Stempel, gegen den `changedSincePrecheck`
  *  unmittelbar vor dem Schreiben noch einmal vergleicht. */
-async function precheck(provider, { client, link, pageId, pageName, logger, seen: out = {} }) {
+async function precheck(provider, { client, link, pageId, pageName, pageHtml = '', bookId = null, logger, seen: out = {} }) {
   const P = provider.prefix;
   const tag = `${provider.logTag}-Push: Page ${pageId} "${pageName}"`;
   const remoteRef = `${provider.remoteLabel} ${provider.remoteId(link)}`;
@@ -116,7 +118,7 @@ async function precheck(provider, { client, link, pageId, pageName, logger, seen
     logger.info(`${tag} — ${remoteRef} drueben geaendert (${now} > ${seen}), Konflikt gesetzt`);
     return { code: `${P}_CONFLICT` };
   }
-  const lossy = provider.lossyParts(current);
+  const lossy = await provider.lossyParts(current, { pageId, bookId, html: pageHtml });
   // Befund am Link merken (Badge „nur im Blog bearbeitbar"), auch wenn er weg ist.
   provider.db.setLockedParts?.(pageId, lossy);
   if (lossy.length) {
@@ -254,7 +256,9 @@ async function _runSyncPushJob(provider, jobId, bookId, userEmail, pageIds, publ
       const link = provider.db.getLinkByPage(pageId);
       const seen = {};
       if (link) {
-        const blocked = await precheck(provider, { client, link, pageId, pageName: pageRow.name, logger, seen });
+        const blocked = await precheck(provider, {
+          client, link, pageId, pageName: pageRow.name, pageHtml: pageRow.html || pageRow.body_html || '', bookId, logger, seen,
+        });
         if (blocked) {
           if (blocked.code === `${P}_CONFLICT`) conflictSkipped++;
           errors.push({ pageId, ...blocked });

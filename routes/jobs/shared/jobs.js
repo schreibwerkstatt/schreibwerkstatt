@@ -169,7 +169,7 @@ const NO_AI_JOB_TYPES = new Set([
   'lexicon-scan', 'research-link-check',
   'pdf-export', 'epub-export', 'docx-export', 'manuscript-import', 'book-import',
   'blog-import', 'blog-pull', 'blog-push', 'blog-reconcile', 'blog-repull',
-  'hubspot-import', 'hubspot-push', 'hubspot-reconcile',
+  'hubspot-import', 'hubspot-images', 'hubspot-push', 'hubspot-reconcile',
 ]);
 
 function createJob(type, bookId, userEmail, label, labelParams = null, dedupId = null) {
@@ -424,6 +424,7 @@ const JOB_TYPE_LABELS = {
   'blog-reconcile':        'job.label.blogReconcile',
   'blog-repull':           'job.label.blogRepull',
   'hubspot-import':        'job.label.hubspotImport',
+  'hubspot-images':        'job.label.hubspotImages',
   'hubspot-push':          'job.label.hubspotPush',
   'hubspot-reconcile':     'job.label.hubspotReconcile',
   'werkstatt-brainstorm':  'job.label.werkstattBrainstorm',

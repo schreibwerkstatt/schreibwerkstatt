@@ -1,4 +1,5 @@
-/* Funktionsuebersicht /funktionen (routes/public-features.js). Standalone wie
+/* Funktionsuebersicht /funktionen (routes/public-features.js) und die
+   Bild-Text-Zeilen der Themenseiten (public/topic.html). Standalone wie
    landing.css, ohne @layer; baut auf landing.css + landing-sections.css auf
    (.public-shell, .public-heading, .public-cta).
 
@@ -24,6 +25,18 @@
   padding-top: var(--space-lg);
   border-top: 3px solid var(--card-accent, var(--color-border));
   scroll-margin-top: var(--space-lg);
+}
+
+/* Themenseiten (/lektorat, /testleser): dieselbe Bild-Text-Zeile, aber ohne
+   Trennlinie — drei Zeilen zu einem Thema, keine Bereiche. */
+.public-topic-rows {
+  display: flex;
+  flex-direction: column;
+  gap: calc(var(--space-2xl) + var(--space-md));
+}
+.public-fgroup--topic {
+  border-top: none;
+  padding-top: 0;
 }
 
 .public-fgroup-head {

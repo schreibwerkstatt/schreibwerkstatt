@@ -192,15 +192,23 @@ function fitBoardOutline(state, { ideenMarker = null, budgetChars = Infinity } =
   return { text: `${cut.slice(0, cut.lastIndexOf('\n') > 0 ? cut.lastIndexOf('\n') : cut.length)}\n… (Board gekürzt — weitere Akte/Beats nicht aufgeführt)`, trimmed: true };
 }
 
-/** Katalog- und Werkstatt-Figuren — jede mit der Kennung, die propose_* annimmt. */
-function figurenOutline(state) {
+/** Katalog- und Werkstatt-Figuren — jede mit der Kennung, die propose_* annimmt.
+ *  `budgetChars`: Zeilen bis zum Budget, der Rest gezählt — die Handler lösen
+ *  Figuren auch über den Namen auf. */
+function figurenOutline(state, { budgetChars = Infinity } = {}) {
   const lines = [];
   for (const f of state.figures) {
     const name = f.name || f.kurzname || f.fig_id;
     lines.push(`- ${name}${f.kurzname && f.kurzname !== name ? ` (${f.kurzname})` : ''} · fig_id ${f.fig_id}`);
   }
   for (const d of state.drafts) lines.push(`- ${d.name} · Werkstatt-Figur draft#${d.id} (in Entwicklung)`);
-  return lines.join('\n');
+  const full = lines.join('\n');
+  if (full.length <= budgetChars) return full;
+  const reserve = 80;
+  let len = 0, n = 0;
+  while (n < lines.length && len + lines[n].length + 1 <= budgetChars - reserve) { len += lines[n].length + 1; n++; }
+  const rest = `(+ ${lines.length - n} weitere Figuren — per Name angeben)`;
+  return n ? `${lines.slice(0, n).join('\n')}\n${rest}` : rest;
 }
 
 // Schauplätze und Motive mit der Kennung, die die Felder orte/motive annehmen.

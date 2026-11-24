@@ -38,6 +38,8 @@ function stopPushPoller(holder) {
 //   pushNote      — optional, i18n-Key: Hinweis im Push-Dialog bei
 //                   verknüpften Beiträgen (HubSpot: Module/CTAs gehen verloren)
 //   publishNote   — optional, i18n-Key: Voraussetzung fürs Veröffentlichen
+//   lockedTip     — optional, i18n-Key des Sperr-Tooltips mit `{blocks}`
+//                   (Default `sync.status.lockedTip`, nennt WordPress)
 //
 // Jeder Push läuft über den Push-Dialog (sync/push-dialog.js): Vorschau gegen
 // den Blogstand, dann pushen, veröffentlichen oder planen.
@@ -47,8 +49,8 @@ function stopPushPoller(holder) {
 //   'new'         — kein Link, Push legt den Remote-Post an
 //   'conflict'    — beide Seiten geändert (conflict_state='detected')
 //   'locked'      — der Beitrag enthält drüben Elemente, die der Import nicht
-//                   übernimmt (`locked_blocks`, nur WordPress); der Push ist
-//                   gesperrt, weil er sie im Live-Blog löschte
+//                   übernimmt (`locked_blocks`; HubSpot zusätzlich: Bild fehlt
+//                   im Abschnitt); der Push ist gesperrt, weil er sie löschte
 //   'push-needed' — Abschnitt oder Titel-Werkstatt jünger als der Sync-Punkt
 //   'synced'      — Stand identisch zum letzten Abgleich
 // Sync-Punkt = der jüngere von last_pulled_at/last_pushed_at — dieselbe Regel
@@ -91,6 +93,9 @@ const LOCKED_KEYS = new Set([
   'iframe', 'object', 'embed', 'video', 'audio', 'picture', 'source',
   'format:text-align', 'format:drop-cap', 'format:color', 'format:font-size', 'format:font-family',
   'format:align', 'format:image-size', 'format:block-style', 'format:list-start',
+  // HubSpot (lib/hubspot-html.js#hubspotLossyParts, lib/sync/providers/hubspot.js)
+  'hs-cta', 'hs-form', 'hs-embed', 'hs-module', 'hs-graphic', 'hs-script', 'hs-style',
+  'image-missing', 'image-unsupported',
 ]);
 export function lockedPartKey(id) {
   const s = String(id || '').trim();
@@ -257,7 +262,7 @@ export function createSyncCard(spec) {
             const txt = k ? app?.t(k.key, k.params || {}) : '';
             return txt && txt !== k?.key ? txt : id;
           }).join(', ');
-          return app?.t('sync.status.lockedTip', { blocks }) || '';
+          return app?.t(spec.lockedTip || 'sync.status.lockedTip', { blocks }) || '';
         }
         return this.statusLabel(s);
       },

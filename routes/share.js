@@ -35,5 +35,6 @@ require('./share/tts').register(router);
 require('./share/reader').register(router);
 require('./share/reader-stats').register(router);
 require('./share/api').register(router);
+require('./share/review').register(router);
 
 module.exports = router;

@@ -9,6 +9,7 @@
 //   researchIdeeProposals  — `final_answer.ideen` an den Schreibkontext der Frage hängen
 
 const { normalizeUrl } = require('../../lib/url-normalize');
+const { proposalsOnlyFallback: sharedFallback } = require('./proposal-chat-shared');
 const { cleanStr, TITLE_MAX } = require('../../lib/research-validate');
 const { resolvePageBookId, resolveChapterBookId } = require('../../lib/content-ownership');
 const contentStore = require('../../lib/content-store');
@@ -192,18 +193,11 @@ function changeSummary(p) {
   return parts.join(', ') || 'Änderung';
 }
 
-// Platzhalter des Loops für „keine Antwort" (agentic-chat.js) — mit Vorschlägen
-// ist das kein Fehlschlag. Frontend-Pendant: research-chat-render.js.
-const EMPTY_MARKERS = new Set(['__i18n:chat.errors.maxIterReached__', '__i18n:chat.errors.emptyAnswer__']);
-
 /** Antworttext ohne Inhalt, aber mit Vorschlägen → eigener Hinweis statt
- *  „Iterationen erschöpft" (der Lauf war erfolgreich, nur ohne Prosa). */
+ *  „Iterationen erschöpft" (der Lauf war erfolgreich, nur ohne Prosa). Regel und
+ *  Leer-Marker: proposal-chat-shared.js. */
 function proposalsOnlyFallback(antwort, proposalCount) {
-  const a = String(antwort || '').trim();
-  if (proposalCount > 0 && (!a || EMPTY_MARKERS.has(a))) {
-    return '__i18n:recherche.chat.proposalsOnly__';
-  }
-  return a;
+  return sharedFallback(antwort, proposalCount, { onlyMarker: '__i18n:recherche.chat.proposalsOnly__' });
 }
 
 // ── Schreibkontext der Frage (Kontext-Chip) ──────────────────────────────────

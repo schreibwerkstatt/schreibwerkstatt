@@ -24,17 +24,7 @@ export { installResearchChatAskBridge, RESEARCH_CHAT_ASK_PENDING } from './resea
 // SearXNG (Gate: lib/research-chat-gate.js, Suchweg: lib/websearch#webSearchMode).
 
 export const researchChatMethods = {
-  // Panel auf-/zuklappen. Beim ersten Öffnen Sessions laden (onVisible-Pfad).
-  async toggleResearchChat() {
-    this.researchChatOpen = !this.researchChatOpen;
-    if (this.researchChatOpen) {
-      await this._onVisibleResearchChat();
-      this.$nextTick(() => {
-        const ta = this.$root?.querySelector('.research-chat-input');
-        if (ta) ta.focus();
-      });
-    }
-  },
+  // toggleResearchChat kommt aus makeChatMethods (openProp).
 
   // Vorbelegte Frage aus einer anderen Oberfläche (Event `research-chat:ask`,
   // research-chat-ask.js) übernehmen: Panel auf, NEUE Session, Eingabefeld
@@ -93,6 +83,8 @@ export const researchChatMethods = {
   ...makeChatMethods({
     untitledKey: 'recherche.chat.untitled',
     label: 'ResearchChat',
+    openProp: 'researchChatOpen',
+    inputSelector: '.research-chat-input',
     props: {
       sessions: 'researchChatSessions',
       messages: 'researchChatMessages',

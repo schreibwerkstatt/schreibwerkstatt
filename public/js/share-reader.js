@@ -361,7 +361,7 @@ import { setupWakeLock } from './share-reader/wakelock.js';
   // ── Selektions-Button + Composer-Overlay (Widget) ────────────────────────────
   const composer = setupComposer({
     t, article, postComment: api.postComment, savedName, ensureIdentity,
-    onPosted: fetchThreads,
+    onPosted: fetchThreads, review: !!CFG.review,
   });
   // Esc schliesst die oberste Ebene: liegt der Namens-Dialog über dem Composer
   // (Abfrage vor dem Senden), nur ihn — der Beitrag bleibt im Formular.

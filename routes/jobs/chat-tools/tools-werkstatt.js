@@ -5,7 +5,7 @@
 const { getUser } = require('../../../db/app-users');
 const { resolveI18nTree, resolveI18n } = require('../../../lib/i18n-server');
 const { listDraftFigures, getDraftFigure, listWerkstattRuns, getWerkstattRun } = require('../../../db/draft-figures');
-const { _truncateResult } = require('./shared');
+const { _truncateResult, clampInt, clip, findByName, ambiguousNameError } = require('./shared');
 
 const WERKSTATT_NOTES_PREVIEW_CHARS = 200;
 const WERKSTATT_RUN_LIMIT_DEFAULT = 5;
@@ -44,14 +44,9 @@ function _findDraftByNameOrId(input, ctx) {
     return null;
   }
   if (typeof input?.figur_name === 'string' && input.figur_name.trim()) {
-    const needle = input.figur_name.trim().toLowerCase();
-    const all = listDraftFigures(ctx.bookId, userEmail);
-    const exact = all.find(d => (d.name || '').toLowerCase() === needle);
-    if (exact) return exact;
-    // Teilstring nur, wenn er eindeutig ist — „Ann" fände sonst still „Hannah".
-    const partial = all.filter(d => (d.name || '').toLowerCase().includes(needle));
-    if (partial.length > 1) return { ambiguous: partial };
-    return partial[0] || null;
+    // shared.js#findByName: exakt > Wortanfang > Teilstring; mehrdeutig → Kandidaten.
+    const hit = findByName(listDraftFigures(ctx.bookId, userEmail), input.figur_name);
+    return hit.ambiguous ? { ambiguous: hit.ambiguous } : hit.row;
   }
   return null;
 }
@@ -82,15 +77,13 @@ function _draftList(ctx) {
       name: d.name,
       archetype: d.archetype || null,
       source_figure_name: d.source_figure_name || null,
-      notes: notes && notes.length > WERKSTATT_NOTES_PREVIEW_CHARS
-        ? notes.slice(0, WERKSTATT_NOTES_PREVIEW_CHARS) + '…'
-        : notes,
+      notes: notes ? clip(notes, WERKSTATT_NOTES_PREVIEW_CHARS) : notes,
       updated_at: d.updated_at,
       runs: counts,
       ...(lastRun ? { last_run: _summarizeRunListItem(lastRun, locale) } : {}),
     };
   });
-  return _truncateResult({ drafts: items, total: items.length });
+  return _truncateResult({ total: items.length, drafts: items });
 }
 
 function _draftDetail(input, ctx) {
@@ -99,11 +92,7 @@ function _draftDetail(input, ctx) {
 
   const draft = _findDraftByNameOrId(input, ctx);
   if (draft?.ambiguous) {
-    return {
-      error: 'Werkstatt-Draft-Name mehrdeutig', errorKey: 'chat.toolError.ambiguousName',
-      candidates: draft.ambiguous.map(d => ({ draft_id: d.id, name: d.name })),
-      hint: 'Per draft_id aus den Kandidaten erneut aufrufen.',
-    };
+    return ambiguousNameError(input.figur_name, draft.ambiguous, d => ({ draft_id: d.id, name: d.name }), 'draft_id');
   }
   if (!draft) {
     return {
@@ -116,7 +105,7 @@ function _draftDetail(input, ctx) {
   const mindmapText = resolvedRoot ? _flattenMindmapTree(resolvedRoot).join('\n') : '';
 
   const includeRuns = input?.include_runs !== false;
-  const runLimit = Math.min(20, Math.max(1, Number.isInteger(input?.run_limit) ? input.run_limit : WERKSTATT_RUN_LIMIT_DEFAULT));
+  const runLimit = clampInt(input?.run_limit, WERKSTATT_RUN_LIMIT_DEFAULT, 1, 20);
 
   const runs = [];
   if (includeRuns) {
@@ -134,22 +123,16 @@ function _draftDetail(input, ctx) {
       if (detail.kind === 'brainstorm' && Array.isArray(detail.result?.vorschlaege)) {
         entry.vorschlaege = detail.result.vorschlaege.map(v => ({
           label: v.label,
-          begruendung: typeof v.begruendung === 'string' && v.begruendung.length > WERKSTATT_BRAINSTORM_BEGRUENDUNG_PREVIEW
-            ? v.begruendung.slice(0, WERKSTATT_BRAINSTORM_BEGRUENDUNG_PREVIEW) + '…'
-            : (v.begruendung || ''),
+          begruendung: typeof v.begruendung === 'string' ? clip(v.begruendung, WERKSTATT_BRAINSTORM_BEGRUENDUNG_PREVIEW) : (v.begruendung || ''),
         }));
       } else if (detail.kind === 'consistency') {
         const fazit = detail.result?.fazit || null;
-        entry.fazit = fazit && fazit.length > WERKSTATT_CONSISTENCY_FAZIT_PREVIEW
-          ? fazit.slice(0, WERKSTATT_CONSISTENCY_FAZIT_PREVIEW) + '…'
-          : fazit;
+        entry.fazit = fazit ? clip(fazit, WERKSTATT_CONSISTENCY_FAZIT_PREVIEW) : fazit;
         if (Array.isArray(detail.result?.konflikte)) {
           entry.konflikte = detail.result.konflikte.map(k => ({
             feld: k.feld,
             schwere: k.schwere,
-            problem: typeof k.problem === 'string' && k.problem.length > WERKSTATT_CONSISTENCY_PROBLEM_PREVIEW
-              ? k.problem.slice(0, WERKSTATT_CONSISTENCY_PROBLEM_PREVIEW) + '…'
-              : k.problem,
+            problem: typeof k.problem === 'string' ? clip(k.problem, WERKSTATT_CONSISTENCY_PROBLEM_PREVIEW) : k.problem,
             vorschlag: k.vorschlag || null,
           }));
         }

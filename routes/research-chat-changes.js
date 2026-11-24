@@ -33,8 +33,7 @@ const { guardBook, sessionEmail } = require('../lib/acl');
 const { getOwnedSession } = require('../db/chat-sessions');
 const { emitItem } = require('../db/research-items');
 const { CHANGE_TYPES, applyItemUpdate, archiveItem, mergeItems } = require('../db/research-changes');
-const { TITLE_MAX, BODY_MAX, cleanStr } = require('../lib/research-validate');
-const { normalizeUrl } = require('../lib/url-normalize');
+const { TITLE_MAX, BODY_MAX, cleanStr, keptUrls } = require('../lib/research-validate');
 const { belegFoundInPage } = require('./jobs/research-chat-change');
 const { makeChatProposalStatusRouter } = require('./chat-proposal-status');
 const logger = require('../logger');
@@ -66,11 +65,6 @@ function _editedFields(fields, edits) {
 }
 
 /** URLs des Vorschlags, die in `keep` stehen (normalisiert); `keep` kein Array → alle. */
-function _keptUrls(urls, keep) {
-  if (!Array.isArray(keep)) return urls || [];
-  const wanted = new Set(keep.map(k => normalizeUrl(typeof k === 'string' ? k : k?.url)).filter(Boolean));
-  return (urls || []).filter(u => wanted.has(normalizeUrl(u.url)));
-}
 
 /** Änderung eines Vorschlags schreiben (Datenregeln in db/research-changes.js). */
 function _apply(p, fields, { bookId, userEmail, keepUrls }) {
@@ -81,7 +75,7 @@ function _apply(p, fields, { bookId, userEmail, keepUrls }) {
       title: fields.title, body: fields.body, before: p.before || {},
     });
   }
-  const urls = _keptUrls(p.urls, keepUrls);
+  const urls = keptUrls(p.urls, keepUrls);
   return applyItemUpdate({
     bookId, itemId: p.item_id, userEmail, before: p.before || {},
     change: { ...fields, ...(urls.length ? { urls } : {}) },

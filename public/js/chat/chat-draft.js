@@ -7,6 +7,8 @@
 // Session-Anlage, Eingabefeld und Fokus kennt nur dort. Ein bereits offenes,
 // LEERES Gespräch wird weiterbenutzt (keine zweite leere Session), ein
 // laufendes nicht — die neue Frage beginnt ein eigenes Gespräch.
+// Daneben das Auf-/Zuklappen der Chat-Panels (makeToggleMethod), das denselben
+// Eingabefeld-Selektor braucht.
 
 /**
  * Factory: die Draft-Methode eines Chats (`prepare<L>Draft`).
@@ -29,5 +31,23 @@ export function makeDraftMethod({ props, loadSessions, startNewSession, inputSel
       ta.focus();
       ta.setSelectionRange?.(ta.value.length, ta.value.length);
     });
+  };
+}
+
+/**
+ * Factory: Panel eines Chats neben seiner Werkstatt auf-/zuklappen (`toggle<L>`;
+ * Plot-, Ideen-, Recherche-Chat). Beim Öffnen Sessions laden (onVisible-Pfad)
+ * und das Eingabefeld fokussieren.
+ * @param {object} cfg
+ * @param {string} cfg.openProp          Sichtbarkeits-Prop der Karte (z.B. `plotChatOpen`)
+ * @param {Function} cfg.onVisible        Öffnen-Pfad der Basis
+ * @param {string} [cfg.inputSelector]   Selektor des Eingabefelds (Default `.chat-input`)
+ */
+export function makeToggleMethod({ openProp, onVisible, inputSelector = '.chat-input' }) {
+  return async function () {
+    this[openProp] = !this[openProp];
+    if (!this[openProp]) return;
+    await onVisible.call(this);
+    this.$nextTick(() => this.$root?.querySelector(inputSelector)?.focus());
   };
 }

@@ -254,7 +254,11 @@ test('jeder trackUsageEvent-Aufruf im Frontend nennt ein Client-Event', () => {
 
 test('jeder trackChatProposal-Aufruf nennt eine Chat-Art aus dem Katalog', () => {
   const kinds = USAGE_EVENTS['chat.proposal'].meta.chat.values;
-  const found = calls(['public/js'], /\btrackChatProposal\(\s*'(\w+)'/g);
+  // Direkt aufgerufen oder über die Fabrik der Board-Chats (proposal-status.js#makeProposalApplyMethods, `chat: '…'`).
+  const found = [
+    ...calls(['public/js'], /\btrackChatProposal\(\s*'(\w+)'/g),
+    ...calls(['public/js'], /\bmakeProposalApplyMethods\(\{[^]*?\bchat:\s*'(\w+)'/g),
+  ];
   assert.deepEqual(found.filter(c => !kinds.includes(c.name)), []);
   // Alle fuenf Chats sind instrumentiert (Abschnitts- und Buch-Chat ueber _chatKind / Wirt).
   for (const k of ['research', 'plot', 'ideen', 'page']) {

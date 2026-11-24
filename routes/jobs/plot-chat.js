@@ -13,6 +13,7 @@
 const { getBookSettings } = require('../../db/schema');
 const { getPrompts, loadOrderedBookContents } = require('./shared');
 const { makeProposalChatJob } = require('./proposal-chat');
+const { splitOutlineBudget } = require('./proposal-chat-shared');
 const { executePlotChatTool, PROPOSE_TOOLS } = require('./plot-chat-tools');
 const {
   loadBoardState, fitBoardOutline, figurenOutline, katalogOutline, sessionPlotProposalMemory,
@@ -30,6 +31,10 @@ async function plotChatContext(session, userEmail, { outlineBudgetChars = Infini
   const chapterNames = new Map((chaptersFlat || []).map(c => [c.id, c.path || c.name]));
   const state = loadBoardState(session.book_id, userEmail, chapterNames);
   const settings = getBookSettings(session.book_id, userEmail);
+  // Board und Figurenliste teilen sich das Vorspann-Budget.
+  const { first: board, second: figuren } = splitOutlineBudget(outlineBudgetChars,
+    (b) => figurenOutline(state, { budgetChars: b }),
+    (b) => fitBoardOutline(state, { ideenMarker, budgetChars: b }));
   return {
     state,
     bookContext: getResearchPromptContext(`${settings.language || 'de'}-${settings.region || 'CH'}`, {
@@ -37,8 +42,8 @@ async function plotChatContext(session, userEmail, { outlineBudgetChars = Infini
       buchKontext: settings.buch_kontext || null,
       hauptland: settings.schauplatz_land || null,
     }),
-    board: fitBoardOutline(state, { ideenMarker, budgetChars: outlineBudgetChars }),
-    figurenOutline: figurenOutline(state),
+    board,
+    figurenOutline: figuren,
     katalogOutline: katalogOutline(state),
     proposalMemory: buildPlotProposalMemoryBlock(sessionPlotProposalMemory(session.id, state)),
     toolCtx: {

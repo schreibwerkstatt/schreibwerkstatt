@@ -155,7 +155,7 @@ function deleteConnection(bookId) {
 // ── hubspot_page_links ──────────────────────────────────────────────────────
 
 const LINK_COLS = `page_id, hub_id, hubspot_post_id, hubspot_state, hubspot_created_at,
-         hubspot_updated_at, last_pushed_at, last_pulled_at, hubspot_url, conflict_state`;
+         hubspot_updated_at, last_pushed_at, last_pulled_at, hubspot_url, conflict_state, locked_blocks`;
 const CONFLICT_STATES = ['detected', 'resolved-app', 'resolved-remote'];
 
 const _stmtGetLinkByPage = db.prepare(`SELECT ${LINK_COLS} FROM hubspot_page_links WHERE page_id = ?`);
@@ -175,7 +175,7 @@ function getLinkByPost(hubId, hubspotPostId) {
 const _stmtListLinksForConn = db.prepare(`
   SELECT l.page_id, l.hub_id, l.hubspot_post_id, l.hubspot_state, l.hubspot_created_at,
          l.hubspot_updated_at, l.last_pushed_at, l.last_pulled_at, l.hubspot_url,
-         l.conflict_state, h.updated_at AS headline_updated_at
+         l.conflict_state, l.locked_blocks, h.updated_at AS headline_updated_at
     FROM hubspot_page_links l
     LEFT JOIN page_headline h ON h.page_id = l.page_id
    WHERE l.hub_id = ?
@@ -262,12 +262,21 @@ function refreshLinkMeta(pageId, { hubspotState = null, hubspotUrl = null } = {}
   return _stmtRefreshMeta.run(hubspotState, hubspotUrl, parseInt(pageId, 10)).changes > 0;
 }
 
+// Push-Sperre (lib/hubspot-html.js#hubspotLossyParts + fehlende Bilder): Liste
+// der Elemente, die ein Push im Entwurf loeschte. Leer → NULL (pushbar).
+const _stmtSetLocked = db.prepare('UPDATE hubspot_page_links SET locked_blocks = ? WHERE page_id = ?');
+function setLockedBlocks(pageId, blocks) {
+  const list = [...new Set((blocks || []).map(b => String(b).trim()).filter(Boolean))];
+  _stmtSetLocked.run(list.length ? list.join(', ') : null, parseInt(pageId, 10));
+}
+
 const _stmtDeleteLink = db.prepare('DELETE FROM hubspot_page_links WHERE page_id = ?');
 function deleteLink(pageId) {
   return _stmtDeleteLink.run(parseInt(pageId, 10)).changes > 0;
 }
 
 module.exports = {
+  setLockedBlocks,
   getConnection,
   getConnectionPublic,
   upsertConnection,

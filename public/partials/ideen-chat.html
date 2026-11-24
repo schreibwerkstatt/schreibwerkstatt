@@ -43,6 +43,7 @@
           <div x-show="msg.role === 'user'" class="chat-msg-text" x-text="msg.content"></div>
           <div x-show="msg.role === 'assistant'" class="chat-msg-text" x-html="_renderChatMarkdown(msg.content)"></div>
 
+          <!-- @include chat-stop-note -->
           <!-- @include chat-tool-log -->
 
           <!-- Vorschläge an die Ideen: jeder einzeln übernehmen/verwerfen -->
@@ -56,7 +57,7 @@
                           x-text="ideenProposalStatus(msg, pi).state === 'applied' ? $app.t('ideenBoard.chat.applied') : ideenProposalStatus(msg, pi).state === 'discarded' ? $app.t('chat.discarded') : ideenProposalTypeLabel(p)"></span>
                     <span class="chat-vorschlag-actions">
                       <button type="button" class="chat-vorschlag-btn" x-show="ideenProposalStatus(msg, pi).state === 'open'"
-                              @click="applyIdeenProposal(msg, pi)" :disabled="!!p._applying || !!ideenProposalStatus(msg, pi).blocked || busy"
+                              @click="applyIdeenProposal(msg, pi)" :disabled="!ideenProposalCanApply(msg, pi)"
                               :data-tip="ideenProposalBlockedText(msg, pi) || null">
                         <span x-show="p._applying" class="spinner"></span>
                         <span x-text="p._applying ? $app.t('common.saving') : (ideenProposalStatus(msg, pi).removed ? $app.t('ideenBoard.chat.reapply') : $app.t('chat.apply'))"></span>
@@ -137,7 +138,7 @@
                   </template>
 
                   <div x-show="p.begruendung" class="chat-vorschlag-begruendung" x-text="p.begruendung"></div>
-                  <div x-show="ideenProposalStatus(msg, pi).state === 'open' && ideenProposalStatus(msg, pi).blocked" class="chat-vorschlag-note" x-text="ideenProposalBlockedText(msg, pi)"></div>
+                  <div x-show="ideenProposalStatus(msg, pi).state === 'open' && ideenProposalBlockedText(msg, pi)" class="chat-vorschlag-note" x-text="ideenProposalBlockedText(msg, pi)"></div>
                   <div x-show="ideenProposalStatus(msg, pi).state === 'open' && !ideenProposalStatus(msg, pi).blocked && ideenProposalStatus(msg, pi).stale" class="chat-vorschlag-note" x-text="$app.t('ideenBoard.chat.stale')"></div>
                   <div x-show="ideenProposalStatus(msg, pi).removed" class="chat-vorschlag-note" x-text="$app.t('ideenBoard.chat.removed')"></div>
                   <div x-show="p._error" class="chat-vorschlag-error" x-text="p._error"></div>
@@ -149,6 +150,8 @@
           <div x-show="msg.role === 'assistant' && _chatTokenInfo(msg)" class="chat-token-info" :title="_chatTokenTitle(msg)" x-text="_chatTokenInfo(msg)"></div>
           <!-- @include chat-feedback -->
         </div>
+        <!-- Gescheiterter Lauf: Grund + Teil-Verlauf an der Frage -->
+        <!-- @include chat-run-failed -->
       </div>
     </template>
 

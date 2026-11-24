@@ -18,7 +18,10 @@ import { errorText } from './api.js';
 //   savedName    → () => string|undefined (globaler Identitäts-Name)
 //   ensureIdentity → () => Promise<boolean> (fragt vor dem ersten Beitrag nach
 //                  dem Namen; false = Leser hat abgebrochen)
-export function setupComposer({ t, article, postComment, onPosted, savedName, ensureIdentity }) {
+//   review       → true: Review-Link — an einer markierten Stelle kann der
+//                  Leser statt eines Kommentars eine Aenderung vorschlagen
+//                  (Ersatztext + optionale Begruendung, docs/share-link.md)
+export function setupComposer({ t, article, postComment, onPosted, savedName, ensureIdentity, review = false }) {
   // {bid, start, end, quote} aus der aktuellen Selektion oder null.
   function anchorFromSelection() {
     const sel = window.getSelection();
@@ -95,6 +98,43 @@ export function setupComposer({ t, article, postComment, onPosted, savedName, en
       card.appendChild(el('blockquote', 'share-composer__quote', anchor.quote));
       if (anchor.truncated) card.appendChild(el('p', 'share-composer__hint', t('anchor_truncated')));
     }
+    // Review-Link: Umschalter Kommentar | Aenderung vorschlagen (nur verankert).
+    let suggest = false;
+    let sugg = null;
+    let setMode = null;
+    if (review && anchor) {
+      const seg = el('div', 'share-composer__modes');
+      seg.setAttribute('role', 'radiogroup');
+      seg.setAttribute('aria-label', t('suggestion_mode_label'));
+      const mk = (label, on) => {
+        const b = el('button', 'share-composer__mode', label);
+        b.type = 'button';
+        b.setAttribute('role', 'radio');
+        b.addEventListener('click', () => setMode(on));
+        seg.appendChild(b);
+        return b;
+      };
+      const bComment = mk(t('suggestion_mode_comment'), false);
+      const bSuggest = mk(t('suggestion_mode_suggest'), true);
+      sugg = el('textarea', 'share-composer__body share-composer__suggestion');
+      sugg.rows = 3;
+      sugg.maxLength = 4000;
+      sugg.value = anchor.quote;
+      sugg.setAttribute('aria-label', t('suggestion_text_label'));
+      sugg.hidden = true;
+      setMode = (on) => {
+        suggest = on;
+        bComment.setAttribute('aria-checked', on ? 'false' : 'true');
+        bSuggest.setAttribute('aria-checked', on ? 'true' : 'false');
+        bComment.classList.toggle('share-composer__mode--on', !on);
+        bSuggest.classList.toggle('share-composer__mode--on', on);
+        sugg.hidden = !on;
+        ta.placeholder = on ? t('suggestion_reason_placeholder') : t('comment_form_body');
+        if (on) setTimeout(() => sugg.focus(), 0);
+      };
+      card.appendChild(seg);
+      card.appendChild(sugg);
+    }
     const ta = el('textarea', 'share-composer__body');
     ta.rows = 4;
     ta.maxLength = 4000;
@@ -102,6 +142,7 @@ export function setupComposer({ t, article, postComment, onPosted, savedName, en
     ta.setAttribute('aria-label', t('comment_form_body'));
     if (draft && draft.key === key) ta.value = draft.text;
     current = { key, ta };
+    if (sugg) setMode(false);
     const actions = el('div', 'share-composer__actions');
     const submit = el('button', 'share-composer__submit', t('send'));
     submit.type = 'button';
@@ -122,13 +163,17 @@ export function setupComposer({ t, article, postComment, onPosted, savedName, en
     cancel.addEventListener('click', closeComposer);
     overlay.addEventListener('mousedown', (e) => { if (e.target === overlay) closeComposer(); });
     submitOnModEnter(ta, () => submit.click());
+    if (sugg) submitOnModEnter(sugg, () => submit.click());
     submit.addEventListener('click', async () => {
       const body = (ta.value || '').trim();
-      if (!body) { status.textContent = t('form_empty'); return; }
+      const suggestion = suggest && sugg ? (sugg.value || '').trim() : '';
+      if (suggest && (!suggestion || suggestion === anchor.quote.trim())) { status.textContent = t('suggestion_unchanged'); return; }
+      if (!body && !suggestion) { status.textContent = t('form_empty'); return; }
       submit.disabled = true;
       if (ensureIdentity && !(await ensureIdentity())) { submit.disabled = false; ta.focus(); return; }
       // Name kommt global aus dem Identitäts-Chip (oben rechts) — kein Feld hier.
       const payload = { body, reader_name: savedName() };
+      if (suggestion) payload.suggestion = suggestion;
       if (anchor) { payload.anchor_bid = anchor.bid; payload.anchor_quote = anchor.quote; payload.anchor_start = anchor.start; payload.anchor_end = anchor.end; }
       try {
         await postComment(payload);

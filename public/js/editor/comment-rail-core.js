@@ -21,6 +21,10 @@ import { groupThreads } from './comment-threads.js';
 import { avatarInitials } from '../avatar.js';
 import { compareText } from '../i18n.js';
 import { highlightRegistry } from './shared/highlights.js';
+import { contentRepo } from '../repo/content.js';
+import { savePage } from './shared/page-api.js';
+import { stripFocusArtefacts } from '../utils.js';
+import { applySuggestionToHtml, suggestionReasonKey } from './comment-suggestion.js';
 
 const anchorOf = anchorFromRow;
 
@@ -52,6 +56,11 @@ function wrapP(text) {
 //   shouldWait(ctx, app)   → true ⇒ Recompute verschieben (Render noch nicht da)
 //   afterRecompute(ctx)    → optionaler Hook nach Thread-Set (z.B. Root-Flags spiegeln)
 //   scrollToRange(range, ctx) → Range in den Sichtbereich scrollen
+//   suggestionTarget(thread, ctx) → { pageId, pageName } | { busy: true } | null
+//     Abschnitt, in dem die verankerte Stelle eines Änderungsvorschlags steht.
+//     `busy`: die Oberfläche hat dort ungespeicherte Änderungen (Bucheditor) —
+//     Übernehmen wartet, statt sie zu überschreiben.
+//   afterSuggestionApplied({ pageId, html, saved }, ctx) → neuen Stand anzeigen
 export function createCommentRail(cfg) {
   const K = cfg.keys;
 
@@ -393,6 +402,69 @@ export function createCommentRail(cfg) {
         window.__app?.refreshShareCommentCounts?.();
       } catch (e) {
         reportError('share.comments.resolveFailed', e);
+      } finally {
+        this[K.savingResolve] = null;
+      }
+    },
+
+    // Änderungsvorschlag (Review-Modus) übernehmen oder ablehnen. Übernehmen:
+    // Abschnitt frisch laden, Stelle im verankerten Block ersetzen (genau ein
+    // Treffer, comment-suggestion.js), mit Versionsprüfung speichern, dann den
+    // Entscheid festhalten — in dieser Reihenfolge, damit ein gescheiterter Save
+    // nie als «übernommen» dasteht. Revisions-Quelle 'review': die Revisions-
+    // liste zeigt, dass die Änderung aus dem Review kam.
+    async _railDecideSuggestion(thread, decision) {
+      const root = thread?.root;
+      if (!root || root.suggestion_text == null || this[K.savingResolve] === root.id) return;
+      const app = window.__app;
+      this[K.savingResolve] = root.id;
+      try {
+        if (decision === 'accept') {
+          const target = cfg.suggestionTarget?.(thread, this);
+          if (target?.busy) { reportError('share.comments.suggestion.busy', null); return; }
+          if (!target?.pageId) { reportError(suggestionReasonKey('blockGone'), null); return; }
+          const page = await contentRepo.loadPage(target.pageId, { fresh: true });
+          const res = applySuggestionToHtml(stripFocusArtefacts(page.html || ''), {
+            bid: root.anchor_bid, quote: root.anchor_quote, replacement: root.suggestion_text,
+          });
+          const already = res.reason === 'alreadyApplied';
+          if (res.reason && !already) { reportError(suggestionReasonKey(res.reason), null); return; }
+          if (!already) {
+            let saved;
+            try {
+              saved = await savePage(target.pageId, {
+                html: res.html, pageName: page.name || target.pageName, source: 'review',
+                expectedUpdatedAt: page.updated_at || null,
+              });
+            } catch (e) {
+              reportError(e?.status === 409 ? 'share.comments.suggestion.conflict' : 'share.comments.suggestion.failed', e);
+              return;
+            }
+            app?._syncPageStatsAfterSave?.({ id: target.pageId, updated_at: saved?.updated_at || null }, res.html);
+            // Der Abschnitt ist gespeichert — die Oberfläche zieht nach, auch wenn
+            // der Status-PATCH gleich scheitert (sonst zeigte sie den alten Text).
+            await cfg.afterSuggestionApplied?.({ pageId: target.pageId, html: res.html, saved }, this);
+          }
+          try {
+            await sendJson(`/share/api/comments/${root.id}/suggestion`, 'PATCH', { state: 'accepted' });
+          } catch (e) {
+            // Text steht, Status nicht: ein erneutes «Übernehmen» erkennt den
+            // übernommenen Text (alreadyApplied) und setzt nur den Status.
+            reportError(already ? 'share.comments.suggestion.failed' : 'share.comments.suggestion.statusFailed', e);
+            return;
+          }
+          root.suggestion_state = 'accepted';
+          if (!root.resolved_at) root.resolved_at = new Date().toISOString();
+          app?.setStatus?.(app.t(already ? 'share.comments.suggestion.alreadyApplied' : 'share.comments.suggestion.applied'), false, 4000);
+        } else {
+          const state = decision === 'reject' ? 'rejected' : 'open';
+          await sendJson(`/share/api/comments/${root.id}/suggestion`, 'PATCH', { state });
+          root.suggestion_state = state;
+        }
+        this._railRecompute();
+        app?.refreshShareCommentCounts?.();
+      } catch (e) {
+        reportError('share.comments.suggestion.failed', e);
       } finally {
         this[K.savingResolve] = null;
       }

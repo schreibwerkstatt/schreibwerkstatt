@@ -176,8 +176,33 @@ function fitIdeenOutline(state, { budgetChars = Infinity } = {}) {
   return { text: `${nl > 0 ? cut.slice(0, nl) : cut}\n… (Ideenliste gekürzt — weitere Ideen nicht aufgeführt)`, trimmed: true };
 }
 
-/** Kapitel + Abschnitte mit ids — Ziele für Anker-Vorschläge und get_pages. */
-function gliederungOutline(state) {
+/**
+ * Kapitel + Abschnitte mit ids — Ziele für Anker-Vorschläge und get_pages.
+ * `budgetChars`: passt die volle Gliederung nicht, stehen die Kapitel (mit ids) und
+ * je Kapitel nur die Zahl der Abschnitte da; reicht auch das nicht, harter Schnitt an
+ * einer Zeile. Ein Buch mit über tausend Abschnitten sprengte sonst auf einem kleinen
+ * Modell schon mit dem Vorspann das Fenster.
+ */
+function gliederungOutline(state, { budgetChars = Infinity } = {}) {
+  const full = _gliederungFull(state);
+  if (full.length <= budgetChars) return full;
+  const counts = new Map();
+  for (const p of state.pages) counts.set(p.chapter_id ?? null, (counts.get(p.chapter_id ?? null) || 0) + 1);
+  const lines = state.chaptersFlat.map((c) => {
+    const n = counts.get(c.id) || 0;
+    return `${'  '.repeat(state.chapterDepth.get(c.id) || 0)}- Kapitel [chapter#${c.id}] «${c.name}»${n ? ` (${n} Abschnitte)` : ''}`;
+  });
+  if (counts.get(null)) lines.push(`- ${counts.get(null)} Abschnitte ohne Kapitel`);
+  const note = '… (Gliederung gekürzt — Abschnitte nicht einzeln aufgeführt; ihre ids liefern die Werkzeuge zur Gliederung bzw. zum Kapiteltext)';
+  let text = lines.join('\n');
+  if (text.length + note.length + 1 > budgetChars) {
+    const cut = text.slice(0, Math.max(0, budgetChars - note.length - 1));
+    text = cut.slice(0, Math.max(0, cut.lastIndexOf('\n')));
+  }
+  return `${text}\n${note}`;
+}
+
+function _gliederungFull(state) {
   const out = [];
   const pagesByChapter = new Map();
   for (const p of state.pages) {

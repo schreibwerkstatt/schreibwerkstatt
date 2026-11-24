@@ -6,8 +6,8 @@
 import { escHtml, fmtTok, renderChatMarkdown, loadChatMarkdown, chatMarkdownReady, fetchJson, sendJson } from '../utils.js';
 import { startPoll, runningJobStatus } from '../cards/job-helpers.js';
 import { tFetchError } from '../i18n.js';
-import { toolLogEntries, toolLogHeading } from './tool-log.js';
-import { makeDraftMethod } from './chat-draft.js';
+import { toolLogMethods } from './tool-log-methods.js';
+import { makeDraftMethod, makeToggleMethod } from './chat-draft.js';
 import { uuid } from '../utils/uuid.js';
 
 // Status-Zeile der Chat-Karten (landet per x-html): Text immer escapen.
@@ -15,8 +15,6 @@ import { uuid } from '../utils/uuid.js';
 function statusHtml(kind, text) {
   return `<span class="${kind}-msg">${escHtml(text)}</span>`;
 }
-
-const _toolLogCache = new WeakMap();
 
 export function makeChatMethods(cfg) {
   const p = cfg.props;
@@ -53,9 +51,8 @@ export function makeChatMethods(cfg) {
   // ── Interne Helfer (Aufruf via .call(this)) ──────────────────────────────
 
   async function loadSessions() {
-    // `canOpen` deckt hier die Vorbedingungen von `sessionsUrl` ab (offene Seite
-    // bzw. gewähltes Buch): der Refresh läuft auch nach einem Job-Ende, und da
-    // kann der User die Seite längst verlassen haben.
+    // `canOpen` = Vorbedingung von `sessionsUrl`; der Refresh läuft auch nach
+    // einem Job-Ende, wenn der User die Seite längst verlassen hat.
     if (!cfg.canOpen(this)) return;
     const g = gen(this);
     try {
@@ -77,8 +74,7 @@ export function makeChatMethods(cfg) {
     this[LOAD_TARGET] = sessionId;
     const superseded = () => gen(this) !== g || this[LOAD_SEQ] !== token;
     try {
-      // Session-Payload und Active-Job-Check parallel — beide Reads idempotent,
-      // sequentielle awaits verdoppelten sonst Latenz beim History-Klick.
+      // Session-Payload und Active-Job-Check parallel (beide idempotent).
       const wantActiveCheck = !this[p.pollTimer] && !this[p.loading];
       const [data, active] = await Promise.all([
         fetchJson('/chat/session/' + sessionId),
@@ -129,15 +125,17 @@ export function makeChatMethods(cfg) {
     return this[inFlight];
   }
 
+  // Weiterbenutzen wird VOR `onBeforeNewSession` geprüft: der Vorlauf (Buch-Chat:
+  // Cache-Wurf) gehört nur zu einem wirklich neuen Gespräch.
   async function createSession() {
     const g = gen(this);
     try {
-      if (cfg.onBeforeNewSession) await cfg.onBeforeNewSession.call(this);
-      if (gen(this) !== g) return;
       if (this[p.sessionId] && !(this[p.messages] || []).length && !this[p.loading]) {
         this[p.status] = '';
         return;
       }
+      if (cfg.onBeforeNewSession) await cfg.onBeforeNewSession.call(this);
+      if (gen(this) !== g) return;
       const { id } = await sendJson(cfg.newSessionUrl, 'POST', cfg.newSessionBody(this));
       if (gen(this) !== g) return;
       supersedeLoads(this);
@@ -159,8 +157,7 @@ export function makeChatMethods(cfg) {
   // und `onDone` zieht den User am Ende ungefragt dorthin zurück, wo er
   // weggeklickt hat.
   function startPollLocal(jobId, sessionId = this[p.sessionId]) {
-    // Ohne Session gibt es kein Gespräch, dem der Lauf gehören könnte (Reset
-    // zwischen Senden und Job-Start) — nichts anzeigen, nichts pollen.
+    // Ohne Session (Reset zwischen Senden und Job-Start): nichts anzeigen, nichts pollen.
     if (sessionId == null) { finishRun.call(this); return; }
     const root = window.__app;
     const g = gen(this);
@@ -185,17 +182,19 @@ export function makeChatMethods(cfg) {
           ? { tool_calls: job.liveTools, tool_rounds: job.liveRounds || [] }
           : null;
       },
+      // Job verschwunden (Server-Neustart, Aufräumen): Server-Stand zeigen und
+      // sagen, warum keine Antwort kam — sonst bricht der Lauf wortlos ab.
       onNotFound: async () => {
         if (stale()) return;
         finish();
-        if (viewing()) await loadSession.call(this, sessionId);
-        else await loadSessions.call(this);
+        if (!viewing()) { await loadSessions.call(this); return; }
+        await loadSession.call(this, sessionId);
+        if (!stale() && viewing()) this[p.status] = statusHtml('muted', root.t('chat.runLost'));
       },
       onError: async (job) => {
         if (stale()) return;
-        // Belt-and-suspenders: startPoll clear't Timer eigentlich vor dem
-        // Callback. Doppelt clearen schützt vor stuck `loading=true`-States,
-        // bei denen weder „Neue Session" noch Senden möglich wäre.
+        // startPoll räumt den Timer schon; doppelt räumen schützt vor hängendem
+        // `loading=true` (weder „Neue Session" noch Senden möglich).
         if (this[p.pollTimer]) { clearInterval(this[p.pollTimer]); this[p.pollTimer] = null; }
         finish();
         if (p.pendingRefresh) this[p.pendingRefresh] = false;
@@ -215,8 +214,7 @@ export function makeChatMethods(cfg) {
         }
         const errLabel = job.error ? root.t(job.error, job.errorParams) : root.t('common.unknownError');
         if (!viewing()) {
-          // Fehler nicht verschlucken, aber auch nicht dem sichtbaren Gespräch
-          // anhängen — er gehört zu dem Lauf, der woanders lief.
+          // Zeigen, aber nicht dem sichtbaren Gespräch anhängen (Lauf lief woanders).
           this[p.status] = statusHtml('error', root.t('chat.errorElsewhere', { msg: errLabel }));
           await loadSessions.call(this);
           return;
@@ -270,9 +268,8 @@ export function makeChatMethods(cfg) {
     this[p.status] = '';
   }
 
-  // Mit gesetztem Suchtreffer (`_hitMsgId`) bleibt die Ansicht auf ihm stehen —
-  // auch für die späteren Aufrufe beim Öffnen der Karte; Senden und neue Session
-  // heben das wieder auf.
+  // Mit Suchtreffer (`_hitMsgId`) bleibt die Ansicht auf ihm stehen (auch beim
+  // Öffnen der Karte); Senden und neue Session heben das auf.
   function scrollToBottom() {
     const el = document.getElementById(cfg.scrollElId);
     if (!el) return;
@@ -281,8 +278,7 @@ export function makeChatMethods(cfg) {
     el.scrollTop = el.scrollHeight;
   }
 
-  // Wird beim $watch(showXxxCard) aufgerufen, wenn die Karte geöffnet wird.
-  async function onVisible() {
+  async function onVisible() { // Karte/Panel geöffnet
     if (!cfg.canOpen(this)) return;
     await loadSessions.call(this);
     if (this[p.sessions].length === 0) {
@@ -305,7 +301,9 @@ export function makeChatMethods(cfg) {
 
   // Vorbereitete Nachricht in einer NEUEN Session — das Muster ALLER Übergaben
   // zwischen Oberflächen (chat-draft.js; docs/chats.md).
-  m[`prepare${L}Draft`] = makeDraftMethod({ props: p, loadSessions, startNewSession });
+  m[`prepare${L}Draft`] = makeDraftMethod({ props: p, loadSessions, startNewSession, inputSelector: cfg.inputSelector });
+  // Panel neben einer Werkstatt auf-/zuklappen (`cfg.openProp`: Plot, Ideen, Recherche).
+  if (cfg.openProp) m[`toggle${L}`] = makeToggleMethod({ openProp: cfg.openProp, onVisible, inputSelector: cfg.inputSelector });
 
   m[`delete${L}Session`] = async function (id) {
     const root = window.__app;
@@ -478,32 +476,8 @@ export function makeChatMethods(cfg) {
     }
   };
 
-  // Werkzeug-Verlauf eines agentischen Turns (Buch-, Recherche-, Plot-, Ideen-Chat;
-  // Partial chat-tool-log). Pro tool_calls-Array + Locale gemerkt (WeakMap, nicht am
-  // reaktiven msg — ein Schreiben im Render-Getter löste neue Effekte aus): das
-  // Template fragt den Verlauf mehrfach ab, ein Locale-Wechsel muss neu übersetzen.
-  m._toolLog = function (msg) {
-    const ci = msg?.context_info;
-    const calls = ci?.tool_calls;
-    const hasCalls = Array.isArray(calls) && calls.some(tc => tc?.name && tc.name !== 'final_answer');
-    // Auch ohne Werkzeug-Runde, wenn vorab Kontext geladen wurde: dann zeigt der
-    // Verlauf, dass die Antwort allein daraus entstand.
-    if (!hasCalls && !(ci?.pre_context?.count > 0)) return null;
-    const app = window.__app;
-    const loc = app?.$store?.shell?.uiLocale || '';
-    const key = Array.isArray(calls) ? calls : ci;
-    const hit = _toolLogCache.get(key);
-    if (hit && hit.loc === loc) return hit.log;
-    const t = (k, prm) => app.t(k, prm);
-    const entries = toolLogEntries(ci, t, { fmtTok });
-    const log = { ...entries, heading: toolLogHeading(entries.rows, t) };
-    _toolLogCache.set(key, { loc, log });
-    return log;
-  };
-  // Live-Stand als Pseudo-Nachricht, damit dasselbe Fragment ihn rendert.
-  m._liveToolMsg = function () {
-    return this._liveToolLog ? { role: 'assistant', _live: true, context_info: this._liveToolLog } : null;
-  };
+  // Werkzeug-Verlauf, Abbruch-Hinweis, gescheiterter Lauf (agentische Chats): tool-log-methods.js.
+  Object.assign(m, toolLogMethods);
 
   // Server-persistierte Fallback-Nachrichten werden als `__i18n:key__` gespeichert
   // und beim Rendern in die aktuelle Locale aufgelöst (siehe CLAUDE.md, i18n-Regel).

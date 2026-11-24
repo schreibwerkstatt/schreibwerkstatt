@@ -8,7 +8,7 @@ const contentStore = require('../../../lib/content-store');
 const { htmlToPlainText } = require('../../../lib/html-text');
 const embed = require('../../../lib/embed');
 const semanticRetrieval = require('../../../lib/semantic-retrieval');
-const { _truncateResult, resolveEntityTitle, semanticIndexStatus, indexIncompleteFields, relevanceFields } = require('./shared');
+const { _truncateResult, resolveEntityTitle, semanticIndexStatus, indexIncompleteFields, relevanceFields, clampInt } = require('./shared');
 const { getPageWithChapter } = require('../../../db/book-chat/text');
 
 // Snippet-Länge pro Treffer. Ein Chunk ist ~1500 Zeichen (lib/embed-chunk.js#CHUNK_CHARS).
@@ -121,7 +121,7 @@ async function tool_search_similar(input, ctx) {
   const kinds = Array.isArray(input.kinds) && input.kinds.length
     ? input.kinds.filter(k => ALLOWED_KINDS.includes(k)) : BOOK_KINDS;
   if (!kinds.length) return { error: `kinds: erlaubt sind ${ALLOWED_KINDS.join(', ')}.`, errorKey: 'chat.toolError.invalidParam', errorParams: { param: 'kinds' } };
-  const topK = Math.min(Math.max(1, input.limit || 20), 50);
+  const topK = clampInt(input.limit, 20, 1, 50);
 
   // Volle Qualitäts-Pipeline (Retrieval → Hybrid-Fusion → Reranking), damit der
   // agentische Chat dieselben scharfen Treffer bekommt wie die Such-Karte — inkl.
@@ -145,10 +145,7 @@ async function tool_search_similar(input, ctx) {
   // nicht vor» liest.
   const indexStatus = await semanticIndexStatus(ctx.bookId);
 
-  const snippetChars = Math.min(
-    Math.max(120, Number.isInteger(input.snippet_chars) ? input.snippet_chars : SIMILAR_SNIPPET_CHARS),
-    SIMILAR_SNIPPET_MAX_CHARS,
-  );
+  const snippetChars = clampInt(input.snippet_chars, SIMILAR_SNIPPET_CHARS, 120, SIMILAR_SNIPPET_MAX_CHARS);
 
   const pageTexts = new Map(); // page_id → Plaintext (eine Ladung pro Seite)
   const results = [];

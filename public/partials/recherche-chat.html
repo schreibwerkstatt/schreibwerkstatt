@@ -44,6 +44,7 @@
               </template>
             </div>
           </template>
+          <!-- @include chat-stop-note -->
           <!-- @include chat-tool-log -->
           <!-- Suchbegriffe älterer Antworten, deren Anthropic-Suchen noch nicht im Verlauf stehen -->
           <template x-if="msg.role === 'assistant' && researchWebQueries(msg).length">
@@ -74,7 +75,7 @@
             <div class="chat-vorschlaege chat-vorschlaege--wide research-chat-proposals">
               <div class="chat-vorschlaege-actions" x-show="researchSavableProposals(msg).length > 1">
                 <button type="button" class="chat-vorschlag-btn" @click="saveAllResearchProposals(msg)"
-                        x-text="$app.t('recherche.chat.proposalSaveAll', { n: researchSavableProposals(msg).length })"></button>
+                        x-text="$app.tn('recherche.chat.proposalSaveAll', researchSavableProposals(msg).length)"></button>
               </div>
               <template x-for="(prop, pi) in researchProposals(msg)" :key="pi">
                 <div class="chat-vorschlag research-chat-proposal" :class="{ 'chat-vorschlag--applied': isProposalSaved(msg, pi) }">
@@ -169,6 +170,8 @@
           <div x-show="msg.role === 'assistant' && _chatTokenInfo(msg)" class="chat-token-info" :title="_chatTokenTitle(msg)" x-text="_chatTokenInfo(msg)"></div>
           <!-- @include chat-feedback -->
         </div>
+        <!-- Gescheiterter Lauf: Grund + Teil-Verlauf an der Frage -->
+        <!-- @include chat-run-failed -->
       </div>
     </template>
 

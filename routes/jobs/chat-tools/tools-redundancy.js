@@ -11,18 +11,16 @@ const redundancyDb = require('../../../db/redundancy');
 const embed = require('../../../lib/embed');
 const { isRunStale } = require('../../../lib/redundancy-staleness');
 const { listFigureNamesForUser } = require('../../../db/book-chat/figures');
-const { _truncateResult, resultCapFor, offeredList } = require('./shared');
+const { _truncateResult, resultCapFor, offeredList, clampInt, clip, assertScope } = require('./shared');
 
 const DEFAULT_LIMIT = 20;
 const DEFAULT_TEXT_CHARS = 300;
 
-function _clip(text, max) {
-  const t = String(text || '');
-  return t.length > max ? t.slice(0, max) + '…' : t;
-}
-
 async function tool_list_redundancies(input, ctx) {
   const userEmail = ctx.userEmail || null;
+  const chapterFilter = Number.isInteger(input?.chapter_id) ? input.chapter_id : null;
+  const scopeErr = assertScope(ctx, { chapterId: chapterFilter });
+  if (scopeErr) return scopeErr;
   const run = userEmail ? redundancyDb.getLastRun(ctx.bookId, userEmail) : null;
   if (!run) {
     return {
@@ -32,9 +30,8 @@ async function tool_list_redundancies(input, ctx) {
   }
 
   const kind = input?.kind === 'page' || input?.kind === 'figure' ? input.kind : 'all';
-  const chapterFilter = Number.isInteger(input?.chapter_id) ? input.chapter_id : null;
-  const limit = Math.min(60, Math.max(1, Number.isInteger(input?.limit) ? input.limit : DEFAULT_LIMIT));
-  const textChars = Math.min(1500, Math.max(80, Number.isInteger(input?.text_chars) ? input.text_chars : DEFAULT_TEXT_CHARS));
+  const limit = clampInt(input?.limit, DEFAULT_LIMIT, 1, 60);
+  const textChars = clampInt(input?.text_chars, DEFAULT_TEXT_CHARS, 80, 1500);
   const dismissed = redundancyDb.dismissalSets(ctx.bookId, userEmail);
 
   const [outline, pageRows] = await Promise.all([
@@ -52,7 +49,7 @@ async function tool_list_redundancies(input, ctx) {
     return {
       page_id: id, page_name: n.name,
       ...(n.path.length ? { chapter_path: contentStore.formatChapterPath(n.path) } : {}),
-      chunk_ix: ix, text: _clip(text, textChars),
+      chunk_ix: ix, text: clip(text, textChars),
       ...(changedSinceRun.has(id) ? { changed_since_run: true } : {}),
     };
   };

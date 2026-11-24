@@ -15,26 +15,42 @@
   <script src="/js/theme-init.js"></script>
   <link rel="stylesheet" href="/css/tokens.css">
   <link rel="stylesheet" href="/css/landing.css">
+  <link rel="stylesheet" href="/css/landing-sections.css">
   <script defer src="/js/plausible-init.js?surface=datenschutz"></script>
 </head>
 <body>
-  <main class="public-shell">
+  <main class="public-shell public-shell--wide public-landing">
     {{#if langHint}}<p class="public-lang-hint" lang="{{langSwitchLang}}"><a class="public-inline-link" href="{{langSwitchUrl}}" hreflang="{{langSwitchLang}}">{{langHintText}}</a></p>{{/if}}
-    <header class="public-header">
-      <h1>{{appName}}</h1>
-      <p class="public-sub">{{pageTitle}}</p>
-    </header>
+    {{headerHtml}}
 
-    <article class="public-prose">
+    <div class="public-legal">
+      <nav class="public-legal-toc" aria-label="{{tocLabel}}">
+        <p class="public-legal-toc-title">{{tocLabel}}</p>
+        <ol>
+          <li><a class="public-inline-link" href="#ds-1">{{sec1Title}}</a></li>
+          <li><a class="public-inline-link" href="#ds-2">{{sec2Title}}</a></li>
+          <li><a class="public-inline-link" href="#ds-3">{{sec3Title}}</a></li>
+          <li><a class="public-inline-link" href="#ds-4">{{sec4Title}}</a></li>
+          <li><a class="public-inline-link" href="#ds-ki">{{secAiTitle}}</a></li>
+          <li><a class="public-inline-link" href="#ds-5">{{sec5Title}}</a></li>
+          <li><a class="public-inline-link" href="#ds-6">{{sec6Title}}</a></li>
+          <li><a class="public-inline-link" href="#loeschung">{{sec7Title}}</a></li>
+          <li><a class="public-inline-link" href="#ds-8">{{sec8Title}}</a></li>
+          {{#if analyticsEnabled}}<li><a class="public-inline-link" href="#ds-analytics">{{secAnalyticsTitle}}</a></li>{{/if}}
+          <li><a class="public-inline-link" href="#ds-9">{{sec9Title}}</a></li>
+        </ol>
+      </nav>
+
+      <article class="public-prose public-legal-text">
       <p class="public-prose-meta">{{lastUpdated}}</p>
       <p class="public-prose-lead">{{intro}}</p>
 
-      <section class="public-prose-section">
+      <section class="public-prose-section" id="ds-1">
         <h2>{{sec1Title}}</h2>
         <p>{{sec1Body}}</p>
       </section>
 
-      <section class="public-prose-section">
+      <section class="public-prose-section" id="ds-2">
         <h2>{{sec2Title}}</h2>
         <p>{{sec2Intro}}</p>
         <ul>
@@ -46,27 +62,27 @@
         </ul>
       </section>
 
-      <section class="public-prose-section">
+      <section class="public-prose-section" id="ds-3">
         <h2>{{sec3Title}}</h2>
         <p>{{sec3Body}}</p>
       </section>
 
-      <section class="public-prose-section">
+      <section class="public-prose-section" id="ds-4">
         <h2>{{sec4Title}}</h2>
         <p>{{sec4Body}}</p>
       </section>
 
-      <section class="public-prose-section">
+      <section class="public-prose-section" id="ds-ki">
         <h2>{{secAiTitle}}</h2>
         <p>{{secAiBody}}</p>
       </section>
 
-      <section class="public-prose-section">
+      <section class="public-prose-section" id="ds-5">
         <h2>{{sec5Title}}</h2>
         <p>{{sec5Body}}</p>
       </section>
 
-      <section class="public-prose-section">
+      <section class="public-prose-section" id="ds-6">
         <h2>{{sec6Title}}</h2>
         <p>{{sec6Body}}</p>
         <p>{{sec6AndroidIntro}}</p>
@@ -85,28 +101,26 @@
         <p>{{sec7Body}}</p>
       </section>
 
-      <section class="public-prose-section">
+      <section class="public-prose-section" id="ds-8">
         <h2>{{sec8Title}}</h2>
         <p>{{sec8Body}}</p>
       </section>
 
       {{#if analyticsEnabled}}
-      <section class="public-prose-section">
+      <section class="public-prose-section" id="ds-analytics">
         <h2>{{secAnalyticsTitle}}</h2>
         <p>{{secAnalyticsBody}}</p>
       </section>
       {{/if}}
 
-      <section class="public-prose-section">
+      <section class="public-prose-section" id="ds-9">
         <h2>{{sec9Title}}</h2>
         <p>{{sec9Body}}</p>
       </section>
     </article>
+    </div>
 
-    <footer class="public-footer">
-      <a class="public-footer-link" href="/">{{backToLanding}}</a>
-      <a class="public-footer-link" href="{{langSwitchUrl}}" hreflang="{{langSwitchLang}}" lang="{{langSwitchLang}}">{{langSwitchLabel}}</a>
-    </footer>
+    {{footerHtml}}
   </main>
 </body>
 </html>

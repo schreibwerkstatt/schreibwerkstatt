@@ -320,3 +320,11 @@ test('linkableSources: javascript:/data:-URLs verlieren den Link, Position bleib
   });
   assert.doesNotMatch(html, /javascript:/);
 });
+
+test('Leer-Marker: Frontend-Spiegel deckt jeden Server-Marker (proposal-chat-shared.js)', async () => {
+  const { createRequire } = await import('node:module');
+  const req = createRequire(import.meta.url);
+  const { EMPTY_MARKERS } = req('../../routes/jobs/proposal-chat-shared.js');
+  const { effectiveAnswerText, PROPOSALS_ONLY_MARKER } = await import('../../public/js/chat/research-chat-render.js');
+  for (const m of EMPTY_MARKERS) assert.equal(effectiveAnswerText(m, 1), PROPOSALS_ONLY_MARKER, m);
+});

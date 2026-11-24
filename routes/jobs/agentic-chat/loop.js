@@ -62,7 +62,7 @@
 //       in die Kosten: bezahlt sind nur Anthropics serverseitige Suchen (state.*).
 //   executeTool(name, input, ctx),
 //   consumeFinalAnswer({ finalUse, ctx, toolLog, iterNum, logger }) → finalText (JSON-String),
-//   parseFinal(finalText, logger) → antwort-String,
+//   parseFinal(finalText, logger, ctx) → antwort-String,
 //   buildContextInfo({ toolLog, iter, rounds, webSearches, webResults, webQueries, ctx, stopReason, costUsd }) → object,
 //     rounds: Provider-Calls dieser Antwort (Werkzeug-Runden + Synthese) — die Zahl für `iterations`.
 //     webSearches/webResults/webQueries: Server-Tool-Suchen + webStats zusammen.
@@ -111,9 +111,10 @@ const {
   _defaultModelFor, _estimateTokens, _fitMessagesToBudget, _synthesisError, applyChatEffort,
   _synthesisRequestMessages, synthesisToolPlan, appendBeforeRemoval,
 } = require('./helpers');
-const { makeToolRunner, capLogInput } = require('./run-tools');
+const { makeToolRunner } = require('./run-tools');
 const { READ_ONLY_TOOLS } = require('../chat-tools');
-const { makeToolViewer, roundNote, liveTools, serverSearchEntry, applyServerSearchResult, LIVE_MAX_ROUNDS } = require('./tool-view');
+const { makeToolViewer } = require('./tool-view');
+const { makeRunLog, persistFailedRun } = require('./run-log');
 
 function makeAgenticChatJob(config) {
   return async function runAgenticChatJob(jobId, sessionId, userMsgId, message, userEmail) {
@@ -129,6 +130,9 @@ function makeAgenticChatJob(config) {
     };
     let session = null;
     let persisted = false;
+    // Lauf-Protokoll (./run-log.js) — ausserhalb des try, damit ein gescheiterter Lauf seinen Teil-Verlauf behält.
+    const runLog = makeRunLog({ jobId, updateJob });
+    const { toolLog, rounds, counters, publishLive } = runLog;
     // Rückfall auf den klassischen Pfad nur, solange kein Call geantwortet hat.
     let fallbackAllowed = true;
     try {
@@ -194,15 +198,9 @@ function makeAgenticChatJob(config) {
         for (const b of result.rawContentBlocks || []) {
           if (b.type === 'server_tool_use' && b.name === 'web_search') {
             state.webSearches++;
-            const query = String(b.input?.query || '');
-            state.webQueries.push(query);
-            // Serverseitige Suche (Anthropic) als Zeile im Werkzeug-Verlauf, wie die
-            // eigenen Werkzeuge; die Trefferzahl trägt der Result-Block nach.
-            const entry = serverSearchEntry(query, state.rounds);
-            toolLog.push(entry);
-            if (b.id) serverSearches.set(b.id, entry);
+            state.webQueries.push(runLog.serverSearch(b, state.rounds));
           }
-          if (b.type === 'web_search_tool_result') applyServerSearchResult(serverSearches.get(b.tool_use_id), b);
+          if (b.type === 'web_search_tool_result') runLog.serverSearchResult(b);
           // Fehler-Results haben content als Objekt (nicht Array) → Array-Guard.
           if (b.type === 'web_search_tool_result' && Array.isArray(b.content)) {
             for (const r of b.content) {
@@ -219,17 +217,12 @@ function makeAgenticChatJob(config) {
         });
       };
 
-      // `note`: Zwischenstand des Modells (Thinking-Zusammenfassung, nur Claude) —
-      // ersetzt in der Statuszeile das blosse «Werkzeuge 2/6».
-      const onProgress = ({ chars, tokIn, note }) => {
+      // Die Denk-Zusammenfassung (`note`, nur Claude) bleibt ungenutzt: ihre Sprache
+      // steuert die App nicht. Den Zwischenstand liefert der Satz neben den Aufrufen.
+      const onProgress = ({ chars, tokIn }) => {
         const updates = {};
         if (tokIn > 0)  updates.tokensIn  = state.totalTokIn + tokIn;
         if (chars > 0)  updates.tokensOut = state.totalTokOut + Math.floor(chars / aiCfg.charsPerToken);
-        if (note && !inSynthesis) {
-          pendingNote = note;
-          updates.statusText = 'job.phase.agentNote';
-          updates.statusParams = { current: iter + 1, total: maxToolIter, note };
-        }
         if (Object.keys(updates).length) updateJob(jobId, updates);
       };
 
@@ -237,42 +230,22 @@ function makeAgenticChatJob(config) {
       // Turn). In einer Werkzeug-Runde entscheidet der Loop selbst (truncated_round).
       const call = async (msgs, { synthesis = false } = {}) => {
         const callTools = synthesis ? synthTools : tools;
+        const t0 = Date.now();
         const result = await ai.callAIWithTools(msgs, systemPrompt, callTools, onProgress, undefined, jobSignal, config.callProvider);
         fallbackAllowed = false;
         state.rounds++;
         accumulate(result);
         providerStops.push(result.stopReason || '-');
-        // Runden-Protokoll für den Werkzeug-Verlauf: was das Modell vorhatte (Text neben
-        // den Werkzeug-Aufrufen, sonst der letzte Thinking-Zwischenstand) und was die
-        // Runde gekostet hat. Text einer Antwort-Runde ist die Antwort, keine Notiz.
-        const narrates = result.stopReason === 'tool_use' || result.stopReason === 'pause_turn';
-        const note = roundNote(narrates ? result.text : '') || roundNote(pendingNote);
-        pendingNote = null;
-        // Cache-Anteil je Runde (nur Claude meldet ihn): zeigt, welche Runde den
-        // Präfix neu geschrieben hat statt ihn zu lesen.
-        rounds.push({
-          iter: state.rounds, tokIn: result.tokensIn || 0, tokOut: result.tokensOut || 0,
-          ...(result.cacheReadIn > 0 ? { cacheReadIn: result.cacheReadIn } : {}),
-          ...(result.cacheCreationIn > 0 ? { cacheCreationIn: result.cacheCreationIn } : {}),
-          ...(note ? { note } : {}),
-        });
-        publishLive();
+        const note = runLog.round(result, { iter: state.rounds, durationMs: Date.now() - t0, synthesis });
+        // Während die Werkzeuge der Runde laufen: «Werkzeuge 2/6 · Ich prüfe …».
+        if (note) updateJob(jobId, { statusText: 'job.phase.agentNote', statusParams: { current: state.rounds, total: maxToolIter, note } });
         if (result.truncated && synthesis) throw i18nError('job.error.aiTruncated', { max: aiCfg.maxTokensOut, tokIn: state.totalTokIn, tokOut: state.totalTokOut, total: state.totalTokIn + state.totalTokOut });
         return result;
       };
 
-      const toolLog = [];
-      const rounds = [];
       const providerStops = [];
-      // Für die Abschluss-Logzeile: nicht ausgeführte / nicht angebotene / gescheiterte Aufrufe.
-      const counters = { skipped: 0, notOffered: 0, failed: 0 };
       // Synthese ohne serverseitige Werkzeuge (siehe Kopfkommentar).
       const { synthTools, removalMessage } = synthesisToolPlan(tools, !!ai.providerSupportsToolRemoval?.(provider));
-      let pendingNote = null;
-      // Live-Stand für den Werkzeug-Verlauf während des Laufs (GET /jobs/:id → liveTools).
-      const publishLive = () => updateJob(jobId, { liveTools: liveTools(toolLog), liveRounds: rounds.slice(-LIVE_MAX_ROUNDS) });
-      // server_tool_use-id → Verlaufszeile der Anthropic-Websuche (Trefferzahl nachtragen).
-      const serverSearches = new Map();
       // Lesbare Sicht pro Aufruf (Werkzeug-Verlauf im UI); darf den Lauf nie stören.
       const describeTool = makeToolViewer(ctx);
       const toolView = (name, input, out, ok) => {
@@ -284,7 +257,6 @@ function makeAgenticChatJob(config) {
       let finalText = null;
       let stopReason = null;
       let iter = 0;
-      let inSynthesis = false;
 
       // Ablehnung (stop_reason `refusal`): Hinweis speichern, Teil-Output verwerfen.
       const refusalFinal = (result) => {
@@ -303,10 +275,7 @@ function makeAgenticChatJob(config) {
         caps: { maxToolsPerRound, roundResultCap, toolResultCaps, capFor, collectTools, parallelTools: new Set(prep.parallelTools || []) },
         toolLog, toolView, logger, jobSignal, publishLive, counters,
       });
-      const skipLog = (tu, iterNum, errorKey) => {
-        counters.skipped++;
-        toolLog.push({ name: tu.name, input: capLogInput(tu.input), ok: false, skipped: true, durationMs: 0, resultBytes: 0, truncated: false, iter: iterNum, error: errorKey, errorKey });
-      };
+      const skipLog = (tu, iterNum, errorKey) => runLog.skip(tu, iterNum, errorKey);
       const runFinalRoundTools = async (others, iterNum) => {
         const run = others.filter(tu => !isReadOnly(tu.name));
         for (const tu of others) if (isReadOnly(tu.name)) skipLog(tu, iterNum, 'chat.toolError.finalRound');
@@ -354,6 +323,7 @@ function makeAgenticChatJob(config) {
         // Synthese aus dem bisher Gesammelten (die Runde ist bezahlt und gebucht).
         if (result.truncated) {
           logger.warn(`Runde ${state.rounds} am Output-Deckel abgeschnitten (${aiCfg.maxTokensOut} Tokens, ${(result.toolUses || []).length} Aufruf(e) verworfen) – erzwinge Synthese.`);
+          runLog.skipAll(result.toolUses, iter + 1, 'chat.toolError.truncatedRound');
           stopReason = 'truncated_round';
           break;
         }
@@ -407,6 +377,7 @@ function makeAgenticChatJob(config) {
         // Antwort — er wird nicht gespeichert.
         if (result.tokensIn > tokenBudget) {
           logger.warn(`Context-Budget überschritten (${result.tokensIn}/${tokenBudget} Input-Tokens) – erzwinge Synthese.`);
+          runLog.skipAll(toolUses, iter + 1, 'chat.toolError.contextBudget');
           stopReason = 'context_budget';
           break;
         }
@@ -438,7 +409,6 @@ function makeAgenticChatJob(config) {
           stopReason = 'max_iter';
           logger.warn(`Max-Iterationen (${maxToolIter}) erreicht – erzwinge Synthese aus dem bereits gesammelten Kontext.`);
         }
-        inSynthesis = true;
         updateJob(jobId, { statusText: 'job.phase.agentSynthesize', progress: 92 });
         const budgetStop = stopReason === 'input_cap' || stopReason === 'context_budget';
         const instruction = budgetStop ? (prep.inputCapInstruction ?? forceFinalInstruction) : forceFinalInstruction;
@@ -508,6 +478,9 @@ function makeAgenticChatJob(config) {
           if (finalUse) {
             await runFinalRoundTools(others, state.rounds);
             finalText = await config.consumeFinalAnswer({ finalUse, ctx, toolLog, iterNum: state.rounds, logger });
+          } else if (others.some(tu => collectTools.has(tu.name))) {
+            // Vorschläge ohne Antwort: ausführen (sammeln nur); parseFinal setzt den Hinweis.
+            await runTools(others.filter(tu => collectTools.has(tu.name)), state.rounds);
           } else if (!others.length && result.stopReason !== 'pause_turn') {
             // Modell antwortete in Prosa statt via final_answer — Prosa IST die Antwort.
             finalText = _proseFinal(result.text);
@@ -518,7 +491,7 @@ function makeAgenticChatJob(config) {
 
       logger.info(`Abschluss: stop=${stopReason || '-'}, Runden=${state.rounds} (Provider-Stops ${providerStops.join(',') || '-'}), Werkzeug-Aufrufe=${toolLog.length}, übersprungen=${counters.skipped}, nicht angeboten=${counters.notOffered}, fehlgeschlagen=${counters.failed}.`);
       finalText = _ensureNonEmptyFinal(finalText);
-      const rawAnswer = config.parseFinal(finalText, logger);
+      const rawAnswer = config.parseFinal(finalText, logger, ctx);
       // Die Belege zeigt das System als Liste unter der Antwort an. Steht in der
       // Antwort selbst ein Beleg-Absatz, ist das ein Echo des Verlaufs-Hinweises
       // (das Modell hat den Hinweis als eigenen Text gelesen und mitgeschrieben) —
@@ -589,6 +562,7 @@ function makeAgenticChatJob(config) {
         });
       }
       if (e.name !== 'AbortError') logger.error(`${config.errLabel}-Fehler: ${e.message}`, { stack: e.stack });
+      if (!persisted) persistFailedRun({ userMsgId, runLog, err: e, cancelled: e?.name === 'AbortError', logger });
       failJob(jobId, e);
     }
   };

@@ -14,6 +14,11 @@ import { copyText } from '../copy-button.js';
 import { EVT } from '../events.js';
 import { isSelectedBook, loadToken } from './book-guard.js';
 import { shareChapterOptions, sharePageOptions } from './share-target-options.js';
+import { statusRank } from '../redaktion/status.js';
+
+// Stufe, die ein abgeschlossenes Review anbietet (redaktionelle Kette,
+// docs/bearbeitungsstand.md). Gesetzt wird sie nie automatisch.
+const REVIEW_DONE_STATUS = 'gegengelesen';
 
 export function registerShareLinksCard() {
   if (typeof window === 'undefined' || !window.Alpine) return;
@@ -29,6 +34,10 @@ export function registerShareLinksCard() {
     createExpiresAt: '',
     createShowToc: false,
     createShowPromo: true,
+    // Review-Link (docs/share-link.md → „Review-Modus"): benannte Reviewer,
+    // Änderungsvorschläge, «Review abschliessen» statt Sterne.
+    createReview: false,
+    createReviewers: [],
     creating: false,
     createError: '',
     // Edit-State
@@ -37,7 +46,11 @@ export function registerShareLinksCard() {
     editExpiresAt: '',
     editShowToc: false,
     editShowPromo: true,
+    editReview: false,
+    editReviewers: [],
     savingEdit: false,
+    // Token des Links, dessen Abschnitte gerade auf «gegengelesen» gehen.
+    markingReviewed: null,
     // Copy-Feedback
     copiedToken: null,
     _copiedTimer: null,
@@ -188,6 +201,8 @@ export function registerShareLinksCard() {
           cur.unread_count = r.unread_count;
           cur.creator_access = r.creator_access;
           cur.revoked_at = r.revoked_at;
+          cur.mode = r.mode;
+          cur.review = r.review;
         }
       } else {
         this.links = rows;
@@ -237,6 +252,8 @@ export function registerShareLinksCard() {
         expires_at: this.createExpiresAt || null,
         show_toc: this.createKind !== 'page' && this.createShowToc,
         show_promo: this.createShowPromo,
+        mode: this.createReview ? 'review' : 'leser',
+        reviewers: this.createReview ? this.createReviewers : [],
       };
       if (this.createKind === 'page') {
         body.page_id = parseInt(this.createPageId, 10);
@@ -256,6 +273,8 @@ export function registerShareLinksCard() {
         this.createExpiresAt = '';
         this.createShowToc = false;
         this.createShowPromo = true;
+        this.createReview = false;
+        this.createReviewers = [];
         window.__app.refreshShareLinkCounts();
         copyText(this.linkUrl(j.token));
         this.copiedToken = j.token;
@@ -301,6 +320,8 @@ export function registerShareLinksCard() {
       this.editExpiresAt = link.expires_at ? link.expires_at.slice(0, 16) : '';
       this.editShowToc = !!link.show_toc;
       this.editShowPromo = link.show_promo !== 0;
+      this.editReview = link.mode === 'review';
+      this.editReviewers = (link.review?.reviewers || []).map(r => r.name);
     },
 
     cancelEdit() {
@@ -309,6 +330,8 @@ export function registerShareLinksCard() {
       this.editExpiresAt = '';
       this.editShowToc = false;
       this.editShowPromo = true;
+      this.editReview = false;
+      this.editReviewers = [];
     },
 
     async saveEdit(token) {
@@ -320,6 +343,8 @@ export function registerShareLinksCard() {
           expires_at: this.editExpiresAt || null,
           show_toc: this.editShowToc,
           show_promo: this.editShowPromo,
+          mode: this.editReview ? 'review' : 'leser',
+          ...(this.editReview ? { reviewers: this.editReviewers } : {}),
         });
         await this.loadLinks();
         this.cancelEdit();
@@ -359,6 +384,55 @@ export function registerShareLinksCard() {
       setTimeout(() => {
         window.dispatchEvent(new CustomEvent(EVT.COMMENTS_RAIL_GOTO, { detail: { token: link.token } }));
       }, 0);
+    },
+
+    // ── Review-Link: Stand + Status-Kopplung ──────────────────────────────────
+    // Vorschläge der Reviewer-Eingabe: Namen aus den übrigen Review-Links des Buchs.
+    reviewerPool() {
+      const set = new Set();
+      for (const l of this.links) for (const r of (l.review?.reviewers || [])) set.add(r.name);
+      return [...set];
+    },
+
+    // Zeile «2/3 abgeschlossen · 1 offen · 2 Vorschläge».
+    reviewSummary(link) {
+      const r = link.review;
+      if (!r) return '';
+      const app = window.__app;
+      const parts = [app.t('share.review.doneOf', { done: r.done, total: r.total })];
+      if (r.openThreads) parts.push(app.tn('share.review.openThreads', r.openThreads));
+      if (r.openSuggestions) parts.push(app.tn('share.review.openSuggestions', r.openSuggestions));
+      return parts.join(' · ');
+    },
+
+    // Aktuelle (schwächste) Stufe des Link-Ziels; Buch-Shares haben keins.
+    _reviewScopeStatus(link) {
+      const app = window.__app;
+      if (link.kind === 'page') return Alpine.store('badges').editStatus?.[String(link.page_id)]?.status || null;
+      if (link.kind === 'chapter') return app?.chapterEditStatus?.({ type: 'chapter', id: link.chapter_id })?.status || null;
+      return undefined;
+    },
+
+    // «Als gegengelesen markieren» anbieten: Review vollständig (alle Reviewer
+    // fertig, nichts offen), redaktionelles Buch, Ziel noch unter der Stufe.
+    canMarkReviewed(link) {
+      const app = window.__app;
+      if (!link.review?.complete || link.mine === false || link.kind === 'book') return false;
+      if (!app?.isJournalistischesBuch?.() || !app?.canEdit?.()) return false;
+      const cur = this._reviewScopeStatus(link);
+      return statusRank(cur) < statusRank(REVIEW_DONE_STATUS);
+    },
+
+    async markReviewed(link) {
+      const app = window.__app;
+      if (this.markingReviewed || !this.canMarkReviewed(link)) return;
+      this.markingReviewed = link.token;
+      try {
+        if (link.kind === 'page') await app.setPageEditStatus(link.page_id, REVIEW_DONE_STATUS);
+        else await app.setChapterEditStatus(link.chapter_id, REVIEW_DONE_STATUS);
+      } finally {
+        this.markingReviewed = null;
+      }
     },
 
     async copyLink(token) {

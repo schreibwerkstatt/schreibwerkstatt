@@ -55,7 +55,8 @@ function _shrinkRound(msg, overshootChars) {
   const shrunk = blocks.map((b) => {
     if (b?.type !== 'tool_result' || typeof b.content !== 'string') return b;
     const keep = Math.floor(b.content.length * keepRatio);
-    const content = keep >= 300 ? b.content.slice(0, keep) + TRIM_NOTE : TRIM_NOTE.trim();
+    // toWellFormed: ein Schnitt mitten in einem Emoji hinterliesse ein einsames Surrogat.
+    const content = keep >= 300 ? b.content.slice(0, keep).toWellFormed() + TRIM_NOTE : TRIM_NOTE.trim();
     if (content.length >= b.content.length) return b;
     changed = true;
     return { ...b, content };

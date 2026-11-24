@@ -12,10 +12,8 @@
 // Deep-Doc: docs/plot-chat.md
 
 import { sendJson } from '../utils.js';
-import { tFetchError } from '../i18n.js';
 import { diffParts } from '../diff/diff-parts.js';
-import { persistProposalStatus, applyProposalOnce, proposalApplyError } from './proposal-status.js';
-import { trackChatProposal } from '../features-usage.js';
+import { makeProposalApplyMethods, proposalBaseState } from './proposal-status.js';
 import { sameBeatRelation } from '../book/plot/constants.js';
 
 const CREATE_KIND = { beat_create: 'beat', act_create: 'act', thread_create: 'thread', relation_create: 'relation' };
@@ -80,10 +78,11 @@ export function proposalStatus(p, proposals, board) {
   const out = { state: 'open', removed: false, blocked: null, stale: false };
   if (!p) return out;
   const createKind = CREATE_KIND[p.type];
-  if (p.applied_at) {
+  const base = proposalBaseState(p);
+  if (base === 'applied') {
     if (!createKind || _exists(board, createKind, p.applied_id)) { out.state = 'applied'; return out; }
     out.removed = true;
-  } else if (p.status === 'discarded') {
+  } else if (base === 'discarded') {
     out.state = 'discarded';
     return out;
   }
@@ -252,42 +251,18 @@ export const plotProposalMethods = {
     if (id) this._revealBeat(this.beats.find(b => b.id === id));
   },
 
-  async applyPlotProposal(msg, pi) {
-    const app = window.__app;
-    const list = this.plotProposals(msg);
-    const p = list[pi];
-    if (!p || p._applying || this.busy || this._inHistoryFlight) return;
-    const st = proposalStatus(p, list, this._plotBoardRef());
-    if (st.state !== 'open' || (st.blocked && !p._written)) return;
+  // plotProposalCanApply / applyPlotProposal / discardPlotProposal
+  ...makeProposalApplyMethods({
+    url: '/plot/chat-proposal',
+    chat: 'plot',
+    names: { list: 'plotProposals', status: 'plotProposalStatus', canApply: 'plotProposalCanApply', apply: 'applyPlotProposal', discard: 'discardPlotProposal' },
+    applyKey: 'plot.chat.applyError',
+    statusKey: 'plot.chat.statusError',
+    locked() { return !!this._inHistoryFlight; },
     // Ein offenes Beat-Edit-Panel committet sonst per click.outside über die Übernahme.
-    if (this.editingBeatId != null) this.cancelEditBeat();
-    p._applying = true;
-    p._error = '';
-    this.busy = true;
-    const r = await applyProposalOnce('/plot/chat-proposal', msg, pi, async () => {
-      const id = await this._applyPlotProposalByType(p, list);
-      this.busy = false;
-      this.errorMessage = '';
-      return id;
-    });
-    this.busy = false;
-    p._applying = false;
-    if (r.ok) { if (!r.already) trackChatProposal('plot', 'applied', p.type); return; }
-    const err = proposalApplyError(r, { applyKey: 'plot.chat.applyError', statusKey: 'plot.chat.statusError' });
-    if (err) p._error = err;
-  },
-
-  async discardPlotProposal(msg, pi, discard = true) {
-    const p = this.plotProposals(msg)[pi];
-    if (!p || p._applying) return;
-    p._error = '';
-    try {
-      await persistProposalStatus('/plot/chat-proposal', msg, pi, discard ? 'discarded' : 'reopen');
-      trackChatProposal('plot', discard ? 'discarded' : 'reopened', p.type);
-    } catch (e) {
-      p._error = tFetchError(e);
-    }
-  },
+    beforeApply() { if (this.editingBeatId != null) this.cancelEditBeat(); },
+    write(p, list) { return this._applyPlotProposalByType(p, list); },
+  }),
 
   async _applyPlotProposalByType(p, list) {
     const board = this._plotBoardRef();

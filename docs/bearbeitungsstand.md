@@ -85,6 +85,7 @@ wird mit den Sidebar-Plaketten geladen
 nach jedem Setzen mit der Server-Antwort ersetzt. Nichts ist optimistisch: die
 Antwort trägt `stale` und den Anker, die der Client nicht selbst bilden kann.
 
+- **Review-Link** ([share-links-card.js](../public/js/cards/share-links-card.js)#`markReviewed`): ist ein Review über den Share-Link vollständig (alle Reviewer fertig, nichts offen, [share-link.md → „Review-Modus"](share-link.md#review-modus)), bietet die Karte «Geteilte Links» in redaktionellen Büchern «Als gegengelesen markieren» an — nur, solange das Ziel darunter steht. Gesetzt wird über dieselben Setter wie im Seitenbaum, nie automatisch.
 - **Seitenbaum** ([tree/edit-status.js](../public/js/book/tree/edit-status.js)):
   vier Segmente hinter dem Namen, gefüllt bis zur Stufe, gedämpft bei `stale`.
   Am Kapitelkopf steht der abgeleitete Kapitelstand. Gesetzt wird per

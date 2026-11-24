@@ -2,7 +2,7 @@
 // Figuren-fokussierte Tools: Auftritte (inkl. Erst-/Letztauftritt), Beziehungen,
 // Voll-Profil — dazu die Pronomenzählung, die get_stil_metrics (pronouns) nutzt.
 
-const { _truncateResult, _findFigure, sortByReadingOrder } = require('./shared');
+const { _truncateResult, _findFigure, sortByReadingOrder, analysisStand } = require('./shared');
 const {
   listPronounCountsWithChapters,
   listFigureMentionsWithPages,
@@ -199,6 +199,7 @@ function tool_get_figure_profile(input, ctx) {
   if (f.arc) { try { arc = JSON.parse(f.arc); } catch { arc = null; } }
 
   return _truncateResult({
+    ...analysisStand(ctx),
     fig_id: f.fig_id,
     name: f.name,
     kurzname: f.kurzname || null,

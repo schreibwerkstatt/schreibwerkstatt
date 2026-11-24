@@ -340,7 +340,7 @@ export { SCHEMA_CHAT, historyTrimNote, formatPageChange, buildPageChatBookContex
 
 // Buch-Chat-only: Gliederungs-Block (klassisch) + Aussenwelt-Regel.
 export { buildGliederungBlock } from './prompts/book-outline.js';
-export { BOOK_CHAT_OUTPUT_TOOLS, buildBookChatOutsideWorldRule } from './prompts/book-chat-output.js';
+export { BOOK_CHAT_OUTPUT_TOOLS, bookChatOutputTools, buildBookChatOutsideWorldRule } from './prompts/book-chat-output.js';
 
 // Gemeinsamer Werkzeug-Katalog der agentischen Chats (Buch, Plot, Ideen, Recherche).
 export {

@@ -7,8 +7,11 @@ const { getBookSettings, getBookName, worldFactsScanState } = require('../../../
 const { listWorldFacts, FAKT_KATEGORIE_WL } = require('../../../db/world-facts');
 const { narrativeLabels } = require('../narrative-labels');
 const { buchtypLabel } = require('../../../lib/buchtyp');
-const { _truncateResult, _findFigure, resultCapFor, toolHint, offeredList } = require('./shared');
-const { isIdeeStatus, isOpenIdeeStatus, normalizeIdeeStatus } = require('../../../lib/ideen-status');
+const {
+  _truncateResult, _findFigure, resultCapFor, toolHint, offeredList,
+  clampInt, clip, groupBy, findByName, ambiguousNameError, assertScope, invalidEnum, analysisStand,
+} = require('./shared');
+const { IDEE_STATUSES, isOpenIdeeStatus, normalizeIdeeStatus } = require('../../../lib/ideen-status');
 const { listLocationChaptersWithNames } = require('../../../db/book-chat/text');
 const contentStore = require('../../../lib/content-store');
 const { attachLinks: attachIdeaLinks } = require('../../../db/ideen');
@@ -16,7 +19,7 @@ const {
   listChaptersWithStats, listPagesWithStats, listIdeenWithPlaces,
   listLocationsWithFirstPage, listLocationChaptersForLocations,
   listLocationFiguresForLocations, listLocationFigures, getLocationIdByLocId,
-  getLocationByLocId, findLocationByName, listLocationScenesWithPlaces,
+  getLocationByLocId, listLocationScenesWithPlaces,
   listSongsWithFirstPage, listSongChaptersForSongs, listSongFiguresForSongs,
   listScenesWithPlaces, listSceneFiguresForScenes,
   listSceneLocationsForScenes, listFiguresWithMentions,
@@ -87,8 +90,8 @@ async function tool_list_chapters(input, ctx) {
     cur.pages.push([n.id, n.name, pageStats.get(n.id)?.words || 0]);
   }
 
-  const offset = Math.max(0, Number.isInteger(input?.offset) ? input.offset : 0);
-  const limit  = Number.isInteger(input?.limit) && input.limit > 0 ? input.limit : allChapters.length;
+  const offset = clampInt(input?.offset, 0, 0);
+  const limit  = clampInt(input?.limit, 0, 0) || allChapters.length; // 0/fehlend = alle
   const head = {
     total_chapters: totalChapters,
     ...(allChapters.length !== totalChapters ? { total_entries: allChapters.length } : {}),
@@ -158,11 +161,15 @@ function tool_list_ideen(input, ctx) {
   // `status` ist die Achse (offen → in_arbeit → erledigt, daneben verworfen);
   // `offen_only` ist die Abkuerzung fuer die haeufigste Frage („was ist hier
   // noch offen?") und meint offen UND in_arbeit.
-  const statusFilter = isIdeeStatus(input?.status) ? input.status : null;
+  const badStatus = invalidEnum('status', input?.status, IDEE_STATUSES);
+  if (badStatus) return badStatus;
+  const statusFilter = input?.status || null;
   const offenOnly = input?.offen_only === true;
   const pageFilter    = Number.isInteger(input?.page_id)    ? input.page_id    : null;
   const chapterFilter = Number.isInteger(input?.chapter_id) ? input.chapter_id : null;
-  const limit = Math.min(200, Math.max(1, Number.isInteger(input?.limit) ? input.limit : IDEEN_DEFAULT_LIMIT));
+  const limit = clampInt(input?.limit, IDEEN_DEFAULT_LIMIT, 1, 200);
+  const scopeErr = assertScope(ctx, { chapterId: chapterFilter, pageId: pageFilter });
+  if (scopeErr) return scopeErr;
 
   const rows = listIdeenWithPlaces(ctx.bookId, userEmail, {
     status: statusFilter, offenOnly, pageId: pageFilter, chapterId: chapterFilter,
@@ -176,9 +183,7 @@ function tool_list_ideen(input, ctx) {
   const limited = shown.map(r => ({
     id: r.id,
     scope: r.scope,
-    content: r.content && r.content.length > IDEEN_CONTENT_CHARS
-      ? r.content.slice(0, IDEEN_CONTENT_CHARS) + '…'
-      : (r.content || ''),
+    content: clip(r.content, IDEEN_CONTENT_CHARS),
     status: normalizeIdeeStatus(r.status),
     status_at: r.status_at || null,
     created_at: r.created_at,
@@ -194,11 +199,11 @@ function tool_list_ideen(input, ctx) {
 
   const offen = rows.filter(r => isOpenIdeeStatus(r.status)).length;
   return _truncateResult({
-    ideen: limited,
     total,
     offen,
     abgeschlossen: total - offen,
     ...(limited.length < total ? { truncated: true, shown: limited.length } : {}),
+    ideen: limited,
   });
 }
 
@@ -207,6 +212,8 @@ function tool_list_ideen(input, ctx) {
 function tool_list_locations(input, ctx) {
   const userEmail = ctx.userEmail || null;
   const chapterFilter = Number.isInteger(input?.chapter_id) ? input.chapter_id : null;
+  const scopeErr = assertScope(ctx, { chapterId: chapterFilter });
+  if (scopeErr) return scopeErr;
 
   const rows = listLocationsWithFirstPage(ctx.bookId, userEmail, chapterFilter);
   if (!rows.length) {
@@ -218,18 +225,13 @@ function tool_list_locations(input, ctx) {
   const chRows = listLocationChaptersForLocations(locIds);
   const fgRows = listLocationFiguresForLocations(ctx.bookId, userEmail, locIds);
 
-  const chByLoc = new Map();
-  for (const r of chRows) {
-    if (!chByLoc.has(r.location_id)) chByLoc.set(r.location_id, []);
-    chByLoc.get(r.location_id).push({ chapter_id: r.chapter_id, chapter_name: r.chapter_name || null, haeufigkeit: r.haeufigkeit });
-  }
-  const fgByLoc = new Map();
-  for (const r of fgRows) {
-    if (!fgByLoc.has(r.location_id)) fgByLoc.set(r.location_id, []);
-    fgByLoc.get(r.location_id).push({ fig_id: r.fig_id, name: r.name || null });
-  }
+  const chByLoc = groupBy(chRows, r => r.location_id,
+    r => ({ chapter_id: r.chapter_id, chapter_name: r.chapter_name || null, haeufigkeit: r.haeufigkeit }));
+  const fgByLoc = groupBy(fgRows, r => r.location_id, r => ({ fig_id: r.fig_id, name: r.name || null }));
 
   return _truncateResult({
+    ...analysisStand(ctx),
+    total: rows.length,
     locations: rows.map(r => {
       const kap = chByLoc.get(r.id) || [];
       return {
@@ -246,7 +248,6 @@ function tool_list_locations(input, ctx) {
         figuren: fgByLoc.get(r.id) || [],
       };
     }),
-    total: rows.length,
   });
 }
 
@@ -258,7 +259,9 @@ const SONGS_MAX_LIMIT     = 200;
 function tool_list_songs(input, ctx) {
   const userEmail = ctx.userEmail || null;
   const chapterFilter = Number.isInteger(input?.chapter_id) ? input.chapter_id : null;
-  const limit = Math.min(SONGS_MAX_LIMIT, Math.max(1, Number.isInteger(input?.limit) ? input.limit : SONGS_DEFAULT_LIMIT));
+  const limit = clampInt(input?.limit, SONGS_DEFAULT_LIMIT, 1, SONGS_MAX_LIMIT);
+  const scopeErr = assertScope(ctx, { chapterId: chapterFilter });
+  if (scopeErr) return scopeErr;
 
   let figFilterId = null;
   if (input?.figur_id || input?.figur_name) {
@@ -279,16 +282,10 @@ function tool_list_songs(input, ctx) {
   const chRows = listSongChaptersForSongs(songIds);
   const fgRows = listSongFiguresForSongs(songIds);
 
-  const chBy = new Map();
-  for (const r of chRows) {
-    if (!chBy.has(r.song_id)) chBy.set(r.song_id, []);
-    chBy.get(r.song_id).push({ chapter_id: r.chapter_id, chapter_name: r.chapter_name || null, haeufigkeit: r.haeufigkeit });
-  }
-  const fgBy = new Map();
-  for (const r of fgRows) {
-    if (!fgBy.has(r.song_id)) fgBy.set(r.song_id, []);
-    fgBy.get(r.song_id).push({ fig_id: r.fig_id, name: r.name || null, kontext_typ: r.kontext_typ || null });
-  }
+  const chBy = groupBy(chRows, r => r.song_id,
+    r => ({ chapter_id: r.chapter_id, chapter_name: r.chapter_name || null, haeufigkeit: r.haeufigkeit }));
+  const fgBy = groupBy(fgRows, r => r.song_id,
+    r => ({ fig_id: r.fig_id, name: r.name || null, kontext_typ: r.kontext_typ || null }));
 
   const total = rows.length;
   const limited = rows.slice(0, limit).map(r => ({
@@ -307,9 +304,10 @@ function tool_list_songs(input, ctx) {
   }));
 
   return _truncateResult({
-    songs: limited,
+    ...analysisStand(ctx),
     total,
     ...(limited.length < total ? { truncated: true, shown: limited.length } : {}),
+    songs: limited,
   });
 }
 
@@ -322,8 +320,14 @@ function tool_get_location_profile(input, ctx) {
   if (locId) {
     locRow = getLocationByLocId(ctx.bookId, locId, userEmail);
   }
-  if (!locRow && input?.name) {
-    locRow = findLocationByName(ctx.bookId, userEmail, input.name);
+  if (!locRow && typeof input?.name === 'string' && input.name.trim()) {
+    // Namens-Lookup in JS (shared.js#findByName): SQLite-LIKE fände «österreich»
+    // nicht in «Österreich-Haus», und ein mehrdeutiger Teilstring nähme still den ersten.
+    const hit = findByName(listLocationsWithFirstPage(ctx.bookId, userEmail, null), input.name);
+    if (hit.ambiguous) {
+      return ambiguousNameError(input.name, hit.ambiguous, l => ({ loc_id: l.loc_id, name: l.name }), 'loc_id');
+    }
+    locRow = hit.row;
   }
   if (!locRow) return { error: `Ort nicht gefunden.${toolHint(ctx, 'list_locations', ' Erst list_locations rufen, um loc_id/Name zu ermitteln.')}`, errorKey: 'chat.toolError.locationNotFound' };
 
@@ -338,6 +342,10 @@ function tool_get_location_profile(input, ctx) {
   }));
 
   return _truncateResult({
+    ...analysisStand(ctx),
+    total_kapitel: kapitel.length,
+    total_figuren: figuren.length,
+    total_szenen: szenen.length,
     loc_id:                     locRow.loc_id,
     name:                       locRow.name,
     typ:                        locRow.typ || null,
@@ -350,9 +358,6 @@ function tool_get_location_profile(input, ctx) {
     last_chapter: kapitel.length ? kapitel[kapitel.length - 1] : null,
     figuren,
     szenen,
-    total_kapitel: kapitel.length,
-    total_figuren: figuren.length,
-    total_szenen: szenen.length,
   });
 }
 
@@ -364,7 +369,9 @@ function tool_list_scenes(input, ctx) {
   const userEmail = ctx.userEmail || null;
   const chapterFilter = Number.isInteger(input?.chapter_id) ? input.chapter_id : null;
   const pageFilter    = Number.isInteger(input?.page_id)    ? input.page_id    : null;
-  const limit = Math.min(200, Math.max(1, Number.isInteger(input?.limit) ? input.limit : SCENES_DEFAULT_LIMIT));
+  const limit = clampInt(input?.limit, SCENES_DEFAULT_LIMIT, 1, 200);
+  const scopeErr = assertScope(ctx, { chapterId: chapterFilter, pageId: pageFilter });
+  if (scopeErr) return scopeErr;
 
   let figFilterId = null;
   if (input?.figur_id || input?.figur_name) {
@@ -389,16 +396,8 @@ function tool_list_scenes(input, ctx) {
   const sfRows = listSceneFiguresForScenes(sceneIds);
   const slRows = listSceneLocationsForScenes(sceneIds);
 
-  const sfBy = new Map();
-  for (const r of sfRows) {
-    if (!sfBy.has(r.scene_id)) sfBy.set(r.scene_id, []);
-    sfBy.get(r.scene_id).push({ fig_id: r.fig_id, name: r.name });
-  }
-  const slBy = new Map();
-  for (const r of slRows) {
-    if (!slBy.has(r.scene_id)) slBy.set(r.scene_id, []);
-    slBy.get(r.scene_id).push({ loc_id: r.loc_id, name: r.name });
-  }
+  const sfBy = groupBy(sfRows, r => r.scene_id, r => ({ fig_id: r.fig_id, name: r.name }));
+  const slBy = groupBy(slRows, r => r.scene_id, r => ({ loc_id: r.loc_id, name: r.name }));
 
   const total = rows.length;
   const limited = rows.slice(0, limit).map(r => ({
@@ -413,9 +412,10 @@ function tool_list_scenes(input, ctx) {
   }));
 
   return _truncateResult({
-    scenes: limited,
+    ...analysisStand(ctx),
     total,
     ...(limited.length < total ? { truncated: true, shown: limited.length } : {}),
+    scenes: limited,
   });
 }
 
@@ -451,7 +451,7 @@ const LIST_FIGURES_MAX_LIMIT     = 200;
 
 function tool_list_figures(input, ctx) {
   const userEmail = ctx.userEmail || null;
-  const limit = Math.min(Math.max(1, input?.limit || LIST_FIGURES_DEFAULT_LIMIT), LIST_FIGURES_MAX_LIMIT);
+  const limit = clampInt(input?.limit, LIST_FIGURES_DEFAULT_LIMIT, 1, LIST_FIGURES_MAX_LIMIT);
   const sort = ['mentions_desc', 'name', 'presence_desc'].includes(input?.sort) ? input.sort : 'mentions_desc';
 
   const rows = listFiguresWithMentions(ctx.bookId, userEmail);
@@ -471,6 +471,7 @@ function tool_list_figures(input, ctx) {
 
   const sliced = sorted.slice(0, limit);
   return _truncateResult({
+    ...analysisStand(ctx),
     total: rows.length,
     results: sliced.map(r => ({
       fig_id:   r.fig_id,
@@ -498,9 +499,8 @@ function tool_list_world_facts(input, ctx) {
   const userEmail = ctx.userEmail || null;
   const kategorie = typeof input?.kategorie === 'string' && input.kategorie.trim() ? input.kategorie.trim().toLowerCase() : null;
   const subjekt   = typeof input?.subjekt === 'string' && input.subjekt.trim() ? input.subjekt.trim() : null;
-  if (kategorie !== null && !FAKT_KATEGORIE_WL.has(kategorie)) {
-    return { fakten: [], error: `Unbekannte kategorie «${kategorie}». Gültige Werte: ${[...FAKT_KATEGORIE_WL].join(', ')}.`, errorKey: 'chat.toolError.invalidParam', errorParams: { param: 'kategorie' } };
-  }
+  const badKategorie = invalidEnum('kategorie', kategorie, [...FAKT_KATEGORIE_WL]);
+  if (badKategorie) return { ...badKategorie, fakten: [] };
 
   const rows = listWorldFacts(ctx.bookId, userEmail, { kategorien: kategorie ? [kategorie] : null, subjekt, withRefuted: true });
   if (!rows.length) {
@@ -514,6 +514,9 @@ function tool_list_world_facts(input, ctx) {
   }
 
   return _truncateResult({
+    ...analysisStand(ctx),
+    total: rows.length,
+    scanned: true,
     fakten: rows.map(r => ({
       kategorie:    r.kategorie || null,
       subjekt:      r.subjekt || null,
@@ -523,8 +526,6 @@ function tool_list_world_facts(input, ctx) {
       // Faktencheck: per Quelle als real falsch belegt — Buchaussage, keine reale Tatsache.
       ...(r.widerlegt ? { real_widerlegt: true } : {}),
     })),
-    total: rows.length,
-    scanned: true,
   });
 }
 

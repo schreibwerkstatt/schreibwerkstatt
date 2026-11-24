@@ -82,9 +82,10 @@ test('hubspot-import: zwei PUBLISHED-Posts → Pages + Jahres-Kapitel + Link-Ein
   assert.match(pageOrder[0].page_name, /^2024-03-15:/);
   assert.match(pageOrder[1].page_name, /^2025-01-02:/);
 
-  // Bild im Body wurde gestrippt.
+  // Bild bleibt als Abbildung stehen. Nicht ladbar (kein Netz im Test) →
+  // Original-Adresse, damit ein Push es nicht loescht (lib/sync/image-mirror.js).
   const body = ctx.dbSchema.db.prepare('SELECT body_html FROM pages WHERE page_id = ?').get(pages[0].page_id);
-  assert.doesNotMatch(body.body_html, /<img/);
+  assert.match(body.body_html, /<figure[^>]*><img src="https:\/\/x\/foo\.png"/);
 
   // Link-Eintraege existieren.
   const links = hubspot.listLinksForConnection(conn.id);

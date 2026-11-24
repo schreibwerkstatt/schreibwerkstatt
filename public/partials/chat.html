@@ -161,6 +161,8 @@
           <div x-show="msg.role === 'assistant' && _chatTokenInfo(msg)" class="chat-token-info" :title="_chatTokenTitle(msg)" x-text="_chatTokenInfo(msg)"></div>
           <!-- @include chat-feedback -->
         </div>
+        <!-- Gescheiterter Lauf: Grund + Teil-Verlauf an der Frage -->
+        <!-- @include chat-run-failed -->
         <!-- Ideen-Vorschläge (Abschnitts- und Buch-Chat) -->
         <!-- @include chat-idee-vorschlaege -->
       </div>

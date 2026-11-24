@@ -30,7 +30,7 @@ const { NOW_ISO_SQL } = require('./now');
 const { htmlToPlainText } = require('../lib/html-text');
 
 const VALID_SOURCES = new Set([
-  'focus', 'main', 'book', 'chat-apply', 'lektorat-apply',
+  'focus', 'main', 'book', 'chat-apply', 'lektorat-apply', 'review',
   'import', 'conflict', 'macapp', 'split', 'restore',
 ]);
 

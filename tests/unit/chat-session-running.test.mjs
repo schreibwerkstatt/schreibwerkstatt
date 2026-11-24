@@ -55,7 +55,7 @@ globalThis.fetch = async (url, opts) => {
 
 const SESSIONS_URL = '/chat/sessions/7';
 
-function makeCard() {
+function makeCard(extra = {}) {
   const methods = makeChatMethods({
     label: 'Chat',
     props: {
@@ -76,6 +76,7 @@ function makeCard() {
     newSessionUrl: '/chat/session',
     newSessionBody: () => ({}),
     sendUrl: '/jobs/chat',
+    ...extra,
   });
   return {
     chatSessions: [],
@@ -399,4 +400,37 @@ test('isChatSessionActive: Lauf aus dem Job-Snapshot (fremder Tab) zählt, Sende
   } finally {
     delete globalThis.Alpine;
   }
+});
+
+test('Neu auf einem leeren offenen Gespräch: onBeforeNewSession läuft nicht', async () => {
+  reset();
+  let before = 0;
+  const c = makeCard({ onBeforeNewSession: async () => { before++; } });
+  c.chatSessionId = 300;
+  c.chatMessages = [];
+  await c.startNewChatSession();
+  assert.equal(before, 0, 'weiterbenutzte Session braucht keinen Vorlauf (z.B. Cache-Wurf)');
+  assert.equal(calls.filter((x) => x.method === 'POST').length, 0);
+  c.chatMessages = [{ role: 'user', content: 'x' }];
+  routes.set('POST /chat/session', { id: 301 });
+  await c.startNewChatSession();
+  assert.equal(before, 1);
+  assert.equal(c.chatSessionId, 301);
+});
+
+test('Lauf verschwunden (404 beim Poll): Verlauf nachgeladen, neutrale Statuszeile', async () => {
+  reset();
+  const c = makeCard();
+  c.chatSessionId = 100;
+  c.chatInput = 'Frage';
+  routes.set('/jobs/chat', { jobId: 'job-1' });
+  routes.set(SESSIONS_URL, [{ id: 100, preview: 'Frage', last_message_at: 'b' }]);
+  await c.sendChatMessage();
+  routes.set('/chat/session/100', { id: 100, messages: [{ role: 'user', content: 'Frage' }] });
+  // /jobs/job-1 ohne Route → 404
+  await pollTick();
+  assert.equal(c.chatLoading, false);
+  assert.equal(c.chatMessages.length, 1);
+  assert.match(c.chatStatus, /muted-msg/);
+  assert.match(c.chatStatus, /chat\.runLost/);
 });

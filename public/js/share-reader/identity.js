@@ -58,8 +58,11 @@ export function closeNameModal(proceed = false) {
 // Vor dem ersten Beitrag einmal nach dem Namen fragen. Resolved `true`, wenn
 // abgesendet werden soll (Name gesetzt, schon vorhanden, oder „Anonym bleiben"),
 // `false`, wenn der Leser den Dialog ohne Wahl schliesst (Esc, Klick daneben).
-export function ensureIdentity() {
-  if (savedName() || nameDismissed() || !openModal) return Promise.resolve(true);
+export async function ensureIdentity() {
+  // Review: `identityKnown` wartet auf den Ladestand des Wählers — sonst ginge
+  // der Dialog auch in einem Browser auf, der seinen Namen schon gewählt hat.
+  const known = identityKnown ? await identityKnown() : (savedName() || nameDismissed());
+  if (known || !openModal) return true;
   if (pendingResolve) closeNameModal(false);
   return new Promise((resolve) => {
     openModal();
@@ -88,7 +91,7 @@ export function setupIdentity({ t, menuSection, onIdentityChange }) {
     }
     const btn = el('button', 'share-identity-bar__btn', name ? t('change_name') : t('set_name'));
     btn.type = 'button';
-    btn.addEventListener('click', () => openNameModal());
+    btn.addEventListener('click', () => (openModal || openNameModal)());
     chip.appendChild(btn);
   }
 
@@ -169,4 +172,18 @@ export function setupIdentity({ t, menuSection, onIdentityChange }) {
 
   openModal = openNameModal;
   renderChip();
+  rerenderChip = renderChip;
 }
+
+// Review-Link (share-reader/review.js): statt „Dein Name" waehlt der Leser
+// seinen Namen aus der Reviewer-Liste. Der Waehler oeffnet seinen Dialog unter
+// derselben ID (`share-name-modal`) und beendet ihn ueber closeNameModal — so
+// bleiben Esc-Reihenfolge, Poll-Pause und ein wartender Beitrag unveraendert.
+let rerenderChip = null;
+let identityKnown = null; // Review: „hat dieser Browser einen Reviewer-Namen?"
+export function setNameModalOpener(fn, known = null) {
+  if (typeof fn === 'function') openModal = fn;
+  if (typeof known === 'function') identityKnown = known;
+}
+export function registerNameModal(release) { releaseModal = release; }
+export function refreshIdentityChip() { rerenderChip?.(); }

@@ -78,7 +78,7 @@ export function registerChatHistorySearch() {
         this.histHits = data.hits || [];
         this.histNote = data.semanticError
           ? root.t('chat.historySearch.semanticUnavailable')
-          : (data.indexing ? root.t('chat.historySearch.indexing', { n: data.pending }) : '');
+          : (data.indexing ? root.tn('chat.historySearch.indexing', data.pending) : '');
       } catch (e) {
         if (g !== this._histGen) return;
         this.histHits = [];

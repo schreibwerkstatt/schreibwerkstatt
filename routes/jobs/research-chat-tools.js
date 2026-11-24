@@ -103,6 +103,11 @@ const OWN_TOOLS = {
 };
 
 async function executeResearchTool(name, input, ctx) {
+  // Ohne Manuskripttext (Suchweg SearXNG, ctx.manuscriptWithheld): frühere Buch- und
+  // Abschnitts-Chats tragen Manuskript-Zitate — die Verlaufssuche bleibt auf
+  // Recherche-Gespräche beschränkt, egal welchen scope das Modell wählt. Grund wie
+  // beim zurückgehaltenen search_passages (research-chat.js).
+  if (name === 'search_chat_history' && ctx?.manuscriptWithheld) input = { ...(input || {}), scope: 'research' };
   if (!OWN_TOOLS[name] && CATALOG_TOOLS[name]) return executeCatalogTool(name, input, ctx);
   const fn = OWN_TOOLS[name];
   // Nicht angebotene Werkzeuge weist schon der Loop ab (chat.toolError.notOffered);

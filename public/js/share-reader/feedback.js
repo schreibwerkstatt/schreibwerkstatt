@@ -19,6 +19,8 @@ import { readerToken, savedName, ensureIdentity } from './identity.js';
   try { CFG = JSON.parse(cfgEl.textContent || '{}'); } catch { return; }
   const TOKEN = CFG.token;
   if (!TOKEN) return;
+  // Review-Link: an dieser Stelle steht «Review abschliessen» (share-reader/review.js).
+  if (CFG.review) return;
   const I18N = CFG.i18n || {};
   const t = (k) => I18N[k] || k;
 

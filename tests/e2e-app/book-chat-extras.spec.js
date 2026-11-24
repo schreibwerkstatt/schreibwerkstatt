@@ -155,3 +155,56 @@ test('buch-chat: Werkzeug-Verlauf wächst während des Laufs mit (liveTools am J
   await expect(group.locator('.chat-tool-log-row')).toHaveCount(3);
   if (process.env.SHOT_LIVE) await live.screenshot({ path: process.env.SHOT_LIVE });
 });
+
+test('buch-chat: Antwort-Runde, Treffer-Verweise, Abbruch-Hinweis und gescheiterter Lauf an der Frage', async ({ page }) => {
+  await bootApp(page);
+  const bookId = await selectSeededBook(page);
+  const SID = 987656;
+  const now = new Date().toISOString();
+  const search = { name: 'search_passages', input: { pattern: 'See' }, ok: true, durationMs: 5, iter: 1,
+    view: { subject: [{ t: 'q', v: 'See' }], result: { key: 'chat.toolResult.hits', params: { n: 2 } },
+      hits: [{ t: 'ref', k: 'page', id: '4242', v: 'Am <b>See</b>' }] } };
+  await page.route(`**/chat/sessions/book/${bookId}`, (route) => route.fulfill({
+    status: 200, contentType: 'application/json',
+    body: JSON.stringify([{ id: SID, title: 'Runs', preview: 'Frage', last_message_at: now }]),
+  }));
+  await page.route(`**/chat/session/${SID}`, (route) => route.fulfill({
+    status: 200, contentType: 'application/json',
+    body: JSON.stringify({ id: SID, book_id: Number(bookId), kind: 'book', messages: [
+      { id: 1, role: 'user', content: 'Wo liegt der See?', created_at: now },
+      { id: 2, role: 'assistant', content: 'Am Ortsrand.', tokens_in: 70000, tokens_out: 900, created_at: now,
+        context_info: { mode: 'agent', iterations: 2, stop_reason: 'max_iter',
+          tool_rounds: [{ iter: 1, tokIn: 64000, tokOut: 100, durationMs: 3000 }, { iter: 2, tokIn: 68000, tokOut: 800, cacheReadIn: 64000, synth: true }],
+          tool_calls: [search] } },
+      { id: 3, role: 'user', content: 'Und der Fluss?', created_at: now,
+        context_info: { run_failed: { cancelled: false, error: 'job.error.sessionNotFound',
+          tool_calls: [{ ...search, view: { ...search.view, hits: [] } }], tool_rounds: [{ iter: 1, tokIn: 500, tokOut: 20 }] } } },
+    ] }),
+  }));
+  await page.route('**/jobs/active?type=book-chat*', (route) => route.fulfill({
+    status: 200, contentType: 'application/json', body: JSON.stringify({ jobId: null }),
+  }));
+  await page.evaluate(() => window.__app.toggleBookChatCard());
+  const card = page.locator(CARD);
+  await expect(card).toBeVisible();
+
+  // Abbruch-Hinweis (geteilter Text) im Block mit dem Wiederholen-Knopf.
+  await expect(card.locator('.book-chat-stop-note')).toHaveText('Werkzeug-Runden ausgeschöpft — Antwort aus dem bisher Gesammelten.');
+
+  const log = card.locator('.chat-msg--assistant .chat-tool-log');
+  await log.locator('.collapsible-toggle').first().click();
+  const rounds = log.locator('.chat-tool-log-round');
+  await expect(rounds).toHaveCount(2);
+  await expect(rounds.nth(0).locator('.chat-tool-log-round-duration')).toHaveText('3.0 s');
+  await expect(rounds.nth(1).locator('.chat-tool-log-round-title')).toHaveText('Runde 2 · Abschluss aus dem Gesammelten');
+  await expect(rounds.nth(1).locator('.chat-tool-log-round-tokens')).toHaveText('4.8K Tokens + 64.0K aus dem Cache');
+  // Treffer: Abschnitts-Verweis, Name per x-entity-ref (kein HTML).
+  await expect(log.locator('.chat-tool-log-hits .entity-ref__label')).toHaveText('Am <b>See</b>');
+
+  // Gescheiterter Lauf: Grund + Teil-Verlauf unter der Frage, ausserhalb der Sprechblase.
+  const failed = card.locator('.chat-msg--user .chat-run-failed');
+  await expect(failed).toHaveCount(1);
+  await expect(failed.locator('.chat-msg-hint')).toHaveText('Diese Frage blieb ohne Antwort: Session nicht gefunden.');
+  await failed.locator('.collapsible-toggle').first().click();
+  await expect(failed.locator('.chat-tool-log-row')).toHaveCount(1);
+});

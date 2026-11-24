@@ -69,3 +69,25 @@ test('Nicht-Objekte gehen unverändert durch', () => {
   assert.equal(truncateToolResult(null, 10), null);
   assert.equal(truncateToolResult('abc', 1), 'abc');
 });
+
+test('String-Stufe nutzt den Deckel aus: ein langer Text wird nicht pauschal auf 4000 Zeichen gekürzt', () => {
+  const o = { hint: 'vorn', text: big(40000) };
+  const out = truncateToolResult(o, 30000);
+  assert.ok(JSON.stringify(out).length <= 30000);
+  assert.ok(out.text.length > 25000, `Text nur ${out.text.length} Zeichen trotz Deckel 30000`);
+});
+
+test('kurze Hinweise oben (hint/error) bleiben beim Kürzen langer Strings ganz', () => {
+  // Alte Stufen kürzten bei 200 auch den Hinweis (250 Zeichen) mit.
+  const hint = 'h'.repeat(250);
+  const out = truncateToolResult({ hint, items: [{ s: big(5000) }] }, 500);
+  assert.ok(JSON.stringify(out).length <= 500);
+  assert.equal(out.hint, hint);
+});
+
+test('String-Kürzung halbiert kein Emoji', () => {
+  // Ungerade Vorlage: jede gerade Schnittstelle trifft die Mitte eines Paars.
+  const out = truncateToolResult({ text: 'a' + '😀'.repeat(3000) }, 2001);
+  // JSON.stringify escapt ein einsames Surrogat zu ASCII `\udXXX` — geprüft wird der String selbst.
+  assert.equal(out.text.isWellFormed(), true);
+});

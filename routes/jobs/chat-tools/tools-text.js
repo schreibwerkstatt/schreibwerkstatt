@@ -20,7 +20,10 @@ const {
   resultCapFor,
   _findFigure,
   toolHint,
+  clampInt,
 } = require('./shared');
+const { tolerantLiteralSource } = require('../../../lib/quote-verify');
+const { regexScan, REGEX_TIMEOUT_MS, REGEX_MAX_PATTERN } = require('./regex-scan');
 const {
   listPagesForPassageSearch,
   getPageWithChapter,
@@ -30,11 +33,11 @@ const {
 
 // ── search_passages ───────────────────────────────────────────────────────────
 
+// Literal-Muster: tolerant wie die Zitat-Prüfung (lib/quote-verify.js) — der Text
+// hier ist htmlToPlainText («Bist du da ?»), das Modell kennt ihn aus get_pages
+// («Bist du da?»). Ohne diese Toleranz meldete es ein vorhandenes Zitat als fehlend.
 function _buildSearchRegex(pattern, regex) {
-  if (!regex) {
-    const escaped = pattern.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-    return new RegExp(escaped, 'gi');
-  }
+  if (!regex) return new RegExp(tolerantLiteralSource(pattern), 'gi');
   return new RegExp(pattern, 'gi');
 }
 
@@ -51,7 +54,10 @@ async function tool_search_passages(input, ctx) {
   const pattern = (input.pattern || '').trim();
   if (!pattern) return { error: 'pattern fehlt', errorKey: 'chat.toolError.missingParam', errorParams: { param: 'pattern' } };
   const isRegex = !!input.regex;
-  const maxResults = Math.min(Math.max(1, input.max_results || 10), MAX_SEARCH_RESULTS);
+  const maxResults = clampInt(input.max_results, 10, 1, MAX_SEARCH_RESULTS);
+  if (isRegex && pattern.length > REGEX_MAX_PATTERN) {
+    return { error: `pattern zu lang (max ${REGEX_MAX_PATTERN}).`, errorKey: 'chat.toolError.invalidParam', errorParams: { param: 'pattern' } };
+  }
 
   let re;
   try { re = _buildSearchRegex(pattern, isRegex); }
@@ -102,9 +108,38 @@ async function tool_search_passages(input, ctx) {
   }
 
   const results = [];
+  const snippet = (p, text, index, len, match) => {
+    const start = Math.max(0, index - SEARCH_SNIPPET_CONTEXT);
+    const end   = Math.min(text.length, index + len + SEARCH_SNIPPET_CONTEXT);
+    return {
+      page_id:   p.page_id,
+      page_name: p.page_name,
+      chapter_id: p.chapter_id,
+      offset:    index,
+      match,
+      snippet:   (start > 0 ? '…' : '') + text.slice(start, end) + (end < text.length ? '…' : ''),
+    };
+  };
+
+  // Regex-Lauf am Zeitdeckel: mit Treffern davor ein Teilergebnis samt Hinweis
+  // (die restlichen Abschnitte sind ungeprüft), ohne Treffer ein Fehler.
+  let regexTimeout = false;
+  if (isRegex) {
+    const texts = orderedPages.map(p => htmlToPlainText(p.body_html || ''));
+    const scan = await regexScan(re.source, texts, maxResults, ctx.jobSignal);
+    if (scan.timeout && !scan.matches.length) {
+      return {
+        error: `Regex-Suche nach ${REGEX_TIMEOUT_MS / 1000} s abgebrochen — das Muster ist zu aufwendig (verschachtelte Wiederholungen). Vereinfache es oder suche wörtlich.`,
+        errorKey: 'chat.toolError.regexTimeout',
+      };
+    }
+    regexTimeout = !!scan.timeout;
+    for (const m of scan.matches) results.push(snippet(orderedPages[m.t], texts[m.t], m.index, m.len, m.text));
+  }
+
   const deadline = Date.now() + 3000;
 
-  outer: for (const p of orderedPages) {
+  outer: for (const p of (isRegex ? [] : orderedPages)) {
     if (Date.now() > deadline) break;
     if (ctx.jobSignal?.aborted) throw new DOMException('Aborted', 'AbortError');
     const text = htmlToPlainText(p.body_html || '');
@@ -112,16 +147,7 @@ async function tool_search_passages(input, ctx) {
     re.lastIndex = 0;
     let m;
     while ((m = re.exec(text)) !== null) {
-      const start = Math.max(0, m.index - SEARCH_SNIPPET_CONTEXT);
-      const end   = Math.min(text.length, m.index + m[0].length + SEARCH_SNIPPET_CONTEXT);
-      results.push({
-        page_id:   p.page_id,
-        page_name: p.page_name,
-        chapter_id: p.chapter_id,
-        offset:    m.index,
-        match:     m[0],
-        snippet:   (start > 0 ? '…' : '') + text.slice(start, end) + (end < text.length ? '…' : ''),
-      });
+      results.push(snippet(p, text, m.index, m[0].length, m[0]));
       if (results.length >= maxResults) break outer;
       if (m.index === re.lastIndex) re.lastIndex++;
     }
@@ -133,6 +159,10 @@ async function tool_search_passages(input, ctx) {
     ...(ftsUsed ? { fts: true } : {}),
     ...(Number.isInteger(input.chapter_id) ? { chapter_id: input.chapter_id } : {}),
     ...(Number.isInteger(input.page_id)    ? { page_id:    input.page_id    } : {}),
+    ...(regexTimeout ? {
+      incomplete: true,
+      hint: `Regex-Suche nach ${REGEX_TIMEOUT_MS / 1000} s abgebrochen — nur die Treffer bis dahin; spätere Abschnitte sind UNGEPRÜFT (nicht «ohne Treffer»). Muster vereinfachen, wörtlich suchen oder per chapter_id/page_id eingrenzen.`,
+    } : {}),
     results,
     ...(orderedPages.length === 0
       ? { note: 'Keine indizierten Abschnitte im Buch — Reindex oder Sync ausfuehren.' }
@@ -382,14 +412,15 @@ async function _quoteByPattern(input, ctx) {
   const pd = await contentStore.loadPage(pageId);
   const text = htmlToPlainText(pd.html || '');
 
-  const lcText = text.toLowerCase();
-  const lcPat  = pattern.toLowerCase();
+  // Tolerant wie search_passages (Leerraum vor Satzzeichen, Anführungs-/Strichformen):
+  // die Treffer-Länge kann darum vom Muster abweichen.
+  const re = new RegExp(tolerantLiteralSource(pattern), 'gi');
   const indices = [];
-  for (let pos = 0; pos <= lcText.length - lcPat.length; ) {
-    const found = lcText.indexOf(lcPat, pos);
-    if (found < 0) break;
-    indices.push(found);
-    pos = found + lcPat.length;
+  const lengths = [];
+  for (let m; (m = re.exec(text)) !== null;) {
+    indices.push(m.index);
+    lengths.push(m[0].length);
+    if (m[0].length === 0) re.lastIndex++;
     if (indices.length >= 5000) break;
   }
   if (indices.length === 0) {
@@ -408,7 +439,7 @@ async function _quoteByPattern(input, ctx) {
     };
   }
   const idx    = indices[occurrence - 1];
-  const length = pattern.length;
+  const length = lengths[occurrence - 1];
   const end    = idx + length;
   const quote  = text.slice(idx, end);
   const before = contextChars ? text.slice(Math.max(0, idx - contextChars), idx) : '';
@@ -474,8 +505,8 @@ function _dialogueMatchesFigure(text, [a, b], sender, { figNames, senderRe }) {
 }
 
 function tool_get_dialogue(input, ctx) {
-  const limit = Math.min(DIALOGUE_MAX_LIMIT, Math.max(1, Number.isInteger(input?.limit) ? input.limit : DIALOGUE_DEFAULT_LIMIT));
-  const minLen = Math.max(1, Number.isInteger(input?.min_length) ? input.min_length : 4);
+  const limit = clampInt(input?.limit, DIALOGUE_DEFAULT_LIMIT, 1, DIALOGUE_MAX_LIMIT);
+  const minLen = clampInt(input?.min_length, 4, 1);
 
   let figRow = null;
   let figNames = null;
@@ -494,7 +525,10 @@ function tool_get_dialogue(input, ctx) {
 
   const results = [];
   let totalFound = 0;
-  for (const p of pages) {
+  // Ohne Figur endet die Suche am Limit (Kosten) — die Gesamtzahl ist dann unbekannt.
+  let stoppedEarly = false;
+  for (let pi = 0; pi < pages.length; pi++) {
+    const p = pages[pi];
     const { text, msgRanges, msgSenders } = htmlToPlainTextWithMsgRanges(p.body_html);
     // Nachricht → Absender (lib/html-text.js, Regel wie msgUtterances). Eine
     // Nachricht beginnt ihren Dialog-Bereich: findDialogRanges legt nur
@@ -522,15 +556,21 @@ function tool_get_dialogue(input, ctx) {
         after:      after  || null,
       });
     }
-    if (results.length >= limit && !figNames) break;
+    if (results.length >= limit && !figNames) {
+      stoppedEarly = pi < pages.length - 1;
+      break;
+    }
   }
 
+  // Zusammenfassung vor der Liste (strukturierte Kürzung halbiert nur die Liste).
   return _truncateResult({
     ...(figRow ? { figur: { fig_id: figRow.fig_id, name: figRow.name } } : {}),
+    ...(stoppedEarly
+      ? { total_results: null, total_unknown: true, truncated: true, shown: results.length }
+      : { total_results: totalFound, ...(totalFound > results.length ? { truncated: true, shown: results.length } : {}) }),
+    hint: 'Heuristische Dialog-Erkennung (Anfuehrungszeichen, Speech-Verb+Doppelpunkt, Em-Dash, Nachrichten eines SMS-/Chat-Verlaufs). Einfache gerade Quotes werden ignoriert.'
+      + (stoppedEarly ? ` Suche am Limit beendet — weitere Abschnitte nicht durchsucht, Gesamtzahl unbekannt (Abschnitt/Kapitel eingrenzen oder limit erhöhen, max ${DIALOGUE_MAX_LIMIT}).` : ''),
     results,
-    total_results: totalFound,
-    ...(totalFound > results.length ? { truncated: true, shown: results.length } : {}),
-    hint: 'Heuristische Dialog-Erkennung (Anfuehrungszeichen, Speech-Verb+Doppelpunkt, Em-Dash, Nachrichten eines SMS-/Chat-Verlaufs). Einfache gerade Quotes werden ignoriert.',
   });
 }
 

@@ -5,12 +5,17 @@
 //
 // Einträge (`kind`):
 //   pre    — vorab geladener Kontext (Erst-Kontext), steht vor Runde 1
-//   round  — Rundenkopf: Nummer, Notiz des Modells (was es vorhatte), Tokens
+//   round  — Rundenkopf: Nummer, Notiz des Modells (was es vorhatte), Tokens (neu +
+//            aus dem Cache getrennt), Dauer. Eine Runde ohne Aufrufe ist die
+//            Antwort-Runde (`answer`) bzw. der erzwungene Abschluss (`synth`).
 //   row    — ein Aufruf: Tätigkeit, Gegenstand (`view.subject`, serverseitig mit
 //            Namen aufgelöst, routes/jobs/agentic-chat/tool-view.js), Ergebnis
 //   group  — ab GROUP_MIN gleichen Aufrufen einer Runde gebündelt; die Einzelzeilen
 //            klappen darunter auf
-//   final  — Abschluss: Antwort mit geprüften Zitaten
+//   final  — Abschluss: Antwort mit geprüften Zitaten bzw. ohne Prüfung (Prosa)
+//
+// Ein abgelehnter Vorschlag (`chat.toolError.proposal*`, Plot- und Ideen-Chat) ist
+// kein Werkzeugfehler: das Modell bekommt den Grund und korrigiert — neutral.
 //
 // Ältere Antworten ohne `view` bekommen eine Sicht aus den Argumenten: Suchbegriffe
 // als Zitat, IDs als Verweis ohne Namen.
@@ -32,8 +37,21 @@ const LEGACY_ID_KEYS = { page_id: 'page', chapter_id: 'chapter', figur_id: 'figu
 const SKIP_ERROR_KEYS = new Set([
   'chat.toolError.invalidArgs', 'chat.toolError.roundLimit', 'chat.toolError.roundBudget',
   'chat.toolError.synthesisOnly', 'chat.toolError.webSearchCap', 'chat.toolError.pageReadCap',
-  'chat.toolError.notOffered',
+  'chat.toolError.notOffered', 'chat.toolError.finalRound', 'chat.toolError.truncatedRound',
+  'chat.toolError.contextBudget',
 ]);
+const REJECT_KEY = /^chat\.toolError\.proposal[A-Z]/;
+
+// Abbruchgründe mit sichtbarem Hinweis unter der Antwort (Antwort aus dem Gesammelten).
+const STOP_NOTES = {
+  input_cap: 'chat.stopInputCap',
+  max_iter: 'chat.stopMaxIter',
+  context_budget: 'chat.stopContextBudget',
+  truncated_round: 'chat.stopTruncatedRound',
+  web_cap: 'chat.stopWebCap',
+};
+// Ohne Angabe (ältere Antworten) gilt die letzte Runde dieser Gründe als Synthese.
+const SYNTH_STOPS = new Set(Object.keys(STOP_NOTES));
 
 // Dauer erst ab einer Sekunde: darunter ist sie Rauschen (Datenbank-Lookups).
 const SHOW_DURATION_MS = 1000;
@@ -108,7 +126,8 @@ function _rawInput(input) {
 function _row(tc, t, seen) {
   const subject = Array.isArray(tc.view?.subject) ? tc.view.subject : _legacySubject(tc.input);
   const skipped = tc.skipped === true || (tc.ok === false && SKIP_ERROR_KEYS.has(tc.errorKey));
-  const failed = tc.ok === false && !skipped;
+  const rejected = !skipped && tc.ok === false && REJECT_KEY.test(tc.errorKey || '');
+  const failed = tc.ok === false && !skipped && !rejected;
   const resultKey = tc.ok !== false ? tc.view?.result?.key : null;
   const trunc = tc.view?.trunc;
   // Gleicher Aufruf (Werkzeug + Argumente bzw. Sicht) wie schon einmal in dieser Antwort.
@@ -120,6 +139,7 @@ function _row(tc, t, seen) {
     name: String(tc.name),
     label: _label(tc.name, t),
     parts: subject.map(it => _part(it, t)).filter(Boolean),
+    hits: tc.ok !== false && Array.isArray(tc.view?.hits) ? tc.view.hits.map(it => _part(it, t)).filter(Boolean) : [],
     result: resultKey ? t(resultKey, tc.view.result.params || {}) : '',
     hit: !!resultKey && /^chat\.toolResult\.hits/.test(resultKey) && !/None$/.test(resultKey),
     empty: !!resultKey && /None$/.test(resultKey),
@@ -129,6 +149,7 @@ function _row(tc, t, seen) {
       : '',
     repeat,
     skipped,
+    rejected,
     failed,
     // Angezeigt wird immer ein übersetzter Text: ein Eintrag ohne Key (ältere Antworten,
     // rohe Handler-Fehler) bekommt den generischen. Der Rohtext bleibt nur als
@@ -159,9 +180,11 @@ function _groupRound(rows, t) {
     const empty = children.filter(c => c.empty).length;
     const failed = children.filter(c => c.failed).length;
     const skipped = children.filter(c => c.skipped).length;
+    const rejected = children.filter(c => c.rejected).length;
     const summary = [];
     if (hits || empty) summary.push(t('chat.toolGroupHits', { hit: hits, none: empty }));
     if (failed) summary.push(t('chat.toolGroupFailed', { n: failed }));
+    if (rejected) summary.push(t('chat.toolGroupRejected', { n: rejected }));
     if (skipped) summary.push(t('chat.toolGroupSkipped', { n: skipped }));
     out.push({
       kind: 'group',
@@ -177,14 +200,18 @@ function _groupRound(rows, t) {
   return out;
 }
 
-function _finalEntry(tc, t) {
+function _finalEntry(tc, ci, t) {
+  // Buch-Chat ohne final_answer (Prosa-Abschluss): keine Zitate geprüft.
+  if (ci?.mode === 'agent' && ci.stop_reason === 'prose') {
+    return { kind: 'final', text: t('chat.toolFinalProse'), bad: false };
+  }
   const n = Number(tc?.input?.zitate_count) || 0;
   if (!n) return null;
   const bad = Number(tc.citations_invalid) || 0;
   return {
     kind: 'final',
     text: bad
-      ? t('chat.toolFinalCitationsBad', { n, bad })
+      ? t(pluralKey('chat.toolFinalCitationsBad', n), { n, bad })
       : t(pluralKey('chat.toolFinalCitationsOk', n), { n }),
     bad: bad > 0,
   };
@@ -202,10 +229,16 @@ export function toolLogEntries(ci, t, opts = {}) {
   const finalCall = calls.find(tc => tc.name === 'final_answer');
   const seen = new Set();
   const rows = calls.filter(tc => tc.name !== 'final_answer').map(tc => _row(tc, t, seen));
-  const roundInfo = new Map((Array.isArray(ci?.tool_rounds) ? ci.tool_rounds : []).map(r => [r.iter, r]));
-  const iters = [...new Set(rows.map(r => r.iter))];
-  const showRounds = iters.length > 1 || [...roundInfo.values()].some(r => r.note);
+  const roundList = Array.isArray(ci?.tool_rounds) ? ci.tool_rounds.filter(r => r && r.iter != null) : [];
+  const roundInfo = new Map(roundList.map(r => [r.iter, r]));
+  const rowIters = new Set(rows.map(r => r.iter));
+  // Runden ohne Aufrufe (Antwort, Synthese) stehen mit im Verlauf — sie tragen meist
+  // die meisten Ausgabe-Tokens. Reihenfolge: Rundennummer; Zeilen ohne Runde zuerst.
+  const iters = [...new Set([...rowIters, ...roundInfo.keys()])]
+    .sort((a, b) => (a == null ? -1 : b == null ? 1 : a - b));
+  const showRounds = roundInfo.size > 1 || rowIters.size > 1 || roundList.some(r => r.note);
   const fmtTok = opts.fmtTok || (n => String(n));
+  const lastIter = roundList.length ? Math.max(...roundList.map(r => r.iter)) : null;
 
   const items = [];
   const pre = Number(ci?.pre_context?.count) || 0;
@@ -214,19 +247,43 @@ export function toolLogEntries(ci, t, opts = {}) {
     const roundRows = rows.filter(r => r.iter === iter);
     if (showRounds && iter != null) {
       const info = roundInfo.get(iter);
-      const tok = info ? (info.tokIn || 0) + (info.tokOut || 0) : 0;
+      const noCalls = !rowIters.has(iter);
+      const synth = !!info?.synth || (noCalls && iter === lastIter && !info?.synth && SYNTH_STOPS.has(ci?.stop_reason));
+      const phase = noCalls ? (synth ? 'chat.toolIterSynthesis' : 'chat.toolIterAnswer') : 'chat.toolIter';
       items.push({
         kind: 'round',
-        text: t('chat.toolIter', { n: iter }),
+        text: t(phase, { n: iter }),
         note: info?.note || '',
-        tokens: tok ? t('chat.toolRoundTokens', { n: fmtTok(tok) }) : '',
+        tokens: _roundTokens(info, t, fmtTok),
+        duration: _durationLabel(info?.durationMs, t),
       });
     }
     items.push(..._groupRound(roundRows, t));
   }
-  const fin = _finalEntry(finalCall, t);
+  const fin = _finalEntry(finalCall, ci, t);
   if (fin) items.push(fin);
   return { items, rows, summary: rows.length >= SUMMARY_MIN_ROWS ? _summary(rows, iters, t) : '' };
+}
+
+// Tokens einer Runde: neue (ungecachter Input + Output) vorn, Cache-Lesezugriffe
+// getrennt — sie kosten einen Bruchteil und überzeichneten sonst jede Runde.
+function _roundTokens(info, t, fmtTok) {
+  if (!info) return '';
+  const cached = Math.max(0, Number(info.cacheReadIn) || 0);
+  const fresh = Math.max(0, (Number(info.tokIn) || 0) - cached) + (Number(info.tokOut) || 0);
+  if (!fresh && !cached) return '';
+  const main = t('chat.toolRoundTokens', { n: fmtTok(fresh) });
+  return cached ? `${main} ${t('chat.toolRoundCached', { n: fmtTok(cached) })}` : main;
+}
+
+/**
+ * Sichtbarer Hinweis unter einer Antwort, die ein Deckel beendet hat — die Antwort
+ * entstand aus dem bisher Gesammelten. Leer für reguläre Abschlüsse.
+ * @param {object} ci  context_info
+ */
+export function chatStopNote(ci, t) {
+  const key = STOP_NOTES[ci?.stop_reason];
+  return key ? t(key) : '';
 }
 
 // «10 Runden · Wortlaut im Buch gesucht ×34 · Abschnitte gelesen ×3 · +2 weitere»

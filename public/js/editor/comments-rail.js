@@ -54,6 +54,16 @@ const rail = createCommentRail({
   // Nach jedem Thread-Set: Root-Flag spiegeln (Grid-Split + Badge).
   afterRecompute: (ctx) => { ctx._mirrorFlag(); },
   scrollToRange: (range, ctx) => ctx._scrollRangeIntoView(range),
+  // Änderungsvorschlag: die Leiste zeigt nur Threads der offenen Seite, also
+  // steht die Stelle in genau diesem Abschnitt. Danach die Leseansicht neu laden.
+  suggestionTarget: () => {
+    const p = window.__app?.currentPage;
+    return p?.id ? { pageId: p.id, pageName: p.name } : null;
+  },
+  afterSuggestionApplied: async ({ pageId }) => {
+    const app = window.__app;
+    if (app?.currentPage?.id === pageId) await app._refetchCurrentPage?.();
+  },
   // Klick im Text → Leiste: die Leiste ist ab 1100px ein eigener Scroll-Container
   // (max-height + overflow). Nur sie scrollen, nicht das Fenster — der User steht
   // schon an der Textstelle. Gestapelt (schmal) scrollt sie nicht → nichts tun.
@@ -85,6 +95,7 @@ export const editorCommentsRailMethods = {
   replyToCommentRoot(thread) { return this._railReply(thread); },
   toggleCommentResolve(comment) { return this._railResolve(comment); },
   deleteBookComment(comment) { return this._railDelete(comment); },
+  decideCommentSuggestion(thread, decision) { return this._railDecideSuggestion(thread, decision); },
 
   init() {
     this._railAbort = new AbortController();

@@ -12,7 +12,6 @@ const { globalPageOrderSql, chapterSubtreeFilter } = require('../book-order');
 require('../migrations');
 const { inClause } = require('../../lib/validate');
 const { openStatusSql } = require('../../lib/ideen-status');
-const { likeContains } = require('../like-escape');
 
 // ── Kapitel + Seiten ────────────────────────────────────────────────────────
 
@@ -70,7 +69,7 @@ function getPageHeader(pageId) {
 /** Ideen eines Buchs mit Seiten-/Kapitelnamen; offene zuerst, dann jüngste.
  *  Ideen hängen an einer Seite, einem Kapitel oder (ohne Anker) nur am Buch;
  *  `effective_chapter_id` deckt Seite und Kapitel ab. Filter optional: `status`, `offenOnly` (offen +
- *  in_arbeit), `pageId`, `chapterId` (gegen effective_chapter_id). */
+ *  in_arbeit), `pageId`, `chapterId` (gegen effective_chapter_id, samt Unterkapiteln). */
 function listIdeenWithPlaces(bookId, userEmail, { status = null, offenOnly = false, pageId = null, chapterId = null } = {}) {
   let sql = `
     SELECT i.id, i.content, i.status, i.status_at, i.created_at, i.updated_at,
@@ -91,8 +90,9 @@ function listIdeenWithPlaces(bookId, userEmail, { status = null, offenOnly = fal
   if (offenOnly) { sql += ` AND ${openStatusSql('i')}`; }
   if (pageId    !== null) { sql += ' AND i.page_id = ?'; params.push(pageId); }
   if (chapterId !== null) {
-    sql += ' AND COALESCE(i.chapter_id, p.chapter_id) = ?';
-    params.push(chapterId);
+    // Kapitel = Teilbaum: eine Idee im Unterkapitel gehört auch zum Teil.
+    const f = chapterSubtreeFilter('COALESCE(i.chapter_id, p.chapter_id)', chapterId);
+    sql += ` AND ${f.sql}`; params.push(...f.params);
   }
   sql += ` ORDER BY CASE WHEN ${openStatusSql('i')} THEN 0 ELSE 1 END, i.updated_at DESC, i.id DESC`;
   return db.prepare(sql).all(...params);
@@ -181,22 +181,6 @@ const _stmtLocationByLocId = db.prepare(`
 /** Ort per loc_id (exakt) mit Name der Erst-Erwähnungs-Seite. */
 function getLocationByLocId(bookId, locId, userEmail) {
   return _stmtLocationByLocId.get(bookId, locId, userEmail);
-}
-
-const _stmtLocationByName = db.prepare(`
-      SELECT l.id, l.loc_id, l.name, l.typ, l.beschreibung, l.stimmung,
-             l.erste_erwaehnung, l.erste_erwaehnung_page_id, p.page_name AS erste_erwaehnung_page_name
-      FROM locations l
-      LEFT JOIN pages p ON p.page_id = l.erste_erwaehnung_page_id
-      WHERE l.book_id = ? AND l.user_email IS ? AND l.name LIKE ? ESCAPE '\\'
-      ORDER BY CASE WHEN l.name = ? THEN 0 ELSE 1 END, l.sort_order, l.id
-      LIMIT 1
-    `);
-
-/** Ort per Namens-Teilstring (LIKE, exakter Treffer zuerst). `name` kommt von der
- *  KI — `%`/`_`/`\` darin sind Text, keine Platzhalter. */
-function findLocationByName(bookId, userEmail, name) {
-  return _stmtLocationByName.get(bookId, userEmail, likeContains(name), name);
 }
 
 const _stmtLocationScenes = db.prepare(`
@@ -324,7 +308,7 @@ function listSceneLocationsForScenes(sceneIds) {
 
 const _stmtFiguresWithMentions = db.prepare(`
     SELECT f.id, f.fig_id, f.name, f.kurzname, f.typ, f.rolle, f.praesenz,
-           COALESCE(SUM(pfm.count), 0) AS mentions
+           COALESCE(SUM(CASE WHEN p.page_id IS NOT NULL THEN pfm.count END), 0) AS mentions
     FROM figures f
     LEFT JOIN page_figure_mentions pfm ON pfm.figure_id = f.id
     LEFT JOIN pages p ON p.page_id = pfm.page_id AND p.book_id = f.book_id
@@ -333,7 +317,8 @@ const _stmtFiguresWithMentions = db.prepare(`
     ORDER BY f.sort_order, f.id
   `);
 
-/** Figuren eines Buchs mit Summe der Index-Erwähnungen. */
+/** Figuren eines Buchs mit Summe der Index-Erwähnungen — nur aus Abschnitten
+ *  desselben Buchs (wie get_figure_mentions). */
 function listFiguresWithMentions(bookId, userEmail) {
   return _stmtFiguresWithMentions.all(bookId, userEmail);
 }
@@ -349,7 +334,6 @@ module.exports = {
   listLocationFigures,
   getLocationIdByLocId,
   getLocationByLocId,
-  findLocationByName,
   listLocationScenesWithPlaces,
   listSongsWithFirstPage,
   listSongChaptersForSongs,

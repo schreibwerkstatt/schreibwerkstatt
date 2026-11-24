@@ -140,3 +140,17 @@ test('Leerraum vor Satzzeichen ist Extraktions-Artefakt: «nein .» = «nein.»'
   const hay = normalizeForQuoteMatch('Sie sagte nein. Dann ging sie (leise) hinaus.');
   assert.equal(quoteFoundIn('Sie sagte nein . Dann ging sie ( leise ) hinaus', hay), true);
 });
+
+test('tolerantLiteralSource: Strich-Folge wird eine Klasse — kein Backtracking über Leerraum, gleiche Toleranz', async () => {
+  const { tolerantLiteralSource } = await import('../../lib/quote-verify.js').then(m => m.default || m);
+  const src = tolerantLiteralSource('a ' + '-'.repeat(12) + ' x');
+  assert.ok(!src.includes('\\s*\\s*'), `keine nebeneinanderliegenden \\s* (${src})`);
+  const t0 = Date.now();
+  new RegExp(src, 'gi').test('a' + ' '.repeat(300) + 'y');
+  assert.ok(Date.now() - t0 < 200, 'ein Leerraum-Lauf ohne Treffer bleibt billig');
+  const re = (p) => new RegExp(tolerantLiteralSource(p), 'i');
+  assert.ok(re('a --- b').test('a—b'));
+  assert.ok(re('a - - b').test('a - - b'));
+  assert.ok(re('Ja - nein').test('Ja – nein'));
+  assert.ok(re('E-Mail').test('E – Mail'));
+});

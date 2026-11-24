@@ -8,7 +8,7 @@
      vereinheitlichten comment*-Felder/-Methoden (commentSelectedRootId,
      commentSavingResolve, commentSavingReply, commentReplyDrafts,
      selectCommentThread, toggleCommentResolve, deleteBookComment,
-     replyToCommentRoot, commentAvatar). Der verankerte Quote-Block und der
+     replyToCommentRoot, commentAvatar, decideCommentSuggestion). Der verankerte Quote-Block und der
      Karten-Wrapper bleiben pro Partial inline (Quote nur bei verankerten
      Threads; der Wrapper trägt im Bucheditor die Vertikalverankerung). -->
 <div class="comment-rail__comment internal-link" role="button" tabindex="0"
@@ -39,7 +39,37 @@
       </button>
     </span>
   </div>
-  <div class="comment-rail__body" x-text="thread.root.body"></div>
+  <!-- Änderungsvorschlag (Review-Modus): neuer Text + Entscheid des Autors; die
+       alte Stelle steht durchgestrichen im Anker-Zitat der Einbettung
+       (`comment-rail__quote--old`). Übernehmen schreibt in den Abschnitt
+       (comment-suggestion.js). -->
+  <template x-if="thread.root.suggestion_text != null">
+    <div class="comment-suggestion">
+      <span class="comment-suggestion__label" x-text="$app.t('share.comments.suggestion.label')"></span>
+      <ins class="comment-suggestion__new" x-text="thread.root.suggestion_text"></ins>
+      <div class="comment-suggestion__actions" x-show="!thread.root.suggestion_state || thread.root.suggestion_state === 'open'">
+        <button type="button" class="btn-compact"
+                :disabled="commentSavingResolve === thread.root.id"
+                @click.stop="decideCommentSuggestion(thread, 'accept')"
+                x-text="$app.t('share.comments.suggestion.accept')"></button>
+        <button type="button" class="btn-compact btn-compact--ghost"
+                :disabled="commentSavingResolve === thread.root.id"
+                @click.stop="decideCommentSuggestion(thread, 'reject')"
+                x-text="$app.t('share.comments.suggestion.reject')"></button>
+      </div>
+      <div class="comment-suggestion__actions" x-show="thread.root.suggestion_state === 'accepted' || thread.root.suggestion_state === 'rejected'">
+        <span class="comment-suggestion__state"
+              :class="'comment-suggestion__state--' + thread.root.suggestion_state"
+              x-text="$app.t(thread.root.suggestion_state === 'accepted' ? 'share.comments.suggestion.accepted' : 'share.comments.suggestion.rejected')"></span>
+        <button type="button" class="btn-compact btn-compact--ghost"
+                x-show="thread.root.suggestion_state === 'rejected'"
+                :disabled="commentSavingResolve === thread.root.id"
+                @click.stop="decideCommentSuggestion(thread, 'reopen')"
+                x-text="$app.t('share.comments.suggestion.reopen')"></button>
+      </div>
+    </div>
+  </template>
+  <div class="comment-rail__body" x-show="thread.root.body" x-text="thread.root.body"></div>
 </div>
 
 <!-- Antworten (meine sind abgesetzt). -->

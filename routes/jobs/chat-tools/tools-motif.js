@@ -6,7 +6,7 @@
 // kein KI-Call (liest die schon vorhandenen Motiv-Tabellen).
 
 const { listMotifs, listOccurrences, getGraph, hasOccurrences } = require('../../../db/motifs');
-const { _truncateResult } = require('./shared');
+const { _truncateResult, clampInt, clip, findByName, ambiguousNameError } = require('./shared');
 // Dieselbe Cosinus-Untergrenze wie die Motiv-Karte und der Konsistenz-Job: sonst
 // nennt der Buch-Chat Zahlen und Stellen, die die Karte als zu schwach ausblendet —
 // zwei Bestände für dieselbe Frage.
@@ -37,11 +37,11 @@ function _motifOverview(ctx) {
 
   if (!graph.motifs.length && !graph.themes.length) {
     return {
-      themes: [],
-      motifs: [],
       total_themes: 0,
       total_motifs: 0,
       hint: 'Keine Motiv-Werkstatt vorhanden. Der User plant Themen & Motive als Konstellation über die Motiv-Karte (tile.motifs) — abstrakte Themen bündeln konkrete, wiederkehrende Motive (Wasser, Spiegel, ein Lied). Leere Werkstatt ≠ Buch ohne Motive — es heisst nur, dass der User keine separate Motiv-Planung angelegt hat.',
+      themes: [],
+      motifs: [],
     };
   }
 
@@ -61,9 +61,7 @@ function _motifOverview(ctx) {
       id: m.id,
       name: m.name,
       thema: m.theme_id != null ? (themeNameById.get(m.theme_id) || null) : null,
-      beschreibung: m.beschreibung && m.beschreibung.length > MOTIF_DESC_PREVIEW
-        ? m.beschreibung.slice(0, MOTIF_DESC_PREVIEW) + '…'
-        : (m.beschreibung || null),
+      beschreibung: m.beschreibung ? clip(m.beschreibung, MOTIF_DESC_PREVIEW) : null,
       trigger_terms: m.trigger_terms || [],
       ...(Object.keys(soll).length ? { soll } : {}),
       ...(scanned ? { ist_count: m.occurrenceCount } : {}),
@@ -74,9 +72,7 @@ function _motifOverview(ctx) {
   const themes = graph.themes.map(t => ({
     id: t.id,
     name: t.name,
-    beschreibung: t.beschreibung && t.beschreibung.length > MOTIF_DESC_PREVIEW
-      ? t.beschreibung.slice(0, MOTIF_DESC_PREVIEW) + '…'
-      : (t.beschreibung || null),
+    beschreibung: t.beschreibung ? clip(t.beschreibung, MOTIF_DESC_PREVIEW) : null,
   }));
 
   const relations = graph.relations.map(r => ({
@@ -85,10 +81,9 @@ function _motifOverview(ctx) {
     typ: r.typ,
   }));
 
+  // Zusammenfassung und Legende vor den Listen: die strukturierte Kürzung
+  // halbiert die Listen, die Summen bleiben stehen.
   return _truncateResult({
-    themes,
-    motifs,
-    ...(relations.length ? { relations } : {}),
     total_themes: themes.length,
     total_motifs: motifs.length,
     scanned,
@@ -96,10 +91,14 @@ function _motifOverview(ctx) {
       hint: 'Der Motiv-Scan lief für dieses Buch noch nie — es gibt keine Fundstellen-Zahlen. Das heisst UNGEPRÜFT, nicht «kommt im Text nicht vor».',
     }),
     soll_ist_legende: 'soll = wo das Motiv laut Plan tragen soll (verknüpfte Figuren/Beats/Kapitel/Abschnitte). ist_count = wie oft die KI-Motiverkennung das Motiv real im Text fand (motif_occurrences). geist=true heisst: geplant, aber 0 Fundstellen (fallengelassen oder noch nicht geschrieben). Fundstellen-Detail eines Motivs: erneut mit motif_id bzw. motif_name aufrufen.',
+    themes,
+    motifs,
+    ...(relations.length ? { relations } : {}),
   });
 }
 
-// Motiv per motif_id (INTEGER) oder Name (exakt, dann Substring, case-insensitive).
+// Motiv per motif_id (INTEGER) oder Name (shared.js#findByName: exakt > Wortanfang
+// > Teilstring; mehrdeutig → { ambiguous }).
 function _findMotifByIdOrName(input, ctx) {
   const userEmail = ctx.userEmail || '';
   const all = listMotifs(ctx.bookId, userEmail);
@@ -107,16 +106,17 @@ function _findMotifByIdOrName(input, ctx) {
     return all.find(m => m.id === input.motif_id) || null;
   }
   if (typeof input?.motif_name === 'string' && input.motif_name.trim()) {
-    const needle = input.motif_name.trim().toLowerCase();
-    return all.find(m => (m.name || '').toLowerCase() === needle)
-        || all.find(m => (m.name || '').toLowerCase().includes(needle))
-        || null;
+    const hit = findByName(all, input.motif_name);
+    return hit.ambiguous ? { ambiguous: hit.ambiguous } : hit.row;
   }
   return null;
 }
 
 function _motifOccurrences(input, ctx) {
   const motif = _findMotifByIdOrName(input, ctx);
+  if (motif?.ambiguous) {
+    return ambiguousNameError(input.motif_name, motif.ambiguous, m => ({ motif_id: m.id, name: m.name }), 'motif_id');
+  }
   if (!motif) {
     return {
       error: 'Motiv nicht gefunden', errorKey: 'chat.toolError.notFound',
@@ -124,7 +124,7 @@ function _motifOccurrences(input, ctx) {
     };
   }
 
-  const limit = Math.min(OCC_LIMIT_MAX, Math.max(1, Number.isInteger(input?.limit) ? input.limit : OCC_LIMIT_DEFAULT));
+  const limit = clampInt(input?.limit, OCC_LIMIT_DEFAULT, 1, OCC_LIMIT_MAX);
   const rows = listOccurrences(motif.id, _motifFloor());
 
   if (!rows.length) {
@@ -153,15 +153,14 @@ function _motifOccurrences(input, ctx) {
       : { scene_id: o.scene_id, scene_titel: o.scene_titel || null }),
     source: o.source, // 'semantic' (Embedding) | 'trigger' (FTS wörtlich)
     ...(o.score != null ? { score: Number(o.score.toFixed?.(3) ?? o.score) } : {}),
-    snippet: o.snippet && o.snippet.length > OCC_SNIPPET_PREVIEW
-      ? o.snippet.slice(0, OCC_SNIPPET_PREVIEW) + '…'
-      : (o.snippet || null),
+    snippet: o.snippet ? clip(o.snippet, OCC_SNIPPET_PREVIEW) : null,
   }));
 
   return _truncateResult({
     motif_id: motif.id,
     name: motif.name,
     ist_count: rows.length,
+    ...(occurrences.length < rows.length ? { shown: occurrences.length } : {}),
     occurrences,
   });
 }

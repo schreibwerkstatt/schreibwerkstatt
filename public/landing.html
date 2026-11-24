@@ -43,12 +43,7 @@
   <main class="public-shell public-shell--wide public-landing">
     {{#if langHint}}<p class="public-lang-hint" lang="{{langSwitchLang}}"><a class="public-inline-link" href="{{langSwitchUrl}}" hreflang="{{langSwitchLang}}">{{langHintText}}</a></p>{{/if}}
     <div class="public-hero-block">
-      <header class="public-header public-hero">
-        <img class="public-brand" src="/schreibwerkstatt_icon.svg" alt="" width="72" height="72">
-        <p class="public-hero-brand">{{appName}}</p>
-        <h1 class="public-hero-title">{{heroTitle}}</h1>
-        <p class="public-sub">{{heroText}}</p>
-      </header>
+      {{headerHtml}}
 
       <div class="public-actions public-actions--inline">
         {{#if demoUrl}}<a class="public-btn public-btn--primary" href="{{demoUrl}}">{{demoLabel}}</a>
@@ -112,7 +107,7 @@
         <li><h3>{{more5Title}}</h3><p>{{more5Desc}}</p></li>
         <li><h3>{{more6Title}}</h3><p>{{more6Desc}}</p></li>
       </ul>
-      <p class="public-topic-links"><a class="public-btn" href="/funktionen">{{allFeaturesLink}}</a></p>
+      <div class="public-actions public-actions--inline"><a class="public-btn" href="/funktionen">{{allFeaturesLink}}</a></div>
     </section>
 
     <section class="public-features" aria-label="{{trustTitle}}">
@@ -162,17 +157,7 @@
       </div>
     </section>
 
-    <footer class="public-footer">
-      <span>{{footer}}</span>
-      <nav class="public-footer-links">
-        <a class="public-footer-link" href="/lektorat">{{featLinkLektorat}}</a>
-        <a class="public-footer-link" href="/testleser">{{featLinkTestleser}}</a>
-        <a class="public-footer-link" href="/funktionen">{{allFeaturesLink}}</a>
-        <a class="public-footer-link" href="{{githubUrl}}" target="_blank" rel="noopener noreferrer">{{githubLabel}}</a>
-        <a class="public-footer-link" href="/datenschutz">{{privacyLabel}}</a>
-        <a class="public-footer-link" href="{{langSwitchUrl}}" hreflang="{{langSwitchLang}}" lang="{{langSwitchLang}}">{{langSwitchLabel}}</a>
-      </nav>
-    </footer>
+    {{footerHtml}}
   </main>
 </body>
 </html>

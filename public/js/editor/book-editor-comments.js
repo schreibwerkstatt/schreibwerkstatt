@@ -91,6 +91,36 @@ const rail = createCommentRail({
   // weil Kartenhöhen gemessen werden müssen).
   afterRecompute: (ctx) => ctx._scheduleCommentLayout(),
   scrollToRange: (range) => scrollWindowToRange(range, 140),
+  // Änderungsvorschlag: der Abschnitt, dessen Block die verankerte Stelle trägt.
+  // Ungespeicherte Änderungen dort (oder ein offener Konflikt) → warten, statt
+  // sie mit dem Server-Stand zu überschreiben.
+  suggestionTarget: (thread, ctx) => {
+    const needle = `data-bid="${String(thread.root.anchor_bid || '')}"`;
+    const block = (ctx.blocks || []).find(b => b.kind === 'page' && String(b.html || '').includes(needle));
+    if (!block) return null;
+    if (block.dirty || block.saving || block.conflict) return { busy: true };
+    return { pageId: block.pageId, pageName: block.name || block.pageName || '' };
+  },
+  // Neuen Stand in den Block schreiben — dasselbe Muster wie „Fremde Fassung
+  // übernehmen" (book-editor/save.js#resolveConflictTakeRemote): ein aktiver
+  // Block wird erst deaktiviert, sonst liesse `_maybeRehydrate` sein DOM stehen;
+  // der Undo-Verlauf fällt, sonst holte Cmd+Z den Stand vor dem Vorschlag zurück
+  // und speicherte ihn über die Übernahme.
+  // Hat der User während Laden/Speichern im Block getippt, bleibt seine Eingabe
+  // stehen: sein nächster Save trifft auf den neueren Server-Stand und landet im
+  // Konflikt-Dialog, statt still überschrieben zu werden.
+  afterSuggestionApplied: ({ pageId, html, saved }, ctx) => {
+    const block = ctx._blockById?.(pageId);
+    if (!block || block.dirty || block.saving || block.conflict) return;
+    ctx._historyDrop?.(pageId);
+    block.html = html;
+    block.originalHtml = html;
+    if (saved?.updated_at) block.originalUpdatedAt = saved.updated_at;
+    block.dirty = false;
+    ctx._writeBlockDraft?.(block);
+    if (ctx.activePageId === pageId) ctx.activePageId = null;
+    block._rev++;
+  },
   // Gegenrichtung (Klick im Text → Leiste): das passende Thread-Item in der
   // Leiste sichtbar scrollen. block:'nearest' scrollt den Leisten-Container, nicht
   // das Fenster. rAF, damit die Auswahl-DOM-Änderung (Foot aufgeklappt) gesetzt ist.
@@ -120,6 +150,7 @@ export const bookEditorCommentsMethods = {
   replyToCommentRoot(thread) { return this._railReply(thread); },
   toggleCommentResolve(comment) { return this._railResolve(comment); },
   deleteBookComment(comment) { return this._railDelete(comment); },
+  decideCommentSuggestion(thread, decision) { return this._railDecideSuggestion(thread, decision); },
 
   // Steht die Leiste? EINE Bedingung für die Leiste selbst und ihre Rasterspalte:
   // sobald das Buch Threads hat (ungefiltert) — ein Filter ohne Treffer zeigt die

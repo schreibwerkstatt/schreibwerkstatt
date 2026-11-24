@@ -219,6 +219,7 @@ export const appJobsCoreMethods = {
       'blog-reconcile':        'toast.job.blogReconcile',
       'blog-repull':           'toast.job.blogRepull',
       'hubspot-import':        'toast.job.hubspotImport',
+      'hubspot-images':        'toast.job.hubspotImages',
       'hubspot-push':          'toast.job.hubspotPush',
       'hubspot-reconcile':     'toast.job.hubspotReconcile',
       'book-import':           'toast.job.bookImport',

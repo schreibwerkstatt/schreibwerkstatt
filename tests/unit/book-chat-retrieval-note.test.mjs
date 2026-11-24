@@ -7,7 +7,11 @@ import assert from 'node:assert/strict';
 globalThis.window = globalThis.window || {};
 globalThis.window.addEventListener = globalThis.window.addEventListener || (() => {});
 globalThis.window.removeEventListener = globalThis.window.removeEventListener || (() => {});
-globalThis.window.__app = { t: (k, p) => (p ? `${k}:${JSON.stringify(p)}` : k) };
+globalThis.window.__app = {
+  t: (k, p) => (p ? `${k}:${JSON.stringify(p)}` : k),
+  // Zähl-Texte über tn(): Einzahl-Key wie i18n.js#pluralKey (`<key>One`).
+  tn: (k, n) => `${n === 1 ? k + 'One' : k}:${JSON.stringify({ n })}`,
+};
 const { bookChatMethods: m } = await import('../../public/js/chat/book-chat.js');
 
 const note = (ci) => m._bookChatRetrievalNote({ role: 'assistant', context_info: ci });

@@ -393,3 +393,15 @@ test('propose_idee «erledigt»: Kurzfragmente mit Auslassungen tragen keinen Be
   }, mkCtx());
   assert.equal(ok.ok, true, ok.error);
 });
+
+test('gliederungOutline: grosses Buch wird aufs Budget gekürzt, Kapitel bleiben, Kürzung ausgewiesen', () => {
+  const chaptersFlat = Array.from({ length: 40 }, (_, i) => ({ id: 1000 + i, name: `Kapitel ${i}`, parent_id: null }));
+  const pages = Array.from({ length: 1200 }, (_, i) => ({ id: 5000 + i, name: `Abschnitt mit langem Namen ${i}`, chapter_id: 1000 + (i % 40) }));
+  const state = { chaptersFlat, chapterDepth: new Map(), pages, standByPage: new Map() };
+  const full = gliederungOutline(state);
+  const fitted = gliederungOutline(state, { budgetChars: 6000 });
+  assert.ok(full.length > 6000);
+  assert.ok(fitted.length <= 6200, `gekürzt auf ${fitted.length}`);
+  assert.match(fitted, /chapter#1039/, 'alle Kapitel bleiben');
+  assert.match(fitted, /gekürzt/);
+});

@@ -4,6 +4,7 @@
 // Threads-JSON). Ohne Session — Mount in server.js VOR dem Auth-Guard.
 
 const shareLinks = require('../../db/share-links');
+const shareReview = require('../../db/share-review');
 const rateLimit = require('../../lib/share-ratelimit');
 const { setContext } = require('../../lib/log-context');
 const { tServer, tServerParams } = require('../../lib/i18n-server');
@@ -187,7 +188,15 @@ function register(router) {
       'prefs_typeface', 'prefs_serif', 'prefs_sans',
       'feedback_heading', 'feedback_intro', 'feedback_rating_label', 'feedback_star',
       'feedback_comment_placeholder', 'feedback_submit', 'feedback_update',
-      'feedback_thanks', 'feedback_error', 'feedback_change'];
+      'feedback_thanks', 'feedback_error', 'feedback_change',
+      // Review-Link (share-reader/composer.js, thread-render.js, review.js)
+      'suggestion_label', 'suggestion_accepted', 'suggestion_rejected', 'suggestion_mode_label',
+      'suggestion_mode_comment', 'suggestion_mode_suggest', 'suggestion_text_label',
+      'suggestion_reason_placeholder', 'suggestion_unchanged',
+      'review_heading', 'review_pick_title', 'review_pick_intro', 'review_done_badge', 'review_as',
+      'review_done_msg', 'review_reopen', 'review_finish_intro', 'review_note_placeholder', 'review_finish',
+      'review_pick_intro_open', 'review_pick_other', 'review_name_placeholder', 'review_join', 'review_taken_badge',
+      'review_full', 'suggestion_open', 'suggestion_decided'];
     const readerI18n = {};
     for (const k of readerKeys) readerI18n[k] = tServer(`share.reader.${k}`, lang);
     // Vorlesen (TTS): nur `enabled`, Atempausen und die Buchsprache (Satz-
@@ -212,10 +221,15 @@ function register(router) {
       } catch (e) { logger.warn(`[share/view] record fehlgeschlagen: ${e.message}`); }
     }
 
-    const promo = buildPromo(link, lang); // App-Hinweis, pro Link abschaltbar (lib/share-promo.js)
+    // Review-Modus: Kollegen lesen gegen, kein App-Hinweis (lib/share-promo.js).
+    const isReview = link.mode === 'review';
+    const promo = buildPromo(isReview ? { ...link, show_promo: 0 } : link, lang);
     const configJson = JSON.stringify({
       token, lang, viewId, i18n: readerI18n, tts: ttsCfg, promo: promo.config,
       readDepth: { chapters: readDepthChapters },
+      // Reviewer-Namen (ohne Anspruch/Notiz); den eigenen Stand holt der Reader
+      // mit seinem reader_token ueber GET /share/:token/review (routes/share/review.js).
+      review: isReview ? { reviewers: shareReview.listReviewers(token).map(r => ({ id: r.id, name: r.name })) } : null,
     }).replace(/</g, '\\u003c');
 
     // Diagramme serverseitig aufloesen — Reihenfolge ist Pflicht, Begruendung
@@ -285,15 +299,21 @@ function register(router) {
     setContext({ book: link.book_id });
     if (isExpired(link)) return respond(410, 'GONE');
 
-    const body = String((req.body?.body || '')).trim();
-    const readerName = String((req.body?.reader_name || '')).trim();
+    let body = String((req.body?.body || '')).trim();
+    let readerName = String((req.body?.reader_name || '')).trim();
+    // Aenderungsvorschlag: nur im Review-Modus und nur verankert (Pruefung des
+    // Ankers unten). Die Begruendung (body) ist dann optional.
+    const suggestionRaw = link.mode === 'review' && typeof req.body?.suggestion === 'string'
+      ? req.body.suggestion.replace(/\r\n?/g, '\n') : null;
+    const suggestion = suggestionRaw != null && suggestionRaw.trim() ? suggestionRaw.trim() : null;
+    if (suggestion && suggestion.length > BODY_MAX) return respond(400, 'BODY_TOO_LONG');
     const readerEmailRaw = String((req.body?.reader_email || '')).trim();
     const hp = String((req.body?._hp || '')).trim();
     if (hp) {
       logger.warn(`[share/comment] honeypot triggered token=${token.slice(0, 8)}`);
       return respond(400, 'INVALID');
     }
-    if (!body) return respond(400, 'BODY_REQUIRED');
+    if (!body && !suggestion) return respond(400, 'BODY_REQUIRED');
     if (body.length > BODY_MAX) return respond(400, 'BODY_TOO_LONG');
     if (readerName.length > READER_NAME_MAX) return respond(400, 'NAME_TOO_LONG');
     // Mail optional: leer = keine; gesetzt = formal valide + Längenlimit.
@@ -333,6 +353,15 @@ function register(router) {
         anchorEnd = e;
       }
     }
+    if (suggestion && (!anchorBid || !anchorQuote)) return respond(400, 'SUGGESTION_NEEDS_ANCHOR');
+    if (suggestion && suggestion === anchorQuote.trim()) return respond(400, 'SUGGESTION_UNCHANGED');
+    // Review-Modus: ein Browser, der einen Reviewer-Namen beansprucht hat,
+    // kommentiert unter diesem Namen — der Filter der Owner-Leiste und der
+    // Abschluss-Stand haengen an genau diesem Namen.
+    if (link.mode === 'review' && readerToken) {
+      const reviewer = shareReview.reviewerForReader(token, readerToken);
+      if (reviewer) readerName = reviewer.name;
+    }
 
     const ip = req.ip || req.connection?.remoteAddress || '';
     const ipHash = rateLimit.hashIp(ip);
@@ -356,8 +385,9 @@ function register(router) {
         anchorQuote,
         anchorStart,
         anchorEnd,
+        suggestion: parentId ? null : suggestion,
       });
-      logger.info(`[share/comment] new token=${token.slice(0, 8)} book=${link.book_id} bytes=${body.length} anchored=${!!anchorBid} reply=${!!parentId}`);
+      logger.info(`[share/comment] new token=${token.slice(0, 8)} book=${link.book_id} bytes=${body.length} anchored=${!!anchorBid} reply=${!!parentId} suggestion=${!!(suggestion && !parentId)}`);
       // Owner per Mail benachrichtigen (fire-and-forget, gedrosselt, opt-out).
       notify.maybeNotifyShareComment(link, comment).catch(() => {});
       if (wantsJson) {
@@ -438,6 +468,12 @@ function register(router) {
     const rtRaw = String(req.body?.reader_token || '').trim();
     if (!READER_TOKEN_RE.test(rtRaw)) return res.status(400).json({ error_code: 'INVALID_TOKEN' });
     const resolved = req.body?.resolved !== false;
+    // Offener Aenderungsvorschlag: darueber entscheidet der Autor. Ein vom Leser
+    // erledigter, aber unentschiedener Vorschlag verschwaende aus den Markierungen
+    // der Owner-Leisten und hielte den Review-Stand fuer immer unvollstaendig.
+    if (resolved && shareLinks.getCommentById(id)?.suggestion_state === 'open') {
+      return res.status(409).json({ error_code: 'SUGGESTION_OPEN' });
+    }
 
     try {
       const ok = shareLinks.setReaderCommentResolved(id, token, rtRaw, resolved);
@@ -466,11 +502,25 @@ function register(router) {
     const rtRaw = String(req.body?.reader_token || '').trim();
     if (!READER_TOKEN_RE.test(rtRaw)) return res.status(400).json({ error_code: 'INVALID_TOKEN' });
     const body = String(req.body?.body || '').trim();
-    if (!body) return res.status(400).json({ error_code: 'BODY_REQUIRED' });
     if (body.length > BODY_MAX) return res.status(400).json({ error_code: 'BODY_TOO_LONG' });
+    // Eigener Aenderungsvorschlag: Ersatztext aenderbar, solange der Autor nicht
+    // entschieden hat; die Begruendung darf dann leer sein (wie beim Anlegen).
+    let suggestion;
+    if (typeof req.body?.suggestion === 'string') {
+      const own = shareLinks.getCommentById(id);
+      if (!own || own.share_token !== token || own.reader_token !== rtRaw || own.suggestion_text == null) {
+        return res.status(404).json({ error_code: 'NOT_FOUND' });
+      }
+      if (own.suggestion_state !== 'open') return res.status(409).json({ error_code: 'SUGGESTION_DECIDED' });
+      suggestion = req.body.suggestion.replace(/\r\n?/g, '\n').trim();
+      if (!suggestion) return res.status(400).json({ error_code: 'BODY_REQUIRED' });
+      if (suggestion.length > BODY_MAX) return res.status(400).json({ error_code: 'BODY_TOO_LONG' });
+      if (suggestion === String(own.anchor_quote || '').trim()) return res.status(400).json({ error_code: 'SUGGESTION_UNCHANGED' });
+    }
+    if (!body && suggestion === undefined) return res.status(400).json({ error_code: 'BODY_REQUIRED' });
 
     try {
-      const ok = shareLinks.editReaderComment(id, token, rtRaw, body);
+      const ok = shareLinks.editReaderComment(id, token, rtRaw, body, suggestion);
       if (!ok) return res.status(404).json({ error_code: 'NOT_FOUND' });
       res.json({ ok: true, comment: serializeCommentForReader(shareLinks.getCommentById(id), rtRaw) });
     } catch (e) {

@@ -90,7 +90,13 @@ function mountSyncRoutes(router, provider, opts = {}) {
     if (!found) return;
     try {
       const remote = await provider.fetchRemote(provider.client(found.conn), found.link, 'precheck');
-      res.json({ remoteId: provider.remoteId(found.link), ...(await provider.remoteView(remote)) });
+      // Abschnittsstand mitgeben: HubSpot zeigt schon gespiegelte Bilder im
+      // Diff mit ihrer lokalen Adresse (die CSP sperrt das CDN).
+      const pageRow = await contentStore.loadPage(pageId).catch(() => null);
+      const view = await provider.remoteView(remote, {
+        pageHtml: pageRow?.html || pageRow?.body_html || '', bookId: req.bookId, hubId: provider.linkConnId(found.link),
+      });
+      res.json({ remoteId: provider.remoteId(found.link), ...view });
     } catch (e) {
       sendRemoteError(res, e, P);
     }
@@ -120,7 +126,7 @@ function mountSyncRoutes(router, provider, opts = {}) {
           return res.status(404).json({ error_code: 'PAGE_NOT_FOUND' });
         }
         const applied = await provider.applyRemote({
-          pageId, bookId: req.bookId, pageRow, remote, userEmail: sessionEmail(req),
+          pageId, bookId: req.bookId, pageRow, remote, userEmail: sessionEmail(req), logger,
         });
         renamedTo = applied?.name || null;
         // `syncedAt` (falls der Adapter ihn liefert): Stempel des eigenen Writes

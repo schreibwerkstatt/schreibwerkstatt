@@ -7,6 +7,7 @@
 
 const { searchChatHistory } = require('../../../lib/chat-search');
 const { SEARCHABLE_KINDS } = require('../../../db/chat-search');
+const { clampInt, clip } = require('./shared');
 
 const DEFAULT_LIMIT = 8;
 const MAX_LIMIT = 20;
@@ -17,7 +18,7 @@ async function tool_search_chat_history(input, ctx) {
   if (!query) return { error: 'query fehlt', errorKey: 'chat.toolError.missingParam', errorParams: { param: 'query' } };
   if (!ctx.userEmail) return { query, count: 0, results: [] };
   const scope = SEARCHABLE_KINDS.includes(input.scope) ? input.scope : 'all';
-  const limit = Math.min(Math.max(1, Number.isInteger(input.limit) ? input.limit : DEFAULT_LIMIT), MAX_LIMIT);
+  const limit = clampInt(input.limit, DEFAULT_LIMIT, 1, MAX_LIMIT);
 
   const r = await searchChatHistory({
     bookId: ctx.bookId, userEmail: ctx.userEmail, query,
@@ -30,7 +31,7 @@ async function tool_search_chat_history(input, ctx) {
     ...(h.page_name ? { page_name: h.page_name } : {}),
     title: h.title,
     created_at: h.created_at,
-    snippet: h.plain.length > SNIPPET_CHARS ? h.plain.slice(0, SNIPPET_CHARS) + '…' : h.plain,
+    snippet: clip(h.plain, SNIPPET_CHARS),
   }));
   // Stand der Bedeutungssuche: ohne diese Felder läse das Modell eine reine
   // Wortlaut-Trefferliste als vollständig.

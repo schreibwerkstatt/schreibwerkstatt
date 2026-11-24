@@ -5,7 +5,7 @@
 // __SHELL_BUILD: content hash over all listed assets → drives SHELL_CACHE.
 // __SHELL_MANIFEST: the coherent set precached atomically at SW install.
 // __VENDOR_SET: current vendor/ + fonts/ files — VENDOR_CACHE prune list.
-self.__SHELL_BUILD = "5930dd7999c22b47";
+self.__SHELL_BUILD = "05c65a1442697755";
 self.__SHELL_MANIFEST = [
   "/css/admin/admin-backup.css",
   "/css/admin/admin-home.css",
@@ -658,6 +658,7 @@ self.__SHELL_MANIFEST = [
   "/js/chat/research-chat-proposals.js",
   "/js/chat/research-chat-render.js",
   "/js/chat/research-chat.js",
+  "/js/chat/tool-log-methods.js",
   "/js/chat/tool-log.js",
   "/js/client-error.js",
   "/js/collapsible.js",
@@ -679,6 +680,7 @@ self.__SHELL_MANIFEST = [
   "/js/editor/book-editor-comments.js",
   "/js/editor/comment-rail-core.js",
   "/js/editor/comment-rail-layout.js",
+  "/js/editor/comment-suggestion.js",
   "/js/editor/comment-threads.js",
   "/js/editor/comments-rail.js",
   "/js/editor/draft-idb.js",
@@ -883,6 +885,7 @@ self.__SHELL_MANIFEST = [
   "/js/prompts/book-outline.js",
   "/js/prompts/buchlandkarte.js",
   "/js/prompts/chat-pre-context.js",
+  "/js/prompts/chat-round-note.js",
   "/js/prompts/chat-tools/access.js",
   "/js/prompts/chat-tools/catalog-analysis.js",
   "/js/prompts/chat-tools/catalog-planning.js",
@@ -977,6 +980,7 @@ self.__SHELL_MANIFEST = [
   "/js/share-reader/read-depth.js",
   "/js/share-reader/reading-prefs.js",
   "/js/share-reader/resume.js",
+  "/js/share-reader/review.js",
   "/js/share-reader/sheet.js",
   "/js/share-reader/theme.js",
   "/js/share-reader/thread-render.js",
@@ -1158,7 +1162,9 @@ self.__SHELL_MANIFEST = [
   "/partials/chat-history-search.html",
   "/partials/chat-idee-vorschlaege.html",
   "/partials/chat-quick-actions.html",
+  "/partials/chat-run-failed.html",
   "/partials/chat-session-list.html",
+  "/partials/chat-stop-note.html",
   "/partials/chat-titel-varianten.html",
   "/partials/chat-tool-log-row.html",
   "/partials/chat-tool-log.html",
@@ -1342,6 +1348,7 @@ self.__SHELL_MANIFEST = [
   "/partials/reference.html",
   "/partials/relation-conflicts-list.html",
   "/partials/search.html",
+  "/partials/share-links-review.html",
   "/partials/share-links.html",
   "/partials/shortcuts-more.html",
   "/partials/shortcuts.html",

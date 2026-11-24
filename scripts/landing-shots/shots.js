@@ -148,9 +148,10 @@ async function captureAll({ base, seed, outDir }) {
   await page.goto(`${base}/#book/${seed.bookId}`, { waitUntil: 'domcontentloaded' });
   await _waitRoot(page, () => !!window.__app && !!window.Alpine?.store('nav')?.selectedBookId);
   await page.waitForTimeout(1200);
-  // Job-Toasts («Abschnitts-Lektorat fertig») sind Bedienhinweise, keine
-  // Produktabbildung — sie würden auf jedem Bild unten rechts kleben.
-  await page.addStyleTag({ content: '.toast-live { display: none !important; }' });
+  // Job-Toasts («Abschnitts-Lektorat fertig») und der Einstiegs-Hinweis über
+  // dem Abschnitt («Abschnitt lektorieren») sind Bedienhinweise, keine
+  // Produktabbildung — sie würden auf den Bildern kleben.
+  await page.addStyleTag({ content: '.toast-live, .page-aha { display: none !important; }' });
   // Aufnahme-Modus: die Inhaltsspalten der Karten auf Kachelbreite (460 px)
   // begrenzen. Sonst laufen die Zeilen über den Ausschnitt hinaus und der
   // Screenshot schneidet sie mitten im Wort ab.
@@ -171,6 +172,31 @@ async function captureAll({ base, seed, outDir }) {
     await window.__app.selectPage(window.Alpine.store('nav').pages[0]);
   });
   await page.waitForTimeout(1500);
+
+  // ── 2a. Kommentare: die Leiste des Autors neben dem Text ──────────────────
+  // Notebook-Leseansicht des geteilten Abschnitts: die Leser-Kommentare stehen
+  // in der Randleiste rechts (vor dem Lektorat-Lauf — mit offenen Befunden
+  // blendet die Leiste aus). Ausschnitt rechtsbündig an der Leiste, links
+  // davon der Text mit den markierten Stellen.
+  // Die Leiste startet je Abschnitt eingeklappt; der Knopf in den
+  // Abschnitts-Aktionen schaltet sie per Window-Event.
+  await page.evaluate(() => window.dispatchEvent(new CustomEvent('comments-rail:toggle')));
+  await page.waitForSelector('.comments-split .comment-rail:visible', { state: 'visible', timeout: 20000 });
+  await page.waitForTimeout(1200);
+  // Die Antwort des Besitzers trägt den Namen des Dev-Kontos («Dev (lokal)»);
+  // die Leser-Ansicht zeigt dafür «Autor» — im Bild dieselbe Bezeichnung.
+  await page.evaluate(() => {
+    for (const el of document.querySelectorAll('.comment-rail *')) {
+      if (el.children.length) continue;
+      if (el.textContent.trim() === 'Dev (lokal)') el.textContent = 'Autor';
+      else if (el.textContent.trim() === 'DL') el.textContent = 'A';
+    }
+  });
+  {
+    const railW = await page.locator('.comments-split .comment-rail:visible').first().evaluate(n => n.getBoundingClientRect().width);
+    shots.push(await _shot(page, outDir, 'kommentare', '.comments-split .comment-rail:visible', { rect: { x: Math.round(railW) - CROP_W, y: 0 } }));
+  }
+
   await page.evaluate(() => window.__app.runCheck());
   await _waitRoot(page, () => window.__app.checkDone === true && (window.__app.lektoratFindings || []).length > 0);
   // Die Befunde angehakt zeigen: abgewählte stehen abgeblendet (0.55) da und
@@ -178,6 +204,8 @@ async function captureAll({ base, seed, outDir }) {
   await page.evaluate(() => window.__app.selectAllFindings(true));
   await page.waitForTimeout(1200);
   shots.push(await _shot(page, outDir, 'lektorat', '.lektorat-split-findings', { rect: { x: 0, y: 0 } }));
+  // Dieselben Befunde im Text: markierte Stellen in der Vorschau links.
+  shots.push(await _shot(page, outDir, 'lektorat-text', '.lektorat-split-preview', { rect: { x: 0, y: 0 } }));
 
   // ── 3. Manuskript im Blick: Stil-Heatmap je Kapitel ──────────────────────
   // Regelbasiert (kein KI-Lauf): Satzlänge, Füllwörter, Passiv, Wiederholungen
@@ -292,6 +320,21 @@ async function captureAll({ base, seed, outDir }) {
   await page.waitForSelector('.card--export', { state: 'visible', timeout: 20000 });
   await page.waitForTimeout(1500);
   shots.push(await _shot(page, outDir, 'export', '.card--export', { rect: { x: 0, y: 0 } }));
+
+  // ── 9a. Teilen: die Karte «Geteilte Links» ─────────────────────────────────
+  await page.evaluate(async () => {
+    window.__app._closeOtherMainCards?.(null);
+    await window.__app.toggleShareLinksCard();
+  });
+  await page.waitForSelector('.card--share', { state: 'visible', timeout: 20000 });
+  await page.waitForTimeout(1500);
+  // Die Liste der bestehenden Links (Ziel, Aufrufe, Kommentare) erzählt
+  // «geteilt, was fertig ist» — das Formular darüber wäre nur Bedienung. Auf
+  // Kachelbreite begrenzt, sonst bricht die Zeile mitten im Wort ab. Die
+  // Link-URL zeigte die Wegwerf-Adresse des Aufnahme-Servers.
+  await page.addStyleTag({ content: '.card--share .share-list { max-width: 440px; } .card--share .share-row__url { display: none !important; }' });
+  await page.waitForTimeout(400);
+  shots.push(await _shot(page, outDir, 'teilen', '.card--share .share-list', { rect: { x: -12, y: -12 } }));
 
   // ── 10. Testleser: geteilter Abschnitt (ohne Session) ───────────────────────
   const shareToken = seed.shareTokens?.page;

@@ -133,3 +133,28 @@ test('Gedächtnis: Änderungen erscheinen mit Stand', () => {
   assert.deepEqual(mem.map(m => [m.kind, m.item_id, m.change_state]), [['change', 5, 'applied'], ['change', 6, 'discarded']]);
   assert.match(mem[0].what, /Status → in_arbeit/);
 });
+
+test('Suchweg ohne Manuskripttext (SearXNG): «eingearbeitet» serverseitig abgelehnt, auch mit gültigem Beleg', async () => {
+  const id = item();
+  const c = { ...ctx(), manuscriptWithheld: true };
+  const { r } = await propose({ item_id: id, status: 'eingearbeitet', beleg: { text: 'fuhr um 7 Uhr in Olten ein', page_id: PAGE } }, c);
+  assert.equal(r.ok, false);
+  assert.equal(c.changeProposals?.length || 0, 0);
+});
+
+test('Suchweg ohne Manuskripttext: search_chat_history durchsucht nur Recherche-Gespräche', async () => {
+  const NOWS = '2026-01-01T00:00:00.000Z';
+  const sess = (kind) => db.prepare(
+    "INSERT INTO chat_sessions (book_id, kind, user_email, title, created_at, last_message_at) VALUES (?, ?, ?, 'T', ?, ?)"
+  ).run(BOOK, kind, USER, NOWS, NOWS).lastInsertRowid;
+  const msg = (sid, text) => db.prepare(
+    "INSERT INTO chat_messages (session_id, role, content, created_at) VALUES (?, 'assistant', ?, ?)"
+  ).run(sid, text, NOWS);
+  msg(sess('book'), 'Manuskript: Zahnradbahn Rigi geheim');
+  msg(sess('research'), 'Recherche: Zahnradbahn Rigi 1871');
+  const kindsOf = (out) => out.results.map(r => r.kind).sort();
+  const open = await executeResearchTool('search_chat_history', { query: 'Zahnradbahn Rigi' }, ctx());
+  assert.deepEqual(kindsOf(open), ['book', 'research'], 'Gegenprobe: ohne Flag beide Gespräche');
+  const closed = await executeResearchTool('search_chat_history', { query: 'Zahnradbahn Rigi', scope: 'book' }, { ...ctx(), manuscriptWithheld: true });
+  assert.deepEqual(kindsOf(closed), ['research']);
+});

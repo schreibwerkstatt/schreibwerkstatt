@@ -16,8 +16,7 @@
 import { sendJson } from '../utils.js';
 import { tFetchError } from '../i18n.js';
 import { diffParts } from '../diff/diff-parts.js';
-import { persistProposalStatus, applyProposalOnce, proposalApplyError } from './proposal-status.js';
-import { trackChatProposal } from '../features-usage.js';
+import { makeProposalApplyMethods, proposalBaseState } from './proposal-status.js';
 import { IDEE_OPEN_STATUSES } from '../book/ideen-shared.js';
 
 function _find(ideen, id) {
@@ -43,10 +42,11 @@ export function refAppliedIdeeId(proposals, ref, ideen) {
 export function ideenProposalStatus(p, proposals, ideen, stages = null) {
   const out = { state: 'open', removed: false, blocked: null, stale: false };
   if (!p) return out;
-  if (p.applied_at) {
+  const base = proposalBaseState(p);
+  if (base === 'applied') {
     if (p.type !== 'idee_create' || _find(ideen, p.applied_id)) { out.state = 'applied'; return out; }
     out.removed = true;
-  } else if (p.status === 'discarded') {
+  } else if (base === 'discarded') {
     out.state = 'discarded';
     return out;
   }
@@ -131,6 +131,32 @@ export function ideeUpdateRows(p) {
   return rows;
 }
 
+/**
+ * Beleg eines Ideen-Vorschlags (idee_update mit `beleg`: «erledigt»/«verworfen»
+ * stützen sich auf eine Textstelle DES VORSCHLAGS-ZEITPUNKTS) gegen den aktuellen
+ * Abschnitt prüfen — Server, gleiche Normalisierung wie beim Vorschlagen.
+ * Geteilt von Ideen-Chat und Abschnitts-Chat (chat-idee-proposals.js).
+ * → true = übernehmen. Fehlt der Beleg, markiert `_belegMissing` und fragt nach;
+ * ein Prüf-Fehler (offline, Server) setzt `_error` und bricht ab, statt
+ * ungeprüft zu übernehmen. `statusLabel(status)` beschriftet die Stufe.
+ */
+export async function confirmIdeeBeleg(msg, pi, p, statusLabel) {
+  if (p?.type !== 'idee_update' || !p.beleg?.text) return true;
+  const app = window.__app;
+  let r;
+  try {
+    r = await sendJson('/ideen/chat-proposal/beleg-check', 'POST', { message_id: msg.id, index: pi });
+  } catch (e) {
+    p._error = tFetchError(e);
+    return false;
+  }
+  p._belegMissing = r?.checked === true && r.found === false;
+  if (!p._belegMissing) return true;
+  return !!(await app.appConfirm({
+    message: app.t('ideenBoard.chat.belegGoneConfirm', { status: statusLabel(p.fields?.status || 'erledigt') }),
+  }));
+}
+
 export const ideenProposalMethods = {
   ideenProposals(msg) {
     return Array.isArray(msg?.context_info?.proposals) ? msg.context_info.proposals : [];
@@ -147,10 +173,11 @@ export const ideenProposalMethods = {
     return window.__app.t(`ideenBoard.chat.type.${p?.type || 'idee_create'}`);
   },
 
-  // Blockier-Grund als Text (Status-Keys der Stufen übersetzt).
+  // Blockier-Grund als Text (Status-Keys der Stufen übersetzt). Schon geschrieben
+  // (`_written`, nur der Status fehlt): kein Grund mehr — der Knopf ist klickbar.
   ideenProposalBlockedText(msg, pi) {
     const b = this.ideenProposalStatus(msg, pi).blocked;
-    if (!b) return '';
+    if (!b || this.ideenProposals(msg)[pi]?._written) return '';
     const params = { ...(b.params || {}) };
     if (params.status) params.status = this.statusLabel(params.status);
     return window.__app.t(b.key, params);
@@ -160,87 +187,40 @@ export const ideenProposalMethods = {
     return window.__app.t(`ideen.link.kind.${p?.target_kind}`);
   },
 
-  async applyIdeenProposal(msg, pi) {
-    const app = window.__app;
-    const list = this.ideenProposals(msg);
-    const p = list[pi];
-    if (!p || p._applying || this.busy) return;
-    const st = ideenProposalStatus(p, list, this.ideen || [], this.stages);
-    if (st.state !== 'open' || (st.blocked && !p._written)) return;
-    p._applying = true;
-    p._error = '';
-    try {
-      // «erledigt» steht auf einem Beleg aus dem Text DES VORSCHLAGS-ZEITPUNKTS —
-      // vor dem Übernehmen gegen den aktuellen Abschnitt prüfen (Server, gleiche
-      // Normalisierung wie beim Vorschlagen). Fehlt er, nur nach Rückfrage.
-      if (!p._written && !(await this._confirmIdeenBeleg(msg, pi, p))) return;
+  // ideenProposalCanApply / applyIdeenProposal / discardIdeenProposal
+  ...makeProposalApplyMethods({
+    url: '/ideen/chat-proposal',
+    chat: 'ideen',
+    names: { list: 'ideenProposals', status: 'ideenProposalStatus', canApply: 'ideenProposalCanApply', apply: 'applyIdeenProposal', discard: 'discardIdeenProposal' },
+    applyKey: 'ideenBoard.chat.applyError',
+    statusKey: 'ideenBoard.chat.statusError',
+    async confirmFirst(msg, pi, p) {
+      if (!(await confirmIdeeBeleg(msg, pi, p, (s) => this.statusLabel(s)))) return false;
       // Zusammenführen löscht die aufgehenden Ideen — einmal ausdrücklich bestätigen.
-      if (!p._written && p.type === 'idee_merge' && !(await app.appConfirm({
+      if (p.type !== 'idee_merge') return true;
+      const app = window.__app;
+      return !!(await app.appConfirm({
         message: app.tn('ideenBoard.chat.mergeConfirm', (p.merge_ids || []).length),
         confirmLabel: app.t('ideenBoard.chat.mergeConfirmLabel'),
         danger: true,
-      }))) return;
-      this.busy = true;
-      let writtenId = null;
-      const r = await applyProposalOnce('/ideen/chat-proposal', msg, pi, async () => {
-        const id = await this._applyIdeenProposalByType(p, list);
-        writtenId = id;
-        this.busy = false;
-        this.errorMessage = '';
-        this._memos = {};
-        this._publishCounts();
-        await this._ensureBoardSortables();
-        return id;
-      });
-      // Neue oder umgehängte Idee sofort im Board zeigen — auch wenn ein Filter
-      // oder eine eingeklappte Bahn sie verdecken würde. Gilt, sobald das Board
-      // geschrieben ist, auch wenn danach nur der Status-PATCH scheitert.
+      }));
+    },
+    write(p, list) { return this._applyIdeenProposalByType(p, list); },
+    async afterWrite() {
+      this._memos = {};
+      this._publishCounts();
+      await this._ensureBoardSortables();
+    },
+    // Neue oder umgehängte Idee sofort im Board zeigen — auch wenn ein Filter
+    // oder eine eingeklappte Bahn sie verdecken würde. Gilt, sobald das Board
+    // geschrieben ist, auch wenn danach nur der Status-PATCH scheitert.
+    async afterApply(p, id) {
       const f = p.fields || {};
-      if (writtenId != null && (p.type === 'idee_create' || (p.type === 'idee_update' && ('page_id' in f || 'chapter_id' in f)))) {
-        await this.revealIdee(writtenId);
+      if (id != null && (p.type === 'idee_create' || (p.type === 'idee_update' && ('page_id' in f || 'chapter_id' in f)))) {
+        await this.revealIdee(id);
       }
-      if (r.ok) { if (!r.already) trackChatProposal('ideen', 'applied', p.type); return; }
-      const err = proposalApplyError(r, { applyKey: 'ideenBoard.chat.applyError', statusKey: 'ideenBoard.chat.statusError' });
-      if (err) p._error = err;
-    } finally {
-      this.busy = false;
-      p._applying = false;
-    }
-  },
-
-  // → true = übernehmen. Prüft den Beleg eines «erledigt»-Vorschlags gegen den
-  // aktuellen Abschnittstext; fehlt er, markiert den Vorschlag (_belegMissing)
-  // und fragt nach. Ein Prüf-Fehler (offline, Server) bricht ab, statt
-  // ungeprüft zu übernehmen.
-  async _confirmIdeenBeleg(msg, pi, p) {
-    // Gilt für jeden Beleg — «erledigt» wie «verworfen» stützen sich auf eine Textstelle.
-    if (p.type !== 'idee_update' || !p.beleg?.text) return true;
-    const app = window.__app;
-    let r;
-    try {
-      r = await sendJson('/ideen/chat-proposal/beleg-check', 'POST', { message_id: msg.id, index: pi });
-    } catch (e) {
-      p._error = tFetchError(e);
-      return false;
-    }
-    p._belegMissing = r?.checked === true && r.found === false;
-    if (!p._belegMissing) return true;
-    return !!(await app.appConfirm({
-      message: app.t('ideenBoard.chat.belegGoneConfirm', { status: this.statusLabel(p.fields?.status || 'erledigt') }),
-    }));
-  },
-
-  async discardIdeenProposal(msg, pi, discard = true) {
-    const p = this.ideenProposals(msg)[pi];
-    if (!p || p._applying) return;
-    p._error = '';
-    try {
-      await persistProposalStatus('/ideen/chat-proposal', msg, pi, discard ? 'discarded' : 'reopen');
-      trackChatProposal('ideen', discard ? 'discarded' : 'reopened', p.type);
-    } catch (e) {
-      p._error = tFetchError(e);
-    }
-  },
+    },
+  }),
 
   // Ein Schreibweg je Art, über die regulären /ideen-Routen. Wirft bei Fehler
   // (fetchJson) — die Server-Prüfung gilt unverändert.

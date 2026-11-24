@@ -26,13 +26,7 @@ export function ideenChatState() {
 }
 
 export const ideenChatMethods = {
-  async toggleIdeenChat() {
-    this.ideenChatOpen = !this.ideenChatOpen;
-    if (this.ideenChatOpen) {
-      await this._onVisibleIdeenChat();
-      this.$nextTick(() => this.$root?.querySelector('.ideen-chat-input')?.focus());
-    }
-  },
+  // toggleIdeenChat kommt aus makeChatMethods (openProp).
 
   // Schnellstart-Auftrag aus dem leeren Panel: füllt die Eingabe und schickt ab.
   async askIdeenChat(key) {
@@ -42,11 +36,15 @@ export const ideenChatMethods = {
   },
 
   // Feature-Tipp «Was ist schon erledigt?» (ideen-board.html): Panel öffnen und
-  // den Erledigt-Check in einem neuen Gespräch starten.
+  // den Erledigt-Check in einem neuen Gespräch starten. Läuft schon ein Lauf
+  // (die Karte sendet nur einen zur Zeit), liegt die Frage in einem neuen
+  // Gespräch im Eingabefeld bereit, statt dass der Klick verpufft.
   async startIdeenErledigtCheck() {
     if (!this.ideenChatOpen) await this.toggleIdeenChat();
+    const key = 'ideenBoard.chat.starter.erledigt';
+    if (this.ideenChatLoading) { await this.prepareIdeenChatDraft(window.__app.t(key)); return; }
     await this.startNewIdeenChatSession();
-    await this.askIdeenChat('ideenBoard.chat.starter.erledigt');
+    await this.askIdeenChat(key);
   },
 
   // Tipp nur, wenn genug offene Ideen an Abschnitten/Kapiteln hängen.
@@ -59,6 +57,8 @@ export const ideenChatMethods = {
   ...makeChatMethods({
     untitledKey: 'ideenBoard.chat.untitled',
     label: 'IdeenChat',
+    openProp: 'ideenChatOpen',
+    inputSelector: '.ideen-chat-input',
     props: {
       sessions: 'ideenChatSessions',
       messages: 'ideenChatMessages',

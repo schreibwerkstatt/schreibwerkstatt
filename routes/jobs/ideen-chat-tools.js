@@ -67,13 +67,13 @@ function _anchorLabel(state, { page_id, chapter_id }) {
 function _resolveAnchor(input, state) {
   const pageId = _int(input.page_id);
   const chapterId = _int(input.chapter_id);
-  if (pageId && chapterId) return _err('Entweder page_id ODER chapter_id — eine Idee hängt an höchstens einem Anker.');
+  if (pageId && chapterId) return _err('Entweder page_id ODER chapter_id — eine Idee hängt an höchstens einem Anker.', 'conflict');
   if (pageId) {
-    if (!state.pageById.has(pageId)) return _err(`Abschnitt #${pageId} gehört nicht zu diesem Buch. Nutze eine page#-id aus der Gliederung.`);
+    if (!state.pageById.has(pageId)) return _err(`Abschnitt #${pageId} gehört nicht zu diesem Buch. Nutze eine page#-id aus der Gliederung.`, 'notInBook');
     return { page_id: pageId };
   }
   if (chapterId) {
-    if (!state.chapterNames.has(chapterId)) return _err(`Kapitel #${chapterId} gehört nicht zu diesem Buch. Nutze eine chapter#-id aus der Gliederung.`);
+    if (!state.chapterNames.has(chapterId)) return _err(`Kapitel #${chapterId} gehört nicht zu diesem Buch. Nutze eine chapter#-id aus der Gliederung.`, 'notInBook');
     // Einabschnitts-Kapitel: derselbe Ort wie sein Abschnitt, die Idee hängt am Abschnitt.
     const c = canonicalIdeeAnchor({ kind: 'chapter', id: chapterId });
     if (c.kind === 'page' && state.pageById.has(c.id)) return { page_id: c.id };
@@ -105,10 +105,10 @@ async function belegInPage(pageId, beleg, bookId = null) {
 }
 
 function _proposeCreate(input, ctx, state) {
-  if (input.status != null) return _err('Eine neue Idee beginnt immer als «offen» — status nur bei Änderungen (mit idee_id).');
+  if (input.status != null) return _err('Eine neue Idee beginnt immer als «offen» — status nur bei Änderungen (mit idee_id).', 'conflict');
   const content = _str(input.content, MAX_CONTENT);
-  if (!content) return _err('Neue Idee braucht content (Stichpunkt, keine Prosa).');
-  if (input.anker_loesen === true) return _err('anker_loesen nur bei Änderungen (mit idee_id) — eine neue Idee ohne Ort ist schon eine Buch-Idee.');
+  if (!content) return _err('Neue Idee braucht content (Stichpunkt, keine Prosa).', 'missing');
+  if (input.anker_loesen === true) return _err('anker_loesen nur bei Änderungen (mit idee_id) — eine neue Idee ohne Ort ist schon eine Buch-Idee.', 'conflict');
   const anchor = _resolveAnchor(input, state);
   if (anchor.error) return anchor;
   // Dieselbe neue Idee zweimal in einer Antwort: nicht doppelt sammeln.
@@ -135,7 +135,7 @@ async function _pageHaystack(ctx, pageId) {
 
 async function _proposeUpdate(input, ctx, state, ideeId) {
   const idee = state.ideeById.get(ideeId);
-  if (!idee) return _err(`Idee #${ideeId} gibt es nicht. Nutze eine [#id] aus der Ideenliste.`);
+  if (!idee) return _err(`Idee #${ideeId} gibt es nicht. Nutze eine [#id] aus der Ideenliste.`, 'unknown');
   const fields = {};
   const before = {};
   const labels = { idee: _preview(idee.content) };
@@ -144,11 +144,11 @@ async function _proposeUpdate(input, ctx, state, ideeId) {
   const c = _str(input.content, MAX_CONTENT);
   if (c && c !== idee.content) { fields.content = c; before.content = idee.content; }
   if (input.status != null) {
-    if (!isIdeeStatus(input.status)) return _err(`Unbekannte Stufe «${input.status}». Erlaubt: ${state.stages.join(', ')}.`);
+    if (!isIdeeStatus(input.status)) return _err(`Unbekannte Stufe «${input.status}». Erlaubt: ${state.stages.join(', ')}.`, 'invalid');
     if (input.status !== idee.status) {
       // = routes/ideen.js: in eine abgeschaltete Stufe wird nicht gewechselt.
       if (!state.stages.includes(input.status)) {
-        return _err(`Die Stufe «${input.status}» ist in diesem Buch abgeschaltet. Erlaubt: ${state.stages.join(', ')}.`);
+        return _err(`Die Stufe «${input.status}» ist in diesem Buch abgeschaltet. Erlaubt: ${state.stages.join(', ')}.`, 'invalid');
       }
       fields.status = input.status;
       before.status = idee.status;
@@ -158,9 +158,9 @@ async function _proposeUpdate(input, ctx, state, ideeId) {
   if (anchor.error) return anchor;
   if (input.anker_loesen === true) {
     // Zurück ans Buch: PATCH /ideen/:id mit page_id = chapter_id = null.
-    if (anchor.page_id || anchor.chapter_id) return _err('anker_loesen und ein neuer Ort schliessen sich aus.');
-    if (idee.page_id == null && idee.chapter_id == null) return _err(`Idee #${ideeId} hängt schon an keinem Ort.`);
-    if (!isOpenIdeeStatus(idee.status)) return _err(`Idee #${ideeId} ist ${idee.status} — eine abgeschlossene Idee wandert nicht mehr.`);
+    if (anchor.page_id || anchor.chapter_id) return _err('anker_loesen und ein neuer Ort schliessen sich aus.', 'conflict');
+    if (idee.page_id == null && idee.chapter_id == null) return _err(`Idee #${ideeId} hängt schon an keinem Ort.`, 'noChange');
+    if (!isOpenIdeeStatus(idee.status)) return _err(`Idee #${ideeId} ist ${idee.status} — eine abgeschlossene Idee wandert nicht mehr.`, 'notAllowed');
     fields.page_id = null;
     fields.chapter_id = null;
     before.page_id = idee.page_id ?? null;
@@ -170,7 +170,7 @@ async function _proposeUpdate(input, ctx, state, ideeId) {
     labels.anchor_before = _anchorLabel(state, idee) || null;
   } else if (anchor.page_id || anchor.chapter_id) {
     // = routes/ideen.js: eine abgeschlossene Idee wandert nicht mehr.
-    if (!isOpenIdeeStatus(idee.status)) return _err(`Idee #${ideeId} ist ${idee.status} — eine abgeschlossene Idee bekommt keinen neuen Ort.`);
+    if (!isOpenIdeeStatus(idee.status)) return _err(`Idee #${ideeId} ist ${idee.status} — eine abgeschlossene Idee bekommt keinen neuen Ort.`, 'notAllowed');
     const same = anchor.page_id ? anchor.page_id === idee.page_id : anchor.chapter_id === idee.chapter_id;
     if (!same) {
       // Der neue Anker leert den alten — auch beim Wechsel Kapitel ↔ Abschnitt.
@@ -182,22 +182,22 @@ async function _proposeUpdate(input, ctx, state, ideeId) {
       labels.anchor_before = _anchorLabel(state, idee) || null;
     }
   }
-  if (!Object.keys(fields).length) return _err(`Der Vorschlag ändert an Idee #${ideeId} nichts.`);
+  if (!Object.keys(fields).length) return _err(`Der Vorschlag ändert an Idee #${ideeId} nichts.`, 'noChange');
 
   let beleg = null;
   const belegText = _str(input.beleg, MAX_BELEG);
   const bp = _int(input.beleg_page_id);
   if (fields.status && ('page_id' in fields || 'chapter_id' in fields) && !isOpenIdeeStatus(fields.status)) {
-    return _err('Ort ändern und zugleich abschliessen geht nicht — eine Idee wandert nur, solange sie offen ist.');
+    return _err('Ort ändern und zugleich abschliessen geht nicht — eine Idee wandert nur, solange sie offen ist.', 'notAllowed');
   }
   if (fields.status === 'erledigt' && (!belegText || !bp)) {
-    return _err('Wer «erledigt» vorschlägt, belegt es: gib in `beleg` die Textstelle (wörtlich, kurz) an, die die Pendenz einlöst, und in beleg_page_id ihren Abschnitt.');
+    return _err('Wer «erledigt» vorschlägt, belegt es: gib in `beleg` die Textstelle (wörtlich, kurz) an, die die Pendenz einlöst, und in beleg_page_id ihren Abschnitt.', 'evidence');
   }
   if (belegText) {
-    if (!bp) return _err('Zum beleg gehört beleg_page_id — der Abschnitt, in dem das Zitat steht.');
-    if (!state.pageById.has(bp)) return _err(`beleg_page_id #${bp} gehört nicht zu diesem Buch.`);
+    if (!bp) return _err('Zum beleg gehört beleg_page_id — der Abschnitt, in dem das Zitat steht.', 'evidence');
+    if (!state.pageById.has(bp)) return _err(`beleg_page_id #${bp} gehört nicht zu diesem Buch.`, 'notInBook');
     if (!quoteFoundIn(belegText, await _pageHaystack(ctx, bp), { strict: true })) {
-      return _err(`Das Zitat steht so nicht in Abschnitt #${bp}. Lies den Abschnitt und zitiere wörtlich eine zusammenhängende Stelle (je Teilstück mind. drei Wörter, höchstens zwei Auslassungen «…») — oder lass den Vorschlag weg.`);
+      return _err(`Das Zitat steht so nicht in Abschnitt #${bp}. Lies den Abschnitt und zitiere wörtlich eine zusammenhängende Stelle (je Teilstück mind. drei Wörter, höchstens zwei Auslassungen «…») — oder lass den Vorschlag weg.`, 'evidence');
     }
     beleg = { text: belegText, page_id: bp };
     labels.beleg_page = state.pageById.get(bp)?.name || null;
@@ -213,9 +213,9 @@ async function _proposeIdee(input, ctx) {
   const state = _state(ctx);
   const ideeId = _int(input.idee_id);
   if (Array.isArray(input.merge_ids) && input.merge_ids.length) {
-    if (!ideeId) return _err('merge_ids nur zusammen mit idee_id — der Idee, die bleibt.');
+    if (!ideeId) return _err('merge_ids nur zusammen mit idee_id — der Idee, die bleibt.', 'missing');
     if (input.status != null || input.page_id || input.chapter_id || input.anker_loesen === true || input.beleg) {
-      return _err('Beim Zusammenführen nur content angeben — Stufe und Ort der bleibenden Idee ändert ein eigener Vorschlag.');
+      return _err('Beim Zusammenführen nur content angeben — Stufe und Ort der bleibenden Idee ändert ein eigener Vorschlag.', 'conflict');
     }
     return _proposeMerge(input, ctx);
   }
@@ -225,10 +225,10 @@ async function _proposeIdee(input, ctx) {
 function _proposeLink(input, ctx) {
   const state = _state(ctx);
   const kind = input.target_kind;
-  if (!isIdeaLinkKind(kind)) return _err(`target_kind muss einer von research, beat, thread, motif, draft sein.`);
+  if (!isIdeaLinkKind(kind)) return _err(`target_kind muss einer von research, beat, thread, motif, draft sein.`, 'invalid');
   const targetId = _int(input.target_id);
   const target = targetId ? (state.targets?.[kind] || []).find(t => t.id === targetId) : null;
-  if (!target) return _err(`${kind}#${input.target_id} ist kein verknüpfbares Ziel in diesem Buch. Nutze eine id aus der Zielliste.`);
+  if (!target) return _err(`${kind}#${input.target_id} ist kein verknüpfbares Ziel in diesem Buch. Nutze eine id aus der Zielliste.`, 'notInBook');
 
   const n = _int(input.idee_ref);
   if (n) {
@@ -242,9 +242,9 @@ function _proposeLink(input, ctx) {
   }
   const ideeId = _int(input.idee_id);
   const idee = ideeId ? state.ideeById.get(ideeId) : null;
-  if (!idee) return _err(`Idee #${input.idee_id} gibt es nicht. Nutze eine [#id] aus der Ideenliste oder idee_ref.`);
+  if (!idee) return _err(`Idee #${input.idee_id} gibt es nicht. Nutze eine [#id] aus der Ideenliste oder idee_ref.`, 'unknown');
   if ((idee.links || []).some(l => l.target_kind === kind && l.target_id === targetId)) {
-    return _err(`Idee #${ideeId} ist mit ${kind}#${targetId} schon verknüpft.`);
+    return _err(`Idee #${ideeId} ist mit ${kind}#${targetId} schon verknüpft.`, 'duplicate');
   }
   return _push(ctx, {
     type: 'link_create', idee_id: ideeId, target_kind: kind, target_id: targetId,
@@ -257,21 +257,21 @@ function _proposeMerge(input, ctx) {
   const state = _state(ctx);
   const keepId = _int(input.idee_id);
   const keep = keepId ? state.ideeById.get(keepId) : null;
-  if (!keep) return _err(`Idee #${input.idee_id} gibt es nicht. idee_id ist die Idee, die bleibt — eine [#id] aus der Ideenliste.`);
+  if (!keep) return _err(`Idee #${input.idee_id} gibt es nicht. idee_id ist die Idee, die bleibt — eine [#id] aus der Ideenliste.`, 'unknown');
   const raw = Array.isArray(input.merge_ids) ? input.merge_ids : [];
   const ids = [...new Set(raw.map(_int).filter(Boolean))].filter(id => id !== keepId);
-  if (!ids.length) return _err('merge_ids braucht mindestens eine andere Idee, die in idee_id aufgeht.');
-  if (ids.length > MAX_MERGE) return _err(`Höchstens ${MAX_MERGE} Ideen pro Zusammenführung.`);
+  if (!ids.length) return _err('merge_ids braucht mindestens eine andere Idee, die in idee_id aufgeht.', 'missing');
+  if (ids.length > MAX_MERGE) return _err(`Höchstens ${MAX_MERGE} Ideen pro Zusammenführung.`, 'limit');
   const missing = ids.filter(id => !state.ideeById.has(id));
-  if (missing.length) return _err(`Unbekannte Ideen: ${missing.map(i => '#' + i).join(', ')}. Nutze [#id] aus der Ideenliste.`);
+  if (missing.length) return _err(`Unbekannte Ideen: ${missing.map(i => '#' + i).join(', ')}. Nutze [#id] aus der Ideenliste.`, 'unknown');
   const merged = ids.map(id => state.ideeById.get(id));
   if (!isOpenIdeeStatus(keep.status) && merged.some(i => isOpenIdeeStatus(i.status))) {
-    return _err(`Idee #${keepId} ist ${keep.status} — eine offene Pendenz geht nicht in einer abgeschlossenen auf. Behalte die offene.`);
+    return _err(`Idee #${keepId} ist ${keep.status} — eine offene Pendenz geht nicht in einer abgeschlossenen auf. Behalte die offene.`, 'notAllowed');
   }
   const taken = new Set();
   for (const p of ctx.proposals) if (p.type === 'idee_merge') [p.idee_id, ...p.merge_ids].forEach(i => taken.add(i));
   const clash = [keepId, ...ids].filter(i => taken.has(i));
-  if (clash.length) return _err(`${clash.map(i => '#' + i).join(', ')} steckt schon in einer Zusammenführung dieser Antwort — fasse alle Dubletten eines Gedankens in EINEM propose_idee-Aufruf zusammen.`);
+  if (clash.length) return _err(`${clash.map(i => '#' + i).join(', ')} steckt schon in einer Zusammenführung dieser Antwort — fasse alle Dubletten eines Gedankens in EINEM propose_idee-Aufruf zusammen.`, 'duplicate');
   const fields = {};
   const c = _str(input.content, MAX_CONTENT);
   if (c && c !== keep.content) fields.content = c;
@@ -296,7 +296,7 @@ const PROPOSE_HANDLERS = {
 async function executeIdeenChatTool(name, input, ctx) {
   if (PROPOSE_TOOLS.has(name)) {
     if (ctx.proposals.length >= MAX_PROPOSALS) {
-      return _err(`Höchstens ${MAX_PROPOSALS} Vorschläge pro Antwort. Beende die Antwort mit final_answer.`);
+      return _err(`Höchstens ${MAX_PROPOSALS} Vorschläge pro Antwort. Beende die Antwort mit final_answer.`, 'limit');
     }
     return PROPOSE_HANDLERS[name](input || {}, ctx);
   }

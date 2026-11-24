@@ -1,6 +1,7 @@
 // LIKE-Muster aus freiem Text: `%`, `_` und das Escape-Zeichen `\` selbst sind
-// Text, keine Platzhalter. Geprueft am Helper und an den zwei Konsumenten
-// (Content-Store-Fallback-Suche, Orts-Lookup des Buch-Chats mit KI-Namen).
+// Text, keine Platzhalter. Geprueft am Helper und an der Content-Store-Fallback-
+// Suche. Der Orts-Lookup des Buch-Chats mit KI-Namen läuft ohne LIKE in JS
+// (routes/jobs/chat-tools/shared.js#findByName) — hier gegen dieselben Fälle.
 
 import test from 'node:test';
 import assert from 'node:assert/strict';
@@ -14,7 +15,9 @@ require('../../db/migrations');
 const { db } = require('../../db/connection');
 const { likeContains, escapeLike } = require('../../db/like-escape');
 const contentStore = require('../../lib/content-store');
-const { findLocationByName } = require('../../db/book-chat/catalog');
+const { listLocationsWithFirstPage } = require('../../db/book-chat/catalog');
+const { findByName } = require('../../routes/jobs/chat-tools/shared');
+const findLocationByName = (bookId, user, name) => findByName(listLocationsWithFirstPage(bookId, user, null), name).row ?? undefined;
 
 const now = new Date().toISOString();
 db.prepare('INSERT INTO books (book_id, name, created_at, updated_at) VALUES (?, ?, ?, ?)').run(9601, 'B', now, now);

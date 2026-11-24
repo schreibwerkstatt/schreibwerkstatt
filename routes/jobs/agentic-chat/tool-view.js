@@ -13,6 +13,7 @@
 //     ],
 //     result: { key, params? } | null, // i18n-Key: was herauskam (Treffer, Abschnitte, …)
 //     trunc?: { shown, total },        // Liste gekürzt: so viele sah das Modell von wie vielen
+//     hits?: [ { t: 'ref', k, id, v } | { t: 'url', v } ],  // erste Treffer einer Suche (verlinkt)
 //   }
 //
 // Dazu das Lauf-Protokoll für loop.js (unten): Rundennotizen, Live-Kopie des Logs
@@ -29,6 +30,7 @@ const { toolRefNames } = require('../../../db/chat-tool-refs');
 
 const QUOTE_MAX = 90;
 const MAX_LIST_REFS = 3;
+const MAX_HITS = 5;
 
 // Argument → Objekt-Art (ID-Felder). `ids` zählt nur bei get_pages als Abschnitte.
 const ID_KEYS = {
@@ -100,6 +102,7 @@ function _trunc(out) {
 }
 
 function _result(name, input, out) {
+  if (name === 'get_figure_mentions' && Number.isFinite(out?.total_mentions)) return _countKey('hits', out.total_mentions);
   if (SEARCH_TOOLS.has(name)) return _countKey('hits', _count(out));
   if (name === 'read_web_page') return input?.suche ? _countKey('hits', _count(out)) : null;
   if (SECTION_TOOLS.has(name)) return _countKey('sections', Array.isArray(out?.pages) ? out.pages.length : null);
@@ -120,7 +123,52 @@ function _result(name, input, out) {
     return out?.already_in_archive ? { key: 'chat.toolResult.proposedExists' } : { key: 'chat.toolResult.proposed' };
   }
   if (name === 'generate_image') return { key: 'chat.toolResult.image' };
+  if (name === 'get_plot_board') return _countKey('beats', Number.isFinite(out?.total_beats) ? out.total_beats : null);
+  // get_figure_age: mit Figur ein Steckbrief (Alter bekannt oder nicht), ohne die Alterstabelle.
+  if (name === 'get_figure_age') {
+    if (Array.isArray(out?.figuren)) return _countKey('entries', Number.isFinite(out.total_mit_geburt) ? out.total_mit_geburt : out.figuren.length);
+    // `zum_jahr` steht auch ohne Geburtsjahr da (nur mit Hinweis) — kein Beleg für ein Alter.
+    if (out?.figur) return { key: out.alters_index || out.geburt ? 'chat.toolResult.ageKnown' : 'chat.toolResult.ageUnknown' };
+  }
   return _countKey('entries', _count(out));
+}
+
+// Erste Treffer einer Suche als Verweise (Abschnitt, Figur, Ort, Recherche) bzw. Links.
+// Nur, was das Ergebnis selbst benennt — der Handler hat Buch und Zugriff geprüft.
+function _hitItem(name, r) {
+  if (!r || typeof r !== 'object') return [];
+  const page = (id, v) => (id != null ? [{ t: 'ref', k: 'page', id: _clip(id, 40), ...(v ? { v: _clip(v, 60) } : {}) }] : []);
+  if (name === 'search_similar') {
+    const kind = { page: 'page', figure: 'figure', location: 'location', research: 'research' }[r.kind];
+    return kind && r.entity_id != null ? [{ t: 'ref', k: kind, id: _clip(r.entity_id, 40), ...(r.title ? { v: _clip(r.title, 60) } : {}) }] : [];
+  }
+  if (name === 'find_repetitions') return (r.sample_pages || []).flatMap(sp => page(sp?.page_id, sp?.page_name));
+  if (name === 'get_figure_mentions') return (r.pages || []).flatMap(sp => page(sp?.page_id, sp?.page_name));
+  if (name === 'search_research_passages' && r.item_id != null) {
+    return [{ t: 'ref', k: 'research', id: _clip(r.item_id, 40), ...(r.title ? { v: _clip(r.title, 60) } : {}) }];
+  }
+  if (typeof r.url === 'string' && /^https?:\/\//i.test(r.url)) return [{ t: 'url', v: _clip(r.url, 120) }];
+  return page(r.page_id, r.page_name);
+}
+
+const HIT_LISTS = { get_figure_mentions: 'by_chapter', lookup_literature: 'treffer', web_search: 'treffer' };
+
+function _hits(name, out) {
+  if (!SEARCH_TOOLS.has(name) || !out || typeof out !== 'object') return null;
+  const list = out[HIT_LISTS[name] || 'results'];
+  if (!Array.isArray(list)) return null;
+  const seen = new Set();
+  const hits = [];
+  for (const r of list) {
+    for (const h of _hitItem(name, r)) {
+      const key = `${h.t}|${h.k || ''}|${h.id ?? h.v}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      hits.push(h);
+      if (hits.length >= MAX_HITS) return hits;
+    }
+  }
+  return hits.length ? hits : null;
 }
 
 /**
@@ -186,10 +234,12 @@ function makeToolViewer(ctx) {
    */
   return function describe(name, input, out, ok) {
     const trunc = ok ? _trunc(out) : null;
+    const hits = ok ? _hits(name, out) : null;
     return {
       subject: _subject(name, input, ok),
       result: ok ? _result(name, input, out) : null,
       ...(trunc ? { trunc } : {}),
+      ...(hits ? { hits } : {}),
     };
   };
 }
@@ -233,7 +283,10 @@ function serverSearchEntry(query, iter) {
 function applyServerSearchResult(entry, block) {
   if (!entry) return;
   if (Array.isArray(block.content)) {
-    entry.view.result = _countKey('hits', block.content.filter(r => r?.type === 'web_search_result').length);
+    const results = block.content.filter(r => r?.type === 'web_search_result');
+    entry.view.result = _countKey('hits', results.length);
+    const hits = results.filter(r => /^https?:\/\//i.test(r.url || '')).slice(0, MAX_HITS).map(r => ({ t: 'url', v: _clip(r.url, 120) }));
+    if (hits.length) entry.view.hits = hits;
     return;
   }
   const code = String(block.content?.error_code || 'unknown');

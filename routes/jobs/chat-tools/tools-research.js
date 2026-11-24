@@ -15,7 +15,7 @@ const {
   listResearchItemsFiltered, researchTagsByItem, researchUrlsByItem, getResearchItemForRead,
   getResearchItemTitleInBook, researchItemMeta, listBookEntityRows,
 } = require('../../../db/book-chat/research');
-const { toolHint } = require('./shared');
+const { toolHint, clampInt, assertScope, invalidEnum } = require('./shared');
 
 // FTS-Vorfilter weit fassen (wie das Board), dann auf ITEM_LIST_MAX kappen.
 const FTS_LIMIT = 500;
@@ -23,8 +23,9 @@ const ITEM_LIST_MAX = 60;
 const SNIPPET_MAX = 220;
 const DOC_TEXT_MAX = 8000;
 
-/** Einzeiliger Anriss: Leerraum zusammengezogen, auf `n` Zeichen gekappt.
- *  Auch vom Recherche-Chat (../research-chat-tools.js) benutzt. */
+/** Einzeiliger Anriss: Leerraum zusammengezogen, auf `n` Zeichen gekappt — bewusst
+ *  ohne «…» (anders als shared.js#clip): der Recherche-Chat (../research-chat-tools.js)
+ *  macht daraus den Ersatz-Titel eines Vorschlags, der so gespeichert wird. */
 const snipText = (s, n) => String(s || '').replace(/\s+/g, ' ').trim().slice(0, n);
 const _snip = snipText;
 
@@ -48,9 +49,14 @@ function tool_list_research_items(input, ctx) {
   // Kapitel-Filter umfasst direkt am Kapitel verknuepfte Fundstuecke UND solche an
   // Seiten des Kapitels (gleiche Regel wie list_ideen). Mehrere Vorauswahlen
   // (Stelle, Volltext) schneiden sich.
+  const badParam = invalidEnum('kind', input.kind, [...LIST_FILTER_KINDS])
+    || invalidEnum('status', input.status, [...RESEARCH_STATUS_SET]);
+  if (badParam) return badParam;
   let ids = null;
-  const chapterId = parseInt(input.chapter_id, 10);
-  const pageId = parseInt(input.page_id, 10);
+  const chapterId = clampInt(input.chapter_id, 0, 0);
+  const pageId = clampInt(input.page_id, 0, 0);
+  const scopeErr = assertScope(ctx, { chapterId: chapterId || null, pageId: pageId || null });
+  if (scopeErr) return scopeErr;
   if (pageId || chapterId) ids = itemIdsAtPlace(ctx.bookId, pageId ? { pageId } : { chapterId });
 
   const q = String(input.q || '').trim();
@@ -60,15 +66,21 @@ function tool_list_research_items(input, ctx) {
       const ftsIds = (hits?.hits || []).map(h => h.entity_id).filter(Boolean);
       ids = ids ? ids.filter(id => ftsIds.includes(id)) : ftsIds;
     } catch (e) {
+      // Nicht ungefiltert weiter: die Liste sähe aus wie die Treffer zu `q`.
       ctx.logger?.warn?.(`[research] FTS-Filter fehlgeschlagen: ${e.message}`);
+      return {
+        search_failed: true,
+        hint: `Die Volltextsuche nach «${q}» ist fehlgeschlagen — keine Aussage darüber, ob es passende Einträge gibt. Ohne q erneut aufrufen (ganze Liste, ggf. mit kind/status) oder später nochmals versuchen.`,
+        items: [], count: 0, total: 0, truncated: false,
+      };
     }
   }
 
   // Gesamtzahl passender Einträge — damit das Modell weiss, ob die auf ITEM_LIST_MAX
   // gedeckelte Liste gekürzt ist (statt still „nur diese existieren" anzunehmen).
   const { total, rows } = listResearchItemsFiltered(ctx.bookId, {
-    kind: LIST_FILTER_KINDS.has(input.kind) ? input.kind : null,
-    status: RESEARCH_STATUS_SET.has(input.status) ? input.status : null,
+    kind: input.kind || null,
+    status: input.status || null,
     ids,
     limit: ITEM_LIST_MAX,
   });
@@ -152,7 +164,7 @@ async function tool_search_research_passages(input, ctx) {
   if (!embed.isEnabled()) {
     return { error: `Semantische Suche ist nicht aktiviert.${_wordSearchHint(ctx)}`, errorKey: 'chat.toolError.semanticUnavailable' };
   }
-  const topK = Math.min(Math.max(parseInt(input.top_k, 10) || PASSAGE_TOPK_DEFAULT, 1), PASSAGE_TOPK_MAX);
+  const topK = clampInt(input.top_k, PASSAGE_TOPK_DEFAULT, 1, PASSAGE_TOPK_MAX);
   const itemId = input.item_id ? parseInt(input.item_id, 10) : null;
 
   try {

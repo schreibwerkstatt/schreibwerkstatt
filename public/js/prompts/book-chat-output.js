@@ -4,7 +4,7 @@
 
 import { toolMentions } from './chat-tools/mentions.js';
 
-export const BOOK_CHAT_OUTPUT_TOOLS = [
+const _BOOK_CHAT_OUTPUT_TOOLS = [
   {
     name: 'final_answer',
     description: 'Liefert die Antwort an den User — Pflicht-Endpunkt und ALLERLETZTER Aufruf einer Runde; Freitext ohne final_answer gilt nicht als Antwort. Sprache: die der Userfrage. Jedes wörtliche Zitat der antwort gehört mit {page_id, offset, length, quote} in `zitate`; der Server prüft sie und zeigt sie als Fussnoten. Reale Fakten AUSSERHALB des Manuskripts kannst du nicht prüfen (keine Web-Suche): sag das, beantworte, was das Buch hergibt, und setze recherche_hinweis mit einer präzisen recherche_frage. Bemerkst du einen Widerspruch, Fehler oder offenen Punkt an einer konkreten Stelle, biete ihn in `ideen` an.',
@@ -50,6 +50,28 @@ export const BOOK_CHAT_OUTPUT_TOOLS = [
     },
   },
 ];
+
+const IDEEN_SENTENCE = ' Bemerkst du einen Widerspruch, Fehler oder offenen Punkt an einer konkreten Stelle, biete ihn in `ideen` an.';
+
+/**
+ * Ausgabe-Werkzeuge des Buch-Chats. `ideen: false` (Rolle ohne Schreibrecht, z.B.
+ * Lektor mit allow_lektor_book_chat): ohne das Feld `ideen` und ohne den Satz dazu —
+ * der User könnte die Vorschläge nicht übernehmen (POST /ideen verlangt editor).
+ */
+export function bookChatOutputTools({ ideen = true } = {}) {
+  if (ideen) return _BOOK_CHAT_OUTPUT_TOOLS;
+  return _BOOK_CHAT_OUTPUT_TOOLS.map((t) => {
+    if (t.name !== 'final_answer') return t;
+    const { ideen: _drop, ...properties } = t.input_schema.properties;
+    return {
+      ...t,
+      description: t.description.replace(IDEEN_SENTENCE, ''),
+      input_schema: { ...t.input_schema, properties },
+    };
+  });
+}
+
+export const BOOK_CHAT_OUTPUT_TOOLS = bookChatOutputTools();
 
 /**
  * Regel für Fragen zur Aussenwelt — hängt der Job (routes/jobs/chat/book-chat-agent.js)

@@ -7,7 +7,7 @@ const { getPageHeader } = require('../../../db/book-chat/catalog');
 const { htmlToPlainText } = require('../../../lib/html-text');
 const { diffWordsWithSpace } = require('diff');
 const pageRevisions = require('../../../db/page-revisions');
-const { _truncateResult } = require('./shared');
+const { _truncateResult, clampInt, clip } = require('./shared');
 
 const DIFF_MAX_BLOCKS   = 100;
 const DIFF_MAX_TEXT_LEN = 600;
@@ -34,10 +34,7 @@ function _diffBlocks(oldText, newText) {
   return blocks;
 }
 
-function _clampDiffPart(s) {
-  if (s == null) return s;
-  return s.length > DIFF_MAX_TEXT_LEN ? s.slice(0, DIFF_MAX_TEXT_LEN) + '…' : s;
-}
+const _clampDiffPart = (s) => (s == null ? s : clip(s, DIFF_MAX_TEXT_LEN));
 
 function _diffRevisions(input, ctx) {
   const pageId = input?.page_id;
@@ -128,7 +125,7 @@ function _listRevisions(input, ctx) {
     return { error: 'Abschnitt nicht im aktuellen Buch.', errorKey: 'chat.toolError.pageNotInBook' };
   }
 
-  const limit = Math.min(Math.max(1, input?.limit || LIST_REVISIONS_DEFAULT_LIMIT), LIST_REVISIONS_MAX_LIMIT);
+  const limit = clampInt(input?.limit, LIST_REVISIONS_DEFAULT_LIMIT, 1, LIST_REVISIONS_MAX_LIMIT);
   const total = pageRevisions.countForPage(pageId);
   const revs  = pageRevisions.listForPage(pageId, limit);
 

@@ -29,6 +29,10 @@ export function errorText(err, t) {
   if (code === 'INVALID_EMAIL') return t('email_invalid');
   if (code === 'HAS_REPLIES') return t('delete_has_replies');
   if (code === 'BODY_REQUIRED') return t('form_empty');
+  if (code === 'SUGGESTION_OPEN') return t('suggestion_open');
+  if (code === 'SUGGESTION_DECIDED') return t('suggestion_decided');
+  if (code === 'SUGGESTION_UNCHANGED') return t('suggestion_unchanged');
+  if (code === 'REVIEWERS_FULL') return t('review_full');
   if (err && (err.status === 410 || code === 'GONE')) return t('link_gone');
   return t('form_error');
 }
@@ -55,7 +59,9 @@ export function createApi({ token, rt, savedEmail }) {
       document.dispatchEvent(new CustomEvent(EVT.SHARE_COMMENT_POSTED));
       return j.comment;
     },
-    editOwnComment: (id, body) => send(`${base}/comment/${id}`, 'PATCH', { reader_token: rt, body }),
+    // `suggestion` (optional): neuer Ersatztext eines eigenen offenen Vorschlags.
+    editOwnComment: (id, body, suggestion) => send(`${base}/comment/${id}`, 'PATCH',
+      suggestion == null ? { reader_token: rt, body } : { reader_token: rt, body, suggestion }),
     // 409 HAS_REPLIES = der Autor hat geantwortet → die UI zeigt für solche
     // Threads keinen Lösch-Button (Schutz vor Cascade), der Status fängt Races ab.
     deleteOwnComment: (id) => send(`${base}/comment/${id}`, 'DELETE', { reader_token: rt }),

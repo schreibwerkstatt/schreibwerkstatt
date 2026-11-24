@@ -47,6 +47,22 @@
     </template>
 
     <div class="share-create__row">
+      <div x-data="toggleSwitch({ label: () => $app.t('share.review.toggle') })"
+           x-modelable="value" x-model="createReview"></div>
+      <span class="share-create__hint" x-text="$app.t('share.review.toggleHint')"></span>
+    </div>
+    <template x-if="createReview">
+      <div class="share-create__row" x-id="['fld']">
+        <span class="share-create__label" :id="$id('fld')" x-text="$app.t('share.review.reviewers')"></span>
+        <div :aria-labelledby="$id('fld')"
+             x-data="tagInput({ max: 30, maxLen: 80, placeholder: $app.t('share.review.reviewersPlaceholder'), label: $app.t('share.review.reviewers') })"
+             x-modelable="tags" x-model="createReviewers"
+             x-effect="pool = reviewerPool()"></div>
+        <span class="share-create__hint" x-text="$app.t('share.review.reviewersHint')"></span>
+      </div>
+    </template>
+
+    <div class="share-create__row" x-show="!createReview">
       <div x-data="toggleSwitch({ label: () => $app.t('share.create.promo') })"
            x-modelable="value" x-model="createShowPromo"></div>
       <span class="share-create__hint" x-text="$app.t('share.create.promoHint')"></span>
@@ -156,6 +172,8 @@
           </div>
         </template>
 
+        <!-- @include share-links-review -->
+
         <div class="share-row__url">
           <input type="text" readonly :value="linkUrl(link.token)" class="share-row__url-input">
           <button type="button" @click="copyLink(link.token)"
@@ -188,7 +206,15 @@
               <div x-data="toggleSwitch({ label: () => $app.t('share.create.toc') })"
                    x-modelable="value" x-model="editShowToc"></div>
             </template>
-            <div x-data="toggleSwitch({ label: () => $app.t('share.create.promo') })"
+            <div x-data="toggleSwitch({ label: () => $app.t('share.review.toggle') })"
+                 x-modelable="value" x-model="editReview"></div>
+            <template x-if="editReview">
+              <div :aria-label="$app.t('share.review.reviewers')"
+                   x-data="tagInput({ max: 30, maxLen: 80, placeholder: $app.t('share.review.reviewersPlaceholder'), label: $app.t('share.review.reviewers') })"
+                   x-modelable="tags" x-model="editReviewers"
+                   x-effect="pool = reviewerPool()"></div>
+            </template>
+            <div x-show="!editReview" x-data="toggleSwitch({ label: () => $app.t('share.create.promo') })"
                  x-modelable="value" x-model="editShowPromo"></div>
             <div class="share-row__edit-actions">
               <button type="button" class="primary" @click="saveEdit(link.token)" :disabled="savingEdit">

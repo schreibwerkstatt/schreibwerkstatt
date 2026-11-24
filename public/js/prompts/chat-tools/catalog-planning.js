@@ -55,7 +55,7 @@ export const PLANNING_TOOLS = [
         status:     { type: 'string', enum: ['offen', 'in_arbeit', 'erledigt', 'verworfen'], description: 'Nur Ideen dieser Stufe.' },
         offen_only: { type: 'boolean', description: 'true = nur noch offene (offen ODER in_arbeit).' },
         page_id:    { type: 'integer', description: 'Nur Ideen zu diesem Abschnitt.' },
-        chapter_id: { type: 'integer', description: 'Nur Ideen zu diesem Kapitel (am Kapitel + an seinen Abschnitten).' },
+        chapter_id: { type: 'integer', description: 'Nur Ideen zu diesem Kapitel inkl. Unterkapitel (am Kapitel + an Abschnitten).' },
         limit:      { type: 'integer', description: 'Maximale Anzahl (default 50, max 200).' },
       },
       required: [],

@@ -8,6 +8,7 @@
 import { _obj, _str } from './schema-utils.js';
 import { _jsonOnly } from './state.js';
 import { toolMentions } from './chat-tools/mentions.js';
+import { roundNoteRule } from './chat-round-note.js';
 
 // Archiv-Inhalte sind fremder Text: Notizen, gescrapte Seiten, PDF-Volltexte —
 // der Autor hat sie gesammelt, nicht geschrieben. Eine Anweisung darin ist Teil
@@ -255,6 +256,7 @@ export function buildResearchChatAgentSystemPrompt(bookName, itemCount, maxToolI
       '- Nenne in `final_answer` unter `quellen` die Web-Quellen (URL + Titel), auf die sich deine Antwort stützt — nur URLs, die dir `web_search` in diesem Durchgang tatsächlich geliefert hat, oder Quellen früherer Antworten aus dem Verlauf. Schreib keine eigene URL- oder Quellenliste in den Antworttext: die App zeigt die Quellen aus `quellen` darunter.',
     ]),
     'Liefere die finale Antwort IMMER über `final_answer`. Sprache: passe dich der Userfrage an, nicht diesem Prompt.',
+    ...roundNoteRule(),
     ...(bookContext ? ['', bookContext] : []),
   ].join('\n');
 }

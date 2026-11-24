@@ -38,11 +38,13 @@
 
   /* Rail = normale gestapelte Spalte mit eigenem Scroll, auf Blatthöhe begrenzt
      (--pcv-max-h, dieselbe Höhe wie .page-content-view), damit viele Kommentare
-     die Spalte nicht über das Blatt hinaus dehnen. Überschreibt die
+     die Spalte nicht über das Blatt hinaus dehnen — aber nie unter 60vh: ein
+     kurzer Abschnitt deckelt das Blatt auf wenige Zeilen, und die Leiste
+     schnitte dann schon die erste Karte samt ihren Knöpfen ab. Überschreibt die
      .comment-rail-Basis-Chrome (Border/Padding/BG) für die Leseansicht. */
   .comments-split .comment-rail {
     align-self: start;
-    max-height: var(--pcv-max-h, 60vh);
+    max-height: max(var(--pcv-max-h, 60vh), 60vh);
     overflow-y: auto;
     padding: 0;
     border: none;

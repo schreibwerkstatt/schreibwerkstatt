@@ -1,6 +1,6 @@
 # ERD — schreibwerkstatt
 
-Stand: Schema-Version 370, 199 Tabellen (ohne `sqlite_*`/`schema_version`/FTS5-Shadow-Tables; inkl. FTS5-Virtual `search_index`/`search_trigram`/`chat_messages_fts` + `search_meta`).
+Stand: Schema-Version 373, 200 Tabellen (ohne `sqlite_*`/`schema_version`/FTS5-Shadow-Tables; inkl. FTS5-Virtual `search_index`/`search_trigram`/`chat_messages_fts` + `search_meta`).
 
 Quelle: Squashed-Schema-Snapshot in [db/squashed-schema.js](../db/squashed-schema.js) (regeneriert via `node tools/dump-schema.js`) + [db/migrations.js](../db/migrations.js). Drift gegen die Legacy-Migration-Kette ist durch [tests/unit/squash-drift.test.mjs](../tests/unit/squash-drift.test.mjs) gegated. Mermaid-Diagramme — in VSCode mit „Markdown Preview Mermaid Support" (oder GitHub) direkt sichtbar.
 
@@ -163,6 +163,7 @@ erDiagram
   share_links ||--o{ share_comments  : has
   share_links ||--o{ share_views      : "access log"
   share_links ||--o{ share_feedback   : "overall feedback"
+  share_links ||--o{ share_link_reviewers : "review reviewers"
   share_views ||--o{ share_view_sections : "per-chapter depth"
   chapters ||--o{ share_view_sections : "read depth"
 
@@ -413,7 +414,7 @@ erDiagram
     INTEGER chars
     INTEGER words
     INTEGER tok
-    TEXT    source        "focus|main|book|chat-apply|lektorat-apply|import|conflict|macapp|split|restore"
+    TEXT    source        "focus|main|book|chat-apply|lektorat-apply|import|conflict|macapp|split|restore|review"
     TEXT    user_email
     TEXT    client        "Browser·OS bzw. nativer Client"
     TEXT    created_at
@@ -2579,6 +2580,7 @@ erDiagram
     TEXT    hubspot_updated_at "zuletzt gesehener Draft-updated (Push-Vorab-Pruefung)"
     TEXT    last_pulled_at     "Sync-Punkt nach Konflikt-Aufloesung 'HubSpot uebernehmen'"
     TEXT    conflict_state     "NULL|detected|resolved-app|resolved-remote (CHECK)"
+    TEXT    locked_blocks      "Push-Sperre: nicht uebernehmbare Entwurfs-Elemente / fehlende Bilder, NULL=pushbar"
   }
   sync_media_cache {
     INTEGER id         PK
@@ -2603,6 +2605,7 @@ erDiagram
     TEXT    owner_last_seen_at "Unread-Tracking"
     INTEGER show_toc           "0|1 — Inhaltsverzeichnis im Reader (nur kind page!=)"
     INTEGER show_promo         "0|1, Default 1 — dezenter App-Hinweis im Reader (Footer + nach erstem Kommentar)"
+    TEXT    mode               "leser|review (CHECK), Default leser — Review: benannte Reviewer, Vorschlaege"
     TEXT    created_at         "DEFAULT NOW_ISO_SQL"
   }
   share_comments {
@@ -2621,6 +2624,19 @@ erDiagram
     INTEGER anchor_end   "Offset-Hinweis im Block"
     TEXT    resolved_at  "Owner-Resolve-Marker (nur Root)"
     TEXT    ip_hash      "SHA-256(ip + Server-Salt) fuer Rate-Limit"
+    TEXT    suggestion_text       "Review: Ersatztext fuer die verankerte Stelle, NULL=Kommentar"
+    TEXT    suggestion_state      "open|accepted|rejected (CHECK), NULL ohne Vorschlag"
+    TEXT    suggestion_decided_at "Entscheid des Owners"
+    TEXT    created_at
+  }
+  share_link_reviewers {
+    INTEGER id           PK
+    TEXT    share_token  FK "FK share_links(token) ON DELETE CASCADE; UNIQUE(share_token, name NOCASE)"
+    TEXT    name         "Reviewer-Name (kein Konto)"
+    INTEGER position     "Reihenfolge"
+    TEXT    reader_token "Browser, der den Namen beansprucht hat, nullable"
+    TEXT    done_at      "«Review abschliessen», nullable"
+    TEXT    done_note    "Schlussnotiz, nullable"
     TEXT    created_at
   }
   share_views {
@@ -2691,6 +2707,7 @@ erDiagram
   share_links      ||--o{ share_comments    : has
   share_links      ||--o{ share_views       : "access log"
   share_links      ||--o{ share_feedback    : "overall feedback"
+  share_links      ||--o{ share_link_reviewers : "review reviewers"
   share_views      ||--o{ share_view_sections : "per-chapter depth"
   chapters         ||--o{ share_view_sections : "read depth"
   share_comments   ||--o{ share_comments    : "reply (parent_id)"

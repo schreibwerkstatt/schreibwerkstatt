@@ -55,6 +55,22 @@ export function createThreadRenderer(deps) {
     return meta;
   }
 
+  // Aenderungsvorschlag (Review-Modus): der Ersatztext + Entscheid des Autors.
+  // Die alte Stelle steht nur einmal — als durchgestrichenes Zitat in der
+  // Anker-Zeile (renderAnchorRow). Optik geteilt mit den Owner-Leisten
+  // (.comment-suggestion in components/comment-rail.css).
+  function renderSuggestion(root) {
+    const s = root.suggestion;
+    const box = el('div', 'comment-suggestion');
+    box.appendChild(el('span', 'comment-suggestion__label', t('suggestion_label')));
+    box.appendChild(el('ins', 'comment-suggestion__new', s.text));
+    if (s.state === 'accepted' || s.state === 'rejected') {
+      box.appendChild(el('span', `comment-suggestion__state comment-suggestion__state--${s.state}`,
+        t(s.state === 'accepted' ? 'suggestion_accepted' : 'suggestion_rejected')));
+    }
+    return box;
+  }
+
   function statusEl() {
     const s = el('span', 'share-comments__status');
     s.setAttribute('role', 'status');
@@ -138,11 +154,24 @@ export function createThreadRenderer(deps) {
   // die Liste neu (rebaut die Karte); bei Abbruch wird der Body wiederhergestellt.
   function startEditInline(c, bodyEl, status) {
     const editor = el('div', 'share-thread__edit');
+    // Eigener offener Vorschlag: Ersatztext mit bearbeiten; die Begründung darf
+    // dann leer sein. Entschiedene Vorschläge bleiben fest (Server: 409).
+    const editSugg = c.suggestion?.state === 'open';
+    let sta = null;
+    if (editSugg) {
+      sta = el('textarea', 'comment-rail__textarea share-thread__suggestion-edit');
+      sta.rows = 2;
+      sta.maxLength = 4000;
+      sta.value = c.suggestion.text || '';
+      sta.setAttribute('aria-label', t('suggestion_text_label'));
+      editor.appendChild(sta);
+    }
     const ta = el('textarea', 'comment-rail__textarea');
     ta.rows = 3;
     ta.maxLength = 4000;
     ta.value = c.body || '';
     ta.setAttribute('aria-label', t('edit'));
+    if (editSugg) ta.placeholder = t('suggestion_reason_placeholder');
     const acts = el('div', 'share-thread__reply-actions');
     const save = el('button', null, t('edit_save'));
     save.type = 'button';
@@ -152,18 +181,21 @@ export function createThreadRenderer(deps) {
     editor.appendChild(ta);
     editor.appendChild(acts);
     bodyEl.replaceWith(editor);
-    setTimeout(() => ta.focus(), 20);
+    setTimeout(() => (sta || ta).focus(), 20);
     onResize();
     cancel.addEventListener('click', () => { editor.replaceWith(bodyEl); onResize(); });
     const doSave = async () => {
       const val = (ta.value || '').trim();
-      if (!val) { status.textContent = t('form_empty'); return; }
+      const sval = sta ? (sta.value || '').trim() : null;
+      if (sta && !sval) { status.textContent = t('form_empty'); return; }
+      if (!val && !sta) { status.textContent = t('form_empty'); return; }
       save.disabled = true;
-      try { await api.editOwnComment(c.id, val); await reload(); }
+      try { await api.editOwnComment(c.id, val, sval); await reload(); }
       catch (e) { status.textContent = errorText(e, t); save.disabled = false; }
     };
     save.addEventListener('click', doSave);
     submitOnModEnter(ta, doSave);
+    if (sta) submitOnModEnter(sta, doSave);
   }
 
   // Self-Service-Aktionen für eigene Kommentare (mine). Root: Erledigt-Toggle +
@@ -173,7 +205,8 @@ export function createThreadRenderer(deps) {
     const actions = el('div', 'share-thread__actions hover-reveal');
     const status = statusEl();
 
-    if (isRoot) {
+    // Über einen offenen Vorschlag entscheidet der Autor — kein «Erledigt» (Server: 409).
+    if (isRoot && !(c.suggestion?.state === 'open' && !c.resolved)) {
       const toggle = el('button', 'share-thread__action', c.resolved ? t('reopen') : t('mark_done'));
       toggle.type = 'button';
       toggle.addEventListener('click', async () => {
@@ -219,7 +252,9 @@ export function createThreadRenderer(deps) {
     const res = resolveCurrentQuote(article, root.anchor);
     const gone = !isAnchorLocated(root) || res.status === 'gone';
     const changed = !gone && res.status === 'changed';
-    row.appendChild(el('span', 'comment-rail__quote' + (gone || changed ? ' comment-rail__quote--stale' : ''), root.anchor.quote || ''));
+    // Vorschlag: die Stelle ist der zu ersetzende Text → durchgestrichen.
+    const old = root.suggestion && !gone && !changed ? ' comment-rail__quote--old' : '';
+    row.appendChild(el('span', 'comment-rail__quote' + (gone || changed ? ' comment-rail__quote--stale' : '') + old, root.anchor.quote || ''));
     if (gone || changed) row.appendChild(el('span', 'share-thread__stale', t(gone ? 'anchor_stale' : 'anchor_changed')));
     if (!gone) {
       row.setAttribute('role', 'button');
@@ -264,7 +299,11 @@ export function createThreadRenderer(deps) {
 
     const rootComment = el('div', 'comment-rail__comment');
     rootComment.appendChild(renderMeta(root));
+    if (root.suggestion) rootComment.appendChild(renderSuggestion(root));
     const rootBody = el('div', 'comment-rail__body', root.body);
+    // Ein Vorschlag ohne Begruendung hat keinen Text — die Zeile entfaellt, das
+    // Bearbeiten (eigene Beitraege) blendet sie wieder ein.
+    if (root.suggestion && !root.body) rootBody.hidden = true;
     rootComment.appendChild(rootBody);
     if (root.mine) rootComment.appendChild(renderOwnActions(root, { isRoot: true, hasReplies: replies.length > 0, bodyEl: rootBody }));
     li.appendChild(rootComment);

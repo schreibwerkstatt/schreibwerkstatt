@@ -3,7 +3,8 @@
 // dem Job-Gerüst (proposal-chat.js): Handler-Eingabe säubern, Vorschlag sammeln,
 // Status eines gespeicherten Vorschlags und das Session-Gedächtnis früherer
 // Vorschläge. Die chat-eigenen Achsen (Label je Vorschlag, ob das Angelegte noch
-// existiert) kommen als Callback herein.
+// existiert) kommen als Callback herein. Der Nur-Vorschläge-Hinweis samt Leer-Markern
+// gilt zusätzlich für den Recherche-Chat.
 
 const { db } = require('../../db/schema');
 const { str } = require('../../lib/proposal-input');
@@ -13,7 +14,48 @@ const MAX_BEGRUENDUNG = 600;
 const MEMORY_LABEL_MAX = 140;
 const MEMORY_LIMIT = 40;
 
-function err(msg) { return { error: msg }; }
+// Abgelehnter Vorschlag: `msg` ist der Korrekturhinweis fürs Modell (deutsch), `kind`
+// der Grund fürs UI — `chat.toolError.proposal<Kind>`; der Werkzeug-Verlauf zeigt ihn
+// neutral als «abgelehnt», nicht als Werkzeugfehler (public/js/chat/tool-log.js).
+const PROPOSAL_REJECT_KINDS = new Set([
+  'unknown', 'ambiguous', 'notInBook', 'missing', 'invalid', 'noChange', 'wrongCell',
+  'conflict', 'duplicate', 'evidence', 'limit', 'notAllowed',
+]);
+function err(msg, kind) {
+  const k = PROPOSAL_REJECT_KINDS.has(kind) ? kind[0].toUpperCase() + kind.slice(1) : 'Rejected';
+  return { error: msg, errorKey: `chat.toolError.proposal${k}` };
+}
+
+// Platzhalter des Loops für «keine Antwort» (agentic-chat/loop.js). Mit gesammelten
+// Vorschlägen ist das kein Fehlschlag — gilt für jeden Chat mit propose_*-Werkzeugen
+// (Plot, Ideen, Recherche). Frontend-Pendant: research-chat-render.js.
+const MAX_ITER_MARKER = '__i18n:chat.errors.maxIterReached__';
+const EMPTY_MARKERS = new Set([MAX_ITER_MARKER, '__i18n:chat.errors.emptyAnswer__']);
+
+/**
+ * Zwei Vorspann-Blöcke teilen sich ein Zeichenbudget (proposal-chat.js#outlineBudgetChars):
+ * der Nebenblock (Figurenliste, Gliederung) wird zuerst gebaut, mit höchstens der
+ * Hälfte; der Hauptblock (Board, Ideenliste) bekommt, was übrig bleibt. Ist der
+ * Nebenblock klein, steht dem Hauptblock fast das ganze Budget offen.
+ * `buildSecond(budget) → String`, `buildFirst(budget) → beliebig`.
+ */
+function splitOutlineBudget(total, buildSecond, buildFirst) {
+  const finite = Number.isFinite(total);
+  const second = buildSecond(finite ? Math.floor(total / 2) : Infinity);
+  const first = buildFirst(finite ? Math.max(0, total - second.length - 1) : Infinity);
+  return { first, second };
+}
+
+/**
+ * Antworttext ohne Inhalt (leer oder Loop-Platzhalter), aber mit `n` Vorschlägen →
+ * eigener Hinweis statt Fehlermeldung. `cutMarker` (optional) ersetzt den Abbruch-
+ * Platzhalter (Iterationen erschöpft), `onlyMarker` alles andere Leere.
+ */
+function proposalsOnlyFallback(antwort, n, { onlyMarker, cutMarker = null }) {
+  const a = String(antwort || '').trim();
+  if (!(n > 0) || (a && !EMPTY_MARKERS.has(a))) return a;
+  return a === MAX_ITER_MARKER && cutMarker ? cutMarker : onlyMarker;
+}
 
 /**
  * Leere Werte entfernen, BEVOR ein Vorschlags-Handler sie sieht — in beiden
@@ -62,11 +104,11 @@ function refProposal(ctx, n, type, what) {
     if (!ref) {
       return err(n <= (ctx.proposalSeq || 0)
         ? `${what} ${n}: dieser Vorschlag wurde abgelehnt und gibt es nicht — korrigiere ihn zuerst oder verweise auf einen bestehenden Eintrag.`
-        : `${what} ${n}: einen Vorschlag mit dieser Nummer gibt es in dieser Antwort nicht.`);
+        : `${what} ${n}: einen Vorschlag mit dieser Nummer gibt es in dieser Antwort nicht.`, 'unknown');
     }
   }
   const p = ctx.proposals[ref - 1];
-  if (!p || p.type !== type) return err(`${what} ${n} zeigt auf keinen passenden Vorschlag dieser Antwort.`);
+  if (!p || p.type !== type) return err(`${what} ${n} zeigt auf keinen passenden Vorschlag dieser Antwort.`, 'unknown');
   return { ref, p };
 }
 
@@ -131,7 +173,8 @@ function oneLine(s, max) {
 }
 
 module.exports = {
+  MAX_ITER_MARKER, EMPTY_MARKERS, proposalsOnlyFallback, splitOutlineBudget,
   nextProposalSeq, refProposal,
   MAX_BEGRUENDUNG, MEMORY_LABEL_MAX,
-  err, cleanProposalInput, pushProposal, proposalState, sessionProposalMemory, oneLine,
+  err, PROPOSAL_REJECT_KINDS, cleanProposalInput, pushProposal, proposalState, sessionProposalMemory, oneLine,
 };

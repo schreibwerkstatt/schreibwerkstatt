@@ -2,13 +2,18 @@
 // Alter, Zeitstrahl, Szenen, Orte, Welt-Fakten, Songs, Kontinuität.
 // Format und Regeln: ./CLAUDE.md (gilt für jeden Eintrag).
 
+// Feste Wertebereiche aus den Komplett-Schemas (Zeitstrahl `typ`, Kontinuität
+// `schwere`); Gleichstand gegated in tests/unit/chat-tools-contract.test.mjs.
+export const TIMELINE_TYPEN = ['persoenlich', 'extern'];
+export const CONTINUITY_SCHWEREN = ['kritisch', 'mittel', 'niedrig'];
+
 const FIGUR_ID   = { type: 'string', description: 'fig_id der Figur (z.B. "fig_3").' };
 const FIGUR_NAME = { type: 'string', description: 'Alternative: Name oder Kurzname der Figur.' };
 
 export const WORLD_TOOLS = [
   {
     name: 'list_figures',
-    description: 'Figurenkatalog des Buchs: pro Figur fig_id, Name, Kurzname, Typ, Rolle, Präsenz und Erwähnungen. Leichter Einstieg, um zu wissen, welche Figuren es gibt und welche fig_ids sie haben.',
+    description: 'Figurenkatalog des Buchs: pro Figur fig_id, Name, Kurzname, Typ, Rolle, Präsenz und Erwähnungen. Leichter Einstieg für «wer kommt vor?», «wer sind die Hauptfiguren?» und die fig_ids.',
     see: {
       get_figure_profile: 'Profil, Beziehungen und Lebensereignisse einer Figur → `get_figure_profile`.',
     },
@@ -75,13 +80,13 @@ export const WORLD_TOOLS = [
   },
   {
     name: 'get_timeline',
-    description: 'Konsolidierter Zeitstrahl in chronologischer Reihenfolge: Datum, Ereignis, Typ, Bedeutung, betroffene Kapitel/Abschnitte/Figuren. Filter nach Figur und Ereignistyp (z.B. "persoenlich", "historisch"). Für «wann passiert was?», «biografische Timeline von X».',
+    description: 'Konsolidierter Zeitstrahl in chronologischer Reihenfolge: Datum, Ereignis, Typ, Bedeutung, betroffene Kapitel/Abschnitte/Figuren. Filter nach Figur und Ereignistyp. Für «wann passiert was?», «biografische Timeline von X».',
     input_schema: {
       type: 'object',
       properties: {
         figur_id:   { type: 'string', description: 'Optional: nur Ereignisse dieser Figur (fig_id).' },
         figur_name: FIGUR_NAME,
-        typ:        { type: 'string', description: 'Optional: Typ-Filter (Gross-/Kleinschreibung egal).' },
+        typ:        { type: 'string', enum: TIMELINE_TYPEN, description: 'Optional: persoenlich = biografisch, extern = gesellschaftlich/historisch.' },
         limit:      { type: 'integer', description: 'Maximale Anzahl (default 60, max 200).' },
       },
       required: [],
@@ -105,7 +110,7 @@ export const WORLD_TOOLS = [
   },
   {
     name: 'list_locations',
-    description: 'Schauplätze des Buchs: loc_id, Name, Typ, Beschreibung, Stimmung, erste Erwähnung, Kapitel mit Häufigkeit, last_chapter (wo der Ort zuletzt vorkommt) und zugehörige Figuren. Filter nach Kapitel.',
+    description: 'Schauplätze des Buchs: loc_id, Name, Typ, Beschreibung, Stimmung, erste Erwähnung, Kapitel mit Häufigkeit, last_chapter (wo der Ort zuletzt vorkommt) und zugehörige Figuren. Für «welche Orte gibt es?», «wo spielt Kapitel 3?».',
     see: {
       get_location_profile: 'Alle Szenen und Details eines Orts → `get_location_profile`.',
     },
@@ -161,8 +166,8 @@ export const WORLD_TOOLS = [
     input_schema: {
       type: 'object',
       properties: {
-        schwere:    { type: 'string', description: 'Optionaler Filter (z.B. "hoch", "mittel", "niedrig"), Gross-/Kleinschreibung egal.' },
-        typ:        { type: 'string', description: 'Optionaler Typ-Filter (z.B. "zeit", "ort", "fakt"), Gross-/Kleinschreibung egal.' },
+        schwere:    { type: 'string', enum: CONTINUITY_SCHWEREN, description: 'Optional: kritisch = schwerste.' },
+        typ:        { type: 'string', description: 'Optional, z.B. "zeitlinie", "figur", "ort", "objekt", "faktenfehler".' },
         chapter_id: { type: 'integer', description: 'Nur Befunde, die dieses Kapitel betreffen (inkl. Unterkapitel).' },
         limit:      { type: 'integer', description: 'Maximale Anzahl (default 30, max 100).' },
       },

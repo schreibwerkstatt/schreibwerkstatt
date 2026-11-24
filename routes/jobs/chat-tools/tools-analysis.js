@@ -3,7 +3,7 @@
 // Stil-Metriken (Buch/Kapitel/Seite), N-Gram-Wiederholungen.
 
 const { htmlToPlainText } = require('../../../lib/html-text');
-const { _truncateResult } = require('./shared');
+const { _truncateResult, clampInt, clip, assertScope, filterValue, filterMiss } = require('./shared');
 const { countPronouns, PRONOUN_KEYS } = require('./tools-figures');
 const { listChaptersForBook } = require('../../../db/content-names');
 const {
@@ -44,9 +44,7 @@ function _getBookReview(ctx) {
     ...(row.stale === 1 ? { stale: true, stale_hint: 'Buch wurde nach der Bewertung editiert — Review-Inhalt ggf. veraltet.' } : {}),
     gesamtnote: typeof parsed.gesamtnote === 'number' ? parsed.gesamtnote : null,
     zusammenfassung: parsed.zusammenfassung || null,
-    fazit: fazit && fazit.length > BOOK_REVIEW_FAZIT_CHARS
-      ? fazit.slice(0, BOOK_REVIEW_FAZIT_CHARS) + '…'
-      : fazit,
+    fazit: fazit ? clip(fazit, BOOK_REVIEW_FAZIT_CHARS) : fazit,
     staerken: Array.isArray(parsed.staerken) ? parsed.staerken : [],
     schwaechen: Array.isArray(parsed.schwaechen) ? parsed.schwaechen : [],
     model: row.model || null,
@@ -63,7 +61,7 @@ function tool_get_reviews(input, ctx) {
   const sort = input?.sort === 'note_asc' || input?.sort === 'note_desc' || input?.sort === 'chapter'
     ? input.sort
     : 'note_desc';
-  const limit = Math.min(100, Math.max(1, Number.isInteger(input?.limit) ? input.limit : CHAPTER_REVIEW_DEFAULT_LIMIT));
+  const limit = clampInt(input?.limit, CHAPTER_REVIEW_DEFAULT_LIMIT, 1, 100);
 
   const rows = listLatestChapterReviews(ctx.bookId, userEmail, chapterIdsFilter);
 
@@ -80,9 +78,7 @@ function tool_get_reviews(input, ctx) {
       reviewed_at:  r.reviewed_at,
       gesamtnote:   typeof parsed.gesamtnote === 'number' ? parsed.gesamtnote : null,
       zusammenfassung: parsed.zusammenfassung || null,
-      fazit:        fazit && fazit.length > CHAPTER_REVIEW_FAZIT_CHARS
-        ? fazit.slice(0, CHAPTER_REVIEW_FAZIT_CHARS) + '…'
-        : fazit,
+      fazit:        fazit ? clip(fazit, CHAPTER_REVIEW_FAZIT_CHARS) : fazit,
       staerken:     Array.isArray(parsed.staerken)   ? parsed.staerken   : [],
       schwaechen:   Array.isArray(parsed.schwaechen) ? parsed.schwaechen : [],
       model:        r.model || null,
@@ -126,8 +122,8 @@ const HOTSPOTS_FAZIT_CHARS = 200;
 function _lektoratHotspots(input, ctx) {
   const userEmail = ctx.userEmail || null;
   const chapterFilter = Number.isInteger(input?.chapter_id) ? input.chapter_id : null;
-  const minErrors     = Number.isInteger(input?.min_errors) ? Math.max(0, input.min_errors) : 0;
-  const limit = Math.min(100, Math.max(1, Number.isInteger(input?.limit) ? input.limit : HOTSPOTS_DEFAULT_LIMIT));
+  const minErrors     = clampInt(input?.min_errors, 0, 0);
+  const limit = clampInt(input?.limit, HOTSPOTS_DEFAULT_LIMIT, 1, 100);
 
   const rows = listLektoratHotspotRows(ctx.bookId, userEmail, chapterFilter).filter(r => (r.error_count || 0) >= minErrors);
   if (!rows.length) {
@@ -166,17 +162,15 @@ function _lektoratHotspots(input, ctx) {
     chapter_name: r.chapter_name || null,
     error_count: r.error_count || 0,
     checked_at: r.checked_at,
-    fazit: r.fazit && r.fazit.length > HOTSPOTS_FAZIT_CHARS
-      ? r.fazit.slice(0, HOTSPOTS_FAZIT_CHARS) + '…'
-      : (r.fazit || null),
+    fazit: r.fazit ? clip(r.fazit, HOTSPOTS_FAZIT_CHARS) : null,
   }));
 
   return _truncateResult({
     pages_checked: rows.length,
     total_errors: rows.reduce((s, r) => s + (r.error_count || 0), 0),
+    ...(top.length < rows.length ? { truncated: true, shown: top.length } : {}),
     per_chapter: perChapter,
     top_pages: top,
-    ...(top.length < rows.length ? { truncated: true, shown: top.length } : {}),
   });
 }
 
@@ -186,19 +180,14 @@ const FINDINGS_DEFAULT_LIMIT = 30;
 const FINDINGS_MAX_LIMIT     = 100;
 const FINDINGS_FIELD_CAP     = 600;
 
-function _clampField(s) {
-  if (typeof s !== 'string') return null;
-  if (s.length <= FINDINGS_FIELD_CAP) return s;
-  return s.slice(0, FINDINGS_FIELD_CAP) + '…';
-}
+const _clampField = (s) => (typeof s === 'string' ? clip(s, FINDINGS_FIELD_CAP) : null);
 
 function _lektoratFindings(input, ctx) {
   const userEmail = ctx.userEmail || null;
   const pageId    = Number.isInteger(input?.page_id)    ? input.page_id    : null;
   const chapterId = Number.isInteger(input?.chapter_id) ? input.chapter_id : null;
-  const typFilter = typeof input?.typ === 'string' ? input.typ.toLowerCase().trim() : null;
-  const limit     = Math.min(FINDINGS_MAX_LIMIT, Math.max(1,
-    Number.isInteger(input?.limit) ? input.limit : FINDINGS_DEFAULT_LIMIT));
+  const typFilter = filterValue(input?.typ);
+  const limit     = clampInt(input?.limit, FINDINGS_DEFAULT_LIMIT, 1, FINDINGS_MAX_LIMIT);
 
   const rows = listLektoratFindingRows(ctx.bookId, userEmail, { pageId, chapterId });
   if (!rows.length) {
@@ -208,15 +197,22 @@ function _lektoratFindings(input, ctx) {
     };
   }
 
+  // errors_json einmal je Zeile parsen: Liste (bis limit) und Typ-Verteilung
+  // (über alle) entstehen im selben Durchlauf.
   const findings = [];
+  const byTyp = {};
+  const allTyps = [];
   let totalAvailable = 0;
   for (const r of rows) {
     let errs = [];
     try { errs = JSON.parse(r.errors_json || '[]'); } catch { errs = []; }
     if (!Array.isArray(errs)) continue;
     for (const e of errs) {
-      if (typFilter && (e.typ || '').toLowerCase() !== typFilter) continue;
+      allTyps.push(e.typ);
+      if (typFilter && filterValue(e.typ) !== typFilter) continue;
       totalAvailable++;
+      const key = (e.typ || 'unbekannt').toLowerCase();
+      byTyp[key] = (byTyp[key] || 0) + 1;
       if (findings.length >= limit) continue;
       findings.push({
         page_id:      r.page_id,
@@ -234,26 +230,17 @@ function _lektoratFindings(input, ctx) {
     }
   }
 
-  const byTyp = {};
-  for (const r of rows) {
-    let errs = [];
-    try { errs = JSON.parse(r.errors_json || '[]'); } catch { errs = []; }
-    if (!Array.isArray(errs)) continue;
-    for (const e of errs) {
-      if (typFilter && (e.typ || '').toLowerCase() !== typFilter) continue;
-      const key = (e.typ || 'unbekannt').toLowerCase();
-      byTyp[key] = (byTyp[key] || 0) + 1;
-    }
-  }
+  const miss = totalAvailable === 0 ? filterMiss('typ', input?.typ, allTyps) : null;
+  if (miss) return { total_findings: 0, pages_with_checks: rows.length, ...miss, findings: [] };
 
   return _truncateResult({
-    findings,
     total_findings:    totalAvailable,
     pages_with_checks: rows.length,
     by_typ:            byTyp,
     ...(totalAvailable > findings.length
       ? { truncated: true, shown: findings.length, hint: 'Weitere Findings via typ/page_id/chapter_id einschraenken.' }
       : {}),
+    findings,
   });
 }
 
@@ -265,7 +252,7 @@ function _stilMetrics(input, ctx) {
   const scope = input?.scope === 'chapter' || input?.scope === 'page' ? input.scope : 'book';
   const metric = STIL_METRIC_COLS.includes(input?.metric) ? input.metric : 'passive_count';
   const order = input?.order === 'asc' ? 'ASC' : 'DESC';
-  const limit = Math.min(50, Math.max(1, Number.isInteger(input?.limit) ? input.limit : STIL_DEFAULT_LIMIT));
+  const limit = clampInt(input?.limit, STIL_DEFAULT_LIMIT, 1, 50);
 
   if (scope === 'book') {
     const r = getBookStilTotals(ctx.bookId);
@@ -383,8 +370,8 @@ function tool_find_repetitions(input, ctx) {
   const n = [2, 3, 4, 5].includes(input?.n) ? input.n : 3;
   const scope = ['book', 'chapter', 'page'].includes(input?.scope) ? input.scope : 'book';
   const ignoreStopwords = input?.ignore_stopwords !== false;
-  const minCount = Math.max(2, Number.isInteger(input?.min_count) ? input.min_count : (scope === 'book' ? 5 : 2));
-  const limit = Math.min(REPETITIONS_MAX_LIMIT, Math.max(1, Number.isInteger(input?.limit) ? input.limit : REPETITIONS_DEFAULT_LIMIT));
+  const minCount = clampInt(input?.min_count, scope === 'book' ? 5 : 2, 2);
+  const limit = clampInt(input?.limit, REPETITIONS_DEFAULT_LIMIT, 1, REPETITIONS_MAX_LIMIT);
 
   const filter = {};
   if (scope === 'chapter') {
@@ -394,6 +381,8 @@ function tool_find_repetitions(input, ctx) {
     if (!Number.isInteger(input?.page_id)) return { error: 'page_id fehlt (scope=page)', errorKey: 'chat.toolError.missingParam', errorParams: { param: 'page_id' } };
     filter.pageId = input.page_id;
   }
+  const scopeErr = assertScope(ctx, filter);
+  if (scopeErr) return scopeErr;
   const pages = listPagesWithBody(ctx.bookId, filter);
   if (!pages.length) {
     return { results: [], hint: 'Keine Abschnitte mit body_html im gewaehlten Scope. Sync ausfuehren.' };
@@ -446,6 +435,11 @@ function tool_find_repetitions(input, ctx) {
 // beides gibt es nur dort; sonst der Überblick.
 
 function tool_get_lektorat(input, ctx) {
+  const scopeErr = assertScope(ctx, {
+    chapterId: Number.isInteger(input?.chapter_id) ? input.chapter_id : null,
+    pageId:    Number.isInteger(input?.page_id)    ? input.page_id    : null,
+  });
+  if (scopeErr) return scopeErr;
   const view = input?.view === 'findings' || input?.view === 'hotspots'
     ? input.view
     : (Number.isInteger(input?.page_id) || typeof input?.typ === 'string' ? 'findings' : 'hotspots');
@@ -456,6 +450,8 @@ function tool_get_lektorat(input, ctx) {
 // ── get_stil_metrics (+ Pronomen-Zählung auf Wunsch) ──────────────────────────
 
 function tool_get_stil_metrics(input, ctx) {
+  const scopeErr = assertScope(ctx, { chapterId: Number.isInteger(input?.chapter_id) ? input.chapter_id : null });
+  if (scopeErr) return scopeErr;
   const out = _stilMetrics(input, ctx);
   const wanted = Array.isArray(input?.pronouns) ? input.pronouns : [];
   if (!wanted.length) return out;

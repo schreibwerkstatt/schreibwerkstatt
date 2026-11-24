@@ -222,6 +222,14 @@
             <span x-show="hubspotReconcileJobId" class="spinner"></span>
             <span x-text="$app.t('hubspot.action.reconcile')"></span>
           </button>
+          <button type="button"
+                  x-show="hubspotConnection?.initialImportDoneAt"
+                  @click="startHubspotImages()"
+                  :disabled="hubspotBusy || hubspotImagesJobId || hubspotImportJobId"
+                  :data-tip="$app.t('hubspot.action.imagesHint')">
+            <span x-show="hubspotImagesJobId" class="spinner"></span>
+            <span x-text="$app.t('hubspot.action.images')"></span>
+          </button>
           <button type="button" class="danger"
                   x-show="hubspotConnection"
                   @click="disconnectHubspot()"

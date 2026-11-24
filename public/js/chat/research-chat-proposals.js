@@ -118,14 +118,20 @@ export const researchProposalMethods = {
     };
   },
 
-  // Vorschlag lokal ersetzen (nach Speichern/409) — neue Nachricht im Array.
-  _patchProposal(msg, pi, patch) {
+  // Vorschlag lokal ersetzen — neue Nachricht im Array (s. Kopf). `next` ist das
+  // neue Vorschlagsobjekt oder eine Funktion alt → neu. Geteilt mit
+  // research-chat-changes.js; `idx` ist der echte Index in context_info.proposals.
+  _replaceResearchProposal(msg, idx, next) {
     this.researchChatMessages = this.researchChatMessages.map(m => {
       if (m !== msg && !(m.id && m.id === msg.id)) return m;
       const proposals = [...(m.context_info?.proposals || [])];
-      proposals[pi] = { ...proposals[pi], ...patch };
+      proposals[idx] = typeof next === 'function' ? next(proposals[idx]) : next;
       return { ...m, context_info: { ...m.context_info, proposals } };
     });
+  },
+  // Felder eines neuen Fundstück-Vorschlags überschreiben (nach Speichern/409).
+  _patchProposal(msg, pi, patch) {
+    this._replaceResearchProposal(msg, pi, (old) => ({ ...old, ...patch }));
   },
 
   // Speichern. Persistiert erst HIER — der Chat hat nur vorgeschlagen.

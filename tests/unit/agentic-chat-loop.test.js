@@ -79,7 +79,6 @@ function makeJob(over = {}) {
       return { ok: true, name };
     },
     ...(over.fallbackJob ? { fallbackJob: over.fallbackJob } : {}),
-    ...(over.config || {}),
     consumeFinalAnswer: ({ finalUse }) => JSON.stringify({ antwort: finalUse.input?.antwort ?? '' }),
     parseFinal: (finalText) => {
       const o = JSON.parse(finalText);
@@ -87,6 +86,7 @@ function makeJob(over = {}) {
     },
     buildContextInfo: (args) => { captured = args; return { stop: args.stopReason, effects: args.ctx.effects, webQueries: args.webQueries }; },
     buildSummary: () => 'summary',
+    ...(over.config || {}),
   });
   return { run, executed, ctx: () => captured };
 }
@@ -287,18 +287,25 @@ test('refusal im Synthese-Turn: Hinweis statt Fehler', async () => {
   assert.equal(out.ci.stop, 'refusal');
 });
 
-test('Zwischenstand (note) des Providers landet in der Statuszeile', async () => {
-  let jobRef = null;
+test('Zwischenstand: der Satz neben den Aufrufen steht in der Statuszeile und als Notiz, die Denk-Zusammenfassung nicht', async () => {
+  let during = null;
+  let n = 0;
   ai.callAIWithTools = async (_m, _s, _t, onProgress) => {
-    onProgress({ note: 'Ich prüfe das Alter von Manuel.' });
-    jobRef = { ...jobs.get(lastJobId) };
+    n++;
+    onProgress({ note: "I'm checking Manuel's age." });   // Denk-Zusammenfassung: bleibt draussen
+    if (n === 1) return res({ stopReason: 'tool_use', text: 'Ich prüfe das Alter von Manuel.', toolUses: [tu('lookup')] });
     return res({ stopReason: 'tool_use', toolUses: [tu('final_answer', { antwort: 'ok' })] });
   };
-  const lastJobId = createJob('book-chat', BOOK, USER, 'x');
-  jobs.get(lastJobId).status = 'running';   // updateJob schreibt nur laufende Jobs (sonst Queue)
-  await makeJob().run(lastJobId, newSession(), 1, 'Frage?', USER);
-  assert.equal(jobRef.statusText, 'job.phase.agentNote');
-  assert.deepEqual(jobRef.statusParams, { current: 1, total: 4, note: 'Ich prüfe das Alter von Manuel.' });
+  const jobId = createJob('book-chat', BOOK, USER, 'x');
+  jobs.get(jobId).status = 'running';   // updateJob schreibt nur laufende Jobs (sonst Queue)
+  const job = makeJob({ toolResult: () => { during = { ...jobs.get(jobId) }; return { ok: true }; } });
+  await job.run(jobId, newSession(), 1, 'Frage?', USER);
+  assert.equal(during.statusText, 'job.phase.agentNote');
+  assert.deepEqual(during.statusParams, { current: 1, total: 4, note: 'Ich prüfe das Alter von Manuel.' });
+  const j = jobs.get(jobId);
+  const ci = JSON.parse(db.prepare('SELECT context_info FROM chat_messages WHERE id = ?').get(j.result.assistant_message_id).context_info);
+  assert.equal(ci.tool_rounds[0].note, 'Ich prüfe das Alter von Manuel.');
+  assert.equal(ci.tool_rounds[1].note, undefined, 'Antwort-Runde ohne Text: keine Notiz, auch nicht aus der Denk-Zusammenfassung');
 });
 
 test('effortSettingKey: Claude-Effort des Chats geht in den Job-Bag, bestehender Bag bleibt', async () => {
@@ -515,6 +522,8 @@ test('Beleg-Echo in der Antwort wird vor dem Speichern entfernt (Belege stehen i
 
 test('_handleChatPost: laufender Job derselben Session → 409, Nachricht wird nicht gespeichert', () => {
   const { _handleChatPost } = require('../../routes/jobs/chat/shared');
+  // Die Dedup-Antwort kommt erst nach Besitz- und Rechteprüfung.
+  require('../../db/book-access').grantAccess(BOOK, USER, 'editor', USER);
   const sid = newSession();
   const before = db.prepare(`SELECT COUNT(*) AS n FROM chat_messages WHERE session_id = ?`).get(sid).n;
   const running = createJob('book-chat', BOOK, USER, 'x', null, sid);
@@ -596,7 +605,8 @@ test('Werkzeug-Verlauf: Rundenprotokoll in context_info, übersprungene Aufrufe 
   assert.equal(log[1].errorKey, 'chat.toolError.roundLimit');
   assert.equal(j.liveTools.length, 2, 'Live-Kopie des Logs am Job');
   assert.equal(j.liveTools[0].input, undefined, 'Live-Kopie ohne Rohargumente');
-  assert.deepEqual(j.liveRounds[0], { iter: 1, tokIn: 500, tokOut: 20, note: 'Ich schaue zwei Stellen nach.' });
+  const { durationMs: _d, ...round1 } = j.liveRounds[0];
+  assert.deepEqual(round1, { iter: 1, tokIn: 500, tokOut: 20, note: 'Ich schaue zwei Stellen nach.' });
   assert.equal(j.liveRounds[1].note, undefined, 'Antwort-Runde: Text ist Antwort, keine Notiz');
 });
 
@@ -943,4 +953,87 @@ test('buildAgenticHistory: Recherche-Antwort ohne alte Belegmarker, mit Quellen-
   assert.equal(b, 'Der Umbau 2019 folgte.');
   const { stripHistoryNote } = require('../../lib/chat-history-note');
   assert.equal(stripHistoryNote(`Antwort.\n\n[Quellen der vorigen Antwort (Verlauf — nicht in der Antwort wiedergeben; diese URLs sind lesbar): (1) X — https://x]`), 'Antwort.');
+});
+
+test('Synthese: Vorschlag erst im ZWEITEN Versuch, ohne final_answer → läuft trotzdem, parseFinal bekommt ctx', async () => {
+  mockCalls([
+    res({ stopReason: 'tool_use', toolUses: [tu('lookup')] }),
+    res({ stopReason: 'tool_use', toolUses: [tu('lookup', {}, 'z1')] }),
+    res({ stopReason: 'tool_use', toolUses: [tu('side_effect', { v: 9 }, 'z2')] }),
+  ]);
+  let parseCtx = null;
+  const job = makeJob({
+    prep: { maxToolIter: 1, collectTools: ['side_effect'] },
+    config: { parseFinal: (finalText, logger, ctx) => { parseCtx = ctx; return JSON.parse(finalText).antwort; } },
+  });
+  const out = await runJob(job, newSession());
+  assert.deepEqual(out.ci.effects, [9], 'Vorschlag aus dem zweiten Synthese-Versuch gesammelt');
+  assert.ok(parseCtx && Array.isArray(parseCtx.effects), 'parseFinal bekommt den ctx des Laufs');
+});
+
+test('_handleChatPost: client_msg_id einer FREMDEN Session verrät keine job_id (Besitz vor Dedup)', () => {
+  const { _handleChatPost } = require('../../routes/jobs/chat/shared');
+  const sid = newSession();
+  db.prepare(`UPDATE chat_messages SET client_msg_id = 'cm-1', job_id = 'job-geheim' WHERE session_id = ?`).run(sid);
+  appUsers.createUser({ email: 'fremd@example.com' });
+  let status = 200, body = null;
+  const resStub = { status(c) { status = c; return this; }, json(b) { body = b; return this; } };
+  _handleChatPost({ body: { session_id: sid, message: 'x', client_msg_id: 'cm-1' }, session: { user: { email: 'fremd@example.com' } } }, resStub, {
+    jobType: 'book-chat', kind: 'book', labelFn: () => ({ key: 'x' }), runFn: () => {},
+  });
+  assert.equal(status, 404, JSON.stringify(body));
+  assert.ok(!JSON.stringify(body).includes('job-geheim'));
+});
+
+test('abgeschnittene Werkzeug-Runde: verworfene Aufrufe stehen als übersprungen im Verlauf, Synthese-Runde markiert', async () => {
+  mockCalls([
+    res({ stopReason: 'tool_use', toolUses: [tu('lookup')] }),
+    res({ stopReason: 'max_tokens', truncated: true, toolUses: [tu('side_effect', { v: 9 })] }),
+    res({ stopReason: 'tool_use', toolUses: [tu('final_answer', { antwort: 'aus dem Gesammelten' })] }),
+  ]);
+  const job = makeJob();
+  const jobId = createJob('book-chat', BOOK, USER, 'x');
+  await job.run(jobId, newSession(), 1, 'Frage?', USER);
+  const j = jobs.get(jobId);
+  assert.equal(j.status, 'done', j.error);
+  const dropped = job.ctx().toolLog.find(e => e.name === 'side_effect');
+  assert.equal(dropped.skipped, true);
+  assert.equal(dropped.errorKey, 'chat.toolError.truncatedRound');
+  assert.equal(dropped.iter, 2);
+  const ci = JSON.parse(db.prepare('SELECT context_info FROM chat_messages WHERE id = ?').get(j.result.assistant_message_id).context_info);
+  assert.deepEqual(ci.tool_rounds.map(r => !!r.synth), [false, false, true], 'nur der Synthese-Turn trägt synth');
+});
+
+test('gescheiterter Lauf: Teil-Verlauf hängt an der Frage (run_failed), nicht am Modell-Verlauf', async () => {
+  let n = 0;
+  ai.callAIWithTools = async () => {
+    n++;
+    if (n === 1) return res({ stopReason: 'tool_use', text: 'Ich schaue nach.', toolUses: [tu('lookup', { pattern: 'A' })] });
+    throw Object.assign(new Error('job.error.aiTruncated'), { i18nParams: { max: 1 } });
+  };
+  const sid = newSession();
+  const userMsgId = db.prepare(`SELECT id FROM chat_messages WHERE session_id = ? AND role = 'user'`).get(sid).id;
+  db.prepare('UPDATE chat_messages SET context_info = ? WHERE id = ?').run(JSON.stringify({ book_chat_mode: 'full' }), userMsgId);
+  const job = makeJob();
+  const jobId = createJob('book-chat', BOOK, USER, 'x');
+  await job.run(jobId, sid, userMsgId, 'Frage?', USER);
+  assert.equal(jobs.get(jobId).status, 'error');
+  const ci = JSON.parse(db.prepare('SELECT context_info FROM chat_messages WHERE id = ?').get(userMsgId).context_info);
+  assert.equal(ci.book_chat_mode, 'full', 'bestehender Kontext der Frage bleibt');
+  assert.equal(ci.run_failed.cancelled, false);
+  assert.equal(ci.run_failed.error, 'job.error.aiTruncated');
+  assert.deepEqual(ci.run_failed.errorParams, { max: 1 });
+  assert.deepEqual(ci.run_failed.tool_calls.map(c => c.name), ['lookup']);
+  assert.equal(ci.run_failed.tool_rounds[0].note, 'Ich schaue nach.');
+  const { buildAgenticHistory } = require('../../routes/jobs/agentic-chat/history');
+  assert.ok(!JSON.stringify(buildAgenticHistory(sid)).includes('run_failed'), 'Modell sieht den Teil-Verlauf nicht');
+});
+
+test('gescheiterter Lauf ohne Runde: nichts an die Frage gehängt', async () => {
+  ai.callAIWithTools = async () => { throw new Error('job.error.aiTruncated'); };
+  const sid = newSession();
+  const userMsgId = db.prepare(`SELECT id FROM chat_messages WHERE session_id = ? AND role = 'user'`).get(sid).id;
+  const jobId = createJob('book-chat', BOOK, USER, 'x');
+  await makeJob().run(jobId, sid, userMsgId, 'Frage?', USER);
+  assert.equal(db.prepare('SELECT context_info FROM chat_messages WHERE id = ?').get(userMsgId).context_info, null);
 });

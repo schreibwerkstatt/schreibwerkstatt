@@ -15,13 +15,11 @@ export const bookChatMethods = {
     return Array.isArray(c) ? c : [];
   },
 
-  // Hinweis, wenn die Antwort aus einem Deckel-Abbruch synthetisiert wurde.
+  // Hinweis, wenn die Antwort aus einem Deckel-Abbruch synthetisiert wurde — derselbe
+  // Text wie in den anderen agentischen Chats (tool-log-methods.js#_chatStopNote);
+  // hier steht er im Block mit den Wiederholen-Knöpfen.
   _bookChatStopNote(msg) {
-    const r = msg?.context_info?.stop_reason;
-    if (r === 'input_cap') return window.__app.t('chat.stopInputCap');
-    if (r === 'max_iter') return window.__app.t('chat.stopMaxIter');
-    if (r === 'context_budget') return window.__app.t('chat.stopContextBudget');
-    return '';
+    return this._chatStopNote(msg);
   },
 
   // Woher der Buchtext einer klassischen Antwort kam (context_info.retrievalMode
@@ -39,7 +37,7 @@ export const bookChatMethods = {
     })[ci.retrievalFallback];
     if (mode !== 'full' && ci.fullRequested) parts.push(t('chat.retrieval.fullRequested'));
     if (mode !== 'full' && reason) parts.push(t(`chat.retrieval.${reason}`));
-    if (ci.freshPages > 0) parts.push(t('chat.retrieval.freshPages', { n: ci.freshPages }));
+    if (ci.freshPages > 0) parts.push(window.__app.tn('chat.retrieval.freshPages', ci.freshPages));
     if (ci.historyTrimmed > 0) parts.push(t('chat.retrieval.historyTrimmed'));
     return parts.join(' – ');
   },
@@ -125,8 +123,11 @@ export const bookChatMethods = {
     newSessionBody: () => ({ book_id: parseInt(Alpine.store('nav').selectedBookId) }),
     sendUrl: '/jobs/book-chat',
     sendExtra: (ctx) => (ctx._bookChatSendMode === 'full' ? { mode: 'full' } : {}),
+    // Cache-Wurf best effort: scheitert er (offline, Server), läuft das neue
+    // Gespräch trotzdem an.
     onBeforeNewSession: async function () {
-      await fetch('/jobs/book-chat-cache?book_id=' + Alpine.store('nav').selectedBookId, { method: 'DELETE' });
+      await fetch('/jobs/book-chat-cache?book_id=' + Alpine.store('nav').selectedBookId, { method: 'DELETE' })
+        .catch((e) => console.warn('[BookChat] cache reset', e));
     },
   }),
 };

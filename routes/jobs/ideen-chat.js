@@ -15,6 +15,7 @@
 const { getBookSettings } = require('../../db/schema');
 const { getPrompts, loadOrderedBookContents } = require('./shared');
 const { makeProposalChatJob } = require('./proposal-chat');
+const { splitOutlineBudget } = require('./proposal-chat-shared');
 const { executeIdeenChatTool, PROPOSE_TOOLS } = require('./ideen-chat-tools');
 const {
   loadIdeenState, fitIdeenOutline, gliederungOutline, targetsOutline, sessionIdeenProposalMemory,
@@ -31,6 +32,10 @@ async function ideenChatContext(session, userEmail, { outlineBudgetChars = Infin
   const tree = await loadOrderedBookContents(session.book_id, { includeExcluded: true });
   const state = loadIdeenState(session.book_id, userEmail, tree);
   const settings = getBookSettings(session.book_id, userEmail);
+  // Ideenliste und Gliederung teilen sich das Vorspann-Budget.
+  const { first: ideen, second: gliederung } = splitOutlineBudget(outlineBudgetChars,
+    (b) => gliederungOutline(state, { budgetChars: b }),
+    (b) => fitIdeenOutline(state, { budgetChars: b }));
   return {
     state,
     bookContext: getResearchPromptContext(`${settings.language || 'de'}-${settings.region || 'CH'}`, {
@@ -38,8 +43,8 @@ async function ideenChatContext(session, userEmail, { outlineBudgetChars = Infin
       buchKontext: settings.buch_kontext || null,
       hauptland: settings.schauplatz_land || null,
     }),
-    ideen: fitIdeenOutline(state, { budgetChars: outlineBudgetChars }),
-    gliederungOutline: gliederungOutline(state),
+    ideen,
+    gliederungOutline: gliederung,
     targetsOutline: targetsOutline(state),
     stages: state.stages,
     proposalMemory: buildIdeenProposalMemoryBlock(sessionIdeenProposalMemory(session.id, state)),

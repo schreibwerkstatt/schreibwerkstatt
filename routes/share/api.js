@@ -6,6 +6,7 @@
 
 const contentStore = require('../../lib/content-store');
 const shareLinks = require('../../db/share-links');
+const shareReview = require('../../db/share-review');
 const { guardBook, resolveBookRole, sessionEmail } = require('../../lib/acl');
 const { setContext } = require('../../lib/log-context');
 const { recordUsageEvent } = require('../../lib/usage-events');
@@ -55,13 +56,19 @@ function guardComment(req, res, id) {
 // Zeile fuer die Owner-Karte: `mine` (selbst angelegt → Bearbeiten/Kommentare/
 // Statistik) und `creator_access` (Ersteller hat noch die noetige Buchrolle —
 // sonst ist der Link fuer Leser bereits tot, siehe share-helpers#isExpired).
+// Review-Links tragen zusaetzlich ihren Stand (Reviewer, offene Threads und
+// Vorschlaege, `complete` fuer das Angebot «gegengelesen»).
 function _listRow(row, me) {
   return {
     ...row,
     mine: row.owner_email === me,
     creator_access: !H.creatorLostAccess(row),
+    ...(row.mode === 'review' ? { review: shareReview.reviewState(row.token) } : {}),
   };
 }
+
+// `mode` aus dem Body: nur 'review' schaltet um, alles andere ist 'leser'.
+const _modeOf = (v) => (v === 'review' ? 'review' : 'leser');
 
 function register(router) {
   router.get('/api/links', requireSession, (req, res) => {
@@ -184,7 +191,7 @@ function register(router) {
 
   router.post('/api/links', requireSession, jsonBody, async (req, res) => {
     const ownerEmail = sessionEmail(req);
-    const { kind, page_id, chapter_id, book_id, intro, expires_at, show_toc, show_promo } = req.body || {};
+    const { kind, page_id, chapter_id, book_id, intro, expires_at, show_toc, show_promo, mode, reviewers } = req.body || {};
     if (kind !== 'page' && kind !== 'chapter' && kind !== 'book') return res.status(400).json({ error_code: 'INVALID_KIND' });
     if (kind === 'page' && !Number.isInteger(parseInt(page_id, 10))) return res.status(400).json({ error_code: 'PAGE_ID_REQUIRED' });
     if (kind === 'chapter' && !Number.isInteger(parseInt(chapter_id, 10))) return res.status(400).json({ error_code: 'CHAPTER_ID_REQUIRED' });
@@ -229,14 +236,16 @@ function register(router) {
         showToc: !!show_toc,
         // App-Hinweis im Reader: Standard an, nur explizites false schaltet ab.
         showPromo: show_promo !== false && show_promo !== 0,
+        mode: _modeOf(mode),
       });
+      if (created.mode === 'review' && Array.isArray(reviewers)) shareReview.replaceReviewers(created.token, reviewers);
 
       // data-bid auf den Scope-Seiten nachziehen (Detail-Begruendung am Helper).
       await backfillScopeBlockIds(created);
 
       logger.info(`[share/api/links POST] kind=${kind} book=${bookId} token=${created.token.slice(0, 8)}`);
       recordUsageEvent({ userEmail: ownerEmail, event: 'share.link.created', bookId, meta: { kind } });
-      res.json(created);
+      res.json(_listRow(shareLinks.getShareLinkByToken(created.token), ownerEmail));
     } catch (e) {
       logger.error('[share/api/links POST] ' + e.message);
       res.status(500).json({ error_code: 'DB_ERROR' });
@@ -267,9 +276,12 @@ function register(router) {
     if ('show_promo' in (req.body || {})) {
       patch.showPromo = !!req.body.show_promo;
     }
+    if ('mode' in (req.body || {})) patch.mode = _modeOf(req.body.mode);
     try {
       shareLinks.updateShareLink(token, ownerEmail, patch);
-      res.json(shareLinks.getShareLinkByToken(token));
+      const row = shareLinks.getShareLinkByToken(token);
+      if (row?.mode === 'review' && Array.isArray(req.body?.reviewers)) shareReview.replaceReviewers(token, req.body.reviewers);
+      res.json(_listRow(shareLinks.getShareLinkByToken(token), ownerEmail));
     } catch (e) {
       logger.error('[share/api/links PATCH] ' + e.message);
       res.status(500).json({ error_code: 'DB_ERROR' });
@@ -432,4 +444,4 @@ function register(router) {
   });
 }
 
-module.exports = { register, requireSession };
+module.exports = { register, requireSession, ownLink, guardComment };

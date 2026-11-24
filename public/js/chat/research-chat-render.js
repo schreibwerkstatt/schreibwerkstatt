@@ -142,8 +142,10 @@ export function displaySources(text, sources, answerSources) {
   return citedSources(text, Array.isArray(sources) ? sources : []);
 }
 
-// Platzhalter des Loops für „keine Antwort" (routes/jobs/agentic-chat.js). Mit
-// Vorschlägen ist das kein Fehlschlag — Server-Pendant: research-chat-helpers.js.
+// Platzhalter des Loops für „keine Antwort" (routes/jobs/agentic-chat/loop.js). Mit
+// Vorschlägen ist das kein Fehlschlag. Spiegel von EMPTY_MARKERS in
+// routes/jobs/proposal-chat-shared.js (der Server kann dieses Modul nicht
+// synchron importieren) — eine Änderung dort gehört hierher.
 const EMPTY_MARKERS = new Set(['__i18n:chat.errors.maxIterReached__', '__i18n:chat.errors.emptyAnswer__']);
 export const PROPOSALS_ONLY_MARKER = '__i18n:recherche.chat.proposalsOnly__';
 

@@ -21,7 +21,7 @@ export const ANALYSIS_TOOLS = [
   },
   {
     name: 'get_lektorat',
-    description: 'Gespeicherte Lektorat-Ergebnisse (letzter Check pro Abschnitt). view="hotspots" (Default): pro Kapitel total/avg/max Fehler plus die Abschnitte mit den meisten Fehlern samt fazit-Auszug — «wo sind die schwersten Probleme?». view="findings": Einzelbefunde findings[{page_id, page_name, chapter_name, checked_at, typ, original, korrektur, erklaerung, offset?, length?}] mit by_typ und total_findings — «zeig mir die Stilfehler in Kapitel 3». Erst Überblick, dann Detail. Zählt Befunde, misst keine Satzstruktur.',
+    description: 'Gespeicherte Lektorat-Ergebnisse (letzter Check pro Abschnitt). view="hotspots" (Default): pro Kapitel total/avg/max Fehler plus die Abschnitte mit den meisten Fehlern samt fazit-Auszug — «wo sind die schwersten Probleme?». view="findings": Einzelbefunde findings[{page_id, page_name, chapter_name, checked_at, typ, original, korrektur, erklaerung, offset?, length?}] mit by_typ und total_findings — «zeig mir die Stilfehler in Kapitel 3». Zählt Befunde, misst keine Satzstruktur.',
     see: {
       get_stil_metrics: 'Passiv-Anteil, LIX, Dialoganteil → `get_stil_metrics`.',
     },
@@ -31,7 +31,7 @@ export const ANALYSIS_TOOLS = [
         view:       { type: 'string', enum: ['hotspots', 'findings'], description: 'hotspots = Überblick (Default), findings = Einzelbefunde.' },
         chapter_id: { type: 'integer', description: 'Nur dieses Kapitel (inkl. Unterkapitel).' },
         page_id:    { type: 'integer', description: 'Nur view=findings: nur dieser Abschnitt (hat Vorrang vor chapter_id).' },
-        typ:        { type: 'string',  description: 'Nur view=findings: Fehlertyp, z.B. "stil", "grammatik", "rechtschreibung", "interpunktion", "fluss", "wortwahl".' },
+        typ:        { type: 'string',  description: 'Nur view=findings: Fehlertyp, z.B. "stil", "grammatik", "wiederholung"; vorhandene nennt by_typ.' },
         min_errors: { type: 'integer', description: 'Nur view=hotspots: Mindest-Fehleranzahl pro Abschnitt (default 0).' },
         limit:      { type: 'integer', description: 'hotspots: Anzahl Top-Abschnitte (default 20); findings: Befunde (default 30). Max 100.' },
       },

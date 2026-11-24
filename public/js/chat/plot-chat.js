@@ -24,19 +24,14 @@ export function plotChatState() {
 }
 
 export const plotChatMethods = {
-  async togglePlotChat() {
-    this.plotChatOpen = !this.plotChatOpen;
-    if (this.plotChatOpen) {
-      await this._onVisiblePlotChat();
-      this.$nextTick(() => this.$root?.querySelector('.plot-chat-input')?.focus());
-    }
-  },
-
+  // togglePlotChat kommt aus makeChatMethods (openProp).
   ...plotProposalMethods,
 
   ...makeChatMethods({
     untitledKey: 'plot.chat.untitled',
     label: 'PlotChat',
+    openProp: 'plotChatOpen',
+    inputSelector: '.plot-chat-input',
     props: {
       sessions: 'plotChatSessions',
       messages: 'plotChatMessages',

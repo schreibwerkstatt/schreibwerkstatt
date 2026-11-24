@@ -1,0 +1,31 @@
+<!-- @expects link -->
+<!-- Stand eines Review-Links in der Owner-Karte (share-links-card.js):
+     Reviewer mit Abschluss und Schlussnotiz, offene Threads/Vorschläge, Angebot
+     «gegengelesen».
+     Gesetzt wird die Stufe nur auf Klick (docs/bearbeitungsstand.md). -->
+<template x-if="link.review">
+  <div class="share-review-state">
+    <span class="share-row__kind" x-text="$app.t('share.review.badge')"></span>
+    <div class="share-review-state__people">
+      <template x-for="r in link.review.reviewers" :key="r.id">
+        <span class="share-review-state__person" :class="{ 'share-review-state__person--done': r.done }">
+          <svg class="icon" aria-hidden="true" x-show="r.done"><use href="/icons.svg#check"/></svg>
+          <span x-text="r.name"></span>
+        </span>
+      </template>
+      <span class="muted-msg muted-msg--sm" x-show="!link.review.reviewers.length" x-text="$app.t('share.review.noReviewers')"></span>
+    </div>
+    <span class="share-review-state__summary" x-show="link.review.reviewers.length" x-text="reviewSummary(link)"></span>
+    <!-- Schlussnotizen sichtbar, nicht nur als Tooltip (Touch-Geräte). -->
+    <template x-for="r in link.review.reviewers.filter(x => x.done_note)" :key="'note-' + r.id">
+      <p class="share-review-state__note">
+        <span class="share-review-state__note-name" x-text="r.name"></span>
+        <span class="share-review-state__note-text" x-text="r.done_note"></span>
+      </p>
+    </template>
+    <button type="button" class="btn-compact" x-show="canMarkReviewed(link)"
+            :disabled="markingReviewed === link.token"
+            @click="markReviewed(link)"
+            x-text="$app.t('share.review.markReviewed')"></button>
+  </div>
+</template>

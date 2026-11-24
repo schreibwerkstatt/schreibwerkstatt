@@ -103,7 +103,7 @@ test('Filter- und Ergebnis-Keys der Server-Sicht existieren in beiden Locales', 
   const src = readFileSync(new URL('../../routes/jobs/agentic-chat/tool-view.js', import.meta.url), 'utf8');
   const filters = [...src.match(/const FILTER_KEYS = new Set\(\[([\s\S]*?)\]\)/)[1].matchAll(/'([a-z_]+)'/g)].map(m => m[1]);
   const results = [...src.matchAll(/chat\.toolResult\.([a-zA-Z]+)/g)].map(m => m[1])
-    .flatMap(base => (/(?:One|None|Of)$/.test(base) || ['quoteFound', 'quoted', 'proposed', 'proposedExists', 'image'].includes(base)
+    .flatMap(base => (/(?:One|None|Of)$/.test(base) || ['quoteFound', 'quoted', 'proposed', 'proposedExists', 'image', 'ageKnown', 'ageUnknown'].includes(base)
       ? [base] : [base, `${base}One`, `${base}None`]));
   const counted = ['hits', 'sections', 'entries'].flatMap(b => [b, `${b}One`, `${b}None`]);
   const keys = [...new Set([...filters.map(f => `chat.toolFilter.${f}`), ...[...results, ...counted].map(r => `chat.toolResult.${r}`),
@@ -125,4 +125,79 @@ test('Fehler ohne Key: generischer übersetzter Text, Rohtext nur als errorDetai
   for (const k of ['chat.toolError.failed', 'chat.toolError.failedCode', 'chat.toolError.notOffered']) {
     assert.ok(de[k] && en[k], `${k} in beiden Locales`);
   }
+});
+
+test('Antwort- und Synthese-Runde stehen im Verlauf, Tokens ohne Cache-Lesezugriffe, Dauer ab einer Sekunde', async () => {
+  const ci = {
+    tool_rounds: [
+      { iter: 1, tokIn: 64000, tokOut: 100, cacheCreationIn: 64000, durationMs: 4200 },
+      { iter: 2, tokIn: 68000, tokOut: 1200, cacheReadIn: 64000, durationMs: 800 },
+    ],
+    tool_calls: [{ name: 'search_passages', ok: true, iter: 1, input: { pattern: 'x' } }],
+  };
+  const rounds = toolLogEntries(ci, t).items.filter(i => i.kind === 'round');
+  assert.equal(rounds.length, 2);
+  assert.equal(rounds[0].text, 'Runde 1');
+  assert.equal(rounds[0].tokens, '64100 Tokens');
+  assert.equal(rounds[0].duration, '4.2 s');
+  assert.equal(rounds[1].text, t('chat.toolIterAnswer', { n: 2 }));
+  assert.equal(rounds[1].tokens, `5200 Tokens ${t('chat.toolRoundCached', { n: 64000 })}`);
+  assert.equal(rounds[1].duration, '');
+
+  // Synthese: markiert (neu) oder bei älteren Antworten aus dem Abbruchgrund abgeleitet.
+  const synth = (r, stop) => toolLogEntries({ ...ci, stop_reason: stop, tool_rounds: [ci.tool_rounds[0], { ...ci.tool_rounds[1], ...r }] }, t)
+    .items.filter(i => i.kind === 'round')[1].text;
+  assert.equal(synth({ synth: true }, 'max_iter'), t('chat.toolIterSynthesis', { n: 2 }));
+  assert.equal(synth({}, 'input_cap'), t('chat.toolIterSynthesis', { n: 2 }));
+  assert.equal(synth({}, 'final_answer'), t('chat.toolIterAnswer', { n: 2 }));
+});
+
+test('abgelehnter Vorschlag ist neutral mit übersetztem Grund, kein Fehler', () => {
+  const { rows } = toolLogEntries({ tool_calls: [
+    { name: 'propose_beat', ok: false, iter: 1, input: {}, error: 'Beat #113 liegt nicht in der Zielzelle', errorKey: 'chat.toolError.proposalWrongCell' },
+  ] }, t);
+  assert.equal(rows[0].rejected, true);
+  assert.equal(rows[0].failed, false);
+  assert.equal(rows[0].error, de['chat.toolError.proposalWrongCell']);
+  assert.equal(rows[0].errorDetail, 'Beat #113 liegt nicht in der Zielzelle');
+  assert.equal(toolLogHeading(rows, t), t('chat.toolsToggleN', { n: 1 }));
+});
+
+test('Treffer einer Suche als Verweise bzw. Links, nur bei erfolgreichem Aufruf', () => {
+  const { rows } = toolLogEntries({ tool_calls: [
+    { name: 'search_passages', ok: true, iter: 1, input: { pattern: 'x' },
+      view: { subject: [], result: { key: 'chat.toolResult.hits', params: { n: 2 } },
+        hits: [{ t: 'ref', k: 'page', id: '4', v: 'Am See' }, { t: 'url', v: 'https://a.ch/x' }] } },
+  ] }, t);
+  assert.equal(rows[0].hits.length, 2);
+  assert.deepEqual(rows[0].hits[0], { kind: 'entity', entity: { type: 'page', id: '4', name: 'Am See' } });
+  assert.equal(rows[0].hits[1].href, 'https://a.ch/x');
+});
+
+test('Abbruch-Hinweis für alle Deckel-Gründe, Prosa-Abschluss des Buch-Chats im Verlauf', async () => {
+  const { chatStopNote } = await import('../../public/js/chat/tool-log.js');
+  for (const r of ['input_cap', 'max_iter', 'context_budget', 'truncated_round', 'web_cap']) {
+    assert.ok(chatStopNote({ stop_reason: r }, t) && !chatStopNote({ stop_reason: r }, t).startsWith('chat.'), r);
+  }
+  assert.equal(chatStopNote({ stop_reason: 'final_answer' }, t), '');
+  const items = toolLogEntries({ mode: 'agent', stop_reason: 'prose', tool_calls: [{ name: 'search_passages', ok: true, iter: 1, input: {} }] }, t).items;
+  assert.equal(items.at(-1).kind, 'final');
+  assert.equal(items.at(-1).text, de['chat.toolFinalProse']);
+});
+
+test('jeder abgelehnte Vorschlag (Plot-, Ideen-Chat) trägt einen Grund mit Key in beiden Locales', async () => {
+  const { createRequire } = await import('node:module');
+  const require = createRequire(import.meta.url);
+  const { PROPOSAL_REJECT_KINDS, err } = require('../../routes/jobs/proposal-chat-shared.js');
+  const kinds = [...PROPOSAL_REJECT_KINDS].join('|');
+  for (const f of ['plot-chat-tools.js', 'ideen-chat-tools.js']) {
+    const src = readFileSync(new URL(`../../routes/jobs/${f}`, import.meta.url), 'utf8');
+    const calls = (src.match(/\b_err\(/g) || []).length;
+    const tagged = (src.match(new RegExp(`, '(?:${kinds})'\\)`, 'g')) || []).length;
+    assert.ok(calls > 0);
+    assert.equal(tagged, calls, `${f}: jedes _err(…) mit Grund aus PROPOSAL_REJECT_KINDS`);
+  }
+  const keys = [...PROPOSAL_REJECT_KINDS, 'x'].map(k => err('m', k).errorKey);
+  assert.equal(keys.at(-1), 'chat.toolError.proposalRejected');
+  assert.deepEqual(keys.filter(k => !de[k] || !en[k]), []);
 });

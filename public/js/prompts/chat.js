@@ -9,6 +9,7 @@ import { SYSTEM_CHAT, SYSTEM_BOOK_CHAT } from './core.js';
 import { PAGE_CHAT_IDEEN_RULES, pageChatIdeenLines, pageChatIdeenAenderungRules, pageChatNachrichtenHinweis, buildBookTitlesBlock, buildCurrentTitleLine } from './page-chat.js';
 import { CHAT_TOOLS, toolMentions } from './chat-tools/index.js';
 import { buildWeltfaktenBlock } from './weltfakten-block.js';
+import { roundNoteRule } from './chat-round-note.js';
 export { buildWeltfaktenBlock, WELTFAKTEN_BLOCK_DEFAULT_MAX_CHARS } from './weltfakten-block.js';
 
 /**
@@ -378,6 +379,7 @@ export function buildBookChatAgentSystemPrompt(bookName, figuren, review, system
 
   parts.push(
     'Liefere deine finale Antwort IMMER über das Werkzeug `final_answer` (Pflicht-Endpunkt). Kein Freitext-Output ohne Tool-Call — auch wenn keine Recherche-Tools nötig sind, muss die Antwort via final_answer kommen. Sprache der Antwort: passe dich der Sprache der Userfrage an, nicht der Sprache dieses Prompts.',
+    ...roundNoteRule(),
     'ZITATE UND BELEGE: Das System zeigt die geprüften Belege unter deiner Antwort an. Gib sie deshalb nicht in die Antwort aus — kein «Belege»- oder «Quellen»-Abschnitt am Fuss, keine Zitatliste, keine Beleg-Nummern im Fliesstext. Wörtliche Zitate gehören in das Feld `zitate` von `final_answer`.',
   );
 

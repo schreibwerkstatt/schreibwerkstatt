@@ -93,3 +93,13 @@ test('Lauf-Protokoll: Rundennotiz, Live-Kopie ohne Rohargumente', () => {
   const live = liveTools([{ name: 'search_passages', input: { pattern: 'geheim' }, ok: true, iter: 1, durationMs: 2, truncated: false, view: { subject: [], result: null }, skipped: true }]);
   assert.deepEqual(live, [{ name: 'search_passages', ok: true, iter: 1, durationMs: 2, truncated: false, view: { subject: [], result: null }, skipped: true }]);
 });
+
+test('get_figure_age: Jahr ohne Geburtsjahr ist «Alter unbekannt», nicht «bekannt»', () => {
+  const figur = { fig_id: 'fig_1', name: 'Stefan Berger' };
+  const ohne = describe('get_figure_age', { figur_name: 'Stefan' }, { figur, geburt: null, zum_jahr: { jahr: 1990, hinweis: 'Kein Geburtsjahr bekannt' } }, true);
+  assert.equal(ohne.result.key, 'chat.toolResult.ageUnknown');
+  const mit = describe('get_figure_age', { figur_name: 'Stefan' }, { figur, geburt: { jahr: 1970 }, zum_jahr: { jahr: 1990, alter: 20 } }, true);
+  assert.equal(mit.result.key, 'chat.toolResult.ageKnown');
+  const index = describe('get_figure_age', { figur_name: 'Stefan' }, { figur, geburt: null, alters_index: { alter_von: 12 } }, true);
+  assert.equal(index.result.key, 'chat.toolResult.ageKnown');
+});

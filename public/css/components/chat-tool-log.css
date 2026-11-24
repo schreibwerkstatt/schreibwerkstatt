@@ -44,7 +44,8 @@
     text-transform: uppercase;
     color: var(--color-muted);
   }
-  .chat-tool-log-round-tokens {
+  .chat-tool-log-round-tokens,
+  .chat-tool-log-round-duration {
     font-size: var(--font-size-micro);
     color: var(--color-muted);
   }
@@ -100,8 +101,18 @@
     flex-basis: 100%;
     color: var(--color-err-text);
   }
-  .chat-tool-log-row--skipped .chat-tool-log-error {
+  .chat-tool-log-error--neutral {
     color: var(--color-muted);
+  }
+  /* Erste Treffer einer Suche: eigene Zeile unter dem Aufruf */
+  .chat-tool-log-hits {
+    flex-basis: 100%;
+  }
+
+  /* Gescheiterter Lauf an der Frage: Grund + Teil-Verlauf */
+  .chat-run-failed {
+    max-width: 88%;
+    margin-top: var(--space-xs);
   }
 
   /* Gruppe gleicher Aufrufe: Sammelzeile als Klapp-Knopf, ohne die Versalien des
@@ -127,7 +138,8 @@
   @media (max-width: 768px) {
     .chat-tool-log { font-size: var(--font-size-sm); color: var(--color-muted); }
     .chat-tool-log-round-title,
-    .chat-tool-log-round-tokens { font-size: var(--font-size-xs); }
+    .chat-tool-log-round-tokens,
+    .chat-tool-log-round-duration { font-size: var(--font-size-xs); }
     .chat-tool-log-note { color: var(--color-muted); }
     .chat-tool-log .collapsible-toggle {
       min-height: 36px;

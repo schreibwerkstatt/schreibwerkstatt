@@ -13,6 +13,7 @@
 import { _isLocal, _jsonOnly } from './state.js';
 import { buildPassageBlockLines } from './chat-pre-context.js';
 import { toolMentions } from './chat-tools/mentions.js';
+import { roundNoteRule } from './chat-round-note.js';
 import { buildProposalMemoryBlock } from './proposal-memory.js';
 
 export const IDEEN_CHAT_FORCE_FINAL_INSTRUCTION =
@@ -209,6 +210,7 @@ export function buildIdeenChatSystemPrompt(bookName, ctx = {}) {
     '',
     `Maximal ${maxToolIter} Werkzeug-Iterationen pro Antwort (eine Iteration = eine Runde, nicht ein Aufruf). Bündle unabhängige Aufrufe in EINER Runde. Vorschlags-Aufrufe zählen mit — gib alle Vorschläge möglichst in einer Runde ab.`,
     'Liefere die Antwort IMMER über `final_answer`. Sprache: passe dich der Userfrage an, nicht diesem Prompt.',
+    ...roundNoteRule(),
     ...(bookContext ? ['', bookContext] : []),
   );
 

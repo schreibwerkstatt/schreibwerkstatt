@@ -15,9 +15,9 @@
 
 import { sendJson, fetchJson } from '../utils.js';
 import { tFetchError } from '../i18n.js';
-import { persistProposalStatus, applyProposalOnce, proposalApplyError } from './proposal-status.js';
+import { persistProposalStatus, applyProposalOnce, proposalApplyError, proposalBaseState } from './proposal-status.js';
 import { trackChatProposal } from '../features-usage.js';
-import { ideeUpdateRows } from './ideen-chat-proposals.js';
+import { ideeUpdateRows, confirmIdeeBeleg } from './ideen-chat-proposals.js';
 import { IDEE_OPEN_STATUSES } from '../book/ideen-shared.js';
 import { EVT } from '../events.js';
 
@@ -62,7 +62,7 @@ async function _currentIdee(p) {
 // Alle Wirte spreaden dieselben Methoden; welcher Chat es ist, sagt die
 // Nachrichtenliste, in der die Nachricht steht. Auch per ID: der Recherche-Chat
 // ersetzt eine Nachricht nach dem Speichern eines Fundstücks durch ein neues
-// Objekt (research-chat-proposals.js#_patchProposal), ein laufender Ideen-Klick
+// Objekt (research-chat-proposals.js#_replaceResearchProposal), ein laufender Ideen-Klick
 // hält dann noch das alte. Die IDs sind über alle Chats eindeutig (chat_messages).
 function _inList(list, msg) {
   return Array.isArray(list) && list.some(m => m === msg || (msg?.id != null && m?.id === msg.id));
@@ -83,11 +83,7 @@ export const chatIdeeProposalMethods = {
   /** Feld-Zeilen eines idee_update (vorher → nachher, Text als Wort-Diff). */
   chatIdeeUpdateRows(p) { return ideeUpdateRows(p); },
 
-  chatIdeeState(p) {
-    if (p?.applied_at) return 'applied';
-    if (p?.status === 'discarded') return 'discarded';
-    return 'open';
-  },
+  chatIdeeState(p) { return proposalBaseState(p); },
 
   editChatIdee(p) {
     if (p._draft == null) p._draft = p.fields?.content || '';
@@ -122,10 +118,11 @@ export const chatIdeeProposalMethods = {
       return row?.id || null;
     });
     if (!r.ok) {
-      if (r.phase !== 'cancelled') {
-        console.error('[captureChatIdee]', r.error);
-        p._error = tFetchError(r.error);
-      }
+      // Schreibfehler: Server-Grund; angelegt, nur der Status fehlt: eigener
+      // Hinweis (der nächste Klick holt nur den Status nach).
+      if (r.phase !== 'cancelled') console.error('[captureChatIdee]', r.error);
+      const err = proposalApplyError(r, { applyKey: 'ideenBoard.chat.applyError', statusKey: 'chat.ideeCaptureStatusError' });
+      if (err) p._error = err;
     } else if (!r.already) {
       trackChatProposal(_chatKind(this, msg), 'applied', p.type);
     }
@@ -144,13 +141,7 @@ export const chatIdeeProposalMethods = {
     p._error = '';
     try {
       if (!p._written) {
-        if (p.beleg?.text) {
-          const r = await sendJson('/ideen/chat-proposal/beleg-check', 'POST', { message_id: msg.id, index: idx });
-          p._belegMissing = r?.checked === true && r.found === false;
-          if (p._belegMissing && !(await app.appConfirm({
-            message: app.t('ideenBoard.chat.belegGoneConfirm', { status: app.t('ideen.status.' + (p.fields?.status || 'erledigt')) }),
-          }))) return;
-        }
+        if (!(await confirmIdeeBeleg(msg, idx, p, (s) => app.t('ideen.status.' + s)))) return;
         const cur = await _currentIdee(p);
         if (cur === null) { p._error = app.t('ideenBoard.chat.block.ideeGone'); return; }
         const b = p.before || {};

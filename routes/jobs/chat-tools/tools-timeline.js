@@ -26,7 +26,7 @@ const { getSchoolPath, listFiguresForSchoolPath } = require('../../../db/figure-
 const { schoolPath, ageAtModule, figureStationen } = require('../../../lib/esm-bridge');
 const { listStationenForFigure } = require('../../../db/figure-stationen');
 const { schoolLabel } = require('../../../lib/school-labels');
-const { _truncateResult, _findFigure, offeredList, toolHint } = require('./shared');
+const { _truncateResult, _findFigure, offeredList, toolHint, clampInt, groupBy, assertScope, filterValue, filterMiss, analysisStand } = require('./shared');
 
 // ── list_continuity_issues ────────────────────────────────────────────────────
 
@@ -34,6 +34,9 @@ const CONTINUITY_DEFAULT_LIMIT = 30;
 
 function tool_list_continuity_issues(input, ctx) {
   const userEmail = ctx.userEmail || null;
+  const chapterFilter = Number.isInteger(input?.chapter_id) ? input.chapter_id : null;
+  const scopeErr = assertScope(ctx, { chapterId: chapterFilter });
+  if (scopeErr) return scopeErr;
   const check = getLatestContinuityCheck(ctx.bookId, userEmail);
   if (!check) {
     return {
@@ -42,15 +45,20 @@ function tool_list_continuity_issues(input, ctx) {
     };
   }
 
-  const schwereFilter = typeof input?.schwere === 'string' ? input.schwere.toLowerCase() : null;
-  const typFilter     = typeof input?.typ === 'string'     ? input.typ.toLowerCase()     : null;
-  const chapterFilter = Number.isInteger(input?.chapter_id) ? input.chapter_id           : null;
-  const limit = Math.min(100, Math.max(1, Number.isInteger(input?.limit) ? input.limit : CONTINUITY_DEFAULT_LIMIT));
+  const schwereFilter = filterValue(input?.schwere);
+  const typFilter     = filterValue(input?.typ);
+  const limit = clampInt(input?.limit, CONTINUITY_DEFAULT_LIMIT, 1, 100);
 
   let issues = listContinuityIssuesForCheck(check.id);
 
-  if (schwereFilter) issues = issues.filter(i => (i.schwere || '').toLowerCase() === schwereFilter);
-  if (typFilter)     issues = issues.filter(i => (i.typ || '').toLowerCase()     === typFilter);
+  const miss = filterMiss('schwere', input?.schwere, issues.map(i => i.schwere))
+    || filterMiss('typ', input?.typ, issues.map(i => i.typ));
+  if (miss) {
+    return { check_id: check.id, checked_at: check.checked_at, total: 0, ...miss, issues: [] };
+  }
+
+  if (schwereFilter) issues = issues.filter(i => filterValue(i.schwere) === schwereFilter);
+  if (typFilter)     issues = issues.filter(i => filterValue(i.typ)     === typFilter);
 
   if (!issues.length) {
     return { check_id: check.id, checked_at: check.checked_at, summary: check.summary || null, issues: [], total: 0 };
@@ -61,17 +69,10 @@ function tool_list_continuity_issues(input, ctx) {
   const figRows = listContinuityIssueFigures(issueIds);
   const chRows = listContinuityIssueChapters(issueIds);
 
-  const figByIssue = new Map();
-  for (const r of figRows) {
-    if (!r.name) continue;
-    if (!figByIssue.has(r.issue_id)) figByIssue.set(r.issue_id, []);
-    figByIssue.get(r.issue_id).push({ fig_id: r.fig_id || null, name: r.name });
-  }
-  const chByIssue = new Map();
-  for (const r of chRows) {
-    if (!chByIssue.has(r.issue_id)) chByIssue.set(r.issue_id, []);
-    chByIssue.get(r.issue_id).push({ chapter_id: r.chapter_id, chapter_name: r.chapter_name || null });
-  }
+  const figByIssue = groupBy(figRows.filter(r => r.name), r => r.issue_id,
+    r => ({ fig_id: r.fig_id || null, name: r.name }));
+  const chByIssue = groupBy(chRows, r => r.issue_id,
+    r => ({ chapter_id: r.chapter_id, chapter_name: r.chapter_name || null }));
 
   let enriched = issues.map(i => ({
     issue_id: i.id,
@@ -99,9 +100,9 @@ function tool_list_continuity_issues(input, ctx) {
     checked_at: check.checked_at,
     summary: check.summary || null,
     model: check.model || null,
-    issues: limited,
     total,
     ...(limited.length < total ? { truncated: true, shown: limited.length } : {}),
+    issues: limited,
   });
 }
 
@@ -116,8 +117,8 @@ function tool_get_timeline(input, ctx) {
     focusFig = _findFigure(input, ctx);
     if (!focusFig) return { error: 'Figur nicht gefunden', errorKey: 'chat.toolError.figureNotFound', hint: 'Prüfe die Figurenliste im System-Prompt.' };
   }
-  const typFilter = typeof input?.typ === 'string' ? input.typ.toLowerCase() : null;
-  const limit = Math.min(200, Math.max(1, Number.isInteger(input?.limit) ? input.limit : TIMELINE_DEFAULT_LIMIT));
+  const typFilter = filterValue(input?.typ);
+  const limit = clampInt(input?.limit, TIMELINE_DEFAULT_LIMIT, 1, 200);
 
   const events = listTimelineEvents(ctx.bookId, userEmail);
 
@@ -134,22 +135,12 @@ function tool_get_timeline(input, ctx) {
   const pgRows = listTimelineEventPages(eventIds);
   const fgRows = listTimelineEventFigures(eventIds);
 
-  const chByEvt = new Map();
-  for (const r of chRows) {
-    if (!chByEvt.has(r.event_id)) chByEvt.set(r.event_id, []);
-    chByEvt.get(r.event_id).push({ chapter_id: r.chapter_id, chapter_name: r.chapter_name || null });
-  }
-  const pgByEvt = new Map();
-  for (const r of pgRows) {
-    if (!pgByEvt.has(r.event_id)) pgByEvt.set(r.event_id, []);
-    pgByEvt.get(r.event_id).push({ page_id: r.page_id, page_name: r.page_name || null });
-  }
-  const fgByEvt = new Map();
-  for (const r of fgRows) {
-    if (!r.name) continue;
-    if (!fgByEvt.has(r.event_id)) fgByEvt.set(r.event_id, []);
-    fgByEvt.get(r.event_id).push({ fig_id: r.fig_id || null, name: r.name });
-  }
+  const chByEvt = groupBy(chRows, r => r.event_id,
+    r => ({ chapter_id: r.chapter_id, chapter_name: r.chapter_name || null }));
+  const pgByEvt = groupBy(pgRows, r => r.event_id,
+    r => ({ page_id: r.page_id, page_name: r.page_name || null }));
+  const fgByEvt = groupBy(fgRows.filter(r => r.name), r => r.event_id,
+    r => ({ fig_id: r.fig_id || null, name: r.name }));
 
   let enriched = events.map(e => ({
     datum: e.datum,
@@ -161,7 +152,9 @@ function tool_get_timeline(input, ctx) {
     figuren: fgByEvt.get(e.id) || [],
   }));
 
-  if (typFilter) enriched = enriched.filter(e => (e.typ || '').toLowerCase() === typFilter);
+  const miss = filterMiss('typ', input?.typ, enriched.map(e => e.typ));
+  if (miss) return { total: 0, ...miss, events: [] };
+  if (typFilter) enriched = enriched.filter(e => filterValue(e.typ) === typFilter);
   if (focusFig) {
     enriched = enriched.filter(e => e.figuren.some(f => f.fig_id === focusFig.fig_id));
   }
@@ -170,10 +163,11 @@ function tool_get_timeline(input, ctx) {
   const limited = enriched.slice(0, limit);
 
   return _truncateResult({
+    ...analysisStand(ctx),
     ...(focusFig ? { focus: { fig_id: focusFig.fig_id, name: focusFig.name } } : {}),
-    events: limited,
     total,
     ...(limited.length < total ? { truncated: true, shown: limited.length } : {}),
+    events: limited,
   });
 }
 

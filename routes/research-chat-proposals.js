@@ -24,9 +24,8 @@ const {
   createItem, emitItem, urlDuplicateConflict, addItemLink,
 } = require('../db/research-items');
 const {
-  PROPOSAL_KINDS, TITLE_MAX, BODY_MAX, SOURCE_MAX, cleanStr, normalizeUrls, normalizeTags,
+  PROPOSAL_KINDS, TITLE_MAX, BODY_MAX, SOURCE_MAX, cleanStr, normalizeUrls, normalizeTags, keptUrls,
 } = require('../lib/research-validate');
-const { normalizeUrl } = require('../lib/url-normalize');
 const logger = require('../logger');
 
 const router = express.Router();
@@ -37,11 +36,6 @@ const CONTEXT_KINDS = new Set(['page', 'chapter']);
 
 /** URLs des Vorschlags, die in `keep` stehen (Vergleich normalisiert); `keep` kein
  *  Array → alle. Eine URL, die der Vorschlag nicht hat, fällt weg. */
-function _keptUrls(own, keep) {
-  if (!Array.isArray(keep)) return own;
-  const wanted = new Set(keep.map(k => normalizeUrl(typeof k === 'string' ? k : k?.url)).filter(Boolean));
-  return own.filter(u => wanted.has(normalizeUrl(u.url)));
-}
 
 /** Vorschlag + Bearbeitungen → Felder für createItem. Pure (unit-getestet über die Route).
  *  `edits.urls`: Teilmenge der Vorschlags-URLs (Strings oder { url }) — neue URLs
@@ -54,7 +48,7 @@ function mergeProposal(p, edits = {}) {
     title: cleanStr(pick('title'), TITLE_MAX) || '',
     body: cleanStr(pick('body'), BODY_MAX) || '',
     source: cleanStr(p.source, SOURCE_MAX) || '',
-    urls: _keptUrls(normalizeUrls(p.urls).urls, e.urls),
+    urls: keptUrls(normalizeUrls(p.urls).urls, e.urls),
     tags: normalizeTags(Array.isArray(e.tags) ? e.tags : p.tags),
   };
 }
@@ -85,8 +79,9 @@ router.post('/chat-proposal', jsonBody, (req, res) => {
   try { ci = JSON.parse(msg.context_info || '{}') || {}; } catch { ci = {}; }
   const proposals = Array.isArray(ci.proposals) ? ci.proposals : [];
   const p = proposals[index];
-  // Ideen-Vorschläge derselben Nachricht laufen über PATCH /ideen/chat-proposal.
-  if (!p || p.type === 'idee_create') return res.status(404).json({ error_code: 'PROPOSAL_NOT_FOUND' });
+  // Nur neue Fundstücke (ohne `type`): Änderungen laufen über /apply, Ideen über
+  // PATCH /ideen/chat-proposal — eine Änderung hier würde als neue Notiz angelegt.
+  if (!p || p.type) return res.status(404).json({ error_code: 'PROPOSAL_NOT_FOUND' });
   if (p.saved_item_id && db.prepare('SELECT 1 FROM research_items WHERE id = ? AND book_id = ?').get(p.saved_item_id, bookId)) {
     return res.status(409).json({ error_code: 'ALREADY_SAVED', item_id: p.saved_item_id, params: { item_id: p.saved_item_id } });
   }

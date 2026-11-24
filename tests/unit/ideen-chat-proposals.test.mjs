@@ -112,3 +112,22 @@ test('Board-Zusammenführen: Ziel ist eine offene, sonst die älteste; Text ohne
   assert.equal(mergeTargetOf([a, { ...a, id: 4, created_at: '2025-06-01' }]).id, 5);
   assert.equal(mergedContentOf(c, [b, a]), 'offen neu · Erledigt alt');
 });
+
+test('ideenProposalBlockedText: schon geschrieben (_written) → kein Blockier-Hinweis, sonst übersetzt', async () => {
+  const { ideenProposalMethods } = await import('../../public/js/chat/ideen-chat-proposals.js');
+  globalThis.window = globalThis.window || {};
+  const prevApp = window.__app;
+  window.__app = { t: (k) => `T:${k}` };
+  try {
+    const p = { _written: false };
+    const card = {
+      ...ideenProposalMethods,
+      ideenProposals: () => [p],
+      ideenProposalStatus: () => ({ state: 'open', blocked: { key: 'ideenBoard.chat.mergeGone' } }),
+      statusLabel: (s) => s,
+    };
+    assert.equal(card.ideenProposalBlockedText({}, 0), 'T:ideenBoard.chat.mergeGone');
+    p._written = true;
+    assert.equal(card.ideenProposalBlockedText({}, 0), '');
+  } finally { window.__app = prevApp; }
+});

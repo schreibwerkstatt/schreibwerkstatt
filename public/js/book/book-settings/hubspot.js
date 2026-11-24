@@ -9,7 +9,7 @@ export const hubspotMethods = {
   // ─── HubSpot-Sync ────────────────────────────────────────────────────────
   // Sichtbar nur bei buchtyp === 'blog'. State im Card-Init: hubspotConnection,
   // hubspotForm, hubspotBusy/Action/Message/Error, hubspotBlogs, hubspotAuthors,
-  // hubspotImportJobId, hubspotReconcileJobId. Was WordPress genauso macht,
+  // hubspotImportJobId, hubspotReconcileJobId, hubspotImagesJobId. Was WordPress genauso macht,
   // steht in ./sync-shared.js.
 
   async loadHubspotStatus(bookId = this._selectedBookId()) {
@@ -25,9 +25,9 @@ export const hubspotMethods = {
         // den aktuellen Wert als Label zeigen können.
         this.loadHubspotLists();
       }
-      const jobs = await rehydrateSyncJobs(bookId, ['hubspot-import', 'hubspot-reconcile']);
+      const jobs = await rehydrateSyncJobs(bookId, ['hubspot-import', 'hubspot-reconcile', 'hubspot-images']);
       if (!this._isFormBook(bookId)) return;
-      [this.hubspotImportJobId, this.hubspotReconcileJobId] = jobs;
+      [this.hubspotImportJobId, this.hubspotReconcileJobId, this.hubspotImagesJobId] = jobs;
     } catch (e) {
       console.error('[hubspot] Status laden fehlgeschlagen:', e);
     }
@@ -169,6 +169,14 @@ export const hubspotMethods = {
   // Posts nach (verknuepfte bleiben unberuehrt).
   startHubspotImport() {
     return this._startHubspotJob('hubspot-import', 'HUBSPOT_IMPORT_FAILED', 'hubspotImportJobId');
+  },
+
+
+  // Bilder-Nachzug: Posts, die vor dem Bild-Spiegel importiert wurden, bekommen
+  // ihre Bilder (nur unveraenderte Abschnitte, routes/jobs/hubspot-sync.js).
+  async startHubspotImages() {
+    if (!await window.__app.appConfirm({ message: window.__app.t('hubspot.action.imagesConfirm') })) return;
+    return this._startHubspotJob('hubspot-images', 'HUBSPOT_IMAGES_FAILED', 'hubspotImagesJobId');
   },
 
 

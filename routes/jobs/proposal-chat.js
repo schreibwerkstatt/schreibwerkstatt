@@ -62,13 +62,11 @@ const { prepareChatTools } = require('./chat-tools/select');
 const { maxToolIterFor, agentLimits } = require('./agentic-chat/limits');
 const { getBookSettings } = require('../../db/book-settings');
 const { narrativeLabels } = require('./narrative-labels');
-const { cleanProposalInput, nextProposalSeq } = require('./proposal-chat-shared');
-
-const MAX_ITER_MARKER = '__i18n:chat.errors.maxIterReached__';
-const EMPTY_MARKERS = new Set([MAX_ITER_MARKER, '__i18n:chat.errors.emptyAnswer__']);
+const { cleanProposalInput, nextProposalSeq, MAX_ITER_MARKER, proposalsOnlyFallback: fallbackFor } = require('./proposal-chat-shared');
 const QUESTION_HEAD = '=== FRAGE ===';
 
-// Anteil des Input-Budgets für die Board- bzw. Ideen-Gliederung im Vorspann.
+// Anteil des Input-Budgets für den Vorspann-Katalog: Board + Figurenliste (Plot)
+// bzw. Ideenliste + Gliederung (Ideen) teilen ihn sich (proposal-chat-shared.js#splitOutlineBudget).
 function outlineBudgetChars(aiCfg) {
   return Math.max(6000, Math.floor((aiCfg?.inputBudgetChars || 0) * 0.15));
 }
@@ -88,9 +86,6 @@ function makeProposalChatJob(cfg) {
   const { kind, label } = cfg;
   // Job-Typ wie in routes/jobs/chat.js (POST /jobs/<kind>-chat) — wählt die Modellstufe.
   const jobType = `${kind}-chat`;
-  // ctx des laufenden agentischen Jobs je Logger (pro Job eine Instanz): parseFinal
-  // bekommt vom Loop nur (finalText, logger), braucht aber die gesammelten Vorschläge.
-  const ctxByLogger = new WeakMap();
 
   // Erzählweise (Perspektive, Tempus) für den stabilen Prompt-Block beider Pfade.
   function erzaehlweise(p, session, userEmail) {
@@ -100,9 +95,7 @@ function makeProposalChatJob(cfg) {
   // Vorschläge gesammelt, aber keine Antwort: eigener Hinweis statt Fehler —
   // «Iterationen erschöpft» bekommt den Abbruch-Hinweis, leer den Nur-Vorschläge-Hinweis.
   function proposalsOnlyFallback(antwort, n) {
-    const a = String(antwort || '').trim();
-    if (!(n > 0) || (a && !EMPTY_MARKERS.has(a))) return a;
-    return a === MAX_ITER_MARKER && cfg.proposalsCutMarker ? cfg.proposalsCutMarker : cfg.proposalsOnlyMarker;
+    return fallbackFor(antwort, n, { onlyMarker: cfg.proposalsOnlyMarker, cutMarker: cfg.proposalsCutMarker });
   }
 
   // Vorschlags-Aufrufe beider Pfade durch dieselbe Säuberung (leer = nicht angegeben).
@@ -120,6 +113,9 @@ function makeProposalChatJob(cfg) {
    */
   async function collectClassicProposals(vorschlaege, ctx, logger) {
     let rejected = 0;
+    // Handler, die Standardwerte des klassischen Schemas anders lesen müssen
+    // (Plot-Chat: verworfen:false), erkennen den Pfad hieran.
+    ctx.classic = true;
     for (const v of Array.isArray(vorschlaege) ? vorschlaege : []) {
       const name = v?.werkzeug;
       // Auch ein unbrauchbarer Eintrag trägt eine Nummer: das Modell zählt ihn mit.
@@ -291,7 +287,6 @@ function makeProposalChatJob(cfg) {
         proposals: [],
         preContext: preContext ? { count: preContext.hits.length, chars: preContext.chars } : null,
       };
-      ctxByLogger.set(logger, ctx);
       return {
         systemPrompt,
         tools,
@@ -322,16 +317,14 @@ function makeProposalChatJob(cfg) {
 
     // Auch wenn die Synthese kein final_answer liefert (Loop schreibt dann den
     // maxIterReached-Marker): sind Vorschläge gesammelt, stehen sie mit Hinweis da
-    // statt hinter einer Fehlermeldung. ctx kommt als drittes Argument, falls der
-    // Loop es reicht, sonst über den Logger dieses Laufs.
-    parseFinal: (finalText, logger, loopCtx) => {
+    // statt hinter einer Fehlermeldung.
+    parseFinal: (finalText, logger, ctx) => {
       let antwort = '';
       try { antwort = JSON.parse(finalText)?.antwort || ''; }
       catch {
         logger.warn(`${label}-Antwort kein valides JSON – Rohtext (gesäubert) wird gespeichert.`);
         antwort = stripTrailingEmptyJson(finalText) || finalText;
       }
-      const ctx = loopCtx || ctxByLogger.get(logger);
       return proposalsOnlyFallback(antwort || MAX_ITER_MARKER, ctx?.proposals?.length || 0) || MAX_ITER_MARKER;
     },
 

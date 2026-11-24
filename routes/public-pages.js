@@ -12,17 +12,20 @@ const express = require('express');
 const { tServer, tServerParams } = require('../lib/i18n-server');
 const {
   render, toInlineJson, pageLang, demoUrl, appName, seoLinks, breadcrumbLd,
-  langSwitchVars, setPublicPageHeaders, headMetaHtml, ogImageUrl,
+  langSwitchVars, setPublicPageHeaders, headMetaHtml, ogImageUrl, publicFooterHtml, publicHeaderHtml,
 } = require('../lib/public-render');
 
 const router = express.Router();
 
 // Themenseiten: Key-Praefix publicPage.<key>.* (title, metaDescription, h1,
-// intro, s1..s3 Title/Text) + Produktbild aus /img/landing/ (pre-auth frei).
+// intro, s1..s3 Title/Text). Je Abschnitt ein Produktbild aus /img/landing/
+// (pre-auth frei, erzeugt von `npm run shots:landing`), `accent` =
+// Kartenfarbe der App fuer Ueberschriften (wie /funktionen).
 const TOPICS = {
-  lektorat:  { img: '/img/landing/lektorat.webp' },
-  testleser: { img: '/img/landing/testleser.webp' },
+  lektorat:  { accent: 'stil',  imgs: ['lektorat-text', 'lektorat', 'bewertung'] },
+  testleser: { accent: 'share', imgs: ['teilen', 'testleser', 'kommentare'] },
 };
+const _img = (name) => `/img/landing/${name}.webp`;
 
 // Funktionsuebersicht /funktionen: eigenes Modul, hier eingehaengt, damit sie
 // mit den Themenseiten in der Sitemap steht.
@@ -36,6 +39,7 @@ function _commonVars(req, pathName) {
   const t = (key, params) => (params ? tServerParams(key, params, lang) : tServer(key, lang));
   const seo = seoLinks(pathName, lang);
   const demo = demoUrl();
+  const langSwitch = langSwitchVars(req, pathName, lang);
   return {
     t, lang,
     vars: {
@@ -43,13 +47,12 @@ function _commonVars(req, pathName) {
       appName: appName(),
       noindex: !seo.canonical,
       ...seo,
-      ...langSwitchVars(req, pathName, lang),
+      ...langSwitch,
+      footerHtml: publicFooterHtml({ lang, current: pathName, ...langSwitch }),
       demoUrl: demo,
+      noDemo: !demo,
       demoLabel: t('publicPage.demoLabel'),
       registerLabel: t('publicPage.registerLabel'),
-      backToLanding: t('publicPage.backToLanding'),
-      privacyLabel: t('privacy.footerLink'),
-      footer: t('landing.footer'),
     },
   };
 }
@@ -67,9 +70,9 @@ function _renderTopic(key) {
       metaDescription: p('metaDescription'),
       headMetaHtml: headMetaHtml({ lang: vars.lang, ogImage: ogImageUrl(key, vars.lang), ogAlt: title }),
       ldJson: toInlineJson(breadcrumbLd(p('h1'), `/${key}`, vars.lang)),
-      img: topic.img,
-      h1: p('h1'),
-      intro: p('intro'),
+      headerHtml: publicHeaderHtml({ lang: vars.lang, h1: p('h1'), intro: p('intro') }),
+      accent: topic.accent,
+      s1Img: _img(topic.imgs[0]), s2Img: _img(topic.imgs[1]), s3Img: _img(topic.imgs[2]),
       s1Title: p('s1Title'), s1Text: p('s1Text'),
       s2Title: p('s2Title'), s2Text: p('s2Text'),
       s3Title: p('s3Title'), s3Text: p('s3Text'),

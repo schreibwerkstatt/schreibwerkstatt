@@ -272,3 +272,82 @@ test('getFiguren: Geburtsjahr nach derselben Vorrangregel wie get_figure_age, Wi
   assert.deepEqual(all.figuren.find(f => f.fig_id === 'fig_bert').geburtsjahr_widerspruch, byId.fig_bert.geburtsjahr_widerspruch);
   assert.equal(all.figuren.find(f => f.fig_id === 'fig_anna').geburtsjahr_widerspruch, undefined);
 });
+
+test('final_answer.ideen: ohne Schreibrecht (ideenAllowed=false) fallen sie weg, sonst normalisiert', async () => {
+  const { _consumeFinalAnswer } = require('../../routes/jobs/chat/book-chat-agent');
+  const logger = { info() {}, warn() {} };
+  const finalUse = { input: { antwort: 'A', ideen: [{ page_id: 930101, inhalt: 'Augenfarbe prüfen' }] } };
+  const denied = { bookId: BOOK, userEmail: U, ideenAllowed: false };
+  await _consumeFinalAnswer(finalUse, denied, [], 1, logger);
+  assert.deepEqual(denied.ideenProposals, []);
+  const allowed = { bookId: BOOK, userEmail: U, ideenAllowed: true };
+  await _consumeFinalAnswer(finalUse, allowed, [], 1, logger);
+  assert.equal(allowed.ideenProposals.length, 1);
+});
+
+test('Wortlaut-Suche toleriert Leerraum vor Satzzeichen (get_pages-Sicht «da?» vs. Index-Sicht «da ?»)', async () => {
+  const { db: cdb } = require('../../db/connection');
+  cdb.prepare('UPDATE pages SET body_html = ? WHERE page_id = ?')
+    .run('<p>Anna fragte: «Bist du <em>da</em>?» und lief zur <a href="#">Tür</a>.</p>', 930101);
+  const q = await call('quote_passage', { page_id: 930101, pattern: 'Bist du da?' });
+  assert.equal(q.error, undefined, JSON.stringify(q));
+  assert.match(q.quote, /^Bist du da ?\?$/);
+  const s = await call('search_passages', { pattern: 'zur Tür.', page_id: 930101 });
+  assert.equal(s.results.length, 1, JSON.stringify(s));
+  const nan = await call('search_passages', { pattern: 'Anna', max_results: 'viele' });
+  assert.ok(nan.results.length >= 1 && nan.results.length <= 30, 'nicht-numerisches max_results → Default');
+});
+
+test('search_passages regex: katastrophales Backtracking blockiert den Prozess nicht (Zeitdeckel, Fehler statt Hänger)', async () => {
+  const { db: cdb } = require('../../db/connection');
+  cdb.prepare('UPDATE pages SET body_html = ? WHERE page_id = ?').run(`<p>${'a'.repeat(40)}</p>`, 930101);
+  let ticks = 0;
+  const iv = setInterval(() => { ticks++; }, 20);
+  const t0 = Date.now();
+  const r = await call('search_passages', { pattern: '(a|aa)+b', regex: true, page_id: 930101 });
+  clearInterval(iv);
+  assert.ok(Date.now() - t0 < 6000, 'Zeitdeckel greift');
+  assert.ok(ticks >= 5, `Event-Loop lief weiter (${ticks} Ticks)`);
+  assert.equal(r.errorKey, 'chat.toolError.regexTimeout', JSON.stringify(r));
+});
+
+test('search_passages regex: Zeitdeckel nach Treffern liefert das Teilergebnis mit Hinweis statt Fehler', async () => {
+  const { db: cdb } = require('../../db/connection');
+  cdb.prepare('UPDATE pages SET body_html = ? WHERE page_id = ?').run(`<p>${'a'.repeat(40)}</p>`, 930101);
+  // Kleinere page_id: listPagesForPassageSearch liefert ohne ORDER BY in rowid-Folge,
+  // der Treffer-Abschnitt wird also vor dem hängenden gescannt.
+  cdb.prepare("INSERT OR REPLACE INTO pages (page_id, book_id, page_name, chapter_id, body_html, position, updated_at) VALUES (930100, ?, 'Davor', 93011, ?, 0, ?)")
+    .run(BOOK, '<p>ab und nochmals aab</p>', T);
+  try {
+    const r = await call('search_passages', { pattern: '(a|aa)+b', regex: true, chapter_id: 93011 });
+    assert.equal(r.error, undefined, JSON.stringify(r));
+    assert.equal(r.incomplete, true);
+    assert.match(r.hint, /UNGEPRÜFT/);
+    assert.deepEqual(r.results.map(x => x.page_id), [930100, 930100]);
+  } finally {
+    cdb.prepare('DELETE FROM pages WHERE page_id = 930100').run();
+  }
+});
+
+test('get_dialogue ohne Figur: Abbruch am Limit meldet keine falsche Gesamtzahl', async () => {
+  const { db: cdb } = require('../../db/connection');
+  cdb.prepare('UPDATE pages SET body_html = ? WHERE page_id = ?')
+    .run('<p>«Komm her», sagte Anna. «Nein», rief Bert.</p>', 930101);
+  cdb.prepare("INSERT OR REPLACE INTO pages (page_id, book_id, page_name, chapter_id, body_html, position, updated_at) VALUES (930102, ?, 'Zweite', 93011, ?, 2, ?)")
+    .run(BOOK, '<p>«Wo bist du?», fragte Cleo. «Hier», sagte Anna. «Gut», sagte Bert.</p>', T);
+  const r = await call('get_dialogue', { limit: 1 });
+  assert.equal(r.results.length, 1);
+  assert.notEqual(r.total_results, 1, 'nicht «1 Dialog im Buch», wenn weitere Abschnitte ungezählt blieben');
+  assert.equal(r.truncated, true);
+});
+
+test('Zitat-Prüfung: length ≤ 0 ohne Zitattext ist ein Formfehler, keine gültige leere Fussnote', async () => {
+  const { validateFinalAnswerCitations } = require('../../routes/jobs/chat-tools');
+  const out = await validateFinalAnswerCitations([
+    { page_id: 930101, offset: 5, length: 0 },
+    { page_id: 930101, offset: 10, length: -5 },
+    { page_id: 930101, offset: 0, length: 0, quote: '' },
+  ], { bookId: BOOK });
+  assert.deepEqual(out.map(o => o.valid), [false, false, false]);
+  assert.deepEqual(out.map(o => o.reason), ['bad_shape', 'bad_shape', 'bad_shape']);
+});

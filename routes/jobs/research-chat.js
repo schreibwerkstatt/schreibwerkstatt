@@ -198,6 +198,9 @@ const runResearchChatJob = makeAgenticChatJob({
       ctx: {
         bookId: session.book_id, sessionId: session.id, userEmail,
         jobSignal, logger, offeredTools,
+        // Suchweg SearXNG: kein Manuskripttext im Lauf (withhold oben) — wirkt in
+        // research-chat-tools.js (Verlaufssuche) und research-chat-change.js (Status).
+        manuscriptWithheld: searxng,
         proposals: [], // propose_research_item sammelt hier; nach dem Loop in context_info
         changeProposals: [], // propose_research_item mit item_id (research-chat-change.js)
         // final_answer.ideen, am Schreibkontext verankert (researchIdeeProposals).
@@ -236,12 +239,13 @@ const runResearchChatJob = makeAgenticChatJob({
     return JSON.stringify({ antwort });
   },
 
-  parseFinal: (finalText) => {
+  // Auch ohne final_answer (Loop-Platzhalter): gesammelte Vorschläge stehen mit
+  // Hinweis da statt hinter «Iterationen erschöpft».
+  parseFinal: (finalText, logger, ctx) => {
     let antwort = '';
     try { antwort = JSON.parse(finalText)?.antwort || ''; }
     catch { antwort = stripTrailingEmptyJson(finalText) || finalText; }
-    if (!antwort) antwort = '__i18n:chat.errors.maxIterReached__';
-    return antwort;
+    return proposalsOnlyFallback(antwort || '__i18n:chat.errors.maxIterReached__', _proposalCount(ctx));
   },
 
   buildContextInfo: ({ toolLog, rounds, webSearches, webResults, webQueries, ctx, stopReason, costUsd }) => ({

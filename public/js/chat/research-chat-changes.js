@@ -13,10 +13,10 @@
 // (`_changeEdits`) und URLs weglassen (dieselbe Mechanik wie bei neuen
 // Fundstücken: `_proposalRemovedUrls`, ungeprüfte vorab abgewählt).
 //
-// Lokale Updates ersetzen die Nachricht im Array (wie research-chat-proposals.js).
+// Lokale Updates ersetzen die Nachricht im Array (research-chat-proposals.js#_replaceResearchProposal).
 import { sendJson } from '../utils.js';
 import { trackChatProposal } from '../features-usage.js';
-import { persistProposalStatus } from './proposal-status.js';
+import { persistProposalStatus, proposalBaseState } from './proposal-status.js';
 
 const CHANGE_TYPES = new Set(['research_update', 'research_archive', 'research_merge']);
 const STATUS_URL = '/research/chat-proposal';
@@ -30,10 +30,7 @@ export const researchChangeMethods = {
       .map((p, idx) => ({ p, idx }))
       .filter(({ p }) => CHANGE_TYPES.has(p?.type));
   },
-  researchChangeState(p) {
-    if (p?.applied_at) return 'applied';
-    return p?.status === 'discarded' ? 'discarded' : 'open';
-  },
+  researchChangeState(p) { return proposalBaseState(p); },
   researchChangeLabel(p) {
     const t = window.__app.t;
     const state = this.researchChangeState(p);
@@ -80,18 +77,9 @@ export const researchChangeMethods = {
     return (p?.urls || []).filter(u => !this.isProposalUrlRemoved(msg, idx, u));
   },
 
-  // Vorschlag lokal ersetzen — neue Nachricht im Array, damit das Template es sieht.
-  _replaceChangeProposal(msg, idx, proposal) {
-    this.researchChatMessages = this.researchChatMessages.map(m => {
-      if (m !== msg && !(m.id && m.id === msg.id)) return m;
-      const proposals = [...(m.context_info?.proposals || [])];
-      proposals[idx] = proposal;
-      return { ...m, context_info: { ...m.context_info, proposals } };
-    });
-  },
   _setChangeError(msg, idx, error) {
     const p = msg?.context_info?.proposals?.[idx];
-    if (p) this._replaceChangeProposal(msg, idx, { ...p, _error: error || undefined });
+    if (p) this._replaceResearchProposal(msg, idx, { ...p, _error: error || undefined });
   },
 
   async applyResearchChange(msg, idx, { ignoreBeleg = false } = {}) {
@@ -122,7 +110,7 @@ export const researchChangeMethods = {
         ...(Object.keys(edits).length ? { edits } : {}),
         ...(ignoreBeleg ? { ignore_beleg: true } : {}),
       });
-      this._replaceChangeProposal(msg, idx, res?.proposal || { ...p, applied_at: new Date().toISOString() });
+      this._replaceResearchProposal(msg, idx, res?.proposal || { ...p, applied_at: new Date().toISOString() });
       trackChatProposal('research', 'applied', p.type.replace('research_', ''));
       if (this._changeEdits[_key(msg, idx)]) { const n = { ...this._changeEdits }; delete n[_key(msg, idx)]; this._changeEdits = n; }
       await this.loadRecherche();
@@ -136,7 +124,7 @@ export const researchChangeMethods = {
         return;
       }
       if (e?.status === 409 && code === 'PROPOSAL_ALREADY_APPLIED' && e.body?.proposal) {
-        this._replaceChangeProposal(msg, idx, e.body.proposal);
+        this._replaceResearchProposal(msg, idx, e.body.proposal);
         return;
       }
       // Codes mit eigenem Satz für diese Karte (BODY_TOO_LONG/ITEM_NOT_FOUND tragen
@@ -162,7 +150,7 @@ export const researchChangeMethods = {
     try {
       const saved = await persistProposalStatus(STATUS_URL, msg, idx, discard ? 'discarded' : 'reopen');
       const { status: _drop, ...rest } = p;
-      this._replaceChangeProposal(msg, idx, saved ? { ...rest, ...saved } : rest);
+      this._replaceResearchProposal(msg, idx, saved ? { ...rest, ...saved } : rest);
       trackChatProposal('research', discard ? 'discarded' : 'reopened', p.type.replace('research_', ''));
     } catch {
       this._setChangeError(msg, idx, app.t('recherche.chat.change.error.generic'));

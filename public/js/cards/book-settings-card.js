@@ -205,6 +205,7 @@ export function registerBookSettingsCard() {
     hubspotError: '',
     hubspotImportJobId: null,
     hubspotReconcileJobId: null,
+    hubspotImagesJobId: null,
     // Publikation (book_publication: Cover/Titelei/Bio, geteilt mit PDF+EPUB).
     bookPublication: _EMPTY_PUB_META(),
     bookPublicationLoaded: false,
@@ -303,6 +304,7 @@ export function registerBookSettingsCard() {
           hubspotError: '',
           hubspotImportJobId: null,
           hubspotReconcileJobId: null,
+          hubspotImagesJobId: null,
           bookPublication: _EMPTY_PUB_META(),
           bookPublicationLoaded: false,
           exposeLoaded: false,
@@ -443,11 +445,16 @@ export function registerBookSettingsCard() {
         if (t === 'blog-import' || t === 'blog-pull' || t === 'blog-repull') window.__app.loadPages?.();
         return;
       }
-      if (t === 'hubspot-import' || t === 'hubspot-push' || t === 'hubspot-reconcile') {
+      if (t === 'hubspot-import' || t === 'hubspot-push' || t === 'hubspot-reconcile' || t === 'hubspot-images') {
         this.hubspotImportJobId = null;
         this.hubspotReconcileJobId = null;
+        this.hubspotImagesJobId = null;
+        if (t === 'hubspot-images' && detail.job?.result) {
+          const r = detail.job.result;
+          this.hubspotMessage = window.__app.tn('hubspot.images.done', r.repaired || 0);
+        }
         this.loadHubspotStatus();
-        if (t === 'hubspot-import') window.__app.loadPages?.();
+        if (t === 'hubspot-import' || t === 'hubspot-images') window.__app.loadPages?.();
       }
     },
 

@@ -1,0 +1,18 @@
+<!-- @expects msg -->
+<!--
+  Gescheiterter oder abgebrochener Lauf der agentischen Chats (Buch-, Recherche-,
+  Plot-, Ideen-Chat): Grund + Teil-Verlauf hängen an der Frage
+  (`context_info.run_failed`, routes/jobs/agentic-chat/run-log.js) und bleiben nach
+  dem Neuladen sichtbar. Der Verlauf rendert über dasselbe Fragment wie unter einer
+  Antwort, mit einer Pseudo-Nachricht (tool-log-methods.js#_failedRunMsg).
+-->
+<template x-if="_failedRunMsg(msg)">
+  <div class="chat-run-failed">
+    <div class="chat-msg-hint" x-text="_failedRunText(msg)"></div>
+    <template x-for="msg in [_failedRunMsg(msg)]" :key="'failed'">
+      <div>
+        <!-- @include chat-tool-log -->
+      </div>
+    </template>
+  </div>
+</template>

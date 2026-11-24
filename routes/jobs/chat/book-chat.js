@@ -242,7 +242,7 @@ async function runBookChatJob(jobId, sessionId, userMsgId, message, userEmail) {
   try {
     updateJob(jobId, { statusText: 'job.phase.preparing', progress: 5 });
 
-    session = getSessionWithBookName(parseInt(sessionId), userEmail);
+    session = getSessionWithBookName(parseInt(sessionId), userEmail, 'book');
     if (!session) throw i18nError('job.error.sessionNotFound');
     logger.info(`Start: «${session.book_name || '-'}» session=${sessionId}, msg-len=${message.length}`);
 

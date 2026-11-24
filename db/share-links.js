@@ -14,7 +14,7 @@ function newToken() {
   return crypto.randomBytes(16).toString('base64url');
 }
 
-function createShareLink({ kind, pageId = null, chapterId = null, bookId, ownerEmail, intro = null, expiresAt = null, showToc = false, showPromo = true }) {
+function createShareLink({ kind, pageId = null, chapterId = null, bookId, ownerEmail, intro = null, expiresAt = null, showToc = false, showPromo = true, mode = 'leser' }) {
   if (kind !== 'page' && kind !== 'chapter' && kind !== 'book') throw new Error('invalid kind');
   if (kind === 'page' && !pageId) throw new Error('page_id required');
   if (kind === 'chapter' && !chapterId) throw new Error('chapter_id required');
@@ -22,14 +22,14 @@ function createShareLink({ kind, pageId = null, chapterId = null, bookId, ownerE
   // TOC nur bei Buch-/Kapitel-Shares sinnvoll (eine Seite hat keins).
   const toc = kind !== 'page' && showToc ? 1 : 0;
   const stmt = db.prepare(`
-    INSERT INTO share_links (token, kind, page_id, chapter_id, book_id, owner_email, intro, expires_at, show_toc, show_promo, created_at)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ${NOW_ISO_SQL})
+    INSERT INTO share_links (token, kind, page_id, chapter_id, book_id, owner_email, intro, expires_at, show_toc, show_promo, mode, created_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ${NOW_ISO_SQL})
   `);
   for (let i = 0; i < 3; i++) {
     const token = newToken();
     try {
       stmt.run(token, kind, kind === 'page' ? pageId : null, kind === 'chapter' ? chapterId : null,
-               bookId, ownerEmail, intro, expiresAt, toc, showPromo ? 1 : 0);
+               bookId, ownerEmail, intro, expiresAt, toc, showPromo ? 1 : 0, mode === 'review' ? 'review' : 'leser');
       return getShareLinkByToken(token);
     } catch (e) {
       if (!/UNIQUE/i.test(e.message)) throw e;
@@ -152,13 +152,14 @@ function revokeSharesByOwnerOnBook(ownerEmail, bookId) {
   return r.changes;
 }
 
-function updateShareLink(token, ownerEmail, { intro, expiresAt, showToc, showPromo }) {
+function updateShareLink(token, ownerEmail, { intro, expiresAt, showToc, showPromo, mode }) {
   const sets = [];
   const params = [];
   if (intro !== undefined) { sets.push('intro = ?'); params.push(intro); }
   if (expiresAt !== undefined) { sets.push('expires_at = ?'); params.push(expiresAt); }
   if (showToc !== undefined) { sets.push('show_toc = ?'); params.push(showToc ? 1 : 0); }
   if (showPromo !== undefined) { sets.push('show_promo = ?'); params.push(showPromo ? 1 : 0); }
+  if (mode !== undefined) { sets.push('mode = ?'); params.push(mode === 'review' ? 'review' : 'leser'); }
   if (!sets.length) return false;
   params.push(token, ownerEmail);
   const r = db.prepare(`UPDATE share_links SET ${sets.join(', ')} WHERE token = ? AND owner_email = ?`).run(...params);
@@ -303,17 +304,19 @@ function markOwnerSeen(token, ownerEmail) {
 // Leser-Kommentar: anonym (author_email bleibt NULL). Optional verankert
 // (anchor_*) und/oder Antwort auf einen Root-Kommentar (parentId). Optionale
 // reader_email erlaubt die Reply-Benachrichtigung (Reader hat keinen Account).
+// `suggestion` (Review-Modus): Ersatztext fuer die verankerte Stelle → Status 'open'.
 function insertComment({
   token, readerName = null, readerEmail = null, readerToken = null, body, ipHash = null,
   parentId = null, anchorBid = null, anchorQuote = null, anchorStart = null, anchorEnd = null,
+  suggestion = null,
 }) {
   const r = db.prepare(`
     INSERT INTO share_comments
       (share_token, reader_name, reader_email, reader_token, body, ip_hash, parent_id,
-       anchor_bid, anchor_quote, anchor_start, anchor_end, created_at)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ${NOW_ISO_SQL})
+       anchor_bid, anchor_quote, anchor_start, anchor_end, suggestion_text, suggestion_state, created_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ${NOW_ISO_SQL})
   `).run(token, readerName, readerEmail, readerToken, body, ipHash, parentId,
-         anchorBid, anchorQuote, anchorStart, anchorEnd);
+         anchorBid, anchorQuote, anchorStart, anchorEnd, suggestion, suggestion != null ? 'open' : null);
   return getCommentById(r.lastInsertRowid);
 }
 
@@ -365,7 +368,8 @@ function listCommentsByToken(token, { order = 'desc' } = {}) {
   const sql = `SELECT sc.id, sc.share_token, sc.parent_id, sc.reader_name, sc.reader_email, sc.reader_token,
                       sc.author_email, u.display_name AS author_display_name,
                       sc.body, sc.created_at, sc.edited_at, sc.resolved_at,
-                      sc.anchor_bid, sc.anchor_quote, sc.anchor_start, sc.anchor_end
+                      sc.anchor_bid, sc.anchor_quote, sc.anchor_start, sc.anchor_end,
+                      sc.suggestion_text, sc.suggestion_state
                FROM share_comments sc
                LEFT JOIN app_users u ON u.email = sc.author_email
                WHERE sc.share_token = ?
@@ -388,8 +392,18 @@ function updateReaderIdentity(token, readerToken, newName, newEmail) {
 
 // Leser bearbeitet einen eigenen Kommentar (Body). Self-Identität via
 // reader_token + author_email IS NULL (nie ein Owner-/Fremd-Beitrag). Setzt
-// edited_at als „bearbeitet"-Marker.
-function editReaderComment(commentId, token, readerToken, body) {
+// edited_at als „bearbeitet"-Marker. `suggestion` (optional): neuer Ersatztext
+// eines eigenen, noch offenen Aenderungsvorschlags (Review-Modus).
+function editReaderComment(commentId, token, readerToken, body, suggestion = undefined) {
+  if (suggestion !== undefined) {
+    const r = db.prepare(`
+      UPDATE share_comments
+      SET body = ?, suggestion_text = ?, edited_at = ${NOW_ISO_SQL}
+      WHERE id = ? AND share_token = ? AND reader_token = ? AND author_email IS NULL
+        AND suggestion_state = 'open'
+    `).run(body, suggestion, commentId, token, readerToken);
+    return r.changes > 0;
+  }
   const r = db.prepare(`
     UPDATE share_comments
     SET body = ?, edited_at = ${NOW_ISO_SQL}
@@ -462,6 +476,7 @@ function listCommentsByOwnerBook(ownerEmail, bookId) {
            sc.author_email, u.display_name AS author_display_name,
            sc.body, sc.created_at, sc.edited_at, sc.resolved_at,
            sc.anchor_bid, sc.anchor_quote, sc.anchor_start, sc.anchor_end,
+           sc.suggestion_text, sc.suggestion_state,
            sl.kind AS link_kind, sl.page_id AS link_page_id
     FROM share_comments sc
     JOIN share_links sl ON sl.token = sc.share_token

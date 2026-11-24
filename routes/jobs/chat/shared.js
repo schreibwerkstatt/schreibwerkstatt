@@ -240,8 +240,9 @@ async function _handleChatPost(req, res, { jobType, kind, labelFn, runFn, prefli
     if (existing) { res.status(409).json({ error_code: 'CHAT_JOB_RUNNING', jobId: existing }); return true; }
     return false;
   };
-  if (answeredByDedup()) return;
 
+  // Besitz und Rechte VOR der Dedup-Antwort: sonst lieferte eine fremde session_id
+  // mit bekannter client_msg_id die job_id einer fremden Session.
   const session = getSessionForJob(session_id, userEmail);
   if (!session || session.kind !== kind) return res.status(404).json({ error_code: 'SESSION_NOT_FOUND' });
 
@@ -264,6 +265,7 @@ async function _handleChatPost(req, res, { jobType, kind, labelFn, runFn, prefli
     minRole = 'editor';
   }
   if (!guardBook(req, res, session.book_id, minRole)) return;
+  if (answeredByDedup()) return;
   if (preflight) {
     if (!(await preflight(req, res, { session, userEmail }))) return;
     if (answeredByDedup()) return;

@@ -81,6 +81,11 @@ async function _proposeUpdate(input, ctx, item) {
   }
   const belegText = _str(input.beleg?.text, MAX_BELEG);
   const belegPage = _int(input.beleg?.page_id);
+  // Ohne Manuskripttext im Lauf (Suchweg SearXNG) gibt es keinen prüfbaren Beleg aus
+  // eigener Suche — «eingearbeitet» nur dort, wo die Wortlaut-Suche angeboten ist.
+  if (fields.status === 'eingearbeitet' && ctx.manuscriptWithheld) {
+    return _err('«eingearbeitet» gibt es auf diesem Suchweg nicht: ohne Manuskripttext lässt sich die Stelle nicht belegen. Schlage einen anderen Status vor oder keinen.');
+  }
   if (fields.status === 'eingearbeitet' && (!belegText || !belegPage)) {
     return _err('«eingearbeitet» braucht einen beleg: die Textstelle im Manuskript (wörtlich, kurz), in der der Fund steckt, und die page_id ihres Abschnitts. Ohne gefundene Stelle schlage keinen Status vor.');
   }

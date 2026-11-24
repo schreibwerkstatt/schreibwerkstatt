@@ -21,53 +21,50 @@
   <link rel="stylesheet" href="/css/tokens.css">
   <link rel="stylesheet" href="/css/landing.css">
   <link rel="stylesheet" href="/css/landing-sections.css">
+  <link rel="stylesheet" href="/css/landing-features.css">
   <script type="application/ld+json">{{ldJson}}</script>
   <script defer src="/js/plausible-init.js?surface=thema"></script>
 </head>
 <body>
-  <main class="public-shell public-shell--wide">
+  <main class="public-shell public-shell--wide public-landing">
     {{#if langHint}}<p class="public-lang-hint" lang="{{langSwitchLang}}"><a class="public-inline-link" href="{{langSwitchUrl}}" hreflang="{{langSwitchLang}}">{{langHintText}}</a></p>{{/if}}
-    <header class="public-header public-hero">
-      <a href="/"><img class="public-brand" src="/schreibwerkstatt_icon.svg" alt="{{appName}}" width="56" height="56"></a>
-      <p class="public-hero-brand">{{appName}}</p>
-      <h1 class="public-hero-title">{{h1}}</h1>
-      <p class="public-sub">{{intro}}</p>
-    </header>
+    {{headerHtml}}
 
-    <img class="public-topic-shot" src="{{img}}" alt="" width="920" height="614" decoding="async">
-
-    <article class="public-prose">
-      <section class="public-prose-section">
-        <h2>{{s1Title}}</h2>
-        <p>{{s1Text}}</p>
+    <!-- Je Abschnitt ein Bild in Originalgroesse (460 px, wie /funktionen),
+         abwechselnd links und rechts. Bilder illustrativ: die h2 daneben sagt,
+         was sie zeigen (alt=""). -->
+    <div class="public-topic-rows">
+      <section class="public-fgroup public-fgroup--topic public-fgroup--{{accent}}">
+        <div class="public-fgroup-head">
+          <img class="public-fgroup-shot" src="{{s1Img}}" alt="" width="920" height="614" decoding="async">
+          <div class="public-fgroup-lead"><h2 class="public-heading">{{s1Title}}</h2><p>{{s1Text}}</p></div>
+        </div>
       </section>
-      <section class="public-prose-section">
-        <h2>{{s2Title}}</h2>
-        <p>{{s2Text}}</p>
+      <section class="public-fgroup public-fgroup--topic public-fgroup--{{accent}}">
+        <div class="public-fgroup-head">
+          <img class="public-fgroup-shot" src="{{s2Img}}" alt="" width="920" height="614" loading="lazy" decoding="async">
+          <div class="public-fgroup-lead"><h2 class="public-heading">{{s2Title}}</h2><p>{{s2Text}}</p></div>
+        </div>
       </section>
-      <section class="public-prose-section">
-        <h2>{{s3Title}}</h2>
-        <p>{{s3Text}}</p>
+      <section class="public-fgroup public-fgroup--topic public-fgroup--{{accent}}">
+        <div class="public-fgroup-head">
+          <img class="public-fgroup-shot" src="{{s3Img}}" alt="" width="920" height="614" loading="lazy" decoding="async">
+          <div class="public-fgroup-lead"><h2 class="public-heading">{{s3Title}}</h2><p>{{s3Text}}</p></div>
+        </div>
       </section>
-    </article>
+    </div>
 
     <section class="public-cta">
       <h2>{{ctaTitle}}</h2>
       <p>{{ctaText}}</p>
       <div class="public-actions public-actions--inline">
-        {{#if demoUrl}}<a class="public-btn public-btn--primary" href="{{demoUrl}}">{{demoLabel}}</a>{{/if}}
-        <a class="public-btn" href="/register">{{registerLabel}}</a>
+        {{#if demoUrl}}<a class="public-btn public-btn--primary" href="{{demoUrl}}">{{demoLabel}}</a>
+        <a class="public-btn" href="/register">{{registerLabel}}</a>{{/if}}
+        {{#if noDemo}}<a class="public-btn public-btn--primary" href="/register">{{registerLabel}}</a>{{/if}}
       </div>
     </section>
 
-    <footer class="public-footer">
-      <span>{{footer}}</span>
-      <nav class="public-footer-links">
-        <a class="public-footer-link" href="/">{{backToLanding}}</a>
-        <a class="public-footer-link" href="/datenschutz">{{privacyLabel}}</a>
-        <a class="public-footer-link" href="{{langSwitchUrl}}" hreflang="{{langSwitchLang}}" lang="{{langSwitchLang}}">{{langSwitchLabel}}</a>
-      </nav>
-    </footer>
+    {{footerHtml}}
   </main>
 </body>
 </html>

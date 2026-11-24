@@ -25,6 +25,7 @@ const { resolvePageBookId } = require('../../../lib/content-ownership');
 const { figurenBlockChars, weltfaktenBlockChars, _parseChatResponse } = require('./shared');
 const { runBookChatJob, _applyBookChatAiOverrides, fullBookPossible } = require('./book-chat');
 const { normalizeChatIdeeProposals } = require('../../../lib/chat-idee-proposals');
+const { getBookRole, hasMinRole } = require('../../../db/book-access');
 
 // ── Agentic Buch-Chat (Tool-Use) ───────────────────────────────────────────────
 // Ersetzt runBookChatJob, wenn der effektive Provider Werkzeuge kann (und
@@ -86,7 +87,9 @@ async function _consumeFinalAnswer(finalUse, ctx, toolLog, iterNum, logger) {
   if (hint) ctx.recherche = hint;
   // Ideen-Vorschläge: nur Abschnitte dieses Buchs, nichts wird angelegt — der
   // User erfasst jeden einzeln (POST /ideen, lib/chat-idee-proposals.js).
-  ctx.ideenProposals = normalizeChatIdeeProposals(finalUse.input?.ideen, { bookId: ctx.bookId });
+  // Ohne Schreibrecht (ctx.ideenAllowed === false) bietet der Lauf das Feld gar nicht
+  // an; was ein Modell trotzdem schickt, fällt hier weg.
+  ctx.ideenProposals = ctx.ideenAllowed === false ? [] : normalizeChatIdeeProposals(finalUse.input?.ideen, { bookId: ctx.bookId });
   return JSON.stringify({ antwort });
 }
 
@@ -162,12 +165,14 @@ const runBookChatJobAgent = makeAgenticChatJob({
   },
   jobType: 'book-chat',
 
-  loadSession: (sessionId, userEmail) => getSessionWithBookName(parseInt(sessionId), userEmail),
+  // kind 'book': zweite Schicht hinter dem POST-Handler — eine Session anderer Art
+  // läuft hier nie, auch nicht über einen direkten Job-Aufruf.
+  loadSession: (sessionId, userEmail) => getSessionWithBookName(parseInt(sessionId), userEmail, 'book'),
 
   async prepare({ session, userEmail, aiCfg, logger, jobSignal, message, history }) {
     const prompts = await getPrompts(userEmail);
     const {
-      buildBookChatAgentSystemPrompt, buildBookChatPreContext, BOOK_CHAT_OUTPUT_TOOLS, buildErzaehlweiseLine,
+      buildBookChatAgentSystemPrompt, buildBookChatPreContext, bookChatOutputTools, buildErzaehlweiseLine,
       BOOK_CHAT_FORCE_FINAL_INSTRUCTION, buildBookChatOutsideWorldRule, BOOK_CHAT_BUDGET_FINAL_INSTRUCTION,
     } = prompts;
     const figuren = getFiguren(session.book_id, userEmail);
@@ -190,8 +195,13 @@ const runBookChatJobAgent = makeAgenticChatJob({
     // ohne Daten im Buch; Prompt, Beschreibungen und Handler-Hinweise nennen nur, was
     // angeboten wird (ctx.offeredTools).
     const toolCtx = { bookId: session.book_id, sessionId: session.id, userEmail, logger };
+    // Ideen übernehmen darf nur, wer schreiben darf (POST /ideen: editor). Ein Lektor,
+    // dem das Buch den Buch-Chat freigibt, bekommt das Feld gar nicht angeboten.
+    // Ohne book_access-Zeile (Admin) bleibt es beim Standard.
+    const role = getBookRole(session.book_id, userEmail);
+    const ideenAllowed = !role || hasMinRole(role, 'editor');
     const { tools, toolNames, toolSet, offeredTools, unavailable } = prepareChatTools({
-      chat: 'book', prompts, provider, userEmail, ctx: toolCtx, outputTools: BOOK_CHAT_OUTPUT_TOOLS,
+      chat: 'book', prompts, provider, userEmail, ctx: toolCtx, outputTools: bookChatOutputTools({ ideen: ideenAllowed }),
     });
     // Figuren- und Welt-Fakten-Block: absolut gedeckelt, nicht nur relativ zum
     // Kontextfenster. Auf einem 1M-Fenster griffen die relativen Deckel nie, und
@@ -248,6 +258,7 @@ const runBookChatJobAgent = makeAgenticChatJob({
         citations: null,
         recherche: null,
         ideenProposals: [],
+        ideenAllowed,
         // Welcher Werkzeugsatz lief — landet in context_info (Kosten-Diagnose:
         // ein Slim-Lauf beantwortet manche Frage nicht, das muss sichtbar sein).
         toolSet, toolsOffered: tools.length,
@@ -309,4 +320,4 @@ const runBookChatJobAgent = makeAgenticChatJob({
   fallbackJob: runBookChatJob,
 });
 
-module.exports = { runBookChatJobAgent, _retrievalQuery: retrievalQuery, _buildCitations };
+module.exports = { runBookChatJobAgent, _retrievalQuery: retrievalQuery, _buildCitations, _consumeFinalAnswer };

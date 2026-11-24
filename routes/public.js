@@ -39,7 +39,7 @@ const { tServer } = require('../lib/i18n-server');
 const {
   render: _render, escHtml: _escHtml, toInlineJson, bodyLang: _bodyLang, publicUrl: _publicUrl,
   seoIndexable: _seoIndexable, demoUrl, appName: _appName, seoLinks, langUrl, LANGS,
-  pageLang, langSwitchVars, setPublicPageHeaders, headMetaHtml, ogImageUrl,
+  pageLang, langSwitchVars, setPublicPageHeaders, headMetaHtml, ogImageUrl, publicHeaderHtml, publicFooterHtml,
 } = require('../lib/public-render');
 const { PUBLIC_PAGE_PATHS } = require('./public-pages');
 
@@ -84,7 +84,7 @@ function _landingLd({ appName, description, url, lang }) {
 // (ohne `landing.`-Praefix) ins Template gehen.
 const LANDING_TEXT_KEYS = [
   'heroTitle', 'heroText', 'demoLabel', 'demoNote', 'loginPrompt', 'statusText',
-  'principleTitle', 'principleText', 'loginLabel', 'registerLabel', 'footer', 'githubLabel',
+  'principleTitle', 'principleText', 'loginLabel', 'registerLabel',
   'featuresTitle', 'featLinkLektorat', 'featLinkTestleser',
   'feat1Title', 'feat1Desc', 'feat2Title', 'feat2Desc', 'feat3Title', 'feat3Desc',
   'moreTitle', 'allFeaturesLink',
@@ -108,13 +108,16 @@ function _renderLanding(req, res) {
   const metaDescription = t('landing.metaDescription');
   const texts = Object.fromEntries(LANDING_TEXT_KEYS.map(k => [k, t(`landing.${k}`)]));
   const title = `${appName}: ${texts.heroTitle.replace(/\.$/, '')}`;
+  const langSwitch = langSwitchVars(req, '/', lang);
   setPublicPageHeaders(res);
   res.type('html').send(_render('landing.html', {
     ...texts,
     lang,
     noindex:       !seo.canonical,
     ...seo,
-    ...langSwitchVars(req, '/', lang),
+    ...langSwitch,
+    headerHtml:    publicHeaderHtml({ lang, h1: texts.heroTitle, intro: texts.heroText, home: true }),
+    footerHtml:    publicFooterHtml({ lang, current: '/', ...langSwitch }),
     title,
     metaDescription,
     headMetaHtml:  headMetaHtml({ lang, ogImage: ogImageUrl('landing', lang), ogAlt: title }),
@@ -123,8 +126,6 @@ function _renderLanding(req, res) {
     demoUrl:       demo,
     noDemo:        !demo,
     registerQuery: source ? `?src=${encodeURIComponent(source)}` : '',
-    githubUrl:     'https://github.com/schreibwerkstatt/schreibwerkstatt',
-    privacyLabel:  t('privacy.footerLink'),
     macUrl:        macclientRelease.MAC_APP_STORE_URL,
     androidUrl:    'https://github.com/schreibwerkstatt/mobile/releases/latest',
     extensionUrl:  extensionRelease.CHROME_STORE_URL,
@@ -175,17 +176,21 @@ function _renderPrivacy(req, res, { alias = false } = {}) {
   // /privacy ist ein Alias derselben Seite — beide zeigen auf /datenschutz,
   // sonst konkurrieren zwei URLs mit identischem Inhalt um dieselbe Position.
   const seo = seoLinks('/datenschutz', lang);
+  const langSwitch = langSwitchVars(req, '/datenschutz', lang);
   setPublicPageHeaders(res);
   res.type('html').send(_render('datenschutz.html', {
     lang,
     noindex:       !seo.canonical,
     ...seo,
-    ...langSwitchVars(req, '/datenschutz', lang),
+    ...langSwitch,
+    headerHtml:    publicHeaderHtml({ lang, h1: t('privacy.title') }),
+    footerHtml:    publicFooterHtml({ lang, current: '/datenschutz', ...langSwitch }),
     headMetaHtml:  headMetaHtml({ lang }),
     metaDescription: t('privacy.metaDescription'),
     appName,
     analyticsEnabled,
     pageTitle:     t('privacy.title'),
+    tocLabel:      t('privacy.tocLabel'),
     lastUpdated:   t('privacy.lastUpdated'),
     intro:         t('privacy.intro'),
     sec1Title:     t('privacy.sec1Title'),  sec1Body:  t('privacy.sec1Body'),
@@ -207,7 +212,6 @@ function _renderPrivacy(req, res, { alias = false } = {}) {
     sec8Body:      analyticsEnabled ? t('privacy.sec8BodyAnalytics') : t('privacy.sec8Body'),
     secAnalyticsTitle: t('privacy.secAnalyticsTitle'), secAnalyticsBody: t('privacy.secAnalyticsBody'),
     sec9Title:     t('privacy.sec9Title'),  sec9Body:  t('privacy.sec9Body'),
-    backToLanding: t('privacy.backToLanding'),
   }));
 }
 

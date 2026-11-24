@@ -4,11 +4,12 @@
 //
 // Re-Push aktualisiert den HubSpot-Draft-Buffer; die Live-Version drüben bleibt
 // unverändert, bis der Buffer veröffentlicht wird (Push-Dialog «Pushen und
-// veröffentlichen» oder in HubSpot). Ein importierter Post kann HubSpot-Module,
-// CTAs oder Formulare tragen, die der Import nicht übernommen hat — im Buffer
-// ersetzt der App-Body sie; darauf weist der Push-Dialog hin (`pushNote`). Ein
-// Edit am Draft in HubSpot fällt in der Vorab-Prüfung des Servers als Konflikt
-// auf und wird nie still überschrieben.
+// veröffentlichen» oder in HubSpot). Trägt der Entwurf HubSpot-Module, CTAs,
+// Formulare oder Bilder, die der Abschnitt nicht hat, sperrt der Server den
+// Push (`locked_blocks`, Badge «nur im Blog», Tooltip `lockedTip`). Was die
+// Sperre bewusst nicht erfasst (Inline-Formatierung), nennt der Push-Dialog
+// (`pushNote`). Ein Edit am Draft in HubSpot fällt in der Vorab-Prüfung des
+// Servers als Konflikt auf und wird nie still überschrieben.
 //
 // Headless display-contents-Anker, via `$hubspot`-Magic global erreichbar.
 
@@ -19,13 +20,14 @@ const hubspotSpec = {
   endpointBase: '/hubspot',
   jobTypes: {
     push: 'hubspot-push',
-    refresh: ['hubspot-import'],
+    refresh: ['hubspot-import', 'hubspot-images'],
     reconcile: 'hubspot-reconcile',
   },
   pushErrorCode: 'HUBSPOT_PUSH_FAILED',
   liveUpdate: false,
   pushNote: 'hubspot.repush.warning',
   publishNote: 'hubspot.publish.needsTeaser',
+  lockedTip: 'hubspot.status.lockedTip',
   remoteState(link) {
     return {
       DRAFT: 'draft', PUBLISHED: 'published', SCHEDULED: 'scheduled',

@@ -8,6 +8,12 @@
 // ein 400.
 
 const { _skipped } = require('./helpers');
+const { truncateToolResult } = require('../chat-tools/truncate');
+
+// Untergrenze für ein ausgeführtes Ergebnis, wenn parallele Aufrufe das Rundenbudget
+// zusammen leicht überziehen: dieselbe Schwelle, unter der `refuse` gar nicht mehr
+// ausführt — darunter wäre das Ergebnis nur noch eine Ellipse.
+const MIN_RESULT_CHARS = 500;
 
 // Eingabe eines Aufrufs, wie sie in context_info.tool_calls landet: lange Strings
 // gekürzt, lange Listen gestutzt. Der Verlauf zeigt, WAS gefragt wurde — ein
@@ -75,7 +81,10 @@ function makeToolRunner({ executeTool, ctx, offered, caps, toolLog, toolView, lo
       const out = await executeTool(tu.name, tu.input, ctx);
       return { out, ok: true, errMsg: null, thrown: null, durationMs: Date.now() - t0 };
     } catch (e) {
-      if (e.name === 'AbortError') throw e;
+      // Nur der Abbruch des Jobs beendet den Lauf. Ein AbortError aus dem Werkzeug
+      // selbst (Timeout beim Embedding/Rerank, lib/http-util.js#fetchWithTimeout)
+      // ist ein Werkzeug-Fehler: das Modell bekommt ihn und antwortet weiter.
+      if (jobSignal?.aborted) throw e?.name === 'AbortError' ? e : new DOMException('Aborted', 'AbortError');
       return { out: { error: e.message }, ok: false, errMsg: e.message, thrown: e, durationMs: Date.now() - t0 };
     }
   };
@@ -88,9 +97,6 @@ function makeToolRunner({ executeTool, ctx, offered, caps, toolLog, toolView, lo
     // Warum ein Aufruf NICHT läuft (Fehler-Result fürs Modell) — oder null.
     // `remaining`: Rest des Rundenbudgets nach allem, was davor lief oder reserviert ist.
     const refuse = (tu, remaining) => {
-      if (tu.parseError) {
-        return _skipped(`Werkzeug-Argumente waren kein gültiges JSON (${String(tu.parseError).slice(0, 120)}) – Aufruf NICHT ausgeführt. Wiederhole ihn mit gültigen Argumenten.`, 'chat.toolError.invalidArgs');
-      }
       if (!offered.has(tu.name)) {
         // Nur was dieser Lauf anbietet, läuft — für jeden Chat an derselben Stelle.
         // Ein erfundener oder fremder Name (Werkzeug eines anderen Chats, Slim-Satz
@@ -98,7 +104,15 @@ function makeToolRunner({ executeTool, ctx, offered, caps, toolLog, toolView, lo
         counters.notOffered++;
         return _skipped(`Werkzeug «${String(tu.name).slice(0, 80)}» wird in diesem Lauf nicht angeboten – Aufruf NICHT ausgeführt. Nutze nur die angebotenen Werkzeuge.`, 'chat.toolError.notOffered');
       }
-      if (!collectTools.has(tu.name) && executed >= maxToolsPerRound) {
+      // Erst nach «angeboten»: ein erfundener Name mit kaputtem JSON soll nicht zur
+      // Wiederholung mit gültigen Argumenten auffordern.
+      if (tu.parseError) {
+        return _skipped(`Werkzeug-Argumente waren kein gültiges JSON (${String(tu.parseError).slice(0, 120)}) – Aufruf NICHT ausgeführt. Wiederhole ihn mit gültigen Argumenten.`, 'chat.toolError.invalidArgs');
+      }
+      // Sammel-Werkzeuge (Vorschläge) haben winzige Ergebnisse und zählen nicht gegen
+      // die Rundendeckel — auch nicht gegen das Ergebnis-Budget.
+      if (collectTools.has(tu.name)) return null;
+      if (executed >= maxToolsPerRound) {
         return _skipped(`Nicht ausgeführt: höchstens ${maxToolsPerRound} Werkzeug-Aufrufe pro Runde. Fordere ihn in der nächsten Runde erneut an, falls er noch nötig ist.`, 'chat.toolError.roundLimit', { max: maxToolsPerRound });
       }
       if (remaining < 500 || (Number(toolResultCaps[tu.name]) > 0 && remaining < capFor(tu.name))) {
@@ -153,10 +167,16 @@ function makeToolRunner({ executeTool, ctx, offered, caps, toolLog, toolView, lo
       }
       const content = JSON.stringify(out);
       const resultBytes = content.length;
-      const cap = Math.min(capFor(tu.name), remaining);
+      const isError = !!(out && typeof out === 'object' && out.error);
+      // Abgewiesene Aufrufe und Fehler sind kurze Meldungen, die das Modell ganz lesen
+      // muss («in der nächsten Runde erneut») — sie zählen nicht gegen den Rest des
+      // Rundenbudgets, nur gegen den Einzeldeckel.
+      const cap = (skipped || isError)
+        ? capFor(tu.name)
+        : Math.max(MIN_RESULT_CHARS, Math.min(capFor(tu.name), remaining));
       const truncated = resultBytes > cap || !!(out && typeof out === 'object' && out.truncated);
-      if (out && typeof out === 'object' && out.error && ok) errMsg = String(out.error);
-      const sent = resultBytes > cap ? content.slice(0, cap) + '…' : content;
+      if (isError && ok) errMsg = String(out.error);
+      const sent = resultBytes > cap ? _fitResult(out, content, cap) : content;
       roundChars += sent.length;
       const callOk = ok && !(out && out.error);
       // Jeder Fehlschlag trägt einen Key; ohne eigenen den generischen.
@@ -181,6 +201,22 @@ function makeToolRunner({ executeTool, ctx, offered, caps, toolLog, toolView, lo
       });
     }
   };
+}
+
+// Ergebnis auf `cap` Zeichen: erst strukturiert (Arrays halbieren, Strings kürzen —
+// Summen und `next_offset` bleiben, das JSON bleibt gültig), harter Schnitt nur, wenn
+// das nicht reicht. Immer wohlgeformtes UTF-16: ein halbes Emoji am Schnitt
+// serialisiert zu einem einsamen `\udXXX`, an dem Provider (LiteLLM/Python,
+// Anthropic) den ganzen Request ablehnen.
+function _fitResult(out, content, cap) {
+  if (out && typeof out === 'object' && !Array.isArray(out)) {
+    const s = JSON.stringify(truncateToolResult(out, cap));
+    if (s.length <= cap) return s.toWellFormed();
+  }
+  let end = Math.max(0, cap);
+  const c = content.charCodeAt(end - 1);
+  if (c >= 0xD800 && c <= 0xDBFF) end--;
+  return (content.slice(0, end) + '…').toWellFormed();
 }
 
 module.exports = { makeToolRunner, capLogInput, failureKey, LOG_INPUT_STR_MAX };

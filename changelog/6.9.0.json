@@ -1,0 +1,51 @@
+{
+  "version": "6.9.0",
+  "date": "2026-11-24",
+  "entries": [
+    {
+      "kind": "neu",
+      "de": "Geteilte Links, «Review mit Kollegen»: Ein Lese-Link wird zum Review-Link, in den sich Reviewer mit Namen eintragen und ihr Review abschliessen. Die Karte zeigt dir, wer fertig ist und was noch offen ist.",
+      "en": "Shared links, “Review with colleagues”: a reading link becomes a review link where reviewers sign in by name and finish their review. The card shows you who is done and what is still open."
+    },
+    {
+      "kind": "neu",
+      "de": "Änderungsvorschläge im Review-Link: Reviewer markieren eine Stelle und schlagen neuen Text vor. Du übernimmst oder lehnst ihn mit einem Klick ab, der alte Stand bleibt als Revision erhalten.",
+      "en": "Suggested edits in review links: reviewers mark a passage and propose new text. You accept or reject it with one click, and the previous version is kept as a revision."
+    },
+    {
+      "kind": "neu",
+      "de": "Bucheinstellungen, HubSpot: «Bilder nachholen» holt die Bilder von Beiträgen, die ohne Bilder importiert wurden. Abschnitte, die du seither bearbeitet hast, bleiben unangetastet.",
+      "en": "Book settings, HubSpot: “Fetch images” retrieves the images of posts that were imported without them. Sections you have edited since stay untouched."
+    },
+    {
+      "kind": "verbessert",
+      "de": "HubSpot-Push: Enthält der HubSpot-Entwurf Module, CTAs, Formulare oder fehlende Bilder, ist der Push gesperrt. So gehen diese Inhalte in HubSpot nicht mehr verloren.",
+      "en": "HubSpot push: if the HubSpot draft contains modules, CTAs, forms or missing images, the push is locked. That way this content is no longer lost in HubSpot."
+    },
+    {
+      "kind": "verbessert",
+      "de": "Buch-, Recherche-, Plot- und Ideen-Chat: Der Werkzeug-Verlauf zeigt jetzt die Runden und abgelehnte Vorschläge samt Grund. Entsteht eine Antwort nur aus dem bisher Gesammelten, steht das darunter.",
+      "en": "Book, research, plot and ideas chat: the tool log now shows the rounds and rejected suggestions with their reason. If an answer was built only from what was gathered so far, it says so below."
+    },
+    {
+      "kind": "verbessert",
+      "de": "Buch-, Recherche-, Plot- und Ideen-Chat: Bleibt eine Frage wegen eines Fehlers oder Abbruchs ohne Antwort, siehst du das jetzt direkt im Verlauf. Du kannst sie dann einfach nochmals schicken.",
+      "en": "Book, research, plot and ideas chat: if a question gets no answer because of an error or cancellation, you now see it right in the history. You can then simply send it again."
+    },
+    {
+      "kind": "verbessert",
+      "de": "Die Chats finden Figuren, Orte und Motive jetzt auch bei Umlauten und abweichender Schreibweise zuverlässig. Ein Kapitel schliesst seine Unterkapitel ein, und Zitate werden toleranter im Text wiedergefunden.",
+      "en": "The chats now reliably find characters, places and motifs even with umlauts or different spelling. A chapter includes its subchapters, and quotes are matched in the text more tolerantly."
+    },
+    {
+      "kind": "verbessert",
+      "de": "Startseite und Funktionsübersicht zeigen jetzt neue Bilder zu Kommentaren, Teilen und Lektorat. Die Datenschutzerklärung hat ein Inhaltsverzeichnis, über das du direkt zum gesuchten Abschnitt springst.",
+      "en": "The start page and feature overview now show new pictures of comments, sharing and copy-editing. The privacy policy has a table of contents that takes you straight to the section you need."
+    },
+    {
+      "kind": "behoben",
+      "de": "«Als Idee erfassen» im Chat: Konnte der Status des Vorschlags nicht gespeichert werden, holt ein zweiter Klick nur den Status nach. Die Idee entsteht dabei nicht doppelt.",
+      "en": "“Capture as idea” in the chat: if the suggestion's status could not be saved, a second click only catches up on the status. The idea is not created twice."
+    }
+  ]
+}

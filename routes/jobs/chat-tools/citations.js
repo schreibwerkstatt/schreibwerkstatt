@@ -90,7 +90,10 @@ async function validateFinalAnswerCitations(zitate, ctx) {
     const offset = z?.offset;
     const length = z?.length;
     const quote  = typeof z?.quote === 'string' ? z.quote : null;
-    if (!Number.isInteger(pageId) || !Number.isInteger(offset) || !Number.isInteger(length)) {
+    // length ≤ 0 ohne Zitattext ergäbe eine leere, «gültige» Fussnote. Mit Zitattext
+    // versucht die Neu-Verankerung unten, die richtige Länge zu finden.
+    if (!Number.isInteger(pageId) || !Number.isInteger(offset) || !Number.isInteger(length)
+      || (length <= 0 && !quote)) {
       out.push({ page_id: pageId ?? null, valid: false, reason: 'bad_shape' });
       continue;
     }

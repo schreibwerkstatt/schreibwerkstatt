@@ -8,7 +8,7 @@ const { getBookSettings } = require('../../../db/book-settings');
 const { isJournalisticBook } = require('../../../lib/buchtyp');
 const { listBookStatus, statusChain, statusRank } = require('../../../db/redaktion');
 const contentStore = require('../../../lib/content-store');
-const { _truncateResult, resultCapFor } = require('./shared');
+const { _truncateResult, resultCapFor, clampInt, assertScope, invalidEnum } = require('./shared');
 
 const DEFAULT_LIMIT = 300;
 const PAGE_FORMAT = '[page_id, page_name, chapter_id, status|null, stale (1 = seit dem Setzen geändert)]';
@@ -26,16 +26,20 @@ function _weakest(entries) {
 }
 
 async function tool_get_edit_status(input, ctx) {
+  const chapterFilter = Number.isInteger(input?.chapter_id) ? input.chapter_id : null;
+  const scopeErr = assertScope(ctx, { chapterId: chapterFilter });
+  if (scopeErr) return scopeErr;
   const chain = statusChain(isJournalisticBook(getBookSettings(ctx.bookId, ctx.userEmail || null)));
   const done = chain[chain.length - 1];
   const byPage = listBookStatus(ctx.bookId);
   const outline = await contentStore.bookOutline(ctx.bookId);
 
-  const statusFilter = input?.status === 'ohne' || chain.includes(input?.status) ? input.status : null;
+  const badStatus = invalidEnum('status', input?.status, [...chain, 'ohne']);
+  if (badStatus) return badStatus;
+  const statusFilter = input?.status || null;
   const staleOnly = input?.stale_only === true;
   const notDone = input?.not_done === true;
-  const chapterFilter = Number.isInteger(input?.chapter_id) ? input.chapter_id : null;
-  const limit = Math.min(1000, Math.max(1, Number.isInteger(input?.limit) ? input.limit : DEFAULT_LIMIT));
+  const limit = clampInt(input?.limit, DEFAULT_LIMIT, 1, 1000);
 
   const counts = Object.fromEntries(chain.map(s => [s, 0]));
   counts.ohne = 0;

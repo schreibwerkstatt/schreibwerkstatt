@@ -43,7 +43,7 @@ const WERK_TABLES = [
   // Quellen am Buch (die Quellen selbst: SOURCES, Abgleich in restoreSources)
   'book_source_links',
   // Share-Links mit neuen Tokens, Kommentare, Fazits
-  'share_links', 'share_comments', 'share_feedback',
+  'share_links', 'share_comments', 'share_feedback', 'share_link_reviewers',
   // Entscheide und Einstellungen des Autors
   'redundancy_dismissals', 'name_guard_ignores', 'world_fact_verdicts', 'world_fact_suppressions',
   'user_dictionary', 'languagetool_disabled_rules',

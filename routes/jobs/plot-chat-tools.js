@@ -73,7 +73,7 @@ function _resolveAct(input, ctx, state) {
   const id = _int(input.act_id);
   if (!id) return null;
   const act = state.actById.get(id);
-  if (!act) return _err(`Akt #${id} gibt es nicht. Nutze eine Akt-id aus dem Board.`);
+  if (!act) return _err(`Akt #${id} gibt es nicht. Nutze eine Akt-id aus dem Board.`, 'unknown');
   return { act_id: id, act, label: act.name };
 }
 
@@ -88,7 +88,7 @@ function _resolveThread(input, ctx, state) {
   const id = _int(input.thread_id);
   if (!id) return undefined;
   const t = state.threadById.get(id);
-  if (!t) return _err(`Strang #${id} gibt es nicht. Nutze eine Strang-id aus dem Board.`);
+  if (!t) return _err(`Strang #${id} gibt es nicht. Nutze eine Strang-id aus dem Board.`, 'unknown');
   return { thread_id: id, label: t.name };
 }
 
@@ -145,8 +145,8 @@ function _resolveFiguren(list, state) {
 }
 
 function _figurenError(r) {
-  if (r.ambiguous.length) return _err(`Mehrdeutige Figur(en): ${r.ambiguous.join('; ')}. Gib die Kennung (fig_id bzw. draft#id) aus der Figurenliste an.`);
-  if (r.unknown.length) return _err(`Unbekannte Figur(en): ${r.unknown.join(', ')}. Nutze fig_id, draft#id oder Namen aus der Figurenliste.`);
+  if (r.ambiguous.length) return _err(`Mehrdeutige Figur(en): ${r.ambiguous.join('; ')}. Gib die Kennung (fig_id bzw. draft#id) aus der Figurenliste an.`, 'ambiguous');
+  if (r.unknown.length) return _err(`Unbekannte Figur(en): ${r.unknown.join(', ')}. Nutze fig_id, draft#id oder Namen aus der Figurenliste.`, 'unknown');
   return null;
 }
 
@@ -170,8 +170,8 @@ function _resolveCatalog(list, items, { idOf, isId, what, kennung }) {
     if (!hit) { unknown.push(q); continue; }
     if (!ids.includes(idOf(hit))) { ids.push(idOf(hit)); names.push(hit.name); }
   }
-  if (ambiguous.length) return _err(`Mehrdeutige ${what}: ${ambiguous.join('; ')}. Gib die Kennung (${kennung}) an.`);
-  if (unknown.length) return _err(`Unbekannte ${what}: ${unknown.join(', ')}. Nutze ${kennung} oder Namen aus der Liste im Vorspann.`);
+  if (ambiguous.length) return _err(`Mehrdeutige ${what}: ${ambiguous.join('; ')}. Gib die Kennung (${kennung}) an.`, 'ambiguous');
+  if (unknown.length) return _err(`Unbekannte ${what}: ${unknown.join(', ')}. Nutze ${kennung} oder Namen aus der Liste im Vorspann.`, 'unknown');
   return { ids, names };
 }
 const _resolveOrte = (list, state) => _resolveCatalog(list, state.locations || [], {
@@ -184,7 +184,7 @@ const _resolveMotive = (list, state) => _resolveCatalog(list, state.motifs || []
 function _validChapter(raw, state) {
   const id = _int(raw);
   if (!id) return { id: null };
-  if (!state.chapterNames.has(id)) return _err(`Kapitel #${id} gehört nicht zu diesem Buch. Nutze eine chapter_id aus Board oder Gliederung.`);
+  if (!state.chapterNames.has(id)) return _err(`Kapitel #${id} gehört nicht zu diesem Buch. Nutze eine chapter_id aus Board oder Gliederung.`, 'notInBook');
   return { id, label: state.chapterNames.get(id) };
 }
 
@@ -193,11 +193,11 @@ function _validChapter(raw, state) {
 function _validAfter(input, cell, state, movingId = null) {
   const after = _int(input.after_beat_id);
   if (!after) return { after_beat_id: null, at_start: input.at_start === true };
-  if (after === movingId) return _err('after_beat_id darf nicht der verschobene Beat selbst sein.');
+  if (after === movingId) return _err('after_beat_id darf nicht der verschobene Beat selbst sein.', 'conflict');
   const b = state.beatById.get(after);
-  if (!b) return _err(`Beat #${after} gibt es nicht.`);
+  if (!b) return _err(`Beat #${after} gibt es nicht.`, 'unknown');
   if (cell.act_id == null || b.act_id !== cell.act_id || (b.thread_id ?? null) !== (cell.thread_id ?? null)) {
-    return _err(`Beat #${after} liegt nicht in der Zielzelle (Akt/Strang) — wähle einen Beat derselben Zelle oder lass after_beat_id weg.`);
+    return _err(`Beat #${after} liegt nicht in der Zielzelle (Akt/Strang) — wähle einen Beat derselben Zelle oder lass after_beat_id weg.`, 'wrongCell');
   }
   return { after_beat_id: after, at_start: false, label: b.titel };
 }
@@ -213,12 +213,12 @@ function _beatFieldsFromInput(input, state, { isUpdate }) {
   if (desc) fields.beschreibung = desc;
   if (input.status != null) {
     const STATUSES = state.plotConst.STATUSES;
-    if (!STATUSES.includes(input.status)) return _err(`status kennt nur: ${STATUSES.join(', ')}.`);
+    if (!STATUSES.includes(input.status)) return _err(`status kennt nur: ${STATUSES.join(', ')}.`, 'invalid');
     fields.status = input.status;
   }
   if (input.intensitaet != null) {
     const n = Number(input.intensitaet);
-    if (!Number.isInteger(n) || n < 1 || n > 5) return _err('intensitaet muss 1–5 sein.');
+    if (!Number.isInteger(n) || n < 1 || n > 5) return _err('intensitaet muss 1–5 sein.', 'invalid');
     fields.intensitaet = n;
   }
   const zeit = _str(input.zeit, MAX_ZEIT);
@@ -254,11 +254,11 @@ function _beatFieldsFromInput(input, state, { isUpdate }) {
   if (isUpdate && typeof input.verworfen === 'boolean') fields.verworfen = input.verworfen ? 1 : 0;
 
   const clear = Array.isArray(input.leeren) ? [...new Set(input.leeren.map(x => String(x)))] : [];
-  if (clear.length && !isUpdate) return _err('leeren gibt es nur bei Änderungen bestehender Beats.');
+  if (clear.length && !isUpdate) return _err('leeren gibt es nur bei Änderungen bestehender Beats.', 'conflict');
   for (const k of clear) {
-    if (!CLEARABLE.has(k)) return _err(`leeren kennt nur: ${[...CLEARABLE].join(', ')}.`);
+    if (!CLEARABLE.has(k)) return _err(`leeren kennt nur: ${[...CLEARABLE].join(', ')}.`, 'invalid');
     const field = CLEAR_FIELD[k] || k;
-    if (field in fields) return _err(`${k} kann nicht zugleich gesetzt und geleert werden.`);
+    if (field in fields) return _err(`${k} kann nicht zugleich gesetzt und geleert werden.`, 'conflict');
     if (k === 'beschreibung') fields.beschreibung = '';
     else if (k === 'figuren') { fields.figure_ids = []; fields.draft_figure_ids = []; labels.figuren = []; }
     else if (k === 'orte' || k === 'motive') { fields[field] = []; labels[k] = []; }
@@ -302,7 +302,7 @@ function _proposeBeat(input, ctx) {
   const beatId = _int(input.beat_id);
   if (beatId) {
     const beat = state.beatById.get(beatId);
-    if (!beat) return _err(`Beat #${beatId} gibt es nicht. Nutze eine Beat-id aus dem Board.`);
+    if (!beat) return _err(`Beat #${beatId} gibt es nicht. Nutze eine Beat-id aus dem Board.`, 'unknown');
     // Klassischer Pfad: das Schema ist die Vereinigung aller Werkzeugfelder, das
     // Modell füllt act_id/thread_id gern mit der Zelle, in der der Beat schon liegt.
     // Das ist keine Verschiebung — nur eine abweichende Zelle oder ein Bezug ist eine.
@@ -310,7 +310,7 @@ function _proposeBeat(input, ctx) {
       || (input.act_id != null && _int(input.act_id) !== beat.act_id)
       || (input.thread_id != null && _int(input.thread_id) !== (beat.thread_id ?? null));
     if (moves) {
-      return _err('Zum Verschieben eines bestehenden Beats propose_beat_move verwenden; propose_beat ändert nur Inhalt/Felder.');
+      return _err('Zum Verschieben eines bestehenden Beats propose_beat_move verwenden; propose_beat ändert nur Inhalt/Felder.', 'conflict');
     }
     const r = _beatFieldsFromInput(input, state, { isUpdate: true });
     if (r.error) return r;
@@ -319,7 +319,14 @@ function _proposeBeat(input, ctx) {
     for (const k of Object.keys(r.fields)) {
       if (_same(r.fields[k], before[k])) { delete r.fields[k]; delete before[k]; }
     }
-    if (!Object.keys(r.fields).length) return _err(`Der Vorschlag ändert an Beat #${beatId} nichts.`);
+    // Klassischer Pfad: manche Provider schicken `verworfen: false` als Standardwert
+    // mit. Neben anderen Änderungen heisst das nicht «wieder aufnehmen» — ein
+    // umbenannter verworfener Beat käme sonst aufs Board zurück. Ein Vorschlag, der
+    // NUR verworfen:false trägt, bleibt das ausdrückliche Wiederaufnehmen.
+    if (ctx.classic && input.verworfen === false && 'verworfen' in r.fields && Object.keys(r.fields).length > 1) {
+      delete r.fields.verworfen; delete before.verworfen;
+    }
+    if (!Object.keys(r.fields).length) return _err(`Der Vorschlag ändert an Beat #${beatId} nichts.`, 'noChange');
     return _push(ctx, {
       type: 'beat_update', beat_id: beatId, fields: r.fields, before,
       labels: { beat: beat.titel, ...r.labels, ...beforeLabels },
@@ -327,19 +334,19 @@ function _proposeBeat(input, ctx) {
   }
 
   const actRes = _resolveAct(input, ctx, state);
-  if (!actRes) return _err('Neuer Beat braucht act_id (oder act_ref auf einen neuen Akt dieser Antwort).');
+  if (!actRes) return _err('Neuer Beat braucht act_id (oder act_ref auf einen neuen Akt dieser Antwort).', 'missing');
   if (actRes.error) return actRes;
   const threadRes = _resolveThread(input, ctx, state);
   if (threadRes?.error) return threadRes;
   if (!_actFits(actRes, threadRes, ctx, state)) {
-    return _err('Akt und Strang passen nicht: ein Strang mit eigener Aktstruktur liegt nur auf seinen eigenen Akten, alle anderen Beats auf geteilten Akten. Wähle einen passenden Akt bzw. thread_id.');
+    return _err('Akt und Strang passen nicht: ein Strang mit eigener Aktstruktur liegt nur auf seinen eigenen Akten, alle anderen Beats auf geteilten Akten. Wähle einen passenden Akt bzw. thread_id.', 'wrongCell');
   }
   // `verworfen: false` ist bei einem neuen Beat der Normalfall (Constrained Decoding
   // schickt den Boolean im klassischen Pfad mit) — nur `true` widerspricht.
-  if (input.verworfen === true) return _err('verworfen gibt es nur bei Änderungen bestehender Beats.');
+  if (input.verworfen === true) return _err('verworfen gibt es nur bei Änderungen bestehender Beats.', 'conflict');
   const r = _beatFieldsFromInput(input, state, { isUpdate: false });
   if (r.error) return r;
-  if (!r.fields.titel) return _err('Neuer Beat braucht einen titel.');
+  if (!r.fields.titel) return _err('Neuer Beat braucht einen titel.', 'missing');
   const cell = { act_id: actRes.act_id ?? null, thread_id: threadRes?.thread_id ?? null };
   const pos = (actRes.act_ref || threadRes?.thread_ref)
     ? { after_beat_id: null, at_start: input.at_start === true }
@@ -360,7 +367,7 @@ function _proposeBeatMove(input, ctx) {
   const state = _state(ctx);
   const beatId = _int(input.beat_id);
   const beat = beatId ? state.beatById.get(beatId) : null;
-  if (!beat) return _err(`Beat #${input.beat_id} gibt es nicht. Nutze eine Beat-id aus dem Board.`);
+  if (!beat) return _err(`Beat #${input.beat_id} gibt es nicht. Nutze eine Beat-id aus dem Board.`, 'unknown');
   const curAct = state.actById.get(beat.act_id);
   const actRes = _resolveAct(input, ctx, state) || { act_id: beat.act_id, act: curAct, label: curAct?.name };
   if (actRes.error) return actRes;
@@ -376,7 +383,7 @@ function _proposeBeatMove(input, ctx) {
     }
   }
   if (!_actFits(actRes, threadRes, ctx, state)) {
-    return _err('Ziel-Akt und Ziel-Strang passen nicht: ein Strang mit eigener Aktstruktur liegt nur auf seinen eigenen Akten, alle anderen Beats auf geteilten Akten.');
+    return _err('Ziel-Akt und Ziel-Strang passen nicht: ein Strang mit eigener Aktstruktur liegt nur auf seinen eigenen Akten, alle anderen Beats auf geteilten Akten.', 'wrongCell');
   }
   const cell = { act_id: actRes.act_id ?? null, thread_id: threadRes?.thread_id ?? null };
   const pos = (actRes.act_ref || threadRes?.thread_ref)
@@ -385,7 +392,7 @@ function _proposeBeatMove(input, ctx) {
   if (pos.error) return pos;
   const sameCell = !actRes.act_ref && !threadRes?.thread_ref
     && cell.act_id === beat.act_id && cell.thread_id === (beat.thread_id ?? null);
-  if (sameCell && !pos.after_beat_id && !pos.at_start) return _err(`Der Vorschlag verschiebt Beat #${beatId} nicht.`);
+  if (sameCell && !pos.after_beat_id && !pos.at_start) return _err(`Der Vorschlag verschiebt Beat #${beatId} nicht.`, 'noChange');
   return _push(ctx, {
     type: 'beat_move', beat_id: beatId,
     ...(actRes.act_ref ? { act_ref: actRes.act_ref } : { act_id: actRes.act_id }),
@@ -413,12 +420,12 @@ const ACT_NOT_FORKED = 'Ein Akt nur für diesen Strang lässt sich nicht vorschl
 function _proposeAct(input, ctx) {
   const state = _state(ctx);
   const name = _str(input.name, MAX_NAME);
-  if (!name) return _err('name ist Pflicht.');
+  if (!name) return _err('name ist Pflicht.', 'missing');
   const actId = _int(input.act_id);
   if (actId) {
     const act = state.actById.get(actId);
-    if (!act) return _err(`Akt #${actId} gibt es nicht.`);
-    if (act.name === name) return _err(`Akt #${actId} heisst schon so.`);
+    if (!act) return _err(`Akt #${actId} gibt es nicht.`, 'unknown');
+    if (act.name === name) return _err(`Akt #${actId} heisst schon so.`, 'noChange');
     return _push(ctx, { type: 'act_update', act_id: actId, name, before: { name: act.name }, labels: { act: act.name } }, input);
   }
   const t = _resolveThread(input, ctx, state);
@@ -431,8 +438,8 @@ function _proposeAct(input, ctx) {
   let afterLabel = null;
   if (after) {
     const a = state.actById.get(after);
-    if (!a) return _err(`Akt #${after} gibt es nicht.`);
-    if ((a.thread_id ?? null) !== threadId) return _err('after_act_id muss im selben Bereich liegen (geteilte Akte bzw. Akte desselben Strangs).');
+    if (!a) return _err(`Akt #${after} gibt es nicht.`, 'unknown');
+    if ((a.thread_id ?? null) !== threadId) return _err('after_act_id muss im selben Bereich liegen (geteilte Akte bzw. Akte desselben Strangs).', 'wrongCell');
     afterLabel = a.name;
   }
   return _push(ctx, {
@@ -447,7 +454,7 @@ function _proposeAct(input, ctx) {
 function _proposeThread(input, ctx) {
   const state = _state(ctx);
   const name = _str(input.name, MAX_NAME);
-  if (!name) return _err('name ist Pflicht.');
+  if (!name) return _err('name ist Pflicht.', 'missing');
   let fig = null;
   const figQ = _str(input.figur, MAX_NAME);
   if (figQ) {
@@ -461,7 +468,7 @@ function _proposeThread(input, ctx) {
   const threadId = _int(input.thread_id);
   if (threadId) {
     const t = state.threadById.get(threadId);
-    if (!t) return _err(`Strang #${threadId} gibt es nicht.`);
+    if (!t) return _err(`Strang #${threadId} gibt es nicht.`, 'unknown');
     const fields = {};
     const before = {};
     if (name !== t.name) { fields.name = name; before.name = t.name; }
@@ -471,7 +478,7 @@ function _proposeThread(input, ctx) {
       before.figure_id = t.fig_id || null;
       before.draft_figure_id = t.draft_figure_id || null;
     }
-    if (!Object.keys(fields).length) return _err(`Der Vorschlag ändert an Strang #${threadId} nichts.`);
+    if (!Object.keys(fields).length) return _err(`Der Vorschlag ändert an Strang #${threadId} nichts.`, 'noChange');
     const figBefore = t.fig_id ? state.figNameById.get(t.fig_id) : (t.draft_figure_id ? state.draftNameById.get(t.draft_figure_id) : null);
     return _push(ctx, {
       type: 'thread_update', thread_id: threadId, fields, before,
@@ -495,9 +502,9 @@ function _resolveRelBeat(input, prefix, ctx, state) {
     return { ref: r.ref, label: r.p.fields?.titel || '' };
   }
   const id = _int(input[`${prefix}_beat_id`]);
-  if (!id) return _err(`${prefix}_beat_id (oder ${prefix}_beat_ref) ist Pflicht.`);
+  if (!id) return _err(`${prefix}_beat_id (oder ${prefix}_beat_ref) ist Pflicht.`, 'missing');
   const b = state.beatById.get(id);
-  if (!b) return _err(`Beat #${id} gibt es nicht. Nutze eine Beat-id aus dem Board.`);
+  if (!b) return _err(`Beat #${id} gibt es nicht. Nutze eine Beat-id aus dem Board.`, 'unknown');
   return { id, label: b.titel, verworfen: !!b.verworfen };
 }
 
@@ -507,21 +514,21 @@ function _proposeBeatRelation(input, ctx) {
   const state = _state(ctx);
   const typ = String(input.typ || '').trim();
   const REL_TYPES = state.plotConst.BEAT_REL_TYPES;
-  if (!REL_TYPES.includes(typ)) return _err(`typ kennt nur: ${REL_TYPES.join(', ')}.`);
+  if (!REL_TYPES.includes(typ)) return _err(`typ kennt nur: ${REL_TYPES.join(', ')}.`, 'invalid');
   const from = _resolveRelBeat(input, 'from', ctx, state);
   if (from.error) return from;
   const to = _resolveRelBeat(input, 'to', ctx, state);
   if (to.error) return to;
-  if ((from.id && from.id === to.id) || (from.ref && from.ref === to.ref)) return _err('Ein Beat kann nicht auf sich selbst zeigen.');
-  if (from.verworfen || to.verworfen) return _err('Verworfene Beats bekommen keine neuen Beziehungen — schlage zuerst vor, den Beat wieder aufzunehmen, oder wähle einen anderen.');
+  if ((from.id && from.id === to.id) || (from.ref && from.ref === to.ref)) return _err('Ein Beat kann nicht auf sich selbst zeigen.', 'conflict');
+  if (from.verworfen || to.verworfen) return _err('Verworfene Beats bekommen keine neuen Beziehungen — schlage zuerst vor, den Beat wieder aufzunehmen, oder wähle einen anderen.', 'notAllowed');
   // Dublette auch in Gegenrichtung (bereitet-vor ↔ zahlt-ein, sameBeatRelation).
   const same = state.plotConst.sameBeatRelation;
   const edge = { from: from.id ? `#${from.id}` : `r${from.ref}`, to: to.id ? `#${to.id}` : `r${to.ref}`, typ };
   const had = from.id && to.id && (state.relations || []).find(r => same(edge, { from: `#${r.from_beat_id}`, to: `#${r.to_beat_id}`, typ: r.typ }));
-  if (had) return _err(`Die Beziehung steht schon im Board: #${had.from_beat_id} ${had.typ} #${had.to_beat_id}.`);
+  if (had) return _err(`Die Beziehung steht schon im Board: #${had.from_beat_id} ${had.typ} #${had.to_beat_id}.`, 'duplicate');
   const key = (p, side) => (p[`${side}_beat_id`] != null ? `#${p[`${side}_beat_id`]}` : `r${p[`${side}_beat_ref`]}`);
   const dup = ctx.proposals.some(p => p.type === 'relation_create' && same(edge, { from: key(p, 'from'), to: key(p, 'to'), typ: p.typ }));
-  if (dup) return _err('Diese Beziehung hast du in dieser Antwort schon vorgeschlagen.');
+  if (dup) return _err('Diese Beziehung hast du in dieser Antwort schon vorgeschlagen.', 'duplicate');
   return _push(ctx, {
     type: 'relation_create', typ,
     ...(from.ref ? { from_beat_ref: from.ref } : { from_beat_id: from.id }),
@@ -554,7 +561,7 @@ const PROPOSE_HANDLERS = {
 async function executePlotChatTool(name, input, ctx) {
   if (PROPOSE_TOOLS.has(name)) {
     if (ctx.proposals.length >= MAX_PROPOSALS) {
-      return _err(`Höchstens ${MAX_PROPOSALS} Vorschläge pro Antwort. Beende die Antwort mit final_answer.`);
+      return _err(`Höchstens ${MAX_PROPOSALS} Vorschläge pro Antwort. Beende die Antwort mit final_answer.`, 'limit');
     }
     const state = _state(ctx);
     if (!state.plotConst) state.plotConst = await plotConstants();

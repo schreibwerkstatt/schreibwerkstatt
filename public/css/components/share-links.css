@@ -130,6 +130,38 @@
   font-weight: var(--fw-semibold);
 }
 
+/* Stand eines Review-Links (partials/share-links-review.html). */
+.share-review-state {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-sm);
+  margin-bottom: var(--space-sm);
+}
+.share-review-state__people { display: flex; flex-wrap: wrap; gap: var(--space-6); }
+.share-review-state__person {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2xs);
+  padding: var(--space-2xs) var(--space-6);
+  border: 1px solid var(--color-border);
+  font-size: var(--font-size-sm);
+  color: var(--color-muted);
+}
+.share-review-state__person--done { border-color: var(--color-ok-text); color: var(--color-ok-text); }
+.share-review-state__summary { font-size: var(--font-size-sm); color: var(--color-muted); }
+/* Schlussnotiz eines Reviewers: volle Zeile unter dem Stand. */
+.share-review-state__note {
+  flex-basis: 100%;
+  margin: 0;
+  font-size: var(--font-size-sm);
+  color: var(--color-text);
+}
+.share-review-state__note-name { font-weight: var(--fw-semibold); margin-right: var(--space-6); }
+/* Zeilenumbrüche der Notiz behalten — nur am Text, nicht am <p> (sonst zählte
+   der Template-Whitespace zwischen den Spans mit). */
+.share-review-state__note-text { white-space: pre-wrap; }
+
 .share-row__url {
   display: flex;
   align-items: center;

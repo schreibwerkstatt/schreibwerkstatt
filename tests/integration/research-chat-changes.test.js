@@ -217,3 +217,17 @@ test('fremde Session → 404, ohne Schreibrecht → 403', async () => {
   const own = message(BOOK, [{ type: 'research_archive', item_id: it.id }], 'leser@test.dev');
   assert.equal((await apply(own, 0)).status, 403);
 });
+
+test('POST /research/chat-proposal (neu anlegen) weist Änderungsvorschläge ab — keine Dubletten-Notiz', async () => {
+  const BOOK = 9120;
+  seedBook(BOOK);
+  const it = await item(BOOK, {});
+  const mid = message(BOOK, [
+    { type: 'research_update', item_id: it.id, urls: [{ url: 'https://neu.example/a', label: '' }], fields: { body: 'mehr' }, before: {} },
+  ]);
+  const before = db.prepare('SELECT COUNT(*) AS n FROM research_items WHERE book_id = ?').get(BOOK).n;
+  const r = await api('POST', '/research/chat-proposal', { message_id: mid, index: 0 });
+  assert.equal(r.status, 404, JSON.stringify(r.json));
+  assert.equal(db.prepare('SELECT COUNT(*) AS n FROM research_items WHERE book_id = ?').get(BOOK).n, before);
+  assert.equal(stored(mid)[0].saved_item_id, undefined);
+});

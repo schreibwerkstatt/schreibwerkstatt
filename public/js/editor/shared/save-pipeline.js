@@ -40,10 +40,11 @@ export function isNoChange(currentHtml, originalHtml) {
 //   'book'          — Buch-Editor (mehrere Pages am Stück)
 //   'lektorat-apply'— Lektorat-Korrekturen übernehmen
 //   'chat-apply'    — Chat-Vorschlag in Seite einsetzen
+//   'review'        — Änderungsvorschlag eines Reviewers übernehmen (Share-Link)
 //
 // Wirft, wenn html, pageName oder source fehlen/ungültig — Aufrufer dürfen
 // sich auf die Pflichtfelder verlassen.
-const VALID_SOURCES = new Set(['main', 'focus', 'book', 'lektorat-apply', 'chat-apply']);
+const VALID_SOURCES = new Set(['main', 'focus', 'book', 'lektorat-apply', 'chat-apply', 'review']);
 
 // `reason` (optional): welcher Weg den Save ausgelöst hat (autosave, retry,
 // outbox …) — nur Diagnose, der Server schreibt es in die PAGE_CONFLICT-Zeile.

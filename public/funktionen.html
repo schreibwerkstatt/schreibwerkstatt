@@ -28,12 +28,7 @@
 <body>
   <main class="public-shell public-shell--wide public-landing">
     {{#if langHint}}<p class="public-lang-hint" lang="{{langSwitchLang}}"><a class="public-inline-link" href="{{langSwitchUrl}}" hreflang="{{langSwitchLang}}">{{langHintText}}</a></p>{{/if}}
-    <header class="public-header public-hero">
-      <a href="/"><img class="public-brand" src="/schreibwerkstatt_icon.svg" alt="{{appName}}" width="56" height="56"></a>
-      <p class="public-hero-brand">{{appName}}</p>
-      <h1 class="public-hero-title">{{h1}}</h1>
-      <p class="public-sub">{{intro}}</p>
-    </header>
+    {{headerHtml}}
 
     <nav class="public-ftoc" aria-label="{{tocLabel}}">
       <ul>{{tocHtml}}</ul>
@@ -45,21 +40,13 @@
       <h2>{{ctaTitle}}</h2>
       <p>{{ctaText}}</p>
       <div class="public-actions public-actions--inline">
-        {{#if demoUrl}}<a class="public-btn public-btn--primary" href="{{demoUrl}}">{{demoLabel}}</a>{{/if}}
-        <a class="public-btn" href="/register">{{registerLabel}}</a>
+        {{#if demoUrl}}<a class="public-btn public-btn--primary" href="{{demoUrl}}">{{demoLabel}}</a>
+        <a class="public-btn" href="/register">{{registerLabel}}</a>{{/if}}
+        {{#if noDemo}}<a class="public-btn public-btn--primary" href="/register">{{registerLabel}}</a>{{/if}}
       </div>
     </section>
 
-    <footer class="public-footer">
-      <span>{{footer}}</span>
-      <nav class="public-footer-links">
-        <a class="public-footer-link" href="/">{{backToLanding}}</a>
-        <a class="public-footer-link" href="/lektorat">{{lektoratLink}}</a>
-        <a class="public-footer-link" href="/testleser">{{testleserLink}}</a>
-        <a class="public-footer-link" href="/datenschutz">{{privacyLabel}}</a>
-        <a class="public-footer-link" href="{{langSwitchUrl}}" hreflang="{{langSwitchLang}}" lang="{{langSwitchLang}}">{{langSwitchLabel}}</a>
-      </nav>
-    </footer>
+    {{footerHtml}}
   </main>
 </body>
 </html>

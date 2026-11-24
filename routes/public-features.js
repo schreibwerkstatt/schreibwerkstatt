@@ -17,7 +17,7 @@ const express = require('express');
 const { tServer } = require('../lib/i18n-server');
 const {
   render, escHtml, toInlineJson, pageLang, demoUrl, appName, seoLinks, breadcrumbLd,
-  langSwitchVars, setPublicPageHeaders, headMetaHtml, ogImageUrl,
+  langSwitchVars, setPublicPageHeaders, headMetaHtml, ogImageUrl, publicHeaderHtml, publicFooterHtml,
 } = require('../lib/public-render');
 
 const router = express.Router();
@@ -85,32 +85,29 @@ function _renderFeatures(req, res) {
   const name = appName();
   const h1 = t('publicFeatures.h1');
   const title = `${t('publicFeatures.title')} – ${name}`;
+  const langSwitch = langSwitchVars(req, FEATURES_PATH, lang);
   setPublicPageHeaders(res);
   res.type('html').send(render('funktionen.html', {
     lang,
     appName: name,
     noindex: !seo.canonical,
     ...seo,
-    ...langSwitchVars(req, FEATURES_PATH, lang),
+    ...langSwitch,
+    headerHtml: publicHeaderHtml({ lang, h1, intro: t('publicFeatures.intro') }),
+    footerHtml: publicFooterHtml({ lang, current: FEATURES_PATH, ...langSwitch }),
     title,
     metaDescription: t('publicFeatures.metaDescription'),
     headMetaHtml: headMetaHtml({ lang, ogImage: ogImageUrl('funktionen', lang), ogAlt: title }),
     ldJson: toInlineJson(breadcrumbLd(h1, FEATURES_PATH, lang)),
-    h1,
-    intro: t('publicFeatures.intro'),
     tocLabel: t('publicFeatures.tocLabel'),
     tocHtml: _tocHtml(t),
     groupsHtml: _groupsHtml(t),
     ctaTitle: t('publicPage.ctaTitle'),
     ctaText: t('publicPage.ctaText'),
     demoUrl: demoUrl(),
+    noDemo: !demoUrl(),
     demoLabel: t('publicPage.demoLabel'),
     registerLabel: t('publicPage.registerLabel'),
-    backToLanding: t('publicPage.backToLanding'),
-    privacyLabel: t('privacy.footerLink'),
-    lektoratLink: t('landing.featLinkLektorat'),
-    testleserLink: t('landing.featLinkTestleser'),
-    footer: t('landing.footer'),
   }));
 }
 

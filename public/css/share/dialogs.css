@@ -89,6 +89,46 @@
   cursor: pointer;
 }
 .share-composer__cancel:hover { background: var(--share-hover); }
+/* Review-Link: Umschalter Kommentar | Änderung vorschlagen (share-reader/composer.js). */
+.share-composer__modes { display: inline-flex; align-self: flex-start; border: 1px solid var(--share-border); border-radius: var(--share-radius-sm); overflow: hidden; }
+.share-composer__mode {
+  padding: 6px 12px;
+  background: transparent;
+  color: var(--share-muted);
+  border: 0;
+  font-family: var(--share-font-ui);
+  font-size: 13px;
+  cursor: pointer;
+}
+.share-composer__mode + .share-composer__mode { border-left: 1px solid var(--share-border); }
+.share-composer__mode--on { background: var(--share-accent); color: var(--share-on-accent); }
+.share-composer__mode:focus-visible { outline: 2px solid var(--share-accent); outline-offset: -2px; }
+.share-composer__suggestion { font-style: normal; }
+
+/* Review-Link: Reviewer-Wahl (Dialog + Abschluss-Sektion, share-reader/review.js). */
+.share-review__picks { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.share-review__pick {
+  padding: 8px 14px;
+  background: var(--share-surface);
+  color: var(--share-text);
+  border: 1px solid var(--share-border);
+  border-radius: var(--share-radius-sm);
+  font-family: var(--share-font-ui);
+  font-size: 14px;
+  cursor: pointer;
+}
+.share-review__pick:hover { background: var(--share-hover); }
+.share-review__pick:focus-visible { outline: 2px solid var(--share-accent); outline-offset: 1px; }
+.share-review__pick--mine { border-color: var(--share-accent); }
+.share-review__pick-done,
+.share-review__pick-taken { margin-left: 6px; color: var(--share-muted); font-size: 12px; }
+.share-review__picker { display: flex; flex-direction: column; gap: 10px; }
+.share-review__other { margin: 0; color: var(--share-muted); font-size: 13px; }
+/* Selbst eintragen: Namensfeld + Knopf in einer Zeile (Optik aus Composer). */
+.share-review__join { display: flex; flex-wrap: wrap; gap: 8px; align-items: stretch; }
+.share-review__join .share-review__name { flex: 1 1 180px; min-width: 0; }
+.share-review__done { margin: 0 0 12px; font-weight: 600; color: var(--share-accent); }
+
 /* Hinweis im Composer (z. B. Markierung über mehrere Absätze gekürzt). */
 .share-composer__hint {
   margin: 0;
