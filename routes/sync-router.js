@@ -5,6 +5,8 @@
 //   GET    /:book_id/links                     — Link-Status fuer Badges + Push
 //   GET    /:book_id/pages/:page_id/remote     — Remote-Stand fuer den Konflikt-Diff
 //   POST   /:book_id/pages/:page_id/resolve    — Konflikt loesen: 'app' | 'remote'
+//   POST   /:book_id/pages/:page_id/refresh-status — Remote-Status eines Links
+//                                                nachziehen (beim Oeffnen des Abschnitts)
 // Anbieter-Spezifisches (Test, Connect, Listen) bleibt im jeweiligen Router; die
 // Unterschiede liefert der Adapter (lib/sync/providers/).
 //
@@ -18,9 +20,14 @@ const { aclParamGuard, sessionEmail } = require('../lib/acl');
 const { getBookSettings } = require('../db/schema');
 const { isBlogBook, requireBlogTypeRoute } = require('../lib/buchtyp');
 const contentStore = require('../lib/content-store');
+const { refreshLink } = require('./jobs/sync/reconcile');
 const logger = require('../logger');
 
 const jsonBody = express.json();
+
+// Statuspruefung beim Oeffnen: hoechstens einmal je Abschnitt in diesem
+// Fenster, egal aus wie vielen Tabs (der Client drosselt zusaetzlich).
+const REFRESH_MIN_INTERVAL_MS = 60_000;
 
 /** HTTP-Status fuer einen Fehler des Remote-Clients. */
 function remoteErrorStatus(code) {
@@ -98,6 +105,38 @@ function mountSyncRoutes(router, provider, opts = {}) {
       });
       res.json({ remoteId: provider.remoteId(found.link), ...view });
     } catch (e) {
+      sendRemoteError(res, e, P);
+    }
+  });
+
+  // Guenstiger Statusabgleich EINES Links beim Oeffnen des Abschnitts: ein
+  // GET auf den Beitrag, Status/URL/Push-Sperre nachziehen (wie der Abgleich-
+  // Job, routes/jobs/sync/reconcile.js#refreshLink). Ein drueben geloeschter
+  // Beitrag wird hier nur gemeldet, nicht entknuepft — das bleibt dem Abgleich
+  // (naechtlich oder von Hand), damit ein Seitenaufruf keinen Link verwirft.
+  // `changed`: der Client laedt die Links nur dann neu.
+  const lastRefresh = new Map();
+  router.post('/:book_id/pages/:page_id/refresh-status', aclParamGuard('viewer'), async (req, res) => {
+    if (!requireType(req, res)) return;
+    const pageId = _pageId(req, res);
+    if (!pageId) return;
+    const found = linkFor(req, res, pageId);
+    if (!found) return;
+    const now = Date.now();
+    if (now - (lastRefresh.get(pageId) || 0) < REFRESH_MIN_INTERVAL_MS) {
+      return res.json({ ok: true, changed: false, throttled: true });
+    }
+    lastRefresh.set(pageId, now);
+    if (lastRefresh.size > 5000) lastRefresh.clear();
+    const before = JSON.stringify(found.link);
+    try {
+      const outcome = await refreshLink(provider, provider.client(found.conn), found.link, { removeGone: false });
+      const after = JSON.stringify(provider.db.getLinkByPage(pageId));
+      const changed = before !== after;
+      if (changed) logger.info(`Sync-Status nachgezogen (${P}): page=${pageId} beim Öffnen.`);
+      res.json({ ok: true, changed, gone: outcome === 'gone' });
+    } catch (e) {
+      logger.warn(`Sync-Statusabgleich (${P}) page=${pageId} fehlgeschlagen: ${e.code || e.message}`);
       sendRemoteError(res, e, P);
     }
   });

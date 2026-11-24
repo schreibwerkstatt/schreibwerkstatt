@@ -56,6 +56,10 @@ function stopPushPoller(holder) {
 // Sync-Punkt = der jüngere von last_pulled_at/last_pushed_at — dieselbe Regel
 // wie lib/blog-merge.js#classifyPull.
 
+// Statusabgleich beim Öffnen eines Abschnitts: höchstens einmal je Abschnitt in
+// diesem Fenster (der Server drosselt zusätzlich, routes/sync-router.js).
+const REMOTE_STATUS_TTL_MS = 5 * 60_000;
+
 // ISO-Stamp → ms. Zonenlose Stamps (WordPress `modified_gmt`:
 // `2026-05-19T20:29:35`) sind UTC — `Date.parse` laese sie sonst als Ortszeit.
 export function stampMs(s) {
@@ -150,6 +154,9 @@ export function createSyncCard(spec) {
       pushBusy: {},
       pushProgress: {},
       _pushTimers: {},
+      _statusCheckedAt: {},
+      _linksLoaded: false,
+      _pendingStatusPage: null,
       // Konflikt-Diff (Modal im Buchorganizer): Seite + beide Stände.
       hasConflict: true,
       conflictOpen: null,
@@ -168,6 +175,7 @@ export function createSyncCard(spec) {
       init() {
         window[globalWindowKey] = this;
         this._onPagesLoaded = () => this.loadLinks();
+        this._onPageOpened = (ev) => this.refreshRemoteStatus(ev?.detail?.pageId);
         this._onBookChanged = () => {
           for (const h of Object.values(this._pushTimers)) stopPushPoller(h);
           this._pushTimers = {};
@@ -179,6 +187,9 @@ export function createSyncCard(spec) {
           this.conflictOpen = null;
           this.conflictData = null;
           this.pushDialog = null;
+          this._statusCheckedAt = {};
+          this._linksLoaded = false;
+          this._pendingStatusPage = null;
           if (typeof spec.onBookChange === 'function') spec.onBookChange.call(this);
         };
         this._onJobFinished = (ev) => {
@@ -195,6 +206,7 @@ export function createSyncCard(spec) {
           }
         };
         window.addEventListener(EVT.PAGES_LOADED, this._onPagesLoaded);
+        window.addEventListener(EVT.PAGE_OPENED, this._onPageOpened);
         window.addEventListener(EVT.BOOK_CHANGED, this._onBookChanged);
         window.addEventListener(EVT.JOB_FINISHED, this._onJobFinished);
       },
@@ -203,6 +215,7 @@ export function createSyncCard(spec) {
         for (const h of Object.values(this._pushTimers)) stopPushPoller(h);
         this._pushTimers = {};
         window.removeEventListener(EVT.PAGES_LOADED, this._onPagesLoaded);
+        window.removeEventListener(EVT.PAGE_OPENED, this._onPageOpened);
         window.removeEventListener(EVT.BOOK_CHANGED, this._onBookChanged);
         window.removeEventListener(EVT.JOB_FINISHED, this._onJobFinished);
         if (window[globalWindowKey] === this) window[globalWindowKey] = null;
@@ -234,8 +247,39 @@ export function createSyncCard(spec) {
           const map = {};
           for (const link of (data.links || [])) map[link.page_id] = link;
           this.linksMap = map;
+          this._linksLoaded = true;
+          const pending = this._pendingStatusPage;
+          this._pendingStatusPage = null;
+          if (pending && String(window.__app?.currentPage?.id) === String(pending)) this.refreshRemoteStatus(pending);
         } catch (e) {
           console.error(`[sync:${spec.key}] Links laden fehlgeschlagen:`, e);
+        }
+      },
+
+      // Beim Öffnen eines verknüpften Abschnitts den Status seines Beitrags
+      // drüben nachziehen (ein GET, z.B. direkt in WordPress veröffentlicht).
+      // Still: ein Fehler (Blog nicht erreichbar) ändert nichts am Badge und
+      // meldet sich nicht — der Abschnitt wurde zum Lesen geöffnet, nicht zum
+      // Synchronisieren. Links neu laden nur, wenn sich etwas geändert hat.
+      async refreshRemoteStatus(pageId) {
+        const bookId = Alpine.store('nav').selectedBookId;
+        if (!bookId || !pageId) return;
+        // Direkt-Link: der Abschnitt öffnet oft, bevor `loadLinks` durch ist —
+        // dann nach dem Laden nachholen (ein Versuch).
+        if (!this._linksLoaded) { this._pendingStatusPage = pageId; return; }
+        if (!this.connected || !this.linksMap[pageId]) return;
+        const now = Date.now();
+        if (now - (this._statusCheckedAt[pageId] || 0) < REMOTE_STATUS_TTL_MS) return;
+        this._statusCheckedAt[pageId] = now;
+        try {
+          const res = await fetch(`${spec.endpointBase}/${bookId}/pages/${pageId}/refresh-status`, {
+            method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}',
+          });
+          if (!res.ok || !isSelectedBook(bookId)) return;
+          const data = await res.json();
+          if (data?.changed && isSelectedBook(bookId)) await this.loadLinks();
+        } catch (e) {
+          console.warn(`[sync:${spec.key}] Statusabgleich fehlgeschlagen:`, e);
         }
       },
 

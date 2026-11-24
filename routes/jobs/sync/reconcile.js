@@ -40,6 +40,32 @@ async function _pruneMediaCache(provider, { conn, client, jobId, logger, tag }) 
   return dropped;
 }
 
+/**
+ * Einen Link gegen den Remote pruefen — der Abgleich-Job (alle Links) und die
+ * Statuspruefung beim Oeffnen eines Abschnitts (routes/sync-router.js, ein Link)
+ * teilen diesen Schritt. Rueckgabe:
+ *   'removed'   — 404 / Papierkorb / archiviert, Link entfernt (nur `removeGone`)
+ *   'gone'      — dasselbe, Link aber stehen gelassen (`removeGone: false`)
+ *   'refreshed' — Status/URL/Push-Sperre nachgezogen
+ * Andere Fehler des Remote wirft er weiter.
+ */
+async function refreshLink(provider, client, link, { removeGone = true } = {}) {
+  let remote;
+  try {
+    remote = await provider.fetchRemote(client, link, 'reconcile');
+  } catch (e) {
+    if (!isNotFound(e)) throw e;
+    remote = null;
+  }
+  if (!remote || provider.isGone(remote)) {
+    if (!removeGone) return 'gone';
+    provider.db.deleteLink(link.page_id);
+    return 'removed';
+  }
+  provider.db.refreshLinkMeta(link.page_id, remote);
+  return 'refreshed';
+}
+
 async function runSyncReconcileJob(provider, jobId, bookId, userEmail) {
   const logger = makeJobLogger(jobId);
   const tag = `${provider.logTag}-Abgleich`;
@@ -64,22 +90,15 @@ async function runSyncReconcileJob(provider, jobId, bookId, userEmail) {
       checked++;
       const ref = `Page ${link.page_id} -> ${provider.remoteLabel} ${provider.remoteId(link)}`;
       try {
-        const remote = await provider.fetchRemote(client, link, 'reconcile');
-        if (provider.isGone(remote)) {
-          provider.db.deleteLink(link.page_id);
+        const outcome = await refreshLink(provider, client, link);
+        if (outcome === 'removed') {
           removed++;
-          logger.info(`${tag}: ${ref} im Papierkorb/archiviert, Link entfernt`);
-        } else if (provider.db.refreshLinkMeta(link.page_id, remote)) {
+          logger.info(`${tag}: ${ref} weg/im Papierkorb/archiviert, Link entfernt`);
+        } else if (outcome === 'refreshed') {
           refreshed++;
         }
       } catch (e) {
-        if (isNotFound(e)) {
-          provider.db.deleteLink(link.page_id);
-          removed++;
-          logger.info(`${tag}: ${ref} weg, Link entfernt`);
-        } else {
-          logger.warn(`${tag}: ${ref} Fehler ${e.code || e.message}`);
-        }
+        logger.warn(`${tag}: ${ref} Fehler ${e.code || e.message}`);
       }
       updateJob(jobId, {
         statusText: `job.${provider.key}.reconcile.check`,
@@ -97,4 +116,4 @@ async function runSyncReconcileJob(provider, jobId, bookId, userEmail) {
   }
 }
 
-module.exports = { runSyncReconcileJob };
+module.exports = { runSyncReconcileJob, refreshLink };

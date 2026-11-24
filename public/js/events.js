@@ -37,6 +37,10 @@ export const EVT = {
   // Karten mit eigener Edit-Repräsentation des Baums (Buchorganizer) ziehen
   // darauf ihren Snapshot nach — `pages:loaded` feuert hier bewusst nicht.
   PAGE_REMOVED: 'page:removed',                 // detail: { pageId }
+  // Ein Abschnitt wurde geöffnet (app-view/page.js#selectPage, nicht beim
+  // Re-Klick auf den offenen). Die Blog-Syncs ziehen darauf den Remote-Status
+  // seines Beitrags nach (cards/sync/sync-core.js#refreshRemoteStatus).
+  PAGE_OPENED: 'page:opened',                   // detail: { pageId, bookId }
   // Ein Kapitel wurde ausserhalb des Buchorganizers lokal in nav.tree
   // eingehängt, OHNE Reload (Sidebar-Kontextmenü/Leeres-Buch-CTA,
   // tree/load.js#createChapter). Der Organizer zieht darauf seinen Workstate

@@ -1,0 +1,11 @@
+{
+  "version": "6.9.1",
+  "date": "2026-11-24",
+  "entries": [
+    {
+      "kind": "verbessert",
+      "de": "Blog-Bücher (WordPress und HubSpot): Veröffentlichst oder löschst du einen Beitrag direkt im Blog, zeigt der Abschnitt das jetzt von selbst an. Der Status wird beim Öffnen des Abschnitts und jede Nacht abgeglichen.",
+      "en": "Blog books (WordPress and HubSpot): if you publish or delete a post directly in the blog, the section now shows it on its own. The status is checked when you open the section and every night."
+    }
+  ]
+}

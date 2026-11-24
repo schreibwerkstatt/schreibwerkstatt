@@ -275,10 +275,17 @@ function deleteLink(pageId) {
   return _stmtDeleteLink.run(parseInt(pageId, 10)).changes > 0;
 }
 
+// Naechtlicher Abgleich (routes/jobs/sync/nightly.js): alle verbundenen Buecher.
+const _stmtConnectedBookIds = db.prepare('SELECT book_id FROM hubspot_connections ORDER BY book_id');
+function listConnectedBookIds() {
+  return _stmtConnectedBookIds.all().map(r => r.book_id);
+}
+
 module.exports = {
   setLockedBlocks,
   getConnection,
   getConnectionPublic,
+  listConnectedBookIds,
   upsertConnection,
   setPortalId,
   markInitialImportDone,

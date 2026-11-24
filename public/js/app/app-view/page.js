@@ -115,6 +115,7 @@ export const pageMethods = {
     this._touchBookOpened?.(this.$store.nav.selectedBookId);
 
     this._loadPageBadgeCounts(p.id);
+    window.dispatchEvent(new CustomEvent(EVT.PAGE_OPENED, { detail: { pageId: p.id, bookId: this.$store.nav.selectedBookId } }));
 
     // Seiteninhalt (oben in `flip` angestossen) abwarten. Fehler landen nicht
     // still in einer leeren Seite, sondern in einem Retry-Block (pageLoadError)
