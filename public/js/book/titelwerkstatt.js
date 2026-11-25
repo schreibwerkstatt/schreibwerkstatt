@@ -14,7 +14,7 @@
 // hat — und das ist die Frage, die eine Redaktion vor Schluss stellt.
 
 import { fetchJson, sendJson } from '../utils/net.js';
-import { startPoll } from '../cards/job-helpers.js';
+import { startPoll, isCancelledJob } from '../cards/job-helpers.js';
 import { isSelectedBook } from '../cards/book-guard.js';
 import {
   HEADLINE_FIELDS, HEADLINE_LONG_FIELDS, HEADLINE_CHANNELS,
@@ -378,7 +378,8 @@ export const titelwerkstattMethods = {
       },
       onError: (job) => {
         this._twIdle();
-        if (job.status === 'cancelled') return;
+        // Abgebrochen ist kein Fehler: neutrale Statuszeile.
+        if (isCancelledJob(job)) { this.twStatus = window.__app.t('job.cancelled'); return; }
         this.twError = window.__app.t(job.error, job.errorParams);
       },
     });

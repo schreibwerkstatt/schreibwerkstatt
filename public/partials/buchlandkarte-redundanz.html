@@ -57,13 +57,9 @@
             x-text="$app.t(redundanzIndexing ? 'redundanz.indexing' : 'redundanz.updateIndex')"></button>
   </div>
 
-  <div x-show="redundanzIndexing && redundanzIndexProgress > 0" class="progress-bar-wrap">
-    <div class="progress-bar" :style="{ '--progress': redundanzIndexProgress + '%' }"></div>
-  </div>
-  <div x-show="redundanzLoading && redundanzProgress > 0" class="progress-bar-wrap">
-    <div class="progress-bar" :style="{ '--progress': redundanzProgress + '%' }"></div>
-  </div>
-  <div x-show="redundanzStatus" class="card-status" x-text="redundanzStatus"></div>
+  <!-- Zwei Läufe: Index-Aufbau und Radar; die gemeinsame Statuszeile trägt der Radar-Block. -->
+  <div x-job-progress="{ active: redundanzIndexing, progress: redundanzIndexProgress, timer: '_redundanzIndexPollTimer' }"></div>
+  <div x-job-progress="{ active: redundanzLoading, progress: redundanzProgress, text: redundanzStatus, timer: '_redundanzPollTimer' }"></div>
 
   <!-- Ergebnis -->
   <template x-if="redundanzResult">

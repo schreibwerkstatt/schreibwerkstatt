@@ -493,6 +493,7 @@ export {
   buildResearchChatTools,
   RESEARCH_CHAT_FORCE_FINAL_INSTRUCTION,
   RESEARCH_CHAT_FORCE_FINAL_INSTRUCTION_SEARXNG,
+  researchSearchStatusNote,
 } from './prompts/recherche.js';
 
 export {

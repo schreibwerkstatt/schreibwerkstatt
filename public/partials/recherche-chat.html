@@ -12,9 +12,6 @@
       <span class="card-title" x-text="$app.t('recherche.chat.heading')"></span>
     </div>
     <div class="card-actions">
-      <button type="button" class="icon-btn icon-btn--ghost" x-show="isResearchChatSessionRunning(researchChatSessionId)" @click="cancelResearchChatRun()" :data-tip="$app.t('chat.cancelRunTip')" :aria-label="$app.t('chat.cancelRun')">
-        <svg class="icon" aria-hidden="true"><use href="/icons.svg#square"/></svg>
-      </button>
       <button type="button" class="icon-btn icon-btn--ghost" @click="startNewResearchChatSession()" :disabled="researchChatLoading" :data-tip="$app.t('chat.newSessionTitle')" :aria-label="$app.t('chat.newSession')">
         <svg class="icon" aria-hidden="true"><use href="/icons.svg#plus"/></svg>
       </button>
@@ -22,16 +19,13 @@
     <button type="button" class="btn-card-close" @click="researchChatOpen = false" :data-tip="$app.t('common.close')" :aria-label="$app.t('common.close')"><svg class="icon" aria-hidden="true"><use href="/icons.svg#x"/></svg></button>
   </div>
 
-  <div x-show="researchChatProgress > 0 && isResearchChatSessionRunning(researchChatSessionId)" class="progress-bar-wrap">
-    <div class="progress-bar" :style="{ '--progress': researchChatProgress + '%' }"></div>
-  </div>
-  <div x-show="researchChatStatus" class="card-status" x-html="researchChatStatus"></div>
+  <div x-job-progress="{ active: isResearchChatSessionRunning(researchChatSessionId), progress: researchChatProgress, status: researchChatStatus }"></div>
 
   <div id="research-chat-messages" class="chat-messages aside-split-scroll">
     <div x-show="researchChatMessages.length === 0 && !researchChatLoading" class="muted-msg muted-msg--sm muted-msg--block" x-text="$app.t('recherche.chat.empty')"></div>
 
     <template x-for="(msg, msgIdx) in researchChatMessages" :key="msgIdx">
-      <div :class="'chat-msg chat-msg--' + msg.role">
+      <div :class="'chat-msg chat-msg--' + msg.role + (msg.id != null && msg.id === _hitMsgId ? ' chat-msg--hit' : '')" :data-msg-id="msg.id">
         <div class="chat-msg-bubble">
           <div x-show="msg.role === 'user'" class="chat-msg-text" x-text="msg.content"></div>
           <div x-show="msg.role === 'assistant'" class="chat-msg-text" x-html="_renderResearchAnswer(msg)"></div>
@@ -78,7 +72,7 @@
                         x-text="$app.tn('recherche.chat.proposalSaveAll', researchSavableProposals(msg).length)"></button>
               </div>
               <template x-for="(prop, pi) in researchProposals(msg)" :key="pi">
-                <div class="chat-vorschlag research-chat-proposal" :class="{ 'chat-vorschlag--applied': isProposalSaved(msg, pi) }">
+                <div class="chat-vorschlag chat-vorschlag--stacked research-chat-proposal" :class="{ 'chat-vorschlag--applied': isProposalSaved(msg, pi) }">
                   <div class="chat-vorschlag-header">
                     <span class="chat-vorschlag-heading">
                       <span class="chat-vorschlag-label" x-text="isProposalSaved(msg, pi) ? $app.t('recherche.chat.proposalSaved') : $app.t('recherche.chat.proposalNew')"></span>
@@ -129,7 +123,15 @@
 
                   <div class="chat-vorschlag-diff" x-show="!proposalEdit(msg, pi)">
                     <div class="chat-vorschlag-title" x-show="prop.title" x-text="prop.title"></div>
-                    <div class="chat-vorschlag-text research-chat-proposal-snippet" x-show="prop.body" x-text="prop.body"></div>
+                    <div class="chat-vorschlag-text research-chat-proposal-snippet" x-show="prop.body" x-text="prop.body"
+                         :class="{ 'research-chat-proposal-snippet--open': isProposalBodyOpen(msg, pi) }"></div>
+                    <button type="button" class="text-link research-chat-proposal-more" x-show="isProposalBodyLong(prop)"
+                            @click="toggleProposalBody(msg, pi)" :aria-expanded="isProposalBodyOpen(msg, pi) ? 'true' : 'false'"
+                            x-text="$app.t(isProposalBodyOpen(msg, pi) ? 'recherche.chat.proposalBodyLess' : 'recherche.chat.proposalBodyMore')"></button>
+                    <div class="chat-vorschlag-row" x-show="prop.source">
+                      <span class="chat-vorschlag-field" x-text="$app.t('recherche.chat.proposalField.source')"></span>
+                      <span x-text="prop.source"></span>
+                    </div>
                     <!-- Je Link: echter Host neben dem Label, Warn-Zeile bei ungeprüfter URL
                          (vorab abgewählt, research-chat-proposals.js), Weglassen vor dem
                          Speichern (edits.urls). -->
@@ -139,8 +141,10 @@
                         <template x-for="(u, ui) in (prop.urls || [])" :key="ui">
                           <span class="research-chat-proposal-url-row"
                                 :class="{ 'research-chat-proposal-url-row--removed': isProposalUrlRemoved(msg, pi, u), 'research-chat-proposal-url-row--unverified': isProposalUrlUnverified(u) }">
-                            <a class="research-chat-proposal-url url-short truncate" :href="u.url" target="_blank" rel="noopener noreferrer" :data-tip="u.url" x-text="urlText(u)"></a>
-                            <span class="research-chat-proposal-url-host truncate" x-show="proposalUrlHost(u)" x-text="proposalUrlHost(u)"></span>
+                            <span class="research-chat-proposal-url-text">
+                              <a class="research-chat-proposal-url" :class="{ 'url-short truncate': !u.label }" :href="u.url" target="_blank" rel="noopener noreferrer" :data-tip="u.url" x-text="urlText(u)"></a>
+                              <span class="research-chat-proposal-url-host" x-show="proposalUrlHost(u)" x-text="proposalUrlHost(u)"></span>
+                            </span>
                             <span class="research-chat-proposal-url-unverified" x-show="isProposalUrlUnverified(u)"
                                   :data-tip="$app.t('recherche.chat.proposalUrlUnverifiedTip')"><svg class="icon" aria-hidden="true"><use href="/icons.svg#alert-triangle"/></svg><span x-text="$app.t('recherche.chat.proposalUrlUnverified')"></span></span>
                             <button type="button" class="icon-btn icon-btn--ghost" x-show="!isProposalSaved(msg, pi)"
@@ -167,8 +171,7 @@
           <!-- @include recherche-chat-changes -->
           <!-- Ideen-Vorschläge an der Stelle des Schreibkontexts (PATCH /ideen/chat-proposal) -->
           <!-- @include chat-idee-vorschlaege -->
-          <div x-show="msg.role === 'assistant' && _chatTokenInfo(msg)" class="chat-token-info" :title="_chatTokenTitle(msg)" x-text="_chatTokenInfo(msg)"></div>
-          <!-- @include chat-feedback -->
+          <!-- @include chat-msg-foot -->
         </div>
         <!-- Gescheiterter Lauf: Grund + Teil-Verlauf an der Frage -->
         <!-- @include chat-run-failed -->
@@ -176,13 +179,16 @@
     </template>
 
     <div x-show="isResearchChatSessionRunning(researchChatSessionId)" class="chat-skeleton-wrapper">
-      <div class="chat-skeleton"></div>
+      <!-- @include chat-skeleton -->
       <!-- Werkzeug-Verlauf des laufenden Turns (wächst mit, offen) -->
       <template x-for="msg in (_liveToolMsg() ? [_liveToolMsg()] : [])" :key="'live'">
         <div class="chat-tool-log-live">
           <!-- @include chat-tool-log -->
         </div>
       </template>
+    </div>
+    <div x-show="openResearchChatQuestion()" class="chat-retry-row">
+      <button type="button" class="chat-vorschlag-btn" @click="retryOpenResearchChatQuestion()" x-text="$app.t('chat.retryQuestion')"></button>
     </div>
   </div>
 
@@ -195,22 +201,20 @@
             x-text="$app.t(researchChatContextTarget().kind === 'chapter' ? 'recherche.chat.contextChipChapter' : 'recherche.chat.contextChipPage', { name: researchChatContextTarget().label || ('#' + researchChatContextTarget().id) })"></button>
   </template>
 
-  <div class="chat-input-row">
-    <textarea class="chat-input research-chat-input" x-model="researchChatInput" rows="2"
+  <div class="chat-input-row" x-data="{ sendBtn: researchChatSendButton() }">
+    <textarea class="chat-input research-chat-input" data-spellcheck="spelling" x-model="researchChatInput" rows="2"
               :placeholder="$app.t('recherche.chat.placeholder')" :aria-label="$app.t('recherche.chat.placeholder')"
               :disabled="researchChatLoading"
               @keydown.enter="$enter($event, () => sendResearchChatMessage(), { multiline: true })"></textarea>
-    <button type="button" class="chat-send-btn" @click="sendResearchChatMessage()" :disabled="researchChatLoading || !researchChatInput.trim()" :aria-label="$app.t('chat.send')">
-      <span x-show="researchChatLoading" class="spinner"></span>
-      <svg x-show="!researchChatLoading" class="icon" aria-hidden="true"><use href="/icons.svg#arrow-up"/></svg>
-    </button>
+    <!-- @include chat-send-btn -->
   </div>
   <div class="chat-input-hint" x-text="$app.t('recherche.chat.hint')"></div>
 
   <!-- Session-Historie -->
-  <div x-show="researchChatSessions.length > 0" class="card-history-section"
-       x-data="{ sessionList: researchChatSessionList() }">
-    <div class="chat-history-title" x-text="$app.t('chat.history')"></div>
-    <!-- @include chat-session-list -->
+  <div x-show="researchChatSessions.length > 0" class="card-history-section" x-data="chatHistorySearch('research')">
+    <!-- @include chat-history-search -->
+    <div x-show="!histActive" x-data="{ sessionList: researchChatSessionList() }">
+      <!-- @include chat-session-list -->
+    </div>
   </div>
 </div>

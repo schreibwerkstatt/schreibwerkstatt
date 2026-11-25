@@ -4,6 +4,7 @@
 
 import { escHtml, fetchJson } from '../../utils.js';
 import { lsSet } from '../../safe-storage.js';
+import { isCancelledJob } from '../../cards/job-helpers.js';
 
 export const lektoratBatchMethods = {
   // Serien-Lektorat: ganzes Buch oder — mit `chapterId` — ein Kapitel samt
@@ -67,6 +68,8 @@ export const lektoratBatchMethods = {
       onError: (job) => {
         this.batchLoading = false;
         setTimeout(() => { this.batchProgress = 0; }, 400);
+        // Abbruch ist kein Fehlschlag: neutrale Statuszeile.
+        if (isCancelledJob(job)) { this.batchStatus = escHtml(this.t('job.cancelled')); return; }
         this.batchStatus = `<span class="error-msg">${this.t('common.errorColon')}${escHtml(this.t(job.error, job.errorParams))}</span>`;
       },
       onDone: async (job) => {

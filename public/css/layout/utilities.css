@@ -23,7 +23,6 @@
 .tok-stats,
 .form-stats,
 .form-num,
-.batch-status,
 .job-queue-pill-progress,
 .job-queue-pill-status,
 .review-stars {
@@ -53,8 +52,8 @@
 
 }
 
-/* Bewusst `components`, nicht `utilities`: `.row > *`, `.table-scroll > table`
-   und `.batch-status` sind Grundgeruest, das Karten-CSS gezielt ueberschreiben
+/* Bewusst `components`, nicht `utilities`: `.row > *` und `.table-scroll > table`
+   sind Grundgeruest, das Karten-CSS gezielt ueberschreiben
    koennen muss — im utilities-Layer gewaenne jede dieser Regeln gegen jede
    Komponente. */
 @layer components {
@@ -99,10 +98,4 @@
 }
 .table-scroll > table { min-width: 100%; }
 
-/* === Batch-Check === */
-.batch-status {
-  font-size: var(--font-size-sm);
-  color: var(--color-muted);
-  margin-top: var(--space-xs);
-}
 }

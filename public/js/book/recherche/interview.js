@@ -11,7 +11,7 @@
 // schliesst den Editor, in den der O-Ton soll.
 
 import { fetchJson, sendJson } from '../../utils/net.js';
-import { startPoll } from '../../cards/job-helpers.js';
+import { startPoll, isCancelledJob } from '../../cards/job-helpers.js';
 import { formatTimecode, durationLabel, speakerLabel } from '../../interview/timecode.js';
 import { lsGet, lsSet } from '../../safe-storage.js';
 
@@ -96,6 +96,7 @@ export const rechercheInterviewMethods = {
     const seq = (this._ivLoadSeq = (this._ivLoadSeq || 0) + 1);
     const current = () => this._ivLoadSeq === seq && this.detailItemId === itemId;
     this.ivError = '';
+    if (!this.ivRunningItemId) this.ivStatus = '';
     this.ivSegments = [];
     this.ivSpeakers = {};
     this.ivItemId = null;
@@ -186,10 +187,14 @@ export const rechercheInterviewMethods = {
       },
       onError: (job) => {
         this._ivIdle();
-        if (this.detailItemId === itemId) this.ivError = window.__app.t(job.error, job.errorParams);
+        const cancelled = isCancelledJob(job);
+        if (this.detailItemId === itemId && !cancelled) this.ivError = window.__app.t(job.error, job.errorParams);
         // Den Grund trägt auch die Transkript-Zeile — neu laden, damit die
         // Karte ihn dauerhaft zeigt und nicht nur bis zum nächsten Öffnen.
         this.ivLoadTranscript(itemId);
+        // Abgebrochen ist kein Fehler: neutrale Statuszeile (nach dem Neuladen,
+        // das den Status des vorigen Fundstücks räumt).
+        if (cancelled && this.detailItemId === itemId) this.ivStatus = window.__app.t('job.cancelled');
       },
     });
   },

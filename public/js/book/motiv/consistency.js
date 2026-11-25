@@ -14,9 +14,10 @@
 // Sprache (gleiche Regel wie persistierte Job-Status-Keys).
 
 import { fetchJson } from '../../utils.js';
-import { startPoll } from '../../cards/job-helpers.js';
+import { startPoll, isCancelledJob } from '../../cards/job-helpers.js';
 import { loadToken, isSelectedBook } from '../../cards/book-guard.js';
 import { befundSeverityClass } from '../../utils/befund-severity.js';
+import { makeRunHistoryMethods } from '../../run-history.js';
 
 export const consistencyMethods = {
   // Lade-Token: die Befunde sind die langsamste Nebenlesung des Board-Loads; eine
@@ -108,6 +109,7 @@ export const consistencyMethods = {
     if (!this.motifs.length) { this.errorMessage = window.__app.t('job.error.motivKatalogLeer'); return; }
     this.consistencyRunning = true;
     this.consistencyProgress = 0;
+    this.consistencyStatus = '';
     this.errorMessage = '';
     try {
       const { jobId } = await fetchJson('/jobs/motif-consistency', {
@@ -123,8 +125,10 @@ export const consistencyMethods = {
         timerProp: '_consistencyPollTimer',
         jobId,
         progressProp: 'consistencyProgress',
+        onProgress: (job) => { this.consistencyStatus = job.statusText ? window.__app.t(job.statusText, job.statusParams) : ''; },
         onDone: (job) => {
           this.consistencyRunning = false;
+          this.consistencyStatus = '';
           this.motivConsistencyJobId = null;
           this.consistencyResult = {
             konflikte: job.result?.konflikte || [],
@@ -136,10 +140,13 @@ export const consistencyMethods = {
           this.loadConsistencyRuns();
           this.setMotivView('checks');
         },
-        onNotFound: () => { this.consistencyRunning = false; this.motivConsistencyJobId = null; },
-        onError: () => {
+        onNotFound: () => { this.consistencyRunning = false; this.consistencyStatus = ''; this.motivConsistencyJobId = null; },
+        onError: (job) => {
           this.consistencyRunning = false;
           this.motivConsistencyJobId = null;
+          // Abgebrochen ist kein Fehler: neutrale Statuszeile.
+          if (isCancelledJob(job)) { this.consistencyProgress = 0; this.consistencyStatus = window.__app.t('job.cancelled'); return; }
+          this.consistencyStatus = '';
           this.errorMessage = window.__app.t('motiv.error.consistency');
         },
       });
@@ -173,46 +180,26 @@ export const consistencyMethods = {
   },
 
   // ── Lauf-Historie ──────────────────────────────────────────────────────────
-  async loadConsistencyRuns() {
-    const bookId = this.$store.nav.selectedBookId;
-    if (!bookId) { this.consistencyRuns = []; return; }
-    const isCurrent = loadToken(this, '_consistencyRunsSeq', bookId);
-    try {
-      const rows = await fetchJson(`/motifs/consistency-runs?book_id=${bookId}`);
-      if (isCurrent()) this.consistencyRuns = Array.isArray(rows) ? rows : [];
-    } catch (e) { if (isCurrent()) this.consistencyRuns = []; }
-  },
-
-  // Toggle wie die Brainstorm-Historie: Klick auf den offenen Lauf schliesst ihn.
-  async openConsistencyRun(run) {
-    if (!run || this.consistencyRunning) return;
-    if (this.selectedConsistencyRunId === run.id) { this.dismissConsistency(); return; }
-    const bookId = this.$store.nav.selectedBookId;
-    try {
-      const detail = await fetchJson(`/motifs/consistency-runs/${run.id}`);
-      if (!isSelectedBook(bookId)) return;
-      if (!detail?.result) throw new Error('no result');
-      this.consistencyResult = {
+  ...makeRunHistoryMethods({
+    names: { load: 'loadConsistencyRuns', open: 'openConsistencyRun', remove: 'deleteConsistencyRun', row: 'motivConsistencyRunRow' },
+    list: 'consistencyRuns',
+    selected: 'selectedConsistencyRunId',
+    listUrl: (bookId) => `/motifs/consistency-runs?book_id=${bookId}`,
+    runUrl: (id) => `/motifs/consistency-runs/${id}`,
+    busy: (ctx) => ctx.consistencyRunning,
+    apply: (ctx, detail) => {
+      ctx.consistencyResult = {
         konflikte: detail.result.konflikte || [],
         fazit: detail.result.fazit || '',
         scanned: detail.result.scanned !== false,
       };
-      this.selectedConsistencyRunId = detail.id;
-      this.selectedKonfliktIdx = null;
-    } catch (e) {
-      this.errorMessage = window.__app.t('motiv.error.consistencyRunLoad');
-    }
-  },
-
-  async deleteConsistencyRun(runId) {
-    if (!runId) return;
-    if (!await window.__app.appConfirm({ message: window.__app.t('motiv.consistency.confirmDeleteRun'), danger: true })) return;
-    try {
-      await fetchJson(`/motifs/consistency-runs/${runId}`, { method: 'DELETE' });
-      this.consistencyRuns = this.consistencyRuns.filter(r => r.id !== runId);
-      if (this.selectedConsistencyRunId === runId) this.dismissConsistency();
-    } catch (e) {
-      this.errorMessage = window.__app.t('motiv.error.runDelete');
-    }
-  },
+      ctx.selectedKonfliktIdx = null;
+    },
+    clear: (ctx) => ctx.dismissConsistency(),
+    confirmKey: 'motiv.consistency.confirmDeleteRun',
+    errorKeys: { open: 'motiv.error.consistencyRunLoad', remove: 'motiv.error.runDelete' },
+    row: {
+      badges(r) { return [{ text: window.__app.tn('motiv.consistency.konfliktCount', r.konflikt_count) }]; },
+    },
+  }),
 };

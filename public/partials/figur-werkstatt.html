@@ -298,45 +298,27 @@
            Band seinen „noch nie verankert"-Hinweis. -->
       <div id="partial-werkstatt-bogen" x-show="arcVisible()" x-cloak></div>
 
-      <!-- Brainstorm-Status während KI-Job -->
-      <section x-show="brainstormLoading" x-cloak class="job-progress">
-        <div x-show="brainstormProgress > 0" class="progress-bar-wrap">
-          <div class="progress-bar" :style="{ '--progress': brainstormProgress + '%' }"></div>
-        </div>
-        <div class="job-progress-row">
-          <div class="card-status" x-html="brainstormStatus"></div>
-          <button type="button" @click="cancelBrainstorm()" x-text="$app.t('common.cancel')"></button>
-        </div>
-      </section>
-
-      <!-- Consistency-Status während KI-Job -->
-      <section x-show="consistencyLoading" x-cloak class="job-progress">
-        <div x-show="consistencyProgress > 0" class="progress-bar-wrap">
-          <div class="progress-bar" :style="{ '--progress': consistencyProgress + '%' }"></div>
-        </div>
-        <div class="job-progress-row">
-          <div class="card-status" x-html="consistencyStatus"></div>
-          <button type="button" @click="cancelConsistency()" x-text="$app.t('common.cancel')"></button>
-        </div>
-      </section>
+      <!-- Brainstorm-/Consistency-Lauf: Balken, Status, Abbrechen (x-job-progress). -->
+      <div x-job-progress="{ active: brainstormLoading, progress: brainstormProgress, status: brainstormStatus, cancel: () => cancelBrainstorm() }"></div>
+      <div x-job-progress="{ active: consistencyLoading, progress: consistencyProgress, status: consistencyStatus, cancel: () => cancelConsistency() }"></div>
 
       <!-- KI-Lauf-Historie pro Draft. Klick expandiert Result inline unter dem
            Eintrag (history-item--open + history-detail), wie Buch-Review-Verlauf. -->
-      <div class="history-bar" x-show="runsLoadedDraftId === selectedDraftId && runs.brainstorm.length > 0" x-cloak>
+      <div class="history-bar" x-show="runsLoadedDraftId === selectedDraftId && runs.brainstorm.length > 0" x-cloak x-data="{ runRow: werkstattBrainstormRunRow() }">
         <div class="history-heading" x-text="$app.t('werkstatt.runs.brainstorm', { count: runs.brainstorm.length })"></div>
         <template x-for="r in runs.brainstorm" :key="r.id">
           <div>
-            <!-- @include werkstatt-run-row -->
+            <!-- @include run-history-row -->
             <!-- @include werkstatt-brainstorm-detail -->
           </div>
         </template>
       </div>
 
-      <div class="history-bar" x-show="runsLoadedDraftId === selectedDraftId && runs.consistency.length > 0" x-cloak>
+      <div class="history-bar" x-show="runsLoadedDraftId === selectedDraftId && runs.consistency.length > 0" x-cloak x-data="{ runRow: werkstattConsistencyRunRow() }">
         <div class="history-heading" x-text="$app.t('werkstatt.runs.consistency', { count: runs.consistency.length })"></div>
         <template x-for="r in runs.consistency" :key="r.id">
           <div>
-            <!-- @include werkstatt-run-row -->
+            <!-- @include run-history-row -->
             <!-- @include werkstatt-consistency-detail -->
           </div>
         </template>

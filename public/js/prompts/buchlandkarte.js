@@ -7,6 +7,7 @@
 // Zusammenfassung: zwei Gruppen, die beide «Familie» behandeln, unterscheiden
 // sich vielleicht in Szene gegen Rückblick, und genau das ist die Achse.
 
+import { formatAbschnitt } from './book-text-format.js';
 import { _isLocal, JSON_ONLY } from './state.js';
 import { _obj, _str } from './schema-utils.js';
 
@@ -30,17 +31,17 @@ export function buildBookMapAxisSystem() {
  * @param {Array<{ neg: Array<{name:string, text:string}>, pos: Array<{name:string, text:string}> }>} axes
  */
 export function buildBookMapAxisPrompt(axes) {
-  const block = (items) => items.map(it => `### ${it.name}\n${it.text}`).join('\n\n');
+  // Auszüge als Abschnitts-Tags (Format: ./book-text-format.js), je Achse zwei Enden.
+  const block = (items) => items.map(it => formatAbschnitt({ title: it.name, text: it.text })).join('\n\n');
   const parts = axes.map((ax, i) => [
-    `## Achse ${i + 1}`,
-    '',
-    `### Ende A (negativ)`,
-    '',
+    `<achse nr="${i + 1}">`,
+    '<ende pol="A" richtung="negativ">',
     block(ax.neg),
-    '',
-    `### Ende B (positiv)`,
-    '',
+    '</ende>',
+    '<ende pol="B" richtung="positiv">',
     block(ax.pos),
+    '</ende>',
+    '</achse>',
   ].join('\n'));
   return [
     `Benenne die folgenden ${axes.length} Achsen. Antworte mit genau einem Eintrag je Achse, in derselben Reihenfolge:`,

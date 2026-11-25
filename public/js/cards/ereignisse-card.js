@@ -64,14 +64,6 @@ export function applyEreignisseFilters(events, { suche = '', figurId = '', subty
 export function registerEreignisseCard() {
   if (typeof window === 'undefined' || !window.Alpine) return;
   window.Alpine.data('ereignisseCard', () => ({
-    ereignisseLoading: false,
-    ereignisseProgress: 0,
-    ereignisseStatus: '',
-    zeitstrahlConsolidating: false,
-    zeitstrahlProgress: 0,
-    zeitstrahlStatus: '',
-    _consolidatePollTimer: null,
-    _ereignisseExtractPollTimer: null,
     _lifecycle: null,
     // Ein Memo-Helper pro Modul (CLAUDE.md): filteredEreignisse()/bandModel()
     // werden im Template mehrfach pro Render gelesen → Cache mit shallow-Array-
@@ -103,14 +95,7 @@ export function registerEreignisseCard() {
       this._lifecycle = setupCardLifecycle(this, {
         name: 'ereignisse',
         showFlag: 'showEreignisseCard',
-        timerKeys: ['_consolidatePollTimer', '_ereignisseExtractPollTimer'],
         resetState: {
-          ereignisseLoading: false,
-          ereignisseProgress: 0,
-          ereignisseStatus: '',
-          zeitstrahlConsolidating: false,
-          zeitstrahlProgress: 0,
-          zeitstrahlStatus: '',
           _selKey: null,
           eventEditId: null,
           eventEditDraft: {},

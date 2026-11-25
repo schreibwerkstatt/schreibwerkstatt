@@ -25,10 +25,7 @@
     </div>
   </div>
 
-  <div x-show="figurenAlterLoading && figurenAlterProgress > 0" class="progress-bar-wrap">
-    <div class="progress-bar" :style="{ '--progress': figurenAlterProgress + '%' }"></div>
-  </div>
-  <div x-show="figurenAlterStatus" class="card-status" x-text="figurenAlterStatus"></div>
+  <div x-job-progress="{ active: figurenAlterLoading, progress: figurenAlterProgress, text: figurenAlterStatus, timer: '_figurenAlterPollTimer' }"></div>
 
   <!-- Filter -->
   <div class="filter-bar">

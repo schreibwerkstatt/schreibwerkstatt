@@ -73,10 +73,9 @@
     </div>
   </div>
 
-  <!-- Scan-Fortschritt -->
-  <div class="motiv-progress" x-show="scanning" x-cloak>
-    <div class="progress-bar" :style="{ '--progress': scanProgress + '%' }"></div>
-  </div>
+  <!-- Scan-/Brainstorm-Lauf: Balken, Status, Abbrechen (x-job-progress). -->
+  <div x-job-progress="{ active: scanning, progress: scanProgress, text: scanStatus, timer: '_scanPollTimer' }"></div>
+  <div x-job-progress="{ active: brainstorming, progress: brainstormProgress, text: brainstormStatus, timer: '_brainstormPollTimer' }"></div>
 
   <div x-show="errorMessage" class="card-status card-status--error" x-text="errorMessage"></div>
 
@@ -198,20 +197,10 @@
   <!-- KI-Brainstorm-Lauf-Historie: persistierte Läufe pro Buch, unter Graph +
        Panel. Klick lädt die Vorschläge in das Panel direkt darunter
        (selectedBrainstormRunId). Wie der Plot-/Werkstatt-Run-Verlauf. -->
-  <div class="history-bar" x-show="brainstormRuns.length > 0" x-cloak>
+  <div class="history-bar" x-show="brainstormRuns.length > 0" x-cloak x-data="{ runRow: motivBrainstormRunRow() }">
     <div class="history-heading" x-text="$app.t('motiv.brainstorm.runs', { count: brainstormRuns.length })"></div>
     <template x-for="r in brainstormRuns" :key="r.id">
-      <div class="history-item hover-reveal-host internal-link" :class="{ 'history-item--open': selectedBrainstormRunId === r.id }"
-           @click="openBrainstormRun(r)">
-        <span class="history-date" x-text="formatRunDate(r.created_at)"></span>
-        <span class="tag" x-text="$app.tn('motiv.brainstorm.vorschlagCount', r.vorschlag_count)"></span>
-        <span x-show="r.model" class="tag" x-text="r.model"></span>
-        <span class="history-chevron" :class="{ open: selectedBrainstormRunId === r.id }" aria-hidden="true"></span>
-        <button type="button" class="history-item-delete hover-reveal"
-                @click.stop="deleteBrainstormRun(r.id)"
-                :data-tip="$app.t('common.deleteEntry')"
-                :aria-label="$app.t('common.deleteEntry')"><svg class="icon" aria-hidden="true"><use href="/icons.svg#trash"/></svg></button>
-      </div>
+      <!-- @include run-history-row -->
     </template>
   </div>
 

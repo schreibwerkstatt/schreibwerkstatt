@@ -11,9 +11,6 @@
       <span class="card-title" x-text="$app.t('chat.title')"></span>
     </div>
     <div class="card-actions">
-      <button type="button" class="icon-btn icon-btn--ghost" x-show="isChatSessionRunning(chatSessionId)" @click="cancelChatRun()" :data-tip="$app.t('chat.cancelRunTip')" :aria-label="$app.t('chat.cancelRun')">
-        <svg class="icon" aria-hidden="true"><use href="/icons.svg#square"/></svg>
-      </button>
       <button type="button" class="icon-btn icon-btn--ghost" @click="startNewChatSession()" :disabled="chatLoading" :data-tip="$app.t('chat.newSessionTitle')" :aria-label="$app.t('chat.newSession')">
         <svg class="icon" aria-hidden="true"><use href="/icons.svg#plus"/></svg>
       </button>
@@ -21,10 +18,7 @@
     <button type="button" class="btn-card-close" @click="$app.toggleChatCard()" :data-tip="$app.t('common.close')" :aria-label="$app.t('common.close')"><svg class="icon" aria-hidden="true"><use href="/icons.svg#x"/></svg></button>
   </div>
 
-  <div class="progress-bar-wrap" x-show="chatProgress > 0 && isChatSessionRunning(chatSessionId)">
-    <div class="progress-bar" :style="{ '--progress': chatProgress + '%' }"></div>
-  </div>
-  <div x-show="chatStatus" class="card-status" x-html="chatStatus"></div>
+  <div x-job-progress="{ active: isChatSessionRunning(chatSessionId), progress: chatProgress, status: chatStatus }"></div>
 
   <div id="chat-messages" class="chat-messages aside-split-scroll" @pointerenter="onChatPointerEnter()">
     <div x-show="chatMessages.length === 0" class="muted-msg muted-msg--sm muted-msg--block" x-text="$app.t('chat.emptyPage', { name: $app.currentPage?.name || '' })"></div>
@@ -36,8 +30,7 @@
           <div x-show="msg.role === 'assistant'" class="chat-msg-text" x-html="_renderChatMarkdown(msg.content)"></div>
           <div x-show="msg.role === 'assistant' && msg.context_info?.parse_fallback" class="chat-msg-hint" x-text="$app.t(msg.context_info?.lost_vorschlaege ? 'chat.parseFallbackLost' : 'chat.parseFallback')"></div>
           <div x-show="msg.role === 'assistant' && msg.context_info?.history_trimmed" class="chat-msg-hint" x-text="$app.t('chat.historyTrimmed', { n: msg.context_info?.history_trimmed || 0 })"></div>
-          <div x-show="msg.role === 'assistant' && _chatTokenInfo(msg)" class="chat-token-info" :title="_chatTokenTitle(msg)" x-text="_chatTokenInfo(msg)"></div>
-          <!-- @include chat-feedback -->
+          <!-- @include chat-msg-foot -->
         </div>
 
         <!-- Änderungsvorschläge + Titelvarianten (nur Seiten-Chat) -->
@@ -49,19 +42,19 @@
     </template>
 
     <div x-show="isChatSessionRunning(chatSessionId)" class="chat-skeleton-wrapper">
-      <div class="chat-skeleton-line chat-skeleton-line--wide"></div>
-      <div class="chat-skeleton-line chat-skeleton-line--narrow"></div>
+      <!-- @include chat-skeleton -->
     </div>
-    <div x-show="chatOpenQuestion()" class="chat-retry-row">
-      <button type="button" class="chat-vorschlag-btn" @click="retryChatQuestion()" x-text="$app.t('chat.retryQuestion')"></button>
+    <div x-show="openChatQuestion()" class="chat-retry-row">
+      <button type="button" class="chat-vorschlag-btn" @click="retryOpenChatQuestion()" x-text="$app.t('chat.retryQuestion')"></button>
     </div>
   </div>
 
   <!-- @include chat-quick-actions -->
   <div x-show="chatFlushFailed" class="chat-msg-hint" x-text="$app.t('chat.flushFailed')"></div>
-  <div class="chat-input-row">
+  <div class="chat-input-row" x-data="{ sendBtn: chatSendButton() }">
     <textarea
       class="chat-input"
+      data-spellcheck="spelling"
       x-model="chatInput"
       :placeholder="$app.t('chat.placeholder')"
       :aria-label="$app.t('chat.placeholder')"
@@ -70,10 +63,7 @@
       @keydown.enter="$enter($event, () => sendChatMessage(), { multiline: true })"
       @keydown.escape="$app.returnFromAside($event)"
     ></textarea>
-    <button type="button" class="chat-send-btn" @click="sendChatMessage()" :disabled="chatLoading || !chatInput.trim()" :aria-label="$app.t('chat.send')">
-      <span x-show="chatLoading" class="spinner"></span>
-      <svg x-show="!chatLoading" class="icon" aria-hidden="true"><use href="/icons.svg#arrow-up"/></svg>
-    </button>
+    <!-- @include chat-send-btn -->
   </div>
   <div class="chat-input-hint" x-text="$app.t('chat.inputHint')"></div>
 
@@ -97,19 +87,13 @@
       <span class="card-title" x-text="$app.t('chat.titleBook')"></span>
     </div>
     <div class="card-actions">
-      <button type="button" class="icon-btn icon-btn--ghost" x-show="isBookChatSessionRunning(bookChatSessionId)" @click="cancelBookChatRun()" :data-tip="$app.t('chat.cancelRunTip')" :aria-label="$app.t('chat.cancelRun')">
-        <svg class="icon" aria-hidden="true"><use href="/icons.svg#square"/></svg>
-      </button>
       <button type="button" class="icon-btn icon-btn--ghost" @click="startNewBookChatSession()" :disabled="bookChatLoading" :data-tip="$app.t('chat.newSessionTitle')" :aria-label="$app.t('chat.newSession')">
         <svg class="icon" aria-hidden="true"><use href="/icons.svg#plus"/></svg>
       </button>
     </div>
   </div>
 
-  <div class="progress-bar-wrap" x-show="bookChatProgress > 0 && isBookChatSessionRunning(bookChatSessionId)">
-    <div class="progress-bar" :style="{ '--progress': bookChatProgress + '%' }"></div>
-  </div>
-  <div x-show="bookChatStatus" class="card-status" x-html="bookChatStatus"></div>
+  <div x-job-progress="{ active: isBookChatSessionRunning(bookChatSessionId), progress: bookChatProgress, status: bookChatStatus }"></div>
 
   <div id="book-chat-messages" class="chat-messages">
     <div x-show="bookChatMessages.length === 0" class="muted-msg muted-msg--sm muted-msg--block" x-text="$app.t('chat.emptyBook', { name: $app.selectedBookName || '' })"></div>
@@ -158,8 +142,7 @@
             </div>
           </template>
           <!-- @include book-chat-msg-extras -->
-          <div x-show="msg.role === 'assistant' && _chatTokenInfo(msg)" class="chat-token-info" :title="_chatTokenTitle(msg)" x-text="_chatTokenInfo(msg)"></div>
-          <!-- @include chat-feedback -->
+          <!-- @include chat-msg-foot -->
         </div>
         <!-- Gescheiterter Lauf: Grund + Teil-Verlauf an der Frage -->
         <!-- @include chat-run-failed -->
@@ -169,8 +152,7 @@
     </template>
 
     <div x-show="isBookChatSessionRunning(bookChatSessionId)" class="chat-skeleton-wrapper">
-      <div class="chat-skeleton-line chat-skeleton-line--wide"></div>
-      <div class="chat-skeleton-line chat-skeleton-line--narrow"></div>
+      <!-- @include chat-skeleton -->
       <!-- Werkzeug-Verlauf des laufenden Turns (wächst mit, offen) -->
       <template x-for="msg in (_liveToolMsg() ? [_liveToolMsg()] : [])" :key="'live'">
         <div class="chat-tool-log-live">
@@ -178,11 +160,15 @@
         </div>
       </template>
     </div>
+    <div x-show="openBookChatQuestion()" class="chat-retry-row">
+      <button type="button" class="chat-vorschlag-btn" @click="retryOpenBookChatQuestion()" x-text="$app.t('chat.retryQuestion')"></button>
+    </div>
   </div>
 
-  <div class="chat-input-row">
+  <div class="chat-input-row" x-data="{ sendBtn: bookChatSendButton() }">
     <textarea
       class="chat-input"
+      data-spellcheck="spelling"
       x-model="bookChatInput"
       :placeholder="$app.t('chat.placeholderBook')"
       :aria-label="$app.t('chat.placeholderBook')"
@@ -190,10 +176,7 @@
       :disabled="bookChatLoading"
       @keydown.enter="$enter($event, () => sendBookChatMessage(), { multiline: true })"
     ></textarea>
-    <button type="button" class="chat-send-btn" @click="sendBookChatMessage()" :disabled="bookChatLoading || !bookChatInput.trim() || isBookChatSessionActive(bookChatSessionId)" :aria-label="$app.t('chat.send')">
-      <span x-show="bookChatLoading" class="spinner"></span>
-      <svg x-show="!bookChatLoading" class="icon" aria-hidden="true"><use href="/icons.svg#arrow-up"/></svg>
-    </button>
+    <!-- @include chat-send-btn -->
   </div>
   <div class="chat-input-hint" x-text="$app.t('chat.inputHint')"></div>
 

@@ -87,6 +87,7 @@ test('buildBookChatSystemPrompt: Gliederung im gecachten Block, Kapitelpfad an d
   assert.ok(blocks[0].text.includes(gliederung));
   assert.ok(!blocks[1].text.includes('GLIEDERUNG'));
   assert.match(blocks[1].text, /in Lesereihenfolge/);
-  assert.match(blocks[1].text, /--- Auszug aus Abschnitt: Szene A \(Kapitel: Teil Eins › Kapitel 1\.1\) ---/);
-  assert.match(blocks[1].text, /--- Auszug aus Abschnitt: Prolog ---/);
+  // Abschnitte als Tags (public/js/prompts/book-text-format.js), leerer Pfad ohne Attribut.
+  assert.match(blocks[1].text, /<abschnitt titel="Szene A" kapitel="Teil Eins › Kapitel 1\.1" auszug="ja">\nText A\n<\/abschnitt>/);
+  assert.match(blocks[1].text, /<abschnitt titel="Prolog" auszug="ja">\nText P\n<\/abschnitt>/);
 });

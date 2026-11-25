@@ -85,6 +85,7 @@ const runResearchChatJob = makeAgenticChatJob({
     const {
       buildResearchChatAgentSystemPrompt, buildResearchChatTools, buildResearchProposalMemoryBlock,
       getResearchPromptContext, RESEARCH_CHAT_FORCE_FINAL_INSTRUCTION, RESEARCH_CHAT_FORCE_FINAL_INSTRUCTION_SEARXNG, buildResearchWritingContextBlock,
+      researchSearchStatusNote,
     } = prompts;
     const itemCount = countActiveResearchItems(session.book_id);
     const maxToolIter = maxToolIterFor('jobs.research_chat.max_tool_iter', 6, provider, userEmail);
@@ -117,10 +118,8 @@ const runResearchChatJob = makeAgenticChatJob({
     });
     // Werkzeugsatz wie in allen agentischen Chats (chat-tools/select.js): Lese-Werkzeuge
     // der Spalte `research`, ohne Daten/Endpunkt (leeres Archiv, keine Embeddings)
-    // weggelassen, plus Web- und Ausgabe-Werkzeuge des Suchwegs. Anthropic: ein
-    // Web-Such-Deckel kleiner als der Rundenwert greift schon hier (max_uses =
-    // Deckel); bei aufgebrauchtem Deckel fällt web_search vor dem Rendern weg, damit
-    // keine Beschreibung es noch nennt. SearXNG: den Deckel hält der Handler. Die
+    // weggelassen, plus Web- und Ausgabe-Werkzeuge des Suchwegs. Anthropic:
+    // max_uses = Web-Such-Deckel (research-chat-helpers.js#toolsForRound). SearXNG: den Deckel hält der Handler. Die
     // Liste bleibt danach für den ganzen Lauf gleich (Prompt-Cache).
     const outputTools = buildResearchChatTools({ allowedDomains: researchProfile.domains, webSearchMode: mode });
     const { tools, toolNames, offeredTools, unavailable } = prepareChatTools({
@@ -180,6 +179,10 @@ const runResearchChatJob = makeAgenticChatJob({
       // (research-web-tools.js); weitere Runden lesen dort die gefundenen Seiten,
       // statt mit den blossen Snippets zu antworten.
       ...(searxng ? {} : { stopBeforeRound: ({ webSearches }) => (webSearches >= maxWebSearches ? 'web_cap' : null) }),
+      // Stand der Web-Suchen nach jeder Runde (beide Suchwege): das Modell sieht, dass
+      // noch Suchen übrig sind, statt eine abgelehnte Suche als Ende zu lesen.
+      ...(offeredTools.has('web_search')
+        ? { roundStatus: ({ webSearches }) => researchSearchStatusNote(webSearches, maxWebSearches) } : {}),
       // Suchen des SearXNG-Handlers (ctx.web) für Deckel, context_info, Zusammenfassung.
       webStats: (ctx) => (ctx.web ? { searches: ctx.web.searches, queries: ctx.web.queries, results: ctx.web.results } : null),
       maxToolIter,

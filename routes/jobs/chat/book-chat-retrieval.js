@@ -25,7 +25,8 @@ const appSettings = require('../../../lib/app-settings');
 const embed = require('../../../lib/embed');
 const semanticRetrieval = require('../../../lib/semantic-retrieval');
 const { resolveEntityTitle, semanticIndexStatus, relevanceFields } = require('../chat-tools/shared');
-const { i18nError, htmlToText, bookTextOpts } = require('../shared');
+const { i18nError } = require('../shared');
+const { readSections } = require('../shared/section-reader');
 const { FALLBACK_PLACEHOLDER } = require('../agentic-chat/history');
 const { bestLivePassage } = require('../../../lib/live-passage');
 
@@ -134,7 +135,7 @@ async function selectPassagesSemantic(bookId, query, budgetChars, signal, { user
   // Live-Text: Trefferseiten + seit dem Indexlauf geänderte Seiten, eine Ladung.
   const fresh = scoreText ? index.changedPageIds.filter(id => metaById.has(id)) : [];
   const liveIds = [...new Set([...hits.map(h => h.entity_id), ...fresh])];
-  const liveText = await _loadLiveTexts(liveIds, signal, bookTextOpts(bookId));
+  const liveText = await _loadLiveTexts(bookId, liveIds, signal, userEmail);
 
   // Frisch-Seiten nach Keyword-Relevanz; ohne Treffer im Text bleiben sie draussen.
   const freshScored = fresh
@@ -183,14 +184,14 @@ async function selectPassagesSemantic(bookId, query, budgetChars, signal, { user
   return { status: 'ok', selectedPages, usedChars, totalPages: pages.length, freshPages };
 }
 
-// Aktueller Klartext der Seiten `ids` in einer Ladung (Map page_id → Text). Nicht
-// ladbare Seiten fehlen in der Map — ihr Treffer fällt beim Aufrufer weg.
-async function _loadLiveTexts(ids, signal, textOpts = {}) {
+// Aktueller Prompt-Text (mit Absätzen) der Seiten `ids` über den Abschnitts-Leser
+// (Map page_id → Text). Seiten ausserhalb des Buchs oder nicht ladbare fehlen in
+// der Map — ihr Treffer fällt beim Aufrufer weg.
+async function _loadLiveTexts(bookId, ids, signal, userEmail) {
   const liveText = new Map();
   if (!ids.length) return liveText;
-  if (signal?.aborted) throw new DOMException('Aborted', 'AbortError');
-  const loaded = await contentStore.loadPagesBatch(ids.map(id => ({ id })), null, { onError: () => null });
-  for (const pd of loaded) liveText.set(pd.id, htmlToText(pd.html || '', textOpts).trim());
+  const { sections } = await readSections(bookId, { pageIds: ids, userEmail, signal });
+  for (const sec of sections) liveText.set(sec.id, sec.text);
   return liveText;
 }
 
@@ -270,7 +271,7 @@ async function preContextPassages(bookId, query, {
   // Index-Chunk kann hinter dem Seitenstand liegen und darf nicht als Buchtext
   // erscheinen. Findet sich die Stelle nicht mehr, fällt die Passage weg.
   // Szenen/Figuren/Orte/Fakten sind Analyse-Daten, kein Buchtext — sie bleiben.
-  const liveText = await _loadLiveTexts([...new Set(kept.filter(h => h.kind === 'page').map(h => h.entity_id))], signal, bookTextOpts(bookId));
+  const liveText = await _loadLiveTexts(bookId, [...new Set(kept.filter(h => h.kind === 'page').map(h => h.entity_id))], signal, userEmail);
 
   const hits = [];
   let used = 0;

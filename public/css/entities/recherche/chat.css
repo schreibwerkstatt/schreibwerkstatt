@@ -31,30 +31,52 @@
   -webkit-line-clamp: 4;
   -webkit-box-orient: vertical;
 }
-/* Ein Link je Zeile: Label, echter Host, ggf. «nicht geprüft», Weglassen-Knopf.
-   Der Link kürzt sich per `.url-short` auf den Platz, der neben Host und Knopf
-   bleibt — die Zeile bricht nicht mitten in der URL um. */
+.research-chat-proposal-snippet--open {
+  display: block;
+  -webkit-line-clamp: unset;
+}
+.research-chat-proposal-more {
+  display: block;
+  margin-bottom: var(--space-xs);
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--card-accent);
+  font-size: var(--font-size-xs);
+}
+/* Ein Link je Zeile: Label + echter Host, ggf. «nicht geprüft», Weglassen-Knopf. */
 .research-chat-proposal-url-row {
   display: flex;
-  align-items: center;
+  align-items: baseline;
   gap: var(--space-2xs);
   min-width: 0;
 }
-.research-chat-proposal-url {
-  flex: 0 1 auto;
-  min-width: 3em;
+/* Titel und Host stehen in einem Textfluss: der Titel bricht um, der Host
+   folgt gedämpft dahinter — so frisst keine feste Host-Spalte die Zeilenbreite
+   und kein Titel schrumpft auf drei Zeichen. Der Host sichert das Label ab (ein
+   Label «Wikipedia» darf keine fremde Domain verdecken). Eine nackte URL (ohne
+   Label) bleibt einzeilig gekürzt (`.url-short truncate` im Markup). */
+.research-chat-proposal-url-text {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow-wrap: anywhere;
   font-size: var(--font-size-sm);
-  color: var(--card-accent);
 }
-/* Der Host sichert das Label ab (ein Label «Wikipedia» darf keine fremde Domain
-   verdecken) — er schrumpft erst, wenn das Label schon auf wenige Zeichen steht. */
+.research-chat-proposal-url { color: var(--card-accent); }
 .research-chat-proposal-url-host {
-  flex: 0 0 auto;
-  max-width: 50%;
-  font-size: var(--font-size-sm);
+  margin-left: var(--space-2xs);
+  color: var(--color-muted);
+  white-space: nowrap;
+}
+/* Weglassen-Knopf leise: vier gefüllte Chips je Vorschlag übertönten die Links. */
+.research-chat-proposal-url-row > .icon-btn {
+  flex-shrink: 0;
+  margin-left: auto;
+  width: 22px;
+  height: 22px;
+  background: transparent;
   color: var(--color-muted);
 }
-.research-chat-proposal-url-row > .icon-btn { flex-shrink: 0; }
 /* Ungeprüfte URL (verified: false): die GANZE Zeile in Warn-Optik, nicht nur
    ein kleines Wort am Rand — sie ist vorab abgewählt, und wer sie wieder
    aufnimmt, soll sehen, dass er eine nie abgerufene Adresse speichert. */

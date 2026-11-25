@@ -14,7 +14,7 @@
 
 import { sendJson } from '../utils.js';
 import { tFetchError } from '../i18n.js';
-import { startPoll } from '../cards/job-helpers.js';
+import { startPoll, isCancelledJob } from '../cards/job-helpers.js';
 import { checkPdfFile, uploadPdf } from '../upload-pdf.js';
 import { draftFromSource } from './fields.js';
 
@@ -91,6 +91,8 @@ export const sourcesPdfDraftMethods = {
       },
       onError: (job) => {
         this._srcPdfIdle();
+        // Abgebrochen ist kein Fehler: neutrale Statuszeile.
+        if (isCancelledJob(job)) { this.srcPdfStatus = app.t('job.cancelled'); return; }
         this.srcPdfError = app.t(job.error, job.errorParams);
       },
       onNotFound: () => {

@@ -36,7 +36,7 @@ export const FIGUREN_BASIS_SCHEMA = `{
       "erste_erwaehnung": "Kapitelname oder Abschnittsname der ersten Erwähnung (leer wenn unklar)",
       "schluesselzitate": ["Bis zu 5 charakterisierende Zitate, wörtlich aus dem Text – vollständige Sätze in Original-Interpunktion"],
       "kapitel": [{ "name": "Kapitelname" }],
-      "beziehungen": [{ "figur_id": "fig_2", "typ": "${RELATION_TYPES_PROMPT}", "machtverhaltnis": 0, "naehe": 0, "beschreibung": "1 Satz", "belege": [{ "kapitel": "Kapitelname (ohne ##-Präfix)", "seite": "Abschnittstitel (ohne ###-Präfix); leer wenn = Kapitel oder unklar" }] }]
+      "beziehungen": [{ "figur_id": "fig_2", "typ": "${RELATION_TYPES_PROMPT}", "machtverhaltnis": 0, "naehe": 0, "beschreibung": "1 Satz", "belege": [{ "kapitel": "Kapitelname (Wert von pfad)", "seite": "Abschnittstitel (Wert von titel); leer wenn = Kapitel oder unklar" }] }]
     }
   ]
 }`;
@@ -54,7 +54,7 @@ export const figurenBasisRules = (kontext = '') => `Regeln:
 - Eindeutige IDs (fig_1, fig_2, …)
 - katalog_id: nur aus einem mitgegebenen Katalog übernehmen (Katalog-Abgleich), sonst leer lassen; nie erfinden. Bei Zusammenführung zweier Einträge die vorhandene katalog_id behalten; zwei Einträge mit VERSCHIEDENER katalog_id nie zusammenführen.
 - beziehungen.figur_id: nur IDs aus dieser Liste; jede Beziehung nur einmal eintragen
-- kapitel: absteigend nach Häufigkeit; name = immer der Kapitelname (aus dem ## Kapitel-Header über dem Abschnitt oder aus dem Prompt-Kontext) – NIEMALS Abschnittstitel als Kapitelnamen verwenden. haeufigkeit (= Anzahl Abschnitte mit aktivem Auftreten) NUR ergänzen wenn >1; bei Einzelauftreten weglassen.
+- kapitel: absteigend nach Häufigkeit; name = immer der Kapitelname (aus dem «pfad» des <kapitel>-Tags, in dem der Abschnitt steht, oder aus dem Prompt-Kontext) – NIEMALS Abschnittstitel als Kapitelnamen verwenden. haeufigkeit (= Anzahl Abschnitte mit aktivem Auftreten) NUR ergänzen wenn >1; bei Einzelauftreten weglassen.
 - typ: Figuren-Archetyp. hauptfigur=trägt zentral die Handlung, antagonist=Gegenspieler, mentor=Anleiter/Lehrerin, nebenfigur=klar identifizierbarer Sekundärcharakter mit mehreren Auftritten, randfigur=tritt nur am Rand in Erscheinung (kaum mehr als Erwähnung), andere=nicht zuordenbar. NICHT mit praesenz verwechseln (Typ = Rolle, Präsenz = Handlungsgewicht).
 - praesenz: Gewichtung der Figur im Gesamtbuch. zentral=Haupthandlungsträger, regelmaessig=wiederkehrend und handlungsrelevant, punktuell=taucht in einzelnen Szenen auf, randfigur=kaum mehr als Erwähnung. Liegt der gesamte Buchtext vor, beurteile über das ganze Buch; nur bei isolierter Einzelkapitel-Analyse basiert die Einschätzung auf diesem Kapitel.
 - rolle: Funktion in der Handlung, 1-2 Sätze. Leer lassen wenn nicht belegt.
@@ -71,7 +71,7 @@ export const figurenBasisRules = (kontext = '') => `Regeln:
 - sozialschicht: gesellschaftliche Schicht der Figur${kontext ? ` (${kontext})` : ''} – nur vergeben wenn eindeutig belegt; wirtschaftselite=Unternehmerfamilien/Direktoren, gehobenes_buergertum=Akademiker/freie Berufe/obere Kader, mittelschicht=Angestellte/Beamte/mittlere Kader, arbeiterschicht=Fabrik-/Bauarbeiter/Servicepersonal, migrantenmilieu=Zugewanderte/zweite Generation, prekariat=Sozialhilfe/Randständige/Langzeitarbeitslose, unterwelt=kriminelles Milieu, andere=nicht eindeutig
 - beziehungen.machtverhaltnis: ganzzahlig im Bereich -2 bis 2 (KEIN führendes Plus-Zeichen). Machtasymmetrie: 2=Gegenüber (figur_id) dominiert klar, 1=Gegenüber hat leichten Vorteil, 0=symmetrisch, -1=diese Figur hat leichten Vorteil, -2=diese Figur dominiert klar; weglassen oder 0 wenn unklar
 - beziehungen.naehe: ganzzahlig im Bereich -2 bis 2 (KEIN führendes Plus-Zeichen). Emotionale Nähe, wie die Beziehung im Text GELEBT wird – nicht, was der Typ nahelegt: 2=innig (Zuneigung, Vertrauen, Geborgenheit), 1=zugewandt, 0=sachlich/neutral, -1=kühl/entfremdet/gleichgültig, -2=feindselig/verletzend/Abscheu. Eine Ehe, in der man sich ignoriert, ist -1; ein Vater, der sein Kind vernachlässigt, -1 oder -2; 0 wenn unklar
-- beziehungen.belege: HÖCHSTENS 1 Stelle (Kapitelname + Abschnittstitel) an der die Beziehung klar wird. Genau wie im Text stehen lassen; leer lassen wenn unsicher. seite leer lassen wenn identisch mit dem Kapitelnamen (z.B. 1 Abschnitt pro Kapitel) oder unklar. Abschnittsnamen aus ### Überschriften, Kapitelnamen aus ## Überschriften oder dem Prompt-Kontext.
+- beziehungen.belege: HÖCHSTENS 1 Stelle (Kapitelname + Abschnittstitel) an der die Beziehung klar wird. Genau wie im Text stehen lassen; leer lassen wenn unsicher. seite leer lassen wenn identisch mit dem Kapitelnamen (z.B. 1 Abschnitt pro Kapitel) oder unklar. Abschnittsnamen aus dem «titel» des <abschnitt>-Tags, Kapitelnamen aus dem «pfad» des <kapitel>-Tags oder dem Prompt-Kontext.
 - Beziehungstypen: typ beschreibt die ROLLE von figur_id (NICHT der aktuellen Figur!). Bei Figur X der Eintrag {figur_id: Y, typ: elternteil} bedeutet: Y IST der Elternteil von X. Konkretes Beispiel: Robert hat Mutter Sandra → bei Robert eintragen {figur_id: «<Sandras fig_id>», typ: elternteil, machtverhaltnis: 2}. patronage=Schutzherrschaft (figur_id = Patron), geschaeft=wirtschaftliche Beziehung, geschwister=ungerichtet, verwandt=weitere Verwandtschaft (ungerichtet), ehepartner=verheiratet/Lebenspartner (ungerichtet), ex_partner=frühere Liebes-/Ehebeziehung (ungerichtet), verbuendete=Verbündete/gemeinsame Sache jenseits blosser Freundschaft (ungerichtet), komplize=gemeinsame (oft illegale) Unternehmung (ungerichtet), vorgesetzter=figur_id ist Vorgesetzte(r), untergebener=figur_id ist unterstellt; liebesbeziehung nur für nicht-eheliche romantische Bindung. Übrige selbsterklärend
 - beziehungen.typ: GENAU EIN Wert aus der Liste im Schema – nie mehrere mit «|» verbinden, keine eigenen Typen. Weitere Verwandtschaft (Tante, Onkel, Cousin, Grosseltern, Enkel, Schwager, Schwiegereltern) → verwandt, das genaue Verwandtschaftswort in die Beschreibung
 - Pro Figurenpaar höchstens EINE Beziehung eintragen – aus der Perspektive EINER Figur. Keine widersprüchlichen Angaben (z.B. nicht gleichzeitig elternteil und kind für dasselbe Paar)
@@ -309,8 +309,8 @@ export const _ASSIGNMENTS_SCHEMA_BLOCK = `"assignments": [
           "ereignis": "Was passierte – neutral formuliert. Gleiches Ereignis bei allen beteiligten Figuren identisch.",
           "typ": "persoenlich|extern",
           "bedeutung": "Bedeutung für diese Figur (1 Satz, leer wenn nicht klar)",
-          "seite": "EXAKT ein ### Abschnitts-Header aus dem aktuellen ## Kapitel. NIE der Kapitelname. Leer wenn unklar.",
-          "kapitel": "EXAKT der ## Kapitel-Header (nicht ###); leer wenn unklar"
+          "seite": "EXAKT ein Abschnittstitel (titel eines <abschnitt>-Tags) aus dem aktuellen Kapitel. NIE der Kapitelname. Leer wenn unklar.",
+          "kapitel": "EXAKT der Kapitelname (pfad des <kapitel>-Tags, nicht der Abschnittstitel); leer wenn unklar"
         }
       ]
     }

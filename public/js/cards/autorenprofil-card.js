@@ -14,7 +14,7 @@ import { EVT } from '../events.js';
 import { setupCardLifecycle } from './card-lifecycle.js';
 import { tFetchError } from '../i18n.js';
 import { formatNumber, fetchJson, sendJson, fmtDateTime } from '../utils.js';
-import { startPoll, runningJobStatus } from './job-helpers.js';
+import { startPoll, runningJobStatus, isCancelledJob } from './job-helpers.js';
 import { diffParts } from '../diff/diff-parts.js';
 import { scrollToWhenReady } from '../utils/scroll-when-ready.js';
 
@@ -34,7 +34,6 @@ export function registerAutorenprofilCard() {
     apError: '',
     // Deutung (Stufe 2): eigener KI-Lauf ueber die Messung + die Buch-Stilprofile.
     apGenerating: false,
-    apJobId: null,
     apGenError: '',
     apGenProgress: 0,
     apGenStatus: '',
@@ -325,7 +324,6 @@ export function registerAutorenprofilCard() {
       this.apSuggestion = null;
       try {
         const data = await sendJson('/jobs/autorenprofil', 'POST', {});
-        this.apJobId = data.jobId;
         window.dispatchEvent(new CustomEvent(EVT.JOB_ENQUEUED, {
           detail: { type: 'autorenprofil', jobId: data.jobId },
         }));
@@ -360,7 +358,6 @@ export function registerAutorenprofilCard() {
       const job = queued.find(j => j.type === 'autorenprofil');
       if (!job) return;
       this.apGenerating = true;
-      this.apJobId = job.id;
       this.apGenProgress = job.progress || 0;
       this._apPoll(job.id);
     },
@@ -368,14 +365,13 @@ export function registerAutorenprofilCard() {
     _apIdle() {
       if (this._apPollTimer) { clearInterval(this._apPollTimer); this._apPollTimer = null; }
       this.apGenerating = false;
-      this.apJobId = null;
       this.apGenProgress = 0;
       this.apGenStatus = '';
     },
 
     _apFinish(job) {
       this._apIdle();
-      if (!job || job.status === 'cancelled') return;
+      if (!job || isCancelledJob(job)) return;
       if (job.status === 'error') {
         this.apGenError = window.__app.t('autorenprofil.genError');
         return;
@@ -395,13 +391,6 @@ export function registerAutorenprofilCard() {
         basisSig: r.basisSig || null,
         diff: diffParts(before, r.profilText),
       };
-    },
-
-    async cancelAutorenprofil() {
-      const id = this.apJobId;
-      if (!id) return;
-      await window.__app.cancelJob(id);
-      this._apIdle();
     },
 
     // Verwerfen erledigt auch den offenen Vorschlag am Server — sonst stünde er

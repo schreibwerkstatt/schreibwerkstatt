@@ -5,6 +5,7 @@ import { fetchJson, downloadHref, downloadBlob } from '../utils.js';
 import { FINETUNE_PROFILES, finetuneProfileById } from './finetune-profiles.js';
 import { studioYamlFor, modelfileFor } from './finetune-studio-files.js';
 import { isSelectedBook } from '../cards/book-guard.js';
+import { runRowAdapter } from '../run-history.js';
 
 export const finetuneExportMethods = {
   // Gespeicherte Sets des Buchs, neuestes zuerst (überleben Neustarts, liegen
@@ -60,6 +61,25 @@ export const finetuneExportMethods = {
 
   finetuneToggleExport(id) {
     this.finetuneOpenId = this.finetuneOpenId === id ? null : id;
+  },
+
+  // Adapter für run-history-row.html (Verlauf der gespeicherten Sets).
+  finetuneRunRow() {
+    return runRowAdapter(this, {
+      date: (ex) => ex.createdAt,
+      isOpen(ex) { return this.finetuneOpenId === ex.id; },
+      toggle(ex) { this.finetuneToggleExport(ex.id); },
+      remove(ex) { return this.finetuneDeleteExport(ex.id); },
+      model: () => '',
+      badges(ex) {
+        const app = window.__app;
+        return [
+          { text: this.finetuneProfileLabel(ex.stats) },
+          { text: app.t('finetune.stats.total', { n: ex.stats?.total ?? 0 }) },
+          ex.stale ? { text: app.t('finetune.history.stale'), cls: 'tok-badge tok-med' } : null,
+        ];
+      },
+    });
   },
 
   finetuneProfileLabel(st) {

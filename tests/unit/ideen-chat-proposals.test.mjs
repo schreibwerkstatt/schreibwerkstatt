@@ -113,7 +113,7 @@ test('Board-Zusammenführen: Ziel ist eine offene, sonst die älteste; Text ohne
   assert.equal(mergedContentOf(c, [b, a]), 'offen neu · Erledigt alt');
 });
 
-test('ideenProposalBlockedText: schon geschrieben (_written) → kein Blockier-Hinweis, sonst übersetzt', async () => {
+test('ideenProposalView: Blockier-Grund übersetzt (Stufe als Label), schon geschrieben (_written) → kein Hinweis', async () => {
   const { ideenProposalMethods } = await import('../../public/js/chat/ideen-chat-proposals.js');
   globalThis.window = globalThis.window || {};
   const prevApp = window.__app;
@@ -123,11 +123,19 @@ test('ideenProposalBlockedText: schon geschrieben (_written) → kein Blockier-H
     const card = {
       ...ideenProposalMethods,
       ideenProposals: () => [p],
-      ideenProposalStatus: () => ({ state: 'open', blocked: { key: 'ideenBoard.chat.mergeGone' } }),
-      statusLabel: (s) => s,
+      ideenProposalStatus: () => ({ state: 'open', blocked: { key: 'ideenBoard.chat.mergeGone', params: { status: 'offen' } } }),
+      statusLabel: (s) => `L:${s}`,
     };
-    assert.equal(card.ideenProposalBlockedText({}, 0), 'T:ideenBoard.chat.mergeGone');
+    let seen = null;
+    window.__app.t = (k, params) => { if (k === 'ideenBoard.chat.mergeGone') seen = params; return `T:${k}`; };
+    const v = card.ideenProposalView({}, 0);
+    assert.equal(v.blockedText, 'T:ideenBoard.chat.mergeGone');
+    assert.deepEqual(seen, { status: 'L:offen' }, 'Stufe im Blockier-Grund übersetzt');
+    assert.deepEqual(v.notes, ['T:ideenBoard.chat.mergeGone']);
+    assert.equal(v.canApply, false);
     p._written = true;
-    assert.equal(card.ideenProposalBlockedText({}, 0), '');
+    const w = card.ideenProposalView({}, 0);
+    assert.equal(w.blockedText, '');
+    assert.equal(w.canApply, true, 'geschrieben: Klick holt den Status nach');
   } finally { window.__app = prevApp; }
 });

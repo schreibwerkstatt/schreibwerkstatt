@@ -8,7 +8,7 @@
 
 import { formatNumber, fmtDateTime, sendJson } from '../utils.js';
 import { sameData } from '../utils/same-data.js';
-import { startPoll } from '../cards/job-helpers.js';
+import { startPoll, isCancelledJob } from '../cards/job-helpers.js';
 import { tRaw, tFetchError } from '../i18n.js';
 import { isSelectedBook } from '../cards/book-guard.js';
 
@@ -64,9 +64,9 @@ export const wortschatzMethods = {
   },
 
   _pollWortschatz(jobId) {
-    const failed = () => {
+    const failed = (job) => {
       this.wortschatzLoading = false;
-      this.wortschatzStatus = tRaw('wortschatz.error');
+      this.wortschatzStatus = isCancelledJob(job) ? tRaw('job.cancelled') : tRaw('wortschatz.error');
     };
     startPoll(this, {
       timerProp: '_wortschatzPollTimer',

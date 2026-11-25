@@ -36,9 +36,13 @@ Jeder Job-Typ — auch einer **ohne** KI — steht in genau einer Modell-Klasse.
 
 **Why:** der Chat-Zweig ist der Default von `createJob` — ein Job, der ihn nicht braucht, muss das aktiv sagen, sonst zählt jeder seiner Läufe als Lauf des Instanz-Modells. Gegated: [tests/unit/job-model-class.test.js](../../tests/unit/job-model-class.test.js) — jeder Typ aus `JOB_TYPE_LABELS` in genau einer Klasse, und Nicht-Chat-Klassen rufen kein `callAI`/`aiCall`.
 
+## Abschnitte lesen
+
+Ein KI-Pfad holt Abschnitte über **einen** Weg: `readSections(bookId, { pageIds | chapterId | all, userEmail, … })` aus [shared/section-reader.js](shared/section-reader.js) — Text mit Absätzen (`pageTextForAi`), Titel, Kapitelpfad, Stand; auf Wunsch die einzeilige Vergleichsform (`withCompare`) und das HTML. Buch-Jobs mit Single-/Multi-Pass lesen über `loadPageContents` (gleiche Textfunktion, dazu Vorfilter und Gruppen); für den Prompt formatiert [shared/book-text-format.js](shared/book-text-format.js). Fachlicher Kontext (Figuren, Ideen, Welt-Fakten, Bewertungen) kommt aus den eigenen Loadern der Jobs, nicht aus dem Leser. Kein `contentStore.loadPage` + eigene HTML→Text-Wandlung für Prompt-Text daneben. Ausgenommen sind Vergleichsformen gegen gespeicherte oder indizierte Stände (Offsets von `quote_passage` gegen den Suchindex, Beleg-Abgleich im Ideen-Chat).
+
 ## Two-Tier-Analyse
 
-Jobs in `routes/jobs/` verwenden ein Single-Pass/Multi-Pass-Muster. Limits und Batch-Grössen sind als Konstanten in `routes/jobs/shared/` definiert — `SINGLE_PASS_LIMIT` und `PER_CHUNK_LIMIT` skalieren dynamisch aus `INPUT_BUDGET_CHARS` (70% / 35%).
+Jobs in `routes/jobs/` verwenden ein Single-Pass/Multi-Pass-Muster. Die Grenzen liefert `chunkLimitsFor(provider)` aus `routes/jobs/shared/loader.js` — `singlePass` und `perChunk` skalieren aus dem Input-Budget des gefragten Providers (70% / 35%), mit dessen Zeichen/Token-Rate.
 
 ## Komplettanalyse-Job
 

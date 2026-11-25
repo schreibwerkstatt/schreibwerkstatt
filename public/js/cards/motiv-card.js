@@ -96,6 +96,7 @@ export function registerMotivCard() {
     // Lauf aus der Historie), consistencyRuns die persistierte Liste.
     consistencyRunning: false,
     consistencyProgress: 0,
+    consistencyStatus: '',
     consistencyResult: null,
     consistencyRuns: [],
     selectedConsistencyRunId: null,
@@ -123,6 +124,7 @@ export function registerMotivCard() {
     // Scan-Job
     scanning: false,
     scanProgress: 0,
+    scanStatus: '',
     motivScanJobId: null,
     // Breite des Seitenpanels neben der Konstellation (px, null = Default aus
     // dem CSS); per Griff gezogen, in localStorage gemerkt (panel-resize.js).
@@ -138,6 +140,8 @@ export function registerMotivCard() {
     embedIndexStale: false,
     // Brainstorm-Job (KI-Vorschläge)
     brainstorming: false,
+    brainstormProgress: 0,
+    brainstormStatus: '',
     motivBrainstormJobId: null,
     suggestions: [],
     // Brainstorm-Lauf-Historie (persistiert pro Buch); ein Eintrag lädt seine

@@ -1,6 +1,6 @@
 'use strict';
 // Recherche-Chat: reine Hilfen + Verfügbarkeits-Gate.
-//  - toolsForRound: Web-Such-Gesamtdeckel (max_uses schrumpft, Werkzeug fällt weg)
+//  - toolsForRound: Web-Such-Gesamtdeckel (max_uses = Rest, Werkzeug fällt weg)
 //  - validateAnswerSources: final_answer.quellen nur gegen echte Web-Treffer
 //  - proposalsOnlyFallback: leere Antwort + Vorschläge ≠ „Iterationen erschöpft"
 //  - sessionProposalMemory: frühere Vorschläge samt Gespeichert-Status (auch Ideen)
@@ -26,35 +26,36 @@ const { findDuplicateItem, createItem } = require('../../db/research-items');
 const NOW = '2026-01-01T00:00:00.000Z';
 const USER = 'tester@example.com';
 
-const WEB = { type: 'web_search_20250305', name: 'web_search', max_uses: 6 };
+const WEB = { type: 'web_search_20250305', name: 'web_search' };
 const LIST = { name: 'list_research_items' };
 const FINAL = { name: 'final_answer' };
 const BASE = [WEB, LIST, FINAL];
 
 // ── Web-Such-Deckel ─────────────────────────────────────────────────────────
 
-test('toolsForRound: Rest ≥ Rundenwert → identisches Objekt (Prompt-Cache bleibt)', () => {
-  const out = toolsForRound(BASE, 2, 10);
-  assert.equal(out[0], WEB, 'unverändertes web_search-Objekt');
-  assert.equal(out.length, 3);
+// max_uses = ganzer Rest des Gesamtdeckels: ein kleinerer Wert pro Request liess das
+// Modell nach 6 Suchen glauben, sein Kontingent sei erschöpft (Prod 2026-11-25,
+// Session 254: 6 von 10 Suchen, Antwort «Websuche an ihr Kontingent gestossen»).
+test('toolsForRound: max_uses = ganzer Rest des Gesamtdeckels', () => {
+  const ws = toolsForRound(BASE, 0, 10).find(t => t.name === 'web_search');
+  assert.equal(ws.max_uses, 10);
+  assert.equal(WEB.max_uses, undefined, 'Basisliste nicht mutiert');
 });
 
-test('toolsForRound: Rest < Rundenwert → max_uses = Rest', () => {
-  const out = toolsForRound(BASE, 7, 10);
-  const ws = out.find(t => t.name === 'web_search');
+test('toolsForRound: ein Rundenwert der Basisliste begrenzt nicht unter den Deckel', () => {
+  const ws = toolsForRound([{ ...WEB, max_uses: 6 }, LIST, FINAL], 0, 10).find(t => t.name === 'web_search');
+  assert.equal(ws.max_uses, 10);
+});
+
+test('toolsForRound: bereits gelaufene Suchen → max_uses = Rest', () => {
+  const ws = toolsForRound(BASE, 7, 10).find(t => t.name === 'web_search');
   assert.equal(ws.max_uses, 3);
-  assert.equal(WEB.max_uses, 6, 'Basisliste nicht mutiert');
 });
 
 test('toolsForRound: Deckel erreicht → web_search fällt weg, Rest bleibt', () => {
   const out = toolsForRound(BASE, 10, 10);
   assert.deepEqual(out.map(t => t.name), ['list_research_items', 'final_answer']);
   assert.deepEqual(toolsForRound(BASE, 12, 10).map(t => t.name), ['list_research_items', 'final_answer']);
-});
-
-test('toolsForRound: Deckel kleiner als Rundenwert greift schon in Runde 1', () => {
-  const ws = toolsForRound(BASE, 0, 4).find(t => t.name === 'web_search');
-  assert.equal(ws.max_uses, 4);
 });
 
 // ── Quellen-Validierung ─────────────────────────────────────────────────────
@@ -248,7 +249,7 @@ test('buildResearchWritingContextBlock: Stelle, Auszug mit Schreibverbot, verkn�
   const out = buildResearchWritingContextBlock(wc, { toolNames: ['web_search', 'read_research_item', 'final_answer'] });
   assert.match(out, /Kapitel «Kap Eins»/);
   assert.match(out, /NICHT umschreiben/);
-  assert.match(out, /«Im Hafen\.»/, 'der Auszug selbst steht im Block');
+  assert.match(out, /<kapitel pfad="Kap Eins" auszug="ja">\nIm Hafen\.\n<\/kapitel>/, 'der Auszug selbst steht im Block, als Tag');
   assert.match(out, /nie in Suchbegriffe/);
   assert.match(out, /id=7 \[fact, offen\] Genua/);
   // Mit read_web_page (SearXNG): kein Auszug — nichts, was eine Seite hinauslocken könnte.

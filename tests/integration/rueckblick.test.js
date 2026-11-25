@@ -112,7 +112,8 @@ test('Zeitraum-Filter: nur Einträge des gewählten Monats', async () => {
   let seenEntryCount = null;
   ctx.mockAi.on((e) => e.schemaKeys.includes('zusammenfassung'), (entry) => {
     // Prompt enthält die Einträge — zähle die Datums-Header des Monats März.
-    seenEntryCount = (entry.prompt.match(/### 2024-03-/g) || []).length;
+    // Einträge als Tags mit datum-Attribut (public/js/prompts/book-text-format.js).
+    seenEntryCount = (entry.prompt.match(/datum="2024-03-/g) || []).length;
     return rueckblickResponse();
   });
 
@@ -348,7 +349,7 @@ test('Jahresrückblick übernimmt die Monats-Teilergebnisse: nur der Synthese-Ca
     const synth = prompt.includes('<verdichtete_facetten');
     calls.push(synth ? 'synth' : 'voll');
     if (synth) return { bemerkenswerteTage: [], zusammenfassung: 'Jahr.' };
-    const tag = /### (\d{4}-\d{2}-\d{2})/.exec(prompt)[1];
+    const tag = /datum="(\d{4}-\d{2}-\d{2})"/.exec(prompt)[1];
     return { ...rueckblickResponse('Monat.'), themen: [{ label: 'Arbeit', belege: [tag] }] };
   });
   for (const m of ['2024-01', '2024-02']) assert.equal((await runRb(BOOK_ID, m, 'm')).status, 'done');

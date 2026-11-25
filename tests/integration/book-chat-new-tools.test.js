@@ -158,7 +158,8 @@ test('Verlauf-Marken in der Buchsprache: bookTextOpts + Lese-Werkzeug', async ()
   assert.deepEqual(bookTextOpts(BOOK_ID), { langCode: 'en' });
   assert.deepEqual(bookTextOpts(null), { langCode: 'de' });
   const r = await bookChatTools.TOOLS.get_pages({ ids: [80221] }, { bookId: BOOK_ID, userEmail: 'alice@example.com' });
-  assert.match(r.pages[0].text, /\[Message thread .*u there\? \[End of message thread\]/);
+  // Text mit Absätzen (Abschnitts-Leser): Marke, Nachricht und Ende je eigener Absatz.
+  assert.match(r.pages[0].text, /\[Message thread [^\]]*\]\s+u there\?\s+\[End of message thread\]/);
 });
 
 // ── list_revisions (Liste + diff) ───────────────────────────────────────────

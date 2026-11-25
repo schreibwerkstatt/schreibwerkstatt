@@ -25,18 +25,22 @@ const { CHANGE_TYPES } = require('../../db/research-changes');
 
 /**
  * Werkzeugliste unter dem Web-Such-Gesamtdeckel: `max_uses` des serverseitigen
- * `web_search` höchstens der Rest des Deckels, bei aufgebrauchtem Deckel fällt das
- * Werkzeug weg. Der Recherche-Chat ruft das einmal beim Start — die Liste bleibt
- * danach für alle Recherche-Runden gleich, weil Werkzeuge vorn im Prompt-Cache
- * stehen und Thinking-Blöcke an den unveränderten Gesprächsanfang gebunden sind.
- * Einzige Ausnahme ist der Synthese-Call: der Loop lässt dort die serverseitigen
- * Werkzeuge (web_search) weg und nimmt den einen Cache-Fehlschlag in Kauf; die
- * eigenen Werkzeuge bleiben. Den Deckel über die Runden hält der Loop-Hook
- * `stopBeforeRound`: ist er erreicht, folgt diese Synthese. Innerhalb einer
- * Runde begrenzt nur `max_uses` (höchstens der Rest beim Start) — mehrere Suchen
- * einer Runde können den Gesamtdeckel darum knapp überschreiten.
+ * `web_search` = der ganze Rest des Deckels, bei aufgebrauchtem Deckel fällt das
+ * Werkzeug weg. Kein kleinerer Wert pro Request: die API lehnt die Suche über
+ * `max_uses` mit `max_uses_exceeded` ab, und das Modell liest das als «Kontingent
+ * erschöpft» und hört auf, obwohl der Gesamtdeckel noch Suchen hergäbe — die
+ * dynamisch filternde Suche (Opus 5.5) bündelt dazu viele Suchen in EINEM Request.
+ * Der Recherche-Chat ruft das einmal beim Start — die Liste bleibt danach für alle
+ * Recherche-Runden gleich, weil Werkzeuge vorn im Prompt-Cache stehen und
+ * Thinking-Blöcke an den unveränderten Gesprächsanfang gebunden sind. Einzige
+ * Ausnahme ist der Synthese-Call: der Loop lässt dort die serverseitigen Werkzeuge
+ * (web_search) weg und nimmt den einen Cache-Fehlschlag in Kauf; die eigenen
+ * Werkzeuge bleiben. Den Deckel über die Runden hält der Loop-Hook
+ * `stopBeforeRound`: ist er erreicht, folgt diese Synthese. Weil `max_uses` je
+ * Request gilt, kann eine spätere Runde den Gesamtdeckel überschreiten (höchstens
+ * um den Deckel minus 1) — billiger als ein Cache-Neuaufbau je Runde.
  *
- * @param {Array} tools  Basisliste (mit `web_search`, `max_uses` = Rundenwert)
+ * @param {Array} tools  Basisliste (mit `web_search`)
  * @param {number} used  bisher gelaufene Web-Suchen
  * @param {number} cap   Gesamtdeckel (jobs.research_chat.max_web_searches)
  */
@@ -46,8 +50,7 @@ function toolsForRound(tools, used, cap) {
   for (const t of tools) {
     if (t.name !== 'web_search') { out.push(t); continue; }
     if (remaining <= 0) continue;
-    const perRound = Number(t.max_uses) || remaining;
-    out.push(perRound <= remaining ? t : { ...t, max_uses: remaining });
+    out.push({ ...t, max_uses: remaining });
   }
   return out;
 }

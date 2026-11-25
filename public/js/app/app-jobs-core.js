@@ -350,14 +350,18 @@ export const appJobsCoreMethods = {
     }
   },
 
+  // true = Abbruch beim Server angekommen (404: Job schon weg), false = gescheitert
+  // — x-job-progress gibt «Abbrechen» dann wieder frei.
   async cancelJob(jobId) {
     try {
       const res = await fetch('/jobs/' + jobId, { method: 'DELETE' });
       if (!res.ok && res.status !== 404) throw new Error(`HTTP ${res.status}`);
       this.$store.jobs.jobQueueItems = this.$store.jobs.jobQueueItems.filter(j => j.id !== jobId);
+      return true;
     } catch (e) {
       console.error('[cancelJob]', e);
       this.setStatus(this.t('app.jobCancelFailed'), false, 4000);
+      return false;
     }
   },
 

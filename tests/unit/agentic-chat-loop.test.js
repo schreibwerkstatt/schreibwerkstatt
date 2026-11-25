@@ -1037,3 +1037,58 @@ test('gescheiterter Lauf ohne Runde: nichts an die Frage gehängt', async () => 
   await makeJob().run(jobId, sid, userMsgId, 'Frage?', USER);
   assert.equal(db.prepare('SELECT context_info FROM chat_messages WHERE id = ?').get(userMsgId).context_info, null);
 });
+
+test('roundStatus: Stand nach der Runde hängt als Text hinter den tool_results, der Hook sieht die Websuchen', async () => {
+  const seen = [];
+  const search = [
+    { type: 'server_tool_use', id: 'ws1', name: 'web_search', input: { query: 'a' } },
+    { type: 'web_search_tool_result', tool_use_id: 'ws1', content: [{ type: 'web_search_result', url: 'https://a.example', title: 'A' }] },
+  ];
+  const calls = mockCalls([
+    res({ stopReason: 'tool_use', rawContentBlocks: search, toolUses: [tu('lookup')] }),
+    res({ stopReason: 'tool_use', toolUses: [tu('final_answer', { antwort: 'fertig' })] }),
+  ]);
+  const roundStatus = ({ webSearches }) => { seen.push(webSearches); return `Suchen: ${webSearches}`; };
+  const out = await runJob(makeJob({ prep: { roundStatus } }), newSession());
+  assert.equal(out.content, 'fertig');
+  assert.deepEqual(seen, [1]);
+  const last = calls[1].messages.at(-1);
+  assert.equal(last.role, 'user');
+  assert.equal(last.content[0].type, 'tool_result', 'tool_results bleiben vorn (Paarung)');
+  assert.deepEqual(last.content.at(-1), { type: 'text', text: 'Suchen: 1' });
+});
+
+test('roundStatus: null → keine Zusatz-Nachricht', async () => {
+  const calls = mockCalls([
+    res({ stopReason: 'tool_use', toolUses: [tu('lookup')] }),
+    res({ stopReason: 'tool_use', toolUses: [tu('final_answer', { antwort: 'fertig' })] }),
+  ]);
+  await runJob(makeJob({ prep: { roundStatus: () => null } }), newSession());
+  assert.ok(calls[1].messages.at(-1).content.every(b => b.type === 'tool_result'));
+});
+
+test('serverToolDigest: Suchen aus der Code-Ausführung, Wiederholungen, Fehler von Suche und Code', () => {
+  const { serverToolDigest } = require('../../routes/jobs/agentic-chat/tool-view');
+  assert.equal(serverToolDigest([{ type: 'text', text: 'x' }]), null, 'ohne Server-Werkzeug kein Eintrag');
+  const caller = { type: 'code_execution_20250825', tool_id: 'ce1' };
+  const d = serverToolDigest([
+    { type: 'server_tool_use', id: 'ce1', name: 'code_execution', input: { code: '…' } },
+    { type: 'server_tool_use', id: 's1', name: 'web_search', input: { query: 'TCS layoffs' }, caller },
+    { type: 'web_search_tool_result', tool_use_id: 's1', caller, content: [] },
+    { type: 'server_tool_use', id: 's2', name: 'web_search', input: { query: 'TCS layoffs' } },
+    { type: 'web_search_tool_result', tool_use_id: 's2', content: { type: 'web_search_tool_result_error', error_code: 'max_uses_exceeded' } },
+    { type: 'code_execution_tool_result', tool_use_id: 'ce1', content: { type: 'code_execution_result', return_code: 1, stderr: 'Traceback …\nTimeoutError: search', stdout: '' } },
+    { type: 'server_tool_use', id: 'ce2', name: 'code_execution', input: {} },
+    { type: 'code_execution_tool_result', tool_use_id: 'ce2', content: { type: 'code_execution_tool_result_error', error_code: 'execution_time_exceeded' } },
+  ]);
+  assert.equal(d.searches, 2);
+  assert.equal(d.viaCode, 1);
+  assert.deepEqual(d.repeated, [{ query: 'TCS layoffs', n: 2 }]);
+  assert.deepEqual(d.searchErrors, ['max_uses_exceeded']);
+  assert.equal(d.codeRuns, 2);
+  assert.deepEqual(d.codeErrors, ['rc=1: TimeoutError: search', 'execution_time_exceeded']);
+  assert.match(d.line, /web_search×2 \(1 aus Code\)/);
+  assert.match(d.line, /wiederholt: «TCS layoffs»×2/);
+  assert.match(d.line, /max_uses_exceeded/);
+  assert.match(d.line, /execution_time_exceeded/);
+});

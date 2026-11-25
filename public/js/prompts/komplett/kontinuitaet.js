@@ -107,7 +107,7 @@ const _KONTINUITAET_FAKTEN_RULES = `Vorrang für diese Kontinuitäts-Extraktion 
 - Zeit-Rahmen jeder Szene: Tageszeit, Jahreszeit, Wetter am Szenenbeginn (Kategorie «zeit» bzw. «ort», z.B. «Szene am See: Nachmittag, Schneefall»).
 - Verletzungen und Krankheiten mit Schwere und Heilungsstand («Marek: Bein gebrochen», «Marek: läuft wieder ohne Krücken»); Verwandtschaft und Beziehungsstatus («Lena: ist Pauls Schwester», «Paul: ist geschieden»).
 - Erzählform: pro Kapitel EIN Fakt mit Kategorie «sonstiges», subjekt «Erzählform», fakt = Perspektive und Tempus («Ich-Erzählerin Lena, Präteritum»); wechselt die Erzählform innerhalb des Kapitels, den Wechsel als eigenen Fakt.
-- «seite» IMMER füllen (Abschnittsname aus der «### …»-Überschrift) — die Prüfung findet darüber die Originalstelle.`;
+- «seite» IMMER füllen (Abschnittsname aus dem «titel» des <abschnitt>-Tags) — die Prüfung findet darüber die Originalstelle.`;
 
 // Fehlerklassen, die Single- und Multi-Pass gleichermassen suchen. Die typ-Zuordnung
 // steht in PROBLEME_RULES; hier steht, WORAUF zu achten ist.

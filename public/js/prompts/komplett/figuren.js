@@ -117,7 +117,7 @@ ${bookText == null ? '(steht im System-Prompt oben)' : bookText}
 Antworte mit diesem JSON-Schema:
 {
   "beziehungen": [
-    { "von": "fig_1", "zu": "fig_2", "typ": "${RELATION_TYPES_PROMPT}", "machtverhaltnis": 0, "naehe": 0, "beschreibung": "1 Satz", "belege": [{ "kapitel": "Kapitelname (ohne ##-Präfix)", "seite": "Abschnittstitel (ohne ###-Präfix); leer wenn = Kapitel oder unklar" }] }
+    { "von": "fig_1", "zu": "fig_2", "typ": "${RELATION_TYPES_PROMPT}", "machtverhaltnis": 0, "naehe": 0, "beschreibung": "1 Satz", "belege": [{ "kapitel": "Kapitelname (Wert von pfad)", "seite": "Abschnittstitel (Wert von titel); leer wenn = Kapitel oder unklar" }] }
   ]
 }
 
@@ -130,7 +130,7 @@ Regeln:
 - Keine Beziehungen die bereits in «Bekannte Beziehungen» stehen
 - machtverhaltnis: ganzzahlig im Bereich -2 bis 2 (KEIN führendes Plus-Zeichen). Machtasymmetrie: 2=Gegenüber («zu») dominiert klar, 1=Gegenüber hat leichten Vorteil, 0=symmetrisch, -1=diese Figur («von») hat leichten Vorteil, -2=diese Figur dominiert klar; weglassen oder 0 wenn unklar
 - naehe: ganzzahlig im Bereich -2 bis 2 (KEIN führendes Plus-Zeichen). Emotionale Nähe, wie die Beziehung im Text GELEBT wird – nicht, was der Typ nahelegt: 2=innig (Zuneigung, Vertrauen, Geborgenheit), 1=zugewandt, 0=sachlich/neutral, -1=kühl/entfremdet/gleichgültig, -2=feindselig/verletzend/Abscheu. Eine Ehe, in der man sich ignoriert, ist -1; ein Vater, der sein Kind vernachlässigt, -1 oder -2; 0 wenn unklar
-- belege: HÖCHSTENS 1 Stelle (Kapitelname + Abschnittstitel) an der die Beziehung sichtbar wird. seite leer lassen wenn identisch mit dem Kapitelnamen oder unklar. Abschnittsnamen aus ### Überschriften, Kapitel aus ## Überschriften des übergebenen Textes.
+- belege: HÖCHSTENS 1 Stelle (Kapitelname + Abschnittstitel) an der die Beziehung sichtbar wird. seite leer lassen wenn identisch mit dem Kapitelnamen oder unklar. Abschnittsnamen aus dem «titel» des <abschnitt>-Tags, Kapitel aus dem «pfad» des <kapitel>-Tags im übergebenen Text.
 - Leeres Array wenn keine neuen kapitelübergreifenden Beziehungen eindeutig belegt sind`;
 }
 
@@ -173,7 +173,7 @@ ${textBlock}
 Antworte mit diesem JSON-Schema:
 {
   "beziehungen": [
-    { "von": "fig_1", "zu": "fig_2", "typ": "${RELATION_TYPES_PROMPT}",${machtField} "beschreibung": "1 Satz", "belege": [{ "kapitel": "Kapitelname (ohne ##-Präfix)", "seite": "Abschnittstitel (ohne ###-Präfix); leer wenn = Kapitel oder unklar" }] }
+    { "von": "fig_1", "zu": "fig_2", "typ": "${RELATION_TYPES_PROMPT}",${machtField} "beschreibung": "1 Satz", "belege": [{ "kapitel": "Kapitelname (Wert von pfad)", "seite": "Abschnittstitel (Wert von titel); leer wenn = Kapitel oder unklar" }] }
   ]
 }
 
@@ -182,7 +182,7 @@ Regeln:
 - typ: GENAU EIN Wert aus der Liste im Schema – nie mehrere mit «|» verbinden, keine eigenen Typen. Weitere Verwandtschaft (Tante, Onkel, Cousin, Grosseltern, Enkel, Schwager, Schwiegereltern) → verwandt, das genaue Verwandtschaftswort in die Beschreibung
 - typ beschreibt die ROLLE von «zu» (NICHT von «von»). Beispiel: Robert hat Mutter Sandra → { von: «<Roberts id>», zu: «<Sandras id>», typ: elternteil } (Sandra IST der Elternteil von Robert). patronage=Schutzherrschaft (zu = Patron), geschaeft=wirtschaftliche Beziehung, geschwister/verwandt/ehepartner/ex_partner/verbuendete/komplize=ungerichtet, vorgesetzter=«zu» ist Vorgesetzte(r) von «von», untergebener=«zu» ist «von» unterstellt, liebesbeziehung nur für nicht-eheliche romantische Bindung, übrige selbsterklärend.
 - Pro Figurenpaar höchstens EINE Beziehung – nicht von→zu UND zu→von für dasselbe Paar. Keine widersprüchlichen Angaben.${machtRule}
-- belege: HÖCHSTENS 1 Stelle (Kapitelname + Abschnittstitel) an der die Beziehung klar wird. seite leer lassen wenn identisch mit dem Kapitelnamen oder unklar. Abschnittsnamen aus ### Überschriften, Kapitel aus ## Überschriften.
+- belege: HÖCHSTENS 1 Stelle (Kapitelname + Abschnittstitel) an der die Beziehung klar wird. seite leer lassen wenn identisch mit dem Kapitelnamen oder unklar. Abschnittsnamen aus dem «titel» des <abschnitt>-Tags, Kapitel aus dem «pfad» des <kapitel>-Tags.
 - KONSERVATIV: Nur Beziehungen die im Text eindeutig belegt sind – lieber weglassen als spekulieren.${scopeRule}
 - Leeres Array wenn keine Beziehungen eindeutig belegt sind.`;
 }

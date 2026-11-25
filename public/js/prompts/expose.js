@@ -10,6 +10,7 @@
 // fliesst darum bewusst NICHT in `_promptsContentHash` (eine Wortlaut-Änderung
 // hier soll nicht jeden anderen persistenten Cache verwerfen).
 
+import { xmlAttr, neutralizeOwnTags } from './book-text-format.js';
 import { _obj, _str, _num } from './schema-utils.js';
 import { JSON_ONLY, _jsonOnly } from './state.js';
 import { reviewProfil } from './review-typen.js';
@@ -110,7 +111,7 @@ ${quelle.text}
   return `\n<inhaltsangaben>
 Das Manuskript ist zu lang für einen Durchgang. Grundlage sind Inhaltsangaben je Kapitel in
 Lesereihenfolge; nutze nur, was dort steht.
-${quelle.items.map(i => `## ${i.kapitel}\n${i.inhalt}`).join('\n\n')}
+${quelle.items.map(i => `<inhaltsangabe ${xmlAttr('kapitel', i.kapitel)}>\n${neutralizeOwnTags(i.inhalt)}\n</inhaltsangabe>`).join('\n\n')}
 </inhaltsangaben>`;
 }
 

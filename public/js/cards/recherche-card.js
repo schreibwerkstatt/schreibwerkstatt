@@ -156,6 +156,7 @@ export function registerRechercheCard() {
     researchChatSessions: [],
     researchChatMessages: [],
     researchChatSessionId: null,
+    _hitMsgId: null,           // Treffer der Verlaufssuche: Sprungziel + Hervorhebung (chat-base.js)
     researchChatInput: '',
     researchChatLoading: false,
     // Session, für die der laufende Job arbeitet (null = kein Lauf).

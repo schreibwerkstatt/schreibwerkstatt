@@ -121,7 +121,7 @@ test('Ideen-Chat: Ort, Stufe mit Beleg und neue Idee einzeln übernehmen', async
   expect(guard.unmatched().map((f) => `[${f.channel}] ${f.text}`)).toEqual([]);
 });
 
-test('Ideen-Chat: Abbrechen-Knopf im Kopf bricht den laufenden Job der Session ab', async ({ page }) => {
+test('Ideen-Chat: Senden-Knopf wird im Lauf zum Stopp-Knopf und bricht den Job der Session ab', async ({ page }) => {
   const guard = attachConsoleGuard(page);
   await bootApp(page);
   await selectSeededBook(page);
@@ -130,16 +130,21 @@ test('Ideen-Chat: Abbrechen-Knopf im Kopf bricht den laufenden Job der Session a
   await page.locator(`${CARD} .card-header button[aria-pressed]`).first().click();
   await page.waitForFunction(() => window.Alpine.$data(document.querySelector('.card--ideenboard')).ideenChatSessionId != null);
 
-  const cancelBtn = page.locator('#ideen-chat-card .card-actions button', { has: page.locator('use[href$="#square"]') });
-  await expect(cancelBtn).toBeHidden();
+  const sendBtn = page.locator('#ideen-chat-card .chat-send-btn');
+  const stopIcon = sendBtn.locator('use[href$="#square"]');
+  await expect(sendBtn.locator('use[href$="#arrow-up"]')).toBeVisible();
+  await expect(stopIcon).toBeHidden();
+  // Kein zweiter Abbrechen-Knopf im Kartenkopf.
+  await expect(page.locator('#ideen-chat-card .card-actions use[href$="#square"]')).toHaveCount(0);
 
   const sid = await boardData(page, 'd.ideenChatLoading = true; d.ideenChatRunningSessionId = d.ideenChatSessionId; return d.ideenChatSessionId;');
   await page.route(`**/jobs/active?type=ideen-chat&book_id=${sid}`, (r) => r.fulfill({ json: { jobId: 'job-ideen-x' } }));
   const del = page.waitForRequest((r) => r.method() === 'DELETE' && r.url().endsWith('/jobs/job-ideen-x'));
   await page.route('**/jobs/job-ideen-x', (r) => r.fulfill({ json: { ok: true } }));
 
-  await expect(cancelBtn).toBeVisible();
-  await cancelBtn.click();
+  await expect(stopIcon).toBeVisible();
+  await expect(sendBtn).toBeEnabled();
+  await sendBtn.click();
   await del;
 
   await boardData(page, 'd.ideenChatLoading = false; d.ideenChatRunningSessionId = null;');

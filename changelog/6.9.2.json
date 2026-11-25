@@ -1,0 +1,41 @@
+{
+  "version": "6.9.2",
+  "date": "2026-11-25",
+  "entries": [
+    {
+      "kind": "neu",
+      "de": "Laufende KI-Auswertungen lassen sich abbrechen: Komplettanalyse, Kontinuitätsprüfung, Erzählprofil, Lektorat-Prüflauf und Transkription in der Recherche haben unter dem Fortschrittsbalken einen Knopf «Abbrechen». Ein abgebrochener Lauf zeigt «Abgebrochen» statt einer Fehlermeldung.",
+      "en": "Running AI analyses can now be cancelled: full analysis, continuity check, narrative profile, proofreading check and transcription in Research have a «Cancel» button below the progress bar. A cancelled run shows «Cancelled» instead of an error."
+    },
+    {
+      "kind": "verbessert",
+      "de": "Alle fünf Chats: Solange eine Antwort entsteht, wird der Senden-Knopf zum Stopp-Knopf. Ist eine Frage unbeantwortet geblieben, kannst du sie mit «Erneut fragen» noch einmal stellen.",
+      "en": "All five chats: while an answer is being written, the send button turns into a stop button. If a question was left unanswered, you can send it again with «Ask again»."
+    },
+    {
+      "kind": "verbessert",
+      "de": "Chats, Bewertungen und Analysen bekommen den Buchtext jetzt mit Absätzen und Kapitelzugehörigkeit. Die Antworten beziehen sich dadurch genauer auf die richtige Stelle und halten sich mit Korrektur-Hinweisen zurück, wo keine gefragt sind.",
+      "en": "Chats, reviews and analyses now receive the book text with its paragraphs and chapter placement. Answers point more precisely to the right passage and hold back on proofreading remarks where none were asked for."
+    },
+    {
+      "kind": "verbessert",
+      "de": "Frühere Läufe (Plot- und Motiv-Werkstatt, Figur-Werkstatt, Buch- und Kapitelbewertung, Fine-Tuning) sehen überall gleich aus: Datum, Angaben, Modell, und das Löschen-Symbol direkt in der Zeile.",
+      "en": "Past runs (plot and motif workshop, character workshop, book and chapter review, fine-tuning) now look the same everywhere: date, details, model, and the delete icon right in the row."
+    },
+    {
+      "kind": "verbessert",
+      "de": "Die Token-Zahlen in Statistik und Abschnitts-Verlauf passen jetzt zum eingestellten Claude-Modell. Die Werte ändern sich dadurch einmalig, auch rückwirkend für ältere Einträge.",
+      "en": "Token counts in statistics and section history now match the configured Claude model. The values change once as a result, including retroactively for older entries."
+    },
+    {
+      "kind": "verbessert",
+      "de": "Recherche-Chat: Vorschläge zu Fundstücken zeigen die Quelle in voller Breite, und lange Texte lassen sich mit «Ganzen Text zeigen» aufklappen.",
+      "en": "Research chat: suggestions for findings show the source at full width, and long texts can be expanded with «Show full text»."
+    },
+    {
+      "kind": "behoben",
+      "de": "Kapitelbewertung: Fehlte ein Abschnitt, der inzwischen gelöscht war, brach die Bewertung ohne verständlichen Grund ab. Jetzt erklärt eine Meldung, dass du die Gliederung neu laden und die Bewertung erneut starten sollst.",
+      "en": "Chapter review: if a section had been deleted in the meantime, the review stopped without a clear reason. A message now tells you to reload the outline and start the review again."
+    }
+  ]
+}

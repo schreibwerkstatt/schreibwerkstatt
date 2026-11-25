@@ -9,7 +9,7 @@
 
 import { sendJson } from '../utils/net.js';
 import { fetchJson } from '../utils.js';
-import { startPoll } from '../cards/job-helpers.js';
+import { startPoll, isCancelledJob } from '../cards/job-helpers.js';
 import { isSelectedBook } from '../cards/book-guard.js';
 import {
   TEXTSORTEN, TEXTSORTE_KEYS, textsorte as textsorteDef,
@@ -233,6 +233,7 @@ export const strukturMethods = {
       },
       onError: (job) => {
         this._strukturIdle();
+        if (isCancelledJob(job)) { this.strukturStatus = window.__app.t('job.cancelled'); return; }
         this.strukturError = window.__app.t(job.error, job.errorParams);
       },
     });

@@ -9,6 +9,31 @@ import { lsRemove } from '../safe-storage.js';
 // läuft als Sicherheitsnetz (bei 2 s: alle 30 s).
 const STREAM_SAFETY_TICKS = 15;
 
+// Timer-Handle → { jobId, holder, prop } des laufenden Pollers. Damit kann jede
+// Fläche ihren Job abbrechen, ohne die ID selbst zu führen (`polledJobId`,
+// x-job-progress). Räumt jemand den Timer von aussen ab (card-lifecycle
+// timerKeys, Nachfolge-Poller, eigenes clearInterval der Karte), tickt der
+// Poller nie mehr und `detach` läuft nicht — `sweepJobIds` wirft solche
+// Einträge beim nächsten Start weg, die Map bleibt so gross wie die Zahl der
+// laufenden Poller.
+const jobIdByTimer = new Map();
+function sweepJobIds() {
+  for (const [t, e] of jobIdByTimer) {
+    if (e.holder[e.prop] !== t) jobIdByTimer.delete(t);
+  }
+}
+
+// Vom User abgebrochen (DELETE /jobs/:id) — kein Fehler, neutral melden.
+export function isCancelledJob(job) {
+  return job?.status === 'cancelled' || job?.error === 'job.cancelled';
+}
+
+// Job-ID des Pollers, der unter `holder[timerProp]` läuft — null, wenn keiner.
+export function polledJobId(holder, timerProp) {
+  const t = holder?.[timerProp];
+  return t ? (jobIdByTimer.get(t)?.jobId ?? null) : null;
+}
+
 // Footer-Sync: Ohne offenen Job-Stream pollt der Job-Queue-Footer `/jobs/queue`
 // nur alle 5 s, der per-Job-Poller `/jobs/:id` alle 2 s. Bei langen Jobs mit vielen schnellen
 // Progress-Updates (z.B. Komplettanalyse über viele kleine Chunks) driften
@@ -65,6 +90,7 @@ export function startPoll(ctx, config) {
   const detach = () => {
     done = true;
     clearInterval(timer);
+    jobIdByTimer.delete(timer);
     unsubscribe?.();
   };
   const stop = () => {
@@ -124,6 +150,8 @@ export function startPoll(ctx, config) {
     tick();
   }, config.intervalMs || 2000);
   holder[config.timerProp] = timer;
+  sweepJobIds();
+  jobIdByTimer.set(timer, { jobId: config.jobId, holder, prop: config.timerProp });
   // Push-Pfad: Fortschritt direkt aus dem Stream-Snapshot (ohne `result`);
   // Terminal-Status und Reconnect (`null`) laufen über einen normalen Tick, der
   // das Ergebnis holt — so bleibt der Terminal-Pfad oben der einzige.

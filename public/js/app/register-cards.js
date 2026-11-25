@@ -111,6 +111,7 @@ import { registerLongPress } from '../action-menu.js';
 import { registerModal } from '../modal.js';
 import { registerEntityRef } from '../entity-ref.js';
 import { registerUserChip } from '../user-chip.js';
+import { registerJobProgress } from '../job-progress.js';
 import { registerSkeleton } from '../skeleton.js';
 import { registerListWindow } from '../list-window.js';
 import { registerAsideResize } from '../aside-resize.js';
@@ -264,6 +265,7 @@ export function registerAllCards() {
   registerModal();
   registerEntityRef();
   registerUserChip();
+  registerJobProgress();
   registerSkeleton();
   registerListWindow();
   registerAsideResize();

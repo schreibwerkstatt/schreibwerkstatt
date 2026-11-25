@@ -4,7 +4,7 @@
 //
 // Eigener State: chatSessions, chatMessages, chatSessionId, chatInput,
 //   chatLoading, chatRunningSessionId, chatProgress, chatStatus, _chatPollTimer,
-//   _chatTitleTimer, _chatPendingRefresh, chatFlushFailed, _chatRetryOf.
+//   _chatTitleTimer, _chatPendingRefresh, chatFlushFailed.
 // Geteilt über Alpine.store('pageChat'): die offenen Vorschläge als Inline-
 //   Marken der Leseansicht (cards/page-chat-store.js).
 // Root behält: showChatCard (Hash-Router), currentPage, originalHtml,
@@ -41,7 +41,6 @@ export function registerChatCard() {
     // (Hinweis über dem Eingabefeld, chat.js#onBeforeSend).
     chatFlushFailed: false,
     // «Erneut fragen»: ID der ersetzten offenen Frage während des Sendens (chat.js).
-    _chatRetryOf: null,
     // onShow ist durchgelaufen: ab dann holt der CARD_REQUEST-Listener einen
     // Session-Wunsch ab, vorher onShow selbst (sonst laden beide parallel).
     _chatShown: false,

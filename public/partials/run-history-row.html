@@ -1,0 +1,30 @@
+<!-- @expects r -->
+<!-- Geteilte Zeile eines Lauf-Verlaufs (DESIGN.md «Lauf-Verlauf»): Datum,
+     Zusatzangaben, Modell, Chevron, Löschen rechts aussen. Erwartet `r` aus dem
+     umschliessenden x-for und den Adapter `runRow` am umschliessenden Element
+     (`x-data="{ runRow: <karte>RunRow() }"`, public/js/run-history.js). -->
+<div class="history-item hover-reveal-host internal-link"
+     :class="{ 'history-item--open': runRow.isOpen(r), 'history-item--disabled': runRow.disabled(r) }"
+     :data-tip="runRow.tip(r)"
+     @click="runRow.toggle(r)">
+  <span class="history-date" x-text="runRow.date(r)"></span>
+  <template x-for="(b, i) in runRow.badges(r)" :key="i">
+    <span class="run-history-badge">
+      <template x-if="b.ref">
+        <span class="entity-ref" x-entity-ref="b.ref"></span>
+      </template>
+      <template x-if="b.stars">
+        <span class="badge badge-ok review-stars" :data-tip="b.tip || null" x-html="runRow.stars(b.stars)"></span>
+      </template>
+      <template x-if="b.text">
+        <span :class="b.cls || 'tag'" :data-tip="b.tip || null" x-text="b.text"></span>
+      </template>
+    </span>
+  </template>
+  <span x-show="runRow.model(r)" class="tag" x-text="runRow.model(r)"></span>
+  <span x-show="!runRow.disabled(r)" class="history-chevron" :class="{ open: runRow.isOpen(r) }" aria-hidden="true"></span>
+  <button type="button" class="history-item-delete hover-reveal"
+          @click.stop="runRow.remove(r)"
+          :data-tip="$app.t('common.deleteEntry')"
+          :aria-label="$app.t('common.deleteEntry')"><svg class="icon" aria-hidden="true"><use href="/icons.svg#trash"/></svg></button>
+</div>

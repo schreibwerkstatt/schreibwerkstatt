@@ -1,4 +1,5 @@
 'use strict';
+const { formatAbschnitt, formatAbschnitte } = require('../shared/book-text-format');
 const { nameTokens, salutationGender } = require('../../../lib/name-normalize');
 
 const crypto = require('crypto');
@@ -357,9 +358,20 @@ function sampleChapters(groups, groupOrder, n, maxCharsPerChapter = 40000) {
   }
   return [...idxs].map(i => {
     const g = groups.get(nonEmpty[i]);
-    let chText = (g.pages || []).map(p => `### ${p.title}\n${p.text}`).join('\n\n---\n\n');
-    if (chText.length > maxCharsPerChapter) chText = chText.slice(0, maxCharsPerChapter);
-    return { name: g.name, chText };
+    // Deckel auf Abschnittsebene: der letzte Abschnitt wird im Text gekürzt, nicht
+    // das formatierte Ergebnis — sonst bliebe ein offenes `<abschnitt>`-Tag stehen.
+    const kept = [];
+    let used = 0;
+    for (const p of (g.pages || [])) {
+      const head = formatAbschnitt({ title: p.title, text: '' }).length;
+      const room = maxCharsPerChapter - used - head;
+      if (room <= 0) break;
+      const text = p.text.length > room ? p.text.slice(0, room) : p.text;
+      kept.push({ title: p.title, text });
+      used += head + text.length + 2;
+      if (text.length < p.text.length) break;
+    }
+    return { name: g.name, chText: formatAbschnitte(kept) };
   });
 }
 

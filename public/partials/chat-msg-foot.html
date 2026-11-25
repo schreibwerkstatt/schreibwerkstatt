@@ -1,0 +1,6 @@
+<!-- @expects msg -->
+<!-- Fuss einer Chat-Antwort in allen fünf Chats (Fragment, string-seitig per
+     Include-Marker in der Nachrichten-Schleife): Token-Info des Laufs
+     (_chatTokenInfo, chat-base.js) und Daumen-Feedback (chat-feedback.html). -->
+<div x-show="msg.role === 'assistant' && _chatTokenInfo(msg)" class="chat-token-info" :title="_chatTokenTitle(msg)" x-text="_chatTokenInfo(msg)"></div>
+<!-- @include chat-feedback -->

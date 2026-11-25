@@ -13,22 +13,18 @@
       <span class="card-title" x-text="$app.t('plot.chat.heading')"></span>
     </div>
     <div class="card-actions">
-      <button type="button" class="icon-btn icon-btn--ghost" x-show="isPlotChatSessionRunning(plotChatSessionId)" @click="cancelPlotChatRun()" :data-tip="$app.t('chat.cancelRunTip')" :aria-label="$app.t('chat.cancelRun')"><svg class="icon" aria-hidden="true"><use href="/icons.svg#square"/></svg></button>
       <button type="button" class="icon-btn icon-btn--ghost" @click="startNewPlotChatSession()" :disabled="plotChatLoading" :data-tip="$app.t('chat.newSessionTitle')" :aria-label="$app.t('chat.newSession')"><svg class="icon" aria-hidden="true"><use href="/icons.svg#plus"/></svg></button>
     </div>
     <button type="button" class="btn-card-close" @click="plotChatOpen = false" :data-tip="$app.t('common.close')" :aria-label="$app.t('common.close')"><svg class="icon" aria-hidden="true"><use href="/icons.svg#x"/></svg></button>
   </div>
 
-  <div x-show="plotChatProgress > 0 && isPlotChatSessionRunning(plotChatSessionId)" class="progress-bar-wrap">
-    <div class="progress-bar" :style="{ '--progress': plotChatProgress + '%' }"></div>
-  </div>
-  <div x-show="plotChatStatus" class="card-status" x-html="plotChatStatus"></div>
+  <div x-job-progress="{ active: isPlotChatSessionRunning(plotChatSessionId), progress: plotChatProgress, status: plotChatStatus }"></div>
 
   <div id="plot-chat-messages" class="chat-messages aside-split-scroll">
     <div x-show="plotChatMessages.length === 0 && !plotChatLoading" class="muted-msg muted-msg--sm muted-msg--block" x-text="$app.t('plot.chat.empty')"></div>
 
     <template x-for="(msg, msgIdx) in plotChatMessages" :key="msgIdx">
-      <div :class="'chat-msg chat-msg--' + msg.role">
+      <div :class="'chat-msg chat-msg--' + msg.role + (msg.id != null && msg.id === _hitMsgId ? ' chat-msg--hit' : '')" :data-msg-id="msg.id">
         <div class="chat-msg-bubble">
           <div x-show="msg.role === 'user'" class="chat-msg-text" x-text="msg.content"></div>
           <div x-show="msg.role === 'assistant'" class="chat-msg-text" x-html="_renderChatMarkdown(msg.content)"></div>
@@ -41,24 +37,8 @@
             <div class="chat-vorschlaege chat-vorschlaege--wide plot-chat-proposals">
               <template x-for="(p, pi) in plotProposals(msg)" :key="pi">
                 <div class="chat-vorschlag"
-                     :class="{ 'chat-vorschlag--applied': plotProposalStatus(msg, pi).state === 'applied', 'chat-vorschlag--discarded': plotProposalStatus(msg, pi).state === 'discarded', 'chat-vorschlag--stale': plotProposalStatus(msg, pi).state === 'open' && (plotProposalStatus(msg, pi).stale || plotProposalStatus(msg, pi).blocked) }">
-                  <div class="chat-vorschlag-header">
-                    <span class="chat-vorschlag-label"
-                          x-text="plotProposalStatus(msg, pi).state === 'applied' ? $app.t('plot.chat.applied') : plotProposalStatus(msg, pi).state === 'discarded' ? $app.t('chat.discarded') : plotProposalTypeLabel(p)"></span>
-                    <span class="chat-vorschlag-actions">
-                      <button type="button" class="chat-vorschlag-btn" x-show="plotProposalStatus(msg, pi).state === 'open'"
-                              @click="applyPlotProposal(msg, pi)" :disabled="!plotProposalCanApply(msg, pi)"
-                              :data-tip="plotProposalStatus(msg, pi).blocked && !p._written ? $app.t(plotProposalStatus(msg, pi).blocked.key, plotProposalStatus(msg, pi).blocked.params || {}) : null">
-                        <span x-show="p._applying" class="spinner"></span>
-                        <span x-text="p._applying ? $app.t('common.saving') : (plotProposalStatus(msg, pi).removed ? $app.t('plot.chat.reapply') : $app.t('chat.apply'))"></span>
-                      </button>
-                      <button type="button" class="chat-vorschlag-btn" x-show="plotProposalStatus(msg, pi).state === 'applied' && plotProposalBeatId(p, msg)"
-                              @click="showPlotProposalBeat(p, msg)" x-text="$app.t('plot.chat.show')"></button>
-                      <button type="button" class="chat-vorschlag-btn chat-vorschlag-btn--ghost" x-show="plotProposalStatus(msg, pi).state !== 'applied'"
-                              @click="discardPlotProposal(msg, pi, plotProposalStatus(msg, pi).state !== 'discarded')" :disabled="!!p._applying"
-                              x-text="plotProposalStatus(msg, pi).state === 'discarded' ? $app.t('chat.restore') : $app.t('chat.discard')"></button>
-                    </span>
-                  </div>
+                     x-data="{ get pv() { return plotProposalView(msg, pi); } }" :class="pv.cls">
+                  <!-- @include chat-vorschlag-board-head -->
 
                   <!-- Neuer Beat / Akt / Strang -->
                   <template x-if="p.type === 'beat_create'">
@@ -140,18 +120,13 @@
                     </div>
                   </template>
 
-                  <div x-show="p.begruendung" class="chat-vorschlag-begruendung" x-text="p.begruendung"></div>
-                  <div x-show="plotProposalStatus(msg, pi).state === 'open' && plotProposalStatus(msg, pi).blocked && !p._written" class="chat-vorschlag-note" x-text="plotProposalStatus(msg, pi).blocked ? $app.t(plotProposalStatus(msg, pi).blocked.key, plotProposalStatus(msg, pi).blocked.params || {}) : ''"></div>
-                  <div x-show="plotProposalStatus(msg, pi).state === 'open' && !plotProposalStatus(msg, pi).blocked && plotProposalStatus(msg, pi).stale" class="chat-vorschlag-note" x-text="$app.t('plot.chat.stale')"></div>
-                  <div x-show="plotProposalStatus(msg, pi).removed" class="chat-vorschlag-note" x-text="$app.t('plot.chat.removed')"></div>
-                  <div x-show="p._error" class="chat-vorschlag-error" x-text="p._error"></div>
+                  <!-- @include chat-vorschlag-board-foot -->
                 </div>
               </template>
             </div>
           </template>
 
-          <div x-show="msg.role === 'assistant' && _chatTokenInfo(msg)" class="chat-token-info" :title="_chatTokenTitle(msg)" x-text="_chatTokenInfo(msg)"></div>
-          <!-- @include chat-feedback -->
+          <!-- @include chat-msg-foot -->
         </div>
         <!-- Gescheiterter Lauf: Grund + Teil-Verlauf an der Frage -->
         <!-- @include chat-run-failed -->
@@ -159,7 +134,7 @@
     </template>
 
     <div x-show="isPlotChatSessionRunning(plotChatSessionId)" class="chat-skeleton-wrapper">
-      <div class="chat-skeleton"></div>
+      <!-- @include chat-skeleton -->
       <!-- Werkzeug-Verlauf des laufenden Turns (wächst mit, offen) -->
       <template x-for="msg in (_liveToolMsg() ? [_liveToolMsg()] : [])" :key="'live'">
         <div class="chat-tool-log-live">
@@ -167,24 +142,25 @@
         </div>
       </template>
     </div>
+    <div x-show="openPlotChatQuestion()" class="chat-retry-row">
+      <button type="button" class="chat-vorschlag-btn" @click="retryOpenPlotChatQuestion()" x-text="$app.t('chat.retryQuestion')"></button>
+    </div>
   </div>
 
-  <div class="chat-input-row">
+  <div class="chat-input-row" x-data="{ sendBtn: plotChatSendButton() }">
     <textarea class="chat-input plot-chat-input" x-model="plotChatInput" rows="2"
               :placeholder="$app.t('plot.chat.placeholder')" :aria-label="$app.t('plot.chat.placeholder')"
               :disabled="plotChatLoading" data-spellcheck="spelling"
               @keydown.enter="$enter($event, () => sendPlotChatMessage(), { multiline: true })"></textarea>
-    <button type="button" class="chat-send-btn" @click="sendPlotChatMessage()" :disabled="plotChatLoading || !plotChatInput.trim()" :aria-label="$app.t('chat.send')">
-      <span x-show="plotChatLoading" class="spinner"></span>
-      <svg x-show="!plotChatLoading" class="icon" aria-hidden="true"><use href="/icons.svg#arrow-up"/></svg>
-    </button>
+    <!-- @include chat-send-btn -->
   </div>
   <div class="chat-input-hint" x-text="$app.t('plot.chat.hint')"></div>
 
   <!-- Session-Historie -->
-  <div x-show="plotChatSessions.length > 0" class="card-history-section"
-       x-data="{ sessionList: plotChatSessionList() }">
-    <div class="chat-history-title" x-text="$app.t('chat.history')"></div>
-    <!-- @include chat-session-list -->
+  <div x-show="plotChatSessions.length > 0" class="card-history-section" x-data="chatHistorySearch('plot')">
+    <!-- @include chat-history-search -->
+    <div x-show="!histActive" x-data="{ sessionList: plotChatSessionList() }">
+      <!-- @include chat-session-list -->
+    </div>
   </div>
 </div>

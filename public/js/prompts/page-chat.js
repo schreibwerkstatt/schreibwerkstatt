@@ -2,6 +2,7 @@
 // Die Auswahl (welche Hunks, wie viel Verlauf) trifft der Job über
 // routes/jobs/chat/page-chat-context.js — hier steht nur der Wortlaut.
 
+import { formatPassage } from './chat-pre-context.js';
 import { _obj, _str, _num, _nullableEnum } from './schema-utils.js';
 
 const CLIP = 160;
@@ -51,7 +52,7 @@ export function pageChatNachrichtenHinweis(langCode = 'de') {
 // lib/chat-idee-proposals.js).
 export const PAGE_CHAT_IDEEN_RULES = [
   'IDEEN-REGELN:',
-  '- ideen sind Pendenzen, die der Autor an diesem Abschnitt oder an seinem Kapitel festhalten kann (er bestätigt jede einzeln). Nutze sie für einen Widerspruch (auch zu einer anderen Stelle des Buchs), einen inhaltlichen Fehler, eine Unstimmigkeit oder einen offenen Punkt, den du bemerkst und der sich NICHT als vorschlaege-Ersetzung lösen lässt — z.B. weil er eine andere Stelle, eine Entscheidung des Autors oder eine Recherche braucht. Oder wenn der Autor ausdrücklich bittet, etwas zu notieren.',
+  '- ideen sind Pendenzen, die der Autor an diesem Abschnitt oder an seinem Kapitel festhalten kann (er bestätigt jede einzeln). Nutze sie für einen Widerspruch (auch zu einer anderen Stelle des Buchs), einen inhaltlichen Fehler, eine Unstimmigkeit oder einen offenen Punkt, den du bemerkst und der sich nicht als vorschlaege-Ersetzung lösen lässt — z.B. weil er eine andere Stelle, eine Entscheidung des Autors oder eine Recherche braucht. Oder wenn der Autor ausdrücklich bittet, etwas zu notieren.',
   '- ort: "abschnitt", wenn die Korrektur in diesem Abschnitt ansetzt; "kapitel", wenn der Punkt das ganze Kapitel betrifft (z.B. Zeitlinie, Ablauf über mehrere Abschnitte).',
   '- inhalt ist ein knapper, eigenständig verständlicher Stichpunkt (keine Prosa, kein Bezug auf diesen Chat), z.B. «Augenfarbe von Lena: hier grün, in Kapitel 2 blau — vereinheitlichen».',
   '- Keine Idee für etwas, das ein Eintrag in vorschlaege schon behebt, und keine, die inhaltlich schon bei den offenen Ideen des Autors steht. Höchstens 3. Sonst ein leeres Array.',
@@ -90,7 +91,7 @@ export function pageChatIdeenAenderungRules(stages, { hatIdeen = true } = {}) {
     'IDEEN-ÄNDERUNGEN:',
     '- ideen_aenderungen ändert bestehende OFFENE IDEEN (idee_id = die Zahl aus [#id]); der Autor übernimmt jede einzeln. Je Idee höchstens ein Eintrag, höchstens 5. Sonst ein leeres Array.',
     `- status: neue Stufe oder null (unverändert). Erlaubt: ${list}.`,
-    '- «erledigt» schlägst du von dir aus vor, sobald der aktuelle Abschnittsinhalt die Pendenz vollständig einlöst — auch eine [Kapitel]-Idee, wenn die Einlösung in diesem Abschnitt steht. Dann ist beleg Pflicht: eine kurze, zusammenhängende Textstelle WÖRTLICH aus dem Abschnittsinhalt oben (mindestens drei Wörter, höchstens zwei Auslassungen «…»), die die Einlösung zeigt. Ohne passende Stelle kein «erledigt» — nur teilweise eingelöst ist nicht erledigt; sag es dann in antwort.',
+    '- «erledigt» schlägst du von dir aus vor, sobald der aktuelle Abschnitt die Pendenz vollständig einlöst — auch eine [Kapitel]-Idee, wenn die Einlösung in diesem Abschnitt steht. Dann ist beleg Pflicht: eine kurze, zusammenhängende Textstelle wörtlich aus dem aktuellen Abschnitt oben (<abschnitt aktuell="ja">; mindestens drei Wörter, höchstens zwei Auslassungen «…»), die die Einlösung zeigt. Ohne passende Stelle kein «erledigt» — nur teilweise eingelöst ist nicht erledigt; sag es dann in antwort.',
     '- «verworfen» nur, wenn der Autor sagt, dass er die Idee fallen lässt oder sie sich erübrigt hat. «in_arbeit»/«offen» nur auf seinen Wunsch.',
     '- inhalt: neuer Wortlaut der Idee, nur wenn der Autor darum bittet oder die Pendenz im Gespräch präzisiert (knapper Stichpunkt wie bei ideen). Sonst leerer Text.',
     '- beleg sonst leer. begruendung: kurz, warum.',
@@ -128,7 +129,7 @@ export function buildBookTitlesBlock(titles, { maxChars = TITLES_MAX_CHARS } = {
     ...lines,
     ...(omitted ? [`(… ${omitted} weitere Abschnitte nicht aufgeführt)`] : []),
     '',
-    'Hinweis Titel: Fragt der Autor nach einem Titel, einer Überschrift oder Headline, erkenne zuerst das Muster der bestehenden Titel (gemeinsamer Satzanfang oder Satzbau, Länge, Ton, Sprache) und halte dich daran, sofern der Autor nichts anderes verlangt. Jede Variante zeigt konkret, worum es in DIESEM Abschnitt geht, statt allgemein zu bleiben, und verrät die Pointe nicht. Schlage keinen Titel vor, der einem anderen Abschnittstitel gleicht oder ihm sehr ähnelt; weise auf solche Doppelungen unter den bestehenden Titeln hin, wenn sie den aktuellen Abschnitt betreffen.',
+    'Hinweis Titel: Fragt der Autor nach einem Titel, einer Überschrift oder Headline, erkenne zuerst das Muster der bestehenden Titel (gemeinsamer Satzanfang oder Satzbau, Länge, Ton, Sprache) und halte dich daran, sofern der Autor nichts anderes verlangt. Jede Variante zeigt konkret, worum es in diesem Abschnitt geht, statt allgemein zu bleiben, und verrät die Pointe nicht. Schlage keinen Titel vor, der einem anderen Abschnittstitel gleicht oder ihm sehr ähnelt; weise auf solche Doppelungen unter den bestehenden Titeln hin, wenn sie den aktuellen Abschnitt betreffen.',
   ].join('\n');
 }
 
@@ -198,13 +199,12 @@ export function formatPageChange(change) {
 export function buildPageChatBookContext(passages) {
   const list = Array.isArray(passages) ? passages.filter(p => p && p.text) : [];
   if (!list.length) return '';
-  const kindLabel = { page: 'Abschnitt', scene: 'Szene', figure: 'Figur', location: 'Ort', fact: 'Welt-Fakt' };
   const out = [
     '=== KONTEXT AUS ANDEREN TEILEN DES BUCHS (nur lesend) ===',
-    '(Automatisch geholt: die semantisch nächsten Stellen zur Frage, nicht aus diesem Abschnitt; Ausschnitte können unvollständig sein. Nutze sie, um Bezüge zum übrigen Buch herzustellen — Figurenwissen, frühere Ereignisse, Widersprüche. Änderungsvorschläge (`vorschlaege`) beziehen sich AUSSCHLIESSLICH auf den ABSCHNITTSINHALT oben; `original` nie aus diesem Block nehmen.)',
+    '(Automatisch geholt: die semantisch nächsten Stellen zur Frage, nicht aus diesem Abschnitt; Ausschnitte können unvollständig sein. Nutze sie, um Bezüge zum übrigen Buch herzustellen — Figurenwissen, frühere Ereignisse, Widersprüche. Änderungsvorschläge (`vorschlaege`) beziehen sich AUSSCHLIESSLICH auf den aktuellen Abschnitt oben (`<abschnitt aktuell="ja">`); `original` nie aus einem `<abschnitt>` dieses Blocks nehmen.)',
   ];
   for (const p of list) {
-    out.push(`--- ${kindLabel[p.kind] || p.kind}: «${p.title}» ---`, String(p.text).trim(), '');
+    out.push(formatPassage(p, { ids: false }), '');
   }
   return out.join('\n');
 }

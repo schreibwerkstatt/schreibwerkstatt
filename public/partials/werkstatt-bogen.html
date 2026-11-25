@@ -26,12 +26,7 @@
 
     <p class="card-hint" x-text="$app.t('werkstatt.arc.hint')"></p>
 
-    <div x-show="anchorLoading" x-cloak class="job-progress">
-      <div x-show="anchorProgress > 0" class="progress-bar-wrap">
-        <div class="progress-bar" :style="{ '--progress': anchorProgress + '%' }"></div>
-      </div>
-      <span class="card-status" x-html="anchorStatus"></span>
-    </div>
+    <div x-job-progress="{ active: anchorLoading, progress: anchorProgress, status: anchorStatus, timer: '_anchorPollTimer' }"></div>
 
     <!-- Ohne semantische Suche kann der Lauf nichts finden: ein Kern ist eine
          Bedeutung, keine Zeichenfolge. Das sagen statt es rätselhaft zu lassen. -->

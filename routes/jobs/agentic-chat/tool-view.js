@@ -293,6 +293,53 @@ function applyServerSearchResult(entry, block) {
   Object.assign(entry, { ok: false, error: code, errorKey: 'chat.toolError.webSearchFailed', errorParams: { code } });
 }
 
+/**
+ * Diagnose der Anthropic-Server-Werkzeuge EINES Provider-Calls fürs Log: wie viele
+ * Suchen (davon aus der Code-Ausführung der dynamisch filternden Suche, `caller`),
+ * welche Suchbegriffe sich wiederholen, welche Fehler Suche und Code-Ausführung
+ * meldeten. Der Code-Lauf ist im Werkzeug-Verlauf unsichtbar — scheitert er, sucht
+ * das Modell oft dieselben Begriffe noch einmal einzeln, und jede Suche zählt gegen
+ * `max_uses`. Liefert null, wenn der Call kein Server-Werkzeug nutzte.
+ */
+const ERR_SNIP = 120;
+function _codeError(content) {
+  if (!content || typeof content !== 'object') return null;
+  if (content.error_code) return String(content.error_code);
+  const rc = Number(content.return_code);
+  if (!Number.isFinite(rc) || rc === 0) return null;
+  const lastLine = String(content.stderr || '').trim().split('\n').filter(Boolean).at(-1) || '';
+  return `rc=${rc}${lastLine ? `: ${_clip(lastLine, ERR_SNIP)}` : ''}`;
+}
+function serverToolDigest(blocks) {
+  let searches = 0, viaCode = 0, codeRuns = 0;
+  const queries = new Map();
+  const searchErrors = [];
+  const codeErrors = [];
+  for (const b of blocks || []) {
+    if (b?.type === 'server_tool_use') {
+      if (b.name === 'web_search') {
+        searches++;
+        if (b.caller?.tool_id) viaCode++;
+        const q = String(b.input?.query || '');
+        queries.set(q, (queries.get(q) || 0) + 1);
+      } else codeRuns++;
+    } else if (b?.type === 'web_search_tool_result') {
+      if (!Array.isArray(b.content)) searchErrors.push(String(b.content?.error_code || 'unknown'));
+    } else if (typeof b?.type === 'string' && b.type.endsWith('_tool_result')) {
+      const err = _codeError(b.content);
+      if (err) codeErrors.push(err);
+    }
+  }
+  if (!searches && !codeRuns) return null;
+  const repeated = [...queries].filter(([, n]) => n > 1).map(([query, n]) => ({ query, n }));
+  const parts = [`web_search×${searches}${viaCode ? ` (${viaCode} aus Code)` : ''}`];
+  if (codeRuns) parts.push(`Code-Ausführung×${codeRuns}`);
+  if (repeated.length) parts.push(`wiederholt: ${repeated.map(r => `«${_clip(r.query, 60)}»×${r.n}`).join(', ')}`);
+  if (searchErrors.length) parts.push(`Suchfehler: ${searchErrors.join(', ')}`);
+  if (codeErrors.length) parts.push(`Codefehler: ${codeErrors.join(' | ')}`);
+  return { searches, viaCode, codeRuns, repeated, searchErrors, codeErrors, line: parts.join('; ') };
+}
+
 module.exports = {
-  makeToolViewer, roundNote, liveTools, serverSearchEntry, applyServerSearchResult, LIVE_MAX_ROUNDS,
+  makeToolViewer, roundNote, liveTools, serverSearchEntry, applyServerSearchResult, serverToolDigest, LIVE_MAX_ROUNDS,
 };

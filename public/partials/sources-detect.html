@@ -25,10 +25,7 @@
     </button>
   </div>
 
-  <div class="progress-bar-wrap" x-show="srcDetectRunning" x-cloak>
-    <div class="progress-bar" :style="{ '--progress': srcDetectProgress + '%' }"></div>
-    <span class="muted-msg muted-msg--sm" x-text="srcDetectStatus"></span>
-  </div>
+  <div x-job-progress="{ active: srcDetectRunning, progress: srcDetectProgress, text: srcDetectStatus, timer: '_srcDetectPollTimer' }"></div>
 
   <p class="card-form-error" x-show="srcDetectError" x-cloak x-text="srcDetectError"></p>
 

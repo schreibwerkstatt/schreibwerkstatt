@@ -125,4 +125,16 @@ function fitHistory(history, maxChars) {
   return { messages: list.slice(start), dropped: start };
 }
 
-module.exports = { pageChatBudget, computePageChangeHunks, fitHistory };
+// Log-Zeile der Prompt-Zusammensetzung (Zeichen je Baustein): `sizes` füllt
+// prompts/chat.js#buildChatSystemPrompt (opts.sizes), `extra` der Job (Buch-Kontext
+// in der Frage, gekürzter Verlauf). Zeigt, welcher Baustein den Prompt trägt —
+// Grundlage jeder Kontext- oder Cache-Entscheidung im Abschnitts-Chat.
+function formatPromptSizes(sizes = {}, extra = {}) {
+  const k = (n) => `${((Number(n) || 0) / 1000).toFixed(1)}K`;
+  return `Prompt-Zeichen: Block1 ${k(sizes.block1)} (System ${k(sizes.system)}, Figuren ${k(sizes.figuren)} [${sizes.figurenModus || '-'}], `
+    + `Buchbewertung ${k(sizes.review)}, Titel ${k(sizes.titel)}) · Block2 ${k(sizes.block2)} (Abschnitt ${k(sizes.abschnitt)}, `
+    + `Änderungen ${k(sizes.aenderungen)}, Ideen ${k(sizes.ideen)}, Welt ${k(sizes.welt)}, Lektorat ${k(sizes.lektorat)}) · `
+    + `Buch-Kontext ${k(extra.buchKontext)} · Verlauf ${k(extra.verlauf)} (${extra.verlaufNachrichten || 0} Nachrichten).`;
+}
+
+module.exports = { pageChatBudget, computePageChangeHunks, fitHistory, formatPromptSizes };

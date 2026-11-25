@@ -114,7 +114,6 @@
   box-sizing: border-box;
   border-radius: var(--radius-md);
 }
-.batch-wrap { margin-bottom: var(--space-10); }
 .tok-stats-wrap { display: contents; }
 
 /* === Seitensuche === */

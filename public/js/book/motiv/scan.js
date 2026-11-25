@@ -2,7 +2,7 @@
 // und pollt ihn; bei Abschluss den Graph neu laden (Fundstellen → Knotengrösse).
 
 import { fetchJson } from '../../utils.js';
-import { startPoll } from '../../cards/job-helpers.js';
+import { startPoll, isCancelledJob } from '../../cards/job-helpers.js';
 import { isSelectedBook } from '../../cards/book-guard.js';
 
 export const scanMethods = {
@@ -72,6 +72,7 @@ export const scanMethods = {
     if (!bookId || this.scanning) return;
     this.scanning = true;
     this.scanProgress = 0;
+    this.scanStatus = '';
     this.errorMessage = '';
     try {
       const { jobId } = await fetchJson('/jobs/motif-scan', {
@@ -85,14 +86,23 @@ export const scanMethods = {
         timerProp: '_scanPollTimer',
         jobId,
         progressProp: 'scanProgress',
+        onProgress: (job) => { this.scanStatus = job.statusText ? window.__app.t(job.statusText, job.statusParams) : ''; },
         onDone: async () => {
+          this.scanStatus = '';
           this.scanning = false;
           this.motivScanJobId = null;
           await this.loadBoard();
           if (this.selectedMotifId) this.selectMotif(this.selectedMotifId);
         },
-        onNotFound: () => { this.scanning = false; this.motivScanJobId = null; },
-        onError: () => { this.scanning = false; this.motivScanJobId = null; this.errorMessage = window.__app.t('motiv.error.scan'); },
+        onNotFound: () => { this.scanning = false; this.scanStatus = ''; this.motivScanJobId = null; },
+        onError: (job) => {
+          this.scanning = false;
+          this.motivScanJobId = null;
+          // Abgebrochen ist kein Fehler: neutrale Statuszeile.
+          if (isCancelledJob(job)) { this.scanProgress = 0; this.scanStatus = window.__app.t('job.cancelled'); return; }
+          this.scanStatus = '';
+          this.errorMessage = window.__app.t('motiv.error.scan');
+        },
       });
     } catch (e) {
       this.scanning = false;

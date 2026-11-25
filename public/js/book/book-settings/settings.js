@@ -4,7 +4,7 @@
 import { EVT, contentRepo, countryOptions, fetchJson, sendJson } from './_shared.js';
 import { DEFAULT_DAILY_GOAL_CHARS } from '../../utils.js';
 import { tFetchError } from '../../i18n.js';
-import { startPoll, runningJobStatus } from '../../cards/job-helpers.js';
+import { startPoll, runningJobStatus, isCancelledJob } from '../../cards/job-helpers.js';
 import { diffParts } from '../../diff/diff-parts.js';
 
 export const settingsMethods = {
@@ -166,7 +166,6 @@ export const settingsMethods = {
     this.stilprofilStatus = '';
     try {
       const data = await sendJson('/jobs/stilprofil', 'POST', { book_id: Number(bookId) });
-      this.stilprofilJobId = data.jobId;
       window.dispatchEvent(new CustomEvent(EVT.JOB_ENQUEUED, { detail: { type: 'stilprofil', jobId: data.jobId } }));
       this._stilprofilPoll(data.jobId, bookId);
     } catch (e) {
@@ -201,7 +200,6 @@ export const settingsMethods = {
     const job = queued.find(j => j.type === 'stilprofil' && String(j.bookId) === String(bookId));
     if (!job) return;
     this.stilprofilGenerating = true;
-    this.stilprofilJobId = job.id;
     this.stilprofilProgress = job.progress || 0;
     this._stilprofilPoll(job.id, bookId);
   },
@@ -209,7 +207,6 @@ export const settingsMethods = {
   _stilprofilIdle() {
     if (this._stilprofilPollTimer) { clearInterval(this._stilprofilPollTimer); this._stilprofilPollTimer = null; }
     this.stilprofilGenerating = false;
-    this.stilprofilJobId = null;
     this.stilprofilProgress = 0;
     this.stilprofilStatus = '';
   },
@@ -217,7 +214,7 @@ export const settingsMethods = {
   _stilprofilFinish(job, bookId) {
     if (!this._isFormBook(bookId)) return;
     this._stilprofilIdle();
-    if (!job || job.status === 'cancelled') return;
+    if (!job || isCancelledJob(job)) return;
     if (job.status === 'error') {
       this.stilprofilError = window.__app.t('book.settings.stilprofil.genError');
       return;
@@ -249,13 +246,6 @@ export const settingsMethods = {
     if (!bookId) return;
     fetchJson(`/ai-proposals/stilprofil?book_id=${Number(bookId)}`, { method: 'DELETE' })
       .catch((e) => { this.stilprofilError = tFetchError(e); });
-  },
-
-  async cancelStilprofil() {
-    const id = this.stilprofilJobId;
-    if (!id) return;
-    await window.__app.cancelJob(id);
-    this._stilprofilIdle();
   },
 
   applyStilprofilSuggestion() {

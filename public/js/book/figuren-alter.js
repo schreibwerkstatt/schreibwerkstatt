@@ -21,7 +21,7 @@
 // Gespreadet in cards/figuren-card.js; Root-Zugriffe via window.__app.
 
 import { fetchJson, sendJson, dateTimeFormat } from '../utils.js';
-import { startPoll } from '../cards/job-helpers.js';
+import { startPoll, isCancelledJob } from '../cards/job-helpers.js';
 import { isSelectedBook } from '../cards/book-guard.js';
 import { tFetchError } from '../i18n.js';
 import { typRank, byTypDannName } from './figur-typen.js';
@@ -189,8 +189,8 @@ export const figurenAlterMethods = {
         finish('');
         await this.loadFigurenAlter();
       },
-      // Deckt error UND cancelled ab (startPoll ruft onError fuer beide).
-      onError: (job) => finish(job?.error
+      // startPoll ruft onError auch fuer cancelled — das ist kein Fehler.
+      onError: (job) => finish(isCancelledJob(job) ? this._t('job.cancelled') : job?.error
         ? this._t(job.error, job.errorParams)
         : this._t('figuren.alter.error')),
       onNotFound: () => finish(this._t('figuren.alter.error')),

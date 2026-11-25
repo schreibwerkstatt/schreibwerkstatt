@@ -63,6 +63,9 @@
    gedämpft + kein Klick-Cursor, Löschen bleibt möglich. */
 .history-item--disabled { cursor: default; opacity: var(--opacity-disabled); }
 .history-item--disabled:hover { background: transparent; border-color: var(--color-border); }
+/* Zusatzangabe einer Lauf-Zeile (run-history-row.html): Hülle je x-for-Eintrag,
+   die Badges selbst stehen als direkte Flex-Kinder der Zeile. */
+.run-history-badge { display: contents; }
 
 /* Mobil: Badges/Buttons nicht umbrechen (unschönes Stapeln), sondern die
    Zeile horizontal scrollbar machen. Gilt fuer Verlauf + page_revisions-Liste
@@ -73,7 +76,7 @@
     overflow-x: auto;
     -webkit-overflow-scrolling: touch;
   }
-  .history-item > * { flex-shrink: 0; }
+  .history-item > *, .run-history-badge > * { flex-shrink: 0; }
   .history-item .history-date { flex: 0 0 auto; }
 }
 

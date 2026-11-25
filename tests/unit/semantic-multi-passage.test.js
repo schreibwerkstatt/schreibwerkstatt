@@ -138,8 +138,12 @@ test('pageWindow: Fenster, Wortgrenze, Offset hinter dem Ende', () => {
 test('get_pages/get_chapter_text: Durchblättern per next_offset liefert den ganzen Abschnitt', async () => {
   const words = Array.from({ length: 3000 }, (_, i) => `wort${i}`);
   const full = words.join(' ');
-  const origLoad = contentStore.loadPage;
-  contentStore.loadPage = async (id) => ({ name: `Abschnitt ${id}`, html: id === P_LONG ? `<p>${full}</p>` : '<p>kurz</p>' });
+  // Die Werkzeuge lesen über den Abschnitts-Leser (routes/jobs/shared/section-reader.js),
+  // der in einer Ladung über loadPagesBatch holt.
+  const origLoad = contentStore.loadPagesBatch;
+  contentStore.loadPagesBatch = async (metas) => metas.map(m => ({
+    id: m.id, name: `Abschnitt ${m.id}`, html: m.id === P_LONG ? `<p>${full}</p>` : '<p>kurz</p>',
+  }));
   const ctx = { bookId: BOOK, userEmail: null, resultCapChars: 5000 };
   try {
     const pieces = [];
@@ -168,7 +172,7 @@ test('get_pages/get_chapter_text: Durchblättern per next_offset liefert den gan
     const short = ch.pages.find(p => p.page_id === P_OTHER);
     if (short) assert.equal(short.text, '');
   } finally {
-    contentStore.loadPage = origLoad;
+    contentStore.loadPagesBatch = origLoad;
   }
 });
 

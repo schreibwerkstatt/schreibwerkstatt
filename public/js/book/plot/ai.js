@@ -2,14 +2,15 @@
 // Buchrealität), persistierte Lauf-Historie, Fullscreen-Toggle und das
 // Aufräumen der Poll-Timer. Die KI plant/prüft nur Struktur — kein Fliesstext.
 
-import { fetchJson, localeTag, tzOpts } from '../../utils.js';
-import { startPoll, runningJobStatus } from '../../cards/job-helpers.js';
+import { fetchJson, escHtml } from '../../utils.js';
+import { startPoll, runningJobStatus, isCancelledJob } from '../../cards/job-helpers.js';
 import { toggleWrapFullscreen } from '../../fullscreen.js';
 import { normTitle } from './constants.js';
 import { EVT } from '../../events.js';
 import { attachDismiss, detachDismiss } from '../../cards/dismiss.js';
 import { computePopoverPos, refinePopoverPos } from '../../popover-anchor.js';
 import { isSelectedBook } from '../../cards/book-guard.js';
+import { makeRunHistoryMethods, formatRunDate } from '../../run-history.js';
 
 export const aiMethods = {
   // ── KI: Brainstorm ──────────────────────────────────────────────────────
@@ -55,6 +56,8 @@ export const aiMethods = {
           this.brainstormLoading = false;
           this.brainstormStatus = '';
           this._brainstormJobId = null;
+          // Abgebrochen ist kein Fehler (Abbruch z. B. aus der Job-Leiste).
+          if (isCancelledJob(job)) { this.brainstormProgress = 0; return; }
           this.errorMessage = app.t(job.error || 'common.error', job.errorParams || {});
         },
         onNotFound: () => {
@@ -133,54 +136,41 @@ export const aiMethods = {
   // result_json; Detail wird beim Öffnen lazy geholt und in das bestehende
   // Inline-Vorschlags-Panel des zugehörigen Akts/der Zelle gelegt (brainstormResult)
   // — genau wie ein frischer Lauf, sodass „Übernehmen" unverändert greift.
-  async loadBrainstormRuns() {
-    const app = window.__app;
-    const bookId = Alpine.store('nav').selectedBookId;
-    if (!bookId) { this.brainstormRuns = []; return; }
-    try {
-      const rows = await fetchJson(`/plot/brainstorm-runs?book_id=${bookId}`);
-      if (!isSelectedBook(bookId)) return;
-      this.brainstormRuns = Array.isArray(rows) ? rows : [];
-    } catch (e) {
-      if (!isSelectedBook(bookId)) return;
-      this.brainstormRuns = [];
-    }
-  },
-
-  // Toggle: Klick auf den aktiven Eintrag schliesst das Panel; sonst Detail laden
-  // und brainstormResult füllen. Ein Lauf mit gelöschtem Akt (act_id == null) hat
-  // keine Ziel-Spalte/-Zelle mehr — das Inline-Panel kann nicht erscheinen, darum
-  // im Template nicht klickbar (hier defensiv nochmal geguardet).
-  async openBrainstormRun(run) {
-    const app = window.__app;
-    if (!run || this.brainstormLoading) return;
-    if (run.act_id == null) { this.errorMessage = app.t('plot.error.runLoad'); return; }
-    if (this.selectedBrainstormRunId === run.id) { this._clearBrainstormPanel(); return; }
-    try {
-      const detail = await fetchJson(`/plot/brainstorm-runs/${run.id}`);
-      if (!detail?.result) throw new Error('no result');
-      this.brainstormActId = detail.act_id;
-      this.brainstormThreadId = detail.thread_id ?? null;
-      this.brainstormResult = { actId: detail.act_id, threadId: detail.thread_id ?? null, vorschlaege: detail.result.vorschlaege || [] };
-      this.selectedBrainstormRunId = detail.id;
-      this._scrollToBrainstormPanel();
-    } catch (e) {
-      this.errorMessage = app.t('plot.error.runLoad');
-    }
-  },
-
-  async deleteBrainstormRun(runId) {
-    const app = window.__app;
-    if (!runId) return;
-    if (!await app.appConfirm({ message: app.t('plot.brainstorm.confirmDeleteRun'), danger: true })) return;
-    try {
-      await fetchJson(`/plot/brainstorm-runs/${runId}`, { method: 'DELETE' });
-      this.brainstormRuns = this.brainstormRuns.filter(r => r.id !== runId);
-      if (this.selectedBrainstormRunId === runId) this._clearBrainstormPanel();
-    } catch (e) {
-      this.errorMessage = app.t('plot.error.runDelete');
-    }
-  },
+  ...makeRunHistoryMethods({
+    names: { load: 'loadBrainstormRuns', open: 'openBrainstormRun', remove: 'deleteBrainstormRun', row: 'plotBrainstormRunRow' },
+    list: 'brainstormRuns',
+    selected: 'selectedBrainstormRunId',
+    listUrl: (bookId) => `/plot/brainstorm-runs?book_id=${bookId}`,
+    runUrl: (id) => `/plot/brainstorm-runs/${id}`,
+    busy: (ctx) => ctx.brainstormLoading,
+    // Ein Lauf mit gelöschtem Akt (act_id == null) hat keine Ziel-Spalte/-Zelle
+    // mehr — das Inline-Panel kann nicht erscheinen.
+    canOpen: (ctx, run) => (run.act_id == null ? 'plot.error.runLoad' : null),
+    apply: (ctx, detail) => {
+      ctx.brainstormActId = detail.act_id;
+      ctx.brainstormThreadId = detail.thread_id ?? null;
+      ctx.brainstormResult = { actId: detail.act_id, threadId: detail.thread_id ?? null, vorschlaege: detail.result.vorschlaege || [] };
+    },
+    clear: (ctx) => ctx._clearBrainstormPanel(),
+    afterOpen: (ctx) => ctx._scrollToBrainstormPanel(),
+    confirmKey: 'plot.brainstorm.confirmDeleteRun',
+    errorKeys: { open: 'plot.error.runLoad', remove: 'plot.error.runDelete' },
+    row: {
+      // Lauf eines archivierten Akts: kein Panel im Archiv → Hinweis statt
+      // stillem Nichts (openBrainstormRunChecked, board-ui.js).
+      toggle(r) { return this.openBrainstormRunChecked(r); },
+      disabled(r) { return r.act_id === null || this.brainstormRunActArchived(r); },
+      tip(r) { return this.brainstormRunActArchived(r) ? window.__app.t('plot.brainstorm.actArchived') : null; },
+      badges(r) {
+        const app = window.__app;
+        return [
+          { text: r.act_name || app.t('plot.brainstorm.actDeleted') },
+          r.thread_id && r.thread_name ? { ref: { type: 'strang', id: r.thread_id, label: r.thread_name, static: true } } : null,
+          { text: app.tn('plot.brainstorm.vorschlagCount', r.vorschlag_count) },
+        ];
+      },
+    },
+  }),
 
   // Das eine sichtbare Vorschlags-Panel (flach ODER Grid-Zelle) ins Bild holen —
   // beim Reopen eines Laufs steht der Ziel-Akt evtl. ausserhalb des Sichtfelds.
@@ -201,7 +191,7 @@ export const aiMethods = {
     if (this.consistencyLoading || !this.beats.length) return;
     const last = (this.consistencyRuns || [])[0];
     const message = last
-      ? app.t('plot.consistency.confirm', { date: this.formatRunDate(last.created_at) })
+      ? app.t('plot.consistency.confirm', { date: formatRunDate(last.created_at) })
       : app.t('plot.consistency.confirmFirst');
     if (!await app.appConfirm({ message, confirmLabel: app.t('plot.consistency.confirmStart') })) return;
     return this.runConsistency();
@@ -246,6 +236,8 @@ export const aiMethods = {
           this.consistencyLoading = false;
           this.consistencyStatus = '';
           this._consistencyJobId = null;
+          // Abgebrochen ist kein Fehler: neutrale Statuszeile.
+          if (isCancelledJob(job)) { this.consistencyProgress = 0; this.consistencyStatus = escHtml(app.t('job.cancelled')); return; }
           this.errorMessage = app.t(job.error || 'common.error', job.errorParams || {});
         },
         onNotFound: () => {
@@ -353,58 +345,24 @@ export const aiMethods = {
   // Persistierte Läufe pro Buch. Liste kommt ohne result_json (Spaltensparsam);
   // Detail wird beim Öffnen lazy geholt und ins bestehende Consistency-Panel
   // (consistencyResult) gelegt — genau wie ein frischer Lauf.
-  async loadConsistencyRuns() {
-    const app = window.__app;
-    const bookId = Alpine.store('nav').selectedBookId;
-    if (!bookId) { this.consistencyRuns = []; return; }
-    try {
-      const rows = await fetchJson(`/plot/consistency-runs?book_id=${bookId}`);
-      if (!isSelectedBook(bookId)) return;
-      this.consistencyRuns = Array.isArray(rows) ? rows : [];
-    } catch (e) {
-      if (!isSelectedBook(bookId)) return;
-      this.consistencyRuns = [];
-    }
-  },
-
-  // Toggle: Klick auf den aktiv markierten Eintrag schliesst das Panel; sonst
-  // Detail laden und consistencyResult füllen. Während eines Live-Laufs gesperrt.
-  async openConsistencyRun(runId) {
-    const app = window.__app;
-    if (!runId || this.consistencyLoading) return;
-    if (this.selectedRunId === runId) { this._clearConsistencyPanel(); return; }
-    try {
-      const run = await fetchJson(`/plot/consistency-runs/${runId}`);
-      if (!run?.result) throw new Error('no result');
-      this.consistencyResult = { konflikte: run.result.konflikte || [], fazit: run.result.fazit || '', erledigt: Array.isArray(run.result.erledigt) ? run.result.erledigt : [] };
-      this.selectedKonfliktIdx = null;
-      this.selectedRunId = run.id;
-    } catch (e) {
-      this.errorMessage = app.t('plot.error.runLoad');
-    }
-  },
-
-  async deleteConsistencyRun(runId) {
-    const app = window.__app;
-    if (!runId) return;
-    if (!await app.appConfirm({ message: app.t('plot.consistency.confirmDeleteRun'), danger: true })) return;
-    try {
-      await fetchJson(`/plot/consistency-runs/${runId}`, { method: 'DELETE' });
-      this.consistencyRuns = this.consistencyRuns.filter(r => r.id !== runId);
-      if (this.selectedRunId === runId) this._clearConsistencyPanel();
-    } catch (e) {
-      this.errorMessage = app.t('plot.error.runDelete');
-    }
-  },
-
-  formatRunDate(iso) {
-    if (!iso) return '';
-    try {
-      const d = new Date(iso);
-      const locale = localeTag(Alpine.store('shell').uiLocale);
-      return d.toLocaleString(locale, tzOpts());
-    } catch { return iso; }
-  },
+  ...makeRunHistoryMethods({
+    names: { load: 'loadConsistencyRuns', open: 'openConsistencyRun', remove: 'deleteConsistencyRun', row: 'plotConsistencyRunRow' },
+    list: 'consistencyRuns',
+    selected: 'selectedRunId',
+    listUrl: (bookId) => `/plot/consistency-runs?book_id=${bookId}`,
+    runUrl: (id) => `/plot/consistency-runs/${id}`,
+    busy: (ctx) => ctx.consistencyLoading,
+    apply: (ctx, run) => {
+      ctx.consistencyResult = { konflikte: run.result.konflikte || [], fazit: run.result.fazit || '', erledigt: Array.isArray(run.result.erledigt) ? run.result.erledigt : [] };
+      ctx.selectedKonfliktIdx = null;
+    },
+    clear: (ctx) => ctx._clearConsistencyPanel(),
+    confirmKey: 'plot.consistency.confirmDeleteRun',
+    errorKeys: { open: 'plot.error.runLoad', remove: 'plot.error.runDelete' },
+    row: {
+      badges(r) { return [{ text: window.__app.tn('plot.consistency.konfliktCount', r.konflikt_count) }]; },
+    },
+  }),
 
   // ── Beat-Verankerung (Ist-Index gegen den Buchtext) ──────────────────────
   // Kein callAI — der Job (beat-anchor) nutzt nur den bestehenden Embedding-/
@@ -450,6 +408,8 @@ export const aiMethods = {
           this.anchorLoading = false;
           this.anchorStatus = '';
           this._anchorJobId = null;
+          // Abgebrochen ist kein Fehler: neutrale Statuszeile.
+          if (isCancelledJob(job)) { this.anchorProgress = 0; this.anchorStatus = escHtml(app.t('job.cancelled')); return; }
           this.errorMessage = app.t(job.error || 'plot.error.anchor', job.errorParams || {});
         },
         onNotFound: () => {

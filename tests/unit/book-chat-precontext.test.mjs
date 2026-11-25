@@ -52,7 +52,7 @@ test('Agent-System-Prompt: genannte Szene ausserhalb des Startkontexts erst such
 
 test('Erst-Kontext-Block: Passagen mit entity_id als Sprungziel', () => {
   const text = buildBookChatPreContext(PASSAGES);
-  assert.match(text, /entity_id 7/);
+  assert.match(text, /entity_id="7"/);
   assert.match(text, /Stefan war damals achtundzwanzig\./);
   assert.match(text, /final_answer/);
   // Zitat-Invariante: aus dem Ausschnitt darf nicht wortwoertlich zitiert werden.
@@ -82,7 +82,7 @@ test('Erst-Kontext-Block: unvollständiger Index / ausgefallene Suche / echte Le
 
 test('Erst-Kontext-Block: stabile Relevanz (Rang, Ähnlichkeit) statt Pipeline-Score', () => {
   const text = buildBookChatPreContext([{ kind: 'page', entity_id: 9, title: 'A', chapter_path: 'Teil 1 › Kap 2', rank: 1, similarity: 0.62, text: 'x' }]);
-  assert.match(text, /entity_id 9, Kapitel: Teil 1 › Kap 2, Rang 1, Ähnlichkeit 0\.62/);
+  assert.match(text, /<abschnitt titel="A" entity_id="9" kapitel="Teil 1 › Kap 2" rang="1" aehnlichkeit="0\.62">/);
   assert.doesNotMatch(text, /score/);
 });
 
@@ -92,7 +92,7 @@ test('Plot-/Ideen-Chat: Textpassagen tragen kind, entity_id und Kapitelpfad', ()
     for (const mode of ['agent', 'classic']) {
       const blocks = build('Buch', { mode, passages: p, passageStatus: { indexIncomplete: true, stalePages: 2 } });
       const vol = blocks[blocks.length - 1].text;
-      assert.match(vol, /--- page: «Abschied» \(entity_id 42, Kapitel: Kap 3, Rang 1/);
+      assert.match(vol, /<abschnitt titel="Abschied" entity_id="42" kapitel="Kap 3" rang="1"/);
       assert.match(vol, /2 Abschnitt/);
       if (mode === 'agent') assert.match(vol, /get_pages/);
     }

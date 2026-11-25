@@ -9,6 +9,7 @@ import { tFetchError } from '../i18n.js';
 import { toolLogMethods } from './tool-log-methods.js';
 import { makeDraftMethod, makeToggleMethod } from './chat-draft.js';
 import { uuid } from '../utils/uuid.js';
+import { addChatAdapters } from './chat-adapters.js';
 
 // Status-Zeile der Chat-Karten (landet per x-html): Text immer escapen.
 // kind: 'muted' (Hinweis) | 'error'.
@@ -344,7 +345,10 @@ export function makeChatMethods(cfg) {
     }
   };
 
-  m[`send${L}Message`] = async function () {
+  // `opts.retryOf`: ID der unbeantworteten Frage, die diese Nachricht ersetzt
+  // («Erneut fragen», retryOpen<L>Question) — der Server löscht sie vor dem Insert.
+  m[`send${L}Message`] = async function (opts) {
+    const retryOf = (opts && typeof opts === 'object' && !(opts instanceof Event)) ? opts.retryOf : null;
     const root = window.__app;
     if (this[p.loading] || !this[p.sessionId]) return;
     const msg = (this[p.input] || '').trim();
@@ -387,6 +391,7 @@ export function makeChatMethods(cfg) {
       const { jobId } = await sendJson(cfg.sendUrl, 'POST', {
         session_id: sessionId, message: msg, client_msg_id: clientMsgId,
         ...(cfg.sendExtra ? cfg.sendExtra(this) : {}),
+        ...(retryOf ? { retry_of: retryOf } : {}),
       });
       // Reset während des POST: die Karte zeigt ein anderes Buch/eine andere
       // Seite (oder nichts). Der Job läuft serverseitig weiter und erscheint
@@ -448,13 +453,8 @@ export function makeChatMethods(cfg) {
   m[`is${L}SessionActive`] = function (id) {
     return m[`is${L}SessionRunning`].call(this, id) || runningInQueue(id);
   };
-  // Adapter für das Fragment chat-session-list.html: `x-data="{ sessionList: chatSessionList() }"`.
-  m[`${L[0].toLowerCase()}${L.slice(1)}SessionList`] = function () {
-    const call = (name) => (id) => m[name].call(this, id);
-    return { sessions: () => this[p.sessions], activeId: () => this[p.sessionId],
-      running: call(`is${L}SessionActive`), deleteDisabled: call(`is${L}SessionRunning`),
-      load: call(`load${L}Session`), remove: call(`delete${L}Session`), untitledKey: cfg.untitledKey || 'chat.previewEmpty' };
-  };
+  // Adapter der Fragmente (Sitzungsliste, Senden-/Stopp-Knopf) + «Erneut fragen».
+  addChatAdapters(m, cfg);
   // Feedback (Daumen hoch/runter) an einer Assistant-Antwort — alle Chats.
   // Erneuter Klick auf denselben Daumen nimmt es zurück. Optimistisch gesetzt,
   // bei Fehler zurückgerollt; Auswertung im Admin-Usage (db/chat-quality.js).
@@ -543,8 +543,8 @@ export function makeChatMethods(cfg) {
   };
 
   // Lauf abbrechen: /jobs/active liefert die Job-ID der Session, DELETE /jobs/:id
-  // (Root `cancelJob`); das Poll-Ende ('cancelled') räumt ab. Knopf im
-  // Kartenkopf aller fünf Chats.
+  // (Root `cancelJob`); das Poll-Ende ('cancelled') räumt ab. Auslöser ist
+  // der Senden-Knopf im Zustand 'stop' (<l>SendButton, chat-send-btn.html).
   m[`cancel${L}Run`] = async function () {
     const sid = this[p.runningSessionId];
     if (!sid) return;

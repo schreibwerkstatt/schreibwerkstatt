@@ -77,11 +77,19 @@ test('Plot-Chat: gleiches Prädikat', () => {
 });
 
 test('Templates: Übernehmen-Knopf fragt das Prädikat, nicht die Blockade', () => {
-  for (const [file, fn] of [['public/partials/ideen-chat.html', 'ideenProposalCanApply'], ['public/partials/plot-chat.html', 'plotProposalCanApply']]) {
+  // Kopf der Karte (geteilt von Plot- und Ideen-Chat): der Knopf liest `pv.canApply`.
+  const head = read('public/partials/chat-vorschlag-board-head.html');
+  assert.match(head, /:disabled="!pv\.canApply"/);
+  assert.doesNotMatch(head, /:disabled="[^"]*blocked/);
+  // Beide Chats binden ihr Anzeige-Modell und den Kopf ein.
+  for (const [file, view] of [['public/partials/ideen-chat.html', 'ideenProposalView'], ['public/partials/plot-chat.html', 'plotProposalView']]) {
     const src = read(file);
-    assert.match(src, new RegExp(`:disabled="!${fn}\\(msg, pi\\)"`), file);
+    assert.match(src, new RegExp(`return ${view}\\(msg, pi\\)`), file);
+    assert.match(src, /<!-- @include chat-vorschlag-board-head -->/, file);
     assert.doesNotMatch(src, /:disabled="[^"]*ProposalStatus\(msg, pi\)\.blocked/, file);
   }
+  // `pv.canApply` IST das Prädikat (nicht die Blockade): blockiert, aber schon geschrieben → klickbar.
+  assert.match(read('public/js/chat/proposal-status.js'), /canApply: this\[n\.canApply\]\(msg, pi\)/);
 });
 
 test('Verwerfen/Übernehmen aus der Fabrik', () => {

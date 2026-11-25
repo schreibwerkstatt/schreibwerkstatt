@@ -21,31 +21,20 @@
       </button>
     </div>
   </div>
-  <div class="progress-bar-wrap" x-show="bookReviewProgress > 0">
-    <div class="progress-bar" :style="{ '--progress': bookReviewProgress + '%' }"></div>
-  </div>
-  <div class="card-status" x-html="bookReviewStatus"></div>
+  <div x-job-progress="{ active: bookReviewLoading, progress: bookReviewProgress, status: bookReviewStatus, timer: '_reviewPollTimer' }"></div>
   <div x-html="bookReviewOut"></div>
 
   <!-- Buchbewertungs-Verlauf -->
   <div x-show="$app.bookReviewHistory.length > 0"
+       x-data="{ runRow: bookReviewRunRow() }"
        class="card-history-section"
        :class="{ 'card-history-section--borderless': !bookReviewOut }">
     <div class="history-heading" x-text="$app.t('review.history')"></div>
-    <template x-for="entry in $app.bookReviewHistory" :key="entry.id">
+    <template x-for="r in $app.bookReviewHistory" :key="r.id">
       <div>
-        <div class="history-item internal-link" :class="{ 'history-item--open': selectedBookReviewId === entry.id }"
-             @click="selectedBookReviewId = selectedBookReviewId === entry.id ? null : entry.id">
-          <span class="history-date" x-text="$app.formatDate(entry.reviewed_at)"></span>
-          <span x-show="entry.review_json?.gesamtnote" class="badge badge-ok review-stars"
-            :data-tip="noteTip(entry.review_json?.gesamtnote)"
-            x-html="renderStars(entry.review_json?.gesamtnote)"></span>
-          <span class="tag" x-text="entry.model"></span>
-          <span class="history-chevron" :class="{ open: selectedBookReviewId === entry.id }" aria-hidden="true"></span>
-        </div>
-        <div x-show="selectedBookReviewId === entry.id" class="history-detail">
-          <div x-html="entry.review_json ? _renderReviewHtml(entry.review_json) : ''"></div>
-          <button type="button" class="btn-delete-history" @click.stop="$app.deleteBookReview(entry.id)" :data-tip="$app.t('common.deleteEntry')" :aria-label="$app.t('common.deleteEntry')"><svg class="icon" aria-hidden="true"><use href="/icons.svg#trash"/></svg></button>
+        <!-- @include run-history-row -->
+        <div x-show="selectedBookReviewId === r.id" class="history-detail">
+          <div x-html="r.review_json ? _renderReviewHtml(r.review_json) : ''"></div>
         </div>
       </div>
     </template>

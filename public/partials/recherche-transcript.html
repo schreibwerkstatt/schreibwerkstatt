@@ -52,10 +52,7 @@
           x-text="$app.t('interview.noBackend')"></span>
   </div>
 
-  <div class="progress-bar-wrap" x-show="ivBusy(item.id)">
-    <div class="progress-bar" :style="{ '--progress': ivProgress + '%' }"></div>
-  </div>
-  <div class="card-status" x-show="ivBusy(item.id)" x-text="ivStatus"></div>
+  <div x-job-progress="{ active: ivBusy(item.id), progress: ivProgress, text: detailItemId === item.id ? ivStatus : '', timer: '_ivPollTimer' }"></div>
   <div class="card-status card-status--error" x-show="ivTranscript?.status === 'error' && ivTranscript?.fehler"
        x-text="ivTranscript?.fehler"></div>
 

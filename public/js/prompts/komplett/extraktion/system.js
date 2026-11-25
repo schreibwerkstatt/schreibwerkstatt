@@ -39,8 +39,8 @@ Antworte mit diesem JSON-Schema:
   ${FAKTEN_SCHEMA},
   "szenen": [
     {
-      "seite": "NUR der reine Abschnittstitel aus einem ### Header – OHNE die ###-Markierung und OHNE führende Leerzeichen. Beispiel: aus «### Was macht Adrian?» wird «Was macht Adrian?». NIEMALS den Kapitelnamen als seite. Leer wenn kein passender ### Header identifizierbar.",
-      "kapitel": "NUR der reine Kapitelname aus dem ## Header – OHNE die ##-Markierung. Beispiel: aus «## Der Vater» wird «Der Vater». Nicht der ### Abschnitts-Header. Leer wenn unklar.",
+      "seite": "NUR der Abschnittstitel aus dem titel-Attribut eines <abschnitt>-Tags, wortgleich. Nur der Wert: «Was macht Adrian?», nicht «titel=…». NIEMALS den Kapitelnamen als seite. Leer wenn kein passender Abschnitt identifizierbar.",
+      "kapitel": "NUR der Kapitelname aus dem pfad-Attribut des <kapitel>-Tags, wortgleich. Nur der Wert: «Der Vater», nicht «pfad=…». Nicht der Abschnittstitel. Leer wenn unklar.",
       "titel": "${SZENE_TITEL_SPEC}",
       "wertung": "stark|mittel|schwach",
       "kommentar": "${SZENE_KOMMENTAR_SPEC}",
@@ -67,8 +67,8 @@ Antworte mit diesem JSON-Schema:
           "ereignis": "Was passierte – neutral und kanonisch formuliert, NICHT aus der Figurenperspektive. Ereignisse die mehrere Figuren betreffen MÜSSEN bei allen beteiligten Figuren identisch formuliert sein (z.B. 'Geburt von Maria' für Vater, Mutter und Kind – nicht 'Geburt seiner Tochter' oder 'Eigene Geburt').",
           "typ": "persoenlich|extern",
           "bedeutung": "Bedeutung für diese Figur (1 Satz, leer wenn nicht klar)",
-          "seite": "NUR der reine Abschnittstitel aus einem ### Header – OHNE ###-Markierung. NIE der Kapitelname. Leer wenn unklar.",
-          "kapitel": "NUR der reine Kapitelname aus dem ## Header – OHNE ##-Markierung. Nicht der ### Abschnitts-Header. Leer wenn unklar."
+          "seite": "NUR der Abschnittstitel aus dem titel-Attribut eines <abschnitt>-Tags, wortgleich. NIE der Kapitelname. Leer wenn unklar.",
+          "kapitel": "NUR der Kapitelname aus dem pfad-Attribut des <kapitel>-Tags, wortgleich. Nicht der Abschnittstitel. Leer wenn unklar."
         }
       ]
     }
@@ -82,7 +82,7 @@ Kernregeln:
 - IDs eindeutig (fig_1, ort_1, song_1, …); Beziehungen nur zwischen IDs aus dieser Liste.
 - KONSERVATIV: Nur aufnehmen was im Text eindeutig belegt ist. Im Zweifel weglassen.
 - Keine historischen/realen Personen die nur erwähnt werden.
-- kapitel[].name: immer der Kapitelname (aus dem ## Header oder dem Prompt-Kontext), niemals Abschnittstitel.
+- kapitel[].name: immer der Kapitelname (aus dem «pfad» des <kapitel>-Tags oder dem Prompt-Kontext), niemals Abschnittstitel.
 - figuren_namen / figur_name: Klarnamen exakt wie im Text. orte_refs: ids aus orte dieser Antwort (ort_1, …).
 - Songs: nur mit konkretem Titel oder Interpret aufnehmen; kontext_typ Pflicht.
 - Ereignisse: datum_label = Original-String, datum_year/month/day strukturiert (jeweils null wenn unbekannt). Ist das Jahr nicht explizit, aber aus dem Kontext erschliessbar (verankerte Jahreszahl + relative Angaben, Lebensspanne, Epoche), das abgeleitete Jahr trotzdem in datum_year eintragen und datum_unsicher=true setzen; sonst datum_unsicher=false. subtyp aus Whitelist; im Zweifel 'sonstiges'. Gleiches Ereignis bei allen beteiligten Figuren identisch formulieren.
@@ -106,8 +106,8 @@ ${FAKTEN_RULES}
 
 Szenen-Regeln:
 - Eine Szene ist ein abgegrenzter Handlungsabschnitt mit eigenem Anfang und Ende
-- seite: NUR der reine Abschnittstitel, OHNE die «### »-Markierung am Anfang. Aus «### Was macht Adrian?» wird «Was macht Adrian?». Wortwörtlich sonst (Gross-/Kleinschreibung, Satzzeichen). Leer lassen wenn kein passender ### Header identifizierbar. Der Kapitelname ist NIE ein gültiger Wert für seite.
-- kapitel: NUR der reine Kapitelname aus dem ## Header, OHNE die «## »-Markierung.
+- seite: NUR der Abschnittstitel aus dem «titel» des <abschnitt>-Tags. Aus <abschnitt titel="Was macht Adrian?"> wird «Was macht Adrian?». Wortwörtlich (Gross-/Kleinschreibung, Satzzeichen). Leer lassen wenn kein passender Abschnitt identifizierbar. Der Kapitelname ist NIE ein gültiger Wert für seite.
+- kapitel: NUR der Kapitelname aus dem «pfad» des <kapitel>-Tags, wortgleich.
 - figuren_namen: aktiv beteiligte Figuren – Namen exakt wie im Text (vollständiger Name oder Spitzname); leeres Array wenn keine Figur beteiligt
 ${SZENEN_ORTE_REFS_RULE}
 - wertung: «stark» = überzeugend/spannend, «mittel» = verbesserungswürdig, «schwach» = klare Schwächen
@@ -150,7 +150,7 @@ Kernregeln:
 - Eindeutige IDs (fig_1, fig_2, …); Beziehungen nur zwischen IDs dieser Liste.
 - KONSERVATIV: Nur was im Text eindeutig belegt ist.
 - Keine historischen/realen Personen die nur erwähnt werden.
-- kapitel[].name: aus ## Header oder Prompt-Kontext. Nie Abschnittstitel.
+- kapitel[].name: aus dem «pfad» des <kapitel>-Tags oder dem Prompt-Kontext. Nie Abschnittstitel.
 - figur_name: Klarname exakt wie im Text.
 - Ereignisse: datum_label = Original-String, datum_year/month/day strukturiert (null wenn unbekannt). subtyp aus Whitelist; im Zweifel 'sonstiges'.
 - Leere Arrays wenn nichts gefunden.`;
@@ -181,7 +181,7 @@ Kernregeln:
 - Eindeutige IDs (fig_1, fig_2, …).
 - KONSERVATIV: Nur was im Text eindeutig belegt ist.
 - Keine historischen/realen Personen die nur erwähnt werden.
-- kapitel[].name: aus ## Header oder Prompt-Kontext. Nie Abschnittstitel.
+- kapitel[].name: aus dem «pfad» des <kapitel>-Tags oder dem Prompt-Kontext. Nie Abschnittstitel.
 - Leere Arrays wenn nichts gefunden.`;
   }
   return `${schemaPart}
@@ -216,8 +216,8 @@ function buildKomplettSchemaOrteSzenen(_kontext = '') {
   ${_schemaBody(SONGS_SCHEMA)},${faktenSchemaLine}
   "szenen": [
     {
-      "seite": "NUR der reine Abschnittstitel aus einem ### Header – OHNE ###-Markierung (Beispiel: aus «### Was macht Adrian?» wird «Was macht Adrian?»). NIE der Kapitelname. Leer wenn unklar.",
-      "kapitel": "NUR der reine Kapitelname aus dem ## Header – OHNE ##-Markierung. Nicht der ### Abschnitts-Header. Leer wenn unklar.",
+      "seite": "NUR der Abschnittstitel aus dem titel-Attribut eines <abschnitt>-Tags, wortgleich (nur der Wert: «Was macht Adrian?», nicht «titel=…»). NIE der Kapitelname. Leer wenn unklar.",
+      "kapitel": "NUR der Kapitelname aus dem pfad-Attribut des <kapitel>-Tags, wortgleich. Nicht der Abschnittstitel. Leer wenn unklar.",
       "titel": "${SZENE_TITEL_SPEC}",
       "wertung": "stark|mittel|schwach",
       "kommentar": "${SZENE_KOMMENTAR_SPEC}",
@@ -232,8 +232,8 @@ function buildKomplettSchemaOrteSzenen(_kontext = '') {
 Kernregeln:
 - Keine Figuren-Stammdaten; figuren_namen nur als Klarname-Referenz in Szenen.
 - KONSERVATIV: Nur was eindeutig belegt ist.
-- kapitel[].name: aus ## Header oder Prompt-Kontext, OHNE «## »-Markierung.
-- Szene.seite: reiner Titel eines ### Headers aus dem aktuellen ## Kapitel, OHNE «### »-Markierung. NIE der Kapitelname. Im Zweifel leer.
+- kapitel[].name: aus dem «pfad» des <kapitel>-Tags oder dem Prompt-Kontext, wortgleich.
+- Szene.seite: der «titel» des <abschnitt>-Tags im aktuellen Kapitel, wortgleich. NIE der Kapitelname. Im Zweifel leer.
 - Songs: nur mit konkretem Titel oder Interpret aufnehmen; kontext_typ Pflicht.
 - Leere Arrays wenn nichts gefunden.
 
@@ -249,7 +249,7 @@ Musik-Regeln:
 ${SONGS_RULES}
 
 Szenen-Regeln:
-- seite: NUR der reine Titel eines ### Headers im aktuellen ## Kapitel, OHNE «### »-Markierung. NIEMALS den Kapitelnamen. Bei Unklarheit: leer.
+- seite: NUR der «titel» des <abschnitt>-Tags im aktuellen Kapitel, wortgleich. NIEMALS den Kapitelnamen. Bei Unklarheit: leer.
 - figuren_namen: Klarnamen exakt wie im Text; leeres Array wenn keine Figur beteiligt.
 ${SZENEN_ORTE_REFS_RULE}
 - wertung: «stark» = überzeugend/spannend, «mittel» = verbesserungswürdig, «schwach» = klare Schwächen.

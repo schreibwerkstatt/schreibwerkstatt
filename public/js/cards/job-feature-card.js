@@ -4,7 +4,7 @@
 // setzt nur das Flag.
 
 import { fetchJson, escHtml } from '../utils.js';
-import { startPoll, runningJobStatus } from './job-helpers.js';
+import { startPoll, runningJobStatus, isCancelledJob } from './job-helpers.js';
 import { lsSet } from '../safe-storage.js';
 import { tFetchError } from '../i18n.js';
 import { isSelectedBook } from './book-guard.js';
@@ -72,6 +72,8 @@ export function createCardJobFeature(cfg) {
       onError: (job) => {
         this[loading] = false;
         if (progress) this[progress] = 0;
+        // Abgebrochen ist kein Fehler: neutrale Statuszeile (DESIGN.md «KI-Lauf verfolgen»).
+        if (isCancelledJob(job)) { writeStatus.call(this, window.__app.t('job.cancelled'), false); return; }
         if (cfg.onError) { cfg.onError.call(this, job); return; }
         if (out) {
           this[out] = jobErrHtml.call(this, job);

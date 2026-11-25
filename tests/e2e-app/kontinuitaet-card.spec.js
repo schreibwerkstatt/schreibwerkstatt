@@ -274,3 +274,43 @@ test('Kontinuität: «Nicht mehr gemeldet» — Tab, Badge, Datum, Sammel-Nachpr
   await expect(since).toContainText('2026');
   guard.assertClean('Kontinuität nicht mehr gemeldet');
 });
+
+test('Kontinuität: laufender Check zeigt Abbrechen, Abbruch ist kein Fehler', async ({ page }) => {
+  const guard = attachConsoleGuard(page);
+  // Ohne Event-Stream pollt startPoll alle 2 s — der Stream schickte für den
+  // gemockten Job nie das Ende, der Sicherheits-Tick käme erst nach 30 s.
+  await page.route('**/events/stream**', (r) => r.fulfill({ status: 204, body: '' }));
+  await bootApp(page);
+  const bookId = await selectSeededBook(page);
+  const [ch1, ch2] = await seedChapters(page);
+  await page.route(`**/jobs/kontinuitaet/${bookId}`, json(mockCheck(ch1, ch2)));
+  const card = await openCard(page);
+  await expect(card.locator('.entity-list .entity-row').first()).toBeVisible({ timeout: 20000 });
+
+  // Lauf: Start liefert eine Job-ID, der Poll sieht ihn laufen bis zum DELETE.
+  let cancelled = false;
+  await page.route('**/jobs/kontinuitaet', (r) => (r.request().method() === 'POST' ? json({ jobId: 'job-kont-x' })(r) : r.continue()));
+  await page.route('**/jobs/job-kont-x', (r) => {
+    if (r.request().method() === 'DELETE') { cancelled = true; return json({ ok: true })(r); }
+    return json(cancelled
+      ? { id: 'job-kont-x', status: 'cancelled', error: 'job.cancelled', progress: 40 }
+      : { id: 'job-kont-x', status: 'running', progress: 40, statusText: 'job.phase.aiReply' })(r);
+  });
+  await page.evaluate(() => window.Alpine.$data(document.querySelector('.card--kontinuitaet')).kontinuitaetRun());
+
+  const progress = card.locator('.job-progress');
+  const cancelBtn = progress.locator('.job-progress-cancel');
+  await expect(cancelBtn).toBeVisible({ timeout: 10000 });
+  await expect(cancelBtn).toHaveText(await tr(page, 'common.cancel'));
+  const del = page.waitForRequest((r) => r.method() === 'DELETE' && r.url().endsWith('/jobs/job-kont-x'));
+  await cancelBtn.click();
+  await del;
+
+  // Abgebrochen: neutrale Statuszeile, kein Fehlertext, kein Abbrechen mehr.
+  const status = progress.locator('.card-status');
+  await expect(status).toHaveText(await tr(page, 'kontinuitaet.run.cancelled'), { timeout: 10000 });
+  await expect(progress.locator('.error-msg')).toHaveCount(0);
+  await expect(status).not.toHaveClass(/card-status--error/);
+  await expect(cancelBtn).toBeHidden();
+  guard.assertClean('Kontinuität abbrechen');
+});

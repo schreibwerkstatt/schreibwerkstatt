@@ -1,30 +1,41 @@
 // Erst-Kontext-Bausteine der Chats: die semantisch nächsten Stellen zur aktuellen
 // Frage (routes/jobs/chat/book-chat-retrieval.js#preContextPassages) als Prompt-Text.
 // Geteilt von Buch-Chat (agentisch, buildBookChatPreContext), Plot-Chat und
-// Ideen-Chat (Textpassagen-Block) — gleiche Passagen-Kopfzeile, gleicher Status-
+// Ideen-Chat (Textpassagen-Block) und Abschnitts-Chat — gleiches Passagen-Tag, gleicher Status-
 // Hinweis. Steht nie im gecachten System-Block: er trägt pro Frage andere Bytes.
 // Werkzeugnamen nur über toolMentions (`toolNames` = angebotene Werkzeuge).
 
 import { toolMentions } from './chat-tools/mentions.js';
+import { formatAbschnitt, formatTreffer } from './book-text-format.js';
+
+// Arten der Such-Treffer, die kein Abschnitt sind, im Tag-Attribut `art`.
+const TREFFER_ART = { scene: 'szene', figure: 'figur', location: 'ort', fact: 'welt-fakt' };
 
 /**
- * Kopfzeile einer Passage: Art, Titel, Sprungziel (`entity_id`, bei Abschnitten =
- * page_id), Kapitelpfad und eine STABILE Relevanzangabe — Rang (1 = bester) und
- * roher Cosinus. Der stufenabhängige Pipeline-Score (RRF ~0.03, Rerank, Cosinus)
- * geht bewusst nicht ans Modell: als RRF-Wert sähe jeder Treffer irrelevant aus.
- * @param {{kind:string,entity_id:number,title?:string,chapter_path?:string,rank?:number,similarity?:number}} p
+ * Eine Passage als Tag (Format: ./book-text-format.js): ein Abschnitts-Treffer als
+ * `<abschnitt titel …>`, alles andere als `<treffer art titel …>`. Attribute:
+ * Sprungziel (`entity_id`, bei Abschnitten = page_id), Kapitelpfad und eine
+ * STABILE Relevanzangabe — Rang (1 = bester) und roher Cosinus. Der
+ * stufenabhängige Pipeline-Score (RRF ~0.03, Rerank, Cosinus) geht bewusst nicht
+ * ans Modell: als RRF-Wert sähe jeder Treffer irrelevant aus.
+ * `ids: false` (Abschnitts-Chat, ohne Werkzeuge): nur Titel und Kapitel.
+ * @param {{kind:string,entity_id:number,title?:string,chapter_path?:string,rank?:number,similarity?:number,text?:string}} p
  */
-export function passageHeader(p) {
-  const meta = [`entity_id ${p.entity_id}`];
-  if (p.chapter_path) meta.push(`Kapitel: ${p.chapter_path}`);
-  if (Number.isInteger(p.rank)) meta.push(`Rang ${p.rank}`);
-  if (Number.isFinite(p.similarity)) meta.push(`Ähnlichkeit ${p.similarity}`);
-  return `--- ${p.kind}: «${p.title || ''}» (${meta.join(', ')}) ---`;
+export function formatPassage(p, { ids = true } = {}) {
+  const attrs = {
+    ...(ids ? { entity_id: p.entity_id } : {}),
+    kapitel: p.chapter_path || null,
+    ...(ids && Number.isInteger(p.rank) ? { rang: p.rank } : {}),
+    ...(ids && Number.isFinite(p.similarity) ? { aehnlichkeit: p.similarity } : {}),
+  };
+  const text = String(p.text || '').trim();
+  if (p.kind === 'page') return formatAbschnitt({ title: p.title || '', text }, attrs);
+  return formatTreffer({ art: TREFFER_ART[p.kind] || p.kind, titel: p.title || '', ...attrs }, text);
 }
 
 /** Lesehilfe zur Relevanzangabe der Kopfzeilen (einmal pro Block). */
 export const PASSAGE_RELEVANCE_NOTE =
-  'Rang = Reihenfolge der Suche (1 = bester Treffer); Ähnlichkeit = Kosinus 0–1, nur relativ zwischen den Treffern zu lesen.';
+  'rang = Reihenfolge der Suche (1 = bester Treffer); aehnlichkeit = Kosinus 0–1, nur relativ zwischen den Treffern zu lesen.';
 
 /**
  * Hinweis zum Stand der Bedeutungssuche, damit das Modell «keine/zu wenige
@@ -79,14 +90,14 @@ export function buildBookChatPreContext(passages, status = null, { toolNames } =
   head.push(
     '(Automatisch vorab geholt über die Bedeutungssuche; nach Relevanz sortiert, Ausschnitte können unvollständig sein.',
     'Beantworten diese Stellen die Frage, antworte direkt via `final_answer` — kein weiteres Werkzeug. Sonst arbeite von hier aus weiter:',
-    ...(into ? [`\`entity_id\` eines Abschnitts (kind page) geht als page_id in ${into}.`] : []),
+    ...(into ? [`\`entity_id\` eines \`<abschnitt>\`-Treffers geht als page_id in ${into}.`] : []),
     m.has('quote_passage')
       ? 'Wörtliche Zitate IMMER über quote_passage verifizieren, nie aus diesem Ausschnitt abschreiben.'
       : 'Wörtliche Zitate nie aus diesem Ausschnitt abschreiben.',
     `${PASSAGE_RELEVANCE_NOTE})`,
   );
   if (note) head.push(note);
-  for (const p of list) head.push(passageHeader(p), p.text, '');
+  for (const p of list) head.push(formatPassage(p), '');
   return head.join('\n');
 }
 
@@ -104,9 +115,9 @@ export function buildPassageBlockLines(passages, { classic, status = null, intro
     if (!classic && intro) lines.push(intro);
     lines.push(classic || !toolMentions(toolNames).has('get_pages')
       ? `(${PASSAGE_RELEVANCE_NOTE})`
-      : `(\`entity_id\` eines Abschnitts (kind page) = page_id für \`get_pages\`. ${PASSAGE_RELEVANCE_NOTE})`);
+      : `(\`entity_id\` eines \`<abschnitt>\`-Treffers = page_id für \`get_pages\`. ${PASSAGE_RELEVANCE_NOTE})`);
     if (note) lines.push(note);
-    for (const p of list) lines.push(passageHeader(p), String(p.text || '').trim());
+    for (const p of list) lines.push(formatPassage(p));
   } else {
     lines.push(note || (classic ? emptyClassic : '(keine Treffer zur Frage — nutze bei Bedarf die Lese-Werkzeuge)'));
   }

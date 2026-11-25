@@ -1,0 +1,8 @@
+<!-- Fuss der Vorschlagskarte der Board-Chats (Plot, Ideen): Begründung, Hinweise
+     (blockiert, veraltet, Angelegtes entfernt), Fehler. Gegenstück zu
+     chat-vorschlag-board-head.html, liest dasselbe Anzeige-Modell `pv`. -->
+<div x-show="pv.begruendung" class="chat-vorschlag-begruendung" x-text="pv.begruendung"></div>
+<template x-for="(note, ni) in pv.notes" :key="ni">
+  <div class="chat-vorschlag-note" x-text="note"></div>
+</template>
+<div x-show="pv.error" class="chat-vorschlag-error" x-text="pv.error"></div>

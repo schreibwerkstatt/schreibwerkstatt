@@ -7,7 +7,7 @@ const {
   insertChapterReview,
 } = require('../../db/schema');
 const {
-  makeJobLogger, updateJob, completeJob, failJob, contentHttpError,
+  makeJobLogger, updateJob, completeJob, failJob, contentHttpError, i18nError,
   normalizeGesamtnote, assertChapterAnalysis, sortEmpfehlungen,
   sigHash: _sigHash, buildChapterPagesSig, systemChars,
   aiCall, getPrompts, getBookPrompts,
@@ -15,9 +15,10 @@ const {
   htmlToText, splitGroupsIntoChunks, loadOrderedBookContents,
   _modelName, applyReviewAiOverrides, tps,
   jobs, runningJobs, createJob, enqueueJob, jobKey, findActiveJobId,
-  jsonBody, BATCH_SIZE, chunkLimitsFor,
-  bookTextOpts,
+  jsonBody, chunkLimitsFor,
 } = require('./shared');
+const { formatAbschnitte, formatKapitel } = require('./shared/book-text-format');
+const { readSections } = require('./shared/section-reader');
 const contentStore = require('../../lib/content-store');
 const { narrativeLabels } = require('./narrative-labels');
 const { loadChapterReviewKomplettContext, loadStrukturContext, loadChapterPlanContext, loadChapterIdeenContext, werkstandFor } = require('./review-context');
@@ -68,7 +69,6 @@ async function runChapterReviewJob(jobId, bookId, chapterId, chapterName, bookNa
   } = prompts;
   const { SYSTEM_KAPITELREVIEW_BLOCKS: SYSTEM_KAPITELREVIEW, SYSTEM_KAPITELANALYSE_BLOCKS: SYSTEM_KAPITELANALYSE } = await getBookPrompts(bookId, userEmail);
   const bookSettings = getBookSettings(bookId, userEmail);
-  const textOpts = bookTextOpts(bookId, userEmail);
   const narrative = narrativeLabels(bookSettings);
   const locale = `${bookSettings?.language || 'de'}-${bookSettings?.region || 'CH'}`;
   const reviewSchwerpunkt = getBuchtypReviewSchwerpunkt(locale, bookSettings?.buchtyp || null);
@@ -219,29 +219,35 @@ async function runChapterReviewJob(jobId, bookId, chapterId, chapterName, bookNa
 
     const tok = { in: 0, out: 0, ms: 0 };
     const signal = jobAbortControllers.get(jobId)?.signal;
-    const contents = [];
-    for (let i = 0; i < pages.length; i += BATCH_SIZE) {
-      if (signal?.aborted) throw new DOMException('Aborted', 'AbortError');
-      updateJob(jobId, {
-        progress: Math.round((i / pages.length) * 60),
-        statusText: 'job.phase.readingPages',
-        statusParams: { from: i + 1, to: Math.min(i + BATCH_SIZE, pages.length), total: pages.length },
-      });
-      // Eine Seite, die nicht lädt, bricht den Lauf ab: die Bewertung eines
-      // lückenhaften Kapitels landete sonst unter der Signatur des vollständigen
-      // im Cache und käme bei jedem Folgelauf wieder. Promise.all erhält die
-      // Reihenfolge des Batches.
-      const batch = pages.slice(i, i + BATCH_SIZE);
-      const results = await Promise.all(batch.map(async p => {
-        const pd = await contentStore.loadPage(p.id).catch(e => { throw contentHttpError(e); });
-        const text = htmlToText(pd.html, textOpts).trim();
-        if (text.length < MIN_PAGE_CHARS) return null;
-        // id + updated_at tragen die Cache-Signatur der Teil-Analysen
-        // (buildChapterPagesSig) — derselbe Stempel wie in der Buchbewertung.
-        return { id: p.id, updated_at: pd.updated_at || '', title: p.name, text, chapterId: p.chapter_id || null };
-      }));
-      for (const v of results) if (v) contents.push(v);
+    updateJob(jobId, {
+      progress: 5,
+      statusText: 'job.phase.readingPages',
+      statusParams: { from: 1, to: pages.length, total: pages.length },
+    });
+    // Eine Seite, die nicht lädt, bricht den Lauf ab: die Bewertung eines
+    // lückenhaften Kapitels landete sonst unter der Signatur des vollständigen
+    // im Cache und käme bei jedem Folgelauf wieder.
+    let read;
+    try {
+      read = await readSections(Number(bookId), { pageIds: pages.map(p => Number(p.id)), userEmail, signal });
+    } catch (e) { throw contentHttpError(e); }
+    const { sections, missing } = read;
+    if (missing.length) {
+      // Ladefehler mit HTTP-Status → Content-Store-Fehler; ohne Status steht der
+      // Abschnitt nicht (mehr) in der Gliederung des Buchs.
+      const m = missing.find(x => x.status) || missing[0];
+      if (m.status) throw contentHttpError(Object.assign(new Error(m.error), { status: m.status, bodyText: m.error }));
+      throw i18nError('job.error.chapterPageMissing', { page_id: m.page_id });
     }
+    const metaById = new Map(pages.map(p => [p.id, p]));
+    // id + updated_at tragen die Cache-Signatur der Teil-Analysen
+    // (buildChapterPagesSig) — derselbe Stempel wie in der Buchbewertung.
+    const contents = sections
+      .filter(sec => sec.text.length >= MIN_PAGE_CHARS)
+      .map(sec => {
+        const p = metaById.get(sec.id);
+        return { id: sec.id, updated_at: sec.updatedAt, title: p.name, text: sec.text, chapterId: p.chapter_id || null };
+      });
 
     if (!contents.length) { completeJob(jobId, { empty: true, chapterName }); return; }
 
@@ -256,18 +262,25 @@ async function runChapterReviewJob(jobId, bookId, chapterId, chapterName, bookNa
       if (topPath && full.startsWith(topPath + ' › ')) return full.slice(topPath.length + 3);
       return full;
     }
+    // Abschnitte des Top-Kapitels stehen ohne Hülle (der Prompt nennt das Kapitel),
+    // jeder Lauf von Abschnitten eines Unterkapitels in `<kapitel pfad="rel">`.
     function _buildText(items) {
       const out = [];
-      let lastChId = null;
+      let run = [], runChId, runRel = '';
+      const flush = () => {
+        if (!run.length) return;
+        out.push(runRel ? formatKapitel(runRel, run) : formatAbschnitte(run));
+        run = [];
+      };
       for (const p of items) {
-        if (includeSubchapters && p.chapterId !== lastChId) {
-          const rel = _relPath(p.chapterId);
-          if (rel) out.push(`## ${rel}`);
-          lastChId = p.chapterId;
-        }
-        out.push(`### ${p.title}\n${p.text}`);
+        const rel = includeSubchapters ? _relPath(p.chapterId) : '';
+        if (run.length && p.chapterId !== runChId) flush();
+        runChId = p.chapterId;
+        runRel = rel;
+        run.push(p);
       }
-      return out.join('\n\n---\n\n');
+      flush();
+      return out.join('\n\n');
     }
     let r;
     // Grundlage der Note: Volltext des Kapitels oder verdichtete Teil-Analysen.

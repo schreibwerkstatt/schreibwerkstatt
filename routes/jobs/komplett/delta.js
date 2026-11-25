@@ -8,7 +8,7 @@
 // loadPageContents, ausgeschlossene Kapitel und Stub-Abschnitte fallen weg), damit
 // „Anteil am Buch" sich auf den Text bezieht, den die Analyse tatsächlich sieht.
 const { loadOrderedBookContents, loadPageContents } = require('../shared/loader');
-const { htmlToText } = require('../shared/ai');
+const { pageTextForAi } = require('../shared/book-text-format');
 const { komplettTextOpts } = require('./job-shared');
 const { lastKomplettRun, revisionBaselines, deletionsSince } = require('../../../db/komplett-delta');
 const { listKatalogAnker } = require('../../../db/katalog-anker');
@@ -48,7 +48,7 @@ async function computeKomplettDelta(bookId, userEmail) {
     const base = baselines.get(p.id);
     let d;
     if (base?.html != null) {
-      const oldText = htmlToText(base.html, textOpts).trim();
+      const oldText = pageTextForAi(base.html, textOpts);
       oldTexts.push(oldText);
       d = textDelta(oldText, p.text);
       // Die Retention dünnt alte Revisionen aus: liegt die Basis deutlich vor dem

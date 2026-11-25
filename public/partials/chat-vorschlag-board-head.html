@@ -1,0 +1,21 @@
+<!-- Kopf der Vorschlagskarte der Board-Chats (Plot, Ideen): Etikett + Übernehmen /
+     Zeigen / Verwerfen–Wiederherstellen (Fragment, string-seitig per Include-Marker
+     in plot-chat.html und ideen-chat.html). Der Einbinder legt an der
+     `.chat-vorschlag` das Anzeige-Modell an:
+       x-data="{ get pv() { return plotProposalView(msg, pi); } }" :class="pv.cls"
+     (Fabrik makeProposalApplyMethods, chat/proposal-status.js — names.view).
+     Der Inhalt je Typ steht zwischen Kopf und Fuss im Chat selbst; der Fuss ist
+     chat-vorschlag-board-foot.html. Optik: components/chat-vorschlag.css. -->
+<div class="chat-vorschlag-header">
+  <span class="chat-vorschlag-label" x-text="pv.label"></span>
+  <span class="chat-vorschlag-actions">
+    <button type="button" class="chat-vorschlag-btn" x-show="pv.state === 'open'"
+            @click="pv.apply()" :disabled="!pv.canApply" :data-tip="pv.blockedText || null">
+      <span x-show="pv.applying" class="spinner"></span>
+      <span x-text="pv.applyLabel"></span>
+    </button>
+    <button type="button" class="chat-vorschlag-btn" x-show="pv.canShow" @click="pv.show()" x-text="pv.showLabel"></button>
+    <button type="button" class="chat-vorschlag-btn chat-vorschlag-btn--ghost" x-show="pv.state !== 'applied'"
+            @click="pv.discard()" :disabled="pv.applying" x-text="pv.discardLabel"></button>
+  </span>
+</div>

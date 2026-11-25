@@ -118,7 +118,7 @@ test('Plot-Chat: Vorschläge einzeln übernehmen, Undo, Akt-Bezug blockiert bis 
   expect(guard.unmatched().map((f) => `[${f.channel}] ${f.text}`)).toEqual([]);
 });
 
-test('Plot-Chat: Abbrechen-Knopf im Kopf bricht den laufenden Job der Session ab', async ({ page }) => {
+test('Plot-Chat: Senden-Knopf wird im Lauf zum Stopp-Knopf und bricht den Job der Session ab', async ({ page }) => {
   const guard = attachConsoleGuard(page);
   await bootApp(page);
   await selectSeededBook(page);
@@ -126,8 +126,12 @@ test('Plot-Chat: Abbrechen-Knopf im Kopf bricht den laufenden Job der Session ab
   await page.locator('.card--plot .card-actions button[aria-pressed]').last().click();
   await page.waitForFunction(() => window.Alpine.$data(document.querySelector('.card--plot')).plotChatSessionId != null);
 
-  const cancelBtn = page.locator('#plot-chat-card .card-actions button', { has: page.locator('use[href$="#square"]') });
-  await expect(cancelBtn).toBeHidden();
+  const sendBtn = page.locator('#plot-chat-card .chat-send-btn');
+  const stopIcon = sendBtn.locator('use[href$="#square"]');
+  await expect(sendBtn.locator('use[href$="#arrow-up"]')).toBeVisible();
+  await expect(stopIcon).toBeHidden();
+  // Kein zweiter Abbrechen-Knopf im Kartenkopf.
+  await expect(page.locator('#plot-chat-card .card-actions use[href$="#square"]')).toHaveCount(0);
 
   // Lauf simulieren: Karte „lädt" für die offene Session; /jobs/active liefert die Job-ID.
   const sid = await plotData(page, 'd.plotChatLoading = true; d.plotChatRunningSessionId = d.plotChatSessionId; return d.plotChatSessionId;');
@@ -135,8 +139,9 @@ test('Plot-Chat: Abbrechen-Knopf im Kopf bricht den laufenden Job der Session ab
   const del = page.waitForRequest((r) => r.method() === 'DELETE' && r.url().endsWith('/jobs/job-plot-x'));
   await page.route('**/jobs/job-plot-x', (r) => r.fulfill({ json: { ok: true } }));
 
-  await expect(cancelBtn).toBeVisible();
-  await cancelBtn.click();
+  await expect(stopIcon).toBeVisible();
+  await expect(sendBtn).toBeEnabled();
+  await sendBtn.click();
   await del;
 
   await plotData(page, 'd.plotChatLoading = false; d.plotChatRunningSessionId = null;');

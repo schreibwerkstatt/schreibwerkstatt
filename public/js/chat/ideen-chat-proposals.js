@@ -173,25 +173,21 @@ export const ideenProposalMethods = {
     return window.__app.t(`ideenBoard.chat.type.${p?.type || 'idee_create'}`);
   },
 
-  // Blockier-Grund als Text (Status-Keys der Stufen übersetzt). Schon geschrieben
-  // (`_written`, nur der Status fehlt): kein Grund mehr — der Knopf ist klickbar.
-  ideenProposalBlockedText(msg, pi) {
-    const b = this.ideenProposalStatus(msg, pi).blocked;
-    if (!b || this.ideenProposals(msg)[pi]?._written) return '';
-    const params = { ...(b.params || {}) };
-    if (params.status) params.status = this.statusLabel(params.status);
-    return window.__app.t(b.key, params);
-  },
-
   ideenProposalLinkKind(p) {
     return window.__app.t(`ideen.link.kind.${p?.target_kind}`);
   },
 
-  // ideenProposalCanApply / applyIdeenProposal / discardIdeenProposal
+  // ideenProposalCanApply / applyIdeenProposal / discardIdeenProposal / ideenProposalView
   ...makeProposalApplyMethods({
     url: '/ideen/chat-proposal',
     chat: 'ideen',
-    names: { list: 'ideenProposals', status: 'ideenProposalStatus', canApply: 'ideenProposalCanApply', apply: 'applyIdeenProposal', discard: 'discardIdeenProposal' },
+    names: { list: 'ideenProposals', status: 'ideenProposalStatus', canApply: 'ideenProposalCanApply', apply: 'applyIdeenProposal', discard: 'discardIdeenProposal', view: 'ideenProposalView' },
+    view: {
+      appliedKey: 'ideenBoard.chat.applied', reapplyKey: 'ideenBoard.chat.reapply', staleKey: 'ideenBoard.chat.stale', removedKey: 'ideenBoard.chat.removed',
+      typeLabel: 'ideenProposalTypeLabel',
+      // Status-Keys der Stufen im Blockier-Grund übersetzen.
+      blockedParams(params) { return params.status ? { ...params, status: this.statusLabel(params.status) } : params; },
+    },
     applyKey: 'ideenBoard.chat.applyError',
     statusKey: 'ideenBoard.chat.statusError',
     async confirmFirst(msg, pi, p) {

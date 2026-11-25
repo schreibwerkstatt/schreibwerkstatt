@@ -20,8 +20,9 @@ const ENTRIES = [
 test('buildRueckblickPrompt: Zeitraum, Einträge, JSON-Only-Marker', () => {
   const p = buildRueckblickPrompt(ENTRIES, { zeitraum: '2024-03' });
   assert.match(p, /2024-03/);
-  assert.match(p, /### 2024-03-04/);
-  assert.match(p, /### 2024-03-15/);
+  // Einträge als Tags mit Datum (public/js/prompts/book-text-format.js).
+  assert.match(p, /<abschnitt titel="2024-03-04" datum="2024-03-04">/);
+  assert.match(p, /<abschnitt titel="2024-03-15" datum="2024-03-15">/);
   // JSON-Only-Marker (Claude-Modus) am Ende angehängt.
   assert.match(p, /ausschliesslich mit einem JSON-Objekt/);
 });
@@ -91,9 +92,9 @@ test('buildRueckblickReducePrompt: verdichtete Facetten + Synthese-Auftrag', () 
     { monat: '2024-02', themen: [], personen: [{ name: 'Anna', haeufigkeit: 1, belege: ['2024-02-01'] }], orte: [], bemerkenswerteTage: [], zusammenfassung: 'Februar.' },
   ];
   const p = buildRueckblickReducePrompt(monthResults, { zeitraum: '2024', merged: mergeRueckblickFacets(monthResults) });
-  // Monats-Labels als Teil-Header (ohne "Monat "-Präfix im neuen Format).
-  assert.match(p, /## 2024-01/);
-  assert.match(p, /## 2024-02/);
+  // Monats-Labels als Teil-Tag (ohne "Monat "-Präfix).
+  assert.match(p, /<teilrueckblick monat="2024-01">/);
+  assert.match(p, /<teilrueckblick monat="2024-02">/);
   // Facetten sind bereits gemergt und werden dem Modell final vorgelegt.
   assert.match(p, /<verdichtete_facetten/);
   assert.match(p, /Arbeit \(2×\)/);

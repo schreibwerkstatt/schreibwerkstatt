@@ -13,6 +13,7 @@
 const { saveChapterNarrativeProfiles, getBookSettings } = require('../../../../db/schema');
 const { getNarrativeReport, saveAutorenBefund, deleteAutorenBefund } = require('../../../../db/narrative-report');
 const { updateJob, toSystemBlocks, retryOnTransientAi, settledAll, i18nError, i18nErrText } = require('../../shared');
+const { formatAbschnitte } = require('../../shared/book-text-format');
 const { bookSystemBlock: buildBookBlock } = require('../book-text');
 const { komplettMaxTokens } = require('./tokens');
 const { COST_LABEL, costTier } = require('../cost-labels');
@@ -57,7 +58,7 @@ async function runErzaehlprofil(ctx, opts = {}) {
     const keys = groupOrder.filter(k => k !== '__ungrouped__');
     const results = await settledAll(keys.map((key, gi) => () => {
       const group = groups.get(key);
-      const chText = group.pages.map(p => `### ${p.title}\n${p.text}`).join('\n\n---\n\n');
+      const chText = formatAbschnitte(group.pages);
       const fp = fromPct + Math.round(((gi) / keys.length) * (toPct - fromPct));
       const tp = fromPct + Math.round(((gi + 1) / keys.length) * (toPct - fromPct));
       return retryOnTransientAi(() => call(jobId, tok,

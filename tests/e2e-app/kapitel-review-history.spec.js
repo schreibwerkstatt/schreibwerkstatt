@@ -61,6 +61,9 @@ test('aktuelle Bewertung oben, ältere im Verlauf, Trend nur bei gleichem Umfang
   // Verlauf: nur die beiden älteren Einträge.
   const items = card.locator('.card-history-section .history-item');
   await expect(items).toHaveCount(2);
+  // Geteilte Lauf-Zeile: Löschen als Symbol in der Zeile, nicht im Detail.
+  await expect(items.nth(0).locator(':scope > .history-item-delete')).toHaveCount(1);
+  await expect(card.locator('.history-detail button')).toHaveCount(0);
 
   // Eintrag „MITTLERE" (#2) hat einen Vorgänger mit anderem Umfang → kein Trend.
   await expect(items.nth(0).locator('.review-trend')).toBeHidden();

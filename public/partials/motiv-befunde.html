@@ -61,9 +61,7 @@
     </button>
   </div>
 
-  <div class="motiv-progress" x-show="consistencyRunning" x-cloak>
-    <div class="progress-bar" :style="{ '--progress': consistencyProgress + '%' }"></div>
-  </div>
+  <div x-job-progress="{ active: consistencyRunning, progress: consistencyProgress, text: consistencyStatus, timer: '_consistencyPollTimer' }"></div>
 
   <div class="motiv-consistency" x-show="consistencyResult" x-cloak>
     <div class="card-section-head">
@@ -115,20 +113,10 @@
 
   <!-- Prüfungs-Verlauf: persistierte Läufe pro Buch (wie die Brainstorm-Historie).
        Nur die KI-Läufe — die Messung oben ist immer der aktuelle Stand. -->
-  <div class="history-bar" x-show="consistencyRuns.length > 0" x-cloak>
+  <div class="history-bar" x-show="consistencyRuns.length > 0" x-cloak x-data="{ runRow: motivConsistencyRunRow() }">
     <div class="history-heading" x-text="$app.t('motiv.consistency.runs', { count: consistencyRuns.length })"></div>
     <template x-for="r in consistencyRuns" :key="r.id">
-      <div class="history-item hover-reveal-host internal-link" :class="{ 'history-item--open': selectedConsistencyRunId === r.id }"
-           @click="openConsistencyRun(r)">
-        <span class="history-date" x-text="formatRunDate(r.created_at)"></span>
-        <span class="tag" x-text="$app.tn('motiv.consistency.konfliktCount', r.konflikt_count)"></span>
-        <span x-show="r.model" class="tag" x-text="r.model"></span>
-        <span class="history-chevron" :class="{ open: selectedConsistencyRunId === r.id }" aria-hidden="true"></span>
-        <button type="button" class="history-item-delete hover-reveal"
-                @click.stop="deleteConsistencyRun(r.id)"
-                :data-tip="$app.t('common.deleteEntry')"
-                :aria-label="$app.t('common.deleteEntry')"><svg class="icon" aria-hidden="true"><use href="/icons.svg#trash"/></svg></button>
-      </div>
+      <!-- @include run-history-row -->
     </template>
   </div>
 </div>

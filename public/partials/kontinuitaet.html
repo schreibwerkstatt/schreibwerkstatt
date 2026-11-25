@@ -17,10 +17,7 @@
     </div>
   </div>
 
-  <div x-show="kontinuitaetProgress > 0" class="progress-bar-wrap">
-    <div class="progress-bar" :style="{ '--progress': kontinuitaetProgress + '%' }"></div>
-  </div>
-  <div x-show="kontinuitaetStatus" class="card-status" x-html="kontinuitaetStatus"></div>
+  <div x-job-progress="{ active: kontinuitaetLoading, progress: kontinuitaetProgress, status: kontinuitaetStatus, timer: '_kontinuitaetPollTimer' }"></div>
 
   <!-- Laden der Befunde fehlgeschlagen: eigener Zustand mit Retry, nicht „noch keine Analyse". -->
   <div x-show="kontinuitaetLoadError && !kontinuitaetResult && !kontinuitaetLoading && !cardLoading" class="card-empty" x-cloak>

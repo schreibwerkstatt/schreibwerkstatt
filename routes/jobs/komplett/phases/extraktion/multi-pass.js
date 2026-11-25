@@ -4,6 +4,7 @@
 // Facade: ../extraktion.js (runPhase1 wählt Single- oder Multi-Pass).
 const { loadChapterExtractCache, saveChapterExtractCache, getBookSettings } = require('../../../../../db/schema');
 const { i18nError, i18nErrText, settledAll, retryOnTransientAi, updateJob, toSystemBlocks, halveChunkPages } = require('../../../shared');
+const { formatAbschnitte } = require('../../../shared/book-text-format');
 const { buildChapterSystemBlockText, bookSettingsSigPart, extractField } = require('../../utils');
 const { chunkPagesSig } = require('../../extract-plan');
 const { _normalizeName } = require('../../figuren-merge');
@@ -252,7 +253,7 @@ async function _extractCloudChunk(ctx, { chunk, chText, chunkLabel, claudeExtrac
     log.warn(`${chunkLabel} – ${i18nErrText(e)}, Retry in zwei Hälften (${halves[0].length}+${halves[1].length} Seiten${chunk.pages.length === 1 ? ', Abschnitt geteilt' : ''}).`);
     const results = [];
     for (const [hi, pages] of halves.entries()) {
-      const text = pages.map(p => `### ${p.title}\n${p.text}`).join('\n\n---\n\n');
+      const text = formatAbschnitte(pages);
       results.push(await extractOnce(`${chunkLabel} Hälfte ${hi + 1}/2`, pages, sys.SYSTEM_KOMPLETT_EXTRAKTION_BLOCKS, text));
     }
     return _concatExtractResults(results[0], results[1]);
@@ -283,7 +284,7 @@ async function extractMultiPass(ctx, { chunks, chunkOrder, claudeExtractCap, cal
       chunk, key: chunkKey, ord,
       // Signatur samt Kapitelname: ../../extract-plan.js#chunkPagesSig (geteilt mit der Prognose).
       pagesSig: chunkPagesSig(chunk, settingsSig, chunkCacheVersion),
-      chText: chunk.pages.map(p => `### ${p.title}\n${p.text}`).join('\n\n---\n\n'),
+      chText: formatAbschnitte(chunk.pages),
     };
   });
   // Claude-Warmup laeuft seriell (settledAll(..., {warmup:true})) und schreibt

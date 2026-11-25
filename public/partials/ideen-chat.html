@@ -14,16 +14,12 @@
       <span class="card-title" x-text="$app.t('ideenBoard.chat.heading')"></span>
     </div>
     <div class="card-actions">
-      <button type="button" class="icon-btn icon-btn--ghost" x-show="isIdeenChatSessionRunning(ideenChatSessionId)" @click="cancelIdeenChatRun()" :data-tip="$app.t('chat.cancelRunTip')" :aria-label="$app.t('chat.cancelRun')"><svg class="icon" aria-hidden="true"><use href="/icons.svg#square"/></svg></button>
       <button type="button" class="icon-btn icon-btn--ghost" @click="startNewIdeenChatSession()" :disabled="ideenChatLoading" :data-tip="$app.t('chat.newSessionTitle')" :aria-label="$app.t('chat.newSession')"><svg class="icon" aria-hidden="true"><use href="/icons.svg#plus"/></svg></button>
     </div>
     <button type="button" class="btn-card-close" @click="ideenChatOpen = false" :data-tip="$app.t('common.close')" :aria-label="$app.t('common.close')"><svg class="icon" aria-hidden="true"><use href="/icons.svg#x"/></svg></button>
   </div>
 
-  <div x-show="ideenChatProgress > 0 && isIdeenChatSessionRunning(ideenChatSessionId)" class="progress-bar-wrap">
-    <div class="progress-bar" :style="{ '--progress': ideenChatProgress + '%' }"></div>
-  </div>
-  <div x-show="ideenChatStatus" class="card-status" x-html="ideenChatStatus"></div>
+  <div x-job-progress="{ active: isIdeenChatSessionRunning(ideenChatSessionId), progress: ideenChatProgress, status: ideenChatStatus }"></div>
 
   <div id="ideen-chat-messages" class="chat-messages ideen-chat-messages aside-split-scroll">
     <!-- Leeres Gespräch: Erklärung + drei Schnellstart-Aufträge (die Kernaufgaben). -->
@@ -38,7 +34,7 @@
     </div>
 
     <template x-for="(msg, msgIdx) in ideenChatMessages" :key="msgIdx">
-      <div :class="'chat-msg chat-msg--' + msg.role">
+      <div :class="'chat-msg chat-msg--' + msg.role + (msg.id != null && msg.id === _hitMsgId ? ' chat-msg--hit' : '')" :data-msg-id="msg.id">
         <div class="chat-msg-bubble">
           <div x-show="msg.role === 'user'" class="chat-msg-text" x-text="msg.content"></div>
           <div x-show="msg.role === 'assistant'" class="chat-msg-text" x-html="_renderChatMarkdown(msg.content)"></div>
@@ -51,22 +47,8 @@
             <div class="chat-vorschlaege chat-vorschlaege--wide ideen-chat-proposals">
               <template x-for="(p, pi) in ideenProposals(msg)" :key="pi">
                 <div class="chat-vorschlag"
-                     :class="{ 'chat-vorschlag--applied': ideenProposalStatus(msg, pi).state === 'applied', 'chat-vorschlag--discarded': ideenProposalStatus(msg, pi).state === 'discarded', 'chat-vorschlag--stale': ideenProposalStatus(msg, pi).state === 'open' && (ideenProposalStatus(msg, pi).stale || ideenProposalStatus(msg, pi).blocked) }">
-                  <div class="chat-vorschlag-header">
-                    <span class="chat-vorschlag-label"
-                          x-text="ideenProposalStatus(msg, pi).state === 'applied' ? $app.t('ideenBoard.chat.applied') : ideenProposalStatus(msg, pi).state === 'discarded' ? $app.t('chat.discarded') : ideenProposalTypeLabel(p)"></span>
-                    <span class="chat-vorschlag-actions">
-                      <button type="button" class="chat-vorschlag-btn" x-show="ideenProposalStatus(msg, pi).state === 'open'"
-                              @click="applyIdeenProposal(msg, pi)" :disabled="!ideenProposalCanApply(msg, pi)"
-                              :data-tip="ideenProposalBlockedText(msg, pi) || null">
-                        <span x-show="p._applying" class="spinner"></span>
-                        <span x-text="p._applying ? $app.t('common.saving') : (ideenProposalStatus(msg, pi).removed ? $app.t('ideenBoard.chat.reapply') : $app.t('chat.apply'))"></span>
-                      </button>
-                      <button type="button" class="chat-vorschlag-btn chat-vorschlag-btn--ghost" x-show="ideenProposalStatus(msg, pi).state !== 'applied'"
-                              @click="discardIdeenProposal(msg, pi, ideenProposalStatus(msg, pi).state !== 'discarded')" :disabled="!!p._applying"
-                              x-text="ideenProposalStatus(msg, pi).state === 'discarded' ? $app.t('chat.restore') : $app.t('chat.discard')"></button>
-                    </span>
-                  </div>
+                     x-data="{ get pv() { return ideenProposalView(msg, pi); } }" :class="pv.cls">
+                  <!-- @include chat-vorschlag-board-head -->
 
                   <!-- Neue Idee -->
                   <template x-if="p.type === 'idee_create'">
@@ -137,18 +119,13 @@
                     </div>
                   </template>
 
-                  <div x-show="p.begruendung" class="chat-vorschlag-begruendung" x-text="p.begruendung"></div>
-                  <div x-show="ideenProposalStatus(msg, pi).state === 'open' && ideenProposalBlockedText(msg, pi)" class="chat-vorschlag-note" x-text="ideenProposalBlockedText(msg, pi)"></div>
-                  <div x-show="ideenProposalStatus(msg, pi).state === 'open' && !ideenProposalStatus(msg, pi).blocked && ideenProposalStatus(msg, pi).stale" class="chat-vorschlag-note" x-text="$app.t('ideenBoard.chat.stale')"></div>
-                  <div x-show="ideenProposalStatus(msg, pi).removed" class="chat-vorschlag-note" x-text="$app.t('ideenBoard.chat.removed')"></div>
-                  <div x-show="p._error" class="chat-vorschlag-error" x-text="p._error"></div>
+                  <!-- @include chat-vorschlag-board-foot -->
                 </div>
               </template>
             </div>
           </template>
 
-          <div x-show="msg.role === 'assistant' && _chatTokenInfo(msg)" class="chat-token-info" :title="_chatTokenTitle(msg)" x-text="_chatTokenInfo(msg)"></div>
-          <!-- @include chat-feedback -->
+          <!-- @include chat-msg-foot -->
         </div>
         <!-- Gescheiterter Lauf: Grund + Teil-Verlauf an der Frage -->
         <!-- @include chat-run-failed -->
@@ -156,7 +133,7 @@
     </template>
 
     <div x-show="isIdeenChatSessionRunning(ideenChatSessionId)" class="chat-skeleton-wrapper">
-      <div class="chat-skeleton"></div>
+      <!-- @include chat-skeleton -->
       <!-- Werkzeug-Verlauf des laufenden Turns (wächst mit, offen) -->
       <template x-for="msg in (_liveToolMsg() ? [_liveToolMsg()] : [])" :key="'live'">
         <div class="chat-tool-log-live">
@@ -164,24 +141,25 @@
         </div>
       </template>
     </div>
+    <div x-show="openIdeenChatQuestion()" class="chat-retry-row">
+      <button type="button" class="chat-vorschlag-btn" @click="retryOpenIdeenChatQuestion()" x-text="$app.t('chat.retryQuestion')"></button>
+    </div>
   </div>
 
-  <div class="chat-input-row">
+  <div class="chat-input-row" x-data="{ sendBtn: ideenChatSendButton() }">
     <textarea class="chat-input ideen-chat-input" x-model="ideenChatInput" rows="2"
               :placeholder="$app.t('ideenBoard.chat.placeholder')" :aria-label="$app.t('ideenBoard.chat.placeholder')"
               :disabled="ideenChatLoading" data-spellcheck="spelling"
               @keydown.enter="$enter($event, () => sendIdeenChatMessage(), { multiline: true })"></textarea>
-    <button type="button" class="chat-send-btn" @click="sendIdeenChatMessage()" :disabled="ideenChatLoading || !ideenChatInput.trim()" :aria-label="$app.t('chat.send')">
-      <span x-show="ideenChatLoading" class="spinner"></span>
-      <svg x-show="!ideenChatLoading" class="icon" aria-hidden="true"><use href="/icons.svg#arrow-up"/></svg>
-    </button>
+    <!-- @include chat-send-btn -->
   </div>
   <div class="chat-input-hint" x-text="$app.t('ideenBoard.chat.hint')"></div>
 
   <!-- Session-Historie -->
-  <div x-show="ideenChatSessions.length > 0" class="card-history-section"
-       x-data="{ sessionList: ideenChatSessionList() }">
-    <div class="chat-history-title" x-text="$app.t('chat.history')"></div>
-    <!-- @include chat-session-list -->
+  <div x-show="ideenChatSessions.length > 0" class="card-history-section" x-data="chatHistorySearch('ideen')">
+    <!-- @include chat-history-search -->
+    <div x-show="!histActive" x-data="{ sessionList: ideenChatSessionList() }">
+      <!-- @include chat-session-list -->
+    </div>
   </div>
 </div>

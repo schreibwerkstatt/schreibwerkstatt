@@ -138,14 +138,21 @@ let _defaultLocale = 'de-CH';
 // `leseContextStr`: Buchkontext ohne Extraktions-Feldanweisungen (siehe _bookContextParts),
 // für Lektorat + Chats; ohne Angabe gleich `bookContextStr`.
 function _buildLocalePrompts(localeConfig, globalErklaerungRule, buchKontext = '', autorenstilRule = '', localChatAddon = '', bookContextStr = '', stilprofil = '', leseContextStr = bookContextStr) {
+  // `rules` = Sprachnorm der Locale (baseRules) — für jeden Prompt. Die Lektorat-
+  // `commonRules` (GRUNDREGEL «nur zweifelsfrei Falsches melden» + Meldekatalog) hängen
+  // ausschliesslich am Lektorat (`lektoratRules`, gesetzt von configurePrompts): an
+  // Chat-, Bewertungs-, Analyse- und Extraktions-Prompts widersprachen sie deren Auftrag
+  // (Chat: Stilvorschläge; Struktur-Check: Sprache/Stil «nicht dein Thema»; Stilprofil:
+  // «ohne zu werten»). Gegated: tests/unit/prompt-common-rules-scope.test.mjs.
   const rules = localeConfig.baseRules || '';
-  const rulesWithAutorenstil = autorenstilRule ? `${rules}\n\n${autorenstilRule}` : rules;
+  const lektoratRules = localeConfig.lektoratRules ?? rules;
+  const withAutorenstil = (r) => (autorenstilRule ? `${r}\n\n${autorenstilRule}` : r);
   const sp    = localeConfig.systemPrompts || {};
   // Nur für lokale Provider (ollama/llama) befüllt; bricht den „Ich kündige an und höre auf"-Trainingsbias.
   const chatAddonSuffix = localChatAddon ? `\n\n${localChatAddon}` : '';
 
   // Stable Cores (ohne Buch-Kontext) — werden im 1h-Cache-Block gesendet.
-  const SYS_LEKTORAT_CORE         = buildSystem(sp.lektorat          || '', rulesWithAutorenstil);
+  const SYS_LEKTORAT_CORE         = buildSystem(sp.lektorat          || '', withAutorenstil(lektoratRules));
   const SYS_BUCHBEWERTUNG_CORE    = buildSystem(sp.buchbewertung     || '', rules);
   const SYS_KAPITELANALYSE_CORE   = buildSystem(sp.kapitelanalyse    || '', rules);
   const SYS_KAPITELREVIEW_CORE    = buildSystem(sp.kapitelreview     || sp.buchbewertung || '', rules);
@@ -236,7 +243,7 @@ function _buildLocalePrompts(localeConfig, globalErklaerungRule, buchKontext = '
     // Chat-Prompts bleiben String (chat-builder konkateniert weitere Sektionen).
     // lektoratCtx (= leseContextStr + Stilprofil-Imitate) wird hier inline
     // gemerged — kein Multi-Block-Split, weil der Builder darauf String erwartet.
-    SYSTEM_CHAT:                 _augCtx(buildSystemNoJson(sp.chat        || '', rulesWithAutorenstil), lektoratCtx) + chatAddonSuffix,
+    SYSTEM_CHAT:                 _augCtx(buildSystemNoJson(sp.chat        || '', withAutorenstil(rules)), lektoratCtx) + chatAddonSuffix,
     SYSTEM_BOOK_CHAT:            _augCtx(buildSystemNoJson(sp.buchchat    || '', rules), lektoratCtx) + chatAddonSuffix,
     SYSTEM_ORTE:                 _aug(SYS_ORTE_CORE),
     SYSTEM_ORTE_BLOCKS:          _toCacheBlocks(SYS_ORTE_CORE, bookContextStr),
@@ -323,7 +330,8 @@ export function configureLocales(cfg) {
     const localChatAddonRaw  = cfg.localModelChatRule  || {};
     for (const [key, localeCfg] of Object.entries(cfg.locales)) {
       const langCode = key.split('-')[0];
-      // Für lokale Modelle wird commonRules durch eine Slim-Version ersetzt.
+      // Für lokale Modelle wird commonRules durch eine Slim-Version ersetzt; beide
+      // Fassungen gehen nur ans Lektorat (lektoratRules, siehe _buildLocalePrompts).
       // AUTORENSTIL wird separat gehandhabt und nur an Lektorat/Chat angehängt.
       const common = _isLocal
         ? (SLIM_COMMON_RULES[langCode] || '')
@@ -336,7 +344,8 @@ export function configureLocales(cfg) {
       const base = localeCfg.baseRules || '';
       const mergedCfg = {
         ...localeCfg,
-        baseRules: common ? `${base}\n\n${common}` : base,
+        baseRules: base,
+        lektoratRules: common ? `${base}\n\n${common}` : base,
       };
       _rawLocales.set(key, mergedCfg);
       _orthoRulesByLocale.set(key, base);

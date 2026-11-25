@@ -68,7 +68,7 @@ test('Sachbuch-Prompt: Kapitelliste statt Figuren, Inhaltsangaben als Quelle', (
   });
   assert.match(p, /\[id=7\] Einleitung/);
   assert.match(p, /<inhaltsangaben>/);
-  assert.match(p, /## Einleitung\nFrage X\./);
+  assert.match(p, /<inhaltsangabe kapitel="Einleitung">\nFrage X\.\n<\/inhaltsangabe>/);
   assert.doesNotMatch(p, /<figurenkatalog>/);
 });
 

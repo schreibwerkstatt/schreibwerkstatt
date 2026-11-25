@@ -11,6 +11,8 @@ const model    = require('./model');
 const modelTier = require('./model-tier');
 const ai       = require('./ai');
 const loader   = require('./loader');
+const bookTextFormat = require('./book-text-format');
+const sectionReader = require('./section-reader');
 const queries  = require('./queries');
 const router   = require('./router');
 const { bundleBlocks } = require('./bundles');
@@ -28,15 +30,6 @@ async function getBookPrompts(bookId, userEmail = null) {
     : { language: 'de', region: 'CH', buchtyp: null, buch_kontext: null, is_finished: 0, schauplatz_land: null, zeitlinie_real: 0 };
   const locale = `${settings.language}-${settings.region}`;
   return getLocalePromptsForBook(locale, settings.buchtyp || null, settings.buch_kontext || null, !!settings.is_finished, settings.schauplatz_land || null, settings.stilprofil || null, !!settings.zeitlinie_real);
-}
-
-// Text-Optionen fuer htmlToText/htmlToTextForPrompt/loadPageContents eines Jobs
-// mit Buch: Nachrichtenverlauf-Marken in der Buchsprache (lib/html-text.js
-// #markMsgThreads), damit ein englisches Buch keine deutschen Marken im Prompt
-// traegt. Ohne Buch Deutsch, wie die Marken selbst.
-function bookTextOpts(bookId, userEmail = null) {
-  if (!bookId) return { langCode: 'de' };
-  return { langCode: getBookSettings(bookId, userEmail).language || 'de' };
 }
 
 // Rückwärtskompatibler Export – einige Module lesen _promptConfig direkt.
@@ -105,6 +98,11 @@ module.exports = {
   splitGroupsIntoChunks: loader.splitGroupsIntoChunks,
   halveChunkPages: loader.halveChunkPages,
   pageSigSuffix: loader.pageSigSuffix,
+  formatAbschnitt: bookTextFormat.formatAbschnitt,
+  formatAbschnitte: bookTextFormat.formatAbschnitte,
+  formatKapitel: bookTextFormat.formatKapitel,
+  wrapKapitel: bookTextFormat.wrapKapitel,
+  pageTextForAi: bookTextFormat.pageTextForAi,
 
   aiCall: ai.aiCall,
   toSystemBlocks: ai.toSystemBlocks,
@@ -114,7 +112,8 @@ module.exports = {
 
   getPrompts,
   getBookPrompts,
-  bookTextOpts,
+  bookTextOpts: sectionReader.bookTextOpts,
+  readSections: sectionReader.readSections,
 
   getFiguren: queries.getFiguren,
   getLatestReview: queries.getLatestReview,
@@ -122,8 +121,6 @@ module.exports = {
   getOpenIdeen: queries.getOpenIdeen,
   buildChatMessageHistory: queries.buildChatMessageHistory,
 
-  SINGLE_PASS_LIMIT: loader.SINGLE_PASS_LIMIT,
-  PER_CHUNK_LIMIT: loader.PER_CHUNK_LIMIT,
   BATCH_SIZE: loader.BATCH_SIZE,
   chunkLimitsFor: loader.chunkLimitsFor,
   resolveExtractSinglePassLimit: loader.resolveExtractSinglePassLimit,

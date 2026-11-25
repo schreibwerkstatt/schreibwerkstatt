@@ -16,7 +16,7 @@
 // die Pol-Labels (Figur/Ort/Begriff), die die Achse so beschriften, wie sie
 // gerechnet wurde.
 
-import { startPoll } from '../cards/job-helpers.js';
+import { startPoll, isCancelledJob } from '../cards/job-helpers.js';
 import { tRaw, tFetchError } from '../i18n.js';
 import { dateTimeFormat, sendJson } from '../utils.js';
 import { mapMethods, _destroyBookMapChart as _destroyMap, _disconnectBookMapThemeObserver as _disconnectMap } from './buchlandkarte/map.js';
@@ -175,6 +175,8 @@ export const buchlandkarteMethods = {
     const failed = (job) => {
       if (stale()) return;
       this.bookMapLoading = false;
+      this.bookMapProgress = 0;
+      if (isCancelledJob(job)) { this.bookMapStatus = tRaw('job.cancelled'); return; }
       this.bookMapStatus = job?.error && job.error.startsWith('job.')
         ? window.__app.t(job.error, job.errorParams)
         : tRaw('buchlandkarte.error');

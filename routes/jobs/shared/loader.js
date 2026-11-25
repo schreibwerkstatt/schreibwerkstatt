@@ -1,29 +1,26 @@
 'use strict';
-const { INPUT_BUDGET_CHARS, getContextConfigFor } = require('../../../lib/ai');
+const { getContextConfigFor } = require('../../../lib/ai');
 const contentStore = require('../../../lib/content-store');
 const { i18nError } = require('./jobs');
-const { htmlToText } = require('./ai');
+const { pageTextForAi, formatBook } = require('./book-text-format');
 const { pagePreviewTexts } = require('../../../db/content-names');
 const { UNGROUPED_CHAPTER_NAME } = require('../../../lib/ungrouped-chapter');
 const { splitGroupsIntoChunks, halveChunkPages, pageSigSuffix } = require('./chunking');
 
-// Multi-Pass-Grenzen skalieren mit dem Input-Budget (context_window − max_tokens_out).
-// SINGLE_PASS_LIMIT: Schwelle, ab der in Chunks zerlegt wird. 70% des Budgets für
+// Multi-Pass-Grenzen skalieren mit dem Input-Budget (context_window − max_tokens_out)
+// des gefragten Providers — nur über `chunkLimitsFor(provider)`:
+// singlePass: Schwelle, ab der in Chunks zerlegt wird. 70% des Budgets für
 //   Buchtext, 30% für System-Prompt + Schema + Output-Reserve.
-// PER_CHUNK_LIMIT:   Max-Grösse eines einzelnen Chunks. Kleinere lokale Modelle
+// perChunk:   Max-Grösse eines einzelnen Chunks. Kleinere lokale Modelle
 //   (Mistral Small u.ä.) verlieren bei grossen Inputs Extraktionsqualität;
 //   Obergrenze 200K Zeichen kappt absurde Werte bei grossen Kontextfenstern.
 // Untergrenzen (20K/10K Zeichen) verhindern zu kleine Pässe bei Misconfig.
-// Boot-Konstanten lesen Claude-Defaults; per-Job-Pfade nutzen `chunkLimitsFor(provider)`,
-// damit Ollama/Llama mit eigenen Kontextfenstern korrekt skaliert werden.
 // SINGLE_PASS_CHAR_CEILING: Obergrenze hoch genug, dass Claudes 1M-Kontextfenster
-//   (≈1.96M Zeichen Input-Budget) voll für Single-Pass genutzt wird – dann fährt
-//   selbst ein dicker Gesellschaftsroman in einem Pass (voller auflösender Kontext,
-//   keine Fakten-basierten False-Positives). Bei 200K-Kontext greift die 0.70-Formel
+//   voll für Single-Pass genutzt wird – dann fährt selbst ein dicker
+//   Gesellschaftsroman in einem Pass (voller auflösender Kontext, keine
+//   Fakten-basierten False-Positives). Bei 200K-Kontext greift die 0.70-Formel
 //   ohnehin lange vorher. Schützt nur gegen absurde Misconfig.
 const SINGLE_PASS_CHAR_CEILING = 2000000;
-const SINGLE_PASS_LIMIT = Math.max(20000, Math.min(SINGLE_PASS_CHAR_CEILING, Math.floor(INPUT_BUDGET_CHARS * 0.70)));
-const PER_CHUNK_LIMIT   = Math.max(10000, Math.min(200000, Math.floor(INPUT_BUDGET_CHARS * 0.35)));
 const BATCH_SIZE = 15;
 
 // `maxTokensOut`: das Output-Cap, gegen das gerechnet wird. Ohne Angabe das provider-weite
@@ -144,7 +141,7 @@ function idMapsFromContents({ chNameToId, pages }) {
   };
 }
 
-// `textOpts` geht an ./ai.js#htmlToText — `{ msgRows, langCode }` setzt nur die
+// `textOpts` geht an ./book-text-format.js#pageTextForAi (Text mit Absätzen) — `{ msgRows, langCode }` setzt nur die
 // Komplettanalyse (komplett/utils.js#komplettTextOpts, auch im Delta-Vergleich).
 // `keepHtml: true` reicht zusaetzlich das Seiten-HTML durch (Alters-Analyse: sie
 // liest Nachrichtenverlaeufe zeilenweise aus dem Markup, figur-alter.js).
@@ -183,7 +180,7 @@ async function loadPageContents(pages, chMap, minLength, onBatch, signal = null,
     },
   }).then(loaded => loaded
     .map(pd => {
-      const text = htmlToText(pd.html, textOpts).trim();
+      const text = pageTextForAi(pd.html, textOpts);
       if (text.length < minLength) return null;
       return {
         id: pd.id,
@@ -210,21 +207,14 @@ function groupByChapter(pageContents) {
 
 // splitGroupsIntoChunks + Teil-Split übergrosser Abschnitte: ./chunking.js (pure).
 
-// Formatiert den Buchtext für Single-Pass-KI-Calls mit klarer Kapitelstruktur:
-// ## Kapitelname als Abschnittsmarker, ### Seitentitel innerhalb.
-// Die KI kann so kapitel-Felder zuverlässig aus dem ## Header ableiten.
+// Buchtext für Single-Pass-KI-Calls: ein `<kapitel pfad>` je Gruppe, darin die
+// `<abschnitt titel>`-Blöcke. Format und Begründung: ./book-text-format.js.
 function buildSinglePassBookText(groups, groupOrder) {
-  return groupOrder
-    .map(key => {
-      const group = groups.get(key);
-      return `## ${group.name}\n\n` +
-        group.pages.map(p => `### ${p.title}\n${p.text}`).join('\n\n---\n\n');
-    })
-    .join('\n\n===\n\n');
+  return formatBook(groups, groupOrder);
 }
 
 module.exports = {
-  SINGLE_PASS_LIMIT, PER_CHUNK_LIMIT, BATCH_SIZE, chunkLimitsFor, resolveExtractSinglePassLimit,
+  BATCH_SIZE, chunkLimitsFor, resolveExtractSinglePassLimit,
   loadOrderedBookContents, idMapsFromContents,
   loadPageContents, groupByChapter, splitGroupsIntoChunks, halveChunkPages, pageSigSuffix, buildSinglePassBookText,
 };

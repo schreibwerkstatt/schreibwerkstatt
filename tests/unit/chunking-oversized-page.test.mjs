@@ -12,7 +12,9 @@ const {
   splitGroupsIntoChunks, splitPageIntoParts, halveChunkPages, pageSigSuffix,
 } = require('../../routes/jobs/shared/chunking.js');
 
-const render = (chunk) => chunk.pages.map(p => `### ${p.title}\n${p.text}`).join('\n\n---\n\n');
+// Prompt-Form der Chunk-Seiten wie in den Jobs (routes/jobs/shared/book-text-format.js).
+const { formatAbschnitte } = require('../../routes/jobs/shared/book-text-format.js');
+const render = (chunk) => formatAbschnitte(chunk.pages);
 const sig = (chunk) => chunk.pages.map(p => `${p.id}:${p.updated_at}${pageSigSuffix(p)}`).sort().join('|');
 
 function sentences(n, seed = 0) {
@@ -111,8 +113,8 @@ test('übergrosser Abschnitt wird in Teile ≤ Limit an Satzgrenzen zerlegt', ()
   // Teile gleichmässig: kein Zwergteil.
   const sizes = parts.map(p => p.text.length);
   assert.ok(Math.min(...sizes) > limit / 3, `Teilgrössen ${sizes}`);
-  // Überschrift im Prompt = echter Titel ohne Teil-Markierung.
-  assert.ok(render({ pages: [parts[1]] }).startsWith(`### ${big.title}\n`));
+  // Tag im Prompt = echter Titel ohne Teil-Markierung.
+  assert.ok(render({ pages: [parts[1]] }).startsWith(`<abschnitt titel="${big.title}">\n`));
   // Signaturen der Teile unterscheiden sich.
   assert.equal(new Set(parts.map(p => `${p.id}:${p.updated_at}${pageSigSuffix(p)}`)).size, parts.length);
   // Originalseite unverändert.

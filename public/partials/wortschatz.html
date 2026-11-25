@@ -33,10 +33,7 @@
   <p class="wortschatz-list-hint" x-show="wortschatzHasResult && !wortschatzIsOwner"
      x-text="$app.t('wortschatz.viewerHint')"></p>
 
-  <div x-show="wortschatzLoading && wortschatzProgress > 0" class="progress-bar-wrap">
-    <div class="progress-bar" :style="{ '--progress': wortschatzProgress + '%' }"></div>
-  </div>
-  <div x-show="wortschatzStatus" class="card-status" x-text="wortschatzStatus"></div>
+  <div x-job-progress="{ active: wortschatzLoading, progress: wortschatzProgress, text: wortschatzStatus, timer: '_wortschatzPollTimer' }"></div>
   <div x-show="wortschatzLoadError" class="muted-msg muted-msg--spaced" x-text="$app.t('wortschatz.loadError')"></div>
 
   <!-- Noch keine Analyse: CTA statt leerer Tabellen -->

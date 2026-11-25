@@ -9,6 +9,7 @@
 // Harter Halluzinations-Constraint: nur belegte Aussagen, jedes Thema/jeder Tag
 // mit Datums-Beleg aus dem vorliegenden Material; keine erfundenen Ereignisse.
 
+import { formatAbschnitt, xmlAttr } from './book-text-format.js';
 import { _obj, _str } from './schema-utils.js';
 
 // Höchstzahl Themen — gleiche Zahl wie THEMEN_MAX in routes/jobs/rueckblick-facets.js
@@ -58,12 +59,14 @@ Antworte mit diesem JSON-Schema:
 }
 </output_format>`;
 
-// Formatiert die gefilterten Einträge für den Single-Pass-Call: ein Block pro
-// Tag mit Datum-Header, damit das Modell Belege zeichengenau zuordnen kann.
+// Formatiert die gefilterten Einträge für den Single-Pass-Call: ein Tag pro
+// Eintrag mit Datum als Attribut (Format: ./book-text-format.js), damit das Modell
+// Belege zeichengenau dem Tag zuordnen kann. Der Titel steht nur, wenn er mehr
+// sagt als das Datum.
 function _formatEntries(entries) {
   return entries
-    .map(e => `### ${e.datum}${e.titel && e.titel !== e.datum ? ` – ${e.titel}` : ''}\n${e.text}`)
-    .join('\n\n---\n\n');
+    .map(e => formatAbschnitt({ title: e.titel && e.titel !== e.datum ? e.titel : e.datum, text: e.text }, { datum: e.datum }))
+    .join('\n\n');
 }
 
 // Eine Entitäts-Zeile: akzeptiert nackten Namen (String) oder ein Objekt
@@ -148,7 +151,7 @@ function _formatMergedFacets(merged) {
 function _formatMonthSummaries(partResults) {
   return (partResults || []).map(m => {
     const tage = (m.bemerkenswerteTage || []).map(t => `${t.datum}: ${t.begruendung}`).join(' | ') || '–';
-    return `## ${m.monat}\nBemerkenswerte Tage: ${tage}\nZusammenfassung: ${m.zusammenfassung || '–'}`;
+    return `<teilrueckblick ${xmlAttr('monat', m.monat)}>\nBemerkenswerte Tage: ${tage}\nZusammenfassung: ${m.zusammenfassung || '–'}\n</teilrueckblick>`;
   }).join('\n\n');
 }
 

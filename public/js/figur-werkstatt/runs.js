@@ -3,8 +3,26 @@
 // lazy geholt. Apply (Brainstorm) prüft beim Anwenden, ob knoten_id noch in
 // der Mindmap existiert — Live-Run gegen mutierten Tree nach `werkstatt.error.knotenGone`.
 
-import { fetchJson, fmtDateTime } from '../utils.js';
+import { fetchJson } from '../utils.js';
+import { makeRunHistoryMethods } from '../run-history.js';
 import { reattachWerkstattJob } from './job-poll.js';
+
+// Eine Lauf-Art (brainstorm | consistency): beide teilen `selectedRunId`, die
+// Liste steht unter `runs[kind]`.
+function werkstattRunMethods(kind, cfg) {
+  const K = kind[0].toUpperCase() + kind.slice(1);
+  return makeRunHistoryMethods({
+    names: { open: `openWerkstatt${K}Run`, remove: `deleteWerkstatt${K}Run`, row: `werkstatt${K}RunRow` },
+    getList: (ctx) => ctx.runs[kind],
+    setList: (ctx, rows) => { ctx.runs = { ...ctx.runs, [kind]: rows }; },
+    selected: 'selectedRunId',
+    runUrl: (id) => `/draft-figures/runs/${id}`,
+    busyKey: 'werkstatt.run.busy',
+    confirmKey: 'werkstatt.run.confirmDelete',
+    errorKeys: { open: 'werkstatt.error.runLoad', remove: 'werkstatt.error.runDelete' },
+    ...cfg,
+  });
+}
 
 export const runsMethods = {
   async loadRuns() {
@@ -40,69 +58,35 @@ export const runsMethods = {
     }
   },
 
-  // Toggle: Klick auf aktiv markierten Eintrag schliesst Result; sonst Detail
-  // laden und brainstormResult/consistencyResult füllen wie ein Live-Lauf.
-  async openRun(runId, kind) {
-    const app = window.__app;
-    if (!runId) return;
-    // Ein laufender Job DERSELBEN Art darf nicht überschrieben werden: sein
-    // onDone renderte sonst über den geöffneten Lauf. Der andere Slot ist frei.
-    // Sagen, warum nichts passiert, statt den Klick zu schlucken.
-    if (kind === 'brainstorm' ? this.brainstormLoading : this.consistencyLoading) {
-      this.errorMessage = app.t('werkstatt.run.busy');
-      return;
-    }
-    if (this.selectedRunId === runId) {
-      this.selectedRunId = null;
-      if (kind === 'brainstorm') this.brainstormResult = null;
-      else this.consistencyResult = null;
-      return;
-    }
-    try {
-      const run = await fetchJson(`/draft-figures/runs/${runId}`);
-      if (!run?.result) throw new Error('no result');
-      if (run.kind === 'brainstorm') {
-        this.brainstormResult = {
-          knotenId: run.knoten_id,
-          knotenPfad: run.knoten_pfad || '',
-          vorschlaege: run.result.vorschlaege || [],
-        };
-        this.consistencyResult = null;
-      } else if (run.kind === 'consistency') {
-        this.consistencyResult = {
-          konflikte: run.result.konflikte || [],
-          fazit: run.result.fazit || '',
-          textbelege: run.result.textbelege || [],
-        };
-        this.brainstormResult = null;
-      }
-      this.selectedRunId = run.id;
-    } catch (e) {
-      this.errorMessage = app.t('werkstatt.error.runLoad');
-    }
-  },
-
-  async deleteRun(runId, kind) {
-    const app = window.__app;
-    if (!runId) return;
-    const ok = await app.appConfirm({
-      message: app.t('werkstatt.run.confirmDelete'),
-      danger: true,
-    });
-    if (!ok) return;
-    try {
-      await fetchJson(`/draft-figures/runs/${runId}`, { method: 'DELETE' });
-      const next = (this.runs[kind] || []).filter(r => r.id !== runId);
-      this.runs = { ...this.runs, [kind]: next };
-      if (this.selectedRunId === runId) {
-        this.selectedRunId = null;
-        if (kind === 'brainstorm') this.brainstormResult = null;
-        else this.consistencyResult = null;
-      }
-    } catch (e) {
-      this.errorMessage = app.t('werkstatt.error.runDelete');
-    }
-  },
+  // Öffnen (Toggle) und Löschen je Lauf-Art über den geteilten Kern; die Liste
+  // lädt loadRuns oben (eine Anfrage je Draft, nach Art aufgeteilt). Ein
+  // laufender Job DERSELBEN Art sperrt das Öffnen — sein onDone renderte sonst
+  // über den geöffneten Lauf; der andere Slot bleibt frei.
+  ...werkstattRunMethods('brainstorm', {
+    busy: (ctx) => ctx.brainstormLoading,
+    apply: (ctx, run) => {
+      ctx.brainstormResult = {
+        knotenId: run.knoten_id,
+        knotenPfad: run.knoten_pfad || '',
+        vorschlaege: run.result.vorschlaege || [],
+      };
+      ctx.consistencyResult = null;
+    },
+    clear: (ctx) => { ctx.brainstormResult = null; },
+    row: { badges(r) { return [{ text: r.knoten_pfad }]; } },
+  }),
+  ...werkstattRunMethods('consistency', {
+    busy: (ctx) => ctx.consistencyLoading,
+    apply: (ctx, run) => {
+      ctx.consistencyResult = {
+        konflikte: run.result.konflikte || [],
+        fazit: run.result.fazit || '',
+        textbelege: run.result.textbelege || [],
+      };
+      ctx.brainstormResult = null;
+    },
+    clear: (ctx) => { ctx.consistencyResult = null; },
+  }),
 
   // Beim Öffnen einer Figur prüfen, ob noch ein Brainstorm-/Consistency-Job
   // für diesen Draft auf dem Server läuft (Tab-Wechsel, Reload, Card-Reopen).
@@ -133,9 +117,5 @@ export const runsMethods = {
         && String(j.dedupId) === draftStr);
       if (cs && this.selectedDraftId === draftId) reattachWerkstattJob(this, 'consistency', cs, draftId);
     }
-  },
-
-  formatRunDate(iso) {
-    return fmtDateTime(iso, Alpine.store('shell').uiLocale);
   },
 };

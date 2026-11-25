@@ -151,17 +151,20 @@ function setOpeningPageText(id, text) {
   _stmtSetOpening.run(text, id);
 }
 
-// «Erneut fragen» im Abschnitts-Chat: die unbeantwortete Frage, die wiederholt
+// «Erneut fragen» (alle Chats): die unbeantwortete Frage, die wiederholt
 // wird, fällt weg, bevor die neue gespeichert wird — sonst stünde sie zweimal im
 // Gespräch, und das Modell bekäme sie zweimal. Nur, wenn sie wirklich offen ist:
-// letzte Nachricht der Session, Rolle user. Liefert true, wenn gelöscht.
+// letzte Nachricht der Session, Rolle user. Liefert die gelöschte Zeile
+// (`{ context_info }`, damit die Wiederholung den Kontext der Frage übernimmt)
+// oder null, wenn nichts gelöscht wurde.
 const _stmtDeleteOpenQuestion = db.prepare(`
   DELETE FROM chat_messages
    WHERE id = ? AND session_id = ? AND role = 'user'
      AND id = (SELECT MAX(id) FROM chat_messages WHERE session_id = ?)
+  RETURNING context_info
 `);
 function deleteUnansweredQuestion(sessionId, messageId) {
-  return _stmtDeleteOpenQuestion.run(messageId, sessionId, sessionId).changes > 0;
+  return _stmtDeleteOpenQuestion.get(messageId, sessionId, sessionId) || null;
 }
 
 module.exports = {

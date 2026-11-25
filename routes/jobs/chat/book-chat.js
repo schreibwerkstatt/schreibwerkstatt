@@ -12,7 +12,7 @@ const {
   getPrompts, getBookPrompts,
   htmlToText, jobAbortControllers,
   getFiguren, getLatestReview,
-  bookTextOpts, bindJobTier,
+  bindJobTier, readSections,
 } = require('../shared');
 const contentStore = require('../../../lib/content-store');
 const { generateSessionTitle } = require('../chat-title');
@@ -164,6 +164,9 @@ function _requestedMode(userMsgId) {
 // Zeichenzahl des Buchtexts für die Volltext-Entscheidung. Quelle der Reihe nach:
 // frischer Seiten-Cache (exakt), sonst page_stats — Seiten OHNE Stats-Zeile zählen
 // nicht als 0, ihr Text wird live nachgemessen (eine Ladung nur für diese Seiten).
+// page_stats zählt die einzeilige Form; der geladene Prompt-Text trägt Absätze und
+// ist darum etwas länger. Die Schätzung liegt also leicht zu tief — runBookChatJob
+// prüft nach dem Laden mit `liveChars` nach und fällt notfalls auf Stichworte zurück.
 async function _bookTextChars(bookId, cacheKey) {
   const cached = bookPageCache.get(cacheKey);
   if (cached && Date.now() - cached.loadedAt < BOOK_PAGE_CACHE_TTL_MS) {
@@ -183,43 +186,29 @@ async function _bookTextChars(bookId, cacheKey) {
   return chars;
 }
 
-// Alle Abschnitte des Buchs als Klartext — aus dem Seiten-Cache oder frisch über
-// den Content-Store (Batches à 5, mit Fortschritt). Füllt den Cache.
-async function _loadAllPageTexts(bookId, cacheKey, jobId, jobSignal) {
+// Alle Abschnitte des Buchs in Lesereihenfolge — aus dem Seiten-Cache oder frisch
+// über den Abschnitts-Leser (Text mit Absätzen). Füllt den Cache.
+async function _loadAllPageTexts(bookId, cacheKey, jobId, jobSignal, userEmail) {
   const cached = bookPageCache.get(cacheKey);
   if (cached && Date.now() - cached.loadedAt < BOOK_PAGE_CACHE_TTL_MS) {
     updateJob(jobId, { statusText: 'job.phase.pagesFromCache', progress: 40 });
     return cached.pages;
   }
   updateJob(jobId, { statusText: 'job.phase.pageListLoading', progress: 8 });
-  let pages;
-  try { pages = await contentStore.listPages(bookId); }
+  let sections;
+  try { ({ sections } = await readSections(bookId, { all: true, userEmail, signal: jobSignal })); }
   catch (e) {
     if (e?.status) throw i18nError('job.error.contentStorePageList', { status: e.status });
     throw e;
   }
-  const BATCH = 5;
-  const textOpts = bookTextOpts(bookId);
-  const pageContents = [];
-  for (let i = 0; i < pages.length; i += BATCH) {
-    if (jobSignal?.aborted) throw new DOMException('Aborted', 'AbortError');
-    updateJob(jobId, {
-      statusText: 'job.phase.loadingPagesBatch',
-      statusParams: { loaded: Math.min(i + BATCH, pages.length), total: pages.length },
-      progress: 10 + Math.round((i / Math.max(pages.length, 1)) * 30),
-    });
-    const batch = pages.slice(i, i + BATCH);
-    const results = await Promise.allSettled(batch.map(async p => {
-      try {
-        const pd = await contentStore.loadPage(p.id);
-        const text = htmlToText(pd.html || '', textOpts).trim();
-        return text ? { name: p.name, id: p.id, slug: p.slug, book_slug: p.book_slug, text } : null;
-      } catch { return null; }
-    }));
-    for (const r of results) {
-      if (r.status === 'fulfilled' && r.value) pageContents.push(r.value);
-    }
-  }
+  updateJob(jobId, {
+    statusText: 'job.phase.loadingPagesBatch',
+    statusParams: { loaded: sections.length, total: sections.length },
+    progress: 40,
+  });
+  const pageContents = sections
+    .filter(sec => sec.text)
+    .map(sec => ({ name: sec.title, id: sec.id, slug: sec.slug, book_slug: sec.bookSlug, text: sec.text }));
   // FIFO-Eviction: ältesten Eintrag entfernen wenn Cache voll
   if (bookPageCache.size >= BOOK_PAGE_CACHE_MAX) {
     const firstKey = bookPageCache.keys().next().value;
@@ -311,7 +300,7 @@ async function runBookChatJob(jobId, sessionId, userMsgId, message, userEmail) {
     let retrievalMode = bookChars > 0 && bookChars <= TEXT_CHAR_BUDGET ? 'full' : 'keyword';
     let fullOverflow = forceFull && retrievalMode !== 'full';
     if (retrievalMode === 'full') {
-      pageContents = await _loadAllPageTexts(session.book_id, cacheKey, jobId, jobSignal);
+      pageContents = await _loadAllPageTexts(session.book_id, cacheKey, jobId, jobSignal, userEmail);
       const liveChars = pageContents.reduce((n, p) => n + p.text.length, 0);
       if (liveChars > TEXT_CHAR_BUDGET) {
         retrievalMode = 'keyword';
@@ -342,7 +331,7 @@ async function runBookChatJob(jobId, sessionId, userMsgId, message, userEmail) {
     }
 
     if (retrievalMode !== 'semantic') {
-      if (!pageContents) pageContents = await _loadAllPageTexts(session.book_id, cacheKey, jobId, jobSignal);
+      if (!pageContents) pageContents = await _loadAllPageTexts(session.book_id, cacheKey, jobId, jobSignal, userEmail);
 
       // ── Relevanz-Scoring + Seitenauswahl ────────────────────────────────────
       updateJob(jobId, { statusText: 'job.phase.selectingPages', progress: 42 });

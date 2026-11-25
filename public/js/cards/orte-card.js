@@ -28,8 +28,6 @@ import { EVT } from '../events.js';
 export function registerOrteCard() {
   if (typeof window === 'undefined' || !window.Alpine) return;
   window.Alpine.data('orteCard', () => ({
-    orteProgress: 0,
-    orteStatus: '',
     orteError: '',
     staleDeleting: false,
     viewMode: lsGet('orte.viewMode') === 'grid' ? 'grid' : 'list', // 'list' | 'grid' | 'map'
@@ -70,7 +68,6 @@ export function registerOrteCard() {
     // Cache liefert bei unveränderten Eingaben dieselbe Array-Referenz zurück
     // (stabile Keys, kein Doppel-Compute in der Karte).
     _orteFilteredCache: null,
-    _ortePollTimer: null,
     _geocodeJobTimer: null,   // transienter Poll-Timer fuer den KI-Geocode-Fallback-Job
     _orteMapStatusTimer: null,// Auto-Clear-Timer fuer orteMapStatus
     // Liste rendert schrittweise (list-window.js): bei ~1000 Orten sonst Sekunden Main-Thread.
@@ -110,8 +107,8 @@ export function registerOrteCard() {
       this._lifecycle = setupCardLifecycle(this, {
         name: 'orte',
         showFlag: 'showOrteCard',
-        timerKeys: ['_ortePollTimer', '_geocodeJobTimer', '_orteMapStatusTimer'],
-        resetState: { plotBacklinks: {}, orteProgress: 0, orteStatus: '', orteError: '', staleDeleting: false, orteRealEnabled: false, geocodingId: null, geocodingAll: false, geoHistoryBusy: false, highlightOrtId: null, orteMapStatus: '', ...entityMergePickerResetState(), ...listWindowState() },
+        timerKeys: ['_geocodeJobTimer', '_orteMapStatusTimer'],
+        resetState: { plotBacklinks: {}, orteError: '', staleDeleting: false, orteRealEnabled: false, geocodingId: null, geocodingAll: false, geoHistoryBusy: false, highlightOrtId: null, orteMapStatus: '', ...entityMergePickerResetState(), ...listWindowState() },
         load: (root) => { this.loadPlotBacklinks('location'); return root.loadOrte(Alpine.store('nav').selectedBookId); },
         onShow: async (root) => {
           const tasks = [root.loadOrte(Alpine.store('nav').selectedBookId), this.loadOrteReal(), this.loadPlotBacklinks('location')];

@@ -132,10 +132,9 @@
       <div id="partial-editor-page-actions" class="display-contents"></div>
     </div>
   </div>
-  <div class="progress-bar-wrap" x-show="checkProgress > 0 || saveApplying != null">
-    <div class="progress-bar" :style="{ '--progress': (checkProgress || saveApplying || 0) + '%' }"></div>
-  </div>
-  <div class="card-status" x-show="checkStatus" x-html="checkStatus"></div>
+  <!-- Prüflauf (Abbrechen nur dort) oder Übernehmen der Korrekturen (saveApplying). -->
+  <div class="lektorat-check-progress"
+       x-job-progress="{ active: checkLoading || saveApplying != null, progress: checkProgress || saveApplying || 0, status: checkStatus, cancel: checkLoading ? () => cancelLektoratCheck() : null }"></div>
   <div class="page-status-row">
     <div id="status" x-html="statusHtml"></div>
     <button type="button" class="btn-compact" x-show="canUndoLektorat()" @click="undoLektoratCorrections()" x-text="t('lektorat.undoCorrections')"></button>

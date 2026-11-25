@@ -226,9 +226,10 @@ test('runChatJob: kaputtes JSON → context_info.parse_fallback + lost_vorschlae
 
 test('runChatJob: Seite nicht ladbar → Job-Fehler mit i18n-Key statt Antwort über leere Seite', async (t) => {
   const contentStore = require('../../lib/content-store');
-  const realLoad = contentStore.loadPage;
-  contentStore.loadPage = async () => { throw Object.assign(new Error('weg'), { status: 404 }); };
-  t.after(() => { contentStore.loadPage = realLoad; });
+  // Der Job liest über den Abschnitts-Leser (loadPagesBatch).
+  const realLoad = contentStore.loadPagesBatch;
+  contentStore.loadPagesBatch = async () => { throw Object.assign(new Error('weg'), { status: 404 }); };
+  t.after(() => { contentStore.loadPagesBatch = realLoad; });
   const sid = newSession();
   aiCalls.length = 0;
   const job = await runJob(sid, 'Hallo?');
@@ -389,14 +390,14 @@ test('pageChatPreflight: Abschnitt über dem Deckel → 422 mit chars/max, sonst
   const { pageMax } = pageChatBudget(getContextConfigFor(resolveProvider({ userEmail: USER })));
   db.prepare(`INSERT INTO pages (page_id, book_id, page_name, body_html, updated_at) VALUES (?, ?, 'Gross', ?, datetime('now'))`)
     .run(OWNED_BIG, OWNED_BOOK, '<p>' + 'Wort '.repeat(Math.ceil(pageMax / 5) + 100) + '</p>');
-  assert.equal(await pageChatPreflight({ page_id: OWNED_PAGE }, USER), null);
-  const block = await pageChatPreflight({ page_id: OWNED_BIG }, USER);
+  assert.equal(await pageChatPreflight({ page_id: OWNED_PAGE, book_id: OWNED_BOOK }, USER), null);
+  const block = await pageChatPreflight({ page_id: OWNED_BIG, book_id: OWNED_BOOK }, USER);
   assert.equal(block.status, 422);
   assert.equal(block.error_code, 'PAGE_CHAT_PAGE_TOO_LARGE');
   assert.equal(block.params.max, pageMax);
   assert.ok(block.params.chars > pageMax);
   // Nicht ladbar ist kein Vorab-Befund — der Job meldet pageChatLoadFailed.
-  assert.equal(await pageChatPreflight({ page_id: 999999 }, USER), null);
+  assert.equal(await pageChatPreflight({ page_id: 999999, book_id: OWNED_BOOK }, USER), null);
 });
 
 test('_handleChatPost: Preflight lehnt ab → Antwort raus, keine Frage in der Session', async () => {
@@ -425,4 +426,39 @@ test('_handleChatPost: Doppel-Send während des async Preflights → kein zweite
   assert.equal(out.body.existing, true, 'zweiter Durchlauf erkennt den ersten');
   assert.equal(out.body.jobId, firstDone.body.jobId);
   assert.equal(msgCount(sid), 1);
+});
+
+test('_handleChatPost: retry_of ersetzt die unbeantwortete Frage — für jede Chat-Art, ohne eigenen Preflight', async () => {
+  const sid = ownedSession(OWNED_PAGE);
+  const open = db.prepare(`INSERT INTO chat_messages (session_id, role, content, created_at) VALUES (?, 'user', 'Frage', datetime('now'))`)
+    .run(sid).lastInsertRowid;
+  // Kein preflight in der cfg: das Ersetzen gehört dem gemeinsamen Handler.
+  const out = await post(sid, {}, { retry_of: open });
+  assert.equal(out.status, 200);
+  assert.equal(db.prepare('SELECT COUNT(*) AS n FROM chat_messages WHERE id = ?').get(open).n, 0, 'alte Frage gelöscht');
+  assert.equal(msgCount(sid), 1, 'neue Frage an ihrer Stelle, nicht doppelt');
+});
+
+test('_handleChatPost: retry_of behält den Kontext der Frage, nicht den aktuellen, ohne Lauf-Spuren', async () => {
+  const sid = ownedSession(OWNED_PAGE);
+  const ci = { research_context: { kind: 'page', id: 1 }, run_failed: { cancelled: true }, repeat_of: 7 };
+  const open = db.prepare(`INSERT INTO chat_messages (session_id, role, content, created_at, context_info) VALUES (?, 'user', 'Frage', datetime('now'), ?)`)
+    .run(sid, JSON.stringify(ci)).lastInsertRowid;
+  // Der Chip zeigt inzwischen etwas anderes — die Wiederholung darf es nicht übernehmen.
+  const out = await post(sid, { contextFn: () => ({ research_context: { kind: 'page', id: 2 } }) }, { retry_of: open });
+  assert.equal(out.status, 200);
+  const row = db.prepare(`SELECT context_info FROM chat_messages WHERE session_id = ? AND role = 'user'`).get(sid);
+  const got = JSON.parse(row.context_info);
+  assert.deepEqual(got.research_context, { kind: 'page', id: 1 });
+  assert.equal(got.run_failed, undefined, 'Teil-Verlauf des alten Laufs reist nicht mit');
+  assert.notEqual(got.repeat_of, 7, 'alte Wiederholungs-Markierung reist nicht mit');
+});
+
+test('_handleChatPost: retry_of auf eine schon beantwortete Frage → neuer Kontext aus contextFn', async () => {
+  const sid = ownedSession(OWNED_PAGE);
+  const q = db.prepare(`INSERT INTO chat_messages (session_id, role, content, created_at) VALUES (?, 'user', 'Frage', datetime('now'))`).run(sid).lastInsertRowid;
+  db.prepare(`INSERT INTO chat_messages (session_id, role, content, created_at) VALUES (?, 'assistant', 'Antwort', datetime('now'))`).run(sid);
+  await post(sid, { contextFn: () => ({ research_context: { kind: 'page', id: 2 } }) }, { retry_of: q });
+  const last = db.prepare(`SELECT context_info FROM chat_messages WHERE session_id = ? ORDER BY id DESC LIMIT 1`).get(sid);
+  assert.deepEqual(JSON.parse(last.context_info).research_context, { kind: 'page', id: 2 });
 });

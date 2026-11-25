@@ -16,7 +16,7 @@
 const express = require('express');
 const {
   makeJobLogger, updateJob, completeJob, failJob, i18nError,
-  createJob, enqueueJob, findActiveJobId, jsonBody,
+  createJob, enqueueJob, findActiveJobId, jsonBody, jobAbortControllers,
 } = require('./shared');
 const { db } = require('../../db/connection');
 const { NOW_ISO_SQL } = require('../../db/now');
@@ -52,12 +52,14 @@ function _writeItemText(itemId, text) {
 
 async function runInterviewJob(jobId, bookId, itemId, userEmail) {
   const log = makeJobLogger(jobId);
+  let prevStatus = 'pending';
   try {
     updateJob(jobId, { statusText: 'job.phase.transcribeLoading', progress: 5 });
     const head = getTranscript(itemId);
     if (!head) throw i18nError('job.error.transcriptMissing');
     const row = getAudio(itemId);
     if (!row?.audio) throw i18nError('job.error.transcriptNoAudio');
+    prevStatus = head.status === 'ready' ? 'ready' : 'pending';
 
     setStatus(itemId, 'running');
     updateJob(jobId, { statusText: 'job.phase.transcribeRunning', progress: 15 });
@@ -66,7 +68,9 @@ async function runInterviewJob(jobId, bookId, itemId, userEmail) {
     try { language = getBookLocale(bookId, userEmail) || ''; } catch { /* Buch-Locale optional */ }
 
     const t0 = Date.now();
-    const result = await transcribeAudio(row.audio, { mime: row.audio_mime, language });
+    // «Abbrechen» (DELETE /jobs/:id) bricht den laufenden Whisper-Request ab.
+    const signal = jobAbortControllers.get(jobId)?.signal || null;
+    const result = await transcribeAudio(row.audio, { mime: row.audio_mime, language, signal });
     const dauerMs = Date.now() - t0;
 
     updateJob(jobId, { statusText: 'job.phase.transcribeSaving', progress: 85 });
@@ -100,13 +104,22 @@ async function runInterviewJob(jobId, bookId, itemId, userEmail) {
       duration_s: result.duration_s,
     }, null, `Transkript: ${result.segments.length} Redebeiträge`);
   } catch (e) {
-    if (e.name !== 'AbortError') {
+    // Abgebrochen entscheidet das Signal, nicht der Fehlername: bricht der User
+    // ab, während der Whisper-Body noch liest, kommt der Abbruch aus
+    // transcribeAudio als TRANSCRIBE_BAD_BODY zurück, nicht als AbortError.
+    const cancelled = !!jobAbortControllers.get(jobId)?.signal?.aborted;
+    if (!cancelled) {
       log.error(`Fehler Transkription Item #${itemId}: ${e.message}`, { stack: e.stack });
     }
     // Der Fehler gehoert AN die Transkript-Zeile, nicht nur ins Job-Protokoll:
     // die Karte zeigt das Fundstueck weiter an und muss sagen koennen, warum
     // dort kein Wortlaut steht.
-    try { setStatus(itemId, 'error', e.code || e.message); } catch { /* Zeile ggf. weg */ }
+    // Abgebrochen ist kein Fehler: die Zeile kehrt in ihren Stand vor dem Lauf
+    // zurück (ein früherer Wortlaut bleibt, Segmente sind erst danach ersetzt).
+    try {
+      if (cancelled) setStatus(itemId, prevStatus);
+      else setStatus(itemId, 'error', e.code || e.message);
+    } catch { /* Zeile ggf. weg */ }
     failJob(jobId, e);
   }
 }

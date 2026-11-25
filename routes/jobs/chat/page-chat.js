@@ -8,7 +8,7 @@ const { callAIChat, chatTemperature, getContextConfigFor, resolveProvider } = re
 const {
   makeJobLogger, updateJob, completeJob, failJob, i18nError,
   getPrompts, getBookPrompts,
-  htmlToText, htmlToTextForPrompt, jobAbortControllers,
+  jobAbortControllers, readSections,
   getFiguren, getLatestReview, getLatestPageCheck, getOpenIdeen, buildChatMessageHistory,
   bookTextOpts, bindJobTier,
 } = require('../shared');
@@ -21,7 +21,7 @@ const { recordChatLedgerForMessage } = require('../../../db/cost-ledger');
 const { _parseChatResponse, capVorschlaege, figurenBlockChars } = require('./shared');
 const { applyChatEffort, EMPTY_ANSWER_MARKER } = require('../agentic-chat');
 const { createThinkPhase } = require('../shared/think-phase');
-const { pageChatBudget, computePageChangeHunks, fitHistory } = require('./page-chat-context');
+const { pageChatBudget, computePageChangeHunks, fitHistory, formatPromptSizes } = require('./page-chat-context');
 const { annotateVorschlagMatches, titelCollisions } = require('./page-chat-verify');
 const { preContextPassages, retrievalQuery } = require('./book-chat-retrieval');
 const embed = require('../../../lib/embed');
@@ -68,9 +68,12 @@ async function _pageChatBookContext(session, query, budget, signal, userEmail, l
 // Ladefehler sind kein Vorab-Befund: dann entscheidet der Job (pageChatLoadFailed).
 // Der Job prüft den Deckel trotzdem selbst — die Seite kann bis zum Lauf wachsen.
 async function pageChatPreflight(session, userEmail) {
-  let pd;
-  try { pd = await contentStore.loadPage(session.page_id); } catch { return null; }
-  const chars = htmlToTextForPrompt(pd.html || '', bookTextOpts(session.book_id, userEmail)).length;
+  let sec;
+  try {
+    ({ sections: [sec] } = await readSections(session.book_id, { pageIds: [session.page_id], userEmail }));
+  } catch { return null; }
+  if (!sec) return null;
+  const chars = sec.text.length;
   const { pageMax } = pageChatBudget(getContextConfigFor(resolveProvider({ userEmail })));
   if (chars <= pageMax) return null;
   return { status: 422, error_code: 'PAGE_CHAT_PAGE_TOO_LARGE', params: { chars, max: pageMax } };
@@ -116,24 +119,31 @@ async function runChatJob(jobId, sessionId, userMsgId, message, userEmail) {
     // keinen Seiten-Chat: ein Fehlschlag endet als Job-Fehler, nicht als Antwort
     // „über" eine leere Seite (deren Vorschläge auf nichts zeigen könnten).
     if (!(session.page_id > 0)) throw i18nError('job.error.pageChatLoadFailed');
-    let pd;
+    let sec;
     try {
-      pd = await contentStore.loadPage(session.page_id);
+      ({ sections: [sec] } = await readSections(session.book_id, {
+        pageIds: [session.page_id], userEmail, keepHtml: true, withCompare: true,
+      }));
     } catch (e) {
       if (e.name === 'AbortError') throw e;
       logger.warn(`Seiteninhalt konnte nicht geladen werden: ${e.message}`);
       throw i18nError('job.error.pageChatLoadFailed');
     }
-    // Zwei Sichten derselben Seite: `pageText` (kompakt, einzeilig) ist die
-    // Vergleichsform — Diff gegen den Stand beim Chat-Start (`opening_page_text`,
-    // gleiche Normalform) und Fundstellen-Prüfung der Vorschläge. `promptText`
-    // behält Absatzgrenzen als Leerzeilen: das Modell sieht Absätze und Dialog-
-    // wechsel und schlägt keine `original` über eine Absatzgrenze vor (die der
+    if (!sec) {
+      logger.warn(`Seiteninhalt konnte nicht geladen werden: page=${session.page_id} nicht im Buch ${session.book_id}`);
+      throw i18nError('job.error.pageChatLoadFailed');
+    }
+    const pd = { html: sec.html, name: sec.title, updated_at: sec.updatedAt, chapter_id: sec.chapterId };
+    // Zwei Sichten derselben Seite aus dem Abschnitts-Leser: `pageText` (kompakt,
+    // einzeilig) ist die Vergleichsform — Diff gegen den Stand beim Chat-Start
+    // (`opening_page_text`, gleiche Normalform) und Fundstellen-Prüfung der
+    // Vorschläge. `promptText` behält Absatzgrenzen: das Modell sieht Absätze und
+    // Dialogwechsel und schlägt keine `original` über eine Absatzgrenze vor (die der
     // Apply-Guard ohnehin abwiese). Der Matcher kollabiert Whitespace, `\n\n` in
     // einem `original` ist darum unschädlich.
     const textOpts = bookTextOpts(session.book_id, userEmail);
-    const pageText = htmlToText(pd.html || '', textOpts);
-    const promptText = htmlToTextForPrompt(pd.html || '', textOpts);
+    const pageText = sec.compare;
+    const promptText = sec.text;
     const pageUpdatedAt = pd.updated_at || null;
     const pageChapterId = pd.chapter_id ?? null;
     session.page_name = pd.name || null;
@@ -202,9 +212,13 @@ async function runChatJob(jobId, sessionId, userMsgId, message, userEmail) {
     const stand = getPageStatus(session.page_id);
     const chain = stand ? statusChain(isJournalisticBook(getBookSettings(session.book_id, userEmail))) : [];
     const editStatus = stand && chain.includes(stand.status) ? { status: stand.status, stale: stand.stale, chain } : null;
+    const promptSizes = {};
+    // Figuren-Block: Form über Setting jobs.page_chat.figuren_modus (prompts/chat.js).
+    const figurenModus = appSettings.get('jobs.page_chat.figuren_modus') || 'ohne_listen';
     const systemPrompt = buildChatSystemPrompt(session.page_name || '–', promptText, figuren, review,
       chatSysPrompt, pageChangeNote, ideen, lektorat, { figurenMaxChars: figurenBlockChars(aiCfg), editStatus, hatNachrichten: hasMsgThread(pd.html), langCode: textOpts.langCode,
-        bookTitles, currentPageId: session.page_id, weltfakten, soziolekte, ideenStages });
+        bookTitles, currentPageId: session.page_id, weltfakten, soziolekte, ideenStages, sizes: promptSizes,
+        figurenModus });
 
     // Buch-Kontext: pro Frage andere Bytes → NICHT im System-Prompt (er bräche den
     // Präfix hinter Block 2, der ganze Verlauf würde jede Runde neu bezahlt), sondern
@@ -225,6 +239,11 @@ async function runChatJob(jobId, sessionId, userMsgId, message, userEmail) {
       throw i18nError('job.error.pageChatContextFull', { chars: sysChars + userContent.length, max: budget.total });
     }
     const { messages: history, dropped } = fitHistory(fullHistory, historyBudget);
+    logger.info(formatPromptSizes(promptSizes, {
+      buchKontext: bookCtxText.length,
+      verlauf: history.reduce((n, m) => n + String(m.content || '').length, 0),
+      verlaufNachrichten: history.length,
+    }));
     // Cache: Breakpoint auf das Ende des Verlaufs (vor der aktuellen Frage), damit der
     // NÄCHSTE Turn System + Verlauf liest, obwohl seine Frage samt Präambel neu ist;
     // zusätzlich der Breakpoint auf der letzten Nachricht (cacheLastMessage). Die

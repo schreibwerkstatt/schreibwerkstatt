@@ -3,7 +3,7 @@
 // Zitate via Offset oder Pattern, Dialogerkennung. Die
 // semantische Suche (search_similar) liegt in tools-similar.js.
 
-const { htmlToText, bookTextOpts } = require('../shared');
+const { readSections } = require('../shared/section-reader');
 const contentStore = require('../../../lib/content-store');
 const { htmlToPlainText, htmlToPlainTextWithMsgRanges } = require('../../../lib/html-text');
 const { findDialogRanges } = require('../../../lib/page-index');
@@ -175,7 +175,7 @@ async function tool_search_passages(input, ctx) {
 // Lange Abschnitte (ein Kapitel am Stück, 20–60k Zeichen) passen nicht in ein
 // Werkzeug-Ergebnis. Statt nur den Anfang zu liefern, gibt es ein Fenster ab
 // `offset` (Zeichen im zurückgegebenen Text) und `next_offset` zum Weiterlesen.
-// Der Schnitt fällt auf eine Wortgrenze, wenn eine in den letzten
+// Der Schnitt fällt auf eine Wortgrenze (Space oder Umbruch), wenn eine in den letzten
 // WINDOW_WORD_SNAP Zeichen liegt. Pure, unit-getestet.
 const WINDOW_WORD_SNAP = 200;
 
@@ -186,7 +186,9 @@ function pageWindow(text, offset, maxChars) {
   let end = Math.min(total, start + Math.max(1, maxChars));
   let next = end;
   if (end < total) {
-    const sp = t.lastIndexOf(' ', end);
+    // Letzter Leerraum vor `end` — Space oder Absatz-/Zeilenumbruch (der Text trägt Absätze).
+    let sp = end;
+    while (sp > start && !/\s/.test(t[sp])) sp--;
     if (sp > start && end - sp <= WINDOW_WORD_SNAP) { end = sp; next = sp + 1; }
   }
   return {
@@ -239,36 +241,23 @@ async function tool_get_pages(input, ctx) {
   const maxChars = _perPageChars(input.max_chars_per_page, ctx);
   const offset = Number.isInteger(input.offset) && input.offset > 0 ? input.offset : 0;
   const toFetch = ids.slice(0, limit);
-  const results = [];
-  const missing = [];
-  const pathById = new Map((await contentStore.bookOutline(ctx.bookId))
-    .filter(n => n.type === 'page' && n.depth > 1).map(n => [n.id, contentStore.formatChapterPath(n.path)]));
-  for (const pageId of toFetch) {
-    if (ctx.jobSignal?.aborted) throw new DOMException('Aborted', 'AbortError');
-    // Buch-Scope VOR dem Laden: die ids kommen vom Modell (und damit indirekt aus
-    // jeder Userfrage). Eine Seite eines fremden Buchs wird wie eine fehlende gemeldet
-    // — ohne Inhalt und ohne Hinweis, dass sie existiert.
-    const pageRow = getPageWithChapter(pageId);
-    if (!pageRow || pageRow.book_id !== ctx.bookId) {
-      missing.push({ page_id: pageId, error: 'Abschnitt nicht im aktuellen Buch.' });
-      continue;
-    }
-    try {
-      const pd = await contentStore.loadPage(pageId);
-      const text = htmlToText(pd.html || '', bookTextOpts(ctx.bookId, ctx.userEmail));
-      const latestCheck = _latestCheckForPage(pageId, ctx.userEmail);
-      results.push({
-        page_id: pageId,
-        page_name: pageRow?.page_name || pd.name || `#${pageId}`,
-        chapter_name: pageRow?.chapter_name || null,
-        ...(pathById.has(pageId) ? { chapter_path: pathById.get(pageId) } : {}),
-        ...pageWindow(text, offset, maxChars),
-        ...(latestCheck ? { latest_check: latestCheck } : {}),
-      });
-    } catch (e) {
-      missing.push({ page_id: pageId, error: e.message });
-    }
-  }
+  // Buch-Scope über die Gliederung: die ids kommen vom Modell (und damit indirekt
+  // aus jeder Userfrage). Eine Seite eines fremden Buchs wird wie eine fehlende
+  // gemeldet — ohne Inhalt und ohne Hinweis, dass sie existiert.
+  const { sections, missing } = await readSections(ctx.bookId, {
+    pageIds: toFetch, userEmail: ctx.userEmail, signal: ctx.jobSignal,
+  });
+  const results = sections.map(sec => {
+    const latestCheck = _latestCheckForPage(sec.id, ctx.userEmail);
+    return {
+      page_id: sec.id,
+      page_name: sec.title,
+      chapter_name: sec.chapterName,
+      ...(sec.depth > 1 ? { chapter_path: sec.chapterPath } : {}),
+      ...pageWindow(sec.text, offset, maxChars),
+      ...(latestCheck ? { latest_check: latestCheck } : {}),
+    };
+  });
   const dropped = ids.length - toFetch.length;
   return _truncateResult({
     ...(results.some(r => r.truncated) ? { hint: WINDOW_HINT } : {}),
@@ -311,24 +300,20 @@ async function tool_get_chapter_text(input, ctx) {
   const toFetch = pageRows.slice(0, maxPages);
   const dropped = pageRows.length - toFetch.length;
 
-  const results = [];
-  const missing = [];
-  for (const row of toFetch) {
-    if (ctx.jobSignal?.aborted) throw new DOMException('Aborted', 'AbortError');
-    try {
-      const pd = await contentStore.loadPage(row.id);
-      const text = htmlToText(pd.html || '', bookTextOpts(ctx.bookId, ctx.userEmail));
-      results.push({
-        page_id:   row.id,
-        page_name: row.name,
-        // Abschnitt eines Unterkapitels: sein direktes Kapitel mitnennen.
-        ...(row.chapter_id !== chapterId ? { chapter_id: row.chapter_id, chapter_name: row.path[row.path.length - 1] } : {}),
-        ...pageWindow(text, offset, maxCharsPerPage),
-      });
-    } catch (e) {
-      missing.push({ page_id: row.id, error: e.message });
-    }
-  }
+  const { sections, missing } = await readSections(ctx.bookId, {
+    pageIds: toFetch.map(r => r.id), outline, userEmail: ctx.userEmail, signal: ctx.jobSignal,
+  });
+  const rowById = new Map(toFetch.map(r => [r.id, r]));
+  const results = sections.map(sec => {
+    const row = rowById.get(sec.id);
+    return {
+      page_id:   sec.id,
+      page_name: row.name,
+      // Abschnitt eines Unterkapitels: sein direktes Kapitel mitnennen.
+      ...(row.chapter_id !== chapterId ? { chapter_id: row.chapter_id, chapter_name: row.path[row.path.length - 1] } : {}),
+      ...pageWindow(sec.text, offset, maxCharsPerPage),
+    };
+  });
 
   return _truncateResult({
     ...head,

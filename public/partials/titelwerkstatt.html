@@ -179,16 +179,8 @@
               <div class="tw-suggest">
                 <button type="button" @click="twSuggest(row.id)" :disabled="twRunning"
                         x-text="twRunning ? $app.t('headline.suggesting') : $app.t('headline.suggest')"></button>
-                <!-- Laufender Job: geteilter Block .job-progress (DESIGN.md «Karten-Innenraum»). -->
-                <div class="job-progress" x-show="twRunning" x-cloak>
-                  <div class="progress-bar-wrap">
-                    <div class="progress-bar" :style="{ '--progress': twProgress + '%' }"></div>
-                  </div>
-                  <div class="job-progress-row">
-                    <div class="card-status" x-text="twStatus"></div>
-                    <button type="button" @click="twCancel()" x-text="$app.t('common.cancel')"></button>
-                  </div>
-                </div>
+                <!-- Laufender Job: Balken, Status, Abbrechen (x-job-progress, DESIGN.md «Job-Fortschritt»). -->
+                <div x-job-progress="{ active: twRunning, progress: twProgress, text: twStatus, cancel: () => twCancel() }"></div>
                 <span class="muted-msg muted-msg--sm" x-show="!twRunning && twLastRun"
                       x-text="twLastRun?.zuKurz
                         ? $app.t('headline.tooShort')

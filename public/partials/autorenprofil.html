@@ -76,15 +76,8 @@
     <p class="card-form-error" x-show="apGenError" x-cloak x-text="apGenError"></p>
 
     <!-- Laufender KI-Lauf: Fortschritt + Abbrechen (wie die Figur-Werkstatt). -->
-    <div class="job-progress" x-show="apGenerating" x-cloak>
-      <div class="progress-bar-wrap" x-show="apGenProgress > 0">
-        <div class="progress-bar" :style="{ '--progress': apGenProgress + '%' }"></div>
-      </div>
-      <div class="job-progress-row">
-        <div class="card-status" x-html="apGenStatus || $app.t('autorenprofil.generating')"></div>
-        <button type="button" @click="cancelAutorenprofil()" x-text="$app.t('common.cancel')"></button>
-      </div>
-    </div>
+    <div x-job-progress="{ active: apGenerating, progress: apGenProgress, status: apGenStatus,
+                           fallback: 'autorenprofil.generating', timer: '_apPollTimer' }"></div>
 
     <!-- KI-Ergebnis als Vorschlag (DESIGN.md „Chat-Vorschlagskarte"): Wort-Diff
          gegen den geltenden Text, Übernehmen speichert, Verwerfen schliesst. -->

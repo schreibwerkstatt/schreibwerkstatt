@@ -6,7 +6,7 @@
 // notfalls an einem Leerzeichen. Ein Teil ist ein normaler Seiten-Eintrag mit
 // derselben Identität (`id`, `title`, `updated_at`, Kapitel-Felder) und dem Feld
 // `part = { nr, von, start, end }` (Zeichen-Offsets im Volltext des Abschnitts).
-// Die Prompt-Überschrift bleibt `### ${title}` OHNE Teil-Markierung: die KI gibt den
+// Das Prompt-Tag bleibt `<abschnitt titel="${title}">` OHNE Teil-Markierung: die KI gibt den
 // Abschnittstitel als Bezug zurück (Szene.seite, locateStelle, page_id-Mapping) und
 // muss dafür exakt den echten Titel sehen.
 //

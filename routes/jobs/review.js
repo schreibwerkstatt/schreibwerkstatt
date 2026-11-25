@@ -17,6 +17,7 @@ const {
   sigHash: _sigHash, buildChapterPagesSig, systemChars,
   bookTextOpts,
 } = require('./shared');
+const { formatAbschnitte } = require('./shared/book-text-format');
 const { narrativeLabels } = require('./narrative-labels');
 const { loadReviewKomplettContext, loadReviewMotivContext, loadStrukturContext, loadWeltContext, werkstandFor, trailingUnwrittenChapters, loadOpenPlanBeats } = require('./review-context');
 const { applyQuoteVerification, belegHaystack } = require('../../lib/quote-verify');
@@ -237,7 +238,7 @@ async function runReviewJob(jobId, bookId, bookName, userEmail) {
           statusText: 'job.phase.analyzing',
           statusParams: { current: gi + 1, total: chunkOrder.length, name: chunk.name },
         });
-        const chText = chunk.pages.map(p => `### ${p.title}\n${p.text}`).join('\n\n---\n\n');
+        const chText = formatAbschnitte(chunk.pages);
         const ca = await aiCall(jobId, tok,
           buildChapterAnalysisPrompt(chunk.name, bookName, chunk.pages.length, chText, { ...narrative, teil }),
           SYSTEM_KAPITELANALYSE,

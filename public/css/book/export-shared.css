@@ -127,14 +127,6 @@
 }
 .export-chip-remove:hover { color: var(--color-text); }
 
-/* === Progress-Block (Job läuft) === */
-.export-progress {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-xs);
-  margin-top: var(--space-sm);
-}
-
 /* === Mobile === */
 @media (max-width: 640px) {
   .pdf-export-card .card-actions,

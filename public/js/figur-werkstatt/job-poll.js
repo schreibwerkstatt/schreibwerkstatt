@@ -5,7 +5,8 @@
 // unterscheiden sich nur in den State-Prop-Namen und der Result-Form. Beides
 // steckt im JOB_KINDS-Deskriptor, damit es genau eine Poll-Definition gibt.
 
-import { startPoll, runningJobStatus } from '../cards/job-helpers.js';
+import { startPoll, runningJobStatus, isCancelledJob } from '../cards/job-helpers.js';
+import { escHtml } from '../utils.js';
 
 export const JOB_KINDS = {
   brainstorm: {
@@ -89,6 +90,13 @@ export function startWerkstattJobPoll(self, kind, jobId) {
       self[k.loadingProp] = false;
       self[k.statusProp] = '';
       self[k.jobIdProp] = null;
+      // Abgebrochen ist kein Fehler: neutrale Statuszeile statt errorMessage.
+      if (isCancelledJob(job)) {
+        self[k.progressProp] = 0;
+        self[k.statusProp] = escHtml(app.t('job.cancelled'));
+        if (!k.bookScoped) self[k.draftIdProp] = null;
+        return;
+      }
       if (k.bookScoped || self.selectedDraftId === self[k.draftIdProp]) {
         self.errorMessage = app.t(job.error || 'common.unknownError', job.errorParams || {});
       }

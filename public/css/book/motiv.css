@@ -99,8 +99,6 @@
   color: var(--color-on-accent-fill);
 }
 
-.motiv-progress { padding: var(--space-2xs) 0 var(--space-xs); }
-
 /* ── KI-Vorschläge (Brainstorm): Karten = .chat-vorschlag
    (components/chat-vorschlag.css), hier nur der Panel-Abstand. ── */
 .motiv-suggestions { padding: var(--space-xs) 0; }

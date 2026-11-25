@@ -140,11 +140,7 @@
   </template>
 
   <!-- Progress / Errors -->
-  <div class="export-progress" x-show="exporting || (exportProgress > 0 && !exportError)">
-    <div class="progress-bar-wrap">
-      <div class="progress-bar" :style="{ '--progress': exportProgress + '%' }"></div>
-    </div>
-    <p class="card-form-field-note" x-text="exportStatus"></p>
-  </div>
+  <!-- Abbrechen steht als Umschalter am Export-Knopf im Kartenkopf. -->
+  <div x-job-progress="{ active: exporting, progress: exportProgress, text: exportError ? '' : exportStatus }"></div>
   <p class="card-form-error" x-show="exportError" x-text="exportError"></p>
 </div>

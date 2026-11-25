@@ -19,6 +19,7 @@ const NOW = '2026-01-01T00:00:00.000Z';
 
 let ctx; let db; let server; let baseUrl;
 let ownSession;
+const otherSessions = {};
 
 test.before(async () => {
   ctx = bootstrap();
@@ -36,6 +37,13 @@ test.before(async () => {
   ownSession = ses.run(BOOK, OWNER, NOW, NOW).lastInsertRowid;
   ins.run(ownSession, 'user', 'Wann stirbt der Leuchtturmwärter?', NOW);
   ins.run(ownSession, 'assistant', 'Im vorletzten Kapitel.', NOW);
+  // Je eine Session der übrigen Chat-Arten: die Suche trennt nach `kind`.
+  for (const kind of ['research', 'plot', 'ideen']) {
+    const sid = db.prepare("INSERT INTO chat_sessions (book_id, kind, user_email, created_at, last_message_at) VALUES (?, ?, ?, ?, ?)")
+      .run(BOOK, kind, OWNER, NOW, NOW).lastInsertRowid;
+    otherSessions[kind] = sid;
+    ins.run(sid, 'user', `Leuchtturm im ${kind}-Chat`, NOW);
+  }
   const coSession = ses.run(BOOK, COAUTHOR, NOW, NOW).lastInsertRowid;
   ins.run(coSession, 'user', 'Leuchtturmwärter — Motiv?', NOW);
   ins.run(coSession, 'assistant', 'Einsamkeit.', NOW);
@@ -71,8 +79,16 @@ test('Mitautor sieht nur seine eigene Session', async () => {
   assert.notEqual(r.json.hits[0].session_id, ownSession);
 });
 
-test('Ohne Buchzugriff → 403, ohne q/kind → 400', async () => {
+test('Recherche-, Plot- und Ideen-Chat: Suche nur in der eigenen Chat-Art', async () => {
+  for (const kind of ['research', 'plot', 'ideen']) {
+    const r = await search(`q=Leuchtturm&kind=${kind}`);
+    assert.equal(r.status, 200, kind);
+    assert.deepEqual(r.json.hits.map(h => h.session_id), [otherSessions[kind]], kind);
+  }
+});
+
+test('Ohne Buchzugriff → 403, ohne q / unbekannte kind → 400', async () => {
   assert.equal((await search('q=Leuchtturm&kind=book', STRANGER)).status, 403);
   assert.equal((await search('kind=book')).status, 400);
-  assert.equal((await search('q=Leuchtturm&kind=plot')).status, 400);
+  assert.equal((await search('q=Leuchtturm&kind=lektorat')).status, 400);
 });

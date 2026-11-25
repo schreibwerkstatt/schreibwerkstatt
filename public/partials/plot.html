@@ -98,7 +98,7 @@
   <div x-show="loading && !acts.length" x-skeleton="4" x-cloak></div>
 
   <!-- Beat-Verankerungs-Lauf (Ist-Index gegen den Buchtext) -->
-  <div x-show="anchorLoading" class="card-status" x-html="anchorStatus || $app.t('plot.anchor.running')"></div>
+  <div x-job-progress="{ active: anchorLoading, progress: anchorProgress, status: anchorStatus, fallback: 'plot.anchor.running', timer: '_anchorPollTimer' }"></div>
 
   <!-- Leer-Hinweis (DESIGN.md „Empty-State mit CTA"). startFirstAct waehlt den
        Weg: flaches Board (addingAct) bzw. — wenn schon Straenge existieren — den

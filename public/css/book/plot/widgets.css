@@ -42,8 +42,6 @@
   }
 
   /* ── Consistency-Panel ─────────────────────────────────────────────────── */
-  .plot-job-bar { display: flex; flex-direction: column; gap: var(--space-xs); margin-bottom: var(--space-sm); }
-  .plot-job-bar-row { display: flex; align-items: center; gap: var(--space-sm); }
   /* Resultat-Panel und darunterliegende Run-Historie klar trennen (Margin-Collapse
      zwischen den Geschwistern würde sonst auf ~1rem zusammenfallen). */
   .card--plot .plot-consistency-panel + .history-bar { margin-top: var(--space-lg); }

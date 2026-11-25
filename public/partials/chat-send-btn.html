@@ -1,0 +1,15 @@
+<!-- Senden-/Stopp-Knopf am Eingabefeld eines Chats (Fragment, string-seitig per
+     Include-Marker in chat.html [Abschnitts- + Buch-Chat], ideen-chat.html,
+     plot-chat.html und recherche-chat.html eingebunden). Der Einbinder legt an
+     der `.chat-input-row` `x-data="{ sendBtn: <label>SendButton() }"` an
+     (Adapter aus makeChatMethods, chat-base.js):
+       mode()     → 'send' (Pfeil) | 'stop' (Quadrat, bricht den Lauf ab) | 'busy' (Spinner)
+       disabled() → gesperrt (busy, oder leeres Eingabefeld)
+       click()    → senden bzw. abbrechen -->
+<button type="button" class="chat-send-btn" @click="sendBtn.click()" :disabled="sendBtn.disabled()"
+        :aria-label="$app.t(sendBtn.mode() === 'stop' ? 'chat.cancelRun' : 'chat.send')"
+        :data-tip="sendBtn.mode() === 'stop' ? $app.t('chat.cancelRunTip') : null">
+  <span x-show="sendBtn.mode() === 'busy'" class="spinner"></span>
+  <svg x-show="sendBtn.mode() === 'stop'" class="icon" aria-hidden="true"><use href="/icons.svg#square"/></svg>
+  <svg x-show="sendBtn.mode() === 'send'" class="icon" aria-hidden="true"><use href="/icons.svg#arrow-up"/></svg>
+</button>

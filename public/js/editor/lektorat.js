@@ -8,6 +8,7 @@ import { renderLektoratAnalysisHtml } from './lektorat-analysis.js';
 import { runQuoteNormalizeHtml } from './shared/quote-normalize.js';
 import { lsSet } from '../safe-storage.js';
 import { UNDO_WINDOW_MS } from './lektorat-undo.js';
+import { polledJobId, isCancelledJob } from '../cards/job-helpers.js';
 import { trackUsageEvent } from '../features-usage.js';
 import { patchBookedLists, mergeByOriginal, bookingEntry } from './lektorat-booking.js';
 import { lektoratBatchMethods } from './lektorat/batch.js';
@@ -267,6 +268,15 @@ export const lektoratMethods = {
     this.updatePageView();
   },
 
+  // Laufenden Prüflauf des offenen Abschnitts abbrechen (x-job-progress im
+  // Notebook-Editor). Der Poller liegt per Abschnitt in `_checkPollTimers`.
+  async cancelLektoratCheck() {
+    const pageId = this.currentPage?.id;
+    if (pageId == null) return false;
+    const jobId = polledJobId(this._checkPollTimers, String(pageId));
+    return jobId ? this.cancelJob(jobId) : false;
+  },
+
   async runCheck() {
     if (!this.currentPage || this.checkLoading) return;
     if (await this._saveBeforeLiveCheck?.() === false) return; // Edit-Modus: erst speichern
@@ -342,6 +352,12 @@ export const lektoratMethods = {
         if (this.currentPage?.id !== pageId) return;
         this.checkLoading = false;
         setTimeout(() => { this.checkProgress = 0; }, 400);
+        // Abbruch ist kein Fehlschlag: neutrale Meldung statt «Fehler: …».
+        if (isCancelledJob(job)) {
+          this.analysisOut = `<span class="muted-msg">${escHtml(this.t('job.cancelled'))}</span>`;
+          this.checkStatus = '';
+          return;
+        }
         this.analysisOut = `<span class="error-msg">${this.t('common.errorColon')}${escHtml(this.t(job.error, job.errorParams))}</span>`;
         this.checkStatus = '';
       },

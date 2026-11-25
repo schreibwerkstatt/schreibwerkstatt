@@ -198,25 +198,6 @@
 .history-detail .bewertung-section { margin-top: var(--space-lg); }
 .history-detail .bewertung-header { margin-bottom: var(--space-10); }
 
-.btn-delete-history {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  padding: var(--space-xs) var(--space-md);
-  font-size: var(--font-size-xs);
-  border: 1px solid var(--color-err-text);
-  background: none;
-  color: var(--color-err-text);
-  border-radius: var(--radius-none);
-  cursor: pointer;
-  font-weight: var(--fw-regular);
-  opacity: 0.55;
-  transition: opacity var(--transition-slow);
-  display: inline-block;
-  margin-top: var(--space-lg);
-}
-.btn-delete-history:hover { opacity: 1; }
-
 /* === page_revisions-Liste unter dem Editor ===
    Reuse .history-bar + .history-item; Liste klappbar via .collapsible-toggle
    (Default zu). Cursor auf history-item bleibt default — Restore-Button am Ende.

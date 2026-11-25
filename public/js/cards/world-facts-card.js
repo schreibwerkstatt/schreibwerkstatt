@@ -14,7 +14,7 @@ import { tFetchError } from '../i18n.js';
 import { sameData } from '../utils/same-data.js';
 import { memoMethods } from './card-memo.js';
 import { activeFilterId, hasId } from '../chapter-filter.js';
-import { startPoll } from './job-helpers.js';
+import { startPoll, isCancelledJob } from './job-helpers.js';
 import { isSelectedBook, loadToken } from './book-guard.js';
 import { listWindowState, listWindowMethods } from '../list-window.js';
 import { actionMenuState, actionMenuMethods } from '../action-menu.js';
@@ -336,7 +336,7 @@ export function registerWorldFactsCard() {
             await this.loadWorldFacts();
           },
           onError: (job) => {
-            if (job?.status === 'cancelled' || job?.error === 'job.cancelled') { this._wfFcStop(''); return; }
+            if (isCancelledJob(job)) { this._wfFcStop(''); this.wfFcStatusKey = 'job.cancelled'; return; }
             this._wfFcStop(this._wfFcErrorText(job?.error, job?.errorParams, true));
           },
           onNotFound: () => this._wfFcStop(''),

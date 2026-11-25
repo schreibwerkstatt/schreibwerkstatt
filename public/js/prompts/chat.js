@@ -10,6 +10,7 @@ import { PAGE_CHAT_IDEEN_RULES, pageChatIdeenLines, pageChatIdeenAenderungRules,
 import { CHAT_TOOLS, toolMentions } from './chat-tools/index.js';
 import { buildWeltfaktenBlock } from './weltfakten-block.js';
 import { roundNoteRule } from './chat-round-note.js';
+import { formatAbschnitt } from './book-text-format.js';
 export { buildWeltfaktenBlock, WELTFAKTEN_BLOCK_DEFAULT_MAX_CHARS } from './weltfakten-block.js';
 
 /**
@@ -38,20 +39,25 @@ export { buildWeltfaktenBlock, WELTFAKTEN_BLOCK_DEFAULT_MAX_CHARS } from './welt
  * beim Kappen fällt damit das Nebenpersonal weg, nicht die Hauptfigur.
  *
  * @param {Array}  figuren  Ergebnis von getFiguren (kann leer/null sein)
- * @param {Object} opts     { maxChars, detailTools }
+ * @param {Object} opts     { maxChars, detailTools, compact, dropLists }
+ *   compact   — Volldossiers eine Figur pro Zeile statt eingerückt (gleicher Inhalt,
+ *               ~20 % kleiner; Abschnitts-Chat-Modus `kompakt`)
+ *   dropLists — Detaillisten, die im Volldossier fehlen sollen (Abschnitts-Chat-Modus
+ *               `ohne_listen`: ['szenen', 'schauplätze']); ihre Anzahl steht als
+ *               `weggelassen` an der Figur, wie im Stammdaten-Modus
  * @returns {{ text, mode, shown, total, chars }|null}  null = kein Block
  */
 export const FIGUREN_BLOCK_DEFAULT_MAX_CHARS = 40000;
 const FIGUREN_DETAIL_KEYS = ['lebensereignisse', 'beziehungen', 'schauplätze', 'szenen'];
 const FIGUREN_HEAD = '=== FIGUREN DES BUCHS ===';
 
-function _figurStamm(f) {
+function _figurStamm(f, keys = FIGUREN_DETAIL_KEYS) {
   const out = {};
   for (const [k, v] of Object.entries(f)) {
-    if (!FIGUREN_DETAIL_KEYS.includes(k)) out[k] = v;
+    if (!keys.includes(k)) out[k] = v;
   }
   const details = {};
-  for (const k of FIGUREN_DETAIL_KEYS) {
+  for (const k of keys) {
     const n = Array.isArray(f[k]) ? f[k].length : 0;
     if (n > 0) details[k] = n;
   }
@@ -65,28 +71,39 @@ export function buildFigurenBlock(figuren, opts = {}) {
   const maxChars = Number(opts.maxChars) > 0 ? Number(opts.maxChars) : FIGUREN_BLOCK_DEFAULT_MAX_CHARS;
   const m = toolMentions(opts.toolNames);
   const withTools = opts.detailTools === true && m.has('get_figure_profile');
+  const head = FIGUREN_HEAD;
+  const dropLists = Array.isArray(opts.dropLists) ? opts.dropLists.filter(k => FIGUREN_DETAIL_KEYS.includes(k)) : [];
+  const wrap = (lines, body) => [...lines, '[', body.join(',\n'), ']'].join('\n');
 
   // Mit Detail-Werkzeugen (agentischer Buch-Chat) nie die Volldossiers: Szenen,
   // Schauplätze, Beziehungen und Lebensereignisse aller Figuren stünden sonst in
   // jeder Iteration im Prompt, obwohl eine Frage meist eine Figur betrifft — die
   // holt `get_figure_profile` gezielt.
-  const voll = withTools ? null : JSON.stringify(list, null, 2);
-  if (voll && voll.length <= maxChars) {
-    const text = [FIGUREN_HEAD, voll].join('\n');
-    return { text, mode: 'voll', shown: list.length, total: list.length, chars: text.length };
+  if (!withTools) {
+    const listsNote = dropLists.length
+      ? [`(Volldossiers ohne die Listen ${dropLists.map(k => `\`${k}\``).join(' und ')}; \`weggelassen\` nennt deren Anzahl. Schliesse aus ihrem Fehlen nichts.)`]
+      : [];
+    const text = dropLists.length
+      ? wrap([head, ...listsNote], list.map(f => JSON.stringify(_figurStamm(f, dropLists))))
+      : opts.compact
+        ? wrap([head], list.map(f => JSON.stringify(f)))
+        : [head, JSON.stringify(list, null, 2)].join('\n');
+    if (text.length - head.length - 1 <= maxChars) {
+      const mode = dropLists.length ? 'ohne_listen' : opts.compact ? 'kompakt' : 'voll';
+      return { text, mode, shown: list.length, total: list.length, chars: text.length };
+    }
   }
 
   const hint = withTools
     ? `Details je Figur (Beziehungen, Szenen, Schauplätze, Lebensereignisse) über ${m.list(['get_figure_profile', 'get_figure_relations'], ' / ')} nachladen.`
     : 'Die Detaillisten je Figur sind hier nicht enthalten — schliesse aus ihrem Fehlen nichts.';
   const lead = [
-    FIGUREN_HEAD,
+    head,
     `(Stammdaten je Figur; \`weggelassen\` nennt die Anzahl der nicht enthaltenen Detaileinträge. ${hint})`,
   ];
   // Eine Figur pro Zeile: kein Pretty-Print-Aufschlag, aber lesbar — und zeilenweise
   // füllbar, weshalb das Kappen immer an einer Figurengrenze endet.
   const rows = list.map(f => JSON.stringify(_figurStamm(f)));
-  const wrap = (head, body) => [...head, '[', body.join(',\n'), ']'].join('\n');
 
   const stamm = wrap(lead, rows);
   if (stamm.length <= maxChars) {
@@ -156,26 +173,45 @@ export function buildFigurenBlock(figuren, opts = {}) {
 //     Überarbeiten); mit 5 min wurde Block 2 samt Verlauf fast jede Runde neu geschrieben.
 export function buildChatSystemPrompt(pageName, pageText, figuren, review, systemOverride = null, pageChangeNote = null, ideen = null, lektorat = null, opts = {}) {
   const stable = [systemOverride ?? SYSTEM_CHAT];
+  // opts.sizes (optional, Out-Parameter): Zeichen je Baustein fürs Job-Log —
+  // welcher Teil den Prompt trägt, ohne die Rückgabeform zu ändern.
+  const sizes = opts.sizes && typeof opts.sizes === 'object' ? opts.sizes : {};
+  sizes.system = String(stable[0] ?? '').length;
 
   // Figuren des KAPITELS (der Aufrufer filtert), trotzdem gebudgetet: auch ein
   // Kapitel-Ensemble trägt Volldossiers. opts.figurenMaxChars kommt aus dem
   // Kontextfenster des effektiven Providers.
-  const figBlock = buildFigurenBlock(figuren, { maxChars: opts.figurenMaxChars });
+  // opts.figurenModus (Setting jobs.page_chat.figuren_modus):
+  //   voll        — Volldossiers aller Kapitelfiguren, eingerückt
+  //   kompakt     — derselbe Inhalt, eine Figur pro Zeile
+  //   ohne_listen — kompakt, ohne die Szenen- und Schauplatz-Listen (Anzahl bleibt)
+  const figurenModus = opts.figurenModus || 'voll';
+  const figBlock = buildFigurenBlock(figuren, {
+    maxChars: opts.figurenMaxChars,
+    compact: figurenModus !== 'voll',
+    dropLists: figurenModus === 'ohne_listen' ? ['szenen', 'schauplätze'] : [],
+  });
   if (figBlock) stable.push('', figBlock.text);
+  sizes.figuren = figBlock ? figBlock.chars : 0;
+  sizes.figurenModus = figBlock ? `${figBlock.mode} ${figBlock.shown}/${figBlock.total}` : '-';
 
+  sizes.review = 0;
   if (review) {
-    stable.push('', '=== LETZTE BUCHBEWERTUNG ===', JSON.stringify({
+    const reviewJson = JSON.stringify({
       gesamtnote:  review.gesamtnote,
       fazit:       review.fazit,
       staerken:    review.staerken,
       schwaechen:  review.schwaechen,
-    }, null, 2));
+    }, null, 2);
+    stable.push('', '=== LETZTE BUCHBEWERTUNG ===', reviewJson);
+    sizes.review = reviewJson.length;
   }
 
   // Ohne Markierung des aktuellen Abschnitts: Block 1 bleibt für alle Abschnitte
   // gleich (Cache über Seitenwechsel); die Stellung steht in Block 2.
   const titlesBlock = buildBookTitlesBlock(opts.bookTitles);
   if (titlesBlock) stable.push('', titlesBlock);
+  sizes.titel = titlesBlock ? titlesBlock.length : 0;
 
   const titleLine = buildCurrentTitleLine(opts.bookTitles, opts.currentPageId ?? null);
   const page = [
@@ -184,7 +220,12 @@ export function buildChatSystemPrompt(pageName, pageText, figuren, review, syste
     '',
   ];
 
-  page.push('=== ABSCHNITTSINHALT ===', pageText, '');
+  // Der aktuelle Abschnitt als Tag (Format: ./book-text-format.js). `aktuell="ja"`
+  // trennt ihn von den Kontext-Passagen anderer Abschnitte (buildPageChatBookContext),
+  // die dasselbe Tag tragen — `original` darf nur aus diesem kommen.
+  page.push(formatAbschnitt({ title: pageName || '', text: pageText || '' }, { aktuell: 'ja' }), '');
+  sizes.abschnitt = String(pageText || '').length;
+  sizes.aenderungen = pageChangeNote ? pageChangeNote.length : 0;
   if (opts.hatNachrichten) page.push(pageChatNachrichtenHinweis(opts.langCode), '');
   if (opts.editStatus) page.push(...buildEditStatusBlock(opts.editStatus));
   if (pageChangeNote) {
@@ -192,27 +233,34 @@ export function buildChatSystemPrompt(pageName, pageText, figuren, review, syste
       '=== ÄNDERUNGEN DES AUTORS SEIT CHAT-START ([-entfernt-] {+eingefügt+}) ===',
       pageChangeNote,
       '',
-      'Hinweis: Frühere Antworten und Vorschläge dieses Gesprächs beziehen sich teils auf den alten Stand. Beziehe dich auf den aktuellen Abschnittsinhalt oben; erwähne die Änderungen nur, wenn sie selbst Thema sind.',
+      'Hinweis: Frühere Antworten und Vorschläge dieses Gesprächs beziehen sich teils auf den alten Stand. Beziehe dich auf den aktuellen Abschnitt oben (<abschnitt aktuell="ja">); erwähne die Änderungen nur, wenn sie selbst Thema sind.',
       '',
     );
   }
 
   const hatIdeen = Array.isArray(ideen) && ideen.length > 0;
-  page.push(...pageChatIdeenLines(ideen));
+  const ideenLines = pageChatIdeenLines(ideen);
+  page.push(...ideenLines);
+  sizes.ideen = ideenLines.join('\n').length;
 
-  page.push(...buildPageChatWeltLines(opts.weltfakten, opts.soziolekte));
+  const weltLines = buildPageChatWeltLines(opts.weltfakten, opts.soziolekte);
+  page.push(...weltLines);
+  sizes.welt = weltLines.join('\n').length;
+  sizes.lektorat = 0;
   const lekSzenen = Array.isArray(lektorat?.szenen) ? lektorat.szenen : [];
   if (lektorat && ((Array.isArray(lektorat.fehler) && lektorat.fehler.length > 0) || lekSzenen.length > 0 || lektorat.stilanalyse || lektorat.fazit)) {
     const datum = lektorat.checked_at ? lektorat.checked_at.slice(0, 16).replace('T', ' ') : null;
     page.push(`=== LETZTES LEKTORAT DIESES ABSCHNITTS${datum ? ` (Stand ${datum})` : ''} ===`);
-    page.push(JSON.stringify({
+    const lektoratJson = JSON.stringify({
       ...(Array.isArray(lektorat.fehler) && lektorat.fehler.length > 0 ? { fehler: lektorat.fehler } : {}),
       ...(lekSzenen.length > 0 ? { szenen: lekSzenen } : {}),
       ...(lektorat.stilanalyse ? { stilanalyse: lektorat.stilanalyse } : {}),
       ...(lektorat.fazit ? { fazit: lektorat.fazit } : {}),
-    }, null, 2));
+    }, null, 2);
+    page.push(lektoratJson);
+    sizes.lektorat = lektoratJson.length;
     page.push('');
-    page.push('Hinweis: Diese Beanstandungen stammen aus einem früheren Lektoratslauf. Der Abschnittstext kann seitdem überarbeitet worden sein — prüfe gegen den aktuellen Abschnittsinhalt, bevor du dich darauf beziehst. Wiederhole bereits erledigte Punkte nicht; greife noch offene Beanstandungen auf, wenn der Autor danach fragt oder daran arbeitet.');
+    page.push('Hinweis: Diese Beanstandungen stammen aus einem früheren Lektoratslauf. Der Abschnittstext kann seitdem überarbeitet worden sein — prüfe gegen den aktuellen Abschnitt (<abschnitt aktuell="ja">), bevor du dich darauf beziehst. Wiederhole bereits erledigte Punkte nicht; greife noch offene Beanstandungen auf, wenn der Autor danach fragt oder daran arbeitet.');
     page.push('');
   }
 
@@ -236,8 +284,8 @@ export function buildChatSystemPrompt(pageName, pageText, figuren, review, syste
     'VORSCHLÄGE-REGELN:',
     '- Vorschläge und Ideen stehen in den Feldern vorschlaege/ideen/ideen_aenderungen. Wiederhole sie nicht im Antworttext: kein Vorschlags- oder Ideen-Block, keine Statusliste in antwort — die App zeigt deine Vorschläge unter der Antwort an.',
     '- Wenn du stilistische, inhaltliche oder sprachliche Schwächen erkennst oder der Autor nach Verbesserungen fragt: liefere mindestens einen konkreten Vorschlag mit original und ersatz.',
-    '- original muss zeichengenau mit dem Abschnittstext übereinstimmen und darin genau einmal vorkommen (sonst etwas mehr Kontext mitnehmen).',
-    '- original liegt innerhalb EINES Absatzes (Absätze sind im Abschnittsinhalt durch Leerzeilen getrennt): über eine Absatzgrenze hinweg lässt sich nichts ersetzen — betrifft eine Änderung mehrere Absätze, liefere je Absatz einen eigenen Vorschlag.',
+    '- original stammt ausschliesslich aus dem aktuellen Abschnitt (<abschnitt aktuell="ja">), muss zeichengenau mit dessen Text übereinstimmen und darin genau einmal vorkommen (sonst etwas mehr Kontext mitnehmen).',
+    '- original liegt innerhalb eines Absatzes (Absätze sind im Abschnittstext durch Leerzeilen getrennt): über eine Absatzgrenze hinweg lässt sich nichts ersetzen — betrifft eine Änderung mehrere Absätze, liefere je Absatz einen eigenen Vorschlag.',
     '- ersatz muss den Stil des Autors beibehalten.',
     '- ersatz ist Fliesstext ohne Markdown. Einzige Ausnahme: *kursiv* bzw. **fett**, wo die Stelle Hervorhebung braucht (z.B. Gedanken, die im Buch kursiv stehen) — das wird beim Übernehmen echte Auszeichnung.',
     '- Soll ein Absatz geteilt werden, steht im ersatz an der Teilungsstelle eine Leerzeile (im JSON: \\n\\n). Sonst keine Zeilenumbrüche im ersatz. Absätze zusammenlegen geht nicht.',
@@ -252,10 +300,13 @@ export function buildChatSystemPrompt(pageName, pageText, figuren, review, syste
     ...(_isLocal ? [] : ['', JSON_ONLY]),
   );
 
-  return [
+  const blocks = [
     { text: stable.join('\n'), ttl: '1h' },
     { text: page.join('\n'), ttl: '1h' },
   ];
+  sizes.block1 = blocks[0].text.length;
+  sizes.block2 = blocks[1].text.length;
+  return blocks;
 }
 
 /**
@@ -454,10 +505,12 @@ export function buildBookChatSystemPrompt(bookName, relevantPages, figuren, revi
       volatil.push('=== RELEVANTE ABSCHNITTE AUS DEM BUCH ===');
       volatil.push('(In Lesereihenfolge; eine Auswahl, nicht das ganze Buch.)');
     }
+    // Abschnitte als Tags (Format: ./book-text-format.js); `auszug="ja"` = nur ein Ausschnitt.
     for (const page of relevantPages) {
-      const where = page.chapter_path ? ` (Kapitel: ${page.chapter_path})` : '';
-      volatil.push(excerpt ? `--- Auszug aus Abschnitt: ${page.name}${where} ---` : `--- Abschnitt: ${page.name}${where} ---`);
-      volatil.push(page.text);
+      volatil.push(formatAbschnitt({ title: page.name, text: page.text }, {
+        kapitel: page.chapter_path || null,
+        auszug: excerpt ? 'ja' : null,
+      }));
       volatil.push('');
     }
   }

@@ -24,7 +24,7 @@
     <div class="card-header-titlebar">
       <span class="card-eyebrow" x-text="$app.selectedBookName"></span>
       <span class="card-title" x-text="$app.t('events.title')"></span>
-      <div class="card-subline" x-show="$store.jobs.alleAktualisierenLastRun && !ereignisseLoading && !zeitstrahlConsolidating">
+      <div class="card-subline" x-show="$store.jobs.alleAktualisierenLastRun">
         <span class="card-timestamp" x-text="$app.t('common.asOf', { date: $store.jobs.alleAktualisierenLastRun })"></span>
       </div>
     </div>
@@ -53,21 +53,10 @@
     </div>
   </div>
 
-  <!-- Fortschritt Ermittlung -->
-  <div x-show="ereignisseLoading && ereignisseProgress > 0" class="progress-bar-wrap">
-    <div class="progress-bar" :style="{ '--progress': ereignisseProgress + '%' }"></div>
-  </div>
-  <div x-show="ereignisseStatus && !zeitstrahlConsolidating" class="card-status" x-html="ereignisseStatus"></div>
-
-  <!-- Fortschritt Konsolidierung -->
-  <div x-show="zeitstrahlConsolidating && zeitstrahlProgress > 0" class="progress-bar-wrap">
-    <div class="progress-bar" :style="{ '--progress': zeitstrahlProgress + '%' }"></div>
-  </div>
-  <div x-show="zeitstrahlStatus && !ereignisseLoading" class="card-status" x-html="zeitstrahlStatus"></div>
   <div x-show="eventEditMessage" class="card-status" x-text="eventEditMessage"></div>
 
   <!-- Leer-Hinweis mit CTA -->
-  <div x-show="$store.catalog.globalZeitstrahl.length === 0 && !zeitstrahlConsolidating && !ereignisseLoading" class="card-empty">
+  <div x-show="$store.catalog.globalZeitstrahl.length === 0" class="card-empty">
     <p class="card-empty-text" x-text="$app.t('common.noAnalysisYet')"></p>
     <p class="card-empty-hint" x-text="$app.t('empty.ereignisse.hint')"></p>
     <button type="button" class="primary card-empty-cta"

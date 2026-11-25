@@ -161,15 +161,19 @@
 /* Balken + Statuszeile sind EIN Block: der Abstand steht am Fuss des Paars,
    nicht zwischen seinen Haelften. */
 .progress-bar-wrap + .card-status { margin-top: 0; margin-bottom: var(--card-gap-section); }
-/* Laufender KI-Job einer Fläche: Balken über einer Zeile aus Status und
-   Text-Knopf «Abbrechen» (Figur-Werkstatt, Bogen, Titel-Werkstatt, Autorenprofil,
-   Stilprofil). */
+/* Laufender Job einer Fläche: Balken über einer Zeile aus Status und
+   Text-Knopf «Abbrechen». Markup baut ausschliesslich die Direktive
+   `x-job-progress` (js/job-progress.js); hier steht die einzige Optik. */
 .job-progress {
   display: flex;
   flex-direction: column;
   gap: var(--space-xs);
-  margin-top: var(--space-md);
+  margin-top: var(--card-gap-tight);
+  margin-bottom: var(--card-gap-section);
 }
+/* `display: flex` überstimmt das UA-[hidden]; die Direktive schaltet per hidden. */
+.job-progress[hidden],
+.job-progress [hidden] { display: none; }
 .job-progress > .progress-bar-wrap { margin: 0; }
 .job-progress-row {
   display: flex;

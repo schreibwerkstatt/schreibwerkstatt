@@ -31,6 +31,9 @@
 //     stopBeforeRound({ iter, webSearches }) → stopReason-String oder null (opt-in):
 //       vor jeder weiteren Runde gefragt; ein String beendet die Recherche und führt
 //       in den Synthese-Turn (Recherche-Chat: Web-Such-Gesamtdeckel → 'web_cap').
+//     roundStatus({ iter, webSearches }) → Text oder null (opt-in): nach jeder
+//       Werkzeug-Runde als Text-Block hinter die tool_results gehängt (Recherche-Chat:
+//       Web-Suchen bisher/übrig). Steht im Verlaufsende, bricht den Cache-Präfix nicht.
 //     inputTokenCap: Kosten-Deckel — kumulierte Input-Tokens pro Antwort. Erreicht,
 //       läuft statt weiterer Runden der erzwungene Synthese-Turn (mit
 //       inputCapInstruction ?? forceFinalInstruction). 0/undefined = aus.
@@ -113,7 +116,7 @@ const {
 } = require('./helpers');
 const { makeToolRunner } = require('./run-tools');
 const { READ_ONLY_TOOLS } = require('../chat-tools');
-const { makeToolViewer } = require('./tool-view');
+const { makeToolViewer, serverToolDigest } = require('./tool-view');
 const { makeRunLog, persistFailedRun } = require('./run-log');
 
 function makeAgenticChatJob(config) {
@@ -210,6 +213,8 @@ function makeAgenticChatJob(config) {
             }
           }
         }
+        const digest = serverToolDigest(result.rawContentBlocks);
+        if (digest) logger.info(`Server-Werkzeuge Runde ${state.rounds}: ${digest.line}`);
         updateJob(jobId, {
           tokensIn: state.totalTokIn, tokensOut: state.totalTokOut,
           cacheReadIn: state.totalCacheRead, cacheCreationIn: state.totalCacheCreation,
@@ -385,7 +390,8 @@ function makeAgenticChatJob(config) {
         // Tool-Use: alle tool_uses ausführen, als user-tool_result anhängen.
         messages.push({ role: 'assistant', content: result.rawContentBlocks });
         const toolResults = await runTools(toolUses, iter + 1);
-        messages.push({ role: 'user', content: toolResults });
+        const status = prep.roundStatus ? prep.roundStatus({ iter: iter + 1, webSearches: allWeb().searches }) : null;
+        messages.push({ role: 'user', content: status ? [...toolResults, { type: 'text', text: status }] : toolResults });
 
         // Kosten-Deckel: die Ergebnisse dieser Runde sind bezahlt und hängen an —
         // daraus synthetisieren, statt eine weitere Recherche-Runde zu starten.

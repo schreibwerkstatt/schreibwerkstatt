@@ -1,6 +1,7 @@
 import { fetchJson, clearStatusAfter, formatLastRun, localeTag } from '../utils.js';
 import { EVT } from '../events.js';
 import { tFetchError } from '../i18n.js';
+import { isCancelledJob } from '../cards/job-helpers.js';
 import { KOMPLETT_STEPS, KOMPLETT_CORE_STEPS, KOMPLETT_STEP_KEYS, KOMPLETT_PHASES,
          normalizeKomplettScope, isFullKomplettScope } from '../komplett-scope.js';
 
@@ -214,6 +215,8 @@ export const appKomplettMethods = {
       },
       onError: (job) => {
         this.$store.jobs.alleAktualisierenLoading = false;
+        // Abbruch ist kein Fehlschlag: neutrale Statuszeile.
+        if (isCancelledJob(job)) { this.$store.jobs.alleAktualisierenStatus = this.t('job.cancelled'); return; }
         this.$store.jobs.alleAktualisierenStatus = `${this.t('common.errorColon')}${job.error ? this.t(job.error, job.errorParams) : this.t('app.jobFailed')}`;
       },
       onDone: async (job) => {

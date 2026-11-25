@@ -1,10 +1,10 @@
 // Alpine.data('chatHistorySearch') — Suche im eigenen Verlauf, verschachtelt in
-// die Verlaufs-Sektion von Abschnitts-Chat (`chatHistorySearch('page')`) und
-// Buch-Chat (`chatHistorySearch('book')`), Markup: partials/chat-history-search.html.
+// die Verlaufs-Sektion aller fünf Chats (`chatHistorySearch('page'|'book'|
+// 'research'|'plot'|'ideen')`), Markup: partials/chat-history-search.html.
 // Server: GET /chat/search/:book_id (Wortlaut + Bedeutung, docs/chats.md#suche-im-verlauf).
 //
 // Ein Klick lädt das Gespräch über die Lade-Methode der umgebenden Karte
-// (`loadChatSession` / `loadBookChatSession`, Scope-Merge) und springt zur
+// (`load<Label>Session` aus makeChatMethods, Scope-Merge) und springt zur
 // gefundenen Nachricht (chat-base.js, `jumpToMsgId`). Liegt ein Abschnitts-Treffer
 // auf einem anderen Abschnitt, wird erst dorthin navigiert: der Seitenwechsel
 // schliesst den Abschnitts-Chat, das Gespräch wird darum vor dem Wieder-Öffnen
@@ -15,12 +15,17 @@ import { fetchJson } from '../utils.js';
 import { tFetchError } from '../i18n.js';
 
 const MIN_CHARS = 2;
+// Chat-Art → Lade-Methode der Karte (makeChatMethods: `load${label}Session`).
+const LOAD_METHOD = {
+  page: 'loadChatSession', book: 'loadBookChatSession', research: 'loadResearchChatSession',
+  plot: 'loadPlotChatSession', ideen: 'loadIdeenChatSession',
+};
 const DEBOUNCE_MS = 350;
 
 export function registerChatHistorySearch() {
   if (typeof window === 'undefined' || !window.Alpine) return;
   window.Alpine.data('chatHistorySearch', (kind) => ({
-    histKind: kind === 'book' ? 'book' : 'page',
+    histKind: LOAD_METHOD[kind] ? kind : 'page',
     histQuery: '',
     // Abschnitts-Chat: nur dieser Abschnitt ('page') oder alle Abschnitte ('book').
     histScope: 'page',
@@ -94,7 +99,7 @@ export function registerChatHistorySearch() {
 
     async openHistHit(hit) {
       const opts = { jumpToMsgId: hit.message_id };
-      if (this.histKind === 'book') return this.loadBookChatSession(hit.session_id, opts);
+      if (this.histKind !== 'page') return this[LOAD_METHOD[this.histKind]](hit.session_id, opts);
       const root = window.__app;
       if (String(root.currentPage?.id) === String(hit.page_id)) return this.loadChatSession(hit.session_id, opts);
       await root.gotoPageById(hit.page_id);

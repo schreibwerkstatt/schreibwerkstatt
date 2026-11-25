@@ -4,7 +4,7 @@
 
 import { fetchJson, sendJson, escHtml } from '../utils.js';
 import { i18nMarkerKey } from '../i18n.js';
-import { startPoll, runningJobStatus } from '../cards/job-helpers.js';
+import { startPoll, runningJobStatus, isCancelledJob } from '../cards/job-helpers.js';
 import { isSelectedBook } from '../cards/book-guard.js';
 import { memoMethods } from '../cards/card-memo.js';
 import { nameGuardMethods } from './kontinuitaet-nameguard.js';
@@ -85,7 +85,11 @@ export const kontinuitaetMethods = {
           this.kontinuitaetWarnings = Array.isArray(job?.result?.warnings) ? job.result.warnings : [];
           await this._loadKontinuitaetHistory();
         },
-        onError: async (job) => { showError(this._kontinuitaetJobErrorText(job)); },
+        onError: async (job) => {
+          // Abbruch ist kein Fehlschlag: neutrale Statuszeile statt Fehlertext.
+          if (isCancelledJob(job)) { clearRunState(); this.kontinuitaetStatus = escHtml(this._kontinuitaetJobErrorText(job)); return; }
+          showError(this._kontinuitaetJobErrorText(job));
+        },
         onNotFound: () => { clearRunState(); },
       });
     } catch (e) {

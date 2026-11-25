@@ -14,7 +14,7 @@
 // und die Fehler-Namespaces (PDF mappt `pdfExport.error.<code>`, DOCX/EPUB nutzen
 // `tError` → `error.<code>`) — letzteres bleibt der `errorFor`-Hook.
 
-import { startPoll } from './job-helpers.js';
+import { startPoll, isCancelledJob } from './job-helpers.js';
 import { downloadHref, downloadBlob, fetchJson } from '../utils.js';
 import { loadToken } from './book-guard.js';
 
@@ -271,6 +271,11 @@ export function exportJobSlice(cfg) {
         },
         onError: (job) => {
           this.exporting = false;
+          if (isCancelledJob(job)) {
+            this.exportProgress = 0;
+            this.exportStatus = window.__app.t('job.cancelled');
+            return;
+          }
           this.exportError = job.error
             ? window.__app.t(job.error, job.errorParams)
             : window.__app.t(`${cfg.i18nPrefix}.error.generic`);

@@ -7,7 +7,7 @@ const { parseJSONLenient } = require('../../../lib/ai');
 const { stripTrailingEmptyJson, EMPTY_ANSWER_MARKER, REFUSAL_MARKER } = require('../agentic-chat');
 const { toIntId } = require('../../../lib/validate');
 const { db, getBookSettings } = require('../../../db/schema');
-const { getSessionForJob } = require('../../../db/chat-sessions');
+const { getSessionForJob, deleteUnansweredQuestion } = require('../../../db/chat-sessions');
 const { recordRepeat } = require('../../../db/chat-quality');
 const logger = require('../../../logger');
 const { resolvePageBookId } = require('../../../lib/content-ownership');
@@ -196,6 +196,17 @@ function invalidateBookPageCache(bookId) {
 // Facade Job-Code kennen müsste. movePage feuert für Quell- UND Zielbuch.
 bookEvents.on('change', (bookId) => invalidateBookPageCache(bookId));
 
+// Kontext einer wiederholten Frage: was der Absender an ihr ablegte
+// (`contextFn`), ohne die Lauf-Spuren, die erst danach dazukamen.
+const RUN_STATE_KEYS = ['run_failed', 'repeat_of'];
+function retriedQuestionContext(raw) {
+  let ci = null;
+  try { ci = raw ? JSON.parse(raw) : null; } catch { ci = null; }
+  if (!ci || typeof ci !== 'object' || Array.isArray(ci)) return null;
+  for (const k of RUN_STATE_KEYS) delete ci[k];
+  return Object.keys(ci).length ? ci : null;
+}
+
 // ── Gemeinsamer Route-Handler ────────────────────────────────────────────────
 // `kind` bindet den Job-Typ an die Session-Art: eine Session läuft nur unter
 // dem Chat, für den sie angelegt wurde.
@@ -270,11 +281,23 @@ async function _handleChatPost(req, res, { jobType, kind, labelFn, runFn, prefli
     if (!(await preflight(req, res, { session, userEmail }))) return;
     if (answeredByDedup()) return;
   }
+  // `retry_of` («Erneut fragen», alle Chats): die unbeantwortete Frage dieser
+  // Session fällt weg, die neue tritt an ihre Stelle
+  // (db/chat-sessions.js#deleteUnansweredQuestion — nur wenn sie die letzte
+  // Nachricht der Session ist). Synchron vor dem Insert, nach allen Prüfungen.
+  // Der Teil-Verlauf des gescheiterten Laufs (`run_failed`) fällt dabei bewusst
+  // mit weg: die Wiederholung ersetzt den Versuch, sie hängt ihn nicht an.
+  const retryOf = toIntId(req.body?.retry_of);
+  const replaced = retryOf ? deleteUnansweredQuestion(session.id, retryOf) : null;
   // Optionaler Kontext der Frage (Recherche-Chat: Seite/Kapitel des Kontext-Chips).
   // `contextFn` prueft ihn gegen das Buch der Session und liefert das, was an der
   // User-Nachricht als context_info steht — der Job liest es von dort, statt die
   // Job-Signatur aller Chats zu erweitern. Ungueltiges faellt still weg.
-  const msgContext = contextFn ? contextFn(req, session) : null;
+  // Eine Wiederholung behält den Kontext, mit dem die Frage gestellt wurde —
+  // nicht den, den der Chip inzwischen zeigt.
+  const msgContext = replaced
+    ? retriedQuestionContext(replaced.context_info)
+    : (contextFn ? contextFn(req, session) : null);
 
   const now = new Date().toISOString();
   const userMsgResult = db.prepare(

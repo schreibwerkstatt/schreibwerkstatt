@@ -4,15 +4,7 @@
      Card-Header; Beat-Verankerung ebenfalls (eigenes Badge pro Beat). -->
 <!-- Consistency unterhalb des Boards: Fortschritt + KI-Ergebnis, gefolgt von der
      Prüfungs-Historie ganz unten. -->
-<div x-show="consistencyLoading" class="plot-job-bar">
-  <div class="progress-bar-wrap" x-show="consistencyProgress > 0">
-    <div class="progress-bar" :style="{ '--progress': consistencyProgress + '%' }"></div>
-  </div>
-  <div class="plot-job-bar-row">
-    <span class="card-status" x-show="consistencyStatus" x-html="consistencyStatus"></span>
-    <button type="button" class="btn-compact btn-compact--ghost" @click="cancelConsistency()" x-text="$app.t('plot.consistency.cancel')"></button>
-  </div>
-</div>
+<div x-job-progress="{ active: consistencyLoading, progress: consistencyProgress, status: consistencyStatus, cancel: () => cancelConsistency() }"></div>
 
 <!-- Zeit-Messung: deterministische Befunde (GET /plot/time-check), getrennt vom
      KI-Urteil darunter. Nur sichtbar, wenn es etwas zu melden gibt — ein Beat
@@ -112,46 +104,19 @@
 
 <!-- Konsistenz-Prüfungs-Historie: persistierte Läufe pro Buch. Klick lädt das
      Result oberhalb ins Consistency-Panel (selectedRunId). Wie Werkstatt-Run-Verlauf. -->
-<div class="history-bar" x-show="consistencyRuns.length > 0" x-cloak>
+<div class="history-bar" x-show="consistencyRuns.length > 0" x-cloak x-data="{ runRow: plotConsistencyRunRow() }">
   <div class="history-heading" x-text="$app.t('plot.consistency.runs', { count: consistencyRuns.length })"></div>
   <template x-for="r in consistencyRuns" :key="r.id">
-    <div class="history-item hover-reveal-host internal-link" :class="{ 'history-item--open': selectedRunId === r.id }"
-         @click="openConsistencyRun(r.id)">
-      <span class="history-date" x-text="formatRunDate(r.created_at)"></span>
-      <span class="tag" x-text="$app.t('plot.consistency.konfliktCount', { n: r.konflikt_count })"></span>
-      <span x-show="r.model" class="tag" x-text="r.model"></span>
-      <span class="history-chevron" :class="{ open: selectedRunId === r.id }" aria-hidden="true"></span>
-      <button type="button" class="history-item-delete hover-reveal"
-              @click.stop="deleteConsistencyRun(r.id)"
-              :data-tip="$app.t('common.deleteEntry')"
-              :aria-label="$app.t('common.deleteEntry')"><svg class="icon" aria-hidden="true"><use href="/icons.svg#trash"/></svg></button>
-    </div>
+    <!-- @include run-history-row -->
   </template>
 </div>
 
 <!-- Brainstorm-Lauf-Historie: persistierte Läufe pro Buch (zusätzlich pro Akt/
      Strang). Klick lädt die Vorschläge zurück ins Inline-Panel des Akts/der Zelle
      (selectedBrainstormRunId). Läufe mit gelöschtem Akt sind nicht reaktivierbar. -->
-<div class="history-bar" x-show="brainstormRuns.length > 0" x-cloak>
+<div class="history-bar" x-show="brainstormRuns.length > 0" x-cloak x-data="{ runRow: plotBrainstormRunRow() }">
   <div class="history-heading" x-text="$app.t('plot.brainstorm.runs', { count: brainstormRuns.length })"></div>
   <template x-for="r in brainstormRuns" :key="r.id">
-    <!-- Lauf eines archivierten Akts: kein Panel im Archiv → Hinweis statt
-         stillem Nichts (openBrainstormRunChecked, board-ui.js). -->
-    <div class="history-item hover-reveal-host internal-link" :class="{ 'history-item--open': selectedBrainstormRunId === r.id, 'history-item--disabled': r.act_id === null || brainstormRunActArchived(r) }"
-         :data-tip="brainstormRunActArchived(r) ? $app.t('plot.brainstorm.actArchived') : null"
-         @click="r.act_id !== null && openBrainstormRunChecked(r)">
-      <span class="history-date" x-text="formatRunDate(r.created_at)"></span>
-      <span class="tag" x-text="r.act_name || $app.t('plot.brainstorm.actDeleted')"></span>
-      <template x-if="r.thread_id && r.thread_name">
-        <span class="entity-ref" x-entity-ref="{ type: 'strang', id: r.thread_id, label: r.thread_name, static: true }"></span>
-      </template>
-      <span class="tag" x-text="$app.t('plot.brainstorm.vorschlagCount', { n: r.vorschlag_count })"></span>
-      <span x-show="r.model" class="tag" x-text="r.model"></span>
-      <span class="history-chevron" :class="{ open: selectedBrainstormRunId === r.id }" aria-hidden="true" x-show="r.act_id !== null"></span>
-      <button type="button" class="history-item-delete hover-reveal"
-              @click.stop="deleteBrainstormRun(r.id)"
-              :data-tip="$app.t('common.deleteEntry')"
-              :aria-label="$app.t('common.deleteEntry')"><svg class="icon" aria-hidden="true"><use href="/icons.svg#trash"/></svg></button>
-    </div>
+    <!-- @include run-history-row -->
   </template>
 </div>

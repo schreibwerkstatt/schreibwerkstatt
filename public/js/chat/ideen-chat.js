@@ -15,6 +15,7 @@ export function ideenChatState() {
     ideenChatSessions: [],
     ideenChatMessages: [],
     ideenChatSessionId: null,
+    _hitMsgId: null,           // Treffer der Verlaufssuche: Sprungziel + Hervorhebung (chat-base.js)
     ideenChatInput: '',
     ideenChatLoading: false,
     ideenChatRunningSessionId: null,

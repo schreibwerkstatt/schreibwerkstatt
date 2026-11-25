@@ -113,3 +113,38 @@ test('Prognose zeigt, wie viel Text neu gelesen wird — ohne Preis', async ({ p
   await expect(box).toContainText(/Analyse-Vorgaben|analysis settings/);
   await page.keyboard.press('Escape');
 });
+
+test('Laufende Komplettanalyse: Abbrechen im Status-Panel, Abbruch ist kein Fehler', async ({ page }) => {
+  const guard = attachConsoleGuard(page);
+  // Ohne Event-Stream pollt startPoll alle 2 s; der Stream schickte für den
+  // gemockten Job nie das Ende.
+  await page.route('**/events/stream**', (r) => r.fulfill({ status: 204, body: '' }));
+  await bootApp(page);
+  await selectSeededBook(page);
+  let cancelled = false;
+  await page.route('**/jobs/komplett-analyse', (r) => (r.request().method() === 'POST'
+    ? r.fulfill({ contentType: 'application/json', body: JSON.stringify({ jobId: 'job-komplett-x' }) })
+    : r.continue()));
+  await page.route('**/jobs/job-komplett-x', (r) => {
+    if (r.request().method() === 'DELETE') { cancelled = true; return r.fulfill({ contentType: 'application/json', body: '{"ok":true}' }); }
+    const job = cancelled
+      ? { id: 'job-komplett-x', status: 'cancelled', error: 'job.cancelled', progress: 20 }
+      : { id: 'job-komplett-x', status: 'running', progress: 20, statusText: 'job.phase.aiReply', tokensIn: 1200, tokensOut: 300 };
+    return r.fulfill({ contentType: 'application/json', body: JSON.stringify(job) });
+  });
+  await page.evaluate(() => window.__app.startKomplettRun());
+
+  const panel = page.locator('.komplett-status-panel');
+  const progress = panel.locator('.job-progress');
+  const cancelBtn = progress.locator('.job-progress-cancel');
+  await expect(cancelBtn).toBeVisible({ timeout: 10000 });
+  await expect(panel.locator('.komplett-tokens')).toBeVisible();
+  const del = page.waitForRequest((r) => r.method() === 'DELETE' && r.url().endsWith('/jobs/job-komplett-x'));
+  await cancelBtn.click();
+  await del;
+  const t = (k) => page.evaluate((key) => window.__app.t(key), k);
+  await expect(progress.locator('.card-status')).toHaveText(await t('job.cancelled'), { timeout: 10000 });
+  await expect(progress.locator('.card-status')).not.toContainText(await t('common.errorColon'));
+  await expect(cancelBtn).toBeHidden();
+  guard.assertClean('Komplettanalyse abbrechen');
+});

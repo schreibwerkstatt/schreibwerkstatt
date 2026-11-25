@@ -131,6 +131,9 @@ export const lifecycleMethods = {
     this.indexing = false;
     this.brainstorming = false;
     this.consistencyRunning = false;
+    this.scanStatus = '';
+    this.brainstormStatus = '';
+    this.consistencyStatus = '';
     this._memos = {};
   },
 

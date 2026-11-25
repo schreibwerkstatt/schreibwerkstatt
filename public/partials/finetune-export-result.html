@@ -4,29 +4,14 @@
      Blöcke als @include, weil sie pro x-for-Iteration geklont werden.
      Wird in `#partial-finetune-export-result` der Karte finetune-export.html
      geladen und erbt deren x-data-Scope. -->
-<div x-show="finetuneLoading" class="progress-bar-wrap">
-  <div class="progress-bar" :style="{ '--progress': finetuneProgress + '%' }"></div>
-</div>
+<div x-job-progress="{ active: finetuneLoading, progress: finetuneProgress, status: finetuneStatus, timer: '_finetunePollTimer' }"></div>
 
-<div x-show="finetuneStatus" class="card-status" x-html="finetuneStatus"></div>
-
-<div x-show="finetuneExports.length > 0" class="card-history-section">
+<div x-show="finetuneExports.length > 0" class="card-history-section" x-data="{ runRow: finetuneRunRow() }">
   <div class="history-heading" x-text="$app.t('finetune.history.title')"></div>
-  <template x-for="ex in finetuneExports" :key="ex.id">
+  <template x-for="r in finetuneExports" :key="r.id">
     <div>
-      <div class="history-item hover-reveal-host internal-link" :class="{ 'history-item--open': finetuneOpenId === ex.id }"
-           @click="finetuneToggleExport(ex.id)">
-        <span class="history-date" x-text="$app.formatDate(ex.createdAt)"></span>
-        <span x-show="finetuneProfileLabel(ex.stats)" class="tag" x-text="finetuneProfileLabel(ex.stats)"></span>
-        <span class="tag" x-text="$app.t('finetune.stats.total', { n: ex.stats?.total ?? 0 })"></span>
-        <span x-show="ex.stale" class="tok-badge tok-med" x-text="$app.t('finetune.history.stale')"></span>
-        <span class="history-chevron" :class="{ open: finetuneOpenId === ex.id }" aria-hidden="true"></span>
-        <button type="button" class="history-item-delete hover-reveal"
-                @click.stop="finetuneDeleteExport(ex.id)"
-                :data-tip="$app.t('common.deleteEntry')"
-                :aria-label="$app.t('common.deleteEntry')"><svg class="icon" aria-hidden="true"><use href="/icons.svg#trash"/></svg></button>
-      </div>
-      <template x-if="finetuneOpenId === ex.id">
+      <!-- @include run-history-row -->
+      <template x-if="finetuneOpenId === r.id">
         <div class="history-detail">
           <!-- @include finetune-export-files -->
           <!-- @include finetune-export-quality -->

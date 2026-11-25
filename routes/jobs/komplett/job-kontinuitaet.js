@@ -19,6 +19,7 @@ const {
   chunkLimitsFor, BATCH_SIZE, jobAbortControllers,
   tps, retryOnTransientAi, summarizeCostByPhase,
 } = require('../shared');
+const { formatAbschnitte } = require('../shared/book-text-format');
 const { makeKomplettCall } = require('./call');
 const { prepareBookText, bookSystemBlock } = require('./book-text');
 const appSettings = require('../../../lib/app-settings');
@@ -145,7 +146,7 @@ async function runKontinuitaetJob(jobId, bookId, bookName, userEmail, provider =
         const fromPct = 50 + Math.round((gi / groupOrder.length) * 35);
         const toPct   = 50 + Math.round(((gi + 1) / groupOrder.length) * 35);
         updateJob(jobId, { progress: fromPct, statusText: 'job.phase.factsInGroup', statusParams: { name: group.name, current: gi + 1, total: groupOrder.length } });
-        const chText = group.pages.map(p => `### ${p.title}\n${p.text}`).join('\n\n---\n\n');
+        const chText = formatAbschnitte(group.pages);
         try {
           // Retry vor dem graceful-skip: der Checkpoint rückt nach gi+1 vor, ein
           // übersprungenes Kapitel wird auch beim Resume NIE nachgeholt – ein
@@ -171,7 +172,7 @@ async function runKontinuitaetJob(jobId, bookId, bookName, userEmail, provider =
         for (const gi of failedGis) {
           const group = groups.get(groupOrder[gi]);
           if (!group) continue;
-          const chText = group.pages.map(p => `### ${p.title}\n${p.text}`).join('\n\n---\n\n');
+          const chText = formatAbschnitte(group.pages);
           try {
             const chResult = await retryOnTransientAi(() => call(jobId, tok,
               prompts.buildKontinuitaetChapterFactsPrompt(group.name, chText),

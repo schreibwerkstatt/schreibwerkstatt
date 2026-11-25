@@ -13,6 +13,7 @@ export function plotChatState() {
     plotChatSessions: [],
     plotChatMessages: [],
     plotChatSessionId: null,
+    _hitMsgId: null,           // Treffer der Verlaufssuche: Sprungziel + Hervorhebung (chat-base.js)
     plotChatInput: '',
     plotChatLoading: false,
     plotChatRunningSessionId: null,

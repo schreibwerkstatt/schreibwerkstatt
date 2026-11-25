@@ -59,7 +59,7 @@ test('sampleChapters: gleichmässig verteilt, nur nicht-leere Kapitel, determini
   assert.equal(s1.length, 2);
   assert.deepEqual(s1.map(s => s.name), s2.map(s => s.name), 'deterministisch');
   assert.ok(!s1.some(s => s.name === 'K2'), 'leeres Kapitel wird nie gesampelt');
-  assert.ok(s1[0].chText.includes('### S1'));
+  assert.ok(s1[0].chText.includes('<abschnitt titel="S1">'));
 });
 
 test('sampleChapters: n=0 oder keine nicht-leeren → []', () => {
@@ -75,6 +75,8 @@ test('sampleChapters: kappt Kapiteltext auf maxCharsPerChapter', () => {
   ]);
   const [s] = sampleChapters(groups, groupOrder, 1, 100);
   assert.ok(s.chText.length <= 100);
+  // Gekürzt wird im Abschnittstext, das Tag bleibt geschlossen.
+  assert.ok(s.chText.endsWith('</abschnitt>'), s.chText);
 });
 
 // ── F3: applyAliasClusters + Alias-Lookup ────────────────────────────────────

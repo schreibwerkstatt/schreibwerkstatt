@@ -3,6 +3,7 @@
 const { addFigurenBeziehungen, saveZeitstrahlEvents } = require('../../../../db/schema');
 const { listFigureEventsForTimeline } = require('../../../../db/zeitstrahl');
 const { i18nError, i18nErrText, updateJob, toSystemBlocks } = require('../../shared');
+const { formatKapitel } = require('../../shared/book-text-format');
 const { consolidationFitsCap } = require('../utils');
 const { bookSystemBlock: buildBookBlock } = require('../book-text');
 const { komplettMaxTokens } = require('./tokens');
@@ -92,13 +93,13 @@ async function runPhase3b(ctx, figuren) {
       let total = 0;
       for (const pi of sortedIdx) {
         const p = pageContents[pi];
-        const chunk = `## ${p.chapter || 'Sonstige'}\n### ${p.title}\n${p.text}`;
+        const chunk = formatKapitel(p.chapter || 'Sonstige', [p]);
         if (total + chunk.length > excerptMax) break;
         parts.push(chunk);
         total += chunk.length;
       }
       if (parts.length > 0) {
-        textForPrompt = parts.join('\n\n---\n\n');
+        textForPrompt = parts.join('\n\n');
         log.info(`Phase 3b Co-Occurrence – ${parts.length} Seiten (${total} Zeichen) aus ${candidatePageIdx.size} Kandidaten.`);
       }
     }

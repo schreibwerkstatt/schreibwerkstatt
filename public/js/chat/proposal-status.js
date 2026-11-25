@@ -163,6 +163,11 @@ export function proposalApplyError(r, { applyKey, statusKey }) {
  * @param {Function} [cfg.confirmFirst] (msg, pi, p) → true = weiter; nur vor dem ersten Schreiben
  * @param {Function} [cfg.afterWrite]  (p, id) direkt nach dem Schreiben (busy schon frei)
  * @param {Function} [cfg.afterApply]  (p, id) nach dem Status — auch wenn nur der Status scheiterte
+ * @param {object} cfg.view      Rahmen der Vorschlagskarte (Fragmente chat-vorschlag-board-head/-foot):
+ *   names.view wird erzeugt: (msg, pi) → Anzeige-Modell. Schlüssel:
+ *   appliedKey/reapplyKey/staleKey/removedKey (i18n), typeLabel (Methodenname, p → Text),
+ *   blockedParams (optional, (params) → params: Werte des Blockier-Grunds übersetzen),
+ *   show (optional, { can: Methodenname (p, msg) → bool, run: Methodenname (p, msg), labelKey }).
  */
 export function makeProposalApplyMethods(cfg) {
   const n = cfg.names;
@@ -202,6 +207,50 @@ export function makeProposalApplyMethods(cfg) {
         this.busy = false;
         p._applying = false;
       }
+    },
+
+    // Anzeige-Modell für den Rahmen der Vorschlagskarte (Kopf mit Etikett und
+    // Knöpfen, Fuss mit Begründung, Hinweisen, Fehler). Inhalt je Typ bleibt im Chat.
+    [n.view](msg, pi) {
+      const v = cfg.view;
+      const t = (k, params) => window.__app.t(k, params);
+      const p = this[n.list](msg)[pi];
+      const st = this[n.status](msg, pi) || {};
+      const state = st.state;
+      let blockedText = '';
+      if (st.blocked && !p?._written) {
+        const params = { ...(st.blocked.params || {}) };
+        blockedText = t(st.blocked.key, v.blockedParams ? v.blockedParams.call(this, params) : params);
+      }
+      const notes = [];
+      if (state === 'open' && blockedText) notes.push(blockedText);
+      if (state === 'open' && !st.blocked && st.stale) notes.push(t(v.staleKey));
+      if (st.removed) notes.push(t(v.removedKey));
+      const canShow = !!(v.show && state === 'applied' && this[v.show.can](p, msg));
+      return {
+        state,
+        cls: {
+          'chat-vorschlag--applied': state === 'applied',
+          'chat-vorschlag--discarded': state === 'discarded',
+          'chat-vorschlag--stale': state === 'open' && !!(st.stale || st.blocked),
+        },
+        label: state === 'applied' ? t(v.appliedKey)
+          : state === 'discarded' ? t('chat.discarded')
+            : this[v.typeLabel](p),
+        applying: !!p?._applying,
+        canApply: this[n.canApply](msg, pi),
+        applyLabel: p?._applying ? t('common.saving') : (st.removed ? t(v.reapplyKey) : t('chat.apply')),
+        blockedText,
+        canShow,
+        showLabel: v.show ? t(v.show.labelKey) : '',
+        discardLabel: state === 'discarded' ? t('chat.restore') : t('chat.discard'),
+        begruendung: p?.begruendung || '',
+        notes,
+        error: p?._error || '',
+        apply: () => this[n.apply](msg, pi),
+        show: () => (canShow ? this[v.show.run](p, msg) : null),
+        discard: () => this[n.discard](msg, pi, state !== 'discarded'),
+      };
     },
 
     async [n.discard](msg, pi, discard = true) {

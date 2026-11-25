@@ -77,6 +77,22 @@ export const researchProposalMethods = {
     return (this.researchProposals(msg)[pi]?.urls || []).filter(u => !this.isProposalUrlRemoved(msg, pi, u));
   },
 
+  // ── Volltext ────────────────────────────────────────────────────────────
+  // Der Auszug ist auf vier Zeilen gekappt (chat.css); ist der Text länger,
+  // klappt «Ganzen Text zeigen» ihn auf — ohne erst «Bearbeiten» öffnen zu müssen.
+  // Schätzung statt Messung: eine Zeile der Leiste trägt rund 60 Zeichen.
+  isProposalBodyLong(p) {
+    const body = String(p?.body || '');
+    return body.length > 240 || body.split('\n').length > 4;
+  },
+  isProposalBodyOpen(msg, pi) { return !!this._proposalBodyOpen[_key(msg, pi)]; },
+  toggleProposalBody(msg, pi) {
+    const k = _key(msg, pi);
+    const next = { ...this._proposalBodyOpen };
+    if (next[k]) delete next[k]; else next[k] = true;
+    this._proposalBodyOpen = next;
+  },
+
   // ── Bearbeiten vor dem Speichern ────────────────────────────────────────
   // Typen, die ein Vorschlag haben kann (Server: PROPOSAL_KINDS in lib/research-validate.js).
   proposalKindOptions() {
@@ -272,6 +288,8 @@ export function researchProposalState() {
     _proposalEdits: {},
     // Weggelassene Links je Vorschlag (gleicher Schlüssel) → URL-Strings.
     _proposalRemovedUrls: {},
+    // Aufgeklappte Volltexte je Vorschlag (gleicher Schlüssel) → true.
+    _proposalBodyOpen: {},
     // Kontext-Chip an: gespeicherte Vorschläge mit Seite/Kapitel verknüpfen.
     researchChatUseContext: false,
   };

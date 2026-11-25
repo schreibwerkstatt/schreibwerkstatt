@@ -24,10 +24,7 @@
   <div x-show="bookMapAvailable && !bookMapHasIndex && !bookMapIndexError" class="muted-msg muted-msg--spaced" x-text="$app.t('buchlandkarte.needIndex')"></div>
   <div x-show="bookMapAvailable && bookMapIndexError" class="card-hint--warn" x-text="$app.t('buchlandkarte.indexUnknown')"></div>
 
-  <div x-show="bookMapLoading && bookMapProgress > 0" class="progress-bar-wrap">
-    <div class="progress-bar" :style="{ '--progress': bookMapProgress + '%' }"></div>
-  </div>
-  <div x-show="bookMapStatus" class="card-status" x-text="bookMapStatus"></div>
+  <div x-job-progress="{ active: bookMapLoading, progress: bookMapProgress, text: bookMapStatus, timer: '_bookMapPollTimer' }"></div>
 
   <!-- Ergebnis -->
   <template x-if="bookMapResult">

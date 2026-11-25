@@ -54,7 +54,7 @@ Token-Referenz (Farben, Radien, Spacing, Schriftgrössen): [public/css/tokens.cs
 - [Filter-Bar](#filter-bar-listenfilter) — Such-/Sort-Eingaben
 - [Heatmap-Visualisierung](#heatmap-visualisierung) — Daten-Intensität
 - [Jahr×Monat-Heatmap](#jahrmonat-heatmap) — Jahre × 12 Monate, Dichte-Raster
-- [History-Item-List](#history-item-list-versionierung-job-verlauf) — Versionen + Job-Verlauf
+- [History-Item-List](#history-item-list-versionierung-job-verlauf) — Versionen + Job-Verlauf; [Lauf-Verlauf](#lauf-verlauf) — Liste früherer Läufe: eine Zeile, ein Datumsformat, gegated
 - [Tree](#tree-sidebar-navigation) — Buch/Kapitel/Seiten-Navigation
 - [Skeleton-Loader](#skeleton-loader) — Shimmer beim Laden
 - [Klappbarer Section-Toggle](#klappbarer-section-toggle-accordion) — Accordion via `.collapsible-toggle`
@@ -169,7 +169,7 @@ Pflicht-Reihenfolge: **Use → Markup → Klassen → Regeln → Beispiele**. We
 | **Rückgängig** | Boards mit Historie (Plot, Organizer, Ideen, Recherche, Motiv): Knöpfe im Kartenkopf + Cmd/Ctrl+Z, Umschalt+Cmd/Ctrl+Z; Kern [board-history.js](public/js/cards/board-history.js), Tasten [board-history-keys.js](public/js/cards/board-history-keys.js). Löschen ist ein Record mit Snapshot (Undo legt neu an, `_remapHistory` schreibt die neue ID um), es leert die Historie nicht | — |
 | **Zusammenführen** | Menüeintrag «Zusammenführen mit …» → Merge-Picker, für aktive wie veraltete Einträge | — |
 | **Mehrfachauswahl** | Kontrollkästchen dauerhaft sichtbar, [Auswahl-Leiste](#auswahl-leiste-selection-bar) erscheint ab der ersten Markierung — kein Auswahl-Modus-Knopf | — |
-| **KI-Lauf verfolgen** | `.job-progress`: Balken, Status, «Abbrechen»; ein abgebrochener Lauf zeigt keinen Fehler | — |
+| **KI-Lauf verfolgen** | `<div x-job-progress="{ active, progress, status, timer }"></div>` ([job-progress.js](public/js/job-progress.js)): Balken, Status, «Abbrechen»; ein abgebrochener Lauf zeigt keinen Fehler, sondern neutral «Abgebrochen» (`isCancelledJob` im `onError`) | — |
 | **KI-Ergebnis übernehmen** | [Vorschlagskarte](#chat-vorschlagskarte-chat-vorschlag) mit Übernehmen **und** Verwerfen je Eintrag; ein KI-Lauf überschreibt nie selbst ein Feld. Ausnahme ist ein Fachmodell, das Varianten sammelt (Titel-Werkstatt) | — |
 
 **Regeln:**
@@ -371,8 +371,8 @@ Dieselbe Mechanik gilt fuer Bausteine, die kein `.card-section` sind, aber aufei
 | `.card-hint` | grauer Erklärsatz | `--sm` (12px), `--right`, `--warn`, `--lead` (Einleitung, 60ch) |
 | `.card-status` | Lade-/Leer-/Fehlerzeile | `--error` |
 | `.muted-msg` | gedämpfte Zustandsmeldung | `--sm`, `--block`, `--spaced` |
-| `.progress-bar-wrap` + `.progress-bar` | Job-Fortschritt | — |
-| `.job-progress` + `.job-progress-row` | laufender KI-Job einer Werkstatt: Balken, darunter Status (`.card-status`) und Text-Knopf «Abbrechen» — Figur-Werkstatt, Bogen, Titel-Werkstatt, Autorenprofil, Stilprofil | — |
+| `.progress-bar-wrap` + `.progress-bar` | Fortschritt ohne Job (Ziel, Meilenstein, Lineal); Job-Fortschritt baut die Direktive `x-job-progress` | — |
+| `x-job-progress` (Element leer) | laufender Job: Balken, darunter Status (`.card-status`) und Text-Knopf «Abbrechen». Die Direktive ([job-progress.js](public/js/job-progress.js)) baut `.job-progress` + `.job-progress-row` selbst, die Optik steht nur in [card-blocks.css](public/css/components/card-form/card-blocks.css); gegated: [job-progress-single-place.test.mjs](tests/unit/job-progress-single-place.test.mjs) | — |
 | `.filter-bar` | Listenfilter (siehe [Filter-Bar](#filter-bar-listenfilter)) | `--inline` |
 | `.card-edit-panel` | gerahmter Anlegen-/Bearbeiten-Block über einer Katalog-Liste (Akzentleiste links) — Schauplätze, Quellen, Weltfakten | — |
 
@@ -942,7 +942,7 @@ Ausblendbare **Karte**: `btn-card-close` im `.card-header` (gleiches Icon, gleic
 **Konsumenten:**
 - Boards: Ideen-Board (Kartenaktionen + Stufen-Knöpfe, [ideen-board.html](public/partials/ideen-board.html)), Recherche-Status-Board ([recherche-status-board.html](public/partials/recherche-status-board.html)).
 - Listen: Recherche-Liste ([recherche-item.html](public/partials/recherche-item.html)), Quellen-Tabelle ([sources.html](public/partials/sources.html)), Motiv-Themen ([motiv-panel.html](public/partials/motiv-panel.html)), Titel-Varianten ([titelwerkstatt.html](public/partials/titelwerkstatt.html)).
-- Verläufe (`.history-item` + `.history-item-delete`): Prüf-Verlauf der Seite, Tagebuch-Rückblick, Motiv-Brainstorm/-Befunde, Plot-KI-Läufe, Figur-Werkstatt-Läufe.
+- Verläufe (`.history-item` + `.history-item-delete`): Prüf-Verlauf der Seite, Tagebuch-Rückblick, Motiv-Brainstorm/-Befunde, Plot-KI-Läufe, Figur-Werkstatt-Läufe, Buch-/Kapitelbewertung, Fine-Tuning-Sets ([Lauf-Verlauf](#lauf-verlauf)).
 - Sitzungslisten (`.chat-session-item` + `.chat-session-delete`) aller fünf Chats: Abschnitts-, Buch-, Plot-, Recherche- und Ideen-Chat.
 - Kommentar-Threads: Notebook-Leseansicht + Bucheditor ([comment-thread-body.html](public/partials/comment-thread-body.html)) und Share-Reader ([share-reader/thread-render.js](public/js/share-reader/thread-render.js)).
 
@@ -2602,7 +2602,7 @@ cancelXyz()       { this.xyzId = null; this._releasePickerPopover(); }
 **Regeln:**
 - **Wechsel eines Werts** (Stufe, Status, Ort, Name, Spannung, Position) ist `.chat-vorschlag-change`: alt gedämpft, Pfeil, neu. **Nie** das Lektorat-Pillenpaar `.finding-original`/`.finding-korrektur` — rot/grün gestapelt liest sich «Offen → Erledigt» wie ein Korrekturbefund. Ausnahme ist der Abschnitts-Chat, dessen Vorschlag eine Textkorrektur ist.
 - **Text-Änderung** (Beschreibung, Ideentext) ist der Wort-Diff (`.chat-word-diff` + `diff-parts.js`).
-- **Feldzeilen** haben eine feste Label-Spalte (`--chat-vorschlag-field-w`), damit die Werte einer Karte bündig stehen; Labels bleiben kurz («Beleg», Erklärung als `data-tip`).
+- **Feldzeilen** haben eine feste Label-Spalte (`--chat-vorschlag-field-w`), damit die Werte einer Karte bündig stehen; Labels bleiben kurz («Beleg», Erklärung als `data-tip`). Sind die Werte lange Texte (Recherche-Fundstück: Quellenangabe, Link-Titel), trägt die Karte `.chat-vorschlag--stacked` — Label über dem Wert, der Wert bekommt die volle Breite.
 - Neuer Eintrag: Fliesstext als `.chat-vorschlag-text`, Zusatzangaben (Ort, Kapitel, Figuren) als `.chat-vorschlag-meta` darunter.
 
 **Gegated:** [chat-vorschlag-single-place.test.mjs](tests/unit/chat-vorschlag-single-place.test.mjs).
@@ -2683,6 +2683,16 @@ cancelXyz()       { this.xyzId = null; this._releasePickerPopover(); }
 CSS: `.history-item*` + `.history-chevron` in [public/css/components/primitives.css](public/css/components/primitives.css), `.history-detail` in [public/css/page/tree-history.css](public/css/page/tree-history.css). `.history-detail` hat einen gestrichelten Top-Border, der visuell anschliesst. Chevron + State (`open`) wiederverwenden — nicht neu definieren.
 
 **Löschen-Symbol** (`.history-item-delete`, letztes Kind der Zeile): sitzt in jeder Zeile am selben Ort — rechts aussen, vertikal mittig, ausserhalb des Inhaltsflusses; die Zeile reserviert seinen Platz als Innenabstand. Umbrechender Inhalt nimmt es nicht mit, und es löst keinen Überlauf aus. Unter 600 px scrollt die Zeile seitlich statt umzubrechen; das Symbol klebt dann rechts (`position: sticky`) und deckt den darunter laufenden Inhalt. Eine Karte, deren Zeile in einer schmalen Spalte einzeilig bleiben soll, setzt `flex-wrap: nowrap` und lässt eine Nebenangabe schrumpfen (`min-width: 0` + Ellipse, voller Text im Tooltip) — Muster: Liste der Rückblick-Karte ([tagebuch-rueckblick-history-row.html](public/partials/tagebuch-rueckblick-history-row.html)).
+
+### Lauf-Verlauf
+
+**Use:** jede Liste früherer Läufe einer Karte, deren Zeile einen Lauf öffnet bzw. aufklappt: KI-Läufe (Plot-Brainstorm/-Konsistenz, Motiv-Brainstorm/-Prüfung, Figur-Werkstatt), Buch- und Kapitelbewertung, Fine-Tuning-Sets.
+
+**Kern:** [run-history.js](public/js/run-history.js) — `formatRunDate` (das eine Datumsformat, App-Zeitzone), `runRowAdapter(this, spec)` (Zeilen-Adapter) und `makeRunHistoryMethods(cfg)` (Laden, Öffnen als Toggle, Löschen mit `appConfirm` — Endpunkte, Panel-Füllen und Fehler-Keys liefert die Karte im `cfg`). **Zeile:** [run-history-row.html](public/partials/run-history-row.html) per `<!-- @include run-history-row -->` im `x-for="r in …"`, Adapter am umschliessenden Element: `x-data="{ runRow: plotConsistencyRunRow() }"`.
+
+**Zeile, immer gleich:** Datum · Zusatzangaben (`badges`: Tag, Sterne-Note oder Entitäts-Verweis; leere entfallen; Zähl-Texte über `tn()`) · Modell (nur wenn vorhanden) · Chevron · Löschen-Symbol in der Zeile (hover-reveal). Offen = `history-item--open`; nicht reaktivierbar = `disabled` (gedämpft, ohne Chevron). Der aufgeklappte Inhalt (`.history-detail`) gehört der Karte und trägt keinen eigenen Löschknopf.
+
+**Nicht hierher:** Prüf-Verlauf der Seite (Auswahl lädt in den Editor, Erledigt-Schalter), Rückblick-Liste (Auswahl mit festen Spalten), Abschnitts-Revisionen. Gegated: [run-history-single-place.test.mjs](tests/unit/run-history-single-place.test.mjs).
 
 ---
 

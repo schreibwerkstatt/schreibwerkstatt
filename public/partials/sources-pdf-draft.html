@@ -5,10 +5,7 @@
      Anlage-Formular (partials/sources-form.html). -->
   <input type="file" hidden accept="application/pdf" x-ref="srcPdfInput"
          :aria-label="$app.t('sources.pdfDraft.open')" @change="startSourceFromPdf($event)">
-  <div class="sources-pdf-draft" x-show="srcPdfBusy || srcPdfError" x-cloak>
-    <div class="progress-bar-wrap" x-show="srcPdfBusy">
-      <div class="progress-bar" :style="{ '--progress': srcPdfProgress + '%' }"></div>
-      <span class="muted-msg muted-msg--sm" x-text="srcPdfStatus"></span>
-    </div>
+  <div class="sources-pdf-draft" x-show="srcPdfBusy || srcPdfStatus || srcPdfError" x-cloak>
+    <div x-job-progress="{ active: srcPdfBusy, progress: srcPdfProgress, text: srcPdfStatus, timer: '_srcPdfPollTimer' }"></div>
     <p class="card-form-error" x-show="srcPdfError" x-text="srcPdfError"></p>
   </div>

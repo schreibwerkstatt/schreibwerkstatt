@@ -32,9 +32,9 @@ export function buildExtraktionKomplettChapterPrompt(chapterName, bookName, page
   const isSinglePass = chapterName === 'Gesamtbuch';
   const scope = isSinglePass ? `dem Buch «${bookName}»` : `dem Kapitel «${chapterName}» des Buchs «${bookName}»`;
   const kapitelNote = isSinglePass
-    ? 'Der Text ist in Kapitel-Sektionen gegliedert (## Kapitelname) mit Abschnitten darunter (### Abschnittstitel). Für alle Kapitel-Felder (kapitel[].name der Figuren, kapitel der Orte, szenen[].kapitel, lebensereignisse[].kapitel): den Kapitelnamen exakt aus dem ## Header entnehmen, unter dem der jeweilige Abschnitt steht.'
-    : `Für alle Kapitel-Felder (kapitel[].name der Figuren, kapitel der Orte, szenen[].kapitel, lebensereignisse[].kapitel): immer genau «${chapterName}» verwenden – die ### Überschriften im Text sind Abschnittstitel, keine Kapitelnamen.`;
-  const seiteNote = 'Im «seite»-Feld jedes Faktums den reinen Abschnittstitel aus dem zugehörigen ### Header eintragen (OHNE «### »-Markierung); leer lassen wenn nicht eindeutig zuordenbar.';
+    ? 'Der Text ist in <kapitel pfad="…">-Blöcke gegliedert, darin <abschnitt titel="…">-Blöcke. Für alle Kapitel-Felder (kapitel[].name der Figuren, kapitel der Orte, szenen[].kapitel, lebensereignisse[].kapitel): den Kapitelnamen exakt aus dem «pfad» des <kapitel>-Tags entnehmen, in dem der jeweilige Abschnitt steht.'
+    : `Für alle Kapitel-Felder (kapitel[].name der Figuren, kapitel der Orte, szenen[].kapitel, lebensereignisse[].kapitel): immer genau «${chapterName}» verwenden – die «titel» der <abschnitt>-Tags im Text sind Abschnittstitel, keine Kapitelnamen.`;
+  const seiteNote = 'Im «seite»-Feld jedes Faktums den Abschnittstitel aus dem «titel» des <abschnitt>-Tags eintragen, in dem es steht (nur der Wert, ohne Tag); leer lassen wenn nicht eindeutig zuordenbar.';
   const textBlock = chText == null
     ? `<text>Der ${isSinglePass ? 'Buchtext' : 'Kapiteltext'} steht im System-Prompt oben.</text>`
     : `<${isSinglePass ? 'buchtext' : 'kapiteltext'} seiten="${pageCount}">\n${chText}\n</${isSinglePass ? 'buchtext' : 'kapiteltext'}>`;
@@ -53,8 +53,8 @@ export function buildExtraktionFigurenPassPrompt(chapterName, bookName, pageCoun
   const isSinglePass = chapterName === 'Gesamtbuch';
   const scope = isSinglePass ? `dem Buch «${bookName}»` : `dem Kapitel «${chapterName}» des Buchs «${bookName}»`;
   const kapitelNote = isSinglePass
-    ? 'Der Text ist in Kapitel-Sektionen gegliedert (## Kapitelname) mit Abschnitten darunter (### Abschnittstitel). Für kapitel[].name und lebensereignisse[].kapitel: exakt aus dem ## Header entnehmen.'
-    : `Für kapitel[].name und lebensereignisse[].kapitel: immer genau «${chapterName}» verwenden – ### Überschriften sind Abschnittstitel.`;
+    ? 'Der Text ist in <kapitel pfad="…">-Blöcke gegliedert, darin <abschnitt titel="…">-Blöcke. Für kapitel[].name und lebensereignisse[].kapitel: exakt aus dem «pfad» des <kapitel>-Tags entnehmen.'
+    : `Für kapitel[].name und lebensereignisse[].kapitel: immer genau «${chapterName}» verwenden – die «titel» der <abschnitt>-Tags sind Abschnittstitel.`;
   const textBlock = chText == null
     ? '<text>Der Buchtext steht im System-Prompt oben.</text>'
     : `<${isSinglePass ? 'buchtext' : 'kapiteltext'} seiten="${pageCount}">\n${chText}\n</${isSinglePass ? 'buchtext' : 'kapiteltext'}>`;
@@ -72,8 +72,8 @@ export function buildExtraktionFigurenStammPrompt(chapterName, bookName, pageCou
   const isSinglePass = chapterName === 'Gesamtbuch';
   const scope = isSinglePass ? `dem Buch «${bookName}»` : `dem Kapitel «${chapterName}» des Buchs «${bookName}»`;
   const kapitelNote = isSinglePass
-    ? 'Der Text ist in Kapitel-Sektionen gegliedert (## Kapitelname) mit Abschnitten darunter (### Abschnittstitel). Für kapitel[].name: exakt aus dem ## Header entnehmen.'
-    : `Für kapitel[].name: immer genau «${chapterName}» verwenden – ### Überschriften sind Abschnittstitel.`;
+    ? 'Der Text ist in <kapitel pfad="…">-Blöcke gegliedert, darin <abschnitt titel="…">-Blöcke. Für kapitel[].name: exakt aus dem «pfad» des <kapitel>-Tags entnehmen.'
+    : `Für kapitel[].name: immer genau «${chapterName}» verwenden – die «titel» der <abschnitt>-Tags sind Abschnittstitel.`;
   const textBlock = chText == null
     ? '<text>Der Buchtext steht im System-Prompt oben.</text>'
     : `<${isSinglePass ? 'buchtext' : 'kapiteltext'} seiten="${pageCount}">\n${chText}\n</${isSinglePass ? 'buchtext' : 'kapiteltext'}>`;
@@ -103,7 +103,7 @@ Extrahiere aus dem Buch «${bookName}» AUSSCHLIESSLICH die Lebensereignisse der
 ${namenListe}
 </figuren>
 
-Verwende im Feld figur_name AUSSCHLIESSLICH die kanonischen Namen aus dieser Liste (exakt wie dort geschrieben) – sonst wird das Ereignis beim ID-Mapping verworfen. Der Text ist in Kapitel-Sektionen (## Kapitelname) mit Abschnitten (### Abschnittstitel) gegliedert; für lebensereignisse[].kapitel den ## Header, für .seite den ### Header verwenden.
+Verwende im Feld figur_name AUSSCHLIESSLICH die kanonischen Namen aus dieser Liste (exakt wie dort geschrieben) – sonst wird das Ereignis beim ID-Mapping verworfen. Der Text ist in <kapitel pfad="…">-Blöcke gegliedert, darin <abschnitt titel="…">-Blöcke. Für lebensereignisse[].kapitel den «pfad» des <kapitel>-Tags, für .seite den «titel» des <abschnitt>-Tags verwenden.
 
 ${textBlock}`;
 }
@@ -113,7 +113,7 @@ export function buildExtraktionOrtePassPrompt(chapterName, bookName, pageCount, 
   const isSinglePass = chapterName === 'Gesamtbuch';
   const scope = isSinglePass ? `dem Buch «${bookName}»` : `dem Kapitel «${chapterName}» des Buchs «${bookName}»`;
   const kapitelNote = isSinglePass
-    ? 'Der Text ist in Kapitel-Sektionen gegliedert (## Kapitelname). Für alle Kapitel-Felder den Namen aus dem ## Header entnehmen.'
+    ? 'Der Text ist in <kapitel pfad="…">-Blöcke gegliedert. Für alle Kapitel-Felder den Namen aus dem «pfad» des <kapitel>-Tags entnehmen.'
     : `Für alle Kapitel-Felder: immer genau «${chapterName}» verwenden.`;
   const textBlock = chText == null
     ? '<text>Der Buchtext steht im System-Prompt oben.</text>'
@@ -173,7 +173,7 @@ Du hast das Buch «${bookName}» bereits einmal nach Figuren durchsucht. Unten s
 ${_knownList(knownNames)}
 </bereits_erfasste_figuren>
 
-Der Text ist in Kapitel-Sektionen gegliedert (## Kapitelname) mit Abschnitten darunter (### Abschnittstitel). Für kapitel[].name: exakt aus dem ## Header entnehmen.
+Der Text ist in <kapitel pfad="…">-Blöcke gegliedert, darin <abschnitt titel="…">-Blöcke. Für kapitel[].name: exakt aus dem «pfad» des <kapitel>-Tags entnehmen.
 
 <text>Der Buchtext steht im System-Prompt oben.</text>`;
 }
@@ -190,7 +190,7 @@ Du hast das Buch «${bookName}» bereits einmal nach Schauplätzen durchsucht. U
 ${_knownList(knownNames)}
 </bereits_erfasste_schauplaetze>
 
-Der Text ist in Kapitel-Sektionen gegliedert (## Kapitelname). Für alle Kapitel-Felder den Namen aus dem zugehörigen ## Header entnehmen.
+Der Text ist in <kapitel pfad="…">-Blöcke gegliedert. Für alle Kapitel-Felder den Namen aus dem «pfad» des <kapitel>-Tags entnehmen, in dem die Stelle steht.
 
 <text>Der Buchtext steht im System-Prompt oben.</text>`;
 }
@@ -207,7 +207,7 @@ Du hast das Buch «${bookName}» bereits einmal nach Welt- und Kontinuitätsfakt
 ${_knownList(knownFacts)}
 </bereits_erfasste_fakten>
 
-Im «seite»-Feld jedes Faktums den reinen Abschnittstitel aus dem zugehörigen ### Header eintragen (OHNE «### »-Markierung); leer lassen wenn nicht eindeutig zuordenbar.
+Im «seite»-Feld jedes Faktums den Abschnittstitel aus dem «titel» des <abschnitt>-Tags eintragen, in dem es steht (nur der Wert, ohne Tag); leer lassen wenn nicht eindeutig zuordenbar.
 
 <text>Der Buchtext steht im System-Prompt oben.</text>`;
 }
@@ -228,7 +228,7 @@ ${_SZENE_NACH_RULE}
 
 ${_ortRefsBlock(knownOrteLines)}
 
-Der Text ist in Kapitel-Sektionen gegliedert (## Kapitelname) mit Abschnitten darunter (### Abschnittstitel). Für szenen[].kapitel den reinen ## Kapitelnamen, für szenen[].seite den reinen ### Abschnittstitel (jeweils ohne Markierung) verwenden.
+Der Text ist in <kapitel pfad="…">-Blöcke gegliedert, darin <abschnitt titel="…">-Blöcke. Für szenen[].kapitel den «pfad» des <kapitel>-Tags, für szenen[].seite den «titel» des <abschnitt>-Tags verwenden (jeweils nur der Wert).
 
 <text>Der Buchtext steht im System-Prompt oben.</text>`;
 }
@@ -260,7 +260,7 @@ Die schon erfassten Schauplätze stehen unten mit Kennung; neue Schauplätze nur
 
 ${_ortRefsBlock(known.orte, true)}
 
-Für alle Kapitel-Felder immer genau «${chapterName}» verwenden – die ### Überschriften im Text sind Abschnittstitel, keine Kapitelnamen.
+Für alle Kapitel-Felder immer genau «${chapterName}» verwenden – die «titel» der <abschnitt>-Tags im Text sind Abschnittstitel, keine Kapitelnamen.
 
 ${chText == null
     ? '<text>Der Kapiteltext steht im System-Prompt oben.</text>'
@@ -276,7 +276,7 @@ export function buildCoverageAuditPrompt(bookName, chapterName, chText, knownFig
   // System-Prompts (Single-Pass) — dort steht ein anderes Antwortschema, darum das Format
   // hier ausdrücklich (beim geteilten Buch-Präfix schickt der Provider kein Schema mit).
   const textBlock = chText == null
-    ? `<text>Der Ausschnitt ist das Kapitel «${chapterName}» (## Header) im Buchtext des System-Prompts oben. Nur dieses Kapitel prüfen.</text>`
+    ? `<text>Der Ausschnitt ist das Kapitel «${chapterName}» (<kapitel pfad="${chapterName}">) im Buchtext des System-Prompts oben. Nur dieses Kapitel prüfen.</text>`
     : `<kapiteltext kapitel="${chapterName}">\n${chText}\n</kapiteltext>`;
   return `<aufgabe>
 Prüfe die Vollständigkeit der bisherigen Analyse des Buchs «${bookName}» an diesem Kapitel-Ausschnitt. Unten stehen die bereits im Katalog erfassten Figuren und Schauplätze. Lies den Kapiteltext GENAU und melde:
@@ -316,7 +316,7 @@ Eine Vollständigkeitsprüfung des Buchs «${bookName}» hat ergeben, dass die u
 ${_knownList(targetNames)}
 </fehlende_figuren>
 
-Der Text ist in Kapitel-Sektionen gegliedert (## Kapitelname). Für kapitel[].name: exakt aus dem ## Header entnehmen.
+Der Text ist in <kapitel pfad="…">-Blöcke gegliedert. Für kapitel[].name: exakt aus dem «pfad» des <kapitel>-Tags entnehmen.
 
 <text>Der Buchtext steht im System-Prompt oben.</text>`;
 }
@@ -332,7 +332,7 @@ Eine Vollständigkeitsprüfung des Buchs «${bookName}» hat ergeben, dass die u
 ${_knownList(targetNames)}
 </fehlende_schauplaetze>
 
-Der Text ist in Kapitel-Sektionen gegliedert (## Kapitelname). Für alle Kapitel-Felder den Namen aus dem zugehörigen ## Header entnehmen.
+Der Text ist in <kapitel pfad="…">-Blöcke gegliedert. Für alle Kapitel-Felder den Namen aus dem «pfad» des <kapitel>-Tags entnehmen, in dem die Stelle steht.
 
 <text>Der Buchtext steht im System-Prompt oben.</text>`;
 }
@@ -349,7 +349,7 @@ Für die unten genannten Kapitel des Buchs «${bookName}» wurde bisher KEINE Sz
 ${_knownList(chapterNames)}
 </kapitel_ohne_szenen>
 
-Für szenen[].kapitel exakt den betreffenden Kapitelnamen (aus dem ## Header) verwenden, für szenen[].seite den reinen ### Abschnittstitel (jeweils ohne Markierung).
+Für szenen[].kapitel exakt den betreffenden Kapitelnamen (aus dem «pfad» des <kapitel>-Tags) verwenden, für szenen[].seite den «titel» des <abschnitt>-Tags (jeweils nur der Wert).
 
 ${_ortRefsBlock(knownOrteLines)}
 
@@ -414,7 +414,7 @@ export function buildExtraktionFaktenPassPrompt(chapterName, bookName, pageCount
   const scope = nur
     ? `den Kapiteln ${nur.map(n => `«${n}»`).join(', ')} des Buchs «${bookName}» (nur diese – Fakten aus anderen Kapiteln werden separat erfasst)`
     : isSinglePass ? `dem Buch «${bookName}»` : `dem Kapitel «${chapterName}» des Buchs «${bookName}»`;
-  const seiteNote = 'Im «seite»-Feld jedes Faktums den reinen Abschnittstitel aus dem zugehörigen ### Header eintragen (OHNE «### »-Markierung); leer lassen wenn nicht eindeutig zuordenbar.';
+  const seiteNote = 'Im «seite»-Feld jedes Faktums den Abschnittstitel aus dem «titel» des <abschnitt>-Tags eintragen, in dem es steht (nur der Wert, ohne Tag); leer lassen wenn nicht eindeutig zuordenbar.';
   const textBlock = chText == null
     ? '<text>Der Buchtext steht im System-Prompt oben.</text>'
     : `<${isSinglePass ? 'buchtext' : 'kapiteltext'} seiten="${pageCount}">\n${chText}\n</${isSinglePass ? 'buchtext' : 'kapiteltext'}>`;

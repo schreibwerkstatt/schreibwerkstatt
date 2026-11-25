@@ -36,10 +36,7 @@
     </div>
   </div>
 
-  <div x-show="strukturRunning && strukturProgress > 0" class="progress-bar-wrap">
-    <div class="progress-bar" :style="{ '--progress': strukturProgress + '%' }"></div>
-  </div>
-  <div x-show="strukturStatus" class="card-status" x-text="strukturStatus"></div>
+  <div x-job-progress="{ active: strukturRunning, progress: strukturProgress, text: strukturStatus, timer: '_strukturPollTimer' }"></div>
   <div x-show="strukturError" class="muted-msg muted-msg--spaced" x-text="strukturError"></div>
   <div x-show="strukturLoadError" class="muted-msg muted-msg--spaced" x-text="$app.t('struktur.loadError')"></div>
 

@@ -126,3 +126,16 @@ test('Schlussrunde SearXNG: Anweisung wiederholt die [nr]-Regel, Anthropic-Fassu
   assert.ok(prompts.RESEARCH_CHAT_FORCE_FINAL_INSTRUCTION_SEARXNG.includes('`nr`'));
   assert.ok(!prompts.RESEARCH_CHAT_FORCE_FINAL_INSTRUCTION.includes('`nr`'));
 });
+
+test('Web-Such-Stand nach jeder Runde: bisher/übrig, am Deckel «keine weitere Suche», ohne Deckel nichts', () => {
+  assert.match(prompts.researchSearchStatusNote(6, 10), /6 von 10.*noch 4/);
+  assert.match(prompts.researchSearchStatusNote(10, 10), /alle 10 verbraucht/);
+  assert.match(prompts.researchSearchStatusNote(12, 10), /alle 10 verbraucht/);
+  assert.equal(prompts.researchSearchStatusNote(3, 0), null);
+});
+
+test('Prompt: Deckel über alle Runden + keine identische Suche wiederholen', () => {
+  const an = prompts.buildResearchChatAgentSystemPrompt('Buch', 0, 6, [], [], {}, { maxWebSearches: 10 });
+  assert.ok(an.includes('höchstens 10 Web-Suchen'));
+  assert.match(an, /denselben Suchbegriff nicht ein zweites Mal/);
+});

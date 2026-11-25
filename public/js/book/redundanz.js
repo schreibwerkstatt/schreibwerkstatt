@@ -6,7 +6,7 @@
 // Ergebnis (GET /redundancy/:book_id) und pflegen die ignorierten Paare.
 // Gespreadet in cards/redundanz-card.js.
 
-import { startPoll } from '../cards/job-helpers.js';
+import { startPoll, isCancelledJob } from '../cards/job-helpers.js';
 import { tRaw, tFetchError } from '../i18n.js';
 import { fmtDateTime } from '../utils/date.js';
 import { fetchJson, sendJson } from '../utils/net.js';
@@ -162,9 +162,9 @@ export const redundanzMethods = {
   },
 
   _pollRedundanz(jobId) {
-    const failed = () => {
+    const failed = (job) => {
       this.redundanzLoading = false;
-      this.redundanzStatus = tRaw('redundanz.error');
+      this.redundanzStatus = isCancelledJob(job) ? tRaw('job.cancelled') : tRaw('redundanz.error');
     };
     startPoll(this, {
       timerProp: '_redundanzPollTimer',
@@ -206,9 +206,9 @@ export const redundanzMethods = {
   },
 
   _pollRedundanzIndex(jobId) {
-    const failed = () => {
+    const failed = (job) => {
       this.redundanzIndexing = false;
-      this.redundanzStatus = tRaw('redundanz.indexError');
+      this.redundanzStatus = isCancelledJob(job) ? tRaw('job.cancelled') : tRaw('redundanz.indexError');
     };
     startPoll(this, {
       timerProp: '_redundanzIndexPollTimer',

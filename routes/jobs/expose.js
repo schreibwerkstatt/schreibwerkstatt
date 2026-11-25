@@ -26,6 +26,7 @@ const {
   _modelName, tps, jsonBody, startBookJob, systemChars: _systemChars,
   bookTextOpts,
 } = require('./shared');
+const { formatAbschnitte } = require('./shared/book-text-format');
 const { narrativeLabels } = require('./narrative-labels');
 const { werkstandFor } = require('./review-context');
 const { normseiten } = require('../../lib/normseite');
@@ -167,7 +168,7 @@ async function runExposeJob(jobId, bookId, userEmail) {
         const chunk = chunks.get(key);
         const prompt = buildExposeSynopsisPrompt({
           bookName: book.name, kapitel: chunk.name, teil: _teilOf(key, chunkOrder), profil,
-          text: chunk.pages.map(p => `### ${p.title}\n${p.text}`).join('\n\n'),
+          text: formatAbschnitte(chunk.pages),
         });
         const sig = _sha(`${model}\n${system}\n${prompt}`);
         usedSigs.push(sig);

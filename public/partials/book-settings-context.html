@@ -46,15 +46,8 @@
           </div>
           <p class="card-form-error" x-show="stilprofilError" x-text="stilprofilError" x-cloak></p>
           <!-- Laufender KI-Lauf: Fortschritt + Abbrechen. -->
-          <div class="job-progress" x-show="stilprofilGenerating" x-cloak>
-            <div class="progress-bar-wrap" x-show="stilprofilProgress > 0">
-              <div class="progress-bar" :style="{ '--progress': stilprofilProgress + '%' }"></div>
-            </div>
-            <div class="job-progress-row">
-              <div class="card-status" x-html="stilprofilStatus || $app.t('book.settings.stilprofil.generating')"></div>
-              <button type="button" @click="cancelStilprofil()" x-text="$app.t('common.cancel')"></button>
-            </div>
-          </div>
+          <div x-job-progress="{ active: stilprofilGenerating, progress: stilprofilProgress, status: stilprofilStatus,
+                                 fallback: 'book.settings.stilprofil.generating', timer: '_stilprofilPollTimer' }"></div>
           <!-- KI-Ergebnis als Vorschlag (DESIGN.md „Chat-Vorschlagskarte"): Übernehmen
                setzt den Feldwert wie eine Handeingabe (ungespeichert), Verwerfen schliesst. -->
           <template x-if="stilprofilSuggestion">

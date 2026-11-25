@@ -7,7 +7,7 @@
 
 import { fetchJson, escHtml, renderStars, noteTip } from '../utils.js';
 import { renderReviewHtml, chapterReviewAxesFor } from '../book/review.js';
-import { startPoll, runningJobStatus } from './job-helpers.js';
+import { startPoll, runningJobStatus, isCancelledJob } from './job-helpers.js';
 import { setupCardLifecycle } from './card-lifecycle.js';
 import { contentRepo } from '../repo/content.js';
 import { memoMethods } from './card-memo.js';
@@ -17,6 +17,7 @@ import { lsSet } from '../safe-storage.js';
 import { EVT } from '../events.js';
 import { loadToken } from './book-guard.js';
 import { tFetchError } from '../i18n.js';
+import { runRowAdapter } from '../run-history.js';
 
 function emptySlot() {
   return { loading: false, progress: 0, status: '', out: '', jobId: null, pollTimer: null };
@@ -196,6 +197,11 @@ export function registerKapitelReviewCard() {
         // gespeicherte Bewertung bleibt darunter sichtbar.
         onError: (job) => {
           slot.loading = false;
+          if (isCancelledJob(job)) {
+            slot.progress = 0;
+            slot.status = this._formatStatus(root.t('job.cancelled'));
+            return;
+          }
           slot.status = this._errorStatus(root.t(job.error, job.errorParams));
         },
         // Das Ergebnis steht nach dem Reload im Verlauf und wird von dort als
@@ -221,6 +227,13 @@ export function registerKapitelReviewCard() {
           }
         },
       });
+    },
+
+    // Abbrechen des Laufs im gewählten Kapitel (x-job-progress). Die Job-ID
+    // steht im Kapitel-Slot, nicht auf der Karte — darum kein `timer`.
+    async cancelKapitelReview() {
+      const jobId = this._currentSlot().jobId;
+      if (jobId) await window.__app.cancelJob(jobId);
     },
 
     async loadKapitelReviewHistory(bookId) {
@@ -489,6 +502,23 @@ export function registerKapitelReviewCard() {
       if (cur.review_json.includeSubchapters !== prev.review_json.includeSubchapters) return null;
       const d = Math.round((a - b) * 100) / 100;
       return d === 0 ? null : d;
+    },
+
+    // Adapter für run-history-row.html (Verlauf unter der aktuellen Bewertung).
+    kapitelReviewRunRow() {
+      return runRowAdapter(this, {
+        date: (e) => e.reviewed_at,
+        isOpen(e) { return this.selectedKapitelReviewId === e.id; },
+        toggle(e) { this.selectedKapitelReviewId = this.selectedKapitelReviewId === e.id ? null : e.id; },
+        remove(e) { return this.deleteKapitelReview(e.id); },
+        badges(e) {
+          const d = this.kapitelReviewNoteDelta(this.kapitelReviewCurrentHistory().findIndex(x => x.id === e.id));
+          const num = d === null ? '' : Math.abs(d).toLocaleString(Alpine.store('shell').uiLocale === 'en' ? 'en-US' : 'de-CH', { minimumFractionDigits: 1, maximumFractionDigits: 2 });
+          return [{ stars: e.review_json?.gesamtnote, tip: noteTip(e.review_json?.gesamtnote) },
+            d === null ? null : { text: (d > 0 ? '+' : '−') + num, cls: `badge review-trend ${d > 0 ? 'badge-ok' : 'badge-err'}`, tip: window.__app.t('kapitelReview.trendTip') },
+            { text: this.kapitelReviewScopeLabel(e) }];
+        },
+      });
     },
 
     // Jüngste gespeicherte Bewertung: steht als aktuelles Urteil oben in der

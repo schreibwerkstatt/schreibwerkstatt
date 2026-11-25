@@ -225,10 +225,10 @@
           <span x-text="$app.t(wfFcRunning ? 'weltfakten.factcheck.starting' : 'weltfakten.factcheck.start')"></span>
         </button>
       </div>
-      <div x-show="wfFcProgress > 0" class="progress-bar-wrap">
-        <div class="progress-bar" :style="{ '--progress': wfFcProgress + '%' }"></div>
-      </div>
-      <p class="card-status" x-show="wfFcRunning && wfFcStatusKey" x-text="$app.t(wfFcStatusKey, wfFcStatusParams || {})"></p>
+      <!-- Statuszeile: Phase des Laufs, danach nur «Abgebrochen». -->
+      <div x-job-progress="{ active: wfFcRunning, progress: wfFcProgress,
+                             text: wfFcStatusKey ? $app.t(wfFcStatusKey, wfFcStatusParams || {}) : '',
+                             timer: '_wfFcPollTimer' }"></div>
       <p class="card-status error-msg" x-show="wfFcError" x-text="wfFcError"></p>
       <template x-if="wfFcResult">
         <div class="card-section">

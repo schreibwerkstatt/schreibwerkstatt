@@ -131,8 +131,9 @@ Prompt [prompts/headline.js](../public/js/prompts/headline.js), Rolle
 - Vorschläge landen als Varianten (`herkunft='ki'`), **übernommen wird von
   Hand**. Ein Titel ist eine redaktionelle Entscheidung.
 - Der Lauf zeigt Fortschritt und lässt sich **abbrechen** (`twCancel` →
-  `DELETE /jobs/:id`, der KI-Call endet per `AbortError` als `cancelled`, ohne
-  Fehlermeldung in der Karte).
+  `DELETE /jobs/:id`, der KI-Call endet per `AbortError` als `cancelled`; die
+  Karte zeigt neutral «Abgebrochen», keine Fehlermeldung). Balken, Status und
+  Knopf baut die Direktive `x-job-progress`.
 
 ### Der Kopf am Beitrag — SSoT [lib/headline-render.js](../lib/headline-render.js)
 
@@ -410,6 +411,11 @@ Lifecycle, Fortschritt und Wiederaufnahme.
 Der Fehler landet **an der Transkript-Zeile** (`status='error'`, `fehler`), nicht
 nur im Job-Protokoll: die Karte zeigt das Fundstück weiter an und muss sagen
 können, warum dort kein Wortlaut steht.
+
+**Abbrechen** (`x-job-progress` in der Fundstück-Zeile → `DELETE /jobs/:id`)
+reicht das Job-Signal an den Whisper-Request durch. Ein Abbruch ist kein Fehler:
+die Zeile kehrt in ihren Stand vor dem Lauf zurück (`ready` mit dem früheren
+Wortlaut, sonst `pending`), die Karte zeigt neutral «Abgebrochen».
 
 Whisper schneidet alle paar Sekunden; `mergeBySpeaker` fasst zu **Redebeiträgen**
 zusammen (Deckel `maxChars`, sonst wäre ein Monolog ein unzitierbarer Block). Die

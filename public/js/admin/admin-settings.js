@@ -5,6 +5,7 @@ import { localeTag, fetchJson, sendJson } from '../utils.js';
 import { tFetchError } from '../i18n.js';
 import { ADMIN_SETTINGS_TABS, ADMIN_SETTINGS_TEST_TAB } from './admin-settings-tabs.js';
 import { adminFmtDateTime } from './admin-format.js';
+import { charsPerTokenFor } from './chars-per-token.js';
 
 // Formularwert eines Felds → gewünschte Aktion beim Speichern.
 //   { op: 'none' }            nichts zu tun
@@ -451,8 +452,11 @@ export const adminSettingsMethods = {
       || (p === 'openai-compat' && this.adminSettingsForm['ai.openai-compat.cloud'] === true);
     const komplettOut = Number(this.adminSettingsForm[`ai.${p}.komplett.extract_max_tokens`]);
     if (!isCloudClass && Number.isFinite(komplettOut) && komplettOut > 0) out = Math.min(out, komplettOut);
-    const cptRaw = Number(this.adminSettingsForm['ai.chars_per_token']);
-    const charsPerToken = Number.isFinite(cptRaw) && cptRaw > 0 ? cptRaw : (p === 'claude' ? 3 : 4);
+    // Rate wie getContextConfigFor: Claude nach seinem Modell (5er-Generation 2.1).
+    const charsPerToken = charsPerTokenFor(p, {
+      model: String(this.adminSettingsForm['ai.claude.model'] || '').trim() || 'claude-sonnet-5-5',
+      explicit: Number(this.adminSettingsForm['ai.chars_per_token']),
+    });
     // Sicherheitspuffer proportional — spiegelt contextSafetyMargin in lib/ai/config.js.
     const safetyMargin = Math.max(2000, Math.round(ctx * 0.03));
     const inputBudgetTokens = Math.max(2000, ctx - out - safetyMargin);

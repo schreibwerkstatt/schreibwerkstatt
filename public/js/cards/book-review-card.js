@@ -8,8 +8,9 @@
 //   - `loadBookReviewHistory` (history.js), `_closeOtherMainCards`, `t`
 
 import { renderReviewHtml, bookReviewAxesFor } from '../book/review.js';
-import { escHtml, renderStars, noteTip } from '../utils.js';
+import { escHtml, noteTip } from '../utils.js';
 import { createCardJobFeature } from './job-feature-card.js';
+import { runRowAdapter } from '../run-history.js';
 import { setupCardLifecycle } from './card-lifecycle.js';
 import { EVT } from '../events.js';
 
@@ -75,8 +76,16 @@ export function registerBookReviewCard() {
       return renderReviewHtml(r, bookReviewAxesFor(r), (k, p) => window.__app.t(k, p));
     },
 
-    renderStars(note) { return renderStars(note); },
-    noteTip(note) { return noteTip(note); },
+    // Adapter für run-history-row.html (Buchbewertungs-Verlauf).
+    bookReviewRunRow() {
+      return runRowAdapter(this, {
+        date: (e) => e.reviewed_at,
+        isOpen(e) { return this.selectedBookReviewId === e.id; },
+        toggle(e) { this.selectedBookReviewId = this.selectedBookReviewId === e.id ? null : e.id; },
+        remove: (e) => window.__app.deleteBookReview(e.id),
+        badges: (e) => [{ stars: e.review_json?.gesamtnote, tip: noteTip(e.review_json?.gesamtnote) }],
+      });
+    },
 
     ...createCardJobFeature({
       name: 'review',

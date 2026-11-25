@@ -15,7 +15,6 @@ const { toIntId } = require('../../lib/validate');
 const { jsonBody } = require('./shared');
 const { _handleChatPost, bookPageCache, invalidateBookPageCache } = require('./chat/shared');
 const { runChatJob, pageChatPreflight } = require('./chat/page-chat');
-const { deleteUnansweredQuestion } = require('../../db/chat-sessions');
 const { runBookChatJobDispatch } = require('./chat/book-chat');
 const { runResearchChatJob } = require('./research-chat');
 const { runPlotChatJobDispatch } = require('./plot-chat');
@@ -36,16 +35,12 @@ chatRouter.post('/chat', jsonBody, (req, res) => _handleChatPost(req, res, {
     : { key: 'job.label.chat', params: null },
   runFn: runChatJob,
   // Abschnitt über dem Deckel: 422 statt einer Frage, die nie beantwortet wird.
-  // `retry_of` («Erneut fragen»): die unbeantwortete Frage dieser Session fällt
-  // weg, die neue tritt an ihre Stelle (db/chat-sessions.js#deleteUnansweredQuestion).
   preflight: async (req2, res2, { session, userEmail }) => {
     const block = await pageChatPreflight(session, userEmail);
     if (block) {
       res2.status(block.status).json({ error_code: block.error_code, params: block.params });
       return false;
     }
-    const retryOf = toIntId(req2.body?.retry_of);
-    if (retryOf) deleteUnansweredQuestion(session.id, retryOf);
     return true;
   },
 }));

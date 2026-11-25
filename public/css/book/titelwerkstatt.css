@@ -217,7 +217,6 @@
   padding-top: var(--space-xs);
   border-top: var(--border-thin) solid var(--color-border);
 }
-.tw-suggest .progress-bar-wrap { flex: 1 1 8rem; margin: 0; }
 
 /* Schmale Viewports: die Übersichtszeile fällt auf drei Zeilen zusammen, der
    Detail-Block behält seine Struktur (er ist ohnehin einspaltig). Der

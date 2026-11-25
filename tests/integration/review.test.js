@@ -439,10 +439,13 @@ test('Kapitel-Review: Seite lädt nicht → Lauf bricht ab, kein Cache, kein Ver
   ctx.mockAi.on(() => true, chapterReviewResponse(4.1));
 
   const contentStore = require('../../lib/content-store');
-  const orig = contentStore.loadPage;
-  contentStore.loadPage = async (id, ...rest) => {
-    if (id === 9661) throw Object.assign(new Error('boom'), { status: 503 });
-    return orig.call(contentStore, id, ...rest);
+  // Der Kapitel-Review liest über den Abschnitts-Leser (loadPagesBatch); Abschnitt
+  // 9661 fällt mit 503 aus, der Rest lädt.
+  const orig = contentStore.loadPagesBatch;
+  contentStore.loadPagesBatch = async (metas, c, opts = {}) => {
+    const ok = await orig.call(contentStore, metas.filter(m => m.id !== 9661), c, opts);
+    for (const m of metas) if (m.id === 9661) opts.onError?.(m, Object.assign(new Error('boom'), { status: 503 }));
+    return ok;
   };
   try {
     const jobId = ctx.shared.createJob('chapter-review', BOOK_ID, 'tester@test.dev', 'job.label.chapterReview', null, CHAPTER_ID);
@@ -451,8 +454,9 @@ test('Kapitel-Review: Seite lädt nicht → Lauf bricht ab, kein Cache, kein Ver
     );
     const job = await waitForJob(ctx.shared, jobId);
     assert.equal(job.status, 'error');
+    assert.equal(job.error, 'job.error.contentStore');
   } finally {
-    contentStore.loadPage = orig;
+    contentStore.loadPagesBatch = orig;
   }
   assert.equal(ctx.mockAi.log.length, 0, 'kein KI-Call über ein lückenhaftes Kapitel');
   const n = (t) => ctx.dbSchema.db.prepare(`SELECT COUNT(*) AS n FROM ${t} WHERE book_id = ? AND chapter_id = ?`)

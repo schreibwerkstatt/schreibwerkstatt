@@ -31,24 +31,22 @@
   box-shadow: var(--shadow-md);
   animation: cardFadeIn var(--transition-base) both;
 }
-.komplett-progress-bar-wrap {
-  margin-top: 0;
-  margin-bottom: var(--space-6);
-  border-radius: var(--radius-none);
-}
 .komplett-progress-label {
   display: flex;
-  justify-content: space-between;
+  justify-content: flex-end;
   align-items: baseline;
   gap: var(--space-sm);
   font-size: var(--font-size-mini);
   color: var(--color-muted);
   margin-bottom: var(--space-10);
 }
-/* Eine Zeile: ein umbrechender Status änderte die Panel-Höhe bei jedem Poll.
-   Der volle Wortlaut steht im Tooltip. */
-.komplett-status-text {
+/* Eine Zeile: ein umbrechender Status änderte die Panel-Höhe bei jedem Poll. */
+.komplett-status-progress .card-status {
+  display: block;
   min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 .komplett-tokens {
   font-size: var(--font-size-xs);

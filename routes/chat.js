@@ -10,6 +10,7 @@ const chatQuality = require('../db/chat-quality');
 const { htmlToText, bookTextOpts, findActiveJobId, cancelJob } = require('./jobs/shared');
 const { setContext } = require('../lib/log-context');
 const { searchChatHistory } = require('../lib/chat-search');
+const { SEARCHABLE_KINDS } = require('../db/chat-search');
 const { stripHistoryNote } = require('../lib/chat-history-note');
 const { enqueueChatEmbedIndexJob } = require('./jobs/chat-embed-index');
 
@@ -140,13 +141,13 @@ router.post('/session/ideen', jsonBody, (req, res) => createBookScopedSession(re
 router.get('/sessions/ideen/:book_id', (req, res) => listBookScopedSessions(req, res, { kind: 'ideen' }));
 
 /** Suche im eigenen Verlauf (docs/chats.md#suche-im-verlauf): Wortlaut + Bedeutung
- *  über die Abschnitts- (`kind=page`, optional `page_id`) bzw. Buch-Chats
- *  (`kind=book`) des Users in diesem Buch. Sind Runden noch nicht vektorisiert,
+ *  über die Gespräche einer Chat-Art (`kind`: page — optional `page_id` —, book,
+ *  research, plot, ideen) des Users in diesem Buch. Sind Runden noch nicht vektorisiert,
  *  stösst die Suche den Index-Lauf an (`indexing`) — bis dahin findet sie sie
  *  über den Wortlaut. */
 router.get('/search/:book_id', async (req, res) => {
   const q = String(req.query.q || '').trim().slice(0, 300);
-  const kind = req.query.kind === 'page' ? 'page' : req.query.kind === 'book' ? 'book' : null;
+  const kind = SEARCHABLE_KINDS.includes(req.query.kind) ? req.query.kind : null;
   if (!q || !kind) return res.status(400).json({ error_code: 'INVALID_QUERY' });
   const pageId = kind === 'page' && req.query.page_id ? toIntId(req.query.page_id) : null;
   const result = await searchChatHistory({

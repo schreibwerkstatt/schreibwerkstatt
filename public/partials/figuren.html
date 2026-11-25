@@ -16,10 +16,6 @@
     </div>
   </div>
 
-  <!-- Fortschritt -->
-  <div x-show="$store.catalogUi.figurenProgress > 0" class="progress-bar-wrap">
-    <div class="progress-bar" :style="{ '--progress': $store.catalogUi.figurenProgress + '%' }"></div>
-  </div>
   <!-- Status = Lade-/Löschfehler (book/figuren.js). Bei leerem Katalog ersetzt er
        den „Noch keine Analyse"-Leerzustand: ein gescheiterter Fetch ist kein
        fehlendes Analyseergebnis, und dessen CTA wäre eine teure Komplettanalyse. -->

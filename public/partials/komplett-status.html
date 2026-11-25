@@ -41,13 +41,8 @@
          Balken mit «Fertig» daneben wäre eine Falschaussage; der Stand steht oben. -->
     <template x-if="$store.jobs.alleAktualisierenLoading || $store.jobs.alleAktualisierenProgress > 0 || $store.jobs.alleAktualisierenStatus">
       <div class="komplett-status-progress">
-        <div class="progress-bar-wrap komplett-progress-bar-wrap">
-          <div class="progress-bar" :style="{ '--progress': $store.jobs.alleAktualisierenProgress + '%' }"></div>
-        </div>
+        <div x-job-progress="{ active: $store.jobs.alleAktualisierenLoading, progress: $store.jobs.alleAktualisierenProgress, text: $store.jobs.alleAktualisierenStatus || t('komplett.done'), timer: '_komplettPollTimer' }"></div>
         <div class="komplett-progress-label">
-          <span class="komplett-status-text truncate"
-                x-text="$store.jobs.alleAktualisierenStatus || t('komplett.done')"
-                :data-tip="$store.jobs.alleAktualisierenStatus || t('komplett.done')"></span>
           <span x-show="$store.jobs.alleAktualisierenTokIn > 0 || $store.jobs.alleAktualisierenTokOut > 0" class="komplett-tokens">
             <svg class="icon" aria-hidden="true"><use href="/icons.svg#arrow-up"/></svg><span class="komplett-tok-num" x-text="_fmtTok($store.jobs.alleAktualisierenTokIn)"></span>
             <svg class="icon" aria-hidden="true"><use href="/icons.svg#arrow-down"/></svg><span class="komplett-tok-num" x-text="_fmtTok($store.jobs.alleAktualisierenTokOut)"></span>

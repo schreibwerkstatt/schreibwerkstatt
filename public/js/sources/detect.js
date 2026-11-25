@@ -21,7 +21,7 @@
 import { fetchJson, sendJson, fmtDateTime } from '../utils.js';
 import { tFetchError } from '../i18n.js';
 import { isSelectedBook } from '../cards/book-guard.js';
-import { startPoll } from '../cards/job-helpers.js';
+import { startPoll, isCancelledJob } from '../cards/job-helpers.js';
 import { draftToPayload, draftFromSource } from './fields.js';
 import { lsSet } from '../safe-storage.js';
 
@@ -116,6 +116,8 @@ export const sourcesDetectMethods = {
       },
       onError: (job) => {
         this._srcDetectIdle();
+        // Abgebrochen ist kein Fehler: neutrale Statuszeile.
+        if (isCancelledJob(job)) { this.srcDetectStatus = window.__app.t('job.cancelled'); return; }
         this.srcDetectError = window.__app.t(job.error, job.errorParams);
       },
     });

@@ -251,11 +251,16 @@ export const plotProposalMethods = {
     if (id) this._revealBeat(this.beats.find(b => b.id === id));
   },
 
-  // plotProposalCanApply / applyPlotProposal / discardPlotProposal
+  // plotProposalCanApply / applyPlotProposal / discardPlotProposal / plotProposalView
   ...makeProposalApplyMethods({
     url: '/plot/chat-proposal',
     chat: 'plot',
-    names: { list: 'plotProposals', status: 'plotProposalStatus', canApply: 'plotProposalCanApply', apply: 'applyPlotProposal', discard: 'discardPlotProposal' },
+    names: { list: 'plotProposals', status: 'plotProposalStatus', canApply: 'plotProposalCanApply', apply: 'applyPlotProposal', discard: 'discardPlotProposal', view: 'plotProposalView' },
+    view: {
+      appliedKey: 'plot.chat.applied', reapplyKey: 'plot.chat.reapply', staleKey: 'plot.chat.stale', removedKey: 'plot.chat.removed',
+      typeLabel: 'plotProposalTypeLabel',
+      show: { can: 'plotProposalBeatId', run: 'showPlotProposalBeat', labelKey: 'plot.chat.show' },
+    },
     applyKey: 'plot.chat.applyError',
     statusKey: 'plot.chat.statusError',
     locked() { return !!this._inHistoryFlight; },

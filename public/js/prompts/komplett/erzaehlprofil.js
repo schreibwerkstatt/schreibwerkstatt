@@ -55,13 +55,13 @@ export function buildErzaehlprofilSinglePassPrompt(bookName, bookText) {
 
 ${_PROFIL_FELDER}
 
-WICHTIG: «kapitel» MUSS EXAKT der Kapitelname aus dem jeweiligen «## …»-Header im Text sein (keine Abschnittstitel, keine Nummerierung ergänzen). Gib genau EINEN Eintrag pro Kapitel aus, in Buchreihenfolge.
+WICHTIG: «kapitel» MUSS EXAKT der Kapitelname aus dem jeweiligen «pfad» des <kapitel>-Tags im Text sein (keine Abschnittstitel, keine Nummerierung ergänzen). Gib genau EINEN Eintrag pro Kapitel aus, in Buchreihenfolge.
 
 Antworte mit diesem JSON-Schema:
 {
   "kapitel": [
     {
-      "kapitel": "Exakter Kapitelname aus dem ## Header",
+      "kapitel": "Exakter Kapitelname aus dem pfad des <kapitel>-Tags",
       ${_PROFIL_ITEM.trim().replace(/^\{\s*/, '').replace(/\s*\}$/, '')}
     }
   ]

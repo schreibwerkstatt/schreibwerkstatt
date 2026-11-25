@@ -21,7 +21,8 @@ test('Single-Pass-Prompt: kapitel-Array + alle Profil-Felder + POV-Legende', () 
   }
   // POV-Keys als Enum-Alternative im Prompt.
   assert.ok(p.includes('er_sie_auktorial'));
-  assert.ok(p.includes('## Header'), 'Kapitelname-aus-Header-Instruktion');
+  // Buchtext-Format: routes/jobs/shared/book-text-format.js (<kapitel pfad>-Tags).
+  assert.ok(p.includes('pfad» des <kapitel>-Tags'), 'Kapitelname-aus-Tag-Instruktion');
   // Buchtext im System-Prompt (null-Fall).
   assert.ok(p.includes('System-Prompt'));
 });
