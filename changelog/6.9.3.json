@@ -1,0 +1,11 @@
+{
+  "version": "6.9.3",
+  "date": "2026-11-25",
+  "entries": [
+    {
+      "kind": "behoben",
+      "de": "Alle fünf Chats: Der Senden- und Stopp-Knopf neben dem Eingabefeld war beim Schreiben ein paar Pixel höher als das Feld. Jetzt sind beide genau gleich hoch.",
+      "en": "All five chats: while typing, the send and stop button next to the input field was a few pixels taller than the field. Both are now exactly the same height."
+    }
+  ]
+}

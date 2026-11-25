@@ -269,7 +269,12 @@
   gap: var(--space-6);
   align-items: flex-end;
 }
+/* display: block — der LanguageTool-Dispatcher wickelt das Feld beim Fokus in
+   .lt-field-wrap (Block); als inline-block liesse die Textarea darin die
+   Unterlängen-Lücke der Zeilenbox stehen, und der per stretch gestreckte
+   Senden-/Stopp-Knopf wäre um diese Lücke höher als das Feld. */
 .chat-input {
+  display: block;
   flex: 1;
   padding: var(--space-sm) var(--space-10);
   border: var(--border-thin) solid var(--color-border-input);
