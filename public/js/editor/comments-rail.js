@@ -113,6 +113,12 @@ export const editorCommentsRailMethods = {
     this.$watch(() => window.__app?.checkDone, () => this.scheduleRecompute());
     this.$watch(() => window.__app?.renderedPageHtml, () => this.scheduleRecompute());
     window.addEventListener(EVT.VIEW_RESET, () => this._onBookChange(null), { signal: this._railAbort.signal });
+    // Kommentare live: die Collab-Schicht meldet geänderte Share-Link-Kommentare
+    // des Buchs (app/app-collab-stream.js#_onShareCommentsChanged).
+    window.addEventListener(EVT.SHARE_COMMENTS_CHANGED, () => {
+      const id = Alpine.store('nav').selectedBookId;
+      if (id) this.loadBookComments(id);
+    }, { signal: this._railAbort.signal });
     // Toggle-Button in den Seiten-Actions (Root-Scope) steuert die Sichtbarkeit
     // per Window-Event (Trampolin, da der Button nicht im Karten-Scope liegt).
     window.addEventListener(EVT.COMMENTS_RAIL_TOGGLE, () => this.toggleRail(), { signal: this._railAbort.signal });

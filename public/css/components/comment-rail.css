@@ -64,11 +64,11 @@
   color: var(--cr-text, var(--color-text));
 }
 
-/* Änderungsvorschlag eines Reviewers (Review-Link): alte Stelle durchgestrichen
-   (Anker-Zitat), neuer Text hinterlegt, Entscheid des Autors. Dieselbe Optik in Share-Reader
-   und beiden Owner-Leisten; der Reader mappt die Werte --cr-del-bg, --cr-ins-bg
-   und --cr-ok-text auf seine Tokens (share/layout.css), die SPA fällt auf die
-   Diff-Marken zurück. */
+/* Änderungsvorschlag eines Reviewers (Review-Link): Wort-Diff Stelle → Vorschlag,
+   gekürzt auf die geänderten Sätze (diff/suggestion-diff.js), + Entscheid des
+   Autors. Dieselbe Optik in Share-Reader und beiden Owner-Leisten; die
+   Markierung selbst kommt aus components/diff-marks.css (der Reader mappt deren
+   --color-mark-* auf seine Tokens, share/layout.css). */
 .comment-suggestion { display: flex; flex-direction: column; gap: var(--space-xs); margin: var(--space-xs) 0; }
 .comment-suggestion__label {
   color: var(--cr-muted, var(--color-muted));
@@ -77,21 +77,8 @@
   text-transform: uppercase;
   letter-spacing: 0.02em;
 }
-/* Die alte Stelle steht nur einmal: als Zitat der Anker-Zeile, durchgestrichen. */
-.comment-rail__quote--old,
-.comment-rail__thread--selected .comment-rail__quote--old,
-.comment-rail__anchor:hover .comment-rail__quote--old {
-  background: var(--cr-del-bg, var(--color-mark-del-bg));
-  color: var(--cr-del-text, var(--color-mark-del-text));
-  text-decoration: line-through;
-}
-.comment-suggestion__new {
-  padding: var(--space-2xs) var(--space-6);
-  white-space: pre-wrap;
-  background: var(--cr-ins-bg, var(--color-mark-ins-bg));
-  color: var(--cr-ins-text, var(--color-mark-ins-text));
-  text-decoration: none;
-}
+/* Schriftgrösse wie der Kommentartext (.comment-rail__body) — geerbt. */
+.comment-suggestion__diff { display: block; white-space: pre-wrap; overflow-wrap: anywhere; }
 .comment-suggestion__actions { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-6); }
 .comment-suggestion__state { font-size: var(--font-size-xs, 11px); font-weight: var(--fw-semibold, 600); }
 .comment-suggestion__state--accepted { color: var(--cr-ok-text, var(--color-ok-text)); }

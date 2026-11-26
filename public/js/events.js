@@ -155,6 +155,9 @@ export const EVT = {
   BOOK_EDITOR_GOTO_COMMENT: 'book-editor:goto-comment', // detail: { token } — Share-Link, dessen ersten offenen Thread öffnen
   COMMENTS_RAIL_GOTO: 'comments-rail:goto',     // detail: { token } — Share-Link, dessen ersten offenen Thread öffnen
   COMMENTS_RAIL_TOGGLE: 'comments-rail:toggle', // kein detail
+  BOOK_META_CHANGED: 'book-meta:changed',       // detail: { bookId, kinds } — Bereiche ausserhalb des Manuskripts in einem anderen Tab/Gerät geändert (app-collab-stream.js)
+  PAGE_REMOTE_CHANGED: 'page:remote-changed',   // detail: { pageId, kind } — Abschnitt anderswo geschrieben/gelöscht (anderer User, Gerät oder Tab)
+  SHARE_COMMENTS_CHANGED: 'share-comments:changed', // kein detail — Leser-/Owner-Kommentare des offenen Buchs haben sich geändert (Buch-Kanal); Kommentar-Leisten laden neu
 
   // ── Cross-Card Selektion / Filter ────────────────────────────────────────
   FIGUR_WERKSTATT_SELECT: 'figur-werkstatt:select',       // detail: { figureId }

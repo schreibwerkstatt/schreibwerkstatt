@@ -3,11 +3,12 @@ const { sessionEmail } = require('../../lib/acl');
 const { toIntId } = require('../../lib/validate');
 const { setContext } = require('../../lib/log-context');
 const { _validDeviceId } = require('../content/shared');
+const { validTabId } = require('../../lib/live-writes');
 const { attachJobChannel } = require('../jobs/shared/stream');
 const { attachBookChannel } = require('./book-channel');
 const { trackStream } = require('../../lib/shutdown');
 
-// GET /events/stream[?book_id=<id>&device_id=<uuid>] — ein SSE-Stream pro Tab.
+// GET /events/stream[?book_id=<id>&device_id=<uuid>&tab_id=<hex>] — ein SSE-Stream pro Tab.
 //
 // Kanäle:
 //   Jobs  immer — Jobs des Session-Users (routes/jobs/shared/stream.js)
@@ -27,6 +28,7 @@ function handleEventStream(req, res) {
   const bookId = toIntId(req.query?.book_id);
   const rawDevice = (req.query?.device_id || '').toString();
   const deviceId = _validDeviceId(rawDevice) ? rawDevice : null;
+  const tabId = validTabId(req.query?.tab_id);
   if (bookId) setContext({ book: bookId });
 
   res.setHeader('Content-Type', 'text/event-stream');
@@ -45,7 +47,7 @@ function handleEventStream(req, res) {
   // Reconnect-Pause für den Browser.
   res.write('retry: 5000\n\n');
 
-  const book = bookId ? attachBookChannel(write, { email, bookId, deviceId }) : null;
+  const book = bookId ? attachBookChannel(write, { email, bookId, deviceId, tabId }) : null;
   write('hello', { book: book ? bookId : null });
   const detachJobs = attachJobChannel(write, email);
 

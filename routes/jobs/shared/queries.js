@@ -34,6 +34,43 @@ function getOpenIdeen(pageId, userEmail) {
 }
 
 /**
+ * Alle offenen Ideen eines Buchs (user-spezifisch) — der buchweite Ideen-Block des
+ * Abschnitts-Chats (routes/jobs/chat/page-chat-kontext.js). Ort nur als ID
+ * (page_id / chapter_id, beide NULL = Buch-Idee); Namen und Lesereihenfolge löst
+ * der Aufrufer über die Gliederung auf.
+ */
+function getOpenBookIdeen(bookId, userEmail) {
+  if (!bookId || !userEmail) return [];
+  return db.prepare(`
+    SELECT i.id, i.content, i.status, i.page_id, i.chapter_id
+    FROM ideen i
+    WHERE i.book_id = ? AND i.user_email = ? AND ${openStatusSql('i')}
+    ORDER BY i.sort_order, i.created_at, i.id
+  `).all(bookId, userEmail);
+}
+
+/**
+ * Aktive Szenen eines Buchs (Komplettanalyse) mit den IDs ihrer Figuren — der Block
+ * «frühere Szenen» des Abschnitts-Chats (routes/jobs/chat/page-chat-kontext.js).
+ * Ort nur als ID; Namen und Reihenfolge löst der Aufrufer über die Gliederung auf.
+ */
+function getSzenenMitFiguren(bookId, userEmail) {
+  if (!bookId || !userEmail) return [];
+  const rows = db.prepare(`
+    SELECT fs.id, fs.titel, fs.chapter_id, fs.page_id, GROUP_CONCAT(sf.figure_id) AS figure_ids
+    FROM figure_scenes fs
+    LEFT JOIN scene_figures sf ON sf.scene_id = fs.id
+    WHERE fs.book_id = ? AND fs.user_email = ? AND fs.stale = 0
+    GROUP BY fs.id
+    ORDER BY fs.sort_order, fs.id
+  `).all(bookId, userEmail);
+  return rows.map(r => ({
+    ...r,
+    figure_ids: r.figure_ids ? String(r.figure_ids).split(',').map(Number) : [],
+  }));
+}
+
+/**
  * Letztes Lektorat einer Seite (user-spezifisch). Wird im Seiten-Chat als
  * Kontext eingespielt, damit die KI auf bereits gefundene Beanstandungen Bezug
  * nehmen kann ohne sie neu zu erfinden.
@@ -232,6 +269,28 @@ function getFiguren(bookId, userEmail, chapterId = null) {
 }
 
 /**
+ * Namen aller aktiven Figuren eines Buchs samt Kapitel-Zuordnung — schlank, für
+ * den Namensabgleich des Abschnitts-Chats (routes/jobs/chat/page-chat-figuren.js).
+ * `chapter_ids` kommen aus figure_appearances; Namen und Reihenfolge der Kapitel
+ * löst der Aufrufer über die Gliederung (content-store) auf.
+ */
+function getFigurenNamen(bookId, userEmail) {
+  const rows = db.prepare(`
+    SELECT f.id, f.fig_id, f.name, f.kurzname, f.weitere_namen, f.typ, f.erste_erwaehnung,
+           GROUP_CONCAT(DISTINCT fa.chapter_id) AS chapter_ids
+    FROM figures f
+    LEFT JOIN figure_appearances fa ON fa.figure_id = f.id
+    WHERE f.book_id = ? AND f.user_email = ? AND ${activeFigureSql('f')}
+    GROUP BY f.id
+    ORDER BY f.sort_order
+  `).all(bookId, userEmail);
+  return rows.map(r => ({
+    ...r,
+    chapter_ids: r.chapter_ids ? String(r.chapter_ids).split(',').map(Number) : [],
+  }));
+}
+
+/**
  * Konversationshistorie einer Session als Messages-Array für die KI.
  * Fasst aufeinanderfolgende Messages derselben Rolle zusammen, damit die
  * user/assistant-Alternation strikt bleibt (LM-Studio-Chat-Templates werfen
@@ -269,4 +328,4 @@ function buildChatMessageHistory(sessionId, { annotate = null, sanitize = null }
   return out;
 }
 
-module.exports = { getOpenIdeen, getLatestReview, getLatestPageCheck, getFiguren, buildChatMessageHistory };
+module.exports = { getOpenIdeen, getOpenBookIdeen, getSzenenMitFiguren, getLatestReview, getLatestPageCheck, getFiguren, getFigurenNamen, buildChatMessageHistory };

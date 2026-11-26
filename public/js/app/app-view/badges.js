@@ -101,4 +101,37 @@ export const badgesMethods = {
       console.error('[refreshShareLinkCounts]', e);
     }
   },
+
+  // Buchweite Zähler-Maps gezielt neu laden (Live-Abgleich, app-collab-stream.js,
+  // und die Karten nach eigenen Änderungen). `specs`: [{ url, key, page? }] —
+  // `key` im badges-Store; `page` = Feld am Root, das den Wert der offenen
+  // Seite spiegelt. Ein gescheiterter Read lässt die bisherige Map stehen:
+  // auf wackligem Netz verschwänden die Plaketten sonst bis zum nächsten Laden.
+  async _refreshBadgeMaps(specs) {
+    const bookId = this.$store.nav.selectedBookId;
+    if (!bookId) return;
+    const maps = await Promise.all(specs.map((sp) => fetchJson(`${sp.url}${sp.url.includes('?') ? '&' : '?'}book_id=${bookId}`).catch(() => null)));
+    if (this.$store.nav.selectedBookId !== bookId) return;
+    specs.forEach((sp, i) => {
+      const map = maps[i];
+      if (!map || typeof map !== 'object') return;
+      this.$store.badges[sp.key] = map;
+      if (sp.page && this.currentPage?.id) this[sp.page] = map[this.currentPage.id] || 0;
+    });
+  },
+
+  refreshIdeenCounts() {
+    return this._refreshBadgeMaps([
+      { url: '/ideen/counts', key: 'ideenCounts' },
+      { url: '/ideen/counts?kind=chapter', key: 'chapterIdeenCounts' },
+    ]);
+  },
+
+  // `targetKind`: 'page' | 'chapter' | undefined (beide).
+  refreshRechercheCounts(targetKind) {
+    const specs = [];
+    if (targetKind !== 'chapter') specs.push({ url: '/research/page-counts', key: 'rechercheCounts', page: 'currentPageRechercheCount' });
+    if (targetKind !== 'page') specs.push({ url: '/research/chapter-counts', key: 'chapterRechercheCounts' });
+    return this._refreshBadgeMaps(specs);
+  },
 };

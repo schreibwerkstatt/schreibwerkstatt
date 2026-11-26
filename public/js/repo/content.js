@@ -9,6 +9,7 @@ import { getDeviceId } from '../device-id.js';
 import { getTabId } from '../tab-id.js';
 import { beginSave, confirmSave, dropSave } from './save-ids.js';
 import { EVT } from '../events.js';
+import { postTabEvent } from '../tab-bus.js';
 import { dropPendingPage, dropQueuedRename, isTempId, isUndelivered, newOpKey, patchPendingPage, pendingPage, queueCreatePage, queueRename, resolveTempId } from './structure-queue.js';
 
 const GET_TIMEOUT_MS = 30000;
@@ -175,7 +176,15 @@ function _currentBookId() {
 // nächste Order-PUT des Organizers mit dem alten Stand in ORDER_CONFLICT.
 function _noteStructureWrite(bookId = null) {
   if (typeof window === 'undefined' || typeof CustomEvent === 'undefined') return;
-  window.dispatchEvent(new CustomEvent(EVT.STRUCTURE_WRITTEN, { detail: { bookId: bookId ?? _currentBookId() } }));
+  const id = bookId ?? _currentBookId();
+  window.dispatchEvent(new CustomEvent(EVT.STRUCTURE_WRITTEN, { detail: { bookId: id } }));
+  postTabEvent({ type: 'structure', bookId: id });
+}
+
+// Body-Write an die anderen Tabs dieses Browsers melden (tab-bus.js): der
+// Server-Anstoss filtert das eigene Gerät heraus.
+function _notePageSaved(pageId, page) {
+  postTabEvent({ type: 'page-saved', bookId: page?.book_id ?? _currentBookId(), pageId: Number(pageId), pageName: page?.name || null });
 }
 
 export const contentRepo = {
@@ -271,6 +280,7 @@ export const contentRepo = {
     if (hasHtml && typeof window !== 'undefined') {
       window.dispatchEvent(new CustomEvent(EVT.PAGE_REVISIONS_CHANGED, { detail: { pageId: id } }));
     }
+    if (hasHtml) _notePageSaved(id, out);
     return out;
   },
 
@@ -391,6 +401,7 @@ export const contentRepo = {
     if (typeof window !== 'undefined') {
       window.dispatchEvent(new CustomEvent(EVT.PAGE_REVISIONS_CHANGED, { detail: { pageId } }));
     }
+    _notePageSaved(pageId, out?.page || out);
     return out;
   },
 
@@ -427,6 +438,7 @@ export const contentRepo = {
     if (bookId != null) inv.push('books/' + bookId + '/tree');
     const out = await _write('POST', 'pages/' + id + '/split', { ...body, device_id: getDeviceId() }, inv);
     _noteStructureWrite(bookId);
+    _notePageSaved(id, out?.head);
     if (typeof window !== 'undefined') {
       window.dispatchEvent(new CustomEvent(EVT.PAGE_REVISIONS_CHANGED, { detail: { pageId: id } }));
     }

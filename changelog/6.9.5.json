@@ -1,0 +1,41 @@
+{
+  "version": "6.9.5",
+  "date": "2026-11-26",
+  "entries": [
+    {
+      "kind": "neu",
+      "de": "Live-Abgleich: Was du in einem anderen Tab oder auf einem anderen Gerät änderst, erscheint ohne Neuladen – etwa Ideen, Recherche, Plot, Figuren und Bearbeitungsstand. Das gilt auch für Änderungen von Mitautoren.",
+      "en": "Live sync: changes you make in another tab or on another device now appear without reloading – ideas, research, plot, characters and editing status, for example. The same goes for changes by co-authors."
+    },
+    {
+      "kind": "neu",
+      "de": "Bucheditor: Ändert jemand anderes einen Abschnitt, übernimmt der Bucheditor den neuen Text sofort. Abschnitte, an denen du gerade selbst schreibst, bleiben unberührt.",
+      "en": "Book editor: when someone else changes a section, the book editor picks up the new text right away. Sections you are currently writing in stay untouched."
+    },
+    {
+      "kind": "verbessert",
+      "de": "Kommentarleisten: Neue und erledigte Kommentare von Lesern deines geteilten Links erscheinen in der Leseansicht und im Bucheditor sofort, ohne Neuladen.",
+      "en": "Comment sidebars: new and resolved comments from readers of your shared link now appear in the reading view and the book editor right away, without reloading."
+    },
+    {
+      "kind": "verbessert",
+      "de": "Abschnitts-Chat: Der Chat kennt jetzt den Zeitstrahl des Buchs, offene Widersprüche im Kapitel, deine Ideen im übrigen Buch und frühere Szenen der Figuren, die im Abschnitt vorkommen.",
+      "en": "Section chat: the chat now knows the book's timeline, open continuity issues in the chapter, your ideas elsewhere in the book and earlier scenes of the characters that appear in the section."
+    },
+    {
+      "kind": "verbessert",
+      "de": "Änderungsvorschläge von Lesern zeigen nur noch die geänderten Sätze statt des ganzen markierten Absatzes. So siehst du auf einen Blick, was sich ändert.",
+      "en": "Change suggestions from readers now show only the changed sentences instead of the whole marked paragraph, so you see at a glance what changes."
+    },
+    {
+      "kind": "verbessert",
+      "de": "Vorschläge im Chat und der Verlauf eines Abschnitts zeigen einen stark umgeschriebenen Satz jetzt als Ganzes alt → neu statt als Wort-Durcheinander.",
+      "en": "Chat suggestions and a section's history now show a heavily rewritten sentence as a whole, old → new, instead of a jumble of words."
+    },
+    {
+      "kind": "behoben",
+      "de": "Abschnitts-Chat: In neu geschriebenen Kapiteln hielt der Chat längst eingeführte Figuren für neu. Jetzt kennt er alle Figuren des Buchs und weist darauf hin, wenn eine Komplettanalyse sie dem Kapitel zuordnen würde.",
+      "en": "Section chat: in newly written chapters, the chat treated long-established characters as new. It now knows every character in the book and tells you when a full analysis would assign them to the chapter."
+    }
+  ]
+}

@@ -1,8 +1,9 @@
-// Abschnitts-Chat: Abschnittsblock und Verlauf gehen mit 1h-TTL in den Prompt-Cache.
-// Zwischen zwei Fragen liegen oft mehr als fünf Minuten; mit 5-min-TTL wurde der
-// Abschnittsblock samt Verlauf fast jede Runde neu geschrieben statt gelesen.
-// Die TTLs dürfen von vorne nach hinten nicht steigen (die API lehnt 1h hinter 5 min ab),
-// darum tragen beide System-Blöcke 1h, wenn die Message-Breakpoints 1h tragen.
+// Abschnitts-Chat: TTL je Haltbarkeit. Block 1 (Buch-/Kapitelstoff) geht mit 1h in
+// den Prompt-Cache — er wird über Sessions und Abschnitte desselben Kapitels gelesen.
+// Block 2 (Abschnitt, Ideen) und der Verlauf ändern sich mit jedem übernommenen
+// Vorschlag, und die meisten Gespräche haben eine Frage: dort 5 min (Schreiben 1,25×
+// statt 2×). Die TTLs dürfen von vorne nach hinten nicht steigen (die API lehnt 1h
+// hinter 5 min ab) — 1h vorn, 5 min dahinter ist erlaubt.
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
@@ -17,10 +18,10 @@ const { _withMessageCacheBreakpoints } = require('../../lib/ai/claude.js');
 
 const ccOf = (m) => (Array.isArray(m.content) ? m.content.at(-1).cache_control : undefined);
 
-test('System des Abschnitts-Chats: beide Blöcke 1h', () => {
+test('System des Abschnitts-Chats: Block 1 1h, Block 2 5 min', () => {
   const blocks = buildChatSystemPrompt('Seite', 'Text.', [], null);
   assert.equal(blocks.length, 2);
-  assert.deepEqual(blocks.map(b => b.ttl), ['1h', '1h']);
+  assert.deepEqual(blocks.map(b => b.ttl), ['1h', undefined]);
 });
 
 test("Message-Breakpoints: '1h' setzt die 1h-TTL auf Verlaufsende und letzte Nachricht", () => {

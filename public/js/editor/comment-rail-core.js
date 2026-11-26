@@ -25,6 +25,10 @@ import { contentRepo } from '../repo/content.js';
 import { savePage } from './shared/page-api.js';
 import { stripFocusArtefacts } from '../utils.js';
 import { applySuggestionToHtml, suggestionReasonKey } from './comment-suggestion.js';
+import { suggestionDiffParts } from '../diff/suggestion-diff.js';
+
+// Template ruft je Render; der LCS läuft nur einmal je (Stelle, Vorschlag).
+const _suggestionDiffMemo = new Map();
 
 const anchorOf = anchorFromRow;
 
@@ -367,6 +371,22 @@ export function createCommentRail(cfg) {
         : (c.reader_name || app.t('share.reader.anon'));
       const seed = isAuthor ? (c.author_email || label) : (c.reader_name || 'anon');
       return { label, initials: avatarInitials(label), hue: app.userAvatarHue(seed) };
+    },
+
+    // Änderungsvorschlag als Wort-Diff, gekürzt auf die geänderten Sätze
+    // (diff/suggestion-diff.js) — dieselbe Darstellung wie im Share-Reader.
+    // Zu langer Text: neuer Text ungemarkert als Einfügung.
+    commentSuggestionParts(root) {
+      const quote = root.anchor_quote || '';
+      const text = root.suggestion_text || '';
+      const key = `${quote}\u0000${text}`;
+      let parts = _suggestionDiffMemo.get(key);
+      if (!parts) {
+        parts = suggestionDiffParts(quote, text) || [{ t: 'add', v: text, c: 'diff-add' }];
+        if (_suggestionDiffMemo.size > 200) _suggestionDiffMemo.clear();
+        _suggestionDiffMemo.set(key, parts);
+      }
+      return parts;
     },
 
     async _railReply(thread) {

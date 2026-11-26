@@ -5,7 +5,7 @@
 // __SHELL_BUILD: content hash over all listed assets → drives SHELL_CACHE.
 // __SHELL_MANIFEST: the coherent set precached atomically at SW install.
 // __VENDOR_SET: current vendor/ + fonts/ files — VENDOR_CACHE prune list.
-self.__SHELL_BUILD = "8081759a8f1e71bd";
+self.__SHELL_BUILD = "531468dffa47ff6e";
 self.__SHELL_MANIFEST = [
   "/css/admin/admin-backup.css",
   "/css/admin/admin-home.css",
@@ -259,6 +259,7 @@ self.__SHELL_MANIFEST = [
   "/js/app/boot/reachability.js",
   "/js/app/boot/session-change.js",
   "/js/app/boot/sw-register.js",
+  "/js/app/boot/tab-header.js",
   "/js/app/boot/update-policy.js",
   "/js/app/boot/user-active.js",
   "/js/app/boot/x-show-guard.js",
@@ -495,6 +496,7 @@ self.__SHELL_MANIFEST = [
   "/js/cards/book-editor/head.js",
   "/js/cards/book-editor/history.js",
   "/js/cards/book-editor/outline.js",
+  "/js/cards/book-editor/remote.js",
   "/js/cards/book-editor/save.js",
   "/js/cards/book-guard.js",
   "/js/cards/book-organizer-card.js",
@@ -677,6 +679,8 @@ self.__SHELL_MANIFEST = [
   "/js/diagram/mermaid-view.js",
   "/js/diff/diff-parts.js",
   "/js/diff/html-blocks.js",
+  "/js/diff/sentence-diff.js",
+  "/js/diff/suggestion-diff.js",
   "/js/diff/word-diff.js",
   "/js/editor/aside-hotkeys.js",
   "/js/editor/book-editor-comments.js",
@@ -928,6 +932,7 @@ self.__SHELL_MANIFEST = [
   "/js/prompts/lektorat-typen.js",
   "/js/prompts/lektorat.js",
   "/js/prompts/motiv.js",
+  "/js/prompts/page-chat-kontext.js",
   "/js/prompts/page-chat.js",
   "/js/prompts/plot-chat.js",
   "/js/prompts/plot.js",
@@ -1026,6 +1031,7 @@ self.__SHELL_MANIFEST = [
   "/js/storage-sweep.js",
   "/js/streak-grid.js",
   "/js/structure-title.js",
+  "/js/tab-bus.js",
   "/js/tab-id.js",
   "/js/table/table-html.js",
   "/js/tabs.js",

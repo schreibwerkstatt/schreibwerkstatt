@@ -30,6 +30,7 @@
           <div x-show="msg.role === 'assistant'" class="chat-msg-text" x-html="_renderChatMarkdown(msg.content)"></div>
           <div x-show="msg.role === 'assistant' && msg.context_info?.parse_fallback" class="chat-msg-hint" x-text="$app.t(msg.context_info?.lost_vorschlaege ? 'chat.parseFallbackLost' : 'chat.parseFallback')"></div>
           <div x-show="msg.role === 'assistant' && msg.context_info?.history_trimmed" class="chat-msg-hint" x-text="$app.t('chat.historyTrimmed', { n: msg.context_info?.history_trimmed || 0 })"></div>
+          <div x-show="msg.role === 'assistant' && msg.context_info?.figuren_fallback" class="chat-msg-hint" x-text="$app.t('chat.figurenFallback')"></div>
           <!-- @include chat-msg-foot -->
         </div>
 

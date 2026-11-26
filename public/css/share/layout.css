@@ -29,11 +29,13 @@ body.share-page {
   --cr-tag-bg: var(--share-hover);
   --cr-warn-bg: color-mix(in srgb, var(--share-accent-2) 18%, transparent);
   --cr-warn-text: var(--share-accent-2);
-  /* Änderungsvorschläge (Review-Link): alt/neu + «übernommen». */
-  --cr-del-bg: color-mix(in srgb, var(--share-danger) 14%, transparent);
-  --cr-del-text: var(--share-text);
-  --cr-ins-bg: color-mix(in srgb, var(--share-accent) 14%, transparent);
-  --cr-ins-text: var(--share-text);
+  /* Änderungsvorschläge (Review-Link): Wort-Marken (components/diff-marks.css)
+     + «übernommen». */
+  --color-mark-del-bg: color-mix(in srgb, var(--share-danger) 14%, transparent);
+  --color-mark-del-text: var(--share-text);
+  --color-mark-del-strike: var(--share-danger);
+  --color-mark-ins-bg: color-mix(in srgb, var(--share-accent) 14%, transparent);
+  --color-mark-ins-text: var(--share-text);
   --cr-ok-text: var(--share-accent);
   /* Vom Reviewer erledigte Kommentare treten in der Leseansicht deutlicher
      zurueck als in den Editor-Rails (default 0.62). */

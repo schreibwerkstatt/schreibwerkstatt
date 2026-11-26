@@ -9,7 +9,7 @@ const {
   makeJobLogger, updateJob, completeJob, failJob, i18nError,
   getPrompts, getBookPrompts,
   jobAbortControllers, readSections,
-  getFiguren, getLatestReview, getLatestPageCheck, getOpenIdeen, buildChatMessageHistory,
+  getFiguren, getFigurenNamen, getLatestReview, getLatestPageCheck, getOpenIdeen, buildChatMessageHistory,
   bookTextOpts, bindJobTier,
 } = require('../shared');
 const contentStore = require('../../../lib/content-store');
@@ -21,8 +21,10 @@ const { recordChatLedgerForMessage } = require('../../../db/cost-ledger');
 const { _parseChatResponse, capVorschlaege, figurenBlockChars } = require('./shared');
 const { applyChatEffort, EMPTY_ANSWER_MARKER } = require('../agentic-chat');
 const { createThinkPhase } = require('../shared/think-phase');
-const { pageChatBudget, computePageChangeHunks, fitHistory, formatPromptSizes } = require('./page-chat-context');
+const { pageChatBudget, pageChatKontextCaps, computePageChangeHunks, fitHistory, formatPromptSizes } = require('./page-chat-context');
 const { annotateVorschlagMatches, titelCollisions } = require('./page-chat-verify');
+const { chapterFiguren, figurenNachtrag } = require('./page-chat-figuren');
+const { loadPageChatKontext } = require('./page-chat-kontext');
 const { preContextPassages, retrievalQuery } = require('./book-chat-retrieval');
 const embed = require('../../../lib/embed');
 const appSettings = require('../../../lib/app-settings');
@@ -79,17 +81,19 @@ async function pageChatPreflight(session, userEmail) {
   return { status: 422, error_code: 'PAGE_CHAT_PAGE_TOO_LARGE', params: { chars, max: pageMax } };
 }
 
-// Abschnittstitel des Buchs in Lesereihenfolge (non-fatal): Kontext für
-// Titelfragen und Grundlage der Doppelungs-Markierung.
-async function _loadBookTitles(bookId, logger) {
+// Gliederung des Buchs (non-fatal): Abschnittstitel in Lesereihenfolge (Kontext
+// für Titelfragen, Grundlage der Doppelungs-Markierung) und die Kapitel-Reihenfolge
+// der Figuren-Nachträge (page-chat-figuren.js).
+async function _loadOutline(bookId, logger) {
   try {
     const outline = await contentStore.bookOutline(bookId);
-    return outline.filter(n => n.type === 'page').map(n => ({
+    const titles = outline.filter(n => n.type === 'page').map(n => ({
       id: n.id, name: n.name, chapter: contentStore.formatChapterPath(n.path),
     }));
+    return { outline, titles };
   } catch (e) {
-    logger.warn(`Abschnittstitel nicht geladen (${e.message}) – Seiten-Chat ohne Titelliste.`);
-    return [];
+    logger.warn(`Gliederung nicht geladen (${e.message}) – Seiten-Chat ohne Titelliste.`);
+    return { outline: [], titles: [] };
   }
 }
 
@@ -97,7 +101,7 @@ async function runChatJob(jobId, sessionId, userMsgId, message, userEmail) {
   const logger = makeJobLogger(jobId);
   const {
     buildChatSystemPrompt, SCHEMA_CHAT, historyTrimNote, formatPageChange,
-    buildPageChatBookContext, normalizeTitle,
+    buildPageChatBookContext, normalizeTitle, pageChatFigurenNachtrag,
   } = await getPrompts(userEmail);
   const effectiveProvider = resolveProvider({ userEmail });
   // Modellstufe vor dem Fenster: getContextConfigFor liest Fenster und Output-Cap
@@ -156,8 +160,11 @@ async function runChatJob(jobId, sessionId, userMsgId, message, userEmail) {
     }
     logger.info(`Start: «${session.page_name || '-'}» session=${sessionId}, page=${session.page_id || '-'}, msg-len=${message.length}`);
 
-    // Kontext aus DB laden – nur Figuren/Szenen/Orte des aktuellen Kapitels
-    const figuren = getFiguren(session.book_id, userEmail, pageChapterId);
+    // Figuren des Kapitels; hat die Analyse dem Kapitel keine zugeordnet, die des
+    // ganzen Buchs (page-chat-figuren.js — sonst hält das Modell eine bekannte
+    // Figur für neu). Kapitel-stabil → Block 1.
+    const { figuren, scope: figurenScope } = chapterFiguren(
+      (chId) => getFiguren(session.book_id, userEmail, chId), pageChapterId);
     const review  = getLatestReview(session.book_id, userEmail);
     const ideen    = getOpenIdeen(session.page_id, userEmail);
     const ideenStages = ideen.length ? getBookIdeenStages(session.book_id) : [];
@@ -168,7 +175,28 @@ async function runChatJob(jobId, sessionId, userMsgId, message, userEmail) {
       chapterId: pageChapterId, text: pageText, pageName: pd.name,
     });
     const { SYSTEM_CHAT: chatSysPrompt } = await getBookPrompts(session.book_id, userEmail);
-    const bookTitles = await _loadBookTitles(session.book_id, logger);
+    const { outline, titles: bookTitles } = await _loadOutline(session.book_id, logger);
+    // Figuren, die Abschnitt oder Frage beim Namen nennen und die Block 1 nicht trägt:
+    // Stammzeile in Block 2 (Abschnitt) bzw. in der Präambel der Frage.
+    const namen = getFigurenNamen(session.book_id, userEmail);
+    const nachtrag = figurenNachtrag({
+      namen,
+      blockFiguren: figuren, outline, pageText: promptText, question: message,
+    });
+    // Zeitstrahl, Kontinuitäts-Befunde des Kapitels, offene Ideen im übrigen Buch
+    // (page-chat-kontext.js). Non-fatal: fehlt etwas, läuft der Chat ohne den Block.
+    let kontext = { zeitstrahl: [], kontinuitaet: [], buchIdeen: [], szenen: [] };
+    try {
+      kontext = loadPageChatKontext({
+        bookId: session.book_id, userEmail, outline, pageId: session.page_id, chapterId: pageChapterId, ideen,
+        pageText: promptText, namen,
+      });
+    } catch (e) {
+      logger.warn(`Zusatzkontext nicht geladen (${e.message}) – Seiten-Chat ohne Zeitstrahl/Kontinuität/Buch-Ideen/Szenen.`);
+    }
+    if (figurenScope !== 'kapitel' || nachtrag.abschnitt.length || nachtrag.frage.length) {
+      logger.info(`Figuren: ${figurenScope} (${figuren.length}), Nachtrag Abschnitt ${nachtrag.abschnitt.length}, Frage ${nachtrag.frage.length}.`);
+    }
 
     const annotate = (r) => {
       if (r.role !== 'assistant') return '';
@@ -218,7 +246,9 @@ async function runChatJob(jobId, sessionId, userMsgId, message, userEmail) {
     const systemPrompt = buildChatSystemPrompt(session.page_name || '–', promptText, figuren, review,
       chatSysPrompt, pageChangeNote, ideen, lektorat, { figurenMaxChars: figurenBlockChars(aiCfg), editStatus, hatNachrichten: hasMsgThread(pd.html), langCode: textOpts.langCode,
         bookTitles, currentPageId: session.page_id, weltfakten, soziolekte, ideenStages, sizes: promptSizes,
-        figurenModus });
+        figurenModus, figurenScope, abschnittFiguren: nachtrag.abschnitt,
+        zeitstrahl: kontext.zeitstrahl, kontinuitaet: kontext.kontinuitaet, buchIdeen: kontext.buchIdeen, szenen: kontext.szenen,
+        kontextMaxChars: pageChatKontextCaps(aiCfg) });
 
     // Buch-Kontext: pro Frage andere Bytes → NICHT im System-Prompt (er bräche den
     // Präfix hinter Block 2, der ganze Verlauf würde jede Runde neu bezahlt), sondern
@@ -228,7 +258,11 @@ async function runChatJob(jobId, sessionId, userMsgId, message, userEmail) {
     const signal = jobAbortControllers.get(jobId)?.signal;
     const bookCtx = await _pageChatBookContext(session, retrievalQuery(message, fullHistory), budget, signal, userEmail, logger);
     const bookCtxText = bookCtx ? buildPageChatBookContext(bookCtx.hits) : '';
-    const userContent = bookCtxText ? `${bookCtxText}\n\n=== FRAGE ===\n${message}` : message;
+    // Figuren aus der Frage: hängen an der Frage, nicht am Kapitel → Präambel wie der
+    // Buch-Kontext (im System-Prompt bräche jede Frage den Cache-Präfix).
+    const frageFigText = pageChatFigurenNachtrag(nachtrag.frage, 'frage').join('\n').trim();
+    const preamble = [frageFigText, bookCtxText].filter(Boolean).join('\n\n');
+    const userContent = preamble ? `${preamble}\n\n=== FRAGE ===\n${message}` : message;
     if (bookCtxText) logger.info(`Buch-Kontext: ${bookCtx.hits.length} Stellen, ${bookCtx.chars} Zeichen.`);
 
     // Konversationshistorie: frühere Vorschläge samt Status als Anhang der
@@ -241,6 +275,7 @@ async function runChatJob(jobId, sessionId, userMsgId, message, userEmail) {
     const { messages: history, dropped } = fitHistory(fullHistory, historyBudget);
     logger.info(formatPromptSizes(promptSizes, {
       buchKontext: bookCtxText.length,
+      figurenFrage: frageFigText.length,
       verlauf: history.reduce((n, m) => n + String(m.content || '').length, 0),
       verlaufNachrichten: history.length,
     }));
@@ -249,7 +284,7 @@ async function runChatJob(jobId, sessionId, userMsgId, message, userEmail) {
     // zusätzlich der Breakpoint auf der letzten Nachricht (cacheLastMessage). Die
     // Markierung ist kein API-Feld — lib/ai/claude.js entfernt sie; andere Provider
     // bekommen sie gar nicht erst.
-    const markHistoryEnd = bookCtxText && effectiveProvider === 'claude' && history.length > 0;
+    const markHistoryEnd = preamble && effectiveProvider === 'claude' && history.length > 0;
     const aiMessages = [
       ...(markHistoryEnd ? [...history.slice(0, -1), { ...history.at(-1), cacheBreakpoint: true }] : history),
       { role: 'user', content: userContent },
@@ -279,13 +314,12 @@ async function runChatJob(jobId, sessionId, userMsgId, message, userEmail) {
       updateJob(jobId, updates);
     };
 
-    // cacheLastMessage: der System-Prompt ist über die Turns einer Session stabil
-    // (Block 1 buch-stabil, Block 2 seiten-stabil) — der Buch-Kontext steht in der
-    // Frage —, also greift das Multi-Turn-Caching der Konversationshistorie immer.
-    // 1h wie die System-Blöcke: zwischen zwei Fragen liegen oft mehr als fünf Minuten.
+    // cacheLastMessage: Verlaufsende + letzte Nachricht mit 5-min-TTL wie Block 2 —
+    // der Verlauf hängt hinter dem Abschnitt und bricht mit ihm (prompts/chat.js,
+    // Kommentar über buildChatSystemPrompt). Der Buch-Kontext steht in der Frage.
     let aiRes;
     try {
-      aiRes = await callAIChat(aiMessages, systemPrompt, onProgress, null, signal, undefined, SCHEMA_CHAT, chatTemperature(), '1h');
+      aiRes = await callAIChat(aiMessages, systemPrompt, onProgress, null, signal, undefined, SCHEMA_CHAT, chatTemperature(), true);
     } finally {
       think.set(false);
     }
@@ -342,6 +376,9 @@ async function runChatJob(jobId, sessionId, userMsgId, message, userEmail) {
       ...(dropped > 0 ? { history_trimmed: dropped } : {}),
       ...(vorschlaegeGekappt > 0 ? { vorschlaege_gekappt: vorschlaegeGekappt } : {}),
       ...(bookCtxText ? { book_context: { count: bookCtx.hits.length, chars: bookCtx.chars } } : {}),
+      // Kapitel ohne Figuren-Zuordnung (Analyse älter als das Kapitel): die Karte
+      // zeigt unter der Antwort einen Hinweis auf die Komplettanalyse.
+      ...(figurenScope === 'fallback' ? { figuren_fallback: true } : {}),
     };
 
     // Assistant-Nachricht in DB speichern

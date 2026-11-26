@@ -27,6 +27,7 @@ import { bookEditorHistoryMethods } from './book-editor/history.js';
 import { bookEditorHeadMethods } from './book-editor/head.js';
 import { bookEditorDraftMethods } from './book-editor/drafts.js';
 import { bookEditorActivationMethods } from './book-editor/activation.js';
+import { bookEditorRemoteMethods } from './book-editor/remote.js';
 import { buildBlocksFromPages, fetchBookContents } from './book-editor/blocks.js';
 import { draftsLoaded } from '../editor/draft-storage.js';
 import { createAutosaveTimers } from '../editor/shared/autosave.js';
@@ -204,6 +205,19 @@ export function registerBookEditorCard() {
         if (this.blocks.length) this._scheduleCommentRecompute();
       }, { signal: this._lifecycle.signal });
 
+      // Kommentare live: die Collab-Schicht meldet geänderte Share-Link-
+      // Kommentare des Buchs (app/app-collab-stream.js#_onShareCommentsChanged).
+      // Fremde Saves (anderer User/Gerät/Tab): unveränderte Blöcke ziehen nach
+      // (book-editor/remote.js).
+      window.addEventListener(EVT.PAGE_REMOTE_CHANGED, (e) => {
+        if (e.detail?.kind === 'delete' || !e.detail?.pageId) return;
+        this._pullRemoteBlock(e.detail.pageId);
+      }, { signal: this._lifecycle.signal });
+      window.addEventListener(EVT.SHARE_COMMENTS_CHANGED, () => {
+        if (this.loading || !this.blocks.length) return;
+        this._loadBookComments();
+      }, { signal: this._lifecycle.signal });
+
       // Klick ausserhalb des offenen Threads (Manuskript-Stream, Chrome) schliesst
       // ihn wieder; Klicks in der Leiste oder auf eine markierte Stelle bleiben aktiv.
       document.addEventListener('click', (e) => this._railDeselectOutside(e), { signal: this._lifecycle.signal });
@@ -362,6 +376,7 @@ export function registerBookEditorCard() {
     ...bookEditorHeadMethods,
     ...bookEditorDraftMethods,
     ...bookEditorActivationMethods,
+    ...bookEditorRemoteMethods,
     // `_memo(key, deps, fn)`; Reset über this._memos = {} im Lade-Pfad.
     ...memoMethods,
 

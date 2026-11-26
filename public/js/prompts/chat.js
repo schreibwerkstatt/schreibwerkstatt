@@ -6,11 +6,12 @@ import { buildPageChatWeltLines } from './blocks-welt.js';
 import { buildEditStatusBlock } from './edit-status-block.js';
 import { _obj, _str } from './schema-utils.js';
 import { SYSTEM_CHAT, SYSTEM_BOOK_CHAT } from './core.js';
-import { PAGE_CHAT_IDEEN_RULES, pageChatIdeenLines, pageChatIdeenAenderungRules, pageChatNachrichtenHinweis, buildBookTitlesBlock, buildCurrentTitleLine } from './page-chat.js';
+import { PAGE_CHAT_IDEEN_RULES, pageChatIdeenLines, pageChatFigurenHead, pageChatFigurenNachtrag, pageChatIdeenAenderungRules, pageChatNachrichtenHinweis, buildBookTitlesBlock, buildCurrentTitleLine } from './page-chat.js';
 import { CHAT_TOOLS, toolMentions } from './chat-tools/index.js';
 import { buildWeltfaktenBlock } from './weltfakten-block.js';
 import { roundNoteRule } from './chat-round-note.js';
 import { formatAbschnitt } from './book-text-format.js';
+import { buildPageChatZeitstrahlLines, buildPageChatKontinuitaetLines, buildPageChatBuchIdeenLines, buildPageChatSzenenLines } from './page-chat-kontext.js';
 export { buildWeltfaktenBlock, WELTFAKTEN_BLOCK_DEFAULT_MAX_CHARS } from './weltfakten-block.js';
 
 /**
@@ -71,7 +72,9 @@ export function buildFigurenBlock(figuren, opts = {}) {
   const maxChars = Number(opts.maxChars) > 0 ? Number(opts.maxChars) : FIGUREN_BLOCK_DEFAULT_MAX_CHARS;
   const m = toolMentions(opts.toolNames);
   const withTools = opts.detailTools === true && m.has('get_figure_profile');
-  const head = FIGUREN_HEAD;
+  // opts.head: Kopfzeile(n) statt `=== FIGUREN DES BUCHS ===` — der Abschnitts-Chat
+  // sagt so, ob der Block nur das Kapitel oder das ganze Buch trägt.
+  const head = Array.isArray(opts.head) && opts.head.length ? opts.head.join('\n') : FIGUREN_HEAD;
   const dropLists = Array.isArray(opts.dropLists) ? opts.dropLists.filter(k => FIGUREN_DETAIL_KEYS.includes(k)) : [];
   const wrap = (lines, body) => [...lines, '[', body.join(',\n'), ']'].join('\n');
 
@@ -155,22 +158,27 @@ export function buildFigurenBlock(figuren, opts = {}) {
  * @param {Object}      opts            { figurenMaxChars } — Zeichenbudget des
  *                                      Figuren-Blocks (siehe buildFigurenBlock);
  *                                      { bookTitles, currentPageId } — Abschnittstitel
- *                                      des Buchs für Titelfragen (buildBookTitlesBlock).
+ *                                      des Buchs für Titelfragen (buildBookTitlesBlock);
+ *                                      { figurenScope } — Kopf des Figuren-Blocks
+ *                                      (prompts/page-chat.js#pageChatFigurenHead);
+ *                                      { abschnittFiguren } — Stammzeilen der Figuren,
+ *                                      die der Abschnitt nennt, aber Block 1 nicht trägt
+ *                                      (Block 2, routes/jobs/chat/page-chat-figuren.js).
  */
 // Rückgabe: Array von System-Cache-Blöcken (für callAIChat → Claude separate
 // cache_control-Blöcke; lokale Provider flatten sie auf einen String).
 //   Block 1 (ttl '1h'): kapitel-stabiler Anteil (System + Figuren des Kapitels +
-//     Review + Titelliste ohne Markierung) — ändert sich weder über die Turns derselben
-//     Seite noch beim Wechsel zu einem anderen Abschnitt desselben Kapitels. Der grosse
-//     SYSTEM_CHAT + die Figuren-JSON werden so über diese Seiten-Chats aus dem Cache
-//     gelesen. Nichts Abschnitts-Spezifisches hier hinein (auch keine Markierung des
-//     aktuellen Abschnitts) — das gehört in Block 2.
-//   Block 2 (ttl '1h'): seiten-spezifischer Anteil (Seitenname, Stellung in der
-//     Titelliste, Seiteninhalt + Ideen +
-//     Lektorat + JSON-Format-Trailer) — stabil über die Turns einer Seiten-Session,
-//     invalidiert beim Seitenwechsel oder wenn der Autor die Seite editiert. 1h statt
-//     5 min, weil zwischen zwei Fragen oft mehr als fünf Minuten liegen (Lesen,
-//     Überarbeiten); mit 5 min wurde Block 2 samt Verlauf fast jede Runde neu geschrieben.
+//     Review + Titelliste ohne Markierung + Zeitstrahl des Buchs + Kontinuitäts-
+//     Befunde des Kapitels) — ändert sich weder über die Turns derselben Seite noch
+//     beim Wechsel zu einem anderen Abschnitt desselben Kapitels und wird über
+//     Sessions hinweg gelesen. Nichts Abschnitts-Spezifisches hier hinein (auch keine
+//     Markierung des aktuellen Abschnitts) — das gehört in Block 2.
+//   Block 2 (5 min): seiten-spezifischer Anteil (Seitenname, Stellung in der
+//     Titelliste, Seiteninhalt, Ideen des Abschnitts + des übrigen Buchs, Lektorat,
+//     JSON-Format-Trailer) — ändert sich mit jedem übernommenen Vorschlag und jeder
+//     übernommenen Idee. Auf Prod hatten 19 von 26 Gesprächen eine einzige Frage, und
+//     in rund der Hälfte der Folgerunden war der Abschnitt geändert: der 1h-Write (2×)
+//     wurde meist nie gelesen, 5 min (1,25×) ist in jedem Fall billiger.
 export function buildChatSystemPrompt(pageName, pageText, figuren, review, systemOverride = null, pageChangeNote = null, ideen = null, lektorat = null, opts = {}) {
   const stable = [systemOverride ?? SYSTEM_CHAT];
   // opts.sizes (optional, Out-Parameter): Zeichen je Baustein fürs Job-Log —
@@ -187,6 +195,7 @@ export function buildChatSystemPrompt(pageName, pageText, figuren, review, syste
   //   ohne_listen — kompakt, ohne die Szenen- und Schauplatz-Listen (Anzahl bleibt)
   const figurenModus = opts.figurenModus || 'voll';
   const figBlock = buildFigurenBlock(figuren, {
+    head: pageChatFigurenHead(opts.figurenScope),
     maxChars: opts.figurenMaxChars,
     compact: figurenModus !== 'voll',
     dropLists: figurenModus === 'ohne_listen' ? ['szenen', 'schauplätze'] : [],
@@ -213,6 +222,17 @@ export function buildChatSystemPrompt(pageName, pageText, figuren, review, syste
   if (titlesBlock) stable.push('', titlesBlock);
   sizes.titel = titlesBlock ? titlesBlock.length : 0;
 
+  // Zeitstrahl des Buchs + offene Kontinuitäts-Befunde dieses Kapitels: beide hängen
+  // nur am Buch bzw. Kapitel, gehören also in den kapitel-stabilen Block 1.
+  // opts.kontextMaxChars: Deckel je Block aus dem Kontextfenster des Providers.
+  const caps = opts.kontextMaxChars || {};
+  const zeitLines = buildPageChatZeitstrahlLines(opts.zeitstrahl, { maxChars: caps.zeitstrahl });
+  if (zeitLines.length) stable.push('', ...zeitLines);
+  sizes.zeitstrahl = zeitLines.join('\n').length;
+  const kontLines = buildPageChatKontinuitaetLines(opts.kontinuitaet, { maxChars: caps.kontinuitaet });
+  if (kontLines.length) stable.push('', ...kontLines);
+  sizes.kontinuitaet = kontLines.join('\n').length;
+
   const titleLine = buildCurrentTitleLine(opts.bookTitles, opts.currentPageId ?? null);
   const page = [
     `Aktueller Abschnitt: «${pageName}»`,
@@ -238,10 +258,25 @@ export function buildChatSystemPrompt(pageName, pageText, figuren, review, syste
     );
   }
 
+  // Figuren, die der Abschnitt nennt, die Block 1 aber nicht trägt (veraltete
+  // Kapitel-Zuordnung): nur Stammzeile — wer, wo im Buch. Hier und nicht in Block 1,
+  // weil die Auswahl am Abschnittstext hängt (Block 1 ist kapitel-stabil).
+  const abschnittFigLines = pageChatFigurenNachtrag(opts.abschnittFiguren, 'abschnitt');
+  page.push(...abschnittFigLines);
+  sizes.figurenAbschnitt = abschnittFigLines.join('\n').length;
+
   const hatIdeen = Array.isArray(ideen) && ideen.length > 0;
   const ideenLines = pageChatIdeenLines(ideen);
   page.push(...ideenLines);
   sizes.ideen = ideenLines.join('\n').length;
+  // Offene Ideen im übrigen Buch, gruppiert nach Lage zu DIESEM Abschnitt → Block 2.
+  const buchIdeenLines = buildPageChatBuchIdeenLines(opts.buchIdeen, { maxChars: caps.ideen });
+  page.push(...buchIdeenLines);
+  sizes.buchIdeen = buchIdeenLines.join('\n').length;
+  // Frühere Szenen mit Figuren, die dieser Abschnitt nennt → Block 2 (hängt am Text).
+  const szenenLines = buildPageChatSzenenLines(opts.szenen, { maxChars: caps.szenen });
+  page.push(...szenenLines);
+  sizes.szenen = szenenLines.join('\n').length;
 
   const weltLines = buildPageChatWeltLines(opts.weltfakten, opts.soziolekte);
   page.push(...weltLines);
@@ -300,9 +335,13 @@ export function buildChatSystemPrompt(pageName, pageText, figuren, review, syste
     ...(_isLocal ? [] : ['', JSON_ONLY]),
   );
 
+  // TTL je Haltbarkeit: Block 1 trägt nur Buch-/Kapitelstoff und wird über Sessions
+  // und Abschnitte desselben Kapitels gelesen → 1h. Block 2 und der Verlauf ändern
+  // sich mit jedem übernommenen Vorschlag und meist sind es Gespräche mit einer
+  // Frage → 5 min (Schreiben 1,25× statt 2×). Längere TTL immer vor kürzerer.
   const blocks = [
     { text: stable.join('\n'), ttl: '1h' },
-    { text: page.join('\n'), ttl: '1h' },
+    { text: page.join('\n') },
   ];
   sizes.block1 = blocks[0].text.length;
   sizes.block2 = blocks[1].text.length;

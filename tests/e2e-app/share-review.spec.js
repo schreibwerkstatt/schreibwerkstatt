@@ -83,7 +83,10 @@ test('Review-Link: Reviewer schlägt vor, Owner übernimmt in der Notebook-Lesea
     await expect(composer).toHaveCount(0);
 
     const card = reader.locator('.share-comments__list .comment-rail__thread');
-    await expect(card.locator('.comment-suggestion__new')).toHaveText('kläfft leise');
+    // Wort-Diff Stelle → Vorschlag (diff/suggestion-diff.js).
+    // Ganz ersetzt → alt → neu als Block (diff/sentence-diff.js).
+    await expect(card.locator('.comment-suggestion__diff del')).toHaveText(['bellt laut']);
+    await expect(card.locator('.comment-suggestion__diff ins')).toHaveText(['kläfft leise']);
     await expect(card.locator('.comment-rail__author')).toContainText('Anna');
     await readerCtx.close();
 
@@ -175,6 +178,103 @@ test('Bucheditor: Vorschlag in der Leiste übernehmen schreibt den Block neu', a
   }
 });
 
+// Live: der Bucheditor ist schon offen, DANN schlägt ein Leser vor. Die Karte
+// muss ohne Reload in der Leiste erscheinen (Buch-Kanal des Event-Streams,
+// `book { comments: true }`) — kein manuelles _loadBookComments im Test.
+test('Bucheditor: Leser-Vorschlag erscheint live in der Leiste', async ({ page, browser }) => {
+  await bootApp(page);
+  await selectSeededBook(page);
+  const pageId = await createPage(page);
+  const readerCtx = await browser.newContext({ baseURL: new URL(page.url()).origin });
+  try {
+    const { token, bid } = await page.evaluate(async (pid) => {
+      const r = await fetch('/share/api/links', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ kind: 'page', page_id: pid, mode: 'review', reviewers: ['Lea'] }),
+      });
+      const link = await r.json();
+      const html = (await (await fetch('/content/pages/' + pid, { cache: 'no-store' })).json()).html;
+      return { token: link.token, bid: /data-bid="([0-9a-f]+)"/.exec(html)[1] };
+    }, pageId);
+
+    await page.evaluate(() => window.__app.toggleBookEditorCard());
+    const editor = page.locator('.card--bookeditor');
+    await expect(editor.locator('.book-editor-page-body').first()).toBeVisible({ timeout: 15000 });
+    // Stream offen und aufs Buch abonniert, sonst prüft der Test den Tab-Fallback.
+    await expect.poll(() => page.evaluate(async () => {
+      const { bookStreamOpen } = await import('/js/event-stream.js');
+      return bookStreamOpen(window.Alpine.store('nav').selectedBookId);
+    }), { timeout: 10000 }).toBe(true);
+    await page.evaluate(() => {
+      const d = window.Alpine.$data(document.querySelector('.card--bookeditor'));
+      if (!d.commentRailVisible) d.toggleCommentRail();
+    });
+
+    // Leser ohne Sitzung schlägt vor.
+    const res = await readerCtx.request.post(`/share/${token}/comment`, {
+      data: {
+        body: 'ruhiger', suggestion: 'schnarcht', reader_token: 'rLeaLive00001',
+        anchor_bid: bid, anchor_quote: 'schläft', anchor_start: 36, anchor_end: 43,
+      },
+    });
+    expect(res.ok()).toBe(true);
+
+    const thread = editor.locator('.book-editor-comments .comment-rail__thread', { hasText: 'ruhiger' });
+    await expect(thread).toBeVisible({ timeout: 5000 });
+    await expect(thread.locator('.comment-suggestion__diff .diff-del')).toHaveText('schläft');
+    await expect(thread.locator('.comment-suggestion__diff .diff-add')).toHaveText('schnarcht');
+  } finally {
+    await readerCtx.close();
+    await page.evaluate(async (pid) => { await fetch('/content/pages/' + pid, { method: 'DELETE' }); }, pageId);
+  }
+});
+
+// Live in der Notebook-Leseansicht: Abschnitt offen, DANN kommentiert ein Leser.
+// Leiste und Abschnitts-Zähler offener Reviewer-Kommentare ziehen ohne Reload
+// nach (EVT.SHARE_COMMENTS_CHANGED aus der Collab-Schicht).
+test('Notebook-Leseansicht: Leser-Kommentar erscheint live, Zähler zieht nach', async ({ page, browser }) => {
+  await bootApp(page);
+  await selectSeededBook(page);
+  const pageId = await createPage(page);
+  const readerCtx = await browser.newContext({ baseURL: new URL(page.url()).origin });
+  try {
+    const { token, bid } = await page.evaluate(async (pid) => {
+      const r = await fetch('/share/api/links', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ kind: 'page', page_id: pid }),
+      });
+      const link = await r.json();
+      const html = (await (await fetch('/content/pages/' + pid, { cache: 'no-store' })).json()).html;
+      return { token: link.token, bid: /data-bid="([0-9a-f]+)"/.exec(html)[1] };
+    }, pageId);
+    await page.evaluate(async (pid) => {
+      const p = window.Alpine.store('nav').pages.find(x => x.id === pid);
+      await window.__app.selectPage(p);
+    }, pageId);
+    await expect(page.locator(VIEW_SEL)).toContainText('bellt laut');
+    await expect.poll(() => page.evaluate(async () => {
+      const { bookStreamOpen } = await import('/js/event-stream.js');
+      return bookStreamOpen(window.Alpine.store('nav').selectedBookId);
+    }), { timeout: 10000 }).toBe(true);
+    await page.evaluate(() => window.dispatchEvent(new CustomEvent('comments-rail:toggle')));
+
+    const res = await readerCtx.request.post(`/share/${token}/comment`, {
+      data: {
+        body: 'Live-Anmerkung', reader_token: 'rLiveNotebook1',
+        anchor_bid: bid, anchor_quote: 'bellt laut', anchor_start: 9, anchor_end: 19,
+      },
+    });
+    expect(res.ok()).toBe(true);
+
+    const rail = page.locator('aside.comment-rail:not(.book-editor-comments)');
+    await expect(rail.locator('.comment-rail__thread', { hasText: 'Live-Anmerkung' })).toBeVisible({ timeout: 5000 });
+    await expect.poll(() => page.evaluate((pid) => window.Alpine.store('badges').shareCommentCounts?.[pid] || 0, pageId)).toBe(1);
+  } finally {
+    await readerCtx.close();
+    await page.evaluate(async (pid) => { await fetch('/content/pages/' + pid, { method: 'DELETE' }); }, pageId);
+  }
+});
+
 // Link frei geteilt (Team-Chat), keine Namensliste: der Reader fragt nach dem
 // Namen, die Person trägt sich ein, der Beitrag geht durch und trägt den Namen.
 // Eigener offener Vorschlag: kein «Erledigt» (entscheidet der Autor), Text
@@ -220,15 +320,16 @@ test('Review-Link ohne Namensliste: Leser trägt sich selbst ein und schlägt vo
 
     const card = reader.locator('.share-comments__list .comment-rail__thread').first();
     await expect(card.locator('.comment-rail__author')).toContainText('Lea');
-    await expect(card.locator('.comment-rail__quote--old')).toHaveText('bellt laut');
-    await expect(card.locator('del')).toHaveCount(0);
+    await expect(card.locator('.comment-rail__quote')).toHaveText('bellt laut');
+    await expect(card.locator('.comment-suggestion__diff del')).toHaveText(['bellt laut']);
     // Kein «Erledigt» am offenen Vorschlag; Bearbeiten ändert den Ersatztext.
     await card.hover();
     await expect(card.locator('.share-thread__action', { hasText: /Mark as done|erledigt/i })).toHaveCount(0);
     await card.locator('.share-thread__action', { hasText: /Edit|Bearbeiten/ }).click();
     await card.locator('.share-thread__suggestion-edit').fill('jault');
     await card.locator('.share-thread__edit button').first().click();
-    await expect(card.locator('.comment-suggestion__new')).toHaveText('jault');
+    await expect(card.locator('.comment-suggestion__diff ins')).toHaveText(['jault']);
+    await expect(card.locator('.comment-suggestion__diff del')).toHaveText(['bellt laut']);
 
     // Abschluss-Sektion: Lea ist eingetragen.
     await expect(reader.locator('#share-feedback.share-review')).toContainText('Lea');

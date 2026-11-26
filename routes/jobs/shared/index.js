@@ -116,9 +116,11 @@ module.exports = {
   readSections: sectionReader.readSections,
 
   getFiguren: queries.getFiguren,
+  getFigurenNamen: queries.getFigurenNamen,
   getLatestReview: queries.getLatestReview,
   getLatestPageCheck: queries.getLatestPageCheck,
   getOpenIdeen: queries.getOpenIdeen,
+  getOpenBookIdeen: queries.getOpenBookIdeen,
   buildChatMessageHistory: queries.buildChatMessageHistory,
 
   BATCH_SIZE: loader.BATCH_SIZE,

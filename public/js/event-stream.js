@@ -19,12 +19,13 @@
 // der Stream braucht darum kein eigenes session-expired-Handling.
 
 import { getDeviceId } from './device-id.js';
+import { getTabId } from './tab-id.js';
 
 const RETRY_AFTER_CLOSE_MS = 30_000;
 
 const jobListeners = new Map(); // jobId → Set<cb(snapshot|null)>
 const queueListeners = new Set(); // cb(items)
-const bookListeners = new Set(); // cb({ changed, presence } | { gone } | { reconnect })
+const bookListeners = new Set(); // cb({ changed, presence, meta } | { gone } | { reconnect })
 let es = null;
 let open = false;
 let started = false;
@@ -41,7 +42,7 @@ function _parse(data) {
 
 function _url() {
   if (!bookId) return '/events/stream';
-  const params = new URLSearchParams({ book_id: String(bookId), device_id: getDeviceId() });
+  const params = new URLSearchParams({ book_id: String(bookId), device_id: getDeviceId(), tab_id: getTabId() });
   return '/events/stream?' + params.toString();
 }
 

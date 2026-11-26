@@ -8,7 +8,8 @@
      vereinheitlichten comment*-Felder/-Methoden (commentSelectedRootId,
      commentSavingResolve, commentSavingReply, commentReplyDrafts,
      selectCommentThread, toggleCommentResolve, deleteBookComment,
-     replyToCommentRoot, commentAvatar, decideCommentSuggestion). Der verankerte Quote-Block und der
+     replyToCommentRoot, commentAvatar, commentSuggestionParts,
+     decideCommentSuggestion). Der verankerte Quote-Block und der
      Karten-Wrapper bleiben pro Partial inline (Quote nur bei verankerten
      Threads; der Wrapper trägt im Bucheditor die Vertikalverankerung). -->
 <div class="comment-rail__comment internal-link" role="button" tabindex="0"
@@ -39,14 +40,14 @@
       </button>
     </span>
   </div>
-  <!-- Änderungsvorschlag (Review-Modus): neuer Text + Entscheid des Autors; die
-       alte Stelle steht durchgestrichen im Anker-Zitat der Einbettung
-       (`comment-rail__quote--old`). Übernehmen schreibt in den Abschnitt
+  <!-- Änderungsvorschlag (Review-Modus): Wort-Diff Stelle → Vorschlag, gekürzt auf
+       die geänderten Sätze (commentSuggestionParts, diff/suggestion-diff.js), +
+       Entscheid des Autors. Übernehmen schreibt in den Abschnitt
        (comment-suggestion.js). -->
   <template x-if="thread.root.suggestion_text != null">
     <div class="comment-suggestion">
       <span class="comment-suggestion__label" x-text="$app.t('share.comments.suggestion.label')"></span>
-      <ins class="comment-suggestion__new" x-text="thread.root.suggestion_text"></ins>
+      <span class="comment-suggestion__diff"><template x-for="(part, pi) in commentSuggestionParts(thread.root)" :key="pi"><span :class="part.c" x-text="part.v"></span></template></span>
       <div class="comment-suggestion__actions" x-show="!thread.root.suggestion_state || thread.root.suggestion_state === 'open'">
         <button type="button" class="btn-compact"
                 :disabled="commentSavingResolve === thread.root.id"

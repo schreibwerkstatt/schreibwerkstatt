@@ -240,7 +240,6 @@
                @click="selectCommentThread(thread.root.id)"
                @keydown.enter.prevent="selectCommentThread(thread.root.id)">
             <span class="comment-rail__quote" x-show="!thread.changed"
-                  :class="{ 'comment-rail__quote--old': thread.root.suggestion_text != null }"
                   x-text="thread.root.anchor_quote || ''"></span>
             <template x-if="thread.changed">
               <div class="comment-rail__changed">

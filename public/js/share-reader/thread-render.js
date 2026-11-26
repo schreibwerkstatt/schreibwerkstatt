@@ -12,6 +12,7 @@ import { resolveCurrentQuote } from '../share-anchor.js';
 import { avatarHue, avatarInitials } from '../avatar.js';
 import { el, timeEl, submitOnModEnter } from './dom.js';
 import { errorText } from './api.js';
+import { suggestionDiffParts } from '../diff/suggestion-diff.js';
 
 // deps:
 //   t, article, api, savedName
@@ -55,15 +56,22 @@ export function createThreadRenderer(deps) {
     return meta;
   }
 
-  // Aenderungsvorschlag (Review-Modus): der Ersatztext + Entscheid des Autors.
-  // Die alte Stelle steht nur einmal — als durchgestrichenes Zitat in der
-  // Anker-Zeile (renderAnchorRow). Optik geteilt mit den Owner-Leisten
-  // (.comment-suggestion in components/comment-rail.css).
+  // Aenderungsvorschlag (Review-Modus): Wort-Diff der markierten Stelle zum
+  // Ersatztext, gekuerzt auf die geaenderten Saetze (diff/suggestion-diff.js),
+  // + Entscheid des Autors. Optik geteilt mit den Owner-Leisten
+  // (.comment-suggestion in components/comment-rail.css, Marken diff-marks.css).
   function renderSuggestion(root) {
     const s = root.suggestion;
     const box = el('div', 'comment-suggestion');
     box.appendChild(el('span', 'comment-suggestion__label', t('suggestion_label')));
-    box.appendChild(el('ins', 'comment-suggestion__new', s.text));
+    const diff = el('div', 'comment-suggestion__diff');
+    const parts = suggestionDiffParts(root.anchor?.quote || '', s.text || '')
+      || [{ t: 'add', v: s.text || '', c: 'diff-add' }];
+    for (const p of parts) {
+      if (p.t === 'eq') diff.appendChild(document.createTextNode(p.v));
+      else diff.appendChild(el(p.t === 'del' ? 'del' : 'ins', p.c, p.v));
+    }
+    box.appendChild(diff);
     if (s.state === 'accepted' || s.state === 'rejected') {
       box.appendChild(el('span', `comment-suggestion__state comment-suggestion__state--${s.state}`,
         t(s.state === 'accepted' ? 'suggestion_accepted' : 'suggestion_rejected')));
@@ -252,9 +260,7 @@ export function createThreadRenderer(deps) {
     const res = resolveCurrentQuote(article, root.anchor);
     const gone = !isAnchorLocated(root) || res.status === 'gone';
     const changed = !gone && res.status === 'changed';
-    // Vorschlag: die Stelle ist der zu ersetzende Text → durchgestrichen.
-    const old = root.suggestion && !gone && !changed ? ' comment-rail__quote--old' : '';
-    row.appendChild(el('span', 'comment-rail__quote' + (gone || changed ? ' comment-rail__quote--stale' : '') + old, root.anchor.quote || ''));
+    row.appendChild(el('span', 'comment-rail__quote' + (gone || changed ? ' comment-rail__quote--stale' : ''), root.anchor.quote || ''));
     if (gone || changed) row.appendChild(el('span', 'share-thread__stale', t(gone ? 'anchor_stale' : 'anchor_changed')));
     if (!gone) {
       row.setAttribute('role', 'button');

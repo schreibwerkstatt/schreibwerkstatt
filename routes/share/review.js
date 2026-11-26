@@ -21,6 +21,7 @@ const shareLinks = require('../../db/share-links');
 const shareReview = require('../../db/share-review');
 const rateLimit = require('../../lib/share-ratelimit');
 const { setContext } = require('../../lib/log-context');
+const { emitBookMeta } = require('../../lib/book-events');
 const { sessionEmail } = require('../../lib/acl');
 const { recordUsageEvent } = require('../../lib/usage-events');
 const logger = require('../../logger');
@@ -154,6 +155,7 @@ function register(router) {
       const ok = shareReview.setSuggestionState(id, ownerEmail, state);
       if (!ok) return res.status(404).json({ error_code: 'NOT_FOUND' });
       logger.info(`[share/comment] Vorschlag ${state} id=${id}`);
+      emitBookMeta(bookId, 'comments');
       if (state !== 'open') {
         recordUsageEvent({ userEmail: ownerEmail, event: 'comment.action', bookId, meta: { action: state === 'accepted' ? 'accept' : 'reject' } });
       }

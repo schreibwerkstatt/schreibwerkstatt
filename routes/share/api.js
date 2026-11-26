@@ -9,6 +9,7 @@ const shareLinks = require('../../db/share-links');
 const shareReview = require('../../db/share-review');
 const { guardBook, resolveBookRole, sessionEmail } = require('../../lib/acl');
 const { setContext } = require('../../lib/log-context');
+const { emitBookMeta } = require('../../lib/book-events');
 const { recordUsageEvent } = require('../../lib/usage-events');
 const notify = require('../../lib/notify');
 const logger = require('../../logger');
@@ -399,6 +400,7 @@ function register(router) {
       // Root-Verfasser dieses Threads.
       notify.maybeNotifyReaderReply(link, reply, shareLinks.getCommentById(parentId)).catch(() => {});
       recordUsageEvent({ userEmail: ownerEmail, event: 'comment.action', bookId: link.book_id, meta: { action: 'reply' } });
+      emitBookMeta(link.book_id, 'comments');
       res.json(reply);
     } catch (e) {
       logger.error('[share/api/reply POST] ' + e.message);
@@ -419,6 +421,7 @@ function register(router) {
       if (!ok) return res.status(404).json({ error_code: 'NOT_FOUND' });
       logger.info(`[share/comment] ${resolved ? 'resolve' : 'reopen'} id=${id} durch=owner`);
       recordUsageEvent({ userEmail: ownerEmail, event: 'comment.action', bookId, meta: { action: 'resolve' } });
+      emitBookMeta(bookId, 'comments');
       res.json({ ok: true, resolved });
     } catch (e) {
       logger.error('[share/api/comments resolve PATCH] ' + e.message);
@@ -436,6 +439,7 @@ function register(router) {
       const ok = shareLinks.deleteComment(id, ownerEmail);
       if (!ok) return res.status(404).json({ error_code: 'NOT_FOUND' });
       recordUsageEvent({ userEmail: ownerEmail, event: 'comment.action', bookId, meta: { action: 'delete' } });
+      emitBookMeta(bookId, 'comments');
       res.json({ ok: true });
     } catch (e) {
       logger.error('[share/api/comments DELETE] ' + e.message);

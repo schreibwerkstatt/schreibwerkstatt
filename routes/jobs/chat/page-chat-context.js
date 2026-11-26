@@ -46,6 +46,25 @@ function pageChatBudget(aiCfg) {
   };
 }
 
+// Zeichendeckel der Zusatzblöcke (Zeitstrahl, Kontinuität, Buch-Ideen, frühere Szenen) als Anteil am
+// Input-Budget, mit Boden und Decke: ein kleines lokales Fenster bekommt wenige
+// Zeilen statt eines gesprengten Prompts, ein grosses keinen Block über die Decke —
+// was nicht passt, weist der Prompt-Baustein als gekappt aus.
+const KONTEXT_CAPS = {
+  zeitstrahl:   { share: 0.05, min: 1500, max: 30000 },
+  kontinuitaet: { share: 0.03, min: 1000, max: 12000 },
+  ideen:        { share: 0.05, min: 1500, max: 30000 },
+  szenen:       { share: 0.05, min: 1500, max: 30000 },
+};
+function pageChatKontextCaps(aiCfg) {
+  const input = Math.max(8000, Number(aiCfg?.inputBudgetChars) || 0);
+  const out = {};
+  for (const [k, { share, min, max }] of Object.entries(KONTEXT_CAPS)) {
+    out[k] = Math.min(max, Math.max(min, Math.floor(input * share)));
+  }
+  return out;
+}
+
 function _clip(s, n) {
   return s.length > n ? s.slice(0, n - 1) + '…' : s;
 }
@@ -132,9 +151,9 @@ function fitHistory(history, maxChars) {
 function formatPromptSizes(sizes = {}, extra = {}) {
   const k = (n) => `${((Number(n) || 0) / 1000).toFixed(1)}K`;
   return `Prompt-Zeichen: Block1 ${k(sizes.block1)} (System ${k(sizes.system)}, Figuren ${k(sizes.figuren)} [${sizes.figurenModus || '-'}], `
-    + `Buchbewertung ${k(sizes.review)}, Titel ${k(sizes.titel)}) · Block2 ${k(sizes.block2)} (Abschnitt ${k(sizes.abschnitt)}, `
-    + `Änderungen ${k(sizes.aenderungen)}, Ideen ${k(sizes.ideen)}, Welt ${k(sizes.welt)}, Lektorat ${k(sizes.lektorat)}) · `
-    + `Buch-Kontext ${k(extra.buchKontext)} · Verlauf ${k(extra.verlauf)} (${extra.verlaufNachrichten || 0} Nachrichten).`;
+    + `Buchbewertung ${k(sizes.review)}, Titel ${k(sizes.titel)}, Zeitstrahl ${k(sizes.zeitstrahl)}, Kontinuität ${k(sizes.kontinuitaet)}) · Block2 ${k(sizes.block2)} (Abschnitt ${k(sizes.abschnitt)}, `
+    + `Änderungen ${k(sizes.aenderungen)}, Figuren-Nachtrag ${k(sizes.figurenAbschnitt)}, Ideen ${k(sizes.ideen)}, Buch-Ideen ${k(sizes.buchIdeen)}, frühere Szenen ${k(sizes.szenen)}, Welt ${k(sizes.welt)}, Lektorat ${k(sizes.lektorat)}) · `
+    + `Buch-Kontext ${k(extra.buchKontext)} · Figuren aus Frage ${k(extra.figurenFrage)} · Verlauf ${k(extra.verlauf)} (${extra.verlaufNachrichten || 0} Nachrichten).`;
 }
 
-module.exports = { pageChatBudget, computePageChangeHunks, fitHistory, formatPromptSizes };
+module.exports = { pageChatBudget, pageChatKontextCaps, computePageChangeHunks, fitHistory, formatPromptSizes };

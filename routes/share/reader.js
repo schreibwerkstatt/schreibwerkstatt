@@ -7,6 +7,7 @@ const shareLinks = require('../../db/share-links');
 const shareReview = require('../../db/share-review');
 const rateLimit = require('../../lib/share-ratelimit');
 const { setContext } = require('../../lib/log-context');
+const { emitBookMeta } = require('../../lib/book-events');
 const { tServer, tServerParams } = require('../../lib/i18n-server');
 const appSettings = require('../../lib/app-settings');
 const notify = require('../../lib/notify');
@@ -390,6 +391,7 @@ function register(router) {
       logger.info(`[share/comment] new token=${token.slice(0, 8)} book=${link.book_id} bytes=${body.length} anchored=${!!anchorBid} reply=${!!parentId} suggestion=${!!(suggestion && !parentId)}`);
       // Owner per Mail benachrichtigen (fire-and-forget, gedrosselt, opt-out).
       notify.maybeNotifyShareComment(link, comment).catch(() => {});
+      emitBookMeta(link.book_id, 'comments');
       if (wantsJson) {
         return res.json({ ok: true, comment: serializeCommentForReader(comment, readerToken) });
       }
@@ -445,6 +447,7 @@ function register(router) {
 
     try {
       const changed = shareLinks.updateReaderIdentity(token, rtRaw, newName || null, newEmailRaw || null);
+      if (changed) emitBookMeta(link.book_id, 'comments');
       res.json({ ok: true, updated: changed });
     } catch (e) {
       logger.error('[share/reader-identity POST] ' + e.message);
@@ -479,6 +482,7 @@ function register(router) {
       const ok = shareLinks.setReaderCommentResolved(id, token, rtRaw, resolved);
       if (!ok) return res.status(404).json({ error_code: 'NOT_FOUND' });
       logger.info(`[share/comment] ${resolved ? 'resolve' : 'reopen'} id=${id} durch=leser token=${token.slice(0, 8)}`);
+      emitBookMeta(link.book_id, 'comments');
       res.json({ ok: true, resolved });
     } catch (e) {
       logger.error('[share/comment resolve PATCH] ' + e.message);
@@ -522,6 +526,7 @@ function register(router) {
     try {
       const ok = shareLinks.editReaderComment(id, token, rtRaw, body, suggestion);
       if (!ok) return res.status(404).json({ error_code: 'NOT_FOUND' });
+      emitBookMeta(link.book_id, 'comments');
       res.json({ ok: true, comment: serializeCommentForReader(shareLinks.getCommentById(id), rtRaw) });
     } catch (e) {
       logger.error('[share/comment edit PATCH] ' + e.message);
@@ -557,6 +562,7 @@ function register(router) {
         return res.status(404).json({ error_code: 'NOT_FOUND' });
       }
       logger.info(`[share/comment DELETE] token=${token.slice(0, 8)} book=${link.book_id} id=${id}`);
+      emitBookMeta(link.book_id, 'comments');
       res.json({ ok: true });
     } catch (e) {
       logger.error('[share/comment DELETE] ' + e.message);

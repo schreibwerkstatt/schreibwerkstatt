@@ -208,3 +208,61 @@ export function buildPageChatBookContext(passages) {
   }
   return out.join('\n');
 }
+
+/**
+ * Kopf des Figuren-Blocks im Abschnitts-Chat — sagt, was der Block trägt, damit
+ * das Modell aus einer fehlenden Figur nicht schliesst, es gebe sie im Buch nicht.
+ *   'kapitel'  — die Figuren, die die Analyse diesem Kapitel zugeordnet hat
+ *   'fallback' — dem Kapitel ist (noch) keine Figur zugeordnet: alle Figuren des Buchs
+ *   sonst      — alle Figuren des Buchs (Abschnitt ohne Kapitel)
+ * Der Kopf hängt nur am Kapitel: Block 1 bleibt kapitel-stabil (Cache).
+ * @param {'kapitel'|'fallback'|'buch'|undefined} scope
+ * @returns {string[]|null}  null = Standardkopf
+ */
+export function pageChatFigurenHead(scope) {
+  if (scope === 'kapitel') {
+    return [
+      '=== FIGUREN DIESES KAPITELS ===',
+      '(Nur die Figuren, die die Figurenanalyse diesem Kapitel zugeordnet hat — das Buch hat weitere. Fehlt hier eine Figur, ist sie deshalb weder neu noch unbekannt. `kapitel` nennt, wo eine Figur im Buch vorkommt.)',
+    ];
+  }
+  if (scope === 'fallback') {
+    return [
+      '=== FIGUREN DES BUCHS ===',
+      '(Diesem Kapitel hat die Figurenanalyse noch keine Figuren zugeordnet — es ist vermutlich neuer als der letzte Analyselauf. Darum stehen hier alle Figuren des Buchs. `kapitel` nennt, wo eine Figur bisher vorkommt; das ist der Stand des Analyselaufs, spätere Kapitel fehlen dort.)',
+    ];
+  }
+  return null;
+}
+
+/**
+ * Stammzeilen von Figuren, die beim Namen genannt werden, aber nicht im
+ * Figuren-Block stehen (veraltete Kapitel-Zuordnung). Nur wer und wo — kein
+ * Dossier: der Nachtrag soll klein bleiben und dem Modell sagen, dass es die Figur
+ * gibt und in welchen Kapiteln sie schon vorkommt.
+ * @param {Array<{name:string,kurzname?:string,typ?:string,erste_erwaehnung?:string,kapitel?:string[]}>} rows
+ * @param {'abschnitt'|'frage'} quelle  wo der Name steht
+ * @returns {string[]}  Zeilen samt Leerzeile am Ende; [] = kein Block
+ */
+export function pageChatFigurenNachtrag(rows, quelle) {
+  const list = Array.isArray(rows) ? rows.filter(r => r && r.name) : [];
+  if (!list.length) return [];
+  const head = quelle === 'frage'
+    ? '=== FIGUREN AUS DER FRAGE (nur Stammdaten) ==='
+    : '=== WEITERE FIGUREN, DIE DIESER ABSCHNITT NENNT (nur Stammdaten) ===';
+  const note = quelle === 'frage'
+    ? '(Figuren des Buchs, deren Name in der Frage vorkommt und die oben nicht stehen. `kapitel` nennt, wo sie laut letzter Figurenanalyse vorkommen — spätere Kapitel können fehlen. Gleichnamige Wörter können Fehltreffer sein.)'
+    : '(Figuren des Buchs, deren Name im Abschnitt vorkommt, die die Figurenanalyse diesem Kapitel aber nicht zugeordnet hat. `kapitel` nennt, wo sie laut letzter Analyse vorkommen.)';
+  const out = [head, note];
+  for (const r of list) {
+    out.push(JSON.stringify({
+      name: r.name,
+      ...(r.kurzname && r.kurzname !== r.name ? { kurzname: r.kurzname } : {}),
+      ...(r.typ ? { typ: r.typ } : {}),
+      ...(r.erste_erwaehnung ? { erste_erwaehnung: r.erste_erwaehnung } : {}),
+      kapitel: Array.isArray(r.kapitel) ? r.kapitel : [],
+    }));
+  }
+  out.push('');
+  return out;
+}

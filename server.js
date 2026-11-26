@@ -198,6 +198,7 @@ app.use((req, res, next) => {
 });
 // Auffällige Antworten (5xx, 4xx ausser 401/404, langsam) ins App-Log.
 app.use(require('./lib/request-log').requestLog);
+app.use(require('./lib/live-writes').liveWrites); // Live-Meldung an offene Browser, vor allen Routern
 
 // ── Auth-Routen (öffentlich) ──────────────────────────────────────────────────
 app.use(authRouter);

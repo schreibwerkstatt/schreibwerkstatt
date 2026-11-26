@@ -169,6 +169,11 @@ export const treeCatchUpMethods = {
       if (this._structureDrifted(data?.structure_at)) this._scheduleTreeCatchUp('structure');
       if (!Array.isArray(data?.changes) || data.changes.length === 0) return;
       this._scheduleTreeCatchUp('drift');
+      // Ansichten ausserhalb der offenen Seite (Bucheditor-Blöcke) ziehen selbst
+      // nach; sie prüfen den Stempel und vertragen doppelte Meldungen.
+      for (const c of data.changes) {
+        if (c?.page_id && typeof window !== 'undefined' && typeof window.dispatchEvent === 'function') window.dispatchEvent(new CustomEvent(EVT.PAGE_REMOTE_CHANGED, { detail: { pageId: c.page_id, kind: c.kind || 'update' } }));
+      }
       // Ausnahme vom „nur Baum": die OFFENE Seite. Der erste Save eines Geraets,
       // das das Buch vorher nicht offen hatte, erreicht sonst nie den Editor —
       // der volle Poll, den dieser Save anstoesst, setzt seine Basis dahinter.

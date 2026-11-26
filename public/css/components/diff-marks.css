@@ -1,7 +1,8 @@
 @layer components {
 /* === Wort-Diff-Markierung — eine Optik für alle Diff-Ansichten ===
    Klassen aus public/js/diff/diff-parts.js: Abschnitts-Historie, Fassungsvergleich,
-   Fassungs-Leseansicht, Kommentar-Leisten («Stelle geändert»), Konflikt-Auflösung
+   Fassungs-Leseansicht, Kommentar-Leisten («Stelle geändert», Änderungsvorschläge
+   auch im Share-Reader), Konflikt-Auflösung
    (Notebook, Focus, Bucheditor) und die Vorschlagskarten von Abschnitts-, Plot- und
    Ideen-Chat. Konsumenten setzen hier nur Dichte/Abstand ihres Containers, nie die
    Markierung selbst — sonst sieht dieselbe Änderung je Ansicht anders aus. */

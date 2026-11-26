@@ -1,13 +1,15 @@
 import { EVT } from '../../events.js';
 import { guardNetRequired, isOfflineRejection } from './net-required.js';
 import { installUserActiveTracker, withUserActiveHeader } from './user-active.js';
+import { withTabHeader } from './tab-header.js';
 import { installReachability, noteServerFail, noteServerOk, setRawFetch, SLOW_MS } from './reachability.js';
 
 // Globaler fetch-Wrapper: fängt 401-Antworten ab und signalisiert Session-Ablauf
 // via SESSION_EXPIRED-Event. Alpine zeigt daraufhin einen Banner. Kein Auto-
 // Redirect – User soll ungespeicherte Änderungen (Editor, Chat) retten können.
 // Ohne Verbindung weist er Server-pflichtige Requests sofort ab (net-required.js).
-// Bei bewusster Nutzung trägt er das Aktivitäts-Signal mit (user-active.js).
+// Bei bewusster Nutzung trägt er das Aktivitäts-Signal mit (user-active.js),
+// an Schreib-Requests die Tab-Kennung (tab-header.js, Live-Echo).
 // Und er meldet der Erreichbarkeit (reachability.js), was er von eigenen
 // Requests sieht — siehe `observe`.
 export function installFetchGuard() {
@@ -21,7 +23,7 @@ export function installFetchGuard() {
     const seen = observe(input, init);
     let res;
     try {
-      res = await origFetch(input, withUserActiveHeader(input, init), ...rest);
+      res = await origFetch(input, withTabHeader(input, withUserActiveHeader(input, init)), ...rest);
     } catch (e) {
       seen?.failed(e);
       throw e;

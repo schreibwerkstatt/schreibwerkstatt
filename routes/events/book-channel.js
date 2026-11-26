@@ -10,7 +10,10 @@ const pagePresence = require('../../db/page-presence');
 //   book  { changed, presence }  — Anstoss, kein Datensatz. `changed`: jemand
 //         anderes hat Seiten des Buchs geschrieben → Client holt /changes.
 //         `presence`: ein Gerät ist dazugekommen/gegangen → Client holt
-//         /presence bzw. seine Geräte-Zähler.
+//         /presence bzw. seine Geräte-Zähler. `meta`: Liste der Bereiche
+//         ausserhalb des Manuskripts, die sich geändert haben (`ideen`,
+//         `redaktion`, `comments`, … — lib/live-writes.js); Client lädt
+//         Zähler und offene Karten dieser Bereiche nach.
 //   book  { gone: true }          — Zugriff aufs Buch ist weg. Der Kanal meldet
 //         sich danach ab; der Client stösst seinen Geräte-Ping an, dessen 403 den
 //         bestehenden Access-Lost-Pfad auslöst.
@@ -24,6 +27,10 @@ const pagePresence = require('../../db/page-presence');
 // Echo: Anstösse, die von DIESEM Gerät ausgelöst wurden (gleiche E-Mail und
 // gleiche oder fehlende device_id — Server-/Job-Writes gelten wie beim
 // Self-Filter von /changes als eigener Edit), gehen nicht raus.
+//
+// Meta-Echo: nur der auslösende Tab (origin.tabId === tab_id dieses Streams)
+// bekommt seine Meldung nicht — andere Tabs desselben Browsers und andere
+// Geräte desselben Users schon. Ohne Tab-ID gibt es kein Echo.
 //
 // Presence: eine offene Verbindung heisst „Gerät ist da". Der Heartbeat des
 // Streams hält die book_presence-Row und die Edit-Rows (page_presence) dieses
@@ -40,12 +47,12 @@ function _sameEmail(a, b) {
 
 // Liefert null, wenn der User das Buch nicht sehen darf — dann gibt es keinen
 // Kanal. Sonst { heartbeat, detach }.
-function attachBookChannel(write, { email, bookId, deviceId }) {
+function attachBookChannel(write, { email, bookId, deviceId, tabId = null }) {
   if (!getBookRole(bookId, email)) return null;
 
   let closed = false;
   let timer = null;
-  let flags = { changed: false, presence: false };
+  let flags = { changed: false, presence: false, meta: new Set() };
 
   const detach = () => {
     if (closed) return;
@@ -53,6 +60,7 @@ function attachBookChannel(write, { email, bookId, deviceId }) {
     if (timer) clearTimeout(timer);
     bus.off('change', onChange);
     bus.off('presence', onPresence);
+    bus.off('meta', onMeta);
   };
 
   const flush = () => {
@@ -63,8 +71,8 @@ function attachBookChannel(write, { email, bookId, deviceId }) {
       detach();
       return;
     }
-    const out = flags;
-    flags = { changed: false, presence: false };
+    const out = { changed: flags.changed, presence: flags.presence, meta: [...flags.meta].sort() };
+    flags = { changed: false, presence: false, meta: new Set() };
     write('book', out);
   };
 
@@ -78,9 +86,16 @@ function attachBookChannel(write, { email, bookId, deviceId }) {
   };
   const onChange = (id, origin) => poke('changed', id, origin);
   const onPresence = (id, origin) => poke('presence', id, origin);
+  const onMeta = (id, kind, origin) => {
+    if (closed || id !== bookId) return;
+    if (tabId && origin?.tabId === tabId) return;
+    flags.meta.add(kind);
+    if (!timer) timer = setTimeout(flush, COALESCE_MS);
+  };
 
   bus.on('change', onChange);
   bus.on('presence', onPresence);
+  bus.on('meta', onMeta);
 
   const heartbeat = () => {
     if (closed || !deviceId) return;

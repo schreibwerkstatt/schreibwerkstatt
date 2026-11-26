@@ -269,6 +269,8 @@ export const appCollabMethods = {
       // Voll-Load unsichtbar. Der Baum wird darum nachgezogen (tree/catchup.js);
       // Toast + Marker laufen unveraendert weiter.
       if (ch.kind !== 'delete' && this._pageIdOrderMap && !this._pageIdOrderMap.has(ch.page_id)) sawUnknownPage = true;
+      // Ansichten ausserhalb der offenen Seite (Bucheditor-Blöcke) ziehen selbst nach.
+      this._notePageRemoteChanged(ch);
       if (ch.kind === 'delete') {
         if (this.currentPage?.id && ch.page_id === this.currentPage.id) {
           touchedCurrent = ch;
@@ -325,6 +327,11 @@ export const appCollabMethods = {
     if (!pageId) return;
     if (typeof window === 'undefined' || typeof CustomEvent === 'undefined') return;
     window.dispatchEvent(new CustomEvent(EVT.PAGE_REVISIONS_CHANGED, { detail: { pageId: Number(pageId) } }));
+  },
+
+  _notePageRemoteChanged(change) {
+    if (typeof window === 'undefined' || typeof window.dispatchEvent !== 'function' || typeof CustomEvent === 'undefined') return;
+    window.dispatchEvent(new CustomEvent(EVT.PAGE_REMOTE_CHANGED, { detail: { pageId: change.page_id, kind: change.kind || 'update' } }));
   },
 
   _onCurrentPageRemoteEdit(change) {

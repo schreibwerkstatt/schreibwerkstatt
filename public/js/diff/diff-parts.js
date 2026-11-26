@@ -1,6 +1,7 @@
 // Darstellung eines Wort-Diffs — geteilt von allen Diff-Ansichten:
 // Abschnitts-Historie, Fassungsvergleich und Fassungs-Leseansicht
-// (page-revision-diff.js, HTML-String), Kommentar-Leisten («Stelle geändert»),
+// (page-revision-diff.js, HTML-String), Kommentar-Leisten («Stelle geändert»,
+// Änderungsvorschläge über suggestion-diff.js, auch im Share-Reader),
 // Konflikt-Auflösung aller drei Editoren (editor/shared/conflict-diff.js) und
 // die Vorschlagskarten von Abschnitts-, Plot- und Ideen-Chat (Alpine-Templates).
 //
@@ -10,8 +11,9 @@
 //
 // Pure — kein DOM, kein Alpine.
 
-import { escHtml } from '../utils.js';
+import { escHtml } from '../utils/escape.js';
 import { wordDiff } from './word-diff.js';
+import { readableParts } from './sentence-diff.js';
 
 // Rand-Whitespace einer Änderung steht ausserhalb der Marke, sonst läuft
 // Hinterlegung und Strich über die Lücke. Reine Satzzeichen (`"` → `«`)
@@ -70,9 +72,12 @@ export function wordParts(a, b, diffLib = null) {
   return diffLib.diffWords(a, b).map(p => ({ t: p.added ? 'add' : p.removed ? 'del' : 'eq', v: p.value }));
 }
 
-/** Markierte Teile beider Seiten im Lesefluss — für die Chat-Vorschlagskarten. */
+/**
+ * Markierte Teile beider Seiten im Lesefluss — für die Chat-/Profil-Vorschlags-
+ * karten. Umgeschriebene Sätze stehen als Ganzes alt → neu (sentence-diff.js).
+ */
 export function diffParts(a, b) {
-  return markParts(wordDiff(a, b), 'both');
+  return markParts(readableParts(wordDiff(a, b)), 'both');
 }
 
 /**

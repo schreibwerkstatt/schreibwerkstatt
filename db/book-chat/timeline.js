@@ -27,7 +27,7 @@ function getLatestContinuityCheck(bookId, userEmail) {
 }
 
 const _stmtContinuityIssues = db.prepare(`
-    SELECT id, schwere, typ, beschreibung, stelle_a, stelle_b, empfehlung, sort_order
+    SELECT id, schwere, typ, beschreibung, stelle_a, stelle_b, empfehlung, sort_order, resolved
     FROM continuity_issues
     WHERE check_id = ? AND dismissed = 0
     ORDER BY sort_order, id

@@ -221,7 +221,7 @@ test('Save-Anstoss: fremd und Zweitgerät ja, eigenes Gerät nein', async () => 
   // Fremder User → Anstoss.
   await contentStore.savePage(pageId, { html: '<p>d</p>', device_id: DEV_B }, ctx('bob@x'));
   await a.until(ev => ev.some(x => x.event === 'book'));
-  assert.deepEqual(bookEvents(a)[0].data, { changed: true, presence: false });
+  assert.deepEqual(bookEvents(a)[0].data, { changed: true, presence: false, meta: [] });
 
   // Eigenes Zweitgerät → Anstoss.
   await contentStore.savePage(pageId, { html: '<p>e</p>', device_id: DEV_A2 }, ctx('alice@x'));
@@ -243,7 +243,7 @@ test('Presence-Anstoss nur bei Zustandswechsel', async () => {
 
   pagePresence.ping(pageId, 'bob@x', bookId, DEV_B);
   await a.until(ev => ev.some(x => x.event === 'book'));
-  assert.deepEqual(bookEvents(a)[0].data, { changed: false, presence: true });
+  assert.deepEqual(bookEvents(a)[0].data, { changed: false, presence: true, meta: [] });
 
   // Heartbeat derselben Row: kein neuer Anstoss.
   pagePresence.ping(pageId, 'bob@x', bookId, DEV_B);
@@ -262,6 +262,40 @@ test('Presence-Anstoss nur bei Zustandswechsel', async () => {
   await sleep(400);
   assert.equal(bookEvents(a).length, 3);
   a.close();
+});
+
+test('Meta-Anstoss: erreicht alle Tabs ausser dem auslösenden, nur im eigenen Buch', async () => {
+  const { bookId } = await setupBook();
+  const { emitBookMeta } = require('../../lib/book-events');
+  const { runWithContext } = require('../../lib/log-context');
+  const TAB_A = 'aaaaaaaaaaaa';
+  const TAB_B = 'bbbbbbbbbbbb';
+  const a = await connect('alice@x', bookQuery(bookId, DEV_A1) + '&tab_id=' + TAB_A);
+  const b = await connect('alice@x', bookQuery(bookId, DEV_A1) + '&tab_id=' + TAB_B);
+  await a.until(ev => ev.some(x => x.event === 'hello'));
+  await b.until(ev => ev.some(x => x.event === 'hello'));
+
+  // Ohne Tab (Leser im Share-Reader, nativer Client): alle Tabs.
+  emitBookMeta(bookId, 'comments');
+  await a.until(ev => ev.some(x => x.event === 'book'));
+  await b.until(ev => ev.some(x => x.event === 'book'));
+  assert.deepEqual(bookEvents(a)[0].data, { changed: false, presence: false, meta: ['comments'] });
+
+  // Aus Tab A, gleiches Gerät: Tab B ja, Tab A nicht. Gleichzeitige Bereiche
+  // kommen in einem Anstoss.
+  runWithContext({ tabId: TAB_A }, () => { emitBookMeta(bookId, 'ideen'); emitBookMeta(bookId, 'plot'); });
+  await b.until(ev => bookEvents({ events: ev }).length >= 2);
+  assert.deepEqual(bookEvents(b)[1].data.meta, ['ideen', 'plot']);
+  await sleep(400);
+  assert.equal(bookEvents(a).length, 1, 'kein Echo an den auslösenden Tab');
+
+  // Anderes Buch → nichts.
+  const other = await setupBook();
+  emitBookMeta(other.bookId, 'ideen');
+  await sleep(400);
+  assert.equal(bookEvents(b).length, 2);
+  a.close();
+  b.close();
 });
 
 test('Zugriff entzogen: gone statt Anstoss, Kanal meldet sich ab', async () => {

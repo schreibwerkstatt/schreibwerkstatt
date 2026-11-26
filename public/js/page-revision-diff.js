@@ -15,6 +15,7 @@ import { escHtml } from './utils.js';
 import { htmlToPlainText } from './html-text.js';
 import { parseBlocks } from './diff/html-blocks.js';
 import { markParts, partsToHtml, wordParts } from './diff/diff-parts.js';
+import { readableParts } from './diff/sentence-diff.js';
 
 export { htmlToPlainText, parseBlocks };
 
@@ -186,9 +187,10 @@ export function renderSideBySide(oldHtml, newHtml, diffLib, opts) {
 }
 
 // Rendert kombinierten Wort-Diff einer Zeile: entfernt → <del>, neu → <ins>,
-// gleich → plain. Lesefluss-Variante (eine Spalte) statt links/rechts getrennt.
+// gleich → plain. Lesefluss-Variante (eine Spalte) statt links/rechts getrennt;
+// umgeschriebene Sätze stehen als Ganzes alt → neu (diff/sentence-diff.js).
 function renderWordsBoth(oldText, newText, diffLib) {
-  return partsToHtml(markParts(wordParts(oldText, newText, diffLib), 'both'));
+  return partsToHtml(markParts(readableParts(wordParts(oldText, newText, diffLib)), 'both'));
 }
 
 // Public API. Einspaltiger Inline-Diff für den Lesefluss (Manuskript-Stream):
