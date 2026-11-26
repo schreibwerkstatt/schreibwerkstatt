@@ -1,5 +1,6 @@
 'use strict';
 // Oeffentliche Inhaltsseiten fuer Erstbesucher (vor dem Auth-Guard gemountet):
+//   GET /schreiben           — Themenseite Schreiben (die drei Editoren)
 //   GET /lektorat            — Themenseite KI-Lektorat
 //   GET /testleser           — Themenseite Testleser-Feedback
 //   GET /funktionen          — Funktionsuebersicht (routes/public-features.js)
@@ -22,6 +23,7 @@ const router = express.Router();
 // (pre-auth frei, erzeugt von `npm run shots:landing`), `accent` =
 // Kartenfarbe der App fuer Ueberschriften (wie /funktionen).
 const TOPICS = {
+  schreiben: { accent: 'bookeditor', imgs: ['notebook', 'fokus', 'schreiben'] },
   lektorat:  { accent: 'stil',  imgs: ['lektorat-text', 'lektorat', 'bewertung'] },
   testleser: { accent: 'share', imgs: ['teilen', 'testleser', 'kommentare'] },
 };

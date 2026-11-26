@@ -173,6 +173,68 @@ async function captureAll({ base, seed, outDir }) {
   });
   await page.waitForTimeout(1500);
 
+  // ── 1a. Notebook-Editor: ein Abschnitt im Edit-Modus ──────────────────────
+  // Werkzeugleiste oben links, darunter der Text — das Bild zur Themenseite
+  // /schreiben. Das Blatt steht sonst mittig in der breiten Spalte, weit rechts
+  // der Leiste: für die Aufnahme linksbündig unter die Leiste und auf
+  // Kachelbreite. Abgebrochen wird ohne Speichern.
+  await page.evaluate(() => window.__app.startEdit());
+  await page.waitForSelector('.page-editor-toolbar', { state: 'visible', timeout: 20000 });
+  {
+    const css = await page.addStyleTag({ content: '.page-content-view--editing { max-width: 444px !important; margin-inline: 0 !important; }' });
+    await page.waitForTimeout(1200);
+    shots.push(await _shot(page, outDir, 'notebook', '.page-editor-toolbar', { rect: { x: -8, y: -8 } }));
+    await css.evaluate(n => n.remove());
+  }
+
+  // ── 1b. Focus-Editor: Vollbild-Schreibmodus ───────────────────────────────
+  // Der Absatz, an dem geschrieben wird, steht hell, der Rest gedimmt. Für die
+  // Aufnahme rückt die Textspalte an den linken Rand und auf Kachelbreite. Am
+  // Ende des ersten Absatzes wird ein Satz getippt (setzt den aktiven Absatz)
+  // und nach der Aufnahme per Undo wieder entfernt — der Text der folgenden
+  // Aufnahmen (Lektorat, Chat) bleibt unverändert.
+  await page.evaluate(() => window.__app.enterFocusMode());
+  await page.waitForSelector('.focus-editor.is-active .focus-editor__content p', { state: 'visible', timeout: 20000 });
+  {
+    const css = await page.addStyleTag({ content: `
+      .focus-editor.is-active .focus-editor__content { padding-left: 24px !important; padding-right: calc(100% - 460px) !important; }
+    ` });
+    await page.waitForTimeout(800);
+    const before = await page.locator('.focus-editor.is-active .focus-editor__content').evaluate(n => n.textContent);
+    await page.evaluate(() => {
+      const p = document.querySelector('.focus-editor.is-active .focus-editor__content p');
+      const r = document.createRange();
+      r.selectNodeContents(p);
+      r.collapse(false);
+      const sel = window.getSelection();
+      sel.removeAllRanges();
+      sel.addRange(r);
+    });
+    await page.keyboard.type(' Draussen regnete es.', { delay: 20 });
+    await page.waitForTimeout(1500);
+    // Ausschnitt um die Schreibzeile: oben die letzten Zeilen des aktiven
+    // Absatzes (hell), darunter der nächste (gedimmt). Wo die Zeile steht,
+    // bestimmt der Typewriter-Scroll — darum gemessen, nicht fest.
+    const caretY = await page.evaluate(() => {
+      const r = window.getSelection().getRangeAt(0).getBoundingClientRect();
+      return Math.round(r.bottom - document.querySelector('.focus-editor.is-active').getBoundingClientRect().top);
+    });
+    shots.push(await _shot(page, outDir, 'fokus', '.focus-editor.is-active', { rect: { x: 0, y: caretY - 156 } }));
+    for (let i = 0; i < 30; i++) {
+      const now = await page.locator('.focus-editor.is-active .focus-editor__content').evaluate(n => n.textContent);
+      if (now === before) break;
+      await page.keyboard.press('Control+z');
+      await page.waitForTimeout(150);
+    }
+    const after = await page.locator('.focus-editor.is-active .focus-editor__content').evaluate(n => n.textContent);
+    if (after !== before) throw new Error('Shot fokus: Undo hat den getippten Satz nicht entfernt');
+    await css.evaluate(n => n.remove());
+  }
+  await page.evaluate(() => window.__app.exitFocusMode());
+  await page.waitForTimeout(1200);
+  await page.evaluate(() => window.__app.cancelEdit());
+  await page.waitForTimeout(1200);
+
   // ── 2a. Kommentare: die Leiste des Autors neben dem Text ──────────────────
   // Notebook-Leseansicht des geteilten Abschnitts: die Leser-Kommentare stehen
   // in der Randleiste rechts (vor dem Lektorat-Lauf — mit offenen Befunden

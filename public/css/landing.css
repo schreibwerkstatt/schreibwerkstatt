@@ -184,24 +184,6 @@ html, body {
 
 /* Neun Kacheln auf zwei Spalten: die neunte bleibt allein. Sie spannt
    deshalb die Zeile und stellt den Screenshot neben den Text. */
-.public-feature--wide {
-  grid-column: 1 / -1;
-  flex-direction: row;
-  align-items: flex-start;
-  gap: var(--space-lg);
-}
-
-.public-feature--wide .public-feature-shot {
-  width: 460px;
-  flex: none;
-  margin-bottom: 0;
-}
-
-.public-feature--wide .public-feature-text {
-  flex: 1;
-  min-width: 0;
-}
-
 .public-feature h3 {
   margin: 0;
   font-size: var(--font-size-md);
@@ -215,6 +197,7 @@ html, body {
   line-height: 1.55;
 }
 
+.public-feature--bookeditor   { --card-accent: var(--card-accent-bookeditor); }
 .public-feature--stil         { --card-accent: var(--card-accent-stil); }
 .public-feature--figuren      { --card-accent: var(--card-accent-figuren); }
 .public-feature--blog         { --card-accent: var(--card-accent-blog); }
@@ -492,9 +475,6 @@ html, body {
 
 @media (max-width: 720px) {
   .public-feature-grid { grid-template-columns: 1fr; }
-  /* Die breite Kachel legt sich auf schmalen Schirmen wieder unter den Text. */
-  .public-feature--wide { flex-direction: column; }
-  .public-feature--wide .public-feature-shot { width: 100%; margin-bottom: var(--space-sm); }
 }
 
 @media (max-width: 480px) {

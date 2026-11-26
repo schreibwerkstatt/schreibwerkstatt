@@ -85,8 +85,8 @@ function _landingLd({ appName, description, url, lang }) {
 const LANDING_TEXT_KEYS = [
   'heroTitle', 'heroText', 'demoLabel', 'demoNote', 'loginPrompt', 'statusText',
   'principleTitle', 'principleText', 'loginLabel', 'registerLabel',
-  'featuresTitle', 'featLinkLektorat', 'featLinkTestleser',
-  'feat1Title', 'feat1Desc', 'feat2Title', 'feat2Desc', 'feat3Title', 'feat3Desc',
+  'featuresTitle', 'featLinkSchreiben', 'featLinkLektorat', 'featLinkTestleser',
+  'feat1Title', 'feat1Desc', 'feat2Title', 'feat2Desc', 'feat3Title', 'feat3Desc', 'feat4Title', 'feat4Desc',
   'moreTitle', 'allFeaturesLink',
   'more1Title', 'more1Desc', 'more2Title', 'more2Desc', 'more3Title', 'more3Desc',
   'more4Title', 'more4Desc', 'more5Title', 'more5Desc', 'more6Title', 'more6Desc',

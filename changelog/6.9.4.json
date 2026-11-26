@@ -1,0 +1,16 @@
+{
+  "version": "6.9.4",
+  "date": "2026-11-26",
+  "entries": [
+    {
+      "kind": "neu",
+      "de": "Öffentliche Website: Die neue Seite «Schreiben» stellt die drei Editoren vor – einzelner Abschnitt, Fokusmodus und das ganze Manuskript am Stück, je mit Bild.",
+      "en": "Public website: the new «Writing» page introduces the three editors – a single section, focus mode and the whole manuscript in one stream, each with a picture."
+    },
+    {
+      "kind": "verbessert",
+      "de": "Startseite: Sie zeigt jetzt Schreiben und Lektorat gleichwertig, mit einer eigenen Kachel für die Editoren und einem Link zur neuen Seite «Schreiben».",
+      "en": "Home page: it now presents writing and copy-editing equally, with its own tile for the editors and a link to the new «Writing» page."
+    }
+  ]
+}

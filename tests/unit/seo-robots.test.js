@@ -135,7 +135,7 @@ test('ohne app.public_url bleibt die Instanz unindexiert — es gibt keine kanon
 
 test('Themenseiten sind indexierbar, kanonisch und stehen in der Sitemap', async () => {
   _setIndexable(true, 'https://app.example.test');
-  for (const urlPath of ['/lektorat', '/testleser', '/funktionen']) {
+  for (const urlPath of ['/schreiben', '/lektorat', '/testleser', '/funktionen']) {
     const res = await _get(urlPath);
     assert.equal(res.status, 200, urlPath);
     assert.doesNotMatch(res.body, /noindex/, `${urlPath} darf kein noindex tragen`);
@@ -143,14 +143,14 @@ test('Themenseiten sind indexierbar, kanonisch und stehen in der Sitemap', async
     assert.match(res.body, /<meta name="description" content="[^"]{60,}">/, `${urlPath} braucht eine Meta-Description`);
   }
   const sitemap = await _get('/sitemap.xml');
-  for (const urlPath of ['/', '/lektorat', '/testleser', '/funktionen', '/datenschutz']) {
+  for (const urlPath of ['/', '/schreiben', '/lektorat', '/testleser', '/funktionen', '/datenschutz']) {
     assert.match(sitemap.body, new RegExp(`<loc>https://app\\.example\\.test${urlPath}</loc>`), urlPath);
   }
 });
 
 test('Themenseiten folgen seo.indexable=false', async () => {
   _setIndexable(false);
-  for (const urlPath of ['/lektorat', '/testleser', '/funktionen']) {
+  for (const urlPath of ['/schreiben', '/lektorat', '/testleser', '/funktionen']) {
     const res = await _get(urlPath);
     assert.match(res.body, /<meta name="robots" content="noindex, nofollow">/, `${urlPath} braucht noindex`);
   }
@@ -188,7 +188,7 @@ test('Sitemap listet beide Sprachfassungen mit vollständigen hreflang-Alternati
   const res = await _get('/sitemap.xml');
   assert.match(res.body, /xmlns:xhtml="http:\/\/www\.w3\.org\/1999\/xhtml"/);
   const blocks = res.body.match(/<url>[\s\S]*?<\/url>/g);
-  assert.equal(blocks.length, 10, '5 Seiten × 2 Sprachen');
+  assert.equal(blocks.length, 12, '6 Seiten × 2 Sprachen');
   for (const b of blocks) {
     assert.equal((b.match(/<xhtml:link /g) || []).length, 3, b);
   }
@@ -215,7 +215,7 @@ test('indexierbare Seiten: Sprache allein aus der URL, Browser-Englisch bekommt 
   // samt anderem canonical, und ein Crawler mit `en` saehe die deutsche
   // Standard-URL als Duplikat der englischen.
   _setIndexable(true, 'https://app.example.test');
-  for (const urlPath of ['/', '/lektorat', '/testleser', '/funktionen', '/datenschutz']) {
+  for (const urlPath of ['/', '/schreiben', '/lektorat', '/testleser', '/funktionen', '/datenschutz']) {
     const res = await _get(urlPath === '/' ? '/landing' : urlPath, { 'accept-language': 'en-US,en;q=0.9' });
     assert.match(res.body, /<html lang="de">/, urlPath);
     assert.match(res.body, new RegExp(`<link rel="canonical" href="https://app\\.example\\.test${urlPath}">`), urlPath);
@@ -240,7 +240,7 @@ test('/privacy (nicht indexierter Alias) folgt weiter dem Browser', async () => 
 test('Vorschaubild: 1200×630-JPEG je Seite und Sprache, Datei vorhanden, Meta vollständig', async () => {
   _setIndexable(true, 'https://app.example.test');
   const { PAGES, LANGS } = require('../../scripts/landing-shots/og-image');
-  const pathOf = { landing: '/landing', lektorat: '/lektorat', testleser: '/testleser', funktionen: '/funktionen' };
+  const pathOf = { landing: '/landing', schreiben: '/schreiben', lektorat: '/lektorat', testleser: '/testleser', funktionen: '/funktionen' };
   assert.deepEqual(Object.keys(PAGES).sort(), Object.keys(pathOf).sort());
   for (const key of Object.keys(PAGES)) {
     for (const lang of LANGS) {

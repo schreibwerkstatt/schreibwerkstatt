@@ -207,7 +207,7 @@ app.use(authRouter);
 // und LOCAL_DEV_MODE laufen ueber `next()` weiter — Guard + staticServe
 // liefern dann die SPA-Shell.
 app.use(require('./routes/public'));
-// Themenseiten (/lektorat, /testleser) —
+// Themenseiten (/schreiben, /lektorat, /testleser) —
 // oeffentliche, indexierbare Inhaltsseiten fuer Erstbesucher.
 app.use(require('./routes/public-pages'));
 

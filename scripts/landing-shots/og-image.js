@@ -27,6 +27,7 @@ const H = 630;
 // Seite → Screenshot + Titel-Key (der sichtbare Titel der Seite).
 const PAGES = {
   landing:    { shot: 'lektorat',  titleKey: 'landing.heroTitle' },
+  schreiben:  { shot: 'fokus',     titleKey: 'publicPage.schreiben.h1' },
   lektorat:   { shot: 'lektorat',  titleKey: 'publicPage.lektorat.h1' },
   testleser:  { shot: 'testleser', titleKey: 'publicPage.testleser.h1' },
   funktionen: { shot: 'schreiben', titleKey: 'publicFeatures.h1' },

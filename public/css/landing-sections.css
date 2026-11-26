@@ -36,9 +36,6 @@
   color: var(--color-text);
 }
 
-/* Breite Kachel: Text mittig neben dem Bild statt oben mit Leerraum darunter. */
-.public-landing .public-feature--wide { align-items: center; }
-
 /* Hero: der Markenname klein ueber der Aussage — die h1 traegt, was die App
    tut (Suchmaschinen und Erstbesucher lesen die h1, nicht das Logo). */
 .public-hero-brand {
